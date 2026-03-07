@@ -1,0 +1,20 @@
+{
+  "name": "cloudflare-workers-github-oauth",
+  "version": "1.0.0",
+  "description": "GitHub OAuth + JWT認証の Cloudflare Workers 実装",
+  "main": "src/index.ts",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "db:migrate:local": "wrangler d1 execute workers-github-oauth --local --file=./migrations/0001_create_user_sessions.sql",
+    "db:migrate:remote": "wrangler d1 execute workers-github-oauth --file=./migrations/0001_create_user_sessions.sql"
+  },
+  "dependencies": {
+    "hono": "^4.0.0"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20260214.0",
+    "typescript": "^5.3.3",
+    "wrangler": "^3.96.0"
+  }
+}

@@ -1,0 +1,33 @@
+name = "cloudflare-workers-github-oauth"
+main = "src/index.ts"
+compatibility_date = "2024-11-17"
+
+# 環境変数（本番環境ではwrangler secretを使用）
+[vars]
+ENVIRONMENT = "development"
+GITHUB_CLIENT_ID = "Ov23li6EmvN5quSFvjsL"
+
+# 必要なシークレット（wrangler secret putで設定）:
+#   wrangler secret put JWT_SECRET
+#   wrangler secret put GITHUB_CLIENT_ID
+#   wrangler secret put GITHUB_CLIENT_SECRET
+
+# D1データベース設定（オプション）
+# セッション管理を有効にするには以下の手順を実行してください:
+#   1. wrangler d1 create workers-github-oauth
+#   2. 出力された database_id を下記に設定して、コメントを外す
+#   3. npm run db:migrate:remote でマイグレーションを実行
+#
+# [[d1_databases]]
+# binding = "DB"
+# database_name = "workers-github-oauth"
+# database_id = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+
+# オブザーバビリティ設定
+[observability]
+enabled = true
+
+# Analytics Engineバインディング（オプション）
+[[analytics_engine_datasets]]
+binding = "ANALYTICS"
+dataset = "github_oauth_metrics"
