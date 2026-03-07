@@ -1,4 +1,4 @@
-name = "cloudflare-workers-github-oauth"
+name = "cloudflare-workers-github-oauth-1"
 main = "src/index.ts"
 compatibility_date = "2024-11-17"
 
