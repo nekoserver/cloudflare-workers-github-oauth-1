@@ -64,3 +64,9 @@
 - GitHub OAuth App 側の callback URL パスとソースコード側のパスは必ず統一する
 - 本テンプレートでは `/github/callback` を使用する
 - よくある間違い: GitHub側が `/auth/github/callback`、コード側が `/github/callback`
+
+### GITHUB_CLIENT_ID を wrangler.toml [vars] に平文で書いてはいけない
+- `GITHUB_CLIENT_ID` は `wrangler secret put` で暗号化管理する
+- `wrangler.toml` の `[vars]` に平文で書くと、secret と競合して意図しない値が使われる
+- **`[vars]` には GITHUB_CLIENT_ID を絶対に書かない。secret に一元化すること**
+- `.dev.vars.example` にも実際の値を書かない（プレースホルダーのみ）
