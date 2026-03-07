@@ -9,8 +9,13 @@
 - **PRの作成はブラウザから手動で行う必要がある**。ブランチをpush後、compareリンクをユーザーに提示すること:
   `https://github.com/{OWNER}/{REPO}/compare/{base}...{head}`
 
+### Cloudflare Workers デプロイ不可
+- `CLOUDFLARE_API_TOKEN` 環境変数が存在しないため `wrangler deploy` は実行できない
+- Cloudflare MCP は Workers の参照（一覧・詳細・コード取得）のみでデプロイ機能はない
+- **デプロイはユーザーのローカル環境から行う必要がある**
+
 ### 利用可能なMCPツール
-- **Cloudflare Developer Platform**: Workers/KV/D1/R2の操作
+- **Cloudflare Developer Platform**: Workers/KV/D1/R2の参照操作（デプロイ不可）
 - **Slack**: メッセージ送信・チャンネル検索等
 - **Vercel**: デプロイ・プロジェクト管理
 - **Context7**: ライブラリドキュメント検索
@@ -20,6 +25,13 @@ GitHub操作用のMCPは提供されていない。
 ### パッケージインストール
 - `apt-get`は外部リポジトリ（launchpad, cli.github.com等）へのアクセスが制限されている
 - システムにプリインストール済みのパッケージのみ利用可能な場合がある
+
+## 過去のトラブルと教訓
+
+### wrangler.toml の name 不一致（redirect_uri mismatch）
+- テンプレートからクローン後、`wrangler.toml` の `name` をリポジトリ名に合わせて更新し忘れると、
+  デプロイ先が別の Worker になり、GitHub OAuth App のコールバックURLと不一致になる
+- **テンプレートからクローンしたら真っ先に `wrangler.toml` の `name` を確認・修正すること**
 
 ## プロジェクト構成
 
