@@ -1,16 +1,16 @@
-name = "cloudflare-workers-github-oauth"
+name = "cloudflare-workers-github-oauth-1"
 main = "src/index.ts"
 compatibility_date = "2024-11-17"
 
 # 環境変数（本番環境ではwrangler secretを使用）
 [vars]
 ENVIRONMENT = "development"
-GITHUB_CLIENT_ID = "Ov23li6EmvN5quSFvjsL"
+# GITHUB_CLIENT_ID は wrangler secret で管理する（[vars] に平文で書かない）
 
 # 必要なシークレット（wrangler secret putで設定）:
-#   wrangler secret put JWT_SECRET
 #   wrangler secret put GITHUB_CLIENT_ID
 #   wrangler secret put GITHUB_CLIENT_SECRET
+#   wrangler secret put JWT_SECRET
 
 # D1データベース設定（オプション）
 # セッション管理を有効にするには以下の手順を実行してください:
