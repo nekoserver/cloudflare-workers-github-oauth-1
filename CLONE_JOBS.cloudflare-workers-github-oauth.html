@@ -19,6 +19,12 @@
     --warn-bg: #fff8c5;
     --warn-border: #d4a72c;
     --code-bg: #f6f8fa;
+    --step-bg: #f6f8fa;
+    --step-border: #d0d7de;
+    --step-text-muted: #8b949e;
+    --step-highlight-bg: #fff;
+    --step-highlight-border: #0969da;
+    --step-highlight-shadow: rgba(9, 105, 218, 0.12);
   }
   @media (prefers-color-scheme: dark) {
     :root {
@@ -34,6 +40,12 @@
       --warn-bg: #2d2000;
       --warn-border: #9e6a03;
       --code-bg: #161b22;
+      --step-bg: #161b22;
+      --step-border: #30363d;
+      --step-text-muted: #656d76;
+      --step-highlight-bg: #1c2333;
+      --step-highlight-border: #58a6ff;
+      --step-highlight-shadow: rgba(88, 166, 255, 0.1);
     }
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -221,6 +233,112 @@
     font-size: 13px;
   }
 
+  /* ── Collapsible phase (details/summary) ── */
+  details.phase-details {
+    margin-bottom: 8px;
+  }
+  details.phase-details > summary {
+    cursor: pointer;
+    list-style: none;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  details.phase-details > summary::-webkit-details-marker {
+    display: none;
+  }
+  details.phase-details > summary::marker {
+    display: none;
+    content: '';
+  }
+  details.phase-details > summary h2 {
+    position: relative;
+    padding-left: 24px;
+  }
+  details.phase-details > summary h2::before {
+    content: '\25B6';
+    position: absolute;
+    left: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 12px;
+    color: var(--text-muted);
+    transition: transform 0.2s ease;
+  }
+  details.phase-details[open] > summary h2::before {
+    transform: translateY(-50%) rotate(90deg);
+  }
+
+  /* ── Step block (focusable sub-step) ── */
+  .step-block {
+    background: var(--step-bg);
+    border: 1px solid var(--step-border);
+    border-radius: 8px;
+    padding: 16px 20px;
+    margin: 16px 0;
+    transition: background 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease, color 0.2s ease;
+    cursor: pointer;
+    outline: none;
+  }
+  .step-block:not(.step-active) {
+    color: var(--step-text-muted);
+  }
+  .step-block:not(.step-active) h3 {
+    color: var(--step-text-muted);
+  }
+  .step-block:not(.step-active) p,
+  .step-block:not(.step-active) li,
+  .step-block:not(.step-active) td,
+  .step-block:not(.step-active) th {
+    color: var(--step-text-muted);
+  }
+  .step-block:not(.step-active) code {
+    opacity: 0.6;
+  }
+  .step-block:not(.step-active) pre {
+    opacity: 0.6;
+  }
+  .step-block:not(.step-active) .warn {
+    opacity: 0.5;
+  }
+
+  /* Active / focused state */
+  .step-block.step-active,
+  .step-block:focus-within {
+    background: var(--step-highlight-bg);
+    border-color: var(--step-highlight-border);
+    box-shadow: 0 0 0 3px var(--step-highlight-shadow), 0 2px 8px var(--step-highlight-shadow);
+    color: var(--text);
+  }
+  .step-block.step-active h3,
+  .step-block:focus-within h3 {
+    color: var(--text);
+  }
+  .step-block.step-active p,
+  .step-block.step-active li,
+  .step-block.step-active td,
+  .step-block.step-active th,
+  .step-block:focus-within p,
+  .step-block:focus-within li,
+  .step-block:focus-within td,
+  .step-block:focus-within th {
+    color: var(--text);
+  }
+  .step-block.step-active code,
+  .step-block:focus-within code {
+    opacity: 1;
+  }
+  .step-block.step-active pre,
+  .step-block:focus-within pre {
+    opacity: 1;
+  }
+  .step-block.step-active .warn,
+  .step-block:focus-within .warn {
+    opacity: 1;
+  }
+  .step-block h3 {
+    margin-top: 0;
+  }
+
   /* ── Responsive ── */
   @media (max-width: 800px) {
     nav { display: none; }
@@ -318,7 +436,8 @@
 
 <!-- ── 前提条件 ── -->
 <section id="prereq">
-<h2>前提条件</h2>
+<details class="phase-details" open>
+<summary><h2>前提条件</h2></summary>
 <ul>
   <li>GitHub アカウントにログイン済み</li>
   <li>Cloudflare アカウントにログイン済み</li>
@@ -326,11 +445,13 @@
   <li><code>npm</code> が使用可能</li>
   <li>Claude Code（Web版 or CLI版）が使用可能</li>
 </ul>
+</details>
 </section>
 
 <!-- ── 変数表 ── -->
 <section id="vars">
-<h2>変数表</h2>
+<details class="phase-details" open>
+<summary><h2>変数表</h2></summary>
 <p>作業開始時にすべて決定し記入する。以降は各フェーズからこの表を参照する。</p>
 <table>
   <tr><th style="width:180px">変数</th><th>説明</th><th style="width:260px">値</th></tr>
@@ -342,24 +463,31 @@
   <tr><td><code>{JWT_SECRET}</code></td><td>JWT 署名用シークレット</td><td><input type="text" id="var-jwt" placeholder="openssl rand -hex 32 で生成" /></td></tr>
 </table>
 <p style="font-size:13px;color:var(--text-muted)">※ Cloudflare Dashboard &gt; Workers &amp; Pages &gt; Overview 右側に表示されている。</p>
+</details>
 </section>
 
 <!-- ════════════════ Phase A ════════════════ -->
 <section id="phase-a">
-<h2>A. リポジトリの作成とクローン</h2>
+<details class="phase-details" open>
+<summary><h2>A. リポジトリの作成とクローン</h2></summary>
 
-<h3 id="a1">A-1. 連番の決定</h3>
+<div class="step-block" tabindex="0" id="a1">
+<h3>A-1. 連番の決定</h3>
 <p>GitHub 上の自分のリポジトリ一覧で <code>cloudflare-workers-github-oauth-*</code> を確認し、次の番号を決定する。
 → <a class="ref" href="#vars">変数表</a>の <code>{N}</code> に記入。</p>
+</div>
 
-<h3 id="a2">A-2. GitHub でリポジトリを新規作成</h3>
+<div class="step-block" tabindex="0" id="a2">
+<h3>A-2. GitHub でリポジトリを新規作成</h3>
 <ul>
   <li>名前: <code>cloudflare-workers-github-oauth-<span class="var">{N}</span></code></li>
   <li><strong>プライベート</strong>リポジトリ</li>
   <li>README / .gitignore の自動生成は<strong>しない</strong></li>
 </ul>
+</div>
 
-<h3 id="a3">A-3. テンプレートのクローンとリモート付替え</h3>
+<div class="step-block" tabindex="0" id="a3">
+<h3>A-3. テンプレートのクローンとリモート付替え</h3>
 <pre><code>git clone https://github.com/<span class="var">{OWNER}</span>/cloudflare-workers-github-oauth.git \
   cloudflare-workers-github-oauth-<span class="var">{N}</span>
 
@@ -369,17 +497,21 @@ git remote set-url origin \
   https://github.com/<span class="var">{OWNER}</span>/cloudflare-workers-github-oauth-<span class="var">{N}</span>.git
 
 git push -u origin main</code></pre>
+</div>
 
 <ul class="checklist" data-phase="a">
   <li><input type="checkbox" /><span><code>git remote -v</code> で origin が新リポジトリを指している</span></li>
 </ul>
+</details>
 </section>
 
 <!-- ════════════════ Phase B ════════════════ -->
 <section id="phase-b">
-<h2>B. GitHub OAuth App の作成</h2>
+<details class="phase-details" open>
+<summary><h2>B. GitHub OAuth App の作成</h2></summary>
 
-<h3 id="b1">B-1. OAuth App を新規登録</h3>
+<div class="step-block" tabindex="0" id="b1">
+<h3>B-1. OAuth App を新規登録</h3>
 <p>GitHub &gt; Settings &gt; Developer settings &gt; OAuth Apps &gt; <strong>New OAuth App</strong></p>
 <table>
   <tr><th>項目</th><th>値</th></tr>
@@ -387,37 +519,47 @@ git push -u origin main</code></pre>
   <tr><td>Homepage URL</td><td><code>https://cloudflare-workers-github-oauth-<span class="var">{N}</span>.<span class="var">{CF_SUBDOMAIN}</span>.workers.dev</code></td></tr>
   <tr><td>Authorization callback URL</td><td><code>https://cloudflare-workers-github-oauth-<span class="var">{N}</span>.<span class="var">{CF_SUBDOMAIN}</span>.workers.dev/github/callback</code></td></tr>
 </table>
+</div>
 
-<h3 id="b2">B-2. Client ID / Client Secret を取得</h3>
+<div class="step-block" tabindex="0" id="b2">
+<h3>B-2. Client ID / Client Secret を取得</h3>
 <ol>
   <li>登録直後の画面で <strong>Client ID</strong> をコピー → <a class="ref" href="#vars">変数表</a>に記入</li>
   <li>"Generate a new client secret" → <strong>Client Secret</strong> をコピー → <a class="ref" href="#vars">変数表</a>に記入</li>
 </ol>
 <div class="warn"><strong>注意:</strong> Client Secret はこの画面でしか表示されない。必ずこの時点で記録すること。</div>
+</div>
 
 <ul class="checklist" data-phase="b">
   <li><input type="checkbox" /><span>Client ID が <code>Ov23li</code> で始まる文字列である</span></li>
   <li><input type="checkbox" /><span>Client Secret が 40 文字の 16 進数文字列である</span></li>
 </ul>
+</details>
 </section>
 
 <!-- ════════════════ Phase C ════════════════ -->
 <section id="phase-c">
-<h2>C. プロジェクト設定の書き換え</h2>
+<details class="phase-details" open>
+<summary><h2>C. プロジェクト設定の書き換え</h2></summary>
 
-<h3 id="c1">C-1. wrangler.toml の name を更新</h3>
+<div class="step-block" tabindex="0" id="c1">
+<h3>C-1. wrangler.toml の name を更新</h3>
 <pre><code>name = "cloudflare-workers-github-oauth-<span class="var">{N}</span>"</code></pre>
 <p>検証: <code>grep '^name' wrangler.toml</code></p>
 <div class="warn">
   <strong>重要:</strong> <code>name</code> を間違えるとデプロイ先が別 Worker になり redirect_uri mismatch が発生する。
   → <a class="ref" href="#t1">T-1</a>
 </div>
+</div>
 
-<h3 style="margin-top:24px"><span class="deprecated">C-2. wrangler.toml の GITHUB_CLIENT_ID を更新</span></h3>
+<div class="step-block" tabindex="0" style="opacity:0.6">
+<h3 style="margin-top:0"><span class="deprecated">C-2. wrangler.toml の GITHUB_CLIENT_ID を更新</span></h3>
 <p class="deprecated-note">廃止: <code>[vars]</code> には書かない。<a class="ref" href="#phase-e">E. シークレット設定</a>で <code>wrangler secret put</code> に一元化。
 理由は <a class="ref" href="#t5">T-5</a> を参照。</p>
+</div>
 
-<h3 id="c3">C-3. コールバック URL パスの確認</h3>
+<div class="step-block" tabindex="0" id="c3">
+<h3>C-3. コールバック URL パスの確認</h3>
 <p>ソースコード側のパスが <code>/github/callback</code> であることを確認（通常変更不要）:</p>
 <pre><code>// src/index.ts
 const redirectUri = `${url.protocol}//${url.host}/github/callback`;</code></pre>
@@ -428,38 +570,52 @@ const redirectUri = `${url.protocol}//${url.host}/github/callback`;</code></pre>
   <tr><td>src/index.ts（<code>/auth/github</code> ルート内）</td><td><code>/github/callback</code></td></tr>
   <tr><td>src/index.ts（<code>/github/callback</code> ルート内）</td><td><code>/github/callback</code></td></tr>
 </table>
+</div>
 
 <ul class="checklist" data-phase="c">
   <li><input type="checkbox" /><span><code>wrangler.toml</code> の <code>name</code> がインスタンス名と一致</span></li>
   <li><input type="checkbox" /><span><code>[vars]</code> に <code>GITHUB_CLIENT_ID</code> が<strong>存在しない</strong></span></li>
   <li><input type="checkbox" /><span>コールバック URL パスが GitHub 側とコード側で一致</span></li>
 </ul>
+</details>
 </section>
 
 <!-- ════════════════ Phase D ════════════════ -->
 <section id="phase-d">
-<h2>D. 依存関係のインストールとデプロイ</h2>
+<details class="phase-details" open>
+<summary><h2>D. 依存関係のインストールとデプロイ</h2></summary>
 
-<h3 id="d1">D-1. npm install</h3>
+<div class="step-block" tabindex="0" id="d1">
+<h3>D-1. npm install</h3>
 <pre><code>npm install</code></pre>
+</div>
 
-<h3 id="d2">D-2. Cloudflare Workers へデプロイ</h3>
+<div class="step-block" tabindex="0" id="d2">
+<h3>D-2. Cloudflare Workers へデプロイ</h3>
 <pre><code>npm run deploy</code></pre>
 <p>デプロイ先: <code>https://cloudflare-workers-github-oauth-<span class="var">{N}</span>.<span class="var">{CF_SUBDOMAIN}</span>.workers.dev</code></p>
+</div>
 
-<h3 id="d3">D-3. 疎通確認</h3>
+<div class="step-block" tabindex="0" id="d3">
+<h3>D-3. 疎通確認</h3>
 <pre><code>curl https://cloudflare-workers-github-oauth-<span class="var">{N}</span>.<span class="var">{CF_SUBDOMAIN}</span>.workers.dev/health</code></pre>
+</div>
 
 <ul class="checklist" data-phase="d">
   <li><input type="checkbox" /><span><code>node_modules/</code> が作成されエラーなし</span></li>
   <li><input type="checkbox" /><span>デプロイ成功、Worker URL が正しい</span></li>
   <li><input type="checkbox" /><span><code>/health</code> が <code>{"status":"ok"}</code> を返す</span></li>
 </ul>
+</details>
 </section>
 
 <!-- ════════════════ Phase E ════════════════ -->
 <section id="phase-e">
-<h2>E. Cloudflare シークレットの設定</h2>
+<details class="phase-details" open>
+<summary><h2>E. Cloudflare シークレットの設定</h2></summary>
+
+<div class="step-block" tabindex="0">
+<h3>E-1〜3. シークレットの設定</h3>
 <p>3 つのシークレットをすべて <code>wrangler secret put</code> で設定する。
 値は<a class="ref" href="#vars">変数表</a>を参照。</p>
 
@@ -476,37 +632,51 @@ npx wrangler secret put JWT_SECRET</code></pre>
   <strong>絶対に <code>wrangler.toml</code> の <code>[vars]</code> に書かないこと。</strong>
   → <a class="ref" href="#t5">T-5. vars と secret の競合</a>
 </div>
+</div>
 
+<div class="step-block" tabindex="0">
 <h3>E-4. シークレット設定後の再デプロイ（必要に応じて）</h3>
 <pre><code>npm run deploy</code></pre>
+</div>
 
 <ul class="checklist" data-phase="e">
   <li><input type="checkbox" /><span>3 つの secret すべてで "Success" が表示された</span></li>
 </ul>
+</details>
 </section>
 
 <!-- ════════════════ Phase F ════════════════ -->
 <section id="phase-f">
-<h2>F. Claude Code へのリポジトリ許可設定</h2>
+<details class="phase-details" open>
+<summary><h2>F. Claude Code へのリポジトリ許可設定</h2></summary>
 
+<div class="step-block" tabindex="0">
 <h3>F-1. リポジトリ権限の付与</h3>
 <p>Claude Code（Web版）設定にて <code><span class="var">{OWNER}</span>/cloudflare-workers-github-oauth-<span class="var">{N}</span></code> に読み取り・書き込み・コミット&amp;プッシュを許可。</p>
+</div>
 
+<div class="step-block" tabindex="0">
 <h3>F-2. Cloudflare MCP の確認（任意）</h3>
 <p>Claude Code から Cloudflare 操作を行う場合は MCP 接続を確認。</p>
+</div>
 
 <ul class="checklist" data-phase="f">
   <li><input type="checkbox" /><span>Claude Code からリポジトリにアクセスできる</span></li>
 </ul>
+</details>
 </section>
 
 <!-- ════════════════ Phase G ════════════════ -->
 <section id="phase-g">
-<h2>G. OAuth フローの動作確認</h2>
+<details class="phase-details" open>
+<summary><h2>G. OAuth フローの動作確認</h2></summary>
 
+<div class="step-block" tabindex="0">
 <h3>G-1. ログインページの表示</h3>
 <p>ブラウザで <code>https://cloudflare-workers-github-oauth-<span class="var">{N}</span>.<span class="var">{CF_SUBDOMAIN}</span>.workers.dev/</code> にアクセス。</p>
+</div>
 
+<div class="step-block" tabindex="0">
 <h3>G-2. OAuth フローの通し確認</h3>
 <ol>
   <li>「GitHub でログイン」をクリック</li>
@@ -516,30 +686,40 @@ npx wrangler secret put JWT_SECRET</code></pre>
   <li>ユーザー名・メールアドレスが表示される</li>
 </ol>
 <p>エラーが出た場合 → <a class="ref" href="#troubleshoot">T. トラブルシュート</a></p>
+</div>
 
 <ul class="checklist" data-phase="g">
   <li><input type="checkbox" /><span>ログインページが表示される</span></li>
   <li><input type="checkbox" /><span>OAuth フローが最後まで正常に完了する</span></li>
 </ul>
+</details>
 </section>
 
 <!-- ════════════════ Phase H ════════════════ -->
 <section id="phase-h">
-<h2>H. コミット &amp; プッシュ</h2>
+<details class="phase-details" open>
+<summary><h2>H. コミット &amp; プッシュ</h2></summary>
+
+<div class="step-block" tabindex="0">
+<h3>H-1. コミットとプッシュ</h3>
 <pre><code>git add -A
 git commit -m "feat: initialize cloudflare-workers-github-oauth-<span class="var">{N}</span>"
 git push -u origin main</code></pre>
+</div>
 
 <ul class="checklist" data-phase="h">
   <li><input type="checkbox" /><span>GitHub 上のリポジトリに変更が反映されている</span></li>
 </ul>
+</details>
 </section>
 
 <!-- ════════════════ Troubleshoot ════════════════ -->
 <section id="troubleshoot">
-<h2>T. トラブルシュート</h2>
+<details class="phase-details" open>
+<summary><h2>T. トラブルシュート</h2></summary>
 
-<h3 id="t1">T-1. redirect_uri mismatch</h3>
+<div class="step-block" tabindex="0" id="t1">
+<h3>T-1. redirect_uri mismatch</h3>
 <p>GitHub 側で「redirect_uri mismatch」が表示される。</p>
 <table>
   <tr><th>原因</th><th>確認方法</th><th>対処</th></tr>
@@ -554,17 +734,25 @@ git push -u origin main</code></pre>
     <td><a class="ref" href="#c3">C-3</a> で統一</td>
   </tr>
 </table>
+</div>
 
-<h3 id="t2">T-2. "GitHub OAuth is not configured"</h3>
+<div class="step-block" tabindex="0" id="t2">
+<h3>T-2. "GitHub OAuth is not configured"</h3>
 <p><code>GITHUB_CLIENT_ID</code> が未設定。→ <a class="ref" href="#phase-e">E. シークレット設定</a>を実行。</p>
+</div>
 
-<h3 id="t3">T-3. "Authentication failed"</h3>
+<div class="step-block" tabindex="0" id="t3">
+<h3>T-3. "Authentication failed"</h3>
 <p><code>GITHUB_CLIENT_SECRET</code> が間違っている。→ <a class="ref" href="#phase-e">E-2</a> を再実行。</p>
+</div>
 
-<h3 id="t4">T-4. "Invalid state parameter"</h3>
+<div class="step-block" tabindex="0" id="t4">
+<h3>T-4. "Invalid state parameter"</h3>
 <p>CSRF state の不一致。ブラウザの Cookie をクリアして再試行。</p>
+</div>
 
-<h3 id="t5">T-5. vars と secret の競合</h3>
+<div class="step-block" tabindex="0" id="t5">
+<h3>T-5. vars と secret の競合</h3>
 <p><code>wrangler.toml</code> の <code>[vars]</code> に <code>GITHUB_CLIENT_ID</code> を書くと、
 <code>wrangler secret put</code> の値と競合し <strong><code>[vars]</code> 側が優先されてしまう</strong>。</p>
 <ul>
@@ -572,9 +760,14 @@ git push -u origin main</code></pre>
   <li>シークレットは <code>wrangler secret put</code> に一元化する</li>
   <li>再デプロイして反映</li>
 </ul>
+</div>
 
-<h3 id="t6">T-6. "JWT_SECRET is not configured"</h3>
+<div class="step-block" tabindex="0" id="t6">
+<h3>T-6. "JWT_SECRET is not configured"</h3>
 <p><code>JWT_SECRET</code> が未設定。→ <a class="ref" href="#phase-e">E-3</a> を実行。</p>
+</div>
+
+</details>
 </section>
 
 </main>
@@ -582,6 +775,40 @@ git push -u origin main</code></pre>
 <!-- ════════════════ SCRIPT ════════════════ -->
 <script>
 (function() {
+  // ── Step block focus management ──
+  // Only one step-block can be active at a time
+  var activeBlock = null;
+
+  function activateBlock(block) {
+    if (activeBlock && activeBlock !== block) {
+      activeBlock.classList.remove('step-active');
+    }
+    block.classList.add('step-active');
+    activeBlock = block;
+  }
+
+  function deactivateAll(e) {
+    // If click is outside any step-block, deactivate
+    if (activeBlock && !e.target.closest('.step-block')) {
+      activeBlock.classList.remove('step-active');
+      activeBlock = null;
+    }
+  }
+
+  document.querySelectorAll('.step-block').forEach(function(block) {
+    block.addEventListener('click', function(e) {
+      // Don't interfere with links, inputs, checkboxes
+      if (e.target.closest('a, input, select, textarea, button')) return;
+      e.stopPropagation();
+      activateBlock(block);
+    });
+    block.addEventListener('focus', function() {
+      activateBlock(block);
+    });
+  });
+
+  document.addEventListener('click', deactivateAll);
+
   // ── Checkbox progress tracking ──
   function updateProgress() {
     document.querySelectorAll('[data-phase]').forEach(function(span) {
@@ -637,12 +864,15 @@ git push -u origin main</code></pre>
   var STORAGE_KEY = 'clone-jobs-state';
 
   function saveState() {
-    var state = { vars: {}, checks: [] };
+    var state = { vars: {}, checks: [], collapsed: [] };
     document.querySelectorAll('#vars input[type="text"]').forEach(function(input) {
       state.vars[input.id] = input.value;
     });
     document.querySelectorAll('.checklist input[type="checkbox"]').forEach(function(cb, i) {
       if (cb.checked) state.checks.push(i);
+    });
+    document.querySelectorAll('details.phase-details').forEach(function(d, i) {
+      if (!d.open) state.collapsed.push(i);
     });
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch(e) {}
   }
@@ -664,11 +894,41 @@ git push -u origin main</code></pre>
           if (cbs[i]) cbs[i].checked = true;
         });
       }
+      if (state.collapsed) {
+        var details = document.querySelectorAll('details.phase-details');
+        state.collapsed.forEach(function(i) {
+          if (details[i]) details[i].open = false;
+        });
+      }
     } catch(e) {}
   }
 
   document.querySelectorAll('#vars input[type="text"]').forEach(function(input) {
     input.addEventListener('input', saveState);
+  });
+
+  // Save collapsed state when toggled
+  document.querySelectorAll('details.phase-details').forEach(function(d) {
+    d.addEventListener('toggle', saveState);
+  });
+
+  // ── Nav click opens collapsed sections ──
+  document.querySelectorAll('nav a[href^="#"]').forEach(function(link) {
+    link.addEventListener('click', function() {
+      var targetId = link.getAttribute('href').slice(1);
+      var targetEl = document.getElementById(targetId);
+      if (!targetEl) return;
+      // Find the closest details ancestor and open it
+      var details = targetEl.closest('details.phase-details');
+      if (details && !details.open) {
+        details.open = true;
+      }
+      // Also check if target is a section containing a details
+      var childDetails = targetEl.querySelector('details.phase-details');
+      if (childDetails && !childDetails.open) {
+        childDetails.open = true;
+      }
+    });
   });
 
   loadState();
