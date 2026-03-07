@@ -70,3 +70,18 @@
 - `wrangler.toml` の `[vars]` に平文で書くと、secret と競合して意図しない値が使われる
 - **`[vars]` には GITHUB_CLIENT_ID を絶対に書かない。secret に一元化すること**
 - `.dev.vars.example` にも実際の値を書かない（プレースホルダーのみ）
+
+---
+
+## Claude Code への行動指針（このリポジトリ固有）
+
+以下は過去のセッションで繰り返した失敗から導いたルールである。必ず守ること。
+
+1. **できないことを何度も試すな** — ツールやAPIが使えないと判明したら即座にユーザーに伝え、代替手段を提示する。同じ方法のバリエーションを繰り返し試さない
+2. **PRはブラウザで作成** — この環境からGitHub APIは使えない。compareリンクを提示して終わり
+3. **デプロイはユーザーに委ねる** — `CLOUDFLARE_API_TOKEN` がないため `wrangler deploy` は不可能。コード修正とpushまでが責務
+4. **秘密情報は `[vars]` に書かない** — `GITHUB_CLIENT_ID`、`GITHUB_CLIENT_SECRET`、`JWT_SECRET` はすべて `wrangler secret` で管理。`wrangler.toml` に平文で書き戻さない
+5. **テンプレートからクローンしたら最初に確認する3項目**:
+   - `wrangler.toml` の `name` がインスタンス名と一致しているか
+   - `wrangler.toml` の `[vars]` に秘密情報が平文で入っていないか
+   - コールバックURLパスがGitHub OAuth App側と一致しているか
