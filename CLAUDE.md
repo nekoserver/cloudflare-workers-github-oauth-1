@@ -73,11 +73,16 @@
 
 ---
 
-## HTML 手順書のスタイルルール
+## HTML 手順書のスタイルルール（Monodoc 形式）
 
-### 左ペイン（nav）の幅
-- `--nav-width` は **`240px`** を使用する（絶対値指定）
-- この値を変更してはならない。レイアウト調整が必要な場合でも左ペイン幅は 240px を維持すること
+詳細は [`RULES.cloudflare-workers-github-oauth-N.md`](RULES.cloudflare-workers-github-oauth-N.md) を参照。
+手順書 HTML を生成・編集する際は必ず RULES ファイルに従うこと。
+
+要点:
+- `--nav-width` は **`240px`** 固定（変更禁止）
+- すべての `<h2>` は `<details class="phase-details">` で折りたたみ可能にする
+- `[A-Z]-[0-9]` の小見出しは `.step-block` で囲んだ領域として表現する
+- 外部依存なし（単一 HTML ファイルで完結）
 
 ---
 
