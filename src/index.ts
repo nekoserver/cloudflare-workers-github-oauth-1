@@ -489,7 +489,14 @@ app.get('/settings', authMiddleware, (c) => {
  * Resend webhook受信用エンドポイント
  * イベントタイプを/lib/resend-webhook.shtml?event=xxxへGETで通知し、Resendへのレスポンスを返す
  */
-app.post('/webhook/resend', async (c) => {
+app.all('/webhook/resend', async (c) => {
+  if (c.req.method !== 'POST') {
+    logger.warn('Resend webhook received with unexpected method', {
+      method: c.req.method,
+      path: c.req.path,
+    });
+    return c.json({ error: 'Method Not Allowed' }, 405);
+  }
   const webhookSecret = c.env.RESEND_WEBHOOK_SECRET;
   if (!webhookSecret) {
     logger.error('Resend webhook secret is not configured');
