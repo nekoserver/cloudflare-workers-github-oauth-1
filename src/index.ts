@@ -15,6 +15,7 @@ import { getWelcomePage } from './views/welcome';
 import { getSettingsPage } from './views/settings';
 import { getGitHubAccessToken, getGitHubUser, getGitHubUserEmail } from './utils/github';
 import { getCookieValue, getCookieValues } from './utils/cookie';
+import { verifyResendWebhookSignature } from './utils/resendWebhook';
 import * as logger from './utils/logger';
 
 // 環境変数の型定義
@@ -25,6 +26,7 @@ type Bindings = {
   GITHUB_CLIENT_SECRET?: string;
   DB?: D1Database;
   ANALYTICS?: AnalyticsEngineDataset;
+  RESEND_WEBHOOK_SECRET?: string;
 };
 
 // コンテキスト変数の型定義
@@ -482,6 +484,84 @@ app.get('/settings', authMiddleware, (c) => {
 // =====================================================
 // API エンドポイント
 // =====================================================
+
+/**
+ * Resend webhook受信用エンドポイント
+ * イベントタイプを/lib/resend-webhook.shtml?event=xxxへGETで通知し、Resendへのレスポンスを返す
+ */
+app.all('/webhook/resend', async (c) => {
+  if (c.req.method !== 'POST') {
+    logger.warn('Resend webhook received with unexpected method', {
+      method: c.req.method,
+      path: c.req.path,
+    });
+    return c.json({ error: 'Method Not Allowed' }, 405);
+  }
+  const webhookSecret = c.env.RESEND_WEBHOOK_SECRET;
+  if (!webhookSecret) {
+    logger.error('Resend webhook secret is not configured');
+    return c.json({ error: 'Webhook endpoint is not available' }, 500);
+  }
+
+  const rawBody = await c.req.text();
+
+  const verification = await verifyResendWebhookSignature(rawBody, {
+    id: c.req.header('svix-id'),
+    timestamp: c.req.header('svix-timestamp'),
+    signature: c.req.header('svix-signature'),
+  }, webhookSecret);
+
+  if (!verification.success) {
+    logger.warn('Rejected Resend webhook', {
+      reason: verification.reason,
+      path: c.req.path,
+      method: c.req.method,
+    });
+    return c.json({ error: 'Unauthorized webhook' }, 401);
+  }
+
+  let payload: any;
+  try {
+    payload = rawBody ? JSON.parse(rawBody) : {};
+  } catch (error) {
+    logger.warn('Unable to parse Resend webhook payload', {
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    return c.json({ error: 'Invalid webhook payload' }, 400);
+  }
+
+  const eventType = typeof payload?.type === 'string' && payload.type.trim().length > 0
+    ? payload.type
+    : 'unknown';
+
+  logger.info('Resend webhook received', { eventType });
+
+  const notifyUrl = new URL('/lib/resend-webhook.shtml', c.req.url);
+  notifyUrl.searchParams.set('event', eventType);
+
+  try {
+    const proxyResponse = await fetch(notifyUrl.toString(), {
+      method: 'GET',
+    });
+
+    if (!proxyResponse.ok) {
+      logger.error('Proxy notification failed for Resend webhook', {
+        eventType,
+        status: proxyResponse.status,
+        statusText: proxyResponse.statusText,
+      });
+      return c.json({ error: 'Failed to notify proxy target' }, 502);
+    }
+  } catch (error) {
+    logger.error('Failed to reach proxy target for Resend webhook', {
+      error: error instanceof Error ? error.message : 'Unknown error',
+      eventType,
+    });
+    return c.json({ error: 'Failed to notify proxy target' }, 502);
+  }
+
+  return c.json({ success: true, event: eventType }, 200);
+});
 
 /**
  * API情報
