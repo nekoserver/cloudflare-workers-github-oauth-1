@@ -536,7 +536,7 @@ app.all('/webhook/resend', async (c) => {
 
   logger.info('Resend webhook received', { eventType });
 
-  const notifyUrl = new URL('/lib/resend-webhook.shtml', c.req.url);
+  const notifyUrl = new URL('https://mynw.nekomaneki.work/lib/resend-webhook.shtml');
   notifyUrl.searchParams.set('event', eventType);
 
   try {
