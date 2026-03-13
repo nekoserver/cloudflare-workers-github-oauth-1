@@ -33,6 +33,8 @@ type Bindings = {
   SLACK_CLIENT_SECRET?: string;
   SLACK_CLIENT_ID?: string;
   SLACK_CHANNEL_ID?: string;
+  SESSION_IDLE_TIMEOUT_SECONDS?: string;
+  RESEND_WEBHOOK_DEDUP_TTL_SECONDS?: string;
 };
 
 // コンテキスト変数の型定義
@@ -42,6 +44,8 @@ type Variables = {
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
+const resendWebhookDedupCache = new Map<string, number>();
+
 /**
  * CSRFを防ぐためのOAuth stateトークンを生成
  */
@@ -49,6 +53,42 @@ function generateOAuthState(): string {
   const array = new Uint8Array(32);
   crypto.getRandomValues(array);
   return Array.from(array, b => b.toString(16).padStart(2, '0')).join('');
+}
+
+function base64UrlEncode(bytes: Uint8Array): string {
+  let binary = '';
+  for (const byte of bytes) {
+    binary += String.fromCharCode(byte);
+  }
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+}
+
+async function generatePkcePair(): Promise<{ verifier: string; challenge: string }> {
+  const verifierBytes = new Uint8Array(32);
+  crypto.getRandomValues(verifierBytes);
+  const verifier = base64UrlEncode(verifierBytes);
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier));
+  const challenge = base64UrlEncode(new Uint8Array(digest));
+  return { verifier, challenge };
+}
+
+function resolveIdleTimeoutSeconds(envValue: string | undefined, sessionDurationSeconds: number): number {
+  const parsed = Number(envValue);
+  const defaultIdle = 30 * 60;
+  let idleSeconds = Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : defaultIdle;
+  if (idleSeconds > sessionDurationSeconds) {
+    idleSeconds = sessionDurationSeconds;
+  }
+  return idleSeconds;
+}
+
+function resolveResendDedupTtlSeconds(envValue: string | undefined): number {
+  const parsed = Number(envValue);
+  const defaultTtl = 10 * 60;
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return defaultTtl;
+  }
+  return Math.floor(parsed);
 }
 
 // セッション有効期限の文字列を秒数に変換するヘルパー関数
@@ -179,6 +219,22 @@ async function updateUserSettings(
 
 // CORSの設定
 app.use('/*', cors());
+app.use('/*', async (c, next) => {
+  await next();
+
+  const headers = c.res.headers;
+  if (!headers.has('Content-Security-Policy')) {
+    headers.set(
+      'Content-Security-Policy',
+      "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'"
+    );
+  }
+  headers.set('X-Content-Type-Options', 'nosniff');
+  headers.set('X-Frame-Options', 'DENY');
+  headers.set('Referrer-Policy', 'no-referrer');
+  headers.set('Permissions-Policy', 'geolocation=(), microphone=(), camera=()');
+  headers.set('Strict-Transport-Security', 'max-age=63072000; includeSubDomains; preload');
+});
 
 // =====================================================
 // ヘルスチェック
@@ -224,7 +280,7 @@ app.get('/', (c) => {
  * GitHub OAuth認証開始（リダイレクト用エンドポイント）
  * CSRF対策のためstateパラメータを生成しクッキーに保存
  */
-app.get('/auth/github', (c) => {
+app.get('/auth/github', async (c) => {
   const clientId = c.env.GITHUB_CLIENT_ID;
 
   if (!clientId) {
@@ -236,18 +292,22 @@ app.get('/auth/github', (c) => {
 
   // CSRF保護用のstateトークンを生成
   const state = generateOAuthState();
+  const pkce = await generatePkcePair();
 
   const authUrl = new URL('https://github.com/login/oauth/authorize');
   authUrl.searchParams.set('client_id', clientId);
   authUrl.searchParams.set('redirect_uri', redirectUri);
   authUrl.searchParams.set('scope', 'read:user user:email');
   authUrl.searchParams.set('state', state);
+  authUrl.searchParams.set('code_challenge', pkce.challenge);
+  authUrl.searchParams.set('code_challenge_method', 'S256');
 
   // stateをHttpOnlyクッキーに保存（5分間有効）
   const redirectHeaders = new Headers({
     'Location': authUrl.toString(),
   });
   redirectHeaders.append('Set-Cookie', `oauth_state=${state}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=300`);
+  redirectHeaders.append('Set-Cookie', `oauth_pkce=${pkce.verifier}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=300`);
 
   return new Response(null, { status: 302, headers: redirectHeaders });
 });
@@ -273,6 +333,7 @@ app.get('/github/callback', async (c) => {
     // stateパラメータの検証（CSRF対策）
     const cookieHeader = c.req.header('Cookie');
     const savedState = getCookieValue(cookieHeader, 'oauth_state');
+    const pkceVerifier = getCookieValue(cookieHeader, 'oauth_pkce');
 
     if (!state || !savedState || state !== savedState) {
       logger.warn('OAuth state mismatch - possible CSRF attempt', {
@@ -280,6 +341,9 @@ app.get('/github/callback', async (c) => {
         hasSavedState: !!savedState,
       });
       return c.json({ error: 'Invalid state parameter. Please try logging in again.' }, 400);
+    }
+    if (!pkceVerifier) {
+      return c.json({ error: 'Missing PKCE verifier. Please try logging in again.' }, 400);
     }
 
     const clientId = c.env.GITHUB_CLIENT_ID;
@@ -298,7 +362,7 @@ app.get('/github/callback', async (c) => {
     const redirectUri = `${url.protocol}//${url.host}/github/callback`;
 
     // GitHubからアクセストークンを取得
-    const accessToken = await getGitHubAccessToken(code, clientId, clientSecret, redirectUri);
+    const accessToken = await getGitHubAccessToken(code, clientId, clientSecret, redirectUri, pkceVerifier);
 
     // GitHubユーザー情報を取得
     const githubUser = await getGitHubUser(accessToken);
@@ -335,6 +399,7 @@ app.get('/github/callback', async (c) => {
     await updateUserSession(c.env.DB, userId, timezone, sessionDuration);
 
     const sessionDurationSeconds = getSessionDurationSeconds(sessionDuration);
+    const idleTimeoutSeconds = resolveIdleTimeoutSeconds(c.env.SESSION_IDLE_TIMEOUT_SECONDS, sessionDurationSeconds);
 
     // JWTトークンを生成
     const token = await createJWT(
@@ -365,9 +430,11 @@ app.get('/github/callback', async (c) => {
     });
     redirectHeaders.append('Set-Cookie', `auth_token=${token}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${sessionDurationSeconds}`);
     redirectHeaders.append('Set-Cookie', `login_timestamp=${Date.now()}; Path=/; Secure; SameSite=Lax; Max-Age=${sessionDurationSeconds}`);
+    redirectHeaders.append('Set-Cookie', `last_activity=${Date.now()}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${idleTimeoutSeconds}`);
     redirectHeaders.append('Set-Cookie', `show_welcome_message=1; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=60`);
     // 使用済みのoauth_stateクッキーを削除
     redirectHeaders.append('Set-Cookie', `oauth_state=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0`);
+    redirectHeaders.append('Set-Cookie', `oauth_pkce=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0`);
 
     return new Response(null, { status: 302, headers: redirectHeaders });
   } catch (error) {
@@ -399,8 +466,10 @@ app.get('/auth/logout', (c) => {
   // HttpOnlyクッキーはJavaScriptからは削除できないため、サーバーサイドで削除する
   redirectHeaders.append('Set-Cookie', 'auth_token=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0');
   redirectHeaders.append('Set-Cookie', 'login_timestamp=; Path=/; Secure; SameSite=Lax; Max-Age=0');
+  redirectHeaders.append('Set-Cookie', 'last_activity=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0');
   redirectHeaders.append('Set-Cookie', 'user_timezone=; Path=/; Secure; SameSite=Lax; Max-Age=0');
   redirectHeaders.append('Set-Cookie', 'user_session_duration=; Path=/; Secure; SameSite=Lax; Max-Age=0');
+  redirectHeaders.append('Set-Cookie', 'oauth_pkce=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0');
 
   return new Response(null, { status: 302, headers: redirectHeaders });
 });
@@ -524,6 +593,26 @@ app.all('/webhook/resend', async (c) => {
       method: c.req.method,
     });
     return c.json({ error: 'Unauthorized webhook' }, 401);
+  }
+
+  const resendEventId = c.req.header('svix-id')?.trim();
+  if (resendEventId) {
+    const nowMs = Date.now();
+    const dedupTtlSeconds = resolveResendDedupTtlSeconds(c.env.RESEND_WEBHOOK_DEDUP_TTL_SECONDS);
+    const expiresAt = nowMs + dedupTtlSeconds * 1000;
+
+    for (const [key, expiry] of resendWebhookDedupCache.entries()) {
+      if (expiry <= nowMs) {
+        resendWebhookDedupCache.delete(key);
+      }
+    }
+
+    if (resendWebhookDedupCache.has(resendEventId)) {
+      logger.warn('Duplicate Resend webhook detected', { resendEventId });
+      return c.json({ error: 'Duplicate webhook' }, 409);
+    }
+
+    resendWebhookDedupCache.set(resendEventId, expiresAt);
   }
 
   let payload: any;
