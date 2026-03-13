@@ -24,20 +24,27 @@ export async function getGitHubAccessToken(
   code: string,
   clientId: string,
   clientSecret: string,
-  redirectUri: string
+  redirectUri: string,
+  codeVerifier?: string
 ): Promise<string> {
+  const payload: Record<string, string> = {
+    client_id: clientId,
+    client_secret: clientSecret,
+    code,
+    redirect_uri: redirectUri,
+  };
+
+  if (codeVerifier) {
+    payload.code_verifier = codeVerifier;
+  }
+
   const response = await fetch('https://github.com/login/oauth/access_token', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       'Accept': 'application/json',
     },
-    body: JSON.stringify({
-      client_id: clientId,
-      client_secret: clientSecret,
-      code,
-      redirect_uri: redirectUri,
-    }),
+    body: JSON.stringify(payload),
   });
 
   if (!response.ok) {

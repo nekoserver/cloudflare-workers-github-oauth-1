@@ -13,6 +13,7 @@ type Bindings = {
   ENVIRONMENT: string;
   GITHUB_CLIENT_ID?: string;
   GITHUB_CLIENT_SECRET?: string;
+  SESSION_IDLE_TIMEOUT_SECONDS?: string;
 };
 
 // Variables type
@@ -28,13 +29,32 @@ export interface AuthContext {
 /**
  * AuthorizationヘッダーまたはCookieからトークンを取得する
  */
-function getToken(c: Context): string | null {
+function getToken(c: Context): { token: string; source: 'header' | 'cookie' } | null {
   const authHeader = c.req.header('Authorization');
   const bearerToken = extractBearerToken(authHeader);
-  if (bearerToken) return bearerToken;
+  if (bearerToken) return { token: bearerToken, source: 'header' };
 
   const cookieHeader = c.req.header('Cookie');
-  return getCookieValue(cookieHeader, 'auth_token');
+  const cookieToken = getCookieValue(cookieHeader, 'auth_token');
+  if (!cookieToken) return null;
+  return { token: cookieToken, source: 'cookie' };
+}
+
+function resolveIdleTimeoutSeconds(envValue: string | undefined, maxSeconds: number): number {
+  const parsed = Number(envValue);
+  const defaultIdle = 30 * 60;
+  let idleSeconds = Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : defaultIdle;
+  if (idleSeconds > maxSeconds) {
+    idleSeconds = maxSeconds;
+  }
+  return idleSeconds;
+}
+
+function parseTimestampMs(value: string | null | undefined): number | null {
+  if (!value) return null;
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) return null;
+  return parsed;
 }
 
 /**
@@ -43,13 +63,15 @@ function getToken(c: Context): string | null {
  */
 export async function authMiddleware(c: Context<{ Bindings: Bindings; Variables: Variables }>, next: Next) {
   const authHeader = c.req.header('Authorization');
-  const token = getToken(c);
+  const tokenInfo = getToken(c);
+  let idleTimeoutToSet: number | null = null;
+  let lastActivityToSet: number | null = null;
 
   // BearerトークンなしでAcceptヘッダーにtext/htmlが含まれる場合はブラウザからのリクエスト
   const acceptHeader = c.req.header('Accept') ?? '';
   const isBrowserRequest = !authHeader && acceptHeader.includes('text/html');
 
-  if (!token) {
+  if (!tokenInfo) {
     if (isBrowserRequest) {
       return c.html(getSessionExpiredPage(), 401);
     }
@@ -62,7 +84,7 @@ export async function authMiddleware(c: Context<{ Bindings: Bindings; Variables:
     return c.json({ error: 'サーバー設定エラー' }, 500);
   }
 
-  const payload = await verifyJWT(token, secret);
+  const payload = await verifyJWT(tokenInfo.token, secret);
   if (!payload) {
     if (isBrowserRequest) {
       return c.html(getSessionExpiredPage(), 401);
@@ -70,10 +92,48 @@ export async function authMiddleware(c: Context<{ Bindings: Bindings; Variables:
     return c.json({ error: '無効なトークンです' }, 401);
   }
 
+  if (tokenInfo.source === 'cookie') {
+    const nowMs = Date.now();
+    const cookieHeader = c.req.header('Cookie');
+    const lastActivity = parseTimestampMs(getCookieValue(cookieHeader, 'last_activity'));
+    const remainingSeconds = Math.max(payload.exp - Math.floor(nowMs / 1000), 0);
+    const idleTimeoutSeconds = resolveIdleTimeoutSeconds(c.env.SESSION_IDLE_TIMEOUT_SECONDS, remainingSeconds);
+
+    if (!lastActivity || nowMs - lastActivity > idleTimeoutSeconds * 1000) {
+      const clearHeaders = new Headers();
+      clearHeaders.append('Set-Cookie', 'auth_token=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0');
+      clearHeaders.append('Set-Cookie', 'last_activity=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0');
+      clearHeaders.append('Set-Cookie', 'login_timestamp=; Path=/; Secure; SameSite=Lax; Max-Age=0');
+
+      if (isBrowserRequest) {
+        clearHeaders.set('Content-Type', 'text/html; charset=utf-8');
+        return new Response(getSessionExpiredPage(), {
+          status: 401,
+          headers: clearHeaders,
+        });
+      }
+      clearHeaders.set('Content-Type', 'application/json; charset=utf-8');
+      return new Response(JSON.stringify({ error: 'セッションの有効期限が切れました' }), {
+        status: 401,
+        headers: clearHeaders,
+      });
+    }
+
+    idleTimeoutToSet = idleTimeoutSeconds;
+    lastActivityToSet = nowMs;
+  }
+
   // Contextに認証ユーザー情報を設定
   c.set('user', payload);
 
   await next();
+
+  if (idleTimeoutToSet && lastActivityToSet) {
+    c.res.headers.append(
+      'Set-Cookie',
+      `last_activity=${lastActivityToSet}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${idleTimeoutToSet}`
+    );
+  }
 }
 
 /**
@@ -81,12 +141,12 @@ export async function authMiddleware(c: Context<{ Bindings: Bindings; Variables:
  * Authorizationヘッダーまたはクッキーのトークンがあれば検証するが、なくてもエラーにしない
  */
 export async function optionalAuthMiddleware(c: Context<{ Bindings: Bindings; Variables: Variables }>, next: Next) {
-  const token = getToken(c);
+  const tokenInfo = getToken(c);
 
-  if (token) {
+  if (tokenInfo) {
     const secret = c.env.JWT_SECRET;
     if (secret) {
-      const payload = await verifyJWT(token, secret);
+      const payload = await verifyJWT(tokenInfo.token, secret);
       if (payload) {
         c.set('user', payload);
       }
