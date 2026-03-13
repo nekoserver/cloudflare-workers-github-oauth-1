@@ -11,6 +11,12 @@ ENVIRONMENT = "development"
 #   wrangler secret put GITHUB_CLIENT_ID
 #   wrangler secret put GITHUB_CLIENT_SECRET
 #   wrangler secret put JWT_SECRET
+#   wrangler secret put RESEND_WEBHOOK_SECRET
+#   wrangler secret put SLACK_SIGNING_SECRET
+#   wrangler secret put SLACK_OAUTH_TOKEN
+#   wrangler secret put SLACK_CLIENT_SECRET
+#   wrangler secret put SLACK_CLIENT_ID
+#   wrangler secret put SLACK_CHANNEL_ID
 
 # D1データベース設定（オプション）
 # セッション管理を有効にするには以下の手順を実行してください:

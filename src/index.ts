@@ -16,6 +16,7 @@ import { getSettingsPage } from './views/settings';
 import { getGitHubAccessToken, getGitHubUser, getGitHubUserEmail } from './utils/github';
 import { getCookieValue, getCookieValues } from './utils/cookie';
 import { verifyResendWebhookSignature } from './utils/resendWebhook';
+import { postSlackMessage } from './utils/slack';
 import * as logger from './utils/logger';
 
 // 環境変数の型定義
@@ -27,6 +28,11 @@ type Bindings = {
   DB?: D1Database;
   ANALYTICS?: AnalyticsEngineDataset;
   RESEND_WEBHOOK_SECRET?: string;
+  SLACK_SIGNING_SECRET?: string;
+  SLACK_OAUTH_TOKEN?: string;
+  SLACK_CLIENT_SECRET?: string;
+  SLACK_CLIENT_ID?: string;
+  SLACK_CHANNEL_ID?: string;
 };
 
 // コンテキスト変数の型定義
@@ -535,6 +541,46 @@ app.all('/webhook/resend', async (c) => {
     : 'unknown';
 
   logger.info('Resend webhook received', { eventType });
+
+  const slackConfig = {
+    signingSecret: c.env.SLACK_SIGNING_SECRET,
+    oauthToken: c.env.SLACK_OAUTH_TOKEN,
+    clientSecret: c.env.SLACK_CLIENT_SECRET,
+    clientId: c.env.SLACK_CLIENT_ID,
+    channelId: c.env.SLACK_CHANNEL_ID,
+  };
+
+  const missingSlackVars = Object.entries(slackConfig)
+    .filter(([, value]) => !value || value.trim().length === 0)
+    .map(([key]) => key);
+
+  if (missingSlackVars.length > 0) {
+    logger.error('Slack notification skipped due to missing configuration', {
+      missing: missingSlackVars,
+    });
+  } else if (slackConfig.oauthToken && slackConfig.channelId) {
+    try {
+      const slackText = `Resend webhookを受信しました: event=${eventType}`;
+      const slackResult = await postSlackMessage({
+        token: slackConfig.oauthToken,
+        channel: slackConfig.channelId,
+        text: slackText,
+      });
+
+      if (!slackResult.ok) {
+        logger.error('Slack notification failed for Resend webhook', {
+          eventType,
+          error: slackResult.error,
+          status: slackResult.status,
+        });
+      }
+    } catch (error) {
+      logger.error('Slack notification errored for Resend webhook', {
+        eventType,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+  }
 
   const notifyUrl = new URL('https://mynw.nekomaneki.work/lib/resend-webhook.shtml');
   notifyUrl.searchParams.set('event', eventType);
