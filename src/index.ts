@@ -550,35 +550,54 @@ app.all('/webhook/resend', async (c) => {
     channelId: c.env.SLACK_CHANNEL_ID,
   };
 
-  const missingSlackVars = Object.entries(slackConfig)
-    .filter(([, value]) => !value || value.trim().length === 0)
-    .map(([key]) => key);
+  const deliveryStatus = eventType === 'email.delivered'
+    ? '送信完了'
+    : (eventType === 'email.failed' || eventType === 'email.bounced' ? '失敗' : null);
 
-  if (missingSlackVars.length > 0) {
-    logger.error('Slack notification skipped due to missing configuration', {
-      missing: missingSlackVars,
-    });
-  } else if (slackConfig.oauthToken && slackConfig.channelId) {
-    try {
-      const slackText = `Resend webhookを受信しました: event=${eventType}`;
-      const slackResult = await postSlackMessage({
-        token: slackConfig.oauthToken,
-        channel: slackConfig.channelId,
-        text: slackText,
+  if (deliveryStatus) {
+    const missingSlackVars = Object.entries(slackConfig)
+      .filter(([, value]) => !value || value.trim().length === 0)
+      .map(([key]) => key);
+
+    if (missingSlackVars.length > 0) {
+      logger.error('Slack notification skipped due to missing configuration', {
+        missing: missingSlackVars,
       });
+    } else if (slackConfig.oauthToken && slackConfig.channelId) {
+      try {
+        const data = payload?.data ?? {};
+        const from = typeof data.from === 'string' && data.from.trim().length > 0 ? data.from : 'unknown';
+        const to = Array.isArray(data.to) && data.to.length > 0
+          ? data.to.join(', ')
+          : (typeof data.to === 'string' && data.to.trim().length > 0 ? data.to : 'unknown');
+        const subject = typeof data.subject === 'string' && data.subject.trim().length > 0 ? data.subject : 'unknown';
 
-      if (!slackResult.ok) {
-        logger.error('Slack notification failed for Resend webhook', {
+        const slackText = [
+          `Resend: ${deliveryStatus}`,
+          `from: ${from}`,
+          `to: ${to}`,
+          `件名: ${subject}`,
+        ].join('\n');
+
+        const slackResult = await postSlackMessage({
+          token: slackConfig.oauthToken,
+          channel: slackConfig.channelId,
+          text: slackText,
+        });
+
+        if (!slackResult.ok) {
+          logger.error('Slack notification failed for Resend webhook', {
+            eventType,
+            error: slackResult.error,
+            status: slackResult.status,
+          });
+        }
+      } catch (error) {
+        logger.error('Slack notification errored for Resend webhook', {
           eventType,
-          error: slackResult.error,
-          status: slackResult.status,
+          error: error instanceof Error ? error.message : 'Unknown error',
         });
       }
-    } catch (error) {
-      logger.error('Slack notification errored for Resend webhook', {
-        eventType,
-        error: error instanceof Error ? error.message : 'Unknown error',
-      });
     }
   }
 
