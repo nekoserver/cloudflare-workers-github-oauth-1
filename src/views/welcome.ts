@@ -263,6 +263,7 @@ export function getWelcomePage(user: {
           ${initials}
         </div>
         <div class="dropdown-menu" id="dropdownMenu">
+          <a href="/repositories" class="dropdown-item">📦 リポジトリ</a>
           <a href="/settings" class="dropdown-item">⚙️ 設定</a>
           <a href="/auth/logout" class="dropdown-item logout">🚪 ログアウト</a>
         </div>

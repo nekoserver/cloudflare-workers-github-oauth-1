@@ -17,6 +17,17 @@ export interface GitHubEmail {
   visibility: string | null;
 }
 
+export interface GitHubRepo {
+  name: string;
+  html_url: string;
+  description: string | null;
+  language: string | null;
+  stargazers_count: number;
+  forks_count: number;
+  updated_at: string;
+  private: boolean;
+}
+
 /**
  * GitHub OAuthのアクセストークンを取得
  */
@@ -115,4 +126,22 @@ export async function getGitHubUserEmail(accessToken: string): Promise<string | 
 
   // 最初のメールを返す
   return emails[0]?.email || null;
+}
+
+/**
+ * GitHubユーザーの公開リポジトリ一覧を取得
+ */
+export async function getGitHubUserRepos(username: string): Promise<GitHubRepo[]> {
+  const response = await fetch(`https://api.github.com/users/${encodeURIComponent(username)}/repos?sort=updated&per_page=100`, {
+    headers: {
+      'Accept': 'application/vnd.github.v3+json',
+      'User-Agent': 'Cloudflare-Workers-GitHub-OAuth',
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error('Failed to fetch GitHub repositories');
+  }
+
+  return await response.json<GitHubRepo[]>();
 }

@@ -13,7 +13,8 @@ import { authMiddleware, optionalAuthMiddleware } from './middleware/auth';
 import { getLoginPage } from './views/login';
 import { getWelcomePage } from './views/welcome';
 import { getSettingsPage } from './views/settings';
-import { getGitHubAccessToken, getGitHubUser, getGitHubUserEmail } from './utils/github';
+import { getRepositoriesPage } from './views/repositories';
+import { getGitHubAccessToken, getGitHubUser, getGitHubUserEmail, getGitHubUserRepos } from './utils/github';
 import { getCookieValue, getCookieValues } from './utils/cookie';
 import { verifyResendWebhookSignature } from './utils/resendWebhook';
 import { postSlackMessage } from './utils/slack';
@@ -226,7 +227,7 @@ app.use('/*', async (c, next) => {
   if (!headers.has('Content-Security-Policy')) {
     headers.set(
       'Content-Security-Policy',
-      "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'"
+      "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'"
     );
   }
   headers.set('X-Content-Type-Options', 'nosniff');
@@ -553,6 +554,61 @@ app.get('/settings', authMiddleware, (c) => {
     expiresAtTimestamp: user.exp,
     timezone,
     sessionDuration,
+  }));
+});
+
+/**
+ * リポジトリページ（ログインが必要だが未ログイン時はトップへ）
+ */
+app.get('/repositories', optionalAuthMiddleware, async (c) => {
+  const user = c.get('user');
+
+  if (!user) {
+    return c.redirect('/', 302);
+  }
+
+  let repositories: {
+    name: string;
+    htmlUrl: string;
+    description?: string | null;
+    language?: string | null;
+    stars: number;
+    forks: number;
+    updatedAt: string;
+    isPrivate: boolean;
+  }[] = [];
+  let errorMessage: string | null = null;
+
+  try {
+    const repos = await getGitHubUserRepos(user.sub);
+    repositories = repos.map((repo) => {
+      const updatedAt = repo.updated_at
+        ? new Date(repo.updated_at).toISOString().replace('T', ' ').substring(0, 19) + ' UTC'
+        : '不明';
+      return {
+        name: repo.name,
+        htmlUrl: repo.html_url,
+        description: repo.description,
+        language: repo.language,
+        stars: repo.stargazers_count ?? 0,
+        forks: repo.forks_count ?? 0,
+        updatedAt,
+        isPrivate: repo.private,
+      };
+    });
+  } catch (error) {
+    logger.error('Failed to fetch GitHub repositories', {
+      userId: user.sub,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    errorMessage = 'リポジトリ一覧を取得できませんでした。時間をおいて再度お試しください。';
+  }
+
+  return c.html(getRepositoriesPage({
+    username: user.sub,
+    name: user.name,
+    repositories,
+    errorMessage,
   }));
 });
 
