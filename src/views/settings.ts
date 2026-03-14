@@ -12,6 +12,9 @@ export function getSettingsPage(user: {
   expiresAtTimestamp: number;
   timezone?: string;
   sessionDuration?: string;
+  githubScopes?: string;
+  githubGrantedScopes?: string[] | null;
+  githubScopeError?: string | null;
 }): string {
   const displayName = escapeHtml(user.name || user.username);
   const safeUsername = escapeHtml(user.username);
@@ -20,6 +23,19 @@ export function getSettingsPage(user: {
   const initials = escapeHtml((user.name || user.username).substring(0, 2).toUpperCase());
   const currentTimezone = user.timezone || 'UTC';
   const currentSessionDuration = user.sessionDuration || '1h';
+  const requestedScopes = user.githubScopes ? user.githubScopes.split(/\s+/).filter(Boolean) : [];
+  const grantedScopes = user.githubGrantedScopes ?? null;
+  const scopeError = user.githubScopeError ? escapeHtml(user.githubScopeError) : null;
+  const renderScopeBadges = (scopes: string[]): string =>
+    scopes.length > 0
+      ? scopes.map((scope) => `<span class="scope-badge">${escapeHtml(scope)}</span>`).join('')
+      : '<span class="scope-empty">なし</span>';
+  const requestedScopeBadges = renderScopeBadges(requestedScopes);
+  const grantedScopeBadges = scopeError
+    ? `<span class="scope-error">${scopeError}</span>`
+    : grantedScopes === null
+      ? '<span class="scope-empty">取得なし</span>'
+      : renderScopeBadges(grantedScopes);
 
   return `<!DOCTYPE html>
 <html lang="ja">
@@ -122,6 +138,13 @@ export function getSettingsPage(user: {
     .btn-cancel { background: #fc8181; color: white; }
     .btn-cancel:hover { background: #f56565; }
     .time-remaining-warning { color: #e53e3e; font-weight: 600; }
+    .scope-badge {
+      display: inline-block; padding: 4px 10px; border-radius: 999px;
+      background: #edf2f7; color: #2d3748; font-size: 12px; font-weight: 600;
+    }
+    .scope-list { display: flex; flex-wrap: wrap; gap: 8px; }
+    .scope-empty { color: #718096; font-size: 12px; font-weight: 600; }
+    .scope-error { color: #e53e3e; font-size: 12px; font-weight: 600; }
   </style>
 </head>
 <body>
@@ -211,6 +234,24 @@ export function getSettingsPage(user: {
           <button class="btn btn-cancel" onclick="cancelSessionDuration()">キャンセル</button>
         </div>
         <div class="success-message" id="sessionSuccessMessage">✓ セッション有効期限を変更しました</div>
+      </div>
+
+      <div class="section">
+        <h2 class="section-title">GitHub OAuth</h2>
+        <div class="info-grid">
+          <div class="info-item">
+            <span class="info-label">要求スコープ</span>
+            <span class="info-value">
+              <span class="scope-list">${requestedScopeBadges}</span>
+            </span>
+          </div>
+          <div class="info-item">
+            <span class="info-label">付与スコープ</span>
+            <span class="info-value">
+              <span class="scope-list">${grantedScopeBadges}</span>
+            </span>
+          </div>
+        </div>
       </div>
 
       <div class="section">

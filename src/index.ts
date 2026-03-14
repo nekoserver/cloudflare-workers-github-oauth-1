@@ -14,7 +14,7 @@ import { getLoginPage } from './views/login';
 import { getWelcomePage } from './views/welcome';
 import { getSettingsPage } from './views/settings';
 import { getRepositoriesPage } from './views/repositories';
-import { getGitHubAccessToken, getGitHubUser, getGitHubUserEmail, getGitHubUserRepos } from './utils/github';
+import { getGitHubAccessToken, getGitHubTokenScopes, getGitHubUser, getGitHubUserEmail, getGitHubUserRepos, GitHubTokenScopesError } from './utils/github';
 import { getCookieValue, getCookieValues } from './utils/cookie';
 import { verifyResendWebhookSignature } from './utils/resendWebhook';
 import { postSlackMessage } from './utils/slack';
@@ -90,6 +90,26 @@ function resolveResendDedupTtlSeconds(envValue: string | undefined): number {
     return defaultTtl;
   }
   return Math.floor(parsed);
+}
+
+function normalizeGitHubApiMessage(message: string): string {
+  const normalized = message.trim().toLowerCase();
+  switch (normalized) {
+    case 'bad credentials':
+      return '認証情報が無効です';
+    case 'requires authentication':
+      return '認証が必要です';
+    case 'not found':
+      return '対象が見つかりません';
+    case 'validation failed':
+      return '入力内容が不正です';
+    case 'resource not accessible by integration':
+      return '権限が不足しています';
+    case 'api rate limit exceeded':
+      return 'APIのレート制限に達しました';
+    default:
+      return message;
+  }
 }
 
 // セッション有効期限の文字列を秒数に変換するヘルパー関数
@@ -260,6 +280,8 @@ app.get('/health', (c) => {
 // 認証フロー
 // =====================================================
 
+const GITHUB_OAUTH_SCOPE = 'read:user user:email';
+
 /**
  * トップページ - GitHub OAuth ログインページ
  */
@@ -302,7 +324,7 @@ app.get('/auth/github', async (c) => {
   const authUrl = new URL('https://github.com/login/oauth/authorize');
   authUrl.searchParams.set('client_id', clientId);
   authUrl.searchParams.set('redirect_uri', redirectUri);
-  authUrl.searchParams.set('scope', 'read:user user:email');
+  authUrl.searchParams.set('scope', GITHUB_OAUTH_SCOPE);
   authUrl.searchParams.set('state', state);
   authUrl.searchParams.set('code_challenge', pkce.challenge);
   authUrl.searchParams.set('code_challenge_method', 'S256');
@@ -549,6 +571,35 @@ app.get('/settings', authMiddleware, (c) => {
     expiresAt = expiresDate.toISOString().replace('T', ' ').substring(0, 19) + ' UTC';
   }
 
+  const userSession = await getUserSession(c.env.DB, user.sub);
+  const accessToken = userSession?.githubAccessToken ?? undefined;
+
+  let grantedScopes: string[] | null = null;
+  let scopesError: string | null = null;
+  const clientId = c.env.GITHUB_CLIENT_ID;
+  const clientSecret = c.env.GITHUB_CLIENT_SECRET;
+
+  if (accessToken && clientId && clientSecret) {
+    try {
+      grantedScopes = await getGitHubTokenScopes({ accessToken, clientId, clientSecret });
+    } catch (error) {
+      logger.warn('Failed to fetch GitHub token scopes', {
+        userId: user.sub,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+      if (error instanceof GitHubTokenScopesError) {
+        const suffix = error.apiMessage ? `: ${normalizeGitHubApiMessage(error.apiMessage)}` : '';
+        scopesError = `付与スコープを取得できませんでした (HTTP ${error.status})${suffix}`;
+      } else {
+        scopesError = '付与スコープを取得できませんでした';
+      }
+    }
+  } else if (!accessToken) {
+    scopesError = 'アクセストークンが保存されていません';
+  } else {
+    scopesError = 'GitHub OAuth 設定が不足しています';
+  }
+
   return c.html(getSettingsPage({
     username: user.sub,
     name: user.name,
@@ -558,6 +609,9 @@ app.get('/settings', authMiddleware, (c) => {
     expiresAtTimestamp: user.exp,
     timezone,
     sessionDuration,
+    githubScopes: GITHUB_OAUTH_SCOPE,
+    githubGrantedScopes: grantedScopes,
+    githubScopeError: scopesError,
   }));
 });
 
