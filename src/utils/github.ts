@@ -20,12 +20,21 @@ export interface GitHubEmail {
 export interface GitHubRepo {
   name: string;
   html_url: string;
+  full_name?: string;
+  owner?: {
+    login?: string;
+  };
   description: string | null;
   language: string | null;
   stargazers_count: number;
   forks_count: number;
   updated_at: string;
   private: boolean;
+}
+
+export interface GitHubCommit {
+  sha: string;
+  html_url: string;
 }
 
 export interface GitHubTokenInfo {
@@ -153,7 +162,7 @@ export async function getGitHubUserEmail(accessToken: string): Promise<string | 
 export async function getGitHubUserRepos(params: { username?: string; accessToken?: string }): Promise<GitHubRepo[]> {
   const { username, accessToken } = params;
   const url = accessToken
-    ? 'https://api.github.com/user/repos?sort=updated&per_page=100'
+    ? 'https://api.github.com/user/repos?sort=updated&per_page=100&visibility=all'
     : `https://api.github.com/users/${encodeURIComponent(username ?? '')}/repos?sort=updated&per_page=100`;
 
   if (!accessToken && !username) {
@@ -175,6 +184,38 @@ export async function getGitHubUserRepos(params: { username?: string; accessToke
   }
 
   return await response.json<GitHubRepo[]>();
+}
+
+/**
+ * GitHubリポジトリの最新コミットを取得
+ */
+export async function getGitHubLatestCommit(params: {
+  owner: string;
+  repo: string;
+  accessToken?: string;
+}): Promise<GitHubCommit | null> {
+  const { owner, repo, accessToken } = params;
+  const url = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/commits?per_page=1`;
+  const headers: Record<string, string> = {
+    'Accept': 'application/vnd.github.v3+json',
+    'User-Agent': 'Cloudflare-Workers-GitHub-OAuth',
+  };
+  if (accessToken) {
+    headers['Authorization'] = `Bearer ${accessToken}`;
+  }
+
+  const response = await fetch(url, { headers });
+  if (!response.ok) {
+    return null;
+  }
+
+  const commits = await response.json<{ sha?: string; html_url?: string }[]>();
+  const latest = commits[0];
+  if (!latest?.sha || !latest?.html_url) {
+    return null;
+  }
+
+  return { sha: latest.sha, html_url: latest.html_url };
 }
 
 /**

@@ -12,6 +12,8 @@ export interface RepositoryListItem {
   forks: number;
   updatedAt: string;
   isPrivate: boolean;
+  latestCommitSha?: string | null;
+  latestCommitUrl?: string | null;
 }
 
 export function getRepositoriesPage(user: {
@@ -24,26 +26,37 @@ export function getRepositoriesPage(user: {
   const initials = escapeHtml((user.name || user.username).substring(0, 2).toUpperCase());
   const repoCount = user.repositories.length;
 
-  const repoCards = user.repositories.map((repo) => {
+  const repoRows = user.repositories.map((repo) => {
     const name = escapeHtml(repo.name);
     const description = repo.description ? escapeHtml(repo.description) : '説明なし';
     const language = repo.language ? escapeHtml(repo.language) : '不明';
     const updatedAt = escapeHtml(repo.updatedAt);
     const privacyBadge = repo.isPrivate ? '<span class="badge private">Private</span>' : '<span class="badge public">Public</span>';
+    const repoLink = `
+      <a class="repo-name-link" href="${repo.htmlUrl}" target="_blank" rel="noreferrer">
+        ${name}
+      </a>
+    `;
+    const commitLink = repo.latestCommitSha && repo.latestCommitUrl
+      ? `<a class="repo-meta-link" href="${repo.latestCommitUrl}" target="_blank" rel="noreferrer">🔗 ${escapeHtml(repo.latestCommitSha.substring(0, 7))}</a>`
+      : `<span class="repo-meta-muted">🔗 なし</span>`;
     return `
-      <a class="repo-card" href="${repo.htmlUrl}" target="_blank" rel="noreferrer">
-        <div class="repo-header">
-          <h3 class="repo-name">${name}</h3>
-          ${privacyBadge}
+      <div class="repo-row" data-updated="${repo.updatedAt}">
+        <div class="repo-main">
+          <div class="repo-title">
+            <h3 class="repo-name">${repoLink}</h3>
+            ${privacyBadge}
+          </div>
+          <p class="repo-description">${description}</p>
         </div>
-        <p class="repo-description">${description}</p>
         <div class="repo-meta">
           <span class="repo-meta-item">🧩 ${language}</span>
           <span class="repo-meta-item">⭐ ${repo.stars}</span>
           <span class="repo-meta-item">🍴 ${repo.forks}</span>
           <span class="repo-meta-item">🕒 ${updatedAt}</span>
+          <span class="repo-meta-item">${commitLink}</span>
         </div>
-      </a>
+      </div>
     `;
   }).join('');
 
@@ -101,7 +114,7 @@ export function getRepositoriesPage(user: {
     .dropdown-item:last-child { border-bottom: none; }
     .dropdown-item:hover { background: #f7fafc; }
     .dropdown-item.logout { color: #e53e3e; }
-    .container { max-width: 1100px; margin: 0 auto; padding: 48px 32px; }
+    .container { width: 100%; margin: 0 auto; padding: 40px 32px 56px; }
     .page-header {
       background: white; border-radius: 16px;
       box-shadow: 0 20px 60px rgba(0,0,0,0.3); padding: 36px; margin-bottom: 24px;
@@ -112,24 +125,55 @@ export function getRepositoriesPage(user: {
       background: #fed7d7; color: #c53030; border-radius: 12px; padding: 12px 16px;
       font-size: 14px; font-weight: 600; margin-top: 16px;
     }
-    .repo-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }
-    .repo-card {
-      background: white; border-radius: 14px; padding: 20px;
-      box-shadow: 0 10px 30px rgba(0,0,0,0.15); text-decoration: none; color: inherit;
-      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    .repo-list { display: flex; flex-direction: column; gap: 14px; }
+    .repo-list-header {
+      display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: 24px;
+      padding: 0 6px; margin-bottom: 6px; align-items: center;
+      color: #1a202c; font-weight: 700; font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em;
     }
-    .repo-card:hover { transform: translateY(-4px); box-shadow: 0 16px 36px rgba(0,0,0,0.2); }
-    .repo-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
-    .repo-name { font-size: 18px; font-weight: 700; color: #2d3748; }
+    .repo-list-header span { opacity: 0.7; }
+    .sort-button {
+      background: transparent; border: none; padding: 0; color: #1a202c;
+      font: inherit; font-weight: 800; display: inline-flex; align-items: center; gap: 6px; cursor: pointer;
+    }
+    .sort-button:hover { color: #2d3748; }
+    .sort-indicator {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 20px; height: 20px; border-radius: 999px; background: rgba(26,32,44,0.08);
+      font-size: 12px; line-height: 1;
+    }
+    .repo-row {
+      background: white; border-radius: 14px; padding: 20px 24px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.15); color: inherit;
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+      display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: 24px; align-items: center;
+    }
+    .repo-row:hover { transform: translateY(-2px); box-shadow: 0 16px 36px rgba(0,0,0,0.2); }
+    .repo-title { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+    .repo-name { font-size: 20px; font-weight: 700; color: #2d3748; }
+    .repo-name-link {
+      color: inherit; text-decoration: none; border-bottom: 2px solid transparent; transition: border-color 0.2s ease;
+    }
+    .repo-name-link:hover { border-color: #667eea; }
     .badge {
       display: inline-flex; align-items: center; justify-content: center;
       padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 700;
     }
     .badge.private { background: #feb2b2; color: #9b2c2c; }
     .badge.public { background: #9ae6b4; color: #276749; }
-    .repo-description { font-size: 14px; color: #4a5568; margin-bottom: 12px; min-height: 36px; }
-    .repo-meta { display: flex; flex-wrap: wrap; gap: 8px; font-size: 12px; color: #718096; }
-    .repo-meta-item { background: #edf2f7; padding: 4px 8px; border-radius: 8px; }
+    .repo-description { font-size: 14px; color: #4a5568; min-height: 22px; }
+    .repo-meta { display: flex; flex-wrap: wrap; gap: 8px; font-size: 12px; color: #718096; justify-content: flex-end; }
+    .repo-meta-item { background: #edf2f7; padding: 4px 10px; border-radius: 999px; }
+    .repo-meta-link { color: #2b6cb0; text-decoration: none; font-weight: 700; }
+    .repo-meta-link:hover { text-decoration: underline; }
+    .repo-meta-muted { color: #a0aec0; font-weight: 700; }
+    @media (max-width: 860px) {
+      .container { padding: 28px 18px 40px; }
+      .repo-list-header { display: none; }
+      .repo-row { grid-template-columns: 1fr; }
+      .repo-meta { justify-content: flex-start; }
+      .repo-title { flex-wrap: wrap; }
+    }
     .empty-state {
       background: rgba(255,255,255,0.9); border-radius: 12px; padding: 16px; text-align: center;
       color: #4a5568; font-weight: 600;
@@ -166,7 +210,16 @@ export function getRepositoriesPage(user: {
     </div>
 
     ${emptyState}
-    ${repoCards ? `<div class="repo-grid">${repoCards}</div>` : ''}
+    ${repoRows ? `
+      <div class="repo-list-header">
+        <span>Repository</span>
+        <button class="sort-button" id="sortUpdated" data-order="desc" type="button" aria-label="更新日の並び替え">
+          最終更新
+          <span class="sort-indicator" id="sortIndicator">▼</span>
+        </button>
+      </div>
+      <div class="repo-list" id="repoList">${repoRows}</div>
+    ` : ''}
   </div>
 
   <script>
@@ -182,6 +235,26 @@ export function getRepositoriesPage(user: {
         dropdown.classList.remove('show');
       }
     });
+
+    const sortButton = document.getElementById('sortUpdated');
+    const repoList = document.getElementById('repoList');
+    const sortIndicator = document.getElementById('sortIndicator');
+    if (sortButton && repoList) {
+      sortButton.addEventListener('click', function() {
+        const order = sortButton.getAttribute('data-order') === 'desc' ? 'asc' : 'desc';
+        sortButton.setAttribute('data-order', order);
+        if (sortIndicator) {
+          sortIndicator.textContent = order === 'desc' ? '▼' : '▲';
+        }
+        const rows = Array.from(repoList.querySelectorAll('.repo-row'));
+        rows.sort((a, b) => {
+          const aTime = Date.parse(a.getAttribute('data-updated') || '') || 0;
+          const bTime = Date.parse(b.getAttribute('data-updated') || '') || 0;
+          return order === 'desc' ? bTime - aTime : aTime - bTime;
+        });
+        rows.forEach((row) => repoList.appendChild(row));
+      });
+    }
   </script>
 </body>
 </html>`;
