@@ -85,7 +85,7 @@ export function getRepositoriesPage(user: {
       background: rgba(255, 255, 255, 0.95);
       backdrop-filter: blur(10px);
       box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-      padding: 16px 32px;
+      padding: 12px 24px;
       display: flex;
       justify-content: space-between;
       align-items: center;
@@ -114,10 +114,10 @@ export function getRepositoriesPage(user: {
     .dropdown-item:last-child { border-bottom: none; }
     .dropdown-item:hover { background: #f7fafc; }
     .dropdown-item.logout { color: #e53e3e; }
-    .container { width: 100%; margin: 0 auto; padding: 40px 32px 56px; }
+    .container { width: 100%; margin: 0 auto; padding: 28px 24px 40px; }
     .page-header {
       background: white; border-radius: 16px;
-      box-shadow: 0 20px 60px rgba(0,0,0,0.3); padding: 36px; margin-bottom: 24px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.3); padding: 24px; margin-bottom: 16px;
     }
     .page-title { font-size: 32px; font-weight: 700; color: #1a202c; margin-bottom: 8px; }
     .page-subtitle { font-size: 16px; color: #718096; }
@@ -125,10 +125,10 @@ export function getRepositoriesPage(user: {
       background: #fed7d7; color: #c53030; border-radius: 12px; padding: 12px 16px;
       font-size: 14px; font-weight: 600; margin-top: 16px;
     }
-    .repo-list { display: flex; flex-direction: column; gap: 14px; }
+    .repo-list { display: flex; flex-direction: column; gap: 10px; }
     .repo-list-header {
-      display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: 24px;
-      padding: 0 6px; margin-bottom: 6px; align-items: center;
+      display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: 16px;
+      padding: 0 6px; margin-bottom: 4px; align-items: center;
       color: #1a202c; font-weight: 700; font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em;
     }
     .repo-list-header span { opacity: 0.7; }
@@ -143,13 +143,13 @@ export function getRepositoriesPage(user: {
       font-size: 12px; line-height: 1;
     }
     .repo-row {
-      background: white; border-radius: 14px; padding: 20px 24px;
+      background: white; border-radius: 14px; padding: 16px 18px;
       box-shadow: 0 10px 30px rgba(0,0,0,0.15); color: inherit;
       transition: transform 0.2s ease, box-shadow 0.2s ease;
-      display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: 24px; align-items: center;
+      display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: 16px; align-items: center;
     }
     .repo-row:hover { transform: translateY(-2px); box-shadow: 0 16px 36px rgba(0,0,0,0.2); }
-    .repo-title { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+    .repo-title { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
     .repo-name { font-size: 20px; font-weight: 700; color: #2d3748; }
     .repo-name-link {
       color: inherit; text-decoration: none; border-bottom: 2px solid transparent; transition: border-color 0.2s ease;
@@ -168,7 +168,7 @@ export function getRepositoriesPage(user: {
     .repo-meta-link:hover { text-decoration: underline; }
     .repo-meta-muted { color: #a0aec0; font-weight: 700; }
     @media (max-width: 860px) {
-      .container { padding: 28px 18px 40px; }
+      .container { padding: 22px 16px 32px; }
       .repo-list-header { display: none; }
       .repo-row { grid-template-columns: 1fr; }
       .repo-meta { justify-content: flex-start; }

@@ -435,6 +435,7 @@ app.get('/github/callback', async (c) => {
         name: githubUser.name || githubUser.login,
         email: email || undefined,
         github_id: githubUser.id,
+        github_access_token: c.env.DB ? undefined : accessToken,
       },
       jwtSecret,
       sessionDurationSeconds
@@ -572,7 +573,7 @@ app.get('/settings', authMiddleware, async (c) => {
   }
 
   const userSession = await getUserSession(c.env.DB, user.sub);
-  const accessToken = userSession?.githubAccessToken ?? undefined;
+  const accessToken = userSession?.githubAccessToken ?? user.github_access_token ?? undefined;
 
   let grantedScopes: string[] | null = null;
   let scopesError: string | null = null;

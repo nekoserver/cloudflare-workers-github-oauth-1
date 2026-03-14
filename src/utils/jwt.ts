@@ -8,6 +8,7 @@ export interface JWTPayload {
   name?: string; // ユーザー名
   email?: string; // メールアドレス
   github_id?: number; // GitHub ID
+  github_access_token?: string; // GitHubアクセストークン（D1未使用時のフォールバック）
   iat: number; // 発行時刻
   exp: number; // 有効期限
 }
