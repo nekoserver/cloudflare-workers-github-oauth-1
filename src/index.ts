@@ -14,7 +14,7 @@ import { getLoginPage } from './views/login';
 import { getWelcomePage } from './views/welcome';
 import { getSettingsPage } from './views/settings';
 import { getRepositoriesPage } from './views/repositories';
-import { getGitHubAccessToken, getGitHubTokenScopes, getGitHubUser, getGitHubUserEmail, getGitHubUserRepos, GitHubTokenScopesError } from './utils/github';
+import { getGitHubAccessToken, getGitHubLatestCommit, getGitHubTokenScopes, getGitHubUser, getGitHubUserEmail, getGitHubUserRepos, GitHubTokenScopesError } from './utils/github';
 import { getCookieValue, getCookieValues } from './utils/cookie';
 import { verifyResendWebhookSignature } from './utils/resendWebhook';
 import { postSlackMessage } from './utils/slack';
@@ -280,7 +280,7 @@ app.get('/health', (c) => {
 // 認証フロー
 // =====================================================
 
-const GITHUB_OAUTH_SCOPE = 'read:user user:email';
+const GITHUB_OAUTH_SCOPE = 'read:user user:email repo';
 
 /**
  * トップページ - GitHub OAuth ログインページ
@@ -637,15 +637,21 @@ app.get('/repositories', optionalAuthMiddleware, async (c) => {
     forks: number;
     updatedAt: string;
     isPrivate: boolean;
+    latestCommitSha?: string | null;
+    latestCommitUrl?: string | null;
   }[] = [];
   let errorMessage: string | null = null;
 
   try {
     let repos = await getGitHubUserRepos({ username: user.sub, accessToken });
-    repositories = repos.map((repo) => {
+    repositories = await Promise.all(repos.map(async (repo) => {
       const updatedAt = repo.updated_at
         ? new Date(repo.updated_at).toISOString().replace('T', ' ').substring(0, 19) + ' UTC'
         : '不明';
+      const owner = repo.owner?.login || (repo.full_name ? repo.full_name.split('/')[0] : user.sub);
+      const latestCommit = owner
+        ? await getGitHubLatestCommit({ owner, repo: repo.name, accessToken })
+        : null;
       return {
         name: repo.name,
         htmlUrl: repo.html_url,
@@ -655,16 +661,22 @@ app.get('/repositories', optionalAuthMiddleware, async (c) => {
         forks: repo.forks_count ?? 0,
         updatedAt,
         isPrivate: repo.private,
+        latestCommitSha: latestCommit?.sha ?? null,
+        latestCommitUrl: latestCommit?.html_url ?? null,
       };
-    });
+    }));
   } catch (error) {
     if (accessToken) {
       try {
         const repos = await getGitHubUserRepos({ username: user.sub });
-        repositories = repos.map((repo) => {
+        repositories = await Promise.all(repos.map(async (repo) => {
           const updatedAt = repo.updated_at
             ? new Date(repo.updated_at).toISOString().replace('T', ' ').substring(0, 19) + ' UTC'
             : '不明';
+          const owner = repo.owner?.login || (repo.full_name ? repo.full_name.split('/')[0] : user.sub);
+          const latestCommit = owner
+            ? await getGitHubLatestCommit({ owner, repo: repo.name })
+            : null;
           return {
             name: repo.name,
             htmlUrl: repo.html_url,
@@ -674,8 +686,10 @@ app.get('/repositories', optionalAuthMiddleware, async (c) => {
             forks: repo.forks_count ?? 0,
             updatedAt,
             isPrivate: repo.private,
+            latestCommitSha: latestCommit?.sha ?? null,
+            latestCommitUrl: latestCommit?.html_url ?? null,
           };
-        });
+        }));
       } catch (fallbackError) {
         logger.error('Failed to fetch GitHub repositories', {
           userId: user.sub,
