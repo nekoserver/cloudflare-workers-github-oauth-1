@@ -131,16 +131,28 @@ export async function getGitHubUserEmail(accessToken: string): Promise<string | 
 /**
  * GitHubユーザーの公開リポジトリ一覧を取得
  */
-export async function getGitHubUserRepos(username: string): Promise<GitHubRepo[]> {
-  const response = await fetch(`https://api.github.com/users/${encodeURIComponent(username)}/repos?sort=updated&per_page=100`, {
-    headers: {
-      'Accept': 'application/vnd.github.v3+json',
-      'User-Agent': 'Cloudflare-Workers-GitHub-OAuth',
-    },
-  });
+export async function getGitHubUserRepos(params: { username?: string; accessToken?: string }): Promise<GitHubRepo[]> {
+  const { username, accessToken } = params;
+  const url = accessToken
+    ? 'https://api.github.com/user/repos?sort=updated&per_page=100'
+    : `https://api.github.com/users/${encodeURIComponent(username ?? '')}/repos?sort=updated&per_page=100`;
+
+  if (!accessToken && !username) {
+    throw new Error('Username is required when access token is not provided');
+  }
+
+  const headers: Record<string, string> = {
+    'Accept': 'application/vnd.github.v3+json',
+    'User-Agent': 'Cloudflare-Workers-GitHub-OAuth',
+  };
+  if (accessToken) {
+    headers['Authorization'] = `Bearer ${accessToken}`;
+  }
+
+  const response = await fetch(url, { headers });
 
   if (!response.ok) {
-    throw new Error('Failed to fetch GitHub repositories');
+    throw new Error(`Failed to fetch GitHub repositories: ${response.status}`);
   }
 
   return await response.json<GitHubRepo[]>();

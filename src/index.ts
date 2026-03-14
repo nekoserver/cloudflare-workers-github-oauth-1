@@ -110,7 +110,8 @@ async function updateUserSession(
   db: D1Database | undefined,
   userId: string,
   timezone: string,
-  sessionDuration: string
+  sessionDuration: string,
+  githubAccessToken?: string
 ): Promise<string | null> {
   if (!db) {
     logger.warn('D1 database not available, skipping session update', { userId });
@@ -130,14 +131,14 @@ async function updateUserSession(
       lastLoginAt = existing.current_login_at;
       await db.prepare(`
         UPDATE user_sessions
-        SET timezone = ?, session_duration = ?, last_login_at = ?, current_login_at = ?, updated_at = ?
+        SET timezone = ?, session_duration = ?, last_login_at = ?, current_login_at = ?, updated_at = ?, github_access_token = ?
         WHERE user_id = ?
-      `).bind(timezone, sessionDuration, lastLoginAt, now, now, userId).run();
+      `).bind(timezone, sessionDuration, lastLoginAt, now, now, githubAccessToken ?? null, userId).run();
     } else {
       await db.prepare(`
-        INSERT INTO user_sessions (user_id, timezone, session_duration, last_login_at, current_login_at, updated_at)
-        VALUES (?, ?, ?, NULL, ?, ?)
-      `).bind(userId, timezone, sessionDuration, now, now).run();
+        INSERT INTO user_sessions (user_id, timezone, session_duration, last_login_at, current_login_at, updated_at, github_access_token)
+        VALUES (?, ?, ?, NULL, ?, ?, ?)
+      `).bind(userId, timezone, sessionDuration, now, now, githubAccessToken ?? null).run();
     }
 
     return lastLoginAt;
@@ -155,6 +156,7 @@ async function getUserSession(db: D1Database | undefined, userId: string): Promi
   timezone: string;
   sessionDuration: string;
   lastLoginAt: string | null;
+  githubAccessToken?: string | null;
 } | null> {
   if (!db) {
     return null;
@@ -162,11 +164,12 @@ async function getUserSession(db: D1Database | undefined, userId: string): Promi
 
   try {
     const result = await db.prepare(
-      'SELECT timezone, session_duration, last_login_at FROM user_sessions WHERE user_id = ?'
+      'SELECT timezone, session_duration, last_login_at, github_access_token FROM user_sessions WHERE user_id = ?'
     ).bind(userId).first<{
       timezone: string;
       session_duration: string;
       last_login_at: string | null;
+      github_access_token: string | null;
     }>();
 
     if (!result) {
@@ -177,6 +180,7 @@ async function getUserSession(db: D1Database | undefined, userId: string): Promi
       timezone: result.timezone,
       sessionDuration: result.session_duration,
       lastLoginAt: result.last_login_at,
+      githubAccessToken: result.github_access_token,
     };
   } catch (error) {
     logger.error('Error getting user session', {
@@ -397,7 +401,7 @@ app.get('/github/callback', async (c) => {
     }
 
     // D1にログイン情報を保存
-    await updateUserSession(c.env.DB, userId, timezone, sessionDuration);
+    await updateUserSession(c.env.DB, userId, timezone, sessionDuration, accessToken);
 
     const sessionDurationSeconds = getSessionDurationSeconds(sessionDuration);
     const idleTimeoutSeconds = resolveIdleTimeoutSeconds(c.env.SESSION_IDLE_TIMEOUT_SECONDS, sessionDurationSeconds);
@@ -567,6 +571,9 @@ app.get('/repositories', optionalAuthMiddleware, async (c) => {
     return c.redirect('/', 302);
   }
 
+  const userSession = await getUserSession(c.env.DB, user.sub);
+  const accessToken = userSession?.githubAccessToken ?? undefined;
+
   let repositories: {
     name: string;
     htmlUrl: string;
@@ -580,7 +587,7 @@ app.get('/repositories', optionalAuthMiddleware, async (c) => {
   let errorMessage: string | null = null;
 
   try {
-    const repos = await getGitHubUserRepos(user.sub);
+    let repos = await getGitHubUserRepos({ username: user.sub, accessToken });
     repositories = repos.map((repo) => {
       const updatedAt = repo.updated_at
         ? new Date(repo.updated_at).toISOString().replace('T', ' ').substring(0, 19) + ' UTC'
@@ -597,11 +604,38 @@ app.get('/repositories', optionalAuthMiddleware, async (c) => {
       };
     });
   } catch (error) {
-    logger.error('Failed to fetch GitHub repositories', {
-      userId: user.sub,
-      error: error instanceof Error ? error.message : 'Unknown error',
-    });
-    errorMessage = 'リポジトリ一覧を取得できませんでした。時間をおいて再度お試しください。';
+    if (accessToken) {
+      try {
+        const repos = await getGitHubUserRepos({ username: user.sub });
+        repositories = repos.map((repo) => {
+          const updatedAt = repo.updated_at
+            ? new Date(repo.updated_at).toISOString().replace('T', ' ').substring(0, 19) + ' UTC'
+            : '不明';
+          return {
+            name: repo.name,
+            htmlUrl: repo.html_url,
+            description: repo.description,
+            language: repo.language,
+            stars: repo.stargazers_count ?? 0,
+            forks: repo.forks_count ?? 0,
+            updatedAt,
+            isPrivate: repo.private,
+          };
+        });
+      } catch (fallbackError) {
+        logger.error('Failed to fetch GitHub repositories', {
+          userId: user.sub,
+          error: fallbackError instanceof Error ? fallbackError.message : 'Unknown error',
+        });
+        errorMessage = 'リポジトリ一覧を取得できませんでした。時間をおいて再度お試しください。';
+      }
+    } else {
+      logger.error('Failed to fetch GitHub repositories', {
+        userId: user.sub,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+      errorMessage = 'リポジトリ一覧を取得できませんでした。時間をおいて再度お試しください。';
+    }
   }
 
   return c.html(getRepositoriesPage({
