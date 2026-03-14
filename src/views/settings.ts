@@ -138,6 +138,7 @@ export function getSettingsPage(user: {
         </div>
         <div class="dropdown-menu" id="dropdownMenu">
           <a href="/welcome" class="dropdown-item">🏠 ホーム</a>
+          <a href="/repositories" class="dropdown-item">📦 リポジトリ</a>
           <a href="/auth/logout" class="dropdown-item logout">🚪 ログアウト</a>
         </div>
       </div>
