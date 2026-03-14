@@ -161,9 +161,6 @@ export async function getGitHubUserEmail(accessToken: string): Promise<string | 
  */
 export async function getGitHubUserRepos(params: { username?: string; accessToken?: string }): Promise<GitHubRepo[]> {
   const { username, accessToken } = params;
-  const url = accessToken
-    ? 'https://api.github.com/user/repos?sort=updated&per_page=100&visibility=all'
-    : `https://api.github.com/users/${encodeURIComponent(username ?? '')}/repos?sort=updated&per_page=100`;
 
   if (!accessToken && !username) {
     throw new Error('Username is required when access token is not provided');
@@ -177,13 +174,40 @@ export async function getGitHubUserRepos(params: { username?: string; accessToke
     headers['Authorization'] = `Bearer ${accessToken}`;
   }
 
-  const response = await fetch(url, { headers });
+  const buildBaseUrl = () => {
+    if (accessToken) {
+      const url = new URL('https://api.github.com/user/repos');
+      url.searchParams.set('sort', 'updated');
+      url.searchParams.set('per_page', '100');
+      url.searchParams.set('visibility', 'all');
+      url.searchParams.set('affiliation', 'owner,collaborator,organization_member');
+      return url;
+    }
+    const url = new URL(`https://api.github.com/users/${encodeURIComponent(username ?? '')}/repos`);
+    url.searchParams.set('sort', 'updated');
+    url.searchParams.set('per_page', '100');
+    url.searchParams.set('type', 'all');
+    return url;
+  };
 
-  if (!response.ok) {
-    throw new Error(`Failed to fetch GitHub repositories: ${response.status}`);
+  const repos: GitHubRepo[] = [];
+  let nextUrl: string | null = buildBaseUrl().toString();
+
+  while (nextUrl) {
+    const response = await fetch(nextUrl, { headers });
+    if (!response.ok) {
+      throw new Error(`Failed to fetch GitHub repositories: ${response.status}`);
+    }
+
+    const pageRepos = await response.json<GitHubRepo[]>();
+    repos.push(...pageRepos);
+
+    const linkHeader = response.headers.get('Link');
+    const nextMatch = linkHeader?.match(/<([^>]+)>;\s*rel="next"/);
+    nextUrl = nextMatch ? nextMatch[1] : null;
   }
 
-  return await response.json<GitHubRepo[]>();
+  return repos;
 }
 
 /**
