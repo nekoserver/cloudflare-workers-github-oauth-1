@@ -28,6 +28,25 @@ export interface GitHubRepo {
   private: boolean;
 }
 
+export interface GitHubTokenInfo {
+  scopes: string[];
+}
+
+export class GitHubTokenScopesError extends Error {
+  status: number;
+  apiMessage?: string;
+
+  constructor(status: number, apiMessage?: string) {
+    const message = apiMessage
+      ? `Failed to fetch GitHub token info: ${status} (${apiMessage})`
+      : `Failed to fetch GitHub token info: ${status}`;
+    super(message);
+    this.name = 'GitHubTokenScopesError';
+    this.status = status;
+    this.apiMessage = apiMessage;
+  }
+}
+
 /**
  * GitHub OAuthのアクセストークンを取得
  */
@@ -156,4 +175,41 @@ export async function getGitHubUserRepos(params: { username?: string; accessToke
   }
 
   return await response.json<GitHubRepo[]>();
+}
+
+/**
+ * GitHub OAuthトークンの付与スコープを取得
+ */
+export async function getGitHubTokenScopes(params: {
+  accessToken: string;
+  clientId: string;
+  clientSecret: string;
+}): Promise<string[]> {
+  const { accessToken, clientId, clientSecret } = params;
+  const response = await fetch(`https://api.github.com/applications/${encodeURIComponent(clientId)}/token`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Basic ${btoa(`${clientId}:${clientSecret}`)}`,
+      'Accept': 'application/vnd.github.v3+json',
+      'User-Agent': 'Cloudflare-Workers-GitHub-OAuth',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ access_token: accessToken }),
+  });
+
+  if (!response.ok) {
+    let apiMessage: string | undefined;
+    try {
+      const errorData = await response.json<{ message?: string }>();
+      if (typeof errorData?.message === 'string') {
+        apiMessage = errorData.message;
+      }
+    } catch {
+      // ignore parse errors
+    }
+    throw new GitHubTokenScopesError(response.status, apiMessage);
+  }
+
+  const data = await response.json<GitHubTokenInfo>();
+  return Array.isArray(data.scopes) ? data.scopes : [];
 }
