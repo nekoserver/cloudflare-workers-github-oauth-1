@@ -161,7 +161,7 @@ export function getRepositoriesPage(user: {
   <div class="container">
     <div class="page-header">
       <h1 class="page-title">📦 リポジトリ</h1>
-      <p class="page-subtitle">公開リポジトリ ${repoCount} 件</p>
+      <p class="page-subtitle">リポジトリ ${repoCount} 件</p>
       ${errorBanner}
     </div>
 
