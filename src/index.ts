@@ -548,7 +548,7 @@ app.get('/welcome', authMiddleware, async (c) => {
 /**
  * 設定ページ（認証が必要）
  */
-app.get('/settings', authMiddleware, (c) => {
+app.get('/settings', authMiddleware, async (c) => {
   const user = c.get('user');
 
   const cookieHeader = c.req.header('Cookie');
