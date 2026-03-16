@@ -16,12 +16,18 @@ export interface RepositoryListItem {
   latestCommitUrl?: string | null;
 }
 
+export interface RepoPermissionInfo {
+  permissions: Record<string, string>;
+  repositorySelection: string;
+}
+
 export function getRepositoriesPage(user: {
   name?: string;
   username: string;
   repositories: RepositoryListItem[];
   errorMessage?: string | null;
   grantedScopes?: string[] | null;
+  repoPermissions?: Record<string, RepoPermissionInfo> | null;
 }): string {
   const displayName = escapeHtml(user.name || user.username);
   const initials = escapeHtml((user.name || user.username).substring(0, 2).toUpperCase());
@@ -29,80 +35,10 @@ export function getRepositoriesPage(user: {
   const scopes = user.grantedScopes ?? [];
   const hasRepoScope = scopes.includes('repo');
   const missingScopesBanner = !hasRepoScope && scopes.length > 0 ? true : false;
+  const repoPerms = user.repoPermissions ?? {};
 
-  // GitHub App権限とOAuthスコープからアクティブな権限を判定
-  interface PermissionInfo {
-    name: string;
-    icon: string;
-    active: boolean;
-    capabilities: string[];
-  }
-  const permissions: PermissionInfo[] = [
-    {
-      name: 'リポジトリ (Contents)',
-      icon: '📦',
-      active: scopes.includes('repo') || scopes.includes('public_repo'),
-      capabilities: [
-        'リポジトリのコード・ファイルの読み取り',
-        'プライベートリポジトリへのアクセス',
-        'コミット履歴の閲覧',
-      ],
-    },
-    {
-      name: 'Issues',
-      icon: '🐛',
-      active: scopes.includes('repo') || scopes.includes('public_repo'),
-      capabilities: [
-        'Issueの作成・編集・クローズ',
-        'Issueへのコメント追加',
-        'ラベル・マイルストーンの管理',
-        'Issueのアサイン',
-      ],
-    },
-    {
-      name: 'Pull Requests',
-      icon: '🔀',
-      active: scopes.includes('repo') || scopes.includes('public_repo'),
-      capabilities: [
-        'PRの作成・編集・クローズ',
-        'PRへのレビュー・コメント追加',
-        'PRのマージ',
-        'ブランチ保護ルールの確認',
-      ],
-    },
-    {
-      name: 'Secrets',
-      icon: '🔑',
-      active: scopes.includes('repo'),
-      capabilities: [
-        'Actions シークレットの管理',
-        'Dependabot シークレットの管理',
-        'Codespaces シークレットの管理',
-        'シークレットの作成・更新・削除',
-      ],
-    },
-    {
-      name: 'ユーザー情報',
-      icon: '👤',
-      active: scopes.includes('read:user') || scopes.includes('user'),
-      capabilities: [
-        'プロフィール情報の読み取り',
-        'メールアドレスの取得',
-      ],
-    },
-  ];
-
-  const permissionItemsHtml = permissions.map(p => `
-    <div class="perm-item ${p.active ? 'active' : 'inactive'}">
-      <div class="perm-header">
-        <span class="perm-icon">${p.icon}</span>
-        <span class="perm-name">${p.name}</span>
-        <span class="perm-badge ${p.active ? 'on' : 'off'}">${p.active ? 'Read &amp; Write' : '無効'}</span>
-        ${!p.active ? '<a href="/auth/github/reauthorize" class="perm-reauth">権限を追加 →</a>' : ''}
-      </div>
-      ${p.active ? `<ul class="perm-caps">${p.capabilities.map(c => `<li>${c}</li>`).join('')}</ul>` : ''}
-    </div>
-  `).join('');
+  // リポジトリごとのインストール権限をJSON化してクライアントサイドで利用
+  const repoPermsJson = JSON.stringify(repoPerms);
 
   const repoRows = user.repositories.map((repo) => {
     const name = escapeHtml(repo.name);
@@ -361,6 +297,14 @@ export function getRepositoriesPage(user: {
       text-decoration: none; margin-left: auto; transition: color 0.2s;
     }
     .perm-reauth:hover { color: #2c5282; text-decoration: underline; }
+    .perm-section-title {
+      font-size: 12px; font-weight: 700; color: #718096; text-transform: uppercase;
+      letter-spacing: 0.05em; margin-bottom: 8px;
+    }
+    .perm-no-install {
+      font-size: 13px; color: #a0aec0; padding: 10px 14px;
+      border: 1px dashed #e2e8f0; border-radius: 10px; text-align: center;
+    }
   </style>
 </head>
 <body>
@@ -419,7 +363,10 @@ export function getRepositoriesPage(user: {
           <div class="modal-repo-desc" id="modalRepoDesc"></div>
           <div class="modal-repo-meta-grid" id="modalRepoMetaGrid"></div>
         </div>
-        ${permissionItemsHtml}
+        <div class="perm-section-title">GitHub App インストール権限</div>
+        <div id="installPermItems"></div>
+        <div class="perm-section-title" style="margin-top:16px">OAuth スコープ</div>
+        <div id="oauthPermItems"></div>
         <div class="scopes-footer">
           付与スコープ: ${scopes.length > 0 ? scopes.map(s => `<code>${escapeHtml(s)}</code>`).join(' ') : '<span>取得できませんでした</span>'}
         </div>
@@ -462,9 +409,101 @@ export function getRepositoriesPage(user: {
     }
 
     // Permissions Modal
-    const modal = document.getElementById('permissionsModal');
-    const modalClose = document.getElementById('modalClose');
-    const modalRepoName = document.getElementById('modalRepoName');
+    var modal = document.getElementById('permissionsModal');
+    var modalClose = document.getElementById('modalClose');
+    var modalRepoName = document.getElementById('modalRepoName');
+    var repoPermsData = ${repoPermsJson};
+    var oauthScopes = ${JSON.stringify(scopes)};
+
+    // GitHub App インストール権限の表示名マッピング
+    var permDisplayNames = {
+      contents: { name: 'Contents (コード)', icon: '📦', caps: ['リポジトリのコード・ファイルの読み書き', 'コミット履歴の閲覧'] },
+      issues: { name: 'Issues', icon: '🐛', caps: ['Issueの作成・編集・クローズ', 'Issueへのコメント追加', 'ラベル・マイルストーンの管理'] },
+      pull_requests: { name: 'Pull Requests', icon: '🔀', caps: ['PRの作成・編集・クローズ', 'PRへのレビュー・コメント', 'PRのマージ'] },
+      metadata: { name: 'Metadata', icon: '📋', caps: ['リポジトリのメタデータ読み取り'] },
+      actions: { name: 'Actions', icon: '⚡', caps: ['ワークフローの管理・実行'] },
+      checks: { name: 'Checks', icon: '✅', caps: ['チェック結果の読み書き'] },
+      deployments: { name: 'Deployments', icon: '🚀', caps: ['デプロイメントの管理'] },
+      environments: { name: 'Environments', icon: '🌍', caps: ['環境の管理'] },
+      pages: { name: 'Pages', icon: '📄', caps: ['GitHub Pagesの管理'] },
+      secrets: { name: 'Secrets', icon: '🔑', caps: ['シークレットの管理'] },
+      workflows: { name: 'Workflows', icon: '🔧', caps: ['ワークフローファイルの編集'] },
+      administration: { name: 'Administration', icon: '⚙️', caps: ['リポジトリ設定の管理'] },
+      members: { name: 'Members', icon: '👥', caps: ['メンバーの管理'] },
+      statuses: { name: 'Statuses', icon: '🔔', caps: ['コミットステータスの管理'] },
+      vulnerability_alerts: { name: 'Vulnerability alerts', icon: '🛡️', caps: ['脆弱性アラートの管理'] },
+      security_events: { name: 'Security events', icon: '🔒', caps: ['セキュリティイベントの管理'] },
+      packages: { name: 'Packages', icon: '📦', caps: ['パッケージの管理'] },
+      webhooks: { name: 'Webhooks', icon: '🪝', caps: ['Webhookの管理'] },
+    };
+
+    function levelLabel(level) {
+      if (level === 'write') return 'Read & Write';
+      if (level === 'read') return 'Read';
+      if (level === 'admin') return 'Admin';
+      return level;
+    }
+
+    function renderInstallPerms(repoName) {
+      var container = document.getElementById('installPermItems');
+      if (!container) return;
+      var info = repoPermsData[repoName];
+      if (!info || !info.permissions) {
+        container.innerHTML = '<div class="perm-no-install">このリポジトリには GitHub App がインストールされていません</div>';
+        return;
+      }
+      var perms = info.permissions;
+      var keys = Object.keys(perms);
+      if (keys.length === 0) {
+        container.innerHTML = '<div class="perm-no-install">インストール権限が設定されていません</div>';
+        return;
+      }
+      var html = '';
+      keys.forEach(function(key) {
+        var level = perms[key];
+        var display = permDisplayNames[key] || { name: key, icon: '🔧', caps: [] };
+        html += '<div class="perm-item active">';
+        html += '<div class="perm-header">';
+        html += '<span class="perm-icon">' + display.icon + '</span>';
+        html += '<span class="perm-name">' + display.name + '</span>';
+        html += '<span class="perm-badge on">' + levelLabel(level) + '</span>';
+        html += '</div>';
+        if (display.caps.length > 0) {
+          html += '<ul class="perm-caps">';
+          display.caps.forEach(function(c) { html += '<li>' + c + '</li>'; });
+          html += '</ul>';
+        }
+        html += '</div>';
+      });
+      container.innerHTML = html;
+    }
+
+    function renderOAuthPerms() {
+      var container = document.getElementById('oauthPermItems');
+      if (!container) return;
+      var items = [
+        { name: 'repo', label: 'リポジトリ全般', icon: '📦' },
+        { name: 'public_repo', label: 'パブリックリポジトリ', icon: '🌐' },
+        { name: 'read:user', label: 'ユーザー情報 (読み取り)', icon: '👤' },
+        { name: 'user', label: 'ユーザー情報', icon: '👤' },
+        { name: 'user:email', label: 'メールアドレス', icon: '✉️' },
+      ];
+      var html = '';
+      items.forEach(function(item) {
+        var active = oauthScopes.indexOf(item.name) >= 0;
+        html += '<div class="perm-item ' + (active ? 'active' : 'inactive') + '">';
+        html += '<div class="perm-header">';
+        html += '<span class="perm-icon">' + item.icon + '</span>';
+        html += '<span class="perm-name">' + item.label + '</span>';
+        html += '<span class="perm-badge ' + (active ? 'on' : 'off') + '">' + (active ? '有効' : '無効') + '</span>';
+        if (!active) {
+          html += '<a href="/auth/github/reauthorize" class="perm-reauth">権限を追加 →</a>';
+        }
+        html += '</div>';
+        html += '</div>';
+      });
+      container.innerHTML = html;
+    }
 
     function openPermissionsModal(repoName, rowEl) {
       if (modalRepoName) {
@@ -499,6 +538,8 @@ export function getRepositoriesPage(user: {
         }
         metaGrid.innerHTML = metaHtml;
       }
+      renderInstallPerms(repoName);
+      renderOAuthPerms();
       if (modal) {
         modal.classList.add('show');
       }

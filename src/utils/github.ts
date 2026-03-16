@@ -245,6 +245,130 @@ export async function getGitHubLatestCommit(params: {
 /**
  * GitHub OAuthトークンの付与スコープを取得
  */
+/**
+ * GitHub App インストール情報
+ */
+export interface GitHubInstallation {
+  id: number;
+  app_id: number;
+  app_slug?: string;
+  permissions: Record<string, string>; // e.g. { contents: "read", issues: "write" }
+  repository_selection: 'all' | 'selected';
+}
+
+/**
+ * GitHub App インストールに紐づくリポジトリ情報
+ */
+export interface GitHubInstallationRepo {
+  name: string;
+  full_name: string;
+  private: boolean;
+}
+
+/**
+ * リポジトリごとのインストール権限情報
+ */
+export interface RepoInstallationPermissions {
+  installationId: number;
+  permissions: Record<string, string>;
+  repositorySelection: 'all' | 'selected';
+}
+
+/**
+ * ユーザーがアクセス可能な GitHub App インストール一覧を取得
+ */
+export async function getGitHubUserInstallations(accessToken: string): Promise<GitHubInstallation[]> {
+  const response = await fetch('https://api.github.com/user/installations', {
+    headers: {
+      'Authorization': `Bearer ${accessToken}`,
+      'Accept': 'application/vnd.github.v3+json',
+      'User-Agent': 'Cloudflare-Workers-GitHub-OAuth',
+    },
+  });
+
+  if (!response.ok) {
+    return [];
+  }
+
+  const data = await response.json<{ installations: GitHubInstallation[] }>();
+  return Array.isArray(data.installations) ? data.installations : [];
+}
+
+/**
+ * 指定インストールに紐づくリポジトリ一覧を取得
+ */
+export async function getGitHubInstallationRepos(
+  accessToken: string,
+  installationId: number
+): Promise<GitHubInstallationRepo[]> {
+  const repos: GitHubInstallationRepo[] = [];
+  let nextUrl: string | null = `https://api.github.com/user/installations/${installationId}/repositories?per_page=100`;
+
+  while (nextUrl) {
+    const response = await fetch(nextUrl, {
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'Accept': 'application/vnd.github.v3+json',
+        'User-Agent': 'Cloudflare-Workers-GitHub-OAuth',
+      },
+    });
+
+    if (!response.ok) {
+      break;
+    }
+
+    const data = await response.json<{ repositories: GitHubInstallationRepo[] }>();
+    if (Array.isArray(data.repositories)) {
+      repos.push(...data.repositories);
+    }
+
+    const linkHeader = response.headers.get('Link');
+    const nextMatch = linkHeader?.match(/<([^>]+)>;\s*rel="next"/);
+    nextUrl = nextMatch ? nextMatch[1] : null;
+  }
+
+  return repos;
+}
+
+/**
+ * リポジトリ名 → インストール権限のマップを構築
+ * GitHub App がインストールされているリポジトリごとに、そのインストールの権限を返す
+ */
+export async function buildRepoInstallationPermissionsMap(
+  accessToken: string
+): Promise<Map<string, RepoInstallationPermissions>> {
+  const map = new Map<string, RepoInstallationPermissions>();
+
+  const installations = await getGitHubUserInstallations(accessToken);
+  if (installations.length === 0) {
+    return map;
+  }
+
+  await Promise.all(installations.map(async (installation) => {
+    if (installation.repository_selection === 'all') {
+      // "All repositories" の場合は個別にリポジトリを取得しない
+      // 後で全リポジトリに対してこのインストールの権限を適用する
+      map.set('__all__' + installation.id, {
+        installationId: installation.id,
+        permissions: installation.permissions,
+        repositorySelection: 'all',
+      });
+      return;
+    }
+
+    const repos = await getGitHubInstallationRepos(accessToken, installation.id);
+    for (const repo of repos) {
+      map.set(repo.name, {
+        installationId: installation.id,
+        permissions: installation.permissions,
+        repositorySelection: installation.repository_selection,
+      });
+    }
+  }));
+
+  return map;
+}
+
 export async function getGitHubTokenScopes(params: {
   accessToken: string;
   clientId: string;

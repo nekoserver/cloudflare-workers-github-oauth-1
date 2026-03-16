@@ -14,7 +14,7 @@ import { getLoginPage } from './views/login';
 import { getWelcomePage } from './views/welcome';
 import { getSettingsPage } from './views/settings';
 import { getRepositoriesPage } from './views/repositories';
-import { getGitHubAccessToken, getGitHubLatestCommit, getGitHubTokenScopes, getGitHubUser, getGitHubUserEmail, getGitHubUserRepos, GitHubTokenScopesError } from './utils/github';
+import { getGitHubAccessToken, getGitHubLatestCommit, getGitHubTokenScopes, getGitHubUser, getGitHubUserEmail, getGitHubUserRepos, GitHubTokenScopesError, buildRepoInstallationPermissionsMap, RepoInstallationPermissions } from './utils/github';
 import { getCookieValue, getCookieValues } from './utils/cookie';
 import { verifyResendWebhookSignature } from './utils/resendWebhook';
 import { postSlackMessage } from './utils/slack';
@@ -721,6 +721,16 @@ app.get('/repositories', optionalAuthMiddleware, async (c) => {
     }
   }
 
+  // GitHub App インストール権限をリポジトリごとに取得
+  let repoInstallationPermissions: Map<string, RepoInstallationPermissions> = new Map();
+  if (accessToken) {
+    try {
+      repoInstallationPermissions = await buildRepoInstallationPermissionsMap(accessToken);
+    } catch {
+      // インストール権限取得失敗は無視
+    }
+  }
+
   try {
     let repos = await getGitHubUserRepos({ username: user.sub, accessToken });
     repositories = await Promise.all(repos.map(async (repo) => {
@@ -785,12 +795,39 @@ app.get('/repositories', optionalAuthMiddleware, async (c) => {
     }
   }
 
+  // リポジトリごとのインストール権限をシリアライズ可能な形に変換
+  // "__all__" キーを持つインストールがある場合は、全リポジトリにその権限を適用
+  const repoPermissionsMap: Record<string, { permissions: Record<string, string>; repositorySelection: string }> = {};
+  let allReposPermissions: Record<string, string> | null = null;
+  for (const [key, value] of repoInstallationPermissions.entries()) {
+    if (key.startsWith('__all__')) {
+      allReposPermissions = value.permissions;
+    } else {
+      repoPermissionsMap[key] = {
+        permissions: value.permissions,
+        repositorySelection: value.repositorySelection,
+      };
+    }
+  }
+  // "All repositories" インストールがある場合、全リポジトリにその権限を適用
+  if (allReposPermissions) {
+    for (const repo of repositories) {
+      if (!repoPermissionsMap[repo.name]) {
+        repoPermissionsMap[repo.name] = {
+          permissions: allReposPermissions,
+          repositorySelection: 'all',
+        };
+      }
+    }
+  }
+
   return c.html(getRepositoriesPage({
     username: user.sub,
     name: user.name,
     repositories,
     errorMessage,
     grantedScopes,
+    repoPermissions: repoPermissionsMap,
   }));
 });
 
