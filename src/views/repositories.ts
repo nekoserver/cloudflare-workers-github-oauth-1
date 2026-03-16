@@ -21,10 +21,85 @@ export function getRepositoriesPage(user: {
   username: string;
   repositories: RepositoryListItem[];
   errorMessage?: string | null;
+  grantedScopes?: string[] | null;
 }): string {
   const displayName = escapeHtml(user.name || user.username);
   const initials = escapeHtml((user.name || user.username).substring(0, 2).toUpperCase());
   const repoCount = user.repositories.length;
+  const scopes = user.grantedScopes ?? [];
+
+  // GitHub App権限とOAuthスコープからアクティブな権限を判定
+  interface PermissionInfo {
+    name: string;
+    icon: string;
+    active: boolean;
+    capabilities: string[];
+  }
+  const permissions: PermissionInfo[] = [
+    {
+      name: 'リポジトリ (Contents)',
+      icon: '📦',
+      active: scopes.includes('repo') || scopes.includes('public_repo'),
+      capabilities: [
+        'リポジトリのコード・ファイルの読み取り',
+        'プライベートリポジトリへのアクセス',
+        'コミット履歴の閲覧',
+      ],
+    },
+    {
+      name: 'Issues',
+      icon: '🐛',
+      active: scopes.includes('repo') || scopes.includes('public_repo'),
+      capabilities: [
+        'Issueの作成・編集・クローズ',
+        'Issueへのコメント追加',
+        'ラベル・マイルストーンの管理',
+        'Issueのアサイン',
+      ],
+    },
+    {
+      name: 'Pull Requests',
+      icon: '🔀',
+      active: scopes.includes('repo') || scopes.includes('public_repo'),
+      capabilities: [
+        'PRの作成・編集・クローズ',
+        'PRへのレビュー・コメント追加',
+        'PRのマージ',
+        'ブランチ保護ルールの確認',
+      ],
+    },
+    {
+      name: 'Secrets',
+      icon: '🔑',
+      active: scopes.includes('repo'),
+      capabilities: [
+        'Actions シークレットの管理',
+        'Dependabot シークレットの管理',
+        'Codespaces シークレットの管理',
+        'シークレットの作成・更新・削除',
+      ],
+    },
+    {
+      name: 'ユーザー情報',
+      icon: '👤',
+      active: scopes.includes('read:user') || scopes.includes('user'),
+      capabilities: [
+        'プロフィール情報の読み取り',
+        'メールアドレスの取得',
+      ],
+    },
+  ];
+
+  const permissionItemsHtml = permissions.map(p => `
+    <div class="perm-item ${p.active ? 'active' : 'inactive'}">
+      <div class="perm-header">
+        <span class="perm-icon">${p.icon}</span>
+        <span class="perm-name">${p.name}</span>
+        <span class="perm-badge ${p.active ? 'on' : 'off'}">${p.active ? 'Read &amp; Write' : '無効'}</span>
+      </div>
+      ${p.active ? `<ul class="perm-caps">${p.capabilities.map(c => `<li>${c}</li>`).join('')}</ul>` : ''}
+    </div>
+  `).join('');
 
   const repoRows = user.repositories.map((repo) => {
     const name = escapeHtml(repo.name);
@@ -178,6 +253,63 @@ export function getRepositoriesPage(user: {
       background: rgba(255,255,255,0.9); border-radius: 12px; padding: 16px; text-align: center;
       color: #4a5568; font-weight: 600;
     }
+    .repo-row { cursor: pointer; }
+
+    /* Permissions Modal */
+    .modal-overlay {
+      display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(0,0,0,0.5); backdrop-filter: blur(4px);
+      z-index: 2000; align-items: center; justify-content: center;
+    }
+    .modal-overlay.show { display: flex; }
+    .modal-content {
+      background: white; border-radius: 16px; max-width: 520px; width: 90%;
+      max-height: 80vh; overflow-y: auto; box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+      animation: modalIn 0.2s ease;
+    }
+    @keyframes modalIn {
+      from { opacity: 0; transform: scale(0.95) translateY(10px); }
+      to { opacity: 1; transform: scale(1) translateY(0); }
+    }
+    .modal-header {
+      padding: 20px 24px 12px; border-bottom: 1px solid #e2e8f0;
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    .modal-title { font-size: 18px; font-weight: 700; color: #1a202c; }
+    .modal-close {
+      width: 32px; height: 32px; border-radius: 8px; border: none; background: #f7fafc;
+      font-size: 18px; cursor: pointer; display: flex; align-items: center; justify-content: center;
+      color: #718096; transition: background 0.2s;
+    }
+    .modal-close:hover { background: #edf2f7; color: #2d3748; }
+    .modal-body { padding: 16px 24px 24px; }
+    .modal-repo-name { font-size: 14px; color: #718096; margin-bottom: 16px; }
+    .perm-item {
+      border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px 14px; margin-bottom: 10px;
+      transition: border-color 0.2s;
+    }
+    .perm-item.active { border-color: #9ae6b4; background: #f0fff4; }
+    .perm-item.inactive { border-color: #e2e8f0; background: #f7fafc; opacity: 0.6; }
+    .perm-header { display: flex; align-items: center; gap: 8px; }
+    .perm-icon { font-size: 18px; }
+    .perm-name { font-weight: 600; color: #2d3748; flex: 1; font-size: 14px; }
+    .perm-badge {
+      padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 700;
+    }
+    .perm-badge.on { background: #c6f6d5; color: #276749; }
+    .perm-badge.off { background: #fed7d7; color: #9b2c2c; }
+    .perm-caps {
+      margin: 8px 0 0 30px; padding: 0; list-style: none; font-size: 13px; color: #4a5568;
+    }
+    .perm-caps li { padding: 2px 0; }
+    .perm-caps li::before { content: '✓ '; color: #38a169; font-weight: 700; }
+    .scopes-footer {
+      margin-top: 16px; padding-top: 12px; border-top: 1px solid #e2e8f0;
+      font-size: 12px; color: #a0aec0;
+    }
+    .scopes-footer code {
+      background: #edf2f7; padding: 1px 5px; border-radius: 4px; font-size: 11px;
+    }
   </style>
 </head>
 <body>
@@ -222,6 +354,23 @@ export function getRepositoriesPage(user: {
     ` : ''}
   </div>
 
+  <!-- Permissions Modal -->
+  <div class="modal-overlay" id="permissionsModal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <span class="modal-title">🔐 有効な権限</span>
+        <button class="modal-close" id="modalClose" type="button">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="modal-repo-name" id="modalRepoName"></div>
+        ${permissionItemsHtml}
+        <div class="scopes-footer">
+          付与スコープ: ${scopes.length > 0 ? scopes.map(s => `<code>${escapeHtml(s)}</code>`).join(' ') : '<span>取得できませんでした</span>'}
+        </div>
+      </div>
+    </div>
+  </div>
+
   <script>
     function toggleDropdown() {
       const dropdown = document.getElementById('dropdownMenu');
@@ -255,6 +404,56 @@ export function getRepositoriesPage(user: {
         rows.forEach((row) => repoList.appendChild(row));
       });
     }
+
+    // Permissions Modal
+    const modal = document.getElementById('permissionsModal');
+    const modalClose = document.getElementById('modalClose');
+    const modalRepoName = document.getElementById('modalRepoName');
+
+    function openPermissionsModal(repoName) {
+      if (modalRepoName) {
+        modalRepoName.textContent = repoName;
+      }
+      if (modal) {
+        modal.classList.add('show');
+      }
+    }
+
+    function closePermissionsModal() {
+      if (modal) {
+        modal.classList.remove('show');
+      }
+    }
+
+    if (modalClose) {
+      modalClose.addEventListener('click', closePermissionsModal);
+    }
+    if (modal) {
+      modal.addEventListener('click', function(e) {
+        if (e.target === modal) {
+          closePermissionsModal();
+        }
+      });
+    }
+    document.addEventListener('keydown', function(e) {
+      if (e.key === 'Escape') {
+        closePermissionsModal();
+      }
+    });
+
+    // リポジトリ行クリックでモーダル表示（リンク・ボタンクリックは除外）
+    document.querySelectorAll('.repo-row').forEach(function(row) {
+      row.addEventListener('click', function(e) {
+        var target = e.target;
+        while (target && target !== row) {
+          if (target.tagName === 'A' || target.tagName === 'BUTTON') return;
+          target = target.parentElement;
+        }
+        var nameEl = row.querySelector('.repo-name-link');
+        var repoName = nameEl ? nameEl.textContent.trim() : '';
+        openPermissionsModal(repoName);
+      });
+    });
   </script>
 </body>
 </html>`;
