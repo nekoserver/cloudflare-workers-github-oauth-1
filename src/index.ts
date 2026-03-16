@@ -20,30 +20,7 @@ import { verifyResendWebhookSignature } from './utils/resendWebhook';
 import { verifyGitHubWebhookSignature } from './utils/githubWebhook';
 import { postSlackMessage } from './utils/slack';
 import * as logger from './utils/logger';
-
-// 環境変数の型定義
-type Bindings = {
-  JWT_SECRET: string;
-  ENVIRONMENT: string;
-  GITHUB_CLIENT_ID?: string;
-  GITHUB_CLIENT_SECRET?: string;
-  DB?: D1Database;
-  ANALYTICS?: AnalyticsEngineDataset;
-  RESEND_WEBHOOK_SECRET?: string;
-  SLACK_SIGNING_SECRET?: string;
-  SLACK_OAUTH_TOKEN?: string;
-  SLACK_CLIENT_SECRET?: string;
-  SLACK_CLIENT_ID?: string;
-  SLACK_CHANNEL_ID?: string;
-  SESSION_IDLE_TIMEOUT_SECONDS?: string;
-  RESEND_WEBHOOK_DEDUP_TTL_SECONDS?: string;
-  GITHUB_WEBHOOK_SECRET?: string;
-};
-
-// コンテキスト変数の型定義
-type Variables = {
-  user: JWTPayload;
-};
+import { resolveIdleTimeoutSeconds, type Bindings, type Variables, type GitHubWebhookInstallationPayload, type ResendWebhookPayload } from './types';
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -73,16 +50,6 @@ async function generatePkcePair(): Promise<{ verifier: string; challenge: string
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier));
   const challenge = base64UrlEncode(new Uint8Array(digest));
   return { verifier, challenge };
-}
-
-function resolveIdleTimeoutSeconds(envValue: string | undefined, sessionDurationSeconds: number): number {
-  const parsed = Number(envValue);
-  const defaultIdle = 30 * 60;
-  let idleSeconds = Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : defaultIdle;
-  if (idleSeconds > sessionDurationSeconds) {
-    idleSeconds = sessionDurationSeconds;
-  }
-  return idleSeconds;
 }
 
 function resolveResendDedupTtlSeconds(envValue: string | undefined): number {
@@ -777,8 +744,11 @@ app.get('/repositories', optionalAuthMiddleware, async (c) => {
   if (accessToken && clientId && clientSecret) {
     try {
       grantedScopes = await getGitHubTokenScopes({ accessToken, clientId, clientSecret });
-    } catch {
-      // スコープ取得失敗は無視
+    } catch (error) {
+      logger.warn('Failed to fetch GitHub token scopes', {
+        userId: user.sub,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
     }
   }
 
@@ -804,8 +774,11 @@ app.get('/repositories', optionalAuthMiddleware, async (c) => {
   } else if (accessToken) {
     try {
       repoInstallationPermissions = await buildRepoInstallationPermissionsMap(accessToken);
-    } catch {
-      // インストール権限取得失敗は無視
+    } catch (error) {
+      logger.warn('Failed to fetch installation permissions from GitHub API', {
+        userId: user.sub,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
     }
   }
 
@@ -939,7 +912,7 @@ app.post('/webhook/github', async (c) => {
   const eventType = c.req.header('X-GitHub-Event') ?? 'unknown';
   const deliveryId = c.req.header('X-GitHub-Delivery') ?? 'unknown';
 
-  let payload: any;
+  let payload: GitHubWebhookInstallationPayload;
   try {
     payload = rawBody ? JSON.parse(rawBody) : {};
   } catch {
@@ -955,8 +928,8 @@ app.post('/webhook/github', async (c) => {
     const db = c.env.DB;
     const installation = payload?.installation;
 
-    if (installation && db) {
-      const installationId = installation.id as number;
+    if (installation && typeof installation.id === 'number' && db) {
+      const installationId = installation.id;
       const permissions = installation.permissions ?? {};
       const repositorySelection = installation.repository_selection ?? 'selected';
       const now = new Date().toISOString();
@@ -1116,7 +1089,7 @@ app.post('/webhook/resend', async (c) => {
     resendWebhookDedupCache.set(resendEventId, expiresAt);
   }
 
-  let payload: any;
+  let payload: ResendWebhookPayload;
   try {
     payload = rawBody ? JSON.parse(rawBody) : {};
   } catch (error) {
@@ -1477,7 +1450,7 @@ app.get('/api/debug/d1', authMiddleware, async (c) => {
 
     // カラム確認
     const columns = await db.prepare("PRAGMA table_info(user_sessions)").all();
-    result.columns = columns.results?.map((col: any) => col.name) ?? [];
+    result.columns = columns.results?.map((col: Record<string, unknown>) => col.name) ?? [];
 
     // ユーザーのレコード確認
     const userRecord = await db.prepare(

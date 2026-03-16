@@ -599,6 +599,11 @@ export function getRepositoriesPage(user: {
     var oauthScopes = ${JSON.stringify(scopes)};
     var currentRepoName = '';
 
+    // クライアントサイド HTML エスケープ（XSS 防止）
+    function esc(str) {
+      return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
     // 全権限キーの定義（インストール権限に含まれないものも「禁止中」として扱う）
     var allPermKeys = [
       'contents', 'issues', 'pull_requests', 'metadata', 'actions', 'checks',
@@ -663,21 +668,21 @@ export function getRepositoriesPage(user: {
         if (isGranted) {
           html += '<div class="perm-item active">';
           html += '<div class="perm-header">';
-          html += '<span class="perm-icon">' + display.icon + '</span>';
-          html += '<span class="perm-name">' + display.name + '</span>';
-          html += '<span class="perm-badge on">' + levelLabel(level) + '</span>';
+          html += '<span class="perm-icon">' + esc(display.icon) + '</span>';
+          html += '<span class="perm-name">' + esc(display.name) + '</span>';
+          html += '<span class="perm-badge on">' + esc(levelLabel(level)) + '</span>';
           html += '</div>';
           if (display.caps.length > 0) {
             html += '<ul class="perm-caps">';
-            display.caps.forEach(function(c) { html += '<li>' + c + '</li>'; });
+            display.caps.forEach(function(cap) { html += '<li>' + esc(cap) + '</li>'; });
             html += '</ul>';
           }
           html += '</div>';
         } else {
           html += '<div class="perm-item inactive">';
           html += '<div class="perm-header">';
-          html += '<span class="perm-icon">' + display.icon + '</span>';
-          html += '<span class="perm-name">' + display.name + '</span>';
+          html += '<span class="perm-icon">' + esc(display.icon) + '</span>';
+          html += '<span class="perm-name">' + esc(display.name) + '</span>';
           html += '<span class="perm-badge off">禁止中</span>';
           html += '</div>';
           html += '</div>';
@@ -704,8 +709,8 @@ export function getRepositoriesPage(user: {
         var active = oauthScopes.indexOf(item.name) >= 0;
         html += '<div class="perm-item ' + (active ? 'active' : 'inactive') + '">';
         html += '<div class="perm-header">';
-        html += '<span class="perm-icon">' + item.icon + '</span>';
-        html += '<span class="perm-name">' + item.label + '</span>';
+        html += '<span class="perm-icon">' + esc(item.icon) + '</span>';
+        html += '<span class="perm-name">' + esc(item.label) + '</span>';
         html += '<span class="perm-badge ' + (active ? 'on' : 'off') + '">' + (active ? '有効' : '無効') + '</span>';
         if (!active) {
           html += '<a href="/auth/github/reauthorize" class="perm-reauth">権限を追加 →</a>';
@@ -742,21 +747,21 @@ export function getRepositoriesPage(user: {
         var commitUrl = rowEl.getAttribute('data-commit-url') || '';
         var metaHtml = '';
         metaHtml += '<span class="modal-repo-meta-item">' + (isPrivate ? '🔒 Private' : '🌐 Public') + '</span>';
-        metaHtml += '<span class="modal-repo-meta-item">🧩 ' + lang + '</span>';
-        metaHtml += '<span class="modal-repo-meta-item">⭐ ' + stars + '</span>';
-        metaHtml += '<span class="modal-repo-meta-item">🍴 ' + forks + '</span>';
+        metaHtml += '<span class="modal-repo-meta-item">🧩 ' + esc(lang) + '</span>';
+        metaHtml += '<span class="modal-repo-meta-item">⭐ ' + esc(stars) + '</span>';
+        metaHtml += '<span class="modal-repo-meta-item">🍴 ' + esc(forks) + '</span>';
         if (updated) {
           if (commitUrl) {
-            metaHtml += '<span class="modal-repo-meta-item"><a class="modal-repo-meta-link" href="' + commitUrl + '" target="_blank" rel="noreferrer">🕒 ' + updated + '</a></span>';
+            metaHtml += '<span class="modal-repo-meta-item"><a class="modal-repo-meta-link" href="' + esc(commitUrl) + '" target="_blank" rel="noreferrer">🕒 ' + esc(updated) + '</a></span>';
           } else {
-            metaHtml += '<span class="modal-repo-meta-item">🕒 ' + updated + '</span>';
+            metaHtml += '<span class="modal-repo-meta-item">🕒 ' + esc(updated) + '</span>';
           }
         }
         if (commitSha) {
           if (commitUrl) {
-            metaHtml += '<span class="modal-repo-meta-item"><a class="modal-repo-meta-link" href="' + commitUrl + '" target="_blank" rel="noreferrer">🔗 ' + commitSha + '</a></span>';
+            metaHtml += '<span class="modal-repo-meta-item"><a class="modal-repo-meta-link" href="' + esc(commitUrl) + '" target="_blank" rel="noreferrer">🔗 ' + esc(commitSha) + '</a></span>';
           } else {
-            metaHtml += '<span class="modal-repo-meta-item">🔗 ' + commitSha + '</span>';
+            metaHtml += '<span class="modal-repo-meta-item">🔗 ' + esc(commitSha) + '</span>';
           }
         }
         metaGrid.innerHTML = metaHtml;
@@ -913,7 +918,7 @@ export function getRepositoriesPage(user: {
     }
 
     function escapeForPre(str) {
-      return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      return esc(str);
     }
 
     function openZanzibarModal() {
