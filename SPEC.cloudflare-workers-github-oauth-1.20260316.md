@@ -127,16 +127,75 @@ D1 データベースバインディングがコメントアウト状態で無�
 
 ---
 
-## 変更ファイル一覧（9ファイル）
+## 8. GitHub App Webhook によるリアルタイム権限同期
 
-| ファイル | 追加行 | 削除行 | 種別 |
-|---|---|---|---|
-| `src/index.ts` | +149 | -1 | 機能追加・修正 |
-| `src/views/repositories.ts` | +286 | -1 | 機能追加（UI） |
-| `src/views/settings.ts` | +1 | -1 | 文言変更 |
-| `wrangler.toml` | +4 | -4 | 設定変更 |
-| `package.json` | +3 | -2 | スクリプト変更 |
-| `CLAUDE.md` | +26 | 0 | ドキュメント |
-| `README.md` | +9 | 0 | ドキュメント |
-| `NOTICE...20260316.md` | +25 | 0 | 新規ドキュメント |
-| `HISTORY...latest.md` | +64 | -36 | ドキュメント更新 |
+### 背景
+GitHub App のインストール権限変更を `/repositories` モーダルに反映する際、従来は GitHub API をページ読み込み時に呼び出していたが、API レート制限やレスポンス遅延の問題があった。Webhook で権限変更イベントをリアルタイムに受信し、D1 に保存する方式に変更。
+
+### 修正内容
+
+| ファイル | 変更概要 |
+|---|---|
+| `migrations/0004_create_installation_permissions.sql` | 新規テーブル `installation_permissions` を作成。`installation_id` + `repo_name` のユニークインデックス付き |
+| `src/utils/githubWebhook.ts` | GitHub Webhook の HMAC-SHA256 署名検証ユーティリティ。タイミングセーフ比較を実装 |
+| `src/index.ts` | `POST /webhook/github` エンドポイントを追加。`installation` / `installation_repositories` イベントを処理し D1 に保存。Slack 通知も実施 |
+| `src/index.ts` | `getInstallationPermissionsFromD1()` ヘルパー関数を追加。D1 からインストール権限を読み取り |
+| `src/index.ts` | `/repositories` ハンドラを D1 優先・API フォールバックに変更 |
+| `src/index.ts` | `/api/repo-permissions` ハンドラを D1 優先・API フォールバックに変更。レスポンスに `source` フィールド追加 |
+| `src/index.ts` | Bindings 型に `GITHUB_WEBHOOK_SECRET` を追加 |
+
+### Webhook で処理するイベント
+
+| イベント | アクション | D1 操作 |
+|---|---|---|
+| `installation` | `created` | レコード挿入（UPSERT） |
+| `installation` | `deleted` | レコード削除 |
+| `installation` | `suspend` | レコード削除 |
+| `installation` | `unsuspend` | レコード挿入（UPSERT） |
+| `installation` | `new_permissions_accepted` | レコード挿入（UPSERT） |
+| `installation_repositories` | `added` / `removed` | リポジトリ単位で挿入/削除 |
+
+### 環境変数
+- `GITHUB_WEBHOOK_SECRET`: `wrangler secret put` で設定（GitHub App の Webhook secret と一致させる）
+
+---
+
+## 9. 高優先度 Slack セキュリティ通知
+
+### 修正内容
+
+| ファイル | 変更概要 |
+|---|---|
+| `src/middleware/auth.ts` | JWT 検証失敗時に Slack へセキュリティ警告を送信（IP アドレス・パス・トークンソース付き） |
+| `src/middleware/auth.ts` | Bindings 型に `SLACK_OAUTH_TOKEN`, `SLACK_CHANNEL_ID` を追加 |
+| `src/index.ts` | OAuth コールバックでの認証エラー時に Slack へログイン失敗通知を送信 |
+| `src/index.ts` | GitHub App Webhook の `installation` イベント受信時に Slack へ通知（インストール/アンインストール/権限変更等） |
+
+### 通知タイミング
+
+| 通知種別 | トリガー | 優先度 |
+|---|---|---|
+| ログイン失敗 | OAuth コールバック catch ブロック | 高 |
+| 不審アクセス | JWT 検証失敗（無効トークン） | 高 |
+| App インストール変更 | Webhook `installation` イベント | 中 |
+
+---
+
+## 変更ファイル一覧（12ファイル）
+
+| ファイル | 種別 |
+|---|---|
+| `src/index.ts` | 機能追加・修正（Webhook, D1読み取り, Slack通知） |
+| `src/middleware/auth.ts` | 機能追加（JWT検証失敗時Slack通知） |
+| `src/utils/githubWebhook.ts` | 新規（Webhook署名検証） |
+| `src/utils/github.ts` | 機能追加（インストール権限取得） |
+| `src/views/repositories.ts` | 機能追加（UI） |
+| `src/views/settings.ts` | 文言変更 |
+| `migrations/0004_create_installation_permissions.sql` | 新規（D1マイグレーション） |
+| `wrangler.toml` | 設定変更 |
+| `package.json` | スクリプト変更 |
+| `CLAUDE.md` | ドキュメント |
+| `README.md` | ドキュメント |
+| `NOTICE...20260316.md` | 新規ドキュメント |
+| `HISTORY...latest.md` | ドキュメント更新 |
+| `SPEC...20260316.md` | 本ファイル |

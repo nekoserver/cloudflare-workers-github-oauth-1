@@ -6,6 +6,7 @@ import { Context, Next } from 'hono';
 import { verifyJWT, extractBearerToken, JWTPayload } from '../utils/jwt';
 import { getSessionExpiredPage } from '../views/session-expired';
 import { getCookieValue } from '../utils/cookie';
+import { postSlackMessage } from '../utils/slack';
 
 // Bindings type
 type Bindings = {
@@ -14,6 +15,8 @@ type Bindings = {
   GITHUB_CLIENT_ID?: string;
   GITHUB_CLIENT_SECRET?: string;
   SESSION_IDLE_TIMEOUT_SECONDS?: string;
+  SLACK_OAUTH_TOKEN?: string;
+  SLACK_CHANNEL_ID?: string;
 };
 
 // Variables type
@@ -86,6 +89,19 @@ export async function authMiddleware(c: Context<{ Bindings: Bindings; Variables:
 
   const payload = await verifyJWT(tokenInfo.token, secret);
   if (!payload) {
+    // 不審なアクセス: 無効なJWTトークンでのアクセス試行をSlackに通知
+    const slackToken = c.env.SLACK_OAUTH_TOKEN;
+    const slackChannel = c.env.SLACK_CHANNEL_ID;
+    if (slackToken && slackChannel) {
+      const path = c.req.path;
+      const method = c.req.method;
+      const ip = c.req.header('CF-Connecting-IP') ?? c.req.header('X-Forwarded-For') ?? 'unknown';
+      postSlackMessage({
+        token: slackToken,
+        channel: slackChannel,
+        text: `[セキュリティ警告] 無効なJWTトークンによるアクセス試行\nパス: ${method} ${path}\nIP: ${ip}\nソース: ${tokenInfo.source}`,
+      }).catch(() => { /* 通知失敗は無視 */ });
+    }
     if (isBrowserRequest) {
       return c.html(getSessionExpiredPage(), 401);
     }

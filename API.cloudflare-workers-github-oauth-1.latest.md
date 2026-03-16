@@ -49,11 +49,54 @@
 
 ## Webhook
 
+### GitHub App Webhook
+
+| メソッド | パス | 認証 | 定義箇所 |
+|---|---|---|---|
+| POST | `/webhook/github` | HMAC-SHA256 署名検証（`X-Hub-Signature-256`） | `src/index.ts` |
+
+#### 処理フロー
+
+```
+GitHub → POST /webhook/github
+  ├─ HMAC-SHA256 署名検証（X-Hub-Signature-256）
+  ├─ イベント種別判定（X-GitHub-Event ヘッダー）
+  ├─ installation / installation_repositories イベントの処理
+  │   ├─ created / new_permissions_accepted / unsuspend → D1 に UPSERT
+  │   ├─ deleted / suspend → D1 から DELETE
+  │   └─ repositories_added / repositories_removed → リポジトリ単位で挿入/削除
+  └─ Slack 通知（インストール変更の概要）
+```
+
+#### 処理するイベント
+
+| X-GitHub-Event | action | D1 操作 | Slack通知 |
+|---|---|---|---|
+| `installation` | `created` | UPSERT | インストール |
+| `installation` | `deleted` | DELETE | アンインストール |
+| `installation` | `suspend` | DELETE | 一時停止 |
+| `installation` | `unsuspend` | UPSERT | 再開 |
+| `installation` | `new_permissions_accepted` | UPSERT | 権限変更承認 |
+| `installation_repositories` | `added` | UPSERT（リポジトリ単位） | - |
+| `installation_repositories` | `removed` | DELETE（リポジトリ単位） | - |
+
+#### 必要な環境変数
+
+| 変数名 | 用途 | 管理方法 |
+|---|---|---|
+| `GITHUB_WEBHOOK_SECRET` | Webhook 署名検証用シークレット | `wrangler secret` |
+
+#### 検証ユーティリティ
+
+| 関数名 | 定義ファイル | 説明 |
+|---|---|---|
+| `verifyGitHubWebhookSignature` | `src/utils/githubWebhook.ts` | HMAC-SHA256 による GitHub Webhook 署名検証（タイミングセーフ比較） |
+
 ### Resend Webhook
 
 | メソッド | パス | 認証 | 定義箇所 | 最終コミット |
 |---|---|---|---|---|
-| POST | `/webhook/resend` | Svix 署名検証 | `src/index.ts` L842 | `d2b2898` 2026-03-13 |
+| POST | `/webhook/resend` | Svix 署名検証 | `src/index.ts` | `d2b2898` 2026-03-13 |
 
 #### 処理フロー
 
@@ -148,11 +191,14 @@ read:user user:email repo
 
 #### 現在の通知タイミング
 
-| トリガー | イベント種別 | 通知内容 |
-|---|---|---|
-| Resend Webhook | `email.delivered` | 「送信完了」+ from / to / 件名 |
-| Resend Webhook | `email.failed` | 「失敗」+ from / to / 件名 |
-| Resend Webhook | `email.bounced` | 「失敗」+ from / to / 件名 |
+| トリガー | イベント種別 | 通知内容 | 優先度 |
+|---|---|---|---|
+| Resend Webhook | `email.delivered` | 「送信完了」+ from / to / 件名 | 中 |
+| Resend Webhook | `email.failed` | 「失敗」+ from / to / 件名 | 中 |
+| Resend Webhook | `email.bounced` | 「失敗」+ from / to / 件名 | 中 |
+| OAuth コールバック失敗 | ログイン失敗 | 「ログイン失敗」+ エラー内容 + IP | 高 |
+| JWT 検証失敗 | 不審アクセス | 「無効なJWTトークンによるアクセス試行」+ パス + IP | 高 |
+| GitHub Webhook | `installation` 各アクション | 「GitHub App インストール/アンインストール/権限変更」+ 操作者 + 対象 | 中〜高 |
 
 #### 必要な環境変数
 
@@ -223,6 +269,7 @@ read:user user:email repo
 | `src/utils/html.ts` | HTML エスケープ | `ea91d8f` | 2026-03-07 14:37 |
 | `src/utils/logger.ts` | ロガー・Analytics | `ea91d8f` | 2026-03-07 14:37 |
 | `src/utils/resendWebhook.ts` | Resend Webhook 署名検証 | `d2b8c0d` | 2026-03-12 19:32 |
+| `src/utils/githubWebhook.ts` | GitHub Webhook 署名検証 | - | 2026-03-16 |
 | `src/utils/slack.ts` | Slack メッセージ送信 | `c155d7d` | 2026-03-13 02:15 |
 
 ---
@@ -243,6 +290,21 @@ read:user user:email repo
 | `display_name` | TEXT | NULL | 0002 |
 | `github_access_token` | TEXT | NULL | 0003 |
 
+### `installation_permissions` テーブル
+
+| カラム | 型 | デフォルト | マイグレーション |
+|---|---|---|---|
+| `id` | INTEGER PRIMARY KEY AUTOINCREMENT | - | 0004 |
+| `installation_id` | INTEGER NOT NULL | - | 0004 |
+| `repo_name` | TEXT | NULL | 0004 |
+| `repository_selection` | TEXT NOT NULL | `'selected'` | 0004 |
+| `permissions` | TEXT NOT NULL | `'{}'` | 0004 |
+| `updated_at` | TEXT NOT NULL | - | 0004 |
+
+**インデックス:**
+- `idx_install_perm_repo`: UNIQUE ON (`installation_id`, `repo_name`)
+- `idx_install_perm_updated`: ON (`updated_at`)
+
 ---
 
 ## 認証方式
@@ -262,13 +324,17 @@ read:user user:email repo
 ページ読み込み (GET /repositories)
   ├─ サーバーサイド
   │   ├─ getGitHubTokenScopes()          → OAuthスコープ取得
-  │   ├─ buildRepoInstallationPermissionsMap()
-  │   │   ├─ getGitHubUserInstallations() → GET /user/installations
-  │   │   └─ getGitHubInstallationRepos() → GET /user/installations/{id}/repositories
+  │   ├─ getInstallationPermissionsFromD1()  → D1 から権限読み取り（高速）
+  │   │   └─ D1 にデータなし → buildRepoInstallationPermissionsMap() でAPI フォールバック
   │   ├─ getGitHubUserRepos()            → リポジトリ一覧取得
   │   └─ getGitHubLatestCommit()         → 各リポジトリの最新コミット
   │
   └─ クライアントサイド（DOMContentLoaded後）
-      └─ fetch('/api/repo-permissions')  → 最新インストール権限を取得
+      └─ fetch('/api/repo-permissions')  → 最新インストール権限を取得（D1優先）
           └─ 差分があれば repoPermsData を更新
 ```
+
+### 権限データの取得優先順位
+
+1. **D1 (Webhook経由)** — `installation_permissions` テーブルから読み取り。Webhookで自動更新されるためリアルタイム
+2. **GitHub API (フォールバック)** — D1にデータがない場合、`buildRepoInstallationPermissionsMap()` で GitHub API から取得
