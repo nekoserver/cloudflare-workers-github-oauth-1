@@ -453,8 +453,11 @@ async function getLinkedReposByAppSlug(
     return { repos: new Set(), appSlug: null, isAllRepos: false };
   }
 
+  // repository_selection === 'all' の場合、GitHub App が全リポジトリにアクセス権を持っているだけで
+  // 実際にサービス連携（デプロイ等）が存在するとは限らない。
+  // 誤検知を防ぐため、'selected' で明示的に選択されたリポジトリのみを連携済みと判定する。
   if (matched.repository_selection === 'all') {
-    return { repos: new Set(), appSlug: matched.app_slug ?? null, isAllRepos: true };
+    return { repos: new Set(), appSlug: matched.app_slug ?? null, isAllRepos: false };
   }
 
   const installRepos = await getGitHubInstallationRepos(accessToken, matched.id);

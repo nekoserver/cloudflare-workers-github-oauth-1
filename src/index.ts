@@ -905,16 +905,12 @@ app.get('/repositories', optionalAuthMiddleware, async (c) => {
 
   // 外部サービス連携判定（GitHub App インストール経由）
   let cloudflareLinkedRepos: Set<string> = new Set();
-  let cloudflareIsAllRepos = false;
   let vercelLinkedRepos: Set<string> = new Set();
-  let vercelIsAllRepos = false;
   if (accessToken) {
     try {
       const result = await getExternalServiceLinkedRepos(accessToken);
       cloudflareLinkedRepos = result.cloudflare.repos;
-      cloudflareIsAllRepos = result.cloudflare.isAllRepos;
       vercelLinkedRepos = result.vercel.repos;
-      vercelIsAllRepos = result.vercel.isAllRepos;
     } catch (error) {
       logger.warn('Failed to detect external service linked repos', {
         userId: user.sub,
@@ -926,23 +922,11 @@ app.get('/repositories', optionalAuthMiddleware, async (c) => {
   // リポジトリ名のセットをシリアライズ可能な形に変換
   const cloudflareRepos: Record<string, boolean> = {};
   const vercelRepos: Record<string, boolean> = {};
-  if (cloudflareIsAllRepos) {
-    for (const repo of repositories) {
-      cloudflareRepos[repo.name] = true;
-    }
-  } else {
-    for (const repoName of cloudflareLinkedRepos) {
-      cloudflareRepos[repoName] = true;
-    }
+  for (const repoName of cloudflareLinkedRepos) {
+    cloudflareRepos[repoName] = true;
   }
-  if (vercelIsAllRepos) {
-    for (const repo of repositories) {
-      vercelRepos[repo.name] = true;
-    }
-  } else {
-    for (const repoName of vercelLinkedRepos) {
-      vercelRepos[repoName] = true;
-    }
+  for (const repoName of vercelLinkedRepos) {
+    vercelRepos[repoName] = true;
   }
 
   return c.html(getRepositoriesPage({
