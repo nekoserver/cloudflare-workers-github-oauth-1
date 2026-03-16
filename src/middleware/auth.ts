@@ -7,22 +7,7 @@ import { verifyJWT, extractBearerToken, JWTPayload } from '../utils/jwt';
 import { getSessionExpiredPage } from '../views/session-expired';
 import { getCookieValue } from '../utils/cookie';
 import { postSlackMessage } from '../utils/slack';
-
-// Bindings type
-type Bindings = {
-  JWT_SECRET: string;
-  ENVIRONMENT: string;
-  GITHUB_CLIENT_ID?: string;
-  GITHUB_CLIENT_SECRET?: string;
-  SESSION_IDLE_TIMEOUT_SECONDS?: string;
-  SLACK_OAUTH_TOKEN?: string;
-  SLACK_CHANNEL_ID?: string;
-};
-
-// Variables type
-type Variables = {
-  user: JWTPayload;
-};
+import { resolveIdleTimeoutSeconds, type Bindings, type Variables } from '../types';
 
 // Contextに認証ユーザー情報を追加
 export interface AuthContext {
@@ -41,16 +26,6 @@ function getToken(c: Context): { token: string; source: 'header' | 'cookie' } | 
   const cookieToken = getCookieValue(cookieHeader, 'auth_token');
   if (!cookieToken) return null;
   return { token: cookieToken, source: 'cookie' };
-}
-
-function resolveIdleTimeoutSeconds(envValue: string | undefined, maxSeconds: number): number {
-  const parsed = Number(envValue);
-  const defaultIdle = 30 * 60;
-  let idleSeconds = Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : defaultIdle;
-  if (idleSeconds > maxSeconds) {
-    idleSeconds = maxSeconds;
-  }
-  return idleSeconds;
 }
 
 function parseTimestampMs(value: string | null | undefined): number | null {
