@@ -643,6 +643,18 @@ app.get('/repositories', optionalAuthMiddleware, async (c) => {
   }[] = [];
   let errorMessage: string | null = null;
 
+  // トークンのスコープを取得
+  let grantedScopes: string[] | null = null;
+  const clientId = c.env.GITHUB_CLIENT_ID;
+  const clientSecret = c.env.GITHUB_CLIENT_SECRET;
+  if (accessToken && clientId && clientSecret) {
+    try {
+      grantedScopes = await getGitHubTokenScopes({ accessToken, clientId, clientSecret });
+    } catch {
+      // スコープ取得失敗は無視
+    }
+  }
+
   try {
     let repos = await getGitHubUserRepos({ username: user.sub, accessToken });
     repositories = await Promise.all(repos.map(async (repo) => {
@@ -712,6 +724,7 @@ app.get('/repositories', optionalAuthMiddleware, async (c) => {
     name: user.name,
     repositories,
     errorMessage,
+    grantedScopes,
   }));
 });
 
