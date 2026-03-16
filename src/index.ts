@@ -1106,6 +1106,26 @@ app.get('/api/debug/d1', authMiddleware, async (c) => {
     // 全レコード数
     const count = await db.prepare('SELECT COUNT(*) as cnt FROM user_sessions').first<{ cnt: number }>();
     result.total_records = count?.cnt ?? 0;
+
+    // テスト書き込み
+    const now = new Date().toISOString();
+    try {
+      await db.prepare(`
+        INSERT INTO user_sessions (user_id, timezone, session_duration, current_login_at, updated_at)
+        VALUES (?, 'UTC', '1h', ?, ?)
+        ON CONFLICT(user_id) DO UPDATE SET updated_at = ?
+      `).bind(user.sub, now, now, now).run();
+      result.test_write = 'SUCCESS';
+    } catch (writeError) {
+      result.test_write = 'FAILED';
+      result.test_write_error = writeError instanceof Error ? writeError.message : 'Unknown error';
+    }
+
+    // テスト書き込み後の確認
+    const afterWrite = await db.prepare(
+      'SELECT user_id, timezone, session_duration, current_login_at, updated_at FROM user_sessions WHERE user_id = ?'
+    ).bind(user.sub).first();
+    result.after_test_write = afterWrite ?? 'NOT FOUND';
   } catch (error) {
     result.error = error instanceof Error ? error.message : 'Unknown error';
     result.stack = error instanceof Error ? error.stack : undefined;
