@@ -443,6 +443,9 @@ export const CLOUDFLARE_DEPLOY_SLUGS = ['cloudflare-pages', 'cloudflare-workers-
 /** Vercel のデプロイ用 GitHub App の既知の app_slug 一覧 */
 export const VERCEL_DEPLOY_SLUGS = ['vercel'];
 
+/** Slack の GitHub App の既知の app_slug 一覧 */
+export const SLACK_APP_SLUGS = ['slack'];
+
 /**
  * インストール一覧から、指定した app_slug リスト（完全一致）に合致するインストールを返す。
  * includes による部分一致では cloudflare-bot 等の非デプロイ用 App に誤マッチするため、
@@ -508,18 +511,20 @@ export async function getVercelLinkedRepos(
 }
 
 /**
- * Cloudflare と Vercel の連携状況をまとめて取得する（API呼び出しを1回に最適化）
+ * Cloudflare・Vercel・Slack の連携状況をまとめて取得する（API呼び出しを1回に最適化）
  */
 export async function getExternalServiceLinkedRepos(
   accessToken: string
 ): Promise<{
   cloudflare: { repos: Set<string>; appSlug: string | null; isAllRepos: boolean };
   vercel: { repos: Set<string>; appSlug: string | null; isAllRepos: boolean };
+  slack: { repos: Set<string>; appSlug: string | null; isAllRepos: boolean };
 }> {
   const installations = await getGitHubUserInstallations(accessToken);
-  const [cloudflare, vercel] = await Promise.all([
+  const [cloudflare, vercel, slack] = await Promise.all([
     getLinkedReposByAppSlugs(accessToken, CLOUDFLARE_DEPLOY_SLUGS, installations),
     getLinkedReposByAppSlugs(accessToken, VERCEL_DEPLOY_SLUGS, installations),
+    getLinkedReposByAppSlugs(accessToken, SLACK_APP_SLUGS, installations),
   ]);
-  return { cloudflare, vercel };
+  return { cloudflare, vercel, slack };
 }

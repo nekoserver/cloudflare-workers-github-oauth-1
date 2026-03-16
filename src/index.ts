@@ -906,11 +906,13 @@ app.get('/repositories', optionalAuthMiddleware, async (c) => {
   // 外部サービス連携判定（GitHub App インストール経由）
   let cloudflareLinkedRepos: Set<string> = new Set();
   let vercelLinkedRepos: Set<string> = new Set();
+  let slackLinkedRepos: Set<string> = new Set();
   if (accessToken) {
     try {
       const result = await getExternalServiceLinkedRepos(accessToken);
       cloudflareLinkedRepos = result.cloudflare.repos;
       vercelLinkedRepos = result.vercel.repos;
+      slackLinkedRepos = result.slack.repos;
     } catch (error) {
       logger.warn('Failed to detect external service linked repos', {
         userId: user.sub,
@@ -922,11 +924,15 @@ app.get('/repositories', optionalAuthMiddleware, async (c) => {
   // リポジトリ名のセットをシリアライズ可能な形に変換
   const cloudflareRepos: Record<string, boolean> = {};
   const vercelRepos: Record<string, boolean> = {};
+  const slackRepos: Record<string, boolean> = {};
   for (const repoName of cloudflareLinkedRepos) {
     cloudflareRepos[repoName] = true;
   }
   for (const repoName of vercelLinkedRepos) {
     vercelRepos[repoName] = true;
+  }
+  for (const repoName of slackLinkedRepos) {
+    slackRepos[repoName] = true;
   }
 
   return c.html(getRepositoriesPage({
@@ -938,6 +944,7 @@ app.get('/repositories', optionalAuthMiddleware, async (c) => {
     repoPermissions: repoPermissionsMap,
     cloudflareLinkedRepos: Object.keys(cloudflareRepos).length > 0 ? cloudflareRepos : null,
     vercelLinkedRepos: Object.keys(vercelRepos).length > 0 ? vercelRepos : null,
+    slackLinkedRepos: Object.keys(slackRepos).length > 0 ? slackRepos : null,
   }));
 });
 
