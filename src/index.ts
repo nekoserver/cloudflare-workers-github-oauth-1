@@ -348,6 +348,21 @@ app.get('/github/callback', async (c) => {
     const code = c.req.query('code');
     const error = c.req.query('error');
     const state = c.req.query('state');
+    const setupAction = c.req.query('setup_action');
+
+    // GitHub App「Install App」フローの処理
+    // Install Appフローはstate/PKCEを伴わないため、OAuth認証フローとは別に処理する
+    if (setupAction === 'install') {
+      const installationId = c.req.query('installation_id');
+      logger.info('GitHub App installation callback received', {
+        installationId,
+        hasCode: !!code,
+      });
+      // インストール完了後、ログイン済みならwelcomeへ、未ログインならトップへ
+      const cookieHeader = c.req.header('Cookie');
+      const authToken = getCookieValue(cookieHeader, 'auth_token');
+      return c.redirect(authToken ? '/welcome' : '/', 302);
+    }
 
     if (error) {
       return c.json({ error: `GitHub OAuth error: ${error}` }, 400);
