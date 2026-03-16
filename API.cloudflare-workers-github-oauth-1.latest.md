@@ -10,47 +10,47 @@
 
 | メソッド | パス | 認証 | 説明 | ビューファイル | 最終コミット |
 |---|---|---|---|---|---|
-| GET | `/` | 不要 | ログインページ | `src/views/login.ts` | `ea91d8f` 2026-03-07 |
-| GET | `/welcome` | 必須 | ウェルカムページ | `src/views/welcome.ts` | `c3f20e1` 2026-03-14 |
-| GET | `/settings` | 必須 | 設定ページ | `src/views/settings.ts` | `a0e5e49` 2026-03-16 |
-| GET | `/repositories` | 任意 | リポジトリ一覧 | `src/views/repositories.ts` | `1a8bf0c` 2026-03-16 |
+| GET | `/` | 不要 | ログインページ | `src/views/login.ts` | [`ea91d8f`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/ea91d8f) 2026-03-07 |
+| GET | `/welcome` | 必須 | ウェルカムページ | `src/views/welcome.ts` | [`c3f20e1`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/c3f20e1) 2026-03-14 |
+| GET | `/settings` | 必須 | 設定ページ | `src/views/settings.ts` | [`a0e5e49`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/a0e5e49) 2026-03-16 |
+| GET | `/repositories` | 任意 | リポジトリ一覧 | `src/views/repositories.ts` | [`1a8bf0c`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/1a8bf0c) 2026-03-16 |
 
 ### 認証フロー
 
 | メソッド | パス | 認証 | 説明 | 最終コミット |
 |---|---|---|---|---|
-| GET | `/auth/github` | 不要 | GitHub OAuth 開始（GitHubへリダイレクト） | `ba4cbc1` 2026-03-16 |
-| GET | `/github/callback` | 不要 | OAuth コールバック / Install App コールバック | `ba4cbc1` 2026-03-16 |
-| GET | `/auth/github/reauthorize` | 必須 | 既存グラント取消 → 再認証 | `3abcd07` 2026-03-16 |
-| GET | `/auth/logout` | 不要 | ログアウト（Cookie削除 → `/` へリダイレクト） | `ea91d8f` 2026-03-07 |
+| GET | `/auth/github` | 不要 | GitHub OAuth 開始（GitHubへリダイレクト） | [`ba4cbc1`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/ba4cbc1) 2026-03-16 |
+| GET | `/github/callback` | 不要 | OAuth コールバック / Install App コールバック | [`ba4cbc1`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/ba4cbc1) 2026-03-16 |
+| GET | `/auth/github/reauthorize` | 必須 | 既存グラント取消 → 再認証 | [`3abcd07`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/3abcd07) 2026-03-16 |
+| GET | `/auth/logout` | 不要 | ログアウト（Cookie削除 → `/` へリダイレクト） | [`ea91d8f`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/ea91d8f) 2026-03-07 |
 
 ### API（JSON）
 
 | メソッド | パス | 認証 | 説明 | 最終コミット |
 |---|---|---|---|---|
-| GET | `/health` | 不要 | ヘルスチェック | `ea91d8f` 2026-03-07 |
-| GET | `/api` | 不要 | API情報・エンドポイント一覧 | `ea91d8f` 2026-03-07 |
-| GET | `/api/public` | 任意 | 公開エンドポイント（認証有無で応答変化） | `ea91d8f` 2026-03-07 |
-| GET | `/api/protected` | 必須 | 認証確認用エンドポイント | `ea91d8f` 2026-03-07 |
-| GET | `/api/profile` | 必須 | ユーザープロフィール取得 | `ea91d8f` 2026-03-07 |
-| PUT | `/api/profile` | 必須 | 表示名の更新（D1） | `ea91d8f` 2026-03-07 |
-| POST | `/api/settings/timezone` | 必須 | タイムゾーン変更（D1 + Cookie） | `207441d` 2026-03-14 |
-| POST | `/api/settings/session-duration` | 必須 | セッション有効期限変更（D1 + Cookie） | `207441d` 2026-03-14 |
-| GET | `/api/repo-permissions` | 必須 | インストール権限の最新データ取得（D1優先、APIフォールバック） | `688c22b` 2026-03-16 |
+| GET | `/health` | 不要 | ヘルスチェック | [`ea91d8f`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/ea91d8f) 2026-03-07 |
+| GET | `/api` | 不要 | API情報・エンドポイント一覧 | [`ea91d8f`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/ea91d8f) 2026-03-07 |
+| GET | `/api/public` | 任意 | 公開エンドポイント（認証有無で応答変化） | [`ea91d8f`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/ea91d8f) 2026-03-07 |
+| GET | `/api/protected` | 必須 | 認証確認用エンドポイント | [`ea91d8f`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/ea91d8f) 2026-03-07 |
+| GET | `/api/profile` | 必須 | ユーザープロフィール取得 | [`ea91d8f`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/ea91d8f) 2026-03-07 |
+| PUT | `/api/profile` | 必須 | 表示名の更新（D1） | [`ea91d8f`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/ea91d8f) 2026-03-07 |
+| POST | `/api/settings/timezone` | 必須 | タイムゾーン変更（D1 + Cookie） | [`207441d`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/207441d) 2026-03-14 |
+| POST | `/api/settings/session-duration` | 必須 | セッション有効期限変更（D1 + Cookie） | [`207441d`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/207441d) 2026-03-14 |
+| GET | `/api/repo-permissions` | 必須 | インストール権限の最新データ取得（D1優先、APIフォールバック） | [`688c22b`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/688c22b) 2026-03-16 |
 
 ### Webhook（受信）
 
 | メソッド | パス | 認証 | 説明 | 最終コミット |
 |---|---|---|---|---|
-| POST | `/webhook/github` | HMAC-SHA256 署名検証 | GitHub App installation イベント受信 → D1保存 + Slack通知 | `688c22b` 2026-03-16 |
-| POST | `/webhook/resend` | Svix 署名検証 | Resend メール配信イベント受信 → Slack通知 + プロキシ転送 | `d2b2898` 2026-03-13 |
+| POST | `/webhook/github` | HMAC-SHA256 署名検証 | GitHub App installation イベント受信 → D1保存 + Slack通知 | [`688c22b`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/688c22b) 2026-03-16 |
+| POST | `/webhook/resend` | Svix 署名検証 | Resend メール配信イベント受信 → Slack通知 + プロキシ転送 | [`d2b2898`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/d2b2898) 2026-03-13 |
 
 ### デバッグ用
 
 | メソッド | パス | 認証 | 説明 | 用途 | 最終コミット |
 |---|---|---|---|---|---|
-| GET | `/api/debug/d1` | 必須 | D1 接続診断 | テーブル存在・カラム・レコード確認・テスト書き込み | `c98a14d` 2026-03-16 |
-| GET | `/api/debug/installations` | 必須 | GitHub App インストール診断 | API生レスポンス・権限マップ・リポジトリ紐付け確認 | `f66113d` 2026-03-16 |
+| GET | `/api/debug/d1` | 必須 | D1 接続診断 | テーブル存在・カラム・レコード確認・テスト書き込み | [`c98a14d`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/c98a14d) 2026-03-16 |
+| GET | `/api/debug/installations` | 必須 | GitHub App インストール診断 | API生レスポンス・権限マップ・リポジトリ紐付け確認 | [`f66113d`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/f66113d) 2026-03-16 |
 
 ---
 
@@ -103,7 +103,7 @@ GitHub → POST /webhook/github
 
 | メソッド | パス | 認証 | 定義箇所 | 最終コミット |
 |---|---|---|---|---|
-| POST | `/webhook/resend` | Svix 署名検証 | `src/index.ts` | `d2b2898` 2026-03-13 |
+| POST | `/webhook/resend` | Svix 署名検証 | `src/index.ts` | [`d2b2898`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/d2b2898) 2026-03-13 |
 
 #### 処理フロー
 
@@ -196,7 +196,7 @@ read:user user:email repo
 
 | 関数名 | メソッド | エンドポイント | 定義ファイル | 最終コミット |
 |---|---|---|---|---|
-| `postSlackMessage` | POST | `https://slack.com/api/chat.postMessage` | `src/utils/slack.ts` | `c155d7d` 2026-03-13 |
+| `postSlackMessage` | POST | `https://slack.com/api/chat.postMessage` | `src/utils/slack.ts` | [`c155d7d`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/c155d7d) 2026-03-13 |
 
 #### 現在の通知タイミング
 
@@ -223,9 +223,9 @@ read:user user:email repo
 
 | タイミング | トリガー箇所 | 通知内容 | 優先度 | 状態 |
 |---|---|---|---|---|
-| **ログイン失敗** | `/github/callback` catch節 | 「ログイン失敗」+ エラー内容 + IP | 高 | 実装済み (`688c22b`) |
-| **不審なアクセス** | `authMiddleware` JWT検証失敗時 | 「無効なJWTトークンによるアクセス試行」+ パス + IP + ソース | 高 | 実装済み (`688c22b`) |
-| **GitHub App 権限変更 Webhook** | `POST /webhook/github` | 「GitHub App インストール/アンインストール/権限変更」+ 操作者 + 対象 | 高 | 実装済み (`688c22b`) |
+| **ログイン失敗** | `/github/callback` catch節 | 「ログイン失敗」+ エラー内容 + IP | 高 | 実装済み ([`688c22b`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/688c22b)) |
+| **不審なアクセス** | `authMiddleware` JWT検証失敗時 | 「無効なJWTトークンによるアクセス試行」+ パス + IP + ソース | 高 | 実装済み ([`688c22b`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/688c22b)) |
+| **GitHub App 権限変更 Webhook** | `POST /webhook/github` | 「GitHub App インストール/アンインストール/権限変更」+ 操作者 + 対象 | 高 | 実装済み ([`688c22b`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/688c22b)) |
 | **ログイン成功** | `/github/callback` JWT発行後 | 「{user} がログインしました」 | 中 | 未実装 |
 | **再認証実行** | `/auth/github/reauthorize` | 「{user} が権限の再認証を実行しました」 | 低 | 未実装 |
 | **権限変更検知** | `/api/repo-permissions` 差分発生時 | 「{user} のインストール権限に変更がありました」 | 中 | 未実装（Webhook実装により優先度低下） |
@@ -263,7 +263,7 @@ read:user user:email repo
 
 | 関数/呼び出し | メソッド | エンドポイント | 呼び出し元 | 定義ファイル | 最終コミット |
 |---|---|---|---|---|---|
-| (直接fetch) | GET | `https://mynw.nekomaneki.work/lib/resend-webhook.shtml?event={type}` | `/webhook/resend` | `src/index.ts` | `d2b2898` 2026-03-13 |
+| (直接fetch) | GET | `https://mynw.nekomaneki.work/lib/resend-webhook.shtml?event={type}` | `/webhook/resend` | `src/index.ts` | [`d2b2898`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/d2b2898) 2026-03-13 |
 
 ---
 
@@ -273,39 +273,39 @@ read:user user:email repo
 
 | ファイル | 役割 | 最終コミット | 日時 |
 |---|---|---|---|
-| `src/index.ts` | ルートハンドラ・ビジネスロジック（Webhook含む） | `688c22b` | 2026-03-16 |
-| `src/middleware/auth.ts` | JWT 認証ミドルウェア（検証失敗時Slack通知） | `688c22b` | 2026-03-16 |
+| `src/index.ts` | ルートハンドラ・ビジネスロジック（Webhook含む） | [`688c22b`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/688c22b) | 2026-03-16 |
+| `src/middleware/auth.ts` | JWT 認証ミドルウェア（検証失敗時Slack通知） | [`688c22b`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/688c22b) | 2026-03-16 |
 
 ### ビュー
 
 | ファイル | 役割 | 最終コミット | 日時 |
 |---|---|---|---|
-| `src/views/login.ts` | ログインページ HTML | `ea91d8f` | 2026-03-07 14:37 |
-| `src/views/welcome.ts` | ウェルカムページ HTML | `c3f20e1` | 2026-03-14 22:22 |
-| `src/views/settings.ts` | 設定ページ HTML | `a0e5e49` | 2026-03-16 02:07 |
-| `src/views/repositories.ts` | リポジトリ一覧ページ HTML | `1a8bf0c` | 2026-03-16 10:19 |
+| `src/views/login.ts` | ログインページ HTML | [`ea91d8f`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/ea91d8f) | 2026-03-07 14:37 |
+| `src/views/welcome.ts` | ウェルカムページ HTML | [`c3f20e1`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/c3f20e1) | 2026-03-14 22:22 |
+| `src/views/settings.ts` | 設定ページ HTML | [`a0e5e49`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/a0e5e49) | 2026-03-16 02:07 |
+| `src/views/repositories.ts` | リポジトリ一覧ページ HTML | [`1a8bf0c`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/1a8bf0c) | 2026-03-16 10:19 |
 
 ### ユーティリティ
 
 | ファイル | 役割 | 最終コミット | 日時 |
 |---|---|---|---|
-| `src/utils/github.ts` | GitHub API ユーティリティ | `f66113d` | 2026-03-16 10:37 |
-| `src/utils/jwt.ts` | JWT 生成・検証 | `e08a15b` | 2026-03-14 23:09 |
-| `src/utils/cookie.ts` | Cookie パース | `ea91d8f` | 2026-03-07 14:37 |
-| `src/utils/html.ts` | HTML エスケープ | `ea91d8f` | 2026-03-07 14:37 |
-| `src/utils/logger.ts` | ロガー・Analytics | `ea91d8f` | 2026-03-07 14:37 |
-| `src/utils/resendWebhook.ts` | Resend Webhook 署名検証 | `d2b8c0d` | 2026-03-12 19:32 |
-| `src/utils/githubWebhook.ts` | GitHub Webhook 署名検証 | `688c22b` | 2026-03-16 |
-| `src/utils/slack.ts` | Slack メッセージ送信 | `c155d7d` | 2026-03-13 02:15 |
+| `src/utils/github.ts` | GitHub API ユーティリティ | [`f66113d`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/f66113d) | 2026-03-16 10:37 |
+| `src/utils/jwt.ts` | JWT 生成・検証 | [`e08a15b`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/e08a15b) | 2026-03-14 23:09 |
+| `src/utils/cookie.ts` | Cookie パース | [`ea91d8f`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/ea91d8f) | 2026-03-07 14:37 |
+| `src/utils/html.ts` | HTML エスケープ | [`ea91d8f`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/ea91d8f) | 2026-03-07 14:37 |
+| `src/utils/logger.ts` | ロガー・Analytics | [`ea91d8f`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/ea91d8f) | 2026-03-07 14:37 |
+| `src/utils/resendWebhook.ts` | Resend Webhook 署名検証 | [`d2b8c0d`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/d2b8c0d) | 2026-03-12 19:32 |
+| `src/utils/githubWebhook.ts` | GitHub Webhook 署名検証 | [`688c22b`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/688c22b) | 2026-03-16 |
+| `src/utils/slack.ts` | Slack メッセージ送信 | [`c155d7d`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/c155d7d) | 2026-03-13 02:15 |
 
 ### マイグレーション
 
 | ファイル | 内容 | 最終コミット | 日時 |
 |---|---|---|---|
-| `migrations/0001_create_user_sessions.sql` | `user_sessions` テーブル作成 | `ea91d8f` | 2026-03-07 |
-| `migrations/0002_add_display_name.sql` | `display_name` カラム追加 | `ea91d8f` | 2026-03-07 |
-| `migrations/0003_add_github_access_token.sql` | `github_access_token` カラム追加 | `e5a4763` | 2026-03-16 |
-| `migrations/0004_create_installation_permissions.sql` | `installation_permissions` テーブル作成 | `688c22b` | 2026-03-16 |
+| `migrations/0001_create_user_sessions.sql` | `user_sessions` テーブル作成 | [`ea91d8f`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/ea91d8f) | 2026-03-07 |
+| `migrations/0002_add_display_name.sql` | `display_name` カラム追加 | [`ea91d8f`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/ea91d8f) | 2026-03-07 |
+| `migrations/0003_add_github_access_token.sql` | `github_access_token` カラム追加 | [`e5a4763`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/e5a4763) | 2026-03-16 |
+| `migrations/0004_create_installation_permissions.sql` | `installation_permissions` テーブル作成 | [`688c22b`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/688c22b) | 2026-03-16 |
 
 ---
 
