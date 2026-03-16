@@ -237,7 +237,7 @@ export function getSettingsPage(user: {
       </div>
 
       <div class="section">
-        <h2 class="section-title">GitHub OAuth</h2>
+        <h2 class="section-title">このアプリに付与済みの権限</h2>
         <div class="info-grid">
           <div class="info-item">
             <span class="info-label">要求スコープ</span>

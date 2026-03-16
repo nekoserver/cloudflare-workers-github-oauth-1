@@ -116,7 +116,7 @@ export function getRepositoriesPage(user: {
       ? `<a class="repo-meta-link" href="${repo.latestCommitUrl}" target="_blank" rel="noreferrer">🔗 ${escapeHtml(repo.latestCommitSha.substring(0, 7))}</a>`
       : `<span class="repo-meta-muted">🔗 なし</span>`;
     return `
-      <div class="repo-row" data-updated="${repo.updatedAt}">
+      <div class="repo-row" data-updated="${repo.updatedAt}" data-description="${repo.description ? escapeHtml(repo.description) : ''}" data-language="${language}" data-stars="${repo.stars}" data-forks="${repo.forks}" data-private="${repo.isPrivate}" data-commit-sha="${repo.latestCommitSha ? escapeHtml(repo.latestCommitSha.substring(0, 7)) : ''}" data-commit-url="${repo.latestCommitUrl ? escapeHtml(repo.latestCommitUrl) : ''}">
         <div class="repo-main">
           <div class="repo-title">
             <h3 class="repo-name">${repoLink}</h3>
@@ -283,7 +283,17 @@ export function getRepositoriesPage(user: {
     }
     .modal-close:hover { background: #edf2f7; color: #2d3748; }
     .modal-body { padding: 16px 24px 24px; }
-    .modal-repo-name { font-size: 14px; color: #718096; margin-bottom: 16px; }
+    .modal-repo-name { font-size: 14px; color: #718096; margin-bottom: 12px; font-weight: 600; }
+    .modal-repo-summary {
+      background: #f7fafc; border-radius: 10px; padding: 14px 16px; margin-bottom: 16px;
+      border: 1px solid #e2e8f0;
+    }
+    .modal-repo-desc { font-size: 13px; color: #4a5568; margin-bottom: 8px; }
+    .modal-repo-desc:empty { display: none; }
+    .modal-repo-meta-grid { display: flex; flex-wrap: wrap; gap: 8px; font-size: 12px; color: #718096; }
+    .modal-repo-meta-item { background: #edf2f7; padding: 3px 8px; border-radius: 999px; }
+    .modal-repo-meta-link { color: #2b6cb0; text-decoration: none; font-weight: 600; }
+    .modal-repo-meta-link:hover { text-decoration: underline; }
     .perm-item {
       border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px 14px; margin-bottom: 10px;
       transition: border-color 0.2s;
@@ -363,6 +373,10 @@ export function getRepositoriesPage(user: {
       </div>
       <div class="modal-body">
         <div class="modal-repo-name" id="modalRepoName"></div>
+        <div class="modal-repo-summary" id="modalRepoSummary">
+          <div class="modal-repo-desc" id="modalRepoDesc"></div>
+          <div class="modal-repo-meta-grid" id="modalRepoMetaGrid"></div>
+        </div>
         ${permissionItemsHtml}
         <div class="scopes-footer">
           付与スコープ: ${scopes.length > 0 ? scopes.map(s => `<code>${escapeHtml(s)}</code>`).join(' ') : '<span>取得できませんでした</span>'}
@@ -410,9 +424,38 @@ export function getRepositoriesPage(user: {
     const modalClose = document.getElementById('modalClose');
     const modalRepoName = document.getElementById('modalRepoName');
 
-    function openPermissionsModal(repoName) {
+    function openPermissionsModal(repoName, rowEl) {
       if (modalRepoName) {
         modalRepoName.textContent = repoName;
+      }
+      var descEl = document.getElementById('modalRepoDesc');
+      var metaGrid = document.getElementById('modalRepoMetaGrid');
+      if (rowEl && descEl && metaGrid) {
+        var desc = rowEl.getAttribute('data-description') || '';
+        descEl.textContent = desc || '説明なし';
+        var lang = rowEl.getAttribute('data-language') || '不明';
+        var stars = rowEl.getAttribute('data-stars') || '0';
+        var forks = rowEl.getAttribute('data-forks') || '0';
+        var isPrivate = rowEl.getAttribute('data-private') === 'true';
+        var updated = rowEl.getAttribute('data-updated') || '';
+        var commitSha = rowEl.getAttribute('data-commit-sha') || '';
+        var commitUrl = rowEl.getAttribute('data-commit-url') || '';
+        var metaHtml = '';
+        metaHtml += '<span class="modal-repo-meta-item">' + (isPrivate ? '🔒 Private' : '🌐 Public') + '</span>';
+        metaHtml += '<span class="modal-repo-meta-item">🧩 ' + lang + '</span>';
+        metaHtml += '<span class="modal-repo-meta-item">⭐ ' + stars + '</span>';
+        metaHtml += '<span class="modal-repo-meta-item">🍴 ' + forks + '</span>';
+        if (updated) {
+          metaHtml += '<span class="modal-repo-meta-item">🕒 ' + updated + '</span>';
+        }
+        if (commitSha) {
+          if (commitUrl) {
+            metaHtml += '<span class="modal-repo-meta-item"><a class="modal-repo-meta-link" href="' + commitUrl + '" target="_blank" rel="noreferrer">🔗 ' + commitSha + '</a></span>';
+          } else {
+            metaHtml += '<span class="modal-repo-meta-item">🔗 ' + commitSha + '</span>';
+          }
+        }
+        metaGrid.innerHTML = metaHtml;
       }
       if (modal) {
         modal.classList.add('show');
@@ -451,7 +494,7 @@ export function getRepositoriesPage(user: {
         }
         var nameEl = row.querySelector('.repo-name-link');
         var repoName = nameEl ? nameEl.textContent.trim() : '';
-        openPermissionsModal(repoName);
+        openPermissionsModal(repoName, row);
       });
     });
   </script>
