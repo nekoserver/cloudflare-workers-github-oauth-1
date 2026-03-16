@@ -129,6 +129,15 @@ npm run deploy
 8. /welcome にリダイレクト
 ```
 
+### 重要: GitHub App Install フローのコールバック
+
+GitHub App の **「Install App」** フローでは、コールバックが `/github/callback?setup_action=install` として戻る。
+これは通常の OAuth 認証フロー（state/PKCE パラメータ付き）とは**異なるワークフロー**であり、コールバックハンドラで分岐処理が必要。
+
+- `setup_action=install` が付いている場合、state パラメータは存在しないため state 検証をスキップする
+- Install App フローはリポジトリアクセス権の付与が目的であり、認証トークンの発行フローではない
+- 詳細は [NOTICE.cloudflare-workers-github-oauth-1.20260316.md](NOTICE.cloudflare-workers-github-oauth-1.20260316.md) を参照
+
 ## 環境変数
 
 | 変数名 | 必須 | 説明 |
