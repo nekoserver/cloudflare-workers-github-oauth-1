@@ -484,6 +484,57 @@ app.get('/github/callback', async (c) => {
 });
 
 /**
+ * 権限の再認証（既存のGitHub OAuthグラントを取り消してから再認証）
+ * スコープが不足している場合にユーザーを新しい認可画面に誘導する
+ */
+app.get('/auth/github/reauthorize', authMiddleware, async (c) => {
+  const user = c.get('user');
+  const clientId = c.env.GITHUB_CLIENT_ID;
+  const clientSecret = c.env.GITHUB_CLIENT_SECRET;
+
+  if (!clientId || !clientSecret) {
+    return c.json({ error: 'GitHub OAuth is not configured' }, 500);
+  }
+
+  // D1からアクセストークンを取得
+  const userSession = await getUserSession(c.env.DB, user.sub);
+  const accessToken = userSession?.githubAccessToken ?? user.github_access_token ?? undefined;
+
+  if (accessToken) {
+    // 既存のOAuthグラントを取り消し（GitHub APIを利用）
+    // これによりGitHubが次回の認証時に新しいスコープの承認画面を表示する
+    try {
+      await fetch(`https://api.github.com/applications/${encodeURIComponent(clientId)}/grant`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Basic ${btoa(`${clientId}:${clientSecret}`)}`,
+          'Accept': 'application/vnd.github.v3+json',
+          'User-Agent': 'Cloudflare-Workers-GitHub-OAuth',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ access_token: accessToken }),
+      });
+
+      logger.info('Revoked GitHub OAuth grant for re-authorization', { userId: user.sub });
+    } catch (error) {
+      logger.warn('Failed to revoke GitHub OAuth grant', {
+        userId: user.sub,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+      // 取り消しに失敗しても再認証フローは続行する
+    }
+  }
+
+  // クッキーを削除してから /auth/github にリダイレクト
+  const redirectHeaders = new Headers({ 'Location': '/auth/github' });
+  redirectHeaders.append('Set-Cookie', 'auth_token=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0');
+  redirectHeaders.append('Set-Cookie', 'login_timestamp=; Path=/; Secure; SameSite=Lax; Max-Age=0');
+  redirectHeaders.append('Set-Cookie', 'last_activity=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0');
+
+  return new Response(null, { status: 302, headers: redirectHeaders });
+});
+
+/**
  * ログアウト
  * サーバーサイドでHttpOnlyクッキーを削除してからログインページへリダイレクト
  */

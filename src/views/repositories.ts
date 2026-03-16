@@ -27,6 +27,8 @@ export function getRepositoriesPage(user: {
   const initials = escapeHtml((user.name || user.username).substring(0, 2).toUpperCase());
   const repoCount = user.repositories.length;
   const scopes = user.grantedScopes ?? [];
+  const hasRepoScope = scopes.includes('repo');
+  const missingScopesBanner = !hasRepoScope && scopes.length > 0 ? true : false;
 
   // GitHub App権限とOAuthスコープからアクティブな権限を判定
   interface PermissionInfo {
@@ -96,6 +98,7 @@ export function getRepositoriesPage(user: {
         <span class="perm-icon">${p.icon}</span>
         <span class="perm-name">${p.name}</span>
         <span class="perm-badge ${p.active ? 'on' : 'off'}">${p.active ? 'Read &amp; Write' : '無効'}</span>
+        ${!p.active ? '<a href="/auth/github/reauthorize" class="perm-reauth">権限を追加 →</a>' : ''}
       </div>
       ${p.active ? `<ul class="perm-caps">${p.capabilities.map(c => `<li>${c}</li>`).join('')}</ul>` : ''}
     </div>
@@ -137,6 +140,20 @@ export function getRepositoriesPage(user: {
 
   const errorBanner = user.errorMessage ? `
     <div class="error-banner">${escapeHtml(user.errorMessage)}</div>
+  ` : '';
+
+  const missingScopeBannerHtml = missingScopesBanner ? `
+    <div class="missing-scope-banner">
+      <span class="missing-scope-banner-icon">⚠️</span>
+      <div class="missing-scope-banner-text">
+        <div class="missing-scope-banner-title">プライベートリポジトリにアクセスできません</div>
+        <div class="missing-scope-banner-desc">現在の認証にはプライベートリポジトリへのアクセス権限が含まれていません。権限を追加するには再認証してください。</div>
+      </div>
+      <a href="/auth/github/reauthorize" class="reauth-btn">
+        <svg viewBox="0 0 16 16"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+        権限を追加して再認証
+      </a>
+    </div>
   ` : '';
 
   const emptyState = !user.errorMessage && repoCount === 0 ? `
@@ -320,6 +337,30 @@ export function getRepositoriesPage(user: {
     .scopes-footer code {
       background: #edf2f7; padding: 1px 5px; border-radius: 4px; font-size: 11px;
     }
+    .missing-scope-banner {
+      background: linear-gradient(135deg, #fefcbf 0%, #fef3c7 100%);
+      border: 1px solid #ecc94b;
+      border-radius: 12px; padding: 16px 20px; margin-top: 16px;
+      display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+    }
+    .missing-scope-banner-icon { font-size: 24px; flex-shrink: 0; }
+    .missing-scope-banner-text { flex: 1; min-width: 200px; }
+    .missing-scope-banner-title { font-size: 14px; font-weight: 700; color: #744210; margin-bottom: 2px; }
+    .missing-scope-banner-desc { font-size: 13px; color: #975a16; }
+    .reauth-btn {
+      display: inline-flex; align-items: center; gap: 6px;
+      background: #2d3748; color: white; border: none; border-radius: 8px;
+      padding: 10px 20px; font-size: 13px; font-weight: 600; cursor: pointer;
+      text-decoration: none; white-space: nowrap; transition: background 0.2s;
+    }
+    .reauth-btn:hover { background: #1a202c; }
+    .reauth-btn svg { width: 16px; height: 16px; fill: currentColor; }
+    .perm-reauth {
+      display: inline-flex; align-items: center; gap: 4px;
+      color: #2b6cb0; font-size: 12px; font-weight: 600;
+      text-decoration: none; margin-left: auto; transition: color 0.2s;
+    }
+    .perm-reauth:hover { color: #2c5282; text-decoration: underline; }
   </style>
 </head>
 <body>
@@ -349,6 +390,7 @@ export function getRepositoriesPage(user: {
       <h1 class="page-title">📦 リポジトリ</h1>
       <p class="page-subtitle">リポジトリ ${repoCount} 件</p>
       ${errorBanner}
+      ${missingScopeBannerHtml}
     </div>
 
     ${emptyState}
