@@ -6,6 +6,8 @@
 
 ## 1. GitHub App Install App フローのコールバック対応
 
+**対象**: `GET /github/callback` エンドポイント — GitHub App の Install App フロー経由で返されるコールバックが、既存の OAuth 認証フロー（state/PKCE 検証）と衝突して state 不一致エラーになる問題の修正。
+
 ### 背景
 GitHub App の「Install App」フローでは、コールバックが `/github/callback?setup_action=install` として返される。このフローには `state` パラメータが存在せず、既存の OAuth 認証フロー（state/PKCE 検証あり）に入ると state 不一致エラーとなっていた。
 
@@ -22,6 +24,8 @@ GitHub App の「Install App」フローでは、コールバックが `/github/
 ---
 
 ## 2. スコープ不足時の再認証フローとUI
+
+**対象**: `/repositories` ページおよび `GET /auth/github/reauthorize` エンドポイント — OAuth トークンに `repo` スコープが含まれていない場合にユーザーが気づいて再認証できる仕組みの追加。
 
 ### 背景
 OAuth トークンに `repo` スコープが含まれていない場合、プライベートリポジトリが取得できない。ユーザーが不足スコープに気づき、再認証できる仕組みが必要だった。
@@ -40,6 +44,8 @@ OAuth トークンに `repo` スコープが含まれていない場合、プラ
 ---
 
 ## 3. リポジトリ行タップで権限モーダルを表示
+
+**対象**: `/repositories` ページのリポジトリ詳細モーダル — 各リポジトリに対してどの GitHub App インストール権限が有効かをユーザーが確認できる UI の追加。
 
 ### 背景
 各リポジトリに対してどの権限が有効かをユーザーが確認できるUIが不足していた。
@@ -64,6 +70,8 @@ OAuth トークンに `repo` スコープが含まれていない場合、プラ
 
 ## 4. リポジトリページのアクセストークン取得改善
 
+**対象**: `/repositories` ハンドラのアクセストークン取得ロジック — D1 に保存されたトークンがない場合に JWT ペイロード内のトークンにフォールバックする修正。
+
 ### 修正内容
 
 | ファイル | 変更概要 |
@@ -76,6 +84,8 @@ OAuth トークンに `repo` スコープが含まれていない場合、プラ
 ---
 
 ## 5. D1 データベース有効化と診断エンドポイント
+
+**対象**: `wrangler.toml` の D1 バインディング設定、および `GET /api/debug/d1` 診断エンドポイント — コメントアウト状態で無効だった D1 データベースの有効化と動作確認手段の整備。
 
 ### 背景
 D1 データベースバインディングがコメントアウト状態で無効だった。有効化後の動作確認のため、診断エンドポイントも追加した。
@@ -98,6 +108,8 @@ D1 データベースバインディングがコメントアウト状態で無�
 
 ## 6. 設定ページの文言変更
 
+**対象**: `/settings` ページの GitHub OAuth セクション見出し — セクションタイトルをユーザーにとってわかりやすい表現に変更。
+
 ### 修正内容
 
 | ファイル | 変更概要 |
@@ -110,6 +122,8 @@ D1 データベースバインディングがコメントアウト状態で無�
 ---
 
 ## 7. ドキュメント整備
+
+**対象**: `CLAUDE.md` / `README.md` / `NOTICE` / `HISTORY` — NOTICEファイル運用ルールの制定、Install App フローの注意事項記載、コミット履歴の整理。
 
 | ファイル | 変更概要 |
 |---|---|
@@ -127,16 +141,82 @@ D1 データベースバインディングがコメントアウト状態で無�
 
 ---
 
-## 変更ファイル一覧（9ファイル）
+## 8. GitHub App Webhook によるリアルタイム権限同期
 
-| ファイル | 追加行 | 削除行 | 種別 |
-|---|---|---|---|
-| `src/index.ts` | +149 | -1 | 機能追加・修正 |
-| `src/views/repositories.ts` | +286 | -1 | 機能追加（UI） |
-| `src/views/settings.ts` | +1 | -1 | 文言変更 |
-| `wrangler.toml` | +4 | -4 | 設定変更 |
-| `package.json` | +3 | -2 | スクリプト変更 |
-| `CLAUDE.md` | +26 | 0 | ドキュメント |
-| `README.md` | +9 | 0 | ドキュメント |
-| `NOTICE...20260316.md` | +25 | 0 | 新規ドキュメント |
-| `HISTORY...latest.md` | +64 | -36 | ドキュメント更新 |
+**対象**: `POST /webhook/github` エンドポイント、D1 `installation_permissions` テーブル、`/repositories` および `/api/repo-permissions` の権限データ取得ロジック — GitHub App のインストール権限変更を Webhook 経由でリアルタイムに D1 へ保存し、ページ表示時に GitHub API を呼ばずに高速に権限データを返せるようにする。
+
+### 背景
+GitHub App のインストール権限変更を `/repositories` モーダルに反映する際、従来は GitHub API をページ読み込み時に呼び出していたが、API レート制限やレスポンス遅延の問題があった。Webhook で権限変更イベントをリアルタイムに受信し、D1 に保存する方式に変更。
+
+### 注意事項
+GitHub App の開発者設定でパーミッションを追加しても、既存インストールには即座に反映されない。オーナーが「Review request」を承認するか、アプリを再インストールする必要がある（GitHub プラットフォーム仕様）。詳細は `NOTICE.cloudflare-workers-github-oauth-1.20260316.md` を参照。
+
+### 修正内容
+
+| ファイル | 変更概要 |
+|---|---|
+| `migrations/0004_create_installation_permissions.sql` | 新規テーブル `installation_permissions` を作成。`installation_id` + `repo_name` のユニークインデックス付き |
+| `src/utils/githubWebhook.ts` | GitHub Webhook の HMAC-SHA256 署名検証ユーティリティ。タイミングセーフ比較を実装 |
+| `src/index.ts` | `POST /webhook/github` エンドポイントを追加。`installation` / `installation_repositories` イベントを処理し D1 に保存。Slack 通知も実施 |
+| `src/index.ts` | `getInstallationPermissionsFromD1()` ヘルパー関数を追加。D1 からインストール権限を読み取り |
+| `src/index.ts` | `/repositories` ハンドラを D1 優先・API フォールバックに変更 |
+| `src/index.ts` | `/api/repo-permissions` ハンドラを D1 優先・API フォールバックに変更。レスポンスに `source` フィールド追加 |
+| `src/index.ts` | Bindings 型に `GITHUB_WEBHOOK_SECRET` を追加 |
+
+### Webhook で処理するイベント
+
+| イベント | アクション | D1 操作 |
+|---|---|---|
+| `installation` | `created` | レコード挿入（UPSERT） |
+| `installation` | `deleted` | レコード削除 |
+| `installation` | `suspend` | レコード削除 |
+| `installation` | `unsuspend` | レコード挿入（UPSERT） |
+| `installation` | `new_permissions_accepted` | レコード挿入（UPSERT） |
+| `installation_repositories` | `added` / `removed` | リポジトリ単位で挿入/削除 |
+
+### 環境変数
+- `GITHUB_WEBHOOK_SECRET`: `wrangler secret put` で設定（GitHub App の Webhook secret と一致させる）
+
+---
+
+## 9. 高優先度 Slack セキュリティ通知
+
+**対象**: `src/middleware/auth.ts` の JWT 検証処理、`src/index.ts` の OAuth コールバックおよび GitHub Webhook ハンドラ — ログイン失敗・不審アクセス・GitHub App インストール変更の3種類のセキュリティイベントを Slack へ即時通知する。
+
+### 修正内容
+
+| ファイル | 変更概要 |
+|---|---|
+| `src/middleware/auth.ts` | JWT 検証失敗時に Slack へセキュリティ警告を送信（IP アドレス・パス・トークンソース付き） |
+| `src/middleware/auth.ts` | Bindings 型に `SLACK_OAUTH_TOKEN`, `SLACK_CHANNEL_ID` を追加 |
+| `src/index.ts` | OAuth コールバックでの認証エラー時に Slack へログイン失敗通知を送信 |
+| `src/index.ts` | GitHub App Webhook の `installation` イベント受信時に Slack へ通知（インストール/アンインストール/権限変更等） |
+
+### 通知タイミング
+
+| 通知種別 | トリガー | 優先度 |
+|---|---|---|
+| ログイン失敗 | OAuth コールバック catch ブロック | 高 |
+| 不審アクセス | JWT 検証失敗（無効トークン） | 高 |
+| App インストール変更 | Webhook `installation` イベント | 中 |
+
+---
+
+## 変更ファイル一覧
+
+| ファイル | 種別 |
+|---|---|
+| `src/index.ts` | 機能追加・修正（Webhook, D1読み取り, Slack通知） |
+| `src/middleware/auth.ts` | 機能追加（JWT検証失敗時Slack通知） |
+| `src/utils/githubWebhook.ts` | 新規（Webhook署名検証） |
+| `src/utils/github.ts` | 機能追加（インストール権限取得） |
+| `src/views/repositories.ts` | 機能追加（UI） |
+| `src/views/settings.ts` | 文言変更 |
+| `migrations/0004_create_installation_permissions.sql` | 新規（D1マイグレーション） |
+| `wrangler.toml` | 設定変更 |
+| `package.json` | スクリプト変更 |
+| `CLAUDE.md` | ドキュメント |
+| `README.md` | ドキュメント |
+| `NOTICE...20260316.md` | 新規ドキュメント |
+| `HISTORY...latest.md` | ドキュメント更新 |
+| `SPEC...20260316.md` | 本ファイル |

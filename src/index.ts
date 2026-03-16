@@ -17,6 +17,7 @@ import { getRepositoriesPage } from './views/repositories';
 import { getGitHubAccessToken, getGitHubLatestCommit, getGitHubTokenScopes, getGitHubUser, getGitHubUserEmail, getGitHubUserRepos, GitHubTokenScopesError, buildRepoInstallationPermissionsMap, RepoInstallationPermissions, getGitHubUserInstallationsWithDiag, getGitHubInstallationRepos } from './utils/github';
 import { getCookieValue, getCookieValues } from './utils/cookie';
 import { verifyResendWebhookSignature } from './utils/resendWebhook';
+import { verifyGitHubWebhookSignature } from './utils/githubWebhook';
 import { postSlackMessage } from './utils/slack';
 import * as logger from './utils/logger';
 
@@ -36,6 +37,7 @@ type Bindings = {
   SLACK_CHANNEL_ID?: string;
   SESSION_IDLE_TIMEOUT_SECONDS?: string;
   RESEND_WEBHOOK_DEDUP_TTL_SECONDS?: string;
+  GITHUB_WEBHOOK_SECRET?: string;
 };
 
 // コンテキスト変数の型定義
@@ -239,6 +241,52 @@ async function updateUserSettings(
       error: error instanceof Error ? error.message : 'Unknown error',
     });
     return false;
+  }
+}
+
+/**
+ * D1からインストール権限を読み取り、リポジトリ名→権限のマップとして返す
+ * Webhookで保存されたデータを使用するため、GitHub APIへのアクセスなしで高速に返せる
+ */
+async function getInstallationPermissionsFromD1(
+  db: D1Database | undefined
+): Promise<{ permissions: Record<string, { permissions: Record<string, string>; repositorySelection: string }>; allPermissions: Record<string, string> | null } | null> {
+  if (!db) return null;
+
+  try {
+    const rows = await db.prepare(
+      'SELECT installation_id, repo_name, repository_selection, permissions FROM installation_permissions'
+    ).all<{
+      installation_id: number;
+      repo_name: string | null;
+      repository_selection: string;
+      permissions: string;
+    }>();
+
+    if (!rows.results || rows.results.length === 0) return null;
+
+    const result: Record<string, { permissions: Record<string, string>; repositorySelection: string }> = {};
+    let allPermissions: Record<string, string> | null = null;
+
+    for (const row of rows.results) {
+      const perms = JSON.parse(row.permissions) as Record<string, string>;
+      if (row.repo_name === null) {
+        // repo_name が NULL → "all repositories" インストール
+        allPermissions = perms;
+      } else {
+        result[row.repo_name] = {
+          permissions: perms,
+          repositorySelection: row.repository_selection,
+        };
+      }
+    }
+
+    return { permissions: result, allPermissions };
+  } catch (error) {
+    logger.error('Failed to read installation permissions from D1', {
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    return null;
   }
 }
 
@@ -491,6 +539,19 @@ app.get('/github/callback', async (c) => {
       timestamp: Date.now(),
     });
 
+    // ログイン失敗をSlackに通知
+    const slackToken = c.env.SLACK_OAUTH_TOKEN;
+    const slackChannel = c.env.SLACK_CHANNEL_ID;
+    if (slackToken && slackChannel) {
+      const ip = c.req.header('CF-Connecting-IP') ?? c.req.header('X-Forwarded-For') ?? 'unknown';
+      const errMsg = error instanceof Error ? error.message : 'Unknown error';
+      postSlackMessage({
+        token: slackToken,
+        channel: slackChannel,
+        text: `[セキュリティ警告] ログイン失敗\nエラー: ${errMsg}\nIP: ${ip}`,
+      }).catch(() => { /* 通知失敗は無視 */ });
+    }
+
     return c.json({
       error: 'Authentication failed',
       details: error instanceof Error ? error.message : 'Unknown error'
@@ -721,9 +782,26 @@ app.get('/repositories', optionalAuthMiddleware, async (c) => {
     }
   }
 
-  // GitHub App インストール権限をリポジトリごとに取得
+  // GitHub App インストール権限をリポジトリごとに取得（D1優先、APIフォールバック）
   let repoInstallationPermissions: Map<string, RepoInstallationPermissions> = new Map();
-  if (accessToken) {
+  const d1Perms = await getInstallationPermissionsFromD1(c.env.DB);
+  if (d1Perms) {
+    // D1 のデータをMap形式に変換
+    for (const [repoName, info] of Object.entries(d1Perms.permissions)) {
+      repoInstallationPermissions.set(repoName, {
+        installationId: 0,
+        permissions: info.permissions,
+        repositorySelection: info.repositorySelection as 'all' | 'selected',
+      });
+    }
+    if (d1Perms.allPermissions) {
+      repoInstallationPermissions.set('__all__0', {
+        installationId: 0,
+        permissions: d1Perms.allPermissions,
+        repositorySelection: 'all',
+      });
+    }
+  } else if (accessToken) {
     try {
       repoInstallationPermissions = await buildRepoInstallationPermissionsMap(accessToken);
     } catch {
@@ -829,6 +907,161 @@ app.get('/repositories', optionalAuthMiddleware, async (c) => {
     grantedScopes,
     repoPermissions: repoPermissionsMap,
   }));
+});
+
+// =====================================================
+// Webhook エンドポイント
+// =====================================================
+
+/**
+ * GitHub App Webhook 受信用エンドポイント
+ * installation イベントを受信し、D1 に権限を保存、Slack に通知
+ */
+app.post('/webhook/github', async (c) => {
+  const webhookSecret = c.env.GITHUB_WEBHOOK_SECRET;
+  if (!webhookSecret) {
+    logger.error('GitHub webhook secret is not configured');
+    return c.json({ error: 'Webhook endpoint is not available' }, 500);
+  }
+
+  const rawBody = await c.req.text();
+  const signatureHeader = c.req.header('X-Hub-Signature-256');
+
+  const verification = await verifyGitHubWebhookSignature(rawBody, signatureHeader, webhookSecret);
+  if (!verification.success) {
+    logger.warn('Rejected GitHub webhook', {
+      reason: verification.reason,
+      path: c.req.path,
+    });
+    return c.json({ error: 'Unauthorized webhook' }, 401);
+  }
+
+  const eventType = c.req.header('X-GitHub-Event') ?? 'unknown';
+  const deliveryId = c.req.header('X-GitHub-Delivery') ?? 'unknown';
+
+  let payload: any;
+  try {
+    payload = rawBody ? JSON.parse(rawBody) : {};
+  } catch {
+    return c.json({ error: 'Invalid webhook payload' }, 400);
+  }
+
+  const action = typeof payload?.action === 'string' ? payload.action : 'unknown';
+
+  logger.info('GitHub webhook received', { eventType, action, deliveryId });
+
+  // installation イベントを処理
+  if (eventType === 'installation' || eventType === 'installation_repositories') {
+    const db = c.env.DB;
+    const installation = payload?.installation;
+
+    if (installation && db) {
+      const installationId = installation.id as number;
+      const permissions = installation.permissions ?? {};
+      const repositorySelection = installation.repository_selection ?? 'selected';
+      const now = new Date().toISOString();
+
+      try {
+        if (action === 'deleted' || action === 'suspend') {
+          // インストール削除 or 一時停止 → D1 から該当レコードを削除
+          await db.prepare(
+            'DELETE FROM installation_permissions WHERE installation_id = ?'
+          ).bind(installationId).run();
+
+          logger.info('Deleted installation permissions from D1', { installationId, action });
+        } else if (action === 'created' || action === 'new_permissions_accepted' || action === 'unsuspend') {
+          // インストール作成 or 権限承認 or 再開
+          if (repositorySelection === 'all') {
+            // "All repositories" → repo_name を NULL で1レコード
+            await db.prepare(`
+              INSERT INTO installation_permissions (installation_id, repo_name, repository_selection, permissions, updated_at)
+              VALUES (?, NULL, ?, ?, ?)
+              ON CONFLICT(installation_id, repo_name) DO UPDATE SET
+                repository_selection = excluded.repository_selection,
+                permissions = excluded.permissions,
+                updated_at = excluded.updated_at
+            `).bind(installationId, repositorySelection, JSON.stringify(permissions), now).run();
+          } else {
+            // "Selected repositories" → リポジトリごとにレコード
+            const repos = payload?.repositories ?? payload?.repositories_added ?? [];
+            if (Array.isArray(repos)) {
+              for (const repo of repos) {
+                const repoName = repo.name ?? repo.full_name?.split('/').pop();
+                if (!repoName) continue;
+                await db.prepare(`
+                  INSERT INTO installation_permissions (installation_id, repo_name, repository_selection, permissions, updated_at)
+                  VALUES (?, ?, ?, ?, ?)
+                  ON CONFLICT(installation_id, repo_name) DO UPDATE SET
+                    repository_selection = excluded.repository_selection,
+                    permissions = excluded.permissions,
+                    updated_at = excluded.updated_at
+                `).bind(installationId, repoName, repositorySelection, JSON.stringify(permissions), now).run();
+              }
+            }
+          }
+
+          // repositories_removed があれば削除
+          const removedRepos = payload?.repositories_removed ?? [];
+          if (Array.isArray(removedRepos)) {
+            for (const repo of removedRepos) {
+              const repoName = repo.name ?? repo.full_name?.split('/').pop();
+              if (!repoName) continue;
+              await db.prepare(
+                'DELETE FROM installation_permissions WHERE installation_id = ? AND repo_name = ?'
+              ).bind(installationId, repoName).run();
+            }
+          }
+
+          logger.info('Updated installation permissions in D1', {
+            installationId,
+            action,
+            repositorySelection,
+            permissionKeys: Object.keys(permissions),
+          });
+        }
+      } catch (error) {
+        logger.error('Failed to update installation permissions in D1', {
+          installationId,
+          action,
+          error: error instanceof Error ? error.message : 'Unknown error',
+        });
+      }
+    }
+
+    // Slack 通知: GitHub App インストール変更
+    const slackToken = c.env.SLACK_OAUTH_TOKEN;
+    const slackChannel = c.env.SLACK_CHANNEL_ID;
+    if (slackToken && slackChannel) {
+      const sender = payload?.sender?.login ?? 'unknown';
+      const appSlug = installation?.app_slug ?? 'unknown';
+      const actionLabel: Record<string, string> = {
+        created: 'インストール',
+        deleted: 'アンインストール',
+        suspend: '一時停止',
+        unsuspend: '再開',
+        new_permissions_accepted: '権限変更承認',
+      };
+      const label = actionLabel[action] ?? action;
+      const repoSelection = installation?.repository_selection ?? 'unknown';
+
+      const slackText = [
+        `[GitHub App] ${label}`,
+        `App: ${appSlug}`,
+        `操作者: ${sender}`,
+        `対象: ${repoSelection === 'all' ? '全リポジトリ' : '選択リポジトリ'}`,
+      ].join('\n');
+
+      try {
+        await postSlackMessage({ token: slackToken, channel: slackChannel, text: slackText });
+      } catch (error) {
+        logger.error('Slack notification failed for GitHub webhook', {
+          error: error instanceof Error ? error.message : 'Unknown error',
+        });
+      }
+    }
+  }
+
+  return c.json({ success: true, event: eventType, action }, 200);
 });
 
 // =====================================================
@@ -1174,6 +1407,14 @@ app.post('/api/settings/session-duration', authMiddleware, async (c) => {
  */
 app.get('/api/repo-permissions', authMiddleware, async (c) => {
   const user = c.get('user');
+
+  // D1 から読み取り（Webhook で保存されたデータ）
+  const d1Data = await getInstallationPermissionsFromD1(c.env.DB);
+  if (d1Data) {
+    return c.json({ permissions: d1Data.permissions, allPermissions: d1Data.allPermissions, source: 'd1' });
+  }
+
+  // D1 にデータがない場合は GitHub API にフォールバック
   const userSession = await getUserSession(c.env.DB, user.sub);
   const accessToken = userSession?.githubAccessToken ?? user.github_access_token ?? undefined;
 
@@ -1197,8 +1438,7 @@ app.get('/api/repo-permissions', authMiddleware, async (c) => {
       }
     }
 
-    // __all__ がある場合はクライアント側で適用するためフラグとして返す
-    return c.json({ permissions: result, allPermissions: allPerms });
+    return c.json({ permissions: result, allPermissions: allPerms, source: 'api' });
   } catch (error) {
     logger.warn('Failed to fetch repo installation permissions', {
       userId: user.sub,
