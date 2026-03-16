@@ -21,6 +21,12 @@ export interface RepoPermissionInfo {
   repositorySelection: string;
 }
 
+export interface RepoCloudflarePageInfo {
+  projectName: string;
+  subdomain: string;
+  productionBranch?: string;
+}
+
 export function getRepositoriesPage(user: {
   name?: string;
   username: string;
@@ -28,6 +34,7 @@ export function getRepositoriesPage(user: {
   errorMessage?: string | null;
   grantedScopes?: string[] | null;
   repoPermissions?: Record<string, RepoPermissionInfo> | null;
+  cloudflarePages?: Record<string, RepoCloudflarePageInfo> | null;
 }): string {
   const displayName = escapeHtml(user.name || user.username);
   const initials = escapeHtml((user.name || user.username).substring(0, 2).toUpperCase());
@@ -36,6 +43,7 @@ export function getRepositoriesPage(user: {
   const hasRepoScope = scopes.includes('repo');
   const missingScopesBanner = !hasRepoScope && scopes.length > 0 ? true : false;
   const repoPerms = user.repoPermissions ?? {};
+  const cfPages = user.cloudflarePages ?? {};
 
   // リポジトリごとのインストール権限をJSON化してクライアントサイドで利用
   const repoPermsJson = JSON.stringify(repoPerms);
@@ -46,6 +54,10 @@ export function getRepositoriesPage(user: {
     const language = repo.language ? escapeHtml(repo.language) : '不明';
     const updatedAt = escapeHtml(repo.updatedAt);
     const privacyBadge = repo.isPrivate ? '<span class="badge private">Private</span>' : '<span class="badge public">Public</span>';
+    const cfInfo = cfPages[repo.name];
+    const cfBadge = cfInfo
+      ? `<a class="badge cf-pages" href="https://${escapeHtml(cfInfo.subdomain)}.pages.dev" target="_blank" rel="noreferrer" title="Cloudflare Pages: ${escapeHtml(cfInfo.projectName)}">☁️ Pages</a>`
+      : '';
     const repoLink = `
       <a class="repo-name-link" href="${repo.htmlUrl}" target="_blank" rel="noreferrer">
         ${name}
@@ -60,6 +72,7 @@ export function getRepositoriesPage(user: {
           <div class="repo-title">
             <h3 class="repo-name">${repoLink}</h3>
             ${privacyBadge}
+            ${cfBadge}
           </div>
           <p class="repo-description">${description}</p>
         </div>
@@ -189,6 +202,8 @@ export function getRepositoriesPage(user: {
     }
     .badge.private { background: #feb2b2; color: #9b2c2c; }
     .badge.public { background: #9ae6b4; color: #276749; }
+    .badge.cf-pages { background: #fbd38d; color: #744210; text-decoration: none; transition: background 0.2s; }
+    .badge.cf-pages:hover { background: #f6ad55; }
     .repo-description { font-size: 14px; color: #4a5568; min-height: 22px; }
     .repo-meta { display: flex; flex-wrap: wrap; gap: 8px; font-size: 12px; color: #718096; justify-content: flex-end; }
     .repo-meta-item { background: #edf2f7; padding: 4px 10px; border-radius: 999px; }

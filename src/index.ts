@@ -16,6 +16,7 @@ import { getSettingsPage } from './views/settings';
 import { getRepositoriesPage } from './views/repositories';
 import { getUserInfoPage } from './views/userinfo';
 import { getGitHubAccessToken, getGitHubLatestCommit, getGitHubTokenScopes, getGitHubUser, getGitHubUserEmail, getGitHubUserRepos, GitHubTokenScopesError, buildRepoInstallationPermissionsMap, RepoInstallationPermissions, getGitHubUserInstallationsWithDiag, getGitHubInstallationRepos } from './utils/github';
+import { getCloudflarePagesRepoMap } from './utils/cloudflare';
 import { getCookieValue, getCookieValues } from './utils/cookie';
 import { verifyResendWebhookSignature } from './utils/resendWebhook';
 import { verifyGitHubWebhookSignature } from './utils/githubWebhook';
@@ -903,6 +904,26 @@ app.get('/repositories', optionalAuthMiddleware, async (c) => {
     }
   }
 
+  // Cloudflare Pages プロジェクトとの連携状況を取得
+  let cloudflarePages: Record<string, { projectName: string; subdomain: string; productionBranch?: string }> | null = null;
+  const cfApiToken = c.env.CLOUDFLARE_API_TOKEN;
+  const cfAccountId = c.env.CLOUDFLARE_ACCOUNT_ID;
+  if (cfApiToken && cfAccountId) {
+    try {
+      const cfMap = await getCloudflarePagesRepoMap(cfApiToken, cfAccountId);
+      if (cfMap.size > 0) {
+        cloudflarePages = {};
+        for (const [repoName, info] of cfMap.entries()) {
+          cloudflarePages[repoName] = info;
+        }
+      }
+    } catch (error) {
+      logger.warn('Failed to fetch Cloudflare Pages projects', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+  }
+
   return c.html(getRepositoriesPage({
     username: user.sub,
     name: user.name,
@@ -910,6 +931,7 @@ app.get('/repositories', optionalAuthMiddleware, async (c) => {
     errorMessage,
     grantedScopes,
     repoPermissions: repoPermissionsMap,
+    cloudflarePages,
   }));
 });
 
