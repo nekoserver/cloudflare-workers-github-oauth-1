@@ -14,7 +14,7 @@ import { getLoginPage } from './views/login';
 import { getWelcomePage } from './views/welcome';
 import { getSettingsPage } from './views/settings';
 import { getRepositoriesPage } from './views/repositories';
-import { getGitHubAccessToken, getGitHubLatestCommit, getGitHubTokenScopes, getGitHubUser, getGitHubUserEmail, getGitHubUserRepos, GitHubTokenScopesError, buildRepoInstallationPermissionsMap, RepoInstallationPermissions } from './utils/github';
+import { getGitHubAccessToken, getGitHubLatestCommit, getGitHubTokenScopes, getGitHubUser, getGitHubUserEmail, getGitHubUserRepos, GitHubTokenScopesError, buildRepoInstallationPermissionsMap, RepoInstallationPermissions, getGitHubUserInstallationsWithDiag, getGitHubInstallationRepos } from './utils/github';
 import { getCookieValue, getCookieValues } from './utils/cookie';
 import { verifyResendWebhookSignature } from './utils/resendWebhook';
 import { postSlackMessage } from './utils/slack';
@@ -1271,6 +1271,78 @@ app.get('/api/debug/d1', authMiddleware, async (c) => {
   } catch (error) {
     result.error = error instanceof Error ? error.message : 'Unknown error';
     result.stack = error instanceof Error ? error.stack : undefined;
+  }
+
+  return c.json(result);
+});
+
+/**
+ * GitHub App インストール権限の診断（認証が必要）
+ * GET /user/installations の生レスポンスを確認できる
+ */
+app.get('/api/debug/installations', authMiddleware, async (c) => {
+  const user = c.get('user');
+  const userSession = await getUserSession(c.env.DB, user.sub);
+  const accessToken = userSession?.githubAccessToken ?? user.github_access_token ?? undefined;
+
+  if (!accessToken) {
+    return c.json({ error: 'アクセストークンが保存されていません', user: user.sub });
+  }
+
+  const result: Record<string, unknown> = { user: user.sub };
+
+  // Step 1: GET /user/installations
+  const diag = await getGitHubUserInstallationsWithDiag(accessToken);
+  result.installations_api = {
+    status: diag.status,
+    error: diag.error,
+    total_count: diag.totalCount,
+    installation_count: diag.installationCount,
+  };
+
+  if (!diag.installations || diag.installations.length === 0) {
+    result.installations = [];
+    result.repo_permissions = {};
+    return c.json(result);
+  }
+
+  // Step 2: 各インストールの詳細
+  const installDetails: Record<string, unknown>[] = [];
+  for (const inst of diag.installations) {
+    const detail: Record<string, unknown> = {
+      id: inst.id,
+      app_id: inst.app_id,
+      app_slug: inst.app_slug,
+      repository_selection: inst.repository_selection,
+      permissions: inst.permissions,
+    };
+
+    if (inst.repository_selection !== 'all') {
+      const repos = await getGitHubInstallationRepos(accessToken, inst.id);
+      detail.repos = repos.map(r => ({ name: r.name, full_name: r.full_name, private: r.private }));
+      detail.repo_count = repos.length;
+    } else {
+      detail.repos = '(all repositories)';
+    }
+
+    installDetails.push(detail);
+  }
+  result.installations = installDetails;
+
+  // Step 3: buildRepoInstallationPermissionsMap の結果
+  try {
+    const permMap = await buildRepoInstallationPermissionsMap(accessToken);
+    const serialized: Record<string, unknown> = {};
+    for (const [key, value] of permMap.entries()) {
+      serialized[key] = {
+        installationId: value.installationId,
+        permissions: value.permissions,
+        repositorySelection: value.repositorySelection,
+      };
+    }
+    result.repo_permissions = serialized;
+  } catch (error) {
+    result.repo_permissions_error = error instanceof Error ? error.message : 'Unknown error';
   }
 
   return c.json(result);

@@ -275,23 +275,61 @@ export interface RepoInstallationPermissions {
 }
 
 /**
+ * GitHub API 共通ヘッダー
+ */
+function githubApiHeaders(accessToken: string): Record<string, string> {
+  return {
+    'Authorization': `Bearer ${accessToken}`,
+    'Accept': 'application/vnd.github+json',
+    'User-Agent': 'Cloudflare-Workers-GitHub-OAuth',
+    'X-GitHub-Api-Version': '2022-11-28',
+  };
+}
+
+/**
+ * インストールAPI呼び出し結果（診断情報付き）
+ */
+export interface InstallationApiDiag {
+  status: number;
+  error?: string;
+  totalCount?: number;
+  installationCount?: number;
+  installations?: GitHubInstallation[];
+}
+
+/**
  * ユーザーがアクセス可能な GitHub App インストール一覧を取得
  */
 export async function getGitHubUserInstallations(accessToken: string): Promise<GitHubInstallation[]> {
+  const diag = await getGitHubUserInstallationsWithDiag(accessToken);
+  return diag.installations ?? [];
+}
+
+/**
+ * 診断情報付きでインストール一覧を取得
+ */
+export async function getGitHubUserInstallationsWithDiag(accessToken: string): Promise<InstallationApiDiag> {
   const response = await fetch('https://api.github.com/user/installations', {
-    headers: {
-      'Authorization': `Bearer ${accessToken}`,
-      'Accept': 'application/vnd.github.v3+json',
-      'User-Agent': 'Cloudflare-Workers-GitHub-OAuth',
-    },
+    headers: githubApiHeaders(accessToken),
   });
 
   if (!response.ok) {
-    return [];
+    let errorMsg: string | undefined;
+    try {
+      const body = await response.json<{ message?: string }>();
+      errorMsg = body?.message;
+    } catch { /* ignore */ }
+    return { status: response.status, error: errorMsg || response.statusText };
   }
 
-  const data = await response.json<{ installations: GitHubInstallation[] }>();
-  return Array.isArray(data.installations) ? data.installations : [];
+  const data = await response.json<{ total_count?: number; installations: GitHubInstallation[] }>();
+  const installations = Array.isArray(data.installations) ? data.installations : [];
+  return {
+    status: response.status,
+    totalCount: data.total_count,
+    installationCount: installations.length,
+    installations,
+  };
 }
 
 /**
@@ -306,11 +344,7 @@ export async function getGitHubInstallationRepos(
 
   while (nextUrl) {
     const response = await fetch(nextUrl, {
-      headers: {
-        'Authorization': `Bearer ${accessToken}`,
-        'Accept': 'application/vnd.github.v3+json',
-        'User-Agent': 'Cloudflare-Workers-GitHub-OAuth',
-      },
+      headers: githubApiHeaders(accessToken),
     });
 
     if (!response.ok) {
