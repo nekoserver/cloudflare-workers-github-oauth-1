@@ -3,6 +3,7 @@ import {
   findInstallationByExactSlugs,
   CLOUDFLARE_DEPLOY_SLUGS,
   VERCEL_DEPLOY_SLUGS,
+  SLACK_APP_SLUGS,
   type GitHubInstallation,
 } from './github';
 
@@ -47,6 +48,15 @@ const vercelInstallation: GitHubInstallation = {
   app_id: 10,
   app_slug: 'vercel',
   permissions: { contents: 'read', deployments: 'write' },
+  repository_selection: 'selected',
+};
+
+/** Slack GitHub App（selected: repo-c, repo-d のみ） */
+const slackInstallation: GitHubInstallation = {
+  id: 400,
+  app_id: 30,
+  app_slug: 'slack',
+  permissions: { contents: 'read', metadata: 'read' },
   repository_selection: 'selected',
 };
 
@@ -142,6 +152,33 @@ describe('findInstallationByExactSlugs', () => {
       const vercelMatch = findInstallationByExactSlugs(installations, VERCEL_DEPLOY_SLUGS);
       expect(vercelMatch).toBeDefined();
       expect(vercelMatch!.app_slug).toBe('vercel');
+    });
+  });
+
+  describe('Slack App のマッチング', () => {
+    it('slack に完全一致する', () => {
+      const installations = [cfPagesInstallation, vercelInstallation, slackInstallation];
+      const result = findInstallationByExactSlugs(installations, SLACK_APP_SLUGS);
+      expect(result).toBeDefined();
+      expect(result!.app_slug).toBe('slack');
+    });
+
+    it('slack-something はリストにないのでマッチしない', () => {
+      const installation: GitHubInstallation = {
+        id: 401,
+        app_id: 31,
+        app_slug: 'slack-something',
+        permissions: { contents: 'read' },
+        repository_selection: 'selected',
+      };
+      const result = findInstallationByExactSlugs([installation], SLACK_APP_SLUGS);
+      expect(result).toBeUndefined();
+    });
+
+    it('Slack App がインストールされていなければ undefined を返す', () => {
+      const installations = [cfPagesInstallation, vercelInstallation];
+      const result = findInstallationByExactSlugs(installations, SLACK_APP_SLUGS);
+      expect(result).toBeUndefined();
     });
   });
 

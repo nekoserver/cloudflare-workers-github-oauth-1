@@ -30,6 +30,7 @@ export function getRepositoriesPage(user: {
   repoPermissions?: Record<string, RepoPermissionInfo> | null;
   cloudflareLinkedRepos?: Record<string, boolean> | null;
   vercelLinkedRepos?: Record<string, boolean> | null;
+  slackLinkedRepos?: Record<string, boolean> | null;
 }): string {
   const displayName = escapeHtml(user.name || user.username);
   const initials = escapeHtml((user.name || user.username).substring(0, 2).toUpperCase());
@@ -40,6 +41,7 @@ export function getRepositoriesPage(user: {
   const repoPerms = user.repoPermissions ?? {};
   const cfLinked = user.cloudflareLinkedRepos ?? {};
   const vercelLinked = user.vercelLinkedRepos ?? {};
+  const slackLinked = user.slackLinkedRepos ?? {};
 
   // リポジトリごとのインストール権限をJSON化してクライアントサイドで利用
   const repoPermsJson = JSON.stringify(repoPerms);
@@ -55,6 +57,9 @@ export function getRepositoriesPage(user: {
       : '';
     const vercelBadge = vercelLinked[repo.name]
       ? '<span class="badge vercel-linked" title="Vercel 連携済み">▲ Vercel</span>'
+      : '';
+    const slackBadge = slackLinked[repo.name]
+      ? '<span class="badge slack-linked" title="Slack 連携済み">💬 Slack</span>'
       : '';
     const repoLink = `
       <a class="repo-name-link" href="${repo.htmlUrl}" target="_blank" rel="noreferrer">
@@ -72,6 +77,7 @@ export function getRepositoriesPage(user: {
             ${privacyBadge}
             ${cfBadge}
             ${vercelBadge}
+            ${slackBadge}
           </div>
           <p class="repo-description">${description}</p>
         </div>
@@ -203,6 +209,7 @@ export function getRepositoriesPage(user: {
     .badge.public { background: #9ae6b4; color: #276749; }
     .badge.cf-linked { background: #fbd38d; color: #744210; }
     .badge.vercel-linked { background: #1a1a1a; color: #ffffff; }
+    .badge.slack-linked { background: #4a154b; color: #ffffff; }
     .repo-description { font-size: 14px; color: #4a5568; min-height: 22px; }
     .repo-meta { display: flex; flex-wrap: wrap; gap: 8px; font-size: 12px; color: #718096; justify-content: flex-end; }
     .repo-meta-item { background: #edf2f7; padding: 4px 10px; border-radius: 999px; }
