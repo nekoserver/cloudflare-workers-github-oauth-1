@@ -15,7 +15,7 @@ import { getWelcomePage } from './views/welcome';
 import { getSettingsPage } from './views/settings';
 import { getRepositoriesPage } from './views/repositories';
 import { getUserInfoPage } from './views/userinfo';
-import { getGitHubAccessToken, getGitHubLatestCommit, getGitHubTokenScopes, getGitHubUser, getGitHubUserEmail, getGitHubUserRepos, GitHubTokenScopesError, buildRepoInstallationPermissionsMap, RepoInstallationPermissions, getGitHubUserInstallationsWithDiag, getGitHubInstallationRepos } from './utils/github';
+import { getGitHubAccessToken, getGitHubLatestCommit, getGitHubTokenScopes, getGitHubUser, getGitHubUserEmail, getGitHubUserRepos, GitHubTokenScopesError, buildRepoInstallationPermissionsMap, RepoInstallationPermissions, getGitHubUserInstallationsWithDiag, getGitHubInstallationRepos, getCloudflareLinkedRepos } from './utils/github';
 import { getCookieValue, getCookieValues } from './utils/cookie';
 import { verifyResendWebhookSignature } from './utils/resendWebhook';
 import { verifyGitHubWebhookSignature } from './utils/githubWebhook';
@@ -903,6 +903,34 @@ app.get('/repositories', optionalAuthMiddleware, async (c) => {
     }
   }
 
+  // Cloudflare 連携判定（GitHub App インストール経由）
+  let cloudflareLinkedRepos: Set<string> = new Set();
+  let cloudflareIsAllRepos = false;
+  if (accessToken) {
+    try {
+      const cfResult = await getCloudflareLinkedRepos(accessToken);
+      cloudflareLinkedRepos = cfResult.repos;
+      cloudflareIsAllRepos = cfResult.isAllRepos;
+    } catch (error) {
+      logger.warn('Failed to detect Cloudflare linked repos', {
+        userId: user.sub,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+  }
+
+  // リポジトリ名のセットをシリアライズ可能な形に変換
+  const cloudflareRepos: Record<string, boolean> = {};
+  if (cloudflareIsAllRepos) {
+    for (const repo of repositories) {
+      cloudflareRepos[repo.name] = true;
+    }
+  } else {
+    for (const repoName of cloudflareLinkedRepos) {
+      cloudflareRepos[repoName] = true;
+    }
+  }
+
   return c.html(getRepositoriesPage({
     username: user.sub,
     name: user.name,
@@ -910,6 +938,7 @@ app.get('/repositories', optionalAuthMiddleware, async (c) => {
     errorMessage,
     grantedScopes,
     repoPermissions: repoPermissionsMap,
+    cloudflareLinkedRepos: Object.keys(cloudflareRepos).length > 0 ? cloudflareRepos : null,
   }));
 });
 
