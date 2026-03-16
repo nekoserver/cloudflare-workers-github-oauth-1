@@ -1,4 +1,4 @@
-# ここアプリインストール後にプライベートリポジトリを表示させる方法
+# このアプリインストール後にプライベートリポジトリを表示させる方法
 
 ## Q. GitHub OAuth でログインしても `/repositories` にプライベートリポジトリが表示されない。どうすればいい？
 
@@ -20,6 +20,6 @@ GitHub OAuth だけではパブリックリポジトリしか取得できない�
 
 ### 補足
 
-- GitHub App の「Install App」コールバックは `/github/callback?setup_action=install` として戻ってくる。これは通常の OAuth 認証フロー（state/PKCE パラメータ付き）とは異なるため、コールバックハンドラで分岐処理が必要（Issue #32 で対応済み）
+- GitHub App の「Install App」コールバックは `/github/callback?setup_action=install` として戻ってくる。これは通常の OAuth 認証フロー（state/PKCE パラメータ付き）とは異なるため、コールバックハンドラで分岐処理が必要（[Issue #32](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/issues/32) で対応済み）
 - Install App フローを経ていない場合、OAuth トークンだけではプライベートリポジトリの一覧取得に必要な権限が不足する
 - リポジトリの選択範囲は後から GitHub App の設定ページで変更可能
