@@ -14,6 +14,7 @@ import { getLoginPage } from './views/login';
 import { getWelcomePage } from './views/welcome';
 import { getSettingsPage } from './views/settings';
 import { getRepositoriesPage } from './views/repositories';
+import { getUserInfoPage } from './views/userinfo';
 import { getGitHubAccessToken, getGitHubLatestCommit, getGitHubTokenScopes, getGitHubUser, getGitHubUserEmail, getGitHubUserRepos, GitHubTokenScopesError, buildRepoInstallationPermissionsMap, RepoInstallationPermissions, getGitHubUserInstallationsWithDiag, getGitHubInstallationRepos } from './utils/github';
 import { getCookieValue, getCookieValues } from './utils/cookie';
 import { verifyResendWebhookSignature } from './utils/resendWebhook';
@@ -631,12 +632,28 @@ app.get('/welcome', authMiddleware, async (c) => {
     c.header('Set-Cookie', `show_welcome_message=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0`);
   }
 
+  // リポジトリ総数を取得
+  const accessToken = userSession?.githubAccessToken ?? user.github_access_token ?? undefined;
+  let repoCount: number | null = null;
+  if (accessToken || user.sub) {
+    try {
+      const repos = await getGitHubUserRepos({ username: user.sub, accessToken });
+      repoCount = repos.length;
+    } catch (error) {
+      logger.warn('Failed to fetch repo count for welcome page', {
+        userId: user.sub,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+  }
+
   return c.html(getWelcomePage({
     username: user.sub,
     name: user.name,
     email: user.email,
     lastLoginAt: formattedLastLogin,
     showWelcomeMessage,
+    repoCount,
   }));
 });
 
@@ -707,6 +724,20 @@ app.get('/settings', authMiddleware, async (c) => {
     githubScopes: GITHUB_OAUTH_SCOPE,
     githubGrantedScopes: grantedScopes,
     githubScopeError: scopesError,
+  }));
+});
+
+/**
+ * ユーザー情報ページ（認証が必要）
+ */
+app.get('/userinfo', authMiddleware, async (c) => {
+  const user = c.get('user');
+
+  return c.html(getUserInfoPage({
+    username: user.sub,
+    name: user.name,
+    email: user.email,
+    githubId: user.github_id,
   }));
 });
 
