@@ -370,6 +370,27 @@ export function getRepositoriesPage(user: {
     .zanzibar-tuples .zt-object { color: #63b3ed; }
     .zanzibar-tuples .zt-relation { color: #f6ad55; }
     .zanzibar-tuples .zt-subject { color: #68d391; }
+
+    /* Tree View Button */
+    .tree-view-btn {
+      display: inline-flex; align-items: center; gap: 4px;
+      background: linear-gradient(135deg, #38a169 0%, #2f855a 100%);
+      color: white; border: none; border-radius: 6px;
+      padding: 4px 10px; font-size: 12px; font-weight: 600;
+      cursor: pointer; transition: opacity 0.2s; flex-shrink: 0;
+    }
+    .tree-view-btn:hover { opacity: 0.9; }
+    .tree-view-btn-icon { font-size: 12px; }
+
+    /* Tree Modal */
+    .tree-modal-content { max-width: 520px; }
+    .tree-tuples { font-size: 11.5px; line-height: 1.6; }
+    .tree-tuples .tt-branch { color: #718096; }
+    .tree-tuples .tt-label { color: #e2e8f0; }
+    .tree-tuples .tt-type { color: #63b3ed; font-weight: 600; }
+    .tree-tuples .tt-relation { color: #f6ad55; }
+    .tree-tuples .tt-read { color: #68d391; }
+    .tree-tuples .tt-write { color: #f6ad55; }
   </style>
 </head>
 <body>
@@ -425,6 +446,10 @@ export function getRepositoriesPage(user: {
       <div class="modal-body">
         <div class="modal-repo-name-row">
           <span class="modal-repo-name" id="modalRepoName"></span>
+          <button class="tree-view-btn" id="treeViewBtn" type="button" title="ツリー表示">
+            <span class="tree-view-btn-icon">🌳</span>
+            ツリー表示
+          </button>
           <label class="toggle-switch" title="リポジトリ詳細の表示切替">
             <input type="checkbox" id="summaryToggle" />
             <span class="toggle-slider"></span>
@@ -471,6 +496,23 @@ export function getRepositoriesPage(user: {
       <div class="modal-body">
         <div class="zanzibar-repo-name" id="zanzibarRepoName"></div>
         <pre class="zanzibar-tuples" id="zanzibarTuples"></pre>
+      </div>
+    </div>
+  </div>
+
+  <!-- Zanzibar Tree Modal -->
+  <div class="modal-overlay" id="treeModal">
+    <div class="modal-content tree-modal-content">
+      <div class="modal-header">
+        <span class="modal-title">🌳 Zanzibar ツリー</span>
+        <div class="zanzibar-header-actions">
+          <button class="zanzibar-copy-btn" id="treeCopyBtn" type="button" title="コピー">📋 コピー</button>
+          <button class="modal-close" id="treeModalClose" type="button">&times;</button>
+        </div>
+      </div>
+      <div class="modal-body">
+        <div class="zanzibar-repo-name" id="treeRepoName"></div>
+        <pre class="zanzibar-tuples tree-tuples" id="treeTuples"></pre>
       </div>
     </div>
   </div>
@@ -751,7 +793,11 @@ export function getRepositoriesPage(user: {
     }
     document.addEventListener('keydown', function(e) {
       if (e.key === 'Escape') {
-        // Zanzibar モーダルが開いている場合はそちらを先に閉じる
+        // ツリーモーダル → Zanzibar モーダル → 権限モーダルの順に閉じる
+        if (treeModal && treeModal.classList.contains('show')) {
+          closeTreeModal();
+          return;
+        }
         if (zanzibarModal && zanzibarModal.classList.contains('show')) {
           closeZanzibarModal();
           return;
@@ -907,6 +953,129 @@ export function getRepositoriesPage(user: {
         }).catch(function() {});
       });
     }
+    // ===== Zanzibar Tree Modal =====
+    var treeModal = document.getElementById('treeModal');
+    var treeModalClose = document.getElementById('treeModalClose');
+    var treeViewBtn = document.getElementById('treeViewBtn');
+    var treeCopyBtn = document.getElementById('treeCopyBtn');
+    var treeRepoName = document.getElementById('treeRepoName');
+    var treeTuples = document.getElementById('treeTuples');
+
+    function generateTreeText(repoName) {
+      var info = repoPermsData[repoName];
+      var perms = (info && info.permissions) ? info.permissions : {};
+      var selection = (info && info.repositorySelection) ? info.repositorySelection : 'unknown';
+      var permKeys = Object.keys(perms).sort();
+      var readPerms = [];
+      var writePerms = [];
+      permKeys.forEach(function(key) {
+        var level = perms[key];
+        var label = key.replace(/-/g, '_');
+        if (level === 'read') readPerms.push(label);
+        else writePerms.push(label);
+      });
+
+      var lines = [];
+      lines.push('installation:' + APP_NAME + '  (subject)');
+      lines.push('│');
+      lines.push('├── github_app:' + APP_NAME);
+      lines.push('│   └── #installation');
+      lines.push('│');
+      if (selection === 'all') {
+        lines.push('└── installation:' + APP_NAME);
+        lines.push('    ├── #repository_selection_all');
+      } else {
+        lines.push('└── repository:' + repoName);
+        lines.push('    ├── #installed_app');
+      }
+
+      if (readPerms.length === 0 && writePerms.length === 0) {
+        lines.push('    └── permissions/');
+        lines.push('        └── (なし)');
+      } else {
+        lines.push('    └── permissions/');
+        if (readPerms.length > 0 && writePerms.length > 0) {
+          lines.push('        ├── read/');
+          readPerms.forEach(function(p, i) {
+            var connector = (i === readPerms.length - 1) ? '└' : '├';
+            lines.push('        │   ' + connector + '── #' + p + '_read');
+          });
+          lines.push('        └── write/');
+          writePerms.forEach(function(p, i) {
+            var connector = (i === writePerms.length - 1) ? '└' : '├';
+            lines.push('            ' + connector + '── #' + p + '_write');
+          });
+        } else if (readPerms.length > 0) {
+          lines.push('        └── read/');
+          readPerms.forEach(function(p, i) {
+            var connector = (i === readPerms.length - 1) ? '└' : '├';
+            lines.push('            ' + connector + '── #' + p + '_read');
+          });
+        } else {
+          lines.push('        └── write/');
+          writePerms.forEach(function(p, i) {
+            var connector = (i === writePerms.length - 1) ? '└' : '├';
+            lines.push('            ' + connector + '── #' + p + '_write');
+          });
+        }
+      }
+
+      return lines.join('\\n');
+    }
+
+    function renderTreeHtml(repoName) {
+      var text = generateTreeText(repoName);
+      return text
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/(installation:|github_app:|repository:)([\\w.-]+)/g,
+          '<span class="tt-type">$1$2</span>')
+        .replace(/(#[\\w_]+_read)\\b/g, '<span class="tt-read">$1</span>')
+        .replace(/(#[\\w_]+_write)\\b/g, '<span class="tt-write">$1</span>')
+        .replace(/(#(?:installation|installed_app|repository_selection_all))\\b/g,
+          '<span class="tt-relation">$1</span>')
+        .replace(/([│├└─┐┤┬┴┼])/g, '<span class="tt-branch">$1</span>')
+        .replace(/(\\(subject\\)|\\(なし\\))/g, '<span class="tt-branch">$1</span>');
+    }
+
+    function openTreeModal() {
+      if (!currentRepoName) return;
+      if (treeRepoName) treeRepoName.textContent = currentRepoName;
+      if (treeTuples) treeTuples.innerHTML = renderTreeHtml(currentRepoName);
+      if (treeModal) treeModal.classList.add('show');
+    }
+
+    function closeTreeModal() {
+      if (treeModal) treeModal.classList.remove('show');
+    }
+
+    if (treeViewBtn) {
+      treeViewBtn.addEventListener('click', openTreeModal);
+    }
+    if (treeModalClose) {
+      treeModalClose.addEventListener('click', closeTreeModal);
+    }
+    if (treeModal) {
+      treeModal.addEventListener('click', function(e) {
+        if (e.target === treeModal) closeTreeModal();
+      });
+    }
+    if (treeCopyBtn) {
+      treeCopyBtn.addEventListener('click', function() {
+        if (!currentRepoName) return;
+        var text = generateTreeText(currentRepoName);
+        navigator.clipboard.writeText(text).then(function() {
+          treeCopyBtn.textContent = '✅ コピー済み';
+          treeCopyBtn.classList.add('copied');
+          setTimeout(function() {
+            treeCopyBtn.textContent = '📋 コピー';
+            treeCopyBtn.classList.remove('copied');
+          }, 2000);
+        }).catch(function() {});
+      });
+    }
+
     // ページ読み込み時に最新のインストール権限を1回だけ取得して差分反映
     (function() {
       fetch('/api/repo-permissions', { credentials: 'same-origin' })
