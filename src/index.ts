@@ -1034,20 +1034,20 @@ app.post('/webhook/github', async (c) => {
     if (slackToken && slackChannel) {
       const sender = payload?.sender?.login ?? 'unknown';
       const appSlug = installation?.app_slug ?? 'unknown';
-      const actionLabel: Record<string, string> = {
-        created: 'インストール',
-        deleted: 'アンインストール',
-        suspend: '一時停止',
-        unsuspend: '再開',
-        new_permissions_accepted: '権限変更承認',
+      const actionMessage: Record<string, string> = {
+        created: 'インストールされました',
+        deleted: 'アンインストールされました',
+        suspend: '一時停止されました',
+        unsuspend: '再開されました',
+        new_permissions_accepted: 'パーミッション変更が承認されました',
       };
-      const label = actionLabel[action] ?? action;
+      const message = actionMessage[action] ?? `${action}が実行されました`;
       const repoSelection = installation?.repository_selection ?? 'unknown';
 
       const slackText = [
-        `[GitHub App] ${label}`,
-        `App: ${appSlug}`,
-        `操作者: ${sender}`,
+        `GitHub OAuth App で${message}`,
+        `対象App: ${appSlug}`,
+        `管理者: ${sender}`,
         `対象: ${repoSelection === 'all' ? '全リポジトリ' : '選択リポジトリ'}`,
       ].join('\n');
 
