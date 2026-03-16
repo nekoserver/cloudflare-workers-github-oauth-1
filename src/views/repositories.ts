@@ -383,8 +383,9 @@ export function getRepositoriesPage(user: {
     .tree-view-btn-icon { font-size: 12px; }
 
     /* Tree Modal */
-    .tree-modal-content { max-width: 520px; }
-    .tree-tuples { font-size: 11.5px; line-height: 1.6; }
+    .tree-modal-content { max-width: 520px; max-height: 92vh; }
+    .tree-modal-content .modal-body { max-height: calc(92vh - 60px); overflow-y: auto; }
+    .tree-tuples { font-size: 11.5px; line-height: 1.6; max-height: none; overflow-y: visible; }
     .tree-tuples .tt-branch { color: #718096; }
     .tree-tuples .tt-label { color: #e2e8f0; }
     .tree-tuples .tt-type { color: #63b3ed; font-weight: 600; }
