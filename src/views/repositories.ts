@@ -236,11 +236,39 @@ export function getRepositoriesPage(user: {
     }
     .modal-close:hover { background: #edf2f7; color: #2d3748; }
     .modal-body { padding: 16px 24px 24px; }
-    .modal-repo-name { font-size: 14px; color: #718096; margin-bottom: 12px; font-weight: 600; }
+    .modal-repo-name-row {
+      display: flex; align-items: center; gap: 10px; margin-bottom: 12px;
+    }
+    .modal-repo-name { font-size: 14px; color: #718096; font-weight: 600; flex: 1; }
+    /* Toggle Switch */
+    .toggle-switch {
+      position: relative; display: inline-block; width: 40px; height: 22px; flex-shrink: 0; cursor: pointer;
+    }
+    .toggle-switch input { opacity: 0; width: 0; height: 0; }
+    .toggle-slider {
+      position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+      background: #cbd5e0; border-radius: 22px; transition: background 0.2s;
+    }
+    .toggle-slider::before {
+      content: ''; position: absolute; width: 16px; height: 16px;
+      left: 3px; bottom: 3px; background: white; border-radius: 50%; transition: transform 0.2s;
+    }
+    .toggle-switch input:checked + .toggle-slider { background: #667eea; }
+    .toggle-switch input:checked + .toggle-slider::before { transform: translateX(18px); }
     .modal-repo-summary {
       background: #f7fafc; border-radius: 10px; padding: 14px 16px; margin-bottom: 16px;
       border: 1px solid #e2e8f0;
     }
+    .modal-repo-summary.hidden { display: none; }
+    /* Permission Section Header */
+    .perm-section-header {
+      display: flex; align-items: center; gap: 10px; margin-bottom: 8px;
+    }
+    .perm-filter-select {
+      font-size: 12px; padding: 3px 8px; border: 1px solid #e2e8f0; border-radius: 6px;
+      background: #f7fafc; color: #4a5568; cursor: pointer; outline: none;
+    }
+    .perm-filter-select:focus { border-color: #667eea; }
     .modal-repo-desc { font-size: 13px; color: #4a5568; margin-bottom: 8px; }
     .modal-repo-desc:empty { display: none; }
     .modal-repo-meta-grid { display: flex; flex-wrap: wrap; gap: 8px; font-size: 12px; color: #718096; }
@@ -358,12 +386,25 @@ export function getRepositoriesPage(user: {
         <button class="modal-close" id="modalClose" type="button">&times;</button>
       </div>
       <div class="modal-body">
-        <div class="modal-repo-name" id="modalRepoName"></div>
+        <div class="modal-repo-name-row">
+          <span class="modal-repo-name" id="modalRepoName"></span>
+          <label class="toggle-switch" title="リポジトリ詳細の表示切替">
+            <input type="checkbox" id="summaryToggle" />
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
         <div class="modal-repo-summary" id="modalRepoSummary">
           <div class="modal-repo-desc" id="modalRepoDesc"></div>
           <div class="modal-repo-meta-grid" id="modalRepoMetaGrid"></div>
         </div>
-        <div class="perm-section-title">GitHub App インストール権限</div>
+        <div class="perm-section-header">
+          <span class="perm-section-title">このアプリに現在付与中の権限</span>
+          <select class="perm-filter-select" id="permFilterSelect">
+            <option value="all">対象: すべて</option>
+            <option value="granted">対象: 許可済み</option>
+            <option value="denied">対象: 禁止中</option>
+          </select>
+        </div>
         <div id="installPermItems"></div>
         <div class="perm-section-title" style="margin-top:16px">OAuth スコープ</div>
         <div id="oauthPermItems"></div>
@@ -408,14 +449,61 @@ export function getRepositoriesPage(user: {
       });
     }
 
-    // Permissions Modal
+    // ===== Cookie ヘルパー =====
+    function getCookie(name) {
+      var m = document.cookie.match('(^|;)\\\\s*' + name + '=([^;]*)');
+      return m ? decodeURIComponent(m[2]) : null;
+    }
+    function setCookie(name, value) {
+      document.cookie = name + '=' + encodeURIComponent(value) + '; Path=/; SameSite=Lax; Max-Age=31536000';
+    }
+
+    // ===== フィルタ状態の読み込み =====
+    var permFilterSelect = document.getElementById('permFilterSelect');
+    var savedFilter = getCookie('repo_perm_filter') || 'all';
+    if (permFilterSelect) {
+      permFilterSelect.value = savedFilter;
+      permFilterSelect.addEventListener('change', function() {
+        setCookie('repo_perm_filter', permFilterSelect.value);
+        if (currentRepoName) renderInstallPerms(currentRepoName);
+      });
+    }
+
+    // ===== サマリトグル状態の読み込み =====
+    var summaryToggle = document.getElementById('summaryToggle');
+    var summaryEl = document.getElementById('modalRepoSummary');
+    function getSummaryToggles() {
+      try { return JSON.parse(getCookie('repo_summary_toggles') || '{}'); } catch(e) { return {}; }
+    }
+    function saveSummaryToggle(repoName, open) {
+      var toggles = getSummaryToggles();
+      toggles[repoName] = open;
+      setCookie('repo_summary_toggles', JSON.stringify(toggles));
+    }
+    if (summaryToggle) {
+      summaryToggle.addEventListener('change', function() {
+        var open = summaryToggle.checked;
+        if (summaryEl) summaryEl.classList.toggle('hidden', !open);
+        if (currentRepoName) saveSummaryToggle(currentRepoName, open);
+      });
+    }
+
+    // ===== Permissions Modal =====
     var modal = document.getElementById('permissionsModal');
     var modalClose = document.getElementById('modalClose');
     var modalRepoName = document.getElementById('modalRepoName');
     var repoPermsData = ${repoPermsJson};
     var oauthScopes = ${JSON.stringify(scopes)};
+    var currentRepoName = '';
 
-    // GitHub App インストール権限の表示名マッピング
+    // 全権限キーの定義（インストール権限に含まれないものも「禁止中」として扱う）
+    var allPermKeys = [
+      'contents', 'issues', 'pull_requests', 'metadata', 'actions', 'checks',
+      'deployments', 'environments', 'pages', 'secrets', 'workflows',
+      'administration', 'members', 'statuses', 'vulnerability_alerts',
+      'security_events', 'packages', 'webhooks'
+    ];
+
     var permDisplayNames = {
       contents: { name: 'Contents (コード)', icon: '📦', caps: ['リポジトリのコード・ファイルの読み書き', 'コミット履歴の閲覧'] },
       issues: { name: 'Issues', icon: '🐛', caps: ['Issueの作成・編集・クローズ', 'Issueへのコメント追加', 'ラベル・マイルストーンの管理'] },
@@ -448,33 +536,45 @@ export function getRepositoriesPage(user: {
       var container = document.getElementById('installPermItems');
       if (!container) return;
       var info = repoPermsData[repoName];
-      if (!info || !info.permissions) {
-        container.innerHTML = '<div class="perm-no-install">このリポジトリには GitHub App がインストールされていません</div>';
-        return;
-      }
-      var perms = info.permissions;
-      var keys = Object.keys(perms);
-      if (keys.length === 0) {
-        container.innerHTML = '<div class="perm-no-install">インストール権限が設定されていません</div>';
-        return;
-      }
+      var grantedPerms = (info && info.permissions) ? info.permissions : {};
+      var filter = permFilterSelect ? permFilterSelect.value : 'all';
+
       var html = '';
-      keys.forEach(function(key) {
-        var level = perms[key];
+      var count = 0;
+      allPermKeys.forEach(function(key) {
+        var level = grantedPerms[key];
+        var isGranted = !!level;
+        // フィルタ適用
+        if (filter === 'granted' && !isGranted) return;
+        if (filter === 'denied' && isGranted) return;
+        count++;
         var display = permDisplayNames[key] || { name: key, icon: '🔧', caps: [] };
-        html += '<div class="perm-item active">';
-        html += '<div class="perm-header">';
-        html += '<span class="perm-icon">' + display.icon + '</span>';
-        html += '<span class="perm-name">' + display.name + '</span>';
-        html += '<span class="perm-badge on">' + levelLabel(level) + '</span>';
-        html += '</div>';
-        if (display.caps.length > 0) {
-          html += '<ul class="perm-caps">';
-          display.caps.forEach(function(c) { html += '<li>' + c + '</li>'; });
-          html += '</ul>';
+        if (isGranted) {
+          html += '<div class="perm-item active">';
+          html += '<div class="perm-header">';
+          html += '<span class="perm-icon">' + display.icon + '</span>';
+          html += '<span class="perm-name">' + display.name + '</span>';
+          html += '<span class="perm-badge on">' + levelLabel(level) + '</span>';
+          html += '</div>';
+          if (display.caps.length > 0) {
+            html += '<ul class="perm-caps">';
+            display.caps.forEach(function(c) { html += '<li>' + c + '</li>'; });
+            html += '</ul>';
+          }
+          html += '</div>';
+        } else {
+          html += '<div class="perm-item inactive">';
+          html += '<div class="perm-header">';
+          html += '<span class="perm-icon">' + display.icon + '</span>';
+          html += '<span class="perm-name">' + display.name + '</span>';
+          html += '<span class="perm-badge off">禁止中</span>';
+          html += '</div>';
+          html += '</div>';
         }
-        html += '</div>';
       });
+      if (count === 0) {
+        html = '<div class="perm-no-install">該当する権限がありません</div>';
+      }
       container.innerHTML = html;
     }
 
@@ -506,9 +606,17 @@ export function getRepositoriesPage(user: {
     }
 
     function openPermissionsModal(repoName, rowEl) {
+      currentRepoName = repoName;
       if (modalRepoName) {
         modalRepoName.textContent = repoName;
       }
+
+      // サマリトグルの復元
+      var toggles = getSummaryToggles();
+      var isOpen = toggles[repoName] !== undefined ? toggles[repoName] : true;
+      if (summaryToggle) summaryToggle.checked = isOpen;
+      if (summaryEl) summaryEl.classList.toggle('hidden', !isOpen);
+
       var descEl = document.getElementById('modalRepoDesc');
       var metaGrid = document.getElementById('modalRepoMetaGrid');
       if (rowEl && descEl && metaGrid) {
@@ -527,7 +635,11 @@ export function getRepositoriesPage(user: {
         metaHtml += '<span class="modal-repo-meta-item">⭐ ' + stars + '</span>';
         metaHtml += '<span class="modal-repo-meta-item">🍴 ' + forks + '</span>';
         if (updated) {
-          metaHtml += '<span class="modal-repo-meta-item">🕒 ' + updated + '</span>';
+          if (commitUrl) {
+            metaHtml += '<span class="modal-repo-meta-item"><a class="modal-repo-meta-link" href="' + commitUrl + '" target="_blank" rel="noreferrer">🕒 ' + updated + '</a></span>';
+          } else {
+            metaHtml += '<span class="modal-repo-meta-item">🕒 ' + updated + '</span>';
+          }
         }
         if (commitSha) {
           if (commitUrl) {
@@ -538,6 +650,13 @@ export function getRepositoriesPage(user: {
         }
         metaGrid.innerHTML = metaHtml;
       }
+
+      // フィルタの復元
+      if (permFilterSelect) {
+        var saved = getCookie('repo_perm_filter') || 'all';
+        permFilterSelect.value = saved;
+      }
+
       renderInstallPerms(repoName);
       renderOAuthPerms();
       if (modal) {
@@ -546,6 +665,7 @@ export function getRepositoriesPage(user: {
     }
 
     function closePermissionsModal() {
+      currentRepoName = '';
       if (modal) {
         modal.classList.remove('show');
       }
