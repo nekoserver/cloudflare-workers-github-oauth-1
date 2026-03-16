@@ -443,8 +443,8 @@ export const CLOUDFLARE_DEPLOY_SLUGS = ['cloudflare-pages', 'cloudflare-workers-
 /** Vercel のデプロイ用 GitHub App の既知の app_slug 一覧 */
 export const VERCEL_DEPLOY_SLUGS = ['vercel'];
 
-/** Slack の GitHub App の既知の app_slug 一覧 */
-export const SLACK_APP_SLUGS = ['slack'];
+/** Slack Webhook の送信先として使われる既知のホスト名一覧 */
+export const SLACK_WEBHOOK_HOSTS = ['hooks.slack.com'];
 
 /**
  * インストール一覧から、指定した app_slug リスト（完全一致）に合致するインストールを返す。
@@ -511,20 +511,88 @@ export async function getVercelLinkedRepos(
 }
 
 /**
- * Cloudflare・Vercel・Slack の連携状況をまとめて取得する（API呼び出しを1回に最適化）
+ * Cloudflare と Vercel の連携状況をまとめて取得する（API呼び出しを1回に最適化）
  */
 export async function getExternalServiceLinkedRepos(
   accessToken: string
 ): Promise<{
   cloudflare: { repos: Set<string>; appSlug: string | null; isAllRepos: boolean };
   vercel: { repos: Set<string>; appSlug: string | null; isAllRepos: boolean };
-  slack: { repos: Set<string>; appSlug: string | null; isAllRepos: boolean };
 }> {
   const installations = await getGitHubUserInstallations(accessToken);
-  const [cloudflare, vercel, slack] = await Promise.all([
+  const [cloudflare, vercel] = await Promise.all([
     getLinkedReposByAppSlugs(accessToken, CLOUDFLARE_DEPLOY_SLUGS, installations),
     getLinkedReposByAppSlugs(accessToken, VERCEL_DEPLOY_SLUGS, installations),
-    getLinkedReposByAppSlugs(accessToken, SLACK_APP_SLUGS, installations),
   ]);
-  return { cloudflare, vercel, slack };
+  return { cloudflare, vercel };
+}
+
+// =====================================================
+// Webhook URL ベースの外部サービス連携判定
+// =====================================================
+
+/** GitHub リポジトリの Webhook 情報 */
+interface GitHubRepoHook {
+  id: number;
+  config: {
+    url?: string;
+    content_type?: string;
+  };
+  active: boolean;
+}
+
+/**
+ * 指定リポジトリの Webhook 一覧を取得する。
+ * admin:repo_hook 権限がない場合や 404 の場合は空配列を返す。
+ */
+async function getRepoWebhooks(
+  accessToken: string,
+  owner: string,
+  repo: string
+): Promise<GitHubRepoHook[]> {
+  const url = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/hooks?per_page=100`;
+  const response = await fetch(url, { headers: githubApiHeaders(accessToken) });
+  if (!response.ok) {
+    return [];
+  }
+  return response.json<GitHubRepoHook[]>();
+}
+
+/**
+ * Webhook の送信先 URL が指定ホスト名リストに含まれるか判定する。
+ */
+export function isWebhookUrlMatchingHosts(webhookUrl: string, hosts: string[]): boolean {
+  try {
+    const parsed = new URL(webhookUrl);
+    return hosts.some((h) => parsed.hostname.toLowerCase() === h.toLowerCase());
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * 複数リポジトリの Webhook を調べ、Slack 連携しているリポジトリ名の Set を返す。
+ * 各リポジトリの Webhook 送信先 URL に hooks.slack.com が含まれるかで判定する。
+ */
+export async function getSlackLinkedReposByWebhooks(
+  accessToken: string,
+  owner: string,
+  repoNames: string[]
+): Promise<Set<string>> {
+  const results = await Promise.all(
+    repoNames.map(async (repoName) => {
+      const hooks = await getRepoWebhooks(accessToken, owner, repoName);
+      const hasSlack = hooks.some(
+        (hook) => hook.config.url != null && isWebhookUrlMatchingHosts(hook.config.url, SLACK_WEBHOOK_HOSTS)
+      );
+      return { repoName, hasSlack };
+    })
+  );
+  const linked = new Set<string>();
+  for (const r of results) {
+    if (r.hasSlack) {
+      linked.add(r.repoName);
+    }
+  }
+  return linked;
 }

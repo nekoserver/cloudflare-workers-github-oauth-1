@@ -15,7 +15,7 @@ import { getWelcomePage } from './views/welcome';
 import { getSettingsPage } from './views/settings';
 import { getRepositoriesPage } from './views/repositories';
 import { getUserInfoPage } from './views/userinfo';
-import { getGitHubAccessToken, getGitHubLatestCommit, getGitHubTokenScopes, getGitHubUser, getGitHubUserEmail, getGitHubUserRepos, GitHubTokenScopesError, buildRepoInstallationPermissionsMap, RepoInstallationPermissions, getGitHubUserInstallationsWithDiag, getGitHubInstallationRepos, getExternalServiceLinkedRepos } from './utils/github';
+import { getGitHubAccessToken, getGitHubLatestCommit, getGitHubTokenScopes, getGitHubUser, getGitHubUserEmail, getGitHubUserRepos, GitHubTokenScopesError, buildRepoInstallationPermissionsMap, RepoInstallationPermissions, getGitHubUserInstallationsWithDiag, getGitHubInstallationRepos, getExternalServiceLinkedRepos, getSlackLinkedReposByWebhooks } from './utils/github';
 import { getCookieValue, getCookieValues } from './utils/cookie';
 import { verifyResendWebhookSignature } from './utils/resendWebhook';
 import { verifyGitHubWebhookSignature } from './utils/githubWebhook';
@@ -903,16 +903,20 @@ app.get('/repositories', optionalAuthMiddleware, async (c) => {
     }
   }
 
-  // 外部サービス連携判定（GitHub App インストール経由）
+  // 外部サービス連携判定
   let cloudflareLinkedRepos: Set<string> = new Set();
   let vercelLinkedRepos: Set<string> = new Set();
   let slackLinkedRepos: Set<string> = new Set();
   if (accessToken) {
     try {
-      const result = await getExternalServiceLinkedRepos(accessToken);
-      cloudflareLinkedRepos = result.cloudflare.repos;
-      vercelLinkedRepos = result.vercel.repos;
-      slackLinkedRepos = result.slack.repos;
+      const repoNames = repositories.map((r) => r.name);
+      const [externalResult, slackResult] = await Promise.all([
+        getExternalServiceLinkedRepos(accessToken),
+        getSlackLinkedReposByWebhooks(accessToken, user.sub, repoNames),
+      ]);
+      cloudflareLinkedRepos = externalResult.cloudflare.repos;
+      vercelLinkedRepos = externalResult.vercel.repos;
+      slackLinkedRepos = slackResult;
     } catch (error) {
       logger.warn('Failed to detect external service linked repos', {
         userId: user.sub,
