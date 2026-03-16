@@ -627,7 +627,7 @@ app.get('/repositories', optionalAuthMiddleware, async (c) => {
   }
 
   const userSession = await getUserSession(c.env.DB, user.sub);
-  const accessToken = userSession?.githubAccessToken ?? undefined;
+  const accessToken = userSession?.githubAccessToken ?? user.github_access_token ?? undefined;
 
   let repositories: {
     name: string;
