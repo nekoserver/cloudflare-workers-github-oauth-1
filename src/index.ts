@@ -1067,6 +1067,54 @@ app.post('/api/settings/session-duration', authMiddleware, async (c) => {
 });
 
 // =====================================================
+// 診断エンドポイント
+// =====================================================
+
+/**
+ * D1接続診断（認証が必要）
+ */
+app.get('/api/debug/d1', authMiddleware, async (c) => {
+  const user = c.get('user');
+  const db = c.env.DB;
+
+  const result: Record<string, unknown> = {
+    db_binding_exists: !!db,
+    user: user.sub,
+  };
+
+  if (!db) {
+    return c.json({ ...result, error: 'DB binding is undefined - D1 is not bound' }, 500);
+  }
+
+  try {
+    // テーブル存在確認
+    const tables = await db.prepare(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name='user_sessions'"
+    ).first();
+    result.table_exists = !!tables;
+
+    // カラム確認
+    const columns = await db.prepare("PRAGMA table_info(user_sessions)").all();
+    result.columns = columns.results?.map((col: any) => col.name) ?? [];
+
+    // ユーザーのレコード確認
+    const userRecord = await db.prepare(
+      'SELECT user_id, timezone, session_duration, last_login_at, current_login_at, updated_at, display_name, CASE WHEN github_access_token IS NOT NULL THEN \'[SET]\' ELSE \'[NULL]\' END as token_status FROM user_sessions WHERE user_id = ?'
+    ).bind(user.sub).first();
+    result.user_record = userRecord ?? 'NOT FOUND';
+
+    // 全レコード数
+    const count = await db.prepare('SELECT COUNT(*) as cnt FROM user_sessions').first<{ cnt: number }>();
+    result.total_records = count?.cnt ?? 0;
+  } catch (error) {
+    result.error = error instanceof Error ? error.message : 'Unknown error';
+    result.stack = error instanceof Error ? error.stack : undefined;
+  }
+
+  return c.json(result);
+});
+
+// =====================================================
 // エラーハンドリング
 // =====================================================
 
