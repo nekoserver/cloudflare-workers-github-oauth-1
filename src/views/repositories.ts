@@ -333,6 +333,43 @@ export function getRepositoriesPage(user: {
       font-size: 13px; color: #a0aec0; padding: 10px 14px;
       border: 1px dashed #e2e8f0; border-radius: 10px; text-align: center;
     }
+
+    /* Zanzibar Button & Modal */
+    .zanzibar-footer {
+      margin-top: 16px; padding-top: 12px; border-top: 1px solid #e2e8f0;
+      display: flex; justify-content: flex-end;
+    }
+    .zanzibar-btn {
+      display: inline-flex; align-items: center; gap: 6px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white; border: none; border-radius: 8px;
+      padding: 8px 16px; font-size: 13px; font-weight: 600;
+      cursor: pointer; transition: opacity 0.2s;
+    }
+    .zanzibar-btn:hover { opacity: 0.9; }
+    .zanzibar-btn-icon { font-size: 14px; }
+    .zanzibar-modal-content { max-width: 640px; }
+    .zanzibar-header-actions { display: flex; align-items: center; gap: 8px; }
+    .zanzibar-copy-btn {
+      background: #edf2f7; border: 1px solid #e2e8f0; border-radius: 6px;
+      padding: 4px 10px; font-size: 12px; font-weight: 600; color: #4a5568;
+      cursor: pointer; transition: background 0.2s;
+    }
+    .zanzibar-copy-btn:hover { background: #e2e8f0; }
+    .zanzibar-copy-btn.copied { background: #c6f6d5; border-color: #9ae6b4; color: #276749; }
+    .zanzibar-repo-name {
+      font-size: 14px; color: #718096; font-weight: 600; margin-bottom: 12px;
+    }
+    .zanzibar-tuples {
+      background: #1a202c; color: #e2e8f0; border-radius: 10px;
+      padding: 16px; font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+      font-size: 12px; line-height: 1.7; overflow-x: auto; white-space: pre;
+      max-height: 50vh; overflow-y: auto;
+    }
+    .zanzibar-tuples .zt-comment { color: #718096; }
+    .zanzibar-tuples .zt-object { color: #63b3ed; }
+    .zanzibar-tuples .zt-relation { color: #f6ad55; }
+    .zanzibar-tuples .zt-subject { color: #68d391; }
   </style>
 </head>
 <body>
@@ -411,6 +448,29 @@ export function getRepositoriesPage(user: {
         <div class="scopes-footer">
           付与スコープ: ${scopes.length > 0 ? scopes.map(s => `<code>${escapeHtml(s)}</code>`).join(' ') : '<span>取得できませんでした</span>'}
         </div>
+        <div class="zanzibar-footer">
+          <button class="zanzibar-btn" id="zanzibarBtn" type="button">
+            <span class="zanzibar-btn-icon">🔗</span>
+            Zanzibar タプル表示
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Zanzibar Tuples Modal -->
+  <div class="modal-overlay" id="zanzibarModal">
+    <div class="modal-content zanzibar-modal-content">
+      <div class="modal-header">
+        <span class="modal-title">🔗 Zanzibar タプル</span>
+        <div class="zanzibar-header-actions">
+          <button class="zanzibar-copy-btn" id="zanzibarCopyBtn" type="button" title="コピー">📋 コピー</button>
+          <button class="modal-close" id="zanzibarModalClose" type="button">&times;</button>
+        </div>
+      </div>
+      <div class="modal-body">
+        <div class="zanzibar-repo-name" id="zanzibarRepoName"></div>
+        <pre class="zanzibar-tuples" id="zanzibarTuples"></pre>
       </div>
     </div>
   </div>
@@ -691,6 +751,11 @@ export function getRepositoriesPage(user: {
     }
     document.addEventListener('keydown', function(e) {
       if (e.key === 'Escape') {
+        // Zanzibar モーダルが開いている場合はそちらを先に閉じる
+        if (zanzibarModal && zanzibarModal.classList.contains('show')) {
+          closeZanzibarModal();
+          return;
+        }
         closePermissionsModal();
       }
     });
@@ -709,6 +774,139 @@ export function getRepositoriesPage(user: {
       });
     });
 
+    // ===== Zanzibar Tuples Modal =====
+    var zanzibarModal = document.getElementById('zanzibarModal');
+    var zanzibarModalClose = document.getElementById('zanzibarModalClose');
+    var zanzibarBtn = document.getElementById('zanzibarBtn');
+    var zanzibarCopyBtn = document.getElementById('zanzibarCopyBtn');
+    var zanzibarRepoName = document.getElementById('zanzibarRepoName');
+    var zanzibarTuples = document.getElementById('zanzibarTuples');
+    var APP_NAME = 'cloudflare-workers-github-oauth-1';
+
+    function generateZanzibarTuples(repoName) {
+      var info = repoPermsData[repoName];
+      var perms = (info && info.permissions) ? info.permissions : {};
+      var selection = (info && info.repositorySelection) ? info.repositorySelection : 'unknown';
+      var lines = [];
+
+      // App ↔ Installation
+      lines.push({ type: 'comment', text: '# App ↔ Installation' });
+      lines.push({
+        object: 'github_app:' + APP_NAME,
+        relation: 'installation',
+        subject: 'installation:' + APP_NAME
+      });
+      lines.push({ type: 'blank' });
+
+      // Repository ↔ Installation
+      lines.push({ type: 'comment', text: '# Repository ↔ Installation' });
+      if (selection === 'all') {
+        lines.push({ type: 'comment', text: '# repository_selection: all' });
+        lines.push({
+          object: 'installation:' + APP_NAME,
+          relation: 'repository_selection_all',
+          subject: 'installation:' + APP_NAME
+        });
+      } else {
+        lines.push({
+          object: 'repository:' + repoName,
+          relation: 'installed_app',
+          subject: 'installation:' + APP_NAME
+        });
+      }
+      lines.push({ type: 'blank' });
+
+      // Permission tuples
+      var permKeys = Object.keys(perms).sort();
+      if (permKeys.length > 0) {
+        lines.push({ type: 'comment', text: '# Permissions' });
+        permKeys.forEach(function(key) {
+          var level = perms[key];
+          var safeKey = key.replace(/-/g, '_');
+          var target = selection === 'all'
+            ? 'installation:' + APP_NAME
+            : 'repository:' + repoName;
+          lines.push({
+            object: target,
+            relation: safeKey + '_' + level,
+            subject: 'installation:' + APP_NAME
+          });
+        });
+      } else {
+        lines.push({ type: 'comment', text: '# (権限なし)' });
+      }
+
+      return lines;
+    }
+
+    function renderZanzibarTuples(lines) {
+      var htmlParts = [];
+      lines.forEach(function(line) {
+        if (line.type === 'comment') {
+          htmlParts.push('<span class="zt-comment">' + escapeForPre(line.text) + '</span>');
+        } else if (line.type === 'blank') {
+          htmlParts.push('');
+        } else {
+          htmlParts.push(
+            '<span class="zt-object">' + escapeForPre(line.object) + '</span>' +
+            '<span class="zt-relation">#' + escapeForPre(line.relation) + '</span>' +
+            '<span class="zt-subject">@' + escapeForPre(line.subject) + '</span>'
+          );
+        }
+      });
+      return htmlParts.join('\\n');
+    }
+
+    function zanzibarTuplesToPlainText(lines) {
+      return lines.map(function(line) {
+        if (line.type === 'comment') return line.text;
+        if (line.type === 'blank') return '';
+        return line.object + '#' + line.relation + '@' + line.subject;
+      }).join('\\n');
+    }
+
+    function escapeForPre(str) {
+      return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
+    function openZanzibarModal() {
+      if (!currentRepoName) return;
+      if (zanzibarRepoName) zanzibarRepoName.textContent = currentRepoName;
+      var lines = generateZanzibarTuples(currentRepoName);
+      if (zanzibarTuples) zanzibarTuples.innerHTML = renderZanzibarTuples(lines);
+      if (zanzibarModal) zanzibarModal.classList.add('show');
+    }
+
+    function closeZanzibarModal() {
+      if (zanzibarModal) zanzibarModal.classList.remove('show');
+    }
+
+    if (zanzibarBtn) {
+      zanzibarBtn.addEventListener('click', openZanzibarModal);
+    }
+    if (zanzibarModalClose) {
+      zanzibarModalClose.addEventListener('click', closeZanzibarModal);
+    }
+    if (zanzibarModal) {
+      zanzibarModal.addEventListener('click', function(e) {
+        if (e.target === zanzibarModal) closeZanzibarModal();
+      });
+    }
+    if (zanzibarCopyBtn) {
+      zanzibarCopyBtn.addEventListener('click', function() {
+        if (!currentRepoName) return;
+        var lines = generateZanzibarTuples(currentRepoName);
+        var text = zanzibarTuplesToPlainText(lines);
+        navigator.clipboard.writeText(text).then(function() {
+          zanzibarCopyBtn.textContent = '✅ コピー済み';
+          zanzibarCopyBtn.classList.add('copied');
+          setTimeout(function() {
+            zanzibarCopyBtn.textContent = '📋 コピー';
+            zanzibarCopyBtn.classList.remove('copied');
+          }, 2000);
+        }).catch(function() {});
+      });
+    }
     // ページ読み込み時に最新のインストール権限を1回だけ取得して差分反映
     (function() {
       fetch('/api/repo-permissions', { credentials: 'same-origin' })
