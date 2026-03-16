@@ -539,9 +539,17 @@ export function getRepositoriesPage(user: {
       var grantedPerms = (info && info.permissions) ? info.permissions : {};
       var filter = permFilterSelect ? permFilterSelect.value : 'all';
 
+      // 有効→禁止の順、それぞれアルファベット順にソート
+      var sortedKeys = allPermKeys.slice().sort(function(a, b) {
+        var aGranted = !!grantedPerms[a];
+        var bGranted = !!grantedPerms[b];
+        if (aGranted !== bGranted) return aGranted ? -1 : 1;
+        return a.localeCompare(b);
+      });
+
       var html = '';
       var count = 0;
-      allPermKeys.forEach(function(key) {
+      sortedKeys.forEach(function(key) {
         var level = grantedPerms[key];
         var isGranted = !!level;
         // フィルタ適用
