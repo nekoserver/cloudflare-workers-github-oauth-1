@@ -437,17 +437,37 @@ export async function getGitHubTokenScopes(params: {
   return Array.isArray(data.scopes) ? data.scopes : [];
 }
 
+/** Cloudflare のデプロイ用 GitHub App の既知の app_slug 一覧 */
+export const CLOUDFLARE_DEPLOY_SLUGS = ['cloudflare-pages', 'cloudflare-workers-and-pages'];
+
+/** Vercel のデプロイ用 GitHub App の既知の app_slug 一覧 */
+export const VERCEL_DEPLOY_SLUGS = ['vercel'];
+
 /**
- * 指定した app_slug キーワードに一致する GitHub App がインストールされているリポジトリ名の Set を返す
+ * インストール一覧から、指定した app_slug リスト（完全一致）に合致するインストールを返す。
+ * includes による部分一致では cloudflare-bot 等の非デプロイ用 App に誤マッチするため、
+ * 既知のデプロイ用 slug のみ完全一致で判定する。
  */
-async function getLinkedReposByAppSlug(
+export function findInstallationByExactSlugs(
+  installations: GitHubInstallation[],
+  slugs: string[]
+): GitHubInstallation | undefined {
+  const slugSet = new Set(slugs.map((s) => s.toLowerCase()));
+  return installations.find(
+    (inst) => inst.app_slug != null && slugSet.has(inst.app_slug.toLowerCase())
+  );
+}
+
+/**
+ * 指定した app_slug リスト（完全一致）に合致する GitHub App がインストールされているリポジトリ名の Set を返す。
+ * repository_selection === 'all' の場合は誤検知防止のため空セットを返す。
+ */
+async function getLinkedReposByAppSlugs(
   accessToken: string,
-  slugKeyword: string,
+  slugs: string[],
   installations: GitHubInstallation[]
 ): Promise<{ repos: Set<string>; appSlug: string | null; isAllRepos: boolean }> {
-  const matched = installations.find(
-    (inst) => inst.app_slug && inst.app_slug.toLowerCase().includes(slugKeyword)
-  );
+  const matched = findInstallationByExactSlugs(installations, slugs);
 
   if (!matched) {
     return { repos: new Set(), appSlug: null, isAllRepos: false };
@@ -466,25 +486,25 @@ async function getLinkedReposByAppSlug(
 }
 
 /**
- * Cloudflare 系 GitHub App がインストールされているリポジトリ名の Set を返す
- * app_slug に "cloudflare" を含むインストールを Cloudflare 連携と判定する
+ * Cloudflare デプロイ用 GitHub App がインストールされているリポジトリ名の Set を返す
+ * 既知の Cloudflare デプロイ用 app_slug に完全一致するインストールのみを判定する
  */
 export async function getCloudflareLinkedRepos(
   accessToken: string
 ): Promise<{ repos: Set<string>; appSlug: string | null; isAllRepos: boolean }> {
   const installations = await getGitHubUserInstallations(accessToken);
-  return getLinkedReposByAppSlug(accessToken, 'cloudflare', installations);
+  return getLinkedReposByAppSlugs(accessToken, CLOUDFLARE_DEPLOY_SLUGS, installations);
 }
 
 /**
- * Vercel GitHub App がインストールされているリポジトリ名の Set を返す
- * app_slug に "vercel" を含むインストールを Vercel 連携と判定する
+ * Vercel デプロイ用 GitHub App がインストールされているリポジトリ名の Set を返す
+ * 既知の Vercel デプロイ用 app_slug に完全一致するインストールのみを判定する
  */
 export async function getVercelLinkedRepos(
   accessToken: string
 ): Promise<{ repos: Set<string>; appSlug: string | null; isAllRepos: boolean }> {
   const installations = await getGitHubUserInstallations(accessToken);
-  return getLinkedReposByAppSlug(accessToken, 'vercel', installations);
+  return getLinkedReposByAppSlugs(accessToken, VERCEL_DEPLOY_SLUGS, installations);
 }
 
 /**
@@ -498,8 +518,8 @@ export async function getExternalServiceLinkedRepos(
 }> {
   const installations = await getGitHubUserInstallations(accessToken);
   const [cloudflare, vercel] = await Promise.all([
-    getLinkedReposByAppSlug(accessToken, 'cloudflare', installations),
-    getLinkedReposByAppSlug(accessToken, 'vercel', installations),
+    getLinkedReposByAppSlugs(accessToken, CLOUDFLARE_DEPLOY_SLUGS, installations),
+    getLinkedReposByAppSlugs(accessToken, VERCEL_DEPLOY_SLUGS, installations),
   ]);
   return { cloudflare, vercel };
 }

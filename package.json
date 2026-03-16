@@ -9,7 +9,8 @@
     "db:migrate:local": "wrangler d1 migrations apply workers-github-oauth --local",
     "db:migrate:remote": "wrangler d1 migrations apply workers-github-oauth --remote",
     "db:migrate:remote:manual": "wrangler d1 execute workers-github-oauth --remote --file=./migrations/0001_create_user_sessions.sql && wrangler d1 execute workers-github-oauth --remote --file=./migrations/0002_add_display_name.sql && wrangler d1 execute workers-github-oauth --remote --file=./migrations/0003_add_github_access_token.sql",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
   },
   "dependencies": {
     "hono": "^4.0.0"
@@ -17,6 +18,7 @@
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20260214.0",
     "typescript": "^5.3.3",
+    "vitest": "^4.1.0",
     "wrangler": "^3.96.0"
   }
 }
