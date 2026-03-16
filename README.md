@@ -4,29 +4,66 @@ GitHub OAuth + JWT 認証の Cloudflare Workers 実装。
 
 ## 機能
 
-- **GitHub OAuth 2.0** 認証フロー
+- **GitHub OAuth 2.0** 認証フロー（PKCE S256 + state パラメータによる CSRF 防止）
 - **JWT トークン** 発行・検証（HMAC-SHA256、Web Crypto API）
 - **Cloudflare D1** を使用したセッション管理
 - **認証ミドルウェア**（Bearer トークン / Cookie 対応）
-- タイムゾーン設定・セッション有効期限設定
+- **GitHub App Webhook** によるインストール権限の D1 リアルタイム同期
+- **Resend Webhook** によるメール配信ステータス通知
+- リポジトリ一覧ページ（権限モーダル・Zanzibar タプル/ツリー表示）
+- スコープ不足時の再認証フロー
+- タイムゾーン設定・セッション有効期限設定・アイドルタイムアウト
+- セキュリティ通知（JWT 検証失敗・ログイン失敗・App 変更の Slack 通知）
 - 構造化ログ・Analytics Engine 対応
+- セキュリティヘッダー（CSP・HSTS・X-Frame-Options・Referrer-Policy・Permissions-Policy）
 
 ## エンドポイント
+
+### ページ
 
 | エンドポイント | メソッド | 認証 | 説明 |
 |---|---|---|---|
 | `/` | GET | - | ログインページ |
-| `/auth/github` | GET | - | GitHub OAuth 開始 |
-| `/auth/github/callback` | GET | - | GitHub OAuth コールバック |
 | `/welcome` | GET | 必要 | ウェルカムページ |
 | `/settings` | GET | 必要 | 設定ページ |
+| `/repositories` | GET | オプション | リポジトリ一覧（権限モーダル付き） |
+
+### 認証
+
+| エンドポイント | メソッド | 認証 | 説明 |
+|---|---|---|---|
+| `/auth/github` | GET | - | GitHub OAuth 開始（PKCE + state 生成） |
+| `/github/callback` | GET | - | GitHub OAuth コールバック |
+| `/auth/github/reauthorize` | GET | 必要 | スコープ不足時の再認証 |
+| `/auth/logout` | GET | - | ログアウト（Cookie 削除） |
+
+### API
+
+| エンドポイント | メソッド | 認証 | 説明 |
+|---|---|---|---|
+| `/health` | GET | - | ヘルスチェック |
 | `/api` | GET | - | API 情報 |
 | `/api/public` | GET | オプション | 公開エンドポイント |
 | `/api/protected` | GET | 必要 | 保護リソース |
 | `/api/profile` | GET | 必要 | プロフィール取得 |
-| `/api/profile` | PUT | 必要 | プロフィール更新 |
+| `/api/profile` | PUT | 必要 | プロフィール更新（表示名） |
 | `/api/settings/timezone` | POST | 必要 | タイムゾーン変更 |
 | `/api/settings/session-duration` | POST | 必要 | セッション有効期限変更 |
+| `/api/repo-permissions` | GET | 必要 | インストール権限取得（D1 優先・API フォールバック） |
+
+### Webhook
+
+| エンドポイント | メソッド | 認証 | 説明 |
+|---|---|---|---|
+| `/webhook/github` | POST | HMAC-SHA256 署名 | GitHub App Webhook 受信（installation イベント） |
+| `/webhook/resend` | POST | Svix 署名 | Resend Webhook 受信（メール配信ステータス） |
+
+### 診断
+
+| エンドポイント | メソッド | 認証 | 説明 |
+|---|---|---|---|
+| `/api/debug/d1` | GET | 必要 | D1 接続診断 |
+| `/api/debug/installations` | GET | 必要 | GitHub App インストール権限の診断 |
 
 ## Cloudflare ダッシュボードからのデプロイ（Git 連携）
 
@@ -61,7 +98,9 @@ npm install
 
 [GitHub Settings > Developer settings > OAuth Apps](https://github.com/settings/applications/new) で OAuth App を作成し、以下を設定：
 
-- **Authorization callback URL**: `https://<your-worker>.workers.dev/auth/github/callback`
+- **Authorization callback URL**: `https://<your-worker>.workers.dev/github/callback`
+
+> **注意**: コールバック URL パスは `/github/callback` です。`/auth/github/callback` ではありません。
 
 ### 3. D1 データベースの作成
 
@@ -98,6 +137,22 @@ wrangler secret put GITHUB_CLIENT_ID
 wrangler secret put GITHUB_CLIENT_SECRET
 ```
 
+> **重要**: `GITHUB_CLIENT_ID` は `wrangler.toml` の `[vars]` に平文で書かず、必ず `wrangler secret` で管理してください。`[vars]` に書くと secret と競合して意図しない値が使われます。
+
+オプションのシークレット：
+
+```bash
+# GitHub App Webhook 署名検証用
+wrangler secret put GITHUB_WEBHOOK_SECRET
+
+# Slack 通知用
+wrangler secret put SLACK_OAUTH_TOKEN
+wrangler secret put SLACK_CHANNEL_ID
+
+# Resend Webhook 署名検証用
+wrangler secret put RESEND_WEBHOOK_SECRET
+```
+
 ### 6. ローカル開発
 
 `.dev.vars.example` をコピーして `.dev.vars` を作成し、値を設定：
@@ -116,17 +171,29 @@ npm run dev
 npm run deploy
 ```
 
+## npm スクリプト
+
+| スクリプト | 説明 |
+|---|---|
+| `npm run dev` | ローカル開発サーバー起動 |
+| `npm run deploy` | Cloudflare Workers へデプロイ |
+| `npm run typecheck` | TypeScript 型チェック（`tsc --noEmit`） |
+| `npm run db:migrate:local` | D1 ローカルマイグレーション |
+| `npm run db:migrate:remote` | D1 リモートマイグレーション |
+
 ## 認証フロー
 
 ```
 1. ユーザーが / にアクセス
 2. GitHubログインボタンをクリック → /auth/github へリダイレクト
-3. GitHub の認可ページへリダイレクト
-4. ユーザーが認可 → /auth/github/callback にコードが届く
-5. コードをアクセストークンに交換
-6. GitHub API でユーザー情報を取得
-7. JWT トークン生成 → Cookie に保存
-8. /welcome にリダイレクト
+3. state + PKCE (S256) を生成し Cookie に保存
+4. GitHub の認可ページへリダイレクト
+5. ユーザーが認可 → /github/callback にコードが届く
+6. state パラメータと PKCE verifier を検証（CSRF 防止）
+7. コードをアクセストークンに交換
+8. GitHub API でユーザー情報を取得
+9. JWT トークン生成 → HttpOnly Cookie に保存
+10. /welcome にリダイレクト
 ```
 
 ### 重要: GitHub App Install フローのコールバック
@@ -138,6 +205,20 @@ GitHub App の **「Install App」** フローでは、コールバックが `/g
 - Install App フローはリポジトリアクセス権の付与が目的であり、認証トークンの発行フローではない
 - 詳細は [NOTICE.cloudflare-workers-github-oauth-1.20260316.md](NOTICE.cloudflare-workers-github-oauth-1.20260316.md) を参照
 
+## セキュリティ
+
+| 対策 | 実装 |
+|---|---|
+| CSRF 防止 | OAuth state パラメータ（Cookie 保存 + コールバックで比較） |
+| PKCE | S256 チャレンジ/レスポンス |
+| Cookie 保護 | 全 Cookie に `HttpOnly; Secure; SameSite=Lax` |
+| Webhook 署名検証 | HMAC-SHA256 タイミングセーフ比較 |
+| SQL インジェクション防止 | D1 プリペアドステートメント（`db.prepare().bind()`） |
+| XSS 防止 | サーバーサイド `escapeHtml()` + クライアントサイド `esc()` |
+| セキュリティヘッダー | CSP・X-Frame-Options・HSTS・Referrer-Policy・Permissions-Policy |
+| 秘密情報管理 | `wrangler secret`（`[vars]` に平文なし） |
+| 不審アクセス通知 | JWT 検証失敗・ログイン失敗・App 変更を Slack 通知 |
+
 ## 環境変数
 
 | 変数名 | 必須 | 説明 |
@@ -146,3 +227,23 @@ GitHub App の **「Install App」** フローでは、コールバックが `/g
 | `GITHUB_CLIENT_ID` | 必須 | GitHub OAuth App のクライアント ID |
 | `GITHUB_CLIENT_SECRET` | 必須 | GitHub OAuth App のクライアントシークレット |
 | `ENVIRONMENT` | - | 実行環境（development / production） |
+| `GITHUB_WEBHOOK_SECRET` | - | GitHub App Webhook 署名検証用シークレット |
+| `SLACK_OAUTH_TOKEN` | - | Slack Bot トークン（通知用） |
+| `SLACK_CHANNEL_ID` | - | Slack 通知先チャンネル ID |
+| `SLACK_SIGNING_SECRET` | - | Slack 署名検証用シークレット |
+| `SLACK_CLIENT_ID` | - | Slack App クライアント ID |
+| `SLACK_CLIENT_SECRET` | - | Slack App クライアントシークレット |
+| `RESEND_WEBHOOK_SECRET` | - | Resend Webhook 署名検証用シークレット |
+| `RESEND_WEBHOOK_DEDUP_TTL_SECONDS` | - | Resend Webhook 重複排除 TTL（デフォルト: 600秒） |
+| `SESSION_IDLE_TIMEOUT_SECONDS` | - | アイドルタイムアウト秒数（デフォルト: 1800秒） |
+
+## ドキュメント
+
+| ファイル | 説明 |
+|---|---|
+| [API リファレンス](API.cloudflare-workers-github-oauth-1.latest.md) | 全エンドポイント・外部 API・ファイル一覧 |
+| [SPEC（仕様）](SPEC.cloudflare-workers-github-oauth-1.latest.md) | セッション中の修正・追加の仕様まとめ |
+| [NOTICE（知見）](NOTICE.cloudflare-workers-github-oauth-1.20260316.md) | 知らないと損する仕様・落とし穴 |
+| [HISTORY（履歴）](HISTORY.cloudflare-workers-github-oauth-1.latest.md) | コミット履歴 |
+| [ZANZIBAR（権限モデル）](ZANZIBAR.cloudflare-workers-github-oauth-1.md) | GitHub App 権限の Zanzibar 形式定義 |
+| [EVAL（実装評価）](EVAL.cloudflare-workers-github-oauth-1.20260316.md) | コード品質・セキュリティ評価 |
