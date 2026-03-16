@@ -484,6 +484,57 @@ app.get('/github/callback', async (c) => {
 });
 
 /**
+ * 権限の再認証（既存のGitHub OAuthグラントを取り消してから再認証）
+ * スコープが不足している場合にユーザーを新しい認可画面に誘導する
+ */
+app.get('/auth/github/reauthorize', authMiddleware, async (c) => {
+  const user = c.get('user');
+  const clientId = c.env.GITHUB_CLIENT_ID;
+  const clientSecret = c.env.GITHUB_CLIENT_SECRET;
+
+  if (!clientId || !clientSecret) {
+    return c.json({ error: 'GitHub OAuth is not configured' }, 500);
+  }
+
+  // D1からアクセストークンを取得
+  const userSession = await getUserSession(c.env.DB, user.sub);
+  const accessToken = userSession?.githubAccessToken ?? user.github_access_token ?? undefined;
+
+  if (accessToken) {
+    // 既存のOAuthグラントを取り消し（GitHub APIを利用）
+    // これによりGitHubが次回の認証時に新しいスコープの承認画面を表示する
+    try {
+      await fetch(`https://api.github.com/applications/${encodeURIComponent(clientId)}/grant`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Basic ${btoa(`${clientId}:${clientSecret}`)}`,
+          'Accept': 'application/vnd.github.v3+json',
+          'User-Agent': 'Cloudflare-Workers-GitHub-OAuth',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ access_token: accessToken }),
+      });
+
+      logger.info('Revoked GitHub OAuth grant for re-authorization', { userId: user.sub });
+    } catch (error) {
+      logger.warn('Failed to revoke GitHub OAuth grant', {
+        userId: user.sub,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+      // 取り消しに失敗しても再認証フローは続行する
+    }
+  }
+
+  // クッキーを削除してから /auth/github にリダイレクト
+  const redirectHeaders = new Headers({ 'Location': '/auth/github' });
+  redirectHeaders.append('Set-Cookie', 'auth_token=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0');
+  redirectHeaders.append('Set-Cookie', 'login_timestamp=; Path=/; Secure; SameSite=Lax; Max-Age=0');
+  redirectHeaders.append('Set-Cookie', 'last_activity=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0');
+
+  return new Response(null, { status: 302, headers: redirectHeaders });
+});
+
+/**
  * ログアウト
  * サーバーサイドでHttpOnlyクッキーを削除してからログインページへリダイレクト
  */
@@ -1064,6 +1115,74 @@ app.post('/api/settings/session-duration', authMiddleware, async (c) => {
     });
     return c.json({ error: 'セッション有効期限の変更に失敗しました' }, 500);
   }
+});
+
+// =====================================================
+// 診断エンドポイント
+// =====================================================
+
+/**
+ * D1接続診断（認証が必要）
+ */
+app.get('/api/debug/d1', authMiddleware, async (c) => {
+  const user = c.get('user');
+  const db = c.env.DB;
+
+  const result: Record<string, unknown> = {
+    db_binding_exists: !!db,
+    user: user.sub,
+  };
+
+  if (!db) {
+    return c.json({ ...result, error: 'DB binding is undefined - D1 is not bound' }, 500);
+  }
+
+  try {
+    // テーブル存在確認
+    const tables = await db.prepare(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name='user_sessions'"
+    ).first();
+    result.table_exists = !!tables;
+
+    // カラム確認
+    const columns = await db.prepare("PRAGMA table_info(user_sessions)").all();
+    result.columns = columns.results?.map((col: any) => col.name) ?? [];
+
+    // ユーザーのレコード確認
+    const userRecord = await db.prepare(
+      'SELECT user_id, timezone, session_duration, last_login_at, current_login_at, updated_at, display_name, CASE WHEN github_access_token IS NOT NULL THEN \'[SET]\' ELSE \'[NULL]\' END as token_status FROM user_sessions WHERE user_id = ?'
+    ).bind(user.sub).first();
+    result.user_record = userRecord ?? 'NOT FOUND';
+
+    // 全レコード数
+    const count = await db.prepare('SELECT COUNT(*) as cnt FROM user_sessions').first<{ cnt: number }>();
+    result.total_records = count?.cnt ?? 0;
+
+    // テスト書き込み
+    const now = new Date().toISOString();
+    try {
+      await db.prepare(`
+        INSERT INTO user_sessions (user_id, timezone, session_duration, current_login_at, updated_at)
+        VALUES (?, 'UTC', '1h', ?, ?)
+        ON CONFLICT(user_id) DO UPDATE SET updated_at = ?
+      `).bind(user.sub, now, now, now).run();
+      result.test_write = 'SUCCESS';
+    } catch (writeError) {
+      result.test_write = 'FAILED';
+      result.test_write_error = writeError instanceof Error ? writeError.message : 'Unknown error';
+    }
+
+    // テスト書き込み後の確認
+    const afterWrite = await db.prepare(
+      'SELECT user_id, timezone, session_duration, current_login_at, updated_at FROM user_sessions WHERE user_id = ?'
+    ).bind(user.sub).first();
+    result.after_test_write = afterWrite ?? 'NOT FOUND';
+  } catch (error) {
+    result.error = error instanceof Error ? error.message : 'Unknown error';
+    result.stack = error instanceof Error ? error.stack : undefined;
+  }
+
+  return c.json(result);
 });
 
 // =====================================================
