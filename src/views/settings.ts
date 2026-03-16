@@ -17,9 +17,6 @@ export function getSettingsPage(user: {
   githubScopeError?: string | null;
 }): string {
   const displayName = escapeHtml(user.name || user.username);
-  const safeUsername = escapeHtml(user.username);
-  const safeName = user.name ? escapeHtml(user.name) : null;
-  const safeEmail = user.email ? escapeHtml(user.email) : null;
   const initials = escapeHtml((user.name || user.username).substring(0, 2).toUpperCase());
   const currentTimezone = user.timezone || 'UTC';
   const currentSessionDuration = user.sessionDuration || '1h';
@@ -162,6 +159,7 @@ export function getSettingsPage(user: {
         <div class="dropdown-menu" id="dropdownMenu">
           <a href="/welcome" class="dropdown-item">🏠 ホーム</a>
           <a href="/repositories" class="dropdown-item">📦 リポジトリ</a>
+          <a href="/userinfo" class="dropdown-item">👤 ユーザー情報</a>
           <a href="/auth/logout" class="dropdown-item logout">🚪 ログアウト</a>
         </div>
       </div>
@@ -171,27 +169,7 @@ export function getSettingsPage(user: {
   <div class="container">
     <div class="settings-card">
       <h1 class="settings-title">⚙️ 設定</h1>
-      <p class="settings-subtitle">アカウント情報とログイン状況</p>
-
-      <div class="section">
-        <h2 class="section-title">アカウント情報</h2>
-        <div class="info-grid">
-          <div class="info-item">
-            <span class="info-label">ユーザー名</span>
-            <span class="info-value">${safeUsername}</span>
-          </div>
-          ${safeName ? `
-          <div class="info-item">
-            <span class="info-label">名前</span>
-            <span class="info-value">${safeName}</span>
-          </div>` : ''}
-          ${safeEmail ? `
-          <div class="info-item">
-            <span class="info-label">メールアドレス</span>
-            <span class="info-value">${safeEmail}</span>
-          </div>` : ''}
-        </div>
-      </div>
+      <p class="settings-subtitle">ログイン状況と表示設定</p>
 
       <div class="section">
         <h2 class="section-title">ログイン状況</h2>

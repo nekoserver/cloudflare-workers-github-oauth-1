@@ -10,6 +10,7 @@ export function getWelcomePage(user: {
   avatar?: string;
   lastLoginAt?: string | null;
   showWelcomeMessage?: boolean;
+  repoCount?: number | null;
 }): string {
   const displayName = escapeHtml(user.name || user.username);
   const safeUsername = escapeHtml(user.username);
@@ -264,6 +265,7 @@ export function getWelcomePage(user: {
         </div>
         <div class="dropdown-menu" id="dropdownMenu">
           <a href="/repositories" class="dropdown-item">📦 リポジトリ</a>
+          <a href="/userinfo" class="dropdown-item">👤 ユーザー情報</a>
           <a href="/settings" class="dropdown-item">⚙️ 設定</a>
           <a href="/auth/logout" class="dropdown-item logout">🚪 ログアウト</a>
         </div>
@@ -292,6 +294,12 @@ export function getWelcomePage(user: {
         <div class="info-row">
           <span class="info-label">前回ログイン日時</span>
           <span class="info-value">${user.lastLoginAt}</span>
+        </div>
+        ` : ''}
+        ${user.repoCount != null ? `
+        <div class="info-row">
+          <span class="info-label">リポジトリ総数</span>
+          <span class="info-value">${user.repoCount}</span>
         </div>
         ` : ''}
       </div>
