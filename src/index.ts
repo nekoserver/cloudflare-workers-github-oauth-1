@@ -15,8 +15,7 @@ import { getWelcomePage } from './views/welcome';
 import { getSettingsPage } from './views/settings';
 import { getRepositoriesPage } from './views/repositories';
 import { getUserInfoPage } from './views/userinfo';
-import { getGitHubAccessToken, getGitHubLatestCommit, getGitHubTokenScopes, getGitHubUser, getGitHubUserEmail, getGitHubUserRepos, GitHubTokenScopesError, buildRepoInstallationPermissionsMap, RepoInstallationPermissions, getGitHubUserInstallationsWithDiag, getGitHubInstallationRepos } from './utils/github';
-import { getCloudflarePagesRepoMap } from './utils/cloudflare';
+import { getGitHubAccessToken, getGitHubLatestCommit, getGitHubTokenScopes, getGitHubUser, getGitHubUserEmail, getGitHubUserRepos, GitHubTokenScopesError, buildRepoInstallationPermissionsMap, RepoInstallationPermissions, getGitHubUserInstallationsWithDiag, getGitHubInstallationRepos, getCloudflareLinkedRepos } from './utils/github';
 import { getCookieValue, getCookieValues } from './utils/cookie';
 import { verifyResendWebhookSignature } from './utils/resendWebhook';
 import { verifyGitHubWebhookSignature } from './utils/githubWebhook';
@@ -904,23 +903,31 @@ app.get('/repositories', optionalAuthMiddleware, async (c) => {
     }
   }
 
-  // Cloudflare Pages プロジェクトとの連携状況を取得
-  let cloudflarePages: Record<string, { projectName: string; subdomain: string; productionBranch?: string }> | null = null;
-  const cfApiToken = c.env.CLOUDFLARE_API_TOKEN;
-  const cfAccountId = c.env.CLOUDFLARE_ACCOUNT_ID;
-  if (cfApiToken && cfAccountId) {
+  // Cloudflare 連携判定（GitHub App インストール経由）
+  let cloudflareLinkedRepos: Set<string> = new Set();
+  let cloudflareIsAllRepos = false;
+  if (accessToken) {
     try {
-      const cfMap = await getCloudflarePagesRepoMap(cfApiToken, cfAccountId);
-      if (cfMap.size > 0) {
-        cloudflarePages = {};
-        for (const [repoName, info] of cfMap.entries()) {
-          cloudflarePages[repoName] = info;
-        }
-      }
+      const cfResult = await getCloudflareLinkedRepos(accessToken);
+      cloudflareLinkedRepos = cfResult.repos;
+      cloudflareIsAllRepos = cfResult.isAllRepos;
     } catch (error) {
-      logger.warn('Failed to fetch Cloudflare Pages projects', {
+      logger.warn('Failed to detect Cloudflare linked repos', {
+        userId: user.sub,
         error: error instanceof Error ? error.message : 'Unknown error',
       });
+    }
+  }
+
+  // リポジトリ名のセットをシリアライズ可能な形に変換
+  const cloudflareRepos: Record<string, boolean> = {};
+  if (cloudflareIsAllRepos) {
+    for (const repo of repositories) {
+      cloudflareRepos[repo.name] = true;
+    }
+  } else {
+    for (const repoName of cloudflareLinkedRepos) {
+      cloudflareRepos[repoName] = true;
     }
   }
 
@@ -931,7 +938,7 @@ app.get('/repositories', optionalAuthMiddleware, async (c) => {
     errorMessage,
     grantedScopes,
     repoPermissions: repoPermissionsMap,
-    cloudflarePages,
+    cloudflareLinkedRepos: Object.keys(cloudflareRepos).length > 0 ? cloudflareRepos : null,
   }));
 });
 

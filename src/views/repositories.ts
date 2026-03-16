@@ -21,12 +21,6 @@ export interface RepoPermissionInfo {
   repositorySelection: string;
 }
 
-export interface RepoCloudflarePageInfo {
-  projectName: string;
-  subdomain: string;
-  productionBranch?: string;
-}
-
 export function getRepositoriesPage(user: {
   name?: string;
   username: string;
@@ -34,7 +28,7 @@ export function getRepositoriesPage(user: {
   errorMessage?: string | null;
   grantedScopes?: string[] | null;
   repoPermissions?: Record<string, RepoPermissionInfo> | null;
-  cloudflarePages?: Record<string, RepoCloudflarePageInfo> | null;
+  cloudflareLinkedRepos?: Record<string, boolean> | null;
 }): string {
   const displayName = escapeHtml(user.name || user.username);
   const initials = escapeHtml((user.name || user.username).substring(0, 2).toUpperCase());
@@ -43,7 +37,7 @@ export function getRepositoriesPage(user: {
   const hasRepoScope = scopes.includes('repo');
   const missingScopesBanner = !hasRepoScope && scopes.length > 0 ? true : false;
   const repoPerms = user.repoPermissions ?? {};
-  const cfPages = user.cloudflarePages ?? {};
+  const cfLinked = user.cloudflareLinkedRepos ?? {};
 
   // リポジトリごとのインストール権限をJSON化してクライアントサイドで利用
   const repoPermsJson = JSON.stringify(repoPerms);
@@ -54,9 +48,8 @@ export function getRepositoriesPage(user: {
     const language = repo.language ? escapeHtml(repo.language) : '不明';
     const updatedAt = escapeHtml(repo.updatedAt);
     const privacyBadge = repo.isPrivate ? '<span class="badge private">Private</span>' : '<span class="badge public">Public</span>';
-    const cfInfo = cfPages[repo.name];
-    const cfBadge = cfInfo
-      ? `<a class="badge cf-pages" href="https://${escapeHtml(cfInfo.subdomain)}.pages.dev" target="_blank" rel="noreferrer" title="Cloudflare Pages: ${escapeHtml(cfInfo.projectName)}">☁️ Pages</a>`
+    const cfBadge = cfLinked[repo.name]
+      ? '<span class="badge cf-linked" title="Cloudflare 連携済み">☁️ Cloudflare</span>'
       : '';
     const repoLink = `
       <a class="repo-name-link" href="${repo.htmlUrl}" target="_blank" rel="noreferrer">
@@ -202,8 +195,7 @@ export function getRepositoriesPage(user: {
     }
     .badge.private { background: #feb2b2; color: #9b2c2c; }
     .badge.public { background: #9ae6b4; color: #276749; }
-    .badge.cf-pages { background: #fbd38d; color: #744210; text-decoration: none; transition: background 0.2s; }
-    .badge.cf-pages:hover { background: #f6ad55; }
+    .badge.cf-linked { background: #fbd38d; color: #744210; }
     .repo-description { font-size: 14px; color: #4a5568; min-height: 22px; }
     .repo-meta { display: flex; flex-wrap: wrap; gap: 8px; font-size: 12px; color: #718096; justify-content: flex-end; }
     .repo-meta-item { background: #edf2f7; padding: 4px 10px; border-radius: 999px; }

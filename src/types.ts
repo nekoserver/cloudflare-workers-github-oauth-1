@@ -20,8 +20,6 @@ export type Bindings = {
   SESSION_IDLE_TIMEOUT_SECONDS?: string;
   RESEND_WEBHOOK_DEDUP_TTL_SECONDS?: string;
   GITHUB_WEBHOOK_SECRET?: string;
-  CLOUDFLARE_API_TOKEN?: string;
-  CLOUDFLARE_ACCOUNT_ID?: string;
 };
 
 /** Hono コンテキスト変数 */
