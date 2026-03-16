@@ -15,7 +15,7 @@ import { getWelcomePage } from './views/welcome';
 import { getSettingsPage } from './views/settings';
 import { getRepositoriesPage } from './views/repositories';
 import { getUserInfoPage } from './views/userinfo';
-import { getGitHubAccessToken, getGitHubLatestCommit, getGitHubTokenScopes, getGitHubUser, getGitHubUserEmail, getGitHubUserRepos, GitHubTokenScopesError, buildRepoInstallationPermissionsMap, RepoInstallationPermissions, getGitHubUserInstallationsWithDiag, getGitHubInstallationRepos, getCloudflareLinkedRepos } from './utils/github';
+import { getGitHubAccessToken, getGitHubLatestCommit, getGitHubTokenScopes, getGitHubUser, getGitHubUserEmail, getGitHubUserRepos, GitHubTokenScopesError, buildRepoInstallationPermissionsMap, RepoInstallationPermissions, getGitHubUserInstallationsWithDiag, getGitHubInstallationRepos, getExternalServiceLinkedRepos } from './utils/github';
 import { getCookieValue, getCookieValues } from './utils/cookie';
 import { verifyResendWebhookSignature } from './utils/resendWebhook';
 import { verifyGitHubWebhookSignature } from './utils/githubWebhook';
@@ -903,16 +903,20 @@ app.get('/repositories', optionalAuthMiddleware, async (c) => {
     }
   }
 
-  // Cloudflare 連携判定（GitHub App インストール経由）
+  // 外部サービス連携判定（GitHub App インストール経由）
   let cloudflareLinkedRepos: Set<string> = new Set();
   let cloudflareIsAllRepos = false;
+  let vercelLinkedRepos: Set<string> = new Set();
+  let vercelIsAllRepos = false;
   if (accessToken) {
     try {
-      const cfResult = await getCloudflareLinkedRepos(accessToken);
-      cloudflareLinkedRepos = cfResult.repos;
-      cloudflareIsAllRepos = cfResult.isAllRepos;
+      const result = await getExternalServiceLinkedRepos(accessToken);
+      cloudflareLinkedRepos = result.cloudflare.repos;
+      cloudflareIsAllRepos = result.cloudflare.isAllRepos;
+      vercelLinkedRepos = result.vercel.repos;
+      vercelIsAllRepos = result.vercel.isAllRepos;
     } catch (error) {
-      logger.warn('Failed to detect Cloudflare linked repos', {
+      logger.warn('Failed to detect external service linked repos', {
         userId: user.sub,
         error: error instanceof Error ? error.message : 'Unknown error',
       });
@@ -921,6 +925,7 @@ app.get('/repositories', optionalAuthMiddleware, async (c) => {
 
   // リポジトリ名のセットをシリアライズ可能な形に変換
   const cloudflareRepos: Record<string, boolean> = {};
+  const vercelRepos: Record<string, boolean> = {};
   if (cloudflareIsAllRepos) {
     for (const repo of repositories) {
       cloudflareRepos[repo.name] = true;
@@ -928,6 +933,15 @@ app.get('/repositories', optionalAuthMiddleware, async (c) => {
   } else {
     for (const repoName of cloudflareLinkedRepos) {
       cloudflareRepos[repoName] = true;
+    }
+  }
+  if (vercelIsAllRepos) {
+    for (const repo of repositories) {
+      vercelRepos[repo.name] = true;
+    }
+  } else {
+    for (const repoName of vercelLinkedRepos) {
+      vercelRepos[repoName] = true;
     }
   }
 
@@ -939,6 +953,7 @@ app.get('/repositories', optionalAuthMiddleware, async (c) => {
     grantedScopes,
     repoPermissions: repoPermissionsMap,
     cloudflareLinkedRepos: Object.keys(cloudflareRepos).length > 0 ? cloudflareRepos : null,
+    vercelLinkedRepos: Object.keys(vercelRepos).length > 0 ? vercelRepos : null,
   }));
 });
 
