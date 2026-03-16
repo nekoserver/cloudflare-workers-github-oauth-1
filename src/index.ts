@@ -1169,6 +1169,45 @@ app.post('/api/settings/session-duration', authMiddleware, async (c) => {
   }
 });
 
+/**
+ * インストール権限の最新データを返す（ページ読み込み時の差分チェック用）
+ */
+app.get('/api/repo-permissions', authMiddleware, async (c) => {
+  const user = c.get('user');
+  const userSession = await getUserSession(c.env.DB, user.sub);
+  const accessToken = userSession?.githubAccessToken ?? user.github_access_token ?? undefined;
+
+  if (!accessToken) {
+    return c.json({ permissions: {} });
+  }
+
+  try {
+    const installMap = await buildRepoInstallationPermissionsMap(accessToken);
+    const result: Record<string, { permissions: Record<string, string>; repositorySelection: string }> = {};
+    let allPerms: Record<string, string> | null = null;
+
+    for (const [key, value] of installMap.entries()) {
+      if (key.startsWith('__all__')) {
+        allPerms = value.permissions;
+      } else {
+        result[key] = {
+          permissions: value.permissions,
+          repositorySelection: value.repositorySelection,
+        };
+      }
+    }
+
+    // __all__ がある場合はクライアント側で適用するためフラグとして返す
+    return c.json({ permissions: result, allPermissions: allPerms });
+  } catch (error) {
+    logger.warn('Failed to fetch repo installation permissions', {
+      userId: user.sub,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    return c.json({ permissions: {} });
+  }
+});
+
 // =====================================================
 // 診断エンドポイント
 // =====================================================

@@ -708,6 +708,31 @@ export function getRepositoriesPage(user: {
         openPermissionsModal(repoName, row);
       });
     });
+
+    // ページ読み込み時に最新のインストール権限を1回だけ取得して差分反映
+    (function() {
+      fetch('/api/repo-permissions', { credentials: 'same-origin' })
+        .then(function(res) { return res.ok ? res.json() : null; })
+        .then(function(data) {
+          if (!data) return;
+          var fresh = data.permissions || {};
+          var allPerms = data.allPermissions || null;
+
+          // allPermissions がある場合、全リポジトリ行に適用
+          if (allPerms) {
+            document.querySelectorAll('.repo-row').forEach(function(row) {
+              var nameEl = row.querySelector('.repo-name-link');
+              var name = nameEl ? nameEl.textContent.trim() : '';
+              if (name && !fresh[name]) {
+                fresh[name] = { permissions: allPerms, repositorySelection: 'all' };
+              }
+            });
+          }
+
+          repoPermsData = fresh;
+        })
+        .catch(function() { /* 取得失敗はサーバーレンダリング済みデータで動作 */ });
+    })();
   </script>
 </body>
 </html>`;
