@@ -29,6 +29,7 @@ export function getRepositoriesPage(user: {
   grantedScopes?: string[] | null;
   repoPermissions?: Record<string, RepoPermissionInfo> | null;
   cloudflareLinkedRepos?: Record<string, boolean> | null;
+  vercelLinkedRepos?: Record<string, boolean> | null;
 }): string {
   const displayName = escapeHtml(user.name || user.username);
   const initials = escapeHtml((user.name || user.username).substring(0, 2).toUpperCase());
@@ -38,6 +39,7 @@ export function getRepositoriesPage(user: {
   const missingScopesBanner = !hasRepoScope && scopes.length > 0 ? true : false;
   const repoPerms = user.repoPermissions ?? {};
   const cfLinked = user.cloudflareLinkedRepos ?? {};
+  const vercelLinked = user.vercelLinkedRepos ?? {};
 
   // リポジトリごとのインストール権限をJSON化してクライアントサイドで利用
   const repoPermsJson = JSON.stringify(repoPerms);
@@ -50,6 +52,9 @@ export function getRepositoriesPage(user: {
     const privacyBadge = repo.isPrivate ? '<span class="badge private">Private</span>' : '<span class="badge public">Public</span>';
     const cfBadge = cfLinked[repo.name]
       ? '<span class="badge cf-linked" title="Cloudflare 連携済み">☁️ Cloudflare</span>'
+      : '';
+    const vercelBadge = vercelLinked[repo.name]
+      ? '<span class="badge vercel-linked" title="Vercel 連携済み">▲ Vercel</span>'
       : '';
     const repoLink = `
       <a class="repo-name-link" href="${repo.htmlUrl}" target="_blank" rel="noreferrer">
@@ -66,6 +71,7 @@ export function getRepositoriesPage(user: {
             <h3 class="repo-name">${repoLink}</h3>
             ${privacyBadge}
             ${cfBadge}
+            ${vercelBadge}
           </div>
           <p class="repo-description">${description}</p>
         </div>
@@ -196,6 +202,7 @@ export function getRepositoriesPage(user: {
     .badge.private { background: #feb2b2; color: #9b2c2c; }
     .badge.public { background: #9ae6b4; color: #276749; }
     .badge.cf-linked { background: #fbd38d; color: #744210; }
+    .badge.vercel-linked { background: #1a1a1a; color: #ffffff; }
     .repo-description { font-size: 14px; color: #4a5568; min-height: 22px; }
     .repo-meta { display: flex; flex-wrap: wrap; gap: 8px; font-size: 12px; color: #718096; justify-content: flex-end; }
     .repo-meta-item { background: #edf2f7; padding: 4px 10px; border-radius: 999px; }

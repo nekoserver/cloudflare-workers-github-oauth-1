@@ -438,6 +438,31 @@ export async function getGitHubTokenScopes(params: {
 }
 
 /**
+ * 指定した app_slug キーワードに一致する GitHub App がインストールされているリポジトリ名の Set を返す
+ */
+async function getLinkedReposByAppSlug(
+  accessToken: string,
+  slugKeyword: string,
+  installations: GitHubInstallation[]
+): Promise<{ repos: Set<string>; appSlug: string | null; isAllRepos: boolean }> {
+  const matched = installations.find(
+    (inst) => inst.app_slug && inst.app_slug.toLowerCase().includes(slugKeyword)
+  );
+
+  if (!matched) {
+    return { repos: new Set(), appSlug: null, isAllRepos: false };
+  }
+
+  if (matched.repository_selection === 'all') {
+    return { repos: new Set(), appSlug: matched.app_slug ?? null, isAllRepos: true };
+  }
+
+  const installRepos = await getGitHubInstallationRepos(accessToken, matched.id);
+  const repoNames = new Set(installRepos.map((r) => r.name));
+  return { repos: repoNames, appSlug: matched.app_slug ?? null, isAllRepos: false };
+}
+
+/**
  * Cloudflare 系 GitHub App がインストールされているリポジトリ名の Set を返す
  * app_slug に "cloudflare" を含むインストールを Cloudflare 連携と判定する
  */
@@ -445,20 +470,33 @@ export async function getCloudflareLinkedRepos(
   accessToken: string
 ): Promise<{ repos: Set<string>; appSlug: string | null; isAllRepos: boolean }> {
   const installations = await getGitHubUserInstallations(accessToken);
+  return getLinkedReposByAppSlug(accessToken, 'cloudflare', installations);
+}
 
-  const cfInstall = installations.find(
-    (inst) => inst.app_slug && inst.app_slug.toLowerCase().includes('cloudflare')
-  );
+/**
+ * Vercel GitHub App がインストールされているリポジトリ名の Set を返す
+ * app_slug に "vercel" を含むインストールを Vercel 連携と判定する
+ */
+export async function getVercelLinkedRepos(
+  accessToken: string
+): Promise<{ repos: Set<string>; appSlug: string | null; isAllRepos: boolean }> {
+  const installations = await getGitHubUserInstallations(accessToken);
+  return getLinkedReposByAppSlug(accessToken, 'vercel', installations);
+}
 
-  if (!cfInstall) {
-    return { repos: new Set(), appSlug: null, isAllRepos: false };
-  }
-
-  if (cfInstall.repository_selection === 'all') {
-    return { repos: new Set(), appSlug: cfInstall.app_slug ?? null, isAllRepos: true };
-  }
-
-  const installRepos = await getGitHubInstallationRepos(accessToken, cfInstall.id);
-  const repoNames = new Set(installRepos.map((r) => r.name));
-  return { repos: repoNames, appSlug: cfInstall.app_slug ?? null, isAllRepos: false };
+/**
+ * Cloudflare と Vercel の連携状況をまとめて取得する（API呼び出しを1回に最適化）
+ */
+export async function getExternalServiceLinkedRepos(
+  accessToken: string
+): Promise<{
+  cloudflare: { repos: Set<string>; appSlug: string | null; isAllRepos: boolean };
+  vercel: { repos: Set<string>; appSlug: string | null; isAllRepos: boolean };
+}> {
+  const installations = await getGitHubUserInstallations(accessToken);
+  const [cloudflare, vercel] = await Promise.all([
+    getLinkedReposByAppSlug(accessToken, 'cloudflare', installations),
+    getLinkedReposByAppSlug(accessToken, 'vercel', installations),
+  ]);
+  return { cloudflare, vercel };
 }
