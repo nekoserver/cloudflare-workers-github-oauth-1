@@ -141,6 +141,45 @@ const installationId = installation.id as number;  // ← as による型アサ�
 
 **提案**: `COALESCE(repo_name, '__ALL__')` を使った生成列（generated column）をユニークインデックスに使用するか、アプリケーション側で `repo_name = '__ALL__'` に統一する。
 
+### 10. `repositories.ts` のクライアントサイド `innerHTML` パターン（中〜高）
+
+**現状**: `src/views/repositories.ts` のクライアントサイド JavaScript で、データ属性から取得した値を文字列結合し `innerHTML` に代入している箇所が複数ある（689行目, 716行目, 762行目, 923行目, 1046行目付近）。
+
+```typescript
+// サーバー側で escapeHtml() 済みのデータを data 属性から取得
+var lang = rowEl.getAttribute('data-language') || '';
+// 文字列結合で HTML を組み立て
+metaHtml += '<span class="modal-repo-meta-item">' + lang + '</span>';
+// innerHTML に代入
+metaGrid.innerHTML = metaHtml;
+```
+
+**リスク**: サーバーサイドの `escapeHtml()` がデータ属性への格納時にエスケープしているため現時点では安全だが、**クライアントサイドが「サーバーがエスケープ済み」という暗黙の前提に依存**している。将来の変更でこの前提が崩れると DOM XSS が発生する。
+
+**提案**: 動的データの挿入には `textContent` または `createElement` を使用し、`innerHTML` はスタティックな HTML 構造のみに限定する。少なくともクライアントサイドでも独自のエスケープを適用するか、DOMPurify 等のサニタイザーを導入する。
+
+### 11. `src/index.ts` のサイレント catch ブロック（中）
+
+**現状**: `src/index.ts:780` と `src/index.ts:807` 付近に空の `catch { }` ブロックが存在する。OAuth フローおよびインストールハンドラ内でエラーが発生しても、ログ出力もエラー通知もなく握りつぶされる。
+
+**影響**: 本番環境でのデバッグが極めて困難になる。特に GitHub API のレスポンス変更やトークン期限切れなど、発見が遅れると影響が大きい問題が隠蔽される。
+
+**提案**: 全ての catch ブロックで最低限 `console.error()` によるログ出力を行う。重要度の高いエラーは既存の Slack 通知パイプラインを活用する。
+
+### 12. `src/utils/github.ts` のエラーメッセージ漏洩リスク（軽微）
+
+**現状**: `src/utils/github.ts:50` の `GitHubTokenScopesError` や `src/utils/github.ts:426` 付近で、GitHub API からのエラーメッセージをそのままクライアントに返している。
+
+**リスク**: GitHub API の内部構造やレート制限状態などの情報がエンドユーザーに漏洩する可能性がある。
+
+**提案**: エラーメッセージはサーバーログに記録し、クライアントには汎用的なメッセージ（「認証に失敗しました」等）のみを返す。
+
+### 13. `package.json` に型チェックスクリプトがない（軽微）
+
+**現状**: `package.json` に `tsc --noEmit` を実行するスクリプトが定義されていない。型エラーがCI/CDで検出されず、デプロイまで到達する可能性がある。
+
+**提案**: `"typecheck": "tsc --noEmit"` を `scripts` に追加し、デプロイパイプラインに組み込む。
+
 ---
 
 ## セキュリティ固有の評価
@@ -149,7 +188,8 @@ const installationId = installation.id as number;  // ← as による型アサ�
 |---|---|---|
 | CSRF 防止（OAuth state） | ✅ 実装済み | クッキーに保存、コールバックで比較 |
 | PKCE (S256) | ✅ 実装済み | `generatePkcePair()` で verifier/challenge を生成 |
-| XSS 防止 | ✅ `escapeHtml()` 使用 | ただし `repoPermsJson` は `JSON.stringify` で直接注入（JSONなので安全だが要注意） |
+| XSS 防止（サーバーサイド） | ✅ `escapeHtml()` 使用 | `repoPermsJson` は `JSON.stringify` で直接注入（JSONなので安全だが要注意） |
+| XSS 防止（クライアントサイド） | △ `innerHTML` 使用 | サーバーエスケープに暗黙依存。`textContent`/`createElement` への移行を推奨（問題点 10 参照） |
 | SQL インジェクション | ✅ プリペアドステートメント | `db.prepare().bind()` を一貫して使用 |
 | Webhook 署名検証 | ✅ HMAC-SHA256 | タイミングセーフ比較を実装 |
 | CSP | ✅ 設定済み | `unsafe-inline` が style-src/script-src に必要（インラインHTML生成のため） |
@@ -197,6 +237,9 @@ const installationId = installation.id as number;  // ← as による型アサ�
 
 1. **テストの追加** — Webhook 署名検証・D1操作・OAuth分岐の最低3ケース
 2. **`src/index.ts` の分割** — ハンドラとDB操作の責務分離
-3. **Webhook ペイロードの型定義** — `any` 排除
-4. **`Bindings` 型の共通化** — `src/types.ts` への抽出
-5. **D1 ユニークインデックスの NULL 問題の検証** — `repo_name = NULL` で `ON CONFLICT` が正しく動作するか確認
+3. **クライアントサイド `innerHTML` の安全化** — `textContent`/`createElement` への移行（DOM XSS 予防）
+4. **Webhook ペイロードの型定義** — `any` 排除
+5. **サイレント catch ブロックの解消** — 全 catch ブロックにログ出力を追加
+6. **`Bindings` 型の共通化** — `src/types.ts` への抽出
+7. **D1 ユニークインデックスの NULL 問題の検証** — `repo_name = NULL` で `ON CONFLICT` が正しく動作するか確認
+8. **型チェックスクリプトの追加** — `tsc --noEmit` を CI に組み込む
