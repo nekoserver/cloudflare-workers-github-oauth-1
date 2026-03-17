@@ -256,7 +256,7 @@ export async function getGitHubRepoOpenIssuesCount(params: {
   owner: string;
   repo: string;
   accessToken?: string;
-}): Promise<number | null> {
+}): Promise<{ count: number | null; status: number | null }> {
   const { owner, repo, accessToken } = params;
   const url = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`;
 
@@ -270,11 +270,14 @@ export async function getGitHubRepoOpenIssuesCount(params: {
 
   const response = await fetch(url, { headers });
   if (!response.ok) {
-    return null;
+    return { count: null, status: response.status };
   }
 
   const data = await response.json<{ open_issues_count?: number }>();
-  return typeof data.open_issues_count === 'number' ? data.open_issues_count : null;
+  return {
+    count: typeof data.open_issues_count === 'number' ? data.open_issues_count : null,
+    status: response.status,
+  };
 }
 
 /**

@@ -1143,16 +1143,19 @@ app.get('/api/repositories/:owner/:repo/issues-count', optionalAuthMiddleware, a
   const userSession = await getUserSession(c.env.DB, user.sub);
   const accessToken = userSession?.githubAccessToken ?? user.github_access_token ?? undefined;
 
-  let count = await getGitHubRepoOpenIssuesCount({ owner, repo, accessToken });
-  if (count === null && accessToken) {
-    count = await getGitHubRepoOpenIssuesCount({ owner, repo });
+  let result = await getGitHubRepoOpenIssuesCount({ owner, repo, accessToken });
+  if (result.count === null && accessToken) {
+    result = await getGitHubRepoOpenIssuesCount({ owner, repo });
   }
 
-  if (count === null) {
+  if (result.count === null) {
+    if (result.status === 401 || result.status === 403 || result.status === 404) {
+      return c.json({ error: 'Insufficient permissions' }, 403);
+    }
     return c.json({ error: 'Failed to fetch issues count' }, 502);
   }
 
-  return c.json({ count });
+  return c.json({ count: result.count });
 });
 
 /**

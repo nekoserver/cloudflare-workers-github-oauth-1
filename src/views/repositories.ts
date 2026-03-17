@@ -324,6 +324,18 @@ export function getRepositoriesPage(user: {
     .scopes-footer code {
       background: #edf2f7; padding: 1px 5px; border-radius: 4px; font-size: 11px;
     }
+    .toast {
+      position: fixed; right: 24px; bottom: 24px; z-index: 3000;
+      padding: 12px 16px; border-radius: 12px; font-size: 13px; font-weight: 700;
+      box-shadow: 0 16px 36px rgba(0,0,0,0.25); display: none; max-width: 320px;
+    }
+    .toast.show { display: block; animation: toastIn 0.2s ease; }
+    .toast.success { background: #c6f6d5; color: #22543d; }
+    .toast.error { background: #fed7e2; color: #97266d; }
+    @keyframes toastIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
     .missing-scope-banner {
       background: linear-gradient(135deg, #fefcbf 0%, #fef3c7 100%);
       border: 1px solid #ecc94b;
@@ -541,8 +553,26 @@ export function getRepositoriesPage(user: {
       </div>
     </div>
   </div>
+  <div class="toast" id="repoToast"></div>
 
   <script>
+    var toastEl = document.getElementById('repoToast');
+    var toastTimer = null;
+    function showToast(message, type, durationMs) {
+      if (!toastEl) return;
+      toastEl.textContent = message;
+      toastEl.classList.remove('success', 'error');
+      toastEl.classList.add(type);
+      toastEl.classList.add('show');
+      if (toastTimer) {
+        clearTimeout(toastTimer);
+      }
+      var ms = typeof durationMs === 'number' ? durationMs : 5000;
+      toastTimer = setTimeout(function() {
+        toastEl.classList.remove('show');
+      }, ms);
+    }
+
     function toggleDropdown() {
       const dropdown = document.getElementById('dropdownMenu');
       dropdown.classList.toggle('show');
@@ -800,18 +830,27 @@ export function getRepositoriesPage(user: {
               headers: { 'Accept': 'application/json' },
             })
               .then(function(res) {
-                if (!res.ok) throw new Error('Failed to fetch');
+                if (!res.ok) {
+                  if (res.status === 403) {
+                    throw new Error('PERMISSION');
+                  }
+                  throw new Error('Failed to fetch');
+                }
                 return res.json();
               })
               .then(function(data) {
                 if (typeof data.count === 'number') {
                   issuesEl.textContent = '🐛 Issue+PR: ' + data.count;
+                  showToast('Issue+PR: ' + data.count + ' 件', 'success', 5000);
                 } else {
                   issuesEl.textContent = '🐛 Issue+PR: 取得不可';
                 }
               })
-              .catch(function() {
+              .catch(function(err) {
                 issuesEl.textContent = '🐛 Issue+PR: 取得不可';
+                if (err && err.message === 'PERMISSION') {
+                  showToast('Issues+PRの取得権限が不足しています(METADATA : read)', 'error', 20000);
+                }
               });
           }
         }
