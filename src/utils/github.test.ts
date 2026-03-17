@@ -1,9 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import {
   findInstallationByExactSlugs,
+  isWebhookUrlMatchingHosts,
   CLOUDFLARE_DEPLOY_SLUGS,
   VERCEL_DEPLOY_SLUGS,
-  SLACK_APP_SLUGS,
+  SLACK_WEBHOOK_HOSTS,
   type GitHubInstallation,
 } from './github';
 
@@ -48,15 +49,6 @@ const vercelInstallation: GitHubInstallation = {
   app_id: 10,
   app_slug: 'vercel',
   permissions: { contents: 'read', deployments: 'write' },
-  repository_selection: 'selected',
-};
-
-/** Slack GitHub App（selected: repo-c, repo-d のみ） */
-const slackInstallation: GitHubInstallation = {
-  id: 400,
-  app_id: 30,
-  app_slug: 'slack',
-  permissions: { contents: 'read', metadata: 'read' },
   repository_selection: 'selected',
 };
 
@@ -140,8 +132,6 @@ describe('findInstallationByExactSlugs', () => {
 
   describe('mantine-ui-nextra-1 のシナリオ', () => {
     it('Cloudflare Bot のみインストール → Cloudflare デプロイ判定にマッチしない', () => {
-      // mantine-ui-nextra-1 がアクセス対象に含まれていても、
-      // cloudflare-bot-management はデプロイ用 slug ではないため無視される
       const installations = [cfBotInstallation, vercelInstallation];
       const cfMatch = findInstallationByExactSlugs(installations, CLOUDFLARE_DEPLOY_SLUGS);
       expect(cfMatch).toBeUndefined();
@@ -152,33 +142,6 @@ describe('findInstallationByExactSlugs', () => {
       const vercelMatch = findInstallationByExactSlugs(installations, VERCEL_DEPLOY_SLUGS);
       expect(vercelMatch).toBeDefined();
       expect(vercelMatch!.app_slug).toBe('vercel');
-    });
-  });
-
-  describe('Slack App のマッチング', () => {
-    it('slack に完全一致する', () => {
-      const installations = [cfPagesInstallation, vercelInstallation, slackInstallation];
-      const result = findInstallationByExactSlugs(installations, SLACK_APP_SLUGS);
-      expect(result).toBeDefined();
-      expect(result!.app_slug).toBe('slack');
-    });
-
-    it('slack-something はリストにないのでマッチしない', () => {
-      const installation: GitHubInstallation = {
-        id: 401,
-        app_id: 31,
-        app_slug: 'slack-something',
-        permissions: { contents: 'read' },
-        repository_selection: 'selected',
-      };
-      const result = findInstallationByExactSlugs([installation], SLACK_APP_SLUGS);
-      expect(result).toBeUndefined();
-    });
-
-    it('Slack App がインストールされていなければ undefined を返す', () => {
-      const installations = [cfPagesInstallation, vercelInstallation];
-      const result = findInstallationByExactSlugs(installations, SLACK_APP_SLUGS);
-      expect(result).toBeUndefined();
     });
   });
 
@@ -204,6 +167,60 @@ describe('findInstallationByExactSlugs', () => {
       const result = findInstallationByExactSlugs([installation], CLOUDFLARE_DEPLOY_SLUGS);
       expect(result).toBeDefined();
       expect(result!.app_slug).toBe('Cloudflare-Pages');
+    });
+  });
+});
+
+describe('isWebhookUrlMatchingHosts', () => {
+  describe('Slack Webhook URL の判定', () => {
+    it('hooks.slack.com の URL にマッチする', () => {
+      expect(isWebhookUrlMatchingHosts(
+        'https://hooks.slack.com/services/T00000000/B00000000/XXXX',
+        SLACK_WEBHOOK_HOSTS
+      )).toBe(true);
+    });
+
+    it('hooks.slack.com のパスが異なってもマッチする', () => {
+      expect(isWebhookUrlMatchingHosts(
+        'https://hooks.slack.com/workflows/T00000000/XXXX',
+        SLACK_WEBHOOK_HOSTS
+      )).toBe(true);
+    });
+
+    it('大文字小文字を無視してマッチする', () => {
+      expect(isWebhookUrlMatchingHosts(
+        'https://Hooks.Slack.Com/services/T00000000/B00000000/XXXX',
+        SLACK_WEBHOOK_HOSTS
+      )).toBe(true);
+    });
+
+    it('api.slack.com はマッチしない', () => {
+      expect(isWebhookUrlMatchingHosts(
+        'https://api.slack.com/events',
+        SLACK_WEBHOOK_HOSTS
+      )).toBe(false);
+    });
+
+    it('slack.com 単体はマッチしない', () => {
+      expect(isWebhookUrlMatchingHosts(
+        'https://slack.com/webhook',
+        SLACK_WEBHOOK_HOSTS
+      )).toBe(false);
+    });
+
+    it('無関係な URL はマッチしない', () => {
+      expect(isWebhookUrlMatchingHosts(
+        'https://example.com/hooks',
+        SLACK_WEBHOOK_HOSTS
+      )).toBe(false);
+    });
+
+    it('不正な URL は false を返す', () => {
+      expect(isWebhookUrlMatchingHosts('not-a-url', SLACK_WEBHOOK_HOSTS)).toBe(false);
+    });
+
+    it('空文字列は false を返す', () => {
+      expect(isWebhookUrlMatchingHosts('', SLACK_WEBHOOK_HOSTS)).toBe(false);
     });
   });
 });

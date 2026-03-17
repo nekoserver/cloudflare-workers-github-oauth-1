@@ -15,7 +15,7 @@ import { getWelcomePage } from './views/welcome';
 import { getSettingsPage } from './views/settings';
 import { getRepositoriesPage } from './views/repositories';
 import { getUserInfoPage } from './views/userinfo';
-import { getGitHubAccessToken, getGitHubLatestCommit, getGitHubTokenScopes, getGitHubUser, getGitHubUserEmail, getGitHubUserRepos, GitHubTokenScopesError, buildRepoInstallationPermissionsMap, RepoInstallationPermissions, getGitHubUserInstallationsWithDiag, getGitHubInstallationRepos, getExternalServiceLinkedRepos } from './utils/github';
+import { getGitHubAccessToken, getGitHubLatestCommit, getGitHubTokenScopes, getGitHubUser, getGitHubUserEmail, getGitHubUserRepos, GitHubTokenScopesError, buildRepoInstallationPermissionsMap, RepoInstallationPermissions, getGitHubUserInstallationsWithDiag, getGitHubInstallationRepos, getExternalServiceLinkedRepos, getSlackLinkedReposByWebhooks } from './utils/github';
 import { getCookieValue, getCookieValues } from './utils/cookie';
 import { verifyResendWebhookSignature } from './utils/resendWebhook';
 import { verifyGitHubWebhookSignature } from './utils/githubWebhook';
@@ -102,10 +102,10 @@ async function updateUserSession(
   timezone: string,
   sessionDuration: string,
   githubAccessToken?: string
-): Promise<string | null> {
+): Promise<{ saved: boolean; lastLoginAt: string | null }> {
   if (!db) {
     logger.warn('D1 database not available, skipping session update', { userId });
-    return null;
+    return { saved: false, lastLoginAt: null };
   }
 
   const now = new Date().toISOString();
@@ -131,13 +131,13 @@ async function updateUserSession(
       `).bind(userId, timezone, sessionDuration, now, now, githubAccessToken ?? null).run();
     }
 
-    return lastLoginAt;
+    return { saved: true, lastLoginAt };
   } catch (error) {
     logger.error('Error updating user session', {
       userId,
       error: error instanceof Error ? error.message : 'Unknown error',
     });
-    return null;
+    return { saved: false, lastLoginAt: null };
   }
 }
 
@@ -454,19 +454,26 @@ app.get('/github/callback', async (c) => {
     }
 
     // D1にログイン情報を保存
-    await updateUserSession(c.env.DB, userId, timezone, sessionDuration, accessToken);
+    const sessionResult = await updateUserSession(c.env.DB, userId, timezone, sessionDuration, accessToken);
 
     const sessionDurationSeconds = getSessionDurationSeconds(sessionDuration);
     const idleTimeoutSeconds = resolveIdleTimeoutSeconds(c.env.SESSION_IDLE_TIMEOUT_SECONDS, sessionDurationSeconds);
 
     // JWTトークンを生成
+    // D1保存が成功した場合はJWTにaccess_tokenを含めない（D1から取得する）
+    // D1保存が失敗した場合はJWTにフォールバックとしてaccess_tokenを含める
+    const includeTokenInJwt = !sessionResult.saved;
+    if (includeTokenInJwt) {
+      logger.warn('D1 session save failed, including access_token in JWT as fallback', { userId });
+    }
+
     const token = await createJWT(
       {
         sub: githubUser.login,
         name: githubUser.name || githubUser.login,
         email: email || undefined,
         github_id: githubUser.id,
-        github_access_token: c.env.DB ? undefined : accessToken,
+        github_access_token: includeTokenInJwt ? accessToken : undefined,
       },
       jwtSecret,
       sessionDurationSeconds
@@ -903,16 +910,20 @@ app.get('/repositories', optionalAuthMiddleware, async (c) => {
     }
   }
 
-  // 外部サービス連携判定（GitHub App インストール経由）
+  // 外部サービス連携判定
   let cloudflareLinkedRepos: Set<string> = new Set();
   let vercelLinkedRepos: Set<string> = new Set();
   let slackLinkedRepos: Set<string> = new Set();
   if (accessToken) {
     try {
-      const result = await getExternalServiceLinkedRepos(accessToken);
-      cloudflareLinkedRepos = result.cloudflare.repos;
-      vercelLinkedRepos = result.vercel.repos;
-      slackLinkedRepos = result.slack.repos;
+      const repoNames = repositories.map((r) => r.name);
+      const [externalResult, slackResult] = await Promise.all([
+        getExternalServiceLinkedRepos(accessToken),
+        getSlackLinkedReposByWebhooks(accessToken, user.sub, repoNames),
+      ]);
+      cloudflareLinkedRepos = externalResult.cloudflare.repos;
+      vercelLinkedRepos = externalResult.vercel.repos;
+      slackLinkedRepos = slackResult;
     } catch (error) {
       logger.warn('Failed to detect external service linked repos', {
         userId: user.sub,
