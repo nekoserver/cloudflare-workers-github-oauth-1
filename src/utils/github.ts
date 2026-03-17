@@ -250,6 +250,34 @@ export async function getGitHubLatestCommit(params: {
 }
 
 /**
+ * GitHubリポジトリのオープンIssue/PR数を取得
+ */
+export async function getGitHubRepoOpenIssuesCount(params: {
+  owner: string;
+  repo: string;
+  accessToken?: string;
+}): Promise<number | null> {
+  const { owner, repo, accessToken } = params;
+  const url = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`;
+
+  const headers: Record<string, string> = {
+    'Accept': 'application/vnd.github.v3+json',
+    'User-Agent': 'Cloudflare-Workers-GitHub-OAuth',
+  };
+  if (accessToken) {
+    headers['Authorization'] = `Bearer ${accessToken}`;
+  }
+
+  const response = await fetch(url, { headers });
+  if (!response.ok) {
+    return null;
+  }
+
+  const data = await response.json<{ open_issues_count?: number }>();
+  return typeof data.open_issues_count === 'number' ? data.open_issues_count : null;
+}
+
+/**
  * GitHub OAuthトークンの付与スコープを取得
  */
 /**

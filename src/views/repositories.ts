@@ -4,6 +4,7 @@
 import { escapeHtml } from '../utils/html';
 
 export interface RepositoryListItem {
+  owner: string;
   name: string;
   htmlUrl: string;
   description?: string | null;
@@ -47,6 +48,7 @@ export function getRepositoriesPage(user: {
   const repoPermsJson = JSON.stringify(repoPerms);
 
   const repoRows = user.repositories.map((repo) => {
+    const owner = escapeHtml(repo.owner);
     const name = escapeHtml(repo.name);
     const description = repo.description ? escapeHtml(repo.description) : '説明なし';
     const language = repo.language ? escapeHtml(repo.language) : '不明';
@@ -70,7 +72,7 @@ export function getRepositoriesPage(user: {
       ? `<a class="repo-meta-link" href="${repo.latestCommitUrl}" target="_blank" rel="noreferrer">🔗 ${escapeHtml(repo.latestCommitSha.substring(0, 7))}</a>`
       : `<span class="repo-meta-muted">🔗 なし</span>`;
     return `
-      <div class="repo-row" data-updated="${repo.updatedAt}" data-description="${repo.description ? escapeHtml(repo.description) : ''}" data-language="${language}" data-stars="${repo.stars}" data-forks="${repo.forks}" data-private="${repo.isPrivate}" data-commit-sha="${repo.latestCommitSha ? escapeHtml(repo.latestCommitSha.substring(0, 7)) : ''}" data-commit-url="${repo.latestCommitUrl ? escapeHtml(repo.latestCommitUrl) : ''}">
+      <div class="repo-row" data-owner="${owner}" data-repo="${name}" data-updated="${repo.updatedAt}" data-description="${repo.description ? escapeHtml(repo.description) : ''}" data-language="${language}" data-stars="${repo.stars}" data-forks="${repo.forks}" data-private="${repo.isPrivate}" data-commit-sha="${repo.latestCommitSha ? escapeHtml(repo.latestCommitSha.substring(0, 7)) : ''}" data-commit-url="${repo.latestCommitUrl ? escapeHtml(repo.latestCommitUrl) : ''}">
         <div class="repo-main">
           <div class="repo-title">
             <h3 class="repo-name">${repoLink}</h3>
@@ -743,7 +745,7 @@ export function getRepositoriesPage(user: {
       container.innerHTML = html;
     }
 
-    function openPermissionsModal(repoName, rowEl) {
+    function openPermissionsModal(repoName, owner, rowEl) {
       currentRepoName = repoName;
       if (modalRepoName) {
         modalRepoName.textContent = repoName;
@@ -786,7 +788,33 @@ export function getRepositoriesPage(user: {
             metaHtml += '<span class="modal-repo-meta-item">🔗 ' + esc(commitSha) + '</span>';
           }
         }
+        metaHtml += '<span class="modal-repo-meta-item" id="modalIssuesCount">🐛 Issue+PR: 取得中...</span>';
         metaGrid.innerHTML = metaHtml;
+
+        var issuesEl = document.getElementById('modalIssuesCount');
+        if (issuesEl) {
+          if (!owner || !repoName) {
+            issuesEl.textContent = '🐛 Issue+PR: 取得不可';
+          } else {
+            fetch('/api/repositories/' + encodeURIComponent(owner) + '/' + encodeURIComponent(repoName) + '/issues-count', {
+              headers: { 'Accept': 'application/json' },
+            })
+              .then(function(res) {
+                if (!res.ok) throw new Error('Failed to fetch');
+                return res.json();
+              })
+              .then(function(data) {
+                if (typeof data.count === 'number') {
+                  issuesEl.textContent = '🐛 Issue+PR: ' + data.count;
+                } else {
+                  issuesEl.textContent = '🐛 Issue+PR: 取得不可';
+                }
+              })
+              .catch(function() {
+                issuesEl.textContent = '🐛 Issue+PR: 取得不可';
+              });
+          }
+        }
       }
 
       // フィルタの復元
@@ -842,9 +870,13 @@ export function getRepositoriesPage(user: {
           if (target.tagName === 'A' || target.tagName === 'BUTTON') return;
           target = target.parentElement;
         }
-        var nameEl = row.querySelector('.repo-name-link');
-        var repoName = nameEl ? nameEl.textContent.trim() : '';
-        openPermissionsModal(repoName, row);
+        var repoName = row.getAttribute('data-repo') || '';
+        var owner = row.getAttribute('data-owner') || '';
+        if (!repoName) {
+          var nameEl = row.querySelector('.repo-name-link');
+          repoName = nameEl ? nameEl.textContent.trim() : '';
+        }
+        openPermissionsModal(repoName, owner, row);
       });
     });
 
