@@ -565,6 +565,57 @@ export async function getExternalServiceLinkedRepos(
   return { cloudflare, vercel };
 }
 
+/**
+ * 指定リポジトリの指定月のコミットを日別に集計する
+ * @returns 日付文字列 (YYYY-MM-DD) → コミット数 のマップ
+ */
+export async function getGitHubRepoCommitsByMonth(params: {
+  owner: string;
+  repo: string;
+  year: number;
+  month: number; // 1-12
+  accessToken?: string;
+}): Promise<Record<string, number>> {
+  const { owner, repo, year, month, accessToken } = params;
+
+  const since = new Date(Date.UTC(year, month - 1, 1));
+  const until = new Date(Date.UTC(year, month, 1)); // 翌月1日
+
+  const headers: Record<string, string> = {
+    'Accept': 'application/vnd.github+json',
+    'User-Agent': 'Cloudflare-Workers-GitHub-OAuth',
+    'X-GitHub-Api-Version': '2022-11-28',
+  };
+  if (accessToken) {
+    headers['Authorization'] = `Bearer ${accessToken}`;
+  }
+
+  const counts: Record<string, number> = {};
+  let nextUrl: string | null = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/commits?since=${since.toISOString()}&until=${until.toISOString()}&per_page=100`;
+
+  while (nextUrl) {
+    const response = await fetch(nextUrl, { headers });
+    if (!response.ok) {
+      break;
+    }
+
+    const commits = await response.json<{ commit?: { author?: { date?: string } } }[]>();
+    for (const c of commits) {
+      const dateStr = c.commit?.author?.date;
+      if (dateStr) {
+        const day = dateStr.substring(0, 10); // YYYY-MM-DD
+        counts[day] = (counts[day] || 0) + 1;
+      }
+    }
+
+    const linkHeader = response.headers.get('Link');
+    const nextMatch = linkHeader?.match(/<([^>]+)>;\s*rel="next"/);
+    nextUrl = nextMatch ? nextMatch[1] : null;
+  }
+
+  return counts;
+}
+
 // =====================================================
 // Webhook URL ベースの外部サービス連携判定
 // =====================================================
