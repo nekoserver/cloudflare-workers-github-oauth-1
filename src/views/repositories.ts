@@ -439,20 +439,11 @@ export function getRepositoriesPage(user: {
     .tree-tuples .tt-read { color: #68d391; }
     .tree-tuples .tt-write { color: #f6ad55; }
 
-    /* Commit Heatmap Calendar Button */
-    .heatmap-btn {
-      display: inline-flex; align-items: center; gap: 4px;
-      background: linear-gradient(135deg, #ed8936 0%, #dd6b20 100%);
-      color: white; border: none; border-radius: 6px;
-      padding: 4px 10px; font-size: 12px; font-weight: 600;
-      cursor: pointer; transition: opacity 0.2s; flex-shrink: 0;
+    /* Inline Heatmap Calendar Section */
+    .heatmap-inline-section {
+      margin: 12px 0 16px; padding: 12px;
+      background: #f7fafc; border-radius: 8px; border: 1px solid #e2e8f0;
     }
-    .heatmap-btn:hover { opacity: 0.9; }
-    .heatmap-btn-icon { font-size: 12px; }
-
-    /* Heatmap Calendar Modal */
-    .heatmap-modal-content { max-width: 400px; max-height: 92vh; }
-    .heatmap-modal-content .modal-body { max-height: calc(92vh - 60px); overflow-y: auto; }
     .heatmap-nav {
       display: flex; align-items: center; justify-content: center; gap: 12px; margin-bottom: 16px;
     }
@@ -554,10 +545,6 @@ export function getRepositoriesPage(user: {
       <div class="modal-body">
         <div class="modal-repo-name-row">
           <span class="modal-repo-name" id="modalRepoName"></span>
-          <button class="heatmap-btn" id="heatmapBtn" type="button" title="コミットカレンダー">
-            <span class="heatmap-btn-icon">📅</span>
-            カレンダー
-          </button>
           <button class="tree-view-btn" id="treeViewBtn" type="button" title="ツリー表示">
             <span class="tree-view-btn-icon">🌳</span>
             ツリー表示
@@ -570,6 +557,14 @@ export function getRepositoriesPage(user: {
         <div class="modal-repo-summary" id="modalRepoSummary">
           <div class="modal-repo-desc" id="modalRepoDesc"></div>
           <div class="modal-repo-meta-grid" id="modalRepoMetaGrid"></div>
+        </div>
+        <div class="heatmap-inline-section" id="heatmapInlineSection">
+          <div class="heatmap-nav">
+            <button class="heatmap-nav-btn" id="heatmapPrev" type="button" title="前月">◀</button>
+            <span class="heatmap-month-label" id="heatmapMonthLabel"></span>
+            <button class="heatmap-nav-btn" id="heatmapNext" type="button" title="翌月">▶</button>
+          </div>
+          <div id="heatmapBody"></div>
         </div>
         <div class="perm-section-header">
           <span class="perm-section-title">このアプリに現在付与中の権限</span>
@@ -625,26 +620,6 @@ export function getRepositoriesPage(user: {
       <div class="modal-body">
         <div class="zanzibar-repo-name" id="treeRepoName"></div>
         <pre class="zanzibar-tuples tree-tuples" id="treeTuples"></pre>
-      </div>
-    </div>
-  </div>
-  <!-- Commit Heatmap Calendar Modal -->
-  <div class="modal-overlay" id="heatmapModal">
-    <div class="modal-content heatmap-modal-content">
-      <div class="modal-header">
-        <span class="modal-title">📅 コミットカレンダー</span>
-        <button class="modal-close" id="heatmapModalClose" type="button">&times;</button>
-      </div>
-      <div class="modal-body">
-        <div class="zanzibar-repo-name" id="heatmapRepoName"></div>
-        <div class="heatmap-nav">
-          <button class="heatmap-nav-btn" id="heatmapPrev" type="button" title="前月">◀</button>
-          <span class="heatmap-month-label" id="heatmapMonthLabel"></span>
-          <button class="heatmap-nav-btn" id="heatmapNext" type="button" title="翌月">▶</button>
-        </div>
-        <div id="heatmapBody">
-          <div class="heatmap-loading">読み込み中...</div>
-        </div>
       </div>
     </div>
   </div>
@@ -1017,6 +992,8 @@ export function getRepositoriesPage(user: {
 
       renderInstallPerms(repoName);
       renderOAuthPerms();
+      // リポジトリ選択時にヒートマップカレンダーを開始
+      startHeatmapForRepo(owner);
       if (modal) {
         modal.classList.add('show');
       }
@@ -1041,11 +1018,7 @@ export function getRepositoriesPage(user: {
     }
     document.addEventListener('keydown', function(e) {
       if (e.key === 'Escape') {
-        // ヒートマップ → ツリーモーダル → Zanzibar モーダル → 権限モーダルの順に閉じる
-        if (heatmapModal && heatmapModal.classList.contains('show')) {
-          closeHeatmapModal();
-          return;
-        }
+        // ツリーモーダル → Zanzibar モーダル → 権限モーダルの順に閉じる
         if (treeModal && treeModal.classList.contains('show')) {
           closeTreeModal();
           return;
@@ -1350,18 +1323,14 @@ export function getRepositoriesPage(user: {
       });
     }
 
-    // ===== Commit Heatmap Calendar Modal =====
-    var heatmapModal = document.getElementById('heatmapModal');
-    var heatmapModalClose = document.getElementById('heatmapModalClose');
-    var heatmapBtn = document.getElementById('heatmapBtn');
-    var heatmapRepoName = document.getElementById('heatmapRepoName');
+    // ===== Commit Heatmap Calendar (inline in permissions modal) =====
     var heatmapMonthLabel = document.getElementById('heatmapMonthLabel');
     var heatmapBody = document.getElementById('heatmapBody');
     var heatmapPrev = document.getElementById('heatmapPrev');
     var heatmapNext = document.getElementById('heatmapNext');
 
-    var heatmapYear = new Date().getFullYear();
-    var heatmapMonth = new Date().getMonth() + 1;
+    var heatmapYear = 0;
+    var heatmapMonth = 0;
     var heatmapOwner = '';
     var heatmapCache = {};
 
@@ -1407,15 +1376,12 @@ export function getRepositoriesPage(user: {
       for (var k in counts) { total += counts[k]; }
 
       var html = '<div class="heatmap-grid">';
-      // Weekday headers
       WEEKDAYS.forEach(function(w) {
         html += '<div class="heatmap-weekday">' + w + '</div>';
       });
-      // Empty cells before first day
       for (var i = 0; i < startDow; i++) {
         html += '<div class="heatmap-day empty"></div>';
       }
-      // Day cells
       for (var d = 1; d <= daysInMonth; d++) {
         var dateStr = year + '-' + String(month).padStart(2, '0') + '-' + String(d).padStart(2, '0');
         var count = counts[dateStr] || 0;
@@ -1425,8 +1391,6 @@ export function getRepositoriesPage(user: {
         html += '<div class="heatmap-day level-' + level + (isToday ? ' today' : '') + '" title="' + esc(titleText) + '">' + d + '</div>';
       }
       html += '</div>';
-
-      // Legend
       html += '<div class="heatmap-legend">';
       html += '<span>少</span>';
       html += '<div class="heatmap-legend-box level-0" style="background:#edf2f7"></div>';
@@ -1436,10 +1400,7 @@ export function getRepositoriesPage(user: {
       html += '<div class="heatmap-legend-box level-4" style="background:#276749"></div>';
       html += '<span>多</span>';
       html += '</div>';
-
-      // Total
       html += '<div class="heatmap-total">合計 ' + total + ' コミット</div>';
-
       heatmapBody.innerHTML = html;
     }
 
@@ -1450,7 +1411,7 @@ export function getRepositoriesPage(user: {
     }
 
     function loadAndRenderHeatmap() {
-      if (!heatmapBody || !currentRepoName) return;
+      if (!heatmapBody || !currentRepoName || !heatmapOwner) return;
       updateHeatmapMonthLabel();
       heatmapBody.innerHTML = '<div class="heatmap-loading">読み込み中...</div>';
       var owner = heatmapOwner;
@@ -1460,41 +1421,15 @@ export function getRepositoriesPage(user: {
       });
     }
 
-    function openHeatmapModal() {
-      if (!currentRepoName) return;
-      // Determine owner from the currently open row
-      var rows = document.querySelectorAll('.repo-row');
-      heatmapOwner = '';
-      rows.forEach(function(row) {
-        if (row.getAttribute('data-repo') === currentRepoName) {
-          heatmapOwner = row.getAttribute('data-owner') || '';
-        }
-      });
-      if (!heatmapOwner) return;
-
-      if (heatmapRepoName) heatmapRepoName.textContent = currentRepoName;
+    // リポジトリ選択時にヒートマップを開始する（ページ読み込み時には実行しない）
+    function startHeatmapForRepo(owner) {
+      heatmapOwner = owner;
       var now = new Date();
       heatmapYear = now.getFullYear();
       heatmapMonth = now.getMonth() + 1;
       loadAndRenderHeatmap();
-      if (heatmapModal) heatmapModal.classList.add('show');
     }
 
-    function closeHeatmapModal() {
-      if (heatmapModal) heatmapModal.classList.remove('show');
-    }
-
-    if (heatmapBtn) {
-      heatmapBtn.addEventListener('click', openHeatmapModal);
-    }
-    if (heatmapModalClose) {
-      heatmapModalClose.addEventListener('click', closeHeatmapModal);
-    }
-    if (heatmapModal) {
-      heatmapModal.addEventListener('click', function(e) {
-        if (e.target === heatmapModal) closeHeatmapModal();
-      });
-    }
     if (heatmapPrev) {
       heatmapPrev.addEventListener('click', function() {
         heatmapMonth--;
