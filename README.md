@@ -13,6 +13,7 @@ GitHub OAuth + JWT 認証の Cloudflare Workers 実装。
 - リポジトリ一覧ページ（権限モーダル・Zanzibar タプル/ツリー表示）
 - スコープ不足時の再認証フロー
 - タイムゾーン設定・セッション有効期限設定・アイドルタイムアウト
+- タイムゾーン既定はJST（必要に応じてUTCへ変更可）
 - セキュリティ通知（JWT 検証失敗・ログイン失敗・App 変更の Slack 通知）
 - 構造化ログ・Analytics Engine 対応
 - セキュリティヘッダー（CSP・HSTS・X-Frame-Options・Referrer-Policy・Permissions-Policy）
