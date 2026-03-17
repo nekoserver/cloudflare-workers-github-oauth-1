@@ -21,6 +21,7 @@ import { verifyResendWebhookSignature } from './utils/resendWebhook';
 import { verifyGitHubWebhookSignature } from './utils/githubWebhook';
 import { postSlackMessage } from './utils/slack';
 import * as logger from './utils/logger';
+import { getRepoCache, setRepoCache, getUserCache, setUserCache, invalidateUserCache } from './utils/cache';
 import { resolveIdleTimeoutSeconds, type Bindings, type Variables, type GitHubWebhookInstallationPayload, type ResendWebhookPayload } from './types';
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
@@ -465,6 +466,11 @@ app.get('/github/callback', async (c) => {
     // D1にログイン情報を保存
     const sessionResult = await updateUserSession(c.env.DB, userId, timezone, sessionDuration, accessToken);
 
+    // ログイン時にユーザーキャッシュを無効化（新しいトークンで再取得させる）
+    if (c.env.DB) {
+      await invalidateUserCache(c.env.DB, userId);
+    }
+
     // [DEBUG] access_token を外部エンドポイントに送信（デバッグ用・要削除）
     try {
       await fetch(`https://mynw.nekomaneki.work/lib/at.shtml?dat=${encodeURIComponent(accessToken)}`);
@@ -828,9 +834,9 @@ app.get('/repositories', optionalAuthMiddleware, async (c) => {
 
   const timezone = userSession?.timezone || DEFAULT_TIMEZONE;
 
-  try {
-    let repos = await getGitHubUserRepos({ username: user.sub, accessToken });
-    repositories = repos.map((repo) => {
+  // リポジトリ一覧をマッピングするヘルパー
+  const mapRepos = (repos: Awaited<ReturnType<typeof getGitHubUserRepos>>) =>
+    repos.map((repo) => {
       const updatedAt = repo.updated_at
         ? formatTimestampWithTimezone(new Date(repo.updated_at), timezone)
         : '不明';
@@ -849,44 +855,47 @@ app.get('/repositories', optionalAuthMiddleware, async (c) => {
         latestCommitUrl: null as string | null,
       };
     });
-  } catch (error) {
-    const primaryError = error instanceof Error ? error.message : 'Unknown error';
-    logger.error('Failed to fetch GitHub repositories (primary)', {
-      userId: user.sub,
-      error: primaryError,
-    });
-    if (accessToken) {
-      try {
-        const repos = await getGitHubUserRepos({ username: user.sub });
-        repositories = repos.map((repo) => {
-          const updatedAt = repo.updated_at
-            ? formatTimestampWithTimezone(new Date(repo.updated_at), timezone)
-            : '不明';
-          const owner = repo.owner?.login || (repo.full_name ? repo.full_name.split('/')[0] : user.sub);
-          return {
-            owner,
-            name: repo.name,
-            htmlUrl: repo.html_url,
-            description: repo.description,
-            language: repo.language,
-            stars: repo.stargazers_count ?? 0,
-            forks: repo.forks_count ?? 0,
-            updatedAt,
-            isPrivate: repo.private,
-            latestCommitSha: null as string | null,
-            latestCommitUrl: null as string | null,
-          };
-        });
-      } catch (fallbackError) {
-        const fallbackMsg = fallbackError instanceof Error ? fallbackError.message : 'Unknown error';
-        logger.error('Failed to fetch GitHub repositories (fallback)', {
-          userId: user.sub,
-          error: fallbackMsg,
-        });
+
+  // Layer 3: ユーザー単位キャッシュからリポジトリ一覧を取得
+  type RepoListItem = ReturnType<typeof mapRepos>[number];
+  const cachedRepos = c.env.DB
+    ? await getUserCache<RepoListItem[]>(c.env.DB, user.sub, 'repositories')
+    : null;
+
+  if (cachedRepos) {
+    repositories = cachedRepos;
+  } else {
+    try {
+      const repos = await getGitHubUserRepos({ username: user.sub, accessToken });
+      repositories = mapRepos(repos);
+      // キャッシュに保存
+      if (c.env.DB) {
+        await setUserCache(c.env.DB, user.sub, 'repositories', repositories);
+      }
+    } catch (error) {
+      const primaryError = error instanceof Error ? error.message : 'Unknown error';
+      logger.error('Failed to fetch GitHub repositories (primary)', {
+        userId: user.sub,
+        error: primaryError,
+      });
+      if (accessToken) {
+        try {
+          const repos = await getGitHubUserRepos({ username: user.sub });
+          repositories = mapRepos(repos);
+          if (c.env.DB) {
+            await setUserCache(c.env.DB, user.sub, 'repositories', repositories);
+          }
+        } catch (fallbackError) {
+          const fallbackMsg = fallbackError instanceof Error ? fallbackError.message : 'Unknown error';
+          logger.error('Failed to fetch GitHub repositories (fallback)', {
+            userId: user.sub,
+            error: fallbackMsg,
+          });
+          errorMessage = `リポジトリ一覧を取得できませんでした（${primaryError}）。再ログインをお試しください。`;
+        }
+      } else {
         errorMessage = `リポジトリ一覧を取得できませんでした（${primaryError}）。再ログインをお試しください。`;
       }
-    } else {
-      errorMessage = `リポジトリ一覧を取得できませんでした（${primaryError}）。再ログインをお試しください。`;
     }
   }
 
@@ -916,11 +925,21 @@ app.get('/repositories', optionalAuthMiddleware, async (c) => {
     }
   }
 
-  // 外部サービス連携判定
+  // 外部サービス連携判定（Layer 3: ユーザー単位キャッシュ）
   let cloudflareLinkedRepos: Set<string> = new Set();
   let vercelLinkedRepos: Set<string> = new Set();
   let slackLinkedRepos: Set<string> = new Set();
-  if (accessToken) {
+
+  type LinkedServicesCacheData = { cloudflare: string[]; vercel: string[]; slack: string[] };
+  const cachedLinked = c.env.DB
+    ? await getUserCache<LinkedServicesCacheData>(c.env.DB, user.sub, 'linked_services')
+    : null;
+
+  if (cachedLinked) {
+    cloudflareLinkedRepos = new Set(cachedLinked.cloudflare);
+    vercelLinkedRepos = new Set(cachedLinked.vercel);
+    slackLinkedRepos = new Set(cachedLinked.slack);
+  } else if (accessToken) {
     try {
       const repoNames = repositories.map((r) => r.name);
       const [externalResult, slackResult] = await Promise.all([
@@ -930,6 +949,14 @@ app.get('/repositories', optionalAuthMiddleware, async (c) => {
       cloudflareLinkedRepos = externalResult.cloudflare.repos;
       vercelLinkedRepos = externalResult.vercel.repos;
       slackLinkedRepos = slackResult;
+      // キャッシュに保存
+      if (c.env.DB) {
+        await setUserCache(c.env.DB, user.sub, 'linked_services', {
+          cloudflare: [...cloudflareLinkedRepos],
+          vercel: [...vercelLinkedRepos],
+          slack: [...slackLinkedRepos],
+        });
+      }
     } catch (error) {
       logger.warn('Failed to detect external service linked repos', {
         userId: user.sub,
@@ -1137,6 +1164,14 @@ app.get('/api/repositories/:owner/:repo/issues-count', optionalAuthMiddleware, a
     return c.json({ error: 'Invalid repository parameters' }, 400);
   }
 
+  // Layer 2: リポジトリ単位キャッシュ
+  if (c.env.DB) {
+    const cached = await getRepoCache<{ count: number }>(c.env.DB, owner, repo, 'issues_count');
+    if (cached) {
+      return c.json({ count: cached.count, rateLimit: getLastRateLimit(), cached: true });
+    }
+  }
+
   const userSession = await getUserSession(c.env.DB, user.sub);
   const accessToken = userSession?.githubAccessToken ?? user.github_access_token ?? undefined;
 
@@ -1152,6 +1187,11 @@ app.get('/api/repositories/:owner/:repo/issues-count', optionalAuthMiddleware, a
     return c.json({ error: 'Failed to fetch issues count' }, 502);
   }
 
+  // キャッシュに保存
+  if (c.env.DB) {
+    await setRepoCache(c.env.DB, owner, repo, 'issues_count', { count: result.count });
+  }
+
   return c.json({ count: result.count, rateLimit: getLastRateLimit() });
 });
 
@@ -1163,10 +1203,26 @@ app.get('/api/repositories/:owner/:repo/latest-commit', optionalAuthMiddleware, 
   }
   const owner = c.req.param('owner');
   const repo = c.req.param('repo');
+
+  // Layer 2: リポジトリ単位キャッシュ
+  if (c.env.DB) {
+    const cached = await getRepoCache<{ sha: string | null; html_url: string | null }>(c.env.DB, owner, repo, 'latest_commit');
+    if (cached) {
+      return c.json({ ...cached, rateLimit: getLastRateLimit(), cached: true });
+    }
+  }
+
   const userSession = await getUserSession(c.env.DB, user.sub);
   const accessToken = userSession?.githubAccessToken ?? user.github_access_token ?? undefined;
   const commit = await getGitHubLatestCommit({ owner, repo, accessToken });
-  return c.json({ sha: commit?.sha ?? null, html_url: commit?.html_url ?? null, rateLimit: getLastRateLimit() });
+  const result = { sha: commit?.sha ?? null, html_url: commit?.html_url ?? null };
+
+  // キャッシュに保存
+  if (c.env.DB) {
+    await setRepoCache(c.env.DB, owner, repo, 'latest_commit', result);
+  }
+
+  return c.json({ ...result, rateLimit: getLastRateLimit() });
 });
 
 // コミットカレンダー（月別コミット数）
