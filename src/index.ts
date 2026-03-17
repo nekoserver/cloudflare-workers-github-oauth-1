@@ -15,7 +15,7 @@ import { getWelcomePage } from './views/welcome';
 import { getSettingsPage } from './views/settings';
 import { getRepositoriesPage } from './views/repositories';
 import { getUserInfoPage } from './views/userinfo';
-import { getGitHubAccessToken, getGitHubLatestCommit, getGitHubRepoOpenIssuesCount, getGitHubTokenScopes, getGitHubUser, getGitHubUserEmail, getGitHubUserRepos, GitHubTokenScopesError, buildRepoInstallationPermissionsMap, RepoInstallationPermissions, getGitHubUserInstallationsWithDiag, getGitHubInstallationRepos, getExternalServiceLinkedRepos, getSlackLinkedReposByWebhooks } from './utils/github';
+import { getGitHubAccessToken, getGitHubLatestCommit, getGitHubRepoOpenIssuesCount, getGitHubRepoCommitsByMonth, getGitHubTokenScopes, getGitHubUser, getGitHubUserEmail, getGitHubUserRepos, GitHubTokenScopesError, buildRepoInstallationPermissionsMap, RepoInstallationPermissions, getGitHubUserInstallationsWithDiag, getGitHubInstallationRepos, getExternalServiceLinkedRepos, getSlackLinkedReposByWebhooks } from './utils/github';
 import { getCookieValue, getCookieValues } from './utils/cookie';
 import { verifyResendWebhookSignature } from './utils/resendWebhook';
 import { verifyGitHubWebhookSignature } from './utils/githubWebhook';
@@ -1155,6 +1155,41 @@ app.get('/api/repositories/:owner/:repo/issues-count', optionalAuthMiddleware, a
   }
 
   return c.json({ count: result.count });
+});
+
+// コミットカレンダー（月別コミット数）
+app.get('/api/repositories/:owner/:repo/commits-calendar', optionalAuthMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!user) {
+    return c.json({ error: 'Unauthorized' }, 401);
+  }
+
+  const owner = c.req.param('owner');
+  const repo = c.req.param('repo');
+  const yearStr = c.req.query('year');
+  const monthStr = c.req.query('month');
+
+  if (!owner || !repo) {
+    return c.json({ error: 'Invalid repository parameters' }, 400);
+  }
+
+  const now = new Date();
+  const year = yearStr ? parseInt(yearStr, 10) : now.getFullYear();
+  const month = monthStr ? parseInt(monthStr, 10) : now.getMonth() + 1;
+
+  if (isNaN(year) || isNaN(month) || month < 1 || month > 12) {
+    return c.json({ error: 'Invalid year/month parameters' }, 400);
+  }
+
+  const userSession = await getUserSession(c.env.DB, user.sub);
+  const accessToken = userSession?.githubAccessToken ?? user.github_access_token ?? undefined;
+
+  if (!accessToken) {
+    return c.json({ error: 'No access token available' }, 401);
+  }
+
+  const counts = await getGitHubRepoCommitsByMonth({ owner, repo, year, month, accessToken });
+  return c.json({ year, month, counts });
 });
 
 /**
