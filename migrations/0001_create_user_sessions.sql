@@ -2,7 +2,7 @@
 CREATE TABLE IF NOT EXISTS user_sessions (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   user_id TEXT NOT NULL UNIQUE,
-  timezone TEXT DEFAULT 'UTC',
+  timezone TEXT DEFAULT 'JST',
   session_duration TEXT DEFAULT '1h',
   last_login_at TEXT,
   current_login_at TEXT NOT NULL,

@@ -1,5 +1,5 @@
---- SPEC.cloudflare-workers-github-oauth.latest.md	2026-03-12 19:15:16.672871469 +0000
-+++ SPEC.cloudflare-workers-github-oauth-1.20260313.md	2026-03-13 02:38:30.202951563 +0000
+--- SPEC.cloudflare-workers-github-oauth.latest.md	2026-03-13 04:15:16.672871469 +0900
++++ SPEC.cloudflare-workers-github-oauth-1.20260313.md	2026-03-13 11:38:30.202951563 +0900
 @@ -31,7 +31,9 @@
  │   │   ├── github.ts             # GitHub API クライアント
  │   │   ├── cookie.ts             # Cookie解析ユーティリティ
@@ -13,7 +13,7 @@
  │       ├── welcome.ts            # ウェルカムページHTML
 @@ -93,6 +95,35 @@
  | `/api/profile` | PUT | 必須 | 表示名更新 (D1に保存) |
- | `/api/settings/timezone` | POST | 必須 | タイムゾーン変更 (UTC/JST) |
+ | `/api/settings/timezone` | POST | 必須 | タイムゾーン変更 (JST/UTC、デフォルトJST) |
  | `/api/settings/session-duration` | POST | 必須 | セッション有効期限変更 |
 +| `/webhook/resend` | POST | - | Resend webhook受信 (署名検証 + オリジン通知 + Slack通知) |
 +

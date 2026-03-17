@@ -317,7 +317,7 @@ read:user user:email repo
 |---|---|---|---|
 | `id` | INTEGER PRIMARY KEY AUTOINCREMENT | - | 0001 |
 | `user_id` | TEXT NOT NULL UNIQUE | - | 0001 |
-| `timezone` | TEXT | `'UTC'` | 0001 |
+| `timezone` | TEXT | `'JST'` | 0001 |
 | `session_duration` | TEXT | `'1h'` | 0001 |
 | `last_login_at` | TEXT | NULL | 0001 |
 | `current_login_at` | TEXT NOT NULL | - | 0001 |
