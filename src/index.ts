@@ -696,8 +696,7 @@ app.get('/settings', authMiddleware, async (c) => {
 
   const userSession = await getUserSession(c.env.DB, user.sub);
   const accessToken = userSession?.githubAccessToken ?? user.github_access_token ?? undefined;
-  const cookieHeader = c.req.header('Cookie');
-  const timezone = userSession?.timezone || getCookieValues(cookieHeader, ['user_timezone'])['user_timezone'] || DEFAULT_TIMEZONE;
+  const resolvedTimezone = userSession?.timezone || getCookieValues(cookieHeader, ['user_timezone'])['user_timezone'] || DEFAULT_TIMEZONE;
 
   let grantedScopes: string[] | null = null;
   let scopesError: string | null = null;
@@ -732,7 +731,7 @@ app.get('/settings', authMiddleware, async (c) => {
     issuedAt,
     expiresAt,
     expiresAtTimestamp: user.exp,
-    timezone,
+    timezone: resolvedTimezone,
     sessionDuration,
     githubScopes: GITHUB_OAUTH_SCOPE,
     githubGrantedScopes: grantedScopes,
