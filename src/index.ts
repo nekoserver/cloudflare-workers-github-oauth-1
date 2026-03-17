@@ -851,6 +851,11 @@ app.get('/repositories', optionalAuthMiddleware, async (c) => {
       };
     }));
   } catch (error) {
+    const primaryError = error instanceof Error ? error.message : 'Unknown error';
+    logger.error('Failed to fetch GitHub repositories (primary)', {
+      userId: user.sub,
+      error: primaryError,
+    });
     if (accessToken) {
       try {
         const repos = await getGitHubUserRepos({ username: user.sub });
@@ -877,18 +882,15 @@ app.get('/repositories', optionalAuthMiddleware, async (c) => {
           };
         }));
       } catch (fallbackError) {
-        logger.error('Failed to fetch GitHub repositories', {
+        const fallbackMsg = fallbackError instanceof Error ? fallbackError.message : 'Unknown error';
+        logger.error('Failed to fetch GitHub repositories (fallback)', {
           userId: user.sub,
-          error: fallbackError instanceof Error ? fallbackError.message : 'Unknown error',
+          error: fallbackMsg,
         });
-        errorMessage = 'リポジトリ一覧を取得できませんでした。時間をおいて再度お試しください。';
+        errorMessage = `リポジトリ一覧を取得できませんでした（${primaryError}）。再ログインをお試しください。`;
       }
     } else {
-      logger.error('Failed to fetch GitHub repositories', {
-        userId: user.sub,
-        error: error instanceof Error ? error.message : 'Unknown error',
-      });
-      errorMessage = 'リポジトリ一覧を取得できませんでした。時間をおいて再度お試しください。';
+      errorMessage = `リポジトリ一覧を取得できませんでした（${primaryError}）。再ログインをお試しください。`;
     }
   }
 
