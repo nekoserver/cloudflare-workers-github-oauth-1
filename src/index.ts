@@ -102,10 +102,10 @@ async function updateUserSession(
   timezone: string,
   sessionDuration: string,
   githubAccessToken?: string
-): Promise<string | null> {
+): Promise<{ saved: boolean; lastLoginAt: string | null }> {
   if (!db) {
     logger.warn('D1 database not available, skipping session update', { userId });
-    return null;
+    return { saved: false, lastLoginAt: null };
   }
 
   const now = new Date().toISOString();
@@ -131,13 +131,13 @@ async function updateUserSession(
       `).bind(userId, timezone, sessionDuration, now, now, githubAccessToken ?? null).run();
     }
 
-    return lastLoginAt;
+    return { saved: true, lastLoginAt };
   } catch (error) {
     logger.error('Error updating user session', {
       userId,
       error: error instanceof Error ? error.message : 'Unknown error',
     });
-    return null;
+    return { saved: false, lastLoginAt: null };
   }
 }
 
@@ -454,19 +454,26 @@ app.get('/github/callback', async (c) => {
     }
 
     // D1にログイン情報を保存
-    await updateUserSession(c.env.DB, userId, timezone, sessionDuration, accessToken);
+    const sessionResult = await updateUserSession(c.env.DB, userId, timezone, sessionDuration, accessToken);
 
     const sessionDurationSeconds = getSessionDurationSeconds(sessionDuration);
     const idleTimeoutSeconds = resolveIdleTimeoutSeconds(c.env.SESSION_IDLE_TIMEOUT_SECONDS, sessionDurationSeconds);
 
     // JWTトークンを生成
+    // D1保存が成功した場合はJWTにaccess_tokenを含めない（D1から取得する）
+    // D1保存が失敗した場合はJWTにフォールバックとしてaccess_tokenを含める
+    const includeTokenInJwt = !sessionResult.saved;
+    if (includeTokenInJwt) {
+      logger.warn('D1 session save failed, including access_token in JWT as fallback', { userId });
+    }
+
     const token = await createJWT(
       {
         sub: githubUser.login,
         name: githubUser.name || githubUser.login,
         email: email || undefined,
         github_id: githubUser.id,
-        github_access_token: c.env.DB ? undefined : accessToken,
+        github_access_token: includeTokenInJwt ? accessToken : undefined,
       },
       jwtSecret,
       sessionDurationSeconds

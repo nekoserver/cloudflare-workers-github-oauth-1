@@ -87,17 +87,24 @@ export async function getGitHubAccessToken(
   });
 
   if (!response.ok) {
-    throw new Error('Failed to get access token from GitHub');
+    const body = await response.text().catch(() => '(unreadable)');
+    throw new Error(`Failed to get access token from GitHub: HTTP ${response.status} - ${body}`);
   }
 
-  const data = await response.json<{ access_token: string; error?: string }>();
+  const data = await response.json<{
+    access_token?: string;
+    error?: string;
+    error_description?: string;
+    error_uri?: string;
+  }>();
 
   if (data.error) {
-    throw new Error(`GitHub OAuth error: ${data.error}`);
+    const desc = data.error_description ? ` - ${data.error_description}` : '';
+    throw new Error(`GitHub OAuth error: ${data.error}${desc}`);
   }
 
   if (!data.access_token) {
-    throw new Error('No access token returned from GitHub');
+    throw new Error('No access token returned from GitHub (response had no error field either)');
   }
 
   return data.access_token;
