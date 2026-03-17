@@ -15,7 +15,7 @@ import { getWelcomePage } from './views/welcome';
 import { getSettingsPage } from './views/settings';
 import { getRepositoriesPage } from './views/repositories';
 import { getUserInfoPage } from './views/userinfo';
-import { getGitHubAccessToken, getGitHubLatestCommit, getGitHubRepoOpenIssuesCount, getGitHubRepoCommitsByMonth, getGitHubTokenScopes, getGitHubUser, getGitHubUserEmail, getGitHubUserRepos, GitHubTokenScopesError, buildRepoInstallationPermissionsMap, RepoInstallationPermissions, getGitHubUserInstallationsWithDiag, getGitHubInstallationRepos, getExternalServiceLinkedRepos, getSlackLinkedReposByWebhooks } from './utils/github';
+import { getGitHubAccessToken, getGitHubLatestCommit, getGitHubRepoOpenIssuesCount, getGitHubRepoCommitsByMonth, getGitHubTokenScopes, getGitHubUser, getGitHubUserEmail, getGitHubUserRepos, GitHubTokenScopesError, buildRepoInstallationPermissionsMap, RepoInstallationPermissions, getGitHubUserInstallationsWithDiag, getGitHubInstallationRepos, getExternalServiceLinkedRepos, getSlackLinkedReposByWebhooks, getLastRateLimit, type GitHubRateLimit } from './utils/github';
 import { getCookieValue, getCookieValues } from './utils/cookie';
 import { verifyResendWebhookSignature } from './utils/resendWebhook';
 import { verifyGitHubWebhookSignature } from './utils/githubWebhook';
@@ -962,6 +962,7 @@ app.get('/repositories', optionalAuthMiddleware, async (c) => {
     cloudflareLinkedRepos: Object.keys(cloudflareRepos).length > 0 ? cloudflareRepos : null,
     vercelLinkedRepos: Object.keys(vercelRepos).length > 0 ? vercelRepos : null,
     slackLinkedRepos: Object.keys(slackRepos).length > 0 ? slackRepos : null,
+    rateLimit: getLastRateLimit(),
   }));
 });
 
@@ -1151,7 +1152,7 @@ app.get('/api/repositories/:owner/:repo/issues-count', optionalAuthMiddleware, a
     return c.json({ error: 'Failed to fetch issues count' }, 502);
   }
 
-  return c.json({ count: result.count });
+  return c.json({ count: result.count, rateLimit: getLastRateLimit() });
 });
 
 // 最新コミット取得（クライアントサイド遅延取得用）
@@ -1165,7 +1166,7 @@ app.get('/api/repositories/:owner/:repo/latest-commit', optionalAuthMiddleware, 
   const userSession = await getUserSession(c.env.DB, user.sub);
   const accessToken = userSession?.githubAccessToken ?? user.github_access_token ?? undefined;
   const commit = await getGitHubLatestCommit({ owner, repo, accessToken });
-  return c.json({ sha: commit?.sha ?? null, html_url: commit?.html_url ?? null });
+  return c.json({ sha: commit?.sha ?? null, html_url: commit?.html_url ?? null, rateLimit: getLastRateLimit() });
 });
 
 // コミットカレンダー（月別コミット数）
@@ -1203,7 +1204,7 @@ app.get('/api/repositories/:owner/:repo/commits-calendar', optionalAuthMiddlewar
         'SELECT counts FROM commit_calendar_cache WHERE owner = ? AND repo = ? AND year = ? AND month = ?'
       ).bind(owner, repo, year, month).first<{ counts: string }>();
       if (cached) {
-        return c.json({ year, month, counts: JSON.parse(cached.counts), cached: true });
+        return c.json({ year, month, counts: JSON.parse(cached.counts), cached: true, rateLimit: getLastRateLimit() });
       }
     } catch (e) {
       logger.warn('Failed to read commit calendar cache from D1', {
@@ -1236,7 +1237,7 @@ app.get('/api/repositories/:owner/:repo/commits-calendar', optionalAuthMiddlewar
     }
   }
 
-  return c.json({ year, month, counts });
+  return c.json({ year, month, counts, rateLimit: getLastRateLimit() });
 });
 
 /**

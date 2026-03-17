@@ -32,6 +32,7 @@ export function getRepositoriesPage(user: {
   cloudflareLinkedRepos?: Record<string, boolean> | null;
   vercelLinkedRepos?: Record<string, boolean> | null;
   slackLinkedRepos?: Record<string, boolean> | null;
+  rateLimit?: { remaining: number; limit: number; reset: number } | null;
 }): string {
   const displayName = escapeHtml(user.name || user.username);
   const initials = escapeHtml((user.name || user.username).substring(0, 2).toUpperCase());
@@ -43,6 +44,9 @@ export function getRepositoriesPage(user: {
   const cfLinked = user.cloudflareLinkedRepos ?? {};
   const vercelLinked = user.vercelLinkedRepos ?? {};
   const slackLinked = user.slackLinkedRepos ?? {};
+
+  // Rate Limit 初期値
+  const rateLimitJson = JSON.stringify(user.rateLimit ?? null);
 
   // リポジトリごとのインストール権限をJSON化してクライアントサイドで利用
   const repoPermsJson = JSON.stringify(repoPerms);
@@ -166,8 +170,14 @@ export function getRepositoriesPage(user: {
       background: white; border-radius: 16px;
       box-shadow: 0 20px 60px rgba(0,0,0,0.3); padding: 24px; margin-bottom: 16px;
     }
+    .page-header-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; }
     .page-title { font-size: 32px; font-weight: 700; color: #1a202c; margin-bottom: 8px; }
     .page-subtitle { font-size: 16px; color: #718096; }
+    .rate-limit-indicator { display: flex; align-items: center; gap: 8px; padding: 8px 14px; background: #f7fafc; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 13px; white-space: nowrap; }
+    .rate-limit-label { font-weight: 600; color: #718096; }
+    .rate-limit-bar { width: 80px; height: 8px; background: #e2e8f0; border-radius: 4px; overflow: hidden; }
+    .rate-limit-fill { display: block; height: 100%; border-radius: 4px; transition: width 0.3s, background-color 0.3s; }
+    .rate-limit-text { font-weight: 700; font-variant-numeric: tabular-nums; min-width: 60px; text-align: right; }
     .error-banner {
       background: #fed7d7; color: #c53030; border-radius: 12px; padding: 12px 16px;
       font-size: 14px; font-weight: 600; margin-top: 16px;
@@ -514,8 +524,17 @@ export function getRepositoriesPage(user: {
 
   <div class="container">
     <div class="page-header">
-      <h1 class="page-title">📦 リポジトリ</h1>
-      <p class="page-subtitle">リポジトリ ${repoCount} 件</p>
+      <div class="page-header-top">
+        <div>
+          <h1 class="page-title">📦 リポジトリ</h1>
+          <p class="page-subtitle">リポジトリ ${repoCount} 件</p>
+        </div>
+        <div class="rate-limit-indicator" id="rateLimitIndicator" title="GitHub API Rate Limit">
+          <span class="rate-limit-label">API</span>
+          <span class="rate-limit-bar"><span class="rate-limit-fill" id="rateLimitFill"></span></span>
+          <span class="rate-limit-text" id="rateLimitText">--</span>
+        </div>
+      </div>
       ${errorBanner}
       ${missingScopeBannerHtml}
     </div>
@@ -704,6 +723,7 @@ export function getRepositoriesPage(user: {
       })
         .then(function(res) { return res.ok ? res.json() : null; })
         .then(function(data) {
+          if (data && data.rateLimit) updateRateLimitUI(data.rateLimit);
           if (data && data.sha && data.html_url) {
             el.innerHTML = '<a class="repo-meta-link" href="' + data.html_url + '" target="_blank" rel="noreferrer">🔗 ' + data.sha.substring(0, 7) + '</a>';
           } else {
@@ -742,6 +762,7 @@ export function getRepositoriesPage(user: {
           return res.json();
         })
         .then(function(data) {
+          if (data && data.rateLimit) updateRateLimitUI(data.rateLimit);
           if (typeof data.count === 'number') {
             issuesCountCache[key] = data.count;
             return data.count;
@@ -811,6 +832,33 @@ export function getRepositoriesPage(user: {
     var repoPermsData = ${repoPermsJson};
     var oauthScopes = ${JSON.stringify(scopes)};
     var currentRepoName = '';
+
+    // ===== Rate Limit インジケータ =====
+    var currentRateLimit = ${rateLimitJson};
+    function updateRateLimitUI(rl) {
+      if (!rl) return;
+      currentRateLimit = rl;
+      var indicator = document.getElementById('rateLimitIndicator');
+      var fill = document.getElementById('rateLimitFill');
+      var text = document.getElementById('rateLimitText');
+      if (!indicator || !fill || !text) return;
+      var pct = rl.limit > 0 ? (rl.remaining / rl.limit) * 100 : 0;
+      fill.style.width = pct + '%';
+      if (pct > 50) {
+        fill.style.backgroundColor = '#48bb78';
+      } else if (pct > 20) {
+        fill.style.backgroundColor = '#ecc94b';
+      } else {
+        fill.style.backgroundColor = '#f56565';
+      }
+      text.textContent = rl.remaining + ' / ' + rl.limit;
+      text.style.color = pct > 20 ? '#4a5568' : '#e53e3e';
+      // リセット時刻をtitleに表示
+      var resetDate = new Date(rl.reset * 1000);
+      indicator.title = 'GitHub API Rate Limit (リセット: ' + resetDate.toLocaleTimeString('ja-JP') + ')';
+    }
+    // 初期表示
+    updateRateLimitUI(currentRateLimit);
 
     // クライアントサイド HTML エスケープ（XSS 防止）
     function esc(str) {
@@ -1375,6 +1423,7 @@ export function getRepositoriesPage(user: {
       })
         .then(function(res) { return res.ok ? res.json() : null; })
         .then(function(data) {
+          if (data && data.rateLimit) updateRateLimitUI(data.rateLimit);
           if (data && data.counts) {
             heatmapCache[key] = data.counts;
             return data.counts;

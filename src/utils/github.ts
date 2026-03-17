@@ -57,6 +57,42 @@ export class GitHubTokenScopesError extends Error {
 }
 
 /**
+ * GitHub API Rate Limit 情報
+ */
+export interface GitHubRateLimit {
+  remaining: number;
+  limit: number;
+  reset: number; // Unix timestamp
+}
+
+/** 直近の Rate Limit 情報（リクエストスコープで共有） */
+let _lastRateLimit: GitHubRateLimit | null = null;
+
+/** 直近の Rate Limit を取得 */
+export function getLastRateLimit(): GitHubRateLimit | null {
+  return _lastRateLimit;
+}
+
+/** Rate Limit をリセット（リクエスト開始時） */
+export function resetLastRateLimit(): void {
+  _lastRateLimit = null;
+}
+
+/** GitHub API レスポンスから Rate Limit ヘッダを抽出・保存 */
+function trackRateLimit(response: Response): void {
+  const remaining = response.headers.get('X-RateLimit-Remaining');
+  const limit = response.headers.get('X-RateLimit-Limit');
+  const reset = response.headers.get('X-RateLimit-Reset');
+  if (remaining !== null && limit !== null && reset !== null) {
+    _lastRateLimit = {
+      remaining: parseInt(remaining, 10),
+      limit: parseInt(limit, 10),
+      reset: parseInt(reset, 10),
+    };
+  }
+}
+
+/**
  * GitHub OAuthのアクセストークンを取得
  */
 export async function getGitHubAccessToken(
@@ -121,6 +157,7 @@ export async function getGitHubUser(accessToken: string): Promise<GitHubUser> {
       'User-Agent': 'Cloudflare-Workers-GitHub-OAuth',
     },
   });
+  trackRateLimit(response);
 
   if (!response.ok) {
     throw new Error('Failed to get user info from GitHub');
@@ -140,6 +177,7 @@ export async function getGitHubUserEmail(accessToken: string): Promise<string | 
       'User-Agent': 'Cloudflare-Workers-GitHub-OAuth',
     },
   });
+  trackRateLimit(response);
 
   if (!response.ok) {
     return null;
@@ -202,6 +240,7 @@ export async function getGitHubUserRepos(params: { username?: string; accessToke
 
   while (nextUrl) {
     const response = await fetch(nextUrl, { headers });
+    trackRateLimit(response);
     if (!response.ok) {
       const rateLimitRemaining = response.headers.get('X-RateLimit-Remaining');
       const rateLimitReset = response.headers.get('X-RateLimit-Reset');
@@ -246,6 +285,7 @@ export async function getGitHubLatestCommit(params: {
   }
 
   const response = await fetch(url, { headers });
+  trackRateLimit(response);
   if (!response.ok) {
     return null;
   }
@@ -279,6 +319,7 @@ export async function getGitHubRepoOpenIssuesCount(params: {
   }
 
   const response = await fetch(url, { headers });
+  trackRateLimit(response);
   if (!response.ok) {
     return { count: null, status: response.status };
   }
@@ -360,6 +401,7 @@ export async function getGitHubUserInstallationsWithDiag(accessToken: string): P
   const response = await fetch('https://api.github.com/user/installations', {
     headers: githubApiHeaders(accessToken),
   });
+  trackRateLimit(response);
 
   if (!response.ok) {
     let errorMsg: string | undefined;
@@ -394,6 +436,7 @@ export async function getGitHubInstallationRepos(
     const response = await fetch(nextUrl, {
       headers: githubApiHeaders(accessToken),
     });
+    trackRateLimit(response);
 
     if (!response.ok) {
       break;
@@ -605,6 +648,7 @@ export async function getGitHubRepoCommitsByMonth(params: {
 
   while (nextUrl) {
     const response = await fetch(nextUrl, { headers });
+    trackRateLimit(response);
     if (!response.ok) {
       break;
     }
@@ -651,6 +695,7 @@ async function getRepoWebhooks(
 ): Promise<GitHubRepoHook[]> {
   const url = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/hooks?per_page=100`;
   const response = await fetch(url, { headers: githubApiHeaders(accessToken) });
+  trackRateLimit(response);
   if (!response.ok) {
     return [];
   }
