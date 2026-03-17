@@ -26,6 +26,7 @@ import { resolveIdleTimeoutSeconds, type Bindings, type Variables, type GitHubWe
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
 const resendWebhookDedupCache = new Map<string, number>();
+const DEFAULT_TIMEZONE = 'JST';
 
 /**
  * CSRFを防ぐためのOAuth stateトークンを生成
@@ -80,6 +81,14 @@ function normalizeGitHubApiMessage(message: string): string {
     default:
       return message;
   }
+}
+
+function formatTimestampWithTimezone(date: Date, timezone: string): string {
+  if (timezone === 'JST') {
+    const jstDate = new Date(date.getTime() + 9 * 60 * 60 * 1000);
+    return jstDate.toISOString().replace('T', ' ').substring(0, 19) + ' JST';
+  }
+  return date.toISOString().replace('T', ' ').substring(0, 19) + ' UTC';
 }
 
 // セッション有効期限の文字列を秒数に変換するヘルパー関数
@@ -436,7 +445,7 @@ app.get('/github/callback', async (c) => {
     // D1データベースからユーザー設定を取得
     const userSession = await getUserSession(c.env.DB, userId);
 
-    let timezone = 'UTC';
+    let timezone = DEFAULT_TIMEZONE;
     let sessionDuration = '1h';
 
     if (userSession) {
@@ -620,7 +629,7 @@ app.get('/welcome', authMiddleware, async (c) => {
   const userSession = await getUserSession(c.env.DB, user.sub);
 
   let lastLoginAt: string | null = null;
-  let timezone = 'UTC';
+  let timezone = DEFAULT_TIMEZONE;
 
   if (userSession) {
     lastLoginAt = userSession.lastLoginAt;
@@ -630,12 +639,7 @@ app.get('/welcome', authMiddleware, async (c) => {
   let formattedLastLogin: string | null = null;
   if (lastLoginAt) {
     const lastLoginDate = new Date(lastLoginAt);
-    if (timezone === 'JST') {
-      const jstDate = new Date(lastLoginDate.getTime() + 9 * 60 * 60 * 1000);
-      formattedLastLogin = jstDate.toISOString().replace('T', ' ').substring(0, 19) + ' JST';
-    } else {
-      formattedLastLogin = lastLoginDate.toISOString().replace('T', ' ').substring(0, 19) + ' UTC';
-    }
+    formattedLastLogin = formatTimestampWithTimezone(lastLoginDate, timezone);
   }
 
   // show_welcome_message Cookieを読み取り、GitHubコールバック直後かどうか判定
@@ -679,26 +683,21 @@ app.get('/settings', authMiddleware, async (c) => {
 
   const cookieHeader = c.req.header('Cookie');
   const cookieVals = getCookieValues(cookieHeader, ['user_timezone', 'user_session_duration']);
-  const timezone = cookieVals['user_timezone'] || 'UTC';
+  const timezone = cookieVals['user_timezone'] || DEFAULT_TIMEZONE;
   const sessionDuration = cookieVals['user_session_duration'] || '1h';
 
   let issuedAt: string;
   let expiresAt: string;
 
-  if (timezone === 'JST') {
-    const issuedDate = new Date(user.iat * 1000 + 9 * 60 * 60 * 1000);
-    const expiresDate = new Date(user.exp * 1000 + 9 * 60 * 60 * 1000);
-    issuedAt = issuedDate.toISOString().replace('T', ' ').substring(0, 19) + ' JST';
-    expiresAt = expiresDate.toISOString().replace('T', ' ').substring(0, 19) + ' JST';
-  } else {
-    const issuedDate = new Date(user.iat * 1000);
-    const expiresDate = new Date(user.exp * 1000);
-    issuedAt = issuedDate.toISOString().replace('T', ' ').substring(0, 19) + ' UTC';
-    expiresAt = expiresDate.toISOString().replace('T', ' ').substring(0, 19) + ' UTC';
-  }
+  const issuedDate = new Date(user.iat * 1000);
+  const expiresDate = new Date(user.exp * 1000);
+  issuedAt = formatTimestampWithTimezone(issuedDate, timezone);
+  expiresAt = formatTimestampWithTimezone(expiresDate, timezone);
 
   const userSession = await getUserSession(c.env.DB, user.sub);
   const accessToken = userSession?.githubAccessToken ?? user.github_access_token ?? undefined;
+  const cookieHeader = c.req.header('Cookie');
+  const timezone = userSession?.timezone || getCookieValues(cookieHeader, ['user_timezone'])['user_timezone'] || DEFAULT_TIMEZONE;
 
   let grantedScopes: string[] | null = null;
   let scopesError: string | null = null;
@@ -832,7 +831,7 @@ app.get('/repositories', optionalAuthMiddleware, async (c) => {
     let repos = await getGitHubUserRepos({ username: user.sub, accessToken });
     repositories = await Promise.all(repos.map(async (repo) => {
       const updatedAt = repo.updated_at
-        ? new Date(repo.updated_at).toISOString().replace('T', ' ').substring(0, 19) + ' UTC'
+        ? formatTimestampWithTimezone(new Date(repo.updated_at), timezone)
         : '不明';
       const owner = repo.owner?.login || (repo.full_name ? repo.full_name.split('/')[0] : user.sub);
       const latestCommit = owner
@@ -858,7 +857,7 @@ app.get('/repositories', optionalAuthMiddleware, async (c) => {
         const repos = await getGitHubUserRepos({ username: user.sub });
         repositories = await Promise.all(repos.map(async (repo) => {
           const updatedAt = repo.updated_at
-            ? new Date(repo.updated_at).toISOString().replace('T', ' ').substring(0, 19) + ' UTC'
+            ? formatTimestampWithTimezone(new Date(repo.updated_at), timezone)
             : '不明';
           const owner = repo.owner?.login || (repo.full_name ? repo.full_name.split('/')[0] : user.sub);
           const latestCommit = owner
@@ -1584,7 +1583,7 @@ app.get('/api/debug/d1', authMiddleware, async (c) => {
     try {
       await db.prepare(`
         INSERT INTO user_sessions (user_id, timezone, session_duration, current_login_at, updated_at)
-        VALUES (?, 'UTC', '1h', ?, ?)
+        VALUES (?, 'JST', '1h', ?, ?)
         ON CONFLICT(user_id) DO UPDATE SET updated_at = ?
       `).bind(user.sub, now, now, now).run();
       result.test_write = 'SUCCESS';

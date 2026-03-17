@@ -1,6 +1,6 @@
 # API Smoke Test Report (cloudflare-workers-github-oauth-1)
 
-Date: 2026-03-16 (UTC)
+Date: 2026-03-17 (JST)
 Target: Local `wrangler dev` (Cloudflare Workers runtime)
 Scope: Basic API smoke tests for `/api` endpoints in `README.md`
 
@@ -60,7 +60,7 @@ None. All planned checks completed (see results below).
   - `Content-Type: application/json`
   - Security headers present (HSTS/CSP/XFO/etc.)
   - Body: auth required error JSON returned (expected unauthenticated behavior)
-- Command: `curl -i -X POST http://127.0.0.1:8787/api/settings/timezone -H 'Content-Type: application/json' -d '{"timezone":"UTC"}'`
+- Command: `curl -i -X POST http://127.0.0.1:8787/api/settings/timezone -H 'Content-Type: application/json' -d '{"timezone":"JST"}'`
 - Result: `HTTP/1.1 401 Unauthorized`
 - Notes:
   - `Content-Type: application/json`
@@ -87,7 +87,7 @@ None. All planned checks completed (see results below).
 - Notes:
   - `Content-Type: application/json`
   - Body: auth required error JSON returned (cookie-based auth not established)
-- Command: `curl -b /tmp/cookies.txt -i -X POST http://127.0.0.1:8787/api/settings/timezone -H 'Content-Type: application/json' -d '{"timezone":"UTC"}'`
+- Command: `curl -b /tmp/cookies.txt -i -X POST http://127.0.0.1:8787/api/settings/timezone -H 'Content-Type: application/json' -d '{"timezone":"JST"}'`
 - Result: `HTTP/1.1 401 Unauthorized`
 - Notes:
   - `Content-Type: application/json`

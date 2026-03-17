@@ -18,7 +18,7 @@ export function getSettingsPage(user: {
 }): string {
   const displayName = escapeHtml(user.name || user.username);
   const initials = escapeHtml((user.name || user.username).substring(0, 2).toUpperCase());
-  const currentTimezone = user.timezone || 'UTC';
+  const currentTimezone = user.timezone || 'JST';
   const currentSessionDuration = user.sessionDuration || '1h';
   const requestedScopes = user.githubScopes ? user.githubScopes.split(/\s+/).filter(Boolean) : [];
   const grantedScopes = user.githubGrantedScopes ?? null;
@@ -240,8 +240,8 @@ export function getSettingsPage(user: {
             <div class="setting-control">
               <div class="setting-select-wrapper">
                 <select class="timezone-select" id="timezoneSelect" onchange="onTimezoneChange()" disabled>
-                  <option value="UTC" ${currentTimezone === 'UTC' ? 'selected' : ''}>UTC (Default)</option>
-                  <option value="JST" ${currentTimezone === 'JST' ? 'selected' : ''}>JST (+9)</option>
+                  <option value="JST" ${currentTimezone === 'JST' ? 'selected' : ''}>JST (Default, +9)</option>
+                  <option value="UTC" ${currentTimezone === 'UTC' ? 'selected' : ''}>UTC</option>
                 </select>
               </div>
               <input type="checkbox" class="setting-checkbox" id="timezoneCheckbox" onchange="toggleTimezoneEdit()">

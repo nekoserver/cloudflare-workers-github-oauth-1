@@ -91,7 +91,7 @@ cloudflare-workers-github-oauth/
 | `/api/protected` | GET | 必須 | 保護リソースアクセス |
 | `/api/profile` | GET | 必須 | ユーザープロフィール取得 |
 | `/api/profile` | PUT | 必須 | 表示名更新 (D1に保存) |
-| `/api/settings/timezone` | POST | 必須 | タイムゾーン変更 (UTC/JST) |
+| `/api/settings/timezone` | POST | 必須 | タイムゾーン変更 (JST/UTC、デフォルトJST) |
 | `/api/settings/session-duration` | POST | 必須 | セッション有効期限変更 |
 
 ---
@@ -148,7 +148,7 @@ cloudflare-workers-github-oauth/
 |---|---|---|
 | `id` | INTEGER (PK, AUTO) | 主キー |
 | `user_id` | TEXT (UNIQUE, NOT NULL) | GitHubユーザー名 |
-| `timezone` | TEXT (DEFAULT 'UTC') | タイムゾーン設定 |
+| `timezone` | TEXT (DEFAULT 'JST') | タイムゾーン設定 |
 | `session_duration` | TEXT (DEFAULT '1h') | セッション有効期限設定 |
 | `display_name` | TEXT | 表示名 |
 | `last_login_at` | TEXT | 前回ログイン日時 (ISO 8601) |
@@ -246,7 +246,7 @@ cloudflare-workers-github-oauth/
 - アカウント情報 (ユーザー名、名前、メール)
 - ログイン状況 (ログイン日時、有効期限、残り時間のリアルタイムカウントダウン)
 - セッション有効期限設定 (チェックボックスで編集有効化 → 保存/キャンセル)
-- タイムゾーン設定 (UTC/JST、チェックボックスで編集有効化 → 保存/キャンセル)
+- タイムゾーン設定 (JST/UTC、チェックボックスで編集有効化 → 保存/キャンセル)
 - 期限切れ時に自動的にトップページへリダイレクト
 
 ### セッション期限切れトースト
@@ -259,7 +259,7 @@ cloudflare-workers-github-oauth/
 ## 既知の設計判断・制約
 
 - **レートリミット**: アプリ内には実装せず、Cloudflare WAFのRate Limiting Rulesで対応する方針 (コメントで明示)
-- **タイムゾーン**: UTC/JSTの2択。手動オフセット計算 (+9h) でIntl API不使用
+- **タイムゾーン**: JST/UTCの2択 (デフォルトJST)。手動オフセット計算 (+9h) でIntl API不使用
 - **JWTライブラリ不使用**: Web Crypto APIを直接使用した独自実装
 - **SSR**: Honoのテンプレートリテラルで全ページをサーバーサイドレンダリング (SPAフレームワーク不使用)
 - **D1オプション化**: D1未設定でもコア機能 (OAuth + JWT認証) は動作する

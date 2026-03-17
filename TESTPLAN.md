@@ -87,7 +87,7 @@ GitHub OAuth + JWT 認証を中心にした Cloudflare Workers 実装の品質�
 - `/api/profile` で JWT payload を返す
 
 ### 8.4 設定 API
-- `/api/settings/timezone` で `UTC/JST` のみ許可
+- `/api/settings/timezone` で `JST/UTC` のみ許可 (デフォルトJST)
 - `/api/settings/session-duration` で許可リスト検証
 - Cookie 設定が反映される
 
