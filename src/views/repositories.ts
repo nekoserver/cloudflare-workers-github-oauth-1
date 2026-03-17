@@ -88,6 +88,7 @@ export function getRepositoriesPage(user: {
           <span class="repo-meta-item">⭐ ${repo.stars}</span>
           <span class="repo-meta-item">🍴 ${repo.forks}</span>
           <span class="repo-meta-item">🕒 ${updatedAt}</span>
+          <span class="repo-issues-pill repo-meta-item" data-issues-pill="1">🐛 Issue+PR: 取得中...</span>
           <span class="repo-meta-item">${commitLink}</span>
         </div>
       </div>
@@ -215,6 +216,9 @@ export function getRepositoriesPage(user: {
     .repo-description { font-size: 14px; color: #4a5568; min-height: 22px; }
     .repo-meta { display: flex; flex-wrap: wrap; gap: 8px; font-size: 12px; color: #718096; justify-content: flex-end; }
     .repo-meta-item { background: #edf2f7; padding: 4px 10px; border-radius: 999px; }
+    .repo-issues-pill { padding: 4px 10px; border-radius: 999px; font-weight: 700; }
+    .repo-issues-pill.has-issues { background: #fed7e2; color: #97266d; }
+    .repo-issues-pill.no-issues { background: #c6f6d5; color: #22543d; }
     .repo-meta-link { color: #2b6cb0; text-decoration: none; font-weight: 700; }
     .repo-meta-link:hover { text-decoration: underline; }
     .repo-meta-muted { color: #a0aec0; font-weight: 700; }
@@ -326,12 +330,19 @@ export function getRepositoriesPage(user: {
     }
     .toast {
       position: fixed; right: 24px; bottom: 24px; z-index: 3000;
-      padding: 12px 16px; border-radius: 12px; font-size: 13px; font-weight: 700;
-      box-shadow: 0 16px 36px rgba(0,0,0,0.25); display: none; max-width: 320px;
+      padding: 12px 14px; border-radius: 12px; font-size: 13px; font-weight: 700;
+      box-shadow: 0 16px 36px rgba(0,0,0,0.25); display: none; max-width: 360px;
+      align-items: center; gap: 12px; justify-content: space-between;
     }
-    .toast.show { display: block; animation: toastIn 0.2s ease; }
+    .toast.show { display: flex; animation: toastIn 0.2s ease; }
     .toast.success { background: #c6f6d5; color: #22543d; }
     .toast.error { background: #fed7e2; color: #97266d; }
+    .toast-message { flex: 1; }
+    .toast-btn {
+      border: none; border-radius: 999px; padding: 4px 10px; font-weight: 800;
+      background: rgba(255,255,255,0.7); color: inherit; cursor: pointer; font-size: 12px;
+    }
+    .toast-btn:hover { background: rgba(255,255,255,0.9); }
     @keyframes toastIn {
       from { opacity: 0; transform: translateY(10px); }
       to { opacity: 1; transform: translateY(0); }
@@ -553,14 +564,19 @@ export function getRepositoriesPage(user: {
       </div>
     </div>
   </div>
-  <div class="toast" id="repoToast"></div>
+  <div class="toast" id="repoToast">
+    <span class="toast-message" id="repoToastMessage"></span>
+    <button class="toast-btn" id="repoToastClose" type="button">OK</button>
+  </div>
 
   <script>
     var toastEl = document.getElementById('repoToast');
+    var toastMessageEl = document.getElementById('repoToastMessage');
+    var toastCloseBtn = document.getElementById('repoToastClose');
     var toastTimer = null;
     function showToast(message, type, durationMs) {
-      if (!toastEl) return;
-      toastEl.textContent = message;
+      if (!toastEl || !toastMessageEl) return;
+      toastMessageEl.textContent = message;
       toastEl.classList.remove('success', 'error');
       toastEl.classList.add(type);
       toastEl.classList.add('show');
@@ -571,6 +587,14 @@ export function getRepositoriesPage(user: {
       toastTimer = setTimeout(function() {
         toastEl.classList.remove('show');
       }, ms);
+    }
+    if (toastCloseBtn) {
+      toastCloseBtn.addEventListener('click', function() {
+        if (toastTimer) {
+          clearTimeout(toastTimer);
+        }
+        toastEl.classList.remove('show');
+      });
     }
 
     function toggleDropdown() {
@@ -613,6 +637,63 @@ export function getRepositoriesPage(user: {
     }
     function setCookie(name, value) {
       document.cookie = name + '=' + encodeURIComponent(value) + '; Path=/; SameSite=Lax; Max-Age=31536000';
+    }
+
+    // ===== Issues+PR 取得 =====
+    var issuesCountCache = {};
+    var issuesCountPending = {};
+    var permissionToastShown = false;
+
+    function requestIssuesCount(owner, repoName) {
+      var key = owner + '/' + repoName;
+      if (issuesCountCache.hasOwnProperty(key)) {
+        return Promise.resolve(issuesCountCache[key]);
+      }
+      if (issuesCountPending[key]) {
+        return issuesCountPending[key];
+      }
+      var p = fetch('/api/repositories/' + encodeURIComponent(owner) + '/' + encodeURIComponent(repoName) + '/issues-count', {
+        headers: { 'Accept': 'application/json' },
+      })
+        .then(function(res) {
+          if (!res.ok) {
+            var err = new Error(res.status === 403 ? 'PERMISSION' : 'FAILED');
+            err.status = res.status;
+            throw err;
+          }
+          return res.json();
+        })
+        .then(function(data) {
+          if (typeof data.count === 'number') {
+            issuesCountCache[key] = data.count;
+            return data.count;
+          }
+          var err = new Error('FAILED');
+          err.status = 500;
+          throw err;
+        })
+        .finally(function() {
+          delete issuesCountPending[key];
+        });
+      issuesCountPending[key] = p;
+      return p;
+    }
+
+    function handlePermissionToastOnce() {
+      if (permissionToastShown) return;
+      permissionToastShown = true;
+      showToast('Issues+PRの取得権限が不足しています(METADATA : read)', 'error', 20000);
+    }
+
+    function updateIssuesPill(pillEl, count) {
+      if (!pillEl) return;
+      pillEl.textContent = '🐛 Issue+PR: ' + count;
+      pillEl.classList.remove('has-issues', 'no-issues');
+      if (count > 0) {
+        pillEl.classList.add('has-issues');
+      } else {
+        pillEl.classList.add('no-issues');
+      }
     }
 
     // ===== フィルタ状態の読み込み =====
@@ -826,30 +907,17 @@ export function getRepositoriesPage(user: {
           if (!owner || !repoName) {
             issuesEl.textContent = '🐛 Issue+PR: 取得不可';
           } else {
-            fetch('/api/repositories/' + encodeURIComponent(owner) + '/' + encodeURIComponent(repoName) + '/issues-count', {
-              headers: { 'Accept': 'application/json' },
-            })
-              .then(function(res) {
-                if (!res.ok) {
-                  if (res.status === 403) {
-                    throw new Error('PERMISSION');
-                  }
-                  throw new Error('Failed to fetch');
-                }
-                return res.json();
-              })
-              .then(function(data) {
-                if (typeof data.count === 'number') {
-                  issuesEl.textContent = '🐛 Issue+PR: ' + data.count;
-                  showToast('Issue+PR: ' + data.count + ' 件', 'success', 5000);
-                } else {
-                  issuesEl.textContent = '🐛 Issue+PR: 取得不可';
-                }
+            requestIssuesCount(owner, repoName)
+              .then(function(count) {
+                issuesEl.textContent = '🐛 Issue+PR: ' + count;
+                showToast('Issue+PR: ' + count + ' 件', 'success', 5000);
+                var pill = rowEl.querySelector('[data-issues-pill=\"1\"]');
+                updateIssuesPill(pill, count);
               })
               .catch(function(err) {
                 issuesEl.textContent = '🐛 Issue+PR: 取得不可';
                 if (err && err.message === 'PERMISSION') {
-                  showToast('Issues+PRの取得権限が不足しています(METADATA : read)', 'error', 20000);
+                  handlePermissionToastOnce();
                 }
               });
           }
@@ -917,6 +985,24 @@ export function getRepositoriesPage(user: {
         }
         openPermissionsModal(repoName, owner, row);
       });
+    });
+
+    // 初回読み込み時に全リポジトリのIssue+PR数を取得
+    document.querySelectorAll('.repo-row').forEach(function(row) {
+      var repoName = row.getAttribute('data-repo') || '';
+      var owner = row.getAttribute('data-owner') || '';
+      var pill = row.querySelector('[data-issues-pill=\"1\"]');
+      if (!owner || !repoName || !pill) return;
+      requestIssuesCount(owner, repoName)
+        .then(function(count) {
+          updateIssuesPill(pill, count);
+        })
+        .catch(function(err) {
+          pill.textContent = '🐛 Issue+PR: 取得不可';
+          if (err && err.message === 'PERMISSION') {
+            handlePermissionToastOnce();
+          }
+        });
     });
 
     // ===== Zanzibar Tuples Modal =====
