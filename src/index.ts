@@ -15,7 +15,7 @@ import { getWelcomePage } from './views/welcome';
 import { getSettingsPage } from './views/settings';
 import { getRepositoriesPage } from './views/repositories';
 import { getUserInfoPage } from './views/userinfo';
-import { getGitHubAccessToken, getGitHubLatestCommit, getGitHubTokenScopes, getGitHubUser, getGitHubUserEmail, getGitHubUserRepos, GitHubTokenScopesError, buildRepoInstallationPermissionsMap, RepoInstallationPermissions, getGitHubUserInstallationsWithDiag, getGitHubInstallationRepos, getExternalServiceLinkedRepos, getSlackLinkedReposByWebhooks } from './utils/github';
+import { getGitHubAccessToken, getGitHubLatestCommit, getGitHubRepoOpenIssuesCount, getGitHubTokenScopes, getGitHubUser, getGitHubUserEmail, getGitHubUserRepos, GitHubTokenScopesError, buildRepoInstallationPermissionsMap, RepoInstallationPermissions, getGitHubUserInstallationsWithDiag, getGitHubInstallationRepos, getExternalServiceLinkedRepos, getSlackLinkedReposByWebhooks } from './utils/github';
 import { getCookieValue, getCookieValues } from './utils/cookie';
 import { verifyResendWebhookSignature } from './utils/resendWebhook';
 import { verifyGitHubWebhookSignature } from './utils/githubWebhook';
@@ -769,6 +769,7 @@ app.get('/repositories', optionalAuthMiddleware, async (c) => {
   const accessToken = userSession?.githubAccessToken ?? user.github_access_token ?? undefined;
 
   let repositories: {
+    owner: string;
     name: string;
     htmlUrl: string;
     description?: string | null;
@@ -838,6 +839,7 @@ app.get('/repositories', optionalAuthMiddleware, async (c) => {
         ? await getGitHubLatestCommit({ owner, repo: repo.name, accessToken })
         : null;
       return {
+        owner,
         name: repo.name,
         htmlUrl: repo.html_url,
         description: repo.description,
@@ -863,6 +865,7 @@ app.get('/repositories', optionalAuthMiddleware, async (c) => {
             ? await getGitHubLatestCommit({ owner, repo: repo.name })
             : null;
           return {
+            owner,
             name: repo.name,
             htmlUrl: repo.html_url,
             description: repo.description,
@@ -1124,6 +1127,33 @@ app.post('/webhook/github', async (c) => {
 // =====================================================
 // API エンドポイント
 // =====================================================
+
+app.get('/api/repositories/:owner/:repo/issues-count', optionalAuthMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!user) {
+    return c.json({ error: 'Unauthorized' }, 401);
+  }
+
+  const owner = c.req.param('owner');
+  const repo = c.req.param('repo');
+  if (!owner || !repo) {
+    return c.json({ error: 'Invalid repository parameters' }, 400);
+  }
+
+  const userSession = await getUserSession(c.env.DB, user.sub);
+  const accessToken = userSession?.githubAccessToken ?? user.github_access_token ?? undefined;
+
+  let count = await getGitHubRepoOpenIssuesCount({ owner, repo, accessToken });
+  if (count === null && accessToken) {
+    count = await getGitHubRepoOpenIssuesCount({ owner, repo });
+  }
+
+  if (count === null) {
+    return c.json({ error: 'Failed to fetch issues count' }, 502);
+  }
+
+  return c.json({ count });
+});
 
 /**
  * Resend webhook受信用エンドポイント
