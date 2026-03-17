@@ -236,6 +236,22 @@ GitHub App の **「Install App」** フローでは、コールバックが `/g
 > **参考**: レート制限の残量はレスポンスヘッダー `X-RateLimit-Remaining` で確認できます。
 > 本アプリでは D1 キャッシュ（`repo_cache` / `user_cache` / `commit_calendar_cache`）により API 呼び出しを削減しています。
 
+### D1 キャッシュ設計（3層構造）
+
+GitHub API の消費を抑えるため、D1 に 3 層のキャッシュを持ちます。
+
+| Layer | テーブル | 内容 | TTL |
+|---|---|---|---|
+| Layer 1 | `commit_calendar_cache` | 過去月のコミット数（不変データ） | 無期限 |
+| Layer 2 | `repo_cache` | 最新コミット・Issue/PR 数等（リポジトリ単位） | 短め（TTL ベース） |
+| Layer 3 | `user_cache` | リポジトリ一覧・Installation 情報（ユーザー単位） | 短め（TTL ベース） |
+
+- **Layer 1** は過去の確定月データなので一度取得すれば永続。API を再度叩かない
+- **Layer 2/3** は TTL 経過後に GitHub API から再取得してキャッシュを更新する
+- キャッシュヒット時は D1 のみで完結し、GitHub API を消費しない
+
+> 詳細なクエリプラン・TTL 設計・キャッシュ無効化戦略は今後ドキュメント化予定。
+
 ## 環境変数
 
 | 変数名 | 必須 | 説明 |
