@@ -220,6 +220,22 @@ GitHub App の **「Install App」** フローでは、コールバックが `/g
 | 秘密情報管理 | `wrangler secret`（`[vars]` に平文なし） |
 | 不審アクセス通知 | JWT 検証失敗・ログイン失敗・App 変更を Slack 通知 |
 
+## GitHub API レート制限
+
+本アプリは GitHub API を使用するため、以下のレート制限に注意が必要です。
+
+| 種別 | 制限 | 備考 |
+|---|---|---|
+| 認証済みリクエスト (REST) | 5,000 req/h | OAuth token 使用時 |
+| 未認証リクエスト (REST) | 60 req/h | IP ベース |
+| Search API | 30 req/min (認証済み) | 未認証は 10 req/min |
+| GraphQL API | 5,000 ポイント/h | クエリの複雑さで消費量変動 |
+| コンテンツ作成 | 80 req/min | Issue・Comment・PR 作成等 |
+| GitHub App (Installation) | 5,000 req/h | App ごと。大規模 Org は上限増 |
+
+> **参考**: レート制限の残量はレスポンスヘッダー `X-RateLimit-Remaining` で確認できます。
+> 本アプリでは D1 キャッシュ（`repo_cache` / `user_cache` / `commit_calendar_cache`）により API 呼び出しを削減しています。
+
 ## 環境変数
 
 | 変数名 | 必須 | 説明 |
