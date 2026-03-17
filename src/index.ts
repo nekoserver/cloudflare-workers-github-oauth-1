@@ -1157,6 +1157,7 @@ app.get('/api/repositories/:owner/:repo/issues-count', optionalAuthMiddleware, a
 });
 
 // コミットカレンダー（月別コミット数）
+// 過去の確定月はD1キャッシュを参照し、当月のみGitHub APIに問い合わせる
 app.get('/api/repositories/:owner/:repo/commits-calendar', optionalAuthMiddleware, async (c) => {
   const user = c.get('user');
   if (!user) {
@@ -1180,6 +1181,26 @@ app.get('/api/repositories/:owner/:repo/commits-calendar', optionalAuthMiddlewar
     return c.json({ error: 'Invalid year/month parameters' }, 400);
   }
 
+  // 過去の月かどうか判定（当月・未来月はキャッシュ不可）
+  const isPastMonth = year < now.getFullYear() || (year === now.getFullYear() && month < now.getMonth() + 1);
+
+  // 過去月ならD1キャッシュを確認
+  if (isPastMonth && c.env.DB) {
+    try {
+      const cached = await c.env.DB.prepare(
+        'SELECT counts FROM commit_calendar_cache WHERE owner = ? AND repo = ? AND year = ? AND month = ?'
+      ).bind(owner, repo, year, month).first<{ counts: string }>();
+      if (cached) {
+        return c.json({ year, month, counts: JSON.parse(cached.counts), cached: true });
+      }
+    } catch (e) {
+      logger.warn('Failed to read commit calendar cache from D1', {
+        owner, repo, year: String(year), month: String(month),
+        error: e instanceof Error ? e.message : 'Unknown error',
+      });
+    }
+  }
+
   const userSession = await getUserSession(c.env.DB, user.sub);
   const accessToken = userSession?.githubAccessToken ?? user.github_access_token ?? undefined;
 
@@ -1188,6 +1209,21 @@ app.get('/api/repositories/:owner/:repo/commits-calendar', optionalAuthMiddlewar
   }
 
   const counts = await getGitHubRepoCommitsByMonth({ owner, repo, year, month, accessToken });
+
+  // 過去月の結果をD1にキャッシュ保存
+  if (isPastMonth && c.env.DB) {
+    try {
+      await c.env.DB.prepare(
+        'INSERT INTO commit_calendar_cache (owner, repo, year, month, counts, cached_at) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT (owner, repo, year, month) DO UPDATE SET counts = excluded.counts, cached_at = excluded.cached_at'
+      ).bind(owner, repo, year, month, JSON.stringify(counts), now.toISOString()).run();
+    } catch (e) {
+      logger.warn('Failed to write commit calendar cache to D1', {
+        owner, repo, year: String(year), month: String(month),
+        error: e instanceof Error ? e.message : 'Unknown error',
+      });
+    }
+  }
+
   return c.json({ year, month, counts });
 });
 
