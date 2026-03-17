@@ -203,7 +203,17 @@ export async function getGitHubUserRepos(params: { username?: string; accessToke
   while (nextUrl) {
     const response = await fetch(nextUrl, { headers });
     if (!response.ok) {
-      throw new Error(`Failed to fetch GitHub repositories: ${response.status}`);
+      const rateLimitRemaining = response.headers.get('X-RateLimit-Remaining');
+      const rateLimitReset = response.headers.get('X-RateLimit-Reset');
+      const retryAfter = response.headers.get('Retry-After');
+      let detail = `status=${response.status}`;
+      if (rateLimitRemaining !== null) detail += ` remaining=${rateLimitRemaining}`;
+      if (rateLimitReset) {
+        const resetDate = new Date(parseInt(rateLimitReset, 10) * 1000);
+        detail += ` reset=${resetDate.toISOString()}`;
+      }
+      if (retryAfter) detail += ` retry-after=${retryAfter}`;
+      throw new Error(`Failed to fetch GitHub repositories: ${detail}`);
     }
 
     const pageRepos = await response.json<GitHubRepo[]>();

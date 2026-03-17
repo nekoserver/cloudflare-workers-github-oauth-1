@@ -826,16 +826,15 @@ app.get('/repositories', optionalAuthMiddleware, async (c) => {
     }
   }
 
+  const timezone = userSession?.timezone || DEFAULT_TIMEZONE;
+
   try {
     let repos = await getGitHubUserRepos({ username: user.sub, accessToken });
-    repositories = await Promise.all(repos.map(async (repo) => {
+    repositories = repos.map((repo) => {
       const updatedAt = repo.updated_at
         ? formatTimestampWithTimezone(new Date(repo.updated_at), timezone)
         : '不明';
       const owner = repo.owner?.login || (repo.full_name ? repo.full_name.split('/')[0] : user.sub);
-      const latestCommit = owner
-        ? await getGitHubLatestCommit({ owner, repo: repo.name, accessToken })
-        : null;
       return {
         owner,
         name: repo.name,
@@ -846,10 +845,10 @@ app.get('/repositories', optionalAuthMiddleware, async (c) => {
         forks: repo.forks_count ?? 0,
         updatedAt,
         isPrivate: repo.private,
-        latestCommitSha: latestCommit?.sha ?? null,
-        latestCommitUrl: latestCommit?.html_url ?? null,
+        latestCommitSha: null as string | null,
+        latestCommitUrl: null as string | null,
       };
-    }));
+    });
   } catch (error) {
     const primaryError = error instanceof Error ? error.message : 'Unknown error';
     logger.error('Failed to fetch GitHub repositories (primary)', {
@@ -859,14 +858,11 @@ app.get('/repositories', optionalAuthMiddleware, async (c) => {
     if (accessToken) {
       try {
         const repos = await getGitHubUserRepos({ username: user.sub });
-        repositories = await Promise.all(repos.map(async (repo) => {
+        repositories = repos.map((repo) => {
           const updatedAt = repo.updated_at
             ? formatTimestampWithTimezone(new Date(repo.updated_at), timezone)
             : '不明';
           const owner = repo.owner?.login || (repo.full_name ? repo.full_name.split('/')[0] : user.sub);
-          const latestCommit = owner
-            ? await getGitHubLatestCommit({ owner, repo: repo.name })
-            : null;
           return {
             owner,
             name: repo.name,
@@ -877,10 +873,10 @@ app.get('/repositories', optionalAuthMiddleware, async (c) => {
             forks: repo.forks_count ?? 0,
             updatedAt,
             isPrivate: repo.private,
-            latestCommitSha: latestCommit?.sha ?? null,
-            latestCommitUrl: latestCommit?.html_url ?? null,
+            latestCommitSha: null as string | null,
+            latestCommitUrl: null as string | null,
           };
-        }));
+        });
       } catch (fallbackError) {
         const fallbackMsg = fallbackError instanceof Error ? fallbackError.message : 'Unknown error';
         logger.error('Failed to fetch GitHub repositories (fallback)', {
@@ -1156,6 +1152,20 @@ app.get('/api/repositories/:owner/:repo/issues-count', optionalAuthMiddleware, a
   }
 
   return c.json({ count: result.count });
+});
+
+// 最新コミット取得（クライアントサイド遅延取得用）
+app.get('/api/repositories/:owner/:repo/latest-commit', optionalAuthMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!user) {
+    return c.json({ error: 'Unauthorized' }, 401);
+  }
+  const owner = c.req.param('owner');
+  const repo = c.req.param('repo');
+  const userSession = await getUserSession(c.env.DB, user.sub);
+  const accessToken = userSession?.githubAccessToken ?? user.github_access_token ?? undefined;
+  const commit = await getGitHubLatestCommit({ owner, repo, accessToken });
+  return c.json({ sha: commit?.sha ?? null, html_url: commit?.html_url ?? null });
 });
 
 // コミットカレンダー（月別コミット数）

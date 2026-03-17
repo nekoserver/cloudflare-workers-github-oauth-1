@@ -68,11 +68,9 @@ export function getRepositoriesPage(user: {
         ${name}
       </a>
     `;
-    const commitLink = repo.latestCommitSha && repo.latestCommitUrl
-      ? `<a class="repo-meta-link" href="${repo.latestCommitUrl}" target="_blank" rel="noreferrer">🔗 ${escapeHtml(repo.latestCommitSha.substring(0, 7))}</a>`
-      : `<span class="repo-meta-muted">🔗 なし</span>`;
+    const commitLink = `<span class="repo-commit-link repo-meta-item" data-commit-link="1">🔗 取得中...</span>`;
     return `
-      <div class="repo-row" data-owner="${owner}" data-repo="${name}" data-updated="${repo.updatedAt}" data-description="${repo.description ? escapeHtml(repo.description) : ''}" data-language="${language}" data-stars="${repo.stars}" data-forks="${repo.forks}" data-private="${repo.isPrivate}" data-commit-sha="${repo.latestCommitSha ? escapeHtml(repo.latestCommitSha.substring(0, 7)) : ''}" data-commit-url="${repo.latestCommitUrl ? escapeHtml(repo.latestCommitUrl) : ''}">
+      <div class="repo-row" data-owner="${owner}" data-repo="${name}" data-updated="${repo.updatedAt}" data-description="${repo.description ? escapeHtml(repo.description) : ''}" data-language="${language}" data-stars="${repo.stars}" data-forks="${repo.forks}" data-private="${repo.isPrivate}">
         <div class="repo-main">
           <div class="repo-title">
             <h3 class="repo-name">${repoLink}</h3>
@@ -89,7 +87,7 @@ export function getRepositoriesPage(user: {
           <span class="repo-meta-item">🍴 ${repo.forks}</span>
           <span class="repo-meta-item">🕒 ${updatedAt}</span>
           <span class="repo-issues-pill repo-meta-item" data-issues-pill="1">🐛 Issue+PR: 取得中...</span>
-          <span class="repo-meta-item">${commitLink}</span>
+          ${commitLink}
         </div>
       </div>
     `;
@@ -699,6 +697,26 @@ export function getRepositoriesPage(user: {
       document.cookie = name + '=' + encodeURIComponent(value) + '; Path=/; SameSite=Lax; Max-Age=31536000';
     }
 
+    // ===== 最新コミット遅延取得 =====
+    function fetchLatestCommit(owner, repoName, el) {
+      fetch('/api/repositories/' + encodeURIComponent(owner) + '/' + encodeURIComponent(repoName) + '/latest-commit', {
+        headers: { 'Accept': 'application/json' },
+      })
+        .then(function(res) { return res.ok ? res.json() : null; })
+        .then(function(data) {
+          if (data && data.sha && data.html_url) {
+            el.innerHTML = '<a class="repo-meta-link" href="' + data.html_url + '" target="_blank" rel="noreferrer">🔗 ' + data.sha.substring(0, 7) + '</a>';
+          } else {
+            el.textContent = '🔗 なし';
+            el.classList.add('repo-meta-muted');
+          }
+        })
+        .catch(function() {
+          el.textContent = '🔗 取得不可';
+          el.classList.add('repo-meta-muted');
+        });
+    }
+
     // ===== Issues+PR 取得 =====
     var issuesCountCache = {};
     var issuesCountPending = {};
@@ -1065,6 +1083,15 @@ export function getRepositoriesPage(user: {
             handlePermissionToastOnce();
           }
         });
+    });
+
+    // 初回読み込み時に全リポジトリの最新コミットを遅延取得
+    document.querySelectorAll('.repo-row').forEach(function(row) {
+      var repoName = row.getAttribute('data-repo') || '';
+      var owner = row.getAttribute('data-owner') || '';
+      var commitEl = row.querySelector('[data-commit-link=\"1\"]');
+      if (!owner || !repoName || !commitEl) return;
+      fetchLatestCommit(owner, repoName, commitEl);
     });
 
     // ===== Zanzibar Tuples Modal =====
