@@ -15,7 +15,7 @@ import { getWelcomePage } from './views/welcome';
 import { getSettingsPage } from './views/settings';
 import { getRepositoriesPage } from './views/repositories';
 import { getUserInfoPage } from './views/userinfo';
-import { getCacheStatusPage, CacheStatusData } from './views/status';
+import { getCacheStatusPage, CacheStatusData, TableStatusEntry, UserContextInfo } from './views/status';
 import { ensureDefaultWorkspace, getCurrentWorkspace, getUserWorkspaces, switchWorkspace } from './utils/workspace';
 import { getGitHubAccessToken, getGitHubLatestCommit, getGitHubRepoOpenIssuesCount, getGitHubRepoCommitsByMonth, getGitHubTokenScopes, getGitHubUser, getGitHubUserEmail, getGitHubUserRepos, GitHubTokenScopesError, buildRepoInstallationPermissionsMap, RepoInstallationPermissions, getGitHubUserInstallationsWithDiag, getGitHubInstallationRepos, getExternalServiceLinkedRepos, getSlackLinkedReposByWebhooks } from './utils/github';
 import { getCookieValue, getCookieValues } from './utils/cookie';
@@ -770,13 +770,70 @@ app.get('/status', authMiddleware, async (c) => {
   const data: CacheStatusData = {
     commitCache: { totalEntries: 0, totalCommits: 0, repos: [], byMonth: [], entries: [] },
     installationPerms: { totalEntries: 0, entries: [] },
+    tables: [],
+    userContext: {
+      teamName: null, teamId: null,
+      workspaceName: null, workspaceId: null,
+      role: null,
+      allWorkspaces: [],
+    },
   };
 
   if (db) {
-    // 現在のワークスペースのコミットキャッシュのみ取得
+    // ワークスペース情報を取得
     const wsInfo = await getCurrentWorkspace(db, user.sub);
     const workspaceId = wsInfo?.workspaceId ?? '';
 
+    // ユーザーコンテキスト情報を構築
+    data.userContext.teamName = wsInfo?.teamName ?? null;
+    data.userContext.teamId = wsInfo?.teamId ?? null;
+    data.userContext.workspaceName = wsInfo?.workspaceName ?? null;
+    data.userContext.workspaceId = wsInfo?.workspaceId ?? null;
+    data.userContext.allWorkspaces = await getUserWorkspaces(db, user.sub);
+
+    // ロール取得
+    if (wsInfo?.teamId) {
+      try {
+        const roleRow = await db.prepare(
+          'SELECT role FROM team_members WHERE team_id = ? AND user_id = ?'
+        ).bind(wsInfo.teamId, user.sub).first<{ role: string }>();
+        data.userContext.role = roleRow?.role ?? null;
+      } catch {
+        // ignore
+      }
+    }
+
+    // テーブル別マイグレーション状況を収集
+    const tableDefinitions: { name: string; migration: string; description: string }[] = [
+      { name: 'user_sessions', migration: '0001', description: 'ユーザーセッション・設定' },
+      { name: 'installation_permissions', migration: '0004', description: 'GitHub App インストール権限キャッシュ' },
+      { name: 'commit_calendar_cache', migration: '0005', description: 'コミットカレンダーキャッシュ' },
+      { name: 'teams', migration: '0007', description: 'チーム管理' },
+      { name: 'workspaces', migration: '0007', description: 'ワークスペース管理' },
+      { name: 'team_members', migration: '0007', description: 'チームメンバー' },
+    ];
+
+    for (const tbl of tableDefinitions) {
+      const entry: TableStatusEntry = {
+        name: tbl.name,
+        exists: false,
+        rowCount: null,
+        migration: tbl.migration,
+        description: tbl.description,
+      };
+      try {
+        const countResult = await db.prepare(
+          `SELECT COUNT(*) AS cnt FROM ${tbl.name}`
+        ).first<{ cnt: number }>();
+        entry.exists = true;
+        entry.rowCount = countResult?.cnt ?? 0;
+      } catch {
+        // テーブルが存在しない場合 → exists = false のまま
+      }
+      data.tables.push(entry);
+    }
+
+    // コミットキャッシュ
     try {
       const cacheRows = await db.prepare(
         'SELECT owner, repo, year, month, counts, cached_at FROM commit_calendar_cache WHERE workspace_id = ? ORDER BY year DESC, month DESC'
@@ -832,7 +889,7 @@ app.get('/status', authMiddleware, async (c) => {
       });
     }
 
-    // インストール権限キャッシュ（GitHub App単位のデータなのでユーザーフィルタ不要）
+    // インストール権限キャッシュ
     try {
       const permRows = await db.prepare(
         'SELECT installation_id, repo_name, repository_selection, permissions, updated_at FROM installation_permissions ORDER BY updated_at DESC'
@@ -858,14 +915,9 @@ app.get('/status', authMiddleware, async (c) => {
     }
   }
 
-  // ワークスペース情報を取得（ルート先頭で取得済みの場合はそれを使う）
-  const statusWsInfo = db ? await getCurrentWorkspace(db, user.sub) : null;
-
   return c.html(getCacheStatusPage({
     username: user.sub,
     name: user.name,
-    workspaceName: statusWsInfo?.workspaceName ?? null,
-    teamName: statusWsInfo?.teamName ?? null,
   }, data));
 });
 
