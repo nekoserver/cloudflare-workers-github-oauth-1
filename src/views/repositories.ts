@@ -563,10 +563,13 @@ export function getRepositoriesPage(user: {
       font-size: 11px; font-weight: 700; margin-left: 2px;
     }
     .recent-commits-btn-count:empty { display: none; }
+    .recent-commits-header-actions {
+      display: flex; align-items: center; gap: 8px;
+    }
     .recent-commits-settings-link {
       font-size: 11px; color: var(--accent-color); text-decoration: none;
       font-weight: 600; white-space: nowrap; flex-shrink: 0;
-      padding: 3px 8px; border: 1px solid var(--border-color); border-radius: 6px;
+      padding: 4px 10px; border: 1px solid var(--border-color); border-radius: 6px;
       background: var(--bg-secondary); transition: background 0.2s;
     }
     .recent-commits-settings-link:hover { background: var(--border-light); text-decoration: underline; }
@@ -634,7 +637,7 @@ export function getRepositoriesPage(user: {
     }
     .recent-commits-pagination {
       display: flex; align-items: center; justify-content: center; gap: 12px;
-      margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--border-color);
+      margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px solid var(--border-color);
     }
     .recent-commits-page-btn {
       display: inline-flex; align-items: center; gap: 4px;
@@ -717,7 +720,6 @@ export function getRepositoriesPage(user: {
             コミット一覧
             <span class="recent-commits-btn-count" id="recentCommitsBtnCount"></span>
           </button>
-          <a href="/settings#recentCommitsCountItem" class="recent-commits-settings-link" title="表示件数変更">表示件数変更</a>
           <label class="toggle-switch" title="リポジトリ詳細の表示切替">
             <input type="checkbox" id="summaryToggle" />
             <span class="toggle-slider"></span>
@@ -812,17 +814,20 @@ export function getRepositoriesPage(user: {
     <div class="modal-content recent-commits-modal-content">
       <div class="modal-header">
         <span class="modal-title">📜 最終コミット一覧</span>
-        <button class="modal-close" id="recentCommitsClose" type="button">&times;</button>
+        <div class="recent-commits-header-actions">
+          <a href="/settings#recentCommitsCountItem" class="recent-commits-settings-link" title="表示件数変更">表示件数変更</a>
+          <button class="modal-close" id="recentCommitsClose" type="button">&times;</button>
+        </div>
       </div>
       <div class="modal-body">
         <div class="recent-commits-repo-name" id="recentCommitsRepoName"></div>
+        <div class="recent-commits-pagination" id="recentCommitsPagination" style="display:none">
+          <button class="recent-commits-page-btn" id="recentCommitsPagePrev" type="button" disabled>◀ 前</button>
+          <span class="recent-commits-page-info" id="recentCommitsPageInfo"></span>
+          <button class="recent-commits-page-btn" id="recentCommitsPageNext" type="button" disabled>次 ▶</button>
+        </div>
         <div class="recent-commits-summary" id="recentCommitsSummary"></div>
         <div id="recentCommitsList"></div>
-        <div class="recent-commits-pagination" id="recentCommitsPagination" style="display:none">
-          <button class="recent-commits-page-btn" id="recentCommitsPagePrev" type="button" disabled>◀ 前のページ</button>
-          <span class="recent-commits-page-info" id="recentCommitsPageInfo"></span>
-          <button class="recent-commits-page-btn" id="recentCommitsPageNext" type="button" disabled>次のページ ▶</button>
-        </div>
       </div>
     </div>
   </div>
@@ -1766,6 +1771,7 @@ export function getRepositoriesPage(user: {
 
     var rcCurrentPage = 1;
     var rcHasMore = false;
+    var rcTotalCount = null;
 
     function getRecentCommitsCount() {
       var m = document.cookie.match('(^|;)\\\\s*user_recent_commits_count=([^;]*)');
@@ -1776,6 +1782,7 @@ export function getRepositoriesPage(user: {
       if (!currentRepoName || !heatmapOwner) return;
       rcCurrentPage = 1;
       rcHasMore = false;
+      rcTotalCount = null;
       if (recentCommitsModal) recentCommitsModal.classList.add('show');
       loadRecentCommitsPage(1);
     }
@@ -1807,11 +1814,18 @@ export function getRepositoriesPage(user: {
             return;
           }
           rcHasMore = !!data.hasMore;
+          if (page === 1 && typeof data.totalCount === 'number' && data.totalCount > 0) {
+            rcTotalCount = data.totalCount;
+          }
           renderRecentCommits(data.commits, page, limit);
           updatePaginationControls(true);
           // ボタン上の件数バッジを更新（1ページ目のとき）
           if (page === 1 && recentCommitsBtnCount) {
-            recentCommitsBtnCount.textContent = data.commits.length + '件';
+            var badgeText = limit + '件';
+            if (rcTotalCount !== null) {
+              badgeText = limit + '/' + rcTotalCount + '件';
+            }
+            recentCommitsBtnCount.textContent = badgeText;
           }
         })
         .catch(function() {
@@ -1826,7 +1840,15 @@ export function getRepositoriesPage(user: {
       recentCommitsPagination.style.display = 'flex';
       if (recentCommitsPagePrev) recentCommitsPagePrev.disabled = !loaded || rcCurrentPage <= 1;
       if (recentCommitsPageNext) recentCommitsPageNext.disabled = !loaded || !rcHasMore;
-      if (recentCommitsPageInfo) recentCommitsPageInfo.textContent = rcCurrentPage + ' ページ';
+      if (recentCommitsPageInfo) {
+        var perPage = getRecentCommitsCount();
+        var totalPages = rcTotalCount !== null ? Math.ceil(rcTotalCount / perPage) : null;
+        var pageText = rcCurrentPage + ' ページ';
+        if (totalPages !== null) {
+          pageText = rcCurrentPage + ' / ' + totalPages + ' ページ';
+        }
+        recentCommitsPageInfo.textContent = pageText;
+      }
     }
 
     function renderRecentCommits(commits, page, perPage) {
@@ -1844,7 +1866,13 @@ export function getRepositoriesPage(user: {
 
       if (recentCommitsSummary) {
         var offset = (page - 1) * perPage;
-        recentCommitsSummary.textContent = (offset + 1) + '〜' + (offset + commits.length) + ' 件目（' + groupOrder.length + ' 日分）';
+        var rangeText = (offset + 1) + '〜' + (offset + commits.length) + ' 件目';
+        if (rcTotalCount !== null) {
+          rangeText += '（全 ' + rcTotalCount + ' 件中・' + groupOrder.length + ' 日分）';
+        } else {
+          rangeText += '（' + groupOrder.length + ' 日分）';
+        }
+        recentCommitsSummary.textContent = rangeText;
       }
 
       var html = '';

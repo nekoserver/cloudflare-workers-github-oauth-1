@@ -17,7 +17,7 @@ import { getRepositoriesPage } from './views/repositories';
 import { getUserInfoPage } from './views/userinfo';
 import { getCacheStatusPage, CacheStatusData, TableStatusEntry, UserContextInfo } from './views/status';
 import { ensureDefaultWorkspace, getCurrentWorkspace, getUserWorkspaces, switchWorkspace } from './utils/workspace';
-import { getGitHubAccessToken, getGitHubLatestCommit, getGitHubRepoOpenIssuesCount, getGitHubRepoCommitsByMonth, getGitHubRepoCommitsByDate, getGitHubRepoRecentCommits, getGitHubTokenScopes, getGitHubUser, getGitHubUserEmail, getGitHubUserRepos, GitHubTokenScopesError, buildRepoInstallationPermissionsMap, RepoInstallationPermissions, getGitHubUserInstallationsWithDiag, getGitHubInstallationRepos, getExternalServiceLinkedRepos, getSlackLinkedReposByWebhooks } from './utils/github';
+import { getGitHubAccessToken, getGitHubLatestCommit, getGitHubRepoOpenIssuesCount, getGitHubRepoCommitsByMonth, getGitHubRepoCommitsByDate, getGitHubRepoRecentCommits, getGitHubRepoTotalCommitCount, getGitHubTokenScopes, getGitHubUser, getGitHubUserEmail, getGitHubUserRepos, GitHubTokenScopesError, buildRepoInstallationPermissionsMap, RepoInstallationPermissions, getGitHubUserInstallationsWithDiag, getGitHubInstallationRepos, getExternalServiceLinkedRepos, getSlackLinkedReposByWebhooks } from './utils/github';
 import { getCookieValue, getCookieValues } from './utils/cookie';
 import { verifyResendWebhookSignature } from './utils/resendWebhook';
 import { verifyGitHubWebhookSignature } from './utils/githubWebhook';
@@ -1484,10 +1484,15 @@ app.get('/api/repositories/:owner/:repo/recent-commits', optionalAuthMiddleware,
     return c.json({ error: 'No access token available' }, 401);
   }
 
-  const commits = await getGitHubRepoRecentCommits({ owner, repo, limit, page, accessToken });
+  const [commits, totalCount] = await Promise.all([
+    getGitHubRepoRecentCommits({ owner, repo, limit, page, accessToken }),
+    page === 1
+      ? getGitHubRepoTotalCommitCount({ owner, repo, accessToken })
+      : Promise.resolve(null),
+  ]);
   const hasMore = commits.length === limit;
 
-  return c.json({ commits, page, hasMore });
+  return c.json({ commits, page, hasMore, totalCount });
 });
 
 /**

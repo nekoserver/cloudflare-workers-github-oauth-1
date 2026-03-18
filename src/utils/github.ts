@@ -760,8 +760,44 @@ export async function getGitHubRepoRecentCommits(params: {
   return commits;
 }
 
-// =====================================================
-// Webhook URL ベースの外部サービス連携判定
+/**
+ * リポジトリの総コミット数を取得する
+ * per_page=1 でリクエストし、Link ヘッダーの last ページ番号から推定する
+ */
+export async function getGitHubRepoTotalCommitCount(params: {
+  owner: string;
+  repo: string;
+  accessToken?: string;
+}): Promise<number | null> {
+  const { owner, repo, accessToken } = params;
+
+  const headers: Record<string, string> = {
+    'Accept': 'application/vnd.github+json',
+    'User-Agent': 'Cloudflare-Workers-GitHub-OAuth',
+    'X-GitHub-Api-Version': '2022-11-28',
+  };
+  if (accessToken) {
+    headers['Authorization'] = `Bearer ${accessToken}`;
+  }
+
+  const url = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/commits?per_page=1`;
+  const response = await fetch(url, { headers });
+  if (!response.ok) return null;
+
+  const linkHeader = response.headers.get('Link');
+  if (!linkHeader) {
+    // Link ヘッダーがない場合は1ページ分（0 or 1件）
+    const data = await response.json<unknown[]>();
+    return Array.isArray(data) ? data.length : null;
+  }
+
+  const lastMatch = linkHeader.match(/<[^>]*[?&]page=(\d+)[^>]*>;\s*rel="last"/);
+  if (lastMatch) {
+    return parseInt(lastMatch[1], 10);
+  }
+
+  return null;
+}
 // =====================================================
 
 /** GitHub リポジトリの Webhook 情報 */
