@@ -18,7 +18,7 @@ import { getUserInfoPage } from './views/userinfo';
 import { getMarkdownPreviewPage } from './views/markdown-preview';
 import { getCacheStatusPage, CacheStatusData, TableStatusEntry, UserContextInfo } from './views/status';
 import { ensureDefaultWorkspace, getCurrentWorkspace, getUserWorkspaces, switchWorkspace } from './utils/workspace';
-import { getGitHubAccessToken, getGitHubLatestCommit, getGitHubRepoOpenIssuesCount, getGitHubRepoCommitsByMonth, getGitHubRepoCommitsByDate, getGitHubRepoRecentCommits, getGitHubRepoTotalCommitCount, getGitHubTokenScopes, getGitHubUser, getGitHubUserEmail, getGitHubUserRepos, GitHubTokenScopesError, buildRepoInstallationPermissionsMap, RepoInstallationPermissions, getGitHubUserInstallationsWithDiag, getGitHubInstallationRepos, getExternalServiceLinkedRepos, getSlackLinkedReposByWebhooks, CommitDetail } from './utils/github';
+import { getGitHubAccessToken, getGitHubLatestCommit, getGitHubRepoOpenIssuesCount, getGitHubRepoCommitsByMonth, getGitHubRepoCommitsByDate, getGitHubTokenScopes, getGitHubUser, getGitHubUserEmail, getGitHubUserRepos, GitHubTokenScopesError, buildRepoInstallationPermissionsMap, RepoInstallationPermissions, getGitHubUserInstallationsWithDiag, getGitHubInstallationRepos, getExternalServiceLinkedRepos, getSlackLinkedReposByWebhooks, CommitDetail } from './utils/github';
 import { getCookieValue, getCookieValues } from './utils/cookie';
 import { verifyResendWebhookSignature } from './utils/resendWebhook';
 import { verifyGitHubWebhookSignature } from './utils/githubWebhook';
@@ -1469,127 +1469,50 @@ app.get('/api/repositories/:owner/:repo/commits-by-date', optionalAuthMiddleware
     return c.json({ error: 'No access token available' }, 401);
   }
 
-  const commits = await getGitHubRepoCommitsByDate({ owner, repo, date, accessToken });
-
-  return c.json({ date, commits });
-});
-
-// 直近コミット一覧を取得する（更新のない日を含まず、limit件まで）
-// 過去の確定日（アクセス当日以外）のコミットはD1にキャッシュし、次回以降はキャッシュから取得する
-app.get('/api/repositories/:owner/:repo/recent-commits', optionalAuthMiddleware, async (c) => {
-  const user = c.get('user');
-  if (!user) {
-    return c.json({ error: 'Unauthorized' }, 401);
-  }
-
-  const owner = c.req.param('owner');
-  const repo = c.req.param('repo');
-  const limitParam = c.req.query('limit');
-  const limit = Math.min(Math.max(parseInt(limitParam || '20', 10) || 20, 1), 100);
-  const pageParam = c.req.query('page');
-  const page = Math.max(parseInt(pageParam || '1', 10) || 1, 1);
-
-  const userSession = await getUserSession(c.env.DB, user.sub);
-  const accessToken = userSession?.githubAccessToken ?? user.github_access_token ?? undefined;
-
-  if (!accessToken) {
-    return c.json({ error: 'No access token available' }, 401);
-  }
-
   // ワークスペースIDを解決（キャッシュのネームスペース分離に使用）
   const wsInfo = c.env.DB ? await getCurrentWorkspace(c.env.DB, user.sub) : null;
   const workspaceId = wsInfo?.workspaceId ?? '';
 
-  const now = new Date();
-  const todayStr = now.toISOString().substring(0, 10); // YYYY-MM-DD (UTC)
-
-  // Step 1: キャッシュから過去日のコミットを取得
-  let cachedPastCommits: CommitDetail[] = [];
-  let hasCacheData = false;
-
+  // Step 1: D1キャッシュから参照
   if (c.env.DB && workspaceId) {
     try {
       const cached = await c.env.DB.prepare(
-        'SELECT date, commits_json FROM commit_list_cache WHERE workspace_id = ? AND owner = ? AND repo = ? ORDER BY date DESC'
-      ).bind(workspaceId, owner, repo).all<{ date: string; commits_json: string }>();
+        'SELECT commits_json FROM commit_list_cache WHERE workspace_id = ? AND owner = ? AND repo = ? AND date = ?'
+      ).bind(workspaceId, owner, repo, date).first<{ commits_json: string }>();
 
-      if (cached.results && cached.results.length > 0) {
-        hasCacheData = true;
-        for (const row of cached.results) {
-          const dateCommits: CommitDetail[] = JSON.parse(row.commits_json);
-          cachedPastCommits.push(...dateCommits);
-        }
+      if (cached) {
+        const commits: CommitDetail[] = JSON.parse(cached.commits_json);
+        return c.json({ date, commits, source: 'cache' });
       }
     } catch (e) {
       logger.warn('Failed to read commit list cache from D1', {
-        owner, repo,
+        owner, repo, date,
         error: e instanceof Error ? e.message : 'Unknown error',
       });
     }
   }
 
-  // Step 2: キャッシュがある場合、キャッシュからの応答を試みる
-  if (hasCacheData) {
-    // 当日のコミットは常にGitHubから取得（当日はキャッシュ不可）
-    let todayCommits: CommitDetail[] = [];
-    try {
-      todayCommits = await getGitHubRepoCommitsByDate({ owner, repo, date: todayStr, accessToken });
-    } catch {
-      // 当日コミット取得失敗は無視
-    }
+  // Step 2: キャッシュに無い → GitHubから取得
+  const commits = await getGitHubRepoCommitsByDate({ owner, repo, date, accessToken });
 
-    const combined = [...todayCommits, ...cachedPastCommits];
-    const offset = (page - 1) * limit;
-
-    // キャッシュ＋当日データで要求ページを満たせる場合はキャッシュから応答
-    if (combined.length > offset) {
-      const pageCommits = combined.slice(offset, offset + limit);
-      const hasMore = combined.length > offset + limit;
-      // totalCount はキャッシュからは正確に分からないため null
-      return c.json({ commits: pageCommits, page, hasMore, totalCount: null, source: 'cache', newlyCached: false });
-    }
-    // キャッシュが不足している場合は GitHub にフォールバック
-  }
-
-  // Step 3: GitHubから取得（キャッシュなし or キャッシュ不足）
-  const [commits, totalCount] = await Promise.all([
-    getGitHubRepoRecentCommits({ owner, repo, limit, page, accessToken }),
-    page === 1
-      ? getGitHubRepoTotalCommitCount({ owner, repo, accessToken })
-      : Promise.resolve(null),
-  ]);
-  const hasMore = commits.length === limit;
-
-  // Step 4: 過去日のコミットをキャッシュに書き込み
-  let newlyCached = false;
+  // Step 3: 取得結果をキャッシュに保存
   if (c.env.DB && workspaceId && commits.length > 0) {
     try {
-      const commitsByDate: Record<string, CommitDetail[]> = {};
-      for (const commit of commits) {
-        const day = commit.date ? commit.date.substring(0, 10) : '';
-        if (day && day < todayStr) {
-          if (!commitsByDate[day]) commitsByDate[day] = [];
-          commitsByDate[day].push(commit);
-        }
-      }
-
-      for (const [date, dateCommits] of Object.entries(commitsByDate)) {
-        await c.env.DB.prepare(
-          'INSERT INTO commit_list_cache (workspace_id, owner, repo, date, commits_json, commit_count, cached_at) VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT (workspace_id, owner, repo, date) DO UPDATE SET commits_json = excluded.commits_json, commit_count = excluded.commit_count, cached_at = excluded.cached_at'
-        ).bind(workspaceId, owner, repo, date, JSON.stringify(dateCommits), dateCommits.length, now.toISOString()).run();
-      }
-
-      newlyCached = Object.keys(commitsByDate).length > 0;
+      const now = new Date();
+      await c.env.DB.prepare(
+        'INSERT INTO commit_list_cache (workspace_id, owner, repo, date, commits_json, commit_count, cached_at) VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT (workspace_id, owner, repo, date) DO UPDATE SET commits_json = excluded.commits_json, commit_count = excluded.commit_count, cached_at = excluded.cached_at'
+      ).bind(workspaceId, owner, repo, date, JSON.stringify(commits), commits.length, now.toISOString()).run();
     } catch (e) {
       logger.warn('Failed to write commit list cache to D1', {
-        owner, repo,
+        owner, repo, date,
         error: e instanceof Error ? e.message : 'Unknown error',
       });
     }
   }
 
-  return c.json({ commits, page, hasMore, totalCount, source: 'github', newlyCached });
+  return c.json({ date, commits, source: 'github' });
 });
+
 
 /**
  * Resend webhook受信用エンドポイント
