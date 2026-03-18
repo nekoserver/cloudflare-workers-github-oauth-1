@@ -616,6 +616,86 @@ export async function getGitHubRepoCommitsByMonth(params: {
   return counts;
 }
 
+/** 特定日のコミット詳細情報 */
+export interface CommitDetail {
+  sha: string;
+  message: string;
+  authorName: string;
+  authorLogin: string;
+  authorAvatarUrl: string;
+  date: string;
+  url: string;
+}
+
+/**
+ * 指定リポジトリの特定日のコミット一覧を取得する
+ * @returns コミット詳細の配列
+ */
+export async function getGitHubRepoCommitsByDate(params: {
+  owner: string;
+  repo: string;
+  date: string; // YYYY-MM-DD
+  accessToken?: string;
+}): Promise<CommitDetail[]> {
+  const { owner, repo, date, accessToken } = params;
+
+  // date の翌日を計算
+  const since = new Date(date + 'T00:00:00Z');
+  const until = new Date(since.getTime() + 24 * 60 * 60 * 1000);
+
+  const headers: Record<string, string> = {
+    'Accept': 'application/vnd.github+json',
+    'User-Agent': 'Cloudflare-Workers-GitHub-OAuth',
+    'X-GitHub-Api-Version': '2022-11-28',
+  };
+  if (accessToken) {
+    headers['Authorization'] = `Bearer ${accessToken}`;
+  }
+
+  const commits: CommitDetail[] = [];
+  let nextUrl: string | null = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/commits?since=${since.toISOString()}&until=${until.toISOString()}&per_page=100`;
+
+  while (nextUrl) {
+    const response = await fetch(nextUrl, { headers });
+    if (!response.ok) {
+      break;
+    }
+
+    const data = await response.json<{
+      sha?: string;
+      html_url?: string;
+      commit?: {
+        message?: string;
+        author?: { name?: string; date?: string };
+      };
+      author?: { login?: string; avatar_url?: string };
+    }[]>();
+
+    for (const c of data) {
+      const authorDate = c.commit?.author?.date;
+      if (!authorDate) continue;
+      const day = authorDate.substring(0, 10);
+      if (day !== date) continue;
+
+      commits.push({
+        sha: c.sha ?? '',
+        message: c.commit?.message ?? '',
+        authorName: c.commit?.author?.name ?? '',
+        authorLogin: c.author?.login ?? '',
+        authorAvatarUrl: c.author?.avatar_url ?? '',
+        date: authorDate,
+        url: c.html_url ?? '',
+      });
+    }
+
+    const linkHeader = response.headers.get('Link');
+    const nextMatch = linkHeader?.match(/<([^>]+)>;\s*rel="next"/);
+    nextUrl = nextMatch ? nextMatch[1] : null;
+  }
+
+  return commits;
+}
+
 // =====================================================
 // Webhook URL ベースの外部サービス連携判定
 // =====================================================

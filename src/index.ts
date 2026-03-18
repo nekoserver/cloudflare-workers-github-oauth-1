@@ -17,7 +17,7 @@ import { getRepositoriesPage } from './views/repositories';
 import { getUserInfoPage } from './views/userinfo';
 import { getCacheStatusPage, CacheStatusData, TableStatusEntry, UserContextInfo } from './views/status';
 import { ensureDefaultWorkspace, getCurrentWorkspace, getUserWorkspaces, switchWorkspace } from './utils/workspace';
-import { getGitHubAccessToken, getGitHubLatestCommit, getGitHubRepoOpenIssuesCount, getGitHubRepoCommitsByMonth, getGitHubTokenScopes, getGitHubUser, getGitHubUserEmail, getGitHubUserRepos, GitHubTokenScopesError, buildRepoInstallationPermissionsMap, RepoInstallationPermissions, getGitHubUserInstallationsWithDiag, getGitHubInstallationRepos, getExternalServiceLinkedRepos, getSlackLinkedReposByWebhooks } from './utils/github';
+import { getGitHubAccessToken, getGitHubLatestCommit, getGitHubRepoOpenIssuesCount, getGitHubRepoCommitsByMonth, getGitHubRepoCommitsByDate, getGitHubTokenScopes, getGitHubUser, getGitHubUserEmail, getGitHubUserRepos, GitHubTokenScopesError, buildRepoInstallationPermissionsMap, RepoInstallationPermissions, getGitHubUserInstallationsWithDiag, getGitHubInstallationRepos, getExternalServiceLinkedRepos, getSlackLinkedReposByWebhooks } from './utils/github';
 import { getCookieValue, getCookieValues } from './utils/cookie';
 import { verifyResendWebhookSignature } from './utils/resendWebhook';
 import { verifyGitHubWebhookSignature } from './utils/githubWebhook';
@@ -1421,6 +1421,37 @@ app.get('/api/repositories/:owner/:repo/commits-calendar', optionalAuthMiddlewar
   }
 
   return c.json({ year, month, counts });
+});
+
+// 特定日のコミット詳細一覧を取得する
+app.get('/api/repositories/:owner/:repo/commits-by-date', optionalAuthMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!user) {
+    return c.json({ error: 'Unauthorized' }, 401);
+  }
+
+  const owner = c.req.param('owner');
+  const repo = c.req.param('repo');
+  const date = c.req.query('date'); // YYYY-MM-DD
+
+  if (!owner || !repo || !date) {
+    return c.json({ error: 'owner, repo, date are required' }, 400);
+  }
+
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    return c.json({ error: 'Invalid date format. Use YYYY-MM-DD' }, 400);
+  }
+
+  const userSession = await getUserSession(c.env.DB, user.sub);
+  const accessToken = userSession?.githubAccessToken ?? user.github_access_token ?? undefined;
+
+  if (!accessToken) {
+    return c.json({ error: 'No access token available' }, 401);
+  }
+
+  const commits = await getGitHubRepoCommitsByDate({ owner, repo, date, accessToken });
+
+  return c.json({ date, commits });
 });
 
 /**
