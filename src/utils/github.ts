@@ -704,9 +704,10 @@ export async function getGitHubRepoRecentCommits(params: {
   owner: string;
   repo: string;
   limit: number;
+  page?: number;
   accessToken?: string;
 }): Promise<CommitDetail[]> {
-  const { owner, repo, limit, accessToken } = params;
+  const { owner, repo, limit, page, accessToken } = params;
 
   const headers: Record<string, string> = {
     'Accept': 'application/vnd.github+json',
@@ -719,7 +720,8 @@ export async function getGitHubRepoRecentCommits(params: {
 
   const commits: CommitDetail[] = [];
   const perPage = Math.min(limit, 100);
-  let nextUrl: string | null = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/commits?per_page=${perPage}`;
+  const pageParam = page && page > 1 ? `&page=${page}` : '';
+  let nextUrl: string | null = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/commits?per_page=${perPage}${pageParam}`;
 
   while (nextUrl && commits.length < limit) {
     const response = await fetch(nextUrl, { headers });
