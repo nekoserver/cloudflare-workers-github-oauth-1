@@ -18,7 +18,7 @@ import { getUserInfoPage } from './views/userinfo';
 import { getMarkdownPreviewPage } from './views/markdown-preview';
 import { getCacheStatusPage, CacheStatusData, TableStatusEntry, UserContextInfo } from './views/status';
 import { ensureDefaultWorkspace, getCurrentWorkspace, getUserWorkspaces, switchWorkspace } from './utils/workspace';
-import { getGitHubAccessToken, getGitHubLatestCommit, getGitHubRepoOpenIssuesCount, getGitHubRepoCommitsByMonth, getGitHubRepoCommitsByDate, getGitHubRepoRecentCommits, getGitHubRepoTotalCommitCount, getGitHubTokenScopes, getGitHubUser, getGitHubUserEmail, getGitHubUserRepos, GitHubTokenScopesError, buildRepoInstallationPermissionsMap, RepoInstallationPermissions, getGitHubUserInstallationsWithDiag, getGitHubInstallationRepos, getExternalServiceLinkedRepos, getSlackLinkedReposByWebhooks } from './utils/github';
+import { getGitHubAccessToken, getGitHubLatestCommit, getGitHubRepoOpenIssuesCount, getGitHubRepoCommitsByMonth, getGitHubRepoCommitsByDate, getGitHubRepoRecentCommits, getGitHubRepoTotalCommitCount, getGitHubTokenScopes, getGitHubUser, getGitHubUserEmail, getGitHubUserRepos, GitHubTokenScopesError, buildRepoInstallationPermissionsMap, RepoInstallationPermissions, getGitHubUserInstallationsWithDiag, getGitHubInstallationRepos, getExternalServiceLinkedRepos, getSlackLinkedReposByWebhooks, CommitDetail } from './utils/github';
 import { getCookieValue, getCookieValues } from './utils/cookie';
 import { verifyResendWebhookSignature } from './utils/resendWebhook';
 import { verifyGitHubWebhookSignature } from './utils/githubWebhook';
@@ -723,10 +723,11 @@ app.get('/settings', authMiddleware, async (c) => {
   const user = c.get('user');
 
   const cookieHeader = c.req.header('Cookie');
-  const cookieVals = getCookieValues(cookieHeader, ['user_timezone', 'user_session_duration', 'user_recent_commits_count']);
+  const cookieVals = getCookieValues(cookieHeader, ['user_timezone', 'user_session_duration', 'user_recent_commits_count', 'user_toast_duration']);
   const timezone = cookieVals['user_timezone'] || DEFAULT_TIMEZONE;
   const sessionDuration = cookieVals['user_session_duration'] || '1h';
   const recentCommitsCount = parseInt(cookieVals['user_recent_commits_count'] || '20', 10) || 20;
+  const toastDuration = parseInt(cookieVals['user_toast_duration'] || '10', 10) || 10;
 
   let issuedAt: string;
   let expiresAt: string;
@@ -776,6 +777,7 @@ app.get('/settings', authMiddleware, async (c) => {
     timezone: resolvedTimezone,
     sessionDuration,
     recentCommitsCount,
+    toastDuration,
     githubScopes: GITHUB_OAUTH_SCOPE,
     githubGrantedScopes: grantedScopes,
     githubScopeError: scopesError,
@@ -847,6 +849,7 @@ app.get('/status', authMiddleware, async (c) => {
       { name: 'teams', migration: '0007', description: 'チーム管理' },
       { name: 'workspaces', migration: '0007', description: 'ワークスペース管理' },
       { name: 'team_members', migration: '0007', description: 'チームメンバー' },
+      { name: 'commit_list_cache', migration: '0008', description: 'コミット一覧キャッシュ' },
     ];
 
     for (const tbl of tableDefinitions) {
@@ -1472,6 +1475,7 @@ app.get('/api/repositories/:owner/:repo/commits-by-date', optionalAuthMiddleware
 });
 
 // 直近コミット一覧を取得する（更新のない日を含まず、limit件まで）
+// 過去の確定日（アクセス当日以外）のコミットはD1にキャッシュし、次回以降はキャッシュから取得する
 app.get('/api/repositories/:owner/:repo/recent-commits', optionalAuthMiddleware, async (c) => {
   const user = c.get('user');
   if (!user) {
@@ -1492,6 +1496,62 @@ app.get('/api/repositories/:owner/:repo/recent-commits', optionalAuthMiddleware,
     return c.json({ error: 'No access token available' }, 401);
   }
 
+  // ワークスペースIDを解決（キャッシュのネームスペース分離に使用）
+  const wsInfo = c.env.DB ? await getCurrentWorkspace(c.env.DB, user.sub) : null;
+  const workspaceId = wsInfo?.workspaceId ?? '';
+
+  const now = new Date();
+  const todayStr = now.toISOString().substring(0, 10); // YYYY-MM-DD (UTC)
+
+  // Step 1: キャッシュから過去日のコミットを取得
+  let cachedPastCommits: CommitDetail[] = [];
+  let hasCacheData = false;
+
+  if (c.env.DB && workspaceId) {
+    try {
+      const cached = await c.env.DB.prepare(
+        'SELECT date, commits_json FROM commit_list_cache WHERE workspace_id = ? AND owner = ? AND repo = ? ORDER BY date DESC'
+      ).bind(workspaceId, owner, repo).all<{ date: string; commits_json: string }>();
+
+      if (cached.results && cached.results.length > 0) {
+        hasCacheData = true;
+        for (const row of cached.results) {
+          const dateCommits: CommitDetail[] = JSON.parse(row.commits_json);
+          cachedPastCommits.push(...dateCommits);
+        }
+      }
+    } catch (e) {
+      logger.warn('Failed to read commit list cache from D1', {
+        owner, repo,
+        error: e instanceof Error ? e.message : 'Unknown error',
+      });
+    }
+  }
+
+  // Step 2: キャッシュがある場合、キャッシュからの応答を試みる
+  if (hasCacheData) {
+    // 当日のコミットは常にGitHubから取得（当日はキャッシュ不可）
+    let todayCommits: CommitDetail[] = [];
+    try {
+      todayCommits = await getGitHubRepoCommitsByDate({ owner, repo, date: todayStr, accessToken });
+    } catch {
+      // 当日コミット取得失敗は無視
+    }
+
+    const combined = [...todayCommits, ...cachedPastCommits];
+    const offset = (page - 1) * limit;
+
+    // キャッシュ＋当日データで要求ページを満たせる場合はキャッシュから応答
+    if (combined.length > offset) {
+      const pageCommits = combined.slice(offset, offset + limit);
+      const hasMore = combined.length > offset + limit;
+      // totalCount はキャッシュからは正確に分からないため null
+      return c.json({ commits: pageCommits, page, hasMore, totalCount: null, source: 'cache', newlyCached: false });
+    }
+    // キャッシュが不足している場合は GitHub にフォールバック
+  }
+
+  // Step 3: GitHubから取得（キャッシュなし or キャッシュ不足）
   const [commits, totalCount] = await Promise.all([
     getGitHubRepoRecentCommits({ owner, repo, limit, page, accessToken }),
     page === 1
@@ -1500,7 +1560,35 @@ app.get('/api/repositories/:owner/:repo/recent-commits', optionalAuthMiddleware,
   ]);
   const hasMore = commits.length === limit;
 
-  return c.json({ commits, page, hasMore, totalCount });
+  // Step 4: 過去日のコミットをキャッシュに書き込み
+  let newlyCached = false;
+  if (c.env.DB && workspaceId && commits.length > 0) {
+    try {
+      const commitsByDate: Record<string, CommitDetail[]> = {};
+      for (const commit of commits) {
+        const day = commit.date ? commit.date.substring(0, 10) : '';
+        if (day && day < todayStr) {
+          if (!commitsByDate[day]) commitsByDate[day] = [];
+          commitsByDate[day].push(commit);
+        }
+      }
+
+      for (const [date, dateCommits] of Object.entries(commitsByDate)) {
+        await c.env.DB.prepare(
+          'INSERT INTO commit_list_cache (workspace_id, owner, repo, date, commits_json, commit_count, cached_at) VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT (workspace_id, owner, repo, date) DO UPDATE SET commits_json = excluded.commits_json, commit_count = excluded.commit_count, cached_at = excluded.cached_at'
+        ).bind(workspaceId, owner, repo, date, JSON.stringify(dateCommits), dateCommits.length, now.toISOString()).run();
+      }
+
+      newlyCached = Object.keys(commitsByDate).length > 0;
+    } catch (e) {
+      logger.warn('Failed to write commit list cache to D1', {
+        owner, repo,
+        error: e instanceof Error ? e.message : 'Unknown error',
+      });
+    }
+  }
+
+  return c.json({ commits, page, hasMore, totalCount, source: 'github', newlyCached });
 });
 
 /**
@@ -1884,6 +1972,31 @@ app.post('/api/settings/recent-commits-count', authMiddleware, async (c) => {
       error: error instanceof Error ? error.message : 'Unknown error',
     });
     return c.json({ error: '表示件数の変更に失敗しました' }, 500);
+  }
+});
+
+/**
+ * トースト通知の表示時間設定変更
+ */
+app.post('/api/settings/toast-duration', authMiddleware, async (c) => {
+  try {
+    const { duration } = await c.req.json();
+    const num = parseInt(duration, 10);
+
+    if (isNaN(num) || num < 1 || num > 60) {
+      return c.json({ error: 'トースト表示時間は1〜60秒の範囲で指定してください' }, 400);
+    }
+
+    c.header('Set-Cookie', `user_toast_duration=${num}; Path=/; Secure; SameSite=Lax; Max-Age=31536000`);
+
+    return c.json({ message: 'トースト表示時間を変更しました', duration: num }, 200);
+  } catch (error) {
+    const user = c.get('user');
+    logger.error('Toast duration update error', {
+      userId: user?.sub,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    return c.json({ error: 'トースト表示時間の変更に失敗しました' }, 500);
   }
 });
 
