@@ -808,6 +808,11 @@ app.get('/status', authMiddleware, async (c) => {
   const data: CacheStatusData = {
     commitCache: { totalEntries: 0, totalCommits: 0, repos: [], byMonth: [], entries: [] },
     installationPerms: { totalEntries: 0, entries: [] },
+    cacheStats: {
+      totalGithubFetch: 0, totalCacheSave: 0,
+      totalCacheLookup: 0, totalCacheHit: 0,
+      entries: [],
+    },
     tables: [],
     userContext: {
       teamName: null, teamId: null,
@@ -850,6 +855,7 @@ app.get('/status', authMiddleware, async (c) => {
       { name: 'workspaces', migration: '0007', description: 'ワークスペース管理' },
       { name: 'team_members', migration: '0007', description: 'チームメンバー' },
       { name: 'commit_list_cache', migration: '0008', description: 'コミット一覧キャッシュ' },
+      { name: 'cache_stats', migration: '0009', description: 'キャッシュ統計' },
     ];
 
     for (const tbl of tableDefinitions) {
@@ -949,6 +955,40 @@ app.get('/status', authMiddleware, async (c) => {
       }
     } catch (error) {
       logger.warn('Failed to fetch installation permissions for status page', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+
+    // キャッシュ統計（ユーザー別）
+    try {
+      const statsRows = await db.prepare(
+        'SELECT owner, repo, github_fetch_count, cache_save_count, cache_lookup_count, cache_hit_count, last_updated_at FROM cache_stats WHERE user_id = ? ORDER BY last_updated_at DESC'
+      ).bind(user.sub).all<{
+        owner: string; repo: string;
+        github_fetch_count: number; cache_save_count: number;
+        cache_lookup_count: number; cache_hit_count: number;
+        last_updated_at: string;
+      }>();
+
+      if (statsRows.results) {
+        for (const row of statsRows.results) {
+          data.cacheStats.entries.push({
+            owner: row.owner,
+            repo: row.repo,
+            githubFetchCount: row.github_fetch_count,
+            cacheSaveCount: row.cache_save_count,
+            cacheLookupCount: row.cache_lookup_count,
+            cacheHitCount: row.cache_hit_count,
+            lastUpdatedAt: row.last_updated_at,
+          });
+          data.cacheStats.totalGithubFetch += row.github_fetch_count;
+          data.cacheStats.totalCacheSave += row.cache_save_count;
+          data.cacheStats.totalCacheLookup += row.cache_lookup_count;
+          data.cacheStats.totalCacheHit += row.cache_hit_count;
+        }
+      }
+    } catch (error) {
+      logger.warn('Failed to fetch cache stats for status page', {
         error: error instanceof Error ? error.message : 'Unknown error',
       });
     }
@@ -1473,14 +1513,32 @@ app.get('/api/repositories/:owner/:repo/commits-by-date', optionalAuthMiddleware
   const wsInfo = c.env.DB ? await getCurrentWorkspace(c.env.DB, user.sub) : null;
   const workspaceId = wsInfo?.workspaceId ?? '';
 
+  // キャッシュ統計を更新するヘルパー
+  const incrementCacheStat = async (field: 'github_fetch_count' | 'cache_save_count' | 'cache_lookup_count' | 'cache_hit_count') => {
+    if (!c.env.DB) return;
+    try {
+      const now = new Date().toISOString();
+      await c.env.DB.prepare(
+        `INSERT INTO cache_stats (user_id, owner, repo, ${field}, last_updated_at) VALUES (?, ?, ?, 1, ?) ON CONFLICT (user_id, owner, repo) DO UPDATE SET ${field} = ${field} + 1, last_updated_at = excluded.last_updated_at`
+      ).bind(user.sub, owner, repo, now).run();
+    } catch (e) {
+      logger.warn('Failed to update cache stats', {
+        field, owner, repo,
+        error: e instanceof Error ? e.message : 'Unknown error',
+      });
+    }
+  };
+
   // Step 1: D1キャッシュから参照
   if (c.env.DB && workspaceId) {
     try {
+      await incrementCacheStat('cache_lookup_count');
       const cached = await c.env.DB.prepare(
         'SELECT commits_json FROM commit_list_cache WHERE workspace_id = ? AND owner = ? AND repo = ? AND date = ?'
       ).bind(workspaceId, owner, repo, date).first<{ commits_json: string }>();
 
       if (cached) {
+        await incrementCacheStat('cache_hit_count');
         const commits: CommitDetail[] = JSON.parse(cached.commits_json);
         return c.json({ date, commits, source: 'cache' });
       }
@@ -1493,6 +1551,7 @@ app.get('/api/repositories/:owner/:repo/commits-by-date', optionalAuthMiddleware
   }
 
   // Step 2: キャッシュに無い → GitHubから取得
+  await incrementCacheStat('github_fetch_count');
   const commits = await getGitHubRepoCommitsByDate({ owner, repo, date, accessToken });
 
   // Step 3: 取得結果をキャッシュに保存
@@ -1502,6 +1561,7 @@ app.get('/api/repositories/:owner/:repo/commits-by-date', optionalAuthMiddleware
       await c.env.DB.prepare(
         'INSERT INTO commit_list_cache (workspace_id, owner, repo, date, commits_json, commit_count, cached_at) VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT (workspace_id, owner, repo, date) DO UPDATE SET commits_json = excluded.commits_json, commit_count = excluded.commit_count, cached_at = excluded.cached_at'
       ).bind(workspaceId, owner, repo, date, JSON.stringify(commits), commits.length, now.toISOString()).run();
+      await incrementCacheStat('cache_save_count');
     } catch (e) {
       logger.warn('Failed to write commit list cache to D1', {
         owner, repo, date,
