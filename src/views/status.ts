@@ -317,6 +317,7 @@ export function getCacheStatusPage(user: {
           <a href="/repositories" class="dropdown-item">📦 リポジトリ</a>
           <a href="/userinfo" class="dropdown-item">👤 ユーザー情報</a>
           <a href="/settings" class="dropdown-item">⚙️ 設定</a>
+          <a href="/auth/switch" class="dropdown-item">🔄 別アカウントでログイン</a>
           <a href="/auth/logout" class="dropdown-item logout">🚪 ログアウト</a>
         </div>
       </div>
