@@ -1474,6 +1474,8 @@ app.get('/api/repositories/:owner/:repo/recent-commits', optionalAuthMiddleware,
   const repo = c.req.param('repo');
   const limitParam = c.req.query('limit');
   const limit = Math.min(Math.max(parseInt(limitParam || '20', 10) || 20, 1), 100);
+  const pageParam = c.req.query('page');
+  const page = Math.max(parseInt(pageParam || '1', 10) || 1, 1);
 
   const userSession = await getUserSession(c.env.DB, user.sub);
   const accessToken = userSession?.githubAccessToken ?? user.github_access_token ?? undefined;
@@ -1482,9 +1484,10 @@ app.get('/api/repositories/:owner/:repo/recent-commits', optionalAuthMiddleware,
     return c.json({ error: 'No access token available' }, 401);
   }
 
-  const commits = await getGitHubRepoRecentCommits({ owner, repo, limit, accessToken });
+  const commits = await getGitHubRepoRecentCommits({ owner, repo, limit, page, accessToken });
+  const hasMore = commits.length === limit;
 
-  return c.json({ commits });
+  return c.json({ commits, page, hasMore });
 });
 
 /**
