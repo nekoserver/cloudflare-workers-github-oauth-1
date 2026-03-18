@@ -150,6 +150,21 @@ export function getSettingsPage(user: {
     .scope-empty { color: var(--text-muted); font-size: 12px; font-weight: 600; }
     .scope-error { color: var(--danger-color); font-size: 12px; font-weight: 600; }
     .theme-label { font-size: 14px; color: var(--text-secondary); }
+    .danger-zone-card { border: 1px solid var(--danger-color); }
+    .danger-zone-title { color: var(--danger-color); border-bottom-color: var(--danger-color); }
+    .danger-zone-item {
+      display: flex; justify-content: space-between; align-items: center; gap: 24px;
+      background: var(--bg-secondary); border-radius: 8px; padding: 16px;
+    }
+    .danger-zone-text { display: flex; flex-direction: column; gap: 4px; }
+    .danger-zone-label { font-size: 14px; font-weight: 600; color: var(--text-primary); }
+    .danger-zone-desc { font-size: 13px; color: var(--text-muted); }
+    .btn-danger {
+      background: transparent; color: var(--danger-color); border: 1px solid var(--danger-color);
+      border-radius: 6px; padding: 8px 16px; font-size: 13px; font-weight: 600;
+      cursor: pointer; white-space: nowrap; transition: background 0.2s, color 0.2s;
+    }
+    .btn-danger:hover { background: var(--danger-color); color: white; }
   </style>
 </head>
 <body>
@@ -170,7 +185,6 @@ export function getSettingsPage(user: {
           <a href="/repositories" class="dropdown-item">📦 リポジトリ</a>
           <a href="/userinfo" class="dropdown-item">👤 ユーザー情報</a>
           <a href="/status" class="dropdown-item">📊 キャッシュ状況</a>
-          <a href="/auth/switch" class="dropdown-item">🔄 別アカウントでログイン</a>
           <a href="/auth/logout" class="dropdown-item logout">🚪 ログアウト</a>
         </div>
       </div>
@@ -277,6 +291,19 @@ export function getSettingsPage(user: {
       </div>
 
       <a href="/welcome" class="back-btn">← ホームに戻る</a>
+    </div>
+
+    <div class="settings-card danger-zone-card">
+      <div class="section" style="margin-bottom: 0;">
+        <h2 class="section-title danger-zone-title">Danger Zone</h2>
+        <div class="danger-zone-item">
+          <div class="danger-zone-text">
+            <span class="danger-zone-label">このアプリへの承認を取り消す</span>
+            <span class="danger-zone-desc">現在のセッションを破棄し、GitHub OAuth の承認画面からやり直します。次回ログイン時に改めてアプリへの権限付与が求められます。</span>
+          </div>
+          <button class="btn btn-danger" onclick="confirmRevoke()">承認を取り消す</button>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -425,6 +452,12 @@ export function getSettingsPage(user: {
       document.getElementById('sessionDurationSelect').disabled = true;
       document.getElementById('sessionDurationItem').classList.add('disabled');
     }
+    function confirmRevoke() {
+      if (confirm('このアプリへの承認を取り消しますか？\\n現在のセッションが破棄され、次回ログイン時に再度承認が必要になります。')) {
+        window.location.href = '/auth/switch';
+      }
+    }
+
     window.addEventListener('click', function(e) {
       const icon = document.querySelector('.user-icon');
       const dd = document.getElementById('dropdownMenu');

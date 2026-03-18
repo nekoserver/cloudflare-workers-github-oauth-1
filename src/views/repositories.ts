@@ -515,7 +515,6 @@ export function getRepositoriesPage(user: {
           <a href="/userinfo" class="dropdown-item">👤 ユーザー情報</a>
           <a href="/settings" class="dropdown-item">⚙️ 設定</a>
           <a href="/status" class="dropdown-item">📊 キャッシュ状況</a>
-          <a href="/auth/switch" class="dropdown-item">🔄 別アカウントでログイン</a>
           <a href="/auth/logout" class="dropdown-item logout">🚪 ログアウト</a>
         </div>
       </div>
