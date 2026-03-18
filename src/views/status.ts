@@ -38,10 +38,14 @@ export interface CacheStatusData {
 export function getCacheStatusPage(user: {
   name?: string;
   username: string;
+  workspaceName?: string | null;
+  teamName?: string | null;
 }, data: CacheStatusData): string {
   const displayName = escapeHtml(user.name || user.username);
   const safeUsername = escapeHtml(user.username);
   const initials = escapeHtml((user.name || user.username).substring(0, 2).toUpperCase());
+  const safeTeamName = user.teamName ? escapeHtml(user.teamName) : null;
+  const safeWorkspaceName = user.workspaceName ? escapeHtml(user.workspaceName) : null;
 
   // リポジトリ別集計テーブル行
   const repoRows = data.commitCache.repos.map(r =>
@@ -249,7 +253,9 @@ export function getCacheStatusPage(user: {
   <div class="container">
     <div class="page-card">
       <h1 class="page-title">📊 キャッシュ状況</h1>
-      <p class="page-subtitle">${safeUsername} のキャッシュデータ</p>
+      <p class="page-subtitle">${safeTeamName && safeWorkspaceName
+        ? `${safeTeamName} / ${safeWorkspaceName}`
+        : `${safeUsername}`} のキャッシュデータ</p>
 
       <!-- サマリー -->
       <div class="summary-grid">

