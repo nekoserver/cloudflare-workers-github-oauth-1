@@ -480,7 +480,8 @@ export function getRepositoriesPage(user: {
     .heatmap-day.level-3 { background: #38a169; color: white; }
     .heatmap-day.level-4 { background: #276749; color: white; }
     .heatmap-day.today { box-shadow: inset 0 0 0 2px var(--accent-color); }
-    .heatmap-day[title] { cursor: help; }
+    .heatmap-day.has-commits { cursor: pointer; }
+    .heatmap-day.has-commits:hover { opacity: 0.8; transform: scale(1.1); transition: all 0.15s; }
     .heatmap-legend {
       display: flex; align-items: center; justify-content: center; gap: 6px;
       margin-top: 14px; font-size: 11px; color: var(--text-faint);
@@ -493,6 +494,57 @@ export function getRepositoriesPage(user: {
     }
     .heatmap-total {
       text-align: center; margin-top: 10px; font-size: 13px; font-weight: 700; color: var(--text-muted);
+    }
+
+    /* Commit Detail Modal */
+    .commit-detail-modal-content {
+      max-width: 600px; width: 92%; max-height: 80vh;
+    }
+    .commit-detail-date {
+      font-size: 14px; font-weight: 700; color: var(--text-secondary); margin-bottom: 12px;
+      padding-bottom: 8px; border-bottom: 1px solid var(--border-color);
+    }
+    .commit-detail-list {
+      overflow-y: auto; max-height: 55vh; display: flex; flex-direction: column; gap: 10px;
+    }
+    .commit-detail-item {
+      border: 1px solid var(--border-color); border-radius: 10px; padding: 12px;
+      transition: border-color 0.2s;
+    }
+    .commit-detail-item:hover { border-color: var(--accent-color); }
+    .commit-detail-header {
+      display: flex; align-items: center; gap: 8px; margin-bottom: 6px;
+    }
+    .commit-detail-avatar {
+      width: 24px; height: 24px; border-radius: 50%; flex-shrink: 0;
+    }
+    .commit-detail-author {
+      font-size: 13px; font-weight: 600; color: var(--text-secondary);
+    }
+    .commit-detail-time {
+      font-size: 11px; color: var(--text-faint); margin-left: auto;
+    }
+    .commit-detail-message {
+      font-size: 13px; color: var(--text-primary); line-height: 1.5;
+      white-space: pre-wrap; word-break: break-word;
+    }
+    .commit-detail-message-title {
+      font-weight: 600;
+    }
+    .commit-detail-message-body {
+      color: var(--text-muted); margin-top: 4px; font-size: 12px;
+    }
+    .commit-detail-sha {
+      display: inline-block; margin-top: 6px; font-size: 11px;
+      font-family: monospace; color: var(--accent-color); text-decoration: none;
+      background: var(--code-bg); padding: 2px 6px; border-radius: 4px;
+    }
+    .commit-detail-sha:hover { text-decoration: underline; }
+    .commit-detail-loading {
+      text-align: center; padding: 40px 0; font-size: 13px; color: var(--text-faint);
+    }
+    .commit-detail-empty {
+      text-align: center; padding: 40px 0; font-size: 13px; color: var(--text-faint);
     }
   </style>
 </head>
@@ -627,6 +679,20 @@ export function getRepositoriesPage(user: {
       <div class="modal-body">
         <div class="zanzibar-repo-name" id="treeRepoName"></div>
         <pre class="zanzibar-tuples tree-tuples" id="treeTuples"></pre>
+      </div>
+    </div>
+  </div>
+
+  <!-- Commit Detail Modal -->
+  <div class="modal-overlay" id="commitDetailModal">
+    <div class="modal-content commit-detail-modal-content">
+      <div class="modal-header">
+        <span class="modal-title" id="commitDetailTitle"></span>
+        <button class="modal-close" id="commitDetailClose" type="button">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="commit-detail-date" id="commitDetailDate"></div>
+        <div class="commit-detail-list" id="commitDetailList"></div>
       </div>
     </div>
   </div>
@@ -1396,8 +1462,9 @@ export function getRepositoriesPage(user: {
         var count = counts[dateStr] || 0;
         var level = getHeatmapLevel(count);
         var isToday = dateStr === todayStr;
+        var hasCommits = count > 0;
         var titleText = d + '日: ' + count + 'コミット';
-        html += '<div class="heatmap-day level-' + level + (isToday ? ' today' : '') + '" title="' + esc(titleText) + '">' + d + '</div>';
+        html += '<div class="heatmap-day level-' + level + (isToday ? ' today' : '') + (hasCommits ? ' has-commits' : '') + '" title="' + esc(titleText) + '"' + (hasCommits ? ' data-date="' + dateStr + '"' : '') + '>' + d + '</div>';
       }
       html += '</div>';
       html += '<div class="heatmap-legend">';
@@ -1452,6 +1519,98 @@ export function getRepositoriesPage(user: {
         if (heatmapMonth > 12) { heatmapMonth = 1; heatmapYear++; }
         loadAndRenderHeatmap();
       });
+    }
+
+    // ===== Commit Detail Modal =====
+    var commitDetailModal = document.getElementById('commitDetailModal');
+    var commitDetailClose = document.getElementById('commitDetailClose');
+    var commitDetailTitle = document.getElementById('commitDetailTitle');
+    var commitDetailDate = document.getElementById('commitDetailDate');
+    var commitDetailList = document.getElementById('commitDetailList');
+
+    if (commitDetailClose) {
+      commitDetailClose.addEventListener('click', function() {
+        if (commitDetailModal) commitDetailModal.classList.remove('show');
+      });
+    }
+    if (commitDetailModal) {
+      commitDetailModal.addEventListener('click', function(e) {
+        if (e.target === commitDetailModal) commitDetailModal.classList.remove('show');
+      });
+    }
+
+    // ヒートマップ日付セルのクリックイベント（イベント委任）
+    if (heatmapBody) {
+      heatmapBody.addEventListener('click', function(e) {
+        var target = e.target;
+        while (target && target !== heatmapBody) {
+          if (target.classList && target.classList.contains('has-commits') && target.getAttribute('data-date')) {
+            var date = target.getAttribute('data-date');
+            openCommitDetailModal(date);
+            return;
+          }
+          target = target.parentElement;
+        }
+      });
+    }
+
+    function openCommitDetailModal(date) {
+      if (!commitDetailModal || !commitDetailList || !commitDetailDate || !commitDetailTitle) return;
+      var parts = date.split('-');
+      var displayDate = parseInt(parts[0]) + '年' + parseInt(parts[1]) + '月' + parseInt(parts[2]) + '日';
+      commitDetailTitle.textContent = 'コミット詳細';
+      commitDetailDate.textContent = displayDate + ' のコミット';
+      commitDetailList.innerHTML = '<div class="commit-detail-loading">読み込み中...</div>';
+      commitDetailModal.classList.add('show');
+
+      var owner = heatmapOwner;
+      var repo = currentRepoName;
+      fetch('/api/repositories/' + encodeURIComponent(owner) + '/' + encodeURIComponent(repo) + '/commits-by-date?date=' + encodeURIComponent(date), {
+        headers: { 'Accept': 'application/json' },
+      })
+        .then(function(res) { return res.ok ? res.json() : null; })
+        .then(function(data) {
+          if (!data || !data.commits || data.commits.length === 0) {
+            commitDetailList.innerHTML = '<div class="commit-detail-empty">コミットが見つかりませんでした</div>';
+            return;
+          }
+          var html = '';
+          data.commits.forEach(function(commit) {
+            var msgLines = (commit.message || '').split('\\n');
+            var title = msgLines[0] || '';
+            var body = msgLines.slice(1).filter(function(l) { return l.trim() !== ''; }).join('\\n');
+            var timeStr = '';
+            if (commit.date) {
+              var d = new Date(commit.date);
+              timeStr = String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+            }
+
+            html += '<div class="commit-detail-item">';
+            html += '<div class="commit-detail-header">';
+            if (commit.authorAvatarUrl) {
+              html += '<img class="commit-detail-avatar" src="' + esc(commit.authorAvatarUrl) + '&s=48" alt="" />';
+            }
+            html += '<span class="commit-detail-author">' + esc(commit.authorLogin || commit.authorName || 'Unknown') + '</span>';
+            if (timeStr) {
+              html += '<span class="commit-detail-time">' + esc(timeStr) + '</span>';
+            }
+            html += '</div>';
+            html += '<div class="commit-detail-message">';
+            html += '<div class="commit-detail-message-title">' + esc(title) + '</div>';
+            if (body) {
+              html += '<div class="commit-detail-message-body">' + esc(body) + '</div>';
+            }
+            html += '</div>';
+            if (commit.sha && commit.url) {
+              html += '<a class="commit-detail-sha" href="' + esc(commit.url) + '" target="_blank" rel="noopener">' + esc(commit.sha.substring(0, 7)) + '</a>';
+            }
+            html += '</div>';
+          });
+          commitDetailList.innerHTML = html;
+        })
+        .catch(function() {
+          commitDetailList.innerHTML = '<div class="commit-detail-empty">読み込みに失敗しました</div>';
+        });
     }
 
     // ページ読み込み時に最新のインストール権限を1回だけ取得して差分反映
