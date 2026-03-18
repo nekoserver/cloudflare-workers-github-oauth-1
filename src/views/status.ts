@@ -1,6 +1,6 @@
 /**
- * キャッシュ状況ページのHTML
- * ログイン中のユーザー自身のキャッシュデータのみを表示する
+ * キャッシュ・DB状況ページのHTML
+ * ログイン中のユーザー自身のキャッシュデータとテーブル別マイグレーション状況を表示する
  */
 import { escapeHtml } from '../utils/html';
 import { getThemeCSS, getThemeInitScript, getThemeToggleCSS, getThemeToggleHTML, getThemeToggleScript } from '../utils/theme';
@@ -22,6 +22,25 @@ export interface InstallationPermEntry {
   updatedAt: string;
 }
 
+/** テーブル単位の状況 */
+export interface TableStatusEntry {
+  name: string;
+  exists: boolean;
+  rowCount: number | null;
+  migration: string;
+  description: string;
+}
+
+/** ユーザーのチーム・ワークスペースコンテキスト */
+export interface UserContextInfo {
+  teamName: string | null;
+  teamId: string | null;
+  workspaceName: string | null;
+  workspaceId: string | null;
+  role: string | null;
+  allWorkspaces: { workspaceId: string; workspaceName: string; teamId: string; teamName: string }[];
+}
+
 export interface CacheStatusData {
   commitCache: {
     totalEntries: number;
@@ -34,19 +53,35 @@ export interface CacheStatusData {
     totalEntries: number;
     entries: InstallationPermEntry[];
   };
+  tables: TableStatusEntry[];
+  userContext: UserContextInfo;
 }
 
 export function getCacheStatusPage(user: {
   name?: string;
   username: string;
-  workspaceName?: string | null;
-  teamName?: string | null;
 }, data: CacheStatusData): string {
   const displayName = escapeHtml(user.name || user.username);
   const safeUsername = escapeHtml(user.username);
   const initials = escapeHtml((user.name || user.username).substring(0, 2).toUpperCase());
-  const safeTeamName = user.teamName ? escapeHtml(user.teamName) : null;
-  const safeWorkspaceName = user.workspaceName ? escapeHtml(user.workspaceName) : null;
+
+  const ctx = data.userContext;
+  const safeTeamName = ctx.teamName ? escapeHtml(ctx.teamName) : null;
+  const safeWorkspaceName = ctx.workspaceName ? escapeHtml(ctx.workspaceName) : null;
+  const safeRole = ctx.role ? escapeHtml(ctx.role) : null;
+
+  // テーブル状況行
+  const tableRows = data.tables.map(t => {
+    const statusIcon = t.exists ? '<span class="status-ok">OK</span>' : '<span class="status-missing">未作成</span>';
+    const count = t.exists && t.rowCount !== null ? String(t.rowCount) : '-';
+    return `<tr>
+      <td><code>${escapeHtml(t.name)}</code></td>
+      <td class="center">${statusIcon}</td>
+      <td class="num">${count}</td>
+      <td class="migration-name">${escapeHtml(t.migration)}</td>
+      <td>${escapeHtml(t.description)}</td>
+    </tr>`;
+  }).join('');
 
   // リポジトリ別集計テーブル行
   const repoRows = data.commitCache.repos.map(r =>
@@ -95,12 +130,23 @@ export function getCacheStatusPage(user: {
     </div>`;
   }).join('');
 
+  // ワークスペース一覧行
+  const wsRows = ctx.allWorkspaces.map(ws => {
+    const isCurrent = ws.workspaceId === ctx.workspaceId;
+    return `<tr${isCurrent ? ' class="current-row"' : ''}>
+      <td>${escapeHtml(ws.teamName)}</td>
+      <td>${escapeHtml(ws.workspaceName)}</td>
+      <td class="mono">${escapeHtml(ws.workspaceId)}</td>
+      <td class="center">${isCurrent ? '<span class="status-ok">選択中</span>' : ''}</td>
+    </tr>`;
+  }).join('');
+
   return `<!DOCTYPE html>
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>キャッシュ状況 - Cloudflare Workers GitHub OAuth</title>
+  <title>DB・キャッシュ状況 - Cloudflare Workers GitHub OAuth</title>
   ${getThemeInitScript()}
   <style>
     ${getThemeCSS()}
@@ -152,6 +198,19 @@ export function getCacheStatusPage(user: {
     .page-title { font-size: 36px; font-weight: 700; color: var(--text-primary); margin-bottom: 8px; }
     .page-subtitle { font-size: 18px; color: var(--text-muted); margin-bottom: 32px; }
 
+    /* ユーザーコンテキスト */
+    .context-grid {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 12px; margin-bottom: 32px;
+    }
+    .context-card {
+      background: var(--bg-secondary); border-radius: 10px; padding: 16px;
+      border: 1px solid var(--border-color);
+    }
+    .context-card .label { font-size: 11px; color: var(--text-faint); font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px; }
+    .context-card .value { font-size: 15px; font-weight: 600; color: var(--text-primary); word-break: break-all; }
+    .context-card .value.mono { font-family: 'Monaco', 'Courier New', monospace; font-size: 12px; color: var(--text-muted); }
+
     /* サマリーカード */
     .summary-grid {
       display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
@@ -186,8 +245,16 @@ export function getCacheStatusPage(user: {
     }
     .data-table tr:hover { background: var(--bg-secondary); }
     .data-table .num { text-align: right; font-variant-numeric: tabular-nums; }
+    .data-table .center { text-align: center; }
     .data-table .date { font-size: 12px; color: var(--text-muted); white-space: nowrap; }
+    .data-table .mono { font-family: 'Monaco', 'Courier New', monospace; font-size: 12px; color: var(--text-muted); }
+    .data-table .migration-name { font-family: 'Monaco', 'Courier New', monospace; font-size: 11px; color: var(--text-faint); white-space: nowrap; }
+    .data-table code { background: var(--code-bg); padding: 2px 6px; border-radius: 4px; font-size: 13px; }
     .all-repos { color: var(--accent-color); font-weight: 600; font-size: 12px; }
+    .status-ok { color: #48bb78; font-weight: 700; font-size: 12px; }
+    .status-missing { color: var(--danger-color); font-weight: 700; font-size: 12px; }
+    .current-row { background: rgba(102, 126, 234, 0.08); }
+    [data-theme="dark"] .current-row { background: rgba(127, 156, 245, 0.12); }
 
     /* 棒グラフ */
     .chart-section { margin-bottom: 32px; }
@@ -228,6 +295,7 @@ export function getCacheStatusPage(user: {
       .page-card { padding: 24px; }
       .page-title { font-size: 28px; }
       .summary-grid { grid-template-columns: repeat(2, 1fr); }
+      .context-grid { grid-template-columns: 1fr 1fr; }
     }
   </style>
 </head>
@@ -257,10 +325,77 @@ export function getCacheStatusPage(user: {
 
   <div class="container">
     <div class="page-card">
-      <h1 class="page-title">📊 キャッシュ状況</h1>
-      <p class="page-subtitle">${safeTeamName && safeWorkspaceName
-        ? `${safeTeamName} / ${safeWorkspaceName}`
-        : `${safeUsername}`} のキャッシュデータ</p>
+      <h1 class="page-title">📊 DB・キャッシュ状況</h1>
+      <p class="page-subtitle">${safeUsername} のデータ状況</p>
+
+      <!-- ユーザーコンテキスト -->
+      <div class="section">
+        <h2 class="section-title">ユーザーコンテキスト</h2>
+        <div class="context-grid">
+          <div class="context-card">
+            <div class="label">ユーザー</div>
+            <div class="value">${safeUsername}</div>
+          </div>
+          <div class="context-card">
+            <div class="label">チーム</div>
+            <div class="value">${safeTeamName || '<span style="color:var(--text-faint)">未設定</span>'}</div>
+          </div>
+          <div class="context-card">
+            <div class="label">ワークスペース</div>
+            <div class="value">${safeWorkspaceName || '<span style="color:var(--text-faint)">未設定</span>'}</div>
+          </div>
+          <div class="context-card">
+            <div class="label">ロール</div>
+            <div class="value">${safeRole || '<span style="color:var(--text-faint)">-</span>'}</div>
+          </div>
+          ${ctx.workspaceId ? `
+          <div class="context-card">
+            <div class="label">Workspace ID</div>
+            <div class="value mono">${escapeHtml(ctx.workspaceId)}</div>
+          </div>` : ''}
+          ${ctx.teamId ? `
+          <div class="context-card">
+            <div class="label">Team ID</div>
+            <div class="value mono">${escapeHtml(ctx.teamId)}</div>
+          </div>` : ''}
+        </div>
+
+        ${ctx.allWorkspaces.length > 1 ? `
+        <h3 style="font-size:16px; font-weight:600; color:var(--text-primary); margin: 16px 0 12px;">所属ワークスペース一覧</h3>
+        <div class="table-scroll">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>チーム</th>
+                <th>ワークスペース</th>
+                <th>ID</th>
+                <th style="text-align:center">状態</th>
+              </tr>
+            </thead>
+            <tbody>${wsRows}</tbody>
+          </table>
+        </div>
+        ` : ''}
+      </div>
+
+      <!-- テーブル別マイグレーション状況 -->
+      <div class="section">
+        <h2 class="section-title">テーブル別マイグレーション状況</h2>
+        <div class="table-scroll">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>テーブル名</th>
+                <th style="text-align:center">状態</th>
+                <th style="text-align:right">レコード数</th>
+                <th>マイグレーション</th>
+                <th>説明</th>
+              </tr>
+            </thead>
+            <tbody>${tableRows}</tbody>
+          </table>
+        </div>
+      </div>
 
       <!-- サマリー -->
       <div class="summary-grid">
