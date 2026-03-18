@@ -1464,19 +1464,55 @@ app.get('/api/repositories/:owner/:repo/commits-calendar', optionalAuthMiddlewar
     return c.json({ error: 'No access token available' }, 401);
   }
 
-  const counts = await getGitHubRepoCommitsByMonth({ owner, repo, year, month, accessToken });
+  const result = await getGitHubRepoCommitsByMonth({ owner, repo, year, month, accessToken });
+  const { counts, commitsByDate } = result;
 
-  // 過去月の結果をD1にキャッシュ保存（ワークスペース単位）
-  if (isPastMonth && c.env.DB && workspaceId) {
-    try {
-      await c.env.DB.prepare(
-        'INSERT INTO commit_calendar_cache (workspace_id, owner, repo, year, month, counts, cached_at) VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT (workspace_id, owner, repo, year, month) DO UPDATE SET counts = excluded.counts, cached_at = excluded.cached_at'
-      ).bind(workspaceId, owner, repo, year, month, JSON.stringify(counts), now.toISOString()).run();
-    } catch (e) {
-      logger.warn('Failed to write commit calendar cache to D1', {
-        owner, repo, year: String(year), month: String(month),
-        error: e instanceof Error ? e.message : 'Unknown error',
-      });
+  // D1にキャッシュ保存（ワークスペース単位）
+  if (c.env.DB && workspaceId) {
+    const cachedAt = now.toISOString();
+
+    // 過去月のカレンダーキャッシュ（counts）を保存
+    if (isPastMonth) {
+      try {
+        await c.env.DB.prepare(
+          'INSERT INTO commit_calendar_cache (workspace_id, owner, repo, year, month, counts, cached_at) VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT (workspace_id, owner, repo, year, month) DO UPDATE SET counts = excluded.counts, cached_at = excluded.cached_at'
+        ).bind(workspaceId, owner, repo, year, month, JSON.stringify(counts), cachedAt).run();
+      } catch (e) {
+        logger.warn('Failed to write commit calendar cache to D1', {
+          owner, repo, year: String(year), month: String(month),
+          error: e instanceof Error ? e.message : 'Unknown error',
+        });
+      }
+    }
+
+    // コミット詳細を日別に commit_list_cache へ一括保存
+    // （後で commits-by-date を呼んだときにキャッシュヒットする）
+    const dates = Object.keys(commitsByDate);
+    if (dates.length > 0) {
+      try {
+        // 既にキャッシュ済みの日付を取得（重複INSERT回避）
+        const placeholders = dates.map(() => '?').join(',');
+        const existing = await c.env.DB.prepare(
+          `SELECT date FROM commit_list_cache WHERE workspace_id = ? AND owner = ? AND repo = ? AND date IN (${placeholders})`
+        ).bind(workspaceId, owner, repo, ...dates).all<{ date: string }>();
+        const existingDates = new Set(existing.results?.map(r => r.date) ?? []);
+
+        // 未キャッシュの日付のみバッチ保存
+        const newDates = dates.filter(d => !existingDates.has(d));
+        for (const date of newDates) {
+          const dayCommits = commitsByDate[date];
+          if (dayCommits.length > 0) {
+            await c.env.DB.prepare(
+              'INSERT INTO commit_list_cache (workspace_id, owner, repo, date, commits_json, commit_count, cached_at) VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT (workspace_id, owner, repo, date) DO NOTHING'
+            ).bind(workspaceId, owner, repo, date, JSON.stringify(dayCommits), dayCommits.length, cachedAt).run();
+          }
+        }
+      } catch (e) {
+        logger.warn('Failed to batch-write commit list cache to D1', {
+          owner, repo, year: String(year), month: String(month),
+          error: e instanceof Error ? e.message : 'Unknown error',
+        });
+      }
     }
   }
 
