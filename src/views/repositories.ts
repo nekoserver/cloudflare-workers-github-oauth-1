@@ -166,6 +166,7 @@ export function getRepositoriesPage(user: {
     }
     .dropdown-item:last-child { border-bottom: none; }
     .dropdown-item:hover { background: var(--dropdown-hover); }
+    .dropdown-item.switch-account { color: var(--accent-color); }
     .dropdown-item.logout { color: var(--danger-color); }
     .container { width: 100%; margin: 0 auto; padding: 28px 24px 40px; }
     .page-header {
@@ -567,6 +568,7 @@ export function getRepositoriesPage(user: {
           <a href="/userinfo" class="dropdown-item">👤 ユーザー情報</a>
           <a href="/settings" class="dropdown-item">⚙️ 設定</a>
           <a href="/status" class="dropdown-item">📊 キャッシュ状況</a>
+          <a href="/auth/switch" class="dropdown-item switch-account">🔄 別アカウントでログイン</a>
           <a href="/auth/logout" class="dropdown-item logout">🚪 ログアウト</a>
         </div>
       </div>

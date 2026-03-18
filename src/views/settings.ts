@@ -83,6 +83,7 @@ export function getSettingsPage(user: {
     }
     .dropdown-item:last-child { border-bottom: none; }
     .dropdown-item:hover { background: var(--dropdown-hover); }
+    .dropdown-item.switch-account { color: var(--accent-color); }
     .dropdown-item.logout { color: var(--danger-color); }
     .container { max-width: 900px; margin: 0 auto; padding: 48px 32px; }
     .settings-card {
@@ -185,6 +186,7 @@ export function getSettingsPage(user: {
           <a href="/repositories" class="dropdown-item">📦 リポジトリ</a>
           <a href="/userinfo" class="dropdown-item">👤 ユーザー情報</a>
           <a href="/status" class="dropdown-item">📊 キャッシュ状況</a>
+          <a href="/auth/switch" class="dropdown-item switch-account">🔄 別アカウントでログイン</a>
           <a href="/auth/logout" class="dropdown-item logout">🚪 ログアウト</a>
         </div>
       </div>
