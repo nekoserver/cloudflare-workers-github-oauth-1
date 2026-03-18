@@ -2,6 +2,7 @@
  * 設定ページのHTML
  */
 import { escapeHtml } from '../utils/html';
+import { getThemeCSS, getThemeInitScript, getThemeToggleCSS, getThemeToggleHTML, getThemeToggleScript } from '../utils/theme';
 
 export function getSettingsPage(user: {
   name?: string;
@@ -40,25 +41,28 @@ export function getSettingsPage(user: {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>設定 - Cloudflare Workers GitHub OAuth</title>
+  ${getThemeInitScript()}
   <style>
+    ${getThemeCSS()}
+    ${getThemeToggleCSS()}
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      background: linear-gradient(135deg, var(--bg-gradient-start) 0%, var(--bg-gradient-end) 100%);
       min-height: 100vh;
     }
     .navbar {
-      background: rgba(255, 255, 255, 0.95);
+      background: var(--navbar-bg);
       backdrop-filter: blur(10px);
-      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+      box-shadow: 0 2px 10px var(--navbar-shadow);
       padding: 16px 32px;
       display: flex;
       justify-content: space-between;
       align-items: center;
     }
-    .navbar-brand { font-size: 20px; font-weight: 700; color: #1a202c; display: flex; align-items: center; gap: 8px; }
+    .navbar-brand { font-size: 20px; font-weight: 700; color: var(--text-primary); display: flex; align-items: center; gap: 8px; }
     .user-menu { display: flex; align-items: center; gap: 12px; }
-    .user-name { font-size: 14px; color: #2d3748; font-weight: 500; }
+    .user-name { font-size: 14px; color: var(--text-secondary); font-weight: 500; }
     .user-icon {
       width: 40px; height: 40px; border-radius: 50%;
       background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
@@ -68,33 +72,33 @@ export function getSettingsPage(user: {
     .user-menu-container { position: relative; }
     .dropdown-menu {
       display: none; position: absolute; top: 50px; right: 0;
-      background: white; border-radius: 8px;
+      background: var(--dropdown-bg); border-radius: 8px;
       box-shadow: 0 4px 12px rgba(0,0,0,0.15); min-width: 180px; z-index: 1000; overflow: hidden;
     }
     .dropdown-menu.show { display: block; }
     .dropdown-item {
-      padding: 12px 20px; color: #2d3748; text-decoration: none;
-      display: block; cursor: pointer; border-bottom: 1px solid #e2e8f0;
+      padding: 12px 20px; color: var(--text-secondary); text-decoration: none;
+      display: block; cursor: pointer; border-bottom: 1px solid var(--border-color);
       transition: background 0.2s ease;
     }
     .dropdown-item:last-child { border-bottom: none; }
-    .dropdown-item:hover { background: #f7fafc; }
-    .dropdown-item.logout { color: #e53e3e; }
+    .dropdown-item:hover { background: var(--dropdown-hover); }
+    .dropdown-item.logout { color: var(--danger-color); }
     .container { max-width: 900px; margin: 0 auto; padding: 48px 32px; }
     .settings-card {
-      background: white; border-radius: 16px;
-      box-shadow: 0 20px 60px rgba(0,0,0,0.3); padding: 48px; margin-bottom: 32px;
+      background: var(--card-bg); border-radius: 16px;
+      box-shadow: 0 20px 60px var(--card-shadow); padding: 48px; margin-bottom: 32px;
     }
-    .settings-title { font-size: 36px; font-weight: 700; color: #1a202c; margin-bottom: 8px; }
-    .settings-subtitle { font-size: 18px; color: #718096; margin-bottom: 32px; }
+    .settings-title { font-size: 36px; font-weight: 700; color: var(--text-primary); margin-bottom: 8px; }
+    .settings-subtitle { font-size: 18px; color: var(--text-muted); margin-bottom: 32px; }
     .section { margin-bottom: 32px; }
     .section-title {
-      font-size: 20px; font-weight: 600; color: #1a202c; margin-bottom: 16px;
-      padding-bottom: 8px; border-bottom: 2px solid #e2e8f0;
+      font-size: 20px; font-weight: 600; color: var(--text-primary); margin-bottom: 16px;
+      padding-bottom: 8px; border-bottom: 2px solid var(--border-color);
     }
     .info-grid { display: grid; gap: 16px; }
     .info-item {
-      background: #f7fafc; border-radius: 8px; padding: 16px;
+      background: var(--bg-secondary); border-radius: 8px; padding: 16px;
       display: flex; justify-content: space-between; align-items: center;
     }
     .info-item.disabled { position: relative; }
@@ -102,46 +106,50 @@ export function getSettingsPage(user: {
       content: ''; position: absolute; top: 0; left: 0; right: 0; bottom: 0;
       background: rgba(200,200,200,0.5); border-radius: 8px; pointer-events: none;
     }
-    .info-label { color: #718096; font-size: 14px; font-weight: 600; }
-    .info-value { color: #2d3748; font-size: 14px; font-weight: 500; }
+    [data-theme="dark"] .info-item.disabled::after {
+      background: rgba(0,0,0,0.4);
+    }
+    .info-label { color: var(--text-muted); font-size: 14px; font-weight: 600; }
+    .info-value { color: var(--text-secondary); font-size: 14px; font-weight: 500; }
     .status-badge {
       display: inline-block; padding: 4px 12px; border-radius: 12px;
-      font-size: 12px; font-weight: 600; background: #48bb78; color: white;
+      font-size: 12px; font-weight: 600; background: var(--success-color); color: white;
     }
     .back-btn {
-      background: #667eea; color: white; border: none; border-radius: 8px;
+      background: var(--accent-color); color: white; border: none; border-radius: 8px;
       padding: 12px 24px; font-size: 14px; font-weight: 600; cursor: pointer;
       margin-top: 24px; text-decoration: none; display: inline-block;
     }
-    .back-btn:hover { background: #5a67d8; }
+    .back-btn:hover { background: var(--accent-hover); }
     .timezone-select {
-      width: 100%; padding: 10px 12px; border: 1px solid #cbd5e0; border-radius: 6px;
-      font-size: 14px; color: #2d3748; background: white; cursor: pointer;
+      width: 100%; padding: 10px 12px; border: 1px solid var(--input-border); border-radius: 6px;
+      font-size: 14px; color: var(--text-secondary); background: var(--input-bg); cursor: pointer;
     }
-    .timezone-select:disabled { background: #e2e8f0; cursor: not-allowed; opacity: 0.6; }
+    .timezone-select:disabled { background: var(--border-light); cursor: not-allowed; opacity: 0.6; }
     .setting-control { display: flex; align-items: center; gap: 12px; flex: 1; }
     .setting-select-wrapper { flex: 1; }
     .setting-checkbox { width: 18px; height: 18px; cursor: pointer; flex-shrink: 0; }
     .success-message {
-      background: #48bb78; color: white; padding: 12px 16px; border-radius: 8px;
+      background: var(--success-color); color: white; padding: 12px 16px; border-radius: 8px;
       margin-top: 16px; display: none; font-size: 14px; font-weight: 500;
     }
     .success-message.show { display: block; }
     .button-container { display: none; margin-top: 16px; gap: 12px; justify-content: flex-start; }
     .button-container.show { display: flex; }
     .btn { padding: 10px 20px; border: none; border-radius: 6px; font-size: 14px; font-weight: 600; cursor: pointer; }
-    .btn-save { background: #48bb78; color: white; }
+    .btn-save { background: var(--success-color); color: white; }
     .btn-save:hover { background: #38a169; }
     .btn-cancel { background: #fc8181; color: white; }
     .btn-cancel:hover { background: #f56565; }
-    .time-remaining-warning { color: #e53e3e; font-weight: 600; }
+    .time-remaining-warning { color: var(--danger-color); font-weight: 600; }
     .scope-badge {
       display: inline-block; padding: 4px 10px; border-radius: 999px;
-      background: #edf2f7; color: #2d3748; font-size: 12px; font-weight: 600;
+      background: var(--badge-bg); color: var(--text-secondary); font-size: 12px; font-weight: 600;
     }
     .scope-list { display: flex; flex-wrap: wrap; gap: 8px; }
-    .scope-empty { color: #718096; font-size: 12px; font-weight: 600; }
-    .scope-error { color: #e53e3e; font-size: 12px; font-weight: 600; }
+    .scope-empty { color: var(--text-muted); font-size: 12px; font-weight: 600; }
+    .scope-error { color: var(--danger-color); font-size: 12px; font-weight: 600; }
+    .theme-label { font-size: 14px; color: var(--text-secondary); }
   </style>
 </head>
 <body>
@@ -151,6 +159,7 @@ export function getSettingsPage(user: {
       <span>ログイン中</span>
     </div>
     <div class="user-menu">
+      ${getThemeToggleHTML()}
       <span class="user-name">${displayName}</span>
       <div class="user-menu-container">
         <div class="user-icon" title="${displayName}" onclick="toggleDropdown()">
@@ -248,6 +257,16 @@ export function getSettingsPage(user: {
               <input type="checkbox" class="setting-checkbox" id="timezoneCheckbox" onchange="toggleTimezoneEdit()">
             </div>
           </div>
+          <div class="info-item">
+            <span class="info-label">テーマ</span>
+            <div class="setting-control" style="justify-content: flex-end;">
+              <span class="theme-label" id="themeLabel">ライト</span>
+              <label class="theme-toggle-switch">
+                <input type="checkbox" id="themeCheckbox" onchange="onThemeSettingChange()">
+                <span class="theme-toggle-slider"></span>
+              </label>
+            </div>
+          </div>
         </div>
         <div class="button-container" id="buttonContainer">
           <button class="btn btn-save" onclick="saveTimezone()">保存</button>
@@ -260,10 +279,57 @@ export function getSettingsPage(user: {
     </div>
   </div>
 
+  <style>
+    .theme-toggle-switch {
+      position: relative; display: inline-block; width: 44px; height: 24px; flex-shrink: 0; cursor: pointer;
+    }
+    .theme-toggle-switch input { opacity: 0; width: 0; height: 0; }
+    .theme-toggle-slider {
+      position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+      background: var(--input-border); border-radius: 24px; transition: background 0.3s;
+    }
+    .theme-toggle-slider::before {
+      content: ''; position: absolute; width: 18px; height: 18px;
+      left: 3px; bottom: 3px; background: white; border-radius: 50%; transition: transform 0.3s;
+    }
+    .theme-toggle-switch input:checked + .theme-toggle-slider { background: var(--accent-color); }
+    .theme-toggle-switch input:checked + .theme-toggle-slider::before { transform: translateX(20px); }
+  </style>
+
   <script>
+    ${getThemeToggleScript()}
+
     let originalTimezone = '${currentTimezone}';
     let originalSessionDuration = '${currentSessionDuration}';
     const expiresAtTimestamp = ${user.expiresAtTimestamp};
+
+    // テーマトグルスイッチの初期化
+    (function() {
+      var isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+      var cb = document.getElementById('themeCheckbox');
+      var label = document.getElementById('themeLabel');
+      if (cb) cb.checked = isDark;
+      if (label) label.textContent = isDark ? 'ダーク' : 'ライト';
+    })();
+
+    function onThemeSettingChange() {
+      var cb = document.getElementById('themeCheckbox');
+      var label = document.getElementById('themeLabel');
+      var newTheme = cb.checked ? 'dark' : 'light';
+      label.textContent = cb.checked ? 'ダーク' : 'ライト';
+      if (newTheme === 'dark') {
+        document.documentElement.setAttribute('data-theme', 'dark');
+      } else {
+        document.documentElement.removeAttribute('data-theme');
+      }
+      document.cookie = 'user_theme=' + newTheme + '; Path=/; Secure; SameSite=Lax; Max-Age=31536000';
+      fetch('/api/settings/theme', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ theme: newTheme })
+      }).catch(function(){});
+    }
 
     function updateTimeRemaining() {
       const now = Math.floor(Date.now() / 1000);

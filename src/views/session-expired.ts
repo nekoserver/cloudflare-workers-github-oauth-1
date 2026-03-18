@@ -1,6 +1,8 @@
 /**
  * セッション期限切れページのHTML
  */
+import { getThemeCSS, getThemeInitScript } from '../utils/theme';
+
 export function getSessionExpiredPage(): string {
   return `<!DOCTYPE html>
 <html lang="ja">
@@ -8,11 +10,13 @@ export function getSessionExpiredPage(): string {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>セッション期限切れ</title>
+  ${getThemeInitScript()}
   <style>
+    ${getThemeCSS()}
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      background: linear-gradient(135deg, var(--bg-gradient-start) 0%, var(--bg-gradient-end) 100%);
       min-height: 100vh;
     }
     .toast {

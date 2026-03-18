@@ -2,6 +2,7 @@
  * ユーザー情報ページのHTML
  */
 import { escapeHtml } from '../utils/html';
+import { getThemeCSS, getThemeInitScript, getThemeToggleCSS, getThemeToggleHTML, getThemeToggleScript } from '../utils/theme';
 
 export function getUserInfoPage(user: {
   name?: string;
@@ -22,25 +23,28 @@ export function getUserInfoPage(user: {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>ユーザー情報 - Cloudflare Workers GitHub OAuth</title>
+  ${getThemeInitScript()}
   <style>
+    ${getThemeCSS()}
+    ${getThemeToggleCSS()}
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      background: linear-gradient(135deg, var(--bg-gradient-start) 0%, var(--bg-gradient-end) 100%);
       min-height: 100vh;
     }
     .navbar {
-      background: rgba(255, 255, 255, 0.95);
+      background: var(--navbar-bg);
       backdrop-filter: blur(10px);
-      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+      box-shadow: 0 2px 10px var(--navbar-shadow);
       padding: 16px 32px;
       display: flex;
       justify-content: space-between;
       align-items: center;
     }
-    .navbar-brand { font-size: 20px; font-weight: 700; color: #1a202c; display: flex; align-items: center; gap: 8px; }
+    .navbar-brand { font-size: 20px; font-weight: 700; color: var(--text-primary); display: flex; align-items: center; gap: 8px; }
     .user-menu { display: flex; align-items: center; gap: 12px; }
-    .user-name { font-size: 14px; color: #2d3748; font-weight: 500; }
+    .user-name { font-size: 14px; color: var(--text-secondary); font-weight: 500; }
     .user-icon {
       width: 40px; height: 40px; border-radius: 50%;
       background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
@@ -50,44 +54,44 @@ export function getUserInfoPage(user: {
     .user-menu-container { position: relative; }
     .dropdown-menu {
       display: none; position: absolute; top: 50px; right: 0;
-      background: white; border-radius: 8px;
+      background: var(--dropdown-bg); border-radius: 8px;
       box-shadow: 0 4px 12px rgba(0,0,0,0.15); min-width: 180px; z-index: 1000; overflow: hidden;
     }
     .dropdown-menu.show { display: block; }
     .dropdown-item {
-      padding: 12px 20px; color: #2d3748; text-decoration: none;
-      display: block; cursor: pointer; border-bottom: 1px solid #e2e8f0;
+      padding: 12px 20px; color: var(--text-secondary); text-decoration: none;
+      display: block; cursor: pointer; border-bottom: 1px solid var(--border-color);
       transition: background 0.2s ease;
     }
     .dropdown-item:last-child { border-bottom: none; }
-    .dropdown-item:hover { background: #f7fafc; }
-    .dropdown-item.logout { color: #e53e3e; }
+    .dropdown-item:hover { background: var(--dropdown-hover); }
+    .dropdown-item.logout { color: var(--danger-color); }
     .container { max-width: 900px; margin: 0 auto; padding: 48px 32px; }
     .userinfo-card {
-      background: white; border-radius: 16px;
-      box-shadow: 0 20px 60px rgba(0,0,0,0.3); padding: 48px; margin-bottom: 32px;
+      background: var(--card-bg); border-radius: 16px;
+      box-shadow: 0 20px 60px var(--card-shadow); padding: 48px; margin-bottom: 32px;
     }
-    .userinfo-title { font-size: 36px; font-weight: 700; color: #1a202c; margin-bottom: 8px; }
-    .userinfo-subtitle { font-size: 18px; color: #718096; margin-bottom: 32px; }
+    .userinfo-title { font-size: 36px; font-weight: 700; color: var(--text-primary); margin-bottom: 8px; }
+    .userinfo-subtitle { font-size: 18px; color: var(--text-muted); margin-bottom: 32px; }
     .section { margin-bottom: 32px; }
     .section-title {
-      font-size: 20px; font-weight: 600; color: #1a202c; margin-bottom: 16px;
-      padding-bottom: 8px; border-bottom: 2px solid #e2e8f0;
+      font-size: 20px; font-weight: 600; color: var(--text-primary); margin-bottom: 16px;
+      padding-bottom: 8px; border-bottom: 2px solid var(--border-color);
     }
     .info-grid { display: grid; gap: 16px; }
     .info-item {
-      background: #f7fafc; border-radius: 8px; padding: 16px;
+      background: var(--bg-secondary); border-radius: 8px; padding: 16px;
       display: flex; justify-content: space-between; align-items: center;
     }
-    .info-label { color: #718096; font-size: 14px; font-weight: 600; }
-    .info-value { color: #2d3748; font-size: 14px; font-weight: 500; }
-    .info-value-mono { color: #2d3748; font-size: 14px; font-weight: 500; font-family: 'Monaco', 'Courier New', monospace; }
+    .info-label { color: var(--text-muted); font-size: 14px; font-weight: 600; }
+    .info-value { color: var(--text-secondary); font-size: 14px; font-weight: 500; }
+    .info-value-mono { color: var(--text-secondary); font-size: 14px; font-weight: 500; font-family: 'Monaco', 'Courier New', monospace; }
     .back-btn {
-      background: #667eea; color: white; border: none; border-radius: 8px;
+      background: var(--accent-color); color: white; border: none; border-radius: 8px;
       padding: 12px 24px; font-size: 14px; font-weight: 600; cursor: pointer;
       margin-top: 24px; text-decoration: none; display: inline-block;
     }
-    .back-btn:hover { background: #5a67d8; }
+    .back-btn:hover { background: var(--accent-hover); }
   </style>
 </head>
 <body>
@@ -97,6 +101,7 @@ export function getUserInfoPage(user: {
       <span>ログイン中</span>
     </div>
     <div class="user-menu">
+      ${getThemeToggleHTML()}
       <span class="user-name">${displayName}</span>
       <div class="user-menu-container">
         <div class="user-icon" title="${displayName}" onclick="toggleDropdown()">
@@ -148,6 +153,8 @@ export function getUserInfoPage(user: {
   </div>
 
   <script>
+    ${getThemeToggleScript()}
+
     function toggleDropdown() {
       document.getElementById('dropdownMenu').classList.toggle('show');
     }
