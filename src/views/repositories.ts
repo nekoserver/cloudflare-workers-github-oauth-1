@@ -1721,6 +1721,7 @@ export function getRepositoriesPage(user: {
     }
 
     // ヒートマップ日付セルのクリックイベント（イベント委任）
+    // 日付タップ時にコミット一覧のプリフェッチも実行する
     if (heatmapBody) {
       heatmapBody.addEventListener('click', function(e) {
         var target = e.target;
@@ -1728,6 +1729,12 @@ export function getRepositoriesPage(user: {
           if (target.classList && target.classList.contains('has-commits') && target.getAttribute('data-date')) {
             var date = target.getAttribute('data-date');
             openCommitDetailModal(date);
+            // 日付が確定したタイミングでコミット一覧をプリフェッチ（GitHub/キャッシュから取得）
+            rcDataPreloaded = false;
+            rcCurrentPage = 1;
+            rcHasMore = false;
+            rcTotalCount = null;
+            loadRecentCommitsPage(1);
             return;
           }
           target = target.parentElement;
@@ -1810,6 +1817,7 @@ export function getRepositoriesPage(user: {
     var rcCurrentPage = 1;
     var rcHasMore = false;
     var rcTotalCount = null;
+    var rcDataPreloaded = false;
 
     function getRecentCommitsCount() {
       var m = document.cookie.match('(^|;)\\\\s*user_recent_commits_count=([^;]*)');
@@ -1818,11 +1826,14 @@ export function getRepositoriesPage(user: {
 
     function openRecentCommitsModal() {
       if (!currentRepoName || !heatmapOwner) return;
-      rcCurrentPage = 1;
-      rcHasMore = false;
-      rcTotalCount = null;
       if (recentCommitsModal) recentCommitsModal.classList.add('show');
-      loadRecentCommitsPage(1);
+      // データが日付タップで既にプリロード済みなら再取得しない
+      if (!rcDataPreloaded) {
+        rcCurrentPage = 1;
+        rcHasMore = false;
+        rcTotalCount = null;
+        loadRecentCommitsPage(1);
+      }
     }
 
     function loadRecentCommitsPage(page) {
@@ -1865,6 +1876,8 @@ export function getRepositoriesPage(user: {
             }
             recentCommitsBtnCount.textContent = badgeText;
           }
+          // データプリロード済みフラグを設定
+          rcDataPreloaded = true;
           // キャッシュ/GitHub ソースに応じたトースト通知
           if (data.source === 'cache') {
             showCacheToast('キャッシュからコミット一覧を取得しました', 'cache-source');
