@@ -2,6 +2,7 @@
  * ウェルカムページのHTML
  */
 import { escapeHtml } from '../utils/html';
+import { getThemeCSS, getThemeInitScript, getThemeToggleCSS, getThemeToggleHTML, getThemeToggleScript } from '../utils/theme';
 
 export function getWelcomePage(user: {
   name?: string;
@@ -23,7 +24,10 @@ export function getWelcomePage(user: {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Welcome - Cloudflare Workers GitHub OAuth</title>
+  ${getThemeInitScript()}
   <style>
+    ${getThemeCSS()}
+    ${getThemeToggleCSS()}
     * {
       margin: 0;
       padding: 0;
@@ -33,14 +37,14 @@ export function getWelcomePage(user: {
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
         'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      background: linear-gradient(135deg, var(--bg-gradient-start) 0%, var(--bg-gradient-end) 100%);
       min-height: 100vh;
     }
 
     .navbar {
-      background: rgba(255, 255, 255, 0.95);
+      background: var(--navbar-bg);
       backdrop-filter: blur(10px);
-      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+      box-shadow: 0 2px 10px var(--navbar-shadow);
       padding: 16px 32px;
       display: flex;
       justify-content: space-between;
@@ -50,7 +54,7 @@ export function getWelcomePage(user: {
     .navbar-brand {
       font-size: 20px;
       font-weight: 700;
-      color: #1a202c;
+      color: var(--text-primary);
       display: flex;
       align-items: center;
       gap: 8px;
@@ -68,7 +72,7 @@ export function getWelcomePage(user: {
 
     .user-name {
       font-size: 14px;
-      color: #2d3748;
+      color: var(--text-secondary);
       font-weight: 500;
     }
 
@@ -101,7 +105,7 @@ export function getWelcomePage(user: {
       position: absolute;
       top: 50px;
       right: 0;
-      background: white;
+      background: var(--dropdown-bg);
       border-radius: 8px;
       box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
       min-width: 180px;
@@ -115,12 +119,12 @@ export function getWelcomePage(user: {
 
     .dropdown-item {
       padding: 12px 20px;
-      color: #2d3748;
+      color: var(--text-secondary);
       text-decoration: none;
       display: block;
       transition: background 0.2s ease;
       cursor: pointer;
-      border-bottom: 1px solid #e2e8f0;
+      border-bottom: 1px solid var(--border-color);
     }
 
     .dropdown-item:last-child {
@@ -128,11 +132,11 @@ export function getWelcomePage(user: {
     }
 
     .dropdown-item:hover {
-      background: #f7fafc;
+      background: var(--dropdown-hover);
     }
 
     .dropdown-item.logout {
-      color: #e53e3e;
+      color: var(--danger-color);
     }
 
     .container {
@@ -142,9 +146,9 @@ export function getWelcomePage(user: {
     }
 
     .welcome-card {
-      background: white;
+      background: var(--card-bg);
       border-radius: 16px;
-      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+      box-shadow: 0 20px 60px var(--card-shadow);
       padding: 48px;
       margin-bottom: 32px;
     }
@@ -152,25 +156,25 @@ export function getWelcomePage(user: {
     .welcome-title {
       font-size: 36px;
       font-weight: 700;
-      color: #1a202c;
+      color: var(--text-primary);
       margin-bottom: 16px;
     }
 
     .welcome-subtitle {
       font-size: 18px;
-      color: #718096;
+      color: var(--text-muted);
       margin-bottom: 32px;
     }
 
     .user-info {
-      background: #f7fafc;
+      background: var(--bg-secondary);
       border-radius: 12px;
       padding: 24px;
       margin-bottom: 32px;
     }
 
     .user-info h3 {
-      color: #2d3748;
+      color: var(--text-secondary);
       font-size: 18px;
       font-weight: 600;
       margin-bottom: 16px;
@@ -181,7 +185,7 @@ export function getWelcomePage(user: {
       justify-content: space-between;
       align-items: center;
       padding: 8px 0;
-      border-bottom: 1px solid #e2e8f0;
+      border-bottom: 1px solid var(--border-color);
     }
 
     .info-row:last-child {
@@ -189,27 +193,27 @@ export function getWelcomePage(user: {
     }
 
     .info-label {
-      color: #718096;
+      color: var(--text-muted);
       font-size: 14px;
       white-space: nowrap;
     }
 
     .info-value {
-      color: #2d3748;
+      color: var(--text-secondary);
       font-size: 14px;
       font-weight: 500;
       white-space: nowrap;
     }
 
     .api-section {
-      background: white;
+      background: var(--card-bg);
       border-radius: 16px;
-      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+      box-shadow: 0 10px 30px var(--card-shadow-light);
       padding: 32px;
     }
 
     .api-section h2 {
-      color: #1a202c;
+      color: var(--text-primary);
       font-size: 24px;
       font-weight: 700;
       margin-bottom: 16px;
@@ -221,7 +225,7 @@ export function getWelcomePage(user: {
     }
 
     .endpoint {
-      background: #f7fafc;
+      background: var(--bg-secondary);
       border-radius: 8px;
       padding: 16px;
       display: flex;
@@ -230,7 +234,7 @@ export function getWelcomePage(user: {
     }
 
     .endpoint-method {
-      background: #667eea;
+      background: var(--accent-color);
       color: white;
       padding: 4px 12px;
       border-radius: 4px;
@@ -247,7 +251,7 @@ export function getWelcomePage(user: {
     .endpoint-path {
       font-family: 'Monaco', 'Courier New', monospace;
       font-size: 14px;
-      color: #2d3748;
+      color: var(--text-secondary);
     }
   </style>
 </head>
@@ -258,6 +262,7 @@ export function getWelcomePage(user: {
       <span>ログイン中</span>
     </div>
     <div class="user-menu">
+      ${getThemeToggleHTML()}
       <span class="user-name">${displayName}</span>
       <div class="user-menu-container">
         <div class="user-icon" title="${displayName}" onclick="toggleDropdown()">
@@ -326,6 +331,8 @@ export function getWelcomePage(user: {
   </div>
 
   <script>
+    ${getThemeToggleScript()}
+
     function toggleDropdown() {
       const dropdown = document.getElementById('dropdownMenu');
       dropdown.classList.toggle('show');

@@ -1,6 +1,8 @@
 /**
  * GitHub OAuth ログインページのHTML
  */
+import { getThemeCSS, getThemeInitScript, getThemeToggleCSS, getThemeToggleHTML, getThemeToggleScript } from '../utils/theme';
+
 export function getLoginPage(): string {
   return `<!DOCTYPE html>
 <html lang="ja">
@@ -8,7 +10,10 @@ export function getLoginPage(): string {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>ログイン - Cloudflare Workers GitHub OAuth</title>
+  ${getThemeInitScript()}
   <style>
+    ${getThemeCSS()}
+    ${getThemeToggleCSS()}
     * {
       margin: 0;
       padding: 0;
@@ -18,7 +23,7 @@ export function getLoginPage(): string {
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
         'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      background: linear-gradient(135deg, var(--bg-gradient-start) 0%, var(--bg-gradient-end) 100%);
       min-height: 100vh;
       display: flex;
       align-items: center;
@@ -27,7 +32,7 @@ export function getLoginPage(): string {
     }
 
     .container {
-      background: white;
+      background: var(--card-bg);
       border-radius: 16px;
       box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
       max-width: 450px;
@@ -49,14 +54,14 @@ export function getLoginPage(): string {
     }
 
     h1 {
-      color: #1a202c;
+      color: var(--text-primary);
       font-size: 28px;
       font-weight: 700;
       margin-bottom: 12px;
     }
 
     .subtitle {
-      color: #718096;
+      color: var(--text-muted);
       font-size: 16px;
       margin-bottom: 40px;
     }
@@ -107,19 +112,19 @@ export function getLoginPage(): string {
       top: 50%;
       width: 100%;
       height: 1px;
-      background: #e2e8f0;
+      background: var(--border-color);
     }
 
     .divider span {
-      background: white;
+      background: var(--card-bg);
       padding: 0 16px;
-      color: #a0aec0;
+      color: var(--text-faint);
       font-size: 14px;
       position: relative;
     }
 
     .api-info {
-      background: #f7fafc;
+      background: var(--bg-secondary);
       border-radius: 8px;
       padding: 20px;
       text-align: left;
@@ -127,15 +132,15 @@ export function getLoginPage(): string {
     }
 
     .api-info h3 {
-      color: #2d3748;
+      color: var(--text-secondary);
       font-size: 14px;
       font-weight: 600;
       margin-bottom: 12px;
     }
 
     .api-info code {
-      background: #edf2f7;
-      color: #2d3748;
+      background: var(--code-bg);
+      color: var(--text-secondary);
       padding: 2px 6px;
       border-radius: 4px;
       font-size: 13px;
@@ -143,7 +148,7 @@ export function getLoginPage(): string {
     }
 
     .api-info p {
-      color: #4a5568;
+      color: var(--text-secondary);
       font-size: 13px;
       line-height: 1.6;
       margin-bottom: 8px;
@@ -155,7 +160,7 @@ export function getLoginPage(): string {
     }
 
     .api-info li {
-      color: #4a5568;
+      color: var(--text-secondary);
       font-size: 13px;
       padding: 4px 0;
       padding-left: 20px;
@@ -166,11 +171,20 @@ export function getLoginPage(): string {
       content: '→';
       position: absolute;
       left: 0;
-      color: #667eea;
+      color: var(--accent-color);
+    }
+    .theme-toggle-fixed {
+      position: fixed;
+      top: 16px;
+      right: 16px;
+      z-index: 100;
     }
   </style>
 </head>
 <body>
+  <div class="theme-toggle-fixed">
+    ${getThemeToggleHTML()}
+  </div>
   <div class="container">
     <div class="logo">🔐</div>
     <h1>ようこそ</h1>
@@ -197,6 +211,10 @@ export function getLoginPage(): string {
       </ul>
     </div>
   </div>
+
+  <script>
+    ${getThemeToggleScript()}
+  </script>
 </body>
 </html>`;
 }

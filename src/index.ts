@@ -1684,6 +1684,31 @@ app.post('/api/settings/session-duration', authMiddleware, async (c) => {
 });
 
 /**
+ * テーマ設定変更
+ */
+app.post('/api/settings/theme', authMiddleware, async (c) => {
+  try {
+    const { theme } = await c.req.json();
+
+    const validThemes = ['light', 'dark'];
+    if (!validThemes.includes(theme)) {
+      return c.json({ error: '無効なテーマです' }, 400);
+    }
+
+    c.header('Set-Cookie', `user_theme=${theme}; Path=/; Secure; SameSite=Lax; Max-Age=31536000`);
+
+    return c.json({ message: 'テーマを変更しました', theme }, 200);
+  } catch (error) {
+    const user = c.get('user');
+    logger.error('Theme update error', {
+      userId: user?.sub,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    return c.json({ error: 'テーマの変更に失敗しました' }, 500);
+  }
+});
+
+/**
  * ワークスペース一覧取得
  */
 app.get('/api/workspaces', authMiddleware, async (c) => {

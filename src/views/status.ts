@@ -3,6 +3,7 @@
  * ログイン中のユーザー自身のキャッシュデータのみを表示する
  */
 import { escapeHtml } from '../utils/html';
+import { getThemeCSS, getThemeInitScript, getThemeToggleCSS, getThemeToggleHTML, getThemeToggleScript } from '../utils/theme';
 
 export interface CommitCacheEntry {
   owner: string;
@@ -100,25 +101,28 @@ export function getCacheStatusPage(user: {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>キャッシュ状況 - Cloudflare Workers GitHub OAuth</title>
+  ${getThemeInitScript()}
   <style>
+    ${getThemeCSS()}
+    ${getThemeToggleCSS()}
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      background: linear-gradient(135deg, var(--bg-gradient-start) 0%, var(--bg-gradient-end) 100%);
       min-height: 100vh;
     }
     .navbar {
-      background: rgba(255, 255, 255, 0.95);
+      background: var(--navbar-bg);
       backdrop-filter: blur(10px);
-      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+      box-shadow: 0 2px 10px var(--navbar-shadow);
       padding: 16px 32px;
       display: flex;
       justify-content: space-between;
       align-items: center;
     }
-    .navbar-brand { font-size: 20px; font-weight: 700; color: #1a202c; display: flex; align-items: center; gap: 8px; }
+    .navbar-brand { font-size: 20px; font-weight: 700; color: var(--text-primary); display: flex; align-items: center; gap: 8px; }
     .user-menu { display: flex; align-items: center; gap: 12px; }
-    .user-name { font-size: 14px; color: #2d3748; font-weight: 500; }
+    .user-name { font-size: 14px; color: var(--text-secondary); font-weight: 500; }
     .user-icon {
       width: 40px; height: 40px; border-radius: 50%;
       background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
@@ -128,25 +132,25 @@ export function getCacheStatusPage(user: {
     .user-menu-container { position: relative; }
     .dropdown-menu {
       display: none; position: absolute; top: 50px; right: 0;
-      background: white; border-radius: 8px;
+      background: var(--dropdown-bg); border-radius: 8px;
       box-shadow: 0 4px 12px rgba(0,0,0,0.15); min-width: 180px; z-index: 1000; overflow: hidden;
     }
     .dropdown-menu.show { display: block; }
     .dropdown-item {
-      padding: 12px 20px; color: #2d3748; text-decoration: none;
-      display: block; cursor: pointer; border-bottom: 1px solid #e2e8f0;
+      padding: 12px 20px; color: var(--text-secondary); text-decoration: none;
+      display: block; cursor: pointer; border-bottom: 1px solid var(--border-color);
       transition: background 0.2s ease;
     }
     .dropdown-item:last-child { border-bottom: none; }
-    .dropdown-item:hover { background: #f7fafc; }
-    .dropdown-item.logout { color: #e53e3e; }
+    .dropdown-item:hover { background: var(--dropdown-hover); }
+    .dropdown-item.logout { color: var(--danger-color); }
     .container { max-width: 1200px; margin: 0 auto; padding: 48px 32px; }
     .page-card {
-      background: white; border-radius: 16px;
-      box-shadow: 0 20px 60px rgba(0,0,0,0.3); padding: 48px; margin-bottom: 32px;
+      background: var(--card-bg); border-radius: 16px;
+      box-shadow: 0 20px 60px var(--card-shadow); padding: 48px; margin-bottom: 32px;
     }
-    .page-title { font-size: 36px; font-weight: 700; color: #1a202c; margin-bottom: 8px; }
-    .page-subtitle { font-size: 18px; color: #718096; margin-bottom: 32px; }
+    .page-title { font-size: 36px; font-weight: 700; color: var(--text-primary); margin-bottom: 8px; }
+    .page-subtitle { font-size: 18px; color: var(--text-muted); margin-bottom: 32px; }
 
     /* サマリーカード */
     .summary-grid {
@@ -154,18 +158,18 @@ export function getCacheStatusPage(user: {
       gap: 16px; margin-bottom: 32px;
     }
     .summary-card {
-      background: #f7fafc; border-radius: 12px; padding: 20px; text-align: center;
-      border: 1px solid #e2e8f0;
+      background: var(--bg-secondary); border-radius: 12px; padding: 20px; text-align: center;
+      border: 1px solid var(--border-color);
     }
-    .summary-card .label { font-size: 13px; color: #718096; font-weight: 600; margin-bottom: 8px; }
-    .summary-card .value { font-size: 32px; font-weight: 700; color: #2d3748; }
-    .summary-card .value.accent { color: #667eea; }
+    .summary-card .label { font-size: 13px; color: var(--text-muted); font-weight: 600; margin-bottom: 8px; }
+    .summary-card .value { font-size: 32px; font-weight: 700; color: var(--text-secondary); }
+    .summary-card .value.accent { color: var(--accent-color); }
 
     /* セクション */
     .section { margin-bottom: 32px; }
     .section-title {
-      font-size: 20px; font-weight: 600; color: #1a202c; margin-bottom: 16px;
-      padding-bottom: 8px; border-bottom: 2px solid #e2e8f0;
+      font-size: 20px; font-weight: 600; color: var(--text-primary); margin-bottom: 16px;
+      padding-bottom: 8px; border-bottom: 2px solid var(--border-color);
     }
 
     /* テーブル */
@@ -173,17 +177,17 @@ export function getCacheStatusPage(user: {
       width: 100%; border-collapse: collapse; font-size: 14px;
     }
     .data-table th {
-      background: #f7fafc; padding: 10px 12px; text-align: left;
-      font-weight: 600; color: #4a5568; border-bottom: 2px solid #e2e8f0;
+      background: var(--bg-secondary); padding: 10px 12px; text-align: left;
+      font-weight: 600; color: var(--text-muted); border-bottom: 2px solid var(--border-color);
       white-space: nowrap;
     }
     .data-table td {
-      padding: 10px 12px; border-bottom: 1px solid #e2e8f0; color: #2d3748;
+      padding: 10px 12px; border-bottom: 1px solid var(--border-color); color: var(--text-secondary);
     }
-    .data-table tr:hover { background: #f7fafc; }
+    .data-table tr:hover { background: var(--bg-secondary); }
     .data-table .num { text-align: right; font-variant-numeric: tabular-nums; }
-    .data-table .date { font-size: 12px; color: #718096; white-space: nowrap; }
-    .all-repos { color: #667eea; font-weight: 600; font-size: 12px; }
+    .data-table .date { font-size: 12px; color: var(--text-muted); white-space: nowrap; }
+    .all-repos { color: var(--accent-color); font-weight: 600; font-size: 12px; }
 
     /* 棒グラフ */
     .chart-section { margin-bottom: 32px; }
@@ -191,31 +195,31 @@ export function getCacheStatusPage(user: {
       display: flex; align-items: center; gap: 8px; margin-bottom: 6px;
     }
     .chart-label {
-      min-width: 80px; font-size: 13px; color: #4a5568; text-align: right;
+      min-width: 80px; font-size: 13px; color: var(--text-muted); text-align: right;
       font-variant-numeric: tabular-nums;
     }
     .chart-bar-container {
-      flex: 1; height: 22px; background: #edf2f7; border-radius: 4px; overflow: hidden;
+      flex: 1; height: 22px; background: var(--chart-bar-bg); border-radius: 4px; overflow: hidden;
     }
     .chart-bar {
       height: 100%; background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
       border-radius: 4px; min-width: 2px; transition: width 0.3s ease;
     }
     .chart-value {
-      min-width: 50px; font-size: 13px; color: #2d3748; font-weight: 600;
+      min-width: 50px; font-size: 13px; color: var(--text-secondary); font-weight: 600;
       font-variant-numeric: tabular-nums;
     }
 
     .empty-message {
-      padding: 24px; text-align: center; color: #a0aec0; font-size: 14px;
+      padding: 24px; text-align: center; color: var(--text-faint); font-size: 14px;
     }
 
     .back-btn {
-      background: #667eea; color: white; border: none; border-radius: 8px;
+      background: var(--accent-color); color: white; border: none; border-radius: 8px;
       padding: 12px 24px; font-size: 14px; font-weight: 600; cursor: pointer;
       text-decoration: none; display: inline-block;
     }
-    .back-btn:hover { background: #5a67d8; }
+    .back-btn:hover { background: var(--accent-hover); }
 
     .table-scroll { overflow-x: auto; }
 
@@ -234,6 +238,7 @@ export function getCacheStatusPage(user: {
       <span>ログイン中</span>
     </div>
     <div class="user-menu">
+      ${getThemeToggleHTML()}
       <span class="user-name">${displayName}</span>
       <div class="user-menu-container">
         <div class="user-icon" title="${displayName}" onclick="toggleDropdown()">
@@ -348,6 +353,8 @@ export function getCacheStatusPage(user: {
   </div>
 
   <script>
+    ${getThemeToggleScript()}
+
     function toggleDropdown() {
       document.getElementById('dropdownMenu').classList.toggle('show');
     }

@@ -2,6 +2,7 @@
  * リポジトリ一覧ページのHTML
  */
 import { escapeHtml } from '../utils/html';
+import { getThemeCSS, getThemeInitScript, getThemeToggleCSS, getThemeToggleHTML, getThemeToggleScript } from '../utils/theme';
 
 export interface RepositoryListItem {
   owner: string;
@@ -123,25 +124,28 @@ export function getRepositoriesPage(user: {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>リポジトリ - Cloudflare Workers GitHub OAuth</title>
+  ${getThemeInitScript()}
   <style>
+    ${getThemeCSS()}
+    ${getThemeToggleCSS()}
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      background: linear-gradient(135deg, var(--bg-gradient-start) 0%, var(--bg-gradient-end) 100%);
       min-height: 100vh;
     }
     .navbar {
-      background: rgba(255, 255, 255, 0.95);
+      background: var(--navbar-bg);
       backdrop-filter: blur(10px);
-      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+      box-shadow: 0 2px 10px var(--navbar-shadow);
       padding: 12px 24px;
       display: flex;
       justify-content: space-between;
       align-items: center;
     }
-    .navbar-brand { font-size: 20px; font-weight: 700; color: #1a202c; display: flex; align-items: center; gap: 8px; }
+    .navbar-brand { font-size: 20px; font-weight: 700; color: var(--text-primary); display: flex; align-items: center; gap: 8px; }
     .user-menu { display: flex; align-items: center; gap: 12px; }
-    .user-name { font-size: 14px; color: #2d3748; font-weight: 500; }
+    .user-name { font-size: 14px; color: var(--text-secondary); font-weight: 500; }
     .user-icon {
       width: 40px; height: 40px; border-radius: 50%;
       background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
@@ -151,25 +155,25 @@ export function getRepositoriesPage(user: {
     .user-menu-container { position: relative; }
     .dropdown-menu {
       display: none; position: absolute; top: 50px; right: 0;
-      background: white; border-radius: 8px;
+      background: var(--dropdown-bg); border-radius: 8px;
       box-shadow: 0 4px 12px rgba(0,0,0,0.15); min-width: 180px; z-index: 1000; overflow: hidden;
     }
     .dropdown-menu.show { display: block; }
     .dropdown-item {
-      padding: 12px 20px; color: #2d3748; text-decoration: none;
-      display: block; cursor: pointer; border-bottom: 1px solid #e2e8f0;
+      padding: 12px 20px; color: var(--text-secondary); text-decoration: none;
+      display: block; cursor: pointer; border-bottom: 1px solid var(--border-color);
       transition: background 0.2s ease;
     }
     .dropdown-item:last-child { border-bottom: none; }
-    .dropdown-item:hover { background: #f7fafc; }
-    .dropdown-item.logout { color: #e53e3e; }
+    .dropdown-item:hover { background: var(--dropdown-hover); }
+    .dropdown-item.logout { color: var(--danger-color); }
     .container { width: 100%; margin: 0 auto; padding: 28px 24px 40px; }
     .page-header {
-      background: white; border-radius: 16px;
-      box-shadow: 0 20px 60px rgba(0,0,0,0.3); padding: 24px; margin-bottom: 16px;
+      background: var(--card-bg); border-radius: 16px;
+      box-shadow: 0 20px 60px var(--card-shadow); padding: 24px; margin-bottom: 16px;
     }
-    .page-title { font-size: 32px; font-weight: 700; color: #1a202c; margin-bottom: 8px; }
-    .page-subtitle { font-size: 16px; color: #718096; }
+    .page-title { font-size: 32px; font-weight: 700; color: var(--text-primary); margin-bottom: 8px; }
+    .page-subtitle { font-size: 16px; color: var(--text-muted); }
     .error-banner {
       background: #fed7d7; color: #c53030; border-radius: 12px; padding: 12px 16px;
       font-size: 14px; font-weight: 600; margin-top: 16px;
@@ -178,32 +182,32 @@ export function getRepositoriesPage(user: {
     .repo-list-header {
       display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: 16px;
       padding: 0 6px; margin-bottom: 4px; align-items: center;
-      color: #1a202c; font-weight: 700; font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em;
+      color: var(--text-primary); font-weight: 700; font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em;
     }
     .repo-list-header span { opacity: 0.7; }
     .sort-button {
-      background: transparent; border: none; padding: 0; color: #1a202c;
+      background: transparent; border: none; padding: 0; color: var(--text-primary);
       font: inherit; font-weight: 800; display: inline-flex; align-items: center; gap: 6px; cursor: pointer;
     }
-    .sort-button:hover { color: #2d3748; }
+    .sort-button:hover { color: var(--text-secondary); }
     .sort-indicator {
       display: inline-flex; align-items: center; justify-content: center;
-      width: 20px; height: 20px; border-radius: 999px; background: rgba(26,32,44,0.08);
+      width: 20px; height: 20px; border-radius: 999px; background: var(--badge-bg);
       font-size: 12px; line-height: 1;
     }
     .repo-row {
-      background: white; border-radius: 14px; padding: 16px 18px;
+      background: var(--card-bg); border-radius: 14px; padding: 16px 18px;
       box-shadow: 0 10px 30px rgba(0,0,0,0.15); color: inherit;
       transition: transform 0.2s ease, box-shadow 0.2s ease;
       display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: 16px; align-items: center;
     }
     .repo-row:hover { transform: translateY(-2px); box-shadow: 0 16px 36px rgba(0,0,0,0.2); }
     .repo-title { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
-    .repo-name { font-size: 20px; font-weight: 700; color: #2d3748; }
+    .repo-name { font-size: 20px; font-weight: 700; color: var(--text-secondary); }
     .repo-name-link {
       color: inherit; text-decoration: none; border-bottom: 2px solid transparent; transition: border-color 0.2s ease;
     }
-    .repo-name-link:hover { border-color: #667eea; }
+    .repo-name-link:hover { border-color: var(--accent-color); }
     .badge {
       display: inline-flex; align-items: center; justify-content: center;
       padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 700;
@@ -213,15 +217,15 @@ export function getRepositoriesPage(user: {
     .badge.cf-linked { background: #fbd38d; color: #744210; }
     .badge.vercel-linked { background: #1a1a1a; color: #ffffff; }
     .badge.slack-linked { background: #4a154b; color: #ffffff; }
-    .repo-description { font-size: 14px; color: #4a5568; min-height: 22px; }
-    .repo-meta { display: flex; flex-wrap: wrap; gap: 8px; font-size: 12px; color: #718096; justify-content: flex-end; }
-    .repo-meta-item { background: #edf2f7; padding: 4px 10px; border-radius: 999px; }
+    .repo-description { font-size: 14px; color: var(--text-muted); min-height: 22px; }
+    .repo-meta { display: flex; flex-wrap: wrap; gap: 8px; font-size: 12px; color: var(--text-muted); justify-content: flex-end; }
+    .repo-meta-item { background: var(--badge-bg); padding: 4px 10px; border-radius: 999px; }
     .repo-issues-pill { padding: 4px 10px; border-radius: 999px; font-weight: 700; }
     .repo-issues-pill.has-issues { background: #fed7e2; color: #97266d; }
     .repo-issues-pill.no-issues { background: #c6f6d5; color: #22543d; }
     .repo-meta-link { color: #2b6cb0; text-decoration: none; font-weight: 700; }
     .repo-meta-link:hover { text-decoration: underline; }
-    .repo-meta-muted { color: #a0aec0; font-weight: 700; }
+    .repo-meta-muted { color: var(--text-faint); font-weight: 700; }
     @media (max-width: 860px) {
       .container { padding: 22px 16px 32px; }
       .repo-list-header { display: none; }
@@ -230,20 +234,20 @@ export function getRepositoriesPage(user: {
       .repo-title { flex-wrap: wrap; }
     }
     .empty-state {
-      background: rgba(255,255,255,0.9); border-radius: 12px; padding: 16px; text-align: center;
-      color: #4a5568; font-weight: 600;
+      background: var(--card-bg); border-radius: 12px; padding: 16px; text-align: center;
+      color: var(--text-muted); font-weight: 600;
     }
     .repo-row { cursor: pointer; }
 
     /* Permissions Modal */
     .modal-overlay {
       display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-      background: rgba(0,0,0,0.5); backdrop-filter: blur(4px);
+      background: var(--modal-overlay); backdrop-filter: blur(4px);
       z-index: 2000; align-items: center; justify-content: center;
     }
     .modal-overlay.show { display: flex; }
     .modal-content {
-      background: white; border-radius: 16px; max-width: 520px; width: 90%;
+      background: var(--card-bg); border-radius: 16px; max-width: 520px; width: 90%;
       max-height: 80vh; overflow-y: auto; box-shadow: 0 20px 60px rgba(0,0,0,0.3);
       animation: modalIn 0.2s ease;
     }
@@ -252,21 +256,21 @@ export function getRepositoriesPage(user: {
       to { opacity: 1; transform: scale(1) translateY(0); }
     }
     .modal-header {
-      padding: 20px 24px 12px; border-bottom: 1px solid #e2e8f0;
+      padding: 20px 24px 12px; border-bottom: 1px solid var(--border-color);
       display: flex; justify-content: space-between; align-items: center;
     }
-    .modal-title { font-size: 18px; font-weight: 700; color: #1a202c; }
+    .modal-title { font-size: 18px; font-weight: 700; color: var(--text-primary); }
     .modal-close {
-      width: 32px; height: 32px; border-radius: 8px; border: none; background: #f7fafc;
+      width: 32px; height: 32px; border-radius: 8px; border: none; background: var(--bg-secondary);
       font-size: 18px; cursor: pointer; display: flex; align-items: center; justify-content: center;
-      color: #718096; transition: background 0.2s;
+      color: var(--text-muted); transition: background 0.2s;
     }
-    .modal-close:hover { background: #edf2f7; color: #2d3748; }
+    .modal-close:hover { background: var(--border-light); color: var(--text-secondary); }
     .modal-body { padding: 16px 24px 24px; }
     .modal-repo-name-row {
       display: flex; align-items: center; gap: 10px; margin-bottom: 12px;
     }
-    .modal-repo-name { font-size: 14px; color: #718096; font-weight: 600; flex: 1; }
+    .modal-repo-name { font-size: 14px; color: var(--text-muted); font-weight: 600; flex: 1; }
     /* Toggle Switch */
     .toggle-switch {
       position: relative; display: inline-block; width: 40px; height: 22px; flex-shrink: 0; cursor: pointer;
@@ -274,17 +278,17 @@ export function getRepositoriesPage(user: {
     .toggle-switch input { opacity: 0; width: 0; height: 0; }
     .toggle-slider {
       position: absolute; top: 0; left: 0; right: 0; bottom: 0;
-      background: #cbd5e0; border-radius: 22px; transition: background 0.2s;
+      background: var(--input-border); border-radius: 22px; transition: background 0.2s;
     }
     .toggle-slider::before {
       content: ''; position: absolute; width: 16px; height: 16px;
       left: 3px; bottom: 3px; background: white; border-radius: 50%; transition: transform 0.2s;
     }
-    .toggle-switch input:checked + .toggle-slider { background: #667eea; }
+    .toggle-switch input:checked + .toggle-slider { background: var(--accent-color); }
     .toggle-switch input:checked + .toggle-slider::before { transform: translateX(18px); }
     .modal-repo-summary {
-      background: #f7fafc; border-radius: 10px; padding: 14px 16px; margin-bottom: 16px;
-      border: 1px solid #e2e8f0;
+      background: var(--bg-secondary); border-radius: 10px; padding: 14px 16px; margin-bottom: 16px;
+      border: 1px solid var(--border-color);
     }
     .modal-repo-summary.hidden { display: none; }
     /* Permission Section Header */
@@ -292,41 +296,42 @@ export function getRepositoriesPage(user: {
       display: flex; align-items: center; gap: 10px; margin-bottom: 8px;
     }
     .perm-filter-select {
-      font-size: 12px; padding: 3px 8px; border: 1px solid #e2e8f0; border-radius: 6px;
-      background: #f7fafc; color: #4a5568; cursor: pointer; outline: none;
+      font-size: 12px; padding: 3px 8px; border: 1px solid var(--border-color); border-radius: 6px;
+      background: var(--bg-secondary); color: var(--text-muted); cursor: pointer; outline: none;
     }
-    .perm-filter-select:focus { border-color: #667eea; }
-    .modal-repo-desc { font-size: 13px; color: #4a5568; margin-bottom: 8px; }
+    .perm-filter-select:focus { border-color: var(--accent-color); }
+    .modal-repo-desc { font-size: 13px; color: var(--text-muted); margin-bottom: 8px; }
     .modal-repo-desc:empty { display: none; }
-    .modal-repo-meta-grid { display: flex; flex-wrap: wrap; gap: 8px; font-size: 12px; color: #718096; }
-    .modal-repo-meta-item { background: #edf2f7; padding: 3px 8px; border-radius: 999px; }
+    .modal-repo-meta-grid { display: flex; flex-wrap: wrap; gap: 8px; font-size: 12px; color: var(--text-muted); }
+    .modal-repo-meta-item { background: var(--badge-bg); padding: 3px 8px; border-radius: 999px; }
     .modal-repo-meta-link { color: #2b6cb0; text-decoration: none; font-weight: 600; }
     .modal-repo-meta-link:hover { text-decoration: underline; }
     .perm-item {
-      border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px 14px; margin-bottom: 10px;
+      border: 1px solid var(--border-color); border-radius: 10px; padding: 12px 14px; margin-bottom: 10px;
       transition: border-color 0.2s;
     }
     .perm-item.active { border-color: #9ae6b4; background: #f0fff4; }
-    .perm-item.inactive { border-color: #e2e8f0; background: #f7fafc; opacity: 0.6; }
+    [data-theme="dark"] .perm-item.active { border-color: #38a169; background: rgba(56,161,105,0.15); }
+    .perm-item.inactive { border-color: var(--border-color); background: var(--bg-secondary); opacity: 0.6; }
     .perm-header { display: flex; align-items: center; gap: 8px; }
     .perm-icon { font-size: 18px; }
-    .perm-name { font-weight: 600; color: #2d3748; flex: 1; font-size: 14px; }
+    .perm-name { font-weight: 600; color: var(--text-secondary); flex: 1; font-size: 14px; }
     .perm-badge {
       padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 700;
     }
     .perm-badge.on { background: #c6f6d5; color: #276749; }
     .perm-badge.off { background: #fed7d7; color: #9b2c2c; }
     .perm-caps {
-      margin: 8px 0 0 30px; padding: 0; list-style: none; font-size: 13px; color: #4a5568;
+      margin: 8px 0 0 30px; padding: 0; list-style: none; font-size: 13px; color: var(--text-muted);
     }
     .perm-caps li { padding: 2px 0; }
     .perm-caps li::before { content: '✓ '; color: #38a169; font-weight: 700; }
     .scopes-footer {
-      margin-top: 16px; padding-top: 12px; border-top: 1px solid #e2e8f0;
-      font-size: 12px; color: #a0aec0;
+      margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--border-color);
+      font-size: 12px; color: var(--text-faint);
     }
     .scopes-footer code {
-      background: #edf2f7; padding: 1px 5px; border-radius: 4px; font-size: 11px;
+      background: var(--code-bg); padding: 1px 5px; border-radius: 4px; font-size: 11px;
     }
     .toast {
       position: fixed; right: 24px; bottom: 24px; z-index: 3000;
@@ -372,17 +377,17 @@ export function getRepositoriesPage(user: {
     }
     .perm-reauth:hover { color: #2c5282; text-decoration: underline; }
     .perm-section-title {
-      font-size: 12px; font-weight: 700; color: #718096; text-transform: uppercase;
+      font-size: 12px; font-weight: 700; color: var(--text-muted); text-transform: uppercase;
       letter-spacing: 0.05em; margin-bottom: 8px;
     }
     .perm-no-install {
-      font-size: 13px; color: #a0aec0; padding: 10px 14px;
-      border: 1px dashed #e2e8f0; border-radius: 10px; text-align: center;
+      font-size: 13px; color: var(--text-faint); padding: 10px 14px;
+      border: 1px dashed var(--border-color); border-radius: 10px; text-align: center;
     }
 
     /* Zanzibar Button & Modal */
     .zanzibar-footer {
-      margin-top: 16px; padding-top: 12px; border-top: 1px solid #e2e8f0;
+      margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--border-color);
       display: flex; justify-content: flex-end;
     }
     .zanzibar-btn {
@@ -397,14 +402,14 @@ export function getRepositoriesPage(user: {
     .zanzibar-modal-content { max-width: 640px; }
     .zanzibar-header-actions { display: flex; align-items: center; gap: 8px; }
     .zanzibar-copy-btn {
-      background: #edf2f7; border: 1px solid #e2e8f0; border-radius: 6px;
-      padding: 4px 10px; font-size: 12px; font-weight: 600; color: #4a5568;
+      background: var(--badge-bg); border: 1px solid var(--border-color); border-radius: 6px;
+      padding: 4px 10px; font-size: 12px; font-weight: 600; color: var(--text-muted);
       cursor: pointer; transition: background 0.2s;
     }
-    .zanzibar-copy-btn:hover { background: #e2e8f0; }
+    .zanzibar-copy-btn:hover { background: var(--border-color); }
     .zanzibar-copy-btn.copied { background: #c6f6d5; border-color: #9ae6b4; color: #276749; }
     .zanzibar-repo-name {
-      font-size: 14px; color: #718096; font-weight: 600; margin-bottom: 12px;
+      font-size: 14px; color: var(--text-muted); font-weight: 600; margin-bottom: 12px;
     }
     .zanzibar-tuples {
       background: #1a202c; color: #e2e8f0; border-radius: 10px;
@@ -442,52 +447,52 @@ export function getRepositoriesPage(user: {
     /* Inline Heatmap Calendar Section */
     .heatmap-inline-section {
       margin: 12px 0 16px; padding: 12px;
-      background: #f7fafc; border-radius: 8px; border: 1px solid #e2e8f0;
+      background: var(--bg-secondary); border-radius: 8px; border: 1px solid var(--border-color);
     }
     .heatmap-nav {
       display: flex; align-items: center; justify-content: center; gap: 12px; margin-bottom: 16px;
     }
     .heatmap-nav-btn {
-      width: 32px; height: 32px; border-radius: 8px; border: 1px solid #e2e8f0;
-      background: #f7fafc; font-size: 16px; cursor: pointer;
+      width: 32px; height: 32px; border-radius: 8px; border: 1px solid var(--border-color);
+      background: var(--bg-secondary); font-size: 16px; cursor: pointer;
       display: flex; align-items: center; justify-content: center;
-      color: #4a5568; transition: background 0.2s;
+      color: var(--text-muted); transition: background 0.2s;
     }
-    .heatmap-nav-btn:hover { background: #edf2f7; }
-    .heatmap-month-label { font-size: 15px; font-weight: 700; color: #2d3748; min-width: 120px; text-align: center; }
+    .heatmap-nav-btn:hover { background: var(--border-light); }
+    .heatmap-month-label { font-size: 15px; font-weight: 700; color: var(--text-secondary); min-width: 120px; text-align: center; }
     .heatmap-grid {
       display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px;
     }
     .heatmap-weekday {
-      font-size: 10px; font-weight: 700; color: #a0aec0; text-align: center;
+      font-size: 10px; font-weight: 700; color: var(--text-faint); text-align: center;
       padding: 4px 0;
     }
     .heatmap-day {
       aspect-ratio: 1; border-radius: 4px;
       display: flex; align-items: center; justify-content: center;
-      font-size: 11px; font-weight: 600; color: #4a5568;
+      font-size: 11px; font-weight: 600; color: var(--text-muted);
       position: relative; cursor: default;
     }
     .heatmap-day.empty { background: transparent; }
-    .heatmap-day.level-0 { background: #edf2f7; color: #a0aec0; }
+    .heatmap-day.level-0 { background: var(--badge-bg); color: var(--text-faint); }
     .heatmap-day.level-1 { background: #c6f6d5; color: #276749; }
     .heatmap-day.level-2 { background: #68d391; color: #22543d; }
     .heatmap-day.level-3 { background: #38a169; color: white; }
     .heatmap-day.level-4 { background: #276749; color: white; }
-    .heatmap-day.today { box-shadow: inset 0 0 0 2px #667eea; }
+    .heatmap-day.today { box-shadow: inset 0 0 0 2px var(--accent-color); }
     .heatmap-day[title] { cursor: help; }
     .heatmap-legend {
       display: flex; align-items: center; justify-content: center; gap: 6px;
-      margin-top: 14px; font-size: 11px; color: #a0aec0;
+      margin-top: 14px; font-size: 11px; color: var(--text-faint);
     }
     .heatmap-legend-box {
       width: 14px; height: 14px; border-radius: 3px;
     }
     .heatmap-loading {
-      text-align: center; padding: 32px 0; font-size: 13px; color: #a0aec0;
+      text-align: center; padding: 32px 0; font-size: 13px; color: var(--text-faint);
     }
     .heatmap-total {
-      text-align: center; margin-top: 10px; font-size: 13px; font-weight: 700; color: #4a5568;
+      text-align: center; margin-top: 10px; font-size: 13px; font-weight: 700; color: var(--text-muted);
     }
   </style>
 </head>
@@ -498,6 +503,7 @@ export function getRepositoriesPage(user: {
       <span>ログイン中</span>
     </div>
     <div class="user-menu">
+      ${getThemeToggleHTML()}
       <span class="user-name">${displayName}</span>
       <div class="user-menu-container">
         <div class="user-icon" title="${displayName}" onclick="toggleDropdown()">
@@ -657,6 +663,8 @@ export function getRepositoriesPage(user: {
         toastEl.classList.remove('show');
       });
     }
+
+    ${getThemeToggleScript()}
 
     function toggleDropdown() {
       const dropdown = document.getElementById('dropdownMenu');
