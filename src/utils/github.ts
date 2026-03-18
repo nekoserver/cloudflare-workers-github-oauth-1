@@ -569,13 +569,20 @@ export async function getExternalServiceLinkedRepos(
  * 指定リポジトリの指定月のコミットを日別に集計する
  * @returns 日付文字列 (YYYY-MM-DD) → コミット数 のマップ
  */
+/** getGitHubRepoCommitsByMonth の戻り値 */
+export interface MonthlyCommitsResult {
+  counts: Record<string, number>;
+  /** 日付ごとのコミット詳細（カレンダー取得時に同時にキャッシュ保存するため） */
+  commitsByDate: Record<string, CommitDetail[]>;
+}
+
 export async function getGitHubRepoCommitsByMonth(params: {
   owner: string;
   repo: string;
   year: number;
   month: number; // 1-12
   accessToken?: string;
-}): Promise<Record<string, number>> {
+}): Promise<MonthlyCommitsResult> {
   const { owner, repo, year, month, accessToken } = params;
 
   const since = new Date(Date.UTC(year, month - 1, 1));
@@ -591,6 +598,7 @@ export async function getGitHubRepoCommitsByMonth(params: {
   }
 
   const counts: Record<string, number> = {};
+  const commitsByDate: Record<string, CommitDetail[]> = {};
   let nextUrl: string | null = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/commits?since=${since.toISOString()}&until=${until.toISOString()}&per_page=100`;
 
   while (nextUrl) {
@@ -599,12 +607,34 @@ export async function getGitHubRepoCommitsByMonth(params: {
       break;
     }
 
-    const commits = await response.json<{ commit?: { author?: { date?: string } } }[]>();
+    const commits = await response.json<{
+      sha?: string;
+      html_url?: string;
+      commit?: {
+        message?: string;
+        author?: { name?: string; date?: string };
+      };
+      author?: { login?: string; avatar_url?: string };
+    }[]>();
     for (const c of commits) {
       const dateStr = c.commit?.author?.date;
       if (dateStr) {
         const day = dateStr.substring(0, 10); // YYYY-MM-DD
         counts[day] = (counts[day] || 0) + 1;
+
+        // コミット詳細も同時に収集
+        if (!commitsByDate[day]) {
+          commitsByDate[day] = [];
+        }
+        commitsByDate[day].push({
+          sha: c.sha ?? '',
+          message: c.commit?.message ?? '',
+          authorName: c.commit?.author?.name ?? '',
+          authorLogin: c.author?.login ?? '',
+          authorAvatarUrl: c.author?.avatar_url ?? '',
+          date: dateStr,
+          url: c.html_url ?? '',
+        });
       }
     }
 
@@ -613,7 +643,7 @@ export async function getGitHubRepoCommitsByMonth(params: {
     nextUrl = nextMatch ? nextMatch[1] : null;
   }
 
-  return counts;
+  return { counts, commitsByDate };
 }
 
 /** 特定日のコミット詳細情報 */
