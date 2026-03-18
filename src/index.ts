@@ -764,15 +764,14 @@ app.get('/status', authMiddleware, async (c) => {
   const data: CacheStatusData = {
     commitCache: { totalEntries: 0, totalCommits: 0, repos: [], byMonth: [], entries: [] },
     installationPerms: { totalEntries: 0, entries: [] },
-    userSessions: { totalUsers: 0, timezoneBreakdown: [], sessionDurationBreakdown: [] },
   };
 
   if (db) {
-    // コミットキャッシュ全件取得
+    // 現在のユーザーのコミットキャッシュのみ取得
     try {
       const cacheRows = await db.prepare(
-        'SELECT owner, repo, year, month, counts, cached_at FROM commit_calendar_cache ORDER BY year DESC, month DESC'
-      ).all<{ owner: string; repo: string; year: number; month: number; counts: string; cached_at: string }>();
+        'SELECT owner, repo, year, month, counts, cached_at FROM commit_calendar_cache WHERE user_id = ? ORDER BY year DESC, month DESC'
+      ).bind(user.sub).all<{ owner: string; repo: string; year: number; month: number; counts: string; cached_at: string }>();
 
       if (cacheRows.results) {
         const repoMap = new Map<string, { entryCount: number; totalCommits: number }>();
@@ -824,7 +823,7 @@ app.get('/status', authMiddleware, async (c) => {
       });
     }
 
-    // インストール権限キャッシュ
+    // インストール権限キャッシュ（GitHub App単位のデータなのでユーザーフィルタ不要）
     try {
       const permRows = await db.prepare(
         'SELECT installation_id, repo_name, repository_selection, permissions, updated_at FROM installation_permissions ORDER BY updated_at DESC'
@@ -845,30 +844,6 @@ app.get('/status', authMiddleware, async (c) => {
       }
     } catch (error) {
       logger.warn('Failed to fetch installation permissions for status page', {
-        error: error instanceof Error ? error.message : 'Unknown error',
-      });
-    }
-
-    // ユーザーセッション統計
-    try {
-      const totalResult = await db.prepare('SELECT COUNT(*) as cnt FROM user_sessions').first<{ cnt: number }>();
-      data.userSessions.totalUsers = totalResult?.cnt ?? 0;
-
-      const tzResult = await db.prepare(
-        'SELECT timezone, COUNT(*) as cnt FROM user_sessions GROUP BY timezone ORDER BY cnt DESC'
-      ).all<{ timezone: string; cnt: number }>();
-      if (tzResult.results) {
-        data.userSessions.timezoneBreakdown = tzResult.results.map(r => ({ timezone: r.timezone, count: r.cnt }));
-      }
-
-      const sdResult = await db.prepare(
-        'SELECT session_duration, COUNT(*) as cnt FROM user_sessions GROUP BY session_duration ORDER BY cnt DESC'
-      ).all<{ session_duration: string; cnt: number }>();
-      if (sdResult.results) {
-        data.userSessions.sessionDurationBreakdown = sdResult.results.map(r => ({ duration: r.session_duration, count: r.cnt }));
-      }
-    } catch (error) {
-      logger.warn('Failed to fetch user session stats for status page', {
         error: error instanceof Error ? error.message : 'Unknown error',
       });
     }
@@ -1317,8 +1292,8 @@ app.get('/api/repositories/:owner/:repo/commits-calendar', optionalAuthMiddlewar
   if (isPastMonth && c.env.DB) {
     try {
       const cached = await c.env.DB.prepare(
-        'SELECT counts FROM commit_calendar_cache WHERE owner = ? AND repo = ? AND year = ? AND month = ?'
-      ).bind(owner, repo, year, month).first<{ counts: string }>();
+        'SELECT counts FROM commit_calendar_cache WHERE user_id = ? AND owner = ? AND repo = ? AND year = ? AND month = ?'
+      ).bind(user.sub, owner, repo, year, month).first<{ counts: string }>();
       if (cached) {
         return c.json({ year, month, counts: JSON.parse(cached.counts), cached: true });
       }
@@ -1343,8 +1318,8 @@ app.get('/api/repositories/:owner/:repo/commits-calendar', optionalAuthMiddlewar
   if (isPastMonth && c.env.DB) {
     try {
       await c.env.DB.prepare(
-        'INSERT INTO commit_calendar_cache (owner, repo, year, month, counts, cached_at) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT (owner, repo, year, month) DO UPDATE SET counts = excluded.counts, cached_at = excluded.cached_at'
-      ).bind(owner, repo, year, month, JSON.stringify(counts), now.toISOString()).run();
+        'INSERT INTO commit_calendar_cache (user_id, owner, repo, year, month, counts, cached_at) VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT (user_id, owner, repo, year, month) DO UPDATE SET counts = excluded.counts, cached_at = excluded.cached_at'
+      ).bind(user.sub, owner, repo, year, month, JSON.stringify(counts), now.toISOString()).run();
     } catch (e) {
       logger.warn('Failed to write commit calendar cache to D1', {
         owner, repo, year: String(year), month: String(month),

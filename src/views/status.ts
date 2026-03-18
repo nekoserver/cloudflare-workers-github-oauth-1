@@ -1,5 +1,6 @@
 /**
  * キャッシュ状況ページのHTML
+ * ログイン中のユーザー自身のキャッシュデータのみを表示する
  */
 import { escapeHtml } from '../utils/html';
 
@@ -32,11 +33,6 @@ export interface CacheStatusData {
     totalEntries: number;
     entries: InstallationPermEntry[];
   };
-  userSessions: {
-    totalUsers: number;
-    timezoneBreakdown: { timezone: string; count: number }[];
-    sessionDurationBreakdown: { duration: string; count: number }[];
-  };
 }
 
 export function getCacheStatusPage(user: {
@@ -44,6 +40,7 @@ export function getCacheStatusPage(user: {
   username: string;
 }, data: CacheStatusData): string {
   const displayName = escapeHtml(user.name || user.username);
+  const safeUsername = escapeHtml(user.username);
   const initials = escapeHtml((user.name || user.username).substring(0, 2).toUpperCase());
 
   // リポジトリ別集計テーブル行
@@ -52,15 +49,6 @@ export function getCacheStatusPage(user: {
       <td>${escapeHtml(r.owner)}/${escapeHtml(r.repo)}</td>
       <td class="num">${r.entryCount}</td>
       <td class="num">${r.totalCommits.toLocaleString()}</td>
-    </tr>`
-  ).join('');
-
-  // 月別集計テーブル行
-  const monthRows = data.commitCache.byMonth.map(m =>
-    `<tr>
-      <td>${escapeHtml(m.yearMonth)}</td>
-      <td class="num">${m.entryCount}</td>
-      <td class="num">${m.totalCommits.toLocaleString()}</td>
     </tr>`
   ).join('');
 
@@ -85,17 +73,7 @@ export function getCacheStatusPage(user: {
     </tr>`
   ).join('');
 
-  // タイムゾーン分布
-  const tzRows = data.userSessions.timezoneBreakdown.map(t =>
-    `<tr><td>${escapeHtml(t.timezone)}</td><td class="num">${t.count}</td></tr>`
-  ).join('');
-
-  // セッション期間分布
-  const sdRows = data.userSessions.sessionDurationBreakdown.map(s =>
-    `<tr><td>${escapeHtml(s.duration)}</td><td class="num">${s.count}</td></tr>`
-  ).join('');
-
-  // 日別作業量チャート用データ（コミットキャッシュの月別から日毎に展開はできないが、月毎のコミット数で棒グラフを描く）
+  // 月別コミット量チャート
   const chartData = data.commitCache.byMonth
     .slice()
     .sort((a, b) => a.yearMonth.localeCompare(b.yearMonth));
@@ -224,25 +202,6 @@ export function getCacheStatusPage(user: {
       font-variant-numeric: tabular-nums;
     }
 
-    /* 分布カード */
-    .breakdown-grid {
-      display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-      gap: 24px;
-    }
-    .breakdown-card {
-      background: #f7fafc; border-radius: 12px; padding: 20px;
-    }
-    .breakdown-card h4 {
-      font-size: 15px; font-weight: 600; color: #4a5568; margin-bottom: 12px;
-    }
-    .breakdown-table {
-      width: 100%; border-collapse: collapse; font-size: 14px;
-    }
-    .breakdown-table td {
-      padding: 6px 8px; border-bottom: 1px solid #e2e8f0; color: #2d3748;
-    }
-    .breakdown-table .num { text-align: right; font-weight: 600; }
-
     .empty-message {
       padding: 24px; text-align: center; color: #a0aec0; font-size: 14px;
     }
@@ -290,7 +249,7 @@ export function getCacheStatusPage(user: {
   <div class="container">
     <div class="page-card">
       <h1 class="page-title">📊 キャッシュ状況</h1>
-      <p class="page-subtitle">D1データベースに保存されたキャッシュデータの集計</p>
+      <p class="page-subtitle">${safeUsername} のキャッシュデータ</p>
 
       <!-- サマリー -->
       <div class="summary-grid">
@@ -305,10 +264,6 @@ export function getCacheStatusPage(user: {
         <div class="summary-card">
           <div class="label">権限キャッシュ件数</div>
           <div class="value accent">${data.installationPerms.totalEntries}</div>
-        </div>
-        <div class="summary-card">
-          <div class="label">登録ユーザー数</div>
-          <div class="value">${data.userSessions.totalUsers}</div>
         </div>
       </div>
 
@@ -380,29 +335,6 @@ export function getCacheStatusPage(user: {
           </table>
         </div>
         ` : '<div class="empty-message">インストール権限キャッシュがありません</div>'}
-      </div>
-
-      <!-- ユーザー設定分布 -->
-      <div class="section">
-        <h2 class="section-title">ユーザー設定の分布</h2>
-        <div class="breakdown-grid">
-          <div class="breakdown-card">
-            <h4>タイムゾーン</h4>
-            ${data.userSessions.timezoneBreakdown.length > 0 ? `
-            <table class="breakdown-table">
-              <tbody>${tzRows}</tbody>
-            </table>
-            ` : '<div class="empty-message">データなし</div>'}
-          </div>
-          <div class="breakdown-card">
-            <h4>セッション有効期限</h4>
-            ${data.userSessions.sessionDurationBreakdown.length > 0 ? `
-            <table class="breakdown-table">
-              <tbody>${sdRows}</tbody>
-            </table>
-            ` : '<div class="empty-message">データなし</div>'}
-          </div>
-        </div>
       </div>
 
       <a href="/welcome" class="back-btn">← ホームに戻る</a>
