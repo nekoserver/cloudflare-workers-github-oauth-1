@@ -41,6 +41,16 @@ export interface UserContextInfo {
   allWorkspaces: { workspaceId: string; workspaceName: string; teamId: string; teamName: string }[];
 }
 
+export interface CacheStatsEntry {
+  owner: string;
+  repo: string;
+  githubFetchCount: number;
+  cacheSaveCount: number;
+  cacheLookupCount: number;
+  cacheHitCount: number;
+  lastUpdatedAt: string;
+}
+
 export interface CacheStatusData {
   commitCache: {
     totalEntries: number;
@@ -52,6 +62,13 @@ export interface CacheStatusData {
   installationPerms: {
     totalEntries: number;
     entries: InstallationPermEntry[];
+  };
+  cacheStats: {
+    totalGithubFetch: number;
+    totalCacheSave: number;
+    totalCacheLookup: number;
+    totalCacheHit: number;
+    entries: CacheStatsEntry[];
   };
   tables: TableStatusEntry[];
   userContext: UserContextInfo;
@@ -129,6 +146,46 @@ export function getCacheStatusPage(user: {
       <div class="chart-value">${d.totalCommits}</div>
     </div>`;
   }).join('');
+
+  // キャッシュ統計：リポジトリ別テーブル行
+  const cs = data.cacheStats;
+  const cacheHitRate = cs.totalCacheLookup > 0
+    ? ((cs.totalCacheHit / cs.totalCacheLookup) * 100).toFixed(1)
+    : '-';
+
+  const cacheStatsRows = cs.entries.map(e => {
+    const hitRate = e.cacheLookupCount > 0
+      ? ((e.cacheHitCount / e.cacheLookupCount) * 100).toFixed(1) + '%'
+      : '-';
+    return `<tr>
+      <td>${escapeHtml(e.owner)}/${escapeHtml(e.repo)}</td>
+      <td class="num">${e.githubFetchCount}</td>
+      <td class="num">${e.cacheSaveCount}</td>
+      <td class="num">${e.cacheLookupCount}</td>
+      <td class="num">${e.cacheHitCount}</td>
+      <td class="num">${hitRate}</td>
+      <td class="date">${escapeHtml(e.lastUpdatedAt)}</td>
+    </tr>`;
+  }).join('');
+
+  // キャッシュ統計：棒グラフ用データ（リポジトリ別の4指標）
+  const statsChartData = cs.entries.map(e => ({
+    label: `${e.owner}/${e.repo}`,
+    githubFetch: e.githubFetchCount,
+    cacheSave: e.cacheSaveCount,
+    cacheLookup: e.cacheLookupCount,
+    cacheHit: e.cacheHitCount,
+  }));
+  const statsChartDataJson = JSON.stringify(statsChartData);
+
+  // キャッシュヒット率：リポジトリ別の折れ線チャート用データ
+  const hitRateChartData = cs.entries
+    .filter(e => e.cacheLookupCount > 0)
+    .map(e => ({
+      label: `${e.owner}/${e.repo}`,
+      rate: parseFloat(((e.cacheHitCount / e.cacheLookupCount) * 100).toFixed(1)),
+    }));
+  const hitRateChartDataJson = JSON.stringify(hitRateChartData);
 
   // ワークスペース一覧行
   const wsRows = ctx.allWorkspaces.map(ws => {
@@ -289,6 +346,8 @@ export function getCacheStatusPage(user: {
     }
     .back-btn:hover { background: var(--accent-hover); }
 
+    .canvas-wrapper { width: 100%; overflow-x: auto; }
+    .canvas-wrapper canvas { display: block; }
     .table-scroll { overflow-x: auto; }
 
     @media (max-width: 768px) {
@@ -415,6 +474,30 @@ export function getCacheStatusPage(user: {
         </div>
       </div>
 
+      <!-- キャッシュ統計サマリー -->
+      <div class="summary-grid">
+        <div class="summary-card">
+          <div class="label">GitHub API 問い合わせ</div>
+          <div class="value">${cs.totalGithubFetch}</div>
+        </div>
+        <div class="summary-card">
+          <div class="label">キャッシュ保存</div>
+          <div class="value">${cs.totalCacheSave}</div>
+        </div>
+        <div class="summary-card">
+          <div class="label">キャッシュ参照</div>
+          <div class="value">${cs.totalCacheLookup}</div>
+        </div>
+        <div class="summary-card">
+          <div class="label">キャッシュヒット</div>
+          <div class="value accent">${cs.totalCacheHit}</div>
+        </div>
+        <div class="summary-card">
+          <div class="label">キャッシュヒット率</div>
+          <div class="value accent">${cacheHitRate}${cacheHitRate !== '-' ? '%' : ''}</div>
+        </div>
+      </div>
+
       <!-- 月別コミット量チャート -->
       ${chartData.length > 0 ? `
       <div class="section">
@@ -485,6 +568,49 @@ export function getCacheStatusPage(user: {
         ` : '<div class="empty-message">インストール権限キャッシュがありません</div>'}
       </div>
 
+      <!-- キャッシュ統計：累計棒グラフ -->
+      ${cs.entries.length > 0 ? `
+      <div class="section">
+        <h2 class="section-title">リポジトリ別キャッシュ累計</h2>
+        <div class="canvas-wrapper">
+          <canvas id="statsBarChart" width="800" height="${Math.max(200, cs.entries.length * 80 + 60)}"></canvas>
+        </div>
+      </div>
+      ` : ''}
+
+      <!-- キャッシュヒット率：折れ線チャート -->
+      ${hitRateChartData.length > 0 ? `
+      <div class="section">
+        <h2 class="section-title">リポジトリ別キャッシュヒット率</h2>
+        <div class="canvas-wrapper">
+          <canvas id="hitRateChart" width="800" height="300"></canvas>
+        </div>
+      </div>
+      ` : ''}
+
+      <!-- キャッシュ統計詳細テーブル -->
+      <div class="section">
+        <h2 class="section-title">コミット一覧キャッシュ統計（リポジトリ別）</h2>
+        ${cs.entries.length > 0 ? `
+        <div class="table-scroll">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>リポジトリ</th>
+                <th style="text-align:right">GitHub問い合わせ</th>
+                <th style="text-align:right">キャッシュ保存</th>
+                <th style="text-align:right">キャッシュ参照</th>
+                <th style="text-align:right">キャッシュヒット</th>
+                <th style="text-align:right">ヒット率</th>
+                <th>最終更新</th>
+              </tr>
+            </thead>
+            <tbody>${cacheStatsRows}</tbody>
+          </table>
+        </div>
+        ` : '<div class="empty-message">キャッシュ統計データがありません</div>'}
+      </div>
+
       <a href="/welcome" class="back-btn">← ホームに戻る</a>
     </div>
   </div>
@@ -500,6 +626,210 @@ export function getCacheStatusPage(user: {
       const dd = document.getElementById('dropdownMenu');
       if (!icon.contains(e.target) && !dd.contains(e.target)) dd.classList.remove('show');
     });
+
+    // Canvas チャート描画
+    (function() {
+      var isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+      var textColor = isDark ? '#a0aec0' : '#4a5568';
+      var gridColor = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)';
+      var bgColor = isDark ? '#2d3748' : '#ffffff';
+      var barColors = ['#667eea', '#48bb78', '#ed8936', '#e53e3e'];
+      var barLabels = ['GitHub問い合わせ', 'キャッシュ保存', 'キャッシュ参照', 'キャッシュヒット'];
+
+      var statsData = ${statsChartDataJson};
+      var hitRateData = ${hitRateChartDataJson};
+
+      // ── 累計棒グラフ ──
+      var barCanvas = document.getElementById('statsBarChart');
+      if (barCanvas && statsData.length > 0) {
+        var ctx = barCanvas.getContext('2d');
+        var dpr = window.devicePixelRatio || 1;
+        var w = barCanvas.parentElement.clientWidth;
+        var rowH = 80;
+        var h = Math.max(200, statsData.length * rowH + 60);
+        barCanvas.width = w * dpr;
+        barCanvas.height = h * dpr;
+        barCanvas.style.width = w + 'px';
+        barCanvas.style.height = h + 'px';
+        ctx.scale(dpr, dpr);
+
+        var padL = 180, padR = 80, padT = 40, padB = 30;
+        var chartW = w - padL - padR;
+
+        // 最大値
+        var maxVal = 1;
+        for (var i = 0; i < statsData.length; i++) {
+          var d = statsData[i];
+          var vals = [d.githubFetch, d.cacheSave, d.cacheLookup, d.cacheHit];
+          for (var j = 0; j < vals.length; j++) {
+            if (vals[j] > maxVal) maxVal = vals[j];
+          }
+        }
+
+        // グリッド
+        ctx.strokeStyle = gridColor;
+        ctx.lineWidth = 1;
+        var gridSteps = 5;
+        for (var g = 0; g <= gridSteps; g++) {
+          var gx = padL + (chartW / gridSteps) * g;
+          ctx.beginPath();
+          ctx.moveTo(gx, padT);
+          ctx.lineTo(gx, h - padB);
+          ctx.stroke();
+          ctx.fillStyle = textColor;
+          ctx.font = '11px -apple-system, sans-serif';
+          ctx.textAlign = 'center';
+          ctx.fillText(String(Math.round(maxVal / gridSteps * g)), gx, h - padB + 16);
+        }
+
+        // 棒グラフ描画
+        var barH = 14;
+        var groupGap = rowH;
+        for (var i = 0; i < statsData.length; i++) {
+          var d = statsData[i];
+          var vals = [d.githubFetch, d.cacheSave, d.cacheLookup, d.cacheHit];
+          var baseY = padT + i * groupGap;
+
+          // ラベル
+          ctx.fillStyle = textColor;
+          ctx.font = '13px -apple-system, sans-serif';
+          ctx.textAlign = 'right';
+          ctx.textBaseline = 'middle';
+          var labelText = d.label.length > 22 ? d.label.substring(0, 20) + '..' : d.label;
+          ctx.fillText(labelText, padL - 8, baseY + (barH * 4 + 6) / 2);
+
+          for (var j = 0; j < 4; j++) {
+            var bw = vals[j] > 0 ? Math.max(2, (vals[j] / maxVal) * chartW) : 0;
+            var by = baseY + j * (barH + 2);
+            ctx.fillStyle = barColors[j];
+            ctx.beginPath();
+            ctx.roundRect(padL, by, bw, barH, 3);
+            ctx.fill();
+            if (vals[j] > 0) {
+              ctx.fillStyle = textColor;
+              ctx.font = '11px -apple-system, sans-serif';
+              ctx.textAlign = 'left';
+              ctx.textBaseline = 'middle';
+              ctx.fillText(String(vals[j]), padL + bw + 4, by + barH / 2);
+            }
+          }
+        }
+
+        // 凡例
+        var legendY = 12;
+        var legendX = padL;
+        ctx.font = '12px -apple-system, sans-serif';
+        ctx.textBaseline = 'middle';
+        for (var j = 0; j < 4; j++) {
+          ctx.fillStyle = barColors[j];
+          ctx.fillRect(legendX, legendY - 5, 12, 12);
+          ctx.fillStyle = textColor;
+          ctx.textAlign = 'left';
+          ctx.fillText(barLabels[j], legendX + 16, legendY + 1);
+          legendX += ctx.measureText(barLabels[j]).width + 32;
+        }
+      }
+
+      // ── キャッシュヒット率折れ線 ──
+      var lineCanvas = document.getElementById('hitRateChart');
+      if (lineCanvas && hitRateData.length > 0) {
+        var ctx2 = lineCanvas.getContext('2d');
+        var dpr2 = window.devicePixelRatio || 1;
+        var w2 = lineCanvas.parentElement.clientWidth;
+        var h2 = 300;
+        lineCanvas.width = w2 * dpr2;
+        lineCanvas.height = h2 * dpr2;
+        lineCanvas.style.width = w2 + 'px';
+        lineCanvas.style.height = h2 + 'px';
+        ctx2.scale(dpr2, dpr2);
+
+        var pL = 50, pR = 30, pT = 30, pB = 60;
+        var cW = w2 - pL - pR;
+        var cH = h2 - pT - pB;
+
+        // Y軸グリッド (0-100%)
+        ctx2.strokeStyle = gridColor;
+        ctx2.lineWidth = 1;
+        ctx2.font = '11px -apple-system, sans-serif';
+        ctx2.fillStyle = textColor;
+        ctx2.textAlign = 'right';
+        ctx2.textBaseline = 'middle';
+        for (var y = 0; y <= 100; y += 20) {
+          var yy = pT + cH - (y / 100) * cH;
+          ctx2.beginPath();
+          ctx2.moveTo(pL, yy);
+          ctx2.lineTo(w2 - pR, yy);
+          ctx2.stroke();
+          ctx2.fillText(y + '%', pL - 6, yy);
+        }
+
+        // データ点とライン
+        var lineColor = '#667eea';
+        var pointColor = '#764ba2';
+        var n = hitRateData.length;
+        var stepX = n > 1 ? cW / (n - 1) : cW / 2;
+
+        // 塗り
+        ctx2.fillStyle = isDark ? 'rgba(102,126,234,0.15)' : 'rgba(102,126,234,0.1)';
+        ctx2.beginPath();
+        ctx2.moveTo(pL, pT + cH);
+        for (var i = 0; i < n; i++) {
+          var px = n > 1 ? pL + i * stepX : pL + cW / 2;
+          var py = pT + cH - (hitRateData[i].rate / 100) * cH;
+          ctx2.lineTo(px, py);
+        }
+        ctx2.lineTo(n > 1 ? pL + (n - 1) * stepX : pL + cW / 2, pT + cH);
+        ctx2.closePath();
+        ctx2.fill();
+
+        // 線
+        ctx2.strokeStyle = lineColor;
+        ctx2.lineWidth = 2.5;
+        ctx2.lineJoin = 'round';
+        ctx2.beginPath();
+        for (var i = 0; i < n; i++) {
+          var px = n > 1 ? pL + i * stepX : pL + cW / 2;
+          var py = pT + cH - (hitRateData[i].rate / 100) * cH;
+          if (i === 0) ctx2.moveTo(px, py);
+          else ctx2.lineTo(px, py);
+        }
+        ctx2.stroke();
+
+        // ポイントとラベル
+        for (var i = 0; i < n; i++) {
+          var px = n > 1 ? pL + i * stepX : pL + cW / 2;
+          var py = pT + cH - (hitRateData[i].rate / 100) * cH;
+
+          ctx2.fillStyle = bgColor;
+          ctx2.beginPath();
+          ctx2.arc(px, py, 5, 0, Math.PI * 2);
+          ctx2.fill();
+          ctx2.strokeStyle = pointColor;
+          ctx2.lineWidth = 2;
+          ctx2.stroke();
+
+          // 率ラベル
+          ctx2.fillStyle = textColor;
+          ctx2.font = 'bold 12px -apple-system, sans-serif';
+          ctx2.textAlign = 'center';
+          ctx2.textBaseline = 'bottom';
+          ctx2.fillText(hitRateData[i].rate + '%', px, py - 8);
+
+          // X軸ラベル
+          ctx2.save();
+          ctx2.translate(px, pT + cH + 8);
+          ctx2.rotate(Math.PI / 6);
+          ctx2.fillStyle = textColor;
+          ctx2.font = '11px -apple-system, sans-serif';
+          ctx2.textAlign = 'left';
+          ctx2.textBaseline = 'top';
+          var lbl = hitRateData[i].label;
+          if (lbl.length > 20) lbl = lbl.substring(0, 18) + '..';
+          ctx2.fillText(lbl, 0, 0);
+          ctx2.restore();
+        }
+      }
+    })();
   </script>
 </body>
 </html>`;
