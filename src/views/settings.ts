@@ -13,6 +13,7 @@ export function getSettingsPage(user: {
   expiresAtTimestamp: number;
   timezone?: string;
   sessionDuration?: string;
+  recentCommitsCount?: number;
   githubScopes?: string;
   githubGrantedScopes?: string[] | null;
   githubScopeError?: string | null;
@@ -21,6 +22,7 @@ export function getSettingsPage(user: {
   const initials = escapeHtml((user.name || user.username).substring(0, 2).toUpperCase());
   const currentTimezone = user.timezone || 'JST';
   const currentSessionDuration = user.sessionDuration || '1h';
+  const currentRecentCommitsCount = user.recentCommitsCount || 20;
   const requestedScopes = user.githubScopes ? user.githubScopes.split(/\s+/).filter(Boolean) : [];
   const grantedScopes = user.githubGrantedScopes ?? null;
   const scopeError = user.githubScopeError ? escapeHtml(user.githubScopeError) : null;
@@ -284,12 +286,33 @@ export function getSettingsPage(user: {
               </label>
             </div>
           </div>
+          <div class="info-item disabled" id="recentCommitsCountItem">
+            <span class="info-label">最終コミット一覧の表示件数</span>
+            <div class="setting-control">
+              <div class="setting-select-wrapper">
+                <select class="timezone-select" id="recentCommitsCountSelect" onchange="onRecentCommitsCountChange()" disabled>
+                  <option value="5" ${currentRecentCommitsCount === 5 ? 'selected' : ''}>5件</option>
+                  <option value="10" ${currentRecentCommitsCount === 10 ? 'selected' : ''}>10件</option>
+                  <option value="20" ${currentRecentCommitsCount === 20 ? 'selected' : ''}>20件 (デフォルト)</option>
+                  <option value="30" ${currentRecentCommitsCount === 30 ? 'selected' : ''}>30件</option>
+                  <option value="50" ${currentRecentCommitsCount === 50 ? 'selected' : ''}>50件</option>
+                  <option value="100" ${currentRecentCommitsCount === 100 ? 'selected' : ''}>100件</option>
+                </select>
+              </div>
+              <input type="checkbox" class="setting-checkbox" id="recentCommitsCountCheckbox" onchange="toggleRecentCommitsCountEdit()">
+            </div>
+          </div>
         </div>
         <div class="button-container" id="buttonContainer">
           <button class="btn btn-save" onclick="saveTimezone()">保存</button>
           <button class="btn btn-cancel" onclick="cancelTimezone()">キャンセル</button>
         </div>
         <div class="success-message" id="successMessage">✓ タイムゾーンを変更しました</div>
+        <div class="button-container" id="recentCommitsCountButtonContainer">
+          <button class="btn btn-save" onclick="saveRecentCommitsCount()">保存</button>
+          <button class="btn btn-cancel" onclick="cancelRecentCommitsCount()">キャンセル</button>
+        </div>
+        <div class="success-message" id="recentCommitsCountSuccessMessage">✓ 表示件数を変更しました</div>
       </div>
 
       <a href="/welcome" class="back-btn">← ホームに戻る</a>
@@ -331,6 +354,7 @@ export function getSettingsPage(user: {
 
     let originalTimezone = '${currentTimezone}';
     let originalSessionDuration = '${currentSessionDuration}';
+    let originalRecentCommitsCount = '${currentRecentCommitsCount}';
     const expiresAtTimestamp = ${user.expiresAtTimestamp};
 
     // テーマトグルスイッチの初期化
@@ -453,6 +477,40 @@ export function getSettingsPage(user: {
       document.getElementById('sessionDurationCheckbox').checked = false;
       document.getElementById('sessionDurationSelect').disabled = true;
       document.getElementById('sessionDurationItem').classList.add('disabled');
+    }
+    function toggleRecentCommitsCountEdit() {
+      const cb = document.getElementById('recentCommitsCountCheckbox');
+      const sel = document.getElementById('recentCommitsCountSelect');
+      const item = document.getElementById('recentCommitsCountItem');
+      if (cb.checked) { sel.disabled = false; item.classList.remove('disabled'); }
+      else { sel.disabled = true; item.classList.add('disabled'); sel.value = originalRecentCommitsCount; document.getElementById('recentCommitsCountButtonContainer').classList.remove('show'); }
+    }
+    function onRecentCommitsCountChange() {
+      const cb = document.getElementById('recentCommitsCountCheckbox');
+      const sel = document.getElementById('recentCommitsCountSelect');
+      if (cb.checked && sel.value !== originalRecentCommitsCount) document.getElementById('recentCommitsCountButtonContainer').classList.add('show');
+      else document.getElementById('recentCommitsCountButtonContainer').classList.remove('show');
+    }
+    async function saveRecentCommitsCount() {
+      const count = document.getElementById('recentCommitsCountSelect').value;
+      const res = await fetch('/api/settings/recent-commits-count', { method: 'POST', headers: {'Content-Type':'application/json'}, credentials: 'include', body: JSON.stringify({ count }) });
+      if (res.ok) {
+        originalRecentCommitsCount = count;
+        document.getElementById('recentCommitsCountButtonContainer').classList.remove('show');
+        const msg = document.getElementById('recentCommitsCountSuccessMessage');
+        msg.classList.add('show');
+        document.getElementById('recentCommitsCountCheckbox').checked = false;
+        document.getElementById('recentCommitsCountSelect').disabled = true;
+        document.getElementById('recentCommitsCountItem').classList.add('disabled');
+        setTimeout(() => { msg.classList.remove('show'); }, 1500);
+      } else { alert('表示件数の変更に失敗しました'); }
+    }
+    function cancelRecentCommitsCount() {
+      document.getElementById('recentCommitsCountSelect').value = originalRecentCommitsCount;
+      document.getElementById('recentCommitsCountButtonContainer').classList.remove('show');
+      document.getElementById('recentCommitsCountCheckbox').checked = false;
+      document.getElementById('recentCommitsCountSelect').disabled = true;
+      document.getElementById('recentCommitsCountItem').classList.add('disabled');
     }
     function confirmRevoke() {
       if (confirm('このアプリへの承認を取り消しますか？\\n現在のセッションが破棄され、次回ログイン時に再度承認が必要になります。')) {

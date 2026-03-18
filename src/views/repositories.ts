@@ -547,6 +547,79 @@ export function getRepositoriesPage(user: {
     .commit-detail-empty {
       text-align: center; padding: 40px 0; font-size: 13px; color: var(--text-faint);
     }
+
+    /* Recent Commits Button */
+    .recent-commits-btn {
+      display: inline-flex; align-items: center; gap: 4px;
+      background: linear-gradient(135deg, #3182ce 0%, #2b6cb0 100%);
+      color: white; border: none; border-radius: 6px;
+      padding: 4px 10px; font-size: 12px; font-weight: 600;
+      cursor: pointer; transition: opacity 0.2s; flex-shrink: 0;
+    }
+    .recent-commits-btn:hover { opacity: 0.9; }
+    .recent-commits-btn-icon { font-size: 12px; }
+
+    /* Recent Commits Modal */
+    .recent-commits-modal-content {
+      max-width: 640px; width: 92%; max-height: 85vh;
+    }
+    .recent-commits-modal-content .modal-body {
+      padding: 16px 24px 24px; overflow-y: auto; max-height: calc(85vh - 60px);
+    }
+    .recent-commits-repo-name {
+      font-size: 14px; font-weight: 700; color: var(--text-secondary); margin-bottom: 12px;
+    }
+    .recent-commits-summary {
+      font-size: 12px; color: var(--text-faint); margin-bottom: 16px;
+      padding-bottom: 8px; border-bottom: 1px solid var(--border-color);
+    }
+    .recent-commits-date-group {
+      margin-bottom: 16px;
+    }
+    .recent-commits-date-label {
+      font-size: 13px; font-weight: 700; color: var(--text-muted);
+      margin-bottom: 8px; padding-bottom: 4px; border-bottom: 1px solid var(--border-color);
+      display: flex; align-items: center; gap: 8px;
+    }
+    .recent-commits-date-count {
+      font-size: 11px; font-weight: 600; color: var(--text-faint);
+      background: var(--badge-bg); padding: 2px 8px; border-radius: 999px;
+    }
+    .recent-commits-item {
+      border: 1px solid var(--border-color); border-radius: 10px; padding: 10px 12px;
+      margin-bottom: 8px; transition: border-color 0.2s;
+    }
+    .recent-commits-item:hover { border-color: var(--accent-color); }
+    .recent-commits-header {
+      display: flex; align-items: center; gap: 8px; margin-bottom: 4px;
+    }
+    .recent-commits-avatar {
+      width: 22px; height: 22px; border-radius: 50%; flex-shrink: 0;
+    }
+    .recent-commits-author {
+      font-size: 12px; font-weight: 600; color: var(--text-secondary);
+    }
+    .recent-commits-time {
+      font-size: 11px; color: var(--text-faint); margin-left: auto;
+    }
+    .recent-commits-message {
+      font-size: 13px; color: var(--text-primary); line-height: 1.4;
+      white-space: pre-wrap; word-break: break-word;
+    }
+    .recent-commits-message-title { font-weight: 600; }
+    .recent-commits-message-body { color: var(--text-muted); margin-top: 2px; font-size: 12px; }
+    .recent-commits-sha {
+      display: inline-block; margin-top: 4px; font-size: 11px;
+      font-family: monospace; color: var(--accent-color); text-decoration: none;
+      background: var(--code-bg); padding: 2px 6px; border-radius: 4px;
+    }
+    .recent-commits-sha:hover { text-decoration: underline; }
+    .recent-commits-loading {
+      text-align: center; padding: 40px 0; font-size: 13px; color: var(--text-faint);
+    }
+    .recent-commits-empty {
+      text-align: center; padding: 40px 0; font-size: 13px; color: var(--text-faint);
+    }
   </style>
 </head>
 <body>
@@ -609,6 +682,10 @@ export function getRepositoriesPage(user: {
           <button class="tree-view-btn" id="treeViewBtn" type="button" title="ツリー表示">
             <span class="tree-view-btn-icon">🌳</span>
             ツリー表示
+          </button>
+          <button class="recent-commits-btn" id="recentCommitsBtn" type="button" title="最終コミット一覧">
+            <span class="recent-commits-btn-icon">📜</span>
+            コミット一覧
           </button>
           <label class="toggle-switch" title="リポジトリ詳細の表示切替">
             <input type="checkbox" id="summaryToggle" />
@@ -695,6 +772,21 @@ export function getRepositoriesPage(user: {
       <div class="modal-body">
         <div class="commit-detail-date" id="commitDetailDate"></div>
         <div class="commit-detail-list" id="commitDetailList"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Recent Commits Modal -->
+  <div class="modal-overlay" id="recentCommitsModal">
+    <div class="modal-content recent-commits-modal-content">
+      <div class="modal-header">
+        <span class="modal-title">📜 最終コミット一覧</span>
+        <button class="modal-close" id="recentCommitsClose" type="button">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="recent-commits-repo-name" id="recentCommitsRepoName"></div>
+        <div class="recent-commits-summary" id="recentCommitsSummary"></div>
+        <div id="recentCommitsList"></div>
       </div>
     </div>
   </div>
@@ -1095,7 +1187,15 @@ export function getRepositoriesPage(user: {
     }
     document.addEventListener('keydown', function(e) {
       if (e.key === 'Escape') {
-        // ツリーモーダル → Zanzibar モーダル → 権限モーダルの順に閉じる
+        // 最終コミット一覧 → コミット詳細 → ツリー → Zanzibar → 権限モーダルの順に閉じる
+        if (recentCommitsModal && recentCommitsModal.classList.contains('show')) {
+          closeRecentCommitsModal();
+          return;
+        }
+        if (commitDetailModal && commitDetailModal.classList.contains('show')) {
+          commitDetailModal.classList.remove('show');
+          return;
+        }
         if (treeModal && treeModal.classList.contains('show')) {
           closeTreeModal();
           return;
@@ -1613,6 +1713,125 @@ export function getRepositoriesPage(user: {
         .catch(function() {
           commitDetailList.innerHTML = '<div class="commit-detail-empty">読み込みに失敗しました</div>';
         });
+    }
+
+    // ===== Recent Commits Modal =====
+    var recentCommitsModal = document.getElementById('recentCommitsModal');
+    var recentCommitsClose = document.getElementById('recentCommitsClose');
+    var recentCommitsBtn = document.getElementById('recentCommitsBtn');
+    var recentCommitsRepoName = document.getElementById('recentCommitsRepoName');
+    var recentCommitsSummary = document.getElementById('recentCommitsSummary');
+    var recentCommitsList = document.getElementById('recentCommitsList');
+
+    function getRecentCommitsCount() {
+      var m = document.cookie.match('(^|;)\\\\s*user_recent_commits_count=([^;]*)');
+      return m ? parseInt(decodeURIComponent(m[2]), 10) || 20 : 20;
+    }
+
+    function openRecentCommitsModal() {
+      if (!currentRepoName || !heatmapOwner) return;
+      if (recentCommitsRepoName) recentCommitsRepoName.textContent = heatmapOwner + '/' + currentRepoName;
+      if (recentCommitsSummary) recentCommitsSummary.textContent = '読み込み中...';
+      if (recentCommitsList) recentCommitsList.innerHTML = '<div class="recent-commits-loading">読み込み中...</div>';
+      if (recentCommitsModal) recentCommitsModal.classList.add('show');
+
+      var limit = getRecentCommitsCount();
+      var owner = heatmapOwner;
+      var repo = currentRepoName;
+      fetch('/api/repositories/' + encodeURIComponent(owner) + '/' + encodeURIComponent(repo) + '/recent-commits?limit=' + limit, {
+        headers: { 'Accept': 'application/json' },
+      })
+        .then(function(res) { return res.ok ? res.json() : null; })
+        .then(function(data) {
+          if (!data || !data.commits || data.commits.length === 0) {
+            if (recentCommitsSummary) recentCommitsSummary.textContent = '';
+            if (recentCommitsList) recentCommitsList.innerHTML = '<div class="recent-commits-empty">コミットが見つかりませんでした</div>';
+            return;
+          }
+          renderRecentCommits(data.commits);
+        })
+        .catch(function() {
+          if (recentCommitsSummary) recentCommitsSummary.textContent = '';
+          if (recentCommitsList) recentCommitsList.innerHTML = '<div class="recent-commits-empty">読み込みに失敗しました</div>';
+        });
+    }
+
+    function renderRecentCommits(commits) {
+      // 日付ごとにグループ化
+      var groups = {};
+      var groupOrder = [];
+      commits.forEach(function(commit) {
+        var day = commit.date ? commit.date.substring(0, 10) : 'unknown';
+        if (!groups[day]) {
+          groups[day] = [];
+          groupOrder.push(day);
+        }
+        groups[day].push(commit);
+      });
+
+      if (recentCommitsSummary) {
+        recentCommitsSummary.textContent = '直近 ' + commits.length + ' 件のコミット（' + groupOrder.length + ' 日分）';
+      }
+
+      var html = '';
+      groupOrder.forEach(function(day) {
+        var dayCommits = groups[day];
+        var parts = day.split('-');
+        var displayDate = day !== 'unknown' ? parseInt(parts[0]) + '年' + parseInt(parts[1]) + '月' + parseInt(parts[2]) + '日' : '不明';
+        html += '<div class="recent-commits-date-group">';
+        html += '<div class="recent-commits-date-label">';
+        html += '<span>' + esc(displayDate) + '</span>';
+        html += '<span class="recent-commits-date-count">' + dayCommits.length + '件</span>';
+        html += '</div>';
+        dayCommits.forEach(function(commit) {
+          var msgLines = (commit.message || '').split('\\n');
+          var title = msgLines[0] || '';
+          var body = msgLines.slice(1).filter(function(l) { return l.trim() !== ''; }).join('\\n');
+          var timeStr = '';
+          if (commit.date) {
+            var d = new Date(commit.date);
+            timeStr = String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+          }
+          html += '<div class="recent-commits-item">';
+          html += '<div class="recent-commits-header">';
+          if (commit.authorAvatarUrl) {
+            html += '<img class="recent-commits-avatar" src="' + esc(commit.authorAvatarUrl) + '&s=44" alt="" />';
+          }
+          html += '<span class="recent-commits-author">' + esc(commit.authorLogin || commit.authorName || 'Unknown') + '</span>';
+          if (timeStr) {
+            html += '<span class="recent-commits-time">' + esc(timeStr) + '</span>';
+          }
+          html += '</div>';
+          html += '<div class="recent-commits-message">';
+          html += '<div class="recent-commits-message-title">' + esc(title) + '</div>';
+          if (body) {
+            html += '<div class="recent-commits-message-body">' + esc(body) + '</div>';
+          }
+          html += '</div>';
+          if (commit.sha && commit.url) {
+            html += '<a class="recent-commits-sha" href="' + esc(commit.url) + '" target="_blank" rel="noopener">' + esc(commit.sha.substring(0, 7)) + '</a>';
+          }
+          html += '</div>';
+        });
+        html += '</div>';
+      });
+      if (recentCommitsList) recentCommitsList.innerHTML = html;
+    }
+
+    function closeRecentCommitsModal() {
+      if (recentCommitsModal) recentCommitsModal.classList.remove('show');
+    }
+
+    if (recentCommitsBtn) {
+      recentCommitsBtn.addEventListener('click', openRecentCommitsModal);
+    }
+    if (recentCommitsClose) {
+      recentCommitsClose.addEventListener('click', closeRecentCommitsModal);
+    }
+    if (recentCommitsModal) {
+      recentCommitsModal.addEventListener('click', function(e) {
+        if (e.target === recentCommitsModal) closeRecentCommitsModal();
+      });
     }
 
     // ページ読み込み時に最新のインストール権限を1回だけ取得して差分反映
