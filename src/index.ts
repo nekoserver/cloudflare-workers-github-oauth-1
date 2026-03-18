@@ -628,6 +628,25 @@ app.get('/auth/logout', (c) => {
 });
 
 /**
+ * アカウント切り替え
+ * 現在のセッションをクリアして、GitHubの再認証画面にリダイレクトする
+ */
+app.get('/auth/switch', (c) => {
+  const redirectHeaders = new Headers({
+    'Location': '/auth/github',
+  });
+  // 現在のセッションをクリア
+  redirectHeaders.append('Set-Cookie', 'auth_token=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0');
+  redirectHeaders.append('Set-Cookie', 'login_timestamp=; Path=/; Secure; SameSite=Lax; Max-Age=0');
+  redirectHeaders.append('Set-Cookie', 'last_activity=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0');
+  redirectHeaders.append('Set-Cookie', 'user_timezone=; Path=/; Secure; SameSite=Lax; Max-Age=0');
+  redirectHeaders.append('Set-Cookie', 'user_session_duration=; Path=/; Secure; SameSite=Lax; Max-Age=0');
+  redirectHeaders.append('Set-Cookie', 'oauth_pkce=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0');
+
+  return new Response(null, { status: 302, headers: redirectHeaders });
+});
+
+/**
  * ウェルカムページ（認証が必要）
  */
 app.get('/welcome', authMiddleware, async (c) => {
