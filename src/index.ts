@@ -356,6 +356,12 @@ app.get('/auth/github', async (c) => {
   authUrl.searchParams.set('code_challenge', pkce.challenge);
   authUrl.searchParams.set('code_challenge_method', 'S256');
 
+  // アカウント切り替え時は login="" を付与して GitHub ログイン画面を強制表示
+  const prompt = c.req.query('prompt');
+  if (prompt === 'switch') {
+    authUrl.searchParams.set('login', '');
+  }
+
   // stateをHttpOnlyクッキーに保存（5分間有効）
   const redirectHeaders = new Headers({
     'Location': authUrl.toString(),
@@ -630,10 +636,11 @@ app.get('/auth/logout', (c) => {
 /**
  * アカウント切り替え
  * 現在のセッションをクリアして、GitHubの再認証画面にリダイレクトする
+ * login="" パラメータを付与し、GitHub側でログイン画面を強制表示させる
  */
 app.get('/auth/switch', (c) => {
   const redirectHeaders = new Headers({
-    'Location': '/auth/github',
+    'Location': '/auth/github?prompt=switch',
   });
   // 現在のセッションをクリア
   redirectHeaders.append('Set-Cookie', 'auth_token=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0');

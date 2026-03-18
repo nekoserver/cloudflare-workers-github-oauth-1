@@ -189,6 +189,7 @@ export function getCacheStatusPage(user: {
     }
     .dropdown-item:last-child { border-bottom: none; }
     .dropdown-item:hover { background: var(--dropdown-hover); }
+    .dropdown-item.switch-account { color: var(--accent-color); }
     .dropdown-item.logout { color: var(--danger-color); }
     .container { max-width: 1200px; margin: 0 auto; padding: 48px 32px; }
     .page-card {
@@ -317,6 +318,7 @@ export function getCacheStatusPage(user: {
           <a href="/repositories" class="dropdown-item">📦 リポジトリ</a>
           <a href="/userinfo" class="dropdown-item">👤 ユーザー情報</a>
           <a href="/settings" class="dropdown-item">⚙️ 設定</a>
+          <a href="/auth/switch" class="dropdown-item switch-account">🔄 別アカウントでログイン</a>
           <a href="/auth/logout" class="dropdown-item logout">🚪 ログアウト</a>
         </div>
       </div>
