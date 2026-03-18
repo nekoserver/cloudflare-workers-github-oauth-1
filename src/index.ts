@@ -15,6 +15,7 @@ import { getWelcomePage } from './views/welcome';
 import { getSettingsPage } from './views/settings';
 import { getRepositoriesPage } from './views/repositories';
 import { getUserInfoPage } from './views/userinfo';
+import { getCacheStatusPage, CacheStatusData } from './views/status';
 import { getGitHubAccessToken, getGitHubLatestCommit, getGitHubRepoOpenIssuesCount, getGitHubRepoCommitsByMonth, getGitHubTokenScopes, getGitHubUser, getGitHubUserEmail, getGitHubUserRepos, GitHubTokenScopesError, buildRepoInstallationPermissionsMap, RepoInstallationPermissions, getGitHubUserInstallationsWithDiag, getGitHubInstallationRepos, getExternalServiceLinkedRepos, getSlackLinkedReposByWebhooks } from './utils/github';
 import { getCookieValue, getCookieValues } from './utils/cookie';
 import { verifyResendWebhookSignature } from './utils/resendWebhook';
@@ -751,6 +752,132 @@ app.get('/userinfo', authMiddleware, async (c) => {
     email: user.email,
     githubId: user.github_id,
   }));
+});
+
+/**
+ * キャッシュ状況ページ（認証が必要）
+ */
+app.get('/status', authMiddleware, async (c) => {
+  const user = c.get('user');
+  const db = c.env.DB;
+
+  const data: CacheStatusData = {
+    commitCache: { totalEntries: 0, totalCommits: 0, repos: [], byMonth: [], entries: [] },
+    installationPerms: { totalEntries: 0, entries: [] },
+    userSessions: { totalUsers: 0, timezoneBreakdown: [], sessionDurationBreakdown: [] },
+  };
+
+  if (db) {
+    // コミットキャッシュ全件取得
+    try {
+      const cacheRows = await db.prepare(
+        'SELECT owner, repo, year, month, counts, cached_at FROM commit_calendar_cache ORDER BY year DESC, month DESC'
+      ).all<{ owner: string; repo: string; year: number; month: number; counts: string; cached_at: string }>();
+
+      if (cacheRows.results) {
+        const repoMap = new Map<string, { entryCount: number; totalCommits: number }>();
+        const monthMap = new Map<string, { entryCount: number; totalCommits: number }>();
+
+        for (const row of cacheRows.results) {
+          const counts: Record<string, number> = JSON.parse(row.counts);
+          const total = Object.values(counts).reduce((s, v) => s + v, 0);
+
+          data.commitCache.entries.push({
+            owner: row.owner,
+            repo: row.repo,
+            year: row.year,
+            month: row.month,
+            totalCommits: total,
+            cachedAt: row.cached_at,
+          });
+          data.commitCache.totalCommits += total;
+
+          const repoKey = `${row.owner}/${row.repo}`;
+          const existing = repoMap.get(repoKey) || { entryCount: 0, totalCommits: 0 };
+          existing.entryCount++;
+          existing.totalCommits += total;
+          repoMap.set(repoKey, existing);
+
+          const ym = `${row.year}-${String(row.month).padStart(2, '0')}`;
+          const mExisting = monthMap.get(ym) || { entryCount: 0, totalCommits: 0 };
+          mExisting.entryCount++;
+          mExisting.totalCommits += total;
+          monthMap.set(ym, mExisting);
+        }
+
+        data.commitCache.totalEntries = cacheRows.results.length;
+
+        for (const [key, val] of repoMap.entries()) {
+          const [owner, repo] = key.split('/');
+          data.commitCache.repos.push({ owner, repo, entryCount: val.entryCount, totalCommits: val.totalCommits });
+        }
+        data.commitCache.repos.sort((a, b) => b.totalCommits - a.totalCommits);
+
+        for (const [ym, val] of monthMap.entries()) {
+          data.commitCache.byMonth.push({ yearMonth: ym, entryCount: val.entryCount, totalCommits: val.totalCommits });
+        }
+        data.commitCache.byMonth.sort((a, b) => a.yearMonth.localeCompare(b.yearMonth));
+      }
+    } catch (error) {
+      logger.warn('Failed to fetch commit calendar cache for status page', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+
+    // インストール権限キャッシュ
+    try {
+      const permRows = await db.prepare(
+        'SELECT installation_id, repo_name, repository_selection, permissions, updated_at FROM installation_permissions ORDER BY updated_at DESC'
+      ).all<{ installation_id: number; repo_name: string | null; repository_selection: string; permissions: string; updated_at: string }>();
+
+      if (permRows.results) {
+        data.installationPerms.totalEntries = permRows.results.length;
+        for (const row of permRows.results) {
+          const perms: Record<string, string> = JSON.parse(row.permissions);
+          data.installationPerms.entries.push({
+            installationId: row.installation_id,
+            repoName: row.repo_name,
+            repositorySelection: row.repository_selection,
+            permissionCount: Object.keys(perms).length,
+            updatedAt: row.updated_at,
+          });
+        }
+      }
+    } catch (error) {
+      logger.warn('Failed to fetch installation permissions for status page', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+
+    // ユーザーセッション統計
+    try {
+      const totalResult = await db.prepare('SELECT COUNT(*) as cnt FROM user_sessions').first<{ cnt: number }>();
+      data.userSessions.totalUsers = totalResult?.cnt ?? 0;
+
+      const tzResult = await db.prepare(
+        'SELECT timezone, COUNT(*) as cnt FROM user_sessions GROUP BY timezone ORDER BY cnt DESC'
+      ).all<{ timezone: string; cnt: number }>();
+      if (tzResult.results) {
+        data.userSessions.timezoneBreakdown = tzResult.results.map(r => ({ timezone: r.timezone, count: r.cnt }));
+      }
+
+      const sdResult = await db.prepare(
+        'SELECT session_duration, COUNT(*) as cnt FROM user_sessions GROUP BY session_duration ORDER BY cnt DESC'
+      ).all<{ session_duration: string; cnt: number }>();
+      if (sdResult.results) {
+        data.userSessions.sessionDurationBreakdown = sdResult.results.map(r => ({ duration: r.session_duration, count: r.cnt }));
+      }
+    } catch (error) {
+      logger.warn('Failed to fetch user session stats for status page', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+  }
+
+  return c.html(getCacheStatusPage({
+    username: user.sub,
+    name: user.name,
+  }, data));
 });
 
 /**
