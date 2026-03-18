@@ -696,6 +696,68 @@ export async function getGitHubRepoCommitsByDate(params: {
   return commits;
 }
 
+/**
+ * 直近のコミットを取得する（更新のない日を含まず、limit件まで）
+ * GitHub API の /commits を新しい順に取得し、limit件に達するまでページングする
+ */
+export async function getGitHubRepoRecentCommits(params: {
+  owner: string;
+  repo: string;
+  limit: number;
+  accessToken?: string;
+}): Promise<CommitDetail[]> {
+  const { owner, repo, limit, accessToken } = params;
+
+  const headers: Record<string, string> = {
+    'Accept': 'application/vnd.github+json',
+    'User-Agent': 'Cloudflare-Workers-GitHub-OAuth',
+    'X-GitHub-Api-Version': '2022-11-28',
+  };
+  if (accessToken) {
+    headers['Authorization'] = `Bearer ${accessToken}`;
+  }
+
+  const commits: CommitDetail[] = [];
+  const perPage = Math.min(limit, 100);
+  let nextUrl: string | null = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/commits?per_page=${perPage}`;
+
+  while (nextUrl && commits.length < limit) {
+    const response = await fetch(nextUrl, { headers });
+    if (!response.ok) {
+      break;
+    }
+
+    const data = await response.json<{
+      sha?: string;
+      html_url?: string;
+      commit?: {
+        message?: string;
+        author?: { name?: string; date?: string };
+      };
+      author?: { login?: string; avatar_url?: string };
+    }[]>();
+
+    for (const c of data) {
+      if (commits.length >= limit) break;
+      commits.push({
+        sha: c.sha ?? '',
+        message: c.commit?.message ?? '',
+        authorName: c.commit?.author?.name ?? '',
+        authorLogin: c.author?.login ?? '',
+        authorAvatarUrl: c.author?.avatar_url ?? '',
+        date: c.commit?.author?.date ?? '',
+        url: c.html_url ?? '',
+      });
+    }
+
+    const linkHeader = response.headers.get('Link');
+    const nextMatch = linkHeader?.match(/<([^>]+)>;\s*rel="next"/);
+    nextUrl = nextMatch ? nextMatch[1] : null;
+  }
+
+  return commits;
+}
+
 // =====================================================
 // Webhook URL ベースの外部サービス連携判定
 // =====================================================

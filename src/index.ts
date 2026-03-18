@@ -17,7 +17,7 @@ import { getRepositoriesPage } from './views/repositories';
 import { getUserInfoPage } from './views/userinfo';
 import { getCacheStatusPage, CacheStatusData, TableStatusEntry, UserContextInfo } from './views/status';
 import { ensureDefaultWorkspace, getCurrentWorkspace, getUserWorkspaces, switchWorkspace } from './utils/workspace';
-import { getGitHubAccessToken, getGitHubLatestCommit, getGitHubRepoOpenIssuesCount, getGitHubRepoCommitsByMonth, getGitHubRepoCommitsByDate, getGitHubTokenScopes, getGitHubUser, getGitHubUserEmail, getGitHubUserRepos, GitHubTokenScopesError, buildRepoInstallationPermissionsMap, RepoInstallationPermissions, getGitHubUserInstallationsWithDiag, getGitHubInstallationRepos, getExternalServiceLinkedRepos, getSlackLinkedReposByWebhooks } from './utils/github';
+import { getGitHubAccessToken, getGitHubLatestCommit, getGitHubRepoOpenIssuesCount, getGitHubRepoCommitsByMonth, getGitHubRepoCommitsByDate, getGitHubRepoRecentCommits, getGitHubTokenScopes, getGitHubUser, getGitHubUserEmail, getGitHubUserRepos, GitHubTokenScopesError, buildRepoInstallationPermissionsMap, RepoInstallationPermissions, getGitHubUserInstallationsWithDiag, getGitHubInstallationRepos, getExternalServiceLinkedRepos, getSlackLinkedReposByWebhooks } from './utils/github';
 import { getCookieValue, getCookieValues } from './utils/cookie';
 import { verifyResendWebhookSignature } from './utils/resendWebhook';
 import { verifyGitHubWebhookSignature } from './utils/githubWebhook';
@@ -715,9 +715,10 @@ app.get('/settings', authMiddleware, async (c) => {
   const user = c.get('user');
 
   const cookieHeader = c.req.header('Cookie');
-  const cookieVals = getCookieValues(cookieHeader, ['user_timezone', 'user_session_duration']);
+  const cookieVals = getCookieValues(cookieHeader, ['user_timezone', 'user_session_duration', 'user_recent_commits_count']);
   const timezone = cookieVals['user_timezone'] || DEFAULT_TIMEZONE;
   const sessionDuration = cookieVals['user_session_duration'] || '1h';
+  const recentCommitsCount = parseInt(cookieVals['user_recent_commits_count'] || '20', 10) || 20;
 
   let issuedAt: string;
   let expiresAt: string;
@@ -766,6 +767,7 @@ app.get('/settings', authMiddleware, async (c) => {
     expiresAtTimestamp: user.exp,
     timezone: resolvedTimezone,
     sessionDuration,
+    recentCommitsCount,
     githubScopes: GITHUB_OAUTH_SCOPE,
     githubGrantedScopes: grantedScopes,
     githubScopeError: scopesError,
@@ -1461,6 +1463,30 @@ app.get('/api/repositories/:owner/:repo/commits-by-date', optionalAuthMiddleware
   return c.json({ date, commits });
 });
 
+// 直近コミット一覧を取得する（更新のない日を含まず、limit件まで）
+app.get('/api/repositories/:owner/:repo/recent-commits', optionalAuthMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!user) {
+    return c.json({ error: 'Unauthorized' }, 401);
+  }
+
+  const owner = c.req.param('owner');
+  const repo = c.req.param('repo');
+  const limitParam = c.req.query('limit');
+  const limit = Math.min(Math.max(parseInt(limitParam || '20', 10) || 20, 1), 100);
+
+  const userSession = await getUserSession(c.env.DB, user.sub);
+  const accessToken = userSession?.githubAccessToken ?? user.github_access_token ?? undefined;
+
+  if (!accessToken) {
+    return c.json({ error: 'No access token available' }, 401);
+  }
+
+  const commits = await getGitHubRepoRecentCommits({ owner, repo, limit, accessToken });
+
+  return c.json({ commits });
+});
+
 /**
  * Resend webhook受信用エンドポイント
  * イベントタイプを/lib/resend-webhook.shtml?event=xxxへGETで通知し、Resendへのレスポンスを返す
@@ -1817,6 +1843,31 @@ app.post('/api/settings/theme', authMiddleware, async (c) => {
       error: error instanceof Error ? error.message : 'Unknown error',
     });
     return c.json({ error: 'テーマの変更に失敗しました' }, 500);
+  }
+});
+
+/**
+ * 最終コミット一覧の表示件数設定変更
+ */
+app.post('/api/settings/recent-commits-count', authMiddleware, async (c) => {
+  try {
+    const { count } = await c.req.json();
+    const num = parseInt(count, 10);
+
+    if (isNaN(num) || num < 5 || num > 100) {
+      return c.json({ error: '表示件数は5〜100の範囲で指定してください' }, 400);
+    }
+
+    c.header('Set-Cookie', `user_recent_commits_count=${num}; Path=/; Secure; SameSite=Lax; Max-Age=31536000`);
+
+    return c.json({ message: '表示件数を変更しました', count: num }, 200);
+  } catch (error) {
+    const user = c.get('user');
+    logger.error('Recent commits count update error', {
+      userId: user?.sub,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    return c.json({ error: '表示件数の変更に失敗しました' }, 500);
   }
 });
 
