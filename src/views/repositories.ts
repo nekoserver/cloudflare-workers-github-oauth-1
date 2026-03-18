@@ -353,6 +353,24 @@ export function getRepositoriesPage(user: {
       from { opacity: 0; transform: translateY(10px); }
       to { opacity: 1; transform: translateY(0); }
     }
+    .cache-toast-container {
+      position: fixed; top: 20px; left: 50%; transform: translateX(-50%);
+      z-index: 10000; display: flex; flex-direction: column; gap: 8px;
+      pointer-events: none;
+    }
+    .cache-toast {
+      padding: 12px 24px; border-radius: 8px; color: white; font-size: 14px; font-weight: 600;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.2); pointer-events: auto;
+      animation: cacheToastSlideIn 0.3s ease-out; transition: opacity 0.3s ease-out;
+    }
+    .cache-toast.cache-source { background: #68d391; color: #22543d; }
+    .cache-toast.github-source { background: #63b3ed; color: #1a365d; }
+    .cache-toast.cache-saved { background: #68d391; color: #22543d; }
+    .cache-toast.cache-toast-fade { opacity: 0; }
+    @keyframes cacheToastSlideIn {
+      from { transform: translateY(-20px); opacity: 0; }
+      to { transform: translateY(0); opacity: 1; }
+    }
     .missing-scope-banner {
       background: linear-gradient(135deg, #fefcbf 0%, #fef3c7 100%);
       border: 1px solid #ecc94b;
@@ -837,6 +855,8 @@ export function getRepositoriesPage(user: {
     <button class="toast-btn" id="repoToastClose" type="button">OK</button>
   </div>
 
+  <div class="cache-toast-container" id="cacheToastContainer"></div>
+
   <script>
     var toastEl = document.getElementById('repoToast');
     var toastMessageEl = document.getElementById('repoToastMessage');
@@ -863,6 +883,24 @@ export function getRepositoriesPage(user: {
         }
         toastEl.classList.remove('show');
       });
+    }
+
+    function getCacheToastDuration() {
+      var m = document.cookie.match('(^|;)\\\\s*user_toast_duration=([^;]*)');
+      return m ? parseInt(decodeURIComponent(m[2]), 10) || 10 : 10;
+    }
+    function showCacheToast(message, cssClass) {
+      var container = document.getElementById('cacheToastContainer');
+      if (!container) return;
+      var toast = document.createElement('div');
+      toast.className = 'cache-toast ' + cssClass;
+      toast.textContent = message;
+      container.appendChild(toast);
+      var durationMs = getCacheToastDuration() * 1000;
+      setTimeout(function() {
+        toast.classList.add('cache-toast-fade');
+        setTimeout(function() { if (toast.parentNode) toast.parentNode.removeChild(toast); }, 300);
+      }, durationMs);
     }
 
     ${getThemeToggleScript()}
@@ -1826,6 +1864,17 @@ export function getRepositoriesPage(user: {
               badgeText = limit + '/' + rcTotalCount + '件';
             }
             recentCommitsBtnCount.textContent = badgeText;
+          }
+          // キャッシュ/GitHub ソースに応じたトースト通知
+          if (data.source === 'cache') {
+            showCacheToast('キャッシュからコミット一覧を取得しました', 'cache-source');
+          } else if (data.source === 'github') {
+            showCacheToast('GitHub からコミット一覧を取得しました', 'github-source');
+            if (data.newlyCached) {
+              setTimeout(function() {
+                showCacheToast('コミット一覧がキャッシュに保存されました', 'cache-saved');
+              }, 500);
+            }
           }
         })
         .catch(function() {

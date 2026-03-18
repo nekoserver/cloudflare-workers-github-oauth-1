@@ -14,6 +14,7 @@ export function getSettingsPage(user: {
   timezone?: string;
   sessionDuration?: string;
   recentCommitsCount?: number;
+  toastDuration?: number;
   githubScopes?: string;
   githubGrantedScopes?: string[] | null;
   githubScopeError?: string | null;
@@ -23,6 +24,7 @@ export function getSettingsPage(user: {
   const currentTimezone = user.timezone || 'JST';
   const currentSessionDuration = user.sessionDuration || '1h';
   const currentRecentCommitsCount = user.recentCommitsCount || 20;
+  const currentToastDuration = user.toastDuration || 10;
   const requestedScopes = user.githubScopes ? user.githubScopes.split(/\s+/).filter(Boolean) : [];
   const grantedScopes = user.githubGrantedScopes ?? null;
   const scopeError = user.githubScopeError ? escapeHtml(user.githubScopeError) : null;
@@ -302,6 +304,17 @@ export function getSettingsPage(user: {
               <input type="checkbox" class="setting-checkbox" id="recentCommitsCountCheckbox" onchange="toggleRecentCommitsCountEdit()">
             </div>
           </div>
+          <div class="info-item disabled" id="toastDurationItem">
+            <span class="info-label">トースト通知の表示時間</span>
+            <div class="setting-control">
+              <div class="setting-select-wrapper">
+                <select class="timezone-select" id="toastDurationSelect" onchange="onToastDurationChange()" disabled>
+                  ${Array.from({ length: 60 }, (_, i) => i + 1).map(s => `<option value="${s}" ${currentToastDuration === s ? 'selected' : ''}>${s}秒${s === 10 ? ' (デフォルト)' : ''}</option>`).join('')}
+                </select>
+              </div>
+              <input type="checkbox" class="setting-checkbox" id="toastDurationCheckbox" onchange="toggleToastDurationEdit()">
+            </div>
+          </div>
         </div>
         <div class="button-container" id="buttonContainer">
           <button class="btn btn-save" onclick="saveTimezone()">保存</button>
@@ -313,6 +326,11 @@ export function getSettingsPage(user: {
           <button class="btn btn-cancel" onclick="cancelRecentCommitsCount()">キャンセル</button>
         </div>
         <div class="success-message" id="recentCommitsCountSuccessMessage">✓ 表示件数を変更しました</div>
+        <div class="button-container" id="toastDurationButtonContainer">
+          <button class="btn btn-save" onclick="saveToastDuration()">保存</button>
+          <button class="btn btn-cancel" onclick="cancelToastDuration()">キャンセル</button>
+        </div>
+        <div class="success-message" id="toastDurationSuccessMessage">✓ トースト表示時間を変更しました</div>
       </div>
 
       <a href="/welcome" class="back-btn">← ホームに戻る</a>
@@ -355,6 +373,7 @@ export function getSettingsPage(user: {
     let originalTimezone = '${currentTimezone}';
     let originalSessionDuration = '${currentSessionDuration}';
     let originalRecentCommitsCount = '${currentRecentCommitsCount}';
+    let originalToastDuration = '${currentToastDuration}';
     const expiresAtTimestamp = ${user.expiresAtTimestamp};
 
     // テーマトグルスイッチの初期化
@@ -511,6 +530,40 @@ export function getSettingsPage(user: {
       document.getElementById('recentCommitsCountCheckbox').checked = false;
       document.getElementById('recentCommitsCountSelect').disabled = true;
       document.getElementById('recentCommitsCountItem').classList.add('disabled');
+    }
+    function toggleToastDurationEdit() {
+      const cb = document.getElementById('toastDurationCheckbox');
+      const sel = document.getElementById('toastDurationSelect');
+      const item = document.getElementById('toastDurationItem');
+      if (cb.checked) { sel.disabled = false; item.classList.remove('disabled'); }
+      else { sel.disabled = true; item.classList.add('disabled'); sel.value = originalToastDuration; document.getElementById('toastDurationButtonContainer').classList.remove('show'); }
+    }
+    function onToastDurationChange() {
+      const cb = document.getElementById('toastDurationCheckbox');
+      const sel = document.getElementById('toastDurationSelect');
+      if (cb.checked && sel.value !== originalToastDuration) document.getElementById('toastDurationButtonContainer').classList.add('show');
+      else document.getElementById('toastDurationButtonContainer').classList.remove('show');
+    }
+    async function saveToastDuration() {
+      const duration = document.getElementById('toastDurationSelect').value;
+      const res = await fetch('/api/settings/toast-duration', { method: 'POST', headers: {'Content-Type':'application/json'}, credentials: 'include', body: JSON.stringify({ duration }) });
+      if (res.ok) {
+        originalToastDuration = duration;
+        document.getElementById('toastDurationButtonContainer').classList.remove('show');
+        const msg = document.getElementById('toastDurationSuccessMessage');
+        msg.classList.add('show');
+        document.getElementById('toastDurationCheckbox').checked = false;
+        document.getElementById('toastDurationSelect').disabled = true;
+        document.getElementById('toastDurationItem').classList.add('disabled');
+        setTimeout(() => { msg.classList.remove('show'); }, 1500);
+      } else { alert('トースト表示時間の変更に失敗しました'); }
+    }
+    function cancelToastDuration() {
+      document.getElementById('toastDurationSelect').value = originalToastDuration;
+      document.getElementById('toastDurationButtonContainer').classList.remove('show');
+      document.getElementById('toastDurationCheckbox').checked = false;
+      document.getElementById('toastDurationSelect').disabled = true;
+      document.getElementById('toastDurationItem').classList.add('disabled');
     }
     function confirmRevoke() {
       if (confirm('このアプリへの承認を取り消しますか？\\n現在のセッションが破棄され、次回ログイン時に再度承認が必要になります。')) {
