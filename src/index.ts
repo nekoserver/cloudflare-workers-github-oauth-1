@@ -882,6 +882,9 @@ app.get('/repositories', optionalAuthMiddleware, async (c) => {
   const userSession = await getUserSession(c.env.DB, user.sub);
   const accessToken = userSession?.githubAccessToken ?? user.github_access_token ?? undefined;
 
+  const cookieHeader = c.req.header('Cookie');
+  const timezone = userSession?.timezone || getCookieValues(cookieHeader, ['user_timezone'])['user_timezone'] || DEFAULT_TIMEZONE;
+
   let repositories: {
     owner: string;
     name: string;
