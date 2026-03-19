@@ -37,6 +37,15 @@ export interface GitHubCommit {
   html_url: string;
 }
 
+export interface GitHubCommitHistoryEntry {
+  sha: string;
+  message: string;
+  htmlUrl: string;
+  authorName: string | null;
+  authorLogin: string | null;
+  authoredDate: string | null;
+}
+
 export interface GitHubTokenInfo {
   scopes: string[];
 }
@@ -247,6 +256,107 @@ export async function getGitHubLatestCommit(params: {
   }
 
   return { sha: latest.sha, html_url: latest.html_url };
+}
+
+function parseLinkHeaderForLastPage(linkHeader: string | null): number | null {
+  if (!linkHeader) {
+    return null;
+  }
+  const segments = linkHeader.split(',');
+  for (const segment of segments) {
+    const match = segment.match(/<([^>]+)>;\s*rel="last"/);
+    if (!match) {
+      continue;
+    }
+    try {
+      const parsedUrl = new URL(match[1]);
+      const pageParam = parsedUrl.searchParams.get('page');
+      if (!pageParam) {
+        continue;
+      }
+      const pageNumber = Number(pageParam);
+      if (!Number.isNaN(pageNumber)) {
+        return pageNumber;
+      }
+    } catch (error) {
+      continue;
+    }
+  }
+  return null;
+}
+
+export async function getGitHubCommitCount(params: {
+  owner: string;
+  repo: string;
+  accessToken?: string;
+}): Promise<{ total: number | null; status: number }> {
+  const { owner, repo, accessToken } = params;
+  const url = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/commits?per_page=1`;
+  const headers: Record<string, string> = {
+    'Accept': 'application/vnd.github.v3+json',
+    'User-Agent': 'Cloudflare-Workers-GitHub-OAuth',
+  };
+  if (accessToken) {
+    headers['Authorization'] = `Bearer ${accessToken}`;
+  }
+
+  const response = await fetch(url, { headers });
+  if (!response.ok) {
+    return { total: null, status: response.status };
+  }
+
+  const commits = await response.json<any[]>();
+  const lastPage = parseLinkHeaderForLastPage(response.headers.get('Link'));
+  if (lastPage !== null) {
+    return { total: lastPage, status: response.status };
+  }
+
+  return { total: commits.length, status: response.status };
+}
+
+export async function getGitHubCommits(params: {
+  owner: string;
+  repo: string;
+  perPage: number;
+  page?: number;
+  accessToken?: string;
+}): Promise<{ commits: GitHubCommitHistoryEntry[]; status: number }> {
+  const { owner, repo, perPage, page = 1, accessToken } = params;
+  const url = new URL(`https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/commits`);
+  url.searchParams.set('per_page', perPage.toString());
+  url.searchParams.set('page', page.toString());
+  const headers: Record<string, string> = {
+    'Accept': 'application/vnd.github.v3+json',
+    'User-Agent': 'Cloudflare-Workers-GitHub-OAuth',
+  };
+  if (accessToken) {
+    headers['Authorization'] = `Bearer ${accessToken}`;
+  }
+
+  const response = await fetch(url.toString(), { headers });
+  if (!response.ok) {
+    return { commits: [], status: response.status };
+  }
+
+  const data = await response.json<any[]>();
+  if (!Array.isArray(data)) {
+    return { commits: [], status: response.status };
+  }
+
+  const entries = data.map((entry) => {
+    const commitInfo = entry?.commit ?? {};
+    const authorInfo = commitInfo.author;
+    return {
+      sha: entry?.sha ?? '',
+      htmlUrl: entry?.html_url ?? '',
+      message: typeof commitInfo.message === 'string' ? commitInfo.message : entry?.sha ?? '',
+      authorName: typeof authorInfo?.name === 'string' ? authorInfo.name : null,
+      authorLogin: entry?.author?.login ?? null,
+      authoredDate: typeof authorInfo?.date === 'string' ? authorInfo.date : null,
+    };
+  }).filter((entry) => entry.sha && entry.htmlUrl);
+
+  return { commits: entries, status: response.status };
 }
 
 /**

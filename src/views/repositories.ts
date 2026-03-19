@@ -33,6 +33,7 @@ export function getRepositoriesPage(user: {
   cloudflareLinkedRepos?: Record<string, boolean> | null;
   vercelLinkedRepos?: Record<string, boolean> | null;
   slackLinkedRepos?: Record<string, boolean> | null;
+  commitHistoryPageSize: number;
 }): string {
   const displayName = escapeHtml(user.name || user.username);
   const initials = escapeHtml((user.name || user.username).substring(0, 2).toUpperCase());
@@ -44,6 +45,9 @@ export function getRepositoriesPage(user: {
   const cfLinked = user.cloudflareLinkedRepos ?? {};
   const vercelLinked = user.vercelLinkedRepos ?? {};
   const slackLinked = user.slackLinkedRepos ?? {};
+  const commitHistoryPageSize = Number.isFinite(user.commitHistoryPageSize) && user.commitHistoryPageSize > 0
+    ? user.commitHistoryPageSize
+    : 10;
 
   // リポジトリごとのインストール権限をJSON化してクライアントサイドで利用
   const repoPermsJson = JSON.stringify(repoPerms);
@@ -566,6 +570,48 @@ export function getRepositoriesPage(user: {
       text-align: center; padding: 40px 0; font-size: 13px; color: var(--text-faint);
     }
 
+    .commit-history-btn {
+      display: inline-flex; align-items: center; gap: 4px;
+      background: linear-gradient(135deg, #ed8936 0%, #dd6b20 100%);
+      color: white; border: none; border-radius: 6px;
+      padding: 4px 10px; font-size: 12px; font-weight: 600;
+      cursor: pointer; transition: opacity 0.2s; flex-shrink: 0;
+    }
+    .commit-history-btn:hover { opacity: 0.9; }
+    .commit-history-btn-icon { font-size: 12px; }
+    .commit-history-btn-label { white-space: nowrap; }
+
+    .commit-history-modal { z-index: 2600; }
+    .commit-history-modal-content { max-width: 640px; max-height: 92vh; }
+    .commit-history-modal-content .modal-body { padding-bottom: 20px; }
+    .commit-history-meta {
+      font-size: 14px; font-weight: 600; color: #2d3748;
+      display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; margin-bottom: 12px;
+    }
+    .commit-history-total { font-weight: 500; color: #4a5568; }
+    .commit-history-list {
+      display: flex; flex-direction: column; gap: 10px;
+      max-height: 60vh; overflow-y: auto; padding-right: 4px;
+    }
+    .commit-history-loading,
+    .commit-history-empty {
+      text-align: center; color: #718096; font-size: 13px; padding: 20px 0;
+    }
+    .commit-history-entry {
+      border-radius: 10px; border: 1px solid #e2e8f0;
+      background: #f7fafc; padding: 12px 14px; display: flex; flex-direction: column; gap: 6px;
+    }
+    .commit-history-entry-title a {
+      color: #1a202c; font-weight: 700; text-decoration: none; word-break: break-word;
+    }
+    .commit-history-entry-title a:hover { text-decoration: underline; }
+    .commit-history-entry-meta {
+      display: flex; gap: 12px; flex-wrap: wrap;
+      font-size: 12px; color: #718096;
+    }
+    .commit-history-feedback {
+      margin-top: 10px; font-size: 13px; color: #e53e3e; min-height: 18px;
+    }
   </style>
 </head>
 <body>
@@ -628,6 +674,10 @@ export function getRepositoriesPage(user: {
           <button class="tree-view-btn" id="treeViewBtn" type="button" title="ツリー表示">
             <span class="tree-view-btn-icon">🌳</span>
             ツリー表示
+          </button>
+          <button class="commit-history-btn" id="commitHistoryBtn" type="button" title="コミット履歴一覧">
+            <span class="commit-history-btn-icon">🧾</span>
+            <span class="commit-history-btn-label" id="commitHistoryBtnLabel">コミット履歴一覧${commitHistoryPageSize}/--</span>
           </button>
           <label class="toggle-switch" title="リポジトリ詳細の表示切替">
             <input type="checkbox" id="summaryToggle" />
@@ -719,6 +769,22 @@ export function getRepositoriesPage(user: {
   </div>
 
 
+  <div class="modal-overlay commit-history-modal" id="commitHistoryModal">
+    <div class="modal-content commit-history-modal-content">
+      <div class="modal-header">
+        <span class="modal-title">🕘 コミット履歴一覧</span>
+        <button class="modal-close" id="commitHistoryModalClose" type="button">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="commit-history-meta">
+          <span>直近のコミット数 : <strong id="commitHistoryCount">0 件</strong></span>
+          <span class="commit-history-total" id="commitHistoryTotal">総コミット数: --</span>
+        </div>
+        <div class="commit-history-list" id="commitHistoryList"></div>
+        <div class="commit-history-feedback" id="commitHistoryFeedback"></div>
+      </div>
+    </div>
+  </div>
   <div class="toast" id="repoToast">
     <span class="toast-message" id="repoToastMessage"></span>
     <button class="toast-btn" id="repoToastClose" type="button">OK</button>
@@ -910,6 +976,8 @@ export function getRepositoriesPage(user: {
     var repoPermsData = ${repoPermsJson};
     var oauthScopes = ${JSON.stringify(scopes)};
     var currentRepoName = '';
+    var currentRepoOwner = '';
+    var currentRepoFullName = '';
 
     // クライアントサイド HTML エスケープ（XSS 防止）
     function esc(str) {
@@ -1035,6 +1103,12 @@ export function getRepositoriesPage(user: {
 
     function openPermissionsModal(repoName, owner, rowEl) {
       currentRepoName = repoName;
+      currentRepoOwner = owner;
+      currentRepoFullName = owner && repoName ? owner + '/' + repoName : '';
+      if (commitHistoryBtnLabel) {
+        var cachedCommits = commitHistoryCache[currentRepoFullName];
+        updateCommitHistoryButtonLabel(cachedCommits ? cachedCommits.totalCommits : null);
+      }
       if (modalRepoName) {
         modalRepoName.textContent = repoName;
       }
@@ -1118,6 +1192,8 @@ export function getRepositoriesPage(user: {
 
     function closePermissionsModal() {
       currentRepoName = '';
+      currentRepoOwner = '';
+      currentRepoFullName = '';
       if (modal) {
         modal.classList.remove('show');
       }
@@ -1135,9 +1211,13 @@ export function getRepositoriesPage(user: {
     }
     document.addEventListener('keydown', function(e) {
       if (e.key === 'Escape') {
-        // コミット詳細 → ツリー → Zanzibar → 権限モーダルの順に閉じる
+        // コミット詳細 → コミット履歴 → ツリーモーダル → Zanzibar モーダル → 権限モーダルの順に閉じる
         if (commitDetailModal && commitDetailModal.classList.contains('show')) {
           commitDetailModal.classList.remove('show');
+          return;
+        }
+        if (commitHistoryModal && commitHistoryModal.classList.contains('show')) {
+          closeCommitHistoryModal();
           return;
         }
         if (treeModal && treeModal.classList.contains('show')) {
@@ -1441,6 +1521,143 @@ export function getRepositoriesPage(user: {
             treeCopyBtn.classList.remove('copied');
           }, 2000);
         }).catch(function() {});
+      });
+    }
+    // ===== Commit History Modal =====
+    var commitHistoryModal = document.getElementById('commitHistoryModal');
+    var commitHistoryModalClose = document.getElementById('commitHistoryModalClose');
+    var commitHistoryBtn = document.getElementById('commitHistoryBtn');
+    var commitHistoryBtnLabel = document.getElementById('commitHistoryBtnLabel');
+    var commitHistoryList = document.getElementById('commitHistoryList');
+    var commitHistoryCount = document.getElementById('commitHistoryCount');
+    var commitHistoryTotal = document.getElementById('commitHistoryTotal');
+    var commitHistoryFeedback = document.getElementById('commitHistoryFeedback');
+    var COMMIT_HISTORY_PAGE_SIZE = ${commitHistoryPageSize};
+    var commitHistoryCache = {};
+
+    function updateCommitHistoryButtonLabel(total) {
+      if (!commitHistoryBtnLabel) return;
+      var displayTotal = typeof total === 'number' ? total : '--';
+      commitHistoryBtnLabel.textContent = 'コミット履歴一覧' + COMMIT_HISTORY_PAGE_SIZE + '/' + displayTotal;
+    }
+
+    function formatCommitDate(dateString) {
+      if (!dateString) return '不明';
+      var date = new Date(dateString);
+      if (Number.isNaN(date.getTime())) return '不明';
+      return date.toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo', hour12: false });
+    }
+
+    function renderCommitHistoryRows(commits) {
+      if (!commitHistoryList) return;
+      if (!commits || commits.length === 0) {
+        commitHistoryList.innerHTML = '<div class="commit-history-empty">コミットが見つかりませんでした。</div>';
+        return;
+      }
+      commitHistoryList.innerHTML = commits.map(function(commit) {
+        var shortSha = (commit.sha || '').substring(0, 7);
+        var message = commit.message ? commit.message.split('\\n')[0] : shortSha;
+        var author = commit.authorName || commit.authorLogin || 'Unknown';
+        var dateLabel = formatCommitDate(commit.authoredDate);
+        return '<div class="commit-history-entry">' +
+          '<div class="commit-history-entry-title"><a href="' + esc(commit.htmlUrl || '#') + '" target="_blank" rel="noreferrer">' + esc(message) + '</a></div>' +
+          '<div class="commit-history-entry-meta">' +
+            '<span>SHA: ' + esc(shortSha) + '</span>' +
+            '<span>by ' + esc(author) + '</span>' +
+            '<span>' + esc(dateLabel) + '</span>' +
+          '</div>' +
+        '</div>';
+      }).join('');
+    }
+
+    function renderCommitHistoryContent(payload) {
+      var commits = Array.isArray(payload.commits) ? payload.commits : [];
+      var total = typeof payload.totalCommits === 'number' ? payload.totalCommits : null;
+      var displayCount = Math.min(COMMIT_HISTORY_PAGE_SIZE, total !== null ? total : commits.length);
+      if (commitHistoryCount) commitHistoryCount.textContent = displayCount + ' 件';
+      if (commitHistoryTotal) commitHistoryTotal.textContent = '総コミット数: ' + (total !== null ? total : '不明');
+      updateCommitHistoryButtonLabel(total);
+      renderCommitHistoryRows(commits);
+      if (commitHistoryFeedback) commitHistoryFeedback.textContent = '';
+    }
+
+    function renderCommitHistoryError(message) {
+      if (commitHistoryList) {
+        commitHistoryList.innerHTML = '<div class="commit-history-empty">コミット履歴を取得できませんでした。</div>';
+      }
+      if (commitHistoryFeedback) {
+        commitHistoryFeedback.textContent = message;
+      }
+      if (commitHistoryCount) commitHistoryCount.textContent = '0 件';
+      if (commitHistoryTotal) commitHistoryTotal.textContent = '総コミット数: --';
+      updateCommitHistoryButtonLabel(null);
+    }
+
+    function showCommitHistoryLoadingState() {
+      if (commitHistoryList) {
+        commitHistoryList.innerHTML = '<div class="commit-history-loading">コミット履歴を取得中...</div>';
+      }
+      if (commitHistoryFeedback) {
+        commitHistoryFeedback.textContent = '';
+      }
+      if (commitHistoryCount) commitHistoryCount.textContent = '0 件';
+      if (commitHistoryTotal) commitHistoryTotal.textContent = '総コミット数: --';
+    }
+
+    function fetchCommitHistory(owner, repoName, repoKey) {
+      var url = '/api/repositories/' + encodeURIComponent(owner) + '/' + encodeURIComponent(repoName) + '/commits?per_page=' + COMMIT_HISTORY_PAGE_SIZE;
+      fetch(url, { credentials: 'same-origin' })
+        .then(function(res) {
+          if (!res.ok) {
+            return res.json().catch(function() { return null; }).then(function(payload) {
+              var errorMessage = payload && payload.error ? payload.error : '取得に失敗しました';
+              throw new Error(errorMessage);
+            });
+          }
+          return res.json();
+        })
+        .then(function(data) {
+          if (!data || !Array.isArray(data.commits)) {
+            throw new Error('取得データが不正です');
+          }
+          var totalCommits = typeof data.totalCommits === 'number' ? data.totalCommits : null;
+          commitHistoryCache[repoKey] = { commits: data.commits, totalCommits: totalCommits };
+          renderCommitHistoryContent({ commits: data.commits, totalCommits: totalCommits });
+        })
+        .catch(function(err) {
+          renderCommitHistoryError(err.message || 'コミット履歴を取得できませんでした');
+        });
+    }
+
+    function openCommitHistoryModal() {
+      if (!currentRepoName || !currentRepoOwner) return;
+      if (commitHistoryModal) commitHistoryModal.classList.add('show');
+      showCommitHistoryLoadingState();
+      var repoKey = currentRepoFullName || (currentRepoOwner + '/' + currentRepoName);
+      var cached = commitHistoryCache[repoKey];
+      if (cached) {
+        renderCommitHistoryContent({ commits: cached.commits, totalCommits: cached.totalCommits });
+        return;
+      }
+      fetchCommitHistory(currentRepoOwner, currentRepoName, repoKey);
+    }
+
+    function closeCommitHistoryModal() {
+      if (commitHistoryModal) commitHistoryModal.classList.remove('show');
+    }
+
+    if (commitHistoryBtn) {
+      commitHistoryBtn.addEventListener('click', function(e) {
+        e.stopPropagation();
+        openCommitHistoryModal();
+      });
+    }
+    if (commitHistoryModalClose) {
+      commitHistoryModalClose.addEventListener('click', closeCommitHistoryModal);
+    }
+    if (commitHistoryModal) {
+      commitHistoryModal.addEventListener('click', function(e) {
+        if (e.target === commitHistoryModal) closeCommitHistoryModal();
       });
     }
 
