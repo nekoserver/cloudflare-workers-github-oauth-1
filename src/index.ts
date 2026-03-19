@@ -763,11 +763,12 @@ app.get('/settings', authMiddleware, async (c) => {
   const user = c.get('user');
 
   const cookieHeader = c.req.header('Cookie');
-  const cookieVals = getCookieValues(cookieHeader, ['user_timezone', 'user_session_duration', 'user_recent_commits_count', 'user_toast_duration']);
+  const cookieVals = getCookieValues(cookieHeader, ['user_timezone', 'user_session_duration', 'user_recent_commits_count', 'user_toast_duration', 'user_status_commit_cache_sort_mode']);
   const timezone = cookieVals['user_timezone'] || DEFAULT_TIMEZONE;
   const sessionDuration = cookieVals['user_session_duration'] || '1h';
   const recentCommitsCount = parseInt(cookieVals['user_recent_commits_count'] || '20', 10) || 20;
   const toastDuration = parseInt(cookieVals['user_toast_duration'] || '10', 10) || 10;
+  const statusCommitCacheSortMode = cookieVals['user_status_commit_cache_sort_mode'] === 'toggle' ? 'toggle' : 'off';
 
   let issuedAt: string;
   let expiresAt: string;
@@ -818,6 +819,7 @@ app.get('/settings', authMiddleware, async (c) => {
     sessionDuration,
     recentCommitsCount,
     toastDuration,
+    statusCommitCacheSortMode,
     githubScopes: GITHUB_OAUTH_SCOPE,
     githubGrantedScopes: grantedScopes,
     githubScopeError: scopesError,
@@ -844,6 +846,12 @@ app.get('/userinfo', authMiddleware, async (c) => {
 app.get('/status', authMiddleware, async (c) => {
   const user = c.get('user');
   const db = c.env.DB;
+  const cookieHeader = c.req.header('Cookie');
+  const cookieVals = getCookieValues(cookieHeader, ['user_status_commit_cache_sort_mode', 'user_status_commit_cache_sort_state']);
+  const statusCommitCacheSortMode = cookieVals['user_status_commit_cache_sort_mode'] === 'toggle' ? 'toggle' : 'off';
+  const statusCommitCacheSortState = statusCommitCacheSortMode === 'toggle' && cookieVals['user_status_commit_cache_sort_state'] === 'commit_month_desc'
+    ? 'commit_month_desc'
+    : 'cached_at_desc';
 
   const data: CacheStatusData = {
     commitCache: { totalEntries: 0, totalCommits: 0, repos: [], byMonth: [], entries: [] },
@@ -1037,6 +1045,8 @@ app.get('/status', authMiddleware, async (c) => {
   return c.html(getCacheStatusPage({
     username: user.sub,
     name: user.name,
+    statusCommitCacheSortMode,
+    statusCommitCacheSortState,
   }, data));
 });
 
@@ -2108,6 +2118,34 @@ app.post('/api/settings/toast-duration', authMiddleware, async (c) => {
       error: error instanceof Error ? error.message : 'Unknown error',
     });
     return c.json({ error: 'トースト表示時間の変更に失敗しました' }, 500);
+  }
+});
+
+/**
+ * /status の月別コミットキャッシュ詳細ソート設定変更
+ */
+app.post('/api/settings/status-commit-cache-sort-mode', authMiddleware, async (c) => {
+  try {
+    const { mode } = await c.req.json();
+
+    if (mode !== 'off' && mode !== 'toggle') {
+      return c.json({ error: '無効な並び替え設定です' }, 400);
+    }
+
+    const headers = new Headers({ 'Content-Type': 'application/json; charset=utf-8' });
+    headers.append('Set-Cookie', `user_status_commit_cache_sort_mode=${mode}; Path=/; Secure; SameSite=Lax; Max-Age=31536000`);
+    if (mode === 'off') {
+      headers.append('Set-Cookie', 'user_status_commit_cache_sort_state=cached_at_desc; Path=/; Secure; SameSite=Lax; Max-Age=31536000');
+    }
+
+    return new Response(JSON.stringify({ message: '月別コミットキャッシュ詳細の並び替え設定を変更しました', mode }), { status: 200, headers });
+  } catch (error) {
+    const user = c.get('user');
+    logger.error('Status commit cache sort mode update error', {
+      userId: user?.sub,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    return c.json({ error: '月別コミットキャッシュ詳細の並び替え設定変更に失敗しました' }, 500);
   }
 });
 
