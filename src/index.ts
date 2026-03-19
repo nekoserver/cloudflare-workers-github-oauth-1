@@ -32,6 +32,15 @@ const resendWebhookDedupCache = new Map<string, number>();
 const DEFAULT_TIMEZONE = 'JST';
 const DEFAULT_COMMIT_HISTORY_PAGE_SIZE = 10;
 
+function jsonUtf8(payload: unknown, status = 200): Response {
+  return new Response(JSON.stringify(payload), {
+    status,
+    headers: {
+      'Content-Type': 'application/json; charset=utf-8',
+    },
+  });
+}
+
 function resolveCommitHistoryPageSize(envValue: string | undefined): number {
   const fallback = DEFAULT_COMMIT_HISTORY_PAGE_SIZE;
   if (!envValue) {
@@ -330,7 +339,7 @@ app.get('/', (c) => {
   const clientId = c.env.GITHUB_CLIENT_ID;
 
   if (!clientId) {
-    return c.json({
+    return jsonUtf8({
       error: 'GitHub OAuth is not configured',
       message: 'GITHUB_CLIENT_ID environment variable is not set',
       apiEndpoints: {
@@ -352,7 +361,7 @@ app.get('/auth/github', async (c) => {
   const clientId = c.env.GITHUB_CLIENT_ID;
 
   if (!clientId) {
-    return c.json({ error: 'GitHub OAuth is not configured' }, 500);
+    return jsonUtf8({ error: 'GitHub OAuth is not configured' }, 500);
   }
 
   const url = new URL(c.req.url);
@@ -412,11 +421,11 @@ app.get('/github/callback', async (c) => {
     }
 
     if (error) {
-      return c.json({ error: `GitHub OAuth error: ${error}` }, 400);
+      return jsonUtf8({ error: `GitHub OAuth error: ${error}` }, 400);
     }
 
     if (!code) {
-      return c.json({ error: 'No code provided' }, 400);
+      return jsonUtf8({ error: 'No code provided' }, 400);
     }
 
     // stateパラメータの検証（CSRF対策）
@@ -429,10 +438,10 @@ app.get('/github/callback', async (c) => {
         hasState: !!state,
         hasSavedState: !!savedState,
       });
-      return c.json({ error: 'Invalid state parameter. Please try logging in again.' }, 400);
+      return jsonUtf8({ error: 'Invalid state parameter. Please try logging in again.' }, 400);
     }
     if (!pkceVerifier) {
-      return c.json({ error: 'Missing PKCE verifier. Please try logging in again.' }, 400);
+      return jsonUtf8({ error: 'Missing PKCE verifier. Please try logging in again.' }, 400);
     }
 
     const clientId = c.env.GITHUB_CLIENT_ID;
@@ -440,11 +449,11 @@ app.get('/github/callback', async (c) => {
     const jwtSecret = c.env.JWT_SECRET;
 
     if (!clientId || !clientSecret) {
-      return c.json({ error: 'GitHub OAuth is not configured' }, 500);
+      return jsonUtf8({ error: 'GitHub OAuth is not configured' }, 500);
     }
 
     if (!jwtSecret) {
-      return c.json({ error: 'JWT_SECRET is not configured' }, 500);
+      return jsonUtf8({ error: 'JWT_SECRET is not configured' }, 500);
     }
 
     const url = new URL(c.req.url);
@@ -570,7 +579,7 @@ app.get('/github/callback', async (c) => {
       }).catch(() => { /* 通知失敗は無視 */ });
     }
 
-    return c.json({
+    return jsonUtf8({
       error: 'Authentication failed',
       details: error instanceof Error ? error.message : 'Unknown error'
     }, 500);
@@ -2332,7 +2341,7 @@ app.onError((err, c) => {
     timestamp: Date.now(),
   });
 
-  return c.json({ error: 'サーバーエラーが発生しました' }, 500);
+  return jsonUtf8({ error: 'サーバーエラーが発生しました' }, 500);
 });
 
 export default app;
