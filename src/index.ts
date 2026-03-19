@@ -400,7 +400,10 @@ app.get('/auth/github', async (c) => {
  * stateパラメータを検証してCSRF攻撃を防止
  */
 app.get('/github/callback', async (c) => {
+  let phase = 'start';
+  let userIdForLog: string | null = null;
   try {
+    phase = 'read-query';
     const code = c.req.query('code');
     const error = c.req.query('error');
     const state = c.req.query('state');
@@ -420,6 +423,7 @@ app.get('/github/callback', async (c) => {
       return c.redirect(authToken ? '/welcome' : '/', 302);
     }
 
+    phase = 'validate-query';
     if (error) {
       return jsonUtf8({ error: `GitHub OAuth error: ${error}` }, 400);
     }
@@ -429,6 +433,7 @@ app.get('/github/callback', async (c) => {
     }
 
     // stateパラメータの検証（CSRF対策）
+    phase = 'validate-state';
     const cookieHeader = c.req.header('Cookie');
     const savedState = getCookieValue(cookieHeader, 'oauth_state');
     const pkceVerifier = getCookieValue(cookieHeader, 'oauth_pkce');
@@ -460,20 +465,25 @@ app.get('/github/callback', async (c) => {
     const redirectUri = `${url.protocol}//${url.host}/github/callback`;
 
     // GitHubからアクセストークンを取得
+    phase = 'exchange-token';
     const accessToken = await getGitHubAccessToken(code, clientId, clientSecret, redirectUri, pkceVerifier);
 
     // GitHubユーザー情報を取得
+    phase = 'fetch-user';
     const githubUser = await getGitHubUser(accessToken);
 
     // メールアドレスを取得（user.emailがnullの場合に備えて）
+    phase = 'fetch-email';
     let email = githubUser.email;
     if (!email) {
       email = await getGitHubUserEmail(accessToken);
     }
 
     const userId = githubUser.login;
+    userIdForLog = userId;
 
     // D1データベースからユーザー設定を取得
+    phase = 'load-session';
     const userSession = await getUserSession(c.env.DB, userId);
 
     let timezone = DEFAULT_TIMEZONE;
@@ -494,10 +504,12 @@ app.get('/github/callback', async (c) => {
     }
 
     // D1にログイン情報を保存
+    phase = 'save-session';
     const sessionResult = await updateUserSession(c.env.DB, userId, timezone, sessionDuration, accessToken);
 
     // デフォルトチーム＋ワークスペースを自動プロビジョニング（初回ログイン時に作成）
     if (c.env.DB) {
+      phase = 'ensure-workspace';
       await ensureDefaultWorkspace(c.env.DB, userId);
     }
 
@@ -519,6 +531,7 @@ app.get('/github/callback', async (c) => {
       logger.warn('D1 session save failed, including access_token in JWT as fallback', { userId });
     }
 
+    phase = 'create-jwt';
     const token = await createJWT(
       {
         sub: githubUser.login,
@@ -543,6 +556,7 @@ app.get('/github/callback', async (c) => {
 
     // 認証成功後、クッキーをセットしつつ /welcome へリダイレクト
     // Headers API を使って複数の Set-Cookie を確実に付与する
+    phase = 'set-cookies';
     const redirectHeaders = new Headers({
       'Location': '/welcome',
     });
@@ -557,11 +571,14 @@ app.get('/github/callback', async (c) => {
     return new Response(null, { status: 302, headers: redirectHeaders });
   } catch (error) {
     logger.error('GitHub OAuth callback error', {
+      phase,
+      userId: userIdForLog,
       error: error instanceof Error ? error.message : 'Unknown error',
       stack: error instanceof Error ? error.stack : undefined,
     });
 
     logger.recordMetric(c.env.ANALYTICS, 'auth_github_error', {
+      phase,
       error: error instanceof Error ? error.message : 'unknown',
       timestamp: Date.now(),
     });
@@ -575,12 +592,13 @@ app.get('/github/callback', async (c) => {
       postSlackMessage({
         token: slackToken,
         channel: slackChannel,
-        text: `[セキュリティ警告] ログイン失敗\nエラー: ${errMsg}\nIP: ${ip}`,
+        text: `[セキュリティ警告] ログイン失敗\nフェーズ: ${phase}\nエラー: ${errMsg}\nIP: ${ip}`,
       }).catch(() => { /* 通知失敗は無視 */ });
     }
 
     return jsonUtf8({
       error: 'Authentication failed',
+      phase,
       details: error instanceof Error ? error.message : 'Unknown error'
     }, 500);
   }
