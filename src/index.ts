@@ -18,7 +18,7 @@ import { getUserInfoPage } from './views/userinfo';
 import { getMarkdownPreviewPage } from './views/markdown-preview';
 import { getCacheStatusPage, CacheStatusData, TableStatusEntry, UserContextInfo } from './views/status';
 import { ensureDefaultWorkspace, getCurrentWorkspace, getUserWorkspaces, switchWorkspace } from './utils/workspace';
-import { getGitHubAccessToken, getGitHubLatestCommit, getGitHubRepoOpenIssuesCount, getGitHubRepoCommitsByMonth, getGitHubRepoCommitsByDate, getGitHubTokenScopes, getGitHubUser, getGitHubUserEmail, getGitHubUserRepos, GitHubTokenScopesError, buildRepoInstallationPermissionsMap, RepoInstallationPermissions, getGitHubUserInstallationsWithDiag, getGitHubInstallationRepos, getExternalServiceLinkedRepos, getSlackLinkedReposByWebhooks, CommitDetail } from './utils/github';
+import { getGitHubAccessToken, getGitHubLatestCommit, getGitHubCommitCount, getGitHubCommits, getGitHubRepoOpenIssuesCount, getGitHubRepoCommitsByMonth, getGitHubRepoCommitsByDate, getGitHubTokenScopes, getGitHubUser, getGitHubUserEmail, getGitHubUserRepos, GitHubTokenScopesError, buildRepoInstallationPermissionsMap, RepoInstallationPermissions, getGitHubUserInstallationsWithDiag, getGitHubInstallationRepos, getExternalServiceLinkedRepos, getSlackLinkedReposByWebhooks, CommitDetail } from './utils/github';
 import { getCookieValue, getCookieValues } from './utils/cookie';
 import { verifyResendWebhookSignature } from './utils/resendWebhook';
 import { verifyGitHubWebhookSignature } from './utils/githubWebhook';
@@ -30,6 +30,19 @@ const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
 const resendWebhookDedupCache = new Map<string, number>();
 const DEFAULT_TIMEZONE = 'JST';
+const DEFAULT_COMMIT_HISTORY_PAGE_SIZE = 10;
+
+function resolveCommitHistoryPageSize(envValue: string | undefined): number {
+  const fallback = DEFAULT_COMMIT_HISTORY_PAGE_SIZE;
+  if (!envValue) {
+    return fallback;
+  }
+  const parsed = Number(envValue);
+  if (!Number.isFinite(parsed)) {
+    return fallback;
+  }
+  return Math.min(50, Math.max(1, Math.floor(parsed)));
+}
 
 /**
  * CSRFを防ぐためのOAuth stateトークンを生成
@@ -580,6 +593,7 @@ app.get('/auth/github/reauthorize', authMiddleware, async (c) => {
   // D1からアクセストークンを取得
   const userSession = await getUserSession(c.env.DB, user.sub);
   const accessToken = userSession?.githubAccessToken ?? user.github_access_token ?? undefined;
+  const commitHistoryPageSize = resolveCommitHistoryPageSize(c.env.COMMIT_HISTORY_PAGE_SIZE);
 
   if (accessToken) {
     // 既存のOAuthグラントを取り消し（GitHub APIを利用）
@@ -1216,6 +1230,7 @@ app.get('/repositories', optionalAuthMiddleware, async (c) => {
     cloudflareLinkedRepos: Object.keys(cloudflareRepos).length > 0 ? cloudflareRepos : null,
     vercelLinkedRepos: Object.keys(vercelRepos).length > 0 ? vercelRepos : null,
     slackLinkedRepos: Object.keys(slackRepos).length > 0 ? slackRepos : null,
+    commitHistoryPageSize,
   }));
 });
 
@@ -1406,6 +1421,58 @@ app.get('/api/repositories/:owner/:repo/issues-count', optionalAuthMiddleware, a
   }
 
   return c.json({ count: result.count });
+});
+app.get('/api/repositories/:owner/:repo/commits', optionalAuthMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!user) {
+    return c.json({ error: 'Unauthorized' }, 401);
+  }
+
+  const owner = c.req.param('owner');
+  const repo = c.req.param('repo');
+  if (!owner || !repo) {
+    return c.json({ error: 'Invalid repository parameters' }, 400);
+  }
+
+  const requestedPerPage = Number(c.req.query('per_page'));
+  const defaultPageSize = resolveCommitHistoryPageSize(c.env.COMMIT_HISTORY_PAGE_SIZE);
+  const perPage = Number.isFinite(requestedPerPage)
+    ? Math.min(100, Math.max(1, Math.floor(requestedPerPage)))
+    : defaultPageSize;
+
+  const userSession = await getUserSession(c.env.DB, user.sub);
+  const accessToken = userSession?.githubAccessToken ?? user.github_access_token ?? undefined;
+
+  try {
+    const countResult = await getGitHubCommitCount({ owner, repo, accessToken });
+    const commitsResult = await getGitHubCommits({ owner, repo, perPage, accessToken });
+    if (commitsResult.status === 401 || commitsResult.status === 403 || commitsResult.status === 404) {
+      return c.json({ error: 'Insufficient permissions' }, 403);
+    }
+    if (commitsResult.status < 200 || commitsResult.status >= 300) {
+      logger.error('Failed to fetch commit history', {
+        userId: user.sub,
+        owner,
+        repo,
+        status: commitsResult.status,
+      });
+      return c.json({ error: 'Failed to fetch commit history' }, 502);
+    }
+
+    return c.json({
+      totalCommits: countResult.total,
+      commits: commitsResult.commits,
+      perPage,
+    });
+  } catch (error) {
+    logger.error('Failed to fetch commit history', {
+      userId: user.sub,
+      owner,
+      repo,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    return c.json({ error: 'Failed to fetch commit history' }, 502);
+  }
 });
 
 // コミットカレンダー（月別コミット数）
@@ -1608,8 +1675,6 @@ app.get('/api/repositories/:owner/:repo/commits-by-date', optionalAuthMiddleware
 
   return c.json({ date, commits, source: 'github' });
 });
-
-
 /**
  * Resend webhook受信用エンドポイント
  * イベントタイプを/lib/resend-webhook.shtml?event=xxxへGETで通知し、Resendへのレスポンスを返す
