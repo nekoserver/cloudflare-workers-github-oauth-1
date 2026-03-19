@@ -921,7 +921,7 @@ app.get('/status', authMiddleware, async (c) => {
     // コミットキャッシュ
     try {
       const cacheRows = await db.prepare(
-        'SELECT owner, repo, year, month, counts, cached_at FROM commit_calendar_cache WHERE workspace_id = ? ORDER BY year DESC, month DESC'
+        'SELECT owner, repo, year, month, counts, cached_at FROM commit_calendar_cache WHERE workspace_id = ? ORDER BY cached_at DESC, year DESC, month DESC'
       ).bind(workspaceId).all<{ owner: string; repo: string; year: number; month: number; counts: string; cached_at: string }>();
 
       if (cacheRows.results) {
