@@ -589,6 +589,15 @@ export function getRepositoriesPage(user: {
       display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; margin-bottom: 12px;
     }
     .commit-history-total { font-weight: 500; color: #4a5568; }
+    .commit-history-month-picker {
+      margin-bottom: 12px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+      font-size: 13px; color: #4a5568;
+    }
+    .commit-history-month-picker label { font-weight: 600; color: #2d3748; }
+    .commit-history-month-select {
+      min-width: 180px; padding: 7px 10px; border-radius: 8px;
+      border: 1px solid #cbd5e0; background: #fff; color: #2d3748; font-size: 13px;
+    }
     .commit-history-list {
       display: flex; flex-direction: column; gap: 10px;
       max-height: 60vh; overflow-y: auto; padding-right: 4px;
@@ -611,6 +620,15 @@ export function getRepositoriesPage(user: {
     }
     .commit-history-feedback {
       margin-top: 10px; font-size: 13px; color: #e53e3e; min-height: 18px;
+    }
+    .monthly-status-modal-content { max-width: 720px; max-height: 92vh; }
+    .monthly-status-modal-content .modal-body { max-height: 72vh; overflow-y: auto; }
+    .monthly-status-subtitle {
+      font-size: 14px; color: #718096; font-weight: 600; margin-bottom: 12px;
+    }
+    .monthly-status-body .heatmap-loading,
+    .monthly-status-body .commit-history-empty {
+      padding: 28px 0;
     }
   </style>
 </head>
@@ -780,8 +798,26 @@ export function getRepositoriesPage(user: {
           <span>直近のコミット数 : <strong id="commitHistoryCount">0 件</strong></span>
           <span class="commit-history-total" id="commitHistoryTotal">総コミット数: --</span>
         </div>
+        <div class="commit-history-month-picker">
+          <label for="commitHistoryMonthSelect">月別コミット状況</label>
+          <select class="commit-history-month-select" id="commitHistoryMonthSelect">
+            <option value="">出力結果から YYYY-MM を選択</option>
+          </select>
+        </div>
         <div class="commit-history-list" id="commitHistoryList"></div>
         <div class="commit-history-feedback" id="commitHistoryFeedback"></div>
+      </div>
+    </div>
+  </div>
+  <div class="modal-overlay" id="monthlyStatusModal">
+    <div class="modal-content monthly-status-modal-content">
+      <div class="modal-header">
+        <span class="modal-title">月別コミット状況</span>
+        <button class="modal-close" id="monthlyStatusModalClose" type="button">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="monthly-status-subtitle" id="monthlyStatusLabel"></div>
+        <div class="monthly-status-body" id="monthlyStatusBody"></div>
       </div>
     </div>
   </div>
@@ -1211,7 +1247,11 @@ export function getRepositoriesPage(user: {
     }
     document.addEventListener('keydown', function(e) {
       if (e.key === 'Escape') {
-        // コミット詳細 → コミット履歴 → ツリーモーダル → Zanzibar モーダル → 権限モーダルの順に閉じる
+        // 月別コミット状況 → コミット詳細 → コミット履歴 → ツリーモーダル → Zanzibar モーダル → 権限モーダルの順に閉じる
+        if (monthlyStatusModal && monthlyStatusModal.classList.contains('show')) {
+          closeMonthlyStatusModal();
+          return;
+        }
         if (commitDetailModal && commitDetailModal.classList.contains('show')) {
           commitDetailModal.classList.remove('show');
           return;
@@ -1532,6 +1572,11 @@ export function getRepositoriesPage(user: {
     var commitHistoryCount = document.getElementById('commitHistoryCount');
     var commitHistoryTotal = document.getElementById('commitHistoryTotal');
     var commitHistoryFeedback = document.getElementById('commitHistoryFeedback');
+    var commitHistoryMonthSelect = document.getElementById('commitHistoryMonthSelect');
+    var monthlyStatusModal = document.getElementById('monthlyStatusModal');
+    var monthlyStatusModalClose = document.getElementById('monthlyStatusModalClose');
+    var monthlyStatusLabel = document.getElementById('monthlyStatusLabel');
+    var monthlyStatusBody = document.getElementById('monthlyStatusBody');
     var COMMIT_HISTORY_PAGE_SIZE = ${commitHistoryPageSize};
     var commitHistoryCache = {};
 
@@ -1546,6 +1591,35 @@ export function getRepositoriesPage(user: {
       var date = new Date(dateString);
       if (Number.isNaN(date.getTime())) return '不明';
       return date.toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo', hour12: false });
+    }
+
+    function extractCommitMonths(commits) {
+      var seen = {};
+      var months = [];
+      (commits || []).forEach(function(commit) {
+        if (!commit || !commit.authoredDate) return;
+        var date = new Date(commit.authoredDate);
+        if (Number.isNaN(date.getTime())) return;
+        var monthKey = date.getFullYear() + '-' + String(date.getMonth() + 1).padStart(2, '0');
+        if (!seen[monthKey]) {
+          seen[monthKey] = true;
+          months.push(monthKey);
+        }
+      });
+      months.sort(function(a, b) { return b.localeCompare(a); });
+      return months;
+    }
+
+    function renderCommitHistoryMonthOptions(commits) {
+      if (!commitHistoryMonthSelect) return;
+      var months = extractCommitMonths(commits);
+      var html = '<option value="">出力結果から YYYY-MM を選択</option>';
+      months.forEach(function(month) {
+        html += '<option value="' + esc(month) + '">' + esc(month) + '</option>';
+      });
+      commitHistoryMonthSelect.innerHTML = html;
+      commitHistoryMonthSelect.disabled = months.length === 0;
+      commitHistoryMonthSelect.value = '';
     }
 
     function renderCommitHistoryRows(commits) {
@@ -1577,6 +1651,7 @@ export function getRepositoriesPage(user: {
       if (commitHistoryCount) commitHistoryCount.textContent = displayCount + ' 件';
       if (commitHistoryTotal) commitHistoryTotal.textContent = '総コミット数: ' + (total !== null ? total : '不明');
       updateCommitHistoryButtonLabel(total);
+      renderCommitHistoryMonthOptions(commits);
       renderCommitHistoryRows(commits);
       if (commitHistoryFeedback) commitHistoryFeedback.textContent = '';
     }
@@ -1590,6 +1665,7 @@ export function getRepositoriesPage(user: {
       }
       if (commitHistoryCount) commitHistoryCount.textContent = '0 件';
       if (commitHistoryTotal) commitHistoryTotal.textContent = '総コミット数: --';
+      renderCommitHistoryMonthOptions([]);
       updateCommitHistoryButtonLabel(null);
     }
 
@@ -1602,6 +1678,7 @@ export function getRepositoriesPage(user: {
       }
       if (commitHistoryCount) commitHistoryCount.textContent = '0 件';
       if (commitHistoryTotal) commitHistoryTotal.textContent = '総コミット数: --';
+      renderCommitHistoryMonthOptions([]);
     }
 
     function fetchCommitHistory(owner, repoName, repoKey) {
@@ -1646,6 +1723,10 @@ export function getRepositoriesPage(user: {
       if (commitHistoryModal) commitHistoryModal.classList.remove('show');
     }
 
+    function closeMonthlyStatusModal() {
+      if (monthlyStatusModal) monthlyStatusModal.classList.remove('show');
+    }
+
     if (commitHistoryBtn) {
       commitHistoryBtn.addEventListener('click', function(e) {
         e.stopPropagation();
@@ -1658,6 +1739,14 @@ export function getRepositoriesPage(user: {
     if (commitHistoryModal) {
       commitHistoryModal.addEventListener('click', function(e) {
         if (e.target === commitHistoryModal) closeCommitHistoryModal();
+      });
+    }
+    if (monthlyStatusModalClose) {
+      monthlyStatusModalClose.addEventListener('click', closeMonthlyStatusModal);
+    }
+    if (monthlyStatusModal) {
+      monthlyStatusModal.addEventListener('click', function(e) {
+        if (e.target === monthlyStatusModal) closeMonthlyStatusModal();
       });
     }
 
@@ -1703,10 +1792,10 @@ export function getRepositoriesPage(user: {
       return 4;
     }
 
-    function renderHeatmap(counts, year, month) {
-      if (!heatmapBody) return;
+    function buildHeatmapHtml(counts, year, month) {
       var today = new Date();
       var todayStr = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0');
+      var isCurrentMonth = today.getFullYear() === year && (today.getMonth() + 1) === month;
       var firstDay = new Date(year, month - 1, 1);
       var daysInMonth = new Date(year, month, 0).getDate();
       var startDow = firstDay.getDay(); // 0=Sun
@@ -1724,7 +1813,7 @@ export function getRepositoriesPage(user: {
         var dateStr = year + '-' + String(month).padStart(2, '0') + '-' + String(d).padStart(2, '0');
         var count = counts[dateStr] || 0;
         var level = getHeatmapLevel(count);
-        var isToday = dateStr === todayStr;
+        var isToday = isCurrentMonth && dateStr === todayStr;
         var hasCommits = count > 0;
         var titleText = d + '日: ' + count + 'コミット';
         html += '<div class="heatmap-day level-' + level + (isToday ? ' today' : '') + (hasCommits ? ' has-commits' : '') + '" title="' + esc(titleText) + '"' + (hasCommits ? ' data-date="' + dateStr + '"' : '') + '>' + d + '</div>';
@@ -1740,7 +1829,17 @@ export function getRepositoriesPage(user: {
       html += '<span>多</span>';
       html += '</div>';
       html += '<div class="heatmap-total">合計 ' + total + ' コミット</div>';
-      heatmapBody.innerHTML = html;
+      return html;
+    }
+
+    function renderHeatmap(counts, year, month) {
+      if (!heatmapBody) return;
+      heatmapBody.innerHTML = buildHeatmapHtml(counts, year, month);
+    }
+
+    function renderMonthlyStatusHeatmap(counts, year, month) {
+      if (!monthlyStatusBody) return;
+      monthlyStatusBody.innerHTML = buildHeatmapHtml(counts, year, month);
     }
 
     function updateHeatmapMonthLabel() {
@@ -1758,6 +1857,27 @@ export function getRepositoriesPage(user: {
       fetchHeatmapData(owner, repo, heatmapYear, heatmapMonth).then(function(counts) {
         renderHeatmap(counts, heatmapYear, heatmapMonth);
       });
+    }
+
+    function openMonthlyStatusModal(monthKey) {
+      if (!monthKey || !currentRepoOwner || !currentRepoName || !monthlyStatusModal || !monthlyStatusBody) return;
+      var parts = monthKey.split('-');
+      if (parts.length !== 2) return;
+      var year = Number(parts[0]);
+      var month = Number(parts[1]);
+      if (!year || !month) return;
+      if (monthlyStatusLabel) {
+        monthlyStatusLabel.textContent = currentRepoName + ' / ' + monthKey;
+      }
+      monthlyStatusBody.innerHTML = '<div class="heatmap-loading">読み込み中...</div>';
+      monthlyStatusModal.classList.add('show');
+      fetchHeatmapData(currentRepoOwner, currentRepoName, year, month)
+        .then(function(counts) {
+          renderMonthlyStatusHeatmap(counts, year, month);
+        })
+        .catch(function() {
+          monthlyStatusBody.innerHTML = '<div class="commit-history-empty">月別コミット状況を取得できませんでした。</div>';
+        });
     }
 
     // リポジトリ選択時にヒートマップを開始する（ページ読み込み時には実行しない）
@@ -1781,6 +1901,12 @@ export function getRepositoriesPage(user: {
         heatmapMonth++;
         if (heatmapMonth > 12) { heatmapMonth = 1; heatmapYear++; }
         loadAndRenderHeatmap();
+      });
+    }
+    if (commitHistoryMonthSelect) {
+      commitHistoryMonthSelect.addEventListener('change', function() {
+        if (!commitHistoryMonthSelect.value) return;
+        openMonthlyStatusModal(commitHistoryMonthSelect.value);
       });
     }
 
