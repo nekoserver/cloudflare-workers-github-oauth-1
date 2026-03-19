@@ -1613,13 +1613,16 @@ export function getRepositoriesPage(user: {
     function renderCommitHistoryMonthOptions(commits) {
       if (!commitHistoryMonthSelect) return;
       var months = extractCommitMonths(commits);
-      var html = '<option value="">出力結果から YYYY-MM を選択</option>';
+      var html = '';
+      if (months.length === 0) {
+        html = '<option value="">なし</option>';
+      }
       months.forEach(function(month) {
         html += '<option value="' + esc(month) + '">' + esc(month) + '</option>';
       });
       commitHistoryMonthSelect.innerHTML = html;
       commitHistoryMonthSelect.disabled = months.length === 0;
-      commitHistoryMonthSelect.value = '';
+      commitHistoryMonthSelect.value = months.length > 0 ? months[0] : '';
     }
 
     function renderCommitHistoryRows(commits) {
