@@ -15,6 +15,7 @@ export function getSettingsPage(user: {
   sessionDuration?: string;
   recentCommitsCount?: number;
   toastDuration?: number;
+  statusCommitCacheSortMode?: string;
   githubScopes?: string;
   githubGrantedScopes?: string[] | null;
   githubScopeError?: string | null;
@@ -25,6 +26,7 @@ export function getSettingsPage(user: {
   const currentSessionDuration = user.sessionDuration || '1h';
   const currentRecentCommitsCount = user.recentCommitsCount || 20;
   const currentToastDuration = user.toastDuration || 10;
+  const currentStatusCommitCacheSortMode = user.statusCommitCacheSortMode === 'toggle' ? 'toggle' : 'off';
   const requestedScopes = user.githubScopes ? user.githubScopes.split(/\s+/).filter(Boolean) : [];
   const grantedScopes = user.githubGrantedScopes ?? null;
   const scopeError = user.githubScopeError ? escapeHtml(user.githubScopeError) : null;
@@ -315,6 +317,18 @@ export function getSettingsPage(user: {
               <input type="checkbox" class="setting-checkbox" id="toastDurationCheckbox" onchange="toggleToastDurationEdit()">
             </div>
           </div>
+          <div class="info-item disabled" id="statusCommitCacheSortModeItem">
+            <span class="info-label">月別コミットキャッシュ詳細の並び替え</span>
+            <div class="setting-control">
+              <div class="setting-select-wrapper">
+                <select class="timezone-select" id="statusCommitCacheSortModeSelect" onchange="onStatusCommitCacheSortModeChange()" disabled>
+                  <option value="off" ${currentStatusCommitCacheSortMode === 'off' ? 'selected' : ''}>OFF (デフォルト)</option>
+                  <option value="toggle" ${currentStatusCommitCacheSortMode === 'toggle' ? 'selected' : ''}>トグル式</option>
+                </select>
+              </div>
+              <input type="checkbox" class="setting-checkbox" id="statusCommitCacheSortModeCheckbox" onchange="toggleStatusCommitCacheSortModeEdit()">
+            </div>
+          </div>
         </div>
         <div class="button-container" id="buttonContainer">
           <button class="btn btn-save" onclick="saveTimezone()">保存</button>
@@ -331,6 +345,11 @@ export function getSettingsPage(user: {
           <button class="btn btn-cancel" onclick="cancelToastDuration()">キャンセル</button>
         </div>
         <div class="success-message" id="toastDurationSuccessMessage">✓ トースト表示時間を変更しました</div>
+        <div class="button-container" id="statusCommitCacheSortModeButtonContainer">
+          <button class="btn btn-save" onclick="saveStatusCommitCacheSortMode()">保存</button>
+          <button class="btn btn-cancel" onclick="cancelStatusCommitCacheSortMode()">キャンセル</button>
+        </div>
+        <div class="success-message" id="statusCommitCacheSortModeSuccessMessage">✓ 月別コミットキャッシュ詳細の並び替え設定を変更しました</div>
       </div>
 
       <a href="/welcome" class="back-btn">← ホームに戻る</a>
@@ -374,6 +393,7 @@ export function getSettingsPage(user: {
     let originalSessionDuration = '${currentSessionDuration}';
     let originalRecentCommitsCount = '${currentRecentCommitsCount}';
     let originalToastDuration = '${currentToastDuration}';
+    let originalStatusCommitCacheSortMode = '${currentStatusCommitCacheSortMode}';
     const expiresAtTimestamp = ${user.expiresAtTimestamp};
 
     // テーマトグルスイッチの初期化
@@ -564,6 +584,55 @@ export function getSettingsPage(user: {
       document.getElementById('toastDurationCheckbox').checked = false;
       document.getElementById('toastDurationSelect').disabled = true;
       document.getElementById('toastDurationItem').classList.add('disabled');
+    }
+    function toggleStatusCommitCacheSortModeEdit() {
+      const cb = document.getElementById('statusCommitCacheSortModeCheckbox');
+      const sel = document.getElementById('statusCommitCacheSortModeSelect');
+      const item = document.getElementById('statusCommitCacheSortModeItem');
+      if (cb.checked) { sel.disabled = false; item.classList.remove('disabled'); }
+      else {
+        sel.disabled = true;
+        item.classList.add('disabled');
+        sel.value = originalStatusCommitCacheSortMode;
+        document.getElementById('statusCommitCacheSortModeButtonContainer').classList.remove('show');
+      }
+    }
+    function onStatusCommitCacheSortModeChange() {
+      const cb = document.getElementById('statusCommitCacheSortModeCheckbox');
+      const sel = document.getElementById('statusCommitCacheSortModeSelect');
+      if (cb.checked && sel.value !== originalStatusCommitCacheSortMode) {
+        document.getElementById('statusCommitCacheSortModeButtonContainer').classList.add('show');
+      } else {
+        document.getElementById('statusCommitCacheSortModeButtonContainer').classList.remove('show');
+      }
+    }
+    async function saveStatusCommitCacheSortMode() {
+      const mode = document.getElementById('statusCommitCacheSortModeSelect').value;
+      const res = await fetch('/api/settings/status-commit-cache-sort-mode', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        credentials: 'include',
+        body: JSON.stringify({ mode })
+      });
+      if (res.ok) {
+        originalStatusCommitCacheSortMode = mode;
+        document.getElementById('statusCommitCacheSortModeButtonContainer').classList.remove('show');
+        const msg = document.getElementById('statusCommitCacheSortModeSuccessMessage');
+        msg.classList.add('show');
+        document.getElementById('statusCommitCacheSortModeCheckbox').checked = false;
+        document.getElementById('statusCommitCacheSortModeSelect').disabled = true;
+        document.getElementById('statusCommitCacheSortModeItem').classList.add('disabled');
+        setTimeout(() => { msg.classList.remove('show'); }, 1500);
+      } else {
+        alert('月別コミットキャッシュ詳細の並び替え設定変更に失敗しました');
+      }
+    }
+    function cancelStatusCommitCacheSortMode() {
+      document.getElementById('statusCommitCacheSortModeSelect').value = originalStatusCommitCacheSortMode;
+      document.getElementById('statusCommitCacheSortModeButtonContainer').classList.remove('show');
+      document.getElementById('statusCommitCacheSortModeCheckbox').checked = false;
+      document.getElementById('statusCommitCacheSortModeSelect').disabled = true;
+      document.getElementById('statusCommitCacheSortModeItem').classList.add('disabled');
     }
     function confirmRevoke() {
       if (confirm('このアプリへの承認を取り消しますか？\\n現在のセッションが破棄され、次回ログイン時に再度承認が必要になります。')) {
