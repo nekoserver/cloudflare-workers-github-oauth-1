@@ -620,7 +620,6 @@ app.get('/auth/github/reauthorize', authMiddleware, async (c) => {
   // D1からアクセストークンを取得
   const userSession = await getUserSession(c.env.DB, user.sub);
   const accessToken = userSession?.githubAccessToken ?? user.github_access_token ?? undefined;
-  const commitHistoryPageSize = resolveCommitHistoryPageSize(c.env.COMMIT_HISTORY_PAGE_SIZE);
 
   if (accessToken) {
     // 既存のOAuthグラントを取り消し（GitHub APIを利用）
@@ -1051,6 +1050,7 @@ app.get('/repositories', optionalAuthMiddleware, async (c) => {
     return c.redirect('/', 302);
   }
 
+  const commitHistoryPageSize = resolveCommitHistoryPageSize(c.env.COMMIT_HISTORY_PAGE_SIZE);
   const userSession = await getUserSession(c.env.DB, user.sub);
   const accessToken = userSession?.githubAccessToken ?? user.github_access_token ?? undefined;
 
