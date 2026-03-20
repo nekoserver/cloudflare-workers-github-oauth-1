@@ -513,6 +513,89 @@ export function getCacheStatusPage(user: {
       margin: 8px 0 0; font-size: 12px; line-height: 1.5; color: var(--text-muted);
     }
 
+    /* UML ボタン */
+    .uml-button-row {
+      display: flex; justify-content: flex-end; margin-bottom: 12px;
+    }
+    .uml-button {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white; border: none; border-radius: 8px;
+      padding: 10px 20px; font-size: 13px; font-weight: 600;
+      cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
+      transition: opacity 0.2s;
+    }
+    .uml-button:hover { opacity: 0.85; }
+
+    /* UML モーダル */
+    .uml-modal-card {
+      width: min(1200px, 100%); max-height: min(90vh, 960px);
+      background: var(--card-bg); border: 1px solid var(--border-color);
+      border-radius: 16px; box-shadow: 0 24px 80px rgba(0, 0, 0, 0.25);
+      overflow: hidden; display: flex; flex-direction: column;
+    }
+    .uml-canvas-wrapper {
+      position: relative; overflow: auto; min-height: 400px;
+      padding: 24px;
+    }
+    .uml-er-container {
+      position: relative; min-width: 1100px; min-height: 720px;
+    }
+    .uml-table-card {
+      position: absolute; background: var(--card-bg);
+      border: 2px solid var(--border-color); border-radius: 10px;
+      min-width: 170px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+      font-size: 12px; overflow: hidden; z-index: 1;
+    }
+    .uml-table-card .uml-table-header {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white; padding: 8px 12px; font-weight: 700; font-size: 13px;
+      display: flex; align-items: center; gap: 6px;
+    }
+    .uml-table-card .uml-table-body {
+      padding: 6px 0;
+    }
+    .uml-col-row {
+      display: flex; align-items: center; gap: 6px;
+      padding: 3px 12px; font-family: 'Monaco', 'Courier New', monospace;
+      font-size: 11px; color: var(--text-secondary);
+    }
+    .uml-col-row:hover { background: var(--bg-secondary); }
+    .uml-col-key {
+      font-size: 9px; font-weight: 700; border-radius: 3px;
+      padding: 1px 4px; color: white; flex-shrink: 0;
+    }
+    .uml-col-key.pk { background: #e53e3e; }
+    .uml-col-key.fk { background: #ed8936; }
+    .uml-col-key.uk { background: #48bb78; }
+    .uml-col-key.idx { background: #4299e1; }
+    .uml-col-name { flex: 1; }
+    .uml-col-type { color: var(--text-faint); font-size: 10px; }
+    .uml-svg-overlay {
+      position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+      pointer-events: none; z-index: 0;
+    }
+    .uml-legend {
+      display: flex; flex-wrap: wrap; gap: 16px; padding: 16px 24px;
+      border-top: 1px solid var(--border-color); font-size: 12px;
+      color: var(--text-muted); align-items: center;
+    }
+    .uml-legend-item {
+      display: inline-flex; align-items: center; gap: 6px;
+    }
+    .uml-legend-color {
+      width: 12px; height: 12px; border-radius: 3px; flex-shrink: 0;
+    }
+    .uml-normalization-note {
+      padding: 12px 24px 20px; font-size: 12px; color: var(--text-muted);
+      border-top: 1px solid var(--border-color); line-height: 1.7;
+    }
+    .uml-normalization-note strong { color: var(--text-primary); }
+    .uml-normalization-note .nf-badge {
+      display: inline-block; background: #48bb78; color: white;
+      font-size: 10px; font-weight: 700; padding: 2px 6px;
+      border-radius: 4px; margin-right: 4px; vertical-align: middle;
+    }
+
     @media (max-width: 768px) {
       .container { padding: 24px 16px; }
       .page-card { padding: 24px; }
@@ -616,6 +699,12 @@ export function getCacheStatusPage(user: {
       <!-- テーブル別マイグレーション状況 -->
       <div class="section">
         <h2 class="section-title">テーブル別マイグレーション状況</h2>
+        <div class="uml-button-row">
+          <button type="button" class="uml-button" id="openUmlButton">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="1" y="1" width="5" height="6" rx="1" stroke="white" stroke-width="1.5"/><rect x="10" y="9" width="5" height="6" rx="1" stroke="white" stroke-width="1.5"/><path d="M6 4h2.5a1.5 1.5 0 011.5 1.5V12" stroke="white" stroke-width="1.5"/></svg>
+            UML を表示
+          </button>
+        </div>
         <div class="table-scroll">
           <table class="data-table" id="statusTablesTable">
             <thead>
@@ -810,6 +899,34 @@ export function getCacheStatusPage(user: {
       </div>
       <div class="modal-body" id="statusDetailBody">
         <div class="modal-loading">読み込み中...</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="umlModal" aria-hidden="true">
+    <div class="uml-modal-card" role="dialog" aria-modal="true" aria-labelledby="umlModalTitle">
+      <div class="modal-header">
+        <div class="modal-title-wrap">
+          <div class="modal-title" id="umlModalTitle">ER図 — テーブルリレーション</div>
+          <div class="modal-subtitle">テーブル間の外部キー・参照関係と正規化状況を表示しています</div>
+        </div>
+        <button type="button" class="modal-close" id="umlModalClose" aria-label="閉じる">&times;</button>
+      </div>
+      <div class="uml-canvas-wrapper" id="umlCanvasWrapper"></div>
+      <div class="uml-legend">
+        <div class="uml-legend-item"><div class="uml-legend-color" style="background:#e53e3e"></div>PK — 主キー</div>
+        <div class="uml-legend-item"><div class="uml-legend-color" style="background:#ed8936"></div>FK — 外部キー</div>
+        <div class="uml-legend-item"><div class="uml-legend-color" style="background:#48bb78"></div>UK — ユニーク制約</div>
+        <div class="uml-legend-item"><div class="uml-legend-color" style="background:#4299e1"></div>IDX — インデックス</div>
+        <div class="uml-legend-item" style="margin-left:auto; color:var(--text-faint)">ドラッグで移動可</div>
+      </div>
+      <div class="uml-normalization-note">
+        <strong>正規化状況:</strong><br>
+        <span class="nf-badge">3NF</span><code>teams</code> <code>workspaces</code> <code>team_members</code> — 第3正規形。非キー属性が主キーにのみ関数従属。<br>
+        <span class="nf-badge">3NF</span><code>user_sessions</code> — user_id UNIQUE で実質的な候補キー。設定カラム (timezone, session_duration) は user_id にのみ従属。<br>
+        <span class="nf-badge">2NF</span><code>commit_calendar_cache</code> <code>commit_list_cache</code> — counts / commits_json が JSON 文字列格納（非原子値）。運用上のキャッシュ用途として許容。<br>
+        <span class="nf-badge">3NF</span><code>cache_stats</code> — 全カウンタが (user_id, owner, repo) 複合キーにのみ従属。<br>
+        <span class="nf-badge">2NF</span><code>installation_permissions</code> — permissions が JSON 文字列格納。GitHub API レスポンスのキャッシュとして非正規化を許容。
       </div>
     </div>
   </div>
@@ -1218,6 +1335,333 @@ export function getCacheStatusPage(user: {
         var nextState = commitCacheSortState === 'cached_at_desc' ? 'commit_month_desc' : 'cached_at_desc';
         applyCommitCacheSort(nextState, true);
       });
+    })();
+
+    // UML ER図モーダル
+    (function() {
+      var umlModal = document.getElementById('umlModal');
+      var umlCloseBtn = document.getElementById('umlModalClose');
+      var openUmlBtn = document.getElementById('openUmlButton');
+      var umlWrapper = document.getElementById('umlCanvasWrapper');
+      if (!umlModal || !umlWrapper || !openUmlBtn) return;
+
+      var umlRendered = false;
+
+      function openUmlModal() {
+        umlModal.classList.add('show');
+        umlModal.setAttribute('aria-hidden', 'false');
+        document.body.style.overflow = 'hidden';
+        if (!umlRendered) {
+          renderErDiagram();
+          umlRendered = true;
+        }
+      }
+
+      function closeUmlModal() {
+        umlModal.classList.remove('show');
+        umlModal.setAttribute('aria-hidden', 'true');
+        document.body.style.overflow = '';
+      }
+
+      openUmlBtn.addEventListener('click', openUmlModal);
+      if (umlCloseBtn) umlCloseBtn.addEventListener('click', closeUmlModal);
+      umlModal.addEventListener('click', function(e) { if (e.target === umlModal) closeUmlModal(); });
+      document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape' && umlModal.classList.contains('show')) closeUmlModal();
+      });
+
+      // テーブル定義
+      var tables = [
+        {
+          name: 'teams', x: 80, y: 40, cols: [
+            { name: 'id', type: 'TEXT', keys: ['pk'] },
+            { name: 'name', type: 'TEXT', keys: [] },
+            { name: 'created_at', type: 'TEXT', keys: [] }
+          ]
+        },
+        {
+          name: 'workspaces', x: 80, y: 260, cols: [
+            { name: 'id', type: 'TEXT', keys: ['pk'] },
+            { name: 'team_id', type: 'TEXT', keys: ['fk'] },
+            { name: 'name', type: 'TEXT', keys: [] },
+            { name: 'created_at', type: 'TEXT', keys: [] }
+          ]
+        },
+        {
+          name: 'team_members', x: 350, y: 40, cols: [
+            { name: 'team_id', type: 'TEXT', keys: ['pk', 'fk'] },
+            { name: 'user_id', type: 'TEXT', keys: ['pk'] },
+            { name: 'role', type: 'TEXT', keys: [] },
+            { name: 'joined_at', type: 'TEXT', keys: [] }
+          ]
+        },
+        {
+          name: 'user_sessions', x: 600, y: 40, cols: [
+            { name: 'id', type: 'INTEGER', keys: ['pk'] },
+            { name: 'user_id', type: 'TEXT', keys: ['uk'] },
+            { name: 'current_workspace_id', type: 'TEXT', keys: ['fk'] },
+            { name: 'timezone', type: 'TEXT', keys: [] },
+            { name: 'session_duration', type: 'TEXT', keys: [] },
+            { name: 'display_name', type: 'TEXT', keys: [] },
+            { name: 'github_access_token', type: 'TEXT', keys: [] },
+            { name: 'last_login_at', type: 'TEXT', keys: [] },
+            { name: 'current_login_at', type: 'TEXT', keys: [] },
+            { name: 'updated_at', type: 'TEXT', keys: [] }
+          ]
+        },
+        {
+          name: 'commit_calendar_cache', x: 350, y: 260, cols: [
+            { name: 'id', type: 'INTEGER', keys: ['pk'] },
+            { name: 'workspace_id', type: 'TEXT', keys: ['fk', 'uk'] },
+            { name: 'owner', type: 'TEXT', keys: ['uk'] },
+            { name: 'repo', type: 'TEXT', keys: ['uk'] },
+            { name: 'year', type: 'INTEGER', keys: ['uk'] },
+            { name: 'month', type: 'INTEGER', keys: ['uk'] },
+            { name: 'user_id', type: 'TEXT', keys: [] },
+            { name: 'counts', type: 'TEXT (JSON)', keys: [] },
+            { name: 'cached_at', type: 'TEXT', keys: [] }
+          ]
+        },
+        {
+          name: 'commit_list_cache', x: 350, y: 540, cols: [
+            { name: 'workspace_id', type: 'TEXT', keys: ['fk', 'uk'] },
+            { name: 'owner', type: 'TEXT', keys: ['uk'] },
+            { name: 'repo', type: 'TEXT', keys: ['uk'] },
+            { name: 'date', type: 'TEXT', keys: ['uk'] },
+            { name: 'commits_json', type: 'TEXT (JSON)', keys: [] },
+            { name: 'commit_count', type: 'INTEGER', keys: [] },
+            { name: 'cached_at', type: 'TEXT', keys: [] }
+          ]
+        },
+        {
+          name: 'cache_stats', x: 600, y: 400, cols: [
+            { name: 'user_id', type: 'TEXT', keys: ['uk'] },
+            { name: 'owner', type: 'TEXT', keys: ['uk'] },
+            { name: 'repo', type: 'TEXT', keys: ['uk'] },
+            { name: 'github_fetch_count', type: 'INTEGER', keys: [] },
+            { name: 'cache_save_count', type: 'INTEGER', keys: [] },
+            { name: 'cache_lookup_count', type: 'INTEGER', keys: [] },
+            { name: 'cache_hit_count', type: 'INTEGER', keys: [] },
+            { name: 'last_updated_at', type: 'TEXT', keys: [] }
+          ]
+        },
+        {
+          name: 'installation_permissions', x: 870, y: 40, cols: [
+            { name: 'id', type: 'INTEGER', keys: ['pk'] },
+            { name: 'installation_id', type: 'INTEGER', keys: ['uk'] },
+            { name: 'repo_name', type: 'TEXT', keys: ['uk'] },
+            { name: 'repository_selection', type: 'TEXT', keys: [] },
+            { name: 'permissions', type: 'TEXT (JSON)', keys: [] },
+            { name: 'updated_at', type: 'TEXT', keys: ['idx'] }
+          ]
+        }
+      ];
+
+      // リレーション定義: [fromTable, fromCol, toTable, toCol, label]
+      var relations = [
+        ['workspaces', 'team_id', 'teams', 'id', '多:1'],
+        ['team_members', 'team_id', 'teams', 'id', '多:1'],
+        ['user_sessions', 'current_workspace_id', 'workspaces', 'id', '多:1'],
+        ['commit_calendar_cache', 'workspace_id', 'workspaces', 'id', '多:1'],
+        ['commit_list_cache', 'workspace_id', 'workspaces', 'id', '多:1']
+      ];
+
+      function getTableCardWidth(table) {
+        var maxLen = table.name.length;
+        for (var i = 0; i < table.cols.length; i++) {
+          var len = table.cols[i].name.length + table.cols[i].type.length + table.cols[i].keys.length * 3 + 2;
+          if (len > maxLen) maxLen = len;
+        }
+        return Math.max(180, Math.min(240, maxLen * 8 + 40));
+      }
+
+      function getTableCardHeight(table) {
+        return 34 + table.cols.length * 22 + 8;
+      }
+
+      function renderErDiagram() {
+        var isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+        var container = document.createElement('div');
+        container.className = 'uml-er-container';
+
+        // テーブルカード座標を保存
+        var cardRects = {};
+        var cardElements = {};
+
+        for (var t = 0; t < tables.length; t++) {
+          var tbl = tables[t];
+          var w = getTableCardWidth(tbl);
+          var h = getTableCardHeight(tbl);
+          cardRects[tbl.name] = { x: tbl.x, y: tbl.y, w: w, h: h };
+
+          var card = document.createElement('div');
+          card.className = 'uml-table-card';
+          card.style.left = tbl.x + 'px';
+          card.style.top = tbl.y + 'px';
+          card.style.width = w + 'px';
+          card.setAttribute('data-uml-table', tbl.name);
+
+          var header = document.createElement('div');
+          header.className = 'uml-table-header';
+          header.textContent = tbl.name;
+          card.appendChild(header);
+
+          var body = document.createElement('div');
+          body.className = 'uml-table-body';
+          for (var c = 0; c < tbl.cols.length; c++) {
+            var col = tbl.cols[c];
+            var row = document.createElement('div');
+            row.className = 'uml-col-row';
+            for (var k = 0; k < col.keys.length; k++) {
+              var badge = document.createElement('span');
+              badge.className = 'uml-col-key ' + col.keys[k];
+              badge.textContent = col.keys[k].toUpperCase();
+              row.appendChild(badge);
+            }
+            var nameSpan = document.createElement('span');
+            nameSpan.className = 'uml-col-name';
+            nameSpan.textContent = col.name;
+            row.appendChild(nameSpan);
+            var typeSpan = document.createElement('span');
+            typeSpan.className = 'uml-col-type';
+            typeSpan.textContent = col.type;
+            row.appendChild(typeSpan);
+            body.appendChild(row);
+          }
+          card.appendChild(body);
+          container.appendChild(card);
+          cardElements[tbl.name] = card;
+        }
+
+        // SVG for relationship lines
+        var svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        svg.classList.add('uml-svg-overlay');
+        svg.setAttribute('width', '100%');
+        svg.setAttribute('height', '100%');
+
+        var defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
+        var marker = document.createElementNS('http://www.w3.org/2000/svg', 'marker');
+        marker.setAttribute('id', 'uml-arrow');
+        marker.setAttribute('viewBox', '0 0 10 6');
+        marker.setAttribute('refX', '10');
+        marker.setAttribute('refY', '3');
+        marker.setAttribute('markerWidth', '10');
+        marker.setAttribute('markerHeight', '6');
+        marker.setAttribute('orient', 'auto-start-reverse');
+        var arrowPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        arrowPath.setAttribute('d', 'M0,0 L10,3 L0,6 Z');
+        arrowPath.setAttribute('fill', isDark ? '#a0aec0' : '#718096');
+        marker.appendChild(arrowPath);
+        defs.appendChild(marker);
+        svg.appendChild(defs);
+
+        container.appendChild(svg);
+        umlWrapper.innerHTML = '';
+        umlWrapper.appendChild(container);
+
+        // 接続線描画
+        function drawRelations() {
+          while (svg.childNodes.length > 1) svg.removeChild(svg.lastChild);
+
+          var lineColor = isDark ? 'rgba(160,174,192,0.6)' : 'rgba(113,128,150,0.5)';
+          var labelColor = isDark ? '#a0aec0' : '#4a5568';
+
+          for (var r = 0; r < relations.length; r++) {
+            var rel = relations[r];
+            var fromRect = cardRects[rel[0]];
+            var toRect = cardRects[rel[2]];
+            if (!fromRect || !toRect) continue;
+
+            // カードのエッジから接続点を計算
+            var fromCx = fromRect.x + fromRect.w / 2;
+            var fromCy = fromRect.y + fromRect.h / 2;
+            var toCx = toRect.x + toRect.w / 2;
+            var toCy = toRect.y + toRect.h / 2;
+
+            // from 側の接続点
+            var fx, fy;
+            if (toCx < fromRect.x) { fx = fromRect.x; fy = fromCy; }
+            else if (toCx > fromRect.x + fromRect.w) { fx = fromRect.x + fromRect.w; fy = fromCy; }
+            else if (toCy < fromRect.y) { fx = fromCx; fy = fromRect.y; }
+            else { fx = fromCx; fy = fromRect.y + fromRect.h; }
+
+            // to 側の接続点
+            var tx, ty;
+            if (fromCx < toRect.x) { tx = toRect.x; ty = toCy; }
+            else if (fromCx > toRect.x + toRect.w) { tx = toRect.x + toRect.w; ty = toCy; }
+            else if (fromCy < toRect.y) { tx = toCx; ty = toRect.y; }
+            else { tx = toCx; ty = toRect.y + toRect.h; }
+
+            var line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+            line.setAttribute('x1', String(fx));
+            line.setAttribute('y1', String(fy));
+            line.setAttribute('x2', String(tx));
+            line.setAttribute('y2', String(ty));
+            line.setAttribute('stroke', lineColor);
+            line.setAttribute('stroke-width', '2');
+            line.setAttribute('marker-end', 'url(#uml-arrow)');
+            svg.appendChild(line);
+
+            // ラベル
+            var mx = (fx + tx) / 2;
+            var my = (fy + ty) / 2;
+            var text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+            text.setAttribute('x', String(mx));
+            text.setAttribute('y', String(my - 6));
+            text.setAttribute('text-anchor', 'middle');
+            text.setAttribute('font-size', '11');
+            text.setAttribute('fill', labelColor);
+            text.setAttribute('font-weight', '600');
+            text.textContent = rel[4];
+            svg.appendChild(text);
+          }
+        }
+
+        drawRelations();
+
+        // ドラッグ
+        var dragTarget = null;
+        var dragOffsetX = 0;
+        var dragOffsetY = 0;
+
+        function clientToContainer(clientX, clientY) {
+          var wrapperRect = umlWrapper.getBoundingClientRect();
+          return {
+            x: clientX - wrapperRect.left + umlWrapper.scrollLeft,
+            y: clientY - wrapperRect.top + umlWrapper.scrollTop
+          };
+        }
+
+        container.addEventListener('mousedown', function(e) {
+          var card = e.target.closest('[data-uml-table]');
+          if (!card) return;
+          var tName = card.getAttribute('data-uml-table');
+          if (!tName || !cardRects[tName]) return;
+          dragTarget = tName;
+          var pos = clientToContainer(e.clientX, e.clientY);
+          dragOffsetX = pos.x - cardRects[tName].x;
+          dragOffsetY = pos.y - cardRects[tName].y;
+          e.preventDefault();
+        });
+
+        document.addEventListener('mousemove', function(e) {
+          if (!dragTarget) return;
+          var rect = cardRects[dragTarget];
+          var pos = clientToContainer(e.clientX, e.clientY);
+          rect.x = pos.x - dragOffsetX;
+          rect.y = pos.y - dragOffsetY;
+          var el = cardElements[dragTarget];
+          if (el) {
+            el.style.left = rect.x + 'px';
+            el.style.top = rect.y + 'px';
+          }
+          drawRelations();
+        });
+
+        document.addEventListener('mouseup', function() {
+          dragTarget = null;
+        });
+      }
     })();
 
     // Canvas チャート描画
