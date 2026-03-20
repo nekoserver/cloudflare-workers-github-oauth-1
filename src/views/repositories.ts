@@ -1593,6 +1593,45 @@ export function getRepositoriesPage(user: {
       return date.toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo', hour12: false });
     }
 
+    function getTokyoDateParts(date) {
+      if (!(date instanceof Date) || Number.isNaN(date.getTime())) return null;
+      var formatter = new Intl.DateTimeFormat('ja-JP', {
+        timeZone: 'Asia/Tokyo',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+      });
+      var parts = formatter.formatToParts(date);
+      var result = {};
+      parts.forEach(function(part) {
+        if (part.type !== 'literal') result[part.type] = part.value;
+      });
+      return result;
+    }
+
+    function formatTokyoYearMonth(date) {
+      var parts = getTokyoDateParts(date);
+      if (!parts) return null;
+      return parts.year + '-' + parts.month;
+    }
+
+    function formatTokyoDateKey(date) {
+      var parts = getTokyoDateParts(date);
+      if (!parts) return null;
+      return parts.year + '-' + parts.month + '-' + parts.day;
+    }
+
+    function formatTokyoTime(dateString) {
+      if (!dateString) return '';
+      var date = new Date(dateString);
+      var parts = getTokyoDateParts(date);
+      if (!parts) return '';
+      return parts.hour + ':' + parts.minute;
+    }
+
     function extractCommitMonths(commits) {
       var seen = {};
       var months = [];
@@ -1600,7 +1639,8 @@ export function getRepositoriesPage(user: {
         if (!commit || !commit.authoredDate) return;
         var date = new Date(commit.authoredDate);
         if (Number.isNaN(date.getTime())) return;
-        var monthKey = date.getFullYear() + '-' + String(date.getMonth() + 1).padStart(2, '0');
+        var monthKey = formatTokyoYearMonth(date);
+        if (!monthKey) return;
         if (!seen[monthKey]) {
           seen[monthKey] = true;
           months.push(monthKey);
@@ -1797,8 +1837,9 @@ export function getRepositoriesPage(user: {
 
     function buildHeatmapHtml(counts, year, month) {
       var today = new Date();
-      var todayStr = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0');
-      var isCurrentMonth = today.getFullYear() === year && (today.getMonth() + 1) === month;
+      var todayStr = formatTokyoDateKey(today);
+      var currentYearMonth = formatTokyoYearMonth(today);
+      var isCurrentMonth = currentYearMonth === year + '-' + String(month).padStart(2, '0');
       var firstDay = new Date(year, month - 1, 1);
       var daysInMonth = new Date(year, month, 0).getDate();
       var startDow = firstDay.getDay(); // 0=Sun
@@ -1887,8 +1928,9 @@ export function getRepositoriesPage(user: {
     function startHeatmapForRepo(owner) {
       heatmapOwner = owner;
       var now = new Date();
-      heatmapYear = now.getFullYear();
-      heatmapMonth = now.getMonth() + 1;
+      var nowParts = getTokyoDateParts(now);
+      heatmapYear = nowParts ? Number(nowParts.year) : now.getFullYear();
+      heatmapMonth = nowParts ? Number(nowParts.month) : (now.getMonth() + 1);
       loadAndRenderHeatmap();
     }
 
@@ -1972,11 +2014,7 @@ export function getRepositoriesPage(user: {
             var msgLines = (commit.message || '').split('\\n');
             var title = msgLines[0] || '';
             var body = msgLines.slice(1).filter(function(l) { return l.trim() !== ''; }).join('\\n');
-            var timeStr = '';
-            if (commit.date) {
-              var d = new Date(commit.date);
-              timeStr = String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
-            }
+            var timeStr = formatTokyoTime(commit.date);
 
             html += '<div class="commit-detail-item">';
             html += '<div class="commit-detail-header">';
