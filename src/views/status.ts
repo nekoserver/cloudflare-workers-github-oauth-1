@@ -526,6 +526,15 @@ export function getCacheStatusPage(user: {
     }
     .uml-button:hover { opacity: 0.85; }
 
+    .uml-export-button {
+      background: #48bb78; color: white; border: none; border-radius: 8px;
+      padding: 8px 16px; font-size: 12px; font-weight: 600;
+      cursor: pointer; display: inline-flex; align-items: center; gap: 5px;
+      transition: background 0.2s; white-space: nowrap;
+    }
+    .uml-export-button:hover { background: #38a169; }
+    .uml-export-button:disabled { background: #a0aec0; cursor: not-allowed; }
+
     /* UML モーダル */
     .uml-modal-card {
       width: min(1200px, 100%); max-height: min(90vh, 960px);
@@ -910,7 +919,13 @@ export function getCacheStatusPage(user: {
           <div class="modal-title" id="umlModalTitle">ER図 — テーブルリレーション</div>
           <div class="modal-subtitle">テーブル間の外部キー・参照関係と正規化状況を表示しています</div>
         </div>
-        <button type="button" class="modal-close" id="umlModalClose" aria-label="閉じる">&times;</button>
+        <div style="display:flex; align-items:center; gap:8px;">
+          <button type="button" class="uml-export-button" id="umlExportPng">
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M8 1v9M8 10L4.5 6.5M8 10l3.5-3.5M2 12v2h12v-2" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            画像出力
+          </button>
+          <button type="button" class="modal-close" id="umlModalClose" aria-label="閉じる">&times;</button>
+        </div>
       </div>
       <div class="uml-canvas-wrapper" id="umlCanvasWrapper"></div>
       <div class="uml-legend">
@@ -1661,6 +1676,266 @@ export function getCacheStatusPage(user: {
         document.addEventListener('mouseup', function() {
           dragTarget = null;
         });
+
+        // PNG出力
+        var exportBtn = document.getElementById('umlExportPng');
+        if (exportBtn) {
+          exportBtn.addEventListener('click', function() {
+            exportErDiagramAsPng(cardRects, isDark);
+          });
+        }
+      }
+
+      var keyColorMap = { pk: '#e53e3e', fk: '#ed8936', uk: '#48bb78', idx: '#4299e1' };
+
+      function exportErDiagramAsPng(cardRects, isDark) {
+        var exportBtn = document.getElementById('umlExportPng');
+        if (exportBtn) {
+          exportBtn.disabled = true;
+          exportBtn.textContent = '出力中...';
+        }
+
+        try {
+          // キャンバスサイズ算出（全テーブルカードのバウンディングボックス + 余白）
+          var pad = 40;
+          var minX = Infinity, minY = Infinity, maxX = 0, maxY = 0;
+          for (var t = 0; t < tables.length; t++) {
+            var r = cardRects[tables[t].name];
+            if (!r) continue;
+            if (r.x < minX) minX = r.x;
+            if (r.y < minY) minY = r.y;
+            if (r.x + r.w > maxX) maxX = r.x + r.w;
+            if (r.y + r.h > maxY) maxY = r.y + r.h;
+          }
+          // 正規化ノート領域
+          var noteHeight = 120;
+          var legendHeight = 36;
+
+          var canvasW = maxX - minX + pad * 2;
+          var canvasH = maxY - minY + pad * 2 + legendHeight + noteHeight;
+          var offsetX = -minX + pad;
+          var offsetY = -minY + pad;
+
+          var dpr = 2;
+          var canvas = document.createElement('canvas');
+          canvas.width = canvasW * dpr;
+          canvas.height = canvasH * dpr;
+          var ctx = canvas.getContext('2d');
+          ctx.scale(dpr, dpr);
+
+          // 背景
+          ctx.fillStyle = isDark ? '#1a202c' : '#ffffff';
+          ctx.fillRect(0, 0, canvasW, canvasH);
+
+          // リレーション線を先に描画
+          var lineColor = isDark ? 'rgba(160,174,192,0.6)' : 'rgba(113,128,150,0.5)';
+          var labelColor = isDark ? '#a0aec0' : '#4a5568';
+          var arrowFill = isDark ? '#a0aec0' : '#718096';
+
+          for (var ri = 0; ri < relations.length; ri++) {
+            var rel = relations[ri];
+            var fromRect = cardRects[rel[0]];
+            var toRect = cardRects[rel[2]];
+            if (!fromRect || !toRect) continue;
+
+            var fromCx = fromRect.x + fromRect.w / 2 + offsetX;
+            var fromCy = fromRect.y + fromRect.h / 2 + offsetY;
+            var toCx = toRect.x + toRect.w / 2 + offsetX;
+            var toCy = toRect.y + toRect.h / 2 + offsetY;
+
+            var fx, fy;
+            if (toCx < fromRect.x + offsetX) { fx = fromRect.x + offsetX; fy = fromCy; }
+            else if (toCx > fromRect.x + fromRect.w + offsetX) { fx = fromRect.x + fromRect.w + offsetX; fy = fromCy; }
+            else if (toCy < fromRect.y + offsetY) { fx = fromCx; fy = fromRect.y + offsetY; }
+            else { fx = fromCx; fy = fromRect.y + fromRect.h + offsetY; }
+
+            var tx, ty;
+            if (fromCx < toRect.x + offsetX) { tx = toRect.x + offsetX; ty = toCy; }
+            else if (fromCx > toRect.x + toRect.w + offsetX) { tx = toRect.x + toRect.w + offsetX; ty = toCy; }
+            else if (fromCy < toRect.y + offsetY) { tx = toCx; ty = toRect.y + offsetY; }
+            else { tx = toCx; ty = toRect.y + toRect.h + offsetY; }
+
+            // 線
+            ctx.strokeStyle = lineColor;
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(fx, fy);
+            ctx.lineTo(tx, ty);
+            ctx.stroke();
+
+            // 矢印
+            var angle = Math.atan2(ty - fy, tx - fx);
+            var arrowLen = 10;
+            ctx.fillStyle = arrowFill;
+            ctx.beginPath();
+            ctx.moveTo(tx, ty);
+            ctx.lineTo(tx - arrowLen * Math.cos(angle - 0.35), ty - arrowLen * Math.sin(angle - 0.35));
+            ctx.lineTo(tx - arrowLen * Math.cos(angle + 0.35), ty - arrowLen * Math.sin(angle + 0.35));
+            ctx.closePath();
+            ctx.fill();
+
+            // カーディナリティラベル
+            var mx = (fx + tx) / 2;
+            var my = (fy + ty) / 2;
+            ctx.fillStyle = labelColor;
+            ctx.font = '600 11px -apple-system, BlinkMacSystemFont, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'bottom';
+            ctx.fillText(rel[4], mx, my - 4);
+          }
+
+          // テーブルカード描画
+          var headerGrad1 = '#667eea';
+          var headerGrad2 = '#764ba2';
+          var cardBg = isDark ? '#2d3748' : '#ffffff';
+          var cardBorder = isDark ? '#4a5568' : '#e2e8f0';
+          var colText = isDark ? '#cbd5e0' : '#4a5568';
+          var typeText = isDark ? '#718096' : '#a0aec0';
+          var colRowH = 22;
+          var headerH = 34;
+
+          for (var t = 0; t < tables.length; t++) {
+            var tbl = tables[t];
+            var rect = cardRects[tbl.name];
+            if (!rect) continue;
+            var cx = rect.x + offsetX;
+            var cy = rect.y + offsetY;
+            var cw = rect.w;
+            var ch = rect.h;
+
+            // カード影
+            ctx.shadowColor = 'rgba(0,0,0,0.12)';
+            ctx.shadowBlur = 8;
+            ctx.shadowOffsetX = 0;
+            ctx.shadowOffsetY = 2;
+
+            // カード背景
+            ctx.fillStyle = cardBg;
+            ctx.beginPath();
+            ctx.roundRect(cx, cy, cw, ch, 10);
+            ctx.fill();
+
+            // カードボーダー
+            ctx.shadowColor = 'transparent';
+            ctx.shadowBlur = 0;
+            ctx.strokeStyle = cardBorder;
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.roundRect(cx, cy, cw, ch, 10);
+            ctx.stroke();
+
+            // ヘッダー背景（グラデーション）
+            var grad = ctx.createLinearGradient(cx, cy, cx + cw, cy + headerH);
+            grad.addColorStop(0, headerGrad1);
+            grad.addColorStop(1, headerGrad2);
+            ctx.fillStyle = grad;
+            ctx.beginPath();
+            ctx.moveTo(cx + 10, cy);
+            ctx.lineTo(cx + cw - 10, cy);
+            ctx.quadraticCurveTo(cx + cw, cy, cx + cw, cy + 10);
+            ctx.lineTo(cx + cw, cy + headerH);
+            ctx.lineTo(cx, cy + headerH);
+            ctx.lineTo(cx, cy + 10);
+            ctx.quadraticCurveTo(cx, cy, cx + 10, cy);
+            ctx.closePath();
+            ctx.fill();
+
+            // ヘッダーテキスト
+            ctx.fillStyle = '#ffffff';
+            ctx.font = '700 13px -apple-system, BlinkMacSystemFont, sans-serif';
+            ctx.textAlign = 'left';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(tbl.name, cx + 12, cy + headerH / 2);
+
+            // カラム行
+            for (var c = 0; c < tbl.cols.length; c++) {
+              var col = tbl.cols[c];
+              var rowY = cy + headerH + 6 + c * colRowH;
+              var colX = cx + 12;
+
+              // キーバッジ
+              for (var k = 0; k < col.keys.length; k++) {
+                var badgeW = 22;
+                var badgeH = 13;
+                ctx.fillStyle = keyColorMap[col.keys[k]] || '#a0aec0';
+                ctx.beginPath();
+                ctx.roundRect(colX, rowY + 2, badgeW, badgeH, 3);
+                ctx.fill();
+                ctx.fillStyle = '#ffffff';
+                ctx.font = '700 8px -apple-system, sans-serif';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(col.keys[k].toUpperCase(), colX + badgeW / 2, rowY + 2 + badgeH / 2);
+                colX += badgeW + 4;
+              }
+
+              // カラム名
+              ctx.fillStyle = colText;
+              ctx.font = '11px Monaco, Courier New, monospace';
+              ctx.textAlign = 'left';
+              ctx.textBaseline = 'middle';
+              ctx.fillText(col.name, colX, rowY + 9);
+
+              // 型
+              ctx.fillStyle = typeText;
+              ctx.font = '10px Monaco, Courier New, monospace';
+              ctx.textAlign = 'right';
+              ctx.fillText(col.type, cx + cw - 10, rowY + 9);
+            }
+          }
+
+          // 凡例
+          var legendY = maxY - minY + pad * 2 + 8;
+          var legendItems = [
+            { label: 'PK — 主キー', color: '#e53e3e' },
+            { label: 'FK — 外部キー', color: '#ed8936' },
+            { label: 'UK — ユニーク制約', color: '#48bb78' },
+            { label: 'IDX — インデックス', color: '#4299e1' }
+          ];
+          var lx = pad;
+          for (var li = 0; li < legendItems.length; li++) {
+            ctx.fillStyle = legendItems[li].color;
+            ctx.fillRect(lx, legendY, 12, 12);
+            ctx.fillStyle = labelColor;
+            ctx.font = '12px -apple-system, sans-serif';
+            ctx.textAlign = 'left';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(legendItems[li].label, lx + 16, legendY + 6);
+            lx += ctx.measureText(legendItems[li].label).width + 36;
+          }
+
+          // 正規化ノート
+          var noteY = legendY + legendHeight;
+          ctx.fillStyle = labelColor;
+          ctx.font = '700 12px -apple-system, sans-serif';
+          ctx.textAlign = 'left';
+          ctx.textBaseline = 'top';
+          ctx.fillText('正規化状況:', pad, noteY);
+          ctx.font = '11px -apple-system, sans-serif';
+          var noteLines = [
+            '[3NF] teams, workspaces, team_members — 第3正規形',
+            '[3NF] user_sessions — user_id UNIQUE で実質的な候補キー',
+            '[2NF] commit_calendar_cache, commit_list_cache — JSON 文字列格納 (キャッシュ用途)',
+            '[3NF] cache_stats — 全カウンタが複合キーにのみ従属',
+            '[2NF] installation_permissions — permissions が JSON 格納 (APIキャッシュ)'
+          ];
+          for (var ni = 0; ni < noteLines.length; ni++) {
+            ctx.fillText(noteLines[ni], pad, noteY + 18 + ni * 18);
+          }
+
+          // ダウンロード
+          var link = document.createElement('a');
+          link.download = 'er-diagram-' + new Date().toISOString().slice(0, 10) + '.png';
+          link.href = canvas.toDataURL('image/png');
+          link.click();
+        } catch (err) {
+          console.error('PNG export failed', err);
+        } finally {
+          if (exportBtn) {
+            exportBtn.disabled = false;
+            exportBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M8 1v9M8 10L4.5 6.5M8 10l3.5-3.5M2 12v2h12v-2" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg> 画像出力';
+          }
+        }
       }
     })();
 
