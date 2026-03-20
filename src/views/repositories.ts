@@ -1903,6 +1903,19 @@ export function getRepositoriesPage(user: {
       });
     }
 
+    function syncInlineHeatmapToMonth(monthKey) {
+      if (!monthKey || !currentRepoOwner || !currentRepoName) return;
+      var parts = monthKey.split('-');
+      if (parts.length !== 2) return;
+      var year = Number(parts[0]);
+      var month = Number(parts[1]);
+      if (!year || !month) return;
+      heatmapOwner = currentRepoOwner;
+      heatmapYear = year;
+      heatmapMonth = month;
+      loadAndRenderHeatmap();
+    }
+
     function openMonthlyStatusModal(monthKey) {
       if (!monthKey || !currentRepoOwner || !currentRepoName || !monthlyStatusModal || !monthlyStatusBody) return;
       var parts = monthKey.split('-');
@@ -1951,7 +1964,8 @@ export function getRepositoriesPage(user: {
     if (commitHistoryMonthSelect) {
       commitHistoryMonthSelect.addEventListener('change', function() {
         if (!commitHistoryMonthSelect.value) return;
-        openMonthlyStatusModal(commitHistoryMonthSelect.value);
+        closeCommitHistoryModal();
+        syncInlineHeatmapToMonth(commitHistoryMonthSelect.value);
       });
     }
 
