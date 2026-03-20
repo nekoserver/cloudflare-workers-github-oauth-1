@@ -904,7 +904,7 @@ export function getCacheStatusPage(user: {
         + renderCopyableCodeCard('curl: migration sql only', migrationSqlCurl, migrationSqlCurl)
         + renderCopyableCodeCard('curl: table rows preview', rowsCookieCurl, rowsCookieCurl)
         + renderCopyableCodeCard('curl: table rows preview (Bearer)', rowsBearerCurl, rowsBearerCurl)
-        + '<p class="code-note">`/api/status/*` は認証必須です。ブラウザでは Cookie、CLI では Cookie または Bearer トークンで呼び出せます。</p>'
+        + '<p class="code-note">&#96;/api/status/*&#96; は認証必須です。ブラウザでは Cookie、CLI では Cookie または Bearer トークンで呼び出せます。</p>'
         + '</div>'
         + '</section>'
         + '</div>';
