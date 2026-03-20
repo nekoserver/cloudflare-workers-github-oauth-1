@@ -31,6 +31,142 @@ const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 const resendWebhookDedupCache = new Map<string, number>();
 const DEFAULT_TIMEZONE = 'JST';
 const DEFAULT_COMMIT_HISTORY_PAGE_SIZE = 10;
+const STATUS_TABLE_PREVIEW_LIMIT = 20;
+
+type StatusTableDefinition = {
+  name: string;
+  migration: string;
+  description: string;
+};
+
+const STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
+  { name: 'user_sessions', migration: '0001', description: 'ユーザーセッション・設定' },
+  { name: 'installation_permissions', migration: '0004', description: 'GitHub App インストール権限キャッシュ' },
+  { name: 'commit_calendar_cache', migration: '0005', description: 'コミットカレンダーキャッシュ' },
+  { name: 'teams', migration: '0007', description: 'チーム管理' },
+  { name: 'workspaces', migration: '0007', description: 'ワークスペース管理' },
+  { name: 'team_members', migration: '0007', description: 'チームメンバー' },
+  { name: 'commit_list_cache', migration: '0008', description: 'コミット一覧キャッシュ' },
+  { name: 'cache_stats', migration: '0009', description: 'キャッシュ統計' },
+];
+
+const STATUS_MIGRATION_SQL: Record<string, string> = {
+  '0001': `-- ユーザーセッション情報テーブル
+CREATE TABLE IF NOT EXISTS user_sessions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id TEXT NOT NULL UNIQUE,
+  timezone TEXT DEFAULT 'JST',
+  session_duration TEXT DEFAULT '1h',
+  last_login_at TEXT,
+  current_login_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+-- user_idにインデックスを作成（検索の高速化）
+CREATE INDEX IF NOT EXISTS idx_user_id ON user_sessions(user_id);`,
+  '0004': `-- GitHub App インストール権限をリポジトリ単位で保存
+CREATE TABLE IF NOT EXISTS installation_permissions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  installation_id INTEGER NOT NULL,
+  repo_name TEXT,
+  repository_selection TEXT NOT NULL DEFAULT 'selected',
+  permissions TEXT NOT NULL DEFAULT '{}',
+  updated_at TEXT NOT NULL
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_install_perm_repo
+  ON installation_permissions (installation_id, repo_name);
+
+CREATE INDEX IF NOT EXISTS idx_install_perm_updated
+  ON installation_permissions (updated_at);`,
+  '0005': `-- コミットカレンダーのキャッシュテーブル
+-- 過去の確定月のコミット数データをキャッシュし、GitHub APIへの連続アクセスを防止する
+CREATE TABLE IF NOT EXISTS commit_calendar_cache (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  owner TEXT NOT NULL,
+  repo TEXT NOT NULL,
+  year INTEGER NOT NULL,
+  month INTEGER NOT NULL,
+  counts TEXT NOT NULL DEFAULT '{}',
+  cached_at TEXT NOT NULL
+);
+
+CREATE UNIQUE INDEX idx_commit_calendar_owner_repo_ym
+  ON commit_calendar_cache (owner, repo, year, month);`,
+  '0007': `-- チーム・ワークスペースによるネームスペース分離
+-- 1人チームであっても必ずチーム→ワークスペースの階層でデータを分離する
+
+-- チーム
+CREATE TABLE IF NOT EXISTS teams (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+
+-- ワークスペース（チームに属する）
+CREATE TABLE IF NOT EXISTS workspaces (
+  id TEXT PRIMARY KEY,
+  team_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  FOREIGN KEY (team_id) REFERENCES teams(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_workspaces_team ON workspaces (team_id);
+
+-- チームメンバー
+CREATE TABLE IF NOT EXISTS team_members (
+  team_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  role TEXT NOT NULL DEFAULT 'member',
+  joined_at TEXT NOT NULL,
+  PRIMARY KEY (team_id, user_id),
+  FOREIGN KEY (team_id) REFERENCES teams(id)
+);
+
+-- user_sessions に現在のワークスペースIDを追加
+ALTER TABLE user_sessions ADD COLUMN current_workspace_id TEXT;
+
+-- commit_calendar_cache: user_id → workspace_id に移行
+-- 0006 で追加した user_id は空文字のままなので workspace_id に置き換える
+ALTER TABLE commit_calendar_cache ADD COLUMN workspace_id TEXT NOT NULL DEFAULT '';
+
+-- 既存の user_id ベースのインデックスを削除し workspace_id ベースに置き換え
+DROP INDEX IF EXISTS idx_commit_calendar_user_owner_repo_ym;
+
+CREATE UNIQUE INDEX idx_commit_calendar_ws_owner_repo_ym
+  ON commit_calendar_cache (workspace_id, owner, repo, year, month);`,
+  '0008': `-- コミット一覧のキャッシュテーブル
+-- 過去の確定日(アクセス当日以外)のコミット詳細データをキャッシュし、GitHub APIへのアクセスを削減する
+CREATE TABLE IF NOT EXISTS commit_list_cache (
+  workspace_id TEXT NOT NULL,
+  owner TEXT NOT NULL,
+  repo TEXT NOT NULL,
+  date TEXT NOT NULL,
+  commits_json TEXT NOT NULL DEFAULT '[]',
+  commit_count INTEGER NOT NULL DEFAULT 0,
+  cached_at TEXT NOT NULL
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_commit_list_ws_owner_repo_date
+  ON commit_list_cache (workspace_id, owner, repo, date);`,
+  '0009': `-- ユーザー別キャッシュ統計テーブル
+-- コミット一覧のキャッシュヒット率を計算するための累計カウンターを保持する
+-- 各カウンターは毎回のアクセス時に加算され、永続的に蓄積される
+CREATE TABLE IF NOT EXISTS cache_stats (
+  user_id TEXT NOT NULL,
+  owner TEXT NOT NULL,
+  repo TEXT NOT NULL,
+  github_fetch_count INTEGER NOT NULL DEFAULT 0,
+  cache_save_count INTEGER NOT NULL DEFAULT 0,
+  cache_lookup_count INTEGER NOT NULL DEFAULT 0,
+  cache_hit_count INTEGER NOT NULL DEFAULT 0,
+  last_updated_at TEXT NOT NULL
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_cache_stats_user_repo
+  ON cache_stats (user_id, owner, repo);`,
+};
 
 function jsonUtf8(payload: unknown, status = 200): Response {
   return new Response(JSON.stringify(payload), {
@@ -114,6 +250,62 @@ function formatTimestampWithTimezone(date: Date, timezone: string): string {
     return jstDate.toISOString().replace('T', ' ').substring(0, 19) + ' JST';
   }
   return date.toISOString().replace('T', ' ').substring(0, 19) + ' UTC';
+}
+
+function getStatusTableDefinition(tableName: string): StatusTableDefinition | undefined {
+  return STATUS_TABLE_DEFINITIONS.find((table) => table.name === tableName);
+}
+
+function getStatusTablePreviewQuery(
+  tableName: string,
+  userId: string,
+  workspaceId: string | null,
+  teamId: string | null,
+): { sql: string; params: (string | number)[] } | null {
+  switch (tableName) {
+    case 'user_sessions':
+      return {
+        sql: `SELECT * FROM ${tableName} WHERE user_id = ? ORDER BY updated_at DESC, id DESC LIMIT ${STATUS_TABLE_PREVIEW_LIMIT}`,
+        params: [userId],
+      };
+    case 'commit_calendar_cache':
+    case 'commit_list_cache':
+      if (!workspaceId) return null;
+      return {
+        sql: `SELECT * FROM ${tableName} WHERE workspace_id = ? ORDER BY cached_at DESC LIMIT ${STATUS_TABLE_PREVIEW_LIMIT}`,
+        params: [workspaceId],
+      };
+    case 'cache_stats':
+      return {
+        sql: `SELECT * FROM ${tableName} WHERE user_id = ? ORDER BY last_updated_at DESC LIMIT ${STATUS_TABLE_PREVIEW_LIMIT}`,
+        params: [userId],
+      };
+    case 'teams':
+      if (!teamId) return null;
+      return {
+        sql: `SELECT * FROM ${tableName} WHERE id = ? ORDER BY created_at DESC LIMIT ${STATUS_TABLE_PREVIEW_LIMIT}`,
+        params: [teamId],
+      };
+    case 'workspaces':
+      if (!teamId) return null;
+      return {
+        sql: `SELECT * FROM ${tableName} WHERE team_id = ? ORDER BY created_at DESC LIMIT ${STATUS_TABLE_PREVIEW_LIMIT}`,
+        params: [teamId],
+      };
+    case 'team_members':
+      if (!teamId) return null;
+      return {
+        sql: `SELECT * FROM ${tableName} WHERE team_id = ? ORDER BY joined_at DESC LIMIT ${STATUS_TABLE_PREVIEW_LIMIT}`,
+        params: [teamId],
+      };
+    case 'installation_permissions':
+      return {
+        sql: `SELECT * FROM ${tableName} ORDER BY updated_at DESC, id DESC LIMIT ${STATUS_TABLE_PREVIEW_LIMIT}`,
+        params: [],
+      };
+    default:
+      return null;
+  }
 }
 
 function getJstYearMonthParts(date: Date): { year: number; month: number } {
@@ -913,18 +1105,7 @@ app.get('/status', authMiddleware, async (c) => {
     }
 
     // テーブル別マイグレーション状況を収集
-    const tableDefinitions: { name: string; migration: string; description: string }[] = [
-      { name: 'user_sessions', migration: '0001', description: 'ユーザーセッション・設定' },
-      { name: 'installation_permissions', migration: '0004', description: 'GitHub App インストール権限キャッシュ' },
-      { name: 'commit_calendar_cache', migration: '0005', description: 'コミットカレンダーキャッシュ' },
-      { name: 'teams', migration: '0007', description: 'チーム管理' },
-      { name: 'workspaces', migration: '0007', description: 'ワークスペース管理' },
-      { name: 'team_members', migration: '0007', description: 'チームメンバー' },
-      { name: 'commit_list_cache', migration: '0008', description: 'コミット一覧キャッシュ' },
-      { name: 'cache_stats', migration: '0009', description: 'キャッシュ統計' },
-    ];
-
-    for (const tbl of tableDefinitions) {
+    for (const tbl of STATUS_TABLE_DEFINITIONS) {
       const entry: TableStatusEntry = {
         name: tbl.name,
         exists: false,
@@ -1066,6 +1247,67 @@ app.get('/status', authMiddleware, async (c) => {
     statusCommitCacheSortMode,
     statusCommitCacheSortState,
   }, data));
+});
+
+app.get('/api/status/tables/:table/rows', authMiddleware, async (c) => {
+  const user = c.get('user');
+  const db = c.env.DB;
+  const tableName = c.req.param('table');
+  const tableDefinition = getStatusTableDefinition(tableName);
+
+  if (!db || !tableDefinition) {
+    return jsonUtf8({ error: 'Table not found' }, 404);
+  }
+
+  const wsInfo = await getCurrentWorkspace(db, user.sub);
+  const previewQuery = getStatusTablePreviewQuery(
+    tableName,
+    user.sub,
+    wsInfo?.workspaceId ?? null,
+    wsInfo?.teamId ?? null,
+  );
+
+  if (!previewQuery) {
+    return jsonUtf8({
+      table: tableName,
+      migration: tableDefinition.migration,
+      description: tableDefinition.description,
+      columns: [],
+      rows: [],
+      limit: STATUS_TABLE_PREVIEW_LIMIT,
+    });
+  }
+
+  try {
+    const columnsResult = await db.prepare(`PRAGMA table_info(${tableName})`).all<{ name: string }>();
+    const columns = (columnsResult.results ?? []).map((column) => column.name);
+    const rowsResult = await db.prepare(previewQuery.sql).bind(...previewQuery.params).all<Record<string, unknown>>();
+    return jsonUtf8({
+      table: tableName,
+      migration: tableDefinition.migration,
+      description: tableDefinition.description,
+      columns,
+      rows: rowsResult.results ?? [],
+      limit: STATUS_TABLE_PREVIEW_LIMIT,
+    });
+  } catch (error) {
+    logger.warn('Failed to fetch status table preview', {
+      tableName,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    return jsonUtf8({ error: 'Failed to fetch table preview' }, 500);
+  }
+});
+
+app.get('/api/status/migrations/:migration/sql', authMiddleware, async (c) => {
+  const migration = c.req.param('migration');
+  const sql = STATUS_MIGRATION_SQL[migration];
+
+  if (!sql) {
+    return jsonUtf8({ error: 'Migration not found' }, 404);
+  }
+
+  return jsonUtf8({ migration, sql });
 });
 
 /**
