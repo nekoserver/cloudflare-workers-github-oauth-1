@@ -18,6 +18,7 @@ export type Bindings = {
   SLACK_CLIENT_ID?: string;
   SLACK_CHANNEL_ID?: string;
   SESSION_IDLE_TIMEOUT_SECONDS?: string;
+  COMMIT_HISTORY_PAGE_SIZE?: string;
   RESEND_WEBHOOK_DEDUP_TTL_SECONDS?: string;
   GITHUB_WEBHOOK_SECRET?: string;
 };

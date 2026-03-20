@@ -39,6 +39,12 @@ type StatusTableDefinition = {
   description: string;
 };
 
+type StatusQueryExample = {
+  sql: string;
+  params: string[];
+  note: string;
+};
+
 const STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
   { name: 'user_sessions', migration: '0001', description: 'ユーザーセッション・設定' },
   { name: 'installation_permissions', migration: '0004', description: 'GitHub App インストール権限キャッシュ' },
@@ -302,6 +308,84 @@ function getStatusTablePreviewQuery(
       return {
         sql: `SELECT * FROM ${tableName} ORDER BY updated_at DESC, id DESC LIMIT ${STATUS_TABLE_PREVIEW_LIMIT}`,
         params: [],
+      };
+    default:
+      return null;
+  }
+}
+
+function getStatusTableQueryExample(tableName: string): StatusQueryExample | null {
+  switch (tableName) {
+    case 'user_sessions':
+      return {
+        sql: `SELECT * FROM user_sessions
+WHERE user_id = ?
+ORDER BY updated_at DESC, id DESC
+LIMIT 20;`,
+        params: ['user.sub'],
+        note: '現在のログインユーザー自身のセッション設定を新しい順で取得します。',
+      };
+    case 'installation_permissions':
+      return {
+        sql: `SELECT * FROM installation_permissions
+ORDER BY updated_at DESC, id DESC
+LIMIT 20;`,
+        params: [],
+        note: 'インストール権限キャッシュを更新日時の新しい順で取得します。',
+      };
+    case 'commit_calendar_cache':
+      return {
+        sql: `SELECT * FROM commit_calendar_cache
+WHERE workspace_id = ?
+ORDER BY cached_at DESC
+LIMIT 20;`,
+        params: ['currentWorkspaceId'],
+        note: '現在ワークスペースに紐づく月別コミットキャッシュを最新順で取得します。',
+      };
+    case 'teams':
+      return {
+        sql: `SELECT * FROM teams
+WHERE id = ?
+ORDER BY created_at DESC
+LIMIT 20;`,
+        params: ['currentTeamId'],
+        note: '現在所属チームの定義を取得します。',
+      };
+    case 'workspaces':
+      return {
+        sql: `SELECT * FROM workspaces
+WHERE team_id = ?
+ORDER BY created_at DESC
+LIMIT 20;`,
+        params: ['currentTeamId'],
+        note: '現在所属チーム配下のワークスペースを作成順で取得します。',
+      };
+    case 'team_members':
+      return {
+        sql: `SELECT * FROM team_members
+WHERE team_id = ?
+ORDER BY joined_at DESC
+LIMIT 20;`,
+        params: ['currentTeamId'],
+        note: '現在所属チームのメンバー一覧を参加日時の新しい順で取得します。',
+      };
+    case 'commit_list_cache':
+      return {
+        sql: `SELECT * FROM commit_list_cache
+WHERE workspace_id = ?
+ORDER BY cached_at DESC
+LIMIT 20;`,
+        params: ['currentWorkspaceId'],
+        note: '現在ワークスペースに紐づく日別コミット一覧キャッシュを最新順で取得します。',
+      };
+    case 'cache_stats':
+      return {
+        sql: `SELECT * FROM cache_stats
+WHERE user_id = ?
+ORDER BY last_updated_at DESC
+LIMIT 20;`,
+        params: ['user.sub'],
+        note: '現在のログインユーザーに紐づくキャッシュ統計を更新日時順で取得します。',
       };
     default:
       return null;
@@ -1308,6 +1392,31 @@ app.get('/api/status/migrations/:migration/sql', authMiddleware, async (c) => {
   }
 
   return jsonUtf8({ migration, sql });
+});
+
+app.get('/api/status/tables/:table/migration-details', authMiddleware, async (c) => {
+  const tableName = c.req.param('table');
+  const tableDefinition = getStatusTableDefinition(tableName);
+
+  if (!tableDefinition) {
+    return jsonUtf8({ error: 'Table not found' }, 404);
+  }
+
+  const queryExample = getStatusTableQueryExample(tableName);
+  const sql = STATUS_MIGRATION_SQL[tableDefinition.migration];
+
+  return jsonUtf8({
+    table: tableName,
+    migration: tableDefinition.migration,
+    description: tableDefinition.description,
+    migrationSql: sql ?? '',
+    queryExample,
+    endpoints: {
+      tableRowsPath: `/api/status/tables/${encodeURIComponent(tableName)}/rows`,
+      migrationSqlPath: `/api/status/migrations/${encodeURIComponent(tableDefinition.migration)}/sql`,
+      migrationDetailPath: `/api/status/tables/${encodeURIComponent(tableName)}/migration-details`,
+    },
+  });
 });
 
 /**
