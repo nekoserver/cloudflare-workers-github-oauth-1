@@ -113,10 +113,10 @@ export function getCacheStatusPage(user: {
     const statusIcon = t.exists ? '<span class="status-ok">OK</span>' : '<span class="status-missing">未作成</span>';
     const count = t.exists && t.rowCount !== null ? String(t.rowCount) : '-';
     return `<tr>
-      <td><code>${escapeHtml(t.name)}</code></td>
+      <td><button type="button" class="status-link-button" data-table-preview="${escapeHtml(t.name)}"><code>${escapeHtml(t.name)}</code></button></td>
       <td class="center">${statusIcon}</td>
       <td class="num">${count}</td>
-      <td class="migration-name">${escapeHtml(t.migration)}</td>
+      <td class="migration-name"><button type="button" class="status-link-button migration-button" data-migration-sql="${escapeHtml(t.migration)}">${escapeHtml(t.migration)}</button></td>
       <td>${escapeHtml(t.description)}</td>
     </tr>`;
   }).join('');
@@ -331,6 +331,18 @@ export function getCacheStatusPage(user: {
       background: transparent; border: 0; padding: 0; margin: 0;
       color: inherit; font: inherit; cursor: pointer;
     }
+    .status-link-button {
+      background: transparent; border: 0; padding: 0; margin: 0;
+      color: var(--accent-color); font: inherit; cursor: pointer;
+      text-align: left;
+    }
+    .status-link-button:hover {
+      color: var(--accent-hover); text-decoration: underline;
+    }
+    .migration-button {
+      font-family: 'Monaco', 'Courier New', monospace;
+      font-size: 11px;
+    }
     .year-month-cell-button {
       background: transparent; border: 0; padding: 0; margin: 0;
       color: var(--accent-color); font: inherit; cursor: pointer;
@@ -393,6 +405,62 @@ export function getCacheStatusPage(user: {
     .canvas-wrapper { width: 100%; overflow-x: auto; }
     .canvas-wrapper canvas { display: block; }
     .table-scroll { overflow-x: auto; }
+    .modal-backdrop {
+      position: fixed; inset: 0; background: rgba(15, 23, 42, 0.52);
+      display: none; align-items: center; justify-content: center;
+      padding: 24px; z-index: 2000;
+    }
+    .modal-backdrop.show { display: flex; }
+    .modal-card {
+      width: min(1100px, 100%); max-height: min(85vh, 900px);
+      background: var(--card-bg); border: 1px solid var(--border-color);
+      border-radius: 16px; box-shadow: 0 24px 80px rgba(0, 0, 0, 0.25);
+      overflow: hidden; display: flex; flex-direction: column;
+    }
+    .modal-header {
+      display: flex; align-items: flex-start; justify-content: space-between; gap: 16px;
+      padding: 20px 24px; border-bottom: 1px solid var(--border-color);
+      background: var(--bg-secondary);
+    }
+    .modal-title-wrap { min-width: 0; }
+    .modal-title { font-size: 18px; font-weight: 700; color: var(--text-primary); }
+    .modal-subtitle { margin-top: 6px; font-size: 13px; color: var(--text-muted); }
+    .modal-close {
+      background: transparent; border: 0; color: var(--text-muted);
+      font-size: 26px; line-height: 1; cursor: pointer;
+    }
+    .modal-close:hover { color: var(--text-primary); }
+    .modal-body {
+      padding: 24px; overflow: auto; color: var(--text-secondary);
+    }
+    .modal-loading, .modal-empty {
+      padding: 32px 12px; text-align: center; color: var(--text-faint);
+    }
+    .modal-note {
+      margin-bottom: 16px; font-size: 13px; color: var(--text-muted);
+    }
+    .preview-table {
+      width: 100%; border-collapse: collapse; font-size: 13px;
+    }
+    .preview-table th, .preview-table td {
+      padding: 10px 12px; border-bottom: 1px solid var(--border-color); vertical-align: top;
+    }
+    .preview-table th {
+      position: sticky; top: 0; background: var(--bg-secondary);
+      text-align: left; color: var(--text-muted); z-index: 1;
+    }
+    .preview-value {
+      max-width: 320px; white-space: pre-wrap; word-break: break-word;
+      font-family: 'Monaco', 'Courier New', monospace; font-size: 12px;
+    }
+    .preview-value.null { color: var(--text-faint); font-style: italic; }
+    .sql-view {
+      margin: 0; padding: 18px; overflow: auto; border-radius: 12px;
+      background: var(--bg-secondary); border: 1px solid var(--border-color);
+      color: var(--text-primary); font-size: 12px; line-height: 1.6;
+      font-family: 'Monaco', 'Courier New', monospace; white-space: pre-wrap;
+      word-break: break-word;
+    }
 
     @media (max-width: 768px) {
       .container { padding: 24px 16px; }
@@ -400,6 +468,9 @@ export function getCacheStatusPage(user: {
       .page-title { font-size: 28px; }
       .summary-grid { grid-template-columns: repeat(2, 1fr); }
       .context-grid { grid-template-columns: 1fr 1fr; }
+      .modal-backdrop { padding: 12px; }
+      .modal-header, .modal-body { padding: 16px; }
+      .preview-table th, .preview-table td { padding: 8px; }
     }
   </style>
 </head>
@@ -487,7 +558,7 @@ export function getCacheStatusPage(user: {
       <div class="section">
         <h2 class="section-title">テーブル別マイグレーション状況</h2>
         <div class="table-scroll">
-          <table class="data-table">
+          <table class="data-table" id="statusTablesTable">
             <thead>
               <tr>
                 <th>テーブル名</th>
@@ -669,6 +740,21 @@ export function getCacheStatusPage(user: {
     </div>
   </div>
 
+  <div class="modal-backdrop" id="statusDetailModal" aria-hidden="true">
+    <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="statusDetailTitle">
+      <div class="modal-header">
+        <div class="modal-title-wrap">
+          <div class="modal-title" id="statusDetailTitle">詳細</div>
+          <div class="modal-subtitle" id="statusDetailSubtitle"></div>
+        </div>
+        <button type="button" class="modal-close" id="statusDetailClose" aria-label="閉じる">&times;</button>
+      </div>
+      <div class="modal-body" id="statusDetailBody">
+        <div class="modal-loading">読み込み中...</div>
+      </div>
+    </div>
+  </div>
+
   <script>
     ${getThemeToggleScript()}
 
@@ -688,6 +774,119 @@ export function getCacheStatusPage(user: {
 
     function setCookie(name, value) {
       document.cookie = name + '=' + encodeURIComponent(value) + '; Path=/; Secure; SameSite=Lax; Max-Age=31536000';
+    }
+
+    function getStatusModalElements() {
+      return {
+        modal: document.getElementById('statusDetailModal'),
+        title: document.getElementById('statusDetailTitle'),
+        subtitle: document.getElementById('statusDetailSubtitle'),
+        body: document.getElementById('statusDetailBody')
+      };
+    }
+
+    function openStatusModal(title, subtitle, bodyHtml) {
+      var elements = getStatusModalElements();
+      if (!elements.modal || !elements.title || !elements.subtitle || !elements.body) return;
+      elements.title.textContent = title;
+      elements.subtitle.textContent = subtitle || '';
+      elements.body.innerHTML = bodyHtml;
+      elements.modal.classList.add('show');
+      elements.modal.setAttribute('aria-hidden', 'false');
+      document.body.style.overflow = 'hidden';
+    }
+
+    function closeStatusModal() {
+      var elements = getStatusModalElements();
+      if (!elements.modal) return;
+      elements.modal.classList.remove('show');
+      elements.modal.setAttribute('aria-hidden', 'true');
+      document.body.style.overflow = '';
+    }
+
+    function showStatusModalLoading(title, subtitle) {
+      openStatusModal(title, subtitle, '<div class="modal-loading">読み込み中...</div>');
+    }
+
+    function showStatusModalError(title, subtitle, message) {
+      openStatusModal(title, subtitle, '<div class="modal-empty">' + escapeHtmlText(message) + '</div>');
+    }
+
+    function isJsonLikeString(value) {
+      if (typeof value !== 'string') return false;
+      var trimmed = value.trim();
+      return (trimmed.startsWith('{') && trimmed.endsWith('}')) || (trimmed.startsWith('[') && trimmed.endsWith(']'));
+    }
+
+    function formatPreviewValue(value) {
+      if (value === null || typeof value === 'undefined') {
+        return '<span class="preview-value null">NULL</span>';
+      }
+      if (typeof value === 'string' && isJsonLikeString(value)) {
+        try {
+          return '<pre class="preview-value">' + escapeHtmlText(JSON.stringify(JSON.parse(value), null, 2)) + '</pre>';
+        } catch (_error) {
+          return '<pre class="preview-value">' + escapeHtmlText(value) + '</pre>';
+        }
+      }
+      if (typeof value === 'object') {
+        return '<pre class="preview-value">' + escapeHtmlText(JSON.stringify(value, null, 2)) + '</pre>';
+      }
+      return '<pre class="preview-value">' + escapeHtmlText(String(value)) + '</pre>';
+    }
+
+    function renderStatusTablePreview(columns, rows, limit) {
+      if (!rows || rows.length === 0) {
+        return '<div class="modal-empty">表示できる保存データがありません</div>';
+      }
+      var headerHtml = columns.map(function(column) {
+        return '<th>' + escapeHtmlText(column) + '</th>';
+      }).join('');
+      var bodyHtml = rows.map(function(row) {
+        return '<tr>' + columns.map(function(column) {
+          return '<td>' + formatPreviewValue(row[column]) + '</td>';
+        }).join('') + '</tr>';
+      }).join('');
+      return '<div class="modal-note">最新 ' + escapeHtmlText(String(limit)) + ' 件を表示しています。値は D1 に保存されている内容をそのまま確認しやすい形で表示しています。</div>'
+        + '<div class="table-scroll"><table class="preview-table"><thead><tr>' + headerHtml + '</tr></thead><tbody>' + bodyHtml + '</tbody></table></div>';
+    }
+
+    async function openTablePreview(tableName) {
+      var title = tableName + ' の保存データ';
+      showStatusModalLoading(title, '最新 20 件を取得しています');
+      try {
+        var response = await fetch('/api/status/tables/' + encodeURIComponent(tableName) + '/rows');
+        if (!response.ok) {
+          throw new Error('table preview request failed');
+        }
+        var data = await response.json();
+        openStatusModal(
+          tableName + ' の保存データ',
+          (data.description || '') + (data.migration ? ' / マイグレーション ' + data.migration : ''),
+          renderStatusTablePreview(data.columns || [], data.rows || [], data.limit || 20)
+        );
+      } catch (_error) {
+        showStatusModalError(title, '', '保存データの取得に失敗しました');
+      }
+    }
+
+    async function openMigrationSql(migration) {
+      var title = 'マイグレーション ' + migration;
+      showStatusModalLoading(title, 'SQL を取得しています');
+      try {
+        var response = await fetch('/api/status/migrations/' + encodeURIComponent(migration) + '/sql');
+        if (!response.ok) {
+          throw new Error('migration sql request failed');
+        }
+        var data = await response.json();
+        openStatusModal(
+          'マイグレーション ' + migration,
+          'テーブル定義に使われた SQL',
+          '<pre class="sql-view">' + escapeHtmlText(data.sql || '') + '</pre>'
+        );
+      } catch (_error) {
+        showStatusModalError(title, '', 'SQL の取得に失敗しました');
+      }
     }
 
     function renderCommitCacheDetailRows(entries) {
@@ -800,7 +999,45 @@ export function getCacheStatusPage(user: {
       var sortButton = document.getElementById('commitCacheSortToggle');
       var monthSortButton = document.getElementById('commitCacheMonthSortButton');
       var detailBody = document.getElementById('commitCacheDetailBody');
+      var statusTablesTable = document.getElementById('statusTablesTable');
+      var modal = document.getElementById('statusDetailModal');
+      var modalCloseButton = document.getElementById('statusDetailClose');
       updateCommitCacheSortHeader();
+      if (modalCloseButton) {
+        modalCloseButton.addEventListener('click', closeStatusModal);
+      }
+      if (modal) {
+        modal.addEventListener('click', function(event) {
+          if (event.target === modal) {
+            closeStatusModal();
+          }
+        });
+      }
+      document.addEventListener('keydown', function(event) {
+        if (event.key === 'Escape') {
+          closeStatusModal();
+        }
+      });
+      if (statusTablesTable) {
+        statusTablesTable.addEventListener('click', function(event) {
+          var target = event.target;
+          if (!(target instanceof Element)) return;
+          var tableButton = target.closest('[data-table-preview]');
+          if (tableButton) {
+            var tableName = tableButton.getAttribute('data-table-preview');
+            if (tableName) {
+              openTablePreview(tableName);
+            }
+            return;
+          }
+          var migrationButton = target.closest('[data-migration-sql]');
+          if (!migrationButton) return;
+          var migration = migrationButton.getAttribute('data-migration-sql');
+          if (migration) {
+            openMigrationSql(migration);
+          }
+        });
+      }
       if (commitCacheEntries.length === 0) return;
       applyCommitCacheSort('commit_month_desc', true);
       if (monthSortButton) {
