@@ -434,6 +434,10 @@ export function getCacheStatusPage(user: {
     .modal-close:hover { color: var(--text-primary); }
     .modal-body {
       padding: 24px; overflow: auto; color: var(--text-secondary);
+      min-height: 0;
+    }
+    .migration-detail-body {
+      overflow: hidden;
     }
     .modal-loading, .modal-empty {
       padding: 32px 12px; text-align: center; color: var(--text-faint);
@@ -467,8 +471,20 @@ export function getCacheStatusPage(user: {
       display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
       gap: 20px; align-items: start;
     }
+    .migration-detail-layout {
+      height: min(68vh, 720px);
+      min-height: 0;
+    }
     .panel-block {
       min-width: 0;
+    }
+    .migration-detail-layout .panel-block {
+      min-height: 0;
+    }
+    .migration-detail-layout .panel-block-secondary {
+      height: 100%;
+      overflow-y: auto;
+      padding-right: 4px;
     }
     .panel-title {
       margin-bottom: 10px; font-size: 14px; font-weight: 700; color: var(--text-primary);
@@ -504,6 +520,13 @@ export function getCacheStatusPage(user: {
       .summary-grid { grid-template-columns: repeat(2, 1fr); }
       .context-grid { grid-template-columns: 1fr 1fr; }
       .split-panel { grid-template-columns: 1fr; }
+      .migration-detail-layout { height: auto; }
+      .migration-detail-body { overflow: auto; }
+      .migration-detail-layout .panel-block-secondary {
+        height: auto;
+        overflow: visible;
+        padding-right: 0;
+      }
       .modal-backdrop { padding: 12px; }
       .modal-header, .modal-body { padding: 16px; }
       .preview-table th, .preview-table td { padding: 8px; }
@@ -821,11 +844,12 @@ export function getCacheStatusPage(user: {
       };
     }
 
-    function openStatusModal(title, subtitle, bodyHtml) {
+    function openStatusModal(title, subtitle, bodyHtml, bodyClassName) {
       var elements = getStatusModalElements();
       if (!elements.modal || !elements.title || !elements.subtitle || !elements.body) return;
       elements.title.textContent = title;
       elements.subtitle.textContent = subtitle || '';
+      elements.body.className = 'modal-body' + (bodyClassName ? ' ' + bodyClassName : '');
       elements.body.innerHTML = bodyHtml;
       elements.modal.classList.add('show');
       elements.modal.setAttribute('aria-hidden', 'false');
@@ -841,10 +865,14 @@ export function getCacheStatusPage(user: {
     }
 
     function showStatusModalLoading(title, subtitle) {
+      var elements = getStatusModalElements();
+      if (elements.body) elements.body.className = 'modal-body';
       openStatusModal(title, subtitle, '<div class="modal-loading">読み込み中...</div>');
     }
 
     function showStatusModalError(title, subtitle, message) {
+      var elements = getStatusModalElements();
+      if (elements.body) elements.body.className = 'modal-body';
       openStatusModal(title, subtitle, '<div class="modal-empty">' + escapeHtmlText(message) + '</div>');
     }
 
@@ -896,12 +924,12 @@ export function getCacheStatusPage(user: {
       var migrationSqlCurl = buildCurlWithCookie(origin, data.endpoints.migrationSqlPath);
       var rowsCookieCurl = buildCurlWithCookie(origin, data.endpoints.tableRowsPath);
       var rowsBearerCurl = buildCurlWithBearer(origin, data.endpoints.tableRowsPath);
-      return '<div class="split-panel">'
-        + '<section class="panel-block">'
+      return '<div class="split-panel migration-detail-layout">'
+        + '<section class="panel-block panel-block-primary">'
         + '<div class="panel-title">左: テーブル定義 SQL</div>'
         + renderCopyableCodeCard('Migration SQL', data.migrationSql || '', data.migrationSql || '')
         + '</section>'
-        + '<section class="panel-block">'
+        + '<section class="panel-block panel-block-secondary">'
         + '<div class="panel-title">右: 読み出し方法</div>'
         + '<div class="panel-stack">'
         + queryBlock
@@ -986,7 +1014,8 @@ export function getCacheStatusPage(user: {
         openStatusModal(
           'マイグレーション ' + migration + ' / ' + tableName,
           '左にテーブル定義 SQL、右に読み出しクエリと curl 例を表示しています',
-          renderMigrationDetailLayout(data)
+          renderMigrationDetailLayout(data),
+          'migration-detail-body'
         );
       } catch (_error) {
         showStatusModalError(title, '', 'SQL の取得に失敗しました');
