@@ -84,9 +84,24 @@ export function getCacheStatusPage(user: {
   const safeUsername = escapeHtml(user.username);
   const initials = escapeHtml((user.name || user.username).substring(0, 2).toUpperCase());
   const statusCommitCacheSortMode = user.statusCommitCacheSortMode === 'toggle' ? 'toggle' : 'off';
-  const statusCommitCacheSortState = user.statusCommitCacheSortState === 'commit_month_desc'
-    ? 'commit_month_desc'
-    : 'cached_at_desc';
+  const statusCommitCacheSortState = 'commit_month_desc';
+
+  const getCachedAtEpoch = (cachedAt: string): number => {
+    const epoch = Date.parse(cachedAt);
+    if (!Number.isNaN(epoch)) return epoch;
+    const normalizedEpoch = Date.parse(cachedAt.replace(' ', 'T'));
+    return Number.isNaN(normalizedEpoch) ? 0 : normalizedEpoch;
+  };
+
+  const sortedCommitCacheEntries = data.commitCache.entries.slice().sort((a, b) => {
+    if (a.year !== b.year) return b.year - a.year;
+    if (a.month !== b.month) return b.month - a.month;
+    const cachedAtDiff = getCachedAtEpoch(b.cachedAt) - getCachedAtEpoch(a.cachedAt);
+    if (cachedAtDiff !== 0) return cachedAtDiff;
+    const ownerDiff = a.owner.localeCompare(b.owner);
+    if (ownerDiff !== 0) return ownerDiff;
+    return a.repo.localeCompare(b.repo);
+  });
 
   const ctx = data.userContext;
   const safeTeamName = ctx.teamName ? escapeHtml(ctx.teamName) : null;
@@ -116,10 +131,10 @@ export function getCacheStatusPage(user: {
   ).join('');
 
   // コミットキャッシュ詳細行
-  const cacheDetailRows = data.commitCache.entries.map(e =>
+  const cacheDetailRows = sortedCommitCacheEntries.map(e =>
     `<tr>
       <td>${escapeHtml(e.owner)}/${escapeHtml(e.repo)}</td>
-      <td>${e.year}-${String(e.month).padStart(2, '0')}</td>
+      <td><button type="button" class="year-month-cell-button" data-year-month="${e.year}-${String(e.month).padStart(2, '0')}">${e.year}-${String(e.month).padStart(2, '0')}</button></td>
       <td class="num">${e.totalCommits}</td>
       <td class="date">${escapeHtml(e.cachedAt)}</td>
     </tr>`
@@ -315,6 +330,14 @@ export function getCacheStatusPage(user: {
       display: inline-flex; align-items: center; gap: 6px;
       background: transparent; border: 0; padding: 0; margin: 0;
       color: inherit; font: inherit; cursor: pointer;
+    }
+    .year-month-cell-button {
+      background: transparent; border: 0; padding: 0; margin: 0;
+      color: var(--accent-color); font: inherit; cursor: pointer;
+      font-variant-numeric: tabular-nums;
+    }
+    .year-month-cell-button:hover {
+      color: var(--accent-hover); text-decoration: underline;
     }
     .sort-header-indicator {
       font-size: 11px; color: var(--text-faint);
@@ -557,7 +580,12 @@ export function getCacheStatusPage(user: {
             <thead>
               <tr>
                 <th>リポジトリ</th>
-                <th>年月</th>
+                <th class="sortable">
+                  <button type="button" class="sort-header-button" id="commitCacheMonthSortButton">
+                    <span>年月</span>
+                    <span class="sort-header-indicator" id="commitCacheMonthSortIndicator"></span>
+                  </button>
+                </th>
                 <th style="text-align:right">コミット数</th>
                 <th class="${statusCommitCacheSortMode === 'toggle' ? 'sortable' : ''}">
                   <button type="button" class="sort-header-button" id="commitCacheSortToggle" ${statusCommitCacheSortMode === 'toggle' ? '' : 'disabled aria-disabled="true"'}>
@@ -647,6 +675,7 @@ export function getCacheStatusPage(user: {
     var commitCacheSortMode = ${JSON.stringify(statusCommitCacheSortMode)};
     var commitCacheSortState = ${JSON.stringify(statusCommitCacheSortState)};
     var commitCacheEntries = ${commitCacheEntriesJson};
+    var activeCommitCacheYearMonth = null;
 
     function escapeHtmlText(value) {
       return String(value)
@@ -667,11 +696,22 @@ export function getCacheStatusPage(user: {
         var ym = String(entry.year) + '-' + String(entry.month).padStart(2, '0');
         return '<tr>'
           + '<td>' + repoName + '</td>'
-          + '<td>' + ym + '</td>'
+          + '<td><button type="button" class="year-month-cell-button" data-year-month="' + escapeHtmlText(ym) + '">' + escapeHtmlText(ym) + '</button></td>'
           + '<td class="num">' + Number(entry.totalCommits).toLocaleString() + '</td>'
           + '<td class="date">' + escapeHtmlText(entry.cachedAt) + '</td>'
           + '</tr>';
       }).join('');
+    }
+
+    function getCommitCacheYearMonth(entry) {
+      return String(entry.year) + '-' + String(entry.month).padStart(2, '0');
+    }
+
+    function getCommitCacheCachedAtEpoch(cachedAt) {
+      var epoch = Date.parse(String(cachedAt));
+      if (!Number.isNaN(epoch)) return epoch;
+      var normalizedEpoch = Date.parse(String(cachedAt).replace(' ', 'T'));
+      return Number.isNaN(normalizedEpoch) ? 0 : normalizedEpoch;
     }
 
     function sortCommitCacheEntries(entries, sortState) {
@@ -679,19 +719,30 @@ export function getCacheStatusPage(user: {
         if (sortState === 'commit_month_desc') {
           if (a.year !== b.year) return b.year - a.year;
           if (a.month !== b.month) return b.month - a.month;
-          return String(b.cachedAt).localeCompare(String(a.cachedAt));
+          var monthCachedAtDiff = getCommitCacheCachedAtEpoch(b.cachedAt) - getCommitCacheCachedAtEpoch(a.cachedAt);
+          if (monthCachedAtDiff !== 0) return monthCachedAtDiff;
+          var ownerDiff = String(a.owner).localeCompare(String(b.owner));
+          if (ownerDiff !== 0) return ownerDiff;
+          return String(a.repo).localeCompare(String(b.repo));
         }
-        var cachedAtCmp = String(b.cachedAt).localeCompare(String(a.cachedAt));
-        if (cachedAtCmp !== 0) return cachedAtCmp;
+        var cachedAtDiff = getCommitCacheCachedAtEpoch(b.cachedAt) - getCommitCacheCachedAtEpoch(a.cachedAt);
+        if (cachedAtDiff !== 0) return cachedAtDiff;
         if (a.year !== b.year) return b.year - a.year;
-        return b.month - a.month;
+        if (a.month !== b.month) return b.month - a.month;
+        var repoOwnerDiff = String(a.owner).localeCompare(String(b.owner));
+        if (repoOwnerDiff !== 0) return repoOwnerDiff;
+        return String(a.repo).localeCompare(String(b.repo));
       });
     }
 
     function updateCommitCacheSortHeader() {
       var label = document.getElementById('commitCacheSortLabel');
       var indicator = document.getElementById('commitCacheSortIndicator');
+      var monthIndicator = document.getElementById('commitCacheMonthSortIndicator');
       if (!label || !indicator) return;
+      if (monthIndicator) {
+        monthIndicator.textContent = activeCommitCacheYearMonth ? activeCommitCacheYearMonth + ' 表示中' : '新しい順';
+      }
       if (commitCacheSortMode !== 'toggle') {
         label.textContent = 'キャッシュ日時';
         indicator.textContent = '';
@@ -706,15 +757,34 @@ export function getCacheStatusPage(user: {
       }
     }
 
+    function getDisplayedCommitCacheEntries() {
+      var entries = activeCommitCacheYearMonth
+        ? commitCacheEntries.filter(function(entry) {
+            return getCommitCacheYearMonth(entry) === activeCommitCacheYearMonth;
+          })
+        : commitCacheEntries.slice();
+      var sortState = activeCommitCacheYearMonth ? 'cached_at_desc' : commitCacheSortState;
+      return sortCommitCacheEntries(entries, sortState);
+    }
+
     function applyCommitCacheSort(sortState, shouldPersist) {
       var body = document.getElementById('commitCacheDetailBody');
       if (!body || commitCacheEntries.length === 0) return;
       commitCacheSortState = sortState === 'commit_month_desc' ? 'commit_month_desc' : 'cached_at_desc';
-      body.innerHTML = renderCommitCacheDetailRows(sortCommitCacheEntries(commitCacheEntries, commitCacheSortState));
+      activeCommitCacheYearMonth = null;
+      body.innerHTML = renderCommitCacheDetailRows(getDisplayedCommitCacheEntries());
       updateCommitCacheSortHeader();
       if (shouldPersist) {
         setCookie('user_status_commit_cache_sort_state', commitCacheSortState);
       }
+    }
+
+    function applyCommitCacheYearMonthFilter(yearMonth) {
+      var body = document.getElementById('commitCacheDetailBody');
+      if (!body || commitCacheEntries.length === 0) return;
+      activeCommitCacheYearMonth = yearMonth;
+      body.innerHTML = renderCommitCacheDetailRows(getDisplayedCommitCacheEntries());
+      updateCommitCacheSortHeader();
     }
 
     function toggleDropdown() {
@@ -728,10 +798,28 @@ export function getCacheStatusPage(user: {
 
     (function() {
       var sortButton = document.getElementById('commitCacheSortToggle');
+      var monthSortButton = document.getElementById('commitCacheMonthSortButton');
+      var detailBody = document.getElementById('commitCacheDetailBody');
       updateCommitCacheSortHeader();
-      if (!sortButton || commitCacheEntries.length === 0) return;
-      applyCommitCacheSort(commitCacheSortState, false);
-      if (commitCacheSortMode !== 'toggle') return;
+      if (commitCacheEntries.length === 0) return;
+      applyCommitCacheSort('commit_month_desc', true);
+      if (monthSortButton) {
+        monthSortButton.addEventListener('click', function() {
+          applyCommitCacheSort('commit_month_desc', true);
+        });
+      }
+      if (detailBody) {
+        detailBody.addEventListener('click', function(event) {
+          var target = event.target;
+          if (!(target instanceof Element)) return;
+          var yearMonthButton = target.closest('[data-year-month]');
+          if (!yearMonthButton) return;
+          var yearMonth = yearMonthButton.getAttribute('data-year-month');
+          if (!yearMonth) return;
+          applyCommitCacheYearMonthFilter(yearMonth);
+        });
+      }
+      if (!sortButton || commitCacheSortMode !== 'toggle') return;
       sortButton.addEventListener('click', function() {
         var nextState = commitCacheSortState === 'cached_at_desc' ? 'commit_month_desc' : 'cached_at_desc';
         applyCommitCacheSort(nextState, true);
