@@ -84,7 +84,9 @@ export function getCacheStatusPage(user: {
   const safeUsername = escapeHtml(user.username);
   const initials = escapeHtml((user.name || user.username).substring(0, 2).toUpperCase());
   const statusCommitCacheSortMode = user.statusCommitCacheSortMode === 'toggle' ? 'toggle' : 'off';
-  const statusCommitCacheSortState = 'commit_month_desc';
+  const statusCommitCacheSortState = user.statusCommitCacheSortState === 'commit_month_desc'
+    ? 'commit_month_desc'
+    : 'cached_at_desc';
 
   const getCachedAtEpoch = (cachedAt: string): number => {
     const epoch = Date.parse(cachedAt);
@@ -861,9 +863,9 @@ export function getCacheStatusPage(user: {
         return '<div class="modal-empty">このテーブルに対応する読み出しクエリ例はありません</div>';
       }
       var paramsText = (example.params || []).length > 0
-        ? '-- bind params: ' + example.params.join(', ') + '\n'
+        ? '-- bind params: ' + example.params.join(', ') + '\\n'
         : '';
-      var queryCode = example.sql + (paramsText ? '\n' + paramsText : '');
+      var queryCode = example.sql + (paramsText ? '\\n' + paramsText : '');
       var noteHtml = example.note
         ? '<p class="code-note">' + escapeHtmlText(example.note) + '</p>'
         : '';
@@ -871,15 +873,19 @@ export function getCacheStatusPage(user: {
     }
 
     function buildCurlWithCookie(origin, path) {
-      return 'curl -sS \\\n'
-        + "  -H \"Cookie: auth_token=<YOUR_AUTH_TOKEN>\" \\\n"
-        + "  \"" + origin + path + '"';
+      return [
+        'curl -sS \\\\',
+        '  -H "Cookie: auth_token=<YOUR_AUTH_TOKEN>" \\\\',
+        '  "' + origin + path + '"'
+      ].join('\\n');
     }
 
     function buildCurlWithBearer(origin, path) {
-      return 'curl -sS \\\n'
-        + "  -H \"Authorization: Bearer <YOUR_AUTH_TOKEN>\" \\\n"
-        + "  \"" + origin + path + '"';
+      return [
+        'curl -sS \\\\',
+        '  -H "Authorization: Bearer <YOUR_AUTH_TOKEN>" \\\\',
+        '  "' + origin + path + '"'
+      ].join('\\n');
     }
 
     function renderMigrationDetailLayout(data) {
@@ -1161,7 +1167,7 @@ export function getCacheStatusPage(user: {
         });
       }
       if (commitCacheEntries.length === 0) return;
-      applyCommitCacheSort('commit_month_desc', true);
+      applyCommitCacheSort(commitCacheSortState, false);
       if (monthSortButton) {
         monthSortButton.addEventListener('click', function() {
           applyCommitCacheSort('commit_month_desc', true);
