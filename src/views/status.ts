@@ -116,7 +116,7 @@ export function getCacheStatusPage(user: {
       <td><button type="button" class="status-link-button" data-table-preview="${escapeHtml(t.name)}"><code>${escapeHtml(t.name)}</code></button></td>
       <td class="center">${statusIcon}</td>
       <td class="num">${count}</td>
-      <td class="migration-name"><button type="button" class="status-link-button migration-button" data-migration-sql="${escapeHtml(t.migration)}">${escapeHtml(t.migration)}</button></td>
+      <td class="migration-name"><button type="button" class="status-link-button migration-button" data-migration-sql="${escapeHtml(t.migration)}" data-migration-table="${escapeHtml(t.name)}">${escapeHtml(t.migration)}</button></td>
       <td>${escapeHtml(t.description)}</td>
     </tr>`;
   }).join('');
@@ -461,6 +461,39 @@ export function getCacheStatusPage(user: {
       font-family: 'Monaco', 'Courier New', monospace; white-space: pre-wrap;
       word-break: break-word;
     }
+    .split-panel {
+      display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      gap: 20px; align-items: start;
+    }
+    .panel-block {
+      min-width: 0;
+    }
+    .panel-title {
+      margin-bottom: 10px; font-size: 14px; font-weight: 700; color: var(--text-primary);
+    }
+    .panel-stack {
+      display: grid; gap: 14px;
+    }
+    .code-card {
+      border: 1px solid var(--border-color); border-radius: 12px; overflow: hidden;
+      background: var(--card-bg);
+    }
+    .code-card-header {
+      display: flex; align-items: center; justify-content: space-between; gap: 12px;
+      padding: 10px 14px; background: var(--bg-secondary); border-bottom: 1px solid var(--border-color);
+    }
+    .code-card-label {
+      font-size: 12px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em;
+    }
+    .copy-button {
+      background: var(--accent-color); color: white; border: 0; border-radius: 8px;
+      padding: 8px 10px; font-size: 12px; font-weight: 700; cursor: pointer; white-space: nowrap;
+    }
+    .copy-button:hover { background: var(--accent-hover); }
+    .copy-button.copied { background: #2f855a; }
+    .code-note {
+      margin: 8px 0 0; font-size: 12px; line-height: 1.5; color: var(--text-muted);
+    }
 
     @media (max-width: 768px) {
       .container { padding: 24px 16px; }
@@ -468,6 +501,7 @@ export function getCacheStatusPage(user: {
       .page-title { font-size: 28px; }
       .summary-grid { grid-template-columns: repeat(2, 1fr); }
       .context-grid { grid-template-columns: 1fr 1fr; }
+      .split-panel { grid-template-columns: 1fr; }
       .modal-backdrop { padding: 12px; }
       .modal-header, .modal-body { padding: 16px; }
       .preview-table th, .preview-table td { padding: 8px; }
@@ -812,6 +846,70 @@ export function getCacheStatusPage(user: {
       openStatusModal(title, subtitle, '<div class="modal-empty">' + escapeHtmlText(message) + '</div>');
     }
 
+    function renderCopyableCodeCard(label, code, copyText) {
+      return '<div class="code-card">'
+        + '<div class="code-card-header">'
+        + '<div class="code-card-label">' + escapeHtmlText(label) + '</div>'
+        + '<button type="button" class="copy-button" data-copy-text="' + escapeHtmlText(copyText) + '">コピー</button>'
+        + '</div>'
+        + '<pre class="sql-view">' + escapeHtmlText(code) + '</pre>'
+        + '</div>';
+    }
+
+    function renderQueryExample(example) {
+      if (!example) {
+        return '<div class="modal-empty">このテーブルに対応する読み出しクエリ例はありません</div>';
+      }
+      var paramsText = (example.params || []).length > 0
+        ? '-- bind params: ' + example.params.join(', ') + '\n'
+        : '';
+      var queryCode = example.sql + (paramsText ? '\n' + paramsText : '');
+      var noteHtml = example.note
+        ? '<p class="code-note">' + escapeHtmlText(example.note) + '</p>'
+        : '';
+      return renderCopyableCodeCard('SELECT Query', queryCode, queryCode) + noteHtml;
+    }
+
+    function buildCurlWithCookie(origin, path) {
+      return 'curl -sS \\\n'
+        + "  -H \"Cookie: auth_token=<YOUR_AUTH_TOKEN>\" \\\n"
+        + "  \"" + origin + path + '"';
+    }
+
+    function buildCurlWithBearer(origin, path) {
+      return 'curl -sS \\\n'
+        + "  -H \"Authorization: Bearer <YOUR_AUTH_TOKEN>\" \\\n"
+        + "  \"" + origin + path + '"';
+    }
+
+    function renderMigrationDetailLayout(data) {
+      var origin = window.location.origin;
+      var queryBlock = renderQueryExample(data.queryExample || null);
+      var detailCookieCurl = buildCurlWithCookie(origin, data.endpoints.migrationDetailPath);
+      var detailBearerCurl = buildCurlWithBearer(origin, data.endpoints.migrationDetailPath);
+      var migrationSqlCurl = buildCurlWithCookie(origin, data.endpoints.migrationSqlPath);
+      var rowsCookieCurl = buildCurlWithCookie(origin, data.endpoints.tableRowsPath);
+      var rowsBearerCurl = buildCurlWithBearer(origin, data.endpoints.tableRowsPath);
+      return '<div class="split-panel">'
+        + '<section class="panel-block">'
+        + '<div class="panel-title">左: テーブル定義 SQL</div>'
+        + renderCopyableCodeCard('Migration SQL', data.migrationSql || '', data.migrationSql || '')
+        + '</section>'
+        + '<section class="panel-block">'
+        + '<div class="panel-title">右: 読み出し方法</div>'
+        + '<div class="panel-stack">'
+        + queryBlock
+        + renderCopyableCodeCard('curl: migration detail', detailCookieCurl, detailCookieCurl)
+        + renderCopyableCodeCard('curl: migration detail (Bearer)', detailBearerCurl, detailBearerCurl)
+        + renderCopyableCodeCard('curl: migration sql only', migrationSqlCurl, migrationSqlCurl)
+        + renderCopyableCodeCard('curl: table rows preview', rowsCookieCurl, rowsCookieCurl)
+        + renderCopyableCodeCard('curl: table rows preview (Bearer)', rowsBearerCurl, rowsBearerCurl)
+        + '<p class="code-note">`/api/status/*` は認証必須です。ブラウザでは Cookie、CLI では Cookie または Bearer トークンで呼び出せます。</p>'
+        + '</div>'
+        + '</section>'
+        + '</div>';
+    }
+
     function isJsonLikeString(value) {
       if (typeof value !== 'string') return false;
       var trimmed = value.trim();
@@ -870,19 +968,19 @@ export function getCacheStatusPage(user: {
       }
     }
 
-    async function openMigrationSql(migration) {
+    async function openMigrationSql(migration, tableName) {
       var title = 'マイグレーション ' + migration;
       showStatusModalLoading(title, 'SQL を取得しています');
       try {
-        var response = await fetch('/api/status/migrations/' + encodeURIComponent(migration) + '/sql');
+        var response = await fetch('/api/status/tables/' + encodeURIComponent(tableName) + '/migration-details');
         if (!response.ok) {
           throw new Error('migration sql request failed');
         }
         var data = await response.json();
         openStatusModal(
-          'マイグレーション ' + migration,
-          'テーブル定義に使われた SQL',
-          '<pre class="sql-view">' + escapeHtmlText(data.sql || '') + '</pre>'
+          'マイグレーション ' + migration + ' / ' + tableName,
+          '左にテーブル定義 SQL、右に読み出しクエリと curl 例を表示しています',
+          renderMigrationDetailLayout(data)
         );
       } catch (_error) {
         showStatusModalError(title, '', 'SQL の取得に失敗しました');
@@ -1013,6 +1111,29 @@ export function getCacheStatusPage(user: {
           }
         });
       }
+      var modalBody = document.getElementById('statusDetailBody');
+      if (modalBody) {
+        modalBody.addEventListener('click', async function(event) {
+          var target = event.target;
+          if (!(target instanceof Element)) return;
+          var copyButton = target.closest('[data-copy-text]');
+          if (!copyButton) return;
+          var text = copyButton.getAttribute('data-copy-text');
+          if (!text) return;
+          try {
+            await navigator.clipboard.writeText(text);
+            var originalText = copyButton.textContent || 'コピー';
+            copyButton.textContent = 'コピー済み';
+            copyButton.classList.add('copied');
+            window.setTimeout(function() {
+              copyButton.textContent = originalText;
+              copyButton.classList.remove('copied');
+            }, 1200);
+          } catch (_error) {
+            copyButton.textContent = '失敗';
+          }
+        });
+      }
       document.addEventListener('keydown', function(event) {
         if (event.key === 'Escape') {
           closeStatusModal();
@@ -1033,8 +1154,9 @@ export function getCacheStatusPage(user: {
           var migrationButton = target.closest('[data-migration-sql]');
           if (!migrationButton) return;
           var migration = migrationButton.getAttribute('data-migration-sql');
-          if (migration) {
-            openMigrationSql(migration);
+          var tableName = migrationButton.getAttribute('data-migration-table');
+          if (migration && tableName) {
+            openMigrationSql(migration, tableName);
           }
         });
       }
