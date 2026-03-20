@@ -1803,6 +1803,7 @@ export function getRepositoriesPage(user: {
     var heatmapMonth = 0;
     var heatmapOwner = '';
     var heatmapCache = {};
+    var heatmapRequestSeq = 0;
 
     var WEEKDAYS = ['日', '月', '火', '水', '木', '金', '土'];
 
@@ -1894,12 +1895,21 @@ export function getRepositoriesPage(user: {
 
     function loadAndRenderHeatmap() {
       if (!heatmapBody || !currentRepoName || !heatmapOwner) return;
+      var requestOwner = heatmapOwner;
+      var requestRepo = currentRepoName;
+      var requestYear = heatmapYear;
+      var requestMonth = heatmapMonth;
+      var requestSeq = ++heatmapRequestSeq;
       updateHeatmapMonthLabel();
       heatmapBody.innerHTML = '<div class="heatmap-loading">読み込み中...</div>';
-      var owner = heatmapOwner;
-      var repo = currentRepoName;
-      fetchHeatmapData(owner, repo, heatmapYear, heatmapMonth).then(function(counts) {
-        renderHeatmap(counts, heatmapYear, heatmapMonth);
+      fetchHeatmapData(requestOwner, requestRepo, requestYear, requestMonth).then(function(counts) {
+        var isLatestRequest = requestSeq === heatmapRequestSeq;
+        var isSameTarget = requestOwner === heatmapOwner
+          && requestRepo === currentRepoName
+          && requestYear === heatmapYear
+          && requestMonth === heatmapMonth;
+        if (!isLatestRequest || !isSameTarget) return;
+        renderHeatmap(counts, requestYear, requestMonth);
       });
     }
 
@@ -1964,6 +1974,7 @@ export function getRepositoriesPage(user: {
     if (commitHistoryMonthSelect) {
       commitHistoryMonthSelect.addEventListener('change', function() {
         if (!commitHistoryMonthSelect.value) return;
+        closeMonthlyStatusModal();
         closeCommitHistoryModal();
         syncInlineHeatmapToMonth(commitHistoryMonthSelect.value);
       });
