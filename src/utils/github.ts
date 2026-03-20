@@ -686,6 +686,45 @@ export interface MonthlyCommitsResult {
   commitsByDate: Record<string, CommitDetail[]>;
 }
 
+function formatJstDateKey(dateInput: string | Date): string | null {
+  const date = dateInput instanceof Date ? dateInput : new Date(dateInput);
+  if (Number.isNaN(date.getTime())) return null;
+  const formatter = new Intl.DateTimeFormat('ja-JP', {
+    timeZone: 'Asia/Tokyo',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  });
+  const parts = formatter.formatToParts(date);
+  let year = '';
+  let month = '';
+  let day = '';
+  for (const part of parts) {
+    if (part.type === 'year') year = part.value;
+    if (part.type === 'month') month = part.value;
+    if (part.type === 'day') day = part.value;
+  }
+  if (!year || !month || !day) return null;
+  return `${year}-${month}-${day}`;
+}
+
+function getJstMonthRange(year: number, month: number): { since: Date; until: Date } {
+  return {
+    since: new Date(Date.UTC(year, month - 1, 1, -9, 0, 0)),
+    until: new Date(Date.UTC(year, month, 1, -9, 0, 0)),
+  };
+}
+
+function getJstDayRange(date: string): { since: Date; until: Date } {
+  const [yearStr, monthStr, dayStr] = date.split('-');
+  const year = parseInt(yearStr, 10);
+  const month = parseInt(monthStr, 10);
+  const day = parseInt(dayStr, 10);
+  const since = new Date(Date.UTC(year, month - 1, day, -9, 0, 0));
+  const until = new Date(since.getTime() + 24 * 60 * 60 * 1000);
+  return { since, until };
+}
+
 export async function getGitHubRepoCommitsByMonth(params: {
   owner: string;
   repo: string;
@@ -695,8 +734,7 @@ export async function getGitHubRepoCommitsByMonth(params: {
 }): Promise<MonthlyCommitsResult> {
   const { owner, repo, year, month, accessToken } = params;
 
-  const since = new Date(Date.UTC(year, month - 1, 1));
-  const until = new Date(Date.UTC(year, month, 1)); // 翌月1日
+  const { since, until } = getJstMonthRange(year, month);
 
   const headers: Record<string, string> = {
     'Accept': 'application/vnd.github+json',
@@ -729,7 +767,8 @@ export async function getGitHubRepoCommitsByMonth(params: {
     for (const c of commits) {
       const dateStr = c.commit?.author?.date;
       if (dateStr) {
-        const day = dateStr.substring(0, 10); // YYYY-MM-DD
+        const day = formatJstDateKey(dateStr);
+        if (!day) continue;
         counts[day] = (counts[day] || 0) + 1;
 
         // コミット詳細も同時に収集
@@ -779,9 +818,7 @@ export async function getGitHubRepoCommitsByDate(params: {
 }): Promise<CommitDetail[]> {
   const { owner, repo, date, accessToken } = params;
 
-  // date の翌日を計算
-  const since = new Date(date + 'T00:00:00Z');
-  const until = new Date(since.getTime() + 24 * 60 * 60 * 1000);
+  const { since, until } = getJstDayRange(date);
 
   const headers: Record<string, string> = {
     'Accept': 'application/vnd.github+json',
@@ -814,7 +851,7 @@ export async function getGitHubRepoCommitsByDate(params: {
     for (const c of data) {
       const authorDate = c.commit?.author?.date;
       if (!authorDate) continue;
-      const day = authorDate.substring(0, 10);
+      const day = formatJstDateKey(authorDate);
       if (day !== date) continue;
 
       commits.push({

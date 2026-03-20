@@ -116,6 +116,22 @@ function formatTimestampWithTimezone(date: Date, timezone: string): string {
   return date.toISOString().replace('T', ' ').substring(0, 19) + ' UTC';
 }
 
+function getJstYearMonthParts(date: Date): { year: number; month: number } {
+  const formatter = new Intl.DateTimeFormat('ja-JP', {
+    timeZone: 'Asia/Tokyo',
+    year: 'numeric',
+    month: '2-digit',
+  });
+  const parts = formatter.formatToParts(date);
+  let year = date.getUTCFullYear();
+  let month = date.getUTCMonth() + 1;
+  for (const part of parts) {
+    if (part.type === 'year') year = parseInt(part.value, 10);
+    if (part.type === 'month') month = parseInt(part.value, 10);
+  }
+  return { year, month };
+}
+
 // セッション有効期限の文字列を秒数に変換するヘルパー関数
 function getSessionDurationSeconds(duration: string): number {
   switch (duration) {
@@ -852,6 +868,8 @@ app.get('/status', authMiddleware, async (c) => {
   const statusCommitCacheSortState = statusCommitCacheSortMode === 'toggle' && cookieVals['user_status_commit_cache_sort_state'] === 'commit_month_desc'
     ? 'commit_month_desc'
     : 'cached_at_desc';
+  const userSession = await getUserSession(c.env.DB, user.sub);
+  const timezone = userSession?.timezone || getCookieValues(cookieHeader, ['user_timezone'])['user_timezone'] || DEFAULT_TIMEZONE;
 
   const data: CacheStatusData = {
     commitCache: { totalEntries: 0, totalCommits: 0, repos: [], byMonth: [], entries: [] },
@@ -946,7 +964,7 @@ app.get('/status', authMiddleware, async (c) => {
             year: row.year,
             month: row.month,
             totalCommits: total,
-            cachedAt: row.cached_at,
+            cachedAt: formatTimestampWithTimezone(new Date(row.cached_at), timezone),
           });
           data.commitCache.totalCommits += total;
 
@@ -997,7 +1015,7 @@ app.get('/status', authMiddleware, async (c) => {
             repoName: row.repo_name,
             repositorySelection: row.repository_selection,
             permissionCount: Object.keys(perms).length,
-            updatedAt: row.updated_at,
+            updatedAt: formatTimestampWithTimezone(new Date(row.updated_at), timezone),
           });
         }
       }
@@ -1027,7 +1045,7 @@ app.get('/status', authMiddleware, async (c) => {
             cacheSaveCount: row.cache_save_count,
             cacheLookupCount: row.cache_lookup_count,
             cacheHitCount: row.cache_hit_count,
-            lastUpdatedAt: row.last_updated_at,
+            lastUpdatedAt: formatTimestampWithTimezone(new Date(row.last_updated_at), timezone),
           });
           data.cacheStats.totalGithubFetch += row.github_fetch_count;
           data.cacheStats.totalCacheSave += row.cache_save_count;
@@ -1530,15 +1548,16 @@ app.get('/api/repositories/:owner/:repo/commits-calendar', optionalAuthMiddlewar
   }
 
   const now = new Date();
-  const year = yearStr ? parseInt(yearStr, 10) : now.getFullYear();
-  const month = monthStr ? parseInt(monthStr, 10) : now.getMonth() + 1;
+  const currentJstYearMonth = getJstYearMonthParts(now);
+  const year = yearStr ? parseInt(yearStr, 10) : currentJstYearMonth.year;
+  const month = monthStr ? parseInt(monthStr, 10) : currentJstYearMonth.month;
 
   if (isNaN(year) || isNaN(month) || month < 1 || month > 12) {
     return c.json({ error: 'Invalid year/month parameters' }, 400);
   }
 
   // 過去の月かどうか判定（当月・未来月はキャッシュ不可）
-  const isPastMonth = year < now.getFullYear() || (year === now.getFullYear() && month < now.getMonth() + 1);
+  const isPastMonth = year < currentJstYearMonth.year || (year === currentJstYearMonth.year && month < currentJstYearMonth.month);
 
   // ワークスペースIDを解決（キャッシュのネームスペース分離に使用）
   const wsInfo = c.env.DB ? await getCurrentWorkspace(c.env.DB, user.sub) : null;
