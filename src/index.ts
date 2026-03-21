@@ -26,7 +26,7 @@ import { postSlackMessage } from './utils/slack';
 import { executeCreateRepo } from './utils/repoValidation';
 import { validateReturnTo } from './utils/returnTo';
 import * as logger from './utils/logger';
-import { resolveIdleTimeoutSeconds, type Bindings, type Variables, type GitHubWebhookInstallationPayload, type GitHubWebhookRepositoryPayload, type ResendWebhookPayload } from './types';
+import { resolveIdleTimeoutSeconds, type Bindings, type Variables, type GitHubWebhookInstallationPayload, type GitHubWebhookRepositoryPayload, type GitHubWebhookPullRequestPayload, type ResendWebhookPayload } from './types';
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -1947,6 +1947,94 @@ app.post('/webhook/github', async (c) => {
           error: error instanceof Error ? error.message : 'Unknown error',
           repoFullName: repo.full_name,
         });
+      }
+    }
+  }
+
+  // pull_request イベント: AI要約 → Slack通知
+  if (eventType === 'pull_request') {
+    const prPayload = payload as unknown as GitHubWebhookPullRequestPayload;
+    const prAction = prPayload?.action;
+    if (prAction === 'opened' || prAction === 'synchronize') {
+      const pr = prPayload?.pull_request;
+      const repoFullName = prPayload?.repository?.full_name ?? 'unknown';
+      const slackToken = c.env.SLACK_OAUTH_TOKEN;
+      const slackChannel = c.env.SLACK_CHANNEL_ID;
+      const ai = c.env.AI;
+      const githubToken = c.env.GITHUB_TOKEN;
+
+      if (pr && slackToken && slackChannel) {
+        const title = pr.title;
+        const description = pr.body ?? '';
+        const prUrl = pr.html_url;
+        const prNumber = pr.number;
+        const author = pr.user?.login ?? 'unknown';
+
+        // diff 取得（GITHUB_TOKEN がある場合のみ）
+        let trimmedDiff = '';
+        if (githubToken && pr.diff_url) {
+          try {
+            const diffRes = await fetch(pr.diff_url, {
+              headers: { Authorization: `Bearer ${githubToken}` },
+            });
+            if (diffRes.ok) {
+              const diff = await diffRes.text();
+              trimmedDiff = diff.slice(0, 8000);
+            }
+          } catch (error) {
+            logger.warn('Failed to fetch PR diff', {
+              error: error instanceof Error ? error.message : 'Unknown error',
+              prUrl,
+            });
+          }
+        }
+
+        // AI 要約（Workers AI バインディングがある場合のみ）
+        let summary = '';
+        if (ai && trimmedDiff) {
+          try {
+            const aiRes = await ai.run('@cf/meta/llama-3.1-8b-instruct-fp8', {
+              messages: [
+                {
+                  role: 'system',
+                  content: 'あなたはコードレビュー支援AIです。プルリクエストの変更点・目的・影響範囲を日本語で簡潔にまとめてください。',
+                },
+                {
+                  role: 'user',
+                  content: `PRタイトル:\n${title}\n\n説明:\n${description}\n\n差分:\n${trimmedDiff}\n\n以下の形式で日本語で出力してください:\n- 概要\n- 主な変更点\n- 影響範囲`,
+                },
+              ],
+            });
+            if (aiRes && typeof aiRes === 'object' && 'response' in aiRes) {
+              summary = (aiRes as { response: string }).response ?? '';
+            }
+          } catch (error) {
+            logger.warn('Workers AI summarization failed', {
+              error: error instanceof Error ? error.message : 'Unknown error',
+              prUrl,
+            });
+          }
+        }
+
+        // Slack 通知
+        const slackLines = [
+          `*PR ${prAction === 'opened' ? '作成' : '更新'}:* #${prNumber} ${title}`,
+          `リポジトリ: ${repoFullName}`,
+          `作成者: ${author}`,
+          prUrl,
+        ];
+        if (summary) {
+          slackLines.push('', '*AI要約:*', summary);
+        }
+
+        try {
+          await postSlackMessage({ token: slackToken, channel: slackChannel, text: slackLines.join('\n') });
+        } catch (error) {
+          logger.error('Slack notification failed for PR webhook', {
+            error: error instanceof Error ? error.message : 'Unknown error',
+            prUrl,
+          });
+        }
       }
     }
   }

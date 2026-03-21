@@ -17,6 +17,7 @@ ENVIRONMENT = "development"
 #   wrangler secret put SLACK_CLIENT_SECRET
 #   wrangler secret put SLACK_CLIENT_ID
 #   wrangler secret put SLACK_CHANNEL_ID
+#   wrangler secret put GITHUB_TOKEN        # PR diff取得用（GitHub PAT）
 
 # D1データベース設定（オプション）
 # セッション管理を有効にするには以下の手順を実行してください:
@@ -28,6 +29,10 @@ ENVIRONMENT = "development"
 binding = "DB"
 database_name = "workers-github-oauth"
 database_id = "abbe590b-f7ff-4b98-b61c-17c8cb18c8cf"
+
+# Workers AI バインディング（PR要約に使用）
+[ai]
+binding = "AI"
 
 # オブザーバビリティ設定
 [observability]
