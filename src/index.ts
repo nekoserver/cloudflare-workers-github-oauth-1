@@ -2788,6 +2788,20 @@ app.post('/api/repositories', authMiddleware, async (c) => {
   const userSession = await getUserSession(c.env.DB, user.sub);
   const accessToken = userSession?.githubAccessToken ?? user.github_access_token ?? undefined;
 
+  // スコープ事前チェック: repo スコープが無ければ GitHub API を叩く前に弾く
+  const storedScopes = userSession?.githubGrantedScopes ?? '';
+  const scopeList = storedScopes.split(/\s+/).filter(Boolean);
+  if (!scopeList.includes('repo')) {
+    logger.warn('Repo creation blocked: missing repo scope', {
+      userId: user.sub,
+      grantedScopes: storedScopes || '(empty)',
+    });
+    return c.json({
+      error: 'リポジトリ作成には repo スコープが必要です。設定画面で付与スコープを確認し、再認証してください。',
+      requireReauth: true,
+    }, 403);
+  }
+
   const body = await c.req.json<{ name?: string; isPrivate?: boolean; description?: string }>();
 
   const result = await executeCreateRepo({
