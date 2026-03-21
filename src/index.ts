@@ -23,7 +23,7 @@ import { getCookieValue, getCookieValues } from './utils/cookie';
 import { verifyResendWebhookSignature } from './utils/resendWebhook';
 import { verifyGitHubWebhookSignature } from './utils/githubWebhook';
 import { postSlackMessage } from './utils/slack';
-import { validateRepoName, checkRepoScope, isPermissionError } from './utils/repoValidation';
+import { validateRepoName, isTokenOrPermissionError } from './utils/repoValidation';
 import * as logger from './utils/logger';
 import { resolveIdleTimeoutSeconds, type Bindings, type Variables, type GitHubWebhookInstallationPayload, type ResendWebhookPayload } from './types';
 
@@ -2779,24 +2779,6 @@ app.post('/api/repositories', authMiddleware, async (c) => {
     return c.json({ error: 'GitHub アクセストークンがありません。再ログインしてください。' }, 401);
   }
 
-  // repo スコープの事前チェック
-  const scopeCheck = checkRepoScope(userSession?.githubGrantedScopes, !!userSession);
-  if (!scopeCheck.hasRepoScope) {
-    logger.warn('Repo creation attempted without repo scope', {
-      userId: user.sub,
-      grantedScopes: userSession?.githubGrantedScopes ?? '(null)',
-      hasScopeData: scopeCheck.hasScopeData,
-    });
-    return c.json({
-      error: scopeCheck.hasScopeData
-        ? 'リポジトリ作成には repo 権限が必要です。GitHub の認可画面で「repo」スコープを許可してから再ログインしてください。GitHub OAuth App の設定で repo スコープが有効になっているか確認してください。'
-        : 'スコープ情報が保存されていません。再ログインして権限を付与してください。',
-      requireReauth: true,
-      missingScope: 'repo',
-      grantedScopes: scopeCheck.scopeList,
-    }, 403);
-  }
-
   const body = await c.req.json<{ name?: string; isPrivate?: boolean; description?: string }>();
   const repoName = (body.name ?? '').trim();
 
@@ -2846,12 +2828,13 @@ app.post('/api/repositories', authMiddleware, async (c) => {
       error: msg,
     });
 
-    // GitHub App/OAuth 権限不足エラーの場合、再ログインを促す
-    if (isPermissionError(msg)) {
+    // トークン期限切れ・無効化の場合、再ログインを促す
+    // GitHub OAuth App ではスコープは全承認されるため、
+    // 権限エラーが出る場合はトークンの期限切れまたは無効化が原因
+    if (isTokenOrPermissionError(msg)) {
       return c.json({
-        error: 'リポジトリ作成の権限がありません。再ログインして権限を付与してください。',
+        error: 'アクセストークンが無効または期限切れです。再ログインしてください。',
         requireReauth: true,
-        missingScope: 'repo',
       }, 403);
     }
 

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { validateRepoName, checkRepoScope, isPermissionError } from './repoValidation';
+import { validateRepoName, isTokenOrPermissionError } from './repoValidation';
 
 // =====================================================
 // validateRepoName
@@ -96,125 +96,61 @@ describe('validateRepoName', () => {
 });
 
 // =====================================================
-// checkRepoScope
+// isTokenOrPermissionError
 // =====================================================
 
-describe('checkRepoScope', () => {
-  describe('セッションあり・スコープデータあり', () => {
-    it('repo スコープが含まれていれば hasRepoScope=true', () => {
-      const result = checkRepoScope('read:user user:email repo', true);
-      expect(result.hasRepoScope).toBe(true);
-      expect(result.scopeList).toContain('repo');
-      expect(result.hasScopeData).toBe(true);
+describe('isTokenOrPermissionError', () => {
+  describe('トークン無効・権限不足パターン', () => {
+    it('GitHub App 権限エラーを検出する', () => {
+      expect(isTokenOrPermissionError('Resource not accessible by integration')).toBe(true);
     });
 
-    it('repo スコープがなければ hasRepoScope=false', () => {
-      const result = checkRepoScope('read:user user:email', true);
-      expect(result.hasRepoScope).toBe(false);
-      expect(result.scopeList).not.toContain('repo');
-      expect(result.hasScopeData).toBe(true);
+    it('Personal Access Token 権限エラーを検出する', () => {
+      expect(isTokenOrPermissionError('Resource not accessible by personal access token')).toBe(true);
     });
 
-    it('カンマ区切りのスコープもパースできる', () => {
-      const result = checkRepoScope('read:user,user:email,repo', true);
-      expect(result.hasRepoScope).toBe(true);
-      expect(result.scopeList).toEqual(['read:user', 'user:email', 'repo']);
+    it('Not Found を検出する（プライベートリソースへのアクセス拒否）', () => {
+      expect(isTokenOrPermissionError('Not Found')).toBe(true);
     });
 
-    it('混合区切り（スペースとカンマ）もパースできる', () => {
-      const result = checkRepoScope('read:user, user:email, repo', true);
-      expect(result.hasRepoScope).toBe(true);
-    });
-  });
-
-  describe('セッションあり・スコープデータなし（移行前セッション）', () => {
-    it('githubGrantedScopes が null → hasRepoScope=false（再認証が必要）', () => {
-      const result = checkRepoScope(null, true);
-      expect(result.hasRepoScope).toBe(false);
-      expect(result.scopeList).toEqual([]);
-      expect(result.hasScopeData).toBe(false);
+    it('HTTP 403 を検出する', () => {
+      expect(isTokenOrPermissionError('HTTP 403')).toBe(true);
     });
 
-    it('githubGrantedScopes が undefined → hasRepoScope=false（再認証が必要）', () => {
-      const result = checkRepoScope(undefined, true);
-      expect(result.hasRepoScope).toBe(false);
-      expect(result.scopeList).toEqual([]);
-      expect(result.hasScopeData).toBe(false);
+    it('HTTP 401 を検出する', () => {
+      expect(isTokenOrPermissionError('HTTP 401')).toBe(true);
     });
 
-    it('githubGrantedScopes が空文字列 → hasRepoScope=false（再認証が必要）', () => {
-      const result = checkRepoScope('', true);
-      expect(result.hasRepoScope).toBe(false);
-      expect(result.scopeList).toEqual([]);
-      expect(result.hasScopeData).toBe(false);
+    it('Bad credentials を検出する（トークン期限切れ）', () => {
+      expect(isTokenOrPermissionError('Bad credentials')).toBe(true);
     });
   });
 
-  describe('セッションなし（D1 障害時のフォールバック）', () => {
-    it('セッションなしの場合は hasRepoScope=true（API 呼び出しに委ねる）', () => {
-      const result = checkRepoScope(null, false);
-      expect(result.hasRepoScope).toBe(true);
+  describe('権限不足ではないエラー', () => {
+    it('バリデーションエラーは false を返す', () => {
+      expect(isTokenOrPermissionError('Validation Failed')).toBe(false);
     });
 
-    it('セッションなし・スコープ文字列ありでも hasRepoScope=true', () => {
-      const result = checkRepoScope('read:user', false);
-      expect(result.hasRepoScope).toBe(true);
+    it('名前の重複エラーは false を返す', () => {
+      expect(isTokenOrPermissionError('name already exists on this account')).toBe(false);
+    });
+
+    it('空文字列は false を返す', () => {
+      expect(isTokenOrPermissionError('')).toBe(false);
+    });
+
+    it('レート制限エラーは false を返す', () => {
+      expect(isTokenOrPermissionError('API rate limit exceeded')).toBe(false);
     });
   });
 
   describe('エッジケース', () => {
-    it('余分な空白があってもパースできる', () => {
-      const result = checkRepoScope('  read:user   repo  ', true);
-      expect(result.hasRepoScope).toBe(true);
-      expect(result.scopeList).toEqual(['read:user', 'repo']);
+    it('部分一致で検出する（前後に他のテキストがあっても）', () => {
+      expect(isTokenOrPermissionError('Error: Resource not accessible by integration - please re-auth')).toBe(true);
     });
 
-    it('repo のみのスコープ', () => {
-      const result = checkRepoScope('repo', true);
-      expect(result.hasRepoScope).toBe(true);
-      expect(result.scopeList).toEqual(['repo']);
+    it('Bad credentials が長いメッセージに含まれても検出する', () => {
+      expect(isTokenOrPermissionError('HttpError: Bad credentials (401)')).toBe(true);
     });
-  });
-});
-
-// =====================================================
-// isPermissionError
-// =====================================================
-
-describe('isPermissionError', () => {
-  it('GitHub App 権限エラーを検出する', () => {
-    expect(isPermissionError('Resource not accessible by integration')).toBe(true);
-  });
-
-  it('Personal Access Token 権限エラーを検出する', () => {
-    expect(isPermissionError('Resource not accessible by personal access token')).toBe(true);
-  });
-
-  it('Not Found を権限エラーとして検出する', () => {
-    expect(isPermissionError('Not Found')).toBe(true);
-  });
-
-  it('HTTP 403 を権限エラーとして検出する', () => {
-    expect(isPermissionError('HTTP 403')).toBe(true);
-  });
-
-  it('HTTP 401 を権限エラーとして検出する', () => {
-    expect(isPermissionError('HTTP 401')).toBe(true);
-  });
-
-  it('無関係なエラーメッセージは false を返す', () => {
-    expect(isPermissionError('Validation Failed')).toBe(false);
-  });
-
-  it('名前の重複エラーは false を返す', () => {
-    expect(isPermissionError('name already exists on this account')).toBe(false);
-  });
-
-  it('空文字列は false を返す', () => {
-    expect(isPermissionError('')).toBe(false);
-  });
-
-  it('部分一致で検出する（前後に他のテキストがあっても）', () => {
-    expect(isPermissionError('Error: Resource not accessible by integration - please re-auth')).toBe(true);
   });
 });
