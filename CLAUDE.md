@@ -21,7 +21,7 @@
 | インスタンス番号 | 1 |
 | リポジトリ名 | `cloudflare-workers-github-oauth-1` |
 | Worker名 | `cloudflare-workers-github-oauth-1` |
-| コールバックURLパス | `/github/callback` |
+| コールバックURLパス | `/auth/github/callback` |
 | フレームワーク | Hono + Cloudflare Workers |
 | 認証方式 | GitHub OAuth + JWT |
 
@@ -62,8 +62,7 @@
 
 ### コールバックURLパスの不一致
 - GitHub OAuth App 側の callback URL パスとソースコード側のパスは必ず統一する
-- 本テンプレートでは `/github/callback` を使用する
-- よくある間違い: GitHub側が `/auth/github/callback`、コード側が `/github/callback`
+- 本インスタンスでは `/auth/github/callback` を使用する
 
 ### GITHUB_CLIENT_ID を wrangler.toml [vars] に平文で書いてはいけない
 - `GITHUB_CLIENT_ID` は `wrangler secret put` で暗号化管理する

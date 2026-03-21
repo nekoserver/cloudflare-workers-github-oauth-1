@@ -24,6 +24,7 @@ import { verifyResendWebhookSignature } from './utils/resendWebhook';
 import { verifyGitHubWebhookSignature } from './utils/githubWebhook';
 import { postSlackMessage } from './utils/slack';
 import { executeCreateRepo } from './utils/repoValidation';
+import { validateReturnTo } from './utils/returnTo';
 import * as logger from './utils/logger';
 import { resolveIdleTimeoutSeconds, type Bindings, type Variables, type GitHubWebhookInstallationPayload, type ResendWebhookPayload } from './types';
 
@@ -670,7 +671,7 @@ app.get('/auth/github', async (c) => {
   }
 
   const url = new URL(c.req.url);
-  const redirectUri = `${url.protocol}//${url.host}/github/callback`;
+  const redirectUri = `${url.protocol}//${url.host}/auth/github/callback`;
 
   // CSRF保護用のstateトークンを生成
   const state = generateOAuthState();
@@ -690,12 +691,21 @@ app.get('/auth/github', async (c) => {
     authUrl.searchParams.set('login', '');
   }
 
+  // return_to パラメータを検証・保存（再認証後のリダイレクト先）
+  const returnTo = validateReturnTo(c.req.query('return_to'));
+
   // stateをHttpOnlyクッキーに保存（5分間有効）
   const redirectHeaders = new Headers({
     'Location': authUrl.toString(),
   });
   redirectHeaders.append('Set-Cookie', `oauth_state=${state}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=300`);
   redirectHeaders.append('Set-Cookie', `oauth_pkce=${pkce.verifier}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=300`);
+  if (returnTo) {
+    redirectHeaders.append('Set-Cookie', `oauth_return_to=${encodeURIComponent(returnTo)}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=300`);
+  } else {
+    // 前回のreturn_toが残っていたら消す
+    redirectHeaders.append('Set-Cookie', `oauth_return_to=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0`);
+  }
 
   return new Response(null, { status: 302, headers: redirectHeaders });
 });
@@ -704,7 +714,7 @@ app.get('/auth/github', async (c) => {
  * GitHub OAuth コールバック
  * stateパラメータを検証してCSRF攻撃を防止
  */
-app.get('/github/callback', async (c) => {
+app.get('/auth/github/callback', async (c) => {
   let phase = 'start';
   let userIdForLog: string | null = null;
   try {
@@ -767,7 +777,7 @@ app.get('/github/callback', async (c) => {
     }
 
     const url = new URL(c.req.url);
-    const redirectUri = `${url.protocol}//${url.host}/github/callback`;
+    const redirectUri = `${url.protocol}//${url.host}/auth/github/callback`;
 
     // GitHubからアクセストークンを取得
     phase = 'exchange-token';
@@ -867,19 +877,22 @@ app.get('/github/callback', async (c) => {
       timestamp: Date.now(),
     });
 
-    // 認証成功後、クッキーをセットしつつ /welcome へリダイレクト
-    // Headers API を使って複数の Set-Cookie を確実に付与する
+    // 認証成功後、クッキーをセットしつつリダイレクト
+    // return_to クッキーがあればそちらへ、なければ /welcome へ
     phase = 'set-cookies';
+    const returnToCookie = getCookieValue(c.req.header('Cookie'), 'oauth_return_to');
+    const returnToPath = validateReturnTo(returnToCookie ? decodeURIComponent(returnToCookie) : null) ?? '/welcome';
     const redirectHeaders = new Headers({
-      'Location': '/welcome',
+      'Location': returnToPath,
     });
     redirectHeaders.append('Set-Cookie', `auth_token=${token}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${sessionDurationSeconds}`);
     redirectHeaders.append('Set-Cookie', `login_timestamp=${Date.now()}; Path=/; Secure; SameSite=Lax; Max-Age=${sessionDurationSeconds}`);
     redirectHeaders.append('Set-Cookie', `last_activity=${Date.now()}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${idleTimeoutSeconds}`);
     redirectHeaders.append('Set-Cookie', `show_welcome_message=1; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=60`);
-    // 使用済みのoauth_stateクッキーを削除
+    // 使用済みのOAuthクッキーを削除
     redirectHeaders.append('Set-Cookie', `oauth_state=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0`);
     redirectHeaders.append('Set-Cookie', `oauth_pkce=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0`);
+    redirectHeaders.append('Set-Cookie', `oauth_return_to=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0`);
 
     return new Response(null, { status: 302, headers: redirectHeaders });
   } catch (error) {

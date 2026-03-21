@@ -1023,6 +1023,23 @@ export function getRepositoriesPage(user: {
         }
       });
 
+      // 再認証後のフォーム状態復元
+      try {
+        var savedForm = sessionStorage.getItem('repo_create_form');
+        if (savedForm) {
+          sessionStorage.removeItem('repo_create_form');
+          var parsed = JSON.parse(savedForm);
+          if (parsed.name) {
+            openModal();
+            if (nameInput) nameInput.value = parsed.name;
+            if (parsed.isPrivate) {
+              var privateRadio = form ? form.querySelector('input[name="repoVisibility"][value="private"]') : null;
+              if (privateRadio) privateRadio.checked = true;
+            }
+          }
+        }
+      } catch (e) { /* sessionStorage エラーは無視 */ }
+
       function validateRepoName(name) {
         if (!name) return 'リポジトリ名を入力してください。';
         if (!/^[a-zA-Z0-9._-]+$/.test(name)) return '英数字、ハイフン、ドット、アンダースコアのみ使用できます。';
@@ -1069,14 +1086,16 @@ export function getRepositoriesPage(user: {
             if (!result.ok) {
               var msg = result.data.error || 'リポジトリの作成に失敗しました。';
               if (errorEl) {
-                if (result.data.missingScope) {
-                  errorEl.innerHTML = '<div style="margin-bottom:8px">' + msg + '</div>'
-                    + '<div style="font-size:12px;color:#8b949e;margin-bottom:8px">'
-                    + '現在付与されているスコープ: <code>' + (result.data.grantedScopes || []).join(', ') + '</code>'
-                    + '</div>'
-                    + '<a href="/auth/github/reauthorize" style="color:#58a6ff;text-decoration:underline;">権限を追加して再認証</a>';
-                } else if (result.data.requireReauth) {
-                  errorEl.innerHTML = msg + ' <a href="/auth/github/reauthorize" style="color:#58a6ff;text-decoration:underline;">再認証</a>';
+                if (result.data.requireReauth) {
+                  // フォーム入力内容を保存して自動で再認証フローに入る
+                  try {
+                    sessionStorage.setItem('repo_create_form', JSON.stringify({
+                      name: name,
+                      isPrivate: isPrivate,
+                    }));
+                  } catch (e) { /* sessionStorage が使えない環境は無視 */ }
+                  window.location.href = '/auth/github?return_to=/repositories';
+                  return;
                 } else {
                   errorEl.textContent = msg;
                 }
