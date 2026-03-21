@@ -2796,8 +2796,9 @@ app.post('/api/repositories', authMiddleware, async (c) => {
       userId: user.sub,
       grantedScopes: storedScopes || '(empty)',
     });
+    const scopeDisplay = scopeList.length > 0 ? scopeList.join(', ') : 'なし';
     return c.json({
-      error: 'リポジトリ作成には repo スコープが必要です。設定画面で付与スコープを確認し、再認証してください。',
+      error: `リポジトリ作成には repo スコープが必要ですが、付与されていません（現在のスコープ: ${scopeDisplay}）。GitHub OAuth App の設定を確認し、再認証してください。`,
       requireReauth: true,
     }, 403);
   }

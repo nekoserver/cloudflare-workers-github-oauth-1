@@ -109,12 +109,13 @@ export function getRepositoriesPage(user: {
     <div class="error-banner">${escapeHtml(user.errorMessage)}</div>
   ` : '';
 
-  const missingScopeBannerTitle = scopesEmpty
-    ? 'リポジトリ操作に必要な権限がありません'
-    : 'プライベートリポジトリにアクセスできません';
+  const currentScopesText = scopes.length > 0
+    ? `現在の付与スコープ: ${scopes.join(', ')}`
+    : '現在の付与スコープ: なし';
+  const missingScopeBannerTitle = 'repo スコープが不足しています';
   const missingScopeBannerDesc = scopesEmpty
-    ? '現在の認証にはスコープが付与されていません。リポジトリの作成・閲覧にはrepo権限が必要です。再認証して権限を付与してください。'
-    : '現在の認証にはプライベートリポジトリへのアクセス権限が含まれていません。権限を追加するには再認証してください。';
+    ? `リポジトリの作成・閲覧には <code>repo</code> スコープが必要ですが、現在スコープが一切付与されていません。GitHub OAuth App の設定で Repository 権限が有効か確認し、再認証してください。（${currentScopesText}）`
+    : `リポジトリの作成・閲覧には <code>repo</code> スコープが必要ですが、付与されていません。再認証して <code>repo</code> スコープを付与してください。（${currentScopesText}）`;
   const missingScopeBannerHtml = missingScopesBanner ? `
     <div class="missing-scope-banner">
       <span class="missing-scope-banner-icon">⚠️</span>

@@ -111,7 +111,7 @@ describe('ユーザーがリポジトリ作成できない最悪のシナリオ'
     if (!result.ok) {
       expect(result.status).toBe(403);
       expect(result.requireReauth).toBe(true);
-      expect(result.error).not.toContain('スコープ');
+      expect(result.error).toContain('repo スコープ');
     }
   });
 });

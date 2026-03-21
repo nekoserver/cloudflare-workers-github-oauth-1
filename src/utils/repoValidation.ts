@@ -131,7 +131,7 @@ export async function executeCreateRepo(params: {
       return {
         ok: false,
         status: 403,
-        error: 'アクセストークンが無効または期限切れです。再ログインしてください。',
+        error: `GitHub API がリクエストを拒否しました（${msg}）。アクセストークンが無効・期限切れか、repo スコープが付与されていない可能性があります。再認証してください。`,
         requireReauth: true,
       };
     }
