@@ -16,7 +16,7 @@ import { getSettingsPage } from './views/settings';
 import { getRepositoriesPage } from './views/repositories';
 import { getUserInfoPage } from './views/userinfo';
 import { getMarkdownPreviewPage } from './views/markdown-preview';
-import { getCacheStatusPage, CacheStatusData, TableStatusEntry, UserContextInfo } from './views/status';
+import { getCacheStatusPage, CacheStatusData, TableStatusEntry, UserContextInfo, RepoColorEntry } from './views/status';
 import { ensureDefaultWorkspace, getCurrentWorkspace, getUserWorkspaces, switchWorkspace } from './utils/workspace';
 import { getGitHubAccessToken, getGitHubLatestCommit, getGitHubCommitCount, getGitHubCommits, getGitHubRepoOpenIssuesCount, getGitHubRepoCommitsByMonth, getGitHubRepoCommitsByDate, getGitHubTokenScopes, getGitHubUser, getGitHubUserEmail, getGitHubUserRepos, createGitHubRepo, GitHubTokenScopesError, buildRepoInstallationPermissionsMap, RepoInstallationPermissions, getGitHubUserInstallationsWithDiag, getGitHubInstallationRepos, getExternalServiceLinkedRepos, getSlackLinkedReposByWebhooks, CommitDetail } from './utils/github';
 import { getCookieValue, getCookieValues } from './utils/cookie';
@@ -60,6 +60,7 @@ const STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
   { name: 'commit_search_history', migration: '0011', description: 'コミット検索履歴' },
   { name: 'commit_search_repo_stats', migration: '0011', description: 'コミット検索リポジトリ別集計' },
   { name: 'ai_summary_log', migration: '0012', description: 'AI要約ログ' },
+  { name: 'repo_color_settings', migration: '0013', description: 'リポジトリ色・タグ設定' },
 ];
 
 const STATUS_MIGRATION_SQL: Record<string, string> = {
@@ -236,6 +237,23 @@ CREATE INDEX IF NOT EXISTS idx_commit_search_repo_stats_history_id ON commit_sea
 );
 
 CREATE INDEX IF NOT EXISTS idx_ai_summary_log_date ON ai_summary_log (event_date);`,
+  '0013': `CREATE TABLE IF NOT EXISTS repo_color_settings (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  workspace_id TEXT NOT NULL DEFAULT '',
+  repo_name TEXT NOT NULL,
+  color_code TEXT NOT NULL DEFAULT '#667eea',
+  display_order INTEGER NOT NULL DEFAULT 0,
+  tags TEXT NOT NULL DEFAULT '',
+  is_visible INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_repo_color_ws_repo
+  ON repo_color_settings (workspace_id, repo_name);
+
+CREATE INDEX IF NOT EXISTS idx_repo_color_order
+  ON repo_color_settings (workspace_id, display_order);`,
 };
 
 function jsonUtf8(payload: unknown, status = 200): Response {
@@ -1248,6 +1266,7 @@ app.get('/status', authMiddleware, async (c) => {
 
   const data: CacheStatusData = {
     commitCache: { totalEntries: 0, totalCommits: 0, repos: [], byMonth: [], byMonthByRepo: [], entries: [] },
+    repoColors: [],
     installationPerms: { totalEntries: 0, entries: [] },
     cacheStats: {
       totalGithubFetch: 0, totalCacheSave: 0,
@@ -1517,6 +1536,72 @@ app.get('/status', authMiddleware, async (c) => {
       }
     } catch (error) {
       logger.warn('Failed to fetch cache stats for status page', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+
+    // リポジトリ色設定の読み込みと未登録リポジトリの自動登録
+    try {
+      const colorRows = await db.prepare(
+        'SELECT repo_name, color_code, display_order, tags, is_visible FROM repo_color_settings WHERE workspace_id = ? ORDER BY display_order ASC, repo_name ASC'
+      ).bind(workspaceId).all<{
+        repo_name: string; color_code: string; display_order: number; tags: string; is_visible: number;
+      }>();
+
+      const existingColorMap = new Map<string, RepoColorEntry>();
+      if (colorRows.results) {
+        for (const row of colorRows.results) {
+          const entry: RepoColorEntry = {
+            repoName: row.repo_name,
+            colorCode: row.color_code,
+            displayOrder: row.display_order,
+            tags: row.tags,
+            isVisible: row.is_visible === 1,
+          };
+          existingColorMap.set(row.repo_name, entry);
+          data.repoColors.push(entry);
+        }
+      }
+
+      const defaultPalette = [
+        '#667eea', '#e53e3e', '#38a169', '#ed8936', '#9f7aea',
+        '#dd6b20', '#319795', '#d53f8c', '#3182ce', '#d69e2e',
+        '#805ad5', '#2b6cb0', '#c53030', '#2f855a', '#b7791f',
+      ];
+
+      const allChartRepos = Array.from(new Set(data.commitCache.byMonthByRepo.map(r => r.repo)));
+      const newRepos = allChartRepos.filter(r => !existingColorMap.has(r));
+
+      if (newRepos.length > 0) {
+        const maxOrder = data.repoColors.length > 0
+          ? Math.max(...data.repoColors.map(r => r.displayOrder))
+          : -1;
+        const now = new Date().toISOString();
+        const usedColorCount = existingColorMap.size;
+
+        for (let i = 0; i < newRepos.length; i++) {
+          const repo = newRepos[i];
+          const colorIndex = (usedColorCount + i) % defaultPalette.length;
+          const order = maxOrder + 1 + i;
+          const color = defaultPalette[colorIndex];
+
+          await db.prepare(
+            'INSERT OR IGNORE INTO repo_color_settings (workspace_id, repo_name, color_code, display_order, tags, is_visible, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 1, ?, ?)'
+          ).bind(workspaceId, repo, color, order, '', now, now).run();
+
+          const entry: RepoColorEntry = {
+            repoName: repo,
+            colorCode: color,
+            displayOrder: order,
+            tags: '',
+            isVisible: true,
+          };
+          existingColorMap.set(repo, entry);
+          data.repoColors.push(entry);
+        }
+      }
+    } catch (error) {
+      logger.warn('Failed to load/register repo color settings', {
         error: error instanceof Error ? error.message : 'Unknown error',
       });
     }

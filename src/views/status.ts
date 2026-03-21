@@ -51,6 +51,14 @@ export interface CacheStatsEntry {
   lastUpdatedAt: string;
 }
 
+export interface RepoColorEntry {
+  repoName: string;
+  colorCode: string;
+  displayOrder: number;
+  tags: string;
+  isVisible: boolean;
+}
+
 export interface CacheStatusData {
   commitCache: {
     totalEntries: number;
@@ -60,6 +68,7 @@ export interface CacheStatusData {
     byMonthByRepo: { yearMonth: string; repo: string; commits: number }[];
     entries: CommitCacheEntry[];
   };
+  repoColors: RepoColorEntry[];
   installationPerms: {
     totalEntries: number;
     entries: InstallationPermEntry[];
@@ -163,12 +172,16 @@ export function getCacheStatusPage(user: {
     .sort((a, b) => a.yearMonth.localeCompare(b.yearMonth));
   const maxCommits = Math.max(...chartData.map(d => d.totalCommits), 1);
 
-  // リポジトリ別カラーパレット
-  const repoColorPalette = [
+  // リポジトリ別カラーパレット（DB登録済みの色を優先、未登録はフォールバック）
+  const repoColorFallback = [
     '#667eea', '#e53e3e', '#38a169', '#ed8936', '#9f7aea',
     '#dd6b20', '#319795', '#d53f8c', '#3182ce', '#d69e2e',
     '#805ad5', '#2b6cb0', '#c53030', '#2f855a', '#b7791f',
   ];
+  const dbColorMap = new Map<string, string>();
+  for (const rc of data.repoColors) {
+    dbColorMap.set(rc.repoName, rc.colorCode);
+  }
   const allRepos = Array.from(new Set(data.commitCache.byMonthByRepo.map(r => r.repo)));
   const repoTotalCommits = new Map<string, number>();
   for (const r of data.commitCache.byMonthByRepo) {
@@ -176,7 +189,9 @@ export function getCacheStatusPage(user: {
   }
   allRepos.sort((a, b) => (repoTotalCommits.get(b) || 0) - (repoTotalCommits.get(a) || 0));
   const repoColorMap: Record<string, string> = {};
-  allRepos.forEach((repo, i) => { repoColorMap[repo] = repoColorPalette[i % repoColorPalette.length]; });
+  allRepos.forEach((repo, i) => {
+    repoColorMap[repo] = dbColorMap.get(repo) || repoColorFallback[i % repoColorFallback.length];
+  });
 
   // グラデーションモード用バー
   const gradientBars = chartData.map(d => {
