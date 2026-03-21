@@ -651,6 +651,18 @@ export function getCacheStatusPage(user: {
     }
     .uml-button:hover { opacity: 0.85; }
 
+    .uml-refresh-button {
+      background: linear-gradient(135deg, #38b2ac 0%, #319795 100%);
+      color: white; border: none; border-radius: 8px;
+      padding: 10px 20px; font-size: 13px; font-weight: 600;
+      cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
+      transition: opacity 0.2s;
+    }
+    .uml-refresh-button:hover { opacity: 0.85; }
+    .uml-refresh-button:disabled { opacity: 0.5; cursor: not-allowed; }
+    .uml-refresh-button .spin { animation: uml-spin 0.8s linear infinite; }
+    @keyframes uml-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+
     .uml-export-button {
       background: #48bb78; color: white; border: none; border-radius: 8px;
       padding: 8px 16px; font-size: 12px; font-weight: 600;
@@ -837,6 +849,10 @@ export function getCacheStatusPage(user: {
           <button type="button" class="uml-button" id="openUmlButton">
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="1" y="1" width="5" height="6" rx="1" stroke="white" stroke-width="1.5"/><rect x="10" y="9" width="5" height="6" rx="1" stroke="white" stroke-width="1.5"/><path d="M6 4h2.5a1.5 1.5 0 011.5 1.5V12" stroke="white" stroke-width="1.5"/></svg>
             UML を表示
+          </button>
+          <button type="button" class="uml-refresh-button" id="refreshUmlButton">
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M14 8A6 6 0 114 3.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M4 0.5V4h3.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            手動で更新する
           </button>
         </div>
         <div class="table-scroll">
@@ -1753,6 +1769,7 @@ export function getCacheStatusPage(user: {
       var umlModal = document.getElementById('umlModal');
       var umlCloseBtn = document.getElementById('umlModalClose');
       var openUmlBtn = document.getElementById('openUmlButton');
+      var refreshUmlBtn = document.getElementById('refreshUmlButton');
       var umlWrapper = document.getElementById('umlCanvasWrapper');
       if (!umlModal || !umlWrapper || !openUmlBtn) return;
 
@@ -1763,9 +1780,53 @@ export function getCacheStatusPage(user: {
         umlModal.setAttribute('aria-hidden', 'false');
         document.body.style.overflow = 'hidden';
         if (!umlRendered) {
-          renderErDiagram();
+          renderErDiagram(tables, relations);
           umlRendered = true;
         }
+      }
+
+      if (refreshUmlBtn) {
+        refreshUmlBtn.addEventListener('click', function() {
+          refreshUmlBtn.disabled = true;
+          var svgIcon = refreshUmlBtn.querySelector('svg');
+          if (svgIcon) svgIcon.classList.add('spin');
+          var origText = refreshUmlBtn.lastChild;
+          if (origText) origText.textContent = ' 取得中...';
+
+          fetch('/api/status/schema')
+            .then(function(res) { return res.json(); })
+            .then(function(data) {
+              if (data.tables && data.relations) {
+                var gap = 20;
+                var colWidth = 240;
+                var colCount = Math.max(3, Math.ceil(Math.sqrt(data.tables.length)));
+                for (var i = 0; i < data.tables.length; i++) {
+                  var col = i % colCount;
+                  var row = Math.floor(i / colCount);
+                  data.tables[i].x = 40 + col * (colWidth + gap);
+                  data.tables[i].y = 40 + row * 260;
+                }
+                tables = data.tables;
+                relations = data.relations;
+                renderErDiagram(tables, relations);
+                umlRendered = true;
+
+                if (umlModal.classList.contains('show')) {
+                  // already open
+                } else {
+                  openUmlModal();
+                }
+              }
+            })
+            .catch(function(err) {
+              console.error('Schema fetch failed', err);
+            })
+            .finally(function() {
+              refreshUmlBtn.disabled = false;
+              if (svgIcon) svgIcon.classList.remove('spin');
+              if (origText) origText.textContent = ' 手動で更新する';
+            });
+        });
       }
 
       function closeUmlModal() {
@@ -1890,7 +1951,7 @@ export function getCacheStatusPage(user: {
         return 34 + table.cols.length * 22 + 8;
       }
 
-      function renderErDiagram() {
+      function renderErDiagram(tablesData, relationsData) {
         var isDark = document.documentElement.getAttribute('data-theme') === 'dark';
         var container = document.createElement('div');
         container.className = 'uml-er-container';
@@ -1899,8 +1960,8 @@ export function getCacheStatusPage(user: {
         var cardRects = {};
         var cardElements = {};
 
-        for (var t = 0; t < tables.length; t++) {
-          var tbl = tables[t];
+        for (var t = 0; t < tablesData.length; t++) {
+          var tbl = tablesData[t];
           var w = getTableCardWidth(tbl);
           var h = getTableCardHeight(tbl);
           cardRects[tbl.name] = { x: tbl.x, y: tbl.y, w: w, h: h };
@@ -1977,8 +2038,8 @@ export function getCacheStatusPage(user: {
           var lineColor = isDark ? 'rgba(160,174,192,0.6)' : 'rgba(113,128,150,0.5)';
           var labelColor = isDark ? '#a0aec0' : '#4a5568';
 
-          for (var r = 0; r < relations.length; r++) {
-            var rel = relations[r];
+          for (var r = 0; r < relationsData.length; r++) {
+            var rel = relationsData[r];
             var fromRect = cardRects[rel[0]];
             var toRect = cardRects[rel[2]];
             if (!fromRect || !toRect) continue;
