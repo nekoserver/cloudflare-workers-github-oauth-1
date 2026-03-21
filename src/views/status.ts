@@ -503,12 +503,78 @@ export function getCacheStatusPage(user: {
     .code-card-label {
       font-size: 12px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em;
     }
+    .code-card-actions {
+      display: flex; gap: 6px; align-items: center;
+    }
     .copy-button {
       background: var(--accent-color); color: white; border: 0; border-radius: 8px;
       padding: 8px 10px; font-size: 12px; font-weight: 700; cursor: pointer; white-space: nowrap;
     }
     .copy-button:hover { background: var(--accent-hover); }
     .copy-button.copied { background: #2f855a; }
+    .exec-button {
+      background: #e53e3e; color: white; border: 0; border-radius: 8px;
+      padding: 8px 10px; font-size: 12px; font-weight: 700; cursor: pointer; white-space: nowrap;
+      transition: background 0.15s;
+    }
+    .exec-button:hover { background: #c53030; }
+    .exec-button:disabled { background: #a0aec0; cursor: not-allowed; }
+    .exec-button.running { background: #dd6b20; }
+    /* Exec result area */
+    .exec-result {
+      margin-top: 8px; border: 1px solid var(--border-color); border-radius: 8px;
+      overflow: hidden; background: var(--card-bg);
+    }
+    .exec-result-header {
+      display: flex; align-items: center; justify-content: space-between; gap: 8px;
+      padding: 8px 12px; background: var(--bg-secondary); border-bottom: 1px solid var(--border-color);
+      cursor: pointer; user-select: none;
+    }
+    .exec-result-header:hover { background: var(--bg-tertiary, var(--bg-secondary)); }
+    .exec-result-summary {
+      display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 600;
+    }
+    .exec-result-chevron {
+      font-size: 10px; transition: transform 0.2s; color: var(--text-muted);
+    }
+    .exec-result-header[aria-expanded="true"] .exec-result-chevron { transform: rotate(90deg); }
+    .exec-status-badge {
+      display: inline-block; padding: 2px 8px; border-radius: 4px;
+      font-size: 11px; font-weight: 700; font-family: monospace;
+    }
+    .exec-status-badge.success { background: #c6f6d5; color: #22543d; }
+    .exec-status-badge.error { background: #fed7d7; color: #742a2a; }
+    .exec-status-badge.info { background: #bee3f8; color: #2a4365; }
+    .exec-result-meta {
+      font-size: 11px; color: var(--text-muted); font-family: monospace;
+    }
+    .exec-result-body {
+      overflow: hidden; transition: max-height 0.25s ease;
+    }
+    .exec-result-body.collapsed { max-height: 0 !important; }
+    .exec-result-body pre {
+      margin: 0; padding: 12px; font-size: 12px; line-height: 1.5;
+      overflow-x: auto; white-space: pre-wrap; word-break: break-all;
+    }
+    .exec-result-section {
+      border-top: 1px solid var(--border-color);
+    }
+    .exec-result-section:first-child { border-top: none; }
+    .exec-result-section-header {
+      display: flex; align-items: center; gap: 6px;
+      padding: 6px 12px; font-size: 11px; font-weight: 700; color: var(--text-muted);
+      text-transform: uppercase; letter-spacing: 0.04em;
+      cursor: pointer; user-select: none; background: var(--bg-secondary);
+    }
+    .exec-result-section-header:hover { background: var(--bg-tertiary, var(--bg-secondary)); }
+    .exec-result-section-chevron {
+      font-size: 9px; transition: transform 0.2s; color: var(--text-muted);
+    }
+    .exec-result-section-header[aria-expanded="true"] .exec-result-section-chevron { transform: rotate(90deg); }
+    .exec-result-section-body {
+      overflow: hidden; transition: max-height 0.2s ease;
+    }
+    .exec-result-section-body.collapsed { max-height: 0 !important; }
     .code-note {
       margin: 8px 0 0; font-size: 12px; line-height: 1.5; color: var(--text-muted);
     }
@@ -1008,11 +1074,17 @@ export function getCacheStatusPage(user: {
       openStatusModal(title, subtitle, '<div class="modal-empty">' + escapeHtmlText(message) + '</div>');
     }
 
-    function renderCopyableCodeCard(label, code, copyText) {
+    function renderCopyableCodeCard(label, code, copyText, execPath) {
+      var execButton = execPath
+        ? '<button type="button" class="exec-button" data-exec-path="' + escapeHtmlText(execPath) + '">Exec</button>'
+        : '';
       return '<div class="code-card">'
         + '<div class="code-card-header">'
         + '<div class="code-card-label">' + escapeHtmlText(label) + '</div>'
+        + '<div class="code-card-actions">'
         + '<button type="button" class="copy-button" data-copy-text="' + escapeHtmlText(copyText) + '">コピー</button>'
+        + execButton
+        + '</div>'
         + '</div>'
         + '<pre class="sql-view">' + escapeHtmlText(code) + '</pre>'
         + '</div>';
@@ -1048,6 +1120,142 @@ export function getCacheStatusPage(user: {
       ].join('\\n');
     }
 
+    function renderExecResultSectionHtml(title, content, startExpanded) {
+      var expanded = startExpanded ? 'true' : 'false';
+      var collapsedClass = startExpanded ? '' : ' collapsed';
+      return '<div class="exec-result-section">'
+        + '<div class="exec-result-section-header" role="button" aria-expanded="' + expanded + '">'
+        + '<span class="exec-result-section-chevron">&#9654;</span>'
+        + '<span>' + escapeHtmlText(title) + '</span>'
+        + '</div>'
+        + '<div class="exec-result-section-body' + collapsedClass + '">'
+        + content
+        + '</div>'
+        + '</div>';
+    }
+
+    function renderExecResult(status, statusText, headers, body, elapsed) {
+      var isSuccess = status >= 200 && status < 300;
+      var badgeClass = isSuccess ? 'success' : 'error';
+      var badgeText = status + ' ' + statusText;
+
+      // Response headers section
+      var headerLines = [];
+      if (headers) {
+        headers.forEach(function(value, key) {
+          headerLines.push(escapeHtmlText(key) + ': ' + escapeHtmlText(value));
+        });
+      }
+      var headersHtml = '<pre>' + (headerLines.length > 0 ? headerLines.join('\\n') : '(none)') + '</pre>';
+
+      // Response body section - try to format JSON
+      var bodyHtml = '';
+      var parsedJson = null;
+      try {
+        parsedJson = JSON.parse(body);
+      } catch (_e) { /* not json */ }
+
+      if (parsedJson !== null) {
+        if (Array.isArray(parsedJson)) {
+          // Array: show summary + each item collapsible
+          bodyHtml = '<pre style="padding:8px 12px;margin:0;font-size:11px;color:var(--text-muted);">'
+            + 'Array (' + parsedJson.length + ' items)</pre>';
+          parsedJson.forEach(function(item, index) {
+            var itemJson = JSON.stringify(item, null, 2);
+            bodyHtml += renderExecResultSectionHtml(
+              '[' + index + ']',
+              '<pre>' + escapeHtmlText(itemJson) + '</pre>',
+              index < 3
+            );
+          });
+        } else if (typeof parsedJson === 'object') {
+          // Object: show each top-level key as collapsible
+          var keys = Object.keys(parsedJson);
+          keys.forEach(function(key) {
+            var val = parsedJson[key];
+            var isComplex = (typeof val === 'object' && val !== null);
+            var valStr = isComplex
+              ? JSON.stringify(val, null, 2)
+              : JSON.stringify(val);
+            var shouldExpand = !isComplex || (Array.isArray(val) && val.length <= 3);
+            bodyHtml += renderExecResultSectionHtml(
+              key + (Array.isArray(val) ? ' (' + val.length + ')' : ''),
+              '<pre>' + escapeHtmlText(valStr) + '</pre>',
+              shouldExpand
+            );
+          });
+        }
+      } else {
+        bodyHtml = '<pre>' + escapeHtmlText(body || '(empty)') + '</pre>';
+      }
+
+      return '<div class="exec-result">'
+        + '<div class="exec-result-header" role="button" aria-expanded="true">'
+        + '<div class="exec-result-summary">'
+        + '<span class="exec-result-chevron">&#9654;</span>'
+        + '<span class="exec-status-badge ' + badgeClass + '">' + badgeText + '</span>'
+        + '<span class="exec-result-meta">' + elapsed + 'ms</span>'
+        + '</div>'
+        + '</div>'
+        + '<div class="exec-result-body">'
+        + renderExecResultSectionHtml('Response Headers', headersHtml, false)
+        + renderExecResultSectionHtml('Response Body', bodyHtml, true)
+        + '</div>'
+        + '</div>';
+    }
+
+    function renderExecError(message) {
+      return '<div class="exec-result">'
+        + '<div class="exec-result-header" role="button" aria-expanded="true">'
+        + '<div class="exec-result-summary">'
+        + '<span class="exec-result-chevron">&#9654;</span>'
+        + '<span class="exec-status-badge error">ERROR</span>'
+        + '</div>'
+        + '</div>'
+        + '<div class="exec-result-body">'
+        + '<pre style="padding:12px;color:#e53e3e;">' + escapeHtmlText(message) + '</pre>'
+        + '</div>'
+        + '</div>';
+    }
+
+    async function handleExecClick(button) {
+      var path = button.getAttribute('data-exec-path');
+      if (!path) return;
+
+      // Find or create result container (sibling after the code-card)
+      var codeCard = button.closest('.code-card');
+      if (!codeCard) return;
+      var resultContainer = codeCard.nextElementSibling;
+      if (!resultContainer || !resultContainer.classList.contains('exec-result-container')) {
+        resultContainer = document.createElement('div');
+        resultContainer.className = 'exec-result-container';
+        codeCard.parentNode.insertBefore(resultContainer, codeCard.nextSibling);
+      }
+
+      button.disabled = true;
+      button.classList.add('running');
+      button.textContent = '実行中...';
+      resultContainer.innerHTML = '';
+
+      var startTime = Date.now();
+      try {
+        var response = await fetch(path);
+        var elapsed = Date.now() - startTime;
+        var body = await response.text();
+        resultContainer.innerHTML = renderExecResult(
+          response.status, response.statusText, response.headers, body, elapsed
+        );
+      } catch (err) {
+        resultContainer.innerHTML = renderExecError(
+          err && err.message ? err.message : 'リクエストに失敗しました'
+        );
+      } finally {
+        button.disabled = false;
+        button.classList.remove('running');
+        button.textContent = 'Exec';
+      }
+    }
+
     function renderMigrationDetailLayout(data) {
       var origin = window.location.origin;
       var queryBlock = renderQueryExample(data.queryExample || null);
@@ -1065,11 +1273,11 @@ export function getCacheStatusPage(user: {
         + '<div class="panel-title">右: 読み出し方法</div>'
         + '<div class="panel-stack">'
         + queryBlock
-        + renderCopyableCodeCard('curl: migration detail', detailCookieCurl, detailCookieCurl)
-        + renderCopyableCodeCard('curl: migration detail (Bearer)', detailBearerCurl, detailBearerCurl)
-        + renderCopyableCodeCard('curl: migration sql only', migrationSqlCurl, migrationSqlCurl)
-        + renderCopyableCodeCard('curl: table rows preview', rowsCookieCurl, rowsCookieCurl)
-        + renderCopyableCodeCard('curl: table rows preview (Bearer)', rowsBearerCurl, rowsBearerCurl)
+        + renderCopyableCodeCard('curl: migration detail', detailCookieCurl, detailCookieCurl, data.endpoints.migrationDetailPath)
+        + renderCopyableCodeCard('curl: migration detail (Bearer)', detailBearerCurl, detailBearerCurl, data.endpoints.migrationDetailPath)
+        + renderCopyableCodeCard('curl: migration sql only', migrationSqlCurl, migrationSqlCurl, data.endpoints.migrationSqlPath)
+        + renderCopyableCodeCard('curl: table rows preview', rowsCookieCurl, rowsCookieCurl, data.endpoints.tableRowsPath)
+        + renderCopyableCodeCard('curl: table rows preview (Bearer)', rowsBearerCurl, rowsBearerCurl, data.endpoints.tableRowsPath)
         + '<p class="code-note">&#96;/api/status/*&#96; は認証必須です。ブラウザでは Cookie、CLI では Cookie または Bearer トークンで呼び出せます。</p>'
         + '</div>'
         + '</section>'
@@ -1283,6 +1491,39 @@ export function getCacheStatusPage(user: {
         modalBody.addEventListener('click', async function(event) {
           var target = event.target;
           if (!(target instanceof Element)) return;
+
+          // Exec button handler
+          var execButton = target.closest('[data-exec-path]');
+          if (execButton) {
+            handleExecClick(execButton);
+            return;
+          }
+
+          // Collapsible exec result header toggle
+          var resultHeader = target.closest('.exec-result-header');
+          if (resultHeader) {
+            var expanded = resultHeader.getAttribute('aria-expanded') === 'true';
+            resultHeader.setAttribute('aria-expanded', expanded ? 'false' : 'true');
+            var resultBody = resultHeader.nextElementSibling;
+            if (resultBody && resultBody.classList.contains('exec-result-body')) {
+              resultBody.classList.toggle('collapsed');
+            }
+            return;
+          }
+
+          // Collapsible exec result section toggle
+          var sectionHeader = target.closest('.exec-result-section-header');
+          if (sectionHeader) {
+            var sExpanded = sectionHeader.getAttribute('aria-expanded') === 'true';
+            sectionHeader.setAttribute('aria-expanded', sExpanded ? 'false' : 'true');
+            var sectionBody = sectionHeader.nextElementSibling;
+            if (sectionBody && sectionBody.classList.contains('exec-result-section-body')) {
+              sectionBody.classList.toggle('collapsed');
+            }
+            return;
+          }
+
+          // Copy button handler
           var copyButton = target.closest('[data-copy-text]');
           if (!copyButton) return;
           var text = copyButton.getAttribute('data-copy-text');
