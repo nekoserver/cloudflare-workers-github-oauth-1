@@ -1070,7 +1070,7 @@ export function getRepositoriesPage(user: {
               var msg = result.data.error || 'リポジトリの作成に失敗しました。';
               if (errorEl) {
                 if (result.data.requireReauth) {
-                  errorEl.innerHTML = msg + ' <a href="/auth/github" style="color:#58a6ff;text-decoration:underline;">再ログイン</a>';
+                  errorEl.innerHTML = msg + ' <a href="/auth/github/reauthorize" style="color:#58a6ff;text-decoration:underline;">再ログイン</a>';
                 } else {
                   errorEl.textContent = msg;
                 }
