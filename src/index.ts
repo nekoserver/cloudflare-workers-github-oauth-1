@@ -16,7 +16,7 @@ import { getSettingsPage } from './views/settings';
 import { getRepositoriesPage } from './views/repositories';
 import { getUserInfoPage } from './views/userinfo';
 import { getMarkdownPreviewPage } from './views/markdown-preview';
-import { getCacheStatusPage, CacheStatusData, TableStatusEntry, UserContextInfo, RepoColorEntry } from './views/status';
+import { getCacheStatusPage, CacheStatusData, TableStatusEntry, UserContextInfo, RepoColorEntry, RepoGroupEntry } from './views/status';
 import { ensureDefaultWorkspace, getCurrentWorkspace, getUserWorkspaces, switchWorkspace } from './utils/workspace';
 import { getGitHubAccessToken, getGitHubLatestCommit, getGitHubCommitCount, getGitHubCommits, getGitHubRepoOpenIssuesCount, getGitHubRepoCommitsByMonth, getGitHubRepoCommitsByDate, getGitHubTokenScopes, getGitHubUser, getGitHubUserEmail, getGitHubUserRepos, createGitHubRepo, GitHubTokenScopesError, buildRepoInstallationPermissionsMap, RepoInstallationPermissions, getGitHubUserInstallationsWithDiag, getGitHubInstallationRepos, getExternalServiceLinkedRepos, getSlackLinkedReposByWebhooks, CommitDetail } from './utils/github';
 import { getCookieValue, getCookieValues } from './utils/cookie';
@@ -61,6 +61,8 @@ const STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
   { name: 'commit_search_repo_stats', migration: '0011', description: 'コミット検索リポジトリ別集計' },
   { name: 'ai_summary_log', migration: '0012', description: 'AI要約ログ' },
   { name: 'repo_color_settings', migration: '0013', description: 'リポジトリ色・タグ設定' },
+  { name: 'repo_groups', migration: '0014', description: 'リポジトリグループ' },
+  { name: 'repo_group_members', migration: '0014', description: 'リポジトリグループメンバー' },
 ];
 
 const STATUS_MIGRATION_SQL: Record<string, string> = {
@@ -254,6 +256,33 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_repo_color_ws_repo
 
 CREATE INDEX IF NOT EXISTS idx_repo_color_order
   ON repo_color_settings (workspace_id, display_order);`,
+  '0014': `CREATE TABLE IF NOT EXISTS repo_groups (
+  id TEXT PRIMARY KEY,
+  workspace_id TEXT NOT NULL DEFAULT '',
+  name TEXT NOT NULL,
+  description TEXT NOT NULL DEFAULT '',
+  color_code TEXT NOT NULL DEFAULT '#667eea',
+  icon TEXT NOT NULL DEFAULT '',
+  slack_channel_id TEXT NOT NULL DEFAULT '',
+  display_order INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_repo_groups_ws
+  ON repo_groups (workspace_id, display_order);
+
+CREATE TABLE IF NOT EXISTS repo_group_members (
+  group_id TEXT NOT NULL,
+  repo_name TEXT NOT NULL,
+  workspace_id TEXT NOT NULL DEFAULT '',
+  added_at TEXT NOT NULL,
+  PRIMARY KEY (group_id, repo_name),
+  FOREIGN KEY (group_id) REFERENCES repo_groups(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_repo_group_members_repo
+  ON repo_group_members (workspace_id, repo_name);`,
 };
 
 function jsonUtf8(payload: unknown, status = 200): Response {
@@ -1267,6 +1296,7 @@ app.get('/status', authMiddleware, async (c) => {
   const data: CacheStatusData = {
     commitCache: { totalEntries: 0, totalCommits: 0, repos: [], byMonth: [], byMonthByRepo: [], entries: [] },
     repoColors: [],
+    repoGroups: [],
     installationPerms: { totalEntries: 0, entries: [] },
     cacheStats: {
       totalGithubFetch: 0, totalCacheSave: 0,
@@ -1541,6 +1571,7 @@ app.get('/status', authMiddleware, async (c) => {
     }
 
     // リポジトリ色設定の読み込みと未登録リポジトリの自動登録
+    const existingColorMap = new Map<string, RepoColorEntry>();
     try {
       const colorRows = await db.prepare(
         'SELECT repo_name, color_code, display_order, tags, is_visible FROM repo_color_settings WHERE workspace_id = ? ORDER BY display_order ASC, repo_name ASC'
@@ -1548,7 +1579,6 @@ app.get('/status', authMiddleware, async (c) => {
         repo_name: string; color_code: string; display_order: number; tags: string; is_visible: number;
       }>();
 
-      const existingColorMap = new Map<string, RepoColorEntry>();
       if (colorRows.results) {
         for (const row of colorRows.results) {
           const entry: RepoColorEntry = {
@@ -1562,7 +1592,14 @@ app.get('/status', authMiddleware, async (c) => {
           data.repoColors.push(entry);
         }
       }
+    } catch (error) {
+      logger.warn('Failed to read repo_color_settings (table may not exist yet)', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
 
+    // 未登録リポジトリの自動登録（SELECTとは別のtry/catchで処理）
+    try {
       const defaultPalette = [
         '#667eea', '#e53e3e', '#38a169', '#ed8936', '#9f7aea',
         '#dd6b20', '#319795', '#d53f8c', '#3182ce', '#d69e2e',
@@ -1579,29 +1616,81 @@ app.get('/status', authMiddleware, async (c) => {
         const now = new Date().toISOString();
         const usedColorCount = existingColorMap.size;
 
-        for (let i = 0; i < newRepos.length; i++) {
-          const repo = newRepos[i];
+        const stmts = newRepos.map((repo, i) => {
           const colorIndex = (usedColorCount + i) % defaultPalette.length;
           const order = maxOrder + 1 + i;
-          const color = defaultPalette[colorIndex];
-
-          await db.prepare(
+          return db.prepare(
             'INSERT OR IGNORE INTO repo_color_settings (workspace_id, repo_name, color_code, display_order, tags, is_visible, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 1, ?, ?)'
-          ).bind(workspaceId, repo, color, order, '', now, now).run();
+          ).bind(workspaceId, repo, defaultPalette[colorIndex], order, '', now, now);
+        });
 
+        await db.batch(stmts);
+
+        for (let i = 0; i < newRepos.length; i++) {
+          const colorIndex = (usedColorCount + i) % defaultPalette.length;
+          const order = maxOrder + 1 + i;
           const entry: RepoColorEntry = {
-            repoName: repo,
-            colorCode: color,
+            repoName: newRepos[i],
+            colorCode: defaultPalette[colorIndex],
             displayOrder: order,
             tags: '',
             isVisible: true,
           };
-          existingColorMap.set(repo, entry);
+          existingColorMap.set(newRepos[i], entry);
           data.repoColors.push(entry);
+        }
+        logger.info(`Auto-registered ${newRepos.length} repos in repo_color_settings`, {
+          repos: newRepos,
+          workspaceId,
+        });
+      }
+    } catch (error) {
+      logger.warn('Failed to auto-register repos in repo_color_settings', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+        repoCount: data.commitCache.byMonthByRepo.length,
+        workspaceId,
+      });
+    }
+
+    // リポジトリグループの読み込み
+    try {
+      const groupRows = await db.prepare(
+        'SELECT id, name, description, color_code, icon, slack_channel_id, display_order FROM repo_groups WHERE workspace_id = ? ORDER BY display_order ASC, name ASC'
+      ).bind(workspaceId).all<{
+        id: string; name: string; description: string; color_code: string;
+        icon: string; slack_channel_id: string; display_order: number;
+      }>();
+
+      if (groupRows.results && groupRows.results.length > 0) {
+        const groupIds = groupRows.results.map(g => g.id);
+        const memberRows = await db.prepare(
+          `SELECT group_id, repo_name FROM repo_group_members WHERE workspace_id = ? AND group_id IN (${groupIds.map(() => '?').join(',')}) ORDER BY repo_name`
+        ).bind(workspaceId, ...groupIds).all<{ group_id: string; repo_name: string }>();
+
+        const memberMap = new Map<string, string[]>();
+        if (memberRows.results) {
+          for (const m of memberRows.results) {
+            const list = memberMap.get(m.group_id) || [];
+            list.push(m.repo_name);
+            memberMap.set(m.group_id, list);
+          }
+        }
+
+        for (const g of groupRows.results) {
+          data.repoGroups.push({
+            id: g.id,
+            name: g.name,
+            description: g.description,
+            colorCode: g.color_code,
+            icon: g.icon,
+            slackChannelId: g.slack_channel_id,
+            displayOrder: g.display_order,
+            repos: memberMap.get(g.id) || [],
+          });
         }
       }
     } catch (error) {
-      logger.warn('Failed to load/register repo color settings', {
+      logger.warn('Failed to load repo_groups (table may not exist yet)', {
         error: error instanceof Error ? error.message : 'Unknown error',
       });
     }
