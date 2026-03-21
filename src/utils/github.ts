@@ -227,6 +227,46 @@ export async function getGitHubUserRepos(params: { username?: string; accessToke
 }
 
 /**
+ * GitHubリポジトリを新規作成
+ */
+export async function createGitHubRepo(params: {
+  accessToken: string;
+  name: string;
+  isPrivate: boolean;
+  description?: string;
+}): Promise<GitHubRepo> {
+  const { accessToken, name, isPrivate, description } = params;
+
+  const body: Record<string, unknown> = {
+    name,
+    private: isPrivate,
+    auto_init: true,
+  };
+  if (description) {
+    body.description = description;
+  }
+
+  const response = await fetch('https://api.github.com/user/repos', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${accessToken}`,
+      'Accept': 'application/vnd.github.v3+json',
+      'User-Agent': 'Cloudflare-Workers-GitHub-OAuth',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json<{ message?: string; errors?: Array<{ message?: string }> }>().catch(() => null);
+    const msg = errorData?.errors?.[0]?.message || errorData?.message || `HTTP ${response.status}`;
+    throw new Error(msg);
+  }
+
+  return await response.json<GitHubRepo>();
+}
+
+/**
  * GitHubリポジトリの最新コミットを取得
  */
 export async function getGitHubLatestCommit(params: {
