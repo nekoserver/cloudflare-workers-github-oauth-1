@@ -427,7 +427,8 @@ async function updateUserSession(
   userId: string,
   timezone: string,
   sessionDuration: string,
-  githubAccessToken?: string
+  githubAccessToken?: string,
+  githubGrantedScopes?: string
 ): Promise<{ saved: boolean; lastLoginAt: string | null }> {
   if (!db) {
     logger.warn('D1 database not available, skipping session update', { userId });
@@ -437,6 +438,13 @@ async function updateUserSession(
   const now = new Date().toISOString();
 
   try {
+    // github_granted_scopes カラムがなければ追加（マイグレーション互換）
+    try {
+      await db.prepare('ALTER TABLE user_sessions ADD COLUMN github_granted_scopes TEXT').run();
+    } catch {
+      // カラムが既にある場合は無視
+    }
+
     // 前回ログイン日時を取得（UPSERT 前に取得する必要がある）
     const existing = await db.prepare(
       'SELECT current_login_at FROM user_sessions WHERE user_id = ?'
@@ -446,16 +454,17 @@ async function updateUserSession(
     // UPSERT: INSERT ... ON CONFLICT で競合状態を解消
     // 同一ユーザーの同時ログインでも UNIQUE 制約違反にならない
     await db.prepare(`
-      INSERT INTO user_sessions (user_id, timezone, session_duration, last_login_at, current_login_at, updated_at, github_access_token)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO user_sessions (user_id, timezone, session_duration, last_login_at, current_login_at, updated_at, github_access_token, github_granted_scopes)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT (user_id) DO UPDATE SET
         timezone = excluded.timezone,
         session_duration = excluded.session_duration,
         last_login_at = excluded.last_login_at,
         current_login_at = excluded.current_login_at,
         updated_at = excluded.updated_at,
-        github_access_token = excluded.github_access_token
-    `).bind(userId, timezone, sessionDuration, lastLoginAt, now, now, githubAccessToken ?? null).run();
+        github_access_token = excluded.github_access_token,
+        github_granted_scopes = excluded.github_granted_scopes
+    `).bind(userId, timezone, sessionDuration, lastLoginAt, now, now, githubAccessToken ?? null, githubGrantedScopes ?? null).run();
 
     return { saved: true, lastLoginAt };
   } catch (error) {
@@ -473,6 +482,7 @@ async function getUserSession(db: D1Database | undefined, userId: string): Promi
   sessionDuration: string;
   lastLoginAt: string | null;
   githubAccessToken?: string | null;
+  githubGrantedScopes?: string | null;
 } | null> {
   if (!db) {
     return null;
@@ -480,12 +490,13 @@ async function getUserSession(db: D1Database | undefined, userId: string): Promi
 
   try {
     const result = await db.prepare(
-      'SELECT timezone, session_duration, last_login_at, github_access_token FROM user_sessions WHERE user_id = ?'
+      'SELECT timezone, session_duration, last_login_at, github_access_token, github_granted_scopes FROM user_sessions WHERE user_id = ?'
     ).bind(userId).first<{
       timezone: string;
       session_duration: string;
       last_login_at: string | null;
       github_access_token: string | null;
+      github_granted_scopes: string | null;
     }>();
 
     if (!result) {
@@ -497,6 +508,7 @@ async function getUserSession(db: D1Database | undefined, userId: string): Promi
       sessionDuration: result.session_duration,
       lastLoginAt: result.last_login_at,
       githubAccessToken: result.github_access_token,
+      githubGrantedScopes: result.github_granted_scopes,
     };
   } catch (error) {
     logger.error('Error getting user session', {
@@ -758,7 +770,15 @@ app.get('/github/callback', async (c) => {
 
     // GitHubからアクセストークンを取得
     phase = 'exchange-token';
-    const accessToken = await getGitHubAccessToken(code, clientId, clientSecret, redirectUri, pkceVerifier);
+    const tokenResult = await getGitHubAccessToken(code, clientId, clientSecret, redirectUri, pkceVerifier);
+    const accessToken = tokenResult.accessToken;
+    const grantedScopes = tokenResult.grantedScopes;
+
+    logger.info('GitHub OAuth token exchanged', {
+      grantedScopes: grantedScopes.join(' '),
+      requestedScopes: GITHUB_OAUTH_SCOPE,
+      hasRepoScope: grantedScopes.includes('repo'),
+    });
 
     // GitHubユーザー情報を取得
     phase = 'fetch-user';
@@ -795,9 +815,9 @@ app.get('/github/callback', async (c) => {
       }
     }
 
-    // D1にログイン情報を保存
+    // D1にログイン情報を保存（付与スコープも含む）
     phase = 'save-session';
-    const sessionResult = await updateUserSession(c.env.DB, userId, timezone, sessionDuration, accessToken);
+    const sessionResult = await updateUserSession(c.env.DB, userId, timezone, sessionDuration, accessToken, grantedScopes.join(' '));
 
     // デフォルトチーム＋ワークスペースを自動プロビジョニング（初回ログイン時に作成）
     if (c.env.DB) {
@@ -2756,6 +2776,22 @@ app.post('/api/repositories', authMiddleware, async (c) => {
 
   if (!accessToken) {
     return c.json({ error: 'GitHub アクセストークンがありません。再ログインしてください。' }, 401);
+  }
+
+  // repo スコープの事前チェック
+  const grantedScopes = userSession?.githubGrantedScopes ?? '';
+  const scopeList = grantedScopes.split(/[\s,]+/).filter((s) => s.length > 0);
+  if (grantedScopes && !scopeList.includes('repo')) {
+    logger.warn('Repo creation attempted without repo scope', {
+      userId: user.sub,
+      grantedScopes,
+    });
+    return c.json({
+      error: 'リポジトリ作成には repo 権限が必要です。GitHub の認可画面で「repo」スコープを許可してから再ログインしてください。GitHub OAuth App の設定で repo スコープが有効になっているか確認してください。',
+      requireReauth: true,
+      missingScope: 'repo',
+      grantedScopes: scopeList,
+    }, 403);
   }
 
   const body = await c.req.json<{ name?: string; isPrivate?: boolean; description?: string }>();
