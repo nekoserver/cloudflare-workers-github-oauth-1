@@ -410,6 +410,99 @@ export function getRepositoriesPage(user: {
     .create-repo-submit:hover { opacity: 0.9; }
     .create-repo-submit:disabled { opacity: 0.5; cursor: not-allowed; }
 
+    /* Commit Search */
+    .commit-search-row {
+      display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    }
+    .commit-search-input {
+      flex: 1; min-width: 200px; padding: 10px 14px; border-radius: 10px;
+      border: 2px solid var(--border-color); background: var(--bg-secondary);
+      color: var(--text-primary); font-size: 14px; outline: none;
+      transition: border-color 0.2s;
+    }
+    .commit-search-input:focus { border-color: var(--accent-color, #48bb78); }
+    .commit-search-input::placeholder { color: var(--text-faint, var(--text-muted)); }
+    .commit-search-btn {
+      padding: 10px 18px; border-radius: 10px; border: none;
+      background: linear-gradient(135deg, #667eea, #764ba2); color: #fff;
+      font-size: 14px; font-weight: 700; cursor: pointer;
+      transition: opacity 0.2s; white-space: nowrap;
+    }
+    .commit-search-btn:hover { opacity: 0.9; }
+    .commit-search-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    /* Search Results Modal */
+    .search-modal-content {
+      background: var(--card-bg); border-radius: 16px; max-width: 760px; width: 94%;
+      max-height: 85vh; display: flex; flex-direction: column;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+      animation: modalIn 0.2s ease;
+    }
+    .search-modal-header {
+      padding: 20px 24px 14px; border-bottom: 1px solid var(--border-color);
+      display: flex; justify-content: space-between; align-items: center; flex-shrink: 0;
+    }
+    .search-modal-title { font-size: 18px; font-weight: 700; color: var(--text-primary); }
+    .search-modal-subtitle { font-size: 13px; color: var(--text-muted); margin-top: 2px; }
+    .search-modal-body {
+      padding: 16px 24px 24px; overflow-y: auto; flex: 1; min-height: 0;
+    }
+    .search-result-group {
+      margin-bottom: 16px;
+    }
+    .search-result-group-header {
+      display: flex; align-items: center; gap: 8px; padding: 8px 0; cursor: pointer; user-select: none;
+    }
+    .search-result-group-chevron {
+      font-size: 10px; transition: transform 0.2s; color: var(--text-muted);
+    }
+    .search-result-group-header[aria-expanded="true"] .search-result-group-chevron { transform: rotate(90deg); }
+    .search-result-group-repo {
+      font-size: 14px; font-weight: 700; color: var(--text-secondary);
+    }
+    .search-result-group-date {
+      font-size: 12px; color: var(--text-muted); font-family: monospace;
+    }
+    .search-result-group-count {
+      font-size: 11px; color: var(--text-muted); background: var(--badge-bg);
+      padding: 2px 8px; border-radius: 999px; font-weight: 600;
+    }
+    .search-result-group-body {
+      overflow: hidden; transition: max-height 0.25s ease;
+    }
+    .search-result-group-body.collapsed { max-height: 0 !important; }
+    .search-result-commit {
+      display: grid; grid-template-columns: 36px 1fr; gap: 10px;
+      padding: 10px 12px; border-radius: 10px; margin-bottom: 4px;
+      background: var(--bg-secondary); align-items: start;
+    }
+    .search-result-avatar {
+      width: 36px; height: 36px; border-radius: 50%; object-fit: cover;
+    }
+    .search-result-commit-info { min-width: 0; }
+    .search-result-commit-msg {
+      font-size: 13px; font-weight: 600; color: var(--text-primary);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .search-result-commit-msg-full {
+      font-size: 13px; font-weight: 600; color: var(--text-primary);
+      white-space: pre-wrap; word-break: break-word;
+    }
+    .search-result-commit-meta {
+      display: flex; gap: 8px; align-items: center; margin-top: 3px;
+      font-size: 11px; color: var(--text-muted);
+    }
+    .search-result-sha {
+      font-family: monospace; color: #2b6cb0; text-decoration: none; font-weight: 700;
+    }
+    .search-result-sha:hover { text-decoration: underline; }
+    .search-result-highlight { background: rgba(237,137,54,0.3); border-radius: 2px; padding: 0 1px; }
+    .search-empty {
+      text-align: center; padding: 40px 20px; color: var(--text-muted); font-size: 14px;
+    }
+    .search-loading {
+      text-align: center; padding: 40px 20px; color: var(--text-muted); font-size: 14px;
+    }
+
     /* Permissions Modal */
     .modal-overlay {
       display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
@@ -833,6 +926,10 @@ export function getRepositoriesPage(user: {
         </div>
         <button class="create-repo-btn" id="openCreateRepoModal" type="button">＋ 新規にリポジトリを生成する</button>
       </div>
+      <div class="commit-search-row" style="margin-top: 14px;">
+        <input type="text" class="commit-search-input" id="commitSearchInput" placeholder="コミット履歴を検索（メッセージ・作者・SHA）" autocomplete="off" />
+        <button class="commit-search-btn" id="commitSearchBtn" type="button">検索</button>
+      </div>
       ${errorBanner}
       ${missingScopeBannerHtml}
       ${cfPendingBannerHtml}
@@ -1050,6 +1147,21 @@ export function getRepositoriesPage(user: {
           </div>
           <button class="create-repo-submit" id="createRepoSubmit" type="submit">作成する</button>
         </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Commit Search Results Modal -->
+  <div class="modal-overlay" id="commitSearchModal">
+    <div class="search-modal-content">
+      <div class="search-modal-header">
+        <div>
+          <div class="search-modal-title" id="commitSearchTitle">検索結果</div>
+          <div class="search-modal-subtitle" id="commitSearchSubtitle"></div>
+        </div>
+        <button class="modal-close" id="commitSearchClose" type="button">&times;</button>
+      </div>
+      <div class="search-modal-body" id="commitSearchBody">
       </div>
     </div>
   </div>
@@ -2596,6 +2708,177 @@ export function getRepositoriesPage(user: {
           commitDetailList.innerHTML = '<div class="commit-detail-empty">読み込みに失敗しました</div>';
         });
     }
+
+    // ===== コミット全文検索 =====
+    (function() {
+      var searchInput = document.getElementById('commitSearchInput');
+      var searchBtn = document.getElementById('commitSearchBtn');
+      var searchModal = document.getElementById('commitSearchModal');
+      var searchClose = document.getElementById('commitSearchClose');
+      var searchBody = document.getElementById('commitSearchBody');
+      var searchTitle = document.getElementById('commitSearchTitle');
+      var searchSubtitle = document.getElementById('commitSearchSubtitle');
+      if (!searchInput || !searchBtn || !searchModal || !searchBody) return;
+
+      function escapeForHtml(str) {
+        return String(str)
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;');
+      }
+
+      function highlightMatch(text, query) {
+        if (!query) return escapeForHtml(text);
+        var escaped = escapeForHtml(text);
+        var qEscaped = escapeForHtml(query);
+        var regex = new RegExp('(' + qEscaped.replace(/[.*+?^$\x7b\x7d()|\\[\\]\\\\]/g, '\\\\$&') + ')', 'gi');
+        return escaped.replace(regex, '<span class="search-result-highlight">$1</span>');
+      }
+
+      function openSearchModal() {
+        searchModal.classList.add('show');
+        document.body.style.overflow = 'hidden';
+      }
+
+      function closeSearchModal() {
+        searchModal.classList.remove('show');
+        document.body.style.overflow = '';
+      }
+
+      if (searchClose) {
+        searchClose.addEventListener('click', closeSearchModal);
+      }
+      searchModal.addEventListener('click', function(e) {
+        if (e.target === searchModal) closeSearchModal();
+      });
+      document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape' && searchModal.classList.contains('show')) {
+          closeSearchModal();
+        }
+      });
+
+      function renderSearchResults(data) {
+        if (!data.results || data.results.length === 0) {
+          return '<div class="search-empty">「' + escapeForHtml(data.query) + '」に一致するコミットは見つかりませんでした。<br><span style="font-size:12px;margin-top:8px;display:block;">キャッシュ済みのコミット履歴のみが検索対象です。<br>先にカレンダーヒートマップを表示してキャッシュを蓄積してください。</span></div>';
+        }
+
+        // リポジトリごとにグループ化
+        var groups = {};
+        var groupOrder = [];
+        data.results.forEach(function(item) {
+          var key = item.owner + '/' + item.repo;
+          if (!groups[key]) {
+            groups[key] = [];
+            groupOrder.push(key);
+          }
+          item.commits.forEach(function(c) {
+            groups[key].push({ commit: c, date: item.date });
+          });
+        });
+
+        var html = '';
+        groupOrder.forEach(function(repoKey) {
+          var commits = groups[repoKey];
+          html += '<div class="search-result-group">'
+            + '<div class="search-result-group-header" role="button" aria-expanded="true" data-search-group-toggle>'
+            + '<span class="search-result-group-chevron">&#9654;</span>'
+            + '<span class="search-result-group-repo">' + escapeForHtml(repoKey) + '</span>'
+            + '<span class="search-result-group-count">' + commits.length + ' 件</span>'
+            + '</div>'
+            + '<div class="search-result-group-body">';
+
+          commits.forEach(function(item) {
+            var c = item.commit;
+            var msgLines = (c.message || '').split('\\n');
+            var firstLine = msgLines[0] || '';
+            var hasBody = msgLines.length > 1 && msgLines.slice(1).some(function(l) { return l.trim() !== ''; });
+            var avatarHtml = c.authorAvatarUrl
+              ? '<img class="search-result-avatar" src="' + escapeForHtml(c.authorAvatarUrl) + '&s=72" alt="" loading="lazy" />'
+              : '<div class="search-result-avatar" style="background:var(--badge-bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;color:var(--text-muted);">' + escapeForHtml((c.authorName || '?').substring(0, 1).toUpperCase()) + '</div>';
+            var shaShort = (c.sha || '').substring(0, 7);
+            var dateDisplay = item.date || '';
+
+            html += '<div class="search-result-commit">'
+              + avatarHtml
+              + '<div class="search-result-commit-info">'
+              + '<div class="search-result-commit-msg">' + highlightMatch(firstLine, data.query) + '</div>';
+
+            if (hasBody) {
+              var bodyText = msgLines.slice(1).join('\\n').trim();
+              html += '<details style="margin-top:4px;"><summary style="font-size:11px;color:var(--text-muted);cursor:pointer;">全文を表示</summary>'
+                + '<div class="search-result-commit-msg-full" style="margin-top:4px;font-weight:400;font-size:12px;color:var(--text-muted);">' + highlightMatch(bodyText, data.query) + '</div>'
+                + '</details>';
+            }
+
+            html += '<div class="search-result-commit-meta">'
+              + '<span>' + highlightMatch(c.authorName || c.authorLogin || '', data.query) + '</span>'
+              + '<span>' + escapeForHtml(dateDisplay) + '</span>';
+            if (c.url) {
+              html += '<a class="search-result-sha" href="' + escapeForHtml(c.url) + '" target="_blank" rel="noreferrer">' + highlightMatch(shaShort, data.query) + '</a>';
+            } else {
+              html += '<span style="font-family:monospace;">' + highlightMatch(shaShort, data.query) + '</span>';
+            }
+            html += '</div></div></div>';
+          });
+
+          html += '</div></div>';
+        });
+
+        return html;
+      }
+
+      function executeSearch() {
+        var query = searchInput.value.trim();
+        if (query.length < 2) {
+          searchInput.focus();
+          return;
+        }
+
+        searchTitle.textContent = '検索結果';
+        searchSubtitle.textContent = '「' + query + '」を検索中...';
+        searchBody.innerHTML = '<div class="search-loading">検索中...</div>';
+        openSearchModal();
+        searchBtn.disabled = true;
+
+        fetch('/api/repositories/search/commits?q=' + encodeURIComponent(query), { credentials: 'same-origin' })
+          .then(function(res) { return res.json(); })
+          .then(function(data) {
+            searchBtn.disabled = false;
+            if (data.error) {
+              searchBody.innerHTML = '<div class="search-empty">' + escapeForHtml(data.error) + '</div>';
+              searchSubtitle.textContent = '';
+              return;
+            }
+            searchSubtitle.textContent = '「' + escapeForHtml(data.query) + '」— ' + data.total + ' 件のコミットが見つかりました';
+            searchBody.innerHTML = renderSearchResults(data);
+          })
+          .catch(function() {
+            searchBtn.disabled = false;
+            searchBody.innerHTML = '<div class="search-empty">検索に失敗しました</div>';
+            searchSubtitle.textContent = '';
+          });
+      }
+
+      searchBtn.addEventListener('click', executeSearch);
+      searchInput.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') executeSearch();
+      });
+
+      // グループ折りたたみ
+      searchBody.addEventListener('click', function(e) {
+        var target = e.target;
+        if (!(target instanceof Element)) return;
+        var header = target.closest('[data-search-group-toggle]');
+        if (!header) return;
+        var expanded = header.getAttribute('aria-expanded') === 'true';
+        header.setAttribute('aria-expanded', expanded ? 'false' : 'true');
+        var body = header.nextElementSibling;
+        if (body && body.classList.contains('search-result-group-body')) {
+          body.classList.toggle('collapsed');
+        }
+      });
+    })();
 
     // ページ読み込み時に最新のインストール権限を1回だけ取得して差分反映
     (function() {

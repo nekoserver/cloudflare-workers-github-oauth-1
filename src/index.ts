@@ -2214,6 +2214,105 @@ app.get('/api/repositories/:owner/:repo/commits-by-date', optionalAuthMiddleware
 
   return c.json({ date, commits, source: 'github' });
 });
+
+// コミット履歴の全文検索
+app.get('/api/repositories/search/commits', optionalAuthMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!user) {
+    return jsonUtf8({ error: 'Unauthorized' }, 401);
+  }
+
+  const q = (c.req.query('q') ?? '').trim();
+  if (!q || q.length < 2) {
+    return jsonUtf8({ error: 'Search query must be at least 2 characters' }, 400);
+  }
+
+  if (!c.env.DB) {
+    return jsonUtf8({ error: 'Database not available' }, 500);
+  }
+
+  const wsInfo = await getCurrentWorkspace(c.env.DB, user.sub);
+  const workspaceId = wsInfo?.workspaceId ?? '';
+
+  if (!workspaceId) {
+    return jsonUtf8({ results: [], query: q, total: 0 });
+  }
+
+  try {
+    // commit_list_cache の commits_json (JSON配列) を LIKE で全文検索
+    const searchPattern = `%${q.replace(/%/g, '\\%').replace(/_/g, '\\_')}%`;
+    const rows = await c.env.DB.prepare(
+      `SELECT owner, repo, date, commits_json, commit_count
+       FROM commit_list_cache
+       WHERE workspace_id = ?
+         AND commits_json LIKE ? ESCAPE '\\'
+       ORDER BY date DESC
+       LIMIT 100`
+    ).bind(workspaceId, searchPattern).all<{
+      owner: string;
+      repo: string;
+      date: string;
+      commits_json: string;
+      commit_count: number;
+    }>();
+
+    // 各行の commits_json をパースして、マッチするコミットだけ抽出
+    interface SearchResultCommit {
+      sha: string;
+      message: string;
+      authorName: string;
+      authorLogin: string;
+      authorAvatarUrl: string;
+      date: string;
+      url: string;
+    }
+    interface SearchResultItem {
+      owner: string;
+      repo: string;
+      date: string;
+      commits: SearchResultCommit[];
+    }
+
+    const qLower = q.toLowerCase();
+    const results: SearchResultItem[] = [];
+    let totalMatches = 0;
+
+    for (const row of rows.results ?? []) {
+      try {
+        const commits: SearchResultCommit[] = JSON.parse(row.commits_json);
+        const matched = commits.filter((commit) => {
+          const msg = (commit.message ?? '').toLowerCase();
+          const author = (commit.authorName ?? '').toLowerCase();
+          const login = (commit.authorLogin ?? '').toLowerCase();
+          const sha = (commit.sha ?? '').toLowerCase();
+          return msg.includes(qLower)
+            || author.includes(qLower)
+            || login.includes(qLower)
+            || sha.includes(qLower);
+        });
+        if (matched.length > 0) {
+          results.push({
+            owner: row.owner,
+            repo: row.repo,
+            date: row.date,
+            commits: matched,
+          });
+          totalMatches += matched.length;
+        }
+      } catch (_e) {
+        // JSONパース失敗はスキップ
+      }
+    }
+
+    return jsonUtf8({ results, query: q, total: totalMatches });
+  } catch (error) {
+    logger.warn('Commit search failed', {
+      query: q,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    return jsonUtf8({ error: 'Search failed' }, 500);
+  }
+});
 /**
  * Resend webhook受信用エンドポイント
  * イベントタイプを/lib/resend-webhook.shtml?event=xxxへGETで通知し、Resendへのレスポンスを返す
