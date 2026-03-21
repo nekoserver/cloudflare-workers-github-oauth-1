@@ -1191,6 +1191,9 @@ export function getCacheStatusPage(user: {
       <div class="section">
         <div class="section-title-row">
           <h2 class="section-title">月別コミット量</h2>
+          <button type="button" class="sync-repo-colors-btn" id="openRepoGroupModal" title="リポジトリグループを管理">
+            <span class="sync-icon">&#x1F4C1;</span> グループ管理
+          </button>
           <button type="button" class="sync-repo-colors-btn" id="syncRepoColorsBtn" title="コミットキャッシュからリポジトリ色設定を同期">
             <span class="sync-icon">&#x21bb;</span> 色設定を同期
           </button>
@@ -1474,6 +1477,30 @@ export function getCacheStatusPage(user: {
         <div class="uml-legend-item" style="margin-left:auto; color:var(--text-faint)">ドラッグで移動可</div>
       </div>
       <div class="uml-key-summary" id="filteredUmlKeySummary"></div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="repoGroupModal" aria-hidden="true">
+    <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="repoGroupModalTitle" style="max-width:640px;">
+      <div class="modal-header">
+        <div class="modal-title-wrap">
+          <div class="modal-title" id="repoGroupModalTitle">リポジトリグループ管理</div>
+          <div class="modal-subtitle">リポジトリをグループに分類して管理します</div>
+        </div>
+        <button type="button" class="modal-close" id="repoGroupModalClose" aria-label="閉じる">&times;</button>
+      </div>
+      <div class="modal-body" id="repoGroupModalBody" style="max-height:70vh; overflow-y:auto;">
+        <div id="repoGroupList" style="margin-bottom:16px;"></div>
+        <div style="border-top:1px solid var(--border-color); padding-top:16px;">
+          <h3 style="margin:0 0 12px; font-size:14px; font-weight:600; color:var(--text-primary);">新規グループ作成</h3>
+          <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+            <input type="text" id="newGroupName" placeholder="グループ名" style="flex:1; min-width:160px; padding:6px 10px; border:1px solid var(--border-color); border-radius:6px; background:var(--bg-secondary); color:var(--text-primary); font-size:13px;">
+            <input type="color" id="newGroupColor" value="#667eea" style="width:36px; height:32px; border:1px solid var(--border-color); border-radius:6px; cursor:pointer; padding:2px;">
+            <button type="button" id="createGroupBtn" style="padding:6px 14px; background:#667eea; color:#fff; border:none; border-radius:6px; font-size:13px; cursor:pointer; white-space:nowrap;">作成</button>
+          </div>
+          <input type="text" id="newGroupDesc" placeholder="説明（任意）" style="width:100%; margin-top:8px; padding:6px 10px; border:1px solid var(--border-color); border-radius:6px; background:var(--bg-secondary); color:var(--text-primary); font-size:13px; box-sizing:border-box;">
+        </div>
+      </div>
     </div>
   </div>
 
@@ -3735,6 +3762,129 @@ export function getCacheStatusPage(user: {
             setTimeout(function() { btn.innerHTML = origText; btn.disabled = false; }, 3000);
           });
       });
+    })();
+
+    // リポジトリグループ管理モーダル
+    (function() {
+      var modal = document.getElementById('repoGroupModal');
+      var openBtn = document.getElementById('openRepoGroupModal');
+      var closeBtn = document.getElementById('repoGroupModalClose');
+      var listEl = document.getElementById('repoGroupList');
+      var createBtn = document.getElementById('createGroupBtn');
+      if (!modal || !openBtn) return;
+
+      function showModal() {
+        modal.classList.add('show');
+        modal.setAttribute('aria-hidden', 'false');
+        loadGroups();
+      }
+      function hideModal() {
+        modal.classList.remove('show');
+        modal.setAttribute('aria-hidden', 'true');
+      }
+      openBtn.addEventListener('click', showModal);
+      if (closeBtn) closeBtn.addEventListener('click', hideModal);
+      modal.addEventListener('click', function(e) {
+        if (e.target === modal) hideModal();
+      });
+
+      function loadGroups() {
+        if (!listEl) return;
+        listEl.innerHTML = '<div style="color:var(--text-muted); font-size:13px;">読み込み中...</div>';
+        fetch('/api/repo-groups', { credentials: 'same-origin' })
+          .then(function(res) { return res.json(); })
+          .then(function(data) {
+            if (!data.groups || data.groups.length === 0) {
+              listEl.innerHTML = '<div style="color:var(--text-muted); font-size:13px;">グループがありません。下のフォームから作成してください。</div>';
+              return;
+            }
+            var html = '';
+            data.groups.forEach(function(g) {
+              var repoList = (g.repos || []).map(function(r) {
+                return '<span style="display:inline-block; padding:2px 8px; background:var(--bg-tertiary, var(--bg-secondary)); border-radius:4px; font-size:12px; margin:2px;">' + escapeHtmlText(r) + '</span>';
+              }).join('');
+              html += '<div style="border:1px solid var(--border-color); border-radius:8px; padding:12px; margin-bottom:10px;" data-group-id="' + escapeHtmlText(g.id) + '">'
+                + '<div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">'
+                + '<div style="width:16px; height:16px; border-radius:4px; background:' + escapeHtmlText(g.colorCode) + '; flex-shrink:0;"></div>'
+                + '<strong style="font-size:14px; color:var(--text-primary);">' + escapeHtmlText(g.name) + '</strong>'
+                + (g.description ? '<span style="color:var(--text-muted); font-size:12px;"> — ' + escapeHtmlText(g.description) + '</span>' : '')
+                + '<button type="button" class="repo-group-delete-btn" data-id="' + escapeHtmlText(g.id) + '" style="margin-left:auto; background:none; border:none; color:var(--text-muted); cursor:pointer; font-size:16px; padding:2px 6px;" title="削除">&times;</button>'
+                + '</div>'
+                + '<div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">'
+                + '<span style="font-size:12px; color:var(--text-muted);">メンバー:</span>'
+                + (repoList || '<span style="font-size:12px; color:var(--text-faint);">なし</span>')
+                + '<button type="button" class="repo-group-edit-btn" data-id="' + escapeHtmlText(g.id) + '" style="padding:2px 8px; background:var(--bg-secondary); border:1px solid var(--border-color); border-radius:4px; font-size:11px; color:var(--text-primary); cursor:pointer; margin-left:4px;">編集</button>'
+                + '</div>'
+                + '</div>';
+            });
+            listEl.innerHTML = html;
+
+            listEl.querySelectorAll('.repo-group-delete-btn').forEach(function(btn) {
+              btn.addEventListener('click', function() {
+                var id = btn.getAttribute('data-id');
+                if (!confirm('このグループを削除しますか？')) return;
+                fetch('/api/repo-groups/' + encodeURIComponent(id), {
+                  method: 'DELETE',
+                  credentials: 'same-origin',
+                }).then(function() { loadGroups(); });
+              });
+            });
+
+            listEl.querySelectorAll('.repo-group-edit-btn').forEach(function(btn) {
+              btn.addEventListener('click', function() {
+                var id = btn.getAttribute('data-id');
+                var group = data.groups.find(function(g) { return g.id === id; });
+                if (!group) return;
+                var reposStr = prompt('メンバーリポジトリ（カンマ区切り）:', (group.repos || []).join(', '));
+                if (reposStr === null) return;
+                var repos = reposStr.split(',').map(function(s) { return s.trim(); }).filter(function(s) { return s.length > 0; });
+                fetch('/api/repo-groups/' + encodeURIComponent(id), {
+                  method: 'PATCH',
+                  credentials: 'same-origin',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ repos: repos }),
+                }).then(function() { loadGroups(); });
+              });
+            });
+          })
+          .catch(function() {
+            listEl.innerHTML = '<div style="color:#e53e3e; font-size:13px;">読み込みに失敗しました</div>';
+          });
+      }
+
+      if (createBtn) {
+        createBtn.addEventListener('click', function() {
+          var nameInput = document.getElementById('newGroupName');
+          var colorInput = document.getElementById('newGroupColor');
+          var descInput = document.getElementById('newGroupDesc');
+          var name = nameInput ? nameInput.value.trim() : '';
+          if (!name) { alert('グループ名を入力してください'); return; }
+          var body = {
+            name: name,
+            colorCode: colorInput ? colorInput.value : '#667eea',
+            description: descInput ? descInput.value.trim() : '',
+          };
+          createBtn.disabled = true;
+          fetch('/api/repo-groups', {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+          })
+            .then(function(res) { return res.json(); })
+            .then(function(data) {
+              createBtn.disabled = false;
+              if (data.error) { alert(data.error); return; }
+              if (nameInput) nameInput.value = '';
+              if (descInput) descInput.value = '';
+              loadGroups();
+            })
+            .catch(function() {
+              createBtn.disabled = false;
+              alert('作成に失敗しました');
+            });
+        });
+      }
     })();
   </script>
 </body>

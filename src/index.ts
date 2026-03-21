@@ -423,6 +423,29 @@ function getStatusTablePreviewQuery(
         sql: `SELECT * FROM ${tableName} ORDER BY updated_at DESC, id DESC LIMIT ${STATUS_TABLE_PREVIEW_LIMIT}`,
         params: [],
       };
+    case 'repo_color_settings':
+      if (!workspaceId) return null;
+      return {
+        sql: `SELECT * FROM ${tableName} WHERE workspace_id = ? ORDER BY display_order ASC, repo_name ASC LIMIT ${STATUS_TABLE_PREVIEW_LIMIT}`,
+        params: [workspaceId],
+      };
+    case 'repo_groups':
+      if (!workspaceId) return null;
+      return {
+        sql: `SELECT * FROM ${tableName} WHERE workspace_id = ? ORDER BY display_order ASC, name ASC LIMIT ${STATUS_TABLE_PREVIEW_LIMIT}`,
+        params: [workspaceId],
+      };
+    case 'repo_group_members':
+      if (!workspaceId) return null;
+      return {
+        sql: `SELECT * FROM ${tableName} WHERE workspace_id = ? ORDER BY repo_name ASC LIMIT ${STATUS_TABLE_PREVIEW_LIMIT}`,
+        params: [workspaceId],
+      };
+    case 'ai_summary_log':
+      return {
+        sql: `SELECT * FROM ${tableName} ORDER BY created_at DESC LIMIT ${STATUS_TABLE_PREVIEW_LIMIT}`,
+        params: [],
+      };
     default:
       return null;
   }
@@ -500,6 +523,43 @@ ORDER BY last_updated_at DESC
 LIMIT 20;`,
         params: ['user.sub'],
         note: '現在のログインユーザーに紐づくキャッシュ統計を更新日時順で取得します。',
+      };
+    case 'repo_color_settings':
+      return {
+        sql: `SELECT * FROM repo_color_settings
+WHERE workspace_id = ?
+ORDER BY display_order ASC, repo_name ASC
+LIMIT 20;`,
+        params: ['currentWorkspaceId'],
+        note: '現在ワークスペースに紐づくリポジトリ色設定を表示順で取得します。',
+      };
+    case 'repo_groups':
+      return {
+        sql: `SELECT * FROM repo_groups
+WHERE workspace_id = ?
+ORDER BY display_order ASC, name ASC
+LIMIT 20;`,
+        params: ['currentWorkspaceId'],
+        note: '現在ワークスペースに紐づくリポジトリグループを表示順で取得します。',
+      };
+    case 'repo_group_members':
+      return {
+        sql: `SELECT gm.*, g.name AS group_name
+FROM repo_group_members gm
+JOIN repo_groups g ON g.id = gm.group_id
+WHERE gm.workspace_id = ?
+ORDER BY g.display_order ASC, gm.repo_name ASC
+LIMIT 20;`,
+        params: ['currentWorkspaceId'],
+        note: '現在ワークスペースに紐づくリポジトリグループメンバーをグループ順で取得します。',
+      };
+    case 'ai_summary_log':
+      return {
+        sql: `SELECT * FROM ai_summary_log
+ORDER BY created_at DESC
+LIMIT 20;`,
+        params: [],
+        note: 'AI要約ログを作成日時の新しい順で取得します。',
       };
     default:
       return null;
@@ -3629,6 +3689,293 @@ app.patch('/api/repo-colors/:repoName{.+}', authMiddleware, async (c) => {
       error: error instanceof Error ? error.message : 'Unknown error',
     });
     return c.json({ error: 'リポジトリ色設定の更新に失敗しました' }, 500);
+  }
+});
+
+/**
+ * リポジトリグループ一覧取得
+ */
+app.get('/api/repo-groups', authMiddleware, async (c) => {
+  const user = c.get('user');
+  const db = c.env.DB;
+  if (!db) {
+    return c.json({ groups: [] });
+  }
+  try {
+    const wsInfo = await getCurrentWorkspace(db, user.sub);
+    const workspaceId = wsInfo?.workspaceId ?? '';
+    const groupRows = await db.prepare(
+      'SELECT id, name, description, color_code, icon, slack_channel_id, display_order, created_at, updated_at FROM repo_groups WHERE workspace_id = ? ORDER BY display_order ASC, name ASC'
+    ).bind(workspaceId).all<{
+      id: string; name: string; description: string; color_code: string;
+      icon: string; slack_channel_id: string; display_order: number;
+      created_at: string; updated_at: string;
+    }>();
+
+    const groups = groupRows.results ?? [];
+    if (groups.length === 0) {
+      return c.json({ groups: [] });
+    }
+
+    const groupIds = groups.map(g => g.id);
+    const memberRows = await db.prepare(
+      `SELECT group_id, repo_name FROM repo_group_members WHERE workspace_id = ? AND group_id IN (${groupIds.map(() => '?').join(',')}) ORDER BY repo_name`
+    ).bind(workspaceId, ...groupIds).all<{ group_id: string; repo_name: string }>();
+
+    const memberMap = new Map<string, string[]>();
+    if (memberRows.results) {
+      for (const m of memberRows.results) {
+        const list = memberMap.get(m.group_id) || [];
+        list.push(m.repo_name);
+        memberMap.set(m.group_id, list);
+      }
+    }
+
+    return c.json({
+      groups: groups.map(g => ({
+        id: g.id,
+        name: g.name,
+        description: g.description,
+        colorCode: g.color_code,
+        icon: g.icon,
+        slackChannelId: g.slack_channel_id,
+        displayOrder: g.display_order,
+        repos: memberMap.get(g.id) || [],
+      })),
+    });
+  } catch (error) {
+    logger.error('Failed to fetch repo groups', {
+      userId: user.sub,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    return c.json({ error: 'リポジトリグループの取得に失敗しました' }, 500);
+  }
+});
+
+/**
+ * リポジトリグループ作成
+ */
+app.post('/api/repo-groups', authMiddleware, async (c) => {
+  const user = c.get('user');
+  const db = c.env.DB;
+  if (!db) {
+    return c.json({ error: 'D1 is not configured' }, 500);
+  }
+  try {
+    const body = await c.req.json<{
+      name: string;
+      description?: string;
+      colorCode?: string;
+      icon?: string;
+      slackChannelId?: string;
+      repos?: string[];
+    }>();
+
+    if (!body.name || body.name.trim() === '') {
+      return c.json({ error: 'グループ名は必須です' }, 400);
+    }
+    if (body.colorCode && !/^#[0-9a-fA-F]{6}$/.test(body.colorCode)) {
+      return c.json({ error: '無効なカラーコードです' }, 400);
+    }
+
+    const wsInfo = await getCurrentWorkspace(db, user.sub);
+    const workspaceId = wsInfo?.workspaceId ?? '';
+    const now = new Date().toISOString();
+    const id = crypto.randomUUID();
+
+    const orderRow = await db.prepare(
+      'SELECT MAX(display_order) AS max_order FROM repo_groups WHERE workspace_id = ?'
+    ).bind(workspaceId).first<{ max_order: number | null }>();
+    const displayOrder = (orderRow?.max_order ?? -1) + 1;
+
+    const stmts: D1PreparedStatement[] = [
+      db.prepare(
+        'INSERT INTO repo_groups (id, workspace_id, name, description, color_code, icon, slack_channel_id, display_order, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+      ).bind(
+        id, workspaceId, body.name.trim(),
+        body.description ?? '', body.colorCode ?? '#667eea',
+        body.icon ?? '', body.slackChannelId ?? '',
+        displayOrder, now, now,
+      ),
+    ];
+
+    const repos = body.repos ?? [];
+    for (const repo of repos) {
+      stmts.push(
+        db.prepare(
+          'INSERT INTO repo_group_members (group_id, repo_name, workspace_id, added_at) VALUES (?, ?, ?, ?)'
+        ).bind(id, repo, workspaceId, now),
+      );
+    }
+
+    await db.batch(stmts);
+
+    logger.info('Created repo group', { userId: user.sub, workspaceId, groupId: id, name: body.name });
+    return c.json({
+      message: 'グループを作成しました',
+      group: {
+        id,
+        name: body.name.trim(),
+        description: body.description ?? '',
+        colorCode: body.colorCode ?? '#667eea',
+        icon: body.icon ?? '',
+        slackChannelId: body.slackChannelId ?? '',
+        displayOrder,
+        repos,
+      },
+    }, 201);
+  } catch (error) {
+    logger.error('Failed to create repo group', {
+      userId: user.sub,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    return c.json({ error: 'リポジトリグループの作成に失敗しました' }, 500);
+  }
+});
+
+/**
+ * リポジトリグループ更新
+ */
+app.patch('/api/repo-groups/:id', authMiddleware, async (c) => {
+  const user = c.get('user');
+  const db = c.env.DB;
+  if (!db) {
+    return c.json({ error: 'D1 is not configured' }, 500);
+  }
+  const groupId = c.req.param('id');
+  try {
+    const body = await c.req.json<{
+      name?: string;
+      description?: string;
+      colorCode?: string;
+      icon?: string;
+      slackChannelId?: string;
+      displayOrder?: number;
+      repos?: string[];
+    }>();
+
+    const wsInfo = await getCurrentWorkspace(db, user.sub);
+    const workspaceId = wsInfo?.workspaceId ?? '';
+    const now = new Date().toISOString();
+
+    const updates: string[] = [];
+    const values: (string | number)[] = [];
+    if (body.name !== undefined) {
+      if (body.name.trim() === '') {
+        return c.json({ error: 'グループ名は空にできません' }, 400);
+      }
+      updates.push('name = ?');
+      values.push(body.name.trim());
+    }
+    if (body.description !== undefined) {
+      updates.push('description = ?');
+      values.push(body.description);
+    }
+    if (body.colorCode !== undefined) {
+      if (!/^#[0-9a-fA-F]{6}$/.test(body.colorCode)) {
+        return c.json({ error: '無効なカラーコードです' }, 400);
+      }
+      updates.push('color_code = ?');
+      values.push(body.colorCode);
+    }
+    if (body.icon !== undefined) {
+      updates.push('icon = ?');
+      values.push(body.icon);
+    }
+    if (body.slackChannelId !== undefined) {
+      updates.push('slack_channel_id = ?');
+      values.push(body.slackChannelId);
+    }
+    if (body.displayOrder !== undefined) {
+      updates.push('display_order = ?');
+      values.push(body.displayOrder);
+    }
+
+    const stmts: D1PreparedStatement[] = [];
+
+    if (updates.length > 0) {
+      updates.push('updated_at = ?');
+      values.push(now);
+      values.push(workspaceId, groupId);
+      stmts.push(
+        db.prepare(
+          `UPDATE repo_groups SET ${updates.join(', ')} WHERE workspace_id = ? AND id = ?`
+        ).bind(...values),
+      );
+    }
+
+    if (body.repos !== undefined) {
+      stmts.push(
+        db.prepare(
+          'DELETE FROM repo_group_members WHERE group_id = ? AND workspace_id = ?'
+        ).bind(groupId, workspaceId),
+      );
+      for (const repo of body.repos) {
+        stmts.push(
+          db.prepare(
+            'INSERT INTO repo_group_members (group_id, repo_name, workspace_id, added_at) VALUES (?, ?, ?, ?)'
+          ).bind(groupId, repo, workspaceId, now),
+        );
+      }
+      if (updates.length === 0) {
+        stmts.push(
+          db.prepare(
+            'UPDATE repo_groups SET updated_at = ? WHERE workspace_id = ? AND id = ?'
+          ).bind(now, workspaceId, groupId),
+        );
+      }
+    }
+
+    if (stmts.length === 0) {
+      return c.json({ error: '更新するフィールドがありません' }, 400);
+    }
+
+    await db.batch(stmts);
+
+    logger.info('Updated repo group', { userId: user.sub, workspaceId, groupId });
+    return c.json({ message: 'グループを更新しました', groupId });
+  } catch (error) {
+    logger.error('Failed to update repo group', {
+      userId: user.sub,
+      groupId,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    return c.json({ error: 'リポジトリグループの更新に失敗しました' }, 500);
+  }
+});
+
+/**
+ * リポジトリグループ削除
+ */
+app.delete('/api/repo-groups/:id', authMiddleware, async (c) => {
+  const user = c.get('user');
+  const db = c.env.DB;
+  if (!db) {
+    return c.json({ error: 'D1 is not configured' }, 500);
+  }
+  const groupId = c.req.param('id');
+  try {
+    const wsInfo = await getCurrentWorkspace(db, user.sub);
+    const workspaceId = wsInfo?.workspaceId ?? '';
+
+    await db.batch([
+      db.prepare(
+        'DELETE FROM repo_group_members WHERE group_id = ? AND workspace_id = ?'
+      ).bind(groupId, workspaceId),
+      db.prepare(
+        'DELETE FROM repo_groups WHERE id = ? AND workspace_id = ?'
+      ).bind(groupId, workspaceId),
+    ]);
+
+    logger.info('Deleted repo group', { userId: user.sub, workspaceId, groupId });
+    return c.json({ message: 'グループを削除しました', groupId });
+  } catch (error) {
+    logger.error('Failed to delete repo group', {
+      userId: user.sub,
+      groupId,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    return c.json({ error: 'リポジトリグループの削除に失敗しました' }, 500);
   }
 });
 
