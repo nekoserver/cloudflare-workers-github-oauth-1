@@ -1490,6 +1490,83 @@ app.get('/api/status/migrations/:migration/sql', authMiddleware, async (c) => {
   return jsonUtf8({ migration, sql });
 });
 
+app.get('/api/status/schema', authMiddleware, async (c) => {
+  const db = c.env.DB;
+  if (!db) {
+    return jsonUtf8({ error: 'DB not available' }, 500);
+  }
+
+  try {
+    const tablesResult = await db
+      .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_cf_%' AND name NOT LIKE 'd1_%' ORDER BY name")
+      .all<{ name: string }>();
+    const tableNames = (tablesResult.results ?? []).map((r) => r.name);
+
+    const tables: {
+      name: string;
+      cols: { name: string; type: string; keys: string[] }[];
+    }[] = [];
+
+    const relations: [string, string, string, string, string][] = [];
+    const seenRelations = new Set<string>();
+
+    for (const tName of tableNames) {
+      const colsResult = await db
+        .prepare(`PRAGMA table_info(${tName})`)
+        .all<{ name: string; type: string; pk: number; notnull: number }>();
+      const cols = (colsResult.results ?? []).map((col) => {
+        const keys: string[] = [];
+        if (col.pk > 0) keys.push('pk');
+        return { name: col.name, type: col.type || 'TEXT', keys };
+      });
+
+      const indexResult = await db
+        .prepare(`PRAGMA index_list(${tName})`)
+        .all<{ name: string; unique: number }>();
+      for (const idx of indexResult.results ?? []) {
+        const indexInfoResult = await db
+          .prepare(`PRAGMA index_info(${idx.name})`)
+          .all<{ name: string }>();
+        const indexCols = (indexInfoResult.results ?? []).map((r) => r.name);
+        for (const c of cols) {
+          if (indexCols.includes(c.name)) {
+            if (idx.unique && !c.keys.includes('pk')) {
+              if (!c.keys.includes('uk')) c.keys.push('uk');
+            } else if (!idx.unique && !c.keys.includes('pk') && !c.keys.includes('uk')) {
+              if (!c.keys.includes('idx')) c.keys.push('idx');
+            }
+          }
+        }
+      }
+
+      const fkResult = await db
+        .prepare(`PRAGMA foreign_key_list(${tName})`)
+        .all<{ table: string; from: string; to: string }>();
+      for (const fk of fkResult.results ?? []) {
+        for (const c of cols) {
+          if (c.name === fk.from && !c.keys.includes('fk')) {
+            c.keys.push('fk');
+          }
+        }
+        const relKey = `${tName}.${fk.from}->${fk.table}.${fk.to}`;
+        if (!seenRelations.has(relKey)) {
+          seenRelations.add(relKey);
+          relations.push([tName, fk.from, fk.table, fk.to, '多:1']);
+        }
+      }
+
+      tables.push({ name: tName, cols });
+    }
+
+    return jsonUtf8({ tables, relations });
+  } catch (error) {
+    logger.warn('Failed to fetch schema', {
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    return jsonUtf8({ error: 'Failed to fetch schema' }, 500);
+  }
+});
+
 app.get('/api/status/tables/:table/migration-details', authMiddleware, async (c) => {
   const tableName = c.req.param('table');
   const tableDefinition = getStatusTableDefinition(tableName);
