@@ -23,6 +23,15 @@ export interface RepoPermissionInfo {
   repositorySelection: string;
 }
 
+export interface CloudflareSetupPendingItem {
+  id: number;
+  repoOwner: string;
+  repoName: string;
+  repoFullName: string;
+  isPrivate: boolean;
+  createdAt: string;
+}
+
 export function getRepositoriesPage(user: {
   name?: string;
   username: string;
@@ -34,6 +43,7 @@ export function getRepositoriesPage(user: {
   vercelLinkedRepos?: Record<string, boolean> | null;
   slackLinkedRepos?: Record<string, boolean> | null;
   commitHistoryPageSize: number;
+  cloudflareSetupPending?: CloudflareSetupPendingItem[];
 }): string {
   const displayName = escapeHtml(user.name || user.username);
   const initials = escapeHtml((user.name || user.username).substring(0, 2).toUpperCase());
@@ -121,6 +131,27 @@ export function getRepositoriesPage(user: {
         <svg viewBox="0 0 16 16"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
         権限を追加して再認証
       </a>
+    </div>
+  ` : '';
+
+  // Cloudflare セットアップ通知
+  const cfPending = user.cloudflareSetupPending ?? [];
+  const cfPendingJson = JSON.stringify(cfPending);
+
+  const cfPendingBannerHtml = cfPending.length > 0 ? `
+    <div class="cf-setup-banner" id="cfSetupBanner">
+      <div class="cf-setup-banner-icon">☁️</div>
+      <div class="cf-setup-banner-content">
+        <div class="cf-setup-banner-title">Cloudflare 連携が未設定のリポジトリがあります</div>
+        <div class="cf-setup-banner-desc">
+          ${cfPending.map((p) => `<strong>${escapeHtml(p.repoName)}</strong>`).join('、')}
+          — Cloudflare Pages でビルド＆デプロイを設定できます。
+        </div>
+        <div class="cf-setup-banner-actions">
+          <button class="cf-setup-btn" id="cfSetupOpenBtn" type="button">セットアップを開始する</button>
+          <button class="cf-setup-dismiss-btn" id="cfSetupDismissAllBtn" type="button">後で</button>
+        </div>
+      </div>
     </div>
   ` : '';
 
@@ -262,6 +293,85 @@ export function getRepositoriesPage(user: {
     .create-repo-btn:hover { opacity: 0.9; transform: translateY(-1px); }
     .create-repo-btn:active { transform: translateY(0); }
     .page-header-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+
+    /* Cloudflare Setup Banner */
+    .cf-setup-banner {
+      display: flex; gap: 14px; align-items: flex-start;
+      background: linear-gradient(135deg, rgba(246,173,85,0.12) 0%, rgba(237,137,54,0.10) 100%);
+      border: 1px solid rgba(237,137,54,0.3);
+      border-radius: 12px; padding: 16px 18px; margin-top: 16px;
+    }
+    .cf-setup-banner-icon { font-size: 28px; flex-shrink: 0; }
+    .cf-setup-banner-content { flex: 1; min-width: 0; }
+    .cf-setup-banner-title {
+      font-size: 15px; font-weight: 700; color: var(--text-primary); margin-bottom: 4px;
+    }
+    .cf-setup-banner-desc {
+      font-size: 13px; color: var(--text-muted); line-height: 1.5; margin-bottom: 12px;
+    }
+    .cf-setup-banner-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+    .cf-setup-btn {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 8px 18px; border-radius: 8px; border: none;
+      background: linear-gradient(135deg, #f6ad55, #ed8936); color: #fff;
+      font-size: 13px; font-weight: 700; cursor: pointer;
+      transition: opacity 0.2s ease, transform 0.15s ease;
+      box-shadow: 0 2px 8px rgba(237,137,54,0.3);
+    }
+    .cf-setup-btn:hover { opacity: 0.9; transform: translateY(-1px); }
+    .cf-setup-btn:active { transform: translateY(0); }
+    .cf-setup-dismiss-btn {
+      padding: 8px 18px; border-radius: 8px;
+      border: 1px solid var(--border-color); background: transparent;
+      color: var(--text-muted); font-size: 13px; font-weight: 600; cursor: pointer;
+      transition: background 0.2s ease;
+    }
+    .cf-setup-dismiss-btn:hover { background: var(--bg-secondary); }
+
+    /* Cloudflare Setup Modal */
+    .cf-setup-modal-content {
+      background: var(--card-bg); border-radius: 16px;
+      box-shadow: 0 24px 60px rgba(0,0,0,0.3); width: 100%; max-width: 540px;
+      max-height: 90vh; overflow-y: auto;
+    }
+    .cf-setup-repo-list {
+      display: flex; flex-direction: column; gap: 10px; margin-bottom: 16px;
+    }
+    .cf-setup-repo-item {
+      display: flex; align-items: center; gap: 12px;
+      background: var(--bg-secondary); border-radius: 10px; padding: 12px 16px;
+      border: 1px solid var(--border-color); transition: border-color 0.2s;
+    }
+    .cf-setup-repo-item:hover { border-color: rgba(237,137,54,0.5); }
+    .cf-setup-repo-item-icon { font-size: 20px; flex-shrink: 0; }
+    .cf-setup-repo-item-info { flex: 1; min-width: 0; }
+    .cf-setup-repo-item-name { font-size: 14px; font-weight: 700; color: var(--text-primary); }
+    .cf-setup-repo-item-meta { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+    .cf-setup-repo-item-action { flex-shrink: 0; }
+    .cf-setup-repo-connect-btn {
+      padding: 6px 14px; border-radius: 6px; border: none;
+      background: linear-gradient(135deg, #f6ad55, #ed8936); color: #fff;
+      font-size: 12px; font-weight: 700; cursor: pointer;
+      transition: opacity 0.2s ease;
+    }
+    .cf-setup-repo-connect-btn:hover { opacity: 0.9; }
+    .cf-setup-repo-skip-btn {
+      padding: 6px 14px; border-radius: 6px;
+      border: 1px solid var(--border-color); background: transparent;
+      color: var(--text-muted); font-size: 12px; font-weight: 600; cursor: pointer;
+      transition: background 0.2s;
+    }
+    .cf-setup-repo-skip-btn:hover { background: var(--bg-secondary); }
+    .cf-setup-notice {
+      background: var(--bg-secondary); border-radius: 8px; padding: 12px 14px;
+      font-size: 12px; color: var(--text-muted); line-height: 1.6;
+      border: 1px solid var(--border-color); margin-bottom: 16px;
+    }
+    .cf-setup-notice strong { color: var(--text-primary); }
+    .cf-setup-footer {
+      display: flex; justify-content: flex-end; gap: 10px; padding-top: 8px;
+      border-top: 1px solid var(--border-color);
+    }
 
     /* Create Repo Modal */
     .create-repo-modal-content {
@@ -725,6 +835,7 @@ export function getRepositoriesPage(user: {
       </div>
       ${errorBanner}
       ${missingScopeBannerHtml}
+      ${cfPendingBannerHtml}
     </div>
 
     ${emptyState}
@@ -888,6 +999,27 @@ export function getRepositoriesPage(user: {
   </div>
 
   <div class="cache-toast-container" id="cacheToastContainer"></div>
+
+  <!-- Cloudflare Setup Modal -->
+  <div class="modal-overlay" id="cfSetupModal">
+    <div class="cf-setup-modal-content">
+      <div class="modal-header">
+        <span class="modal-title">☁️ Cloudflare Pages セットアップ</span>
+        <button class="modal-close" id="cfSetupModalClose" type="button">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="cf-setup-notice">
+          <strong>Cloudflare Pages</strong> を使うと、GitHub リポジトリに push するたびに自動でビルド＆デプロイが実行されます。
+          下記のリポジトリはまだ Cloudflare との連携が設定されていません。
+          「接続する」をクリックすると Cloudflare ダッシュボードが開き、ビルド設定を行えます。
+        </div>
+        <div class="cf-setup-repo-list" id="cfSetupRepoList"></div>
+        <div class="cf-setup-footer">
+          <button class="cf-setup-dismiss-btn" id="cfSetupModalDismissAll" type="button">すべてスキップ</button>
+        </div>
+      </div>
+    </div>
+  </div>
 
   <!-- Create Repo Modal -->
   <div class="modal-overlay" id="createRepoModal">
@@ -1108,8 +1240,14 @@ export function getRepositoriesPage(user: {
             }
             closeModal();
             showToast('リポジトリ「' + name + '」を作成しました', 'success', 7000);
-            // 2秒後にページリロードして一覧に反映
-            setTimeout(function() { location.reload(); }, 2000);
+            // Cloudflare セットアップ通知がレスポンスに含まれている場合はモーダルを表示
+            if (result.data.cloudflareSetupPending) {
+              var pending = result.data.cloudflareSetupPending;
+              showCfSetupModalForNewRepo(name, pending.id, currentUser);
+            } else {
+              // 2秒後にページリロードして一覧に反映
+              setTimeout(function() { location.reload(); }, 2000);
+            }
           })
           .catch(function() {
             if (errorEl) errorEl.textContent = '通信エラーが発生しました。';
@@ -1117,6 +1255,160 @@ export function getRepositoriesPage(user: {
           });
         });
       }
+    })();
+
+    // =============================================
+    // Cloudflare セットアップ通知
+    // =============================================
+    (function() {
+      var cfPendingData = ${cfPendingJson};
+      var cfSetupModal = document.getElementById('cfSetupModal');
+      var cfSetupModalClose = document.getElementById('cfSetupModalClose');
+      var cfSetupRepoList = document.getElementById('cfSetupRepoList');
+      var cfSetupBanner = document.getElementById('cfSetupBanner');
+      var cfSetupOpenBtn = document.getElementById('cfSetupOpenBtn');
+      var cfSetupDismissAllBtn = document.getElementById('cfSetupDismissAllBtn');
+      var cfSetupModalDismissAll = document.getElementById('cfSetupModalDismissAll');
+
+      var CF_PAGES_SETUP_URL = 'https://dash.cloudflare.com/select-account/pages/new/provider/github';
+
+      function openCfSetupModal() {
+        if (!cfSetupModal) return;
+        renderCfSetupRepoList(cfPendingData);
+        cfSetupModal.classList.add('show');
+      }
+      function closeCfSetupModal() {
+        if (cfSetupModal) cfSetupModal.classList.remove('show');
+      }
+
+      function renderCfSetupRepoList(items) {
+        if (!cfSetupRepoList) return;
+        if (items.length === 0) {
+          cfSetupRepoList.innerHTML = '<div style="text-align:center;color:var(--text-muted);padding:16px;">通知はありません</div>';
+          return;
+        }
+        cfSetupRepoList.innerHTML = items.map(function(item) {
+          return '<div class="cf-setup-repo-item" data-pending-id="' + item.id + '">' +
+            '<div class="cf-setup-repo-item-icon">' + (item.isPrivate ? '🔒' : '📦') + '</div>' +
+            '<div class="cf-setup-repo-item-info">' +
+              '<div class="cf-setup-repo-item-name">' + escapeForHtml(item.repoFullName || (item.repoOwner + '/' + item.repoName)) + '</div>' +
+              '<div class="cf-setup-repo-item-meta">' + (item.isPrivate ? 'Private' : 'Public') + '</div>' +
+            '</div>' +
+            '<div class="cf-setup-repo-item-action">' +
+              '<button class="cf-setup-repo-connect-btn" type="button" data-repo="' + escapeForHtml(item.repoFullName || (item.repoOwner + '/' + item.repoName)) + '" data-id="' + item.id + '">接続する</button>' +
+              '<button class="cf-setup-repo-skip-btn" type="button" data-id="' + item.id + '" style="margin-left:6px;">スキップ</button>' +
+            '</div>' +
+          '</div>';
+        }).join('');
+
+        // イベントハンドラをバインド
+        cfSetupRepoList.querySelectorAll('.cf-setup-repo-connect-btn').forEach(function(btn) {
+          btn.addEventListener('click', function() {
+            var pendingId = btn.getAttribute('data-id');
+            var repoName = btn.getAttribute('data-repo');
+            // Cloudflare Pages のセットアップ画面を開く
+            window.open(CF_PAGES_SETUP_URL, '_blank');
+            // 通知を消化
+            dismissPending(pendingId, function() {
+              removePendingItem(pendingId);
+              showToast(repoName + ' の Cloudflare Pages セットアップ画面を開きました', 'success', 5000);
+            });
+          });
+        });
+        cfSetupRepoList.querySelectorAll('.cf-setup-repo-skip-btn').forEach(function(btn) {
+          btn.addEventListener('click', function() {
+            var pendingId = btn.getAttribute('data-id');
+            dismissPending(pendingId, function() {
+              removePendingItem(pendingId);
+            });
+          });
+        });
+      }
+
+      function removePendingItem(pendingId) {
+        var el = cfSetupRepoList ? cfSetupRepoList.querySelector('[data-pending-id="' + pendingId + '"]') : null;
+        if (el) el.remove();
+        // リストが空になったらモーダルとバナーを閉じる
+        if (cfSetupRepoList && cfSetupRepoList.querySelectorAll('.cf-setup-repo-item').length === 0) {
+          closeCfSetupModal();
+          if (cfSetupBanner) cfSetupBanner.style.display = 'none';
+        }
+      }
+
+      function dismissPending(pendingId, callback) {
+        fetch('/api/cloudflare-setup-pending/' + pendingId + '/dismiss', {
+          method: 'POST',
+          credentials: 'same-origin',
+        }).then(function() {
+          if (callback) callback();
+        }).catch(function() {
+          if (callback) callback();
+        });
+      }
+
+      function dismissAll(callback) {
+        fetch('/api/cloudflare-setup-pending/dismiss-all', {
+          method: 'POST',
+          credentials: 'same-origin',
+        }).then(function() {
+          if (callback) callback();
+        }).catch(function() {
+          if (callback) callback();
+        });
+      }
+
+      function escapeForHtml(str) {
+        var d = document.createElement('div');
+        d.textContent = str;
+        return d.innerHTML;
+      }
+
+      // バナーのイベント
+      if (cfSetupOpenBtn) {
+        cfSetupOpenBtn.addEventListener('click', openCfSetupModal);
+      }
+      if (cfSetupDismissAllBtn) {
+        cfSetupDismissAllBtn.addEventListener('click', function() {
+          dismissAll(function() {
+            if (cfSetupBanner) cfSetupBanner.style.display = 'none';
+            showToast('通知をスキップしました', 'info', 3000);
+          });
+        });
+      }
+
+      // モーダルのイベント
+      if (cfSetupModalClose) {
+        cfSetupModalClose.addEventListener('click', closeCfSetupModal);
+      }
+      if (cfSetupModal) {
+        cfSetupModal.addEventListener('click', function(e) {
+          if (e.target === cfSetupModal) closeCfSetupModal();
+        });
+      }
+      if (cfSetupModalDismissAll) {
+        cfSetupModalDismissAll.addEventListener('click', function() {
+          dismissAll(function() {
+            closeCfSetupModal();
+            if (cfSetupBanner) cfSetupBanner.style.display = 'none';
+            showToast('すべての通知をスキップしました', 'info', 3000);
+          });
+        });
+      }
+
+      // リポジトリ作成直後に呼ばれるグローバル関数
+      window.showCfSetupModalForNewRepo = function(repoName, pendingId, ownerLogin) {
+        var item = {
+          id: pendingId,
+          repoOwner: ownerLogin,
+          repoName: repoName,
+          repoFullName: ownerLogin + '/' + repoName,
+          isPrivate: false,
+        };
+        if (cfSetupModal) {
+          renderCfSetupRepoList([item]);
+          cfSetupModal.classList.add('show');
+        }
+      };
     })();
 
     const sortButton = document.getElementById('sortUpdated');

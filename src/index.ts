@@ -26,7 +26,7 @@ import { postSlackMessage } from './utils/slack';
 import { executeCreateRepo } from './utils/repoValidation';
 import { validateReturnTo } from './utils/returnTo';
 import * as logger from './utils/logger';
-import { resolveIdleTimeoutSeconds, type Bindings, type Variables, type GitHubWebhookInstallationPayload, type ResendWebhookPayload } from './types';
+import { resolveIdleTimeoutSeconds, type Bindings, type Variables, type GitHubWebhookInstallationPayload, type GitHubWebhookRepositoryPayload, type ResendWebhookPayload } from './types';
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -56,6 +56,7 @@ const STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
   { name: 'team_members', migration: '0007', description: 'チームメンバー' },
   { name: 'commit_list_cache', migration: '0008', description: 'コミット一覧キャッシュ' },
   { name: 'cache_stats', migration: '0009', description: 'キャッシュ統計' },
+  { name: 'cloudflare_setup_pending', migration: '0010', description: 'Cloudflare セットアップ通知' },
 ];
 
 const STATUS_MIGRATION_SQL: Record<string, string> = {
@@ -174,6 +175,21 @@ CREATE TABLE IF NOT EXISTS cache_stats (
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_cache_stats_user_repo
   ON cache_stats (user_id, owner, repo);`,
+  '0010': `-- Cloudflare 未連携リポジトリのセットアップ通知テーブル
+CREATE TABLE IF NOT EXISTS cloudflare_setup_pending (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id TEXT NOT NULL,
+  repo_owner TEXT NOT NULL,
+  repo_name TEXT NOT NULL,
+  repo_full_name TEXT NOT NULL,
+  is_private INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL,
+  dismissed_at TEXT,
+  UNIQUE(user_id, repo_full_name)
+);
+
+CREATE INDEX IF NOT EXISTS idx_cloudflare_setup_pending_user
+  ON cloudflare_setup_pending(user_id, dismissed_at);`,
 };
 
 function jsonUtf8(payload: unknown, status = 200): Response {
@@ -1660,6 +1676,51 @@ app.get('/repositories', optionalAuthMiddleware, async (c) => {
     slackRepos[repoName] = true;
   }
 
+  // Cloudflare セットアップ通知を取得
+  let cloudflareSetupPending: Array<{
+    id: number;
+    repoOwner: string;
+    repoName: string;
+    repoFullName: string;
+    isPrivate: boolean;
+    createdAt: string;
+  }> = [];
+  if (c.env.DB) {
+    try {
+      const pendingRows = await c.env.DB.prepare(`
+        SELECT id, repo_owner, repo_name, repo_full_name, is_private, created_at
+        FROM cloudflare_setup_pending
+        WHERE user_id = ? AND dismissed_at IS NULL
+        ORDER BY created_at DESC
+        LIMIT 10
+      `).bind(user.sub).all<{
+        id: number;
+        repo_owner: string;
+        repo_name: string;
+        repo_full_name: string;
+        is_private: number;
+        created_at: string;
+      }>();
+
+      // Cloudflare 連携済みのリポジトリは除外
+      cloudflareSetupPending = (pendingRows.results ?? [])
+        .filter((row) => !cloudflareRepos[row.repo_name])
+        .map((row) => ({
+          id: row.id,
+          repoOwner: row.repo_owner,
+          repoName: row.repo_name,
+          repoFullName: row.repo_full_name,
+          isPrivate: row.is_private === 1,
+          createdAt: row.created_at,
+        }));
+    } catch (error) {
+      logger.warn('Failed to fetch Cloudflare setup pending notifications', {
+        userId: user.sub,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+  }
+
   return c.html(getRepositoriesPage({
     username: user.sub,
     name: user.name,
@@ -1671,6 +1732,7 @@ app.get('/repositories', optionalAuthMiddleware, async (c) => {
     vercelLinkedRepos: Object.keys(vercelRepos).length > 0 ? vercelRepos : null,
     slackLinkedRepos: Object.keys(slackRepos).length > 0 ? slackRepos : null,
     commitHistoryPageSize,
+    cloudflareSetupPending,
   }));
 });
 
@@ -1821,6 +1883,42 @@ app.post('/webhook/github', async (c) => {
       } catch (error) {
         logger.error('Slack notification failed for GitHub webhook', {
           error: error instanceof Error ? error.message : 'Unknown error',
+        });
+      }
+    }
+  }
+
+  // repository イベント: リポジトリ作成時に Cloudflare セットアップ通知を保存
+  if (eventType === 'repository' && action === 'created') {
+    const db = c.env.DB;
+    const repoPayload = payload as unknown as GitHubWebhookRepositoryPayload;
+    const repo = repoPayload?.repository;
+    const senderLogin = repoPayload?.sender?.login;
+
+    if (db && repo && senderLogin) {
+      const now = new Date().toISOString();
+      try {
+        await db.prepare(`
+          INSERT INTO cloudflare_setup_pending (user_id, repo_owner, repo_name, repo_full_name, is_private, created_at)
+          VALUES (?, ?, ?, ?, ?, ?)
+          ON CONFLICT(user_id, repo_full_name) DO NOTHING
+        `).bind(
+          senderLogin,
+          repo.owner?.login ?? senderLogin,
+          repo.name,
+          repo.full_name,
+          repo.private ? 1 : 0,
+          now,
+        ).run();
+
+        logger.info('Saved Cloudflare setup pending notification (webhook)', {
+          userId: senderLogin,
+          repoFullName: repo.full_name,
+        });
+      } catch (error) {
+        logger.error('Failed to save Cloudflare setup pending notification', {
+          error: error instanceof Error ? error.message : 'Unknown error',
+          repoFullName: repo.full_name,
         });
       }
     }
@@ -2780,6 +2878,119 @@ app.get('/api/debug/installations', authMiddleware, async (c) => {
 });
 
 // =====================================================
+// Cloudflare セットアップ通知 API
+// =====================================================
+
+/**
+ * 未消化の Cloudflare セットアップ通知一覧を取得
+ */
+app.get('/api/cloudflare-setup-pending', authMiddleware, async (c) => {
+  const user = c.get('user');
+  const db = c.env.DB;
+  if (!db) {
+    return c.json({ notifications: [] });
+  }
+
+  try {
+    const rows = await db.prepare(`
+      SELECT id, repo_owner, repo_name, repo_full_name, is_private, created_at
+      FROM cloudflare_setup_pending
+      WHERE user_id = ? AND dismissed_at IS NULL
+      ORDER BY created_at DESC
+      LIMIT 10
+    `).bind(user.sub).all<{
+      id: number;
+      repo_owner: string;
+      repo_name: string;
+      repo_full_name: string;
+      is_private: number;
+      created_at: string;
+    }>();
+
+    return c.json({
+      notifications: (rows.results ?? []).map((row) => ({
+        id: row.id,
+        repoOwner: row.repo_owner,
+        repoName: row.repo_name,
+        repoFullName: row.repo_full_name,
+        isPrivate: row.is_private === 1,
+        createdAt: row.created_at,
+      })),
+    });
+  } catch (error) {
+    logger.error('Failed to fetch Cloudflare setup pending notifications', {
+      userId: user.sub,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    return c.json({ notifications: [] });
+  }
+});
+
+/**
+ * Cloudflare セットアップ通知を消化（dismiss）する
+ */
+app.post('/api/cloudflare-setup-pending/:id/dismiss', authMiddleware, async (c) => {
+  const user = c.get('user');
+  const db = c.env.DB;
+  const notificationId = c.req.param('id');
+
+  if (!db) {
+    return c.json({ error: 'Database not available' }, 500);
+  }
+
+  try {
+    const now = new Date().toISOString();
+    const result = await db.prepare(`
+      UPDATE cloudflare_setup_pending
+      SET dismissed_at = ?
+      WHERE id = ? AND user_id = ? AND dismissed_at IS NULL
+    `).bind(now, notificationId, user.sub).run();
+
+    if (result.meta?.changes === 0) {
+      return c.json({ error: '通知が見つかりません' }, 404);
+    }
+
+    return c.json({ success: true });
+  } catch (error) {
+    logger.error('Failed to dismiss Cloudflare setup pending notification', {
+      userId: user.sub,
+      notificationId,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    return c.json({ error: 'Failed to dismiss notification' }, 500);
+  }
+});
+
+/**
+ * 全ての Cloudflare セットアップ通知を一括消化
+ */
+app.post('/api/cloudflare-setup-pending/dismiss-all', authMiddleware, async (c) => {
+  const user = c.get('user');
+  const db = c.env.DB;
+
+  if (!db) {
+    return c.json({ error: 'Database not available' }, 500);
+  }
+
+  try {
+    const now = new Date().toISOString();
+    await db.prepare(`
+      UPDATE cloudflare_setup_pending
+      SET dismissed_at = ?
+      WHERE user_id = ? AND dismissed_at IS NULL
+    `).bind(now, user.sub).run();
+
+    return c.json({ success: true });
+  } catch (error) {
+    logger.error('Failed to dismiss all Cloudflare setup pending notifications', {
+      userId: user.sub,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    return c.json({ error: 'Failed to dismiss notifications' }, 500);
+  }
+});
+
+// =====================================================
 // リポジトリ作成API
 // =====================================================
 
@@ -2803,9 +3014,46 @@ app.post('/api/repositories', authMiddleware, async (c) => {
   });
 
   if (result.ok) {
+    // Cloudflare セットアップ通知を D1 に保存
+    let cloudflareSetupPendingId: number | null = null;
+    const db = c.env.DB;
+    if (db) {
+      const now = new Date().toISOString();
+      const repoFullName = `${user.sub}/${result.repository.name}`;
+      try {
+        const insertResult = await db.prepare(`
+          INSERT INTO cloudflare_setup_pending (user_id, repo_owner, repo_name, repo_full_name, is_private, created_at)
+          VALUES (?, ?, ?, ?, ?, ?)
+          ON CONFLICT(user_id, repo_full_name) DO NOTHING
+        `).bind(
+          user.sub,
+          user.sub,
+          result.repository.name,
+          repoFullName,
+          body.isPrivate ? 1 : 0,
+          now,
+        ).run();
+        if (insertResult.meta?.last_row_id) {
+          cloudflareSetupPendingId = insertResult.meta.last_row_id as number;
+        }
+        logger.info('Saved Cloudflare setup pending notification (repo create)', {
+          userId: user.sub,
+          repoFullName,
+        });
+      } catch (error) {
+        logger.error('Failed to save Cloudflare setup pending notification', {
+          error: error instanceof Error ? error.message : 'Unknown error',
+        });
+      }
+    }
+
     return c.json({
       message: `リポジトリ "${result.repository.name}" を作成しました。`,
       repository: result.repository,
+      cloudflareSetupPending: cloudflareSetupPendingId ? {
+        id: cloudflareSetupPendingId,
+        repoFullName: `${user.sub}/${result.repository.name}`,
+      } : null,
     }, result.status);
   }
 
