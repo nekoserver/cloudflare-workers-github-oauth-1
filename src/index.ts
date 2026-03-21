@@ -23,7 +23,7 @@ import { getCookieValue, getCookieValues } from './utils/cookie';
 import { verifyResendWebhookSignature } from './utils/resendWebhook';
 import { verifyGitHubWebhookSignature } from './utils/githubWebhook';
 import { postSlackMessage } from './utils/slack';
-import { validateRepoName, isTokenOrPermissionError } from './utils/repoValidation';
+import { executeCreateRepo } from './utils/repoValidation';
 import * as logger from './utils/logger';
 import { resolveIdleTimeoutSeconds, type Bindings, type Variables, type GitHubWebhookInstallationPayload, type ResendWebhookPayload } from './types';
 
@@ -2775,71 +2775,39 @@ app.post('/api/repositories', authMiddleware, async (c) => {
   const userSession = await getUserSession(c.env.DB, user.sub);
   const accessToken = userSession?.githubAccessToken ?? user.github_access_token ?? undefined;
 
-  if (!accessToken) {
-    return c.json({ error: 'GitHub アクセストークンがありません。再ログインしてください。' }, 401);
-  }
-
   const body = await c.req.json<{ name?: string; isPrivate?: boolean; description?: string }>();
-  const repoName = (body.name ?? '').trim();
 
-  const nameValidation = validateRepoName(body.name);
-  if (!nameValidation.valid) {
-    return c.json({ error: nameValidation.error }, 400);
-  }
+  const result = await executeCreateRepo({
+    accessToken,
+    userId: user.sub,
+    name: body.name,
+    isPrivate: body.isPrivate ?? false,
+    description: body.description,
+    deps: {
+      getUserRepos: (token) => getGitHubUserRepos({ accessToken: token }),
+      createRepo: createGitHubRepo,
+    },
+  });
 
-  // 既存リポジトリとの重複チェック
-  try {
-    const existingRepos = await getGitHubUserRepos({ accessToken });
-    const duplicate = existingRepos.find(
-      (r) => r.name.toLowerCase() === repoName.toLowerCase() && r.owner?.login?.toLowerCase() === user.sub.toLowerCase()
-    );
-    if (duplicate) {
-      return c.json({ error: `リポジトリ "${repoName}" は既に存在します。` }, 409);
-    }
-  } catch (error) {
-    logger.warn('Failed to check existing repos before creation', {
-      userId: user.sub,
-      error: error instanceof Error ? error.message : 'Unknown error',
-    });
-    // チェック失敗時は GitHub API 側で重複検出されるのでそのまま続行
-  }
-
-  try {
-    const created = await createGitHubRepo({
-      accessToken,
-      name: repoName,
-      isPrivate: body.isPrivate ?? false,
-      description: body.description,
-    });
-
+  if (result.ok) {
     return c.json({
-      message: `リポジトリ "${created.name}" を作成しました。`,
-      repository: {
-        name: created.name,
-        htmlUrl: created.html_url,
-        isPrivate: created.private,
-      },
-    }, 201);
-  } catch (error) {
-    const msg = error instanceof Error ? error.message : 'Unknown error';
+      message: `リポジトリ "${result.repository.name}" を作成しました。`,
+      repository: result.repository,
+    }, result.status);
+  }
+
+  if (result.status === 403 || result.status === 422) {
     logger.error('Failed to create GitHub repository', {
       userId: user.sub,
-      repoName,
-      error: msg,
+      repoName: body.name,
+      error: result.error,
     });
-
-    // トークン期限切れ・無効化の場合、再ログインを促す
-    // GitHub OAuth App ではスコープは全承認されるため、
-    // 権限エラーが出る場合はトークンの期限切れまたは無効化が原因
-    if (isTokenOrPermissionError(msg)) {
-      return c.json({
-        error: 'アクセストークンが無効または期限切れです。再ログインしてください。',
-        requireReauth: true,
-      }, 403);
-    }
-
-    return c.json({ error: `リポジトリの作成に失敗しました: ${msg}` }, 422);
   }
+
+  return c.json({
+    error: result.error,
+    ...(result.requireReauth ? { requireReauth: true } : {}),
+  }, result.status);
 });
 
 // =====================================================
