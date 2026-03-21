@@ -513,13 +513,72 @@ export function getCacheStatusPage(user: {
     .copy-button:hover { background: var(--accent-hover); }
     .copy-button.copied { background: #2f855a; }
     .exec-button {
-      background: #e53e3e; color: white; border: 0; border-radius: 8px;
+      border: 0; border-radius: 8px;
       padding: 8px 10px; font-size: 12px; font-weight: 700; cursor: pointer; white-space: nowrap;
-      transition: background 0.15s;
+      transition: background 0.15s, opacity 0.15s;
     }
-    .exec-button:hover { background: #c53030; }
-    .exec-button:disabled { background: #a0aec0; cursor: not-allowed; }
-    .exec-button.running { background: #dd6b20; }
+    .exec-button:disabled { background: #a0aec0 !important; color: white !important; cursor: not-allowed; opacity: 0.7; }
+    .exec-button.running { background: #dd6b20 !important; color: white !important; }
+    .exec-button.method-get { background: #e6ffed; color: #22543d; border: 1px solid #9ae6b4; }
+    .exec-button.method-get:hover { background: #c6f6d5; }
+    .exec-button.method-post { background: #fff5f5; color: #9b2c2c; border: 1px solid #feb2b2; }
+    .exec-button.method-post:hover { background: #fed7d7; }
+    .exec-button.method-put { background: #fffaf0; color: #975a16; border: 1px solid #fbd38d; }
+    .exec-button.method-put:hover { background: #fefcbf; }
+    .exec-button.method-delete { background: #fff5f5; color: #742a2a; border: 1px solid #fc8181; }
+    .exec-button.method-delete:hover { background: #fed7d7; }
+    /* Exec collapse-all button */
+    .exec-collapse-all-row {
+      display: flex; justify-content: flex-end; margin-bottom: 6px;
+    }
+    .exec-collapse-all-button {
+      background: var(--bg-secondary); color: var(--text-muted); border: 1px solid var(--border-color);
+      border-radius: 6px; padding: 4px 10px; font-size: 11px; font-weight: 600;
+      cursor: pointer; white-space: nowrap;
+    }
+    .exec-collapse-all-button:hover { background: var(--bg-tertiary, var(--bg-secondary)); color: var(--text-primary); }
+    /* API endpoint description in left panel */
+    .endpoint-docs {
+      margin-top: 14px;
+    }
+    .endpoint-docs-toggle {
+      display: flex; align-items: center; gap: 6px; width: 100%;
+      padding: 8px 12px; background: var(--bg-secondary); border: 1px solid var(--border-color);
+      border-radius: 8px; cursor: pointer; user-select: none;
+      font-size: 12px; font-weight: 700; color: var(--text-primary);
+    }
+    .endpoint-docs-toggle:hover { background: var(--bg-tertiary, var(--bg-secondary)); }
+    .endpoint-docs-chevron {
+      font-size: 10px; transition: transform 0.2s; color: var(--text-muted);
+    }
+    .endpoint-docs-toggle[aria-expanded="true"] .endpoint-docs-chevron { transform: rotate(90deg); }
+    .endpoint-docs-body {
+      overflow: hidden; transition: max-height 0.25s ease;
+    }
+    .endpoint-docs-body.collapsed { max-height: 0 !important; }
+    .endpoint-docs-content {
+      padding: 12px; border: 1px solid var(--border-color); border-top: 0;
+      border-radius: 0 0 8px 8px; background: var(--card-bg);
+    }
+    .endpoint-doc-item {
+      margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px solid var(--border-color);
+    }
+    .endpoint-doc-item:last-child { margin-bottom: 0; padding-bottom: 0; border-bottom: none; }
+    .endpoint-doc-method {
+      display: inline-block; padding: 2px 6px; border-radius: 4px;
+      font-size: 10px; font-weight: 800; font-family: monospace; margin-right: 6px;
+    }
+    .endpoint-doc-method.get { background: #e6ffed; color: #22543d; }
+    .endpoint-doc-method.post { background: #fff5f5; color: #9b2c2c; }
+    .endpoint-doc-path {
+      font-size: 12px; font-weight: 600; font-family: monospace; color: var(--text-primary);
+    }
+    .endpoint-doc-desc {
+      margin-top: 4px; font-size: 11px; line-height: 1.5; color: var(--text-muted);
+    }
+    .endpoint-doc-response {
+      margin-top: 4px; font-size: 10px; color: var(--text-faint); font-family: monospace;
+    }
     /* Exec result area */
     .exec-result {
       margin-top: 8px; border: 1px solid var(--border-color); border-radius: 8px;
@@ -1074,9 +1133,11 @@ export function getCacheStatusPage(user: {
       openStatusModal(title, subtitle, '<div class="modal-empty">' + escapeHtmlText(message) + '</div>');
     }
 
-    function renderCopyableCodeCard(label, code, copyText, execPath) {
+    function renderCopyableCodeCard(label, code, copyText, execPath, execMethod) {
+      var method = (execMethod || 'GET').toUpperCase();
+      var methodClass = 'method-' + method.toLowerCase();
       var execButton = execPath
-        ? '<button type="button" class="exec-button" data-exec-path="' + escapeHtmlText(execPath) + '">Exec</button>'
+        ? '<button type="button" class="exec-button ' + methodClass + '" data-exec-path="' + escapeHtmlText(execPath) + '" data-exec-method="' + escapeHtmlText(method) + '">' + escapeHtmlText(method) + '</button>'
         : '';
       return '<div class="code-card">'
         + '<div class="code-card-header">'
@@ -1134,10 +1195,12 @@ export function getCacheStatusPage(user: {
         + '</div>';
     }
 
-    function renderExecResult(status, statusText, headers, body, elapsed) {
+    function renderExecResult(method, status, statusText, headers, body, elapsed) {
       var isSuccess = status >= 200 && status < 300;
       var badgeClass = isSuccess ? 'success' : 'error';
       var badgeText = status + ' ' + statusText;
+      var methodLower = (method || 'GET').toLowerCase();
+      var methodBadgeClass = (methodLower === 'get') ? 'get' : 'post';
 
       // Response headers section
       var headerLines = [];
@@ -1189,10 +1252,14 @@ export function getCacheStatusPage(user: {
         bodyHtml = '<pre>' + escapeHtmlText(body || '(empty)') + '</pre>';
       }
 
-      return '<div class="exec-result">'
+      return '<div class="exec-collapse-all-row">'
+        + '<button type="button" class="exec-collapse-all-button" data-collapse-all="true">すべて閉じる</button>'
+        + '</div>'
+        + '<div class="exec-result">'
         + '<div class="exec-result-header" role="button" aria-expanded="true">'
         + '<div class="exec-result-summary">'
         + '<span class="exec-result-chevron">&#9654;</span>'
+        + '<span class="endpoint-doc-method ' + methodBadgeClass + '">' + escapeHtmlText(method) + '</span>'
         + '<span class="exec-status-badge ' + badgeClass + '">' + badgeText + '</span>'
         + '<span class="exec-result-meta">' + elapsed + 'ms</span>'
         + '</div>'
@@ -1221,6 +1288,7 @@ export function getCacheStatusPage(user: {
     async function handleExecClick(button) {
       var path = button.getAttribute('data-exec-path');
       if (!path) return;
+      var method = (button.getAttribute('data-exec-method') || 'GET').toUpperCase();
 
       // Find or create result container (sibling after the code-card)
       var codeCard = button.closest('.code-card');
@@ -1234,16 +1302,18 @@ export function getCacheStatusPage(user: {
 
       button.disabled = true;
       button.classList.add('running');
+      var originalText = button.textContent;
       button.textContent = '実行中...';
       resultContainer.innerHTML = '';
 
       var startTime = Date.now();
       try {
-        var response = await fetch(path);
+        var fetchOptions = { method: method };
+        var response = await fetch(path, fetchOptions);
         var elapsed = Date.now() - startTime;
         var body = await response.text();
         resultContainer.innerHTML = renderExecResult(
-          response.status, response.statusText, response.headers, body, elapsed
+          method, response.status, response.statusText, response.headers, body, elapsed
         );
       } catch (err) {
         resultContainer.innerHTML = renderExecError(
@@ -1252,8 +1322,70 @@ export function getCacheStatusPage(user: {
       } finally {
         button.disabled = false;
         button.classList.remove('running');
-        button.textContent = 'Exec';
+        button.textContent = originalText;
       }
+    }
+
+    function collapseAllExecResults(container) {
+      var sections = container.querySelectorAll('.exec-result-section-header[aria-expanded="true"]');
+      sections.forEach(function(header) {
+        header.setAttribute('aria-expanded', 'false');
+        var body = header.nextElementSibling;
+        if (body) body.classList.add('collapsed');
+      });
+      var resultHeaders = container.querySelectorAll('.exec-result-header[aria-expanded="true"]');
+      resultHeaders.forEach(function(header) {
+        header.setAttribute('aria-expanded', 'false');
+        var body = header.nextElementSibling;
+        if (body) body.classList.add('collapsed');
+      });
+    }
+
+    function renderEndpointDocs(data) {
+      var endpoints = [
+        {
+          method: 'GET',
+          path: data.endpoints.migrationDetailPath,
+          desc: 'テーブルのマイグレーション詳細を返す。テーブル定義 SQL、クエリ例、関連 API パスを含む JSON レスポンス。',
+          response: '{ table, migration, description, migrationSql, queryExample, endpoints }'
+        },
+        {
+          method: 'GET',
+          path: data.endpoints.migrationSqlPath,
+          desc: 'マイグレーション番号に対応する CREATE TABLE 文の SQL テキストのみを返す。',
+          response: '{ migration, sql }'
+        },
+        {
+          method: 'GET',
+          path: data.endpoints.tableRowsPath,
+          desc: 'テーブルの保存データを最大 20 行までプレビュー表示する。ワークスペース・ユーザーのスコープでフィルタされる。',
+          response: '{ table, migration, description, columns, rows, limit }'
+        }
+      ];
+
+      var itemsHtml = endpoints.map(function(ep) {
+        var methodClass = ep.method.toLowerCase();
+        return '<div class="endpoint-doc-item">'
+          + '<div>'
+          + '<span class="endpoint-doc-method ' + methodClass + '">' + escapeHtmlText(ep.method) + '</span>'
+          + '<span class="endpoint-doc-path">' + escapeHtmlText(ep.path) + '</span>'
+          + '</div>'
+          + '<div class="endpoint-doc-desc">' + escapeHtmlText(ep.desc) + '</div>'
+          + '<div class="endpoint-doc-response">Response: ' + escapeHtmlText(ep.response) + '</div>'
+          + '</div>';
+      }).join('');
+
+      return '<div class="endpoint-docs">'
+        + '<button type="button" class="endpoint-docs-toggle" aria-expanded="false" data-endpoint-docs-toggle="true">'
+        + '<span class="endpoint-docs-chevron">&#9654;</span>'
+        + '<span>API エンドポイント仕様</span>'
+        + '</button>'
+        + '<div class="endpoint-docs-body collapsed">'
+        + '<div class="endpoint-docs-content">'
+        + itemsHtml
+        + '</div>'
+        + '</div>'
+        + '</div>';
     }
 
     function renderMigrationDetailLayout(data) {
@@ -1268,6 +1400,7 @@ export function getCacheStatusPage(user: {
         + '<section class="panel-block panel-block-primary">'
         + '<div class="panel-title">左: テーブル定義 SQL</div>'
         + renderCopyableCodeCard('Migration SQL', data.migrationSql || '', data.migrationSql || '')
+        + renderEndpointDocs(data)
         + '</section>'
         + '<section class="panel-block panel-block-secondary">'
         + '<div class="panel-title">右: 読み出し方法</div>'
@@ -1491,6 +1624,28 @@ export function getCacheStatusPage(user: {
         modalBody.addEventListener('click', async function(event) {
           var target = event.target;
           if (!(target instanceof Element)) return;
+
+          // Collapse all button handler
+          var collapseAllBtn = target.closest('[data-collapse-all]');
+          if (collapseAllBtn) {
+            var resultContainer = collapseAllBtn.closest('.exec-result-container');
+            if (resultContainer) {
+              collapseAllExecResults(resultContainer);
+            }
+            return;
+          }
+
+          // Endpoint docs toggle handler
+          var docsToggle = target.closest('[data-endpoint-docs-toggle]');
+          if (docsToggle) {
+            var dExpanded = docsToggle.getAttribute('aria-expanded') === 'true';
+            docsToggle.setAttribute('aria-expanded', dExpanded ? 'false' : 'true');
+            var docsBody = docsToggle.nextElementSibling;
+            if (docsBody && docsBody.classList.contains('endpoint-docs-body')) {
+              docsBody.classList.toggle('collapsed');
+            }
+            return;
+          }
 
           // Exec button handler
           var execButton = target.closest('[data-exec-path]');
