@@ -1964,14 +1964,35 @@ app.post('/webhook/github', async (c) => {
       const githubToken = c.env.GITHUB_TOKEN;
 
       if (pr && slackToken && slackChannel) {
+        const db = c.env.DB;
         const title = pr.title;
         const description = pr.body ?? '';
         const prUrl = pr.html_url;
         const prNumber = pr.number;
         const author = pr.user?.login ?? 'unknown';
+        const now = new Date();
+        const eventDate = now.toISOString().slice(0, 10); // YYYY-MM-DD
+        const requestId = crypto.randomUUID();
+        const aiModel = '@cf/meta/llama-3.1-8b-instruct-fp8';
+
+        // 本日の通算番号を取得
+        let dailySeq = 1;
+        if (db) {
+          try {
+            const countResult = await db.prepare(
+              'SELECT COUNT(*) as cnt FROM ai_summary_log WHERE event_date = ?'
+            ).bind(eventDate).first<{ cnt: number }>();
+            dailySeq = (countResult?.cnt ?? 0) + 1;
+          } catch (error) {
+            logger.warn('Failed to get daily AI summary count', {
+              error: error instanceof Error ? error.message : 'Unknown error',
+            });
+          }
+        }
 
         // diff 取得（GITHUB_TOKEN がある場合のみ）
         let trimmedDiff = '';
+        let diffLength = 0;
         if (githubToken && pr.diff_url) {
           try {
             const diffRes = await fetch(pr.diff_url, {
@@ -1979,6 +2000,7 @@ app.post('/webhook/github', async (c) => {
             });
             if (diffRes.ok) {
               const diff = await diffRes.text();
+              diffLength = diff.length;
               trimmedDiff = diff.slice(0, 8000);
             }
           } catch (error) {
@@ -1993,7 +2015,7 @@ app.post('/webhook/github', async (c) => {
         let summary = '';
         if (ai && trimmedDiff) {
           try {
-            const aiRes = await ai.run('@cf/meta/llama-3.1-8b-instruct-fp8', {
+            const aiRes = await ai.run(aiModel, {
               messages: [
                 {
                   role: 'system',
@@ -2026,14 +2048,47 @@ app.post('/webhook/github', async (c) => {
         if (summary) {
           slackLines.push('', '*AI要約:*', summary);
         }
+        slackLines.push('', `_AI問い合わせ #${dailySeq} (本日) | ID: ${requestId}_`);
 
+        let slackNotified = false;
         try {
           await postSlackMessage({ token: slackToken, channel: slackChannel, text: slackLines.join('\n') });
+          slackNotified = true;
         } catch (error) {
           logger.error('Slack notification failed for PR webhook', {
             error: error instanceof Error ? error.message : 'Unknown error',
             prUrl,
           });
+        }
+
+        // D1 にログを書き込み
+        if (db) {
+          try {
+            await db.prepare(`
+              INSERT INTO ai_summary_log
+                (request_id, daily_seq, event_date, event_type, repo_full_name, pr_number, pr_action, pr_url, model, summary, diff_length, slack_notified, created_at)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            `).bind(
+              requestId,
+              dailySeq,
+              eventDate,
+              'pr_summary',
+              repoFullName,
+              prNumber,
+              prAction,
+              prUrl,
+              aiModel,
+              summary || null,
+              diffLength,
+              slackNotified ? 1 : 0,
+              now.toISOString(),
+            ).run();
+          } catch (error) {
+            logger.error('Failed to insert ai_summary_log', {
+              error: error instanceof Error ? error.message : 'Unknown error',
+              requestId,
+            });
+          }
         }
       }
     }
