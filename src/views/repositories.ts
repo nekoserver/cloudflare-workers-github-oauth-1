@@ -40,7 +40,12 @@ export function getRepositoriesPage(user: {
   const repoCount = user.repositories.length;
   const scopes = user.grantedScopes ?? [];
   const hasRepoScope = scopes.includes('repo');
-  const missingScopesBanner = !hasRepoScope && scopes.length > 0 ? true : false;
+  // repo スコープが確認できない場合はすべてバナー表示
+  // - grantedScopes が null/undefined: スコープ取得失敗または未取得
+  // - grantedScopes が []: スコープが空（未付与）
+  // - grantedScopes に 'repo' が無い: 権限不足
+  const missingScopesBanner = !hasRepoScope;
+  const scopesEmpty = !user.grantedScopes || user.grantedScopes.length === 0;
   const repoPerms = user.repoPermissions ?? {};
   const cfLinked = user.cloudflareLinkedRepos ?? {};
   const vercelLinked = user.vercelLinkedRepos ?? {};
@@ -104,12 +109,18 @@ export function getRepositoriesPage(user: {
     <div class="error-banner">${escapeHtml(user.errorMessage)}</div>
   ` : '';
 
+  const missingScopeBannerTitle = scopesEmpty
+    ? 'リポジトリ操作に必要な権限がありません'
+    : 'プライベートリポジトリにアクセスできません';
+  const missingScopeBannerDesc = scopesEmpty
+    ? '現在の認証にはスコープが付与されていません。リポジトリの作成・閲覧にはrepo権限が必要です。再認証して権限を付与してください。'
+    : '現在の認証にはプライベートリポジトリへのアクセス権限が含まれていません。権限を追加するには再認証してください。';
   const missingScopeBannerHtml = missingScopesBanner ? `
     <div class="missing-scope-banner">
       <span class="missing-scope-banner-icon">⚠️</span>
       <div class="missing-scope-banner-text">
-        <div class="missing-scope-banner-title">プライベートリポジトリにアクセスできません</div>
-        <div class="missing-scope-banner-desc">現在の認証にはプライベートリポジトリへのアクセス権限が含まれていません。権限を追加するには再認証してください。</div>
+        <div class="missing-scope-banner-title">${missingScopeBannerTitle}</div>
+        <div class="missing-scope-banner-desc">${missingScopeBannerDesc}</div>
       </div>
       <a href="/auth/github/reauthorize" class="reauth-btn">
         <svg viewBox="0 0 16 16"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
@@ -255,6 +266,11 @@ export function getRepositoriesPage(user: {
     }
     .create-repo-btn:hover { opacity: 0.9; transform: translateY(-1px); }
     .create-repo-btn:active { transform: translateY(0); }
+    .create-repo-btn:disabled {
+      background: #a0aec0; cursor: not-allowed; opacity: 0.6;
+      transform: none;
+    }
+    .create-repo-btn:disabled:hover { opacity: 0.6; transform: none; }
     .page-header-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
 
     /* Create Repo Modal */
@@ -715,7 +731,7 @@ export function getRepositoriesPage(user: {
           <h1 class="page-title">📦 リポジトリ</h1>
           <p class="page-subtitle">リポジトリ ${repoCount} 件</p>
         </div>
-        <button class="create-repo-btn" id="openCreateRepoModal" type="button">＋ 新規にリポジトリを生成する</button>
+        <button class="create-repo-btn" id="openCreateRepoModal" type="button" ${!hasRepoScope ? 'disabled title="repo スコープが付与されていません。再認証してください。"' : ''}>＋ 新規にリポジトリを生成する</button>
       </div>
       ${errorBanner}
       ${missingScopeBannerHtml}
@@ -1085,20 +1101,16 @@ export function getRepositoriesPage(user: {
           .then(function(result) {
             if (!result.ok) {
               var msg = result.data.error || 'リポジトリの作成に失敗しました。';
-              if (errorEl) {
-                if (result.data.requireReauth) {
-                  // フォーム入力内容を保存して自動で再認証フローに入る
-                  try {
-                    sessionStorage.setItem('repo_create_form', JSON.stringify({
-                      name: name,
-                      isPrivate: isPrivate,
-                    }));
-                  } catch (e) { /* sessionStorage が使えない環境は無視 */ }
-                  window.location.href = '/auth/github?return_to=/repositories';
-                  return;
-                } else {
-                  errorEl.textContent = msg;
+              if (result.data.requireReauth) {
+                // スコープ不足・トークン無効: エラーメッセージ + 再認証リンクを表示
+                if (errorEl) {
+                  errorEl.innerHTML = msg + ' <a href="/auth/github?return_to=/repositories" style="color:#e53e3e;font-weight:700;text-decoration:underline;">再認証する</a>';
                 }
+                if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = '再認証が必要です'; }
+                return;
+              }
+              if (errorEl) {
+                errorEl.textContent = msg;
               }
               if (nameInput) nameInput.classList.add('error');
               if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = '作成する'; }
