@@ -57,6 +57,8 @@ const STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
   { name: 'commit_list_cache', migration: '0008', description: 'コミット一覧キャッシュ' },
   { name: 'cache_stats', migration: '0009', description: 'キャッシュ統計' },
   { name: 'cloudflare_setup_pending', migration: '0010', description: 'Cloudflare セットアップ通知' },
+  { name: 'commit_search_history', migration: '0011', description: 'コミット検索履歴' },
+  { name: 'commit_search_repo_stats', migration: '0011', description: 'コミット検索リポジトリ別集計' },
 ];
 
 const STATUS_MIGRATION_SQL: Record<string, string> = {
@@ -190,6 +192,31 @@ CREATE TABLE IF NOT EXISTS cloudflare_setup_pending (
 
 CREATE INDEX IF NOT EXISTS idx_cloudflare_setup_pending_user
   ON cloudflare_setup_pending(user_id, dismissed_at);`,
+  '0011': `-- コミット検索履歴テーブル（テーブルA）
+CREATE TABLE IF NOT EXISTS commit_search_history (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id TEXT NOT NULL,
+  search_query TEXT NOT NULL,
+  total_hits INTEGER NOT NULL DEFAULT 0,
+  repo_names TEXT NOT NULL DEFAULT '[]',
+  searched_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_commit_search_history_user_id ON commit_search_history(user_id);
+CREATE INDEX IF NOT EXISTS idx_commit_search_history_total_hits ON commit_search_history(user_id, total_hits DESC);
+
+-- コミット検索リポジトリ別集計テーブル（テーブルB）
+CREATE TABLE IF NOT EXISTS commit_search_repo_stats (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  search_history_id INTEGER NOT NULL,
+  repo_name TEXT NOT NULL,
+  hit_count INTEGER NOT NULL DEFAULT 0,
+  search_query TEXT NOT NULL,
+  user_name TEXT NOT NULL,
+  FOREIGN KEY (search_history_id) REFERENCES commit_search_history(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_commit_search_repo_stats_history_id ON commit_search_repo_stats(search_history_id);`,
 };
 
 function jsonUtf8(payload: unknown, status = 200): Response {
@@ -2304,6 +2331,44 @@ app.get('/api/repositories/search/commits', optionalAuthMiddleware, async (c) =>
       }
     }
 
+    // リポジトリごとのヒット数を集計
+    const repoHitMap = new Map<string, number>();
+    for (const item of results) {
+      const repoKey = `${item.owner}/${item.repo}`;
+      repoHitMap.set(repoKey, (repoHitMap.get(repoKey) ?? 0) + item.commits.length);
+    }
+
+    // テーブルA・Bに検索結果を保存
+    if (totalMatches > 0) {
+      try {
+        const now = new Date().toISOString();
+        const repoNamesList = JSON.stringify([...repoHitMap.keys()]);
+        const insertA = await c.env.DB.prepare(
+          `INSERT INTO commit_search_history (user_id, search_query, total_hits, repo_names, searched_at)
+           VALUES (?, ?, ?, ?, ?)`
+        ).bind(user.sub, q, totalMatches, repoNamesList, now).run();
+
+        const historyId = insertA.meta?.last_row_id;
+        if (historyId) {
+          const userName = user.name ?? user.sub;
+          const stmts = [...repoHitMap.entries()].map(([repoName, hitCount]) =>
+            c.env.DB!.prepare(
+              `INSERT INTO commit_search_repo_stats (search_history_id, repo_name, hit_count, search_query, user_name)
+               VALUES (?, ?, ?, ?, ?)`
+            ).bind(historyId, repoName, hitCount, q, userName)
+          );
+          if (stmts.length > 0) {
+            await c.env.DB.batch(stmts);
+          }
+        }
+      } catch (saveErr) {
+        logger.warn('Failed to save commit search history', {
+          query: q,
+          error: saveErr instanceof Error ? saveErr.message : 'Unknown error',
+        });
+      }
+    }
+
     return jsonUtf8({ results, query: q, total: totalMatches });
   } catch (error) {
     logger.warn('Commit search failed', {
@@ -2313,6 +2378,89 @@ app.get('/api/repositories/search/commits', optionalAuthMiddleware, async (c) =>
     return jsonUtf8({ error: 'Search failed' }, 500);
   }
 });
+
+// コミット検索履歴一覧（テーブルA: ヒット総数降順）
+app.get('/api/repositories/search/history', optionalAuthMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!user) return jsonUtf8({ error: 'Unauthorized' }, 401);
+  if (!c.env.DB) return jsonUtf8({ error: 'Database not available' }, 500);
+
+  try {
+    const rows = await c.env.DB.prepare(
+      `SELECT id, search_query, total_hits, repo_names, searched_at
+       FROM commit_search_history
+       WHERE user_id = ?
+       ORDER BY total_hits DESC
+       LIMIT 200`
+    ).bind(user.sub).all<{
+      id: number;
+      search_query: string;
+      total_hits: number;
+      repo_names: string;
+      searched_at: string;
+    }>();
+    return jsonUtf8({ history: rows.results ?? [] });
+  } catch (error) {
+    logger.warn('Failed to fetch commit search history', {
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    return jsonUtf8({ error: 'Failed to fetch history' }, 500);
+  }
+});
+
+// コミット検索履歴の詳細（テーブルA + テーブルBのリポジトリ別集計）
+app.get('/api/repositories/search/history/:id', optionalAuthMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!user) return jsonUtf8({ error: 'Unauthorized' }, 401);
+  if (!c.env.DB) return jsonUtf8({ error: 'Database not available' }, 500);
+
+  const historyId = Number(c.req.param('id'));
+  if (!Number.isFinite(historyId) || historyId <= 0) {
+    return jsonUtf8({ error: 'Invalid history ID' }, 400);
+  }
+
+  try {
+    const header = await c.env.DB.prepare(
+      `SELECT id, search_query, total_hits, repo_names, searched_at
+       FROM commit_search_history
+       WHERE id = ? AND user_id = ?`
+    ).bind(historyId, user.sub).first<{
+      id: number;
+      search_query: string;
+      total_hits: number;
+      repo_names: string;
+      searched_at: string;
+    }>();
+
+    if (!header) {
+      return jsonUtf8({ error: 'Not found' }, 404);
+    }
+
+    const details = await c.env.DB.prepare(
+      `SELECT repo_name, hit_count, search_query, user_name
+       FROM commit_search_repo_stats
+       WHERE search_history_id = ?
+       ORDER BY hit_count DESC`
+    ).bind(historyId).all<{
+      repo_name: string;
+      hit_count: number;
+      search_query: string;
+      user_name: string;
+    }>();
+
+    return jsonUtf8({
+      history: header,
+      repoStats: details.results ?? [],
+    });
+  } catch (error) {
+    logger.warn('Failed to fetch commit search history detail', {
+      historyId,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    return jsonUtf8({ error: 'Failed to fetch detail' }, 500);
+  }
+});
+
 /**
  * Resend webhook受信用エンドポイント
  * イベントタイプを/lib/resend-webhook.shtml?event=xxxへGETで通知し、Resendへのレスポンスを返す
