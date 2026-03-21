@@ -23,6 +23,7 @@ import { getCookieValue, getCookieValues } from './utils/cookie';
 import { verifyResendWebhookSignature } from './utils/resendWebhook';
 import { verifyGitHubWebhookSignature } from './utils/githubWebhook';
 import { postSlackMessage } from './utils/slack';
+import { validateRepoName, checkRepoScope, isPermissionError } from './utils/repoValidation';
 import * as logger from './utils/logger';
 import { resolveIdleTimeoutSeconds, type Bindings, type Variables, type GitHubWebhookInstallationPayload, type ResendWebhookPayload } from './types';
 
@@ -2779,35 +2780,29 @@ app.post('/api/repositories', authMiddleware, async (c) => {
   }
 
   // repo スコープの事前チェック
-  const grantedScopes = userSession?.githubGrantedScopes ?? '';
-  const scopeList = grantedScopes.split(/[\s,]+/).filter((s) => s.length > 0);
-  if (grantedScopes && !scopeList.includes('repo')) {
+  const scopeCheck = checkRepoScope(userSession?.githubGrantedScopes, !!userSession);
+  if (!scopeCheck.hasRepoScope) {
     logger.warn('Repo creation attempted without repo scope', {
       userId: user.sub,
-      grantedScopes,
+      grantedScopes: userSession?.githubGrantedScopes ?? '(null)',
+      hasScopeData: scopeCheck.hasScopeData,
     });
     return c.json({
-      error: 'リポジトリ作成には repo 権限が必要です。GitHub の認可画面で「repo」スコープを許可してから再ログインしてください。GitHub OAuth App の設定で repo スコープが有効になっているか確認してください。',
+      error: scopeCheck.hasScopeData
+        ? 'リポジトリ作成には repo 権限が必要です。GitHub の認可画面で「repo」スコープを許可してから再ログインしてください。GitHub OAuth App の設定で repo スコープが有効になっているか確認してください。'
+        : 'スコープ情報が保存されていません。再ログインして権限を付与してください。',
       requireReauth: true,
       missingScope: 'repo',
-      grantedScopes: scopeList,
+      grantedScopes: scopeCheck.scopeList,
     }, 403);
   }
 
   const body = await c.req.json<{ name?: string; isPrivate?: boolean; description?: string }>();
   const repoName = (body.name ?? '').trim();
 
-  if (!repoName) {
-    return c.json({ error: 'リポジトリ名を入力してください。' }, 400);
-  }
-
-  // リポジトリ名の形式チェック (GitHub の命名規則)
-  if (!/^[a-zA-Z0-9._-]+$/.test(repoName)) {
-    return c.json({ error: 'リポジトリ名に使用できるのは英数字、ハイフン、ドット、アンダースコアのみです。' }, 400);
-  }
-
-  if (repoName.startsWith('.') || repoName.endsWith('.')) {
-    return c.json({ error: 'リポジトリ名はドットで開始・終了できません。' }, 400);
+  const nameValidation = validateRepoName(body.name);
+  if (!nameValidation.valid) {
+    return c.json({ error: nameValidation.error }, 400);
   }
 
   // 既存リポジトリとの重複チェック
@@ -2852,10 +2847,11 @@ app.post('/api/repositories', authMiddleware, async (c) => {
     });
 
     // GitHub App/OAuth 権限不足エラーの場合、再ログインを促す
-    if (msg.includes('Resource not accessible by integration') || msg.includes('Resource not accessible by personal access token') || msg.includes('Not Found') || msg.includes('HTTP 403') || msg.includes('HTTP 401')) {
+    if (isPermissionError(msg)) {
       return c.json({
         error: 'リポジトリ作成の権限がありません。再ログインして権限を付与してください。',
         requireReauth: true,
+        missingScope: 'repo',
       }, 403);
     }
 
