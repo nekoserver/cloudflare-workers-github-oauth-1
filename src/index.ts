@@ -671,7 +671,7 @@ app.get('/auth/github', async (c) => {
   }
 
   const url = new URL(c.req.url);
-  const redirectUri = `${url.protocol}//${url.host}/github/callback`;
+  const redirectUri = `${url.protocol}//${url.host}/auth/github/callback`;
 
   // CSRF保護用のstateトークンを生成
   const state = generateOAuthState();
@@ -714,7 +714,7 @@ app.get('/auth/github', async (c) => {
  * GitHub OAuth コールバック
  * stateパラメータを検証してCSRF攻撃を防止
  */
-app.get('/github/callback', async (c) => {
+app.get('/auth/github/callback', async (c) => {
   let phase = 'start';
   let userIdForLog: string | null = null;
   try {
@@ -777,7 +777,7 @@ app.get('/github/callback', async (c) => {
     }
 
     const url = new URL(c.req.url);
-    const redirectUri = `${url.protocol}//${url.host}/github/callback`;
+    const redirectUri = `${url.protocol}//${url.host}/auth/github/callback`;
 
     // GitHubからアクセストークンを取得
     phase = 'exchange-token';
