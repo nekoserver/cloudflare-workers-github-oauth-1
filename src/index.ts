@@ -1570,8 +1570,7 @@ app.get('/status', authMiddleware, async (c) => {
       });
     }
 
-    // リポジトリ色設定の読み込みと未登録リポジトリの自動登録
-    const existingColorMap = new Map<string, RepoColorEntry>();
+    // リポジトリ色設定の読み込み（読み取りのみ。同期は POST /api/repo-colors/sync で行う）
     try {
       const colorRows = await db.prepare(
         'SELECT repo_name, color_code, display_order, tags, is_visible FROM repo_color_settings WHERE workspace_id = ? ORDER BY display_order ASC, repo_name ASC'
@@ -1581,74 +1580,18 @@ app.get('/status', authMiddleware, async (c) => {
 
       if (colorRows.results) {
         for (const row of colorRows.results) {
-          const entry: RepoColorEntry = {
+          data.repoColors.push({
             repoName: row.repo_name,
             colorCode: row.color_code,
             displayOrder: row.display_order,
             tags: row.tags,
             isVisible: row.is_visible === 1,
-          };
-          existingColorMap.set(row.repo_name, entry);
-          data.repoColors.push(entry);
+          });
         }
       }
     } catch (error) {
       logger.warn('Failed to read repo_color_settings (table may not exist yet)', {
         error: error instanceof Error ? error.message : 'Unknown error',
-      });
-    }
-
-    // 未登録リポジトリの自動登録（SELECTとは別のtry/catchで処理）
-    try {
-      const defaultPalette = [
-        '#667eea', '#e53e3e', '#38a169', '#ed8936', '#9f7aea',
-        '#dd6b20', '#319795', '#d53f8c', '#3182ce', '#d69e2e',
-        '#805ad5', '#2b6cb0', '#c53030', '#2f855a', '#b7791f',
-      ];
-
-      const allChartRepos = Array.from(new Set(data.commitCache.byMonthByRepo.map(r => r.repo)));
-      const newRepos = allChartRepos.filter(r => !existingColorMap.has(r));
-
-      if (newRepos.length > 0) {
-        const maxOrder = data.repoColors.length > 0
-          ? Math.max(...data.repoColors.map(r => r.displayOrder))
-          : -1;
-        const now = new Date().toISOString();
-        const usedColorCount = existingColorMap.size;
-
-        const stmts = newRepos.map((repo, i) => {
-          const colorIndex = (usedColorCount + i) % defaultPalette.length;
-          const order = maxOrder + 1 + i;
-          return db.prepare(
-            'INSERT OR IGNORE INTO repo_color_settings (workspace_id, repo_name, color_code, display_order, tags, is_visible, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 1, ?, ?)'
-          ).bind(workspaceId, repo, defaultPalette[colorIndex], order, '', now, now);
-        });
-
-        await db.batch(stmts);
-
-        for (let i = 0; i < newRepos.length; i++) {
-          const colorIndex = (usedColorCount + i) % defaultPalette.length;
-          const order = maxOrder + 1 + i;
-          const entry: RepoColorEntry = {
-            repoName: newRepos[i],
-            colorCode: defaultPalette[colorIndex],
-            displayOrder: order,
-            tags: '',
-            isVisible: true,
-          };
-          existingColorMap.set(newRepos[i], entry);
-          data.repoColors.push(entry);
-        }
-        logger.info(`Auto-registered ${newRepos.length} repos in repo_color_settings`, {
-          repos: newRepos,
-          workspaceId,
-        });
-      }
-    } catch (error) {
-      logger.warn('Failed to auto-register repos in repo_color_settings', {
-        error: error instanceof Error ? error.message : 'Unknown error',
-        repoCount: data.commitCache.byMonthByRepo.length,
-        workspaceId,
       });
     }
 
@@ -3431,6 +3374,102 @@ app.post('/api/settings/status-chart-mode', authMiddleware, async (c) => {
       error: error instanceof Error ? error.message : 'Unknown error',
     });
     return c.json({ error: '月別コミット量チャートの表示モード変更に失敗しました' }, 500);
+  }
+});
+
+/**
+ * リポジトリ色設定の同期
+ * コミットキャッシュに存在するリポジトリをrepo_color_settingsに一括登録する。
+ * 既存行は上書きしない（INSERT OR IGNORE）。
+ */
+app.post('/api/repo-colors/sync', authMiddleware, async (c) => {
+  const user = c.get('user');
+  const db = c.env.DB;
+
+  if (!db) {
+    return c.json({ error: 'D1 is not configured' }, 500);
+  }
+
+  try {
+    const wsInfo = await getCurrentWorkspace(db, user.sub);
+    const workspaceId = wsInfo?.workspaceId ?? '';
+
+    const cacheRows = await db.prepare(
+      'SELECT DISTINCT owner, repo FROM commit_calendar_cache WHERE workspace_id = ?'
+    ).bind(workspaceId).all<{ owner: string; repo: string }>();
+
+    const listRows = await db.prepare(
+      'SELECT DISTINCT owner, repo FROM commit_list_cache WHERE workspace_id = ?'
+    ).bind(workspaceId).all<{ owner: string; repo: string }>();
+
+    const repoSet = new Set<string>();
+    if (cacheRows.results) {
+      for (const r of cacheRows.results) repoSet.add(`${r.owner}/${r.repo}`);
+    }
+    if (listRows.results) {
+      for (const r of listRows.results) repoSet.add(`${r.owner}/${r.repo}`);
+    }
+
+    if (repoSet.size === 0) {
+      return c.json({ message: 'コミットキャッシュにリポジトリが存在しません', registered: 0, total: 0 });
+    }
+
+    const existingRows = await db.prepare(
+      'SELECT repo_name FROM repo_color_settings WHERE workspace_id = ?'
+    ).bind(workspaceId).all<{ repo_name: string }>();
+
+    const existingSet = new Set<string>();
+    let maxOrder = -1;
+    if (existingRows.results) {
+      for (const r of existingRows.results) existingSet.add(r.repo_name);
+    }
+    if (existingSet.size > 0) {
+      const orderRow = await db.prepare(
+        'SELECT MAX(display_order) AS max_order FROM repo_color_settings WHERE workspace_id = ?'
+      ).bind(workspaceId).first<{ max_order: number | null }>();
+      maxOrder = orderRow?.max_order ?? -1;
+    }
+
+    const defaultPalette = [
+      '#667eea', '#e53e3e', '#38a169', '#ed8936', '#9f7aea',
+      '#dd6b20', '#319795', '#d53f8c', '#3182ce', '#d69e2e',
+      '#805ad5', '#2b6cb0', '#c53030', '#2f855a', '#b7791f',
+    ];
+
+    const newRepos = Array.from(repoSet).filter(r => !existingSet.has(r)).sort();
+    if (newRepos.length === 0) {
+      return c.json({ message: '全リポジトリ登録済みです', registered: 0, total: existingSet.size });
+    }
+
+    const now = new Date().toISOString();
+    const stmts = newRepos.map((repo, i) => {
+      const colorIndex = (existingSet.size + i) % defaultPalette.length;
+      const order = maxOrder + 1 + i;
+      return db.prepare(
+        'INSERT OR IGNORE INTO repo_color_settings (workspace_id, repo_name, color_code, display_order, tags, is_visible, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 1, ?, ?)'
+      ).bind(workspaceId, repo, defaultPalette[colorIndex], order, '', now, now);
+    });
+
+    await db.batch(stmts);
+
+    logger.info(`Synced ${newRepos.length} repos to repo_color_settings`, {
+      userId: user.sub,
+      workspaceId,
+      newRepos,
+    });
+
+    return c.json({
+      message: `${newRepos.length} 件のリポジトリを登録しました`,
+      registered: newRepos.length,
+      total: existingSet.size + newRepos.length,
+      repos: newRepos,
+    });
+  } catch (error) {
+    logger.error('Failed to sync repo colors', {
+      userId: user.sub,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    return c.json({ error: 'リポジトリ色設定の同期に失敗しました' }, 500);
   }
 });
 

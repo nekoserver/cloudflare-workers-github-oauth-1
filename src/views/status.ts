@@ -386,6 +386,27 @@ export function getCacheStatusPage(user: {
       font-size: 20px; font-weight: 600; color: var(--text-primary); margin-bottom: 16px;
       padding-bottom: 8px; border-bottom: 2px solid var(--border-color);
     }
+    .section-title-row {
+      display: flex; align-items: center; justify-content: space-between; gap: 12px;
+      margin-bottom: 16px; padding-bottom: 8px; border-bottom: 2px solid var(--border-color);
+    }
+    .section-title-row .section-title {
+      margin-bottom: 0; padding-bottom: 0; border-bottom: none;
+    }
+    .sync-repo-colors-btn {
+      display: inline-flex; align-items: center; gap: 4px;
+      padding: 6px 14px; font-size: 13px; font-weight: 500;
+      color: var(--text-primary); background: var(--bg-secondary);
+      border: 1px solid var(--border-color); border-radius: 6px;
+      cursor: pointer; white-space: nowrap; transition: background 0.15s, border-color 0.15s;
+    }
+    .sync-repo-colors-btn:hover { background: var(--bg-tertiary, var(--border-color)); }
+    .sync-repo-colors-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .sync-repo-colors-btn .sync-icon { font-size: 15px; }
+    .sync-repo-colors-btn.syncing .sync-icon {
+      animation: spin-sync 0.8s linear infinite;
+    }
+    @keyframes spin-sync { to { transform: rotate(360deg); } }
 
     /* テーブル */
     .data-table {
@@ -1149,7 +1170,12 @@ export function getCacheStatusPage(user: {
       <!-- 月別コミット量チャート -->
       ${chartData.length > 0 ? `
       <div class="section">
-        <h2 class="section-title">月別コミット量</h2>
+        <div class="section-title-row">
+          <h2 class="section-title">月別コミット量</h2>
+          <button type="button" class="sync-repo-colors-btn" id="syncRepoColorsBtn" title="コミットキャッシュからリポジトリ色設定を同期">
+            <span class="sync-icon">&#x21bb;</span> 色設定を同期
+          </button>
+        </div>
         ${statusChartMode === 'repo' && allRepos.length > 0 ? `<div class="chart-legend">${repoLegend}</div>` : ''}
         <div class="chart-section">
           ${chartBars}
@@ -3661,6 +3687,35 @@ export function getCacheStatusPage(user: {
           ctx2.restore();
         }
       }
+    })();
+
+    (function() {
+      var btn = document.getElementById('syncRepoColorsBtn');
+      if (!btn) return;
+      btn.addEventListener('click', function() {
+        if (btn.disabled) return;
+        btn.disabled = true;
+        btn.classList.add('syncing');
+        var origText = btn.innerHTML;
+        btn.innerHTML = '<span class="sync-icon">&#x21bb;</span> 同期中...';
+        fetch('/api/repo-colors/sync', { method: 'POST', credentials: 'same-origin' })
+          .then(function(res) { return res.json(); })
+          .then(function(data) {
+            btn.classList.remove('syncing');
+            if (data.error) {
+              btn.innerHTML = '<span class="sync-icon">&#x21bb;</span> ' + escapeHtmlText(data.error);
+              setTimeout(function() { btn.innerHTML = origText; btn.disabled = false; }, 3000);
+            } else {
+              btn.innerHTML = '<span class="sync-icon">&#x21bb;</span> ' + escapeHtmlText(data.message);
+              setTimeout(function() { location.reload(); }, 1500);
+            }
+          })
+          .catch(function() {
+            btn.classList.remove('syncing');
+            btn.innerHTML = '<span class="sync-icon">&#x21bb;</span> 通信エラー';
+            setTimeout(function() { btn.innerHTML = origText; btn.disabled = false; }, 3000);
+          });
+      });
     })();
   </script>
 </body>
