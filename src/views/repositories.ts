@@ -1069,8 +1069,14 @@ export function getRepositoriesPage(user: {
             if (!result.ok) {
               var msg = result.data.error || 'リポジトリの作成に失敗しました。';
               if (errorEl) {
-                if (result.data.requireReauth) {
-                  errorEl.innerHTML = msg + ' <a href="/auth/github/reauthorize" style="color:#58a6ff;text-decoration:underline;">再ログイン</a>';
+                if (result.data.missingScope) {
+                  errorEl.innerHTML = '<div style="margin-bottom:8px">' + msg + '</div>'
+                    + '<div style="font-size:12px;color:#8b949e;margin-bottom:8px">'
+                    + '現在付与されているスコープ: <code>' + (result.data.grantedScopes || []).join(', ') + '</code>'
+                    + '</div>'
+                    + '<a href="/auth/github/reauthorize" style="color:#58a6ff;text-decoration:underline;">権限を追加して再認証</a>';
+                } else if (result.data.requireReauth) {
+                  errorEl.innerHTML = msg + ' <a href="/auth/github/reauthorize" style="color:#58a6ff;text-decoration:underline;">再認証</a>';
                 } else {
                   errorEl.textContent = msg;
                 }

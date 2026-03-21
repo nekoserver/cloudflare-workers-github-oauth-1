@@ -68,13 +68,18 @@ export class GitHubTokenScopesError extends Error {
 /**
  * GitHub OAuthのアクセストークンを取得
  */
+export interface GitHubAccessTokenResult {
+  accessToken: string;
+  grantedScopes: string[];
+}
+
 export async function getGitHubAccessToken(
   code: string,
   clientId: string,
   clientSecret: string,
   redirectUri: string,
   codeVerifier?: string
-): Promise<string> {
+): Promise<GitHubAccessTokenResult> {
   const payload: Record<string, string> = {
     client_id: clientId,
     client_secret: clientSecret,
@@ -102,6 +107,7 @@ export async function getGitHubAccessToken(
 
   const data = await response.json<{
     access_token?: string;
+    scope?: string;
     error?: string;
     error_description?: string;
     error_uri?: string;
@@ -116,7 +122,11 @@ export async function getGitHubAccessToken(
     throw new Error('No access token returned from GitHub (response had no error field either)');
   }
 
-  return data.access_token;
+  const grantedScopes = data.scope
+    ? data.scope.split(/[,\s]+/).filter((s) => s.length > 0)
+    : [];
+
+  return { accessToken: data.access_token, grantedScopes };
 }
 
 /**
