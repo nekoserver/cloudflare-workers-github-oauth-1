@@ -1068,7 +1068,13 @@ export function getRepositoriesPage(user: {
           .then(function(result) {
             if (!result.ok) {
               var msg = result.data.error || 'リポジトリの作成に失敗しました。';
-              if (errorEl) errorEl.textContent = msg;
+              if (errorEl) {
+                if (result.data.requireReauth) {
+                  errorEl.innerHTML = msg + ' <a href="/auth/github" style="color:#58a6ff;text-decoration:underline;">再ログイン</a>';
+                } else {
+                  errorEl.textContent = msg;
+                }
+              }
               if (nameInput) nameInput.classList.add('error');
               if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = '作成する'; }
               return;
