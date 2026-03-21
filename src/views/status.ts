@@ -59,6 +59,17 @@ export interface RepoColorEntry {
   isVisible: boolean;
 }
 
+export interface RepoGroupEntry {
+  id: string;
+  name: string;
+  description: string;
+  colorCode: string;
+  icon: string;
+  slackChannelId: string;
+  displayOrder: number;
+  repos: string[];
+}
+
 export interface CacheStatusData {
   commitCache: {
     totalEntries: number;
@@ -69,6 +80,7 @@ export interface CacheStatusData {
     entries: CommitCacheEntry[];
   };
   repoColors: RepoColorEntry[];
+  repoGroups: RepoGroupEntry[];
   installationPerms: {
     totalEntries: number;
     entries: InstallationPermEntry[];
