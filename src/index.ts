@@ -2816,7 +2816,7 @@ app.post('/api/repositories', authMiddleware, async (c) => {
     });
 
     // GitHub App/OAuth 権限不足エラーの場合、再ログインを促す
-    if (msg.includes('Resource not accessible by integration') || msg.includes('Not Found')) {
+    if (msg.includes('Resource not accessible by integration') || msg.includes('Resource not accessible by personal access token') || msg.includes('Not Found') || msg.includes('HTTP 403') || msg.includes('HTTP 401')) {
       return c.json({
         error: 'リポジトリ作成の権限がありません。再ログインして権限を付与してください。',
         requireReauth: true,
