@@ -57,6 +57,7 @@ export interface CacheStatusData {
     totalCommits: number;
     repos: { owner: string; repo: string; entryCount: number; totalCommits: number }[];
     byMonth: { yearMonth: string; entryCount: number; totalCommits: number }[];
+    byMonthByRepo: { yearMonth: string; repo: string; commits: number }[];
     entries: CommitCacheEntry[];
   };
   installationPerms: {
@@ -79,6 +80,7 @@ export function getCacheStatusPage(user: {
   username: string;
   statusCommitCacheSortMode?: string;
   statusCommitCacheSortState?: string;
+  statusChartMode?: string;
 }, data: CacheStatusData): string {
   const displayName = escapeHtml(user.name || user.username);
   const safeUsername = escapeHtml(user.username);
@@ -87,6 +89,7 @@ export function getCacheStatusPage(user: {
   const statusCommitCacheSortState = user.statusCommitCacheSortState === 'commit_month_desc'
     ? 'commit_month_desc'
     : 'cached_at_desc';
+  const statusChartMode = user.statusChartMode === 'repo' ? 'repo' : 'gradient';
 
   const getCachedAtEpoch = (cachedAt: string): number => {
     const epoch = Date.parse(cachedAt);
@@ -160,7 +163,23 @@ export function getCacheStatusPage(user: {
     .sort((a, b) => a.yearMonth.localeCompare(b.yearMonth));
   const maxCommits = Math.max(...chartData.map(d => d.totalCommits), 1);
 
-  const chartBars = chartData.map(d => {
+  // リポジトリ別カラーパレット
+  const repoColorPalette = [
+    '#667eea', '#e53e3e', '#38a169', '#ed8936', '#9f7aea',
+    '#dd6b20', '#319795', '#d53f8c', '#3182ce', '#d69e2e',
+    '#805ad5', '#2b6cb0', '#c53030', '#2f855a', '#b7791f',
+  ];
+  const allRepos = Array.from(new Set(data.commitCache.byMonthByRepo.map(r => r.repo)));
+  const repoTotalCommits = new Map<string, number>();
+  for (const r of data.commitCache.byMonthByRepo) {
+    repoTotalCommits.set(r.repo, (repoTotalCommits.get(r.repo) || 0) + r.commits);
+  }
+  allRepos.sort((a, b) => (repoTotalCommits.get(b) || 0) - (repoTotalCommits.get(a) || 0));
+  const repoColorMap: Record<string, string> = {};
+  allRepos.forEach((repo, i) => { repoColorMap[repo] = repoColorPalette[i % repoColorPalette.length]; });
+
+  // グラデーションモード用バー
+  const gradientBars = chartData.map(d => {
     const pct = Math.round((d.totalCommits / maxCommits) * 100);
     return `<div class="chart-bar-wrapper">
       <div class="chart-label">${escapeHtml(d.yearMonth)}</div>
@@ -170,6 +189,34 @@ export function getCacheStatusPage(user: {
       <div class="chart-value">${d.totalCommits}</div>
     </div>`;
   }).join('');
+
+  // リポジトリ色分けモード用バー（コミット数の多い月を左に）
+  const sortedChartDataByCount = chartData.slice().sort((a, b) => b.totalCommits - a.totalCommits);
+  const repoBars = sortedChartDataByCount.map(d => {
+    const pct = Math.round((d.totalCommits / maxCommits) * 100);
+    const monthRepos = data.commitCache.byMonthByRepo
+      .filter(r => r.yearMonth === d.yearMonth)
+      .sort((a, b) => (repoTotalCommits.get(b.repo) || 0) - (repoTotalCommits.get(a.repo) || 0));
+    const segments = monthRepos.map(r => {
+      const segPct = d.totalCommits > 0 ? (r.commits / d.totalCommits * 100) : 0;
+      return `<div class="chart-bar-segment" style="width:${segPct.toFixed(2)}%;background:${repoColorMap[r.repo]}" title="${escapeHtml(r.repo)}: ${r.commits}"></div>`;
+    }).join('');
+    return `<div class="chart-bar-wrapper">
+      <div class="chart-label">${escapeHtml(d.yearMonth)}</div>
+      <div class="chart-bar-container">
+        <div class="chart-bar-stacked" style="width: ${pct}%">${segments}</div>
+      </div>
+      <div class="chart-value">${d.totalCommits}</div>
+    </div>`;
+  }).join('');
+
+  // リポジトリ凡例
+  const repoLegend = allRepos.map(repo => {
+    const total = repoTotalCommits.get(repo) || 0;
+    return `<span class="chart-legend-item"><span class="chart-legend-dot" style="background:${repoColorMap[repo]}"></span>${escapeHtml(repo)} (${total})</span>`;
+  }).join('');
+
+  const chartBars = statusChartMode === 'repo' ? repoBars : gradientBars;
 
   // キャッシュ統計：リポジトリ別テーブル行
   const cs = data.cacheStats;
@@ -387,6 +434,27 @@ export function getCacheStatusPage(user: {
     .chart-bar {
       height: 100%; background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
       border-radius: 4px; min-width: 2px; transition: width 0.3s ease;
+    }
+    .chart-bar-stacked {
+      height: 100%; display: flex; border-radius: 4px; overflow: hidden;
+      min-width: 2px; transition: width 0.3s ease;
+    }
+    .chart-bar-segment {
+      height: 100%; min-width: 1px; transition: width 0.3s ease;
+    }
+    .chart-bar-segment:first-child { border-radius: 4px 0 0 4px; }
+    .chart-bar-segment:last-child { border-radius: 0 4px 4px 0; }
+    .chart-bar-segment:only-child { border-radius: 4px; }
+    .chart-legend {
+      display: flex; flex-wrap: wrap; gap: 8px 16px; margin-bottom: 12px;
+      padding: 8px 12px; background: var(--bg-secondary); border-radius: 8px;
+    }
+    .chart-legend-item {
+      display: inline-flex; align-items: center; gap: 5px;
+      font-size: 12px; color: var(--text-secondary); white-space: nowrap;
+    }
+    .chart-legend-dot {
+      display: inline-block; width: 10px; height: 10px; border-radius: 2px; flex-shrink: 0;
     }
     .chart-value {
       min-width: 50px; font-size: 13px; color: var(--text-secondary); font-weight: 600;
@@ -915,6 +983,7 @@ export function getCacheStatusPage(user: {
       ${chartData.length > 0 ? `
       <div class="section">
         <h2 class="section-title">月別コミット量</h2>
+        ${statusChartMode === 'repo' && allRepos.length > 0 ? `<div class="chart-legend">${repoLegend}</div>` : ''}
         <div class="chart-section">
           ${chartBars}
         </div>
@@ -1797,15 +1866,7 @@ export function getCacheStatusPage(user: {
             .then(function(res) { return res.json(); })
             .then(function(data) {
               if (data.tables && data.relations) {
-                var gap = 20;
-                var colWidth = 240;
-                var colCount = Math.max(3, Math.ceil(Math.sqrt(data.tables.length)));
-                for (var i = 0; i < data.tables.length; i++) {
-                  var col = i % colCount;
-                  var row = Math.floor(i / colCount);
-                  data.tables[i].x = 40 + col * (colWidth + gap);
-                  data.tables[i].y = 40 + row * 260;
-                }
+                layoutTablesRelational(data.tables, data.relations);
                 tables = data.tables;
                 relations = data.relations;
                 renderErDiagram(tables, relations);
@@ -1937,6 +1998,77 @@ export function getCacheStatusPage(user: {
         ['commit_calendar_cache', 'workspace_id', 'workspaces', 'id', '多:1'],
         ['commit_list_cache', 'workspace_id', 'workspaces', 'id', '多:1']
       ];
+
+      function layoutTablesRelational(tbls, rels) {
+        var adj = {};
+        for (var i = 0; i < tbls.length; i++) adj[tbls[i].name] = [];
+        for (var r = 0; r < rels.length; r++) {
+          var from = rels[r][0], to = rels[r][2];
+          if (adj[from]) adj[from].push(to);
+          if (adj[to]) adj[to].push(from);
+        }
+        var tblByName = {};
+        for (var i = 0; i < tbls.length; i++) tblByName[tbls[i].name] = tbls[i];
+
+        var scored = tbls.map(function(t) {
+          return { name: t.name, score: (adj[t.name] || []).length };
+        });
+        scored.sort(function(a, b) { return b.score - a.score; });
+
+        var placed = {};
+        var colWidth = 260;
+        var rowGap = 30;
+
+        function estimateHeight(t) { return 34 + t.cols.length * 22 + 8; }
+
+        var layers = [];
+        var visited = {};
+
+        function bfs(startName) {
+          var queue = [startName];
+          visited[startName] = true;
+          var layerIdx = layers.length;
+          while (queue.length > 0) {
+            var nextQueue = [];
+            if (!layers[layerIdx]) layers[layerIdx] = [];
+            for (var q = 0; q < queue.length; q++) {
+              var name = queue[q];
+              layers[layerIdx].push(name);
+              var neighbors = adj[name] || [];
+              for (var n = 0; n < neighbors.length; n++) {
+                if (!visited[neighbors[n]]) {
+                  visited[neighbors[n]] = true;
+                  nextQueue.push(neighbors[n]);
+                }
+              }
+            }
+            layerIdx++;
+            queue = nextQueue;
+          }
+        }
+
+        for (var s = 0; s < scored.length; s++) {
+          if (!visited[scored[s].name]) bfs(scored[s].name);
+        }
+
+        var currentX = 40;
+        for (var l = 0; l < layers.length; l++) {
+          var layer = layers[l];
+          var currentY = 40;
+          var maxW = 0;
+          for (var m = 0; m < layer.length; m++) {
+            var tbl = tblByName[layer[m]];
+            if (!tbl) continue;
+            var w = getTableCardWidth(tbl);
+            var h = estimateHeight(tbl);
+            tbl.x = currentX;
+            tbl.y = currentY;
+            currentY += h + rowGap;
+            if (w > maxW) maxW = w;
+          }
+          currentX += maxW + 60;
+        }
+      }
 
       function getTableCardWidth(table) {
         var maxLen = table.name.length;

@@ -1151,12 +1151,13 @@ app.get('/settings', authMiddleware, async (c) => {
   const user = c.get('user');
 
   const cookieHeader = c.req.header('Cookie');
-  const cookieVals = getCookieValues(cookieHeader, ['user_timezone', 'user_session_duration', 'user_recent_commits_count', 'user_toast_duration', 'user_status_commit_cache_sort_mode']);
+  const cookieVals = getCookieValues(cookieHeader, ['user_timezone', 'user_session_duration', 'user_recent_commits_count', 'user_toast_duration', 'user_status_commit_cache_sort_mode', 'user_status_chart_mode']);
   const timezone = cookieVals['user_timezone'] || DEFAULT_TIMEZONE;
   const sessionDuration = cookieVals['user_session_duration'] || '1h';
   const recentCommitsCount = parseInt(cookieVals['user_recent_commits_count'] || '20', 10) || 20;
   const toastDuration = parseInt(cookieVals['user_toast_duration'] || '10', 10) || 10;
   const statusCommitCacheSortMode = cookieVals['user_status_commit_cache_sort_mode'] === 'toggle' ? 'toggle' : 'off';
+  const statusChartMode = cookieVals['user_status_chart_mode'] === 'repo' ? 'repo' : 'gradient';
 
   let issuedAt: string;
   let expiresAt: string;
@@ -1208,6 +1209,7 @@ app.get('/settings', authMiddleware, async (c) => {
     recentCommitsCount,
     toastDuration,
     statusCommitCacheSortMode,
+    statusChartMode,
     githubScopes: GITHUB_OAUTH_SCOPE,
     githubGrantedScopes: grantedScopes,
     githubScopeError: scopesError,
@@ -1235,16 +1237,17 @@ app.get('/status', authMiddleware, async (c) => {
   const user = c.get('user');
   const db = c.env.DB;
   const cookieHeader = c.req.header('Cookie');
-  const cookieVals = getCookieValues(cookieHeader, ['user_status_commit_cache_sort_mode', 'user_status_commit_cache_sort_state']);
+  const cookieVals = getCookieValues(cookieHeader, ['user_status_commit_cache_sort_mode', 'user_status_commit_cache_sort_state', 'user_status_chart_mode']);
   const statusCommitCacheSortMode = cookieVals['user_status_commit_cache_sort_mode'] === 'toggle' ? 'toggle' : 'off';
   const statusCommitCacheSortState = statusCommitCacheSortMode === 'toggle' && cookieVals['user_status_commit_cache_sort_state'] === 'commit_month_desc'
     ? 'commit_month_desc'
     : 'cached_at_desc';
+  const statusChartMode = cookieVals['user_status_chart_mode'] === 'repo' ? 'repo' : 'gradient';
   const userSession = await getUserSession(c.env.DB, user.sub);
   const timezone = userSession?.timezone || getCookieValues(cookieHeader, ['user_timezone'])['user_timezone'] || DEFAULT_TIMEZONE;
 
   const data: CacheStatusData = {
-    commitCache: { totalEntries: 0, totalCommits: 0, repos: [], byMonth: [], entries: [] },
+    commitCache: { totalEntries: 0, totalCommits: 0, repos: [], byMonth: [], byMonthByRepo: [], entries: [] },
     installationPerms: { totalEntries: 0, entries: [] },
     cacheStats: {
       totalGithubFetch: 0, totalCacheSave: 0,
@@ -1314,6 +1317,7 @@ app.get('/status', authMiddleware, async (c) => {
       if (cacheRows.results) {
         const repoMap = new Map<string, { entryCount: number; totalCommits: number }>();
         const monthMap = new Map<string, { entryCount: number; totalCommits: number }>();
+        const monthRepoMap = new Map<string, number>();
 
         for (const row of cacheRows.results) {
           const counts: Record<string, number> = JSON.parse(row.counts);
@@ -1330,12 +1334,14 @@ app.get('/status', authMiddleware, async (c) => {
           data.commitCache.totalCommits += total;
 
           const repoKey = `${row.owner}/${row.repo}`;
+          const ym = `${row.year}-${String(row.month).padStart(2, '0')}`;
+          const mrKey = `${ym}::${repoKey}`;
+          monthRepoMap.set(mrKey, (monthRepoMap.get(mrKey) || 0) + total);
           const existing = repoMap.get(repoKey) || { entryCount: 0, totalCommits: 0 };
           existing.entryCount++;
           existing.totalCommits += total;
           repoMap.set(repoKey, existing);
 
-          const ym = `${row.year}-${String(row.month).padStart(2, '0')}`;
           const mExisting = monthMap.get(ym) || { entryCount: 0, totalCommits: 0 };
           mExisting.entryCount++;
           mExisting.totalCommits += total;
@@ -1354,6 +1360,11 @@ app.get('/status', authMiddleware, async (c) => {
           data.commitCache.byMonth.push({ yearMonth: ym, entryCount: val.entryCount, totalCommits: val.totalCommits });
         }
         data.commitCache.byMonth.sort((a, b) => a.yearMonth.localeCompare(b.yearMonth));
+
+        for (const [mrKey, commits] of monthRepoMap.entries()) {
+          const [ym, repo] = mrKey.split('::');
+          data.commitCache.byMonthByRepo.push({ yearMonth: ym, repo, commits });
+        }
       }
     } catch (error) {
       logger.warn('Failed to fetch commit calendar cache for status page', {
@@ -1436,6 +1447,14 @@ app.get('/status', authMiddleware, async (c) => {
           });
         }
         data.commitCache.byMonth.sort((a, b) => a.yearMonth.localeCompare(b.yearMonth));
+
+        for (const [repoKey, val] of currentMonthRepoMap.entries()) {
+          data.commitCache.byMonthByRepo.push({
+            yearMonth: currentYmPrefix,
+            repo: repoKey,
+            commits: val.totalCommits,
+          });
+        }
       }
     } catch (error) {
       logger.warn('Failed to fetch current month commit data for status page', {
@@ -1508,6 +1527,7 @@ app.get('/status', authMiddleware, async (c) => {
     name: user.name,
     statusCommitCacheSortMode,
     statusCommitCacheSortState,
+    statusChartMode,
   }, data));
 });
 
@@ -3216,6 +3236,27 @@ app.post('/api/settings/status-commit-cache-sort-mode', authMiddleware, async (c
       error: error instanceof Error ? error.message : 'Unknown error',
     });
     return c.json({ error: '月別コミットキャッシュ詳細の並び替え設定変更に失敗しました' }, 500);
+  }
+});
+
+app.post('/api/settings/status-chart-mode', authMiddleware, async (c) => {
+  try {
+    const { mode } = await c.req.json();
+
+    if (mode !== 'gradient' && mode !== 'repo') {
+      return c.json({ error: '無効なチャート表示モードです' }, 400);
+    }
+
+    c.header('Set-Cookie', `user_status_chart_mode=${mode}; Path=/; Secure; SameSite=Lax; Max-Age=31536000`);
+
+    return c.json({ message: '月別コミット量チャートの表示モードを変更しました', mode }, 200);
+  } catch (error) {
+    const user = c.get('user');
+    logger.error('Status chart mode update error', {
+      userId: user?.sub,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    return c.json({ error: '月別コミット量チャートの表示モード変更に失敗しました' }, 500);
   }
 });
 

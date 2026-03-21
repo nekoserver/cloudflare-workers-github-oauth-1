@@ -16,6 +16,7 @@ export function getSettingsPage(user: {
   recentCommitsCount?: number;
   toastDuration?: number;
   statusCommitCacheSortMode?: string;
+  statusChartMode?: string;
   githubScopes?: string;
   githubGrantedScopes?: string[] | null;
   githubScopeError?: string | null;
@@ -27,6 +28,7 @@ export function getSettingsPage(user: {
   const currentRecentCommitsCount = user.recentCommitsCount || 20;
   const currentToastDuration = user.toastDuration || 10;
   const currentStatusCommitCacheSortMode = user.statusCommitCacheSortMode === 'toggle' ? 'toggle' : 'off';
+  const currentStatusChartMode = user.statusChartMode === 'repo' ? 'repo' : 'gradient';
   const requestedScopes = user.githubScopes ? user.githubScopes.split(/\s+/).filter(Boolean) : [];
   const grantedScopes = user.githubGrantedScopes ?? null;
   const scopeError = user.githubScopeError ? escapeHtml(user.githubScopeError) : null;
@@ -317,6 +319,18 @@ export function getSettingsPage(user: {
               <input type="checkbox" class="setting-checkbox" id="toastDurationCheckbox" onchange="toggleToastDurationEdit()">
             </div>
           </div>
+          <div class="info-item disabled" id="statusChartModeItem">
+            <span class="info-label">月別コミット量チャートの表示モード</span>
+            <div class="setting-control">
+              <div class="setting-select-wrapper">
+                <select class="timezone-select" id="statusChartModeSelect" onchange="onStatusChartModeChange()" disabled>
+                  <option value="gradient" ${currentStatusChartMode === 'gradient' ? 'selected' : ''}>グラデーション (デフォルト)</option>
+                  <option value="repo" ${currentStatusChartMode === 'repo' ? 'selected' : ''}>リポジトリ別色分け</option>
+                </select>
+              </div>
+              <input type="checkbox" class="setting-checkbox" id="statusChartModeCheckbox" onchange="toggleStatusChartModeEdit()">
+            </div>
+          </div>
           <div class="info-item disabled" id="statusCommitCacheSortModeItem">
             <span class="info-label">月別コミットキャッシュ詳細の並び替え</span>
             <div class="setting-control">
@@ -345,6 +359,11 @@ export function getSettingsPage(user: {
           <button class="btn btn-cancel" onclick="cancelToastDuration()">キャンセル</button>
         </div>
         <div class="success-message" id="toastDurationSuccessMessage">✓ トースト表示時間を変更しました</div>
+        <div class="button-container" id="statusChartModeButtonContainer">
+          <button class="btn btn-save" onclick="saveStatusChartMode()">保存</button>
+          <button class="btn btn-cancel" onclick="cancelStatusChartMode()">キャンセル</button>
+        </div>
+        <div class="success-message" id="statusChartModeSuccessMessage">✓ 月別コミット量チャートの表示モードを変更しました</div>
         <div class="button-container" id="statusCommitCacheSortModeButtonContainer">
           <button class="btn btn-save" onclick="saveStatusCommitCacheSortMode()">保存</button>
           <button class="btn btn-cancel" onclick="cancelStatusCommitCacheSortMode()">キャンセル</button>
@@ -393,6 +412,7 @@ export function getSettingsPage(user: {
     let originalSessionDuration = '${currentSessionDuration}';
     let originalRecentCommitsCount = '${currentRecentCommitsCount}';
     let originalToastDuration = '${currentToastDuration}';
+    let originalStatusChartMode = '${currentStatusChartMode}';
     let originalStatusCommitCacheSortMode = '${currentStatusCommitCacheSortMode}';
     const expiresAtTimestamp = ${user.expiresAtTimestamp};
 
@@ -584,6 +604,55 @@ export function getSettingsPage(user: {
       document.getElementById('toastDurationCheckbox').checked = false;
       document.getElementById('toastDurationSelect').disabled = true;
       document.getElementById('toastDurationItem').classList.add('disabled');
+    }
+    function toggleStatusChartModeEdit() {
+      const cb = document.getElementById('statusChartModeCheckbox');
+      const sel = document.getElementById('statusChartModeSelect');
+      const item = document.getElementById('statusChartModeItem');
+      if (cb.checked) { sel.disabled = false; item.classList.remove('disabled'); }
+      else {
+        sel.disabled = true;
+        item.classList.add('disabled');
+        sel.value = originalStatusChartMode;
+        document.getElementById('statusChartModeButtonContainer').classList.remove('show');
+      }
+    }
+    function onStatusChartModeChange() {
+      const cb = document.getElementById('statusChartModeCheckbox');
+      const sel = document.getElementById('statusChartModeSelect');
+      if (cb.checked && sel.value !== originalStatusChartMode) {
+        document.getElementById('statusChartModeButtonContainer').classList.add('show');
+      } else {
+        document.getElementById('statusChartModeButtonContainer').classList.remove('show');
+      }
+    }
+    async function saveStatusChartMode() {
+      const mode = document.getElementById('statusChartModeSelect').value;
+      const res = await fetch('/api/settings/status-chart-mode', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        credentials: 'include',
+        body: JSON.stringify({ mode })
+      });
+      if (res.ok) {
+        originalStatusChartMode = mode;
+        document.getElementById('statusChartModeButtonContainer').classList.remove('show');
+        const msg = document.getElementById('statusChartModeSuccessMessage');
+        msg.classList.add('show');
+        document.getElementById('statusChartModeCheckbox').checked = false;
+        document.getElementById('statusChartModeSelect').disabled = true;
+        document.getElementById('statusChartModeItem').classList.add('disabled');
+        setTimeout(() => { msg.classList.remove('show'); }, 1500);
+      } else {
+        alert('月別コミット量チャートの表示モード変更に失敗しました');
+      }
+    }
+    function cancelStatusChartMode() {
+      document.getElementById('statusChartModeSelect').value = originalStatusChartMode;
+      document.getElementById('statusChartModeButtonContainer').classList.remove('show');
+      document.getElementById('statusChartModeCheckbox').checked = false;
+      document.getElementById('statusChartModeSelect').disabled = true;
+      document.getElementById('statusChartModeItem').classList.add('disabled');
     }
     function toggleStatusCommitCacheSortModeEdit() {
       const cb = document.getElementById('statusCommitCacheSortModeCheckbox');
