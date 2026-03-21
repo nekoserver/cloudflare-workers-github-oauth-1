@@ -35,10 +35,13 @@ const DEFAULT_TIMEZONE = 'JST';
 const DEFAULT_COMMIT_HISTORY_PAGE_SIZE = 10;
 const STATUS_TABLE_PREVIEW_LIMIT = 20;
 
+type SyncPolicy = 'auto' | 'manual' | 'readonly';
+
 type StatusTableDefinition = {
   name: string;
   migration: string;
   description: string;
+  syncPolicy: SyncPolicy;
 };
 
 type StatusQueryExample = {
@@ -48,21 +51,21 @@ type StatusQueryExample = {
 };
 
 const STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
-  { name: 'user_sessions', migration: '0001', description: 'ユーザーセッション・設定' },
-  { name: 'installation_permissions', migration: '0004', description: 'GitHub App インストール権限キャッシュ' },
-  { name: 'commit_calendar_cache', migration: '0005', description: 'コミットカレンダーキャッシュ' },
-  { name: 'teams', migration: '0007', description: 'チーム管理' },
-  { name: 'workspaces', migration: '0007', description: 'ワークスペース管理' },
-  { name: 'team_members', migration: '0007', description: 'チームメンバー' },
-  { name: 'commit_list_cache', migration: '0008', description: 'コミット一覧キャッシュ' },
-  { name: 'cache_stats', migration: '0009', description: 'キャッシュ統計' },
-  { name: 'cloudflare_setup_pending', migration: '0010', description: 'Cloudflare セットアップ通知' },
-  { name: 'commit_search_history', migration: '0011', description: 'コミット検索履歴' },
-  { name: 'commit_search_repo_stats', migration: '0011', description: 'コミット検索リポジトリ別集計' },
-  { name: 'ai_summary_log', migration: '0012', description: 'AI要約ログ' },
-  { name: 'repo_color_settings', migration: '0013', description: 'リポジトリ色・タグ設定' },
-  { name: 'repo_groups', migration: '0014', description: 'リポジトリグループ' },
-  { name: 'repo_group_members', migration: '0014', description: 'リポジトリグループメンバー' },
+  { name: 'user_sessions', migration: '0001', description: 'ユーザーセッション・設定', syncPolicy: 'auto' },
+  { name: 'installation_permissions', migration: '0004', description: 'GitHub App インストール権限キャッシュ', syncPolicy: 'readonly' },
+  { name: 'commit_calendar_cache', migration: '0005', description: 'コミットカレンダーキャッシュ', syncPolicy: 'auto' },
+  { name: 'teams', migration: '0007', description: 'チーム管理', syncPolicy: 'auto' },
+  { name: 'workspaces', migration: '0007', description: 'ワークスペース管理', syncPolicy: 'auto' },
+  { name: 'team_members', migration: '0007', description: 'チームメンバー', syncPolicy: 'auto' },
+  { name: 'commit_list_cache', migration: '0008', description: 'コミット一覧キャッシュ', syncPolicy: 'auto' },
+  { name: 'cache_stats', migration: '0009', description: 'キャッシュ統計', syncPolicy: 'auto' },
+  { name: 'cloudflare_setup_pending', migration: '0010', description: 'Cloudflare セットアップ通知', syncPolicy: 'auto' },
+  { name: 'commit_search_history', migration: '0011', description: 'コミット検索履歴', syncPolicy: 'auto' },
+  { name: 'commit_search_repo_stats', migration: '0011', description: 'コミット検索リポジトリ別集計', syncPolicy: 'auto' },
+  { name: 'ai_summary_log', migration: '0012', description: 'AI要約ログ', syncPolicy: 'auto' },
+  { name: 'repo_color_settings', migration: '0013', description: 'リポジトリ色・タグ設定', syncPolicy: 'auto' },
+  { name: 'repo_groups', migration: '0014', description: 'リポジトリグループ', syncPolicy: 'manual' },
+  { name: 'repo_group_members', migration: '0014', description: 'リポジトリグループメンバー', syncPolicy: 'manual' },
 ];
 
 const STATUS_MIGRATION_SQL: Record<string, string> = {
@@ -1344,6 +1347,7 @@ app.get('/status', authMiddleware, async (c) => {
         rowCount: null,
         migration: tbl.migration,
         description: tbl.description,
+        syncPolicy: tbl.syncPolicy,
       };
       try {
         const countResult = await db.prepare(
@@ -1570,16 +1574,19 @@ app.get('/status', authMiddleware, async (c) => {
       });
     }
 
-    // リポジトリ色設定の読み込み（読み取りのみ。同期は POST /api/repo-colors/sync で行う）
+    // リポジトリ色設定の読み込み（syncPolicy: auto — ページ読み込み時に自動同期）
     try {
+      // まず既存データを読む
       const colorRows = await db.prepare(
         'SELECT repo_name, color_code, display_order, tags, is_visible FROM repo_color_settings WHERE workspace_id = ? ORDER BY display_order ASC, repo_name ASC'
       ).bind(workspaceId).all<{
         repo_name: string; color_code: string; display_order: number; tags: string; is_visible: number;
       }>();
 
+      const existingRepoNames = new Set<string>();
       if (colorRows.results) {
         for (const row of colorRows.results) {
+          existingRepoNames.add(row.repo_name);
           data.repoColors.push({
             repoName: row.repo_name,
             colorCode: row.color_code,
@@ -1589,8 +1596,65 @@ app.get('/status', authMiddleware, async (c) => {
           });
         }
       }
+
+      // コミットキャッシュに存在するが色設定に未登録のリポジトリを自動追加
+      const cacheRepoRows = await db.prepare(
+        'SELECT DISTINCT owner, repo FROM commit_calendar_cache WHERE workspace_id = ?'
+      ).bind(workspaceId).all<{ owner: string; repo: string }>();
+      const listRepoRows = await db.prepare(
+        'SELECT DISTINCT owner, repo FROM commit_list_cache WHERE workspace_id = ?'
+      ).bind(workspaceId).all<{ owner: string; repo: string }>();
+
+      const allCacheRepos = new Set<string>();
+      if (cacheRepoRows.results) {
+        for (const r of cacheRepoRows.results) allCacheRepos.add(`${r.owner}/${r.repo}`);
+      }
+      if (listRepoRows.results) {
+        for (const r of listRepoRows.results) allCacheRepos.add(`${r.owner}/${r.repo}`);
+      }
+
+      const newRepos = Array.from(allCacheRepos).filter(r => !existingRepoNames.has(r)).sort();
+      if (newRepos.length > 0) {
+        const defaultPalette = [
+          '#667eea', '#e53e3e', '#38a169', '#ed8936', '#9f7aea',
+          '#dd6b20', '#319795', '#d53f8c', '#3182ce', '#d69e2e',
+          '#805ad5', '#2b6cb0', '#c53030', '#2f855a', '#b7791f',
+        ];
+        let maxOrder = -1;
+        if (existingRepoNames.size > 0) {
+          const orderRow = await db.prepare(
+            'SELECT MAX(display_order) AS max_order FROM repo_color_settings WHERE workspace_id = ?'
+          ).bind(workspaceId).first<{ max_order: number | null }>();
+          maxOrder = orderRow?.max_order ?? -1;
+        }
+        const now = new Date().toISOString();
+        const stmts = newRepos.map((repo, i) => {
+          const colorIndex = (existingRepoNames.size + i) % defaultPalette.length;
+          const order = maxOrder + 1 + i;
+          return db.prepare(
+            'INSERT OR IGNORE INTO repo_color_settings (workspace_id, repo_name, color_code, display_order, tags, is_visible, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 1, ?, ?)'
+          ).bind(workspaceId, repo, defaultPalette[colorIndex], order, '', now, now);
+        });
+        await db.batch(stmts);
+
+        // 新規追加分を data.repoColors にも反映
+        for (let i = 0; i < newRepos.length; i++) {
+          const colorIndex = (existingRepoNames.size + i) % defaultPalette.length;
+          data.repoColors.push({
+            repoName: newRepos[i],
+            colorCode: defaultPalette[colorIndex],
+            displayOrder: maxOrder + 1 + i,
+            tags: '',
+            isVisible: true,
+          });
+        }
+
+        logger.info(`Auto-synced ${newRepos.length} repos to repo_color_settings on page load`, {
+          userId: user.sub, workspaceId, newRepos,
+        });
+      }
     } catch (error) {
-      logger.warn('Failed to read repo_color_settings (table may not exist yet)', {
+      logger.warn('Failed to read/sync repo_color_settings (table may not exist yet)', {
         error: error instanceof Error ? error.message : 'Unknown error',
       });
     }
