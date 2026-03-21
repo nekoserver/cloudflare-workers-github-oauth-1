@@ -740,6 +740,70 @@ export function getCacheStatusPage(user: {
     .uml-export-button:hover { background: #38a169; }
     .uml-export-button:disabled { background: #a0aec0; cursor: not-allowed; }
 
+    .uml-collist-button {
+      background: #4299e1; color: white; border: none; border-radius: 8px;
+      padding: 8px 16px; font-size: 12px; font-weight: 600;
+      cursor: pointer; display: inline-flex; align-items: center; gap: 5px;
+      transition: background 0.2s; white-space: nowrap;
+    }
+    .uml-collist-button:hover { background: #3182ce; }
+
+    /* カラム名一覧モーダル */
+    .collist-modal-card {
+      width: min(960px, 100%); max-height: min(90vh, 960px);
+      background: var(--card-bg); border: 1px solid var(--border-color);
+      border-radius: 16px; box-shadow: 0 24px 80px rgba(0, 0, 0, 0.25);
+      overflow: hidden; display: flex; flex-direction: column;
+    }
+    .collist-filters {
+      display: flex; gap: 8px; padding: 12px 24px; flex-wrap: wrap;
+      border-bottom: 1px solid var(--border-color); background: var(--card-bg);
+    }
+    .collist-filter-group {
+      display: flex; flex-direction: column; gap: 2px; min-width: 140px;
+    }
+    .collist-filter-group label {
+      font-size: 10px; font-weight: 600; color: var(--text-faint);
+      text-transform: uppercase; letter-spacing: 0.5px;
+    }
+    .collist-filter-group select {
+      padding: 5px 8px; font-size: 12px; border: 1px solid var(--border-color);
+      border-radius: 6px; background: var(--bg); color: var(--text-color);
+      cursor: pointer; min-width: 120px;
+    }
+    .collist-body {
+      overflow: auto; flex: 1; padding: 0;
+    }
+    .collist-table {
+      width: 100%; border-collapse: collapse; font-size: 13px;
+    }
+    .collist-table thead { position: sticky; top: 0; z-index: 1; }
+    .collist-table th {
+      background: var(--card-bg); border-bottom: 2px solid var(--border-color);
+      padding: 10px 14px; text-align: left; font-weight: 600; cursor: pointer;
+      user-select: none; white-space: nowrap; color: var(--text-color);
+    }
+    .collist-table th:hover { background: var(--hover-bg, rgba(0,0,0,0.03)); }
+    .collist-table th .sort-indicator { margin-left: 4px; opacity: 0.4; font-size: 11px; }
+    .collist-table th .sort-indicator.active { opacity: 1; }
+    .collist-table td {
+      padding: 8px 14px; border-bottom: 1px solid var(--border-color);
+      color: var(--text-color);
+    }
+    .collist-table tr:hover td { background: var(--hover-bg, rgba(0,0,0,0.02)); }
+    .collist-table .key-badge {
+      display: inline-block; padding: 1px 6px; border-radius: 4px;
+      font-size: 10px; font-weight: 700; color: white; margin-right: 3px;
+    }
+    .collist-table .key-badge.pk { background: #e53e3e; }
+    .collist-table .key-badge.fk { background: #ed8936; }
+    .collist-table .key-badge.uk { background: #48bb78; }
+    .collist-table .key-badge.idx { background: #4299e1; }
+    .collist-count {
+      padding: 8px 24px; font-size: 12px; color: var(--text-faint);
+      border-top: 1px solid var(--border-color); text-align: right;
+    }
+
     /* UML モーダル */
     .uml-modal-card {
       width: min(1200px, 100%); max-height: min(90vh, 960px);
@@ -1130,6 +1194,10 @@ export function getCacheStatusPage(user: {
           <div class="modal-subtitle">テーブル間の外部キー・参照関係と正規化状況を表示しています</div>
         </div>
         <div style="display:flex; align-items:center; gap:8px;">
+          <button type="button" class="uml-collist-button" id="umlColListBtn">
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M2 4h12M2 8h12M2 12h8" stroke="white" stroke-width="1.5" stroke-linecap="round"/></svg>
+            カラム名での表一覧
+          </button>
           <button type="button" class="uml-export-button" id="umlExportPng">
             <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M8 1v9M8 10L4.5 6.5M8 10l3.5-3.5M2 12v2h12v-2" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
             画像出力
@@ -1153,6 +1221,26 @@ export function getCacheStatusPage(user: {
         <span class="nf-badge">3NF</span><code>cache_stats</code> — 全カウンタが (user_id, owner, repo) 複合キーにのみ従属。<br>
         <span class="nf-badge">2NF</span><code>installation_permissions</code> — permissions が JSON 文字列格納。GitHub API レスポンスのキャッシュとして非正規化を許容。
       </div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="colListModal" aria-hidden="true">
+    <div class="collist-modal-card" role="dialog" aria-modal="true" aria-labelledby="colListModalTitle">
+      <div class="modal-header">
+        <div class="modal-title-wrap">
+          <div class="modal-title" id="colListModalTitle">カラム名での表一覧</div>
+          <div class="modal-subtitle">全テーブルのカラム定義をキー種別・テーブル名で絞り込み・ソートできます</div>
+        </div>
+        <button type="button" class="modal-close" id="colListModalClose" aria-label="閉じる">&times;</button>
+      </div>
+      <div class="collist-filters" id="colListFilters"></div>
+      <div class="collist-body">
+        <table class="collist-table">
+          <thead id="colListThead"></thead>
+          <tbody id="colListTbody"></tbody>
+        </table>
+      </div>
+      <div class="collist-count" id="colListCount"></div>
     </div>
   </div>
 
@@ -1869,8 +1957,10 @@ export function getCacheStatusPage(user: {
                 layoutTablesRelational(data.tables, data.relations);
                 tables = data.tables;
                 relations = data.relations;
+                window.__erTables = tables;
                 renderErDiagram(tables, relations);
                 umlRendered = true;
+                if (window.__refreshColList) window.__refreshColList(tables);
 
                 if (umlModal.classList.contains('show')) {
                   // already open
@@ -1904,6 +1994,7 @@ export function getCacheStatusPage(user: {
       });
 
       // テーブル定義
+      window.__erTables = null;
       var tables = [
         {
           name: 'teams', x: 80, y: 40, cols: [
@@ -1998,6 +2089,8 @@ export function getCacheStatusPage(user: {
         ['commit_calendar_cache', 'workspace_id', 'workspaces', 'id', '多:1'],
         ['commit_list_cache', 'workspace_id', 'workspaces', 'id', '多:1']
       ];
+
+      window.__erTables = tables;
 
       function layoutTablesRelational(tbls, rels) {
         var adj = {};
@@ -2526,6 +2619,229 @@ export function getCacheStatusPage(user: {
           }
         }
       }
+    })();
+
+    // カラム名一覧モーダル
+    (function() {
+      var colListModal = document.getElementById('colListModal');
+      var colListCloseBtn = document.getElementById('colListModalClose');
+      var colListBtn = document.getElementById('umlColListBtn');
+      var colListThead = document.getElementById('colListThead');
+      var colListTbody = document.getElementById('colListTbody');
+      var colListFilters = document.getElementById('colListFilters');
+      var colListCount = document.getElementById('colListCount');
+      if (!colListModal || !colListBtn || !colListTbody) return;
+
+      var repoName = ${JSON.stringify('cloudflare-workers-github-oauth-1')};
+      var colHeaders = [
+        { key: 'keys', label: 'キー種別' },
+        { key: 'colName', label: 'カラム名' },
+        { key: 'tableName', label: '定義済テーブル' },
+        { key: 'repoName', label: 'リポジトリ名' }
+      ];
+
+      var allRows = [];
+      var sortCol = 'colName';
+      var sortAsc = true;
+      var filters = { keys: '', colName: '', tableName: '', repoName: '' };
+      var colListBuilt = false;
+
+      function buildRows(tablesData) {
+        allRows = [];
+        for (var t = 0; t < tablesData.length; t++) {
+          var tbl = tablesData[t];
+          for (var c = 0; c < tbl.cols.length; c++) {
+            var col = tbl.cols[c];
+            var keyLabel = '';
+            if (col.keys.length > 1) {
+              keyLabel = col.keys.map(function(k) { return k.toUpperCase(); }).join('+');
+            } else if (col.keys.length === 1) {
+              keyLabel = col.keys[0].toUpperCase();
+            } else {
+              keyLabel = '-';
+            }
+            allRows.push({
+              keys: keyLabel,
+              keysArr: col.keys.slice(),
+              colName: col.name,
+              tableName: tbl.name,
+              repoName: repoName
+            });
+          }
+        }
+      }
+
+      function getFilteredSorted() {
+        var filtered = allRows.filter(function(row) {
+          for (var f in filters) {
+            if (filters[f] && row[f] !== filters[f]) return false;
+          }
+          return true;
+        });
+        filtered.sort(function(a, b) {
+          var va = a[sortCol] || '';
+          var vb = b[sortCol] || '';
+          if (va < vb) return sortAsc ? -1 : 1;
+          if (va > vb) return sortAsc ? 1 : -1;
+          return 0;
+        });
+        return filtered;
+      }
+
+      function getUniqueValues(key) {
+        var seen = {};
+        var vals = [];
+        for (var i = 0; i < allRows.length; i++) {
+          var v = allRows[i][key];
+          if (!seen[v]) { seen[v] = true; vals.push(v); }
+        }
+        vals.sort();
+        return vals;
+      }
+
+      function renderFilters() {
+        colListFilters.innerHTML = '';
+        for (var h = 0; h < colHeaders.length; h++) {
+          var hdr = colHeaders[h];
+          var group = document.createElement('div');
+          group.className = 'collist-filter-group';
+          var label = document.createElement('label');
+          label.textContent = hdr.label;
+          group.appendChild(label);
+          var sel = document.createElement('select');
+          sel.setAttribute('data-filter-key', hdr.key);
+          var optAll = document.createElement('option');
+          optAll.value = '';
+          optAll.textContent = 'すべて';
+          sel.appendChild(optAll);
+          var vals = getUniqueValues(hdr.key);
+          for (var v = 0; v < vals.length; v++) {
+            var opt = document.createElement('option');
+            opt.value = vals[v];
+            opt.textContent = vals[v];
+            sel.appendChild(opt);
+          }
+          sel.value = filters[hdr.key] || '';
+          sel.addEventListener('change', (function(key) {
+            return function(e) {
+              filters[key] = e.target.value;
+              renderTable();
+            };
+          })(hdr.key));
+          group.appendChild(sel);
+          colListFilters.appendChild(group);
+        }
+      }
+
+      function renderThead() {
+        colListThead.innerHTML = '';
+        var tr = document.createElement('tr');
+        for (var h = 0; h < colHeaders.length; h++) {
+          var th = document.createElement('th');
+          var hdr = colHeaders[h];
+          var textSpan = document.createTextNode(hdr.label + ' ');
+          th.appendChild(textSpan);
+          var indicator = document.createElement('span');
+          indicator.className = 'sort-indicator' + (sortCol === hdr.key ? ' active' : '');
+          if (sortCol === hdr.key) {
+            indicator.textContent = sortAsc ? '\u25B2' : '\u25BC';
+          } else {
+            indicator.textContent = '\u25B2';
+          }
+          th.appendChild(indicator);
+          th.addEventListener('click', (function(key) {
+            return function() {
+              if (sortCol === key) {
+                sortAsc = !sortAsc;
+              } else {
+                sortCol = key;
+                sortAsc = true;
+              }
+              renderThead();
+              renderTable();
+            };
+          })(hdr.key));
+          tr.appendChild(th);
+        }
+        colListThead.appendChild(tr);
+      }
+
+      function renderTable() {
+        var rows = getFilteredSorted();
+        colListTbody.innerHTML = '';
+        for (var i = 0; i < rows.length; i++) {
+          var row = rows[i];
+          var tr = document.createElement('tr');
+
+          var tdKey = document.createElement('td');
+          if (row.keysArr.length > 0) {
+            for (var k = 0; k < row.keysArr.length; k++) {
+              var badge = document.createElement('span');
+              badge.className = 'key-badge ' + row.keysArr[k];
+              badge.textContent = row.keysArr[k].toUpperCase();
+              tdKey.appendChild(badge);
+            }
+          } else {
+            tdKey.textContent = '-';
+          }
+          tr.appendChild(tdKey);
+
+          var tdCol = document.createElement('td');
+          tdCol.textContent = row.colName;
+          tr.appendChild(tdCol);
+
+          var tdTbl = document.createElement('td');
+          tdTbl.textContent = row.tableName;
+          tr.appendChild(tdTbl);
+
+          var tdRepo = document.createElement('td');
+          tdRepo.textContent = row.repoName;
+          tr.appendChild(tdRepo);
+
+          colListTbody.appendChild(tr);
+        }
+        if (colListCount) {
+          colListCount.textContent = rows.length + ' / ' + allRows.length + ' 件表示';
+        }
+      }
+
+      function openColListModal(tablesData) {
+        if (!colListBuilt || allRows.length === 0) {
+          buildRows(tablesData);
+          renderFilters();
+          renderThead();
+          renderTable();
+          colListBuilt = true;
+        }
+        colListModal.classList.add('show');
+        colListModal.setAttribute('aria-hidden', 'false');
+      }
+
+      function closeColListModal() {
+        colListModal.classList.remove('show');
+        colListModal.setAttribute('aria-hidden', 'true');
+      }
+
+      colListBtn.addEventListener('click', function() {
+        openColListModal(window.__erTables || []);
+      });
+      if (colListCloseBtn) colListCloseBtn.addEventListener('click', closeColListModal);
+      colListModal.addEventListener('click', function(e) { if (e.target === colListModal) closeColListModal(); });
+      document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape' && colListModal.classList.contains('show')) closeColListModal();
+      });
+
+      window.__refreshColList = function(tablesData) {
+        colListBuilt = false;
+        filters = { keys: '', colName: '', tableName: '', repoName: '' };
+        sortCol = 'colName';
+        sortAsc = true;
+        buildRows(tablesData);
+        renderFilters();
+        renderThead();
+        renderTable();
+        colListBuilt = true;
+      };
     })();
 
     // Canvas チャート描画
