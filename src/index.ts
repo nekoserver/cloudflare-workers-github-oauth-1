@@ -1361,6 +1361,88 @@ app.get('/status', authMiddleware, async (c) => {
       });
     }
 
+    // 当月分を commit_list_cache から集計して統計に含める
+    // （commit_calendar_cache には過去月のみ保存されるため当月分が欠落する）
+    try {
+      const currentYm = getJstYearMonthParts(new Date());
+      const currentYmPrefix = `${currentYm.year}-${String(currentYm.month).padStart(2, '0')}`;
+
+      const currentMonthRows = await db.prepare(
+        'SELECT owner, repo, date, commit_count FROM commit_list_cache WHERE workspace_id = ? AND date LIKE ? ORDER BY owner, repo, date'
+      ).bind(workspaceId, `${currentYmPrefix}-%`).all<{
+        owner: string; repo: string; date: string; commit_count: number;
+      }>();
+
+      if (currentMonthRows.results && currentMonthRows.results.length > 0) {
+        const currentMonthRepoMap = new Map<string, { owner: string; repo: string; totalCommits: number; latestDate: string }>();
+        let currentMonthTotalCommits = 0;
+
+        for (const row of currentMonthRows.results) {
+          currentMonthTotalCommits += row.commit_count;
+          const repoKey = `${row.owner}/${row.repo}`;
+          const existing = currentMonthRepoMap.get(repoKey);
+          if (existing) {
+            existing.totalCommits += row.commit_count;
+            if (row.date > existing.latestDate) existing.latestDate = row.date;
+          } else {
+            currentMonthRepoMap.set(repoKey, {
+              owner: row.owner,
+              repo: row.repo,
+              totalCommits: row.commit_count,
+              latestDate: row.date,
+            });
+          }
+        }
+
+        for (const [, val] of currentMonthRepoMap.entries()) {
+          data.commitCache.entries.push({
+            owner: val.owner,
+            repo: val.repo,
+            year: currentYm.year,
+            month: currentYm.month,
+            totalCommits: val.totalCommits,
+            cachedAt: formatTimestampWithTimezone(new Date(val.latestDate + 'T00:00:00Z'), timezone) + ' (当月)',
+          });
+          data.commitCache.totalCommits += val.totalCommits;
+
+          const repoEntry = data.commitCache.repos.find(
+            r => r.owner === val.owner && r.repo === val.repo
+          );
+          if (repoEntry) {
+            repoEntry.entryCount++;
+            repoEntry.totalCommits += val.totalCommits;
+          } else {
+            data.commitCache.repos.push({
+              owner: val.owner,
+              repo: val.repo,
+              entryCount: 1,
+              totalCommits: val.totalCommits,
+            });
+          }
+        }
+
+        data.commitCache.totalEntries += currentMonthRepoMap.size;
+        data.commitCache.repos.sort((a, b) => b.totalCommits - a.totalCommits);
+
+        const existingMonth = data.commitCache.byMonth.find(m => m.yearMonth === currentYmPrefix);
+        if (existingMonth) {
+          existingMonth.entryCount += currentMonthRepoMap.size;
+          existingMonth.totalCommits += currentMonthTotalCommits;
+        } else {
+          data.commitCache.byMonth.push({
+            yearMonth: currentYmPrefix,
+            entryCount: currentMonthRepoMap.size,
+            totalCommits: currentMonthTotalCommits,
+          });
+        }
+        data.commitCache.byMonth.sort((a, b) => a.yearMonth.localeCompare(b.yearMonth));
+      }
+    } catch (error) {
+      logger.warn('Failed to fetch current month commit data for status page', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+
     // インストール権限キャッシュ
     try {
       const permRows = await db.prepare(
