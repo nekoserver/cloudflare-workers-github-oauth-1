@@ -29,6 +29,7 @@ export interface TableStatusEntry {
   rowCount: number | null;
   migration: string;
   description: string;
+  syncPolicy: 'auto' | 'manual' | 'readonly';
 }
 
 /** ユーザーのチーム・ワークスペースコンテキスト */
@@ -135,13 +136,20 @@ export function getCacheStatusPage(user: {
   const safeRole = ctx.role ? escapeHtml(ctx.role) : null;
 
   // テーブル状況行
+  const syncPolicyLabel: Record<string, { text: string; cls: string }> = {
+    auto: { text: '自動', cls: 'sync-auto' },
+    manual: { text: '手動', cls: 'sync-manual' },
+    readonly: { text: '外部', cls: 'sync-readonly' },
+  };
   const tableRows = data.tables.map(t => {
     const statusIcon = t.exists ? '<span class="status-ok">OK</span>' : '<span class="status-missing">未作成</span>';
     const count = t.exists && t.rowCount !== null ? String(t.rowCount) : '-';
+    const policy = syncPolicyLabel[t.syncPolicy] || syncPolicyLabel.auto;
     return `<tr>
       <td><button type="button" class="status-link-button" data-table-preview="${escapeHtml(t.name)}"><code>${escapeHtml(t.name)}</code></button></td>
       <td class="center">${statusIcon}</td>
       <td class="num">${count}</td>
+      <td class="center"><span class="sync-policy-badge ${policy.cls}">${policy.text}</span></td>
       <td class="migration-name"><button type="button" class="status-link-button migration-button" data-migration-sql="${escapeHtml(t.migration)}" data-migration-table="${escapeHtml(t.name)}">${escapeHtml(t.migration)}</button></td>
       <td>${escapeHtml(t.description)}</td>
     </tr>`;
@@ -393,6 +401,16 @@ export function getCacheStatusPage(user: {
     .section-title-row .section-title {
       margin-bottom: 0; padding-bottom: 0; border-bottom: none;
     }
+    .sync-policy-badge {
+      display: inline-block; padding: 2px 8px; font-size: 11px; font-weight: 600;
+      border-radius: 10px; letter-spacing: 0.3px; line-height: 1.4;
+    }
+    .sync-auto { background: #c6f6d5; color: #22543d; }
+    .sync-manual { background: #fefcbf; color: #744210; }
+    .sync-readonly { background: #e2e8f0; color: #4a5568; }
+    [data-theme="dark"] .sync-auto { background: #22543d; color: #c6f6d5; }
+    [data-theme="dark"] .sync-manual { background: #744210; color: #fefcbf; }
+    [data-theme="dark"] .sync-readonly { background: #4a5568; color: #e2e8f0; }
     .sync-repo-colors-btn {
       display: inline-flex; align-items: center; gap: 4px;
       padding: 6px 14px; font-size: 13px; font-weight: 500;
@@ -1118,6 +1136,7 @@ export function getCacheStatusPage(user: {
                 <th>テーブル名</th>
                 <th style="text-align:center">状態</th>
                 <th style="text-align:right">レコード数</th>
+                <th style="text-align:center">更新</th>
                 <th>マイグレーション</th>
                 <th>説明</th>
               </tr>

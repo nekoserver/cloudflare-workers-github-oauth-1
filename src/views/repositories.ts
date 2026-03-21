@@ -282,6 +282,14 @@ export function getRepositoriesPage(user: {
     .repo-row { cursor: pointer; }
 
     /* Create Repo Button */
+    .color-assign-btn {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 8px 16px; border-radius: 8px;
+      border: 1px solid var(--border-color); background: var(--bg-secondary);
+      color: var(--text-primary); font-size: 14px; font-weight: 600; cursor: pointer;
+      transition: background 0.2s ease, border-color 0.2s ease;
+    }
+    .color-assign-btn:hover { background: var(--bg-tertiary, var(--border-color)); border-color: var(--text-muted); }
     .create-repo-btn {
       display: inline-flex; align-items: center; gap: 6px;
       padding: 8px 16px; border-radius: 8px; border: none;
@@ -292,6 +300,61 @@ export function getRepositoriesPage(user: {
     }
     .create-repo-btn:hover { opacity: 0.9; transform: translateY(-1px); }
     .create-repo-btn:active { transform: translateY(0); }
+
+    /* Color Assignment Modal */
+    .color-assign-modal-content {
+      background: var(--card-bg); border-radius: 16px;
+      box-shadow: 0 24px 60px rgba(0,0,0,0.3); width: 100%; max-width: 640px;
+      max-height: 85vh; display: flex; flex-direction: column;
+      animation: modalIn 0.2s ease;
+    }
+    .color-assign-list {
+      display: flex; flex-direction: column; gap: 8px;
+      overflow-y: auto; max-height: 55vh; padding: 0 24px 24px;
+    }
+    .color-assign-item {
+      display: flex; align-items: center; gap: 12px;
+      background: var(--bg-secondary); border-radius: 10px; padding: 10px 14px;
+      border: 1px solid var(--border-color); transition: border-color 0.2s;
+    }
+    .color-assign-item:hover { border-color: var(--text-muted); }
+    .color-assign-swatch {
+      width: 28px; height: 28px; border-radius: 6px; flex-shrink: 0;
+      border: 2px solid rgba(0,0,0,0.1); cursor: pointer; position: relative;
+    }
+    .color-assign-swatch input[type="color"] {
+      position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+      opacity: 0; cursor: pointer; border: none;
+    }
+    .color-assign-repo-name {
+      flex: 1; min-width: 0; font-size: 14px; font-weight: 600;
+      color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .color-assign-select {
+      padding: 5px 8px; border-radius: 6px; border: 1px solid var(--border-color);
+      background: var(--card-bg); color: var(--text-primary); font-size: 12px;
+      cursor: pointer; min-width: 100px;
+    }
+    .color-assign-tags {
+      padding: 5px 8px; border-radius: 6px; border: 1px solid var(--border-color);
+      background: var(--card-bg); color: var(--text-primary); font-size: 12px;
+      width: 80px;
+    }
+    .color-assign-save-status {
+      font-size: 11px; color: var(--text-muted); min-width: 50px; text-align: right;
+    }
+    .color-assign-footer {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 12px 24px; border-top: 1px solid var(--border-color);
+    }
+    .color-assign-sync-btn {
+      padding: 6px 14px; border-radius: 6px; border: none;
+      background: linear-gradient(135deg, #667eea, #764ba2); color: #fff;
+      font-size: 12px; font-weight: 700; cursor: pointer;
+      transition: opacity 0.2s;
+    }
+    .color-assign-sync-btn:hover { opacity: 0.9; }
+    .color-assign-sync-btn:disabled { opacity: 0.5; cursor: not-allowed; }
     .page-header-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
 
     /* Cloudflare Setup Banner */
@@ -991,7 +1054,10 @@ export function getRepositoriesPage(user: {
           <h1 class="page-title">📦 リポジトリ</h1>
           <p class="page-subtitle">リポジトリ ${repoCount} 件</p>
         </div>
-        <button class="create-repo-btn" id="openCreateRepoModal" type="button">＋ 新規にリポジトリを生成する</button>
+        <div style="display:flex;gap:10px;align-items:center;">
+          <button class="color-assign-btn" id="openColorAssignModal" type="button">🎨 色割当て</button>
+          <button class="create-repo-btn" id="openCreateRepoModal" type="button">＋ 新規にリポジトリを生成する</button>
+        </div>
       </div>
       <div class="commit-search-row" style="margin-top: 14px;">
         <input type="text" class="commit-search-input" id="commitSearchInput" placeholder="コミット履歴を検索（メッセージ・作者・SHA）" autocomplete="off" />
@@ -1171,6 +1237,25 @@ export function getRepositoriesPage(user: {
 
   <div class="cache-toast-container" id="cacheToastContainer"></div>
 
+  <!-- Color Assignment Modal -->
+  <div class="modal-overlay" id="colorAssignModal">
+    <div class="color-assign-modal-content">
+      <div class="modal-header">
+        <span class="modal-title">🎨 リポジトリ色割当て</span>
+        <button class="modal-close" id="colorAssignModalClose" type="button">&times;</button>
+      </div>
+      <div class="modal-body" style="padding-bottom:0;">
+        <div class="color-assign-list" id="colorAssignList">
+          <div style="text-align:center;color:var(--text-muted);padding:24px 0;">読み込み中...</div>
+        </div>
+      </div>
+      <div class="color-assign-footer">
+        <button class="color-assign-sync-btn" id="colorAssignSyncBtn" type="button">未登録リポジトリを同期</button>
+        <span class="color-assign-save-status" id="colorAssignStatus"></span>
+      </div>
+    </div>
+  </div>
+
   <!-- Cloudflare Setup Modal -->
   <div class="modal-overlay" id="cfSetupModal">
     <div class="cf-setup-modal-content">
@@ -1315,6 +1400,223 @@ export function getRepositoriesPage(user: {
         dropdown.classList.remove('show');
       }
     });
+
+    // =============================================
+    // 色割当てモーダル
+    // =============================================
+    (function() {
+      var modal = document.getElementById('colorAssignModal');
+      var openBtn = document.getElementById('openColorAssignModal');
+      var closeBtn = document.getElementById('colorAssignModalClose');
+      var listEl = document.getElementById('colorAssignList');
+      var syncBtn = document.getElementById('colorAssignSyncBtn');
+      var statusEl = document.getElementById('colorAssignStatus');
+
+      var presetColors = [
+        { label: '青', value: '#667eea' },
+        { label: '赤', value: '#e53e3e' },
+        { label: '緑', value: '#38a169' },
+        { label: 'オレンジ', value: '#ed8936' },
+        { label: '紫', value: '#9f7aea' },
+        { label: '茶', value: '#dd6b20' },
+        { label: 'ティール', value: '#319795' },
+        { label: 'ピンク', value: '#d53f8c' },
+        { label: '水色', value: '#3182ce' },
+        { label: '黄', value: '#d69e2e' },
+        { label: '藤', value: '#805ad5' },
+        { label: '紺', value: '#2b6cb0' },
+        { label: '深赤', value: '#c53030' },
+        { label: '深緑', value: '#2f855a' },
+        { label: '琥珀', value: '#b7791f' },
+      ];
+
+      function escTxt(s) { var d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+
+      function renderList(colors) {
+        if (!listEl) return;
+        if (colors.length === 0) {
+          listEl.innerHTML = '<div style="text-align:center;color:var(--text-muted);padding:24px 0;">色設定データがありません。「未登録リポジトリを同期」をクリックしてください。</div>';
+          return;
+        }
+        listEl.innerHTML = colors.map(function(c) {
+          var optionsHtml = presetColors.map(function(p) {
+            var sel = p.value.toLowerCase() === c.colorCode.toLowerCase() ? ' selected' : '';
+            return '<option value="' + escTxt(p.value) + '"' + sel + '>' + escTxt(p.label) + '</option>';
+          }).join('');
+          var hasCustom = !presetColors.some(function(p) { return p.value.toLowerCase() === c.colorCode.toLowerCase(); });
+          if (hasCustom) {
+            optionsHtml += '<option value="' + escTxt(c.colorCode) + '" selected>カスタム</option>';
+          }
+          optionsHtml += '<option value="__custom__">カスタム...</option>';
+          return '<div class="color-assign-item" data-repo="' + escTxt(c.repoName) + '">'
+            + '<div class="color-assign-swatch" style="background:' + escTxt(c.colorCode) + ';">'
+            + '<input type="color" value="' + escTxt(c.colorCode) + '" data-field="swatch" />'
+            + '</div>'
+            + '<div class="color-assign-repo-name">' + escTxt(c.repoName) + '</div>'
+            + '<select class="color-assign-select" data-field="preset">' + optionsHtml + '</select>'
+            + '<input type="text" class="color-assign-tags" placeholder="タグ" value="' + escTxt(c.tags || '') + '" data-field="tags" />'
+            + '<span class="color-assign-save-status" data-field="status"></span>'
+            + '</div>';
+        }).join('');
+
+        // イベント設定
+        listEl.querySelectorAll('.color-assign-item').forEach(function(item) {
+          var repo = item.getAttribute('data-repo');
+          var swatch = item.querySelector('[data-field="swatch"]');
+          var swatchDiv = item.querySelector('.color-assign-swatch');
+          var select = item.querySelector('[data-field="preset"]');
+          var tagsInput = item.querySelector('[data-field="tags"]');
+          var itemStatus = item.querySelector('[data-field="status"]');
+
+          function saveColor(colorCode, extraFields) {
+            var body = { colorCode: colorCode };
+            if (extraFields) {
+              for (var k in extraFields) body[k] = extraFields[k];
+            }
+            if (itemStatus) itemStatus.textContent = '保存中...';
+            fetch('/api/repo-colors/' + encodeURIComponent(repo), {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              credentials: 'same-origin',
+              body: JSON.stringify(body),
+            }).then(function(res) { return res.json(); })
+              .then(function(data) {
+                if (data.error) {
+                  if (itemStatus) itemStatus.textContent = 'エラー';
+                } else {
+                  if (itemStatus) itemStatus.textContent = '保存済';
+                  setTimeout(function() { if (itemStatus) itemStatus.textContent = ''; }, 2000);
+                }
+              })
+              .catch(function() {
+                if (itemStatus) itemStatus.textContent = '通信エラー';
+              });
+          }
+
+          if (select) {
+            select.addEventListener('change', function() {
+              var val = select.value;
+              if (val === '__custom__') {
+                if (swatch) swatch.click();
+                return;
+              }
+              if (swatchDiv) swatchDiv.style.background = val;
+              if (swatch) swatch.value = val;
+              saveColor(val);
+            });
+          }
+
+          if (swatch) {
+            swatch.addEventListener('input', function() {
+              if (swatchDiv) swatchDiv.style.background = swatch.value;
+            });
+            swatch.addEventListener('change', function() {
+              var val = swatch.value;
+              if (swatchDiv) swatchDiv.style.background = val;
+              var hasPreset = false;
+              if (select) {
+                for (var i = 0; i < select.options.length; i++) {
+                  if (select.options[i].value.toLowerCase() === val.toLowerCase() && select.options[i].value !== '__custom__') {
+                    select.selectedIndex = i;
+                    hasPreset = true;
+                    break;
+                  }
+                }
+                if (!hasPreset) {
+                  var customOpt = select.querySelector('option[value="__custom__"]');
+                  if (customOpt) {
+                    customOpt.value = val;
+                    customOpt.textContent = 'カスタム';
+                    customOpt.selected = true;
+                  }
+                }
+              }
+              saveColor(val);
+            });
+          }
+
+          if (tagsInput) {
+            var tagTimer;
+            tagsInput.addEventListener('input', function() {
+              clearTimeout(tagTimer);
+              tagTimer = setTimeout(function() {
+                if (itemStatus) itemStatus.textContent = '保存中...';
+                fetch('/api/repo-colors/' + encodeURIComponent(repo), {
+                  method: 'PATCH',
+                  headers: { 'Content-Type': 'application/json' },
+                  credentials: 'same-origin',
+                  body: JSON.stringify({ tags: tagsInput.value }),
+                }).then(function(res) { return res.json(); })
+                  .then(function(data) {
+                    if (data.error) {
+                      if (itemStatus) itemStatus.textContent = 'エラー';
+                    } else {
+                      if (itemStatus) itemStatus.textContent = '保存済';
+                      setTimeout(function() { if (itemStatus) itemStatus.textContent = ''; }, 2000);
+                    }
+                  })
+                  .catch(function() { if (itemStatus) itemStatus.textContent = '通信エラー'; });
+              }, 800);
+            });
+          }
+        });
+      }
+
+      function loadColors() {
+        if (!listEl) return;
+        listEl.innerHTML = '<div style="text-align:center;color:var(--text-muted);padding:24px 0;">読み込み中...</div>';
+        fetch('/api/repo-colors', { credentials: 'same-origin' })
+          .then(function(res) { return res.json(); })
+          .then(function(data) {
+            if (data.error) {
+              listEl.innerHTML = '<div style="text-align:center;color:#e53e3e;padding:24px 0;">' + escTxt(data.error) + '</div>';
+            } else {
+              renderList(data.colors || []);
+            }
+          })
+          .catch(function() {
+            listEl.innerHTML = '<div style="text-align:center;color:#e53e3e;padding:24px 0;">通信エラー</div>';
+          });
+      }
+
+      if (openBtn) {
+        openBtn.addEventListener('click', function() {
+          if (modal) { modal.classList.add('show'); loadColors(); }
+        });
+      }
+      if (closeBtn) {
+        closeBtn.addEventListener('click', function() {
+          if (modal) modal.classList.remove('show');
+        });
+      }
+      if (modal) {
+        modal.addEventListener('click', function(e) {
+          if (e.target === modal) modal.classList.remove('show');
+        });
+      }
+      if (syncBtn) {
+        syncBtn.addEventListener('click', function() {
+          syncBtn.disabled = true;
+          syncBtn.textContent = '同期中...';
+          fetch('/api/repo-colors/sync', { method: 'POST', credentials: 'same-origin' })
+            .then(function(res) { return res.json(); })
+            .then(function(data) {
+              syncBtn.disabled = false;
+              syncBtn.textContent = '未登録リポジトリを同期';
+              if (statusEl) {
+                statusEl.textContent = data.message || '完了';
+                setTimeout(function() { statusEl.textContent = ''; }, 3000);
+              }
+              loadColors();
+            })
+            .catch(function() {
+              syncBtn.disabled = false;
+              syncBtn.textContent = '未登録リポジトリを同期';
+              if (statusEl) statusEl.textContent = '通信エラー';
+            });
+        });
+      }
+    })();
 
     // =============================================
     // 新規リポジトリ作成モーダル
