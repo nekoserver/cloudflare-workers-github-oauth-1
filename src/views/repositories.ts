@@ -40,12 +40,10 @@ export function getRepositoriesPage(user: {
   const repoCount = user.repositories.length;
   const scopes = user.grantedScopes ?? [];
   const hasRepoScope = scopes.includes('repo');
-  // repo スコープが確認できない場合はすべてバナー表示
-  // - grantedScopes が null/undefined: スコープ取得失敗または未取得
-  // - grantedScopes が []: スコープが空（未付与）
-  // - grantedScopes に 'repo' が無い: 権限不足
-  const missingScopesBanner = !hasRepoScope;
-  const scopesEmpty = !user.grantedScopes || user.grantedScopes.length === 0;
+  // GitHub App はスコープを返さない（空配列が正常）ため、
+  // スコープが空の場合はバナーを出さない（GitHub App のパーミッションで制御される）
+  // classic OAuth App でスコープが取得できている場合のみ repo 欠如を警告する
+  const missingScopesBanner = scopes.length > 0 && !hasRepoScope;
   const repoPerms = user.repoPermissions ?? {};
   const cfLinked = user.cloudflareLinkedRepos ?? {};
   const vercelLinked = user.vercelLinkedRepos ?? {};
@@ -109,13 +107,9 @@ export function getRepositoriesPage(user: {
     <div class="error-banner">${escapeHtml(user.errorMessage)}</div>
   ` : '';
 
-  const currentScopesText = scopes.length > 0
-    ? `現在の付与スコープ: ${scopes.join(', ')}`
-    : '現在の付与スコープ: なし';
+  const currentScopesText = `現在の付与スコープ: ${scopes.join(', ')}`;
   const missingScopeBannerTitle = 'repo スコープが不足しています';
-  const missingScopeBannerDesc = scopesEmpty
-    ? `リポジトリの作成・閲覧には <code>repo</code> スコープが必要ですが、現在スコープが一切付与されていません。GitHub OAuth App の設定で Repository 権限が有効か確認し、再認証してください。（${currentScopesText}）`
-    : `リポジトリの作成・閲覧には <code>repo</code> スコープが必要ですが、付与されていません。再認証して <code>repo</code> スコープを付与してください。（${currentScopesText}）`;
+  const missingScopeBannerDesc = `リポジトリの作成・閲覧には <code>repo</code> スコープが必要ですが、付与されていません。再認証して <code>repo</code> スコープを付与してください。（${currentScopesText}）`;
   const missingScopeBannerHtml = missingScopesBanner ? `
     <div class="missing-scope-banner">
       <span class="missing-scope-banner-icon">⚠️</span>
@@ -267,11 +261,6 @@ export function getRepositoriesPage(user: {
     }
     .create-repo-btn:hover { opacity: 0.9; transform: translateY(-1px); }
     .create-repo-btn:active { transform: translateY(0); }
-    .create-repo-btn:disabled {
-      background: #a0aec0; cursor: not-allowed; opacity: 0.6;
-      transform: none;
-    }
-    .create-repo-btn:disabled:hover { opacity: 0.6; transform: none; }
     .page-header-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
 
     /* Create Repo Modal */
@@ -732,7 +721,7 @@ export function getRepositoriesPage(user: {
           <h1 class="page-title">📦 リポジトリ</h1>
           <p class="page-subtitle">リポジトリ ${repoCount} 件</p>
         </div>
-        <button class="create-repo-btn" id="openCreateRepoModal" type="button" ${!hasRepoScope ? 'disabled title="repo スコープが付与されていません。再認証してください。"' : ''}>＋ 新規にリポジトリを生成する</button>
+        <button class="create-repo-btn" id="openCreateRepoModal" type="button">＋ 新規にリポジトリを生成する</button>
       </div>
       ${errorBanner}
       ${missingScopeBannerHtml}
