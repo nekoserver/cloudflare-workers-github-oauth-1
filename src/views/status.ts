@@ -898,6 +898,58 @@ export function getCacheStatusPage(user: {
       border-radius: 4px; margin-right: 4px; vertical-align: middle;
     }
 
+    /* キー種別ツールチップ */
+    .uml-legend-item.has-tooltip {
+      position: relative; cursor: pointer;
+    }
+    .uml-legend-item.has-tooltip:hover .key-tooltip,
+    .uml-legend-item.has-tooltip:focus .key-tooltip {
+      display: block;
+    }
+    .key-tooltip {
+      display: none; position: absolute; bottom: calc(100% + 8px); left: 50%;
+      transform: translateX(-50%); width: 320px; padding: 14px 16px;
+      background: var(--card-bg); border: 1px solid var(--border-color);
+      border-radius: 10px; box-shadow: 0 8px 32px rgba(0,0,0,0.18);
+      font-size: 12px; line-height: 1.65; color: var(--text-secondary);
+      z-index: 100; pointer-events: none; text-align: left;
+    }
+    .key-tooltip::after {
+      content: ''; position: absolute; top: 100%; left: 50%;
+      transform: translateX(-50%); border: 6px solid transparent;
+      border-top-color: var(--border-color);
+    }
+    .key-tooltip strong { color: var(--text-primary); display: block; margin-bottom: 4px; font-size: 13px; }
+    .key-tooltip .tooltip-section { margin-top: 6px; }
+    .key-tooltip .tooltip-label { font-weight: 600; color: var(--text-muted); font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; }
+
+    /* キーカラム一覧 */
+    .uml-key-summary {
+      padding: 12px 24px 16px; border-top: 1px solid var(--border-color);
+      max-height: 180px; overflow-y: auto;
+    }
+    .uml-key-summary-title {
+      font-size: 12px; font-weight: 700; color: var(--text-primary); margin-bottom: 8px;
+    }
+    .uml-key-cols {
+      display: flex; flex-wrap: wrap; gap: 6px;
+    }
+    .uml-key-col-item {
+      display: inline-flex; align-items: center; gap: 4px;
+      padding: 3px 10px; border-radius: 6px; font-size: 11px;
+      background: var(--bg-secondary); border: 1px solid var(--border-color);
+      color: var(--text-secondary); white-space: nowrap;
+    }
+    .uml-key-col-item .kc-badge {
+      display: inline-block; padding: 1px 5px; border-radius: 3px;
+      font-size: 9px; font-weight: 700; color: white;
+    }
+    .uml-key-col-item .kc-badge.pk { background: #e53e3e; }
+    .uml-key-col-item .kc-badge.fk { background: #ed8936; }
+    .uml-key-col-item .kc-badge.uk { background: #48bb78; }
+    .uml-key-col-item .kc-badge.idx { background: #4299e1; }
+    .uml-key-col-item .kc-table { color: var(--text-faint); font-size: 10px; }
+
     @media (max-width: 768px) {
       .container { padding: 24px 16px; }
       .page-card { padding: 24px; }
@@ -1231,12 +1283,41 @@ export function getCacheStatusPage(user: {
       </div>
       <div class="uml-canvas-wrapper" id="umlCanvasWrapper"></div>
       <div class="uml-legend">
-        <div class="uml-legend-item"><div class="uml-legend-color" style="background:#e53e3e"></div>PK — 主キー</div>
-        <div class="uml-legend-item"><div class="uml-legend-color" style="background:#ed8936"></div>FK — 外部キー</div>
-        <div class="uml-legend-item"><div class="uml-legend-color" style="background:#48bb78"></div>UK — ユニーク制約</div>
-        <div class="uml-legend-item"><div class="uml-legend-color" style="background:#4299e1"></div>IDX — インデックス</div>
+        <div class="uml-legend-item has-tooltip" tabindex="0"><div class="uml-legend-color" style="background:#e53e3e"></div>PK — 主キー
+          <div class="key-tooltip">
+            <strong>PK（Primary Key / 主キー）</strong>
+            <div class="tooltip-section"><span class="tooltip-label">用法</span><br>テーブル内の各行を一意に識別するカラム。NULL不可・重複不可。</div>
+            <div class="tooltip-section"><span class="tooltip-label">使用場面</span><br>ユーザーID、注文番号など、レコードを特定する必要がある全テーブルで必須。</div>
+            <div class="tooltip-section"><span class="tooltip-label">メリット</span><br>データの一意性を保証し、外部キーの参照先となる。自動的にインデックスが作成されるためJOINや検索が高速。</div>
+          </div>
+        </div>
+        <div class="uml-legend-item has-tooltip" tabindex="0"><div class="uml-legend-color" style="background:#ed8936"></div>FK — 外部キー
+          <div class="key-tooltip">
+            <strong>FK（Foreign Key / 外部キー）</strong>
+            <div class="tooltip-section"><span class="tooltip-label">用法</span><br>他テーブルの主キーを参照するカラム。テーブル間の親子関係を定義する。</div>
+            <div class="tooltip-section"><span class="tooltip-label">使用場面</span><br>workspaces.team_id → teams.id のように、所属関係・参照関係を表現する場面。</div>
+            <div class="tooltip-section"><span class="tooltip-label">メリット</span><br>参照整合性を保証し、存在しない親レコードへの参照を防止。JOINクエリの論理的根拠となる。</div>
+          </div>
+        </div>
+        <div class="uml-legend-item has-tooltip" tabindex="0"><div class="uml-legend-color" style="background:#48bb78"></div>UK — ユニーク制約
+          <div class="key-tooltip">
+            <strong>UK（Unique Key / ユニーク制約）</strong>
+            <div class="tooltip-section"><span class="tooltip-label">用法</span><br>PKとは別に、カラムまたはカラムの組み合わせの値が重複しないことを保証する。</div>
+            <div class="tooltip-section"><span class="tooltip-label">使用場面</span><br>メールアドレス、ユーザー名など「PKではないが一意であるべき」値。複合ユニーク制約（例: workspace_id + owner + repo）にも使用。</div>
+            <div class="tooltip-section"><span class="tooltip-label">メリット</span><br>ビジネスロジック上の重複を防止。自動的にインデックスが作成され、検索性能も向上。</div>
+          </div>
+        </div>
+        <div class="uml-legend-item has-tooltip" tabindex="0"><div class="uml-legend-color" style="background:#4299e1"></div>IDX — インデックス
+          <div class="key-tooltip">
+            <strong>IDX（Index / インデックス）</strong>
+            <div class="tooltip-section"><span class="tooltip-label">用法</span><br>検索・ソート・フィルタリングの頻度が高いカラムに付与し、クエリの実行速度を向上させる。</div>
+            <div class="tooltip-section"><span class="tooltip-label">使用場面</span><br>WHERE句やORDER BY句で頻繁に参照されるカラム（日付、ステータス等）。</div>
+            <div class="tooltip-section"><span class="tooltip-label">メリット</span><br>フルテーブルスキャンを回避し、O(log n) のB-Tree検索で高速にデータを取得。書き込み時のオーバーヘッドとのトレードオフ。</div>
+          </div>
+        </div>
         <div class="uml-legend-item" style="margin-left:auto; color:var(--text-faint)">ドラッグで移動可</div>
       </div>
+      <div class="uml-key-summary" id="umlKeySummary"></div>
       <div class="uml-normalization-note">
         <strong>正規化状況:</strong><br>
         <span class="nf-badge">3NF</span><code>teams</code> <code>workspaces</code> <code>team_members</code> — 第3正規形。非キー属性が主キーにのみ関数従属。<br>
@@ -1286,12 +1367,41 @@ export function getCacheStatusPage(user: {
       </div>
       <div class="uml-canvas-wrapper" id="filteredUmlCanvasWrapper"></div>
       <div class="uml-legend">
-        <div class="uml-legend-item"><div class="uml-legend-color" style="background:#e53e3e"></div>PK — 主キー</div>
-        <div class="uml-legend-item"><div class="uml-legend-color" style="background:#ed8936"></div>FK — 外部キー</div>
-        <div class="uml-legend-item"><div class="uml-legend-color" style="background:#48bb78"></div>UK — ユニーク制約</div>
-        <div class="uml-legend-item"><div class="uml-legend-color" style="background:#4299e1"></div>IDX — インデックス</div>
+        <div class="uml-legend-item has-tooltip" tabindex="0"><div class="uml-legend-color" style="background:#e53e3e"></div>PK — 主キー
+          <div class="key-tooltip">
+            <strong>PK（Primary Key / 主キー）</strong>
+            <div class="tooltip-section"><span class="tooltip-label">用法</span><br>テーブル内の各行を一意に識別するカラム。NULL不可・重複不可。</div>
+            <div class="tooltip-section"><span class="tooltip-label">使用場面</span><br>ユーザーID、注文番号など、レコードを特定する必要がある全テーブルで必須。</div>
+            <div class="tooltip-section"><span class="tooltip-label">メリット</span><br>データの一意性を保証し、外部キーの参照先となる。自動的にインデックスが作成されるためJOINや検索が高速。</div>
+          </div>
+        </div>
+        <div class="uml-legend-item has-tooltip" tabindex="0"><div class="uml-legend-color" style="background:#ed8936"></div>FK — 外部キー
+          <div class="key-tooltip">
+            <strong>FK（Foreign Key / 外部キー）</strong>
+            <div class="tooltip-section"><span class="tooltip-label">用法</span><br>他テーブルの主キーを参照するカラム。テーブル間の親子関係を定義する。</div>
+            <div class="tooltip-section"><span class="tooltip-label">使用場面</span><br>workspaces.team_id → teams.id のように、所属関係・参照関係を表現する場面。</div>
+            <div class="tooltip-section"><span class="tooltip-label">メリット</span><br>参照整合性を保証し、存在しない親レコードへの参照を防止。JOINクエリの論理的根拠となる。</div>
+          </div>
+        </div>
+        <div class="uml-legend-item has-tooltip" tabindex="0"><div class="uml-legend-color" style="background:#48bb78"></div>UK — ユニーク制約
+          <div class="key-tooltip">
+            <strong>UK（Unique Key / ユニーク制約）</strong>
+            <div class="tooltip-section"><span class="tooltip-label">用法</span><br>PKとは別に、カラムまたはカラムの組み合わせの値が重複しないことを保証する。</div>
+            <div class="tooltip-section"><span class="tooltip-label">使用場面</span><br>メールアドレス、ユーザー名など「PKではないが一意であるべき」値。複合ユニーク制約にも使用。</div>
+            <div class="tooltip-section"><span class="tooltip-label">メリット</span><br>ビジネスロジック上の重複を防止。自動的にインデックスが作成され、検索性能も向上。</div>
+          </div>
+        </div>
+        <div class="uml-legend-item has-tooltip" tabindex="0"><div class="uml-legend-color" style="background:#4299e1"></div>IDX — インデックス
+          <div class="key-tooltip">
+            <strong>IDX（Index / インデックス）</strong>
+            <div class="tooltip-section"><span class="tooltip-label">用法</span><br>検索・ソート・フィルタリングの頻度が高いカラムに付与し、クエリの実行速度を向上させる。</div>
+            <div class="tooltip-section"><span class="tooltip-label">使用場面</span><br>WHERE句やORDER BY句で頻繁に参照されるカラム（日付、ステータス等）。</div>
+            <div class="tooltip-section"><span class="tooltip-label">メリット</span><br>フルテーブルスキャンを回避し、O(log n) のB-Tree検索で高速にデータを取得。</div>
+          </div>
+        </div>
         <div class="uml-legend-item" style="margin-left:auto; color:var(--text-faint)">ドラッグで移動可</div>
       </div>
+      <div class="uml-key-summary" id="filteredUmlKeySummary"></div>
     </div>
   </div>
 
@@ -1310,6 +1420,58 @@ export function getCacheStatusPage(user: {
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#39;');
+    }
+
+    function buildKeySummary(targetId, tablesData) {
+      var container = document.getElementById(targetId);
+      if (!container) return;
+      container.innerHTML = '';
+      var keyOrder = ['pk', 'fk', 'uk', 'idx'];
+      var keyLabels = { pk: 'PK', fk: 'FK', uk: 'UK', idx: 'IDX' };
+      var items = [];
+      for (var t = 0; t < tablesData.length; t++) {
+        var tbl = tablesData[t];
+        for (var c = 0; c < tbl.cols.length; c++) {
+          var col = tbl.cols[c];
+          if (col.keys.length === 0) continue;
+          for (var k = 0; k < col.keys.length; k++) {
+            items.push({ key: col.keys[k], col: col.name, table: tbl.name });
+          }
+        }
+      }
+      items.sort(function(a, b) {
+        var ai = keyOrder.indexOf(a.key), bi = keyOrder.indexOf(b.key);
+        if (ai !== bi) return ai - bi;
+        if (a.table < b.table) return -1;
+        if (a.table > b.table) return 1;
+        if (a.col < b.col) return -1;
+        if (a.col > b.col) return 1;
+        return 0;
+      });
+      if (items.length === 0) return;
+      var title = document.createElement('div');
+      title.className = 'uml-key-summary-title';
+      title.textContent = 'キー・インデックス一覧 (' + items.length + ' 件)';
+      container.appendChild(title);
+      var wrap = document.createElement('div');
+      wrap.className = 'uml-key-cols';
+      for (var i = 0; i < items.length; i++) {
+        var it = items[i];
+        var el = document.createElement('span');
+        el.className = 'uml-key-col-item';
+        var badge = document.createElement('span');
+        badge.className = 'kc-badge ' + it.key;
+        badge.textContent = keyLabels[it.key] || it.key.toUpperCase();
+        el.appendChild(badge);
+        var colText = document.createTextNode(' ' + it.col + ' ');
+        el.appendChild(colText);
+        var tblSpan = document.createElement('span');
+        tblSpan.className = 'kc-table';
+        tblSpan.textContent = '(' + it.table + ')';
+        el.appendChild(tblSpan);
+        wrap.appendChild(el);
+      }
+      container.appendChild(wrap);
     }
 
     function setCookie(name, value) {
@@ -1989,6 +2151,7 @@ export function getCacheStatusPage(user: {
         document.body.style.overflow = 'hidden';
         if (!umlRendered) {
           renderErDiagram(tables, relations);
+          buildKeySummary('umlKeySummary', tables);
           umlRendered = true;
         }
       }
@@ -2011,6 +2174,7 @@ export function getCacheStatusPage(user: {
                 window.__erTables = tables;
                 window.__erRelations = relations;
                 renderErDiagram(tables, relations);
+                buildKeySummary('umlKeySummary', tables);
                 umlRendered = true;
                 if (window.__refreshColList) window.__refreshColList(tables);
 
@@ -2961,12 +3125,20 @@ export function getCacheStatusPage(user: {
 
       window.openFilteredUmlModal = function(tableNames, allTables, allRelations) {
         var isDark = document.documentElement.getAttribute('data-theme') === 'dark';
-        var nameSet = {};
-        for (var i = 0; i < tableNames.length; i++) nameSet[tableNames[i]] = true;
+        var primarySet = {};
+        for (var i = 0; i < tableNames.length; i++) primarySet[tableNames[i]] = true;
+
+        var expandedSet = {};
+        for (var n in primarySet) expandedSet[n] = true;
+        for (var r = 0; r < allRelations.length; r++) {
+          var rel = allRelations[r];
+          if (primarySet[rel[0]] && !expandedSet[rel[2]]) expandedSet[rel[2]] = true;
+          if (primarySet[rel[2]] && !expandedSet[rel[0]]) expandedSet[rel[0]] = true;
+        }
 
         var filteredTables = [];
         for (var t = 0; t < allTables.length; t++) {
-          if (nameSet[allTables[t].name]) {
+          if (expandedSet[allTables[t].name]) {
             filteredTables.push({
               name: allTables[t].name,
               cols: allTables[t].cols.slice(),
@@ -2978,16 +3150,29 @@ export function getCacheStatusPage(user: {
         var filteredRelations = [];
         for (var r = 0; r < allRelations.length; r++) {
           var rel = allRelations[r];
-          if (nameSet[rel[0]] && nameSet[rel[2]]) {
+          if (expandedSet[rel[0]] && expandedSet[rel[2]]) {
             filteredRelations.push(rel);
           }
         }
 
+        var primaryNames = tableNames.slice().sort();
+        var addedNames = [];
+        for (var n in expandedSet) {
+          if (!primarySet[n]) addedNames.push(n);
+        }
+        addedNames.sort();
+
+        var subtitleText = primaryNames.join(', ');
+        if (addedNames.length > 0) {
+          subtitleText += '  +  関連: ' + addedNames.join(', ');
+        }
+
         if (fUmlTitle) fUmlTitle.textContent = 'フィルタ済み ER図 (' + filteredTables.length + ' テーブル)';
-        if (fUmlSubtitle) fUmlSubtitle.textContent = tableNames.join(', ');
+        if (fUmlSubtitle) fUmlSubtitle.textContent = subtitleText;
 
         layoutFilteredTables(filteredTables, filteredRelations);
         renderFilteredErDiagram(filteredTables, filteredRelations, isDark);
+        buildKeySummary('filteredUmlKeySummary', filteredTables);
 
         fUmlModal.classList.add('show');
         fUmlModal.setAttribute('aria-hidden', 'false');
