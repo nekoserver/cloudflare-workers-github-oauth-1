@@ -3538,6 +3538,101 @@ app.post('/api/repo-colors/sync', authMiddleware, async (c) => {
 });
 
 /**
+ * リポジトリ色設定の一覧取得
+ */
+app.get('/api/repo-colors', authMiddleware, async (c) => {
+  const user = c.get('user');
+  const db = c.env.DB;
+  if (!db) {
+    return c.json({ colors: [] });
+  }
+  try {
+    const wsInfo = await getCurrentWorkspace(db, user.sub);
+    const workspaceId = wsInfo?.workspaceId ?? '';
+    const rows = await db.prepare(
+      'SELECT repo_name, color_code, display_order, tags, is_visible FROM repo_color_settings WHERE workspace_id = ? ORDER BY display_order ASC, repo_name ASC'
+    ).bind(workspaceId).all<{
+      repo_name: string; color_code: string; display_order: number; tags: string; is_visible: number;
+    }>();
+    const colors = (rows.results ?? []).map(r => ({
+      repoName: r.repo_name,
+      colorCode: r.color_code,
+      displayOrder: r.display_order,
+      tags: r.tags,
+      isVisible: r.is_visible === 1,
+    }));
+    return c.json({ colors });
+  } catch (error) {
+    logger.error('Failed to fetch repo colors', {
+      userId: user.sub,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    return c.json({ error: 'リポジトリ色設定の取得に失敗しました' }, 500);
+  }
+});
+
+/**
+ * リポジトリ色設定の個別更新
+ */
+app.patch('/api/repo-colors/:repoName{.+}', authMiddleware, async (c) => {
+  const user = c.get('user');
+  const db = c.env.DB;
+  if (!db) {
+    return c.json({ error: 'D1 is not configured' }, 500);
+  }
+  const repoName = c.req.param('repoName');
+  try {
+    const body = await c.req.json<{ colorCode?: string; tags?: string; isVisible?: boolean; displayOrder?: number }>();
+    const wsInfo = await getCurrentWorkspace(db, user.sub);
+    const workspaceId = wsInfo?.workspaceId ?? '';
+
+    const updates: string[] = [];
+    const values: (string | number)[] = [];
+    if (body.colorCode !== undefined) {
+      if (!/^#[0-9a-fA-F]{6}$/.test(body.colorCode)) {
+        return c.json({ error: '無効なカラーコードです' }, 400);
+      }
+      updates.push('color_code = ?');
+      values.push(body.colorCode);
+    }
+    if (body.tags !== undefined) {
+      updates.push('tags = ?');
+      values.push(body.tags);
+    }
+    if (body.isVisible !== undefined) {
+      updates.push('is_visible = ?');
+      values.push(body.isVisible ? 1 : 0);
+    }
+    if (body.displayOrder !== undefined) {
+      updates.push('display_order = ?');
+      values.push(body.displayOrder);
+    }
+    if (updates.length === 0) {
+      return c.json({ error: '更新するフィールドがありません' }, 400);
+    }
+    updates.push('updated_at = ?');
+    values.push(new Date().toISOString());
+    values.push(workspaceId, repoName);
+
+    const result = await db.prepare(
+      `UPDATE repo_color_settings SET ${updates.join(', ')} WHERE workspace_id = ? AND repo_name = ?`
+    ).bind(...values).run();
+
+    if (result.meta.changes === 0) {
+      return c.json({ error: '対象のリポジトリ色設定が見つかりません' }, 404);
+    }
+    return c.json({ message: '色設定を更新しました', repoName });
+  } catch (error) {
+    logger.error('Failed to update repo color', {
+      userId: user.sub,
+      repoName,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    return c.json({ error: 'リポジトリ色設定の更新に失敗しました' }, 500);
+  }
+});
+
+/**
  * ワークスペース一覧取得
  */
 app.get('/api/workspaces', authMiddleware, async (c) => {
