@@ -47,6 +47,20 @@ export interface GitHubWebhookInstallationPayload {
   sender?: { login?: string };
 }
 
+/** GitHub Webhook の repository イベントペイロード */
+export interface GitHubWebhookRepositoryPayload {
+  action?: string;
+  repository?: {
+    id: number;
+    name: string;
+    full_name: string;
+    private: boolean;
+    owner?: { login: string };
+    html_url?: string;
+  };
+  sender?: { login?: string };
+}
+
 /** Resend Webhook のペイロード */
 export interface ResendWebhookPayload {
   type?: string;
