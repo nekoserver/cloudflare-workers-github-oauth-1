@@ -767,9 +767,24 @@ export function getCacheStatusPage(user: {
       text-transform: uppercase; letter-spacing: 0.5px;
     }
     .collist-filter-group select {
-      padding: 5px 8px; font-size: 12px; border: 1px solid var(--border-color);
-      border-radius: 6px; background: var(--bg); color: var(--text-color);
+      padding: 5px 8px; font-size: 12px; border: 1px solid var(--input-border);
+      border-radius: 6px; background: var(--input-bg); color: var(--text-primary);
       cursor: pointer; min-width: 120px;
+    }
+    .collist-actions {
+      display: flex; gap: 8px; padding: 8px 24px; align-items: center;
+      border-bottom: 1px solid var(--border-color); background: var(--card-bg);
+    }
+    .collist-uml-btn {
+      background: #805ad5; color: white; border: none; border-radius: 8px;
+      padding: 7px 14px; font-size: 12px; font-weight: 600;
+      cursor: pointer; display: inline-flex; align-items: center; gap: 5px;
+      transition: background 0.2s, opacity 0.2s; white-space: nowrap;
+    }
+    .collist-uml-btn:hover:not(:disabled) { background: #6b46c1; }
+    .collist-uml-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    .collist-uml-hint {
+      font-size: 11px; color: var(--text-faint); margin-left: 4px;
     }
     .collist-body {
       overflow: auto; flex: 1; padding: 0;
@@ -779,18 +794,18 @@ export function getCacheStatusPage(user: {
     }
     .collist-table thead { position: sticky; top: 0; z-index: 1; }
     .collist-table th {
-      background: var(--card-bg); border-bottom: 2px solid var(--border-color);
+      background: var(--bg-secondary); border-bottom: 2px solid var(--border-color);
       padding: 10px 14px; text-align: left; font-weight: 600; cursor: pointer;
-      user-select: none; white-space: nowrap; color: var(--text-color);
+      user-select: none; white-space: nowrap; color: var(--text-primary);
     }
-    .collist-table th:hover { background: var(--hover-bg, rgba(0,0,0,0.03)); }
+    .collist-table th:hover { background: var(--dropdown-hover); }
     .collist-table th .sort-indicator { margin-left: 4px; opacity: 0.4; font-size: 11px; }
     .collist-table th .sort-indicator.active { opacity: 1; }
     .collist-table td {
       padding: 8px 14px; border-bottom: 1px solid var(--border-color);
-      color: var(--text-color);
+      color: var(--text-secondary);
     }
-    .collist-table tr:hover td { background: var(--hover-bg, rgba(0,0,0,0.02)); }
+    .collist-table tr:hover td { background: var(--dropdown-hover); }
     .collist-table .key-badge {
       display: inline-block; padding: 1px 6px; border-radius: 4px;
       font-size: 10px; font-weight: 700; color: white; margin-right: 3px;
@@ -800,8 +815,17 @@ export function getCacheStatusPage(user: {
     .collist-table .key-badge.uk { background: #48bb78; }
     .collist-table .key-badge.idx { background: #4299e1; }
     .collist-count {
+      display: flex; justify-content: space-between; align-items: center;
       padding: 8px 24px; font-size: 12px; color: var(--text-faint);
-      border-top: 1px solid var(--border-color); text-align: right;
+      border-top: 1px solid var(--border-color);
+    }
+
+    /* フィルタ済みUMLモーダル */
+    .filtered-uml-modal-card {
+      width: min(1200px, 100%); max-height: min(90vh, 960px);
+      background: var(--card-bg); border: 1px solid var(--border-color);
+      border-radius: 16px; box-shadow: 0 24px 80px rgba(0, 0, 0, 0.25);
+      overflow: hidden; display: flex; flex-direction: column;
     }
 
     /* UML モーダル */
@@ -1234,6 +1258,13 @@ export function getCacheStatusPage(user: {
         <button type="button" class="modal-close" id="colListModalClose" aria-label="閉じる">&times;</button>
       </div>
       <div class="collist-filters" id="colListFilters"></div>
+      <div class="collist-actions" id="colListActions">
+        <button type="button" class="collist-uml-btn" id="colListUmlBtn" disabled>
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M2 2h5v5H2zM9 2h5v5H9zM5.5 9.5v3m0 0H3m2.5 0h2.5M11.5 9.5v3m0 0H9m2.5 0h2.5" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          UMLを作成
+        </button>
+        <span class="collist-uml-hint" id="colListUmlHint">フィルタを選択すると有効になります</span>
+      </div>
       <div class="collist-body">
         <table class="collist-table">
           <thead id="colListThead"></thead>
@@ -1241,6 +1272,26 @@ export function getCacheStatusPage(user: {
         </table>
       </div>
       <div class="collist-count" id="colListCount"></div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="filteredUmlModal" aria-hidden="true">
+    <div class="filtered-uml-modal-card" role="dialog" aria-modal="true" aria-labelledby="filteredUmlModalTitle">
+      <div class="modal-header">
+        <div class="modal-title-wrap">
+          <div class="modal-title" id="filteredUmlModalTitle">フィルタ済み ER図</div>
+          <div class="modal-subtitle" id="filteredUmlModalSubtitle"></div>
+        </div>
+        <button type="button" class="modal-close" id="filteredUmlModalClose" aria-label="閉じる">&times;</button>
+      </div>
+      <div class="uml-canvas-wrapper" id="filteredUmlCanvasWrapper"></div>
+      <div class="uml-legend">
+        <div class="uml-legend-item"><div class="uml-legend-color" style="background:#e53e3e"></div>PK — 主キー</div>
+        <div class="uml-legend-item"><div class="uml-legend-color" style="background:#ed8936"></div>FK — 外部キー</div>
+        <div class="uml-legend-item"><div class="uml-legend-color" style="background:#48bb78"></div>UK — ユニーク制約</div>
+        <div class="uml-legend-item"><div class="uml-legend-color" style="background:#4299e1"></div>IDX — インデックス</div>
+        <div class="uml-legend-item" style="margin-left:auto; color:var(--text-faint)">ドラッグで移動可</div>
+      </div>
     </div>
   </div>
 
@@ -1958,6 +2009,7 @@ export function getCacheStatusPage(user: {
                 tables = data.tables;
                 relations = data.relations;
                 window.__erTables = tables;
+                window.__erRelations = relations;
                 renderErDiagram(tables, relations);
                 umlRendered = true;
                 if (window.__refreshColList) window.__refreshColList(tables);
@@ -2091,6 +2143,7 @@ export function getCacheStatusPage(user: {
       ];
 
       window.__erTables = tables;
+      window.__erRelations = relations;
 
       function layoutTablesRelational(tbls, rels) {
         var adj = {};
@@ -2630,6 +2683,8 @@ export function getCacheStatusPage(user: {
       var colListTbody = document.getElementById('colListTbody');
       var colListFilters = document.getElementById('colListFilters');
       var colListCount = document.getElementById('colListCount');
+      var colListUmlBtn = document.getElementById('colListUmlBtn');
+      var colListUmlHint = document.getElementById('colListUmlHint');
       if (!colListModal || !colListBtn || !colListTbody) return;
 
       var repoName = ${JSON.stringify('cloudflare-workers-github-oauth-1')};
@@ -2668,6 +2723,24 @@ export function getCacheStatusPage(user: {
               repoName: repoName
             });
           }
+        }
+      }
+
+      function hasActiveFilter() {
+        for (var f in filters) {
+          if (filters[f]) return true;
+        }
+        return false;
+      }
+
+      function updateUmlButton() {
+        if (!colListUmlBtn) return;
+        var active = hasActiveFilter();
+        colListUmlBtn.disabled = !active;
+        if (colListUmlHint) {
+          colListUmlHint.textContent = active
+            ? getFilteredSorted().length + ' 件のカラムを含むテーブルのUMLを表示'
+            : 'フィルタを選択すると有効になります';
         }
       }
 
@@ -2726,6 +2799,7 @@ export function getCacheStatusPage(user: {
             return function(e) {
               filters[key] = e.target.value;
               renderTable();
+              updateUmlButton();
             };
           })(hdr.key));
           group.appendChild(sel);
@@ -2811,6 +2885,7 @@ export function getCacheStatusPage(user: {
           renderFilters();
           renderThead();
           renderTable();
+          updateUmlButton();
           colListBuilt = true;
         }
         colListModal.classList.add('show');
@@ -2828,8 +2903,27 @@ export function getCacheStatusPage(user: {
       if (colListCloseBtn) colListCloseBtn.addEventListener('click', closeColListModal);
       colListModal.addEventListener('click', function(e) { if (e.target === colListModal) closeColListModal(); });
       document.addEventListener('keydown', function(e) {
-        if (e.key === 'Escape' && colListModal.classList.contains('show')) closeColListModal();
+        if (e.key === 'Escape' && colListModal.classList.contains('show')) {
+          var fUml = document.getElementById('filteredUmlModal');
+          if (fUml && fUml.classList.contains('show')) return;
+          closeColListModal();
+        }
       });
+
+      // UMLを作成ボタン
+      if (colListUmlBtn) {
+        colListUmlBtn.addEventListener('click', function() {
+          if (colListUmlBtn.disabled) return;
+          var filteredRows = getFilteredSorted();
+          var tableNameSet = {};
+          for (var i = 0; i < filteredRows.length; i++) {
+            tableNameSet[filteredRows[i].tableName] = true;
+          }
+          var tableNames = Object.keys(tableNameSet);
+          if (tableNames.length === 0) return;
+          openFilteredUmlModal(tableNames, window.__erTables || [], window.__erRelations || []);
+        });
+      }
 
       window.__refreshColList = function(tablesData) {
         colListBuilt = false;
@@ -2840,8 +2934,317 @@ export function getCacheStatusPage(user: {
         renderFilters();
         renderThead();
         renderTable();
+        updateUmlButton();
         colListBuilt = true;
       };
+    })();
+
+    // フィルタ済みUMLモーダル
+    (function() {
+      var fUmlModal = document.getElementById('filteredUmlModal');
+      var fUmlCloseBtn = document.getElementById('filteredUmlModalClose');
+      var fUmlWrapper = document.getElementById('filteredUmlCanvasWrapper');
+      var fUmlTitle = document.getElementById('filteredUmlModalTitle');
+      var fUmlSubtitle = document.getElementById('filteredUmlModalSubtitle');
+      if (!fUmlModal || !fUmlWrapper) return;
+
+      function closeFilteredUmlModal() {
+        fUmlModal.classList.remove('show');
+        fUmlModal.setAttribute('aria-hidden', 'true');
+      }
+
+      if (fUmlCloseBtn) fUmlCloseBtn.addEventListener('click', closeFilteredUmlModal);
+      fUmlModal.addEventListener('click', function(e) { if (e.target === fUmlModal) closeFilteredUmlModal(); });
+      document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape' && fUmlModal.classList.contains('show')) closeFilteredUmlModal();
+      });
+
+      window.openFilteredUmlModal = function(tableNames, allTables, allRelations) {
+        var isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+        var nameSet = {};
+        for (var i = 0; i < tableNames.length; i++) nameSet[tableNames[i]] = true;
+
+        var filteredTables = [];
+        for (var t = 0; t < allTables.length; t++) {
+          if (nameSet[allTables[t].name]) {
+            filteredTables.push({
+              name: allTables[t].name,
+              cols: allTables[t].cols.slice(),
+              x: 0, y: 0
+            });
+          }
+        }
+
+        var filteredRelations = [];
+        for (var r = 0; r < allRelations.length; r++) {
+          var rel = allRelations[r];
+          if (nameSet[rel[0]] && nameSet[rel[2]]) {
+            filteredRelations.push(rel);
+          }
+        }
+
+        if (fUmlTitle) fUmlTitle.textContent = 'フィルタ済み ER図 (' + filteredTables.length + ' テーブル)';
+        if (fUmlSubtitle) fUmlSubtitle.textContent = tableNames.join(', ');
+
+        layoutFilteredTables(filteredTables, filteredRelations);
+        renderFilteredErDiagram(filteredTables, filteredRelations, isDark);
+
+        fUmlModal.classList.add('show');
+        fUmlModal.setAttribute('aria-hidden', 'false');
+      };
+
+      function getTableCardWidth(table) {
+        var maxLen = table.name.length;
+        for (var i = 0; i < table.cols.length; i++) {
+          var len = table.cols[i].name.length + table.cols[i].type.length + table.cols[i].keys.length * 3 + 2;
+          if (len > maxLen) maxLen = len;
+        }
+        return Math.max(180, Math.min(240, maxLen * 8 + 40));
+      }
+
+      function getTableCardHeight(table) {
+        return 34 + table.cols.length * 22 + 8;
+      }
+
+      function layoutFilteredTables(tbls, rels) {
+        var adj = {};
+        for (var i = 0; i < tbls.length; i++) adj[tbls[i].name] = [];
+        for (var r = 0; r < rels.length; r++) {
+          var from = rels[r][0], to = rels[r][2];
+          if (adj[from]) adj[from].push(to);
+          if (adj[to]) adj[to].push(from);
+        }
+        var tblByName = {};
+        for (var i = 0; i < tbls.length; i++) tblByName[tbls[i].name] = tbls[i];
+
+        var scored = tbls.map(function(t) {
+          return { name: t.name, score: (adj[t.name] || []).length };
+        });
+        scored.sort(function(a, b) { return b.score - a.score; });
+
+        var layers = [];
+        var visited = {};
+
+        function bfs(startName) {
+          var queue = [startName];
+          visited[startName] = true;
+          var layerIdx = layers.length;
+          while (queue.length > 0) {
+            var nextQueue = [];
+            if (!layers[layerIdx]) layers[layerIdx] = [];
+            for (var q = 0; q < queue.length; q++) {
+              var name = queue[q];
+              layers[layerIdx].push(name);
+              var neighbors = adj[name] || [];
+              for (var n = 0; n < neighbors.length; n++) {
+                if (!visited[neighbors[n]]) {
+                  visited[neighbors[n]] = true;
+                  nextQueue.push(neighbors[n]);
+                }
+              }
+            }
+            layerIdx++;
+            queue = nextQueue;
+          }
+        }
+
+        for (var s = 0; s < scored.length; s++) {
+          if (!visited[scored[s].name]) bfs(scored[s].name);
+        }
+
+        var currentX = 40;
+        var rowGap = 30;
+        for (var l = 0; l < layers.length; l++) {
+          var layer = layers[l];
+          var currentY = 40;
+          var maxW = 0;
+          for (var m = 0; m < layer.length; m++) {
+            var tbl = tblByName[layer[m]];
+            if (!tbl) continue;
+            var w = getTableCardWidth(tbl);
+            var h = getTableCardHeight(tbl);
+            tbl.x = currentX;
+            tbl.y = currentY;
+            currentY += h + rowGap;
+            if (w > maxW) maxW = w;
+          }
+          currentX += maxW + 60;
+        }
+      }
+
+      function renderFilteredErDiagram(tablesData, relationsData, isDark) {
+        var container = document.createElement('div');
+        container.className = 'uml-er-container';
+
+        var cardRects = {};
+        var cardElements = {};
+        var keyColorMap = { pk: '#e53e3e', fk: '#ed8936', uk: '#48bb78', idx: '#4299e1' };
+
+        for (var t = 0; t < tablesData.length; t++) {
+          var tbl = tablesData[t];
+          var w = getTableCardWidth(tbl);
+          var h = getTableCardHeight(tbl);
+          cardRects[tbl.name] = { x: tbl.x, y: tbl.y, w: w, h: h };
+
+          var card = document.createElement('div');
+          card.className = 'uml-table-card';
+          card.style.left = tbl.x + 'px';
+          card.style.top = tbl.y + 'px';
+          card.style.width = w + 'px';
+          card.setAttribute('data-uml-table', tbl.name);
+
+          var header = document.createElement('div');
+          header.className = 'uml-table-header';
+          header.textContent = tbl.name;
+          card.appendChild(header);
+
+          var body = document.createElement('div');
+          body.className = 'uml-table-body';
+          for (var c = 0; c < tbl.cols.length; c++) {
+            var col = tbl.cols[c];
+            var row = document.createElement('div');
+            row.className = 'uml-col-row';
+            for (var k = 0; k < col.keys.length; k++) {
+              var badge = document.createElement('span');
+              badge.className = 'uml-col-key ' + col.keys[k];
+              badge.textContent = col.keys[k].toUpperCase();
+              row.appendChild(badge);
+            }
+            var nameSpan = document.createElement('span');
+            nameSpan.className = 'uml-col-name';
+            nameSpan.textContent = col.name;
+            row.appendChild(nameSpan);
+            var typeSpan = document.createElement('span');
+            typeSpan.className = 'uml-col-type';
+            typeSpan.textContent = col.type;
+            row.appendChild(typeSpan);
+            body.appendChild(row);
+          }
+          card.appendChild(body);
+          container.appendChild(card);
+          cardElements[tbl.name] = card;
+        }
+
+        var svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        svg.classList.add('uml-svg-overlay');
+        svg.setAttribute('width', '100%');
+        svg.setAttribute('height', '100%');
+
+        var defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
+        var marker = document.createElementNS('http://www.w3.org/2000/svg', 'marker');
+        marker.setAttribute('id', 'fuml-arrow');
+        marker.setAttribute('viewBox', '0 0 10 6');
+        marker.setAttribute('refX', '10');
+        marker.setAttribute('refY', '3');
+        marker.setAttribute('markerWidth', '10');
+        marker.setAttribute('markerHeight', '6');
+        marker.setAttribute('orient', 'auto-start-reverse');
+        var arrowPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        arrowPath.setAttribute('d', 'M0,0 L10,3 L0,6 Z');
+        arrowPath.setAttribute('fill', isDark ? '#a0aec0' : '#718096');
+        marker.appendChild(arrowPath);
+        defs.appendChild(marker);
+        svg.appendChild(defs);
+        container.appendChild(svg);
+        fUmlWrapper.innerHTML = '';
+        fUmlWrapper.appendChild(container);
+
+        function drawRelations() {
+          while (svg.childNodes.length > 1) svg.removeChild(svg.lastChild);
+          var lineColor = isDark ? 'rgba(160,174,192,0.6)' : 'rgba(113,128,150,0.5)';
+          var labelColor = isDark ? '#a0aec0' : '#4a5568';
+
+          for (var r = 0; r < relationsData.length; r++) {
+            var rel = relationsData[r];
+            var fromRect = cardRects[rel[0]];
+            var toRect = cardRects[rel[2]];
+            if (!fromRect || !toRect) continue;
+
+            var fromCx = fromRect.x + fromRect.w / 2;
+            var fromCy = fromRect.y + fromRect.h / 2;
+            var toCx = toRect.x + toRect.w / 2;
+            var toCy = toRect.y + toRect.h / 2;
+
+            var fx, fy;
+            if (toCx < fromRect.x) { fx = fromRect.x; fy = fromCy; }
+            else if (toCx > fromRect.x + fromRect.w) { fx = fromRect.x + fromRect.w; fy = fromCy; }
+            else if (toCy < fromRect.y) { fx = fromCx; fy = fromRect.y; }
+            else { fx = fromCx; fy = fromRect.y + fromRect.h; }
+
+            var tx, ty;
+            if (fromCx < toRect.x) { tx = toRect.x; ty = toCy; }
+            else if (fromCx > toRect.x + toRect.w) { tx = toRect.x + toRect.w; ty = toCy; }
+            else if (fromCy < toRect.y) { tx = toCx; ty = toRect.y; }
+            else { tx = toCx; ty = toRect.y + toRect.h; }
+
+            var line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+            line.setAttribute('x1', String(fx));
+            line.setAttribute('y1', String(fy));
+            line.setAttribute('x2', String(tx));
+            line.setAttribute('y2', String(ty));
+            line.setAttribute('stroke', lineColor);
+            line.setAttribute('stroke-width', '2');
+            line.setAttribute('marker-end', 'url(#fuml-arrow)');
+            svg.appendChild(line);
+
+            var mx = (fx + tx) / 2;
+            var my = (fy + ty) / 2;
+            var text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+            text.setAttribute('x', String(mx));
+            text.setAttribute('y', String(my - 6));
+            text.setAttribute('text-anchor', 'middle');
+            text.setAttribute('font-size', '11');
+            text.setAttribute('fill', labelColor);
+            text.setAttribute('font-weight', '600');
+            text.textContent = rel[4];
+            svg.appendChild(text);
+          }
+        }
+
+        drawRelations();
+
+        var dragTarget = null;
+        var dragOffsetX = 0;
+        var dragOffsetY = 0;
+
+        function clientToContainer(clientX, clientY) {
+          var wrapperRect = fUmlWrapper.getBoundingClientRect();
+          return {
+            x: clientX - wrapperRect.left + fUmlWrapper.scrollLeft,
+            y: clientY - wrapperRect.top + fUmlWrapper.scrollTop
+          };
+        }
+
+        container.addEventListener('mousedown', function(e) {
+          var card = e.target.closest('[data-uml-table]');
+          if (!card) return;
+          var tName = card.getAttribute('data-uml-table');
+          if (!tName || !cardRects[tName]) return;
+          dragTarget = tName;
+          var pos = clientToContainer(e.clientX, e.clientY);
+          dragOffsetX = pos.x - cardRects[tName].x;
+          dragOffsetY = pos.y - cardRects[tName].y;
+          e.preventDefault();
+        });
+
+        container.addEventListener('mousemove', function(e) {
+          if (!dragTarget) return;
+          var rect = cardRects[dragTarget];
+          var pos = clientToContainer(e.clientX, e.clientY);
+          rect.x = pos.x - dragOffsetX;
+          rect.y = pos.y - dragOffsetY;
+          var el = cardElements[dragTarget];
+          if (el) {
+            el.style.left = rect.x + 'px';
+            el.style.top = rect.y + 'px';
+          }
+          drawRelations();
+        });
+
+        document.addEventListener('mouseup', function() {
+          dragTarget = null;
+        });
+      }
     })();
 
     // Canvas チャート描画
