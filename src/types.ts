@@ -21,6 +21,8 @@ export type Bindings = {
   COMMIT_HISTORY_PAGE_SIZE?: string;
   RESEND_WEBHOOK_DEDUP_TTL_SECONDS?: string;
   GITHUB_WEBHOOK_SECRET?: string;
+  GITHUB_TOKEN?: string;
+  AI?: Ai;
 };
 
 /** Hono コンテキスト変数 */
@@ -57,6 +59,23 @@ export interface GitHubWebhookRepositoryPayload {
     private: boolean;
     owner?: { login: string };
     html_url?: string;
+  };
+  sender?: { login?: string };
+}
+
+/** GitHub Webhook の pull_request イベントペイロード */
+export interface GitHubWebhookPullRequestPayload {
+  action?: string;
+  pull_request?: {
+    title: string;
+    body: string | null;
+    html_url: string;
+    diff_url: string;
+    number: number;
+    user?: { login: string };
+  };
+  repository?: {
+    full_name: string;
   };
   sender?: { login?: string };
 }
