@@ -18,7 +18,7 @@ import { getUserInfoPage } from './views/userinfo';
 import { getMarkdownPreviewPage } from './views/markdown-preview';
 import { getCacheStatusPage, CacheStatusData, TableStatusEntry, UserContextInfo } from './views/status';
 import { ensureDefaultWorkspace, getCurrentWorkspace, getUserWorkspaces, switchWorkspace } from './utils/workspace';
-import { getGitHubAccessToken, getGitHubLatestCommit, getGitHubCommitCount, getGitHubCommits, getGitHubRepoOpenIssuesCount, getGitHubRepoCommitsByMonth, getGitHubRepoCommitsByDate, getGitHubTokenScopes, getGitHubUser, getGitHubUserEmail, getGitHubUserRepos, GitHubTokenScopesError, buildRepoInstallationPermissionsMap, RepoInstallationPermissions, getGitHubUserInstallationsWithDiag, getGitHubInstallationRepos, getExternalServiceLinkedRepos, getSlackLinkedReposByWebhooks, CommitDetail } from './utils/github';
+import { getGitHubAccessToken, getGitHubLatestCommit, getGitHubCommitCount, getGitHubCommits, getGitHubRepoOpenIssuesCount, getGitHubRepoCommitsByMonth, getGitHubRepoCommitsByDate, getGitHubTokenScopes, getGitHubUser, getGitHubUserEmail, getGitHubUserRepos, createGitHubRepo, GitHubTokenScopesError, buildRepoInstallationPermissionsMap, RepoInstallationPermissions, getGitHubUserInstallationsWithDiag, getGitHubInstallationRepos, getExternalServiceLinkedRepos, getSlackLinkedReposByWebhooks, CommitDetail } from './utils/github';
 import { getCookieValue, getCookieValues } from './utils/cookie';
 import { verifyResendWebhookSignature } from './utils/resendWebhook';
 import { verifyGitHubWebhookSignature } from './utils/githubWebhook';
@@ -2743,6 +2743,79 @@ app.get('/api/debug/installations', authMiddleware, async (c) => {
   }
 
   return c.json(result);
+});
+
+// =====================================================
+// リポジトリ作成API
+// =====================================================
+
+app.post('/api/repositories', authMiddleware, async (c) => {
+  const user = c.get('user');
+  const userSession = await getUserSession(c.env.DB, user.sub);
+  const accessToken = userSession?.githubAccessToken ?? user.github_access_token ?? undefined;
+
+  if (!accessToken) {
+    return c.json({ error: 'GitHub アクセストークンがありません。再ログインしてください。' }, 401);
+  }
+
+  const body = await c.req.json<{ name?: string; isPrivate?: boolean; description?: string }>();
+  const repoName = (body.name ?? '').trim();
+
+  if (!repoName) {
+    return c.json({ error: 'リポジトリ名を入力してください。' }, 400);
+  }
+
+  // リポジトリ名の形式チェック (GitHub の命名規則)
+  if (!/^[a-zA-Z0-9._-]+$/.test(repoName)) {
+    return c.json({ error: 'リポジトリ名に使用できるのは英数字、ハイフン、ドット、アンダースコアのみです。' }, 400);
+  }
+
+  if (repoName.startsWith('.') || repoName.endsWith('.')) {
+    return c.json({ error: 'リポジトリ名はドットで開始・終了できません。' }, 400);
+  }
+
+  // 既存リポジトリとの重複チェック
+  try {
+    const existingRepos = await getGitHubUserRepos({ accessToken });
+    const duplicate = existingRepos.find(
+      (r) => r.name.toLowerCase() === repoName.toLowerCase() && r.owner?.login?.toLowerCase() === user.sub.toLowerCase()
+    );
+    if (duplicate) {
+      return c.json({ error: `リポジトリ "${repoName}" は既に存在します。` }, 409);
+    }
+  } catch (error) {
+    logger.warn('Failed to check existing repos before creation', {
+      userId: user.sub,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    // チェック失敗時は GitHub API 側で重複検出されるのでそのまま続行
+  }
+
+  try {
+    const created = await createGitHubRepo({
+      accessToken,
+      name: repoName,
+      isPrivate: body.isPrivate ?? false,
+      description: body.description,
+    });
+
+    return c.json({
+      message: `リポジトリ "${created.name}" を作成しました。`,
+      repository: {
+        name: created.name,
+        htmlUrl: created.html_url,
+        isPrivate: created.private,
+      },
+    }, 201);
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : 'Unknown error';
+    logger.error('Failed to create GitHub repository', {
+      userId: user.sub,
+      repoName,
+      error: msg,
+    });
+    return c.json({ error: `リポジトリの作成に失敗しました: ${msg}` }, 422);
+  }
 });
 
 // =====================================================

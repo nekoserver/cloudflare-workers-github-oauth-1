@@ -244,6 +244,56 @@ export function getRepositoriesPage(user: {
     }
     .repo-row { cursor: pointer; }
 
+    /* Create Repo Button */
+    .create-repo-btn {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 8px 16px; border-radius: 8px; border: none;
+      background: linear-gradient(135deg, #48bb78, #38a169); color: #fff;
+      font-size: 14px; font-weight: 700; cursor: pointer;
+      transition: opacity 0.2s ease, transform 0.15s ease;
+      box-shadow: 0 2px 8px rgba(72,187,120,0.3);
+    }
+    .create-repo-btn:hover { opacity: 0.9; transform: translateY(-1px); }
+    .create-repo-btn:active { transform: translateY(0); }
+    .page-header-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+
+    /* Create Repo Modal */
+    .create-repo-modal-content {
+      background: var(--card-bg); border-radius: 16px;
+      box-shadow: 0 24px 60px rgba(0,0,0,0.3); width: 100%; max-width: 480px;
+      max-height: 90vh; overflow-y: auto;
+    }
+    .create-repo-form { display: flex; flex-direction: column; gap: 16px; }
+    .form-group { display: flex; flex-direction: column; gap: 6px; }
+    .form-label { font-size: 13px; font-weight: 700; color: var(--text-primary); }
+    .form-input {
+      padding: 10px 12px; border-radius: 8px; border: 1px solid var(--border-color);
+      background: var(--input-bg, var(--card-bg)); color: var(--text-primary);
+      font-size: 14px; outline: none; transition: border-color 0.2s ease;
+    }
+    .form-input:focus { border-color: var(--accent-color, #48bb78); }
+    .form-input.error { border-color: #e53e3e; }
+    .form-error { font-size: 12px; color: #e53e3e; font-weight: 600; min-height: 18px; }
+    .radio-group { display: flex; gap: 16px; }
+    .radio-label {
+      display: flex; align-items: center; gap: 6px; cursor: pointer;
+      font-size: 14px; color: var(--text-primary); font-weight: 500;
+      padding: 8px 14px; border-radius: 8px; border: 2px solid var(--border-color);
+      transition: border-color 0.2s ease, background 0.2s ease;
+    }
+    .radio-label:has(input:checked) {
+      border-color: var(--accent-color, #48bb78); background: rgba(72,187,120,0.08);
+    }
+    .radio-label input[type="radio"] { accent-color: #48bb78; }
+    .create-repo-submit {
+      padding: 10px 20px; border-radius: 8px; border: none;
+      background: linear-gradient(135deg, #48bb78, #38a169); color: #fff;
+      font-size: 14px; font-weight: 700; cursor: pointer;
+      transition: opacity 0.2s ease;
+    }
+    .create-repo-submit:hover { opacity: 0.9; }
+    .create-repo-submit:disabled { opacity: 0.5; cursor: not-allowed; }
+
     /* Permissions Modal */
     .modal-overlay {
       display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
@@ -660,8 +710,13 @@ export function getRepositoriesPage(user: {
 
   <div class="container">
     <div class="page-header">
-      <h1 class="page-title">📦 リポジトリ</h1>
-      <p class="page-subtitle">リポジトリ ${repoCount} 件</p>
+      <div class="page-header-row">
+        <div>
+          <h1 class="page-title">📦 リポジトリ</h1>
+          <p class="page-subtitle">リポジトリ ${repoCount} 件</p>
+        </div>
+        <button class="create-repo-btn" id="openCreateRepoModal" type="button">＋ 新規にリポジトリを生成する</button>
+      </div>
       ${errorBanner}
       ${missingScopeBannerHtml}
     </div>
@@ -828,6 +883,39 @@ export function getRepositoriesPage(user: {
 
   <div class="cache-toast-container" id="cacheToastContainer"></div>
 
+  <!-- Create Repo Modal -->
+  <div class="modal-overlay" id="createRepoModal">
+    <div class="create-repo-modal-content">
+      <div class="modal-header">
+        <span class="modal-title">📦 新規リポジトリを作成</span>
+        <button class="modal-close" id="createRepoModalClose" type="button">&times;</button>
+      </div>
+      <div class="modal-body">
+        <form class="create-repo-form" id="createRepoForm">
+          <div class="form-group">
+            <label class="form-label" for="createRepoName">リポジトリ名</label>
+            <input class="form-input" id="createRepoName" type="text" placeholder="my-new-repo" autocomplete="off" maxlength="100" />
+            <div class="form-error" id="createRepoError"></div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">公開設定</label>
+            <div class="radio-group">
+              <label class="radio-label">
+                <input type="radio" name="repoVisibility" value="public" checked />
+                🌐 Public
+              </label>
+              <label class="radio-label">
+                <input type="radio" name="repoVisibility" value="private" />
+                🔒 Private
+              </label>
+            </div>
+          </div>
+          <button class="create-repo-submit" id="createRepoSubmit" type="submit">作成する</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
   <script>
     var toastEl = document.getElementById('repoToast');
     var toastMessageEl = document.getElementById('repoToastMessage');
@@ -888,6 +976,115 @@ export function getRepositoriesPage(user: {
         dropdown.classList.remove('show');
       }
     });
+
+    // =============================================
+    // 新規リポジトリ作成モーダル
+    // =============================================
+    (function() {
+      var createModal = document.getElementById('createRepoModal');
+      var openBtn = document.getElementById('openCreateRepoModal');
+      var closeBtn = document.getElementById('createRepoModalClose');
+      var form = document.getElementById('createRepoForm');
+      var nameInput = document.getElementById('createRepoName');
+      var errorEl = document.getElementById('createRepoError');
+      var submitBtn = document.getElementById('createRepoSubmit');
+
+      // 既存リポジトリ名の一覧（小文字化して重複チェックに使用）
+      var existingRepoNames = [];
+      document.querySelectorAll('.repo-row').forEach(function(row) {
+        var owner = (row.getAttribute('data-owner') || '').toLowerCase();
+        var repo = (row.getAttribute('data-repo') || '').toLowerCase();
+        if (repo) existingRepoNames.push(owner + '/' + repo);
+      });
+      var currentUser = '${escapeHtml(user.username)}'.toLowerCase();
+
+      function openModal() {
+        if (createModal) {
+          createModal.classList.add('show');
+          if (nameInput) { nameInput.value = ''; nameInput.classList.remove('error'); }
+          if (errorEl) errorEl.textContent = '';
+          if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = '作成する'; }
+        }
+      }
+      function closeModal() {
+        if (createModal) createModal.classList.remove('show');
+      }
+
+      if (openBtn) openBtn.addEventListener('click', openModal);
+      if (closeBtn) closeBtn.addEventListener('click', closeModal);
+      if (createModal) {
+        createModal.addEventListener('click', function(e) {
+          if (e.target === createModal) closeModal();
+        });
+      }
+      document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape' && createModal && createModal.classList.contains('show')) {
+          closeModal();
+        }
+      });
+
+      function validateRepoName(name) {
+        if (!name) return 'リポジトリ名を入力してください。';
+        if (!/^[a-zA-Z0-9._-]+$/.test(name)) return '英数字、ハイフン、ドット、アンダースコアのみ使用できます。';
+        if (name.startsWith('.') || name.endsWith('.')) return 'ドットで開始・終了はできません。';
+        if (existingRepoNames.indexOf(currentUser + '/' + name.toLowerCase()) !== -1) return 'このリポジトリ名は既に使用されています。';
+        return '';
+      }
+
+      if (nameInput && errorEl) {
+        nameInput.addEventListener('input', function() {
+          var err = validateRepoName(nameInput.value.trim());
+          errorEl.textContent = err;
+          nameInput.classList.toggle('error', !!err);
+        });
+      }
+
+      if (form) {
+        form.addEventListener('submit', function(e) {
+          e.preventDefault();
+          var name = (nameInput ? nameInput.value.trim() : '');
+          var err = validateRepoName(name);
+          if (err) {
+            if (errorEl) errorEl.textContent = err;
+            if (nameInput) nameInput.classList.add('error');
+            return;
+          }
+
+          var visibilityEl = form.querySelector('input[name="repoVisibility"]:checked');
+          var isPrivate = visibilityEl ? visibilityEl.value === 'private' : false;
+
+          if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = '作成中...'; }
+          if (errorEl) errorEl.textContent = '';
+
+          fetch('/api/repositories', {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: name, isPrivate: isPrivate })
+          })
+          .then(function(res) {
+            return res.json().then(function(data) { return { ok: res.ok, status: res.status, data: data }; });
+          })
+          .then(function(result) {
+            if (!result.ok) {
+              var msg = result.data.error || 'リポジトリの作成に失敗しました。';
+              if (errorEl) errorEl.textContent = msg;
+              if (nameInput) nameInput.classList.add('error');
+              if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = '作成する'; }
+              return;
+            }
+            closeModal();
+            showToast('リポジトリ「' + name + '」を作成しました', 'success', 7000);
+            // 2秒後にページリロードして一覧に反映
+            setTimeout(function() { location.reload(); }, 2000);
+          })
+          .catch(function() {
+            if (errorEl) errorEl.textContent = '通信エラーが発生しました。';
+            if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = '作成する'; }
+          });
+        });
+      }
+    })();
 
     const sortButton = document.getElementById('sortUpdated');
     const repoList = document.getElementById('repoList');
