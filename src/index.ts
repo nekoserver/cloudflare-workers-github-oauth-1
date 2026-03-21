@@ -2432,15 +2432,33 @@ app.post('/webhook/github', async (c) => {
         // diff 取得（GITHUB_TOKEN がある場合のみ）
         let trimmedDiff = '';
         let diffLength = 0;
-        if (githubToken && pr.diff_url) {
+        if (!githubToken) {
+          logger.warn('GITHUB_TOKEN is not configured, skipping PR diff fetch', { prUrl });
+        } else if (!pr.diff_url) {
+          logger.warn('PR diff_url is missing', { prUrl });
+        } else {
           try {
             const diffRes = await fetch(pr.diff_url, {
-              headers: { Authorization: `Bearer ${githubToken}` },
+              headers: {
+                Authorization: `Bearer ${githubToken}`,
+                Accept: 'application/vnd.github.v3.diff',
+                'User-Agent': 'cloudflare-workers-github-oauth-1',
+              },
             });
             if (diffRes.ok) {
               const diff = await diffRes.text();
               diffLength = diff.length;
               trimmedDiff = diff.slice(0, 8000);
+              logger.info('Fetched PR diff', { prUrl, diffLength, trimmedLength: trimmedDiff.length });
+            } else {
+              const errorBody = await diffRes.text().catch(() => '');
+              logger.warn('PR diff fetch returned non-OK status', {
+                prUrl,
+                diffUrl: pr.diff_url,
+                status: diffRes.status,
+                statusText: diffRes.statusText,
+                errorBody: errorBody.slice(0, 500),
+              });
             }
           } catch (error) {
             logger.warn('Failed to fetch PR diff', {
@@ -2452,6 +2470,11 @@ app.post('/webhook/github', async (c) => {
 
         // AI 要約（Workers AI バインディングがある場合のみ）
         let summary = '';
+        if (!ai) {
+          logger.warn('Workers AI binding (AI) is not available, skipping summarization', { prUrl });
+        } else if (!trimmedDiff) {
+          logger.warn('No diff available for AI summarization', { prUrl, githubTokenSet: !!githubToken });
+        }
         if (ai && trimmedDiff) {
           try {
             const aiRes = await ai.run(aiModel, {
