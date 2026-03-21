@@ -23,7 +23,7 @@ import { getCookieValue, getCookieValues } from './utils/cookie';
 import { verifyResendWebhookSignature } from './utils/resendWebhook';
 import { verifyGitHubWebhookSignature } from './utils/githubWebhook';
 import { postSlackMessage } from './utils/slack';
-import { validateRepoName, checkRepoScope, isPermissionError } from './utils/repoValidation';
+import { executeCreateRepo } from './utils/repoValidation';
 import * as logger from './utils/logger';
 import { resolveIdleTimeoutSeconds, type Bindings, type Variables, type GitHubWebhookInstallationPayload, type ResendWebhookPayload } from './types';
 
@@ -2775,88 +2775,39 @@ app.post('/api/repositories', authMiddleware, async (c) => {
   const userSession = await getUserSession(c.env.DB, user.sub);
   const accessToken = userSession?.githubAccessToken ?? user.github_access_token ?? undefined;
 
-  if (!accessToken) {
-    return c.json({ error: 'GitHub アクセストークンがありません。再ログインしてください。' }, 401);
-  }
-
-  // repo スコープの事前チェック
-  const scopeCheck = checkRepoScope(userSession?.githubGrantedScopes, !!userSession);
-  if (!scopeCheck.hasRepoScope) {
-    logger.warn('Repo creation attempted without repo scope', {
-      userId: user.sub,
-      grantedScopes: userSession?.githubGrantedScopes ?? '(null)',
-      hasScopeData: scopeCheck.hasScopeData,
-    });
-    return c.json({
-      error: scopeCheck.hasScopeData
-        ? 'リポジトリ作成には repo 権限が必要です。GitHub の認可画面で「repo」スコープを許可してから再ログインしてください。GitHub OAuth App の設定で repo スコープが有効になっているか確認してください。'
-        : 'スコープ情報が保存されていません。再ログインして権限を付与してください。',
-      requireReauth: true,
-      missingScope: 'repo',
-      grantedScopes: scopeCheck.scopeList,
-    }, 403);
-  }
-
   const body = await c.req.json<{ name?: string; isPrivate?: boolean; description?: string }>();
-  const repoName = (body.name ?? '').trim();
 
-  const nameValidation = validateRepoName(body.name);
-  if (!nameValidation.valid) {
-    return c.json({ error: nameValidation.error }, 400);
-  }
+  const result = await executeCreateRepo({
+    accessToken,
+    userId: user.sub,
+    name: body.name,
+    isPrivate: body.isPrivate ?? false,
+    description: body.description,
+    deps: {
+      getUserRepos: (token) => getGitHubUserRepos({ accessToken: token }),
+      createRepo: createGitHubRepo,
+    },
+  });
 
-  // 既存リポジトリとの重複チェック
-  try {
-    const existingRepos = await getGitHubUserRepos({ accessToken });
-    const duplicate = existingRepos.find(
-      (r) => r.name.toLowerCase() === repoName.toLowerCase() && r.owner?.login?.toLowerCase() === user.sub.toLowerCase()
-    );
-    if (duplicate) {
-      return c.json({ error: `リポジトリ "${repoName}" は既に存在します。` }, 409);
-    }
-  } catch (error) {
-    logger.warn('Failed to check existing repos before creation', {
-      userId: user.sub,
-      error: error instanceof Error ? error.message : 'Unknown error',
-    });
-    // チェック失敗時は GitHub API 側で重複検出されるのでそのまま続行
-  }
-
-  try {
-    const created = await createGitHubRepo({
-      accessToken,
-      name: repoName,
-      isPrivate: body.isPrivate ?? false,
-      description: body.description,
-    });
-
+  if (result.ok) {
     return c.json({
-      message: `リポジトリ "${created.name}" を作成しました。`,
-      repository: {
-        name: created.name,
-        htmlUrl: created.html_url,
-        isPrivate: created.private,
-      },
-    }, 201);
-  } catch (error) {
-    const msg = error instanceof Error ? error.message : 'Unknown error';
+      message: `リポジトリ "${result.repository.name}" を作成しました。`,
+      repository: result.repository,
+    }, result.status);
+  }
+
+  if (result.status === 403 || result.status === 422) {
     logger.error('Failed to create GitHub repository', {
       userId: user.sub,
-      repoName,
-      error: msg,
+      repoName: body.name,
+      error: result.error,
     });
-
-    // GitHub App/OAuth 権限不足エラーの場合、再ログインを促す
-    if (isPermissionError(msg)) {
-      return c.json({
-        error: 'リポジトリ作成の権限がありません。再ログインして権限を付与してください。',
-        requireReauth: true,
-        missingScope: 'repo',
-      }, 403);
-    }
-
-    return c.json({ error: `リポジトリの作成に失敗しました: ${msg}` }, 422);
   }
+
+  return c.json({
+    error: result.error,
+    ...(result.requireReauth ? { requireReauth: true } : {}),
+  }, result.status);
 });
 
 // =====================================================
