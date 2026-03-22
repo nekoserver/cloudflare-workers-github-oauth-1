@@ -3821,16 +3821,16 @@ export function getCacheStatusPage(user: {
                 return '<span style="display:inline-block; padding:2px 8px; background:var(--bg-tertiary, var(--bg-secondary)); border-radius:4px; font-size:12px; margin:2px;">' + escapeHtmlText(r) + '</span>';
               }).join('');
               html += '<div style="border:1px solid var(--border-color); border-radius:8px; padding:12px; margin-bottom:10px;" data-group-id="' + escapeHtmlText(g.id) + '">'
-                + '<div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">'
-                + '<div style="width:16px; height:16px; border-radius:4px; background:' + escapeHtmlText(g.colorCode) + '; flex-shrink:0;"></div>'
+                + '<div class="repo-group-header" style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">'
+                + '<div class="repo-group-color-swatch" style="width:16px; height:16px; border-radius:4px; background:' + escapeHtmlText(g.colorCode) + '; flex-shrink:0;"></div>'
                 + '<strong style="font-size:14px; color:var(--text-primary);">' + escapeHtmlText(g.name) + '</strong>'
                 + (g.description ? '<span style="color:var(--text-muted); font-size:12px;"> — ' + escapeHtmlText(g.description) + '</span>' : '')
+                + '<button type="button" class="repo-group-edit-btn" data-id="' + escapeHtmlText(g.id) + '" style="padding:2px 8px; background:var(--bg-secondary); border:1px solid var(--border-color); border-radius:4px; font-size:11px; color:var(--text-primary); cursor:pointer;">編集</button>'
                 + '<button type="button" class="repo-group-delete-btn" data-id="' + escapeHtmlText(g.id) + '" style="margin-left:auto; background:none; border:none; color:var(--text-muted); cursor:pointer; font-size:16px; padding:2px 6px;" title="削除">&times;</button>'
                 + '</div>'
                 + '<div class="repo-group-member-area" style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">'
                 + '<span style="font-size:12px; color:var(--text-muted);">メンバー:</span>'
                 + (repoList || '<span style="font-size:12px; color:var(--text-faint);">なし</span>')
-                + '<button type="button" class="repo-group-edit-btn" data-id="' + escapeHtmlText(g.id) + '" style="padding:2px 8px; background:var(--bg-secondary); border:1px solid var(--border-color); border-radius:4px; font-size:11px; color:var(--text-primary); cursor:pointer; margin-left:4px;">編集</button>'
                 + '</div>'
                 + '</div>';
             });
@@ -3847,6 +3847,24 @@ export function getCacheStatusPage(user: {
               });
             });
 
+            var groupColorPresets = [
+              { label: '青', value: '#667eea' },
+              { label: '赤', value: '#e53e3e' },
+              { label: '緑', value: '#38a169' },
+              { label: 'オレンジ', value: '#ed8936' },
+              { label: '紫', value: '#9f7aea' },
+              { label: '茶', value: '#dd6b20' },
+              { label: 'ティール', value: '#319795' },
+              { label: 'ピンク', value: '#d53f8c' },
+              { label: '水色', value: '#3182ce' },
+              { label: '黄', value: '#d69e2e' },
+              { label: '藤', value: '#805ad5' },
+              { label: '紺', value: '#2b6cb0' },
+              { label: '深赤', value: '#c53030' },
+              { label: '深緑', value: '#2f855a' },
+              { label: '琥珀', value: '#b7791f' },
+            ];
+
             listEl.querySelectorAll('.repo-group-edit-btn').forEach(function(btn) {
               btn.addEventListener('click', function() {
                 var id = btn.getAttribute('data-id');
@@ -3854,11 +3872,102 @@ export function getCacheStatusPage(user: {
                 if (!group) return;
                 var card = btn.closest('[data-group-id]');
                 if (!card) return;
+                var headerArea = card.querySelector('.repo-group-header');
                 var memberArea = card.querySelector('.repo-group-member-area');
-                if (!memberArea) return;
+                if (!headerArea || !memberArea) return;
                 var currentRepos = (group.repos || []).slice();
+                var currentColor = group.colorCode || '#667eea';
 
-                function renderEditUI() {
+                function renderEditHeader() {
+                  var presetOpts = groupColorPresets.map(function(p) {
+                    var sel = p.value.toLowerCase() === currentColor.toLowerCase() ? ' selected' : '';
+                    return '<option value="' + escapeHtmlText(p.value) + '"' + sel + '>' + escapeHtmlText(p.label) + '</option>';
+                  }).join('');
+                  var hasCustom = !groupColorPresets.some(function(p) { return p.value.toLowerCase() === currentColor.toLowerCase(); });
+                  if (hasCustom) {
+                    presetOpts += '<option value="' + escapeHtmlText(currentColor) + '" selected>カスタム</option>';
+                  }
+                  presetOpts += '<option value="__custom__">カスタム...</option>';
+
+                  headerArea.innerHTML = '<div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">'
+                    + '<div class="edit-color-swatch" style="width:24px; height:24px; border-radius:4px; background:' + escapeHtmlText(currentColor) + '; flex-shrink:0; position:relative; cursor:pointer; border:1px solid var(--border-color);">'
+                    + '<input type="color" class="edit-color-picker" value="' + escapeHtmlText(currentColor) + '" style="position:absolute; top:0; left:0; width:100%; height:100%; opacity:0; cursor:pointer;">'
+                    + '</div>'
+                    + '<select class="edit-color-preset" style="padding:4px 8px; border:1px solid var(--border-color); border-radius:4px; background:var(--bg-secondary); color:var(--text-primary); font-size:12px;">'
+                    + presetOpts
+                    + '</select>'
+                    + '<input type="text" class="edit-color-hex" value="' + escapeHtmlText(currentColor) + '" style="width:80px; padding:4px 8px; border:1px solid var(--border-color); border-radius:4px; background:var(--bg-secondary); color:var(--text-primary); font-size:12px; font-family:monospace;" placeholder="#000000">'
+                    + '<span style="flex:1;"></span>'
+                    + '<strong style="font-size:14px; color:var(--text-primary);">' + escapeHtmlText(group.name) + '</strong>'
+                    + (group.description ? '<span style="color:var(--text-muted); font-size:12px;"> — ' + escapeHtmlText(group.description) + '</span>' : '')
+                    + '<button type="button" class="repo-group-delete-btn" data-id="' + escapeHtmlText(id) + '" style="margin-left:auto; background:none; border:none; color:var(--text-muted); cursor:pointer; font-size:16px; padding:2px 6px;" title="削除">&times;</button>'
+                    + '</div>';
+
+                  function updateColor(newColor) {
+                    if (!/^#[0-9a-fA-F]{6}$/.test(newColor)) return;
+                    currentColor = newColor;
+                    var swatch = headerArea.querySelector('.edit-color-swatch');
+                    var picker = headerArea.querySelector('.edit-color-picker');
+                    var hexInput = headerArea.querySelector('.edit-color-hex');
+                    var preset = headerArea.querySelector('.edit-color-preset');
+                    if (swatch) swatch.style.background = newColor;
+                    if (picker) picker.value = newColor;
+                    if (hexInput) hexInput.value = newColor;
+                    if (preset) {
+                      var matched = false;
+                      for (var i = 0; i < preset.options.length; i++) {
+                        if (preset.options[i].value.toLowerCase() === newColor.toLowerCase()) {
+                          preset.selectedIndex = i;
+                          matched = true;
+                          break;
+                        }
+                      }
+                      if (!matched) {
+                        var customOpt = preset.querySelector('option[value="__custom__"]');
+                        if (customOpt) {
+                          customOpt.value = newColor;
+                          customOpt.textContent = 'カスタム';
+                          customOpt.selected = true;
+                        }
+                      }
+                    }
+                  }
+
+                  var picker = headerArea.querySelector('.edit-color-picker');
+                  if (picker) picker.addEventListener('input', function() { updateColor(picker.value); });
+
+                  var preset = headerArea.querySelector('.edit-color-preset');
+                  if (preset) {
+                    preset.addEventListener('change', function() {
+                      if (preset.value === '__custom__') {
+                        if (picker) picker.click();
+                        return;
+                      }
+                      updateColor(preset.value);
+                    });
+                  }
+
+                  var hexInput = headerArea.querySelector('.edit-color-hex');
+                  if (hexInput) {
+                    hexInput.addEventListener('change', function() {
+                      var val = hexInput.value.trim();
+                      if (/^[0-9a-fA-F]{6}$/.test(val)) val = '#' + val;
+                      updateColor(val);
+                    });
+                  }
+
+                  var delBtn = headerArea.querySelector('.repo-group-delete-btn');
+                  if (delBtn) {
+                    delBtn.addEventListener('click', function() {
+                      if (!confirm('このグループを削除しますか？')) return;
+                      fetch('/api/repo-groups/' + encodeURIComponent(id), {
+                        method: 'DELETE', credentials: 'same-origin',
+                      }).then(function() { loadGroups(); });
+                    });
+                  }
+                }
+
+                function renderEditMembers() {
                   var badgesHtml = currentRepos.map(function(r) {
                     return '<span style="display:inline-flex; align-items:center; gap:4px; padding:2px 8px; background:var(--bg-tertiary, var(--bg-secondary)); border-radius:4px; font-size:12px; margin:2px;">'
                       + escapeHtmlText(r)
@@ -3892,7 +4001,7 @@ export function getCacheStatusPage(user: {
                     rb.addEventListener('click', function() {
                       var repo = rb.getAttribute('data-repo');
                       currentRepos = currentRepos.filter(function(r) { return r !== repo; });
-                      renderEditUI();
+                      renderEditMembers();
                     });
                   });
 
@@ -3903,14 +4012,14 @@ export function getCacheStatusPage(user: {
                       var val = sel.value;
                       if (val && currentRepos.indexOf(val) === -1) {
                         currentRepos.push(val);
-                        renderEditUI();
+                        renderEditMembers();
                       }
                     });
                     sel.addEventListener('change', function() {
                       var val = sel.value;
                       if (val && currentRepos.indexOf(val) === -1) {
                         currentRepos.push(val);
-                        renderEditUI();
+                        renderEditMembers();
                       }
                     });
                   }
@@ -3922,7 +4031,7 @@ export function getCacheStatusPage(user: {
                     var val = textInput.value.trim();
                     if (val && currentRepos.indexOf(val) === -1) {
                       currentRepos.push(val);
-                      renderEditUI();
+                      renderEditMembers();
                     }
                   }
                   if (textAddBtn) textAddBtn.addEventListener('click', addFromText);
@@ -3933,11 +4042,13 @@ export function getCacheStatusPage(user: {
                     saveBtn.addEventListener('click', function() {
                       saveBtn.disabled = true;
                       saveBtn.textContent = '保存中...';
+                      var patchBody = { repos: currentRepos };
+                      if (currentColor !== group.colorCode) patchBody.colorCode = currentColor;
                       fetch('/api/repo-groups/' + encodeURIComponent(id), {
                         method: 'PATCH',
                         credentials: 'same-origin',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ repos: currentRepos }),
+                        body: JSON.stringify(patchBody),
                       }).then(function() { loadGroups(); });
                     });
                   }
@@ -3945,7 +4056,9 @@ export function getCacheStatusPage(user: {
                   var cancelBtn = memberArea.querySelector('.repo-member-cancel-btn');
                   if (cancelBtn) cancelBtn.addEventListener('click', function() { loadGroups(); });
                 }
-                renderEditUI();
+
+                renderEditHeader();
+                renderEditMembers();
               });
             });
           })
