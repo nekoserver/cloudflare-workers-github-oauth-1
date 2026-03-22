@@ -267,6 +267,18 @@ export function getCacheStatusPage(user: {
 
   const chartBars = statusChartMode === 'repo' ? repoBars : gradientBars;
 
+  // グループフィルタ用セレクトボックスのオプション
+  const sortedGroups = data.repoGroups.slice().sort((a, b) => a.name.localeCompare(b.name));
+  const groupFilterOptions = sortedGroups.map(g =>
+    `<option value="${escapeHtml(g.id)}">${escapeHtml(g.name)}</option>`
+  ).join('');
+
+  // クライアント側再描画用のデータ
+  const byMonthByRepoJson = JSON.stringify(data.commitCache.byMonthByRepo);
+  const repoColorMapJson = JSON.stringify(repoColorMap);
+  const repoGroupsJson = JSON.stringify(sortedGroups.map(g => ({ id: g.id, name: g.name, repos: g.repos })));
+  const chartModeJson = JSON.stringify(statusChartMode);
+
   // キャッシュ統計：リポジトリ別テーブル行
   const cs = data.cacheStats;
   const cacheHitRate = cs.totalCacheLookup > 0
@@ -540,6 +552,15 @@ export function getCacheStatusPage(user: {
       min-width: 50px; font-size: 13px; color: var(--text-secondary); font-weight: 600;
       font-variant-numeric: tabular-nums;
     }
+    .group-filter-select {
+      padding: 5px 10px; font-size: 13px; font-weight: 500;
+      color: var(--text-primary); background: var(--bg-secondary);
+      border: 1px solid var(--border-color); border-radius: 6px;
+      cursor: pointer; max-width: 200px;
+      transition: border-color 0.15s;
+    }
+    .group-filter-select:hover { border-color: var(--accent-color); }
+    .group-filter-select:focus { outline: none; border-color: var(--accent-color); box-shadow: 0 0 0 2px rgba(102,126,234,0.2); }
 
     .empty-message {
       padding: 24px; text-align: center; color: var(--text-faint); font-size: 14px;
@@ -1202,9 +1223,13 @@ export function getCacheStatusPage(user: {
 
       <!-- 月別コミット量チャート -->
       ${chartData.length > 0 ? `
-      <div class="section">
+      <div class="section" id="commitChartSection">
         <div class="section-title-row">
           <h2 class="section-title">月別コミット量</h2>
+          <select id="groupFilter" class="group-filter-select" title="グループでフィルタ">
+            <option value="">すべて</option>
+            ${groupFilterOptions}
+          </select>
           <button type="button" class="sync-repo-colors-btn" id="openRepoGroupModal" title="リポジトリグループを管理">
             <span class="sync-icon">&#x1F4C1;</span> グループ管理
           </button>
@@ -1213,8 +1238,8 @@ export function getCacheStatusPage(user: {
           </button>
         </div>
         ${uniqueOwner ? `<div style="font-size:13px; color:var(--text-muted); margin-bottom:8px;">対象ユーザー : <strong style="color:var(--text-primary);">${escapeHtml(uniqueOwner)}</strong></div>` : ''}
-        ${statusChartMode === 'repo' && allRepos.length > 0 ? `<div class="chart-legend">${repoLegend}</div>` : ''}
-        <div class="chart-section">
+        <div id="chartLegendArea">${statusChartMode === 'repo' && allRepos.length > 0 ? `<div class="chart-legend">${repoLegend}</div>` : ''}</div>
+        <div class="chart-section" id="chartBarsArea">
           ${chartBars}
         </div>
       </div>
@@ -1529,6 +1554,11 @@ export function getCacheStatusPage(user: {
     var uniqueOwner = ${uniqueOwner ? JSON.stringify(uniqueOwner) : 'null'};
     var activeCommitCacheYearMonth = null;
 
+    var byMonthByRepo = ${byMonthByRepoJson};
+    var repoColorMap = ${repoColorMapJson};
+    var repoGroupsForFilter = ${repoGroupsJson};
+    var currentChartMode = ${chartModeJson};
+
     function escapeHtmlText(value) {
       return String(value)
         .replace(/&/g, '&amp;')
@@ -1537,6 +1567,120 @@ export function getCacheStatusPage(user: {
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#39;');
     }
+
+    function stripOwnerName(fullName) {
+      if (!uniqueOwner) return fullName;
+      var prefix = uniqueOwner + '/';
+      return fullName.indexOf(prefix) === 0 ? fullName.substring(prefix.length) : fullName;
+    }
+
+    function renderCommitChart(filterGroupId) {
+      var chartBarsArea = document.getElementById('chartBarsArea');
+      var chartLegendArea = document.getElementById('chartLegendArea');
+      if (!chartBarsArea) return;
+
+      var allowedRepos = null;
+      if (filterGroupId) {
+        for (var g = 0; g < repoGroupsForFilter.length; g++) {
+          if (repoGroupsForFilter[g].id === filterGroupId) {
+            allowedRepos = {};
+            for (var r = 0; r < repoGroupsForFilter[g].repos.length; r++) {
+              allowedRepos[repoGroupsForFilter[g].repos[r]] = true;
+            }
+            break;
+          }
+        }
+        if (!allowedRepos) { allowedRepos = {}; }
+      }
+
+      var filtered = byMonthByRepo;
+      if (allowedRepos) {
+        filtered = byMonthByRepo.filter(function(r) { return allowedRepos[r.repo]; });
+      }
+
+      var byMonthMap = {};
+      for (var i = 0; i < filtered.length; i++) {
+        var ym = filtered[i].yearMonth;
+        if (!byMonthMap[ym]) byMonthMap[ym] = 0;
+        byMonthMap[ym] += filtered[i].commits;
+      }
+      var chartData = [];
+      for (var ym in byMonthMap) {
+        chartData.push({ yearMonth: ym, totalCommits: byMonthMap[ym] });
+      }
+      chartData.sort(function(a, b) { return a.yearMonth.localeCompare(b.yearMonth); });
+
+      var maxCommits = 1;
+      for (var i = 0; i < chartData.length; i++) {
+        if (chartData[i].totalCommits > maxCommits) maxCommits = chartData[i].totalCommits;
+      }
+
+      var visibleRepos = {};
+      var repoTotals = {};
+      for (var i = 0; i < filtered.length; i++) {
+        var repo = filtered[i].repo;
+        visibleRepos[repo] = true;
+        if (!repoTotals[repo]) repoTotals[repo] = 0;
+        repoTotals[repo] += filtered[i].commits;
+      }
+      var repoList = Object.keys(visibleRepos);
+      repoList.sort(function(a, b) { return (repoTotals[b] || 0) - (repoTotals[a] || 0); });
+
+      var html = '';
+      if (currentChartMode === 'repo') {
+        var sorted = chartData.slice().sort(function(a, b) { return b.totalCommits - a.totalCommits; });
+        for (var i = 0; i < sorted.length; i++) {
+          var d = sorted[i];
+          var pct = Math.round((d.totalCommits / maxCommits) * 100);
+          var monthRepos = filtered.filter(function(r) { return r.yearMonth === d.yearMonth; });
+          monthRepos.sort(function(a, b) { return (repoTotals[b.repo] || 0) - (repoTotals[a.repo] || 0); });
+          var segments = '';
+          for (var j = 0; j < monthRepos.length; j++) {
+            var mr = monthRepos[j];
+            var segPct = d.totalCommits > 0 ? (mr.commits / d.totalCommits * 100) : 0;
+            var color = repoColorMap[mr.repo] || '#667eea';
+            segments += '<div class="chart-bar-segment" style="width:' + segPct.toFixed(2) + '%;background:' + color + '" title="' + escapeHtmlText(stripOwnerName(mr.repo)) + ': ' + mr.commits + '"></div>';
+          }
+          html += '<div class="chart-bar-wrapper"><div class="chart-label">' + escapeHtmlText(d.yearMonth) + '</div><div class="chart-bar-container"><div class="chart-bar-stacked" style="width: ' + pct + '%">' + segments + '</div></div><div class="chart-value">' + d.totalCommits + '</div></div>';
+        }
+      } else {
+        for (var i = 0; i < chartData.length; i++) {
+          var d = chartData[i];
+          var pct = Math.round((d.totalCommits / maxCommits) * 100);
+          html += '<div class="chart-bar-wrapper"><div class="chart-label">' + escapeHtmlText(d.yearMonth) + '</div><div class="chart-bar-container"><div class="chart-bar" style="width: ' + pct + '%"></div></div><div class="chart-value">' + d.totalCommits + '</div></div>';
+        }
+      }
+
+      if (chartData.length === 0) {
+        html = '<div class="empty-message">該当するデータがありません</div>';
+      }
+      chartBarsArea.innerHTML = html;
+
+      if (chartLegendArea) {
+        if (currentChartMode === 'repo' && repoList.length > 0) {
+          var legendHtml = '<div class="chart-legend">';
+          for (var i = 0; i < repoList.length; i++) {
+            var repo = repoList[i];
+            var color = repoColorMap[repo] || '#667eea';
+            var total = repoTotals[repo] || 0;
+            legendHtml += '<span class="chart-legend-item"><span class="chart-legend-dot" style="background:' + color + '"></span>' + escapeHtmlText(stripOwnerName(repo)) + ' (' + total + ')</span>';
+          }
+          legendHtml += '</div>';
+          chartLegendArea.innerHTML = legendHtml;
+        } else {
+          chartLegendArea.innerHTML = '';
+        }
+      }
+    }
+
+    (function() {
+      var groupFilter = document.getElementById('groupFilter');
+      if (groupFilter) {
+        groupFilter.addEventListener('change', function() {
+          renderCommitChart(groupFilter.value);
+        });
+      }
+    })();
 
     function buildKeySummary(targetId, tablesData) {
       var container = document.getElementById(targetId);
