@@ -1040,9 +1040,34 @@ export function getCacheStatusPage(user: {
       position: absolute; top: 0; left: 0; width: 100%; height: 100%;
       pointer-events: none; z-index: 0;
     }
+    .uml-bottom-panel {
+      position: relative; transition: order 0.3s;
+    }
+    .uml-bottom-panel.at-top { order: 1; }
+    .uml-bottom-panel.at-bottom { order: 10; }
+    .uml-canvas-wrapper { order: 2; flex: 1; }
+    .modal-header { order: 0; }
+    .uml-panel-handle {
+      display: flex; align-items: center; justify-content: center;
+      padding: 6px 0 2px; cursor: grab; user-select: none; -webkit-user-select: none;
+      border-top: 1px solid var(--border-color);
+    }
+    .uml-bottom-panel.at-top .uml-panel-handle {
+      border-top: none; border-bottom: 1px solid var(--border-color);
+      padding: 2px 0 6px;
+    }
+    .uml-panel-handle:active { cursor: grabbing; }
+    .uml-panel-handle-bar {
+      width: 40px; height: 4px; border-radius: 2px;
+      background: var(--text-faint); opacity: 0.5; transition: opacity 0.2s;
+    }
+    .uml-panel-handle:hover .uml-panel-handle-bar { opacity: 0.8; }
+    .uml-panel-handle-hint {
+      font-size: 10px; color: var(--text-faint); margin-left: 8px;
+    }
     .uml-legend {
       display: flex; flex-wrap: wrap; gap: 16px; padding: 16px 24px;
-      border-top: 1px solid var(--border-color); font-size: 12px;
+      font-size: 12px;
       color: var(--text-muted); align-items: center;
     }
     .uml-legend-item {
@@ -1053,7 +1078,7 @@ export function getCacheStatusPage(user: {
     }
     .uml-normalization-note {
       padding: 12px 24px 20px; font-size: 12px; color: var(--text-muted);
-      border-top: 1px solid var(--border-color); line-height: 1.7;
+      line-height: 1.7;
     }
     .uml-normalization-note strong { color: var(--text-primary); }
     .uml-normalization-note .nf-badge {
@@ -1481,49 +1506,55 @@ export function getCacheStatusPage(user: {
         </div>
       </div>
       <div class="uml-canvas-wrapper" id="umlCanvasWrapper"></div>
-      <div class="uml-legend">
-        <div class="uml-legend-item has-tooltip" tabindex="0"><div class="uml-legend-color" style="background:#e53e3e"></div>PK — 主キー
-          <div class="key-tooltip">
-            <strong>PK（Primary Key / 主キー）</strong>
-            <div class="tooltip-section"><span class="tooltip-label">用法</span><br>テーブル内の各行を一意に識別するカラム。NULL不可・重複不可。</div>
-            <div class="tooltip-section"><span class="tooltip-label">使用場面</span><br>ユーザーID、注文番号など、レコードを特定する必要がある全テーブルで必須。</div>
-            <div class="tooltip-section"><span class="tooltip-label">メリット</span><br>データの一意性を保証し、外部キーの参照先となる。自動的にインデックスが作成されるためJOINや検索が高速。</div>
-          </div>
+      <div class="uml-bottom-panel at-bottom" id="umlBottomPanel">
+        <div class="uml-panel-handle" id="umlPanelHandle">
+          <div class="uml-panel-handle-bar"></div>
+          <span class="uml-panel-handle-hint">上下にドラッグで移動</span>
         </div>
-        <div class="uml-legend-item has-tooltip" tabindex="0"><div class="uml-legend-color" style="background:#ed8936"></div>FK — 外部キー
-          <div class="key-tooltip">
-            <strong>FK（Foreign Key / 外部キー）</strong>
-            <div class="tooltip-section"><span class="tooltip-label">用法</span><br>他テーブルの主キーを参照するカラム。テーブル間の親子関係を定義する。</div>
-            <div class="tooltip-section"><span class="tooltip-label">使用場面</span><br>workspaces.team_id → teams.id のように、所属関係・参照関係を表現する場面。</div>
-            <div class="tooltip-section"><span class="tooltip-label">メリット</span><br>参照整合性を保証し、存在しない親レコードへの参照を防止。JOINクエリの論理的根拠となる。</div>
+        <div class="uml-legend">
+          <div class="uml-legend-item has-tooltip" tabindex="0"><div class="uml-legend-color" style="background:#e53e3e"></div>PK — 主キー
+            <div class="key-tooltip">
+              <strong>PK（Primary Key / 主キー）</strong>
+              <div class="tooltip-section"><span class="tooltip-label">用法</span><br>テーブル内の各行を一意に識別するカラム。NULL不可・重複不可。</div>
+              <div class="tooltip-section"><span class="tooltip-label">使用場面</span><br>ユーザーID、注文番号など、レコードを特定する必要がある全テーブルで必須。</div>
+              <div class="tooltip-section"><span class="tooltip-label">メリット</span><br>データの一意性を保証し、外部キーの参照先となる。自動的にインデックスが作成されるためJOINや検索が高速。</div>
+            </div>
           </div>
-        </div>
-        <div class="uml-legend-item has-tooltip" tabindex="0"><div class="uml-legend-color" style="background:#48bb78"></div>UK — ユニーク制約
-          <div class="key-tooltip">
-            <strong>UK（Unique Key / ユニーク制約）</strong>
-            <div class="tooltip-section"><span class="tooltip-label">用法</span><br>PKとは別に、カラムまたはカラムの組み合わせの値が重複しないことを保証する。</div>
-            <div class="tooltip-section"><span class="tooltip-label">使用場面</span><br>メールアドレス、ユーザー名など「PKではないが一意であるべき」値。複合ユニーク制約（例: workspace_id + owner + repo）にも使用。</div>
-            <div class="tooltip-section"><span class="tooltip-label">メリット</span><br>ビジネスロジック上の重複を防止。自動的にインデックスが作成され、検索性能も向上。</div>
+          <div class="uml-legend-item has-tooltip" tabindex="0"><div class="uml-legend-color" style="background:#ed8936"></div>FK — 外部キー
+            <div class="key-tooltip">
+              <strong>FK（Foreign Key / 外部キー）</strong>
+              <div class="tooltip-section"><span class="tooltip-label">用法</span><br>他テーブルの主キーを参照するカラム。テーブル間の親子関係を定義する。</div>
+              <div class="tooltip-section"><span class="tooltip-label">使用場面</span><br>workspaces.team_id → teams.id のように、所属関係・参照関係を表現する場面。</div>
+              <div class="tooltip-section"><span class="tooltip-label">メリット</span><br>参照整合性を保証し、存在しない親レコードへの参照を防止。JOINクエリの論理的根拠となる。</div>
+            </div>
           </div>
-        </div>
-        <div class="uml-legend-item has-tooltip" tabindex="0"><div class="uml-legend-color" style="background:#4299e1"></div>IDX — インデックス
-          <div class="key-tooltip">
-            <strong>IDX（Index / インデックス）</strong>
-            <div class="tooltip-section"><span class="tooltip-label">用法</span><br>検索・ソート・フィルタリングの頻度が高いカラムに付与し、クエリの実行速度を向上させる。</div>
-            <div class="tooltip-section"><span class="tooltip-label">使用場面</span><br>WHERE句やORDER BY句で頻繁に参照されるカラム（日付、ステータス等）。</div>
-            <div class="tooltip-section"><span class="tooltip-label">メリット</span><br>フルテーブルスキャンを回避し、O(log n) のB-Tree検索で高速にデータを取得。書き込み時のオーバーヘッドとのトレードオフ。</div>
+          <div class="uml-legend-item has-tooltip" tabindex="0"><div class="uml-legend-color" style="background:#48bb78"></div>UK — ユニーク制約
+            <div class="key-tooltip">
+              <strong>UK（Unique Key / ユニーク制約）</strong>
+              <div class="tooltip-section"><span class="tooltip-label">用法</span><br>PKとは別に、カラムまたはカラムの組み合わせの値が重複しないことを保証する。</div>
+              <div class="tooltip-section"><span class="tooltip-label">使用場面</span><br>メールアドレス、ユーザー名など「PKではないが一意であるべき」値。複合ユニーク制約（例: workspace_id + owner + repo）にも使用。</div>
+              <div class="tooltip-section"><span class="tooltip-label">メリット</span><br>ビジネスロジック上の重複を防止。自動的にインデックスが作成され、検索性能も向上。</div>
+            </div>
           </div>
+          <div class="uml-legend-item has-tooltip" tabindex="0"><div class="uml-legend-color" style="background:#4299e1"></div>IDX — インデックス
+            <div class="key-tooltip">
+              <strong>IDX（Index / インデックス）</strong>
+              <div class="tooltip-section"><span class="tooltip-label">用法</span><br>検索・ソート・フィルタリングの頻度が高いカラムに付与し、クエリの実行速度を向上させる。</div>
+              <div class="tooltip-section"><span class="tooltip-label">使用場面</span><br>WHERE句やORDER BY句で頻繁に参照されるカラム（日付、ステータス等）。</div>
+              <div class="tooltip-section"><span class="tooltip-label">メリット</span><br>フルテーブルスキャンを回避し、O(log n) のB-Tree検索で高速にデータを取得。書き込み時のオーバーヘッドとのトレードオフ。</div>
+            </div>
+          </div>
+          <div class="uml-legend-item" style="margin-left:auto; color:var(--text-faint)">ドラッグで移動可</div>
         </div>
-        <div class="uml-legend-item" style="margin-left:auto; color:var(--text-faint)">ドラッグで移動可</div>
-      </div>
-      <div class="uml-key-summary" id="umlKeySummary"></div>
-      <div class="uml-normalization-note">
-        <strong>正規化状況:</strong><br>
-        <span class="nf-badge">3NF</span><code>teams</code> <code>workspaces</code> <code>team_members</code> — 第3正規形。非キー属性が主キーにのみ関数従属。<br>
-        <span class="nf-badge">3NF</span><code>user_sessions</code> — user_id UNIQUE で実質的な候補キー。設定カラム (timezone, session_duration) は user_id にのみ従属。<br>
-        <span class="nf-badge">2NF</span><code>commit_calendar_cache</code> <code>commit_list_cache</code> — counts / commits_json が JSON 文字列格納（非原子値）。運用上のキャッシュ用途として許容。<br>
-        <span class="nf-badge">3NF</span><code>cache_stats</code> — 全カウンタが (user_id, owner, repo) 複合キーにのみ従属。<br>
-        <span class="nf-badge">2NF</span><code>installation_permissions</code> — permissions が JSON 文字列格納。GitHub API レスポンスのキャッシュとして非正規化を許容。
+        <div class="uml-key-summary" id="umlKeySummary"></div>
+        <div class="uml-normalization-note">
+          <strong>正規化状況:</strong><br>
+          <span class="nf-badge">3NF</span><code>teams</code> <code>workspaces</code> <code>team_members</code> — 第3正規形。非キー属性が主キーにのみ関数従属。<br>
+          <span class="nf-badge">3NF</span><code>user_sessions</code> — user_id UNIQUE で実質的な候補キー。設定カラム (timezone, session_duration) は user_id にのみ従属。<br>
+          <span class="nf-badge">2NF</span><code>commit_calendar_cache</code> <code>commit_list_cache</code> — counts / commits_json が JSON 文字列格納（非原子値）。運用上のキャッシュ用途として許容。<br>
+          <span class="nf-badge">3NF</span><code>cache_stats</code> — 全カウンタが (user_id, owner, repo) 複合キーにのみ従属。<br>
+          <span class="nf-badge">2NF</span><code>installation_permissions</code> — permissions が JSON 文字列格納。GitHub API レスポンスのキャッシュとして非正規化を許容。
+        </div>
       </div>
     </div>
   </div>
@@ -1565,42 +1596,48 @@ export function getCacheStatusPage(user: {
         <button type="button" class="modal-close" id="filteredUmlModalClose" aria-label="閉じる">&times;</button>
       </div>
       <div class="uml-canvas-wrapper" id="filteredUmlCanvasWrapper"></div>
-      <div class="uml-legend">
-        <div class="uml-legend-item has-tooltip" tabindex="0"><div class="uml-legend-color" style="background:#e53e3e"></div>PK — 主キー
-          <div class="key-tooltip">
-            <strong>PK（Primary Key / 主キー）</strong>
-            <div class="tooltip-section"><span class="tooltip-label">用法</span><br>テーブル内の各行を一意に識別するカラム。NULL不可・重複不可。</div>
-            <div class="tooltip-section"><span class="tooltip-label">使用場面</span><br>ユーザーID、注文番号など、レコードを特定する必要がある全テーブルで必須。</div>
-            <div class="tooltip-section"><span class="tooltip-label">メリット</span><br>データの一意性を保証し、外部キーの参照先となる。自動的にインデックスが作成されるためJOINや検索が高速。</div>
-          </div>
+      <div class="uml-bottom-panel at-bottom" id="filteredUmlBottomPanel">
+        <div class="uml-panel-handle" id="filteredUmlPanelHandle">
+          <div class="uml-panel-handle-bar"></div>
+          <span class="uml-panel-handle-hint">上下にドラッグで移動</span>
         </div>
-        <div class="uml-legend-item has-tooltip" tabindex="0"><div class="uml-legend-color" style="background:#ed8936"></div>FK — 外部キー
-          <div class="key-tooltip">
-            <strong>FK（Foreign Key / 外部キー）</strong>
-            <div class="tooltip-section"><span class="tooltip-label">用法</span><br>他テーブルの主キーを参照するカラム。テーブル間の親子関係を定義する。</div>
-            <div class="tooltip-section"><span class="tooltip-label">使用場面</span><br>workspaces.team_id → teams.id のように、所属関係・参照関係を表現する場面。</div>
-            <div class="tooltip-section"><span class="tooltip-label">メリット</span><br>参照整合性を保証し、存在しない親レコードへの参照を防止。JOINクエリの論理的根拠となる。</div>
+        <div class="uml-legend">
+          <div class="uml-legend-item has-tooltip" tabindex="0"><div class="uml-legend-color" style="background:#e53e3e"></div>PK — 主キー
+            <div class="key-tooltip">
+              <strong>PK（Primary Key / 主キー）</strong>
+              <div class="tooltip-section"><span class="tooltip-label">用法</span><br>テーブル内の各行を一意に識別するカラム。NULL不可・重複不可。</div>
+              <div class="tooltip-section"><span class="tooltip-label">使用場面</span><br>ユーザーID、注文番号など、レコードを特定する必要がある全テーブルで必須。</div>
+              <div class="tooltip-section"><span class="tooltip-label">メリット</span><br>データの一意性を保証し、外部キーの参照先となる。自動的にインデックスが作成されるためJOINや検索が高速。</div>
+            </div>
           </div>
-        </div>
-        <div class="uml-legend-item has-tooltip" tabindex="0"><div class="uml-legend-color" style="background:#48bb78"></div>UK — ユニーク制約
-          <div class="key-tooltip">
-            <strong>UK（Unique Key / ユニーク制約）</strong>
-            <div class="tooltip-section"><span class="tooltip-label">用法</span><br>PKとは別に、カラムまたはカラムの組み合わせの値が重複しないことを保証する。</div>
-            <div class="tooltip-section"><span class="tooltip-label">使用場面</span><br>メールアドレス、ユーザー名など「PKではないが一意であるべき」値。複合ユニーク制約にも使用。</div>
-            <div class="tooltip-section"><span class="tooltip-label">メリット</span><br>ビジネスロジック上の重複を防止。自動的にインデックスが作成され、検索性能も向上。</div>
+          <div class="uml-legend-item has-tooltip" tabindex="0"><div class="uml-legend-color" style="background:#ed8936"></div>FK — 外部キー
+            <div class="key-tooltip">
+              <strong>FK（Foreign Key / 外部キー）</strong>
+              <div class="tooltip-section"><span class="tooltip-label">用法</span><br>他テーブルの主キーを参照するカラム。テーブル間の親子関係を定義する。</div>
+              <div class="tooltip-section"><span class="tooltip-label">使用場面</span><br>workspaces.team_id → teams.id のように、所属関係・参照関係を表現する場面。</div>
+              <div class="tooltip-section"><span class="tooltip-label">メリット</span><br>参照整合性を保証し、存在しない親レコードへの参照を防止。JOINクエリの論理的根拠となる。</div>
+            </div>
           </div>
-        </div>
-        <div class="uml-legend-item has-tooltip" tabindex="0"><div class="uml-legend-color" style="background:#4299e1"></div>IDX — インデックス
-          <div class="key-tooltip">
-            <strong>IDX（Index / インデックス）</strong>
-            <div class="tooltip-section"><span class="tooltip-label">用法</span><br>検索・ソート・フィルタリングの頻度が高いカラムに付与し、クエリの実行速度を向上させる。</div>
-            <div class="tooltip-section"><span class="tooltip-label">使用場面</span><br>WHERE句やORDER BY句で頻繁に参照されるカラム（日付、ステータス等）。</div>
-            <div class="tooltip-section"><span class="tooltip-label">メリット</span><br>フルテーブルスキャンを回避し、O(log n) のB-Tree検索で高速にデータを取得。</div>
+          <div class="uml-legend-item has-tooltip" tabindex="0"><div class="uml-legend-color" style="background:#48bb78"></div>UK — ユニーク制約
+            <div class="key-tooltip">
+              <strong>UK（Unique Key / ユニーク制約）</strong>
+              <div class="tooltip-section"><span class="tooltip-label">用法</span><br>PKとは別に、カラムまたはカラムの組み合わせの値が重複しないことを保証する。</div>
+              <div class="tooltip-section"><span class="tooltip-label">使用場面</span><br>メールアドレス、ユーザー名など「PKではないが一意であるべき」値。複合ユニーク制約にも使用。</div>
+              <div class="tooltip-section"><span class="tooltip-label">メリット</span><br>ビジネスロジック上の重複を防止。自動的にインデックスが作成され、検索性能も向上。</div>
+            </div>
           </div>
+          <div class="uml-legend-item has-tooltip" tabindex="0"><div class="uml-legend-color" style="background:#4299e1"></div>IDX — インデックス
+            <div class="key-tooltip">
+              <strong>IDX（Index / インデックス）</strong>
+              <div class="tooltip-section"><span class="tooltip-label">用法</span><br>検索・ソート・フィルタリングの頻度が高いカラムに付与し、クエリの実行速度を向上させる。</div>
+              <div class="tooltip-section"><span class="tooltip-label">使用場面</span><br>WHERE句やORDER BY句で頻繁に参照されるカラム（日付、ステータス等）。</div>
+              <div class="tooltip-section"><span class="tooltip-label">メリット</span><br>フルテーブルスキャンを回避し、O(log n) のB-Tree検索で高速にデータを取得。</div>
+            </div>
+          </div>
+          <div class="uml-legend-item" style="margin-left:auto; color:var(--text-faint)">ドラッグで移動可</div>
         </div>
-        <div class="uml-legend-item" style="margin-left:auto; color:var(--text-faint)">ドラッグで移動可</div>
+        <div class="uml-key-summary" id="filteredUmlKeySummary"></div>
       </div>
-      <div class="uml-key-summary" id="filteredUmlKeySummary"></div>
     </div>
   </div>
 
@@ -4483,6 +4520,131 @@ export function getCacheStatusPage(user: {
             });
         });
       }
+    })();
+
+    /* ============ ボトムパネル上下移動 ============ */
+    (function() {
+      function getCookie(name) {
+        var m = document.cookie.match('(^|;)\\\\s*' + name + '=([^;]*)');
+        return m ? decodeURIComponent(m[2]) : null;
+      }
+
+      function setupPanelDrag(panelId, handleId) {
+        var panel = document.getElementById(panelId);
+        var handle = document.getElementById(handleId);
+        if (!panel || !handle) return;
+        var startY = 0;
+        var dragging = false;
+
+        function togglePosition() {
+          if (panel.classList.contains('at-bottom')) {
+            panel.classList.remove('at-bottom');
+            panel.classList.add('at-top');
+          } else {
+            panel.classList.remove('at-top');
+            panel.classList.add('at-bottom');
+          }
+        }
+
+        function onStart(clientY) {
+          startY = clientY;
+          dragging = true;
+        }
+        function onMove(clientY, evt) {
+          if (!dragging) return;
+          var dy = clientY - startY;
+          if (Math.abs(dy) > 40) {
+            if (dy < 0 && panel.classList.contains('at-bottom')) {
+              togglePosition();
+            } else if (dy > 0 && panel.classList.contains('at-top')) {
+              togglePosition();
+            }
+            dragging = false;
+          }
+        }
+        function onEnd() { dragging = false; }
+
+        handle.addEventListener('mousedown', function(e) {
+          e.preventDefault();
+          onStart(e.clientY);
+        });
+        document.addEventListener('mousemove', function(e) { onMove(e.clientY, e); });
+        document.addEventListener('mouseup', onEnd);
+
+        handle.addEventListener('touchstart', function(e) {
+          if (e.touches.length === 1) {
+            onStart(e.touches[0].clientY);
+          }
+        }, { passive: true });
+        document.addEventListener('touchmove', function(e) {
+          if (e.touches.length === 1) onMove(e.touches[0].clientY, e);
+        }, { passive: true });
+        document.addEventListener('touchend', onEnd);
+
+        return { panel: panel, setPosition: function(pos) {
+          panel.classList.remove('at-top', 'at-bottom');
+          panel.classList.add(pos === 'top' ? 'at-top' : 'at-bottom');
+        }};
+      }
+
+      var mainPanel = setupPanelDrag('umlBottomPanel', 'umlPanelHandle');
+      var filteredPanel = setupPanelDrag('filteredUmlBottomPanel', 'filteredUmlPanelHandle');
+
+      /* ============ デバイス傾き検知 ============ */
+      var tiltEnabled = getCookie('er_tilt_enabled') === 'on';
+      var lastTiltPos = null;
+      var tiltThrottleTimer = null;
+
+      function handleOrientation(event) {
+        if (!tiltEnabled) return;
+        var beta = event.beta;
+        if (beta === null || beta === undefined) return;
+        var pos;
+        if (beta < 30) {
+          pos = 'top';
+        } else if (beta > 60) {
+          pos = 'bottom';
+        } else {
+          return;
+        }
+        if (pos === lastTiltPos) return;
+        lastTiltPos = pos;
+        if (mainPanel) mainPanel.setPosition(pos);
+        if (filteredPanel) filteredPanel.setPosition(pos);
+      }
+
+      if (tiltEnabled && window.DeviceOrientationEvent) {
+        if (typeof DeviceOrientationEvent.requestPermission === 'function') {
+          document.addEventListener('click', function reqPerm() {
+            DeviceOrientationEvent.requestPermission().then(function(state) {
+              if (state === 'granted') {
+                window.addEventListener('deviceorientation', handleOrientation);
+              }
+            }).catch(function(){});
+            document.removeEventListener('click', reqPerm);
+          }, { once: true });
+        } else {
+          window.addEventListener('deviceorientation', handleOrientation);
+        }
+      }
+
+      window.__erTiltUpdate = function(enabled) {
+        tiltEnabled = enabled;
+        if (enabled && window.DeviceOrientationEvent) {
+          if (typeof DeviceOrientationEvent.requestPermission === 'function') {
+            DeviceOrientationEvent.requestPermission().then(function(state) {
+              if (state === 'granted') {
+                window.addEventListener('deviceorientation', handleOrientation);
+              }
+            }).catch(function(){});
+          } else {
+            window.addEventListener('deviceorientation', handleOrientation);
+          }
+        } else {
+          window.removeEventListener('deviceorientation', handleOrientation);
+          lastTiltPos = null;
+        }
+      };
     })();
   </script>
 </body>
