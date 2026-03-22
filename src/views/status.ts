@@ -3005,6 +3005,41 @@ export function getCacheStatusPage(user: {
           dragTarget = null;
         });
 
+        // タッチ対応（タブレット）
+        container.addEventListener('touchstart', function(e) {
+          var touch = e.touches[0];
+          var card = document.elementFromPoint(touch.clientX, touch.clientY);
+          if (card) card = card.closest('[data-uml-table]');
+          if (!card) return;
+          var tName = card.getAttribute('data-uml-table');
+          if (!tName || !cardRects[tName]) return;
+          dragTarget = tName;
+          var pos = clientToContainer(touch.clientX, touch.clientY);
+          dragOffsetX = pos.x - cardRects[tName].x;
+          dragOffsetY = pos.y - cardRects[tName].y;
+          e.preventDefault();
+        }, { passive: false });
+
+        document.addEventListener('touchmove', function(e) {
+          if (!dragTarget) return;
+          var touch = e.touches[0];
+          var rect = cardRects[dragTarget];
+          var pos = clientToContainer(touch.clientX, touch.clientY);
+          rect.x = pos.x - dragOffsetX;
+          rect.y = pos.y - dragOffsetY;
+          var el = cardElements[dragTarget];
+          if (el) {
+            el.style.left = rect.x + 'px';
+            el.style.top = rect.y + 'px';
+          }
+          drawRelations();
+          e.preventDefault();
+        }, { passive: false });
+
+        document.addEventListener('touchend', function() {
+          dragTarget = null;
+        });
+
         // PNG出力
         var exportBtn = document.getElementById('umlExportPng');
         if (exportBtn) {
@@ -3856,6 +3891,41 @@ export function getCacheStatusPage(user: {
         });
 
         document.addEventListener('mouseup', function() {
+          dragTarget = null;
+        });
+
+        // タッチ対応（タブレット）
+        container.addEventListener('touchstart', function(e) {
+          var touch = e.touches[0];
+          var card = document.elementFromPoint(touch.clientX, touch.clientY);
+          if (card) card = card.closest('[data-uml-table]');
+          if (!card) return;
+          var tName = card.getAttribute('data-uml-table');
+          if (!tName || !cardRects[tName]) return;
+          dragTarget = tName;
+          var pos = clientToContainer(touch.clientX, touch.clientY);
+          dragOffsetX = pos.x - cardRects[tName].x;
+          dragOffsetY = pos.y - cardRects[tName].y;
+          e.preventDefault();
+        }, { passive: false });
+
+        document.addEventListener('touchmove', function(e) {
+          if (!dragTarget) return;
+          var touch = e.touches[0];
+          var rect = cardRects[dragTarget];
+          var pos = clientToContainer(touch.clientX, touch.clientY);
+          rect.x = pos.x - dragOffsetX;
+          rect.y = pos.y - dragOffsetY;
+          var el = cardElements[dragTarget];
+          if (el) {
+            el.style.left = rect.x + 'px';
+            el.style.top = rect.y + 'px';
+          }
+          drawRelations();
+          e.preventDefault();
+        }, { passive: false });
+
+        document.addEventListener('touchend', function() {
           dragTarget = null;
         });
       }
