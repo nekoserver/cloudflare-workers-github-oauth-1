@@ -2402,6 +2402,13 @@ app.post('/webhook/github', async (c) => {
       const ai = c.env.AI;
       const githubToken = c.env.GITHUB_TOKEN;
 
+      if (!pr) {
+        logger.warn('pull_request payload is missing pr object', { repoFullName });
+      } else if (!slackToken) {
+        logger.warn('SLACK_OAUTH_TOKEN is not configured, skipping PR notification', { repoFullName });
+      } else if (!slackChannel) {
+        logger.warn('SLACK_CHANNEL_ID is not configured, skipping PR notification', { repoFullName });
+      }
       if (pr && slackToken && slackChannel) {
         const db = c.env.DB;
         const title = pr.title;
@@ -2514,10 +2521,18 @@ app.post('/webhook/github', async (c) => {
 
         let slackNotified = false;
         try {
-          await postSlackMessage({ token: slackToken, channel: slackChannel, text: slackLines.join('\n') });
-          slackNotified = true;
+          const slackResult = await postSlackMessage({ token: slackToken, channel: slackChannel, text: slackLines.join('\n') });
+          if (slackResult.ok) {
+            slackNotified = true;
+          } else {
+            logger.error('Slack notification failed for PR webhook', {
+              error: slackResult.error,
+              status: slackResult.status,
+              prUrl,
+            });
+          }
         } catch (error) {
-          logger.error('Slack notification failed for PR webhook', {
+          logger.error('Slack notification threw for PR webhook', {
             error: error instanceof Error ? error.message : 'Unknown error',
             prUrl,
           });
