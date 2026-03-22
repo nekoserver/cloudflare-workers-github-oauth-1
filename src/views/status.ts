@@ -279,6 +279,51 @@ export function getCacheStatusPage(user: {
   const repoGroupsJson = JSON.stringify(sortedGroups.map(g => ({ id: g.id, name: g.name, repos: g.repos })));
   const chartModeJson = JSON.stringify(statusChartMode);
 
+  // 今月のコミット内訳パイチャート用データ
+  const now = new Date();
+  const currentYearMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  const currentMonthRepos = data.commitCache.byMonthByRepo
+    .filter(r => r.yearMonth === currentYearMonth)
+    .sort((a, b) => b.commits - a.commits);
+  const currentMonthTotal = currentMonthRepos.reduce((sum, r) => sum + r.commits, 0);
+
+  // パイチャート SVG 生成（サーバーサイド初期描画）
+  const buildPieChartSvg = (repos: { repo: string; commits: number }[], total: number): string => {
+    if (total === 0 || repos.length === 0) {
+      return '<div class="empty-message">今月のコミットデータがありません</div>';
+    }
+    const size = 220;
+    const cx = size / 2;
+    const cy = size / 2;
+    const r = 90;
+    let cumAngle = -Math.PI / 2;
+    const slices = repos.map(item => {
+      const pct = item.commits / total;
+      const angle = pct * 2 * Math.PI;
+      const startAngle = cumAngle;
+      cumAngle += angle;
+      const endAngle = cumAngle;
+      const largeArc = angle > Math.PI ? 1 : 0;
+      const x1 = cx + r * Math.cos(startAngle);
+      const y1 = cy + r * Math.sin(startAngle);
+      const x2 = cx + r * Math.cos(endAngle);
+      const y2 = cy + r * Math.sin(endAngle);
+      const color = repoColorMap[item.repo] || '#667eea';
+      if (repos.length === 1) {
+        return `<circle cx="${cx}" cy="${cy}" r="${r}" fill="${color}"/>`;
+      }
+      return `<path d="M${cx},${cy} L${x1.toFixed(2)},${y1.toFixed(2)} A${r},${r} 0 ${largeArc} 1 ${x2.toFixed(2)},${y2.toFixed(2)} Z" fill="${color}"><title>${escapeHtml(stripOwner(item.repo))}: ${item.commits} (${(pct * 100).toFixed(1)}%)</title></path>`;
+    }).join('');
+    return `<svg viewBox="0 0 ${size} ${size}" width="${size}" height="${size}" class="pie-chart-svg">${slices}</svg>`;
+  };
+
+  const pieSvgInitial = buildPieChartSvg(currentMonthRepos, currentMonthTotal);
+  const pieLegendInitial = currentMonthRepos.map(item => {
+    const pct = currentMonthTotal > 0 ? (item.commits / currentMonthTotal * 100).toFixed(1) : '0.0';
+    const color = repoColorMap[item.repo] || '#667eea';
+    return `<span class="chart-legend-item"><span class="chart-legend-dot" style="background:${color}"></span>${escapeHtml(stripOwner(item.repo))} (${item.commits} / ${pct}%)</span>`;
+  }).join('');
+
   // キャッシュ統計：リポジトリ別テーブル行
   const cs = data.cacheStats;
   const cacheHitRate = cs.totalCacheLookup > 0
@@ -561,6 +606,24 @@ export function getCacheStatusPage(user: {
     }
     .group-filter-select:hover { border-color: var(--accent-color); }
     .group-filter-select:focus { outline: none; border-color: var(--accent-color); box-shadow: 0 0 0 2px rgba(102,126,234,0.2); }
+
+    /* パイチャート */
+    .pie-chart-container {
+      display: flex; align-items: flex-start; gap: 24px; flex-wrap: wrap;
+    }
+    .pie-chart-svg-area { flex-shrink: 0; }
+    .pie-chart-svg path:hover, .pie-chart-svg circle:hover { opacity: 0.8; cursor: pointer; }
+    .pie-chart-legend-area {
+      flex: 1; min-width: 180px;
+    }
+    .pie-chart-legend {
+      display: flex; flex-direction: column; gap: 6px;
+      padding: 8px 12px; background: var(--bg-secondary); border-radius: 8px;
+    }
+    .pie-chart-total {
+      font-size: 13px; color: var(--text-muted); margin-bottom: 8px;
+    }
+    .pie-chart-total strong { color: var(--text-primary); font-size: 20px; font-weight: 700; }
 
     .empty-message {
       padding: 24px; text-align: center; color: var(--text-faint); font-size: 14px;
@@ -1245,6 +1308,27 @@ export function getCacheStatusPage(user: {
       </div>
       ` : ''}
 
+      <!-- 今月のコミット総数の内訳パイチャート -->
+      <div class="section" id="pieChartSection">
+        <div class="section-title-row">
+          <h2 class="section-title">今月のコミット総数の内訳</h2>
+          <select id="pieGroupFilter" class="group-filter-select" title="グループでフィルタ">
+            <option value="">すべて</option>
+            ${groupFilterOptions}
+          </select>
+        </div>
+        ${uniqueOwner ? `<div style="font-size:13px; color:var(--text-muted); margin-bottom:8px;">対象ユーザー : <strong style="color:var(--text-primary);">${escapeHtml(uniqueOwner)}</strong></div>` : ''}
+        <div class="pie-chart-total">対象月: <strong>${escapeHtml(currentYearMonth)}</strong> &mdash; 合計: <strong>${currentMonthTotal}</strong> commits</div>
+        <div class="pie-chart-container">
+          <div class="pie-chart-svg-area" id="pieChartSvgArea">
+            ${pieSvgInitial}
+          </div>
+          <div class="pie-chart-legend-area" id="pieChartLegendArea">
+            ${currentMonthRepos.length > 0 ? `<div class="pie-chart-legend">${pieLegendInitial}</div>` : ''}
+          </div>
+        </div>
+      </div>
+
       <!-- リポジトリ別集計 -->
       <div class="section">
         <h2 class="section-title">リポジトリ別コミットキャッシュ</h2>
@@ -1673,11 +1757,96 @@ export function getCacheStatusPage(user: {
       }
     }
 
+    var currentYearMonth = ${JSON.stringify(currentYearMonth)};
+
+    function renderPieChart(filterGroupId) {
+      var svgArea = document.getElementById('pieChartSvgArea');
+      var legendArea = document.getElementById('pieChartLegendArea');
+      if (!svgArea) return;
+
+      var allowedRepos = null;
+      if (filterGroupId) {
+        for (var g = 0; g < repoGroupsForFilter.length; g++) {
+          if (repoGroupsForFilter[g].id === filterGroupId) {
+            allowedRepos = {};
+            for (var r = 0; r < repoGroupsForFilter[g].repos.length; r++) {
+              allowedRepos[repoGroupsForFilter[g].repos[r]] = true;
+            }
+            break;
+          }
+        }
+        if (!allowedRepos) { allowedRepos = {}; }
+      }
+
+      var monthData = [];
+      for (var i = 0; i < byMonthByRepo.length; i++) {
+        var item = byMonthByRepo[i];
+        if (item.yearMonth !== currentYearMonth) continue;
+        if (allowedRepos && !allowedRepos[item.repo]) continue;
+        monthData.push(item);
+      }
+      monthData.sort(function(a, b) { return b.commits - a.commits; });
+
+      var total = 0;
+      for (var i = 0; i < monthData.length; i++) total += monthData[i].commits;
+
+      var totalEl = document.querySelector('.pie-chart-total');
+      if (totalEl) {
+        totalEl.innerHTML = '対象月: <strong>' + escapeHtmlText(currentYearMonth) + '</strong> &mdash; 合計: <strong>' + total + '</strong> commits';
+      }
+
+      if (total === 0 || monthData.length === 0) {
+        svgArea.innerHTML = '<div class="empty-message">今月のコミットデータがありません</div>';
+        if (legendArea) legendArea.innerHTML = '';
+        return;
+      }
+
+      var size = 220, cx = size / 2, cy = size / 2, r = 90;
+      var cumAngle = -Math.PI / 2;
+      var slices = '';
+      for (var i = 0; i < monthData.length; i++) {
+        var pct = monthData[i].commits / total;
+        var angle = pct * 2 * Math.PI;
+        var startAngle = cumAngle;
+        cumAngle += angle;
+        var endAngle = cumAngle;
+        var color = repoColorMap[monthData[i].repo] || '#667eea';
+        if (monthData.length === 1) {
+          slices += '<circle cx="' + cx + '" cy="' + cy + '" r="' + r + '" fill="' + color + '"/>';
+        } else {
+          var largeArc = angle > Math.PI ? 1 : 0;
+          var x1 = cx + r * Math.cos(startAngle);
+          var y1 = cy + r * Math.sin(startAngle);
+          var x2 = cx + r * Math.cos(endAngle);
+          var y2 = cy + r * Math.sin(endAngle);
+          slices += '<path d="M' + cx + ',' + cy + ' L' + x1.toFixed(2) + ',' + y1.toFixed(2) + ' A' + r + ',' + r + ' 0 ' + largeArc + ' 1 ' + x2.toFixed(2) + ',' + y2.toFixed(2) + ' Z" fill="' + color + '"><title>' + escapeHtmlText(stripOwnerName(monthData[i].repo)) + ': ' + monthData[i].commits + ' (' + (pct * 100).toFixed(1) + '%)</title></path>';
+        }
+      }
+      svgArea.innerHTML = '<svg viewBox="0 0 ' + size + ' ' + size + '" width="' + size + '" height="' + size + '" class="pie-chart-svg">' + slices + '</svg>';
+
+      if (legendArea) {
+        var lhtml = '<div class="pie-chart-legend">';
+        for (var i = 0; i < monthData.length; i++) {
+          var pct = (monthData[i].commits / total * 100).toFixed(1);
+          var color = repoColorMap[monthData[i].repo] || '#667eea';
+          lhtml += '<span class="chart-legend-item"><span class="chart-legend-dot" style="background:' + color + '"></span>' + escapeHtmlText(stripOwnerName(monthData[i].repo)) + ' (' + monthData[i].commits + ' / ' + pct + '%)</span>';
+        }
+        lhtml += '</div>';
+        legendArea.innerHTML = lhtml;
+      }
+    }
+
     (function() {
       var groupFilter = document.getElementById('groupFilter');
       if (groupFilter) {
         groupFilter.addEventListener('change', function() {
           renderCommitChart(groupFilter.value);
+        });
+      }
+      var pieGroupFilter = document.getElementById('pieGroupFilter');
+      if (pieGroupFilter) {
+        pieGroupFilter.addEventListener('change', function() {
+          renderPieChart(pieGroupFilter.value);
         });
       }
     })();
