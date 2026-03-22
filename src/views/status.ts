@@ -1041,22 +1041,15 @@ export function getCacheStatusPage(user: {
       pointer-events: none; z-index: 0;
     }
     .uml-bottom-panel {
-      position: relative; transition: order 0.3s;
+      position: relative;
     }
-    .uml-bottom-panel.at-top { order: 1; }
-    .uml-bottom-panel.at-bottom { order: 10; }
-    .uml-canvas-wrapper { order: 2; flex: 1; }
-    .modal-header { order: 0; }
+    .uml-canvas-wrapper { flex: 1; }
     .uml-panel-handle {
       display: flex; align-items: center; justify-content: center;
-      padding: 6px 0 2px; cursor: grab; user-select: none; -webkit-user-select: none;
+      padding: 6px 0 2px; cursor: ns-resize; user-select: none; -webkit-user-select: none;
       border-top: 1px solid var(--border-color);
     }
-    .uml-bottom-panel.at-top .uml-panel-handle {
-      border-top: none; border-bottom: 1px solid var(--border-color);
-      padding: 2px 0 6px;
-    }
-    .uml-panel-handle:active { cursor: grabbing; }
+    .uml-panel-handle:active { cursor: ns-resize; }
     .uml-panel-handle-bar {
       width: 40px; height: 4px; border-radius: 2px;
       background: var(--text-faint); opacity: 0.5; transition: opacity 0.2s;
@@ -1065,6 +1058,16 @@ export function getCacheStatusPage(user: {
     .uml-panel-handle-hint {
       font-size: 10px; color: var(--text-faint); margin-left: 8px;
     }
+    .uml-panel-body {
+      overflow: hidden; transition: max-height 0.25s ease;
+    }
+    .uml-panel-toggle {
+      background: none; border: 1px solid var(--border-color); border-radius: 4px;
+      padding: 2px 8px; font-size: 10px; color: var(--text-muted); cursor: pointer;
+      margin-left: 6px; line-height: 1.4; white-space: nowrap;
+      transition: background 0.15s, color 0.15s;
+    }
+    .uml-panel-toggle:hover { background: var(--bg-secondary); color: var(--text-primary); }
     .uml-legend {
       display: flex; flex-wrap: wrap; gap: 16px; padding: 16px 24px;
       font-size: 12px;
@@ -1506,10 +1509,10 @@ export function getCacheStatusPage(user: {
         </div>
       </div>
       <div class="uml-canvas-wrapper" id="umlCanvasWrapper"></div>
-      <div class="uml-bottom-panel at-bottom" id="umlBottomPanel">
+      <div class="uml-bottom-panel" id="umlBottomPanel">
         <div class="uml-panel-handle" id="umlPanelHandle">
           <div class="uml-panel-handle-bar"></div>
-          <span class="uml-panel-handle-hint">上下にドラッグで移動</span>
+          <span class="uml-panel-handle-hint">上下にドラッグで開閉</span>
         </div>
         <div class="uml-legend">
           <div class="uml-legend-item has-tooltip" tabindex="0"><div class="uml-legend-color" style="background:#e53e3e"></div>PK — 主キー
@@ -1544,16 +1547,18 @@ export function getCacheStatusPage(user: {
               <div class="tooltip-section"><span class="tooltip-label">メリット</span><br>フルテーブルスキャンを回避し、O(log n) のB-Tree検索で高速にデータを取得。書き込み時のオーバーヘッドとのトレードオフ。</div>
             </div>
           </div>
-          <div class="uml-legend-item" style="margin-left:auto; color:var(--text-faint)">ドラッグで移動可</div>
+          <div class="uml-legend-item" style="margin-left:auto; color:var(--text-faint)">ドラッグで移動可 <button type="button" class="uml-panel-toggle" id="umlPanelToggle">close</button></div>
         </div>
-        <div class="uml-key-summary" id="umlKeySummary"></div>
-        <div class="uml-normalization-note">
-          <strong>正規化状況:</strong><br>
-          <span class="nf-badge">3NF</span><code>teams</code> <code>workspaces</code> <code>team_members</code> — 第3正規形。非キー属性が主キーにのみ関数従属。<br>
-          <span class="nf-badge">3NF</span><code>user_sessions</code> — user_id UNIQUE で実質的な候補キー。設定カラム (timezone, session_duration) は user_id にのみ従属。<br>
-          <span class="nf-badge">2NF</span><code>commit_calendar_cache</code> <code>commit_list_cache</code> — counts / commits_json が JSON 文字列格納（非原子値）。運用上のキャッシュ用途として許容。<br>
-          <span class="nf-badge">3NF</span><code>cache_stats</code> — 全カウンタが (user_id, owner, repo) 複合キーにのみ従属。<br>
-          <span class="nf-badge">2NF</span><code>installation_permissions</code> — permissions が JSON 文字列格納。GitHub API レスポンスのキャッシュとして非正規化を許容。
+        <div class="uml-panel-body" id="umlPanelBody">
+          <div class="uml-key-summary" id="umlKeySummary"></div>
+          <div class="uml-normalization-note">
+            <strong>正規化状況:</strong><br>
+            <span class="nf-badge">3NF</span><code>teams</code> <code>workspaces</code> <code>team_members</code> — 第3正規形。非キー属性が主キーにのみ関数従属。<br>
+            <span class="nf-badge">3NF</span><code>user_sessions</code> — user_id UNIQUE で実質的な候補キー。設定カラム (timezone, session_duration) は user_id にのみ従属。<br>
+            <span class="nf-badge">2NF</span><code>commit_calendar_cache</code> <code>commit_list_cache</code> — counts / commits_json が JSON 文字列格納（非原子値）。運用上のキャッシュ用途として許容。<br>
+            <span class="nf-badge">3NF</span><code>cache_stats</code> — 全カウンタが (user_id, owner, repo) 複合キーにのみ従属。<br>
+            <span class="nf-badge">2NF</span><code>installation_permissions</code> — permissions が JSON 文字列格納。GitHub API レスポンスのキャッシュとして非正規化を許容。
+          </div>
         </div>
       </div>
     </div>
@@ -1596,10 +1601,10 @@ export function getCacheStatusPage(user: {
         <button type="button" class="modal-close" id="filteredUmlModalClose" aria-label="閉じる">&times;</button>
       </div>
       <div class="uml-canvas-wrapper" id="filteredUmlCanvasWrapper"></div>
-      <div class="uml-bottom-panel at-bottom" id="filteredUmlBottomPanel">
+      <div class="uml-bottom-panel" id="filteredUmlBottomPanel">
         <div class="uml-panel-handle" id="filteredUmlPanelHandle">
           <div class="uml-panel-handle-bar"></div>
-          <span class="uml-panel-handle-hint">上下にドラッグで移動</span>
+          <span class="uml-panel-handle-hint">上下にドラッグで開閉</span>
         </div>
         <div class="uml-legend">
           <div class="uml-legend-item has-tooltip" tabindex="0"><div class="uml-legend-color" style="background:#e53e3e"></div>PK — 主キー
@@ -1634,9 +1639,11 @@ export function getCacheStatusPage(user: {
               <div class="tooltip-section"><span class="tooltip-label">メリット</span><br>フルテーブルスキャンを回避し、O(log n) のB-Tree検索で高速にデータを取得。</div>
             </div>
           </div>
-          <div class="uml-legend-item" style="margin-left:auto; color:var(--text-faint)">ドラッグで移動可</div>
+          <div class="uml-legend-item" style="margin-left:auto; color:var(--text-faint)">ドラッグで移動可 <button type="button" class="uml-panel-toggle" id="filteredUmlPanelToggle">close</button></div>
         </div>
-        <div class="uml-key-summary" id="filteredUmlKeySummary"></div>
+        <div class="uml-panel-body" id="filteredUmlPanelBody">
+          <div class="uml-key-summary" id="filteredUmlKeySummary"></div>
+        </div>
       </div>
     </div>
   </div>
@@ -4522,95 +4529,124 @@ export function getCacheStatusPage(user: {
       }
     })();
 
-    /* ============ ボトムパネル上下移動 ============ */
+    /* ============ ボトムパネル開閉 + ドラッグ + 傾き検知 ============ */
     (function() {
       function getCookie(name) {
         var m = document.cookie.match('(^|;)\\\\s*' + name + '=([^;]*)');
         return m ? decodeURIComponent(m[2]) : null;
       }
 
-      function setupPanelDrag(panelId, handleId) {
-        var panel = document.getElementById(panelId);
+      function setupPanel(bodyId, handleId, toggleId) {
+        var body = document.getElementById(bodyId);
         var handle = document.getElementById(handleId);
-        if (!panel || !handle) return;
+        var toggleBtn = document.getElementById(toggleId);
+        if (!body || !handle) return null;
+
+        var isOpen = true;
+        var naturalHeight = 0;
+        var currentMaxH = 0;
         var startY = 0;
+        var startMaxH = 0;
         var dragging = false;
 
-        function togglePosition() {
-          if (panel.classList.contains('at-bottom')) {
-            panel.classList.remove('at-bottom');
-            panel.classList.add('at-top');
+        function measureNatural() {
+          body.style.transition = 'none';
+          body.style.maxHeight = 'none';
+          naturalHeight = body.scrollHeight;
+          body.style.maxHeight = naturalHeight + 'px';
+          body.offsetHeight;
+          body.style.transition = '';
+        }
+
+        function setOpen(open, animate) {
+          isOpen = open;
+          if (animate === false) body.style.transition = 'none';
+          if (open) {
+            measureNatural();
+            currentMaxH = naturalHeight;
+            body.style.maxHeight = naturalHeight + 'px';
           } else {
-            panel.classList.remove('at-top');
-            panel.classList.add('at-bottom');
+            currentMaxH = 0;
+            body.style.maxHeight = '0px';
           }
+          if (animate === false) { body.offsetHeight; body.style.transition = ''; }
+          if (toggleBtn) toggleBtn.textContent = open ? 'close' : 'open';
+        }
+
+        function setMaxH(h) {
+          if (naturalHeight === 0) measureNatural();
+          currentMaxH = Math.max(0, Math.min(h, naturalHeight));
+          body.style.transition = 'none';
+          body.style.maxHeight = currentMaxH + 'px';
+          isOpen = currentMaxH > 0;
+          if (toggleBtn) toggleBtn.textContent = isOpen ? 'close' : 'open';
         }
 
         function onStart(clientY) {
+          if (naturalHeight === 0) measureNatural();
           startY = clientY;
+          startMaxH = currentMaxH;
           dragging = true;
         }
-        function onMove(clientY, evt) {
+        function onMove(clientY) {
           if (!dragging) return;
-          var dy = clientY - startY;
-          if (Math.abs(dy) > 40) {
-            if (dy < 0 && panel.classList.contains('at-bottom')) {
-              togglePosition();
-            } else if (dy > 0 && panel.classList.contains('at-top')) {
-              togglePosition();
-            }
-            dragging = false;
+          var dy = startY - clientY;
+          setMaxH(startMaxH + dy);
+        }
+        function onEnd() {
+          if (!dragging) return;
+          dragging = false;
+          body.style.transition = '';
+          if (currentMaxH < 20) {
+            setOpen(false, true);
+          } else if (currentMaxH > naturalHeight - 20) {
+            setOpen(true, true);
           }
         }
-        function onEnd() { dragging = false; }
 
-        handle.addEventListener('mousedown', function(e) {
-          e.preventDefault();
-          onStart(e.clientY);
-        });
-        document.addEventListener('mousemove', function(e) { onMove(e.clientY, e); });
+        handle.addEventListener('mousedown', function(e) { e.preventDefault(); onStart(e.clientY); });
+        document.addEventListener('mousemove', function(e) { if (dragging) { e.preventDefault(); onMove(e.clientY); } });
         document.addEventListener('mouseup', onEnd);
-
-        handle.addEventListener('touchstart', function(e) {
-          if (e.touches.length === 1) {
-            onStart(e.touches[0].clientY);
-          }
-        }, { passive: true });
-        document.addEventListener('touchmove', function(e) {
-          if (e.touches.length === 1) onMove(e.touches[0].clientY, e);
-        }, { passive: true });
+        handle.addEventListener('touchstart', function(e) { if (e.touches.length === 1) onStart(e.touches[0].clientY); }, { passive: true });
+        document.addEventListener('touchmove', function(e) { if (dragging && e.touches.length === 1) onMove(e.touches[0].clientY); }, { passive: false });
         document.addEventListener('touchend', onEnd);
 
-        return { panel: panel, setPosition: function(pos) {
-          panel.classList.remove('at-top', 'at-bottom');
-          panel.classList.add(pos === 'top' ? 'at-top' : 'at-bottom');
-        }};
+        if (toggleBtn) {
+          toggleBtn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            setOpen(!isOpen, true);
+          });
+        }
+
+        setTimeout(function() { measureNatural(); currentMaxH = naturalHeight; }, 100);
+
+        return { setOpen: setOpen };
       }
 
-      var mainPanel = setupPanelDrag('umlBottomPanel', 'umlPanelHandle');
-      var filteredPanel = setupPanelDrag('filteredUmlBottomPanel', 'filteredUmlPanelHandle');
+      var mainCtrl = setupPanel('umlPanelBody', 'umlPanelHandle', 'umlPanelToggle');
+      var filteredCtrl = setupPanel('filteredUmlPanelBody', 'filteredUmlPanelHandle', 'filteredUmlPanelToggle');
 
       /* ============ デバイス傾き検知 ============ */
       var tiltEnabled = getCookie('er_tilt_enabled') === 'on';
       var lastTiltPos = null;
-      var tiltThrottleTimer = null;
 
       function handleOrientation(event) {
         if (!tiltEnabled) return;
         var beta = event.beta;
         if (beta === null || beta === undefined) return;
-        var pos;
+        var open;
         if (beta < 30) {
-          pos = 'top';
+          open = true;
         } else if (beta > 60) {
-          pos = 'bottom';
+          open = false;
         } else {
           return;
         }
+        var pos = open ? 'open' : 'closed';
         if (pos === lastTiltPos) return;
         lastTiltPos = pos;
-        if (mainPanel) mainPanel.setPosition(pos);
-        if (filteredPanel) filteredPanel.setPosition(pos);
+        if (mainCtrl) mainCtrl.setOpen(open, true);
+        if (filteredCtrl) filteredCtrl.setOpen(open, true);
       }
 
       if (tiltEnabled && window.DeviceOrientationEvent) {
