@@ -66,6 +66,7 @@ const STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
   { name: 'repo_color_settings', migration: '0013', description: 'リポジトリ色・タグ設定', syncPolicy: 'auto' },
   { name: 'repo_groups', migration: '0014', description: 'リポジトリグループ', syncPolicy: 'manual' },
   { name: 'repo_group_members', migration: '0014', description: 'リポジトリグループメンバー', syncPolicy: 'manual' },
+  { name: 'ai_summary_reviews', migration: '0016', description: 'AI要約レビュー・評価', syncPolicy: 'manual' },
 ];
 
 const STATUS_MIGRATION_SQL: Record<string, string> = {
@@ -286,6 +287,29 @@ CREATE TABLE IF NOT EXISTS repo_group_members (
 
 CREATE INDEX IF NOT EXISTS idx_repo_group_members_repo
   ON repo_group_members (workspace_id, repo_name);`,
+  '0015': `ALTER TABLE ai_summary_log ADD COLUMN resolved INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE ai_summary_log ADD COLUMN resolved_at TEXT;
+ALTER TABLE ai_summary_log ADD COLUMN resolution_note TEXT;
+ALTER TABLE ai_summary_log ADD COLUMN view_count INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE ai_summary_log ADD COLUMN parent_id TEXT;
+ALTER TABLE ai_summary_log ADD COLUMN tags TEXT NOT NULL DEFAULT '';`,
+  '0016': `CREATE TABLE IF NOT EXISTS ai_summary_reviews (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  summary_request_id TEXT NOT NULL,
+  rating TEXT NOT NULL,
+  reviewer_type TEXT NOT NULL DEFAULT 'human',
+  reviewer_name TEXT,
+  review_model TEXT,
+  comment TEXT,
+  created_at TEXT NOT NULL,
+  FOREIGN KEY (summary_request_id) REFERENCES ai_summary_log(request_id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_ai_summary_reviews_request_id
+  ON ai_summary_reviews (summary_request_id);
+
+CREATE INDEX IF NOT EXISTS idx_ai_summary_reviews_rating
+  ON ai_summary_reviews (rating);`,
 };
 
 function jsonUtf8(payload: unknown, status = 200): Response {
@@ -446,6 +470,11 @@ function getStatusTablePreviewQuery(
         sql: `SELECT * FROM ${tableName} ORDER BY created_at DESC LIMIT ${STATUS_TABLE_PREVIEW_LIMIT}`,
         params: [],
       };
+    case 'ai_summary_reviews':
+      return {
+        sql: `SELECT r.*, l.repo_full_name, l.pr_number FROM ai_summary_reviews r JOIN ai_summary_log l ON l.request_id = r.summary_request_id ORDER BY r.created_at DESC LIMIT ${STATUS_TABLE_PREVIEW_LIMIT}`,
+        params: [],
+      };
     default:
       return null;
   }
@@ -560,6 +589,16 @@ ORDER BY created_at DESC
 LIMIT 20;`,
         params: [],
         note: 'AI要約ログを作成日時の新しい順で取得します。',
+      };
+    case 'ai_summary_reviews':
+      return {
+        sql: `SELECT r.*, l.repo_full_name, l.pr_number
+FROM ai_summary_reviews r
+JOIN ai_summary_log l ON l.request_id = r.summary_request_id
+ORDER BY r.created_at DESC
+LIMIT 20;`,
+        params: [],
+        note: 'AI要約レビューをレビュー一覧から作成日時の新しい順で取得します。',
       };
     default:
       return null;
@@ -4015,6 +4054,114 @@ app.delete('/api/repo-groups/:id', authMiddleware, async (c) => {
     });
     return c.json({ error: 'リポジトリグループの削除に失敗しました' }, 500);
   }
+});
+
+// =====================================================
+// AI要約 API
+// =====================================================
+
+/**
+ * AI要約詳細取得 + view_count インクリメント
+ */
+app.get('/api/ai-summary/:id', authMiddleware, async (c) => {
+  const db = c.env.DB;
+  if (!db) return c.json({ error: 'DB not available' }, 500);
+
+  const requestId = c.req.param('id');
+  const row = await db.prepare(
+    'SELECT * FROM ai_summary_log WHERE request_id = ?'
+  ).bind(requestId).first();
+  if (!row) return c.json({ error: 'Not found' }, 404);
+
+  await db.prepare(
+    'UPDATE ai_summary_log SET view_count = view_count + 1 WHERE request_id = ?'
+  ).bind(requestId).run();
+
+  const reviews = await db.prepare(
+    'SELECT * FROM ai_summary_reviews WHERE summary_request_id = ? ORDER BY created_at DESC'
+  ).bind(requestId).all();
+
+  return c.json({ summary: { ...row, view_count: (row.view_count as number ?? 0) + 1 }, reviews: reviews.results ?? [] });
+});
+
+/**
+ * AI要約レビュー登録
+ */
+app.post('/api/ai-summary/:id/feedback', authMiddleware, async (c) => {
+  const db = c.env.DB;
+  if (!db) return c.json({ error: 'DB not available' }, 500);
+
+  const requestId = c.req.param('id');
+  const body = await c.req.json<{
+    rating: string;
+    reviewer_type?: string;
+    reviewer_name?: string;
+    review_model?: string;
+    comment?: string;
+  }>();
+
+  if (!body.rating || !['good', 'bad'].includes(body.rating)) {
+    return c.json({ error: 'rating must be "good" or "bad"' }, 400);
+  }
+
+  const existing = await db.prepare(
+    'SELECT request_id FROM ai_summary_log WHERE request_id = ?'
+  ).bind(requestId).first();
+  if (!existing) return c.json({ error: 'Summary not found' }, 404);
+
+  const now = new Date().toISOString();
+  const reviewerType = body.reviewer_type || 'human';
+
+  await db.prepare(`
+    INSERT INTO ai_summary_reviews
+      (summary_request_id, rating, reviewer_type, reviewer_name, review_model, comment, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `).bind(
+    requestId,
+    body.rating,
+    reviewerType,
+    body.reviewer_name || null,
+    body.review_model || null,
+    body.comment || null,
+    now,
+  ).run();
+
+  return c.json({ success: true });
+});
+
+/**
+ * AI要約 解決フラグ更新
+ */
+app.post('/api/ai-summary/:id/resolve', authMiddleware, async (c) => {
+  const db = c.env.DB;
+  if (!db) return c.json({ error: 'DB not available' }, 500);
+
+  const requestId = c.req.param('id');
+  const body = await c.req.json<{
+    resolved: boolean;
+    resolution_note?: string;
+  }>();
+
+  const existing = await db.prepare(
+    'SELECT request_id FROM ai_summary_log WHERE request_id = ?'
+  ).bind(requestId).first();
+  if (!existing) return c.json({ error: 'Summary not found' }, 404);
+
+  const now = new Date().toISOString();
+  const resolved = body.resolved ? 1 : 0;
+
+  await db.prepare(`
+    UPDATE ai_summary_log
+    SET resolved = ?, resolved_at = ?, resolution_note = ?
+    WHERE request_id = ?
+  `).bind(
+    resolved,
+    resolved ? now : null,
+    body.resolution_note || null,
+    requestId,
+  ).run();
+
+  return c.json({ success: true });
 });
 
 /**
