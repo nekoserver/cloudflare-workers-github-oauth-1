@@ -281,6 +281,17 @@ export function getRepositoriesPage(user: {
     }
     .repo-row { cursor: pointer; }
 
+    /* Group Filter Select */
+    .repo-group-filter-select {
+      padding: 7px 12px; font-size: 13px; font-weight: 500;
+      color: var(--text-primary); background: var(--bg-secondary);
+      border: 1px solid var(--border-color); border-radius: 8px;
+      cursor: pointer; max-width: 200px;
+      transition: border-color 0.15s;
+    }
+    .repo-group-filter-select:hover { border-color: var(--text-muted); }
+    .repo-group-filter-select:focus { outline: none; border-color: var(--accent-color, #667eea); box-shadow: 0 0 0 2px rgba(102,126,234,0.2); }
+
     /* Create Repo Button */
     .color-assign-btn {
       display: inline-flex; align-items: center; gap: 6px;
@@ -1055,6 +1066,9 @@ export function getRepositoriesPage(user: {
           <p class="page-subtitle">リポジトリ ${repoCount} 件</p>
         </div>
         <div style="display:flex;gap:10px;align-items:center;">
+          <select id="repoGroupFilter" class="repo-group-filter-select" title="リポジトリグループでフィルタ">
+            <option value="">なし</option>
+          </select>
           <button class="color-assign-btn" id="openColorAssignModal" type="button">🎨 色割当て</button>
           <button class="create-repo-btn" id="openCreateRepoModal" type="button">＋ 新規にリポジトリを生成する</button>
         </div>
@@ -1402,6 +1416,65 @@ export function getRepositoriesPage(user: {
     });
 
     // =============================================
+    // リポジトリグループフィルタ
+    // =============================================
+    var repoGroupFilterData = [];
+    var repoGroupFilterSelect = document.getElementById('repoGroupFilter');
+    var activeGroupRepos = null;
+
+    function applyRepoGroupFilter() {
+      var rows = document.querySelectorAll('.repo-row');
+      for (var i = 0; i < rows.length; i++) {
+        var row = rows[i];
+        var owner = row.getAttribute('data-owner') || '';
+        var repo = row.getAttribute('data-repo') || '';
+        var fullName = owner + '/' + repo;
+        if (!activeGroupRepos) {
+          row.style.display = '';
+        } else {
+          row.style.display = activeGroupRepos[fullName] ? '' : 'none';
+        }
+      }
+    }
+
+    (function() {
+      if (!repoGroupFilterSelect) return;
+      fetch('/api/repo-groups', { credentials: 'same-origin' })
+        .then(function(res) { return res.json(); })
+        .then(function(data) {
+          var groups = (data.groups || []).slice();
+          groups.sort(function(a, b) { return (a.name || '').localeCompare(b.name || ''); });
+          repoGroupFilterData = groups;
+          for (var i = 0; i < groups.length; i++) {
+            var opt = document.createElement('option');
+            opt.value = groups[i].id;
+            opt.textContent = groups[i].name;
+            repoGroupFilterSelect.appendChild(opt);
+          }
+        })
+        .catch(function() {});
+
+      repoGroupFilterSelect.addEventListener('change', function() {
+        var val = repoGroupFilterSelect.value;
+        if (!val) {
+          activeGroupRepos = null;
+        } else {
+          activeGroupRepos = {};
+          for (var i = 0; i < repoGroupFilterData.length; i++) {
+            if (repoGroupFilterData[i].id === val) {
+              var repos = repoGroupFilterData[i].repos || [];
+              for (var j = 0; j < repos.length; j++) {
+                activeGroupRepos[repos[j]] = true;
+              }
+              break;
+            }
+          }
+        }
+        applyRepoGroupFilter();
+      });
+    })();
+
+    // =============================================
     // 色割当てモーダル
     // =============================================
     (function() {
@@ -1586,7 +1659,11 @@ export function getRepositoriesPage(user: {
             if (data.error) {
               listEl.innerHTML = '<div style="text-align:center;color:#e53e3e;padding:24px 0;">' + escTxt(data.error) + '</div>';
             } else {
-              renderList(data.colors || []);
+              var colors = data.colors || [];
+              if (activeGroupRepos) {
+                colors = colors.filter(function(c) { return activeGroupRepos[c.repoName]; });
+              }
+              renderList(colors);
             }
           })
           .catch(function() {
