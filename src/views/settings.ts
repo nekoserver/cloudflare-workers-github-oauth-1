@@ -331,6 +331,16 @@ export function getSettingsPage(user: {
               <input type="checkbox" class="setting-checkbox" id="statusChartModeCheckbox" onchange="toggleStatusChartModeEdit()">
             </div>
           </div>
+          <div class="info-item">
+            <span class="info-label">デバイスの傾きによってER図キー一覧の表示位置を変化させる</span>
+            <div class="setting-control" style="justify-content: flex-end;">
+              <span class="theme-label" id="erTiltLabel">OFF</span>
+              <label class="theme-toggle-switch">
+                <input type="checkbox" id="erTiltCheckbox" onchange="onErTiltChange()">
+                <span class="theme-toggle-slider"></span>
+              </label>
+            </div>
+          </div>
           <div class="info-item disabled" id="statusCommitCacheSortModeItem">
             <span class="info-label">月別コミットキャッシュ詳細の並び替え</span>
             <div class="setting-control">
@@ -424,6 +434,24 @@ export function getSettingsPage(user: {
       if (cb) cb.checked = isDark;
       if (label) label.textContent = isDark ? 'ダーク' : 'ライト';
     })();
+
+    // ER図傾きトグルの初期化
+    (function() {
+      var m = document.cookie.match('(^|;)\\\\s*er_tilt_enabled=([^;]*)');
+      var val = m ? decodeURIComponent(m[2]) : 'off';
+      var cb = document.getElementById('erTiltCheckbox');
+      var label = document.getElementById('erTiltLabel');
+      if (cb) cb.checked = (val === 'on');
+      if (label) label.textContent = (val === 'on') ? 'ON' : 'OFF';
+    })();
+
+    function onErTiltChange() {
+      var cb = document.getElementById('erTiltCheckbox');
+      var label = document.getElementById('erTiltLabel');
+      var enabled = cb.checked;
+      label.textContent = enabled ? 'ON' : 'OFF';
+      document.cookie = 'er_tilt_enabled=' + (enabled ? 'on' : 'off') + '; Path=/; Secure; SameSite=Lax; Max-Age=31536000';
+    }
 
     function onThemeSettingChange() {
       var cb = document.getElementById('themeCheckbox');
