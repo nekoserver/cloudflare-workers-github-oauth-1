@@ -1438,7 +1438,22 @@ export function getRepositoriesPage(user: {
           listEl.innerHTML = '<div style="text-align:center;color:var(--text-muted);padding:24px 0;">色設定データがありません。「未登録リポジトリを同期」をクリックしてください。</div>';
           return;
         }
-        listEl.innerHTML = colors.map(function(c) {
+        var owners = {};
+        colors.forEach(function(c) {
+          var idx = c.repoName.indexOf('/');
+          if (idx > 0) owners[c.repoName.substring(0, idx)] = true;
+        });
+        var ownerKeys = Object.keys(owners);
+        var colorUniqueOwner = ownerKeys.length === 1 ? ownerKeys[0] : null;
+        function displayRepoName(fullName) {
+          if (!colorUniqueOwner) return fullName;
+          var prefix = colorUniqueOwner + '/';
+          return fullName.indexOf(prefix) === 0 ? fullName.substring(prefix.length) : fullName;
+        }
+        var ownerLabel = colorUniqueOwner
+          ? '<div style="font-size:13px; color:var(--text-muted); margin-bottom:10px;">対象ユーザー : <strong style="color:var(--text-primary);">' + escTxt(colorUniqueOwner) + '</strong></div>'
+          : '';
+        listEl.innerHTML = ownerLabel + colors.map(function(c) {
           var optionsHtml = presetColors.map(function(p) {
             var sel = p.value.toLowerCase() === c.colorCode.toLowerCase() ? ' selected' : '';
             return '<option value="' + escTxt(p.value) + '"' + sel + '>' + escTxt(p.label) + '</option>';
@@ -1452,7 +1467,7 @@ export function getRepositoriesPage(user: {
             + '<div class="color-assign-swatch" style="background:' + escTxt(c.colorCode) + ';">'
             + '<input type="color" value="' + escTxt(c.colorCode) + '" data-field="swatch" />'
             + '</div>'
-            + '<div class="color-assign-repo-name">' + escTxt(c.repoName) + '</div>'
+            + '<div class="color-assign-repo-name">' + escTxt(displayRepoName(c.repoName)) + '</div>'
             + '<select class="color-assign-select" data-field="preset">' + optionsHtml + '</select>'
             + '<input type="text" class="color-assign-tags" placeholder="タグ" value="' + escTxt(c.tags || '') + '" data-field="tags" />'
             + '<span class="color-assign-save-status" data-field="status"></span>'

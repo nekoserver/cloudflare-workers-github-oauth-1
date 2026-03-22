@@ -135,6 +135,20 @@ export function getCacheStatusPage(user: {
   const safeWorkspaceName = ctx.workspaceName ? escapeHtml(ctx.workspaceName) : null;
   const safeRole = ctx.role ? escapeHtml(ctx.role) : null;
 
+  // owner が一意かどうか判定（一意ならテーブル内で owner/ プレフィクスを省略）
+  const allOwners = new Set<string>();
+  for (const r of data.commitCache.repos) allOwners.add(r.owner);
+  for (const rc of data.repoColors) {
+    const slashIdx = rc.repoName.indexOf('/');
+    if (slashIdx > 0) allOwners.add(rc.repoName.substring(0, slashIdx));
+  }
+  const uniqueOwner = allOwners.size === 1 ? Array.from(allOwners)[0] : null;
+  const stripOwner = (fullName: string): string => {
+    if (!uniqueOwner) return fullName;
+    const prefix = uniqueOwner + '/';
+    return fullName.startsWith(prefix) ? fullName.substring(prefix.length) : fullName;
+  };
+
   // テーブル状況行
   const syncPolicyLabel: Record<string, { text: string; cls: string }> = {
     auto: { text: '自動', cls: 'sync-auto' },
@@ -158,7 +172,7 @@ export function getCacheStatusPage(user: {
   // リポジトリ別集計テーブル行
   const repoRows = data.commitCache.repos.map(r =>
     `<tr>
-      <td>${escapeHtml(r.owner)}/${escapeHtml(r.repo)}</td>
+      <td>${escapeHtml(uniqueOwner ? r.repo : `${r.owner}/${r.repo}`)}</td>
       <td class="num">${r.entryCount}</td>
       <td class="num">${r.totalCommits.toLocaleString()}</td>
     </tr>`
@@ -167,7 +181,7 @@ export function getCacheStatusPage(user: {
   // コミットキャッシュ詳細行
   const cacheDetailRows = sortedCommitCacheEntries.map(e =>
     `<tr>
-      <td>${escapeHtml(e.owner)}/${escapeHtml(e.repo)}</td>
+      <td>${escapeHtml(uniqueOwner ? e.repo : `${e.owner}/${e.repo}`)}</td>
       <td><button type="button" class="year-month-cell-button" data-year-month="${e.year}-${String(e.month).padStart(2, '0')}">${e.year}-${String(e.month).padStart(2, '0')}</button></td>
       <td class="num">${e.totalCommits}</td>
       <td class="date">${escapeHtml(e.cachedAt)}</td>
@@ -234,7 +248,7 @@ export function getCacheStatusPage(user: {
       .sort((a, b) => (repoTotalCommits.get(b.repo) || 0) - (repoTotalCommits.get(a.repo) || 0));
     const segments = monthRepos.map(r => {
       const segPct = d.totalCommits > 0 ? (r.commits / d.totalCommits * 100) : 0;
-      return `<div class="chart-bar-segment" style="width:${segPct.toFixed(2)}%;background:${repoColorMap[r.repo]}" title="${escapeHtml(r.repo)}: ${r.commits}"></div>`;
+      return `<div class="chart-bar-segment" style="width:${segPct.toFixed(2)}%;background:${repoColorMap[r.repo]}" title="${escapeHtml(stripOwner(r.repo))}: ${r.commits}"></div>`;
     }).join('');
     return `<div class="chart-bar-wrapper">
       <div class="chart-label">${escapeHtml(d.yearMonth)}</div>
@@ -248,7 +262,7 @@ export function getCacheStatusPage(user: {
   // リポジトリ凡例
   const repoLegend = allRepos.map(repo => {
     const total = repoTotalCommits.get(repo) || 0;
-    return `<span class="chart-legend-item"><span class="chart-legend-dot" style="background:${repoColorMap[repo]}"></span>${escapeHtml(repo)} (${total})</span>`;
+    return `<span class="chart-legend-item"><span class="chart-legend-dot" style="background:${repoColorMap[repo]}"></span>${escapeHtml(stripOwner(repo))} (${total})</span>`;
   }).join('');
 
   const chartBars = statusChartMode === 'repo' ? repoBars : gradientBars;
@@ -264,7 +278,7 @@ export function getCacheStatusPage(user: {
       ? ((e.cacheHitCount / e.cacheLookupCount) * 100).toFixed(1) + '%'
       : '-';
     return `<tr>
-      <td>${escapeHtml(e.owner)}/${escapeHtml(e.repo)}</td>
+      <td>${escapeHtml(uniqueOwner ? e.repo : `${e.owner}/${e.repo}`)}</td>
       <td class="num">${e.githubFetchCount}</td>
       <td class="num">${e.cacheSaveCount}</td>
       <td class="num">${e.cacheLookupCount}</td>
@@ -276,7 +290,7 @@ export function getCacheStatusPage(user: {
 
   // キャッシュ統計：棒グラフ用データ（リポジトリ別の4指標）
   const statsChartData = cs.entries.map(e => ({
-    label: `${e.owner}/${e.repo}`,
+    label: uniqueOwner ? e.repo : `${e.owner}/${e.repo}`,
     githubFetch: e.githubFetchCount,
     cacheSave: e.cacheSaveCount,
     cacheLookup: e.cacheLookupCount,
@@ -288,7 +302,7 @@ export function getCacheStatusPage(user: {
   const hitRateChartData = cs.entries
     .filter(e => e.cacheLookupCount > 0)
     .map(e => ({
-      label: `${e.owner}/${e.repo}`,
+      label: uniqueOwner ? e.repo : `${e.owner}/${e.repo}`,
       rate: parseFloat(((e.cacheHitCount / e.cacheLookupCount) * 100).toFixed(1)),
     }));
   const hitRateChartDataJson = JSON.stringify(hitRateChartData);
@@ -1198,6 +1212,7 @@ export function getCacheStatusPage(user: {
             <span class="sync-icon">&#x21bb;</span> 色設定を同期
           </button>
         </div>
+        ${uniqueOwner ? `<div style="font-size:13px; color:var(--text-muted); margin-bottom:8px;">対象ユーザー : <strong style="color:var(--text-primary);">${escapeHtml(uniqueOwner)}</strong></div>` : ''}
         ${statusChartMode === 'repo' && allRepos.length > 0 ? `<div class="chart-legend">${repoLegend}</div>` : ''}
         <div class="chart-section">
           ${chartBars}
@@ -1510,6 +1525,8 @@ export function getCacheStatusPage(user: {
     var commitCacheSortMode = ${JSON.stringify(statusCommitCacheSortMode)};
     var commitCacheSortState = ${JSON.stringify(statusCommitCacheSortState)};
     var commitCacheEntries = ${commitCacheEntriesJson};
+    var allRepoNames = ${JSON.stringify(data.repoColors.map(rc => rc.repoName).sort())};
+    var uniqueOwner = ${uniqueOwner ? JSON.stringify(uniqueOwner) : 'null'};
     var activeCommitCacheYearMonth = null;
 
     function escapeHtmlText(value) {
@@ -1982,7 +1999,7 @@ export function getCacheStatusPage(user: {
 
     function renderCommitCacheDetailRows(entries) {
       return entries.map(function(entry) {
-        var repoName = escapeHtmlText(entry.owner) + '/' + escapeHtmlText(entry.repo);
+        var repoName = uniqueOwner ? escapeHtmlText(entry.repo) : escapeHtmlText(entry.owner) + '/' + escapeHtmlText(entry.repo);
         var ym = String(entry.year) + '-' + String(entry.month).padStart(2, '0');
         return '<tr>'
           + '<td>' + repoName + '</td>'
@@ -3810,7 +3827,7 @@ export function getCacheStatusPage(user: {
                 + (g.description ? '<span style="color:var(--text-muted); font-size:12px;"> — ' + escapeHtmlText(g.description) + '</span>' : '')
                 + '<button type="button" class="repo-group-delete-btn" data-id="' + escapeHtmlText(g.id) + '" style="margin-left:auto; background:none; border:none; color:var(--text-muted); cursor:pointer; font-size:16px; padding:2px 6px;" title="削除">&times;</button>'
                 + '</div>'
-                + '<div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">'
+                + '<div class="repo-group-member-area" style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">'
                 + '<span style="font-size:12px; color:var(--text-muted);">メンバー:</span>'
                 + (repoList || '<span style="font-size:12px; color:var(--text-faint);">なし</span>')
                 + '<button type="button" class="repo-group-edit-btn" data-id="' + escapeHtmlText(g.id) + '" style="padding:2px 8px; background:var(--bg-secondary); border:1px solid var(--border-color); border-radius:4px; font-size:11px; color:var(--text-primary); cursor:pointer; margin-left:4px;">編集</button>'
@@ -3835,15 +3852,100 @@ export function getCacheStatusPage(user: {
                 var id = btn.getAttribute('data-id');
                 var group = data.groups.find(function(g) { return g.id === id; });
                 if (!group) return;
-                var reposStr = prompt('メンバーリポジトリ（カンマ区切り）:', (group.repos || []).join(', '));
-                if (reposStr === null) return;
-                var repos = reposStr.split(',').map(function(s) { return s.trim(); }).filter(function(s) { return s.length > 0; });
-                fetch('/api/repo-groups/' + encodeURIComponent(id), {
-                  method: 'PATCH',
-                  credentials: 'same-origin',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ repos: repos }),
-                }).then(function() { loadGroups(); });
+                var card = btn.closest('[data-group-id]');
+                if (!card) return;
+                var memberArea = card.querySelector('.repo-group-member-area');
+                if (!memberArea) return;
+                var currentRepos = (group.repos || []).slice();
+
+                function renderEditUI() {
+                  var badgesHtml = currentRepos.map(function(r) {
+                    return '<span style="display:inline-flex; align-items:center; gap:4px; padding:2px 8px; background:var(--bg-tertiary, var(--bg-secondary)); border-radius:4px; font-size:12px; margin:2px;">'
+                      + escapeHtmlText(r)
+                      + '<button type="button" class="repo-member-remove" data-repo="' + escapeHtmlText(r) + '" style="background:none; border:none; color:var(--text-muted); cursor:pointer; font-size:14px; padding:0 2px; line-height:1;" title="除外">&times;</button>'
+                      + '</span>';
+                  }).join('');
+
+                  var availableRepos = (typeof allRepoNames !== 'undefined' ? allRepoNames : []).filter(function(r) {
+                    return currentRepos.indexOf(r) === -1;
+                  });
+                  var selectHtml = '<select class="repo-member-select" style="padding:4px 8px; border:1px solid var(--border-color); border-radius:4px; background:var(--bg-secondary); color:var(--text-primary); font-size:12px; max-width:220px;">'
+                    + '<option value="">リポジトリを選択...</option>'
+                    + availableRepos.map(function(r) { return '<option value="' + escapeHtmlText(r) + '">' + escapeHtmlText(r) + '</option>'; }).join('')
+                    + '</select>';
+
+                  memberArea.innerHTML = '<div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap; margin-bottom:8px;">'
+                    + '<span style="font-size:12px; color:var(--text-muted);">メンバー:</span>'
+                    + (badgesHtml || '<span style="font-size:12px; color:var(--text-faint);">なし</span>')
+                    + '</div>'
+                    + '<div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">'
+                    + selectHtml
+                    + '<button type="button" class="repo-member-add-btn" style="padding:4px 10px; background:#667eea; color:#fff; border:none; border-radius:4px; font-size:12px; cursor:pointer;">追加</button>'
+                    + '<input type="text" class="repo-member-text" placeholder="手入力で追加" style="padding:4px 8px; border:1px solid var(--border-color); border-radius:4px; background:var(--bg-secondary); color:var(--text-primary); font-size:12px; width:150px;">'
+                    + '<button type="button" class="repo-member-text-add-btn" style="padding:4px 10px; background:var(--bg-secondary); color:var(--text-primary); border:1px solid var(--border-color); border-radius:4px; font-size:12px; cursor:pointer;">追加</button>'
+                    + '<span style="flex:1;"></span>'
+                    + '<button type="button" class="repo-member-save-btn" style="padding:4px 12px; background:#38a169; color:#fff; border:none; border-radius:4px; font-size:12px; cursor:pointer;">保存</button>'
+                    + '<button type="button" class="repo-member-cancel-btn" style="padding:4px 10px; background:var(--bg-secondary); color:var(--text-primary); border:1px solid var(--border-color); border-radius:4px; font-size:12px; cursor:pointer;">キャンセル</button>'
+                    + '</div>';
+
+                  memberArea.querySelectorAll('.repo-member-remove').forEach(function(rb) {
+                    rb.addEventListener('click', function() {
+                      var repo = rb.getAttribute('data-repo');
+                      currentRepos = currentRepos.filter(function(r) { return r !== repo; });
+                      renderEditUI();
+                    });
+                  });
+
+                  var addBtn = memberArea.querySelector('.repo-member-add-btn');
+                  var sel = memberArea.querySelector('.repo-member-select');
+                  if (addBtn && sel) {
+                    addBtn.addEventListener('click', function() {
+                      var val = sel.value;
+                      if (val && currentRepos.indexOf(val) === -1) {
+                        currentRepos.push(val);
+                        renderEditUI();
+                      }
+                    });
+                    sel.addEventListener('change', function() {
+                      var val = sel.value;
+                      if (val && currentRepos.indexOf(val) === -1) {
+                        currentRepos.push(val);
+                        renderEditUI();
+                      }
+                    });
+                  }
+
+                  var textInput = memberArea.querySelector('.repo-member-text');
+                  var textAddBtn = memberArea.querySelector('.repo-member-text-add-btn');
+                  function addFromText() {
+                    if (!textInput) return;
+                    var val = textInput.value.trim();
+                    if (val && currentRepos.indexOf(val) === -1) {
+                      currentRepos.push(val);
+                      renderEditUI();
+                    }
+                  }
+                  if (textAddBtn) textAddBtn.addEventListener('click', addFromText);
+                  if (textInput) textInput.addEventListener('keydown', function(e) { if (e.key === 'Enter') { e.preventDefault(); addFromText(); } });
+
+                  var saveBtn = memberArea.querySelector('.repo-member-save-btn');
+                  if (saveBtn) {
+                    saveBtn.addEventListener('click', function() {
+                      saveBtn.disabled = true;
+                      saveBtn.textContent = '保存中...';
+                      fetch('/api/repo-groups/' + encodeURIComponent(id), {
+                        method: 'PATCH',
+                        credentials: 'same-origin',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ repos: currentRepos }),
+                      }).then(function() { loadGroups(); });
+                    });
+                  }
+
+                  var cancelBtn = memberArea.querySelector('.repo-member-cancel-btn');
+                  if (cancelBtn) cancelBtn.addEventListener('click', function() { loadGroups(); });
+                }
+                renderEditUI();
               });
             });
           })
