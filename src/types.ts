@@ -84,9 +84,17 @@ export interface GitHubWebhookPullRequestPayload {
 export interface ResendWebhookPayload {
   type?: string;
   data?: {
+    email_id?: string;
     from?: string;
     to?: string | string[];
     subject?: string;
+    bounce?: {
+      type?: string;
+      message?: string;
+    };
+    error?: {
+      message?: string;
+    };
   };
 }
 
