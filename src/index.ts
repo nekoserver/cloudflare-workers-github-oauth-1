@@ -67,6 +67,12 @@ const STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
   { name: 'repo_groups', migration: '0014', description: 'リポジトリグループ', syncPolicy: 'manual' },
   { name: 'repo_group_members', migration: '0014', description: 'リポジトリグループメンバー', syncPolicy: 'manual' },
   { name: 'ai_summary_reviews', migration: '0016', description: 'AI要約レビュー・評価', syncPolicy: 'manual' },
+  { name: 'resend_webhook_sources', migration: '0017', description: 'Resend Webhook 送信元定義', syncPolicy: 'manual' },
+  { name: 'email_send_log', migration: '0018', description: 'メール送信ログ', syncPolicy: 'auto' },
+  { name: 'resend_webhook_log', migration: '0019', description: 'Resend Webhook 受信ログ', syncPolicy: 'auto' },
+  { name: 'email_suppression_list', migration: '0020', description: 'メール配信停止リスト', syncPolicy: 'auto' },
+  { name: 'email_mfa_challenges', migration: '0021', description: 'メールMFA認証チャレンジ', syncPolicy: 'auto' },
+  { name: 'email_audit_anomalies', migration: '0022', description: 'メール監査異常検知', syncPolicy: 'auto' },
 ];
 
 const STATUS_MIGRATION_SQL: Record<string, string> = {
@@ -310,6 +316,108 @@ CREATE INDEX IF NOT EXISTS idx_ai_summary_reviews_request_id
 
 CREATE INDEX IF NOT EXISTS idx_ai_summary_reviews_rating
   ON ai_summary_reviews (rating);`,
+  '0017': `CREATE TABLE IF NOT EXISTS resend_webhook_sources (
+  id TEXT PRIMARY KEY,
+  label TEXT NOT NULL,
+  resend_account_id TEXT,
+  svix_endpoint_id TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);`,
+  '0018': `CREATE TABLE IF NOT EXISTS email_send_log (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  source_id TEXT,
+  resend_email_id TEXT,
+  email_to TEXT NOT NULL,
+  email_type TEXT NOT NULL,
+  reference_id TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  FOREIGN KEY (source_id) REFERENCES resend_webhook_sources(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_email_send_log_resend_email_id ON email_send_log(resend_email_id);
+CREATE INDEX IF NOT EXISTS idx_email_send_log_source_id ON email_send_log(source_id);
+CREATE INDEX IF NOT EXISTS idx_email_send_log_email_type ON email_send_log(email_type);`,
+  '0019': `CREATE TABLE IF NOT EXISTS resend_webhook_log (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  source_id TEXT,
+  svix_id TEXT NOT NULL,
+  resend_email_id TEXT,
+  event_type TEXT NOT NULL,
+  email_to TEXT,
+  bounce_type TEXT,
+  error_detail TEXT,
+  slack_result TEXT,
+  slack_result_at TEXT,
+  proxy_result TEXT,
+  proxy_result_at TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  FOREIGN KEY (source_id) REFERENCES resend_webhook_sources(id),
+  UNIQUE (source_id, svix_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_resend_webhook_log_resend_email_id ON resend_webhook_log(resend_email_id);
+CREATE INDEX IF NOT EXISTS idx_resend_webhook_log_event_type ON resend_webhook_log(event_type);
+CREATE INDEX IF NOT EXISTS idx_resend_webhook_log_created_at ON resend_webhook_log(created_at);`,
+  '0020': `CREATE TABLE IF NOT EXISTS email_suppression_list (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  email TEXT NOT NULL,
+  source_id TEXT,
+  reason TEXT NOT NULL,
+  origin_webhook_log_id INTEGER,
+  suppressed_at TEXT NOT NULL DEFAULT (datetime('now')),
+  resubscribed_at TEXT,
+  FOREIGN KEY (source_id) REFERENCES resend_webhook_sources(id),
+  FOREIGN KEY (origin_webhook_log_id) REFERENCES resend_webhook_log(id),
+  UNIQUE (email, source_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_email_suppression_list_email ON email_suppression_list(email);`,
+  '0021': `CREATE TABLE IF NOT EXISTS email_mfa_challenges (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  email TEXT NOT NULL,
+  source_id TEXT,
+  resend_email_id TEXT,
+  code_hash TEXT NOT NULL,
+  code_type TEXT NOT NULL,
+  code_algorithm TEXT NOT NULL DEFAULT 'random',
+  totp_period INTEGER,
+  totp_counter INTEGER,
+  purpose TEXT NOT NULL,
+  attempts INTEGER NOT NULL DEFAULT 0,
+  max_attempts INTEGER NOT NULL DEFAULT 5,
+  expires_at TEXT NOT NULL,
+  verified_at TEXT,
+  invalidated_at TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  FOREIGN KEY (source_id) REFERENCES resend_webhook_sources(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_email_mfa_challenges_user_id ON email_mfa_challenges(user_id);
+CREATE INDEX IF NOT EXISTS idx_email_mfa_challenges_resend_email_id ON email_mfa_challenges(resend_email_id);
+CREATE INDEX IF NOT EXISTS idx_email_mfa_challenges_expires_at ON email_mfa_challenges(expires_at);`,
+  '0022': `CREATE TABLE IF NOT EXISTS email_audit_anomalies (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  period_start TEXT NOT NULL,
+  period_end TEXT NOT NULL,
+  anomaly_type TEXT NOT NULL,
+  severity TEXT NOT NULL,
+  target_user_id TEXT,
+  target_email TEXT,
+  source_id TEXT,
+  metric_value REAL NOT NULL,
+  threshold_value REAL NOT NULL,
+  detail TEXT,
+  acknowledged_at TEXT,
+  acknowledged_by TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  FOREIGN KEY (source_id) REFERENCES resend_webhook_sources(id),
+  UNIQUE (period_start, period_end, anomaly_type, target_user_id, target_email, source_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_email_audit_anomalies_anomaly_type ON email_audit_anomalies(anomaly_type);
+CREATE INDEX IF NOT EXISTS idx_email_audit_anomalies_severity ON email_audit_anomalies(severity);
+CREATE INDEX IF NOT EXISTS idx_email_audit_anomalies_period ON email_audit_anomalies(period_start, period_end);`,
 };
 
 function jsonUtf8(payload: unknown, status = 200): Response {
@@ -475,6 +583,36 @@ function getStatusTablePreviewQuery(
         sql: `SELECT r.*, l.repo_full_name, l.pr_number FROM ai_summary_reviews r JOIN ai_summary_log l ON l.request_id = r.summary_request_id ORDER BY r.created_at DESC LIMIT ${STATUS_TABLE_PREVIEW_LIMIT}`,
         params: [],
       };
+    case 'resend_webhook_sources':
+      return {
+        sql: `SELECT * FROM ${tableName} ORDER BY created_at DESC LIMIT ${STATUS_TABLE_PREVIEW_LIMIT}`,
+        params: [],
+      };
+    case 'email_send_log':
+      return {
+        sql: `SELECT * FROM ${tableName} ORDER BY created_at DESC LIMIT ${STATUS_TABLE_PREVIEW_LIMIT}`,
+        params: [],
+      };
+    case 'resend_webhook_log':
+      return {
+        sql: `SELECT * FROM ${tableName} ORDER BY created_at DESC LIMIT ${STATUS_TABLE_PREVIEW_LIMIT}`,
+        params: [],
+      };
+    case 'email_suppression_list':
+      return {
+        sql: `SELECT * FROM ${tableName} ORDER BY suppressed_at DESC LIMIT ${STATUS_TABLE_PREVIEW_LIMIT}`,
+        params: [],
+      };
+    case 'email_mfa_challenges':
+      return {
+        sql: `SELECT * FROM ${tableName} ORDER BY created_at DESC LIMIT ${STATUS_TABLE_PREVIEW_LIMIT}`,
+        params: [],
+      };
+    case 'email_audit_anomalies':
+      return {
+        sql: `SELECT * FROM ${tableName} ORDER BY created_at DESC LIMIT ${STATUS_TABLE_PREVIEW_LIMIT}`,
+        params: [],
+      };
     default:
       return null;
   }
@@ -599,6 +737,54 @@ ORDER BY r.created_at DESC
 LIMIT 20;`,
         params: [],
         note: 'AI要約レビューをレビュー一覧から作成日時の新しい順で取得します。',
+      };
+    case 'resend_webhook_sources':
+      return {
+        sql: `SELECT * FROM resend_webhook_sources
+ORDER BY created_at DESC
+LIMIT 20;`,
+        params: [],
+        note: 'Resend Webhook 送信元定義を作成日時の新しい順で取得します。',
+      };
+    case 'email_send_log':
+      return {
+        sql: `SELECT * FROM email_send_log
+ORDER BY created_at DESC
+LIMIT 20;`,
+        params: [],
+        note: 'メール送信ログを送信日時の新しい順で取得します。',
+      };
+    case 'resend_webhook_log':
+      return {
+        sql: `SELECT * FROM resend_webhook_log
+ORDER BY created_at DESC
+LIMIT 20;`,
+        params: [],
+        note: 'Resend Webhook 受信ログを受信日時の新しい順で取得します。',
+      };
+    case 'email_suppression_list':
+      return {
+        sql: `SELECT * FROM email_suppression_list
+ORDER BY suppressed_at DESC
+LIMIT 20;`,
+        params: [],
+        note: 'メール配信停止リストを停止日時の新しい順で取得します。',
+      };
+    case 'email_mfa_challenges':
+      return {
+        sql: `SELECT * FROM email_mfa_challenges
+ORDER BY created_at DESC
+LIMIT 20;`,
+        params: [],
+        note: 'メールMFA認証チャレンジを作成日時の新しい順で取得します。',
+      };
+    case 'email_audit_anomalies':
+      return {
+        sql: `SELECT * FROM email_audit_anomalies
+ORDER BY created_at DESC
+LIMIT 20;`,
+        params: [],
+        note: 'メール監査異常検知レコードを検知日時の新しい順で取得します。',
       };
     default:
       return null;
