@@ -1253,8 +1253,13 @@ app.get('/welcome', authMiddleware, async (c) => {
     formattedLastLogin = formatTimestampWithTimezone(lastLoginDate, timezone);
   }
 
-  // show_welcome_message Cookieを読み取り、GitHubコールバック直後かどうか判定
+  const expiresDate = new Date(user.exp * 1000);
+  const expiresAt = formatTimestampWithTimezone(expiresDate, timezone);
+
   const cookieHeader = c.req.header('Cookie');
+  const sessionDuration = userSession?.sessionDuration || getCookieValues(cookieHeader, ['user_session_duration'])['user_session_duration'] || '1h';
+
+  // show_welcome_message Cookieを読み取り、GitHubコールバック直後かどうか判定
   const showWelcomeMessage = getCookieValue(cookieHeader, 'show_welcome_message') === '1';
 
   if (showWelcomeMessage) {
@@ -1283,6 +1288,9 @@ app.get('/welcome', authMiddleware, async (c) => {
     lastLoginAt: formattedLastLogin,
     showWelcomeMessage,
     repoCount,
+    expiresAt,
+    expiresAtTimestamp: user.exp,
+    sessionDuration,
   }));
 });
 

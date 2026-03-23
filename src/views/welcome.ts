@@ -12,11 +12,26 @@ export function getWelcomePage(user: {
   lastLoginAt?: string | null;
   showWelcomeMessage?: boolean;
   repoCount?: number | null;
+  expiresAt?: string;
+  expiresAtTimestamp?: number;
+  sessionDuration?: string;
 }): string {
   const displayName = escapeHtml(user.name || user.username);
   const safeUsername = escapeHtml(user.username);
   const safeEmail = user.email ? escapeHtml(user.email) : null;
   const initials = escapeHtml((user.name || user.username).substring(0, 2).toUpperCase());
+
+  const sessionDurationLabel = (d?: string): string => {
+    switch (d) {
+      case '1h': return '1時間';
+      case '3h': return '3時間';
+      case '8h': return '8時間';
+      case '1d': return '1日';
+      case '3d': return '3日';
+      case '1w': return '1週間';
+      default: return '1時間';
+    }
+  };
 
   return `<!DOCTYPE html>
 <html lang="ja">
@@ -254,6 +269,11 @@ export function getWelcomePage(user: {
       font-size: 14px;
       color: var(--text-secondary);
     }
+
+    .time-remaining-warning {
+      color: var(--danger-color, #e53e3e) !important;
+      font-weight: 700;
+    }
   </style>
 </head>
 <body>
@@ -310,6 +330,16 @@ export function getWelcomePage(user: {
           <span class="info-value">${user.repoCount}</span>
         </div>
         ` : ''}
+        ${user.expiresAt ? `
+        <div class="info-row">
+          <span class="info-label">セッションの有効期限</span>
+          <span class="info-value">${escapeHtml(user.expiresAt)}（${sessionDurationLabel(user.sessionDuration)}）</span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">残り</span>
+          <span class="info-value" id="timeRemaining">計算中...</span>
+        </div>
+        ` : ''}
       </div>
     </div>
 
@@ -347,6 +377,32 @@ export function getWelcomePage(user: {
         dropdown.classList.remove('show');
       }
     });
+
+    ${user.expiresAtTimestamp ? `
+    (function() {
+      var expiresAtTimestamp = ${user.expiresAtTimestamp};
+      function updateTimeRemaining() {
+        var now = Math.floor(Date.now() / 1000);
+        var remaining = expiresAtTimestamp - now;
+        var el = document.getElementById('timeRemaining');
+        if (!el) return;
+        if (remaining <= 0) {
+          el.textContent = '期限切れ';
+          el.classList.add('time-remaining-warning');
+          return;
+        }
+        var hours = Math.floor(remaining / 3600);
+        var minutes = Math.floor((remaining % 3600) / 60);
+        var seconds = remaining % 60;
+        el.textContent = hours > 0 ? hours + '時間 ' + minutes + '分 ' + seconds + '秒'
+          : minutes > 0 ? minutes + '分 ' + seconds + '秒' : seconds + '秒';
+        if (remaining <= 60) el.classList.add('time-remaining-warning');
+        else el.classList.remove('time-remaining-warning');
+      }
+      updateTimeRemaining();
+      setInterval(updateTimeRemaining, 1000);
+    })();
+    ` : ''}
   </script>
 </body>
 </html>`;
