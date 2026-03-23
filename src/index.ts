@@ -418,6 +418,7 @@ CREATE INDEX IF NOT EXISTS idx_email_mfa_challenges_expires_at ON email_mfa_chal
 CREATE INDEX IF NOT EXISTS idx_email_audit_anomalies_anomaly_type ON email_audit_anomalies(anomaly_type);
 CREATE INDEX IF NOT EXISTS idx_email_audit_anomalies_severity ON email_audit_anomalies(severity);
 CREATE INDEX IF NOT EXISTS idx_email_audit_anomalies_period ON email_audit_anomalies(period_start, period_end);`,
+  '0023': `ALTER TABLE resend_webhook_sources ADD COLUMN webhook_secret TEXT;`,
 };
 
 function jsonUtf8(payload: unknown, status = 200): Response {
@@ -595,7 +596,7 @@ function getStatusTablePreviewQuery(
       };
     case 'resend_webhook_log':
       return {
-        sql: `SELECT * FROM ${tableName} ORDER BY created_at DESC LIMIT ${STATUS_TABLE_PREVIEW_LIMIT}`,
+        sql: `SELECT w.*, s.label AS source_label FROM resend_webhook_log w LEFT JOIN resend_webhook_sources s ON s.id = w.source_id ORDER BY w.created_at DESC LIMIT ${STATUS_TABLE_PREVIEW_LIMIT}`,
         params: [],
       };
     case 'email_suppression_list':
@@ -756,11 +757,9 @@ LIMIT 20;`,
       };
     case 'resend_webhook_log':
       return {
-        sql: `SELECT * FROM resend_webhook_log
-ORDER BY created_at DESC
-LIMIT 20;`,
+        sql: `SELECT w.*, s.label AS source_label FROM resend_webhook_log w LEFT JOIN resend_webhook_sources s ON s.id = w.source_id ORDER BY w.created_at DESC LIMIT 20;`,
         params: [],
-        note: 'Resend Webhook 受信ログを受信日時の新しい順で取得します。',
+        note: 'Resend Webhook 受信ログを受信日時の新しい順で取得します。source_label は送信元定義の名前です。',
       };
     case 'email_suppression_list':
       return {
@@ -3318,10 +3317,27 @@ app.get('/api/repositories/search/history/:id', optionalAuthMiddleware, async (c
  * Resend webhook受信用エンドポイント
  * イベントタイプを/lib/resend-webhook.shtml?event=xxxへGETで通知し、Resendへのレスポンスを返す
  */
-app.post('/webhook/resend', async (c) => {
-  const webhookSecret = c.env.RESEND_WEBHOOK_SECRET;
+app.post('/webhook/resend/:sourceId', async (c) => {
+  const sourceId = c.req.param('sourceId');
+
+  const db = c.env.DB;
+  if (!db) {
+    logger.error('Database is not available for Resend webhook source validation');
+    return c.json({ error: 'Webhook endpoint is not available' }, 500);
+  }
+
+  const sourceRow = await db.prepare(
+    `SELECT id, label, webhook_secret FROM resend_webhook_sources WHERE id = ?`
+  ).bind(sourceId).first<{ id: string; label: string; webhook_secret: string | null }>();
+
+  if (!sourceRow) {
+    logger.warn('Unknown Resend webhook source', { sourceId });
+    return c.json({ error: 'Unknown webhook source' }, 404);
+  }
+
+  const webhookSecret = sourceRow.webhook_secret ?? c.env.RESEND_WEBHOOK_SECRET;
   if (!webhookSecret) {
-    logger.error('Resend webhook secret is not configured');
+    logger.error('Resend webhook secret is not configured', { sourceId });
     return c.json({ error: 'Webhook endpoint is not available' }, 500);
   }
 
@@ -3336,6 +3352,7 @@ app.post('/webhook/resend', async (c) => {
   if (!verification.success) {
     logger.warn('Rejected Resend webhook', {
       reason: verification.reason,
+      sourceId,
       path: c.req.path,
       method: c.req.method,
     });
@@ -3344,6 +3361,7 @@ app.post('/webhook/resend', async (c) => {
 
   const resendEventId = c.req.header('svix-id')?.trim();
   if (resendEventId) {
+    const dedupKey = `${sourceId}:${resendEventId}`;
     const nowMs = Date.now();
     const dedupTtlSeconds = resolveResendDedupTtlSeconds(c.env.RESEND_WEBHOOK_DEDUP_TTL_SECONDS);
     const expiresAt = nowMs + dedupTtlSeconds * 1000;
@@ -3354,12 +3372,12 @@ app.post('/webhook/resend', async (c) => {
       }
     }
 
-    if (resendWebhookDedupCache.has(resendEventId)) {
-      logger.warn('Duplicate Resend webhook detected', { resendEventId });
+    if (resendWebhookDedupCache.has(dedupKey)) {
+      logger.warn('Duplicate Resend webhook detected', { sourceId, resendEventId });
       return c.json({ error: 'Duplicate webhook' }, 409);
     }
 
-    resendWebhookDedupCache.set(resendEventId, expiresAt);
+    resendWebhookDedupCache.set(dedupKey, expiresAt);
   }
 
   let payload: ResendWebhookPayload;
@@ -3489,32 +3507,30 @@ app.post('/webhook/resend', async (c) => {
     proxyFailed = true;
   }
 
-  const db = c.env.DB;
   const svixId = resendEventId ?? `noid_${Date.now()}`;
-  if (db) {
-    try {
-      await db.prepare(
-        `INSERT INTO resend_webhook_log (source_id, svix_id, resend_email_id, event_type, email_to, bounce_type, error_detail, slack_result, slack_result_at, proxy_result, proxy_result_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-      ).bind(
-        null,
-        svixId,
-        resendEmailId,
-        eventType,
-        emailTo,
-        bounceType,
-        errorDetail,
-        slackResultText,
-        slackResultAt,
-        proxyResultText,
-        proxyResultAt
-      ).run();
-    } catch (dbError) {
-      logger.error('Failed to insert resend_webhook_log', {
-        error: dbError instanceof Error ? dbError.message : 'Unknown error',
-        svixId,
-        eventType,
-      });
-    }
+  try {
+    await db.prepare(
+      `INSERT OR IGNORE INTO resend_webhook_log (source_id, svix_id, resend_email_id, event_type, email_to, bounce_type, error_detail, slack_result, slack_result_at, proxy_result, proxy_result_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).bind(
+      sourceId,
+      svixId,
+      resendEmailId,
+      eventType,
+      emailTo,
+      bounceType,
+      errorDetail,
+      slackResultText,
+      slackResultAt,
+      proxyResultText,
+      proxyResultAt
+    ).run();
+  } catch (dbError) {
+    logger.error('Failed to insert resend_webhook_log', {
+      error: dbError instanceof Error ? dbError.message : 'Unknown error',
+      sourceId,
+      svixId,
+      eventType,
+    });
   }
 
   if (proxyFailed) {
