@@ -601,10 +601,34 @@ export function getRepositoriesPage(user: {
       display: flex; justify-content: space-between; align-items: center; flex-shrink: 0;
     }
     .history-modal-title { font-size: 18px; font-weight: 700; color: var(--text-primary); }
-    .history-modal-subtitle { font-size: 13px; color: var(--text-muted); margin-top: 2px; }
     .history-modal-body {
       padding: 16px 24px 24px; overflow-y: auto; flex: 1; min-height: 0;
     }
+    .history-search-bar {
+      display: flex; gap: 8px; margin-bottom: 14px; align-items: center; flex-shrink: 0;
+      padding: 0 24px;
+    }
+    .history-search-input {
+      flex: 1; max-width: 400px; padding: 8px 14px; border-radius: 10px;
+      border: 2px solid var(--border-color); background: var(--bg-secondary);
+      color: var(--text-primary); font-size: 13px; outline: none;
+      transition: border-color 0.2s;
+    }
+    .history-search-input:focus { border-color: var(--accent-color, #48bb78); }
+    .history-search-btn {
+      padding: 8px 18px; border-radius: 10px; border: none;
+      background: linear-gradient(135deg, #48bb78, #38a169); color: #fff;
+      font-size: 13px; font-weight: 700; cursor: pointer;
+      transition: opacity 0.2s; white-space: nowrap;
+    }
+    .history-search-btn:hover { opacity: 0.9; }
+    .history-search-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .history-search-status {
+      font-size: 12px; color: var(--text-muted); white-space: nowrap;
+    }
+    .history-search-status.searching { color: #ed8936; }
+    .history-search-status.done { color: #48bb78; }
+    .history-search-status.error { color: #e53e3e; }
     .history-grid-wrap {
       display: flex; gap: 12px; flex-wrap: nowrap; overflow-x: auto;
     }
@@ -629,6 +653,20 @@ export function getRepositoriesPage(user: {
       display: inline-flex; align-items: center; justify-content: center;
       background: linear-gradient(135deg, #667eea, #764ba2); color: #fff;
       font-size: 12px; font-weight: 700; padding: 2px 10px; border-radius: 999px;
+    }
+    .history-grid-col tr.history-row-new td {
+      animation: historyRowFlash 1.5s ease;
+    }
+    @keyframes historyRowFlash {
+      0% { background: rgba(72,187,120,0.3); }
+      100% { background: transparent; }
+    }
+    .history-grid-col tr.history-row-updated td {
+      animation: historyRowUpdate 1.5s ease;
+    }
+    @keyframes historyRowUpdate {
+      0% { background: rgba(237,137,54,0.3); }
+      100% { background: transparent; }
     }
     @media (max-width: 900px) {
       .history-modal-content { max-width: 98vw; width: 98vw; }
@@ -1335,6 +1373,11 @@ export function getRepositoriesPage(user: {
           <div class="history-modal-title" id="historyModalTitle">検索履歴</div>
         </div>
         <button class="modal-close" id="historyModalClose" type="button">&times;</button>
+      </div>
+      <div class="history-search-bar">
+        <input type="text" class="history-search-input" id="historySearchInput" placeholder="キーワードを入力して検索..." autocomplete="off" />
+        <button class="history-search-btn" id="historySearchBtn" type="button">検索</button>
+        <span class="history-search-status" id="historySearchStatus"></span>
       </div>
       <div class="history-modal-body" id="historyModalBody">
       </div>
@@ -3360,9 +3403,15 @@ export function getRepositoriesPage(user: {
       var historyModalClose = document.getElementById('historyModalClose');
       var historyModalBody = document.getElementById('historyModalBody');
       var historyModalTitle = document.getElementById('historyModalTitle');
+      var hSearchInput = document.getElementById('historySearchInput');
+      var hSearchBtn = document.getElementById('historySearchBtn');
+      var hSearchStatus = document.getElementById('historySearchStatus');
       if (!historyRow || !historyOpenBtn || !historyModal || !historyModalBody) return;
 
       var ROWS_PER_COL = 20;
+      var MIN_COLS = 3;
+      var MAX_COLS = 5;
+      var currentItems = [];
 
       function escHtml(str) {
         return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -3416,23 +3465,30 @@ export function getRepositoriesPage(user: {
         return arr;
       }
 
-      function renderGrid(items) {
+      function renderGrid(items, highlightKey, highlightType) {
         if (items.length === 0) return '<div class="search-empty">検索履歴がありません。</div>';
         var numCols = Math.ceil(items.length / ROWS_PER_COL);
-        if (numCols > 5) numCols = 5;
+        if (numCols < MIN_COLS) numCols = MIN_COLS;
+        if (numCols > MAX_COLS) numCols = MAX_COLS;
         var rowsPerCol = Math.ceil(items.length / numCols);
         var html = '<div class="history-grid-wrap">';
         for (var c = 0; c < numCols; c++) {
           var start = c * rowsPerCol;
           var end = Math.min(start + rowsPerCol, items.length);
-          if (start >= items.length) break;
           html += '<div class="history-grid-col"><table>'
             + '<thead><tr><th>ヒット数</th><th>キーワード</th></tr></thead><tbody>';
           for (var r = start; r < end; r++) {
-            html += '<tr>'
+            var rowClass = '';
+            if (highlightKey && items[r].search_query === highlightKey) {
+              rowClass = highlightType === 'new' ? ' class="history-row-new"' : ' class="history-row-updated"';
+            }
+            html += '<tr' + rowClass + '>'
               + '<td><span class="history-hit-badge">' + items[r].total_hits + '</span></td>'
               + '<td title="' + escHtml(items[r].search_query) + '">' + escHtml(items[r].search_query) + '</td>'
               + '</tr>';
+          }
+          if (start >= items.length) {
+            html += '<tr><td colspan="2" style="color:var(--text-muted);text-align:center;padding:20px 0;font-size:12px;">&mdash;</td></tr>';
           }
           html += '</tbody></table></div>';
         }
@@ -3440,23 +3496,107 @@ export function getRepositoriesPage(user: {
         return html;
       }
 
+      function updateTitle() {
+        historyModalTitle.textContent = '検索履歴 (' + currentItems.length + ' 件)';
+      }
+
+      function refreshGrid(highlightKey, highlightType) {
+        updateTitle();
+        historyModalBody.innerHTML = renderGrid(currentItems, highlightKey, highlightType);
+      }
+
+      function setSearchStatus(text, cls) {
+        if (!hSearchStatus) return;
+        hSearchStatus.textContent = text;
+        hSearchStatus.className = 'history-search-status' + (cls ? ' ' + cls : '');
+      }
+
+      function mergeResult(query, totalHits) {
+        var found = false;
+        var highlightType = 'new';
+        for (var i = 0; i < currentItems.length; i++) {
+          if (currentItems[i].search_query === query) {
+            found = true;
+            if (totalHits > currentItems[i].total_hits) {
+              currentItems[i].total_hits = totalHits;
+              highlightType = 'updated';
+            } else {
+              highlightType = 'updated';
+            }
+            break;
+          }
+        }
+        if (!found) {
+          currentItems.push({ search_query: query, total_hits: totalHits });
+        }
+        currentItems.sort(function(a, b) { return b.total_hits - a.total_hits; });
+        refreshGrid(query, highlightType);
+      }
+
+      function executeModalSearch() {
+        if (!hSearchInput) return;
+        var query = hSearchInput.value.trim();
+        if (!query || query.length < 2) {
+          setSearchStatus('2文字以上入力してください', 'error');
+          return;
+        }
+        hSearchBtn.disabled = true;
+        setSearchStatus('検索中...', 'searching');
+
+        fetch('/api/repositories/search/commits?q=' + encodeURIComponent(query), { credentials: 'same-origin' })
+          .then(function(res) { return res.json(); })
+          .then(function(data) {
+            hSearchBtn.disabled = false;
+            if (data.error) {
+              setSearchStatus(data.error, 'error');
+              return;
+            }
+            var total = data.total || 0;
+            setSearchStatus('「' + query + '」' + total + ' 件ヒット', 'done');
+            if (total > 0) {
+              mergeResult(query, total);
+              if (typeof window.__reloadSearchHistory === 'function') window.__reloadSearchHistory();
+            } else {
+              mergeResult(query, 0);
+            }
+            hSearchInput.value = '';
+          })
+          .catch(function() {
+            hSearchBtn.disabled = false;
+            setSearchStatus('検索に失敗しました', 'error');
+          });
+      }
+
+      if (hSearchBtn) {
+        hSearchBtn.addEventListener('click', executeModalSearch);
+      }
+      if (hSearchInput) {
+        hSearchInput.addEventListener('keydown', function(e) {
+          if (e.key === 'Enter') executeModalSearch();
+        });
+      }
+
       historyOpenBtn.addEventListener('click', function() {
         historyModalTitle.textContent = '検索履歴';
         historyModalBody.innerHTML = '<div class="search-loading">読み込み中...</div>';
+        setSearchStatus('', '');
+        if (hSearchInput) hSearchInput.value = '';
         openHistoryModal();
 
         fetch('/api/repositories/search/history', { credentials: 'same-origin' })
           .then(function(res) { return res.ok ? res.json() : null; })
           .then(function(data) {
             if (!data || !data.history || data.history.length === 0) {
+              currentItems = [];
               historyModalBody.innerHTML = '<div class="search-empty">検索履歴がありません。</div>';
+              updateTitle();
               return;
             }
-            var items = dedupeAndSort(data.history);
-            historyModalTitle.textContent = '検索履歴 (' + items.length + ' 件)';
-            historyModalBody.innerHTML = renderGrid(items);
+            currentItems = dedupeAndSort(data.history);
+            refreshGrid(null, null);
           })
           .catch(function() {
+            currentItems = [];
             historyModalBody.innerHTML = '<div class="search-empty">読み込みに失敗しました。</div>';
           });
       });
