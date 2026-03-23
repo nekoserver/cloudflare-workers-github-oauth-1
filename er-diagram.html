@@ -116,7 +116,9 @@
   }
   .dropdown-menu.show { display: block; }
   .dropdown-menu button {
-    display: block;
+    display: flex;
+    align-items: center;
+    gap: 6px;
     width: 100%;
     text-align: left;
     padding: 8px 14px;
@@ -125,6 +127,11 @@
     font-size: 13px;
   }
   .dropdown-menu button:hover { background: var(--dropdown-hover); }
+  .menu-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
   .dropdown-menu .separator {
     height: 1px;
     background: var(--border);
@@ -172,6 +179,7 @@
     z-index: 10;
     cursor: move;
     user-select: none;
+    touch-action: none;
     transition: box-shadow 0.15s;
   }
   .er-table:hover {
@@ -271,6 +279,18 @@
   <h1>ER Diagram</h1>
   <span style="font-size:12px;color:var(--text-muted)">cloudflare-workers-github-oauth-1</span>
   <span class="spacer"></span>
+  <div class="dropdown-wrapper">
+    <button onclick="toggleGroupMenu(event)">Filter Group ▾</button>
+    <div id="group-menu" class="dropdown-menu">
+      <button onclick="filterGroup('all')">すべて</button>
+      <div class="separator"></div>
+      <button onclick="filterGroup('auth')"><span class="menu-dot" style="background:#388bfd"></span>Auth / Session</button>
+      <button onclick="filterGroup('commit')"><span class="menu-dot" style="background:#3fb950"></span>Commit / Cache</button>
+      <button onclick="filterGroup('ai')"><span class="menu-dot" style="background:#d29922"></span>AI Summary</button>
+      <button onclick="filterGroup('email')"><span class="menu-dot" style="background:#f85149"></span>Email / Resend</button>
+      <button onclick="filterGroup('config')"><span class="menu-dot" style="background:#a371f7"></span>Config / Settings</button>
+    </div>
+  </div>
   <button onclick="resetPositions()">Reset Layout</button>
   <button onclick="fitToView()">Fit to View</button>
   <div class="dropdown-wrapper">
@@ -527,23 +547,21 @@ function createTableElement(table) {
 }
 
 function makeDraggable(el, tableName) {
-  let startX, startY, origX, origY;
-  let isDragging = false;
-
-  el.addEventListener('mousedown', (e) => {
+  el.addEventListener('pointerdown', (e) => {
     if (e.button !== 0) return;
     e.preventDefault();
-    isDragging = true;
+    e.stopPropagation();
+    el.setPointerCapture(e.pointerId);
     el.classList.add('dragging');
-    startX = e.clientX;
-    startY = e.clientY;
-    origX = positions[tableName].x;
-    origY = positions[tableName].y;
+    const startX = e.clientX;
+    const startY = e.clientY;
+    const origX = positions[tableName].x;
+    const origY = positions[tableName].y;
 
     function onMove(e2) {
-      const wrapper = document.getElementById('canvas-wrapper');
-      const dx = (e2.clientX - startX);
-      const dy = (e2.clientY - startY);
+      e2.preventDefault();
+      const dx = e2.clientX - startX;
+      const dy = e2.clientY - startY;
       const newX = Math.max(0, origX + dx);
       const newY = Math.max(0, origY + dy);
       positions[tableName].x = newX;
@@ -553,16 +571,16 @@ function makeDraggable(el, tableName) {
       drawRelations();
     }
 
-    function onUp() {
-      isDragging = false;
+    function onUp(e3) {
+      el.releasePointerCapture(e3.pointerId);
       el.classList.remove('dragging');
-      document.removeEventListener('mousemove', onMove);
-      document.removeEventListener('mouseup', onUp);
+      el.removeEventListener('pointermove', onMove);
+      el.removeEventListener('pointerup', onUp);
       localStorage.setItem('er-positions-oauth1', JSON.stringify(positions));
     }
 
-    document.addEventListener('mousemove', onMove);
-    document.addEventListener('mouseup', onUp);
+    el.addEventListener('pointermove', onMove);
+    el.addEventListener('pointerup', onUp);
   });
 }
 
@@ -574,6 +592,7 @@ function drawRelations() {
     const fromEl = tableElements[rel.from];
     const toEl = tableElements[rel.to];
     if (!fromEl || !toEl) continue;
+    if (fromEl.style.display === 'none' || toEl.style.display === 'none') continue;
 
     const fromRect = { x: positions[rel.from].x, y: positions[rel.from].y, w: fromEl.offsetWidth, h: fromEl.offsetHeight };
     const toRect = { x: positions[rel.to].x, y: positions[rel.to].y, w: toEl.offsetWidth, h: toEl.offsetHeight };
@@ -644,14 +663,46 @@ function edgePoint(rect, targetX, targetY) {
   return { x: cx + dx * scale, y: cy + dy * scale };
 }
 
+let activeFilter = 'all';
+
+function groupKeyOf(tableName) {
+  for (const [g, d] of Object.entries(GROUPS)) {
+    if (d.tables.includes(tableName)) return g;
+  }
+  return null;
+}
+
+function filterGroup(group) {
+  activeFilter = group;
+  document.getElementById('group-menu').classList.remove('show');
+
+  for (const table of SCHEMA) {
+    const el = tableElements[table.name];
+    const key = groupKeyOf(table.name);
+    if (group === 'all' || key === group) {
+      el.style.display = '';
+    } else {
+      el.style.display = 'none';
+    }
+  }
+  drawRelations();
+}
+
+function toggleGroupMenu(e) {
+  e.stopPropagation();
+  document.getElementById('save-menu').classList.remove('show');
+  document.getElementById('group-menu').classList.toggle('show');
+}
+
 function toggleSaveMenu(e) {
   e.stopPropagation();
-  const menu = document.getElementById('save-menu');
-  menu.classList.toggle('show');
+  document.getElementById('group-menu').classList.remove('show');
+  document.getElementById('save-menu').classList.toggle('show');
 }
 
 document.addEventListener('click', () => {
   document.getElementById('save-menu').classList.remove('show');
+  document.getElementById('group-menu').classList.remove('show');
 });
 
 function downloadPositions(format) {
