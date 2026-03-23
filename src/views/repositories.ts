@@ -3395,10 +3395,7 @@ export function getRepositoriesPage(user: {
             data.history.forEach(function(item) {
               var opt = document.createElement('option');
               opt.value = String(item.id);
-              var repos = [];
-              try { repos = JSON.parse(item.repo_names); } catch(_e) {}
-              var repoLabel = repos.length > 0 ? ' (' + repos.join(', ') + ')' : '';
-              opt.textContent = item.search_query + ' — ' + item.total_hits + ' 件' + repoLabel;
+              opt.textContent = item.search_query + ' — ' + item.total_hits + ' 件';
               historySelect.appendChild(opt);
             });
           })
