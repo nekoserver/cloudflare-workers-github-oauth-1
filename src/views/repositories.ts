@@ -577,33 +577,22 @@ export function getRepositoriesPage(user: {
       text-align: center; padding: 40px 20px; color: var(--text-muted); font-size: 14px;
     }
 
-    /* Search History Select */
+    /* Search History Button */
     .search-history-row {
       display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 10px;
     }
-    .search-history-label {
-      font-size: 13px; font-weight: 700; color: var(--text-muted); white-space: nowrap;
-    }
-    .search-history-select {
-      flex: 1; min-width: 200px; padding: 8px 12px; border-radius: 10px;
-      border: 2px solid var(--border-color); background: var(--bg-secondary);
-      color: var(--text-primary); font-size: 13px; outline: none;
-      cursor: pointer; transition: border-color 0.2s;
-    }
-    .search-history-select:focus { border-color: var(--accent-color, #48bb78); }
-    .search-history-detail-btn {
+    .search-history-open-btn {
       padding: 8px 16px; border-radius: 10px; border: none;
       background: linear-gradient(135deg, #ed8936, #dd6b20); color: #fff;
       font-size: 13px; font-weight: 700; cursor: pointer;
       transition: opacity 0.2s; white-space: nowrap;
     }
-    .search-history-detail-btn:hover { opacity: 0.9; }
-    .search-history-detail-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .search-history-open-btn:hover { opacity: 0.9; }
 
-    /* History Detail Modal */
+    /* History Grid Modal */
     .history-modal-content {
-      background: var(--card-bg); border-radius: 16px; max-width: 680px; width: 94%;
-      max-height: 85vh; display: flex; flex-direction: column;
+      background: var(--card-bg); border-radius: 16px; max-width: 95vw; width: 95vw;
+      max-height: 90vh; display: flex; flex-direction: column;
       box-shadow: 0 20px 60px rgba(0,0,0,0.3);
       animation: modalIn 0.2s ease;
     }
@@ -616,32 +605,35 @@ export function getRepositoriesPage(user: {
     .history-modal-body {
       padding: 16px 24px 24px; overflow-y: auto; flex: 1; min-height: 0;
     }
-    .history-summary-card {
-      background: var(--bg-secondary); border-radius: 12px; padding: 16px; margin-bottom: 16px;
+    .history-grid-wrap {
+      display: flex; gap: 12px; flex-wrap: nowrap; overflow-x: auto;
     }
-    .history-summary-row {
-      display: flex; justify-content: space-between; align-items: center; padding: 4px 0;
-      font-size: 13px; color: var(--text-primary);
+    .history-grid-col {
+      flex: 1 1 0; min-width: 180px;
     }
-    .history-summary-row .label { font-weight: 600; color: var(--text-muted); }
-    .history-summary-row .value { font-weight: 700; }
-    .history-repo-table {
+    .history-grid-col table {
       width: 100%; border-collapse: collapse; font-size: 13px;
     }
-    .history-repo-table th {
-      text-align: left; padding: 8px 12px; border-bottom: 2px solid var(--border-color);
+    .history-grid-col th {
+      text-align: left; padding: 6px 10px; border-bottom: 2px solid var(--border-color);
       color: var(--text-muted); font-weight: 700; font-size: 11px; text-transform: uppercase;
-      letter-spacing: 0.05em;
+      letter-spacing: 0.05em; white-space: nowrap;
     }
-    .history-repo-table td {
-      padding: 8px 12px; border-bottom: 1px solid var(--border-color);
-      color: var(--text-primary);
+    .history-grid-col td {
+      padding: 5px 10px; border-bottom: 1px solid var(--border-color);
+      color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      max-width: 200px;
     }
-    .history-repo-table tr:last-child td { border-bottom: none; }
+    .history-grid-col tr:last-child td { border-bottom: none; }
     .history-hit-badge {
       display: inline-flex; align-items: center; justify-content: center;
       background: linear-gradient(135deg, #667eea, #764ba2); color: #fff;
       font-size: 12px; font-weight: 700; padding: 2px 10px; border-radius: 999px;
+    }
+    @media (max-width: 900px) {
+      .history-modal-content { max-width: 98vw; width: 98vw; }
+      .history-grid-wrap { flex-wrap: wrap; }
+      .history-grid-col { min-width: 45%; }
     }
 
     /* Permissions Modal */
@@ -1078,11 +1070,7 @@ export function getRepositoriesPage(user: {
         <button class="commit-search-btn" id="commitSearchBtn" type="button">検索</button>
       </div>
       <div class="search-history-row" id="searchHistoryRow" style="display:none;">
-        <span class="search-history-label">検索履歴:</span>
-        <select class="search-history-select" id="searchHistorySelect">
-          <option value="">-- 検索履歴を選択 --</option>
-        </select>
-        <button class="search-history-detail-btn" id="searchHistoryDetailBtn" type="button" disabled>詳細を表示</button>
+        <button class="search-history-open-btn" id="searchHistoryOpenBtn" type="button">検索履歴</button>
       </div>
       ${errorBanner}
       ${missingScopeBannerHtml}
@@ -1339,13 +1327,12 @@ export function getRepositoriesPage(user: {
     </div>
   </div>
 
-  <!-- Search History Detail Modal -->
+  <!-- Search History Grid Modal -->
   <div class="modal-overlay" id="searchHistoryModal">
     <div class="history-modal-content">
       <div class="history-modal-header">
         <div>
-          <div class="history-modal-title" id="historyModalTitle">検索履歴詳細</div>
-          <div class="history-modal-subtitle" id="historyModalSubtitle"></div>
+          <div class="history-modal-title" id="historyModalTitle">検索履歴</div>
         </div>
         <button class="modal-close" id="historyModalClose" type="button">&times;</button>
       </div>
@@ -3365,52 +3352,37 @@ export function getRepositoriesPage(user: {
       });
     })();
 
-    // ===== 検索履歴セレクトメニュー & 詳細モーダル =====
+    // ===== 検索履歴ボタン & グリッドモーダル =====
     (function() {
       var historyRow = document.getElementById('searchHistoryRow');
-      var historySelect = document.getElementById('searchHistorySelect');
-      var historyDetailBtn = document.getElementById('searchHistoryDetailBtn');
+      var historyOpenBtn = document.getElementById('searchHistoryOpenBtn');
       var historyModal = document.getElementById('searchHistoryModal');
       var historyModalClose = document.getElementById('historyModalClose');
       var historyModalBody = document.getElementById('historyModalBody');
       var historyModalTitle = document.getElementById('historyModalTitle');
-      var historyModalSubtitle = document.getElementById('historyModalSubtitle');
-      if (!historyRow || !historySelect || !historyDetailBtn || !historyModal || !historyModalBody) return;
+      if (!historyRow || !historyOpenBtn || !historyModal || !historyModalBody) return;
+
+      var ROWS_PER_COL = 20;
 
       function escHtml(str) {
         return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
       }
 
-      function loadSearchHistory() {
+      function checkHistoryExists() {
         fetch('/api/repositories/search/history', { credentials: 'same-origin' })
           .then(function(res) { return res.ok ? res.json() : null; })
           .then(function(data) {
             if (!data || !data.history || data.history.length === 0) {
               historyRow.style.display = 'none';
-              return;
+            } else {
+              historyRow.style.display = 'flex';
             }
-            historyRow.style.display = 'flex';
-            // 既存オプションをクリア
-            while (historySelect.options.length > 1) historySelect.remove(1);
-            data.history.forEach(function(item) {
-              var opt = document.createElement('option');
-              opt.value = String(item.id);
-              opt.textContent = item.search_query + ' — ' + item.total_hits + ' 件';
-              historySelect.appendChild(opt);
-            });
           })
           .catch(function() { /* ignore */ });
       }
 
-      // ページ読み込み時にロード
-      loadSearchHistory();
-
-      // グローバルに公開して検索後にリロード可能にする
-      window.__reloadSearchHistory = loadSearchHistory;
-
-      historySelect.addEventListener('change', function() {
-        historyDetailBtn.disabled = !historySelect.value;
-      });
+      checkHistoryExists();
+      window.__reloadSearchHistory = checkHistoryExists;
 
       function openHistoryModal() {
         historyModal.classList.add('show');
@@ -3430,55 +3402,62 @@ export function getRepositoriesPage(user: {
         if (e.key === 'Escape' && historyModal.classList.contains('show')) closeHistoryModal();
       });
 
-      historyDetailBtn.addEventListener('click', function() {
-        var selectedId = historySelect.value;
-        if (!selectedId) return;
+      function dedupeAndSort(history) {
+        var map = {};
+        history.forEach(function(item) {
+          var key = item.search_query;
+          if (!map[key] || item.total_hits > map[key].total_hits) {
+            map[key] = { search_query: key, total_hits: item.total_hits };
+          }
+        });
+        var arr = [];
+        for (var k in map) { if (map.hasOwnProperty(k)) arr.push(map[k]); }
+        arr.sort(function(a, b) { return b.total_hits - a.total_hits; });
+        return arr;
+      }
 
-        historyModalTitle.textContent = '検索履歴詳細';
-        historyModalSubtitle.textContent = '読み込み中...';
+      function renderGrid(items) {
+        if (items.length === 0) return '<div class="search-empty">検索履歴がありません。</div>';
+        var numCols = Math.ceil(items.length / ROWS_PER_COL);
+        if (numCols > 5) numCols = 5;
+        var rowsPerCol = Math.ceil(items.length / numCols);
+        var html = '<div class="history-grid-wrap">';
+        for (var c = 0; c < numCols; c++) {
+          var start = c * rowsPerCol;
+          var end = Math.min(start + rowsPerCol, items.length);
+          if (start >= items.length) break;
+          html += '<div class="history-grid-col"><table>'
+            + '<thead><tr><th>ヒット数</th><th>キーワード</th></tr></thead><tbody>';
+          for (var r = start; r < end; r++) {
+            html += '<tr>'
+              + '<td><span class="history-hit-badge">' + items[r].total_hits + '</span></td>'
+              + '<td title="' + escHtml(items[r].search_query) + '">' + escHtml(items[r].search_query) + '</td>'
+              + '</tr>';
+          }
+          html += '</tbody></table></div>';
+        }
+        html += '</div>';
+        return html;
+      }
+
+      historyOpenBtn.addEventListener('click', function() {
+        historyModalTitle.textContent = '検索履歴';
         historyModalBody.innerHTML = '<div class="search-loading">読み込み中...</div>';
         openHistoryModal();
 
-        fetch('/api/repositories/search/history/' + encodeURIComponent(selectedId), { credentials: 'same-origin' })
+        fetch('/api/repositories/search/history', { credentials: 'same-origin' })
           .then(function(res) { return res.ok ? res.json() : null; })
           .then(function(data) {
-            if (!data || !data.history) {
-              historyModalBody.innerHTML = '<div class="search-empty">データが見つかりませんでした。</div>';
-              historyModalSubtitle.textContent = '';
+            if (!data || !data.history || data.history.length === 0) {
+              historyModalBody.innerHTML = '<div class="search-empty">検索履歴がありません。</div>';
               return;
             }
-            var h = data.history;
-            var repos = [];
-            try { repos = JSON.parse(h.repo_names); } catch(_e) {}
-            historyModalSubtitle.textContent = '検索キー: 「' + h.search_query + '」';
-
-            var html = '<div class="history-summary-card">'
-              + '<div class="history-summary-row"><span class="label">検索キー</span><span class="value">' + escHtml(h.search_query) + '</span></div>'
-              + '<div class="history-summary-row"><span class="label">総ヒット数</span><span class="value"><span class="history-hit-badge">' + h.total_hits + '</span></span></div>'
-              + '<div class="history-summary-row"><span class="label">検索日時</span><span class="value">' + escHtml(h.searched_at) + '</span></div>'
-              + '<div class="history-summary-row"><span class="label">対象リポジトリ</span><span class="value">' + escHtml(repos.join(', ') || 'なし') + '</span></div>'
-              + '</div>';
-
-            if (data.repoStats && data.repoStats.length > 0) {
-              html += '<table class="history-repo-table">'
-                + '<thead><tr><th>リポジトリ</th><th>ヒット数</th><th>検索キー</th><th>ユーザー</th></tr></thead>'
-                + '<tbody>';
-              data.repoStats.forEach(function(s) {
-                html += '<tr>'
-                  + '<td>' + escHtml(s.repo_name) + '</td>'
-                  + '<td><span class="history-hit-badge">' + s.hit_count + '</span></td>'
-                  + '<td>' + escHtml(s.search_query) + '</td>'
-                  + '<td>' + escHtml(s.user_name) + '</td>'
-                  + '</tr>';
-              });
-              html += '</tbody></table>';
-            }
-
-            historyModalBody.innerHTML = html;
+            var items = dedupeAndSort(data.history);
+            historyModalTitle.textContent = '検索履歴 (' + items.length + ' 件)';
+            historyModalBody.innerHTML = renderGrid(items);
           })
           .catch(function() {
             historyModalBody.innerHTML = '<div class="search-empty">読み込みに失敗しました。</div>';
-            historyModalSubtitle.textContent = '';
           });
       });
     })();
