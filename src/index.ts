@@ -3378,6 +3378,16 @@ app.post('/webhook/resend', async (c) => {
 
   logger.info('Resend webhook received', { eventType });
 
+  const webhookData = payload?.data ?? {};
+  const resendEmailId = typeof webhookData.email_id === 'string' && webhookData.email_id.trim().length > 0
+    ? webhookData.email_id
+    : null;
+  const emailTo = Array.isArray(webhookData.to) && webhookData.to.length > 0
+    ? webhookData.to.join(', ')
+    : (typeof webhookData.to === 'string' && webhookData.to.trim().length > 0 ? webhookData.to : null);
+  const bounceType = webhookData.bounce?.type ?? null;
+  const errorDetail = webhookData.bounce?.message ?? webhookData.error?.message ?? null;
+
   const slackConfig = {
     signingSecret: c.env.SLACK_SIGNING_SECRET,
     oauthToken: c.env.SLACK_OAUTH_TOKEN,
@@ -3390,6 +3400,9 @@ app.post('/webhook/resend', async (c) => {
     ? '送信完了'
     : (eventType === 'email.failed' || eventType === 'email.bounced' ? '失敗' : null);
 
+  let slackResultText: string | null = null;
+  let slackResultAt: string | null = null;
+
   if (deliveryStatus) {
     const missingSlackVars = Object.entries(slackConfig)
       .filter(([, value]) => !value || value.trim().length === 0)
@@ -3399,19 +3412,18 @@ app.post('/webhook/resend', async (c) => {
       logger.error('Slack notification skipped due to missing configuration', {
         missing: missingSlackVars,
       });
+      slackResultText = 'skipped:missing_config';
+      slackResultAt = new Date().toISOString();
     } else if (slackConfig.oauthToken && slackConfig.channelId) {
       try {
-        const data = payload?.data ?? {};
-        const from = typeof data.from === 'string' && data.from.trim().length > 0 ? data.from : 'unknown';
-        const to = Array.isArray(data.to) && data.to.length > 0
-          ? data.to.join(', ')
-          : (typeof data.to === 'string' && data.to.trim().length > 0 ? data.to : 'unknown');
-        const subject = typeof data.subject === 'string' && data.subject.trim().length > 0 ? data.subject : 'unknown';
+        const from = typeof webhookData.from === 'string' && webhookData.from.trim().length > 0 ? webhookData.from : 'unknown';
+        const toDisplay = emailTo ?? 'unknown';
+        const subject = typeof webhookData.subject === 'string' && webhookData.subject.trim().length > 0 ? webhookData.subject : 'unknown';
 
         const slackText = [
           `Resend: ${deliveryStatus}`,
           `from: ${from}`,
-          `to: ${to}`,
+          `to: ${toDisplay}`,
           `件名: ${subject}`,
         ].join('\n');
 
@@ -3421,18 +3433,24 @@ app.post('/webhook/resend', async (c) => {
           text: slackText,
         });
 
+        slackResultAt = new Date().toISOString();
         if (!slackResult.ok) {
           logger.error('Slack notification failed for Resend webhook', {
             eventType,
             error: slackResult.error,
             status: slackResult.status,
           });
+          slackResultText = `error:${slackResult.status ?? 'unknown'}`;
+        } else {
+          slackResultText = 'ok';
         }
       } catch (error) {
         logger.error('Slack notification errored for Resend webhook', {
           eventType,
           error: error instanceof Error ? error.message : 'Unknown error',
         });
+        slackResultText = `exception:${error instanceof Error ? error.message : 'unknown'}`;
+        slackResultAt = new Date().toISOString();
       }
     }
   }
@@ -3440,24 +3458,66 @@ app.post('/webhook/resend', async (c) => {
   const notifyUrl = new URL('https://mynw.nekomaneki.work/lib/resend-webhook.shtml');
   notifyUrl.searchParams.set('event', eventType);
 
+  let proxyResultText: string | null = null;
+  let proxyResultAt: string | null = null;
+  let proxyFailed = false;
+
   try {
     const proxyResponse = await fetch(notifyUrl.toString(), {
       method: 'GET',
     });
 
+    proxyResultAt = new Date().toISOString();
     if (!proxyResponse.ok) {
       logger.error('Proxy notification failed for Resend webhook', {
         eventType,
         status: proxyResponse.status,
         statusText: proxyResponse.statusText,
       });
-      return c.json({ error: 'Failed to notify proxy target' }, 502);
+      proxyResultText = `error:${proxyResponse.status}`;
+      proxyFailed = true;
+    } else {
+      proxyResultText = 'ok';
     }
   } catch (error) {
     logger.error('Failed to reach proxy target for Resend webhook', {
       error: error instanceof Error ? error.message : 'Unknown error',
       eventType,
     });
+    proxyResultText = `exception:${error instanceof Error ? error.message : 'unknown'}`;
+    proxyResultAt = new Date().toISOString();
+    proxyFailed = true;
+  }
+
+  const db = c.env.DB;
+  const svixId = resendEventId ?? `noid_${Date.now()}`;
+  if (db) {
+    try {
+      await db.prepare(
+        `INSERT INTO resend_webhook_log (source_id, svix_id, resend_email_id, event_type, email_to, bounce_type, error_detail, slack_result, slack_result_at, proxy_result, proxy_result_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      ).bind(
+        null,
+        svixId,
+        resendEmailId,
+        eventType,
+        emailTo,
+        bounceType,
+        errorDetail,
+        slackResultText,
+        slackResultAt,
+        proxyResultText,
+        proxyResultAt
+      ).run();
+    } catch (dbError) {
+      logger.error('Failed to insert resend_webhook_log', {
+        error: dbError instanceof Error ? dbError.message : 'Unknown error',
+        svixId,
+        eventType,
+      });
+    }
+  }
+
+  if (proxyFailed) {
     return c.json({ error: 'Failed to notify proxy target' }, 502);
   }
 
