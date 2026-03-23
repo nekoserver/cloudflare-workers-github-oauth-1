@@ -4,6 +4,7 @@ CREATE TABLE IF NOT EXISTS resend_webhook_log (
   svix_id TEXT NOT NULL,
   resend_email_id TEXT,
   event_type TEXT NOT NULL,
+  email_from TEXT,
   email_to TEXT,
   bounce_type TEXT,
   error_detail TEXT,

@@ -343,6 +343,7 @@ CREATE INDEX IF NOT EXISTS idx_email_send_log_email_type ON email_send_log(email
   svix_id TEXT NOT NULL,
   resend_email_id TEXT,
   event_type TEXT NOT NULL,
+  email_from TEXT,
   email_to TEXT,
   bounce_type TEXT,
   error_detail TEXT,
@@ -418,7 +419,8 @@ CREATE INDEX IF NOT EXISTS idx_email_mfa_challenges_expires_at ON email_mfa_chal
 CREATE INDEX IF NOT EXISTS idx_email_audit_anomalies_anomaly_type ON email_audit_anomalies(anomaly_type);
 CREATE INDEX IF NOT EXISTS idx_email_audit_anomalies_severity ON email_audit_anomalies(severity);
 CREATE INDEX IF NOT EXISTS idx_email_audit_anomalies_period ON email_audit_anomalies(period_start, period_end);`,
-  '0023': `ALTER TABLE resend_webhook_sources ADD COLUMN webhook_secret TEXT;`,
+  '0023': `ALTER TABLE resend_webhook_sources ADD COLUMN webhook_secret TEXT;
+ALTER TABLE resend_webhook_log ADD COLUMN email_from TEXT;`,
 };
 
 function jsonUtf8(payload: unknown, status = 200): Response {
@@ -3403,6 +3405,9 @@ app.post('/webhook/resend/:sourceId', async (c) => {
   const emailTo = Array.isArray(webhookData.to) && webhookData.to.length > 0
     ? webhookData.to.join(', ')
     : (typeof webhookData.to === 'string' && webhookData.to.trim().length > 0 ? webhookData.to : null);
+  const emailFrom = typeof webhookData.from === 'string' && webhookData.from.trim().length > 0
+    ? webhookData.from
+    : null;
   const bounceType = webhookData.bounce?.type ?? null;
   const errorDetail = webhookData.bounce?.message ?? webhookData.error?.message ?? null;
 
@@ -3510,12 +3515,13 @@ app.post('/webhook/resend/:sourceId', async (c) => {
   const svixId = resendEventId ?? `noid_${Date.now()}`;
   try {
     await db.prepare(
-      `INSERT OR IGNORE INTO resend_webhook_log (source_id, svix_id, resend_email_id, event_type, email_to, bounce_type, error_detail, slack_result, slack_result_at, proxy_result, proxy_result_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      `INSERT OR IGNORE INTO resend_webhook_log (source_id, svix_id, resend_email_id, event_type, email_from, email_to, bounce_type, error_detail, slack_result, slack_result_at, proxy_result, proxy_result_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).bind(
       sourceId,
       svixId,
       resendEmailId,
       eventType,
+      emailFrom,
       emailTo,
       bounceType,
       errorDetail,
