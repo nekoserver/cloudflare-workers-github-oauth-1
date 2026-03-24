@@ -426,17 +426,35 @@ describe('buildSummaryModal', () => {
     expect(modal.title.text).toBe('要約を表示');
   });
 
-  it('blocks にリポジトリ・PR番号が含まれる', () => {
+  it('blocks にラベル付きでリポジトリ名が含まれる', () => {
     const modal = buildSummaryModal(baseRow);
     const allText = JSON.stringify(modal.blocks);
+    expect(allText).toContain('リポジトリ :');
     expect(allText).toContain('owner/repo');
+  });
+
+  it('blocks にラベル付きでPR番号が含まれる', () => {
+    const modal = buildSummaryModal(baseRow);
+    const allText = JSON.stringify(modal.blocks);
+    expect(allText).toContain('PR番号 :');
     expect(allText).toContain('#42');
   });
 
   it('PR URLがリンクとして含まれる', () => {
     const modal = buildSummaryModal(baseRow);
     const allText = JSON.stringify(modal.blocks);
-    expect(allText).toContain('<https://github.com/owner/repo/pull/42|PR #42>');
+    expect(allText).toContain('<https://github.com/owner/repo/pull/42|#42>');
+  });
+
+  it('blocks にラベル付きでモデル・diff長・要約回が含まれる', () => {
+    const modal = buildSummaryModal(baseRow);
+    const allText = JSON.stringify(modal.blocks);
+    expect(allText).toContain('モデル@cf :');
+    expect(allText).toContain('diff :');
+    expect(allText).toContain('要約回 :');
+    expect(allText).toContain('llama-3.1-8b');
+    expect(allText).toContain('1234');
+    expect(allText).toContain('#3');
   });
 
   it('blocks に要約テキストが含まれる', () => {
@@ -452,17 +470,9 @@ describe('buildSummaryModal', () => {
     expect(allText).toContain('要約なし');
   });
 
-  it('モデル・diff長が含まれる', () => {
+  it('ヘッダーセクションにevent_dateが含まれる', () => {
     const modal = buildSummaryModal(baseRow);
     const allText = JSON.stringify(modal.blocks);
-    expect(allText).toContain('llama-3.1-8b');
-    expect(allText).toContain('1234');
-  });
-
-  it('ヘッダーセクションにdaily_seqとevent_dateが含まれる', () => {
-    const modal = buildSummaryModal(baseRow);
-    const allText = JSON.stringify(modal.blocks);
-    expect(allText).toContain('#3');
     expect(allText).toContain('2026-03-24');
   });
 
@@ -470,6 +480,21 @@ describe('buildSummaryModal', () => {
     const modal = buildSummaryModal(baseRow);
     const divider = modal.blocks.find((b: any) => b.type === 'divider');
     expect(divider).toBeTruthy();
+  });
+
+  it('「HTMLで表示」ボタンがactionsブロックに含まれる', () => {
+    const modal = buildSummaryModal(baseRow);
+    const actions = modal.blocks.find((b: any) => b.type === 'actions') as any;
+    expect(actions).toBeTruthy();
+    const htmlButton = actions.elements.find((e: any) => e.action_id === 'open_ai_summary_html');
+    expect(htmlButton).toBeTruthy();
+    expect(htmlButton.text.text).toBe('HTMLで表示');
+    expect(htmlButton.url).toContain('/ai-summary/abc-123');
+  });
+
+  it('closeボタンのテキストが「閉じる」である', () => {
+    const modal = buildSummaryModal(baseRow);
+    expect(modal.close).toEqual({ type: 'plain_text', text: '閉じる' });
   });
 
   // ---- summary null + diff_length 0 のハンドリング ----

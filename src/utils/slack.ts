@@ -61,6 +61,7 @@ export async function postSlackMessage({ token, channel, text, blocks }: SlackPo
 type SlackModalView = {
   type: 'modal';
   title: { type: 'plain_text'; text: string };
+  close?: { type: 'plain_text'; text: string };
   blocks: Record<string, unknown>[];
 };
 
