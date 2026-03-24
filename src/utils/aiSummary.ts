@@ -288,12 +288,21 @@ export function buildSummaryModal(row: SummaryModalRow): SlackModalView {
 
   blocks.push({ type: 'divider' });
 
-  const summaryText = row.summary ?? '(要約なし)';
+  const isNullSummary = row.summary === null || row.summary === undefined;
+  const isDiffEmpty = !row.diff_length || row.diff_length === 0;
+  let summaryDisplay: string;
+  if (isNullSummary && isDiffEmpty) {
+    summaryDisplay = '(要約なし)\n\n_差分を取得できなかったため、AI要約は生成されませんでした。_';
+  } else if (isNullSummary) {
+    summaryDisplay = '(要約なし)';
+  } else {
+    summaryDisplay = row.summary!;
+  }
   blocks.push({
     type: 'section',
     text: {
       type: 'mrkdwn',
-      text: `*AI要約:*\n${summaryText}`,
+      text: `*AI要約:*\n${summaryDisplay}`,
     },
   });
 
@@ -306,23 +315,23 @@ export function buildSummaryModal(row: SummaryModalRow): SlackModalView {
       text: [
         '*テーブル関連一覧:*',
         '```',
-        'ai_summary_log',
-        '  ├ request_id (UNIQUE)',
-        '  ├ daily_seq, event_date',
-        '  ├ repo_full_name, pr_number, pr_action, pr_url',
-        '  ├ model, summary, diff_length',
-        '  ├ slack_notified',
-        '  ├ resolved, resolved_at, resolution_note',
-        '  ├ view_count, parent_id, tags',
-        '  └ created_at',
-        '       │',
-        '       │ request_id',
-        '       ▼',
-        'ai_summary_reviews',
-        '  ├ summary_request_id → ai_summary_log.request_id',
-        '  ├ rating, reviewer_type, reviewer_name',
-        '  ├ review_model, comment',
-        '  └ created_at',
+        'Table              | Key Columns',
+        '-------------------+--------------------------------',
+        'ai_summary_log     | request_id (UNIQUE, PK)',
+        '  Columns:         | daily_seq, event_date,',
+        '                   | repo_full_name, pr_number,',
+        '                   | pr_action, pr_url, model,',
+        '                   | summary, diff_length,',
+        '                   | slack_notified, resolved,',
+        '                   | resolved_at, resolution_note,',
+        '                   | view_count, parent_id, tags,',
+        '                   | created_at',
+        '',
+        'ai_summary_reviews | summary_request_id (FK)',
+        '  FK:              | -> ai_summary_log.request_id',
+        '  Columns:         | rating, reviewer_type,',
+        '                   | reviewer_name, review_model,',
+        '                   | comment, created_at',
         '```',
       ].join('\n'),
     },
