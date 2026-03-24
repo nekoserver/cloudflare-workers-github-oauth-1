@@ -2739,11 +2739,19 @@ app.post('/webhook/github', async (c) => {
               ],
             });
             if (aiRes && typeof aiRes === 'object' && 'response' in aiRes) {
-              summary = (aiRes as { response: string }).response ?? '';
+              const raw = (aiRes as { response: string }).response;
+              summary = raw ?? '';
+              if (!summary) {
+                summary = `[AI_EMPTY_RESPONSE] keys=${Object.keys(aiRes).join(',')} response=${JSON.stringify(raw)}`;
+              }
+            } else {
+              summary = `[AI_UNEXPECTED_FORMAT] type=${typeof aiRes} value=${JSON.stringify(aiRes).slice(0, 500)}`;
             }
           } catch (error) {
+            const msg = error instanceof Error ? error.message : 'Unknown error';
+            summary = `[AI_ERROR] ${msg}`;
             logger.warn('Workers AI summarization failed', {
-              error: error instanceof Error ? error.message : 'Unknown error',
+              error: msg,
               prUrl,
             });
           }
