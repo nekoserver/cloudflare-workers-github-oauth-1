@@ -297,6 +297,37 @@ export function buildSummaryModal(row: SummaryModalRow): SlackModalView {
     },
   });
 
+  blocks.push({ type: 'divider' });
+
+  blocks.push({
+    type: 'section',
+    text: {
+      type: 'mrkdwn',
+      text: [
+        '*テーブル関連一覧:*',
+        '```',
+        'ai_summary_log',
+        '  ├ request_id (UNIQUE)',
+        '  ├ daily_seq, event_date',
+        '  ├ repo_full_name, pr_number, pr_action, pr_url',
+        '  ├ model, summary, diff_length',
+        '  ├ slack_notified',
+        '  ├ resolved, resolved_at, resolution_note',
+        '  ├ view_count, parent_id, tags',
+        '  └ created_at',
+        '       │',
+        '       │ request_id',
+        '       ▼',
+        'ai_summary_reviews',
+        '  ├ summary_request_id → ai_summary_log.request_id',
+        '  ├ rating, reviewer_type, reviewer_name',
+        '  ├ review_model, comment',
+        '  └ created_at',
+        '```',
+      ].join('\n'),
+    },
+  });
+
   return {
     type: 'modal',
     title: { type: 'plain_text', text: '要約を表示' },
