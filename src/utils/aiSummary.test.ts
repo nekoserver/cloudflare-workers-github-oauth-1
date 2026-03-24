@@ -3,7 +3,9 @@ import {
   fetchPrDiff,
   generateAiSummary,
   buildSlackMessage,
+  classifySummaryResult,
   type AiBinding,
+  type SummaryDiagnosis,
 } from './aiSummary';
 
 // ---- fetchPrDiff ----
@@ -239,5 +241,51 @@ describe('buildSlackMessage', () => {
     expect(msg).toContain('作成者: testuser');
     expect(msg).toContain('https://github.com/owner/repo/pull/42');
     expect(msg).toContain('_AI問い合わせ #3 (本日) | ID: abc-123_');
+  });
+});
+
+// ---- classifySummaryResult ----
+
+describe('classifySummaryResult', () => {
+  it('正常な要約はrating=good、hasSummary=trueを返す', () => {
+    const result = classifySummaryResult('概要: ログイン機能を追加\n主な変更点: ...');
+    expect(result.rating).toBe('good');
+    expect(result.hasSummary).toBe(true);
+    expect(result.comment).toContain('正常');
+  });
+
+  it('空文字はrating=bad、hasSummary=falseを返す', () => {
+    const result = classifySummaryResult('');
+    expect(result.rating).toBe('bad');
+    expect(result.hasSummary).toBe(false);
+    expect(result.comment).toContain('空');
+  });
+
+  it('[AI_ERROR]はrating=bad、hasSummary=falseを返す', () => {
+    const result = classifySummaryResult('[AI_ERROR] Model not found');
+    expect(result.rating).toBe('bad');
+    expect(result.hasSummary).toBe(false);
+    expect(result.comment).toContain('AI_ERROR');
+  });
+
+  it('[AI_EMPTY_RESPONSE]はrating=bad、hasSummary=falseを返す', () => {
+    const result = classifySummaryResult('[AI_EMPTY_RESPONSE] keys=response response=null');
+    expect(result.rating).toBe('bad');
+    expect(result.hasSummary).toBe(false);
+    expect(result.comment).toContain('AI_EMPTY_RESPONSE');
+  });
+
+  it('[AI_UNEXPECTED_FORMAT]はrating=bad、hasSummary=falseを返す', () => {
+    const result = classifySummaryResult('[AI_UNEXPECTED_FORMAT] type=string value="hello"');
+    expect(result.rating).toBe('bad');
+    expect(result.hasSummary).toBe(false);
+    expect(result.comment).toContain('AI_UNEXPECTED_FORMAT');
+  });
+
+  it('AIバインディングなし（null summary）はrating=bad、hasSummary=falseを返す', () => {
+    const result = classifySummaryResult(null);
+    expect(result.rating).toBe('bad');
+    expect(result.hasSummary).toBe(false);
+    expect(result.comment).toContain('生成されなかった');
   });
 });

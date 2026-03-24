@@ -23,7 +23,7 @@ import { getCookieValue, getCookieValues } from './utils/cookie';
 import { verifyResendWebhookSignature } from './utils/resendWebhook';
 import { verifyGitHubWebhookSignature } from './utils/githubWebhook';
 import { postSlackMessage } from './utils/slack';
-import { fetchPrDiff, generateAiSummary, buildSlackMessage } from './utils/aiSummary';
+import { fetchPrDiff, generateAiSummary, buildSlackMessage, classifySummaryResult } from './utils/aiSummary';
 import { executeCreateRepo } from './utils/repoValidation';
 import { validateReturnTo } from './utils/returnTo';
 import * as logger from './utils/logger';
@@ -2769,6 +2769,28 @@ app.post('/webhook/github', async (c) => {
               slackNotified ? 1 : 0,
               now.toISOString(),
             ).run();
+            // 要約結果を自動診断してフィードバックを記録
+            const diagnosis = classifySummaryResult(summary !== '' ? summary : null);
+            try {
+              await db.prepare(`
+                INSERT INTO ai_summary_reviews
+                  (summary_request_id, rating, reviewer_type, reviewer_name, review_model, comment, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+              `).bind(
+                requestId,
+                diagnosis.rating,
+                'system',
+                'auto-diagnosis',
+                null,
+                diagnosis.comment,
+                now.toISOString(),
+              ).run();
+            } catch (feedbackError) {
+              logger.warn('Failed to insert auto-diagnosis feedback', {
+                error: feedbackError instanceof Error ? feedbackError.message : 'Unknown error',
+                requestId,
+              });
+            }
           } catch (error) {
             logger.error('Failed to insert ai_summary_log', {
               error: error instanceof Error ? error.message : 'Unknown error',

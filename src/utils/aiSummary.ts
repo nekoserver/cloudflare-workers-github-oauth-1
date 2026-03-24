@@ -87,6 +87,31 @@ export async function generateAiSummary(
   return `[AI_UNEXPECTED_FORMAT] type=${typeof aiRes} value=${JSON.stringify(aiRes).slice(0, 500)}`;
 }
 
+export type SummaryDiagnosis = {
+  rating: 'good' | 'bad';
+  hasSummary: boolean;
+  comment: string;
+};
+
+export function classifySummaryResult(summary: string | null): SummaryDiagnosis {
+  if (summary === null || summary === undefined) {
+    return { rating: 'bad', hasSummary: false, comment: '要約が生成されなかった（AIバインディング未設定の可能性）' };
+  }
+  if (summary === '') {
+    return { rating: 'bad', hasSummary: false, comment: '要約が空で返された' };
+  }
+  if (summary.startsWith('[AI_ERROR]')) {
+    return { rating: 'bad', hasSummary: false, comment: `AI_ERROR: ${summary}` };
+  }
+  if (summary.startsWith('[AI_EMPTY_RESPONSE]')) {
+    return { rating: 'bad', hasSummary: false, comment: `AI_EMPTY_RESPONSE: ${summary}` };
+  }
+  if (summary.startsWith('[AI_UNEXPECTED_FORMAT]')) {
+    return { rating: 'bad', hasSummary: false, comment: `AI_UNEXPECTED_FORMAT: ${summary}` };
+  }
+  return { rating: 'good', hasSummary: true, comment: '正常に要約が生成された' };
+}
+
 export type BuildSlackMessageParams = {
   prAction: string;
   prNumber: number;
