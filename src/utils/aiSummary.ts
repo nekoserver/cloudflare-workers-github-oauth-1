@@ -185,7 +185,12 @@ export type BuildSlackMessageParams = {
   requestId: string;
 };
 
-export function buildSlackMessage(params: BuildSlackMessageParams): string {
+export type SlackMessagePayload = {
+  text: string;
+  blocks: Record<string, unknown>[];
+};
+
+export function buildSlackMessage(params: BuildSlackMessageParams): SlackMessagePayload {
   const {
     prAction,
     prNumber,
@@ -198,16 +203,126 @@ export function buildSlackMessage(params: BuildSlackMessageParams): string {
     requestId,
   } = params;
 
-  const lines = [
-    `*PR ${prAction === 'opened' ? '作成' : '更新'}:* #${prNumber} ${title}`,
+  const actionLabel = prAction === 'opened' ? '作成' : '更新';
+  const hasSummary = summary !== '' && !summary.startsWith('[AI_');
+
+  const textLines = [
+    `*PR ${actionLabel}:* #${prNumber} ${title}`,
     `リポジトリ: ${repoFullName}`,
     `作成者: ${author}`,
     prUrl,
   ];
-  if (summary && !summary.startsWith('[AI_')) {
-    lines.push('', '*AI要約:*', summary);
+  if (hasSummary) {
+    textLines.push('', '*AI要約:*', summary);
   }
-  lines.push('', `_AI問い合わせ #${dailySeq} (本日) | ID: ${requestId}_`);
+  textLines.push('', `_AI問い合わせ #${dailySeq} (本日) | ID: ${requestId}_`);
+  const text = textLines.join('\n');
 
-  return lines.join('\n');
+  const blocks: Record<string, unknown>[] = [];
+
+  blocks.push({
+    type: 'section',
+    text: {
+      type: 'mrkdwn',
+      text: `*PR ${actionLabel}:* #${prNumber} ${title}\nリポジトリ: ${repoFullName}\n作成者: ${author}\n${prUrl}`,
+    },
+  });
+
+  if (hasSummary) {
+    const quoted = summary.split('\n').map(line => `> ${line}`).join('\n');
+    blocks.push({
+      type: 'section',
+      text: {
+        type: 'mrkdwn',
+        text: `*AI要約:*\n${quoted}`,
+      },
+    });
+
+    blocks.push({
+      type: 'actions',
+      elements: [
+        {
+          type: 'button',
+          text: { type: 'plain_text', text: '詳細を見る' },
+          action_id: 'view_ai_summary_detail',
+          value: requestId,
+        },
+      ],
+    });
+  }
+
+  blocks.push({
+    type: 'context',
+    elements: [
+      {
+        type: 'mrkdwn',
+        text: `AI問い合わせ #${dailySeq} (本日) | ID: ${requestId}`,
+      },
+    ],
+  });
+
+  return { text, blocks };
+}
+
+export type SummaryModalRow = {
+  request_id: string;
+  daily_seq: number;
+  event_date: string;
+  repo_full_name: string | null;
+  pr_number: number | null;
+  pr_action: string | null;
+  pr_url: string | null;
+  model: string | null;
+  summary: string | null;
+  diff_length: number | null;
+  created_at: string;
+};
+
+export type SlackModalView = {
+  type: 'modal';
+  title: { type: 'plain_text'; text: string };
+  blocks: Record<string, unknown>[];
+};
+
+export function buildSummaryModal(row: SummaryModalRow): SlackModalView {
+  const blocks: Record<string, unknown>[] = [];
+
+  const prLabel = row.pr_number
+    ? (row.pr_url ? `<${row.pr_url}|PR #${row.pr_number}>` : `PR #${row.pr_number}`)
+    : '(不明)';
+
+  blocks.push({
+    type: 'section',
+    fields: [
+      { type: 'mrkdwn', text: `*リポジトリ:*\n${row.repo_full_name ?? '(不明)'}` },
+      { type: 'mrkdwn', text: `*PR:*\n${prLabel}` },
+      { type: 'mrkdwn', text: `*モデル:*\n${row.model ?? '(不明)'}` },
+      { type: 'mrkdwn', text: `*Diff長:*\n${row.diff_length ?? 0} 文字` },
+    ],
+  });
+
+  blocks.push({
+    type: 'section',
+    fields: [
+      { type: 'mrkdwn', text: `*日時:*\n${row.created_at}` },
+      { type: 'mrkdwn', text: `*日次番号:*\n#${row.daily_seq} (${row.event_date})` },
+    ],
+  });
+
+  blocks.push({ type: 'divider' });
+
+  const summaryText = row.summary ?? '(要約なし)';
+  blocks.push({
+    type: 'section',
+    text: {
+      type: 'mrkdwn',
+      text: `*AI要約:*\n${summaryText}`,
+    },
+  });
+
+  return {
+    type: 'modal',
+    title: { type: 'plain_text', text: 'AI要約詳細' },
+    blocks,
+  };
 }
