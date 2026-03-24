@@ -65,17 +65,46 @@ describe('handleSlackInteraction', () => {
     mockedRespondToInteraction.mockResolvedValue({ ok: true, status: 200 });
   });
 
-  it('正常系: 署名検証→ペイロード解析→DB取得→モーダル表示まで完走する', async () => {
+  it('正常系: openSlackModalに正しいtrigger_idと有効なモーダルviewが渡される', async () => {
     const deps = makeDeps();
     const result = await handleSlackInteraction(deps);
 
     expect(result.status).toBe(200);
-    expect(result.steps).toContain('sig_ok');
-    expect(result.steps).toContain('parsed');
-    expect(result.steps).toContain('action_matched');
-    expect(result.steps).toContain('db_hit');
-    expect(result.steps).toContain('modal_ok');
+    expect(result.steps).toEqual([
+      'received', 'body_read', 'sig_ok', 'parsed', 'action_matched', 'db_hit', 'modal_ok',
+    ]);
+
     expect(mockedOpenModal).toHaveBeenCalledTimes(1);
+    const call = mockedOpenModal.mock.calls[0][0];
+    expect(call.token).toBe(SLACK_TOKEN);
+    expect(call.triggerId).toBe('trigger-123');
+
+    const view = call.view;
+    expect(view.type).toBe('modal');
+    expect(view.title.type).toBe('plain_text');
+    expect(view.title.text.length).toBeLessThanOrEqual(24);
+    expect(view.blocks.length).toBeGreaterThan(0);
+
+    const allBlockText = JSON.stringify(view.blocks);
+    expect(allBlockText).toContain('owner/repo');
+    expect(allBlockText).toContain('PR #42');
+    expect(allBlockText).toContain('概要: テスト');
+  });
+
+  it('正常系: dbQueryにペイロードのrequestIdが渡される', async () => {
+    const deps = makeDeps();
+    await handleSlackInteraction(deps);
+
+    expect(deps.dbQuery).toHaveBeenCalledWith('req-001');
+  });
+
+  it('正常系: verifySignatureに正しい引数が渡される', async () => {
+    const deps = makeDeps();
+    await handleSlackInteraction(deps);
+
+    expect(deps.verifySignature).toHaveBeenCalledWith(
+      deps.rawBody, '1711300000', 'v0=abc', SIGNING_SECRET,
+    );
   });
 
   it('SLACK_SIGNING_SECRET未設定の場合、errorステップで終了する', async () => {
@@ -151,17 +180,20 @@ describe('handleSlackInteraction', () => {
     expect(mockedOpenModal).not.toHaveBeenCalled();
   });
 
-  it('DBにデータが無い場合、db_missステップでresponse_urlにメッセージを返す', async () => {
+  it('DBにデータが無い場合、response_urlに「見つかりません」メッセージを送る', async () => {
     const deps = makeDeps({ dbQuery: vi.fn().mockResolvedValue(null) });
     const result = await handleSlackInteraction(deps);
 
     expect(result.status).toBe(200);
     expect(result.steps).toContain('db_miss');
-    expect(mockedRespondToInteraction).toHaveBeenCalledTimes(1);
     expect(mockedOpenModal).not.toHaveBeenCalled();
+    expect(mockedRespondToInteraction).toHaveBeenCalledTimes(1);
+    const call = mockedRespondToInteraction.mock.calls[0][0];
+    expect(call.responseUrl).toBe('https://hooks.slack.com/actions/T00/B00/xxx');
+    expect(call.text).toContain('req-001');
   });
 
-  it('モーダル表示失敗時、response_urlにフォールバックメッセージを送る', async () => {
+  it('モーダル表示失敗時、response_urlにフォールバックとしてPR情報・要約を含むメッセージを送る', async () => {
     mockedOpenModal.mockResolvedValue({ ok: false, status: 500, error: 'internal_error' });
     const deps = makeDeps();
     const result = await handleSlackInteraction(deps);
@@ -170,6 +202,12 @@ describe('handleSlackInteraction', () => {
     expect(result.steps).toContain('modal_fail');
     expect(result.steps).toContain('fallback');
     expect(mockedRespondToInteraction).toHaveBeenCalledTimes(1);
+    const call = mockedRespondToInteraction.mock.calls[0][0];
+    expect(call.responseUrl).toBe('https://hooks.slack.com/actions/T00/B00/xxx');
+    expect(call.text).toContain('PR #42');
+    expect(call.text).toContain('概要: テスト');
+    expect(call.blocks).toBeDefined();
+    expect(call.blocks!.length).toBeGreaterThan(0);
   });
 
   it('モーダル表示失敗かつresponse_url無しの場合、フォールバックを送らない', async () => {
