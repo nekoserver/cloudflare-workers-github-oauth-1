@@ -1,5 +1,22 @@
 export const DEFAULT_AI_MODEL = '@cf/meta/llama-3.1-8b-instruct-fp8';
 
+export const DESIGN_SPEC_CHECKLIST = [
+  'GitHub OAuth 2.0 + JWT認証',
+  'D1セッション管理 (user_sessions)',
+  'Resend webhook受信・オリジン通知・Slack通知',
+  'GitHub App Webhook受信・D1権限保存',
+  'セキュリティSlack通知 (JWT検証失敗・OAuth失敗・App変更)',
+  'リポジトリ一覧・権限モーダル・Zanzibar表示',
+  'コミットヒートマップカレンダー・D1キャッシュ',
+  'キャッシュ状況ページ (/status)',
+  'チーム・ワークスペースによるマルチテナント分離',
+  'ナイトモード (ダークテーマ)',
+  '別アカウントでログイン機能',
+  'コミット詳細モーダル・コミット一覧ページネーション',
+  'Markdownプレビューページ (/md-preview)',
+  'AI要約パイプライン (Workers AI)',
+].join('\n');
+
 export function resolveAiModel(envValue: string | undefined): string {
   return envValue?.trim() || DEFAULT_AI_MODEL;
 }
@@ -51,12 +68,13 @@ export type GenerateSummaryParams = {
   title: string;
   description: string;
   trimmedDiff: string;
+  designSpec?: string;
 };
 
 export async function generateAiSummary(
   params: GenerateSummaryParams
 ): Promise<string> {
-  const { ai, model, title, description, trimmedDiff } = params;
+  const { ai, model, title, description, trimmedDiff, designSpec } = params;
 
   const userParts: string[] = [];
   userParts.push(`PRタイトル:\n${title}`);
@@ -64,9 +82,16 @@ export async function generateAiSummary(
   if (trimmedDiff) {
     userParts.push(`差分:\n${trimmedDiff}`);
   }
-  userParts.push(
-    '以下の形式で日本語で出力してください:\n- 概要\n- 主な変更点\n- 影響範囲'
-  );
+  if (designSpec) {
+    userParts.push(`初期設計チェックリスト:\n${designSpec}`);
+    userParts.push(
+      '以下の形式で日本語で出力してください:\n- 概要\n- 主な変更点\n- 影響範囲\n- 初期設計との差異（達成/進行中/変更/中止の状態と達成数を「N/M件達成」形式で記載）'
+    );
+  } else {
+    userParts.push(
+      '以下の形式で日本語で出力してください:\n- 概要\n- 主な変更点\n- 影響範囲'
+    );
+  }
 
   const aiRes = await ai.run(model, {
     messages: [
@@ -125,6 +150,7 @@ export type RunSummaryPipelineParams = {
   title: string;
   description: string;
   trimmedDiff: string;
+  designSpec?: string;
 };
 
 export type SummaryPipelineResult = {
@@ -135,19 +161,35 @@ export type SummaryPipelineResult = {
 export async function runSummaryPipeline(
   params: RunSummaryPipelineParams
 ): Promise<SummaryPipelineResult> {
-  const { ai, model, title, description, trimmedDiff } = params;
+  const { ai, model, title, description, trimmedDiff, designSpec } = params;
 
   if (!ai) {
     return { summary: '[AI_NO_BINDING] Workers AI binding is not available', success: false };
   }
 
   try {
-    const summary = await generateAiSummary({ ai, model, title, description, trimmedDiff });
+    const summary = await generateAiSummary({ ai, model, title, description, trimmedDiff, designSpec });
     return { summary, success: !summary.startsWith('[AI_') };
   } catch (error) {
     const msg = error instanceof Error ? error.message : 'Unknown error';
     return { summary: `[AI_ERROR] ${msg}`, success: false };
   }
+}
+
+export type ExtractedSummary = {
+  summary: string;
+  designDiff: string;
+};
+
+export function extractDesignDiff(rawSummary: string): ExtractedSummary {
+  const marker = /[-#*]*\s*初期設計との差異/;
+  const match = rawSummary.match(marker);
+  if (!match || match.index === undefined) {
+    return { summary: rawSummary, designDiff: '' };
+  }
+  const summary = rawSummary.slice(0, match.index).trimEnd();
+  const designDiff = rawSummary.slice(match.index + match[0].length).trim();
+  return { summary, designDiff };
 }
 
 export type BuildSlackMessageParams = {
@@ -160,6 +202,7 @@ export type BuildSlackMessageParams = {
   summary: string;
   dailySeq: number;
   requestId: string;
+  designDiff?: string;
 };
 
 export type SlackMessagePayload = {
@@ -178,10 +221,12 @@ export function buildSlackMessage(params: BuildSlackMessageParams): SlackMessage
     summary,
     dailySeq,
     requestId,
+    designDiff,
   } = params;
 
   const actionLabel = prAction === 'opened' ? '作成' : '更新';
   const hasSummary = summary !== '' && !summary.startsWith('[AI_');
+  const hasDesignDiff = !!designDiff;
 
   const textLines = [
     `*PR ${actionLabel}:* #${prNumber} ${title}`,
@@ -191,6 +236,9 @@ export function buildSlackMessage(params: BuildSlackMessageParams): SlackMessage
   ];
   if (hasSummary) {
     textLines.push('', '*AI要約:*', summary);
+  }
+  if (hasDesignDiff) {
+    textLines.push('', '*初期設計との差異:*', designDiff);
   }
   textLines.push('', `_AI問い合わせ #${dailySeq} (本日) | ID: ${requestId}_`);
   const text = textLines.join('\n');
@@ -206,12 +254,11 @@ export function buildSlackMessage(params: BuildSlackMessageParams): SlackMessage
   });
 
   if (hasSummary) {
-    const quoted = summary.split('\n').map(line => `> ${line}`).join('\n');
     blocks.push({
       type: 'section',
       text: {
         type: 'mrkdwn',
-        text: `*AI要約:*\n${quoted}`,
+        text: `*AI要約:*\n\`\`\`\n${summary}\n\`\`\``,
       },
     });
 
@@ -225,6 +272,16 @@ export function buildSlackMessage(params: BuildSlackMessageParams): SlackMessage
           value: requestId,
         },
       ],
+    });
+  }
+
+  if (hasDesignDiff) {
+    blocks.push({
+      type: 'section',
+      text: {
+        type: 'mrkdwn',
+        text: `*初期設計との差異:*\n\`\`\`\n${designDiff}\n\`\`\``,
+      },
     });
   }
 

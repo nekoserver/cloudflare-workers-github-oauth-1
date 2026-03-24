@@ -23,7 +23,7 @@ import { getCookieValue, getCookieValues } from './utils/cookie';
 import { verifyResendWebhookSignature } from './utils/resendWebhook';
 import { verifyGitHubWebhookSignature } from './utils/githubWebhook';
 import { postSlackMessage, openSlackModal } from './utils/slack';
-import { fetchPrDiff, runSummaryPipeline, buildSlackMessage, buildSummaryModal, classifySummaryResult, resolveAiModel, type SummaryModalRow } from './utils/aiSummary';
+import { fetchPrDiff, runSummaryPipeline, buildSlackMessage, buildSummaryModal, classifySummaryResult, resolveAiModel, extractDesignDiff, DESIGN_SPEC_CHECKLIST, type SummaryModalRow } from './utils/aiSummary';
 import { verifySlackSignature } from './utils/slackSignature';
 import { executeCreateRepo } from './utils/repoValidation';
 import { validateReturnTo } from './utils/returnTo';
@@ -2700,11 +2700,17 @@ app.post('/webhook/github', async (c) => {
           title,
           description,
           trimmedDiff,
+          designSpec: DESIGN_SPEC_CHECKLIST,
         });
-        const summary = pipelineResult.summary;
+        const rawSummary = pipelineResult.summary;
         if (!pipelineResult.success) {
-          logger.warn('AI summary pipeline failed', { summary, prUrl, githubTokenSet: !!githubToken });
+          logger.warn('AI summary pipeline failed', { summary: rawSummary, prUrl, githubTokenSet: !!githubToken });
         }
+
+        // AI出力から「初期設計との差異」セクションを分離
+        const extracted = extractDesignDiff(rawSummary);
+        const summary = extracted.summary;
+        const designDiff = extracted.designDiff;
 
         // Slack 通知
         const slackPayload = buildSlackMessage({
@@ -2717,6 +2723,7 @@ app.post('/webhook/github', async (c) => {
           summary,
           dailySeq,
           requestId,
+          designDiff,
         });
 
         let slackNotified = false;

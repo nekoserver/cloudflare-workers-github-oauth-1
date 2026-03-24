@@ -7,6 +7,7 @@ import {
   classifySummaryResult,
   runSummaryPipeline,
   resolveAiModel,
+  extractDesignDiff,
   DEFAULT_AI_MODEL,
   type AiBinding,
   type SummaryDiagnosis,
@@ -191,6 +192,29 @@ describe('generateAiSummary', () => {
     expect(result).toMatch(/^\[AI_UNEXPECTED_FORMAT\]/);
   });
 
+  it('designSpecが指定された場合、プロンプトに初期設計チェックリストが含まれる', async () => {
+    const ai = makeAi({ response: '要約テスト' });
+    await generateAiSummary({
+      ...baseParams,
+      ai,
+      designSpec: '1. OAuth認証\n2. Slack通知\n3. Resend webhook',
+    });
+
+    const call = (ai.run as ReturnType<typeof vi.fn>).mock.calls[0];
+    const userContent = call[1].messages[1].content as string;
+    expect(userContent).toContain('初期設計');
+    expect(userContent).toContain('OAuth認証');
+  });
+
+  it('designSpecが未指定の場合、プロンプトに初期設計チェックリストが含まれない', async () => {
+    const ai = makeAi({ response: '要約テスト' });
+    await generateAiSummary({ ...baseParams, ai });
+
+    const call = (ai.run as ReturnType<typeof vi.fn>).mock.calls[0];
+    const userContent = call[1].messages[1].content as string;
+    expect(userContent).not.toContain('初期設計');
+  });
+
   it('ai.runがthrowした場合、そのままthrowする', async () => {
     const ai: AiBinding = {
       run: vi.fn().mockRejectedValue(new Error('Model not found')),
@@ -250,20 +274,25 @@ describe('buildSlackMessage', () => {
     expect(summaryBlock).toBeTruthy();
   });
 
-  it('summaryがある場合、ブロッククォートで囲まれる', () => {
+  it('summaryがコードブロックで囲まれる', () => {
     const { blocks } = buildSlackMessage(baseParams);
     const summaryBlock = blocks.find((b: any) =>
       b.type === 'section' && b.text?.text?.includes('AI要約')
     ) as any;
-    expect(summaryBlock?.text?.text).toContain('> 概要: バグ修正');
+    expect(summaryBlock?.text?.text).toContain('```');
+    expect(summaryBlock?.text?.text).toContain('概要: バグ修正');
   });
 
-  it('複数行のsummaryは各行がブロッククォートになる', () => {
+  it('複数行のsummaryもコードブロック内に収まる', () => {
     const { blocks } = buildSlackMessage({ ...baseParams, summary: '概要: テスト\n変更点: 修正' });
     const summaryBlock = blocks.find((b: any) =>
       b.type === 'section' && b.text?.text?.includes('AI要約')
     ) as any;
-    expect(summaryBlock?.text?.text).toContain('> 概要: テスト\n> 変更点: 修正');
+    const text = summaryBlock?.text?.text;
+    expect(text).toContain('```');
+    expect(text).toContain('概要: テスト\n変更点: 修正');
+    // ブロッククォート(>)ではなくコードブロックであること
+    expect(text).not.toContain('> 概要');
   });
 
   it('summaryが空文字の場合、AI要約セクションが含まれない', () => {
@@ -314,6 +343,54 @@ describe('buildSlackMessage', () => {
     const text = contextBlock?.elements?.[0]?.text;
     expect(text).toContain('AI問い合わせ #3');
     expect(text).toContain('abc-123');
+  });
+
+  it('designDiffが指定された場合、初期設計との差異セクションが表示される', () => {
+    const { blocks } = buildSlackMessage({
+      ...baseParams,
+      designDiff: '達成: 3/5件\n- OAuth認証: 達成\n- Slack通知: 達成\n- Resend webhook: 達成\n- リポジトリ管理: 未着手\n- ダッシュボード: 未着手',
+    });
+    const designBlock = blocks.find((b: any) =>
+      b.type === 'section' && b.text?.text?.includes('初期設計との差異')
+    );
+    expect(designBlock).toBeTruthy();
+  });
+
+  it('designDiffがコードブロック内に収まる', () => {
+    const { blocks } = buildSlackMessage({
+      ...baseParams,
+      designDiff: '達成: 3/5件',
+    });
+    const designBlock = blocks.find((b: any) =>
+      b.type === 'section' && b.text?.text?.includes('初期設計との差異')
+    ) as any;
+    expect(designBlock?.text?.text).toContain('```');
+    expect(designBlock?.text?.text).toContain('達成: 3/5件');
+  });
+
+  it('designDiffが未指定の場合、初期設計との差異セクションが含まれない', () => {
+    const { blocks } = buildSlackMessage(baseParams);
+    const designBlock = blocks.find((b: any) =>
+      b.type === 'section' && b.text?.text?.includes('初期設計との差異')
+    );
+    expect(designBlock).toBeUndefined();
+  });
+
+  it('designDiffが空文字の場合、初期設計との差異セクションが含まれない', () => {
+    const { blocks } = buildSlackMessage({ ...baseParams, designDiff: '' });
+    const designBlock = blocks.find((b: any) =>
+      b.type === 'section' && b.text?.text?.includes('初期設計との差異')
+    );
+    expect(designBlock).toBeUndefined();
+  });
+
+  it('designDiffのtext（フォールバック）にも初期設計情報が含まれる', () => {
+    const { text } = buildSlackMessage({
+      ...baseParams,
+      designDiff: '達成: 3/5件',
+    });
+    expect(text).toContain('初期設計との差異');
+    expect(text).toContain('達成: 3/5件');
   });
 
   it('URLリンク（<https://...>）が blocks に含まれない', () => {
@@ -457,6 +534,37 @@ describe('buildSummaryModal', () => {
     const allText = JSON.stringify(modal.blocks);
     expect(allText).not.toContain('差分を取得できなかった');
     expect(allText).toContain('要約なし');
+  });
+});
+
+// ---- extractDesignDiff ----
+
+describe('extractDesignDiff', () => {
+  it('「初期設計との差異」セクションがある場合、summaryとdesignDiffに分離される', () => {
+    const raw = '## 概要\nバグ修正\n## 主な変更点\n認証修正\n## 初期設計との差異\n達成: 3/5件';
+    const result = extractDesignDiff(raw);
+    expect(result.summary).toContain('バグ修正');
+    expect(result.summary).not.toContain('達成: 3/5件');
+    expect(result.designDiff).toContain('達成: 3/5件');
+  });
+
+  it('「初期設計との差異」セクションがない場合、summaryはそのまま、designDiffは空', () => {
+    const raw = '## 概要\nバグ修正\n## 主な変更点\n認証修正';
+    const result = extractDesignDiff(raw);
+    expect(result.summary).toBe(raw);
+    expect(result.designDiff).toBe('');
+  });
+
+  it('- 初期設計との差異 の形式でもマッチする', () => {
+    const raw = '概要: テスト\n- 初期設計との差異\n5/10件達成';
+    const result = extractDesignDiff(raw);
+    expect(result.designDiff).toContain('5/10件達成');
+  });
+
+  it('空文字のsummaryはそのまま返す', () => {
+    const result = extractDesignDiff('');
+    expect(result.summary).toBe('');
+    expect(result.designDiff).toBe('');
   });
 });
 
