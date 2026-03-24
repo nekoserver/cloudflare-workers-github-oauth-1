@@ -14,8 +14,14 @@ describe('postSlackMessage', () => {
 
     const result = await postSlackMessage({ token: 'xoxb-test', channel: '#general', text: 'hello' });
     expect(result.ok).toBe(true);
+    expect(result.status).toBe(200);
+    expect(result.error).toBeUndefined();
 
-    const body = JSON.parse(mockFetch.mock.calls[0][1].body);
+    const [url, opts] = mockFetch.mock.calls[0];
+    expect(url).toBe('https://slack.com/api/chat.postMessage');
+    expect(opts.headers.Authorization).toBe('Bearer xoxb-test');
+    const body = JSON.parse(opts.body);
+    expect(body.channel).toBe('#general');
     expect(body.text).toBe('hello');
     expect(body.blocks).toBeUndefined();
   });
@@ -63,7 +69,7 @@ describe('openSlackModal', () => {
     vi.unstubAllGlobals();
   });
 
-  it('views.open に正しいパラメータを渡す', async () => {
+  it('正常時に ok: true, status: 200 を返し、正しいパラメータでviews.openを呼ぶ', async () => {
     const mockFetch = vi.fn().mockResolvedValue(
       new Response(JSON.stringify({ ok: true }), { status: 200 })
     );
@@ -72,9 +78,12 @@ describe('openSlackModal', () => {
     const view = { type: 'modal' as const, title: { type: 'plain_text' as const, text: 'Test' }, blocks: [] };
     const result = await openSlackModal({ token: 'xoxb-test', triggerId: 'trigger-123', view });
     expect(result.ok).toBe(true);
+    expect(result.status).toBe(200);
+    expect(result.error).toBeUndefined();
 
     const [url, opts] = mockFetch.mock.calls[0];
     expect(url).toBe('https://slack.com/api/views.open');
+    expect(opts.headers.Authorization).toBe('Bearer xoxb-test');
     const body = JSON.parse(opts.body);
     expect(body.trigger_id).toBe('trigger-123');
     expect(body.view).toEqual(view);
