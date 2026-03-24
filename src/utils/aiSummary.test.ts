@@ -314,37 +314,22 @@ describe('buildSlackMessage', () => {
     expect(summaryBlock).toBeUndefined();
   });
 
-  it('「詳細を見る (モーダル)」ボタンが actions ブロックに含まれる', () => {
+  it('summaryがある場合、actionsブロックに「詳細を見る」ボタンが含まれる', () => {
     const { blocks } = buildSlackMessage(baseParams);
     const actionsBlock = blocks.find((b: any) => b.type === 'actions') as any;
     expect(actionsBlock).toBeTruthy();
-    const modalButton = actionsBlock?.elements?.find((e: any) => e.action_id === 'view_ai_summary_detail');
-    expect(modalButton?.type).toBe('button');
-    expect(modalButton?.value).toBe('abc-123');
+    const btn = actionsBlock?.elements?.find((e: any) => e.action_id === 'view_ai_summary_detail');
+    expect(btn?.type).toBe('button');
+    expect(btn?.value).toBe('abc-123');
   });
 
-  it('workerBaseUrlが指定された場合、リンクボタンが追加される', () => {
-    const { blocks } = buildSlackMessage({ ...baseParams, workerBaseUrl: 'https://example.workers.dev' });
-    const actionsBlock = blocks.find((b: any) => b.type === 'actions') as any;
-    const linkButton = actionsBlock?.elements?.find((e: any) => e.action_id === 'view_ai_summary_link');
-    expect(linkButton).toBeTruthy();
-    expect(linkButton?.url).toBe('https://example.workers.dev/ai-summary/abc-123');
-  });
-
-  it('workerBaseUrlが未指定の場合、リンクボタンは含まれない', () => {
-    const { blocks } = buildSlackMessage(baseParams);
-    const actionsBlock = blocks.find((b: any) => b.type === 'actions') as any;
-    const linkButton = actionsBlock?.elements?.find((e: any) => e.action_id === 'view_ai_summary_link');
-    expect(linkButton).toBeUndefined();
-  });
-
-  it('summaryが無い場合はボタンが含まれない', () => {
+  it('summaryが無い場合はactionsブロックが含まれない', () => {
     const { blocks } = buildSlackMessage({ ...baseParams, summary: '' });
     const actionsBlock = blocks.find((b: any) => b.type === 'actions');
     expect(actionsBlock).toBeUndefined();
   });
 
-  it('[AI_*]エラーの場合もボタンが含まれない', () => {
+  it('[AI_*]エラーの場合もactionsブロックが含まれない', () => {
     const { blocks } = buildSlackMessage({ ...baseParams, summary: '[AI_ERROR] fail' });
     const actionsBlock = blocks.find((b: any) => b.type === 'actions');
     expect(actionsBlock).toBeUndefined();
@@ -407,7 +392,7 @@ describe('buildSlackMessage', () => {
     expect(text).toContain('達成: 3/5件');
   });
 
-  it('URLリンク（<https://...>）が blocks に含まれない', () => {
+  it('blocks内にURLリンク（<https://...>）が含まれない', () => {
     const { blocks } = buildSlackMessage(baseParams);
     const allText = JSON.stringify(blocks);
     expect(allText).not.toContain('<https://');

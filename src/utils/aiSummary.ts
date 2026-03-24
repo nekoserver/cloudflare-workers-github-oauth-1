@@ -203,7 +203,6 @@ export type BuildSlackMessageParams = {
   dailySeq: number;
   requestId: string;
   designDiff?: string;
-  workerBaseUrl?: string;
 };
 
 export type SlackMessagePayload = {
@@ -223,7 +222,6 @@ export function buildSlackMessage(params: BuildSlackMessageParams): SlackMessage
     dailySeq,
     requestId,
     designDiff,
-    workerBaseUrl,
   } = params;
 
   const actionLabel = prAction === 'opened' ? '作成' : '更新';
@@ -264,24 +262,16 @@ export function buildSlackMessage(params: BuildSlackMessageParams): SlackMessage
       },
     });
 
-    const buttonElements: Record<string, unknown>[] = [];
-    if (workerBaseUrl) {
-      buttonElements.push({
-        type: 'button',
-        text: { type: 'plain_text', text: '詳細を見る' },
-        url: `${workerBaseUrl}/ai-summary/${requestId}`,
-        action_id: 'view_ai_summary_link',
-      });
-    }
-    buttonElements.push({
-      type: 'button',
-      text: { type: 'plain_text', text: '詳細を見る (モーダル)' },
-      action_id: 'view_ai_summary_detail',
-      value: requestId,
-    });
     blocks.push({
       type: 'actions',
-      elements: buttonElements,
+      elements: [
+        {
+          type: 'button',
+          text: { type: 'plain_text', text: '詳細を見る' },
+          action_id: 'view_ai_summary_detail',
+          value: requestId,
+        },
+      ],
     });
   }
 
