@@ -417,7 +417,7 @@ describe('buildSummaryModal', () => {
   it('リレーションの矢印が含まれる', () => {
     const modal = buildSummaryModal(baseRow);
     const allText = JSON.stringify(modal.blocks);
-    expect(allText).toContain('→');
+    expect(allText).toContain('->');
   });
 
   it('request_id がリレーションキーとして表示される', () => {
