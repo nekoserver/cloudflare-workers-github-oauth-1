@@ -426,13 +426,11 @@ describe('buildSummaryModal', () => {
     expect(modal.title.text).toBe('要約を表示');
   });
 
-  it('blocks にリポジトリ・PR番号が fields テーブルとして含まれる', () => {
+  it('blocks にリポジトリ・PR番号が含まれる', () => {
     const modal = buildSummaryModal(baseRow);
-    const fieldsBlock = modal.blocks.find((b: any) => b.type === 'section' && b.fields) as any;
-    expect(fieldsBlock).toBeTruthy();
-    const fieldsText = JSON.stringify(fieldsBlock.fields);
-    expect(fieldsText).toContain('owner/repo');
-    expect(fieldsText).toContain('#42');
+    const allText = JSON.stringify(modal.blocks);
+    expect(allText).toContain('owner/repo');
+    expect(allText).toContain('#42');
   });
 
   it('PR URLがリンクとして含まれる', () => {
@@ -454,64 +452,24 @@ describe('buildSummaryModal', () => {
     expect(allText).toContain('要約なし');
   });
 
-  it('モデル・diff長・日時が含まれる', () => {
+  it('モデル・diff長が含まれる', () => {
     const modal = buildSummaryModal(baseRow);
     const allText = JSON.stringify(modal.blocks);
     expect(allText).toContain('llama-3.1-8b');
     expect(allText).toContain('1234');
-    expect(allText).toContain('2026-03-24T10:00:00Z');
   });
 
-  it('要約セクションに「AI要約」ヘッダーがある', () => {
-    const modal = buildSummaryModal(baseRow);
-    const summaryBlock = modal.blocks.find((b: any) =>
-      b.type === 'section' && b.text?.text?.includes('AI要約')
-    );
-    expect(summaryBlock).toBeTruthy();
-  });
-
-  // ---- テーブルリレーション一覧 ----
-
-  it('「一覧」セクションが存在する', () => {
+  it('ヘッダーセクションにdaily_seqとevent_dateが含まれる', () => {
     const modal = buildSummaryModal(baseRow);
     const allText = JSON.stringify(modal.blocks);
-    expect(allText).toContain('テーブル関連');
+    expect(allText).toContain('#3');
+    expect(allText).toContain('2026-03-24');
   });
 
-  it('ai_summary_log テーブル名が含まれる', () => {
+  it('dividerブロックが含まれる', () => {
     const modal = buildSummaryModal(baseRow);
-    const allText = JSON.stringify(modal.blocks);
-    expect(allText).toContain('ai_summary_log');
-  });
-
-  it('ai_summary_reviews テーブル名が含まれる', () => {
-    const modal = buildSummaryModal(baseRow);
-    const allText = JSON.stringify(modal.blocks);
-    expect(allText).toContain('ai_summary_reviews');
-  });
-
-  it('リレーションの矢印が含まれる', () => {
-    const modal = buildSummaryModal(baseRow);
-    const allText = JSON.stringify(modal.blocks);
-    expect(allText).toContain('->');
-  });
-
-  it('request_id がリレーションキーとして表示される', () => {
-    const modal = buildSummaryModal(baseRow);
-    const allText = JSON.stringify(modal.blocks);
-    expect(allText).toContain('request_id');
-  });
-
-  it('一覧セクションはAI要約セクションの後に表示される', () => {
-    const modal = buildSummaryModal(baseRow);
-    const summaryIdx = modal.blocks.findIndex((b: any) =>
-      b.type === 'section' && b.text?.text?.includes('AI要約')
-    );
-    const relationIdx = modal.blocks.findIndex((b: any) =>
-      b.type === 'section' && b.text?.text?.includes('テーブル関連')
-    );
-    expect(summaryIdx).toBeGreaterThanOrEqual(0);
-    expect(relationIdx).toBeGreaterThan(summaryIdx);
+    const divider = modal.blocks.find((b: any) => b.type === 'divider');
+    expect(divider).toBeTruthy();
   });
 
   // ---- summary null + diff_length 0 のハンドリング ----

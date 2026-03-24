@@ -327,20 +327,13 @@ export function buildSummaryModal(row: SummaryModalRow): SlackModalView {
 
   blocks.push({
     type: 'section',
-    fields: [
-      { type: 'mrkdwn', text: `*リポジトリ:*\n${row.repo_full_name ?? '(不明)'}` },
-      { type: 'mrkdwn', text: `*PR:*\n${prLabel}` },
-      { type: 'mrkdwn', text: `*モデル:*\n${row.model ?? '(不明)'}` },
-      { type: 'mrkdwn', text: `*Diff長:*\n${row.diff_length ?? 0} 文字` },
-    ],
-  });
-
-  blocks.push({
-    type: 'section',
-    fields: [
-      { type: 'mrkdwn', text: `*日時:*\n${row.created_at}` },
-      { type: 'mrkdwn', text: `*日次番号:*\n#${row.daily_seq} (${row.event_date})` },
-    ],
+    text: {
+      type: 'mrkdwn',
+      text: [
+        `*${row.repo_full_name ?? '(不明)'}* ${prLabel}`,
+        `${row.model ?? '(不明)'} / ${row.diff_length ?? 0}文字 / #${row.daily_seq} (${row.event_date})`,
+      ].join('\n'),
+    },
   });
 
   blocks.push({ type: 'divider' });
@@ -359,38 +352,7 @@ export function buildSummaryModal(row: SummaryModalRow): SlackModalView {
     type: 'section',
     text: {
       type: 'mrkdwn',
-      text: `*AI要約:*\n${summaryDisplay}`,
-    },
-  });
-
-  blocks.push({ type: 'divider' });
-
-  blocks.push({
-    type: 'section',
-    text: {
-      type: 'mrkdwn',
-      text: [
-        '*テーブル関連一覧:*',
-        '```',
-        'Table              | Key Columns',
-        '-------------------+--------------------------------',
-        'ai_summary_log     | request_id (UNIQUE, PK)',
-        '  Columns:         | daily_seq, event_date,',
-        '                   | repo_full_name, pr_number,',
-        '                   | pr_action, pr_url, model,',
-        '                   | summary, diff_length,',
-        '                   | slack_notified, resolved,',
-        '                   | resolved_at, resolution_note,',
-        '                   | view_count, parent_id, tags,',
-        '                   | created_at',
-        '',
-        'ai_summary_reviews | summary_request_id (FK)',
-        '  FK:              | -> ai_summary_log.request_id',
-        '  Columns:         | rating, reviewer_type,',
-        '                   | reviewer_name, review_model,',
-        '                   | comment, created_at',
-        '```',
-      ].join('\n'),
+      text: summaryDisplay,
     },
   });
 
