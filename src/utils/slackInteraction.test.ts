@@ -87,7 +87,7 @@ describe('handleSlackInteraction', () => {
 
     const allBlockText = JSON.stringify(view.blocks);
     expect(allBlockText).toContain('owner/repo');
-    expect(allBlockText).toContain('PR #42');
+    expect(allBlockText).toContain('#42');
     expect(allBlockText).toContain('概要: テスト');
   });
 

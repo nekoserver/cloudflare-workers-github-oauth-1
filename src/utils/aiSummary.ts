@@ -315,14 +315,17 @@ export type SummaryModalRow = {
 export type SlackModalView = {
   type: 'modal';
   title: { type: 'plain_text'; text: string };
+  close?: { type: 'plain_text'; text: string };
   blocks: Record<string, unknown>[];
 };
+
+export const WORKER_BASE_URL = 'https://cloudflare-workers-github-oauth-1.nekoserver.workers.dev';
 
 export function buildSummaryModal(row: SummaryModalRow): SlackModalView {
   const blocks: Record<string, unknown>[] = [];
 
   const prLabel = row.pr_number
-    ? (row.pr_url ? `<${row.pr_url}|PR #${row.pr_number}>` : `PR #${row.pr_number}`)
+    ? (row.pr_url ? `<${row.pr_url}|#${row.pr_number}>` : `#${row.pr_number}`)
     : '(不明)';
 
   blocks.push({
@@ -330,8 +333,9 @@ export function buildSummaryModal(row: SummaryModalRow): SlackModalView {
     text: {
       type: 'mrkdwn',
       text: [
-        `*${row.repo_full_name ?? '(不明)'}* ${prLabel}`,
-        `${row.model ?? '(不明)'} / ${row.diff_length ?? 0}文字 / #${row.daily_seq} (${row.event_date})`,
+        `*リポジトリ :* ${row.repo_full_name ?? '(不明)'}`,
+        `*PR番号 :* ${prLabel}`,
+        `*モデル@cf :* ${row.model ?? '(不明)'}  *diff :* ${row.diff_length ?? 0}文字  *要約回 :* #${row.daily_seq} (${row.event_date})`,
       ].join('\n'),
     },
   });
@@ -356,9 +360,22 @@ export function buildSummaryModal(row: SummaryModalRow): SlackModalView {
     },
   });
 
+  blocks.push({
+    type: 'actions',
+    elements: [
+      {
+        type: 'button',
+        text: { type: 'plain_text', text: 'HTMLで表示' },
+        action_id: 'open_ai_summary_html',
+        url: `${WORKER_BASE_URL}/ai-summary/${row.request_id}`,
+      },
+    ],
+  });
+
   return {
     type: 'modal',
     title: { type: 'plain_text', text: '要約を表示' },
+    close: { type: 'plain_text', text: '閉じる' },
     blocks,
   };
 }
