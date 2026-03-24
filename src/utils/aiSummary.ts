@@ -112,6 +112,37 @@ export function classifySummaryResult(summary: string | null): SummaryDiagnosis 
   return { rating: 'good', hasSummary: true, comment: '正常に要約が生成された' };
 }
 
+export type RunSummaryPipelineParams = {
+  ai: AiBinding | null | undefined;
+  model: string;
+  title: string;
+  description: string;
+  trimmedDiff: string;
+};
+
+export type SummaryPipelineResult = {
+  summary: string;
+  success: boolean;
+};
+
+export async function runSummaryPipeline(
+  params: RunSummaryPipelineParams
+): Promise<SummaryPipelineResult> {
+  const { ai, model, title, description, trimmedDiff } = params;
+
+  if (!ai) {
+    return { summary: '[AI_NO_BINDING] Workers AI binding is not available', success: false };
+  }
+
+  try {
+    const summary = await generateAiSummary({ ai, model, title, description, trimmedDiff });
+    return { summary, success: !summary.startsWith('[AI_') };
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : 'Unknown error';
+    return { summary: `[AI_ERROR] ${msg}`, success: false };
+  }
+}
+
 export type BuildSlackMessageParams = {
   prAction: string;
   prNumber: number;

@@ -23,7 +23,7 @@ import { getCookieValue, getCookieValues } from './utils/cookie';
 import { verifyResendWebhookSignature } from './utils/resendWebhook';
 import { verifyGitHubWebhookSignature } from './utils/githubWebhook';
 import { postSlackMessage } from './utils/slack';
-import { fetchPrDiff, generateAiSummary, buildSlackMessage, classifySummaryResult } from './utils/aiSummary';
+import { fetchPrDiff, runSummaryPipeline, buildSlackMessage, classifySummaryResult } from './utils/aiSummary';
 import { executeCreateRepo } from './utils/repoValidation';
 import { validateReturnTo } from './utils/returnTo';
 import * as logger from './utils/logger';
@@ -2692,27 +2692,17 @@ app.post('/webhook/github', async (c) => {
           }
         }
 
-        // AI 要約（Workers AI バインディングがある場合のみ）
-        let summary = '';
-        if (!ai) {
-          logger.warn('Workers AI binding (AI) is not available, skipping summarization', { prUrl });
-        } else {
-          if (!trimmedDiff) {
-            logger.info('No diff available, summarizing from title and description only', { prUrl, githubTokenSet: !!githubToken });
-          }
-          try {
-            summary = await generateAiSummary({
-              ai: ai as { run(model: string, input: { messages: { role: string; content: string }[] }): Promise<unknown> },
-              model: aiModel,
-              title,
-              description,
-              trimmedDiff,
-            });
-          } catch (error) {
-            const msg = error instanceof Error ? error.message : 'Unknown error';
-            summary = `[AI_ERROR] ${msg}`;
-            logger.warn('Workers AI summarization failed', { error: msg, prUrl });
-          }
+        // AI 要約
+        const pipelineResult = await runSummaryPipeline({
+          ai: ai as { run(model: string, input: { messages: { role: string; content: string }[] }): Promise<unknown> } | null,
+          model: aiModel,
+          title,
+          description,
+          trimmedDiff,
+        });
+        const summary = pipelineResult.summary;
+        if (!pipelineResult.success) {
+          logger.warn('AI summary pipeline failed', { summary, prUrl, githubTokenSet: !!githubToken });
         }
 
         // Slack 通知

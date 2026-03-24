@@ -4,6 +4,7 @@ import {
   generateAiSummary,
   buildSlackMessage,
   classifySummaryResult,
+  runSummaryPipeline,
   type AiBinding,
   type SummaryDiagnosis,
 } from './aiSummary';
@@ -287,5 +288,88 @@ describe('classifySummaryResult', () => {
     expect(result.rating).toBe('bad');
     expect(result.hasSummary).toBe(false);
     expect(result.comment).toContain('生成されなかった');
+  });
+});
+
+// ---- runSummaryPipeline ----
+
+describe('runSummaryPipeline', () => {
+  const baseParams = {
+    model: '@cf/meta/llama-3.1-8b-instruct-fp8',
+    title: 'Add feature',
+    description: 'New feature',
+    trimmedDiff: '',
+  };
+
+  it('AIバインディングがnullの場合、AI_NO_BINDINGを返しsuccess=false', async () => {
+    const result = await runSummaryPipeline({ ...baseParams, ai: null });
+    expect(result.success).toBe(false);
+    expect(result.summary).toMatch(/^\[AI_NO_BINDING\]/);
+  });
+
+  it('AIバインディングがundefinedの場合、AI_NO_BINDINGを返しsuccess=false', async () => {
+    const result = await runSummaryPipeline({ ...baseParams, ai: undefined });
+    expect(result.success).toBe(false);
+    expect(result.summary).toMatch(/^\[AI_NO_BINDING\]/);
+  });
+
+  it('AI呼び出し成功時、summaryを返しsuccess=true', async () => {
+    const ai: AiBinding = { run: vi.fn().mockResolvedValue({ response: '要約テスト' }) };
+    const result = await runSummaryPipeline({ ...baseParams, ai });
+    expect(result.success).toBe(true);
+    expect(result.summary).toBe('要約テスト');
+  });
+
+  it('AI呼び出しが例外をthrowした場合、AI_ERRORを返しsuccess=false', async () => {
+    const ai: AiBinding = { run: vi.fn().mockRejectedValue(new Error('Model overloaded')) };
+    const result = await runSummaryPipeline({ ...baseParams, ai });
+    expect(result.success).toBe(false);
+    expect(result.summary).toBe('[AI_ERROR] Model overloaded');
+  });
+
+  it('AI呼び出しが例外をthrowした場合、エラーメッセージが握りつぶされない', async () => {
+    const ai: AiBinding = { run: vi.fn().mockRejectedValue(new Error('InternalError: GPU timeout')) };
+    const result = await runSummaryPipeline({ ...baseParams, ai });
+    expect(result.summary).toContain('GPU timeout');
+    expect(result.summary.length).toBeGreaterThan('[AI_ERROR] '.length);
+  });
+
+  it('AIがnullレスポンスを返した場合、AI_UNEXPECTED_FORMATを返しsuccess=false', async () => {
+    const ai: AiBinding = { run: vi.fn().mockResolvedValue(null) };
+    const result = await runSummaryPipeline({ ...baseParams, ai });
+    expect(result.success).toBe(false);
+    expect(result.summary).toMatch(/^\[AI_UNEXPECTED_FORMAT\]/);
+  });
+
+  it('AIがresponse=nullを返した場合、AI_EMPTY_RESPONSEを返しsuccess=false', async () => {
+    const ai: AiBinding = { run: vi.fn().mockResolvedValue({ response: null }) };
+    const result = await runSummaryPipeline({ ...baseParams, ai });
+    expect(result.success).toBe(false);
+    expect(result.summary).toMatch(/^\[AI_EMPTY_RESPONSE\]/);
+  });
+
+  it('AIがresponse=""を返した場合、AI_EMPTY_RESPONSEを返しsuccess=false', async () => {
+    const ai: AiBinding = { run: vi.fn().mockResolvedValue({ response: '' }) };
+    const result = await runSummaryPipeline({ ...baseParams, ai });
+    expect(result.success).toBe(false);
+    expect(result.summary).toMatch(/^\[AI_EMPTY_RESPONSE\]/);
+  });
+
+  it('どのケースでもsummaryが空文字にならない（握りつぶし防止）', async () => {
+    const cases: Array<{ label: string; ai: AiBinding | null }> = [
+      { label: 'binding null', ai: null },
+      { label: 'throw', ai: { run: vi.fn().mockRejectedValue(new Error('fail')) } },
+      { label: 'null response', ai: { run: vi.fn().mockResolvedValue(null) } },
+      { label: 'empty response', ai: { run: vi.fn().mockResolvedValue({ response: '' }) } },
+      { label: 'null response field', ai: { run: vi.fn().mockResolvedValue({ response: null }) } },
+      { label: 'no response field', ai: { run: vi.fn().mockResolvedValue({ result: 'x' }) } },
+    ];
+
+    for (const { label, ai } of cases) {
+      const result = await runSummaryPipeline({ ...baseParams, ai });
+      expect(result.summary, `"${label}" must not produce empty summary`).not.toBe('');
+      expect(result.summary, `"${label}" must not produce null-like summary`).toBeTruthy();
+      expect(result.success, `"${label}" must be success=false`).toBe(false);
+    }
   });
 });
