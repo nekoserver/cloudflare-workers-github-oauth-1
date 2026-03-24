@@ -322,7 +322,7 @@ export function buildSummaryModal(row: SummaryModalRow): SlackModalView {
 
   return {
     type: 'modal',
-    title: { type: 'plain_text', text: 'AI要約詳細' },
+    title: { type: 'plain_text', text: '要約を表示' },
     blocks,
   };
 }

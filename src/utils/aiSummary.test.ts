@@ -345,17 +345,24 @@ describe('buildSummaryModal', () => {
     expect(modal.type).toBe('modal');
   });
 
-  it('title が「AI要約詳細」を含む', () => {
+  it('title が「要約を表示」である', () => {
     const modal = buildSummaryModal(baseRow);
-    expect(modal.title.text).toContain('AI要約詳細');
+    expect(modal.title.text).toBe('要約を表示');
   });
 
-  it('blocks にリポジトリ・PR番号・モデル情報が含まれる', () => {
+  it('blocks にリポジトリ・PR番号が fields テーブルとして含まれる', () => {
+    const modal = buildSummaryModal(baseRow);
+    const fieldsBlock = modal.blocks.find((b: any) => b.type === 'section' && b.fields) as any;
+    expect(fieldsBlock).toBeTruthy();
+    const fieldsText = JSON.stringify(fieldsBlock.fields);
+    expect(fieldsText).toContain('owner/repo');
+    expect(fieldsText).toContain('#42');
+  });
+
+  it('PR URLがリンクとして含まれる', () => {
     const modal = buildSummaryModal(baseRow);
     const allText = JSON.stringify(modal.blocks);
-    expect(allText).toContain('owner/repo');
-    expect(allText).toContain('#42');
-    expect(allText).toContain('llama-3.1-8b');
+    expect(allText).toContain('<https://github.com/owner/repo/pull/42|PR #42>');
   });
 
   it('blocks に要約テキストが含まれる', () => {
@@ -371,22 +378,20 @@ describe('buildSummaryModal', () => {
     expect(allText).toContain('要約なし');
   });
 
-  it('diff_length が含まれる', () => {
+  it('モデル・diff長・日時が含まれる', () => {
     const modal = buildSummaryModal(baseRow);
     const allText = JSON.stringify(modal.blocks);
+    expect(allText).toContain('llama-3.1-8b');
     expect(allText).toContain('1234');
-  });
-
-  it('PR URLがリンクとして含まれる', () => {
-    const modal = buildSummaryModal(baseRow);
-    const allText = JSON.stringify(modal.blocks);
-    expect(allText).toContain('<https://github.com/owner/repo/pull/42|PR #42>');
-  });
-
-  it('created_at が含まれる', () => {
-    const modal = buildSummaryModal(baseRow);
-    const allText = JSON.stringify(modal.blocks);
     expect(allText).toContain('2026-03-24T10:00:00Z');
+  });
+
+  it('要約セクションに「AI要約」ヘッダーがある', () => {
+    const modal = buildSummaryModal(baseRow);
+    const summaryBlock = modal.blocks.find((b: any) =>
+      b.type === 'section' && b.text?.text?.includes('AI要約')
+    );
+    expect(summaryBlock).toBeTruthy();
   });
 });
 
