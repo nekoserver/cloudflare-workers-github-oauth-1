@@ -8,6 +8,7 @@ import {
   runSummaryPipeline,
   resolveAiModel,
   extractDesignDiff,
+  sanitizeBoxDrawing,
   DEFAULT_AI_MODEL,
   type AiBinding,
   type SummaryDiagnosis,
@@ -396,6 +397,56 @@ describe('buildSlackMessage', () => {
     const { blocks } = buildSlackMessage(baseParams);
     const allText = JSON.stringify(blocks);
     expect(allText).not.toContain('<https://');
+  });
+
+  it('designDiffに罫線文字が含まれていても除去される', () => {
+    const { blocks } = buildSlackMessage({
+      ...baseParams,
+      designDiff: '├── OAuth認証: 達成\n│   └── JWT: 達成\n└── Slack通知: 進行中',
+    });
+    const designBlock = blocks.find((b: any) =>
+      b.type === 'section' && b.text?.text?.includes('初期設計との差異')
+    ) as any;
+    const text = designBlock?.text?.text ?? '';
+    expect(text).not.toMatch(/[│├└─┌┐┘┤┬┴┼]/);
+    expect(text).toContain('OAuth認証: 達成');
+    expect(text).toContain('Slack通知: 進行中');
+  });
+
+  it('designDiffのtextフォールバックでも罫線文字が除去される', () => {
+    const { text } = buildSlackMessage({
+      ...baseParams,
+      designDiff: '├── OAuth認証: 達成\n└── Slack通知: 進行中',
+    });
+    expect(text).not.toMatch(/[│├└─┌┐┘┤┬┴┼]/);
+    expect(text).toContain('OAuth認証: 達成');
+  });
+});
+
+// ---- sanitizeBoxDrawing ----
+
+describe('sanitizeBoxDrawing', () => {
+  it('罫線文字を除去する', () => {
+    expect(sanitizeBoxDrawing('├── 項目A')).toBe('- 項目A');
+    expect(sanitizeBoxDrawing('└── 項目B')).toBe('- 項目B');
+    expect(sanitizeBoxDrawing('│   テスト')).toBe('  テスト');
+  });
+
+  it('複数行の罫線を除去する', () => {
+    const input = '├── 項目A\n│   ├── サブ項目\n│   └── サブ項目2\n└── 項目B';
+    const result = sanitizeBoxDrawing(input);
+    expect(result).not.toMatch(/[│├└─┌┐┘┤┬┴┼]/);
+    expect(result).toContain('- 項目A');
+    expect(result).toContain('- 項目B');
+  });
+
+  it('罫線がない場合はそのまま返す', () => {
+    const input = '- 項目A\n- 項目B';
+    expect(sanitizeBoxDrawing(input)).toBe(input);
+  });
+
+  it('空文字を受け取ったらそのまま返す', () => {
+    expect(sanitizeBoxDrawing('')).toBe('');
   });
 });
 
