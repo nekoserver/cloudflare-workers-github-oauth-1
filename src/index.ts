@@ -2771,7 +2771,7 @@ app.post('/webhook/github', async (c) => {
                 diagnosis.rating,
                 'system',
                 'auto-diagnosis',
-                null,
+                aiModel,
                 diagnosis.comment,
                 now.toISOString(),
               ).run();
