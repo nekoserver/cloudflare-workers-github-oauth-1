@@ -393,6 +393,50 @@ describe('buildSummaryModal', () => {
     );
     expect(summaryBlock).toBeTruthy();
   });
+
+  // ---- テーブルリレーション一覧 ----
+
+  it('「一覧」セクションが存在する', () => {
+    const modal = buildSummaryModal(baseRow);
+    const allText = JSON.stringify(modal.blocks);
+    expect(allText).toContain('テーブル関連');
+  });
+
+  it('ai_summary_log テーブル名が含まれる', () => {
+    const modal = buildSummaryModal(baseRow);
+    const allText = JSON.stringify(modal.blocks);
+    expect(allText).toContain('ai_summary_log');
+  });
+
+  it('ai_summary_reviews テーブル名が含まれる', () => {
+    const modal = buildSummaryModal(baseRow);
+    const allText = JSON.stringify(modal.blocks);
+    expect(allText).toContain('ai_summary_reviews');
+  });
+
+  it('リレーションの矢印が含まれる', () => {
+    const modal = buildSummaryModal(baseRow);
+    const allText = JSON.stringify(modal.blocks);
+    expect(allText).toContain('→');
+  });
+
+  it('request_id がリレーションキーとして表示される', () => {
+    const modal = buildSummaryModal(baseRow);
+    const allText = JSON.stringify(modal.blocks);
+    expect(allText).toContain('request_id');
+  });
+
+  it('一覧セクションはAI要約セクションの後に表示される', () => {
+    const modal = buildSummaryModal(baseRow);
+    const summaryIdx = modal.blocks.findIndex((b: any) =>
+      b.type === 'section' && b.text?.text?.includes('AI要約')
+    );
+    const relationIdx = modal.blocks.findIndex((b: any) =>
+      b.type === 'section' && b.text?.text?.includes('テーブル関連')
+    );
+    expect(summaryIdx).toBeGreaterThanOrEqual(0);
+    expect(relationIdx).toBeGreaterThan(summaryIdx);
+  });
 });
 
 // ---- classifySummaryResult ----
