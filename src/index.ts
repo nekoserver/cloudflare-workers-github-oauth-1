@@ -22,8 +22,9 @@ import { getGitHubAccessToken, getGitHubLatestCommit, getGitHubCommitCount, getG
 import { getCookieValue, getCookieValues } from './utils/cookie';
 import { verifyResendWebhookSignature } from './utils/resendWebhook';
 import { verifyGitHubWebhookSignature } from './utils/githubWebhook';
-import { postSlackMessage } from './utils/slack';
-import { fetchPrDiff, runSummaryPipeline, buildSlackMessage, classifySummaryResult, resolveAiModel } from './utils/aiSummary';
+import { postSlackMessage, openSlackModal } from './utils/slack';
+import { fetchPrDiff, runSummaryPipeline, buildSlackMessage, buildSummaryModal, classifySummaryResult, resolveAiModel, type SummaryModalRow } from './utils/aiSummary';
+import { verifySlackSignature } from './utils/slackSignature';
 import { executeCreateRepo } from './utils/repoValidation';
 import { validateReturnTo } from './utils/returnTo';
 import * as logger from './utils/logger';
@@ -2706,9 +2707,7 @@ app.post('/webhook/github', async (c) => {
         }
 
         // Slack 通知
-        const reqUrl = new URL(c.req.url);
-        const workerBaseUrl = `${reqUrl.protocol}//${reqUrl.host}`;
-        const slackText = buildSlackMessage({
+        const slackPayload = buildSlackMessage({
           prAction,
           prNumber,
           title,
@@ -2718,12 +2717,11 @@ app.post('/webhook/github', async (c) => {
           summary,
           dailySeq,
           requestId,
-          workerBaseUrl,
         });
 
         let slackNotified = false;
         try {
-          const slackResult = await postSlackMessage({ token: slackToken, channel: slackChannel, text: slackText });
+          const slackResult = await postSlackMessage({ token: slackToken, channel: slackChannel, text: slackPayload.text, blocks: slackPayload.blocks });
           if (slackResult.ok) {
             slackNotified = true;
           } else {
@@ -3303,6 +3301,104 @@ app.get('/api/repositories/search/history/:id', optionalAuthMiddleware, async (c
     });
     return jsonUtf8({ error: 'Failed to fetch detail' }, 500);
   }
+});
+
+/**
+ * Slack Interactivity エンドポイント
+ * ボタンクリック等の対話イベントを受信し、モーダルを返す
+ */
+app.post('/slack/interactions', async (c) => {
+  const signingSecret = c.env.SLACK_SIGNING_SECRET;
+  if (!signingSecret) {
+    logger.error('SLACK_SIGNING_SECRET not configured');
+    return c.text('', 200);
+  }
+
+  const rawBody = await c.req.text();
+  const timestamp = c.req.header('X-Slack-Request-Timestamp');
+  const signature = c.req.header('X-Slack-Signature');
+
+  const verification = await verifySlackSignature(rawBody, timestamp, signature, signingSecret);
+  if (!verification.success) {
+    logger.warn('Slack signature verification failed', { reason: verification.reason });
+    return c.text('', 401);
+  }
+
+  let interactionPayload: any;
+  try {
+    const params = new URLSearchParams(rawBody);
+    const payloadStr = params.get('payload');
+    if (!payloadStr) {
+      logger.warn('Slack interaction: missing payload field');
+      return c.text('', 200);
+    }
+    interactionPayload = JSON.parse(payloadStr);
+  } catch (error) {
+    logger.warn('Slack interaction: failed to parse payload', {
+      error: error instanceof Error ? error.message : 'Unknown',
+    });
+    return c.text('', 200);
+  }
+
+  if (interactionPayload.type !== 'block_actions') {
+    return c.text('', 200);
+  }
+
+  const action = interactionPayload.actions?.[0];
+  if (!action || action.action_id !== 'view_ai_summary_detail') {
+    return c.text('', 200);
+  }
+
+  const requestId = action.value;
+  const triggerId = interactionPayload.trigger_id;
+  if (!requestId || !triggerId) {
+    logger.warn('Slack interaction: missing requestId or trigger_id');
+    return c.text('', 200);
+  }
+
+  const db = c.env.DB;
+  if (!db) {
+    logger.error('Slack interaction: DB not available');
+    return c.text('', 200);
+  }
+
+  const slackToken = c.env.SLACK_OAUTH_TOKEN;
+  if (!slackToken) {
+    logger.error('Slack interaction: SLACK_OAUTH_TOKEN not configured');
+    return c.text('', 200);
+  }
+
+  try {
+    const row = await db.prepare(
+      'SELECT request_id, daily_seq, event_date, repo_full_name, pr_number, pr_action, pr_url, model, summary, diff_length, created_at FROM ai_summary_log WHERE request_id = ?'
+    ).bind(requestId).first() as SummaryModalRow | null;
+
+    if (!row) {
+      const errorView = {
+        type: 'modal' as const,
+        title: { type: 'plain_text' as const, text: 'エラー' },
+        blocks: [{
+          type: 'section',
+          text: { type: 'mrkdwn', text: `要約データが見つかりません (ID: ${requestId})` },
+        }],
+      };
+      await openSlackModal({ token: slackToken, triggerId, view: errorView });
+      return c.text('', 200);
+    }
+
+    const modalView = buildSummaryModal(row);
+    const modalResult = await openSlackModal({ token: slackToken, triggerId, view: modalView });
+    if (!modalResult.ok) {
+      logger.error('Slack modal open failed', { error: modalResult.error, requestId });
+    }
+  } catch (error) {
+    logger.error('Slack interaction handler error', {
+      error: error instanceof Error ? error.message : 'Unknown',
+      requestId,
+    });
+  }
+
+  return c.text('', 200);
 });
 
 /**

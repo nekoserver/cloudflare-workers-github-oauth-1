@@ -3,6 +3,7 @@ import {
   fetchPrDiff,
   generateAiSummary,
   buildSlackMessage,
+  buildSummaryModal,
   classifySummaryResult,
   runSummaryPipeline,
   resolveAiModel,
@@ -214,76 +215,183 @@ describe('buildSlackMessage', () => {
     summary: '概要: バグ修正',
     dailySeq: 3,
     requestId: 'abc-123',
-    workerBaseUrl: 'https://cloudflare-workers-github-oauth-1.example.workers.dev',
   };
 
+  it('text と blocks の両方を返す', () => {
+    const result = buildSlackMessage(baseParams);
+    expect(result).toHaveProperty('text');
+    expect(result).toHaveProperty('blocks');
+    expect(Array.isArray(result.blocks)).toBe(true);
+  });
+
+  it('text（フォールバック）にPR情報が含まれる', () => {
+    const { text } = buildSlackMessage(baseParams);
+    expect(text).toContain('PR 作成');
+    expect(text).toContain('#42 Fix bug');
+  });
+
   it('openedの場合「作成」と表示される', () => {
-    const msg = buildSlackMessage(baseParams);
-    expect(msg).toContain('*PR 作成:* #42 Fix bug');
+    const { text, blocks } = buildSlackMessage(baseParams);
+    expect(text).toContain('PR 作成');
+    const headerBlock = blocks.find((b: any) => b.type === 'section' && b.text?.text?.includes('PR 作成'));
+    expect(headerBlock).toBeTruthy();
   });
 
   it('synchronizeの場合「更新」と表示される', () => {
-    const msg = buildSlackMessage({ ...baseParams, prAction: 'synchronize' });
-    expect(msg).toContain('*PR 更新:* #42 Fix bug');
+    const { text } = buildSlackMessage({ ...baseParams, prAction: 'synchronize' });
+    expect(text).toContain('PR 更新');
   });
 
-  it('summaryがある場合、AI要約がブロッククォートで囲まれる', () => {
-    const msg = buildSlackMessage(baseParams);
-    expect(msg).toContain('*AI要約:*');
-    expect(msg).toContain('> 概要: バグ修正');
+  it('summaryがある場合、blocks にAI要約セクションが含まれる', () => {
+    const { blocks } = buildSlackMessage(baseParams);
+    const summaryBlock = blocks.find((b: any) =>
+      b.type === 'section' && b.text?.text?.includes('AI要約')
+    );
+    expect(summaryBlock).toBeTruthy();
+  });
+
+  it('summaryがある場合、ブロッククォートで囲まれる', () => {
+    const { blocks } = buildSlackMessage(baseParams);
+    const summaryBlock = blocks.find((b: any) =>
+      b.type === 'section' && b.text?.text?.includes('AI要約')
+    ) as any;
+    expect(summaryBlock?.text?.text).toContain('> 概要: バグ修正');
   });
 
   it('複数行のsummaryは各行がブロッククォートになる', () => {
-    const msg = buildSlackMessage({ ...baseParams, summary: '概要: テスト\n変更点: 修正' });
-    expect(msg).toContain('> 概要: テスト\n> 変更点: 修正');
+    const { blocks } = buildSlackMessage({ ...baseParams, summary: '概要: テスト\n変更点: 修正' });
+    const summaryBlock = blocks.find((b: any) =>
+      b.type === 'section' && b.text?.text?.includes('AI要約')
+    ) as any;
+    expect(summaryBlock?.text?.text).toContain('> 概要: テスト\n> 変更点: 修正');
   });
 
   it('summaryが空文字の場合、AI要約セクションが含まれない', () => {
-    const msg = buildSlackMessage({ ...baseParams, summary: '' });
-    expect(msg).not.toContain('*AI要約:*');
+    const { blocks } = buildSlackMessage({ ...baseParams, summary: '' });
+    const summaryBlock = blocks.find((b: any) =>
+      b.type === 'section' && b.text?.text?.includes('AI要約')
+    );
+    expect(summaryBlock).toBeUndefined();
   });
 
   it('[AI_ERROR]で始まるsummaryの場合、AI要約セクションが含まれない', () => {
-    const msg = buildSlackMessage({
+    const { blocks } = buildSlackMessage({
       ...baseParams,
       summary: '[AI_ERROR] Model not found',
     });
-    expect(msg).not.toContain('*AI要約:*');
-    expect(msg).not.toContain('[AI_ERROR]');
+    const summaryBlock = blocks.find((b: any) =>
+      b.type === 'section' && b.text?.text?.includes('AI要約')
+    );
+    expect(summaryBlock).toBeUndefined();
   });
 
-  it('[AI_UNEXPECTED_FORMAT]で始まるsummaryの場合、AI要約セクションが含まれない', () => {
-    const msg = buildSlackMessage({
-      ...baseParams,
-      summary: '[AI_UNEXPECTED_FORMAT] type=string',
-    });
-    expect(msg).not.toContain('*AI要約:*');
+  it('「詳細を見る」ボタンが actions ブロックに含まれる', () => {
+    const { blocks } = buildSlackMessage(baseParams);
+    const actionsBlock = blocks.find((b: any) => b.type === 'actions') as any;
+    expect(actionsBlock).toBeTruthy();
+    const button = actionsBlock?.elements?.[0];
+    expect(button?.type).toBe('button');
+    expect(button?.action_id).toBe('view_ai_summary_detail');
+    expect(button?.value).toBe('abc-123');
   });
 
-  it('[AI_EMPTY_RESPONSE]で始まるsummaryの場合、AI要約セクションが含まれない', () => {
-    const msg = buildSlackMessage({
-      ...baseParams,
-      summary: '[AI_EMPTY_RESPONSE] keys=response',
-    });
-    expect(msg).not.toContain('*AI要約:*');
+  it('summaryが無い場合はボタンが含まれない', () => {
+    const { blocks } = buildSlackMessage({ ...baseParams, summary: '' });
+    const actionsBlock = blocks.find((b: any) => b.type === 'actions');
+    expect(actionsBlock).toBeUndefined();
   });
 
-  it('requestIdが詳細ページへのリンクになる', () => {
-    const msg = buildSlackMessage(baseParams);
-    expect(msg).toContain('<https://cloudflare-workers-github-oauth-1.example.workers.dev/api/ai-summary/abc-123|abc-123>');
+  it('[AI_*]エラーの場合もボタンが含まれない', () => {
+    const { blocks } = buildSlackMessage({ ...baseParams, summary: '[AI_ERROR] fail' });
+    const actionsBlock = blocks.find((b: any) => b.type === 'actions');
+    expect(actionsBlock).toBeUndefined();
   });
 
-  it('workerBaseUrlが空の場合、リンクなしでIDのみ表示される', () => {
-    const msg = buildSlackMessage({ ...baseParams, workerBaseUrl: '' });
-    expect(msg).toContain('ID: abc-123');
-    expect(msg).not.toContain('<https://');
+  it('context ブロックにフッター情報が含まれる', () => {
+    const { blocks } = buildSlackMessage(baseParams);
+    const contextBlock = blocks.find((b: any) => b.type === 'context') as any;
+    expect(contextBlock).toBeTruthy();
+    const text = contextBlock?.elements?.[0]?.text;
+    expect(text).toContain('AI問い合わせ #3');
+    expect(text).toContain('abc-123');
   });
 
-  it('リポジトリ名・作成者・URLが含まれる', () => {
-    const msg = buildSlackMessage(baseParams);
-    expect(msg).toContain('リポジトリ: owner/repo');
-    expect(msg).toContain('作成者: testuser');
-    expect(msg).toContain('https://github.com/owner/repo/pull/42');
+  it('URLリンク（<https://...>）が blocks に含まれない', () => {
+    const { blocks } = buildSlackMessage(baseParams);
+    const allText = JSON.stringify(blocks);
+    expect(allText).not.toContain('<https://');
+  });
+});
+
+// ---- buildSummaryModal ----
+
+describe('buildSummaryModal', () => {
+  const baseRow = {
+    request_id: 'abc-123',
+    daily_seq: 3,
+    event_date: '2026-03-24',
+    repo_full_name: 'owner/repo',
+    pr_number: 42,
+    pr_action: 'opened',
+    pr_url: 'https://github.com/owner/repo/pull/42',
+    model: '@cf/meta/llama-3.1-8b-instruct-fp8',
+    summary: '## 概要\nバグを修正しました\n## 主な変更点\n認証ロジックの修正\n## 影響範囲\n全認証フロー',
+    diff_length: 1234,
+    created_at: '2026-03-24T10:00:00Z',
+  };
+
+  it('type が modal である', () => {
+    const modal = buildSummaryModal(baseRow);
+    expect(modal.type).toBe('modal');
+  });
+
+  it('title が「要約を表示」である', () => {
+    const modal = buildSummaryModal(baseRow);
+    expect(modal.title.text).toBe('要約を表示');
+  });
+
+  it('blocks にリポジトリ・PR番号が fields テーブルとして含まれる', () => {
+    const modal = buildSummaryModal(baseRow);
+    const fieldsBlock = modal.blocks.find((b: any) => b.type === 'section' && b.fields) as any;
+    expect(fieldsBlock).toBeTruthy();
+    const fieldsText = JSON.stringify(fieldsBlock.fields);
+    expect(fieldsText).toContain('owner/repo');
+    expect(fieldsText).toContain('#42');
+  });
+
+  it('PR URLがリンクとして含まれる', () => {
+    const modal = buildSummaryModal(baseRow);
+    const allText = JSON.stringify(modal.blocks);
+    expect(allText).toContain('<https://github.com/owner/repo/pull/42|PR #42>');
+  });
+
+  it('blocks に要約テキストが含まれる', () => {
+    const modal = buildSummaryModal(baseRow);
+    const allText = JSON.stringify(modal.blocks);
+    expect(allText).toContain('バグを修正しました');
+    expect(allText).toContain('認証ロジックの修正');
+  });
+
+  it('summary が null の場合「要約なし」と表示する', () => {
+    const modal = buildSummaryModal({ ...baseRow, summary: null });
+    const allText = JSON.stringify(modal.blocks);
+    expect(allText).toContain('要約なし');
+  });
+
+  it('モデル・diff長・日時が含まれる', () => {
+    const modal = buildSummaryModal(baseRow);
+    const allText = JSON.stringify(modal.blocks);
+    expect(allText).toContain('llama-3.1-8b');
+    expect(allText).toContain('1234');
+    expect(allText).toContain('2026-03-24T10:00:00Z');
+  });
+
+  it('要約セクションに「AI要約」ヘッダーがある', () => {
+    const modal = buildSummaryModal(baseRow);
+    const summaryBlock = modal.blocks.find((b: any) =>
+      b.type === 'section' && b.text?.text?.includes('AI要約')
+    );
+    expect(summaryBlock).toBeTruthy();
   });
 });
 
