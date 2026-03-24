@@ -23,6 +23,7 @@ import { getCookieValue, getCookieValues } from './utils/cookie';
 import { verifyResendWebhookSignature } from './utils/resendWebhook';
 import { verifyGitHubWebhookSignature } from './utils/githubWebhook';
 import { postSlackMessage } from './utils/slack';
+import { fetchPrDiff, runSummaryPipeline, buildSlackMessage, classifySummaryResult } from './utils/aiSummary';
 import { executeCreateRepo } from './utils/repoValidation';
 import { validateReturnTo } from './utils/returnTo';
 import * as logger from './utils/logger';
@@ -2679,28 +2680,10 @@ app.post('/webhook/github', async (c) => {
           logger.warn('PR diff_url is missing', { prUrl });
         } else {
           try {
-            const diffRes = await fetch(pr.diff_url, {
-              headers: {
-                Authorization: `Bearer ${githubToken}`,
-                Accept: 'application/vnd.github.v3.diff',
-                'User-Agent': 'cloudflare-workers-github-oauth-1',
-              },
-            });
-            if (diffRes.ok) {
-              const diff = await diffRes.text();
-              diffLength = diff.length;
-              trimmedDiff = diff.slice(0, 8000);
-              logger.info('Fetched PR diff', { prUrl, diffLength, trimmedLength: trimmedDiff.length });
-            } else {
-              const errorBody = await diffRes.text().catch(() => '');
-              logger.warn('PR diff fetch returned non-OK status', {
-                prUrl,
-                diffUrl: pr.diff_url,
-                status: diffRes.status,
-                statusText: diffRes.statusText,
-                errorBody: errorBody.slice(0, 500),
-              });
-            }
+            const diffResult = await fetchPrDiff({ diffUrl: pr.diff_url, githubToken });
+            trimmedDiff = diffResult.trimmedDiff;
+            diffLength = diffResult.diffLength;
+            logger.info('Fetched PR diff', { prUrl, diffLength, trimmedLength: trimmedDiff.length });
           } catch (error) {
             logger.warn('Failed to fetch PR diff', {
               error: error instanceof Error ? error.message : 'Unknown error',
@@ -2709,61 +2692,35 @@ app.post('/webhook/github', async (c) => {
           }
         }
 
-        // AI 要約（Workers AI バインディングがある場合のみ）
-        let summary = '';
-        if (!ai) {
-          logger.warn('Workers AI binding (AI) is not available, skipping summarization', { prUrl });
-        } else {
-          if (!trimmedDiff) {
-            logger.info('No diff available, summarizing from title and description only', { prUrl, githubTokenSet: !!githubToken });
-          }
-          try {
-            const userParts: string[] = [];
-            userParts.push(`PRタイトル:\n${title}`);
-            userParts.push(`説明:\n${description}`);
-            if (trimmedDiff) {
-              userParts.push(`差分:\n${trimmedDiff}`);
-            }
-            userParts.push('以下の形式で日本語で出力してください:\n- 概要\n- 主な変更点\n- 影響範囲');
-
-            const aiRes = await ai.run(aiModel, {
-              messages: [
-                {
-                  role: 'system',
-                  content: 'あなたはコードレビュー支援AIです。プルリクエストの変更点・目的・影響範囲を日本語で簡潔にまとめてください。',
-                },
-                {
-                  role: 'user',
-                  content: userParts.join('\n\n'),
-                },
-              ],
-            });
-            if (aiRes && typeof aiRes === 'object' && 'response' in aiRes) {
-              summary = (aiRes as { response: string }).response ?? '';
-            }
-          } catch (error) {
-            logger.warn('Workers AI summarization failed', {
-              error: error instanceof Error ? error.message : 'Unknown error',
-              prUrl,
-            });
-          }
+        // AI 要約
+        const pipelineResult = await runSummaryPipeline({
+          ai: ai as { run(model: string, input: { messages: { role: string; content: string }[] }): Promise<unknown> } | null,
+          model: aiModel,
+          title,
+          description,
+          trimmedDiff,
+        });
+        const summary = pipelineResult.summary;
+        if (!pipelineResult.success) {
+          logger.warn('AI summary pipeline failed', { summary, prUrl, githubTokenSet: !!githubToken });
         }
 
         // Slack 通知
-        const slackLines = [
-          `*PR ${prAction === 'opened' ? '作成' : '更新'}:* #${prNumber} ${title}`,
-          `リポジトリ: ${repoFullName}`,
-          `作成者: ${author}`,
+        const slackText = buildSlackMessage({
+          prAction,
+          prNumber,
+          title,
+          repoFullName,
+          author,
           prUrl,
-        ];
-        if (summary) {
-          slackLines.push('', '*AI要約:*', summary);
-        }
-        slackLines.push('', `_AI問い合わせ #${dailySeq} (本日) | ID: ${requestId}_`);
+          summary,
+          dailySeq,
+          requestId,
+        });
 
         let slackNotified = false;
         try {
-          const slackResult = await postSlackMessage({ token: slackToken, channel: slackChannel, text: slackLines.join('\n') });
+          const slackResult = await postSlackMessage({ token: slackToken, channel: slackChannel, text: slackText });
           if (slackResult.ok) {
             slackNotified = true;
           } else {
@@ -2802,6 +2759,28 @@ app.post('/webhook/github', async (c) => {
               slackNotified ? 1 : 0,
               now.toISOString(),
             ).run();
+            // 要約結果を自動診断してフィードバックを記録
+            const diagnosis = classifySummaryResult(summary !== '' ? summary : null);
+            try {
+              await db.prepare(`
+                INSERT INTO ai_summary_reviews
+                  (summary_request_id, rating, reviewer_type, reviewer_name, review_model, comment, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+              `).bind(
+                requestId,
+                diagnosis.rating,
+                'system',
+                'auto-diagnosis',
+                null,
+                diagnosis.comment,
+                now.toISOString(),
+              ).run();
+            } catch (feedbackError) {
+              logger.warn('Failed to insert auto-diagnosis feedback', {
+                error: feedbackError instanceof Error ? feedbackError.message : 'Unknown error',
+                requestId,
+              });
+            }
           } catch (error) {
             logger.error('Failed to insert ai_summary_log', {
               error: error instanceof Error ? error.message : 'Unknown error',
