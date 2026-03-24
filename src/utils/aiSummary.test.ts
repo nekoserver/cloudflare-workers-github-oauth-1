@@ -314,37 +314,33 @@ describe('buildSlackMessage', () => {
     expect(summaryBlock).toBeUndefined();
   });
 
-  it('「詳細を見る (モーダル)」ボタンが actions ブロックに含まれる', () => {
+  it('actions ブロック（ボタン）が存在しない（Interactivity不要）', () => {
     const { blocks } = buildSlackMessage(baseParams);
-    const actionsBlock = blocks.find((b: any) => b.type === 'actions') as any;
-    expect(actionsBlock).toBeTruthy();
-    const modalButton = actionsBlock?.elements?.find((e: any) => e.action_id === 'view_ai_summary_detail');
-    expect(modalButton?.type).toBe('button');
-    expect(modalButton?.value).toBe('abc-123');
+    const actionsBlock = blocks.find((b: any) => b.type === 'actions');
+    expect(actionsBlock).toBeUndefined();
   });
 
-  it('workerBaseUrlが指定された場合、リンクボタンが追加される', () => {
+  it('workerBaseUrlが指定された場合、contextブロックに詳細リンクが含まれる', () => {
     const { blocks } = buildSlackMessage({ ...baseParams, workerBaseUrl: 'https://example.workers.dev' });
-    const actionsBlock = blocks.find((b: any) => b.type === 'actions') as any;
-    const linkButton = actionsBlock?.elements?.find((e: any) => e.action_id === 'view_ai_summary_link');
-    expect(linkButton).toBeTruthy();
-    expect(linkButton?.url).toBe('https://example.workers.dev/ai-summary/abc-123');
+    const contextBlock = blocks.find((b: any) => b.type === 'context') as any;
+    const texts = contextBlock?.elements?.map((e: any) => e.text).join(' ');
+    expect(texts).toContain('<https://example.workers.dev/ai-summary/abc-123|詳細を見る>');
   });
 
-  it('workerBaseUrlが未指定の場合、リンクボタンは含まれない', () => {
+  it('workerBaseUrlが未指定の場合、詳細リンクが含まれない', () => {
     const { blocks } = buildSlackMessage(baseParams);
-    const actionsBlock = blocks.find((b: any) => b.type === 'actions') as any;
-    const linkButton = actionsBlock?.elements?.find((e: any) => e.action_id === 'view_ai_summary_link');
-    expect(linkButton).toBeUndefined();
+    const contextBlock = blocks.find((b: any) => b.type === 'context') as any;
+    const texts = contextBlock?.elements?.map((e: any) => e.text).join(' ');
+    expect(texts).not.toContain('詳細を見る');
   });
 
-  it('summaryが無い場合はボタンが含まれない', () => {
+  it('summaryが無い場合はactions/リンクが含まれない', () => {
     const { blocks } = buildSlackMessage({ ...baseParams, summary: '' });
     const actionsBlock = blocks.find((b: any) => b.type === 'actions');
     expect(actionsBlock).toBeUndefined();
   });
 
-  it('[AI_*]エラーの場合もボタンが含まれない', () => {
+  it('[AI_*]エラーの場合もactions/リンクが含まれない', () => {
     const { blocks } = buildSlackMessage({ ...baseParams, summary: '[AI_ERROR] fail' });
     const actionsBlock = blocks.find((b: any) => b.type === 'actions');
     expect(actionsBlock).toBeUndefined();
@@ -407,7 +403,7 @@ describe('buildSlackMessage', () => {
     expect(text).toContain('達成: 3/5件');
   });
 
-  it('URLリンク（<https://...>）が blocks に含まれない', () => {
+  it('workerBaseUrl未指定時はblocks内にURLリンクが含まれない', () => {
     const { blocks } = buildSlackMessage(baseParams);
     const allText = JSON.stringify(blocks);
     expect(allText).not.toContain('<https://');

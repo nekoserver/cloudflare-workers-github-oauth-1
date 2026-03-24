@@ -264,25 +264,6 @@ export function buildSlackMessage(params: BuildSlackMessageParams): SlackMessage
       },
     });
 
-    const buttonElements: Record<string, unknown>[] = [];
-    if (workerBaseUrl) {
-      buttonElements.push({
-        type: 'button',
-        text: { type: 'plain_text', text: '詳細を見る' },
-        url: `${workerBaseUrl}/ai-summary/${requestId}`,
-        action_id: 'view_ai_summary_link',
-      });
-    }
-    buttonElements.push({
-      type: 'button',
-      text: { type: 'plain_text', text: '詳細を見る (モーダル)' },
-      action_id: 'view_ai_summary_detail',
-      value: requestId,
-    });
-    blocks.push({
-      type: 'actions',
-      elements: buttonElements,
-    });
   }
 
   if (hasDesignDiff) {
@@ -295,14 +276,21 @@ export function buildSlackMessage(params: BuildSlackMessageParams): SlackMessage
     });
   }
 
+  const contextElements: Record<string, unknown>[] = [
+    {
+      type: 'mrkdwn',
+      text: `AI問い合わせ #${dailySeq} (本日) | ID: ${requestId}`,
+    },
+  ];
+  if (hasSummary && workerBaseUrl) {
+    contextElements.push({
+      type: 'mrkdwn',
+      text: `<${workerBaseUrl}/ai-summary/${requestId}|詳細を見る>`,
+    });
+  }
   blocks.push({
     type: 'context',
-    elements: [
-      {
-        type: 'mrkdwn',
-        text: `AI問い合わせ #${dailySeq} (本日) | ID: ${requestId}`,
-      },
-    ],
+    elements: contextElements,
   });
 
   return { text, blocks };
