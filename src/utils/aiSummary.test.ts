@@ -314,14 +314,28 @@ describe('buildSlackMessage', () => {
     expect(summaryBlock).toBeUndefined();
   });
 
-  it('「詳細を見る」ボタンが actions ブロックに含まれる', () => {
+  it('「詳細を見る (モーダル)」ボタンが actions ブロックに含まれる', () => {
     const { blocks } = buildSlackMessage(baseParams);
     const actionsBlock = blocks.find((b: any) => b.type === 'actions') as any;
     expect(actionsBlock).toBeTruthy();
-    const button = actionsBlock?.elements?.[0];
-    expect(button?.type).toBe('button');
-    expect(button?.action_id).toBe('view_ai_summary_detail');
-    expect(button?.value).toBe('abc-123');
+    const modalButton = actionsBlock?.elements?.find((e: any) => e.action_id === 'view_ai_summary_detail');
+    expect(modalButton?.type).toBe('button');
+    expect(modalButton?.value).toBe('abc-123');
+  });
+
+  it('workerBaseUrlが指定された場合、リンクボタンが追加される', () => {
+    const { blocks } = buildSlackMessage({ ...baseParams, workerBaseUrl: 'https://example.workers.dev' });
+    const actionsBlock = blocks.find((b: any) => b.type === 'actions') as any;
+    const linkButton = actionsBlock?.elements?.find((e: any) => e.action_id === 'view_ai_summary_link');
+    expect(linkButton).toBeTruthy();
+    expect(linkButton?.url).toBe('https://example.workers.dev/ai-summary/abc-123');
+  });
+
+  it('workerBaseUrlが未指定の場合、リンクボタンは含まれない', () => {
+    const { blocks } = buildSlackMessage(baseParams);
+    const actionsBlock = blocks.find((b: any) => b.type === 'actions') as any;
+    const linkButton = actionsBlock?.elements?.find((e: any) => e.action_id === 'view_ai_summary_link');
+    expect(linkButton).toBeUndefined();
   });
 
   it('summaryが無い場合はボタンが含まれない', () => {

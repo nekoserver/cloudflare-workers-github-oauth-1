@@ -203,6 +203,7 @@ export type BuildSlackMessageParams = {
   dailySeq: number;
   requestId: string;
   designDiff?: string;
+  workerBaseUrl?: string;
 };
 
 export type SlackMessagePayload = {
@@ -222,6 +223,7 @@ export function buildSlackMessage(params: BuildSlackMessageParams): SlackMessage
     dailySeq,
     requestId,
     designDiff,
+    workerBaseUrl,
   } = params;
 
   const actionLabel = prAction === 'opened' ? '作成' : '更新';
@@ -262,16 +264,24 @@ export function buildSlackMessage(params: BuildSlackMessageParams): SlackMessage
       },
     });
 
+    const buttonElements: Record<string, unknown>[] = [];
+    if (workerBaseUrl) {
+      buttonElements.push({
+        type: 'button',
+        text: { type: 'plain_text', text: '詳細を見る' },
+        url: `${workerBaseUrl}/ai-summary/${requestId}`,
+        action_id: 'view_ai_summary_link',
+      });
+    }
+    buttonElements.push({
+      type: 'button',
+      text: { type: 'plain_text', text: '詳細を見る (モーダル)' },
+      action_id: 'view_ai_summary_detail',
+      value: requestId,
+    });
     blocks.push({
       type: 'actions',
-      elements: [
-        {
-          type: 'button',
-          text: { type: 'plain_text', text: '詳細を見る' },
-          action_id: 'view_ai_summary_detail',
-          value: requestId,
-        },
-      ],
+      elements: buttonElements,
     });
   }
 
@@ -399,4 +409,42 @@ export function buildSummaryModal(row: SummaryModalRow): SlackModalView {
     title: { type: 'plain_text', text: '要約を表示' },
     blocks,
   };
+}
+
+export function buildSummaryFallbackBlocks(row: SummaryModalRow): { text: string; blocks: Record<string, unknown>[] } {
+  const prLabel = row.pr_number
+    ? (row.pr_url ? `<${row.pr_url}|PR #${row.pr_number}>` : `PR #${row.pr_number}`)
+    : '(不明)';
+
+  const isNullSummary = row.summary === null || row.summary === undefined;
+  const isDiffEmpty = !row.diff_length || row.diff_length === 0;
+  let summaryDisplay: string;
+  if (isNullSummary && isDiffEmpty) {
+    summaryDisplay = '(要約なし — 差分を取得できなかったため生成されませんでした)';
+  } else if (isNullSummary) {
+    summaryDisplay = '(要約なし)';
+  } else {
+    summaryDisplay = row.summary!;
+  }
+
+  const lines = [
+    `*AI要約詳細* (${prLabel})`,
+    `リポジトリ: ${row.repo_full_name ?? '(不明)'}`,
+    `モデル: ${row.model ?? '(不明)'} / Diff長: ${row.diff_length ?? 0}文字`,
+    `日時: ${row.created_at} / #${row.daily_seq} (${row.event_date})`,
+    '',
+    '```',
+    summaryDisplay,
+    '```',
+  ];
+  const text = lines.join('\n');
+
+  const blocks: Record<string, unknown>[] = [
+    {
+      type: 'section',
+      text: { type: 'mrkdwn', text },
+    },
+  ];
+
+  return { text, blocks };
 }
