@@ -288,12 +288,21 @@ export function buildSummaryModal(row: SummaryModalRow): SlackModalView {
 
   blocks.push({ type: 'divider' });
 
-  const summaryText = row.summary ?? '(要約なし)';
+  const isNullSummary = row.summary === null || row.summary === undefined;
+  const isDiffEmpty = !row.diff_length || row.diff_length === 0;
+  let summaryDisplay: string;
+  if (isNullSummary && isDiffEmpty) {
+    summaryDisplay = '(要約なし)\n\n_差分を取得できなかったため、AI要約は生成されませんでした。_';
+  } else if (isNullSummary) {
+    summaryDisplay = '(要約なし)';
+  } else {
+    summaryDisplay = row.summary!;
+  }
   blocks.push({
     type: 'section',
     text: {
       type: 'mrkdwn',
-      text: `*AI要約:*\n${summaryText}`,
+      text: `*AI要約:*\n${summaryDisplay}`,
     },
   });
 

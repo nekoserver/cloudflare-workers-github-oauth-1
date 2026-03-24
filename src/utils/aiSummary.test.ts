@@ -437,6 +437,27 @@ describe('buildSummaryModal', () => {
     expect(summaryIdx).toBeGreaterThanOrEqual(0);
     expect(relationIdx).toBeGreaterThan(summaryIdx);
   });
+
+  // ---- summary null + diff_length 0 のハンドリング ----
+
+  it('summary null かつ diff_length 0 のとき、diff取得失敗の説明が表示される', () => {
+    const modal = buildSummaryModal({ ...baseRow, summary: null, diff_length: 0 });
+    const allText = JSON.stringify(modal.blocks);
+    expect(allText).toContain('差分を取得できなかった');
+  });
+
+  it('summary null かつ diff_length 0 のとき、要約なしの文言が表示される', () => {
+    const modal = buildSummaryModal({ ...baseRow, summary: null, diff_length: 0 });
+    const allText = JSON.stringify(modal.blocks);
+    expect(allText).toContain('要約なし');
+  });
+
+  it('summary null かつ diff_length が正の値のとき、diff取得失敗の説明は表示されない', () => {
+    const modal = buildSummaryModal({ ...baseRow, summary: null, diff_length: 500 });
+    const allText = JSON.stringify(modal.blocks);
+    expect(allText).not.toContain('差分を取得できなかった');
+    expect(allText).toContain('要約なし');
+  });
 });
 
 // ---- classifySummaryResult ----
