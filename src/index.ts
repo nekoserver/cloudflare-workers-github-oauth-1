@@ -2713,8 +2713,6 @@ app.post('/webhook/github', async (c) => {
         const designDiff = extracted.designDiff;
 
         // Slack 通知
-        const reqUrl = new URL(c.req.url);
-        const workerBaseUrl = `${reqUrl.protocol}//${reqUrl.host}`;
         const slackPayload = buildSlackMessage({
           prAction,
           prNumber,
@@ -2726,7 +2724,6 @@ app.post('/webhook/github', async (c) => {
           dailySeq,
           requestId,
           designDiff,
-          workerBaseUrl,
         });
 
         let slackNotified = false;

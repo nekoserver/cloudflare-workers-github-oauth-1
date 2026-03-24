@@ -203,7 +203,6 @@ export type BuildSlackMessageParams = {
   dailySeq: number;
   requestId: string;
   designDiff?: string;
-  workerBaseUrl?: string;
 };
 
 export type SlackMessagePayload = {
@@ -223,7 +222,6 @@ export function buildSlackMessage(params: BuildSlackMessageParams): SlackMessage
     dailySeq,
     requestId,
     designDiff,
-    workerBaseUrl,
   } = params;
 
   const actionLabel = prAction === 'opened' ? '作成' : '更新';
@@ -264,6 +262,17 @@ export function buildSlackMessage(params: BuildSlackMessageParams): SlackMessage
       },
     });
 
+    blocks.push({
+      type: 'actions',
+      elements: [
+        {
+          type: 'button',
+          text: { type: 'plain_text', text: '詳細を見る' },
+          action_id: 'view_ai_summary_detail',
+          value: requestId,
+        },
+      ],
+    });
   }
 
   if (hasDesignDiff) {
@@ -276,21 +285,14 @@ export function buildSlackMessage(params: BuildSlackMessageParams): SlackMessage
     });
   }
 
-  const contextElements: Record<string, unknown>[] = [
-    {
-      type: 'mrkdwn',
-      text: `AI問い合わせ #${dailySeq} (本日) | ID: ${requestId}`,
-    },
-  ];
-  if (hasSummary && workerBaseUrl) {
-    contextElements.push({
-      type: 'mrkdwn',
-      text: `<${workerBaseUrl}/ai-summary/${requestId}|詳細を見る>`,
-    });
-  }
   blocks.push({
     type: 'context',
-    elements: contextElements,
+    elements: [
+      {
+        type: 'mrkdwn',
+        text: `AI問い合わせ #${dailySeq} (本日) | ID: ${requestId}`,
+      },
+    ],
   });
 
   return { text, blocks };
