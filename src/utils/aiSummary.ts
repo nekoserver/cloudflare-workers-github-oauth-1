@@ -85,7 +85,7 @@ export async function generateAiSummary(
   if (designSpec) {
     userParts.push(`初期設計チェックリスト:\n${designSpec}`);
     userParts.push(
-      '以下の形式で日本語で出力してください:\n- 概要\n- 主な変更点\n- 影響範囲\n- 初期設計との差異（達成/進行中/変更/中止の状態と達成数を「N/M件達成」形式で記載）'
+      '以下の形式で日本語で出力してください:\n- 概要\n- 主な変更点\n- 影響範囲\n- 初期設計との差異（達成/進行中/変更/中止の状態と達成数を「N/M件達成」形式で記載）\n\n注意: 罫線文字（├└│─等）やASCIIツリーは使わず、「- 」の箇条書きで表現すること'
     );
   } else {
     userParts.push(
@@ -181,6 +181,20 @@ export type ExtractedSummary = {
   designDiff: string;
 };
 
+/**
+ * 罫線・ボックスドローイング文字を箇条書きに変換する。
+ * AI出力に含まれるツリー文字(├└│─等)をSlack/外部サービスで崩れない形式に正規化する。
+ */
+export function sanitizeBoxDrawing(text: string): string {
+  if (!text) return text;
+  return text
+    .replace(/[├┌┬]──?\s*/g, '- ')
+    .replace(/[└]──?\s*/g, '- ')
+    .replace(/[│]\s*/g, '  ')
+    .replace(/[─┐┘┤┴┼]/g, '')
+    .replace(/\s+$/gm, '');
+}
+
 export function extractDesignDiff(rawSummary: string): ExtractedSummary {
   const marker = /[-#*]*\s*初期設計との差異/;
   const match = rawSummary.match(marker);
@@ -226,7 +240,8 @@ export function buildSlackMessage(params: BuildSlackMessageParams): SlackMessage
 
   const actionLabel = prAction === 'opened' ? '作成' : '更新';
   const hasSummary = summary !== '' && !summary.startsWith('[AI_');
-  const hasDesignDiff = !!designDiff;
+  const cleanDesignDiff = designDiff ? sanitizeBoxDrawing(designDiff) : '';
+  const hasDesignDiff = !!cleanDesignDiff;
 
   const textLines = [
     `*PR ${actionLabel}:* #${prNumber} ${title}`,
@@ -238,7 +253,7 @@ export function buildSlackMessage(params: BuildSlackMessageParams): SlackMessage
     textLines.push('', '*AI要約:*', summary);
   }
   if (hasDesignDiff) {
-    textLines.push('', '*初期設計との差異:*', designDiff);
+    textLines.push('', '*初期設計との差異:*', cleanDesignDiff);
   }
   textLines.push('', `_AI問い合わせ #${dailySeq} (本日) | ID: ${requestId}_`);
   const text = textLines.join('\n');
@@ -280,7 +295,7 @@ export function buildSlackMessage(params: BuildSlackMessageParams): SlackMessage
       type: 'section',
       text: {
         type: 'mrkdwn',
-        text: `*初期設計との差異:*\n\`\`\`\n${designDiff}\n\`\`\``,
+        text: `*初期設計との差異:*\n\`\`\`\n${cleanDesignDiff}\n\`\`\``,
       },
     });
   }
@@ -378,13 +393,14 @@ export function buildSummaryModal(row: SummaryModalRow): SlackModalView {
     },
   });
 
-  const htmlUrl = `${WORKER_BASE_URL}/ai-summary/${row.request_id}`;
   blocks.push({
-    type: 'context',
+    type: 'actions',
     elements: [
       {
-        type: 'mrkdwn',
-        text: `<${htmlUrl}|:globe_with_meridians: HTMLで表示>`,
+        type: 'button',
+        text: { type: 'plain_text', text: ':globe_with_meridians: HTMLで表示' },
+        action_id: 'open_ai_summary_html',
+        value: row.request_id,
       },
     ],
   });
@@ -395,6 +411,26 @@ export function buildSummaryModal(row: SummaryModalRow): SlackModalView {
     close: { type: 'plain_text', text: '閉じる' },
     blocks,
   };
+}
+
+export function buildSummaryModalWithHtmlLink(row: SummaryModalRow): SlackModalView {
+  const base = buildSummaryModal(row);
+  const htmlUrl = `${WORKER_BASE_URL}/ai-summary/${row.request_id}`;
+  const blocks = base.blocks.map((b: any) => {
+    if (b.type === 'actions' && b.elements?.[0]?.action_id === 'open_ai_summary_html') {
+      return {
+        type: 'context',
+        elements: [
+          {
+            type: 'mrkdwn',
+            text: `:white_check_mark: <${htmlUrl}|HTMLで表示>`,
+          },
+        ],
+      };
+    }
+    return b;
+  });
+  return { ...base, blocks };
 }
 
 export function buildSummaryFallbackBlocks(row: SummaryModalRow): { text: string; blocks: Record<string, unknown>[] } {

@@ -75,6 +75,16 @@ export async function openSlackModal({ token, triggerId, view }: OpenSlackModalP
   return fetchSlackApi('https://slack.com/api/views.open', token, { trigger_id: triggerId, view });
 }
 
+type UpdateSlackModalParams = {
+  token: string;
+  viewId: string;
+  view: SlackModalView;
+};
+
+export async function updateSlackModal({ token, viewId, view }: UpdateSlackModalParams): Promise<SlackPostResult> {
+  return fetchSlackApi('https://slack.com/api/views.update', token, { view_id: viewId, view });
+}
+
 type RespondToInteractionParams = {
   responseUrl: string;
   text: string;
