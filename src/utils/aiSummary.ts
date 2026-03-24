@@ -329,15 +329,33 @@ export function buildSummaryModal(row: SummaryModalRow): SlackModalView {
     : '(不明)';
 
   blocks.push({
-    type: 'section',
-    text: {
-      type: 'mrkdwn',
-      text: [
-        `*リポジトリ :* ${row.repo_full_name ?? '(不明)'}`,
-        `*PR番号 :* ${prLabel}`,
-        `*モデル@cf :* ${row.model ?? '(不明)'}  *diff :* ${row.diff_length ?? 0}文字  *要約回 :* #${row.daily_seq} (${row.event_date})`,
-      ].join('\n'),
-    },
+    type: 'context',
+    elements: [
+      {
+        type: 'mrkdwn',
+        text: `*リポジトリ :* ${row.repo_full_name ?? '(不明)'}`,
+      },
+    ],
+  });
+
+  blocks.push({
+    type: 'context',
+    elements: [
+      {
+        type: 'mrkdwn',
+        text: `*PR番号 :* ${prLabel}`,
+      },
+    ],
+  });
+
+  blocks.push({
+    type: 'context',
+    elements: [
+      {
+        type: 'mrkdwn',
+        text: `*モデル@cf :* ${row.model ?? '(不明)'}  *diff :* ${row.diff_length ?? 0}文字  *要約回 :* #${row.daily_seq} (${row.event_date})`,
+      },
+    ],
   });
 
   blocks.push({ type: 'divider' });
@@ -360,14 +378,13 @@ export function buildSummaryModal(row: SummaryModalRow): SlackModalView {
     },
   });
 
+  const htmlUrl = `${WORKER_BASE_URL}/ai-summary/${row.request_id}`;
   blocks.push({
-    type: 'actions',
+    type: 'context',
     elements: [
       {
-        type: 'button',
-        text: { type: 'plain_text', text: 'HTMLで表示' },
-        action_id: 'open_ai_summary_html',
-        url: `${WORKER_BASE_URL}/ai-summary/${row.request_id}`,
+        type: 'mrkdwn',
+        text: `<${htmlUrl}|:globe_with_meridians: HTMLで表示>`,
       },
     ],
   });
