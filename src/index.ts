@@ -22,8 +22,8 @@ import { getGitHubAccessToken, getGitHubLatestCommit, getGitHubCommitCount, getG
 import { getCookieValue, getCookieValues } from './utils/cookie';
 import { verifyResendWebhookSignature } from './utils/resendWebhook';
 import { verifyGitHubWebhookSignature } from './utils/githubWebhook';
-import { postSlackMessage, openSlackModal } from './utils/slack';
-import { fetchPrDiff, runSummaryPipeline, buildSlackMessage, buildSummaryModal, classifySummaryResult, resolveAiModel, extractDesignDiff, DESIGN_SPEC_CHECKLIST, type SummaryModalRow } from './utils/aiSummary';
+import { postSlackMessage, openSlackModal, respondToInteraction } from './utils/slack';
+import { fetchPrDiff, runSummaryPipeline, buildSlackMessage, buildSummaryModal, buildSummaryFallbackBlocks, classifySummaryResult, resolveAiModel, extractDesignDiff, DESIGN_SPEC_CHECKLIST, type SummaryModalRow } from './utils/aiSummary';
 import { verifySlackSignature } from './utils/slackSignature';
 import { executeCreateRepo } from './utils/repoValidation';
 import { validateReturnTo } from './utils/returnTo';
@@ -2713,6 +2713,8 @@ app.post('/webhook/github', async (c) => {
         const designDiff = extracted.designDiff;
 
         // Slack 通知
+        const reqUrl = new URL(c.req.url);
+        const workerBaseUrl = `${reqUrl.protocol}//${reqUrl.host}`;
         const slackPayload = buildSlackMessage({
           prAction,
           prNumber,
@@ -2724,6 +2726,7 @@ app.post('/webhook/github', async (c) => {
           dailySeq,
           requestId,
           designDiff,
+          workerBaseUrl,
         });
 
         let slackNotified = false;
@@ -3315,55 +3318,80 @@ app.get('/api/repositories/search/history/:id', optionalAuthMiddleware, async (c
  * ボタンクリック等の対話イベントを受信し、モーダルを返す
  */
 app.post('/slack/interactions', async (c) => {
+  const db = c.env.DB;
+  const logStep = async (step: string, detail?: string) => {
+    if (!db) return;
+    try {
+      await db.prepare(
+        'INSERT INTO slack_interaction_log (step, detail, created_at) VALUES (?, ?, ?)'
+      ).bind(step, detail ?? null, new Date().toISOString()).run();
+    } catch (_) { /* best effort */ }
+  };
+
+  await logStep('received', `headers: ts=${c.req.header('X-Slack-Request-Timestamp') ?? 'none'}, sig=${c.req.header('X-Slack-Signature') ? 'present' : 'none'}`);
+
   const signingSecret = c.env.SLACK_SIGNING_SECRET;
   if (!signingSecret) {
+    await logStep('error', 'SLACK_SIGNING_SECRET not configured');
     logger.error('SLACK_SIGNING_SECRET not configured');
     return c.text('', 200);
   }
 
   const rawBody = await c.req.text();
+  await logStep('body_read', `length=${rawBody.length}`);
+
   const timestamp = c.req.header('X-Slack-Request-Timestamp');
   const signature = c.req.header('X-Slack-Signature');
 
   const verification = await verifySlackSignature(rawBody, timestamp, signature, signingSecret);
   if (!verification.success) {
+    await logStep('sig_fail', verification.reason ?? 'unknown');
     logger.warn('Slack signature verification failed', { reason: verification.reason });
     return c.text('', 401);
   }
+  await logStep('sig_ok');
 
   let interactionPayload: any;
   try {
     const params = new URLSearchParams(rawBody);
     const payloadStr = params.get('payload');
     if (!payloadStr) {
+      await logStep('error', 'missing payload field');
       logger.warn('Slack interaction: missing payload field');
       return c.text('', 200);
     }
     interactionPayload = JSON.parse(payloadStr);
   } catch (error) {
-    logger.warn('Slack interaction: failed to parse payload', {
-      error: error instanceof Error ? error.message : 'Unknown',
-    });
+    const msg = error instanceof Error ? error.message : 'Unknown';
+    await logStep('error', `parse failed: ${msg}`);
+    logger.warn('Slack interaction: failed to parse payload', { error: msg });
     return c.text('', 200);
   }
 
+  await logStep('parsed', `type=${interactionPayload.type}, action_id=${interactionPayload.actions?.[0]?.action_id ?? 'none'}`);
+
   if (interactionPayload.type !== 'block_actions') {
+    await logStep('skip', `type=${interactionPayload.type}`);
     return c.text('', 200);
   }
 
   const action = interactionPayload.actions?.[0];
   if (!action || action.action_id !== 'view_ai_summary_detail') {
+    await logStep('skip', `action_id=${action?.action_id ?? 'none'}`);
     return c.text('', 200);
   }
 
   const requestId = action.value;
   const triggerId = interactionPayload.trigger_id;
+  const responseUrl: string | undefined = interactionPayload.response_url;
   if (!requestId || !triggerId) {
+    await logStep('error', `requestId=${requestId ?? 'none'}, triggerId=${triggerId ?? 'none'}`);
     logger.warn('Slack interaction: missing requestId or trigger_id');
     return c.text('', 200);
   }
 
-  const db = c.env.DB;
+  await logStep('action_matched', `requestId=${requestId}, triggerId=${triggerId}, response_url=${responseUrl ? 'present' : 'none'}`);
+
   if (!db) {
     logger.error('Slack interaction: DB not available');
     return c.text('', 200);
@@ -3371,6 +3399,7 @@ app.post('/slack/interactions', async (c) => {
 
   const slackToken = c.env.SLACK_OAUTH_TOKEN;
   if (!slackToken) {
+    await logStep('error', 'SLACK_OAUTH_TOKEN not configured');
     logger.error('Slack interaction: SLACK_OAUTH_TOKEN not configured');
     return c.text('', 200);
   }
@@ -3381,28 +3410,31 @@ app.post('/slack/interactions', async (c) => {
     ).bind(requestId).first() as SummaryModalRow | null;
 
     if (!row) {
-      const errorView = {
-        type: 'modal' as const,
-        title: { type: 'plain_text' as const, text: 'エラー' },
-        blocks: [{
-          type: 'section',
-          text: { type: 'mrkdwn', text: `要約データが見つかりません (ID: ${requestId})` },
-        }],
-      };
-      await openSlackModal({ token: slackToken, triggerId, view: errorView });
+      await logStep('db_miss', `requestId=${requestId}`);
+      if (responseUrl) {
+        await respondToInteraction({ responseUrl, text: `要約データが見つかりません (ID: ${requestId})` });
+      }
       return c.text('', 200);
     }
 
+    await logStep('db_hit', `pr_number=${row.pr_number}`);
     const modalView = buildSummaryModal(row);
     const modalResult = await openSlackModal({ token: slackToken, triggerId, view: modalView });
     if (!modalResult.ok) {
+      await logStep('modal_fail', `error=${modalResult.error}, status=${modalResult.status}`);
       logger.error('Slack modal open failed', { error: modalResult.error, requestId });
+      if (responseUrl) {
+        const fallback = buildSummaryFallbackBlocks(row);
+        const fallbackResult = await respondToInteraction({ responseUrl, text: fallback.text, blocks: fallback.blocks });
+        await logStep('fallback', fallbackResult.ok ? 'ok' : `fail: ${fallbackResult.error}`);
+      }
+    } else {
+      await logStep('modal_ok', `requestId=${requestId}`);
     }
   } catch (error) {
-    logger.error('Slack interaction handler error', {
-      error: error instanceof Error ? error.message : 'Unknown',
-      requestId,
-    });
+    const msg = error instanceof Error ? error.message : 'Unknown';
+    await logStep('exception', msg);
+    logger.error('Slack interaction handler error', { error: msg, requestId });
   }
 
   return c.text('', 200);
@@ -4428,6 +4460,61 @@ app.delete('/api/repo-groups/:id', authMiddleware, async (c) => {
 // =====================================================
 // AI要約 API
 // =====================================================
+
+/**
+ * AI要約詳細ページ (公開HTML — Slackボタンからの直接リンク用)
+ */
+app.get('/ai-summary/:id', async (c) => {
+  const db = c.env.DB;
+  if (!db) return c.text('DB not available', 500);
+
+  const requestId = c.req.param('id');
+  const row = await db.prepare(
+    'SELECT request_id, daily_seq, event_date, repo_full_name, pr_number, pr_action, pr_url, model, summary, diff_length, created_at FROM ai_summary_log WHERE request_id = ?'
+  ).bind(requestId).first() as SummaryModalRow | null;
+
+  if (!row) return c.text('Not found', 404);
+
+  await db.prepare(
+    'UPDATE ai_summary_log SET view_count = view_count + 1 WHERE request_id = ?'
+  ).bind(requestId).run();
+
+  const reviews = await db.prepare(
+    'SELECT rating, reviewer_type, reviewer_name, comment, created_at FROM ai_summary_reviews WHERE summary_request_id = ? ORDER BY created_at DESC'
+  ).bind(requestId).all();
+
+  const escHtml = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  const summaryText = row.summary ?? '(要約なし)';
+  const prLink = row.pr_url ? `<a href="${escHtml(row.pr_url)}">PR #${row.pr_number}</a>` : `PR #${row.pr_number ?? '?'}`;
+
+  const reviewRows = (reviews.results ?? []).map((r: any) =>
+    `<tr><td>${escHtml(r.rating)}</td><td>${escHtml(r.reviewer_name ?? '')}</td><td>${escHtml(r.comment ?? '')}</td><td>${escHtml(r.created_at ?? '')}</td></tr>`
+  ).join('');
+
+  const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AI要約 #${row.daily_seq}</title>
+<style>body{font-family:system-ui,sans-serif;max-width:800px;margin:2rem auto;padding:0 1rem;background:#f8f9fa;color:#333}
+h1{font-size:1.4rem}table{border-collapse:collapse;width:100%}th,td{border:1px solid #ddd;padding:8px;text-align:left}
+th{background:#e9ecef}pre{background:#1e1e1e;color:#d4d4d4;padding:1rem;border-radius:6px;overflow-x:auto;white-space:pre-wrap}
+.meta{display:grid;grid-template-columns:1fr 1fr;gap:0.5rem;margin:1rem 0}.meta dt{font-weight:bold;color:#666}.meta dd{margin:0}</style>
+</head><body>
+<h1>AI要約 #${row.daily_seq} (${escHtml(row.event_date)})</h1>
+<dl class="meta">
+<dt>リポジトリ</dt><dd>${escHtml(row.repo_full_name ?? '(不明)')}</dd>
+<dt>PR</dt><dd>${prLink}</dd>
+<dt>アクション</dt><dd>${escHtml(row.pr_action ?? '')}</dd>
+<dt>モデル</dt><dd>${escHtml(row.model ?? '(不明)')}</dd>
+<dt>Diff長</dt><dd>${row.diff_length ?? 0} 文字</dd>
+<dt>日時</dt><dd>${escHtml(row.created_at)}</dd>
+<dt>Request ID</dt><dd style="font-size:0.85rem">${escHtml(row.request_id)}</dd>
+</dl>
+<h2>要約</h2>
+<pre>${escHtml(summaryText)}</pre>
+${reviewRows ? `<h2>レビュー</h2><table><thead><tr><th>評価</th><th>レビュアー</th><th>コメント</th><th>日時</th></tr></thead><tbody>${reviewRows}</tbody></table>` : ''}
+</body></html>`;
+
+  return c.html(html);
+});
 
 /**
  * AI要約詳細取得 + view_count インクリメント

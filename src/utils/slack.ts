@@ -73,3 +73,33 @@ type OpenSlackModalParams = {
 export async function openSlackModal({ token, triggerId, view }: OpenSlackModalParams): Promise<SlackPostResult> {
   return fetchSlackApi('https://slack.com/api/views.open', token, { trigger_id: triggerId, view });
 }
+
+type RespondToInteractionParams = {
+  responseUrl: string;
+  text: string;
+  blocks?: Record<string, unknown>[];
+};
+
+export async function respondToInteraction({ responseUrl, text, blocks }: RespondToInteractionParams): Promise<SlackPostResult> {
+  const body: Record<string, unknown> = {
+    response_type: 'ephemeral',
+    replace_original: false,
+    text,
+  };
+  if (blocks) {
+    body.blocks = blocks;
+  }
+
+  const response = await fetch(responseUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json; charset=utf-8' },
+    body: JSON.stringify(body),
+  });
+
+  if (response.status >= 200 && response.status < 300) {
+    return { ok: true, status: response.status };
+  }
+
+  const errorText = await response.text().catch(() => '');
+  return { ok: false, status: response.status, error: errorText.slice(0, 500) };
+}
