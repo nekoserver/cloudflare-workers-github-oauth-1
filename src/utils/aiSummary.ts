@@ -1,3 +1,9 @@
+export const DEFAULT_AI_MODEL = '@cf/meta/llama-3.1-8b-instruct-fp8';
+
+export function resolveAiModel(envValue: string | undefined): string {
+  return envValue?.trim() || DEFAULT_AI_MODEL;
+}
+
 export type AiBinding = {
   run(model: string, input: { messages: { role: string; content: string }[] }): Promise<unknown>;
 };

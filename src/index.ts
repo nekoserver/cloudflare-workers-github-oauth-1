@@ -23,7 +23,7 @@ import { getCookieValue, getCookieValues } from './utils/cookie';
 import { verifyResendWebhookSignature } from './utils/resendWebhook';
 import { verifyGitHubWebhookSignature } from './utils/githubWebhook';
 import { postSlackMessage } from './utils/slack';
-import { fetchPrDiff, runSummaryPipeline, buildSlackMessage, classifySummaryResult } from './utils/aiSummary';
+import { fetchPrDiff, runSummaryPipeline, buildSlackMessage, classifySummaryResult, resolveAiModel } from './utils/aiSummary';
 import { executeCreateRepo } from './utils/repoValidation';
 import { validateReturnTo } from './utils/returnTo';
 import * as logger from './utils/logger';
@@ -2654,7 +2654,7 @@ app.post('/webhook/github', async (c) => {
         const now = new Date();
         const eventDate = now.toISOString().slice(0, 10); // YYYY-MM-DD
         const requestId = crypto.randomUUID();
-        const aiModel = '@cf/meta/llama-3.1-8b-instruct-fp8';
+        const aiModel = resolveAiModel(c.env.AI_MODEL);
 
         // 本日の通算番号を取得
         let dailySeq = 1;

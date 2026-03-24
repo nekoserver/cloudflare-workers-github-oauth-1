@@ -5,9 +5,35 @@ import {
   buildSlackMessage,
   classifySummaryResult,
   runSummaryPipeline,
+  resolveAiModel,
+  DEFAULT_AI_MODEL,
   type AiBinding,
   type SummaryDiagnosis,
 } from './aiSummary';
+
+// ---- resolveAiModel ----
+
+describe('resolveAiModel', () => {
+  it('環境変数が設定されていればそのモデル名を返す', () => {
+    expect(resolveAiModel('@cf/google/gemma-3-12b-it')).toBe('@cf/google/gemma-3-12b-it');
+  });
+
+  it('環境変数がundefinedならデフォルトモデルを返す', () => {
+    expect(resolveAiModel(undefined)).toBe(DEFAULT_AI_MODEL);
+  });
+
+  it('環境変数が空文字ならデフォルトモデルを返す', () => {
+    expect(resolveAiModel('')).toBe(DEFAULT_AI_MODEL);
+  });
+
+  it('環境変数が空白のみならデフォルトモデルを返す', () => {
+    expect(resolveAiModel('  ')).toBe(DEFAULT_AI_MODEL);
+  });
+
+  it('環境変数の前後空白はtrimされる', () => {
+    expect(resolveAiModel('  @cf/meta/llama-3.3-70b-instruct-fp8-fast  ')).toBe('@cf/meta/llama-3.3-70b-instruct-fp8-fast');
+  });
+});
 
 // ---- fetchPrDiff ----
 
