@@ -16,6 +16,7 @@ import { getSettingsPage } from './views/settings';
 import { getRepositoriesPage } from './views/repositories';
 import { getUserInfoPage } from './views/userinfo';
 import { getMarkdownPreviewPage } from './views/markdown-preview';
+import { getProxyTestPage } from './views/proxy-test';
 import { getCacheStatusPage, CacheStatusData, TableStatusEntry, UserContextInfo, RepoColorEntry, RepoGroupEntry } from './views/status';
 import { ensureDefaultWorkspace, getCurrentWorkspace, getUserWorkspaces, switchWorkspace } from './utils/workspace';
 import { getGitHubAccessToken, getGitHubLatestCommit, getGitHubCommitCount, getGitHubCommits, getGitHubRepoOpenIssuesCount, getGitHubRepoCommitsByMonth, getGitHubRepoCommitsByDate, getGitHubTokenScopes, getGitHubUser, getGitHubUserEmail, getGitHubUserRepos, createGitHubRepo, GitHubTokenScopesError, buildRepoInstallationPermissionsMap, RepoInstallationPermissions, getGitHubUserInstallationsWithDiag, getGitHubInstallationRepos, getExternalServiceLinkedRepos, getSlackLinkedReposByWebhooks, CommitDetail } from './utils/github';
@@ -4858,6 +4859,116 @@ app.post('/api/repositories', authMiddleware, async (c) => {
     error: result.error,
     ...(result.requireReauth ? { requireReauth: true } : {}),
   }, result.status);
+});
+
+// =====================================================
+// プロキシテスト
+// =====================================================
+
+app.get('/proxy-test', authMiddleware, (c) => {
+  const user = c.get('user');
+  return c.html(getProxyTestPage(user.name || user.sub));
+});
+
+app.post('/api/proxy-test', authMiddleware, async (c) => {
+  const body = await c.req.json<{
+    url?: string;
+    method?: string;
+    followRedirects?: boolean;
+    includeBody?: boolean;
+  }>();
+
+  const targetUrl = body.url;
+  if (!targetUrl || typeof targetUrl !== 'string') {
+    return c.json({ error: 'url is required' }, 400);
+  }
+
+  let parsed: URL;
+  try {
+    parsed = new URL(targetUrl);
+  } catch {
+    return c.json({ error: 'Invalid URL' }, 400);
+  }
+
+  if (!['http:', 'https:'].includes(parsed.protocol)) {
+    return c.json({ error: 'Only http/https are allowed' }, 400);
+  }
+
+  const hostname = parsed.hostname;
+  if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1'
+    || hostname.startsWith('10.') || hostname.startsWith('192.168.')
+    || /^172\.(1[6-9]|2\d|3[01])\./.test(hostname)
+    || hostname.endsWith('.local') || hostname.endsWith('.internal')) {
+    return c.json({ error: 'Private/local addresses are not allowed' }, 400);
+  }
+
+  const method = ['GET', 'HEAD', 'POST', 'OPTIONS'].includes(body.method || '')
+    ? body.method!
+    : 'GET';
+
+  const followRedirects = body.followRedirects !== false;
+  const includeBody = body.includeBody !== false;
+
+  const startTime = Date.now();
+
+  try {
+    const resp = await fetch(targetUrl, {
+      method,
+      headers: {
+        'User-Agent': 'CloudflareWorker-ProxyTest/1.0',
+        'Accept': '*/*',
+      },
+      redirect: followRedirects ? 'follow' : 'manual',
+    });
+
+    const durationMs = Date.now() - startTime;
+
+    const headers: Record<string, string> = {};
+    resp.headers.forEach((v, k) => { headers[k] = v; });
+
+    let bodyPreview: string | null = null;
+    if (includeBody && method !== 'HEAD') {
+      const reader = resp.body?.getReader();
+      if (reader) {
+        const chunks: Uint8Array[] = [];
+        let totalSize = 0;
+        const maxBytes = 4096;
+        while (totalSize < maxBytes) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          chunks.push(value);
+          totalSize += value.length;
+        }
+        reader.cancel();
+        const merged = new Uint8Array(Math.min(totalSize, maxBytes));
+        let offset = 0;
+        for (const chunk of chunks) {
+          const remaining = maxBytes - offset;
+          const slice = chunk.length > remaining ? chunk.slice(0, remaining) : chunk;
+          merged.set(slice, offset);
+          offset += slice.length;
+          if (offset >= maxBytes) break;
+        }
+        bodyPreview = new TextDecoder('utf-8').decode(merged);
+      }
+    }
+
+    return c.json({
+      status: resp.status,
+      statusText: resp.statusText,
+      durationMs,
+      cfRay: headers['cf-ray'] || null,
+      server: headers['server'] || null,
+      headers,
+      bodyPreview,
+    });
+  } catch (err) {
+    const durationMs = Date.now() - startTime;
+    return c.json({
+      error: 'Fetch failed: ' + (err instanceof Error ? err.message : 'Unknown error'),
+      durationMs,
+    }, 502);
+  }
 });
 
 // =====================================================
