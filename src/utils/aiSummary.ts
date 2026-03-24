@@ -139,6 +139,9 @@ export function classifySummaryResult(summary: string | null): SummaryDiagnosis 
     parts.push('WARNING: 要約が短い（20文字未満）');
   }
 
+  const excerpt = summary.replace(/\n/g, ' ').slice(0, 80);
+  parts.push(`抜粋: ${excerpt}${charCount > 80 ? '…' : ''}`);
+
   return { rating: 'good', hasSummary: true, comment: parts.join(' | ') };
 }
 
@@ -183,6 +186,7 @@ export type BuildSlackMessageParams = {
   summary: string;
   dailySeq: number;
   requestId: string;
+  workerBaseUrl: string;
 };
 
 export function buildSlackMessage(params: BuildSlackMessageParams): string {
@@ -196,6 +200,7 @@ export function buildSlackMessage(params: BuildSlackMessageParams): string {
     summary,
     dailySeq,
     requestId,
+    workerBaseUrl,
   } = params;
 
   const lines = [
@@ -205,9 +210,14 @@ export function buildSlackMessage(params: BuildSlackMessageParams): string {
     prUrl,
   ];
   if (summary && !summary.startsWith('[AI_')) {
-    lines.push('', '*AI要約:*', summary);
+    const quoted = summary.split('\n').map(line => `> ${line}`).join('\n');
+    lines.push('', '*AI要約:*', quoted);
   }
-  lines.push('', `_AI問い合わせ #${dailySeq} (本日) | ID: ${requestId}_`);
+
+  const idDisplay = workerBaseUrl
+    ? `<${workerBaseUrl}/api/ai-summary/${requestId}|${requestId}>`
+    : requestId;
+  lines.push('', `_AI問い合わせ #${dailySeq} (本日) | ID: ${idDisplay}_`);
 
   return lines.join('\n');
 }

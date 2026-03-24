@@ -2706,6 +2706,8 @@ app.post('/webhook/github', async (c) => {
         }
 
         // Slack 通知
+        const reqUrl = new URL(c.req.url);
+        const workerBaseUrl = `${reqUrl.protocol}//${reqUrl.host}`;
         const slackText = buildSlackMessage({
           prAction,
           prNumber,
@@ -2716,6 +2718,7 @@ app.post('/webhook/github', async (c) => {
           summary,
           dailySeq,
           requestId,
+          workerBaseUrl,
         });
 
         let slackNotified = false;

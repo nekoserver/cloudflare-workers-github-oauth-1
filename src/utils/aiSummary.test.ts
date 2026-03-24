@@ -214,6 +214,7 @@ describe('buildSlackMessage', () => {
     summary: '概要: バグ修正',
     dailySeq: 3,
     requestId: 'abc-123',
+    workerBaseUrl: 'https://cloudflare-workers-github-oauth-1.example.workers.dev',
   };
 
   it('openedの場合「作成」と表示される', () => {
@@ -226,10 +227,15 @@ describe('buildSlackMessage', () => {
     expect(msg).toContain('*PR 更新:* #42 Fix bug');
   });
 
-  it('summaryがある場合、AI要約セクションが含まれる', () => {
+  it('summaryがある場合、AI要約がブロッククォートで囲まれる', () => {
     const msg = buildSlackMessage(baseParams);
     expect(msg).toContain('*AI要約:*');
-    expect(msg).toContain('概要: バグ修正');
+    expect(msg).toContain('> 概要: バグ修正');
+  });
+
+  it('複数行のsummaryは各行がブロッククォートになる', () => {
+    const msg = buildSlackMessage({ ...baseParams, summary: '概要: テスト\n変更点: 修正' });
+    expect(msg).toContain('> 概要: テスト\n> 変更点: 修正');
   });
 
   it('summaryが空文字の場合、AI要約セクションが含まれない', () => {
@@ -262,24 +268,36 @@ describe('buildSlackMessage', () => {
     expect(msg).not.toContain('*AI要約:*');
   });
 
-  it('リポジトリ名・作成者・URL・フッターが含まれる', () => {
+  it('requestIdが詳細ページへのリンクになる', () => {
+    const msg = buildSlackMessage(baseParams);
+    expect(msg).toContain('<https://cloudflare-workers-github-oauth-1.example.workers.dev/api/ai-summary/abc-123|abc-123>');
+  });
+
+  it('workerBaseUrlが空の場合、リンクなしでIDのみ表示される', () => {
+    const msg = buildSlackMessage({ ...baseParams, workerBaseUrl: '' });
+    expect(msg).toContain('ID: abc-123');
+    expect(msg).not.toContain('<https://');
+  });
+
+  it('リポジトリ名・作成者・URLが含まれる', () => {
     const msg = buildSlackMessage(baseParams);
     expect(msg).toContain('リポジトリ: owner/repo');
     expect(msg).toContain('作成者: testuser');
     expect(msg).toContain('https://github.com/owner/repo/pull/42');
-    expect(msg).toContain('_AI問い合わせ #3 (本日) | ID: abc-123_');
   });
 });
 
 // ---- classifySummaryResult ----
 
 describe('classifySummaryResult', () => {
-  it('正常な要約はrating=good、hasSummary=trueを返し、文字数を含む', () => {
+  it('正常な要約はrating=good、hasSummary=trueを返し、文字数と抜粋を含む', () => {
     const summary = '## 概要\nログイン機能を追加\n## 主な変更点\nOAuthフロー実装\n## 影響範囲\n認証モジュール';
     const result = classifySummaryResult(summary);
     expect(result.rating).toBe('good');
     expect(result.hasSummary).toBe(true);
     expect(result.comment).toContain(`${summary.length}文字`);
+    expect(result.comment).toContain('抜粋:');
+    expect(result.comment).toContain('ログイン機能を追加');
   });
 
   it('正常な要約で概要・変更点・影響範囲セクションの有無を報告する', () => {
@@ -300,6 +318,12 @@ describe('classifySummaryResult', () => {
     expect(result.rating).toBe('good');
     expect(result.hasSummary).toBe(true);
     expect(result.comment).toContain('短い');
+  });
+
+  it('80文字超の要約は抜粋が省略記号で切られる', () => {
+    const long = 'あ'.repeat(100);
+    const result = classifySummaryResult(long);
+    expect(result.comment).toContain('抜粋: ' + 'あ'.repeat(80) + '…');
   });
 
   it('空文字はrating=bad、hasSummary=falseを返す', () => {
