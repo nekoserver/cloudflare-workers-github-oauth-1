@@ -116,30 +116,7 @@ export function classifySummaryResult(summary: string | null): SummaryDiagnosis 
     return { rating: 'bad', hasSummary: false, comment: `AI_UNEXPECTED_FORMAT: ${summary}` };
   }
 
-  const charCount = summary.length;
-  const hasOverview = /概要/.test(summary);
-  const hasChanges = /変更点/.test(summary);
-  const hasImpact = /影響範囲/.test(summary);
-  const sectionCount = [hasOverview, hasChanges, hasImpact].filter(Boolean).length;
-
-  const parts: string[] = [];
-  parts.push(`${charCount}文字`);
-
-  if (sectionCount === 3) {
-    parts.push('セクション: 概要/変更点/影響範囲');
-  } else if (sectionCount > 0) {
-    const found = [hasOverview && '概要', hasChanges && '変更点', hasImpact && '影響範囲'].filter(Boolean);
-    const missing = [!hasOverview && '概要', !hasChanges && '変更点', !hasImpact && '影響範囲'].filter(Boolean);
-    parts.push(`セクション: ${found.join('/')} (セクション不足: ${missing.join('/')})`);
-  } else {
-    parts.push('セクション不足: 概要/変更点/影響範囲 いずれも検出されず');
-  }
-
-  if (charCount < 20) {
-    parts.push('WARNING: 要約が短い（20文字未満）');
-  }
-
-  return { rating: 'good', hasSummary: true, comment: parts.join(' | ') };
+  return { rating: 'good', hasSummary: true, comment: summary };
 }
 
 export type RunSummaryPipelineParams = {

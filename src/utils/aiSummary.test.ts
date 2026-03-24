@@ -398,32 +398,19 @@ describe('buildSummaryModal', () => {
 // ---- classifySummaryResult ----
 
 describe('classifySummaryResult', () => {
-  it('正常な要約はrating=good、hasSummary=trueを返し、文字数を含む', () => {
+  it('正常な要約はrating=good、hasSummary=trueを返し、commentに要約そのものが入る', () => {
     const summary = '## 概要\nログイン機能を追加\n## 主な変更点\nOAuthフロー実装\n## 影響範囲\n認証モジュール';
     const result = classifySummaryResult(summary);
     expect(result.rating).toBe('good');
     expect(result.hasSummary).toBe(true);
-    expect(result.comment).toContain(`${summary.length}文字`);
+    expect(result.comment).toBe(summary);
   });
 
-  it('正常な要約で概要・変更点・影響範囲セクションの有無を報告する', () => {
-    const withAll = '## 概要\nテスト\n## 主な変更点\nテスト\n## 影響範囲\nテスト';
-    const resultAll = classifySummaryResult(withAll);
-    expect(resultAll.comment).toContain('概要');
-    expect(resultAll.comment).toContain('変更点');
-    expect(resultAll.comment).toContain('影響範囲');
-
-    const withNone = 'これはただのテキストです。特にセクションはありません。';
-    const resultNone = classifySummaryResult(withNone);
-    expect(resultNone.rating).toBe('good');
-    expect(resultNone.comment).toContain('セクション不足');
-  });
-
-  it('短すぎる要約はrating=good だがwarningを含む', () => {
+  it('短い要約でもcommentは要約そのもの', () => {
     const result = classifySummaryResult('OK');
     expect(result.rating).toBe('good');
     expect(result.hasSummary).toBe(true);
-    expect(result.comment).toContain('短い');
+    expect(result.comment).toBe('OK');
   });
 
   it('空文字はrating=bad、hasSummary=falseを返す', () => {

@@ -1,4 +1,4 @@
-# AI要約のモデル設定と summary NULL 問題の顛末
+# AI要約のモデル設定と summary NULL 問題の顛末 (updated)
 
 ## AI_MODEL 環境変数によるモデル切り替え
 
