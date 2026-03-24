@@ -3315,55 +3315,79 @@ app.get('/api/repositories/search/history/:id', optionalAuthMiddleware, async (c
  * ボタンクリック等の対話イベントを受信し、モーダルを返す
  */
 app.post('/slack/interactions', async (c) => {
+  const db = c.env.DB;
+  const logStep = async (step: string, detail?: string) => {
+    if (!db) return;
+    try {
+      await db.prepare(
+        'INSERT INTO slack_interaction_log (step, detail, created_at) VALUES (?, ?, ?)'
+      ).bind(step, detail ?? null, new Date().toISOString()).run();
+    } catch (_) { /* best effort */ }
+  };
+
+  await logStep('received', `headers: ts=${c.req.header('X-Slack-Request-Timestamp') ?? 'none'}, sig=${c.req.header('X-Slack-Signature') ? 'present' : 'none'}`);
+
   const signingSecret = c.env.SLACK_SIGNING_SECRET;
   if (!signingSecret) {
+    await logStep('error', 'SLACK_SIGNING_SECRET not configured');
     logger.error('SLACK_SIGNING_SECRET not configured');
     return c.text('', 200);
   }
 
   const rawBody = await c.req.text();
+  await logStep('body_read', `length=${rawBody.length}`);
+
   const timestamp = c.req.header('X-Slack-Request-Timestamp');
   const signature = c.req.header('X-Slack-Signature');
 
   const verification = await verifySlackSignature(rawBody, timestamp, signature, signingSecret);
   if (!verification.success) {
+    await logStep('sig_fail', verification.reason ?? 'unknown');
     logger.warn('Slack signature verification failed', { reason: verification.reason });
     return c.text('', 401);
   }
+  await logStep('sig_ok');
 
   let interactionPayload: any;
   try {
     const params = new URLSearchParams(rawBody);
     const payloadStr = params.get('payload');
     if (!payloadStr) {
+      await logStep('error', 'missing payload field');
       logger.warn('Slack interaction: missing payload field');
       return c.text('', 200);
     }
     interactionPayload = JSON.parse(payloadStr);
   } catch (error) {
-    logger.warn('Slack interaction: failed to parse payload', {
-      error: error instanceof Error ? error.message : 'Unknown',
-    });
+    const msg = error instanceof Error ? error.message : 'Unknown';
+    await logStep('error', `parse failed: ${msg}`);
+    logger.warn('Slack interaction: failed to parse payload', { error: msg });
     return c.text('', 200);
   }
 
+  await logStep('parsed', `type=${interactionPayload.type}, action_id=${interactionPayload.actions?.[0]?.action_id ?? 'none'}`);
+
   if (interactionPayload.type !== 'block_actions') {
+    await logStep('skip', `type=${interactionPayload.type}`);
     return c.text('', 200);
   }
 
   const action = interactionPayload.actions?.[0];
   if (!action || action.action_id !== 'view_ai_summary_detail') {
+    await logStep('skip', `action_id=${action?.action_id ?? 'none'}`);
     return c.text('', 200);
   }
 
   const requestId = action.value;
   const triggerId = interactionPayload.trigger_id;
   if (!requestId || !triggerId) {
+    await logStep('error', `requestId=${requestId ?? 'none'}, triggerId=${triggerId ?? 'none'}`);
     logger.warn('Slack interaction: missing requestId or trigger_id');
     return c.text('', 200);
   }
 
-  const db = c.env.DB;
+  await logStep('action_matched', `requestId=${requestId}, triggerId=${triggerId}`);
+
   if (!db) {
     logger.error('Slack interaction: DB not available');
     return c.text('', 200);
@@ -3371,6 +3395,7 @@ app.post('/slack/interactions', async (c) => {
 
   const slackToken = c.env.SLACK_OAUTH_TOKEN;
   if (!slackToken) {
+    await logStep('error', 'SLACK_OAUTH_TOKEN not configured');
     logger.error('Slack interaction: SLACK_OAUTH_TOKEN not configured');
     return c.text('', 200);
   }
@@ -3381,6 +3406,7 @@ app.post('/slack/interactions', async (c) => {
     ).bind(requestId).first() as SummaryModalRow | null;
 
     if (!row) {
+      await logStep('db_miss', `requestId=${requestId}`);
       const errorView = {
         type: 'modal' as const,
         title: { type: 'plain_text' as const, text: 'エラー' },
@@ -3393,16 +3419,19 @@ app.post('/slack/interactions', async (c) => {
       return c.text('', 200);
     }
 
+    await logStep('db_hit', `pr_number=${row.pr_number}`);
     const modalView = buildSummaryModal(row);
     const modalResult = await openSlackModal({ token: slackToken, triggerId, view: modalView });
     if (!modalResult.ok) {
+      await logStep('modal_fail', `error=${modalResult.error}, status=${modalResult.status}`);
       logger.error('Slack modal open failed', { error: modalResult.error, requestId });
+    } else {
+      await logStep('modal_ok', `requestId=${requestId}`);
     }
   } catch (error) {
-    logger.error('Slack interaction handler error', {
-      error: error instanceof Error ? error.message : 'Unknown',
-      requestId,
-    });
+    const msg = error instanceof Error ? error.message : 'Unknown';
+    await logStep('exception', msg);
+    logger.error('Slack interaction handler error', { error: msg, requestId });
   }
 
   return c.text('', 200);
