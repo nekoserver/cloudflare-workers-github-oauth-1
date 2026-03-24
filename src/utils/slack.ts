@@ -4,6 +4,45 @@ export type SlackPostResult = {
   error?: string;
 };
 
+function parseSlackResponse(payload: any, parseError: string | null, status: number): SlackPostResult {
+  const appendParseInfo = (detail: string) =>
+    parseError ? `${detail} (parse: ${parseError})` : detail;
+
+  if (status < 200 || status >= 300) {
+    const detail = payload && typeof payload.error === 'string' ? payload.error : `HTTP ${status}`;
+    return { ok: false, status, error: appendParseInfo(detail) };
+  }
+
+  if (!payload || payload.ok !== true) {
+    const detail = payload && typeof payload.error === 'string' ? payload.error : 'Slack API error';
+    return { ok: false, status, error: appendParseInfo(detail) };
+  }
+
+  return { ok: true, status };
+}
+
+async function fetchSlackApi(url: string, token: string, body: Record<string, unknown>): Promise<SlackPostResult> {
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json; charset=utf-8',
+    },
+    body: JSON.stringify(body),
+  });
+
+  let payload: any = null;
+  let parseError: string | null = null;
+  try {
+    payload = await response.json();
+  } catch (error) {
+    parseError = error instanceof Error ? error.message : 'JSON parse failed';
+    payload = null;
+  }
+
+  return parseSlackResponse(payload, parseError, response.status);
+}
+
 type SlackPostParams = {
   token: string;
   channel: string;
@@ -16,40 +55,7 @@ export async function postSlackMessage({ token, channel, text, blocks }: SlackPo
   if (blocks) {
     body.blocks = blocks;
   }
-
-  const response = await fetch('https://slack.com/api/chat.postMessage', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json; charset=utf-8',
-    },
-    body: JSON.stringify(body),
-  });
-
-  let payload: any = null;
-  try {
-    payload = await response.json();
-  } catch (error) {
-    payload = null;
-  }
-
-  if (!response.ok) {
-    return {
-      ok: false,
-      status: response.status,
-      error: payload && typeof payload.error === 'string' ? payload.error : `HTTP ${response.status}`,
-    };
-  }
-
-  if (!payload || payload.ok !== true) {
-    return {
-      ok: false,
-      status: response.status,
-      error: payload && typeof payload.error === 'string' ? payload.error : 'Slack API error',
-    };
-  }
-
-  return { ok: true, status: response.status };
+  return fetchSlackApi('https://slack.com/api/chat.postMessage', token, body);
 }
 
 type SlackModalView = {
@@ -65,40 +71,5 @@ type OpenSlackModalParams = {
 };
 
 export async function openSlackModal({ token, triggerId, view }: OpenSlackModalParams): Promise<SlackPostResult> {
-  const response = await fetch('https://slack.com/api/views.open', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json; charset=utf-8',
-    },
-    body: JSON.stringify({
-      trigger_id: triggerId,
-      view,
-    }),
-  });
-
-  let payload: any = null;
-  try {
-    payload = await response.json();
-  } catch (error) {
-    payload = null;
-  }
-
-  if (!response.ok) {
-    return {
-      ok: false,
-      status: response.status,
-      error: payload && typeof payload.error === 'string' ? payload.error : `HTTP ${response.status}`,
-    };
-  }
-
-  if (!payload || payload.ok !== true) {
-    return {
-      ok: false,
-      status: response.status,
-      error: payload && typeof payload.error === 'string' ? payload.error : 'Slack API error',
-    };
-  }
-
-  return { ok: true, status: response.status };
+  return fetchSlackApi('https://slack.com/api/views.open', token, { trigger_id: triggerId, view });
 }
