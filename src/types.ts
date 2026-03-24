@@ -23,6 +23,7 @@ export type Bindings = {
   GITHUB_WEBHOOK_SECRET?: string;
   GITHUB_TOKEN?: string;
   AI?: Ai;
+  AI_MODEL?: string;
 };
 
 /** Hono コンテキスト変数 */
