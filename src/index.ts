@@ -23,6 +23,7 @@ import { getCookieValue, getCookieValues } from './utils/cookie';
 import { verifyResendWebhookSignature } from './utils/resendWebhook';
 import { verifyGitHubWebhookSignature } from './utils/githubWebhook';
 import { postSlackMessage } from './utils/slack';
+import { fetchPrDiff, generateAiSummary, buildSlackMessage } from './utils/aiSummary';
 import { executeCreateRepo } from './utils/repoValidation';
 import { validateReturnTo } from './utils/returnTo';
 import * as logger from './utils/logger';
@@ -2679,28 +2680,10 @@ app.post('/webhook/github', async (c) => {
           logger.warn('PR diff_url is missing', { prUrl });
         } else {
           try {
-            const diffRes = await fetch(pr.diff_url, {
-              headers: {
-                Authorization: `Bearer ${githubToken}`,
-                Accept: 'application/vnd.github.v3.diff',
-                'User-Agent': 'cloudflare-workers-github-oauth-1',
-              },
-            });
-            if (diffRes.ok) {
-              const diff = await diffRes.text();
-              diffLength = diff.length;
-              trimmedDiff = diff.slice(0, 8000);
-              logger.info('Fetched PR diff', { prUrl, diffLength, trimmedLength: trimmedDiff.length });
-            } else {
-              const errorBody = await diffRes.text().catch(() => '');
-              logger.warn('PR diff fetch returned non-OK status', {
-                prUrl,
-                diffUrl: pr.diff_url,
-                status: diffRes.status,
-                statusText: diffRes.statusText,
-                errorBody: errorBody.slice(0, 500),
-              });
-            }
+            const diffResult = await fetchPrDiff({ diffUrl: pr.diff_url, githubToken });
+            trimmedDiff = diffResult.trimmedDiff;
+            diffLength = diffResult.diffLength;
+            logger.info('Fetched PR diff', { prUrl, diffLength, trimmedLength: trimmedDiff.length });
           } catch (error) {
             logger.warn('Failed to fetch PR diff', {
               error: error instanceof Error ? error.message : 'Unknown error',
@@ -2718,60 +2701,36 @@ app.post('/webhook/github', async (c) => {
             logger.info('No diff available, summarizing from title and description only', { prUrl, githubTokenSet: !!githubToken });
           }
           try {
-            const userParts: string[] = [];
-            userParts.push(`PRタイトル:\n${title}`);
-            userParts.push(`説明:\n${description}`);
-            if (trimmedDiff) {
-              userParts.push(`差分:\n${trimmedDiff}`);
-            }
-            userParts.push('以下の形式で日本語で出力してください:\n- 概要\n- 主な変更点\n- 影響範囲');
-
-            const aiRes = await ai.run(aiModel, {
-              messages: [
-                {
-                  role: 'system',
-                  content: 'あなたはコードレビュー支援AIです。プルリクエストの変更点・目的・影響範囲を日本語で簡潔にまとめてください。',
-                },
-                {
-                  role: 'user',
-                  content: userParts.join('\n\n'),
-                },
-              ],
+            summary = await generateAiSummary({
+              ai: ai as { run(model: string, input: { messages: { role: string; content: string }[] }): Promise<unknown> },
+              model: aiModel,
+              title,
+              description,
+              trimmedDiff,
             });
-            if (aiRes && typeof aiRes === 'object' && 'response' in aiRes) {
-              const raw = (aiRes as { response: string }).response;
-              summary = raw ?? '';
-              if (!summary) {
-                summary = `[AI_EMPTY_RESPONSE] keys=${Object.keys(aiRes).join(',')} response=${JSON.stringify(raw)}`;
-              }
-            } else {
-              summary = `[AI_UNEXPECTED_FORMAT] type=${typeof aiRes} value=${JSON.stringify(aiRes).slice(0, 500)}`;
-            }
           } catch (error) {
             const msg = error instanceof Error ? error.message : 'Unknown error';
             summary = `[AI_ERROR] ${msg}`;
-            logger.warn('Workers AI summarization failed', {
-              error: msg,
-              prUrl,
-            });
+            logger.warn('Workers AI summarization failed', { error: msg, prUrl });
           }
         }
 
         // Slack 通知
-        const slackLines = [
-          `*PR ${prAction === 'opened' ? '作成' : '更新'}:* #${prNumber} ${title}`,
-          `リポジトリ: ${repoFullName}`,
-          `作成者: ${author}`,
+        const slackText = buildSlackMessage({
+          prAction,
+          prNumber,
+          title,
+          repoFullName,
+          author,
           prUrl,
-        ];
-        if (summary) {
-          slackLines.push('', '*AI要約:*', summary);
-        }
-        slackLines.push('', `_AI問い合わせ #${dailySeq} (本日) | ID: ${requestId}_`);
+          summary,
+          dailySeq,
+          requestId,
+        });
 
         let slackNotified = false;
         try {
-          const slackResult = await postSlackMessage({ token: slackToken, channel: slackChannel, text: slackLines.join('\n') });
+          const slackResult = await postSlackMessage({ token: slackToken, channel: slackChannel, text: slackText });
           if (slackResult.ok) {
             slackNotified = true;
           } else {
