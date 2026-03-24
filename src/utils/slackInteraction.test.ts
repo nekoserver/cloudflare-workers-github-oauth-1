@@ -3,12 +3,14 @@ import { handleSlackInteraction, type InteractionDeps } from './slackInteraction
 
 vi.mock('./slack', () => ({
   openSlackModal: vi.fn(),
+  updateSlackModal: vi.fn(),
   respondToInteraction: vi.fn(),
 }));
 
-import { openSlackModal, respondToInteraction } from './slack';
+import { openSlackModal, updateSlackModal, respondToInteraction } from './slack';
 
 const mockedOpenModal = vi.mocked(openSlackModal);
+const mockedUpdateModal = vi.mocked(updateSlackModal);
 const mockedRespondToInteraction = vi.mocked(respondToInteraction);
 
 const SIGNING_SECRET = 'test-secret';
@@ -62,6 +64,7 @@ describe('handleSlackInteraction', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockedOpenModal.mockResolvedValue({ ok: true, status: 200 });
+    mockedUpdateModal.mockResolvedValue({ ok: true, status: 200 });
     mockedRespondToInteraction.mockResolvedValue({ ok: true, status: 200 });
   });
 
@@ -231,5 +234,55 @@ describe('handleSlackInteraction', () => {
 
     expect(result.status).toBe(200);
     expect(result.steps).toContain('exception');
+  });
+
+  // ---- open_ai_summary_html アクション ----
+
+  it('open_ai_summary_html: DB確認後にモーダルを更新してリンクを表示する', async () => {
+    const deps = makeDeps({
+      rawBody: buildPayload({
+        actions: [{ action_id: 'open_ai_summary_html', value: 'req-001' }],
+        view: { id: 'V123456' },
+      }),
+    });
+    const result = await handleSlackInteraction(deps);
+
+    expect(result.status).toBe(200);
+    expect(result.steps).toContain('modal_updated');
+    expect(mockedUpdateModal).toHaveBeenCalledTimes(1);
+    const call = mockedUpdateModal.mock.calls[0][0];
+    expect(call.viewId).toBe('V123456');
+    expect(call.token).toBe(SLACK_TOKEN);
+    const viewText = JSON.stringify(call.view.blocks);
+    expect(viewText).toContain('/ai-summary/req-001');
+    expect(viewText).toContain('HTMLで表示');
+  });
+
+  it('open_ai_summary_html: DBにデータがない場合、db_missで終了する', async () => {
+    const deps = makeDeps({
+      rawBody: buildPayload({
+        actions: [{ action_id: 'open_ai_summary_html', value: 'req-001' }],
+        view: { id: 'V123456' },
+      }),
+      dbQuery: vi.fn().mockResolvedValue(null),
+    });
+    const result = await handleSlackInteraction(deps);
+
+    expect(result.status).toBe(200);
+    expect(result.steps).toContain('db_miss');
+    expect(mockedUpdateModal).not.toHaveBeenCalled();
+  });
+
+  it('open_ai_summary_html: viewIdがない場合、errorで終了する', async () => {
+    const deps = makeDeps({
+      rawBody: buildPayload({
+        actions: [{ action_id: 'open_ai_summary_html', value: 'req-001' }],
+        trigger_id: undefined,
+      }),
+    });
+    const result = await handleSlackInteraction(deps);
+
+    expect(result.status).toBe(200);
+    expect(result.steps).toContain('error');
   });
 });

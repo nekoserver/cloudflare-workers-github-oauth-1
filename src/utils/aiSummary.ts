@@ -393,13 +393,14 @@ export function buildSummaryModal(row: SummaryModalRow): SlackModalView {
     },
   });
 
-  const htmlUrl = `${WORKER_BASE_URL}/ai-summary/${row.request_id}`;
   blocks.push({
-    type: 'context',
+    type: 'actions',
     elements: [
       {
-        type: 'mrkdwn',
-        text: `<${htmlUrl}|:globe_with_meridians: HTMLで表示>`,
+        type: 'button',
+        text: { type: 'plain_text', text: ':globe_with_meridians: HTMLで表示' },
+        action_id: 'open_ai_summary_html',
+        value: row.request_id,
       },
     ],
   });
@@ -410,6 +411,26 @@ export function buildSummaryModal(row: SummaryModalRow): SlackModalView {
     close: { type: 'plain_text', text: '閉じる' },
     blocks,
   };
+}
+
+export function buildSummaryModalWithHtmlLink(row: SummaryModalRow): SlackModalView {
+  const base = buildSummaryModal(row);
+  const htmlUrl = `${WORKER_BASE_URL}/ai-summary/${row.request_id}`;
+  const blocks = base.blocks.map((b: any) => {
+    if (b.type === 'actions' && b.elements?.[0]?.action_id === 'open_ai_summary_html') {
+      return {
+        type: 'context',
+        elements: [
+          {
+            type: 'mrkdwn',
+            text: `:white_check_mark: <${htmlUrl}|HTMLで表示>`,
+          },
+        ],
+      };
+    }
+    return b;
+  });
+  return { ...base, blocks };
 }
 
 export function buildSummaryFallbackBlocks(row: SummaryModalRow): { text: string; blocks: Record<string, unknown>[] } {

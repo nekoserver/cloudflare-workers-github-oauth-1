@@ -4,6 +4,7 @@ import {
   generateAiSummary,
   buildSlackMessage,
   buildSummaryModal,
+  buildSummaryModalWithHtmlLink,
   classifySummaryResult,
   runSummaryPipeline,
   resolveAiModel,
@@ -524,11 +525,15 @@ describe('buildSummaryModal', () => {
     expect(divider).toBeTruthy();
   });
 
-  it('「HTMLで表示」がmrkdwnリンクとしてcontextブロックに含まれる', () => {
+  it('「HTMLで表示」がactionsブロックのボタンとして含まれる', () => {
     const modal = buildSummaryModal(baseRow);
-    const allText = JSON.stringify(modal.blocks);
-    expect(allText).toContain('HTMLで表示');
-    expect(allText).toContain('/ai-summary/abc-123');
+    const actions = modal.blocks.find((b: any) => b.type === 'actions') as any;
+    expect(actions).toBeTruthy();
+    const btn = actions.elements.find((e: any) => e.action_id === 'open_ai_summary_html');
+    expect(btn).toBeTruthy();
+    expect(btn.text.text).toContain('HTMLで表示');
+    expect(btn.value).toBe('abc-123');
+    expect(btn.url).toBeUndefined();
   });
 
   it('closeボタンのテキストが「閉じる」である', () => {
@@ -555,6 +560,41 @@ describe('buildSummaryModal', () => {
     const allText = JSON.stringify(modal.blocks);
     expect(allText).not.toContain('差分を取得できなかった');
     expect(allText).toContain('要約なし');
+  });
+});
+
+// ---- buildSummaryModalWithHtmlLink ----
+
+describe('buildSummaryModalWithHtmlLink', () => {
+  const baseRow = {
+    request_id: 'abc-123',
+    daily_seq: 3,
+    event_date: '2026-03-24',
+    repo_full_name: 'owner/repo',
+    pr_number: 42,
+    pr_action: 'opened',
+    pr_url: 'https://github.com/owner/repo/pull/42',
+    model: '@cf/meta/llama-3.1-8b-instruct-fp8',
+    summary: '## 概要\nバグを修正しました',
+    diff_length: 1234,
+    created_at: '2026-03-24T10:00:00Z',
+  };
+
+  it('actionsブロックがcontextブロックのリンクに置き換わる', () => {
+    const modal = buildSummaryModalWithHtmlLink(baseRow);
+    const actions = modal.blocks.find((b: any) => b.type === 'actions');
+    expect(actions).toBeUndefined();
+    const allText = JSON.stringify(modal.blocks);
+    expect(allText).toContain('HTMLで表示');
+    expect(allText).toContain('/ai-summary/abc-123');
+    expect(allText).toContain('white_check_mark');
+  });
+
+  it('元のモーダルの他のブロックは維持される', () => {
+    const modal = buildSummaryModalWithHtmlLink(baseRow);
+    const allText = JSON.stringify(modal.blocks);
+    expect(allText).toContain('owner/repo');
+    expect(allText).toContain('バグを修正しました');
   });
 });
 
