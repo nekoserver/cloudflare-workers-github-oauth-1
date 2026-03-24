@@ -4406,7 +4406,7 @@ app.get('/ai-summary/:id', async (c) => {
 <style>body{font-family:system-ui,sans-serif;max-width:800px;margin:2rem auto;padding:0 1rem;background:#f8f9fa;color:#333}
 h1{font-size:1.4rem}table{border-collapse:collapse;width:100%}th,td{border:1px solid #ddd;padding:8px;text-align:left}
 th{background:#e9ecef}pre{background:#1e1e1e;color:#d4d4d4;padding:1rem;border-radius:6px;overflow-x:auto;white-space:pre-wrap}
-.meta{display:grid;grid-template-columns:1fr 1fr;gap:0.5rem;margin:1rem 0}.meta dt{font-weight:bold;color:#666}.meta dd{margin:0}</style>
+.meta{display:grid;grid-template-columns:auto 1fr;gap:0.25rem 1rem;margin:1rem 0}.meta dt{font-weight:bold;color:#666;text-align:right;white-space:nowrap}.meta dd{margin:0}</style>
 </head><body>
 <h1>AI要約 #${row.daily_seq} (${escHtml(row.event_date)})</h1>
 <dl class="meta">
