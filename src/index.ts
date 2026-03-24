@@ -2713,11 +2713,19 @@ app.post('/webhook/github', async (c) => {
         let summary = '';
         if (!ai) {
           logger.warn('Workers AI binding (AI) is not available, skipping summarization', { prUrl });
-        } else if (!trimmedDiff) {
-          logger.warn('No diff available for AI summarization', { prUrl, githubTokenSet: !!githubToken });
-        }
-        if (ai && trimmedDiff) {
+        } else {
+          if (!trimmedDiff) {
+            logger.info('No diff available, summarizing from title and description only', { prUrl, githubTokenSet: !!githubToken });
+          }
           try {
+            const userParts: string[] = [];
+            userParts.push(`PRタイトル:\n${title}`);
+            userParts.push(`説明:\n${description}`);
+            if (trimmedDiff) {
+              userParts.push(`差分:\n${trimmedDiff}`);
+            }
+            userParts.push('以下の形式で日本語で出力してください:\n- 概要\n- 主な変更点\n- 影響範囲');
+
             const aiRes = await ai.run(aiModel, {
               messages: [
                 {
@@ -2726,7 +2734,7 @@ app.post('/webhook/github', async (c) => {
                 },
                 {
                   role: 'user',
-                  content: `PRタイトル:\n${title}\n\n説明:\n${description}\n\n差分:\n${trimmedDiff}\n\n以下の形式で日本語で出力してください:\n- 概要\n- 主な変更点\n- 影響範囲`,
+                  content: userParts.join('\n\n'),
                 },
               ],
             });
@@ -2789,7 +2797,7 @@ app.post('/webhook/github', async (c) => {
               prAction,
               prUrl,
               aiModel,
-              summary || null,
+              summary !== '' ? summary : null,
               diffLength,
               slackNotified ? 1 : 0,
               now.toISOString(),
