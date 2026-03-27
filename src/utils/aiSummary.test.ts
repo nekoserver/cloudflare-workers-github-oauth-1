@@ -4,7 +4,6 @@ import {
   generateAiSummary,
   buildSlackMessage,
   buildSummaryModal,
-  buildSummaryModalWithHtmlLink,
   classifySummaryResult,
   runSummaryPipeline,
   resolveAiModel,
@@ -422,6 +421,29 @@ describe('buildSlackMessage', () => {
     expect(text).not.toMatch(/[│├└─┌┐┘┤┬┴┼]/);
     expect(text).toContain('OAuth認証: 達成');
   });
+
+  it('summary本文に罫線文字が含まれていても除去される', () => {
+    const { blocks } = buildSlackMessage({
+      ...baseParams,
+      summary: '├── 概要: 修正\n│   └── 詳細: テスト\n└── 影響: なし',
+    });
+    const summaryBlock = blocks.find((b: any) =>
+      b.type === 'section' && b.text?.text?.includes('AI要約')
+    ) as any;
+    const text = summaryBlock?.text?.text ?? '';
+    expect(text).not.toMatch(/[│├└─┌┐┘┤┬┴┼]/);
+    expect(text).toContain('概要: 修正');
+    expect(text).toContain('影響: なし');
+  });
+
+  it('summaryのtextフォールバックでも罫線文字が除去される', () => {
+    const { text } = buildSlackMessage({
+      ...baseParams,
+      summary: '├── 概要: 修正\n└── 影響: なし',
+    });
+    expect(text).not.toMatch(/[│├└─┌┐┘┤┬┴┼]/);
+    expect(text).toContain('概要: 修正');
+  });
 });
 
 // ---- sanitizeBoxDrawing ----
@@ -525,15 +547,27 @@ describe('buildSummaryModal', () => {
     expect(divider).toBeTruthy();
   });
 
-  it('「HTMLで表示」がactionsブロックのボタンとして含まれる', () => {
+  it('「HTMLで表示」がURL型ボタンとして含まれ直接ブラウザで開く', () => {
     const modal = buildSummaryModal(baseRow);
     const actions = modal.blocks.find((b: any) => b.type === 'actions') as any;
     expect(actions).toBeTruthy();
     const btn = actions.elements.find((e: any) => e.action_id === 'open_ai_summary_html');
     expect(btn).toBeTruthy();
     expect(btn.text.text).toContain('HTMLで表示');
-    expect(btn.value).toBe('abc-123');
-    expect(btn.url).toBeUndefined();
+    expect(btn.url).toContain('/ai-summary/abc-123');
+    expect(btn.url).toMatch(/^https:\/\//);
+  });
+
+  it('要約テキストの罫線文字がsanitizeされている', () => {
+    const rowWithBoxChars = {
+      ...baseRow,
+      summary: '## 概要\n├── 項目A\n│   └── サブ項目\n└── 項目B',
+    };
+    const modal = buildSummaryModal(rowWithBoxChars);
+    const allText = JSON.stringify(modal.blocks);
+    expect(allText).not.toMatch(/[│├└─┌┐┘┤┬┴┼]/);
+    expect(allText).toContain('項目A');
+    expect(allText).toContain('項目B');
   });
 
   it('closeボタンのテキストが「閉じる」である', () => {
@@ -563,40 +597,6 @@ describe('buildSummaryModal', () => {
   });
 });
 
-// ---- buildSummaryModalWithHtmlLink ----
-
-describe('buildSummaryModalWithHtmlLink', () => {
-  const baseRow = {
-    request_id: 'abc-123',
-    daily_seq: 3,
-    event_date: '2026-03-24',
-    repo_full_name: 'owner/repo',
-    pr_number: 42,
-    pr_action: 'opened',
-    pr_url: 'https://github.com/owner/repo/pull/42',
-    model: '@cf/meta/llama-3.1-8b-instruct-fp8',
-    summary: '## 概要\nバグを修正しました',
-    diff_length: 1234,
-    created_at: '2026-03-24T10:00:00Z',
-  };
-
-  it('actionsブロックがcontextブロックのリンクに置き換わる', () => {
-    const modal = buildSummaryModalWithHtmlLink(baseRow);
-    const actions = modal.blocks.find((b: any) => b.type === 'actions');
-    expect(actions).toBeUndefined();
-    const allText = JSON.stringify(modal.blocks);
-    expect(allText).toContain('HTMLで表示');
-    expect(allText).toContain('/ai-summary/abc-123');
-    expect(allText).toContain('white_check_mark');
-  });
-
-  it('元のモーダルの他のブロックは維持される', () => {
-    const modal = buildSummaryModalWithHtmlLink(baseRow);
-    const allText = JSON.stringify(modal.blocks);
-    expect(allText).toContain('owner/repo');
-    expect(allText).toContain('バグを修正しました');
-  });
-});
 
 // ---- extractDesignDiff ----
 

@@ -240,6 +240,7 @@ export function buildSlackMessage(params: BuildSlackMessageParams): SlackMessage
 
   const actionLabel = prAction === 'opened' ? '作成' : '更新';
   const hasSummary = summary !== '' && !summary.startsWith('[AI_');
+  const cleanSummary = hasSummary ? sanitizeBoxDrawing(summary) : summary;
   const cleanDesignDiff = designDiff ? sanitizeBoxDrawing(designDiff) : '';
   const hasDesignDiff = !!cleanDesignDiff;
 
@@ -250,7 +251,7 @@ export function buildSlackMessage(params: BuildSlackMessageParams): SlackMessage
     prUrl,
   ];
   if (hasSummary) {
-    textLines.push('', '*AI要約:*', summary);
+    textLines.push('', '*AI要約:*', cleanSummary);
   }
   if (hasDesignDiff) {
     textLines.push('', '*初期設計との差異:*', cleanDesignDiff);
@@ -273,7 +274,7 @@ export function buildSlackMessage(params: BuildSlackMessageParams): SlackMessage
       type: 'section',
       text: {
         type: 'mrkdwn',
-        text: `*AI要約:*\n\`\`\`\n${summary}\n\`\`\``,
+        text: `*AI要約:*\n\`\`\`\n${cleanSummary}\n\`\`\``,
       },
     });
 
@@ -383,7 +384,7 @@ export function buildSummaryModal(row: SummaryModalRow): SlackModalView {
   } else if (isNullSummary) {
     summaryDisplay = '(要約なし)';
   } else {
-    summaryDisplay = row.summary!;
+    summaryDisplay = sanitizeBoxDrawing(row.summary!);
   }
   blocks.push({
     type: 'section',
@@ -393,6 +394,7 @@ export function buildSummaryModal(row: SummaryModalRow): SlackModalView {
     },
   });
 
+  const htmlUrl = `${WORKER_BASE_URL}/ai-summary/${row.request_id}`;
   blocks.push({
     type: 'actions',
     elements: [
@@ -400,7 +402,7 @@ export function buildSummaryModal(row: SummaryModalRow): SlackModalView {
         type: 'button',
         text: { type: 'plain_text', text: ':globe_with_meridians: HTMLで表示' },
         action_id: 'open_ai_summary_html',
-        value: row.request_id,
+        url: htmlUrl,
       },
     ],
   });
@@ -413,25 +415,6 @@ export function buildSummaryModal(row: SummaryModalRow): SlackModalView {
   };
 }
 
-export function buildSummaryModalWithHtmlLink(row: SummaryModalRow): SlackModalView {
-  const base = buildSummaryModal(row);
-  const htmlUrl = `${WORKER_BASE_URL}/ai-summary/${row.request_id}`;
-  const blocks = base.blocks.map((b: any) => {
-    if (b.type === 'actions' && b.elements?.[0]?.action_id === 'open_ai_summary_html') {
-      return {
-        type: 'context',
-        elements: [
-          {
-            type: 'mrkdwn',
-            text: `:white_check_mark: <${htmlUrl}|HTMLで表示>`,
-          },
-        ],
-      };
-    }
-    return b;
-  });
-  return { ...base, blocks };
-}
 
 export function buildSummaryFallbackBlocks(row: SummaryModalRow): { text: string; blocks: Record<string, unknown>[] } {
   const prLabel = row.pr_number
