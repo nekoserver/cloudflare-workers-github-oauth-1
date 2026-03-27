@@ -24,6 +24,7 @@ import { verifyResendWebhookSignature } from './utils/resendWebhook';
 import { verifyGitHubWebhookSignature } from './utils/githubWebhook';
 import { postSlackMessage, openSlackModal, respondToInteraction } from './utils/slack';
 import { fetchPrDiff, runSummaryPipeline, buildSlackMessage, buildSummaryModal, buildSummaryFallbackBlocks, classifySummaryResult, resolveAiModel, extractDesignDiff, sanitizeBoxDrawing, DESIGN_SPEC_CHECKLIST, type SummaryModalRow } from './utils/aiSummary';
+import { getSessionDurationSeconds, renewSession } from './utils/session';
 import { verifySlackSignature } from './utils/slackSignature';
 import { handleSlackInteraction } from './utils/slackInteraction';
 import { executeCreateRepo } from './utils/repoValidation';
@@ -812,18 +813,6 @@ function getJstYearMonthParts(date: Date): { year: number; month: number } {
 }
 
 // セッション有効期限の文字列を秒数に変換するヘルパー関数
-function getSessionDurationSeconds(duration: string): number {
-  switch (duration) {
-    case '1h': return 3600;
-    case '3h': return 10800;
-    case '8h': return 28800;
-    case '1d': return 86400;
-    case '3d': return 259200;
-    case '1w': return 604800;
-    default: return 3600;
-  }
-}
-
 // D1データベースにユーザーセッション情報を保存または更新
 async function updateUserSession(
   db: D1Database | undefined,
@@ -3752,9 +3741,28 @@ app.post('/api/settings/session-duration', authMiddleware, async (c) => {
       return c.json({ error: 'データベースの更新に失敗しました' }, 500);
     }
 
-    c.header('Set-Cookie', `user_session_duration=${sessionDuration}; Path=/; Secure; SameSite=Lax; Max-Age=31536000`);
+    const jwtSecret = c.env.JWT_SECRET;
+    if (!jwtSecret) {
+      return c.json({ error: 'サーバー設定エラー' }, 500);
+    }
 
-    return c.json({ message: 'セッション有効期限を変更しました', sessionDuration }, 200);
+    const renewed = await renewSession({
+      currentUser: user,
+      newDuration: sessionDuration,
+      jwtSecret,
+      idleTimeoutEnv: c.env.SESSION_IDLE_TIMEOUT_SECONDS,
+    });
+
+    const headers = new Headers();
+    for (const cookie of renewed.cookies) {
+      headers.append('Set-Cookie', cookie);
+    }
+    headers.set('Content-Type', 'application/json; charset=utf-8');
+
+    return new Response(
+      JSON.stringify({ message: 'セッション有効期限を変更しました（即時反映）', sessionDuration }),
+      { status: 200, headers }
+    );
   } catch (error) {
     const user = c.get('user');
     logger.error('Session duration update error', {
