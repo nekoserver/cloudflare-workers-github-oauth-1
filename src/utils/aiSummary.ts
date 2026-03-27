@@ -396,13 +396,11 @@ export function buildSummaryModal(row: SummaryModalRow): SlackModalView {
 
   const htmlUrl = `${WORKER_BASE_URL}/ai-summary/${row.request_id}`;
   blocks.push({
-    type: 'actions',
+    type: 'context',
     elements: [
       {
-        type: 'button',
-        text: { type: 'plain_text', text: ':globe_with_meridians: HTMLで表示' },
-        action_id: 'open_ai_summary_html',
-        url: htmlUrl,
+        type: 'mrkdwn',
+        text: `:globe_with_meridians: <${htmlUrl}|HTMLで表示>`,
       },
     ],
   });
