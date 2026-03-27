@@ -350,6 +350,27 @@ export type SlackModalView = {
 
 export const WORKER_BASE_URL = 'https://cloudflare-workers-github-oauth-1.nekoserver.workers.dev';
 
+export function encodeSummaryViewData(row: SummaryModalRow): string {
+  const data = {
+    s: row.summary ?? '',
+    r: row.repo_full_name ?? '',
+    p: row.pr_number,
+    u: row.pr_url ?? '',
+    m: row.model ?? '',
+    d: row.diff_length ?? 0,
+    n: row.daily_seq,
+    e: row.event_date,
+    c: row.created_at,
+  };
+  const json = JSON.stringify(data);
+  const bytes = new TextEncoder().encode(json);
+  let binary = '';
+  for (const b of bytes) {
+    binary += String.fromCharCode(b);
+  }
+  return btoa(binary);
+}
+
 export function buildSummaryModal(row: SummaryModalRow): SlackModalView {
   const blocks: Record<string, unknown>[] = [];
 
@@ -407,13 +428,14 @@ export function buildSummaryModal(row: SummaryModalRow): SlackModalView {
     },
   });
 
-  const htmlUrl = `${WORKER_BASE_URL}/ai-summary/${row.request_id}`;
+  const viewData = encodeSummaryViewData(row);
+  const viewUrl = `${WORKER_BASE_URL}/view#${viewData}`;
   blocks.push({
     type: 'context',
     elements: [
       {
         type: 'mrkdwn',
-        text: `:globe_with_meridians: <${htmlUrl}|HTMLで表示>`,
+        text: `:globe_with_meridians: <${viewUrl}|HTMLで表示>`,
       },
     ],
   });

@@ -574,14 +574,28 @@ describe('buildSummaryModal', () => {
     expect(divider).toBeTruthy();
   });
 
-  it('「HTMLで表示」がmrkdwnリンクとしてcontextブロックに含まれる', () => {
+  it('「HTMLで表示」リンクがデータ埋め込み型の/viewハッシュURLを使用する', () => {
     const modal = buildSummaryModal(baseRow);
     const allText = JSON.stringify(modal.blocks);
     expect(allText).toContain('HTMLで表示');
-    expect(allText).toContain('/ai-summary/abc-123');
+    expect(allText).toContain('/view#');
     // actionsブロックのボタンではない（モーダルでurl付きボタンは非対応）
     const actions = modal.blocks.find((b: any) => b.type === 'actions');
     expect(actions).toBeUndefined();
+  });
+
+  it('「HTMLで表示」リンクのハッシュにデコード可能なデータが含まれる', () => {
+    const modal = buildSummaryModal(baseRow);
+    const allText = JSON.stringify(modal.blocks);
+    const match = allText.match(/\/view#([A-Za-z0-9+/=_-]+)/);
+    expect(match).toBeTruthy();
+    const binary = atob(match![1]);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    const decoded = JSON.parse(new TextDecoder().decode(bytes));
+    expect(decoded.s).toContain('バグを修正しました');
+    expect(decoded.r).toBe('owner/repo');
+    expect(decoded.p).toBe(42);
   });
 
   it('要約テキストの罫線文字がsanitizeされている', () => {
