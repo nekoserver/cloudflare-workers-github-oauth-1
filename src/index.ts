@@ -4380,16 +4380,7 @@ app.delete('/api/repo-groups/:id', authMiddleware, async (c) => {
 // =====================================================
 
 /**
- * AI要約ビューアー (クライアントサイドレンダリング — DBアクセス不要)
- * URLハッシュフラグメントに埋め込まれたデータをブラウザ側でデコード・表示する
- */
-app.get('/view', async (c) => {
-  const { getAiSummaryViewerPage } = await import('./views/ai-summary-viewer');
-  return c.html(getAiSummaryViewerPage());
-});
-
-/**
- * AI要約詳細ページ (公開HTML — レガシー互換用、DBから取得)
+ * AI要約詳細ページ (公開HTML — Slackモーダルからの直接リンク用)
  */
 app.get('/ai-summary/:id', async (c) => {
   const db = c.env.DB;

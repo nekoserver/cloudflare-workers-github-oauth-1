@@ -4,14 +4,18 @@ import {
   generateAiSummary,
   buildSlackMessage,
   buildSummaryModal,
+  buildSummaryFallbackBlocks,
   classifySummaryResult,
   runSummaryPipeline,
   resolveAiModel,
   extractDesignDiff,
   sanitizeBoxDrawing,
+  WORKER_BASE_URL,
   DEFAULT_AI_MODEL,
   type AiBinding,
   type SummaryDiagnosis,
+  type SummaryModalRow,
+  type SlackModalView,
 } from './aiSummary';
 
 // ---- resolveAiModel ----
@@ -574,28 +578,13 @@ describe('buildSummaryModal', () => {
     expect(divider).toBeTruthy();
   });
 
-  it('「HTMLで表示」リンクがデータ埋め込み型の/viewハッシュURLを使用する', () => {
+  it('「HTMLで表示」リンクが/ai-summary/:idを指すmrkdwnリンクである', () => {
     const modal = buildSummaryModal(baseRow);
     const allText = JSON.stringify(modal.blocks);
     expect(allText).toContain('HTMLで表示');
-    expect(allText).toContain('/view#');
-    // actionsブロックのボタンではない（モーダルでurl付きボタンは非対応）
+    expect(allText).toContain('/ai-summary/abc-123');
     const actions = modal.blocks.find((b: any) => b.type === 'actions');
     expect(actions).toBeUndefined();
-  });
-
-  it('「HTMLで表示」リンクのハッシュにデコード可能なデータが含まれる', () => {
-    const modal = buildSummaryModal(baseRow);
-    const allText = JSON.stringify(modal.blocks);
-    const match = allText.match(/\/view#([A-Za-z0-9+/=_-]+)/);
-    expect(match).toBeTruthy();
-    const binary = atob(match![1]);
-    const bytes = new Uint8Array(binary.length);
-    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-    const decoded = JSON.parse(new TextDecoder().decode(bytes));
-    expect(decoded.s).toContain('バグを修正しました');
-    expect(decoded.r).toBe('owner/repo');
-    expect(decoded.p).toBe(42);
   });
 
   it('要約テキストの罫線文字がsanitizeされている', () => {
@@ -803,5 +792,247 @@ describe('runSummaryPipeline', () => {
       expect(result.summary, `"${label}" must not produce null-like summary`).toBeTruthy();
       expect(result.success, `"${label}" must be success=false`).toBe(false);
     }
+  });
+});
+
+// ==================================================================
+// Slack Block Kit 制約テスト — 過去のリグレッションを二度と起こさないための不変条件
+// ==================================================================
+// 背景:
+//   1. モーダル内のボタンに url プロパティを追加 → views.open が無言で失敗しモーダルが壊れた
+//   2. リンクURLを base64 ハッシュフラグメントに変更 → 巨大で醜いURLになりページも壊れた
+//   3. [AI_*] エラーを hasSummary=false として扱い要約セクション丸ごと非表示 → エラーが握りつぶされた
+
+describe('Slack Block Kit 制約: buildSummaryModal', () => {
+  const baseRow: SummaryModalRow = {
+    request_id: 'constraint-test-001',
+    daily_seq: 5,
+    event_date: '2026-03-27',
+    repo_full_name: 'owner/repo',
+    pr_number: 99,
+    pr_action: 'opened',
+    pr_url: 'https://github.com/owner/repo/pull/99',
+    model: '@cf/meta/llama-3.1-8b-instruct-fp8',
+    summary: '概要: テスト用要約\n変更点: なし\n影響: なし',
+    diff_length: 2000,
+    created_at: '2026-03-27T12:00:00Z',
+  };
+
+  function allBlocksFlat(modal: SlackModalView): Record<string, unknown>[] {
+    return modal.blocks;
+  }
+
+  // ---- 制約1: モーダル内にURLボタンが存在してはならない ----
+  // Slack の views.open/views.update でモーダルを開く場合、
+  // ボタン要素に url プロパティがあると API がエラーを返しモーダル全体が表示されない。
+
+  it('制約: モーダルのblocks内にtype=buttonsかつurlプロパティを持つ要素が存在しない', () => {
+    const modal = buildSummaryModal(baseRow);
+    for (const block of allBlocksFlat(modal)) {
+      if (block.type === 'actions') {
+        const elements = block.elements as Record<string, unknown>[];
+        for (const el of elements) {
+          expect(el, 'モーダル内ボタンにurlプロパティがあるとviews.openが失敗する').not.toHaveProperty('url');
+        }
+      }
+    }
+  });
+
+  it('制約: summaryがnullでもモーダルにURLボタンが存在しない', () => {
+    const modal = buildSummaryModal({ ...baseRow, summary: null });
+    for (const block of allBlocksFlat(modal)) {
+      if (block.type === 'actions') {
+        const elements = block.elements as Record<string, unknown>[];
+        for (const el of elements) {
+          expect(el).not.toHaveProperty('url');
+        }
+      }
+    }
+  });
+
+  // ---- 制約2: HTMLで表示リンクは /ai-summary/{id} パターンのみ ----
+  // base64エンコードされたハッシュフラグメント (#eyJ...) や /view# 等は禁止。
+  // URLは短く、既存の /ai-summary/:id ルートを指すこと。
+
+  it('制約: HTMLで表示リンクが /ai-summary/{request_id} の形式である', () => {
+    const modal = buildSummaryModal(baseRow);
+    const allText = JSON.stringify(modal.blocks);
+    const expectedUrl = `${WORKER_BASE_URL}/ai-summary/${baseRow.request_id}`;
+    expect(allText).toContain(expectedUrl);
+  });
+
+  it('制約: HTMLで表示リンクにハッシュフラグメント(#)が含まれない', () => {
+    const modal = buildSummaryModal(baseRow);
+    const allText = JSON.stringify(modal.blocks);
+    // /ai-summary/xxx の後に # が付いていないことを確認
+    const urlMatch = allText.match(/\/ai-summary\/[^"\\|>]+/);
+    expect(urlMatch).toBeTruthy();
+    expect(urlMatch![0]).not.toContain('#');
+  });
+
+  it('制約: HTMLで表示リンクのURL長が200文字以下である', () => {
+    const modal = buildSummaryModal(baseRow);
+    const allText = JSON.stringify(modal.blocks);
+    const urlMatch = allText.match(/https:\/\/[^|>\\]+\/ai-summary\/[^|>\\]+/);
+    expect(urlMatch).toBeTruthy();
+    expect(urlMatch![0].length, 'URLが長すぎる（base64埋め込み等の兆候）').toBeLessThanOrEqual(200);
+  });
+
+  // ---- 制約3: モーダルのtitleは24文字以下 (Slack API制限) ----
+
+  it('制約: モーダルtitleが24文字以下', () => {
+    const modal = buildSummaryModal(baseRow);
+    expect(modal.title.text.length).toBeLessThanOrEqual(24);
+  });
+
+  // ---- 制約4: モーダルのblocks内sectionテキストが3000文字以下 (Slack API制限) ----
+
+  it('制約: 各sectionブロックのtextが3000文字以下', () => {
+    const longSummary = 'A'.repeat(2500);
+    const modal = buildSummaryModal({ ...baseRow, summary: longSummary });
+    for (const block of allBlocksFlat(modal)) {
+      if (block.type === 'section') {
+        const textObj = block.text as { text: string };
+        expect(textObj.text.length, 'Slack section text は3000文字が上限').toBeLessThanOrEqual(3000);
+      }
+    }
+  });
+
+  // ---- 制約5: 全ブロックのtypeが有効なSlack Block Kit型である ----
+
+  it('制約: 全ブロックのtypeがSlack Block Kitで有効な型である', () => {
+    const validTypes = ['section', 'divider', 'context', 'actions', 'image', 'header', 'input', 'file'];
+    const modal = buildSummaryModal(baseRow);
+    for (const block of allBlocksFlat(modal)) {
+      expect(validTypes, `不正なblock type: ${block.type}`).toContain(block.type);
+    }
+  });
+
+  // ---- 制約6: contextブロックのelementsは10個以下 (Slack API制限) ----
+
+  it('制約: contextブロックのelements数が10以下', () => {
+    const modal = buildSummaryModal(baseRow);
+    for (const block of allBlocksFlat(modal)) {
+      if (block.type === 'context') {
+        const elements = block.elements as unknown[];
+        expect(elements.length, 'Slack context block は elements 最大10個').toBeLessThanOrEqual(10);
+      }
+    }
+  });
+});
+
+describe('Slack Block Kit 制約: buildSlackMessage', () => {
+  const baseParams = {
+    prAction: 'opened',
+    prNumber: 42,
+    title: 'Fix bug',
+    repoFullName: 'owner/repo',
+    author: 'testuser',
+    prUrl: 'https://github.com/owner/repo/pull/42',
+    summary: '概要: バグ修正\n変更点: 認証修正\n影響: 全体',
+    dailySeq: 3,
+    requestId: 'msg-constraint-001',
+  };
+
+  // ---- 制約: [AI_*]エラー時にエラー情報が表示されること (握りつぶし防止) ----
+
+  const aiErrorCases = [
+    { label: 'AI_ERROR (モデル不在)', summary: '[AI_ERROR] 5007: No such model llama-3.2-11b-vision-instruct or task' },
+    { label: 'AI_NO_BINDING', summary: '[AI_NO_BINDING] Workers AI binding is not available' },
+    { label: 'AI_EMPTY_RESPONSE', summary: '[AI_EMPTY_RESPONSE] keys=response response=null' },
+    { label: 'AI_UNEXPECTED_FORMAT', summary: '[AI_UNEXPECTED_FORMAT] type=string value="hello"' },
+  ];
+
+  for (const { label, summary } of aiErrorCases) {
+    it(`制約: ${label} がSlack通知で可視化される（blocksにエラー情報が含まれる）`, () => {
+      const result = buildSlackMessage({ ...baseParams, summary });
+      const allBlockText = JSON.stringify(result.blocks);
+      // エラーが存在する以上、blocks内にエラーに関する情報が必ず表示されること
+      expect(allBlockText, `${label} がblocksから消えている＝握りつぶし`).toContain('AI要約エラー');
+    });
+
+    it(`制約: ${label} がtextフォールバックでも可視化される`, () => {
+      const result = buildSlackMessage({ ...baseParams, summary });
+      expect(result.text, `${label} がtextから消えている`).toContain('AI要約エラー');
+    });
+
+    it(`制約: ${label} のとき正常要約セクション(*AI要約:*)が表示されない`, () => {
+      const result = buildSlackMessage({ ...baseParams, summary });
+      const summaryBlock = result.blocks.find((b: any) =>
+        b.type === 'section' && (b.text as any)?.text?.includes('*AI要約:*')
+      );
+      expect(summaryBlock, `${label} なのに正常要約セクションが表示されている`).toBeUndefined();
+    });
+  }
+
+  // ---- 制約: 正常要約時にactionsブロックの「詳細を見る」ボタンが存在する ----
+
+  it('制約: 正常要約時に「詳細を見る」ボタンがactions内に存在する', () => {
+    const result = buildSlackMessage(baseParams);
+    const actionsBlock = result.blocks.find((b: any) => b.type === 'actions') as any;
+    expect(actionsBlock, '正常要約なのにactionsブロックがない').toBeTruthy();
+    const btn = actionsBlock.elements.find((e: any) => e.action_id === 'view_ai_summary_detail');
+    expect(btn, '「詳細を見る」ボタンがない').toBeTruthy();
+    expect(btn.type).toBe('button');
+    // メッセージ内ボタンにはurlプロパティは不要（action_idでインタラクション処理する）
+    expect(btn.value).toBe(baseParams.requestId);
+  });
+
+  // ---- 制約: 正常要約がコードブロックで囲まれている ----
+
+  it('制約: 正常要約がコードブロック(```)で囲まれ、罫線文字を含まない', () => {
+    const summaryWithBox = '├── 概要: 修正\n│   └── 詳細\n└── 影響: なし';
+    const result = buildSlackMessage({ ...baseParams, summary: summaryWithBox });
+    const summaryBlock = result.blocks.find((b: any) =>
+      b.type === 'section' && (b.text as any)?.text?.includes('AI要約')
+    ) as any;
+    expect(summaryBlock).toBeTruthy();
+    const text = summaryBlock.text.text as string;
+    expect(text).toContain('```');
+    expect(text).not.toMatch(/[│├└─┌┐┘┤┬┴┼]/);
+  });
+
+  // ---- 制約: 全ブロックのtypeが有効である ----
+
+  it('制約: 全ブロックのtypeがSlack Block Kitで有効な型である', () => {
+    const validTypes = ['section', 'divider', 'context', 'actions', 'image', 'header', 'input', 'file'];
+    const result = buildSlackMessage(baseParams);
+    for (const block of result.blocks) {
+      expect(validTypes, `不正なblock type: ${block.type}`).toContain(block.type);
+    }
+  });
+});
+
+describe('Slack Block Kit 制約: buildSummaryFallbackBlocks', () => {
+  const baseRow: SummaryModalRow = {
+    request_id: 'fallback-test-001',
+    daily_seq: 1,
+    event_date: '2026-03-27',
+    repo_full_name: 'owner/repo',
+    pr_number: 10,
+    pr_action: 'opened',
+    pr_url: 'https://github.com/owner/repo/pull/10',
+    model: '@cf/meta/llama-3.1-8b-instruct-fp8',
+    summary: '概要: フォールバックテスト',
+    diff_length: 100,
+    created_at: '2026-03-27T12:00:00Z',
+  };
+
+  it('制約: textとblocksの両方が返される', () => {
+    const result = buildSummaryFallbackBlocks(baseRow);
+    expect(result.text).toBeTruthy();
+    expect(result.blocks).toBeTruthy();
+    expect(result.blocks.length).toBeGreaterThan(0);
+  });
+
+  it('制約: summary null + diff 0 のとき差分取得失敗の説明が表示される', () => {
+    const result = buildSummaryFallbackBlocks({ ...baseRow, summary: null, diff_length: 0 });
+    expect(result.text).toContain('差分を取得できなかった');
+  });
+
+  it('制約: summaryがnullでもtextが空にならない（握りつぶし防止）', () => {
+    const result = buildSummaryFallbackBlocks({ ...baseRow, summary: null });
+    expect(result.text.length).toBeGreaterThan(0);
+    expect(result.text).toContain('要約なし');
   });
 });
