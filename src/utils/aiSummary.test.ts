@@ -547,15 +547,14 @@ describe('buildSummaryModal', () => {
     expect(divider).toBeTruthy();
   });
 
-  it('「HTMLで表示」がURL型ボタンとして含まれ直接ブラウザで開く', () => {
+  it('「HTMLで表示」がmrkdwnリンクとしてcontextブロックに含まれる', () => {
     const modal = buildSummaryModal(baseRow);
-    const actions = modal.blocks.find((b: any) => b.type === 'actions') as any;
-    expect(actions).toBeTruthy();
-    const btn = actions.elements.find((e: any) => e.action_id === 'open_ai_summary_html');
-    expect(btn).toBeTruthy();
-    expect(btn.text.text).toContain('HTMLで表示');
-    expect(btn.url).toContain('/ai-summary/abc-123');
-    expect(btn.url).toMatch(/^https:\/\//);
+    const allText = JSON.stringify(modal.blocks);
+    expect(allText).toContain('HTMLで表示');
+    expect(allText).toContain('/ai-summary/abc-123');
+    // actionsブロックのボタンではない（モーダルでurl付きボタンは非対応）
+    const actions = modal.blocks.find((b: any) => b.type === 'actions');
+    expect(actions).toBeUndefined();
   });
 
   it('要約テキストの罫線文字がsanitizeされている', () => {
