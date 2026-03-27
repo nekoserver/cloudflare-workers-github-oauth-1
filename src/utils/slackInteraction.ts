@@ -1,5 +1,5 @@
-import { openSlackModal, updateSlackModal, respondToInteraction } from './slack';
-import { buildSummaryModal, buildSummaryModalWithHtmlLink, buildSummaryFallbackBlocks, type SummaryModalRow } from './aiSummary';
+import { openSlackModal, respondToInteraction } from './slack';
+import { buildSummaryModal, buildSummaryFallbackBlocks, type SummaryModalRow } from './aiSummary';
 
 export type InteractionDeps = {
   signingSecret: string | undefined;
@@ -65,7 +65,7 @@ export async function handleSlackInteraction(deps: InteractionDeps): Promise<Int
   const action = interactionPayload.actions?.[0];
   const actionId = action?.action_id ?? 'none';
 
-  if (!action || (actionId !== 'view_ai_summary_detail' && actionId !== 'open_ai_summary_html')) {
+  if (!action || actionId !== 'view_ai_summary_detail') {
     await log('skip', `action_id=${actionId}`);
     return { status: 200, steps };
   }
@@ -73,9 +73,8 @@ export async function handleSlackInteraction(deps: InteractionDeps): Promise<Int
   const requestId = action.value;
   const triggerId = interactionPayload.trigger_id;
   const responseUrl: string | undefined = interactionPayload.response_url;
-  const viewId: string | undefined = interactionPayload.view?.id;
-  if (!requestId || (!triggerId && !viewId)) {
-    await log('error', `requestId=${requestId ?? 'none'}, triggerId=${triggerId ?? 'none'}, viewId=${viewId ?? 'none'}`);
+  if (!requestId || !triggerId) {
+    await log('error', `requestId=${requestId ?? 'none'}, triggerId=${triggerId ?? 'none'}`);
     return { status: 200, steps };
   }
 
@@ -99,31 +98,17 @@ export async function handleSlackInteraction(deps: InteractionDeps): Promise<Int
 
     await log('db_hit', `pr_number=${row.pr_number}`);
 
-    if (actionId === 'open_ai_summary_html') {
-      if (!viewId) {
-        await log('error', 'viewId missing for modal update');
-        return { status: 200, steps };
-      }
-      const updatedView = buildSummaryModalWithHtmlLink(row);
-      const updateResult = await updateSlackModal({ token: deps.slackToken, viewId, view: updatedView });
-      if (!updateResult.ok) {
-        await log('modal_update_fail', `error=${updateResult.error}, status=${updateResult.status}`);
-      } else {
-        await log('modal_updated', `requestId=${requestId}`);
+    const modalView = buildSummaryModal(row);
+    const modalResult = await openSlackModal({ token: deps.slackToken, triggerId, view: modalView });
+    if (!modalResult.ok) {
+      await log('modal_fail', `error=${modalResult.error}, status=${modalResult.status}`);
+      if (responseUrl) {
+        const fallback = buildSummaryFallbackBlocks(row);
+        const fallbackResult = await respondToInteraction({ responseUrl, text: fallback.text, blocks: fallback.blocks });
+        await log('fallback', fallbackResult.ok ? 'ok' : `fail: ${fallbackResult.error}`);
       }
     } else {
-      const modalView = buildSummaryModal(row);
-      const modalResult = await openSlackModal({ token: deps.slackToken, triggerId: triggerId!, view: modalView });
-      if (!modalResult.ok) {
-        await log('modal_fail', `error=${modalResult.error}, status=${modalResult.status}`);
-        if (responseUrl) {
-          const fallback = buildSummaryFallbackBlocks(row);
-          const fallbackResult = await respondToInteraction({ responseUrl, text: fallback.text, blocks: fallback.blocks });
-          await log('fallback', fallbackResult.ok ? 'ok' : `fail: ${fallbackResult.error}`);
-        }
-      } else {
-        await log('modal_ok', `requestId=${requestId}`);
-      }
+      await log('modal_ok', `requestId=${requestId}`);
     }
   } catch (error) {
     const msg = error instanceof Error ? error.message : 'Unknown';

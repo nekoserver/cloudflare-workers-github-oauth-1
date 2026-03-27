@@ -23,7 +23,7 @@ import { getCookieValue, getCookieValues } from './utils/cookie';
 import { verifyResendWebhookSignature } from './utils/resendWebhook';
 import { verifyGitHubWebhookSignature } from './utils/githubWebhook';
 import { postSlackMessage, openSlackModal, respondToInteraction } from './utils/slack';
-import { fetchPrDiff, runSummaryPipeline, buildSlackMessage, buildSummaryModal, buildSummaryFallbackBlocks, classifySummaryResult, resolveAiModel, extractDesignDiff, DESIGN_SPEC_CHECKLIST, type SummaryModalRow } from './utils/aiSummary';
+import { fetchPrDiff, runSummaryPipeline, buildSlackMessage, buildSummaryModal, buildSummaryFallbackBlocks, classifySummaryResult, resolveAiModel, extractDesignDiff, sanitizeBoxDrawing, DESIGN_SPEC_CHECKLIST, type SummaryModalRow } from './utils/aiSummary';
 import { verifySlackSignature } from './utils/slackSignature';
 import { handleSlackInteraction } from './utils/slackInteraction';
 import { executeCreateRepo } from './utils/repoValidation';
@@ -4394,7 +4394,7 @@ app.get('/ai-summary/:id', async (c) => {
   ).bind(requestId).all();
 
   const escHtml = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-  const summaryText = row.summary ?? '(要約なし)';
+  const summaryText = row.summary ? sanitizeBoxDrawing(row.summary) : '(要約なし)';
   const prLink = row.pr_url ? `<a href="${escHtml(row.pr_url)}">PR #${row.pr_number}</a>` : `PR #${row.pr_number ?? '?'}`;
 
   const reviewRows = (reviews.results ?? []).map((r: any) =>
