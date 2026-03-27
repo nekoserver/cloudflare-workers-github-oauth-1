@@ -304,13 +304,38 @@ describe('buildSlackMessage', () => {
     expect(summaryBlock).toBeUndefined();
   });
 
-  it('[AI_ERROR]で始まるsummaryの場合、AI要約セクションが含まれない', () => {
+  it('[AI_ERROR]で始まるsummaryの場合、エラー通知セクションが表示される', () => {
+    const { blocks, text } = buildSlackMessage({
+      ...baseParams,
+      summary: '[AI_ERROR] 5007: No such model llama-3.2-11b-vision-instruct or task',
+    });
+    const errorBlock = blocks.find((b: any) =>
+      b.type === 'section' && b.text?.text?.includes('AI要約エラー')
+    ) as any;
+    expect(errorBlock).toBeTruthy();
+    expect(errorBlock.text.text).toContain('No such model');
+    expect(text).toContain('AI要約エラー');
+  });
+
+  it('[AI_NO_BINDING]の場合もエラー通知セクションが表示される', () => {
+    const { blocks } = buildSlackMessage({
+      ...baseParams,
+      summary: '[AI_NO_BINDING] Workers AI binding is not available',
+    });
+    const errorBlock = blocks.find((b: any) =>
+      b.type === 'section' && b.text?.text?.includes('AI要約エラー')
+    ) as any;
+    expect(errorBlock).toBeTruthy();
+    expect(errorBlock.text.text).toContain('binding is not available');
+  });
+
+  it('[AI_*]エラーの場合、正常なAI要約セクションは含まれない', () => {
     const { blocks } = buildSlackMessage({
       ...baseParams,
       summary: '[AI_ERROR] Model not found',
     });
     const summaryBlock = blocks.find((b: any) =>
-      b.type === 'section' && b.text?.text?.includes('AI要約')
+      b.type === 'section' && b.text?.text?.includes('*AI要約:*')
     );
     expect(summaryBlock).toBeUndefined();
   });
@@ -330,9 +355,11 @@ describe('buildSlackMessage', () => {
     expect(actionsBlock).toBeUndefined();
   });
 
-  it('[AI_*]エラーの場合もactionsブロックが含まれない', () => {
+  it('[AI_*]エラーの場合、「詳細を見る」actionsブロックが含まれない', () => {
     const { blocks } = buildSlackMessage({ ...baseParams, summary: '[AI_ERROR] fail' });
-    const actionsBlock = blocks.find((b: any) => b.type === 'actions');
+    const actionsBlock = blocks.find((b: any) =>
+      b.type === 'actions' && b.elements?.some((e: any) => e.action_id === 'view_ai_summary_detail')
+    );
     expect(actionsBlock).toBeUndefined();
   });
 

@@ -239,7 +239,8 @@ export function buildSlackMessage(params: BuildSlackMessageParams): SlackMessage
   } = params;
 
   const actionLabel = prAction === 'opened' ? '作成' : '更新';
-  const hasSummary = summary !== '' && !summary.startsWith('[AI_');
+  const isAiError = summary.startsWith('[AI_');
+  const hasSummary = summary !== '' && !isAiError;
   const cleanSummary = hasSummary ? sanitizeBoxDrawing(summary) : summary;
   const cleanDesignDiff = designDiff ? sanitizeBoxDrawing(designDiff) : '';
   const hasDesignDiff = !!cleanDesignDiff;
@@ -252,6 +253,9 @@ export function buildSlackMessage(params: BuildSlackMessageParams): SlackMessage
   ];
   if (hasSummary) {
     textLines.push('', '*AI要約:*', cleanSummary);
+  } else if (isAiError) {
+    const errorDetail = summary.replace(/^\[AI_[A-Z_]+\]\s*/, '');
+    textLines.push('', ':warning: *AI要約エラー:*', errorDetail, '_管理者はモデル設定・AIバインディングを確認してください_');
   }
   if (hasDesignDiff) {
     textLines.push('', '*初期設計との差異:*', cleanDesignDiff);
@@ -288,6 +292,15 @@ export function buildSlackMessage(params: BuildSlackMessageParams): SlackMessage
           value: requestId,
         },
       ],
+    });
+  } else if (isAiError) {
+    const errorDetail = summary.replace(/^\[AI_[A-Z_]+\]\s*/, '');
+    blocks.push({
+      type: 'section',
+      text: {
+        type: 'mrkdwn',
+        text: `:warning: *AI要約エラー:* ${errorDetail}\n_管理者はモデル設定・AIバインディングを確認してください_`,
+      },
     });
   }
 
