@@ -415,13 +415,11 @@ export function buildSummaryModal(row: SummaryModalRow): SlackModalView {
   });
 
   blocks.push({
-    type: 'actions',
+    type: 'context',
     elements: [
       {
-        type: 'button',
-        text: { type: 'plain_text', text: 'HTMLで表示' },
-        action_id: 'open_ai_summary_html',
-        url: `${WORKER_BASE_URL}/ai-summary/${row.request_id}`,
+        type: 'mrkdwn',
+        text: `:globe_with_meridians: <${WORKER_BASE_URL}/ai-summary/${row.request_id}|HTMLで表示>`,
       },
     ],
   });
