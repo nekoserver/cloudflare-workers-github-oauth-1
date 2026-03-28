@@ -23,7 +23,7 @@ import { getCookieValue, getCookieValues } from './utils/cookie';
 import { verifyResendWebhookSignature } from './utils/resendWebhook';
 import { verifyGitHubWebhookSignature } from './utils/githubWebhook';
 import { postSlackMessage, openSlackModal, respondToInteraction } from './utils/slack';
-import { fetchPrDiff, runSummaryPipeline, buildSlackMessage, buildSummaryModal, buildSummaryFallbackBlocks, classifySummaryResult, resolveAiModel, extractDesignDiff, sanitizeBoxDrawing, DESIGN_SPEC_CHECKLIST, type SummaryModalRow } from './utils/aiSummary';
+import { fetchPrDiff, runSummaryPipeline, buildSlackMessage, buildSummaryModal, buildSummaryFallbackBlocks, classifySummaryResult, resolveAiModel, extractDesignDiff, sanitizeBoxDrawing, WORKER_BASE_URL, DESIGN_SPEC_CHECKLIST, type SummaryModalRow } from './utils/aiSummary';
 import { getSessionDurationSeconds, renewSession } from './utils/session';
 import { verifySlackSignature } from './utils/slackSignature';
 import { handleSlackInteraction } from './utils/slackInteraction';
@@ -4427,12 +4427,13 @@ details{margin-bottom:1rem}summary{cursor:pointer;font-size:1.4rem;font-weight:b
 <dt>モデル</dt><dd>${escHtml(row.model ?? '(不明)')}</dd>
 <dt>Diff長</dt><dd>${row.diff_length ?? 0} 文字</dd>
 <dt>日時</dt><dd>${escHtml(row.created_at)}</dd>
-<dt>Request ID</dt><dd style="font-size:0.85rem">${escHtml(row.request_id)}</dd>
+<dt>Request ID</dt><dd style="font-size:0.85rem"><a href="${WORKER_BASE_URL}/ai-summary/${escHtml(row.request_id)}" target="_blank">${escHtml(row.request_id)}</a></dd>
 </dl>
 </details>
 <h2>要約</h2>
 <pre>${escHtml(summaryText)}</pre>
-${reviewRows ? `<h2>レビュー</h2><table><thead><tr><th>評価</th><th>レビュアー</th><th>コメント</th><th>日時</th></tr></thead><tbody>${reviewRows}</tbody></table>` : ''}
+${reviewRows ? `<details><summary>D1上のイメージ</summary><table><thead><tr><th>評価</th><th>レビュアー</th><th>コメント</th><th>日時</th></tr></thead><tbody>${reviewRows}</tbody></table></details>` : ''}
+<footer style="margin-top:2rem;padding-top:1rem;border-top:1px solid #3a3a5c;font-size:0.85rem;color:#707090">AI要約時に生成された Request ID (UUIDv4) は <code>/ai-summary/{id}</code> でHTMLページとしてリクエストできます。</footer>
 </body></html>`;
 
   return c.html(html);
@@ -4484,12 +4485,13 @@ details{margin-bottom:1rem}summary{cursor:pointer;font-size:1.4rem;font-weight:b
 <dt>モデル</dt><dd>${escHtml(row.model ?? '(不明)')}</dd>
 <dt>Diff長</dt><dd>${row.diff_length ?? 0} 文字</dd>
 <dt>日時</dt><dd>${escHtml(row.created_at)}</dd>
-<dt>Request ID</dt><dd style="font-size:0.85rem">${escHtml(row.request_id)}</dd>
+<dt>Request ID</dt><dd style="font-size:0.85rem"><a href="${WORKER_BASE_URL}/ai-summary/${escHtml(row.request_id)}" target="_blank">${escHtml(row.request_id)}</a></dd>
 </dl>
 </details>
 <h2>要約</h2>
 <pre>${escHtml(summaryText)}</pre>
-${reviewRows ? `<h2>レビュー</h2><table><thead><tr><th>評価</th><th>レビュアー</th><th>コメント</th><th>日時</th></tr></thead><tbody>${reviewRows}</tbody></table>` : ''}
+${reviewRows ? `<details><summary>D1上のイメージ</summary><table><thead><tr><th>評価</th><th>レビュアー</th><th>コメント</th><th>日時</th></tr></thead><tbody>${reviewRows}</tbody></table></details>` : ''}
+<footer style="margin-top:2rem;padding-top:1rem;border-top:1px solid #3a3a5c;font-size:0.85rem;color:#707090">AI要約時に生成された Request ID (UUIDv4) は <code>/ai-summary/{id}</code> でHTMLページとしてリクエストできます。</footer>
 </body></html>`;
 
   return c.html(html);
