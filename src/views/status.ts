@@ -2282,13 +2282,9 @@ export function getCacheStatusPage(user: {
       return (trimmed.startsWith('{') && trimmed.endsWith('}')) || (trimmed.startsWith('[') && trimmed.endsWith(']'));
     }
 
-    function formatPreviewValue(value, column) {
+    function formatPreviewValue(value) {
       if (value === null || typeof value === 'undefined') {
         return '<span class="preview-value null">NULL</span>';
-      }
-      if (column === 'request_id' && typeof value === 'string' && value.length > 0) {
-        var safe = escapeHtmlText(value);
-        return '<pre class="preview-value"><a href="/ai-summary/' + encodeURIComponent(value) + '" target="_blank" rel="noopener">' + safe + '</a></pre>';
       }
       if (typeof value === 'string' && isJsonLikeString(value)) {
         try {
@@ -2303,7 +2299,14 @@ export function getCacheStatusPage(user: {
       return '<pre class="preview-value">' + escapeHtmlText(String(value)) + '</pre>';
     }
 
-    function renderStatusTablePreview(columns, rows, limit) {
+    function formatCellValue(column, value, tableName) {
+      if (column === 'request_id' && tableName === 'ai_summary_log' && value && typeof value === 'string') {
+        return '<a href="/ai-summary/' + encodeURIComponent(value) + '" target="_blank" style="color:#6cb4ee;word-break:break-all">' + escapeHtmlText(value) + '</a>';
+      }
+      return formatPreviewValue(value);
+    }
+
+    function renderStatusTablePreview(columns, rows, limit, tableName) {
       if (!rows || rows.length === 0) {
         return '<div class="modal-empty">表示できる保存データがありません</div>';
       }
@@ -2312,7 +2315,7 @@ export function getCacheStatusPage(user: {
       }).join('');
       var bodyHtml = rows.map(function(row) {
         return '<tr>' + columns.map(function(column) {
-          return '<td>' + formatPreviewValue(row[column], column) + '</td>';
+          return '<td>' + formatCellValue(column, row[column], tableName) + '</td>';
         }).join('') + '</tr>';
       }).join('');
       return '<div class="modal-note">最新 ' + escapeHtmlText(String(limit)) + ' 件を表示しています。値は D1 に保存されている内容をそのまま確認しやすい形で表示しています。</div>'
@@ -2331,7 +2334,7 @@ export function getCacheStatusPage(user: {
         openStatusModal(
           tableName + ' の保存データ',
           (data.description || '') + (data.migration ? ' / マイグレーション ' + data.migration : ''),
-          renderStatusTablePreview(data.columns || [], data.rows || [], data.limit || 20)
+          renderStatusTablePreview(data.columns || [], data.rows || [], data.limit || 20, tableName)
         );
       } catch (_error) {
         showStatusModalError(title, '', '保存データの取得に失敗しました');
