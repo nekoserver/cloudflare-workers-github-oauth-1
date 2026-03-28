@@ -248,22 +248,6 @@ describe('handleSlackInteraction', () => {
 
   // ---- Slack API制約テスト: openSlackModalに渡されるviewの構造検証 ----
 
-  it('制約: openSlackModalに渡されるviewにURLボタンが含まれない', async () => {
-    const deps = makeDeps();
-    await handleSlackInteraction(deps);
-
-    const call = mockedOpenModal.mock.calls[0][0];
-    const view = call.view;
-    for (const block of view.blocks) {
-      if ((block as any).type === 'actions') {
-        const elements = (block as any).elements as any[];
-        for (const el of elements) {
-          expect(el, 'モーダル内ボタンにurlがあるとviews.openが失敗する').not.toHaveProperty('url');
-        }
-      }
-    }
-  });
-
   it('制約: openSlackModalに渡されるviewのtitleが24文字以下', async () => {
     const deps = makeDeps();
     await handleSlackInteraction(deps);
@@ -272,15 +256,13 @@ describe('handleSlackInteraction', () => {
     expect(call.view.title.text.length).toBeLessThanOrEqual(24);
   });
 
-  it('制約: 「HTMLで表示」リンクが /ai-summary/{id} パターンである', async () => {
+  it('制約: 「HTMLで表示」ボタンが /ai-summary/{id} URLを持つ', async () => {
     const deps = makeDeps();
     await handleSlackInteraction(deps);
 
     const call = mockedOpenModal.mock.calls[0][0];
     const allText = JSON.stringify(call.view.blocks);
-    expect(allText).toContain('/view?id=req-001');
-    // base64ハッシュフラグメントが含まれていないこと
-    expect(allText).not.toContain('/view#');
+    expect(allText).toContain('/ai-summary/req-001');
     expect(allText).not.toContain('#eyJ');
   });
 

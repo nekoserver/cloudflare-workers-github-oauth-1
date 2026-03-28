@@ -578,13 +578,14 @@ describe('buildSummaryModal', () => {
     expect(divider).toBeTruthy();
   });
 
-  it('「HTMLで表示」リンクが/view?id=:idを指すmrkdwnリンクである', () => {
+  it('「HTMLで表示」ボタンがactionsブロック内にurl付きで存在する', () => {
     const modal = buildSummaryModal(baseRow);
-    const allText = JSON.stringify(modal.blocks);
-    expect(allText).toContain('HTMLで表示');
-    expect(allText).toContain('/view?id=abc-123');
-    const actions = modal.blocks.find((b: any) => b.type === 'actions');
-    expect(actions).toBeUndefined();
+    const actionsBlock = modal.blocks.find((b: any) => b.type === 'actions') as any;
+    expect(actionsBlock).toBeTruthy();
+    const btn = actionsBlock.elements.find((e: any) => e.action_id === 'open_ai_summary_html');
+    expect(btn).toBeTruthy();
+    expect(btn.text.text).toBe('HTMLで表示');
+    expect(btn.url).toContain('/ai-summary/abc-123');
   });
 
   it('要約テキストの罫線文字がsanitizeされている', () => {
@@ -822,58 +823,31 @@ describe('Slack Block Kit 制約: buildSummaryModal', () => {
     return modal.blocks;
   }
 
-  // ---- 制約1: モーダル内にURLボタンが存在してはならない ----
-  // Slack の views.open/views.update でモーダルを開く場合、
-  // ボタン要素に url プロパティがあると API がエラーを返しモーダル全体が表示されない。
+  // ---- 制約1: HTMLで表示ボタンが /ai-summary/{id} のURL付きで存在する ----
 
-  it('制約: モーダルのblocks内にtype=buttonsかつurlプロパティを持つ要素が存在しない', () => {
+  it('制約: HTMLで表示ボタンが /ai-summary/{request_id} のURLを持つ', () => {
     const modal = buildSummaryModal(baseRow);
-    for (const block of allBlocksFlat(modal)) {
-      if (block.type === 'actions') {
-        const elements = block.elements as Record<string, unknown>[];
-        for (const el of elements) {
-          expect(el, 'モーダル内ボタンにurlプロパティがあるとviews.openが失敗する').not.toHaveProperty('url');
-        }
-      }
-    }
+    const actionsBlock = allBlocksFlat(modal).find((b) => b.type === 'actions') as any;
+    expect(actionsBlock, 'actionsブロックが存在しない').toBeTruthy();
+    const btn = actionsBlock.elements.find((e: any) => e.action_id === 'open_ai_summary_html');
+    expect(btn, 'HTMLで表示ボタンが存在しない').toBeTruthy();
+    expect(btn.url).toContain(`/ai-summary/${baseRow.request_id}`);
   });
 
-  it('制約: summaryがnullでもモーダルにURLボタンが存在しない', () => {
-    const modal = buildSummaryModal({ ...baseRow, summary: null });
-    for (const block of allBlocksFlat(modal)) {
-      if (block.type === 'actions') {
-        const elements = block.elements as Record<string, unknown>[];
-        for (const el of elements) {
-          expect(el).not.toHaveProperty('url');
-        }
-      }
-    }
-  });
+  // ---- 制約2: URLにbase64ハッシュフラグメントが含まれない ----
 
-  // ---- 制約2: HTMLで表示リンクは /view?id={id} パターンのみ ----
-  // base64エンコードされたハッシュフラグメント (#eyJ...) や /view# 等は禁止。
-  // URLは短く、既存の /view?id=:id ルートを指すこと。
-
-  it('制約: HTMLで表示リンクが /view?id={request_id} の形式である', () => {
+  it('制約: HTMLで表示URLにハッシュフラグメント(#)が含まれない', () => {
     const modal = buildSummaryModal(baseRow);
     const allText = JSON.stringify(modal.blocks);
-    const expectedUrl = `${WORKER_BASE_URL}/view?id=${baseRow.request_id}`;
-    expect(allText).toContain(expectedUrl);
-  });
-
-  it('制約: HTMLで表示リンクにハッシュフラグメント(#)が含まれない', () => {
-    const modal = buildSummaryModal(baseRow);
-    const allText = JSON.stringify(modal.blocks);
-    // /view?id=xxx の後に # が付いていないことを確認
-    const urlMatch = allText.match(/\/view\?id=[^"\\|>]+/);
+    const urlMatch = allText.match(/\/ai-summary\/[^"\\|>]+/);
     expect(urlMatch).toBeTruthy();
     expect(urlMatch![0]).not.toContain('#');
   });
 
-  it('制約: HTMLで表示リンクのURL長が200文字以下である', () => {
+  it('制約: HTMLで表示URLの長さが200文字以下である', () => {
     const modal = buildSummaryModal(baseRow);
     const allText = JSON.stringify(modal.blocks);
-    const urlMatch = allText.match(/https:\/\/[^|>\\]+\/view\?id=[^|>\\]+/);
+    const urlMatch = allText.match(/https:\/\/[^"\\]+\/ai-summary\/[^"\\]+/);
     expect(urlMatch).toBeTruthy();
     expect(urlMatch![0].length, 'URLが長すぎる（base64埋め込み等の兆候）').toBeLessThanOrEqual(200);
   });
