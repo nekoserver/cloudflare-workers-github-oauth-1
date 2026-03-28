@@ -291,6 +291,12 @@ export function buildSlackMessage(params: BuildSlackMessageParams): SlackMessage
           action_id: 'view_ai_summary_detail',
           value: requestId,
         },
+        {
+          type: 'button',
+          text: { type: 'plain_text', text: 'HTMLで表示' },
+          action_id: 'open_ai_summary_html',
+          url: `${WORKER_BASE_URL}/ai-summary/${requestId}`,
+        },
       ],
     });
   } else if (isAiError) {
