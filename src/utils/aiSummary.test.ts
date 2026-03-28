@@ -822,19 +822,45 @@ describe('Slack Block Kit 制約: buildSummaryModal', () => {
     return modal.blocks;
   }
 
-  // ---- 制約1: モーダル内にactionsブロック（URLボタン）が存在しない ----
-  // Slackモーダルではurl付きボタンが正常に動作しないため、mrkdwnリンクを使う。
+  // ---- 制約1: モーダル内にactionsブロックが存在してはならない ----
+  // 実証済み: Slackモーダルのactionsブロック内のurl付きボタンは動作しない。
+  // メッセージでは動くがモーダルでは動かない。この差異が過去の障害の根本原因。
+  // モーダル内のリンクはmrkdwn形式 (<URL|テキスト>) のみ使用可能。
 
-  it('制約: モーダル内にactionsブロックが存在しない', () => {
+  it('制約: モーダル内にactionsブロックが存在しない（url付きボタンはモーダルで動作しない）', () => {
     const modal = buildSummaryModal(baseRow);
     const actionsBlock = allBlocksFlat(modal).find((b) => b.type === 'actions');
-    expect(actionsBlock, 'モーダル内にactionsブロックがある').toBeUndefined();
+    expect(actionsBlock, 'モーダル内にactionsブロックがあるとurl付きボタンが動作しない').toBeUndefined();
   });
+
+  it('制約: summaryがnullでもモーダルにactionsブロックが存在しない', () => {
+    const modal = buildSummaryModal({ ...baseRow, summary: null });
+    const actionsBlock = allBlocksFlat(modal).find((b) => b.type === 'actions');
+    expect(actionsBlock).toBeUndefined();
+  });
+
+  it('制約: summaryがnullかつdiff_length=0でもモーダルにactionsブロックが存在しない', () => {
+    const modal = buildSummaryModal({ ...baseRow, summary: null, diff_length: 0 });
+    const actionsBlock = allBlocksFlat(modal).find((b) => b.type === 'actions');
+    expect(actionsBlock).toBeUndefined();
+  });
+
+  // ---- 制約2: HTMLで表示はmrkdwnリンクとして存在する ----
 
   it('制約: HTMLで表示リンクが /ai-summary/{request_id} を指すmrkdwnリンクである', () => {
     const modal = buildSummaryModal(baseRow);
     const allText = JSON.stringify(modal.blocks);
     expect(allText).toContain(`/ai-summary/${baseRow.request_id}|HTMLで表示`);
+  });
+
+  it('制約: HTMLで表示リンクがcontextブロック内のmrkdwn要素である', () => {
+    const modal = buildSummaryModal(baseRow);
+    const contextWithLink = allBlocksFlat(modal).find((b) => {
+      if (b.type !== 'context') return false;
+      const elements = b.elements as any[];
+      return elements.some((e: any) => e.type === 'mrkdwn' && e.text?.includes('HTMLで表示'));
+    });
+    expect(contextWithLink, 'HTMLで表示がcontextブロックのmrkdwn内にない').toBeTruthy();
   });
 
   // ---- 制約2: URLにbase64ハッシュフラグメントが含まれない ----
@@ -942,17 +968,34 @@ describe('Slack Block Kit 制約: buildSlackMessage', () => {
     });
   }
 
-  // ---- 制約: 正常要約時にactionsブロックの「詳細を見る」ボタンが存在する ----
+  // ---- 制約: 正常要約時にメッセージのactionsブロックに2ボタンが存在する ----
+  // 実証済み: Slackメッセージではurl付きボタンが正常に動作する（モーダルとは異なる）。
+  // 「詳細を見る」(モーダルを開く) と「HTMLで表示」(URLを直接開く) の2つが必要。
 
-  it('制約: 正常要約時に「詳細を見る」ボタンがactions内に存在する', () => {
+  it('制約: 正常要約時にactionsブロックに2つのボタンが存在する', () => {
     const result = buildSlackMessage(baseParams);
     const actionsBlock = result.blocks.find((b: any) => b.type === 'actions') as any;
     expect(actionsBlock, '正常要約なのにactionsブロックがない').toBeTruthy();
+    expect(actionsBlock.elements.length, 'ボタンが2つでない').toBe(2);
+  });
+
+  it('制約: 「詳細を見る」ボタンがaction_id=view_ai_summary_detailで存在する', () => {
+    const result = buildSlackMessage(baseParams);
+    const actionsBlock = result.blocks.find((b: any) => b.type === 'actions') as any;
     const btn = actionsBlock.elements.find((e: any) => e.action_id === 'view_ai_summary_detail');
     expect(btn, '「詳細を見る」ボタンがない').toBeTruthy();
     expect(btn.type).toBe('button');
-    // メッセージ内ボタンにはurlプロパティは不要（action_idでインタラクション処理する）
     expect(btn.value).toBe(baseParams.requestId);
+  });
+
+  it('制約: 「HTMLで表示」ボタンがurl付きでメッセージ内に存在する', () => {
+    const result = buildSlackMessage(baseParams);
+    const actionsBlock = result.blocks.find((b: any) => b.type === 'actions') as any;
+    const btn = actionsBlock.elements.find((e: any) => e.action_id === 'open_ai_summary_html');
+    expect(btn, '「HTMLで表示」ボタンがない').toBeTruthy();
+    expect(btn.type).toBe('button');
+    expect(btn.url, 'HTMLで表示ボタンにurlがない').toBeTruthy();
+    expect(btn.url).toContain(`/ai-summary/${baseParams.requestId}`);
   });
 
   // ---- 制約: 正常要約がコードブロックで囲まれている ----

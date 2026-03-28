@@ -256,13 +256,23 @@ describe('handleSlackInteraction', () => {
     expect(call.view.title.text.length).toBeLessThanOrEqual(24);
   });
 
-  it('制約: 「HTMLで表示」ボタンが /ai-summary/{id} URLを持つ', async () => {
+  it('制約: モーダル内にactionsブロックが存在しない（url付きボタンはモーダルで動作しない）', async () => {
+    const deps = makeDeps();
+    await handleSlackInteraction(deps);
+
+    const call = mockedOpenModal.mock.calls[0][0];
+    const actionsBlock = call.view.blocks.find((b: any) => b.type === 'actions');
+    expect(actionsBlock, 'モーダル内にactionsブロックがある').toBeUndefined();
+  });
+
+  it('制約: HTMLで表示がmrkdwnリンクとしてcontextブロック内に存在する', async () => {
     const deps = makeDeps();
     await handleSlackInteraction(deps);
 
     const call = mockedOpenModal.mock.calls[0][0];
     const allText = JSON.stringify(call.view.blocks);
     expect(allText).toContain('/ai-summary/req-001');
+    expect(allText).toContain('HTMLで表示');
     expect(allText).not.toContain('#eyJ');
   });
 
