@@ -578,14 +578,13 @@ describe('buildSummaryModal', () => {
     expect(divider).toBeTruthy();
   });
 
-  it('「HTMLで表示」ボタンがactionsブロック内にurl付きで存在する', () => {
+  it('「HTMLで表示」がcontextブロック内のmrkdwnリンクとして存在する', () => {
     const modal = buildSummaryModal(baseRow);
-    const actionsBlock = modal.blocks.find((b: any) => b.type === 'actions') as any;
-    expect(actionsBlock).toBeTruthy();
-    const btn = actionsBlock.elements.find((e: any) => e.action_id === 'open_ai_summary_html');
-    expect(btn).toBeTruthy();
-    expect(btn.text.text).toBe('HTMLで表示');
-    expect(btn.url).toContain('/ai-summary/abc-123');
+    const allText = JSON.stringify(modal.blocks);
+    expect(allText).toContain('HTMLで表示');
+    expect(allText).toContain('/ai-summary/abc-123');
+    const actionsBlock = modal.blocks.find((b: any) => b.type === 'actions');
+    expect(actionsBlock).toBeUndefined();
   });
 
   it('要約テキストの罫線文字がsanitizeされている', () => {
@@ -823,15 +822,19 @@ describe('Slack Block Kit 制約: buildSummaryModal', () => {
     return modal.blocks;
   }
 
-  // ---- 制約1: HTMLで表示ボタンが /ai-summary/{id} のURL付きで存在する ----
+  // ---- 制約1: モーダル内にactionsブロック（URLボタン）が存在しない ----
+  // Slackモーダルではurl付きボタンが正常に動作しないため、mrkdwnリンクを使う。
 
-  it('制約: HTMLで表示ボタンが /ai-summary/{request_id} のURLを持つ', () => {
+  it('制約: モーダル内にactionsブロックが存在しない', () => {
     const modal = buildSummaryModal(baseRow);
-    const actionsBlock = allBlocksFlat(modal).find((b) => b.type === 'actions') as any;
-    expect(actionsBlock, 'actionsブロックが存在しない').toBeTruthy();
-    const btn = actionsBlock.elements.find((e: any) => e.action_id === 'open_ai_summary_html');
-    expect(btn, 'HTMLで表示ボタンが存在しない').toBeTruthy();
-    expect(btn.url).toContain(`/ai-summary/${baseRow.request_id}`);
+    const actionsBlock = allBlocksFlat(modal).find((b) => b.type === 'actions');
+    expect(actionsBlock, 'モーダル内にactionsブロックがある').toBeUndefined();
+  });
+
+  it('制約: HTMLで表示リンクが /ai-summary/{request_id} を指すmrkdwnリンクである', () => {
+    const modal = buildSummaryModal(baseRow);
+    const allText = JSON.stringify(modal.blocks);
+    expect(allText).toContain(`/ai-summary/${baseRow.request_id}|HTMLで表示`);
   });
 
   // ---- 制約2: URLにbase64ハッシュフラグメントが含まれない ----
