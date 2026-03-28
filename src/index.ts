@@ -4433,6 +4433,7 @@ details{margin-bottom:1rem}summary{cursor:pointer;font-size:1.4rem;font-weight:b
 <h2>要約</h2>
 <pre>${escHtml(summaryText)}</pre>
 ${reviewRows ? `<details><summary>D1上のイメージ</summary><table><thead><tr><th>評価</th><th>レビュアー</th><th>コメント</th><th>日時</th></tr></thead><tbody>${reviewRows}</tbody></table></details>` : ''}
+<footer style="margin-top:2rem;padding-top:1rem;border-top:1px solid #3a3a5c;font-size:0.85rem;color:#707090">AI要約時に生成された Request ID (UUIDv4) は <code>/ai-summary/{id}</code> でHTMLページとしてリクエストできます。</footer>
 </body></html>`;
 
   return c.html(html);
@@ -4490,6 +4491,7 @@ details{margin-bottom:1rem}summary{cursor:pointer;font-size:1.4rem;font-weight:b
 <h2>要約</h2>
 <pre>${escHtml(summaryText)}</pre>
 ${reviewRows ? `<details><summary>D1上のイメージ</summary><table><thead><tr><th>評価</th><th>レビュアー</th><th>コメント</th><th>日時</th></tr></thead><tbody>${reviewRows}</tbody></table></details>` : ''}
+<footer style="margin-top:2rem;padding-top:1rem;border-top:1px solid #3a3a5c;font-size:0.85rem;color:#707090">AI要約時に生成された Request ID (UUIDv4) は <code>/ai-summary/{id}</code> でHTMLページとしてリクエストできます。</footer>
 </body></html>`;
 
   return c.html(html);
