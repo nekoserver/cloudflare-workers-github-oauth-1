@@ -287,13 +287,13 @@ export function buildSlackMessage(params: BuildSlackMessageParams): SlackMessage
       elements: [
         {
           type: 'button',
-          text: { type: 'plain_text', text: '詳細を見る' },
+          text: { type: 'plain_text', text: 'モーダルで詳細' },
           action_id: 'view_ai_summary_detail',
           value: requestId,
         },
         {
           type: 'button',
-          text: { type: 'plain_text', text: 'HTMLで表示' },
+          text: { type: 'plain_text', text: '詳細を見る(HTML版)' },
           action_id: 'open_ai_summary_html',
           url: `${WORKER_BASE_URL}/ai-summary/${requestId}`,
         },
