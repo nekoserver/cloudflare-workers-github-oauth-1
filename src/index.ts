@@ -4416,9 +4416,10 @@ app.get('/view', async (c) => {
 <style>body{font-family:system-ui,sans-serif;max-width:800px;margin:2rem auto;padding:0 1rem;background:#1a1a2e;color:#e0e0e0}
 a{color:#6cb4ee}h1{font-size:1.4rem;color:#f0f0f0}h2{color:#d0d0d0}table{border-collapse:collapse;width:100%}th,td{border:1px solid #3a3a5c;padding:8px;text-align:left}
 th{background:#2a2a4a;color:#c0c0c0}td{background:#22223a}pre{background:#0d0d1a;color:#d4d4d4;padding:1rem;border-radius:6px;overflow-x:auto;white-space:pre-wrap;border:1px solid #3a3a5c}
-.meta{display:grid;grid-template-columns:auto 1fr;gap:0.25rem 1rem;margin:1rem 0}.meta dt{font-weight:bold;color:#9090b0;text-align:right;white-space:nowrap}.meta dd{margin:0;color:#d0d0d0}</style>
+.meta{display:grid;grid-template-columns:auto 1fr;gap:0.25rem 1rem;margin:1rem 0}.meta dt{font-weight:bold;color:#9090b0;text-align:right;white-space:nowrap}.meta dd{margin:0;color:#d0d0d0}
+details{margin-bottom:1rem}summary{cursor:pointer;font-size:1.4rem;font-weight:bold;color:#f0f0f0;padding:0.5rem 0}summary:hover{color:#6cb4ee}</style>
 </head><body>
-<h1>AI要約 #${row.daily_seq} (${escHtml(row.event_date)})</h1>
+<details><summary>AI要約 #${row.daily_seq} (${escHtml(row.event_date)}) — ${escHtml(row.repo_full_name ?? '(不明)')} ${prLink}</summary>
 <dl class="meta">
 <dt>リポジトリ</dt><dd>${escHtml(row.repo_full_name ?? '(不明)')}</dd>
 <dt>PR</dt><dd>${prLink}</dd>
@@ -4428,6 +4429,7 @@ th{background:#2a2a4a;color:#c0c0c0}td{background:#22223a}pre{background:#0d0d1a
 <dt>日時</dt><dd>${escHtml(row.created_at)}</dd>
 <dt>Request ID</dt><dd style="font-size:0.85rem">${escHtml(row.request_id)}</dd>
 </dl>
+</details>
 <h2>要約</h2>
 <pre>${escHtml(summaryText)}</pre>
 ${reviewRows ? `<h2>レビュー</h2><table><thead><tr><th>評価</th><th>レビュアー</th><th>コメント</th><th>日時</th></tr></thead><tbody>${reviewRows}</tbody></table>` : ''}
@@ -4471,9 +4473,10 @@ app.get('/ai-summary/:id', async (c) => {
 <style>body{font-family:system-ui,sans-serif;max-width:800px;margin:2rem auto;padding:0 1rem;background:#1a1a2e;color:#e0e0e0}
 a{color:#6cb4ee}h1{font-size:1.4rem;color:#f0f0f0}h2{color:#d0d0d0}table{border-collapse:collapse;width:100%}th,td{border:1px solid #3a3a5c;padding:8px;text-align:left}
 th{background:#2a2a4a;color:#c0c0c0}td{background:#22223a}pre{background:#0d0d1a;color:#d4d4d4;padding:1rem;border-radius:6px;overflow-x:auto;white-space:pre-wrap;border:1px solid #3a3a5c}
-.meta{display:grid;grid-template-columns:auto 1fr;gap:0.25rem 1rem;margin:1rem 0}.meta dt{font-weight:bold;color:#9090b0;text-align:right;white-space:nowrap}.meta dd{margin:0;color:#d0d0d0}</style>
+.meta{display:grid;grid-template-columns:auto 1fr;gap:0.25rem 1rem;margin:1rem 0}.meta dt{font-weight:bold;color:#9090b0;text-align:right;white-space:nowrap}.meta dd{margin:0;color:#d0d0d0}
+details{margin-bottom:1rem}summary{cursor:pointer;font-size:1.4rem;font-weight:bold;color:#f0f0f0;padding:0.5rem 0}summary:hover{color:#6cb4ee}</style>
 </head><body>
-<h1>AI要約 #${row.daily_seq} (${escHtml(row.event_date)})</h1>
+<details><summary>AI要約 #${row.daily_seq} (${escHtml(row.event_date)}) — ${escHtml(row.repo_full_name ?? '(不明)')} ${prLink}</summary>
 <dl class="meta">
 <dt>リポジトリ</dt><dd>${escHtml(row.repo_full_name ?? '(不明)')}</dd>
 <dt>PR</dt><dd>${prLink}</dd>
@@ -4483,6 +4486,7 @@ th{background:#2a2a4a;color:#c0c0c0}td{background:#22223a}pre{background:#0d0d1a
 <dt>日時</dt><dd>${escHtml(row.created_at)}</dd>
 <dt>Request ID</dt><dd style="font-size:0.85rem">${escHtml(row.request_id)}</dd>
 </dl>
+</details>
 <h2>要約</h2>
 <pre>${escHtml(summaryText)}</pre>
 ${reviewRows ? `<h2>レビュー</h2><table><thead><tr><th>評価</th><th>レビュアー</th><th>コメント</th><th>日時</th></tr></thead><tbody>${reviewRows}</tbody></table>` : ''}
