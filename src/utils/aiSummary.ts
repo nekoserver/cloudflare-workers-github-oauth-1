@@ -354,7 +354,7 @@ export type SlackModalView = {
   blocks: Record<string, unknown>[];
 };
 
-export const WORKER_BASE_URL = 'https://cloudflare-workers-github-oauth-1.nekoserver.workers.dev';
+export const WORKER_BASE_URL = 'https://cloudflare-workers-github-oauth-1.nekoflare.workers.dev';
 
 
 export function buildSummaryModal(row: SummaryModalRow): SlackModalView {
