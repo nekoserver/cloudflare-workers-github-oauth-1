@@ -4432,7 +4432,7 @@ details{margin-bottom:1rem}summary{cursor:pointer;font-size:1.4rem;font-weight:b
 </details>
 <h2>要約</h2>
 <pre>${escHtml(summaryText)}</pre>
-${reviewRows ? `<h2>レビュー</h2><table><thead><tr><th>評価</th><th>レビュアー</th><th>コメント</th><th>日時</th></tr></thead><tbody>${reviewRows}</tbody></table>` : ''}
+${reviewRows ? `<details><summary>D1上のイメージ</summary><table><thead><tr><th>評価</th><th>レビュアー</th><th>コメント</th><th>日時</th></tr></thead><tbody>${reviewRows}</tbody></table></details>` : ''}
 </body></html>`;
 
   return c.html(html);
@@ -4489,7 +4489,7 @@ details{margin-bottom:1rem}summary{cursor:pointer;font-size:1.4rem;font-weight:b
 </details>
 <h2>要約</h2>
 <pre>${escHtml(summaryText)}</pre>
-${reviewRows ? `<h2>レビュー</h2><table><thead><tr><th>評価</th><th>レビュアー</th><th>コメント</th><th>日時</th></tr></thead><tbody>${reviewRows}</tbody></table>` : ''}
+${reviewRows ? `<details><summary>D1上のイメージ</summary><table><thead><tr><th>評価</th><th>レビュアー</th><th>コメント</th><th>日時</th></tr></thead><tbody>${reviewRows}</tbody></table></details>` : ''}
 </body></html>`;
 
   return c.html(html);
