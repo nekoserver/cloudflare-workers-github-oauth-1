@@ -4380,7 +4380,64 @@ app.delete('/api/repo-groups/:id', authMiddleware, async (c) => {
 // =====================================================
 
 /**
- * AI要約詳細ページ (公開HTML — Slackモーダルからの直接リンク用)
+ * AI要約HTMLビューア (クエリパラメータ方式 — Slackモーダルからの直接リンク用)
+ */
+app.get('/view', async (c) => {
+  const db = c.env.DB;
+  if (!db) return c.text('DB not available', 500);
+
+  const requestId = c.req.query('id');
+  if (!requestId) return c.text('id parameter is required', 400);
+
+  const row = await db.prepare(
+    'SELECT request_id, daily_seq, event_date, repo_full_name, pr_number, pr_action, pr_url, model, summary, diff_length, created_at FROM ai_summary_log WHERE request_id = ?'
+  ).bind(requestId).first() as SummaryModalRow | null;
+
+  if (!row) return c.text('Not found', 404);
+
+  await db.prepare(
+    'UPDATE ai_summary_log SET view_count = view_count + 1 WHERE request_id = ?'
+  ).bind(requestId).run();
+
+  const reviews = await db.prepare(
+    'SELECT rating, reviewer_type, reviewer_name, comment, created_at FROM ai_summary_reviews WHERE summary_request_id = ? ORDER BY created_at DESC'
+  ).bind(requestId).all();
+
+  const escHtml = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  const summaryText = row.summary ? sanitizeBoxDrawing(row.summary) : '(要約なし)';
+  const prLink = row.pr_url ? `<a href="${escHtml(row.pr_url)}">PR #${row.pr_number}</a>` : `PR #${row.pr_number ?? '?'}`;
+
+  const reviewRows = (reviews.results ?? []).map((r: any) =>
+    `<tr><td>${escHtml(r.rating)}</td><td>${escHtml(r.reviewer_name ?? '')}</td><td>${escHtml(r.comment ?? '')}</td><td>${escHtml(r.created_at ?? '')}</td></tr>`
+  ).join('');
+
+  const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AI要約 #${row.daily_seq}</title>
+<style>body{font-family:system-ui,sans-serif;max-width:800px;margin:2rem auto;padding:0 1rem;background:#f8f9fa;color:#333}
+h1{font-size:1.4rem}table{border-collapse:collapse;width:100%}th,td{border:1px solid #ddd;padding:8px;text-align:left}
+th{background:#e9ecef}pre{background:#1e1e1e;color:#d4d4d4;padding:1rem;border-radius:6px;overflow-x:auto;white-space:pre-wrap}
+.meta{display:grid;grid-template-columns:auto 1fr;gap:0.25rem 1rem;margin:1rem 0}.meta dt{font-weight:bold;color:#666;text-align:right;white-space:nowrap}.meta dd{margin:0}</style>
+</head><body>
+<h1>AI要約 #${row.daily_seq} (${escHtml(row.event_date)})</h1>
+<dl class="meta">
+<dt>リポジトリ</dt><dd>${escHtml(row.repo_full_name ?? '(不明)')}</dd>
+<dt>PR</dt><dd>${prLink}</dd>
+<dt>アクション</dt><dd>${escHtml(row.pr_action ?? '')}</dd>
+<dt>モデル</dt><dd>${escHtml(row.model ?? '(不明)')}</dd>
+<dt>Diff長</dt><dd>${row.diff_length ?? 0} 文字</dd>
+<dt>日時</dt><dd>${escHtml(row.created_at)}</dd>
+<dt>Request ID</dt><dd style="font-size:0.85rem">${escHtml(row.request_id)}</dd>
+</dl>
+<h2>要約</h2>
+<pre>${escHtml(summaryText)}</pre>
+${reviewRows ? `<h2>レビュー</h2><table><thead><tr><th>評価</th><th>レビュアー</th><th>コメント</th><th>日時</th></tr></thead><tbody>${reviewRows}</tbody></table>` : ''}
+</body></html>`;
+
+  return c.html(html);
+});
+
+/**
+ * AI要約詳細ページ (パスパラメータ方式 — /view へのフォールバック)
  */
 app.get('/ai-summary/:id', async (c) => {
   const db = c.env.DB;

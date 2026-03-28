@@ -408,7 +408,7 @@ export function buildSummaryModal(row: SummaryModalRow): SlackModalView {
     },
   });
 
-  const htmlUrl = `${WORKER_BASE_URL}/ai-summary/${row.request_id}`;
+  const htmlUrl = `${WORKER_BASE_URL}/view?id=${row.request_id}`;
   blocks.push({
     type: 'context',
     elements: [

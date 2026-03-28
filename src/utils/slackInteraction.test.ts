@@ -278,7 +278,7 @@ describe('handleSlackInteraction', () => {
 
     const call = mockedOpenModal.mock.calls[0][0];
     const allText = JSON.stringify(call.view.blocks);
-    expect(allText).toContain('/ai-summary/req-001');
+    expect(allText).toContain('/view?id=req-001');
     // base64ハッシュフラグメントが含まれていないこと
     expect(allText).not.toContain('/view#');
     expect(allText).not.toContain('#eyJ');

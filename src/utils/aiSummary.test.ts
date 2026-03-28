@@ -578,11 +578,11 @@ describe('buildSummaryModal', () => {
     expect(divider).toBeTruthy();
   });
 
-  it('「HTMLで表示」リンクが/ai-summary/:idを指すmrkdwnリンクである', () => {
+  it('「HTMLで表示」リンクが/view?id=:idを指すmrkdwnリンクである', () => {
     const modal = buildSummaryModal(baseRow);
     const allText = JSON.stringify(modal.blocks);
     expect(allText).toContain('HTMLで表示');
-    expect(allText).toContain('/ai-summary/abc-123');
+    expect(allText).toContain('/view?id=abc-123');
     const actions = modal.blocks.find((b: any) => b.type === 'actions');
     expect(actions).toBeUndefined();
   });
@@ -850,22 +850,22 @@ describe('Slack Block Kit 制約: buildSummaryModal', () => {
     }
   });
 
-  // ---- 制約2: HTMLで表示リンクは /ai-summary/{id} パターンのみ ----
+  // ---- 制約2: HTMLで表示リンクは /view?id={id} パターンのみ ----
   // base64エンコードされたハッシュフラグメント (#eyJ...) や /view# 等は禁止。
-  // URLは短く、既存の /ai-summary/:id ルートを指すこと。
+  // URLは短く、既存の /view?id=:id ルートを指すこと。
 
-  it('制約: HTMLで表示リンクが /ai-summary/{request_id} の形式である', () => {
+  it('制約: HTMLで表示リンクが /view?id={request_id} の形式である', () => {
     const modal = buildSummaryModal(baseRow);
     const allText = JSON.stringify(modal.blocks);
-    const expectedUrl = `${WORKER_BASE_URL}/ai-summary/${baseRow.request_id}`;
+    const expectedUrl = `${WORKER_BASE_URL}/view?id=${baseRow.request_id}`;
     expect(allText).toContain(expectedUrl);
   });
 
   it('制約: HTMLで表示リンクにハッシュフラグメント(#)が含まれない', () => {
     const modal = buildSummaryModal(baseRow);
     const allText = JSON.stringify(modal.blocks);
-    // /ai-summary/xxx の後に # が付いていないことを確認
-    const urlMatch = allText.match(/\/ai-summary\/[^"\\|>]+/);
+    // /view?id=xxx の後に # が付いていないことを確認
+    const urlMatch = allText.match(/\/view\?id=[^"\\|>]+/);
     expect(urlMatch).toBeTruthy();
     expect(urlMatch![0]).not.toContain('#');
   });
@@ -873,7 +873,7 @@ describe('Slack Block Kit 制約: buildSummaryModal', () => {
   it('制約: HTMLで表示リンクのURL長が200文字以下である', () => {
     const modal = buildSummaryModal(baseRow);
     const allText = JSON.stringify(modal.blocks);
-    const urlMatch = allText.match(/https:\/\/[^|>\\]+\/ai-summary\/[^|>\\]+/);
+    const urlMatch = allText.match(/https:\/\/[^|>\\]+\/view\?id=[^|>\\]+/);
     expect(urlMatch).toBeTruthy();
     expect(urlMatch![0].length, 'URLが長すぎる（base64埋め込み等の兆候）').toBeLessThanOrEqual(200);
   });
