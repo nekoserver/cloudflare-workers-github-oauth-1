@@ -2715,6 +2715,9 @@ app.post('/webhook/github', async (c) => {
           dailySeq,
           requestId,
           designDiff,
+          fallbackUsed: pipelineResult.fallbackUsed,
+          primaryModel: aiModel,
+          fallbackModel: DEFAULT_AI_MODEL,
         });
 
         let slackNotified = false;

@@ -475,6 +475,50 @@ describe('buildSlackMessage', () => {
     expect(text).not.toMatch(/[│├└─┌┐┘┤┬┴┼]/);
     expect(text).toContain('概要: 修正');
   });
+
+  // ---- フォールバック発動通知テスト ----
+
+  it('fallbackUsed=trueの場合、blocksにフォールバック発動の注記が含まれる', () => {
+    const { blocks } = buildSlackMessage({
+      ...baseParams,
+      fallbackUsed: true,
+      primaryModel: '@cf/openai/gpt-oss-120b',
+      fallbackModel: '@cf/meta/llama-3.1-8b-instruct-fp8',
+    });
+    const allText = JSON.stringify(blocks);
+    expect(allText).toContain('フォールバック');
+    expect(allText).toContain('gpt-oss-120b');
+  });
+
+  it('fallbackUsed=trueの場合、textにもフォールバック発動の注記が含まれる', () => {
+    const { text } = buildSlackMessage({
+      ...baseParams,
+      fallbackUsed: true,
+      primaryModel: '@cf/openai/gpt-oss-120b',
+      fallbackModel: '@cf/meta/llama-3.1-8b-instruct-fp8',
+    });
+    expect(text).toContain('フォールバック');
+    expect(text).toContain('gpt-oss-120b');
+  });
+
+  it('fallbackUsed=falseの場合、フォールバック注記が含まれない', () => {
+    const { blocks, text } = buildSlackMessage({
+      ...baseParams,
+      fallbackUsed: false,
+      primaryModel: '@cf/openai/gpt-oss-120b',
+      fallbackModel: '@cf/meta/llama-3.1-8b-instruct-fp8',
+    });
+    const allText = JSON.stringify(blocks);
+    expect(allText).not.toContain('フォールバック');
+    expect(text).not.toContain('フォールバック');
+  });
+
+  it('fallbackUsed未指定の場合、フォールバック注記が含まれない', () => {
+    const { blocks, text } = buildSlackMessage(baseParams);
+    const allText = JSON.stringify(blocks);
+    expect(allText).not.toContain('フォールバック');
+    expect(text).not.toContain('フォールバック');
+  });
 });
 
 // ---- sanitizeBoxDrawing ----
@@ -810,10 +854,11 @@ describe('runSummaryPipeline', () => {
     expect(result.success).toBe(true);
     expect(result.summary).toBe('実験モデル要約');
     expect(result.usedModel).toBe(experimentModel);
+    expect(result.fallbackUsed).toBe(false);
     expect(ai.run).toHaveBeenCalledTimes(1);
   });
 
-  it('primaryがthrow→fallbackで成功した場合、fallbackのusedModelを返す', async () => {
+  it('primaryがthrow→fallbackで成功した場合、fallbackUsed=trueを返す', async () => {
     let callCount = 0;
     const ai: AiBinding = {
       run: vi.fn().mockImplementation((model: string) => {
@@ -826,10 +871,11 @@ describe('runSummaryPipeline', () => {
     expect(result.success).toBe(true);
     expect(result.summary).toBe('安定モデル要約');
     expect(result.usedModel).toBe(stableModel);
+    expect(result.fallbackUsed).toBe(true);
     expect(ai.run).toHaveBeenCalledTimes(2);
   });
 
-  it('primaryが[AI_EMPTY_RESPONSE]→fallbackで成功した場合、fallbackのusedModelを返す', async () => {
+  it('primaryが[AI_EMPTY_RESPONSE]→fallbackで成功した場合、fallbackUsed=trueを返す', async () => {
     let callCount = 0;
     const ai: AiBinding = {
       run: vi.fn().mockImplementation(() => {
@@ -842,6 +888,7 @@ describe('runSummaryPipeline', () => {
     expect(result.success).toBe(true);
     expect(result.summary).toBe('フォールバック要約');
     expect(result.usedModel).toBe(stableModel);
+    expect(result.fallbackUsed).toBe(true);
   });
 
   it('primary=fallback（同一モデル）で失敗した場合、再試行しない', async () => {
@@ -850,15 +897,17 @@ describe('runSummaryPipeline', () => {
     expect(result.success).toBe(false);
     expect(result.summary).toContain('[AI_ERROR]');
     expect(result.usedModel).toBe(baseParams.model);
+    expect(result.fallbackUsed).toBe(false);
     expect(ai.run).toHaveBeenCalledTimes(1);
   });
 
-  it('両方失敗した場合、fallback also failedメッセージを返す', async () => {
+  it('両方失敗した場合、fallbackUsed=trueでfallback also failedメッセージを返す', async () => {
     const ai: AiBinding = { run: vi.fn().mockRejectedValue(new Error('Service unavailable')) };
     const result = await runSummaryPipeline({ ...fallbackParams, ai });
     expect(result.success).toBe(false);
     expect(result.summary).toContain('fallback also failed');
     expect(result.usedModel).toBe(stableModel);
+    expect(result.fallbackUsed).toBe(true);
     expect(ai.run).toHaveBeenCalledTimes(2);
   });
 
@@ -868,6 +917,7 @@ describe('runSummaryPipeline', () => {
     expect(result.success).toBe(false);
     expect(result.summary).toContain('[AI_ERROR]');
     expect(result.usedModel).toBe(baseParams.model);
+    expect(result.fallbackUsed).toBe(false);
     expect(ai.run).toHaveBeenCalledTimes(1);
   });
 });

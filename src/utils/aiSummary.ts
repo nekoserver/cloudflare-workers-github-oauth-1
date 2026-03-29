@@ -158,6 +158,7 @@ export type SummaryPipelineResult = {
   summary: string;
   success: boolean;
   usedModel: string;
+  fallbackUsed: boolean;
 };
 
 export async function runSummaryPipeline(
@@ -168,7 +169,7 @@ export async function runSummaryPipeline(
   const canFallback = fallbackModel && fallbackModel !== model;
 
   if (!ai) {
-    return { summary: '[AI_NO_BINDING] Workers AI binding is not available', success: false, usedModel: model };
+    return { summary: '[AI_NO_BINDING] Workers AI binding is not available', success: false, usedModel: model, fallbackUsed: false };
   }
 
   let primaryFailed = false;
@@ -176,7 +177,7 @@ export async function runSummaryPipeline(
   try {
     const summary = await generateAiSummary({ ai, model, ...genParams });
     if (!summary.startsWith('[AI_')) {
-      return { summary, success: true, usedModel: model };
+      return { summary, success: true, usedModel: model, fallbackUsed: false };
     }
     primaryFailed = true;
     primaryErrorSummary = summary;
@@ -189,14 +190,14 @@ export async function runSummaryPipeline(
   if (primaryFailed && canFallback) {
     try {
       const summary = await generateAiSummary({ ai, model: fallbackModel, ...genParams });
-      return { summary, success: !summary.startsWith('[AI_'), usedModel: fallbackModel };
+      return { summary, success: !summary.startsWith('[AI_'), usedModel: fallbackModel, fallbackUsed: true };
     } catch (fallbackError) {
       const msg = fallbackError instanceof Error ? fallbackError.message : 'Unknown error';
-      return { summary: `[AI_ERROR] fallback also failed: ${msg}`, success: false, usedModel: fallbackModel };
+      return { summary: `[AI_ERROR] fallback also failed: ${msg}`, success: false, usedModel: fallbackModel, fallbackUsed: true };
     }
   }
 
-  return { summary: primaryErrorSummary, success: false, usedModel: model };
+  return { summary: primaryErrorSummary, success: false, usedModel: model, fallbackUsed: false };
 }
 
 export type ExtractedSummary = {
@@ -240,6 +241,9 @@ export type BuildSlackMessageParams = {
   dailySeq: number;
   requestId: string;
   designDiff?: string;
+  fallbackUsed?: boolean;
+  primaryModel?: string;
+  fallbackModel?: string;
 };
 
 export type SlackMessagePayload = {
@@ -259,6 +263,9 @@ export function buildSlackMessage(params: BuildSlackMessageParams): SlackMessage
     dailySeq,
     requestId,
     designDiff,
+    fallbackUsed,
+    primaryModel,
+    fallbackModel,
   } = params;
 
   const actionLabel = prAction === 'opened' ? '作成' : '更新';
@@ -274,8 +281,15 @@ export function buildSlackMessage(params: BuildSlackMessageParams): SlackMessage
     `作成者: ${author}`,
     prUrl,
   ];
+  const fallbackNote = fallbackUsed && primaryModel
+    ? `:rotating_light: 実験モデル (${primaryModel}) が失敗したためフォールバックモデル (${fallbackModel || 'default'}) で要約しました`
+    : '';
+
   if (hasSummary) {
     textLines.push('', '*AI要約:*', cleanSummary);
+    if (fallbackNote) {
+      textLines.push(fallbackNote);
+    }
   } else if (isAiError) {
     const errorDetail = summary.replace(/^\[AI_[A-Z_]+\]\s*/, '');
     textLines.push('', ':warning: *AI要約エラー:*', errorDetail, '_管理者はモデル設定・AIバインディングを確認してください_');
@@ -322,6 +336,16 @@ export function buildSlackMessage(params: BuildSlackMessageParams): SlackMessage
         },
       ],
     });
+
+    if (fallbackNote) {
+      blocks.push({
+        type: 'context',
+        elements: [{
+          type: 'mrkdwn',
+          text: fallbackNote,
+        }],
+      });
+    }
   } else if (isAiError) {
     const errorDetail = summary.replace(/^\[AI_[A-Z_]+\]\s*/, '');
     blocks.push({
