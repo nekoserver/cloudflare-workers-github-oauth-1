@@ -465,6 +465,9 @@ export function getCacheStatusPage(user: {
       font-size: 20px; font-weight: 600; color: var(--text-primary); margin-bottom: 16px;
       padding-bottom: 8px; border-bottom: 2px solid var(--border-color);
     }
+    .section-count {
+      font-size: 14px; font-weight: 400; color: var(--text-secondary);
+    }
     .section-title-row {
       display: flex; align-items: center; justify-content: space-between; gap: 12px;
       margin-bottom: 16px; padding-bottom: 8px; border-bottom: 2px solid var(--border-color);
@@ -1244,7 +1247,7 @@ export function getCacheStatusPage(user: {
 
       <!-- テーブル別マイグレーション状況 -->
       <div class="section">
-        <h2 class="section-title">テーブル別マイグレーション状況</h2>
+        <h2 class="section-title">テーブル別マイグレーション状況 <span class="section-count">(${data.tables.length})</span></h2>
         <div class="uml-button-row">
           <button type="button" class="uml-button" id="openUmlButton">
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="1" y="1" width="5" height="6" rx="1" stroke="white" stroke-width="1.5"/><rect x="10" y="9" width="5" height="6" rx="1" stroke="white" stroke-width="1.5"/><path d="M6 4h2.5a1.5 1.5 0 011.5 1.5V12" stroke="white" stroke-width="1.5"/></svg>
