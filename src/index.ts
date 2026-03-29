@@ -23,7 +23,7 @@ import { getCookieValue, getCookieValues } from './utils/cookie';
 import { verifyResendWebhookSignature } from './utils/resendWebhook';
 import { verifyGitHubWebhookSignature } from './utils/githubWebhook';
 import { postSlackMessage, openSlackModal, respondToInteraction } from './utils/slack';
-import { fetchPrDiff, runSummaryPipeline, buildSlackMessage, buildSummaryModal, buildSummaryFallbackBlocks, classifySummaryResult, resolveAiModel, extractDesignDiff, sanitizeBoxDrawing, WORKER_BASE_URL, DESIGN_SPEC_CHECKLIST, type SummaryModalRow } from './utils/aiSummary';
+import { fetchPrDiff, runSummaryPipeline, buildSlackMessage, buildSummaryModal, buildSummaryFallbackBlocks, classifySummaryResult, resolveAiModel, extractDesignDiff, sanitizeBoxDrawing, WORKER_BASE_URL, DESIGN_SPEC_CHECKLIST, DEFAULT_AI_MODEL, type SummaryModalRow } from './utils/aiSummary';
 import { getSessionDurationSeconds, renewSession } from './utils/session';
 import { verifySlackSignature } from './utils/slackSignature';
 import { handleSlackInteraction } from './utils/slackInteraction';
@@ -2687,6 +2687,7 @@ app.post('/webhook/github', async (c) => {
         const pipelineResult = await runSummaryPipeline({
           ai: ai as { run(model: string, input: { messages: { role: string; content: string }[] }): Promise<unknown> } | null,
           model: aiModel,
+          fallbackModel: DEFAULT_AI_MODEL,
           title,
           description,
           trimmedDiff,
@@ -2714,6 +2715,9 @@ app.post('/webhook/github', async (c) => {
           dailySeq,
           requestId,
           designDiff,
+          fallbackUsed: pipelineResult.fallbackUsed,
+          primaryModel: aiModel,
+          fallbackModel: DEFAULT_AI_MODEL,
         });
 
         let slackNotified = false;
@@ -2751,7 +2755,7 @@ app.post('/webhook/github', async (c) => {
               prNumber,
               prAction,
               prUrl,
-              aiModel,
+              pipelineResult.usedModel,
               summary !== '' ? summary : null,
               diffLength,
               slackNotified ? 1 : 0,

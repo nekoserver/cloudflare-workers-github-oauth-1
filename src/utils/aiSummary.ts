@@ -147,6 +147,7 @@ export function classifySummaryResult(summary: string | null): SummaryDiagnosis 
 export type RunSummaryPipelineParams = {
   ai: AiBinding | null | undefined;
   model: string;
+  fallbackModel?: string;
   title: string;
   description: string;
   trimmedDiff: string;
@@ -156,24 +157,47 @@ export type RunSummaryPipelineParams = {
 export type SummaryPipelineResult = {
   summary: string;
   success: boolean;
+  usedModel: string;
+  fallbackUsed: boolean;
 };
 
 export async function runSummaryPipeline(
   params: RunSummaryPipelineParams
 ): Promise<SummaryPipelineResult> {
-  const { ai, model, title, description, trimmedDiff, designSpec } = params;
+  const { ai, model, fallbackModel, title, description, trimmedDiff, designSpec } = params;
+  const genParams = { title, description, trimmedDiff, designSpec };
+  const canFallback = fallbackModel && fallbackModel !== model;
 
   if (!ai) {
-    return { summary: '[AI_NO_BINDING] Workers AI binding is not available', success: false };
+    return { summary: '[AI_NO_BINDING] Workers AI binding is not available', success: false, usedModel: model, fallbackUsed: false };
   }
 
+  let primaryFailed = false;
+  let primaryErrorSummary = '';
   try {
-    const summary = await generateAiSummary({ ai, model, title, description, trimmedDiff, designSpec });
-    return { summary, success: !summary.startsWith('[AI_') };
+    const summary = await generateAiSummary({ ai, model, ...genParams });
+    if (!summary.startsWith('[AI_')) {
+      return { summary, success: true, usedModel: model, fallbackUsed: false };
+    }
+    primaryFailed = true;
+    primaryErrorSummary = summary;
   } catch (error) {
+    primaryFailed = true;
     const msg = error instanceof Error ? error.message : 'Unknown error';
-    return { summary: `[AI_ERROR] ${msg}`, success: false };
+    primaryErrorSummary = `[AI_ERROR] ${msg}`;
   }
+
+  if (primaryFailed && canFallback) {
+    try {
+      const summary = await generateAiSummary({ ai, model: fallbackModel, ...genParams });
+      return { summary, success: !summary.startsWith('[AI_'), usedModel: fallbackModel, fallbackUsed: true };
+    } catch (fallbackError) {
+      const msg = fallbackError instanceof Error ? fallbackError.message : 'Unknown error';
+      return { summary: `[AI_ERROR] fallback also failed: ${msg}`, success: false, usedModel: fallbackModel, fallbackUsed: true };
+    }
+  }
+
+  return { summary: primaryErrorSummary, success: false, usedModel: model, fallbackUsed: false };
 }
 
 export type ExtractedSummary = {
@@ -217,6 +241,9 @@ export type BuildSlackMessageParams = {
   dailySeq: number;
   requestId: string;
   designDiff?: string;
+  fallbackUsed?: boolean;
+  primaryModel?: string;
+  fallbackModel?: string;
 };
 
 export type SlackMessagePayload = {
@@ -236,6 +263,9 @@ export function buildSlackMessage(params: BuildSlackMessageParams): SlackMessage
     dailySeq,
     requestId,
     designDiff,
+    fallbackUsed,
+    primaryModel,
+    fallbackModel,
   } = params;
 
   const actionLabel = prAction === 'opened' ? '作成' : '更新';
@@ -251,11 +281,25 @@ export function buildSlackMessage(params: BuildSlackMessageParams): SlackMessage
     `作成者: ${author}`,
     prUrl,
   ];
+  const fallbackNote = fallbackUsed && primaryModel
+    ? `:rotating_light: 実験モデル (${primaryModel}) が失敗したためフォールバックモデル (${fallbackModel || 'default'}) で要約しました`
+    : '';
+
   if (hasSummary) {
     textLines.push('', '*AI要約:*', cleanSummary);
+    if (fallbackNote) {
+      textLines.push(fallbackNote);
+    }
   } else if (isAiError) {
     const errorDetail = summary.replace(/^\[AI_[A-Z_]+\]\s*/, '');
-    textLines.push('', ':warning: *AI要約エラー:*', errorDetail, '_管理者はモデル設定・AIバインディングを確認してください_');
+    textLines.push('', ':warning: *AI要約エラー:*', errorDetail);
+    if (fallbackUsed && primaryModel) {
+      textLines.push(`:rotating_light: 実験モデル (${primaryModel}) とフォールバックモデル (${fallbackModel || 'default'}) の両方が失敗しました。モデル設定を見直してください`);
+    } else if (!fallbackUsed && primaryModel && fallbackModel && primaryModel === fallbackModel) {
+      textLines.push(`_AI_MODEL とフォールバックが同一モデル (${primaryModel}) のため再試行できませんでした。異なるモデルを設定するか、AI_MODEL を解除してください_`);
+    } else {
+      textLines.push('_管理者はモデル設定・AIバインディングを確認してください_');
+    }
   }
   if (hasDesignDiff) {
     textLines.push('', '*初期設計との差異:*', cleanDesignDiff);
@@ -299,13 +343,31 @@ export function buildSlackMessage(params: BuildSlackMessageParams): SlackMessage
         },
       ],
     });
+
+    if (fallbackNote) {
+      blocks.push({
+        type: 'context',
+        elements: [{
+          type: 'mrkdwn',
+          text: fallbackNote,
+        }],
+      });
+    }
   } else if (isAiError) {
     const errorDetail = summary.replace(/^\[AI_[A-Z_]+\]\s*/, '');
+    let errorSuffix: string;
+    if (fallbackUsed && primaryModel) {
+      errorSuffix = `:rotating_light: 実験モデル (${primaryModel}) とフォールバックモデル (${fallbackModel || 'default'}) の両方が失敗しました。モデル設定を見直してください`;
+    } else if (!fallbackUsed && primaryModel && fallbackModel && primaryModel === fallbackModel) {
+      errorSuffix = `_AI_MODEL とフォールバックが同一モデル (${primaryModel}) のため再試行できませんでした。異なるモデルを設定するか、AI_MODEL を解除してください_`;
+    } else {
+      errorSuffix = '_管理者はモデル設定・AIバインディングを確認してください_';
+    }
     blocks.push({
       type: 'section',
       text: {
         type: 'mrkdwn',
-        text: `:warning: *AI要約エラー:* ${errorDetail}\n_管理者はモデル設定・AIバインディングを確認してください_`,
+        text: `:warning: *AI要約エラー:* ${errorDetail}\n${errorSuffix}`,
       },
     });
   }

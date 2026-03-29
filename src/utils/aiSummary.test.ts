@@ -475,6 +475,93 @@ describe('buildSlackMessage', () => {
     expect(text).not.toMatch(/[│├└─┌┐┘┤┬┴┼]/);
     expect(text).toContain('概要: 修正');
   });
+
+  // ---- フォールバック発動通知テスト ----
+
+  it('fallbackUsed=trueの場合、blocksにフォールバック発動の注記が含まれる', () => {
+    const { blocks } = buildSlackMessage({
+      ...baseParams,
+      fallbackUsed: true,
+      primaryModel: '@cf/openai/gpt-oss-120b',
+      fallbackModel: '@cf/meta/llama-3.1-8b-instruct-fp8',
+    });
+    const allText = JSON.stringify(blocks);
+    expect(allText).toContain('フォールバック');
+    expect(allText).toContain('gpt-oss-120b');
+  });
+
+  it('fallbackUsed=trueの場合、textにもフォールバック発動の注記が含まれる', () => {
+    const { text } = buildSlackMessage({
+      ...baseParams,
+      fallbackUsed: true,
+      primaryModel: '@cf/openai/gpt-oss-120b',
+      fallbackModel: '@cf/meta/llama-3.1-8b-instruct-fp8',
+    });
+    expect(text).toContain('フォールバック');
+    expect(text).toContain('gpt-oss-120b');
+  });
+
+  it('fallbackUsed=falseの場合、フォールバック注記が含まれない', () => {
+    const { blocks, text } = buildSlackMessage({
+      ...baseParams,
+      fallbackUsed: false,
+      primaryModel: '@cf/openai/gpt-oss-120b',
+      fallbackModel: '@cf/meta/llama-3.1-8b-instruct-fp8',
+    });
+    const allText = JSON.stringify(blocks);
+    expect(allText).not.toContain('フォールバック');
+    expect(text).not.toContain('フォールバック');
+  });
+
+  it('fallbackUsed未指定の場合、フォールバック注記が含まれない', () => {
+    const { blocks, text } = buildSlackMessage(baseParams);
+    const allText = JSON.stringify(blocks);
+    expect(allText).not.toContain('フォールバック');
+    expect(text).not.toContain('フォールバック');
+  });
+
+  // ---- エラー時のフォールバック情報表示テスト ----
+
+  it('[AI_ERROR]でfallbackUsed=trueの場合、フォールバックも失敗したことが明示される', () => {
+    const { blocks, text } = buildSlackMessage({
+      ...baseParams,
+      summary: '[AI_ERROR] fallback also failed: Service unavailable',
+      fallbackUsed: true,
+      primaryModel: '@cf/openai/gpt-oss-120b',
+      fallbackModel: '@cf/meta/llama-3.1-8b-instruct-fp8',
+    });
+    const allText = JSON.stringify(blocks);
+    expect(allText).toContain('フォールバック');
+    expect(allText).toContain('gpt-oss-120b');
+    expect(text).toContain('フォールバック');
+  });
+
+  it('[AI_ERROR]でfallbackUsed=false、primaryModel=fallbackModelの場合、同一モデルのため再試行不可と明示される', () => {
+    const { blocks, text } = buildSlackMessage({
+      ...baseParams,
+      summary: '[AI_ERROR] Model overloaded',
+      fallbackUsed: false,
+      primaryModel: '@cf/meta/llama-3.1-8b-instruct-fp8',
+      fallbackModel: '@cf/meta/llama-3.1-8b-instruct-fp8',
+    });
+    const allText = JSON.stringify(blocks);
+    expect(allText).toContain('同一モデル');
+    expect(text).toContain('同一モデル');
+  });
+
+  it('[AI_ERROR]でfallbackUsed=false、primaryModel≠fallbackModelの場合、通常のエラーメッセージが表示される', () => {
+    const { blocks, text } = buildSlackMessage({
+      ...baseParams,
+      summary: '[AI_ERROR] Model overloaded',
+      fallbackUsed: false,
+      primaryModel: '@cf/openai/gpt-oss-120b',
+      fallbackModel: '@cf/meta/llama-3.1-8b-instruct-fp8',
+    });
+    const allText = JSON.stringify(blocks);
+    // フォールバック関連の注記がないこと（フォールバック未使用で別モデル = primary単体失敗）
+    expect(allText).not.toContain('フォールバック');
+    expect(allText).not.toContain('同一モデル');
+  });
 });
 
 // ---- sanitizeBoxDrawing ----
@@ -726,12 +813,14 @@ describe('runSummaryPipeline', () => {
     const result = await runSummaryPipeline({ ...baseParams, ai: null });
     expect(result.success).toBe(false);
     expect(result.summary).toMatch(/^\[AI_NO_BINDING\]/);
+    expect(result.usedModel).toBe(baseParams.model);
   });
 
   it('AIバインディングがundefinedの場合、AI_NO_BINDINGを返しsuccess=false', async () => {
     const result = await runSummaryPipeline({ ...baseParams, ai: undefined });
     expect(result.success).toBe(false);
     expect(result.summary).toMatch(/^\[AI_NO_BINDING\]/);
+    expect(result.usedModel).toBe(baseParams.model);
   });
 
   it('AI呼び出し成功時、summaryを返しsuccess=true', async () => {
@@ -739,6 +828,7 @@ describe('runSummaryPipeline', () => {
     const result = await runSummaryPipeline({ ...baseParams, ai });
     expect(result.success).toBe(true);
     expect(result.summary).toBe('要約テスト');
+    expect(result.usedModel).toBe(baseParams.model);
   });
 
   it('AI呼び出しが例外をthrowした場合、AI_ERRORを返しsuccess=false', async () => {
@@ -746,6 +836,7 @@ describe('runSummaryPipeline', () => {
     const result = await runSummaryPipeline({ ...baseParams, ai });
     expect(result.success).toBe(false);
     expect(result.summary).toBe('[AI_ERROR] Model overloaded');
+    expect(result.usedModel).toBe(baseParams.model);
   });
 
   it('AI呼び出しが例外をthrowした場合、エラーメッセージが握りつぶされない', async () => {
@@ -792,6 +883,85 @@ describe('runSummaryPipeline', () => {
       expect(result.summary, `"${label}" must not produce null-like summary`).toBeTruthy();
       expect(result.success, `"${label}" must be success=false`).toBe(false);
     }
+  });
+
+  // ---- フォールバック機構テスト ----
+
+  const experimentModel = '@cf/openai/gpt-oss-120b';
+  const stableModel = '@cf/meta/llama-3.1-8b-instruct-fp8';
+  const fallbackParams = { ...baseParams, model: experimentModel, fallbackModel: stableModel };
+
+  it('primary成功時はfallbackを試行せずprimaryのusedModelを返す', async () => {
+    const ai: AiBinding = { run: vi.fn().mockResolvedValue({ response: '実験モデル要約' }) };
+    const result = await runSummaryPipeline({ ...fallbackParams, ai });
+    expect(result.success).toBe(true);
+    expect(result.summary).toBe('実験モデル要約');
+    expect(result.usedModel).toBe(experimentModel);
+    expect(result.fallbackUsed).toBe(false);
+    expect(ai.run).toHaveBeenCalledTimes(1);
+  });
+
+  it('primaryがthrow→fallbackで成功した場合、fallbackUsed=trueを返す', async () => {
+    let callCount = 0;
+    const ai: AiBinding = {
+      run: vi.fn().mockImplementation((model: string) => {
+        callCount++;
+        if (callCount === 1) throw new Error('Model not found');
+        return Promise.resolve({ response: '安定モデル要約' });
+      }),
+    };
+    const result = await runSummaryPipeline({ ...fallbackParams, ai });
+    expect(result.success).toBe(true);
+    expect(result.summary).toBe('安定モデル要約');
+    expect(result.usedModel).toBe(stableModel);
+    expect(result.fallbackUsed).toBe(true);
+    expect(ai.run).toHaveBeenCalledTimes(2);
+  });
+
+  it('primaryが[AI_EMPTY_RESPONSE]→fallbackで成功した場合、fallbackUsed=trueを返す', async () => {
+    let callCount = 0;
+    const ai: AiBinding = {
+      run: vi.fn().mockImplementation(() => {
+        callCount++;
+        if (callCount === 1) return Promise.resolve({ response: '' });
+        return Promise.resolve({ response: 'フォールバック要約' });
+      }),
+    };
+    const result = await runSummaryPipeline({ ...fallbackParams, ai });
+    expect(result.success).toBe(true);
+    expect(result.summary).toBe('フォールバック要約');
+    expect(result.usedModel).toBe(stableModel);
+    expect(result.fallbackUsed).toBe(true);
+  });
+
+  it('primary=fallback（同一モデル）で失敗した場合、再試行しない', async () => {
+    const ai: AiBinding = { run: vi.fn().mockRejectedValue(new Error('GPU timeout')) };
+    const result = await runSummaryPipeline({ ...baseParams, ai, fallbackModel: baseParams.model });
+    expect(result.success).toBe(false);
+    expect(result.summary).toContain('[AI_ERROR]');
+    expect(result.usedModel).toBe(baseParams.model);
+    expect(result.fallbackUsed).toBe(false);
+    expect(ai.run).toHaveBeenCalledTimes(1);
+  });
+
+  it('両方失敗した場合、fallbackUsed=trueでfallback also failedメッセージを返す', async () => {
+    const ai: AiBinding = { run: vi.fn().mockRejectedValue(new Error('Service unavailable')) };
+    const result = await runSummaryPipeline({ ...fallbackParams, ai });
+    expect(result.success).toBe(false);
+    expect(result.summary).toContain('fallback also failed');
+    expect(result.usedModel).toBe(stableModel);
+    expect(result.fallbackUsed).toBe(true);
+    expect(ai.run).toHaveBeenCalledTimes(2);
+  });
+
+  it('fallbackModel未指定で失敗した場合、再試行しない', async () => {
+    const ai: AiBinding = { run: vi.fn().mockRejectedValue(new Error('fail')) };
+    const result = await runSummaryPipeline({ ...baseParams, ai });
+    expect(result.success).toBe(false);
+    expect(result.summary).toContain('[AI_ERROR]');
+    expect(result.usedModel).toBe(baseParams.model);
+    expect(result.fallbackUsed).toBe(false);
+    expect(ai.run).toHaveBeenCalledTimes(1);
   });
 });
 
