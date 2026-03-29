@@ -2282,9 +2282,13 @@ export function getCacheStatusPage(user: {
       return (trimmed.startsWith('{') && trimmed.endsWith('}')) || (trimmed.startsWith('[') && trimmed.endsWith(']'));
     }
 
-    function formatPreviewValue(value) {
+    function formatPreviewValue(value, column) {
       if (value === null || typeof value === 'undefined') {
         return '<span class="preview-value null">NULL</span>';
+      }
+      if (column === 'request_id' && typeof value === 'string' && value.length > 0) {
+        var safe = escapeHtmlText(value);
+        return '<pre class="preview-value"><a href="/ai-summary/' + encodeURIComponent(value) + '" target="_blank" rel="noopener">' + safe + '</a></pre>';
       }
       if (typeof value === 'string' && isJsonLikeString(value)) {
         try {
@@ -2308,7 +2312,7 @@ export function getCacheStatusPage(user: {
       }).join('');
       var bodyHtml = rows.map(function(row) {
         return '<tr>' + columns.map(function(column) {
-          return '<td>' + formatPreviewValue(row[column]) + '</td>';
+          return '<td>' + formatPreviewValue(row[column], column) + '</td>';
         }).join('') + '</tr>';
       }).join('');
       return '<div class="modal-note">最新 ' + escapeHtmlText(String(limit)) + ' 件を表示しています。値は D1 に保存されている内容をそのまま確認しやすい形で表示しています。</div>'
