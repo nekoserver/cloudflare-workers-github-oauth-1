@@ -147,6 +147,7 @@ export function classifySummaryResult(summary: string | null): SummaryDiagnosis 
 export type RunSummaryPipelineParams = {
   ai: AiBinding | null | undefined;
   model: string;
+  fallbackModel?: string;
   title: string;
   description: string;
   trimmedDiff: string;
@@ -156,24 +157,46 @@ export type RunSummaryPipelineParams = {
 export type SummaryPipelineResult = {
   summary: string;
   success: boolean;
+  usedModel: string;
 };
 
 export async function runSummaryPipeline(
   params: RunSummaryPipelineParams
 ): Promise<SummaryPipelineResult> {
-  const { ai, model, title, description, trimmedDiff, designSpec } = params;
+  const { ai, model, fallbackModel, title, description, trimmedDiff, designSpec } = params;
+  const genParams = { title, description, trimmedDiff, designSpec };
+  const canFallback = fallbackModel && fallbackModel !== model;
 
   if (!ai) {
-    return { summary: '[AI_NO_BINDING] Workers AI binding is not available', success: false };
+    return { summary: '[AI_NO_BINDING] Workers AI binding is not available', success: false, usedModel: model };
   }
 
+  let primaryFailed = false;
+  let primaryErrorSummary = '';
   try {
-    const summary = await generateAiSummary({ ai, model, title, description, trimmedDiff, designSpec });
-    return { summary, success: !summary.startsWith('[AI_') };
+    const summary = await generateAiSummary({ ai, model, ...genParams });
+    if (!summary.startsWith('[AI_')) {
+      return { summary, success: true, usedModel: model };
+    }
+    primaryFailed = true;
+    primaryErrorSummary = summary;
   } catch (error) {
+    primaryFailed = true;
     const msg = error instanceof Error ? error.message : 'Unknown error';
-    return { summary: `[AI_ERROR] ${msg}`, success: false };
+    primaryErrorSummary = `[AI_ERROR] ${msg}`;
   }
+
+  if (primaryFailed && canFallback) {
+    try {
+      const summary = await generateAiSummary({ ai, model: fallbackModel, ...genParams });
+      return { summary, success: !summary.startsWith('[AI_'), usedModel: fallbackModel };
+    } catch (fallbackError) {
+      const msg = fallbackError instanceof Error ? fallbackError.message : 'Unknown error';
+      return { summary: `[AI_ERROR] fallback also failed: ${msg}`, success: false, usedModel: fallbackModel };
+    }
+  }
+
+  return { summary: primaryErrorSummary, success: false, usedModel: model };
 }
 
 export type ExtractedSummary = {
