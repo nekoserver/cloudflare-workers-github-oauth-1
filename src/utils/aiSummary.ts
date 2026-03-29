@@ -1,4 +1,4 @@
-export const DEFAULT_AI_MODEL = '@cf/openai/gpt-oss-120b';
+export const DEFAULT_AI_MODEL = '@cf/meta/llama-3.1-8b-instruct-fp8';
 
 export const DESIGN_SPEC_CHECKLIST = [
   'GitHub OAuth 2.0 + JWT認証',
