@@ -4427,7 +4427,7 @@ details{margin-bottom:1rem}summary{cursor:pointer;font-size:1.4rem;font-weight:b
 <dt>モデル</dt><dd>${escHtml(row.model ?? '(不明)')}</dd>
 <dt>Diff長</dt><dd>${row.diff_length ?? 0} 文字</dd>
 <dt>日時</dt><dd>${escHtml(row.created_at)}</dd>
-<dt>Request ID</dt><dd style="font-size:0.85rem"><a href="${WORKER_BASE_URL}/ai-summary/${escHtml(row.request_id)}" target="_blank">${escHtml(row.request_id)}</a></dd>
+<dt>Request ID</dt><dd style="font-size:0.85rem">${escHtml(row.request_id)}</dd>
 </dl>
 </details>
 <h2>要約</h2>
@@ -4485,7 +4485,7 @@ details{margin-bottom:1rem}summary{cursor:pointer;font-size:1.4rem;font-weight:b
 <dt>モデル</dt><dd>${escHtml(row.model ?? '(不明)')}</dd>
 <dt>Diff長</dt><dd>${row.diff_length ?? 0} 文字</dd>
 <dt>日時</dt><dd>${escHtml(row.created_at)}</dd>
-<dt>Request ID</dt><dd style="font-size:0.85rem"><a href="${WORKER_BASE_URL}/ai-summary/${escHtml(row.request_id)}" target="_blank">${escHtml(row.request_id)}</a></dd>
+<dt>Request ID</dt><dd style="font-size:0.85rem">${escHtml(row.request_id)}</dd>
 </dl>
 </details>
 <h2>要約</h2>
