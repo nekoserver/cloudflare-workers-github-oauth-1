@@ -292,7 +292,14 @@ export function buildSlackMessage(params: BuildSlackMessageParams): SlackMessage
     }
   } else if (isAiError) {
     const errorDetail = summary.replace(/^\[AI_[A-Z_]+\]\s*/, '');
-    textLines.push('', ':warning: *AI要約エラー:*', errorDetail, '_管理者はモデル設定・AIバインディングを確認してください_');
+    textLines.push('', ':warning: *AI要約エラー:*', errorDetail);
+    if (fallbackUsed && primaryModel) {
+      textLines.push(`:rotating_light: 実験モデル (${primaryModel}) とフォールバックモデル (${fallbackModel || 'default'}) の両方が失敗しました。モデル設定を見直してください`);
+    } else if (!fallbackUsed && primaryModel && fallbackModel && primaryModel === fallbackModel) {
+      textLines.push(`_AI_MODEL とフォールバックが同一モデル (${primaryModel}) のため再試行できませんでした。異なるモデルを設定するか、AI_MODEL を解除してください_`);
+    } else {
+      textLines.push('_管理者はモデル設定・AIバインディングを確認してください_');
+    }
   }
   if (hasDesignDiff) {
     textLines.push('', '*初期設計との差異:*', cleanDesignDiff);
@@ -348,11 +355,19 @@ export function buildSlackMessage(params: BuildSlackMessageParams): SlackMessage
     }
   } else if (isAiError) {
     const errorDetail = summary.replace(/^\[AI_[A-Z_]+\]\s*/, '');
+    let errorSuffix: string;
+    if (fallbackUsed && primaryModel) {
+      errorSuffix = `:rotating_light: 実験モデル (${primaryModel}) とフォールバックモデル (${fallbackModel || 'default'}) の両方が失敗しました。モデル設定を見直してください`;
+    } else if (!fallbackUsed && primaryModel && fallbackModel && primaryModel === fallbackModel) {
+      errorSuffix = `_AI_MODEL とフォールバックが同一モデル (${primaryModel}) のため再試行できませんでした。異なるモデルを設定するか、AI_MODEL を解除してください_`;
+    } else {
+      errorSuffix = '_管理者はモデル設定・AIバインディングを確認してください_';
+    }
     blocks.push({
       type: 'section',
       text: {
         type: 'mrkdwn',
-        text: `:warning: *AI要約エラー:* ${errorDetail}\n_管理者はモデル設定・AIバインディングを確認してください_`,
+        text: `:warning: *AI要約エラー:* ${errorDetail}\n${errorSuffix}`,
       },
     });
   }

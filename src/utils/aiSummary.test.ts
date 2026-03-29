@@ -519,6 +519,49 @@ describe('buildSlackMessage', () => {
     expect(allText).not.toContain('フォールバック');
     expect(text).not.toContain('フォールバック');
   });
+
+  // ---- エラー時のフォールバック情報表示テスト ----
+
+  it('[AI_ERROR]でfallbackUsed=trueの場合、フォールバックも失敗したことが明示される', () => {
+    const { blocks, text } = buildSlackMessage({
+      ...baseParams,
+      summary: '[AI_ERROR] fallback also failed: Service unavailable',
+      fallbackUsed: true,
+      primaryModel: '@cf/openai/gpt-oss-120b',
+      fallbackModel: '@cf/meta/llama-3.1-8b-instruct-fp8',
+    });
+    const allText = JSON.stringify(blocks);
+    expect(allText).toContain('フォールバック');
+    expect(allText).toContain('gpt-oss-120b');
+    expect(text).toContain('フォールバック');
+  });
+
+  it('[AI_ERROR]でfallbackUsed=false、primaryModel=fallbackModelの場合、同一モデルのため再試行不可と明示される', () => {
+    const { blocks, text } = buildSlackMessage({
+      ...baseParams,
+      summary: '[AI_ERROR] Model overloaded',
+      fallbackUsed: false,
+      primaryModel: '@cf/meta/llama-3.1-8b-instruct-fp8',
+      fallbackModel: '@cf/meta/llama-3.1-8b-instruct-fp8',
+    });
+    const allText = JSON.stringify(blocks);
+    expect(allText).toContain('同一モデル');
+    expect(text).toContain('同一モデル');
+  });
+
+  it('[AI_ERROR]でfallbackUsed=false、primaryModel≠fallbackModelの場合、通常のエラーメッセージが表示される', () => {
+    const { blocks, text } = buildSlackMessage({
+      ...baseParams,
+      summary: '[AI_ERROR] Model overloaded',
+      fallbackUsed: false,
+      primaryModel: '@cf/openai/gpt-oss-120b',
+      fallbackModel: '@cf/meta/llama-3.1-8b-instruct-fp8',
+    });
+    const allText = JSON.stringify(blocks);
+    // フォールバック関連の注記がないこと（フォールバック未使用で別モデル = primary単体失敗）
+    expect(allText).not.toContain('フォールバック');
+    expect(allText).not.toContain('同一モデル');
+  });
 });
 
 // ---- sanitizeBoxDrawing ----
