@@ -511,6 +511,24 @@ function formatTimestampWithTimezone(date: Date, timezone: string): string {
   return date.toISOString().replace('T', ' ').substring(0, 19) + ' UTC';
 }
 
+/**
+ * PRAGMAカラム一覧に、行データに含まれるがPRAGMAにないカラム（JOIN由来等）を追加する。
+ * 元の配列を変更せず新しい配列を返す。
+ */
+export function mergeColumnsFromRows(
+  pragmaColumns: string[],
+  rows: Record<string, unknown>[],
+): string[] {
+  if (rows.length === 0) return pragmaColumns;
+  const merged = [...pragmaColumns];
+  for (const key of Object.keys(rows[0])) {
+    if (!merged.includes(key)) {
+      merged.push(key);
+    }
+  }
+  return merged;
+}
+
 function getStatusTableDefinition(tableName: string): StatusTableDefinition | undefined {
   return STATUS_TABLE_DEFINITIONS.find((table) => table.name === tableName);
 }
@@ -2029,16 +2047,10 @@ app.get('/api/status/tables/:table/rows', authMiddleware, async (c) => {
 
   try {
     const columnsResult = await db.prepare(`PRAGMA table_info(${tableName})`).all<{ name: string }>();
-    const columns = (columnsResult.results ?? []).map((column) => column.name);
+    const pragmaColumns = (columnsResult.results ?? []).map((column) => column.name);
     const rowsResult = await db.prepare(previewQuery.sql).bind(...previewQuery.params).all<Record<string, unknown>>();
     const rows = rowsResult.results ?? [];
-    if (rows.length > 0) {
-      for (const key of Object.keys(rows[0])) {
-        if (!columns.includes(key)) {
-          columns.push(key);
-        }
-      }
-    }
+    const columns = mergeColumnsFromRows(pragmaColumns, rows);
     return jsonUtf8({
       table: tableName,
       migration: tableDefinition.migration,
