@@ -17,6 +17,8 @@
     --table-header-bg: #f6f8fa;
     --pk-color: #cf222e;
     --fk-color: #0969da;
+    --uk-color: #9a6700;
+    --idx-color: #656d76;
     --line-color: #8b949e;
     --shadow: rgba(0,0,0,0.08);
     --toolbar-bg: #fff;
@@ -41,6 +43,8 @@
       --table-header-bg: #21262d;
       --pk-color: #f85149;
       --fk-color: #58a6ff;
+      --uk-color: #d29922;
+      --idx-color: #8b949e;
       --line-color: #484f58;
       --shadow: rgba(0,0,0,0.3);
       --toolbar-bg: #21262d;
@@ -226,6 +230,8 @@
   }
   .er-col .pk { background: #ffebe9; color: var(--pk-color); }
   .er-col .fk { background: #ddf4ff; color: var(--fk-color); }
+  .er-col .uk { background: #fff8c5; color: var(--uk-color); }
+  .er-col .idx { background: #f0f0f0; color: var(--idx-color); }
   .er-col .col-name { font-weight: 500; }
   .er-col .col-type { color: var(--text-muted); margin-left: auto; }
 
@@ -271,6 +277,8 @@
   @media (prefers-color-scheme: dark) {
     .er-col .pk { background: rgba(248,81,73,0.15); }
     .er-col .fk { background: rgba(88,166,255,0.15); }
+    .er-col .uk { background: rgba(210,153,34,0.15); }
+    .er-col .idx { background: rgba(139,148,158,0.12); }
   }
 </style>
 </head>
@@ -317,6 +325,11 @@
   <div class="legend-row"><div class="legend-dot" style="background:#d29922"></div> AI Summary</div>
   <div class="legend-row"><div class="legend-dot" style="background:#f85149"></div> Email / Resend</div>
   <div class="legend-row"><div class="legend-dot" style="background:#a371f7"></div> Config / Settings</div>
+  <hr style="margin:6px 0;border:0;border-top:1px solid var(--border)">
+  <div class="legend-row"><span class="col-badge pk" style="font-size:9px;font-weight:700;padding:0 4px;border-radius:3px">PK</span> Primary Key</div>
+  <div class="legend-row"><span class="col-badge fk" style="font-size:9px;font-weight:700;padding:0 4px;border-radius:3px">FK</span> Foreign Key</div>
+  <div class="legend-row"><span class="col-badge uk" style="font-size:9px;font-weight:700;padding:0 4px;border-radius:3px">UK</span> Unique</div>
+  <div class="legend-row"><span class="col-badge idx" style="font-size:9px;font-weight:700;padding:0 4px;border-radius:3px">IDX</span> Index</div>
 </div>
 
 <div class="zoom-info">Drag tables to rearrange</div>
@@ -339,7 +352,7 @@ function groupOf(tableName) {
 
 const SCHEMA = [
   { name:'user_sessions', cols:[
-    {n:'id',pk:true,t:'INT'},{n:'user_id',t:'TEXT'},{n:'timezone',t:'TEXT'},{n:'session_duration',t:'TEXT'},
+    {n:'id',pk:true,t:'INT'},{n:'user_id',uk:true,idx:true,t:'TEXT'},{n:'timezone',t:'TEXT'},{n:'session_duration',t:'TEXT'},
     {n:'last_login_at',t:'TEXT'},{n:'current_login_at',t:'TEXT'},{n:'updated_at',t:'TEXT'},
     {n:'display_name',t:'TEXT'},{n:'github_access_token',t:'TEXT'},{n:'current_workspace_id',t:'TEXT'}
   ]},
@@ -347,45 +360,45 @@ const SCHEMA = [
     {n:'id',pk:true,t:'TEXT'},{n:'name',t:'TEXT'},{n:'created_at',t:'TEXT'}
   ]},
   { name:'workspaces', cols:[
-    {n:'id',pk:true,t:'TEXT'},{n:'team_id',fk:'teams',t:'TEXT'},{n:'name',t:'TEXT'},{n:'created_at',t:'TEXT'}
+    {n:'id',pk:true,t:'TEXT'},{n:'team_id',fk:'teams',idx:true,t:'TEXT'},{n:'name',t:'TEXT'},{n:'created_at',t:'TEXT'}
   ]},
   { name:'team_members', cols:[
     {n:'team_id',pk:true,fk:'teams',t:'TEXT'},{n:'user_id',pk:true,t:'TEXT'},{n:'role',t:'TEXT'},{n:'joined_at',t:'TEXT'}
   ]},
   { name:'installation_permissions', cols:[
-    {n:'id',pk:true,t:'INT'},{n:'installation_id',t:'INT'},{n:'repo_name',t:'TEXT'},
-    {n:'repository_selection',t:'TEXT'},{n:'permissions',t:'TEXT'},{n:'updated_at',t:'TEXT'}
+    {n:'id',pk:true,t:'INT'},{n:'installation_id',idx:true,t:'INT'},{n:'repo_name',idx:true,t:'TEXT'},
+    {n:'repository_selection',t:'TEXT'},{n:'permissions',t:'TEXT'},{n:'updated_at',idx:true,t:'TEXT'}
   ]},
   { name:'commit_calendar_cache', cols:[
-    {n:'id',pk:true,t:'INT'},{n:'owner',t:'TEXT'},{n:'repo',t:'TEXT'},
-    {n:'year',t:'INT'},{n:'month',t:'INT'},{n:'counts',t:'TEXT'},{n:'cached_at',t:'TEXT'},
-    {n:'user_id',t:'TEXT'},{n:'workspace_id',t:'TEXT'}
+    {n:'id',pk:true,t:'INT'},{n:'owner',idx:true,t:'TEXT'},{n:'repo',idx:true,t:'TEXT'},
+    {n:'year',idx:true,t:'INT'},{n:'month',idx:true,t:'INT'},{n:'counts',t:'TEXT'},{n:'cached_at',t:'TEXT'},
+    {n:'user_id',t:'TEXT'},{n:'workspace_id',idx:true,t:'TEXT'}
   ]},
   { name:'commit_list_cache', cols:[
-    {n:'workspace_id',t:'TEXT'},{n:'owner',t:'TEXT'},{n:'repo',t:'TEXT'},
-    {n:'date',t:'TEXT'},{n:'commits_json',t:'TEXT'},{n:'commit_count',t:'INT'},{n:'cached_at',t:'TEXT'}
+    {n:'workspace_id',idx:true,t:'TEXT'},{n:'owner',idx:true,t:'TEXT'},{n:'repo',idx:true,t:'TEXT'},
+    {n:'date',idx:true,t:'TEXT'},{n:'commits_json',t:'TEXT'},{n:'commit_count',t:'INT'},{n:'cached_at',t:'TEXT'}
   ]},
   { name:'cache_stats', cols:[
-    {n:'user_id',t:'TEXT'},{n:'owner',t:'TEXT'},{n:'repo',t:'TEXT'},
+    {n:'user_id',idx:true,t:'TEXT'},{n:'owner',idx:true,t:'TEXT'},{n:'repo',idx:true,t:'TEXT'},
     {n:'github_fetch_count',t:'INT'},{n:'cache_save_count',t:'INT'},
     {n:'cache_lookup_count',t:'INT'},{n:'cache_hit_count',t:'INT'},{n:'last_updated_at',t:'TEXT'}
   ]},
   { name:'cloudflare_setup_pending', cols:[
-    {n:'id',pk:true,t:'INT'},{n:'user_id',t:'TEXT'},{n:'repo_owner',t:'TEXT'},
+    {n:'id',pk:true,t:'INT'},{n:'user_id',idx:true,t:'TEXT'},{n:'repo_owner',t:'TEXT'},
     {n:'repo_name',t:'TEXT'},{n:'repo_full_name',t:'TEXT'},{n:'is_private',t:'INT'},
     {n:'created_at',t:'TEXT'},{n:'dismissed_at',t:'TEXT'}
   ]},
   { name:'commit_search_history', cols:[
-    {n:'id',pk:true,t:'INT'},{n:'user_id',t:'TEXT'},{n:'search_query',t:'TEXT'},
+    {n:'id',pk:true,t:'INT'},{n:'user_id',idx:true,t:'TEXT'},{n:'search_query',t:'TEXT'},
     {n:'total_hits',t:'INT'},{n:'repo_names',t:'TEXT'},{n:'searched_at',t:'TEXT'}
   ]},
   { name:'commit_search_repo_stats', cols:[
-    {n:'id',pk:true,t:'INT'},{n:'search_history_id',fk:'commit_search_history',t:'INT'},
+    {n:'id',pk:true,t:'INT'},{n:'search_history_id',fk:'commit_search_history',idx:true,t:'INT'},
     {n:'repo_name',t:'TEXT'},{n:'hit_count',t:'INT'},{n:'search_query',t:'TEXT'},{n:'user_name',t:'TEXT'}
   ]},
   { name:'ai_summary_log', cols:[
-    {n:'id',pk:true,t:'INT'},{n:'request_id',t:'TEXT'},{n:'daily_seq',t:'INT'},
-    {n:'event_date',t:'TEXT'},{n:'event_type',t:'TEXT'},{n:'repo_full_name',t:'TEXT'},
+    {n:'id',pk:true,t:'INT'},{n:'request_id',uk:true,t:'TEXT'},{n:'daily_seq',t:'INT'},
+    {n:'event_date',idx:true,t:'TEXT'},{n:'event_type',t:'TEXT'},{n:'repo_full_name',t:'TEXT'},
     {n:'pr_number',t:'INT'},{n:'pr_action',t:'TEXT'},{n:'pr_url',t:'TEXT'},
     {n:'model',t:'TEXT'},{n:'summary',t:'TEXT'},{n:'diff_length',t:'INT'},
     {n:'slack_notified',t:'INT'},{n:'created_at',t:'TEXT'},
@@ -393,23 +406,23 @@ const SCHEMA = [
     {n:'view_count',t:'INT'},{n:'parent_id',t:'TEXT'},{n:'tags',t:'TEXT'}
   ]},
   { name:'ai_summary_reviews', cols:[
-    {n:'id',pk:true,t:'INT'},{n:'summary_request_id',fk:'ai_summary_log',t:'TEXT'},
-    {n:'rating',t:'TEXT'},{n:'reviewer_type',t:'TEXT'},{n:'reviewer_name',t:'TEXT'},
+    {n:'id',pk:true,t:'INT'},{n:'summary_request_id',fk:'ai_summary_log',idx:true,t:'TEXT'},
+    {n:'rating',idx:true,t:'TEXT'},{n:'reviewer_type',t:'TEXT'},{n:'reviewer_name',t:'TEXT'},
     {n:'review_model',t:'TEXT'},{n:'comment',t:'TEXT'},{n:'created_at',t:'TEXT'}
   ]},
   { name:'repo_color_settings', cols:[
-    {n:'id',pk:true,t:'INT'},{n:'workspace_id',t:'TEXT'},{n:'repo_name',t:'TEXT'},
-    {n:'color_code',t:'TEXT'},{n:'display_order',t:'INT'},{n:'tags',t:'TEXT'},
+    {n:'id',pk:true,t:'INT'},{n:'workspace_id',idx:true,t:'TEXT'},{n:'repo_name',idx:true,t:'TEXT'},
+    {n:'color_code',t:'TEXT'},{n:'display_order',idx:true,t:'INT'},{n:'tags',t:'TEXT'},
     {n:'is_visible',t:'INT'},{n:'created_at',t:'TEXT'},{n:'updated_at',t:'TEXT'}
   ]},
   { name:'repo_groups', cols:[
-    {n:'id',pk:true,t:'TEXT'},{n:'workspace_id',t:'TEXT'},{n:'name',t:'TEXT'},
+    {n:'id',pk:true,t:'TEXT'},{n:'workspace_id',idx:true,t:'TEXT'},{n:'name',t:'TEXT'},
     {n:'description',t:'TEXT'},{n:'color_code',t:'TEXT'},{n:'icon',t:'TEXT'},
     {n:'slack_channel_id',t:'TEXT'},{n:'display_order',t:'INT'},
     {n:'created_at',t:'TEXT'},{n:'updated_at',t:'TEXT'}
   ]},
   { name:'repo_group_members', cols:[
-    {n:'group_id',pk:true,fk:'repo_groups',t:'TEXT'},{n:'repo_name',pk:true,t:'TEXT'},
+    {n:'group_id',pk:true,fk:'repo_groups',idx:true,t:'TEXT'},{n:'repo_name',pk:true,idx:true,t:'TEXT'},
     {n:'workspace_id',t:'TEXT'},{n:'added_at',t:'TEXT'}
   ]},
   { name:'resend_webhook_sources', cols:[
@@ -417,34 +430,34 @@ const SCHEMA = [
     {n:'svix_endpoint_id',t:'TEXT'},{n:'created_at',t:'TEXT'},{n:'webhook_secret',t:'TEXT'}
   ]},
   { name:'email_send_log', cols:[
-    {n:'id',pk:true,t:'INT'},{n:'source_id',fk:'resend_webhook_sources',t:'TEXT'},
-    {n:'resend_email_id',t:'TEXT'},{n:'email_to',t:'TEXT'},{n:'email_type',t:'TEXT'},
+    {n:'id',pk:true,t:'INT'},{n:'source_id',fk:'resend_webhook_sources',idx:true,t:'TEXT'},
+    {n:'resend_email_id',idx:true,t:'TEXT'},{n:'email_to',t:'TEXT'},{n:'email_type',idx:true,t:'TEXT'},
     {n:'reference_id',t:'TEXT'},{n:'created_at',t:'TEXT'}
   ]},
   { name:'resend_webhook_log', cols:[
-    {n:'id',pk:true,t:'INT'},{n:'source_id',fk:'resend_webhook_sources',t:'TEXT'},
-    {n:'svix_id',t:'TEXT'},{n:'resend_email_id',t:'TEXT'},{n:'event_type',t:'TEXT'},
+    {n:'id',pk:true,t:'INT'},{n:'source_id',fk:'resend_webhook_sources',idx:true,t:'TEXT'},
+    {n:'svix_id',t:'TEXT'},{n:'resend_email_id',idx:true,t:'TEXT'},{n:'event_type',idx:true,t:'TEXT'},
     {n:'email_from',t:'TEXT'},{n:'email_to',t:'TEXT'},{n:'bounce_type',t:'TEXT'},
     {n:'error_detail',t:'TEXT'},{n:'slack_result',t:'TEXT'},{n:'slack_result_at',t:'TEXT'},
-    {n:'proxy_result',t:'TEXT'},{n:'proxy_result_at',t:'TEXT'},{n:'created_at',t:'TEXT'}
+    {n:'proxy_result',t:'TEXT'},{n:'proxy_result_at',t:'TEXT'},{n:'created_at',idx:true,t:'TEXT'}
   ]},
   { name:'email_suppression_list', cols:[
-    {n:'id',pk:true,t:'INT'},{n:'email',t:'TEXT'},
+    {n:'id',pk:true,t:'INT'},{n:'email',idx:true,t:'TEXT'},
     {n:'source_id',fk:'resend_webhook_sources',t:'TEXT'},
     {n:'reason',t:'TEXT'},{n:'origin_webhook_log_id',fk:'resend_webhook_log',t:'INT'},
     {n:'suppressed_at',t:'TEXT'},{n:'resubscribed_at',t:'TEXT'}
   ]},
   { name:'email_mfa_challenges', cols:[
-    {n:'id',pk:true,t:'TEXT'},{n:'user_id',t:'TEXT'},{n:'email',t:'TEXT'},
-    {n:'source_id',fk:'resend_webhook_sources',t:'TEXT'},{n:'resend_email_id',t:'TEXT'},
+    {n:'id',pk:true,t:'TEXT'},{n:'user_id',idx:true,t:'TEXT'},{n:'email',t:'TEXT'},
+    {n:'source_id',fk:'resend_webhook_sources',t:'TEXT'},{n:'resend_email_id',idx:true,t:'TEXT'},
     {n:'code_hash',t:'TEXT'},{n:'code_type',t:'TEXT'},{n:'code_algorithm',t:'TEXT'},
     {n:'totp_period',t:'INT'},{n:'totp_counter',t:'INT'},{n:'purpose',t:'TEXT'},
-    {n:'attempts',t:'INT'},{n:'max_attempts',t:'INT'},{n:'expires_at',t:'TEXT'},
+    {n:'attempts',t:'INT'},{n:'max_attempts',t:'INT'},{n:'expires_at',idx:true,t:'TEXT'},
     {n:'verified_at',t:'TEXT'},{n:'invalidated_at',t:'TEXT'},{n:'created_at',t:'TEXT'}
   ]},
   { name:'email_audit_anomalies', cols:[
-    {n:'id',pk:true,t:'INT'},{n:'period_start',t:'TEXT'},{n:'period_end',t:'TEXT'},
-    {n:'anomaly_type',t:'TEXT'},{n:'severity',t:'TEXT'},{n:'target_user_id',t:'TEXT'},
+    {n:'id',pk:true,t:'INT'},{n:'period_start',idx:true,t:'TEXT'},{n:'period_end',idx:true,t:'TEXT'},
+    {n:'anomaly_type',idx:true,t:'TEXT'},{n:'severity',idx:true,t:'TEXT'},{n:'target_user_id',t:'TEXT'},
     {n:'target_email',t:'TEXT'},{n:'source_id',fk:'resend_webhook_sources',t:'TEXT'},
     {n:'metric_value',t:'REAL'},{n:'threshold_value',t:'REAL'},{n:'detail',t:'TEXT'},
     {n:'acknowledged_at',t:'TEXT'},{n:'acknowledged_by',t:'TEXT'},{n:'created_at',t:'TEXT'}
@@ -542,6 +555,8 @@ function createTableElement(table) {
     let badges = '';
     if (col.pk) badges += '<span class="col-badge pk">PK</span>';
     if (col.fk) badges += '<span class="col-badge fk">FK</span>';
+    if (col.uk) badges += '<span class="col-badge uk">UK</span>';
+    if (col.idx && !col.pk && !col.uk) badges += '<span class="col-badge idx">IDX</span>';
     bodyHTML += `<div class="er-col" data-col="${col.n}">
       ${badges}
       <span class="col-name">${col.n}</span>

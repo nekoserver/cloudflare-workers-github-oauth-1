@@ -16,6 +16,8 @@ const minimalData: CacheStatusData = {
   installationPerms: { totalEntries: 0, entries: [] },
   cacheStats: { totalGithubFetch: 0, totalCacheSave: 0, totalCacheLookup: 0, totalCacheHit: 0, entries: [] },
   tables: [],
+  tableGroupMap: {},
+  groupLabels: {},
   userContext: { teamName: null, teamId: null, workspaceName: null, workspaceId: null, role: null, allWorkspaces: [] },
 };
 

@@ -94,6 +94,8 @@ export interface CacheStatusData {
     entries: CacheStatsEntry[];
   };
   tables: TableStatusEntry[];
+  tableGroupMap: Record<string, string>;
+  groupLabels: Record<string, string>;
   userContext: UserContextInfo;
 }
 
@@ -149,6 +151,19 @@ export function getCacheStatusPage(user: {
     return fullName.startsWith(prefix) ? fullName.substring(prefix.length) : fullName;
   };
 
+  // グループID→番号マッピング（表示用）
+  const groupKeys = [...new Set(Object.values(data.tableGroupMap))];
+  groupKeys.sort();
+  const groupIdMap: Record<string, number> = {};
+  groupKeys.forEach((g, i) => { groupIdMap[g] = i + 1; });
+
+  // グループセレクトメニュー用オプション
+  const groupSelectOptions = groupKeys.map(g => {
+    const num = groupIdMap[g];
+    const label = data.groupLabels[g] || g;
+    return `<option value="${num}">${num}: ${escapeHtml(label)}</option>`;
+  }).join('');
+
   // テーブル状況行
   const syncPolicyLabel: Record<string, { text: string; cls: string }> = {
     auto: { text: '自動', cls: 'sync-auto' },
@@ -159,7 +174,11 @@ export function getCacheStatusPage(user: {
     const statusIcon = t.exists ? '<span class="status-ok">OK</span>' : '<span class="status-missing">未作成</span>';
     const count = t.exists && t.rowCount !== null ? String(t.rowCount) : '-';
     const policy = syncPolicyLabel[t.syncPolicy] || syncPolicyLabel.auto;
-    return `<tr>
+    const groupName = data.tableGroupMap[t.name] || '';
+    const groupNum = groupIdMap[groupName] || 0;
+    const migrationNum = parseInt(t.migration.replace(/[^0-9]/g, ''), 10) || 0;
+    return `<tr data-group-id="${groupNum}" data-migration-num="${migrationNum}">
+      <td class="group-id-cell">${groupNum}</td>
       <td><button type="button" class="status-link-button" data-table-preview="${escapeHtml(t.name)}"><code>${escapeHtml(t.name)}</code></button></td>
       <td class="center">${statusIcon}</td>
       <td class="num">${count}</td>
@@ -552,6 +571,7 @@ export function getCacheStatusPage(user: {
     .data-table .date { font-size: 12px; color: var(--text-muted); white-space: nowrap; }
     .data-table .mono { font-family: 'Monaco', 'Courier New', monospace; font-size: 12px; color: var(--text-muted); }
     .data-table .migration-name { font-family: 'Monaco', 'Courier New', monospace; font-size: 11px; color: var(--text-faint); white-space: nowrap; }
+    .data-table .group-id-cell { text-align: center; font-size: 11px; font-weight: 700; color: var(--text-faint); width: 30px; }
     .data-table code { background: var(--code-bg); padding: 2px 6px; border-radius: 4px; font-size: 13px; }
     .all-repos { color: var(--accent-color); font-weight: 600; font-size: 12px; }
     .status-ok { color: #48bb78; font-weight: 700; font-size: 12px; }
@@ -1262,11 +1282,12 @@ export function getCacheStatusPage(user: {
           <table class="data-table" id="statusTablesTable">
             <thead>
               <tr>
+                <th>G <select id="groupFilterSelect" style="font-size:10px;padding:1px 2px;border-radius:3px;border:1px solid #888;background:transparent;color:inherit;cursor:pointer;max-width:60px"><option value="">ALL</option>${groupSelectOptions}</select></th>
                 <th>テーブル名</th>
                 <th style="text-align:center">状態</th>
                 <th style="text-align:right">レコード数</th>
                 <th style="text-align:center">更新</th>
-                <th>マイグレーション</th>
+                <th style="cursor:pointer;user-select:none" id="migrationSortTh">マイグレーション ⇅</th>
                 <th>説明</th>
               </tr>
             </thead>
@@ -2316,9 +2337,12 @@ export function getCacheStatusPage(user: {
 
     function renderColumnKeyBadge(keyType) {
       if (!keyType) return '';
-      if (keyType === 'pk') return ' <span style="font-size:9px;font-weight:700;padding:0 4px;border-radius:3px;background:#ffebe9;color:#cf222e">PK</span>';
-      if (keyType === 'fk') return ' <span style="font-size:9px;font-weight:700;padding:0 4px;border-radius:3px;background:#ddf4ff;color:#0969da">FK</span>';
-      if (keyType === 'pk+fk') return ' <span style="font-size:9px;font-weight:700;padding:0 4px;border-radius:3px;background:#ffebe9;color:#cf222e">PK</span><span style="font-size:9px;font-weight:700;padding:0 4px;border-radius:3px;background:#ddf4ff;color:#0969da;margin-left:2px">FK</span>';
+      var s = 'font-size:9px;font-weight:700;padding:0 4px;border-radius:3px;';
+      if (keyType === 'pk') return ' <span style="' + s + 'background:#ffebe9;color:#cf222e">PK</span>';
+      if (keyType === 'fk') return ' <span style="' + s + 'background:#ddf4ff;color:#0969da">FK</span>';
+      if (keyType === 'pk+fk') return ' <span style="' + s + 'background:#ffebe9;color:#cf222e">PK</span><span style="' + s + 'background:#ddf4ff;color:#0969da;margin-left:2px">FK</span>';
+      if (keyType === 'uk') return ' <span style="' + s + 'background:#fff8c5;color:#9a6700">UK</span>';
+      if (keyType === 'idx') return ' <span style="' + s + 'background:#f0f0f0;color:#656d76">IDX</span>';
       return '';
     }
 
@@ -2405,12 +2429,7 @@ export function getCacheStatusPage(user: {
           var col = tbl.columns[j];
           html += '<div style="padding:2px 10px;font-size:12px;display:flex;align-items:center;gap:4px">';
           html += '<code style="font-size:11px">' + escapeHtmlText(col.name) + '</code>';
-          if (col.keyType === 'pk' || col.keyType === 'pk+fk') {
-            html += ' <span style="font-size:9px;font-weight:700;padding:0 4px;border-radius:3px;background:#ffebe9;color:#cf222e">PK</span>';
-          }
-          if (col.keyType === 'fk' || col.keyType === 'pk+fk') {
-            html += ' <span style="font-size:9px;font-weight:700;padding:0 4px;border-radius:3px;background:#ddf4ff;color:#0969da">FK</span>';
-          }
+          html += renderColumnKeyBadge(col.keyType);
           if (col.fkTarget) {
             html += ' <span style="font-size:10px;color:#888">&rarr; ' + escapeHtmlText(col.fkTarget) + '</span>';
           }
@@ -2721,6 +2740,58 @@ export function getCacheStatusPage(user: {
           }
         });
       }
+      var groupFilterSelect = document.getElementById('groupFilterSelect');
+      var migrationSortTh = document.getElementById('migrationSortTh');
+      var groupSortState = 'none';
+      var migrationSortState = 'none';
+
+      function getStatusTableRows() {
+        if (!statusTablesTable) return [];
+        return Array.prototype.slice.call(statusTablesTable.querySelectorAll('tbody tr'));
+      }
+
+      function applyGroupFilter() {
+        var filterVal = groupFilterSelect ? groupFilterSelect.value : '';
+        var rows = getStatusTableRows();
+        for (var i = 0; i < rows.length; i++) {
+          var gid = rows[i].getAttribute('data-group-id');
+          rows[i].style.display = (!filterVal || gid === filterVal) ? '' : 'none';
+        }
+      }
+
+      function sortTableRows(attr, direction) {
+        if (!statusTablesTable) return;
+        var tbody = statusTablesTable.querySelector('tbody');
+        if (!tbody) return;
+        var rows = getStatusTableRows();
+        rows.sort(function(a, b) {
+          var va = parseInt(a.getAttribute(attr) || '0', 10);
+          var vb = parseInt(b.getAttribute(attr) || '0', 10);
+          return direction === 'asc' ? va - vb : vb - va;
+        });
+        for (var i = 0; i < rows.length; i++) {
+          tbody.appendChild(rows[i]);
+        }
+        applyGroupFilter();
+      }
+
+      if (groupFilterSelect) {
+        groupFilterSelect.addEventListener('change', function() {
+          applyGroupFilter();
+          if (groupFilterSelect.value) {
+            groupSortState = groupSortState === 'none' ? 'asc' : groupSortState;
+          }
+        });
+      }
+
+      if (migrationSortTh) {
+        migrationSortTh.addEventListener('click', function() {
+          migrationSortState = migrationSortState === 'asc' ? 'desc' : 'asc';
+          migrationSortTh.textContent = 'マイグレーション ' + (migrationSortState === 'asc' ? '↑' : '↓');
+          sortTableRows('data-migration-num', migrationSortState);
+        });
+      }
+
       if (commitCacheEntries.length === 0) return;
       applyCommitCacheSort(commitCacheSortState, false);
       if (monthSortButton) {
