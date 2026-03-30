@@ -2031,12 +2031,20 @@ app.get('/api/status/tables/:table/rows', authMiddleware, async (c) => {
     const columnsResult = await db.prepare(`PRAGMA table_info(${tableName})`).all<{ name: string }>();
     const columns = (columnsResult.results ?? []).map((column) => column.name);
     const rowsResult = await db.prepare(previewQuery.sql).bind(...previewQuery.params).all<Record<string, unknown>>();
+    const rows = rowsResult.results ?? [];
+    if (rows.length > 0) {
+      for (const key of Object.keys(rows[0])) {
+        if (!columns.includes(key)) {
+          columns.push(key);
+        }
+      }
+    }
     return jsonUtf8({
       table: tableName,
       migration: tableDefinition.migration,
       description: tableDefinition.description,
       columns,
-      rows: rowsResult.results ?? [],
+      rows,
       limit: STATUS_TABLE_PREVIEW_LIMIT,
     });
   } catch (error) {

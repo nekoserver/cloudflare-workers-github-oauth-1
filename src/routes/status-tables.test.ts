@@ -97,7 +97,29 @@ describe('/api/status/tables/:table/rows', () => {
     expect(data.columns).toContain('created_at');
   });
 
-  it('ai_summary_reviews: JOINカラム(repo_full_name, pr_number)がrowsデータに含まれる', async () => {
+  it('ai_summary_reviews: columnsの全キーでrows内の全行から値が取れること（正常終了保証）', async () => {
+    const db = createMockDb(reviewColumns, [sampleReview]);
+    const auth = await makeAuthHeader();
+    const res = await app.request('/api/status/tables/ai_summary_reviews/rows', {
+      headers: { Authorization: auth },
+    }, makeEnv(db));
+
+    expect(res.status).toBe(200);
+    const data = await res.json() as { columns: string[]; rows: Record<string, unknown>[] };
+
+    // columns が空でないこと（空ならクライアントは何も表示できない）
+    expect(data.columns.length).toBeGreaterThan(0);
+
+    // 全行について、columnsの全キーで undefined でない値が取れること
+    // これが失敗する = クライアントで「全フィールド空」になる
+    for (const row of data.rows) {
+      for (const col of data.columns) {
+        expect(row[col], `row[${col}] が undefined — クライアントで空セルになる`).not.toBeUndefined();
+      }
+    }
+  });
+
+  it('ai_summary_reviews: rowsに含まれる全キーがcolumnsにも含まれること（表示漏れ防止）', async () => {
     const db = createMockDb(reviewColumns, [sampleReview]);
     const auth = await makeAuthHeader();
     const res = await app.request('/api/status/tables/ai_summary_reviews/rows', {
@@ -105,11 +127,14 @@ describe('/api/status/tables/:table/rows', () => {
     }, makeEnv(db));
 
     const data = await res.json() as { columns: string[]; rows: Record<string, unknown>[] };
-    expect(data.rows[0]).toHaveProperty('repo_full_name', 'owner/repo');
-    expect(data.rows[0]).toHaveProperty('pr_number', 42);
-    // JOINカラムはPRAGMAに含まれないためcolumnsには入らない — これが表示問題の原因
-    expect(data.columns).not.toContain('repo_full_name');
-    expect(data.columns).not.toContain('pr_number');
+
+    // rowsの全キーがcolumnsに含まれていなければ、そのカラムは表示されない
+    // JOINカラム(repo_full_name, pr_number)もcolumnsに含まれるべき
+    if (data.rows.length > 0) {
+      const rowKeys = Object.keys(data.rows[0]);
+      const missingColumns = rowKeys.filter(key => !data.columns.includes(key));
+      expect(missingColumns, `rows にあるが columns にないキー — 表示されないカラム`).toEqual([]);
+    }
   });
 
   it('ai_summary_reviews: rowsが空の場合でも正常にレスポンスを返す', async () => {
