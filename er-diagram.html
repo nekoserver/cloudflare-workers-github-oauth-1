@@ -327,7 +327,7 @@ const GROUPS = {
   commit: { color: '#3fb950', tables: ['commit_calendar_cache','commit_list_cache','cache_stats','commit_search_history','commit_search_repo_stats','cloudflare_setup_pending'] },
   ai:     { color: '#d29922', tables: ['ai_summary_log','ai_summary_reviews'] },
   email:  { color: '#f85149', tables: ['resend_webhook_sources','resend_webhook_log','email_send_log','email_suppression_list','email_mfa_challenges','email_audit_anomalies'] },
-  config: { color: '#a371f7', tables: ['installation_permissions','repo_color_settings','repo_groups','repo_group_members'] }
+  config: { color: '#a371f7', tables: ['installation_permissions','repo_color_settings','repo_groups','repo_group_members','table_catalog','table_column_keys'] }
 };
 
 function groupOf(tableName) {
@@ -448,6 +448,14 @@ const SCHEMA = [
     {n:'target_email',t:'TEXT'},{n:'source_id',fk:'resend_webhook_sources',t:'TEXT'},
     {n:'metric_value',t:'REAL'},{n:'threshold_value',t:'REAL'},{n:'detail',t:'TEXT'},
     {n:'acknowledged_at',t:'TEXT'},{n:'acknowledged_by',t:'TEXT'},{n:'created_at',t:'TEXT'}
+  ]},
+  { name:'table_catalog', cols:[
+    {n:'table_name',pk:true,t:'TEXT'},{n:'group_name',t:'TEXT'},{n:'description',t:'TEXT'},
+    {n:'migration',t:'TEXT'},{n:'sync_policy',t:'TEXT'},{n:'display_order',t:'INT'}
+  ]},
+  { name:'table_column_keys', cols:[
+    {n:'table_name',pk:true,fk:'table_catalog',t:'TEXT'},{n:'column_name',pk:true,t:'TEXT'},
+    {n:'key_type',t:'TEXT'},{n:'fk_target_table',t:'TEXT'}
   ]}
 ];
 
