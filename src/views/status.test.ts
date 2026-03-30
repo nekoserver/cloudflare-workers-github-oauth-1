@@ -95,3 +95,25 @@ describe('/status ページの thフィルタ機能', () => {
     expect(html).toContain('data.filterableColumns');
   });
 });
+
+describe('/status ページの グループER図モーダル', () => {
+  it('openGroupEr 関数が存在する', () => {
+    const html = getCacheStatusPage(minimalUser, minimalData);
+    expect(html).toContain('function openGroupEr(tableName)');
+  });
+
+  it('renderGroupErDiagram 関数が存在する', () => {
+    const html = getCacheStatusPage(minimalUser, minimalData);
+    expect(html).toContain('function renderGroupErDiagram(erData)');
+  });
+
+  it('モーダル上部にグループER図ボタンが配置される', () => {
+    const html = getCacheStatusPage(minimalUser, minimalData);
+    expect(html).toContain('このテーブルが属するグループのテーブル構造を確認する');
+  });
+
+  it('group-er APIエンドポイントを呼び出す', () => {
+    const html = getCacheStatusPage(minimalUser, minimalData);
+    expect(html).toContain('/group-er');
+  });
+});

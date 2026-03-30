@@ -2392,6 +2392,57 @@ export function getCacheStatusPage(user: {
       return html;
     }
 
+    function renderGroupErDiagram(erData) {
+      var html = '<div style="display:flex;flex-wrap:wrap;gap:16px;padding:8px">';
+      for (var i = 0; i < erData.tables.length; i++) {
+        var tbl = erData.tables[i];
+        html += '<div style="border:1px solid #555;border-radius:6px;min-width:220px;max-width:320px;flex:1">';
+        html += '<div style="padding:6px 10px;font-weight:700;font-size:13px;border-bottom:1px solid #555;background:' + escapeHtmlText(erData.groupColor) + '22;border-radius:6px 6px 0 0">'
+          + escapeHtmlText(tbl.tableName)
+          + '</div>';
+        if (tbl.description) {
+          html += '<div style="padding:3px 10px;font-size:11px;color:#888;border-bottom:1px solid #333">' + escapeHtmlText(tbl.description) + '</div>';
+        }
+        for (var j = 0; j < tbl.columns.length; j++) {
+          var col = tbl.columns[j];
+          html += '<div style="padding:2px 10px;font-size:12px;display:flex;align-items:center;gap:4px">';
+          html += '<code style="font-size:11px">' + escapeHtmlText(col.name) + '</code>';
+          if (col.keyType === 'pk' || col.keyType === 'pk+fk') {
+            html += ' <span style="font-size:9px;font-weight:700;padding:0 4px;border-radius:3px;background:#ffebe9;color:#cf222e">PK</span>';
+          }
+          if (col.keyType === 'fk' || col.keyType === 'pk+fk') {
+            html += ' <span style="font-size:9px;font-weight:700;padding:0 4px;border-radius:3px;background:#ddf4ff;color:#0969da">FK</span>';
+          }
+          if (col.fkTarget) {
+            html += ' <span style="font-size:10px;color:#888">&rarr; ' + escapeHtmlText(col.fkTarget) + '</span>';
+          }
+          html += '</div>';
+        }
+        html += '</div>';
+      }
+      html += '</div>';
+      return html;
+    }
+
+    async function openGroupEr(tableName) {
+      var title = tableName + ' のグループ ER 図';
+      showStatusModalLoading(title, 'グループ情報を取得しています');
+      try {
+        var response = await fetch('/api/status/tables/' + encodeURIComponent(tableName) + '/group-er');
+        if (!response.ok) {
+          throw new Error('group er request failed');
+        }
+        var erData = await response.json();
+        openStatusModal(
+          erData.groupLabel + ' グループ ER 図',
+          tableName + ' が属するグループ「' + erData.groupLabel + '」の全テーブル構造',
+          renderGroupErDiagram(erData)
+        );
+      } catch (_error) {
+        showStatusModalError(title, '', 'グループ情報の取得に失敗しました');
+      }
+    }
+
     async function openTablePreview(tableName) {
       var title = tableName + ' の保存データ';
       showStatusModalLoading(title, '最新 20 件を取得しています');
@@ -2401,11 +2452,21 @@ export function getCacheStatusPage(user: {
           throw new Error('table preview request failed');
         }
         var data = await response.json();
+        var groupErButton = '<div style="margin-bottom:8px">'
+          + '<button type="button" onclick="(function(){var fn=document.querySelector(\'[data-group-er-table]\');if(fn)fn.click();})()" data-group-er-table="' + escapeHtmlText(tableName) + '" '
+          + 'style="font-size:12px;padding:4px 12px;border:1px solid #666;border-radius:4px;background:transparent;color:inherit;cursor:pointer">'
+          + 'このテーブルが属するグループのテーブル構造を確認する</button></div>';
         openStatusModal(
           tableName + ' の保存データ',
           (data.description || '') + (data.migration ? ' / マイグレーション ' + data.migration : ''),
-          renderStatusTablePreview(data.columns || [], data.rows || [], data.limit || 20, tableName, data.columnKeyInfo || {}, data.filterableColumns || [])
+          groupErButton + renderStatusTablePreview(data.columns || [], data.rows || [], data.limit || 20, tableName, data.columnKeyInfo || {}, data.filterableColumns || [])
         );
+        var erBtn = document.querySelector('[data-group-er-table]');
+        if (erBtn) {
+          erBtn.addEventListener('click', function() {
+            openGroupEr(tableName);
+          });
+        }
       } catch (_error) {
         showStatusModalError(title, '', '保存データの取得に失敗しました');
       }

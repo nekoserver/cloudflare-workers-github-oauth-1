@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { mergeColumnsFromRows, getColumnKeyType, isAiSummaryLinkColumn, isFilterableColumn, getFilterableColumns } from '../index';
+import { mergeColumnsFromRows, getColumnKeyType, isAiSummaryLinkColumn, isFilterableColumn, getFilterableColumns, buildGroupErData, TABLE_GROUP_MAP, TABLE_COLUMN_KEYS, COLUMN_FK_TARGETS } from '../index';
 
 describe('mergeColumnsFromRows', () => {
   it('rowsが空なら元のカラムをそのまま返す', () => {
@@ -122,5 +122,45 @@ describe('isFilterableColumn / getFilterableColumns', () => {
   it('getFilterableColumns でフィルタ対象カラム一覧を取得', () => {
     expect(getFilterableColumns('table_catalog')).toEqual(['group_name', 'sync_policy']);
     expect(getFilterableColumns('user_sessions')).toEqual([]);
+  });
+});
+
+describe('buildGroupErData', () => {
+  const descriptions: Record<string, string> = {
+    ai_summary_log: 'AI要約ログ',
+    ai_summary_reviews: 'AI要約レビュー',
+  };
+  const pragmaCols: Record<string, string[]> = {
+    ai_summary_log: ['id', 'request_id', 'summary'],
+    ai_summary_reviews: ['id', 'summary_request_id', 'rating'],
+  };
+
+  it('指定テーブルと同グループの全テーブルを返す', () => {
+    const result = buildGroupErData('ai_summary_reviews', TABLE_GROUP_MAP, descriptions, TABLE_COLUMN_KEYS, COLUMN_FK_TARGETS, pragmaCols);
+    expect(result).not.toBeNull();
+    expect(result!.groupName).toBe('ai');
+    expect(result!.groupLabel).toBe('AI Summary');
+    expect(result!.tables.map(t => t.tableName)).toContain('ai_summary_log');
+    expect(result!.tables.map(t => t.tableName)).toContain('ai_summary_reviews');
+  });
+
+  it('各テーブルのカラムにPK/FK情報が含まれる', () => {
+    const result = buildGroupErData('ai_summary_reviews', TABLE_GROUP_MAP, descriptions, TABLE_COLUMN_KEYS, COLUMN_FK_TARGETS, pragmaCols);
+    const reviews = result!.tables.find(t => t.tableName === 'ai_summary_reviews')!;
+    const idCol = reviews.columns.find(c => c.name === 'id')!;
+    expect(idCol.keyType).toBe('pk');
+    const fkCol = reviews.columns.find(c => c.name === 'summary_request_id')!;
+    expect(fkCol.keyType).toBe('fk');
+    expect(fkCol.fkTarget).toBe('ai_summary_log');
+  });
+
+  it('存在しないテーブルにはnullを返す', () => {
+    const result = buildGroupErData('nonexistent', TABLE_GROUP_MAP, descriptions, TABLE_COLUMN_KEYS, COLUMN_FK_TARGETS, pragmaCols);
+    expect(result).toBeNull();
+  });
+
+  it('グループカラーが返される', () => {
+    const result = buildGroupErData('ai_summary_log', TABLE_GROUP_MAP, descriptions, TABLE_COLUMN_KEYS, COLUMN_FK_TARGETS, pragmaCols);
+    expect(result!.groupColor).toBe('#d29922');
   });
 });
