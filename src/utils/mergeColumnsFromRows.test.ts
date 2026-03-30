@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { mergeColumnsFromRows, getColumnKeyType, isAiSummaryLinkColumn } from '../index';
+import { mergeColumnsFromRows, getColumnKeyType, isAiSummaryLinkColumn, isFilterableColumn, getFilterableColumns } from '../index';
 
 describe('mergeColumnsFromRows', () => {
   it('rowsが空なら元のカラムをそのまま返す', () => {
@@ -95,5 +95,32 @@ describe('isAiSummaryLinkColumn', () => {
     expect(isAiSummaryLinkColumn('ai_summary_log', 'id')).toBe(false);
     expect(isAiSummaryLinkColumn('ai_summary_reviews', 'request_id')).toBe(false);
     expect(isAiSummaryLinkColumn('user_sessions', 'id')).toBe(false);
+  });
+});
+
+describe('isFilterableColumn / getFilterableColumns', () => {
+  it('table_catalog.group_name はフィルタ対象', () => {
+    expect(isFilterableColumn('table_catalog', 'group_name')).toBe(true);
+  });
+
+  it('table_catalog.sync_policy はフィルタ対象', () => {
+    expect(isFilterableColumn('table_catalog', 'sync_policy')).toBe(true);
+  });
+
+  it('table_catalog.table_name はフィルタ対象外', () => {
+    expect(isFilterableColumn('table_catalog', 'table_name')).toBe(false);
+  });
+
+  it('table_column_keys.key_type はフィルタ対象', () => {
+    expect(isFilterableColumn('table_column_keys', 'key_type')).toBe(true);
+  });
+
+  it('未定義テーブルはフィルタ対象外', () => {
+    expect(isFilterableColumn('user_sessions', 'id')).toBe(false);
+  });
+
+  it('getFilterableColumns でフィルタ対象カラム一覧を取得', () => {
+    expect(getFilterableColumns('table_catalog')).toEqual(['group_name', 'sync_policy']);
+    expect(getFilterableColumns('user_sessions')).toEqual([]);
   });
 });

@@ -605,6 +605,24 @@ export function isAiSummaryLinkColumn(tableName: string, columnName: string): bo
   );
 }
 
+/**
+ * テーブル×カラムの組み合わせで、thタップ時にフィルタ用セレクトメニューを表示するかどうか。
+ * 行データからユニーク値を抽出してフィルタ選択肢にする。
+ */
+const FILTERABLE_COLUMNS: Record<string, string[]> = {
+  table_catalog: ['group_name', 'sync_policy'],
+  table_column_keys: ['key_type', 'group_name'],
+};
+
+export function isFilterableColumn(tableName: string, columnName: string): boolean {
+  const cols = FILTERABLE_COLUMNS[tableName];
+  return cols ? cols.includes(columnName) : false;
+}
+
+export function getFilterableColumns(tableName: string): string[] {
+  return FILTERABLE_COLUMNS[tableName] ?? [];
+}
+
 function getStatusTableDefinition(tableName: string): StatusTableDefinition | undefined {
   return STATUS_TABLE_DEFINITIONS.find((table) => table.name === tableName);
 }
@@ -2127,6 +2145,7 @@ app.get('/api/status/tables/:table/rows', authMiddleware, async (c) => {
       description: tableDefinition.description,
       columns: [],
       columnKeyInfo: {},
+      filterableColumns: [],
       rows: [],
       limit: STATUS_TABLE_PREVIEW_LIMIT,
     });
@@ -2149,6 +2168,7 @@ app.get('/api/status/tables/:table/rows', authMiddleware, async (c) => {
       description: tableDefinition.description,
       columns,
       columnKeyInfo,
+      filterableColumns: getFilterableColumns(tableName),
       rows,
       limit: STATUS_TABLE_PREVIEW_LIMIT,
     });
