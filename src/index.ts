@@ -77,6 +77,8 @@ const STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
   { name: 'email_suppression_list', migration: '0020', description: 'メール配信停止リスト', syncPolicy: 'auto' },
   { name: 'email_mfa_challenges', migration: '0021', description: 'メールMFA認証チャレンジ', syncPolicy: 'auto' },
   { name: 'email_audit_anomalies', migration: '0022', description: 'メール監査異常検知', syncPolicy: 'auto' },
+  { name: 'table_catalog', migration: '0024', description: 'テーブルカタログ（グループ・メタ情報）', syncPolicy: 'manual' },
+  { name: 'table_column_keys', migration: '0024', description: 'カラムキー定義（PK/FK）', syncPolicy: 'manual' },
 ];
 
 const STATUS_MIGRATION_SQL: Record<string, string> = {
@@ -425,6 +427,26 @@ CREATE INDEX IF NOT EXISTS idx_email_audit_anomalies_severity ON email_audit_ano
 CREATE INDEX IF NOT EXISTS idx_email_audit_anomalies_period ON email_audit_anomalies(period_start, period_end);`,
   '0023': `ALTER TABLE resend_webhook_sources ADD COLUMN webhook_secret TEXT;
 ALTER TABLE resend_webhook_log ADD COLUMN email_from TEXT;`,
+  '0024': `CREATE TABLE IF NOT EXISTS table_catalog (
+  table_name TEXT PRIMARY KEY,
+  group_name TEXT NOT NULL,
+  description TEXT NOT NULL,
+  migration TEXT NOT NULL,
+  sync_policy TEXT NOT NULL DEFAULT 'auto',
+  display_order INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS table_column_keys (
+  table_name TEXT NOT NULL,
+  column_name TEXT NOT NULL,
+  key_type TEXT NOT NULL,
+  fk_target_table TEXT,
+  PRIMARY KEY (table_name, column_name),
+  FOREIGN KEY (table_name) REFERENCES table_catalog(table_name)
+);
+
+CREATE INDEX IF NOT EXISTS idx_table_catalog_group ON table_catalog(group_name);
+CREATE INDEX IF NOT EXISTS idx_table_column_keys_fk ON table_column_keys(fk_target_table);`,
 };
 
 function jsonUtf8(payload: unknown, status = 200): Response {
@@ -562,6 +584,8 @@ const TABLE_COLUMN_KEYS: Record<string, ColumnKeyInfo> = {
   email_suppression_list: { id: 'pk', source_id: 'fk', origin_webhook_log_id: 'fk' },
   email_mfa_challenges: { id: 'pk', source_id: 'fk' },
   email_audit_anomalies: { id: 'pk', source_id: 'fk' },
+  table_catalog: { table_name: 'pk' },
+  table_column_keys: { table_name: 'pk+fk', column_name: 'pk' },
 };
 
 export function getColumnKeyType(tableName: string, columnName: string): ColumnKeyType {
@@ -688,6 +712,16 @@ function getStatusTablePreviewQuery(
     case 'email_audit_anomalies':
       return {
         sql: `SELECT * FROM ${tableName} ORDER BY created_at DESC LIMIT ${STATUS_TABLE_PREVIEW_LIMIT}`,
+        params: [],
+      };
+    case 'table_catalog':
+      return {
+        sql: `SELECT * FROM ${tableName} ORDER BY display_order ASC, table_name ASC LIMIT ${STATUS_TABLE_PREVIEW_LIMIT}`,
+        params: [],
+      };
+    case 'table_column_keys':
+      return {
+        sql: `SELECT ck.*, tc.group_name FROM table_column_keys ck JOIN table_catalog tc ON tc.table_name = ck.table_name ORDER BY ck.table_name ASC, ck.column_name ASC LIMIT ${STATUS_TABLE_PREVIEW_LIMIT}`,
         params: [],
       };
     default:
