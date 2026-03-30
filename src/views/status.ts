@@ -2303,18 +2303,32 @@ export function getCacheStatusPage(user: {
     }
 
     function formatCellValue(column, value, tableName) {
-      if (column === 'request_id' && tableName === 'ai_summary_log' && value && typeof value === 'string') {
-        return '<a href="/ai-summary/' + encodeURIComponent(value) + '" target="_blank" style="color:#6cb4ee;word-break:break-all">' + escapeHtmlText(value) + '</a>';
+      if (value && typeof value === 'string') {
+        if (column === 'request_id' && tableName === 'ai_summary_log') {
+          return '<a href="/ai-summary/' + encodeURIComponent(value) + '" target="_blank" style="color:#6cb4ee;word-break:break-all">' + escapeHtmlText(value) + '</a>';
+        }
+        if (column === 'summary_request_id' && tableName === 'ai_summary_reviews') {
+          return '<a href="/ai-summary/' + encodeURIComponent(value) + '" target="_blank" style="color:#6cb4ee;word-break:break-all">' + escapeHtmlText(value) + '</a>';
+        }
       }
       return formatPreviewValue(value);
     }
 
-    function renderStatusTablePreview(columns, rows, limit, tableName) {
+    function renderColumnKeyBadge(keyType) {
+      if (!keyType) return '';
+      if (keyType === 'pk') return ' <span style="font-size:9px;font-weight:700;padding:0 4px;border-radius:3px;background:#ffebe9;color:#cf222e">PK</span>';
+      if (keyType === 'fk') return ' <span style="font-size:9px;font-weight:700;padding:0 4px;border-radius:3px;background:#ddf4ff;color:#0969da">FK</span>';
+      if (keyType === 'pk+fk') return ' <span style="font-size:9px;font-weight:700;padding:0 4px;border-radius:3px;background:#ffebe9;color:#cf222e">PK</span><span style="font-size:9px;font-weight:700;padding:0 4px;border-radius:3px;background:#ddf4ff;color:#0969da;margin-left:2px">FK</span>';
+      return '';
+    }
+
+    function renderStatusTablePreview(columns, rows, limit, tableName, columnKeyInfo) {
       if (!rows || rows.length === 0) {
         return '<div class="modal-empty">表示できる保存データがありません</div>';
       }
+      var keyInfo = columnKeyInfo || {};
       var headerHtml = columns.map(function(column) {
-        return '<th>' + escapeHtmlText(column) + '</th>';
+        return '<th>' + escapeHtmlText(column) + renderColumnKeyBadge(keyInfo[column]) + '</th>';
       }).join('');
       var bodyHtml = rows.map(function(row) {
         return '<tr>' + columns.map(function(column) {
@@ -2337,7 +2351,7 @@ export function getCacheStatusPage(user: {
         openStatusModal(
           tableName + ' の保存データ',
           (data.description || '') + (data.migration ? ' / マイグレーション ' + data.migration : ''),
-          renderStatusTablePreview(data.columns || [], data.rows || [], data.limit || 20, tableName)
+          renderStatusTablePreview(data.columns || [], data.rows || [], data.limit || 20, tableName, data.columnKeyInfo || {})
         );
       } catch (_error) {
         showStatusModalError(title, '', '保存データの取得に失敗しました');
