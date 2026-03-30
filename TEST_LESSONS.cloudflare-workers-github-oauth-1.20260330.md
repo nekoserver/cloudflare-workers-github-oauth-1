@@ -12,6 +12,23 @@
 
 API側で `PRAGMA table_info(ai_summary_reviews)` の結果を `columns` として返していたが、PRAGMAはテーブル定義のカラムのみ返す（SQLiteの仕様）。JOINで追加された `repo_full_name`, `pr_number` は `columns` に含まれない。クライアント側は `columns.map(col => row[col])` でセルを描画するため、`columns` にないカラムは表示されない。
 
+### 解決
+
+| コミット | 内容 |
+|---|---|
+| [`28a5419`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/28a5419) | JOINカラムがcolumnsに含まれずクライアントで表示されない問題を修正（インライン実装） |
+| [`4979450`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/4979450) | `mergeColumnsFromRows` に純粋関数として切り出し、ユニットテスト6件追加 |
+| [`0e93417`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/0e93417) | `/api/status/tables/:table/rows` の統合テスト追加（columns/rows整合性検証含む） |
+
+PR: [#196](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/pull/196)
+
+**解決の要点**: `PRAGMA table_info` のカラム一覧を行データのキーで補完する `mergeColumnsFromRows` 関数を導入。PRAGMAにないJOINカラムも `columns` に含まれるようになり、クライアント側で全カラムが表示される。
+
+**変更ファイル**:
+- `src/index.ts` — `mergeColumnsFromRows` 関数の定義、ルートハンドラから呼び出し
+- `src/utils/mergeColumnsFromRows.test.ts` — 純粋関数のユニットテスト6件
+- `src/routes/status-tables.test.ts` — API統合テスト7件
+
 ### どうテストしていれば防げたか
 
 **テスト対象**: APIレスポンスの `columns` と `rows` の整合性
