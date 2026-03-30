@@ -552,38 +552,38 @@ export function mergeColumnsFromRows(
 }
 
 /**
- * カラムのキー種別（PK/FK）を返す。ER図の定義と一致させること。
- * 'pk' | 'fk' | 'pk+fk' | null
+ * カラムのキー種別を返す。ER図の定義と一致させること。
+ * 'pk' | 'fk' | 'pk+fk' | 'uk' | 'idx' | null
  */
-export type ColumnKeyType = 'pk' | 'fk' | 'pk+fk' | null;
+export type ColumnKeyType = 'pk' | 'fk' | 'pk+fk' | 'uk' | 'idx' | null;
 
 export interface ColumnKeyInfo {
   [columnName: string]: ColumnKeyType;
 }
 
 export const TABLE_COLUMN_KEYS: Record<string, ColumnKeyInfo> = {
-  user_sessions: { id: 'pk' },
+  user_sessions: { id: 'pk', user_id: 'uk' },
   teams: { id: 'pk' },
   workspaces: { id: 'pk', team_id: 'fk' },
   team_members: { team_id: 'pk+fk', user_id: 'pk' },
-  installation_permissions: { id: 'pk' },
-  commit_calendar_cache: { id: 'pk' },
-  commit_list_cache: {},
-  cache_stats: {},
-  cloudflare_setup_pending: { id: 'pk' },
-  commit_search_history: { id: 'pk' },
+  installation_permissions: { id: 'pk', installation_id: 'idx', repo_name: 'idx', updated_at: 'idx' },
+  commit_calendar_cache: { id: 'pk', owner: 'idx', repo: 'idx', year: 'idx', month: 'idx', workspace_id: 'idx' },
+  commit_list_cache: { workspace_id: 'idx', owner: 'idx', repo: 'idx', date: 'idx' },
+  cache_stats: { user_id: 'idx', owner: 'idx', repo: 'idx' },
+  cloudflare_setup_pending: { id: 'pk', user_id: 'idx' },
+  commit_search_history: { id: 'pk', user_id: 'idx' },
   commit_search_repo_stats: { id: 'pk', search_history_id: 'fk' },
-  ai_summary_log: { id: 'pk' },
+  ai_summary_log: { id: 'pk', request_id: 'uk', event_date: 'idx' },
   ai_summary_reviews: { id: 'pk', summary_request_id: 'fk' },
-  repo_color_settings: { id: 'pk' },
-  repo_groups: { id: 'pk' },
+  repo_color_settings: { id: 'pk', workspace_id: 'idx', repo_name: 'idx' },
+  repo_groups: { id: 'pk', workspace_id: 'idx' },
   repo_group_members: { group_id: 'pk+fk', repo_name: 'pk' },
   resend_webhook_sources: { id: 'pk' },
-  email_send_log: { id: 'pk', source_id: 'fk' },
-  resend_webhook_log: { id: 'pk', source_id: 'fk' },
-  email_suppression_list: { id: 'pk', source_id: 'fk', origin_webhook_log_id: 'fk' },
-  email_mfa_challenges: { id: 'pk', source_id: 'fk' },
-  email_audit_anomalies: { id: 'pk', source_id: 'fk' },
+  email_send_log: { id: 'pk', source_id: 'fk', resend_email_id: 'idx', email_type: 'idx' },
+  resend_webhook_log: { id: 'pk', source_id: 'fk', resend_email_id: 'idx', event_type: 'idx', created_at: 'idx' },
+  email_suppression_list: { id: 'pk', source_id: 'fk', origin_webhook_log_id: 'fk', email: 'idx' },
+  email_mfa_challenges: { id: 'pk', source_id: 'fk', user_id: 'idx', resend_email_id: 'idx', expires_at: 'idx' },
+  email_audit_anomalies: { id: 'pk', source_id: 'fk', anomaly_type: 'idx', severity: 'idx', period_start: 'idx' },
   table_catalog: { table_name: 'pk' },
   table_column_keys: { table_name: 'pk+fk', column_name: 'pk' },
 };
@@ -639,7 +639,7 @@ export const TABLE_GROUP_MAP: Record<string, string> = {
   table_group_permissions: 'config',
 };
 
-const GROUP_LABELS: Record<string, string> = {
+export const GROUP_LABELS: Record<string, string> = {
   auth: 'Auth / Session',
   commit: 'Commit / Cache',
   ai: 'AI Summary',
@@ -1822,6 +1822,8 @@ app.get('/status', authMiddleware, async (c) => {
       entries: [],
     },
     tables: [],
+    tableGroupMap: TABLE_GROUP_MAP,
+    groupLabels: GROUP_LABELS,
     userContext: {
       teamName: null, teamId: null,
       workspaceName: null, workspaceId: null,
