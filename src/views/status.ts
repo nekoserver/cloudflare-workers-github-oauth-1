@@ -2367,29 +2367,27 @@ export function getCacheStatusPage(user: {
       var tableId = 'preview-table-' + tableName.replace(/[^a-zA-Z0-9_]/g, '');
       var html = '<div class="modal-note">最新 ' + escapeHtmlText(String(limit)) + ' 件を表示しています。値は D1 に保存されている内容をそのまま確認しやすい形で表示しています。</div>'
         + '<div class="table-scroll"><table id="' + tableId + '" class="preview-table"><thead><tr>' + headerHtml + '</tr></thead><tbody>' + bodyHtml + '</tbody></table></div>';
-      if (filterable.length > 0) {
-        html += '<script>'
-          + '(function(){'
-          + 'var tbl=document.getElementById("' + tableId + '");'
-          + 'if(!tbl)return;'
-          + 'var selects=tbl.querySelectorAll(".th-filter-select");'
-          + 'function applyFilters(){'
-          + '  var trs=tbl.querySelectorAll("tbody tr");'
-          + '  for(var i=0;i<trs.length;i++){'
-          + '    var show=true;'
-          + '    for(var j=0;j<selects.length;j++){'
-          + '      var col=selects[j].getAttribute("data-filter-column");'
-          + '      var val=selects[j].value;'
-          + '      if(val && trs[i].getAttribute("data-filter-"+col)!==val){show=false;break;}'
-          + '    }'
-          + '    trs[i].style.display=show?"":"none";'
-          + '  }'
-          + '}'
-          + 'for(var k=0;k<selects.length;k++){selects[k].addEventListener("change",applyFilters);}'
-          + '})();'
-          + '</script>';
-      }
       return html;
+    }
+
+    function bindFilterSelects(tableId) {
+      var tbl = document.getElementById(tableId);
+      if (!tbl) return;
+      var selects = tbl.querySelectorAll('.th-filter-select');
+      if (!selects.length) return;
+      function applyFilters() {
+        var trs = tbl.querySelectorAll('tbody tr');
+        for (var i = 0; i < trs.length; i++) {
+          var show = true;
+          for (var j = 0; j < selects.length; j++) {
+            var col = selects[j].getAttribute('data-filter-column');
+            var val = selects[j].value;
+            if (val && trs[i].getAttribute('data-filter-' + col) !== val) { show = false; break; }
+          }
+          trs[i].style.display = show ? '' : 'none';
+        }
+      }
+      for (var k = 0; k < selects.length; k++) { selects[k].addEventListener('change', applyFilters); }
     }
 
     function renderGroupErDiagram(erData) {
@@ -2453,14 +2451,17 @@ export function getCacheStatusPage(user: {
         }
         var data = await response.json();
         var groupErButton = '<div style="margin-bottom:8px">'
-          + '<button type="button" onclick="(function(){var fn=document.querySelector(\'[data-group-er-table]\');if(fn)fn.click();})()" data-group-er-table="' + escapeHtmlText(tableName) + '" '
+          + '<button type="button" data-group-er-table="' + escapeHtmlText(tableName) + '" '
           + 'style="font-size:12px;padding:4px 12px;border:1px solid #666;border-radius:4px;background:transparent;color:inherit;cursor:pointer">'
           + 'このテーブルが属するグループのテーブル構造を確認する</button></div>';
+        var previewHtml = renderStatusTablePreview(data.columns || [], data.rows || [], data.limit || 20, tableName, data.columnKeyInfo || {}, data.filterableColumns || []);
         openStatusModal(
           tableName + ' の保存データ',
           (data.description || '') + (data.migration ? ' / マイグレーション ' + data.migration : ''),
-          groupErButton + renderStatusTablePreview(data.columns || [], data.rows || [], data.limit || 20, tableName, data.columnKeyInfo || {}, data.filterableColumns || [])
+          groupErButton + previewHtml
         );
+        var tableId = 'preview-table-' + tableName.replace(/[^a-zA-Z0-9_]/g, '');
+        bindFilterSelects(tableId);
         var erBtn = document.querySelector('[data-group-er-table]');
         if (erBtn) {
           erBtn.addEventListener('click', function() {

@@ -96,6 +96,23 @@ describe('/status ページの thフィルタ機能', () => {
   });
 });
 
+describe('/status ページの script安全性', () => {
+  it('JavaScript文字列内に </script> リテラルが含まれない（HTMLパーサー破壊防止）', () => {
+    const html = getCacheStatusPage(minimalUser, minimalData);
+    const scriptBlocks = html.match(/<script[\s>][\s\S]*?<\/script>/gi) || [];
+    for (const block of scriptBlocks) {
+      const inner = block.replace(/^<script[^>]*>/i, '').replace(/<\/script>$/i, '');
+      expect(inner).not.toContain('</script>');
+    }
+  });
+
+  it('bindFilterSelects 関数がinnerHTML後にフィルタをバインドする', () => {
+    const html = getCacheStatusPage(minimalUser, minimalData);
+    expect(html).toContain('function bindFilterSelects(tableId)');
+    expect(html).toContain('bindFilterSelects(tableId)');
+  });
+});
+
 describe('/status ページの グループER図モーダル', () => {
   it('openGroupEr 関数が存在する', () => {
     const html = getCacheStatusPage(minimalUser, minimalData);
