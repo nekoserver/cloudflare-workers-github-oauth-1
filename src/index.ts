@@ -561,7 +561,7 @@ export interface ColumnKeyInfo {
   [columnName: string]: ColumnKeyType;
 }
 
-const TABLE_COLUMN_KEYS: Record<string, ColumnKeyInfo> = {
+export const TABLE_COLUMN_KEYS: Record<string, ColumnKeyInfo> = {
   user_sessions: { id: 'pk' },
   teams: { id: 'pk' },
   workspaces: { id: 'pk', team_id: 'fk' },
@@ -603,6 +603,131 @@ export function isAiSummaryLinkColumn(tableName: string, columnName: string): bo
     (columnName === 'request_id' && tableName === 'ai_summary_log') ||
     (columnName === 'summary_request_id' && tableName === 'ai_summary_reviews')
   );
+}
+
+/**
+ * テーブル×カラムの組み合わせで、thタップ時にフィルタ用セレクトメニューを表示するかどうか。
+ * 行データからユニーク値を抽出してフィルタ選択肢にする。
+ */
+const FILTERABLE_COLUMNS: Record<string, string[]> = {
+  table_catalog: ['group_name', 'sync_policy'],
+  table_column_keys: ['key_type', 'group_name'],
+};
+
+export function isFilterableColumn(tableName: string, columnName: string): boolean {
+  const cols = FILTERABLE_COLUMNS[tableName];
+  return cols ? cols.includes(columnName) : false;
+}
+
+export function getFilterableColumns(tableName: string): string[] {
+  return FILTERABLE_COLUMNS[tableName] ?? [];
+}
+
+/**
+ * テーブル→グループのマッピング（ER図と同期）。
+ * table_catalog がDBに存在しない場合のフォールバック。
+ */
+export const TABLE_GROUP_MAP: Record<string, string> = {
+  user_sessions: 'auth', teams: 'auth', workspaces: 'auth', team_members: 'auth',
+  commit_calendar_cache: 'commit', commit_list_cache: 'commit', cache_stats: 'commit',
+  commit_search_history: 'commit', commit_search_repo_stats: 'commit', cloudflare_setup_pending: 'commit',
+  ai_summary_log: 'ai', ai_summary_reviews: 'ai',
+  resend_webhook_sources: 'email', email_send_log: 'email', resend_webhook_log: 'email',
+  email_suppression_list: 'email', email_mfa_challenges: 'email', email_audit_anomalies: 'email',
+  installation_permissions: 'config', repo_color_settings: 'config', repo_groups: 'config',
+  repo_group_members: 'config', table_catalog: 'config', table_column_keys: 'config',
+  table_group_permissions: 'config',
+};
+
+const GROUP_LABELS: Record<string, string> = {
+  auth: 'Auth / Session',
+  commit: 'Commit / Cache',
+  ai: 'AI Summary',
+  email: 'Email / Resend',
+  config: 'Config / Settings',
+};
+
+const GROUP_COLORS: Record<string, string> = {
+  auth: '#388bfd',
+  commit: '#3fb950',
+  ai: '#d29922',
+  email: '#f85149',
+  config: '#a371f7',
+};
+
+export interface GroupErColumn {
+  name: string;
+  keyType: ColumnKeyType;
+  fkTarget: string | null;
+}
+
+export interface GroupErTable {
+  tableName: string;
+  description: string;
+  columns: GroupErColumn[];
+}
+
+export interface GroupErData {
+  groupName: string;
+  groupLabel: string;
+  groupColor: string;
+  tables: GroupErTable[];
+}
+
+/**
+ * カラムのFK先テーブルのマッピング（ER図と同期）。
+ * table_column_keys がDBに存在しない場合のフォールバック。
+ */
+export const COLUMN_FK_TARGETS: Record<string, Record<string, string>> = {
+  workspaces: { team_id: 'teams' },
+  team_members: { team_id: 'teams' },
+  commit_search_repo_stats: { search_history_id: 'commit_search_history' },
+  ai_summary_reviews: { summary_request_id: 'ai_summary_log' },
+  repo_group_members: { group_id: 'repo_groups' },
+  email_send_log: { source_id: 'resend_webhook_sources' },
+  resend_webhook_log: { source_id: 'resend_webhook_sources' },
+  email_suppression_list: { source_id: 'resend_webhook_sources', origin_webhook_log_id: 'resend_webhook_log' },
+  email_mfa_challenges: { source_id: 'resend_webhook_sources' },
+  email_audit_anomalies: { source_id: 'resend_webhook_sources' },
+  table_column_keys: { table_name: 'table_catalog' },
+};
+
+export function buildGroupErData(
+  tableName: string,
+  groupMap: Record<string, string>,
+  tableDescriptions: Record<string, string>,
+  columnKeys: Record<string, ColumnKeyInfo>,
+  fkTargets: Record<string, Record<string, string>>,
+  pragmaColumnsMap: Record<string, string[]>,
+): GroupErData | null {
+  const groupName = groupMap[tableName];
+  if (!groupName) return null;
+
+  const groupTables = Object.entries(groupMap)
+    .filter(([, g]) => g === groupName)
+    .map(([t]) => t);
+
+  const tables: GroupErTable[] = groupTables.map((t) => {
+    const cols = pragmaColumnsMap[t] ?? [];
+    const keys = columnKeys[t] ?? {};
+    const fks = fkTargets[t] ?? {};
+    return {
+      tableName: t,
+      description: tableDescriptions[t] ?? '',
+      columns: cols.map((c) => ({
+        name: c,
+        keyType: keys[c] ?? null,
+        fkTarget: fks[c] ?? null,
+      })),
+    };
+  });
+
+  return {
+    groupName,
+    groupLabel: GROUP_LABELS[groupName] ?? groupName,
+    groupColor: GROUP_COLORS[groupName] ?? '#8b949e',
+    tables,
+  };
 }
 
 function getStatusTableDefinition(tableName: string): StatusTableDefinition | undefined {
@@ -2127,6 +2252,7 @@ app.get('/api/status/tables/:table/rows', authMiddleware, async (c) => {
       description: tableDefinition.description,
       columns: [],
       columnKeyInfo: {},
+      filterableColumns: [],
       rows: [],
       limit: STATUS_TABLE_PREVIEW_LIMIT,
     });
@@ -2149,6 +2275,7 @@ app.get('/api/status/tables/:table/rows', authMiddleware, async (c) => {
       description: tableDefinition.description,
       columns,
       columnKeyInfo,
+      filterableColumns: getFilterableColumns(tableName),
       rows,
       limit: STATUS_TABLE_PREVIEW_LIMIT,
     });
@@ -2272,6 +2399,71 @@ app.get('/api/status/tables/:table/migration-details', authMiddleware, async (c)
       migrationDetailPath: `/api/status/tables/${encodeURIComponent(tableName)}/migration-details`,
     },
   });
+});
+
+app.get('/api/status/tables/:table/group-er', authMiddleware, async (c) => {
+  const db = c.env.DB;
+  const tableName = c.req.param('table');
+
+  const tableDescriptions: Record<string, string> = {};
+  for (const tbl of STATUS_TABLE_DEFINITIONS) {
+    tableDescriptions[tbl.name] = tbl.description;
+  }
+
+  let groupMap = TABLE_GROUP_MAP;
+  let fkTargets = COLUMN_FK_TARGETS;
+  const pragmaColumnsMap: Record<string, string[]> = {};
+
+  if (db) {
+    try {
+      const catalogRows = await db.prepare('SELECT table_name, group_name, description FROM table_catalog').all<{
+        table_name: string; group_name: string; description: string;
+      }>();
+      if (catalogRows.results && catalogRows.results.length > 0) {
+        groupMap = {};
+        for (const row of catalogRows.results) {
+          groupMap[row.table_name] = row.group_name;
+          tableDescriptions[row.table_name] = row.description;
+        }
+      }
+    } catch {
+      // table_catalog未作成 — フォールバック定数を使用
+    }
+
+    try {
+      const keyRows = await db.prepare('SELECT table_name, column_name, fk_target_table FROM table_column_keys WHERE fk_target_table IS NOT NULL').all<{
+        table_name: string; column_name: string; fk_target_table: string;
+      }>();
+      if (keyRows.results && keyRows.results.length > 0) {
+        fkTargets = {};
+        for (const row of keyRows.results) {
+          if (!fkTargets[row.table_name]) fkTargets[row.table_name] = {};
+          fkTargets[row.table_name][row.column_name] = row.fk_target_table;
+        }
+      }
+    } catch {
+      // table_column_keys未作成 — フォールバック定数を使用
+    }
+
+    const groupName = groupMap[tableName];
+    if (groupName) {
+      const groupTables = Object.entries(groupMap).filter(([, g]) => g === groupName).map(([t]) => t);
+      for (const t of groupTables) {
+        try {
+          const pragma = await db.prepare(`PRAGMA table_info(${t})`).all<{ name: string }>();
+          pragmaColumnsMap[t] = (pragma.results ?? []).map((col) => col.name);
+        } catch {
+          pragmaColumnsMap[t] = [];
+        }
+      }
+    }
+  }
+
+  const erData = buildGroupErData(tableName, groupMap, tableDescriptions, TABLE_COLUMN_KEYS, fkTargets, pragmaColumnsMap);
+  if (!erData) {
+    return jsonUtf8({ error: 'Group not found for table' }, 404);
+  }
+  return jsonUtf8(erData);
 });
 
 /**

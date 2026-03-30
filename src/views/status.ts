@@ -2322,21 +2322,125 @@ export function getCacheStatusPage(user: {
       return '';
     }
 
-    function renderStatusTablePreview(columns, rows, limit, tableName, columnKeyInfo) {
+    function getUniqueValues(rows, columnName) {
+      var seen = {};
+      var result = [];
+      for (var i = 0; i < rows.length; i++) {
+        var val = rows[i][columnName];
+        if (val != null && !seen[val]) {
+          seen[val] = true;
+          result.push(String(val));
+        }
+      }
+      return result.sort();
+    }
+
+    function renderStatusTablePreview(columns, rows, limit, tableName, columnKeyInfo, filterableColumns) {
       if (!rows || rows.length === 0) {
         return '<div class="modal-empty">表示できる保存データがありません</div>';
       }
       var keyInfo = columnKeyInfo || {};
+      var filterable = filterableColumns || [];
       var headerHtml = columns.map(function(column) {
-        return '<th>' + escapeHtmlText(column) + renderColumnKeyBadge(keyInfo[column]) + '</th>';
+        var badge = renderColumnKeyBadge(keyInfo[column]);
+        if (filterable.indexOf(column) !== -1) {
+          var uniqueVals = getUniqueValues(rows, column);
+          var optionsHtml = '<option value="">すべて</option>' + uniqueVals.map(function(v) {
+            return '<option value="' + escapeHtmlText(v) + '">' + escapeHtmlText(v) + '</option>';
+          }).join('');
+          return '<th>' + escapeHtmlText(column) + badge
+            + ' <select class="th-filter-select" data-filter-column="' + escapeHtmlText(column) + '" style="font-size:10px;padding:1px 2px;border-radius:3px;border:1px solid #888;background:transparent;color:inherit;cursor:pointer;max-width:80px">'
+            + optionsHtml + '</select></th>';
+        }
+        return '<th>' + escapeHtmlText(column) + badge + '</th>';
       }).join('');
-      var bodyHtml = rows.map(function(row) {
-        return '<tr>' + columns.map(function(column) {
+      var bodyHtml = rows.map(function(row, idx) {
+        var dataAttrs = '';
+        for (var f = 0; f < filterable.length; f++) {
+          var fCol = filterable[f];
+          dataAttrs += ' data-filter-' + fCol + '="' + escapeHtmlText(String(row[fCol] != null ? row[fCol] : '')) + '"';
+        }
+        return '<tr' + dataAttrs + '>' + columns.map(function(column) {
           return '<td>' + formatCellValue(column, row[column], tableName) + '</td>';
         }).join('') + '</tr>';
       }).join('');
-      return '<div class="modal-note">最新 ' + escapeHtmlText(String(limit)) + ' 件を表示しています。値は D1 に保存されている内容をそのまま確認しやすい形で表示しています。</div>'
-        + '<div class="table-scroll"><table class="preview-table"><thead><tr>' + headerHtml + '</tr></thead><tbody>' + bodyHtml + '</tbody></table></div>';
+      var tableId = 'preview-table-' + tableName.replace(/[^a-zA-Z0-9_]/g, '');
+      var html = '<div class="modal-note">最新 ' + escapeHtmlText(String(limit)) + ' 件を表示しています。値は D1 に保存されている内容をそのまま確認しやすい形で表示しています。</div>'
+        + '<div class="table-scroll"><table id="' + tableId + '" class="preview-table"><thead><tr>' + headerHtml + '</tr></thead><tbody>' + bodyHtml + '</tbody></table></div>';
+      if (filterable.length > 0) {
+        html += '<script>'
+          + '(function(){'
+          + 'var tbl=document.getElementById("' + tableId + '");'
+          + 'if(!tbl)return;'
+          + 'var selects=tbl.querySelectorAll(".th-filter-select");'
+          + 'function applyFilters(){'
+          + '  var trs=tbl.querySelectorAll("tbody tr");'
+          + '  for(var i=0;i<trs.length;i++){'
+          + '    var show=true;'
+          + '    for(var j=0;j<selects.length;j++){'
+          + '      var col=selects[j].getAttribute("data-filter-column");'
+          + '      var val=selects[j].value;'
+          + '      if(val && trs[i].getAttribute("data-filter-"+col)!==val){show=false;break;}'
+          + '    }'
+          + '    trs[i].style.display=show?"":"none";'
+          + '  }'
+          + '}'
+          + 'for(var k=0;k<selects.length;k++){selects[k].addEventListener("change",applyFilters);}'
+          + '})();'
+          + '</script>';
+      }
+      return html;
+    }
+
+    function renderGroupErDiagram(erData) {
+      var html = '<div style="display:flex;flex-wrap:wrap;gap:16px;padding:8px">';
+      for (var i = 0; i < erData.tables.length; i++) {
+        var tbl = erData.tables[i];
+        html += '<div style="border:1px solid #555;border-radius:6px;min-width:220px;max-width:320px;flex:1">';
+        html += '<div style="padding:6px 10px;font-weight:700;font-size:13px;border-bottom:1px solid #555;background:' + escapeHtmlText(erData.groupColor) + '22;border-radius:6px 6px 0 0">'
+          + escapeHtmlText(tbl.tableName)
+          + '</div>';
+        if (tbl.description) {
+          html += '<div style="padding:3px 10px;font-size:11px;color:#888;border-bottom:1px solid #333">' + escapeHtmlText(tbl.description) + '</div>';
+        }
+        for (var j = 0; j < tbl.columns.length; j++) {
+          var col = tbl.columns[j];
+          html += '<div style="padding:2px 10px;font-size:12px;display:flex;align-items:center;gap:4px">';
+          html += '<code style="font-size:11px">' + escapeHtmlText(col.name) + '</code>';
+          if (col.keyType === 'pk' || col.keyType === 'pk+fk') {
+            html += ' <span style="font-size:9px;font-weight:700;padding:0 4px;border-radius:3px;background:#ffebe9;color:#cf222e">PK</span>';
+          }
+          if (col.keyType === 'fk' || col.keyType === 'pk+fk') {
+            html += ' <span style="font-size:9px;font-weight:700;padding:0 4px;border-radius:3px;background:#ddf4ff;color:#0969da">FK</span>';
+          }
+          if (col.fkTarget) {
+            html += ' <span style="font-size:10px;color:#888">&rarr; ' + escapeHtmlText(col.fkTarget) + '</span>';
+          }
+          html += '</div>';
+        }
+        html += '</div>';
+      }
+      html += '</div>';
+      return html;
+    }
+
+    async function openGroupEr(tableName) {
+      var title = tableName + ' のグループ ER 図';
+      showStatusModalLoading(title, 'グループ情報を取得しています');
+      try {
+        var response = await fetch('/api/status/tables/' + encodeURIComponent(tableName) + '/group-er');
+        if (!response.ok) {
+          throw new Error('group er request failed');
+        }
+        var erData = await response.json();
+        openStatusModal(
+          erData.groupLabel + ' グループ ER 図',
+          tableName + ' が属するグループ「' + erData.groupLabel + '」の全テーブル構造',
+          renderGroupErDiagram(erData)
+        );
+      } catch (_error) {
+        showStatusModalError(title, '', 'グループ情報の取得に失敗しました');
+      }
     }
 
     async function openTablePreview(tableName) {
@@ -2348,11 +2452,21 @@ export function getCacheStatusPage(user: {
           throw new Error('table preview request failed');
         }
         var data = await response.json();
+        var groupErButton = '<div style="margin-bottom:8px">'
+          + '<button type="button" onclick="(function(){var fn=document.querySelector(\'[data-group-er-table]\');if(fn)fn.click();})()" data-group-er-table="' + escapeHtmlText(tableName) + '" '
+          + 'style="font-size:12px;padding:4px 12px;border:1px solid #666;border-radius:4px;background:transparent;color:inherit;cursor:pointer">'
+          + 'このテーブルが属するグループのテーブル構造を確認する</button></div>';
         openStatusModal(
           tableName + ' の保存データ',
           (data.description || '') + (data.migration ? ' / マイグレーション ' + data.migration : ''),
-          renderStatusTablePreview(data.columns || [], data.rows || [], data.limit || 20, tableName, data.columnKeyInfo || {})
+          groupErButton + renderStatusTablePreview(data.columns || [], data.rows || [], data.limit || 20, tableName, data.columnKeyInfo || {}, data.filterableColumns || [])
         );
+        var erBtn = document.querySelector('[data-group-er-table]');
+        if (erBtn) {
+          erBtn.addEventListener('click', function() {
+            openGroupEr(tableName);
+          });
+        }
       } catch (_error) {
         showStatusModalError(title, '', '保存データの取得に失敗しました');
       }

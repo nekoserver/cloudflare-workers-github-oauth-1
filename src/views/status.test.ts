@@ -68,3 +68,52 @@ describe('/status ページの PK/FK バッジ表示', () => {
     expect(html).toContain('data.columnKeyInfo');
   });
 });
+
+describe('/status ページの thフィルタ機能', () => {
+  it('renderStatusTablePreview が filterableColumns を受け取る', () => {
+    const html = getCacheStatusPage(minimalUser, minimalData);
+    expect(html).toContain('filterableColumns');
+  });
+
+  it('th-filter-select クラスのセレクトメニューを生成するロジックを含む', () => {
+    const html = getCacheStatusPage(minimalUser, minimalData);
+    expect(html).toContain('th-filter-select');
+  });
+
+  it('getUniqueValues 関数で行データからユニーク値を抽出する', () => {
+    const html = getCacheStatusPage(minimalUser, minimalData);
+    expect(html).toContain('function getUniqueValues(rows, columnName)');
+  });
+
+  it('フィルタ変更時に applyFilters で行の表示/非表示を切り替える', () => {
+    const html = getCacheStatusPage(minimalUser, minimalData);
+    expect(html).toContain('applyFilters');
+  });
+
+  it('openTablePreview が data.filterableColumns を渡す', () => {
+    const html = getCacheStatusPage(minimalUser, minimalData);
+    expect(html).toContain('data.filterableColumns');
+  });
+});
+
+describe('/status ページの グループER図モーダル', () => {
+  it('openGroupEr 関数が存在する', () => {
+    const html = getCacheStatusPage(minimalUser, minimalData);
+    expect(html).toContain('function openGroupEr(tableName)');
+  });
+
+  it('renderGroupErDiagram 関数が存在する', () => {
+    const html = getCacheStatusPage(minimalUser, minimalData);
+    expect(html).toContain('function renderGroupErDiagram(erData)');
+  });
+
+  it('モーダル上部にグループER図ボタンが配置される', () => {
+    const html = getCacheStatusPage(minimalUser, minimalData);
+    expect(html).toContain('このテーブルが属するグループのテーブル構造を確認する');
+  });
+
+  it('group-er APIエンドポイントを呼び出す', () => {
+    const html = getCacheStatusPage(minimalUser, minimalData);
+    expect(html).toContain('/group-er');
+  });
+});
