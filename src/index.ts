@@ -529,6 +529,58 @@ export function mergeColumnsFromRows(
   return merged;
 }
 
+/**
+ * カラムのキー種別（PK/FK）を返す。ER図の定義と一致させること。
+ * 'pk' | 'fk' | 'pk+fk' | null
+ */
+export type ColumnKeyType = 'pk' | 'fk' | 'pk+fk' | null;
+
+export interface ColumnKeyInfo {
+  [columnName: string]: ColumnKeyType;
+}
+
+const TABLE_COLUMN_KEYS: Record<string, ColumnKeyInfo> = {
+  user_sessions: { id: 'pk' },
+  teams: { id: 'pk' },
+  workspaces: { id: 'pk', team_id: 'fk' },
+  team_members: { team_id: 'pk+fk', user_id: 'pk' },
+  installation_permissions: { id: 'pk' },
+  commit_calendar_cache: { id: 'pk' },
+  commit_list_cache: {},
+  cache_stats: {},
+  cloudflare_setup_pending: { id: 'pk' },
+  commit_search_history: { id: 'pk' },
+  commit_search_repo_stats: { id: 'pk', search_history_id: 'fk' },
+  ai_summary_log: { id: 'pk' },
+  ai_summary_reviews: { id: 'pk', summary_request_id: 'fk' },
+  repo_color_settings: { id: 'pk' },
+  repo_groups: { id: 'pk' },
+  repo_group_members: { group_id: 'pk+fk', repo_name: 'pk' },
+  resend_webhook_sources: { id: 'pk' },
+  email_send_log: { id: 'pk', source_id: 'fk' },
+  resend_webhook_log: { id: 'pk', source_id: 'fk' },
+  email_suppression_list: { id: 'pk', source_id: 'fk', origin_webhook_log_id: 'fk' },
+  email_mfa_challenges: { id: 'pk', source_id: 'fk' },
+  email_audit_anomalies: { id: 'pk', source_id: 'fk' },
+};
+
+export function getColumnKeyType(tableName: string, columnName: string): ColumnKeyType {
+  const tableKeys = TABLE_COLUMN_KEYS[tableName];
+  if (!tableKeys) return null;
+  return tableKeys[columnName] ?? null;
+}
+
+/**
+ * summary_request_id → /ai-summary/{id} リンクの対象かどうかを判定する。
+ * request_id (ai_summary_log) と summary_request_id (ai_summary_reviews) が対象。
+ */
+export function isAiSummaryLinkColumn(tableName: string, columnName: string): boolean {
+  return (
+    (columnName === 'request_id' && tableName === 'ai_summary_log') ||
+    (columnName === 'summary_request_id' && tableName === 'ai_summary_reviews')
+  );
+}
+
 function getStatusTableDefinition(tableName: string): StatusTableDefinition | undefined {
   return STATUS_TABLE_DEFINITIONS.find((table) => table.name === tableName);
 }
@@ -2040,6 +2092,7 @@ app.get('/api/status/tables/:table/rows', authMiddleware, async (c) => {
       migration: tableDefinition.migration,
       description: tableDefinition.description,
       columns: [],
+      columnKeyInfo: {},
       rows: [],
       limit: STATUS_TABLE_PREVIEW_LIMIT,
     });
@@ -2051,11 +2104,17 @@ app.get('/api/status/tables/:table/rows', authMiddleware, async (c) => {
     const rowsResult = await db.prepare(previewQuery.sql).bind(...previewQuery.params).all<Record<string, unknown>>();
     const rows = rowsResult.results ?? [];
     const columns = mergeColumnsFromRows(pragmaColumns, rows);
+    const columnKeyInfo: Record<string, string> = {};
+    for (const col of columns) {
+      const keyType = getColumnKeyType(tableName, col);
+      if (keyType) columnKeyInfo[col] = keyType;
+    }
     return jsonUtf8({
       table: tableName,
       migration: tableDefinition.migration,
       description: tableDefinition.description,
       columns,
+      columnKeyInfo,
       rows,
       limit: STATUS_TABLE_PREVIEW_LIMIT,
     });

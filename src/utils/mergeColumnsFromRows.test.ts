@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { mergeColumnsFromRows } from '../index';
+import { mergeColumnsFromRows, getColumnKeyType, isAiSummaryLinkColumn } from '../index';
 
 describe('mergeColumnsFromRows', () => {
   it('rowsが空なら元のカラムをそのまま返す', () => {
@@ -47,5 +47,53 @@ describe('mergeColumnsFromRows', () => {
         expect(row[col as keyof typeof row], `row[${col}]がundefined`).not.toBeUndefined();
       }
     }
+  });
+});
+
+describe('getColumnKeyType', () => {
+  it('PKカラムに対してpkを返す', () => {
+    expect(getColumnKeyType('ai_summary_log', 'id')).toBe('pk');
+    expect(getColumnKeyType('user_sessions', 'id')).toBe('pk');
+  });
+
+  it('FKカラムに対してfkを返す', () => {
+    expect(getColumnKeyType('ai_summary_reviews', 'summary_request_id')).toBe('fk');
+    expect(getColumnKeyType('workspaces', 'team_id')).toBe('fk');
+    expect(getColumnKeyType('email_send_log', 'source_id')).toBe('fk');
+  });
+
+  it('PK+FKの複合キーに対してpk+fkを返す', () => {
+    expect(getColumnKeyType('team_members', 'team_id')).toBe('pk+fk');
+    expect(getColumnKeyType('repo_group_members', 'group_id')).toBe('pk+fk');
+  });
+
+  it('複合PKの各カラムにpkを返す', () => {
+    expect(getColumnKeyType('team_members', 'user_id')).toBe('pk');
+    expect(getColumnKeyType('repo_group_members', 'repo_name')).toBe('pk');
+  });
+
+  it('キーでないカラムにnullを返す', () => {
+    expect(getColumnKeyType('ai_summary_log', 'summary')).toBeNull();
+    expect(getColumnKeyType('user_sessions', 'timezone')).toBeNull();
+  });
+
+  it('存在しないテーブルにnullを返す', () => {
+    expect(getColumnKeyType('nonexistent_table', 'id')).toBeNull();
+  });
+});
+
+describe('isAiSummaryLinkColumn', () => {
+  it('ai_summary_log.request_id はリンク対象', () => {
+    expect(isAiSummaryLinkColumn('ai_summary_log', 'request_id')).toBe(true);
+  });
+
+  it('ai_summary_reviews.summary_request_id はリンク対象', () => {
+    expect(isAiSummaryLinkColumn('ai_summary_reviews', 'summary_request_id')).toBe(true);
+  });
+
+  it('他のテーブル・カラムの組み合わせはリンク対象外', () => {
+    expect(isAiSummaryLinkColumn('ai_summary_log', 'id')).toBe(false);
+    expect(isAiSummaryLinkColumn('ai_summary_reviews', 'request_id')).toBe(false);
+    expect(isAiSummaryLinkColumn('user_sessions', 'id')).toBe(false);
   });
 });
