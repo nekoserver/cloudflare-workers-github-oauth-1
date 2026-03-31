@@ -182,4 +182,27 @@ describe('/api/status/tables/:table/rows', () => {
     expect(data.rows.length).toBeGreaterThan(0);
     expect(data.rows[0]).toHaveProperty('request_id', 'uuid-log-001');
   });
+
+  it('commit_agent_log: rowsにデータが含まれる（0025テーブルのプレビュー）', async () => {
+    const columns = ['id', 'summary_request_id', 'repo_full_name', 'pr_number', 'agent_name', 'agent_version', 'created_at'];
+    const sample = {
+      id: 1,
+      summary_request_id: 'uuid-0025',
+      repo_full_name: 'owner/repo',
+      pr_number: 25,
+      agent_name: 'Codex',
+      agent_version: '1.0.0',
+      created_at: '2026-03-31T00:00:00Z',
+    };
+    const db = createMockDb(columns, [sample]);
+    const auth = await makeAuthHeader();
+    const res = await app.request('/api/status/tables/commit_agent_log/rows', {
+      headers: { Authorization: auth },
+    }, makeEnv(db));
+
+    expect(res.status).toBe(200);
+    const data = await res.json() as { rows: Record<string, unknown>[] };
+    expect(data.rows.length).toBeGreaterThan(0);
+    expect(data.rows[0]).toHaveProperty('summary_request_id', 'uuid-0025');
+  });
 });
