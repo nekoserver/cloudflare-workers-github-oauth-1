@@ -12,6 +12,7 @@ const data: CacheStatusData = {
     { name: 'commit_agent_log', exists: true, rowCount: 1, migration: '0025', description: 'コミットエージェント検出ログ', syncPolicy: 'auto' },
   ],
   tableGroupMap: { commit_agent_log: 'ai' },
+  unclassifiedAutoDetectedTables: [],
   groupLabels: { ai: 'AI Summary' },
   userContext: { teamName: null, teamId: null, workspaceName: null, workspaceId: null, role: null, allWorkspaces: [] },
 };

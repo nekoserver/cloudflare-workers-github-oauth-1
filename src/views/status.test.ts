@@ -51,14 +51,14 @@ describe('/status ページの PK/FK バッジ表示', () => {
     expect(html).toContain("keyType === 'pk+fk'");
   });
 
-  it('PKバッジの配色がER図と一致する（ライトモード: bg=#ffebe9, color=#cf222e）', () => {
+  it('PKバッジの配色がER図と一致する（bg=#e53e3e）', () => {
     const html = getCacheStatusPage(minimalUser, minimalData);
-    expect(html).toContain('background:#ffebe9;color:#cf222e');
+    expect(html).toContain('background:#e53e3e');
   });
 
-  it('FKバッジの配色がER図と一致する（ライトモード: bg=#ddf4ff, color=#0969da）', () => {
+  it('FKバッジの配色がER図と一致する（bg=#ed8936）', () => {
     const html = getCacheStatusPage(minimalUser, minimalData);
-    expect(html).toContain('background:#ddf4ff;color:#0969da');
+    expect(html).toContain('background:#ed8936');
   });
 
   it('renderStatusTablePreview が columnKeyInfo を受け取りヘッダーにバッジを埋め込む', () => {
