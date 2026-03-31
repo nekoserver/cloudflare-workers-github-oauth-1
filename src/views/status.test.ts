@@ -27,8 +27,15 @@ const minimalUser = { username: 'testuser' };
 describe('/status ページの formatCellValue リンク化', () => {
   it('ai_summary_log の request_id を /ai-summary/ リンクに変換するロジックを含む', () => {
     const html = getCacheStatusPage(minimalUser, minimalData);
-    expect(html).toContain("column === 'request_id' && tableName === 'ai_summary_log'");
+    expect(html).toContain("column === 'request_id'");
+    expect(html).toContain('isCommitRelatedTable(tableName)');
     expect(html).toContain('/ai-summary/');
+  });
+
+  it('commit_agent_log を含む commit系テーブルの request_id を /ai-summary/ リンクに変換するロジックを含む', () => {
+    const html = getCacheStatusPage(minimalUser, minimalData);
+    expect(html).toContain("return tableName.indexOf('commit_') === 0");
+    expect(html).toContain("tableName === 'commit_agent_log'");
   });
 
   it('ai_summary_reviews の summary_request_id を /ai-summary/ リンクに変換するロジックを含む', () => {

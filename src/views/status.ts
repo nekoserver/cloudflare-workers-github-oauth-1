@@ -2440,9 +2440,15 @@ export function getCacheStatusPage(user: {
       return '<pre class="preview-value">' + escapeHtmlText(String(value)) + '</pre>';
     }
 
+    function isCommitRelatedTable(tableName) {
+      if (!tableName) return false;
+      if (tableName === 'commit_agent_log') return true;
+      return tableName.indexOf('commit_') === 0;
+    }
+
     function formatCellValue(column, value, tableName) {
       if (value && typeof value === 'string') {
-        if (column === 'request_id' && tableName === 'ai_summary_log') {
+        if (column === 'request_id' && (tableName === 'ai_summary_log' || isCommitRelatedTable(tableName))) {
           return '<a href="/ai-summary/' + encodeURIComponent(value) + '" target="_blank" style="color:#6cb4ee;word-break:break-all">' + escapeHtmlText(value) + '</a>';
         }
         if (column === 'summary_request_id' && tableName === 'ai_summary_reviews') {
