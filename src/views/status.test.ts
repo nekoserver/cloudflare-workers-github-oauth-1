@@ -27,8 +27,15 @@ const minimalUser = { username: 'testuser' };
 describe('/status ページの formatCellValue リンク化', () => {
   it('ai_summary_log の request_id を /ai-summary/ リンクに変換するロジックを含む', () => {
     const html = getCacheStatusPage(minimalUser, minimalData);
-    expect(html).toContain("column === 'request_id' && tableName === 'ai_summary_log'");
+    expect(html).toContain("column === 'request_id'");
+    expect(html).toContain('isCommitRelatedTable(tableName)');
     expect(html).toContain('/ai-summary/');
+  });
+
+  it('commit_agent_log を含む commit系テーブルの request_id を /ai-summary/ リンクに変換するロジックを含む', () => {
+    const html = getCacheStatusPage(minimalUser, minimalData);
+    expect(html).toContain("return tableName.indexOf('commit_') === 0");
+    expect(html).toContain("tableName === 'commit_agent_log'");
   });
 
   it('ai_summary_reviews の summary_request_id を /ai-summary/ リンクに変換するロジックを含む', () => {
@@ -51,14 +58,14 @@ describe('/status ページの PK/FK バッジ表示', () => {
     expect(html).toContain("keyType === 'pk+fk'");
   });
 
-  it('PKバッジの配色がER図と一致する（ライトモード: bg=#ffebe9, color=#cf222e）', () => {
+  it('PKバッジの配色がER図と一致する（bg=#e53e3e）', () => {
     const html = getCacheStatusPage(minimalUser, minimalData);
-    expect(html).toContain('background:#ffebe9;color:#cf222e');
+    expect(html).toContain('background:#e53e3e');
   });
 
-  it('FKバッジの配色がER図と一致する（ライトモード: bg=#ddf4ff, color=#0969da）', () => {
+  it('FKバッジの配色がER図と一致する（bg=#ed8936）', () => {
     const html = getCacheStatusPage(minimalUser, minimalData);
-    expect(html).toContain('background:#ddf4ff;color:#0969da');
+    expect(html).toContain('background:#ed8936');
   });
 
   it('renderStatusTablePreview が columnKeyInfo を受け取りヘッダーにバッジを埋め込む', () => {

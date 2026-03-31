@@ -2440,9 +2440,15 @@ export function getCacheStatusPage(user: {
       return '<pre class="preview-value">' + escapeHtmlText(String(value)) + '</pre>';
     }
 
+    function isCommitRelatedTable(tableName) {
+      if (!tableName) return false;
+      if (tableName === 'commit_agent_log') return true;
+      return tableName.indexOf('commit_') === 0;
+    }
+
     function formatCellValue(column, value, tableName) {
       if (value && typeof value === 'string') {
-        if (column === 'request_id' && tableName === 'ai_summary_log') {
+        if (column === 'request_id' && (tableName === 'ai_summary_log' || isCommitRelatedTable(tableName))) {
           return '<a href="/ai-summary/' + encodeURIComponent(value) + '" target="_blank" style="color:#6cb4ee;word-break:break-all">' + escapeHtmlText(value) + '</a>';
         }
         if (column === 'summary_request_id' && tableName === 'ai_summary_reviews') {
@@ -2454,12 +2460,12 @@ export function getCacheStatusPage(user: {
 
     function renderColumnKeyBadge(keyType) {
       if (!keyType) return '';
-      var s = 'font-size:9px;font-weight:700;padding:0 4px;border-radius:3px;';
-      if (keyType === 'pk') return ' <span style="' + s + 'background:#ffebe9;color:#cf222e">PK</span>';
-      if (keyType === 'fk') return ' <span style="' + s + 'background:#ddf4ff;color:#0969da">FK</span>';
-      if (keyType === 'pk+fk') return ' <span style="' + s + 'background:#ffebe9;color:#cf222e">PK</span><span style="' + s + 'background:#ddf4ff;color:#0969da;margin-left:2px">FK</span>';
-      if (keyType === 'uk') return ' <span style="' + s + 'background:#fff8c5;color:#9a6700">UK</span>';
-      if (keyType === 'idx') return ' <span style="' + s + 'background:#f0f0f0;color:#656d76">IDX</span>';
+      var s = 'font-size:9px;font-weight:700;padding:0 4px;border-radius:3px;color:#fff;';
+      if (keyType === 'pk') return ' <span style="' + s + 'background:#e53e3e">PK</span>';
+      if (keyType === 'fk') return ' <span style="' + s + 'background:#ed8936">FK</span>';
+      if (keyType === 'pk+fk') return ' <span style="' + s + 'background:#e53e3e">PK</span><span style="' + s + 'background:#ed8936;margin-left:2px">FK</span>';
+      if (keyType === 'uk') return ' <span style="' + s + 'background:#48bb78">UK</span>';
+      if (keyType === 'idx') return ' <span style="' + s + 'background:#4299e1">IDX</span>';
       return '';
     }
 
