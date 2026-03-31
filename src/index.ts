@@ -83,6 +83,10 @@ const STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
   { name: 'table_column_keys', migration: '0024', description: 'カラムキー定義（PK/FK）', syncPolicy: 'manual' },
 ];
 
+const REQUIRED_STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
+  { name: 'commit_agent_log', migration: '0025', description: 'コミットエージェント検出ログ', syncPolicy: 'auto' },
+];
+
 const STATUS_MIGRATION_SQL: Record<string, string> = {
   '0001': `-- ユーザーセッション情報テーブル
 CREATE TABLE IF NOT EXISTS user_sessions (
@@ -752,7 +756,20 @@ export function buildGroupErData(
 }
 
 function getStatusTableDefinition(tableName: string): StatusTableDefinition | undefined {
-  return STATUS_TABLE_DEFINITIONS.find((table) => table.name === tableName);
+  return getEffectiveStatusTableDefinitions().find((table) => table.name === tableName);
+}
+
+function getEffectiveStatusTableDefinitions(): StatusTableDefinition[] {
+  const tableMap = new Map<string, StatusTableDefinition>();
+  for (const table of STATUS_TABLE_DEFINITIONS) {
+    tableMap.set(table.name, table);
+  }
+  for (const requiredTable of REQUIRED_STATUS_TABLE_DEFINITIONS) {
+    if (!tableMap.has(requiredTable.name)) {
+      tableMap.set(requiredTable.name, requiredTable);
+    }
+  }
+  return Array.from(tableMap.values());
 }
 
 function inferMigrationFromAppliedNames(tableName: string, appliedMigrationNames: string[]): string | null {
@@ -1986,7 +2003,7 @@ app.get('/status', authMiddleware, async (c) => {
     }
 
     const knownTables = new Set<string>();
-    for (const tbl of STATUS_TABLE_DEFINITIONS) {
+    for (const tbl of getEffectiveStatusTableDefinitions()) {
       knownTables.add(tbl.name);
       const entry: TableStatusEntry = {
         name: tbl.name,
@@ -2596,7 +2613,7 @@ app.get('/api/status/tables/:table/group-er', authMiddleware, async (c) => {
   const tableName = c.req.param('table');
 
   const tableDescriptions: Record<string, string> = {};
-  for (const tbl of STATUS_TABLE_DEFINITIONS) {
+  for (const tbl of getEffectiveStatusTableDefinitions()) {
     tableDescriptions[tbl.name] = tbl.description;
   }
 
