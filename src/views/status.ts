@@ -30,6 +30,7 @@ export interface TableStatusEntry {
   migration: string;
   description: string;
   syncPolicy: 'auto' | 'manual' | 'readonly';
+  isAutoDetected?: boolean;
 }
 
 /** ユーザーのチーム・ワークスペースコンテキスト */
@@ -105,6 +106,7 @@ export function getCacheStatusPage(user: {
   statusCommitCacheSortMode?: string;
   statusCommitCacheSortState?: string;
   statusChartMode?: string;
+  statusIgnoreUnknownUnclassifiedWarning?: string;
 }, data: CacheStatusData): string {
   const displayName = escapeHtml(user.name || user.username);
   const safeUsername = escapeHtml(user.username);
@@ -114,6 +116,7 @@ export function getCacheStatusPage(user: {
     ? 'commit_month_desc'
     : 'cached_at_desc';
   const statusChartMode = user.statusChartMode === 'repo' ? 'repo' : 'gradient';
+  const statusIgnoreUnknownUnclassifiedWarning = user.statusIgnoreUnknownUnclassifiedWarning === 'off' ? 'off' : 'on';
 
   const getCachedAtEpoch = (cachedAt: string): number => {
     const epoch = Date.parse(cachedAt);
@@ -170,14 +173,24 @@ export function getCacheStatusPage(user: {
     manual: { text: '手動', cls: 'sync-manual' },
     readonly: { text: '外部', cls: 'sync-readonly' },
   };
-  const tableRows = data.tables.map(t => {
+  const statusTables = data.tables.some((t) => t.name === 'commit_agent_log')
+    ? data.tables
+    : [...data.tables, {
+      name: 'commit_agent_log',
+      exists: false,
+      rowCount: null,
+      migration: '0025',
+      description: 'コミットエージェント検出ログ',
+      syncPolicy: 'auto' as const,
+    }];
+  const tableRows = statusTables.map(t => {
     const statusIcon = t.exists ? '<span class="status-ok">OK</span>' : '<span class="status-missing">未作成</span>';
     const count = t.exists && t.rowCount !== null ? String(t.rowCount) : '-';
     const policy = syncPolicyLabel[t.syncPolicy] || syncPolicyLabel.auto;
     const groupName = data.tableGroupMap[t.name] || '';
     const groupNum = groupIdMap[groupName] || 0;
     const migrationNum = parseInt(t.migration.replace(/[^0-9]/g, ''), 10) || 0;
-    return `<tr data-group-id="${groupNum}" data-migration-num="${migrationNum}">
+    return `<tr data-group-id="${groupNum}" data-migration-num="${migrationNum}" data-migration="${escapeHtml(t.migration)}" data-table-name="${escapeHtml(t.name)}">
       <td class="group-id-cell">${groupNum}</td>
       <td><button type="button" class="status-link-button" data-table-preview="${escapeHtml(t.name)}"><code>${escapeHtml(t.name)}</code></button></td>
       <td class="center">${statusIcon}</td>
@@ -451,6 +464,17 @@ export function getCacheStatusPage(user: {
     }
     .page-title { font-size: 36px; font-weight: 700; color: var(--text-primary); margin-bottom: 8px; }
     .page-subtitle { font-size: 18px; color: var(--text-muted); margin-bottom: 32px; }
+    .status-toast {
+      position: fixed; right: 20px; bottom: 20px; z-index: 2100;
+      background: #fed7e2; color: #97266d; border: 1px solid #f687b3;
+      border-radius: 10px; box-shadow: 0 10px 24px rgba(0,0,0,0.18);
+      padding: 12px 14px; max-width: min(420px, calc(100vw - 32px));
+      font-size: 13px; line-height: 1.5; display: none;
+    }
+    .status-toast.show { display: block; }
+    [data-theme="dark"] .status-toast {
+      background: #702459; color: #ffd2e8; border-color: #b83280;
+    }
 
     /* ユーザーコンテキスト */
     .context-grid {
@@ -1267,11 +1291,15 @@ export function getCacheStatusPage(user: {
 
       <!-- テーブル別マイグレーション状況 -->
       <div class="section">
-        <h2 class="section-title">テーブル別マイグレーション状況 <span class="section-count">(${data.tables.length})</span></h2>
+        <h2 class="section-title">テーブル別マイグレーション状況 <span class="section-count">(${statusTables.length})</span></h2>
         <div class="uml-button-row">
           <button type="button" class="uml-button" id="openUmlButton">
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="1" y="1" width="5" height="6" rx="1" stroke="white" stroke-width="1.5"/><rect x="10" y="9" width="5" height="6" rx="1" stroke="white" stroke-width="1.5"/><path d="M6 4h2.5a1.5 1.5 0 011.5 1.5V12" stroke="white" stroke-width="1.5"/></svg>
             UML を表示
+          </button>
+          <button type="button" class="uml-button" id="openCommitAgentLogButton">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="2" y="2" width="12" height="12" rx="2" stroke="white" stroke-width="1.5"/><path d="M4.5 6h7M4.5 8h7M4.5 10h4" stroke="white" stroke-width="1.5" stroke-linecap="round"/></svg>
+            0025(commit_agent_log) を開く
           </button>
           <button type="button" class="uml-refresh-button" id="refreshUmlButton">
             <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M14 8A6 6 0 114 3.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M4 0.5V4h3.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -1696,6 +1724,8 @@ export function getCacheStatusPage(user: {
     </div>
   </div>
 
+  <div id="unclassifiedWarningToast" class="status-toast" role="status" aria-live="polite"></div>
+
   <script>
     ${getThemeToggleScript()}
 
@@ -1710,6 +1740,7 @@ export function getCacheStatusPage(user: {
     var repoColorMap = ${repoColorMapJson};
     var repoGroupsForFilter = ${repoGroupsJson};
     var currentChartMode = ${chartModeJson};
+    var ignoreUnknownUnclassifiedWarning = ${JSON.stringify(statusIgnoreUnknownUnclassifiedWarning)};
 
     function escapeHtmlText(value) {
       return String(value)
@@ -1718,6 +1749,46 @@ export function getCacheStatusPage(user: {
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#39;');
+    }
+
+    function getToastDurationSeconds() {
+      var m = document.cookie.match('(^|;)\\\\s*user_toast_duration=([^;]*)');
+      var raw = m ? decodeURIComponent(m[2]) : '10';
+      var parsed = parseInt(raw, 10);
+      if (!Number.isFinite(parsed) || parsed < 1 || parsed > 60) return 10;
+      return parsed;
+    }
+
+    function showUnclassifiedWarningToast(message) {
+      var toast = document.getElementById('unclassifiedWarningToast');
+      if (!toast) return;
+      toast.textContent = message;
+      toast.classList.add('show');
+      var duration = getToastDurationSeconds() * 1000;
+      setTimeout(function() {
+        toast.classList.remove('show');
+      }, duration);
+    }
+
+    function checkUnclassifiedTableWarnings() {
+      var table = document.getElementById('statusTablesTable');
+      if (!table) return;
+      var rows = Array.prototype.slice.call(table.querySelectorAll('tbody tr'));
+      var unclassified = rows.filter(function(row) {
+        var groupId = row.getAttribute('data-group-id') || '';
+        if (groupId !== '0') return false;
+        var migration = (row.getAttribute('data-migration') || '').toLowerCase();
+        if (ignoreUnknownUnclassifiedWarning === 'on' && migration === 'unknown') return false;
+        return true;
+      });
+      if (unclassified.length === 0) return;
+      var tableNames = unclassified.map(function(row) {
+        var codeEl = row.querySelector('td:nth-child(2) code');
+        return codeEl ? codeEl.textContent : '(unknown)';
+      }).filter(function(v) { return !!v; });
+      var preview = tableNames.slice(0, 3).join(', ');
+      var suffix = tableNames.length > 3 ? ' ほか' + (tableNames.length - 3) + '件' : '';
+      showUnclassifiedWarningToast('未分類テーブルを検出: ' + preview + suffix);
     }
 
     function stripOwnerName(fullName) {
@@ -2740,6 +2811,12 @@ export function getCacheStatusPage(user: {
           }
         });
       }
+      var openCommitAgentLogButton = document.getElementById('openCommitAgentLogButton');
+      if (openCommitAgentLogButton) {
+        openCommitAgentLogButton.addEventListener('click', function() {
+          openTablePreview('commit_agent_log');
+        });
+      }
       var groupFilterSelect = document.getElementById('groupFilterSelect');
       var migrationSortTh = document.getElementById('migrationSortTh');
       var groupSortState = 'none';
@@ -2755,7 +2832,9 @@ export function getCacheStatusPage(user: {
         var rows = getStatusTableRows();
         for (var i = 0; i < rows.length; i++) {
           var gid = rows[i].getAttribute('data-group-id');
-          rows[i].style.display = (!filterVal || gid === filterVal) ? '' : 'none';
+          var tableName = rows[i].getAttribute('data-table-name');
+          var forceVisible = tableName === 'commit_agent_log';
+          rows[i].style.display = (forceVisible || !filterVal || gid === filterVal) ? '' : 'none';
         }
       }
 
@@ -2791,6 +2870,8 @@ export function getCacheStatusPage(user: {
           sortTableRows('data-migration-num', migrationSortState);
         });
       }
+
+      checkUnclassifiedTableWarnings();
 
       if (commitCacheEntries.length === 0) return;
       applyCommitCacheSort(commitCacheSortState, false);
