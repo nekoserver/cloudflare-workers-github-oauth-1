@@ -594,6 +594,7 @@ export const TABLE_COLUMN_KEYS: Record<string, ColumnKeyInfo> = {
   commit_search_repo_stats: { id: 'pk', search_history_id: 'fk' },
   ai_summary_log: { id: 'pk', request_id: 'uk', event_date: 'idx' },
   ai_summary_reviews: { id: 'pk', summary_request_id: 'fk' },
+  commit_agent_log: { id: 'pk', request_id: 'idx', repo_full_name: 'idx', pr_number: 'idx' },
   repo_color_settings: { id: 'pk', workspace_id: 'idx', repo_name: 'idx' },
   repo_groups: { id: 'pk', workspace_id: 'idx' },
   repo_group_members: { group_id: 'pk+fk', repo_name: 'pk' },
@@ -1817,6 +1818,7 @@ app.get('/settings', authMiddleware, async (c) => {
     'user_status_chart_mode',
     'user_status_table_autodetect',
     'user_status_show_autodetected_tables',
+    'user_status_ignore_unknown_unclassified_warning',
   ]);
   const timezone = cookieVals['user_timezone'] || DEFAULT_TIMEZONE;
   const sessionDuration = cookieVals['user_session_duration'] || '1h';
@@ -1826,6 +1828,7 @@ app.get('/settings', authMiddleware, async (c) => {
   const statusChartMode = cookieVals['user_status_chart_mode'] === 'repo' ? 'repo' : 'gradient';
   const statusTableAutoDetect = cookieVals['user_status_table_autodetect'] === 'off' ? 'off' : 'on';
   const statusShowAutoDetectedTables = cookieVals['user_status_show_autodetected_tables'] === 'on' ? 'on' : 'off';
+  const statusIgnoreUnknownUnclassifiedWarning = cookieVals['user_status_ignore_unknown_unclassified_warning'] === 'off' ? 'off' : 'on';
 
   let issuedAt: string;
   let expiresAt: string;
@@ -1880,6 +1883,7 @@ app.get('/settings', authMiddleware, async (c) => {
     statusChartMode,
     statusTableAutoDetect,
     statusShowAutoDetectedTables,
+    statusIgnoreUnknownUnclassifiedWarning,
     githubScopes: GITHUB_OAUTH_SCOPE,
     githubGrantedScopes: grantedScopes,
     githubScopeError: scopesError,
@@ -1913,6 +1917,7 @@ app.get('/status', authMiddleware, async (c) => {
     'user_status_chart_mode',
     'user_status_table_autodetect',
     'user_status_show_autodetected_tables',
+    'user_status_ignore_unknown_unclassified_warning',
   ]);
   const statusCommitCacheSortMode = cookieVals['user_status_commit_cache_sort_mode'] === 'toggle' ? 'toggle' : 'off';
   const statusCommitCacheSortState = statusCommitCacheSortMode === 'toggle' && cookieVals['user_status_commit_cache_sort_state'] === 'commit_month_desc'
@@ -1921,6 +1926,7 @@ app.get('/status', authMiddleware, async (c) => {
   const statusChartMode = cookieVals['user_status_chart_mode'] === 'repo' ? 'repo' : 'gradient';
   const statusTableAutoDetect = cookieVals['user_status_table_autodetect'] === 'off' ? 'off' : 'on';
   const statusShowAutoDetectedTables = cookieVals['user_status_show_autodetected_tables'] === 'on' ? 'on' : 'off';
+  const statusIgnoreUnknownUnclassifiedWarning = cookieVals['user_status_ignore_unknown_unclassified_warning'] === 'off' ? 'off' : 'on';
   const userSession = await getUserSession(c.env.DB, user.sub);
   const timezone = userSession?.timezone || getCookieValues(cookieHeader, ['user_timezone'])['user_timezone'] || DEFAULT_TIMEZONE;
 
@@ -2011,18 +2017,12 @@ app.get('/status', authMiddleware, async (c) => {
         for (const row of sqliteTables.results ?? []) {
           if (!row.name || knownTables.has(row.name) || row.name === 'd1_migrations') continue;
           const inferredMigration = inferMigrationFromAppliedNames(row.name, appliedMigrationNames) ?? 'unknown';
-          const inferredGroup = inferGroupFromTableName(row.name);
           let rowCount: number | null = null;
           try {
             const countResult = await db.prepare(`SELECT COUNT(*) AS cnt FROM ${row.name}`).first<{ cnt: number }>();
             rowCount = countResult?.cnt ?? 0;
           } catch {
             rowCount = null;
-          }
-          if (inferredGroup) {
-            data.tableGroupMap[row.name] = inferredGroup;
-          } else {
-            data.unclassifiedAutoDetectedTables.push(row.name);
           }
           data.tables.push({
             name: row.name,
@@ -2391,6 +2391,7 @@ app.get('/status', authMiddleware, async (c) => {
     statusCommitCacheSortMode,
     statusCommitCacheSortState,
     statusChartMode,
+    statusIgnoreUnknownUnclassifiedWarning,
   }, data));
 });
 
@@ -4524,6 +4525,27 @@ app.post('/api/settings/status-show-autodetected-tables', authMiddleware, async 
       error: error instanceof Error ? error.message : 'Unknown error',
     });
     return c.json({ error: '/status の自動検出テーブル表示設定変更に失敗しました' }, 500);
+  }
+});
+
+app.post('/api/settings/status-ignore-unknown-unclassified-warning', authMiddleware, async (c) => {
+  try {
+    const { mode } = await c.req.json();
+
+    if (mode !== 'on' && mode !== 'off') {
+      return c.json({ error: '無効な未分類警告設定です' }, 400);
+    }
+
+    c.header('Set-Cookie', `user_status_ignore_unknown_unclassified_warning=${mode}; Path=/; Secure; SameSite=Lax; Max-Age=31536000`);
+
+    return c.json({ message: '/status の未分類警告設定を変更しました', mode }, 200);
+  } catch (error) {
+    const user = c.get('user');
+    logger.error('Status unknown unclassified warning setting update error', {
+      userId: user?.sub,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    return c.json({ error: '/status の未分類警告設定変更に失敗しました' }, 500);
   }
 });
 

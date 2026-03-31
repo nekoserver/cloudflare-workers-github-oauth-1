@@ -19,6 +19,7 @@ export function getSettingsPage(user: {
   statusChartMode?: string;
   statusTableAutoDetect?: string;
   statusShowAutoDetectedTables?: string;
+  statusIgnoreUnknownUnclassifiedWarning?: string;
   githubScopes?: string;
   githubGrantedScopes?: string[] | null;
   githubScopeError?: string | null;
@@ -33,6 +34,7 @@ export function getSettingsPage(user: {
   const currentStatusChartMode = user.statusChartMode === 'repo' ? 'repo' : 'gradient';
   const currentStatusTableAutoDetect = user.statusTableAutoDetect === 'off' ? 'off' : 'on';
   const currentStatusShowAutoDetectedTables = user.statusShowAutoDetectedTables === 'on' ? 'on' : 'off';
+  const currentStatusIgnoreUnknownUnclassifiedWarning = user.statusIgnoreUnknownUnclassifiedWarning === 'off' ? 'off' : 'on';
   const requestedScopes = user.githubScopes ? user.githubScopes.split(/\s+/).filter(Boolean) : [];
   const grantedScopes = user.githubGrantedScopes ?? null;
   const scopeError = user.githubScopeError ? escapeHtml(user.githubScopeError) : null;
@@ -379,6 +381,17 @@ export function getSettingsPage(user: {
               </label>
             </div>
           </div>
+          <div class="info-item">
+            <span class="info-label">未分類のunknownマイグレーションテーブル検出時にも警告しない</span>
+            <div class="setting-control" style="justify-content: flex-end;">
+              <span class="theme-label" id="statusIgnoreUnknownUnclassifiedWarningLabel">${currentStatusIgnoreUnknownUnclassifiedWarning === 'on' ? 'ON' : 'OFF'}</span>
+              <label class="theme-toggle-switch">
+                <input type="checkbox" id="statusIgnoreUnknownUnclassifiedWarningCheckbox" onchange="onStatusIgnoreUnknownUnclassifiedWarningChange()"
+                  ${currentStatusIgnoreUnknownUnclassifiedWarning === 'on' ? 'checked' : ''}>
+                <span class="theme-toggle-slider"></span>
+              </label>
+            </div>
+          </div>
         </div>
         <div class="button-container" id="buttonContainer">
           <button class="btn btn-save" onclick="saveTimezone()">保存</button>
@@ -533,6 +546,26 @@ export function getSettingsPage(user: {
         if (!res.ok) throw new Error('failed');
       } catch (e) {
         alert('/status の自動検出テーブル表示設定の変更に失敗しました');
+        cb.checked = !cb.checked;
+        label.textContent = cb.checked ? 'ON' : 'OFF';
+      }
+    }
+
+    async function onStatusIgnoreUnknownUnclassifiedWarningChange() {
+      var cb = document.getElementById('statusIgnoreUnknownUnclassifiedWarningCheckbox');
+      var label = document.getElementById('statusIgnoreUnknownUnclassifiedWarningLabel');
+      var mode = cb.checked ? 'on' : 'off';
+      label.textContent = cb.checked ? 'ON' : 'OFF';
+      try {
+        const res = await fetch('/api/settings/status-ignore-unknown-unclassified-warning', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ mode })
+        });
+        if (!res.ok) throw new Error('failed');
+      } catch (e) {
+        alert('/status の未分類警告設定の変更に失敗しました');
         cb.checked = !cb.checked;
         label.textContent = cb.checked ? 'ON' : 'OFF';
       }
