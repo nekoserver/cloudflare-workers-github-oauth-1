@@ -2043,6 +2043,28 @@ app.get('/status', authMiddleware, async (c) => {
       data.tables = data.tables.filter((table) => !table.isAutoDetected);
     }
 
+    // 競合解消や表示差分があっても 0025(commit_agent_log) が /status 一覧から消えないよう補完
+    if (!data.tables.some((table) => table.name === 'commit_agent_log')) {
+      let rowCount: number | null = null;
+      let exists = false;
+      try {
+        const countResult = await db.prepare('SELECT COUNT(*) AS cnt FROM commit_agent_log').first<{ cnt: number }>();
+        exists = true;
+        rowCount = countResult?.cnt ?? 0;
+      } catch {
+        exists = false;
+        rowCount = null;
+      }
+      data.tables.push({
+        name: 'commit_agent_log',
+        exists,
+        rowCount,
+        migration: '0025',
+        description: 'コミットエージェント検出ログ',
+        syncPolicy: 'auto',
+      });
+    }
+
     // コミットキャッシュ
     try {
       const cacheRows = await db.prepare(
