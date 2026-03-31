@@ -25,6 +25,7 @@ import { verifyGitHubWebhookSignature } from './utils/githubWebhook';
 import { postSlackMessage, openSlackModal, respondToInteraction } from './utils/slack';
 import { fetchPrDiff, runSummaryPipeline, buildSlackMessage, buildSummaryModal, buildSummaryFallbackBlocks, classifySummaryResult, resolveAiModel, extractDesignDiff, sanitizeBoxDrawing, detectCommitAgentFromText, detectCommitAgentFromPrText, WORKER_BASE_URL, DESIGN_SPEC_CHECKLIST, DEFAULT_AI_MODEL, type SummaryModalRow } from './utils/aiSummary';
 import { getSessionDurationSeconds, renewSession } from './utils/session';
+import { buildCommitAgentLogEntry } from './utils/commitAgentLog';
 import { verifySlackSignature } from './utils/slackSignature';
 import { handleSlackInteraction } from './utils/slackInteraction';
 import { executeCreateRepo } from './utils/repoValidation';
@@ -3248,24 +3249,45 @@ app.post('/webhook/github', async (c) => {
               now.toISOString(),
             ).run();
 
-            if (latestCommitMessage) {
-              await db.prepare(`
-                INSERT INTO commit_agent_log
-                  (request_id, repo_full_name, pr_number, commit_sha, commit_message, commit_author_name, commit_author_email, detected_agent_name, detected_agent_version, detected_signal, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-              `).bind(
-                requestId,
-                repoFullName,
-                prNumber,
-                latestCommitSha,
-                latestCommitMessage,
-                latestCommitAuthorName,
-                latestCommitAuthorEmail,
-                commitAgentName,
-                commitAgentVersion,
-                commitAgentSignal,
-                now.toISOString(),
-              ).run();
+            const commitAgentLogEntry = buildCommitAgentLogEntry({
+              requestId,
+              repoFullName,
+              prNumber,
+              commitSha: latestCommitSha,
+              commitMessage: latestCommitMessage,
+              commitAuthorName: latestCommitAuthorName,
+              commitAuthorEmail: latestCommitAuthorEmail,
+              detectedAgentName: commitAgentName,
+              detectedAgentVersion: commitAgentVersion,
+              detectedSignal: commitAgentSignal,
+              createdAtIso: now.toISOString(),
+            });
+
+            if (commitAgentLogEntry) {
+              try {
+                await db.prepare(`
+                  INSERT INTO commit_agent_log
+                    (request_id, repo_full_name, pr_number, commit_sha, commit_message, commit_author_name, commit_author_email, detected_agent_name, detected_agent_version, detected_signal, created_at)
+                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                `).bind(
+                  commitAgentLogEntry.requestId,
+                  commitAgentLogEntry.repoFullName,
+                  commitAgentLogEntry.prNumber,
+                  commitAgentLogEntry.commitSha,
+                  commitAgentLogEntry.commitMessage,
+                  commitAgentLogEntry.commitAuthorName,
+                  commitAgentLogEntry.commitAuthorEmail,
+                  commitAgentLogEntry.detectedAgentName,
+                  commitAgentLogEntry.detectedAgentVersion,
+                  commitAgentLogEntry.detectedSignal,
+                  commitAgentLogEntry.createdAtIso,
+                ).run();
+              } catch (agentLogError) {
+                logger.warn('Failed to insert commit_agent_log', {
+                  error: agentLogError instanceof Error ? agentLogError.message : 'Unknown error',
+                  requestId,
+                });
+              }
             }
             // 要約結果を自動診断してフィードバックを記録
             const diagnosis = classifySummaryResult(summary !== '' ? summary : null);
