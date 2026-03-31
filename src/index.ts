@@ -2617,7 +2617,7 @@ app.get('/api/status/tables/:table/group-er', authMiddleware, async (c) => {
     tableDescriptions[tbl.name] = tbl.description;
   }
 
-  let groupMap = TABLE_GROUP_MAP;
+  let groupMap: Record<string, string> = { ...TABLE_GROUP_MAP };
   let fkTargets = COLUMN_FK_TARGETS;
   const pragmaColumnsMap: Record<string, string[]> = {};
 
@@ -2627,7 +2627,6 @@ app.get('/api/status/tables/:table/group-er', authMiddleware, async (c) => {
         table_name: string; group_name: string; description: string;
       }>();
       if (catalogRows.results && catalogRows.results.length > 0) {
-        groupMap = {};
         for (const row of catalogRows.results) {
           groupMap[row.table_name] = row.group_name;
           tableDescriptions[row.table_name] = row.description;
@@ -2650,6 +2649,11 @@ app.get('/api/status/tables/:table/group-er', authMiddleware, async (c) => {
       }
     } catch {
       // table_column_keys未作成 — フォールバック定数を使用
+    }
+
+    // table_catalog の投入状況に依存せず commit_agent_log のグループ解決を保証
+    if (!groupMap.commit_agent_log) {
+      groupMap.commit_agent_log = 'ai';
     }
 
     const groupName = groupMap[tableName];
