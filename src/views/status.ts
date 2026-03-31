@@ -30,6 +30,7 @@ export interface TableStatusEntry {
   migration: string;
   description: string;
   syncPolicy: 'auto' | 'manual' | 'readonly';
+  isAutoDetected?: boolean;
 }
 
 /** ユーザーのチーム・ワークスペースコンテキスト */
