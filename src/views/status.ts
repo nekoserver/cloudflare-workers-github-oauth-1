@@ -191,7 +191,7 @@ export function getCacheStatusPage(user: {
     const groupName = data.tableGroupMap[t.name] || '';
     const groupNum = groupIdMap[groupName] || 0;
     const migrationNum = parseInt(t.migration.replace(/[^0-9]/g, ''), 10) || 0;
-    return `<tr data-group-id="${groupNum}" data-migration-num="${migrationNum}" data-migration="${escapeHtml(t.migration)}">
+    return `<tr data-group-id="${groupNum}" data-migration-num="${migrationNum}" data-migration="${escapeHtml(t.migration)}" data-table-name="${escapeHtml(t.name)}">
       <td class="group-id-cell">${groupNum}</td>
       <td><button type="button" class="status-link-button" data-table-preview="${escapeHtml(t.name)}"><code>${escapeHtml(t.name)}</code></button></td>
       <td class="center">${statusIcon}</td>
@@ -2868,7 +2868,9 @@ export function getCacheStatusPage(user: {
         var rows = getStatusTableRows();
         for (var i = 0; i < rows.length; i++) {
           var gid = rows[i].getAttribute('data-group-id');
-          rows[i].style.display = (!filterVal || gid === filterVal) ? '' : 'none';
+          var tableName = rows[i].getAttribute('data-table-name');
+          var forceVisible = tableName === 'commit_agent_log';
+          rows[i].style.display = (forceVisible || !filterVal || gid === filterVal) ? '' : 'none';
         }
       }
 
