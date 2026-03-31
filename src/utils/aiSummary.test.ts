@@ -10,6 +10,8 @@ import {
   resolveAiModel,
   extractDesignDiff,
   sanitizeBoxDrawing,
+  detectCommitAgentFromText,
+  detectCommitAgentFromPrText,
   WORKER_BASE_URL,
   DEFAULT_AI_MODEL,
   type AiBinding,
@@ -231,6 +233,43 @@ describe('generateAiSummary', () => {
   });
 });
 
+// ---- detectCommitAgentFromText ----
+
+describe('detectCommitAgentFromText', () => {
+  it('コミットメッセージからエージェント名とバージョンを抽出する', () => {
+    const detected = detectCommitAgentFromText('Generated with Claude Code v1.2.3');
+    expect(detected).toEqual({
+      agentName: 'Claude Code',
+      agentVersion: '1.2.3',
+      signal: 'message',
+    });
+  });
+
+  it('エージェントが含まれない場合はnullを返す', () => {
+    expect(detectCommitAgentFromText('fix: adjust oauth redirect flow')).toBeNull();
+  });
+
+  it('日本語の「バージョン」表記からもバージョンを抽出する', () => {
+    const detected = detectCommitAgentFromText('codex バージョン 1.24.0 で生成');
+    expect(detected?.agentName).toBe('Codex');
+    expect(detected?.agentVersion).toBe('1.24.0');
+  });
+});
+
+describe('detectCommitAgentFromPrText', () => {
+  it('PR本文の表記からエージェントを検出し signal=pr を返す', () => {
+    const detected = detectCommitAgentFromPrText(
+      'feat: refactor auth',
+      '実装メモ: claude code version 2.1.0 を使って改修'
+    );
+    expect(detected).toEqual({
+      agentName: 'Claude Code',
+      agentVersion: '2.1.0',
+      signal: 'pr',
+    });
+  });
+});
+
 // ---- buildSlackMessage ----
 
 describe('buildSlackMessage', () => {
@@ -257,6 +296,32 @@ describe('buildSlackMessage', () => {
     const { text } = buildSlackMessage(baseParams);
     expect(text).toContain('PR 作成');
     expect(text).toContain('#42 Fix bug');
+  });
+
+  it('commitAgentNameがある場合、テキストとblocksにコミットエージェント情報が含まれる', () => {
+    const { text, blocks } = buildSlackMessage({
+      ...baseParams,
+      commitAgentName: 'Codex',
+      commitAgentVersion: 'v0.9.0',
+      commitAgentSignal: 'message',
+      summaryModel: '@cf/meta/llama-3.1-8b-instruct-fp8',
+    });
+    expect(text).toContain('AI要約モデル (@cf・要約専用):* @cf/meta/llama-3.1-8b-instruct-fp8');
+    expect(text).toContain('コーディングエージェント (コミット由来):* Codex (v0.9.0)');
+    const contextBlock = blocks.find((b: any) =>
+      b.type === 'context' && b.elements?.[0]?.text?.includes('コーディングエージェント (コミット由来): Codex (v0.9.0)')
+    );
+    expect(contextBlock).toBeTruthy();
+  });
+
+  it('commitAgentSignal=pr の場合はPR記述由来ラベルを表示する', () => {
+    const { text } = buildSlackMessage({
+      ...baseParams,
+      commitAgentName: 'Claude Code',
+      commitAgentVersion: '2.1.0',
+      commitAgentSignal: 'pr',
+    });
+    expect(text).toContain('コーディングエージェント (PR記述由来):* Claude Code (2.1.0)');
   });
 
   it('openedの場合「作成」と表示される', () => {

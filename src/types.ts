@@ -72,6 +72,7 @@ export interface GitHubWebhookPullRequestPayload {
     body: string | null;
     html_url: string;
     diff_url: string;
+    commits_url?: string;
     number: number;
     user?: { login: string };
   };
