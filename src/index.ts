@@ -838,6 +838,11 @@ function getStatusTablePreviewQuery(
         sql: `SELECT r.*, l.repo_full_name, l.pr_number FROM ai_summary_reviews r JOIN ai_summary_log l ON l.request_id = r.summary_request_id ORDER BY r.created_at DESC LIMIT ${STATUS_TABLE_PREVIEW_LIMIT}`,
         params: [],
       };
+    case 'commit_agent_log':
+      return {
+        sql: `SELECT * FROM ${tableName} ORDER BY created_at DESC LIMIT ${STATUS_TABLE_PREVIEW_LIMIT}`,
+        params: [],
+      };
     case 'resend_webhook_sources':
       return {
         sql: `SELECT * FROM ${tableName} ORDER BY created_at DESC LIMIT ${STATUS_TABLE_PREVIEW_LIMIT}`,
@@ -1002,6 +1007,14 @@ ORDER BY r.created_at DESC
 LIMIT 20;`,
         params: [],
         note: 'AI要約レビューをレビュー一覧から作成日時の新しい順で取得します。',
+      };
+    case 'commit_agent_log':
+      return {
+        sql: `SELECT * FROM commit_agent_log
+ORDER BY created_at DESC
+LIMIT 20;`,
+        params: [],
+        note: 'コミットエージェント検出ログを作成日時の新しい順で取得します。',
       };
     case 'resend_webhook_sources':
       return {
@@ -1745,13 +1758,24 @@ app.get('/settings', authMiddleware, async (c) => {
   const user = c.get('user');
 
   const cookieHeader = c.req.header('Cookie');
-  const cookieVals = getCookieValues(cookieHeader, ['user_timezone', 'user_session_duration', 'user_recent_commits_count', 'user_toast_duration', 'user_status_commit_cache_sort_mode', 'user_status_chart_mode']);
+  const cookieVals = getCookieValues(cookieHeader, [
+    'user_timezone',
+    'user_session_duration',
+    'user_recent_commits_count',
+    'user_toast_duration',
+    'user_status_commit_cache_sort_mode',
+    'user_status_chart_mode',
+    'user_status_table_autodetect',
+    'user_status_show_autodetected_tables',
+  ]);
   const timezone = cookieVals['user_timezone'] || DEFAULT_TIMEZONE;
   const sessionDuration = cookieVals['user_session_duration'] || '1h';
   const recentCommitsCount = parseInt(cookieVals['user_recent_commits_count'] || '20', 10) || 20;
   const toastDuration = parseInt(cookieVals['user_toast_duration'] || '10', 10) || 10;
   const statusCommitCacheSortMode = cookieVals['user_status_commit_cache_sort_mode'] === 'toggle' ? 'toggle' : 'off';
   const statusChartMode = cookieVals['user_status_chart_mode'] === 'repo' ? 'repo' : 'gradient';
+  const statusTableAutoDetect = cookieVals['user_status_table_autodetect'] === 'off' ? 'off' : 'on';
+  const statusShowAutoDetectedTables = cookieVals['user_status_show_autodetected_tables'] === 'on' ? 'on' : 'off';
 
   let issuedAt: string;
   let expiresAt: string;
@@ -1804,6 +1828,8 @@ app.get('/settings', authMiddleware, async (c) => {
     toastDuration,
     statusCommitCacheSortMode,
     statusChartMode,
+    statusTableAutoDetect,
+    statusShowAutoDetectedTables,
     githubScopes: GITHUB_OAUTH_SCOPE,
     githubGrantedScopes: grantedScopes,
     githubScopeError: scopesError,
@@ -1831,12 +1857,20 @@ app.get('/status', authMiddleware, async (c) => {
   const user = c.get('user');
   const db = c.env.DB;
   const cookieHeader = c.req.header('Cookie');
-  const cookieVals = getCookieValues(cookieHeader, ['user_status_commit_cache_sort_mode', 'user_status_commit_cache_sort_state', 'user_status_chart_mode']);
+  const cookieVals = getCookieValues(cookieHeader, [
+    'user_status_commit_cache_sort_mode',
+    'user_status_commit_cache_sort_state',
+    'user_status_chart_mode',
+    'user_status_table_autodetect',
+    'user_status_show_autodetected_tables',
+  ]);
   const statusCommitCacheSortMode = cookieVals['user_status_commit_cache_sort_mode'] === 'toggle' ? 'toggle' : 'off';
   const statusCommitCacheSortState = statusCommitCacheSortMode === 'toggle' && cookieVals['user_status_commit_cache_sort_state'] === 'commit_month_desc'
     ? 'commit_month_desc'
     : 'cached_at_desc';
   const statusChartMode = cookieVals['user_status_chart_mode'] === 'repo' ? 'repo' : 'gradient';
+  const statusTableAutoDetect = cookieVals['user_status_table_autodetect'] === 'off' ? 'off' : 'on';
+  const statusShowAutoDetectedTables = cookieVals['user_status_show_autodetected_tables'] === 'on' ? 'on' : 'off';
   const userSession = await getUserSession(c.env.DB, user.sub);
   const timezone = userSession?.timezone || getCookieValues(cookieHeader, ['user_timezone'])['user_timezone'] || DEFAULT_TIMEZONE;
 
@@ -1918,31 +1952,38 @@ app.get('/status', authMiddleware, async (c) => {
     }
 
     // 追加テーブル（定義外）も自動検出して表示する
-    try {
-      const sqliteTables = await db.prepare(
-        "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'"
-      ).all<{ name: string }>();
-      for (const row of sqliteTables.results ?? []) {
-        if (!row.name || knownTables.has(row.name) || row.name === 'd1_migrations') continue;
-        const inferredMigration = inferMigrationFromAppliedNames(row.name, appliedMigrationNames) ?? 'unknown';
-        let rowCount: number | null = null;
-        try {
-          const countResult = await db.prepare(`SELECT COUNT(*) AS cnt FROM ${row.name}`).first<{ cnt: number }>();
-          rowCount = countResult?.cnt ?? 0;
-        } catch {
-          rowCount = null;
+    if (statusTableAutoDetect === 'on') {
+      try {
+        const sqliteTables = await db.prepare(
+          "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'"
+        ).all<{ name: string }>();
+        for (const row of sqliteTables.results ?? []) {
+          if (!row.name || knownTables.has(row.name) || row.name === 'd1_migrations') continue;
+          const inferredMigration = inferMigrationFromAppliedNames(row.name, appliedMigrationNames) ?? 'unknown';
+          let rowCount: number | null = null;
+          try {
+            const countResult = await db.prepare(`SELECT COUNT(*) AS cnt FROM ${row.name}`).first<{ cnt: number }>();
+            rowCount = countResult?.cnt ?? 0;
+          } catch {
+            rowCount = null;
+          }
+          data.tables.push({
+            name: row.name,
+            exists: true,
+            rowCount,
+            migration: inferredMigration,
+            description: '自動検出テーブル',
+            syncPolicy: 'manual',
+            isAutoDetected: true,
+          });
         }
-        data.tables.push({
-          name: row.name,
-          exists: true,
-          rowCount,
-          migration: inferredMigration,
-          description: '自動検出テーブル',
-          syncPolicy: 'manual',
-        });
+      } catch {
+        // sqlite_master が参照できない環境は無視
       }
-    } catch {
-      // sqlite_master が参照できない環境は無視
+    }
+
+    if (statusShowAutoDetectedTables !== 'on') {
+      data.tables = data.tables.filter((table) => !table.isAutoDetected);
     }
 
     // コミットキャッシュ
@@ -4363,6 +4404,48 @@ app.post('/api/settings/status-chart-mode', authMiddleware, async (c) => {
       error: error instanceof Error ? error.message : 'Unknown error',
     });
     return c.json({ error: '月別コミット量チャートの表示モード変更に失敗しました' }, 500);
+  }
+});
+
+app.post('/api/settings/status-table-autodetect', authMiddleware, async (c) => {
+  try {
+    const { mode } = await c.req.json();
+
+    if (mode !== 'on' && mode !== 'off') {
+      return c.json({ error: '無効な自動検出設定です' }, 400);
+    }
+
+    c.header('Set-Cookie', `user_status_table_autodetect=${mode}; Path=/; Secure; SameSite=Lax; Max-Age=31536000`);
+
+    return c.json({ message: '/status のテーブル自動検出設定を変更しました', mode }, 200);
+  } catch (error) {
+    const user = c.get('user');
+    logger.error('Status table autodetect setting update error', {
+      userId: user?.sub,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    return c.json({ error: '/status のテーブル自動検出設定変更に失敗しました' }, 500);
+  }
+});
+
+app.post('/api/settings/status-show-autodetected-tables', authMiddleware, async (c) => {
+  try {
+    const { mode } = await c.req.json();
+
+    if (mode !== 'on' && mode !== 'off') {
+      return c.json({ error: '無効な表示設定です' }, 400);
+    }
+
+    c.header('Set-Cookie', `user_status_show_autodetected_tables=${mode}; Path=/; Secure; SameSite=Lax; Max-Age=31536000`);
+
+    return c.json({ message: '/status の自動検出テーブル表示設定を変更しました', mode }, 200);
+  } catch (error) {
+    const user = c.get('user');
+    logger.error('Status auto detected table visibility update error', {
+      userId: user?.sub,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    return c.json({ error: '/status の自動検出テーブル表示設定変更に失敗しました' }, 500);
   }
 });
 

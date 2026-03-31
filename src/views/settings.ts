@@ -17,6 +17,8 @@ export function getSettingsPage(user: {
   toastDuration?: number;
   statusCommitCacheSortMode?: string;
   statusChartMode?: string;
+  statusTableAutoDetect?: string;
+  statusShowAutoDetectedTables?: string;
   githubScopes?: string;
   githubGrantedScopes?: string[] | null;
   githubScopeError?: string | null;
@@ -29,6 +31,8 @@ export function getSettingsPage(user: {
   const currentToastDuration = user.toastDuration || 10;
   const currentStatusCommitCacheSortMode = user.statusCommitCacheSortMode === 'toggle' ? 'toggle' : 'off';
   const currentStatusChartMode = user.statusChartMode === 'repo' ? 'repo' : 'gradient';
+  const currentStatusTableAutoDetect = user.statusTableAutoDetect === 'off' ? 'off' : 'on';
+  const currentStatusShowAutoDetectedTables = user.statusShowAutoDetectedTables === 'on' ? 'on' : 'off';
   const requestedScopes = user.githubScopes ? user.githubScopes.split(/\s+/).filter(Boolean) : [];
   const grantedScopes = user.githubGrantedScopes ?? null;
   const scopeError = user.githubScopeError ? escapeHtml(user.githubScopeError) : null;
@@ -353,6 +357,28 @@ export function getSettingsPage(user: {
               <input type="checkbox" class="setting-checkbox" id="statusCommitCacheSortModeCheckbox" onchange="toggleStatusCommitCacheSortModeEdit()">
             </div>
           </div>
+          <div class="info-item">
+            <span class="info-label">/status のテーブル自動検出機能</span>
+            <div class="setting-control" style="justify-content: flex-end;">
+              <span class="theme-label" id="statusTableAutoDetectLabel">${currentStatusTableAutoDetect === 'on' ? 'ON' : 'OFF'}</span>
+              <label class="theme-toggle-switch">
+                <input type="checkbox" id="statusTableAutoDetectCheckbox" onchange="onStatusTableAutoDetectChange()"
+                  ${currentStatusTableAutoDetect === 'on' ? 'checked' : ''}>
+                <span class="theme-toggle-slider"></span>
+              </label>
+            </div>
+          </div>
+          <div class="info-item">
+            <span class="info-label">/status で自動検出テーブルを表示する</span>
+            <div class="setting-control" style="justify-content: flex-end;">
+              <span class="theme-label" id="statusShowAutoDetectedTablesLabel">${currentStatusShowAutoDetectedTables === 'on' ? 'ON' : 'OFF'}</span>
+              <label class="theme-toggle-switch">
+                <input type="checkbox" id="statusShowAutoDetectedTablesCheckbox" onchange="onStatusShowAutoDetectedTablesChange()"
+                  ${currentStatusShowAutoDetectedTables === 'on' ? 'checked' : ''}>
+                <span class="theme-toggle-slider"></span>
+              </label>
+            </div>
+          </div>
         </div>
         <div class="button-container" id="buttonContainer">
           <button class="btn btn-save" onclick="saveTimezone()">保存</button>
@@ -470,6 +496,46 @@ export function getSettingsPage(user: {
         credentials: 'include',
         body: JSON.stringify({ theme: newTheme })
       }).catch(function(){});
+    }
+
+    async function onStatusTableAutoDetectChange() {
+      var cb = document.getElementById('statusTableAutoDetectCheckbox');
+      var label = document.getElementById('statusTableAutoDetectLabel');
+      var mode = cb.checked ? 'on' : 'off';
+      label.textContent = cb.checked ? 'ON' : 'OFF';
+      try {
+        const res = await fetch('/api/settings/status-table-autodetect', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ mode })
+        });
+        if (!res.ok) throw new Error('failed');
+      } catch (e) {
+        alert('/status のテーブル自動検出設定の変更に失敗しました');
+        cb.checked = !cb.checked;
+        label.textContent = cb.checked ? 'ON' : 'OFF';
+      }
+    }
+
+    async function onStatusShowAutoDetectedTablesChange() {
+      var cb = document.getElementById('statusShowAutoDetectedTablesCheckbox');
+      var label = document.getElementById('statusShowAutoDetectedTablesLabel');
+      var mode = cb.checked ? 'on' : 'off';
+      label.textContent = cb.checked ? 'ON' : 'OFF';
+      try {
+        const res = await fetch('/api/settings/status-show-autodetected-tables', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ mode })
+        });
+        if (!res.ok) throw new Error('failed');
+      } catch (e) {
+        alert('/status の自動検出テーブル表示設定の変更に失敗しました');
+        cb.checked = !cb.checked;
+        label.textContent = cb.checked ? 'ON' : 'OFF';
+      }
     }
 
     function updateTimeRemaining() {
