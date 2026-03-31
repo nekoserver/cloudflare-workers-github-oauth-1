@@ -25,6 +25,7 @@ import { verifyGitHubWebhookSignature } from './utils/githubWebhook';
 import { postSlackMessage, openSlackModal, respondToInteraction } from './utils/slack';
 import { fetchPrDiff, runSummaryPipeline, buildSlackMessage, buildSummaryModal, buildSummaryFallbackBlocks, classifySummaryResult, resolveAiModel, extractDesignDiff, sanitizeBoxDrawing, detectCommitAgentFromText, detectCommitAgentFromPrText, WORKER_BASE_URL, DESIGN_SPEC_CHECKLIST, DEFAULT_AI_MODEL, type SummaryModalRow } from './utils/aiSummary';
 import { getSessionDurationSeconds, renewSession } from './utils/session';
+import { buildCommitAgentLogEntry } from './utils/commitAgentLog';
 import { verifySlackSignature } from './utils/slackSignature';
 import { handleSlackInteraction } from './utils/slackInteraction';
 import { executeCreateRepo } from './utils/repoValidation';
@@ -593,6 +594,7 @@ export const TABLE_COLUMN_KEYS: Record<string, ColumnKeyInfo> = {
   commit_search_repo_stats: { id: 'pk', search_history_id: 'fk' },
   ai_summary_log: { id: 'pk', request_id: 'uk', event_date: 'idx' },
   ai_summary_reviews: { id: 'pk', summary_request_id: 'fk' },
+  commit_agent_log: { id: 'pk', request_id: 'idx', repo_full_name: 'idx', pr_number: 'idx' },
   repo_color_settings: { id: 'pk', workspace_id: 'idx', repo_name: 'idx' },
   repo_groups: { id: 'pk', workspace_id: 'idx' },
   repo_group_members: { group_id: 'pk+fk', repo_name: 'pk' },
@@ -649,7 +651,7 @@ export const TABLE_GROUP_MAP: Record<string, string> = {
   user_sessions: 'auth', teams: 'auth', workspaces: 'auth', team_members: 'auth',
   commit_calendar_cache: 'commit', commit_list_cache: 'commit', cache_stats: 'commit',
   commit_search_history: 'commit', commit_search_repo_stats: 'commit', cloudflare_setup_pending: 'commit',
-  ai_summary_log: 'ai', ai_summary_reviews: 'ai',
+  ai_summary_log: 'ai', ai_summary_reviews: 'ai', commit_agent_log: 'ai',
   resend_webhook_sources: 'email', email_send_log: 'email', resend_webhook_log: 'email',
   email_suppression_list: 'email', email_mfa_challenges: 'email', email_audit_anomalies: 'email',
   installation_permissions: 'config', repo_color_settings: 'config', repo_groups: 'config',
@@ -838,6 +840,11 @@ function getStatusTablePreviewQuery(
         sql: `SELECT r.*, l.repo_full_name, l.pr_number FROM ai_summary_reviews r JOIN ai_summary_log l ON l.request_id = r.summary_request_id ORDER BY r.created_at DESC LIMIT ${STATUS_TABLE_PREVIEW_LIMIT}`,
         params: [],
       };
+    case 'commit_agent_log':
+      return {
+        sql: `SELECT * FROM ${tableName} ORDER BY created_at DESC LIMIT ${STATUS_TABLE_PREVIEW_LIMIT}`,
+        params: [],
+      };
     case 'resend_webhook_sources':
       return {
         sql: `SELECT * FROM ${tableName} ORDER BY created_at DESC LIMIT ${STATUS_TABLE_PREVIEW_LIMIT}`,
@@ -1002,6 +1009,14 @@ ORDER BY r.created_at DESC
 LIMIT 20;`,
         params: [],
         note: 'AI要約レビューをレビュー一覧から作成日時の新しい順で取得します。',
+      };
+    case 'commit_agent_log':
+      return {
+        sql: `SELECT * FROM commit_agent_log
+ORDER BY created_at DESC
+LIMIT 20;`,
+        params: [],
+        note: 'コミットエージェント検出ログを作成日時の新しい順で取得します。',
       };
     case 'resend_webhook_sources':
       return {
@@ -1745,13 +1760,26 @@ app.get('/settings', authMiddleware, async (c) => {
   const user = c.get('user');
 
   const cookieHeader = c.req.header('Cookie');
-  const cookieVals = getCookieValues(cookieHeader, ['user_timezone', 'user_session_duration', 'user_recent_commits_count', 'user_toast_duration', 'user_status_commit_cache_sort_mode', 'user_status_chart_mode']);
+  const cookieVals = getCookieValues(cookieHeader, [
+    'user_timezone',
+    'user_session_duration',
+    'user_recent_commits_count',
+    'user_toast_duration',
+    'user_status_commit_cache_sort_mode',
+    'user_status_chart_mode',
+    'user_status_table_autodetect',
+    'user_status_show_autodetected_tables',
+    'user_status_ignore_unknown_unclassified_warning',
+  ]);
   const timezone = cookieVals['user_timezone'] || DEFAULT_TIMEZONE;
   const sessionDuration = cookieVals['user_session_duration'] || '1h';
   const recentCommitsCount = parseInt(cookieVals['user_recent_commits_count'] || '20', 10) || 20;
   const toastDuration = parseInt(cookieVals['user_toast_duration'] || '10', 10) || 10;
   const statusCommitCacheSortMode = cookieVals['user_status_commit_cache_sort_mode'] === 'toggle' ? 'toggle' : 'off';
   const statusChartMode = cookieVals['user_status_chart_mode'] === 'repo' ? 'repo' : 'gradient';
+  const statusTableAutoDetect = cookieVals['user_status_table_autodetect'] === 'off' ? 'off' : 'on';
+  const statusShowAutoDetectedTables = cookieVals['user_status_show_autodetected_tables'] === 'on' ? 'on' : 'off';
+  const statusIgnoreUnknownUnclassifiedWarning = cookieVals['user_status_ignore_unknown_unclassified_warning'] === 'off' ? 'off' : 'on';
 
   let issuedAt: string;
   let expiresAt: string;
@@ -1804,6 +1832,9 @@ app.get('/settings', authMiddleware, async (c) => {
     toastDuration,
     statusCommitCacheSortMode,
     statusChartMode,
+    statusTableAutoDetect,
+    statusShowAutoDetectedTables,
+    statusIgnoreUnknownUnclassifiedWarning,
     githubScopes: GITHUB_OAUTH_SCOPE,
     githubGrantedScopes: grantedScopes,
     githubScopeError: scopesError,
@@ -1831,12 +1862,22 @@ app.get('/status', authMiddleware, async (c) => {
   const user = c.get('user');
   const db = c.env.DB;
   const cookieHeader = c.req.header('Cookie');
-  const cookieVals = getCookieValues(cookieHeader, ['user_status_commit_cache_sort_mode', 'user_status_commit_cache_sort_state', 'user_status_chart_mode']);
+  const cookieVals = getCookieValues(cookieHeader, [
+    'user_status_commit_cache_sort_mode',
+    'user_status_commit_cache_sort_state',
+    'user_status_chart_mode',
+    'user_status_table_autodetect',
+    'user_status_show_autodetected_tables',
+    'user_status_ignore_unknown_unclassified_warning',
+  ]);
   const statusCommitCacheSortMode = cookieVals['user_status_commit_cache_sort_mode'] === 'toggle' ? 'toggle' : 'off';
   const statusCommitCacheSortState = statusCommitCacheSortMode === 'toggle' && cookieVals['user_status_commit_cache_sort_state'] === 'commit_month_desc'
     ? 'commit_month_desc'
     : 'cached_at_desc';
   const statusChartMode = cookieVals['user_status_chart_mode'] === 'repo' ? 'repo' : 'gradient';
+  const statusTableAutoDetect = cookieVals['user_status_table_autodetect'] === 'off' ? 'off' : 'on';
+  const statusShowAutoDetectedTables = cookieVals['user_status_show_autodetected_tables'] === 'on' ? 'on' : 'off';
+  const statusIgnoreUnknownUnclassifiedWarning = cookieVals['user_status_ignore_unknown_unclassified_warning'] === 'off' ? 'off' : 'on';
   const userSession = await getUserSession(c.env.DB, user.sub);
   const timezone = userSession?.timezone || getCookieValues(cookieHeader, ['user_timezone'])['user_timezone'] || DEFAULT_TIMEZONE;
 
@@ -1918,31 +1959,60 @@ app.get('/status', authMiddleware, async (c) => {
     }
 
     // 追加テーブル（定義外）も自動検出して表示する
-    try {
-      const sqliteTables = await db.prepare(
-        "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'"
-      ).all<{ name: string }>();
-      for (const row of sqliteTables.results ?? []) {
-        if (!row.name || knownTables.has(row.name) || row.name === 'd1_migrations') continue;
-        const inferredMigration = inferMigrationFromAppliedNames(row.name, appliedMigrationNames) ?? 'unknown';
-        let rowCount: number | null = null;
-        try {
-          const countResult = await db.prepare(`SELECT COUNT(*) AS cnt FROM ${row.name}`).first<{ cnt: number }>();
-          rowCount = countResult?.cnt ?? 0;
-        } catch {
-          rowCount = null;
+    if (statusTableAutoDetect === 'on') {
+      try {
+        const sqliteTables = await db.prepare(
+          "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'"
+        ).all<{ name: string }>();
+        for (const row of sqliteTables.results ?? []) {
+          if (!row.name || knownTables.has(row.name) || row.name === 'd1_migrations') continue;
+          const inferredMigration = inferMigrationFromAppliedNames(row.name, appliedMigrationNames) ?? 'unknown';
+          let rowCount: number | null = null;
+          try {
+            const countResult = await db.prepare(`SELECT COUNT(*) AS cnt FROM ${row.name}`).first<{ cnt: number }>();
+            rowCount = countResult?.cnt ?? 0;
+          } catch {
+            rowCount = null;
+          }
+          data.tables.push({
+            name: row.name,
+            exists: true,
+            rowCount,
+            migration: inferredMigration,
+            description: '自動検出テーブル',
+            syncPolicy: 'manual',
+            isAutoDetected: true,
+          });
         }
-        data.tables.push({
-          name: row.name,
-          exists: true,
-          rowCount,
-          migration: inferredMigration,
-          description: '自動検出テーブル',
-          syncPolicy: 'manual',
-        });
+      } catch {
+        // sqlite_master が参照できない環境は無視
       }
-    } catch {
-      // sqlite_master が参照できない環境は無視
+    }
+
+    if (statusShowAutoDetectedTables !== 'on') {
+      data.tables = data.tables.filter((table) => !table.isAutoDetected);
+    }
+
+    // 競合解消や表示差分があっても 0025(commit_agent_log) が /status 一覧から消えないよう補完
+    if (!data.tables.some((table) => table.name === 'commit_agent_log')) {
+      let rowCount: number | null = null;
+      let exists = false;
+      try {
+        const countResult = await db.prepare('SELECT COUNT(*) AS cnt FROM commit_agent_log').first<{ cnt: number }>();
+        exists = true;
+        rowCount = countResult?.cnt ?? 0;
+      } catch {
+        exists = false;
+        rowCount = null;
+      }
+      data.tables.push({
+        name: 'commit_agent_log',
+        exists,
+        rowCount,
+        migration: '0025',
+        description: 'コミットエージェント検出ログ',
+        syncPolicy: 'auto',
+      });
     }
 
     // コミットキャッシュ
@@ -2293,6 +2363,7 @@ app.get('/status', authMiddleware, async (c) => {
     statusCommitCacheSortMode,
     statusCommitCacheSortState,
     statusChartMode,
+    statusIgnoreUnknownUnclassifiedWarning,
   }, data));
 });
 
@@ -3207,24 +3278,45 @@ app.post('/webhook/github', async (c) => {
               now.toISOString(),
             ).run();
 
-            if (latestCommitMessage) {
-              await db.prepare(`
-                INSERT INTO commit_agent_log
-                  (request_id, repo_full_name, pr_number, commit_sha, commit_message, commit_author_name, commit_author_email, detected_agent_name, detected_agent_version, detected_signal, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-              `).bind(
-                requestId,
-                repoFullName,
-                prNumber,
-                latestCommitSha,
-                latestCommitMessage,
-                latestCommitAuthorName,
-                latestCommitAuthorEmail,
-                commitAgentName,
-                commitAgentVersion,
-                commitAgentSignal,
-                now.toISOString(),
-              ).run();
+            const commitAgentLogEntry = buildCommitAgentLogEntry({
+              requestId,
+              repoFullName,
+              prNumber,
+              commitSha: latestCommitSha,
+              commitMessage: latestCommitMessage,
+              commitAuthorName: latestCommitAuthorName,
+              commitAuthorEmail: latestCommitAuthorEmail,
+              detectedAgentName: commitAgentName,
+              detectedAgentVersion: commitAgentVersion,
+              detectedSignal: commitAgentSignal,
+              createdAtIso: now.toISOString(),
+            });
+
+            if (commitAgentLogEntry) {
+              try {
+                await db.prepare(`
+                  INSERT INTO commit_agent_log
+                    (request_id, repo_full_name, pr_number, commit_sha, commit_message, commit_author_name, commit_author_email, detected_agent_name, detected_agent_version, detected_signal, created_at)
+                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                `).bind(
+                  commitAgentLogEntry.requestId,
+                  commitAgentLogEntry.repoFullName,
+                  commitAgentLogEntry.prNumber,
+                  commitAgentLogEntry.commitSha,
+                  commitAgentLogEntry.commitMessage,
+                  commitAgentLogEntry.commitAuthorName,
+                  commitAgentLogEntry.commitAuthorEmail,
+                  commitAgentLogEntry.detectedAgentName,
+                  commitAgentLogEntry.detectedAgentVersion,
+                  commitAgentLogEntry.detectedSignal,
+                  commitAgentLogEntry.createdAtIso,
+                ).run();
+              } catch (agentLogError) {
+                logger.warn('Failed to insert commit_agent_log', {
+                  error: agentLogError instanceof Error ? agentLogError.message : 'Unknown error',
+                  requestId,
+                });
+              }
             }
             // 要約結果を自動診断してフィードバックを記録
             const diagnosis = classifySummaryResult(summary !== '' ? summary : null);
@@ -4363,6 +4455,69 @@ app.post('/api/settings/status-chart-mode', authMiddleware, async (c) => {
       error: error instanceof Error ? error.message : 'Unknown error',
     });
     return c.json({ error: '月別コミット量チャートの表示モード変更に失敗しました' }, 500);
+  }
+});
+
+app.post('/api/settings/status-table-autodetect', authMiddleware, async (c) => {
+  try {
+    const { mode } = await c.req.json();
+
+    if (mode !== 'on' && mode !== 'off') {
+      return c.json({ error: '無効な自動検出設定です' }, 400);
+    }
+
+    c.header('Set-Cookie', `user_status_table_autodetect=${mode}; Path=/; Secure; SameSite=Lax; Max-Age=31536000`);
+
+    return c.json({ message: '/status のテーブル自動検出設定を変更しました', mode }, 200);
+  } catch (error) {
+    const user = c.get('user');
+    logger.error('Status table autodetect setting update error', {
+      userId: user?.sub,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    return c.json({ error: '/status のテーブル自動検出設定変更に失敗しました' }, 500);
+  }
+});
+
+app.post('/api/settings/status-show-autodetected-tables', authMiddleware, async (c) => {
+  try {
+    const { mode } = await c.req.json();
+
+    if (mode !== 'on' && mode !== 'off') {
+      return c.json({ error: '無効な表示設定です' }, 400);
+    }
+
+    c.header('Set-Cookie', `user_status_show_autodetected_tables=${mode}; Path=/; Secure; SameSite=Lax; Max-Age=31536000`);
+
+    return c.json({ message: '/status の自動検出テーブル表示設定を変更しました', mode }, 200);
+  } catch (error) {
+    const user = c.get('user');
+    logger.error('Status auto detected table visibility update error', {
+      userId: user?.sub,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    return c.json({ error: '/status の自動検出テーブル表示設定変更に失敗しました' }, 500);
+  }
+});
+
+app.post('/api/settings/status-ignore-unknown-unclassified-warning', authMiddleware, async (c) => {
+  try {
+    const { mode } = await c.req.json();
+
+    if (mode !== 'on' && mode !== 'off') {
+      return c.json({ error: '無効な未分類警告設定です' }, 400);
+    }
+
+    c.header('Set-Cookie', `user_status_ignore_unknown_unclassified_warning=${mode}; Path=/; Secure; SameSite=Lax; Max-Age=31536000`);
+
+    return c.json({ message: '/status の未分類警告設定を変更しました', mode }, 200);
+  } catch (error) {
+    const user = c.get('user');
+    logger.error('Status unknown unclassified warning setting update error', {
+      userId: user?.sub,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    return c.json({ error: '/status の未分類警告設定変更に失敗しました' }, 500);
   }
 });
 
