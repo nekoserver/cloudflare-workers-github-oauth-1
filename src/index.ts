@@ -650,7 +650,7 @@ export const TABLE_GROUP_MAP: Record<string, string> = {
   user_sessions: 'auth', teams: 'auth', workspaces: 'auth', team_members: 'auth',
   commit_calendar_cache: 'commit', commit_list_cache: 'commit', cache_stats: 'commit',
   commit_search_history: 'commit', commit_search_repo_stats: 'commit', cloudflare_setup_pending: 'commit',
-  ai_summary_log: 'ai', ai_summary_reviews: 'ai',
+  ai_summary_log: 'ai', ai_summary_reviews: 'ai', commit_agent_log: 'ai',
   resend_webhook_sources: 'email', email_send_log: 'email', resend_webhook_log: 'email',
   email_suppression_list: 'email', email_mfa_challenges: 'email', email_audit_anomalies: 'email',
   installation_permissions: 'config', repo_color_settings: 'config', repo_groups: 'config',
@@ -702,6 +702,7 @@ export const COLUMN_FK_TARGETS: Record<string, Record<string, string>> = {
   team_members: { team_id: 'teams' },
   commit_search_repo_stats: { search_history_id: 'commit_search_history' },
   ai_summary_reviews: { summary_request_id: 'ai_summary_log' },
+  commit_agent_log: { request_id: 'ai_summary_log' },
   repo_group_members: { group_id: 'repo_groups' },
   email_send_log: { source_id: 'resend_webhook_sources' },
   resend_webhook_log: { source_id: 'resend_webhook_sources' },
@@ -760,6 +761,54 @@ function inferMigrationFromAppliedNames(tableName: string, appliedMigrationNames
     if (!lower.includes(normalized)) continue;
     const match = name.match(/^(\d{4})_/);
     if (match) return match[1];
+  }
+  return null;
+}
+
+function inferGroupFromTableName(tableName: string): string | null {
+  const normalized = tableName.toLowerCase();
+
+  if (
+    normalized.includes('ai_') ||
+    normalized.includes('summary') ||
+    normalized.includes('agent_log')
+  ) {
+    return 'ai';
+  }
+  if (
+    normalized.includes('email') ||
+    normalized.includes('resend') ||
+    normalized.includes('webhook') ||
+    normalized.includes('suppression') ||
+    normalized.includes('mfa')
+  ) {
+    return 'email';
+  }
+  if (
+    normalized.includes('commit') ||
+    normalized.includes('cache') ||
+    normalized.includes('cloudflare_setup')
+  ) {
+    return 'commit';
+  }
+  if (
+    normalized.includes('session') ||
+    normalized.includes('auth') ||
+    normalized.includes('team') ||
+    normalized.includes('workspace') ||
+    normalized.includes('member')
+  ) {
+    return 'auth';
+  }
+  if (
+    normalized.includes('repo_') ||
+    normalized.includes('installation') ||
+    normalized.includes('table_') ||
+    normalized.includes('settings') ||
+    normalized.includes('config') ||
+    normalized.includes('slack_interaction')
+  ) {
+    return 'config';
   }
   return null;
 }
@@ -1887,6 +1936,7 @@ app.get('/status', authMiddleware, async (c) => {
     },
     tables: [],
     tableGroupMap: TABLE_GROUP_MAP,
+    unclassifiedAutoDetectedTables: [],
     groupLabels: GROUP_LABELS,
     userContext: {
       teamName: null, teamId: null,
@@ -1961,12 +2011,18 @@ app.get('/status', authMiddleware, async (c) => {
         for (const row of sqliteTables.results ?? []) {
           if (!row.name || knownTables.has(row.name) || row.name === 'd1_migrations') continue;
           const inferredMigration = inferMigrationFromAppliedNames(row.name, appliedMigrationNames) ?? 'unknown';
+          const inferredGroup = inferGroupFromTableName(row.name);
           let rowCount: number | null = null;
           try {
             const countResult = await db.prepare(`SELECT COUNT(*) AS cnt FROM ${row.name}`).first<{ cnt: number }>();
             rowCount = countResult?.cnt ?? 0;
           } catch {
             rowCount = null;
+          }
+          if (inferredGroup) {
+            data.tableGroupMap[row.name] = inferredGroup;
+          } else {
+            data.unclassifiedAutoDetectedTables.push(row.name);
           }
           data.tables.push({
             name: row.name,

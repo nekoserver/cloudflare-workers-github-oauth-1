@@ -129,10 +129,12 @@ describe('buildGroupErData', () => {
   const descriptions: Record<string, string> = {
     ai_summary_log: 'AI要約ログ',
     ai_summary_reviews: 'AI要約レビュー',
+    commit_agent_log: 'コミットエージェント検出ログ',
   };
   const pragmaCols: Record<string, string[]> = {
     ai_summary_log: ['id', 'request_id', 'summary'],
     ai_summary_reviews: ['id', 'summary_request_id', 'rating'],
+    commit_agent_log: ['id', 'request_id', 'detected_agent_name'],
   };
 
   it('指定テーブルと同グループの全テーブルを返す', () => {
@@ -162,5 +164,15 @@ describe('buildGroupErData', () => {
   it('グループカラーが返される', () => {
     const result = buildGroupErData('ai_summary_log', TABLE_GROUP_MAP, descriptions, TABLE_COLUMN_KEYS, COLUMN_FK_TARGETS, pragmaCols);
     expect(result!.groupColor).toBe('#d29922');
+  });
+
+  it('commit_agent_log が AI グループに含まれ、request_id のFK先が解決される', () => {
+    const result = buildGroupErData('commit_agent_log', TABLE_GROUP_MAP, descriptions, TABLE_COLUMN_KEYS, COLUMN_FK_TARGETS, pragmaCols);
+    expect(result).not.toBeNull();
+    expect(result!.groupName).toBe('ai');
+    expect(result!.tables.map((t) => t.tableName)).toContain('commit_agent_log');
+    const commitAgentTable = result!.tables.find((t) => t.tableName === 'commit_agent_log')!;
+    const requestIdCol = commitAgentTable.columns.find((c) => c.name === 'request_id')!;
+    expect(requestIdCol.fkTarget).toBe('ai_summary_log');
   });
 });
