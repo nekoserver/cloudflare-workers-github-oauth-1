@@ -96,6 +96,7 @@ export interface CacheStatusData {
   };
   tables: TableStatusEntry[];
   tableGroupMap: Record<string, string>;
+  unclassifiedAutoDetectedTables: string[];
   groupLabels: Record<string, string>;
   userContext: UserContextInfo;
 }
@@ -220,6 +221,7 @@ export function getCacheStatusPage(user: {
     </tr>`
   ).join('');
   const commitCacheEntriesJson = JSON.stringify(data.commitCache.entries);
+  const unclassifiedAutoDetectedTablesJson = JSON.stringify(data.unclassifiedAutoDetectedTables);
 
   // インストール権限行
   const permRows = data.installationPerms.entries.map(e =>
@@ -600,6 +602,29 @@ export function getCacheStatusPage(user: {
     .all-repos { color: var(--accent-color); font-weight: 600; font-size: 12px; }
     .status-ok { color: #48bb78; font-weight: 700; font-size: 12px; }
     .status-missing { color: var(--danger-color); font-weight: 700; font-size: 12px; }
+    .status-warning-toast {
+      position: fixed;
+      right: 20px;
+      bottom: 20px;
+      z-index: 1100;
+      min-width: 320px;
+      max-width: 460px;
+      background: #ffd6ea;
+      color: #702459;
+      border: 1px solid #ff9dcb;
+      border-radius: 10px;
+      box-shadow: 0 10px 24px rgba(112, 36, 89, 0.2);
+      padding: 12px 14px;
+      font-size: 12px;
+      line-height: 1.55;
+      display: none;
+    }
+    .status-warning-toast strong { font-size: 13px; }
+    .status-warning-toast code {
+      background: rgba(112, 36, 89, 0.08);
+      border-radius: 4px;
+      padding: 1px 4px;
+    }
     .current-row { background: rgba(102, 126, 234, 0.08); }
     [data-theme="dark"] .current-row { background: rgba(127, 156, 245, 0.12); }
 
@@ -1728,6 +1753,7 @@ export function getCacheStatusPage(user: {
     var commitCacheSortMode = ${JSON.stringify(statusCommitCacheSortMode)};
     var commitCacheSortState = ${JSON.stringify(statusCommitCacheSortState)};
     var commitCacheEntries = ${commitCacheEntriesJson};
+    var unclassifiedAutoDetectedTables = ${unclassifiedAutoDetectedTablesJson};
     var allRepoNames = ${JSON.stringify(data.repoColors.map(rc => rc.repoName).sort())};
     var uniqueOwner = ${uniqueOwner ? JSON.stringify(uniqueOwner) : 'null'};
     var activeCommitCacheYearMonth = null;
@@ -1792,6 +1818,26 @@ export function getCacheStatusPage(user: {
       var prefix = uniqueOwner + '/';
       return fullName.indexOf(prefix) === 0 ? fullName.substring(prefix.length) : fullName;
     }
+
+    function showUnclassifiedTableToast() {
+      if (!unclassifiedAutoDetectedTables || unclassifiedAutoDetectedTables.length === 0) return;
+      var toast = document.getElementById('unclassifiedTableToast');
+      if (!toast) return;
+      var previewList = unclassifiedAutoDetectedTables.slice(0, 4).map(function(t) { return '<code>' + escapeHtmlText(t) + '</code>'; }).join(', ');
+      var rest = unclassifiedAutoDetectedTables.length > 4
+        ? ' ほか ' + (unclassifiedAutoDetectedTables.length - 4) + ' 件'
+        : '';
+      toast.innerHTML =
+        '<strong>未分類テーブルがあります（グループID: 0）</strong><br>' +
+        '自動検出された新規テーブルのうち、分類できなかったものがあります。' +
+        '<br>' + previewList + rest +
+        '<br>/status のグループ設計（table_catalog/TABLE_GROUP_MAP）へ追加してください。';
+      toast.style.display = 'block';
+      setTimeout(function() {
+        toast.style.display = 'none';
+      }, 12000);
+    }
+    showUnclassifiedTableToast();
 
     function renderCommitChart(filterGroupId) {
       var chartBarsArea = document.getElementById('chartBarsArea');

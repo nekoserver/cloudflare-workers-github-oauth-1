@@ -17,6 +17,7 @@ const minimalData: CacheStatusData = {
   cacheStats: { totalGithubFetch: 0, totalCacheSave: 0, totalCacheLookup: 0, totalCacheHit: 0, entries: [] },
   tables: [],
   tableGroupMap: {},
+  unclassifiedAutoDetectedTables: [],
   groupLabels: {},
   userContext: { teamName: null, teamId: null, workspaceName: null, workspaceId: null, role: null, allWorkspaces: [] },
 };
@@ -112,6 +113,18 @@ describe('/status ページの script安全性', () => {
     const html = getCacheStatusPage(minimalUser, minimalData);
     expect(html).toContain('function bindFilterSelects(tableId)');
     expect(html).toContain('bindFilterSelects(tableId)');
+  });
+});
+
+describe('/status ページの 未分類テーブル注意トースト', () => {
+  it('未分類テーブルがある場合に注意トースト表示ロジックを含む', () => {
+    const html = getCacheStatusPage(minimalUser, {
+      ...minimalData,
+      unclassifiedAutoDetectedTables: ['mystery_table'],
+    });
+    expect(html).toContain('unclassifiedTableToast');
+    expect(html).toContain('showUnclassifiedTableToast');
+    expect(html).toContain('未分類テーブルがあります（グループID: 0）');
   });
 });
 
