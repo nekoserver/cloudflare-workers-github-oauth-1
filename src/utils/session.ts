@@ -30,7 +30,11 @@ export type RenewSessionResult = {
 export async function renewSession(params: RenewSessionParams): Promise<RenewSessionResult> {
   const { currentUser, newDuration, jwtSecret, idleTimeoutEnv } = params;
   const sessionDurationSeconds = getSessionDurationSeconds(newDuration);
-  const idleTimeoutSeconds = resolveIdleTimeoutSeconds(idleTimeoutEnv, sessionDurationSeconds);
+  const idleTimeoutSeconds = resolveIdleTimeoutSeconds(
+    idleTimeoutEnv,
+    sessionDurationSeconds,
+    sessionDurationSeconds
+  );
 
   const token = await createJWT(
     {

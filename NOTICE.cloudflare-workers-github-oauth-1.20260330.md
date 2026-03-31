@@ -35,3 +35,13 @@ table_column_keys は table_catalog への FK を持つため、以下の順序�
 3. table_column_keys への INSERT（34行）
 
 順序を間違えるとFK制約違反でINSERTが失敗する。
+
+## 3. セッション無操作タイムアウト（デフォルト30分）の適用条件
+
+無操作タイムアウトの30分デフォルトは、以下のどちらかの場合にのみ使う：
+
+1. `SESSION_IDLE_TIMEOUT_SECONDS` が未設定または不正値
+2. `/settings` で保持している `user_session_duration` が確認できない
+
+上記以外（= 環境変数または `/settings` の値が確認できる場合）は、30分デフォルトを適用しない。
+具体的には、環境変数があればそれを優先し、環境変数がなければ `/settings` のセッション有効期限値を無操作タイムアウト値として使う。

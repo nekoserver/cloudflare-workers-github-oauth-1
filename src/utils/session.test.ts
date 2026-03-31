@@ -60,9 +60,9 @@ describe('renewSession', () => {
     expect(result.sessionDurationSeconds).toBe(86400);
   });
 
-  it('idleTimeoutSecondsがデフォルト30分に設定される', async () => {
+  it('idleTimeoutSecondsはsessionDurationの値を使う（設定値未取得時のみデフォルト30分）', async () => {
     const result = await renewSession(baseParams);
-    expect(result.idleTimeoutSeconds).toBe(1800);
+    expect(result.idleTimeoutSeconds).toBe(86400);
   });
 
   it('cookiesにauth_token・login_timestamp・last_activity・user_session_durationが含まれる', async () => {
@@ -70,7 +70,7 @@ describe('renewSession', () => {
     expect(result.cookies).toHaveLength(4);
     expect(result.cookies[0]).toMatch(/^auth_token=.+; Path=\/; HttpOnly; Secure; SameSite=Lax; Max-Age=86400$/);
     expect(result.cookies[1]).toMatch(/^login_timestamp=\d+; Path=\/; Secure; SameSite=Lax; Max-Age=86400$/);
-    expect(result.cookies[2]).toMatch(/^last_activity=\d+; Path=\/; HttpOnly; Secure; SameSite=Lax; Max-Age=1800$/);
+    expect(result.cookies[2]).toMatch(/^last_activity=\d+; Path=\/; HttpOnly; Secure; SameSite=Lax; Max-Age=86400$/);
     expect(result.cookies[3]).toBe('user_session_duration=1d; Path=/; Secure; SameSite=Lax; Max-Age=31536000');
   });
 
@@ -78,6 +78,12 @@ describe('renewSession', () => {
     const result = await renewSession({ ...baseParams, newDuration: '1w' });
     expect(result.sessionDurationSeconds).toBe(604800);
     expect(result.cookies[0]).toContain('Max-Age=604800');
+  });
+
+  it('SESSION_IDLE_TIMEOUT_SECONDSが設定されていればその値を優先する', async () => {
+    const result = await renewSession({ ...baseParams, idleTimeoutEnv: '900' });
+    expect(result.idleTimeoutSeconds).toBe(900);
+    expect(result.cookies[2]).toMatch(/^last_activity=\d+; Path=\/; HttpOnly; Secure; SameSite=Lax; Max-Age=900$/);
   });
 
   it('github_access_tokenがあればJWTに含まれる', async () => {

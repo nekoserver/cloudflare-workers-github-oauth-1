@@ -103,10 +103,18 @@ export interface ResendWebhookPayload {
  * セッションアイドルタイムアウト秒数を解決する
  * 環境変数の値をパースし、maxSeconds を超えないように制限する
  */
-export function resolveIdleTimeoutSeconds(envValue: string | undefined, maxSeconds: number): number {
+export function resolveIdleTimeoutSeconds(
+  envValue: string | undefined,
+  maxSeconds: number,
+  settingsSeconds?: number
+): number {
   const parsed = Number(envValue);
   const defaultIdle = 30 * 60;
-  let idleSeconds = Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : defaultIdle;
+  const resolvedSettings = Number(settingsSeconds);
+  const fallbackIdle = Number.isFinite(resolvedSettings) && resolvedSettings > 0
+    ? Math.floor(resolvedSettings)
+    : defaultIdle;
+  let idleSeconds = Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : fallbackIdle;
   if (idleSeconds > maxSeconds) {
     idleSeconds = maxSeconds;
   }

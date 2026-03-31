@@ -7,6 +7,7 @@ import { verifyJWT, extractBearerToken, JWTPayload } from '../utils/jwt';
 import { getSessionExpiredPage } from '../views/session-expired';
 import { getCookieValue } from '../utils/cookie';
 import { postSlackMessage } from '../utils/slack';
+import { getSessionDurationSeconds } from '../utils/session';
 import { resolveIdleTimeoutSeconds, type Bindings, type Variables } from '../types';
 
 // Contextに認証ユーザー情報を追加
@@ -88,7 +89,13 @@ export async function authMiddleware(c: Context<{ Bindings: Bindings; Variables:
     const cookieHeader = c.req.header('Cookie');
     const lastActivity = parseTimestampMs(getCookieValue(cookieHeader, 'last_activity'));
     const remainingSeconds = Math.max(payload.exp - Math.floor(nowMs / 1000), 0);
-    const idleTimeoutSeconds = resolveIdleTimeoutSeconds(c.env.SESSION_IDLE_TIMEOUT_SECONDS, remainingSeconds);
+    const configuredDuration = getCookieValue(cookieHeader, 'user_session_duration');
+    const idleFromSettings = configuredDuration ? getSessionDurationSeconds(configuredDuration) : undefined;
+    const idleTimeoutSeconds = resolveIdleTimeoutSeconds(
+      c.env.SESSION_IDLE_TIMEOUT_SECONDS,
+      remainingSeconds,
+      idleFromSettings
+    );
 
     if (!lastActivity || nowMs - lastActivity > idleTimeoutSeconds * 1000) {
       const clearHeaders = new Headers();
