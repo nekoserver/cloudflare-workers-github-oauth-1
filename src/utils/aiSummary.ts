@@ -62,6 +62,56 @@ export async function fetchPrDiff(
   };
 }
 
+
+export type DetectedCommitAgent = {
+  agentName: string;
+  agentVersion: string | null;
+  signal: 'message' | 'author' | 'pr';
+};
+
+function detectVersion(input: string): string | null {
+  const m = input.match(/\b(?:version|ver\.?|v|バージョン)\s*[:=]?\s*(\d+(?:\.\d+){0,3}(?:[-+._][0-9A-Za-z]+)?)\b/i)
+    || input.match(/\bv(?:\d+\.){0,3}\d+(?:[-+._][0-9A-Za-z]+)?\b/i)
+    || input.match(/\b\d+\.\d+(?:\.\d+){0,2}(?:[-+._][0-9A-Za-z]+)?\b/);
+  if (!m) return null;
+  if (m[1]) return m[1];
+  return m[0];
+}
+
+export function detectCommitAgentFromText(message: string, authorName?: string | null, authorEmail?: string | null): DetectedCommitAgent | null {
+  const text = `${message}
+${authorName ?? ''}
+${authorEmail ?? ''}`.toLowerCase();
+  const rules: Array<{ key: string; label: string }> = [
+    { key: 'claude code', label: 'Claude Code' },
+    { key: 'codex', label: 'Codex' },
+    { key: 'cursor', label: 'Cursor' },
+    { key: 'windsurf', label: 'Windsurf' },
+    { key: 'aider', label: 'Aider' },
+    { key: 'cline', label: 'Cline' },
+    { key: 'github copilot', label: 'GitHub Copilot' },
+  ];
+
+  for (const rule of rules) {
+    if (text.includes(rule.key)) {
+      return {
+        agentName: rule.label,
+        agentVersion: detectVersion(message) || detectVersion(authorName ?? '') || detectVersion(authorEmail ?? ''),
+        signal: message.toLowerCase().includes(rule.key) ? 'message' : 'author',
+      };
+    }
+  }
+
+  return null;
+}
+
+export function detectCommitAgentFromPrText(prTitle: string, prBody: string | null | undefined): DetectedCommitAgent | null {
+  const joined = `${prTitle}\n${prBody ?? ''}`;
+  const detected = detectCommitAgentFromText(joined);
+  if (!detected) return null;
+  return { ...detected, signal: 'pr' };
+}
+
 export type GenerateSummaryParams = {
   ai: AiBinding;
   model: string;
@@ -244,6 +294,10 @@ export type BuildSlackMessageParams = {
   fallbackUsed?: boolean;
   primaryModel?: string;
   fallbackModel?: string;
+  commitAgentName?: string;
+  commitAgentVersion?: string | null;
+  commitAgentSignal?: 'message' | 'author' | 'pr' | null;
+  summaryModel?: string | null;
 };
 
 export type SlackMessagePayload = {
@@ -266,6 +320,10 @@ export function buildSlackMessage(params: BuildSlackMessageParams): SlackMessage
     fallbackUsed,
     primaryModel,
     fallbackModel,
+    commitAgentName,
+    commitAgentVersion,
+    commitAgentSignal,
+    summaryModel,
   } = params;
 
   const actionLabel = prAction === 'opened' ? '作成' : '更新';
@@ -282,7 +340,7 @@ export function buildSlackMessage(params: BuildSlackMessageParams): SlackMessage
     prUrl,
   ];
   const fallbackNote = fallbackUsed && primaryModel
-    ? `:rotating_light: 実験モデル (${primaryModel}) が失敗したためフォールバックモデル (${fallbackModel || 'default'}) で要約しました`
+    ? `:rotating_light: AI要約モデル (${primaryModel}) が失敗したためフォールバック要約モデル (${fallbackModel || 'default'}) で要約しました`
     : '';
 
   if (hasSummary) {
@@ -303,6 +361,13 @@ export function buildSlackMessage(params: BuildSlackMessageParams): SlackMessage
   }
   if (hasDesignDiff) {
     textLines.push('', '*初期設計との差異:*', cleanDesignDiff);
+  }
+  if (summaryModel) {
+    textLines.push('', `*AI要約モデル (@cf・要約専用):* ${summaryModel}`);
+  }
+  if (commitAgentName) {
+    const sourceLabel = commitAgentSignal === 'pr' ? 'PR記述由来' : 'コミット由来';
+    textLines.push('', `*コーディングエージェント (${sourceLabel}):* ${commitAgentName}${commitAgentVersion ? ` (${commitAgentVersion})` : ''}`);
   }
   textLines.push('', `_AI問い合わせ #${dailySeq} (本日) | ID: ${requestId}_`);
   const text = textLines.join('\n');
@@ -379,6 +444,27 @@ export function buildSlackMessage(params: BuildSlackMessageParams): SlackMessage
         type: 'mrkdwn',
         text: `*初期設計との差異:*\n\`\`\`\n${cleanDesignDiff}\n\`\`\``,
       },
+    });
+  }
+
+  if (summaryModel) {
+    blocks.push({
+      type: 'context',
+      elements: [{
+        type: 'mrkdwn',
+        text: `AI要約モデル (@cf・要約専用): ${summaryModel}`,
+      }],
+    });
+  }
+
+  if (commitAgentName) {
+    const sourceLabel = commitAgentSignal === 'pr' ? 'PR記述由来' : 'コミット由来';
+    blocks.push({
+      type: 'context',
+      elements: [{
+        type: 'mrkdwn',
+        text: `コーディングエージェント (${sourceLabel}): ${commitAgentName}${commitAgentVersion ? ` (${commitAgentVersion})` : ''}`,
+      }],
     });
   }
 

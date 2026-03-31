@@ -23,7 +23,7 @@ import { getCookieValue, getCookieValues } from './utils/cookie';
 import { verifyResendWebhookSignature } from './utils/resendWebhook';
 import { verifyGitHubWebhookSignature } from './utils/githubWebhook';
 import { postSlackMessage, openSlackModal, respondToInteraction } from './utils/slack';
-import { fetchPrDiff, runSummaryPipeline, buildSlackMessage, buildSummaryModal, buildSummaryFallbackBlocks, classifySummaryResult, resolveAiModel, extractDesignDiff, sanitizeBoxDrawing, WORKER_BASE_URL, DESIGN_SPEC_CHECKLIST, DEFAULT_AI_MODEL, type SummaryModalRow } from './utils/aiSummary';
+import { fetchPrDiff, runSummaryPipeline, buildSlackMessage, buildSummaryModal, buildSummaryFallbackBlocks, classifySummaryResult, resolveAiModel, extractDesignDiff, sanitizeBoxDrawing, detectCommitAgentFromText, detectCommitAgentFromPrText, WORKER_BASE_URL, DESIGN_SPEC_CHECKLIST, DEFAULT_AI_MODEL, type SummaryModalRow } from './utils/aiSummary';
 import { getSessionDurationSeconds, renewSession } from './utils/session';
 import { verifySlackSignature } from './utils/slackSignature';
 import { handleSlackInteraction } from './utils/slackInteraction';
@@ -71,6 +71,7 @@ const STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
   { name: 'repo_groups', migration: '0014', description: 'リポジトリグループ', syncPolicy: 'manual' },
   { name: 'repo_group_members', migration: '0014', description: 'リポジトリグループメンバー', syncPolicy: 'manual' },
   { name: 'ai_summary_reviews', migration: '0016', description: 'AI要約レビュー・評価', syncPolicy: 'manual' },
+  { name: 'commit_agent_log', migration: '0025', description: 'コミットエージェント検出ログ', syncPolicy: 'auto' },
   { name: 'resend_webhook_sources', migration: '0017', description: 'Resend Webhook 送信元定義', syncPolicy: 'manual' },
   { name: 'email_send_log', migration: '0018', description: 'メール送信ログ', syncPolicy: 'auto' },
   { name: 'resend_webhook_log', migration: '0019', description: 'Resend Webhook 受信ログ', syncPolicy: 'auto' },
@@ -447,6 +448,23 @@ CREATE TABLE IF NOT EXISTS table_column_keys (
 
 CREATE INDEX IF NOT EXISTS idx_table_catalog_group ON table_catalog(group_name);
 CREATE INDEX IF NOT EXISTS idx_table_column_keys_fk ON table_column_keys(fk_target_table);`,
+  '0025': `CREATE TABLE IF NOT EXISTS commit_agent_log (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  request_id TEXT NOT NULL,
+  repo_full_name TEXT NOT NULL,
+  pr_number INTEGER NOT NULL,
+  commit_sha TEXT,
+  commit_message TEXT,
+  commit_author_name TEXT,
+  commit_author_email TEXT,
+  detected_agent_name TEXT,
+  detected_agent_version TEXT,
+  detected_signal TEXT,
+  created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_commit_agent_log_request ON commit_agent_log(request_id);
+CREATE INDEX IF NOT EXISTS idx_commit_agent_log_repo_pr ON commit_agent_log(repo_full_name, pr_number);`,
 };
 
 function jsonUtf8(payload: unknown, status = 200): Response {
@@ -732,6 +750,17 @@ export function buildGroupErData(
 
 function getStatusTableDefinition(tableName: string): StatusTableDefinition | undefined {
   return STATUS_TABLE_DEFINITIONS.find((table) => table.name === tableName);
+}
+
+function inferMigrationFromAppliedNames(tableName: string, appliedMigrationNames: string[]): string | null {
+  const normalized = tableName.toLowerCase();
+  for (const name of appliedMigrationNames) {
+    const lower = name.toLowerCase();
+    if (!lower.includes(normalized)) continue;
+    const match = name.match(/^(\d{4})_/);
+    if (match) return match[1];
+  }
+  return null;
 }
 
 function getStatusTablePreviewQuery(
@@ -1857,7 +1886,17 @@ app.get('/status', authMiddleware, async (c) => {
     }
 
     // テーブル別マイグレーション状況を収集
+    let appliedMigrationNames: string[] = [];
+    try {
+      const migrationRows = await db.prepare('SELECT name FROM d1_migrations ORDER BY id DESC').all<{ name: string }>();
+      appliedMigrationNames = (migrationRows.results ?? []).map((row) => row.name).filter((v): v is string => typeof v === 'string');
+    } catch {
+      // d1_migrations が存在しない環境は無視
+    }
+
+    const knownTables = new Set<string>();
     for (const tbl of STATUS_TABLE_DEFINITIONS) {
+      knownTables.add(tbl.name);
       const entry: TableStatusEntry = {
         name: tbl.name,
         exists: false,
@@ -1876,6 +1915,34 @@ app.get('/status', authMiddleware, async (c) => {
         // テーブルが存在しない場合 → exists = false のまま
       }
       data.tables.push(entry);
+    }
+
+    // 追加テーブル（定義外）も自動検出して表示する
+    try {
+      const sqliteTables = await db.prepare(
+        "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'"
+      ).all<{ name: string }>();
+      for (const row of sqliteTables.results ?? []) {
+        if (!row.name || knownTables.has(row.name) || row.name === 'd1_migrations') continue;
+        const inferredMigration = inferMigrationFromAppliedNames(row.name, appliedMigrationNames) ?? 'unknown';
+        let rowCount: number | null = null;
+        try {
+          const countResult = await db.prepare(`SELECT COUNT(*) AS cnt FROM ${row.name}`).first<{ cnt: number }>();
+          rowCount = countResult?.cnt ?? 0;
+        } catch {
+          rowCount = null;
+        }
+        data.tables.push({
+          name: row.name,
+          exists: true,
+          rowCount,
+          migration: inferredMigration,
+          description: '自動検出テーブル',
+          syncPolicy: 'manual',
+        });
+      }
+    } catch {
+      // sqlite_master が参照できない環境は無視
     }
 
     // コミットキャッシュ
@@ -2743,6 +2810,34 @@ app.get('/repositories', optionalAuthMiddleware, async (c) => {
  * GitHub App Webhook 受信用エンドポイント
  * installation イベントを受信し、D1 に権限を保存、Slack に通知
  */
+
+async function fetchLatestPrCommitInfo(commitsUrl: string, githubToken: string): Promise<{ sha: string; message: string; authorName: string | null; authorEmail: string | null } | null> {
+  const res = await fetch(commitsUrl, {
+    headers: {
+      Authorization: `Bearer ${githubToken}`,
+      Accept: 'application/vnd.github+json',
+      'User-Agent': 'cloudflare-workers-github-oauth-1',
+    },
+  });
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    throw new Error(`PR commits fetch failed: ${res.status} ${res.statusText} ${body.slice(0, 500)}`);
+  }
+  const commits = await res.json() as Array<{ sha?: string; commit?: { message?: string; author?: { name?: string; email?: string } } }>;
+  if (!Array.isArray(commits) || commits.length === 0) {
+    return null;
+  }
+  const latest = commits[commits.length - 1];
+  const message = typeof latest?.commit?.message === 'string' ? latest.commit.message : '';
+  if (!message) return null;
+  return {
+    sha: latest?.sha ?? '',
+    message,
+    authorName: latest?.commit?.author?.name ?? null,
+    authorEmail: latest?.commit?.author?.email ?? null,
+  };
+}
+
 app.post('/webhook/github', async (c) => {
   const webhookSecret = c.env.GITHUB_WEBHOOK_SECRET;
   if (!webhookSecret) {
@@ -2990,6 +3085,45 @@ app.post('/webhook/github', async (c) => {
           }
         }
 
+        // 最新コミットからエージェント情報を抽出
+        let commitAgentName: string | null = null;
+        let commitAgentVersion: string | null = null;
+        let commitAgentSignal: 'message' | 'author' | 'pr' | null = null;
+        let latestCommitSha: string | null = null;
+        let latestCommitMessage: string | null = null;
+        let latestCommitAuthorName: string | null = null;
+        let latestCommitAuthorEmail: string | null = null;
+        if (githubToken && pr.commits_url) {
+          try {
+            const latestCommit = await fetchLatestPrCommitInfo(pr.commits_url, githubToken);
+            if (latestCommit) {
+              latestCommitSha = latestCommit.sha || null;
+              latestCommitMessage = latestCommit.message;
+              latestCommitAuthorName = latestCommit.authorName;
+              latestCommitAuthorEmail = latestCommit.authorEmail;
+              const agent = detectCommitAgentFromText(latestCommit.message, latestCommit.authorName, latestCommit.authorEmail);
+              if (agent) {
+                commitAgentName = agent.agentName;
+                commitAgentVersion = agent.agentVersion;
+                commitAgentSignal = agent.signal;
+              }
+            }
+          } catch (error) {
+            logger.warn('Failed to fetch PR commits for agent detection', {
+              error: error instanceof Error ? error.message : 'Unknown error',
+              prUrl,
+            });
+          }
+        }
+        if (!commitAgentName) {
+          const prDetected = detectCommitAgentFromPrText(title, description);
+          if (prDetected) {
+            commitAgentName = prDetected.agentName;
+            commitAgentVersion = prDetected.agentVersion;
+            commitAgentSignal = prDetected.signal;
+          }
+        }
+
         // AI 要約
         const pipelineResult = await runSummaryPipeline({
           ai: ai as { run(model: string, input: { messages: { role: string; content: string }[] }): Promise<unknown> } | null,
@@ -3025,6 +3159,10 @@ app.post('/webhook/github', async (c) => {
           fallbackUsed: pipelineResult.fallbackUsed,
           primaryModel: aiModel,
           fallbackModel: DEFAULT_AI_MODEL,
+          summaryModel: pipelineResult.usedModel,
+          commitAgentName: commitAgentName ?? undefined,
+          commitAgentVersion,
+          commitAgentSignal,
         });
 
         let slackNotified = false;
@@ -3068,6 +3206,26 @@ app.post('/webhook/github', async (c) => {
               slackNotified ? 1 : 0,
               now.toISOString(),
             ).run();
+
+            if (latestCommitMessage) {
+              await db.prepare(`
+                INSERT INTO commit_agent_log
+                  (request_id, repo_full_name, pr_number, commit_sha, commit_message, commit_author_name, commit_author_email, detected_agent_name, detected_agent_version, detected_signal, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+              `).bind(
+                requestId,
+                repoFullName,
+                prNumber,
+                latestCommitSha,
+                latestCommitMessage,
+                latestCommitAuthorName,
+                latestCommitAuthorEmail,
+                commitAgentName,
+                commitAgentVersion,
+                commitAgentSignal,
+                now.toISOString(),
+              ).run();
+            }
             // 要約結果を自動診断してフィードバックを記録
             const diagnosis = classifySummaryResult(summary !== '' ? summary : null);
             try {
