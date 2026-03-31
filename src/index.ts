@@ -752,6 +752,17 @@ function getStatusTableDefinition(tableName: string): StatusTableDefinition | un
   return STATUS_TABLE_DEFINITIONS.find((table) => table.name === tableName);
 }
 
+function inferMigrationFromAppliedNames(tableName: string, appliedMigrationNames: string[]): string | null {
+  const normalized = tableName.toLowerCase();
+  for (const name of appliedMigrationNames) {
+    const lower = name.toLowerCase();
+    if (!lower.includes(normalized)) continue;
+    const match = name.match(/^(\d{4})_/);
+    if (match) return match[1];
+  }
+  return null;
+}
+
 function getStatusTablePreviewQuery(
   tableName: string,
   userId: string,
@@ -1875,7 +1886,17 @@ app.get('/status', authMiddleware, async (c) => {
     }
 
     // テーブル別マイグレーション状況を収集
+    let appliedMigrationNames: string[] = [];
+    try {
+      const migrationRows = await db.prepare('SELECT name FROM d1_migrations ORDER BY id DESC').all<{ name: string }>();
+      appliedMigrationNames = (migrationRows.results ?? []).map((row) => row.name).filter((v): v is string => typeof v === 'string');
+    } catch {
+      // d1_migrations が存在しない環境は無視
+    }
+
+    const knownTables = new Set<string>();
     for (const tbl of STATUS_TABLE_DEFINITIONS) {
+      knownTables.add(tbl.name);
       const entry: TableStatusEntry = {
         name: tbl.name,
         exists: false,
@@ -1894,6 +1915,34 @@ app.get('/status', authMiddleware, async (c) => {
         // テーブルが存在しない場合 → exists = false のまま
       }
       data.tables.push(entry);
+    }
+
+    // 追加テーブル（定義外）も自動検出して表示する
+    try {
+      const sqliteTables = await db.prepare(
+        "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'"
+      ).all<{ name: string }>();
+      for (const row of sqliteTables.results ?? []) {
+        if (!row.name || knownTables.has(row.name) || row.name === 'd1_migrations') continue;
+        const inferredMigration = inferMigrationFromAppliedNames(row.name, appliedMigrationNames) ?? 'unknown';
+        let rowCount: number | null = null;
+        try {
+          const countResult = await db.prepare(`SELECT COUNT(*) AS cnt FROM ${row.name}`).first<{ cnt: number }>();
+          rowCount = countResult?.cnt ?? 0;
+        } catch {
+          rowCount = null;
+        }
+        data.tables.push({
+          name: row.name,
+          exists: true,
+          rowCount,
+          migration: inferredMigration,
+          description: '自動検出テーブル',
+          syncPolicy: 'manual',
+        });
+      }
+    } catch {
+      // sqlite_master が参照できない環境は無視
     }
 
     // コミットキャッシュ
