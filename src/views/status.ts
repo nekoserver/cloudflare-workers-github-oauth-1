@@ -1322,6 +1322,10 @@ export function getCacheStatusPage(user: {
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="1" y="1" width="5" height="6" rx="1" stroke="white" stroke-width="1.5"/><rect x="10" y="9" width="5" height="6" rx="1" stroke="white" stroke-width="1.5"/><path d="M6 4h2.5a1.5 1.5 0 011.5 1.5V12" stroke="white" stroke-width="1.5"/></svg>
             UML を表示
           </button>
+          <button type="button" class="uml-button" id="openCommitAgentLogButton">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="2" y="2" width="12" height="12" rx="2" stroke="white" stroke-width="1.5"/><path d="M4.5 6h7M4.5 8h7M4.5 10h4" stroke="white" stroke-width="1.5" stroke-linecap="round"/></svg>
+            0025(commit_agent_log) を開く
+          </button>
           <button type="button" class="uml-refresh-button" id="refreshUmlButton">
             <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M14 8A6 6 0 114 3.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M4 0.5V4h3.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
             手動で更新する
@@ -2851,6 +2855,12 @@ export function getCacheStatusPage(user: {
           if (migration && tableName) {
             openMigrationSql(migration, tableName);
           }
+        });
+      }
+      var openCommitAgentLogButton = document.getElementById('openCommitAgentLogButton');
+      if (openCommitAgentLogButton) {
+        openCommitAgentLogButton.addEventListener('click', function() {
+          openTablePreview('commit_agent_log');
         });
       }
       var groupFilterSelect = document.getElementById('groupFilterSelect');
