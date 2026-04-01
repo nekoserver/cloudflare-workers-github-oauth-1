@@ -1110,7 +1110,38 @@ export function getCacheStatusPage(user: {
     .uml-col-type { color: var(--text-faint); font-size: 10px; }
     .uml-svg-overlay {
       position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-      pointer-events: none; z-index: 0;
+      pointer-events: none; z-index: 2;
+    }
+    .filtered-uml-toolbar {
+      display: flex; align-items: center; gap: 8px;
+      padding: 10px 20px; border-top: 1px solid var(--border-color);
+      border-bottom: 1px solid var(--border-color);
+      background: var(--bg-secondary);
+    }
+    .filtered-uml-toolbar-label {
+      font-size: 12px; color: var(--text-secondary); font-weight: 600;
+    }
+    .filtered-uml-toolbar-select {
+      min-width: 240px; max-width: 520px;
+      padding: 6px 8px; border-radius: 6px;
+      border: 1px solid var(--border-color);
+      background: var(--card-bg); color: var(--text-primary);
+      font-size: 12px;
+    }
+    .filtered-uml-toolbar-clear {
+      padding: 6px 10px; border-radius: 6px;
+      border: 1px solid var(--border-color);
+      background: var(--card-bg); color: var(--text-secondary);
+      font-size: 12px; cursor: pointer;
+    }
+    .uml-col-row.col-highlight {
+      background: rgba(102, 126, 234, 0.18);
+      box-shadow: inset 3px 0 0 rgba(102, 126, 234, 0.95);
+      color: var(--text-primary);
+      font-weight: 700;
+    }
+    .uml-table-card.has-col-highlight .uml-table-header {
+      box-shadow: inset 0 -2px 0 rgba(255, 255, 255, 0.35);
     }
     .uml-er-container.filtered-uml-container .uml-svg-overlay {
       z-index: 2;
@@ -4489,6 +4520,20 @@ export function getCacheStatusPage(user: {
           currentHighlightedColumn = '';
           if (fUmlColumnSelect) fUmlColumnSelect.value = '';
           applyColumnHighlight(currentFilteredContainer, currentHighlightedColumn);
+        });
+      }
+
+      if (fUmlColumnSelect) {
+        fUmlColumnSelect.addEventListener('change', function() {
+          currentHighlightedColumn = fUmlColumnSelect.value || '';
+          rerenderFilteredUml();
+        });
+      }
+      if (fUmlColumnClear) {
+        fUmlColumnClear.addEventListener('click', function() {
+          currentHighlightedColumn = '';
+          if (fUmlColumnSelect) fUmlColumnSelect.value = '';
+          rerenderFilteredUml();
         });
       }
     })();
