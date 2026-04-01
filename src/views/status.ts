@@ -1140,6 +1140,12 @@ export function getCacheStatusPage(user: {
       color: var(--text-primary);
       font-weight: 700;
     }
+    .uml-col-row.col-related {
+      background: rgba(72, 187, 120, 0.16);
+      box-shadow: inset 3px 0 0 rgba(56, 161, 105, 0.95);
+      color: var(--text-primary);
+      font-weight: 600;
+    }
     .uml-table-card.has-col-highlight .uml-table-header {
       box-shadow: inset 0 -2px 0 rgba(255, 255, 255, 0.35);
     }
@@ -1268,6 +1274,13 @@ export function getCacheStatusPage(user: {
       padding: 3px 10px; border-radius: 6px; font-size: 11px;
       background: var(--bg-secondary); border: 1px solid var(--border-color);
       color: var(--text-secondary); white-space: nowrap;
+    }
+    .uml-key-col-item.interactive { cursor: pointer; transition: all 0.15s ease; }
+    .uml-key-col-item.interactive:hover { border-color: var(--accent-color); color: var(--text-primary); }
+    .uml-key-col-item.interactive.active {
+      border-color: var(--accent-color);
+      background: rgba(102, 126, 234, 0.14);
+      color: var(--text-primary);
     }
     .uml-key-col-item .kc-badge {
       display: inline-block; padding: 1px 5px; border-radius: 3px;
@@ -2108,10 +2121,17 @@ export function getCacheStatusPage(user: {
       }
     })();
 
-    function buildKeySummary(targetId, tablesData) {
+    function buildKeySummary(targetId, tablesData, options) {
+      function norm(name) {
+        return String(name || '').trim().toLowerCase();
+      }
       var container = document.getElementById(targetId);
       if (!container) return;
       container.innerHTML = '';
+      var opts = options || {};
+      var selectedTable = opts.selectedTable || '';
+      var selectedColumn = norm(opts.selectedColumn || '');
+      var selectedKey = String(opts.selectedKey || '').toLowerCase();
       var keyOrder = ['pk', 'fk', 'uk', 'idx'];
       var keyLabels = { pk: 'PK', fk: 'FK', uk: 'UK', idx: 'IDX' };
       var items = [];
@@ -2143,8 +2163,18 @@ export function getCacheStatusPage(user: {
       wrap.className = 'uml-key-cols';
       for (var i = 0; i < items.length; i++) {
         var it = items[i];
-        var el = document.createElement('span');
+        var el = document.createElement('button');
+        var isActive = selectedTable === it.table
+          && selectedColumn === norm(it.col)
+          && selectedKey === String(it.key || '').toLowerCase();
         el.className = 'uml-key-col-item';
+        if (opts.onSelect) {
+          el.classList.add('interactive');
+          if (isActive) el.classList.add('active');
+          el.type = 'button';
+          el.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+          el.setAttribute('data-key-item', 'true');
+        }
         var badge = document.createElement('span');
         badge.className = 'kc-badge ' + it.key;
         badge.textContent = keyLabels[it.key] || it.key.toUpperCase();
@@ -2155,6 +2185,19 @@ export function getCacheStatusPage(user: {
         tblSpan.className = 'kc-table';
         tblSpan.textContent = '(' + it.table + ')';
         el.appendChild(tblSpan);
+        if (opts.onSelect) {
+          (function(item) {
+            el.addEventListener('click', function() {
+              opts.onSelect(item);
+            });
+            el.addEventListener('keydown', function(evt) {
+              if (evt.key === 'Enter' || evt.key === ' ') {
+                evt.preventDefault();
+                opts.onSelect(item);
+              }
+            });
+          })(it);
+        }
         wrap.appendChild(el);
       }
       container.appendChild(wrap);
@@ -4083,6 +4126,7 @@ export function getCacheStatusPage(user: {
       var currentIsDark = false;
       var currentFilteredContainer = null;
       var currentHighlightedColumn = '';
+      var currentSelectedKeyRef = null;
 
       function normalizeColumnName(name) {
         return String(name || '').trim().toLowerCase();
@@ -4119,7 +4163,7 @@ export function getCacheStatusPage(user: {
         fUmlColumnSelect.value = selectedColumn || '';
       }
 
-      function applyColumnHighlight(container, highlightedColumn) {
+      function applyColumnHighlight(container, highlightedColumn, selectedRef) {
         if (!container) return;
         var normalized = normalizeColumnName(highlightedColumn);
         var cards = container.querySelectorAll('.uml-table-card');
@@ -4130,6 +4174,7 @@ export function getCacheStatusPage(user: {
         for (var r = 0; r < rows.length; r++) {
           var row = rows[r];
           row.classList.remove('col-highlight');
+          row.classList.remove('col-related');
           if (!normalized) continue;
           var rowCol = normalizeColumnName(row.getAttribute('data-col-name'));
           if (rowCol !== normalized) continue;
@@ -4137,6 +4182,58 @@ export function getCacheStatusPage(user: {
           var card = row.closest('.uml-table-card');
           if (card) card.classList.add('has-col-highlight');
         }
+        if (!selectedRef) return;
+        var tableName = String(selectedRef.table || '');
+        var colNameNorm = normalizeColumnName(selectedRef.col || '');
+        if (!tableName || !colNameNorm) return;
+        for (var i = 0; i < rows.length; i++) {
+          var relRow = rows[i];
+          var relTable = relRow.getAttribute('data-table-name');
+          var relCol = normalizeColumnName(relRow.getAttribute('data-col-name'));
+          if (relTable === tableName && relCol === colNameNorm) {
+            relRow.classList.add('col-highlight');
+            continue;
+          }
+          for (var j = 0; j < currentFilteredRelations.length; j++) {
+            var rel = currentFilteredRelations[j];
+            var isRelated = (
+              rel[0] === tableName && normalizeColumnName(rel[1]) === colNameNorm && rel[2] === relTable && normalizeColumnName(rel[3]) === relCol
+            ) || (
+              rel[2] === tableName && normalizeColumnName(rel[3]) === colNameNorm && rel[0] === relTable && normalizeColumnName(rel[1]) === relCol
+            );
+            if (isRelated) {
+              relRow.classList.add('col-related');
+              break;
+            }
+          }
+        }
+      }
+
+      function rerenderFilteredUml() {
+        if (!currentFilteredTables || currentFilteredTables.length === 0) return;
+        currentFilteredContainer = renderFilteredErDiagram(
+          currentFilteredTables,
+          currentFilteredRelations,
+          currentIsDark,
+          currentHighlightedColumn,
+          currentSelectedKeyRef
+        );
+        applyColumnHighlight(currentFilteredContainer, currentHighlightedColumn, currentSelectedKeyRef);
+        buildKeySummary('filteredUmlKeySummary', currentFilteredTables, {
+          selectedTable: currentSelectedKeyRef ? currentSelectedKeyRef.table : '',
+          selectedColumn: currentSelectedKeyRef ? currentSelectedKeyRef.col : '',
+          selectedKey: currentSelectedKeyRef ? currentSelectedKeyRef.key : '',
+          onSelect: function(item) {
+            var same = currentSelectedKeyRef
+              && currentSelectedKeyRef.table === item.table
+              && normalizeColumnName(currentSelectedKeyRef.col) === normalizeColumnName(item.col)
+              && String(currentSelectedKeyRef.key || '').toLowerCase() === String(item.key || '').toLowerCase();
+            currentSelectedKeyRef = same ? null : item;
+            currentHighlightedColumn = currentSelectedKeyRef ? currentSelectedKeyRef.col : '';
+            if (fUmlColumnSelect) fUmlColumnSelect.value = currentHighlightedColumn;
+            rerenderFilteredUml();
+          }
+        });
       }
 
       function closeFilteredUmlModal() {
@@ -4202,14 +4299,27 @@ export function getCacheStatusPage(user: {
         currentIsDark = isDark;
         currentFilteredContainer = null;
         currentHighlightedColumn = '';
-
-        populateFilteredColumnOptions(filteredTables, currentHighlightedColumn);
-        layoutFilteredTables(filteredTables, filteredRelations);
-        currentFilteredContainer = renderFilteredErDiagram(filteredTables, filteredRelations, isDark, currentHighlightedColumn);
-        buildKeySummary('filteredUmlKeySummary', filteredTables);
+        currentSelectedKeyRef = null;
 
         fUmlModal.classList.add('show');
         fUmlModal.setAttribute('aria-hidden', 'false');
+
+        populateFilteredColumnOptions(filteredTables, currentHighlightedColumn);
+        layoutFilteredTables(filteredTables, filteredRelations);
+        currentFilteredContainer = renderFilteredErDiagram(filteredTables, filteredRelations, isDark, currentHighlightedColumn, currentSelectedKeyRef);
+        applyColumnHighlight(currentFilteredContainer, currentHighlightedColumn, currentSelectedKeyRef);
+        buildKeySummary('filteredUmlKeySummary', filteredTables, {
+          onSelect: function(item) {
+            currentSelectedKeyRef = item;
+            currentHighlightedColumn = item.col || '';
+            if (fUmlColumnSelect) fUmlColumnSelect.value = currentHighlightedColumn;
+            rerenderFilteredUml();
+          }
+        });
+
+        requestAnimationFrame(function() {
+          rerenderFilteredUml();
+        });
       };
 
       function getTableCardWidth(table) {
@@ -4291,13 +4401,16 @@ export function getCacheStatusPage(user: {
         }
       }
 
-      function renderFilteredErDiagram(tablesData, relationsData, isDark, highlightedColumn) {
+      function renderFilteredErDiagram(tablesData, relationsData, isDark, highlightedColumn, selectedRef) {
         var container = document.createElement('div');
         container.className = 'uml-er-container filtered-uml-container';
         var highlightedColumnNorm = normalizeColumnName(highlightedColumn);
+        var selectedColNorm = selectedRef ? normalizeColumnName(selectedRef.col || '') : '';
+        var selectedTable = selectedRef ? String(selectedRef.table || '') : '';
 
         var cardRects = {};
         var cardElements = {};
+        var rowElements = {};
         var keyColorMap = { pk: '#e53e3e', fk: '#ed8936', uk: '#48bb78', idx: '#4299e1' };
 
         for (var t = 0; t < tablesData.length; t++) {
@@ -4326,7 +4439,12 @@ export function getCacheStatusPage(user: {
             var row = document.createElement('div');
             row.className = 'uml-col-row';
             row.setAttribute('data-col-name', col.name);
+            row.setAttribute('data-table-name', tbl.name);
             if (highlightedColumnNorm && normalizeColumnName(col.name) === highlightedColumnNorm) {
+              row.classList.add('col-highlight');
+              hasColHighlight = true;
+            }
+            if (selectedTable === tbl.name && selectedColNorm && normalizeColumnName(col.name) === selectedColNorm) {
               row.classList.add('col-highlight');
               hasColHighlight = true;
             }
@@ -4345,6 +4463,7 @@ export function getCacheStatusPage(user: {
             typeSpan.textContent = col.type;
             row.appendChild(typeSpan);
             body.appendChild(row);
+            rowElements[tbl.name + '::' + normalizeColumnName(col.name)] = row;
           }
           if (hasColHighlight) card.classList.add('has-col-highlight');
           card.appendChild(body);
@@ -4380,6 +4499,7 @@ export function getCacheStatusPage(user: {
           while (svg.childNodes.length > 1) svg.removeChild(svg.lastChild);
           var lineColor = isDark ? 'rgba(160,174,192,0.6)' : 'rgba(113,128,150,0.5)';
           var labelColor = isDark ? '#a0aec0' : '#4a5568';
+          var activeLineColor = isDark ? 'rgba(104,211,145,0.95)' : 'rgba(56,161,105,0.9)';
 
           for (var r = 0; r < relationsData.length; r++) {
             var rel = relationsData[r];
@@ -4425,6 +4545,44 @@ export function getCacheStatusPage(user: {
             text.setAttribute('font-weight', '600');
             text.textContent = rel[4];
             svg.appendChild(text);
+
+            if (!selectedRef || !selectedTable || !selectedColNorm) continue;
+            var matchesSelected = (
+              rel[0] === selectedTable && normalizeColumnName(rel[1]) === selectedColNorm
+            ) || (
+              rel[2] === selectedTable && normalizeColumnName(rel[3]) === selectedColNorm
+            );
+            if (!matchesSelected) continue;
+
+            var sourceKey = rel[0] + '::' + normalizeColumnName(rel[1]);
+            var targetKey = rel[2] + '::' + normalizeColumnName(rel[3]);
+            var sourceRow = rowElements[sourceKey];
+            var targetRow = rowElements[targetKey];
+            if (!sourceRow || !targetRow) continue;
+
+            sourceRow.classList.add('col-related');
+            targetRow.classList.add('col-related');
+
+            var srcCard = sourceRow.closest('[data-uml-table]');
+            var dstCard = targetRow.closest('[data-uml-table]');
+            if (!srcCard || !dstCard) continue;
+            var srcCardName = srcCard.getAttribute('data-uml-table');
+            var dstCardName = dstCard.getAttribute('data-uml-table');
+            if (!srcCardName || !dstCardName || !cardRects[srcCardName] || !cardRects[dstCardName]) continue;
+            var srcX = cardRects[srcCardName].x + sourceRow.offsetLeft + sourceRow.offsetWidth;
+            var srcY = cardRects[srcCardName].y + sourceRow.offsetTop + sourceRow.offsetHeight / 2;
+            var dstX = cardRects[dstCardName].x + targetRow.offsetLeft;
+            var dstY = cardRects[dstCardName].y + targetRow.offsetTop + targetRow.offsetHeight / 2;
+
+            var active = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+            active.setAttribute('x1', String(srcX));
+            active.setAttribute('y1', String(srcY));
+            active.setAttribute('x2', String(dstX));
+            active.setAttribute('y2', String(dstY));
+            active.setAttribute('stroke', activeLineColor);
+            active.setAttribute('stroke-width', '3');
+            active.setAttribute('marker-end', 'url(#fuml-arrow)');
+            svg.appendChild(active);
           }
         }
 
@@ -4512,26 +4670,14 @@ export function getCacheStatusPage(user: {
       if (fUmlColumnSelect) {
         fUmlColumnSelect.addEventListener('change', function() {
           currentHighlightedColumn = fUmlColumnSelect.value || '';
-          applyColumnHighlight(currentFilteredContainer, currentHighlightedColumn);
-        });
-      }
-      if (fUmlColumnClear) {
-        fUmlColumnClear.addEventListener('click', function() {
-          currentHighlightedColumn = '';
-          if (fUmlColumnSelect) fUmlColumnSelect.value = '';
-          applyColumnHighlight(currentFilteredContainer, currentHighlightedColumn);
-        });
-      }
-
-      if (fUmlColumnSelect) {
-        fUmlColumnSelect.addEventListener('change', function() {
-          currentHighlightedColumn = fUmlColumnSelect.value || '';
+          currentSelectedKeyRef = null;
           rerenderFilteredUml();
         });
       }
       if (fUmlColumnClear) {
         fUmlColumnClear.addEventListener('click', function() {
           currentHighlightedColumn = '';
+          currentSelectedKeyRef = null;
           if (fUmlColumnSelect) fUmlColumnSelect.value = '';
           rerenderFilteredUml();
         });
