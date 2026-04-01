@@ -1143,6 +1143,40 @@ export function getCacheStatusPage(user: {
     .uml-table-card.has-col-highlight .uml-table-header {
       box-shadow: inset 0 -2px 0 rgba(255, 255, 255, 0.35);
     }
+    .uml-er-container.filtered-uml-container .uml-svg-overlay {
+      z-index: 2;
+    }
+    .filtered-uml-toolbar {
+      display: flex; align-items: center; gap: 8px;
+      padding: 10px 20px; border-top: 1px solid var(--border-color);
+      border-bottom: 1px solid var(--border-color);
+      background: var(--bg-secondary);
+    }
+    .filtered-uml-toolbar-label {
+      font-size: 12px; color: var(--text-secondary); font-weight: 600;
+    }
+    .filtered-uml-toolbar-select {
+      min-width: 240px; max-width: 520px;
+      padding: 6px 8px; border-radius: 6px;
+      border: 1px solid var(--border-color);
+      background: var(--card-bg); color: var(--text-primary);
+      font-size: 12px;
+    }
+    .filtered-uml-toolbar-clear {
+      padding: 6px 10px; border-radius: 6px;
+      border: 1px solid var(--border-color);
+      background: var(--card-bg); color: var(--text-secondary);
+      font-size: 12px; cursor: pointer;
+    }
+    .uml-col-row.col-highlight {
+      background: rgba(102, 126, 234, 0.18);
+      box-shadow: inset 3px 0 0 rgba(102, 126, 234, 0.95);
+      color: var(--text-primary);
+      font-weight: 700;
+    }
+    .uml-table-card.has-col-highlight .uml-table-header {
+      box-shadow: inset 0 -2px 0 rgba(255, 255, 255, 0.35);
+    }
     .uml-bottom-panel {
       position: relative;
     }
@@ -4047,6 +4081,7 @@ export function getCacheStatusPage(user: {
       var currentFilteredTables = [];
       var currentFilteredRelations = [];
       var currentIsDark = false;
+      var currentFilteredContainer = null;
       var currentHighlightedColumn = '';
 
       function normalizeColumnName(name) {
@@ -4084,8 +4119,24 @@ export function getCacheStatusPage(user: {
         fUmlColumnSelect.value = selectedColumn || '';
       }
 
-      function rerenderFilteredUml() {
-        renderFilteredErDiagram(currentFilteredTables, currentFilteredRelations, currentIsDark, currentHighlightedColumn);
+      function applyColumnHighlight(container, highlightedColumn) {
+        if (!container) return;
+        var normalized = normalizeColumnName(highlightedColumn);
+        var cards = container.querySelectorAll('.uml-table-card');
+        for (var i = 0; i < cards.length; i++) {
+          cards[i].classList.remove('has-col-highlight');
+        }
+        var rows = container.querySelectorAll('.uml-col-row[data-col-name]');
+        for (var r = 0; r < rows.length; r++) {
+          var row = rows[r];
+          row.classList.remove('col-highlight');
+          if (!normalized) continue;
+          var rowCol = normalizeColumnName(row.getAttribute('data-col-name'));
+          if (rowCol !== normalized) continue;
+          row.classList.add('col-highlight');
+          var card = row.closest('.uml-table-card');
+          if (card) card.classList.add('has-col-highlight');
+        }
       }
 
       function closeFilteredUmlModal() {
@@ -4149,11 +4200,12 @@ export function getCacheStatusPage(user: {
         currentFilteredTables = filteredTables;
         currentFilteredRelations = filteredRelations;
         currentIsDark = isDark;
+        currentFilteredContainer = null;
         currentHighlightedColumn = '';
 
         populateFilteredColumnOptions(filteredTables, currentHighlightedColumn);
         layoutFilteredTables(filteredTables, filteredRelations);
-        renderFilteredErDiagram(filteredTables, filteredRelations, isDark, currentHighlightedColumn);
+        currentFilteredContainer = renderFilteredErDiagram(filteredTables, filteredRelations, isDark, currentHighlightedColumn);
         buildKeySummary('filteredUmlKeySummary', filteredTables);
 
         fUmlModal.classList.add('show');
@@ -4241,7 +4293,7 @@ export function getCacheStatusPage(user: {
 
       function renderFilteredErDiagram(tablesData, relationsData, isDark, highlightedColumn) {
         var container = document.createElement('div');
-        container.className = 'uml-er-container';
+        container.className = 'uml-er-container filtered-uml-container';
         var highlightedColumnNorm = normalizeColumnName(highlightedColumn);
 
         var cardRects = {};
@@ -4453,6 +4505,21 @@ export function getCacheStatusPage(user: {
 
         document.addEventListener('touchend', function() {
           dragTarget = null;
+        });
+        return container;
+      }
+
+      if (fUmlColumnSelect) {
+        fUmlColumnSelect.addEventListener('change', function() {
+          currentHighlightedColumn = fUmlColumnSelect.value || '';
+          applyColumnHighlight(currentFilteredContainer, currentHighlightedColumn);
+        });
+      }
+      if (fUmlColumnClear) {
+        fUmlColumnClear.addEventListener('click', function() {
+          currentHighlightedColumn = '';
+          if (fUmlColumnSelect) fUmlColumnSelect.value = '';
+          applyColumnHighlight(currentFilteredContainer, currentHighlightedColumn);
         });
       }
 
