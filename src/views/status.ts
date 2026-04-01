@@ -1058,7 +1058,7 @@ export function getCacheStatusPage(user: {
 
     /* フィルタ済みUMLモーダル */
     .filtered-uml-modal-card {
-      width: min(1200px, 100%); max-height: min(90vh, 960px);
+      width: min(1600px, 96vw); max-height: min(92vh, 1080px);
       background: var(--card-bg); border: 1px solid var(--border-color);
       border-radius: 16px; box-shadow: 0 24px 80px rgba(0, 0, 0, 0.25);
       overflow: hidden; display: flex; flex-direction: column;
@@ -1066,7 +1066,7 @@ export function getCacheStatusPage(user: {
 
     /* UML モーダル */
     .uml-modal-card {
-      width: min(1200px, 100%); max-height: min(90vh, 960px);
+      width: min(1600px, 96vw); max-height: min(92vh, 1080px);
       background: var(--card-bg); border: 1px solid var(--border-color);
       border-radius: 16px; box-shadow: 0 24px 80px rgba(0, 0, 0, 0.25);
       overflow: hidden; display: flex; flex-direction: column;
@@ -1076,7 +1076,7 @@ export function getCacheStatusPage(user: {
       padding: 24px;
     }
     .uml-er-container {
-      position: relative; min-width: 1100px; min-height: 720px;
+      position: relative; min-width: 1500px; min-height: 900px;
     }
     .uml-table-card {
       position: absolute; background: var(--card-bg);
@@ -2564,6 +2564,39 @@ export function getCacheStatusPage(user: {
       return html;
     }
 
+    function normalizeGroupErToUml(erData) {
+      var tableNameSet = {};
+      var umlTables = [];
+      for (var i = 0; i < erData.tables.length; i++) {
+        var srcTable = erData.tables[i];
+        tableNameSet[srcTable.tableName] = true;
+        var cols = [];
+        for (var j = 0; j < srcTable.columns.length; j++) {
+          var col = srcTable.columns[j];
+          var keys = [];
+          if (col.keyType) keys.push(col.keyType);
+          cols.push({ name: col.name, type: '', keys: keys });
+        }
+        umlTables.push({ name: srcTable.tableName, cols: cols, x: 0, y: 0 });
+      }
+
+      var umlRelations = [];
+      var relationSet = {};
+      for (var ti = 0; ti < erData.tables.length; ti++) {
+        var tbl = erData.tables[ti];
+        for (var ci = 0; ci < tbl.columns.length; ci++) {
+          var column = tbl.columns[ci];
+          if (!column.fkTarget || !tableNameSet[column.fkTarget]) continue;
+          var relKey = tbl.tableName + '.' + column.name + '->' + column.fkTarget;
+          if (relationSet[relKey]) continue;
+          relationSet[relKey] = true;
+          umlRelations.push([tbl.tableName, column.name, column.fkTarget, 'id', '多:1']);
+        }
+      }
+
+      return { tables: umlTables, relations: umlRelations };
+    }
+
     async function openGroupEr(tableName) {
       var title = tableName + ' のグループ ER 図';
       showStatusModalLoading(title, 'グループ情報を取得しています');
@@ -2573,6 +2606,15 @@ export function getCacheStatusPage(user: {
           throw new Error('group er request failed');
         }
         var erData = await response.json();
+        var umlData = normalizeGroupErToUml(erData);
+        var openFilteredUmlModal = window.openFilteredUmlModal;
+        if (typeof openFilteredUmlModal === 'function') {
+          closeStatusModal();
+          var tableNames = umlData.tables.map(function(tbl) { return tbl.name; });
+          openFilteredUmlModal(tableNames, umlData.tables, umlData.relations);
+          return;
+        }
+
         openStatusModal(
           erData.groupLabel + ' グループ ER 図',
           tableName + ' が属するグループ「' + erData.groupLabel + '」の全テーブル構造',
