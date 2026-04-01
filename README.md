@@ -118,6 +118,15 @@ git push -u origin feat/<task-name>
 - 必須ステータスチェック通過後のみマージ
 - 「Require branches to be up to date before merging」を有効化
 
+ローカルでも事故を防ぐため、同梱の pre-push フックを有効化できます。
+
+```bash
+git config core.hooksPath .githooks
+```
+
+この設定後は `main` / `master` への直接 push が拒否され、PR 運用を強制できます。
+（緊急時のみ `ALLOW_MAIN_PUSH=1 git push ...` で一時的に回避）
+
 「マージの瞬間」と「既存ビルドの完了」が重なる構成は、実際に不整合の原因になり得るため、タイミング調整とブランチ運用の固定化は推奨です。
 
 ---
