@@ -1279,7 +1279,7 @@ export function getCacheStatusPage(user: {
     .uml-key-col-item.interactive:hover { border-color: var(--accent-color); color: var(--text-primary); }
     .uml-key-col-item.interactive.active {
       border-color: var(--accent-color);
-      background: color-mix(in srgb, var(--accent-color) 12%, var(--bg-secondary));
+      background: rgba(102, 126, 234, 0.14);
       color: var(--text-primary);
     }
     .uml-key-col-item .kc-badge {
@@ -2172,6 +2172,8 @@ export function getCacheStatusPage(user: {
           el.classList.add('interactive');
           if (isActive) el.classList.add('active');
           el.type = 'button';
+          el.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+          el.setAttribute('data-key-item', 'true');
         }
         var badge = document.createElement('span');
         badge.className = 'kc-badge ' + it.key;
@@ -2187,6 +2189,12 @@ export function getCacheStatusPage(user: {
           (function(item) {
             el.addEventListener('click', function() {
               opts.onSelect(item);
+            });
+            el.addEventListener('keydown', function(evt) {
+              if (evt.key === 'Enter' || evt.key === ' ') {
+                evt.preventDefault();
+                opts.onSelect(item);
+              }
             });
           })(it);
         }
@@ -4293,6 +4301,9 @@ export function getCacheStatusPage(user: {
         currentHighlightedColumn = '';
         currentSelectedKeyRef = null;
 
+        fUmlModal.classList.add('show');
+        fUmlModal.setAttribute('aria-hidden', 'false');
+
         populateFilteredColumnOptions(filteredTables, currentHighlightedColumn);
         layoutFilteredTables(filteredTables, filteredRelations);
         currentFilteredContainer = renderFilteredErDiagram(filteredTables, filteredRelations, isDark, currentHighlightedColumn, currentSelectedKeyRef);
@@ -4306,8 +4317,9 @@ export function getCacheStatusPage(user: {
           }
         });
 
-        fUmlModal.classList.add('show');
-        fUmlModal.setAttribute('aria-hidden', 'false');
+        requestAnimationFrame(function() {
+          rerenderFilteredUml();
+        });
       };
 
       function getTableCardWidth(table) {
@@ -4554,19 +4566,19 @@ export function getCacheStatusPage(user: {
             var srcCard = sourceRow.closest('[data-uml-table]');
             var dstCard = targetRow.closest('[data-uml-table]');
             if (!srcCard || !dstCard) continue;
-            var srcRect = sourceRow.getBoundingClientRect();
-            var dstRect = targetRow.getBoundingClientRect();
-            var containerRect = container.getBoundingClientRect();
-            var sx = srcRect.right - containerRect.left + fUmlWrapper.scrollLeft;
-            var sy = srcRect.top + srcRect.height / 2 - containerRect.top + fUmlWrapper.scrollTop;
-            var tx2 = dstRect.left - containerRect.left + fUmlWrapper.scrollLeft;
-            var ty2 = dstRect.top + dstRect.height / 2 - containerRect.top + fUmlWrapper.scrollTop;
+            var srcCardName = srcCard.getAttribute('data-uml-table');
+            var dstCardName = dstCard.getAttribute('data-uml-table');
+            if (!srcCardName || !dstCardName || !cardRects[srcCardName] || !cardRects[dstCardName]) continue;
+            var srcX = cardRects[srcCardName].x + sourceRow.offsetLeft + sourceRow.offsetWidth;
+            var srcY = cardRects[srcCardName].y + sourceRow.offsetTop + sourceRow.offsetHeight / 2;
+            var dstX = cardRects[dstCardName].x + targetRow.offsetLeft;
+            var dstY = cardRects[dstCardName].y + targetRow.offsetTop + targetRow.offsetHeight / 2;
 
             var active = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-            active.setAttribute('x1', String(sx));
-            active.setAttribute('y1', String(sy));
-            active.setAttribute('x2', String(tx2));
-            active.setAttribute('y2', String(ty2));
+            active.setAttribute('x1', String(srcX));
+            active.setAttribute('y1', String(srcY));
+            active.setAttribute('x2', String(dstX));
+            active.setAttribute('y2', String(dstY));
             active.setAttribute('stroke', activeLineColor);
             active.setAttribute('stroke-width', '3');
             active.setAttribute('marker-end', 'url(#fuml-arrow)');
