@@ -1112,6 +1112,40 @@ export function getCacheStatusPage(user: {
       position: absolute; top: 0; left: 0; width: 100%; height: 100%;
       pointer-events: none; z-index: 0;
     }
+    .uml-er-container.filtered-uml-container .uml-svg-overlay {
+      z-index: 2;
+    }
+    .filtered-uml-toolbar {
+      display: flex; align-items: center; gap: 8px;
+      padding: 10px 20px; border-top: 1px solid var(--border-color);
+      border-bottom: 1px solid var(--border-color);
+      background: var(--bg-secondary);
+    }
+    .filtered-uml-toolbar-label {
+      font-size: 12px; color: var(--text-secondary); font-weight: 600;
+    }
+    .filtered-uml-toolbar-select {
+      min-width: 240px; max-width: 520px;
+      padding: 6px 8px; border-radius: 6px;
+      border: 1px solid var(--border-color);
+      background: var(--card-bg); color: var(--text-primary);
+      font-size: 12px;
+    }
+    .filtered-uml-toolbar-clear {
+      padding: 6px 10px; border-radius: 6px;
+      border: 1px solid var(--border-color);
+      background: var(--card-bg); color: var(--text-secondary);
+      font-size: 12px; cursor: pointer;
+    }
+    .uml-col-row.col-highlight {
+      background: rgba(102, 126, 234, 0.18);
+      box-shadow: inset 3px 0 0 rgba(102, 126, 234, 0.95);
+      color: var(--text-primary);
+      font-weight: 700;
+    }
+    .uml-table-card.has-col-highlight .uml-table-header {
+      box-shadow: inset 0 -2px 0 rgba(255, 255, 255, 0.35);
+    }
     .uml-bottom-panel {
       position: relative;
     }
@@ -1676,6 +1710,13 @@ export function getCacheStatusPage(user: {
           <div class="modal-subtitle" id="filteredUmlModalSubtitle"></div>
         </div>
         <button type="button" class="modal-close" id="filteredUmlModalClose" aria-label="閉じる">&times;</button>
+      </div>
+      <div class="filtered-uml-toolbar">
+        <label class="filtered-uml-toolbar-label" for="filteredUmlColumnSelect">カラム名ハイライト</label>
+        <select class="filtered-uml-toolbar-select" id="filteredUmlColumnSelect">
+          <option value="">（選択なし）</option>
+        </select>
+        <button type="button" class="filtered-uml-toolbar-clear" id="filteredUmlColumnClear">クリア</button>
       </div>
       <div class="uml-canvas-wrapper" id="filteredUmlCanvasWrapper"></div>
       <div class="uml-bottom-panel" id="filteredUmlBottomPanel">
@@ -4003,7 +4044,69 @@ export function getCacheStatusPage(user: {
       var fUmlWrapper = document.getElementById('filteredUmlCanvasWrapper');
       var fUmlTitle = document.getElementById('filteredUmlModalTitle');
       var fUmlSubtitle = document.getElementById('filteredUmlModalSubtitle');
+      var fUmlColumnSelect = document.getElementById('filteredUmlColumnSelect');
+      var fUmlColumnClear = document.getElementById('filteredUmlColumnClear');
       if (!fUmlModal || !fUmlWrapper) return;
+      var currentFilteredTables = [];
+      var currentFilteredRelations = [];
+      var currentIsDark = false;
+      var currentFilteredContainer = null;
+      var currentHighlightedColumn = '';
+
+      function normalizeColumnName(name) {
+        return String(name || '').trim().toLowerCase();
+      }
+
+      function populateFilteredColumnOptions(tablesData, selectedColumn) {
+        if (!fUmlColumnSelect) return;
+        var seen = {};
+        var cols = [];
+        for (var t = 0; t < tablesData.length; t++) {
+          var table = tablesData[t];
+          for (var c = 0; c < table.cols.length; c++) {
+            var colName = table.cols[c].name;
+            var colKey = normalizeColumnName(colName);
+            if (!colKey || seen[colKey]) continue;
+            seen[colKey] = true;
+            cols.push(colName);
+          }
+        }
+        cols.sort(function(a, b) { return a.localeCompare(b); });
+
+        fUmlColumnSelect.innerHTML = '';
+        var emptyOpt = document.createElement('option');
+        emptyOpt.value = '';
+        emptyOpt.textContent = '（選択なし）';
+        fUmlColumnSelect.appendChild(emptyOpt);
+
+        for (var i = 0; i < cols.length; i++) {
+          var opt = document.createElement('option');
+          opt.value = cols[i];
+          opt.textContent = cols[i];
+          fUmlColumnSelect.appendChild(opt);
+        }
+        fUmlColumnSelect.value = selectedColumn || '';
+      }
+
+      function applyColumnHighlight(container, highlightedColumn) {
+        if (!container) return;
+        var normalized = normalizeColumnName(highlightedColumn);
+        var cards = container.querySelectorAll('.uml-table-card');
+        for (var i = 0; i < cards.length; i++) {
+          cards[i].classList.remove('has-col-highlight');
+        }
+        var rows = container.querySelectorAll('.uml-col-row[data-col-name]');
+        for (var r = 0; r < rows.length; r++) {
+          var row = rows[r];
+          row.classList.remove('col-highlight');
+          if (!normalized) continue;
+          var rowCol = normalizeColumnName(row.getAttribute('data-col-name'));
+          if (rowCol !== normalized) continue;
+          row.classList.add('col-highlight');
+          var card = row.closest('.uml-table-card');
+          if (card) card.classList.add('has-col-highlight');
+        }
+      }
 
       function closeFilteredUmlModal() {
         fUmlModal.classList.remove('show');
@@ -4063,8 +4166,15 @@ export function getCacheStatusPage(user: {
         if (fUmlTitle) fUmlTitle.textContent = 'フィルタ済み ER図 (' + filteredTables.length + ' テーブル)';
         if (fUmlSubtitle) fUmlSubtitle.textContent = subtitleText;
 
+        currentFilteredTables = filteredTables;
+        currentFilteredRelations = filteredRelations;
+        currentIsDark = isDark;
+        currentFilteredContainer = null;
+        currentHighlightedColumn = '';
+
+        populateFilteredColumnOptions(filteredTables, currentHighlightedColumn);
         layoutFilteredTables(filteredTables, filteredRelations);
-        renderFilteredErDiagram(filteredTables, filteredRelations, isDark);
+        currentFilteredContainer = renderFilteredErDiagram(filteredTables, filteredRelations, isDark, currentHighlightedColumn);
         buildKeySummary('filteredUmlKeySummary', filteredTables);
 
         fUmlModal.classList.add('show');
@@ -4150,9 +4260,10 @@ export function getCacheStatusPage(user: {
         }
       }
 
-      function renderFilteredErDiagram(tablesData, relationsData, isDark) {
+      function renderFilteredErDiagram(tablesData, relationsData, isDark, highlightedColumn) {
         var container = document.createElement('div');
-        container.className = 'uml-er-container';
+        container.className = 'uml-er-container filtered-uml-container';
+        var highlightedColumnNorm = normalizeColumnName(highlightedColumn);
 
         var cardRects = {};
         var cardElements = {};
@@ -4178,10 +4289,16 @@ export function getCacheStatusPage(user: {
 
           var body = document.createElement('div');
           body.className = 'uml-table-body';
+          var hasColHighlight = false;
           for (var c = 0; c < tbl.cols.length; c++) {
             var col = tbl.cols[c];
             var row = document.createElement('div');
             row.className = 'uml-col-row';
+            row.setAttribute('data-col-name', col.name);
+            if (highlightedColumnNorm && normalizeColumnName(col.name) === highlightedColumnNorm) {
+              row.classList.add('col-highlight');
+              hasColHighlight = true;
+            }
             for (var k = 0; k < col.keys.length; k++) {
               var badge = document.createElement('span');
               badge.className = 'uml-col-key ' + col.keys[k];
@@ -4198,6 +4315,7 @@ export function getCacheStatusPage(user: {
             row.appendChild(typeSpan);
             body.appendChild(row);
           }
+          if (hasColHighlight) card.classList.add('has-col-highlight');
           card.appendChild(body);
           container.appendChild(card);
           cardElements[tbl.name] = card;
@@ -4356,6 +4474,21 @@ export function getCacheStatusPage(user: {
 
         document.addEventListener('touchend', function() {
           dragTarget = null;
+        });
+        return container;
+      }
+
+      if (fUmlColumnSelect) {
+        fUmlColumnSelect.addEventListener('change', function() {
+          currentHighlightedColumn = fUmlColumnSelect.value || '';
+          applyColumnHighlight(currentFilteredContainer, currentHighlightedColumn);
+        });
+      }
+      if (fUmlColumnClear) {
+        fUmlColumnClear.addEventListener('click', function() {
+          currentHighlightedColumn = '';
+          if (fUmlColumnSelect) fUmlColumnSelect.value = '';
+          applyColumnHighlight(currentFilteredContainer, currentHighlightedColumn);
         });
       }
     })();
