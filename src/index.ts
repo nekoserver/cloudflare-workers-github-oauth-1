@@ -765,9 +765,8 @@ function getEffectiveStatusTableDefinitions(): StatusTableDefinition[] {
     tableMap.set(table.name, table);
   }
   for (const requiredTable of REQUIRED_STATUS_TABLE_DEFINITIONS) {
-    if (!tableMap.has(requiredTable.name)) {
-      tableMap.set(requiredTable.name, requiredTable);
-    }
+    // 必須テーブルは既存定義より優先し、migration番号の取り違えを防ぐ
+    tableMap.set(requiredTable.name, requiredTable);
   }
   return Array.from(tableMap.values());
 }
