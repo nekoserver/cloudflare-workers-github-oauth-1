@@ -2586,7 +2586,7 @@ export function getCacheStatusPage(user: {
         var tbl = erData.tables[ti];
         for (var ci = 0; ci < tbl.columns.length; ci++) {
           var column = tbl.columns[ci];
-          if (!column.fkTarget || !tableNameSet[column.fkTarget]) continue;
+          if (column.keyType !== "fk" || !column.fkTarget || !tableNameSet[column.fkTarget]) continue;
           var relKey = tbl.tableName + '.' + column.name + '->' + column.fkTarget;
           if (relationSet[relKey]) continue;
           relationSet[relKey] = true;

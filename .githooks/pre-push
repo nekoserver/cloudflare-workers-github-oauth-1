@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+protected_regex='^(refs/heads/main|refs/heads/master)$'
+
+while read -r local_ref local_sha remote_ref remote_sha; do
+  if [[ "${remote_ref}" =~ ${protected_regex} ]]; then
+    if [[ "${ALLOW_MAIN_PUSH:-}" != "1" ]]; then
+      echo "[pre-push] Direct push to ${remote_ref} is blocked." >&2
+      echo "[pre-push] Create a feature branch and open a PR instead." >&2
+      echo "[pre-push] If intentional, run: ALLOW_MAIN_PUSH=1 git push ..." >&2
+      exit 1
+    fi
+  fi
+done
