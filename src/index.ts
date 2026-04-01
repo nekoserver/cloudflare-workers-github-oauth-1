@@ -765,9 +765,8 @@ function getEffectiveStatusTableDefinitions(): StatusTableDefinition[] {
     tableMap.set(table.name, table);
   }
   for (const requiredTable of REQUIRED_STATUS_TABLE_DEFINITIONS) {
-    if (!tableMap.has(requiredTable.name)) {
-      tableMap.set(requiredTable.name, requiredTable);
-    }
+    // 必須テーブルは既存定義より優先し、migration番号の取り違えを防ぐ
+    tableMap.set(requiredTable.name, requiredTable);
   }
   return Array.from(tableMap.values());
 }
@@ -2572,6 +2571,42 @@ app.get('/api/status/schema', authMiddleware, async (c) => {
       }
 
       tables.push({ name: tName, cols });
+    }
+
+    // table_column_keys が存在する場合は、キー定義とFK先を補完する
+    try {
+      const keyRows = await db
+        .prepare('SELECT table_name, column_name, key_type, fk_target_table FROM table_column_keys')
+        .all<{ table_name: string; column_name: string; key_type: string; fk_target_table: string | null }>();
+      const tableMap = new Map<string, { name: string; cols: { name: string; type: string; keys: string[] }[] }>();
+      for (const table of tables) {
+        tableMap.set(table.name, table);
+      }
+      for (const row of keyRows.results ?? []) {
+        const table = tableMap.get(row.table_name);
+        if (!table) continue;
+        const col = table.cols.find((c) => c.name === row.column_name);
+        if (!col) continue;
+        const keyType = String(row.key_type || '').toLowerCase();
+        if ((keyType === 'pk' || keyType === 'fk' || keyType === 'uk' || keyType === 'idx') && !col.keys.includes(keyType)) {
+          col.keys.push(keyType);
+        }
+        if (!row.fk_target_table) continue;
+        const targetTable = tableMap.get(row.fk_target_table);
+        if (!targetTable) continue;
+        const targetPk = targetTable.cols.find((c) => c.keys.includes('pk'));
+        const fallbackTargetCol = targetTable.cols.some((c) => c.name === 'id')
+          ? 'id'
+          : (targetTable.cols[0]?.name ?? row.column_name);
+        const targetCol = targetPk?.name ?? fallbackTargetCol;
+        const relKey = `${row.table_name}.${row.column_name}->${row.fk_target_table}.${targetCol}`;
+        if (!seenRelations.has(relKey)) {
+          seenRelations.add(relKey);
+          relations.push([row.table_name, row.column_name, row.fk_target_table, targetCol, '多:1']);
+        }
+      }
+    } catch {
+      // table_column_keys 未作成の環境は補完なしで継続
     }
 
     return jsonUtf8({ tables, relations });
