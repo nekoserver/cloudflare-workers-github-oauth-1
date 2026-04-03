@@ -72,15 +72,16 @@ const STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
   { name: 'repo_groups', migration: '0014', description: 'リポジトリグループ', syncPolicy: 'manual' },
   { name: 'repo_group_members', migration: '0014', description: 'リポジトリグループメンバー', syncPolicy: 'manual' },
   { name: 'ai_summary_reviews', migration: '0016', description: 'AI要約レビュー・評価', syncPolicy: 'manual' },
-  { name: 'commit_agent_log', migration: '0025', description: 'コミットエージェント検出ログ', syncPolicy: 'auto' },
   { name: 'resend_webhook_sources', migration: '0017', description: 'Resend Webhook 送信元定義', syncPolicy: 'manual' },
   { name: 'email_send_log', migration: '0018', description: 'メール送信ログ', syncPolicy: 'auto' },
   { name: 'resend_webhook_log', migration: '0019', description: 'Resend Webhook 受信ログ', syncPolicy: 'auto' },
   { name: 'email_suppression_list', migration: '0020', description: 'メール配信停止リスト', syncPolicy: 'auto' },
   { name: 'email_mfa_challenges', migration: '0021', description: 'メールMFA認証チャレンジ', syncPolicy: 'auto' },
   { name: 'email_audit_anomalies', migration: '0022', description: 'メール監査異常検知', syncPolicy: 'auto' },
-  { name: 'table_catalog', migration: '0024', description: 'テーブルカタログ（グループ・メタ情報）', syncPolicy: 'manual' },
-  { name: 'table_column_keys', migration: '0024', description: 'カラムキー定義（PK/FK）', syncPolicy: 'manual' },
+  { name: 'slack_interaction_log', migration: '0024', description: 'Slack操作ログ', syncPolicy: 'auto' },
+  { name: 'commit_agent_log', migration: '0025', description: 'コミットエージェント検出ログ', syncPolicy: 'auto' },
+  { name: 'table_catalog', migration: '0026', description: 'テーブルカタログ（グループ・メタ情報）', syncPolicy: 'manual' },
+  { name: 'table_column_keys', migration: '0026', description: 'カラムキー定義（PK/FK）', syncPolicy: 'manual' },
 ];
 
 const REQUIRED_STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
@@ -433,7 +434,30 @@ CREATE INDEX IF NOT EXISTS idx_email_audit_anomalies_severity ON email_audit_ano
 CREATE INDEX IF NOT EXISTS idx_email_audit_anomalies_period ON email_audit_anomalies(period_start, period_end);`,
   '0023': `ALTER TABLE resend_webhook_sources ADD COLUMN webhook_secret TEXT;
 ALTER TABLE resend_webhook_log ADD COLUMN email_from TEXT;`,
-  '0024': `CREATE TABLE IF NOT EXISTS table_catalog (
+  '0024': `CREATE TABLE IF NOT EXISTS slack_interaction_log (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  step TEXT NOT NULL,
+  detail TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);`,
+  '0025': `CREATE TABLE IF NOT EXISTS commit_agent_log (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  request_id TEXT NOT NULL,
+  repo_full_name TEXT NOT NULL,
+  pr_number INTEGER NOT NULL,
+  commit_sha TEXT,
+  commit_message TEXT,
+  commit_author_name TEXT,
+  commit_author_email TEXT,
+  detected_agent_name TEXT,
+  detected_agent_version TEXT,
+  detected_signal TEXT,
+  created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_commit_agent_log_request ON commit_agent_log(request_id);
+CREATE INDEX IF NOT EXISTS idx_commit_agent_log_repo_pr ON commit_agent_log(repo_full_name, pr_number);`,
+  '0026': `CREATE TABLE IF NOT EXISTS table_catalog (
   table_name TEXT PRIMARY KEY,
   group_name TEXT NOT NULL,
   description TEXT NOT NULL,
@@ -453,23 +477,6 @@ CREATE TABLE IF NOT EXISTS table_column_keys (
 
 CREATE INDEX IF NOT EXISTS idx_table_catalog_group ON table_catalog(group_name);
 CREATE INDEX IF NOT EXISTS idx_table_column_keys_fk ON table_column_keys(fk_target_table);`,
-  '0025': `CREATE TABLE IF NOT EXISTS commit_agent_log (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  request_id TEXT NOT NULL,
-  repo_full_name TEXT NOT NULL,
-  pr_number INTEGER NOT NULL,
-  commit_sha TEXT,
-  commit_message TEXT,
-  commit_author_name TEXT,
-  commit_author_email TEXT,
-  detected_agent_name TEXT,
-  detected_agent_version TEXT,
-  detected_signal TEXT,
-  created_at TEXT NOT NULL
-);
-
-CREATE INDEX IF NOT EXISTS idx_commit_agent_log_request ON commit_agent_log(request_id);
-CREATE INDEX IF NOT EXISTS idx_commit_agent_log_repo_pr ON commit_agent_log(repo_full_name, pr_number);`,
 };
 
 function jsonUtf8(payload: unknown, status = 200): Response {
@@ -608,6 +615,7 @@ export const TABLE_COLUMN_KEYS: Record<string, ColumnKeyInfo> = {
   email_suppression_list: { id: 'pk', source_id: 'fk', origin_webhook_log_id: 'fk', email: 'idx' },
   email_mfa_challenges: { id: 'pk', source_id: 'fk', user_id: 'idx', resend_email_id: 'idx', expires_at: 'idx' },
   email_audit_anomalies: { id: 'pk', source_id: 'fk', anomaly_type: 'idx', severity: 'idx', period_start: 'idx' },
+  slack_interaction_log: { id: 'pk' },
   table_catalog: { table_name: 'pk' },
   table_column_keys: { table_name: 'pk+fk', column_name: 'pk' },
 };
@@ -658,6 +666,7 @@ export const TABLE_GROUP_MAP: Record<string, string> = {
   ai_summary_log: 'ai', ai_summary_reviews: 'ai', commit_agent_log: 'ai',
   resend_webhook_sources: 'email', email_send_log: 'email', resend_webhook_log: 'email',
   email_suppression_list: 'email', email_mfa_challenges: 'email', email_audit_anomalies: 'email',
+  slack_interaction_log: 'config',
   installation_permissions: 'config', repo_color_settings: 'config', repo_groups: 'config',
   repo_group_members: 'config', table_catalog: 'config', table_column_keys: 'config',
   table_group_permissions: 'config',
@@ -941,6 +950,11 @@ function getStatusTablePreviewQuery(
         sql: `SELECT * FROM ${tableName} ORDER BY created_at DESC LIMIT ${STATUS_TABLE_PREVIEW_LIMIT}`,
         params: [],
       };
+    case 'slack_interaction_log':
+      return {
+        sql: `SELECT * FROM ${tableName} ORDER BY created_at DESC LIMIT ${STATUS_TABLE_PREVIEW_LIMIT}`,
+        params: [],
+      };
     case 'table_catalog':
       return {
         sql: `SELECT * FROM ${tableName} ORDER BY display_order ASC, table_name ASC LIMIT ${STATUS_TABLE_PREVIEW_LIMIT}`,
@@ -1129,6 +1143,14 @@ ORDER BY created_at DESC
 LIMIT 20;`,
         params: [],
         note: 'メール監査異常検知レコードを検知日時の新しい順で取得します。',
+      };
+    case 'slack_interaction_log':
+      return {
+        sql: `SELECT * FROM slack_interaction_log
+ORDER BY created_at DESC
+LIMIT 20;`,
+        params: [],
+        note: 'Slack操作ログを新しい順で取得します。',
       };
     default:
       return null;

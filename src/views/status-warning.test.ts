@@ -38,4 +38,31 @@ describe('/status 未分類警告スクリプト', () => {
     expect(html).toContain("ignoreUnknownUnclassifiedWarning");
     expect(html).toContain("migration === 'unknown'");
   });
+
+  it('slack_interaction_log が migration 0024 として表示される', () => {
+    const html = getCacheStatusPage({ username: 'u' }, {
+      ...data,
+      tables: [
+        { name: 'slack_interaction_log', exists: true, rowCount: 5, migration: '0024', description: 'Slack操作ログ', syncPolicy: 'auto' },
+        { name: 'commit_agent_log', exists: true, rowCount: 1, migration: '0025', description: 'コミットエージェント検出ログ', syncPolicy: 'auto' },
+      ],
+      tableGroupMap: { commit_agent_log: 'ai', slack_interaction_log: 'config' },
+    });
+    expect(html).toContain('<code>slack_interaction_log</code>');
+    expect(html).toContain('data-migration="0024"');
+    expect(html).toContain('data-migration="0025"');
+  });
+
+  it('table_catalog/table_column_keys が migration 0024 ではなく 0026 として表示される', () => {
+    const html = getCacheStatusPage({ username: 'u' }, {
+      ...data,
+      tables: [
+        { name: 'table_catalog', exists: true, rowCount: 10, migration: '0026', description: 'テーブルカタログ（グループ・メタ情報）', syncPolicy: 'manual' },
+        { name: 'table_column_keys', exists: true, rowCount: 20, migration: '0026', description: 'カラムキー定義（PK/FK）', syncPolicy: 'manual' },
+      ],
+      tableGroupMap: { table_catalog: 'config', table_column_keys: 'config' },
+    });
+    expect(html).toContain('data-migration="0026"');
+    expect(html).not.toContain('data-table-name="table_catalog" data-migration="0024"');
+  });
 });
