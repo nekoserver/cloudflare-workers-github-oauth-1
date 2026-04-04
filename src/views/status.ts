@@ -1110,7 +1110,7 @@ export function getCacheStatusPage(user: {
     .uml-col-type { color: var(--text-faint); font-size: 10px; }
     .uml-svg-overlay {
       position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-      pointer-events: none; z-index: 0;
+      pointer-events: none; z-index: 2; overflow: visible;
     }
     .uml-bottom-panel {
       position: relative;
@@ -2586,7 +2586,7 @@ export function getCacheStatusPage(user: {
         var tbl = erData.tables[ti];
         for (var ci = 0; ci < tbl.columns.length; ci++) {
           var column = tbl.columns[ci];
-          if (column.keyType !== "fk" || !column.fkTarget || !tableNameSet[column.fkTarget]) continue;
+          if ((!column.keyType || column.keyType.indexOf('fk') === -1) || !column.fkTarget || !tableNameSet[column.fkTarget]) continue;
           var relKey = tbl.tableName + '.' + column.name + '->' + column.fkTarget;
           if (relationSet[relKey]) continue;
           relationSet[relKey] = true;
