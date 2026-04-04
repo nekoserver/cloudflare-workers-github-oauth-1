@@ -423,6 +423,58 @@ export function getRepositoriesPage(user: {
       font-size: 11px; padding: 2px 8px; border-radius: 999px;
       background: var(--badge-bg); color: var(--text-muted); font-weight: 600;
     }
+    .approval-repo-chip.clickable {
+      cursor: pointer; transition: background 0.15s, color 0.15s;
+      border: 1px solid transparent;
+    }
+    .approval-repo-chip.clickable:hover {
+      background: var(--accent-color); color: #fff; border-color: var(--accent-color);
+    }
+
+    /* Repo Detail Modal (nested inside approval modal) */
+    .repo-detail-overlay {
+      position: fixed; inset: 0; z-index: 10001; display: flex;
+      align-items: center; justify-content: center; background: rgba(0,0,0,0.45);
+      opacity: 0; pointer-events: none; transition: opacity 0.2s;
+    }
+    .repo-detail-overlay.show { opacity: 1; pointer-events: auto; }
+    .repo-detail-content {
+      background: var(--card-bg); border-radius: 16px;
+      box-shadow: 0 24px 60px rgba(0,0,0,0.35); width: 100%; max-width: 560px;
+      max-height: 85vh; display: flex; flex-direction: column;
+      animation: modalIn 0.2s ease;
+    }
+    .repo-detail-header {
+      padding: 18px 22px 12px; border-bottom: 1px solid var(--border-color);
+      display: flex; justify-content: space-between; align-items: center; flex-shrink: 0;
+    }
+    .repo-detail-body {
+      padding: 16px 22px 22px; overflow-y: auto; flex: 1; min-height: 0;
+    }
+    .repo-detail-notice {
+      background: linear-gradient(135deg, rgba(237,137,54,0.10) 0%, rgba(246,173,85,0.08) 100%);
+      border: 1px solid rgba(237,137,54,0.25); border-radius: 10px;
+      padding: 14px 16px; margin-top: 16px; font-size: 12px;
+      color: var(--text-primary); line-height: 1.6;
+    }
+    .repo-detail-notice-title {
+      font-weight: 700; font-size: 13px; margin-bottom: 6px;
+      display: flex; align-items: center; gap: 6px;
+    }
+    .repo-detail-links {
+      margin-top: 14px; display: flex; flex-direction: column; gap: 8px;
+    }
+    .repo-detail-link {
+      display: flex; align-items: center; gap: 8px; padding: 10px 14px;
+      background: var(--bg-secondary); border: 1px solid var(--border-color);
+      border-radius: 8px; text-decoration: none; color: var(--text-primary);
+      font-size: 13px; font-weight: 600; transition: background 0.15s;
+    }
+    .repo-detail-link:hover { background: var(--card-bg); }
+    .repo-detail-link-icon { font-size: 18px; flex-shrink: 0; }
+    .repo-detail-link-desc {
+      font-size: 11px; font-weight: 400; color: var(--text-muted); margin-top: 2px;
+    }
     .approval-refresh-btn {
       padding: 4px 12px; border-radius: 6px; border: 1px solid var(--border-color);
       background: transparent; color: var(--text-muted); font-size: 12px; cursor: pointer;
@@ -1200,6 +1252,18 @@ export function getRepositoriesPage(user: {
       </div>
       <div class="approval-modal-body" id="approvalModalBody">
         <div style="text-align:center;padding:24px;color:var(--text-muted)">読み込み中...</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Repo Detail Modal (nested, higher z-index) -->
+  <div class="repo-detail-overlay" id="repoDetailModal">
+    <div class="repo-detail-content">
+      <div class="repo-detail-header">
+        <span class="modal-title" id="repoDetailTitle">📦 リポジトリ詳細</span>
+        <button class="modal-close" id="repoDetailClose" type="button">&times;</button>
+      </div>
+      <div class="repo-detail-body" id="repoDetailBody">
       </div>
     </div>
   </div>
@@ -2252,6 +2316,8 @@ export function getRepositoriesPage(user: {
         var repoNames = Object.keys(permsData);
         var allPerms = null;
         try { allPerms = arguments.length > 2 ? arguments[2] : null; } catch(e) {}
+        lastPermsData = permsData;
+        lastAllPerms = allPerms;
         var hasInstall = repoNames.length > 0 || allPerms;
 
         html += '<div class="approval-section">';
@@ -2289,11 +2355,11 @@ export function getRepositoriesPage(user: {
         // リポジトリ別の権限有無
         if (repoNames.length > 0) {
           html += '<div class="approval-card">';
-          html += '<div class="approval-card-label" style="margin-bottom:6px">権限が検出されたリポジトリ (' + repoNames.length + ')</div>';
+          html += '<div class="approval-card-label" style="margin-bottom:6px">権限が検出されたリポジトリ (' + repoNames.length + ') <span style="font-size:11px;font-weight:400;color:var(--text-faint)">— タップで詳細</span></div>';
           html += '<div class="approval-repo-list">';
           repoNames.sort();
           for (var j = 0; j < repoNames.length; j++) {
-            html += '<span class="approval-repo-chip">' + esc(repoNames[j]) + '</span>';
+            html += '<span class="approval-repo-chip clickable" data-repo="' + esc(repoNames[j]) + '">' + esc(repoNames[j]) + '</span>';
           }
           html += '</div></div>';
         }
@@ -2384,6 +2450,9 @@ export function getRepositoriesPage(user: {
           });
       }
 
+      var lastPermsData = {};
+      var lastAllPerms = null;
+
       function openApprovalModal() {
         loadApprovalData();
         if (approvalModal) approvalModal.classList.add('show');
@@ -2391,6 +2460,163 @@ export function getRepositoriesPage(user: {
 
       function closeApprovalModal() {
         if (approvalModal) approvalModal.classList.remove('show');
+      }
+
+      // --- Repo Detail Modal ---
+      var repoDetailModal = document.getElementById('repoDetailModal');
+      var repoDetailBody = document.getElementById('repoDetailBody');
+      var repoDetailTitle = document.getElementById('repoDetailTitle');
+      var repoDetailCloseBtn = document.getElementById('repoDetailClose');
+
+      function findRepoInfo(repoName) {
+        for (var i = 0; i < repos.length; i++) {
+          if (repos[i].name === repoName) return repos[i];
+        }
+        return null;
+      }
+
+      function renderRepoDetail(repoName) {
+        if (!repoDetailBody || !repoDetailTitle) return;
+        var info = findRepoInfo(repoName);
+        var owner = info ? info.owner : '';
+        var fullName = owner ? owner + '/' + repoName : repoName;
+        repoDetailTitle.textContent = '📦 ' + repoName;
+
+        var html = '';
+
+        // リポジトリ基本情報
+        html += '<div class="approval-section">';
+        html += '<div class="approval-section-title">基本情報</div>';
+        html += '<div class="approval-card">';
+        html += '<div class="approval-card-row"><span class="approval-card-label">リポジトリ</span><span class="approval-card-value">' + esc(fullName) + '</span></div>';
+        if (info) {
+          html += '<div class="approval-card-row" style="margin-top:4px"><span class="approval-card-label">公開状態</span>';
+          html += info.isPrivate ? '<span class="approval-badge warn">Private</span>' : '<span class="approval-badge ok">Public</span>';
+          html += '</div>';
+        }
+        html += '</div></div>';
+
+        // このリポジトリの権限状況
+        var repoPermData = lastPermsData[repoName];
+        html += '<div class="approval-section">';
+        html += '<div class="approval-section-title">GitHub App 権限</div>';
+        if (repoPermData && typeof repoPermData === 'object' && Object.keys(repoPermData).length > 0) {
+          html += '<div class="approval-card">';
+          html += '<div class="approval-card-label" style="margin-bottom:8px">このリポジトリに適用されている権限</div>';
+          html += '<div class="approval-perm-grid">';
+          var rpKeys = Object.keys(repoPermData).sort();
+          for (var k = 0; k < rpKeys.length; k++) {
+            var lv = repoPermData[rpKeys[k]];
+            var lc = lv === 'write' ? 'write' : lv === 'read' ? 'read' : '';
+            html += '<div class="approval-perm-item"><span class="approval-perm-name">' + esc(rpKeys[k]) + '</span>';
+            html += '<span class="approval-perm-level ' + lc + '">' + esc(lv) + '</span></div>';
+          }
+          html += '</div></div>';
+        } else if (lastAllPerms) {
+          html += '<div class="approval-card">';
+          html += '<div class="approval-card-label" style="margin-bottom:8px">アプリ全体の権限（リポジトリ個別データなし）</div>';
+          html += '<div class="approval-perm-grid">';
+          var apKeys = Object.keys(lastAllPerms).sort();
+          for (var a = 0; a < apKeys.length; a++) {
+            var alv = lastAllPerms[apKeys[a]];
+            var alc = alv === 'write' ? 'write' : alv === 'read' ? 'read' : '';
+            html += '<div class="approval-perm-item"><span class="approval-perm-name">' + esc(apKeys[a]) + '</span>';
+            html += '<span class="approval-perm-level ' + alc + '">' + esc(alv) + '</span></div>';
+          }
+          html += '</div></div>';
+        } else {
+          html += '<div class="approval-card"><div class="approval-card-row">';
+          html += '<span class="approval-card-label">権限データ</span>';
+          html += '<span class="approval-badge none">取得不可</span>';
+          html += '</div></div>';
+        }
+
+        // OAuth スコープ
+        if (scopes.length > 0) {
+          html += '<div class="approval-card" style="margin-top:8px">';
+          html += '<div class="approval-card-label" style="margin-bottom:6px">OAuth スコープ</div>';
+          html += '<div style="display:flex;flex-wrap:wrap;gap:4px">';
+          for (var si = 0; si < scopes.length; si++) {
+            html += '<code style="font-size:11px;padding:2px 6px;background:var(--badge-bg);border-radius:4px">' + esc(scopes[si]) + '</code>';
+          }
+          html += '</div></div>';
+        }
+
+        // サービス連携
+        var svcItems = [
+          { name: 'Cloudflare', icon: '☁️', linked: cfLinkedMap[repoName] },
+          { name: 'Vercel', icon: '▲', linked: vercelLinkedMap[repoName] },
+          { name: 'Slack', icon: '💬', linked: slackLinkedMap[repoName] }
+        ];
+        html += '<div class="approval-card" style="margin-top:8px">';
+        html += '<div class="approval-card-label" style="margin-bottom:6px">サービス連携</div>';
+        for (var sv = 0; sv < svcItems.length; sv++) {
+          var s = svcItems[sv];
+          html += '<div class="approval-card-row" style="margin-top:4px"><span style="font-size:12px">' + s.icon + ' ' + esc(s.name) + '</span>';
+          html += s.linked ? '<span class="approval-badge ok">連携中</span>' : '<span class="approval-badge none">未連携</span>';
+          html += '</div>';
+        }
+        html += '</div>';
+        html += '</div>';
+
+        // 制約の説明
+        html += '<div class="repo-detail-notice">';
+        html += '<div class="repo-detail-notice-title">⚠️ 権限変更に関する制約</div>';
+        html += 'このアプリから直接リポジトリの権限を変更することはできません。GitHub の仕様により以下の制約があります:';
+        html += '<ul style="margin:8px 0 0 16px;padding:0;list-style:disc">';
+        html += '<li style="margin-bottom:4px"><strong>GitHub App 権限</strong>: アプリ開発者がマニフェストで定義した権限セットに対し、ユーザーは「承認」か「アンインストール」の二択のみ。個別権限の取り消しは不可</li>';
+        html += '<li style="margin-bottom:4px"><strong>OAuth スコープ</strong>: 認可時にリクエストされた全スコープが一括で付与される仕組み。個別スコープの追加・削除は API 上存在しない</li>';
+        html += '<li style="margin-bottom:4px"><strong>OAuth グラント取り消し</strong>: <code style="font-size:11px">DELETE /applications/{client_id}/grant</code> はグラント全体を削除し、全機能が停止する。個別スコープの取り消し手段はない</li>';
+        html += '</ul></div>';
+
+        // 公式ページへのリンク
+        html += '<div class="repo-detail-links">';
+        html += '<a class="repo-detail-link" href="https://github.com/settings/installations" target="_blank" rel="noopener">';
+        html += '<span class="repo-detail-link-icon">⚙️</span>';
+        html += '<div><div>GitHub App インストール管理</div>';
+        html += '<div class="repo-detail-link-desc">インストール済みアプリの確認・アンインストール</div></div>';
+        html += '</a>';
+        html += '<a class="repo-detail-link" href="https://github.com/settings/applications" target="_blank" rel="noopener">';
+        html += '<span class="repo-detail-link-icon">🔑</span>';
+        html += '<div><div>Authorized OAuth Apps</div>';
+        html += '<div class="repo-detail-link-desc">OAuth アプリの認可状況確認・取り消し</div></div>';
+        html += '</a>';
+        if (owner) {
+          html += '<a class="repo-detail-link" href="https://github.com/' + esc(fullName) + '/settings" target="_blank" rel="noopener">';
+          html += '<span class="repo-detail-link-icon">📦</span>';
+          html += '<div><div>' + esc(repoName) + ' の設定</div>';
+          html += '<div class="repo-detail-link-desc">リポジトリ設定・Webhooks・ブランチ保護等</div></div>';
+          html += '</a>';
+        }
+        html += '</div>';
+
+        repoDetailBody.innerHTML = html;
+      }
+
+      function openRepoDetail(repoName) {
+        renderRepoDetail(repoName);
+        if (repoDetailModal) repoDetailModal.classList.add('show');
+      }
+
+      function closeRepoDetail() {
+        if (repoDetailModal) repoDetailModal.classList.remove('show');
+      }
+
+      // チップクリック委任（approvalBody 内）
+      if (approvalBody) {
+        approvalBody.addEventListener('click', function(e) {
+          var chip = e.target.closest('.approval-repo-chip.clickable');
+          if (chip && chip.dataset.repo) {
+            openRepoDetail(chip.dataset.repo);
+          }
+        });
+      }
+
+      if (repoDetailCloseBtn) repoDetailCloseBtn.addEventListener('click', closeRepoDetail);
+      if (repoDetailModal) {
+        repoDetailModal.addEventListener('click', function(e) {
+          if (e.target === repoDetailModal) closeRepoDetail();
+        });
       }
 
       if (approvalOpenBtn) approvalOpenBtn.addEventListener('click', openApprovalModal);
@@ -2402,7 +2628,10 @@ export function getRepositoriesPage(user: {
         });
       }
       document.addEventListener('keydown', function(e) {
-        if (e.key === 'Escape' && approvalModal && approvalModal.classList.contains('show')) closeApprovalModal();
+        if (e.key === 'Escape') {
+          if (repoDetailModal && repoDetailModal.classList.contains('show')) { closeRepoDetail(); return; }
+          if (approvalModal && approvalModal.classList.contains('show')) closeApprovalModal();
+        }
       });
     })();
 
