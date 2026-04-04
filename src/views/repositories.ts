@@ -472,6 +472,81 @@ export function getRepositoriesPage(user: {
       transition: background 0.2s;
     }
     .approval-refresh-btn:hover { background: var(--bg-secondary); }
+
+    /* Add OAuth App Modal */
+    .add-app-overlay {
+      position: fixed; inset: 0; z-index: 10002; display: flex;
+      align-items: center; justify-content: center; background: rgba(0,0,0,0.5);
+      opacity: 0; pointer-events: none; transition: opacity 0.2s;
+    }
+    .add-app-overlay.show { opacity: 1; pointer-events: auto; }
+    .add-app-dialog {
+      background: var(--card-bg); border-radius: 14px;
+      box-shadow: 0 20px 50px rgba(0,0,0,0.35); width: 100%; max-width: 420px;
+      max-height: 80vh; display: flex; flex-direction: column;
+      animation: modalIn 0.15s ease;
+    }
+    .add-app-dialog-header {
+      padding: 16px 20px 12px; border-bottom: 1px solid var(--border-color);
+      display: flex; justify-content: space-between; align-items: center; flex-shrink: 0;
+    }
+    .add-app-dialog-body { padding: 14px 20px 20px; overflow-y: auto; flex: 1; min-height: 0; }
+    .add-app-input {
+      width: 100%; box-sizing: border-box; padding: 10px 12px; border-radius: 8px;
+      border: 1px solid var(--border-color); background: var(--bg-secondary);
+      color: var(--text-primary); font-size: 14px; font-weight: 600;
+      outline: none; transition: border-color 0.15s;
+    }
+    .add-app-input:focus { border-color: var(--accent-color); }
+    .add-app-note-input {
+      width: 100%; box-sizing: border-box; padding: 8px 12px; border-radius: 8px;
+      border: 1px solid var(--border-color); background: var(--bg-secondary);
+      color: var(--text-primary); font-size: 12px; outline: none; margin-top: 8px;
+    }
+    .add-app-repo-list {
+      margin-top: 10px; max-height: 220px; overflow-y: auto;
+      border: 1px solid var(--border-color); border-radius: 8px;
+    }
+    .add-app-repo-item {
+      padding: 8px 12px; cursor: pointer; font-size: 13px;
+      display: flex; justify-content: space-between; align-items: center;
+      border-bottom: 1px solid var(--border-color); transition: background 0.1s;
+    }
+    .add-app-repo-item:last-child { border-bottom: none; }
+    .add-app-repo-item:hover { background: var(--bg-secondary); }
+    .add-app-repo-item.selected { background: #c6f6d5; }
+    .add-app-repo-name { font-weight: 600; color: var(--text-primary); }
+    .add-app-repo-date { font-size: 11px; color: var(--text-faint); }
+    .add-app-sort-toggle {
+      display: flex; align-items: center; gap: 6px; margin-top: 8px; margin-bottom: 4px;
+      font-size: 11px; color: var(--text-muted);
+    }
+    .add-app-sort-toggle label { cursor: pointer; display: flex; align-items: center; gap: 4px; }
+    .add-app-sort-toggle input[type="checkbox"] {
+      width: 32px; height: 18px; appearance: none; -webkit-appearance: none;
+      background: var(--border-color); border-radius: 9px; position: relative;
+      cursor: pointer; transition: background 0.2s; flex-shrink: 0;
+    }
+    .add-app-sort-toggle input[type="checkbox"]::after {
+      content: ''; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px;
+      background: white; border-radius: 50%; transition: transform 0.2s;
+    }
+    .add-app-sort-toggle input[type="checkbox"]:checked { background: var(--accent-color); }
+    .add-app-sort-toggle input[type="checkbox"]:checked::after { transform: translateX(14px); }
+    .add-app-actions {
+      margin-top: 14px; display: flex; gap: 8px; justify-content: flex-end;
+    }
+    .add-app-btn {
+      padding: 8px 18px; border-radius: 8px; font-size: 13px; font-weight: 600;
+      cursor: pointer; border: 1px solid var(--border-color); transition: background 0.15s;
+    }
+    .add-app-btn.primary {
+      background: var(--accent-color); color: #fff; border-color: var(--accent-color);
+    }
+    .add-app-btn.primary:hover { opacity: 0.9; }
+    .add-app-btn.cancel { background: transparent; color: var(--text-muted); }
+    .add-app-btn.cancel:hover { background: var(--bg-secondary); }
+
     @media (max-width: 500px) {
     }
 
@@ -1242,6 +1317,30 @@ export function getRepositoriesPage(user: {
       </div>
       <div class="approval-modal-body" id="approvalModalBody">
         <div style="text-align:center;padding:24px;color:var(--text-muted)">読み込み中...</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Add OAuth App Modal -->
+  <div class="add-app-overlay" id="addAppModal">
+    <div class="add-app-dialog">
+      <div class="add-app-dialog-header">
+        <span class="modal-title" id="addAppTitle">🔗 OAuth App 追加</span>
+        <button class="modal-close" id="addAppClose" type="button">&times;</button>
+      </div>
+      <div class="add-app-dialog-body">
+        <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px" id="addAppGroupLabel"></div>
+        <input class="add-app-input" id="addAppNameInput" type="text" placeholder="App名を入力またはリポジトリから選択">
+        <input class="add-app-note-input" id="addAppNoteInput" type="text" placeholder="メモ（任意）">
+        <div class="add-app-sort-toggle">
+          <span>候補:</span>
+          <label><input type="checkbox" id="addAppSortToggle"><span id="addAppSortLabel">更新順</span></label>
+        </div>
+        <div class="add-app-repo-list" id="addAppRepoList"></div>
+        <div class="add-app-actions">
+          <button class="add-app-btn cancel" id="addAppCancelBtn" type="button">キャンセル</button>
+          <button class="add-app-btn primary" id="addAppSubmitBtn" type="button">追加</button>
+        </div>
       </div>
     </div>
   </div>
@@ -2294,7 +2393,7 @@ export function getRepositoriesPage(user: {
       var cfLinkedMap = ${JSON.stringify(cfLinked)};
       var vercelLinkedMap = ${JSON.stringify(vercelLinked)};
       var slackLinkedMap = ${JSON.stringify(slackLinked)};
-      var repos = ${JSON.stringify(user.repositories.map(r => ({ name: r.name, owner: r.owner, isPrivate: r.isPrivate })))};
+      var repos = ${JSON.stringify(user.repositories.map(r => ({ name: r.name, owner: r.owner, isPrivate: r.isPrivate, updatedAt: r.updatedAt })))};
 
       function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
@@ -2440,16 +2539,7 @@ export function getRepositoriesPage(user: {
         approvalBody.addEventListener('click', function(ev) {
           var addBtn = ev.target.closest('.oauth-app-add-btn');
           if (addBtn) {
-            var gid = addBtn.dataset.groupId;
-            var gname = addBtn.dataset.groupName;
-            var appName = prompt(gname + ' に追加する OAuth App 名を入力:');
-            if (!appName || !appName.trim()) return;
-            var appNote = prompt('メモ（任意、空欄可）:') || '';
-            fetch('/api/repo-groups/' + encodeURIComponent(gid) + '/oauth-apps', {
-              method: 'POST', credentials: 'same-origin',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ appName: appName.trim(), appNote: appNote.trim() })
-            }).then(function() { loadApprovalData(); });
+            openAddAppModal(addBtn.dataset.groupId, addBtn.dataset.groupName);
             return;
           }
           var rmBtn = ev.target.closest('.oauth-app-remove-btn');
@@ -2461,6 +2551,117 @@ export function getRepositoriesPage(user: {
               method: 'DELETE', credentials: 'same-origin'
             }).then(function() { loadApprovalData(); });
           }
+        });
+      }
+
+      // --- Add App Modal ---
+      var addAppModal = document.getElementById('addAppModal');
+      var addAppNameInput = document.getElementById('addAppNameInput');
+      var addAppNoteInput = document.getElementById('addAppNoteInput');
+      var addAppGroupLabel = document.getElementById('addAppGroupLabel');
+      var addAppRepoList = document.getElementById('addAppRepoList');
+      var addAppSortToggle = document.getElementById('addAppSortToggle');
+      var addAppSortLabel = document.getElementById('addAppSortLabel');
+      var addAppSubmitBtn = document.getElementById('addAppSubmitBtn');
+      var addAppCancelBtn = document.getElementById('addAppCancelBtn');
+      var addAppCloseBtn = document.getElementById('addAppClose');
+      var addAppGroupId = '';
+      var addAppAlphaSort = false;
+
+      function getReposSorted(alpha) {
+        var list = repos.slice();
+        if (alpha) {
+          list.sort(function(a, b) { return a.name < b.name ? -1 : a.name > b.name ? 1 : 0; });
+        } else {
+          list.sort(function(a, b) {
+            var da = a.updatedAt || ''; var db = b.updatedAt || '';
+            return da > db ? -1 : da < db ? 1 : 0;
+          });
+        }
+        return list;
+      }
+
+      function renderAddAppRepoList() {
+        if (!addAppRepoList || !addAppNameInput) return;
+        var sorted = getReposSorted(addAppAlphaSort);
+        var currentVal = addAppNameInput.value.trim();
+        var html = '';
+        for (var ri = 0; ri < sorted.length; ri++) {
+          var r = sorted[ri];
+          var sel = r.name === currentVal ? ' selected' : '';
+          var dateStr = r.updatedAt ? r.updatedAt.substring(0, 10) : '';
+          html += '<div class="add-app-repo-item' + sel + '" data-name="' + esc(r.name) + '">';
+          html += '<span class="add-app-repo-name">' + esc(r.name) + '</span>';
+          html += '<span class="add-app-repo-date">' + esc(dateStr) + '</span>';
+          html += '</div>';
+        }
+        addAppRepoList.innerHTML = html;
+      }
+
+      function openAddAppModal(groupId, groupName) {
+        addAppGroupId = groupId;
+        if (addAppGroupLabel) addAppGroupLabel.textContent = '対象グループ: ' + groupName;
+
+        var topRepo = getReposSorted(false);
+        if (addAppNameInput) addAppNameInput.value = topRepo.length > 0 ? topRepo[0].name : '';
+        if (addAppNoteInput) addAppNoteInput.value = '';
+
+        addAppAlphaSort = false;
+        if (addAppSortToggle) addAppSortToggle.checked = false;
+        if (addAppSortLabel) addAppSortLabel.textContent = '更新順';
+        renderAddAppRepoList();
+
+        if (addAppModal) addAppModal.classList.add('show');
+        if (addAppNameInput) addAppNameInput.focus();
+      }
+
+      function closeAddAppModal() {
+        if (addAppModal) addAppModal.classList.remove('show');
+      }
+
+      function submitAddApp() {
+        var appName = addAppNameInput ? addAppNameInput.value.trim() : '';
+        if (!appName) return;
+        var appNote = addAppNoteInput ? addAppNoteInput.value.trim() : '';
+        fetch('/api/repo-groups/' + encodeURIComponent(addAppGroupId) + '/oauth-apps', {
+          method: 'POST', credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ appName: appName, appNote: appNote })
+        }).then(function() {
+          closeAddAppModal();
+          loadApprovalData();
+        });
+      }
+
+      if (addAppRepoList) {
+        addAppRepoList.addEventListener('click', function(ev) {
+          var item = ev.target.closest('.add-app-repo-item');
+          if (item && item.dataset.name && addAppNameInput) {
+            addAppNameInput.value = item.dataset.name;
+            renderAddAppRepoList();
+          }
+        });
+      }
+
+      if (addAppSortToggle) {
+        addAppSortToggle.addEventListener('change', function() {
+          addAppAlphaSort = addAppSortToggle.checked;
+          if (addAppSortLabel) addAppSortLabel.textContent = addAppAlphaSort ? 'ABC順' : '更新順';
+          renderAddAppRepoList();
+        });
+      }
+
+      if (addAppSubmitBtn) addAppSubmitBtn.addEventListener('click', submitAddApp);
+      if (addAppCancelBtn) addAppCancelBtn.addEventListener('click', closeAddAppModal);
+      if (addAppCloseBtn) addAppCloseBtn.addEventListener('click', closeAddAppModal);
+      if (addAppModal) {
+        addAppModal.addEventListener('click', function(e) {
+          if (e.target === addAppModal) closeAddAppModal();
+        });
+      }
+      if (addAppNameInput) {
+        addAppNameInput.addEventListener('keydown', function(e) {
+          if (e.key === 'Enter') submitAddApp();
         });
       }
 
@@ -2655,6 +2856,7 @@ export function getRepositoriesPage(user: {
       }
       document.addEventListener('keydown', function(e) {
         if (e.key === 'Escape') {
+          if (addAppModal && addAppModal.classList.contains('show')) { closeAddAppModal(); return; }
           if (repoDetailModal && repoDetailModal.classList.contains('show')) { closeRepoDetail(); return; }
           if (approvalModal && approvalModal.classList.contains('show')) closeApprovalModal();
         }
