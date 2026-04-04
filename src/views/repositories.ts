@@ -418,6 +418,9 @@ export function getRepositoriesPage(user: {
     .approval-repo-chip.clickable:hover {
       background: var(--accent-color); color: #fff; border-color: var(--accent-color);
     }
+    .approval-repo-chip.active {
+      background: #c6f6d5; color: #22543d; border-color: #9ae6b4;
+    }
 
     /* Repo Detail Modal (nested inside approval modal) */
     .repo-detail-overlay {
@@ -2376,12 +2379,15 @@ export function getRepositoriesPage(user: {
 
         // リポジトリ一覧（タップで詳細）
         if (repos.length > 0) {
+          var selectedRepoEl = document.getElementById('modalRepoName');
+          var selectedRepo = selectedRepoEl ? (selectedRepoEl.textContent || '') : '';
           html += '<div class="approval-card">';
           html += '<div class="approval-card-label" style="margin-bottom:6px">リポジトリ一覧 <span style="font-size:11px;font-weight:400;color:var(--text-faint)">— タップで詳細</span></div>';
           html += '<div class="approval-repo-list">';
           var sortedRepos = repos.slice().sort(function(a, b) { return a.name < b.name ? -1 : a.name > b.name ? 1 : 0; });
           for (var rci = 0; rci < sortedRepos.length; rci++) {
-            html += '<span class="approval-repo-chip clickable" data-repo="' + esc(sortedRepos[rci].name) + '">' + esc(sortedRepos[rci].name) + '</span>';
+            var isActive = sortedRepos[rci].name === selectedRepo;
+            html += '<span class="approval-repo-chip clickable' + (isActive ? ' active' : '') + '" data-repo="' + esc(sortedRepos[rci].name) + '">' + esc(sortedRepos[rci].name) + '</span>';
           }
           html += '</div></div>';
         }
