@@ -404,18 +404,6 @@ export function getRepositoriesPage(user: {
     .approval-badge.warn { background: #fefcbf; color: #744210; }
     .approval-badge.none { background: var(--badge-bg); color: var(--text-muted); }
     .approval-badge.error { background: #fed7d7; color: #9b2c2c; }
-    .approval-perm-grid {
-      display: grid; grid-template-columns: 1fr 1fr; gap: 6px;
-    }
-    .approval-perm-item {
-      display: flex; justify-content: space-between; align-items: center;
-      font-size: 12px; padding: 4px 8px; border-radius: 6px;
-      background: var(--card-bg); border: 1px solid var(--border-color);
-    }
-    .approval-perm-name { font-weight: 600; color: var(--text-primary); }
-    .approval-perm-level { color: var(--text-muted); }
-    .approval-perm-level.write { color: #e53e3e; font-weight: 700; }
-    .approval-perm-level.read { color: #38a169; }
     .approval-repo-list {
       display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px;
     }
@@ -429,6 +417,9 @@ export function getRepositoriesPage(user: {
     }
     .approval-repo-chip.clickable:hover {
       background: var(--accent-color); color: #fff; border-color: var(--accent-color);
+    }
+    .approval-repo-chip.active {
+      background: #c6f6d5; color: #22543d; border-color: #9ae6b4;
     }
 
     /* Repo Detail Modal (nested inside approval modal) */
@@ -482,7 +473,6 @@ export function getRepositoriesPage(user: {
     }
     .approval-refresh-btn:hover { background: var(--bg-secondary); }
     @media (max-width: 500px) {
-      .approval-perm-grid { grid-template-columns: 1fr; }
     }
 
     /* Cloudflare Setup Banner */
@@ -2312,60 +2302,13 @@ export function getRepositoriesPage(user: {
         if (!approvalBody) return;
         var html = '';
 
-        // 1. GitHub App インストール状況
         var repoNames = Object.keys(permsData);
         var allPerms = null;
         try { allPerms = arguments.length > 2 ? arguments[2] : null; } catch(e) {}
         lastPermsData = permsData;
         lastAllPerms = allPerms;
-        var hasInstall = repoNames.length > 0 || allPerms;
 
-        html += '<div class="approval-section">';
-        html += '<div class="approval-section-title">GitHub App インストール</div>';
-        html += '<div class="approval-card"><div class="approval-card-row">';
-        html += '<span class="approval-card-label">インストール状態</span>';
-        if (hasInstall) {
-          html += '<span class="approval-badge ok">接続済み</span>';
-        } else {
-          html += '<span class="approval-badge warn">未検出</span>';
-        }
-        html += '</div>';
-        if (source) {
-          html += '<div style="margin-top:6px;font-size:11px;color:var(--text-faint)">データソース: ' + esc(source) + '</div>';
-        }
-        html += '</div>';
-
-        // アプリ権限（allPermissions）
-        if (allPerms && typeof allPerms === 'object') {
-          html += '<div class="approval-card">';
-          html += '<div class="approval-card-label" style="margin-bottom:8px">アプリに付与されている権限</div>';
-          html += '<div class="approval-perm-grid">';
-          var permKeys = Object.keys(allPerms).sort();
-          for (var i = 0; i < permKeys.length; i++) {
-            var level = allPerms[permKeys[i]];
-            var levelCls = level === 'write' ? 'write' : level === 'read' ? 'read' : '';
-            html += '<div class="approval-perm-item">';
-            html += '<span class="approval-perm-name">' + esc(permKeys[i]) + '</span>';
-            html += '<span class="approval-perm-level ' + levelCls + '">' + esc(level) + '</span>';
-            html += '</div>';
-          }
-          html += '</div></div>';
-        }
-
-        // リポジトリ別の権限有無
-        if (repoNames.length > 0) {
-          html += '<div class="approval-card">';
-          html += '<div class="approval-card-label" style="margin-bottom:6px">権限が検出されたリポジトリ (' + repoNames.length + ') <span style="font-size:11px;font-weight:400;color:var(--text-faint)">— タップで詳細</span></div>';
-          html += '<div class="approval-repo-list">';
-          repoNames.sort();
-          for (var j = 0; j < repoNames.length; j++) {
-            html += '<span class="approval-repo-chip clickable" data-repo="' + esc(repoNames[j]) + '">' + esc(repoNames[j]) + '</span>';
-          }
-          html += '</div></div>';
-        }
-        html += '</div>';
-
-        // 2. OAuth スコープ
+        // 1. OAuth スコープ
         html += '<div class="approval-section">';
         html += '<div class="approval-section-title">OAuth スコープ</div>';
         html += '<div class="approval-card"><div class="approval-card-row">';
@@ -2385,7 +2328,7 @@ export function getRepositoriesPage(user: {
         }
         html += '</div></div>';
 
-        // 3. サービス連携状況
+        // 2. サービス連携状況
         html += '<div class="approval-section">';
         html += '<div class="approval-section-title">サービス連携</div>';
         var services = [
@@ -2417,6 +2360,47 @@ export function getRepositoriesPage(user: {
         }
         html += '</div>';
 
+        // 3. グループ別 OAuth App（ユーザー手動管理）
+        html += '<div class="approval-section">';
+        html += '<div class="approval-section-title">グループ別 OAuth App 認可状況</div>';
+        if (groupOAuthData && groupOAuthData.length > 0) {
+          for (var gi = 0; gi < groupOAuthData.length; gi++) {
+            var grp = groupOAuthData[gi];
+            html += '<div class="approval-card">';
+            html += '<div class="approval-card-row">';
+            html += '<span class="approval-card-label"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:' + esc(grp.colorCode || '#667eea') + ';margin-right:6px;vertical-align:middle"></span>' + esc(grp.name) + '</span>';
+            html += '<span class="approval-badge ' + (grp.apps.length > 0 ? 'ok' : 'none') + '">' + (grp.apps.length > 0 ? grp.apps.length + ' App' : '未登録') + '</span>';
+            html += '</div>';
+            if (grp.apps.length > 0) {
+              html += '<div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:4px">';
+              for (var ai = 0; ai < grp.apps.length; ai++) {
+                var app = grp.apps[ai];
+                html += '<span class="approval-repo-chip" title="' + esc(app.app_note || '') + '" style="display:inline-flex;align-items:center;gap:4px">';
+                html += '🔗 ' + esc(app.app_name);
+                html += '<button type="button" class="oauth-app-remove-btn" data-group-id="' + esc(grp.id) + '" data-app-name="' + esc(app.app_name) + '" style="background:none;border:none;cursor:pointer;padding:0 2px;font-size:13px;color:var(--text-faint);line-height:1" title="削除">&times;</button>';
+                html += '</span>';
+              }
+              html += '</div>';
+            }
+            html += '<div style="margin-top:6px">';
+            html += '<button type="button" class="approval-refresh-btn oauth-app-add-btn" data-group-id="' + esc(grp.id) + '" data-group-name="' + esc(grp.name) + '">+ App追加</button>';
+            html += '</div>';
+            html += '</div>';
+          }
+        } else {
+          html += '<div class="approval-card"><div class="approval-card-row">';
+          html += '<span class="approval-card-label">グループ</span>';
+          html += '<span class="approval-badge none">未作成</span>';
+          html += '</div>';
+          html += '<div style="margin-top:6px;font-size:11px;color:var(--text-faint)">リポジトリグループを作成すると、グループ単位でOAuth App認可状況を管理できます</div>';
+          html += '</div>';
+        }
+        html += '<div style="margin-top:8px;padding:10px 12px;background:var(--bg-secondary);border-radius:8px;font-size:11px;color:var(--text-muted);line-height:1.6">';
+        html += '<strong>ℹ️ GitHub API の制約を補う機能</strong><br>';
+        html += 'GitHub の公式 API は、ユーザーが認可済みの OAuth App 一覧を第三者アプリに開示していません。この機能はその制約を補い、ユーザー自身がグループ単位で認可状況を記録・管理できるようにするものです。各ユーザーは実際に利用しているリポジトリとアプリの組み合わせを登録するため、運用実態に基づいた信頼性の高い情報として活用できます。なお、登録内容の正確性の管理はユーザーの責任となります。';
+        html += '</div>';
+        html += '</div>';
+
         // 4. リポジトリ概要
         html += '<div class="approval-section">';
         html += '<div class="approval-section-title">リポジトリ概要</div>';
@@ -2432,26 +2416,93 @@ export function getRepositoriesPage(user: {
           html += '<span class="approval-card-value">' + privCount + '</span>';
           html += '</div>';
         }
-        html += '</div></div>';
+        html += '</div>';
+
+        // リポジトリ一覧（タップで詳細）
+        if (repos.length > 0) {
+          var selectedRepoEl = document.getElementById('modalRepoName');
+          var selectedRepo = selectedRepoEl ? (selectedRepoEl.textContent || '') : '';
+          html += '<div class="approval-card">';
+          html += '<div class="approval-card-label" style="margin-bottom:6px">リポジトリ一覧 <span style="font-size:11px;font-weight:400;color:var(--text-faint)">— タップで詳細</span></div>';
+          html += '<div class="approval-repo-list">';
+          var sortedRepos = repos.slice().sort(function(a, b) { return a.name < b.name ? -1 : a.name > b.name ? 1 : 0; });
+          for (var rci = 0; rci < sortedRepos.length; rci++) {
+            var isActive = sortedRepos[rci].name === selectedRepo;
+            html += '<span class="approval-repo-chip clickable' + (isActive ? ' active' : '') + '" data-repo="' + esc(sortedRepos[rci].name) + '">' + esc(sortedRepos[rci].name) + '</span>';
+          }
+          html += '</div></div>';
+        }
+        html += '</div>';
 
         approvalBody.innerHTML = html;
+
+        // App追加・削除ボタンのイベント委任
+        approvalBody.addEventListener('click', function(ev) {
+          var addBtn = ev.target.closest('.oauth-app-add-btn');
+          if (addBtn) {
+            var gid = addBtn.dataset.groupId;
+            var gname = addBtn.dataset.groupName;
+            var appName = prompt(gname + ' に追加する OAuth App 名を入力:');
+            if (!appName || !appName.trim()) return;
+            var appNote = prompt('メモ（任意、空欄可）:') || '';
+            fetch('/api/repo-groups/' + encodeURIComponent(gid) + '/oauth-apps', {
+              method: 'POST', credentials: 'same-origin',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ appName: appName.trim(), appNote: appNote.trim() })
+            }).then(function() { loadApprovalData(); });
+            return;
+          }
+          var rmBtn = ev.target.closest('.oauth-app-remove-btn');
+          if (rmBtn) {
+            var gid2 = rmBtn.dataset.groupId;
+            var aname = rmBtn.dataset.appName;
+            if (!confirm(aname + ' を削除しますか？')) return;
+            fetch('/api/repo-groups/' + encodeURIComponent(gid2) + '/oauth-apps/' + encodeURIComponent(aname), {
+              method: 'DELETE', credentials: 'same-origin'
+            }).then(function() { loadApprovalData(); });
+          }
+        });
       }
+
+      var groupOAuthData = null;
 
       function loadApprovalData() {
         if (!approvalBody) return;
         approvalBody.innerHTML = '<div style="text-align:center;padding:24px;color:var(--text-muted)">読み込み中...</div>';
-        fetch('/api/repo-permissions', { credentials: 'same-origin' })
-          .then(function(res) { return res.json(); })
-          .then(function(data) {
-            renderApprovalStatus(data.permissions || {}, data.source || '', data.allPermissions || null);
-          })
-          .catch(function() {
-            renderApprovalStatus(repoPerms, 'cache');
+
+        Promise.all([
+          fetch('/api/repo-permissions', { credentials: 'same-origin' }).then(function(r) { return r.json(); }),
+          fetch('/api/repo-groups', { credentials: 'same-origin' }).then(function(r) { return r.json(); }).catch(function() { return { groups: [] }; }),
+          fetch('/api/repo-oauth-apps', { credentials: 'same-origin' }).then(function(r) { return r.json(); }).catch(function() { return { repoApps: {} }; })
+        ]).then(function(results) {
+          var permData = results[0];
+          var groupData = results[1];
+          var repoAppsData = results[2];
+
+          lastRepoApps = repoAppsData.repoApps || {};
+
+          var groups = groupData.groups || [];
+          var appPromises = groups.map(function(g) {
+            return fetch('/api/repo-groups/' + encodeURIComponent(g.id) + '/oauth-apps', { credentials: 'same-origin' })
+              .then(function(r) { return r.json(); })
+              .then(function(d) { return { id: g.id, name: g.name, colorCode: g.colorCode, apps: d.apps || [] }; })
+              .catch(function() { return { id: g.id, name: g.name, colorCode: g.colorCode, apps: [] }; });
           });
+
+          return Promise.all(appPromises).then(function(groupApps) {
+            groupOAuthData = groupApps;
+            renderApprovalStatus(permData.permissions || {}, permData.source || '', permData.allPermissions || null);
+          });
+        }).catch(function() {
+          groupOAuthData = null;
+          lastRepoApps = {};
+          renderApprovalStatus(repoPerms, 'cache');
+        });
       }
 
       var lastPermsData = {};
       var lastAllPerms = null;
+      var lastRepoApps = {};
 
       function openApprovalModal() {
         loadApprovalData();
@@ -2496,52 +2547,6 @@ export function getRepositoriesPage(user: {
         }
         html += '</div></div>';
 
-        // このリポジトリの権限状況
-        var repoPermData = lastPermsData[repoName];
-        html += '<div class="approval-section">';
-        html += '<div class="approval-section-title">GitHub App 権限</div>';
-        if (repoPermData && typeof repoPermData === 'object' && Object.keys(repoPermData).length > 0) {
-          html += '<div class="approval-card">';
-          html += '<div class="approval-card-label" style="margin-bottom:8px">このリポジトリに適用されている権限</div>';
-          html += '<div class="approval-perm-grid">';
-          var rpKeys = Object.keys(repoPermData).sort();
-          for (var k = 0; k < rpKeys.length; k++) {
-            var lv = repoPermData[rpKeys[k]];
-            var lc = lv === 'write' ? 'write' : lv === 'read' ? 'read' : '';
-            html += '<div class="approval-perm-item"><span class="approval-perm-name">' + esc(rpKeys[k]) + '</span>';
-            html += '<span class="approval-perm-level ' + lc + '">' + esc(lv) + '</span></div>';
-          }
-          html += '</div></div>';
-        } else if (lastAllPerms) {
-          html += '<div class="approval-card">';
-          html += '<div class="approval-card-label" style="margin-bottom:8px">アプリ全体の権限（リポジトリ個別データなし）</div>';
-          html += '<div class="approval-perm-grid">';
-          var apKeys = Object.keys(lastAllPerms).sort();
-          for (var a = 0; a < apKeys.length; a++) {
-            var alv = lastAllPerms[apKeys[a]];
-            var alc = alv === 'write' ? 'write' : alv === 'read' ? 'read' : '';
-            html += '<div class="approval-perm-item"><span class="approval-perm-name">' + esc(apKeys[a]) + '</span>';
-            html += '<span class="approval-perm-level ' + alc + '">' + esc(alv) + '</span></div>';
-          }
-          html += '</div></div>';
-        } else {
-          html += '<div class="approval-card"><div class="approval-card-row">';
-          html += '<span class="approval-card-label">権限データ</span>';
-          html += '<span class="approval-badge none">取得不可</span>';
-          html += '</div></div>';
-        }
-
-        // OAuth スコープ
-        if (scopes.length > 0) {
-          html += '<div class="approval-card" style="margin-top:8px">';
-          html += '<div class="approval-card-label" style="margin-bottom:6px">OAuth スコープ</div>';
-          html += '<div style="display:flex;flex-wrap:wrap;gap:4px">';
-          for (var si = 0; si < scopes.length; si++) {
-            html += '<code style="font-size:11px;padding:2px 6px;background:var(--badge-bg);border-radius:4px">' + esc(scopes[si]) + '</code>';
-          }
-          html += '</div></div>';
-        }
-
         // サービス連携
         var svcItems = [
           { name: 'Cloudflare', icon: '☁️', linked: cfLinkedMap[repoName] },
@@ -2558,6 +2563,27 @@ export function getRepositoriesPage(user: {
         }
         html += '</div>';
         html += '</div>';
+
+        // グループ経由の OAuth App 認可状況（/api/repo-oauth-apps で取得したデータ）
+        if (lastRepoApps && lastRepoApps[repoName] && lastRepoApps[repoName].length > 0) {
+          html += '<div class="approval-section">';
+          html += '<div class="approval-section-title">認可済み OAuth App（グループ経由）</div>';
+          html += '<div class="approval-card">';
+          var rapps = lastRepoApps[repoName];
+          for (var rai = 0; rai < rapps.length; rai++) {
+            var ra = rapps[rai];
+            html += '<div class="approval-card-row" style="margin-top:' + (rai > 0 ? '6' : '0') + 'px">';
+            html += '<span style="font-size:12px;font-weight:600">🔗 ' + esc(ra.appName) + '</span>';
+            html += '<span style="font-size:11px;color:var(--text-muted)"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:' + esc(ra.colorCode) + ';margin-right:4px;vertical-align:middle"></span>' + esc(ra.groupName) + '</span>';
+            html += '</div>';
+            if (ra.appNote) {
+              html += '<div style="font-size:11px;color:var(--text-faint);margin-top:2px;padding-left:20px">' + esc(ra.appNote) + '</div>';
+            }
+          }
+          html += '</div>';
+          html += '<div style="margin-top:6px;font-size:10px;color:var(--text-faint)">※ GitHub API の制約を補い、ユーザーが運用実態に基づきグループ単位で登録した情報です。</div>';
+          html += '</div>';
+        }
 
         // 制約の説明
         html += '<div class="repo-detail-notice">';
