@@ -2534,8 +2534,10 @@ export function getRepositoriesPage(user: {
         html += '</div>';
 
         approvalBody.innerHTML = html;
+      }
 
-        // App追加・削除ボタンのイベント委任
+      // App追加・削除ボタンのイベント委任（1回だけ登録）
+      if (approvalBody) {
         approvalBody.addEventListener('click', function(ev) {
           var addBtn = ev.target.closest('.oauth-app-add-btn');
           if (addBtn) {
