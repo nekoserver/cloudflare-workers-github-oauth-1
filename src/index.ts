@@ -5096,6 +5096,129 @@ app.delete('/api/repo-groups/:id', authMiddleware, async (c) => {
 });
 
 // =====================================================
+// グループ OAuth App 管理 API
+// =====================================================
+
+app.get('/api/repo-groups/:id/oauth-apps', authMiddleware, async (c) => {
+  const user = c.get('user');
+  const db = c.env.DB;
+  if (!db) return c.json({ error: 'D1 is not configured' }, 500);
+
+  const groupId = c.req.param('id');
+  try {
+    const wsInfo = await getCurrentWorkspace(db, user.sub);
+    const workspaceId = wsInfo?.workspaceId ?? '';
+
+    const rows = await db.prepare(
+      'SELECT app_name, app_note, added_at FROM group_oauth_apps WHERE group_id = ? AND workspace_id = ? ORDER BY app_name'
+    ).bind(groupId, workspaceId).all();
+
+    return c.json({ apps: rows.results ?? [] });
+  } catch (error) {
+    logger.error('Failed to get group oauth apps', {
+      userId: user.sub, groupId,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    return c.json({ error: 'OAuth App一覧の取得に失敗しました' }, 500);
+  }
+});
+
+app.post('/api/repo-groups/:id/oauth-apps', authMiddleware, async (c) => {
+  const user = c.get('user');
+  const db = c.env.DB;
+  if (!db) return c.json({ error: 'D1 is not configured' }, 500);
+
+  const groupId = c.req.param('id');
+  try {
+    const body = await c.req.json<{ appName?: string; appNote?: string }>();
+    const appName = (body.appName ?? '').trim();
+    if (!appName) return c.json({ error: 'appName は必須です' }, 400);
+
+    const wsInfo = await getCurrentWorkspace(db, user.sub);
+    const workspaceId = wsInfo?.workspaceId ?? '';
+    const now = new Date().toISOString();
+
+    await db.prepare(
+      'INSERT OR REPLACE INTO group_oauth_apps (group_id, app_name, app_note, workspace_id, added_at) VALUES (?, ?, ?, ?, ?)'
+    ).bind(groupId, appName, (body.appNote ?? '').trim(), workspaceId, now).run();
+
+    logger.info('Added oauth app to group', { userId: user.sub, workspaceId, groupId, appName });
+    return c.json({ message: 'OAuth Appを追加しました', appName });
+  } catch (error) {
+    logger.error('Failed to add oauth app to group', {
+      userId: user.sub, groupId,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    return c.json({ error: 'OAuth Appの追加に失敗しました' }, 500);
+  }
+});
+
+app.delete('/api/repo-groups/:id/oauth-apps/:appName', authMiddleware, async (c) => {
+  const user = c.get('user');
+  const db = c.env.DB;
+  if (!db) return c.json({ error: 'D1 is not configured' }, 500);
+
+  const groupId = c.req.param('id');
+  const appName = decodeURIComponent(c.req.param('appName'));
+  try {
+    const wsInfo = await getCurrentWorkspace(db, user.sub);
+    const workspaceId = wsInfo?.workspaceId ?? '';
+
+    await db.prepare(
+      'DELETE FROM group_oauth_apps WHERE group_id = ? AND app_name = ? AND workspace_id = ?'
+    ).bind(groupId, appName, workspaceId).run();
+
+    logger.info('Removed oauth app from group', { userId: user.sub, workspaceId, groupId, appName });
+    return c.json({ message: 'OAuth Appを削除しました', appName });
+  } catch (error) {
+    logger.error('Failed to remove oauth app from group', {
+      userId: user.sub, groupId,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    return c.json({ error: 'OAuth Appの削除に失敗しました' }, 500);
+  }
+});
+
+app.get('/api/repo-oauth-apps', authMiddleware, async (c) => {
+  const user = c.get('user');
+  const db = c.env.DB;
+  if (!db) return c.json({ error: 'D1 is not configured' }, 500);
+
+  try {
+    const wsInfo = await getCurrentWorkspace(db, user.sub);
+    const workspaceId = wsInfo?.workspaceId ?? '';
+
+    const rows = await db.prepare(
+      `SELECT m.repo_name, a.app_name, a.app_note, g.name AS group_name, g.color_code
+       FROM group_oauth_apps a
+       JOIN repo_groups g ON g.id = a.group_id AND g.workspace_id = a.workspace_id
+       JOIN repo_group_members m ON m.group_id = a.group_id AND m.workspace_id = a.workspace_id
+       WHERE a.workspace_id = ?
+       ORDER BY m.repo_name, a.app_name`
+    ).bind(workspaceId).all();
+
+    const repoApps: Record<string, Array<{ appName: string; appNote: string; groupName: string; colorCode: string }>> = {};
+    for (const row of (rows.results ?? []) as Array<{ repo_name: string; app_name: string; app_note: string; group_name: string; color_code: string }>) {
+      if (!repoApps[row.repo_name]) repoApps[row.repo_name] = [];
+      repoApps[row.repo_name].push({
+        appName: row.app_name,
+        appNote: row.app_note,
+        groupName: row.group_name,
+        colorCode: row.color_code,
+      });
+    }
+
+    return c.json({ repoApps });
+  } catch (error) {
+    logger.error('Failed to get repo oauth apps', {
+      userId: user.sub,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    return c.json({ error: 'リポジトリ別OAuth App情報の取得に失敗しました' }, 500);
+  }
+});
+
+// =====================================================
 // AI要約 API
 // =====================================================
 
