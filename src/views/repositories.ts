@@ -404,18 +404,6 @@ export function getRepositoriesPage(user: {
     .approval-badge.warn { background: #fefcbf; color: #744210; }
     .approval-badge.none { background: var(--badge-bg); color: var(--text-muted); }
     .approval-badge.error { background: #fed7d7; color: #9b2c2c; }
-    .approval-perm-grid {
-      display: grid; grid-template-columns: 1fr 1fr; gap: 6px;
-    }
-    .approval-perm-item {
-      display: flex; justify-content: space-between; align-items: center;
-      font-size: 12px; padding: 4px 8px; border-radius: 6px;
-      background: var(--card-bg); border: 1px solid var(--border-color);
-    }
-    .approval-perm-name { font-weight: 600; color: var(--text-primary); }
-    .approval-perm-level { color: var(--text-muted); }
-    .approval-perm-level.write { color: #e53e3e; font-weight: 700; }
-    .approval-perm-level.read { color: #38a169; }
     .approval-repo-list {
       display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px;
     }
@@ -482,7 +470,6 @@ export function getRepositoriesPage(user: {
     }
     .approval-refresh-btn:hover { background: var(--bg-secondary); }
     @media (max-width: 500px) {
-      .approval-perm-grid { grid-template-columns: 1fr; }
     }
 
     /* Cloudflare Setup Banner */
@@ -2312,60 +2299,13 @@ export function getRepositoriesPage(user: {
         if (!approvalBody) return;
         var html = '';
 
-        // 1. GitHub App インストール状況
         var repoNames = Object.keys(permsData);
         var allPerms = null;
         try { allPerms = arguments.length > 2 ? arguments[2] : null; } catch(e) {}
         lastPermsData = permsData;
         lastAllPerms = allPerms;
-        var hasInstall = repoNames.length > 0 || allPerms;
 
-        html += '<div class="approval-section">';
-        html += '<div class="approval-section-title">GitHub App インストール</div>';
-        html += '<div class="approval-card"><div class="approval-card-row">';
-        html += '<span class="approval-card-label">インストール状態</span>';
-        if (hasInstall) {
-          html += '<span class="approval-badge ok">接続済み</span>';
-        } else {
-          html += '<span class="approval-badge warn">未検出</span>';
-        }
-        html += '</div>';
-        if (source) {
-          html += '<div style="margin-top:6px;font-size:11px;color:var(--text-faint)">データソース: ' + esc(source) + '</div>';
-        }
-        html += '</div>';
-
-        // アプリ権限（allPermissions）
-        if (allPerms && typeof allPerms === 'object') {
-          html += '<div class="approval-card">';
-          html += '<div class="approval-card-label" style="margin-bottom:8px">アプリに付与されている権限</div>';
-          html += '<div class="approval-perm-grid">';
-          var permKeys = Object.keys(allPerms).sort();
-          for (var i = 0; i < permKeys.length; i++) {
-            var level = allPerms[permKeys[i]];
-            var levelCls = level === 'write' ? 'write' : level === 'read' ? 'read' : '';
-            html += '<div class="approval-perm-item">';
-            html += '<span class="approval-perm-name">' + esc(permKeys[i]) + '</span>';
-            html += '<span class="approval-perm-level ' + levelCls + '">' + esc(level) + '</span>';
-            html += '</div>';
-          }
-          html += '</div></div>';
-        }
-
-        // リポジトリ別の権限有無
-        if (repoNames.length > 0) {
-          html += '<div class="approval-card">';
-          html += '<div class="approval-card-label" style="margin-bottom:6px">権限が検出されたリポジトリ (' + repoNames.length + ') <span style="font-size:11px;font-weight:400;color:var(--text-faint)">— タップで詳細</span></div>';
-          html += '<div class="approval-repo-list">';
-          repoNames.sort();
-          for (var j = 0; j < repoNames.length; j++) {
-            html += '<span class="approval-repo-chip clickable" data-repo="' + esc(repoNames[j]) + '">' + esc(repoNames[j]) + '</span>';
-          }
-          html += '</div></div>';
-        }
-        html += '</div>';
-
-        // 2. OAuth スコープ
+        // 1. OAuth スコープ
         html += '<div class="approval-section">';
         html += '<div class="approval-section-title">OAuth スコープ</div>';
         html += '<div class="approval-card"><div class="approval-card-row">';
@@ -2385,7 +2325,7 @@ export function getRepositoriesPage(user: {
         }
         html += '</div></div>';
 
-        // 3. サービス連携状況
+        // 2. サービス連携状況
         html += '<div class="approval-section">';
         html += '<div class="approval-section-title">サービス連携</div>';
         var services = [
@@ -2417,7 +2357,7 @@ export function getRepositoriesPage(user: {
         }
         html += '</div>';
 
-        // 4. リポジトリ概要
+        // 3. リポジトリ概要
         html += '<div class="approval-section">';
         html += '<div class="approval-section-title">リポジトリ概要</div>';
         html += '<div class="approval-card"><div class="approval-card-row">';
@@ -2432,7 +2372,20 @@ export function getRepositoriesPage(user: {
           html += '<span class="approval-card-value">' + privCount + '</span>';
           html += '</div>';
         }
-        html += '</div></div>';
+        html += '</div>';
+
+        // リポジトリ一覧（タップで詳細）
+        if (repos.length > 0) {
+          html += '<div class="approval-card">';
+          html += '<div class="approval-card-label" style="margin-bottom:6px">リポジトリ一覧 <span style="font-size:11px;font-weight:400;color:var(--text-faint)">— タップで詳細</span></div>';
+          html += '<div class="approval-repo-list">';
+          var sortedRepos = repos.slice().sort(function(a, b) { return a.name < b.name ? -1 : a.name > b.name ? 1 : 0; });
+          for (var rci = 0; rci < sortedRepos.length; rci++) {
+            html += '<span class="approval-repo-chip clickable" data-repo="' + esc(sortedRepos[rci].name) + '">' + esc(sortedRepos[rci].name) + '</span>';
+          }
+          html += '</div></div>';
+        }
+        html += '</div>';
 
         approvalBody.innerHTML = html;
       }
@@ -2495,52 +2448,6 @@ export function getRepositoriesPage(user: {
           html += '</div>';
         }
         html += '</div></div>';
-
-        // このリポジトリの権限状況
-        var repoPermData = lastPermsData[repoName];
-        html += '<div class="approval-section">';
-        html += '<div class="approval-section-title">GitHub App 権限</div>';
-        if (repoPermData && typeof repoPermData === 'object' && Object.keys(repoPermData).length > 0) {
-          html += '<div class="approval-card">';
-          html += '<div class="approval-card-label" style="margin-bottom:8px">このリポジトリに適用されている権限</div>';
-          html += '<div class="approval-perm-grid">';
-          var rpKeys = Object.keys(repoPermData).sort();
-          for (var k = 0; k < rpKeys.length; k++) {
-            var lv = repoPermData[rpKeys[k]];
-            var lc = lv === 'write' ? 'write' : lv === 'read' ? 'read' : '';
-            html += '<div class="approval-perm-item"><span class="approval-perm-name">' + esc(rpKeys[k]) + '</span>';
-            html += '<span class="approval-perm-level ' + lc + '">' + esc(lv) + '</span></div>';
-          }
-          html += '</div></div>';
-        } else if (lastAllPerms) {
-          html += '<div class="approval-card">';
-          html += '<div class="approval-card-label" style="margin-bottom:8px">アプリ全体の権限（リポジトリ個別データなし）</div>';
-          html += '<div class="approval-perm-grid">';
-          var apKeys = Object.keys(lastAllPerms).sort();
-          for (var a = 0; a < apKeys.length; a++) {
-            var alv = lastAllPerms[apKeys[a]];
-            var alc = alv === 'write' ? 'write' : alv === 'read' ? 'read' : '';
-            html += '<div class="approval-perm-item"><span class="approval-perm-name">' + esc(apKeys[a]) + '</span>';
-            html += '<span class="approval-perm-level ' + alc + '">' + esc(alv) + '</span></div>';
-          }
-          html += '</div></div>';
-        } else {
-          html += '<div class="approval-card"><div class="approval-card-row">';
-          html += '<span class="approval-card-label">権限データ</span>';
-          html += '<span class="approval-badge none">取得不可</span>';
-          html += '</div></div>';
-        }
-
-        // OAuth スコープ
-        if (scopes.length > 0) {
-          html += '<div class="approval-card" style="margin-top:8px">';
-          html += '<div class="approval-card-label" style="margin-bottom:6px">OAuth スコープ</div>';
-          html += '<div style="display:flex;flex-wrap:wrap;gap:4px">';
-          for (var si = 0; si < scopes.length; si++) {
-            html += '<code style="font-size:11px;padding:2px 6px;background:var(--badge-bg);border-radius:4px">' + esc(scopes[si]) + '</code>';
-          }
-          html += '</div></div>';
-        }
 
         // サービス連携
         var svcItems = [
