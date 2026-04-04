@@ -1724,7 +1724,10 @@ app.get('/auth/github/reauthorize', authMiddleware, async (c) => {
   }
 
   // クッキーを削除してから /auth/github にリダイレクト
-  const redirectHeaders = new Headers({ 'Location': '/auth/github' });
+  // return_to が指定されていれば認証後にそこへ戻す
+  const returnTo = validateReturnTo(c.req.query('return_to'));
+  const authTarget = returnTo ? `/auth/github?return_to=${encodeURIComponent(returnTo)}` : '/auth/github';
+  const redirectHeaders = new Headers({ 'Location': authTarget });
   redirectHeaders.append('Set-Cookie', 'auth_token=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0');
   redirectHeaders.append('Set-Cookie', 'login_timestamp=; Path=/; Secure; SameSite=Lax; Max-Age=0');
   redirectHeaders.append('Set-Cookie', 'last_activity=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0');
