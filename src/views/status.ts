@@ -1336,7 +1336,7 @@ export function getCacheStatusPage(user: {
             <thead>
               <tr>
                 <th>G <select id="groupFilterSelect" style="font-size:10px;padding:1px 2px;border-radius:3px;border:1px solid #888;background:transparent;color:inherit;cursor:pointer;max-width:60px"><option value="">ALL</option>${groupSelectOptions}</select></th>
-                <th>テーブル名</th>
+                <th style="cursor:pointer;user-select:none" id="tableNameSortTh">テーブル名 ⇅</th>
                 <th style="text-align:center">状態</th>
                 <th style="text-align:right">レコード数</th>
                 <th style="text-align:center">更新</th>
@@ -2913,8 +2913,10 @@ export function getCacheStatusPage(user: {
       }
       var groupFilterSelect = document.getElementById('groupFilterSelect');
       var migrationSortTh = document.getElementById('migrationSortTh');
+      var tableNameSortTh = document.getElementById('tableNameSortTh');
       var groupSortState = 'none';
       var migrationSortState = 'none';
+      var tableNameSortState = 'none';
 
       function getStatusTableRows() {
         if (!statusTablesTable) return [];
@@ -2948,6 +2950,24 @@ export function getCacheStatusPage(user: {
         applyGroupFilter();
       }
 
+      function sortTableRowsByString(attr, direction) {
+        if (!statusTablesTable) return;
+        var tbody = statusTablesTable.querySelector('tbody');
+        if (!tbody) return;
+        var rows = getStatusTableRows();
+        rows.sort(function(a, b) {
+          var va = (a.getAttribute(attr) || '').toLowerCase();
+          var vb = (b.getAttribute(attr) || '').toLowerCase();
+          if (va < vb) return direction === 'asc' ? -1 : 1;
+          if (va > vb) return direction === 'asc' ? 1 : -1;
+          return 0;
+        });
+        for (var i = 0; i < rows.length; i++) {
+          tbody.appendChild(rows[i]);
+        }
+        applyGroupFilter();
+      }
+
       if (groupFilterSelect) {
         groupFilterSelect.addEventListener('change', function() {
           applyGroupFilter();
@@ -2961,7 +2981,19 @@ export function getCacheStatusPage(user: {
         migrationSortTh.addEventListener('click', function() {
           migrationSortState = migrationSortState === 'asc' ? 'desc' : 'asc';
           migrationSortTh.textContent = 'マイグレーション ' + (migrationSortState === 'asc' ? '↑' : '↓');
+          if (tableNameSortTh) tableNameSortTh.textContent = 'テーブル名 ⇅';
+          tableNameSortState = 'none';
           sortTableRows('data-migration-num', migrationSortState);
+        });
+      }
+
+      if (tableNameSortTh) {
+        tableNameSortTh.addEventListener('click', function() {
+          tableNameSortState = tableNameSortState === 'asc' ? 'desc' : 'asc';
+          tableNameSortTh.textContent = 'テーブル名 ' + (tableNameSortState === 'asc' ? '↑' : '↓');
+          if (migrationSortTh) migrationSortTh.textContent = 'マイグレーション ⇅';
+          migrationSortState = 'none';
+          sortTableRowsByString('data-table-name', tableNameSortState);
         });
       }
 
@@ -3439,8 +3471,33 @@ export function getCacheStatusPage(user: {
           dragTarget = null;
         });
 
-        // タッチ対応（タブレット）
+        // ピンチズーム
+        var currentScale = 1;
+        var pinchStartDist = 0;
+        var pinchStartScale = 1;
+        container.style.transformOrigin = '0 0';
+
+        function getTouchDist(t1, t2) {
+          var dx = t1.clientX - t2.clientX;
+          var dy = t1.clientY - t2.clientY;
+          return Math.sqrt(dx * dx + dy * dy);
+        }
+
+        function applyZoom(newScale) {
+          currentScale = Math.max(0.3, Math.min(3, newScale));
+          container.style.transform = 'scale(' + currentScale + ')';
+        }
+
+        // タッチ対応（ドラッグ＋ピンチズーム）
         container.addEventListener('touchstart', function(e) {
+          if (e.touches.length === 2) {
+            dragTarget = null;
+            pinchStartDist = getTouchDist(e.touches[0], e.touches[1]);
+            pinchStartScale = currentScale;
+            e.preventDefault();
+            return;
+          }
+          if (e.touches.length !== 1) return;
           var touch = e.touches[0];
           var card = document.elementFromPoint(touch.clientX, touch.clientY);
           if (card) card = card.closest('[data-uml-table]');
@@ -3455,6 +3512,12 @@ export function getCacheStatusPage(user: {
         }, { passive: false });
 
         document.addEventListener('touchmove', function(e) {
+          if (e.touches.length === 2 && pinchStartDist > 0) {
+            var dist = getTouchDist(e.touches[0], e.touches[1]);
+            applyZoom(pinchStartScale * (dist / pinchStartDist));
+            e.preventDefault();
+            return;
+          }
           if (!dragTarget) return;
           var touch = e.touches[0];
           var rect = cardRects[dragTarget];
@@ -3470,9 +3533,19 @@ export function getCacheStatusPage(user: {
           e.preventDefault();
         }, { passive: false });
 
-        document.addEventListener('touchend', function() {
+        document.addEventListener('touchend', function(e) {
+          if (e.touches.length < 2) pinchStartDist = 0;
           dragTarget = null;
         });
+
+        // ホイールズーム（Ctrl+ホイール or トラックパッドピンチ）
+        umlWrapper.addEventListener('wheel', function(e) {
+          if (e.ctrlKey || e.metaKey) {
+            e.preventDefault();
+            var delta = e.deltaY > 0 ? 0.9 : 1.1;
+            applyZoom(currentScale * delta);
+          }
+        }, { passive: false });
 
         // PNG出力
         var exportBtn = document.getElementById('umlExportPng');
@@ -4334,8 +4407,33 @@ export function getCacheStatusPage(user: {
           dragTarget = null;
         });
 
-        // タッチ対応（タブレット）
+        // ピンチズーム
+        var currentScale = 1;
+        var pinchStartDist = 0;
+        var pinchStartScale = 1;
+        container.style.transformOrigin = '0 0';
+
+        function getTouchDist(t1, t2) {
+          var dx = t1.clientX - t2.clientX;
+          var dy = t1.clientY - t2.clientY;
+          return Math.sqrt(dx * dx + dy * dy);
+        }
+
+        function applyZoom(newScale) {
+          currentScale = Math.max(0.3, Math.min(3, newScale));
+          container.style.transform = 'scale(' + currentScale + ')';
+        }
+
+        // タッチ対応（ドラッグ＋ピンチズーム）
         container.addEventListener('touchstart', function(e) {
+          if (e.touches.length === 2) {
+            dragTarget = null;
+            pinchStartDist = getTouchDist(e.touches[0], e.touches[1]);
+            pinchStartScale = currentScale;
+            e.preventDefault();
+            return;
+          }
+          if (e.touches.length !== 1) return;
           var touch = e.touches[0];
           var card = document.elementFromPoint(touch.clientX, touch.clientY);
           if (card) card = card.closest('[data-uml-table]');
@@ -4350,6 +4448,12 @@ export function getCacheStatusPage(user: {
         }, { passive: false });
 
         document.addEventListener('touchmove', function(e) {
+          if (e.touches.length === 2 && pinchStartDist > 0) {
+            var dist = getTouchDist(e.touches[0], e.touches[1]);
+            applyZoom(pinchStartScale * (dist / pinchStartDist));
+            e.preventDefault();
+            return;
+          }
           if (!dragTarget) return;
           var touch = e.touches[0];
           var rect = cardRects[dragTarget];
@@ -4365,9 +4469,19 @@ export function getCacheStatusPage(user: {
           e.preventDefault();
         }, { passive: false });
 
-        document.addEventListener('touchend', function() {
+        document.addEventListener('touchend', function(e) {
+          if (e.touches.length < 2) pinchStartDist = 0;
           dragTarget = null;
         });
+
+        // ホイールズーム（Ctrl+ホイール or トラックパッドピンチ）
+        fUmlWrapper.addEventListener('wheel', function(e) {
+          if (e.ctrlKey || e.metaKey) {
+            e.preventDefault();
+            var delta = e.deltaY > 0 ? 0.9 : 1.1;
+            applyZoom(currentScale * delta);
+          }
+        }, { passive: false });
       }
     })();
 
