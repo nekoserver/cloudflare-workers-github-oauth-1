@@ -2396,8 +2396,8 @@ export function getRepositoriesPage(user: {
           html += '</div>';
         }
         html += '<div style="margin-top:8px;padding:10px 12px;background:var(--bg-secondary);border-radius:8px;font-size:11px;color:var(--text-muted);line-height:1.6">';
-        html += '<strong>ℹ️ この情報はユーザーによる手動登録です</strong><br>';
-        html += 'GitHub の公式 API は、ユーザーが認可済みの OAuth App 一覧を第三者アプリに開示しません。この機能はその制約を補うため、ユーザー自身がグループ単位で認可状況を記録・管理するものです。登録内容の正確性はユーザーの責任であり、実際の GitHub 認可状態との同期は保証されません。';
+        html += '<strong>ℹ️ GitHub API の制約を補う機能</strong><br>';
+        html += 'GitHub の公式 API は、ユーザーが認可済みの OAuth App 一覧を第三者アプリに開示していません。この機能はその制約を補い、ユーザー自身がグループ単位で認可状況を記録・管理できるようにするものです。各ユーザーは実際に利用しているリポジトリとアプリの組み合わせを登録するため、運用実態に基づいた信頼性の高い情報として活用できます。';
         html += '</div>';
         html += '</div>';
 
@@ -2581,7 +2581,7 @@ export function getRepositoriesPage(user: {
             }
           }
           html += '</div>';
-          html += '<div style="margin-top:6px;font-size:10px;color:var(--text-faint)">※ ユーザーがグループ単位で手動登録した情報です。実際の GitHub 認可状態と異なる場合があります。</div>';
+          html += '<div style="margin-top:6px;font-size:10px;color:var(--text-faint)">※ GitHub API の制約を補い、ユーザーが運用実態に基づきグループ単位で登録した情報です。</div>';
           html += '</div>';
         }
 
