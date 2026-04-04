@@ -368,6 +368,71 @@ export function getRepositoriesPage(user: {
     .color-assign-sync-btn:disabled { opacity: 0.5; cursor: not-allowed; }
     .page-header-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
 
+    /* Approval Status Modal */
+    .approval-modal-content {
+      background: var(--card-bg); border-radius: 16px;
+      box-shadow: 0 24px 60px rgba(0,0,0,0.3); width: 100%; max-width: 640px;
+      max-height: 85vh; display: flex; flex-direction: column;
+      animation: modalIn 0.2s ease;
+    }
+    .approval-modal-header {
+      padding: 20px 24px 14px; border-bottom: 1px solid var(--border-color);
+      display: flex; justify-content: space-between; align-items: center; flex-shrink: 0;
+    }
+    .approval-modal-body {
+      padding: 16px 24px 24px; overflow-y: auto; flex: 1; min-height: 0;
+    }
+    .approval-section { margin-bottom: 20px; }
+    .approval-section-title {
+      font-size: 13px; font-weight: 700; color: var(--text-muted); text-transform: uppercase;
+      letter-spacing: 0.05em; margin-bottom: 10px; display: flex; align-items: center; gap: 8px;
+    }
+    .approval-card {
+      background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 10px;
+      padding: 12px 14px; margin-bottom: 8px;
+    }
+    .approval-card-row {
+      display: flex; justify-content: space-between; align-items: center; gap: 8px;
+    }
+    .approval-card-label { font-size: 13px; font-weight: 600; color: var(--text-primary); }
+    .approval-card-value { font-size: 13px; color: var(--text-muted); }
+    .approval-badge {
+      display: inline-flex; align-items: center; gap: 4px;
+      padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 700;
+    }
+    .approval-badge.ok { background: #c6f6d5; color: #22543d; }
+    .approval-badge.warn { background: #fefcbf; color: #744210; }
+    .approval-badge.none { background: var(--badge-bg); color: var(--text-muted); }
+    .approval-badge.error { background: #fed7d7; color: #9b2c2c; }
+    .approval-perm-grid {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 6px;
+    }
+    .approval-perm-item {
+      display: flex; justify-content: space-between; align-items: center;
+      font-size: 12px; padding: 4px 8px; border-radius: 6px;
+      background: var(--card-bg); border: 1px solid var(--border-color);
+    }
+    .approval-perm-name { font-weight: 600; color: var(--text-primary); }
+    .approval-perm-level { color: var(--text-muted); }
+    .approval-perm-level.write { color: #e53e3e; font-weight: 700; }
+    .approval-perm-level.read { color: #38a169; }
+    .approval-repo-list {
+      display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px;
+    }
+    .approval-repo-chip {
+      font-size: 11px; padding: 2px 8px; border-radius: 999px;
+      background: var(--badge-bg); color: var(--text-muted); font-weight: 600;
+    }
+    .approval-refresh-btn {
+      padding: 4px 12px; border-radius: 6px; border: 1px solid var(--border-color);
+      background: transparent; color: var(--text-muted); font-size: 12px; cursor: pointer;
+      transition: background 0.2s;
+    }
+    .approval-refresh-btn:hover { background: var(--bg-secondary); }
+    @media (max-width: 500px) {
+      .approval-perm-grid { grid-template-columns: 1fr; }
+    }
+
     /* Cloudflare Setup Banner */
     .cf-setup-banner {
       display: flex; gap: 14px; align-items: flex-start;
@@ -1099,6 +1164,7 @@ export function getRepositoriesPage(user: {
           <select id="repoGroupFilter" class="repo-group-filter-select" title="リポジトリグループでフィルタ">
             <option value="">なし</option>
           </select>
+          <button class="color-assign-btn" id="openApprovalStatusModal" type="button">🛡 承認状況</button>
           <button class="color-assign-btn" id="openColorAssignModal" type="button">🎨 色割当て</button>
           <button class="create-repo-btn" id="openCreateRepoModal" type="button">＋ 新規にリポジトリを生成する</button>
         </div>
@@ -1126,6 +1192,22 @@ export function getRepositoriesPage(user: {
       </div>
       <div class="repo-list" id="repoList">${repoRows}</div>
     ` : ''}
+  </div>
+
+  <!-- Approval Status Modal -->
+  <div class="modal-overlay" id="approvalStatusModal">
+    <div class="approval-modal-content">
+      <div class="approval-modal-header">
+        <span class="modal-title">🛡 承認状況</span>
+        <div style="display:flex;gap:8px;align-items:center">
+          <button class="approval-refresh-btn" id="approvalRefreshBtn" type="button">更新</button>
+          <button class="modal-close" id="approvalModalClose" type="button">&times;</button>
+        </div>
+      </div>
+      <div class="approval-modal-body" id="approvalModalBody">
+        <div style="text-align:center;padding:24px;color:var(--text-muted)">読み込み中...</div>
+      </div>
+    </div>
   </div>
 
   <!-- Permissions Modal -->
@@ -2151,6 +2233,184 @@ export function getRepositoriesPage(user: {
         if (currentRepoName) saveSummaryToggle(currentRepoName, open);
       });
     }
+
+    // ===== Approval Status Modal =====
+    (function() {
+      var approvalModal = document.getElementById('approvalStatusModal');
+      var approvalBody = document.getElementById('approvalModalBody');
+      var approvalOpenBtn = document.getElementById('openApprovalStatusModal');
+      var approvalCloseBtn = document.getElementById('approvalModalClose');
+      var approvalRefreshBtn = document.getElementById('approvalRefreshBtn');
+      var repoPerms = ${repoPermsJson};
+      var scopes = ${JSON.stringify(scopes)};
+      var cfLinkedMap = ${JSON.stringify(cfLinked)};
+      var vercelLinkedMap = ${JSON.stringify(vercelLinked)};
+      var slackLinkedMap = ${JSON.stringify(slackLinked)};
+      var repos = ${JSON.stringify(user.repositories.map(r => ({ name: r.name, owner: r.owner, isPrivate: r.isPrivate })))};
+
+      function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+      function renderApprovalStatus(permsData, source) {
+        if (!approvalBody) return;
+        var html = '';
+
+        // 1. GitHub App インストール状況
+        var repoNames = Object.keys(permsData);
+        var allPerms = null;
+        try { allPerms = arguments.length > 2 ? arguments[2] : null; } catch(e) {}
+        var hasInstall = repoNames.length > 0 || allPerms;
+
+        html += '<div class="approval-section">';
+        html += '<div class="approval-section-title">GitHub App インストール</div>';
+        html += '<div class="approval-card"><div class="approval-card-row">';
+        html += '<span class="approval-card-label">インストール状態</span>';
+        if (hasInstall) {
+          html += '<span class="approval-badge ok">接続済み</span>';
+        } else {
+          html += '<span class="approval-badge warn">未検出</span>';
+        }
+        html += '</div>';
+        if (source) {
+          html += '<div style="margin-top:6px;font-size:11px;color:var(--text-faint)">データソース: ' + esc(source) + '</div>';
+        }
+        html += '</div>';
+
+        // アプリ権限（allPermissions）
+        if (allPerms && typeof allPerms === 'object') {
+          html += '<div class="approval-card">';
+          html += '<div class="approval-card-label" style="margin-bottom:8px">アプリに付与されている権限</div>';
+          html += '<div class="approval-perm-grid">';
+          var permKeys = Object.keys(allPerms).sort();
+          for (var i = 0; i < permKeys.length; i++) {
+            var level = allPerms[permKeys[i]];
+            var levelCls = level === 'write' ? 'write' : level === 'read' ? 'read' : '';
+            html += '<div class="approval-perm-item">';
+            html += '<span class="approval-perm-name">' + esc(permKeys[i]) + '</span>';
+            html += '<span class="approval-perm-level ' + levelCls + '">' + esc(level) + '</span>';
+            html += '</div>';
+          }
+          html += '</div></div>';
+        }
+
+        // リポジトリ別の権限有無
+        if (repoNames.length > 0) {
+          html += '<div class="approval-card">';
+          html += '<div class="approval-card-label" style="margin-bottom:6px">権限が検出されたリポジトリ (' + repoNames.length + ')</div>';
+          html += '<div class="approval-repo-list">';
+          repoNames.sort();
+          for (var j = 0; j < repoNames.length; j++) {
+            html += '<span class="approval-repo-chip">' + esc(repoNames[j]) + '</span>';
+          }
+          html += '</div></div>';
+        }
+        html += '</div>';
+
+        // 2. OAuth スコープ
+        html += '<div class="approval-section">';
+        html += '<div class="approval-section-title">OAuth スコープ</div>';
+        html += '<div class="approval-card"><div class="approval-card-row">';
+        html += '<span class="approval-card-label">付与スコープ</span>';
+        if (scopes.length > 0) {
+          html += '<span class="approval-badge ok">' + scopes.length + ' 件</span>';
+        } else {
+          html += '<span class="approval-badge none">なし (GitHub App)</span>';
+        }
+        html += '</div>';
+        if (scopes.length > 0) {
+          html += '<div style="margin-top:8px;display:flex;flex-wrap:wrap;gap:4px">';
+          for (var s = 0; s < scopes.length; s++) {
+            html += '<code style="font-size:11px;padding:2px 6px;background:var(--badge-bg);border-radius:4px">' + esc(scopes[s]) + '</code>';
+          }
+          html += '</div>';
+        }
+        html += '</div></div>';
+
+        // 3. サービス連携状況
+        html += '<div class="approval-section">';
+        html += '<div class="approval-section-title">サービス連携</div>';
+        var services = [
+          { name: 'Cloudflare', icon: '☁️', map: cfLinkedMap },
+          { name: 'Vercel', icon: '▲', map: vercelLinkedMap },
+          { name: 'Slack', icon: '💬', map: slackLinkedMap }
+        ];
+        for (var si = 0; si < services.length; si++) {
+          var svc = services[si];
+          var linked = [];
+          for (var rn in svc.map) { if (svc.map[rn]) linked.push(rn); }
+          html += '<div class="approval-card"><div class="approval-card-row">';
+          html += '<span class="approval-card-label">' + svc.icon + ' ' + esc(svc.name) + '</span>';
+          if (linked.length > 0) {
+            html += '<span class="approval-badge ok">連携中 (' + linked.length + ')</span>';
+          } else {
+            html += '<span class="approval-badge none">未連携</span>';
+          }
+          html += '</div>';
+          if (linked.length > 0) {
+            html += '<div class="approval-repo-list" style="margin-top:6px">';
+            linked.sort();
+            for (var li = 0; li < linked.length; li++) {
+              html += '<span class="approval-repo-chip">' + esc(linked[li]) + '</span>';
+            }
+            html += '</div>';
+          }
+          html += '</div>';
+        }
+        html += '</div>';
+
+        // 4. リポジトリ概要
+        html += '<div class="approval-section">';
+        html += '<div class="approval-section-title">リポジトリ概要</div>';
+        html += '<div class="approval-card"><div class="approval-card-row">';
+        html += '<span class="approval-card-label">合計</span>';
+        html += '<span class="approval-card-value">' + repos.length + ' リポジトリ</span>';
+        html += '</div>';
+        var privCount = 0;
+        for (var ri = 0; ri < repos.length; ri++) { if (repos[ri].isPrivate) privCount++; }
+        if (privCount > 0) {
+          html += '<div class="approval-card-row" style="margin-top:4px">';
+          html += '<span class="approval-card-label" style="font-size:12px">Private</span>';
+          html += '<span class="approval-card-value">' + privCount + '</span>';
+          html += '</div>';
+        }
+        html += '</div></div>';
+
+        approvalBody.innerHTML = html;
+      }
+
+      function loadApprovalData() {
+        if (!approvalBody) return;
+        approvalBody.innerHTML = '<div style="text-align:center;padding:24px;color:var(--text-muted)">読み込み中...</div>';
+        fetch('/api/repo-permissions', { credentials: 'same-origin' })
+          .then(function(res) { return res.json(); })
+          .then(function(data) {
+            renderApprovalStatus(data.permissions || {}, data.source || '', data.allPermissions || null);
+          })
+          .catch(function() {
+            renderApprovalStatus(repoPerms, 'cache');
+          });
+      }
+
+      function openApprovalModal() {
+        loadApprovalData();
+        if (approvalModal) approvalModal.classList.add('show');
+      }
+
+      function closeApprovalModal() {
+        if (approvalModal) approvalModal.classList.remove('show');
+      }
+
+      if (approvalOpenBtn) approvalOpenBtn.addEventListener('click', openApprovalModal);
+      if (approvalCloseBtn) approvalCloseBtn.addEventListener('click', closeApprovalModal);
+      if (approvalRefreshBtn) approvalRefreshBtn.addEventListener('click', loadApprovalData);
+      if (approvalModal) {
+        approvalModal.addEventListener('click', function(e) {
+          if (e.target === approvalModal) closeApprovalModal();
+        });
+      }
+      document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape' && approvalModal && approvalModal.classList.contains('show')) closeApprovalModal();
+      });
+    })();
 
     // ===== Permissions Modal =====
     var modal = document.getElementById('permissionsModal');
