@@ -888,12 +888,6 @@ export function getRepositoriesPage(user: {
     }
     .reauth-btn:hover { background: #1a202c; }
     .reauth-btn svg { width: 16px; height: 16px; fill: currentColor; }
-    .perm-reauth {
-      display: inline-flex; align-items: center; gap: 4px;
-      color: #2b6cb0; font-size: 12px; font-weight: 600;
-      text-decoration: none; margin-left: auto; transition: color 0.2s;
-    }
-    .perm-reauth:hover { color: #2c5282; text-decoration: underline; }
     .perm-section-title {
       font-size: 12px; font-weight: 700; color: var(--text-muted); text-transform: uppercase;
       letter-spacing: 0.05em; margin-bottom: 8px;
@@ -2539,9 +2533,6 @@ export function getRepositoriesPage(user: {
         html += '<span class="perm-icon">' + esc(item.icon) + '</span>';
         html += '<span class="perm-name">' + esc(item.label) + '</span>';
         html += '<span class="perm-badge ' + (active ? 'on' : 'off') + '">' + (active ? '有効' : '無効') + '</span>';
-        if (!active) {
-          html += '<a href="/auth/github/reauthorize?return_to=/repositories" class="perm-reauth">権限を追加 →</a>';
-        }
         html += '</div>';
         html += '</div>';
       });
