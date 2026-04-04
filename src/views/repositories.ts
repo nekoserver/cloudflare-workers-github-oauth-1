@@ -2474,9 +2474,12 @@ export function getRepositoriesPage(user: {
               html += '<div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:4px">';
               for (var ai = 0; ai < grp.apps.length; ai++) {
                 var app = grp.apps[ai];
-                html += '<span class="approval-repo-chip" title="' + esc(app.app_note || '') + '" style="display:inline-flex;align-items:center;gap:4px">';
-                html += '🔗 ' + esc(app.app_name);
-                html += '<button type="button" class="oauth-app-remove-btn" data-group-id="' + esc(grp.id) + '" data-app-name="' + esc(app.app_name) + '" style="background:none;border:none;cursor:pointer;padding:0 2px;font-size:13px;color:var(--text-faint);line-height:1" title="削除">&times;</button>';
+                var isAuto = app.auto;
+                html += '<span class="approval-repo-chip" title="' + esc(app.app_note || '') + '" style="display:inline-flex;align-items:center;gap:4px' + (isAuto ? ';background:#c6f6d5;color:#22543d' : '') + '">';
+                html += (isAuto ? '✅ ' : '🔗 ') + esc(app.app_name);
+                if (!isAuto) {
+                  html += '<button type="button" class="oauth-app-remove-btn" data-group-id="' + esc(grp.id) + '" data-app-name="' + esc(app.app_name) + '" style="background:none;border:none;cursor:pointer;padding:0 2px;font-size:13px;color:var(--text-faint);line-height:1" title="削除">&times;</button>';
+                }
                 html += '</span>';
               }
               html += '</div>';
@@ -2688,12 +2691,64 @@ export function getRepositoriesPage(user: {
           var appPromises = groups.map(function(g) {
             return fetch('/api/repo-groups/' + encodeURIComponent(g.id) + '/oauth-apps', { credentials: 'same-origin' })
               .then(function(r) { return r.json(); })
-              .then(function(d) { return { id: g.id, name: g.name, colorCode: g.colorCode, apps: d.apps || [] }; })
+              .then(function(d) {
+                var apps = (d.apps || []).slice();
+                var appNames = {};
+                for (var ai = 0; ai < apps.length; ai++) appNames[apps[ai].app_name] = true;
+
+                // Slack: グループに slack_channel_id が設定済みなら自動認可
+                if (g.slackChannelId && !appNames['Slack']) {
+                  apps.push({ app_name: 'Slack', app_note: '自動検出（グループにSlackチャンネル設定済み）', added_at: '', auto: true });
+                }
+
+                // Cloudflare/Vercel: グループメンバーのリポジトリが連携済みなら自動認可
+                var gRepos = g.repos || [];
+                var hasCf = false, hasVercel = false;
+                for (var ri = 0; ri < gRepos.length; ri++) {
+                  if (!hasCf && cfLinkedMap[gRepos[ri]]) hasCf = true;
+                  if (!hasVercel && vercelLinkedMap[gRepos[ri]]) hasVercel = true;
+                }
+                if (hasCf && !appNames['Cloudflare']) {
+                  apps.push({ app_name: 'Cloudflare', app_note: '自動検出（グループ内リポジトリが連携済み）', added_at: '', auto: true });
+                }
+                if (hasVercel && !appNames['Vercel']) {
+                  apps.push({ app_name: 'Vercel', app_note: '自動検出（グループ内リポジトリが連携済み）', added_at: '', auto: true });
+                }
+
+                return { id: g.id, name: g.name, colorCode: g.colorCode, apps: apps };
+              })
               .catch(function() { return { id: g.id, name: g.name, colorCode: g.colorCode, apps: [] }; });
           });
 
           return Promise.all(appPromises).then(function(groupApps) {
             groupOAuthData = groupApps;
+
+            // 自動検出分を lastRepoApps にもマージ
+            for (var gai = 0; gai < groupApps.length; gai++) {
+              var ga = groupApps[gai];
+              var gaGroup = null;
+              for (var ggi = 0; ggi < groups.length; ggi++) {
+                if (groups[ggi].id === ga.id) { gaGroup = groups[ggi]; break; }
+              }
+              if (!gaGroup) continue;
+              var gaRepos = gaGroup.repos || [];
+              for (var gri = 0; gri < gaRepos.length; gri++) {
+                var rName = gaRepos[gri];
+                for (var aai = 0; aai < ga.apps.length; aai++) {
+                  var ap = ga.apps[aai];
+                  if (!ap.auto) continue;
+                  if (!lastRepoApps[rName]) lastRepoApps[rName] = [];
+                  var exists = false;
+                  for (var exi = 0; exi < lastRepoApps[rName].length; exi++) {
+                    if (lastRepoApps[rName][exi].appName === ap.app_name) { exists = true; break; }
+                  }
+                  if (!exists) {
+                    lastRepoApps[rName].push({ appName: ap.app_name, appNote: ap.app_note, groupName: ga.name, colorCode: ga.colorCode });
+                  }
+                }
+              }
+            }
+
             renderApprovalStatus(permData.permissions || {}, permData.source || '', permData.allPermissions || null);
           });
         }).catch(function() {
