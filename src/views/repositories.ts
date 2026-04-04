@@ -2397,7 +2397,7 @@ export function getRepositoriesPage(user: {
         }
         html += '<div style="margin-top:8px;padding:10px 12px;background:var(--bg-secondary);border-radius:8px;font-size:11px;color:var(--text-muted);line-height:1.6">';
         html += '<strong>ℹ️ GitHub API の制約を補う機能</strong><br>';
-        html += 'GitHub の公式 API は、ユーザーが認可済みの OAuth App 一覧を第三者アプリに開示していません。この機能はその制約を補い、ユーザー自身がグループ単位で認可状況を記録・管理できるようにするものです。各ユーザーは実際に利用しているリポジトリとアプリの組み合わせを登録するため、運用実態に基づいた信頼性の高い情報として活用できます。';
+        html += 'GitHub の公式 API は、ユーザーが認可済みの OAuth App 一覧を第三者アプリに開示していません。この機能はその制約を補い、ユーザー自身がグループ単位で認可状況を記録・管理できるようにするものです。各ユーザーは実際に利用しているリポジトリとアプリの組み合わせを登録するため、運用実態に基づいた信頼性の高い情報として活用できます。なお、登録内容の正確性の管理はユーザーの責任となります。';
         html += '</div>';
         html += '</div>';
 
