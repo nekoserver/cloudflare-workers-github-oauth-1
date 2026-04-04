@@ -3311,32 +3311,18 @@ export function getCacheStatusPage(user: {
         svg.setAttribute('width', '100%');
         svg.setAttribute('height', '100%');
 
-        var defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
-        var marker = document.createElementNS('http://www.w3.org/2000/svg', 'marker');
-        marker.setAttribute('id', 'uml-arrow');
-        marker.setAttribute('viewBox', '0 0 10 6');
-        marker.setAttribute('refX', '10');
-        marker.setAttribute('refY', '3');
-        marker.setAttribute('markerWidth', '10');
-        marker.setAttribute('markerHeight', '6');
-        marker.setAttribute('orient', 'auto-start-reverse');
-        var arrowPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-        arrowPath.setAttribute('d', 'M0,0 L10,3 L0,6 Z');
-        arrowPath.setAttribute('fill', isDark ? '#a0aec0' : '#718096');
-        marker.appendChild(arrowPath);
-        defs.appendChild(marker);
-        svg.appendChild(defs);
-
         container.appendChild(svg);
         umlWrapper.innerHTML = '';
         umlWrapper.appendChild(container);
 
         // 接続線描画
         function drawRelations() {
-          while (svg.childNodes.length > 1) svg.removeChild(svg.lastChild);
+          while (svg.firstChild) svg.removeChild(svg.firstChild);
 
           var lineColor = isDark ? 'rgba(160,174,192,0.6)' : 'rgba(113,128,150,0.5)';
+          var arrowColor = isDark ? '#a0aec0' : '#718096';
           var labelColor = isDark ? '#a0aec0' : '#4a5568';
+          var arrowSize = 10;
 
           for (var r = 0; r < relationsData.length; r++) {
             var rel = relationsData[r];
@@ -3364,15 +3350,34 @@ export function getCacheStatusPage(user: {
             else if (fromCy < toRect.y) { tx = toCx; ty = toRect.y; }
             else { tx = toCx; ty = toRect.y + toRect.h; }
 
+            var dx = tx - fx, dy = ty - fy;
+            var len = Math.sqrt(dx * dx + dy * dy);
+            var lineX2 = tx, lineY2 = ty;
+            var bx1 = 0, by1 = 0, bx2 = 0, by2 = 0;
+            var hasArrow = len > 0;
+            if (hasArrow) {
+              var ux = dx / len, uy = dy / len;
+              lineX2 = tx - arrowSize * ux;
+              lineY2 = ty - arrowSize * uy;
+              bx1 = lineX2 + (arrowSize / 2.5) * uy;
+              by1 = lineY2 - (arrowSize / 2.5) * ux;
+              bx2 = lineX2 - (arrowSize / 2.5) * uy;
+              by2 = lineY2 + (arrowSize / 2.5) * ux;
+            }
             var line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
             line.setAttribute('x1', String(fx));
             line.setAttribute('y1', String(fy));
-            line.setAttribute('x2', String(tx));
-            line.setAttribute('y2', String(ty));
+            line.setAttribute('x2', String(lineX2));
+            line.setAttribute('y2', String(lineY2));
             line.setAttribute('stroke', lineColor);
             line.setAttribute('stroke-width', '2');
-            line.setAttribute('marker-end', 'url(#uml-arrow)');
             svg.appendChild(line);
+            if (hasArrow) {
+              var poly = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+              poly.setAttribute('points', tx + ',' + ty + ' ' + bx1 + ',' + by1 + ' ' + bx2 + ',' + by2);
+              poly.setAttribute('fill', arrowColor);
+              svg.appendChild(poly);
+            }
 
             // ラベル
             var mx = (fx + tx) / 2;
@@ -4208,29 +4213,16 @@ export function getCacheStatusPage(user: {
         svg.setAttribute('width', '100%');
         svg.setAttribute('height', '100%');
 
-        var defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
-        var marker = document.createElementNS('http://www.w3.org/2000/svg', 'marker');
-        marker.setAttribute('id', 'fuml-arrow');
-        marker.setAttribute('viewBox', '0 0 10 6');
-        marker.setAttribute('refX', '10');
-        marker.setAttribute('refY', '3');
-        marker.setAttribute('markerWidth', '10');
-        marker.setAttribute('markerHeight', '6');
-        marker.setAttribute('orient', 'auto-start-reverse');
-        var arrowPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-        arrowPath.setAttribute('d', 'M0,0 L10,3 L0,6 Z');
-        arrowPath.setAttribute('fill', isDark ? '#a0aec0' : '#718096');
-        marker.appendChild(arrowPath);
-        defs.appendChild(marker);
-        svg.appendChild(defs);
         container.appendChild(svg);
         fUmlWrapper.innerHTML = '';
         fUmlWrapper.appendChild(container);
 
         function drawRelations() {
-          while (svg.childNodes.length > 1) svg.removeChild(svg.lastChild);
+          while (svg.firstChild) svg.removeChild(svg.firstChild);
           var lineColor = isDark ? 'rgba(160,174,192,0.6)' : 'rgba(113,128,150,0.5)';
+          var arrowColor = isDark ? '#a0aec0' : '#718096';
           var labelColor = isDark ? '#a0aec0' : '#4a5568';
+          var arrowSize = 10;
 
           for (var r = 0; r < relationsData.length; r++) {
             var rel = relationsData[r];
@@ -4255,15 +4247,34 @@ export function getCacheStatusPage(user: {
             else if (fromCy < toRect.y) { tx = toCx; ty = toRect.y; }
             else { tx = toCx; ty = toRect.y + toRect.h; }
 
+            var dx = tx - fx, dy = ty - fy;
+            var len = Math.sqrt(dx * dx + dy * dy);
+            var lineX2 = tx, lineY2 = ty;
+            var bx1 = 0, by1 = 0, bx2 = 0, by2 = 0;
+            var hasArrow = len > 0;
+            if (hasArrow) {
+              var ux = dx / len, uy = dy / len;
+              lineX2 = tx - arrowSize * ux;
+              lineY2 = ty - arrowSize * uy;
+              bx1 = lineX2 + (arrowSize / 2.5) * uy;
+              by1 = lineY2 - (arrowSize / 2.5) * ux;
+              bx2 = lineX2 - (arrowSize / 2.5) * uy;
+              by2 = lineY2 + (arrowSize / 2.5) * ux;
+            }
             var line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
             line.setAttribute('x1', String(fx));
             line.setAttribute('y1', String(fy));
-            line.setAttribute('x2', String(tx));
-            line.setAttribute('y2', String(ty));
+            line.setAttribute('x2', String(lineX2));
+            line.setAttribute('y2', String(lineY2));
             line.setAttribute('stroke', lineColor);
             line.setAttribute('stroke-width', '2');
-            line.setAttribute('marker-end', 'url(#fuml-arrow)');
             svg.appendChild(line);
+            if (hasArrow) {
+              var poly = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+              poly.setAttribute('points', tx + ',' + ty + ' ' + bx1 + ',' + by1 + ' ' + bx2 + ',' + by2);
+              poly.setAttribute('fill', arrowColor);
+              svg.appendChild(poly);
+            }
 
             var mx = (fx + tx) / 2;
             var my = (fy + ty) / 2;
