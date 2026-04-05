@@ -23,7 +23,7 @@ import { getCookieValue, getCookieValues } from './utils/cookie';
 import { verifyResendWebhookSignature } from './utils/resendWebhook';
 import { verifyGitHubWebhookSignature } from './utils/githubWebhook';
 import { postSlackMessage, openSlackModal, respondToInteraction } from './utils/slack';
-import { fetchPrDiff, runSummaryPipeline, buildSlackMessage, buildSummaryModal, buildSummaryFallbackBlocks, classifySummaryResult, resolveAiModel, extractDesignDiff, sanitizeBoxDrawing, detectCommitAgentFromText, detectCommitAgentFromPrText, WORKER_BASE_URL, DESIGN_SPEC_CHECKLIST, DEFAULT_AI_MODEL, type SummaryModalRow } from './utils/aiSummary';
+import { fetchPrDiff, runSummaryPipeline, buildSlackMessage, buildSummaryModal, buildSummaryFallbackBlocks, classifySummaryResult, resolveAiModel, extractDesignDiff, sanitizeBoxDrawing, detectCommitAgentFromText, detectCommitAgentFromPrText, describeModelSwitch, WORKER_BASE_URL, DESIGN_SPEC_CHECKLIST, DEFAULT_AI_MODEL, type SummaryModalRow } from './utils/aiSummary';
 import { getSessionDurationSeconds, renewSession } from './utils/session';
 import { buildCommitAgentLogEntry } from './utils/commitAgentLog';
 import { verifySlackSignature } from './utils/slackSignature';
@@ -3356,8 +3356,8 @@ app.post('/webhook/github', async (c) => {
           try {
             await db.prepare(`
               INSERT INTO ai_summary_log
-                (request_id, daily_seq, event_date, event_type, repo_full_name, pr_number, pr_action, pr_url, model, summary, diff_length, slack_notified, created_at)
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                (request_id, daily_seq, event_date, event_type, repo_full_name, pr_number, pr_action, pr_url, model, summary, diff_length, slack_notified, created_at, fallback_used, primary_model)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             `).bind(
               requestId,
               dailySeq,
@@ -3372,6 +3372,8 @@ app.post('/webhook/github', async (c) => {
               diffLength,
               slackNotified ? 1 : 0,
               now.toISOString(),
+              pipelineResult.fallbackUsed ? 1 : 0,
+              aiModel,
             ).run();
 
             const commitAgentLogEntry = buildCommitAgentLogEntry({
@@ -3983,7 +3985,7 @@ app.post('/slack/interactions', async (c) => {
     dbQuery: async (requestId: string) => {
       if (!db) return null;
       return db.prepare(
-        'SELECT request_id, daily_seq, event_date, repo_full_name, pr_number, pr_action, pr_url, model, summary, diff_length, created_at FROM ai_summary_log WHERE request_id = ?'
+        'SELECT request_id, daily_seq, event_date, repo_full_name, pr_number, pr_action, pr_url, model, summary, diff_length, created_at, fallback_used, primary_model FROM ai_summary_log WHERE request_id = ?'
       ).bind(requestId).first() as Promise<SummaryModalRow | null>;
     },
     logStep,
@@ -5233,7 +5235,7 @@ app.get('/view', async (c) => {
   if (!requestId) return c.text('id parameter is required', 400);
 
   const row = await db.prepare(
-    'SELECT request_id, daily_seq, event_date, repo_full_name, pr_number, pr_action, pr_url, model, summary, diff_length, created_at FROM ai_summary_log WHERE request_id = ?'
+    'SELECT request_id, daily_seq, event_date, repo_full_name, pr_number, pr_action, pr_url, model, summary, diff_length, created_at, fallback_used, primary_model FROM ai_summary_log WHERE request_id = ?'
   ).bind(requestId).first() as SummaryModalRow | null;
 
   if (!row) return c.text('Not found', 404);
@@ -5268,6 +5270,7 @@ details{margin-bottom:1rem}summary{cursor:pointer;font-size:1.4rem;font-weight:b
 <dt>PR</dt><dd>${prLink}</dd>
 <dt>アクション</dt><dd>${escHtml(row.pr_action ?? '')}</dd>
 <dt>モデル</dt><dd>${escHtml(row.model ?? '(不明)')}</dd>
+<dt>モデル切替</dt><dd>${escHtml(describeModelSwitch(row))}</dd>
 <dt>Diff長</dt><dd>${row.diff_length ?? 0} 文字</dd>
 <dt>日時</dt><dd>${escHtml(row.created_at)}</dd>
 <dt>Request ID</dt><dd style="font-size:0.85rem">${escHtml(row.request_id)}</dd>
@@ -5291,7 +5294,7 @@ app.get('/ai-summary/:id', async (c) => {
 
   const requestId = c.req.param('id');
   const row = await db.prepare(
-    'SELECT request_id, daily_seq, event_date, repo_full_name, pr_number, pr_action, pr_url, model, summary, diff_length, created_at FROM ai_summary_log WHERE request_id = ?'
+    'SELECT request_id, daily_seq, event_date, repo_full_name, pr_number, pr_action, pr_url, model, summary, diff_length, created_at, fallback_used, primary_model FROM ai_summary_log WHERE request_id = ?'
   ).bind(requestId).first() as SummaryModalRow | null;
 
   if (!row) return c.text('Not found', 404);
@@ -5326,6 +5329,7 @@ details{margin-bottom:1rem}summary{cursor:pointer;font-size:1.4rem;font-weight:b
 <dt>PR</dt><dd>${prLink}</dd>
 <dt>アクション</dt><dd>${escHtml(row.pr_action ?? '')}</dd>
 <dt>モデル</dt><dd>${escHtml(row.model ?? '(不明)')}</dd>
+<dt>モデル切替</dt><dd>${escHtml(describeModelSwitch(row))}</dd>
 <dt>Diff長</dt><dd>${row.diff_length ?? 0} 文字</dd>
 <dt>日時</dt><dd>${escHtml(row.created_at)}</dd>
 <dt>Request ID</dt><dd style="font-size:0.85rem">${escHtml(row.request_id)}</dd>
