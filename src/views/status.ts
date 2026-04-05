@@ -2574,11 +2574,23 @@ export function getCacheStatusPage(user: {
         for (var j = 0; j < srcTable.columns.length; j++) {
           var col = srcTable.columns[j];
           var keys = [];
-          if (col.keyType) keys.push(col.keyType);
+          if (col.keyType) {
+            if (col.keyType.indexOf('+') !== -1) {
+              var parts = col.keyType.split('+');
+              for (var p = 0; p < parts.length; p++) keys.push(parts[p]);
+            } else {
+              keys.push(col.keyType);
+            }
+          }
           cols.push({ name: col.name, type: '', keys: keys });
         }
         umlTables.push({ name: srcTable.tableName, cols: cols, x: 0, y: 0 });
       }
+
+      var fkTargetColMap = {
+        'ai_summary_reviews.summary_request_id': 'request_id',
+        'table_column_keys.table_name': 'table_name'
+      };
 
       var umlRelations = [];
       var relationSet = {};
@@ -2590,7 +2602,9 @@ export function getCacheStatusPage(user: {
           var relKey = tbl.tableName + '.' + column.name + '->' + column.fkTarget;
           if (relationSet[relKey]) continue;
           relationSet[relKey] = true;
-          umlRelations.push([tbl.tableName, column.name, column.fkTarget, 'id', '多:1']);
+          var fkColKey = tbl.tableName + '.' + column.name;
+          var targetCol = fkTargetColMap[fkColKey] || 'id';
+          umlRelations.push([tbl.tableName, column.name, column.fkTarget, targetCol, '多:1']);
         }
       }
 
