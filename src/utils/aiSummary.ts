@@ -1,4 +1,4 @@
-export const DEFAULT_AI_MODEL = '@cf/meta/llama-3.1-8b-instruct-fp8';
+export const DEFAULT_AI_MODEL = '@cf/google/gemma-4-26b-a4b-it';
 
 export const DESIGN_SPEC_CHECKLIST = [
   'GitHub OAuth 2.0 + JWT認証',

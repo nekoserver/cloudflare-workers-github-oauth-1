@@ -62,7 +62,7 @@ describe('/api/status/tables/:table/rows', () => {
     rating: 'good',
     reviewer_type: 'system',
     reviewer_name: 'auto-diagnosis',
-    review_model: '@cf/meta/llama-3.1-8b-instruct-fp8',
+    review_model: '@cf/google/gemma-4-26b-a4b-it',
     comment: 'テスト要約',
     created_at: '2026-03-29T10:00:00Z',
     repo_full_name: 'owner/repo',
@@ -167,7 +167,7 @@ describe('/api/status/tables/:table/rows', () => {
       event_date: '2026-03-29',
       repo_full_name: 'owner/repo',
       pr_number: 10,
-      model: '@cf/meta/llama-3.1-8b-instruct-fp8',
+      model: '@cf/google/gemma-4-26b-a4b-it',
       summary: 'テスト',
       created_at: '2026-03-29T10:00:00Z',
     };

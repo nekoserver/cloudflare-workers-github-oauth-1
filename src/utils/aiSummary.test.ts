@@ -121,7 +121,7 @@ describe('fetchPrDiff', () => {
 
 describe('generateAiSummary', () => {
   const baseParams = {
-    model: '@cf/meta/llama-3.1-8b-instruct-fp8',
+    model: '@cf/google/gemma-4-26b-a4b-it',
     title: 'Add login feature',
     description: 'Implements GitHub OAuth login',
     trimmedDiff: '',
@@ -304,9 +304,9 @@ describe('buildSlackMessage', () => {
       commitAgentName: 'Codex',
       commitAgentVersion: 'v0.9.0',
       commitAgentSignal: 'message',
-      summaryModel: '@cf/meta/llama-3.1-8b-instruct-fp8',
+      summaryModel: '@cf/google/gemma-4-26b-a4b-it',
     });
-    expect(text).toContain('AI要約モデル (@cf・要約専用):* @cf/meta/llama-3.1-8b-instruct-fp8');
+    expect(text).toContain('AI要約モデル (@cf・要約専用):* @cf/google/gemma-4-26b-a4b-it');
     expect(text).toContain('コーディングエージェント (コミット由来):* Codex (v0.9.0)');
     const contextBlock = blocks.find((b: any) =>
       b.type === 'context' && b.elements?.[0]?.text?.includes('コーディングエージェント (コミット由来): Codex (v0.9.0)')
@@ -548,7 +548,7 @@ describe('buildSlackMessage', () => {
       ...baseParams,
       fallbackUsed: true,
       primaryModel: '@cf/openai/gpt-oss-120b',
-      fallbackModel: '@cf/meta/llama-3.1-8b-instruct-fp8',
+      fallbackModel: '@cf/google/gemma-4-26b-a4b-it',
     });
     const allText = JSON.stringify(blocks);
     expect(allText).toContain('フォールバック');
@@ -560,7 +560,7 @@ describe('buildSlackMessage', () => {
       ...baseParams,
       fallbackUsed: true,
       primaryModel: '@cf/openai/gpt-oss-120b',
-      fallbackModel: '@cf/meta/llama-3.1-8b-instruct-fp8',
+      fallbackModel: '@cf/google/gemma-4-26b-a4b-it',
     });
     expect(text).toContain('フォールバック');
     expect(text).toContain('gpt-oss-120b');
@@ -571,7 +571,7 @@ describe('buildSlackMessage', () => {
       ...baseParams,
       fallbackUsed: false,
       primaryModel: '@cf/openai/gpt-oss-120b',
-      fallbackModel: '@cf/meta/llama-3.1-8b-instruct-fp8',
+      fallbackModel: '@cf/google/gemma-4-26b-a4b-it',
     });
     const allText = JSON.stringify(blocks);
     expect(allText).not.toContain('フォールバック');
@@ -593,7 +593,7 @@ describe('buildSlackMessage', () => {
       summary: '[AI_ERROR] fallback also failed: Service unavailable',
       fallbackUsed: true,
       primaryModel: '@cf/openai/gpt-oss-120b',
-      fallbackModel: '@cf/meta/llama-3.1-8b-instruct-fp8',
+      fallbackModel: '@cf/google/gemma-4-26b-a4b-it',
     });
     const allText = JSON.stringify(blocks);
     expect(allText).toContain('フォールバック');
@@ -606,8 +606,8 @@ describe('buildSlackMessage', () => {
       ...baseParams,
       summary: '[AI_ERROR] Model overloaded',
       fallbackUsed: false,
-      primaryModel: '@cf/meta/llama-3.1-8b-instruct-fp8',
-      fallbackModel: '@cf/meta/llama-3.1-8b-instruct-fp8',
+      primaryModel: '@cf/google/gemma-4-26b-a4b-it',
+      fallbackModel: '@cf/google/gemma-4-26b-a4b-it',
     });
     const allText = JSON.stringify(blocks);
     expect(allText).toContain('同一モデル');
@@ -620,7 +620,7 @@ describe('buildSlackMessage', () => {
       summary: '[AI_ERROR] Model overloaded',
       fallbackUsed: false,
       primaryModel: '@cf/openai/gpt-oss-120b',
-      fallbackModel: '@cf/meta/llama-3.1-8b-instruct-fp8',
+      fallbackModel: '@cf/google/gemma-4-26b-a4b-it',
     });
     const allText = JSON.stringify(blocks);
     // フォールバック関連の注記がないこと（フォールバック未使用で別モデル = primary単体失敗）
@@ -667,7 +667,7 @@ describe('buildSummaryModal', () => {
     pr_number: 42,
     pr_action: 'opened',
     pr_url: 'https://github.com/owner/repo/pull/42',
-    model: '@cf/meta/llama-3.1-8b-instruct-fp8',
+    model: '@cf/google/gemma-4-26b-a4b-it',
     summary: '## 概要\nバグを修正しました\n## 主な変更点\n認証ロジックの修正\n## 影響範囲\n全認証フロー',
     diff_length: 1234,
     created_at: '2026-03-24T10:00:00Z',
@@ -694,7 +694,7 @@ describe('buildSummaryModal', () => {
     expect(allContextText).toContain('モデル@cf :');
     expect(allContextText).toContain('diff :');
     expect(allContextText).toContain('要約回 :');
-    expect(allContextText).toContain('llama-3.1-8b');
+    expect(allContextText).toContain('gemma-4-26b');
     expect(allContextText).toContain('1234');
     expect(allContextText).toContain('#3');
   });
@@ -868,7 +868,7 @@ describe('classifySummaryResult', () => {
 
 describe('runSummaryPipeline', () => {
   const baseParams = {
-    model: '@cf/meta/llama-3.1-8b-instruct-fp8',
+    model: '@cf/google/gemma-4-26b-a4b-it',
     title: 'Add feature',
     description: 'New feature',
     trimmedDiff: '',
@@ -953,7 +953,7 @@ describe('runSummaryPipeline', () => {
   // ---- フォールバック機構テスト ----
 
   const experimentModel = '@cf/openai/gpt-oss-120b';
-  const stableModel = '@cf/meta/llama-3.1-8b-instruct-fp8';
+  const stableModel = '@cf/google/gemma-4-26b-a4b-it';
   const fallbackParams = { ...baseParams, model: experimentModel, fallbackModel: stableModel };
 
   it('primary成功時はfallbackを試行せずprimaryのusedModelを返す', async () => {
@@ -1047,7 +1047,7 @@ describe('Slack Block Kit 制約: buildSummaryModal', () => {
     pr_number: 99,
     pr_action: 'opened',
     pr_url: 'https://github.com/owner/repo/pull/99',
-    model: '@cf/meta/llama-3.1-8b-instruct-fp8',
+    model: '@cf/google/gemma-4-26b-a4b-it',
     summary: '概要: テスト用要約\n変更点: なし\n影響: なし',
     diff_length: 2000,
     created_at: '2026-03-27T12:00:00Z',
@@ -1267,7 +1267,7 @@ describe('Slack Block Kit 制約: buildSummaryFallbackBlocks', () => {
     pr_number: 10,
     pr_action: 'opened',
     pr_url: 'https://github.com/owner/repo/pull/10',
-    model: '@cf/meta/llama-3.1-8b-instruct-fp8',
+    model: '@cf/google/gemma-4-26b-a4b-it',
     summary: '概要: フォールバックテスト',
     diff_length: 100,
     created_at: '2026-03-27T12:00:00Z',

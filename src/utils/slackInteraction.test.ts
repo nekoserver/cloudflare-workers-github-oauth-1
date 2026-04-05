@@ -22,7 +22,7 @@ const sampleRow = {
   pr_number: 42,
   pr_action: 'opened',
   pr_url: 'https://github.com/owner/repo/pull/42',
-  model: '@cf/meta/llama-3.1-8b-instruct-fp8',
+  model: '@cf/google/gemma-4-26b-a4b-it',
   summary: '概要: テスト',
   diff_length: 500,
   created_at: '2026-03-24T10:00:00Z',
