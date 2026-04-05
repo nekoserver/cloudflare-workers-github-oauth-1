@@ -3288,6 +3288,21 @@ export function getCacheStatusPage(user: {
         var container = document.createElement('div');
         container.className = 'uml-er-container';
 
+        // リレーション配色パレット
+        var relColors = isDark
+          ? ['#f6ad55','#68d391','#63b3ed','#fc8181','#b794f4','#f687b3','#4fd1c5','#ecc94b','#9ae6b4','#feb2b2']
+          : ['#c05621','#276749','#2b6cb0','#c53030','#6b46c1','#b83280','#2c7a7b','#975a16','#22543d','#9b2c2c'];
+
+        // カラム→色マッピング: { "tableName.colName": colorIndex }
+        var colColorMap = {};
+        for (var ri = 0; ri < relationsData.length; ri++) {
+          var colorIdx = ri % relColors.length;
+          var fromKey = relationsData[ri][0] + '.' + relationsData[ri][1];
+          var toKey = relationsData[ri][2] + '.' + relationsData[ri][3];
+          if (!(fromKey in colColorMap)) colColorMap[fromKey] = colorIdx;
+          if (!(toKey in colColorMap)) colColorMap[toKey] = colorIdx;
+        }
+
         // テーブルカード座標を保存
         var cardRects = {};
         var cardElements = {};
@@ -3325,6 +3340,13 @@ export function getCacheStatusPage(user: {
             var nameSpan = document.createElement('span');
             nameSpan.className = 'uml-col-name';
             nameSpan.textContent = col.name;
+            var colKey = tbl.name + '.' + col.name;
+            if (colKey in colColorMap) {
+              nameSpan.style.color = relColors[colColorMap[colKey]];
+              nameSpan.style.fontWeight = '700';
+              row.style.borderLeft = '3px solid ' + relColors[colColorMap[colKey]];
+              row.style.paddingLeft = '5px';
+            }
             row.appendChild(nameSpan);
             var typeSpan = document.createElement('span');
             typeSpan.className = 'uml-col-type';
@@ -3351,9 +3373,6 @@ export function getCacheStatusPage(user: {
         function drawRelations() {
           while (svg.firstChild) svg.removeChild(svg.firstChild);
 
-          var lineColor = isDark ? 'rgba(160,174,192,0.6)' : 'rgba(113,128,150,0.5)';
-          var arrowColor = isDark ? '#a0aec0' : '#718096';
-          var labelColor = isDark ? '#a0aec0' : '#4a5568';
           var arrowSize = 10;
 
           for (var r = 0; r < relationsData.length; r++) {
@@ -3361,6 +3380,11 @@ export function getCacheStatusPage(user: {
             var fromRect = cardRects[rel[0]];
             var toRect = cardRects[rel[2]];
             if (!fromRect || !toRect) continue;
+
+            var relColorIdx = r % relColors.length;
+            var lineColor = relColors[relColorIdx];
+            var arrowColor = relColors[relColorIdx];
+            var labelColor = relColors[relColorIdx];
 
             // カードのエッジから接続点を計算
             var fromCx = fromRect.x + fromRect.w / 2;
@@ -3598,15 +3622,27 @@ export function getCacheStatusPage(user: {
           ctx.fillRect(0, 0, canvasW, canvasH);
 
           // リレーション線を先に描画
-          var lineColor = isDark ? 'rgba(160,174,192,0.6)' : 'rgba(113,128,150,0.5)';
+          var cRelColors = isDark
+            ? ['#f6ad55','#68d391','#63b3ed','#fc8181','#b794f4','#f687b3','#4fd1c5','#ecc94b','#9ae6b4','#feb2b2']
+            : ['#c05621','#276749','#2b6cb0','#c53030','#6b46c1','#b83280','#2c7a7b','#975a16','#22543d','#9b2c2c'];
+          var cColColorMap = {};
+          for (var ci = 0; ci < relations.length; ci++) {
+            var cIdx = ci % cRelColors.length;
+            var cFromKey = relations[ci][0] + '.' + relations[ci][1];
+            var cToKey = relations[ci][2] + '.' + relations[ci][3];
+            if (!(cFromKey in cColColorMap)) cColColorMap[cFromKey] = cIdx;
+            if (!(cToKey in cColColorMap)) cColColorMap[cToKey] = cIdx;
+          }
           var labelColor = isDark ? '#a0aec0' : '#4a5568';
-          var arrowFill = isDark ? '#a0aec0' : '#718096';
 
           for (var ri = 0; ri < relations.length; ri++) {
             var rel = relations[ri];
             var fromRect = cardRects[rel[0]];
             var toRect = cardRects[rel[2]];
             if (!fromRect || !toRect) continue;
+
+            var rColorIdx = ri % cRelColors.length;
+            var rColor = cRelColors[rColorIdx];
 
             var fromCx = fromRect.x + fromRect.w / 2 + offsetX;
             var fromCy = fromRect.y + fromRect.h / 2 + offsetY;
@@ -3626,7 +3662,7 @@ export function getCacheStatusPage(user: {
             else { tx = toCx; ty = toRect.y + toRect.h + offsetY; }
 
             // 線
-            ctx.strokeStyle = lineColor;
+            ctx.strokeStyle = rColor;
             ctx.lineWidth = 2;
             ctx.beginPath();
             ctx.moveTo(fx, fy);
@@ -3636,7 +3672,7 @@ export function getCacheStatusPage(user: {
             // 矢印
             var angle = Math.atan2(ty - fy, tx - fx);
             var arrowLen = 10;
-            ctx.fillStyle = arrowFill;
+            ctx.fillStyle = rColor;
             ctx.beginPath();
             ctx.moveTo(tx, ty);
             ctx.lineTo(tx - arrowLen * Math.cos(angle - 0.35), ty - arrowLen * Math.sin(angle - 0.35));
@@ -3647,7 +3683,7 @@ export function getCacheStatusPage(user: {
             // カーディナリティラベル
             var mx = (fx + tx) / 2;
             var my = (fy + ty) / 2;
-            ctx.fillStyle = labelColor;
+            ctx.fillStyle = rColor;
             ctx.font = '600 11px -apple-system, BlinkMacSystemFont, sans-serif';
             ctx.textAlign = 'center';
             ctx.textBaseline = 'bottom';
@@ -3740,8 +3776,14 @@ export function getCacheStatusPage(user: {
               }
 
               // カラム名
-              ctx.fillStyle = colText;
-              ctx.font = '11px Monaco, Courier New, monospace';
+              var cColKey = tbl.name + '.' + col.name;
+              if (cColKey in cColColorMap) {
+                ctx.fillStyle = cRelColors[cColColorMap[cColKey]];
+                ctx.font = '700 11px Monaco, Courier New, monospace';
+              } else {
+                ctx.fillStyle = colText;
+                ctx.font = '11px Monaco, Courier New, monospace';
+              }
               ctx.textAlign = 'left';
               ctx.textBaseline = 'middle';
               ctx.fillText(col.name, colX, rowY + 9);
@@ -4232,6 +4274,20 @@ export function getCacheStatusPage(user: {
         var container = document.createElement('div');
         container.className = 'uml-er-container';
 
+        // リレーション配色パレット
+        var fRelColors = isDark
+          ? ['#f6ad55','#68d391','#63b3ed','#fc8181','#b794f4','#f687b3','#4fd1c5','#ecc94b','#9ae6b4','#feb2b2']
+          : ['#c05621','#276749','#2b6cb0','#c53030','#6b46c1','#b83280','#2c7a7b','#975a16','#22543d','#9b2c2c'];
+
+        var fColColorMap = {};
+        for (var fri = 0; fri < relationsData.length; fri++) {
+          var fci = fri % fRelColors.length;
+          var fFromKey = relationsData[fri][0] + '.' + relationsData[fri][1];
+          var fToKey = relationsData[fri][2] + '.' + relationsData[fri][3];
+          if (!(fFromKey in fColColorMap)) fColColorMap[fFromKey] = fci;
+          if (!(fToKey in fColColorMap)) fColColorMap[fToKey] = fci;
+        }
+
         var cardRects = {};
         var cardElements = {};
         var keyColorMap = { pk: '#e53e3e', fk: '#ed8936', uk: '#48bb78', idx: '#4299e1' };
@@ -4269,6 +4325,13 @@ export function getCacheStatusPage(user: {
             var nameSpan = document.createElement('span');
             nameSpan.className = 'uml-col-name';
             nameSpan.textContent = col.name;
+            var fColKey = tbl.name + '.' + col.name;
+            if (fColKey in fColColorMap) {
+              nameSpan.style.color = fRelColors[fColColorMap[fColKey]];
+              nameSpan.style.fontWeight = '700';
+              row.style.borderLeft = '3px solid ' + fRelColors[fColColorMap[fColKey]];
+              row.style.paddingLeft = '5px';
+            }
             row.appendChild(nameSpan);
             var typeSpan = document.createElement('span');
             typeSpan.className = 'uml-col-type';
@@ -4292,9 +4355,6 @@ export function getCacheStatusPage(user: {
 
         function drawRelations() {
           while (svg.firstChild) svg.removeChild(svg.firstChild);
-          var lineColor = isDark ? 'rgba(160,174,192,0.6)' : 'rgba(113,128,150,0.5)';
-          var arrowColor = isDark ? '#a0aec0' : '#718096';
-          var labelColor = isDark ? '#a0aec0' : '#4a5568';
           var arrowSize = 10;
 
           for (var r = 0; r < relationsData.length; r++) {
@@ -4302,6 +4362,11 @@ export function getCacheStatusPage(user: {
             var fromRect = cardRects[rel[0]];
             var toRect = cardRects[rel[2]];
             if (!fromRect || !toRect) continue;
+
+            var fRelIdx = r % fRelColors.length;
+            var lineColor = fRelColors[fRelIdx];
+            var arrowColor = fRelColors[fRelIdx];
+            var labelColor = fRelColors[fRelIdx];
 
             var fromCx = fromRect.x + fromRect.w / 2;
             var fromCy = fromRect.y + fromRect.h / 2;
