@@ -1574,6 +1574,10 @@ export function getCacheStatusPage(user: {
           <div class="modal-subtitle">テーブル間の外部キー・参照関係と正規化状況を表示しています</div>
         </div>
         <div style="display:flex; align-items:center; gap:8px;">
+          <button type="button" class="uml-collist-button" id="umlFkVerifyBtn" title="FK関係の実データを検証">
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M6.5 12a5.5 5.5 0 100-11 5.5 5.5 0 000 11zM15 15l-3.6-3.6" stroke="white" stroke-width="1.5" stroke-linecap="round"/><path d="M5 6.5l2 2 3.5-3.5" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            FK検証
+          </button>
           <button type="button" class="uml-collist-button" id="umlColListBtn">
             <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M2 4h12M2 8h12M2 12h8" stroke="white" stroke-width="1.5" stroke-linecap="round"/></svg>
             カラム名での表一覧
@@ -1638,6 +1642,19 @@ export function getCacheStatusPage(user: {
           </div>
         </div>
       </div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="fkVerifyModal" aria-hidden="true" style="z-index:10002">
+    <div class="collist-modal-card" role="dialog" aria-modal="true" aria-labelledby="fkVerifyModalTitle">
+      <div class="modal-header">
+        <div class="modal-title-wrap">
+          <div class="modal-title" id="fkVerifyModalTitle">FK検証 — 実データサンプリング</div>
+          <div class="modal-subtitle">リレーションごとにJOINで実データを検証し、孤立レコード(orphan)を検出します</div>
+        </div>
+        <button type="button" class="modal-close" id="fkVerifyModalClose" aria-label="閉じる">&times;</button>
+      </div>
+      <div id="fkVerifyBody" style="padding:1rem;overflow-y:auto;max-height:70vh;"></div>
     </div>
   </div>
 
@@ -3863,6 +3880,105 @@ export function getCacheStatusPage(user: {
           }
         }
       }
+    })();
+
+    // FK検証モーダル
+    (function() {
+      var fkVerifyBtn = document.getElementById('umlFkVerifyBtn');
+      var fkVerifyModal = document.getElementById('fkVerifyModal');
+      var fkVerifyClose = document.getElementById('fkVerifyModalClose');
+      var fkVerifyBody = document.getElementById('fkVerifyBody');
+      if (!fkVerifyBtn || !fkVerifyModal || !fkVerifyBody) return;
+
+      function closeFkVerify() {
+        fkVerifyModal.classList.remove('show');
+        fkVerifyModal.setAttribute('aria-hidden', 'true');
+      }
+      if (fkVerifyClose) fkVerifyClose.addEventListener('click', closeFkVerify);
+      fkVerifyModal.addEventListener('click', function(e) { if (e.target === fkVerifyModal) closeFkVerify(); });
+
+      fkVerifyBtn.addEventListener('click', async function() {
+        var relations = window.__erRelations || [];
+        if (relations.length === 0) {
+          fkVerifyBody.innerHTML = '<p style="color:#a0aec0">リレーションが見つかりません</p>';
+          fkVerifyModal.classList.add('show');
+          fkVerifyModal.setAttribute('aria-hidden', 'false');
+          return;
+        }
+        fkVerifyBody.innerHTML = '<p style="color:#a0aec0">検証中...</p>';
+        fkVerifyModal.classList.add('show');
+        fkVerifyModal.setAttribute('aria-hidden', 'false');
+
+        var html = '';
+        for (var i = 0; i < relations.length; i++) {
+          var rel = relations[i];
+          try {
+            var res = await fetch('/api/status/fk-verify', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ fromTable: rel[0], fromCol: rel[1], toTable: rel[2], toCol: rel[3] })
+            });
+            var data = await res.json();
+            if (data.error) {
+              html += '<div style="margin-bottom:1.5rem;border:1px solid #4a5568;border-radius:8px;padding:1rem;">';
+              html += '<div style="font-weight:700;color:#fc8181;margin-bottom:0.5rem">' + rel[0] + '.' + rel[1] + ' → ' + rel[2] + '.' + rel[3] + '</div>';
+              html += '<div style="color:#fc8181">エラー: ' + data.error + '</div></div>';
+              continue;
+            }
+            var orphanRate = data.totalFromRows > 0 ? (data.orphanCount / data.totalFromRows * 100).toFixed(1) : '0.0';
+            var statusColor = data.orphanCount === 0 ? '#68d391' : '#fc8181';
+            var statusLabel = data.orphanCount === 0 ? '正常' : '孤立あり';
+
+            html += '<div style="margin-bottom:1.5rem;border:1px solid #4a5568;border-radius:8px;padding:1rem;">';
+            html += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:0.5rem">';
+            html += '<span style="font-weight:700;color:#e2e8f0">' + rel[0] + '.' + rel[1] + ' → ' + rel[2] + '.' + rel[3] + '</span>';
+            html += '<span style="font-size:0.8rem;padding:2px 8px;border-radius:4px;background:' + statusColor + '20;color:' + statusColor + ';font-weight:600">' + statusLabel + '</span>';
+            html += '</div>';
+            html += '<div style="font-size:0.85rem;color:#a0aec0;margin-bottom:0.75rem">';
+            html += rel[0] + ' 全' + data.totalFromRows + '行 / 孤立: ' + data.orphanCount + '行 (' + orphanRate + '%)';
+            if (data.orphanSamples && data.orphanSamples.length > 0) {
+              html += ' — 孤立値: ' + data.orphanSamples.map(function(v) { return '<code style="background:#2d3748;padding:1px 4px;border-radius:3px">' + v + '</code>'; }).join(', ');
+            }
+            html += '</div>';
+
+            if (data.samples && data.samples.length > 0) {
+              for (var s = 0; s < data.samples.length; s++) {
+                var sample = data.samples[s];
+                html += '<details style="margin-bottom:0.5rem"' + (s === 0 ? ' open' : '') + '>';
+                html += '<summary style="cursor:pointer;font-size:0.85rem;color:#63b3ed">サンプル #' + (s + 1) + ' (FK値: <code>' + (sample.fromRow[rel[1]] ?? '?') + '</code>)</summary>';
+                html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:0.5rem">';
+
+                html += '<div style="background:#1a202c;border:1px solid #4a5568;border-radius:6px;padding:0.5rem">';
+                html += '<div style="font-weight:700;color:#f6ad55;font-size:0.8rem;margin-bottom:0.25rem">' + rel[0] + '</div>';
+                var fromKeys = Object.keys(sample.fromRow);
+                for (var fk = 0; fk < fromKeys.length; fk++) {
+                  var isFK = fromKeys[fk] === rel[1];
+                  html += '<div style="font-size:0.8rem;' + (isFK ? 'color:#f6ad55;font-weight:700' : 'color:#cbd5e0') + '">';
+                  html += '<span style="color:#718096">' + fromKeys[fk] + ':</span> ' + (sample.fromRow[fromKeys[fk]] ?? 'NULL') + '</div>';
+                }
+                html += '</div>';
+
+                html += '<div style="background:#1a202c;border:1px solid #4a5568;border-radius:6px;padding:0.5rem">';
+                html += '<div style="font-weight:700;color:#68d391;font-size:0.8rem;margin-bottom:0.25rem">' + rel[2] + '</div>';
+                var toKeys = Object.keys(sample.toRow);
+                for (var tk = 0; tk < toKeys.length; tk++) {
+                  var isPK = toKeys[tk] === rel[3];
+                  html += '<div style="font-size:0.8rem;' + (isPK ? 'color:#68d391;font-weight:700' : 'color:#cbd5e0') + '">';
+                  html += '<span style="color:#718096">' + toKeys[tk] + ':</span> ' + (sample.toRow[toKeys[tk]] ?? 'NULL') + '</div>';
+                }
+                html += '</div>';
+                html += '</div></details>';
+              }
+            } else {
+              html += '<div style="font-size:0.85rem;color:#718096">JOINに該当するレコードがありません</div>';
+            }
+            html += '</div>';
+          } catch (err) {
+            html += '<div style="margin-bottom:1rem;color:#fc8181">通信エラー: ' + rel[0] + '.' + rel[1] + ' → ' + rel[2] + '.' + rel[3] + '</div>';
+          }
+        }
+        fkVerifyBody.innerHTML = html;
+      });
     })();
 
     // カラム名一覧モーダル

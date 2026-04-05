@@ -2703,6 +2703,63 @@ app.get('/api/status/tables/:table/group-er', authMiddleware, async (c) => {
 });
 
 /**
+ * FK検証: リレーションの実データをサンプリングして返す
+ */
+app.post('/api/status/fk-verify', authMiddleware, async (c) => {
+  const db = c.env.DB;
+  if (!db) return jsonUtf8({ error: 'DB not available' }, 500);
+
+  const body = await c.req.json<{ fromTable: string; fromCol: string; toTable: string; toCol: string }>();
+  const { fromTable, fromCol, toTable, toCol } = body;
+
+  const tableNamePattern = /^[a-z_][a-z0-9_]*$/;
+  if (!tableNamePattern.test(fromTable) || !tableNamePattern.test(toTable) || !tableNamePattern.test(fromCol) || !tableNamePattern.test(toCol)) {
+    return jsonUtf8({ error: 'Invalid table/column name' }, 400);
+  }
+
+  try {
+    const joinSql = `SELECT f.${fromCol} AS fk_value, f.rowid AS from_rowid, t.rowid AS to_rowid FROM ${fromTable} f INNER JOIN ${toTable} t ON f.${fromCol} = t.${toCol} ORDER BY RANDOM() LIMIT 5`;
+    const joinResult = await db.prepare(joinSql).all<{ fk_value: string; from_rowid: number; to_rowid: number }>();
+    const matched = joinResult.results ?? [];
+
+    const orphanSql = `SELECT f.${fromCol} AS fk_value FROM ${fromTable} f LEFT JOIN ${toTable} t ON f.${fromCol} = t.${toCol} WHERE t.${toCol} IS NULL LIMIT 5`;
+    const orphanResult = await db.prepare(orphanSql).all<{ fk_value: string }>();
+    const orphans = orphanResult.results ?? [];
+
+    const countSql = `SELECT COUNT(*) AS total FROM ${fromTable}`;
+    const countResult = await db.prepare(countSql).first<{ total: number }>();
+    const totalFrom = countResult?.total ?? 0;
+
+    const orphanCountSql = `SELECT COUNT(*) AS total FROM ${fromTable} f LEFT JOIN ${toTable} t ON f.${fromCol} = t.${toCol} WHERE t.${toCol} IS NULL`;
+    const orphanCountResult = await db.prepare(orphanCountSql).first<{ total: number }>();
+    const orphanCount = orphanCountResult?.total ?? 0;
+
+    const samples: { fromRow: Record<string, unknown>; toRow: Record<string, unknown> }[] = [];
+    for (const m of matched) {
+      const fromRowSql = `SELECT * FROM ${fromTable} WHERE rowid = ? LIMIT 1`;
+      const toRowSql = `SELECT * FROM ${toTable} WHERE rowid = ? LIMIT 1`;
+      const [fromRow, toRow] = await Promise.all([
+        db.prepare(fromRowSql).bind(m.from_rowid).first(),
+        db.prepare(toRowSql).bind(m.to_rowid).first(),
+      ]);
+      if (fromRow && toRow) {
+        samples.push({ fromRow: fromRow as Record<string, unknown>, toRow: toRow as Record<string, unknown> });
+      }
+    }
+
+    return jsonUtf8({
+      relation: { fromTable, fromCol, toTable, toCol },
+      totalFromRows: totalFrom,
+      orphanCount,
+      orphanSamples: orphans.map((o) => o.fk_value),
+      samples,
+    });
+  } catch (err) {
+    return jsonUtf8({ error: err instanceof Error ? err.message : 'Query failed' }, 500);
+  }
+});
+
+/**
  * リポジトリページ（ログインが必要だが未ログイン時はトップへ）
  */
 app.get('/repositories', optionalAuthMiddleware, async (c) => {
