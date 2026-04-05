@@ -23,7 +23,7 @@ import { getCookieValue, getCookieValues } from './utils/cookie';
 import { verifyResendWebhookSignature } from './utils/resendWebhook';
 import { verifyGitHubWebhookSignature } from './utils/githubWebhook';
 import { postSlackMessage, openSlackModal, respondToInteraction } from './utils/slack';
-import { fetchPrDiff, runSummaryPipeline, buildSlackMessage, buildSummaryModal, buildSummaryFallbackBlocks, classifySummaryResult, resolveAiModel, extractDesignDiff, sanitizeBoxDrawing, detectCommitAgentFromText, detectCommitAgentFromPrText, describeModelSwitch, WORKER_BASE_URL, DESIGN_SPEC_CHECKLIST, DEFAULT_AI_MODEL, type SummaryModalRow } from './utils/aiSummary';
+import { fetchPrDiff, runSummaryPipeline, buildSlackMessage, buildSummaryModal, buildSummaryFallbackBlocks, classifySummaryResult, resolveAiModel, extractDesignDiff, sanitizeBoxDrawing, detectCommitAgentFromText, detectCommitAgentFromPrText, describeModelSwitch, WORKER_BASE_URL, DESIGN_SPEC_CHECKLIST, DEFAULT_AI_MODEL, FALLBACK_AI_MODEL, type SummaryModalRow } from './utils/aiSummary';
 import { getSessionDurationSeconds, renewSession } from './utils/session';
 import { buildCommitAgentLogEntry } from './utils/commitAgentLog';
 import { verifySlackSignature } from './utils/slackSignature';
@@ -3352,7 +3352,7 @@ app.post('/webhook/github', async (c) => {
         const pipelineResult = await runSummaryPipeline({
           ai: ai as { run(model: string, input: { messages: { role: string; content: string }[] }): Promise<unknown> } | null,
           model: aiModel,
-          fallbackModel: DEFAULT_AI_MODEL,
+          fallbackModel: FALLBACK_AI_MODEL,
           title,
           description,
           trimmedDiff,
@@ -3382,7 +3382,7 @@ app.post('/webhook/github', async (c) => {
           designDiff,
           fallbackUsed: pipelineResult.fallbackUsed,
           primaryModel: aiModel,
-          fallbackModel: DEFAULT_AI_MODEL,
+          fallbackModel: FALLBACK_AI_MODEL,
           summaryModel: pipelineResult.usedModel,
           commitAgentName: commitAgentName ?? undefined,
           commitAgentVersion,
