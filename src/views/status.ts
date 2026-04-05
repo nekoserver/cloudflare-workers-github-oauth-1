@@ -185,7 +185,11 @@ export function getCacheStatusPage(user: {
       syncPolicy: 'auto' as const,
     }];
   const tableRows = statusTables.map(t => {
-    const statusIcon = t.exists ? '<span class="status-ok">OK</span>' : '<span class="status-missing">未作成</span>';
+    const statusIcon = !t.exists
+      ? '<span class="status-missing">未作成</span>'
+      : t.rowCount !== null
+        ? '<span class="status-ok">OK</span>'
+        : '<span class="status-ng">NG</span>';
     const count = t.exists && t.rowCount !== null ? String(t.rowCount) : '-';
     const policy = syncPolicyLabel[t.syncPolicy] || syncPolicyLabel.auto;
     const groupName = data.tableGroupMap[t.name] || '';
@@ -601,6 +605,7 @@ export function getCacheStatusPage(user: {
     .data-table code { background: var(--code-bg); padding: 2px 6px; border-radius: 4px; font-size: 13px; }
     .all-repos { color: var(--accent-color); font-weight: 600; font-size: 12px; }
     .status-ok { color: #48bb78; font-weight: 700; font-size: 12px; }
+    .status-ng { color: #fc8181; font-weight: 700; font-size: 12px; background: rgba(252,129,129,0.15); padding: 1px 6px; border-radius: 4px; }
     .status-missing { color: var(--danger-color); font-weight: 700; font-size: 12px; }
     .status-warning-toast {
       position: fixed;
