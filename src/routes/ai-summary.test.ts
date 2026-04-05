@@ -12,7 +12,7 @@
  */
 import { describe, it, expect, vi } from 'vitest';
 import app from '../index';
-import { WORKER_BASE_URL, buildSummaryModal, type SummaryModalRow } from '../utils/aiSummary';
+import { WORKER_BASE_URL, DEFAULT_AI_MODEL, buildSummaryModal, type SummaryModalRow } from '../utils/aiSummary';
 
 const sampleRow = {
   request_id: 'test-uuid-001',
@@ -22,7 +22,7 @@ const sampleRow = {
   pr_number: 42,
   pr_action: 'opened',
   pr_url: 'https://github.com/owner/repo/pull/42',
-  model: '@cf/google/gemma-4-26b-a4b-it',
+  model: DEFAULT_AI_MODEL,
   summary: '概要: テスト要約\n変更点: 認証修正',
   diff_length: 500,
   created_at: '2026-03-28T10:00:00Z',
@@ -72,7 +72,7 @@ describe('/ai-summary/:id ルート統合テスト', () => {
 
     expect(html).toContain('owner/repo');
     expect(html).toContain('#42');
-    expect(html).toContain('gemma-4-26b-a4b-it');
+    expect(html).toContain(DEFAULT_AI_MODEL);
   });
 
   it('正常系: HTMLが<!DOCTYPE html>で始まる有効なHTML文書である', async () => {
@@ -128,7 +128,7 @@ describe('保証チェーン: モーダルリンク → ルート到達', () => 
       pr_number: 10,
       pr_action: 'opened',
       pr_url: 'https://github.com/owner/repo/pull/10',
-      model: '@cf/google/gemma-4-26b-a4b-it',
+      model: DEFAULT_AI_MODEL,
       summary: 'チェーンテスト用要約',
       diff_length: 100,
       created_at: '2026-03-28T12:00:00Z',

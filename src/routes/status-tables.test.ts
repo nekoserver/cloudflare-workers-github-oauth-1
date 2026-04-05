@@ -7,6 +7,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import app from '../index';
 import { createJWT } from '../utils/jwt';
+import { DEFAULT_AI_MODEL } from '../utils/aiSummary';
 
 const JWT_SECRET = 'test-secret';
 
@@ -62,7 +63,7 @@ describe('/api/status/tables/:table/rows', () => {
     rating: 'good',
     reviewer_type: 'system',
     reviewer_name: 'auto-diagnosis',
-    review_model: '@cf/google/gemma-4-26b-a4b-it',
+    review_model: DEFAULT_AI_MODEL,
     comment: 'テスト要約',
     created_at: '2026-03-29T10:00:00Z',
     repo_full_name: 'owner/repo',
@@ -167,7 +168,7 @@ describe('/api/status/tables/:table/rows', () => {
       event_date: '2026-03-29',
       repo_full_name: 'owner/repo',
       pr_number: 10,
-      model: '@cf/google/gemma-4-26b-a4b-it',
+      model: DEFAULT_AI_MODEL,
       summary: 'テスト',
       created_at: '2026-03-29T10:00:00Z',
     };

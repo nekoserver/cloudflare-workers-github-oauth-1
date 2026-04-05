@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { handleSlackInteraction, type InteractionDeps } from './slackInteraction';
+import { DEFAULT_AI_MODEL } from './aiSummary';
 
 vi.mock('./slack', () => ({
   openSlackModal: vi.fn(),
@@ -22,7 +23,7 @@ const sampleRow = {
   pr_number: 42,
   pr_action: 'opened',
   pr_url: 'https://github.com/owner/repo/pull/42',
-  model: '@cf/google/gemma-4-26b-a4b-it',
+  model: DEFAULT_AI_MODEL,
   summary: '概要: テスト',
   diff_length: 500,
   created_at: '2026-03-24T10:00:00Z',
