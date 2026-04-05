@@ -21,6 +21,17 @@ export function resolveAiModel(envValue: string | undefined): string {
   return envValue?.trim() || DEFAULT_AI_MODEL;
 }
 
+export function describeModelSwitch(row: { model?: string | null; fallback_used?: number | null; primary_model?: string | null }): string {
+  if (row.fallback_used == null) return '(記録なし)';
+  if (row.fallback_used === 1) {
+    return `フォールバック (${row.primary_model ?? '?'} → ${row.model ?? '?'})`;
+  }
+  if (row.primary_model && row.model && row.primary_model !== row.model) {
+    return `切替発生 (${row.primary_model} → ${row.model})`;
+  }
+  return '正常';
+}
+
 export type AiBinding = {
   run(model: string, input: { messages: { role: string; content: string }[] }): Promise<unknown>;
 };
@@ -493,6 +504,8 @@ export type SummaryModalRow = {
   summary: string | null;
   diff_length: number | null;
   created_at: string;
+  fallback_used?: number | null;
+  primary_model?: string | null;
 };
 
 export type SlackModalView = {
@@ -537,7 +550,7 @@ export function buildSummaryModal(row: SummaryModalRow): SlackModalView {
     elements: [
       {
         type: 'mrkdwn',
-        text: `*モデル@cf :* ${row.model ?? '(不明)'}  *diff :* ${row.diff_length ?? 0}文字  *要約回 :* #${row.daily_seq} (${row.event_date})`,
+        text: `*モデル@cf :* ${row.model ?? '(不明)'}  *切替 :* ${describeModelSwitch(row)}  *diff :* ${row.diff_length ?? 0}文字  *要約回 :* #${row.daily_seq} (${row.event_date})`,
       },
     ],
   });
@@ -600,7 +613,7 @@ export function buildSummaryFallbackBlocks(row: SummaryModalRow): { text: string
   const lines = [
     `*AI要約詳細* (${prLabel})`,
     `リポジトリ: ${row.repo_full_name ?? '(不明)'}`,
-    `モデル: ${row.model ?? '(不明)'} / Diff長: ${row.diff_length ?? 0}文字`,
+    `モデル: ${row.model ?? '(不明)'} / 切替: ${describeModelSwitch(row)} / Diff長: ${row.diff_length ?? 0}文字`,
     `日時: ${row.created_at} / #${row.daily_seq} (${row.event_date})`,
     '',
     '```',
