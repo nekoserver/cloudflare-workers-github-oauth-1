@@ -5,6 +5,22 @@
 import { escapeHtml } from '../utils/html';
 import { getThemeCSS, getThemeInitScript, getThemeToggleCSS, getThemeToggleHTML, getThemeToggleScript } from '../utils/theme';
 
+export type TableStatusState = 'ok' | 'ng' | 'missing';
+
+export function resolveTableStatus(entry: { exists: boolean; rowCount: number | null }): TableStatusState {
+  if (!entry.exists) return 'missing';
+  if (entry.rowCount !== null) return 'ok';
+  return 'ng';
+}
+
+export function renderTableStatusBadge(state: TableStatusState): string {
+  switch (state) {
+    case 'ok': return '<span class="status-ok">OK</span>';
+    case 'ng': return '<span class="status-ng">NG</span>';
+    case 'missing': return '<span class="status-missing">未作成</span>';
+  }
+}
+
 export interface CommitCacheEntry {
   owner: string;
   repo: string;
@@ -185,11 +201,7 @@ export function getCacheStatusPage(user: {
       syncPolicy: 'auto' as const,
     }];
   const tableRows = statusTables.map(t => {
-    const statusIcon = !t.exists
-      ? '<span class="status-missing">未作成</span>'
-      : t.rowCount !== null
-        ? '<span class="status-ok">OK</span>'
-        : '<span class="status-ng">NG</span>';
+    const statusIcon = renderTableStatusBadge(resolveTableStatus(t));
     const count = t.exists && t.rowCount !== null ? String(t.rowCount) : '-';
     const policy = syncPolicyLabel[t.syncPolicy] || syncPolicyLabel.auto;
     const groupName = data.tableGroupMap[t.name] || '';
