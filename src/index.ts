@@ -23,7 +23,7 @@ import { getCookieValue, getCookieValues } from './utils/cookie';
 import { verifyResendWebhookSignature } from './utils/resendWebhook';
 import { verifyGitHubWebhookSignature } from './utils/githubWebhook';
 import { postSlackMessage, openSlackModal, respondToInteraction } from './utils/slack';
-import { fetchPrDiff, runSummaryPipeline, buildSlackMessage, buildSummaryModal, buildSummaryFallbackBlocks, classifySummaryResult, resolveAiModel, extractDesignDiff, sanitizeBoxDrawing, detectCommitAgentFromText, detectCommitAgentFromPrText, describeModelSwitch, WORKER_BASE_URL, DESIGN_SPEC_CHECKLIST, DEFAULT_AI_MODEL, type SummaryModalRow } from './utils/aiSummary';
+import { fetchPrDiff, runSummaryPipeline, buildSlackMessage, buildSummaryModal, buildSummaryFallbackBlocks, classifySummaryResult, resolveAiModel, extractDesignDiff, sanitizeBoxDrawing, detectCommitAgentFromText, detectCommitAgentFromPrText, describeModelSwitch, WORKER_BASE_URL, DESIGN_SPEC_CHECKLIST, DEFAULT_AI_MODEL, FALLBACK_AI_MODEL, type SummaryModalRow } from './utils/aiSummary';
 import { getSessionDurationSeconds, renewSession } from './utils/session';
 import { buildCommitAgentLogEntry } from './utils/commitAgentLog';
 import { verifySlackSignature } from './utils/slackSignature';
@@ -82,6 +82,7 @@ const STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
   { name: 'commit_agent_log', migration: '0025', description: 'コミットエージェント検出ログ', syncPolicy: 'auto' },
   { name: 'table_catalog', migration: '0026', description: 'テーブルカタログ（グループ・メタ情報）', syncPolicy: 'manual' },
   { name: 'table_column_keys', migration: '0026', description: 'カラムキー定義（PK/FK）', syncPolicy: 'manual' },
+  { name: 'group_oauth_apps', migration: '0027', description: 'グループ別OAuth App認可状況', syncPolicy: 'manual' },
 ];
 
 const REQUIRED_STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
@@ -477,6 +478,17 @@ CREATE TABLE IF NOT EXISTS table_column_keys (
 
 CREATE INDEX IF NOT EXISTS idx_table_catalog_group ON table_catalog(group_name);
 CREATE INDEX IF NOT EXISTS idx_table_column_keys_fk ON table_column_keys(fk_target_table);`,
+  '0027': `CREATE TABLE IF NOT EXISTS group_oauth_apps (
+  group_id TEXT NOT NULL,
+  app_name TEXT NOT NULL,
+  app_note TEXT NOT NULL DEFAULT '',
+  workspace_id TEXT NOT NULL DEFAULT '',
+  added_at TEXT NOT NULL,
+  PRIMARY KEY (group_id, app_name),
+  FOREIGN KEY (group_id) REFERENCES repo_groups(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_group_oauth_apps_ws ON group_oauth_apps (workspace_id);`,
 };
 
 function jsonUtf8(payload: unknown, status = 200): Response {
@@ -618,6 +630,7 @@ export const TABLE_COLUMN_KEYS: Record<string, ColumnKeyInfo> = {
   slack_interaction_log: { id: 'pk' },
   table_catalog: { table_name: 'pk' },
   table_column_keys: { table_name: 'pk+fk', column_name: 'pk' },
+  group_oauth_apps: { group_id: 'pk+fk', app_name: 'pk' },
 };
 
 export function getColumnKeyType(tableName: string, columnName: string): ColumnKeyType {
@@ -668,7 +681,7 @@ export const TABLE_GROUP_MAP: Record<string, string> = {
   email_suppression_list: 'email', email_mfa_challenges: 'email', email_audit_anomalies: 'email',
   slack_interaction_log: 'config',
   installation_permissions: 'config', repo_color_settings: 'config', repo_groups: 'config',
-  repo_group_members: 'config', table_catalog: 'config', table_column_keys: 'config',
+  repo_group_members: 'config', group_oauth_apps: 'config', table_catalog: 'config', table_column_keys: 'config',
   table_group_permissions: 'config',
 };
 
@@ -718,6 +731,7 @@ export const COLUMN_FK_TARGETS: Record<string, Record<string, string>> = {
   ai_summary_reviews: { summary_request_id: 'ai_summary_log' },
   commit_agent_log: { request_id: 'ai_summary_log' },
   repo_group_members: { group_id: 'repo_groups' },
+  group_oauth_apps: { group_id: 'repo_groups' },
   email_send_log: { source_id: 'resend_webhook_sources' },
   resend_webhook_log: { source_id: 'resend_webhook_sources' },
   email_suppression_list: { source_id: 'resend_webhook_sources', origin_webhook_log_id: 'resend_webhook_log' },
@@ -3352,7 +3366,7 @@ app.post('/webhook/github', async (c) => {
         const pipelineResult = await runSummaryPipeline({
           ai: ai as { run(model: string, input: { messages: { role: string; content: string }[] }): Promise<unknown> } | null,
           model: aiModel,
-          fallbackModel: DEFAULT_AI_MODEL,
+          fallbackModel: FALLBACK_AI_MODEL,
           title,
           description,
           trimmedDiff,
@@ -3382,7 +3396,7 @@ app.post('/webhook/github', async (c) => {
           designDiff,
           fallbackUsed: pipelineResult.fallbackUsed,
           primaryModel: aiModel,
-          fallbackModel: DEFAULT_AI_MODEL,
+          fallbackModel: FALLBACK_AI_MODEL,
           summaryModel: pipelineResult.usedModel,
           commitAgentName: commitAgentName ?? undefined,
           commitAgentVersion,
