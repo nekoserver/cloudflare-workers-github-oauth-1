@@ -28,21 +28,71 @@ const sampleRow = {
   created_at: '2026-03-28T10:00:00Z',
 };
 
-function mockDb(row: Record<string, unknown> | null) {
+function mockDb(
+  row: Record<string, unknown> | null,
+  options?: {
+    reviews?: Record<string, unknown>[];
+    throwOnReviewQuery?: boolean;
+    throwOnViewCountUpdate?: boolean;
+  },
+) {
+  const reviews = options?.reviews ?? [];
   return {
-    prepare: () => ({
-      bind: () => ({
-        first: vi.fn().mockResolvedValue(row),
-        run: vi.fn().mockResolvedValue({}),
-        all: vi.fn().mockResolvedValue({ results: [] }),
-      }),
-    }),
+    prepare: (sql: string) => {
+      if (sql.includes('FROM ai_summary_reviews')) {
+        if (options?.throwOnReviewQuery) {
+          return {
+            bind: () => ({
+              all: vi.fn().mockRejectedValue(new Error('no such table: ai_summary_reviews')),
+            }),
+          };
+        }
+        return {
+          bind: () => ({
+            all: vi.fn().mockResolvedValue({ results: reviews }),
+          }),
+        };
+      }
+      if (sql.includes('UPDATE ai_summary_log SET view_count')) {
+        if (options?.throwOnViewCountUpdate) {
+          return {
+            bind: () => ({
+              run: vi.fn().mockRejectedValue(new Error('no such column: view_count')),
+            }),
+          };
+        }
+        return {
+          bind: () => ({
+            run: vi.fn().mockResolvedValue({}),
+          }),
+        };
+      }
+      if (sql.includes('INSERT INTO ai_summary_link_access_log')) {
+        return {
+          bind: () => ({
+            run: vi.fn().mockResolvedValue({}),
+          }),
+        };
+      }
+      return {
+        bind: () => ({
+          first: vi.fn().mockResolvedValue(row),
+        }),
+      };
+    },
   };
 }
 
-function makeEnv(row: Record<string, unknown> | null = sampleRow) {
+function makeEnv(
+  row: Record<string, unknown> | null = sampleRow,
+  options?: {
+    reviews?: Record<string, unknown>[];
+    throwOnReviewQuery?: boolean;
+    throwOnViewCountUpdate?: boolean;
+  },
+) {
   return {
-    DB: mockDb(row),
+    DB: mockDb(row, options),
     GITHUB_CLIENT_ID: 'test',
     GITHUB_CLIENT_SECRET: 'test',
     JWT_SECRET: 'test-secret',
@@ -85,8 +135,11 @@ describe('/ai-summary/:id ルート統合テスト', () => {
 
   it('異常系: DBにレコードがない場合は404を返す', async () => {
     const res = await app.request('/ai-summary/nonexistent-id', {}, makeEnv(null));
+    const html = await res.text();
 
     expect(res.status).toBe(404);
+    expect(html).toContain('AI要約が見つかりません');
+    expect(html).toContain('Webhook の送信先設定');
   });
 
   it('異常系: DBバインディングがない場合は500を返す', async () => {
@@ -112,6 +165,36 @@ describe('/ai-summary/:id ルート統合テスト', () => {
 
     expect(res.status).toBe(200);
     expect(html).toContain('要約なし');
+  });
+
+  it('正常系: レビュー値が数値/nullを含んでも500にならずHTMLを返す', async () => {
+    const rowWithNullableFields = {
+      ...sampleRow,
+      event_date: null,
+      created_at: null,
+    };
+    const res = await app.request('/ai-summary/test-uuid-001', {}, makeEnv(rowWithNullableFields, {
+      reviews: [
+        { rating: 1, reviewer_name: null, comment: 12345, created_at: null },
+      ],
+    }));
+    const html = await res.text();
+
+    expect(res.status).toBe(200);
+    expect(html).toContain('<table>');
+    expect(html).toContain('<td>1</td>');
+  });
+
+  it('正常系: view_count更新/レビュー取得が失敗しても要約ページ表示は継続する', async () => {
+    const res = await app.request('/ai-summary/test-uuid-001', {}, makeEnv(sampleRow, {
+      throwOnReviewQuery: true,
+      throwOnViewCountUpdate: true,
+    }));
+    const html = await res.text();
+
+    expect(res.status).toBe(200);
+    expect(html).toContain('テスト要約');
+    expect(html).not.toContain('D1上のイメージ');
   });
 });
 

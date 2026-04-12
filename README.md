@@ -59,6 +59,13 @@ GitHub OAuth + JWT 認証の Cloudflare Workers 実装。
 | `/webhook/github` | POST | HMAC-SHA256 署名 | GitHub App Webhook 受信（installation イベント） |
 | `/webhook/resend` | POST | Svix 署名 | Resend Webhook 受信（メール配信ステータス） |
 
+#### AI要約リンク運用メモ（Slack の `/ai-summary/{request_id}`）
+
+- Slack に出る「HTMLで表示」リンクは、このワーカーの D1 (`ai_summary_log`) に保存された `request_id` を参照します。
+- そのため、**対象リポジトリのWebhook送信先がこのワーカーを向いていない**場合、リンクを開いても要約を見つけられません（404）。
+- `/ai-summary/:id` と `/view?id=...` は、補助処理（`view_count` 更新・`ai_summary_reviews` 読み込み）に失敗してもページ描画を継続し、ログに警告を残します。運用時はワーカーログで `AI summary row not found` や `Failed to load ai_summary_reviews` を確認してください。
+- さらに D1 の `ai_summary_link_access_log` にリンクアクセス時の診断情報（`request_id`, `found`, `issue_code`, `referer`, `user_agent`）を保存します。Webhook 向き先不一致の切り分けに利用できます。
+
 ### 診断
 
 | エンドポイント | メソッド | 認証 | 説明 |

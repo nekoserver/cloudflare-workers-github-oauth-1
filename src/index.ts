@@ -83,6 +83,7 @@ const STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
   { name: 'table_catalog', migration: '0026', description: 'テーブルカタログ（グループ・メタ情報）', syncPolicy: 'manual' },
   { name: 'table_column_keys', migration: '0026', description: 'カラムキー定義（PK/FK）', syncPolicy: 'manual' },
   { name: 'group_oauth_apps', migration: '0027', description: 'グループ別OAuth App認可状況', syncPolicy: 'manual' },
+  { name: 'ai_summary_link_access_log', migration: '0029', description: 'AI要約リンクアクセス監査ログ', syncPolicy: 'auto' },
 ];
 
 const REQUIRED_STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
@@ -489,6 +490,20 @@ CREATE INDEX IF NOT EXISTS idx_table_column_keys_fk ON table_column_keys(fk_targ
 );
 
 CREATE INDEX IF NOT EXISTS idx_group_oauth_apps_ws ON group_oauth_apps (workspace_id);`,
+  '0029': `CREATE TABLE IF NOT EXISTS ai_summary_link_access_log (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  route TEXT NOT NULL,
+  request_id TEXT NOT NULL,
+  found INTEGER NOT NULL DEFAULT 0,
+  issue_code TEXT NOT NULL DEFAULT 'unknown',
+  issue_detail TEXT,
+  referer TEXT,
+  user_agent TEXT,
+  created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_ai_summary_link_access_log_request ON ai_summary_link_access_log(request_id);
+CREATE INDEX IF NOT EXISTS idx_ai_summary_link_access_log_created ON ai_summary_link_access_log(created_at);`,
 };
 
 function jsonUtf8(payload: unknown, status = 200): Response {
@@ -631,6 +646,7 @@ export const TABLE_COLUMN_KEYS: Record<string, ColumnKeyInfo> = {
   table_catalog: { table_name: 'pk' },
   table_column_keys: { table_name: 'pk+fk', column_name: 'pk' },
   group_oauth_apps: { group_id: 'pk+fk', app_name: 'pk' },
+  ai_summary_link_access_log: { id: 'pk', request_id: 'idx', route: 'idx', issue_code: 'idx', created_at: 'idx' },
 };
 
 export function getColumnKeyType(tableName: string, columnName: string): ColumnKeyType {
@@ -682,8 +698,46 @@ export const TABLE_GROUP_MAP: Record<string, string> = {
   slack_interaction_log: 'config',
   installation_permissions: 'config', repo_color_settings: 'config', repo_groups: 'config',
   repo_group_members: 'config', group_oauth_apps: 'config', table_catalog: 'config', table_column_keys: 'config',
+  ai_summary_link_access_log: 'ai',
   table_group_permissions: 'config',
 };
+
+async function recordAiSummaryLinkAccess(
+  db: D1Database,
+  payload: {
+    route: '/view' | '/ai-summary/:id';
+    requestId: string;
+    found: boolean;
+    issueCode: string;
+    issueDetail?: string;
+    referer?: string | null;
+    userAgent?: string | null;
+  },
+): Promise<void> {
+  try {
+    await db.prepare(
+      `INSERT INTO ai_summary_link_access_log
+      (route, request_id, found, issue_code, issue_detail, referer, user_agent, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+    ).bind(
+      payload.route,
+      payload.requestId,
+      payload.found ? 1 : 0,
+      payload.issueCode,
+      payload.issueDetail ?? '',
+      payload.referer ?? '',
+      payload.userAgent ?? '',
+      new Date().toISOString(),
+    ).run();
+  } catch (error) {
+    logger.warn('Failed to record ai_summary_link_access_log', {
+      route: payload.route,
+      requestId: payload.requestId,
+      issueCode: payload.issueCode,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
 
 export const GROUP_LABELS: Record<string, string> = {
   auth: 'Auth / Session',
@@ -5304,22 +5358,89 @@ app.get('/view', async (c) => {
 
   const requestId = c.req.query('id');
   if (!requestId) return c.text('id parameter is required', 400);
+  const referer = c.req.header('referer') ?? '';
+  const userAgent = c.req.header('user-agent') ?? '';
 
   const row = await db.prepare(
     'SELECT request_id, daily_seq, event_date, repo_full_name, pr_number, pr_action, pr_url, model, summary, diff_length, created_at, fallback_used, primary_model FROM ai_summary_log WHERE request_id = ?'
   ).bind(requestId).first() as SummaryModalRow | null;
 
-  if (!row) return c.text('Not found', 404);
+  if (!row) {
+    logger.warn('AI summary row not found in /view', {
+      requestId,
+      possibleCause: 'webhook_not_configured_or_summary_not_stored_in_this_worker',
+    });
+    await recordAiSummaryLinkAccess(db, {
+      route: '/view',
+      requestId,
+      found: false,
+      issueCode: 'summary_not_found',
+      issueDetail: 'ai_summary_log row not found',
+      referer,
+      userAgent,
+    });
+    return c.html(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>AI要約が見つかりません</title></head><body style="font-family:system-ui,sans-serif;max-width:800px;margin:2rem auto;padding:0 1rem">
+<h1>AI要約が見つかりません</h1>
+<p>Request ID: <code>${requestId}</code></p>
+<p>このワーカーの D1 に要約レコードがありません。Webhook の送信先設定が別ワーカーを向いている場合や、要約保存前に通知だけ行われたケースで発生します。</p>
+</body></html>`, 404);
+  }
 
-  await db.prepare(
-    'UPDATE ai_summary_log SET view_count = view_count + 1 WHERE request_id = ?'
-  ).bind(requestId).run();
+  try {
+    await db.prepare(
+      'UPDATE ai_summary_log SET view_count = view_count + 1 WHERE request_id = ?'
+    ).bind(requestId).run();
+  } catch (error) {
+    logger.warn('Failed to increment ai_summary_log.view_count in /view', {
+      requestId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    await recordAiSummaryLinkAccess(db, {
+      route: '/view',
+      requestId,
+      found: true,
+      issueCode: 'view_count_update_failed',
+      issueDetail: error instanceof Error ? error.message : String(error),
+      referer,
+      userAgent,
+    });
+  }
 
-  const reviews = await db.prepare(
-    'SELECT rating, reviewer_type, reviewer_name, comment, created_at FROM ai_summary_reviews WHERE summary_request_id = ? ORDER BY created_at DESC'
-  ).bind(requestId).all();
+  let reviews: { results?: unknown[] } = { results: [] };
+  try {
+    reviews = await db.prepare(
+      'SELECT rating, reviewer_type, reviewer_name, comment, created_at FROM ai_summary_reviews WHERE summary_request_id = ? ORDER BY created_at DESC'
+    ).bind(requestId).all();
+  } catch (error) {
+    logger.warn('Failed to load ai_summary_reviews in /view (fallback to empty reviews)', {
+      requestId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    await recordAiSummaryLinkAccess(db, {
+      route: '/view',
+      requestId,
+      found: true,
+      issueCode: 'review_query_failed',
+      issueDetail: error instanceof Error ? error.message : String(error),
+      referer,
+      userAgent,
+    });
+  }
 
-  const escHtml = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  await recordAiSummaryLinkAccess(db, {
+    route: '/view',
+    requestId,
+    found: true,
+    issueCode: 'ok',
+    referer,
+    userAgent,
+  });
+
+  const escHtml = (value: unknown) => String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
   const summaryText = row.summary ? sanitizeBoxDrawing(row.summary) : '(要約なし)';
   const prLink = row.pr_url ? `<a href="${escHtml(row.pr_url)}">PR #${row.pr_number}</a>` : `PR #${row.pr_number ?? '?'}`;
 
@@ -5364,21 +5485,88 @@ app.get('/ai-summary/:id', async (c) => {
   if (!db) return c.text('DB not available', 500);
 
   const requestId = c.req.param('id');
+  const referer = c.req.header('referer') ?? '';
+  const userAgent = c.req.header('user-agent') ?? '';
   const row = await db.prepare(
     'SELECT request_id, daily_seq, event_date, repo_full_name, pr_number, pr_action, pr_url, model, summary, diff_length, created_at, fallback_used, primary_model FROM ai_summary_log WHERE request_id = ?'
   ).bind(requestId).first() as SummaryModalRow | null;
 
-  if (!row) return c.text('Not found', 404);
+  if (!row) {
+    logger.warn('AI summary row not found in /ai-summary/:id', {
+      requestId,
+      possibleCause: 'webhook_not_configured_or_summary_not_stored_in_this_worker',
+    });
+    await recordAiSummaryLinkAccess(db, {
+      route: '/ai-summary/:id',
+      requestId,
+      found: false,
+      issueCode: 'summary_not_found',
+      issueDetail: 'ai_summary_log row not found',
+      referer,
+      userAgent,
+    });
+    return c.html(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>AI要約が見つかりません</title></head><body style="font-family:system-ui,sans-serif;max-width:800px;margin:2rem auto;padding:0 1rem">
+<h1>AI要約が見つかりません</h1>
+<p>Request ID: <code>${requestId}</code></p>
+<p>このワーカーの D1 に要約レコードがありません。Webhook の送信先設定が別ワーカーを向いている場合や、要約保存前に通知だけ行われたケースで発生します。</p>
+</body></html>`, 404);
+  }
 
-  await db.prepare(
-    'UPDATE ai_summary_log SET view_count = view_count + 1 WHERE request_id = ?'
-  ).bind(requestId).run();
+  try {
+    await db.prepare(
+      'UPDATE ai_summary_log SET view_count = view_count + 1 WHERE request_id = ?'
+    ).bind(requestId).run();
+  } catch (error) {
+    logger.warn('Failed to increment ai_summary_log.view_count in /ai-summary/:id', {
+      requestId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    await recordAiSummaryLinkAccess(db, {
+      route: '/ai-summary/:id',
+      requestId,
+      found: true,
+      issueCode: 'view_count_update_failed',
+      issueDetail: error instanceof Error ? error.message : String(error),
+      referer,
+      userAgent,
+    });
+  }
 
-  const reviews = await db.prepare(
-    'SELECT rating, reviewer_type, reviewer_name, comment, created_at FROM ai_summary_reviews WHERE summary_request_id = ? ORDER BY created_at DESC'
-  ).bind(requestId).all();
+  let reviews: { results?: unknown[] } = { results: [] };
+  try {
+    reviews = await db.prepare(
+      'SELECT rating, reviewer_type, reviewer_name, comment, created_at FROM ai_summary_reviews WHERE summary_request_id = ? ORDER BY created_at DESC'
+    ).bind(requestId).all();
+  } catch (error) {
+    logger.warn('Failed to load ai_summary_reviews in /ai-summary/:id (fallback to empty reviews)', {
+      requestId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    await recordAiSummaryLinkAccess(db, {
+      route: '/ai-summary/:id',
+      requestId,
+      found: true,
+      issueCode: 'review_query_failed',
+      issueDetail: error instanceof Error ? error.message : String(error),
+      referer,
+      userAgent,
+    });
+  }
 
-  const escHtml = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  await recordAiSummaryLinkAccess(db, {
+    route: '/ai-summary/:id',
+    requestId,
+    found: true,
+    issueCode: 'ok',
+    referer,
+    userAgent,
+  });
+
+  const escHtml = (value: unknown) => String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
   const summaryText = row.summary ? sanitizeBoxDrawing(row.summary) : '(要約なし)';
   const prLink = row.pr_url ? `<a href="${escHtml(row.pr_url)}">PR #${row.pr_number}</a>` : `PR #${row.pr_number ?? '?'}`;
 
