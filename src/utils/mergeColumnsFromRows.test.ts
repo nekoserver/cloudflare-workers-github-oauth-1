@@ -197,4 +197,14 @@ describe('buildGroupErData', () => {
     expect(COLUMN_FK_TARGETS.commit_agent_log).toBeDefined();
     expect(COLUMN_FK_TARGETS.commit_agent_log.request_id).toBe('ai_summary_log');
   });
+
+  it('COLUMN_FK_TARGETS に repo_color_settings.repo_name / repo_group_members.repo_name の論理FKが登録されている', () => {
+    expect(COLUMN_FK_TARGETS.repo_color_settings).toBeDefined();
+    expect(COLUMN_FK_TARGETS.repo_color_settings.repo_name).toBe('installation_permissions');
+    expect(COLUMN_FK_TARGETS.repo_group_members.repo_name).toBe('installation_permissions');
+  });
+
+  it('TABLE_GROUP_MAP に table_group_permissions が登録されていない（マイグレーション未作成のため）', () => {
+    expect(TABLE_GROUP_MAP.table_group_permissions).toBeUndefined();
+  });
 });
