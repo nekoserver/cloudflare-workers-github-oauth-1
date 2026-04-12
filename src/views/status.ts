@@ -1645,6 +1645,14 @@ export function getCacheStatusPage(user: {
               <div class="tooltip-section"><span class="tooltip-label">メリット</span><br>フルテーブルスキャンを回避し、O(log n) のB-Tree検索で高速にデータを取得。書き込み時のオーバーヘッドとのトレードオフ。</div>
             </div>
           </div>
+          <div class="uml-legend-item has-tooltip" tabindex="0"><div class="uml-legend-color" style="background:transparent; border:1.5px dashed #ed8936; width:12px; height:12px; box-sizing:border-box; border-radius:3px;"></div>論理FK — 論理外部キー
+            <div class="key-tooltip">
+              <strong>論理FK（Logical Foreign Key / 論理外部キー）</strong>
+              <div class="tooltip-section"><span class="tooltip-label">用法</span><br>DBレベルの <code>FOREIGN KEY</code> 制約は貼られていないが、アプリケーション上は他テーブルのカラムを参照していることが明確なカラム。ER図上は破線の関連線で表現する。</div>
+              <div class="tooltip-section"><span class="tooltip-label">使用場面</span><br>例: <code>commit_agent_log.request_id</code> / <code>ai_summary_link_access_log.request_id</code> は <code>ai_summary_log.request_id</code> を参照するが、CASCADE削除や書き込み順序の制約を避けるため DB 制約は設けていない。同名カラムで緩く繋がる監査ログ・キャッシュ系テーブルで典型的。</div>
+              <div class="tooltip-section"><span class="tooltip-label">メリット</span><br>書き込みタイミングが親子で独立しているテーブルでも JOIN 可能な関連として明示できる。CASCADE 連鎖の副作用を避けつつ、テーブル間の意味的な参照関係をドキュメント化できる。</div>
+            </div>
+          </div>
           <div class="uml-legend-item" style="margin-left:auto; color:var(--text-faint)">ドラッグで移動可 <button type="button" class="uml-panel-toggle" id="umlPanelToggle">close</button></div>
         </div>
         <div class="uml-panel-body" id="umlPanelBody">
@@ -1748,6 +1756,14 @@ export function getCacheStatusPage(user: {
               <div class="tooltip-section"><span class="tooltip-label">用法</span><br>検索・ソート・フィルタリングの頻度が高いカラムに付与し、クエリの実行速度を向上させる。</div>
               <div class="tooltip-section"><span class="tooltip-label">使用場面</span><br>WHERE句やORDER BY句で頻繁に参照されるカラム（日付、ステータス等）。</div>
               <div class="tooltip-section"><span class="tooltip-label">メリット</span><br>フルテーブルスキャンを回避し、O(log n) のB-Tree検索で高速にデータを取得。</div>
+            </div>
+          </div>
+          <div class="uml-legend-item has-tooltip" tabindex="0"><div class="uml-legend-color" style="background:transparent; border:1.5px dashed #ed8936; width:12px; height:12px; box-sizing:border-box; border-radius:3px;"></div>論理FK — 論理外部キー
+            <div class="key-tooltip">
+              <strong>論理FK（Logical Foreign Key / 論理外部キー）</strong>
+              <div class="tooltip-section"><span class="tooltip-label">用法</span><br>DBレベルの <code>FOREIGN KEY</code> 制約は貼られていないが、アプリケーション上は他テーブルのカラムを参照していることが明確なカラム。ER図上は破線の関連線で表現する。</div>
+              <div class="tooltip-section"><span class="tooltip-label">使用場面</span><br>例: <code>commit_agent_log.request_id</code> / <code>ai_summary_link_access_log.request_id</code> は <code>ai_summary_log.request_id</code> を参照するが、CASCADE削除や書き込み順序の制約を避けるため DB 制約は設けていない。同名カラムで緩く繋がる監査ログ・キャッシュ系テーブルで典型的。</div>
+              <div class="tooltip-section"><span class="tooltip-label">メリット</span><br>書き込みタイミングが親子で独立しているテーブルでも JOIN 可能な関連として明示できる。CASCADE 連鎖の副作用を避けつつ、テーブル間の意味的な参照関係をドキュメント化できる。</div>
             </div>
           </div>
           <div class="uml-legend-item" style="margin-left:auto; color:var(--text-faint)">ドラッグで移動可 <button type="button" class="uml-panel-toggle" id="filteredUmlPanelToggle">close</button></div>
