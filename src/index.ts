@@ -784,6 +784,7 @@ export const COLUMN_FK_TARGETS: Record<string, Record<string, string>> = {
   commit_search_repo_stats: { search_history_id: 'commit_search_history' },
   ai_summary_reviews: { summary_request_id: 'ai_summary_log' },
   commit_agent_log: { request_id: 'ai_summary_log' },
+  ai_summary_link_access_log: { request_id: 'ai_summary_log' },
   repo_group_members: { group_id: 'repo_groups' },
   group_oauth_apps: { group_id: 'repo_groups' },
   email_send_log: { source_id: 'resend_webhook_sources' },
