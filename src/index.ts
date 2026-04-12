@@ -17,6 +17,8 @@ import { getRepositoriesPage } from './views/repositories';
 import { getUserInfoPage } from './views/userinfo';
 import { getMarkdownPreviewPage } from './views/markdown-preview';
 import { getCacheStatusPage, CacheStatusData, TableStatusEntry, UserContextInfo, RepoColorEntry, RepoGroupEntry } from './views/status';
+import { renderColumnStatsHtml } from './views/columnStats';
+import { computeColumnRelationStats, type TableSchema, type Relation } from './utils/columnRelationStats';
 import { ensureDefaultWorkspace, getCurrentWorkspace, getUserWorkspaces, switchWorkspace } from './utils/workspace';
 import { getGitHubAccessToken, getGitHubLatestCommit, getGitHubCommitCount, getGitHubCommits, getGitHubRepoOpenIssuesCount, getGitHubRepoCommitsByMonth, getGitHubRepoCommitsByDate, getGitHubTokenScopes, getGitHubUser, getGitHubUserEmail, getGitHubUserRepos, createGitHubRepo, GitHubTokenScopesError, buildRepoInstallationPermissionsMap, RepoInstallationPermissions, getGitHubUserInstallationsWithDiag, getGitHubInstallationRepos, getExternalServiceLinkedRepos, getSlackLinkedReposByWebhooks, CommitDetail } from './utils/github';
 import { getCookieValue, getCookieValues } from './utils/cookie';
@@ -699,7 +701,9 @@ export const TABLE_GROUP_MAP: Record<string, string> = {
   installation_permissions: 'config', repo_color_settings: 'config', repo_groups: 'config',
   repo_group_members: 'config', group_oauth_apps: 'config', table_catalog: 'config', table_column_keys: 'config',
   ai_summary_link_access_log: 'ai',
-  table_group_permissions: 'config',
+  // NOTE: table_group_permissions は SPEC で「将来追加」とされマイグレーション未作成。
+  // TABLE_GROUP_MAP に登録するとフィルタ UI に空カードで現れてしまうため、
+  // マイグレーション (0030 以降) で実際に CREATE TABLE されるまでここには登録しない。
 };
 
 async function recordAiSummaryLinkAccess(
@@ -785,7 +789,7 @@ export const COLUMN_FK_TARGETS: Record<string, Record<string, string>> = {
   ai_summary_reviews: { summary_request_id: 'ai_summary_log' },
   commit_agent_log: { request_id: 'ai_summary_log' },
   ai_summary_link_access_log: { request_id: 'ai_summary_log' },
-  repo_group_members: { group_id: 'repo_groups' },
+  repo_group_members: { group_id: 'repo_groups', repo_name: 'installation_permissions' },
   group_oauth_apps: { group_id: 'repo_groups' },
   email_send_log: { source_id: 'resend_webhook_sources' },
   resend_webhook_log: { source_id: 'resend_webhook_sources' },
@@ -793,6 +797,8 @@ export const COLUMN_FK_TARGETS: Record<string, Record<string, string>> = {
   email_mfa_challenges: { source_id: 'resend_webhook_sources' },
   email_audit_anomalies: { source_id: 'resend_webhook_sources' },
   table_column_keys: { table_name: 'table_catalog' },
+  // 論理FK: repo_name は installation_permissions のリポジトリ識別を参照
+  repo_color_settings: { repo_name: 'installation_permissions' },
 };
 
 export function buildGroupErData(
@@ -2668,12 +2674,116 @@ app.get('/api/status/schema', authMiddleware, async (c) => {
       tables.push({ name: tName, cols });
     }
 
+    // 論理FK (COLUMN_FK_TARGETS) をマージ。DB制約のないカラム間参照もER図に破線で描画できるようにする。
+    for (const [fromTable, colMap] of Object.entries(COLUMN_FK_TARGETS)) {
+      for (const [fromCol, toTable] of Object.entries(colMap)) {
+        const relKey = `${fromTable}.${fromCol}->${toTable}.__logical__`;
+        if (seenRelations.has(relKey)) continue;
+        // 既にDB-FKで同じ関係が登録されていれば重複させない
+        const dbFkKeyPrefix = `${fromTable}.${fromCol}->${toTable}.`;
+        let dupExists = false;
+        for (const existing of seenRelations) {
+          if (existing.startsWith(dbFkKeyPrefix)) {
+            dupExists = true;
+            break;
+          }
+        }
+        if (dupExists) continue;
+        seenRelations.add(relKey);
+        // toCol は fromCol と同名前提（異名FKはDB制約で既に拾われているはず）
+        relations.push([fromTable, fromCol, toTable, fromCol, '論理FK']);
+      }
+    }
+
     return jsonUtf8({ tables, relations });
   } catch (error) {
     logger.warn('Failed to fetch schema', {
       error: error instanceof Error ? error.message : 'Unknown error',
     });
     return jsonUtf8({ error: 'Failed to fetch schema' }, 500);
+  }
+});
+
+/**
+ * カラム名別リレーション統計 HTML
+ * 同名カラムがN個のテーブルに出現 → 最小N-1本の矢印が期待されるが、
+ * 実際にER図に描かれている本数と比較する。
+ */
+app.get('/status/column-stats', authMiddleware, async (c) => {
+  const db = c.env.DB;
+  if (!db) {
+    return new Response('DB not available', {
+      status: 500,
+      headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+    });
+  }
+
+  try {
+    const tablesResult = await db
+      .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_cf_%' AND name NOT LIKE 'd1_%' ORDER BY name")
+      .all<{ name: string }>();
+    const tableNames = (tablesResult.results ?? []).map((r) => r.name);
+
+    const tables: TableSchema[] = [];
+    const relations: Relation[] = [];
+    const seenRelations = new Set<string>();
+
+    for (const tName of tableNames) {
+      const colsResult = await db
+        .prepare(`PRAGMA table_info(${tName})`)
+        .all<{ name: string; type: string }>();
+      const cols = (colsResult.results ?? []).map((col) => ({
+        name: col.name,
+        type: col.type || 'TEXT',
+        keys: [] as string[],
+      }));
+
+      const fkResult = await db
+        .prepare(`PRAGMA foreign_key_list(${tName})`)
+        .all<{ table: string; from: string; to: string }>();
+      for (const fk of fkResult.results ?? []) {
+        const relKey = `${tName}.${fk.from}->${fk.table}.${fk.to}`;
+        if (!seenRelations.has(relKey)) {
+          seenRelations.add(relKey);
+          relations.push([tName, fk.from, fk.table, fk.to, '多:1']);
+        }
+      }
+
+      tables.push({ name: tName, cols });
+    }
+
+    // 論理FK (COLUMN_FK_TARGETS) もリレーションに合流
+    for (const [fromTable, cols] of Object.entries(COLUMN_FK_TARGETS)) {
+      for (const [fromCol, toTable] of Object.entries(cols)) {
+        const relKey = `${fromTable}.${fromCol}->${toTable}`;
+        const uniqueKey = `${relKey}__logical`;
+        if (!seenRelations.has(uniqueKey)) {
+          seenRelations.add(uniqueKey);
+          relations.push([fromTable, fromCol, toTable, fromCol, '論理FK']);
+        }
+      }
+    }
+
+    const stats = computeColumnRelationStats(tables, relations);
+    const html = renderColumnStatsHtml({
+      stats,
+      totalTables: tables.length,
+      totalRelations: relations.length,
+      generatedAt: new Date().toISOString(),
+    });
+
+    return new Response(html, {
+      status: 200,
+      headers: { 'Content-Type': 'text/html; charset=utf-8' },
+    });
+  } catch (error) {
+    logger.warn('Failed to render column-stats', {
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    return new Response('Failed to render column-stats', {
+      status: 500,
+      headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+    });
   }
 });
 
