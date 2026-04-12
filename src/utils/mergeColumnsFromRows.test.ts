@@ -130,11 +130,13 @@ describe('buildGroupErData', () => {
     ai_summary_log: 'AI要約ログ',
     ai_summary_reviews: 'AI要約レビュー',
     commit_agent_log: 'コミットエージェント検出ログ',
+    ai_summary_link_access_log: 'AI要約リンクアクセス監査ログ',
   };
   const pragmaCols: Record<string, string[]> = {
     ai_summary_log: ['id', 'request_id', 'summary'],
     ai_summary_reviews: ['id', 'summary_request_id', 'rating'],
     commit_agent_log: ['id', 'request_id', 'detected_agent_name'],
+    ai_summary_link_access_log: ['id', 'route', 'request_id', 'found', 'issue_code', 'created_at'],
   };
 
   it('指定テーブルと同グループの全テーブルを返す', () => {
@@ -174,5 +176,25 @@ describe('buildGroupErData', () => {
     const commitAgentTable = result!.tables.find((t) => t.tableName === 'commit_agent_log')!;
     const requestIdCol = commitAgentTable.columns.find((c) => c.name === 'request_id')!;
     expect(requestIdCol.fkTarget).toBe('ai_summary_log');
+  });
+
+  it('ai_summary_link_access_log.request_id のFK先が ai_summary_log に解決される', () => {
+    const result = buildGroupErData('ai_summary_link_access_log', TABLE_GROUP_MAP, descriptions, TABLE_COLUMN_KEYS, COLUMN_FK_TARGETS, pragmaCols);
+    expect(result).not.toBeNull();
+    expect(result!.groupName).toBe('ai');
+    expect(result!.tables.map((t) => t.tableName)).toContain('ai_summary_link_access_log');
+    const accessLogTable = result!.tables.find((t) => t.tableName === 'ai_summary_link_access_log')!;
+    const requestIdCol = accessLogTable.columns.find((c) => c.name === 'request_id')!;
+    expect(requestIdCol.fkTarget).toBe('ai_summary_log');
+  });
+
+  it('COLUMN_FK_TARGETS に ai_summary_link_access_log.request_id が登録されている', () => {
+    expect(COLUMN_FK_TARGETS.ai_summary_link_access_log).toBeDefined();
+    expect(COLUMN_FK_TARGETS.ai_summary_link_access_log.request_id).toBe('ai_summary_log');
+  });
+
+  it('COLUMN_FK_TARGETS に commit_agent_log.request_id が登録されている', () => {
+    expect(COLUMN_FK_TARGETS.commit_agent_log).toBeDefined();
+    expect(COLUMN_FK_TARGETS.commit_agent_log.request_id).toBe('ai_summary_log');
   });
 });

@@ -2616,13 +2616,21 @@ export function getCacheStatusPage(user: {
               keys.push(col.keyType);
             }
           }
+          // DB制約としてのFKがなくても COLUMN_FK_TARGETS で論理FKが宣言されていれば
+          // FK バッジを表示して参照先テーブルとの関係を示す
+          if (col.fkTarget && keys.indexOf('fk') === -1) {
+            keys.push('fk');
+          }
           cols.push({ name: col.name, type: '', keys: keys });
         }
         umlTables.push({ name: srcTable.tableName, cols: cols, x: 0, y: 0 });
       }
 
+      // FK参照先のカラムが参照先テーブルのPK (id) と異なる場合のマッピング
       var fkTargetColMap = {
         'ai_summary_reviews.summary_request_id': 'request_id',
+        'commit_agent_log.request_id': 'request_id',
+        'ai_summary_link_access_log.request_id': 'request_id',
         'table_column_keys.table_name': 'table_name'
       };
 
@@ -2632,7 +2640,9 @@ export function getCacheStatusPage(user: {
         var tbl = erData.tables[ti];
         for (var ci = 0; ci < tbl.columns.length; ci++) {
           var column = tbl.columns[ci];
-          if ((!column.keyType || column.keyType.indexOf('fk') === -1) || !column.fkTarget || !tableNameSet[column.fkTarget]) continue;
+          // fkTarget が解決されている列は、keyType に 'fk' が含まれていなくても
+          // 論理FK (COLUMN_FK_TARGETS) として関係線を描画する
+          if (!column.fkTarget || !tableNameSet[column.fkTarget]) continue;
           var relKey = tbl.tableName + '.' + column.name + '->' + column.fkTarget;
           if (relationSet[relKey]) continue;
           relationSet[relKey] = true;
