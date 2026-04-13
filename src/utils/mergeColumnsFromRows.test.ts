@@ -207,4 +207,30 @@ describe('buildGroupErData', () => {
   it('TABLE_GROUP_MAP に table_group_permissions が登録されていない（マイグレーション未作成のため）', () => {
     expect(TABLE_GROUP_MAP.table_group_permissions).toBeUndefined();
   });
+
+  it('COLUMN_FK_TARGETS で user_id の論理FKが user_sessions を指している', () => {
+    // user_sessions.user_id が UNIQUE 制約付きで実質の users テーブル。
+    // 他テーブルの user_id は全て user_sessions.user_id を参照する論理FK。
+    expect(COLUMN_FK_TARGETS.team_members.user_id).toBe('user_sessions');
+    expect(COLUMN_FK_TARGETS.cache_stats.user_id).toBe('user_sessions');
+    expect(COLUMN_FK_TARGETS.cloudflare_setup_pending.user_id).toBe('user_sessions');
+    expect(COLUMN_FK_TARGETS.commit_search_history.user_id).toBe('user_sessions');
+    expect(COLUMN_FK_TARGETS.email_mfa_challenges.user_id).toBe('user_sessions');
+  });
+
+  it('COLUMN_FK_TARGETS で target_user_id (email_audit_anomalies) が user_sessions を指している', () => {
+    // 異名FK: target_user_id は意味的には user_id と同じ
+    expect(COLUMN_FK_TARGETS.email_audit_anomalies.target_user_id).toBe('user_sessions');
+  });
+
+  it('COLUMN_FK_TARGETS で workspace_id の論理FKが workspaces を指している', () => {
+    // workspaces.id (PK) が権威ソース。他テーブルの workspace_id は全てそれを参照。
+    expect(COLUMN_FK_TARGETS.user_sessions.current_workspace_id).toBe('workspaces');
+    expect(COLUMN_FK_TARGETS.commit_calendar_cache.workspace_id).toBe('workspaces');
+    expect(COLUMN_FK_TARGETS.commit_list_cache.workspace_id).toBe('workspaces');
+    expect(COLUMN_FK_TARGETS.repo_color_settings.workspace_id).toBe('workspaces');
+    expect(COLUMN_FK_TARGETS.repo_groups.workspace_id).toBe('workspaces');
+    expect(COLUMN_FK_TARGETS.repo_group_members.workspace_id).toBe('workspaces');
+    expect(COLUMN_FK_TARGETS.group_oauth_apps.workspace_id).toBe('workspaces');
+  });
 });

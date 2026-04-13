@@ -5,6 +5,7 @@ import {
   computeColumnRelationStats,
   getMultiTableColumns,
   findMissingRelations,
+  verifyColumnStats,
   type TableSchema,
   type Relation,
 } from './columnRelationStats';
@@ -127,5 +128,71 @@ describe('findMissingRelations', () => {
     const stats = computeColumnRelationStats(tables, rels);
     const missing = findMissingRelations(stats);
     expect(missing).toEqual([]);
+  });
+});
+
+describe('verifyColumnStats', () => {
+  const tables: TableSchema[] = [
+    { name: 't1', cols: [{ name: 'id' }, { name: 'repo_name' }, { name: 'user_id' }] },
+    { name: 't2', cols: [{ name: 'id' }, { name: 'repo_name' }, { name: 'user_id' }] },
+    { name: 't3', cols: [{ name: 'id' }, { name: 'repo_name' }] },
+    { name: 't4', cols: [{ name: 'unique_col' }] },
+  ];
+
+  it('技術カラム (id) は technical 分類で acceptable', () => {
+    const stats = computeColumnRelationStats(tables, []);
+    const result = verifyColumnStats(stats, [], []);
+    const id = result.find((r) => r.columnName === 'id')!;
+    expect(id.classification).toBe('technical');
+    expect(id.acceptable).toBe(true);
+  });
+
+  it('物理FK が存在するカラムは physical-fk 分類', () => {
+    const stats = computeColumnRelationStats(tables, []);
+    const physRels: Relation[] = [
+      ['t1', 'repo_name', 't2', 'repo_name', '多:多'],
+    ];
+    const result = verifyColumnStats(stats, physRels, []);
+    const repoName = result.find((r) => r.columnName === 'repo_name')!;
+    expect(repoName.classification).toBe('physical-fk');
+    expect(repoName.physicalFkCount).toBe(1);
+    expect(repoName.acceptable).toBe(true);
+  });
+
+  it('論理FKのみのカラムは logical-fk-only 分類で acceptable', () => {
+    const stats = computeColumnRelationStats(tables, []);
+    const logRels: Relation[] = [
+      ['t1', 'repo_name', 't2', 'repo_name', '論理FK'],
+    ];
+    const result = verifyColumnStats(stats, [], logRels);
+    const repoName = result.find((r) => r.columnName === 'repo_name')!;
+    expect(repoName.classification).toBe('logical-fk-only');
+    expect(repoName.logicalFkCount).toBe(1);
+    expect(repoName.acceptable).toBe(true);
+  });
+
+  it('物理FKも論理FKも無いドメインカラムは unmapped 分類で acceptable=false', () => {
+    const stats = computeColumnRelationStats(tables, []);
+    const result = verifyColumnStats(stats, [], []);
+    const userId = result.find((r) => r.columnName === 'user_id')!;
+    expect(userId.classification).toBe('unmapped');
+    expect(userId.acceptable).toBe(false);
+  });
+
+  it('1テーブルにしか出現しないカラムは singleton 分類', () => {
+    const stats = computeColumnRelationStats(tables, []);
+    const result = verifyColumnStats(stats, [], []);
+    const unique = result.find((r) => r.columnName === 'unique_col')!;
+    expect(unique.classification).toBe('singleton');
+    expect(unique.acceptable).toBe(true);
+  });
+
+  it('注釈 (annotation) が全カラムで空でない文字列', () => {
+    const stats = computeColumnRelationStats(tables, []);
+    const result = verifyColumnStats(stats, [], []);
+    for (const r of result) {
+      expect(r.annotation).toBeTypeOf('string');
+      expect(r.annotation.length).toBeGreaterThan(0);
+    }
   });
 });
