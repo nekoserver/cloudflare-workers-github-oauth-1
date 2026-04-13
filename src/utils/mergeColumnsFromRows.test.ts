@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { mergeColumnsFromRows, getColumnKeyType, isAiSummaryLinkColumn, isFilterableColumn, getFilterableColumns, buildGroupErData, TABLE_GROUP_MAP, TABLE_COLUMN_KEYS, COLUMN_FK_TARGETS } from '../index';
+import { mergeColumnsFromRows, getColumnKeyType, isAiSummaryLinkColumn, isFilterableColumn, getFilterableColumns, buildGroupErData, TABLE_GROUP_MAP, TABLE_COLUMN_KEYS, COLUMN_FK_TARGETS, resolveLogicalFkTargetCol } from '../index';
 
 describe('mergeColumnsFromRows', () => {
   it('rowsが空なら元のカラムをそのまま返す', () => {
@@ -232,5 +232,40 @@ describe('buildGroupErData', () => {
     expect(COLUMN_FK_TARGETS.repo_groups.workspace_id).toBe('workspaces');
     expect(COLUMN_FK_TARGETS.repo_group_members.workspace_id).toBe('workspaces');
     expect(COLUMN_FK_TARGETS.group_oauth_apps.workspace_id).toBe('workspaces');
+  });
+
+  it('resolveLogicalFkTargetCol が異名FKの参照先カラムを正しく解決する', () => {
+    // workspace_id 系は workspaces.id を参照
+    expect(resolveLogicalFkTargetCol('user_sessions', 'current_workspace_id')).toBe('id');
+    expect(resolveLogicalFkTargetCol('commit_calendar_cache', 'workspace_id')).toBe('id');
+    expect(resolveLogicalFkTargetCol('commit_list_cache', 'workspace_id')).toBe('id');
+    expect(resolveLogicalFkTargetCol('repo_color_settings', 'workspace_id')).toBe('id');
+    expect(resolveLogicalFkTargetCol('repo_groups', 'workspace_id')).toBe('id');
+    expect(resolveLogicalFkTargetCol('repo_group_members', 'workspace_id')).toBe('id');
+    expect(resolveLogicalFkTargetCol('group_oauth_apps', 'workspace_id')).toBe('id');
+    // user_id 系は user_sessions.user_id (UK) を参照
+    expect(resolveLogicalFkTargetCol('team_members', 'user_id')).toBe('user_id');
+    expect(resolveLogicalFkTargetCol('cache_stats', 'user_id')).toBe('user_id');
+    expect(resolveLogicalFkTargetCol('cloudflare_setup_pending', 'user_id')).toBe('user_id');
+    expect(resolveLogicalFkTargetCol('commit_search_history', 'user_id')).toBe('user_id');
+    expect(resolveLogicalFkTargetCol('email_mfa_challenges', 'user_id')).toBe('user_id');
+    // target_user_id は異名FKとして user_sessions.user_id を参照
+    expect(resolveLogicalFkTargetCol('email_audit_anomalies', 'target_user_id')).toBe('user_id');
+    // 異名FK: source_id → resend_webhook_sources.id
+    expect(resolveLogicalFkTargetCol('email_send_log', 'source_id')).toBe('id');
+    expect(resolveLogicalFkTargetCol('resend_webhook_log', 'source_id')).toBe('id');
+    // 異名FK: group_id → repo_groups.id
+    expect(resolveLogicalFkTargetCol('repo_group_members', 'group_id')).toBe('id');
+    expect(resolveLogicalFkTargetCol('group_oauth_apps', 'group_id')).toBe('id');
+    // 異名FK: request_id → ai_summary_log.id
+    expect(resolveLogicalFkTargetCol('commit_agent_log', 'request_id')).toBe('id');
+    expect(resolveLogicalFkTargetCol('ai_summary_link_access_log', 'request_id')).toBe('id');
+    // 同名FK: repo_name → installation_permissions.repo_name (override 無し)
+    expect(resolveLogicalFkTargetCol('repo_color_settings', 'repo_name')).toBe('repo_name');
+    expect(resolveLogicalFkTargetCol('repo_group_members', 'repo_name')).toBe('repo_name');
+    // 同名FK: table_name → table_catalog.table_name (override 無し)
+    expect(resolveLogicalFkTargetCol('table_column_keys', 'table_name')).toBe('table_name');
+    // 未登録カラムは同名にフォールバック
+    expect(resolveLogicalFkTargetCol('unknown_table', 'some_col')).toBe('some_col');
   });
 });
