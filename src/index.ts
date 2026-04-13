@@ -18,7 +18,7 @@ import { getUserInfoPage } from './views/userinfo';
 import { getMarkdownPreviewPage } from './views/markdown-preview';
 import { getCacheStatusPage, CacheStatusData, TableStatusEntry, UserContextInfo, RepoColorEntry, RepoGroupEntry } from './views/status';
 import { renderColumnStatsHtml } from './views/columnStats';
-import { computeColumnRelationStats, type TableSchema, type Relation } from './utils/columnRelationStats';
+import { computeColumnRelationStats, verifyColumnStats, type TableSchema, type Relation } from './utils/columnRelationStats';
 import { ensureDefaultWorkspace, getCurrentWorkspace, getUserWorkspaces, switchWorkspace } from './utils/workspace';
 import { getGitHubAccessToken, getGitHubLatestCommit, getGitHubCommitCount, getGitHubCommits, getGitHubRepoOpenIssuesCount, getGitHubRepoCommitsByMonth, getGitHubRepoCommitsByDate, getGitHubTokenScopes, getGitHubUser, getGitHubUserEmail, getGitHubUserRepos, createGitHubRepo, GitHubTokenScopesError, buildRepoInstallationPermissionsMap, RepoInstallationPermissions, getGitHubUserInstallationsWithDiag, getGitHubInstallationRepos, getExternalServiceLinkedRepos, getSlackLinkedReposByWebhooks, CommitDetail } from './utils/github';
 import { getCookieValue, getCookieValues } from './utils/cookie';
@@ -783,22 +783,60 @@ export interface GroupErData {
  * table_column_keys がDBに存在しない場合のフォールバック。
  */
 export const COLUMN_FK_TARGETS: Record<string, Record<string, string>> = {
+  // ========================================================================
+  // 認証・ワークスペース系
+  //  user_sessions.user_id (UNIQUE) が実質的な users テーブル。
+  //  workspaces.id (PK) が workspace の権威ソース。
+  //  チェーン: user_id → team_members.team_id → teams ← workspaces ← data tables
+  // ========================================================================
+  user_sessions: { current_workspace_id: 'workspaces' },
   workspaces: { team_id: 'teams' },
-  team_members: { team_id: 'teams' },
+  team_members: { team_id: 'teams', user_id: 'user_sessions' },
+
+  // ========================================================================
+  // user_id の論理FK（user_sessions.user_id が参照先）
+  //  DB制約は張らない（認証基盤との結合度を下げ CASCADE 副作用を避けるため）
+  // ========================================================================
+  cache_stats: { user_id: 'user_sessions' },
+  cloudflare_setup_pending: { user_id: 'user_sessions' },
+  commit_search_history: { user_id: 'user_sessions' },
   commit_search_repo_stats: { search_history_id: 'commit_search_history' },
+
+  // ========================================================================
+  // workspace_id の論理FK（workspaces.id が参照先）
+  // ========================================================================
+  commit_calendar_cache: { workspace_id: 'workspaces' },
+  commit_list_cache: { workspace_id: 'workspaces' },
+  repo_color_settings: { workspace_id: 'workspaces', repo_name: 'installation_permissions' },
+  repo_groups: { workspace_id: 'workspaces' },
+  repo_group_members: {
+    workspace_id: 'workspaces',
+    group_id: 'repo_groups',
+    repo_name: 'installation_permissions',
+  },
+  group_oauth_apps: { workspace_id: 'workspaces', group_id: 'repo_groups' },
+
+  // ========================================================================
+  // AI 要約ログ関連
+  // ========================================================================
   ai_summary_reviews: { summary_request_id: 'ai_summary_log' },
   commit_agent_log: { request_id: 'ai_summary_log' },
   ai_summary_link_access_log: { request_id: 'ai_summary_log' },
-  repo_group_members: { group_id: 'repo_groups', repo_name: 'installation_permissions' },
-  group_oauth_apps: { group_id: 'repo_groups' },
+
+  // ========================================================================
+  // メール・Webhook 系
+  //  target_user_id は異名FK（user_id と意味的に同一 → user_sessions を参照）
+  // ========================================================================
   email_send_log: { source_id: 'resend_webhook_sources' },
   resend_webhook_log: { source_id: 'resend_webhook_sources' },
   email_suppression_list: { source_id: 'resend_webhook_sources', origin_webhook_log_id: 'resend_webhook_log' },
-  email_mfa_challenges: { source_id: 'resend_webhook_sources' },
-  email_audit_anomalies: { source_id: 'resend_webhook_sources' },
+  email_mfa_challenges: { source_id: 'resend_webhook_sources', user_id: 'user_sessions' },
+  email_audit_anomalies: { source_id: 'resend_webhook_sources', target_user_id: 'user_sessions' },
+
+  // ========================================================================
+  // メタデータ系
+  // ========================================================================
   table_column_keys: { table_name: 'table_catalog' },
-  // 論理FK: repo_name は installation_permissions のリポジトリ識別を参照
-  repo_color_settings: { repo_name: 'installation_permissions' },
 };
 
 export function buildGroupErData(
@@ -2709,6 +2747,72 @@ app.get('/api/status/schema', authMiddleware, async (c) => {
  * 同名カラムがN個のテーブルに出現 → 最小N-1本の矢印が期待されるが、
  * 実際にER図に描かれている本数と比較する。
  */
+/**
+ * 共通: D1 からスキーマを読み出し、物理FKと論理FKを分けて返す。
+ * 物理FKは PRAGMA foreign_key_list 由来、論理FKは COLUMN_FK_TARGETS 由来。
+ */
+async function loadSchemaRelations(db: D1Database): Promise<{
+  tables: TableSchema[];
+  physicalRelations: Relation[];
+  logicalRelations: Relation[];
+}> {
+  const tablesResult = await db
+    .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_cf_%' AND name NOT LIKE 'd1_%' ORDER BY name")
+    .all<{ name: string }>();
+  const tableNames = (tablesResult.results ?? []).map((r) => r.name);
+
+  const tables: TableSchema[] = [];
+  const physicalRelations: Relation[] = [];
+  const seenPhysical = new Set<string>();
+
+  for (const tName of tableNames) {
+    const colsResult = await db
+      .prepare(`PRAGMA table_info(${tName})`)
+      .all<{ name: string; type: string }>();
+    const cols = (colsResult.results ?? []).map((col) => ({
+      name: col.name,
+      type: col.type || 'TEXT',
+      keys: [] as string[],
+    }));
+
+    const fkResult = await db
+      .prepare(`PRAGMA foreign_key_list(${tName})`)
+      .all<{ table: string; from: string; to: string }>();
+    for (const fk of fkResult.results ?? []) {
+      const relKey = `${tName}.${fk.from}->${fk.table}.${fk.to}`;
+      if (!seenPhysical.has(relKey)) {
+        seenPhysical.add(relKey);
+        physicalRelations.push([tName, fk.from, fk.table, fk.to, '多:1']);
+      }
+    }
+
+    tables.push({ name: tName, cols });
+  }
+
+  const logicalRelations: Relation[] = [];
+  const seenLogical = new Set<string>();
+  for (const [fromTable, colMap] of Object.entries(COLUMN_FK_TARGETS)) {
+    for (const [fromCol, toTable] of Object.entries(colMap)) {
+      // 物理FKに同じ関係があるなら論理FKとして追加しない
+      const physPrefix = `${fromTable}.${fromCol}->${toTable}.`;
+      let dup = false;
+      for (const k of seenPhysical) {
+        if (k.startsWith(physPrefix)) {
+          dup = true;
+          break;
+        }
+      }
+      if (dup) continue;
+      const k = `${fromTable}.${fromCol}->${toTable}`;
+      if (seenLogical.has(k)) continue;
+      seenLogical.add(k);
+      logicalRelations.push([fromTable, fromCol, toTable, fromCol, '論理FK']);
+    }
+  }
+
+  return { tables, physicalRelations, logicalRelations };
+}
+
 app.get('/status/column-stats', authMiddleware, async (c) => {
   const db = c.env.DB;
   if (!db) {
@@ -2719,51 +2823,8 @@ app.get('/status/column-stats', authMiddleware, async (c) => {
   }
 
   try {
-    const tablesResult = await db
-      .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_cf_%' AND name NOT LIKE 'd1_%' ORDER BY name")
-      .all<{ name: string }>();
-    const tableNames = (tablesResult.results ?? []).map((r) => r.name);
-
-    const tables: TableSchema[] = [];
-    const relations: Relation[] = [];
-    const seenRelations = new Set<string>();
-
-    for (const tName of tableNames) {
-      const colsResult = await db
-        .prepare(`PRAGMA table_info(${tName})`)
-        .all<{ name: string; type: string }>();
-      const cols = (colsResult.results ?? []).map((col) => ({
-        name: col.name,
-        type: col.type || 'TEXT',
-        keys: [] as string[],
-      }));
-
-      const fkResult = await db
-        .prepare(`PRAGMA foreign_key_list(${tName})`)
-        .all<{ table: string; from: string; to: string }>();
-      for (const fk of fkResult.results ?? []) {
-        const relKey = `${tName}.${fk.from}->${fk.table}.${fk.to}`;
-        if (!seenRelations.has(relKey)) {
-          seenRelations.add(relKey);
-          relations.push([tName, fk.from, fk.table, fk.to, '多:1']);
-        }
-      }
-
-      tables.push({ name: tName, cols });
-    }
-
-    // 論理FK (COLUMN_FK_TARGETS) もリレーションに合流
-    for (const [fromTable, cols] of Object.entries(COLUMN_FK_TARGETS)) {
-      for (const [fromCol, toTable] of Object.entries(cols)) {
-        const relKey = `${fromTable}.${fromCol}->${toTable}`;
-        const uniqueKey = `${relKey}__logical`;
-        if (!seenRelations.has(uniqueKey)) {
-          seenRelations.add(uniqueKey);
-          relations.push([fromTable, fromCol, toTable, fromCol, '論理FK']);
-        }
-      }
-    }
-
+    const { tables, physicalRelations, logicalRelations } = await loadSchemaRelations(db);
+    const relations = [...physicalRelations, ...logicalRelations];
     const stats = computeColumnRelationStats(tables, relations);
     const html = renderColumnStatsHtml({
       stats,
@@ -2784,6 +2845,37 @@ app.get('/status/column-stats', authMiddleware, async (c) => {
       status: 500,
       headers: { 'Content-Type': 'text/plain; charset=utf-8' },
     });
+  }
+});
+
+/**
+ * カラム別「物理FK検証」API
+ * /status/column-stats の「検証する」ボタンから呼び出され、各カラムに注釈を返す。
+ *
+ * missing > 0 のカラムがあっても仕様上は許容できる（論理FK のみ、技術カラム、意図的な未マップ等）
+ * ことを判定するのが目的。
+ */
+app.get('/api/status/column-stats/verify', authMiddleware, async (c) => {
+  const db = c.env.DB;
+  if (!db) {
+    return jsonUtf8({ error: 'DB not available' }, 500);
+  }
+  try {
+    const { tables, physicalRelations, logicalRelations } = await loadSchemaRelations(db);
+    const stats = computeColumnRelationStats(tables, [...physicalRelations, ...logicalRelations]);
+    const verifications = verifyColumnStats(stats, physicalRelations, logicalRelations);
+    return jsonUtf8({
+      generatedAt: new Date().toISOString(),
+      totalTables: tables.length,
+      physicalRelationCount: physicalRelations.length,
+      logicalRelationCount: logicalRelations.length,
+      columns: verifications,
+    });
+  } catch (error) {
+    logger.warn('Failed to verify column-stats', {
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    return jsonUtf8({ error: 'Failed to verify column-stats' }, 500);
   }
 });
 

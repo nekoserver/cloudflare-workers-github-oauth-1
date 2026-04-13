@@ -157,3 +157,108 @@ export function findMissingRelations(
   const exclude = new Set(excludeColumns);
   return stats.filter((s) => !exclude.has(s.columnName) && s.missing > 0);
 }
+
+/**
+ * 技術カラムのデフォルトリスト。ドメイン相関を持たないがよくある共通カラム。
+ * （カラム別分類 "technical" の判定に使う）
+ */
+export const DEFAULT_TECHNICAL_COLUMNS = [
+  'id',
+  'created_at',
+  'updated_at',
+  'cached_at',
+  'joined_at',
+  'added_at',
+  'last_updated_at',
+  'event_date',
+  'display_order',
+  'description',
+  'name',
+];
+
+/**
+ * カラムの分類。ER図との差分を「エラーか / 仕様内か」で判断するために使う。
+ *
+ * - physical-fk: 物理FK (PRAGMA foreign_key_list) が最低1本存在する
+ * - logical-fk-only: 物理FKは無いが COLUMN_FK_TARGETS 相当の論理FKが定義されている
+ * - technical: id/created_at 等の技術カラム（相関を期待しない）
+ * - unmapped: 同名カラムだが物理FKも論理FKも未定義（検討の余地あり）
+ * - singleton: 1テーブルにしか出現しない（相関対象外）
+ */
+export type ColumnClassification =
+  | 'physical-fk'
+  | 'logical-fk-only'
+  | 'technical'
+  | 'unmapped'
+  | 'singleton';
+
+export interface ColumnVerification {
+  columnName: string;
+  tableCount: number;
+  tables: string[];
+  physicalFkCount: number;
+  logicalFkCount: number;
+  classification: ColumnClassification;
+  /** UI 表示用の日本語注釈 */
+  annotation: string;
+  /** missing が存在しても仕様上許容できる場合は true */
+  acceptable: boolean;
+}
+
+/**
+ * 物理FKと論理FKを個別のリレーション配列として受け取り、
+ * カラム名ごとに分類と注釈を作成する。
+ *
+ * - physicalRelations: `PRAGMA foreign_key_list` で取得した DB 制約ベースの FK
+ * - logicalRelations: `COLUMN_FK_TARGETS` から合成した論理FK
+ */
+export function verifyColumnStats(
+  stats: ColumnStat[],
+  physicalRelations: Relation[],
+  logicalRelations: Relation[],
+  technicalColumns: string[] = DEFAULT_TECHNICAL_COLUMNS,
+): ColumnVerification[] {
+  const tech = new Set(technicalColumns);
+  const physCounts = countRelationsByColumnName(physicalRelations);
+  const logCounts = countRelationsByColumnName(logicalRelations);
+
+  return stats.map((s) => {
+    const physicalFkCount = physCounts.get(s.columnName) ?? 0;
+    const logicalFkCount = logCounts.get(s.columnName) ?? 0;
+
+    let classification: ColumnClassification;
+    let annotation: string;
+    let acceptable = true;
+
+    if (s.tableCount <= 1) {
+      classification = 'singleton';
+      annotation = '1テーブルにしか出現しないためリレーション対象外。';
+    } else if (tech.has(s.columnName)) {
+      classification = 'technical';
+      annotation =
+        '技術カラム（id / created_at 等）。ドメイン相関を持たないため矢印不足は仕様通り。';
+    } else if (physicalFkCount > 0) {
+      classification = 'physical-fk';
+      annotation = `物理FK (${physicalFkCount} 本) が DB 制約として存在する。`;
+    } else if (logicalFkCount > 0) {
+      classification = 'logical-fk-only';
+      annotation = `物理FKは無いが、COLUMN_FK_TARGETS で論理FK (${logicalFkCount} 本) として定義済み。DB制約はあえて設けていない（CASCADE副作用を避ける等の意図）。`;
+    } else {
+      classification = 'unmapped';
+      annotation =
+        '同名カラムで複数テーブルに出現するが、物理FK・論理FK どちらも未定義。意図的に相関させない設計か、COLUMN_FK_TARGETS 登録漏れの可能性あり。';
+      acceptable = false;
+    }
+
+    return {
+      columnName: s.columnName,
+      tableCount: s.tableCount,
+      tables: s.tables,
+      physicalFkCount,
+      logicalFkCount,
+      classification,
+      annotation,
+      acceptable,
+    };
+  });
+}
