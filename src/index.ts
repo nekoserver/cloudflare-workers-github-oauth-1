@@ -839,6 +839,70 @@ export const COLUMN_FK_TARGETS: Record<string, Record<string, string>> = {
   table_column_keys: { table_name: 'table_catalog' },
 };
 
+/**
+ * 異名FKの参照先カラム名オーバーライド。
+ *
+ * キー: `${fromTable}.${fromCol}` / 値: 参照先テーブルの実カラム名。
+ * `COLUMN_FK_TARGETS` 側では「参照先テーブル名」しか持てないため、
+ * `workspace_id → workspaces.id` のようにカラム名が異なる論理FKでは
+ * ここで toCol を明示する必要がある。
+ *
+ * ここに登録がない場合は fromCol と同名のカラムを参照する（同名FK）。
+ */
+export const COLUMN_FK_TARGET_COLUMNS: Record<string, string> = {
+  // workspace_id 系 → workspaces.id
+  'user_sessions.current_workspace_id': 'id',
+  'commit_calendar_cache.workspace_id': 'id',
+  'commit_list_cache.workspace_id': 'id',
+  'repo_color_settings.workspace_id': 'id',
+  'repo_groups.workspace_id': 'id',
+  'repo_group_members.workspace_id': 'id',
+  'group_oauth_apps.workspace_id': 'id',
+
+  // user_id 系 → user_sessions.user_id (UK が権威カラム)
+  'team_members.user_id': 'user_id',
+  'cache_stats.user_id': 'user_id',
+  'cloudflare_setup_pending.user_id': 'user_id',
+  'commit_search_history.user_id': 'user_id',
+  'email_mfa_challenges.user_id': 'user_id',
+  // 異名FK: target_user_id も意味的には user_id
+  'email_audit_anomalies.target_user_id': 'user_id',
+
+  // group_id 系 → repo_groups.id
+  'repo_group_members.group_id': 'id',
+  'group_oauth_apps.group_id': 'id',
+
+  // source_id 系 → resend_webhook_sources.id
+  'email_send_log.source_id': 'id',
+  'resend_webhook_log.source_id': 'id',
+  'email_suppression_list.source_id': 'id',
+  'email_mfa_challenges.source_id': 'id',
+  'email_audit_anomalies.source_id': 'id',
+  // origin_webhook_log_id → resend_webhook_log.id
+  'email_suppression_list.origin_webhook_log_id': 'id',
+
+  // request_id 系 → ai_summary_log.id
+  'ai_summary_reviews.summary_request_id': 'id',
+  'commit_agent_log.request_id': 'id',
+  'ai_summary_link_access_log.request_id': 'id',
+
+  // search_history_id → commit_search_history.id
+  'commit_search_repo_stats.search_history_id': 'id',
+
+  // team_id → teams.id (物理FKで拾われるので普段は経由しないが保険)
+  'workspaces.team_id': 'id',
+  'team_members.team_id': 'id',
+};
+
+/**
+ * 論理FK (`COLUMN_FK_TARGETS`) の参照先カラム名を解決する。
+ * `COLUMN_FK_TARGET_COLUMNS` にオーバーライドがあればそれを返し、
+ * なければ fromCol と同名のカラムを参照するものとみなす。
+ */
+export function resolveLogicalFkTargetCol(fromTable: string, fromCol: string): string {
+  return COLUMN_FK_TARGET_COLUMNS[`${fromTable}.${fromCol}`] ?? fromCol;
+}
+
 export function buildGroupErData(
   tableName: string,
   groupMap: Record<string, string>,
@@ -2728,8 +2792,8 @@ app.get('/api/status/schema', authMiddleware, async (c) => {
         }
         if (dupExists) continue;
         seenRelations.add(relKey);
-        // toCol は fromCol と同名前提（異名FKはDB制約で既に拾われているはず）
-        relations.push([fromTable, fromCol, toTable, fromCol, '論理FK']);
+        const toCol = resolveLogicalFkTargetCol(fromTable, fromCol);
+        relations.push([fromTable, fromCol, toTable, toCol, '論理FK']);
       }
     }
 
@@ -2806,7 +2870,8 @@ async function loadSchemaRelations(db: D1Database): Promise<{
       const k = `${fromTable}.${fromCol}->${toTable}`;
       if (seenLogical.has(k)) continue;
       seenLogical.add(k);
-      logicalRelations.push([fromTable, fromCol, toTable, fromCol, '論理FK']);
+      const toCol = resolveLogicalFkTargetCol(fromTable, fromCol);
+      logicalRelations.push([fromTable, fromCol, toTable, toCol, '論理FK']);
     }
   }
 
