@@ -145,17 +145,19 @@
   #canvas-wrapper {
     position: fixed;
     top: 48px; left: 0; right: 0; bottom: 0;
-    overflow: auto;
+    overflow: hidden;
     background: var(--canvas-bg);
-    cursor: grab;
   }
-  #canvas-wrapper.grabbing { cursor: grabbing; }
   #canvas {
-    position: relative;
+    position: absolute;
+    top: 0; left: 0;
     width: 3200px;
     height: 2400px;
-    min-width: 100%;
-    min-height: 100%;
+    transform-origin: 0 0;
+    will-change: transform;
+  }
+  #canvas.animating {
+    transition: transform 0.6s cubic-bezier(0.4, 0, 0.2, 1);
   }
   #svg-layer {
     position: absolute;
@@ -200,16 +202,23 @@
     font-size: 13px;
     background: var(--table-header-bg);
     border-bottom: 1px solid var(--border);
+    border-left: 4px solid var(--line-color);
     border-radius: 8px 8px 0 0;
     display: flex;
     align-items: center;
     gap: 6px;
+    color: var(--text);
   }
   .er-table-header .group-dot {
     width: 8px; height: 8px;
     border-radius: 50%;
     flex-shrink: 0;
   }
+  .er-table.group-auth   > .er-table-header { background: var(--group-auth);   border-left-color: #388bfd; }
+  .er-table.group-commit > .er-table-header { background: var(--group-commit); border-left-color: #3fb950; }
+  .er-table.group-ai     > .er-table-header { background: var(--group-ai);     border-left-color: #d29922; }
+  .er-table.group-email  > .er-table-header { background: var(--group-email);  border-left-color: #f85149; }
+  .er-table.group-config > .er-table-header { background: var(--group-config); border-left-color: #a371f7; }
   .er-table-body {
     padding: 6px 0;
     font-size: 12px;
@@ -242,22 +251,66 @@
     background: var(--toolbar-bg);
     border: 1px solid var(--border);
     border-radius: 8px;
-    padding: 10px 14px;
+    padding: 8px;
     font-size: 11px;
     z-index: 100;
     box-shadow: 0 2px 6px var(--shadow);
+    min-width: 200px;
+  }
+  .legend-section-title {
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    padding: 4px 6px 2px;
   }
   .legend-row {
     display: flex;
     align-items: center;
     gap: 6px;
-    margin-bottom: 4px;
+    padding: 6px 8px;
+    border-radius: 6px;
+    border: 1px solid transparent;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s;
+    background: transparent;
+    text-align: left;
+    width: 100%;
+    color: var(--text);
+    font-size: 11px;
   }
-  .legend-row:last-child { margin-bottom: 0; }
+  .legend-row:hover {
+    background: var(--accent-light);
+    border-color: var(--border);
+  }
+  .legend-row.active {
+    background: var(--accent-light);
+    border-color: var(--accent);
+    font-weight: 600;
+  }
+  .legend-row.static {
+    cursor: default;
+  }
+  .legend-row.static:hover {
+    background: transparent;
+    border-color: transparent;
+  }
   .legend-dot {
     width: 10px; height: 10px;
     border-radius: 50%;
     flex-shrink: 0;
+  }
+  .legend-badges {
+    display: flex;
+    gap: 10px;
+    padding: 4px 8px;
+    flex-wrap: wrap;
+  }
+  .legend hr {
+    margin: 6px 2px;
+    border: 0;
+    border-top: 1px solid var(--border);
   }
 
   .zoom-info {
@@ -320,19 +373,35 @@
 </div>
 
 <div class="legend">
-  <div class="legend-row"><div class="legend-dot" style="background:#388bfd"></div> Auth / Session</div>
-  <div class="legend-row"><div class="legend-dot" style="background:#3fb950"></div> Commit / Cache</div>
-  <div class="legend-row"><div class="legend-dot" style="background:#d29922"></div> AI Summary</div>
-  <div class="legend-row"><div class="legend-dot" style="background:#f85149"></div> Email / Resend</div>
-  <div class="legend-row"><div class="legend-dot" style="background:#a371f7"></div> Config / Settings</div>
-  <hr style="margin:6px 0;border:0;border-top:1px solid var(--border)">
-  <div class="legend-row"><span class="col-badge pk" style="font-size:9px;font-weight:700;padding:0 4px;border-radius:3px">PK</span> Primary Key</div>
-  <div class="legend-row"><span class="col-badge fk" style="font-size:9px;font-weight:700;padding:0 4px;border-radius:3px">FK</span> Foreign Key</div>
-  <div class="legend-row"><span class="col-badge uk" style="font-size:9px;font-weight:700;padding:0 4px;border-radius:3px">UK</span> Unique</div>
-  <div class="legend-row"><span class="col-badge idx" style="font-size:9px;font-weight:700;padding:0 4px;border-radius:3px">IDX</span> Index</div>
+  <div class="legend-section-title">Groups (click to focus)</div>
+  <button class="legend-row" data-group="all" onclick="focusOnGroup('all')">
+    <div class="legend-dot" style="background:#8b949e"></div> すべて
+  </button>
+  <button class="legend-row" data-group="auth" onclick="focusOnGroup('auth')">
+    <div class="legend-dot" style="background:#388bfd"></div> Auth / Session
+  </button>
+  <button class="legend-row" data-group="commit" onclick="focusOnGroup('commit')">
+    <div class="legend-dot" style="background:#3fb950"></div> Commit / Cache
+  </button>
+  <button class="legend-row" data-group="ai" onclick="focusOnGroup('ai')">
+    <div class="legend-dot" style="background:#d29922"></div> AI Summary
+  </button>
+  <button class="legend-row" data-group="email" onclick="focusOnGroup('email')">
+    <div class="legend-dot" style="background:#f85149"></div> Email / Resend
+  </button>
+  <button class="legend-row" data-group="config" onclick="focusOnGroup('config')">
+    <div class="legend-dot" style="background:#a371f7"></div> Config / Settings
+  </button>
+  <hr>
+  <div class="legend-badges">
+    <span><span class="col-badge pk" style="font-size:9px;font-weight:700;padding:0 4px;border-radius:3px">PK</span> PrimaryKey</span>
+    <span><span class="col-badge fk" style="font-size:9px;font-weight:700;padding:0 4px;border-radius:3px">FK</span> ForeignKey</span>
+    <span><span class="col-badge uk" style="font-size:9px;font-weight:700;padding:0 4px;border-radius:3px">UK</span> Unique</span>
+    <span><span class="col-badge idx" style="font-size:9px;font-weight:700;padding:0 4px;border-radius:3px">IDX</span> Index</span>
+  </div>
 </div>
 
-<div class="zoom-info">Drag tables to rearrange</div>
+<div class="zoom-info" id="zoom-info">Zoom 100%</div>
 
 <script>
 const GROUPS = {
@@ -348,6 +417,13 @@ function groupOf(tableName) {
     if (d.tables.includes(tableName)) return d.color;
   }
   return '#8b949e';
+}
+
+function groupKeyOf(tableName) {
+  for (const [g, d] of Object.entries(GROUPS)) {
+    if (d.tables.includes(tableName)) return g;
+  }
+  return null;
 }
 
 const SCHEMA = [
@@ -517,6 +593,9 @@ const DEFAULT_POSITIONS = {
 
 let positions = {};
 let tableElements = {};
+let currentScale = 1;
+let currentTx = 0;
+let currentTy = 0;
 
 function init() {
   const saved = localStorage.getItem('er-positions-oauth1');
@@ -540,7 +619,8 @@ function init() {
 
 function createTableElement(table) {
   const el = document.createElement('div');
-  el.className = 'er-table';
+  const groupKey = groupKeyOf(table.name);
+  el.className = 'er-table' + (groupKey ? ' group-' + groupKey : '');
   el.id = 'table-' + table.name;
 
   const color = groupOf(table.name);
@@ -583,8 +663,8 @@ function makeDraggable(el, tableName) {
 
     function onMove(e2) {
       e2.preventDefault();
-      const dx = e2.clientX - startX;
-      const dy = e2.clientY - startY;
+      const dx = (e2.clientX - startX) / (currentScale || 1);
+      const dy = (e2.clientY - startY) / (currentScale || 1);
       const newX = Math.max(0, origX + dx);
       const newY = Math.max(0, origY + dy);
       positions[tableName].x = newX;
@@ -688,13 +768,6 @@ function edgePoint(rect, targetX, targetY) {
 
 let activeFilter = 'all';
 
-function groupKeyOf(tableName) {
-  for (const [g, d] of Object.entries(GROUPS)) {
-    if (d.tables.includes(tableName)) return g;
-  }
-  return null;
-}
-
 function filterGroup(group) {
   activeFilter = group;
   document.getElementById('group-menu').classList.remove('show');
@@ -709,6 +782,7 @@ function filterGroup(group) {
     }
   }
   drawRelations();
+  focusOnGroup(group);
 }
 
 function toggleGroupMenu(e) {
@@ -816,6 +890,7 @@ function applyPositions(newPositions) {
   }
   localStorage.setItem('er-positions-oauth1', JSON.stringify(positions));
   drawRelations();
+  fitToView(true);
 }
 
 function resetPositions() {
@@ -823,25 +898,104 @@ function resetPositions() {
   applyPositions(positions);
 }
 
-function fitToView() {
-  let minX = Infinity, minY = Infinity, maxX = 0, maxY = 0;
-  for (const table of SCHEMA) {
-    const p = positions[table.name];
-    const el = tableElements[table.name];
+function computeBBox(tableNames) {
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  let found = 0;
+  for (const name of tableNames) {
+    const el = tableElements[name];
+    if (!el || el.style.display === 'none') continue;
+    const p = positions[name];
+    if (!p) continue;
     minX = Math.min(minX, p.x);
     minY = Math.min(minY, p.y);
     maxX = Math.max(maxX, p.x + el.offsetWidth);
     maxY = Math.max(maxY, p.y + el.offsetHeight);
+    found++;
   }
-  const wrapper = document.getElementById('canvas-wrapper');
-  const pad = 40;
-  wrapper.scrollLeft = minX - pad;
-  wrapper.scrollTop = minY - pad;
+  if (found === 0) return null;
+  return { x: minX, y: minY, w: maxX - minX, h: maxY - minY };
 }
+
+function applyViewport(bbox, animate) {
+  if (!bbox) return;
+  const wrapper = document.getElementById('canvas-wrapper');
+  const canvas = document.getElementById('canvas');
+  const pad = 60;
+  const viewW = wrapper.clientWidth;
+  const viewH = wrapper.clientHeight;
+  const contentW = bbox.w + pad * 2;
+  const contentH = bbox.h + pad * 2;
+  const scale = Math.min(viewW / contentW, viewH / contentH, 1.5);
+  const tx = (viewW - bbox.w * scale) / 2 - bbox.x * scale;
+  const ty = (viewH - bbox.h * scale) / 2 - bbox.y * scale;
+
+  if (animate) {
+    canvas.classList.add('animating');
+  } else {
+    canvas.classList.remove('animating');
+  }
+  canvas.style.transform = `translate(${tx}px, ${ty}px) scale(${scale})`;
+  currentScale = scale;
+  currentTx = tx;
+  currentTy = ty;
+  updateZoomInfo();
+
+  if (animate) {
+    setTimeout(() => canvas.classList.remove('animating'), 650);
+  }
+}
+
+function updateZoomInfo() {
+  const info = document.getElementById('zoom-info');
+  if (info) info.textContent = `Zoom ${Math.round(currentScale * 100)}%`;
+}
+
+function fitToView(animate = true) {
+  const visibleTables = SCHEMA
+    .filter((t) => tableElements[t.name] && tableElements[t.name].style.display !== 'none')
+    .map((t) => t.name);
+  const bbox = computeBBox(visibleTables);
+  applyViewport(bbox, animate);
+}
+
+function focusOnGroup(groupKey) {
+  document.querySelectorAll('.legend-row').forEach((el) => {
+    el.classList.toggle('active', el.dataset.group === groupKey);
+  });
+
+  // ensure all tables are visible so focus works even after filter usage
+  for (const table of SCHEMA) {
+    const el = tableElements[table.name];
+    if (el) el.style.display = '';
+  }
+  activeFilter = 'all';
+  drawRelations();
+
+  let tableNames;
+  if (groupKey === 'all') {
+    tableNames = SCHEMA.map((t) => t.name);
+  } else {
+    const g = GROUPS[groupKey];
+    if (!g) return;
+    tableNames = g.tables.slice();
+  }
+  const bbox = computeBBox(tableNames);
+  applyViewport(bbox, true);
+}
+
+let resizeTimer = null;
+window.addEventListener('resize', () => {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => fitToView(false), 150);
+});
 
 window.addEventListener('DOMContentLoaded', () => {
   init();
-  setTimeout(fitToView, 100);
+  setTimeout(() => {
+    fitToView(false);
+    const allRow = document.querySelector('.legend-row[data-group="all"]');
+    if (allRow) allRow.classList.add('active');
+  }, 50);
 });
 </script>
 </body>
