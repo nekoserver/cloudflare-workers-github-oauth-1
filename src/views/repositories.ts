@@ -1479,7 +1479,7 @@ export function getRepositoriesPage(user: {
         <div class="commit-history-month-picker">
           <label for="commitHistoryMonthSelect">月別コミット状況</label>
           <select class="commit-history-month-select" id="commitHistoryMonthSelect">
-            <option value="">出力結果から YYYY-MM を選択</option>
+            <option value="">すべて</option>
           </select>
         </div>
         <div class="commit-history-list" id="commitHistoryList"></div>
@@ -3569,16 +3569,21 @@ export function getRepositoriesPage(user: {
     function renderCommitHistoryMonthOptions(commits) {
       if (!commitHistoryMonthSelect) return;
       var months = extractCommitMonths(commits);
-      var html = '';
-      if (months.length === 0) {
-        html = '<option value="">なし</option>';
-      }
+      var html = '<option value="">すべて</option>';
       months.forEach(function(month) {
         html += '<option value="' + esc(month) + '">' + esc(month) + '</option>';
       });
       commitHistoryMonthSelect.innerHTML = html;
-      commitHistoryMonthSelect.disabled = months.length === 0;
-      commitHistoryMonthSelect.value = months.length > 0 ? months[0] : '';
+      commitHistoryMonthSelect.disabled = false;
+      var now = new Date();
+      var currentMonth = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
+      if (months.indexOf(currentMonth) !== -1) {
+        commitHistoryMonthSelect.value = currentMonth;
+      } else if (months.length > 0) {
+        commitHistoryMonthSelect.value = months[0];
+      } else {
+        commitHistoryMonthSelect.value = '';
+      }
     }
 
     function renderCommitHistoryRows(commits) {
