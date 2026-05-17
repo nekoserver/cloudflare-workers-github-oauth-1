@@ -100,6 +100,30 @@
   }
   #toolbar .btn-primary:hover { opacity: 0.9; }
 
+  #toolbar .view-toggle {
+    display: inline-flex;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    overflow: hidden;
+  }
+  #toolbar .view-toggle button {
+    border: none;
+    border-radius: 0;
+    padding: 6px 12px;
+    background: var(--toolbar-bg);
+  }
+  #toolbar .view-toggle button + button {
+    border-left: 1px solid var(--border);
+  }
+  #toolbar .view-toggle button.active {
+    background: var(--accent);
+    color: #fff;
+  }
+  #toolbar .view-toggle button.active:hover {
+    background: var(--accent);
+    opacity: 0.9;
+  }
+
   .dropdown-wrapper {
     position: relative;
     display: inline-block;
@@ -353,7 +377,10 @@
     </div>
   </div>
   <button onclick="resetPositions()">Reset Layout</button>
-  <button onclick="fitToView()">Fit to View</button>
+  <div class="view-toggle" role="group" aria-label="View mode">
+    <button id="view-mode-focus" onclick="setViewMode('focus')" title="画面左上にフォーカス（等倍表示）">フォーカス</button>
+    <button id="view-mode-overview" onclick="setViewMode('overview')" title="画面全体を俯瞰（全エンティティを画面に収める）">俯瞰</button>
+  </div>
   <div class="dropdown-wrapper">
     <button class="btn-primary" onclick="toggleSaveMenu(event)">Save Positions</button>
     <div id="save-menu" class="dropdown-menu">
@@ -890,7 +917,7 @@ function applyPositions(newPositions) {
   }
   localStorage.setItem('er-positions-oauth1', JSON.stringify(positions));
   drawRelations();
-  fitToView(true);
+  setViewMode(viewMode, true);
 }
 
 function resetPositions() {
@@ -958,6 +985,43 @@ function fitToView(animate = true) {
   applyViewport(bbox, animate);
 }
 
+let viewMode = 'overview';
+
+function applyFocusView(animate) {
+  const canvas = document.getElementById('canvas');
+  if (animate) {
+    canvas.classList.add('animating');
+  } else {
+    canvas.classList.remove('animating');
+  }
+  canvas.style.transform = 'translate(0px, 0px) scale(1)';
+  currentScale = 1;
+  currentTx = 0;
+  currentTy = 0;
+  updateZoomInfo();
+  if (animate) {
+    setTimeout(() => canvas.classList.remove('animating'), 650);
+  }
+}
+
+function updateViewModeButtons() {
+  const focusBtn = document.getElementById('view-mode-focus');
+  const overviewBtn = document.getElementById('view-mode-overview');
+  if (focusBtn) focusBtn.classList.toggle('active', viewMode === 'focus');
+  if (overviewBtn) overviewBtn.classList.toggle('active', viewMode === 'overview');
+}
+
+function setViewMode(mode, animate = true) {
+  if (mode !== 'focus' && mode !== 'overview') return;
+  viewMode = mode;
+  updateViewModeButtons();
+  if (mode === 'focus') {
+    applyFocusView(animate);
+  } else {
+    fitToView(animate);
+  }
+}
+
 function focusOnGroup(groupKey) {
   document.querySelectorAll('.legend-row').forEach((el) => {
     el.classList.toggle('active', el.dataset.group === groupKey);
@@ -981,18 +1045,26 @@ function focusOnGroup(groupKey) {
   }
   const bbox = computeBBox(tableNames);
   applyViewport(bbox, true);
+  viewMode = 'overview';
+  updateViewModeButtons();
 }
 
 let resizeTimer = null;
 window.addEventListener('resize', () => {
   clearTimeout(resizeTimer);
-  resizeTimer = setTimeout(() => fitToView(false), 150);
+  resizeTimer = setTimeout(() => {
+    if (viewMode === 'focus') {
+      applyFocusView(false);
+    } else {
+      fitToView(false);
+    }
+  }, 150);
 });
 
 window.addEventListener('DOMContentLoaded', () => {
   init();
   setTimeout(() => {
-    fitToView(false);
+    setViewMode('overview', false);
     const allRow = document.querySelector('.legend-row[data-group="all"]');
     if (allRow) allRow.classList.add('active');
   }, 50);
