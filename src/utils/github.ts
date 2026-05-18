@@ -691,12 +691,11 @@ export async function getGitHubCommitsForStats(params: {
     headers['Authorization'] = `Bearer ${accessToken}`;
   }
 
-  const searchParams = new URLSearchParams({ per_page: '100' });
-  if (since) searchParams.set('since', since);
-  if (until) searchParams.set('until', until);
-
   const baseUrl = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/commits`;
-  let nextUrl: string | null = `${baseUrl}?${searchParams.toString()}`;
+  const queryParts = ['per_page=100'];
+  if (since) queryParts.push(`since=${since}`);
+  if (until) queryParts.push(`until=${until}`);
+  let nextUrl: string | null = `${baseUrl}?${queryParts.join('&')}`;
   const allCommits: GitHubCommitHistoryEntry[] = [];
 
   while (nextUrl && allCommits.length < maxCommits) {

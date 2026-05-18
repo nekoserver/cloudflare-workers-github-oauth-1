@@ -428,4 +428,24 @@ describe('getGitHubCommitsForStats — ページネーション', () => {
     expect(result.commits).toHaveLength(1);
     expect(result.commits[0].sha).toBe('abc3');
   });
+
+  it('since/untilのコロンをパーセントエンコードしない', async () => {
+    const capturedUrls: string[] = [];
+    vi.spyOn(globalThis, 'fetch').mockImplementation((input) => {
+      capturedUrls.push(typeof input === 'string' ? input : (input as Request).url);
+      return Promise.resolve(new Response(JSON.stringify([]), { status: 200 }));
+    });
+
+    await getGitHubCommitsForStats({
+      owner: 'o',
+      repo: 'r',
+      since: '2026-04-30T15:00:00.000Z',
+      until: '2026-05-31T15:00:00.000Z',
+    });
+
+    expect(capturedUrls).toHaveLength(1);
+    expect(capturedUrls[0]).not.toContain('%3A');
+    expect(capturedUrls[0]).toContain('since=2026-04-30T15:00:00.000Z');
+    expect(capturedUrls[0]).toContain('until=2026-05-31T15:00:00.000Z');
+  });
 });
