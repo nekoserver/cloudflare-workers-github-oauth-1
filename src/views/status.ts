@@ -1841,6 +1841,8 @@ export function getCacheStatusPage(user: {
     var repoGroupsForFilter = ${repoGroupsJson};
     var currentChartMode = ${chartModeJson};
     var ignoreUnknownUnclassifiedWarning = ${JSON.stringify(statusIgnoreUnknownUnclassifiedWarning)};
+    var tableGroupMap = ${JSON.stringify(data.tableGroupMap)};
+    var groupLabels = ${JSON.stringify(data.groupLabels)};
 
     function escapeHtmlText(value) {
       return String(value)
@@ -4486,7 +4488,21 @@ export function getCacheStatusPage(user: {
           subtitleText += '  +  関連: ' + addedNames.join(', ');
         }
 
-        if (fUmlTitle) fUmlTitle.textContent = 'フィルタ済み ER図 (' + filteredTables.length + ' テーブル)';
+        var groupSet = {};
+        for (var gi = 0; gi < tableNames.length; gi++) {
+          var gKey = tableGroupMap[tableNames[gi]];
+          if (gKey) groupSet[gKey] = true;
+        }
+        var groupKeys = Object.keys(groupSet).sort();
+        var groupTitle;
+        if (groupKeys.length === 0) {
+          groupTitle = 'フィルタ済み ER図';
+        } else {
+          var labels = groupKeys.map(function(k) { return groupLabels[k] || k; });
+          groupTitle = labels.join(' / ');
+        }
+
+        if (fUmlTitle) fUmlTitle.textContent = groupTitle + ' (' + filteredTables.length + ' テーブル)';
         if (fUmlSubtitle) fUmlSubtitle.textContent = subtitleText;
 
         layoutFilteredTables(filteredTables, filteredRelations);
