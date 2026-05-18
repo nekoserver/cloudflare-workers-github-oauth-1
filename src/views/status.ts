@@ -1001,6 +1001,20 @@ export function getCacheStatusPage(user: {
     }
     .uml-collist-button:hover { background: #3182ce; }
 
+    .uml-view-toggle {
+      display: inline-flex; border: 1px solid var(--border-color);
+      border-radius: 8px; overflow: hidden; background: var(--card-bg);
+    }
+    .uml-view-toggle button {
+      background: transparent; color: var(--text-secondary);
+      border: none; padding: 7px 12px;
+      font-size: 12px; font-weight: 600; cursor: pointer;
+      white-space: nowrap; border-radius: 0; transition: background 0.2s;
+    }
+    .uml-view-toggle button + button { border-left: 1px solid var(--border-color); }
+    .uml-view-toggle button.active { background: #4299e1; color: white; }
+    .uml-view-toggle button:not(.active):hover { background: rgba(66, 153, 225, 0.12); }
+
     /* カラム名一覧モーダル */
     .collist-modal-card {
       width: min(960px, 100%); max-height: min(90vh, 960px);
@@ -1591,6 +1605,10 @@ export function getCacheStatusPage(user: {
           <div class="modal-subtitle">テーブル間の外部キー・参照関係と正規化状況を表示しています</div>
         </div>
         <div style="display:flex; align-items:center; gap:8px;">
+          <div class="uml-view-toggle" role="group" aria-label="表示モード">
+            <button type="button" id="umlViewModeFocus" title="画面左上にフォーカス（等倍表示）">フォーカス</button>
+            <button type="button" id="umlViewModeOverview" title="画面全体を俯瞰（全テーブルを画面に収める）">俯瞰</button>
+          </div>
           <button type="button" class="uml-collist-button" id="umlFkVerifyBtn" title="FK関係の実データを検証">
             <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M6.5 12a5.5 5.5 0 100-11 5.5 5.5 0 000 11zM15 15l-3.6-3.6" stroke="white" stroke-width="1.5" stroke-linecap="round"/><path d="M5 6.5l2 2 3.5-3.5" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
             FK検証
@@ -1717,7 +1735,13 @@ export function getCacheStatusPage(user: {
           <div class="modal-title" id="filteredUmlModalTitle">フィルタ済み ER図</div>
           <div class="modal-subtitle" id="filteredUmlModalSubtitle"></div>
         </div>
-        <button type="button" class="modal-close" id="filteredUmlModalClose" aria-label="閉じる">&times;</button>
+        <div style="display:flex; align-items:center; gap:8px;">
+          <div class="uml-view-toggle" role="group" aria-label="表示モード">
+            <button type="button" id="filteredUmlViewModeFocus" title="画面左上にフォーカス（等倍表示）">フォーカス</button>
+            <button type="button" id="filteredUmlViewModeOverview" title="画面全体を俯瞰（全テーブルを画面に収める）">俯瞰</button>
+          </div>
+          <button type="button" class="modal-close" id="filteredUmlModalClose" aria-label="閉じる">&times;</button>
+        </div>
       </div>
       <div class="uml-canvas-wrapper" id="filteredUmlCanvasWrapper"></div>
       <div class="uml-bottom-panel" id="filteredUmlBottomPanel">
@@ -3108,6 +3132,40 @@ export function getCacheStatusPage(user: {
       if (!umlModal || !umlWrapper || !openUmlBtn) return;
 
       var umlRendered = false;
+      var UML_VIEW_MODE_KEY = 'er-uml-view-mode';
+
+      function getUmlViewMode() {
+        var v = null;
+        try { v = localStorage.getItem(UML_VIEW_MODE_KEY); } catch (_e) {}
+        return v === 'focus' ? 'focus' : 'overview';
+      }
+
+      function updateUmlViewToggleButtons() {
+        var mode = getUmlViewMode();
+        var focusBtn = document.getElementById('umlViewModeFocus');
+        var overviewBtn = document.getElementById('umlViewModeOverview');
+        if (focusBtn) focusBtn.classList.toggle('active', mode === 'focus');
+        if (overviewBtn) overviewBtn.classList.toggle('active', mode === 'overview');
+      }
+
+      function applyUmlViewMode(mode) {
+        if (typeof window.__umlApplyViewMode === 'function') {
+          window.__umlApplyViewMode(mode);
+        }
+      }
+
+      function setUmlViewMode(mode) {
+        if (mode !== 'focus' && mode !== 'overview') return;
+        try { localStorage.setItem(UML_VIEW_MODE_KEY, mode); } catch (_e) {}
+        updateUmlViewToggleButtons();
+        applyUmlViewMode(mode);
+      }
+
+      var umlFocusBtnEl = document.getElementById('umlViewModeFocus');
+      var umlOverviewBtnEl = document.getElementById('umlViewModeOverview');
+      if (umlFocusBtnEl) umlFocusBtnEl.addEventListener('click', function() { setUmlViewMode('focus'); });
+      if (umlOverviewBtnEl) umlOverviewBtnEl.addEventListener('click', function() { setUmlViewMode('overview'); });
+      updateUmlViewToggleButtons();
 
       function openUmlModal() {
         umlModal.classList.add('show');
@@ -3118,6 +3176,8 @@ export function getCacheStatusPage(user: {
           buildKeySummary('umlKeySummary', tables);
           umlRendered = true;
         }
+        updateUmlViewToggleButtons();
+        setTimeout(function() { applyUmlViewMode(getUmlViewMode()); }, 50);
       }
 
       if (refreshUmlBtn) {
@@ -3141,6 +3201,7 @@ export function getCacheStatusPage(user: {
                 buildKeySummary('umlKeySummary', tables);
                 umlRendered = true;
                 if (window.__refreshColList) window.__refreshColList(tables);
+                setTimeout(function() { applyUmlViewMode(getUmlViewMode()); }, 50);
 
                 if (umlModal.classList.contains('show')) {
                   // already open
@@ -3585,6 +3646,43 @@ export function getCacheStatusPage(user: {
           currentScale = Math.max(0.3, Math.min(3, newScale));
           container.style.transform = 'scale(' + currentScale + ')';
         }
+
+        function computeUmlBBox() {
+          var minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+          var found = false;
+          for (var name in cardRects) {
+            var r = cardRects[name];
+            if (r.x < minX) minX = r.x;
+            if (r.y < minY) minY = r.y;
+            if (r.x + r.w > maxX) maxX = r.x + r.w;
+            if (r.y + r.h > maxY) maxY = r.y + r.h;
+            found = true;
+          }
+          if (!found) return null;
+          return { x: minX, y: minY, w: maxX - minX, h: maxY - minY };
+        }
+
+        window.__umlApplyViewMode = function(mode) {
+          if (mode === 'overview') {
+            var bbox = computeUmlBBox();
+            if (bbox) {
+              var pad = 48;
+              var availW = umlWrapper.clientWidth - pad;
+              var availH = umlWrapper.clientHeight - pad;
+              if (availW > 0 && availH > 0) {
+                var sx = availW / (bbox.x + bbox.w);
+                var sy = availH / (bbox.y + bbox.h);
+                applyZoom(Math.min(sx, sy, 1));
+              }
+            }
+            umlWrapper.scrollLeft = 0;
+            umlWrapper.scrollTop = 0;
+          } else {
+            applyZoom(1);
+            umlWrapper.scrollLeft = 0;
+            umlWrapper.scrollTop = 0;
+          }
+        };
 
         // タッチ対応（ドラッグ＋ピンチズーム）
         container.addEventListener('touchstart', function(e) {
@@ -4309,6 +4407,41 @@ export function getCacheStatusPage(user: {
         if (e.key === 'Escape' && fUmlModal.classList.contains('show')) closeFilteredUmlModal();
       });
 
+      var FILTERED_UML_VIEW_MODE_KEY = 'er-filtered-uml-view-mode';
+
+      function getFilteredUmlViewMode() {
+        var v = null;
+        try { v = localStorage.getItem(FILTERED_UML_VIEW_MODE_KEY); } catch (_e) {}
+        return v === 'focus' ? 'focus' : 'overview';
+      }
+
+      function updateFilteredUmlViewToggleButtons() {
+        var mode = getFilteredUmlViewMode();
+        var focusBtn = document.getElementById('filteredUmlViewModeFocus');
+        var overviewBtn = document.getElementById('filteredUmlViewModeOverview');
+        if (focusBtn) focusBtn.classList.toggle('active', mode === 'focus');
+        if (overviewBtn) overviewBtn.classList.toggle('active', mode === 'overview');
+      }
+
+      function applyFilteredUmlViewMode(mode) {
+        if (typeof window.__filteredUmlApplyViewMode === 'function') {
+          window.__filteredUmlApplyViewMode(mode);
+        }
+      }
+
+      function setFilteredUmlViewMode(mode) {
+        if (mode !== 'focus' && mode !== 'overview') return;
+        try { localStorage.setItem(FILTERED_UML_VIEW_MODE_KEY, mode); } catch (_e) {}
+        updateFilteredUmlViewToggleButtons();
+        applyFilteredUmlViewMode(mode);
+      }
+
+      var fUmlFocusBtnEl = document.getElementById('filteredUmlViewModeFocus');
+      var fUmlOverviewBtnEl = document.getElementById('filteredUmlViewModeOverview');
+      if (fUmlFocusBtnEl) fUmlFocusBtnEl.addEventListener('click', function() { setFilteredUmlViewMode('focus'); });
+      if (fUmlOverviewBtnEl) fUmlOverviewBtnEl.addEventListener('click', function() { setFilteredUmlViewMode('overview'); });
+      updateFilteredUmlViewToggleButtons();
+
       window.openFilteredUmlModal = function(tableNames, allTables, allRelations) {
         var isDark = document.documentElement.getAttribute('data-theme') === 'dark';
         var primarySet = {};
@@ -4362,6 +4495,8 @@ export function getCacheStatusPage(user: {
 
         fUmlModal.classList.add('show');
         fUmlModal.setAttribute('aria-hidden', 'false');
+        updateFilteredUmlViewToggleButtons();
+        setTimeout(function() { applyFilteredUmlViewMode(getFilteredUmlViewMode()); }, 50);
       };
 
       function getTableCardWidth(table) {
@@ -4661,6 +4796,43 @@ export function getCacheStatusPage(user: {
           currentScale = Math.max(0.3, Math.min(3, newScale));
           container.style.transform = 'scale(' + currentScale + ')';
         }
+
+        function computeFUmlBBox() {
+          var minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+          var found = false;
+          for (var name in cardRects) {
+            var r = cardRects[name];
+            if (r.x < minX) minX = r.x;
+            if (r.y < minY) minY = r.y;
+            if (r.x + r.w > maxX) maxX = r.x + r.w;
+            if (r.y + r.h > maxY) maxY = r.y + r.h;
+            found = true;
+          }
+          if (!found) return null;
+          return { x: minX, y: minY, w: maxX - minX, h: maxY - minY };
+        }
+
+        window.__filteredUmlApplyViewMode = function(mode) {
+          if (mode === 'overview') {
+            var bbox = computeFUmlBBox();
+            if (bbox) {
+              var pad = 48;
+              var availW = fUmlWrapper.clientWidth - pad;
+              var availH = fUmlWrapper.clientHeight - pad;
+              if (availW > 0 && availH > 0) {
+                var sx = availW / (bbox.x + bbox.w);
+                var sy = availH / (bbox.y + bbox.h);
+                applyZoom(Math.min(sx, sy, 1));
+              }
+            }
+            fUmlWrapper.scrollLeft = 0;
+            fUmlWrapper.scrollTop = 0;
+          } else {
+            applyZoom(1);
+            fUmlWrapper.scrollLeft = 0;
+            fUmlWrapper.scrollTop = 0;
+          }
+        };
 
         // タッチ対応（ドラッグ＋ピンチズーム）
         container.addEventListener('touchstart', function(e) {
