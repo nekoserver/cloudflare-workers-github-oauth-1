@@ -521,7 +521,8 @@ CREATE INDEX IF NOT EXISTS idx_ai_summary_link_access_log_created ON ai_summary_
 );
 
 CREATE INDEX IF NOT EXISTS idx_commit_stats_cache_repo_period ON commit_stats_cache(owner, repo, period);`,
-  '0031': `ALTER TABLE commit_calendar_cache ADD COLUMN total_count INTEGER NOT NULL DEFAULT 0;`,
+  '0031': `ALTER TABLE commit_calendar_cache ADD COLUMN total_count INTEGER NOT NULL DEFAULT 0;
+UPDATE commit_calendar_cache SET total_count = (SELECT COALESCE(SUM(CAST(je.value AS INTEGER)), 0) FROM json_each(commit_calendar_cache.counts) je) WHERE total_count = 0;`,
 };
 
 function jsonUtf8(payload: unknown, status = 200): Response {
@@ -4050,6 +4051,7 @@ app.get('/api/repositories/:owner/:repo/commit-stats', optionalAuthMiddleware, a
 //   - キーが存在しない場合: GitHub API から取得 → total_count を含めキャッシュ書き込み（0件でも保存）
 //   - total_count > 0 の月のみ結果に含める
 //   - 当月は常に結果に含める（ユーザビリティ優先・キャッシュ対象外）
+// 診断情報を details に含めて返すことで、フロントエンドからキャッシュ確認・API取得の履行状況を可視化できる
 app.get('/api/repositories/:owner/:repo/commit-months', optionalAuthMiddleware, async (c) => {
   const user = c.get('user');
   if (!user) return c.json({ error: 'Unauthorized' }, 401);
@@ -4061,14 +4063,48 @@ app.get('/api/repositories/:owner/:repo/commit-months', optionalAuthMiddleware, 
   const currentJstYM = getJstYearMonthParts(now);
   const currentMonth = `${currentJstYM.year}-${String(currentJstYM.month).padStart(2, '0')}`;
 
+  type CommitMonthsDetails = {
+    status: string;
+    repoCreatedMonth: string | null;
+    candidatesCount: number;
+    cacheHits: number;
+    fetched: number;
+    fetchErrors: number;
+    pastMonthsWithCommits: number;
+    inconsistentRefetched: number;
+    cacheReadError: string | null;
+    repoInfoError: string | null;
+  };
+  const details: CommitMonthsDetails = {
+    status: 'ok',
+    repoCreatedMonth: null,
+    candidatesCount: 0,
+    cacheHits: 0,
+    fetched: 0,
+    fetchErrors: 0,
+    pastMonthsWithCommits: 0,
+    inconsistentRefetched: 0,
+    cacheReadError: null,
+    repoInfoError: null,
+  };
+
   const wsInfo = c.env.DB ? await getCurrentWorkspace(c.env.DB, user.sub) : null;
   const workspaceId = wsInfo?.workspaceId ?? '';
 
   const userSession = await getUserSession(c.env.DB, user.sub);
   const accessToken = userSession?.githubAccessToken ?? user.github_access_token ?? undefined;
 
-  if (!c.env.DB || !workspaceId || !accessToken) {
-    return c.json({ months: [currentMonth], currentMonth });
+  if (!c.env.DB) {
+    details.status = 'no_db';
+    return c.json({ months: [currentMonth], currentMonth, details });
+  }
+  if (!workspaceId) {
+    details.status = 'no_workspace';
+    return c.json({ months: [currentMonth], currentMonth, details });
+  }
+  if (!accessToken) {
+    details.status = 'no_access_token';
+    return c.json({ months: [currentMonth], currentMonth, details });
   }
 
   let createdYM: string | null = null;
@@ -4080,39 +4116,65 @@ app.get('/api/repositories/:owner/:repo/commit-months', optionalAuthMiddleware, 
         const j = getJstYearMonthParts(d);
         createdYM = `${j.year}-${String(j.month).padStart(2, '0')}`;
       }
+    } else {
+      details.repoInfoError = `GitHub API status ${info.status}`;
     }
   } catch (e) {
+    details.repoInfoError = e instanceof Error ? e.message : String(e);
     logger.warn('commit-months: failed to fetch repo info', {
-      owner, repo, error: e instanceof Error ? e.message : String(e),
+      owner, repo, error: details.repoInfoError,
     });
   }
 
   if (!createdYM) {
-    return c.json({ months: [currentMonth], currentMonth });
+    details.status = 'no_repo_created_at';
+    return c.json({ months: [currentMonth], currentMonth, details });
   }
+  details.repoCreatedMonth = createdYM;
 
   const candidates = buildPastMonthRange(createdYM, currentMonth);
+  details.candidatesCount = candidates.length;
 
-  let cachedRows: { year: number; month: number; total_count: number }[] = [];
+  let cachedRows: { year: number; month: number; total_count: number; counts: string }[] = [];
   try {
     const rows = await c.env.DB.prepare(
-      'SELECT year, month, total_count FROM commit_calendar_cache WHERE workspace_id = ? AND owner = ? AND repo = ?'
-    ).bind(workspaceId, owner, repo).all<{ year: number; month: number; total_count: number }>();
+      'SELECT year, month, total_count, counts FROM commit_calendar_cache WHERE workspace_id = ? AND owner = ? AND repo = ?'
+    ).bind(workspaceId, owner, repo).all<{ year: number; month: number; total_count: number; counts: string }>();
     cachedRows = rows.results ?? [];
   } catch (e) {
+    details.cacheReadError = e instanceof Error ? e.message : String(e);
     logger.warn('commit-months: cache read failed', {
-      owner, repo, error: e instanceof Error ? e.message : String(e),
+      owner, repo, error: details.cacheReadError,
     });
   }
 
+  // ALTER TABLE 直後の不整合行（total_count = 0 だが counts JSON は非ゼロ要素を持つ）を検出
+  // 該当行は cachedMap に入れず、後続の「未キャッシュ判定」経由で GitHub から再取得・全カラム上書きさせる
   const cachedMap = new Map<string, number>();
+  const inconsistentMonths = new Set<string>();
   for (const row of cachedRows) {
     const ym = `${row.year}-${String(row.month).padStart(2, '0')}`;
+    if (row.total_count === 0 && row.counts && row.counts !== '{}') {
+      let recomputed = 0;
+      try {
+        recomputed = sumCountsTotal(JSON.parse(row.counts));
+      } catch {
+        recomputed = 0;
+      }
+      if (recomputed > 0) {
+        inconsistentMonths.add(ym);
+        continue;
+      }
+    }
     cachedMap.set(ym, row.total_count);
   }
+  details.inconsistentRefetched = inconsistentMonths.size;
 
   for (const candidate of candidates) {
-    if (cachedMap.has(candidate)) continue;
+    if (cachedMap.has(candidate)) {
+      details.cacheHits++;
+      continue;
+    }
     const [yStr, mStr] = candidate.split('-');
     const cY = parseInt(yStr, 10);
     const cM = parseInt(mStr, 10);
@@ -4120,6 +4182,7 @@ app.get('/api/repositories/:owner/:repo/commit-months', optionalAuthMiddleware, 
     try {
       ghResult = await getGitHubRepoCommitsByMonth({ owner, repo, year: cY, month: cM, accessToken });
     } catch (e) {
+      details.fetchErrors++;
       logger.warn('commit-months: GitHub fetch failed for candidate', {
         owner, repo, candidate, error: e instanceof Error ? e.message : String(e),
       });
@@ -4153,7 +4216,9 @@ app.get('/api/repositories/:owner/:repo/commit-months', optionalAuthMiddleware, 
           ).bind(owner, repo, candidate, row.authorLogin, row.authorName ?? null, row.commitCount, row.mergeCount, cachedAt).run();
         }
       }
+      details.fetched++;
     } catch (e) {
+      details.fetchErrors++;
       logger.warn('commit-months: cache write failed', {
         owner, repo, candidate, error: e instanceof Error ? e.message : String(e),
       });
@@ -4163,9 +4228,10 @@ app.get('/api/repositories/:owner/:repo/commit-months', optionalAuthMiddleware, 
 
   const months: string[] = [currentMonth];
   const pastMonthsWithCommits = candidates.filter(ym => (cachedMap.get(ym) ?? 0) > 0);
+  details.pastMonthsWithCommits = pastMonthsWithCommits.length;
   for (const ym of pastMonthsWithCommits) months.push(ym);
 
-  return c.json({ months, currentMonth });
+  return c.json({ months, currentMonth, details });
 });
 
 // 月別コミット一覧（cache-first: 過去月はD1、当月はGitHub API）
