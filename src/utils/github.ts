@@ -44,6 +44,7 @@ export interface GitHubCommitHistoryEntry {
   authorName: string | null;
   authorLogin: string | null;
   authoredDate: string | null;
+  isMerge: boolean;
 }
 
 export interface GitHubTokenInfo {
@@ -396,6 +397,7 @@ export async function getGitHubCommits(params: {
   const entries = data.map((entry) => {
     const commitInfo = entry?.commit ?? {};
     const authorInfo = commitInfo.author;
+    const parents = Array.isArray(entry?.parents) ? entry.parents : [];
     return {
       sha: entry?.sha ?? '',
       htmlUrl: entry?.html_url ?? '',
@@ -403,6 +405,7 @@ export async function getGitHubCommits(params: {
       authorName: typeof authorInfo?.name === 'string' ? authorInfo.name : null,
       authorLogin: entry?.author?.login ?? null,
       authoredDate: typeof authorInfo?.date === 'string' ? authorInfo.date : null,
+      isMerge: parents.length >= 2,
     };
   }).filter((entry) => entry.sha && entry.htmlUrl);
 
