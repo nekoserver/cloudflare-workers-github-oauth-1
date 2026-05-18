@@ -674,6 +674,64 @@ export function computeCommitStats(commits: Array<{
   });
 }
 
+/**
+ * counts JSON (Record<dateString, commitCount>) の合計を返す
+ */
+export function sumCountsTotal(counts: Record<string, number> | null | undefined): number {
+  if (!counts) return 0;
+  let total = 0;
+  for (const v of Object.values(counts)) {
+    if (typeof v === 'number' && !isNaN(v)) total += v;
+  }
+  return total;
+}
+
+/**
+ * リポジトリ作成月（JST, YYYY-MM）から（当月-1）までの月リストを降順で返す
+ * 例: createdYM='2024-03', currentYM='2026-05' → ['2026-04', '2026-03', ..., '2024-03']
+ */
+export function buildPastMonthRange(createdYM: string, currentYM: string): string[] {
+  if (!/^\d{4}-\d{2}$/.test(createdYM) || !/^\d{4}-\d{2}$/.test(currentYM)) return [];
+  if (createdYM >= currentYM) return [];
+  const months: string[] = [];
+  let [curY, curM] = currentYM.split('-').map(Number);
+  curM -= 1;
+  if (curM < 1) { curM = 12; curY -= 1; }
+  while (true) {
+    const ym = `${curY}-${String(curM).padStart(2, '0')}`;
+    months.push(ym);
+    if (ym === createdYM) break;
+    curM -= 1;
+    if (curM < 1) { curM = 12; curY -= 1; }
+    if (curY < parseInt(createdYM.split('-')[0], 10) - 100) break;
+  }
+  return months;
+}
+
+/**
+ * 単一リポジトリの情報を取得（created_at のみ抽出）
+ */
+export async function getGitHubRepoInfo(params: {
+  owner: string;
+  repo: string;
+  accessToken?: string;
+}): Promise<{ createdAt: string | null; status: number }> {
+  const { owner, repo, accessToken } = params;
+  const url = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`;
+  const headers: Record<string, string> = {
+    'Accept': 'application/vnd.github.v3+json',
+    'User-Agent': 'Cloudflare-Workers-GitHub-OAuth',
+  };
+  if (accessToken) headers['Authorization'] = `Bearer ${accessToken}`;
+  const response = await fetch(url, { headers });
+  if (!response.ok) return { createdAt: null, status: response.status };
+  const data = await response.json<{ created_at?: string }>();
+  return {
+    createdAt: typeof data.created_at === 'string' ? data.created_at : null,
+    status: response.status,
+  };
+}
+
 export async function getGitHubCommitsForStats(params: {
   owner: string;
   repo: string;
