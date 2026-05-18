@@ -4044,6 +4044,142 @@ app.get('/api/repositories/:owner/:repo/commit-stats', optionalAuthMiddleware, a
   }
 });
 
+// キャッシュ済み月一覧を返す（commit_calendar_cache の過去月 + 当月）
+app.get('/api/repositories/:owner/:repo/commit-months', optionalAuthMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!user) return c.json({ error: 'Unauthorized' }, 401);
+  const owner = c.req.param('owner');
+  const repo = c.req.param('repo');
+  if (!owner || !repo) return c.json({ error: 'Invalid repository parameters' }, 400);
+
+  const now = new Date();
+  const currentJstYM = getJstYearMonthParts(now);
+  const currentMonth = `${currentJstYM.year}-${String(currentJstYM.month).padStart(2, '0')}`;
+  const months: string[] = [currentMonth];
+
+  if (c.env.DB) {
+    const wsInfo = await getCurrentWorkspace(c.env.DB, user.sub);
+    const workspaceId = wsInfo?.workspaceId ?? '';
+    if (workspaceId) {
+      try {
+        const rows = await c.env.DB.prepare(
+          'SELECT year, month FROM commit_calendar_cache WHERE workspace_id = ? AND owner = ? AND repo = ? ORDER BY year DESC, month DESC'
+        ).bind(workspaceId, owner, repo).all<{ year: number; month: number }>();
+        for (const row of rows.results ?? []) {
+          const ym = `${row.year}-${String(row.month).padStart(2, '0')}`;
+          if (ym !== currentMonth) months.push(ym);
+        }
+      } catch (e) {
+        logger.warn('commit-months cache read failed', {
+          owner, repo, error: e instanceof Error ? e.message : String(e),
+        });
+      }
+    }
+  }
+  return c.json({ months, currentMonth });
+});
+
+// 月別コミット一覧（cache-first: 過去月はD1、当月はGitHub API）
+// 過去月取得時は commit_calendar_cache / commit_list_cache / commit_stats_cache へ同時書き込み
+app.get('/api/repositories/:owner/:repo/commits-by-month', optionalAuthMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!user) return c.json({ error: 'Unauthorized' }, 401);
+  const owner = c.req.param('owner');
+  const repo = c.req.param('repo');
+  if (!owner || !repo) return c.json({ error: 'Invalid repository parameters' }, 400);
+
+  const period = c.req.query('period') ?? '';
+  if (!period || !/^\d{4}-\d{2}$/.test(period)) return c.json({ error: 'Invalid period format' }, 400);
+  const [yearStr, monthStr] = period.split('-');
+  const year = parseInt(yearStr, 10);
+  const month = parseInt(monthStr, 10);
+  if (isNaN(year) || isNaN(month) || month < 1 || month > 12) return c.json({ error: 'Invalid period format' }, 400);
+
+  const now = new Date();
+  const currentJstYM = getJstYearMonthParts(now);
+  const currentYMStr = `${currentJstYM.year}-${String(currentJstYM.month).padStart(2, '0')}`;
+  const isPastMonth = period < currentYMStr;
+
+  const wsInfo = c.env.DB ? await getCurrentWorkspace(c.env.DB, user.sub) : null;
+  const workspaceId = wsInfo?.workspaceId ?? '';
+
+  if (isPastMonth && c.env.DB && workspaceId) {
+    try {
+      const calCached = await c.env.DB.prepare(
+        'SELECT 1 FROM commit_calendar_cache WHERE workspace_id = ? AND owner = ? AND repo = ? AND year = ? AND month = ?'
+      ).bind(workspaceId, owner, repo, year, month).first<{ 1: number }>();
+
+      if (calCached) {
+        const listRows = await c.env.DB.prepare(
+          'SELECT commits_json FROM commit_list_cache WHERE workspace_id = ? AND owner = ? AND repo = ? AND date LIKE ? ORDER BY date DESC'
+        ).bind(workspaceId, owner, repo, `${period}-%`).all<{ commits_json: string }>();
+        const commits = (listRows.results ?? []).flatMap(row => {
+          try { return JSON.parse(row.commits_json) as CommitDetail[]; } catch { return []; }
+        });
+        return c.json({ period, commits, cached: true });
+      }
+    } catch (e) {
+      logger.warn('commits-by-month cache read failed', {
+        owner, repo, period, error: e instanceof Error ? e.message : String(e),
+      });
+    }
+  }
+
+  const userSession = await getUserSession(c.env.DB, user.sub);
+  const accessToken = userSession?.githubAccessToken ?? user.github_access_token ?? undefined;
+  if (!accessToken) return c.json({ error: 'No access token available' }, 401);
+
+  let ghResult: { counts: Record<string, number>; commitsByDate: Record<string, CommitDetail[]> };
+  try {
+    ghResult = await getGitHubRepoCommitsByMonth({ owner, repo, year, month, accessToken });
+  } catch (e) {
+    logger.error('commits-by-month GitHub fetch failed', {
+      owner, repo, period, error: e instanceof Error ? e.message : String(e),
+    });
+    return c.json({ error: 'Failed to fetch commits from GitHub' }, 502);
+  }
+
+  const { counts, commitsByDate } = ghResult;
+  const allCommits = Object.values(commitsByDate).flat()
+    .sort((a, b) => (b.authoredDate ?? '').localeCompare(a.authoredDate ?? ''));
+
+  if (isPastMonth && c.env.DB && workspaceId) {
+    const cachedAt = now.toISOString();
+    try {
+      await c.env.DB.prepare(
+        'INSERT INTO commit_calendar_cache (workspace_id, owner, repo, year, month, counts, cached_at) VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT (workspace_id, owner, repo, year, month) DO UPDATE SET counts = excluded.counts, cached_at = excluded.cached_at'
+      ).bind(workspaceId, owner, repo, year, month, JSON.stringify(counts), cachedAt).run();
+
+      for (const [date, dayCommits] of Object.entries(commitsByDate)) {
+        if (dayCommits.length > 0) {
+          await c.env.DB.prepare(
+            'INSERT INTO commit_list_cache (workspace_id, owner, repo, date, commits_json, commit_count, cached_at) VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT (workspace_id, owner, repo, date) DO UPDATE SET commits_json = excluded.commits_json, commit_count = excluded.commit_count, cached_at = excluded.cached_at'
+          ).bind(workspaceId, owner, repo, date, JSON.stringify(dayCommits), dayCommits.length, cachedAt).run();
+        }
+      }
+
+      if (allCommits.length > 0) {
+        const statsRows = computeCommitStats(allCommits.map(cm => ({
+          authorLogin: cm.authorLogin,
+          authorName: cm.authorName,
+          isMerge: cm.isMerge,
+        })));
+        for (const row of statsRows) {
+          await c.env.DB.prepare(
+            'INSERT OR REPLACE INTO commit_stats_cache (owner, repo, period, author_login, author_name, commit_count, merge_count, cached_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+          ).bind(owner, repo, period, row.authorLogin, row.authorName ?? null, row.commitCount, row.mergeCount, cachedAt).run();
+        }
+      }
+    } catch (e) {
+      logger.warn('commits-by-month cache write failed', {
+        owner, repo, period, error: e instanceof Error ? e.message : String(e),
+      });
+    }
+  }
+
+  return c.json({ period, commits: allCommits, cached: false });
+});
+
 // コミットカレンダー（月別コミット数）
 // 過去の確定月はD1キャッシュを参照し、当月のみGitHub APIに問い合わせる
 app.get('/api/repositories/:owner/:repo/commits-calendar', optionalAuthMiddleware, async (c) => {
