@@ -5,6 +5,8 @@ import {
   getGitHubCommits,
   computeCommitStats,
   getGitHubCommitsForStats,
+  sumCountsTotal,
+  buildPastMonthRange,
   CLOUDFLARE_DEPLOY_SLUGS,
   VERCEL_DEPLOY_SLUGS,
   SLACK_WEBHOOK_HOSTS,
@@ -427,5 +429,43 @@ describe('getGitHubCommitsForStats — ページネーション', () => {
     const result = await getGitHubCommitsForStats({ owner: 'o', repo: 'r' });
     expect(result.commits).toHaveLength(1);
     expect(result.commits[0].sha).toBe('abc3');
+  });
+});
+
+describe('sumCountsTotal', () => {
+  it('空オブジェクトは 0 を返す', () => {
+    expect(sumCountsTotal({})).toBe(0);
+  });
+  it('null/undefined は 0 を返す', () => {
+    expect(sumCountsTotal(null)).toBe(0);
+    expect(sumCountsTotal(undefined)).toBe(0);
+  });
+  it('全日の合計を返す', () => {
+    expect(sumCountsTotal({ '2026-05-01': 3, '2026-05-02': 7, '2026-05-15': 2 })).toBe(12);
+  });
+  it('NaN は無視する', () => {
+    expect(sumCountsTotal({ '2026-05-01': 3, '2026-05-02': NaN as any })).toBe(3);
+  });
+});
+
+describe('buildPastMonthRange', () => {
+  it('作成月 < 当月 のとき、(当月-1) から作成月までを降順で返す', () => {
+    expect(buildPastMonthRange('2026-03', '2026-05')).toEqual(['2026-04', '2026-03']);
+  });
+  it('年をまたぐケースを正しく扱う', () => {
+    expect(buildPastMonthRange('2025-11', '2026-02')).toEqual(['2026-01', '2025-12', '2025-11']);
+  });
+  it('作成月 == 当月 のとき空配列を返す', () => {
+    expect(buildPastMonthRange('2026-05', '2026-05')).toEqual([]);
+  });
+  it('作成月 > 当月 のとき空配列を返す（異常入力）', () => {
+    expect(buildPastMonthRange('2026-06', '2026-05')).toEqual([]);
+  });
+  it('作成月が (当月-1) のとき1件のみ返す', () => {
+    expect(buildPastMonthRange('2026-04', '2026-05')).toEqual(['2026-04']);
+  });
+  it('フォーマット不正の場合は空配列を返す', () => {
+    expect(buildPastMonthRange('2026/05', '2026-04')).toEqual([]);
+    expect(buildPastMonthRange('2026-05', 'invalid')).toEqual([]);
   });
 });
