@@ -123,6 +123,7 @@ export function getCacheStatusPage(user: {
   statusCommitCacheSortMode?: string;
   statusCommitCacheSortState?: string;
   statusChartMode?: string;
+  statusChartSortOrder?: string;
   statusIgnoreUnknownUnclassifiedWarning?: string;
 }, data: CacheStatusData): string {
   const displayName = escapeHtml(user.name || user.username);
@@ -133,6 +134,7 @@ export function getCacheStatusPage(user: {
     ? 'commit_month_desc'
     : 'cached_at_desc';
   const statusChartMode = user.statusChartMode === 'repo' ? 'repo' : 'gradient';
+  const statusChartSortOrder = user.statusChartSortOrder === 'date' ? 'date' : 'count';
   const statusIgnoreUnknownUnclassifiedWarning = user.statusIgnoreUnknownUnclassifiedWarning === 'off' ? 'off' : 'on';
 
   const getCachedAtEpoch = (cachedAt: string): number => {
@@ -250,10 +252,13 @@ export function getCacheStatusPage(user: {
     </tr>`
   ).join('');
 
-  // 月別コミット量チャート
-  const chartData = data.commitCache.byMonth
-    .slice()
-    .sort((a, b) => a.yearMonth.localeCompare(b.yearMonth));
+  // 月別コミット量チャート（並び順は statusChartSortOrder で切り替え）
+  const sortByOrder = (rows: typeof data.commitCache.byMonth) => {
+    return statusChartSortOrder === 'date'
+      ? rows.slice().sort((a, b) => a.yearMonth.localeCompare(b.yearMonth))
+      : rows.slice().sort((a, b) => b.totalCommits - a.totalCommits);
+  };
+  const chartData = sortByOrder(data.commitCache.byMonth);
   const maxCommits = Math.max(...chartData.map(d => d.totalCommits), 1);
 
   // リポジトリ別カラーパレット（DB登録済みの色を優先、未登録はフォールバック）
@@ -289,9 +294,8 @@ export function getCacheStatusPage(user: {
     </div>`;
   }).join('');
 
-  // リポジトリ色分けモード用バー（コミット数の多い月を左に）
-  const sortedChartDataByCount = chartData.slice().sort((a, b) => b.totalCommits - a.totalCommits);
-  const repoBars = sortedChartDataByCount.map(d => {
+  // リポジトリ色分けモード用バー（chartData の並び順を継承）
+  const repoBars = chartData.map(d => {
     const pct = Math.round((d.totalCommits / maxCommits) * 100);
     const monthRepos = data.commitCache.byMonthByRepo
       .filter(r => r.yearMonth === d.yearMonth)
@@ -328,6 +332,7 @@ export function getCacheStatusPage(user: {
   const repoColorMapJson = JSON.stringify(repoColorMap);
   const repoGroupsJson = JSON.stringify(sortedGroups.map(g => ({ id: g.id, name: g.name, repos: g.repos })));
   const chartModeJson = JSON.stringify(statusChartMode);
+  const chartSortOrderJson = JSON.stringify(statusChartSortOrder);
 
   // 今月のコミット内訳パイチャート用データ
   const now = new Date();
@@ -556,6 +561,17 @@ export function getCacheStatusPage(user: {
     .sync-repo-colors-btn:hover { background: var(--bg-tertiary, var(--border-color)); }
     .sync-repo-colors-btn:disabled { opacity: 0.5; cursor: not-allowed; }
     .sync-repo-colors-btn .sync-icon { font-size: 15px; }
+    .chart-sort-toggle {
+      display: inline-flex; border: 1px solid var(--border-color); border-radius: 6px; overflow: hidden;
+    }
+    .chart-sort-toggle-btn {
+      padding: 6px 12px; font-size: 13px; font-weight: 500;
+      color: var(--text-primary); background: var(--bg-secondary);
+      border: none; cursor: pointer; transition: background 0.15s;
+    }
+    .chart-sort-toggle-btn + .chart-sort-toggle-btn { border-left: 1px solid var(--border-color); }
+    .chart-sort-toggle-btn:hover { background: var(--bg-tertiary, var(--border-color)); }
+    .chart-sort-toggle-btn.active { background: var(--accent-color, #667eea); color: #fff; }
     .sync-repo-colors-btn.syncing .sync-icon {
       animation: spin-sync 0.8s linear infinite;
     }
@@ -1425,6 +1441,10 @@ export function getCacheStatusPage(user: {
       <div class="section" id="commitChartSection">
         <div class="section-title-row">
           <h2 class="section-title">月別コミット量</h2>
+          <div class="chart-sort-toggle" role="group" aria-label="並び順">
+            <button type="button" class="chart-sort-toggle-btn ${statusChartSortOrder === 'count' ? 'active' : ''}" data-sort-order="count">件数順</button>
+            <button type="button" class="chart-sort-toggle-btn ${statusChartSortOrder === 'date' ? 'active' : ''}" data-sort-order="date">日付順</button>
+          </div>
           <select id="groupFilter" class="group-filter-select" title="グループでフィルタ">
             <option value="">すべて</option>
             ${groupFilterOptions}
@@ -1840,6 +1860,7 @@ export function getCacheStatusPage(user: {
     var repoColorMap = ${repoColorMapJson};
     var repoGroupsForFilter = ${repoGroupsJson};
     var currentChartMode = ${chartModeJson};
+    var currentChartSortOrder = ${chartSortOrderJson};
     var ignoreUnknownUnclassifiedWarning = ${JSON.stringify(statusIgnoreUnknownUnclassifiedWarning)};
     var tableGroupMap = ${JSON.stringify(data.tableGroupMap)};
     var groupLabels = ${JSON.stringify(data.groupLabels)};
@@ -1953,7 +1974,11 @@ export function getCacheStatusPage(user: {
       for (var ym in byMonthMap) {
         chartData.push({ yearMonth: ym, totalCommits: byMonthMap[ym] });
       }
-      chartData.sort(function(a, b) { return a.yearMonth.localeCompare(b.yearMonth); });
+      if (currentChartSortOrder === 'date') {
+        chartData.sort(function(a, b) { return a.yearMonth.localeCompare(b.yearMonth); });
+      } else {
+        chartData.sort(function(a, b) { return b.totalCommits - a.totalCommits; });
+      }
 
       var maxCommits = 1;
       for (var i = 0; i < chartData.length; i++) {
@@ -1973,9 +1998,8 @@ export function getCacheStatusPage(user: {
 
       var html = '';
       if (currentChartMode === 'repo') {
-        var sorted = chartData.slice().sort(function(a, b) { return b.totalCommits - a.totalCommits; });
-        for (var i = 0; i < sorted.length; i++) {
-          var d = sorted[i];
+        for (var i = 0; i < chartData.length; i++) {
+          var d = chartData[i];
           var pct = Math.round((d.totalCommits / maxCommits) * 100);
           var monthRepos = filtered.filter(function(r) { return r.yearMonth === d.yearMonth; });
           monthRepos.sort(function(a, b) { return (repoTotals[b.repo] || 0) - (repoTotals[a.repo] || 0); });
@@ -2102,6 +2126,26 @@ export function getCacheStatusPage(user: {
       if (groupFilter) {
         groupFilter.addEventListener('change', function() {
           renderCommitChart(groupFilter.value);
+        });
+      }
+      var chartSortBtns = document.querySelectorAll('.chart-sort-toggle-btn');
+      for (var i = 0; i < chartSortBtns.length; i++) {
+        chartSortBtns[i].addEventListener('click', function(e) {
+          var order = e.currentTarget.getAttribute('data-sort-order');
+          if (!order || order === currentChartSortOrder) return;
+          currentChartSortOrder = order;
+          for (var j = 0; j < chartSortBtns.length; j++) {
+            if (chartSortBtns[j].getAttribute('data-sort-order') === order) chartSortBtns[j].classList.add('active');
+            else chartSortBtns[j].classList.remove('active');
+          }
+          document.cookie = 'user_status_chart_sort_order=' + encodeURIComponent(order) + '; Path=/; Max-Age=31536000; SameSite=Lax';
+          fetch('/api/settings/status-chart-sort-order', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ order: order })
+          }).catch(function() { /* Cookie 側は手動でも設定済みなので継続描画は問題なし */ });
+          renderCommitChart(groupFilter ? groupFilter.value : '');
         });
       }
       var pieGroupFilter = document.getElementById('pieGroupFilter');

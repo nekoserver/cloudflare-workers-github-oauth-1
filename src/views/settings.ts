@@ -17,6 +17,7 @@ export function getSettingsPage(user: {
   toastDuration?: number;
   statusCommitCacheSortMode?: string;
   statusChartMode?: string;
+  statusChartSortOrder?: string;
   statusTableAutoDetect?: string;
   statusShowAutoDetectedTables?: string;
   statusIgnoreUnknownUnclassifiedWarning?: string;
@@ -32,6 +33,7 @@ export function getSettingsPage(user: {
   const currentToastDuration = user.toastDuration || 10;
   const currentStatusCommitCacheSortMode = user.statusCommitCacheSortMode === 'toggle' ? 'toggle' : 'off';
   const currentStatusChartMode = user.statusChartMode === 'repo' ? 'repo' : 'gradient';
+  const currentStatusChartSortOrder = user.statusChartSortOrder === 'date' ? 'date' : 'count';
   const currentStatusTableAutoDetect = user.statusTableAutoDetect === 'off' ? 'off' : 'on';
   const currentStatusShowAutoDetectedTables = user.statusShowAutoDetectedTables === 'on' ? 'on' : 'off';
   const currentStatusIgnoreUnknownUnclassifiedWarning = user.statusIgnoreUnknownUnclassifiedWarning === 'off' ? 'off' : 'on';
@@ -337,6 +339,18 @@ export function getSettingsPage(user: {
               <input type="checkbox" class="setting-checkbox" id="statusChartModeCheckbox" onchange="toggleStatusChartModeEdit()">
             </div>
           </div>
+          <div class="info-item disabled" id="statusChartSortOrderItem">
+            <span class="info-label">月別コミット量のトグル状態</span>
+            <div class="setting-control">
+              <div class="setting-select-wrapper">
+                <select class="timezone-select" id="statusChartSortOrderSelect" onchange="onStatusChartSortOrderChange()" disabled>
+                  <option value="count" ${currentStatusChartSortOrder === 'count' ? 'selected' : ''}>件数順 (デフォルト)</option>
+                  <option value="date" ${currentStatusChartSortOrder === 'date' ? 'selected' : ''}>日付順</option>
+                </select>
+              </div>
+              <input type="checkbox" class="setting-checkbox" id="statusChartSortOrderCheckbox" onchange="toggleStatusChartSortOrderEdit()">
+            </div>
+          </div>
           <div class="info-item">
             <span class="info-label">デバイスの傾きによってER図キー一覧の表示位置を変化させる</span>
             <div class="setting-control" style="justify-content: flex-end;">
@@ -413,6 +427,11 @@ export function getSettingsPage(user: {
           <button class="btn btn-cancel" onclick="cancelStatusChartMode()">キャンセル</button>
         </div>
         <div class="success-message" id="statusChartModeSuccessMessage">✓ 月別コミット量チャートの表示モードを変更しました</div>
+        <div class="button-container" id="statusChartSortOrderButtonContainer">
+          <button class="btn btn-save" onclick="saveStatusChartSortOrder()">保存</button>
+          <button class="btn btn-cancel" onclick="cancelStatusChartSortOrder()">キャンセル</button>
+        </div>
+        <div class="success-message" id="statusChartSortOrderSuccessMessage">✓ 月別コミット量チャートの並び順を変更しました</div>
         <div class="button-container" id="statusCommitCacheSortModeButtonContainer">
           <button class="btn btn-save" onclick="saveStatusCommitCacheSortMode()">保存</button>
           <button class="btn btn-cancel" onclick="cancelStatusCommitCacheSortMode()">キャンセル</button>
@@ -462,6 +481,7 @@ export function getSettingsPage(user: {
     let originalRecentCommitsCount = '${currentRecentCommitsCount}';
     let originalToastDuration = '${currentToastDuration}';
     let originalStatusChartMode = '${currentStatusChartMode}';
+    let originalStatusChartSortOrder = '${currentStatusChartSortOrder}';
     let originalStatusCommitCacheSortMode = '${currentStatusCommitCacheSortMode}';
     const expiresAtTimestamp = ${user.expiresAtTimestamp};
 
@@ -780,6 +800,55 @@ export function getSettingsPage(user: {
       document.getElementById('statusChartModeCheckbox').checked = false;
       document.getElementById('statusChartModeSelect').disabled = true;
       document.getElementById('statusChartModeItem').classList.add('disabled');
+    }
+    function toggleStatusChartSortOrderEdit() {
+      const cb = document.getElementById('statusChartSortOrderCheckbox');
+      const sel = document.getElementById('statusChartSortOrderSelect');
+      const item = document.getElementById('statusChartSortOrderItem');
+      if (cb.checked) { sel.disabled = false; item.classList.remove('disabled'); }
+      else {
+        sel.disabled = true;
+        item.classList.add('disabled');
+        sel.value = originalStatusChartSortOrder;
+        document.getElementById('statusChartSortOrderButtonContainer').classList.remove('show');
+      }
+    }
+    function onStatusChartSortOrderChange() {
+      const cb = document.getElementById('statusChartSortOrderCheckbox');
+      const sel = document.getElementById('statusChartSortOrderSelect');
+      if (cb.checked && sel.value !== originalStatusChartSortOrder) {
+        document.getElementById('statusChartSortOrderButtonContainer').classList.add('show');
+      } else {
+        document.getElementById('statusChartSortOrderButtonContainer').classList.remove('show');
+      }
+    }
+    async function saveStatusChartSortOrder() {
+      const order = document.getElementById('statusChartSortOrderSelect').value;
+      const res = await fetch('/api/settings/status-chart-sort-order', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        credentials: 'include',
+        body: JSON.stringify({ order })
+      });
+      if (res.ok) {
+        originalStatusChartSortOrder = order;
+        document.getElementById('statusChartSortOrderButtonContainer').classList.remove('show');
+        const msg = document.getElementById('statusChartSortOrderSuccessMessage');
+        msg.classList.add('show');
+        document.getElementById('statusChartSortOrderCheckbox').checked = false;
+        document.getElementById('statusChartSortOrderSelect').disabled = true;
+        document.getElementById('statusChartSortOrderItem').classList.add('disabled');
+        setTimeout(() => { msg.classList.remove('show'); }, 1500);
+      } else {
+        alert('月別コミット量チャートの並び順変更に失敗しました');
+      }
+    }
+    function cancelStatusChartSortOrder() {
+      document.getElementById('statusChartSortOrderSelect').value = originalStatusChartSortOrder;
+      document.getElementById('statusChartSortOrderButtonContainer').classList.remove('show');
+      document.getElementById('statusChartSortOrderCheckbox').checked = false;
+      document.getElementById('statusChartSortOrderSelect').disabled = true;
+      document.getElementById('statusChartSortOrderItem').classList.add('disabled');
     }
     function toggleStatusCommitCacheSortModeEdit() {
       const cb = document.getElementById('statusCommitCacheSortModeCheckbox');

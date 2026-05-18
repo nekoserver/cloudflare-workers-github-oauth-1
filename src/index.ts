@@ -2051,6 +2051,7 @@ app.get('/settings', authMiddleware, async (c) => {
     'user_toast_duration',
     'user_status_commit_cache_sort_mode',
     'user_status_chart_mode',
+    'user_status_chart_sort_order',
     'user_status_table_autodetect',
     'user_status_show_autodetected_tables',
     'user_status_ignore_unknown_unclassified_warning',
@@ -2061,6 +2062,7 @@ app.get('/settings', authMiddleware, async (c) => {
   const toastDuration = parseInt(cookieVals['user_toast_duration'] || '10', 10) || 10;
   const statusCommitCacheSortMode = cookieVals['user_status_commit_cache_sort_mode'] === 'toggle' ? 'toggle' : 'off';
   const statusChartMode = cookieVals['user_status_chart_mode'] === 'repo' ? 'repo' : 'gradient';
+  const statusChartSortOrder = cookieVals['user_status_chart_sort_order'] === 'date' ? 'date' : 'count';
   const statusTableAutoDetect = cookieVals['user_status_table_autodetect'] === 'off' ? 'off' : 'on';
   const statusShowAutoDetectedTables = cookieVals['user_status_show_autodetected_tables'] === 'on' ? 'on' : 'off';
   const statusIgnoreUnknownUnclassifiedWarning = cookieVals['user_status_ignore_unknown_unclassified_warning'] === 'off' ? 'off' : 'on';
@@ -2116,6 +2118,7 @@ app.get('/settings', authMiddleware, async (c) => {
     toastDuration,
     statusCommitCacheSortMode,
     statusChartMode,
+    statusChartSortOrder,
     statusTableAutoDetect,
     statusShowAutoDetectedTables,
     statusIgnoreUnknownUnclassifiedWarning,
@@ -2150,6 +2153,7 @@ app.get('/status', authMiddleware, async (c) => {
     'user_status_commit_cache_sort_mode',
     'user_status_commit_cache_sort_state',
     'user_status_chart_mode',
+    'user_status_chart_sort_order',
     'user_status_table_autodetect',
     'user_status_show_autodetected_tables',
     'user_status_ignore_unknown_unclassified_warning',
@@ -2159,6 +2163,7 @@ app.get('/status', authMiddleware, async (c) => {
     ? 'commit_month_desc'
     : 'cached_at_desc';
   const statusChartMode = cookieVals['user_status_chart_mode'] === 'repo' ? 'repo' : 'gradient';
+  const statusChartSortOrder = cookieVals['user_status_chart_sort_order'] === 'date' ? 'date' : 'count';
   const statusTableAutoDetect = cookieVals['user_status_table_autodetect'] === 'off' ? 'off' : 'on';
   const statusShowAutoDetectedTables = cookieVals['user_status_show_autodetected_tables'] === 'on' ? 'on' : 'off';
   const statusIgnoreUnknownUnclassifiedWarning = cookieVals['user_status_ignore_unknown_unclassified_warning'] === 'off' ? 'off' : 'on';
@@ -2648,6 +2653,7 @@ app.get('/status', authMiddleware, async (c) => {
     statusCommitCacheSortMode,
     statusCommitCacheSortState,
     statusChartMode,
+    statusChartSortOrder,
     statusIgnoreUnknownUnclassifiedWarning,
   }, data));
 });
@@ -5352,6 +5358,27 @@ app.post('/api/settings/status-chart-mode', authMiddleware, async (c) => {
       error: error instanceof Error ? error.message : 'Unknown error',
     });
     return c.json({ error: '月別コミット量チャートの表示モード変更に失敗しました' }, 500);
+  }
+});
+
+app.post('/api/settings/status-chart-sort-order', authMiddleware, async (c) => {
+  try {
+    const { order } = await c.req.json();
+
+    if (order !== 'count' && order !== 'date') {
+      return c.json({ error: '無効なチャート並び順です' }, 400);
+    }
+
+    c.header('Set-Cookie', `user_status_chart_sort_order=${order}; Path=/; Secure; SameSite=Lax; Max-Age=31536000`);
+
+    return c.json({ message: '月別コミット量チャートの並び順を変更しました', order }, 200);
+  } catch (error) {
+    const user = c.get('user');
+    logger.error('Status chart sort order update error', {
+      userId: user?.sub,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    return c.json({ error: '月別コミット量チャートの並び順変更に失敗しました' }, 500);
   }
 });
 
