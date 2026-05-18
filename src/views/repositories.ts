@@ -1217,32 +1217,32 @@ export function getRepositoriesPage(user: {
     .commit-stats-modal-content { max-width: 720px; max-height: 92vh; }
     .commit-stats-modal-content .modal-body { padding-bottom: 20px; }
     .commit-stats-period {
-      font-size: 13px; color: #4a5568; margin-bottom: 10px;
+      font-size: 13px; color: var(--text-secondary); margin-bottom: 10px;
     }
-    .commit-stats-period strong { color: #2d3748; }
+    .commit-stats-period strong { color: var(--text-primary); }
     .commit-stats-summary {
-      font-size: 13px; color: #4a5568; margin-bottom: 12px;
+      font-size: 13px; color: var(--text-secondary); margin-bottom: 12px;
     }
     .commit-stats-table-wrapper {
-      max-height: 60vh; overflow: auto; border: 1px solid #e2e8f0; border-radius: 8px;
+      max-height: 60vh; overflow: auto; border: 1px solid var(--border-color); border-radius: 8px;
     }
     .commit-stats-table {
       width: 100%; border-collapse: collapse; font-size: 13px;
     }
     .commit-stats-table thead th {
       position: sticky; top: 0;
-      background: #f7fafc; color: #2d3748; font-weight: 700; text-align: left;
-      padding: 9px 12px; border-bottom: 1px solid #e2e8f0;
+      background: var(--bg-secondary); color: var(--text-primary); font-weight: 700; text-align: left;
+      padding: 9px 12px; border-bottom: 1px solid var(--border-color);
     }
     .commit-stats-table tbody td {
-      padding: 8px 12px; border-bottom: 1px solid #edf2f7; color: #2d3748;
+      padding: 8px 12px; border-bottom: 1px solid var(--border-color); color: var(--text-primary);
     }
     .commit-stats-table tbody tr:last-child td { border-bottom: none; }
     .commit-stats-table td.num, .commit-stats-table th.num {
       text-align: right; font-variant-numeric: tabular-nums;
     }
     .commit-stats-empty {
-      text-align: center; color: #718096; font-size: 13px; padding: 24px 0;
+      text-align: center; color: var(--text-muted, var(--text-secondary)); font-size: 13px; padding: 24px 0;
     }
     .commit-history-list {
       display: flex; flex-direction: column; gap: 10px;

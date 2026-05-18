@@ -77,6 +77,14 @@
 
 ---
 
+## CSS / UI スタイリングルール
+
+詳細は [`CLAUDE.CSS.md`](CLAUDE.CSS.md) を参照。
+**CSS を書く前・スクリーンショットで表示異常を受け取った時は必ず読むこと**。
+特に「固定色禁止・CSS変数の使用」「ダークモード目視確認」「スクリーンショットを最初に読む」は再発防止の最重要ルール。
+
+---
+
 ## HTML 手順書のスタイルルール（Monodoc 形式）
 
 詳細は [`RULES.cloudflare-workers-github-oauth-N.md`](RULES.cloudflare-workers-github-oauth-N.md) を参照。
