@@ -1216,12 +1216,19 @@ export function getRepositoriesPage(user: {
 
     .commit-stats-modal-content { max-width: 720px; max-height: 92vh; }
     .commit-stats-modal-content .modal-body { padding-bottom: 20px; }
+    .commit-stats-repo {
+      font-size: 13px; color: var(--text-secondary); margin-bottom: 6px;
+    }
+    .commit-stats-repo strong { color: var(--text-primary); font-family: monospace; }
     .commit-stats-period {
       font-size: 13px; color: var(--text-secondary); margin-bottom: 10px;
     }
     .commit-stats-period strong { color: var(--text-primary); }
     .commit-stats-summary {
-      font-size: 13px; color: var(--text-secondary); margin-bottom: 12px;
+      font-size: 13px; color: var(--text-secondary); margin-bottom: 4px;
+    }
+    .commit-stats-source {
+      font-size: 12px; color: var(--text-muted, var(--text-secondary)); margin-bottom: 12px;
     }
     .commit-stats-table-wrapper {
       max-height: 60vh; overflow: auto; border: 1px solid var(--border-color); border-radius: 8px;
@@ -1536,8 +1543,10 @@ export function getRepositoriesPage(user: {
         <button class="modal-close" id="commitStatsModalClose" type="button">&times;</button>
       </div>
       <div class="modal-body">
+        <div class="commit-stats-repo" id="commitStatsRepo"></div>
         <div class="commit-stats-period">対象期間 : <strong id="commitStatsPeriod">--</strong></div>
         <div class="commit-stats-summary" id="commitStatsSummary"></div>
+        <div class="commit-stats-source" id="commitStatsSource"></div>
         <div class="commit-stats-table-wrapper" id="commitStatsTableWrapper"></div>
       </div>
     </div>
@@ -3547,8 +3556,10 @@ export function getRepositoriesPage(user: {
     var commitHistoryStatsBtn = document.getElementById('commitHistoryStatsBtn');
     var commitStatsModal = document.getElementById('commitStatsModal');
     var commitStatsModalClose = document.getElementById('commitStatsModalClose');
+    var commitStatsRepo = document.getElementById('commitStatsRepo');
     var commitStatsPeriod = document.getElementById('commitStatsPeriod');
     var commitStatsSummary = document.getElementById('commitStatsSummary');
+    var commitStatsSource = document.getElementById('commitStatsSource');
     var commitStatsTableWrapper = document.getElementById('commitStatsTableWrapper');
     var commitStatsSessionCache = {};
     var monthlyStatusModal = document.getElementById('monthlyStatusModal');
@@ -3963,8 +3974,11 @@ export function getRepositoriesPage(user: {
       });
     }
 
-    function renderCommitStatsFromData(data, monthFilter) {
+    function renderCommitStatsFromData(data, monthFilter, owner, repoName) {
       var rows = data && Array.isArray(data.rows) ? data.rows : [];
+      if (commitStatsRepo) {
+        commitStatsRepo.innerHTML = '集計対象リポジトリ : <strong>' + esc(owner + '/' + repoName) + '</strong>';
+      }
       if (commitStatsPeriod) commitStatsPeriod.textContent = monthFilter || 'すべて';
       var totalCommits = 0;
       var totalMerges = 0;
@@ -3980,6 +3994,9 @@ export function getRepositoriesPage(user: {
             'ユーザー数 ' + rows.length + ' 名 / コミット ' + totalCommits +
             ' 件（うちマージ承認 ' + totalMerges + ' 件）';
         }
+      }
+      if (commitStatsSource) {
+        commitStatsSource.textContent = data && data.cached ? 'キャッシュ（D1）から取得' : 'GitHub API から取得（リアルタイム）';
       }
       if (!commitStatsTableWrapper) return;
       if (rows.length === 0) {
@@ -4021,7 +4038,7 @@ export function getRepositoriesPage(user: {
 
       var cacheKey = owner + '/' + repoName + '|' + monthFilter;
       if (commitStatsSessionCache[cacheKey]) {
-        renderCommitStatsFromData(commitStatsSessionCache[cacheKey], monthFilter);
+        renderCommitStatsFromData(commitStatsSessionCache[cacheKey], monthFilter, owner, repoName);
         return;
       }
 
@@ -4039,7 +4056,7 @@ export function getRepositoriesPage(user: {
         })
         .then(function(data) {
           commitStatsSessionCache[cacheKey] = data;
-          renderCommitStatsFromData(data, monthFilter);
+          renderCommitStatsFromData(data, monthFilter, owner, repoName);
         })
         .catch(function(err) {
           if (commitStatsSummary) commitStatsSummary.textContent = 'エラー: ' + (err.message || '取得に失敗しました');
