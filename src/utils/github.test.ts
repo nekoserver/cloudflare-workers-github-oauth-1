@@ -3,6 +3,8 @@ import {
   findInstallationByExactSlugs,
   isWebhookUrlMatchingHosts,
   getGitHubCommits,
+  computeCommitStats,
+  getGitHubCommitsForStats,
   CLOUDFLARE_DEPLOY_SLUGS,
   VERCEL_DEPLOY_SLUGS,
   SLACK_WEBHOOK_HOSTS,
@@ -293,5 +295,137 @@ describe('getGitHubCommits — isMerge 判定', () => {
 
     const result = await getGitHubCommits({ owner: 'o', repo: 'r', perPage: 10 });
     expect(result.commits[0].isMerge).toBe(false);
+  });
+});
+
+describe('computeCommitStats', () => {
+  it('空配列は空配列を返す', () => {
+    expect(computeCommitStats([])).toEqual([]);
+  });
+
+  it('単一コミット（非マージ）を1件にまとめる', () => {
+    const result = computeCommitStats([{ authorLogin: 'alice', authorName: 'Alice', isMerge: false }]);
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({ authorLogin: 'alice', commitCount: 1, mergeCount: 0 });
+  });
+
+  it('マージコミットのカウントを正しく計上する', () => {
+    const commits = [
+      { authorLogin: 'alice', authorName: 'Alice', isMerge: true },
+      { authorLogin: 'alice', authorName: 'Alice', isMerge: false },
+    ];
+    const result = computeCommitStats(commits);
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({ authorLogin: 'alice', commitCount: 2, mergeCount: 1 });
+  });
+
+  it('authorLoginがnullの場合はauthorNameで集計する', () => {
+    const result = computeCommitStats([{ authorLogin: null, authorName: 'Bob', isMerge: false }]);
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({ authorLogin: '', authorName: 'Bob', commitCount: 1 });
+  });
+
+  it('authorLogin/authorNameともにnullの場合はUnknownキーで集計する', () => {
+    const result = computeCommitStats([
+      { authorLogin: null, authorName: null, isMerge: false },
+      { authorLogin: null, authorName: null, isMerge: true },
+    ]);
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({ commitCount: 2, mergeCount: 1 });
+  });
+
+  it('コミット数降順でソートされる', () => {
+    const commits = [
+      { authorLogin: 'alice', authorName: 'Alice', isMerge: false },
+      { authorLogin: 'bob', authorName: 'Bob', isMerge: false },
+      { authorLogin: 'bob', authorName: 'Bob', isMerge: false },
+    ];
+    const result = computeCommitStats(commits);
+    expect(result[0].authorLogin).toBe('bob');
+    expect(result[1].authorLogin).toBe('alice');
+  });
+
+  it('コミット数が同じ場合はauthorLoginのアルファベット順', () => {
+    const commits = [
+      { authorLogin: 'zara', authorName: 'Zara', isMerge: false },
+      { authorLogin: 'alice', authorName: 'Alice', isMerge: false },
+    ];
+    const result = computeCommitStats(commits);
+    expect(result[0].authorLogin).toBe('alice');
+    expect(result[1].authorLogin).toBe('zara');
+  });
+
+  it('複数ユーザーの集計を正しく行う', () => {
+    const commits = [
+      { authorLogin: 'alice', authorName: 'Alice', isMerge: false },
+      { authorLogin: 'bob', authorName: 'Bob', isMerge: true },
+      { authorLogin: 'alice', authorName: 'Alice', isMerge: true },
+      { authorLogin: 'bob', authorName: 'Bob', isMerge: false },
+      { authorLogin: 'bob', authorName: 'Bob', isMerge: false },
+    ];
+    const result = computeCommitStats(commits);
+    expect(result).toHaveLength(2);
+    expect(result[0]).toMatchObject({ authorLogin: 'bob', commitCount: 3, mergeCount: 1 });
+    expect(result[1]).toMatchObject({ authorLogin: 'alice', commitCount: 2, mergeCount: 1 });
+  });
+});
+
+describe('getGitHubCommitsForStats — ページネーション', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('単一ページのレスポンスを正しく処理する', async () => {
+    const apiResponse = [
+      {
+        sha: 'abc1',
+        html_url: 'https://github.com/o/r/commit/abc1',
+        commit: { message: 'fix', author: { name: 'Alice', date: '2026-05-01T00:00:00Z' } },
+        author: { login: 'alice' },
+        parents: [{ sha: 'p1' }],
+      },
+      {
+        sha: 'abc2',
+        html_url: 'https://github.com/o/r/commit/abc2',
+        commit: { message: 'Merge PR', author: { name: 'Bob', date: '2026-05-02T00:00:00Z' } },
+        author: { login: 'bob' },
+        parents: [{ sha: 'p2' }, { sha: 'p3' }],
+      },
+    ];
+
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+      new Response(JSON.stringify(apiResponse), { status: 200 })
+    );
+
+    const result = await getGitHubCommitsForStats({ owner: 'o', repo: 'r' });
+    expect(result.status).toBe(200);
+    expect(result.commits).toHaveLength(2);
+    expect(result.commits[0]).toMatchObject({ sha: 'abc1', authorLogin: 'alice', isMerge: false });
+    expect(result.commits[1]).toMatchObject({ sha: 'abc2', authorLogin: 'bob', isMerge: true });
+  });
+
+  it('APIエラー時に部分結果と実際のstatusを返す', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+      new Response(JSON.stringify({ message: 'Not Found' }), { status: 404 })
+    );
+
+    const result = await getGitHubCommitsForStats({ owner: 'o', repo: 'missing' });
+    expect(result.status).toBe(404);
+    expect(result.commits).toHaveLength(0);
+  });
+
+  it('sha/html_urlが欠けたエントリはスキップする', async () => {
+    const apiResponse = [
+      { sha: '', html_url: '', commit: { message: 'x', author: { name: 'x', date: '2026-05-01T00:00:00Z' } }, author: { login: 'x' }, parents: [] },
+      { sha: 'abc3', html_url: 'https://github.com/o/r/commit/abc3', commit: { message: 'y', author: { name: 'y', date: '2026-05-01T00:00:00Z' } }, author: { login: 'y' }, parents: [] },
+    ];
+
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+      new Response(JSON.stringify(apiResponse), { status: 200 })
+    );
+
+    const result = await getGitHubCommitsForStats({ owner: 'o', repo: 'r' });
+    expect(result.commits).toHaveLength(1);
+    expect(result.commits[0].sha).toBe('abc3');
   });
 });

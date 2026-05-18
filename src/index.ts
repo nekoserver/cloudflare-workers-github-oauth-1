@@ -20,7 +20,7 @@ import { getCacheStatusPage, CacheStatusData, TableStatusEntry, UserContextInfo,
 import { renderColumnStatsHtml } from './views/columnStats';
 import { computeColumnRelationStats, verifyColumnStats, type TableSchema, type Relation } from './utils/columnRelationStats';
 import { ensureDefaultWorkspace, getCurrentWorkspace, getUserWorkspaces, switchWorkspace } from './utils/workspace';
-import { getGitHubAccessToken, getGitHubLatestCommit, getGitHubCommitCount, getGitHubCommits, getGitHubRepoOpenIssuesCount, getGitHubRepoCommitsByMonth, getGitHubRepoCommitsByDate, getGitHubTokenScopes, getGitHubUser, getGitHubUserEmail, getGitHubUserRepos, createGitHubRepo, GitHubTokenScopesError, buildRepoInstallationPermissionsMap, RepoInstallationPermissions, getGitHubUserInstallationsWithDiag, getGitHubInstallationRepos, getExternalServiceLinkedRepos, getSlackLinkedReposByWebhooks, CommitDetail } from './utils/github';
+import { getGitHubAccessToken, getGitHubLatestCommit, getGitHubCommitCount, getGitHubCommits, getGitHubCommitsForStats, computeCommitStats, getGitHubRepoOpenIssuesCount, getGitHubRepoCommitsByMonth, getGitHubRepoCommitsByDate, getGitHubTokenScopes, getGitHubUser, getGitHubUserEmail, getGitHubUserRepos, createGitHubRepo, GitHubTokenScopesError, buildRepoInstallationPermissionsMap, RepoInstallationPermissions, getGitHubUserInstallationsWithDiag, getGitHubInstallationRepos, getExternalServiceLinkedRepos, getSlackLinkedReposByWebhooks, CommitDetail } from './utils/github';
 import { getCookieValue, getCookieValues } from './utils/cookie';
 import { verifyResendWebhookSignature } from './utils/resendWebhook';
 import { verifyGitHubWebhookSignature } from './utils/githubWebhook';
@@ -86,6 +86,7 @@ const STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
   { name: 'table_column_keys', migration: '0026', description: 'カラムキー定義（PK/FK）', syncPolicy: 'manual' },
   { name: 'group_oauth_apps', migration: '0027', description: 'グループ別OAuth App認可状況', syncPolicy: 'manual' },
   { name: 'ai_summary_link_access_log', migration: '0029', description: 'AI要約リンクアクセス監査ログ', syncPolicy: 'auto' },
+  { name: 'commit_stats_cache', migration: '0030', description: 'コミット統計キャッシュ', syncPolicy: 'auto' },
 ];
 
 const REQUIRED_STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
@@ -506,6 +507,20 @@ CREATE INDEX IF NOT EXISTS idx_group_oauth_apps_ws ON group_oauth_apps (workspac
 
 CREATE INDEX IF NOT EXISTS idx_ai_summary_link_access_log_request ON ai_summary_link_access_log(request_id);
 CREATE INDEX IF NOT EXISTS idx_ai_summary_link_access_log_created ON ai_summary_link_access_log(created_at);`,
+  '0030': `CREATE TABLE IF NOT EXISTS commit_stats_cache (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  owner TEXT NOT NULL,
+  repo TEXT NOT NULL,
+  period TEXT NOT NULL,
+  author_login TEXT NOT NULL,
+  author_name TEXT,
+  commit_count INTEGER NOT NULL DEFAULT 0,
+  merge_count INTEGER NOT NULL DEFAULT 0,
+  cached_at TEXT NOT NULL,
+  UNIQUE(owner, repo, period, author_login)
+);
+
+CREATE INDEX IF NOT EXISTS idx_commit_stats_cache_repo_period ON commit_stats_cache(owner, repo, period);`,
 };
 
 function jsonUtf8(payload: unknown, status = 200): Response {
@@ -649,6 +664,7 @@ export const TABLE_COLUMN_KEYS: Record<string, ColumnKeyInfo> = {
   table_column_keys: { table_name: 'pk+fk', column_name: 'pk' },
   group_oauth_apps: { group_id: 'pk+fk', app_name: 'pk' },
   ai_summary_link_access_log: { id: 'pk', request_id: 'idx', route: 'idx', issue_code: 'idx', created_at: 'idx' },
+  commit_stats_cache: { id: 'pk', owner: 'idx', repo: 'idx', period: 'idx' },
 };
 
 export function getColumnKeyType(tableName: string, columnName: string): ColumnKeyType {
@@ -694,6 +710,7 @@ export const TABLE_GROUP_MAP: Record<string, string> = {
   user_sessions: 'auth', teams: 'auth', workspaces: 'auth', team_members: 'auth',
   commit_calendar_cache: 'commit', commit_list_cache: 'commit', cache_stats: 'commit',
   commit_search_history: 'commit', commit_search_repo_stats: 'commit', cloudflare_setup_pending: 'commit',
+  commit_stats_cache: 'commit',
   ai_summary_log: 'ai', ai_summary_reviews: 'ai', commit_agent_log: 'ai',
   resend_webhook_sources: 'email', email_send_log: 'email', resend_webhook_log: 'email',
   email_suppression_list: 'email', email_mfa_challenges: 'email', email_audit_anomalies: 'email',
@@ -701,9 +718,6 @@ export const TABLE_GROUP_MAP: Record<string, string> = {
   installation_permissions: 'config', repo_color_settings: 'config', repo_groups: 'config',
   repo_group_members: 'config', group_oauth_apps: 'config', table_catalog: 'config', table_column_keys: 'config',
   ai_summary_link_access_log: 'ai',
-  // NOTE: table_group_permissions は SPEC で「将来追加」とされマイグレーション未作成。
-  // TABLE_GROUP_MAP に登録するとフィルタ UI に空カードで現れてしまうため、
-  // マイグレーション (0030 以降) で実際に CREATE TABLE されるまでここには登録しない。
 };
 
 async function recordAiSummaryLinkAccess(
@@ -3928,6 +3942,105 @@ app.get('/api/repositories/:owner/:repo/commits', optionalAuthMiddleware, async 
       error: error instanceof Error ? error.message : 'Unknown error',
     });
     return c.json({ error: 'Failed to fetch commit history' }, 502);
+  }
+});
+
+// コミット統計（ユーザー別コミット回数・マージ承認回数）
+// 過去の確定月はD1キャッシュを参照し、当月・全期間はGitHub APIに問い合わせる
+app.get('/api/repositories/:owner/:repo/commit-stats', optionalAuthMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!user) {
+    return c.json({ error: 'Unauthorized' }, 401);
+  }
+
+  const owner = c.req.param('owner');
+  const repo = c.req.param('repo');
+  if (!owner || !repo) {
+    return c.json({ error: 'Invalid repository parameters' }, 400);
+  }
+
+  const period = c.req.query('period') ?? '';
+
+  const now = new Date();
+  const currentJstYM = getJstYearMonthParts(now);
+  const currentYMStr = currentJstYM.year + '-' + String(currentJstYM.month).padStart(2, '0');
+  const isPastPeriod = period !== '' && period < currentYMStr;
+
+  if (c.env.DB && isPastPeriod) {
+    try {
+      const cached = await c.env.DB.prepare(
+        'SELECT author_login, author_name, commit_count, merge_count FROM commit_stats_cache WHERE owner = ? AND repo = ? AND period = ? ORDER BY commit_count DESC'
+      ).bind(owner, repo, period).all<{ author_login: string; author_name: string | null; commit_count: number; merge_count: number }>();
+      if (cached.results && cached.results.length > 0) {
+        return c.json({
+          period,
+          rows: cached.results.map(r => ({
+            authorLogin: r.author_login,
+            authorName: r.author_name,
+            commitCount: r.commit_count,
+            mergeCount: r.merge_count,
+          })),
+          cached: true,
+        });
+      }
+    } catch (e) {
+      logger.warn('commit_stats_cache read failed', {
+        owner, repo, period, error: e instanceof Error ? e.message : 'Unknown',
+      });
+    }
+  }
+
+  const userSession = await getUserSession(c.env.DB, user.sub);
+  const accessToken = userSession?.githubAccessToken ?? user.github_access_token ?? undefined;
+
+  let since: string | undefined;
+  let until: string | undefined;
+
+  if (period) {
+    const [yearStr, monthStr] = period.split('-');
+    const y = parseInt(yearStr, 10);
+    const m = parseInt(monthStr, 10);
+    if (isNaN(y) || isNaN(m) || m < 1 || m > 12) {
+      return c.json({ error: 'Invalid period format' }, 400);
+    }
+    since = new Date(Date.UTC(y, m - 1, 1, -9, 0, 0)).toISOString();
+    until = new Date(Date.UTC(y, m, 1, -9, 0, 0)).toISOString();
+  }
+
+  try {
+    const { commits, status } = await getGitHubCommitsForStats({ owner, repo, since, until, accessToken });
+    if (status === 401 || status === 403 || status === 404) {
+      return c.json({ error: 'Insufficient permissions' }, 403);
+    }
+    if (status < 200 || status >= 300) {
+      logger.error('getGitHubCommitsForStats failed', { owner, repo, period, status });
+      return c.json({ error: 'Failed to fetch commits from GitHub' }, 502);
+    }
+
+    const rows = computeCommitStats(commits);
+
+    if (c.env.DB && isPastPeriod && rows.length > 0) {
+      const cachedAt = now.toISOString();
+      try {
+        const stmts = rows.map(row =>
+          c.env.DB!.prepare(
+            'INSERT OR REPLACE INTO commit_stats_cache (owner, repo, period, author_login, author_name, commit_count, merge_count, cached_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+          ).bind(owner, repo, period, row.authorLogin || 'Unknown', row.authorName ?? null, row.commitCount, row.mergeCount, cachedAt)
+        );
+        await c.env.DB.batch(stmts);
+      } catch (e) {
+        logger.warn('commit_stats_cache write failed', {
+          owner, repo, period, error: e instanceof Error ? e.message : 'Unknown',
+        });
+      }
+    }
+
+    return c.json({ period, rows, cached: false });
+  } catch (error) {
+    logger.error('commit-stats endpoint error', {
+      owner, repo, period, error: error instanceof Error ? error.message : 'Unknown',
+    });
+    return c.json({ error: 'Internal server error' }, 500);
   }
 });
 
