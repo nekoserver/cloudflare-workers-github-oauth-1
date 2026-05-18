@@ -521,7 +521,8 @@ CREATE INDEX IF NOT EXISTS idx_ai_summary_link_access_log_created ON ai_summary_
 );
 
 CREATE INDEX IF NOT EXISTS idx_commit_stats_cache_repo_period ON commit_stats_cache(owner, repo, period);`,
-  '0031': `ALTER TABLE commit_calendar_cache ADD COLUMN total_count INTEGER NOT NULL DEFAULT 0;`,
+  '0031': `ALTER TABLE commit_calendar_cache ADD COLUMN total_count INTEGER NOT NULL DEFAULT 0;
+UPDATE commit_calendar_cache SET total_count = (SELECT COALESCE(SUM(CAST(je.value AS INTEGER)), 0) FROM json_each(commit_calendar_cache.counts) je) WHERE total_count = 0;`,
 };
 
 function jsonUtf8(payload: unknown, status = 200): Response {
@@ -4070,6 +4071,7 @@ app.get('/api/repositories/:owner/:repo/commit-months', optionalAuthMiddleware, 
     fetched: number;
     fetchErrors: number;
     pastMonthsWithCommits: number;
+    inconsistentRefetched: number;
     cacheReadError: string | null;
     repoInfoError: string | null;
   };
@@ -4081,6 +4083,7 @@ app.get('/api/repositories/:owner/:repo/commit-months', optionalAuthMiddleware, 
     fetched: 0,
     fetchErrors: 0,
     pastMonthsWithCommits: 0,
+    inconsistentRefetched: 0,
     cacheReadError: null,
     repoInfoError: null,
   };
@@ -4132,11 +4135,11 @@ app.get('/api/repositories/:owner/:repo/commit-months', optionalAuthMiddleware, 
   const candidates = buildPastMonthRange(createdYM, currentMonth);
   details.candidatesCount = candidates.length;
 
-  let cachedRows: { year: number; month: number; total_count: number }[] = [];
+  let cachedRows: { year: number; month: number; total_count: number; counts: string }[] = [];
   try {
     const rows = await c.env.DB.prepare(
-      'SELECT year, month, total_count FROM commit_calendar_cache WHERE workspace_id = ? AND owner = ? AND repo = ?'
-    ).bind(workspaceId, owner, repo).all<{ year: number; month: number; total_count: number }>();
+      'SELECT year, month, total_count, counts FROM commit_calendar_cache WHERE workspace_id = ? AND owner = ? AND repo = ?'
+    ).bind(workspaceId, owner, repo).all<{ year: number; month: number; total_count: number; counts: string }>();
     cachedRows = rows.results ?? [];
   } catch (e) {
     details.cacheReadError = e instanceof Error ? e.message : String(e);
@@ -4145,11 +4148,27 @@ app.get('/api/repositories/:owner/:repo/commit-months', optionalAuthMiddleware, 
     });
   }
 
+  // ALTER TABLE 直後の不整合行（total_count = 0 だが counts JSON は非ゼロ要素を持つ）を検出
+  // 該当行は cachedMap に入れず、後続の「未キャッシュ判定」経由で GitHub から再取得・全カラム上書きさせる
   const cachedMap = new Map<string, number>();
+  const inconsistentMonths = new Set<string>();
   for (const row of cachedRows) {
     const ym = `${row.year}-${String(row.month).padStart(2, '0')}`;
+    if (row.total_count === 0 && row.counts && row.counts !== '{}') {
+      let recomputed = 0;
+      try {
+        recomputed = sumCountsTotal(JSON.parse(row.counts));
+      } catch {
+        recomputed = 0;
+      }
+      if (recomputed > 0) {
+        inconsistentMonths.add(ym);
+        continue;
+      }
+    }
     cachedMap.set(ym, row.total_count);
   }
+  details.inconsistentRefetched = inconsistentMonths.size;
 
   for (const candidate of candidates) {
     if (cachedMap.has(candidate)) {

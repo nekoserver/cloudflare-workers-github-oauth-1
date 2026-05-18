@@ -3657,6 +3657,7 @@ export function getRepositoriesPage(user: {
         parts.push('対象月: ' + details.candidatesCount);
         parts.push('キャッシュHIT: ' + (details.cacheHits || 0));
         parts.push('GitHub取得: ' + (details.fetched || 0));
+        if (details.inconsistentRefetched) parts.push('不整合再取得: ' + details.inconsistentRefetched);
         if (details.fetchErrors) parts.push('取得失敗: ' + details.fetchErrors);
         parts.push('コミット有: ' + (details.pastMonthsWithCommits || 0));
       }
