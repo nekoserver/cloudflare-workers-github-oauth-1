@@ -3550,6 +3550,7 @@ export function getRepositoriesPage(user: {
     var commitStatsPeriod = document.getElementById('commitStatsPeriod');
     var commitStatsSummary = document.getElementById('commitStatsSummary');
     var commitStatsTableWrapper = document.getElementById('commitStatsTableWrapper');
+    var commitStatsSessionCache = {};
     var monthlyStatusModal = document.getElementById('monthlyStatusModal');
     var monthlyStatusModalClose = document.getElementById('monthlyStatusModalClose');
     var monthlyStatusLabel = document.getElementById('monthlyStatusLabel');
@@ -3962,60 +3963,26 @@ export function getRepositoriesPage(user: {
       });
     }
 
-    function aggregateCommitStats(commits, monthFilter) {
-      var byUser = {};
-      var total = 0;
-      var mergeTotal = 0;
-      for (var i = 0; i < (commits || []).length; i++) {
-        var c = commits[i];
-        if (!c) continue;
-        if (monthFilter) {
-          if (!c.authoredDate) continue;
-          var d = new Date(c.authoredDate);
-          if (isNaN(d.getTime())) continue;
-          var ym = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
-          if (ym !== monthFilter) continue;
-        }
-        var key = c.authorLogin || c.authorName || 'Unknown';
-        if (!byUser[key]) {
-          byUser[key] = {
-            user: key,
-            authorLogin: c.authorLogin || '',
-            authorName: c.authorName || '',
-            commits: 0,
-            merges: 0
-          };
-        }
-        byUser[key].commits++;
-        total++;
-        if (c.isMerge) {
-          byUser[key].merges++;
-          mergeTotal++;
-        }
-      }
-      var rows = [];
-      for (var k in byUser) rows.push(byUser[k]);
-      rows.sort(function(a, b) {
-        if (b.commits !== a.commits) return b.commits - a.commits;
-        return a.user.localeCompare(b.user);
-      });
-      return { rows: rows, totalCommits: total, totalMerges: mergeTotal };
-    }
-
-    function renderCommitStats(commits, monthFilter) {
-      var agg = aggregateCommitStats(commits, monthFilter);
+    function renderCommitStatsFromData(data, monthFilter) {
+      var rows = data && Array.isArray(data.rows) ? data.rows : [];
       if (commitStatsPeriod) commitStatsPeriod.textContent = monthFilter || 'すべて';
+      var totalCommits = 0;
+      var totalMerges = 0;
+      for (var i = 0; i < rows.length; i++) {
+        totalCommits += (rows[i].commitCount || 0);
+        totalMerges += (rows[i].mergeCount || 0);
+      }
       if (commitStatsSummary) {
-        if (agg.rows.length === 0) {
+        if (rows.length === 0) {
           commitStatsSummary.textContent = '対象期間のコミットがありません。';
         } else {
           commitStatsSummary.textContent =
-            'ユーザー数 ' + agg.rows.length + ' 名 / コミット ' + agg.totalCommits +
-            ' 件（うちマージ承認 ' + agg.totalMerges + ' 件）';
+            'ユーザー数 ' + rows.length + ' 名 / コミット ' + totalCommits +
+            ' 件（うちマージ承認 ' + totalMerges + ' 件）';
         }
       }
       if (!commitStatsTableWrapper) return;
-      if (agg.rows.length === 0) {
+      if (rows.length === 0) {
         commitStatsTableWrapper.innerHTML = '<div class="commit-stats-empty">表示できる集計データがありません。</div>';
         return;
       }
@@ -4025,15 +3992,15 @@ export function getRepositoriesPage(user: {
           '<th class="num">コミット回数</th>' +
           '<th class="num">マージ承認回数</th>' +
         '</tr></thead><tbody>';
-      for (var i = 0; i < agg.rows.length; i++) {
-        var row = agg.rows[i];
+      for (var i = 0; i < rows.length; i++) {
+        var row = rows[i];
         var label = row.authorLogin
           ? row.authorLogin + (row.authorName && row.authorName !== row.authorLogin ? ' (' + row.authorName + ')' : '')
           : (row.authorName || 'Unknown');
         html += '<tr>' +
           '<td>' + esc(label) + '</td>' +
-          '<td class="num">' + row.commits + '</td>' +
-          '<td class="num">' + row.merges + '</td>' +
+          '<td class="num">' + (row.commitCount || 0) + '</td>' +
+          '<td class="num">' + (row.mergeCount || 0) + '</td>' +
         '</tr>';
       }
       html += '</tbody></table>';
@@ -4042,12 +4009,42 @@ export function getRepositoriesPage(user: {
 
     function openCommitStatsModal() {
       if (!commitStatsModal) return;
-      var repoKey = currentRepoFullName;
-      var cached = repoKey ? commitHistoryCache[repoKey] : null;
-      var commits = cached && Array.isArray(cached.commits) ? cached.commits : [];
+      var owner = currentRepoOwner;
+      var repoName = currentRepoName;
+      if (!owner || !repoName) return;
       var monthFilter = commitHistoryMonthSelect ? commitHistoryMonthSelect.value : '';
-      renderCommitStats(commits, monthFilter);
+
       commitStatsModal.classList.add('show');
+      if (commitStatsPeriod) commitStatsPeriod.textContent = monthFilter || 'すべて';
+      if (commitStatsSummary) commitStatsSummary.textContent = '集計中...';
+      if (commitStatsTableWrapper) commitStatsTableWrapper.innerHTML = '';
+
+      var cacheKey = owner + '/' + repoName + '|' + monthFilter;
+      if (commitStatsSessionCache[cacheKey]) {
+        renderCommitStatsFromData(commitStatsSessionCache[cacheKey], monthFilter);
+        return;
+      }
+
+      var url = '/api/repositories/' + encodeURIComponent(owner) + '/' + encodeURIComponent(repoName) + '/commit-stats';
+      if (monthFilter) url += '?period=' + encodeURIComponent(monthFilter);
+
+      fetch(url, { credentials: 'same-origin' })
+        .then(function(res) {
+          if (!res.ok) {
+            return res.json().catch(function() { return null; }).then(function(payload) {
+              throw new Error(payload && payload.error ? payload.error : '取得に失敗しました');
+            });
+          }
+          return res.json();
+        })
+        .then(function(data) {
+          commitStatsSessionCache[cacheKey] = data;
+          renderCommitStatsFromData(data, monthFilter);
+        })
+        .catch(function(err) {
+          if (commitStatsSummary) commitStatsSummary.textContent = 'エラー: ' + (err.message || '取得に失敗しました');
+          if (commitStatsTableWrapper) commitStatsTableWrapper.innerHTML = '';
+        });
     }
 
     function closeCommitStatsModal() {

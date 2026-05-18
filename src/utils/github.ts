@@ -638,6 +638,99 @@ export async function getGitHubTokenScopes(params: {
   return Array.isArray(data.scopes) ? data.scopes : [];
 }
 
+export interface CommitStatsRow {
+  authorLogin: string;
+  authorName: string | null;
+  commitCount: number;
+  mergeCount: number;
+}
+
+export function computeCommitStats(commits: Array<{
+  authorLogin: string | null;
+  authorName: string | null;
+  isMerge: boolean;
+}>): CommitStatsRow[] {
+  const byUser = new Map<string, CommitStatsRow>();
+  for (const commit of commits) {
+    const key = commit.authorLogin || commit.authorName || 'Unknown';
+    const existing = byUser.get(key);
+    if (existing) {
+      existing.commitCount++;
+      if (commit.isMerge) existing.mergeCount++;
+    } else {
+      byUser.set(key, {
+        authorLogin: commit.authorLogin ?? '',
+        authorName: commit.authorName ?? null,
+        commitCount: 1,
+        mergeCount: commit.isMerge ? 1 : 0,
+      });
+    }
+  }
+  return Array.from(byUser.values()).sort((a, b) => {
+    if (b.commitCount !== a.commitCount) return b.commitCount - a.commitCount;
+    const aKey = a.authorLogin || a.authorName || '';
+    const bKey = b.authorLogin || b.authorName || '';
+    return aKey.localeCompare(bKey);
+  });
+}
+
+export async function getGitHubCommitsForStats(params: {
+  owner: string;
+  repo: string;
+  since?: string;
+  until?: string;
+  accessToken?: string;
+  maxCommits?: number;
+}): Promise<{ commits: GitHubCommitHistoryEntry[]; status: number }> {
+  const { owner, repo, since, until, accessToken, maxCommits = 500 } = params;
+  const headers: Record<string, string> = {
+    'Accept': 'application/vnd.github.v3+json',
+    'User-Agent': 'Cloudflare-Workers-GitHub-OAuth',
+  };
+  if (accessToken) {
+    headers['Authorization'] = `Bearer ${accessToken}`;
+  }
+
+  const searchParams = new URLSearchParams({ per_page: '100' });
+  if (since) searchParams.set('since', since);
+  if (until) searchParams.set('until', until);
+
+  const baseUrl = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/commits`;
+  let nextUrl: string | null = `${baseUrl}?${searchParams.toString()}`;
+  const allCommits: GitHubCommitHistoryEntry[] = [];
+
+  while (nextUrl && allCommits.length < maxCommits) {
+    const response = await fetch(nextUrl, { headers });
+    if (!response.ok) {
+      return { commits: allCommits, status: response.status };
+    }
+    const data = await response.json<any[]>();
+    if (!Array.isArray(data)) break;
+
+    for (const entry of data) {
+      const commitInfo = entry?.commit ?? {};
+      const authorInfo = commitInfo.author;
+      const parents = Array.isArray(entry?.parents) ? entry.parents : [];
+      if (!entry?.sha || !entry?.html_url) continue;
+      allCommits.push({
+        sha: entry.sha,
+        htmlUrl: entry.html_url,
+        message: typeof commitInfo.message === 'string' ? commitInfo.message : entry.sha,
+        authorName: typeof authorInfo?.name === 'string' ? authorInfo.name : null,
+        authorLogin: entry?.author?.login ?? null,
+        authoredDate: typeof authorInfo?.date === 'string' ? authorInfo.date : null,
+        isMerge: parents.length >= 2,
+      });
+    }
+
+    const linkHeader = response.headers.get('Link');
+    const nextMatch = linkHeader?.match(/<([^>]+)>;\s*rel="next"/);
+    nextUrl = nextMatch ? nextMatch[1] : null;
+  }
+
+  return { commits: allCommits, status: 200 };
+}
+
 /** Cloudflare のデプロイ用 GitHub App の既知の app_slug 一覧 */
 export const CLOUDFLARE_DEPLOY_SLUGS = ['cloudflare-pages', 'cloudflare-workers-and-pages'];
 
