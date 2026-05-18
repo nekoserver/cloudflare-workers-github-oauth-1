@@ -1,7 +1,8 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import {
   findInstallationByExactSlugs,
   isWebhookUrlMatchingHosts,
+  getGitHubCommits,
   CLOUDFLARE_DEPLOY_SLUGS,
   VERCEL_DEPLOY_SLUGS,
   SLACK_WEBHOOK_HOSTS,
@@ -222,5 +223,75 @@ describe('isWebhookUrlMatchingHosts', () => {
     it('空文字列は false を返す', () => {
       expect(isWebhookUrlMatchingHosts('', SLACK_WEBHOOK_HOSTS)).toBe(false);
     });
+  });
+});
+
+describe('getGitHubCommits — isMerge 判定', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('parents が 2 件以上のコミットは isMerge=true、1 件以下は false を返す', async () => {
+    const apiResponse = [
+      {
+        sha: 'merge1',
+        html_url: 'https://github.com/o/r/commit/merge1',
+        commit: { message: 'Merge pull request #1', author: { name: 'alice', date: '2026-05-01T00:00:00Z' } },
+        author: { login: 'alice' },
+        parents: [{ sha: 'p1' }, { sha: 'p2' }],
+      },
+      {
+        sha: 'normal1',
+        html_url: 'https://github.com/o/r/commit/normal1',
+        commit: { message: 'fix: bug', author: { name: 'bob', date: '2026-05-02T00:00:00Z' } },
+        author: { login: 'bob' },
+        parents: [{ sha: 'p3' }],
+      },
+      {
+        sha: 'initial',
+        html_url: 'https://github.com/o/r/commit/initial',
+        commit: { message: 'initial commit', author: { name: 'alice', date: '2026-05-03T00:00:00Z' } },
+        author: { login: 'alice' },
+        parents: [],
+      },
+      {
+        sha: 'octopus',
+        html_url: 'https://github.com/o/r/commit/octopus',
+        commit: { message: 'Merge branches', author: { name: 'bob', date: '2026-05-04T00:00:00Z' } },
+        author: { login: 'bob' },
+        parents: [{ sha: 'p4' }, { sha: 'p5' }, { sha: 'p6' }],
+      },
+    ];
+
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+      new Response(JSON.stringify(apiResponse), { status: 200 })
+    );
+
+    const result = await getGitHubCommits({ owner: 'o', repo: 'r', perPage: 10 });
+
+    expect(result.status).toBe(200);
+    expect(result.commits).toHaveLength(4);
+    expect(result.commits[0]).toMatchObject({ sha: 'merge1', isMerge: true });
+    expect(result.commits[1]).toMatchObject({ sha: 'normal1', isMerge: false });
+    expect(result.commits[2]).toMatchObject({ sha: 'initial', isMerge: false });
+    expect(result.commits[3]).toMatchObject({ sha: 'octopus', isMerge: true });
+  });
+
+  it('parents プロパティが欠落しても isMerge=false で安全にマップする', async () => {
+    const apiResponse = [
+      {
+        sha: 'noparents',
+        html_url: 'https://github.com/o/r/commit/noparents',
+        commit: { message: 'x', author: { name: 'x', date: '2026-05-05T00:00:00Z' } },
+        author: { login: 'x' },
+      },
+    ];
+
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+      new Response(JSON.stringify(apiResponse), { status: 200 })
+    );
+
+    const result = await getGitHubCommits({ owner: 'o', repo: 'r', perPage: 10 });
+    expect(result.commits[0].isMerge).toBe(false);
   });
 });

@@ -1204,6 +1204,46 @@ export function getRepositoriesPage(user: {
       min-width: 180px; padding: 7px 10px; border-radius: 8px;
       border: 1px solid #cbd5e0; background: #fff; color: #2d3748; font-size: 13px;
     }
+    .commit-history-stats-btn {
+      margin-left: auto;
+      padding: 7px 14px; border-radius: 8px; border: 1px solid #3182ce;
+      background: #3182ce; color: #fff; font-size: 12px; font-weight: 700;
+      cursor: pointer; transition: background 0.15s, opacity 0.15s;
+      white-space: nowrap;
+    }
+    .commit-history-stats-btn:hover { background: #2c5282; }
+    .commit-history-stats-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    .commit-stats-modal-content { max-width: 720px; max-height: 92vh; }
+    .commit-stats-modal-content .modal-body { padding-bottom: 20px; }
+    .commit-stats-period {
+      font-size: 13px; color: #4a5568; margin-bottom: 10px;
+    }
+    .commit-stats-period strong { color: #2d3748; }
+    .commit-stats-summary {
+      font-size: 13px; color: #4a5568; margin-bottom: 12px;
+    }
+    .commit-stats-table-wrapper {
+      max-height: 60vh; overflow: auto; border: 1px solid #e2e8f0; border-radius: 8px;
+    }
+    .commit-stats-table {
+      width: 100%; border-collapse: collapse; font-size: 13px;
+    }
+    .commit-stats-table thead th {
+      position: sticky; top: 0;
+      background: #f7fafc; color: #2d3748; font-weight: 700; text-align: left;
+      padding: 9px 12px; border-bottom: 1px solid #e2e8f0;
+    }
+    .commit-stats-table tbody td {
+      padding: 8px 12px; border-bottom: 1px solid #edf2f7; color: #2d3748;
+    }
+    .commit-stats-table tbody tr:last-child td { border-bottom: none; }
+    .commit-stats-table td.num, .commit-stats-table th.num {
+      text-align: right; font-variant-numeric: tabular-nums;
+    }
+    .commit-stats-empty {
+      text-align: center; color: #718096; font-size: 13px; padding: 24px 0;
+    }
     .commit-history-list {
       display: flex; flex-direction: column; gap: 10px;
       max-height: 60vh; overflow-y: auto; padding-right: 4px;
@@ -1481,9 +1521,24 @@ export function getRepositoriesPage(user: {
           <select class="commit-history-month-select" id="commitHistoryMonthSelect">
             <option value="">すべて</option>
           </select>
+          <button type="button" class="commit-history-stats-btn" id="commitHistoryStatsBtn" title="現在選択中の期間に対するユーザー別集計を表示">stats</button>
         </div>
         <div class="commit-history-list" id="commitHistoryList"></div>
         <div class="commit-history-feedback" id="commitHistoryFeedback"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="commitStatsModal" style="z-index:2700">
+    <div class="modal-content commit-stats-modal-content">
+      <div class="modal-header">
+        <span class="modal-title">📊 コミット集計</span>
+        <button class="modal-close" id="commitStatsModalClose" type="button">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="commit-stats-period">対象期間 : <strong id="commitStatsPeriod">--</strong></div>
+        <div class="commit-stats-summary" id="commitStatsSummary"></div>
+        <div class="commit-stats-table-wrapper" id="commitStatsTableWrapper"></div>
       </div>
     </div>
   </div>
@@ -3489,6 +3544,12 @@ export function getRepositoriesPage(user: {
     var commitHistoryTotal = document.getElementById('commitHistoryTotal');
     var commitHistoryFeedback = document.getElementById('commitHistoryFeedback');
     var commitHistoryMonthSelect = document.getElementById('commitHistoryMonthSelect');
+    var commitHistoryStatsBtn = document.getElementById('commitHistoryStatsBtn');
+    var commitStatsModal = document.getElementById('commitStatsModal');
+    var commitStatsModalClose = document.getElementById('commitStatsModalClose');
+    var commitStatsPeriod = document.getElementById('commitStatsPeriod');
+    var commitStatsSummary = document.getElementById('commitStatsSummary');
+    var commitStatsTableWrapper = document.getElementById('commitStatsTableWrapper');
     var monthlyStatusModal = document.getElementById('monthlyStatusModal');
     var monthlyStatusModalClose = document.getElementById('monthlyStatusModalClose');
     var monthlyStatusLabel = document.getElementById('monthlyStatusLabel');
@@ -3898,6 +3959,110 @@ export function getRepositoriesPage(user: {
         closeMonthlyStatusModal();
         closeCommitHistoryModal();
         syncInlineHeatmapToMonth(commitHistoryMonthSelect.value);
+      });
+    }
+
+    function aggregateCommitStats(commits, monthFilter) {
+      var byUser = {};
+      var total = 0;
+      var mergeTotal = 0;
+      for (var i = 0; i < (commits || []).length; i++) {
+        var c = commits[i];
+        if (!c) continue;
+        if (monthFilter) {
+          if (!c.authoredDate) continue;
+          var d = new Date(c.authoredDate);
+          if (isNaN(d.getTime())) continue;
+          var ym = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+          if (ym !== monthFilter) continue;
+        }
+        var key = c.authorLogin || c.authorName || 'Unknown';
+        if (!byUser[key]) {
+          byUser[key] = {
+            user: key,
+            authorLogin: c.authorLogin || '',
+            authorName: c.authorName || '',
+            commits: 0,
+            merges: 0
+          };
+        }
+        byUser[key].commits++;
+        total++;
+        if (c.isMerge) {
+          byUser[key].merges++;
+          mergeTotal++;
+        }
+      }
+      var rows = [];
+      for (var k in byUser) rows.push(byUser[k]);
+      rows.sort(function(a, b) {
+        if (b.commits !== a.commits) return b.commits - a.commits;
+        return a.user.localeCompare(b.user);
+      });
+      return { rows: rows, totalCommits: total, totalMerges: mergeTotal };
+    }
+
+    function renderCommitStats(commits, monthFilter) {
+      var agg = aggregateCommitStats(commits, monthFilter);
+      if (commitStatsPeriod) commitStatsPeriod.textContent = monthFilter || 'すべて';
+      if (commitStatsSummary) {
+        if (agg.rows.length === 0) {
+          commitStatsSummary.textContent = '対象期間のコミットがありません。';
+        } else {
+          commitStatsSummary.textContent =
+            'ユーザー数 ' + agg.rows.length + ' 名 / コミット ' + agg.totalCommits +
+            ' 件（うちマージ承認 ' + agg.totalMerges + ' 件）';
+        }
+      }
+      if (!commitStatsTableWrapper) return;
+      if (agg.rows.length === 0) {
+        commitStatsTableWrapper.innerHTML = '<div class="commit-stats-empty">表示できる集計データがありません。</div>';
+        return;
+      }
+      var html = '<table class="commit-stats-table">' +
+        '<thead><tr>' +
+          '<th>ユーザー</th>' +
+          '<th class="num">コミット回数</th>' +
+          '<th class="num">マージ承認回数</th>' +
+        '</tr></thead><tbody>';
+      for (var i = 0; i < agg.rows.length; i++) {
+        var row = agg.rows[i];
+        var label = row.authorLogin
+          ? row.authorLogin + (row.authorName && row.authorName !== row.authorLogin ? ' (' + row.authorName + ')' : '')
+          : (row.authorName || 'Unknown');
+        html += '<tr>' +
+          '<td>' + esc(label) + '</td>' +
+          '<td class="num">' + row.commits + '</td>' +
+          '<td class="num">' + row.merges + '</td>' +
+        '</tr>';
+      }
+      html += '</tbody></table>';
+      commitStatsTableWrapper.innerHTML = html;
+    }
+
+    function openCommitStatsModal() {
+      if (!commitStatsModal) return;
+      var repoKey = currentRepoFullName;
+      var cached = repoKey ? commitHistoryCache[repoKey] : null;
+      var commits = cached && Array.isArray(cached.commits) ? cached.commits : [];
+      var monthFilter = commitHistoryMonthSelect ? commitHistoryMonthSelect.value : '';
+      renderCommitStats(commits, monthFilter);
+      commitStatsModal.classList.add('show');
+    }
+
+    function closeCommitStatsModal() {
+      if (commitStatsModal) commitStatsModal.classList.remove('show');
+    }
+
+    if (commitHistoryStatsBtn) {
+      commitHistoryStatsBtn.addEventListener('click', openCommitStatsModal);
+    }
+    if (commitStatsModalClose) {
+      commitStatsModalClose.addEventListener('click', closeCommitStatsModal);
+    }
+    if (commitStatsModal) {
+      commitStatsModal.addEventListener('click', function(e) {
+        if (e.target === commitStatsModal) closeCommitStatsModal();
       });
     }
 
