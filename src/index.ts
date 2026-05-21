@@ -20,7 +20,7 @@ import { getCacheStatusPage, CacheStatusData, TableStatusEntry, UserContextInfo,
 import { renderColumnStatsHtml } from './views/columnStats';
 import { computeColumnRelationStats, verifyColumnStats, type TableSchema, type Relation } from './utils/columnRelationStats';
 import { ensureDefaultWorkspace, getCurrentWorkspace, getUserWorkspaces, switchWorkspace } from './utils/workspace';
-import { getGitHubAccessToken, getGitHubLatestCommit, getGitHubCommitCount, getGitHubCommits, getGitHubCommitsForStats, computeCommitStats, getGitHubRepoOpenIssuesCount, getGitHubRepoCommitsByMonth, getGitHubRepoCommitsByDate, getGitHubRepoInfo, getGitHubTokenScopes, getGitHubUser, getGitHubUserEmail, getGitHubUserRepos, createGitHubRepo, GitHubTokenScopesError, buildRepoInstallationPermissionsMap, RepoInstallationPermissions, getGitHubUserInstallationsWithDiag, getGitHubInstallationRepos, getExternalServiceLinkedRepos, getSlackLinkedReposByWebhooks, sumCountsTotal, buildPastMonthRange, CommitDetail } from './utils/github';
+import { getGitHubAccessToken, getGitHubLatestCommit, getGitHubCommitCount, getGitHubCommits, getGitHubCommitsForStats, computeCommitStats, getGitHubRepoOpenIssuesCount, getGitHubRepoCommitsByMonth, getGitHubRepoCommitsByDate, getGitHubRepoInfo, getGitHubTokenScopes, getGitHubUser, getGitHubUserEmail, getGitHubUserRepos, createGitHubRepo, GitHubTokenScopesError, buildRepoInstallationPermissionsMap, RepoInstallationPermissions, getGitHubUserInstallationsWithDiag, getGitHubInstallationRepos, getExternalServiceLinkedRepos, getSlackLinkedReposByWebhooks, sumCountsTotal, buildPastMonthRange, CommitDetail, toClientCommit } from './utils/github';
 import { getCookieValue, getCookieValues } from './utils/cookie';
 import { verifyResendWebhookSignature } from './utils/resendWebhook';
 import { verifyGitHubWebhookSignature } from './utils/githubWebhook';
@@ -4102,15 +4102,28 @@ app.get('/api/repositories/:owner/:repo/commit-months', optionalAuthMiddleware, 
 
   if (!c.env.DB) {
     details.status = 'no_db';
-    return c.json({ months: [currentMonth], currentMonth, details });
+    return c.json({ months: [currentMonth], currentMonth, details, cachedRepoCount: 0 });
   }
   if (!workspaceId) {
     details.status = 'no_workspace';
-    return c.json({ months: [currentMonth], currentMonth, details });
+    return c.json({ months: [currentMonth], currentMonth, details, cachedRepoCount: 0 });
   }
+
+  let cachedRepoCount = 0;
+  try {
+    const countRow = await c.env.DB.prepare(
+      "SELECT COUNT(DISTINCT owner || '/' || repo) AS n FROM commit_calendar_cache WHERE workspace_id = ?"
+    ).bind(workspaceId).first<{ n: number }>();
+    cachedRepoCount = countRow?.n ?? 0;
+  } catch (e) {
+    logger.warn('commit-months: cached repo count failed', {
+      error: e instanceof Error ? e.message : String(e),
+    });
+  }
+
   if (!accessToken) {
     details.status = 'no_access_token';
-    return c.json({ months: [currentMonth], currentMonth, details });
+    return c.json({ months: [currentMonth], currentMonth, details, cachedRepoCount });
   }
 
   let createdYM: string | null = null;
@@ -4134,7 +4147,7 @@ app.get('/api/repositories/:owner/:repo/commit-months', optionalAuthMiddleware, 
 
   if (!createdYM) {
     details.status = 'no_repo_created_at';
-    return c.json({ months: [currentMonth], currentMonth, details });
+    return c.json({ months: [currentMonth], currentMonth, details, cachedRepoCount });
   }
   details.repoCreatedMonth = createdYM;
 
@@ -4237,7 +4250,7 @@ app.get('/api/repositories/:owner/:repo/commit-months', optionalAuthMiddleware, 
   details.pastMonthsWithCommits = pastMonthsWithCommits.length;
   for (const ym of pastMonthsWithCommits) months.push(ym);
 
-  return c.json({ months, currentMonth, details });
+  return c.json({ months, currentMonth, details, cachedRepoCount });
 });
 
 // 月別コミット一覧（cache-first: 過去月はD1、当月はGitHub API）
@@ -4276,7 +4289,7 @@ app.get('/api/repositories/:owner/:repo/commits-by-month', optionalAuthMiddlewar
         ).bind(workspaceId, owner, repo, `${period}-%`).all<{ commits_json: string }>();
         const commits = (listRows.results ?? []).flatMap(row => {
           try { return JSON.parse(row.commits_json) as CommitDetail[]; } catch { return []; }
-        });
+        }).map(toClientCommit);
         return c.json({ period, commits, cached: true });
       }
     } catch (e) {
@@ -4302,7 +4315,7 @@ app.get('/api/repositories/:owner/:repo/commits-by-month', optionalAuthMiddlewar
 
   const { counts, commitsByDate } = ghResult;
   const allCommits = Object.values(commitsByDate).flat()
-    .sort((a, b) => (b.authoredDate ?? '').localeCompare(a.authoredDate ?? ''));
+    .sort((a, b) => (b.date ?? '').localeCompare(a.date ?? ''));
 
   if (isPastMonth && c.env.DB && workspaceId) {
     const cachedAt = now.toISOString();
@@ -4339,7 +4352,7 @@ app.get('/api/repositories/:owner/:repo/commits-by-month', optionalAuthMiddlewar
     }
   }
 
-  return c.json({ period, commits: allCommits, cached: false });
+  return c.json({ period, commits: allCommits.map(toClientCommit), cached: false });
 });
 
 // コミットカレンダー（月別コミット数）

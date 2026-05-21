@@ -7,6 +7,7 @@ import {
   getGitHubCommitsForStats,
   sumCountsTotal,
   buildPastMonthRange,
+  toClientCommit,
   CLOUDFLARE_DEPLOY_SLUGS,
   VERCEL_DEPLOY_SLUGS,
   SLACK_WEBHOOK_HOSTS,
@@ -467,5 +468,56 @@ describe('buildPastMonthRange', () => {
   it('フォーマット不正の場合は空配列を返す', () => {
     expect(buildPastMonthRange('2026/05', '2026-04')).toEqual([]);
     expect(buildPastMonthRange('2026-05', 'invalid')).toEqual([]);
+  });
+});
+
+describe('toClientCommit', () => {
+  it('date → authoredDate, url → htmlUrl にマッピングする', () => {
+    const result = toClientCommit({
+      sha: 'abc123',
+      message: 'fix bug',
+      authorName: 'Alice',
+      authorLogin: 'alice',
+      authorAvatarUrl: 'https://example.com/a.png',
+      date: '2026-05-18T10:00:00Z',
+      url: 'https://github.com/o/r/commit/abc123',
+    });
+    expect(result.authoredDate).toBe('2026-05-18T10:00:00Z');
+    expect(result.htmlUrl).toBe('https://github.com/o/r/commit/abc123');
+  });
+
+  it('date が空文字でも authoredDate に空でない日時相当を返さない（null/空のまま伝える）', () => {
+    const result = toClientCommit({
+      sha: 'abc',
+      message: 'm',
+      authorName: 'a',
+      authorLogin: 'a',
+      authorAvatarUrl: '',
+      date: '',
+      url: '',
+    });
+    expect(result.authoredDate).toBe('');
+    expect(result.htmlUrl).toBe('');
+  });
+
+  it('全フィールドを欠落なく引き継ぐ', () => {
+    const result = toClientCommit({
+      sha: 's',
+      message: 'msg',
+      authorName: 'name',
+      authorLogin: 'login',
+      authorAvatarUrl: 'avatar',
+      date: '2026-01-01T00:00:00Z',
+      url: 'u',
+    });
+    expect(result).toEqual({
+      sha: 's',
+      message: 'msg',
+      authorName: 'name',
+      authorLogin: 'login',
+      authorAvatarUrl: 'avatar',
+      authoredDate: '2026-01-01T00:00:00Z',
+      htmlUrl: 'u',
+    });
   });
 });

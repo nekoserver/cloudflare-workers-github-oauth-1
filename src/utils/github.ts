@@ -1010,6 +1010,34 @@ export interface CommitDetail {
   url: string;
 }
 
+/** コミット履歴モーダルが期待するクライアント表示用の形 */
+export interface ClientCommit {
+  sha: string;
+  message: string;
+  authorName: string;
+  authorLogin: string;
+  authorAvatarUrl: string;
+  authoredDate: string | null;
+  htmlUrl: string;
+}
+
+/**
+ * CommitDetail（date / url 形式・キャッシュDBにこの形で保存される）を
+ * コミット履歴モーダルが参照する authoredDate / htmlUrl 形式に正規化する。
+ * フィールド名の不一致により日時が「不明」表示・リンク切れになるのを防ぐ。
+ */
+export function toClientCommit(cm: CommitDetail): ClientCommit {
+  return {
+    sha: cm.sha ?? '',
+    message: cm.message ?? '',
+    authorName: cm.authorName ?? '',
+    authorLogin: cm.authorLogin ?? '',
+    authorAvatarUrl: cm.authorAvatarUrl ?? '',
+    authoredDate: cm.date ?? null,
+    htmlUrl: cm.url ?? '',
+  };
+}
+
 /**
  * 指定リポジトリの特定日のコミット一覧を取得する
  * @returns コミット詳細の配列
