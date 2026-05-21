@@ -4558,6 +4558,31 @@ app.get('/api/repositories/:owner/:repo/commits-by-date', optionalAuthMiddleware
   return c.json({ date, commits, source: 'github' });
 });
 
+// 今月コミットしたリポジトリ一覧（commit_list_cache から当月分を集計）
+app.get('/api/repositories/this-month-commits', optionalAuthMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!user) return c.json({ error: 'Unauthorized' }, 401);
+
+  if (!c.env.DB) return c.json({ repos: [] });
+
+  const wsInfo = await getCurrentWorkspace(c.env.DB, user.sub);
+  const workspaceId = wsInfo?.workspaceId ?? '';
+  if (!workspaceId) return c.json({ repos: [] });
+
+  const jstYM = getJstYearMonthParts(new Date());
+  const ym = `${jstYM.year}-${String(jstYM.month).padStart(2, '0')}`;
+
+  try {
+    const rows = await c.env.DB.prepare(
+      "SELECT owner, repo, MAX(date) AS latest_date FROM commit_list_cache WHERE workspace_id = ? AND date LIKE ? AND commit_count > 0 GROUP BY owner, repo ORDER BY latest_date DESC"
+    ).bind(workspaceId, `${ym}-%`).all<{ owner: string; repo: string; latest_date: string }>();
+    return c.json({ repos: (rows.results ?? []).map(r => ({ owner: r.owner, repo: r.repo, latestDate: r.latest_date })) });
+  } catch (e) {
+    logger.warn('this-month-commits failed', { error: e instanceof Error ? e.message : String(e) });
+    return c.json({ repos: [] });
+  }
+});
+
 // コミット履歴の全文検索
 app.get('/api/repositories/search/commits', optionalAuthMiddleware, async (c) => {
   const user = c.get('user');

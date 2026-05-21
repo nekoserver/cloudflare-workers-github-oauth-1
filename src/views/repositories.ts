@@ -666,6 +666,28 @@ export function getRepositoriesPage(user: {
     .create-repo-submit:hover { opacity: 0.9; }
     .create-repo-submit:disabled { opacity: 0.5; cursor: not-allowed; }
 
+    /* This Month Commits Bar */
+    .this-month-bar {
+      display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+      margin-top: 14px;
+    }
+    .this-month-label {
+      font-size: 13px; font-weight: 600; color: var(--accent-color, #48bb78);
+      background: none; border: none; cursor: pointer; padding: 0;
+      text-decoration: underline; text-underline-offset: 2px;
+      transition: opacity 0.15s;
+    }
+    .this-month-label:hover { opacity: 0.75; }
+    .this-month-count {
+      font-size: 13px; font-weight: 700; color: var(--text-primary);
+    }
+    .this-month-select {
+      padding: 5px 10px; font-size: 13px; border-radius: 8px;
+      border: 1px solid var(--border-color); background: var(--bg-secondary);
+      color: var(--text-primary); cursor: pointer; max-width: 300px;
+    }
+    .this-month-select:focus { outline: none; border-color: var(--accent-color, #48bb78); }
+
     /* Commit Search */
     .commit-search-row {
       display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
@@ -1339,7 +1361,14 @@ export function getRepositoriesPage(user: {
           <button class="create-repo-btn" id="openCreateRepoModal" type="button">＋ 新規にリポジトリを生成する</button>
         </div>
       </div>
-      <div class="commit-search-row" style="margin-top: 14px;">
+      <div class="this-month-bar" id="thisMonthBar">
+        <button type="button" class="this-month-label" id="thisMonthLabel">今月コミットしたリポジトリ</button>
+        <span class="this-month-count" id="thisMonthCount"> : --/${repoCount} 件</span>
+        <select class="this-month-select" id="thisMonthSelect" style="display:none">
+          <option value="">リポジトリを選択...</option>
+        </select>
+      </div>
+      <div class="commit-search-row" style="margin-top: 8px;">
         <input type="text" class="commit-search-input" id="commitSearchInput" placeholder="コミット履歴を検索（メッセージ・作者・SHA）" autocomplete="off" />
         <button class="commit-search-btn" id="commitSearchBtn" type="button">検索</button>
       </div>
@@ -3556,6 +3585,56 @@ export function getRepositoriesPage(user: {
         }).catch(function() {});
       });
     }
+    // ===== 今月コミットしたリポジトリバー =====
+    (function() {
+      var label = document.getElementById('thisMonthLabel');
+      var countEl = document.getElementById('thisMonthCount');
+      var sel = document.getElementById('thisMonthSelect');
+      if (!label || !countEl || !sel) return;
+
+      var totalRepoCount = ${repoCount};
+      var selectVisible = false;
+
+      fetch('/api/repositories/this-month-commits', { credentials: 'same-origin' })
+        .then(function(res) { return res.json(); })
+        .then(function(data) {
+          var repos = Array.isArray(data.repos) ? data.repos : [];
+          countEl.textContent = ' : ' + repos.length + '/' + totalRepoCount + ' 件';
+
+          sel.innerHTML = '<option value="">リポジトリを選択...</option>';
+          repos.forEach(function(r) {
+            var opt = document.createElement('option');
+            opt.value = r.owner + '/' + r.repo;
+            opt.textContent = r.repo + '  （最終: ' + (r.latestDate || '--') + '）';
+            sel.appendChild(opt);
+          });
+        })
+        .catch(function() {
+          countEl.textContent = ' : 取得失敗';
+        });
+
+      label.addEventListener('click', function() {
+        selectVisible = !selectVisible;
+        sel.style.display = selectVisible ? '' : 'none';
+        if (selectVisible) sel.value = '';
+      });
+
+      sel.addEventListener('change', function() {
+        var val = sel.value;
+        if (!val) return;
+        var parts = val.split('/');
+        var owner = parts[0];
+        var repo = parts.slice(1).join('/');
+        sel.style.display = 'none';
+        selectVisible = false;
+
+        var row = document.querySelector('.repo-row[data-owner="' + owner + '"][data-repo="' + repo + '"]');
+        if (!row) return;
+        row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        openPermissionsModal(repo, owner, row);
+      });
+    })();
+
     // ===== Commit History Modal =====
     var commitHistoryModal = document.getElementById('commitHistoryModal');
     var commitHistoryModalClose = document.getElementById('commitHistoryModalClose');
