@@ -1205,6 +1205,12 @@ export function getRepositoriesPage(user: {
       background: var(--bg-secondary); border: 1px solid var(--border-color);
       word-break: break-all;
     }
+    .commit-history-cache-summary {
+      font-size: 12px; color: var(--text-secondary);
+      margin-bottom: 10px; padding: 6px 10px; border-radius: 6px;
+      background: var(--bg-secondary); border: 1px solid var(--border-color);
+    }
+    .commit-history-cache-summary strong { color: var(--text-primary); }
     .commit-history-month-picker label { font-weight: 600; color: #2d3748; }
     .commit-history-month-select {
       min-width: 180px; padding: 7px 10px; border-radius: 8px;
@@ -1537,6 +1543,7 @@ export function getRepositoriesPage(user: {
           <button type="button" class="commit-history-stats-btn" id="commitHistoryStatsBtn" title="現在選択中の期間に対するユーザー別集計を表示">stats</button>
         </div>
         <div class="commit-history-months-details" id="commitHistoryMonthsDetails" style="display:none"></div>
+        <div class="commit-history-cache-summary" id="commitHistoryCacheSummary" style="display:none"></div>
         <div class="commit-history-list" id="commitHistoryList"></div>
         <div class="commit-history-feedback" id="commitHistoryFeedback"></div>
       </div>
@@ -3667,6 +3674,14 @@ export function getRepositoriesPage(user: {
       el.style.display = '';
     }
 
+    function renderCommitHistoryCacheSummary(count) {
+      var el = document.getElementById('commitHistoryCacheSummary');
+      if (!el) return;
+      if (typeof count !== 'number') { el.textContent = ''; el.style.display = 'none'; return; }
+      el.innerHTML = '現在コミット履歴がキャッシュ済みのリポジトリ : <strong>' + count + '</strong> 件';
+      el.style.display = '';
+    }
+
     function renderCommitHistoryRows(commits) {
       if (!commitHistoryList) return;
       if (!commits || commits.length === 0) {
@@ -3783,6 +3798,7 @@ export function getRepositoriesPage(user: {
         var mc = commitMonthsCache[repoKey];
         renderCommitHistoryMonthOptions(mc.months, mc.currentMonth);
         renderCommitMonthsDetails(mc.details || null);
+        renderCommitHistoryCacheSummary(typeof mc.cachedRepoCount === 'number' ? mc.cachedRepoCount : null);
         var period = commitHistoryMonthSelect ? commitHistoryMonthSelect.value : '';
         if (period) syncInlineHeatmapToMonth(period);
         loadCommitsForSelectedValue(owner, repoName, repoKey, period);
@@ -3800,15 +3816,18 @@ export function getRepositoriesPage(user: {
           var months = Array.isArray(data.months) ? data.months : [];
           var currentMonth = data.currentMonth || '';
           if (months.length === 0 && currentMonth) months = [currentMonth];
-          commitMonthsCache[repoKey] = { months: months, currentMonth: currentMonth, details: data.details || null };
+          var cachedRepoCount = typeof data.cachedRepoCount === 'number' ? data.cachedRepoCount : null;
+          commitMonthsCache[repoKey] = { months: months, currentMonth: currentMonth, details: data.details || null, cachedRepoCount: cachedRepoCount };
           renderCommitHistoryMonthOptions(months, currentMonth);
           renderCommitMonthsDetails(data.details || null);
+          renderCommitHistoryCacheSummary(cachedRepoCount);
           var period = commitHistoryMonthSelect ? commitHistoryMonthSelect.value : '';
           if (period) syncInlineHeatmapToMonth(period);
           loadCommitsForSelectedValue(owner, repoName, repoKey, period);
         })
         .catch(function(err) {
           renderCommitMonthsDetails({ status: 'error', repoInfoError: err && err.message });
+          renderCommitHistoryCacheSummary(null);
           renderCommitHistoryError(err.message || 'コミット履歴を取得できませんでした');
         });
     }
