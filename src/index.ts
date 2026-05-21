@@ -4112,8 +4112,8 @@ app.get('/api/repositories/:owner/:repo/commit-months', optionalAuthMiddleware, 
   let cachedRepoCount = 0;
   try {
     const countRow = await c.env.DB.prepare(
-      "SELECT COUNT(DISTINCT owner || '/' || repo) AS n FROM commit_calendar_cache WHERE workspace_id = ?"
-    ).bind(workspaceId).first<{ n: number }>();
+      "SELECT COUNT(DISTINCT owner || '/' || repo) AS n FROM commit_stats_cache"
+    ).first<{ n: number }>();
     cachedRepoCount = countRow?.n ?? 0;
   } catch (e) {
     logger.warn('commit-months: cached repo count failed', {
