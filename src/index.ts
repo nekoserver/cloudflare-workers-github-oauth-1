@@ -767,7 +767,7 @@ export const GROUP_LABELS: Record<string, string> = {
   config: 'Config / Settings',
 };
 
-const GROUP_COLORS: Record<string, string> = {
+export const GROUP_COLORS: Record<string, string> = {
   auth: '#388bfd',
   commit: '#3fb950',
   ai: '#d29922',
@@ -2184,6 +2184,7 @@ app.get('/status', authMiddleware, async (c) => {
     tableGroupMap: TABLE_GROUP_MAP,
     unclassifiedAutoDetectedTables: [],
     groupLabels: GROUP_LABELS,
+    groupColors: GROUP_COLORS,
     userContext: {
       teamName: null, teamId: null,
       workspaceName: null, workspaceId: null,
