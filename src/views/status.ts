@@ -114,6 +114,7 @@ export interface CacheStatusData {
   tableGroupMap: Record<string, string>;
   unclassifiedAutoDetectedTables: string[];
   groupLabels: Record<string, string>;
+  groupColors: Record<string, string>;
   userContext: UserContextInfo;
 }
 
@@ -1195,7 +1196,7 @@ export function getCacheStatusPage(user: {
       font-size: 12px; overflow: hidden; z-index: 1;
     }
     .uml-table-card .uml-table-header {
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      background: #8b949e;
       color: white; padding: 8px 12px; font-weight: 700; font-size: 13px;
       display: flex; align-items: center; gap: 6px;
     }
@@ -1965,6 +1966,7 @@ export function getCacheStatusPage(user: {
     var ignoreUnknownUnclassifiedWarning = ${JSON.stringify(statusIgnoreUnknownUnclassifiedWarning)};
     var tableGroupMap = ${JSON.stringify(data.tableGroupMap)};
     var groupLabels = ${JSON.stringify(data.groupLabels)};
+    var groupColors = ${JSON.stringify(data.groupColors)};
 
     function escapeHtmlText(value) {
       return String(value)
@@ -1973,6 +1975,27 @@ export function getCacheStatusPage(user: {
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#39;');
+    }
+
+    function getUmlGroupColorsForTable(tableName) {
+      var gKey = tableGroupMap[tableName];
+      if (!gKey) return ['#8b949e'];
+      var keys = gKey.split(',').map(function(k) { return k.trim(); });
+      return keys.map(function(k) { return groupColors[k] || '#8b949e'; });
+    }
+
+    function applyUmlHeaderColor(headerEl, tableName) {
+      var colors = getUmlGroupColorsForTable(tableName);
+      if (colors.length === 1) {
+        headerEl.style.background = colors[0];
+      } else {
+        var stops = colors.map(function(c, i) {
+          var pct0 = Math.round((i / colors.length) * 100);
+          var pct1 = Math.round(((i + 1) / colors.length) * 100);
+          return c + ' ' + pct0 + '%, ' + c + ' ' + pct1 + '%';
+        });
+        headerEl.style.background = 'linear-gradient(90deg, ' + stops.join(', ') + ')';
+      }
     }
 
     function getToastDurationSeconds() {
@@ -3764,6 +3787,7 @@ export function getCacheStatusPage(user: {
           var header = document.createElement('div');
           header.className = 'uml-table-header';
           header.textContent = tbl.name;
+          applyUmlHeaderColor(header, tbl.name);
           card.appendChild(header);
 
           var body = document.createElement('div');
@@ -4175,8 +4199,6 @@ export function getCacheStatusPage(user: {
           }
 
           // テーブルカード描画
-          var headerGrad1 = '#667eea';
-          var headerGrad2 = '#764ba2';
           var cardBg = isDark ? '#2d3748' : '#ffffff';
           var cardBorder = isDark ? '#4a5568' : '#e2e8f0';
           var colText = isDark ? '#cbd5e0' : '#4a5568';
@@ -4214,11 +4236,9 @@ export function getCacheStatusPage(user: {
             ctx.roundRect(cx, cy, cw, ch, 10);
             ctx.stroke();
 
-            // ヘッダー背景（グラデーション）
-            var grad = ctx.createLinearGradient(cx, cy, cx + cw, cy + headerH);
-            grad.addColorStop(0, headerGrad1);
-            grad.addColorStop(1, headerGrad2);
-            ctx.fillStyle = grad;
+            // ヘッダー背景（グループカラー）
+            var tblColors = getUmlGroupColorsForTable(tbl.name);
+            ctx.save();
             ctx.beginPath();
             ctx.moveTo(cx + 10, cy);
             ctx.lineTo(cx + cw - 10, cy);
@@ -4228,7 +4248,18 @@ export function getCacheStatusPage(user: {
             ctx.lineTo(cx, cy + 10);
             ctx.quadraticCurveTo(cx, cy, cx + 10, cy);
             ctx.closePath();
-            ctx.fill();
+            ctx.clip();
+            if (tblColors.length === 1) {
+              ctx.fillStyle = tblColors[0];
+              ctx.fillRect(cx, cy, cw, headerH);
+            } else {
+              var segW = cw / tblColors.length;
+              for (var si = 0; si < tblColors.length; si++) {
+                ctx.fillStyle = tblColors[si];
+                ctx.fillRect(cx + si * segW, cy, segW + 1, headerH);
+              }
+            }
+            ctx.restore();
 
             // ヘッダーテキスト
             ctx.fillStyle = '#ffffff';
@@ -4942,6 +4973,7 @@ export function getCacheStatusPage(user: {
           var header = document.createElement('div');
           header.className = 'uml-table-header';
           header.textContent = tbl.name;
+          applyUmlHeaderColor(header, tbl.name);
           card.appendChild(header);
 
           var body = document.createElement('div');
