@@ -1031,6 +1031,69 @@ export function getCacheStatusPage(user: {
     .uml-view-toggle button.active { background: #4299e1; color: white; }
     .uml-view-toggle button:not(.active):hover { background: rgba(66, 153, 225, 0.12); }
 
+    /* 座標出力 / 座標入力ボタン */
+    .uml-pos-button {
+      background: #718096; color: white; border: none; border-radius: 8px;
+      padding: 8px 14px; font-size: 12px; font-weight: 600;
+      cursor: pointer; display: inline-flex; align-items: center; gap: 4px;
+      transition: background 0.2s; white-space: nowrap;
+    }
+    .uml-pos-button:hover { background: #4a5568; }
+
+    /* 座標出力 / 座標入力 モーダル */
+    .uml-pos-modal-overlay {
+      display: none; position: fixed; inset: 0;
+      background: rgba(15,23,42,0.65);
+      align-items: center; justify-content: center;
+      z-index: 10010;
+    }
+    .uml-pos-modal-overlay.show { display: flex; }
+    .uml-pos-modal {
+      background: var(--card-bg); border: 1px solid var(--border-color);
+      border-radius: 12px; box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+      width: 92%; max-width: 560px;
+      display: flex; flex-direction: column; overflow: hidden;
+    }
+    .uml-pos-modal-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 14px 18px 10px; border-bottom: 1px solid var(--border-color);
+    }
+    .uml-pos-modal-title { font-size: 14px; font-weight: 700; color: var(--text-primary); }
+    .uml-pos-modal-close {
+      border: none; background: none; font-size: 20px; cursor: pointer;
+      color: var(--text-muted); line-height: 1; padding: 0 4px;
+    }
+    .uml-pos-modal-close:hover { color: var(--text-primary); }
+    .uml-pos-modal-body { padding: 16px 18px; }
+    .uml-pos-textarea {
+      width: 100%; height: 280px; font-family: monospace; font-size: 12px;
+      padding: 10px; border: 1px solid var(--border-color); border-radius: 8px;
+      background: var(--bg-primary, var(--card-bg)); color: var(--text-primary);
+      resize: vertical; outline: none; box-sizing: border-box;
+    }
+    .uml-pos-textarea:focus { border-color: #4299e1; }
+    .uml-pos-textarea.pos-error { border-color: #f85149; }
+    .uml-pos-feedback {
+      margin-top: 8px; font-size: 12px; min-height: 18px; color: var(--text-muted);
+    }
+    .uml-pos-feedback.pos-error { color: #f85149; }
+    .uml-pos-feedback.pos-warn { color: #d29922; }
+    .uml-pos-feedback.pos-ok { color: #48bb78; }
+    .uml-pos-modal-footer {
+      display: flex; align-items: center; gap: 8px; justify-content: flex-end;
+      padding: 10px 18px 14px; border-top: 1px solid var(--border-color);
+    }
+    .uml-pos-modal-footer button {
+      font-size: 13px; padding: 7px 16px; border: 1px solid var(--border-color);
+      border-radius: 6px; background: var(--card-bg); color: var(--text-primary);
+      cursor: pointer; transition: background 0.15s;
+    }
+    .uml-pos-modal-footer button:hover { background: rgba(66,153,225,0.1); }
+    .uml-pos-modal-footer .pos-btn-primary {
+      background: #4299e1; color: #fff; border-color: #4299e1;
+    }
+    .uml-pos-modal-footer .pos-btn-primary:hover { background: #3182ce; }
+
     /* カラム名一覧モーダル */
     .collist-modal-card {
       width: min(960px, 100%); max-height: min(90vh, 960px);
@@ -1637,6 +1700,8 @@ export function getCacheStatusPage(user: {
             <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M2 4h12M2 8h12M2 12h8" stroke="white" stroke-width="1.5" stroke-linecap="round"/></svg>
             カラム名での表一覧
           </button>
+          <button type="button" class="uml-pos-button" id="umlExportPosBtn">座標を出力</button>
+          <button type="button" class="uml-pos-button" id="umlImportPosBtn">座標入力</button>
           <button type="button" class="uml-export-button" id="umlExportPng">
             <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M8 1v9M8 10L4.5 6.5M8 10l3.5-3.5M2 12v2h12v-2" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
             画像出力
@@ -1704,6 +1769,42 @@ export function getCacheStatusPage(user: {
             <span class="nf-badge">2NF</span><code>installation_permissions</code> — permissions が JSON 文字列格納。GitHub API レスポンスのキャッシュとして非正規化を許容。
           </div>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 座標出力モーダル -->
+  <div class="uml-pos-modal-overlay" id="umlExportPosModal">
+    <div class="uml-pos-modal" onclick="event.stopPropagation()">
+      <div class="uml-pos-modal-header">
+        <span class="uml-pos-modal-title">各エンティティの座標（JSON）</span>
+        <button class="uml-pos-modal-close" id="umlExportPosClose">&times;</button>
+      </div>
+      <div class="uml-pos-modal-body">
+        <textarea class="uml-pos-textarea" id="umlExportPosTextarea" readonly></textarea>
+      </div>
+      <div class="uml-pos-modal-footer">
+        <button id="umlExportPosCopyBtn">コピー</button>
+        <button id="umlExportPosCloseBtn">閉じる</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 座標入力モーダル -->
+  <div class="uml-pos-modal-overlay" id="umlImportPosModal">
+    <div class="uml-pos-modal" onclick="event.stopPropagation()">
+      <div class="uml-pos-modal-header">
+        <span class="uml-pos-modal-title">座標を入力（JSON）</span>
+        <button class="uml-pos-modal-close" id="umlImportPosClose">&times;</button>
+      </div>
+      <div class="uml-pos-modal-body">
+        <textarea class="uml-pos-textarea" id="umlImportPosTextarea"
+          placeholder='{"teams":{"x":80,"y":40},"workspaces":{"x":80,"y":260},...}'></textarea>
+        <div class="uml-pos-feedback" id="umlImportPosFeedback"></div>
+      </div>
+      <div class="uml-pos-modal-footer">
+        <button id="umlImportPosCancelBtn">キャンセル</button>
+        <button class="pos-btn-primary" id="umlImportPosApplyBtn">適用</button>
       </div>
     </div>
   </div>
@@ -3278,6 +3379,165 @@ export function getCacheStatusPage(user: {
       umlModal.addEventListener('click', function(e) { if (e.target === umlModal) closeUmlModal(); });
       document.addEventListener('keydown', function(e) {
         if (e.key === 'Escape' && umlModal.classList.contains('show')) closeUmlModal();
+        if (e.key === 'Escape') { closeUmlExportPosModal(); closeUmlImportPosModal(); }
+      });
+
+      // ===== 座標出力モーダル =====
+      var umlExportPosModal = document.getElementById('umlExportPosModal');
+      var umlImportPosModal = document.getElementById('umlImportPosModal');
+
+      function getUmlCurrentPositionsJson() {
+        var rects = window.__umlCardRects;
+        var names = window.__umlTableNames;
+        if (!rects || !names) return '{}';
+        var out = {};
+        names.forEach(function(n) {
+          var r = rects[n];
+          if (r) out[n] = { x: Math.round(r.x), y: Math.round(r.y) };
+        });
+        return JSON.stringify(out, null, 2);
+      }
+
+      function closeUmlExportPosModal() {
+        if (umlExportPosModal) umlExportPosModal.classList.remove('show');
+      }
+
+      function closeUmlImportPosModal() {
+        if (umlImportPosModal) umlImportPosModal.classList.remove('show');
+      }
+
+      var exportPosBtn = document.getElementById('umlExportPosBtn');
+      if (exportPosBtn) {
+        exportPosBtn.addEventListener('click', function() {
+          var ta = document.getElementById('umlExportPosTextarea');
+          if (ta) ta.value = getUmlCurrentPositionsJson();
+          var copyBtn = document.getElementById('umlExportPosCopyBtn');
+          if (copyBtn) copyBtn.textContent = 'コピー';
+          if (umlExportPosModal) umlExportPosModal.classList.add('show');
+        });
+      }
+
+      var exportPosCopyBtn = document.getElementById('umlExportPosCopyBtn');
+      if (exportPosCopyBtn) {
+        exportPosCopyBtn.addEventListener('click', function() {
+          var ta = document.getElementById('umlExportPosTextarea');
+          if (!ta) return;
+          navigator.clipboard.writeText(ta.value).then(function() {
+            exportPosCopyBtn.textContent = 'コピーしました ✓';
+            setTimeout(function() { exportPosCopyBtn.textContent = 'コピー'; }, 2000);
+          }).catch(function() { ta.select(); document.execCommand('copy'); });
+        });
+      }
+
+      var exportPosCloseBtn = document.getElementById('umlExportPosCloseBtn');
+      if (exportPosCloseBtn) exportPosCloseBtn.addEventListener('click', closeUmlExportPosModal);
+      var exportPosCloseX = document.getElementById('umlExportPosClose');
+      if (exportPosCloseX) exportPosCloseX.addEventListener('click', closeUmlExportPosModal);
+      if (umlExportPosModal) umlExportPosModal.addEventListener('click', function(e) {
+        if (e.target === umlExportPosModal) closeUmlExportPosModal();
+      });
+
+      // ===== 座標入力モーダル =====
+      var importPosBtn = document.getElementById('umlImportPosBtn');
+      if (importPosBtn) {
+        importPosBtn.addEventListener('click', function() {
+          var ta = document.getElementById('umlImportPosTextarea');
+          var fb = document.getElementById('umlImportPosFeedback');
+          if (ta) { ta.value = ''; ta.className = 'uml-pos-textarea'; }
+          if (fb) { fb.textContent = ''; fb.className = 'uml-pos-feedback'; }
+          if (umlImportPosModal) umlImportPosModal.classList.add('show');
+          if (ta) setTimeout(function() { ta.focus(); }, 50);
+        });
+      }
+
+      function validateUmlPositionJson(text) {
+        if (!text.trim()) return { ok: false, error: 'JSONが入力されていません' };
+        var parsed;
+        try { parsed = JSON.parse(text); } catch (e) {
+          return { ok: false, error: 'JSONの構文エラー: ' + e.message };
+        }
+        if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+          return { ok: false, error: 'JSONはオブジェクト形式 { "テーブル名": { "x": 数値, "y": 数値 }, ... } で入力してください' };
+        }
+        var tableNames = window.__umlTableNames || [];
+        var unknownTables = [];
+        var invalidEntries = [];
+        Object.keys(parsed).forEach(function(key) {
+          var val = parsed[key];
+          if (tableNames.indexOf(key) === -1) {
+            unknownTables.push(key);
+          } else if (
+            typeof val !== 'object' || val === null ||
+            typeof val.x !== 'number' || typeof val.y !== 'number' ||
+            !isFinite(val.x) || !isFinite(val.y)
+          ) {
+            invalidEntries.push(key);
+          }
+        });
+        if (invalidEntries.length > 0) {
+          return { ok: false, error: '以下のエントリで x / y が数値ではありません: ' + invalidEntries.join(', ') };
+        }
+        var matchedCount = Object.keys(parsed).filter(function(k) { return tableNames.indexOf(k) !== -1; }).length;
+        if (matchedCount === 0) {
+          return { ok: false, error: '既知のテーブル名と一致するエントリがありません。テーブル名を確認してください' };
+        }
+        return { ok: true, data: parsed, unknownTables: unknownTables, matchedCount: matchedCount };
+      }
+
+      var importPosApplyBtn = document.getElementById('umlImportPosApplyBtn');
+      if (importPosApplyBtn) {
+        importPosApplyBtn.addEventListener('click', function() {
+          var ta = document.getElementById('umlImportPosTextarea');
+          var fb = document.getElementById('umlImportPosFeedback');
+          if (!ta || !fb) return;
+          var result = validateUmlPositionJson(ta.value);
+          if (!result.ok) {
+            fb.textContent = '⚠ ' + result.error;
+            fb.className = 'uml-pos-feedback pos-error';
+            ta.className = 'uml-pos-textarea pos-error';
+            ta.focus();
+            return;
+          }
+          ta.className = 'uml-pos-textarea';
+          var rects = window.__umlCardRects;
+          var elements = window.__umlCardElements;
+          var draw = window.__umlDrawRelations;
+          if (!rects || !elements || !draw) {
+            fb.textContent = '⚠ ER図がまだ描画されていません。先にER図を開いてください';
+            fb.className = 'uml-pos-feedback pos-error';
+            return;
+          }
+          Object.keys(result.data).forEach(function(name) {
+            if (rects[name]) {
+              rects[name].x = result.data[name].x;
+              rects[name].y = result.data[name].y;
+              if (elements[name]) {
+                elements[name].style.left = result.data[name].x + 'px';
+                elements[name].style.top = result.data[name].y + 'px';
+              }
+            }
+          });
+          draw();
+          var warnMsg = result.unknownTables.length > 0
+            ? '⚠ 不明なテーブル名（スキップ）: ' + result.unknownTables.join(', ')
+            : '';
+          if (warnMsg) {
+            fb.textContent = warnMsg;
+            fb.className = 'uml-pos-feedback pos-warn';
+          } else {
+            fb.textContent = '✓ ' + result.matchedCount + ' 件のエンティティ座標を適用しました';
+            fb.className = 'uml-pos-feedback pos-ok';
+            setTimeout(closeUmlImportPosModal, 1200);
+          }
+        });
+      }
+
+      var importPosCancelBtn = document.getElementById('umlImportPosCancelBtn');
+      if (importPosCancelBtn) importPosCancelBtn.addEventListener('click', closeUmlImportPosModal);
+      var importPosCloseX = document.getElementById('umlImportPosClose');
+      if (importPosCloseX) importPosCloseX.addEventListener('click', closeUmlImportPosModal);
+      if (umlImportPosModal) umlImportPosModal.addEventListener('click', function(e) {
+        if (e.target === umlImportPosModal) closeUmlImportPosModal();
       });
 
       // テーブル定義
@@ -3796,6 +4056,12 @@ export function getCacheStatusPage(user: {
             exportErDiagramAsPng(cardRects, isDark);
           });
         }
+
+        // 座標出力/入力ボタン用に cardRects・cardElements・drawRelations を公開
+        window.__umlCardRects = cardRects;
+        window.__umlCardElements = cardElements;
+        window.__umlDrawRelations = drawRelations;
+        window.__umlTableNames = tablesData.map(function(t) { return t.name; });
       }
 
       var keyColorMap = { pk: '#e53e3e', fk: '#ed8936', uk: '#48bb78', idx: '#4299e1' };
