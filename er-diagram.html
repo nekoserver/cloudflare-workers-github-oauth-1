@@ -351,6 +351,102 @@
     color: var(--text-muted);
   }
 
+  /* Position Export/Import Modals */
+  .pos-modal-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.45);
+    z-index: 500;
+    align-items: center;
+    justify-content: center;
+  }
+  .pos-modal-overlay.show { display: flex; }
+  .pos-modal {
+    background: var(--toolbar-bg);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+    width: 92%;
+    max-width: 560px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .pos-modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 18px 10px;
+    border-bottom: 1px solid var(--border);
+  }
+  .pos-modal-title {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--text);
+  }
+  .pos-modal-close {
+    border: none;
+    background: none;
+    font-size: 18px;
+    cursor: pointer;
+    color: var(--text-muted);
+    line-height: 1;
+    padding: 0 4px;
+  }
+  .pos-modal-close:hover { color: var(--text); background: none; }
+  .pos-modal-body { padding: 16px 18px; }
+  .pos-modal-textarea {
+    width: 100%;
+    height: 280px;
+    font-family: monospace;
+    font-size: 12px;
+    padding: 10px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--canvas-bg);
+    color: var(--text);
+    resize: vertical;
+    outline: none;
+    box-sizing: border-box;
+  }
+  .pos-modal-textarea:focus { border-color: var(--accent); }
+  .pos-modal-textarea.error { border-color: #f85149; }
+  .pos-modal-feedback {
+    margin-top: 8px;
+    font-size: 12px;
+    min-height: 18px;
+    color: var(--text-muted);
+  }
+  .pos-modal-feedback.error { color: #f85149; }
+  .pos-modal-feedback.warn { color: #d29922; }
+  .pos-modal-feedback.ok { color: #3fb950; }
+  .pos-modal-footer {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 18px 14px;
+    border-top: 1px solid var(--border);
+    justify-content: flex-end;
+  }
+  .pos-modal-footer button {
+    font-size: 13px;
+    padding: 7px 16px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--toolbar-bg);
+    color: var(--text);
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  .pos-modal-footer button:hover { background: var(--accent-light); }
+  .pos-modal-footer .btn-primary {
+    background: var(--accent);
+    color: #fff;
+    border-color: var(--accent);
+  }
+  .pos-modal-footer .btn-primary:hover { opacity: 0.9; background: var(--accent); }
+
   @media (prefers-color-scheme: dark) {
     .er-col .pk { background: rgba(248,81,73,0.15); }
     .er-col .fk { background: rgba(88,166,255,0.15); }
@@ -381,6 +477,8 @@
     <button id="view-mode-focus" onclick="setViewMode('focus')" title="画面左上にフォーカス（等倍表示）">フォーカス</button>
     <button id="view-mode-overview" onclick="setViewMode('overview')" title="画面全体を俯瞰（全エンティティを画面に収める）">俯瞰</button>
   </div>
+  <button onclick="openExportModal()">座標を出力</button>
+  <button onclick="openImportModal()">座標入力</button>
   <div class="dropdown-wrapper">
     <button class="btn-primary" onclick="toggleSaveMenu(event)">Save Positions</button>
     <div id="save-menu" class="dropdown-menu">
@@ -396,6 +494,42 @@
 <div id="canvas-wrapper">
   <div id="canvas">
     <svg id="svg-layer"></svg>
+  </div>
+</div>
+
+<!-- 座標出力モーダル -->
+<div class="pos-modal-overlay" id="exportModal">
+  <div class="pos-modal" onclick="event.stopPropagation()">
+    <div class="pos-modal-header">
+      <span class="pos-modal-title">各エンティティの座標（JSON）</span>
+      <button class="pos-modal-close" onclick="closeExportModal()">&times;</button>
+    </div>
+    <div class="pos-modal-body">
+      <textarea class="pos-modal-textarea" id="exportTextarea" readonly></textarea>
+    </div>
+    <div class="pos-modal-footer">
+      <button id="exportCopyBtn" onclick="copyExportJson()">コピー</button>
+      <button onclick="closeExportModal()">閉じる</button>
+    </div>
+  </div>
+</div>
+
+<!-- 座標入力モーダル -->
+<div class="pos-modal-overlay" id="importModal">
+  <div class="pos-modal" onclick="event.stopPropagation()">
+    <div class="pos-modal-header">
+      <span class="pos-modal-title">座標を入力（JSON）</span>
+      <button class="pos-modal-close" onclick="closeImportModal()">&times;</button>
+    </div>
+    <div class="pos-modal-body">
+      <textarea class="pos-modal-textarea" id="importTextarea"
+        placeholder='{"user_sessions":{"x":50,"y":40},"teams":{"x":50,"y":340},...}'></textarea>
+      <div class="pos-modal-feedback" id="importFeedback"></div>
+    </div>
+    <div class="pos-modal-footer">
+      <button onclick="closeImportModal()">キャンセル</button>
+      <button class="btn-primary" onclick="applyImportJson()">適用</button>
+    </div>
   </div>
 </div>
 
@@ -829,6 +963,18 @@ document.addEventListener('click', () => {
   document.getElementById('group-menu').classList.remove('show');
 });
 
+document.addEventListener('click', (e) => {
+  if (e.target === document.getElementById('exportModal')) closeExportModal();
+  if (e.target === document.getElementById('importModal')) closeImportModal();
+});
+
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    closeExportModal();
+    closeImportModal();
+  }
+});
+
 function downloadPositions(format) {
   document.getElementById('save-menu').classList.remove('show');
 
@@ -923,6 +1069,130 @@ function applyPositions(newPositions) {
 function resetPositions() {
   positions = JSON.parse(JSON.stringify(DEFAULT_POSITIONS));
   applyPositions(positions);
+}
+
+// ===== 座標出力モーダル =====
+function currentPositionsJson() {
+  const ordered = {};
+  for (const table of SCHEMA) {
+    const p = positions[table.name];
+    ordered[table.name] = { x: Math.round(p.x), y: Math.round(p.y) };
+  }
+  return JSON.stringify(ordered, null, 2);
+}
+
+function openExportModal() {
+  const ta = document.getElementById('exportTextarea');
+  if (ta) ta.value = currentPositionsJson();
+  const copyBtn = document.getElementById('exportCopyBtn');
+  if (copyBtn) copyBtn.textContent = 'コピー';
+  document.getElementById('exportModal').classList.add('show');
+}
+
+function closeExportModal() {
+  document.getElementById('exportModal').classList.remove('show');
+}
+
+function copyExportJson() {
+  const ta = document.getElementById('exportTextarea');
+  if (!ta) return;
+  navigator.clipboard.writeText(ta.value).then(() => {
+    const btn = document.getElementById('exportCopyBtn');
+    if (btn) { btn.textContent = 'コピーしました ✓'; setTimeout(() => { btn.textContent = 'コピー'; }, 2000); }
+  }).catch(() => {
+    ta.select();
+    document.execCommand('copy');
+  });
+}
+
+// ===== 座標入力モーダル =====
+function openImportModal() {
+  const ta = document.getElementById('importTextarea');
+  if (ta) ta.value = '';
+  const fb = document.getElementById('importFeedback');
+  if (fb) { fb.textContent = ''; fb.className = 'pos-modal-feedback'; }
+  if (ta) ta.className = 'pos-modal-textarea';
+  document.getElementById('importModal').classList.add('show');
+  if (ta) setTimeout(() => ta.focus(), 50);
+}
+
+function closeImportModal() {
+  document.getElementById('importModal').classList.remove('show');
+}
+
+function validatePositionJson(text) {
+  if (!text.trim()) return { ok: false, error: 'JSONが入力されていません' };
+
+  let parsed;
+  try {
+    parsed = JSON.parse(text);
+  } catch (e) {
+    return { ok: false, error: 'JSONの構文エラー: ' + e.message };
+  }
+
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+    return { ok: false, error: 'JSONはオブジェクト形式 { "テーブル名": { "x": 数値, "y": 数値 }, ... } で入力してください' };
+  }
+
+  const tableNames = SCHEMA.map(t => t.name);
+  const unknownTables = [];
+  const invalidEntries = [];
+
+  for (const [key, val] of Object.entries(parsed)) {
+    if (!tableNames.includes(key)) {
+      unknownTables.push(key);
+    } else if (
+      typeof val !== 'object' || val === null ||
+      typeof val.x !== 'number' || typeof val.y !== 'number' ||
+      !isFinite(val.x) || !isFinite(val.y)
+    ) {
+      invalidEntries.push(key);
+    }
+  }
+
+  if (invalidEntries.length > 0) {
+    return { ok: false, error: '以下のエントリで x / y が数値ではありません: ' + invalidEntries.join(', ') };
+  }
+
+  const matchedCount = Object.keys(parsed).filter(k => tableNames.includes(k)).length;
+  if (matchedCount === 0) {
+    return { ok: false, error: '既知のテーブル名と一致するエントリがありません。テーブル名を確認してください' };
+  }
+
+  return { ok: true, data: parsed, unknownTables, matchedCount };
+}
+
+function applyImportJson() {
+  const ta = document.getElementById('importTextarea');
+  const fb = document.getElementById('importFeedback');
+  if (!ta || !fb) return;
+
+  const result = validatePositionJson(ta.value);
+
+  if (!result.ok) {
+    fb.textContent = '⚠ ' + result.error;
+    fb.className = 'pos-modal-feedback error';
+    ta.className = 'pos-modal-textarea error';
+    ta.focus();
+    return;
+  }
+
+  ta.className = 'pos-modal-textarea';
+  let warnMsg = '';
+  if (result.unknownTables.length > 0) {
+    warnMsg = '⚠ 不明なテーブル名（スキップ）: ' + result.unknownTables.join(', ');
+  }
+
+  applyPositions(result.data);
+
+  if (warnMsg) {
+    fb.textContent = warnMsg;
+    fb.className = 'pos-modal-feedback warn';
+  } else {
+    fb.textContent = '✓ ' + result.matchedCount + ' 件のエンティティ座標を適用しました';
+    fb.className = 'pos-modal-feedback ok';
+    setTimeout(closeImportModal, 1200);
+  }
 }
 
 function computeBBox(tableNames) {
