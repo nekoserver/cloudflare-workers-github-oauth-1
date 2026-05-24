@@ -453,6 +453,25 @@
     .er-col .uk { background: rgba(210,153,34,0.15); }
     .er-col .idx { background: rgba(139,148,158,0.12); }
   }
+  #er-group-legend {
+    position: fixed; bottom: 16px; left: 16px; z-index: 200;
+    cursor: pointer; user-select: none;
+  }
+  .er-legend-box {
+    background: var(--toolbar-bg); border: 1px solid var(--border);
+    border-radius: 8px; padding: 6px 10px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.2); min-width: 160px;
+    font-size: 12px; color: var(--text);
+  }
+  .er-legend-header {
+    display: flex; align-items: center; justify-content: space-between;
+    font-weight: 600; gap: 8px;
+  }
+  .er-legend-content { margin-top: 6px; display: flex; flex-direction: column; gap: 4px; }
+  .er-legend-row { display: flex; align-items: center; gap: 8px; }
+  .er-legend-swatch { width: 12px; height: 12px; border-radius: 3px; flex-shrink: 0; }
+  .er-legend-name { flex: 1; font-size: 11px; }
+  .er-legend-code { font-size: 10px; font-family: monospace; color: var(--text-muted); }
 </style>
 </head>
 <body>
@@ -494,6 +513,16 @@
 <div id="canvas-wrapper">
   <div id="canvas">
     <svg id="svg-layer"></svg>
+  </div>
+</div>
+
+<div id="er-group-legend">
+  <div class="er-legend-box">
+    <div class="er-legend-header">
+      <span>グループ凡例</span>
+      <span id="er-legend-arrow">▲</span>
+    </div>
+    <div class="er-legend-content" id="er-legend-content"></div>
   </div>
 </div>
 
@@ -566,11 +595,11 @@
 
 <script>
 const GROUPS = {
-  auth:   { color: '#388bfd', tables: ['user_sessions','teams','workspaces','team_members'] },
-  commit: { color: '#3fb950', tables: ['commit_calendar_cache','commit_list_cache','cache_stats','commit_search_history','commit_search_repo_stats','cloudflare_setup_pending'] },
-  ai:     { color: '#d29922', tables: ['ai_summary_log','ai_summary_reviews'] },
-  email:  { color: '#f85149', tables: ['resend_webhook_sources','resend_webhook_log','email_send_log','email_suppression_list','email_mfa_challenges','email_audit_anomalies'] },
-  config: { color: '#a371f7', tables: ['installation_permissions','repo_color_settings','repo_groups','repo_group_members','table_catalog','table_column_keys'] }
+  auth:   { color: '#388bfd', label: 'Auth / Session',    tables: ['user_sessions','teams','workspaces','team_members'] },
+  commit: { color: '#3fb950', label: 'Commit / Cache',    tables: ['commit_calendar_cache','commit_list_cache','cache_stats','commit_search_history','commit_search_repo_stats','cloudflare_setup_pending'] },
+  ai:     { color: '#d29922', label: 'AI Summary',         tables: ['ai_summary_log','ai_summary_reviews'] },
+  email:  { color: '#f85149', label: 'Email / Resend',    tables: ['resend_webhook_sources','resend_webhook_log','email_send_log','email_suppression_list','email_mfa_challenges','email_audit_anomalies'] },
+  config: { color: '#a371f7', label: 'Config / Settings', tables: ['installation_permissions','repo_color_settings','repo_groups','repo_group_members','table_catalog','table_column_keys'] }
 };
 
 function groupOf(tableName) {
@@ -1360,6 +1389,59 @@ window.addEventListener('DOMContentLoaded', () => {
     if (allRow) allRow.classList.add('active');
   }, 50);
 });
+
+// ===== グループ凡例 =====
+(function() {
+  function getErLegendVisible() {
+    var m = document.cookie.match('(^|;)\\s*er_legend_visible=([^;]*)');
+    return m ? decodeURIComponent(m[2]) !== 'off' : true;
+  }
+
+  function setErLegendVisible(visible) {
+    document.cookie = 'er_legend_visible=' + (visible ? 'on' : 'off') + '; Path=/; Secure; SameSite=Lax; Max-Age=31536000';
+    applyErLegendVisible(visible);
+  }
+
+  function applyErLegendVisible(visible) {
+    var content = document.getElementById('er-legend-content');
+    var arrow = document.getElementById('er-legend-arrow');
+    if (content) content.style.display = visible ? '' : 'none';
+    if (arrow) arrow.textContent = visible ? '▲' : '▼';
+  }
+
+  function buildErLegendItems() {
+    var container = document.getElementById('er-legend-content');
+    if (!container) return;
+    for (var key in GROUPS) {
+      var g = GROUPS[key];
+      var row = document.createElement('div');
+      row.className = 'er-legend-row';
+      var swatch = document.createElement('div');
+      swatch.className = 'er-legend-swatch';
+      swatch.style.background = g.color;
+      var name = document.createElement('span');
+      name.className = 'er-legend-name';
+      name.textContent = g.label || key;
+      var code = document.createElement('span');
+      code.className = 'er-legend-code';
+      code.textContent = g.color;
+      row.appendChild(swatch);
+      row.appendChild(name);
+      row.appendChild(code);
+      container.appendChild(row);
+    }
+  }
+
+  buildErLegendItems();
+  applyErLegendVisible(getErLegendVisible());
+
+  var legend = document.getElementById('er-group-legend');
+  if (legend) {
+    legend.addEventListener('click', function() {
+      setErLegendVisible(!getErLegendVisible());
+    });
+  }
+})();
 </script>
 </body>
 </html>

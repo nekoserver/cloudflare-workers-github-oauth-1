@@ -1200,6 +1200,26 @@ export function getCacheStatusPage(user: {
       color: white; padding: 8px 12px; font-weight: 700; font-size: 13px;
       display: flex; align-items: center; gap: 6px;
     }
+    .uml-modal-card, .filtered-uml-modal-card { position: relative; }
+    .uml-group-legend-wrap {
+      position: absolute; bottom: 56px; left: 16px; z-index: 30;
+      cursor: pointer; user-select: none; pointer-events: all;
+    }
+    .uml-group-legend-box {
+      background: var(--card-bg); border: 1px solid var(--border-color);
+      border-radius: 8px; padding: 6px 10px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.15); min-width: 160px;
+      font-size: 12px;
+    }
+    .uml-group-legend-header {
+      display: flex; align-items: center; justify-content: space-between;
+      font-weight: 600; gap: 8px; color: var(--text-primary);
+    }
+    .uml-group-legend-items { margin-top: 6px; display: flex; flex-direction: column; gap: 4px; }
+    .uml-group-legend-row { display: flex; align-items: center; gap: 8px; }
+    .uml-group-legend-swatch { width: 12px; height: 12px; border-radius: 3px; flex-shrink: 0; }
+    .uml-group-legend-name { flex: 1; font-size: 11px; color: var(--text-secondary); }
+    .uml-group-legend-code { font-size: 10px; font-family: monospace; color: var(--text-muted); }
     .uml-table-card .uml-table-body {
       padding: 6px 0;
     }
@@ -1711,6 +1731,15 @@ export function getCacheStatusPage(user: {
         </div>
       </div>
       <div class="uml-canvas-wrapper" id="umlCanvasWrapper"></div>
+      <div class="uml-group-legend-wrap" id="umlGroupLegendWrap">
+        <div class="uml-group-legend-box" id="umlGroupLegendBox">
+          <div class="uml-group-legend-header">
+            <span>グループ凡例</span>
+            <span id="umlGroupLegendArrow">▲</span>
+          </div>
+          <div class="uml-group-legend-items" id="umlGroupLegendItems"></div>
+        </div>
+      </div>
       <div class="uml-bottom-panel" id="umlBottomPanel">
         <div class="uml-panel-handle" id="umlPanelHandle">
           <div class="uml-panel-handle-bar"></div>
@@ -1866,6 +1895,15 @@ export function getCacheStatusPage(user: {
         </div>
       </div>
       <div class="uml-canvas-wrapper" id="filteredUmlCanvasWrapper"></div>
+      <div class="uml-group-legend-wrap" id="filteredUmlGroupLegendWrap">
+        <div class="uml-group-legend-box" id="filteredUmlGroupLegendBox">
+          <div class="uml-group-legend-header">
+            <span>グループ凡例</span>
+            <span id="filteredUmlGroupLegendArrow">▲</span>
+          </div>
+          <div class="uml-group-legend-items" id="filteredUmlGroupLegendItems"></div>
+        </div>
+      </div>
       <div class="uml-bottom-panel" id="filteredUmlBottomPanel">
         <div class="uml-panel-handle" id="filteredUmlPanelHandle">
           <div class="uml-panel-handle-bar"></div>
@@ -3575,6 +3613,65 @@ export function getCacheStatusPage(user: {
       if (umlImportPosModal) umlImportPosModal.addEventListener('click', function(e) {
         if (e.target === umlImportPosModal) closeUmlImportPosModal();
       });
+
+      // ===== グループ凡例 =====
+      (function() {
+        function getUmlLegendVisible() {
+          var m = document.cookie.match('(^|;)\\\\s*er_legend_visible=([^;]*)');
+          return m ? decodeURIComponent(m[2]) !== 'off' : true;
+        }
+
+        function setUmlLegendVisible(visible) {
+          document.cookie = 'er_legend_visible=' + (visible ? 'on' : 'off') + '; Path=/; Secure; SameSite=Lax; Max-Age=31536000';
+          applyUmlLegendVisible(visible);
+        }
+
+        function applyUmlLegendVisible(visible) {
+          ['umlGroupLegendItems', 'filteredUmlGroupLegendItems'].forEach(function(id) {
+            var el = document.getElementById(id);
+            if (el) el.style.display = visible ? '' : 'none';
+          });
+          ['umlGroupLegendArrow', 'filteredUmlGroupLegendArrow'].forEach(function(id) {
+            var el = document.getElementById(id);
+            if (el) el.textContent = visible ? '▲' : '▼';
+          });
+        }
+
+        function buildUmlLegendItems(containerId) {
+          var container = document.getElementById(containerId);
+          if (!container || container.children.length > 0) return;
+          Object.keys(groupColors).forEach(function(key) {
+            var row = document.createElement('div');
+            row.className = 'uml-group-legend-row';
+            var swatch = document.createElement('div');
+            swatch.className = 'uml-group-legend-swatch';
+            swatch.style.background = groupColors[key];
+            var name = document.createElement('span');
+            name.className = 'uml-group-legend-name';
+            name.textContent = groupLabels[key] || key;
+            var code = document.createElement('span');
+            code.className = 'uml-group-legend-code';
+            code.textContent = groupColors[key];
+            row.appendChild(swatch);
+            row.appendChild(name);
+            row.appendChild(code);
+            container.appendChild(row);
+          });
+        }
+
+        buildUmlLegendItems('umlGroupLegendItems');
+        buildUmlLegendItems('filteredUmlGroupLegendItems');
+        applyUmlLegendVisible(getUmlLegendVisible());
+
+        ['umlGroupLegendBox', 'filteredUmlGroupLegendBox'].forEach(function(id) {
+          var box = document.getElementById(id);
+          if (box) {
+            box.addEventListener('click', function() {
+              setUmlLegendVisible(!getUmlLegendVisible());
+            });
+          }
+        });
+      })();
 
       // テーブル定義
       window.__erTables = null;
