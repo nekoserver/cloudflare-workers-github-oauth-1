@@ -3643,10 +3643,14 @@ export function getCacheStatusPage(user: {
         function expandByFk(primarySet) {
           var expanded = {};
           Object.keys(primarySet).forEach(function(t) { expanded[t] = true; });
-          for (var i = 0; i < tableFkPairs.length; i++) {
-            var from = tableFkPairs[i][0], to = tableFkPairs[i][1];
-            if (expanded[from] && !expanded[to]) expanded[to] = true;
-            if (expanded[to] && !expanded[from]) expanded[from] = true;
+          var changed = true;
+          while (changed) {
+            changed = false;
+            for (var i = 0; i < tableFkPairs.length; i++) {
+              var from = tableFkPairs[i][0], to = tableFkPairs[i][1];
+              if (expanded[from] && !expanded[to]) { expanded[to] = true; changed = true; }
+              if (expanded[to] && !expanded[from]) { expanded[from] = true; changed = true; }
+            }
           }
           return Object.keys(expanded);
         }
