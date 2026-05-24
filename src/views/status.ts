@@ -115,6 +115,7 @@ export interface CacheStatusData {
   unclassifiedAutoDetectedTables: string[];
   groupLabels: Record<string, string>;
   groupColors: Record<string, string>;
+  tableFkPairs: [string, string][];
   userContext: UserContextInfo;
 }
 
@@ -2006,6 +2007,7 @@ export function getCacheStatusPage(user: {
     var tableGroupMap = ${JSON.stringify(data.tableGroupMap)};
     var groupLabels = ${JSON.stringify(data.groupLabels)};
     var groupColors = ${JSON.stringify(data.groupColors)};
+    var tableFkPairs = ${JSON.stringify(data.tableFkPairs)};
 
     function escapeHtmlText(value) {
       return String(value)
@@ -3638,9 +3640,43 @@ export function getCacheStatusPage(user: {
           });
         }
 
+        function expandByFk(primarySet) {
+          var expanded = {};
+          Object.keys(primarySet).forEach(function(t) { expanded[t] = true; });
+          for (var i = 0; i < tableFkPairs.length; i++) {
+            var from = tableFkPairs[i][0], to = tableFkPairs[i][1];
+            if (expanded[from] && !expanded[to]) expanded[to] = true;
+            if (expanded[to] && !expanded[from]) expanded[from] = true;
+          }
+          return Object.keys(expanded);
+        }
+
         function buildUmlLegendItems(containerId) {
           var container = document.getElementById(containerId);
           if (!container || container.children.length > 0) return;
+
+          // 「すべて」行
+          var allRow = document.createElement('div');
+          allRow.className = 'uml-group-legend-row';
+          var allSwatch = document.createElement('div');
+          allSwatch.className = 'uml-group-legend-swatch';
+          allSwatch.style.background = 'linear-gradient(135deg,#388bfd,#3fb950,#d29922,#f85149,#a371f7)';
+          var allName = document.createElement('span');
+          allName.className = 'uml-group-legend-name';
+          allName.textContent = 'すべて';
+          allRow.appendChild(allSwatch);
+          allRow.appendChild(allName);
+          allRow.addEventListener('click', function(e) {
+            e.stopPropagation();
+            var allNames = (window.__erTables || []).map(function(t) { return t.name; });
+            if (allNames.length === 0) allNames = Object.keys(tableGroupMap);
+            var openFn = window.openFilteredUmlModal;
+            if (typeof openFn === 'function') {
+              openFn(allNames, window.__erTables || [], window.__erRelations || []);
+            }
+          });
+          container.appendChild(allRow);
+
           Object.keys(groupColors).forEach(function(key) {
             var row = document.createElement('div');
             row.className = 'uml-group-legend-row';
@@ -3658,15 +3694,19 @@ export function getCacheStatusPage(user: {
             row.appendChild(code);
             row.addEventListener('click', function(e) {
               e.stopPropagation();
-              var tableNames = Object.keys(tableGroupMap).filter(function(t) {
+              var primarySet = {};
+              Object.keys(tableGroupMap).forEach(function(t) {
                 var gVal = tableGroupMap[t];
-                if (!gVal) return false;
-                return gVal.split(',').map(function(k) { return k.trim(); }).indexOf(key) !== -1;
+                if (!gVal) return;
+                if (gVal.split(',').map(function(k) { return k.trim(); }).indexOf(key) !== -1) {
+                  primarySet[t] = true;
+                }
               });
-              if (tableNames.length === 0) return;
+              var expandedNames = expandByFk(primarySet);
+              if (expandedNames.length === 0) return;
               var openFn = window.openFilteredUmlModal;
               if (typeof openFn === 'function') {
-                openFn(tableNames, window.__erTables || [], window.__erRelations || []);
+                openFn(expandedNames, window.__erTables || [], window.__erRelations || []);
               }
             });
             container.appendChild(row);

@@ -2185,6 +2185,9 @@ app.get('/status', authMiddleware, async (c) => {
     unclassifiedAutoDetectedTables: [],
     groupLabels: GROUP_LABELS,
     groupColors: GROUP_COLORS,
+    tableFkPairs: Object.entries(COLUMN_FK_TARGETS).flatMap(
+      ([from, cols]) => Object.values(cols).map(to => [from, to] as [string, string])
+    ),
     userContext: {
       teamName: null, teamId: null,
       workspaceName: null, workspaceId: null,
