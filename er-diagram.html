@@ -465,10 +465,11 @@
   }
   .er-legend-header {
     display: flex; align-items: center; justify-content: space-between;
-    font-weight: 600; gap: 8px;
+    font-weight: 600; gap: 8px; cursor: pointer;
   }
   .er-legend-content { margin-top: 6px; display: flex; flex-direction: column; gap: 4px; }
-  .er-legend-row { display: flex; align-items: center; gap: 8px; }
+  .er-legend-row { display: flex; align-items: center; gap: 8px; cursor: pointer; border-radius: 4px; padding: 1px 2px; }
+  .er-legend-row:hover { background: rgba(128,128,128,0.12); }
   .er-legend-swatch { width: 12px; height: 12px; border-radius: 3px; flex-shrink: 0; }
   .er-legend-name { flex: 1; font-size: 11px; }
   .er-legend-code { font-size: 10px; font-family: monospace; color: var(--text-muted); }
@@ -518,7 +519,7 @@
 
 <div id="er-group-legend">
   <div class="er-legend-box">
-    <div class="er-legend-header">
+    <div class="er-legend-header" id="er-legend-header">
       <span>グループ凡例</span>
       <span id="er-legend-arrow">▲</span>
     </div>
@@ -1413,31 +1414,38 @@ window.addEventListener('DOMContentLoaded', () => {
     var container = document.getElementById('er-legend-content');
     if (!container) return;
     for (var key in GROUPS) {
-      var g = GROUPS[key];
-      var row = document.createElement('div');
-      row.className = 'er-legend-row';
-      var swatch = document.createElement('div');
-      swatch.className = 'er-legend-swatch';
-      swatch.style.background = g.color;
-      var name = document.createElement('span');
-      name.className = 'er-legend-name';
-      name.textContent = g.label || key;
-      var code = document.createElement('span');
-      code.className = 'er-legend-code';
-      code.textContent = g.color;
-      row.appendChild(swatch);
-      row.appendChild(name);
-      row.appendChild(code);
-      container.appendChild(row);
+      (function(groupKey) {
+        var g = GROUPS[groupKey];
+        var row = document.createElement('div');
+        row.className = 'er-legend-row';
+        var swatch = document.createElement('div');
+        swatch.className = 'er-legend-swatch';
+        swatch.style.background = g.color;
+        var name = document.createElement('span');
+        name.className = 'er-legend-name';
+        name.textContent = g.label || groupKey;
+        var code = document.createElement('span');
+        code.className = 'er-legend-code';
+        code.textContent = g.color;
+        row.appendChild(swatch);
+        row.appendChild(name);
+        row.appendChild(code);
+        row.addEventListener('click', function(e) {
+          e.stopPropagation();
+          filterGroup(groupKey);
+        });
+        container.appendChild(row);
+      })(key);
     }
   }
 
   buildErLegendItems();
   applyErLegendVisible(getErLegendVisible());
 
-  var legend = document.getElementById('er-group-legend');
-  if (legend) {
-    legend.addEventListener('click', function() {
+  var legendHeader = document.getElementById('er-legend-header');
+  if (legendHeader) {
+    legendHeader.addEventListener('click', function(e) {
+      e.stopPropagation();
       setErLegendVisible(!getErLegendVisible());
     });
   }

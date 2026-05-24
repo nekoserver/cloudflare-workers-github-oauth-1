@@ -1203,7 +1203,7 @@ export function getCacheStatusPage(user: {
     .uml-modal-card, .filtered-uml-modal-card { position: relative; }
     .uml-group-legend-wrap {
       position: absolute; bottom: 56px; left: 16px; z-index: 30;
-      cursor: pointer; user-select: none; pointer-events: all;
+      user-select: none; pointer-events: all;
     }
     .uml-group-legend-box {
       background: var(--card-bg); border: 1px solid var(--border-color);
@@ -1213,10 +1213,11 @@ export function getCacheStatusPage(user: {
     }
     .uml-group-legend-header {
       display: flex; align-items: center; justify-content: space-between;
-      font-weight: 600; gap: 8px; color: var(--text-primary);
+      font-weight: 600; gap: 8px; color: var(--text-primary); cursor: pointer;
     }
     .uml-group-legend-items { margin-top: 6px; display: flex; flex-direction: column; gap: 4px; }
-    .uml-group-legend-row { display: flex; align-items: center; gap: 8px; }
+    .uml-group-legend-row { display: flex; align-items: center; gap: 8px; cursor: pointer; border-radius: 4px; padding: 1px 2px; }
+    .uml-group-legend-row:hover { background: var(--bg-secondary); }
     .uml-group-legend-swatch { width: 12px; height: 12px; border-radius: 3px; flex-shrink: 0; }
     .uml-group-legend-name { flex: 1; font-size: 11px; color: var(--text-secondary); }
     .uml-group-legend-code { font-size: 10px; font-family: monospace; color: var(--text-muted); }
@@ -1733,7 +1734,7 @@ export function getCacheStatusPage(user: {
       <div class="uml-canvas-wrapper" id="umlCanvasWrapper"></div>
       <div class="uml-group-legend-wrap" id="umlGroupLegendWrap">
         <div class="uml-group-legend-box" id="umlGroupLegendBox">
-          <div class="uml-group-legend-header">
+          <div class="uml-group-legend-header" id="umlGroupLegendHeader">
             <span>グループ凡例</span>
             <span id="umlGroupLegendArrow">▲</span>
           </div>
@@ -1897,7 +1898,7 @@ export function getCacheStatusPage(user: {
       <div class="uml-canvas-wrapper" id="filteredUmlCanvasWrapper"></div>
       <div class="uml-group-legend-wrap" id="filteredUmlGroupLegendWrap">
         <div class="uml-group-legend-box" id="filteredUmlGroupLegendBox">
-          <div class="uml-group-legend-header">
+          <div class="uml-group-legend-header" id="filteredUmlGroupLegendHeader">
             <span>グループ凡例</span>
             <span id="filteredUmlGroupLegendArrow">▲</span>
           </div>
@@ -3655,6 +3656,19 @@ export function getCacheStatusPage(user: {
             row.appendChild(swatch);
             row.appendChild(name);
             row.appendChild(code);
+            row.addEventListener('click', function(e) {
+              e.stopPropagation();
+              var tableNames = Object.keys(tableGroupMap).filter(function(t) {
+                var gVal = tableGroupMap[t];
+                if (!gVal) return false;
+                return gVal.split(',').map(function(k) { return k.trim(); }).indexOf(key) !== -1;
+              });
+              if (tableNames.length === 0) return;
+              var openFn = window.openFilteredUmlModal;
+              if (typeof openFn === 'function') {
+                openFn(tableNames, window.__erTables || [], window.__erRelations || []);
+              }
+            });
             container.appendChild(row);
           });
         }
@@ -3663,10 +3677,11 @@ export function getCacheStatusPage(user: {
         buildUmlLegendItems('filteredUmlGroupLegendItems');
         applyUmlLegendVisible(getUmlLegendVisible());
 
-        ['umlGroupLegendBox', 'filteredUmlGroupLegendBox'].forEach(function(id) {
-          var box = document.getElementById(id);
-          if (box) {
-            box.addEventListener('click', function() {
+        ['umlGroupLegendHeader', 'filteredUmlGroupLegendHeader'].forEach(function(id) {
+          var header = document.getElementById(id);
+          if (header) {
+            header.addEventListener('click', function(e) {
+              e.stopPropagation();
               setUmlLegendVisible(!getUmlLegendVisible());
             });
           }
