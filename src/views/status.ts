@@ -3413,10 +3413,23 @@ export function getCacheStatusPage(user: {
         var rects = window.__umlCardRects;
         var names = window.__umlTableNames;
         if (!rects || !names) return '{}';
+        var m = document.cookie.match('(^|;)\\s*er_json_include_group=([^;]*)');
+        var includeGroup = m ? decodeURIComponent(m[2]) !== 'off' : true;
         var out = {};
         names.forEach(function(n) {
           var r = rects[n];
-          if (r) out[n] = { x: Math.round(r.x), y: Math.round(r.y) };
+          if (!r) return;
+          var entry = { x: Math.round(r.x), y: Math.round(r.y) };
+          if (includeGroup) {
+            var gVal = tableGroupMap[n];
+            if (gVal) {
+              var keys = gVal.split(',').map(function(k) { return k.trim(); }).filter(Boolean);
+              var colors = keys.map(function(k) { return groupColors[k] || '#8b949e'; });
+              entry.groups = keys;
+              entry.colors = colors;
+            }
+          }
+          out[n] = entry;
         });
         return JSON.stringify(out, null, 2);
       }

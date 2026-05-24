@@ -1072,11 +1072,32 @@ function resetPositions() {
 }
 
 // ===== 座標出力モーダル =====
+function getErJsonIncludeGroup() {
+  var m = document.cookie.match('(^|;)\\s*er_json_include_group=([^;]*)');
+  return m ? decodeURIComponent(m[2]) : 'on';
+}
+
 function currentPositionsJson() {
+  const includeGroup = getErJsonIncludeGroup() !== 'off';
   const ordered = {};
   for (const table of SCHEMA) {
     const p = positions[table.name];
-    ordered[table.name] = { x: Math.round(p.x), y: Math.round(p.y) };
+    const entry = { x: Math.round(p.x), y: Math.round(p.y) };
+    if (includeGroup) {
+      const groupKeys = [];
+      const groupColorVals = [];
+      for (const [gKey, gData] of Object.entries(GROUPS)) {
+        if (gData.tables.includes(table.name)) {
+          groupKeys.push(gKey);
+          groupColorVals.push(gData.color);
+        }
+      }
+      if (groupKeys.length > 0) {
+        entry.groups = groupKeys;
+        entry.colors = groupColorVals;
+      }
+    }
+    ordered[table.name] = entry;
   }
   return JSON.stringify(ordered, null, 2);
 }
