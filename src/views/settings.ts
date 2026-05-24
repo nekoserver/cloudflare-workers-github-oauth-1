@@ -371,6 +371,16 @@ export function getSettingsPage(user: {
               </label>
             </div>
           </div>
+          <div class="info-item">
+            <span class="info-label">ER図グループ凡例を初期表示する</span>
+            <div class="setting-control" style="justify-content: flex-end;">
+              <span class="theme-label" id="erLegendVisibleLabel">ON</span>
+              <label class="theme-toggle-switch">
+                <input type="checkbox" id="erLegendVisibleCheckbox" onchange="onErLegendVisibleChange()">
+                <span class="theme-toggle-slider"></span>
+              </label>
+            </div>
+          </div>
           <div class="info-item disabled" id="statusCommitCacheSortModeItem">
             <span class="info-label">月別コミットキャッシュ詳細の並び替え</span>
             <div class="setting-control">
@@ -538,6 +548,24 @@ export function getSettingsPage(user: {
       var enabled = cb.checked;
       label.textContent = enabled ? 'ON' : 'OFF';
       document.cookie = 'er_json_include_group=' + (enabled ? 'on' : 'off') + '; Path=/; Secure; SameSite=Lax; Max-Age=31536000';
+    }
+
+    // ER図グループ凡例トグルの初期化
+    (function() {
+      var m = document.cookie.match('(^|;)\\\\s*er_legend_visible=([^;]*)');
+      var val = m ? decodeURIComponent(m[2]) : 'on';
+      var cb = document.getElementById('erLegendVisibleCheckbox');
+      var label = document.getElementById('erLegendVisibleLabel');
+      if (cb) cb.checked = (val !== 'off');
+      if (label) label.textContent = (val !== 'off') ? 'ON' : 'OFF';
+    })();
+
+    function onErLegendVisibleChange() {
+      var cb = document.getElementById('erLegendVisibleCheckbox');
+      var label = document.getElementById('erLegendVisibleLabel');
+      var enabled = cb.checked;
+      label.textContent = enabled ? 'ON' : 'OFF';
+      document.cookie = 'er_legend_visible=' + (enabled ? 'on' : 'off') + '; Path=/; Secure; SameSite=Lax; Max-Age=31536000';
     }
 
     function onThemeSettingChange() {
