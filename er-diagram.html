@@ -976,6 +976,33 @@ function filterGroup(group) {
   focusOnGroup(group);
 }
 
+function filterGroupWithRelations(groupKey) {
+  activeFilter = groupKey;
+  document.getElementById('group-menu').classList.remove('show');
+
+  const primarySet = {};
+  for (const table of SCHEMA) {
+    if (groupKeyOf(table.name) === groupKey) primarySet[table.name] = true;
+  }
+
+  const expanded = Object.assign({}, primarySet);
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const rel of RELATIONS) {
+      if (expanded[rel.from] && !expanded[rel.to]) { expanded[rel.to] = true; changed = true; }
+      if (expanded[rel.to] && !expanded[rel.from]) { expanded[rel.from] = true; changed = true; }
+    }
+  }
+
+  for (const table of SCHEMA) {
+    const el = tableElements[table.name];
+    el.style.display = expanded[table.name] ? '' : 'none';
+  }
+  drawRelations();
+  focusOnGroup(groupKey);
+}
+
 function toggleGroupMenu(e) {
   e.stopPropagation();
   document.getElementById('save-menu').classList.remove('show');
@@ -1413,6 +1440,23 @@ window.addEventListener('DOMContentLoaded', () => {
   function buildErLegendItems() {
     var container = document.getElementById('er-legend-content');
     if (!container) return;
+
+    var allRow = document.createElement('div');
+    allRow.className = 'er-legend-row';
+    var allSwatch = document.createElement('div');
+    allSwatch.className = 'er-legend-swatch';
+    allSwatch.style.background = 'linear-gradient(135deg,#388bfd,#3fb950,#d29922,#f85149,#a371f7)';
+    var allName = document.createElement('span');
+    allName.className = 'er-legend-name';
+    allName.textContent = 'すべて';
+    allRow.appendChild(allSwatch);
+    allRow.appendChild(allName);
+    allRow.addEventListener('click', function(e) {
+      e.stopPropagation();
+      filterGroup('all');
+    });
+    container.appendChild(allRow);
+
     for (var key in GROUPS) {
       (function(groupKey) {
         var g = GROUPS[groupKey];
@@ -1432,7 +1476,7 @@ window.addEventListener('DOMContentLoaded', () => {
         row.appendChild(code);
         row.addEventListener('click', function(e) {
           e.stopPropagation();
-          filterGroup(groupKey);
+          filterGroupWithRelations(groupKey);
         });
         container.appendChild(row);
       })(key);
