@@ -186,7 +186,7 @@ export function getCacheStatusPage(user: {
     const num = groupIdMap[g];
     const label = data.groupLabels[g] || g;
     return `<option value="${num}">${num}: ${escapeHtml(label)}</option>`;
-  }).join('');
+  }).join('') + `<option value="0">0: ${escapeHtml(data.groupLabels['undefined'] || 'Undefined')}</option>`;
 
   // テーブル状況行
   const syncPolicyLabel: Record<string, { text: string; cls: string }> = {
@@ -3248,7 +3248,7 @@ export function getCacheStatusPage(user: {
         for (var i = 0; i < rows.length; i++) {
           var gid = rows[i].getAttribute('data-group-id');
           var tableName = rows[i].getAttribute('data-table-name');
-          var forceVisible = tableName === 'commit_agent_log';
+          var forceVisible = tableName === 'commit_agent_log' && filterVal !== '0';
           rows[i].style.display = (forceVisible || !filterVal || gid === filterVal) ? '' : 'none';
         }
       }
