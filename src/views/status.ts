@@ -3833,7 +3833,10 @@ export function getCacheStatusPage(user: {
             { name: 'permissions', type: 'TEXT (JSON)', keys: [] },
             { name: 'updated_at', type: 'TEXT', keys: ['idx'] }
           ]
-        }
+        },
+        { name: 'column_concepts', x: 1150, y: 40,  cols: [] },
+        { name: 'repo_cache',      x: 1150, y: 200, cols: [] },
+        { name: 'user_cache',      x: 1150, y: 360, cols: [] }
       ];
 
       // リレーション定義: [fromTable, fromCol, toTable, toCol, label]
