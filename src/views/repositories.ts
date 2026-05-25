@@ -877,6 +877,74 @@ export function getRepositoriesPage(user: {
       .history-grid-wrap { flex-wrap: wrap; }
       .history-grid-col { min-width: 45%; }
     }
+    .history-grid-col tr { cursor: pointer; }
+    .history-grid-col tr:hover td { background: var(--hover-bg, rgba(0,0,0,0.04)); }
+    .history-grid-col tr.selected td { background: rgba(102,126,234,0.12); }
+
+    /* キーワード詳細パネル */
+    .keyword-detail-panel {
+      margin-top: 12px; border: 1px solid var(--border-color); border-radius: 10px;
+      background: var(--bg-secondary, var(--card-bg)); overflow: hidden;
+    }
+    .keyword-detail-panel-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 8px 14px; background: linear-gradient(135deg, rgba(102,126,234,0.15), rgba(118,75,162,0.1));
+      border-bottom: 1px solid var(--border-color);
+    }
+    .keyword-detail-panel-title {
+      font-size: 14px; font-weight: 700; color: var(--text-primary);
+    }
+    .keyword-detail-panel-close {
+      background: none; border: none; font-size: 18px; line-height: 1; cursor: pointer;
+      color: var(--text-muted); padding: 0 4px;
+    }
+    .keyword-detail-body {
+      padding: 12px 14px; display: grid; grid-template-columns: 1fr 1fr; gap: 12px;
+    }
+    @media (max-width: 700px) {
+      .keyword-detail-body { grid-template-columns: 1fr; }
+    }
+    .keyword-detail-section { font-size: 13px; }
+    .keyword-detail-section-title {
+      font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase;
+      letter-spacing: 0.05em; margin-bottom: 6px;
+    }
+    .keyword-detail-summary-row {
+      display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 8px;
+    }
+    .keyword-detail-stat {
+      display: flex; flex-direction: column; align-items: center;
+      background: var(--bg-primary, #fff); border: 1px solid var(--border-color);
+      border-radius: 8px; padding: 6px 14px; min-width: 70px;
+    }
+    .keyword-detail-stat-value {
+      font-size: 18px; font-weight: 800; color: var(--accent-color, #667eea);
+    }
+    .keyword-detail-stat-label { font-size: 10px; color: var(--text-muted); white-space: nowrap; }
+    .keyword-detail-repo-list { list-style: none; margin: 0; padding: 0; }
+    .keyword-detail-repo-list li {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 3px 0; border-bottom: 1px solid var(--border-color); font-size: 12px;
+    }
+    .keyword-detail-repo-list li:last-child { border-bottom: none; }
+    .keyword-detail-repo-name { color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 160px; }
+    .keyword-detail-repo-count { color: var(--text-muted); font-weight: 700; white-space: nowrap; margin-left: 8px; }
+    .keyword-detail-cokey-list { display: flex; flex-wrap: wrap; gap: 6px; }
+    .keyword-detail-cokey-tag {
+      display: inline-flex; align-items: center; gap: 4px;
+      background: var(--bg-primary, #fff); border: 1px solid var(--border-color);
+      border-radius: 999px; padding: 2px 10px; font-size: 11px; cursor: pointer;
+      color: var(--text-primary);
+    }
+    .keyword-detail-cokey-tag:hover { border-color: #667eea; color: #667eea; }
+    .keyword-detail-cokey-count { color: var(--text-muted); font-size: 10px; }
+    .keyword-detail-graph-wrap { overflow-x: auto; }
+    .keyword-detail-graph-wrap svg { display: block; }
+    .kd-bar { fill: rgba(102,126,234,0.7); transition: fill 0.15s; }
+    .kd-bar:hover { fill: rgba(102,126,234,1); }
+    .kd-label { font-size: 9px; fill: var(--text-muted, #888); }
+    .kd-value { font-size: 9px; fill: var(--text-primary, #333); font-weight: 700; }
+    .keyword-detail-loading { padding: 20px; text-align: center; color: var(--text-muted); font-size: 13px; }
 
     /* Permissions Modal */
     .modal-overlay {
@@ -1728,6 +1796,7 @@ export function getRepositoriesPage(user: {
       </div>
       <div class="history-modal-body" id="historyModalBody">
       </div>
+      <div id="keywordDetailPanel" style="display:none"></div>
     </div>
   </div>
 
@@ -4626,6 +4695,9 @@ export function getRepositoriesPage(user: {
         return arr;
       }
 
+      var selectedKeyword = null;
+      var keywordDetailPanel = document.getElementById('keywordDetailPanel');
+
       function renderGrid(items, highlightKey, highlightType) {
         if (items.length === 0) return '<div class="search-empty">検索履歴がありません。</div>';
         var numCols = Math.ceil(items.length / ROWS_PER_COL);
@@ -4639,11 +4711,15 @@ export function getRepositoriesPage(user: {
           html += '<div class="history-grid-col"><table>'
             + '<thead><tr><th>ヒット数</th><th>キーワード</th></tr></thead><tbody>';
           for (var r = start; r < end; r++) {
-            var rowClass = '';
+            var rowClasses = [];
             if (highlightKey && items[r].search_query === highlightKey) {
-              rowClass = highlightType === 'new' ? ' class="history-row-new"' : ' class="history-row-updated"';
+              rowClasses.push(highlightType === 'new' ? 'history-row-new' : 'history-row-updated');
             }
-            html += '<tr' + rowClass + '>'
+            if (selectedKeyword && items[r].search_query === selectedKeyword) {
+              rowClasses.push('selected');
+            }
+            var rowClass = rowClasses.length > 0 ? ' class="' + rowClasses.join(' ') + '"' : '';
+            html += '<tr' + rowClass + ' data-query="' + escHtml(items[r].search_query) + '">'
               + '<td><span class="history-hit-badge">' + items[r].total_hits + '</span></td>'
               + '<td title="' + escHtml(items[r].search_query) + '">' + escHtml(items[r].search_query) + '</td>'
               + '</tr>';
@@ -4657,6 +4733,143 @@ export function getRepositoriesPage(user: {
         return html;
       }
 
+      function buildTimeseriesChart(series) {
+        if (!series || series.length === 0) return '<div style="color:var(--text-muted);font-size:12px;">データなし</div>';
+        var maxHits = 0;
+        series.forEach(function(d) { if (d.total_hits > maxHits) maxHits = d.total_hits; });
+        if (maxHits === 0) maxHits = 1;
+        var barW = 28, gap = 4, padL = 28, padB = 28, padT = 10, chartH = 80;
+        var svgW = Math.max(padL + series.length * (barW + gap) + 10, 200);
+        var svgH = chartH + padB + padT;
+        var html = '<svg width="' + svgW + '" height="' + svgH + '" role="img">';
+        series.forEach(function(d, i) {
+          var x = padL + i * (barW + gap);
+          var barH = Math.max(2, Math.round((d.total_hits / maxHits) * chartH));
+          var y = padT + chartH - barH;
+          var label = d.date ? d.date.substring(5) : '';
+          html += '<rect class="kd-bar" x="' + x + '" y="' + y + '" width="' + barW + '" height="' + barH + '" rx="3">'
+            + '<title>' + escHtml(d.date) + ': ' + d.total_hits + 'ヒット / ' + d.search_count + '回検索</title>'
+            + '</rect>';
+          html += '<text class="kd-label" x="' + (x + barW / 2) + '" y="' + (padT + chartH + 14) + '" text-anchor="middle">' + escHtml(label) + '</text>';
+          if (d.total_hits > 0) {
+            html += '<text class="kd-value" x="' + (x + barW / 2) + '" y="' + (y - 3) + '" text-anchor="middle">' + d.total_hits + '</text>';
+          }
+        });
+        html += '</svg>';
+        return html;
+      }
+
+      function showKeywordDetail(query) {
+        selectedKeyword = query;
+        if (!keywordDetailPanel) return;
+        keywordDetailPanel.style.display = '';
+        keywordDetailPanel.innerHTML = '<div class="keyword-detail-panel"><div class="keyword-detail-panel-header">'
+          + '<span class="keyword-detail-panel-title">「' + escHtml(query) + '」の詳細集計</span>'
+          + '<button class="keyword-detail-panel-close" id="keywordDetailClose" type="button">&times;</button>'
+          + '</div><div class="keyword-detail-loading">読み込み中...</div></div>';
+
+        var closeBtn = document.getElementById('keywordDetailClose');
+        if (closeBtn) {
+          closeBtn.addEventListener('click', function() {
+            selectedKeyword = null;
+            keywordDetailPanel.style.display = 'none';
+            keywordDetailPanel.innerHTML = '';
+            refreshGrid(null, null);
+          });
+        }
+
+        fetch('/api/repositories/search/keyword-stats?q=' + encodeURIComponent(query), { credentials: 'same-origin' })
+          .then(function(res) { return res.ok ? res.json() : null; })
+          .then(function(data) {
+            if (!data || data.error) {
+              keywordDetailPanel.querySelector('.keyword-detail-loading').textContent = '取得に失敗しました';
+              return;
+            }
+            var s = data.summary || {};
+            var body = '<div class="keyword-detail-body">';
+
+            // 左列: サマリー + リポジトリ一覧
+            body += '<div>';
+            body += '<div class="keyword-detail-section">';
+            body += '<div class="keyword-detail-section-title">集計サマリー</div>';
+            body += '<div class="keyword-detail-summary-row">';
+            body += '<div class="keyword-detail-stat"><span class="keyword-detail-stat-value">' + (s.search_count || 0) + '</span><span class="keyword-detail-stat-label">検索回数</span></div>';
+            body += '<div class="keyword-detail-stat"><span class="keyword-detail-stat-value">' + (s.search_days || 0) + '</span><span class="keyword-detail-stat-label">検索日数</span></div>';
+            body += '<div class="keyword-detail-stat"><span class="keyword-detail-stat-value">' + (s.total_hits || 0) + '</span><span class="keyword-detail-stat-label">総ヒット数</span></div>';
+            body += '<div class="keyword-detail-stat"><span class="keyword-detail-stat-value">' + (data.repoStats ? data.repoStats.length : 0) + '</span><span class="keyword-detail-stat-label">対象リポジトリ</span></div>';
+            body += '</div>';
+            body += '</div>';
+
+            if (data.repoStats && data.repoStats.length > 0) {
+              body += '<div class="keyword-detail-section" style="margin-top:10px;">';
+              body += '<div class="keyword-detail-section-title">リポジトリ別ヒット数</div>';
+              body += '<ul class="keyword-detail-repo-list">';
+              data.repoStats.slice(0, 10).forEach(function(r) {
+                body += '<li><span class="keyword-detail-repo-name" title="' + escHtml(r.repo_name) + '">' + escHtml(r.repo_name) + '</span>'
+                  + '<span class="keyword-detail-repo-count">' + r.total_hit_count + ' ヒット</span></li>';
+              });
+              body += '</ul></div>';
+            }
+            body += '</div>';
+
+            // 右列: 共起キーワード + 時系列グラフ
+            body += '<div>';
+            if (data.coKeywords && data.coKeywords.length > 0) {
+              body += '<div class="keyword-detail-section">';
+              body += '<div class="keyword-detail-section-title">共起キーワード（同一リポジトリにヒット）</div>';
+              body += '<div class="keyword-detail-cokey-list">';
+              data.coKeywords.slice(0, 20).forEach(function(k) {
+                body += '<span class="keyword-detail-cokey-tag" data-cokey="' + escHtml(k.search_query) + '" title="共有リポジトリ数: ' + k.shared_repo_count + '">'
+                  + escHtml(k.search_query)
+                  + '<span class="keyword-detail-cokey-count">×' + k.shared_repo_count + '</span>'
+                  + '</span>';
+              });
+              body += '</div></div>';
+            } else {
+              body += '<div class="keyword-detail-section"><div class="keyword-detail-section-title">共起キーワード</div>'
+                + '<div style="font-size:12px;color:var(--text-muted);">なし</div></div>';
+            }
+
+            if (data.timeseries && data.timeseries.length > 0) {
+              body += '<div class="keyword-detail-section" style="margin-top:12px;">';
+              body += '<div class="keyword-detail-section-title">日別ヒット数推移</div>';
+              body += '<div class="keyword-detail-graph-wrap">' + buildTimeseriesChart(data.timeseries) + '</div>';
+              body += '</div>';
+            }
+            body += '</div>';
+            body += '</div>';
+
+            var panel = keywordDetailPanel.querySelector('.keyword-detail-panel');
+            if (panel) {
+              panel.innerHTML = '<div class="keyword-detail-panel-header">'
+                + '<span class="keyword-detail-panel-title">「' + escHtml(query) + '」の詳細集計</span>'
+                + '<button class="keyword-detail-panel-close" id="keywordDetailClose" type="button">&times;</button>'
+                + '</div>' + body;
+              var closeBtn2 = panel.querySelector('#keywordDetailClose');
+              if (closeBtn2) {
+                closeBtn2.addEventListener('click', function() {
+                  selectedKeyword = null;
+                  keywordDetailPanel.style.display = 'none';
+                  keywordDetailPanel.innerHTML = '';
+                  refreshGrid(null, null);
+                });
+              }
+              panel.querySelectorAll('[data-cokey]').forEach(function(el) {
+                el.addEventListener('click', function() {
+                  var cokey = el.getAttribute('data-cokey');
+                  if (cokey) showKeywordDetail(cokey);
+                });
+              });
+            }
+          })
+          .catch(function() {
+            var loading = keywordDetailPanel.querySelector('.keyword-detail-loading');
+            if (loading) loading.textContent = '取得に失敗しました';
+          });
+
+        refreshGrid(null, null);
+      }
+
       function updateTitle() {
         historyModalTitle.textContent = '検索履歴 (' + currentItems.length + ' 件)';
       }
@@ -4664,6 +4877,12 @@ export function getRepositoriesPage(user: {
       function refreshGrid(highlightKey, highlightType) {
         updateTitle();
         historyModalBody.innerHTML = renderGrid(currentItems, highlightKey, highlightType);
+        historyModalBody.querySelectorAll('tr[data-query]').forEach(function(row) {
+          row.addEventListener('click', function() {
+            var q = row.getAttribute('data-query');
+            if (q) showKeywordDetail(q);
+          });
+        });
       }
 
       function setSearchStatus(text, cls) {
