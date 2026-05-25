@@ -69,6 +69,7 @@ const STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
   { name: 'cloudflare_setup_pending', migration: '0010', description: 'Cloudflare セットアップ通知', syncPolicy: 'auto' },
   { name: 'commit_search_history', migration: '0011', description: 'コミット検索履歴', syncPolicy: 'auto' },
   { name: 'commit_search_repo_stats', migration: '0011', description: 'コミット検索リポジトリ別集計', syncPolicy: 'auto' },
+  { name: 'commit_search_hit_details', migration: '0032', description: 'コミット検索ヒット詳細（コミット単位）', syncPolicy: 'auto' },
   { name: 'ai_summary_log', migration: '0012', description: 'AI要約ログ', syncPolicy: 'auto' },
   { name: 'repo_color_settings', migration: '0013', description: 'リポジトリ色・タグ設定', syncPolicy: 'auto' },
   { name: 'repo_groups', migration: '0014', description: 'リポジトリグループ', syncPolicy: 'manual' },
@@ -526,6 +527,17 @@ CREATE INDEX IF NOT EXISTS idx_ai_summary_link_access_log_created ON ai_summary_
 CREATE INDEX IF NOT EXISTS idx_commit_stats_cache_repo_period ON commit_stats_cache(owner, repo, period);`,
   '0031': `ALTER TABLE commit_calendar_cache ADD COLUMN total_count INTEGER NOT NULL DEFAULT 0;
 UPDATE commit_calendar_cache SET total_count = (SELECT COALESCE(SUM(CAST(je.value AS INTEGER)), 0) FROM json_each(commit_calendar_cache.counts) je) WHERE total_count = 0;`,
+  '0032': `CREATE TABLE IF NOT EXISTS commit_search_hit_details (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  search_history_id INTEGER NOT NULL,
+  repo_name TEXT NOT NULL,
+  commit_sha TEXT NOT NULL,
+  commit_message TEXT NOT NULL,
+  FOREIGN KEY (search_history_id) REFERENCES commit_search_history(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_commit_search_hit_details_history ON commit_search_hit_details(search_history_id);
+CREATE INDEX IF NOT EXISTS idx_commit_search_hit_details_repo ON commit_search_hit_details(repo_name);
+CREATE INDEX IF NOT EXISTS idx_commit_search_hit_details_sha ON commit_search_hit_details(commit_sha);`,
 };
 
 function jsonUtf8(payload: unknown, status = 200): Response {
@@ -652,6 +664,7 @@ export const TABLE_COLUMN_KEYS: Record<string, ColumnKeyInfo> = {
   cloudflare_setup_pending: { id: 'pk', user_id: 'idx' },
   commit_search_history: { id: 'pk', user_id: 'idx' },
   commit_search_repo_stats: { id: 'pk', search_history_id: 'fk' },
+  commit_search_hit_details: { id: 'pk', search_history_id: 'fk' },
   ai_summary_log: { id: 'pk', request_id: 'uk', event_date: 'idx' },
   ai_summary_reviews: { id: 'pk', summary_request_id: 'fk' },
   commit_agent_log: { id: 'pk', request_id: 'idx', repo_full_name: 'idx', pr_number: 'idx' },
@@ -714,7 +727,7 @@ export function getFilterableColumns(tableName: string): string[] {
 export const TABLE_GROUP_MAP: Record<string, string> = {
   user_sessions: 'auth', teams: 'auth', workspaces: 'auth', team_members: 'auth',
   commit_calendar_cache: 'commit', commit_list_cache: 'commit', cache_stats: 'commit',
-  commit_search_history: 'commit', commit_search_repo_stats: 'commit', cloudflare_setup_pending: 'commit',
+  commit_search_history: 'commit', commit_search_repo_stats: 'commit', commit_search_hit_details: 'commit', cloudflare_setup_pending: 'commit',
   commit_stats_cache: 'commit',
   ai_summary_log: 'ai', ai_summary_reviews: 'ai', commit_agent_log: 'ai',
   resend_webhook_sources: 'email', email_send_log: 'email', resend_webhook_log: 'email',
@@ -822,6 +835,7 @@ export const COLUMN_FK_TARGETS: Record<string, Record<string, string>> = {
   cloudflare_setup_pending: { user_id: 'user_sessions' },
   commit_search_history: { user_id: 'user_sessions' },
   commit_search_repo_stats: { search_history_id: 'commit_search_history' },
+  commit_search_hit_details: { search_history_id: 'commit_search_history' },
 
   // ========================================================================
   // workspace_id の論理FK（workspaces.id が参照先）
@@ -909,6 +923,7 @@ export const COLUMN_FK_TARGET_COLUMNS: Record<string, string> = {
 
   // search_history_id → commit_search_history.id
   'commit_search_repo_stats.search_history_id': 'id',
+  'commit_search_hit_details.search_history_id': 'id',
 
   // team_id → teams.id (物理FKで拾われるので普段は経由しないが保険)
   'workspaces.team_id': 'id',
@@ -4688,7 +4703,7 @@ app.get('/api/repositories/search/commits', optionalAuthMiddleware, async (c) =>
       repoHitMap.set(repoKey, (repoHitMap.get(repoKey) ?? 0) + item.commits.length);
     }
 
-    // テーブルA・Bに検索結果を保存
+    // テーブルA・B・Cに検索結果を保存
     if (totalMatches > 0) {
       try {
         const now = new Date().toISOString();
@@ -4701,14 +4716,34 @@ app.get('/api/repositories/search/commits', optionalAuthMiddleware, async (c) =>
         const historyId = insertA.meta?.last_row_id;
         if (historyId) {
           const userName = user.name ?? user.sub;
-          const stmts = [...repoHitMap.entries()].map(([repoName, hitCount]) =>
+          const repoStmts = [...repoHitMap.entries()].map(([repoName, hitCount]) =>
             c.env.DB!.prepare(
               `INSERT INTO commit_search_repo_stats (search_history_id, repo_name, hit_count, search_query, user_name)
                VALUES (?, ?, ?, ?, ?)`
             ).bind(historyId, repoName, hitCount, q, userName)
           );
-          if (stmts.length > 0) {
-            await c.env.DB.batch(stmts);
+          if (repoStmts.length > 0) {
+            await c.env.DB.batch(repoStmts);
+          }
+
+          // テーブルC: コミット単位のヒット詳細（最大200件）
+          const hitDetailStmts: ReturnType<typeof c.env.DB.prepare>[] = [];
+          for (const item of results) {
+            if (hitDetailStmts.length >= 200) break;
+            const repoKey = `${item.owner}/${item.repo}`;
+            for (const commit of item.commits) {
+              if (hitDetailStmts.length >= 200) break;
+              const shortMsg = (commit.message ?? '').split('\n')[0].substring(0, 200);
+              hitDetailStmts.push(
+                c.env.DB!.prepare(
+                  `INSERT INTO commit_search_hit_details (search_history_id, repo_name, commit_sha, commit_message)
+                   VALUES (?, ?, ?, ?)`
+                ).bind(historyId, repoKey, commit.sha ?? '', shortMsg)
+              );
+            }
+          }
+          if (hitDetailStmts.length > 0) {
+            await c.env.DB.batch(hitDetailStmts);
           }
         }
       } catch (saveErr) {
@@ -4808,6 +4843,97 @@ app.get('/api/repositories/search/history/:id', optionalAuthMiddleware, async (c
       error: error instanceof Error ? error.message : 'Unknown error',
     });
     return jsonUtf8({ error: 'Failed to fetch detail' }, 500);
+  }
+});
+
+// キーワード集計: 共起キーワード・時系列・リポジトリ別件数を一括返却
+app.get('/api/repositories/search/keyword-stats', optionalAuthMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!user) return jsonUtf8({ error: 'Unauthorized' }, 401);
+  if (!c.env.DB) return jsonUtf8({ error: 'Database not available' }, 500);
+
+  const q = (c.req.query('q') ?? '').trim();
+  if (!q || q.length < 2) return jsonUtf8({ error: 'Query required' }, 400);
+
+  try {
+    // 検索イベント数・総ヒット数・初回・最終
+    const summary = await c.env.DB.prepare(
+      `SELECT COUNT(*) as search_count,
+              SUM(total_hits) as total_hits,
+              COUNT(DISTINCT DATE(searched_at)) as search_days,
+              MIN(searched_at) as first_searched_at,
+              MAX(searched_at) as last_searched_at
+       FROM commit_search_history
+       WHERE user_id = ? AND search_query = ?`
+    ).bind(user.sub, q).first<{
+      search_count: number;
+      total_hits: number;
+      search_days: number;
+      first_searched_at: string;
+      last_searched_at: string;
+    }>();
+
+    // リポジトリ別ヒット数合計
+    const repoStats = await c.env.DB.prepare(
+      `SELECT s.repo_name, SUM(s.hit_count) as total_hit_count, COUNT(*) as search_count
+       FROM commit_search_repo_stats s
+       JOIN commit_search_history h ON s.search_history_id = h.id
+       WHERE h.user_id = ? AND s.search_query = ?
+       GROUP BY s.repo_name
+       ORDER BY total_hit_count DESC
+       LIMIT 50`
+    ).bind(user.sub, q).all<{
+      repo_name: string;
+      total_hit_count: number;
+      search_count: number;
+    }>();
+
+    // 共起キーワード（同一リポジトリにヒットした他のクエリ）
+    const coKeywords = await c.env.DB.prepare(
+      `SELECT b.search_query, COUNT(DISTINCT b.repo_name) as shared_repo_count, SUM(b.hit_count) as total_hits
+       FROM commit_search_repo_stats a
+       JOIN commit_search_history ha ON a.search_history_id = ha.id
+       JOIN commit_search_repo_stats b ON a.repo_name = b.repo_name
+       JOIN commit_search_history hb ON b.search_history_id = hb.id
+       WHERE ha.user_id = ? AND a.search_query = ?
+         AND hb.user_id = ? AND b.search_query != ?
+       GROUP BY b.search_query
+       ORDER BY shared_repo_count DESC, total_hits DESC
+       LIMIT 30`
+    ).bind(user.sub, q, user.sub, q).all<{
+      search_query: string;
+      shared_repo_count: number;
+      total_hits: number;
+    }>();
+
+    // 日別時系列（検索回数・ヒット数）
+    const timeseries = await c.env.DB.prepare(
+      `SELECT DATE(searched_at) as date,
+              COUNT(*) as search_count,
+              SUM(total_hits) as total_hits
+       FROM commit_search_history
+       WHERE user_id = ? AND search_query = ?
+       GROUP BY DATE(searched_at)
+       ORDER BY date ASC`
+    ).bind(user.sub, q).all<{
+      date: string;
+      search_count: number;
+      total_hits: number;
+    }>();
+
+    return jsonUtf8({
+      query: q,
+      summary: summary ?? null,
+      repoStats: repoStats.results ?? [],
+      coKeywords: coKeywords.results ?? [],
+      timeseries: timeseries.results ?? [],
+    });
+  } catch (error) {
+    logger.warn('Failed to fetch keyword stats', {
+      query: q,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    return jsonUtf8({ error: 'Failed to fetch keyword stats' }, 500);
   }
 });
 
