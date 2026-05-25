@@ -765,7 +765,13 @@ export function getCacheStatusPage(user: {
     }
     .modal-title-wrap { min-width: 0; }
     .modal-title { font-size: 18px; font-weight: 700; color: var(--text-primary); }
-    .modal-subtitle { margin-top: 6px; font-size: 13px; color: var(--text-muted); }
+    .modal-subtitle { margin-top: 6px; font-size: 13px; color: var(--text-muted); display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+    .er-tablelist-toggle { position:relative; display:inline-block; width:32px; height:18px; cursor:pointer; vertical-align:middle; flex-shrink:0; }
+    .er-tablelist-toggle input { opacity:0; width:0; height:0; }
+    .er-tablelist-toggle-slider { position:absolute; top:0; left:0; right:0; bottom:0; background:var(--input-border); border-radius:18px; transition:background 0.2s; }
+    .er-tablelist-toggle-slider::before { content:''; position:absolute; width:12px; height:12px; left:3px; bottom:3px; background:white; border-radius:50%; transition:transform 0.2s; }
+    .er-tablelist-toggle input:checked + .er-tablelist-toggle-slider { background:var(--accent-color); }
+    .er-tablelist-toggle input:checked + .er-tablelist-toggle-slider::before { transform:translateX(14px); }
     .modal-close {
       background: transparent; border: 0; color: var(--text-muted);
       font-size: 26px; line-height: 1; cursor: pointer;
@@ -1886,7 +1892,11 @@ export function getCacheStatusPage(user: {
       <div class="modal-header">
         <div class="modal-title-wrap">
           <div class="modal-title" id="filteredUmlModalTitle">フィルタ済み ER図</div>
-          <div class="modal-subtitle" id="filteredUmlModalSubtitle"></div>
+          <div class="modal-subtitle" id="filteredUmlModalSubtitle">
+            <span id="fUmlSubtitleSummary"></span>
+            <label class="er-tablelist-toggle" title="テーブル一覧を展開表示"><input type="checkbox" id="fUmlTablelistToggle"><span class="er-tablelist-toggle-slider"></span></label>
+            <span id="fUmlSubtitleDetail" style="display:none"></span>
+          </div>
         </div>
         <div style="display:flex; align-items:center; gap:8px;">
           <div class="uml-view-toggle" role="group" aria-label="表示モード">
@@ -4919,6 +4929,17 @@ export function getCacheStatusPage(user: {
         if (e.key === 'Escape' && fUmlModal.classList.contains('show')) closeFilteredUmlModal();
       });
 
+      (function() {
+        var toggleEl = document.getElementById('fUmlTablelistToggle');
+        if (!toggleEl) return;
+        toggleEl.addEventListener('change', function() {
+          var on = this.checked;
+          document.cookie = 'er_tablelist_expand=' + (on ? 'on' : 'off') + '; Path=/; Secure; SameSite=Lax; Max-Age=31536000';
+          var detailEl = document.getElementById('fUmlSubtitleDetail');
+          if (detailEl) detailEl.style.display = on ? '' : 'none';
+        });
+      })();
+
       var FILTERED_UML_VIEW_MODE_KEY = 'er-filtered-uml-view-mode';
 
       function getFilteredUmlViewMode() {
@@ -4993,10 +5014,11 @@ export function getCacheStatusPage(user: {
         }
         addedNames.sort();
 
-        var subtitleText = primaryNames.join(', ');
-        if (addedNames.length > 0) {
-          subtitleText += '  +  関連: ' + addedNames.join(', ');
-        }
+        var summaryText = primaryNames.length + ' テーブル';
+        if (addedNames.length > 0) summaryText += '  +  関連 ' + addedNames.length + ' テーブル';
+
+        var detailText = primaryNames.join(', ');
+        if (addedNames.length > 0) detailText += '  +  関連: ' + addedNames.join(', ');
 
         var groupSet = {};
         for (var gi = 0; gi < tableNames.length; gi++) {
@@ -5013,7 +5035,17 @@ export function getCacheStatusPage(user: {
         }
 
         if (fUmlTitle) fUmlTitle.textContent = groupTitle + ' (' + filteredTables.length + ' テーブル)';
-        if (fUmlSubtitle) fUmlSubtitle.textContent = subtitleText;
+        var summaryEl = document.getElementById('fUmlSubtitleSummary');
+        var detailEl = document.getElementById('fUmlSubtitleDetail');
+        var tablelistToggleEl = document.getElementById('fUmlTablelistToggle');
+        if (summaryEl) summaryEl.textContent = summaryText;
+        if (detailEl) detailEl.textContent = detailText;
+        var isTablelistExpanded = (function() {
+          var m = document.cookie.match('(^|;)\\s*er_tablelist_expand=([^;]*)');
+          return m ? m[2] === 'on' : false;
+        })();
+        if (detailEl) detailEl.style.display = isTablelistExpanded ? '' : 'none';
+        if (tablelistToggleEl) tablelistToggleEl.checked = isTablelistExpanded;
 
         layoutFilteredTables(filteredTables, filteredRelations);
         renderFilteredErDiagram(filteredTables, filteredRelations, isDark);
