@@ -914,7 +914,7 @@ export function getRepositoriesPage(user: {
     }
     .keyword-detail-stat {
       display: flex; flex-direction: column; align-items: center;
-      background: var(--bg-primary, #fff); border: 1px solid var(--border-color);
+      background: var(--card-bg); border: 1px solid var(--border-color);
       border-radius: 8px; padding: 6px 14px; min-width: 70px;
     }
     .keyword-detail-stat-value {
@@ -932,7 +932,7 @@ export function getRepositoriesPage(user: {
     .keyword-detail-cokey-list { display: flex; flex-wrap: wrap; gap: 6px; }
     .keyword-detail-cokey-tag {
       display: inline-flex; align-items: center; gap: 4px;
-      background: var(--bg-primary, #fff); border: 1px solid var(--border-color);
+      background: var(--card-bg); border: 1px solid var(--border-color);
       border-radius: 999px; padding: 2px 10px; font-size: 11px; cursor: pointer;
       color: var(--text-primary);
     }
