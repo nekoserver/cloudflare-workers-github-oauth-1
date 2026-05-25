@@ -597,8 +597,8 @@
 <script>
 const GROUPS = {
   auth:      { color: '#388bfd', label: 'Auth / Session',    tables: ['user_sessions','teams','workspaces','team_members'] },
-  commit:    { color: '#3fb950', label: 'Commit / Cache',    tables: ['commit_calendar_cache','commit_list_cache','cache_stats','commit_search_history','commit_search_repo_stats','cloudflare_setup_pending'] },
-  ai:        { color: '#d29922', label: 'AI Summary',         tables: ['ai_summary_log','ai_summary_reviews'] },
+  commit:    { color: '#3fb950', label: 'Commit / Cache',    tables: ['commit_calendar_cache','commit_list_cache','cache_stats','commit_search_history','commit_search_repo_stats','commit_search_hit_details','commit_stats_cache','cloudflare_setup_pending'] },
+  ai:        { color: '#d29922', label: 'AI Summary',         tables: ['ai_summary_log','ai_summary_reviews','commit_agent_log'] },
   email:     { color: '#f85149', label: 'Email / Resend',    tables: ['resend_webhook_sources','resend_webhook_log','email_send_log','email_suppression_list','email_mfa_challenges','email_audit_anomalies'] },
   config:    { color: '#a371f7', label: 'Config / Settings', tables: ['installation_permissions','repo_color_settings','repo_groups','repo_group_members','table_catalog','table_column_keys'] },
   undefined: { color: '#8b949e', label: 'Undefined',          tables: [] }
@@ -640,29 +640,38 @@ const SCHEMA = [
   { name:'commit_calendar_cache', cols:[
     {n:'id',pk:true,t:'INT'},{n:'owner',idx:true,t:'TEXT'},{n:'repo',idx:true,t:'TEXT'},
     {n:'year',idx:true,t:'INT'},{n:'month',idx:true,t:'INT'},{n:'counts',t:'TEXT'},{n:'cached_at',t:'TEXT'},
-    {n:'user_id',t:'TEXT'},{n:'workspace_id',idx:true,t:'TEXT'}
+    {n:'user_id',t:'TEXT'},{n:'workspace_id',fk:'workspaces',idx:true,t:'TEXT'}
   ]},
   { name:'commit_list_cache', cols:[
-    {n:'workspace_id',idx:true,t:'TEXT'},{n:'owner',idx:true,t:'TEXT'},{n:'repo',idx:true,t:'TEXT'},
+    {n:'workspace_id',fk:'workspaces',idx:true,t:'TEXT'},{n:'owner',idx:true,t:'TEXT'},{n:'repo',idx:true,t:'TEXT'},
     {n:'date',idx:true,t:'TEXT'},{n:'commits_json',t:'TEXT'},{n:'commit_count',t:'INT'},{n:'cached_at',t:'TEXT'}
   ]},
   { name:'cache_stats', cols:[
-    {n:'user_id',idx:true,t:'TEXT'},{n:'owner',idx:true,t:'TEXT'},{n:'repo',idx:true,t:'TEXT'},
+    {n:'user_id',fk:'user_sessions',idx:true,t:'TEXT'},{n:'owner',idx:true,t:'TEXT'},{n:'repo',idx:true,t:'TEXT'},
     {n:'github_fetch_count',t:'INT'},{n:'cache_save_count',t:'INT'},
     {n:'cache_lookup_count',t:'INT'},{n:'cache_hit_count',t:'INT'},{n:'last_updated_at',t:'TEXT'}
   ]},
   { name:'cloudflare_setup_pending', cols:[
-    {n:'id',pk:true,t:'INT'},{n:'user_id',idx:true,t:'TEXT'},{n:'repo_owner',t:'TEXT'},
+    {n:'id',pk:true,t:'INT'},{n:'user_id',fk:'user_sessions',idx:true,t:'TEXT'},{n:'repo_owner',t:'TEXT'},
     {n:'repo_name',t:'TEXT'},{n:'repo_full_name',t:'TEXT'},{n:'is_private',t:'INT'},
     {n:'created_at',t:'TEXT'},{n:'dismissed_at',t:'TEXT'}
   ]},
   { name:'commit_search_history', cols:[
-    {n:'id',pk:true,t:'INT'},{n:'user_id',idx:true,t:'TEXT'},{n:'search_query',t:'TEXT'},
+    {n:'id',pk:true,t:'INT'},{n:'user_id',fk:'user_sessions',idx:true,t:'TEXT'},{n:'search_query',t:'TEXT'},
     {n:'total_hits',t:'INT'},{n:'repo_names',t:'TEXT'},{n:'searched_at',t:'TEXT'}
   ]},
   { name:'commit_search_repo_stats', cols:[
     {n:'id',pk:true,t:'INT'},{n:'search_history_id',fk:'commit_search_history',idx:true,t:'INT'},
     {n:'repo_name',t:'TEXT'},{n:'hit_count',t:'INT'},{n:'search_query',t:'TEXT'},{n:'user_name',t:'TEXT'}
+  ]},
+  { name:'commit_search_hit_details', cols:[
+    {n:'id',pk:true,t:'INT'},{n:'search_history_id',fk:'commit_search_history',idx:true,t:'INT'},
+    {n:'repo_name',t:'TEXT'},{n:'commit_sha',idx:true,t:'TEXT'},{n:'commit_message',t:'TEXT'}
+  ]},
+  { name:'commit_stats_cache', cols:[
+    {n:'id',pk:true,t:'INT'},{n:'owner',idx:true,t:'TEXT'},{n:'repo',idx:true,t:'TEXT'},
+    {n:'period',idx:true,t:'TEXT'},{n:'author_login',idx:true,t:'TEXT'},{n:'author_name',t:'TEXT'},
+    {n:'commit_count',t:'INT'},{n:'merge_count',t:'INT'},{n:'cached_at',t:'TEXT'}
   ]},
   { name:'ai_summary_log', cols:[
     {n:'id',pk:true,t:'INT'},{n:'request_id',uk:true,t:'TEXT'},{n:'daily_seq',t:'INT'},
@@ -677,6 +686,14 @@ const SCHEMA = [
     {n:'id',pk:true,t:'INT'},{n:'summary_request_id',fk:'ai_summary_log',idx:true,t:'TEXT'},
     {n:'rating',idx:true,t:'TEXT'},{n:'reviewer_type',t:'TEXT'},{n:'reviewer_name',t:'TEXT'},
     {n:'review_model',t:'TEXT'},{n:'comment',t:'TEXT'},{n:'created_at',t:'TEXT'}
+  ]},
+  { name:'commit_agent_log', cols:[
+    {n:'id',pk:true,t:'INT'},{n:'request_id',fk:'ai_summary_log',idx:true,t:'TEXT'},
+    {n:'repo_full_name',idx:true,t:'TEXT'},{n:'pr_number',idx:true,t:'INT'},
+    {n:'commit_sha',t:'TEXT'},{n:'commit_message',t:'TEXT'},
+    {n:'commit_author_name',t:'TEXT'},{n:'commit_author_email',t:'TEXT'},
+    {n:'detected_agent_name',t:'TEXT'},{n:'detected_agent_version',t:'TEXT'},
+    {n:'detected_signal',t:'TEXT'},{n:'created_at',t:'TEXT'}
   ]},
   { name:'repo_color_settings', cols:[
     {n:'id',pk:true,t:'INT'},{n:'workspace_id',idx:true,t:'TEXT'},{n:'repo_name',idx:true,t:'TEXT'},
@@ -743,8 +760,15 @@ const SCHEMA = [
 const RELATIONS = [
   { from:'workspaces', fromCol:'team_id', to:'teams', toCol:'id' },
   { from:'team_members', fromCol:'team_id', to:'teams', toCol:'id' },
+  { from:'commit_calendar_cache', fromCol:'workspace_id', to:'workspaces', toCol:'id' },
+  { from:'commit_list_cache', fromCol:'workspace_id', to:'workspaces', toCol:'id' },
+  { from:'cache_stats', fromCol:'user_id', to:'user_sessions', toCol:'user_id' },
+  { from:'cloudflare_setup_pending', fromCol:'user_id', to:'user_sessions', toCol:'user_id' },
+  { from:'commit_search_history', fromCol:'user_id', to:'user_sessions', toCol:'user_id' },
   { from:'commit_search_repo_stats', fromCol:'search_history_id', to:'commit_search_history', toCol:'id' },
+  { from:'commit_search_hit_details', fromCol:'search_history_id', to:'commit_search_history', toCol:'id' },
   { from:'ai_summary_reviews', fromCol:'summary_request_id', to:'ai_summary_log', toCol:'request_id' },
+  { from:'commit_agent_log', fromCol:'request_id', to:'ai_summary_log', toCol:'request_id' },
   { from:'repo_group_members', fromCol:'group_id', to:'repo_groups', toCol:'id' },
   { from:'email_send_log', fromCol:'source_id', to:'resend_webhook_sources', toCol:'id' },
   { from:'resend_webhook_log', fromCol:'source_id', to:'resend_webhook_sources', toCol:'id' },
@@ -765,10 +789,13 @@ const DEFAULT_POSITIONS = {
   "cache_stats":                { "x": 560,  "y": 560 },
   "commit_search_history":      { "x": 820,  "y": 40 },
   "commit_search_repo_stats":   { "x": 820,  "y": 240 },
-  "cloudflare_setup_pending":   { "x": 820,  "y": 440 },
+  "commit_search_hit_details":  { "x": 820,  "y": 460 },
+  "commit_stats_cache":         { "x": 560,  "y": 750 },
+  "cloudflare_setup_pending":   { "x": 820,  "y": 690 },
 
   "ai_summary_log":             { "x": 1100, "y": 40 },
   "ai_summary_reviews":         { "x": 1100, "y": 500 },
+  "commit_agent_log":           { "x": 1100, "y": 760 },
 
   "installation_permissions":   { "x": 1380, "y": 40 },
   "repo_color_settings":        { "x": 1380, "y": 260 },
