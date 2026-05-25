@@ -87,6 +87,9 @@ const STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
   { name: 'group_oauth_apps', migration: '0027', description: 'グループ別OAuth App認可状況', syncPolicy: 'manual' },
   { name: 'ai_summary_link_access_log', migration: '0029', description: 'AI要約リンクアクセス監査ログ', syncPolicy: 'auto' },
   { name: 'commit_stats_cache', migration: '0030', description: 'コミット統計キャッシュ', syncPolicy: 'auto' },
+  { name: 'column_concepts', migration: 'unknown', description: 'カラム概念定義（未分類テーブル）', syncPolicy: 'manual' },
+  { name: 'repo_cache', migration: 'unknown', description: 'リポジトリキャッシュ（未分類テーブル）', syncPolicy: 'manual' },
+  { name: 'user_cache', migration: 'unknown', description: 'ユーザーキャッシュ（未分類テーブル）', syncPolicy: 'manual' },
 ];
 
 const REQUIRED_STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
