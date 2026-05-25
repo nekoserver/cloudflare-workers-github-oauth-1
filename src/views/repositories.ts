@@ -1247,6 +1247,12 @@ export function getRepositoriesPage(user: {
     }
     .commit-history-stats-btn:hover { background: #2c5282; }
     .commit-history-stats-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .commit-history-filter-select {
+      padding: 6px 8px; border-radius: 8px; border: 1px solid #cbd5e0;
+      background: var(--bg-primary, #fff); color: var(--text-primary, #2d3748);
+      font-size: 12px; cursor: pointer; max-width: 180px;
+    }
+    .commit-history-filter-select:hover { border-color: #3182ce; }
 
     .commit-stats-modal-content { max-width: 720px; max-height: 92vh; }
     .commit-stats-modal-content .modal-body { padding-bottom: 20px; }
@@ -1568,6 +1574,11 @@ export function getRepositoriesPage(user: {
           <label for="commitHistoryMonthSelect">月別コミット状況</label>
           <select class="commit-history-month-select" id="commitHistoryMonthSelect">
             <option value="">すべて</option>
+          </select>
+          <select class="commit-history-filter-select" id="commitHistoryFilterSelect" title="コミットメッセージのフィルタ">
+            <option value="no-merge">マージ履歴以外のコミットログ</option>
+            <option value="merge-only">マージ履歴のみ</option>
+            <option value="all">すべて</option>
           </select>
           <button type="button" class="commit-history-stats-btn" id="commitHistoryStatsBtn" title="現在選択中の期間に対するユーザー別集計を表示">stats</button>
         </div>
@@ -3661,6 +3672,25 @@ export function getRepositoriesPage(user: {
     var COMMIT_HISTORY_PAGE_SIZE = ${commitHistoryPageSize};
     var commitHistoryCache = {};
     var commitMonthsCache = {};
+    var commitHistoryFilterSelect = document.getElementById('commitHistoryFilterSelect');
+    var currentAllCommits = [];
+
+    function getCommitHistoryMergeFilter() {
+      return getCookie('commit_history_merge_filter') || 'no-merge';
+    }
+    function setCommitHistoryMergeFilter(val) {
+      setCookie('commit_history_merge_filter', val);
+    }
+    function applyMergeFilter(commits) {
+      var filter = commitHistoryFilterSelect ? commitHistoryFilterSelect.value : getCommitHistoryMergeFilter();
+      if (filter === 'merge-only') {
+        return commits.filter(function(c) { return c.message && c.message.indexOf('Merge pull request') !== -1; });
+      }
+      if (filter === 'no-merge') {
+        return commits.filter(function(c) { return !c.message || c.message.indexOf('Merge pull request') === -1; });
+      }
+      return commits;
+    }
 
     function updateCommitHistoryButtonLabel(count) {
       if (!commitHistoryBtnLabel) return;
@@ -3784,13 +3814,14 @@ export function getRepositoriesPage(user: {
     }
 
     function renderCommitHistoryContent(payload) {
-      var commits = Array.isArray(payload.commits) ? payload.commits : [];
-      if (commitHistoryCount) commitHistoryCount.textContent = commits.length + ' 件';
+      currentAllCommits = Array.isArray(payload.commits) ? payload.commits : [];
       if (commitHistoryTotal) {
         commitHistoryTotal.textContent = payload.cached ? 'キャッシュ（D1）から取得' : 'GitHub API から取得（リアルタイム）';
       }
-      updateCommitHistoryButtonLabel(commits.length);
-      renderCommitHistoryRows(commits);
+      var filtered = applyMergeFilter(currentAllCommits);
+      if (commitHistoryCount) commitHistoryCount.textContent = filtered.length + ' 件';
+      updateCommitHistoryButtonLabel(filtered.length);
+      renderCommitHistoryRows(filtered);
       if (commitHistoryFeedback) commitHistoryFeedback.textContent = '';
     }
 
@@ -4136,6 +4167,18 @@ export function getRepositoriesPage(user: {
           var repoKey = currentRepoFullName || (currentRepoOwner + '/' + currentRepoName);
           loadCommitsForSelectedValue(currentRepoOwner, currentRepoName, repoKey, period);
         }
+      });
+    }
+
+    if (commitHistoryFilterSelect) {
+      var savedMergeFilter = getCommitHistoryMergeFilter();
+      commitHistoryFilterSelect.value = savedMergeFilter;
+      commitHistoryFilterSelect.addEventListener('change', function() {
+        setCommitHistoryMergeFilter(commitHistoryFilterSelect.value);
+        var filtered = applyMergeFilter(currentAllCommits);
+        if (commitHistoryCount) commitHistoryCount.textContent = filtered.length + ' 件';
+        updateCommitHistoryButtonLabel(filtered.length);
+        renderCommitHistoryRows(filtered);
       });
     }
 
