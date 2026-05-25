@@ -3709,13 +3709,19 @@ export function getCacheStatusPage(user: {
             row.addEventListener('click', function(e) {
               e.stopPropagation();
               var primarySet = {};
-              Object.keys(tableGroupMap).forEach(function(t) {
-                var gVal = tableGroupMap[t];
-                if (!gVal) return;
-                if (gVal.split(',').map(function(k) { return k.trim(); }).indexOf(key) !== -1) {
-                  primarySet[t] = true;
-                }
-              });
+              if (key === 'undefined') {
+                (window.__erTables || []).forEach(function(t) {
+                  if (!tableGroupMap[t.name]) primarySet[t.name] = true;
+                });
+              } else {
+                Object.keys(tableGroupMap).forEach(function(t) {
+                  var gVal = tableGroupMap[t];
+                  if (!gVal) return;
+                  if (gVal.split(',').map(function(k) { return k.trim(); }).indexOf(key) !== -1) {
+                    primarySet[t] = true;
+                  }
+                });
+              }
               var expandedNames = expandByFk(primarySet);
               if (expandedNames.length === 0) return;
               var openFn = window.openFilteredUmlModal;
