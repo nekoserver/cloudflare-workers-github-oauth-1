@@ -426,6 +426,18 @@ export function getSettingsPage(user: {
               </label>
             </div>
           </div>
+          <div class="info-item">
+            <span class="info-label">コミット履歴のフィルタ既定値</span>
+            <div class="setting-control">
+              <div class="setting-select-wrapper">
+                <select class="timezone-select" id="commitHistoryMergeFilterSelect" onchange="onCommitHistoryMergeFilterChange()">
+                  <option value="no-merge">マージ履歴以外のコミットログ</option>
+                  <option value="merge-only">マージ履歴のみ</option>
+                  <option value="all">すべて</option>
+                </select>
+              </div>
+            </div>
+          </div>
         </div>
         <div class="button-container" id="buttonContainer">
           <button class="btn btn-save" onclick="saveTimezone()">保存</button>
@@ -566,6 +578,20 @@ export function getSettingsPage(user: {
       var enabled = cb.checked;
       label.textContent = enabled ? 'ON' : 'OFF';
       document.cookie = 'er_legend_visible=' + (enabled ? 'on' : 'off') + '; Path=/; Secure; SameSite=Lax; Max-Age=31536000';
+    }
+
+    // コミット履歴フィルタ既定値の初期化
+    (function() {
+      var m = document.cookie.match('(^|;)\\\\s*commit_history_merge_filter=([^;]*)');
+      var val = m ? decodeURIComponent(m[2]) : 'no-merge';
+      var sel = document.getElementById('commitHistoryMergeFilterSelect');
+      if (sel) sel.value = val;
+    })();
+
+    function onCommitHistoryMergeFilterChange() {
+      var sel = document.getElementById('commitHistoryMergeFilterSelect');
+      if (!sel) return;
+      document.cookie = 'commit_history_merge_filter=' + encodeURIComponent(sel.value) + '; Path=/; SameSite=Lax; Max-Age=31536000';
     }
 
     function onThemeSettingChange() {
