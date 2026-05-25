@@ -765,6 +765,7 @@ export const GROUP_LABELS: Record<string, string> = {
   ai: 'AI Summary',
   email: 'Email / Resend',
   config: 'Config / Settings',
+  undefined: 'Undefined',
 };
 
 export const GROUP_COLORS: Record<string, string> = {
@@ -773,6 +774,7 @@ export const GROUP_COLORS: Record<string, string> = {
   ai: '#d29922',
   email: '#f85149',
   config: '#a371f7',
+  undefined: '#8b949e',
 };
 
 export interface GroupErColumn {

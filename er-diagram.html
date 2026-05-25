@@ -596,11 +596,12 @@
 
 <script>
 const GROUPS = {
-  auth:   { color: '#388bfd', label: 'Auth / Session',    tables: ['user_sessions','teams','workspaces','team_members'] },
-  commit: { color: '#3fb950', label: 'Commit / Cache',    tables: ['commit_calendar_cache','commit_list_cache','cache_stats','commit_search_history','commit_search_repo_stats','cloudflare_setup_pending'] },
-  ai:     { color: '#d29922', label: 'AI Summary',         tables: ['ai_summary_log','ai_summary_reviews'] },
-  email:  { color: '#f85149', label: 'Email / Resend',    tables: ['resend_webhook_sources','resend_webhook_log','email_send_log','email_suppression_list','email_mfa_challenges','email_audit_anomalies'] },
-  config: { color: '#a371f7', label: 'Config / Settings', tables: ['installation_permissions','repo_color_settings','repo_groups','repo_group_members','table_catalog','table_column_keys'] }
+  auth:      { color: '#388bfd', label: 'Auth / Session',    tables: ['user_sessions','teams','workspaces','team_members'] },
+  commit:    { color: '#3fb950', label: 'Commit / Cache',    tables: ['commit_calendar_cache','commit_list_cache','cache_stats','commit_search_history','commit_search_repo_stats','cloudflare_setup_pending'] },
+  ai:        { color: '#d29922', label: 'AI Summary',         tables: ['ai_summary_log','ai_summary_reviews'] },
+  email:     { color: '#f85149', label: 'Email / Resend',    tables: ['resend_webhook_sources','resend_webhook_log','email_send_log','email_suppression_list','email_mfa_challenges','email_audit_anomalies'] },
+  config:    { color: '#a371f7', label: 'Config / Settings', tables: ['installation_permissions','repo_color_settings','repo_groups','repo_group_members','table_catalog','table_column_keys'] },
+  undefined: { color: '#8b949e', label: 'Undefined',          tables: [] }
 };
 
 function groupOf(tableName) {
@@ -614,7 +615,7 @@ function groupKeyOf(tableName) {
   for (const [g, d] of Object.entries(GROUPS)) {
     if (d.tables.includes(tableName)) return g;
   }
-  return null;
+  return 'undefined';
 }
 
 const SCHEMA = [
