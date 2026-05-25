@@ -1076,7 +1076,7 @@ export function getCacheStatusPage(user: {
     .uml-pos-textarea {
       width: 100%; height: 280px; font-family: monospace; font-size: 12px;
       padding: 10px; border: 1px solid var(--border-color); border-radius: 8px;
-      background: var(--bg-primary, var(--card-bg)); color: var(--text-primary);
+      background: var(--input-bg); color: var(--text-primary);
       resize: vertical; outline: none; box-sizing: border-box;
     }
     .uml-pos-textarea:focus { border-color: #4299e1; }

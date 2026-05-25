@@ -75,10 +75,56 @@ grep -n "^  --" src/utils/theme.ts
 
 ---
 
-## 5. 過去にやらかしたパターン（再発防止）
+## 5. `<select>` / `<option>` のスタイリング必須ルール
+
+`<select>` 要素は **OS ネイティブのドロップダウン** をレンダリングするため、
+`background` と `color` を明示しないとブラウザのデフォルト（通常は白背景に黒文字）が適用される。
+ダークモードで「セレクトボックスの選択肢が読めない」問題の原因の大半はここにある。
+
+### 守るべきルール
+
+```css
+/* 正しい書き方 */
+select {
+  background: var(--input-bg);
+  color: var(--text-primary);
+  border: 1px solid var(--input-border);
+}
+```
+
+| 用途 | 使う変数 |
+|---|---|
+| セレクト・テキスト入力の背景 | `var(--input-bg)` |
+| セレクト・テキスト入力の文字色 | `var(--text-primary)` |
+| セレクト・テキスト入力の枠線 | `var(--input-border)` |
+| ホバー時の枠線 | `var(--accent-color)` |
+
+### 禁止パターン
+
+```css
+/* NG: 固定色 — ダークモードで白背景に白文字になる */
+select { background: #fff; color: #2d3748; border: 1px solid #cbd5e0; }
+
+/* NG: --bg-primary は未定義。#fff にフォールバックするので上と同じ */
+select { background: var(--bg-primary, #fff); }
+```
+
+`--bg-primary` はこのリポジトリの `src/utils/theme.ts` に**定義されていない**変数。
+`var(--bg-primary, #fff)` と書いても常に `#fff` が使われる。絶対に使わないこと。
+
+---
+
+## 6. 過去にやらかしたパターン（再発防止）
 
 ### コミット集計テーブルが「ヘッダーだけ見えて本文空白」
 
 - 原因: `.commit-stats-table tbody td` に `color: #2d3748` の固定濃色を指定
 - ダークモード時のモーダル背景 `#2d3748` 系と同化して文字が読めなかった
 - 教訓: **モーダル内コンテンツの色は必ず `var(--text-primary)` 系を使う**
+
+### セレクトボックスの選択肢が読めない（白背景に白文字）
+
+- 原因①: `background: #fff; color: #2d3748` の固定色 → ダークモードで `#e2e8f0`（白に近い）の文字が白背景に重なる
+- 原因②: `background: var(--bg-primary, #fff)` — `--bg-primary` は未定義のため常に `#fff` にフォールバック。結果は①と同じ
+- 修正: `background: var(--input-bg); color: var(--text-primary); border: 1px solid var(--input-border);`
+- 教訓: **セレクト・入力欄には必ず `--input-bg` / `--input-border` を使う。`--bg-primary` は存在しない**

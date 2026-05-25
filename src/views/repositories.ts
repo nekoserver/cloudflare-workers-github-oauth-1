@@ -1281,13 +1281,13 @@ export function getRepositoriesPage(user: {
     .commit-history-modal-content { max-width: 640px; max-height: 92vh; }
     .commit-history-modal-content .modal-body { padding-bottom: 20px; }
     .commit-history-meta {
-      font-size: 14px; font-weight: 600; color: #2d3748;
+      font-size: 14px; font-weight: 600; color: var(--text-primary);
       display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; margin-bottom: 12px;
     }
-    .commit-history-total { font-weight: 500; color: #4a5568; }
+    .commit-history-total { font-weight: 500; color: var(--text-secondary); }
     .commit-history-month-picker {
       margin-bottom: 12px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
-      font-size: 13px; color: #4a5568;
+      font-size: 13px; color: var(--text-secondary);
     }
     .commit-history-months-details {
       font-size: 11px; color: var(--text-muted, var(--text-secondary));
@@ -1301,10 +1301,10 @@ export function getRepositoriesPage(user: {
       background: var(--bg-secondary); border: 1px solid var(--border-color);
     }
     .commit-history-cache-summary strong { color: var(--text-primary); }
-    .commit-history-month-picker label { font-weight: 600; color: #2d3748; }
+    .commit-history-month-picker label { font-weight: 600; color: var(--text-primary); }
     .commit-history-month-select {
       min-width: 180px; padding: 7px 10px; border-radius: 8px;
-      border: 1px solid #cbd5e0; background: #fff; color: #2d3748; font-size: 13px;
+      border: 1px solid var(--input-border); background: var(--input-bg); color: var(--text-primary); font-size: 13px;
     }
     .commit-history-stats-btn {
       margin-left: auto;
@@ -1316,11 +1316,11 @@ export function getRepositoriesPage(user: {
     .commit-history-stats-btn:hover { background: #2c5282; }
     .commit-history-stats-btn:disabled { opacity: 0.5; cursor: not-allowed; }
     .commit-history-filter-select {
-      padding: 6px 8px; border-radius: 8px; border: 1px solid #cbd5e0;
-      background: var(--bg-primary, #fff); color: var(--text-primary, #2d3748);
+      padding: 6px 8px; border-radius: 8px; border: 1px solid var(--input-border);
+      background: var(--input-bg); color: var(--text-primary);
       font-size: 12px; cursor: pointer; max-width: 180px;
     }
-    .commit-history-filter-select:hover { border-color: #3182ce; }
+    .commit-history-filter-select:hover { border-color: var(--accent-color); }
 
     .commit-stats-modal-content { max-width: 720px; max-height: 92vh; }
     .commit-stats-modal-content .modal-body { padding-bottom: 20px; }
