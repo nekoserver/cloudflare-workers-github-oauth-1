@@ -3393,12 +3393,39 @@ export function getCacheStatusPage(user: {
         umlModal.setAttribute('aria-hidden', 'false');
         document.body.style.overflow = 'hidden';
         if (!umlRendered) {
-          renderErDiagram(tables, relations);
-          buildKeySummary('umlKeySummary', tables);
-          umlRendered = true;
+          var wrapper = document.getElementById('umlCanvasWrapper');
+          if (wrapper) {
+            wrapper.innerHTML = '<div style="padding:40px;text-align:center;color:var(--text-secondary)">ER図を読み込み中...</div>';
+          }
+          fetch('/api/status/schema')
+            .then(function(res) { return res.json(); })
+            .then(function(schemaData) {
+              if (schemaData.tables && schemaData.relations) {
+                layoutTablesRelational(schemaData.tables, schemaData.relations);
+                tables = schemaData.tables;
+                relations = schemaData.relations;
+                window.__erTables = tables;
+                window.__erRelations = relations;
+              }
+              if (wrapper) wrapper.innerHTML = '';
+              renderErDiagram(tables, relations);
+              buildKeySummary('umlKeySummary', tables);
+              if (window.__refreshColList) window.__refreshColList(tables);
+              umlRendered = true;
+              setTimeout(function() { applyUmlViewMode(getUmlViewMode()); }, 50);
+            })
+            .catch(function() {
+              if (wrapper) wrapper.innerHTML = '';
+              renderErDiagram(tables, relations);
+              buildKeySummary('umlKeySummary', tables);
+              umlRendered = true;
+              setTimeout(function() { applyUmlViewMode(getUmlViewMode()); }, 50);
+            });
         }
         updateUmlViewToggleButtons();
-        setTimeout(function() { applyUmlViewMode(getUmlViewMode()); }, 50);
+        if (umlRendered) {
+          setTimeout(function() { applyUmlViewMode(getUmlViewMode()); }, 50);
+        }
       }
 
       if (refreshUmlBtn) {
