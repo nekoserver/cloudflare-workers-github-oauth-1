@@ -381,6 +381,19 @@ export function getSettingsPage(user: {
               </label>
             </div>
           </div>
+          <div class="info-item">
+            <span class="info-label">ER図テーブルヘッダーをタップしてデータプレビューを表示する</span>
+            <div class="setting-control" style="justify-content: flex-end;">
+              <span class="theme-label" id="erHeaderTapLabel">ON</span>
+              <label class="theme-toggle-switch">
+                <input type="checkbox" id="erHeaderTapCheckbox" onchange="onErHeaderTapChange()">
+                <span class="theme-toggle-slider"></span>
+              </label>
+            </div>
+          </div>
+          <div class="info-item" id="erHeaderTapNoteItem" style="display:none">
+            <span class="info-label" style="color:var(--text-muted);font-size:12px">※ OFFにするとER図のテーブルヘッダーをタップしてもデータモーダルが開きません。ONの場合はログイン済みの場合のみデータを取得できます（未ログイン時はメッセージを表示）。</span>
+          </div>
           <div class="info-item disabled" id="statusCommitCacheSortModeItem">
             <span class="info-label">月別コミットキャッシュ詳細の並び替え</span>
             <div class="setting-control">
@@ -578,6 +591,26 @@ export function getSettingsPage(user: {
       var enabled = cb.checked;
       label.textContent = enabled ? 'ON' : 'OFF';
       document.cookie = 'er_legend_visible=' + (enabled ? 'on' : 'off') + '; Path=/; Secure; SameSite=Lax; Max-Age=31536000';
+    }
+
+    // ER図ヘッダータップ設定の初期化
+    (function() {
+      var m = document.cookie.match('(^|;)\\\\s*er_header_tap_mode=([^;]*)');
+      var val = m ? decodeURIComponent(m[2]) : 'on';
+      var cb = document.getElementById('erHeaderTapCheckbox');
+      var label = document.getElementById('erHeaderTapLabel');
+      var note = document.getElementById('erHeaderTapNoteItem');
+      if (cb) cb.checked = (val !== 'off');
+      if (label) label.textContent = (val !== 'off') ? 'ON' : 'OFF';
+      if (note) note.style.display = 'block';
+    })();
+
+    function onErHeaderTapChange() {
+      var cb = document.getElementById('erHeaderTapCheckbox');
+      var label = document.getElementById('erHeaderTapLabel');
+      var enabled = cb.checked;
+      label.textContent = enabled ? 'ON' : 'OFF';
+      document.cookie = 'er_header_tap_mode=' + (enabled ? 'on' : 'off') + '; Path=/; Secure; SameSite=Lax; Max-Age=31536000';
     }
 
     // コミット履歴フィルタ既定値の初期化
