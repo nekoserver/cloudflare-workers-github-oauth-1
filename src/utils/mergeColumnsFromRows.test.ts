@@ -67,9 +67,9 @@ describe('getColumnKeyType', () => {
     expect(getColumnKeyType('repo_group_members', 'group_id')).toBe('pk+fk');
   });
 
-  it('複合PKの各カラムにpkを返す', () => {
-    expect(getColumnKeyType('team_members', 'user_id')).toBe('pk');
-    expect(getColumnKeyType('repo_group_members', 'repo_name')).toBe('pk');
+  it('複合PK+FKのカラムにpk+fkを返す', () => {
+    expect(getColumnKeyType('team_members', 'user_id')).toBe('pk+fk');
+    expect(getColumnKeyType('repo_group_members', 'repo_name')).toBe('pk+fk');
   });
 
   it('キーでないカラムにnullを返す', () => {
