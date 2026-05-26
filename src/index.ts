@@ -939,6 +939,33 @@ export function resolveLogicalFkTargetCol(fromTable: string, fromCol: string): s
   return COLUMN_FK_TARGET_COLUMNS[`${fromTable}.${fromCol}`] ?? fromCol;
 }
 
+/**
+ * `table_column_keys` の DB行を `COLUMN_FK_TARGETS` 相当の構造にマージする。
+ *
+ * 設計上の問題:
+ *   `table_column_keys` は部分的にしか同期されていないことがある。
+ *   DB に一部のFK行が存在するだけで `base` 全体を置換（OVERRIDE）すると、
+ *   DB に登録されていないFK関係が失われ、ER図の矢印が欠ける。
+ *
+ * この関数は「DB行は base を上書き・補完する」（MERGE）セマンティクスを提供する。
+ * DB行が空の場合は base をそのまま返す。
+ */
+export function mergeFkTargetsFromDb(
+  base: Record<string, Record<string, string>>,
+  dbRows: { table_name: string; column_name: string; fk_target_table: string }[]
+): Record<string, Record<string, string>> {
+  if (!dbRows || dbRows.length === 0) return base;
+  const merged: Record<string, Record<string, string>> = {};
+  for (const [t, cols] of Object.entries(base)) {
+    merged[t] = { ...cols };
+  }
+  for (const row of dbRows) {
+    if (!merged[row.table_name]) merged[row.table_name] = {};
+    merged[row.table_name][row.column_name] = row.fk_target_table;
+  }
+  return merged;
+}
+
 export function buildGroupErData(
   tableName: string,
   groupMap: Record<string, string>,
@@ -3047,13 +3074,7 @@ app.get('/api/status/tables/:table/group-er', authMiddleware, async (c) => {
       const keyRows = await db.prepare('SELECT table_name, column_name, fk_target_table FROM table_column_keys WHERE fk_target_table IS NOT NULL').all<{
         table_name: string; column_name: string; fk_target_table: string;
       }>();
-      if (keyRows.results && keyRows.results.length > 0) {
-        fkTargets = {};
-        for (const row of keyRows.results) {
-          if (!fkTargets[row.table_name]) fkTargets[row.table_name] = {};
-          fkTargets[row.table_name][row.column_name] = row.fk_target_table;
-        }
-      }
+      fkTargets = mergeFkTargetsFromDb(fkTargets, keyRows.results ?? []);
     } catch {
       // table_column_keys未作成 — フォールバック定数を使用
     }
