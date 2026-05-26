@@ -1206,7 +1206,9 @@ export function getCacheStatusPage(user: {
       background: #8b949e;
       color: white; padding: 8px 12px; font-weight: 700; font-size: 13px;
       display: flex; align-items: center; gap: 6px;
+      cursor: pointer; user-select: none;
     }
+    .uml-table-card .uml-table-header:hover { filter: brightness(1.15); }
     .uml-modal-card, .filtered-uml-modal-card { position: relative; }
     .uml-group-legend-wrap {
       position: absolute; bottom: 56px; left: 16px; z-index: 30;
@@ -4136,6 +4138,10 @@ export function getCacheStatusPage(user: {
         var dragTarget = null;
         var dragOffsetX = 0;
         var dragOffsetY = 0;
+        var dragStartX = 0;
+        var dragStartY = 0;
+        var dragStartIsHeader = false;
+        var hasDragged = false;
 
         function clientToContainer(clientX, clientY) {
           var wrapperRect = umlWrapper.getBoundingClientRect();
@@ -4151,6 +4157,10 @@ export function getCacheStatusPage(user: {
           var tName = card.getAttribute('data-uml-table');
           if (!tName || !cardRects[tName]) return;
           dragTarget = tName;
+          dragStartX = e.clientX;
+          dragStartY = e.clientY;
+          dragStartIsHeader = !!e.target.closest('.uml-table-header');
+          hasDragged = false;
           var pos = clientToContainer(e.clientX, e.clientY);
           dragOffsetX = pos.x - cardRects[tName].x;
           dragOffsetY = pos.y - cardRects[tName].y;
@@ -4159,6 +4169,9 @@ export function getCacheStatusPage(user: {
 
         document.addEventListener('mousemove', function(e) {
           if (!dragTarget) return;
+          var dx = e.clientX - dragStartX;
+          var dy = e.clientY - dragStartY;
+          if (Math.sqrt(dx * dx + dy * dy) > 4) hasDragged = true;
           var rect = cardRects[dragTarget];
           var pos = clientToContainer(e.clientX, e.clientY);
           rect.x = pos.x - dragOffsetX;
@@ -4172,6 +4185,12 @@ export function getCacheStatusPage(user: {
         });
 
         document.addEventListener('mouseup', function() {
+          if (dragTarget && dragStartIsHeader && !hasDragged) {
+            var tName = dragTarget;
+            dragTarget = null;
+            openTablePreview(tName);
+            return;
+          }
           dragTarget = null;
         });
 
