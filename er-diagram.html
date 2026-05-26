@@ -910,6 +910,7 @@ let currentTy = 0;
 
 function renderTables(schema) {
   const canvas = document.getElementById('canvas');
+  const tapEnabled = isHeaderTapEnabled();
   for (const table of schema) {
     const el = createTableElement(table);
     canvas.appendChild(el);
@@ -918,6 +919,10 @@ function renderTables(schema) {
     positions[table.name] = pos;
     el.style.left = pos.x + 'px';
     el.style.top = pos.y + 'px';
+    if (!tapEnabled) {
+      const h = el.querySelector('.er-table-header');
+      if (h) { h.style.cursor = 'grab'; h.style.filter = ''; }
+    }
     makeDraggable(el, table.name);
   }
   drawRelations();
@@ -1005,7 +1010,15 @@ function closeTdModal() {
   if (m) m.classList.remove('show');
 }
 
+function isHeaderTapEnabled() {
+  var m = document.cookie.match('(^|;)\\s*er_header_tap_mode=([^;]*)');
+  var val = m ? decodeURIComponent(m[2]) : 'on';
+  return val !== 'off';
+}
+
 function showTableDataModal(tableName) {
+  if (!isHeaderTapEnabled()) return;
+
   const overlay = document.getElementById('tdModal');
   const titleEl = document.getElementById('tdModalTitle');
   const subEl = document.getElementById('tdModalSub');
@@ -1018,7 +1031,10 @@ function showTableDataModal(tableName) {
   overlay.classList.add('show');
 
   fetch('/api/status/tables/' + encodeURIComponent(tableName) + '/rows')
-    .then(function(res) { return res.json(); })
+    .then(function(res) {
+      if (res.status === 401 || res.status === 403) throw Object.assign(new Error('auth'), { isAuth: true });
+      return res.json();
+    })
     .then(function(data) {
       if (subEl) {
         var sub = data.description || '';
@@ -1055,8 +1071,15 @@ function showTableDataModal(tableName) {
         + '<div style="overflow-x:auto"><table class="td-preview-table"><thead><tr>'
         + headerHtml + '</tr></thead><tbody>' + bodyHtml + '</tbody></table></div>';
     })
-    .catch(function() {
-      bodyEl.innerHTML = '<div class="td-modal-empty">データの取得に失敗しました（認証が必要な場合は /status ページからご確認ください）</div>';
+    .catch(function(err) {
+      if (err && err.isAuth) {
+        bodyEl.innerHTML = '<div class="td-modal-empty">ログインが必要です。'
+          + '<a href="/status" style="color:var(--accent)">キャッシュ状況ページ</a>からログインするとデータを確認できます。'
+          + '<br><span style="font-size:11px;color:var(--text-muted)">（ヘッダータップ機能を無効にするには<a href="/settings" style="color:var(--accent)">設定ページ</a>の「ER図テーブルヘッダータップ」をOFFにしてください）</span>'
+          + '</div>';
+      } else {
+        bodyEl.innerHTML = '<div class="td-modal-empty">データの取得に失敗しました</div>';
+      }
     });
 }
 

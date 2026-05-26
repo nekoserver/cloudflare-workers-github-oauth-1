@@ -4188,7 +4188,9 @@ export function getCacheStatusPage(user: {
           if (dragTarget && dragStartIsHeader && !hasDragged) {
             var tName = dragTarget;
             dragTarget = null;
-            openTablePreview(tName);
+            var tapM = document.cookie.match('(^|;)\\s*er_header_tap_mode=([^;]*)');
+            var tapMode = tapM ? decodeURIComponent(tapM[2]) : 'on';
+            if (tapMode !== 'off') openTablePreview(tName);
             return;
           }
           dragTarget = null;
