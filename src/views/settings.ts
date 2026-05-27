@@ -440,6 +440,16 @@ export function getSettingsPage(user: {
             </div>
           </div>
           <div class="info-item">
+            <span class="info-label">検索履歴モーダルのインクリメントサーチ既定値</span>
+            <div class="setting-control" style="justify-content: flex-end;">
+              <span class="theme-label" id="historyIncrSearchLabel">OFF</span>
+              <label class="theme-toggle-switch">
+                <input type="checkbox" id="historyIncrSearchCheckbox" onchange="onHistoryIncrSearchChange()">
+                <span class="theme-toggle-slider"></span>
+              </label>
+            </div>
+          </div>
+          <div class="info-item">
             <span class="info-label">コミット履歴のフィルタ既定値</span>
             <div class="setting-control">
               <div class="setting-select-wrapper">
@@ -625,6 +635,24 @@ export function getSettingsPage(user: {
       var sel = document.getElementById('commitHistoryMergeFilterSelect');
       if (!sel) return;
       document.cookie = 'commit_history_merge_filter=' + encodeURIComponent(sel.value) + '; Path=/; SameSite=Lax; Max-Age=31536000';
+    }
+
+    // 検索履歴インクリメントサーチ既定値の初期化
+    (function() {
+      var m = document.cookie.match('(^|;)\\\\s*history_incr_search=([^;]*)');
+      var val = m ? decodeURIComponent(m[2]) : 'off';
+      var cb = document.getElementById('historyIncrSearchCheckbox');
+      var label = document.getElementById('historyIncrSearchLabel');
+      if (cb) cb.checked = (val === 'on');
+      if (label) label.textContent = (val === 'on') ? 'ON' : 'OFF';
+    })();
+
+    function onHistoryIncrSearchChange() {
+      var cb = document.getElementById('historyIncrSearchCheckbox');
+      var label = document.getElementById('historyIncrSearchLabel');
+      var enabled = cb.checked;
+      label.textContent = enabled ? 'ON' : 'OFF';
+      document.cookie = 'history_incr_search=' + (enabled ? 'on' : 'off') + '; Path=/; SameSite=Lax; Max-Age=31536000';
     }
 
     function onThemeSettingChange() {

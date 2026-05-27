@@ -42,6 +42,42 @@ describe('コミット履歴モーダル: 初回ロード0件時の自動すべ�
   });
 });
 
+describe('検索履歴モーダル: インクリメントサーチ', () => {
+  it('historyIncrSearchToggle ボタンが存在する', () => {
+    const html = getRepositoriesPage(minimalUser);
+    expect(html).toContain('id="historyIncrSearchToggle"');
+  });
+
+  it('isIncrementalSearchEnabled 変数が存在する', () => {
+    const html = getRepositoriesPage(minimalUser);
+    expect(html).toContain('isIncrementalSearchEnabled');
+  });
+
+  it('history_incr_search Cookie を参照する', () => {
+    const html = getRepositoriesPage(minimalUser);
+    expect(html).toContain('history_incr_search');
+  });
+
+  it('getIncrementalFilteredItems 関数が存在する', () => {
+    const html = getRepositoriesPage(minimalUser);
+    expect(html).toContain('function getIncrementalFilteredItems()');
+  });
+
+  it('refreshGrid が getIncrementalFilteredItems を使用する', () => {
+    const html = getRepositoriesPage(minimalUser);
+    const fnMatch = html.match(/function refreshGrid[\s\S]*?^    \}/m);
+    expect(fnMatch).not.toBeNull();
+    const fn = fnMatch![0];
+    expect(fn).toContain('getIncrementalFilteredItems');
+  });
+
+  it('input イベントでインクリメントサーチを発動する', () => {
+    const html = getRepositoriesPage(minimalUser);
+    expect(html).toContain("addEventListener('input'");
+    expect(html).toContain('isIncrementalSearchEnabled');
+  });
+});
+
 describe('検索履歴モーダル: 対象リポジトリセレクト', () => {
   it('historyRepoSelect が HTML に存在する', () => {
     const html = getRepositoriesPage(minimalUser);
