@@ -4876,6 +4876,32 @@ app.get('/api/repositories/search/commits', optionalAuthMiddleware, async (c) =>
   }
 });
 
+// 指定リポジトリにヒットしたキーワード一覧（ハイライト用）
+app.get('/api/repositories/search/repo-keywords', optionalAuthMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!user) return jsonUtf8({ error: 'Unauthorized' }, 401);
+  if (!c.env.DB) return jsonUtf8({ error: 'Database not available' }, 500);
+  const repo = (c.req.query('repo') ?? '').trim();
+  if (!repo) return jsonUtf8({ keywords: [] });
+  try {
+    const rows = await c.env.DB.prepare(
+      `SELECT DISTINCT h.search_query
+       FROM commit_search_repo_stats s
+       JOIN commit_search_history h ON s.search_history_id = h.id
+       WHERE h.user_id = ? AND s.repo_name = ?
+       ORDER BY h.search_query ASC`,
+    )
+      .bind(user.sub, repo)
+      .all<{ search_query: string }>();
+    return jsonUtf8({ keywords: (rows.results ?? []).map((r) => r.search_query) });
+  } catch (error) {
+    logger.warn('Failed to fetch repo keywords', {
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    return jsonUtf8({ error: 'Failed to fetch repo keywords' }, 500);
+  }
+});
+
 // 検索履歴に登場したリポジトリ名一覧（対象リポジトリセレクト用）
 app.get('/api/repositories/search/repo-list', optionalAuthMiddleware, async (c) => {
   const user = c.get('user');
