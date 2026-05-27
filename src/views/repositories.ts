@@ -4751,6 +4751,12 @@ export function getRepositoriesPage(user: {
       if (hRepoSelect) {
         hRepoSelect.addEventListener('change', function() {
           selectedRepo = hRepoSelect.value;
+          if (keywordDetailPanel && keywordDetailPanel.style.display !== 'none') {
+            keywordDetailPanel.style.display = 'none';
+            keywordDetailPanel.innerHTML = '';
+            selectedKeyword = null;
+            activeCokeySet = {};
+          }
           loadRepoFilter(selectedRepo);
         });
       }
