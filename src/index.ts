@@ -4885,15 +4885,16 @@ app.get('/api/repositories/search/repo-keywords', optionalAuthMiddleware, async 
   if (!repo) return jsonUtf8({ keywords: [] });
   try {
     const rows = await c.env.DB.prepare(
-      `SELECT DISTINCT h.search_query
+      `SELECT h.search_query, SUM(s.hit_count) as repo_hit_count
        FROM commit_search_repo_stats s
        JOIN commit_search_history h ON s.search_history_id = h.id
        WHERE h.user_id = ? AND s.repo_name = ?
-       ORDER BY h.search_query ASC`,
+       GROUP BY h.search_query
+       ORDER BY repo_hit_count DESC`,
     )
       .bind(user.sub, repo)
-      .all<{ search_query: string }>();
-    return jsonUtf8({ keywords: (rows.results ?? []).map((r) => r.search_query) });
+      .all<{ search_query: string; repo_hit_count: number }>();
+    return jsonUtf8({ keywords: rows.results ?? [] });
   } catch (error) {
     logger.warn('Failed to fetch repo keywords', {
       error: error instanceof Error ? error.message : 'Unknown error',
