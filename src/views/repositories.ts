@@ -882,6 +882,8 @@ export function getRepositoriesPage(user: {
     .history-grid-col tr.selected td { background: rgba(102,126,234,0.12); }
     .history-grid-col tr.history-row-cokey td { color: var(--accent-color, #48bb78) !important; font-weight: 700; }
     .history-grid-col tr.history-row-dimmed td { color: #bbb !important; }
+    .history-incr-toggle { font-size:12px; padding:4px 10px; border-radius:6px; border:1px solid var(--border-color); background:var(--bg-secondary); color:var(--text-muted); cursor:pointer; white-space:nowrap; }
+    .history-incr-toggle.active { background:var(--accent-color,#48bb78); color:#fff; border-color:var(--accent-color,#48bb78); }
     .history-repo-label { font-size:12px; color:var(--text-muted); white-space:nowrap; margin-left:auto; }
     .history-repo-select {
       font-size:12px; padding:4px 8px; border-radius:6px;
@@ -1800,6 +1802,7 @@ export function getRepositoriesPage(user: {
       <div class="history-search-bar">
         <input type="text" class="history-search-input" id="historySearchInput" placeholder="キーワードを入力して検索..." autocomplete="off" />
         <button class="history-search-btn" id="historySearchBtn" type="button">検索</button>
+        <button class="history-incr-toggle" id="historyIncrSearchToggle" type="button">インクリメント: OFF</button>
         <span class="history-search-status" id="historySearchStatus"></span>
         <label class="history-repo-label" for="historyRepoSelect">対象リポジトリ:</label>
         <select id="historyRepoSelect" class="history-repo-select">
@@ -4659,7 +4662,10 @@ export function getRepositoriesPage(user: {
       var hSearchBtn = document.getElementById('historySearchBtn');
       var hSearchStatus = document.getElementById('historySearchStatus');
       var hRepoSelect = document.getElementById('historyRepoSelect');
+      var hIncrSearchToggle = document.getElementById('historyIncrSearchToggle');
       if (!historyRow || !historyOpenBtn || !historyModal || !historyModalBody) return;
+
+      var isIncrementalSearchEnabled = getCookie('history_incr_search') === 'on';
 
       var ROWS_PER_COL = 20;
       var MIN_COLS = 3;
@@ -4778,6 +4784,15 @@ export function getRepositoriesPage(user: {
             activeCokeySet = {};
           }
           loadRepoFilter(selectedRepo);
+        });
+      }
+
+      function getIncrementalFilteredItems() {
+        if (!isIncrementalSearchEnabled) return currentItems;
+        var val = hSearchInput ? hSearchInput.value.trim().toLowerCase() : '';
+        if (!val) return currentItems;
+        return currentItems.filter(function(item) {
+          return item.search_query.toLowerCase().indexOf(val) !== -1;
         });
       }
 
@@ -4962,7 +4977,8 @@ export function getRepositoriesPage(user: {
 
       function refreshGrid(highlightKey, highlightType) {
         updateTitle();
-        historyModalBody.innerHTML = renderGrid(currentItems, highlightKey, highlightType);
+        var displayItems = getIncrementalFilteredItems();
+        historyModalBody.innerHTML = renderGrid(displayItems, highlightKey, highlightType);
         historyModalBody.querySelectorAll('tr[data-query]').forEach(function(row) {
           row.addEventListener('click', function() {
             var q = row.getAttribute('data-query');
@@ -5041,7 +5057,29 @@ export function getRepositoriesPage(user: {
         hSearchInput.addEventListener('keydown', function(e) {
           if (e.key === 'Enter') executeModalSearch();
         });
+        hSearchInput.addEventListener('input', function() {
+          if (isIncrementalSearchEnabled && currentItems.length > 0) {
+            refreshGrid(null, null);
+          }
+        });
       }
+
+      (function() {
+        if (!hIncrSearchToggle) return;
+        hIncrSearchToggle.textContent = isIncrementalSearchEnabled ? 'インクリメント: ON' : 'インクリメント: OFF';
+        if (isIncrementalSearchEnabled) hIncrSearchToggle.classList.add('active');
+        hIncrSearchToggle.addEventListener('click', function() {
+          isIncrementalSearchEnabled = !isIncrementalSearchEnabled;
+          setCookie('history_incr_search', isIncrementalSearchEnabled ? 'on' : 'off');
+          hIncrSearchToggle.textContent = isIncrementalSearchEnabled ? 'インクリメント: ON' : 'インクリメント: OFF';
+          if (isIncrementalSearchEnabled) {
+            hIncrSearchToggle.classList.add('active');
+          } else {
+            hIncrSearchToggle.classList.remove('active');
+          }
+          if (currentItems.length > 0) refreshGrid(null, null);
+        });
+      })();
 
       function populateRepoSelect(repos) {
         if (!hRepoSelect) return;
