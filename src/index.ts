@@ -2814,7 +2814,7 @@ app.get('/api/status/tables/:table/ym-summary', authMiddleware, async (c) => {
 
     const rowsResult = await db
       .prepare(
-        `SELECT strftime('%Y-%m', last_updated_at) as ym, COUNT(*) as cnt FROM ${tableName} WHERE last_updated_at IS NOT NULL GROUP BY ym ORDER BY ym DESC`,
+        `SELECT strftime('%Y-%m', last_updated_at) as ym, COUNT(*) as cnt FROM ${tableName} WHERE last_updated_at IS NOT NULL GROUP BY ym ORDER BY cnt DESC`,
       )
       .all<{ ym: string; cnt: number }>();
 

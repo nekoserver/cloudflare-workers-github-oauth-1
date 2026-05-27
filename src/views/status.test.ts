@@ -183,9 +183,16 @@ describe('/status ページの last_updated_at YYYY-MM選択・カレンダー�
     expect(html).toContain('/calendar?ym=');
   });
 
-  it('last_updated_at カラム検出ロジックを含む', () => {
+  it('loadYmSelect が常に呼ばれる（hasLastUpdatedAt ガードなし）', () => {
     const html = getCacheStatusPage(minimalUser, minimalData);
-    expect(html).toContain("indexOf('last_updated_at')");
+    expect(html).toContain('loadYmSelect(tableName)');
+    expect(html).not.toContain('if (hasLastUpdatedAt)');
+  });
+
+  it('loadYmSelect が statusDetailBody に動的にセクションを追加する', () => {
+    const html = getCacheStatusPage(minimalUser, minimalData);
+    expect(html).toContain("document.getElementById('statusDetailBody')");
+    expect(html).toContain('ym-select-section');
   });
 
   it('ymCalendarModal が HTML に存在する', () => {
@@ -223,5 +230,13 @@ describe('/status ページの last_updated_at YYYY-MM選択・カレンダー�
   it('renderErDiagram に dragstart 抑制リスナーが追加されている', () => {
     const html = getCacheStatusPage(minimalUser, minimalData);
     expect(html).toContain("container.addEventListener('dragstart'");
+  });
+
+  it('ER図ヘッダーのタップ検出に mouseup を使用している（click ではない）', () => {
+    const html = getCacheStatusPage(minimalUser, minimalData);
+    const renderErDiagramMatch = html.match(/function renderErDiagram[\s\S]*?(?=function renderFilteredErDiagram)/);
+    expect(renderErDiagramMatch).not.toBeNull();
+    const renderErDiagramCode = renderErDiagramMatch![0];
+    expect(renderErDiagramCode).toContain("header.addEventListener('mouseup'");
   });
 });

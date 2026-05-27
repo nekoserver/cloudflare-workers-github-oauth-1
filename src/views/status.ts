@@ -3011,22 +3011,15 @@ export function getCacheStatusPage(user: {
         }
         var data = await response.json();
         var columns = data.columns || [];
-        var hasLastUpdatedAt = columns.indexOf('last_updated_at') !== -1;
         var groupErButton = '<div style="margin-bottom:8px">'
           + '<button type="button" data-group-er-table="' + escapeHtmlText(tableName) + '" '
           + 'style="font-size:12px;padding:4px 12px;border:1px solid #666;border-radius:4px;background:transparent;color:inherit;cursor:pointer">'
           + 'このテーブルが属するグループのテーブル構造を確認する</button></div>';
         var previewHtml = renderStatusTablePreview(columns, data.rows || [], data.limit || 20, tableName, data.columnKeyInfo || {}, data.filterableColumns || []);
-        var ymSectionHtml = hasLastUpdatedAt
-          ? '<div class="ym-select-section" id="ym-select-section-' + escapeHtmlText(tableName) + '">'
-            + '<span class="ym-select-label">last_updated_at 月別:</span>'
-            + '<span style="font-size:12px;color:var(--text-muted)">読み込み中...</span>'
-            + '</div>'
-          : '';
         openStatusModal(
           tableName + ' の保存データ',
           (data.description || '') + (data.migration ? ' / マイグレーション ' + data.migration : ''),
-          groupErButton + previewHtml + ymSectionHtml
+          groupErButton + previewHtml
         );
         applyTableGroupColorToModalTitle(tableName);
         var tableId = 'preview-table-' + tableName.replace(/[^a-zA-Z0-9_]/g, '');
@@ -3037,9 +3030,7 @@ export function getCacheStatusPage(user: {
             openGroupEr(tableName);
           });
         }
-        if (hasLastUpdatedAt) {
-          loadYmSelect(tableName);
-        }
+        loadYmSelect(tableName);
       } catch (_error) {
         showStatusModalError(title, '', '保存データの取得に失敗しました');
         applyTableGroupColorToModalTitle(tableName);
@@ -3047,17 +3038,21 @@ export function getCacheStatusPage(user: {
     }
 
     async function loadYmSelect(tableName) {
-      var sectionId = 'ym-select-section-' + tableName;
-      var section = document.getElementById(sectionId);
-      if (!section) return;
       try {
         var res = await fetch('/api/status/tables/' + encodeURIComponent(tableName) + '/ym-summary');
         if (!res.ok) throw new Error('ym-summary fetch failed');
         var ymData = await res.json();
         var ymList = ymData.ym || [];
-        if (ymList.length === 0) {
-          section.innerHTML = '';
-          return;
+        if (ymList.length === 0) return;
+        var sectionId = 'ym-select-section-' + tableName.replace(/[^a-zA-Z0-9_]/g, '');
+        var section = document.getElementById(sectionId);
+        if (!section) {
+          var modalBody = document.getElementById('statusDetailBody');
+          if (!modalBody) return;
+          section = document.createElement('div');
+          section.className = 'ym-select-section';
+          section.id = sectionId;
+          modalBody.appendChild(section);
         }
         var selectId = 'ym-select-' + tableName.replace(/[^a-zA-Z0-9_]/g, '');
         var opts = '<option value="">-- 月を選択 --</option>'
@@ -3076,7 +3071,7 @@ export function getCacheStatusPage(user: {
           });
         }
       } catch (_e) {
-        section.innerHTML = '';
+        // silently ignore
       }
     }
 
@@ -4197,7 +4192,7 @@ export function getCacheStatusPage(user: {
           header.className = 'uml-table-header';
           header.textContent = tbl.name;
           applyUmlHeaderColor(header, tbl.name);
-          header.addEventListener('click', function(e) {
+          header.addEventListener('mouseup', function(e) {
             if (hasDragged) return;
             var parentCard = e.currentTarget.parentElement;
             if (!parentCard) return;
