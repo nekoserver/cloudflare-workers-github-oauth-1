@@ -880,6 +880,14 @@ export function getRepositoriesPage(user: {
     .history-grid-col tr { cursor: pointer; }
     .history-grid-col tr:hover td { background: var(--hover-bg, rgba(0,0,0,0.04)); }
     .history-grid-col tr.selected td { background: rgba(102,126,234,0.12); }
+    .history-grid-col tr.history-row-cokey td { color: var(--accent-color, #48bb78) !important; font-weight: 700; }
+    .history-grid-col tr.history-row-dimmed td { color: #bbb !important; }
+    .history-repo-label { font-size:12px; color:var(--text-muted); white-space:nowrap; margin-left:auto; }
+    .history-repo-select {
+      font-size:12px; padding:4px 8px; border-radius:6px;
+      border:1px solid var(--border-color); background:var(--bg-secondary);
+      color:var(--text-primary); cursor:pointer; max-width:160px;
+    }
 
     /* キーワード詳細パネル */
     .keyword-detail-panel {
@@ -1793,6 +1801,10 @@ export function getRepositoriesPage(user: {
         <input type="text" class="history-search-input" id="historySearchInput" placeholder="キーワードを入力して検索..." autocomplete="off" />
         <button class="history-search-btn" id="historySearchBtn" type="button">検索</button>
         <span class="history-search-status" id="historySearchStatus"></span>
+        <label class="history-repo-label" for="historyRepoSelect">対象リポジトリ:</label>
+        <select id="historyRepoSelect" class="history-repo-select">
+          <option value="">すべて</option>
+        </select>
       </div>
       <div class="history-modal-body" id="historyModalBody">
       </div>
@@ -4636,15 +4648,53 @@ export function getRepositoriesPage(user: {
       var hSearchInput = document.getElementById('historySearchInput');
       var hSearchBtn = document.getElementById('historySearchBtn');
       var hSearchStatus = document.getElementById('historySearchStatus');
+      var hRepoSelect = document.getElementById('historyRepoSelect');
       if (!historyRow || !historyOpenBtn || !historyModal || !historyModalBody) return;
 
       var ROWS_PER_COL = 20;
       var MIN_COLS = 3;
       var MAX_COLS = 5;
       var currentItems = [];
+      var activeCokeySet = {};
+      var selectedRepo = '';
 
       function escHtml(str) {
         return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+      }
+
+      function applyRepoHighlight() {
+        var rows = historyModalBody.querySelectorAll('tr[data-query]');
+        var hasFilter = Object.keys(activeCokeySet).length > 0;
+        for (var i = 0; i < rows.length; i++) {
+          var row = rows[i];
+          var q = row.getAttribute('data-query');
+          row.classList.remove('history-row-cokey', 'history-row-dimmed');
+          if (hasFilter) {
+            if (activeCokeySet[q]) {
+              row.classList.add('history-row-cokey');
+            } else if (q !== selectedKeyword) {
+              row.classList.add('history-row-dimmed');
+            }
+          }
+        }
+      }
+
+      function loadRepoFilter(repo) {
+        if (!selectedKeyword || !repo) {
+          activeCokeySet = {};
+          applyRepoHighlight();
+          return;
+        }
+        fetch('/api/repositories/search/keyword-stats?q=' + encodeURIComponent(selectedKeyword) + '&repo=' + encodeURIComponent(repo), { credentials: 'same-origin' })
+          .then(function(res) { return res.ok ? res.json() : null; })
+          .then(function(data) {
+            activeCokeySet = {};
+            if (data && data.coKeywords) {
+              data.coKeywords.forEach(function(k) { activeCokeySet[k.search_query] = true; });
+            }
+            applyRepoHighlight();
+          })
+          .catch(function() {});
       }
 
       function checkHistoryExists() {
@@ -4697,6 +4747,13 @@ export function getRepositoriesPage(user: {
 
       var selectedKeyword = null;
       var keywordDetailPanel = document.getElementById('keywordDetailPanel');
+
+      if (hRepoSelect) {
+        hRepoSelect.addEventListener('change', function() {
+          selectedRepo = hRepoSelect.value;
+          loadRepoFilter(selectedRepo);
+        });
+      }
 
       function renderGrid(items, highlightKey, highlightType) {
         if (items.length === 0) return '<div class="search-empty">検索履歴がありません。</div>';
@@ -4849,6 +4906,9 @@ export function getRepositoriesPage(user: {
               if (closeBtn2) {
                 closeBtn2.addEventListener('click', function() {
                   selectedKeyword = null;
+                  activeCokeySet = {};
+                  selectedRepo = '';
+                  if (hRepoSelect) hRepoSelect.innerHTML = '<option value="">すべて</option>';
                   keywordDetailPanel.style.display = 'none';
                   keywordDetailPanel.innerHTML = '';
                   refreshGrid(null, null);
@@ -4860,6 +4920,35 @@ export function getRepositoriesPage(user: {
                   if (cokey) showKeywordDetail(cokey);
                 });
               });
+            }
+
+            // リポジトリセレクトを再構築し、現在のフィルタを適用
+            if (hRepoSelect && data.repoStats && data.repoStats.length > 0) {
+              var prevRepo = hRepoSelect.value;
+              var repoOpts = '<option value="">すべて</option>';
+              data.repoStats.forEach(function(r) {
+                repoOpts += '<option value="' + escHtml(r.repo_name) + '"'
+                  + (r.repo_name === prevRepo ? ' selected' : '') + '>'
+                  + escHtml(r.repo_name) + '</option>';
+              });
+              hRepoSelect.innerHTML = repoOpts;
+              if (prevRepo && hRepoSelect.value === prevRepo) {
+                selectedRepo = prevRepo;
+                loadRepoFilter(prevRepo);
+              } else {
+                hRepoSelect.value = '';
+                selectedRepo = '';
+                activeCokeySet = {};
+                applyRepoHighlight();
+              }
+            } else {
+              if (hRepoSelect) {
+                hRepoSelect.innerHTML = '<option value="">すべて</option>';
+                hRepoSelect.value = '';
+              }
+              selectedRepo = '';
+              activeCokeySet = {};
+              applyRepoHighlight();
             }
           })
           .catch(function() {
@@ -4883,6 +4972,7 @@ export function getRepositoriesPage(user: {
             if (q) showKeywordDetail(q);
           });
         });
+        applyRepoHighlight();
       }
 
       function setSearchStatus(text, cls) {

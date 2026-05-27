@@ -4965,6 +4965,7 @@ app.get('/api/repositories/search/keyword-stats', optionalAuthMiddleware, async 
   if (!c.env.DB) return jsonUtf8({ error: 'Database not available' }, 500);
 
   const q = (c.req.query('q') ?? '').trim();
+  const repoFilter = (c.req.query('repo') ?? '').trim();
   if (!q || q.length < 2) return jsonUtf8({ error: 'Query required' }, 400);
 
   try {
@@ -5001,22 +5002,38 @@ app.get('/api/repositories/search/keyword-stats', optionalAuthMiddleware, async 
     }>();
 
     // 共起キーワード（同一リポジトリにヒットした他のクエリ）
-    const coKeywords = await c.env.DB.prepare(
-      `SELECT b.search_query, COUNT(DISTINCT b.repo_name) as shared_repo_count, SUM(b.hit_count) as total_hits
-       FROM commit_search_repo_stats a
-       JOIN commit_search_history ha ON a.search_history_id = ha.id
-       JOIN commit_search_repo_stats b ON a.repo_name = b.repo_name
-       JOIN commit_search_history hb ON b.search_history_id = hb.id
-       WHERE ha.user_id = ? AND a.search_query = ?
-         AND hb.user_id = ? AND b.search_query != ?
-       GROUP BY b.search_query
-       ORDER BY shared_repo_count DESC, total_hits DESC
-       LIMIT 30`
-    ).bind(user.sub, q, user.sub, q).all<{
-      search_query: string;
-      shared_repo_count: number;
-      total_hits: number;
-    }>();
+    const coKeywordsSql = repoFilter
+      ? `SELECT b.search_query, COUNT(DISTINCT b.repo_name) as shared_repo_count, SUM(b.hit_count) as total_hits
+         FROM commit_search_repo_stats a
+         JOIN commit_search_history ha ON a.search_history_id = ha.id
+         JOIN commit_search_repo_stats b ON a.repo_name = b.repo_name
+         JOIN commit_search_history hb ON b.search_history_id = hb.id
+         WHERE ha.user_id = ? AND a.search_query = ?
+           AND hb.user_id = ? AND b.search_query != ?
+           AND a.repo_name = ?
+         GROUP BY b.search_query
+         ORDER BY shared_repo_count DESC, total_hits DESC
+         LIMIT 30`
+      : `SELECT b.search_query, COUNT(DISTINCT b.repo_name) as shared_repo_count, SUM(b.hit_count) as total_hits
+         FROM commit_search_repo_stats a
+         JOIN commit_search_history ha ON a.search_history_id = ha.id
+         JOIN commit_search_repo_stats b ON a.repo_name = b.repo_name
+         JOIN commit_search_history hb ON b.search_history_id = hb.id
+         WHERE ha.user_id = ? AND a.search_query = ?
+           AND hb.user_id = ? AND b.search_query != ?
+         GROUP BY b.search_query
+         ORDER BY shared_repo_count DESC, total_hits DESC
+         LIMIT 30`;
+    const coKeywordsBindArgs = repoFilter
+      ? ([user.sub, q, user.sub, q, repoFilter] as (string | number)[])
+      : ([user.sub, q, user.sub, q] as (string | number)[]);
+    const coKeywords = await c.env.DB.prepare(coKeywordsSql)
+      .bind(...coKeywordsBindArgs)
+      .all<{
+        search_query: string;
+        shared_repo_count: number;
+        total_hits: number;
+      }>();
 
     // 日別時系列（検索回数・ヒット数）
     const timeseries = await c.env.DB.prepare(
