@@ -4682,17 +4682,27 @@ export function getRepositoriesPage(user: {
       function loadRepoFilter(repo) {
         if (!repo) {
           activeCokeySet = {};
-          applyRepoHighlight();
+          currentItems.forEach(function(item) { item.repoHitCount = null; });
+          currentItems.sort(function(a, b) { return b.total_hits - a.total_hits; });
+          refreshGrid(null, null);
           return;
         }
         fetch('/api/repositories/search/repo-keywords?repo=' + encodeURIComponent(repo), { credentials: 'same-origin' })
           .then(function(res) { return res.ok ? res.json() : null; })
           .then(function(data) {
+            var countMap = {};
             activeCokeySet = {};
             if (data && data.keywords) {
-              data.keywords.forEach(function(k) { activeCokeySet[k] = true; });
+              data.keywords.forEach(function(k) {
+                countMap[k.search_query] = k.repo_hit_count;
+                activeCokeySet[k.search_query] = true;
+              });
             }
-            applyRepoHighlight();
+            currentItems.forEach(function(item) {
+              item.repoHitCount = (countMap[item.search_query] !== undefined) ? countMap[item.search_query] : 0;
+            });
+            currentItems.sort(function(a, b) { return b.repoHitCount - a.repoHitCount; });
+            refreshGrid(null, null);
           })
           .catch(function() {});
       }
@@ -4736,7 +4746,7 @@ export function getRepositoriesPage(user: {
         history.forEach(function(item) {
           var key = item.search_query;
           if (!map[key] || item.total_hits > map[key].total_hits) {
-            map[key] = { search_query: key, total_hits: item.total_hits };
+            map[key] = { search_query: key, total_hits: item.total_hits, repoHitCount: null };
           }
         });
         var arr = [];
@@ -4772,7 +4782,7 @@ export function getRepositoriesPage(user: {
           var start = c * rowsPerCol;
           var end = Math.min(start + rowsPerCol, items.length);
           html += '<div class="history-grid-col"><table>'
-            + '<thead><tr><th>ヒット数</th><th>キーワード</th></tr></thead><tbody>';
+            + '<thead><tr><th>当該</th><th>総ヒット数</th><th>キーワード</th></tr></thead><tbody>';
           for (var r = start; r < end; r++) {
             var rowClasses = [];
             if (highlightKey && items[r].search_query === highlightKey) {
@@ -4782,13 +4792,15 @@ export function getRepositoriesPage(user: {
               rowClasses.push('selected');
             }
             var rowClass = rowClasses.length > 0 ? ' class="' + rowClasses.join(' ') + '"' : '';
+            var repoHit = (items[r].repoHitCount != null) ? items[r].repoHitCount : '-';
             html += '<tr' + rowClass + ' data-query="' + escHtml(items[r].search_query) + '">'
+              + '<td>' + repoHit + '</td>'
               + '<td><span class="history-hit-badge">' + items[r].total_hits + '</span></td>'
               + '<td title="' + escHtml(items[r].search_query) + '">' + escHtml(items[r].search_query) + '</td>'
               + '</tr>';
           }
           if (start >= items.length) {
-            html += '<tr><td colspan="2" style="color:var(--text-muted);text-align:center;padding:20px 0;font-size:12px;">&mdash;</td></tr>';
+            html += '<tr><td colspan="3" style="color:var(--text-muted);text-align:center;padding:20px 0;font-size:12px;">&mdash;</td></tr>';
           }
           html += '</tbody></table></div>';
         }
@@ -5003,7 +5015,7 @@ export function getRepositoriesPage(user: {
           }
         }
         if (!found) {
-          currentItems.push({ search_query: query, total_hits: totalHits });
+          currentItems.push({ search_query: query, total_hits: totalHits, repoHitCount: null });
         }
         currentItems.sort(function(a, b) { return b.total_hits - a.total_hits; });
         refreshGrid(query, highlightType);

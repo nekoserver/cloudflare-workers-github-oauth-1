@@ -69,6 +69,7 @@ describe('検索履歴モーダル: 共起ハイライト JS ロジック', () =
     expect(loadRepoFilterMatch).not.toBeNull();
     const fn = loadRepoFilterMatch![0];
     expect(fn).toContain('data.keywords');
+    expect(fn).toContain('.search_query');
   });
 
   it('applyRepoHighlight がリポジトリ選択時にすべての非マッチ行を dimmed にする（selectedKeyword 例外なし）', () => {
@@ -77,6 +78,30 @@ describe('検索履歴モーダル: 共起ハイライト JS ロジック', () =
     expect(applyMatch).not.toBeNull();
     const fn = applyMatch![0];
     expect(fn).not.toContain('selectedKeyword');
+  });
+});
+
+describe('検索履歴モーダル: 当該カラム', () => {
+  it('当該カラムのヘッダーが存在する', () => {
+    const html = getRepositoriesPage(minimalUser);
+    expect(html).toContain('>当該<');
+  });
+
+  it('ヒット数カラムが総ヒット数に変更されている', () => {
+    const html = getRepositoriesPage(minimalUser);
+    expect(html).toContain('>総ヒット数<');
+    expect(html).not.toContain('>ヒット数<');
+  });
+
+  it('repo_hit_count フィールドで当該件数を取得する', () => {
+    const html = getRepositoriesPage(minimalUser);
+    expect(html).toContain('repo_hit_count');
+  });
+
+  it('リポジトリ選択時に repoHitCount の降順でソートする', () => {
+    const html = getRepositoriesPage(minimalUser);
+    expect(html).toContain('repoHitCount');
+    expect(html).toContain('b.repoHitCount - a.repoHitCount');
   });
 });
 
