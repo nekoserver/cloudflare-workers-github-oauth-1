@@ -3753,6 +3753,7 @@ export function getRepositoriesPage(user: {
     var COMMIT_HISTORY_PAGE_SIZE = ${commitHistoryPageSize};
     var commitHistoryCache = {};
     var commitMonthsCache = {};
+    var commitHistoryIsInitialLoad = false;
     var commitHistoryFilterSelect = document.getElementById('commitHistoryFilterSelect');
     var currentAllCommits = [];
 
@@ -3900,6 +3901,14 @@ export function getRepositoriesPage(user: {
         commitHistoryTotal.textContent = payload.cached ? 'キャッシュ（D1）から取得' : 'GitHub API から取得（リアルタイム）';
       }
       var filtered = applyMergeFilter(currentAllCommits);
+      if (commitHistoryIsInitialLoad && filtered.length === 0 && commitHistoryMonthSelect && commitHistoryMonthSelect.value !== '') {
+        commitHistoryIsInitialLoad = false;
+        commitHistoryMonthSelect.value = '';
+        var repoKey = currentRepoFullName || (currentRepoOwner + '/' + currentRepoName);
+        loadCommitsForSelectedValue(currentRepoOwner, currentRepoName, repoKey, '');
+        return;
+      }
+      commitHistoryIsInitialLoad = false;
       if (commitHistoryCount) commitHistoryCount.textContent = filtered.length + ' 件';
       updateCommitHistoryButtonLabel(filtered.length);
       renderCommitHistoryRows(filtered);
@@ -3985,6 +3994,7 @@ export function getRepositoriesPage(user: {
     }
 
     function fetchCommitMonthsAndInit(owner, repoName, repoKey) {
+      commitHistoryIsInitialLoad = true;
       if (commitMonthsCache[repoKey]) {
         var mc = commitMonthsCache[repoKey];
         renderCommitHistoryMonthOptions(mc.months, mc.currentMonth);
