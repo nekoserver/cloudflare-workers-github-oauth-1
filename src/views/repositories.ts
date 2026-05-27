@@ -5046,6 +5046,17 @@ export function getRepositoriesPage(user: {
         });
       }
 
+      function populateRepoSelect(repos) {
+        if (!hRepoSelect) return;
+        var prev = hRepoSelect.value;
+        var opts = '<option value="">すべて</option>';
+        repos.forEach(function(r) {
+          opts += '<option value="' + escHtml(r) + '"' + (r === prev ? ' selected' : '') + '>'
+            + escHtml(r) + '</option>';
+        });
+        hRepoSelect.innerHTML = opts;
+      }
+
       historyOpenBtn.addEventListener('click', function() {
         historyModalTitle.textContent = '検索履歴';
         historyModalBody.innerHTML = '<div class="search-loading">読み込み中...</div>';
@@ -5053,22 +5064,29 @@ export function getRepositoriesPage(user: {
         if (hSearchInput) hSearchInput.value = '';
         openHistoryModal();
 
-        fetch('/api/repositories/search/history', { credentials: 'same-origin' })
-          .then(function(res) { return res.ok ? res.json() : null; })
-          .then(function(data) {
-            if (!data || !data.history || data.history.length === 0) {
-              currentItems = [];
-              historyModalBody.innerHTML = '<div class="search-empty">検索履歴がありません。</div>';
-              updateTitle();
-              return;
-            }
-            currentItems = dedupeAndSort(data.history);
-            refreshGrid(null, null);
-          })
-          .catch(function() {
+        Promise.all([
+          fetch('/api/repositories/search/history', { credentials: 'same-origin' })
+            .then(function(res) { return res.ok ? res.json() : null; }),
+          fetch('/api/repositories/search/repo-list', { credentials: 'same-origin' })
+            .then(function(res) { return res.ok ? res.json() : null; }),
+        ]).then(function(results) {
+          var data = results[0];
+          var repoData = results[1];
+          if (repoData && Array.isArray(repoData.repos)) {
+            populateRepoSelect(repoData.repos);
+          }
+          if (!data || !data.history || data.history.length === 0) {
             currentItems = [];
-            historyModalBody.innerHTML = '<div class="search-empty">読み込みに失敗しました。</div>';
-          });
+            historyModalBody.innerHTML = '<div class="search-empty">検索履歴がありません。</div>';
+            updateTitle();
+            return;
+          }
+          currentItems = dedupeAndSort(data.history);
+          refreshGrid(null, null);
+        }).catch(function() {
+          currentItems = [];
+          historyModalBody.innerHTML = '<div class="search-empty">読み込みに失敗しました。</div>';
+        });
       });
     })();
 

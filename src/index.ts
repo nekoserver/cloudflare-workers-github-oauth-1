@@ -4876,6 +4876,30 @@ app.get('/api/repositories/search/commits', optionalAuthMiddleware, async (c) =>
   }
 });
 
+// 検索履歴に登場したリポジトリ名一覧（対象リポジトリセレクト用）
+app.get('/api/repositories/search/repo-list', optionalAuthMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!user) return jsonUtf8({ error: 'Unauthorized' }, 401);
+  if (!c.env.DB) return jsonUtf8({ error: 'Database not available' }, 500);
+  try {
+    const rows = await c.env.DB.prepare(
+      `SELECT DISTINCT s.repo_name
+       FROM commit_search_repo_stats s
+       JOIN commit_search_history h ON s.search_history_id = h.id
+       WHERE h.user_id = ?
+       ORDER BY s.repo_name ASC`,
+    )
+      .bind(user.sub)
+      .all<{ repo_name: string }>();
+    return jsonUtf8({ repos: (rows.results ?? []).map((r) => r.repo_name) });
+  } catch (error) {
+    logger.warn('Failed to fetch repo list', {
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    return jsonUtf8({ error: 'Failed to fetch repo list' }, 500);
+  }
+});
+
 // コミット検索履歴一覧（テーブルA: ヒット総数降順）
 app.get('/api/repositories/search/history', optionalAuthMiddleware, async (c) => {
   const user = c.get('user');

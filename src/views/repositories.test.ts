@@ -30,6 +30,16 @@ describe('検索履歴モーダル: 対象リポジトリセレクト', () => {
     const html = getRepositoriesPage(minimalUser);
     expect(html).toContain('>すべて<');
   });
+
+  it('モーダルオープン時に repo-list エンドポイントを呼び出す', () => {
+    const html = getRepositoriesPage(minimalUser);
+    expect(html).toContain('/api/repositories/search/repo-list');
+  });
+
+  it('populateRepoSelect 関数が存在する', () => {
+    const html = getRepositoriesPage(minimalUser);
+    expect(html).toContain('function populateRepoSelect(repos)');
+  });
 });
 
 describe('検索履歴モーダル: 共起ハイライト JS ロジック', () => {
