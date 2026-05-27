@@ -4924,9 +4924,6 @@ export function getRepositoriesPage(user: {
               if (closeBtn2) {
                 closeBtn2.addEventListener('click', function() {
                   selectedKeyword = null;
-                  activeCokeySet = {};
-                  selectedRepo = '';
-                  if (hRepoSelect) hRepoSelect.innerHTML = '<option value="">すべて</option>';
                   keywordDetailPanel.style.display = 'none';
                   keywordDetailPanel.innerHTML = '';
                   refreshGrid(null, null);
@@ -4940,34 +4937,6 @@ export function getRepositoriesPage(user: {
               });
             }
 
-            // リポジトリセレクトを再構築し、現在のフィルタを適用
-            if (hRepoSelect && data.repoStats && data.repoStats.length > 0) {
-              var prevRepo = hRepoSelect.value;
-              var repoOpts = '<option value="">すべて</option>';
-              data.repoStats.forEach(function(r) {
-                repoOpts += '<option value="' + escHtml(r.repo_name) + '"'
-                  + (r.repo_name === prevRepo ? ' selected' : '') + '>'
-                  + escHtml(r.repo_name) + '</option>';
-              });
-              hRepoSelect.innerHTML = repoOpts;
-              if (prevRepo && hRepoSelect.value === prevRepo) {
-                selectedRepo = prevRepo;
-                loadRepoFilter(prevRepo);
-              } else {
-                hRepoSelect.value = '';
-                selectedRepo = '';
-                activeCokeySet = {};
-                applyRepoHighlight();
-              }
-            } else {
-              if (hRepoSelect) {
-                hRepoSelect.innerHTML = '<option value="">すべて</option>';
-                hRepoSelect.value = '';
-              }
-              selectedRepo = '';
-              activeCokeySet = {};
-              applyRepoHighlight();
-            }
           })
           .catch(function() {
             var loading = keywordDetailPanel.querySelector('.keyword-detail-loading');

@@ -117,6 +117,27 @@ describe('検索履歴モーダル: ハイライト CSS', () => {
   });
 });
 
+describe('検索履歴モーダル: 詳細パネルクローズ後のリポジトリセレクト保持', () => {
+  it('詳細パネルクローズ時に hRepoSelect の選択肢を上書きしない', () => {
+    const html = getRepositoriesPage(minimalUser);
+    expect(html).not.toContain("hRepoSelect.innerHTML = '<option value=\"\">すべて</option>'");
+  });
+
+  it('closeBtn2 クローズハンドラが selectedRepo をリセットしない', () => {
+    const html = getRepositoriesPage(minimalUser);
+    const closeHandlerMatch = html.match(/closeBtn2\.addEventListener\('click'[\s\S]{0,500}?\}\);/);
+    expect(closeHandlerMatch).not.toBeNull();
+    const handler = closeHandlerMatch![0];
+    expect(handler).not.toContain("selectedRepo = ''");
+    expect(handler).not.toContain('hRepoSelect');
+  });
+
+  it('showKeywordDetail が hRepoSelect をキーワード専用リポジトリで上書きしない', () => {
+    const html = getRepositoriesPage(minimalUser);
+    expect(html).not.toContain('data.repoStats.forEach');
+  });
+});
+
 describe('検索履歴モーダル: 対象リポジトリ変更時の詳細パネル自動クローズ', () => {
   it('リポジトリ変更時に keywordDetailPanel を非表示にするコードが存在する', () => {
     const html = getRepositoriesPage(minimalUser);
