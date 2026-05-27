@@ -4007,6 +4007,16 @@ export function getCacheStatusPage(user: {
           header.className = 'uml-table-header';
           header.textContent = tbl.name;
           applyUmlHeaderColor(header, tbl.name);
+          header.addEventListener('click', function(e) {
+            if (hasDragged) return;
+            var parentCard = e.currentTarget.parentElement;
+            if (!parentCard) return;
+            var hName = parentCard.getAttribute('data-uml-table');
+            if (!hName) return;
+            var tapM = document.cookie.match('(^|;)\\s*er_header_tap_mode=([^;]*)');
+            var tapMode = tapM ? decodeURIComponent(tapM[2]) : 'on';
+            if (tapMode !== 'off') openTablePreview(hName);
+          });
           card.appendChild(header);
 
           var body = document.createElement('div');
@@ -4187,14 +4197,6 @@ export function getCacheStatusPage(user: {
         });
 
         document.addEventListener('mouseup', function() {
-          if (dragTarget && dragStartIsHeader && !hasDragged) {
-            var tName = dragTarget;
-            dragTarget = null;
-            var tapM = document.cookie.match('(^|;)\\s*er_header_tap_mode=([^;]*)');
-            var tapMode = tapM ? decodeURIComponent(tapM[2]) : 'on';
-            if (tapMode !== 'off') openTablePreview(tName);
-            return;
-          }
           dragTarget = null;
         });
 
