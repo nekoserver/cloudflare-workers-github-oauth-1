@@ -2402,6 +2402,7 @@ export function getCacheStatusPage(user: {
       var elements = getStatusModalElements();
       if (!elements.modal || !elements.title || !elements.subtitle || !elements.body) return;
       elements.title.textContent = title;
+      elements.title.removeAttribute('style');
       elements.subtitle.textContent = subtitle || '';
       elements.body.className = 'modal-body' + (bodyClassName ? ' ' + bodyClassName : '');
       elements.body.innerHTML = bodyHtml;
@@ -2948,9 +2949,20 @@ export function getCacheStatusPage(user: {
       }
     }
 
+    function applyTableGroupColorToModalTitle(tableName) {
+      var titleEl = document.getElementById('statusDetailTitle');
+      if (!titleEl) return;
+      applyUmlHeaderColor(titleEl, tableName);
+      titleEl.style.color = 'white';
+      titleEl.style.padding = '2px 10px';
+      titleEl.style.borderRadius = '5px';
+      titleEl.style.display = 'inline-block';
+    }
+
     async function openTablePreview(tableName) {
       var title = tableName + ' の保存データ';
       showStatusModalLoading(title, '最新 20 件を取得しています');
+      applyTableGroupColorToModalTitle(tableName);
       try {
         var response = await fetch('/api/status/tables/' + encodeURIComponent(tableName) + '/rows');
         if (!response.ok) {
@@ -2967,6 +2979,7 @@ export function getCacheStatusPage(user: {
           (data.description || '') + (data.migration ? ' / マイグレーション ' + data.migration : ''),
           groupErButton + previewHtml
         );
+        applyTableGroupColorToModalTitle(tableName);
         var tableId = 'preview-table-' + tableName.replace(/[^a-zA-Z0-9_]/g, '');
         bindFilterSelects(tableId);
         var erBtn = document.querySelector('[data-group-er-table]');
@@ -2977,6 +2990,7 @@ export function getCacheStatusPage(user: {
         }
       } catch (_error) {
         showStatusModalError(title, '', '保存データの取得に失敗しました');
+        applyTableGroupColorToModalTitle(tableName);
       }
     }
 
