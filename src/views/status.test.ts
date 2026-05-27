@@ -189,16 +189,17 @@ describe('/status ページの last_updated_at YYYY-MM選択・カレンダー�
     expect(html).not.toContain('if (hasLastUpdatedAt)');
   });
 
-  it('openTablePreview がモーダルを開いた直後にローディングセクションを追加する', () => {
+  it('renderStatusTablePreview が last_updated_at の <th> にローディングセレクトを埋め込む', () => {
     const html = getCacheStatusPage(minimalUser, minimalData);
-    expect(html).toContain("document.getElementById('statusDetailBody')");
+    expect(html).toContain("column === 'last_updated_at'");
+    expect(html).toContain('ym-th-select-');
     expect(html).toContain('読み込み中');
-    expect(html).toContain('ymLoadingSection');
   });
 
-  it('loadYmSelect がデータなしの場合にセクションを削除する', () => {
+  it('loadYmSelect が <th> 内セレクトを YYYY-MM データで上書きする', () => {
     const html = getCacheStatusPage(minimalUser, minimalData);
-    expect(html).toContain('section.parentNode.removeChild(section)');
+    expect(html).toContain('thSelectId');
+    expect(html).toContain("document.getElementById(thSelectId)");
   });
 
   it('ymCalendarModal が HTML に存在する', () => {

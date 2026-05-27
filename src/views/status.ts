@@ -2840,6 +2840,14 @@ export function getCacheStatusPage(user: {
             + ' <select class="th-filter-select" data-filter-column="' + escapeHtmlText(column) + '" style="font-size:10px;padding:1px 2px;border-radius:3px;border:1px solid #888;background:transparent;color:inherit;cursor:pointer;max-width:80px">'
             + optionsHtml + '</select></th>';
         }
+        if (column === 'last_updated_at') {
+          var ymThSelectId = 'ym-th-select-' + tableName.replace(/[^a-zA-Z0-9_]/g, '');
+          return '<th>' + escapeHtmlText(column) + badge
+            + ' <select id="' + escapeHtmlText(ymThSelectId) + '"'
+            + ' style="font-size:10px;padding:1px 2px;border-radius:3px;border:1px solid #888;background:transparent;color:inherit;cursor:pointer;max-width:100px">'
+            + '<option value="">読み込み中...</option>'
+            + '</select></th>';
+        }
         return '<th>' + escapeHtmlText(column) + badge + '</th>';
       }).join('');
       var bodyHtml = rows.map(function(row, idx) {
@@ -3030,16 +3038,6 @@ export function getCacheStatusPage(user: {
             openGroupEr(tableName);
           });
         }
-        var ymSectionId = 'ym-select-section-' + tableName.replace(/[^a-zA-Z0-9_]/g, '');
-        var modalBodyEl = document.getElementById('statusDetailBody');
-        if (modalBodyEl) {
-          var ymLoadingSection = document.createElement('div');
-          ymLoadingSection.className = 'ym-select-section';
-          ymLoadingSection.id = ymSectionId;
-          ymLoadingSection.innerHTML = '<span class="ym-select-label">last_updated_at 月別:</span>'
-            + '<span style="font-size:12px;color:var(--text-muted)">読み込み中...</span>';
-          modalBodyEl.appendChild(ymLoadingSection);
-        }
         loadYmSelect(tableName);
       } catch (_error) {
         showStatusModalError(title, '', '保存データの取得に失敗しました');
@@ -3048,37 +3046,30 @@ export function getCacheStatusPage(user: {
     }
 
     async function loadYmSelect(tableName) {
-      var sectionId = 'ym-select-section-' + tableName.replace(/[^a-zA-Z0-9_]/g, '');
+      var thSelectId = 'ym-th-select-' + tableName.replace(/[^a-zA-Z0-9_]/g, '');
       try {
         var res = await fetch('/api/status/tables/' + encodeURIComponent(tableName) + '/ym-summary');
         if (!res.ok) throw new Error('ym-summary fetch failed');
         var ymData = await res.json();
         var ymList = ymData.ym || [];
-        var section = document.getElementById(sectionId);
-        if (!section) return;
+        var thSel = document.getElementById(thSelectId);
+        if (!thSel) return;
         if (ymList.length === 0) {
-          section.parentNode && section.parentNode.removeChild(section);
+          thSel.parentNode && thSel.parentNode.removeChild(thSel);
           return;
         }
-        var selectId = 'ym-select-' + tableName.replace(/[^a-zA-Z0-9_]/g, '');
-        var opts = '<option value="">-- 月を選択 --</option>'
+        thSel.innerHTML = '<option value="">-- 月を選択 --</option>'
           + ymList.map(function(item) {
             return '<option value="' + escapeHtmlText(item.ym) + '">'
               + escapeHtmlText(String(item.cnt)) + '件 ' + escapeHtmlText(item.ym)
               + '</option>';
           }).join('');
-        section.innerHTML = '<span class="ym-select-label">last_updated_at 月別:</span>'
-          + '<select class="ym-select" id="' + escapeHtmlText(selectId) + '">' + opts + '</select>';
-        var sel = document.getElementById(selectId);
-        if (sel) {
-          sel.addEventListener('change', function() {
-            var ym = sel.value;
-            if (ym) openYmCalendarModal(tableName, ym);
-          });
-        }
+        thSel.addEventListener('change', function() {
+          if (thSel.value) openYmCalendarModal(tableName, thSel.value);
+        });
       } catch (_e) {
-        var section = document.getElementById(sectionId);
-        if (section && section.parentNode) section.parentNode.removeChild(section);
+        var thSel = document.getElementById(thSelectId);
+        if (thSel && thSel.parentNode) thSel.parentNode.removeChild(thSel);
       }
     }
 
