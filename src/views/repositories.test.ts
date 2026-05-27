@@ -10,6 +10,38 @@ const minimalUser = {
   commitHistoryPageSize: 10,
 };
 
+describe('コミット履歴モーダル: 初回ロード0件時の自動すべて切り替え', () => {
+  it('commitHistoryIsInitialLoad フラグが存在する', () => {
+    const html = getRepositoriesPage(minimalUser);
+    expect(html).toContain('commitHistoryIsInitialLoad');
+  });
+
+  it('fetchCommitMonthsAndInit で commitHistoryIsInitialLoad を true にセットする', () => {
+    const html = getRepositoriesPage(minimalUser);
+    const fnMatch = html.match(/function fetchCommitMonthsAndInit[\s\S]*?^    \}/m);
+    expect(fnMatch).not.toBeNull();
+    const fn = fnMatch![0];
+    expect(fn).toContain('commitHistoryIsInitialLoad = true');
+  });
+
+  it('renderCommitHistoryContent が0件かつ初回ロード時に commitHistoryMonthSelect を空にする', () => {
+    const html = getRepositoriesPage(minimalUser);
+    const fnMatch = html.match(/function renderCommitHistoryContent[\s\S]*?^    \}/m);
+    expect(fnMatch).not.toBeNull();
+    const fn = fnMatch![0];
+    expect(fn).toContain('commitHistoryIsInitialLoad');
+    expect(fn).toContain("commitHistoryMonthSelect.value = ''");
+  });
+
+  it('renderCommitHistoryContent が初回ロードフラグを false にリセットする', () => {
+    const html = getRepositoriesPage(minimalUser);
+    const fnMatch = html.match(/function renderCommitHistoryContent[\s\S]*?^    \}/m);
+    expect(fnMatch).not.toBeNull();
+    const fn = fnMatch![0];
+    expect(fn).toContain('commitHistoryIsInitialLoad = false');
+  });
+});
+
 describe('検索履歴モーダル: 対象リポジトリセレクト', () => {
   it('historyRepoSelect が HTML に存在する', () => {
     const html = getRepositoriesPage(minimalUser);
