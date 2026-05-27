@@ -30,6 +30,16 @@ describe('検索履歴モーダル: 対象リポジトリセレクト', () => {
     const html = getRepositoriesPage(minimalUser);
     expect(html).toContain('>すべて<');
   });
+
+  it('モーダルオープン時に repo-list エンドポイントを呼び出す', () => {
+    const html = getRepositoriesPage(minimalUser);
+    expect(html).toContain('/api/repositories/search/repo-list');
+  });
+
+  it('populateRepoSelect 関数が存在する', () => {
+    const html = getRepositoriesPage(minimalUser);
+    expect(html).toContain('function populateRepoSelect(repos)');
+  });
 });
 
 describe('検索履歴モーダル: 共起ハイライト JS ロジック', () => {
@@ -64,5 +74,25 @@ describe('検索履歴モーダル: ハイライト CSS', () => {
   it('history-row-dimmed スタイルが存在する', () => {
     const html = getRepositoriesPage(minimalUser);
     expect(html).toContain('history-row-dimmed');
+  });
+});
+
+describe('検索履歴モーダル: 対象リポジトリ変更時の詳細パネル自動クローズ', () => {
+  it('リポジトリ変更時に keywordDetailPanel を非表示にするコードが存在する', () => {
+    const html = getRepositoriesPage(minimalUser);
+    const changeHandlerMatch = html.match(/hRepoSelect\.addEventListener\('change'[\s\S]*?\}\)/);
+    expect(changeHandlerMatch).not.toBeNull();
+    const handler = changeHandlerMatch![0];
+    expect(handler).toContain('keywordDetailPanel');
+    expect(handler).toContain("'none'");
+  });
+
+  it('リポジトリ変更時に selectedKeyword をリセットするコードが存在する', () => {
+    const html = getRepositoriesPage(minimalUser);
+    const changeHandlerMatch = html.match(/hRepoSelect\.addEventListener\('change'[\s\S]*?\}\)/);
+    expect(changeHandlerMatch).not.toBeNull();
+    const handler = changeHandlerMatch![0];
+    expect(handler).toContain('selectedKeyword');
+    expect(handler).toContain('null');
   });
 });
