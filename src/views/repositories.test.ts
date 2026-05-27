@@ -58,10 +58,25 @@ describe('検索履歴モーダル: 共起ハイライト JS ロジック', () =
     expect(html).toContain('activeCokeySet');
   });
 
-  it('keyword-stats API に repo パラメータを付与して呼び出す', () => {
+  it('loadRepoFilter が repo-keywords エンドポイントを呼び出す', () => {
     const html = getRepositoriesPage(minimalUser);
-    expect(html).toContain('keyword-stats?q=');
-    expect(html).toContain('&repo=');
+    expect(html).toContain('repo-keywords?repo=');
+  });
+
+  it('data.keywords 配列でハイライト対象を構築する', () => {
+    const html = getRepositoriesPage(minimalUser);
+    const loadRepoFilterMatch = html.match(/function loadRepoFilter\(repo\)[\s\S]*?^      \}/m);
+    expect(loadRepoFilterMatch).not.toBeNull();
+    const fn = loadRepoFilterMatch![0];
+    expect(fn).toContain('data.keywords');
+  });
+
+  it('applyRepoHighlight がリポジトリ選択時にすべての非マッチ行を dimmed にする（selectedKeyword 例外なし）', () => {
+    const html = getRepositoriesPage(minimalUser);
+    const applyMatch = html.match(/function applyRepoHighlight\(\)[\s\S]*?^      \}/m);
+    expect(applyMatch).not.toBeNull();
+    const fn = applyMatch![0];
+    expect(fn).not.toContain('selectedKeyword');
   });
 });
 

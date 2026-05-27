@@ -4672,7 +4672,7 @@ export function getRepositoriesPage(user: {
           if (hasFilter) {
             if (activeCokeySet[q]) {
               row.classList.add('history-row-cokey');
-            } else if (q !== selectedKeyword) {
+            } else {
               row.classList.add('history-row-dimmed');
             }
           }
@@ -4680,17 +4680,17 @@ export function getRepositoriesPage(user: {
       }
 
       function loadRepoFilter(repo) {
-        if (!selectedKeyword || !repo) {
+        if (!repo) {
           activeCokeySet = {};
           applyRepoHighlight();
           return;
         }
-        fetch('/api/repositories/search/keyword-stats?q=' + encodeURIComponent(selectedKeyword) + '&repo=' + encodeURIComponent(repo), { credentials: 'same-origin' })
+        fetch('/api/repositories/search/repo-keywords?repo=' + encodeURIComponent(repo), { credentials: 'same-origin' })
           .then(function(res) { return res.ok ? res.json() : null; })
           .then(function(data) {
             activeCokeySet = {};
-            if (data && data.coKeywords) {
-              data.coKeywords.forEach(function(k) { activeCokeySet[k.search_query] = true; });
+            if (data && data.keywords) {
+              data.keywords.forEach(function(k) { activeCokeySet[k] = true; });
             }
             applyRepoHighlight();
           })
