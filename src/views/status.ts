@@ -3030,6 +3030,16 @@ export function getCacheStatusPage(user: {
             openGroupEr(tableName);
           });
         }
+        var ymSectionId = 'ym-select-section-' + tableName.replace(/[^a-zA-Z0-9_]/g, '');
+        var modalBodyEl = document.getElementById('statusDetailBody');
+        if (modalBodyEl) {
+          var ymLoadingSection = document.createElement('div');
+          ymLoadingSection.className = 'ym-select-section';
+          ymLoadingSection.id = ymSectionId;
+          ymLoadingSection.innerHTML = '<span class="ym-select-label">last_updated_at 月別:</span>'
+            + '<span style="font-size:12px;color:var(--text-muted)">読み込み中...</span>';
+          modalBodyEl.appendChild(ymLoadingSection);
+        }
         loadYmSelect(tableName);
       } catch (_error) {
         showStatusModalError(title, '', '保存データの取得に失敗しました');
@@ -3038,21 +3048,17 @@ export function getCacheStatusPage(user: {
     }
 
     async function loadYmSelect(tableName) {
+      var sectionId = 'ym-select-section-' + tableName.replace(/[^a-zA-Z0-9_]/g, '');
       try {
         var res = await fetch('/api/status/tables/' + encodeURIComponent(tableName) + '/ym-summary');
         if (!res.ok) throw new Error('ym-summary fetch failed');
         var ymData = await res.json();
         var ymList = ymData.ym || [];
-        if (ymList.length === 0) return;
-        var sectionId = 'ym-select-section-' + tableName.replace(/[^a-zA-Z0-9_]/g, '');
         var section = document.getElementById(sectionId);
-        if (!section) {
-          var modalBody = document.getElementById('statusDetailBody');
-          if (!modalBody) return;
-          section = document.createElement('div');
-          section.className = 'ym-select-section';
-          section.id = sectionId;
-          modalBody.appendChild(section);
+        if (!section) return;
+        if (ymList.length === 0) {
+          section.parentNode && section.parentNode.removeChild(section);
+          return;
         }
         var selectId = 'ym-select-' + tableName.replace(/[^a-zA-Z0-9_]/g, '');
         var opts = '<option value="">-- 月を選択 --</option>'
@@ -3071,7 +3077,8 @@ export function getCacheStatusPage(user: {
           });
         }
       } catch (_e) {
-        // silently ignore
+        var section = document.getElementById(sectionId);
+        if (section && section.parentNode) section.parentNode.removeChild(section);
       }
     }
 
