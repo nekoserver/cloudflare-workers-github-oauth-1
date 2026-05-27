@@ -2405,6 +2405,7 @@ export function getCacheStatusPage(user: {
       elements.subtitle.textContent = subtitle || '';
       elements.body.className = 'modal-body' + (bodyClassName ? ' ' + bodyClassName : '');
       elements.body.innerHTML = bodyHtml;
+      elements.modal.style.zIndex = '3000';
       elements.modal.classList.add('show');
       elements.modal.setAttribute('aria-hidden', 'false');
       document.body.style.overflow = 'hidden';
@@ -2415,6 +2416,7 @@ export function getCacheStatusPage(user: {
       if (!elements.modal) return;
       elements.modal.classList.remove('show');
       elements.modal.setAttribute('aria-hidden', 'true');
+      elements.modal.style.zIndex = '';
       document.body.style.overflow = '';
     }
 
@@ -4261,12 +4263,16 @@ export function getCacheStatusPage(user: {
           }
           if (e.touches.length !== 1) return;
           var touch = e.touches[0];
-          var card = document.elementFromPoint(touch.clientX, touch.clientY);
-          if (card) card = card.closest('[data-uml-table]');
+          var el = document.elementFromPoint(touch.clientX, touch.clientY);
+          var card = el ? el.closest('[data-uml-table]') : null;
           if (!card) return;
           var tName = card.getAttribute('data-uml-table');
           if (!tName || !cardRects[tName]) return;
           dragTarget = tName;
+          dragStartX = touch.clientX;
+          dragStartY = touch.clientY;
+          dragStartIsHeader = !!(el && el.closest('.uml-table-header'));
+          hasDragged = false;
           var pos = clientToContainer(touch.clientX, touch.clientY);
           dragOffsetX = pos.x - cardRects[tName].x;
           dragOffsetY = pos.y - cardRects[tName].y;
@@ -4282,6 +4288,9 @@ export function getCacheStatusPage(user: {
           }
           if (!dragTarget) return;
           var touch = e.touches[0];
+          var dx = touch.clientX - dragStartX;
+          var dy = touch.clientY - dragStartY;
+          if (Math.sqrt(dx * dx + dy * dy) > 4) hasDragged = true;
           var rect = cardRects[dragTarget];
           var pos = clientToContainer(touch.clientX, touch.clientY);
           rect.x = pos.x - dragOffsetX;
@@ -4297,6 +4306,14 @@ export function getCacheStatusPage(user: {
 
         document.addEventListener('touchend', function(e) {
           if (e.touches.length < 2) pinchStartDist = 0;
+          if (dragTarget && dragStartIsHeader && !hasDragged) {
+            var tName = dragTarget;
+            dragTarget = null;
+            var tapM = document.cookie.match('(^|;)\\s*er_header_tap_mode=([^;]*)');
+            var tapMode = tapM ? decodeURIComponent(tapM[2]) : 'on';
+            if (tapMode !== 'off') openTablePreview(tName);
+            return;
+          }
           dragTarget = null;
         });
 
