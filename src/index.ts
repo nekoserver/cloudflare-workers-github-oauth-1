@@ -2796,6 +2796,71 @@ app.get('/api/status/tables/:table/rows', authMiddleware, async (c) => {
   }
 });
 
+app.get('/api/status/tables/:table/ym-summary', authMiddleware, async (c) => {
+  const db = c.env.DB;
+  const tableName = c.req.param('table');
+  const tableDefinition = getStatusTableDefinition(tableName);
+
+  if (!db || !tableDefinition) {
+    return jsonUtf8({ error: 'Table not found' }, 404);
+  }
+
+  try {
+    const colsResult = await db.prepare(`PRAGMA table_info(${tableName})`).all<{ name: string }>();
+    const cols = (colsResult.results ?? []).map((r) => r.name);
+    if (!cols.includes('last_updated_at')) {
+      return jsonUtf8({ ym: [] });
+    }
+
+    const rowsResult = await db
+      .prepare(
+        `SELECT strftime('%Y-%m', last_updated_at) as ym, COUNT(*) as cnt FROM ${tableName} WHERE last_updated_at IS NOT NULL GROUP BY ym ORDER BY ym DESC`,
+      )
+      .all<{ ym: string; cnt: number }>();
+
+    return jsonUtf8({ ym: rowsResult.results ?? [] });
+  } catch (error) {
+    logger.warn('Failed to fetch ym summary', {
+      tableName,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    return jsonUtf8({ error: 'Failed to fetch ym summary' }, 500);
+  }
+});
+
+app.get('/api/status/tables/:table/calendar', authMiddleware, async (c) => {
+  const db = c.env.DB;
+  const tableName = c.req.param('table');
+  const ym = c.req.query('ym');
+  const tableDefinition = getStatusTableDefinition(tableName);
+
+  if (!db || !tableDefinition) {
+    return jsonUtf8({ error: 'Table not found' }, 404);
+  }
+
+  if (!ym || !/^\d{4}-\d{2}$/.test(ym)) {
+    return jsonUtf8({ error: 'Invalid ym parameter' }, 400);
+  }
+
+  try {
+    const rowsResult = await db
+      .prepare(
+        `SELECT strftime('%d', last_updated_at) as day, COUNT(*) as cnt FROM ${tableName} WHERE strftime('%Y-%m', last_updated_at) = ? AND last_updated_at IS NOT NULL GROUP BY day ORDER BY day`,
+      )
+      .bind(ym)
+      .all<{ day: string; cnt: number }>();
+
+    return jsonUtf8({ ym, days: rowsResult.results ?? [] });
+  } catch (error) {
+    logger.warn('Failed to fetch calendar data', {
+      tableName,
+      ym,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    return jsonUtf8({ error: 'Failed to fetch calendar data' }, 500);
+  }
+});
+
 app.get('/api/status/migrations/:migration/sql', authMiddleware, async (c) => {
   const migration = c.req.param('migration');
   const sql = STATUS_MIGRATION_SQL[migration];

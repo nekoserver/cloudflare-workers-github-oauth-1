@@ -156,3 +156,72 @@ describe('/status ページの グループER図モーダル', () => {
     expect(html).toContain('/group-er');
   });
 });
+
+describe('/status ページの last_updated_at YYYY-MM選択・カレンダーヒートマップ機能', () => {
+  it('loadYmSelect 関数が存在する', () => {
+    const html = getCacheStatusPage(minimalUser, minimalData);
+    expect(html).toContain('function loadYmSelect(tableName)');
+  });
+
+  it('openYmCalendarModal 関数が存在する', () => {
+    const html = getCacheStatusPage(minimalUser, minimalData);
+    expect(html).toContain('function openYmCalendarModal(tableName, ym)');
+  });
+
+  it('renderYmCalendar 関数が存在する', () => {
+    const html = getCacheStatusPage(minimalUser, minimalData);
+    expect(html).toContain('function renderYmCalendar(ym, days)');
+  });
+
+  it('ym-summary エンドポイントを呼び出すロジックを含む', () => {
+    const html = getCacheStatusPage(minimalUser, minimalData);
+    expect(html).toContain('/ym-summary');
+  });
+
+  it('calendar エンドポイントを呼び出すロジックを含む', () => {
+    const html = getCacheStatusPage(minimalUser, minimalData);
+    expect(html).toContain('/calendar?ym=');
+  });
+
+  it('last_updated_at カラム検出ロジックを含む', () => {
+    const html = getCacheStatusPage(minimalUser, minimalData);
+    expect(html).toContain("indexOf('last_updated_at')");
+  });
+
+  it('ymCalendarModal が HTML に存在する', () => {
+    const html = getCacheStatusPage(minimalUser, minimalData);
+    expect(html).toContain('id="ymCalendarModal"');
+  });
+
+  it('ymCalendarClose ボタンが HTML に存在する', () => {
+    const html = getCacheStatusPage(minimalUser, minimalData);
+    expect(html).toContain('id="ymCalendarClose"');
+  });
+
+  it('ヒートマップ CSS クラス heat0〜heat4 が存在する', () => {
+    const html = getCacheStatusPage(minimalUser, minimalData);
+    expect(html).toContain('.ym-cal-cell.heat0');
+    expect(html).toContain('.ym-cal-cell.heat4');
+  });
+
+  it('ym-cal-grid CSS が存在する', () => {
+    const html = getCacheStatusPage(minimalUser, minimalData);
+    expect(html).toContain('.ym-cal-grid');
+  });
+
+  it('renderErDiagram の mousedown が e.preventDefault() を呼ばない（click イベント抑制防止）', () => {
+    const html = getCacheStatusPage(minimalUser, minimalData);
+    const renderErDiagramMatch = html.match(/function renderErDiagram[\s\S]*?(?=function renderFilteredErDiagram)/);
+    expect(renderErDiagramMatch).not.toBeNull();
+    const renderErDiagramCode = renderErDiagramMatch![0];
+    const mousedownHandlerMatch = renderErDiagramCode.match(/container\.addEventListener\('mousedown'[\s\S]*?\}\);/);
+    expect(mousedownHandlerMatch).not.toBeNull();
+    const mousedownHandler = mousedownHandlerMatch![0];
+    expect(mousedownHandler).not.toContain('e.preventDefault()');
+  });
+
+  it('renderErDiagram に dragstart 抑制リスナーが追加されている', () => {
+    const html = getCacheStatusPage(minimalUser, minimalData);
+    expect(html).toContain("container.addEventListener('dragstart'");
+  });
+});
