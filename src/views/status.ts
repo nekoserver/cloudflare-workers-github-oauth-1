@@ -758,6 +758,34 @@ export function getCacheStatusPage(user: {
       border-radius: 16px; box-shadow: 0 24px 80px rgba(0, 0, 0, 0.25);
       overflow: hidden; display: flex; flex-direction: column;
     }
+    .ym-calendar-card {
+      width: min(760px, 100%); background: var(--card-bg);
+      border: 1px solid var(--border-color); border-radius: 16px;
+      box-shadow: 0 24px 80px rgba(0, 0, 0, 0.25);
+      overflow: hidden; display: flex; flex-direction: column;
+    }
+    .ym-cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+    .ym-cal-day-header { text-align: center; font-size: 11px; font-weight: 600; color: var(--text-muted); padding: 4px 0; }
+    .ym-cal-day-header.sun { color: #e53e3e; }
+    .ym-cal-day-header.sat { color: #3182ce; }
+    .ym-cal-cell { min-height: 52px; border-radius: 6px; padding: 4px 6px; font-size: 11px; border: 1px solid var(--border-color); background: var(--bg-secondary); display: flex; flex-direction: column; gap: 2px; }
+    .ym-cal-cell.empty { background: transparent; border-color: transparent; }
+    .ym-cal-cell-date { font-weight: 600; color: var(--text-secondary); font-size: 12px; }
+    .ym-cal-cell-date.sun { color: #e53e3e; }
+    .ym-cal-cell-date.sat { color: #3182ce; }
+    .ym-cal-cell-count { font-size: 11px; font-weight: 700; text-align: center; border-radius: 4px; padding: 1px 4px; }
+    .ym-cal-cell.heat0 { background: var(--bg-secondary); }
+    .ym-cal-cell.heat1 { background: #d6f5d6; border-color: #9be9a8; }
+    .ym-cal-cell.heat2 { background: #9be9a8; border-color: #40c463; }
+    .ym-cal-cell.heat3 { background: #40c463; border-color: #30a14e; }
+    .ym-cal-cell.heat4 { background: #216e39; border-color: #1a5b30; }
+    .ym-cal-cell.heat1 .ym-cal-cell-count { color: #1a6321; }
+    .ym-cal-cell.heat2 .ym-cal-cell-count { color: #0d4a16; }
+    .ym-cal-cell.heat3 .ym-cal-cell-count { color: #fff; }
+    .ym-cal-cell.heat4 .ym-cal-cell-count { color: #fff; }
+    .ym-select-section { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border-color); display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .ym-select-label { font-size: 12px; font-weight: 600; color: var(--text-secondary); white-space: nowrap; }
+    .ym-select { font-size: 13px; padding: 4px 8px; border: 1px solid var(--border-color); border-radius: 4px; background: var(--card-bg); color: var(--text-primary); cursor: pointer; }
     .modal-header {
       display: flex; align-items: flex-start; justify-content: space-between; gap: 16px;
       padding: 20px 24px; border-bottom: 1px solid var(--border-color);
@@ -1973,6 +2001,19 @@ export function getCacheStatusPage(user: {
     </div>
   </div>
 
+  <div class="modal-backdrop" id="ymCalendarModal" aria-hidden="true" style="z-index:4000">
+    <div class="ym-calendar-card" role="dialog" aria-modal="true" aria-labelledby="ymCalendarTitle">
+      <div class="modal-header">
+        <div class="modal-title-wrap">
+          <div class="modal-title" id="ymCalendarTitle">カレンダー</div>
+          <div class="modal-subtitle" id="ymCalendarSubtitle"></div>
+        </div>
+        <button type="button" class="modal-close" id="ymCalendarClose" aria-label="閉じる">&times;</button>
+      </div>
+      <div class="modal-body" id="ymCalendarBody" style="padding:16px"></div>
+    </div>
+  </div>
+
   <div class="modal-backdrop" id="repoGroupModal" aria-hidden="true">
     <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="repoGroupModalTitle" style="max-width:640px;">
       <div class="modal-header">
@@ -2969,15 +3010,23 @@ export function getCacheStatusPage(user: {
           throw new Error('table preview request failed');
         }
         var data = await response.json();
+        var columns = data.columns || [];
+        var hasLastUpdatedAt = columns.indexOf('last_updated_at') !== -1;
         var groupErButton = '<div style="margin-bottom:8px">'
           + '<button type="button" data-group-er-table="' + escapeHtmlText(tableName) + '" '
           + 'style="font-size:12px;padding:4px 12px;border:1px solid #666;border-radius:4px;background:transparent;color:inherit;cursor:pointer">'
           + 'このテーブルが属するグループのテーブル構造を確認する</button></div>';
-        var previewHtml = renderStatusTablePreview(data.columns || [], data.rows || [], data.limit || 20, tableName, data.columnKeyInfo || {}, data.filterableColumns || []);
+        var previewHtml = renderStatusTablePreview(columns, data.rows || [], data.limit || 20, tableName, data.columnKeyInfo || {}, data.filterableColumns || []);
+        var ymSectionHtml = hasLastUpdatedAt
+          ? '<div class="ym-select-section" id="ym-select-section-' + escapeHtmlText(tableName) + '">'
+            + '<span class="ym-select-label">last_updated_at 月別:</span>'
+            + '<span style="font-size:12px;color:var(--text-muted)">読み込み中...</span>'
+            + '</div>'
+          : '';
         openStatusModal(
           tableName + ' の保存データ',
           (data.description || '') + (data.migration ? ' / マイグレーション ' + data.migration : ''),
-          groupErButton + previewHtml
+          groupErButton + previewHtml + ymSectionHtml
         );
         applyTableGroupColorToModalTitle(tableName);
         var tableId = 'preview-table-' + tableName.replace(/[^a-zA-Z0-9_]/g, '');
@@ -2988,10 +3037,117 @@ export function getCacheStatusPage(user: {
             openGroupEr(tableName);
           });
         }
+        if (hasLastUpdatedAt) {
+          loadYmSelect(tableName);
+        }
       } catch (_error) {
         showStatusModalError(title, '', '保存データの取得に失敗しました');
         applyTableGroupColorToModalTitle(tableName);
       }
+    }
+
+    async function loadYmSelect(tableName) {
+      var sectionId = 'ym-select-section-' + tableName;
+      var section = document.getElementById(sectionId);
+      if (!section) return;
+      try {
+        var res = await fetch('/api/status/tables/' + encodeURIComponent(tableName) + '/ym-summary');
+        if (!res.ok) throw new Error('ym-summary fetch failed');
+        var ymData = await res.json();
+        var ymList = ymData.ym || [];
+        if (ymList.length === 0) {
+          section.innerHTML = '';
+          return;
+        }
+        var selectId = 'ym-select-' + tableName.replace(/[^a-zA-Z0-9_]/g, '');
+        var opts = '<option value="">-- 月を選択 --</option>'
+          + ymList.map(function(item) {
+            return '<option value="' + escapeHtmlText(item.ym) + '">'
+              + escapeHtmlText(String(item.cnt)) + '件 ' + escapeHtmlText(item.ym)
+              + '</option>';
+          }).join('');
+        section.innerHTML = '<span class="ym-select-label">last_updated_at 月別:</span>'
+          + '<select class="ym-select" id="' + escapeHtmlText(selectId) + '">' + opts + '</select>';
+        var sel = document.getElementById(selectId);
+        if (sel) {
+          sel.addEventListener('change', function() {
+            var ym = sel.value;
+            if (ym) openYmCalendarModal(tableName, ym);
+          });
+        }
+      } catch (_e) {
+        section.innerHTML = '';
+      }
+    }
+
+    async function openYmCalendarModal(tableName, ym) {
+      var calModal = document.getElementById('ymCalendarModal');
+      var calTitle = document.getElementById('ymCalendarTitle');
+      var calSubtitle = document.getElementById('ymCalendarSubtitle');
+      var calBody = document.getElementById('ymCalendarBody');
+      if (!calModal || !calTitle || !calBody) return;
+      calTitle.textContent = ym + ' カレンダー';
+      if (calSubtitle) calSubtitle.textContent = tableName + ' の last_updated_at 日別件数';
+      if (calBody) calBody.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-muted)">読み込み中...</div>';
+      calModal.classList.add('show');
+      calModal.setAttribute('aria-hidden', 'false');
+      try {
+        var res = await fetch('/api/status/tables/' + encodeURIComponent(tableName) + '/calendar?ym=' + encodeURIComponent(ym));
+        if (!res.ok) throw new Error('calendar fetch failed');
+        var calData = await res.json();
+        if (calBody) calBody.innerHTML = renderYmCalendar(ym, calData.days || []);
+      } catch (_e) {
+        if (calBody) calBody.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-muted)">カレンダーデータの取得に失敗しました</div>';
+      }
+    }
+
+    function renderYmCalendar(ym, days) {
+      var parts = ym.split('-');
+      var year = parseInt(parts[0], 10);
+      var month = parseInt(parts[1], 10);
+      var daysInMonth = new Date(year, month, 0).getDate();
+      var firstDow = new Date(year, month - 1, 1).getDay();
+
+      var dayCountMap = {};
+      for (var i = 0; i < days.length; i++) {
+        dayCountMap[parseInt(days[i].day, 10)] = days[i].cnt;
+      }
+      var maxCount = 0;
+      for (var d in dayCountMap) {
+        if (dayCountMap[d] > maxCount) maxCount = dayCountMap[d];
+      }
+
+      function heatLevel(cnt) {
+        if (!cnt || cnt === 0) return 0;
+        if (maxCount <= 0) return 1;
+        var ratio = cnt / maxCount;
+        if (ratio <= 0.25) return 1;
+        if (ratio <= 0.5) return 2;
+        if (ratio <= 0.75) return 3;
+        return 4;
+      }
+
+      var dayHeaders = ['日', '月', '火', '水', '木', '金', '土'];
+      var html = '<div class="ym-cal-grid">';
+      for (var h = 0; h < 7; h++) {
+        var hClass = h === 0 ? 'sun' : (h === 6 ? 'sat' : '');
+        html += '<div class="ym-cal-day-header ' + hClass + '">' + dayHeaders[h] + '</div>';
+      }
+      for (var pre = 0; pre < firstDow; pre++) {
+        html += '<div class="ym-cal-cell empty"></div>';
+      }
+      for (var day = 1; day <= daysInMonth; day++) {
+        var dow = (firstDow + day - 1) % 7;
+        var cnt = dayCountMap[day] || 0;
+        var level = heatLevel(cnt);
+        var dateClass = dow === 0 ? 'sun' : (dow === 6 ? 'sat' : '');
+        html += '<div class="ym-cal-cell heat' + level + '">'
+          + '<div class="ym-cal-cell-date ' + dateClass + '">' + day + '</div>'
+          + (cnt > 0 ? '<div class="ym-cal-cell-count">' + cnt + '</div>' : '')
+          + '</div>';
+      }
+      html += '</div>';
+      return html;
     }
 
     async function openMigrationSql(migration, tableName) {
@@ -3218,9 +3374,29 @@ export function getCacheStatusPage(user: {
       }
       document.addEventListener('keydown', function(event) {
         if (event.key === 'Escape') {
+          var calMod = document.getElementById('ymCalendarModal');
+          if (calMod && calMod.classList.contains('show')) {
+            calMod.classList.remove('show');
+            calMod.setAttribute('aria-hidden', 'true');
+            return;
+          }
           closeStatusModal();
         }
       });
+      (function() {
+        var calModal = document.getElementById('ymCalendarModal');
+        var calClose = document.getElementById('ymCalendarClose');
+        if (calClose) {
+          calClose.addEventListener('click', function() {
+            if (calModal) { calModal.classList.remove('show'); calModal.setAttribute('aria-hidden', 'true'); }
+          });
+        }
+        if (calModal) {
+          calModal.addEventListener('click', function(e) {
+            if (e.target === calModal) { calModal.classList.remove('show'); calModal.setAttribute('aria-hidden', 'true'); }
+          });
+        }
+      })();
       if (statusTablesTable) {
         statusTablesTable.addEventListener('click', function(event) {
           var target = event.target;
@@ -4190,8 +4366,9 @@ export function getCacheStatusPage(user: {
           var pos = clientToContainer(e.clientX, e.clientY);
           dragOffsetX = pos.x - cardRects[tName].x;
           dragOffsetY = pos.y - cardRects[tName].y;
-          e.preventDefault();
         });
+
+        container.addEventListener('dragstart', function(e) { e.preventDefault(); });
 
         document.addEventListener('mousemove', function(e) {
           if (!dragTarget) return;
