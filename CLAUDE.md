@@ -139,6 +139,7 @@
     - **NG（赤背景バッジ）**: テーブルは存在するが、データ読み出しに失敗（`exists=true, rowCount=null`）。CSSクラス `status-ng`
     - **未作成（赤文字）**: テーブル自体が存在しない（`exists=false`）。CSSクラス `status-missing`
     - 新しいテーブルを `STATUS_TABLE_DEFINITIONS` に追加した場合、同時に `TABLE_COLUMN_KEYS`・`TABLE_GROUP_MAP`・`COLUMN_FK_TARGETS`・`STATUS_MIGRATION_SQL` への登録も必須。登録漏れは `/status` に表示されない原因になる
+24. **PR マージ後に `repo_commit_index` を更新する** — PR がマージされるたびに（または新規コミットが main に追加されるたびに）、`SPEC.cloudflare-workers-github-oauth-1.COMMITDB.md` の手順に従い、D1 の `repo_commit_index` テーブルに新規コミットを追記すること。手順の要点: (1) `SELECT MAX(seq_num)` で現在の最大値 N を取得、(2) `git log main --reverse --format="%H|||%s" | tail -n +$((N+1))` で新規コミット一覧を取得、(3) `INSERT OR IGNORE` で追記、(4) `COUNT(*)` と `git rev-list --count main` が一致することを確認。
 
 ---
 
