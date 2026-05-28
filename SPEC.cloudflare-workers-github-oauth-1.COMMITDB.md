@@ -48,13 +48,18 @@ SELECT MAX(seq_num) AS max_seq, COUNT(*) AS total FROM repo_commit_index WHERE r
 
 ### Step 2: git log で新規コミットを取得する
 
+まず origin/main を最新状態に取得してから実行する。
+
 ```bash
-git log main --reverse --format="%H|||%s" | tail -n +$((N+1))
+git fetch origin main
+git log origin/main --reverse --format="%H|||%s" | tail -n +$((N+1))
 ```
 
 出力形式: `<40桁ハッシュ>|||<コミットメッセージ1行>`
 
 新規コミットが 0 件であれば作業終了。
+
+**注意**: `git log main` ではなく `git log origin/main` を使うこと。ローカルの `main` はリモートより古い場合があり、GitHubでのPRマージ時に自動生成されるマージコミット（`Merge pull request #NNN`）が欠落する原因になる。
 
 ---
 
@@ -87,7 +92,7 @@ INSERT OR IGNORE INTO repo_commit_index (commit_hash, seq_num, github_pr_number,
 SELECT COUNT(*) AS total FROM repo_commit_index WHERE repo_name = 'nekoserver/cloudflare-workers-github-oauth-1';
 ```
 
-`git rev-list --count main` の結果と一致すれば完了。
+`git rev-list --count origin/main` の結果と一致すれば完了。
 
 ---
 
@@ -96,7 +101,8 @@ SELECT COUNT(*) AS total FROM repo_commit_index WHERE repo_name = 'nekoserver/cl
 コミット数が多い場合は以下の手順で SQL を一括生成する。
 
 ```bash
-git log main --reverse --format="%H|||%s" > /tmp/new_commits.txt
+git fetch origin main
+git log origin/main --reverse --format="%H|||%s" > /tmp/new_commits.txt
 ```
 
 `N` を Step 1 で得た `max_seq` の値に置き換えてから実行する:
