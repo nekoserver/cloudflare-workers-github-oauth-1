@@ -91,6 +91,7 @@ const STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
   { name: 'column_concepts', migration: 'unknown', description: 'カラム概念定義（未分類テーブル）', syncPolicy: 'manual' },
   { name: 'repo_cache', migration: 'unknown', description: 'リポジトリキャッシュ（未分類テーブル）', syncPolicy: 'manual' },
   { name: 'user_cache', migration: 'unknown', description: 'ユーザーキャッシュ（未分類テーブル）', syncPolicy: 'manual' },
+  { name: 'repo_commit_index', migration: '0034', description: 'コミットインデックス（コミットハッシュ・順番・PR番号）', syncPolicy: 'manual' },
 ];
 
 const REQUIRED_STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
@@ -564,6 +565,15 @@ INSERT OR REPLACE INTO table_column_keys (table_name, column_name, key_type, fk_
 ('ai_summary_link_access_log', 'request_id', 'fk', 'ai_summary_log'),
 ('email_mfa_challenges', 'user_id', 'fk', 'user_sessions'),
 ('email_audit_anomalies', 'target_user_id', 'fk', 'user_sessions');`,
+  '0034': `CREATE TABLE IF NOT EXISTS repo_commit_index (
+  commit_hash      TEXT PRIMARY KEY,
+  seq_num          INTEGER NOT NULL,
+  github_pr_number INTEGER,
+  commit_message   TEXT NOT NULL,
+  repo_name        TEXT NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_repo_commit_index_seq ON repo_commit_index (repo_name, seq_num);
+CREATE INDEX IF NOT EXISTS idx_repo_commit_index_pr ON repo_commit_index (github_pr_number);`,
 };
 
 function jsonUtf8(payload: unknown, status = 200): Response {
@@ -709,6 +719,7 @@ export const TABLE_COLUMN_KEYS: Record<string, ColumnKeyInfo> = {
   group_oauth_apps: { group_id: 'pk+fk', app_name: 'pk', workspace_id: 'fk' },
   ai_summary_link_access_log: { id: 'pk', request_id: 'fk', route: 'idx', issue_code: 'idx', created_at: 'idx' },
   commit_stats_cache: { id: 'pk', owner: 'idx', repo: 'idx', period: 'idx' },
+  repo_commit_index: { commit_hash: 'pk', seq_num: 'idx', github_pr_number: 'idx', repo_name: 'idx' },
 };
 
 export function getColumnKeyType(tableName: string, columnName: string): ColumnKeyType {
@@ -755,6 +766,7 @@ export const TABLE_GROUP_MAP: Record<string, string> = {
   commit_calendar_cache: 'commit', commit_list_cache: 'commit', cache_stats: 'commit',
   commit_search_history: 'commit', commit_search_repo_stats: 'commit', commit_search_hit_details: 'commit', cloudflare_setup_pending: 'commit',
   commit_stats_cache: 'commit',
+  repo_commit_index: 'commit',
   ai_summary_log: 'ai', ai_summary_reviews: 'ai', commit_agent_log: 'ai',
   resend_webhook_sources: 'email', email_send_log: 'email', resend_webhook_log: 'email',
   email_suppression_list: 'email', email_mfa_challenges: 'email', email_audit_anomalies: 'email',
@@ -893,6 +905,11 @@ export const COLUMN_FK_TARGETS: Record<string, Record<string, string>> = {
   email_suppression_list: { source_id: 'resend_webhook_sources', origin_webhook_log_id: 'resend_webhook_log' },
   email_mfa_challenges: { source_id: 'resend_webhook_sources', user_id: 'user_sessions' },
   email_audit_anomalies: { source_id: 'resend_webhook_sources', target_user_id: 'user_sessions' },
+
+  // ========================================================================
+  // コミットインデックス系
+  // ========================================================================
+  repo_commit_index: { repo_name: 'installation_permissions' },
 
   // ========================================================================
   // メタデータ系
