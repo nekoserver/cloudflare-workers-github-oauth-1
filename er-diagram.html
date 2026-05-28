@@ -232,7 +232,10 @@
     align-items: center;
     gap: 6px;
     color: var(--text);
+    cursor: pointer;
+    user-select: none;
   }
+  .er-table-header:hover { filter: brightness(0.93); }
   .er-table-header .group-dot {
     width: 8px; height: 8px;
     border-radius: 50%;
@@ -473,6 +476,57 @@
   .er-legend-swatch { width: 12px; height: 12px; border-radius: 3px; flex-shrink: 0; }
   .er-legend-name { flex: 1; font-size: 11px; }
   .er-legend-code { font-size: 10px; font-family: monospace; color: var(--text-muted); }
+  .td-modal-overlay {
+    display: none; position: fixed; inset: 0;
+    background: rgba(0,0,0,0.5); z-index: 600;
+    align-items: center; justify-content: center;
+  }
+  .td-modal-overlay.show { display: flex; }
+  .td-modal {
+    background: var(--toolbar-bg); border: 1px solid var(--border);
+    border-radius: 12px; box-shadow: 0 8px 32px rgba(0,0,0,0.35);
+    width: 96%; max-width: 900px; max-height: 80vh;
+    display: flex; flex-direction: column; overflow: hidden;
+  }
+  .td-modal-header {
+    display: flex; align-items: flex-start; justify-content: space-between;
+    padding: 14px 18px 10px; border-bottom: 1px solid var(--border);
+    gap: 12px; flex-shrink: 0;
+  }
+  .td-modal-title { font-size: 15px; font-weight: 700; color: var(--text); }
+  .td-modal-sub { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+  .td-modal-close {
+    border: none; background: none; font-size: 20px;
+    cursor: pointer; color: var(--text-muted); line-height: 1;
+    padding: 0 4px; flex-shrink: 0;
+  }
+  .td-modal-close:hover { color: var(--text); }
+  .td-modal-body { padding: 12px 16px; overflow-y: auto; flex: 1; }
+  .td-modal-note { font-size: 12px; color: var(--text-muted); margin-bottom: 10px; }
+  .td-modal-empty { font-size: 13px; color: var(--text-muted); padding: 20px 0; text-align: center; }
+  .td-preview-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .td-preview-table th {
+    background: var(--table-header-bg); border: 1px solid var(--border);
+    padding: 5px 8px; text-align: left; font-weight: 600; white-space: nowrap;
+    position: sticky; top: 0; z-index: 1;
+  }
+  .td-preview-table td {
+    border: 1px solid var(--border); padding: 4px 8px;
+    font-family: monospace; font-size: 11px;
+    max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .td-preview-table tr:nth-child(even) td { background: rgba(128,128,128,0.04); }
+  .td-badge { display: inline-block; font-size: 9px; font-weight: 700; padding: 0 4px; border-radius: 3px; margin-left: 3px; vertical-align: middle; }
+  .td-badge.pk { background: #ffebe9; color: #cf222e; }
+  .td-badge.fk { background: #ddf4ff; color: #0969da; }
+  .td-badge.uk { background: #fff8c5; color: #9a6700; }
+  .td-badge.idx { background: #f0f0f0; color: #656d76; }
+  @media (prefers-color-scheme: dark) {
+    .td-badge.pk { background: rgba(248,81,73,0.15); color: #f85149; }
+    .td-badge.fk { background: rgba(88,166,255,0.15); color: #58a6ff; }
+    .td-badge.uk { background: rgba(210,153,34,0.15); color: #d29922; }
+    .td-badge.idx { background: rgba(139,148,158,0.15); color: #8b949e; }
+  }
 </style>
 </head>
 <body>
@@ -563,6 +617,20 @@
   </div>
 </div>
 
+<!-- テーブルデータプレビューモーダル -->
+<div class="td-modal-overlay" id="tdModal" onclick="if(event.target===this)closeTdModal()">
+  <div class="td-modal" onclick="event.stopPropagation()">
+    <div class="td-modal-header">
+      <div>
+        <div class="td-modal-title" id="tdModalTitle"></div>
+        <div class="td-modal-sub" id="tdModalSub"></div>
+      </div>
+      <button class="td-modal-close" onclick="closeTdModal()">&times;</button>
+    </div>
+    <div class="td-modal-body" id="tdModalBody"></div>
+  </div>
+</div>
+
 <div class="legend">
   <div class="legend-section-title">Groups (click to focus)</div>
   <button class="legend-row" data-group="all" onclick="focusOnGroup('all')">
@@ -598,9 +666,9 @@
 const GROUPS = {
   auth:      { color: '#388bfd', label: 'Auth / Session',    tables: ['user_sessions','teams','workspaces','team_members'] },
   commit:    { color: '#3fb950', label: 'Commit / Cache',    tables: ['commit_calendar_cache','commit_list_cache','cache_stats','commit_search_history','commit_search_repo_stats','commit_search_hit_details','commit_stats_cache','cloudflare_setup_pending'] },
-  ai:        { color: '#d29922', label: 'AI Summary',         tables: ['ai_summary_log','ai_summary_reviews','commit_agent_log'] },
+  ai:        { color: '#d29922', label: 'AI Summary',         tables: ['ai_summary_log','ai_summary_reviews','commit_agent_log','ai_summary_link_access_log'] },
   email:     { color: '#f85149', label: 'Email / Resend',    tables: ['resend_webhook_sources','resend_webhook_log','email_send_log','email_suppression_list','email_mfa_challenges','email_audit_anomalies'] },
-  config:    { color: '#a371f7', label: 'Config / Settings', tables: ['installation_permissions','repo_color_settings','repo_groups','repo_group_members','table_catalog','table_column_keys'] },
+  config:    { color: '#a371f7', label: 'Config / Settings', tables: ['installation_permissions','repo_color_settings','repo_groups','repo_group_members','group_oauth_apps','table_catalog','table_column_keys'] },
   undefined: { color: '#8b949e', label: 'Undefined',          tables: [] }
 };
 
@@ -618,11 +686,11 @@ function groupKeyOf(tableName) {
   return 'undefined';
 }
 
-const SCHEMA = [
+let SCHEMA = [
   { name:'user_sessions', cols:[
     {n:'id',pk:true,t:'INT'},{n:'user_id',uk:true,idx:true,t:'TEXT'},{n:'timezone',t:'TEXT'},{n:'session_duration',t:'TEXT'},
     {n:'last_login_at',t:'TEXT'},{n:'current_login_at',t:'TEXT'},{n:'updated_at',t:'TEXT'},
-    {n:'display_name',t:'TEXT'},{n:'github_access_token',t:'TEXT'},{n:'current_workspace_id',t:'TEXT'}
+    {n:'display_name',t:'TEXT'},{n:'github_access_token',t:'TEXT'},{n:'current_workspace_id',fk:'workspaces',t:'TEXT'}
   ]},
   { name:'teams', cols:[
     {n:'id',pk:true,t:'TEXT'},{n:'name',t:'TEXT'},{n:'created_at',t:'TEXT'}
@@ -631,7 +699,7 @@ const SCHEMA = [
     {n:'id',pk:true,t:'TEXT'},{n:'team_id',fk:'teams',idx:true,t:'TEXT'},{n:'name',t:'TEXT'},{n:'created_at',t:'TEXT'}
   ]},
   { name:'team_members', cols:[
-    {n:'team_id',pk:true,fk:'teams',t:'TEXT'},{n:'user_id',pk:true,t:'TEXT'},{n:'role',t:'TEXT'},{n:'joined_at',t:'TEXT'}
+    {n:'team_id',pk:true,fk:'teams',t:'TEXT'},{n:'user_id',pk:true,fk:'user_sessions',t:'TEXT'},{n:'role',t:'TEXT'},{n:'joined_at',t:'TEXT'}
   ]},
   { name:'installation_permissions', cols:[
     {n:'id',pk:true,t:'INT'},{n:'installation_id',idx:true,t:'INT'},{n:'repo_name',idx:true,t:'TEXT'},
@@ -695,20 +763,29 @@ const SCHEMA = [
     {n:'detected_agent_name',t:'TEXT'},{n:'detected_agent_version',t:'TEXT'},
     {n:'detected_signal',t:'TEXT'},{n:'created_at',t:'TEXT'}
   ]},
+  { name:'ai_summary_link_access_log', cols:[
+    {n:'id',pk:true,t:'INT'},{n:'route',t:'TEXT'},{n:'request_id',fk:'ai_summary_log',idx:true,t:'TEXT'},
+    {n:'found',t:'INT'},{n:'issue_code',t:'TEXT'},{n:'issue_detail',t:'TEXT'},
+    {n:'referer',t:'TEXT'},{n:'user_agent',t:'TEXT'},{n:'created_at',idx:true,t:'TEXT'}
+  ]},
   { name:'repo_color_settings', cols:[
-    {n:'id',pk:true,t:'INT'},{n:'workspace_id',idx:true,t:'TEXT'},{n:'repo_name',idx:true,t:'TEXT'},
+    {n:'id',pk:true,t:'INT'},{n:'workspace_id',fk:'workspaces',idx:true,t:'TEXT'},{n:'repo_name',fk:'installation_permissions',idx:true,t:'TEXT'},
     {n:'color_code',t:'TEXT'},{n:'display_order',idx:true,t:'INT'},{n:'tags',t:'TEXT'},
     {n:'is_visible',t:'INT'},{n:'created_at',t:'TEXT'},{n:'updated_at',t:'TEXT'}
   ]},
   { name:'repo_groups', cols:[
-    {n:'id',pk:true,t:'TEXT'},{n:'workspace_id',idx:true,t:'TEXT'},{n:'name',t:'TEXT'},
+    {n:'id',pk:true,t:'TEXT'},{n:'workspace_id',fk:'workspaces',idx:true,t:'TEXT'},{n:'name',t:'TEXT'},
     {n:'description',t:'TEXT'},{n:'color_code',t:'TEXT'},{n:'icon',t:'TEXT'},
     {n:'slack_channel_id',t:'TEXT'},{n:'display_order',t:'INT'},
     {n:'created_at',t:'TEXT'},{n:'updated_at',t:'TEXT'}
   ]},
   { name:'repo_group_members', cols:[
-    {n:'group_id',pk:true,fk:'repo_groups',idx:true,t:'TEXT'},{n:'repo_name',pk:true,idx:true,t:'TEXT'},
-    {n:'workspace_id',t:'TEXT'},{n:'added_at',t:'TEXT'}
+    {n:'group_id',pk:true,fk:'repo_groups',idx:true,t:'TEXT'},{n:'repo_name',pk:true,fk:'installation_permissions',idx:true,t:'TEXT'},
+    {n:'workspace_id',fk:'workspaces',t:'TEXT'},{n:'added_at',t:'TEXT'}
+  ]},
+  { name:'group_oauth_apps', cols:[
+    {n:'group_id',pk:true,fk:'repo_groups',t:'TEXT'},{n:'app_name',pk:true,t:'TEXT'},
+    {n:'app_note',t:'TEXT'},{n:'workspace_id',fk:'workspaces',idx:true,t:'TEXT'},{n:'added_at',t:'TEXT'}
   ]},
   { name:'resend_webhook_sources', cols:[
     {n:'id',pk:true,t:'TEXT'},{n:'label',t:'TEXT'},{n:'resend_account_id',t:'TEXT'},
@@ -733,7 +810,7 @@ const SCHEMA = [
     {n:'suppressed_at',t:'TEXT'},{n:'resubscribed_at',t:'TEXT'}
   ]},
   { name:'email_mfa_challenges', cols:[
-    {n:'id',pk:true,t:'TEXT'},{n:'user_id',idx:true,t:'TEXT'},{n:'email',t:'TEXT'},
+    {n:'id',pk:true,t:'TEXT'},{n:'user_id',fk:'user_sessions',idx:true,t:'TEXT'},{n:'email',t:'TEXT'},
     {n:'source_id',fk:'resend_webhook_sources',t:'TEXT'},{n:'resend_email_id',idx:true,t:'TEXT'},
     {n:'code_hash',t:'TEXT'},{n:'code_type',t:'TEXT'},{n:'code_algorithm',t:'TEXT'},
     {n:'totp_period',t:'INT'},{n:'totp_counter',t:'INT'},{n:'purpose',t:'TEXT'},
@@ -742,7 +819,7 @@ const SCHEMA = [
   ]},
   { name:'email_audit_anomalies', cols:[
     {n:'id',pk:true,t:'INT'},{n:'period_start',idx:true,t:'TEXT'},{n:'period_end',idx:true,t:'TEXT'},
-    {n:'anomaly_type',idx:true,t:'TEXT'},{n:'severity',idx:true,t:'TEXT'},{n:'target_user_id',t:'TEXT'},
+    {n:'anomaly_type',idx:true,t:'TEXT'},{n:'severity',idx:true,t:'TEXT'},{n:'target_user_id',fk:'user_sessions',t:'TEXT'},
     {n:'target_email',t:'TEXT'},{n:'source_id',fk:'resend_webhook_sources',t:'TEXT'},
     {n:'metric_value',t:'REAL'},{n:'threshold_value',t:'REAL'},{n:'detail',t:'TEXT'},
     {n:'acknowledged_at',t:'TEXT'},{n:'acknowledged_by',t:'TEXT'},{n:'created_at',t:'TEXT'}
@@ -757,9 +834,11 @@ const SCHEMA = [
   ]}
 ];
 
-const RELATIONS = [
+let RELATIONS = [
   { from:'workspaces', fromCol:'team_id', to:'teams', toCol:'id' },
   { from:'team_members', fromCol:'team_id', to:'teams', toCol:'id' },
+  { from:'team_members', fromCol:'user_id', to:'user_sessions', toCol:'user_id' },
+  { from:'user_sessions', fromCol:'current_workspace_id', to:'workspaces', toCol:'id' },
   { from:'commit_calendar_cache', fromCol:'workspace_id', to:'workspaces', toCol:'id' },
   { from:'commit_list_cache', fromCol:'workspace_id', to:'workspaces', toCol:'id' },
   { from:'cache_stats', fromCol:'user_id', to:'user_sessions', toCol:'user_id' },
@@ -769,13 +848,24 @@ const RELATIONS = [
   { from:'commit_search_hit_details', fromCol:'search_history_id', to:'commit_search_history', toCol:'id' },
   { from:'ai_summary_reviews', fromCol:'summary_request_id', to:'ai_summary_log', toCol:'request_id' },
   { from:'commit_agent_log', fromCol:'request_id', to:'ai_summary_log', toCol:'request_id' },
+  { from:'ai_summary_link_access_log', fromCol:'request_id', to:'ai_summary_log', toCol:'id' },
+  { from:'repo_color_settings', fromCol:'workspace_id', to:'workspaces', toCol:'id' },
+  { from:'repo_color_settings', fromCol:'repo_name', to:'installation_permissions', toCol:'repo_name' },
+  { from:'repo_groups', fromCol:'workspace_id', to:'workspaces', toCol:'id' },
   { from:'repo_group_members', fromCol:'group_id', to:'repo_groups', toCol:'id' },
+  { from:'repo_group_members', fromCol:'workspace_id', to:'workspaces', toCol:'id' },
+  { from:'repo_group_members', fromCol:'repo_name', to:'installation_permissions', toCol:'repo_name' },
+  { from:'group_oauth_apps', fromCol:'group_id', to:'repo_groups', toCol:'id' },
+  { from:'group_oauth_apps', fromCol:'workspace_id', to:'workspaces', toCol:'id' },
   { from:'email_send_log', fromCol:'source_id', to:'resend_webhook_sources', toCol:'id' },
   { from:'resend_webhook_log', fromCol:'source_id', to:'resend_webhook_sources', toCol:'id' },
   { from:'email_suppression_list', fromCol:'source_id', to:'resend_webhook_sources', toCol:'id' },
   { from:'email_suppression_list', fromCol:'origin_webhook_log_id', to:'resend_webhook_log', toCol:'id' },
   { from:'email_mfa_challenges', fromCol:'source_id', to:'resend_webhook_sources', toCol:'id' },
-  { from:'email_audit_anomalies', fromCol:'source_id', to:'resend_webhook_sources', toCol:'id' }
+  { from:'email_mfa_challenges', fromCol:'user_id', to:'user_sessions', toCol:'user_id' },
+  { from:'email_audit_anomalies', fromCol:'source_id', to:'resend_webhook_sources', toCol:'id' },
+  { from:'email_audit_anomalies', fromCol:'target_user_id', to:'user_sessions', toCol:'user_id' },
+  { from:'table_column_keys', fromCol:'table_name', to:'table_catalog', toCol:'table_name' }
 ];
 
 const DEFAULT_POSITIONS = {
@@ -796,11 +886,13 @@ const DEFAULT_POSITIONS = {
   "ai_summary_log":             { "x": 1100, "y": 40 },
   "ai_summary_reviews":         { "x": 1100, "y": 500 },
   "commit_agent_log":           { "x": 1100, "y": 760 },
+  "ai_summary_link_access_log": { "x": 1380, "y": 760 },
 
   "installation_permissions":   { "x": 1380, "y": 40 },
   "repo_color_settings":        { "x": 1380, "y": 260 },
   "repo_groups":                { "x": 1380, "y": 510 },
   "repo_group_members":         { "x": 1640, "y": 510 },
+  "group_oauth_apps":           { "x": 1640, "y": 720 },
 
   "resend_webhook_sources":     { "x": 1640, "y": 40 },
   "email_send_log":             { "x": 1900, "y": 40 },
@@ -816,13 +908,10 @@ let currentScale = 1;
 let currentTx = 0;
 let currentTy = 0;
 
-function init() {
-  const saved = localStorage.getItem('er-positions-oauth1');
-  positions = saved ? JSON.parse(saved) : JSON.parse(JSON.stringify(DEFAULT_POSITIONS));
-
+function renderTables(schema) {
   const canvas = document.getElementById('canvas');
-
-  for (const table of SCHEMA) {
+  const tapEnabled = isHeaderTapEnabled();
+  for (const table of schema) {
     const el = createTableElement(table);
     canvas.appendChild(el);
     tableElements[table.name] = el;
@@ -830,10 +919,52 @@ function init() {
     positions[table.name] = pos;
     el.style.left = pos.x + 'px';
     el.style.top = pos.y + 'px';
+    if (!tapEnabled) {
+      const h = el.querySelector('.er-table-header');
+      if (h) { h.style.cursor = 'grab'; h.style.filter = ''; }
+    }
     makeDraggable(el, table.name);
   }
-
   drawRelations();
+}
+
+function adaptApiData(apiData) {
+  const fkColSet = new Set();
+  for (const rel of apiData.relations) {
+    fkColSet.add(rel[0] + '.' + rel[1]);
+  }
+  const schema = apiData.tables.map(t => ({
+    name: t.name,
+    cols: t.cols.map(col => {
+      const c = { n: col.name, t: col.type };
+      if (col.keys.includes('pk')) c.pk = true;
+      if (col.keys.includes('fk') || fkColSet.has(t.name + '.' + col.name)) c.fk = true;
+      if (col.keys.includes('uk')) c.uk = true;
+      if (col.keys.includes('idx') && !col.keys.includes('pk') && !col.keys.includes('uk')) c.idx = true;
+      return c;
+    })
+  }));
+  const relations = apiData.relations.map(rel => ({
+    from: rel[0], fromCol: rel[1], to: rel[2], toCol: rel[3]
+  }));
+  return { schema, relations };
+}
+
+function init() {
+  const saved = localStorage.getItem('er-positions-oauth1');
+  positions = saved ? JSON.parse(saved) : JSON.parse(JSON.stringify(DEFAULT_POSITIONS));
+
+  fetch('/api/status/schema')
+    .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
+    .then(apiData => {
+      if (apiData.tables && apiData.relations) {
+        const adapted = adaptApiData(apiData);
+        SCHEMA = adapted.schema;
+        RELATIONS = adapted.relations;
+      }
+      renderTables(SCHEMA);
+    })
+    .catch(() => renderTables(SCHEMA));
 }
 
 function createTableElement(table) {
@@ -868,6 +999,90 @@ function createTableElement(table) {
   return el;
 }
 
+function escapeHtmlForTd(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function closeTdModal() {
+  const m = document.getElementById('tdModal');
+  if (m) m.classList.remove('show');
+}
+
+function isHeaderTapEnabled() {
+  var m = document.cookie.match('(^|;)\\s*er_header_tap_mode=([^;]*)');
+  var val = m ? decodeURIComponent(m[2]) : 'on';
+  return val !== 'off';
+}
+
+function showTableDataModal(tableName) {
+  if (!isHeaderTapEnabled()) return;
+
+  const overlay = document.getElementById('tdModal');
+  const titleEl = document.getElementById('tdModalTitle');
+  const subEl = document.getElementById('tdModalSub');
+  const bodyEl = document.getElementById('tdModalBody');
+  if (!overlay || !titleEl || !bodyEl) return;
+
+  titleEl.textContent = tableName + ' の保存データ';
+  if (subEl) subEl.textContent = '';
+  bodyEl.innerHTML = '<div class="td-modal-empty">最新20件を取得しています...</div>';
+  overlay.classList.add('show');
+
+  fetch('/api/status/tables/' + encodeURIComponent(tableName) + '/rows')
+    .then(function(res) {
+      if (res.status === 401 || res.status === 403) throw Object.assign(new Error('auth'), { isAuth: true });
+      return res.json();
+    })
+    .then(function(data) {
+      if (subEl) {
+        var sub = data.description || '';
+        if (data.migration) sub += (sub ? ' / ' : '') + 'マイグレーション ' + data.migration;
+        subEl.textContent = sub;
+      }
+      var columns = data.columns || [];
+      var rows = data.rows || [];
+      var limit = data.limit || 20;
+      var keyInfo = data.columnKeyInfo || {};
+      if (rows.length === 0) {
+        bodyEl.innerHTML = '<div class="td-modal-empty">表示できる保存データがありません</div>';
+        return;
+      }
+      var badgeTypes = ['pk', 'fk', 'uk', 'idx'];
+      var headerHtml = columns.map(function(col) {
+        var kt = keyInfo[col];
+        var badges = '';
+        if (kt) {
+          var parts = kt.indexOf('+') !== -1 ? kt.split('+') : [kt];
+          parts.forEach(function(p) {
+            if (badgeTypes.indexOf(p) !== -1) badges += '<span class="td-badge ' + p + '">' + p.toUpperCase() + '</span>';
+          });
+        }
+        return '<th>' + escapeHtmlForTd(col) + badges + '</th>';
+      }).join('');
+      var bodyHtml = rows.map(function(row) {
+        return '<tr>' + columns.map(function(col) {
+          var v = row[col];
+          return '<td>' + escapeHtmlForTd(v == null ? 'NULL' : v) + '</td>';
+        }).join('') + '</tr>';
+      }).join('');
+      bodyEl.innerHTML = '<div class="td-modal-note">最新 ' + limit + ' 件を表示しています</div>'
+        + '<div style="overflow-x:auto"><table class="td-preview-table"><thead><tr>'
+        + headerHtml + '</tr></thead><tbody>' + bodyHtml + '</tbody></table></div>';
+    })
+    .catch(function(err) {
+      if (err && err.isAuth) {
+        bodyEl.innerHTML = '<div class="td-modal-empty">ログインが必要です。'
+          + '<a href="/status" style="color:var(--accent)">キャッシュ状況ページ</a>からログインするとデータを確認できます。'
+          + '<br><span style="font-size:11px;color:var(--text-muted)">（ヘッダータップ機能を無効にするには<a href="/settings" style="color:var(--accent)">設定ページ</a>の「ER図テーブルヘッダータップ」をOFFにしてください）</span>'
+          + '</div>';
+      } else {
+        bodyEl.innerHTML = '<div class="td-modal-empty">データの取得に失敗しました</div>';
+      }
+    });
+}
+
 function makeDraggable(el, tableName) {
   el.addEventListener('pointerdown', (e) => {
     if (e.button !== 0) return;
@@ -879,11 +1094,14 @@ function makeDraggable(el, tableName) {
     const startY = e.clientY;
     const origX = positions[tableName].x;
     const origY = positions[tableName].y;
+    const isHeader = !!e.target.closest('.er-table-header');
+    let hasMoved = false;
 
     function onMove(e2) {
       e2.preventDefault();
       const dx = (e2.clientX - startX) / (currentScale || 1);
       const dy = (e2.clientY - startY) / (currentScale || 1);
+      if (Math.abs(e2.clientX - startX) > 4 || Math.abs(e2.clientY - startY) > 4) hasMoved = true;
       const newX = Math.max(0, origX + dx);
       const newY = Math.max(0, origY + dy);
       positions[tableName].x = newX;
@@ -899,6 +1117,7 @@ function makeDraggable(el, tableName) {
       el.removeEventListener('pointermove', onMove);
       el.removeEventListener('pointerup', onUp);
       localStorage.setItem('er-positions-oauth1', JSON.stringify(positions));
+      if (isHeader && !hasMoved) showTableDataModal(tableName);
     }
 
     el.addEventListener('pointermove', onMove);
@@ -1057,6 +1276,7 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
     closeExportModal();
     closeImportModal();
+    closeTdModal();
   }
 });
 

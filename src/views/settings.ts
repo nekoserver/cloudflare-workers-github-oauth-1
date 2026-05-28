@@ -381,6 +381,19 @@ export function getSettingsPage(user: {
               </label>
             </div>
           </div>
+          <div class="info-item">
+            <span class="info-label">ER図テーブルヘッダーをタップしてデータプレビューを表示する</span>
+            <div class="setting-control" style="justify-content: flex-end;">
+              <span class="theme-label" id="erHeaderTapLabel">ON</span>
+              <label class="theme-toggle-switch">
+                <input type="checkbox" id="erHeaderTapCheckbox" onchange="onErHeaderTapChange()">
+                <span class="theme-toggle-slider"></span>
+              </label>
+            </div>
+          </div>
+          <div class="info-item" id="erHeaderTapNoteItem" style="display:none">
+            <span class="info-label" style="color:var(--text-muted);font-size:12px">※ OFFにするとER図のテーブルヘッダーをタップしてもデータモーダルが開きません。ONの場合はログイン済みの場合のみデータを取得できます（未ログイン時はメッセージを表示）。</span>
+          </div>
           <div class="info-item disabled" id="statusCommitCacheSortModeItem">
             <span class="info-label">月別コミットキャッシュ詳細の並び替え</span>
             <div class="setting-control">
@@ -422,6 +435,16 @@ export function getSettingsPage(user: {
               <label class="theme-toggle-switch">
                 <input type="checkbox" id="statusIgnoreUnknownUnclassifiedWarningCheckbox" onchange="onStatusIgnoreUnknownUnclassifiedWarningChange()"
                   ${currentStatusIgnoreUnknownUnclassifiedWarning === 'on' ? 'checked' : ''}>
+                <span class="theme-toggle-slider"></span>
+              </label>
+            </div>
+          </div>
+          <div class="info-item">
+            <span class="info-label">検索履歴モーダルのインクリメントサーチ既定値</span>
+            <div class="setting-control" style="justify-content: flex-end;">
+              <span class="theme-label" id="historyIncrSearchLabel">OFF</span>
+              <label class="theme-toggle-switch">
+                <input type="checkbox" id="historyIncrSearchCheckbox" onchange="onHistoryIncrSearchChange()">
                 <span class="theme-toggle-slider"></span>
               </label>
             </div>
@@ -580,6 +603,26 @@ export function getSettingsPage(user: {
       document.cookie = 'er_legend_visible=' + (enabled ? 'on' : 'off') + '; Path=/; Secure; SameSite=Lax; Max-Age=31536000';
     }
 
+    // ER図ヘッダータップ設定の初期化
+    (function() {
+      var m = document.cookie.match('(^|;)\\\\s*er_header_tap_mode=([^;]*)');
+      var val = m ? decodeURIComponent(m[2]) : 'on';
+      var cb = document.getElementById('erHeaderTapCheckbox');
+      var label = document.getElementById('erHeaderTapLabel');
+      var note = document.getElementById('erHeaderTapNoteItem');
+      if (cb) cb.checked = (val !== 'off');
+      if (label) label.textContent = (val !== 'off') ? 'ON' : 'OFF';
+      if (note) note.style.display = 'block';
+    })();
+
+    function onErHeaderTapChange() {
+      var cb = document.getElementById('erHeaderTapCheckbox');
+      var label = document.getElementById('erHeaderTapLabel');
+      var enabled = cb.checked;
+      label.textContent = enabled ? 'ON' : 'OFF';
+      document.cookie = 'er_header_tap_mode=' + (enabled ? 'on' : 'off') + '; Path=/; Secure; SameSite=Lax; Max-Age=31536000';
+    }
+
     // コミット履歴フィルタ既定値の初期化
     (function() {
       var m = document.cookie.match('(^|;)\\\\s*commit_history_merge_filter=([^;]*)');
@@ -592,6 +635,24 @@ export function getSettingsPage(user: {
       var sel = document.getElementById('commitHistoryMergeFilterSelect');
       if (!sel) return;
       document.cookie = 'commit_history_merge_filter=' + encodeURIComponent(sel.value) + '; Path=/; SameSite=Lax; Max-Age=31536000';
+    }
+
+    // 検索履歴インクリメントサーチ既定値の初期化
+    (function() {
+      var m = document.cookie.match('(^|;)\\\\s*history_incr_search=([^;]*)');
+      var val = m ? decodeURIComponent(m[2]) : 'off';
+      var cb = document.getElementById('historyIncrSearchCheckbox');
+      var label = document.getElementById('historyIncrSearchLabel');
+      if (cb) cb.checked = (val === 'on');
+      if (label) label.textContent = (val === 'on') ? 'ON' : 'OFF';
+    })();
+
+    function onHistoryIncrSearchChange() {
+      var cb = document.getElementById('historyIncrSearchCheckbox');
+      var label = document.getElementById('historyIncrSearchLabel');
+      var enabled = cb.checked;
+      label.textContent = enabled ? 'ON' : 'OFF';
+      document.cookie = 'history_incr_search=' + (enabled ? 'on' : 'off') + '; Path=/; SameSite=Lax; Max-Age=31536000';
     }
 
     function onThemeSettingChange() {

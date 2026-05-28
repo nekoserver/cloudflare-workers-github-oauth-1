@@ -758,6 +758,34 @@ export function getCacheStatusPage(user: {
       border-radius: 16px; box-shadow: 0 24px 80px rgba(0, 0, 0, 0.25);
       overflow: hidden; display: flex; flex-direction: column;
     }
+    .ym-calendar-card {
+      width: min(760px, 100%); background: var(--card-bg);
+      border: 1px solid var(--border-color); border-radius: 16px;
+      box-shadow: 0 24px 80px rgba(0, 0, 0, 0.25);
+      overflow: hidden; display: flex; flex-direction: column;
+    }
+    .ym-cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+    .ym-cal-day-header { text-align: center; font-size: 11px; font-weight: 600; color: var(--text-muted); padding: 4px 0; }
+    .ym-cal-day-header.sun { color: #e53e3e; }
+    .ym-cal-day-header.sat { color: #3182ce; }
+    .ym-cal-cell { min-height: 52px; border-radius: 6px; padding: 4px 6px; font-size: 11px; border: 1px solid var(--border-color); background: var(--bg-secondary); display: flex; flex-direction: column; gap: 2px; }
+    .ym-cal-cell.empty { background: transparent; border-color: transparent; }
+    .ym-cal-cell-date { font-weight: 600; color: var(--text-secondary); font-size: 12px; }
+    .ym-cal-cell-date.sun { color: #e53e3e; }
+    .ym-cal-cell-date.sat { color: #3182ce; }
+    .ym-cal-cell-count { font-size: 11px; font-weight: 700; text-align: center; border-radius: 4px; padding: 1px 4px; }
+    .ym-cal-cell.heat0 { background: var(--bg-secondary); }
+    .ym-cal-cell.heat1 { background: #d6f5d6; border-color: #9be9a8; }
+    .ym-cal-cell.heat2 { background: #9be9a8; border-color: #40c463; }
+    .ym-cal-cell.heat3 { background: #40c463; border-color: #30a14e; }
+    .ym-cal-cell.heat4 { background: #216e39; border-color: #1a5b30; }
+    .ym-cal-cell.heat1 .ym-cal-cell-count { color: #1a6321; }
+    .ym-cal-cell.heat2 .ym-cal-cell-count { color: #0d4a16; }
+    .ym-cal-cell.heat3 .ym-cal-cell-count { color: #fff; }
+    .ym-cal-cell.heat4 .ym-cal-cell-count { color: #fff; }
+    .ym-select-section { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border-color); display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .ym-select-label { font-size: 12px; font-weight: 600; color: var(--text-secondary); white-space: nowrap; }
+    .ym-select { font-size: 13px; padding: 4px 8px; border: 1px solid var(--border-color); border-radius: 4px; background: var(--card-bg); color: var(--text-primary); cursor: pointer; }
     .modal-header {
       display: flex; align-items: flex-start; justify-content: space-between; gap: 16px;
       padding: 20px 24px; border-bottom: 1px solid var(--border-color);
@@ -1206,7 +1234,9 @@ export function getCacheStatusPage(user: {
       background: #8b949e;
       color: white; padding: 8px 12px; font-weight: 700; font-size: 13px;
       display: flex; align-items: center; gap: 6px;
+      cursor: pointer; user-select: none;
     }
+    .uml-table-card .uml-table-header:hover { filter: brightness(1.15); }
     .uml-modal-card, .filtered-uml-modal-card { position: relative; }
     .uml-group-legend-wrap {
       position: absolute; bottom: 56px; left: 16px; z-index: 30;
@@ -1971,6 +2001,19 @@ export function getCacheStatusPage(user: {
     </div>
   </div>
 
+  <div class="modal-backdrop" id="ymCalendarModal" aria-hidden="true" style="z-index:4000">
+    <div class="ym-calendar-card" role="dialog" aria-modal="true" aria-labelledby="ymCalendarTitle">
+      <div class="modal-header">
+        <div class="modal-title-wrap">
+          <div class="modal-title" id="ymCalendarTitle">カレンダー</div>
+          <div class="modal-subtitle" id="ymCalendarSubtitle"></div>
+        </div>
+        <button type="button" class="modal-close" id="ymCalendarClose" aria-label="閉じる">&times;</button>
+      </div>
+      <div class="modal-body" id="ymCalendarBody" style="padding:16px"></div>
+    </div>
+  </div>
+
   <div class="modal-backdrop" id="repoGroupModal" aria-hidden="true">
     <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="repoGroupModalTitle" style="max-width:640px;">
       <div class="modal-header">
@@ -2400,9 +2443,11 @@ export function getCacheStatusPage(user: {
       var elements = getStatusModalElements();
       if (!elements.modal || !elements.title || !elements.subtitle || !elements.body) return;
       elements.title.textContent = title;
+      elements.title.removeAttribute('style');
       elements.subtitle.textContent = subtitle || '';
       elements.body.className = 'modal-body' + (bodyClassName ? ' ' + bodyClassName : '');
       elements.body.innerHTML = bodyHtml;
+      elements.modal.style.zIndex = '3000';
       elements.modal.classList.add('show');
       elements.modal.setAttribute('aria-hidden', 'false');
       document.body.style.overflow = 'hidden';
@@ -2413,6 +2458,7 @@ export function getCacheStatusPage(user: {
       if (!elements.modal) return;
       elements.modal.classList.remove('show');
       elements.modal.setAttribute('aria-hidden', 'true');
+      elements.modal.style.zIndex = '';
       document.body.style.overflow = '';
     }
 
@@ -2794,6 +2840,14 @@ export function getCacheStatusPage(user: {
             + ' <select class="th-filter-select" data-filter-column="' + escapeHtmlText(column) + '" style="font-size:10px;padding:1px 2px;border-radius:3px;border:1px solid #888;background:transparent;color:inherit;cursor:pointer;max-width:80px">'
             + optionsHtml + '</select></th>';
         }
+        if (column === 'last_updated_at') {
+          var ymThSelectId = 'ym-th-select-' + tableName.replace(/[^a-zA-Z0-9_]/g, '');
+          return '<th>' + escapeHtmlText(column) + badge
+            + ' <select id="' + escapeHtmlText(ymThSelectId) + '"'
+            + ' style="font-size:10px;padding:1px 2px;border-radius:3px;border:1px solid #888;background:transparent;color:inherit;cursor:pointer;max-width:100px">'
+            + '<option value="">読み込み中...</option>'
+            + '</select></th>';
+        }
         return '<th>' + escapeHtmlText(column) + badge + '</th>';
       }).join('');
       var bodyHtml = rows.map(function(row, idx) {
@@ -2944,25 +2998,38 @@ export function getCacheStatusPage(user: {
       }
     }
 
+    function applyTableGroupColorToModalTitle(tableName) {
+      var titleEl = document.getElementById('statusDetailTitle');
+      if (!titleEl) return;
+      applyUmlHeaderColor(titleEl, tableName);
+      titleEl.style.color = 'white';
+      titleEl.style.padding = '2px 10px';
+      titleEl.style.borderRadius = '5px';
+      titleEl.style.display = 'inline-block';
+    }
+
     async function openTablePreview(tableName) {
       var title = tableName + ' の保存データ';
       showStatusModalLoading(title, '最新 20 件を取得しています');
+      applyTableGroupColorToModalTitle(tableName);
       try {
         var response = await fetch('/api/status/tables/' + encodeURIComponent(tableName) + '/rows');
         if (!response.ok) {
           throw new Error('table preview request failed');
         }
         var data = await response.json();
+        var columns = data.columns || [];
         var groupErButton = '<div style="margin-bottom:8px">'
           + '<button type="button" data-group-er-table="' + escapeHtmlText(tableName) + '" '
           + 'style="font-size:12px;padding:4px 12px;border:1px solid #666;border-radius:4px;background:transparent;color:inherit;cursor:pointer">'
           + 'このテーブルが属するグループのテーブル構造を確認する</button></div>';
-        var previewHtml = renderStatusTablePreview(data.columns || [], data.rows || [], data.limit || 20, tableName, data.columnKeyInfo || {}, data.filterableColumns || []);
+        var previewHtml = renderStatusTablePreview(columns, data.rows || [], data.limit || 20, tableName, data.columnKeyInfo || {}, data.filterableColumns || []);
         openStatusModal(
           tableName + ' の保存データ',
           (data.description || '') + (data.migration ? ' / マイグレーション ' + data.migration : ''),
           groupErButton + previewHtml
         );
+        applyTableGroupColorToModalTitle(tableName);
         var tableId = 'preview-table-' + tableName.replace(/[^a-zA-Z0-9_]/g, '');
         bindFilterSelects(tableId);
         var erBtn = document.querySelector('[data-group-er-table]');
@@ -2971,9 +3038,109 @@ export function getCacheStatusPage(user: {
             openGroupEr(tableName);
           });
         }
+        loadYmSelect(tableName);
       } catch (_error) {
         showStatusModalError(title, '', '保存データの取得に失敗しました');
+        applyTableGroupColorToModalTitle(tableName);
       }
+    }
+
+    async function loadYmSelect(tableName) {
+      var thSelectId = 'ym-th-select-' + tableName.replace(/[^a-zA-Z0-9_]/g, '');
+      try {
+        var res = await fetch('/api/status/tables/' + encodeURIComponent(tableName) + '/ym-summary');
+        if (!res.ok) throw new Error('ym-summary fetch failed');
+        var ymData = await res.json();
+        var ymList = ymData.ym || [];
+        var thSel = document.getElementById(thSelectId);
+        if (!thSel) return;
+        if (ymList.length === 0) {
+          thSel.parentNode && thSel.parentNode.removeChild(thSel);
+          return;
+        }
+        thSel.innerHTML = '<option value="">-- 月を選択 --</option>'
+          + ymList.map(function(item) {
+            return '<option value="' + escapeHtmlText(item.ym) + '">'
+              + escapeHtmlText(String(item.cnt)) + '件 ' + escapeHtmlText(item.ym)
+              + '</option>';
+          }).join('');
+        thSel.addEventListener('change', function() {
+          if (thSel.value) openYmCalendarModal(tableName, thSel.value);
+        });
+      } catch (_e) {
+        var thSel = document.getElementById(thSelectId);
+        if (thSel && thSel.parentNode) thSel.parentNode.removeChild(thSel);
+      }
+    }
+
+    async function openYmCalendarModal(tableName, ym) {
+      var calModal = document.getElementById('ymCalendarModal');
+      var calTitle = document.getElementById('ymCalendarTitle');
+      var calSubtitle = document.getElementById('ymCalendarSubtitle');
+      var calBody = document.getElementById('ymCalendarBody');
+      if (!calModal || !calTitle || !calBody) return;
+      calTitle.textContent = ym + ' カレンダー';
+      if (calSubtitle) calSubtitle.textContent = tableName + ' の last_updated_at 日別件数';
+      if (calBody) calBody.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-muted)">読み込み中...</div>';
+      calModal.classList.add('show');
+      calModal.setAttribute('aria-hidden', 'false');
+      try {
+        var res = await fetch('/api/status/tables/' + encodeURIComponent(tableName) + '/calendar?ym=' + encodeURIComponent(ym));
+        if (!res.ok) throw new Error('calendar fetch failed');
+        var calData = await res.json();
+        if (calBody) calBody.innerHTML = renderYmCalendar(ym, calData.days || []);
+      } catch (_e) {
+        if (calBody) calBody.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-muted)">カレンダーデータの取得に失敗しました</div>';
+      }
+    }
+
+    function renderYmCalendar(ym, days) {
+      var parts = ym.split('-');
+      var year = parseInt(parts[0], 10);
+      var month = parseInt(parts[1], 10);
+      var daysInMonth = new Date(year, month, 0).getDate();
+      var firstDow = new Date(year, month - 1, 1).getDay();
+
+      var dayCountMap = {};
+      for (var i = 0; i < days.length; i++) {
+        dayCountMap[parseInt(days[i].day, 10)] = days[i].cnt;
+      }
+      var maxCount = 0;
+      for (var d in dayCountMap) {
+        if (dayCountMap[d] > maxCount) maxCount = dayCountMap[d];
+      }
+
+      function heatLevel(cnt) {
+        if (!cnt || cnt === 0) return 0;
+        if (maxCount <= 0) return 1;
+        var ratio = cnt / maxCount;
+        if (ratio <= 0.25) return 1;
+        if (ratio <= 0.5) return 2;
+        if (ratio <= 0.75) return 3;
+        return 4;
+      }
+
+      var dayHeaders = ['日', '月', '火', '水', '木', '金', '土'];
+      var html = '<div class="ym-cal-grid">';
+      for (var h = 0; h < 7; h++) {
+        var hClass = h === 0 ? 'sun' : (h === 6 ? 'sat' : '');
+        html += '<div class="ym-cal-day-header ' + hClass + '">' + dayHeaders[h] + '</div>';
+      }
+      for (var pre = 0; pre < firstDow; pre++) {
+        html += '<div class="ym-cal-cell empty"></div>';
+      }
+      for (var day = 1; day <= daysInMonth; day++) {
+        var dow = (firstDow + day - 1) % 7;
+        var cnt = dayCountMap[day] || 0;
+        var level = heatLevel(cnt);
+        var dateClass = dow === 0 ? 'sun' : (dow === 6 ? 'sat' : '');
+        html += '<div class="ym-cal-cell heat' + level + '">'
+          + '<div class="ym-cal-cell-date ' + dateClass + '">' + day + '</div>'
+          + (cnt > 0 ? '<div class="ym-cal-cell-count">' + cnt + '</div>' : '')
+          + '</div>';
+      }
+      html += '</div>';
+      return html;
     }
 
     async function openMigrationSql(migration, tableName) {
@@ -3200,9 +3367,29 @@ export function getCacheStatusPage(user: {
       }
       document.addEventListener('keydown', function(event) {
         if (event.key === 'Escape') {
+          var calMod = document.getElementById('ymCalendarModal');
+          if (calMod && calMod.classList.contains('show')) {
+            calMod.classList.remove('show');
+            calMod.setAttribute('aria-hidden', 'true');
+            return;
+          }
           closeStatusModal();
         }
       });
+      (function() {
+        var calModal = document.getElementById('ymCalendarModal');
+        var calClose = document.getElementById('ymCalendarClose');
+        if (calClose) {
+          calClose.addEventListener('click', function() {
+            if (calModal) { calModal.classList.remove('show'); calModal.setAttribute('aria-hidden', 'true'); }
+          });
+        }
+        if (calModal) {
+          calModal.addEventListener('click', function(e) {
+            if (e.target === calModal) { calModal.classList.remove('show'); calModal.setAttribute('aria-hidden', 'true'); }
+          });
+        }
+      })();
       if (statusTablesTable) {
         statusTablesTable.addEventListener('click', function(event) {
           var target = event.target;
@@ -4003,6 +4190,16 @@ export function getCacheStatusPage(user: {
           header.className = 'uml-table-header';
           header.textContent = tbl.name;
           applyUmlHeaderColor(header, tbl.name);
+          header.addEventListener('mouseup', function(e) {
+            if (hasDragged) return;
+            var parentCard = e.currentTarget.parentElement;
+            if (!parentCard) return;
+            var hName = parentCard.getAttribute('data-uml-table');
+            if (!hName) return;
+            var tapM = document.cookie.match('(^|;)\\s*er_header_tap_mode=([^;]*)');
+            var tapMode = tapM ? decodeURIComponent(tapM[2]) : 'on';
+            if (tapMode !== 'off') openTablePreview(hName);
+          });
           card.appendChild(header);
 
           var body = document.createElement('div');
@@ -4136,6 +4333,10 @@ export function getCacheStatusPage(user: {
         var dragTarget = null;
         var dragOffsetX = 0;
         var dragOffsetY = 0;
+        var dragStartX = 0;
+        var dragStartY = 0;
+        var dragStartIsHeader = false;
+        var hasDragged = false;
 
         function clientToContainer(clientX, clientY) {
           var wrapperRect = umlWrapper.getBoundingClientRect();
@@ -4151,14 +4352,22 @@ export function getCacheStatusPage(user: {
           var tName = card.getAttribute('data-uml-table');
           if (!tName || !cardRects[tName]) return;
           dragTarget = tName;
+          dragStartX = e.clientX;
+          dragStartY = e.clientY;
+          dragStartIsHeader = !!e.target.closest('.uml-table-header');
+          hasDragged = false;
           var pos = clientToContainer(e.clientX, e.clientY);
           dragOffsetX = pos.x - cardRects[tName].x;
           dragOffsetY = pos.y - cardRects[tName].y;
-          e.preventDefault();
         });
+
+        container.addEventListener('dragstart', function(e) { e.preventDefault(); });
 
         document.addEventListener('mousemove', function(e) {
           if (!dragTarget) return;
+          var dx = e.clientX - dragStartX;
+          var dy = e.clientY - dragStartY;
+          if (Math.sqrt(dx * dx + dy * dy) > 4) hasDragged = true;
           var rect = cardRects[dragTarget];
           var pos = clientToContainer(e.clientX, e.clientY);
           rect.x = pos.x - dragOffsetX;
@@ -4240,12 +4449,16 @@ export function getCacheStatusPage(user: {
           }
           if (e.touches.length !== 1) return;
           var touch = e.touches[0];
-          var card = document.elementFromPoint(touch.clientX, touch.clientY);
-          if (card) card = card.closest('[data-uml-table]');
+          var el = document.elementFromPoint(touch.clientX, touch.clientY);
+          var card = el ? el.closest('[data-uml-table]') : null;
           if (!card) return;
           var tName = card.getAttribute('data-uml-table');
           if (!tName || !cardRects[tName]) return;
           dragTarget = tName;
+          dragStartX = touch.clientX;
+          dragStartY = touch.clientY;
+          dragStartIsHeader = !!(el && el.closest('.uml-table-header'));
+          hasDragged = false;
           var pos = clientToContainer(touch.clientX, touch.clientY);
           dragOffsetX = pos.x - cardRects[tName].x;
           dragOffsetY = pos.y - cardRects[tName].y;
@@ -4261,6 +4474,9 @@ export function getCacheStatusPage(user: {
           }
           if (!dragTarget) return;
           var touch = e.touches[0];
+          var dx = touch.clientX - dragStartX;
+          var dy = touch.clientY - dragStartY;
+          if (Math.sqrt(dx * dx + dy * dy) > 4) hasDragged = true;
           var rect = cardRects[dragTarget];
           var pos = clientToContainer(touch.clientX, touch.clientY);
           rect.x = pos.x - dragOffsetX;
@@ -4276,6 +4492,14 @@ export function getCacheStatusPage(user: {
 
         document.addEventListener('touchend', function(e) {
           if (e.touches.length < 2) pinchStartDist = 0;
+          if (dragTarget && dragStartIsHeader && !hasDragged) {
+            var tName = dragTarget;
+            dragTarget = null;
+            var tapM = document.cookie.match('(^|;)\\s*er_header_tap_mode=([^;]*)');
+            var tapMode = tapM ? decodeURIComponent(tapM[2]) : 'on';
+            if (tapMode !== 'off') openTablePreview(tName);
+            return;
+          }
           dragTarget = null;
         });
 
