@@ -1248,6 +1248,11 @@ function getStatusTablePreviewQuery(
         sql: `SELECT ck.*, tc.group_name FROM table_column_keys ck JOIN table_catalog tc ON tc.table_name = ck.table_name ORDER BY ck.table_name ASC, ck.column_name ASC LIMIT ${STATUS_TABLE_PREVIEW_LIMIT}`,
         params: [],
       };
+    case 'repo_commit_index':
+      return {
+        sql: `SELECT * FROM ${tableName} ORDER BY seq_num DESC LIMIT ${STATUS_TABLE_PREVIEW_LIMIT}`,
+        params: [],
+      };
     default:
       return null;
   }
@@ -1434,6 +1439,14 @@ ORDER BY created_at DESC
 LIMIT 20;`,
         params: [],
         note: 'Slack操作ログを新しい順で取得します。',
+      };
+    case 'repo_commit_index':
+      return {
+        sql: `SELECT * FROM repo_commit_index
+ORDER BY seq_num DESC
+LIMIT 20;`,
+        params: [],
+        note: 'コミットインデックスを通し番号の新しい順（最新コミット優先）で取得します。',
       };
     default:
       return null;
