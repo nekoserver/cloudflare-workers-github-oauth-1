@@ -884,6 +884,9 @@ export function getRepositoriesPage(user: {
     .history-grid-col tr.history-row-dimmed td { color: #bbb !important; }
     .history-incr-toggle { font-size:12px; padding:4px 10px; border-radius:6px; border:1px solid var(--border-color); background:var(--bg-secondary); color:var(--text-muted); cursor:pointer; white-space:nowrap; }
     .history-incr-toggle.active { background:var(--accent-color,#48bb78); color:#fff; border-color:var(--accent-color,#48bb78); }
+    .history-label-mode-toggle { font-size:12px; padding:4px 10px; border-radius:6px; border:1px solid var(--border-color); background:var(--bg-secondary); color:var(--text-muted); cursor:pointer; white-space:nowrap; transition:background .15s,color .15s,border-color .15s; }
+    .history-label-mode-toggle[data-mode="manual-modal"] { background:#ebf4ff; color:#2b6cb0; border-color:#90cdf4; }
+    .history-label-mode-toggle[data-mode="auto-classify"] { background:#f0fff4; color:#276749; border-color:#9ae6b4; }
     .history-label-filter { display:flex; gap:6px; padding:0 24px 10px; flex-wrap:wrap; flex-shrink:0; }
     .history-label-btn { font-size:11px; padding:3px 11px; border-radius:12px; border:1px solid var(--border-color); background:var(--bg-secondary); color:var(--text-muted); cursor:pointer; white-space:nowrap; transition:background 0.15s,color 0.15s,border-color 0.15s; }
     .history-label-btn:hover { border-color:var(--accent-color,#48bb78); color:var(--accent-color,#48bb78); }
@@ -1882,6 +1885,7 @@ export function getRepositoriesPage(user: {
         <input type="text" class="history-search-input" id="historySearchInput" placeholder="キーワードを入力して検索..." autocomplete="off" />
         <button class="history-search-btn" id="historySearchBtn" type="button">検索</button>
         <button class="history-incr-toggle" id="historyIncrSearchToggle" type="button">インクリメント: OFF</button>
+        <button class="history-label-mode-toggle" id="historyLabelModeToggle" type="button" data-mode="uncategorized">新キーワードの分類: 未分類</button>
         <span class="history-search-status" id="historySearchStatus"></span>
         <label class="history-repo-label" for="historyRepoSelect">対象リポジトリ:</label>
         <select id="historyRepoSelect" class="history-repo-select">
@@ -5019,7 +5023,10 @@ export function getRepositoriesPage(user: {
       }
 
       var selectedLabel = '';
-      var searchLabelMode = 'uncategorized';
+      var searchLabelMode = (function() {
+        var v = getCookie('user_search_label_mode');
+        return (v === 'manual-modal' || v === 'auto-classify') ? v : 'uncategorized';
+      }());
 
       function selectLabelFilter(label) {
         selectedLabel = label;
@@ -5469,6 +5476,24 @@ export function getRepositoriesPage(user: {
         });
       })();
 
+      (function() {
+        var btn = document.getElementById('historyLabelModeToggle');
+        if (!btn) return;
+        var MODES = ['uncategorized', 'manual-modal', 'auto-classify'];
+        var LABELS = { 'uncategorized': '未分類', 'manual-modal': '手動', 'auto-classify': 'AI' };
+        function applyMode(mode) {
+          searchLabelMode = mode;
+          btn.setAttribute('data-mode', mode);
+          btn.textContent = '新キーワードの分類: ' + LABELS[mode];
+          setCookie('user_search_label_mode', mode);
+        }
+        applyMode(searchLabelMode);
+        btn.addEventListener('click', function() {
+          var next = MODES[(MODES.indexOf(searchLabelMode) + 1) % MODES.length];
+          applyMode(next);
+        });
+      })();
+
       function populateRepoSelect(repos) {
         if (!hRepoSelect) return;
         var prev = hRepoSelect.value;
@@ -5507,7 +5532,6 @@ export function getRepositoriesPage(user: {
           currentItems = dedupeAndSort(data.history);
           syncFilterBarFromItems(currentItems);
           updateLabelBadgeCounts(currentItems);
-          if (data && data.searchLabelMode) searchLabelMode = data.searchLabelMode;
           refreshGrid(null, null);
           var pending = window.__pendingNewKeyword;
           window.__pendingNewKeyword = null;
