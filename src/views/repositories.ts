@@ -1433,6 +1433,17 @@ export function getRepositoriesPage(user: {
     .monthly-status-body .commit-history-empty {
       padding: 28px 0;
     }
+  .label-classify-modal{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:center;justify-content:center;}
+  .label-classify-content{background:var(--card-bg);border-radius:12px;padding:24px;max-width:420px;width:90%;}
+  .label-classify-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;}
+  .label-classify-title{font-weight:600;font-size:15px;color:var(--text-primary);}
+  .label-classify-query{font-size:13px;color:var(--text-muted);margin-bottom:16px;word-break:break-all;}
+  .label-classify-btns{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px;}
+  .label-classify-btn{padding:5px 13px;border-radius:12px;border:1px solid var(--border-color);background:var(--bg-secondary);color:var(--text-muted);cursor:pointer;font-size:12px;transition:background .15s,color .15s;}
+  .label-classify-btn:hover,.label-classify-btn.selected{background:var(--accent-color,#48bb78);color:#fff;border-color:var(--accent-color,#48bb78);}
+  .label-classify-input{width:100%;box-sizing:border-box;padding:8px 12px;border:1px solid var(--border-color);border-radius:6px;background:var(--bg-primary);color:var(--text-primary);font-size:13px;margin-bottom:4px;}
+  .label-classify-footer{display:flex;justify-content:flex-end;gap:8px;margin-top:16px;}
+  .label-classify-footer button{padding:7px 16px;border-radius:6px;font-size:13px;cursor:pointer;}
   </style>
 </head>
 <body>
@@ -1826,6 +1837,32 @@ export function getRepositoriesPage(user: {
         <button class="modal-close" id="commitSearchClose" type="button">&times;</button>
       </div>
       <div class="search-modal-body" id="commitSearchBody">
+      </div>
+    </div>
+  </div>
+
+  <!-- Label Classification Modal -->
+  <div class="label-classify-modal" id="labelClassifyModal" style="display:none;">
+    <div class="label-classify-content">
+      <div class="label-classify-header">
+        <span class="label-classify-title">新規キーワードのラベルを選択</span>
+        <button class="modal-close" id="labelClassifyClose" type="button">&times;</button>
+      </div>
+      <div class="label-classify-query" id="labelClassifyQuery"></div>
+      <div class="label-classify-btns" id="labelClassifyBtns">
+        <button class="label-classify-btn" data-label="feature">feature</button>
+        <button class="label-classify-btn" data-label="ui">ui</button>
+        <button class="label-classify-btn" data-label="tech">tech</button>
+        <button class="label-classify-btn" data-label="database">database</button>
+        <button class="label-classify-btn" data-label="bugfix">bugfix</button>
+        <button class="label-classify-btn" data-label="ops">ops</button>
+        <button class="label-classify-btn" data-label="uncategorized">未分類のまま</button>
+      </div>
+      <p style="font-size:12px;color:var(--text-muted);margin:0 0 6px;">または新しい分類を入力:</p>
+      <input type="text" id="labelClassifyInput" class="label-classify-input" placeholder="新しい分類名（例: security）" maxlength="32" />
+      <div class="label-classify-footer">
+        <button id="labelClassifySkip" style="border:1px solid var(--border-color);background:var(--bg-secondary);color:var(--text-muted);">スキップ</button>
+        <button id="labelClassifyConfirm" style="border:none;background:var(--accent-color,#48bb78);color:#fff;">確定</button>
       </div>
     </div>
   </div>
@@ -4765,6 +4802,9 @@ export function getRepositoriesPage(user: {
             }
             searchSubtitle.textContent = '「' + escapeForHtml(data.query) + '」— ' + data.total + ' 件のコミットが見つかりました';
             searchBody.innerHTML = renderSearchResults(data);
+            if (data.isNewKeyword && data.total > 0) {
+              window.__pendingNewKeyword = data.query;
+            }
             // 検索履歴セレクトをリロード
             if (typeof window.__reloadSearchHistory === 'function') window.__reloadSearchHistory();
           })
@@ -4924,6 +4964,79 @@ export function getRepositoriesPage(user: {
       }
 
       var selectedLabel = '';
+      var searchLabelMode = 'uncategorized';
+
+      function selectLabelFilter(label) {
+        selectedLabel = label;
+        if (historyLabelFilter) {
+          historyLabelFilter.querySelectorAll('.history-label-btn').forEach(function(b) {
+            b.classList.toggle('active', (b.getAttribute('data-label') || '') === label);
+          });
+        }
+        refreshGrid(null, null);
+      }
+
+      function showLabelClassificationModal(query) {
+        var modal = document.getElementById('labelClassifyModal');
+        var queryEl = document.getElementById('labelClassifyQuery');
+        var input = document.getElementById('labelClassifyInput');
+        if (!modal || !queryEl) return;
+        queryEl.textContent = '「' + query + '」';
+        if (input) input.value = '';
+        var selectedBtn = null;
+        modal.querySelectorAll('.label-classify-btn').forEach(function(b) { b.classList.remove('selected'); });
+        modal.style.display = 'flex';
+
+        function dismiss() { modal.style.display = 'none'; }
+
+        var closeBtn = document.getElementById('labelClassifyClose');
+        var skipBtn = document.getElementById('labelClassifySkip');
+        var confirmBtn = document.getElementById('labelClassifyConfirm');
+
+        if (closeBtn) closeBtn.onclick = dismiss;
+        if (skipBtn) skipBtn.onclick = dismiss;
+
+        modal.querySelectorAll('.label-classify-btn').forEach(function(btn) {
+          btn.onclick = function() {
+            modal.querySelectorAll('.label-classify-btn').forEach(function(b) { b.classList.remove('selected'); });
+            btn.classList.add('selected');
+            selectedBtn = btn.getAttribute('data-label');
+            if (input) input.value = '';
+          };
+        });
+
+        if (confirmBtn) {
+          confirmBtn.onclick = function() {
+            var label = (input && input.value.trim()) ? input.value.trim() : (selectedBtn || 'uncategorized');
+            dismiss();
+            fetch('/api/repositories/search/keyword-label', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              credentials: 'same-origin',
+              body: JSON.stringify({ search_query: query, label: label })
+            }).then(function(res) { return res.ok ? res.json() : Promise.reject(); })
+              .then(function() {
+                for (var i = 0; i < currentItems.length; i++) {
+                  if (currentItems[i].search_query === query) { currentItems[i].label = label; break; }
+                }
+                var existingLabels = Array.from(historyLabelFilter.querySelectorAll('.history-label-btn')).map(function(b) { return b.getAttribute('data-label'); });
+                if (label !== 'uncategorized' && !existingLabels.includes(label)) {
+                  var newBtn = document.createElement('button');
+                  newBtn.className = 'history-label-btn';
+                  newBtn.setAttribute('data-label', label);
+                  newBtn.textContent = label;
+                  var uncatBtn = historyLabelFilter.querySelector('[data-label="uncategorized"]');
+                  if (uncatBtn) historyLabelFilter.insertBefore(newBtn, uncatBtn);
+                  else historyLabelFilter.appendChild(newBtn);
+                }
+                selectLabelFilter(label);
+              })
+              .catch(function() {
+                console.warn('ラベルの保存に失敗しました');
+              });
+          };
+        }
+      }
 
       if (historyLabelFilter) {
         historyLabelFilter.addEventListener('click', function(e) {
@@ -5292,7 +5405,15 @@ export function getRepositoriesPage(user: {
             return;
           }
           currentItems = dedupeAndSort(data.history);
+          if (data && data.searchLabelMode) searchLabelMode = data.searchLabelMode;
           refreshGrid(null, null);
+          var pending = window.__pendingNewKeyword;
+          window.__pendingNewKeyword = null;
+          if (pending && searchLabelMode === 'manual-modal') {
+            showLabelClassificationModal(pending);
+          } else if (pending && searchLabelMode === 'uncategorized') {
+            selectLabelFilter('uncategorized');
+          }
         }).catch(function() {
           currentItems = [];
           historyModalBody.innerHTML = '<div class="search-empty">読み込みに失敗しました。</div>';

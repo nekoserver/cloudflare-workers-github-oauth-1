@@ -21,6 +21,7 @@ export function getSettingsPage(user: {
   statusTableAutoDetect?: string;
   statusShowAutoDetectedTables?: string;
   statusIgnoreUnknownUnclassifiedWarning?: string;
+  searchLabelMode?: string;
   githubScopes?: string;
   githubGrantedScopes?: string[] | null;
   githubScopeError?: string | null;
@@ -37,6 +38,7 @@ export function getSettingsPage(user: {
   const currentStatusTableAutoDetect = user.statusTableAutoDetect === 'off' ? 'off' : 'on';
   const currentStatusShowAutoDetectedTables = user.statusShowAutoDetectedTables === 'on' ? 'on' : 'off';
   const currentStatusIgnoreUnknownUnclassifiedWarning = user.statusIgnoreUnknownUnclassifiedWarning === 'off' ? 'off' : 'on';
+  const currentSearchLabelMode = user.searchLabelMode === 'manual-modal' ? 'manual-modal' : 'uncategorized';
   const requestedScopes = user.githubScopes ? user.githubScopes.split(/\s+/).filter(Boolean) : [];
   const grantedScopes = user.githubGrantedScopes ?? null;
   const scopeError = user.githubScopeError ? escapeHtml(user.githubScopeError) : null;
@@ -459,6 +461,15 @@ export function getSettingsPage(user: {
                   <option value="all">すべて</option>
                 </select>
               </div>
+            </div>
+          </div>
+          <div class="info-item">
+            <span class="info-label">新規検索キーワードの分類対象</span>
+            <div class="setting-control">
+              <select class="timezone-select" id="searchLabelModeSelect" onchange="onSearchLabelModeChange()">
+                <option value="uncategorized" ${currentSearchLabelMode === 'uncategorized' ? 'selected' : ''}>未分類のまま（分類しない）</option>
+                <option value="manual-modal" ${currentSearchLabelMode === 'manual-modal' ? 'selected' : ''}>新規キーワード追加時にラベル選択モーダルを表示</option>
+              </select>
             </div>
           </div>
         </div>
@@ -1045,6 +1056,21 @@ export function getSettingsPage(user: {
     function confirmRevoke() {
       if (confirm('このアプリへの承認を取り消しますか？\\n現在のセッションが破棄され、次回ログイン時に再度承認が必要になります。')) {
         window.location.href = '/auth/switch';
+      }
+    }
+    async function onSearchLabelModeChange() {
+      var sel = document.getElementById('searchLabelModeSelect');
+      if (!sel) return;
+      var mode = sel.value;
+      try {
+        var res = await fetch('/api/settings/search-label-mode', {
+          method: 'POST', headers: {'Content-Type':'application/json'}, credentials: 'include',
+          body: JSON.stringify({ mode })
+        });
+        if (!res.ok) throw new Error('failed');
+      } catch(e) {
+        alert('分類モード設定の変更に失敗しました');
+        sel.value = mode === 'manual-modal' ? 'uncategorized' : 'manual-modal';
       }
     }
 
