@@ -884,6 +884,10 @@ export function getRepositoriesPage(user: {
     .history-grid-col tr.history-row-dimmed td { color: #bbb !important; }
     .history-incr-toggle { font-size:12px; padding:4px 10px; border-radius:6px; border:1px solid var(--border-color); background:var(--bg-secondary); color:var(--text-muted); cursor:pointer; white-space:nowrap; }
     .history-incr-toggle.active { background:var(--accent-color,#48bb78); color:#fff; border-color:var(--accent-color,#48bb78); }
+    .history-label-filter { display:flex; gap:6px; padding:0 24px 10px; flex-wrap:wrap; flex-shrink:0; }
+    .history-label-btn { font-size:11px; padding:3px 11px; border-radius:12px; border:1px solid var(--border-color); background:var(--bg-secondary); color:var(--text-muted); cursor:pointer; white-space:nowrap; transition:background 0.15s,color 0.15s,border-color 0.15s; }
+    .history-label-btn:hover { border-color:var(--accent-color,#48bb78); color:var(--accent-color,#48bb78); }
+    .history-label-btn.active { border-color:var(--accent-color,#48bb78); background:var(--accent-color,#48bb78); color:#fff; }
     .history-repo-label { font-size:12px; color:var(--text-muted); white-space:nowrap; margin-left:auto; }
     .history-repo-select {
       font-size:12px; padding:4px 8px; border-radius:6px;
@@ -1844,6 +1848,16 @@ export function getRepositoriesPage(user: {
         <select id="historyRepoSelect" class="history-repo-select">
           <option value="">すべて</option>
         </select>
+      </div>
+      <div class="history-label-filter" id="historyLabelFilter">
+        <button class="history-label-btn active" data-label="">すべて</button>
+        <button class="history-label-btn" data-label="feature">feature</button>
+        <button class="history-label-btn" data-label="ui">ui</button>
+        <button class="history-label-btn" data-label="tech">tech</button>
+        <button class="history-label-btn" data-label="database">database</button>
+        <button class="history-label-btn" data-label="bugfix">bugfix</button>
+        <button class="history-label-btn" data-label="ops">ops</button>
+        <button class="history-label-btn" data-label="uncategorized">未分類</button>
       </div>
       <div class="history-modal-body" id="historyModalBody">
       </div>
@@ -4794,6 +4808,7 @@ export function getRepositoriesPage(user: {
       var hSearchStatus = document.getElementById('historySearchStatus');
       var hRepoSelect = document.getElementById('historyRepoSelect');
       var hIncrSearchToggle = document.getElementById('historyIncrSearchToggle');
+      var historyLabelFilter = document.getElementById('historyLabelFilter');
       if (!historyRow || !historyOpenBtn || !historyModal || !historyModalBody) return;
 
       var isIncrementalSearchEnabled = getCookie('history_incr_search') === 'on';
@@ -4877,6 +4892,12 @@ export function getRepositoriesPage(user: {
       function closeHistoryModal() {
         historyModal.classList.remove('show');
         document.body.style.overflow = '';
+        selectedLabel = '';
+        if (historyLabelFilter) {
+          historyLabelFilter.querySelectorAll('.history-label-btn').forEach(function(b, i) {
+            b.classList.toggle('active', i === 0);
+          });
+        }
       }
       if (historyModalClose) {
         historyModalClose.addEventListener('click', closeHistoryModal);
@@ -4893,13 +4914,27 @@ export function getRepositoriesPage(user: {
         history.forEach(function(item) {
           var key = item.search_query;
           if (!map[key] || item.total_hits > map[key].total_hits) {
-            map[key] = { search_query: key, total_hits: item.total_hits, repoHitCount: null };
+            map[key] = { search_query: key, total_hits: item.total_hits, repoHitCount: null, label: item.label || 'uncategorized' };
           }
         });
         var arr = [];
         for (var k in map) { if (map.hasOwnProperty(k)) arr.push(map[k]); }
         arr.sort(function(a, b) { return b.total_hits - a.total_hits; });
         return arr;
+      }
+
+      var selectedLabel = '';
+
+      if (historyLabelFilter) {
+        historyLabelFilter.addEventListener('click', function(e) {
+          var btn = e.target.closest('.history-label-btn');
+          if (!btn) return;
+          selectedLabel = btn.getAttribute('data-label') || '';
+          historyLabelFilter.querySelectorAll('.history-label-btn').forEach(function(b) {
+            b.classList.toggle('active', b === btn);
+          });
+          refreshGrid(null, null);
+        });
       }
 
       var selectedKeyword = null;
@@ -4919,10 +4954,14 @@ export function getRepositoriesPage(user: {
       }
 
       function getIncrementalFilteredItems() {
-        if (!isIncrementalSearchEnabled) return currentItems;
+        var items = currentItems;
+        if (selectedLabel) {
+          items = items.filter(function(item) { return item.label === selectedLabel; });
+        }
+        if (!isIncrementalSearchEnabled) return items;
         var val = hSearchInput ? hSearchInput.value.trim().toLowerCase() : '';
-        if (!val) return currentItems;
-        return currentItems.filter(function(item) {
+        if (!val) return items;
+        return items.filter(function(item) {
           return item.search_query.toLowerCase().indexOf(val) !== -1;
         });
       }
@@ -5103,7 +5142,12 @@ export function getRepositoriesPage(user: {
       }
 
       function updateTitle() {
-        historyModalTitle.textContent = '検索履歴 (' + currentItems.length + ' 件)';
+        var displayed = getIncrementalFilteredItems().length;
+        if (displayed === currentItems.length) {
+          historyModalTitle.textContent = '検索履歴 (' + currentItems.length + ' 件)';
+        } else {
+          historyModalTitle.textContent = '検索履歴 (' + displayed + ' / ' + currentItems.length + ' 件)';
+        }
       }
 
       function refreshGrid(highlightKey, highlightType) {

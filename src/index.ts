@@ -70,6 +70,7 @@ const STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
   { name: 'commit_search_history', migration: '0011', description: 'コミット検索履歴', syncPolicy: 'auto' },
   { name: 'commit_search_repo_stats', migration: '0011', description: 'コミット検索リポジトリ別集計', syncPolicy: 'auto' },
   { name: 'commit_search_hit_details', migration: '0032', description: 'コミット検索ヒット詳細（コミット単位）', syncPolicy: 'auto' },
+  { name: 'commit_search_keyword_labels', migration: '0035', description: '検索キーワードラベル分類', syncPolicy: 'auto' },
   { name: 'ai_summary_log', migration: '0012', description: 'AI要約ログ', syncPolicy: 'auto' },
   { name: 'repo_color_settings', migration: '0013', description: 'リポジトリ色・タグ設定', syncPolicy: 'auto' },
   { name: 'repo_groups', migration: '0014', description: 'リポジトリグループ', syncPolicy: 'manual' },
@@ -574,6 +575,17 @@ INSERT OR REPLACE INTO table_column_keys (table_name, column_name, key_type, fk_
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_repo_commit_index_seq ON repo_commit_index (repo_name, seq_num);
 CREATE INDEX IF NOT EXISTS idx_repo_commit_index_pr ON repo_commit_index (github_pr_number);`,
+  '0035': `CREATE TABLE IF NOT EXISTS commit_search_keyword_labels (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id TEXT NOT NULL,
+  search_query TEXT NOT NULL,
+  label TEXT NOT NULL DEFAULT 'uncategorized',
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE(user_id, search_query)
+);
+CREATE INDEX IF NOT EXISTS idx_commit_search_keyword_labels_user ON commit_search_keyword_labels(user_id);
+CREATE INDEX IF NOT EXISTS idx_commit_search_keyword_labels_label ON commit_search_keyword_labels(user_id, label);`,
 };
 
 function jsonUtf8(payload: unknown, status = 200): Response {
@@ -701,6 +713,7 @@ export const TABLE_COLUMN_KEYS: Record<string, ColumnKeyInfo> = {
   commit_search_history: { id: 'pk', user_id: 'fk' },
   commit_search_repo_stats: { id: 'pk', search_history_id: 'fk' },
   commit_search_hit_details: { id: 'pk', search_history_id: 'fk' },
+  commit_search_keyword_labels: { id: 'pk', user_id: 'fk', search_query: 'idx' },
   ai_summary_log: { id: 'pk', request_id: 'uk', event_date: 'idx' },
   ai_summary_reviews: { id: 'pk', summary_request_id: 'fk' },
   commit_agent_log: { id: 'pk', request_id: 'fk', repo_full_name: 'idx', pr_number: 'idx' },
@@ -764,7 +777,7 @@ export function getFilterableColumns(tableName: string): string[] {
 export const TABLE_GROUP_MAP: Record<string, string> = {
   user_sessions: 'auth', teams: 'auth', workspaces: 'auth', team_members: 'auth',
   commit_calendar_cache: 'commit', commit_list_cache: 'commit', cache_stats: 'commit',
-  commit_search_history: 'commit', commit_search_repo_stats: 'commit', commit_search_hit_details: 'commit', cloudflare_setup_pending: 'commit',
+  commit_search_history: 'commit', commit_search_repo_stats: 'commit', commit_search_hit_details: 'commit', commit_search_keyword_labels: 'commit', cloudflare_setup_pending: 'commit',
   commit_stats_cache: 'commit',
   repo_commit_index: 'commit',
   ai_summary_log: 'ai', ai_summary_reviews: 'ai', commit_agent_log: 'ai',
@@ -874,6 +887,7 @@ export const COLUMN_FK_TARGETS: Record<string, Record<string, string>> = {
   commit_search_history: { user_id: 'user_sessions' },
   commit_search_repo_stats: { search_history_id: 'commit_search_history' },
   commit_search_hit_details: { search_history_id: 'commit_search_history' },
+  commit_search_keyword_labels: { user_id: 'user_sessions' },
 
   // ========================================================================
   // workspace_id の論理FK（workspaces.id が参照先）
@@ -942,6 +956,7 @@ export const COLUMN_FK_TARGET_COLUMNS: Record<string, string> = {
   'cache_stats.user_id': 'user_id',
   'cloudflare_setup_pending.user_id': 'user_id',
   'commit_search_history.user_id': 'user_id',
+  'commit_search_keyword_labels.user_id': 'user_id',
   'email_mfa_challenges.user_id': 'user_id',
   // 異名FK: target_user_id も意味的には user_id
   'email_audit_anomalies.target_user_id': 'user_id',
@@ -4965,10 +4980,13 @@ app.get('/api/repositories/search/history', optionalAuthMiddleware, async (c) =>
 
   try {
     const rows = await c.env.DB.prepare(
-      `SELECT id, search_query, total_hits, repo_names, searched_at
-       FROM commit_search_history
-       WHERE user_id = ?
-       ORDER BY total_hits DESC
+      `SELECT h.id, h.search_query, h.total_hits, h.repo_names, h.searched_at,
+              COALESCE(kl.label, 'uncategorized') AS label
+       FROM commit_search_history h
+       LEFT JOIN commit_search_keyword_labels kl
+         ON kl.user_id = h.user_id AND kl.search_query = h.search_query
+       WHERE h.user_id = ?
+       ORDER BY h.total_hits DESC
        LIMIT 200`
     ).bind(user.sub).all<{
       id: number;
@@ -4976,6 +4994,7 @@ app.get('/api/repositories/search/history', optionalAuthMiddleware, async (c) =>
       total_hits: number;
       repo_names: string;
       searched_at: string;
+      label: string;
     }>();
     return jsonUtf8({ history: rows.results ?? [] });
   } catch (error) {
