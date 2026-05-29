@@ -487,7 +487,9 @@ CREATE TABLE IF NOT EXISTS table_column_keys (
 );
 
 CREATE INDEX IF NOT EXISTS idx_table_catalog_group ON table_catalog(group_name);
-CREATE INDEX IF NOT EXISTS idx_table_column_keys_fk ON table_column_keys(fk_target_table);`,
+CREATE INDEX IF NOT EXISTS idx_table_column_keys_fk ON table_column_keys(fk_target_table);
+
+ALTER TABLE table_catalog ADD COLUMN preview_sql TEXT;`,
   '0027': `CREATE TABLE IF NOT EXISTS group_oauth_apps (
   group_id TEXT NOT NULL,
   app_name TEXT NOT NULL,
@@ -1275,6 +1277,85 @@ function getStatusTablePreviewQuery(
       };
     default:
       return null;
+  }
+}
+
+export function buildPreviewQueryFromTemplate(
+  template: string,
+  userId: string,
+  workspaceId: string | null,
+  teamId: string | null,
+): { sql: string; params: string[] } {
+  const params: string[] = [];
+  const replacements: Record<string, string> = {
+    USER_ID: userId,
+    WORKSPACE_ID: workspaceId ?? '',
+    TEAM_ID: teamId ?? '',
+  };
+  const sql = template.replace(/\{(USER_ID|WORKSPACE_ID|TEAM_ID)\}/g, (_match, key: string) => {
+    params.push(replacements[key]);
+    return '?';
+  });
+  return { sql, params };
+}
+
+async function autoRegisterTablesFromSqliteMaster(
+  db: D1Database,
+  appliedMigrationNames: string[],
+): Promise<void> {
+  const sqliteResult = await db.prepare(
+    "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_cf_%' AND name NOT LIKE 'd1_%'"
+  ).all<{ name: string }>();
+  const allTables = (sqliteResult.results ?? []).map((r) => r.name).filter(Boolean);
+
+  const catalogResult = await db.prepare('SELECT table_name FROM table_catalog').all<{ table_name: string }>();
+  const registered = new Set((catalogResult.results ?? []).map((r) => r.table_name));
+
+  const unregistered = allTables.filter((name) => !registered.has(name));
+  if (unregistered.length === 0) return;
+
+  const maxOrderRow = await db.prepare('SELECT MAX(display_order) AS m FROM table_catalog').first<{ m: number | null }>();
+  let nextOrder = (maxOrderRow?.m ?? 0) + 1;
+
+  for (const tableName of unregistered) {
+    const inferredMigration = inferMigrationFromAppliedNames(tableName, appliedMigrationNames) ?? 'unknown';
+    const inferredGroup = inferGroupFromTableName(tableName) ?? 'config';
+    let previewSql = `SELECT * FROM ${tableName} LIMIT 20`;
+    let pkColumn: string | null = null;
+    try {
+      const pragma = await db.prepare(`PRAGMA table_info(${tableName})`).all<{ name: string; pk: number }>();
+      const cols = (pragma.results ?? []).map((c) => c.name);
+      pkColumn = (pragma.results ?? []).find((c) => c.pk > 0)?.name ?? null;
+      const hasUserId = cols.includes('user_id');
+      const hasCreatedAt = cols.includes('created_at');
+      const hasId = cols.includes('id');
+      const whereClause = hasUserId ? ` WHERE user_id = {USER_ID}` : '';
+      const orderClause = hasCreatedAt ? ' ORDER BY created_at DESC' : hasId ? ' ORDER BY id DESC' : '';
+      previewSql = `SELECT * FROM ${tableName}${whereClause}${orderClause} LIMIT 20`;
+    } catch {
+      // PRAGMA 失敗時はデフォルトのまま
+    }
+    try {
+      await db
+        .prepare(
+          `INSERT OR IGNORE INTO table_catalog (table_name, group_name, description, migration, sync_policy, display_order, preview_sql) VALUES (?, ?, ?, ?, 'auto', ?, ?)`,
+        )
+        .bind(tableName, inferredGroup, tableName, inferredMigration, nextOrder, previewSql)
+        .run();
+      nextOrder++;
+    } catch {
+      // preview_sql カラムが存在しない等のエラーは無視
+    }
+    if (pkColumn) {
+      try {
+        await db
+          .prepare(`INSERT OR IGNORE INTO table_column_keys (table_name, column_name, key_type) VALUES (?, ?, 'pk')`)
+          .bind(tableName, pkColumn)
+          .run();
+      } catch {
+        // table_column_keys が存在しない場合は無視
+      }
+    }
   }
 }
 
@@ -2361,8 +2442,37 @@ app.get('/status', authMiddleware, async (c) => {
       // d1_migrations が存在しない環境は無視
     }
 
+    // 新テーブルを table_catalog へ自動登録（マイグレーション実行後の初回 /status ロードで反映）
+    try {
+      await autoRegisterTablesFromSqliteMaster(db, appliedMigrationNames);
+    } catch {
+      // table_catalog が存在しない等の場合は無視
+    }
+
+    // table_catalog を一次情報源としてテーブル一覧を取得（フォールバック: ハードコード定数）
+    let effectiveTableDefs: Array<{ name: string; migration: string; description: string; syncPolicy: string }>;
+    try {
+      const catalogRows = await db.prepare(
+        'SELECT table_name, migration, description, sync_policy FROM table_catalog ORDER BY display_order ASC, table_name ASC'
+      ).all<{ table_name: string; migration: string; description: string; sync_policy: string }>();
+      effectiveTableDefs = (catalogRows.results ?? []).map((r) => ({
+        name: r.table_name,
+        migration: r.migration,
+        description: r.description,
+        syncPolicy: r.sync_policy,
+      }));
+      if (effectiveTableDefs.length === 0) throw new Error('empty catalog');
+    } catch {
+      effectiveTableDefs = getEffectiveStatusTableDefinitions().map((d) => ({
+        name: d.name,
+        migration: d.migration,
+        description: d.description,
+        syncPolicy: d.syncPolicy,
+      }));
+    }
+
     const knownTables = new Set<string>();
-    for (const tbl of getEffectiveStatusTableDefinitions()) {
+    for (const tbl of effectiveTableDefs) {
       knownTables.add(tbl.name);
       const entry: TableStatusEntry = {
         name: tbl.name,
@@ -2798,25 +2908,57 @@ app.get('/api/status/tables/:table/rows', authMiddleware, async (c) => {
   const user = c.get('user');
   const db = c.env.DB;
   const tableName = c.req.param('table');
-  const tableDefinition = getStatusTableDefinition(tableName);
 
-  if (!db || !tableDefinition) {
+  if (!db) {
     return jsonUtf8({ error: 'Table not found' }, 404);
   }
 
+  // table_catalog を一次情報源として使用（フォールバック: ハードコード定数）
+  let tableInfo: { migration: string; description: string; preview_sql: string | null } | null = null;
+  try {
+    const catalogRow = await db
+      .prepare('SELECT migration, description, preview_sql FROM table_catalog WHERE table_name = ?')
+      .bind(tableName)
+      .first<{ migration: string; description: string; preview_sql: string | null }>();
+    if (catalogRow) {
+      tableInfo = { migration: catalogRow.migration, description: catalogRow.description, preview_sql: catalogRow.preview_sql ?? null };
+    }
+  } catch {
+    // table_catalog が存在しない場合はフォールバックへ
+  }
+  if (!tableInfo) {
+    const hardcoded = getStatusTableDefinition(tableName);
+    if (!hardcoded) {
+      return jsonUtf8({ error: 'Table not found' }, 404);
+    }
+    tableInfo = { migration: hardcoded.migration, description: hardcoded.description, preview_sql: null };
+  }
+
   const wsInfo = await getCurrentWorkspace(db, user.sub);
-  const previewQuery = getStatusTablePreviewQuery(
-    tableName,
-    user.sub,
-    wsInfo?.workspaceId ?? null,
-    wsInfo?.teamId ?? null,
-  );
+
+  // preview_sql が DB に保存されていればテンプレート展開、なければ従来の switch 関数
+  let previewQuery: { sql: string; params: (string | number)[] } | null;
+  if (tableInfo.preview_sql) {
+    previewQuery = buildPreviewQueryFromTemplate(
+      tableInfo.preview_sql,
+      user.sub,
+      wsInfo?.workspaceId ?? null,
+      wsInfo?.teamId ?? null,
+    );
+  } else {
+    previewQuery = getStatusTablePreviewQuery(
+      tableName,
+      user.sub,
+      wsInfo?.workspaceId ?? null,
+      wsInfo?.teamId ?? null,
+    );
+  }
 
   if (!previewQuery) {
     return jsonUtf8({
       table: tableName,
-      migration: tableDefinition.migration,
-      description: tableDefinition.description,
+      migration: tableInfo.migration,
+      description: tableInfo.description,
       columns: [],
       columnKeyInfo: {},
       filterableColumns: [],
@@ -2838,8 +2980,8 @@ app.get('/api/status/tables/:table/rows', authMiddleware, async (c) => {
     }
     return jsonUtf8({
       table: tableName,
-      migration: tableDefinition.migration,
-      description: tableDefinition.description,
+      migration: tableInfo.migration,
+      description: tableInfo.description,
       columns,
       columnKeyInfo,
       filterableColumns: getFilterableColumns(tableName),
