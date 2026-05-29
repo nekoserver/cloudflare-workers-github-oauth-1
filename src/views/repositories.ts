@@ -4805,10 +4805,13 @@ export function getRepositoriesPage(user: {
             searchSubtitle.textContent = '「' + escapeForHtml(data.query) + '」— ' + data.total + ' 件のコミットが見つかりました';
             searchBody.innerHTML = renderSearchResults(data);
             if (data.isNewKeyword && data.total > 0) {
-              if (data.autoLabel) {
+              if (data.autoLabel != null) {
+                var notifMsg = data.autoLabel === 'uncategorized'
+                  ? '「' + data.query + '」を未分類に分類しました（AI分類に失敗しました）'
+                  : '「' + data.query + '」を「' + data.autoLabel + '」に自動分類しました';
                 var notif = document.createElement('div');
                 notif.style.cssText = 'position:fixed;bottom:16px;left:50%;transform:translateX(-50%);background:var(--accent-color,#48bb78);color:#fff;padding:8px 18px;border-radius:8px;font-size:13px;z-index:10000;';
-                notif.textContent = '「' + data.query + '」を「' + data.autoLabel + '」に自動分類しました';
+                notif.textContent = notifMsg;
                 document.body.appendChild(notif);
                 setTimeout(function() { if (notif.parentNode) notif.parentNode.removeChild(notif); }, 4000);
               } else {
@@ -5473,7 +5476,7 @@ export function getRepositoriesPage(user: {
           window.__pendingNewKeyword = null;
           if (pending && searchLabelMode === 'manual-modal') {
             showLabelClassificationModal(pending);
-          } else if (pending && searchLabelMode === 'uncategorized') {
+          } else if (pending && (searchLabelMode === 'uncategorized' || searchLabelMode === 'auto-classify')) {
             selectLabelFilter('uncategorized');
           }
         }).catch(function() {

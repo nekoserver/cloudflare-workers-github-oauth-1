@@ -5108,19 +5108,25 @@ app.get('/api/repositories/search/commits', optionalAuthMiddleware, async (c) =>
     if (isNewKeyword) {
       const cookieHeader = c.req.header('Cookie');
       const searchLabelMode = getCookieValues(cookieHeader, ['user_search_label_mode'])['user_search_label_mode'];
-      if (searchLabelMode === 'auto-classify' && c.env.AI) {
-        const CLASSIFY_LABELS = ['feature', 'ui', 'tech', 'database', 'bugfix', 'ops'];
-        const model = resolveAiModel(c.env.AI_MODEL);
-        autoLabel = await classifyKeywordWithAI(c.env.AI, model, q, CLASSIFY_LABELS);
-        if (autoLabel !== 'uncategorized') {
-          try {
-            await c.env.DB.prepare(
-              `UPDATE commit_search_keyword_labels SET label = ?, updated_at = datetime('now') WHERE user_id = ? AND search_query = ?`
-            ).bind(autoLabel, user.sub, q).run();
-          } catch (updateErr) {
-            logger.warn('auto-classify label update failed', { query: q, error: updateErr instanceof Error ? updateErr.message : 'Unknown error' });
-            autoLabel = null;
+      if (searchLabelMode === 'auto-classify') {
+        if (c.env.AI) {
+          const CLASSIFY_LABELS = ['feature', 'ui', 'tech', 'database', 'bugfix', 'ops'];
+          const model = resolveAiModel(c.env.AI_MODEL);
+          autoLabel = await classifyKeywordWithAI(c.env.AI, model, q, CLASSIFY_LABELS);
+          if (autoLabel !== 'uncategorized') {
+            try {
+              await c.env.DB.prepare(
+                `UPDATE commit_search_keyword_labels SET label = ?, updated_at = datetime('now') WHERE user_id = ? AND search_query = ?`
+              ).bind(autoLabel, user.sub, q).run();
+            } catch (updateErr) {
+              logger.warn('auto-classify label update failed', { query: q, error: updateErr instanceof Error ? updateErr.message : 'Unknown error' });
+              autoLabel = 'uncategorized';
+            }
           }
+        } else {
+          // AI バインディング未設定: 未分類にフォールバック
+          autoLabel = 'uncategorized';
+          logger.warn('auto-classify skipped: AI binding not available', { query: q });
         }
       }
     }
@@ -5217,7 +5223,8 @@ app.get('/api/repositories/search/history', optionalAuthMiddleware, async (c) =>
   if (!c.env.DB) return jsonUtf8({ error: 'Database not available' }, 500);
 
   const cookieHeader = c.req.header('Cookie');
-  const searchLabelMode = getCookieValues(cookieHeader, ['user_search_label_mode'])['user_search_label_mode'] === 'manual-modal' ? 'manual-modal' : 'uncategorized';
+  const rawLabelMode = getCookieValues(cookieHeader, ['user_search_label_mode'])['user_search_label_mode'];
+  const searchLabelMode = ['manual-modal', 'auto-classify'].includes(rawLabelMode ?? '') ? rawLabelMode : 'uncategorized';
 
   try {
     const rows = await c.env.DB.prepare(
