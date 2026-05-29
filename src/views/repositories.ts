@@ -4875,6 +4875,8 @@ export function getRepositoriesPage(user: {
                 if (data.classifyDebug && getCookie('keyword_classify_debug') === 'on') {
                   showClassifyDebugModal(data.classifyDebug);
                 }
+                // 自動分類完了後、次にモーダルを開いたときに分類先へフォーカスする
+                window.__pendingAutoLabel = { query: data.query, label: data.autoLabel };
               } else {
                 window.__pendingNewKeyword = data.query;
               }
@@ -4996,7 +4998,39 @@ export function getRepositoriesPage(user: {
       }
 
       checkHistoryExists();
-      window.__reloadSearchHistory = checkHistoryExists;
+      window.__reloadSearchHistory = function() {
+        checkHistoryExists();
+        // モーダルが開いている場合は currentItems も再取得してフォーカスを反映
+        if (historyModal.classList.contains('show')) {
+          Promise.all([
+            fetch('/api/repositories/search/history', { credentials: 'same-origin' })
+              .then(function(res) { return res.ok ? res.json() : null; }),
+            fetch('/api/repositories/search/repo-list', { credentials: 'same-origin' })
+              .then(function(res) { return res.ok ? res.json() : null; }),
+          ]).then(function(results) {
+            var hData = results[0];
+            var repoData = results[1];
+            if (repoData && Array.isArray(repoData.repos)) populateRepoSelect(repoData.repos);
+            if (!hData || !hData.history || hData.history.length === 0) {
+              currentItems = [];
+              historyModalBody.innerHTML = '<div class="search-empty">検索履歴がありません。</div>';
+              updateTitle();
+              return;
+            }
+            currentItems = dedupeAndSort(hData.history);
+            syncFilterBarFromItems(currentItems);
+            updateLabelBadgeCounts(currentItems);
+            refreshGrid(null, null);
+            var pendingAuto = window.__pendingAutoLabel;
+            window.__pendingAutoLabel = null;
+            if (pendingAuto && pendingAuto.label && pendingAuto.label !== 'uncategorized') {
+              selectLabelFilter(pendingAuto.label);
+            } else if (pendingAuto) {
+              syncLabelFilterToKeyword(pendingAuto.query);
+            }
+          }).catch(function() {});
+        }
+      };
 
       function openHistoryModal() {
         historyModal.classList.add('show');
@@ -5511,6 +5545,7 @@ export function getRepositoriesPage(user: {
               if (data.classifyDebug && getCookie('keyword_classify_debug') === 'on') {
                 showClassifyDebugModal(data.classifyDebug);
               }
+              window.__pendingAutoLabel = { query: data.query, label: data.autoLabel };
             }
           })
           .catch(function() {
@@ -5613,6 +5648,14 @@ export function getRepositoriesPage(user: {
             showLabelClassificationModal(pending);
           } else if (pending && (searchLabelMode === 'uncategorized' || searchLabelMode === 'auto-classify')) {
             selectLabelFilter('uncategorized');
+          }
+          // 自動分類完了済みのキーワードを分類先カテゴリにフォーカスする
+          var pendingAuto = window.__pendingAutoLabel;
+          window.__pendingAutoLabel = null;
+          if (pendingAuto && pendingAuto.label && pendingAuto.label !== 'uncategorized') {
+            selectLabelFilter(pendingAuto.label);
+          } else if (pendingAuto) {
+            syncLabelFilterToKeyword(pendingAuto.query);
           }
         }).catch(function() {
           currentItems = [];
