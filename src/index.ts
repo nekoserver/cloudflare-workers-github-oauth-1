@@ -2268,6 +2268,7 @@ app.get('/settings', authMiddleware, async (c) => {
     'user_status_table_autodetect',
     'user_status_show_autodetected_tables',
     'user_status_ignore_unknown_unclassified_warning',
+    'user_search_label_mode',
   ]);
   const timezone = cookieVals['user_timezone'] || DEFAULT_TIMEZONE;
   const sessionDuration = cookieVals['user_session_duration'] || '1h';
@@ -2279,6 +2280,7 @@ app.get('/settings', authMiddleware, async (c) => {
   const statusTableAutoDetect = cookieVals['user_status_table_autodetect'] === 'off' ? 'off' : 'on';
   const statusShowAutoDetectedTables = cookieVals['user_status_show_autodetected_tables'] === 'on' ? 'on' : 'off';
   const statusIgnoreUnknownUnclassifiedWarning = cookieVals['user_status_ignore_unknown_unclassified_warning'] === 'off' ? 'off' : 'on';
+  const searchLabelMode = cookieVals['user_search_label_mode'] === 'manual-modal' ? 'manual-modal' : 'uncategorized';
 
   let issuedAt: string;
   let expiresAt: string;
@@ -2335,6 +2337,7 @@ app.get('/settings', authMiddleware, async (c) => {
     statusTableAutoDetect,
     statusShowAutoDetectedTables,
     statusIgnoreUnknownUnclassifiedWarning,
+    searchLabelMode,
     githubScopes: GITHUB_OAUTH_SCOPE,
     githubGrantedScopes: grantedScopes,
     githubScopeError: scopesError,
@@ -4940,7 +4943,7 @@ app.get('/api/repositories/search/commits', optionalAuthMiddleware, async (c) =>
   const workspaceId = wsInfo?.workspaceId ?? '';
 
   if (!workspaceId) {
-    return jsonUtf8({ results: [], query: q, total: 0 });
+    return jsonUtf8({ results: [], query: q, total: 0, isNewKeyword: false });
   }
 
   try {
@@ -5067,13 +5070,46 @@ app.get('/api/repositories/search/commits', optionalAuthMiddleware, async (c) =>
       }
     }
 
-    return jsonUtf8({ results, query: q, total: totalMatches });
+    let isNewKeyword = false;
+    try {
+      const labelInsert = await c.env.DB.prepare(
+        `INSERT OR IGNORE INTO commit_search_keyword_labels (user_id, search_query, label, created_at, updated_at) VALUES (?, ?, 'uncategorized', datetime('now'), datetime('now'))`
+      ).bind(user.sub, q).run();
+      isNewKeyword = (labelInsert.meta?.changes ?? 0) > 0;
+    } catch (labelErr) {
+      logger.warn('keyword label insert failed', { query: q, error: labelErr instanceof Error ? labelErr.message : 'Unknown error' });
+    }
+    return jsonUtf8({ results, query: q, total: totalMatches, isNewKeyword });
   } catch (error) {
     logger.warn('Commit search failed', {
       query: q,
       error: error instanceof Error ? error.message : 'Unknown error',
     });
     return jsonUtf8({ error: 'Search failed' }, 500);
+  }
+});
+
+app.post('/api/repositories/search/keyword-label', authMiddleware, async (c) => {
+  const user = c.get('user');
+  const db = c.env.DB;
+  if (!db) return jsonUtf8({ error: 'Database not available' }, 500);
+  let body: { search_query?: string; label?: string };
+  try {
+    body = await c.req.json();
+  } catch {
+    return jsonUtf8({ error: 'Invalid JSON' }, 400);
+  }
+  const searchQuery = (body.search_query ?? '').trim();
+  const label = (body.label ?? '').trim();
+  if (!searchQuery || !label) return jsonUtf8({ error: '無効なパラメータです' }, 400);
+  try {
+    await db.prepare(
+      `INSERT INTO commit_search_keyword_labels (user_id, search_query, label, created_at, updated_at) VALUES (?, ?, ?, datetime('now'), datetime('now')) ON CONFLICT(user_id, search_query) DO UPDATE SET label = excluded.label, updated_at = excluded.updated_at`
+    ).bind(user.sub, searchQuery, label).run();
+    return jsonUtf8({ ok: true, search_query: searchQuery, label });
+  } catch (error) {
+    logger.warn('keyword label upsert failed', { searchQuery, error: error instanceof Error ? error.message : 'Unknown error' });
+    return jsonUtf8({ error: 'ラベルの更新に失敗しました' }, 500);
   }
 });
 
@@ -5134,6 +5170,9 @@ app.get('/api/repositories/search/history', optionalAuthMiddleware, async (c) =>
   if (!user) return jsonUtf8({ error: 'Unauthorized' }, 401);
   if (!c.env.DB) return jsonUtf8({ error: 'Database not available' }, 500);
 
+  const cookieHeader = c.req.header('Cookie');
+  const searchLabelMode = getCookieValues(cookieHeader, ['user_search_label_mode'])['user_search_label_mode'] === 'manual-modal' ? 'manual-modal' : 'uncategorized';
+
   try {
     const rows = await c.env.DB.prepare(
       `SELECT h.id, h.search_query, h.total_hits, h.repo_names, h.searched_at,
@@ -5152,7 +5191,7 @@ app.get('/api/repositories/search/history', optionalAuthMiddleware, async (c) =>
       searched_at: string;
       label: string;
     }>();
-    return jsonUtf8({ history: rows.results ?? [] });
+    return jsonUtf8({ history: rows.results ?? [], searchLabelMode });
   } catch (error) {
     logger.warn('Failed to fetch commit search history', {
       error: error instanceof Error ? error.message : 'Unknown error',
@@ -6000,6 +6039,19 @@ app.post('/api/settings/status-ignore-unknown-unclassified-warning', authMiddlew
       error: error instanceof Error ? error.message : 'Unknown error',
     });
     return c.json({ error: '/status の未分類警告設定変更に失敗しました' }, 500);
+  }
+});
+
+app.post('/api/settings/search-label-mode', authMiddleware, async (c) => {
+  try {
+    const { mode } = await c.req.json();
+    if (mode !== 'uncategorized' && mode !== 'manual-modal') {
+      return c.json({ error: '無効なモードです' }, 400);
+    }
+    c.header('Set-Cookie', `user_search_label_mode=${mode}; Path=/; Secure; SameSite=Lax; Max-Age=31536000`);
+    return c.json({ message: '新規キーワード分類モードを変更しました', mode }, 200);
+  } catch {
+    return c.json({ error: '新規キーワード分類モードの変更に失敗しました' }, 500);
   }
 });
 
