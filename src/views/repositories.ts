@@ -5019,7 +5019,7 @@ export function getRepositoriesPage(user: {
                 for (var i = 0; i < currentItems.length; i++) {
                   if (currentItems[i].search_query === query) { currentItems[i].label = label; break; }
                 }
-                var existingLabels = Array.from(historyLabelFilter.querySelectorAll('.history-label-btn')).map(function(b) { return b.getAttribute('data-label'); });
+                var existingLabels = historyLabelFilter ? Array.from(historyLabelFilter.querySelectorAll('.history-label-btn')).map(function(b) { return b.getAttribute('data-label'); }) : [];
                 if (label !== 'uncategorized' && !existingLabels.includes(label)) {
                   var newBtn = document.createElement('button');
                   newBtn.className = 'history-label-btn';
@@ -5032,7 +5032,11 @@ export function getRepositoriesPage(user: {
                 selectLabelFilter(label);
               })
               .catch(function() {
-                console.warn('ラベルの保存に失敗しました');
+                var failMsg = document.createElement('div');
+                failMsg.style.cssText = 'position:fixed;bottom:16px;left:50%;transform:translateX(-50%);background:#e53e3e;color:#fff;padding:8px 18px;border-radius:8px;font-size:13px;z-index:10000;';
+                failMsg.textContent = 'ラベルの保存に失敗しました';
+                document.body.appendChild(failMsg);
+                setTimeout(function() { if (failMsg.parentNode) failMsg.parentNode.removeChild(failMsg); }, 4000);
               });
           };
         }
