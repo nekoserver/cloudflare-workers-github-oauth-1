@@ -1308,7 +1308,9 @@ async function classifyKeywordWithAI(
   const prompt = buildKeywordClassificationPrompt(keyword, labels);
   try {
     const result = await (ai as unknown as { run: (model: string, opts: Record<string, unknown>) => Promise<{ response?: string }> }).run(model, {
-      prompt,
+      messages: [
+        { role: 'user', content: prompt },
+      ],
       max_tokens: 20,
     });
     const rawResponse = (result?.response ?? '').trim();
