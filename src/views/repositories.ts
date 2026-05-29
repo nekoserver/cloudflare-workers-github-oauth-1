@@ -5189,8 +5189,15 @@ export function getRepositoriesPage(user: {
         return html;
       }
 
+      function syncLabelFilterToKeyword(query) {
+        var found = currentItems.find(function(item) { return item.search_query === query; });
+        var label = (found && found.label) ? found.label : 'uncategorized';
+        selectLabelFilter(label);
+      }
+
       function showKeywordDetail(query) {
         selectedKeyword = query;
+        syncLabelFilterToKeyword(query);
         if (!keywordDetailPanel) return;
         keywordDetailPanel.style.display = '';
         keywordDetailPanel.innerHTML = '<div class="keyword-detail-panel"><div class="keyword-detail-panel-header">'
@@ -5207,6 +5214,7 @@ export function getRepositoriesPage(user: {
             selectedKeyword = null;
             keywordDetailPanel.style.display = 'none';
             keywordDetailPanel.innerHTML = '';
+            selectLabelFilter('');
             refreshGrid(null, null);
           });
         }
@@ -5291,6 +5299,7 @@ export function getRepositoriesPage(user: {
                   selectedKeyword = null;
                   keywordDetailPanel.style.display = 'none';
                   keywordDetailPanel.innerHTML = '';
+                  selectLabelFilter('');
                   refreshGrid(null, null);
                 });
               }
