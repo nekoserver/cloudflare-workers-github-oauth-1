@@ -1297,6 +1297,11 @@ interface ClassifyResult {
   prompt: string;
   rawResponse: string;
   model: string;
+  fallback?: {
+    model: string;
+    rawResponse: string;
+    label: string;
+  };
 }
 
 async function classifyKeywordWithAI(
@@ -1306,19 +1311,35 @@ async function classifyKeywordWithAI(
   labels: string[],
 ): Promise<ClassifyResult> {
   const prompt = buildKeywordClassificationPrompt(keyword, labels);
-  try {
-    const result = await (ai as unknown as { run: (model: string, opts: Record<string, unknown>) => Promise<{ response?: string }> }).run(model, {
-      messages: [
-        { role: 'user', content: prompt },
-      ],
-      max_tokens: 20,
-    });
-    const rawResponse = (result?.response ?? '').trim();
+  const runAi = async (m: string): Promise<string> => {
+    try {
+      const result = await (ai as unknown as { run: (model: string, opts: Record<string, unknown>) => Promise<{ response?: string }> }).run(m, {
+        messages: [{ role: 'user', content: prompt }],
+        max_tokens: 20,
+      });
+      return (result?.response ?? '').trim();
+    } catch {
+      return '';
+    }
+  };
+
+  const rawResponse = await runAi(model);
+  if (rawResponse !== '') {
     const label = pickBestLabelFromResponse(rawResponse.toLowerCase(), labels);
     return { label, prompt, rawResponse, model };
-  } catch {
-    return { label: 'uncategorized', prompt, rawResponse: '', model };
   }
+
+  // プライマリモデルが空レスポンス → フォールバックモデルで再試行
+  const fallbackModel = FALLBACK_AI_MODEL;
+  const fallbackRaw = await runAi(fallbackModel);
+  const fallbackLabel = pickBestLabelFromResponse(fallbackRaw.toLowerCase(), labels);
+  return {
+    label: fallbackLabel,
+    prompt,
+    rawResponse,
+    model,
+    fallback: { model: fallbackModel, rawResponse: fallbackRaw, label: fallbackLabel },
+  };
 }
 
 export function buildPreviewQueryFromTemplate(
@@ -5113,7 +5134,7 @@ app.get('/api/repositories/search/commits', optionalAuthMiddleware, async (c) =>
 
     let isNewKeyword = false;
     let autoLabel: string | null = null;
-    let classifyDebug: { prompt: string; rawResponse: string; resolvedLabel: string; model: string } | null = null;
+    let classifyDebug: { prompt: string; rawResponse: string; resolvedLabel: string; model: string; fallback: { model: string; rawResponse: string; label: string } | null } | null = null;
     const cookieHeader = c.req.header('Cookie');
     const cookieValsSearch = getCookieValues(cookieHeader, ['user_search_label_mode', 'keyword_classify_debug']);
     const searchLabelMode = cookieValsSearch['user_search_label_mode'];
@@ -5156,13 +5177,21 @@ app.get('/api/repositories/search/commits', optionalAuthMiddleware, async (c) =>
         const classifyResult = await classifyKeywordWithAI(c.env.AI, model, q, classifyLabels);
         autoLabel = classifyResult.label;
         if (classifyDebugEnabled) {
-          classifyDebug = { prompt: classifyResult.prompt, rawResponse: classifyResult.rawResponse, resolvedLabel: classifyResult.label, model: classifyResult.model };
+          classifyDebug = {
+            prompt: classifyResult.prompt,
+            rawResponse: classifyResult.rawResponse,
+            resolvedLabel: classifyResult.label,
+            model: classifyResult.model,
+            fallback: classifyResult.fallback ?? null,
+          };
         }
         if (autoLabel !== 'uncategorized') {
+          // 実際に分類に使ったモデル名（フォールバック時はフォールバックモデル）
+          const usedModel = classifyResult.fallback ? classifyResult.fallback.model : classifyResult.model;
           try {
             await c.env.DB.prepare(
-              `UPDATE commit_search_keyword_labels SET label = ?, updated_at = datetime('now') WHERE user_id = ? AND search_query = ?`
-            ).bind(autoLabel, user.sub, q).run();
+              `UPDATE commit_search_keyword_labels SET label = ?, ai_model = ?, updated_at = datetime('now') WHERE user_id = ? AND search_query = ?`
+            ).bind(autoLabel, usedModel, user.sub, q).run();
           } catch (updateErr) {
             logger.warn('auto-classify label update failed', { query: q, error: updateErr instanceof Error ? updateErr.message : 'Unknown error' });
             autoLabel = 'uncategorized';
