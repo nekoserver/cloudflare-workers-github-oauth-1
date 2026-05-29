@@ -1280,6 +1280,29 @@ function getStatusTablePreviewQuery(
   }
 }
 
+export function buildKeywordClassificationPrompt(keyword: string, labels: string[]): string {
+  return `次の検索キーワードを、以下のカテゴリのいずれか1つに分類してください。\nカテゴリ: ${labels.join(', ')}\nキーワード: "${keyword}"\nカテゴリ名のみを返してください。他の文字を含めないでください。`;
+}
+
+async function classifyKeywordWithAI(
+  ai: Ai,
+  model: string,
+  keyword: string,
+  labels: string[],
+): Promise<string> {
+  const prompt = buildKeywordClassificationPrompt(keyword, labels);
+  try {
+    const result = await (ai as unknown as { run: (model: string, opts: Record<string, unknown>) => Promise<{ response?: string }> }).run(model, {
+      prompt,
+      max_tokens: 20,
+    });
+    const raw = (result?.response ?? '').trim().toLowerCase();
+    return labels.find((l) => raw.includes(l)) ?? 'uncategorized';
+  } catch {
+    return 'uncategorized';
+  }
+}
+
 export function buildPreviewQueryFromTemplate(
   template: string,
   userId: string,
@@ -2280,7 +2303,7 @@ app.get('/settings', authMiddleware, async (c) => {
   const statusTableAutoDetect = cookieVals['user_status_table_autodetect'] === 'off' ? 'off' : 'on';
   const statusShowAutoDetectedTables = cookieVals['user_status_show_autodetected_tables'] === 'on' ? 'on' : 'off';
   const statusIgnoreUnknownUnclassifiedWarning = cookieVals['user_status_ignore_unknown_unclassified_warning'] === 'off' ? 'off' : 'on';
-  const searchLabelMode = cookieVals['user_search_label_mode'] === 'manual-modal' ? 'manual-modal' : 'uncategorized';
+  const searchLabelMode = ['manual-modal', 'auto-classify'].includes(cookieVals['user_search_label_mode'] ?? '') ? cookieVals['user_search_label_mode'] : 'uncategorized';
 
   let issuedAt: string;
   let expiresAt: string;
@@ -5071,6 +5094,7 @@ app.get('/api/repositories/search/commits', optionalAuthMiddleware, async (c) =>
     }
 
     let isNewKeyword = false;
+    let autoLabel: string | null = null;
     try {
       const labelInsert = await c.env.DB.prepare(
         `INSERT OR IGNORE INTO commit_search_keyword_labels (user_id, search_query, label, created_at, updated_at) VALUES (?, ?, 'uncategorized', datetime('now'), datetime('now'))`
@@ -5079,7 +5103,28 @@ app.get('/api/repositories/search/commits', optionalAuthMiddleware, async (c) =>
     } catch (labelErr) {
       logger.warn('keyword label insert failed', { query: q, error: labelErr instanceof Error ? labelErr.message : 'Unknown error' });
     }
-    return jsonUtf8({ results, query: q, total: totalMatches, isNewKeyword });
+
+    if (isNewKeyword) {
+      const cookieHeader = c.req.header('Cookie');
+      const searchLabelMode = getCookieValues(cookieHeader, ['user_search_label_mode'])['user_search_label_mode'];
+      if (searchLabelMode === 'auto-classify' && c.env.AI) {
+        const CLASSIFY_LABELS = ['feature', 'ui', 'tech', 'database', 'bugfix', 'ops'];
+        const model = resolveAiModel(c.env.AI_MODEL);
+        autoLabel = await classifyKeywordWithAI(c.env.AI, model, q, CLASSIFY_LABELS);
+        if (autoLabel !== 'uncategorized') {
+          try {
+            await c.env.DB.prepare(
+              `UPDATE commit_search_keyword_labels SET label = ?, updated_at = datetime('now') WHERE user_id = ? AND search_query = ?`
+            ).bind(autoLabel, user.sub, q).run();
+          } catch (updateErr) {
+            logger.warn('auto-classify label update failed', { query: q, error: updateErr instanceof Error ? updateErr.message : 'Unknown error' });
+            autoLabel = null;
+          }
+        }
+      }
+    }
+
+    return jsonUtf8({ results, query: q, total: totalMatches, isNewKeyword, autoLabel });
   } catch (error) {
     logger.warn('Commit search failed', {
       query: q,
@@ -6045,7 +6090,7 @@ app.post('/api/settings/status-ignore-unknown-unclassified-warning', authMiddlew
 app.post('/api/settings/search-label-mode', authMiddleware, async (c) => {
   try {
     const { mode } = await c.req.json();
-    if (mode !== 'uncategorized' && mode !== 'manual-modal') {
+    if (mode !== 'uncategorized' && mode !== 'manual-modal' && mode !== 'auto-classify') {
       return c.json({ error: '無効なモードです' }, 400);
     }
     c.header('Set-Cookie', `user_search_label_mode=${mode}; Path=/; Secure; SameSite=Lax; Max-Age=31536000`);
