@@ -5188,12 +5188,24 @@ app.get('/api/repositories/search/commits', optionalAuthMiddleware, async (c) =>
         if (autoLabel !== 'uncategorized') {
           // 実際に分類に使ったモデル名（フォールバック時はフォールバックモデル）
           const usedModel = classifyResult.fallback ? classifyResult.fallback.model : classifyResult.model;
+          let labelSaved = false;
           try {
             await c.env.DB.prepare(
               `UPDATE commit_search_keyword_labels SET label = ?, ai_model = ?, updated_at = datetime('now') WHERE user_id = ? AND search_query = ?`
             ).bind(autoLabel, usedModel, user.sub, q).run();
-          } catch (updateErr) {
-            logger.warn('auto-classify label update failed', { query: q, error: updateErr instanceof Error ? updateErr.message : 'Unknown error' });
+            labelSaved = true;
+          } catch {
+            // ai_model カラム未作成（マイグレーション未実行）の場合はカラムなしで再試行
+            try {
+              await c.env.DB.prepare(
+                `UPDATE commit_search_keyword_labels SET label = ?, updated_at = datetime('now') WHERE user_id = ? AND search_query = ?`
+              ).bind(autoLabel, user.sub, q).run();
+              labelSaved = true;
+            } catch (updateErr) {
+              logger.warn('auto-classify label update failed', { query: q, error: updateErr instanceof Error ? updateErr.message : 'Unknown error' });
+            }
+          }
+          if (!labelSaved) {
             autoLabel = 'uncategorized';
             if (classifyDebug) classifyDebug.resolvedLabel = 'uncategorized';
           }
