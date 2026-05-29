@@ -4970,9 +4970,34 @@ export function getRepositoriesPage(user: {
           var newBtn = document.createElement('button');
           newBtn.className = 'history-label-btn';
           newBtn.setAttribute('data-label', lbl);
+          newBtn.setAttribute('data-label-name', lbl);
           newBtn.textContent = lbl;
           if (uncatBtn) historyLabelFilter.insertBefore(newBtn, uncatBtn);
           else historyLabelFilter.appendChild(newBtn);
+        });
+      }
+
+      var showLabelBadgeCount = getCookie('keyword_badge_count') !== 'off';
+
+      function updateLabelBadgeCounts(items) {
+        if (!historyLabelFilter) return;
+        var counts = {};
+        items.forEach(function(item) {
+          var lbl = item.label || 'uncategorized';
+          counts[lbl] = (counts[lbl] || 0) + 1;
+        });
+        var total = items.length;
+        historyLabelFilter.querySelectorAll('.history-label-btn').forEach(function(btn) {
+          var lbl = btn.getAttribute('data-label');
+          if (lbl === null) return;
+          var baseName = btn.getAttribute('data-label-name') || btn.textContent.replace(/\s*\(\d+\)$/, '').trim() || btn.textContent;
+          if (!btn.getAttribute('data-label-name')) btn.setAttribute('data-label-name', baseName);
+          if (showLabelBadgeCount) {
+            var cnt = lbl === '' ? total : (counts[lbl] || 0);
+            btn.textContent = baseName + ' (' + cnt + ')';
+          } else {
+            btn.textContent = baseName;
+          }
         });
       }
 
@@ -5067,11 +5092,13 @@ export function getRepositoriesPage(user: {
                   var newBtn = document.createElement('button');
                   newBtn.className = 'history-label-btn';
                   newBtn.setAttribute('data-label', label);
+                  newBtn.setAttribute('data-label-name', label);
                   newBtn.textContent = label;
                   var uncatBtn = historyLabelFilter.querySelector('[data-label="uncategorized"]');
                   if (uncatBtn) historyLabelFilter.insertBefore(newBtn, uncatBtn);
                   else historyLabelFilter.appendChild(newBtn);
                 }
+                updateLabelBadgeCounts(currentItems);
                 selectLabelFilter(label);
               })
               .catch(function() {
@@ -5476,6 +5503,7 @@ export function getRepositoriesPage(user: {
           }
           currentItems = dedupeAndSort(data.history);
           syncFilterBarFromItems(currentItems);
+          updateLabelBadgeCounts(currentItems);
           if (data && data.searchLabelMode) searchLabelMode = data.searchLabelMode;
           refreshGrid(null, null);
           var pending = window.__pendingNewKeyword;
