@@ -4830,7 +4830,7 @@ export function getRepositoriesPage(user: {
         openSearchModal();
         searchBtn.disabled = true;
 
-        fetch('/api/repositories/search/commits?q=' + encodeURIComponent(query), { credentials: 'same-origin' })
+        fetch('/api/repositories/search/commits?q=' + encodeURIComponent(query), { credentials: 'same-origin', cache: 'no-store' })
           .then(function(res) { return res.json(); })
           .then(function(data) {
             searchBtn.disabled = false;
@@ -4857,7 +4857,6 @@ export function getRepositoriesPage(user: {
                 notif.textContent = notifMsg;
                 document.body.appendChild(notif);
                 setTimeout(function() { if (notif.parentNode) notif.parentNode.removeChild(notif); }, 9000);
-                // AI分類デバッグモーダル
                 if (data.classifyDebug && getCookie('keyword_classify_debug') === 'on') {
                   showClassifyDebugModal(data.classifyDebug);
                 }
@@ -4865,7 +4864,6 @@ export function getRepositoriesPage(user: {
                 window.__pendingNewKeyword = data.query;
               }
             }
-            // 検索履歴セレクトをリロード
             if (typeof window.__reloadSearchHistory === 'function') window.__reloadSearchHistory();
           })
           .catch(function() {
@@ -5464,7 +5462,7 @@ export function getRepositoriesPage(user: {
         hSearchBtn.disabled = true;
         setSearchStatus('検索中...', 'searching');
 
-        fetch('/api/repositories/search/commits?q=' + encodeURIComponent(query), { credentials: 'same-origin' })
+        fetch('/api/repositories/search/commits?q=' + encodeURIComponent(query), { credentials: 'same-origin', cache: 'no-store' })
           .then(function(res) { return res.json(); })
           .then(function(data) {
             hSearchBtn.disabled = false;
@@ -5481,6 +5479,24 @@ export function getRepositoriesPage(user: {
               mergeResult(query, 0);
             }
             hSearchInput.value = '';
+            if (data.isNewKeyword && data.autoLabel != null) {
+              var isSuccess = data.autoLabel !== 'uncategorized';
+              var notif = document.createElement('div');
+              notif.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);'
+                + (isSuccess
+                  ? 'background:#c6f6d5;color:#276749;border:1px solid #9ae6b4;'
+                  : 'background:#fefcbf;color:#744210;border:1px solid #f6e05e;')
+                + 'padding:14px 24px;border-radius:10px;font-size:14px;z-index:10000;text-align:center;'
+                + 'box-shadow:0 4px 16px rgba(0,0,0,0.15);max-width:360px;line-height:1.5;';
+              notif.textContent = isSuccess
+                ? 'キーワード「' + data.query + '」は「' + data.autoLabel + '」に分類されました'
+                : data.query + 'は適切なカテゴリが存在しないので未分類に分類されました';
+              document.body.appendChild(notif);
+              setTimeout(function() { if (notif.parentNode) notif.parentNode.removeChild(notif); }, 9000);
+              if (data.classifyDebug && getCookie('keyword_classify_debug') === 'on') {
+                showClassifyDebugModal(data.classifyDebug);
+              }
+            }
           })
           .catch(function() {
             hSearchBtn.disabled = false;
