@@ -5250,7 +5250,7 @@ export function getRepositoriesPage(user: {
           classifyBtn.addEventListener('click', function() { showLabelClassificationModal(query); });
         }
 
-        fetch('/api/repositories/search/keyword-stats?q=' + encodeURIComponent(query), { credentials: 'same-origin' })
+        fetch('/api/repositories/search/keyword-stats?q=' + encodeURIComponent(query), { credentials: 'same-origin', cache: 'no-store' })
           .then(function(res) { return res.ok ? res.json() : null; })
           .then(function(data) {
             if (!data || data.error) {

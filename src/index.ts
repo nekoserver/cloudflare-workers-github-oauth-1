@@ -595,6 +595,7 @@ function jsonUtf8(payload: unknown, status = 200): Response {
     status,
     headers: {
       'Content-Type': 'application/json; charset=utf-8',
+      'Cache-Control': 'no-store',
     },
   });
 }
