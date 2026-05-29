@@ -2593,28 +2593,43 @@ export function getRepositoriesPage(user: {
       var overlay = document.createElement('div');
       overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:10100;display:flex;align-items:center;justify-content:center;';
       var modal = document.createElement('div');
-      modal.style.cssText = 'background:var(--bg-primary);color:var(--text-primary);border:1px solid var(--border-color);border-radius:12px;padding:24px;max-width:600px;width:90%;max-height:80vh;overflow-y:auto;box-shadow:0 8px 32px rgba(0,0,0,0.25);font-size:13px;';
+      modal.style.cssText = 'background:var(--bg-primary);color:var(--text-primary);border:1px solid var(--border-color);border-radius:12px;padding:24px;max-width:620px;width:90%;max-height:80vh;overflow-y:auto;box-shadow:0 8px 32px rgba(0,0,0,0.25);font-size:13px;';
       var esc = function(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); };
+      var rowStyle = 'margin-bottom:12px;';
+      var labelStyle = 'font-weight:600;margin-bottom:4px;color:var(--text-muted);';
+      var boxStyle = 'font-family:monospace;background:var(--bg-secondary);padding:8px 10px;border-radius:6px;border:1px solid var(--border-color);';
+      var hasFallback = debug.fallback != null;
+
+      var fallbackSection = '';
+      if (hasFallback) {
+        var fb = debug.fallback;
+        var fbHasResponse = fb.rawResponse !== '';
+        fallbackSection = '<div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--border-color);">'
+          + '<div style="font-weight:700;margin-bottom:10px;color:#b7791f;">フォールバック試行（プライマリが空レスポンスのため）</div>'
+          + '<div style="' + rowStyle + '"><div style="' + labelStyle + '">フォールバックモデル</div>'
+          + '<div style="' + boxStyle + '">' + esc(fb.model) + '</div></div>'
+          + '<div style="' + rowStyle + '"><div style="' + labelStyle + '">フォールバックからの応答</div>'
+          + '<div style="' + boxStyle + (fbHasResponse ? 'color:#276749;' : '') + '">'
+          + (fbHasResponse ? esc(fb.rawResponse) : '<em style="color:var(--text-muted);">(空)</em>') + '</div></div>'
+          + '<div><div style="' + labelStyle + '">フォールバックの分類結果</div>'
+          + '<div style="' + boxStyle + 'font-weight:bold;">' + esc(fb.label) + '</div></div>'
+          + '</div>';
+      }
+
       modal.innerHTML = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">'
         + '<strong style="font-size:15px;">AI分類デバッグ情報</strong>'
         + '<button id="classifyDebugClose" style="border:none;background:none;font-size:18px;cursor:pointer;color:var(--text-muted);">×</button>'
         + '</div>'
-        + '<div style="margin-bottom:12px;">'
-        + '<div style="font-weight:600;margin-bottom:4px;color:var(--text-muted);">使用モデル</div>'
-        + '<div style="font-family:monospace;background:var(--bg-secondary);padding:8px 10px;border-radius:6px;border:1px solid var(--border-color);">' + esc(debug.model) + '</div>'
-        + '</div>'
-        + '<div style="margin-bottom:12px;">'
-        + '<div style="font-weight:600;margin-bottom:4px;color:var(--text-muted);">AIへ送ったプロンプト</div>'
-        + '<pre style="margin:0;white-space:pre-wrap;word-break:break-word;background:var(--bg-secondary);padding:10px;border-radius:6px;border:1px solid var(--border-color);font-size:12px;line-height:1.6;">' + esc(debug.prompt) + '</pre>'
-        + '</div>'
-        + '<div style="margin-bottom:12px;">'
-        + '<div style="font-weight:600;margin-bottom:4px;color:var(--text-muted);">AIからの生レスポンス</div>'
-        + '<div style="font-family:monospace;background:var(--bg-secondary);padding:8px 10px;border-radius:6px;border:1px solid var(--border-color);">' + (esc(debug.rawResponse) || '<em style="color:var(--text-muted);">(空)</em>') + '</div>'
-        + '</div>'
-        + '<div>'
-        + '<div style="font-weight:600;margin-bottom:4px;color:var(--text-muted);">ワーカーが確定したカテゴリ</div>'
-        + '<div style="font-family:monospace;background:var(--bg-secondary);padding:8px 10px;border-radius:6px;border:1px solid var(--border-color);font-weight:bold;">' + esc(debug.resolvedLabel) + '</div>'
-        + '</div>';
+        + '<div style="' + rowStyle + '"><div style="' + labelStyle + '">プライマリモデル</div>'
+        + '<div style="' + boxStyle + '">' + esc(debug.model) + '</div></div>'
+        + '<div style="' + rowStyle + '"><div style="' + labelStyle + '">AIへ送ったプロンプト</div>'
+        + '<pre style="margin:0;white-space:pre-wrap;word-break:break-word;background:var(--bg-secondary);padding:10px;border-radius:6px;border:1px solid var(--border-color);font-size:12px;line-height:1.6;">' + esc(debug.prompt) + '</pre></div>'
+        + '<div style="' + rowStyle + '"><div style="' + labelStyle + '">プライマリからの応答</div>'
+        + '<div style="' + boxStyle + '">' + (esc(debug.rawResponse) || '<em style="color:var(--text-muted);">(空)</em>') + '</div></div>'
+        + (hasFallback ? fallbackSection : '')
+        + '<div style="margin-top:' + (hasFallback ? '16' : '0') + 'px;padding-top:' + (hasFallback ? '14' : '0') + 'px;' + (hasFallback ? 'border-top:1px solid var(--border-color);' : '') + '">'
+        + '<div style="' + labelStyle + '">ワーカーが確定したカテゴリ</div>'
+        + '<div style="' + boxStyle + 'font-weight:bold;">' + esc(debug.resolvedLabel) + '</div></div>';
       overlay.appendChild(modal);
       document.body.appendChild(overlay);
       function close() { if (overlay.parentNode) overlay.parentNode.removeChild(overlay); }
