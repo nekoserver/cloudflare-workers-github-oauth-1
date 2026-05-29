@@ -4951,6 +4951,23 @@ export function getRepositoriesPage(user: {
         if (e.key === 'Escape' && historyModal.classList.contains('show')) closeHistoryModal();
       });
 
+      function syncFilterBarFromItems(items) {
+        if (!historyLabelFilter) return;
+        var existing = new Set(Array.from(historyLabelFilter.querySelectorAll('.history-label-btn[data-label]')).map(function(b) { return b.getAttribute('data-label'); }));
+        var uncatBtn = historyLabelFilter.querySelector('[data-label="uncategorized"]');
+        items.forEach(function(item) {
+          var lbl = item.label;
+          if (!lbl || lbl === 'uncategorized' || existing.has(lbl)) return;
+          existing.add(lbl);
+          var newBtn = document.createElement('button');
+          newBtn.className = 'history-label-btn';
+          newBtn.setAttribute('data-label', lbl);
+          newBtn.textContent = lbl;
+          if (uncatBtn) historyLabelFilter.insertBefore(newBtn, uncatBtn);
+          else historyLabelFilter.appendChild(newBtn);
+        });
+      }
+
       function dedupeAndSort(history) {
         var map = {};
         history.forEach(function(item) {
@@ -5441,6 +5458,7 @@ export function getRepositoriesPage(user: {
             return;
           }
           currentItems = dedupeAndSort(data.history);
+          syncFilterBarFromItems(currentItems);
           if (data && data.searchLabelMode) searchLabelMode = data.searchLabelMode;
           refreshGrid(null, null);
           var pending = window.__pendingNewKeyword;
