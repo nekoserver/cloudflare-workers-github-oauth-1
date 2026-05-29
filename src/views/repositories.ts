@@ -955,6 +955,8 @@ export function getRepositoriesPage(user: {
     .keyword-detail-graph-wrap { overflow-x: auto; }
     .keyword-detail-graph-wrap svg { display: block; }
     .kd-bar { fill: rgba(102,126,234,0.7); transition: fill 0.15s; }
+    .keyword-detail-classify-btn { font-size:11px; padding:3px 11px; border-radius:12px; border:1px solid var(--accent-color,#48bb78); background:transparent; color:var(--accent-color,#48bb78); cursor:pointer; white-space:nowrap; margin-right:8px; transition:background .15s,color .15s; }
+    .keyword-detail-classify-btn:hover { background:var(--accent-color,#48bb78); color:#fff; }
     .kd-bar:hover { fill: rgba(102,126,234,1); }
     .kd-label { font-size: 9px; fill: var(--text-muted, #888); }
     .kd-value { font-size: 9px; fill: var(--text-primary, #333); font-weight: 700; }
@@ -5152,7 +5154,10 @@ export function getRepositoriesPage(user: {
         keywordDetailPanel.style.display = '';
         keywordDetailPanel.innerHTML = '<div class="keyword-detail-panel"><div class="keyword-detail-panel-header">'
           + '<span class="keyword-detail-panel-title">「' + escHtml(query) + '」の詳細集計</span>'
+          + '<div style="display:flex;align-items:center;gap:4px;">'
+          + '<button class="keyword-detail-classify-btn" id="keywordDetailClassifyBtn" type="button">このキーワードを分類する</button>'
           + '<button class="keyword-detail-panel-close" id="keywordDetailClose" type="button">&times;</button>'
+          + '</div>'
           + '</div><div class="keyword-detail-loading">読み込み中...</div></div>';
 
         var closeBtn = document.getElementById('keywordDetailClose');
@@ -5163,6 +5168,10 @@ export function getRepositoriesPage(user: {
             keywordDetailPanel.innerHTML = '';
             refreshGrid(null, null);
           });
+        }
+        var classifyBtn = document.getElementById('keywordDetailClassifyBtn');
+        if (classifyBtn) {
+          classifyBtn.addEventListener('click', function() { showLabelClassificationModal(query); });
         }
 
         fetch('/api/repositories/search/keyword-stats?q=' + encodeURIComponent(query), { credentials: 'same-origin' })
@@ -5230,7 +5239,10 @@ export function getRepositoriesPage(user: {
             if (panel) {
               panel.innerHTML = '<div class="keyword-detail-panel-header">'
                 + '<span class="keyword-detail-panel-title">「' + escHtml(query) + '」の詳細集計</span>'
+                + '<div style="display:flex;align-items:center;gap:4px;">'
+                + '<button class="keyword-detail-classify-btn" id="keywordDetailClassifyBtn2" type="button">このキーワードを分類する</button>'
                 + '<button class="keyword-detail-panel-close" id="keywordDetailClose" type="button">&times;</button>'
+                + '</div>'
                 + '</div>' + body;
               var closeBtn2 = panel.querySelector('#keywordDetailClose');
               if (closeBtn2) {
@@ -5240,6 +5252,10 @@ export function getRepositoriesPage(user: {
                   keywordDetailPanel.innerHTML = '';
                   refreshGrid(null, null);
                 });
+              }
+              var classifyBtn2 = panel.querySelector('#keywordDetailClassifyBtn2');
+              if (classifyBtn2) {
+                classifyBtn2.addEventListener('click', function() { showLabelClassificationModal(query); });
               }
               panel.querySelectorAll('[data-cokey]').forEach(function(el) {
                 el.addEventListener('click', function() {
