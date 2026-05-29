@@ -4805,7 +4805,15 @@ export function getRepositoriesPage(user: {
             searchSubtitle.textContent = '「' + escapeForHtml(data.query) + '」— ' + data.total + ' 件のコミットが見つかりました';
             searchBody.innerHTML = renderSearchResults(data);
             if (data.isNewKeyword && data.total > 0) {
-              window.__pendingNewKeyword = data.query;
+              if (data.autoLabel) {
+                var notif = document.createElement('div');
+                notif.style.cssText = 'position:fixed;bottom:16px;left:50%;transform:translateX(-50%);background:var(--accent-color,#48bb78);color:#fff;padding:8px 18px;border-radius:8px;font-size:13px;z-index:10000;';
+                notif.textContent = '「' + data.query + '」を「' + data.autoLabel + '」に自動分類しました';
+                document.body.appendChild(notif);
+                setTimeout(function() { if (notif.parentNode) notif.parentNode.removeChild(notif); }, 4000);
+              } else {
+                window.__pendingNewKeyword = data.query;
+              }
             }
             // 検索履歴セレクトをリロード
             if (typeof window.__reloadSearchHistory === 'function') window.__reloadSearchHistory();

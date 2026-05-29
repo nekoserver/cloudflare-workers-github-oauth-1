@@ -38,7 +38,7 @@ export function getSettingsPage(user: {
   const currentStatusTableAutoDetect = user.statusTableAutoDetect === 'off' ? 'off' : 'on';
   const currentStatusShowAutoDetectedTables = user.statusShowAutoDetectedTables === 'on' ? 'on' : 'off';
   const currentStatusIgnoreUnknownUnclassifiedWarning = user.statusIgnoreUnknownUnclassifiedWarning === 'off' ? 'off' : 'on';
-  const currentSearchLabelMode = user.searchLabelMode === 'manual-modal' ? 'manual-modal' : 'uncategorized';
+  const currentSearchLabelMode = ['manual-modal', 'auto-classify'].includes(user.searchLabelMode ?? '') ? user.searchLabelMode : 'uncategorized';
   const requestedScopes = user.githubScopes ? user.githubScopes.split(/\s+/).filter(Boolean) : [];
   const grantedScopes = user.githubGrantedScopes ?? null;
   const scopeError = user.githubScopeError ? escapeHtml(user.githubScopeError) : null;
@@ -469,6 +469,7 @@ export function getSettingsPage(user: {
               <select class="timezone-select" id="searchLabelModeSelect" onchange="onSearchLabelModeChange()">
                 <option value="uncategorized" ${currentSearchLabelMode === 'uncategorized' ? 'selected' : ''}>未分類のまま（分類しない）</option>
                 <option value="manual-modal" ${currentSearchLabelMode === 'manual-modal' ? 'selected' : ''}>新規キーワード追加時にラベル選択モーダルを表示</option>
+                <option value="auto-classify" ${currentSearchLabelMode === 'auto-classify' ? 'selected' : ''}>AIが自動分類する（Workers AI）</option>
               </select>
             </div>
           </div>
@@ -1070,7 +1071,7 @@ export function getSettingsPage(user: {
         if (!res.ok) throw new Error('failed');
       } catch(e) {
         alert('分類モード設定の変更に失敗しました');
-        sel.value = mode === 'manual-modal' ? 'uncategorized' : 'manual-modal';
+        sel.value = 'uncategorized';
       }
     }
 
