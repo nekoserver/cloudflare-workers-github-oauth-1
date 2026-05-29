@@ -338,3 +338,70 @@ describe('検索履歴モーダル: 対象リポジトリ変更時の詳細パ�
     expect(handler).toContain('null');
   });
 });
+
+describe('検索履歴モーダル: ラベルフィルタUI', () => {
+  it('historyLabelFilter コンテナが HTML に存在する', () => {
+    const html = getRepositoriesPage(minimalUser);
+    expect(html).toContain('id="historyLabelFilter"');
+  });
+
+  it('すべてボタン（data-label=""）が存在する', () => {
+    const html = getRepositoriesPage(minimalUser);
+    expect(html).toContain('data-label=""');
+    expect(html).toContain('すべて');
+  });
+
+  it('各ラベルボタンが存在する', () => {
+    const html = getRepositoriesPage(minimalUser);
+    for (const label of ['feature', 'ui', 'tech', 'database', 'bugfix', 'ops']) {
+      expect(html).toContain(`data-label="${label}"`);
+    }
+  });
+
+  it('未分類ボタンが存在する', () => {
+    const html = getRepositoriesPage(minimalUser);
+    expect(html).toContain('data-label="uncategorized"');
+    expect(html).toContain('未分類');
+  });
+
+  it('初期状態ですべてボタンが active クラスを持つ', () => {
+    const html = getRepositoriesPage(minimalUser);
+    expect(html).toMatch(/history-label-btn active[^"]*" data-label=""/);
+  });
+
+  it('selectedLabel 変数が JS に存在する', () => {
+    const html = getRepositoriesPage(minimalUser);
+    expect(html).toContain("var selectedLabel = ''");
+  });
+
+  it('ラベルフィルタのクリックイベントリスナが存在する', () => {
+    const html = getRepositoriesPage(minimalUser);
+    expect(html).toContain('historyLabelFilter');
+    expect(html).toContain('history-label-btn');
+    expect(html).toContain('selectedLabel');
+  });
+
+  it('dedupeAndSort が label フィールドを保持する', () => {
+    const html = getRepositoriesPage(minimalUser);
+    expect(html).toContain("label: item.label || 'uncategorized'");
+  });
+
+  it('getIncrementalFilteredItems が selectedLabel でフィルタする', () => {
+    const html = getRepositoriesPage(minimalUser);
+    expect(html).toContain('item.label === selectedLabel');
+  });
+
+  it('closeHistoryModal が selectedLabel をリセットする', () => {
+    const html = getRepositoriesPage(minimalUser);
+    const closeMatch = html.match(/function closeHistoryModal\(\)[\s\S]*?\}/);
+    expect(closeMatch).not.toBeNull();
+    expect(closeMatch![0]).toContain("selectedLabel = ''");
+  });
+
+  it('updateTitle がフィルタ件数を表示する', () => {
+    const html = getRepositoriesPage(minimalUser);
+    expect(html).toContain('function updateTitle()');
+    expect(html).toContain('getIncrementalFilteredItems().length');
+    expect(html).toContain("' / '");
+  });
+});
