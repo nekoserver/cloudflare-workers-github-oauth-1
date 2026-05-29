@@ -1268,6 +1268,11 @@ function getStatusTablePreviewQuery(
         sql: `SELECT * FROM ${tableName} ORDER BY seq_num DESC LIMIT ${STATUS_TABLE_PREVIEW_LIMIT}`,
         params: [],
       };
+    case 'commit_search_keyword_labels':
+      return {
+        sql: `SELECT * FROM ${tableName} WHERE user_id = ? ORDER BY label ASC, search_query ASC LIMIT ${STATUS_TABLE_PREVIEW_LIMIT}`,
+        params: [userId],
+      };
     default:
       return null;
   }
@@ -1462,6 +1467,15 @@ ORDER BY seq_num DESC
 LIMIT 20;`,
         params: [],
         note: 'コミットインデックスを通し番号の新しい順（最新コミット優先）で取得します。',
+      };
+    case 'commit_search_keyword_labels':
+      return {
+        sql: `SELECT * FROM commit_search_keyword_labels
+WHERE user_id = ?
+ORDER BY label ASC, search_query ASC
+LIMIT 20;`,
+        params: ['user.sub'],
+        note: '検索キーワードのラベル分類を label 順・キーワード順で取得します。',
       };
     default:
       return null;
