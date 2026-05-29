@@ -5400,9 +5400,12 @@ export function getRepositoriesPage(user: {
 
             // 右列: 共起キーワード + 時系列グラフ
             body += '<div>';
+            var coCount = (data.coKeywords && data.coKeywords.length) || 0;
+            var totalKw = data.totalKeywordCount || 0;
+            var coTitle = '共起キーワード : (' + coCount + '/' + totalKw + ')';
             if (data.coKeywords && data.coKeywords.length > 0) {
               body += '<div class="keyword-detail-section">';
-              body += '<div class="keyword-detail-section-title">共起キーワード（同一リポジトリにヒット）</div>';
+              body += '<div class="keyword-detail-section-title">' + escHtml(coTitle) + '</div>';
               body += '<div class="keyword-detail-cokey-list">';
               data.coKeywords.slice(0, 20).forEach(function(k) {
                 body += '<span class="keyword-detail-cokey-tag" data-cokey="' + escHtml(k.search_query) + '" title="共有リポジトリ数: ' + k.shared_repo_count + '">'
@@ -5412,7 +5415,7 @@ export function getRepositoriesPage(user: {
               });
               body += '</div></div>';
             } else {
-              body += '<div class="keyword-detail-section"><div class="keyword-detail-section-title">共起キーワード</div>'
+              body += '<div class="keyword-detail-section"><div class="keyword-detail-section-title">' + escHtml(coTitle) + '</div>'
                 + '<div style="font-size:12px;color:var(--text-muted);">なし</div></div>';
             }
 
