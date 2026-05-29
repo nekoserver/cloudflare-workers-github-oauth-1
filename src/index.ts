@@ -1281,7 +1281,14 @@ function getStatusTablePreviewQuery(
 }
 
 export function buildKeywordClassificationPrompt(keyword: string, labels: string[]): string {
-  return `次の検索キーワードを、以下のカテゴリのいずれか1つに分類してください。\nカテゴリ: ${labels.join(', ')}\nキーワード: "${keyword}"\nカテゴリ名のみを返してください。他の文字を含めないでください。`;
+  return `次の検索キーワードを、以下のカテゴリのいずれか1つに分類してください。複数のカテゴリに該当する場合でも、最も適切な1つだけ返してください。\nカテゴリ: ${labels.join(', ')}\nキーワード: "${keyword}"\nカテゴリ名のみを返してください。他の文字を含めないでください。`;
+}
+
+export function pickBestLabelFromResponse(raw: string, labels: string[]): string {
+  const matched = labels.filter((l) => raw.includes(l));
+  if (matched.length === 0) return 'uncategorized';
+  if (matched.length === 1) return matched[0];
+  return matched.reduce((best, l) => raw.indexOf(l) < raw.indexOf(best) ? l : best);
 }
 
 async function classifyKeywordWithAI(
@@ -1297,7 +1304,7 @@ async function classifyKeywordWithAI(
       max_tokens: 20,
     });
     const raw = (result?.response ?? '').trim().toLowerCase();
-    return labels.find((l) => raw.includes(l)) ?? 'uncategorized';
+    return pickBestLabelFromResponse(raw, labels);
   } catch {
     return 'uncategorized';
   }
@@ -5109,9 +5116,22 @@ app.get('/api/repositories/search/commits', optionalAuthMiddleware, async (c) =>
       const searchLabelMode = getCookieValues(cookieHeader, ['user_search_label_mode'])['user_search_label_mode'];
       if (searchLabelMode === 'auto-classify') {
         if (c.env.AI) {
-          const CLASSIFY_LABELS = ['feature', 'ui', 'tech', 'database', 'bugfix', 'ops'];
+          const DEFAULT_CLASSIFY_LABELS = ['feature', 'ui', 'tech', 'database', 'bugfix', 'ops'];
+          let classifyLabels = DEFAULT_CLASSIFY_LABELS;
+          try {
+            const userLabelRows = await c.env.DB.prepare(
+              `SELECT DISTINCT label FROM commit_search_keyword_labels WHERE user_id = ? AND label != 'uncategorized' ORDER BY label`
+            ).bind(user.sub).all<{ label: string }>();
+            const userLabels = (userLabelRows.results ?? []).map((r) => r.label).filter(Boolean);
+            if (userLabels.length > 0) {
+              const merged = [...new Set([...DEFAULT_CLASSIFY_LABELS, ...userLabels])];
+              classifyLabels = merged;
+            }
+          } catch {
+            // ラベル取得失敗時はデフォルトで続行
+          }
           const model = resolveAiModel(c.env.AI_MODEL);
-          autoLabel = await classifyKeywordWithAI(c.env.AI, model, q, CLASSIFY_LABELS);
+          autoLabel = await classifyKeywordWithAI(c.env.AI, model, q, classifyLabels);
           if (autoLabel !== 'uncategorized') {
             try {
               await c.env.DB.prepare(

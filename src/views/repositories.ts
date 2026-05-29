@@ -4806,14 +4806,20 @@ export function getRepositoriesPage(user: {
             searchBody.innerHTML = renderSearchResults(data);
             if (data.isNewKeyword && data.total > 0) {
               if (data.autoLabel != null) {
-                var notifMsg = data.autoLabel === 'uncategorized'
-                  ? '「' + data.query + '」を未分類に分類しました（AI分類に失敗しました）'
-                  : '「' + data.query + '」を「' + data.autoLabel + '」に自動分類しました';
+                var isSuccess = data.autoLabel !== 'uncategorized';
+                var notifMsg = isSuccess
+                  ? 'キーワード「' + data.query + '」は「' + data.autoLabel + '」に分類されました'
+                  : data.query + 'は適切なカテゴリが存在しないので未分類に分類されました';
                 var notif = document.createElement('div');
-                notif.style.cssText = 'position:fixed;bottom:16px;left:50%;transform:translateX(-50%);background:var(--accent-color,#48bb78);color:#fff;padding:8px 18px;border-radius:8px;font-size:13px;z-index:10000;';
+                notif.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);'
+                  + (isSuccess
+                    ? 'background:#c6f6d5;color:#276749;border:1px solid #9ae6b4;'
+                    : 'background:#fefcbf;color:#744210;border:1px solid #f6e05e;')
+                  + 'padding:14px 24px;border-radius:10px;font-size:14px;z-index:10000;text-align:center;'
+                  + 'box-shadow:0 4px 16px rgba(0,0,0,0.15);max-width:360px;line-height:1.5;';
                 notif.textContent = notifMsg;
                 document.body.appendChild(notif);
-                setTimeout(function() { if (notif.parentNode) notif.parentNode.removeChild(notif); }, 4000);
+                setTimeout(function() { if (notif.parentNode) notif.parentNode.removeChild(notif); }, 9000);
               } else {
                 window.__pendingNewKeyword = data.query;
               }
