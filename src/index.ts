@@ -5484,12 +5484,27 @@ app.get('/api/repositories/search/keyword-stats', optionalAuthMiddleware, async 
       total_hits: number;
     }>();
 
+    // リポジトリ全体に対して検索したことのあるキーワードの総数
+    const totalKeywordCountSql = repoFilter
+      ? `SELECT COUNT(DISTINCT h.search_query) as cnt
+         FROM commit_search_history h
+         JOIN commit_search_repo_stats s ON s.search_history_id = h.id
+         WHERE h.user_id = ? AND s.repo_name = ?`
+      : `SELECT COUNT(DISTINCT search_query) as cnt
+         FROM commit_search_history
+         WHERE user_id = ?`;
+    const totalKeywordCountRow = await c.env.DB.prepare(totalKeywordCountSql)
+      .bind(...(repoFilter ? [user.sub, repoFilter] : [user.sub]))
+      .first<{ cnt: number }>();
+    const totalKeywordCount = totalKeywordCountRow?.cnt ?? 0;
+
     return jsonUtf8({
       query: q,
       summary: summary ?? null,
       repoStats: repoStats.results ?? [],
       coKeywords: coKeywords.results ?? [],
       timeseries: timeseries.results ?? [],
+      totalKeywordCount,
     });
   } catch (error) {
     logger.warn('Failed to fetch keyword stats', {
