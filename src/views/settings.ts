@@ -474,6 +474,16 @@ export function getSettingsPage(user: {
             </div>
           </div>
           <div class="info-item">
+            <span class="info-label">新検索キーワード分類時のAIへの問い合わせ内容を可視化する</span>
+            <div class="setting-control" style="justify-content: flex-end;">
+              <span class="theme-label" id="classifyDebugLabel">OFF</span>
+              <label class="theme-toggle-switch">
+                <input type="checkbox" id="classifyDebugCheckbox" onchange="onClassifyDebugChange()">
+                <span class="theme-toggle-slider"></span>
+              </label>
+            </div>
+          </div>
+          <div class="info-item">
             <span class="info-label">新規検索キーワードの分類対象</span>
             <div class="setting-control">
               <select class="timezone-select" id="searchLabelModeSelect" onchange="onSearchLabelModeChange()">
@@ -693,6 +703,24 @@ export function getSettingsPage(user: {
       var enabled = cb.checked;
       label.textContent = enabled ? 'ON' : 'OFF';
       document.cookie = 'keyword_badge_count=' + (enabled ? 'on' : 'off') + '; Path=/; SameSite=Lax; Max-Age=31536000';
+    }
+
+    // AI分類デバッグ表示の初期化
+    (function() {
+      var m = document.cookie.match('(^|;)\\\\s*keyword_classify_debug=([^;]*)');
+      var val = m ? decodeURIComponent(m[2]) : 'off';
+      var cb = document.getElementById('classifyDebugCheckbox');
+      var label = document.getElementById('classifyDebugLabel');
+      if (cb) cb.checked = (val === 'on');
+      if (label) label.textContent = (val === 'on') ? 'ON' : 'OFF';
+    })();
+
+    function onClassifyDebugChange() {
+      var cb = document.getElementById('classifyDebugCheckbox');
+      var label = document.getElementById('classifyDebugLabel');
+      var enabled = cb.checked;
+      label.textContent = enabled ? 'ON' : 'OFF';
+      document.cookie = 'keyword_classify_debug=' + (enabled ? 'on' : 'off') + '; Path=/; SameSite=Lax; Max-Age=31536000';
     }
 
     function onThemeSettingChange() {
