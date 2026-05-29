@@ -1292,22 +1292,30 @@ export function pickBestLabelFromResponse(raw: string, labels: string[]): string
   return matched.reduce((best, l) => raw.indexOf(l) < raw.indexOf(best) ? l : best);
 }
 
+interface ClassifyResult {
+  label: string;
+  prompt: string;
+  rawResponse: string;
+  model: string;
+}
+
 async function classifyKeywordWithAI(
   ai: Ai,
   model: string,
   keyword: string,
   labels: string[],
-): Promise<string> {
+): Promise<ClassifyResult> {
   const prompt = buildKeywordClassificationPrompt(keyword, labels);
   try {
     const result = await (ai as unknown as { run: (model: string, opts: Record<string, unknown>) => Promise<{ response?: string }> }).run(model, {
       prompt,
       max_tokens: 20,
     });
-    const raw = (result?.response ?? '').trim().toLowerCase();
-    return pickBestLabelFromResponse(raw, labels);
+    const rawResponse = (result?.response ?? '').trim();
+    const label = pickBestLabelFromResponse(rawResponse.toLowerCase(), labels);
+    return { label, prompt, rawResponse, model };
   } catch {
-    return 'uncategorized';
+    return { label: 'uncategorized', prompt, rawResponse: '', model };
   }
 }
 
@@ -5103,8 +5111,11 @@ app.get('/api/repositories/search/commits', optionalAuthMiddleware, async (c) =>
 
     let isNewKeyword = false;
     let autoLabel: string | null = null;
+    let classifyDebug: { prompt: string; rawResponse: string; resolvedLabel: string; model: string } | null = null;
     const cookieHeader = c.req.header('Cookie');
-    const searchLabelMode = getCookieValues(cookieHeader, ['user_search_label_mode'])['user_search_label_mode'];
+    const cookieValsSearch = getCookieValues(cookieHeader, ['user_search_label_mode', 'keyword_classify_debug']);
+    const searchLabelMode = cookieValsSearch['user_search_label_mode'];
+    const classifyDebugEnabled = cookieValsSearch['keyword_classify_debug'] === 'on';
     try {
       const labelInsert = await c.env.DB.prepare(
         `INSERT OR IGNORE INTO commit_search_keyword_labels (user_id, search_query, label, created_at, updated_at) VALUES (?, ?, 'uncategorized', datetime('now'), datetime('now'))`
@@ -5140,7 +5151,11 @@ app.get('/api/repositories/search/commits', optionalAuthMiddleware, async (c) =>
           }
         } catch { /* デフォルトラベルを使用 */ }
         const model = resolveAiModel(c.env.AI_MODEL);
-        autoLabel = await classifyKeywordWithAI(c.env.AI, model, q, classifyLabels);
+        const classifyResult = await classifyKeywordWithAI(c.env.AI, model, q, classifyLabels);
+        autoLabel = classifyResult.label;
+        if (classifyDebugEnabled) {
+          classifyDebug = { prompt: classifyResult.prompt, rawResponse: classifyResult.rawResponse, resolvedLabel: classifyResult.label, model: classifyResult.model };
+        }
         if (autoLabel !== 'uncategorized') {
           try {
             await c.env.DB.prepare(
@@ -5149,6 +5164,7 @@ app.get('/api/repositories/search/commits', optionalAuthMiddleware, async (c) =>
           } catch (updateErr) {
             logger.warn('auto-classify label update failed', { query: q, error: updateErr instanceof Error ? updateErr.message : 'Unknown error' });
             autoLabel = 'uncategorized';
+            if (classifyDebug) classifyDebug.resolvedLabel = 'uncategorized';
           }
         }
       } else {
@@ -5158,7 +5174,7 @@ app.get('/api/repositories/search/commits', optionalAuthMiddleware, async (c) =>
       }
     }
 
-    return jsonUtf8({ results, query: q, total: totalMatches, isNewKeyword, autoLabel });
+    return jsonUtf8({ results, query: q, total: totalMatches, isNewKeyword, autoLabel, classifyDebug });
   } catch (error) {
     logger.warn('Commit search failed', {
       query: q,

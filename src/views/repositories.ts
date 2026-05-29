@@ -2589,6 +2589,39 @@ export function getRepositoriesPage(user: {
       document.cookie = name + '=' + encodeURIComponent(value) + '; Path=/; SameSite=Lax; Max-Age=31536000';
     }
 
+    function showClassifyDebugModal(debug) {
+      var overlay = document.createElement('div');
+      overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:10100;display:flex;align-items:center;justify-content:center;';
+      var modal = document.createElement('div');
+      modal.style.cssText = 'background:var(--bg-primary);color:var(--text-primary);border:1px solid var(--border-color);border-radius:12px;padding:24px;max-width:600px;width:90%;max-height:80vh;overflow-y:auto;box-shadow:0 8px 32px rgba(0,0,0,0.25);font-size:13px;';
+      var esc = function(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); };
+      modal.innerHTML = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">'
+        + '<strong style="font-size:15px;">AI分類デバッグ情報</strong>'
+        + '<button id="classifyDebugClose" style="border:none;background:none;font-size:18px;cursor:pointer;color:var(--text-muted);">×</button>'
+        + '</div>'
+        + '<div style="margin-bottom:12px;">'
+        + '<div style="font-weight:600;margin-bottom:4px;color:var(--text-muted);">使用モデル</div>'
+        + '<div style="font-family:monospace;background:var(--bg-secondary);padding:8px 10px;border-radius:6px;border:1px solid var(--border-color);">' + esc(debug.model) + '</div>'
+        + '</div>'
+        + '<div style="margin-bottom:12px;">'
+        + '<div style="font-weight:600;margin-bottom:4px;color:var(--text-muted);">AIへ送ったプロンプト</div>'
+        + '<pre style="margin:0;white-space:pre-wrap;word-break:break-word;background:var(--bg-secondary);padding:10px;border-radius:6px;border:1px solid var(--border-color);font-size:12px;line-height:1.6;">' + esc(debug.prompt) + '</pre>'
+        + '</div>'
+        + '<div style="margin-bottom:12px;">'
+        + '<div style="font-weight:600;margin-bottom:4px;color:var(--text-muted);">AIからの生レスポンス</div>'
+        + '<div style="font-family:monospace;background:var(--bg-secondary);padding:8px 10px;border-radius:6px;border:1px solid var(--border-color);">' + (esc(debug.rawResponse) || '<em style="color:var(--text-muted);">(空)</em>') + '</div>'
+        + '</div>'
+        + '<div>'
+        + '<div style="font-weight:600;margin-bottom:4px;color:var(--text-muted);">ワーカーが確定したカテゴリ</div>'
+        + '<div style="font-family:monospace;background:var(--bg-secondary);padding:8px 10px;border-radius:6px;border:1px solid var(--border-color);font-weight:bold;">' + esc(debug.resolvedLabel) + '</div>'
+        + '</div>';
+      overlay.appendChild(modal);
+      document.body.appendChild(overlay);
+      function close() { if (overlay.parentNode) overlay.parentNode.removeChild(overlay); }
+      overlay.addEventListener('click', function(e) { if (e.target === overlay) close(); });
+      modal.querySelector('#classifyDebugClose').addEventListener('click', close);
+    }
+
     // ===== Issues+PR 取得 =====
     var issuesCountCache = {};
     var issuesCountPending = {};
@@ -4824,6 +4857,10 @@ export function getRepositoriesPage(user: {
                 notif.textContent = notifMsg;
                 document.body.appendChild(notif);
                 setTimeout(function() { if (notif.parentNode) notif.parentNode.removeChild(notif); }, 9000);
+                // AI分類デバッグモーダル
+                if (data.classifyDebug && getCookie('keyword_classify_debug') === 'on') {
+                  showClassifyDebugModal(data.classifyDebug);
+                }
               } else {
                 window.__pendingNewKeyword = data.query;
               }
