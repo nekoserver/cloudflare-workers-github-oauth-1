@@ -4981,11 +4981,27 @@ export function getRepositoriesPage(user: {
       function showLabelClassificationModal(query) {
         var modal = document.getElementById('labelClassifyModal');
         var queryEl = document.getElementById('labelClassifyQuery');
+        var btnsContainer = document.getElementById('labelClassifyBtns');
         var input = document.getElementById('labelClassifyInput');
         if (!modal || !queryEl) return;
         queryEl.textContent = '「' + query + '」';
         if (input) input.value = '';
         var selectedBtn = null;
+
+        // フィルタバーの現在のラベルを走査して最新状態でボタンを再描画
+        if (btnsContainer && historyLabelFilter) {
+          btnsContainer.innerHTML = '';
+          historyLabelFilter.querySelectorAll('.history-label-btn[data-label]').forEach(function(filterBtn) {
+            var lbl = filterBtn.getAttribute('data-label');
+            if (lbl === '') return;
+            var btn = document.createElement('button');
+            btn.className = 'label-classify-btn';
+            btn.setAttribute('data-label', lbl);
+            btn.textContent = lbl === 'uncategorized' ? '未分類のまま' : lbl;
+            btnsContainer.appendChild(btn);
+          });
+        }
+
         modal.querySelectorAll('.label-classify-btn').forEach(function(b) { b.classList.remove('selected'); });
         modal.style.display = 'flex';
 
