@@ -1461,7 +1461,7 @@ export function getRepositoriesPage(user: {
     .monthly-status-body .commit-history-empty {
       padding: 28px 0;
     }
-  .label-classify-modal{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:center;justify-content:center;}
+  .label-classify-modal{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:10200;display:flex;align-items:center;justify-content:center;}
   .label-classify-content{background:var(--card-bg);border-radius:12px;padding:24px;max-width:420px;width:90%;}
   .label-classify-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;}
   .label-classify-title{font-weight:600;font-size:15px;color:var(--text-primary);}
@@ -1873,7 +1873,7 @@ export function getRepositoriesPage(user: {
   <div class="label-classify-modal" id="labelClassifyModal" style="display:none;">
     <div class="label-classify-content">
       <div class="label-classify-header">
-        <span class="label-classify-title">新規キーワードのラベルを選択</span>
+        <span class="label-classify-title">ラベルを選択</span>
         <button class="modal-close" id="labelClassifyClose" type="button">&times;</button>
       </div>
       <div class="label-classify-query" id="labelClassifyQuery"></div>
