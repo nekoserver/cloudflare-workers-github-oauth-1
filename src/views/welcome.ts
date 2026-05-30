@@ -290,6 +290,7 @@ export function getWelcomePage(user: {
           ${initials}
         </div>
         <div class="dropdown-menu" id="dropdownMenu">
+          <a href="/aichat" class="dropdown-item">🤖 AI チャット</a>
           <a href="/repositories" class="dropdown-item">📦 リポジトリ</a>
           <a href="/userinfo" class="dropdown-item">👤 ユーザー情報</a>
           <a href="/settings" class="dropdown-item">⚙️ 設定</a>
