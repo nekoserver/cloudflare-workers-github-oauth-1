@@ -4930,7 +4930,7 @@ export function getRepositoriesPage(user: {
             }
             searchSubtitle.textContent = '「' + escapeForHtml(data.query) + '」— ' + data.total + ' 件のコミットが見つかりました';
             searchBody.innerHTML = renderSearchResults(data);
-            if (data.isNewKeyword && data.total > 0) {
+            if (data.isNewKeyword) {
               if (data.autoLabel != null) {
                 var isSuccess = data.autoLabel !== 'uncategorized';
                 var notifMsg = isSuccess
