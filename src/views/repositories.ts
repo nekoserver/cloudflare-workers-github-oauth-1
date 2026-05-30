@@ -949,19 +949,24 @@ export function getRepositoriesPage(user: {
     .keyword-detail-repo-count { color: var(--text-muted); font-weight: 700; white-space: nowrap; margin-left: 8px; }
     .keyword-detail-cokey-list { display: flex; flex-wrap: wrap; gap: 6px; }
     .repo-cokey-modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.55); z-index: 10001; display: flex; align-items: center; justify-content: center; }
-    .repo-cokey-modal { background: var(--modal-bg, var(--bg-primary)); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 8px; padding: 20px; max-width: 540px; width: 90%; max-height: 80vh; overflow-y: auto; position: relative; }
+    .repo-cokey-modal { background: var(--card-bg); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 8px; padding: 20px; max-width: 540px; width: 90%; max-height: 80vh; overflow-y: auto; position: relative; box-shadow: 0 8px 32px rgba(0,0,0,0.35); }
     .repo-cokey-modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
     .repo-cokey-modal-title { font-weight: 600; font-size: 14px; color: var(--text-primary); }
     .repo-cokey-modal-close { background: none; border: none; font-size: 20px; cursor: pointer; color: var(--text-primary); line-height: 1; padding: 0 4px; }
-    .repo-cokey-count-label { font-size: 12px; color: var(--text-muted); margin-bottom: 10px; }
+    .repo-cokey-count-label { font-size: 12px; color: var(--text-muted); margin-bottom: 12px; }
     .repo-cokey-loading { font-size: 13px; color: var(--text-muted); }
     .repo-cokey-empty { font-size: 13px; color: var(--text-muted); }
     .repo-cokey-error { font-size: 13px; color: var(--error-color, #cf222e); }
-    .repo-cokey-cat-row { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
-    .repo-cokey-cat-btn { padding: 3px 10px; border-radius: 12px; border: 1px solid var(--border-color); background: var(--bg-secondary, var(--bg-primary)); color: var(--text-primary); font-size: 12px; cursor: pointer; }
-    .repo-cokey-cat-btn.active { background: var(--accent-color, #0969da); color: #fff; border-color: transparent; }
-    .repo-cokey-kw-list { display: flex; flex-wrap: wrap; gap: 6px; }
-    .repo-cokey-kw-badge { display: inline-flex; align-items: center; padding: 2px 10px; border-radius: 12px; font-size: 12px; background: var(--bg-secondary, var(--bg-primary)); color: var(--text-primary); border: 1px solid var(--border-color); }
+    .repo-cokey-cat-section { border: 1px solid var(--border-color); border-radius: 6px; margin-bottom: 6px; overflow: hidden; }
+    .repo-cokey-cat-header { display: flex; justify-content: space-between; align-items: center; padding: 7px 12px; cursor: pointer; background: var(--card-bg); color: var(--text-primary); user-select: none; }
+    .repo-cokey-cat-header:hover { background: var(--bg-hover, var(--border-color)); }
+    .repo-cokey-cat-name { font-size: 12px; font-weight: 600; }
+    .repo-cokey-cat-count { font-size: 11px; color: var(--text-muted); }
+    .repo-cokey-cat-arrow { font-size: 10px; color: var(--text-muted); transition: transform 0.15s; }
+    .repo-cokey-cat-arrow.open { transform: rotate(90deg); }
+    .repo-cokey-cat-body { display: none; padding: 8px 12px 10px; background: var(--card-bg); border-top: 1px solid var(--border-color); }
+    .repo-cokey-cat-body.open { display: flex; flex-wrap: wrap; gap: 5px; }
+    .repo-cokey-kw-badge { display: inline-flex; align-items: center; padding: 2px 10px; border-radius: 12px; font-size: 12px; background: var(--card-bg); color: var(--text-primary); border: 1px solid var(--border-color); }
     .repo-cokey-kw-badge.repo-cokey-kw-base { background: var(--accent-color, #0969da); color: #fff; border-color: transparent; }
     .keyword-detail-cokey-tag {
       display: inline-flex; align-items: center; gap: 4px;
@@ -5521,41 +5526,41 @@ export function getRepositoriesPage(user: {
             });
 
             var sortedLabels = Object.keys(grouped).sort();
-            var activeLabel = null;
 
-            function renderKeywords(filterLabel) {
-              var kwHtml = '';
-              var toShow = filterLabel ? (grouped[filterLabel] || []) : keywords;
-              toShow.forEach(function(k) {
+            var html = '<div class="repo-cokey-count-label">共起キーワード : (' + coCount + '/' + totalKw + ')</div>';
+            sortedLabels.forEach(function(lbl, idx) {
+              var catCount = grouped[lbl].length;
+              html += '<div class="repo-cokey-cat-section">';
+              html += '<div class="repo-cokey-cat-header" data-idx="' + idx + '">'
+                + '<span class="repo-cokey-cat-name">' + escHtml(lbl) + '</span>'
+                + '<span style="display:flex;align-items:center;gap:6px;">'
+                + '<span class="repo-cokey-cat-count">' + catCount + '/' + coCount + '</span>'
+                + '<span class="repo-cokey-cat-arrow">&#9654;</span>'
+                + '</span>'
+                + '</div>';
+              html += '<div class="repo-cokey-cat-body" data-idx="' + idx + '">';
+              grouped[lbl].forEach(function(k) {
                 var isBase = k.search_query === baseQuery;
-                kwHtml += '<span class="repo-cokey-kw-badge' + (isBase ? ' repo-cokey-kw-base' : '') + '">'
-                  + escHtml(k.search_query)
-                  + '</span>';
+                html += '<span class="repo-cokey-kw-badge' + (isBase ? ' repo-cokey-kw-base' : '') + '">'
+                  + escHtml(k.search_query) + '</span>';
               });
-              return kwHtml;
-            }
+              html += '</div>';
+              html += '</div>';
+            });
 
-            function renderAll() {
-              var catHtml = '<div class="repo-cokey-count-label">共起キーワード : (' + coCount + '/' + totalKw + ')</div>';
-              catHtml += '<div class="repo-cokey-cat-row">';
-              catHtml += '<button type="button" class="repo-cokey-cat-btn' + (!activeLabel ? ' active' : '') + '" data-cat="">すべて (' + keywords.length + ')</button>';
-              sortedLabels.forEach(function(lbl) {
-                catHtml += '<button type="button" class="repo-cokey-cat-btn' + (activeLabel === lbl ? ' active' : '') + '" data-cat="' + escHtml(lbl) + '">'
-                  + escHtml(lbl) + ' (' + grouped[lbl].length + ')</button>';
+            modalBody.innerHTML = html;
+
+            modalBody.querySelectorAll('.repo-cokey-cat-header').forEach(function(header) {
+              header.addEventListener('click', function() {
+                var idx = header.getAttribute('data-idx');
+                var body = modalBody.querySelector('.repo-cokey-cat-body[data-idx="' + idx + '"]');
+                var arrow = header.querySelector('.repo-cokey-cat-arrow');
+                if (!body) return;
+                var isOpen = body.classList.contains('open');
+                body.classList.toggle('open', !isOpen);
+                if (arrow) arrow.classList.toggle('open', !isOpen);
               });
-              catHtml += '</div>';
-              catHtml += '<div class="repo-cokey-kw-list" id="repoCoKeyKwList">' + renderKeywords(activeLabel) + '</div>';
-              modalBody.innerHTML = catHtml;
-
-              modalBody.querySelectorAll('.repo-cokey-cat-btn').forEach(function(btn) {
-                btn.addEventListener('click', function() {
-                  activeLabel = btn.getAttribute('data-cat') || null;
-                  renderAll();
-                });
-              });
-            }
-
-            renderAll();
+            });
           })
           .catch(function() {
             var modalBody = document.getElementById('repoCoKeyModalBody');
