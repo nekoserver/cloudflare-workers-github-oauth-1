@@ -96,6 +96,7 @@ const STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
   { name: 'user_cache', migration: 'unknown', description: 'ユーザーキャッシュ（未分類テーブル）', syncPolicy: 'manual' },
   { name: 'repo_commit_index', migration: '0034', description: 'コミットインデックス（コミットハッシュ・順番・PR番号）', syncPolicy: 'manual' },
   { name: 'ai_chat_shares', migration: '0036', description: 'AIチャット共有Q&Aレコード', syncPolicy: 'auto' },
+  { name: 'keyword_category_groups', migration: '0037', description: '検索キーワードカテゴリグループ定義', syncPolicy: 'auto' },
 ];
 
 const REQUIRED_STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
@@ -609,6 +610,21 @@ INSERT OR IGNORE INTO table_catalog (table_name, group_name, description, migrat
 ('ai_chat_shares', 'ai', 'AIチャット共有Q&Aレコード', '0036', 'auto', 0);
 INSERT OR REPLACE INTO table_column_keys (table_name, column_name, key_type, fk_target_table) VALUES
 ('ai_chat_shares', 'user_id', 'fk', 'user_sessions');`,
+  '0037': `CREATE TABLE IF NOT EXISTS keyword_category_groups (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  group_name TEXT NOT NULL,
+  categories TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_keyword_category_groups_user_id ON keyword_category_groups(user_id);
+INSERT OR IGNORE INTO table_catalog (table_name, group_name, description, migration, sync_policy, display_order) VALUES
+('keyword_category_groups', 'search', '検索キーワードカテゴリグループ定義', '0037', 'auto', 0);
+INSERT OR REPLACE INTO table_column_keys (table_name, column_name, key_type, fk_target_table) VALUES
+('keyword_category_groups', 'id', 'pk', NULL);
+INSERT OR REPLACE INTO table_column_keys (table_name, column_name, key_type, fk_target_table) VALUES
+('keyword_category_groups', 'user_id', 'fk', 'user_sessions');`,
 };
 
 function jsonUtf8(payload: unknown, status = 200): Response {
@@ -758,6 +774,7 @@ export const TABLE_COLUMN_KEYS: Record<string, ColumnKeyInfo> = {
   commit_stats_cache: { id: 'pk', owner: 'idx', repo: 'idx', period: 'idx' },
   repo_commit_index: { commit_hash: 'pk', seq_num: 'idx', github_pr_number: 'idx', repo_name: 'idx' },
   ai_chat_shares: { id: 'pk', user_id: 'fk', user_hash: 'idx' },
+  keyword_category_groups: { id: 'pk', user_id: 'fk' },
 };
 
 export function getColumnKeyType(tableName: string, columnName: string): ColumnKeyType {
@@ -813,6 +830,7 @@ export const TABLE_GROUP_MAP: Record<string, string> = {
   repo_group_members: 'config', group_oauth_apps: 'config', table_catalog: 'config', table_column_keys: 'config',
   ai_summary_link_access_log: 'ai',
   ai_chat_shares: 'ai',
+  keyword_category_groups: 'search',
 };
 
 async function recordAiSummaryLinkAccess(
@@ -951,6 +969,7 @@ export const COLUMN_FK_TARGETS: Record<string, Record<string, string>> = {
   // ========================================================================
   repo_commit_index: { repo_name: 'installation_permissions' },
   ai_chat_shares: { user_id: 'user_sessions' },
+  keyword_category_groups: { user_id: 'user_sessions' },
 
   // ========================================================================
   // メタデータ系
@@ -5490,6 +5509,33 @@ app.post('/api/repositories/search/keyword-label', authMiddleware, async (c) => 
   } catch (error) {
     logger.warn('keyword label upsert failed', { searchQuery, error: error instanceof Error ? error.message : 'Unknown error' });
     return jsonUtf8({ error: 'ラベルの更新に失敗しました' }, 500);
+  }
+});
+
+app.get('/api/repositories/search/category-group', authMiddleware, async (c) => {
+  const user = c.get('user');
+  const db = c.env.DB;
+  if (!db) return jsonUtf8({ error: 'Database not available' }, 500);
+  const labelsParam = (c.req.query('labels') ?? '').trim();
+  if (!labelsParam) return jsonUtf8({ group: null });
+  const selectedLabels = labelsParam.split(',').map((l) => l.trim()).filter(Boolean).sort();
+  if (selectedLabels.length < 2) return jsonUtf8({ group: null });
+  try {
+    const rows = await db.prepare(
+      `SELECT id, group_name, categories FROM keyword_category_groups WHERE user_id = ?`
+    ).bind(user.sub).all<{ id: string; group_name: string; categories: string }>();
+    const matched = (rows.results ?? []).find((row) => {
+      try {
+        const cats: string[] = JSON.parse(row.categories);
+        const sorted = cats.slice().sort();
+        return sorted.length === selectedLabels.length && sorted.every((v, i) => v === selectedLabels[i]);
+      } catch {
+        return false;
+      }
+    });
+    return jsonUtf8({ group: matched ? { id: matched.id, group_name: matched.group_name } : null });
+  } catch {
+    return jsonUtf8({ group: null });
   }
 });
 
