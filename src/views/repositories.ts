@@ -945,6 +945,7 @@ export function getRepositoriesPage(user: {
     }
     .keyword-detail-repo-list li:last-child { border-bottom: none; }
     .keyword-detail-repo-name { color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 160px; }
+    .keyword-detail-repo-btn { background: none; border: none; padding: 0; cursor: pointer; color: var(--link-color, #0969da); text-decoration: underline; font-size: inherit; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 160px; text-align: left; }
     .keyword-detail-repo-count { color: var(--text-muted); font-weight: 700; white-space: nowrap; margin-left: 8px; }
     .keyword-detail-cokey-list { display: flex; flex-wrap: wrap; gap: 6px; }
     .keyword-detail-cokey-tag {
@@ -1709,7 +1710,7 @@ export function getRepositoriesPage(user: {
           <button type="button" class="commit-history-stats-btn" id="commitHistoryStatsBtn" title="現在選択中の期間に対するユーザー別集計を表示">stats</button>
         </div>
         <div class="commit-cokey-section" id="commitCoKeySection" style="display:none">
-          <div class="commit-cokey-label">共起キーワード</div>
+          <div class="commit-cokey-label" id="commitCoKeyLabel">共起キーワード</div>
           <div class="commit-cokey-tags" id="commitCoKeyTags"></div>
           <div class="commit-cokey-filter-row">
             <input type="text" class="commit-cokey-input" id="commitCoKeyInput" placeholder="キーワードでフィルタ...">
@@ -3926,6 +3927,9 @@ export function getRepositoriesPage(user: {
             if (commitCoKeySection) commitCoKeySection.style.display = 'none';
             return;
           }
+          var totalKw = (data && data.totalKeywordCount) || 0;
+          var labelEl = document.getElementById('commitCoKeyLabel');
+          if (labelEl) labelEl.textContent = '共起キーワード : (' + keywords.length + '/' + totalKw + ')';
           commitCoKeyTags.innerHTML = keywords.map(function(k) {
             return '<button type="button" class="commit-cokey-tag" data-kw="' + esc(k.search_query) + '">'
               + esc(k.search_query) + '</button>';
@@ -5391,33 +5395,15 @@ export function getRepositoriesPage(user: {
               body += '<div class="keyword-detail-section-title">リポジトリ別ヒット数</div>';
               body += '<ul class="keyword-detail-repo-list">';
               data.repoStats.slice(0, 10).forEach(function(r) {
-                body += '<li><span class="keyword-detail-repo-name" title="' + escHtml(r.repo_name) + '">' + escHtml(r.repo_name) + '</span>'
+                body += '<li><button class="keyword-detail-repo-btn" type="button" data-repo="' + escHtml(r.repo_name) + '" title="共起キーワードを表示">' + escHtml(r.repo_name) + '</button>'
                   + '<span class="keyword-detail-repo-count">' + r.total_hit_count + ' ヒット</span></li>';
               });
               body += '</ul></div>';
             }
             body += '</div>';
 
-            // 右列: 共起キーワード + 時系列グラフ
+            // 右列: 時系列グラフ
             body += '<div>';
-            var coCount = (data.coKeywords && data.coKeywords.length) || 0;
-            var totalKw = data.totalKeywordCount || 0;
-            var coTitle = '共起キーワード : (' + coCount + '/' + totalKw + ')';
-            if (data.coKeywords && data.coKeywords.length > 0) {
-              body += '<div class="keyword-detail-section">';
-              body += '<div class="keyword-detail-section-title">' + escHtml(coTitle) + '</div>';
-              body += '<div class="keyword-detail-cokey-list">';
-              data.coKeywords.slice(0, 20).forEach(function(k) {
-                body += '<span class="keyword-detail-cokey-tag" data-cokey="' + escHtml(k.search_query) + '" title="共有リポジトリ数: ' + k.shared_repo_count + '">'
-                  + escHtml(k.search_query)
-                  + '<span class="keyword-detail-cokey-count">×' + k.shared_repo_count + '</span>'
-                  + '</span>';
-              });
-              body += '</div></div>';
-            } else {
-              body += '<div class="keyword-detail-section"><div class="keyword-detail-section-title">' + escHtml(coTitle) + '</div>'
-                + '<div style="font-size:12px;color:var(--text-muted);">なし</div></div>';
-            }
 
             if (data.timeseries && data.timeseries.length > 0) {
               body += '<div class="keyword-detail-section" style="margin-top:12px;">';
@@ -5457,6 +5443,12 @@ export function getRepositoriesPage(user: {
                   if (cokey) showKeywordDetail(cokey);
                 });
               });
+              panel.querySelectorAll('.keyword-detail-repo-btn').forEach(function(btn) {
+                btn.addEventListener('click', function() {
+                  var repo = btn.getAttribute('data-repo');
+                  if (repo) showRepoCoKeyModal(repo, query);
+                });
+              });
             }
 
           })
@@ -5466,6 +5458,76 @@ export function getRepositoriesPage(user: {
           });
 
         refreshGrid(null, null);
+      }
+
+      function showRepoCoKeyModal(repoName, baseQuery) {
+        var existing = document.getElementById('repoCoKeyModalOverlay');
+        if (existing) existing.remove();
+
+        var overlay = document.createElement('div');
+        overlay.id = 'repoCoKeyModalOverlay';
+        overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:10001;display:flex;align-items:center;justify-content:center;';
+
+        var modal = document.createElement('div');
+        modal.style.cssText = 'background:var(--bg-primary);border:1px solid var(--border-color);border-radius:8px;padding:20px;max-width:520px;width:90%;max-height:80vh;overflow-y:auto;position:relative;';
+
+        modal.innerHTML = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">'
+          + '<span style="font-weight:600;font-size:14px;">' + escHtml(repoName) + ' の共起キーワード</span>'
+          + '<button id="repoCoKeyModalClose" type="button" style="background:none;border:none;font-size:18px;cursor:pointer;color:var(--text-primary);">&times;</button>'
+          + '</div>'
+          + '<div id="repoCoKeyModalBody"><div style="font-size:13px;color:var(--text-muted);">読み込み中...</div></div>';
+
+        overlay.appendChild(modal);
+        document.body.appendChild(overlay);
+
+        overlay.addEventListener('click', function(e) { if (e.target === overlay) overlay.remove(); });
+        modal.querySelector('#repoCoKeyModalClose').addEventListener('click', function() { overlay.remove(); });
+
+        fetch('/api/repositories/search/repo-keywords?repo=' + encodeURIComponent(repoName), { credentials: 'same-origin', cache: 'no-store' })
+          .then(function(res) { return res.ok ? res.json() : null; })
+          .then(function(data) {
+            var modalBody = document.getElementById('repoCoKeyModalBody');
+            if (!modalBody) return;
+            var keywords = data && Array.isArray(data.keywords) ? data.keywords : [];
+            var totalKw = (data && data.totalKeywordCount) || 0;
+            var coCount = keywords.length;
+
+            var html = '<div style="font-size:12px;color:var(--text-muted);margin-bottom:10px;">共起キーワード : (' + coCount + '/' + totalKw + ')</div>';
+
+            if (keywords.length === 0) {
+              html += '<div style="font-size:13px;color:var(--text-muted);">なし</div>';
+              modalBody.innerHTML = html;
+              return;
+            }
+
+            var grouped = {};
+            keywords.forEach(function(k) {
+              var lbl = k.label || 'uncategorized';
+              if (!grouped[lbl]) grouped[lbl] = [];
+              grouped[lbl].push(k);
+            });
+
+            Object.keys(grouped).sort().forEach(function(lbl) {
+              html += '<div style="margin-bottom:10px;">';
+              html += '<div style="font-size:11px;color:var(--text-muted);margin-bottom:4px;">' + escHtml(lbl) + '</div>';
+              html += '<div style="display:flex;flex-wrap:wrap;gap:4px;">';
+              grouped[lbl].forEach(function(k) {
+                var isBase = k.search_query === baseQuery;
+                html += '<span style="display:inline-flex;align-items:center;gap:3px;padding:2px 8px;border-radius:12px;font-size:12px;'
+                  + (isBase ? 'background:var(--accent-color,#0969da);color:#fff;' : 'background:var(--bg-secondary);color:var(--text-primary);')
+                  + 'border:1px solid var(--border-color);">'
+                  + escHtml(k.search_query)
+                  + '</span>';
+              });
+              html += '</div></div>';
+            });
+
+            modalBody.innerHTML = html;
+          })
+          .catch(function() {
+            var modalBody = document.getElementById('repoCoKeyModalBody');
+            if (modalBody) modalBody.innerHTML = '<div style="color:var(--error-color,red);font-size:13px;">取得に失敗しました</div>';
+          });
       }
 
       function updateTitle() {
