@@ -31,11 +31,15 @@ export function getAiChatPage(user: {
 
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
+    html, body {
+      height: 100%;
+      overflow: hidden;
+    }
+
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
       background: var(--bg-primary, #f8fafc);
       color: var(--text-primary);
-      min-height: 100vh;
       display: flex;
       flex-direction: column;
     }
@@ -99,6 +103,8 @@ export function getAiChatPage(user: {
       width: 100%;
       margin: 0 auto;
       padding: 24px 16px 0;
+      overflow: hidden;
+      min-height: 0;
     }
 
     .chat-header {
@@ -166,8 +172,7 @@ export function getAiChatPage(user: {
     }
 
     .chat-form-area {
-      position: sticky;
-      bottom: 0;
+      flex-shrink: 0;
       background: var(--bg-primary, #f8fafc);
       padding: 12px 0 20px;
       border-top: 1px solid var(--border-color);
