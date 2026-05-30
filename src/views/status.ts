@@ -1418,6 +1418,7 @@ export function getCacheStatusPage(user: {
         </div>
         <div class="dropdown-menu" id="dropdownMenu">
           <a href="/welcome" class="dropdown-item">🏠 ホーム</a>
+          <a href="/aichat" class="dropdown-item">🤖 AI チャット</a>
           <a href="/repositories" class="dropdown-item">📦 リポジトリ</a>
           <a href="/userinfo" class="dropdown-item">👤 ユーザー情報</a>
           <a href="/settings" class="dropdown-item">⚙️ 設定</a>
