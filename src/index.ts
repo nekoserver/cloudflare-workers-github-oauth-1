@@ -5257,7 +5257,7 @@ app.get('/api/repositories/search/repo-keywords', optionalAuthMiddleware, async 
   if (!user) return jsonUtf8({ error: 'Unauthorized' }, 401);
   if (!c.env.DB) return jsonUtf8({ error: 'Database not available' }, 500);
   const repo = (c.req.query('repo') ?? '').trim();
-  if (!repo) return jsonUtf8({ keywords: [] });
+  if (!repo) return jsonUtf8({ keywords: [], totalKeywordCount: 0 });
   try {
     const rows = await c.env.DB.prepare(
       `SELECT h.search_query, SUM(s.hit_count) as repo_hit_count
@@ -5269,7 +5269,14 @@ app.get('/api/repositories/search/repo-keywords', optionalAuthMiddleware, async 
     )
       .bind(user.sub, repo)
       .all<{ search_query: string; repo_hit_count: number }>();
-    return jsonUtf8({ keywords: rows.results ?? [] });
+    // リポジトリ全体に対して検索したことのあるキーワード総数（同リポジトリ内）
+    const totalRow = await c.env.DB.prepare(
+      `SELECT COUNT(DISTINCT h.search_query) as cnt
+       FROM commit_search_history h
+       JOIN commit_search_repo_stats s ON s.search_history_id = h.id
+       WHERE h.user_id = ? AND s.repo_name = ?`,
+    ).bind(user.sub, repo).first<{ cnt: number }>();
+    return jsonUtf8({ keywords: rows.results ?? [], totalKeywordCount: totalRow?.cnt ?? 0 });
   } catch (error) {
     logger.warn('Failed to fetch repo keywords', {
       error: error instanceof Error ? error.message : 'Unknown error',
