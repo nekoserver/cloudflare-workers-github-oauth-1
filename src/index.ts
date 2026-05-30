@@ -12,6 +12,7 @@ import { createJWT, JWTPayload } from './utils/jwt';
 import { authMiddleware, optionalAuthMiddleware } from './middleware/auth';
 import { getLoginPage } from './views/login';
 import { getWelcomePage } from './views/welcome';
+import { getAiChatPage } from './views/aichat';
 import { getSettingsPage } from './views/settings';
 import { getRepositoriesPage } from './views/repositories';
 import { getUserInfoPage } from './views/userinfo';
@@ -2310,6 +2311,59 @@ app.get('/welcome', authMiddleware, async (c) => {
  */
 app.get('/md-preview', (c) => {
   return c.html(getMarkdownPreviewPage());
+});
+
+/**
+ * AI チャットページ（認証が必要）
+ */
+app.get('/aichat', authMiddleware, async (c) => {
+  const user = c.get('user');
+  const aiChatModel = (c.env.AI_CHAT_MODEL ?? '').trim() || '@cf/meta/llama-3.1-8b-instruct-fp8';
+  return c.html(getAiChatPage({
+    name: user.name,
+    username: user.sub,
+    avatar: user.avatar_url,
+    aiChatModel,
+  }));
+});
+
+/**
+ * AI チャット API（認証が必要）
+ */
+app.post('/api/aichat', authMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!c.env.AI) {
+    return jsonUtf8({ error: 'AI バインディングが未設定です' }, 503);
+  }
+  let body: { message?: string };
+  try {
+    body = await c.req.json();
+  } catch {
+    return jsonUtf8({ error: 'リクエスト形式が不正です' }, 400);
+  }
+  const message = (body.message ?? '').trim();
+  if (!message) {
+    return jsonUtf8({ error: 'メッセージが空です' }, 400);
+  }
+  const model = (c.env.AI_CHAT_MODEL ?? '').trim() || '@cf/meta/llama-3.1-8b-instruct-fp8';
+  try {
+    const result = await c.env.AI.run(model as Parameters<typeof c.env.AI.run>[0], {
+      messages: [{ role: 'user', content: message }],
+      max_tokens: 1024,
+    });
+    const response =
+      typeof result === 'object' && result !== null && 'response' in result
+        ? String((result as { response: unknown }).response ?? '')
+        : '';
+    return jsonUtf8({ response });
+  } catch (error) {
+    logger.warn('AI chat failed', {
+      model,
+      user: user.sub,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    return jsonUtf8({ error: 'AI への問い合わせに失敗しました' }, 500);
+  }
 });
 
 /**

@@ -24,6 +24,7 @@ export type Bindings = {
   GITHUB_TOKEN?: string;
   AI?: Ai;
   AI_MODEL?: string;
+  AI_CHAT_MODEL?: string;
 };
 
 /** Hono コンテキスト変数 */

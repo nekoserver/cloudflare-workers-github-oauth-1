@@ -110,6 +110,7 @@ export function getUserInfoPage(user: {
         </div>
         <div class="dropdown-menu" id="dropdownMenu">
           <a href="/welcome" class="dropdown-item">🏠 ホーム</a>
+          <a href="/aichat" class="dropdown-item">🤖 AI チャット</a>
           <a href="/repositories" class="dropdown-item">📦 リポジトリ</a>
           <a href="/settings" class="dropdown-item">⚙️ 設定</a>
           <a href="/status" class="dropdown-item">📊 キャッシュ状況</a>
