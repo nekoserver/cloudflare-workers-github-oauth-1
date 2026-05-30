@@ -5139,81 +5139,84 @@ app.get('/api/repositories/search/commits', optionalAuthMiddleware, async (c) =>
     const cookieValsSearch = getCookieValues(cookieHeader, ['user_search_label_mode', 'keyword_classify_debug']);
     const searchLabelMode = cookieValsSearch['user_search_label_mode'];
     const classifyDebugEnabled = cookieValsSearch['keyword_classify_debug'] === 'on';
-    try {
-      const labelInsert = await c.env.DB.prepare(
-        `INSERT OR IGNORE INTO commit_search_keyword_labels (user_id, search_query, label, created_at, updated_at) VALUES (?, ?, 'uncategorized', datetime('now'), datetime('now'))`
-      ).bind(user.sub, q).run();
-      isNewKeyword = (labelInsert.meta?.changes ?? 0) > 0;
-    } catch (labelErr) {
-      logger.warn('keyword label insert failed', { query: q, error: labelErr instanceof Error ? labelErr.message : 'Unknown error' });
-    }
 
-    // 既存の未分類キーワードも auto-classify モード時は再分類対象にする
-    if (!isNewKeyword && searchLabelMode === 'auto-classify') {
+    if (totalMatches > 0) {
       try {
-        const existingRow = await c.env.DB.prepare(
-          `SELECT label FROM commit_search_keyword_labels WHERE user_id = ? AND search_query = ?`
-        ).bind(user.sub, q).first<{ label: string }>();
-        if (existingRow?.label === 'uncategorized') {
-          isNewKeyword = true;
-        }
-      } catch { /* 判定失敗時は isNewKeyword のまま */ }
-    }
+        const labelInsert = await c.env.DB.prepare(
+          `INSERT OR IGNORE INTO commit_search_keyword_labels (user_id, search_query, label, created_at, updated_at) VALUES (?, ?, 'uncategorized', datetime('now'), datetime('now'))`
+        ).bind(user.sub, q).run();
+        isNewKeyword = (labelInsert.meta?.changes ?? 0) > 0;
+      } catch (labelErr) {
+        logger.warn('keyword label insert failed', { query: q, error: labelErr instanceof Error ? labelErr.message : 'Unknown error' });
+      }
 
-    if (isNewKeyword && searchLabelMode === 'auto-classify') {
-      if (c.env.AI) {
-        const DEFAULT_CLASSIFY_LABELS = ['feature', 'ui', 'tech', 'database', 'bugfix', 'ops'];
-        let classifyLabels = DEFAULT_CLASSIFY_LABELS;
+      // 既存の未分類キーワードも auto-classify モード時は再分類対象にする
+      if (!isNewKeyword && searchLabelMode === 'auto-classify') {
         try {
-          const userLabelRows = await c.env.DB.prepare(
-            `SELECT DISTINCT label FROM commit_search_keyword_labels WHERE user_id = ? AND label != 'uncategorized' ORDER BY label`
-          ).bind(user.sub).all<{ label: string }>();
-          const userLabels = (userLabelRows.results ?? []).map((r) => r.label).filter(Boolean);
-          if (userLabels.length > 0) {
-            classifyLabels = [...new Set([...DEFAULT_CLASSIFY_LABELS, ...userLabels])];
+          const existingRow = await c.env.DB.prepare(
+            `SELECT label FROM commit_search_keyword_labels WHERE user_id = ? AND search_query = ?`
+          ).bind(user.sub, q).first<{ label: string }>();
+          if (existingRow?.label === 'uncategorized') {
+            isNewKeyword = true;
           }
-        } catch { /* デフォルトラベルを使用 */ }
-        const model = resolveAiModel(c.env.AI_MODEL);
-        const classifyResult = await classifyKeywordWithAI(c.env.AI, model, q, classifyLabels);
-        autoLabel = classifyResult.label;
-        if (classifyDebugEnabled) {
-          classifyDebug = {
-            prompt: classifyResult.prompt,
-            rawResponse: classifyResult.rawResponse,
-            resolvedLabel: classifyResult.label,
-            model: classifyResult.model,
-            fallback: classifyResult.fallback ?? null,
-          };
-        }
-        if (autoLabel !== 'uncategorized') {
-          // 実際に分類に使ったモデル名（フォールバック時はフォールバックモデル）
-          const usedModel = classifyResult.fallback ? classifyResult.fallback.model : classifyResult.model;
-          let labelSaved = false;
+        } catch { /* 判定失敗時は isNewKeyword のまま */ }
+      }
+
+      if (isNewKeyword && searchLabelMode === 'auto-classify') {
+        if (c.env.AI) {
+          const DEFAULT_CLASSIFY_LABELS = ['feature', 'ui', 'tech', 'database', 'bugfix', 'ops'];
+          let classifyLabels = DEFAULT_CLASSIFY_LABELS;
           try {
-            await c.env.DB.prepare(
-              `UPDATE commit_search_keyword_labels SET label = ?, ai_model = ?, updated_at = datetime('now') WHERE user_id = ? AND search_query = ?`
-            ).bind(autoLabel, usedModel, user.sub, q).run();
-            labelSaved = true;
-          } catch {
-            // ai_model カラム未作成（マイグレーション未実行）の場合はカラムなしで再試行
+            const userLabelRows = await c.env.DB.prepare(
+              `SELECT DISTINCT label FROM commit_search_keyword_labels WHERE user_id = ? AND label != 'uncategorized' ORDER BY label`
+            ).bind(user.sub).all<{ label: string }>();
+            const userLabels = (userLabelRows.results ?? []).map((r) => r.label).filter(Boolean);
+            if (userLabels.length > 0) {
+              classifyLabels = [...new Set([...DEFAULT_CLASSIFY_LABELS, ...userLabels])];
+            }
+          } catch { /* デフォルトラベルを使用 */ }
+          const model = resolveAiModel(c.env.AI_MODEL);
+          const classifyResult = await classifyKeywordWithAI(c.env.AI, model, q, classifyLabels);
+          autoLabel = classifyResult.label;
+          if (classifyDebugEnabled) {
+            classifyDebug = {
+              prompt: classifyResult.prompt,
+              rawResponse: classifyResult.rawResponse,
+              resolvedLabel: classifyResult.label,
+              model: classifyResult.model,
+              fallback: classifyResult.fallback ?? null,
+            };
+          }
+          if (autoLabel !== 'uncategorized') {
+            // 実際に分類に使ったモデル名（フォールバック時はフォールバックモデル）
+            const usedModel = classifyResult.fallback ? classifyResult.fallback.model : classifyResult.model;
+            let labelSaved = false;
             try {
               await c.env.DB.prepare(
-                `UPDATE commit_search_keyword_labels SET label = ?, updated_at = datetime('now') WHERE user_id = ? AND search_query = ?`
-              ).bind(autoLabel, user.sub, q).run();
+                `UPDATE commit_search_keyword_labels SET label = ?, ai_model = ?, updated_at = datetime('now') WHERE user_id = ? AND search_query = ?`
+              ).bind(autoLabel, usedModel, user.sub, q).run();
               labelSaved = true;
-            } catch (updateErr) {
-              logger.warn('auto-classify label update failed', { query: q, error: updateErr instanceof Error ? updateErr.message : 'Unknown error' });
+            } catch {
+              // ai_model カラム未作成（マイグレーション未実行）の場合はカラムなしで再試行
+              try {
+                await c.env.DB.prepare(
+                  `UPDATE commit_search_keyword_labels SET label = ?, updated_at = datetime('now') WHERE user_id = ? AND search_query = ?`
+                ).bind(autoLabel, user.sub, q).run();
+                labelSaved = true;
+              } catch (updateErr) {
+                logger.warn('auto-classify label update failed', { query: q, error: updateErr instanceof Error ? updateErr.message : 'Unknown error' });
+              }
+            }
+            if (!labelSaved) {
+              autoLabel = 'uncategorized';
+              if (classifyDebug) classifyDebug.resolvedLabel = 'uncategorized';
             }
           }
-          if (!labelSaved) {
-            autoLabel = 'uncategorized';
-            if (classifyDebug) classifyDebug.resolvedLabel = 'uncategorized';
-          }
+        } else {
+          // AI バインディング未設定: 未分類にフォールバック
+          autoLabel = 'uncategorized';
+          logger.warn('auto-classify skipped: AI binding not available', { query: q });
         }
-      } else {
-        // AI バインディング未設定: 未分類にフォールバック
-        autoLabel = 'uncategorized';
-        logger.warn('auto-classify skipped: AI binding not available', { query: q });
       }
     }
 
@@ -5327,13 +5330,21 @@ app.get('/api/repositories/search/history', optionalAuthMiddleware, async (c) =>
        LEFT JOIN commit_search_keyword_labels kl
          ON kl.user_id = h.user_id AND kl.search_query = h.search_query
        WHERE h.user_id = ?
-       ORDER BY h.total_hits DESC
+       UNION
+       SELECT NULL, kl.search_query, 0, NULL, kl.created_at, kl.label
+       FROM commit_search_keyword_labels kl
+       WHERE kl.user_id = ?
+       AND NOT EXISTS (
+         SELECT 1 FROM commit_search_history h2
+         WHERE h2.user_id = kl.user_id AND h2.search_query = kl.search_query
+       )
+       ORDER BY total_hits DESC
        LIMIT 200`
-    ).bind(user.sub).all<{
-      id: number;
+    ).bind(user.sub, user.sub).all<{
+      id: number | null;
       search_query: string;
       total_hits: number;
-      repo_names: string;
+      repo_names: string | null;
       searched_at: string;
       label: string;
     }>();

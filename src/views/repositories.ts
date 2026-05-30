@@ -1467,7 +1467,7 @@ export function getRepositoriesPage(user: {
   .label-classify-btns{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px;}
   .label-classify-btn{padding:5px 13px;border-radius:12px;border:1px solid var(--border-color);background:var(--bg-secondary);color:var(--text-muted);cursor:pointer;font-size:12px;transition:background .15s,color .15s;}
   .label-classify-btn:hover,.label-classify-btn.selected{background:var(--accent-color,#48bb78);color:#fff;border-color:var(--accent-color,#48bb78);}
-  .label-classify-input{width:100%;box-sizing:border-box;padding:8px 12px;border:1px solid var(--border-color);border-radius:6px;background:var(--bg-primary);color:var(--text-primary);font-size:13px;margin-bottom:4px;}
+  .label-classify-input{width:100%;box-sizing:border-box;padding:8px 12px;border:1px solid var(--border-color);border-radius:6px;background:var(--card-bg);color:var(--text-primary);font-size:13px;margin-bottom:4px;}
   .label-classify-footer{display:flex;justify-content:flex-end;gap:8px;margin-top:16px;}
   .label-classify-footer button{padding:7px 16px;border-radius:6px;font-size:13px;cursor:pointer;}
   </style>
@@ -2614,7 +2614,7 @@ export function getRepositoriesPage(user: {
       var overlay = document.createElement('div');
       overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:10100;display:flex;align-items:center;justify-content:center;';
       var modal = document.createElement('div');
-      modal.style.cssText = 'background:var(--bg-primary);color:var(--text-primary);border:1px solid var(--border-color);border-radius:12px;padding:24px;max-width:620px;width:90%;max-height:80vh;overflow-y:auto;box-shadow:0 8px 32px rgba(0,0,0,0.25);font-size:13px;';
+      modal.style.cssText = 'background:var(--card-bg);color:var(--text-primary);border:1px solid var(--border-color);border-radius:12px;padding:24px;max-width:620px;width:90%;max-height:80vh;overflow-y:auto;box-shadow:0 8px 32px rgba(0,0,0,0.35);font-size:13px;';
       var esc = function(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); };
       var rowStyle = 'margin-bottom:12px;';
       var labelStyle = 'font-weight:600;margin-bottom:4px;color:var(--text-muted);';
