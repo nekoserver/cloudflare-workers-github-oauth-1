@@ -17,6 +17,7 @@ export function getAiChatPage(user: {
   const safeModel = escapeHtml(user.aiChatModel);
   const isConfigured = user.aiChatModelConfigured !== false;
   const safeFallback = escapeHtml(user.fallbackModel ?? '@cf/meta/llama-3.1-8b-instruct-fp8');
+  const modelShortName = escapeHtml(user.aiChatModel.split('/').pop() ?? user.aiChatModel);
 
   return `<!DOCTYPE html>
 <html lang="ja">
@@ -63,6 +64,15 @@ export function getAiChatPage(user: {
       font-weight: 700;
       color: var(--text-primary);
       text-decoration: none;
+      display: flex;
+      align-items: baseline;
+      gap: 8px;
+    }
+    .navbar-model {
+      font-size: 11px;
+      font-weight: 400;
+      color: var(--text-muted);
+      letter-spacing: 0;
     }
 
     .user-menu { display: flex; align-items: center; gap: 12px; }
@@ -102,23 +112,9 @@ export function getAiChatPage(user: {
       max-width: 800px;
       width: 100%;
       margin: 0 auto;
-      padding: 24px 16px 0;
+      padding: 12px 16px 0;
       overflow: hidden;
       min-height: 0;
-    }
-
-    .chat-header {
-      margin-bottom: 16px;
-    }
-    .chat-title {
-      font-size: 22px;
-      font-weight: 700;
-      color: var(--text-primary);
-    }
-    .chat-model-label {
-      font-size: 12px;
-      color: var(--text-muted);
-      margin-top: 4px;
     }
 
     .chat-log {
@@ -217,7 +213,7 @@ export function getAiChatPage(user: {
 </head>
 <body>
   <nav class="navbar">
-    <a href="/welcome" class="navbar-brand">🤖 AI チャット</a>
+    <a href="/welcome" class="navbar-brand">🤖 AI チャット<span class="navbar-model">${modelShortName}</span></a>
     <div class="user-menu">
       ${getThemeToggleHTML()}
       <span class="user-name">${displayName}</span>
@@ -238,10 +234,6 @@ export function getAiChatPage(user: {
   </nav>
 
   <div class="chat-wrapper">
-    <div class="chat-header">
-      <div class="chat-title">AI チャット</div>
-      <div class="chat-model-label">モデル: ${safeModel}${!isConfigured ? ` <span style="color:var(--warning-color,#d29922);font-size:11px;">(AI_CHAT_MODEL 未設定 — フォールバック: ${safeFallback})</span>` : ''}</div>
-    </div>
     <div class="chat-log" id="chatLog"></div>
     <div class="chat-form-area">
       <form class="chat-form" id="chatForm">
