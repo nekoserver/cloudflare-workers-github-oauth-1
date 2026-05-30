@@ -33,7 +33,7 @@ export function getAiChatPage(user: {
 
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      background: var(--bg-primary);
+      background: var(--bg-primary, #f8fafc);
       color: var(--text-primary);
       min-height: 100vh;
       display: flex;
@@ -150,7 +150,12 @@ export function getAiChatPage(user: {
       align-self: flex-start;
       background: rgba(207,34,46,0.08);
       border: 1px solid rgba(207,34,46,0.3);
-      color: var(--error-color, #cf222e);
+      color: #cf222e;
+    }
+    [data-theme="dark"] .chat-bubble.error {
+      background: rgba(252,129,129,0.12);
+      border: 1px solid rgba(252,129,129,0.4);
+      color: #fc8181;
     }
     .chat-bubble.thinking {
       align-self: flex-start;
@@ -163,7 +168,7 @@ export function getAiChatPage(user: {
     .chat-form-area {
       position: sticky;
       bottom: 0;
-      background: var(--bg-primary);
+      background: var(--bg-primary, #f8fafc);
       padding: 12px 0 20px;
       border-top: 1px solid var(--border-color);
     }

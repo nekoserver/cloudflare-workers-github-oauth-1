@@ -14,6 +14,7 @@
 export function getThemeCSS(): string {
   return `
     :root {
+      --bg-primary: #f8fafc;
       --bg-gradient-start: #667eea;
       --bg-gradient-end: #764ba2;
       --navbar-bg: rgba(255, 255, 255, 0.95);
@@ -43,6 +44,7 @@ export function getThemeCSS(): string {
     }
 
     [data-theme="dark"] {
+      --bg-primary: #111827;
       --bg-gradient-start: #1a1a2e;
       --bg-gradient-end: #16213e;
       --navbar-bg: rgba(26, 32, 44, 0.95);
@@ -82,7 +84,8 @@ export function getThemeInitScript(): string {
   return `<script>
 (function(){
   var m = document.cookie.match(/(?:^|;\\s*)user_theme=([^;]*)/);
-  if (m && m[1] === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
+  var theme = m ? m[1] : 'dark';
+  if (theme !== 'light') document.documentElement.setAttribute('data-theme', 'dark');
 })();
 </script>`;
 }
