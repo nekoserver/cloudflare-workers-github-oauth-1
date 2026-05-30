@@ -15,8 +15,6 @@ export function getAiChatPage(user: {
   const displayName = escapeHtml(user.name || user.username);
   const initials = escapeHtml((user.name || user.username).substring(0, 2).toUpperCase());
   const safeModel = escapeHtml(user.aiChatModel);
-  const isConfigured = user.aiChatModelConfigured !== false;
-  const safeFallback = escapeHtml(user.fallbackModel ?? '@cf/meta/llama-3.1-8b-instruct-fp8');
   const modelShortName = escapeHtml(user.aiChatModel.split('/').pop() ?? user.aiChatModel);
 
   return `<!DOCTYPE html>
@@ -32,10 +30,7 @@ export function getAiChatPage(user: {
 
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-    html, body {
-      height: 100%;
-      overflow: hidden;
-    }
+    html, body { height: 100%; overflow: hidden; }
 
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -45,380 +40,313 @@ export function getAiChatPage(user: {
       flex-direction: column;
     }
 
-    /* ======= ナビバー（幅を約80%に縮小・中央寄せ） ======= */
-    .navbar-outer {
-      position: sticky;
-      top: 0;
-      z-index: 200;
+    /* ======= ナビバー（全幅・縦幅縮小） ======= */
+    .navbar {
+      position: sticky; top: 0; z-index: 200;
       background: var(--navbar-bg);
       backdrop-filter: blur(10px);
-      box-shadow: 0 2px 10px var(--navbar-shadow);
+      box-shadow: 0 2px 8px var(--navbar-shadow);
+      padding: 0 20px;
+      height: 44px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
       flex-shrink: 0;
     }
-    .navbar {
-      max-width: 80%;
-      margin: 0 auto;
-      padding: 14px 24px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-    }
-    .navbar-brand {
-      font-size: 20px;
-      font-weight: 700;
-      color: var(--text-primary);
-      text-decoration: none;
-      display: flex;
-      align-items: baseline;
-      gap: 8px;
-    }
-    .navbar-model {
-      font-size: 11px;
-      font-weight: 400;
+
+    /* サイドバートグル — ナビバー内左端 */
+    .sidebar-toggle {
+      width: 32px; height: 32px;
+      border-radius: 7px;
+      border: 1px solid var(--border-color);
+      background: var(--bg-secondary);
       color: var(--text-muted);
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer; font-size: 15px; flex-shrink: 0;
+      transition: background 0.15s, color 0.15s;
     }
-    .user-menu { display: flex; align-items: center; gap: 12px; }
-    .user-name { font-size: 14px; color: var(--text-secondary); font-weight: 500; }
+    .sidebar-toggle:hover { background: var(--border-color); color: var(--text-primary); }
+    .sidebar-toggle.active { background: var(--accent-color, #667eea); color: #fff; border-color: var(--accent-color, #667eea); }
+
+    .navbar-brand {
+      font-size: 17px; font-weight: 700;
+      color: var(--text-primary); text-decoration: none;
+      display: flex; align-items: baseline; gap: 7px;
+      white-space: nowrap;
+    }
+    .navbar-model { font-size: 11px; font-weight: 400; color: var(--text-muted); }
+
+    .navbar-spacer { flex: 1; }
+
+    .user-menu { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+    .user-name { font-size: 13px; color: var(--text-secondary); font-weight: 500; }
     .user-icon {
-      width: 38px; height: 38px; border-radius: 50%;
+      width: 32px; height: 32px; border-radius: 50%;
       background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
       display: flex; align-items: center; justify-content: center;
-      color: white; font-weight: 600; font-size: 15px; cursor: pointer;
-      transition: transform 0.2s ease;
-      box-shadow: 0 2px 8px rgba(102,126,234,0.3);
+      color: white; font-weight: 600; font-size: 13px; cursor: pointer;
+      transition: transform 0.2s; flex-shrink: 0;
     }
     .user-icon:hover { transform: scale(1.05); }
     .user-menu-container { position: relative; }
     .dropdown-menu {
-      display: none; position: absolute; top: 48px; right: 0;
+      display: none; position: absolute; top: 40px; right: 0;
       background: var(--dropdown-bg); border-radius: 8px;
       box-shadow: 0 4px 12px rgba(0,0,0,0.15); min-width: 180px; z-index: 1000; overflow: hidden;
     }
     .dropdown-menu.show { display: block; }
     .dropdown-item {
-      padding: 12px 20px; color: var(--text-secondary); text-decoration: none;
-      display: block; transition: background 0.2s ease; cursor: pointer;
-      border-bottom: 1px solid var(--border-color);
+      padding: 11px 18px; color: var(--text-secondary); text-decoration: none;
+      display: block; transition: background 0.15s; cursor: pointer;
+      border-bottom: 1px solid var(--border-color); font-size: 13px;
     }
     .dropdown-item:last-child { border-bottom: none; }
     .dropdown-item:hover { background: var(--dropdown-hover); }
     .dropdown-item.logout { color: var(--danger-color); }
 
-    /* ======= サイドバートグルボタン ======= */
-    .sidebar-toggle {
-      position: fixed;
-      top: 60px;
-      left: 12px;
-      z-index: 300;
-      width: 36px; height: 36px;
-      border-radius: 8px;
-      border: 1px solid var(--border-color);
-      background: var(--card-bg);
-      color: var(--text-muted);
-      display: flex; align-items: center; justify-content: center;
-      cursor: pointer;
-      font-size: 16px;
-      transition: background 0.2s, color 0.2s, box-shadow 0.2s;
-      box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+    /* ======= レイアウト本体 ======= */
+    .body-area {
+      flex: 1; display: flex; overflow: hidden; min-height: 0;
     }
-    .sidebar-toggle:hover { background: var(--bg-secondary); color: var(--text-primary); }
-    .sidebar-toggle.active { background: var(--accent-color, #667eea); color: #fff; border-color: var(--accent-color, #667eea); }
 
     /* ======= 左サイドバー ======= */
     .sidebar {
-      position: fixed;
-      top: 54px;
-      left: 0;
-      width: 260px;
-      bottom: 0;
+      width: 0; flex-shrink: 0;
       background: var(--card-bg);
       border-right: 1px solid var(--border-color);
-      z-index: 250;
-      display: flex;
-      flex-direction: column;
-      transform: translateX(-100%);
-      transition: transform 0.25s ease;
-      box-shadow: 2px 0 12px rgba(0,0,0,0.1);
+      display: flex; flex-direction: column;
+      overflow: hidden;
+      transition: width 0.25s ease;
     }
-    .sidebar.open { transform: translateX(0); }
+    .sidebar.open { width: 260px; }
 
     .sidebar-head {
-      padding: 12px 14px 10px;
-      border-bottom: 1px solid var(--border-color);
-      flex-shrink: 0;
+      padding: 10px 12px 8px; border-bottom: 1px solid var(--border-color); flex-shrink: 0;
     }
-    .sidebar-search-wrap {
-      position: relative;
-    }
+    .sidebar-search-wrap { position: relative; }
     .sidebar-search {
-      width: 100%;
-      padding: 8px 32px 8px 10px;
-      border-radius: 6px;
-      border: 1px solid var(--border-color);
-      background: var(--bg-secondary);
-      color: var(--text-primary);
-      font-size: 13px;
-      font-family: inherit;
-      outline: none;
+      width: 100%; padding: 7px 28px 7px 9px;
+      border-radius: 6px; border: 1px solid var(--border-color);
+      background: var(--bg-secondary); color: var(--text-primary);
+      font-size: 12px; font-family: inherit; outline: none;
       transition: border-color 0.15s;
     }
     .sidebar-search:focus { border-color: var(--accent-color, #667eea); }
     .sidebar-search-clear {
-      position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
+      position: absolute; right: 7px; top: 50%; transform: translateY(-50%);
       background: none; border: none; color: var(--text-muted); cursor: pointer;
-      font-size: 14px; display: none; padding: 0 2px;
+      font-size: 13px; display: none; padding: 0 2px; line-height: 1;
     }
     .sidebar-search-clear.visible { display: block; }
-
-    .sidebar-status {
-      font-size: 11px; color: var(--text-muted);
-      padding: 6px 14px 4px;
-      flex-shrink: 0;
-    }
+    .sidebar-status { font-size: 10px; color: var(--text-muted); padding: 5px 12px 3px; flex-shrink: 0; }
 
     .sidebar-results {
-      flex: 1;
-      overflow-y: auto;
-      display: flex;
-      flex-direction: column;
-      gap: 0;
+      flex: 1; overflow-y: auto; display: flex; flex-direction: column;
     }
     .sidebar-result-item {
-      padding: 10px 14px;
-      border-bottom: 1px solid var(--border-color);
-      cursor: pointer;
-      transition: background 0.15s;
+      padding: 9px 12px; border-bottom: 1px solid var(--border-color);
+      cursor: pointer; transition: background 0.12s; display: flex; gap: 7px; align-items: flex-start;
     }
     .sidebar-result-item:hover { background: var(--bg-secondary); }
     .sidebar-result-item.selected { background: var(--accent-color, #667eea); }
     .sidebar-result-item.selected .result-q,
-    .sidebar-result-item.selected .result-meta { color: #fff; }
-    .result-q {
-      font-size: 12px; color: var(--text-primary);
-      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-      margin-bottom: 3px;
-    }
+    .sidebar-result-item.selected .result-meta { color: rgba(255,255,255,0.9); }
+    .result-num { font-size: 10px; color: var(--text-muted); font-weight: 600; flex-shrink: 0; padding-top: 1px; min-width: 18px; }
+    .sidebar-result-item.selected .result-num { color: rgba(255,255,255,0.7); }
+    .result-body { min-width: 0; flex: 1; }
+    .result-q { font-size: 12px; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 2px; }
     .result-meta { font-size: 10px; color: var(--text-muted); }
 
-    /* ======= 検索結果 詳細パネル（画面下、全幅） ======= */
+    /* ======= カレンダーヒートマップ ======= */
+    .sidebar-calendar {
+      flex-shrink: 0; border-top: 1px solid var(--border-color);
+      padding: 10px 10px 12px;
+      background: var(--bg-secondary);
+    }
+    .cal-head {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 7px;
+    }
+    .cal-title { font-size: 11px; font-weight: 600; color: var(--text-secondary); }
+    .cal-nav { display: flex; gap: 4px; }
+    .cal-nav-btn {
+      background: none; border: none; color: var(--text-muted); cursor: pointer;
+      font-size: 13px; padding: 0 3px; line-height: 1; border-radius: 3px;
+    }
+    .cal-nav-btn:hover { background: var(--border-color); color: var(--text-primary); }
+    .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; }
+    .cal-dow {
+      font-size: 9px; color: var(--text-muted); text-align: center;
+      padding-bottom: 2px; font-weight: 600;
+    }
+    .cal-cell {
+      aspect-ratio: 1; border-radius: 3px;
+      background: var(--border-color);
+      cursor: default; position: relative;
+      transition: transform 0.1s;
+    }
+    .cal-cell.empty { background: transparent; cursor: default; }
+    .cal-cell.has-data { cursor: pointer; }
+    .cal-cell.has-data:hover { transform: scale(1.15); z-index: 1; }
+    .cal-cell.selected-day { outline: 2px solid var(--accent-color, #667eea); outline-offset: 1px; }
+    /* ヒートマップ強度 */
+    .cal-cell[data-lvl="1"] { background: rgba(102,126,234,0.25); }
+    .cal-cell[data-lvl="2"] { background: rgba(102,126,234,0.45); }
+    .cal-cell[data-lvl="3"] { background: rgba(102,126,234,0.65); }
+    .cal-cell[data-lvl="4"] { background: rgba(102,126,234,0.85); }
+    [data-theme="dark"] .cal-cell[data-lvl="1"] { background: rgba(127,156,245,0.25); }
+    [data-theme="dark"] .cal-cell[data-lvl="2"] { background: rgba(127,156,245,0.45); }
+    [data-theme="dark"] .cal-cell[data-lvl="3"] { background: rgba(127,156,245,0.65); }
+    [data-theme="dark"] .cal-cell[data-lvl="4"] { background: rgba(127,156,245,0.85); }
+    .cal-cell-tip {
+      display: none; position: absolute; bottom: calc(100% + 4px); left: 50%;
+      transform: translateX(-50%); background: var(--dropdown-bg);
+      border: 1px solid var(--border-color); border-radius: 4px;
+      font-size: 10px; color: var(--text-primary); padding: 3px 6px;
+      white-space: nowrap; z-index: 10; pointer-events: none;
+    }
+    .cal-cell:hover .cal-cell-tip { display: block; }
+
+    /* ======= 結果詳細パネル（全幅・下） ======= */
     .results-panel {
-      position: fixed;
-      bottom: 0; left: 0; right: 0;
-      height: 42%;
-      background: var(--card-bg);
-      border-top: 2px solid var(--accent-color, #667eea);
-      z-index: 400;
-      display: flex;
-      flex-direction: column;
-      transform: translateY(100%);
-      transition: transform 0.3s ease;
+      position: fixed; bottom: 0; left: 0; right: 0; height: 42%;
+      background: var(--card-bg); border-top: 2px solid var(--accent-color, #667eea);
+      z-index: 400; display: flex; flex-direction: column;
+      transform: translateY(100%); transition: transform 0.3s ease;
       box-shadow: 0 -4px 20px rgba(0,0,0,0.15);
     }
     .results-panel.open { transform: translateY(0); }
-
     .results-panel-head {
       display: flex; align-items: center; justify-content: space-between;
-      padding: 10px 16px 8px;
-      border-bottom: 1px solid var(--border-color);
-      flex-shrink: 0;
+      padding: 8px 16px; border-bottom: 1px solid var(--border-color); flex-shrink: 0;
     }
-    .results-panel-title {
-      font-size: 13px; font-weight: 600; color: var(--text-primary);
-    }
+    .results-panel-title { font-size: 13px; font-weight: 600; color: var(--text-primary); }
     .results-panel-close {
-      background: none; border: none; color: var(--text-muted);
-      cursor: pointer; font-size: 18px; padding: 0 4px;
-      line-height: 1;
+      background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 18px; padding: 0 4px; line-height: 1;
     }
     .results-panel-close:hover { color: var(--text-primary); }
-
     .results-panel-body {
-      flex: 1; overflow-y: auto;
-      display: grid; grid-template-columns: 1fr 1fr; gap: 0;
+      flex: 1; overflow-y: auto; display: grid; grid-template-columns: 1fr 1fr; gap: 0;
     }
-    .results-panel-col {
-      padding: 14px 18px;
-      overflow-y: auto;
-    }
-    .results-panel-col + .results-panel-col {
-      border-left: 1px solid var(--border-color);
-    }
-    .results-col-label {
-      font-size: 10px; font-weight: 700; color: var(--text-muted);
-      text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 8px;
-    }
-    .results-col-text {
-      font-size: 13px; color: var(--text-primary);
-      line-height: 1.65; white-space: pre-wrap; word-break: break-word;
-    }
+    .results-panel-col { padding: 12px 16px; overflow-y: auto; }
+    .results-panel-col + .results-panel-col { border-left: 1px solid var(--border-color); }
+    .results-col-label { font-size: 10px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 6px; }
+    .results-col-text { font-size: 13px; color: var(--text-primary); line-height: 1.65; white-space: pre-wrap; word-break: break-word; }
     .results-panel-footer {
-      flex-shrink: 0;
-      padding: 8px 16px;
-      border-top: 1px solid var(--border-color);
+      flex-shrink: 0; padding: 6px 16px; border-top: 1px solid var(--border-color);
       display: flex; align-items: center; justify-content: space-between;
       font-size: 11px; color: var(--text-muted);
     }
-    .results-panel-link {
-      font-size: 11px; color: var(--accent-color, #667eea);
-      text-decoration: none;
-    }
+    .results-panel-link { font-size: 11px; color: var(--accent-color, #667eea); text-decoration: none; }
     .results-panel-link:hover { text-decoration: underline; }
 
     /* ======= チャット本体 ======= */
-    .main-area {
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-      overflow: hidden;
-      min-height: 0;
-    }
-
     .chat-wrapper {
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-      max-width: 640px;
-      width: 100%;
-      margin: 0 auto;
-      padding: 12px 16px 0;
-      overflow: hidden;
-      min-height: 0;
+      flex: 1; display: flex; flex-direction: column;
+      max-width: 640px; width: 100%; margin: 0 auto;
+      padding: 12px 16px 0; overflow: hidden; min-height: 0;
     }
-
     .chat-log {
-      flex: 1;
-      overflow-y: auto;
-      display: flex;
-      flex-direction: column;
-      gap: 16px;
-      padding-bottom: 16px;
+      flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 14px; padding-bottom: 14px;
     }
-
     .chat-bubble {
-      max-width: 85%;
-      padding: 12px 16px;
-      border-radius: 12px;
-      font-size: 14px;
-      line-height: 1.6;
-      white-space: pre-wrap;
-      word-break: break-word;
+      max-width: 85%; padding: 10px 14px; border-radius: 12px;
+      font-size: 14px; line-height: 1.6; white-space: pre-wrap; word-break: break-word;
     }
     .chat-bubble.user {
-      align-self: flex-end;
-      background: var(--accent-color, #667eea);
-      color: #fff;
-      border-bottom-right-radius: 3px;
+      align-self: flex-end; background: var(--accent-color, #667eea); color: #fff; border-bottom-right-radius: 3px;
     }
     .chat-bubble.assistant {
-      align-self: flex-start;
-      background: var(--card-bg);
-      border: 1px solid var(--border-color);
-      color: var(--text-primary);
-      border-bottom-left-radius: 3px;
+      align-self: flex-start; background: var(--card-bg); border: 1px solid var(--border-color); color: var(--text-primary); border-bottom-left-radius: 3px;
     }
     .chat-bubble.error {
-      align-self: flex-start;
-      background: rgba(207,34,46,0.08);
-      border: 1px solid rgba(207,34,46,0.3);
-      color: #cf222e;
+      align-self: flex-start; background: rgba(207,34,46,0.08); border: 1px solid rgba(207,34,46,0.3); color: #cf222e;
     }
     [data-theme="dark"] .chat-bubble.error {
-      background: rgba(252,129,129,0.12);
-      border: 1px solid rgba(252,129,129,0.4);
-      color: #fc8181;
+      background: rgba(252,129,129,0.12); border-color: rgba(252,129,129,0.4); color: #fc8181;
     }
     .chat-bubble.thinking {
-      align-self: flex-start;
-      background: var(--card-bg);
-      border: 1px solid var(--border-color);
-      color: var(--text-muted);
-      font-style: italic;
+      align-self: flex-start; background: var(--card-bg); border: 1px solid var(--border-color); color: var(--text-muted); font-style: italic;
     }
-
-    .chat-share-row { align-self: flex-start; margin-top: -8px; }
+    .chat-share-row { align-self: flex-start; margin-top: -6px; }
     .chat-share-btn {
-      background: none;
-      border: 1px solid var(--border-color);
-      border-radius: 6px;
-      padding: 4px 10px;
-      font-size: 11px;
-      color: var(--text-muted);
-      cursor: pointer;
-      display: inline-flex;
-      align-items: center;
-      gap: 4px;
-      transition: background 0.15s, color 0.15s;
+      background: none; border: 1px solid var(--border-color); border-radius: 6px;
+      padding: 3px 9px; font-size: 11px; color: var(--text-muted); cursor: pointer;
+      display: inline-flex; align-items: center; gap: 4px; transition: background 0.15s, color 0.15s;
     }
     .chat-share-btn:hover { background: var(--bg-secondary); color: var(--text-primary); }
     .chat-share-btn.copied { color: var(--success-color, #48bb78); border-color: var(--success-color, #48bb78); }
-
     .chat-form-area {
-      flex-shrink: 0;
-      background: var(--bg-primary, #f8fafc);
-      padding: 12px 0 20px;
-      border-top: 1px solid var(--border-color);
+      flex-shrink: 0; background: var(--bg-primary, #f8fafc); padding: 10px 0 18px; border-top: 1px solid var(--border-color);
     }
     .chat-form { display: flex; gap: 8px; align-items: flex-end; }
     .chat-input {
-      flex: 1; padding: 10px 14px; border-radius: 8px;
-      border: 1px solid var(--border-color);
-      background: var(--card-bg); color: var(--text-primary);
-      font-size: 14px; resize: none; min-height: 42px; max-height: 160px;
-      overflow-y: auto; font-family: inherit; line-height: 1.5;
+      flex: 1; padding: 9px 13px; border-radius: 8px; border: 1px solid var(--border-color);
+      background: var(--card-bg); color: var(--text-primary); font-size: 14px; resize: none;
+      min-height: 40px; max-height: 160px; overflow-y: auto; font-family: inherit; line-height: 1.5;
     }
     .chat-input:focus { outline: none; border-color: var(--accent-color, #667eea); }
     .chat-send-btn {
-      padding: 10px 18px; border-radius: 8px; border: none;
-      background: var(--accent-color, #667eea); color: #fff;
-      font-size: 14px; font-weight: 600; cursor: pointer;
-      white-space: nowrap; transition: opacity 0.15s; height: 42px;
+      padding: 9px 16px; border-radius: 8px; border: none;
+      background: var(--accent-color, #667eea); color: #fff; font-size: 14px; font-weight: 600;
+      cursor: pointer; white-space: nowrap; transition: opacity 0.15s; height: 40px;
     }
     .chat-send-btn:disabled { opacity: 0.5; cursor: not-allowed; }
     .chat-send-btn:not(:disabled):hover { opacity: 0.85; }
   </style>
 </head>
 <body>
-  <!-- ナビバー外枠（全幅背景）-->
-  <div class="navbar-outer">
-    <nav class="navbar">
-      <a href="/welcome" class="navbar-brand">🤖 AI チャット<span class="navbar-model">${modelShortName}</span></a>
-      <div class="user-menu">
-        ${getThemeToggleHTML()}
-        <span class="user-name">${displayName}</span>
-        <div class="user-menu-container">
-          <div class="user-icon" id="userIcon">${initials}</div>
-          <div class="dropdown-menu" id="dropdownMenu">
-            <a href="/welcome" class="dropdown-item">🏠 ホーム</a>
-            <a href="/aichat" class="dropdown-item">🤖 AI チャット</a>
-            <a href="/repositories" class="dropdown-item">📦 リポジトリ</a>
-            <a href="/userinfo" class="dropdown-item">👤 ユーザー情報</a>
-            <a href="/settings" class="dropdown-item">⚙️ 設定</a>
-            <a href="/status" class="dropdown-item">📊 キャッシュ状況</a>
-            <a href="/auth/switch" class="dropdown-item">🔄 別アカウントでログイン</a>
-            <a href="/auth/logout" class="dropdown-item logout">🚪 ログアウト</a>
-          </div>
+  <!-- ナビバー -->
+  <nav class="navbar">
+    <button class="sidebar-toggle" id="sidebarToggle" title="履歴検索">☰</button>
+    <a href="/welcome" class="navbar-brand">🤖 AI チャット<span class="navbar-model">${modelShortName}</span></a>
+    <div class="navbar-spacer"></div>
+    <div class="user-menu">
+      ${getThemeToggleHTML()}
+      <span class="user-name">${displayName}</span>
+      <div class="user-menu-container">
+        <div class="user-icon" id="userIcon">${initials}</div>
+        <div class="dropdown-menu" id="dropdownMenu">
+          <a href="/welcome" class="dropdown-item">🏠 ホーム</a>
+          <a href="/aichat" class="dropdown-item">🤖 AI チャット</a>
+          <a href="/repositories" class="dropdown-item">📦 リポジトリ</a>
+          <a href="/userinfo" class="dropdown-item">👤 ユーザー情報</a>
+          <a href="/settings" class="dropdown-item">⚙️ 設定</a>
+          <a href="/status" class="dropdown-item">📊 キャッシュ状況</a>
+          <a href="/auth/switch" class="dropdown-item">🔄 別アカウントでログイン</a>
+          <a href="/auth/logout" class="dropdown-item logout">🚪 ログアウト</a>
         </div>
       </div>
-    </nav>
-  </div>
+    </div>
+  </nav>
 
-  <!-- サイドバートグルボタン -->
-  <button class="sidebar-toggle" id="sidebarToggle" title="履歴検索">☰</button>
+  <!-- ボディエリア（サイドバー + チャット） -->
+  <div class="body-area">
+    <!-- 左サイドバー -->
+    <div class="sidebar" id="sidebar">
+      <div class="sidebar-head">
+        <div class="sidebar-search-wrap">
+          <input class="sidebar-search" id="sidebarSearch" type="search" placeholder="履歴を検索..." autocomplete="off">
+          <button class="sidebar-search-clear" id="sidebarClear" tabindex="-1">✕</button>
+        </div>
+      </div>
+      <div class="sidebar-status" id="sidebarStatus"></div>
+      <div class="sidebar-results" id="sidebarResults"></div>
 
-  <!-- 左サイドバー -->
-  <div class="sidebar" id="sidebar">
-    <div class="sidebar-head">
-      <div class="sidebar-search-wrap">
-        <input class="sidebar-search" id="sidebarSearch" type="search" placeholder="履歴を検索..." autocomplete="off">
-        <button class="sidebar-search-clear" id="sidebarClear" tabindex="-1">✕</button>
+      <!-- カレンダーヒートマップ -->
+      <div class="sidebar-calendar" id="sidebarCalendar">
+        <div class="cal-head">
+          <span class="cal-title" id="calTitle"></span>
+          <div class="cal-nav">
+            <button class="cal-nav-btn" id="calPrev" title="前月">‹</button>
+            <button class="cal-nav-btn" id="calNext" title="翌月">›</button>
+          </div>
+        </div>
+        <div class="cal-grid" id="calGrid"></div>
       </div>
     </div>
-    <div class="sidebar-status" id="sidebarStatus"></div>
-    <div class="sidebar-results" id="sidebarResults"></div>
-  </div>
 
-  <!-- メインエリア -->
-  <div class="main-area">
+    <!-- チャット本体 -->
     <div class="chat-wrapper">
       <div class="chat-log" id="chatLog"></div>
       <div class="chat-form-area">
@@ -430,7 +358,7 @@ export function getAiChatPage(user: {
     </div>
   </div>
 
-  <!-- 検索結果詳細パネル（画面下全幅） -->
+  <!-- 詳細パネル（全幅・下） -->
   <div class="results-panel" id="resultsPanel">
     <div class="results-panel-head">
       <span class="results-panel-title" id="resultsPanelTitle">詳細</span>
@@ -458,13 +386,8 @@ export function getAiChatPage(user: {
     // ===== ドロップダウン =====
     var userIcon = document.getElementById('userIcon');
     var dropdownMenu = document.getElementById('dropdownMenu');
-    if (userIcon && dropdownMenu) {
-      userIcon.addEventListener('click', function(e) {
-        e.stopPropagation();
-        dropdownMenu.classList.toggle('show');
-      });
-      document.addEventListener('click', function() { dropdownMenu.classList.remove('show'); });
-    }
+    userIcon.addEventListener('click', function(e) { e.stopPropagation(); dropdownMenu.classList.toggle('show'); });
+    document.addEventListener('click', function() { dropdownMenu.classList.remove('show'); });
 
     // ===== サイドバー =====
     var sidebarToggle = document.getElementById('sidebarToggle');
@@ -475,37 +398,31 @@ export function getAiChatPage(user: {
     var sidebarResults = document.getElementById('sidebarResults');
     var sidebarOpen = false;
 
-    sidebarToggle.addEventListener('click', function() {
+    sidebarToggle.addEventListener('click', function(e) {
+      e.stopPropagation();
       sidebarOpen = !sidebarOpen;
       sidebar.classList.toggle('open', sidebarOpen);
       sidebarToggle.classList.toggle('active', sidebarOpen);
-      if (sidebarOpen) setTimeout(function() { sidebarSearch.focus(); }, 260);
-    });
-
-    // サイドバー外クリックで閉じる
-    document.addEventListener('click', function(e) {
-      if (sidebarOpen && !sidebar.contains(e.target) && e.target !== sidebarToggle) {
-        sidebarOpen = false;
-        sidebar.classList.remove('open');
-        sidebarToggle.classList.remove('active');
+      if (sidebarOpen) {
+        setTimeout(function() { sidebarSearch.focus(); }, 260);
+        loadCalendar(calCurrentMonth);
       }
     });
 
-    // ===== 検索 =====
+    // ===== キーワード検索 =====
     var searchTimer = null;
     var currentResults = [];
     var selectedIdx = -1;
+    var currentMode = 'search'; // 'search' | 'date'
+    var currentDateLabel = '';
 
     sidebarSearch.addEventListener('input', function() {
       var q = sidebarSearch.value.trim();
       sidebarClear.classList.toggle('visible', q.length > 0);
       clearTimeout(searchTimer);
-      if (!q) {
-        sidebarStatus.textContent = '';
-        sidebarResults.innerHTML = '';
-        currentResults = [];
-        return;
-      }
+      currentMode = 'search';
+      currentDateLabel = '';
+      if (!q) { sidebarStatus.textContent = ''; sidebarResults.innerHTML = ''; currentResults = []; return; }
       sidebarStatus.textContent = '検索中...';
       searchTimer = setTimeout(function() { doSearch(q); }, 350);
     });
@@ -516,6 +433,9 @@ export function getAiChatPage(user: {
       sidebarStatus.textContent = '';
       sidebarResults.innerHTML = '';
       currentResults = [];
+      currentMode = 'search';
+      currentDateLabel = '';
+      clearSelectedDay();
       sidebarSearch.focus();
     });
 
@@ -526,11 +446,24 @@ export function getAiChatPage(user: {
           currentResults = data.results || [];
           selectedIdx = -1;
           renderSidebarResults();
-          sidebarStatus.textContent = currentResults.length > 0
-            ? currentResults.length + ' 件ヒット'
-            : '一致なし';
+          sidebarStatus.textContent = currentResults.length > 0 ? currentResults.length + ' 件ヒット' : '一致なし';
         })
         .catch(function() { sidebarStatus.textContent = '検索エラー'; });
+    }
+
+    function doDateLoad(date) {
+      sidebarStatus.textContent = '読み込み中...';
+      fetch('/api/aichat/shares/by-date?date=' + encodeURIComponent(date), { credentials: 'same-origin' })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          currentResults = data.results || [];
+          selectedIdx = -1;
+          currentMode = 'date';
+          currentDateLabel = date;
+          renderSidebarResults();
+          sidebarStatus.textContent = date + '：' + currentResults.length + ' 件';
+        })
+        .catch(function() { sidebarStatus.textContent = '読み込みエラー'; });
     }
 
     function renderSidebarResults() {
@@ -538,14 +471,21 @@ export function getAiChatPage(user: {
       currentResults.forEach(function(r, i) {
         var item = document.createElement('div');
         item.className = 'sidebar-result-item' + (i === selectedIdx ? ' selected' : '');
+        var num = document.createElement('div');
+        num.className = 'result-num';
+        num.textContent = (i + 1) + '.';
+        var body = document.createElement('div');
+        body.className = 'result-body';
         var qEl = document.createElement('div');
         qEl.className = 'result-q';
         qEl.textContent = r.question;
         var meta = document.createElement('div');
         meta.className = 'result-meta';
         meta.textContent = r.created_at.slice(0, 16).replace('T', ' ') + '　' + r.model.split('/').pop();
-        item.appendChild(qEl);
-        item.appendChild(meta);
+        body.appendChild(qEl);
+        body.appendChild(meta);
+        item.appendChild(num);
+        item.appendChild(body);
         item.addEventListener('click', function() {
           selectedIdx = i;
           renderSidebarResults();
@@ -555,9 +495,104 @@ export function getAiChatPage(user: {
       });
     }
 
-    // ===== 結果パネル =====
+    // ===== カレンダーヒートマップ =====
+    var calCurrentMonth = new Date().toISOString().slice(0, 7);
+    var calDayData = {};
+    var calSelectedDay = null;
+
+    document.getElementById('calPrev').addEventListener('click', function() {
+      var d = new Date(calCurrentMonth + '-01');
+      d.setMonth(d.getMonth() - 1);
+      calCurrentMonth = d.toISOString().slice(0, 7);
+      loadCalendar(calCurrentMonth);
+    });
+    document.getElementById('calNext').addEventListener('click', function() {
+      var d = new Date(calCurrentMonth + '-01');
+      d.setMonth(d.getMonth() + 1);
+      calCurrentMonth = d.toISOString().slice(0, 7);
+      loadCalendar(calCurrentMonth);
+    });
+
+    function loadCalendar(month) {
+      fetch('/api/aichat/shares/calendar?month=' + encodeURIComponent(month), { credentials: 'same-origin' })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          calDayData = {};
+          (data.days || []).forEach(function(d) { calDayData[d.date] = d.count; });
+          renderCalendar(month);
+        })
+        .catch(function() {});
+    }
+
+    function renderCalendar(month) {
+      var titleEl = document.getElementById('calTitle');
+      var grid = document.getElementById('calGrid');
+      var parts = month.split('-');
+      var year = parseInt(parts[0], 10);
+      var mon = parseInt(parts[1], 10) - 1;
+      titleEl.textContent = year + '年' + (mon + 1) + '月';
+      grid.innerHTML = '';
+
+      var dows = ['日','月','火','水','木','金','土'];
+      dows.forEach(function(d) {
+        var el = document.createElement('div');
+        el.className = 'cal-dow';
+        el.textContent = d;
+        grid.appendChild(el);
+      });
+
+      var firstDay = new Date(year, mon, 1).getDay();
+      var daysInMonth = new Date(year, mon + 1, 0).getDate();
+      var maxCount = Math.max.apply(null, Object.values(calDayData).concat([1]));
+
+      for (var i = 0; i < firstDay; i++) {
+        var empty = document.createElement('div');
+        empty.className = 'cal-cell empty';
+        grid.appendChild(empty);
+      }
+
+      for (var day = 1; day <= daysInMonth; day++) {
+        var dateStr = month + '-' + String(day).padStart(2, '0');
+        var count = calDayData[dateStr] || 0;
+        var cell = document.createElement('div');
+        cell.className = 'cal-cell' + (count > 0 ? ' has-data' : '') + (calSelectedDay === dateStr ? ' selected-day' : '');
+        if (count > 0) {
+          var lvl = count >= maxCount * 0.75 ? 4 : count >= maxCount * 0.5 ? 3 : count >= maxCount * 0.25 ? 2 : 1;
+          cell.setAttribute('data-lvl', lvl);
+          cell.title = day + '日: ' + count + '件';
+          var tip = document.createElement('span');
+          tip.className = 'cal-cell-tip';
+          tip.textContent = day + '日: ' + count + '件';
+          cell.appendChild(tip);
+          (function(ds) {
+            cell.addEventListener('click', function(e) {
+              e.stopPropagation();
+              calSelectedDay = ds;
+              sidebarSearch.value = '';
+              sidebarClear.classList.remove('visible');
+              renderCalendar(calCurrentMonth);
+              doDateLoad(ds);
+            });
+          })(dateStr);
+        } else {
+          cell.title = day + '日';
+        }
+        var label = document.createElement('span');
+        label.style.cssText = 'position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:9px;color:var(--text-muted);';
+        label.textContent = day;
+        cell.style.position = 'relative';
+        cell.appendChild(label);
+        grid.appendChild(cell);
+      }
+    }
+
+    function clearSelectedDay() {
+      calSelectedDay = null;
+      renderCalendar(calCurrentMonth);
+    }
+
+    // ===== 詳細パネル =====
     var resultsPanel = document.getElementById('resultsPanel');
-    var resultsPanelTitle = document.getElementById('resultsPanelTitle');
     var resultsPanelQ = document.getElementById('resultsPanelQ');
     var resultsPanelA = document.getElementById('resultsPanelA');
     var resultsPanelMeta = document.getElementById('resultsPanelMeta');
@@ -567,7 +602,6 @@ export function getAiChatPage(user: {
     function showResultsPanel(r) {
       resultsPanelQ.textContent = r.question;
       resultsPanelA.textContent = r.answer;
-      resultsPanelTitle.textContent = '検索結果';
       resultsPanelMeta.textContent = r.created_at.slice(0, 16).replace('T', ' ') + '　' + r.model + '　👁 ' + (r.access_count || 0);
       resultsPanelShareLink.href = '/s/' + r.user_hash + '/' + r.id;
       resultsPanel.classList.add('open');
@@ -589,7 +623,6 @@ export function getAiChatPage(user: {
       chatInput.style.height = 'auto';
       chatInput.style.height = Math.min(chatInput.scrollHeight, 160) + 'px';
     });
-
     chatInput.addEventListener('keydown', function(e) {
       if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
@@ -614,8 +647,7 @@ export function getAiChatPage(user: {
       btn.innerHTML = '🔗 リンクをコピー';
       btn.onclick = function() {
         fetch('/api/aichat/share', {
-          method: 'POST',
-          credentials: 'same-origin',
+          method: 'POST', credentials: 'same-origin',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ question: question, answer: answer, model: model })
         })
@@ -625,10 +657,7 @@ export function getAiChatPage(user: {
               navigator.clipboard.writeText(d.shareUrl).then(function() {
                 btn.innerHTML = '✓ コピーしました';
                 btn.classList.add('copied');
-                setTimeout(function() {
-                  btn.innerHTML = '🔗 リンクをコピー';
-                  btn.classList.remove('copied');
-                }, 2000);
+                setTimeout(function() { btn.innerHTML = '🔗 リンクをコピー'; btn.classList.remove('copied'); }, 2000);
               });
             }
           })
@@ -645,18 +674,14 @@ export function getAiChatPage(user: {
       e.preventDefault();
       var msg = chatInput.value.trim();
       if (!msg) return;
-
       appendBubble(msg, 'user');
       chatInput.value = '';
       chatInput.style.height = 'auto';
       chatSendBtn.disabled = true;
-
       var currentMsg = msg;
       var thinking = appendBubble('考え中...', 'thinking');
-
       fetch('/api/aichat', {
-        method: 'POST',
-        credentials: 'same-origin',
+        method: 'POST', credentials: 'same-origin',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message: msg })
       })
@@ -671,14 +696,8 @@ export function getAiChatPage(user: {
             appendShareBtn(currentMsg, responseText, data.usedModel || lastModel);
           }
         })
-        .catch(function() {
-          thinking.remove();
-          appendBubble('通信エラーが発生しました', 'error');
-        })
-        .finally(function() {
-          chatSendBtn.disabled = false;
-          chatInput.focus();
-        });
+        .catch(function() { thinking.remove(); appendBubble('通信エラーが発生しました', 'error'); })
+        .finally(function() { chatSendBtn.disabled = false; chatInput.focus(); });
     });
 
     chatInput.focus();

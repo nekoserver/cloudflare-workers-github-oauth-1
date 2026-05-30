@@ -2451,6 +2451,41 @@ app.get('/api/aichat/shares/search', authMiddleware, async (c) => {
   return jsonUtf8({ results: rows.results ?? [] });
 });
 
+app.get('/api/aichat/shares/calendar', authMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+
+  const month = (c.req.query('month') ?? new Date().toISOString().slice(0, 7)).slice(0, 7);
+  const rows = await c.env.DB.prepare(
+    `SELECT substr(created_at, 1, 10) as date, COUNT(*) as count
+     FROM ai_chat_shares
+     WHERE user_id = ? AND created_at LIKE ?
+     GROUP BY date ORDER BY date`
+  ).bind(user.sub, `${month}%`).all<{ date: string; count: number }>();
+
+  return jsonUtf8({ month, days: rows.results ?? [] });
+});
+
+app.get('/api/aichat/shares/by-date', authMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+
+  const date = (c.req.query('date') ?? '').slice(0, 10);
+  if (!date) return jsonUtf8({ results: [] });
+
+  const rows = await c.env.DB.prepare(
+    `SELECT id, user_hash, question, answer, model, created_at, access_count
+     FROM ai_chat_shares
+     WHERE user_id = ? AND created_at LIKE ?
+     ORDER BY created_at DESC LIMIT 50`
+  ).bind(user.sub, `${date}%`).all<{
+    id: string; user_hash: string; question: string; answer: string;
+    model: string; created_at: string; access_count: number;
+  }>();
+
+  return jsonUtf8({ date, results: rows.results ?? [] });
+});
+
 /**
  * AIチャット共有リンク作成 API（認証が必要）
  */
