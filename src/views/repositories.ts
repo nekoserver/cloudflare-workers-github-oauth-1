@@ -948,6 +948,21 @@ export function getRepositoriesPage(user: {
     .keyword-detail-repo-btn { background: none; border: none; padding: 0; cursor: pointer; color: var(--link-color, #0969da); text-decoration: underline; font-size: inherit; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 160px; text-align: left; }
     .keyword-detail-repo-count { color: var(--text-muted); font-weight: 700; white-space: nowrap; margin-left: 8px; }
     .keyword-detail-cokey-list { display: flex; flex-wrap: wrap; gap: 6px; }
+    .repo-cokey-modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.55); z-index: 10001; display: flex; align-items: center; justify-content: center; }
+    .repo-cokey-modal { background: var(--modal-bg, var(--bg-primary)); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 8px; padding: 20px; max-width: 540px; width: 90%; max-height: 80vh; overflow-y: auto; position: relative; }
+    .repo-cokey-modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
+    .repo-cokey-modal-title { font-weight: 600; font-size: 14px; color: var(--text-primary); }
+    .repo-cokey-modal-close { background: none; border: none; font-size: 20px; cursor: pointer; color: var(--text-primary); line-height: 1; padding: 0 4px; }
+    .repo-cokey-count-label { font-size: 12px; color: var(--text-muted); margin-bottom: 10px; }
+    .repo-cokey-loading { font-size: 13px; color: var(--text-muted); }
+    .repo-cokey-empty { font-size: 13px; color: var(--text-muted); }
+    .repo-cokey-error { font-size: 13px; color: var(--error-color, #cf222e); }
+    .repo-cokey-cat-row { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+    .repo-cokey-cat-btn { padding: 3px 10px; border-radius: 12px; border: 1px solid var(--border-color); background: var(--bg-secondary, var(--bg-primary)); color: var(--text-primary); font-size: 12px; cursor: pointer; }
+    .repo-cokey-cat-btn.active { background: var(--accent-color, #0969da); color: #fff; border-color: transparent; }
+    .repo-cokey-kw-list { display: flex; flex-wrap: wrap; gap: 6px; }
+    .repo-cokey-kw-badge { display: inline-flex; align-items: center; padding: 2px 10px; border-radius: 12px; font-size: 12px; background: var(--bg-secondary, var(--bg-primary)); color: var(--text-primary); border: 1px solid var(--border-color); }
+    .repo-cokey-kw-badge.repo-cokey-kw-base { background: var(--accent-color, #0969da); color: #fff; border-color: transparent; }
     .keyword-detail-cokey-tag {
       display: inline-flex; align-items: center; gap: 4px;
       background: var(--card-bg); border: 1px solid var(--border-color);
@@ -5466,16 +5481,16 @@ export function getRepositoriesPage(user: {
 
         var overlay = document.createElement('div');
         overlay.id = 'repoCoKeyModalOverlay';
-        overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:10001;display:flex;align-items:center;justify-content:center;';
+        overlay.className = 'repo-cokey-modal-overlay';
 
         var modal = document.createElement('div');
-        modal.style.cssText = 'background:var(--bg-primary);border:1px solid var(--border-color);border-radius:8px;padding:20px;max-width:520px;width:90%;max-height:80vh;overflow-y:auto;position:relative;';
+        modal.className = 'repo-cokey-modal';
 
-        modal.innerHTML = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">'
-          + '<span style="font-weight:600;font-size:14px;">' + escHtml(repoName) + ' の共起キーワード</span>'
-          + '<button id="repoCoKeyModalClose" type="button" style="background:none;border:none;font-size:18px;cursor:pointer;color:var(--text-primary);">&times;</button>'
+        modal.innerHTML = '<div class="repo-cokey-modal-header">'
+          + '<span class="repo-cokey-modal-title">' + escHtml(repoName) + ' の共起キーワード</span>'
+          + '<button id="repoCoKeyModalClose" type="button" class="repo-cokey-modal-close">&times;</button>'
           + '</div>'
-          + '<div id="repoCoKeyModalBody"><div style="font-size:13px;color:var(--text-muted);">読み込み中...</div></div>';
+          + '<div id="repoCoKeyModalBody"><div class="repo-cokey-loading">読み込み中...</div></div>';
 
         overlay.appendChild(modal);
         document.body.appendChild(overlay);
@@ -5492,11 +5507,9 @@ export function getRepositoriesPage(user: {
             var totalKw = (data && data.totalKeywordCount) || 0;
             var coCount = keywords.length;
 
-            var html = '<div style="font-size:12px;color:var(--text-muted);margin-bottom:10px;">共起キーワード : (' + coCount + '/' + totalKw + ')</div>';
-
             if (keywords.length === 0) {
-              html += '<div style="font-size:13px;color:var(--text-muted);">なし</div>';
-              modalBody.innerHTML = html;
+              modalBody.innerHTML = '<div class="repo-cokey-count-label">共起キーワード : (' + coCount + '/' + totalKw + ')</div>'
+                + '<div class="repo-cokey-empty">なし</div>';
               return;
             }
 
@@ -5507,26 +5520,46 @@ export function getRepositoriesPage(user: {
               grouped[lbl].push(k);
             });
 
-            Object.keys(grouped).sort().forEach(function(lbl) {
-              html += '<div style="margin-bottom:10px;">';
-              html += '<div style="font-size:11px;color:var(--text-muted);margin-bottom:4px;">' + escHtml(lbl) + '</div>';
-              html += '<div style="display:flex;flex-wrap:wrap;gap:4px;">';
-              grouped[lbl].forEach(function(k) {
+            var sortedLabels = Object.keys(grouped).sort();
+            var activeLabel = null;
+
+            function renderKeywords(filterLabel) {
+              var kwHtml = '';
+              var toShow = filterLabel ? (grouped[filterLabel] || []) : keywords;
+              toShow.forEach(function(k) {
                 var isBase = k.search_query === baseQuery;
-                html += '<span style="display:inline-flex;align-items:center;gap:3px;padding:2px 8px;border-radius:12px;font-size:12px;'
-                  + (isBase ? 'background:var(--accent-color,#0969da);color:#fff;' : 'background:var(--bg-secondary);color:var(--text-primary);')
-                  + 'border:1px solid var(--border-color);">'
+                kwHtml += '<span class="repo-cokey-kw-badge' + (isBase ? ' repo-cokey-kw-base' : '') + '">'
                   + escHtml(k.search_query)
                   + '</span>';
               });
-              html += '</div></div>';
-            });
+              return kwHtml;
+            }
 
-            modalBody.innerHTML = html;
+            function renderAll() {
+              var catHtml = '<div class="repo-cokey-count-label">共起キーワード : (' + coCount + '/' + totalKw + ')</div>';
+              catHtml += '<div class="repo-cokey-cat-row">';
+              catHtml += '<button type="button" class="repo-cokey-cat-btn' + (!activeLabel ? ' active' : '') + '" data-cat="">すべて (' + keywords.length + ')</button>';
+              sortedLabels.forEach(function(lbl) {
+                catHtml += '<button type="button" class="repo-cokey-cat-btn' + (activeLabel === lbl ? ' active' : '') + '" data-cat="' + escHtml(lbl) + '">'
+                  + escHtml(lbl) + ' (' + grouped[lbl].length + ')</button>';
+              });
+              catHtml += '</div>';
+              catHtml += '<div class="repo-cokey-kw-list" id="repoCoKeyKwList">' + renderKeywords(activeLabel) + '</div>';
+              modalBody.innerHTML = catHtml;
+
+              modalBody.querySelectorAll('.repo-cokey-cat-btn').forEach(function(btn) {
+                btn.addEventListener('click', function() {
+                  activeLabel = btn.getAttribute('data-cat') || null;
+                  renderAll();
+                });
+              });
+            }
+
+            renderAll();
           })
           .catch(function() {
             var modalBody = document.getElementById('repoCoKeyModalBody');
-            if (modalBody) modalBody.innerHTML = '<div style="color:var(--error-color,red);font-size:13px;">取得に失敗しました</div>';
+            if (modalBody) modalBody.innerHTML = '<div class="repo-cokey-error">取得に失敗しました</div>';
           });
       }
 
