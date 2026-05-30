@@ -1368,6 +1368,9 @@ export function getRepositoriesPage(user: {
       padding: 8px 0 4px 0;
       border-top: 1px solid var(--border-color);
     }
+    .commit-cokey-cat-row { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 8px; }
+    .commit-cokey-cat-btn { font-size: 11px; padding: 2px 8px; border-radius: 12px; border: 1px solid var(--border-color); background: var(--card-bg); color: var(--text-muted); cursor: pointer; white-space: nowrap; }
+    .commit-cokey-cat-btn.active { background: var(--accent-color, #0969da); color: #fff; border-color: transparent; }
     .commit-cokey-label { font-size: 11px; color: var(--text-muted); margin-bottom: 6px; }
     .commit-cokey-tags { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 8px; min-height: 24px; }
     .commit-cokey-tag {
@@ -1732,6 +1735,7 @@ export function getRepositoriesPage(user: {
           <button type="button" class="commit-history-stats-btn" id="commitHistoryStatsBtn" title="現在選択中の期間に対するユーザー別集計を表示">stats</button>
         </div>
         <div class="commit-cokey-section" id="commitCoKeySection" style="display:none">
+          <div class="commit-cokey-cat-row" id="commitCoKeyCatRow"></div>
           <div class="commit-cokey-label" id="commitCoKeyLabel">共起キーワード</div>
           <div class="commit-cokey-tags" id="commitCoKeyTags"></div>
           <div class="commit-cokey-filter-row">
@@ -3950,30 +3954,73 @@ export function getRepositoriesPage(user: {
             return;
           }
           var totalKw = (data && data.totalKeywordCount) || 0;
-          var labelEl = document.getElementById('commitCoKeyLabel');
-          if (labelEl) labelEl.textContent = '共起キーワード : (' + keywords.length + '/' + totalKw + ')';
-          commitCoKeyTags.innerHTML = keywords.map(function(k) {
-            return '<button type="button" class="commit-cokey-tag" data-kw="' + esc(k.search_query) + '">'
-              + esc(k.search_query) + '</button>';
-          }).join('');
-          commitCoKeyTags.querySelectorAll('.commit-cokey-tag').forEach(function(btn) {
-            btn.addEventListener('click', function() {
-              var kw = btn.getAttribute('data-kw') || '';
-              commitCoKeyTags.querySelectorAll('.commit-cokey-tag').forEach(function(b) { b.classList.remove('active'); });
-              if (commitKeywordFilter === kw) {
+          var coCount = keywords.length;
+
+          // カテゴリ別グループ化（件数多い順）
+          var grouped = {};
+          keywords.forEach(function(k) {
+            var lbl = k.label || 'uncategorized';
+            if (!grouped[lbl]) grouped[lbl] = [];
+            grouped[lbl].push(k);
+          });
+          var sortedLabels = Object.keys(grouped).sort(function(a, b) {
+            return grouped[b].length - grouped[a].length;
+          });
+
+          var activeLabel = '';
+
+          function renderCatRow() {
+            var catRow = document.getElementById('commitCoKeyCatRow');
+            if (!catRow) return;
+            var html = '<button type="button" class="commit-cokey-cat-btn' + (activeLabel === '' ? ' active' : '') + '" data-cat="">すべて (' + coCount + ')</button>';
+            sortedLabels.forEach(function(lbl) {
+              html += '<button type="button" class="commit-cokey-cat-btn' + (activeLabel === lbl ? ' active' : '') + '" data-cat="' + esc(lbl) + '">'
+                + esc(lbl) + ' (' + grouped[lbl].length + ')</button>';
+            });
+            catRow.innerHTML = html;
+            catRow.querySelectorAll('.commit-cokey-cat-btn').forEach(function(btn) {
+              btn.addEventListener('click', function() {
+                activeLabel = btn.getAttribute('data-cat') || '';
                 commitKeywordFilter = '';
                 if (commitCoKeyInput) commitCoKeyInput.value = '';
-              } else {
-                commitKeywordFilter = kw;
-                if (commitCoKeyInput) commitCoKeyInput.value = kw;
-                btn.classList.add('active');
-              }
-              var filtered = applyCommitKeywordFilter(applyMergeFilter(currentAllCommits));
-              if (commitHistoryCount) commitHistoryCount.textContent = filtered.length + ' 件';
-              updateCommitHistoryButtonLabel(filtered.length);
-              renderCommitHistoryRows(filtered);
+                renderCatRow();
+                renderTagList();
+              });
             });
-          });
+          }
+
+          function renderTagList() {
+            if (!commitCoKeyTags) return;
+            var toShow = activeLabel ? (grouped[activeLabel] || []) : keywords;
+            var catCount = activeLabel ? (grouped[activeLabel] || []).length : coCount;
+            var labelEl = document.getElementById('commitCoKeyLabel');
+            if (labelEl) labelEl.textContent = '共起キーワード : (' + catCount + '/' + totalKw + ')';
+            commitCoKeyTags.innerHTML = toShow.map(function(k) {
+              return '<button type="button" class="commit-cokey-tag" data-kw="' + esc(k.search_query) + '">'
+                + esc(k.search_query) + '</button>';
+            }).join('');
+            commitCoKeyTags.querySelectorAll('.commit-cokey-tag').forEach(function(btn) {
+              btn.addEventListener('click', function() {
+                var kw = btn.getAttribute('data-kw') || '';
+                commitCoKeyTags.querySelectorAll('.commit-cokey-tag').forEach(function(b) { b.classList.remove('active'); });
+                if (commitKeywordFilter === kw) {
+                  commitKeywordFilter = '';
+                  if (commitCoKeyInput) commitCoKeyInput.value = '';
+                } else {
+                  commitKeywordFilter = kw;
+                  if (commitCoKeyInput) commitCoKeyInput.value = kw;
+                  btn.classList.add('active');
+                }
+                var filtered = applyCommitKeywordFilter(applyMergeFilter(currentAllCommits));
+                if (commitHistoryCount) commitHistoryCount.textContent = filtered.length + ' 件';
+                updateCommitHistoryButtonLabel(filtered.length);
+                renderCommitHistoryRows(filtered);
+              });
+            });
+          }
+
+          renderCatRow();
+          renderTagList();
           if (commitCoKeySection) commitCoKeySection.style.display = '';
         })
         .catch(function() {});
