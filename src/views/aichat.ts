@@ -398,6 +398,17 @@ export function getAiChatPage(user: {
     var sidebarResults = document.getElementById('sidebarResults');
     var sidebarOpen = false;
 
+    function isTapCloseEnabled() {
+      var m = document.cookie.match(/(?:^|;\s*)aichat_sidebar_tap_close=([^;]*)/);
+      return !m || m[1] !== 'off';
+    }
+
+    function closeSidebar() {
+      sidebarOpen = false;
+      sidebar.classList.remove('open');
+      sidebarToggle.classList.remove('active');
+    }
+
     sidebarToggle.addEventListener('click', function(e) {
       e.stopPropagation();
       sidebarOpen = !sidebarOpen;
@@ -406,6 +417,12 @@ export function getAiChatPage(user: {
       if (sidebarOpen) {
         setTimeout(function() { sidebarSearch.focus(); }, 260);
         loadCalendar(calCurrentMonth);
+      }
+    });
+
+    document.addEventListener('click', function(e) {
+      if (sidebarOpen && isTapCloseEnabled() && !sidebar.contains(e.target) && e.target !== sidebarToggle) {
+        closeSidebar();
       }
     });
 
