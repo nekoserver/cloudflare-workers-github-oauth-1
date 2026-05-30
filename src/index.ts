@@ -2428,6 +2428,30 @@ app.post('/api/aichat', authMiddleware, async (c) => {
 });
 
 /**
+ * AIチャット共有履歴の全文検索 API（認証が必要）
+ */
+app.get('/api/aichat/shares/search', authMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+
+  const q = (c.req.query('q') ?? '').trim();
+  if (!q) return jsonUtf8({ results: [] });
+
+  const like = `%${q}%`;
+  const rows = await c.env.DB.prepare(
+    `SELECT id, user_hash, question, answer, model, created_at, access_count
+     FROM ai_chat_shares
+     WHERE user_id = ? AND (question LIKE ? OR answer LIKE ?)
+     ORDER BY created_at DESC LIMIT 30`
+  ).bind(user.sub, like, like).all<{
+    id: string; user_hash: string; question: string; answer: string;
+    model: string; created_at: string; access_count: number;
+  }>();
+
+  return jsonUtf8({ results: rows.results ?? [] });
+});
+
+/**
  * AIチャット共有リンク作成 API（認証が必要）
  */
 app.post('/api/aichat/share', authMiddleware, async (c) => {
