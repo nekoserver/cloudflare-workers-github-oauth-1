@@ -604,7 +604,11 @@ CREATE INDEX IF NOT EXISTS idx_commit_search_keyword_labels_label ON commit_sear
   expires_at TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_ai_chat_shares_user_id ON ai_chat_shares(user_id);
-CREATE INDEX IF NOT EXISTS idx_ai_chat_shares_user_hash ON ai_chat_shares(user_hash);`,
+CREATE INDEX IF NOT EXISTS idx_ai_chat_shares_user_hash ON ai_chat_shares(user_hash);
+INSERT OR IGNORE INTO table_catalog (table_name, group_name, description, migration, sync_policy, display_order) VALUES
+('ai_chat_shares', 'ai', 'AIチャット共有Q&Aレコード', '0036', 'auto', 0);
+INSERT OR REPLACE INTO table_column_keys (table_name, column_name, key_type, fk_target_table) VALUES
+('ai_chat_shares', 'user_id', 'fk', 'user_sessions');`,
 };
 
 function jsonUtf8(payload: unknown, status = 200): Response {
@@ -753,7 +757,7 @@ export const TABLE_COLUMN_KEYS: Record<string, ColumnKeyInfo> = {
   ai_summary_link_access_log: { id: 'pk', request_id: 'fk', route: 'idx', issue_code: 'idx', created_at: 'idx' },
   commit_stats_cache: { id: 'pk', owner: 'idx', repo: 'idx', period: 'idx' },
   repo_commit_index: { commit_hash: 'pk', seq_num: 'idx', github_pr_number: 'idx', repo_name: 'idx' },
-  ai_chat_shares: { id: 'pk', user_id: 'idx', user_hash: 'idx' },
+  ai_chat_shares: { id: 'pk', user_id: 'fk', user_hash: 'idx' },
 };
 
 export function getColumnKeyType(tableName: string, columnName: string): ColumnKeyType {
