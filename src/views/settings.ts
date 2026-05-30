@@ -485,6 +485,16 @@ export function getSettingsPage(user: {
             </div>
           </div>
           <div class="info-item">
+            <span class="info-label">AIチャット画面の左サイドバーを余白タップでも閉じられるようにする</span>
+            <div class="setting-control" style="justify-content: flex-end;">
+              <span class="theme-label" id="aichatSidebarTapCloseLabel">ON</span>
+              <label class="theme-toggle-switch">
+                <input type="checkbox" id="aichatSidebarTapCloseCheckbox" onchange="onAichatSidebarTapCloseChange()">
+                <span class="theme-toggle-slider"></span>
+              </label>
+            </div>
+          </div>
+          <div class="info-item">
             <span class="info-label">新規検索キーワードの分類対象</span>
             <div class="setting-control">
               <select class="timezone-select" id="searchLabelModeSelect" onchange="onSearchLabelModeChange()">
@@ -722,6 +732,23 @@ export function getSettingsPage(user: {
       var enabled = cb.checked;
       label.textContent = enabled ? 'ON' : 'OFF';
       document.cookie = 'keyword_classify_debug=' + (enabled ? 'on' : 'off') + '; Path=/; SameSite=Lax; Max-Age=31536000';
+    }
+
+    (function() {
+      var m = document.cookie.match('(^|;)\\\\s*aichat_sidebar_tap_close=([^;]*)');
+      var val = m ? decodeURIComponent(m[2]) : 'on';
+      var cb = document.getElementById('aichatSidebarTapCloseCheckbox');
+      var label = document.getElementById('aichatSidebarTapCloseLabel');
+      if (cb) cb.checked = (val !== 'off');
+      if (label) label.textContent = (val !== 'off') ? 'ON' : 'OFF';
+    })();
+
+    function onAichatSidebarTapCloseChange() {
+      var cb = document.getElementById('aichatSidebarTapCloseCheckbox');
+      var label = document.getElementById('aichatSidebarTapCloseLabel');
+      var enabled = cb.checked;
+      label.textContent = enabled ? 'ON' : 'OFF';
+      document.cookie = 'aichat_sidebar_tap_close=' + (enabled ? 'on' : 'off') + '; Path=/; Secure; SameSite=Lax; Max-Age=31536000';
     }
 
     function onThemeSettingChange() {
