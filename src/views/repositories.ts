@@ -889,8 +889,9 @@ export function getRepositoriesPage(user: {
     .history-label-mode-toggle[data-mode="auto-classify"] { background:#f0fff4; color:#276749; border-color:#9ae6b4; }
     .history-label-filter { display:flex; gap:6px; padding:0 24px 10px; flex-wrap:wrap; flex-shrink:0; }
     .history-label-btn { font-size:11px; padding:3px 11px; border-radius:12px; border:1px solid var(--border-color); background:var(--bg-secondary); color:var(--text-muted); cursor:pointer; white-space:nowrap; transition:background 0.15s,color 0.15s,border-color 0.15s; }
-    .history-label-btn:hover { border-color:var(--accent-color,#48bb78); color:var(--accent-color,#48bb78); }
-    .history-label-btn.active { border-color:var(--accent-color,#48bb78); background:var(--accent-color,#48bb78); color:#fff; }
+    .history-label-btn:hover { border-color:#3b82f6; color:#3b82f6; }
+    .history-label-btn.active { border-color:#3b82f6; background:#dbeafe; color:#1d4ed8; }
+    [data-theme="dark"] .history-label-btn.active { border-color:#60a5fa; background:rgba(59,130,246,0.25); color:#93c5fd; }
     .history-repo-label { font-size:12px; color:var(--text-muted); white-space:nowrap; margin-left:auto; }
     .history-repo-select {
       font-size:12px; padding:4px 8px; border-radius:6px;
@@ -5093,6 +5094,7 @@ export function getRepositoriesPage(user: {
           currentItems = dedupeAndSort(hData.history);
           syncFilterBarFromItems(currentItems);
           updateLabelBadgeCounts(currentItems);
+          activateAllLabels();
           refreshGrid(null, null);
           var pendingAuto = window.__pendingAutoLabel;
           window.__pendingAutoLabel = null;
@@ -5127,12 +5129,7 @@ export function getRepositoriesPage(user: {
       function closeHistoryModal() {
         historyModal.classList.remove('show');
         document.body.style.overflow = '';
-        selectedLabel = '';
-        if (historyLabelFilter) {
-          historyLabelFilter.querySelectorAll('.history-label-btn').forEach(function(b, i) {
-            b.classList.toggle('active', i === 0);
-          });
-        }
+        activateAllLabels();
       }
       if (historyModalClose) {
         historyModalClose.addEventListener('click', closeHistoryModal);
@@ -5200,18 +5197,45 @@ export function getRepositoriesPage(user: {
         return arr;
       }
 
-      var selectedLabel = '';
+      var activeLabels = new Set();
       var searchLabelMode = (function() {
         var v = getCookie('user_search_label_mode');
         return (v === 'manual-modal' || v === 'auto-classify') ? v : 'uncategorized';
       }());
 
+      function getAllCategoryLabels() {
+        if (!historyLabelFilter) return [];
+        return Array.from(historyLabelFilter.querySelectorAll('.history-label-btn[data-label]'))
+          .map(function(b) { return b.getAttribute('data-label'); })
+          .filter(function(l) { return l !== ''; });
+      }
+
+      function syncBtnStyles() {
+        if (!historyLabelFilter) return;
+        var allLabels = getAllCategoryLabels();
+        var allOn = allLabels.length > 0 && allLabels.every(function(l) { return activeLabels.has(l); });
+        historyLabelFilter.querySelectorAll('.history-label-btn').forEach(function(btn) {
+          var lbl = btn.getAttribute('data-label');
+          if (lbl === '') {
+            btn.classList.toggle('active', allOn);
+          } else {
+            btn.classList.toggle('active', activeLabels.has(lbl));
+          }
+        });
+      }
+
+      function activateAllLabels() {
+        getAllCategoryLabels().forEach(function(l) { activeLabels.add(l); });
+        syncBtnStyles();
+      }
+
       function selectLabelFilter(label) {
-        selectedLabel = label;
-        if (historyLabelFilter) {
-          historyLabelFilter.querySelectorAll('.history-label-btn').forEach(function(b) {
-            b.classList.toggle('active', (b.getAttribute('data-label') || '') === label);
-          });
+        if (label === '') {
+          activateAllLabels();
+        } else {
+          activeLabels.clear();
+          activeLabels.add(label);
+          syncBtnStyles();
         }
         refreshGrid(null, null);
       }
@@ -5304,10 +5328,23 @@ export function getRepositoriesPage(user: {
         historyLabelFilter.addEventListener('click', function(e) {
           var btn = e.target.closest('.history-label-btn');
           if (!btn) return;
-          selectedLabel = btn.getAttribute('data-label') || '';
-          historyLabelFilter.querySelectorAll('.history-label-btn').forEach(function(b) {
-            b.classList.toggle('active', b === btn);
-          });
+          var lbl = btn.getAttribute('data-label');
+          if (lbl === '') {
+            var allLabels = getAllCategoryLabels();
+            var allOn = allLabels.length > 0 && allLabels.every(function(l) { return activeLabels.has(l); });
+            if (allOn) {
+              activeLabels.clear();
+            } else {
+              allLabels.forEach(function(l) { activeLabels.add(l); });
+            }
+          } else {
+            if (activeLabels.has(lbl)) {
+              activeLabels.delete(lbl);
+            } else {
+              activeLabels.add(lbl);
+            }
+          }
+          syncBtnStyles();
           refreshGrid(null, null);
         });
       }
@@ -5329,10 +5366,19 @@ export function getRepositoriesPage(user: {
       }
 
       function getIncrementalFilteredItems() {
+        var allLabels = getAllCategoryLabels();
+        var allOn = allLabels.length > 0 && allLabels.every(function(l) { return activeLabels.has(l); });
         var items = currentItems;
-        if (selectedLabel) {
-          items = items.filter(function(item) { return item.label === selectedLabel; });
+        if (!allOn) {
+          if (activeLabels.size === 0) {
+            items = [];
+          } else {
+            items = items.filter(function(item) {
+              return activeLabels.has(item.label || 'uncategorized');
+            });
+          }
         }
+        items = items.slice().sort(function(a, b) { return b.total_hits - a.total_hits; });
         if (!isIncrementalSearchEnabled) return items;
         var val = hSearchInput ? hSearchInput.value.trim().toLowerCase() : '';
         if (!val) return items;
@@ -5833,6 +5879,7 @@ export function getRepositoriesPage(user: {
           currentItems = dedupeAndSort(data.history);
           syncFilterBarFromItems(currentItems);
           updateLabelBadgeCounts(currentItems);
+          activateAllLabels();
           refreshGrid(null, null);
           var pending = window.__pendingNewKeyword;
           window.__pendingNewKeyword = null;
