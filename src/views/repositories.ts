@@ -966,8 +966,10 @@ export function getRepositoriesPage(user: {
     .repo-cokey-cat-arrow.open { transform: rotate(90deg); }
     .repo-cokey-cat-body { display: none; padding: 8px 12px 10px; background: var(--card-bg); border-top: 1px solid var(--border-color); }
     .repo-cokey-cat-body.open { display: flex; flex-wrap: wrap; gap: 5px; }
-    .repo-cokey-kw-badge { display: inline-flex; align-items: center; padding: 2px 10px; border-radius: 12px; font-size: 12px; background: var(--card-bg); color: var(--text-primary); border: 1px solid var(--border-color); }
+    .repo-cokey-kw-badge { display: inline-flex; align-items: center; padding: 2px 10px; border-radius: 12px; font-size: 12px; background: var(--card-bg); color: var(--text-primary); border: 1px solid var(--border-color); cursor: pointer; }
+    .repo-cokey-kw-badge:hover { border-color: var(--accent-color, #0969da); }
     .repo-cokey-kw-badge.repo-cokey-kw-base { background: var(--accent-color, #0969da); color: #fff; border-color: transparent; }
+    .repo-cokey-kw-badge.repo-cokey-kw-base:hover { opacity: 0.85; }
     .keyword-detail-cokey-tag {
       display: inline-flex; align-items: center; gap: 4px;
       background: var(--card-bg); border: 1px solid var(--border-color);
@@ -5527,21 +5529,28 @@ export function getRepositoriesPage(user: {
 
             var sortedLabels = Object.keys(grouped).sort();
 
+            // baseQuery が属するカテゴリを特定
+            var baseLabel = null;
+            keywords.forEach(function(k) {
+              if (k.search_query === baseQuery) baseLabel = k.label || 'uncategorized';
+            });
+
             var html = '<div class="repo-cokey-count-label">共起キーワード : (' + coCount + '/' + totalKw + ')</div>';
             sortedLabels.forEach(function(lbl, idx) {
               var catCount = grouped[lbl].length;
+              var isInitiallyOpen = lbl === 'uncategorized' || lbl === baseLabel;
               html += '<div class="repo-cokey-cat-section">';
-              html += '<div class="repo-cokey-cat-header" data-idx="' + idx + '">'
+              html += '<div class="repo-cokey-cat-header' + (isInitiallyOpen ? ' open' : '') + '" data-idx="' + idx + '">'
                 + '<span class="repo-cokey-cat-name">' + escHtml(lbl) + '</span>'
                 + '<span style="display:flex;align-items:center;gap:6px;">'
                 + '<span class="repo-cokey-cat-count">' + catCount + '/' + coCount + '</span>'
-                + '<span class="repo-cokey-cat-arrow">&#9654;</span>'
+                + '<span class="repo-cokey-cat-arrow' + (isInitiallyOpen ? ' open' : '') + '">&#9654;</span>'
                 + '</span>'
                 + '</div>';
-              html += '<div class="repo-cokey-cat-body" data-idx="' + idx + '">';
+              html += '<div class="repo-cokey-cat-body' + (isInitiallyOpen ? ' open' : '') + '" data-idx="' + idx + '">';
               grouped[lbl].forEach(function(k) {
                 var isBase = k.search_query === baseQuery;
-                html += '<span class="repo-cokey-kw-badge' + (isBase ? ' repo-cokey-kw-base' : '') + '">'
+                html += '<span class="repo-cokey-kw-badge' + (isBase ? ' repo-cokey-kw-base' : '') + '" data-kw="' + escHtml(k.search_query) + '" title="タップしてキーワードを分類する">'
                   + escHtml(k.search_query) + '</span>';
               });
               html += '</div>';
@@ -5550,6 +5559,7 @@ export function getRepositoriesPage(user: {
 
             modalBody.innerHTML = html;
 
+            // カテゴリヘッダーの開閉
             modalBody.querySelectorAll('.repo-cokey-cat-header').forEach(function(header) {
               header.addEventListener('click', function() {
                 var idx = header.getAttribute('data-idx');
@@ -5559,8 +5569,24 @@ export function getRepositoriesPage(user: {
                 var isOpen = body.classList.contains('open');
                 body.classList.toggle('open', !isOpen);
                 if (arrow) arrow.classList.toggle('open', !isOpen);
+                header.classList.toggle('open', !isOpen);
               });
             });
+
+            // バッジタップで分類モーダルを開く
+            modalBody.querySelectorAll('.repo-cokey-kw-badge').forEach(function(badge) {
+              badge.style.cursor = 'pointer';
+              badge.addEventListener('click', function() {
+                var kw = badge.getAttribute('data-kw');
+                if (kw) showLabelClassificationModal(kw);
+              });
+            });
+
+            // baseQuery バッジにスクロール
+            var baseEl = modalBody.querySelector('.repo-cokey-kw-base');
+            if (baseEl) {
+              setTimeout(function() { baseEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }, 80);
+            }
           })
           .catch(function() {
             var modalBody = document.getElementById('repoCoKeyModalBody');
