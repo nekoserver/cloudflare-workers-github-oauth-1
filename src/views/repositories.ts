@@ -1083,7 +1083,7 @@ export function getRepositoriesPage(user: {
       background: var(--code-bg); padding: 1px 5px; border-radius: 4px; font-size: 11px;
     }
     .toast {
-      position: fixed; right: 24px; bottom: 24px; z-index: 3000;
+      position: fixed; right: 24px; bottom: 24px; z-index: 10300;
       padding: 12px 14px; border-radius: 12px; font-size: 13px; font-weight: 700;
       box-shadow: 0 16px 36px rgba(0,0,0,0.25); display: none; max-width: 360px;
       align-items: center; gap: 12px; justify-content: space-between;
