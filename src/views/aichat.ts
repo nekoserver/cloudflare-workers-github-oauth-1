@@ -9,10 +9,14 @@ export function getAiChatPage(user: {
   username: string;
   avatar?: string;
   aiChatModel: string;
+  aiChatModelConfigured?: boolean;
+  fallbackModel?: string;
 }): string {
   const displayName = escapeHtml(user.name || user.username);
   const initials = escapeHtml((user.name || user.username).substring(0, 2).toUpperCase());
   const safeModel = escapeHtml(user.aiChatModel);
+  const isConfigured = user.aiChatModelConfigured !== false;
+  const safeFallback = escapeHtml(user.fallbackModel ?? '@cf/meta/llama-3.1-8b-instruct-fp8');
 
   return `<!DOCTYPE html>
 <html lang="ja">
@@ -226,7 +230,7 @@ export function getAiChatPage(user: {
   <div class="chat-wrapper">
     <div class="chat-header">
       <div class="chat-title">AI チャット</div>
-      <div class="chat-model-label">モデル: ${safeModel}</div>
+      <div class="chat-model-label">モデル: ${safeModel}${!isConfigured ? ` <span style="color:var(--warning-color,#d29922);font-size:11px;">(AI_CHAT_MODEL 未設定 — フォールバック: ${safeFallback})</span>` : ''}</div>
     </div>
     <div class="chat-log" id="chatLog"></div>
     <div class="chat-form-area">

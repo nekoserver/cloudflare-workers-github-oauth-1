@@ -2318,12 +2318,16 @@ app.get('/md-preview', (c) => {
  */
 app.get('/aichat', authMiddleware, async (c) => {
   const user = c.get('user');
-  const aiChatModel = (c.env.AI_CHAT_MODEL ?? '').trim() || '@cf/meta/llama-3.1-8b-instruct-fp8';
+  const configuredModel = (c.env.AI_CHAT_MODEL ?? '').trim();
+  const fallbackModel = '@cf/meta/llama-3.1-8b-instruct-fp8';
+  const aiChatModel = configuredModel || fallbackModel;
   return c.html(getAiChatPage({
     name: user.name,
     username: user.sub,
     avatar: user.avatar_url,
     aiChatModel,
+    aiChatModelConfigured: !!configuredModel,
+    fallbackModel,
   }));
 });
 
@@ -2345,24 +2349,62 @@ app.post('/api/aichat', authMiddleware, async (c) => {
   if (!message) {
     return jsonUtf8({ error: 'メッセージが空です' }, 400);
   }
-  const model = (c.env.AI_CHAT_MODEL ?? '').trim() || '@cf/meta/llama-3.1-8b-instruct-fp8';
-  try {
-    const result = await c.env.AI.run(model as Parameters<typeof c.env.AI.run>[0], {
+  const configuredModel = (c.env.AI_CHAT_MODEL ?? '').trim();
+  const fallbackModel = '@cf/meta/llama-3.1-8b-instruct-fp8';
+  const primaryModel = configuredModel || fallbackModel;
+
+  const runAi = async (model: string): Promise<string> => {
+    const result = await c.env.AI!.run(model as Parameters<typeof c.env.AI.run>[0], {
       messages: [{ role: 'user', content: message }],
       max_tokens: 1024,
     });
-    const response =
-      typeof result === 'object' && result !== null && 'response' in result
-        ? String((result as { response: unknown }).response ?? '')
-        : '';
-    return jsonUtf8({ response });
-  } catch (error) {
-    logger.warn('AI chat failed', {
-      model,
-      user: user.sub,
-      error: error instanceof Error ? error.message : 'Unknown error',
-    });
-    return jsonUtf8({ error: 'AI への問い合わせに失敗しました' }, 500);
+    return typeof result === 'object' && result !== null && 'response' in result
+      ? String((result as { response: unknown }).response ?? '')
+      : '';
+  };
+
+  // AI_CHAT_MODEL が設定されているときは必ずそのモデルを使い、
+  // 失敗した場合のみフォールバックモデルで再試行する
+  if (configuredModel) {
+    try {
+      const response = await runAi(configuredModel);
+      return jsonUtf8({ response, usedModel: configuredModel });
+    } catch (primaryErr) {
+      logger.warn('AI chat primary model failed, trying fallback', {
+        model: configuredModel,
+        fallback: fallbackModel,
+        user: user.sub,
+        error: primaryErr instanceof Error ? primaryErr.message : 'Unknown error',
+      });
+      // AI_CHAT_MODEL が失敗した場合のみフォールバック
+      if (configuredModel === fallbackModel) {
+        return jsonUtf8({ error: 'AI への問い合わせに失敗しました' }, 500);
+      }
+      try {
+        const response = await runAi(fallbackModel);
+        return jsonUtf8({ response, usedModel: fallbackModel, fallbackUsed: true });
+      } catch (fallbackErr) {
+        logger.warn('AI chat fallback model also failed', {
+          model: fallbackModel,
+          user: user.sub,
+          error: fallbackErr instanceof Error ? fallbackErr.message : 'Unknown error',
+        });
+        return jsonUtf8({ error: 'AI への問い合わせに失敗しました' }, 500);
+      }
+    }
+  } else {
+    // AI_CHAT_MODEL 未設定時はフォールバックモデルで実行
+    try {
+      const response = await runAi(primaryModel);
+      return jsonUtf8({ response, usedModel: primaryModel });
+    } catch (error) {
+      logger.warn('AI chat failed', {
+        model: primaryModel,
+        user: user.sub,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+      return jsonUtf8({ error: 'AI への問い合わせに失敗しました' }, 500);
+    }
   }
 });
 

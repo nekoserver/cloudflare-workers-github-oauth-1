@@ -6,6 +6,7 @@ compatibility_date = "2024-11-17"
 [vars]
 ENVIRONMENT = "development"
 # GITHUB_CLIENT_ID は wrangler secret で管理する（[vars] に平文で書かない）
+AI_CHAT_MODEL = "@cf/meta/llama-2-7b-chat-fp16"
 
 # 必要なシークレット（wrangler secret putで設定）:
 #   wrangler secret put GITHUB_CLIENT_ID
@@ -20,7 +21,8 @@ ENVIRONMENT = "development"
 #   wrangler secret put GITHUB_TOKEN        # PR diff取得用（GitHub PAT）
 #
 # オプション（[vars] または secret で設定可能）:
-#   AI_MODEL  # Workers AIモデル名（未設定時: @cf/meta/llama-3.1-8b-instruct-fp8）
+#   AI_MODEL       # PR要約・キーワード分類用 Workers AIモデル名（未設定時: @cf/google/gemma-4-26b-a4b-it）
+#   AI_CHAT_MODEL  # AIチャットページ用モデル名（未設定時: @cf/meta/llama-3.1-8b-instruct-fp8）
 
 # D1データベース設定（オプション）
 # セッション管理を有効にするには以下の手順を実行してください:
