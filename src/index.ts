@@ -5260,22 +5260,22 @@ app.get('/api/repositories/search/repo-keywords', optionalAuthMiddleware, async 
   if (!repo) return jsonUtf8({ keywords: [], totalKeywordCount: 0 });
   try {
     const rows = await c.env.DB.prepare(
-      `SELECT h.search_query, SUM(s.hit_count) as repo_hit_count
+      `SELECT h.search_query, SUM(s.hit_count) as repo_hit_count,
+              COALESCE(kl.label, 'uncategorized') as label
        FROM commit_search_repo_stats s
        JOIN commit_search_history h ON s.search_history_id = h.id
+       LEFT JOIN commit_search_keyword_labels kl ON kl.user_id = h.user_id AND kl.search_query = h.search_query
        WHERE h.user_id = ? AND s.repo_name = ?
        GROUP BY h.search_query
        ORDER BY repo_hit_count DESC`,
     )
       .bind(user.sub, repo)
-      .all<{ search_query: string; repo_hit_count: number }>();
-    // リポジトリ全体に対して検索したことのあるキーワード総数（同リポジトリ内）
+      .all<{ search_query: string; repo_hit_count: number; label: string }>();
     const totalRow = await c.env.DB.prepare(
-      `SELECT COUNT(DISTINCT h.search_query) as cnt
-       FROM commit_search_history h
-       JOIN commit_search_repo_stats s ON s.search_history_id = h.id
-       WHERE h.user_id = ? AND s.repo_name = ?`,
-    ).bind(user.sub, repo).first<{ cnt: number }>();
+      `SELECT COUNT(DISTINCT search_query) as cnt
+       FROM commit_search_history
+       WHERE user_id = ?`,
+    ).bind(user.sub).first<{ cnt: number }>();
     return jsonUtf8({ keywords: rows.results ?? [], totalKeywordCount: totalRow?.cnt ?? 0 });
   } catch (error) {
     logger.warn('Failed to fetch repo keywords', {
