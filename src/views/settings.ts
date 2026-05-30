@@ -296,7 +296,7 @@ export function getSettingsPage(user: {
           <div class="info-item">
             <span class="info-label">テーマ</span>
             <div class="setting-control" style="justify-content: flex-end;">
-              <span class="theme-label" id="themeLabel">ライト</span>
+              <span class="theme-label" id="themeLabel">ダーク</span>
               <label class="theme-toggle-switch">
                 <input type="checkbox" id="themeCheckbox" onchange="onThemeSettingChange()">
                 <span class="theme-toggle-slider"></span>
