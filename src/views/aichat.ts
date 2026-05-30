@@ -167,6 +167,26 @@ export function getAiChatPage(user: {
       font-style: italic;
     }
 
+    .chat-share-row {
+      align-self: flex-start;
+      margin-top: -8px;
+    }
+    .chat-share-btn {
+      background: none;
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      padding: 4px 10px;
+      font-size: 11px;
+      color: var(--text-muted);
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      transition: background 0.15s, color 0.15s;
+    }
+    .chat-share-btn:hover { background: var(--bg-secondary); color: var(--text-primary); }
+    .chat-share-btn.copied { color: var(--success-color, #48bb78); border-color: var(--success-color, #48bb78); }
+
     .chat-form-area {
       flex-shrink: 0;
       background: var(--bg-primary, #f8fafc);
@@ -284,6 +304,41 @@ export function getAiChatPage(user: {
       return el;
     }
 
+    function appendShareBtn(question, answer, model) {
+      var row = document.createElement('div');
+      row.className = 'chat-share-row';
+      var btn = document.createElement('button');
+      btn.className = 'chat-share-btn';
+      btn.innerHTML = '🔗 リンクをコピー';
+      btn.onclick = function() {
+        fetch('/api/aichat/share', {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ question: question, answer: answer, model: model })
+        })
+          .then(function(r) { return r.json(); })
+          .then(function(d) {
+            if (d.shareUrl) {
+              navigator.clipboard.writeText(d.shareUrl).then(function() {
+                btn.innerHTML = '✓ コピーしました';
+                btn.classList.add('copied');
+                setTimeout(function() {
+                  btn.innerHTML = '🔗 リンクをコピー';
+                  btn.classList.remove('copied');
+                }, 2000);
+              });
+            }
+          })
+          .catch(function() {});
+      };
+      row.appendChild(btn);
+      chatLog.appendChild(row);
+      chatLog.scrollTop = chatLog.scrollHeight;
+    }
+
+    var lastModel = ${JSON.stringify(safeModel)};
+
     chatForm.addEventListener('submit', function(e) {
       e.preventDefault();
       var msg = chatInput.value.trim();
@@ -294,6 +349,7 @@ export function getAiChatPage(user: {
       chatInput.style.height = 'auto';
       chatSendBtn.disabled = true;
 
+      var currentMsg = msg;
       var thinking = appendBubble('考え中...', 'thinking');
 
       fetch('/api/aichat', {
@@ -308,7 +364,9 @@ export function getAiChatPage(user: {
           if (data.error) {
             appendBubble('エラー: ' + data.error, 'error');
           } else {
-            appendBubble(data.response || '(応答なし)', 'assistant');
+            var responseText = data.response || '(応答なし)';
+            appendBubble(responseText, 'assistant');
+            appendShareBtn(currentMsg, responseText, data.usedModel || lastModel);
           }
         })
         .catch(function(err) {

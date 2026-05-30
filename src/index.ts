@@ -13,6 +13,7 @@ import { authMiddleware, optionalAuthMiddleware } from './middleware/auth';
 import { getLoginPage } from './views/login';
 import { getWelcomePage } from './views/welcome';
 import { getAiChatPage } from './views/aichat';
+import { getAiChatSharePage, getAiChatShareNotFoundPage } from './views/aichat-share';
 import { getSettingsPage } from './views/settings';
 import { getRepositoriesPage } from './views/repositories';
 import { getUserInfoPage } from './views/userinfo';
@@ -94,6 +95,7 @@ const STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
   { name: 'repo_cache', migration: 'unknown', description: 'リポジトリキャッシュ（未分類テーブル）', syncPolicy: 'manual' },
   { name: 'user_cache', migration: 'unknown', description: 'ユーザーキャッシュ（未分類テーブル）', syncPolicy: 'manual' },
   { name: 'repo_commit_index', migration: '0034', description: 'コミットインデックス（コミットハッシュ・順番・PR番号）', syncPolicy: 'manual' },
+  { name: 'ai_chat_shares', migration: '0036', description: 'AIチャット共有Q&Aレコード', syncPolicy: 'auto' },
 ];
 
 const REQUIRED_STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
@@ -589,6 +591,20 @@ CREATE INDEX IF NOT EXISTS idx_repo_commit_index_pr ON repo_commit_index (github
 );
 CREATE INDEX IF NOT EXISTS idx_commit_search_keyword_labels_user ON commit_search_keyword_labels(user_id);
 CREATE INDEX IF NOT EXISTS idx_commit_search_keyword_labels_label ON commit_search_keyword_labels(user_id, label);`,
+  '0036': `CREATE TABLE IF NOT EXISTS ai_chat_shares (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  user_hash TEXT NOT NULL,
+  question TEXT NOT NULL,
+  answer TEXT NOT NULL,
+  model TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  accessed_at TEXT,
+  access_count INTEGER NOT NULL DEFAULT 0,
+  expires_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_ai_chat_shares_user_id ON ai_chat_shares(user_id);
+CREATE INDEX IF NOT EXISTS idx_ai_chat_shares_user_hash ON ai_chat_shares(user_hash);`,
 };
 
 function jsonUtf8(payload: unknown, status = 200): Response {
@@ -737,6 +753,7 @@ export const TABLE_COLUMN_KEYS: Record<string, ColumnKeyInfo> = {
   ai_summary_link_access_log: { id: 'pk', request_id: 'fk', route: 'idx', issue_code: 'idx', created_at: 'idx' },
   commit_stats_cache: { id: 'pk', owner: 'idx', repo: 'idx', period: 'idx' },
   repo_commit_index: { commit_hash: 'pk', seq_num: 'idx', github_pr_number: 'idx', repo_name: 'idx' },
+  ai_chat_shares: { id: 'pk', user_id: 'idx', user_hash: 'idx' },
 };
 
 export function getColumnKeyType(tableName: string, columnName: string): ColumnKeyType {
@@ -791,6 +808,7 @@ export const TABLE_GROUP_MAP: Record<string, string> = {
   installation_permissions: 'config', repo_color_settings: 'config', repo_groups: 'config',
   repo_group_members: 'config', group_oauth_apps: 'config', table_catalog: 'config', table_column_keys: 'config',
   ai_summary_link_access_log: 'ai',
+  ai_chat_shares: 'ai',
 };
 
 async function recordAiSummaryLinkAccess(
@@ -928,6 +946,7 @@ export const COLUMN_FK_TARGETS: Record<string, Record<string, string>> = {
   // コミットインデックス系
   // ========================================================================
   repo_commit_index: { repo_name: 'installation_permissions' },
+  ai_chat_shares: { user_id: 'user_sessions' },
 
   // ========================================================================
   // メタデータ系
@@ -2406,6 +2425,69 @@ app.post('/api/aichat', authMiddleware, async (c) => {
       return jsonUtf8({ error: 'AI への問い合わせに失敗しました' }, 500);
     }
   }
+});
+
+/**
+ * AIチャット共有リンク作成 API（認証が必要）
+ */
+app.post('/api/aichat/share', authMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+
+  let body: { question?: string; answer?: string; model?: string };
+  try {
+    body = await c.req.json();
+  } catch {
+    return jsonUtf8({ error: 'リクエスト形式が不正です' }, 400);
+  }
+
+  const question = (body.question ?? '').trim();
+  const answer = (body.answer ?? '').trim();
+  const model = (body.model ?? '').trim();
+  if (!question || !answer) return jsonUtf8({ error: '質問または回答が空です' }, 400);
+
+  const usernameBytes = new TextEncoder().encode(user.sub);
+  const hashBuf = await crypto.subtle.digest('SHA-256', usernameBytes);
+  const userHash = Array.from(new Uint8Array(hashBuf).slice(0, 4))
+    .map((b) => b.toString(16).padStart(2, '0')).join('');
+
+  const tokenBytes = new Uint8Array(8);
+  crypto.getRandomValues(tokenBytes);
+  const shareToken = Array.from(tokenBytes).map((b) => b.toString(16).padStart(2, '0')).join('');
+
+  const now = new Date().toISOString();
+  await c.env.DB.prepare(
+    'INSERT INTO ai_chat_shares (id, user_id, user_hash, question, answer, model, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
+  ).bind(shareToken, user.sub, userHash, question, answer, model, now).run();
+
+  const origin = new URL(c.req.url).origin;
+  const shareUrl = `${origin}/s/${userHash}/${shareToken}`;
+  return jsonUtf8({ shareUrl });
+});
+
+/**
+ * AIチャット共有ページ（認証不要）
+ */
+app.get('/s/:userHash/:shareToken', async (c) => {
+  if (!c.env.DB) return c.html(getAiChatShareNotFoundPage(), 503);
+
+  const userHash = c.req.param('userHash');
+  const shareToken = c.req.param('shareToken');
+
+  const row = await c.env.DB.prepare(
+    'SELECT id, user_id, question, answer, model, created_at, access_count FROM ai_chat_shares WHERE id = ? AND user_hash = ?'
+  ).bind(shareToken, userHash).first<{
+    id: string; user_id: string; question: string; answer: string;
+    model: string; created_at: string; access_count: number;
+  }>();
+
+  if (!row) return c.html(getAiChatShareNotFoundPage(), 404);
+
+  await c.env.DB.prepare(
+    'UPDATE ai_chat_shares SET access_count = access_count + 1, accessed_at = ? WHERE id = ?'
+  ).bind(new Date().toISOString(), shareToken).run();
+
+  return c.html(getAiChatSharePage({ ...row, access_count: row.access_count + 1 }));
 });
 
 /**
