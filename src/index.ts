@@ -5381,29 +5381,28 @@ app.get('/api/repositories/search/commits', optionalAuthMiddleware, async (c) =>
     const searchLabelMode = cookieValsSearch['user_search_label_mode'];
     const classifyDebugEnabled = cookieValsSearch['keyword_classify_debug'] === 'on';
 
-    if (totalMatches > 0) {
+    try {
+      const labelInsert = await c.env.DB.prepare(
+        `INSERT OR IGNORE INTO commit_search_keyword_labels (user_id, search_query, label, created_at, updated_at) VALUES (?, ?, 'uncategorized', datetime('now'), datetime('now'))`
+      ).bind(user.sub, q).run();
+      isNewKeyword = (labelInsert.meta?.changes ?? 0) > 0;
+    } catch (labelErr) {
+      logger.warn('keyword label insert failed', { query: q, error: labelErr instanceof Error ? labelErr.message : 'Unknown error' });
+    }
+
+    // 既存の未分類キーワードも auto-classify モード時は再分類対象にする
+    if (!isNewKeyword && searchLabelMode === 'auto-classify') {
       try {
-        const labelInsert = await c.env.DB.prepare(
-          `INSERT OR IGNORE INTO commit_search_keyword_labels (user_id, search_query, label, created_at, updated_at) VALUES (?, ?, 'uncategorized', datetime('now'), datetime('now'))`
-        ).bind(user.sub, q).run();
-        isNewKeyword = (labelInsert.meta?.changes ?? 0) > 0;
-      } catch (labelErr) {
-        logger.warn('keyword label insert failed', { query: q, error: labelErr instanceof Error ? labelErr.message : 'Unknown error' });
-      }
+        const existingRow = await c.env.DB.prepare(
+          `SELECT label FROM commit_search_keyword_labels WHERE user_id = ? AND search_query = ?`
+        ).bind(user.sub, q).first<{ label: string }>();
+        if (existingRow?.label === 'uncategorized') {
+          isNewKeyword = true;
+        }
+      } catch { /* 判定失敗時は isNewKeyword のまま */ }
+    }
 
-      // 既存の未分類キーワードも auto-classify モード時は再分類対象にする
-      if (!isNewKeyword && searchLabelMode === 'auto-classify') {
-        try {
-          const existingRow = await c.env.DB.prepare(
-            `SELECT label FROM commit_search_keyword_labels WHERE user_id = ? AND search_query = ?`
-          ).bind(user.sub, q).first<{ label: string }>();
-          if (existingRow?.label === 'uncategorized') {
-            isNewKeyword = true;
-          }
-        } catch { /* 判定失敗時は isNewKeyword のまま */ }
-      }
-
-      if (isNewKeyword && searchLabelMode === 'auto-classify') {
+    if (isNewKeyword && searchLabelMode === 'auto-classify') {
         if (c.env.AI) {
           const DEFAULT_CLASSIFY_LABELS = ['feature', 'ui', 'tech', 'database', 'bugfix', 'ops'];
           let classifyLabels = DEFAULT_CLASSIFY_LABELS;
@@ -5459,7 +5458,6 @@ app.get('/api/repositories/search/commits', optionalAuthMiddleware, async (c) =>
           logger.warn('auto-classify skipped: AI binding not available', { query: q });
         }
       }
-    }
 
     return jsonUtf8({ results, query: q, total: totalMatches, isNewKeyword, autoLabel, classifyDebug });
   } catch (error) {
