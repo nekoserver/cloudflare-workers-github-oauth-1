@@ -20,6 +20,7 @@ import { getUserInfoPage } from './views/userinfo';
 import { getMarkdownPreviewPage } from './views/markdown-preview';
 import { getCacheStatusPage, CacheStatusData, TableStatusEntry, UserContextInfo, RepoColorEntry, RepoGroupEntry } from './views/status';
 import { renderColumnStatsHtml } from './views/columnStats';
+import { getFunctionChangelogPage, type FunctionChangeRow } from './views/functionChangelog';
 import { computeColumnRelationStats, verifyColumnStats, type TableSchema, type Relation } from './utils/columnRelationStats';
 import { ensureDefaultWorkspace, getCurrentWorkspace, getUserWorkspaces, switchWorkspace } from './utils/workspace';
 import { getGitHubAccessToken, getGitHubLatestCommit, getGitHubCommitCount, getGitHubCommits, getGitHubCommitsForStats, computeCommitStats, getGitHubRepoOpenIssuesCount, getGitHubRepoCommitsByMonth, getGitHubRepoCommitsByDate, getGitHubRepoInfo, getGitHubTokenScopes, getGitHubUser, getGitHubUserEmail, getGitHubUserRepos, createGitHubRepo, GitHubTokenScopesError, buildRepoInstallationPermissionsMap, RepoInstallationPermissions, getGitHubUserInstallationsWithDiag, getGitHubInstallationRepos, getExternalServiceLinkedRepos, getSlackLinkedReposByWebhooks, sumCountsTotal, buildPastMonthRange, CommitDetail, toClientCommit } from './utils/github';
@@ -3625,6 +3626,55 @@ app.get('/status/column-stats', authMiddleware, async (c) => {
       status: 500,
       headers: { 'Content-Type': 'text/plain; charset=utf-8' },
     });
+  }
+});
+
+app.get('/function-changelog', authMiddleware, async (c) => {
+  const db = c.env.DB;
+  if (!db) {
+    return new Response('DB not available', { status: 500, headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
+  }
+
+  try {
+    const result = await db.prepare(`
+      SELECT
+        cl.commit_at,
+        cl.commit_hash,
+        cl.subject,
+        m.file_path,
+        m.function_name,
+        COALESCE(f.purpose, '') AS purpose,
+        m.change_type,
+        m.lines_added,
+        m.lines_deleted,
+        i.impact_type,
+        i.severity,
+        i.contribution,
+        i.notes,
+        r.full_name AS repo_full_name
+      FROM ts_commit_function_map m
+      JOIN ts_commit_log cl ON m.repo_id = cl.repo_id AND m.commit_hash = cl.commit_hash
+      JOIN ts_repository r ON m.repo_id = r.id
+      LEFT JOIN ts_function_catalog f
+             ON m.repo_id = f.repo_id AND m.file_path = f.file_path AND m.function_name = f.function_name
+      LEFT JOIN ts_function_impact i
+             ON m.repo_id = i.repo_id AND m.commit_hash = i.commit_hash
+            AND m.file_path = i.file_path AND m.function_name = i.function_name
+      ORDER BY cl.commit_at DESC, m.file_path, m.function_name
+      LIMIT 1000
+    `).all<FunctionChangeRow>();
+
+    const html = getFunctionChangelogPage({
+      rows: result.results ?? [],
+      generatedAt: new Date().toISOString(),
+    });
+
+    return new Response(html, { status: 200, headers: { 'Content-Type': 'text/html; charset=utf-8' } });
+  } catch (error) {
+    logger.warn('Failed to render function-changelog', {
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    return new Response('Failed to render function-changelog', { status: 500, headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
   }
 });
 

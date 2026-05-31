@@ -203,6 +203,7 @@ export function getSettingsPage(user: {
           <a href="/welcome" class="dropdown-item">🏠 ホーム</a>
           <a href="/aichat" class="dropdown-item">🤖 AI チャット</a>
           <a href="/repositories" class="dropdown-item">📦 リポジトリ</a>
+          <a href="/function-changelog" class="dropdown-item">🔖 関数辞典</a>
           <a href="/userinfo" class="dropdown-item">👤 ユーザー情報</a>
           <a href="/status" class="dropdown-item">📊 キャッシュ状況</a>
           <a href="/auth/switch" class="dropdown-item switch-account">🔄 別アカウントでログイン</a>
