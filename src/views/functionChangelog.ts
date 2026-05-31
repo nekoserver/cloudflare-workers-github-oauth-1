@@ -98,14 +98,19 @@ export function getFunctionChangelogPage(input: FunctionChangelogInput): string 
   </div>`;
   } else {
     const sentence3 = `現在 <strong>${repos.length}</strong> 件のプロジェクトが登録されています。`;
-    const sentences12 = noRepoSelected
-      ? 'このページの表示にはデータベース内に登録済みのプロジェクト（リポジトリ）の選択が必要です。右上のドロップダウンからプロジェクトを選択してください。'
-      : '';
-    guidanceBanner = `
+    if (noRepoSelected) {
+      const sentences12 = 'このページの表示にはデータベース内に登録済みのプロジェクト（リポジトリ）の選択が必要です。右上のドロップダウンからプロジェクトを選択してください。';
+      guidanceBanner = `
   <div class="guidance-banner" id="guidanceBanner">
-    <span class="guidance-icon">${noRepoSelected ? '⚠️' : 'ℹ️'}</span>
+    <span class="guidance-icon">⚠️</span>
     <span class="guidance-text">${sentences12}${sentence3}</span>
   </div>`;
+    } else {
+      guidanceBanner = `
+  <div class="guidance-banner guidance-banner--info" id="guidanceBanner">
+    <span class="guidance-text">${sentence3}</span>
+  </div>`;
+    }
   }
 
   return `<!DOCTYPE html>
@@ -175,11 +180,21 @@ export function getFunctionChangelogPage(input: FunctionChangelogInput): string 
       background: var(--warn-bg); border: 1px solid var(--warn-border);
       border-radius: 8px; padding: 12px 16px; margin-bottom: 20px;
       color: var(--warn-text); font-size: 12px; line-height: 1.6;
+      transition: opacity 0.6s ease, margin 0.6s ease, padding 0.6s ease, max-height 0.6s ease;
+      max-height: 120px; overflow: hidden;
+    }
+    .guidance-banner--info {
+      background: light-dark(#ddf4ff, #0d2136);
+      border-color: light-dark(#54aeff, #1f6feb);
+      color: light-dark(#0550ae, #79c0ff);
     }
     .guidance-banner--error {
       background: light-dark(#fff0ee, #2d0e0a);
       border-color: light-dark(#cf222e, #f85149);
       color: light-dark(#82071e, #ff7b72);
+    }
+    .guidance-banner.fading {
+      opacity: 0; max-height: 0; padding-top: 0; padding-bottom: 0; margin-bottom: 0;
     }
     .guidance-icon { font-size: 16px; flex-shrink: 0; margin-top: 1px; }
     .guidance-text code {
@@ -360,6 +375,21 @@ export function getFunctionChangelogPage(input: FunctionChangelogInput): string 
     document.getElementById('filterFile').addEventListener('input', applyFilter);
     document.getElementById('filterFunc').addEventListener('input', applyFilter);
     document.getElementById('filterImpact').addEventListener('change', applyFilter);
+
+    var banner = document.getElementById('guidanceBanner');
+    var filterFile = document.getElementById('filterFile');
+    if (banner && filterFile && !filterFile.disabled) {
+      var origPlaceholder = filterFile.placeholder;
+      setTimeout(function() {
+        banner.classList.add('fading');
+        banner.addEventListener('transitionend', function() {
+          banner.style.display = 'none';
+          filterFile.placeholder = 'ファイル名でフィルタできます（例: src/utils/github.ts）';
+          filterFile.focus();
+          setTimeout(function() { filterFile.placeholder = origPlaceholder; }, 5000);
+        }, { once: true });
+      }, 9000);
+    }
   </script>
 </body>
 </html>`;
