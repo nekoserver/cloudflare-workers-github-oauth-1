@@ -330,11 +330,13 @@ export function getFunctionChangelogPage(input: FunctionChangelogInput): string 
     var repoSelect = document.getElementById('repoSelect');
     repoSelect.addEventListener('change', function() {
       var val = repoSelect.value;
+      var url = new URL(window.location.href);
       if (val) {
-        var url = new URL(window.location.href);
         url.searchParams.set('repo', val);
-        window.location.href = url.toString();
+      } else {
+        url.searchParams.delete('repo');
       }
+      window.location.href = url.toString();
     });
 
     function applyFilter() {
