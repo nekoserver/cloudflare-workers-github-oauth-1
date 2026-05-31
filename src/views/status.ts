@@ -211,7 +211,8 @@ export function getCacheStatusPage(user: {
     const groupName = data.tableGroupMap[t.name] || '';
     const groupNum = groupIdMap[groupName] || 0;
     const migrationNum = parseInt(t.migration.replace(/[^0-9]/g, ''), 10) || 0;
-    return `<tr data-group-id="${groupNum}" data-migration-num="${migrationNum}" data-migration="${escapeHtml(t.migration)}" data-table-name="${escapeHtml(t.name)}">
+    const rowCountNum = t.exists && t.rowCount !== null ? t.rowCount : -1;
+    return `<tr data-group-id="${groupNum}" data-migration-num="${migrationNum}" data-row-count="${rowCountNum}" data-migration="${escapeHtml(t.migration)}" data-table-name="${escapeHtml(t.name)}">
       <td class="group-id-cell">${groupNum}</td>
       <td><button type="button" class="status-link-button" data-table-preview="${escapeHtml(t.name)}"><code>${escapeHtml(t.name)}</code></button></td>
       <td class="center">${statusIcon}</td>
@@ -1508,7 +1509,7 @@ export function getCacheStatusPage(user: {
                 <th>G <select id="groupFilterSelect" style="font-size:10px;padding:1px 2px;border-radius:3px;border:1px solid #888;background:transparent;color:inherit;cursor:pointer;max-width:60px"><option value="">ALL</option>${groupSelectOptions}</select></th>
                 <th style="cursor:pointer;user-select:none" id="tableNameSortTh">テーブル名 ⇅</th>
                 <th style="text-align:center">状態</th>
-                <th style="text-align:right">レコード数</th>
+                <th style="text-align:right;cursor:pointer;user-select:none" id="rowCountSortTh">レコード数 ⇅</th>
                 <th style="text-align:center">更新</th>
                 <th style="cursor:pointer;user-select:none" id="migrationSortTh">マイグレーション ⇅</th>
                 <th>説明</th>
@@ -3421,9 +3422,11 @@ export function getCacheStatusPage(user: {
       var groupFilterSelect = document.getElementById('groupFilterSelect');
       var migrationSortTh = document.getElementById('migrationSortTh');
       var tableNameSortTh = document.getElementById('tableNameSortTh');
+      var rowCountSortTh = document.getElementById('rowCountSortTh');
       var groupSortState = 'none';
       var migrationSortState = 'none';
       var tableNameSortState = 'none';
+      var rowCountSortState = 'none';
 
       function getStatusTableRows() {
         if (!statusTablesTable) return [];
@@ -3487,7 +3490,9 @@ export function getCacheStatusPage(user: {
           migrationSortState = migrationSortState === 'asc' ? 'desc' : 'asc';
           migrationSortTh.textContent = 'マイグレーション ' + (migrationSortState === 'asc' ? '↑' : '↓');
           if (tableNameSortTh) tableNameSortTh.textContent = 'テーブル名 ⇅';
+          if (rowCountSortTh) rowCountSortTh.textContent = 'レコード数 ⇅';
           tableNameSortState = 'none';
+          rowCountSortState = 'none';
           sortTableRows('data-migration-num', migrationSortState);
         });
       }
@@ -3497,8 +3502,22 @@ export function getCacheStatusPage(user: {
           tableNameSortState = tableNameSortState === 'asc' ? 'desc' : 'asc';
           tableNameSortTh.textContent = 'テーブル名 ' + (tableNameSortState === 'asc' ? '↑' : '↓');
           if (migrationSortTh) migrationSortTh.textContent = 'マイグレーション ⇅';
+          if (rowCountSortTh) rowCountSortTh.textContent = 'レコード数 ⇅';
           migrationSortState = 'none';
+          rowCountSortState = 'none';
           sortTableRowsByString('data-table-name', tableNameSortState);
+        });
+      }
+
+      if (rowCountSortTh) {
+        rowCountSortTh.addEventListener('click', function() {
+          rowCountSortState = rowCountSortState === 'asc' ? 'desc' : 'asc';
+          rowCountSortTh.textContent = 'レコード数 ' + (rowCountSortState === 'asc' ? '↑' : '↓');
+          if (migrationSortTh) migrationSortTh.textContent = 'マイグレーション ⇅';
+          if (tableNameSortTh) tableNameSortTh.textContent = 'テーブル名 ⇅';
+          migrationSortState = 'none';
+          tableNameSortState = 'none';
+          sortTableRows('data-row-count', rowCountSortState);
         });
       }
 
