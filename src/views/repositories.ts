@@ -5391,7 +5391,14 @@ export function getRepositoriesPage(user: {
               categoryGroupHint.style.display = '';
               if (matchData.group) {
                 categoryGroupHint.innerHTML = '<span class="category-group-hint-found">これらの検索キーカテゴリは「' + escHtml(matchData.group.group_name) + '」というカテゴリグループに含まれています</span>'
-                  + ' <button type="button" onclick="openCategoryGroupEditModal(\'' + escHtml(matchData.group.id) + '\')" style="font-size:11px;padding:2px 10px;border-radius:10px;border:1px solid #3b82f6;background:transparent;color:#3b82f6;cursor:pointer;white-space:nowrap;vertical-align:middle;margin-left:6px;">このカテゴリグループの内容を編集する</button>';
+                  + ' <button type="button" data-edit-group-id="' + escHtml(matchData.group.id) + '" style="font-size:11px;padding:2px 10px;border-radius:10px;border:1px solid #3b82f6;background:transparent;color:#3b82f6;cursor:pointer;white-space:nowrap;vertical-align:middle;margin-left:6px;">このカテゴリグループの内容を編集する</button>';
+                var editBtn = categoryGroupHint.querySelector('[data-edit-group-id]');
+                if (editBtn) {
+                  editBtn.addEventListener('click', function() {
+                    var gid = editBtn.getAttribute('data-edit-group-id');
+                    if (gid && window.openCategoryGroupEditModal) window.openCategoryGroupEditModal(gid);
+                  });
+                }
               } else {
                 categoryGroupHint.innerHTML = '<span class="category-group-hint-none">これらのカテゴリはまだ特定のグループに所属していません</span>'
                   + ' <button id="cgmOpenBtn" type="button" style="font-size:11px;padding:2px 10px;border-radius:10px;border:1px solid #3b82f6;background:transparent;color:#3b82f6;cursor:pointer;white-space:nowrap;vertical-align:middle;margin-left:6px;" onclick="openCategoryGroupCreateModal()">これらのカテゴリに対して新規にグループ名を割り当てる</button>';
