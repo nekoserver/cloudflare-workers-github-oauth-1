@@ -5320,10 +5320,20 @@ export function getRepositoriesPage(user: {
           categoryGroupListEl.style.display = 'none';
           return;
         }
-        var html = '<span class="cg-list-label">グループ:</span>';
-        groups.forEach(function(g) {
+        var html = '<span class="cg-list-label">既存のキーワードグループ : </span>';
+        var groupsWithCount = groups.map(function(g) {
+          var count = new Set(
+            currentItems.filter(function(item) {
+              return g.categories.indexOf(item.label) !== -1;
+            }).map(function(item) { return item.search_query; })
+          ).size;
+          return { g: g, count: count };
+        });
+        groupsWithCount.sort(function(a, b) { return b.count - a.count; });
+        groupsWithCount.forEach(function(entry) {
+          var g = entry.g;
           var isActive = selectedGroupId === g.id;
-          html += '<button type="button" class="cg-group-btn' + (isActive ? ' active' : '') + '" data-group-id="' + escHtml(g.id) + '" data-group-cats="' + escHtml(JSON.stringify(g.categories)) + '">' + escHtml(g.group_name) + '</button>';
+          html += '<button type="button" class="cg-group-btn' + (isActive ? ' active' : '') + '" data-group-id="' + escHtml(g.id) + '" data-group-cats="' + escHtml(JSON.stringify(g.categories)) + '">' + escHtml(g.group_name) + ' (' + entry.count + ')</button>';
         });
         categoryGroupListEl.innerHTML = html;
         categoryGroupListEl.style.display = '';
