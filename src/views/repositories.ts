@@ -896,6 +896,11 @@ export function getRepositoriesPage(user: {
     .category-group-hint-found { color:#1d4ed8; background:#dbeafe; border:1px solid #bfdbfe; border-radius:6px; padding:3px 10px; display:inline-block; }
     .category-group-hint-none { color:var(--text-muted); background:var(--bg-secondary); border:1px solid var(--border-color); border-radius:6px; padding:3px 10px; display:inline-block; }
     [data-theme="dark"] .category-group-hint-found { color:#93c5fd; background:rgba(59,130,246,0.18); border-color:rgba(59,130,246,0.4); }
+    .cg-list-label { color:var(--text-muted); margin-right:8px; }
+    .cg-group-btn { font-size:11px; padding:3px 11px; border-radius:2px; border:1px solid var(--border-color); background:var(--bg-secondary); color:var(--text-muted); cursor:pointer; white-space:nowrap; transition:background .15s,color .15s,border-color .15s; margin-right:4px; margin-bottom:2px; }
+    .cg-group-btn:hover { border-color:#3b82f6; color:#3b82f6; }
+    .cg-group-btn.active { border-color:#3b82f6; background:#dbeafe; color:#1d4ed8; }
+    [data-theme="dark"] .cg-group-btn.active { border-color:#60a5fa; background:rgba(59,130,246,0.25); color:#93c5fd; }
     .history-repo-select {
       font-size:12px; padding:4px 8px; border-radius:6px;
       border:1px solid var(--border-color); background:var(--bg-secondary);
@@ -1960,7 +1965,8 @@ export function getRepositoriesPage(user: {
         <button class="history-label-btn" data-label="ops">ops</button>
         <button class="history-label-btn" data-label="uncategorized">未分類</button>
       </div>
-      <div id="categoryGroupHint" style="display:none;padding:4px 24px 8px;font-size:12px;"></div>
+      <div id="categoryGroupHint" style="display:none;padding:4px 24px 4px;font-size:12px;"></div>
+      <div id="categoryGroupList" style="display:none;padding:2px 24px 8px;font-size:12px;"></div>
       <div class="history-modal-body" id="historyModalBody">
       </div>
       <div id="keywordDetailPanel" style="display:none"></div>
@@ -5160,7 +5166,10 @@ export function getRepositoriesPage(user: {
         historyModal.classList.remove('show');
         document.body.style.overflow = '';
         activateAllLabels();
+        selectedGroupId = null;
+        cachedGroups = null;
         if (categoryGroupHint) categoryGroupHint.style.display = 'none';
+        if (categoryGroupListEl) categoryGroupListEl.style.display = 'none';
       }
       if (historyModalClose) {
         historyModalClose.addEventListener('click', closeHistoryModal);
@@ -5257,7 +5266,44 @@ export function getRepositoriesPage(user: {
       }
 
       var categoryGroupHint = document.getElementById('categoryGroupHint');
+      var categoryGroupListEl = document.getElementById('categoryGroupList');
       var categoryGroupTimer = null;
+      var cachedGroups = null;
+      var selectedGroupId = null;
+
+      function renderGroupList(groups) {
+        if (!categoryGroupListEl) return;
+        if (!groups || groups.length === 0) {
+          categoryGroupListEl.style.display = 'none';
+          return;
+        }
+        var html = '<span class="cg-list-label">グループ:</span>';
+        groups.forEach(function(g) {
+          var isActive = selectedGroupId === g.id;
+          html += '<button type="button" class="cg-group-btn' + (isActive ? ' active' : '') + '" data-group-id="' + escHtml(g.id) + '" data-group-cats="' + escHtml(JSON.stringify(g.categories)) + '">' + escHtml(g.group_name) + '</button>';
+        });
+        categoryGroupListEl.innerHTML = html;
+        categoryGroupListEl.style.display = '';
+        categoryGroupListEl.querySelectorAll('.cg-group-btn').forEach(function(btn) {
+          btn.addEventListener('click', function() {
+            var gid = btn.getAttribute('data-group-id');
+            if (selectedGroupId === gid) {
+              selectedGroupId = null;
+              activateAllLabels();
+            } else {
+              selectedGroupId = gid;
+              try {
+                var cats = JSON.parse(btn.getAttribute('data-group-cats') || '[]');
+                activeLabels.clear();
+                cats.forEach(function(l) { activeLabels.add(l); });
+                syncBtnStyles();
+                refreshGrid(null, null);
+              } catch { /* ignore */ }
+            }
+            renderGroupList(cachedGroups);
+          });
+        });
+      }
 
       function checkCategoryGroup() {
         if (!categoryGroupHint) return;
@@ -5265,26 +5311,36 @@ export function getRepositoriesPage(user: {
         var allOn = allLabels.length > 0 && allLabels.every(function(l) { return activeLabels.has(l); });
         if (allOn || activeLabels.size < 2) {
           categoryGroupHint.style.display = 'none';
+          if (categoryGroupListEl) categoryGroupListEl.style.display = 'none';
           return;
         }
         var labels = Array.from(activeLabels).sort();
         clearTimeout(categoryGroupTimer);
         categoryGroupTimer = setTimeout(function() {
-          fetch('/api/repositories/search/category-group?labels=' + encodeURIComponent(labels.join(',')), { credentials: 'same-origin', cache: 'no-store' })
-            .then(function(res) { return res.ok ? res.json() : null; })
-            .then(function(data) {
-              if (!data) return;
-              categoryGroupHint.style.display = '';
-              if (data.group) {
-                categoryGroupHint.innerHTML = '<span class="category-group-hint-found">これらの検索キーカテゴリは「' + escHtml(data.group.group_name) + '」というカテゴリグループに含まれています</span>';
-              } else {
-                categoryGroupHint.innerHTML = '<span class="category-group-hint-none">これらのカテゴリはまだ特定のグループに所属していません</span>'
-                  + ' <button id="cgmOpenBtn" type="button" style="font-size:11px;padding:2px 10px;border-radius:10px;border:1px solid #3b82f6;background:transparent;color:#3b82f6;cursor:pointer;white-space:nowrap;vertical-align:middle;margin-left:6px;" onclick="openCategoryGroupCreateModal()">これらのカテゴリに対して新規にグループ名を割り当てる</button>';
-              }
-            })
-            .catch(function() {
-              categoryGroupHint.style.display = 'none';
-            });
+          Promise.all([
+            fetch('/api/repositories/search/category-group?labels=' + encodeURIComponent(labels.join(',')), { credentials: 'same-origin', cache: 'no-store' })
+              .then(function(res) { return res.ok ? res.json() : null; }),
+            cachedGroups !== null
+              ? Promise.resolve({ groups: cachedGroups })
+              : fetch('/api/repositories/search/category-groups', { credentials: 'same-origin', cache: 'no-store' })
+                  .then(function(res) { return res.ok ? res.json() : null; }),
+          ]).then(function(results) {
+            var matchData = results[0];
+            var listData = results[1];
+            if (listData && Array.isArray(listData.groups)) cachedGroups = listData.groups;
+
+            if (!matchData) return;
+            categoryGroupHint.style.display = '';
+            if (matchData.group) {
+              categoryGroupHint.innerHTML = '<span class="category-group-hint-found">これらの検索キーカテゴリは「' + escHtml(matchData.group.group_name) + '」というカテゴリグループに含まれています</span>';
+            } else {
+              categoryGroupHint.innerHTML = '<span class="category-group-hint-none">これらのカテゴリはまだ特定のグループに所属していません</span>'
+                + ' <button id="cgmOpenBtn" type="button" style="font-size:11px;padding:2px 10px;border-radius:10px;border:1px solid #3b82f6;background:transparent;color:#3b82f6;cursor:pointer;white-space:nowrap;vertical-align:middle;margin-left:6px;" onclick="openCategoryGroupCreateModal()">これらのカテゴリに対して新規にグループ名を割り当てる</button>';
+            }
+            renderGroupList(cachedGroups);
+          }).catch(function() {
+            categoryGroupHint.style.display = 'none';
+          });
         }, 300);
       }
 
@@ -5387,6 +5443,7 @@ export function getRepositoriesPage(user: {
                 if (data.ok) {
                   close();
                   showToast('カテゴリグループ「' + name + '」を登録しました', 'success', 4000);
+                  cachedGroups = null;
                   checkCategoryGroup();
                 } else {
                   if (nameError) nameError.textContent = data.error || '登録に失敗しました';
