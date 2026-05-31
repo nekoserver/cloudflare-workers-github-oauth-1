@@ -614,11 +614,13 @@ INSERT OR REPLACE INTO table_column_keys (table_name, column_name, key_type, fk_
   id TEXT PRIMARY KEY,
   user_id TEXT NOT NULL,
   group_name TEXT NOT NULL,
+  description TEXT,
   categories TEXT NOT NULL,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_keyword_category_groups_user_id ON keyword_category_groups(user_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_keyword_category_groups_user_name ON keyword_category_groups(user_id, group_name);
 INSERT OR IGNORE INTO table_catalog (table_name, group_name, description, migration, sync_policy, display_order) VALUES
 ('keyword_category_groups', 'search', '検索キーワードカテゴリグループ定義', '0037', 'auto', 0);
 INSERT OR REPLACE INTO table_column_keys (table_name, column_name, key_type, fk_target_table) VALUES
@@ -5536,6 +5538,53 @@ app.get('/api/repositories/search/category-group', authMiddleware, async (c) => 
     return jsonUtf8({ group: matched ? { id: matched.id, group_name: matched.group_name } : null });
   } catch {
     return jsonUtf8({ group: null });
+  }
+});
+
+app.get('/api/repositories/search/category-group/check-name', authMiddleware, async (c) => {
+  const user = c.get('user');
+  const db = c.env.DB;
+  if (!db) return jsonUtf8({ error: 'Database not available' }, 500);
+  const name = (c.req.query('name') ?? '').trim();
+  if (!name) return jsonUtf8({ exists: false });
+  try {
+    const row = await db.prepare(
+      `SELECT id FROM keyword_category_groups WHERE user_id = ? AND group_name = ? LIMIT 1`
+    ).bind(user.sub, name).first<{ id: string }>();
+    return jsonUtf8({ exists: !!row });
+  } catch {
+    return jsonUtf8({ exists: false });
+  }
+});
+
+app.post('/api/repositories/search/category-group', authMiddleware, async (c) => {
+  const user = c.get('user');
+  const db = c.env.DB;
+  if (!db) return jsonUtf8({ error: 'Database not available' }, 500);
+  let body: { group_name?: string; description?: string; categories?: string[] };
+  try {
+    body = await c.req.json();
+  } catch {
+    return jsonUtf8({ error: 'Invalid JSON' }, 400);
+  }
+  const groupName = (body.group_name ?? '').trim();
+  const description = (body.description ?? '').trim() || null;
+  const categories = Array.isArray(body.categories) ? body.categories.map((c) => String(c).trim()).filter(Boolean) : [];
+  if (!groupName) return jsonUtf8({ error: 'グループ名を入力してください' }, 400);
+  if (categories.length < 2) return jsonUtf8({ error: 'カテゴリは2つ以上必要です' }, 400);
+  const id = crypto.randomUUID();
+  const categoriesJson = JSON.stringify(categories.slice().sort());
+  try {
+    await db.prepare(
+      `INSERT INTO keyword_category_groups (id, user_id, group_name, description, categories, created_at, updated_at) VALUES (?, ?, ?, ?, ?, datetime('now'), datetime('now'))`
+    ).bind(id, user.sub, groupName, description, categoriesJson).run();
+    return jsonUtf8({ ok: true, id, group_name: groupName });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : '';
+    if (msg.includes('UNIQUE') || msg.includes('unique')) {
+      return jsonUtf8({ error: '同じ名前のグループがすでに存在します' }, 409);
+    }
+    return jsonUtf8({ error: 'グループの登録に失敗しました' }, 500);
   }
 });
 

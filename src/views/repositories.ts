@@ -1904,6 +1904,32 @@ export function getRepositoriesPage(user: {
     </div>
   </div>
 
+  <!-- Category Group Create Modal -->
+  <div id="categoryGroupCreateModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:10400;align-items:center;justify-content:center;">
+    <div style="background:var(--card-bg);border-radius:14px;padding:28px 28px 22px;max-width:440px;width:92%;box-shadow:0 8px 32px rgba(0,0,0,.22);position:relative;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+        <span style="font-weight:700;font-size:15px;color:var(--text-primary);">カテゴリをグループ化して名前をつける</span>
+        <button id="cgmClose" style="border:none;background:none;font-size:20px;cursor:pointer;color:var(--text-muted);line-height:1;">&times;</button>
+      </div>
+      <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px;">グループ化するカテゴリ:</div>
+      <div id="cgmCategoryBadges" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:18px;"></div>
+      <p style="font-size:13px;color:var(--text-primary);margin-bottom:14px;">これらのカテゴリをまとめるグループに名前をつけてください</p>
+      <div style="margin-bottom:10px;">
+        <label style="font-size:12px;color:var(--text-muted);display:block;margin-bottom:4px;">グループ名 <span style="color:#e53e3e;">*</span></label>
+        <input id="cgmGroupName" type="text" maxlength="64" placeholder="例: フロントエンド関連" style="width:100%;box-sizing:border-box;padding:8px 12px;border:1px solid var(--border-color);border-radius:6px;background:var(--card-bg);color:var(--text-primary);font-size:13px;" />
+        <div id="cgmNameError" style="font-size:11px;color:#e53e3e;margin-top:3px;min-height:16px;"></div>
+      </div>
+      <div style="margin-bottom:18px;">
+        <label style="font-size:12px;color:var(--text-muted);display:block;margin-bottom:4px;">説明（任意）</label>
+        <input id="cgmDescription" type="text" maxlength="200" placeholder="このグループの説明（省略可）" style="width:100%;box-sizing:border-box;padding:8px 12px;border:1px solid var(--border-color);border-radius:6px;background:var(--card-bg);color:var(--text-primary);font-size:13px;" />
+      </div>
+      <div style="display:flex;justify-content:flex-end;gap:8px;">
+        <button id="cgmCancel" style="padding:7px 18px;border-radius:6px;font-size:13px;cursor:pointer;border:1px solid var(--border-color);background:var(--bg-secondary);color:var(--text-muted);">キャンセル</button>
+        <button id="cgmConfirm" disabled style="padding:7px 18px;border-radius:6px;font-size:13px;cursor:pointer;border:none;background:#3b82f6;color:#fff;opacity:0.45;transition:opacity .15s;">登録</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Search History Grid Modal -->
   <div class="modal-overlay" id="searchHistoryModal">
     <div class="history-modal-content">
@@ -5252,7 +5278,8 @@ export function getRepositoriesPage(user: {
               if (data.group) {
                 categoryGroupHint.innerHTML = '<span class="category-group-hint-found">これらの検索キーカテゴリは「' + escHtml(data.group.group_name) + '」というカテゴリグループに含まれています</span>';
               } else {
-                categoryGroupHint.innerHTML = '<span class="category-group-hint-none">これらのカテゴリはまだ特定のグループに所属していません</span>';
+                categoryGroupHint.innerHTML = '<span class="category-group-hint-none">これらのカテゴリはまだ特定のグループに所属していません</span>'
+                  + ' <button id="cgmOpenBtn" type="button" style="font-size:11px;padding:2px 10px;border-radius:10px;border:1px solid #3b82f6;background:transparent;color:#3b82f6;cursor:pointer;white-space:nowrap;vertical-align:middle;margin-left:6px;" onclick="openCategoryGroupCreateModal()">これらのカテゴリに対して新規にグループ名を割り当てる</button>';
               }
             })
             .catch(function() {
@@ -5260,6 +5287,121 @@ export function getRepositoriesPage(user: {
             });
         }, 300);
       }
+
+      // ===== カテゴリグループ新規作成モーダル =====
+      (function() {
+        var modal = document.getElementById('categoryGroupCreateModal');
+        var badgesEl = document.getElementById('cgmCategoryBadges');
+        var nameInput = document.getElementById('cgmGroupName');
+        var descInput = document.getElementById('cgmDescription');
+        var nameError = document.getElementById('cgmNameError');
+        var confirmBtn = document.getElementById('cgmConfirm');
+        var pendingLabels = [];
+        var nameCheckTimer = null;
+        var nameIsValid = false;
+
+        function setConfirmState() {
+          var name = nameInput ? nameInput.value.trim() : '';
+          var ok = name.length > 0 && nameIsValid;
+          if (confirmBtn) {
+            confirmBtn.disabled = !ok;
+            confirmBtn.style.opacity = ok ? '1' : '0.45';
+          }
+        }
+
+        function open(labels) {
+          if (!modal) return;
+          pendingLabels = labels.slice();
+          if (badgesEl) {
+            badgesEl.innerHTML = labels.map(function(l) {
+              return '<span style="font-size:11px;padding:2px 10px;border-radius:10px;background:#dbeafe;color:#1d4ed8;border:1px solid #bfdbfe;">' + escHtml(l) + '</span>';
+            }).join('');
+          }
+          if (nameInput) nameInput.value = '';
+          if (descInput) descInput.value = '';
+          if (nameError) nameError.textContent = '';
+          nameIsValid = false;
+          setConfirmState();
+          modal.style.display = 'flex';
+          if (nameInput) nameInput.focus();
+        }
+
+        function close() {
+          if (modal) modal.style.display = 'none';
+        }
+
+        window.openCategoryGroupCreateModal = function() {
+          open(Array.from(activeLabels).sort());
+        };
+
+        if (document.getElementById('cgmClose')) document.getElementById('cgmClose').onclick = close;
+        if (document.getElementById('cgmCancel')) document.getElementById('cgmCancel').onclick = close;
+        if (modal) modal.addEventListener('click', function(e) { if (e.target === modal) close(); });
+        document.addEventListener('keydown', function(e) {
+          if (e.key === 'Escape' && modal && modal.style.display === 'flex') close();
+        });
+
+        if (nameInput) {
+          nameInput.addEventListener('input', function() {
+            var name = nameInput.value.trim();
+            if (!name) {
+              nameIsValid = false;
+              if (nameError) nameError.textContent = '';
+              setConfirmState();
+              return;
+            }
+            clearTimeout(nameCheckTimer);
+            nameCheckTimer = setTimeout(function() {
+              fetch('/api/repositories/search/category-group/check-name?name=' + encodeURIComponent(name), { credentials: 'same-origin', cache: 'no-store' })
+                .then(function(res) { return res.ok ? res.json() : null; })
+                .then(function(data) {
+                  if (!data) return;
+                  if (data.exists) {
+                    nameIsValid = false;
+                    if (nameError) nameError.textContent = '同じ名前のグループがすでに存在します';
+                  } else {
+                    nameIsValid = true;
+                    if (nameError) nameError.textContent = '';
+                  }
+                  setConfirmState();
+                })
+                .catch(function() {});
+            }, 350);
+          });
+        }
+
+        if (confirmBtn) {
+          confirmBtn.addEventListener('click', function() {
+            var name = nameInput ? nameInput.value.trim() : '';
+            var desc = descInput ? descInput.value.trim() : '';
+            if (!name || !nameIsValid) return;
+            confirmBtn.disabled = true;
+            confirmBtn.style.opacity = '0.45';
+            fetch('/api/repositories/search/category-group', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              credentials: 'same-origin',
+              body: JSON.stringify({ group_name: name, description: desc || null, categories: pendingLabels })
+            }).then(function(res) { return res.json(); })
+              .then(function(data) {
+                if (data.ok) {
+                  close();
+                  showToast('カテゴリグループ「' + name + '」を登録しました', 'success', 4000);
+                  checkCategoryGroup();
+                } else {
+                  if (nameError) nameError.textContent = data.error || '登録に失敗しました';
+                  confirmBtn.disabled = false;
+                  confirmBtn.style.opacity = '1';
+                }
+              })
+              .catch(function() {
+                if (nameError) nameError.textContent = '通信エラーが発生しました';
+                confirmBtn.disabled = false;
+                confirmBtn.style.opacity = '1';
+              });
+          });
+        }
+      }());
 
       function activateAllLabels() {
         getAllCategoryLabels().forEach(function(l) { activeLabels.add(l); });
