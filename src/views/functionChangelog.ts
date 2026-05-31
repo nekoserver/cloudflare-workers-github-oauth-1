@@ -17,8 +17,15 @@ export interface FunctionChangeRow {
   repo_full_name: string;
 }
 
+export interface RepoOption {
+  id: number;
+  full_name: string;
+}
+
 export interface FunctionChangelogInput {
   rows: FunctionChangeRow[];
+  repos: RepoOption[];
+  selectedRepoId: number | null;
   generatedAt: string;
   filterFile?: string;
   filterFunction?: string;
@@ -34,14 +41,9 @@ function changeTypeBadge(t: string): string {
 function impactBadge(t: string | null): string {
   if (!t) return '<span class="badge badge-none">—</span>';
   const map: Record<string, string> = {
-    feature:  'badge-feature',
-    bugfix:   'badge-bugfix',
-    regression: 'badge-regression',
-    refactor: 'badge-refactor',
-    perf:     'badge-perf',
-    test:     'badge-test',
-    docs:     'badge-docs',
-    chore:    'badge-chore',
+    feature: 'badge-feature', bugfix: 'badge-bugfix', regression: 'badge-regression',
+    refactor: 'badge-refactor', perf: 'badge-perf', test: 'badge-test',
+    docs: 'badge-docs', chore: 'badge-chore',
   };
   const label: Record<string, string> = {
     feature: '機能追加', bugfix: 'バグ修正', regression: 'リグレッション',
@@ -58,7 +60,12 @@ function severityDots(n: number | null): string {
 }
 
 export function getFunctionChangelogPage(input: FunctionChangelogInput): string {
-  const { rows, generatedAt } = input;
+  const { rows, repos, selectedRepoId, generatedAt } = input;
+  const noRepoSelected = selectedRepoId === null;
+
+  const repoOptions = repos.map(r =>
+    `<option value="${r.id}"${selectedRepoId === r.id ? ' selected' : ''}>${escapeHtml(r.full_name)}</option>`
+  ).join('\n');
 
   const tableRows = rows.map(r => {
     const shortHash = r.commit_hash.slice(0, 7);
@@ -82,6 +89,18 @@ export function getFunctionChangelogPage(input: FunctionChangelogInput): string 
 
   const emptyRow = '<tr><td colspan="8" class="empty-cell">データなし — ts_commit_function_map にレコードを追加してください</td></tr>';
 
+  const guidanceBanner = noRepoSelected ? `
+  <div class="guidance-banner" id="guidanceBanner">
+    <span class="guidance-icon">⚠️</span>
+    <span class="guidance-text">
+      このページの表示にはデータベース内に登録済みのプロジェクト（リポジトリ）の選択が必要です。
+      右上のドロップダウンからプロジェクトを選択してください。
+      ${repos.length === 0
+        ? '現在 <code>ts_repository</code> テーブルにデータが登録されていません。シードデータを投入してから再度アクセスしてください。'
+        : `現在 ${repos.length} 件のプロジェクトが登録されています。`}
+    </span>
+  </div>` : '';
+
   return `<!DOCTYPE html>
 <html lang="ja">
 <head>
@@ -101,6 +120,10 @@ export function getFunctionChangelogPage(input: FunctionChangelogInput): string 
       --th-bg:       light-dark(#f6f8fa, #1c2128);
       --add-fg:      light-dark(#1a7f37, #3fb950);
       --del-fg:      light-dark(#cf222e, #f85149);
+      --danger:      light-dark(#cf222e, #f85149);
+      --warn-bg:     light-dark(#fff8c5, #2d2a00);
+      --warn-border: light-dark(#d4a72c, #9e6a03);
+      --warn-text:   light-dark(#7d4e00, #e3b341);
     }
     * { box-sizing: border-box; }
     body {
@@ -109,8 +132,49 @@ export function getFunctionChangelogPage(input: FunctionChangelogInput): string 
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
       font-size: 13px; line-height: 1.5;
     }
-    h1 { color: var(--text-strong); font-size: 20px; margin: 0 0 4px; }
-    .subtitle { color: var(--text-muted); font-size: 12px; margin-bottom: 20px; }
+    h1 { color: var(--text-strong); font-size: 20px; margin: 0 0 8px; }
+    .subtitle-row {
+      display: flex; align-items: center; gap: 12px;
+      margin-bottom: 20px; flex-wrap: wrap;
+    }
+    .subtitle {
+      color: var(--text-muted); font-size: 12px;
+      flex: 1; min-width: 0;
+    }
+    .repo-selector-wrap {
+      display: flex; align-items: center; gap: 8px; flex-shrink: 0;
+    }
+    .repo-selector-label {
+      color: var(--text-muted); font-size: 12px; white-space: nowrap;
+    }
+    #repoSelect {
+      padding: 5px 10px; border-radius: 6px;
+      border: 2px solid var(--border);
+      background: var(--panel); color: var(--text);
+      font-size: 12px; min-width: 240px;
+      transition: border-color 0.2s;
+    }
+    #repoSelect.needs-selection {
+      border-color: var(--danger);
+      box-shadow: 0 0 0 3px light-dark(rgba(207,34,46,.15), rgba(248,81,73,.2));
+      animation: pulse-border 1.5s ease-in-out 3;
+    }
+    @keyframes pulse-border {
+      0%, 100% { box-shadow: 0 0 0 3px light-dark(rgba(207,34,46,.15), rgba(248,81,73,.2)); }
+      50%       { box-shadow: 0 0 0 5px light-dark(rgba(207,34,46,.25), rgba(248,81,73,.35)); }
+    }
+    .guidance-banner {
+      display: flex; align-items: flex-start; gap: 10px;
+      background: var(--warn-bg); border: 1px solid var(--warn-border);
+      border-radius: 8px; padding: 12px 16px; margin-bottom: 20px;
+      color: var(--warn-text); font-size: 12px; line-height: 1.6;
+    }
+    .guidance-icon { font-size: 16px; flex-shrink: 0; margin-top: 1px; }
+    .guidance-text code {
+      background: light-dark(rgba(0,0,0,.08), rgba(255,255,255,.1));
+      padding: 1px 5px; border-radius: 4px;
+      font-family: 'SFMono-Regular', Consolas, monospace; font-size: 11px;
+    }
     .toolbar {
       display: flex; gap: 10px; flex-wrap: wrap;
       margin-bottom: 16px; align-items: center;
@@ -132,13 +196,9 @@ export function getFunctionChangelogPage(input: FunctionChangelogInput): string 
       background: var(--th-bg); color: var(--text-muted);
       text-align: left; padding: 8px 12px;
       font-size: 11px; text-transform: uppercase; letter-spacing: 0.4px;
-      border-bottom: 1px solid var(--border);
-      white-space: nowrap;
+      border-bottom: 1px solid var(--border); white-space: nowrap;
     }
-    td {
-      padding: 8px 12px; border-bottom: 1px solid var(--border);
-      vertical-align: top;
-    }
+    td { padding: 8px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
     tr:last-child td { border-bottom: none; }
     tr:hover td { background: light-dark(rgba(0,0,0,.03), rgba(255,255,255,.03)); }
     code {
@@ -163,18 +223,19 @@ export function getFunctionChangelogPage(input: FunctionChangelogInput): string 
       display: inline-block; padding: 2px 7px; border-radius: 10px;
       font-size: 10px; font-weight: 600; white-space: nowrap;
     }
-    .badge-add        { background: rgba(63,185,80,.2);  color: #3fb950; }
-    .badge-mod        { background: rgba(88,166,255,.2); color: #58a6ff; }
-    .badge-del        { background: rgba(248,81,73,.2);  color: #f85149; }
-    .badge-feature    { background: rgba(63,185,80,.2);  color: #3fb950; }
-    .badge-bugfix     { background: rgba(248,81,73,.2);  color: #f85149; }
-    .badge-regression { background: rgba(210,30,30,.35); color: #ff7b72; }
-    .badge-refactor   { background: rgba(88,166,255,.2); color: #58a6ff; }
-    .badge-perf       { background: rgba(210,153,34,.2); color: #e3b341; }
-    .badge-test       { background: rgba(130,80,255,.2); color: #bc8cff; }
-    .badge-docs       { background: rgba(139,148,158,.2);color: #8b949e; }
-    .badge-chore      { background: rgba(139,148,158,.15);color:#8b949e; }
+    .badge-add        { background: rgba(63,185,80,.2);   color: #3fb950; }
+    .badge-mod        { background: rgba(88,166,255,.2);  color: #58a6ff; }
+    .badge-del        { background: rgba(248,81,73,.2);   color: #f85149; }
+    .badge-feature    { background: rgba(63,185,80,.2);   color: #3fb950; }
+    .badge-bugfix     { background: rgba(248,81,73,.2);   color: #f85149; }
+    .badge-regression { background: rgba(210,30,30,.35);  color: #ff7b72; }
+    .badge-refactor   { background: rgba(88,166,255,.2);  color: #58a6ff; }
+    .badge-perf       { background: rgba(210,153,34,.2);  color: #e3b341; }
+    .badge-test       { background: rgba(130,80,255,.2);  color: #bc8cff; }
+    .badge-docs       { background: rgba(139,148,158,.2); color: #8b949e; }
+    .badge-chore      { background: rgba(139,148,158,.15);color: #8b949e; }
     .badge-none       { color: var(--text-muted); background: none; padding: 0; }
+    .table-wrap { opacity: ${noRepoSelected ? '0.35' : '1'}; pointer-events: ${noRepoSelected ? 'none' : 'auto'}; }
     .empty-cell { text-align: center; color: var(--text-muted); padding: 32px; }
     .footer {
       margin-top: 20px; color: var(--text-muted); font-size: 11px;
@@ -186,7 +247,21 @@ export function getFunctionChangelogPage(input: FunctionChangelogInput): string 
 </head>
 <body>
   <h1>関数変更ログ</h1>
-  <div class="subtitle">いつ・どのファイルのどの関数に・どういう変更を加え・結果はどうだったか</div>
+
+  <div class="subtitle-row">
+    <div class="subtitle">
+      いつ・どのプロジェクト（リポジトリ）のどのファイルのどの関数に・どういう変更を加え・結果はどうだったかについての可視化が可能
+    </div>
+    <div class="repo-selector-wrap">
+      <span class="repo-selector-label">プロジェクト</span>
+      <select id="repoSelect" class="${noRepoSelected ? 'needs-selection' : ''}">
+        <option value="">— 選択してください —</option>
+        ${repoOptions}
+      </select>
+    </div>
+  </div>
+
+  ${guidanceBanner}
 
   <div class="toolbar">
     <label>ファイル</label>
@@ -205,26 +280,28 @@ export function getFunctionChangelogPage(input: FunctionChangelogInput): string 
       <option value="docs"${input.filterImpact === 'docs' ? ' selected' : ''}>ドキュメント</option>
       <option value="chore"${input.filterImpact === 'chore' ? ' selected' : ''}>その他</option>
     </select>
-    <span class="count-label" id="rowCount">${rows.length} 件</span>
+    <span class="count-label" id="rowCount">${noRepoSelected ? '—' : rows.length + ' 件'}</span>
   </div>
 
-  <table id="changelogTable">
-    <thead>
-      <tr>
-        <th>日付</th>
-        <th>コミット</th>
-        <th>ファイル</th>
-        <th>関数</th>
-        <th>変更種別</th>
-        <th>インパクト</th>
-        <th>重要度</th>
-        <th>備考</th>
-      </tr>
-    </thead>
-    <tbody id="tableBody">
-      ${tableRows || emptyRow}
-    </tbody>
-  </table>
+  <div class="table-wrap" id="tableWrap">
+    <table id="changelogTable">
+      <thead>
+        <tr>
+          <th>日付</th>
+          <th>コミット</th>
+          <th>ファイル</th>
+          <th>関数</th>
+          <th>変更種別</th>
+          <th>インパクト</th>
+          <th>重要度</th>
+          <th>備考</th>
+        </tr>
+      </thead>
+      <tbody id="tableBody">
+        ${tableRows || emptyRow}
+      </tbody>
+    </table>
+  </div>
 
   <div class="footer">
     生成: ${escapeHtml(generatedAt)} &nbsp;/&nbsp;
@@ -234,6 +311,16 @@ export function getFunctionChangelogPage(input: FunctionChangelogInput): string 
 
   <script>
     var allRows = Array.from(document.querySelectorAll('#tableBody tr[data-file]'));
+
+    var repoSelect = document.getElementById('repoSelect');
+    repoSelect.addEventListener('change', function() {
+      var val = repoSelect.value;
+      if (val) {
+        var url = new URL(window.location.href);
+        url.searchParams.set('repo', val);
+        window.location.href = url.toString();
+      }
+    });
 
     function applyFilter() {
       var file   = document.getElementById('filterFile').value.toLowerCase();
