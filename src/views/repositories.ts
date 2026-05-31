@@ -893,6 +893,9 @@ export function getRepositoriesPage(user: {
     .history-label-btn.active { border-color:#3b82f6; background:#dbeafe; color:#1d4ed8; }
     [data-theme="dark"] .history-label-btn.active { border-color:#60a5fa; background:rgba(59,130,246,0.25); color:#93c5fd; }
     .history-repo-label { font-size:12px; color:var(--text-muted); white-space:nowrap; margin-left:auto; }
+    .category-group-hint-found { color:#1d4ed8; background:#dbeafe; border:1px solid #bfdbfe; border-radius:6px; padding:3px 10px; display:inline-block; }
+    .category-group-hint-none { color:var(--text-muted); background:var(--bg-secondary); border:1px solid var(--border-color); border-radius:6px; padding:3px 10px; display:inline-block; }
+    [data-theme="dark"] .category-group-hint-found { color:#93c5fd; background:rgba(59,130,246,0.18); border-color:rgba(59,130,246,0.4); }
     .history-repo-select {
       font-size:12px; padding:4px 8px; border-radius:6px;
       border:1px solid var(--border-color); background:var(--bg-secondary);
@@ -1931,6 +1934,7 @@ export function getRepositoriesPage(user: {
         <button class="history-label-btn" data-label="ops">ops</button>
         <button class="history-label-btn" data-label="uncategorized">未分類</button>
       </div>
+      <div id="categoryGroupHint" style="display:none;padding:4px 24px 8px;font-size:12px;"></div>
       <div class="history-modal-body" id="historyModalBody">
       </div>
       <div id="keywordDetailPanel" style="display:none"></div>
@@ -5130,6 +5134,7 @@ export function getRepositoriesPage(user: {
         historyModal.classList.remove('show');
         document.body.style.overflow = '';
         activateAllLabels();
+        if (categoryGroupHint) categoryGroupHint.style.display = 'none';
       }
       if (historyModalClose) {
         historyModalClose.addEventListener('click', closeHistoryModal);
@@ -5222,6 +5227,38 @@ export function getRepositoriesPage(user: {
             btn.classList.toggle('active', activeLabels.has(lbl));
           }
         });
+        checkCategoryGroup();
+      }
+
+      var categoryGroupHint = document.getElementById('categoryGroupHint');
+      var categoryGroupTimer = null;
+
+      function checkCategoryGroup() {
+        if (!categoryGroupHint) return;
+        var allLabels = getAllCategoryLabels();
+        var allOn = allLabels.length > 0 && allLabels.every(function(l) { return activeLabels.has(l); });
+        if (allOn || activeLabels.size < 2) {
+          categoryGroupHint.style.display = 'none';
+          return;
+        }
+        var labels = Array.from(activeLabels).sort();
+        clearTimeout(categoryGroupTimer);
+        categoryGroupTimer = setTimeout(function() {
+          fetch('/api/repositories/search/category-group?labels=' + encodeURIComponent(labels.join(',')), { credentials: 'same-origin', cache: 'no-store' })
+            .then(function(res) { return res.ok ? res.json() : null; })
+            .then(function(data) {
+              if (!data) return;
+              categoryGroupHint.style.display = '';
+              if (data.group) {
+                categoryGroupHint.innerHTML = '<span class="category-group-hint-found">これらの検索キーカテゴリは「' + escHtml(data.group.group_name) + '」というカテゴリグループに含まれています</span>';
+              } else {
+                categoryGroupHint.innerHTML = '<span class="category-group-hint-none">これらのカテゴリはまだ特定のグループに所属していません</span>';
+              }
+            })
+            .catch(function() {
+              categoryGroupHint.style.display = 'none';
+            });
+        }, 300);
       }
 
       function activateAllLabels() {
