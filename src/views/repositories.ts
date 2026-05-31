@@ -5350,7 +5350,6 @@ export function getRepositoriesPage(user: {
 
       function syncGroupListSelection() {
         if (!cachedGroups) return;
-        if (cachedGroups.length === 0) return;
         var labels = Array.from(activeLabels).sort();
         var matched = cachedGroups.find(function(g) {
           var sorted = g.categories.slice().sort();
@@ -5366,8 +5365,11 @@ export function getRepositoriesPage(user: {
           .then(function(data) {
             if (data && Array.isArray(data.groups)) {
               cachedGroups = data.groups;
-              syncGroupListSelection();
+            } else {
+              cachedGroups = [];
             }
+            syncGroupListSelection();
+            renderGroupList(cachedGroups);
           })
           .catch(function() {});
       }

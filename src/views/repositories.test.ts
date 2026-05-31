@@ -457,6 +457,35 @@ describe('ページ基本構造: 主要UI要素の存在', () => {
   });
 });
 
+describe('カテゴリグループ一覧: loadGroupList の設計', () => {
+  it('loadGroupList が renderGroupList を直接呼ぶ (syncGroupListSelection 経由に依存しない)', () => {
+    const html = getRepositoriesPage(minimalUser);
+    // loadGroupList 関数内に renderGroupList の直接呼び出しが存在すること
+    const loadFnMatch = html.match(/function loadGroupList\(\)[\s\S]*?^\s{6}\}/m);
+    expect(loadFnMatch).not.toBeNull();
+    expect(loadFnMatch![0]).toContain('renderGroupList(cachedGroups)');
+  });
+
+  it('syncGroupListSelection が length===0 でも renderGroupList を呼ぶ (display:none は renderGroupList に委ねる)', () => {
+    const html = getRepositoriesPage(minimalUser);
+    const fnMatch = html.match(/function syncGroupListSelection\(\)[\s\S]*?^\s{6}\}/m);
+    expect(fnMatch).not.toBeNull();
+    const fn = fnMatch![0];
+    // cachedGroups.length === 0 で return する分岐がないこと
+    expect(fn).not.toContain('cachedGroups.length === 0');
+    // renderGroupList が呼ばれること
+    expect(fn).toContain('renderGroupList(cachedGroups)');
+  });
+
+  it('グループ作成・更新・削除後に loadGroupList が呼ばれること', () => {
+    const html = getRepositoriesPage(minimalUser);
+    // cachedGroups = null; loadGroupList() のパターンが複数存在すること
+    const matches = html.match(/cachedGroups = null[\s\S]{0,50}loadGroupList\(\)/g);
+    expect(matches).not.toBeNull();
+    expect(matches!.length).toBeGreaterThanOrEqual(3);
+  });
+});
+
 describe('ページ基本構造: script タグ内 JS の構文チェック', () => {
   it('script タグ内の JS に構文エラーがない', () => {
     const html = getRepositoriesPage(minimalUser);
