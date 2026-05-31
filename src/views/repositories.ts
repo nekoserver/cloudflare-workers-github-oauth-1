@@ -5169,7 +5169,7 @@ export function getRepositoriesPage(user: {
         selectedGroupId = null;
         cachedGroups = null;
         if (categoryGroupHint) categoryGroupHint.style.display = 'none';
-        if (categoryGroupListEl) categoryGroupListEl.style.display = 'none';
+        if (categoryGroupListEl) { categoryGroupListEl.style.display = 'none'; categoryGroupListEl.innerHTML = ''; }
       }
       if (historyModalClose) {
         historyModalClose.addEventListener('click', closeHistoryModal);
@@ -5305,42 +5305,56 @@ export function getRepositoriesPage(user: {
         });
       }
 
+      function syncGroupListSelection() {
+        if (!cachedGroups) return;
+        if (cachedGroups.length === 0) return;
+        var labels = Array.from(activeLabels).sort();
+        var matched = cachedGroups.find(function(g) {
+          var sorted = g.categories.slice().sort();
+          return sorted.length === labels.length && sorted.every(function(v, i) { return v === labels[i]; });
+        });
+        selectedGroupId = matched ? matched.id : null;
+        renderGroupList(cachedGroups);
+      }
+
+      function loadGroupList() {
+        fetch('/api/repositories/search/category-groups', { credentials: 'same-origin', cache: 'no-store' })
+          .then(function(res) { return res.ok ? res.json() : null; })
+          .then(function(data) {
+            if (data && Array.isArray(data.groups)) {
+              cachedGroups = data.groups;
+              syncGroupListSelection();
+            }
+          })
+          .catch(function() {});
+      }
+
       function checkCategoryGroup() {
         if (!categoryGroupHint) return;
         var allLabels = getAllCategoryLabels();
         var allOn = allLabels.length > 0 && allLabels.every(function(l) { return activeLabels.has(l); });
+        syncGroupListSelection();
         if (allOn || activeLabels.size < 2) {
           categoryGroupHint.style.display = 'none';
-          if (categoryGroupListEl) categoryGroupListEl.style.display = 'none';
           return;
         }
         var labels = Array.from(activeLabels).sort();
         clearTimeout(categoryGroupTimer);
         categoryGroupTimer = setTimeout(function() {
-          Promise.all([
-            fetch('/api/repositories/search/category-group?labels=' + encodeURIComponent(labels.join(',')), { credentials: 'same-origin', cache: 'no-store' })
-              .then(function(res) { return res.ok ? res.json() : null; }),
-            cachedGroups !== null
-              ? Promise.resolve({ groups: cachedGroups })
-              : fetch('/api/repositories/search/category-groups', { credentials: 'same-origin', cache: 'no-store' })
-                  .then(function(res) { return res.ok ? res.json() : null; }),
-          ]).then(function(results) {
-            var matchData = results[0];
-            var listData = results[1];
-            if (listData && Array.isArray(listData.groups)) cachedGroups = listData.groups;
-
-            if (!matchData) return;
-            categoryGroupHint.style.display = '';
-            if (matchData.group) {
-              categoryGroupHint.innerHTML = '<span class="category-group-hint-found">これらの検索キーカテゴリは「' + escHtml(matchData.group.group_name) + '」というカテゴリグループに含まれています</span>';
-            } else {
-              categoryGroupHint.innerHTML = '<span class="category-group-hint-none">これらのカテゴリはまだ特定のグループに所属していません</span>'
-                + ' <button id="cgmOpenBtn" type="button" style="font-size:11px;padding:2px 10px;border-radius:10px;border:1px solid #3b82f6;background:transparent;color:#3b82f6;cursor:pointer;white-space:nowrap;vertical-align:middle;margin-left:6px;" onclick="openCategoryGroupCreateModal()">これらのカテゴリに対して新規にグループ名を割り当てる</button>';
-            }
-            renderGroupList(cachedGroups);
-          }).catch(function() {
-            categoryGroupHint.style.display = 'none';
-          });
+          fetch('/api/repositories/search/category-group?labels=' + encodeURIComponent(labels.join(',')), { credentials: 'same-origin', cache: 'no-store' })
+            .then(function(res) { return res.ok ? res.json() : null; })
+            .then(function(matchData) {
+              if (!matchData) return;
+              categoryGroupHint.style.display = '';
+              if (matchData.group) {
+                categoryGroupHint.innerHTML = '<span class="category-group-hint-found">これらの検索キーカテゴリは「' + escHtml(matchData.group.group_name) + '」というカテゴリグループに含まれています</span>';
+              } else {
+                categoryGroupHint.innerHTML = '<span class="category-group-hint-none">これらのカテゴリはまだ特定のグループに所属していません</span>'
+                  + ' <button id="cgmOpenBtn" type="button" style="font-size:11px;padding:2px 10px;border-radius:10px;border:1px solid #3b82f6;background:transparent;color:#3b82f6;cursor:pointer;white-space:nowrap;vertical-align:middle;margin-left:6px;" onclick="openCategoryGroupCreateModal()">これらのカテゴリに対して新規にグループ名を割り当てる</button>';
+              }
+            }).catch(function() {
+              categoryGroupHint.style.display = 'none';
+            });
         }, 300);
       }
 
@@ -5444,6 +5458,7 @@ export function getRepositoriesPage(user: {
                   close();
                   showToast('カテゴリグループ「' + name + '」を登録しました', 'success', 4000);
                   cachedGroups = null;
+                  loadGroupList();
                   checkCategoryGroup();
                 } else {
                   if (nameError) nameError.textContent = data.error || '登録に失敗しました';
@@ -6094,6 +6109,7 @@ export function getRepositoriesPage(user: {
         setSearchStatus('', '');
         if (hSearchInput) hSearchInput.value = '';
         openHistoryModal();
+        loadGroupList();
 
         Promise.all([
           fetch('/api/repositories/search/history', { credentials: 'same-origin' })
