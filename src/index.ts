@@ -5541,6 +5541,25 @@ app.get('/api/repositories/search/category-group', authMiddleware, async (c) => 
   }
 });
 
+app.get('/api/repositories/search/category-groups', authMiddleware, async (c) => {
+  const user = c.get('user');
+  const db = c.env.DB;
+  if (!db) return jsonUtf8({ groups: [] });
+  try {
+    const rows = await db.prepare(
+      `SELECT id, group_name, categories FROM keyword_category_groups WHERE user_id = ? ORDER BY group_name ASC`
+    ).bind(user.sub).all<{ id: string; group_name: string; categories: string }>();
+    const groups = (rows.results ?? []).map((r) => {
+      let cats: string[] = [];
+      try { cats = JSON.parse(r.categories); } catch { /* ignore */ }
+      return { id: r.id, group_name: r.group_name, categories: cats };
+    });
+    return jsonUtf8({ groups });
+  } catch {
+    return jsonUtf8({ groups: [] });
+  }
+});
+
 app.get('/api/repositories/search/category-group/check-name', authMiddleware, async (c) => {
   const user = c.get('user');
   const db = c.env.DB;

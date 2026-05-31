@@ -1,7 +1,7 @@
 # NOTICE: keyword_category_groups 実装の知見
 
 **対象セッション**: 2026-05-31
-**関連PR**: #367, #368, #369
+**関連PR**: #367, #368, #369, #370, #371
 **関連ブランチ**: `fix/keyword-classify-zero-hits`
 
 ---
@@ -138,3 +138,37 @@ nameInput.addEventListener('input', function() {
   }, 350);
 });
 ```
+
+---
+
+## 7. `description` カラム未存在による INSERT 失敗（#371 で修正）
+
+### 現象
+登録ボタンを押すと「グループの登録に失敗しました: D1_ERROR: table keyword_category_groups has no column named description: SQLITE_ERROR」と表示されて登録できなかった。
+
+### 原因
+migration 0037 の最初のバージョンに `description` カラムが含まれていなかった。そのバージョンで先にテーブルが自動作成されていたため、後から `description` を追加した migration を適用しても `CREATE TABLE IF NOT EXISTS` はテーブルが存在するとスキップされ、カラムが追加されなかった。
+
+### 対処
+`ensureSchema()` ヘルパー内に以下を追加した。
+
+```typescript
+try {
+  await db.prepare(`ALTER TABLE keyword_category_groups ADD COLUMN description TEXT`).run();
+} catch { /* カラムが既に存在する場合は無視 */ }
+```
+
+### エラー検出条件の修正
+`SQLITE_ERROR` という文字列は広すぎるため、`no column named` を個別に検出するよう変更した。
+
+```typescript
+if (msg.includes('no such table') || msg.includes('no column named')) {
+  await ensureSchema();
+  await doInsert(); // リトライ
+}
+```
+
+### 教訓
+- migration のテーブル定義を後から変更した場合、既存テーブルへのカラム追加は `ALTER TABLE ADD COLUMN` でしか行えない。`CREATE TABLE IF NOT EXISTS` はカラム変更を反映しない
+- 自己修復パターンでは `no such table`（テーブル不在）と `no column named`（カラム不在）を別々に検出して同じ `ensureSchema()` に流すのが安全
+- `SQLITE_ERROR` は広すぎるマッチ条件。具体的なエラーメッセージ部分文字列で絞ること
