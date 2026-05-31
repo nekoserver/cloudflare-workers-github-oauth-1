@@ -89,17 +89,24 @@ export function getFunctionChangelogPage(input: FunctionChangelogInput): string 
 
   const emptyRow = '<tr><td colspan="8" class="empty-cell">データなし — ts_commit_function_map にレコードを追加してください</td></tr>';
 
-  const guidanceBanner = noRepoSelected ? `
+  let guidanceBanner = '';
+  if (repos.length === 0) {
+    guidanceBanner = `
+  <div class="guidance-banner guidance-banner--error" id="guidanceBanner">
+    <span class="guidance-icon">🚫</span>
+    <span class="guidance-text">このページは事前にデータベース上に任意のリポジトリに定義済みの関数データが存在しなければ正常動作しません。</span>
+  </div>`;
+  } else {
+    const sentence3 = `現在 <strong>${repos.length}</strong> 件のプロジェクトが登録されています。`;
+    const sentences12 = noRepoSelected
+      ? 'このページの表示にはデータベース内に登録済みのプロジェクト（リポジトリ）の選択が必要です。右上のドロップダウンからプロジェクトを選択してください。'
+      : '';
+    guidanceBanner = `
   <div class="guidance-banner" id="guidanceBanner">
-    <span class="guidance-icon">⚠️</span>
-    <span class="guidance-text">
-      このページの表示にはデータベース内に登録済みのプロジェクト（リポジトリ）の選択が必要です。
-      右上のドロップダウンからプロジェクトを選択してください。
-      ${repos.length === 0
-        ? '現在 <code>ts_repository</code> テーブルにデータが登録されていません。シードデータを投入してから再度アクセスしてください。'
-        : `現在 ${repos.length} 件のプロジェクトが登録されています。`}
-    </span>
-  </div>` : '';
+    <span class="guidance-icon">${noRepoSelected ? '⚠️' : 'ℹ️'}</span>
+    <span class="guidance-text">${sentences12}${sentence3}</span>
+  </div>`;
+  }
 
   return `<!DOCTYPE html>
 <html lang="ja">
@@ -169,6 +176,11 @@ export function getFunctionChangelogPage(input: FunctionChangelogInput): string 
       border-radius: 8px; padding: 12px 16px; margin-bottom: 20px;
       color: var(--warn-text); font-size: 12px; line-height: 1.6;
     }
+    .guidance-banner--error {
+      background: light-dark(#fff0ee, #2d0e0a);
+      border-color: light-dark(#cf222e, #f85149);
+      color: light-dark(#82071e, #ff7b72);
+    }
     .guidance-icon { font-size: 16px; flex-shrink: 0; margin-top: 1px; }
     .guidance-text code {
       background: light-dark(rgba(0,0,0,.08), rgba(255,255,255,.1));
@@ -187,6 +199,9 @@ export function getFunctionChangelogPage(input: FunctionChangelogInput): string 
     }
     .toolbar input { width: 220px; }
     .toolbar label { color: var(--text-muted); font-size: 12px; }
+    .toolbar input:disabled, .toolbar select:disabled {
+      opacity: 0.4; cursor: not-allowed;
+    }
     table {
       width: 100%; border-collapse: collapse;
       background: var(--panel); border: 1px solid var(--border);
@@ -265,11 +280,11 @@ export function getFunctionChangelogPage(input: FunctionChangelogInput): string 
 
   <div class="toolbar">
     <label>ファイル</label>
-    <input type="text" id="filterFile" placeholder="src/utils/github.ts" value="${escapeHtml(input.filterFile ?? '')}">
+    <input type="text" id="filterFile" placeholder="src/utils/github.ts" value="${escapeHtml(input.filterFile ?? '')}"${noRepoSelected ? ' disabled' : ''}>
     <label>関数名</label>
-    <input type="text" id="filterFunc" placeholder="getGitHubUser" value="${escapeHtml(input.filterFunction ?? '')}">
+    <input type="text" id="filterFunc" placeholder="getGitHubUser" value="${escapeHtml(input.filterFunction ?? '')}"${noRepoSelected ? ' disabled' : ''}>
     <label>インパクト</label>
-    <select id="filterImpact">
+    <select id="filterImpact"${noRepoSelected ? ' disabled' : ''}>
       <option value="">すべて</option>
       <option value="feature"${input.filterImpact === 'feature' ? ' selected' : ''}>機能追加</option>
       <option value="bugfix"${input.filterImpact === 'bugfix' ? ' selected' : ''}>バグ修正</option>
