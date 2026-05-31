@@ -366,19 +366,22 @@ describe('検索履歴モーダル: ラベルフィルタUI', () => {
 
   it('初期状態ですべてボタンが active クラスを持つ', () => {
     const html = getRepositoriesPage(minimalUser);
-    expect(html).toMatch(/history-label-btn active[^"]*" data-label=""/);
+    // マルチ選択トグル式に変更: すべてボタンは active クラスを持つ
+    expect(html).toContain('history-label-btn active');
+    expect(html).toContain('data-label=""');
   });
 
-  it('selectedLabel 変数が JS に存在する', () => {
+  it('activeLabels (Set) がマルチ選択状態管理に使われる', () => {
     const html = getRepositoriesPage(minimalUser);
-    expect(html).toContain("var selectedLabel = ''");
+    expect(html).toContain('activeLabels');
+    expect(html).toContain('new Set()');
   });
 
   it('ラベルフィルタのクリックイベントリスナが存在する', () => {
     const html = getRepositoriesPage(minimalUser);
     expect(html).toContain('historyLabelFilter');
     expect(html).toContain('history-label-btn');
-    expect(html).toContain('selectedLabel');
+    expect(html).toContain('activeLabels');
   });
 
   it('dedupeAndSort が label フィールドを保持する', () => {
@@ -386,16 +389,17 @@ describe('検索履歴モーダル: ラベルフィルタUI', () => {
     expect(html).toContain("label: item.label || 'uncategorized'");
   });
 
-  it('getIncrementalFilteredItems が selectedLabel でフィルタする', () => {
+  it('activeLabels でラベルフィルタリングを行う', () => {
     const html = getRepositoriesPage(minimalUser);
-    expect(html).toContain('item.label === selectedLabel');
+    expect(html).toContain('activeLabels.has(');
   });
 
-  it('closeHistoryModal が selectedLabel をリセットする', () => {
+  it('closeHistoryModal が activeLabels をリセットする', () => {
     const html = getRepositoriesPage(minimalUser);
     const closeMatch = html.match(/function closeHistoryModal\(\)[\s\S]*?\}/);
     expect(closeMatch).not.toBeNull();
-    expect(closeMatch![0]).toContain("selectedLabel = ''");
+    // activateAllLabels() でリセット
+    expect(closeMatch![0]).toContain('activateAllLabels');
   });
 
   it('updateTitle がフィルタ件数を表示する', () => {
@@ -403,5 +407,74 @@ describe('検索履歴モーダル: ラベルフィルタUI', () => {
     expect(html).toContain('function updateTitle()');
     expect(html).toContain('getIncrementalFilteredItems().length');
     expect(html).toContain("' / '");
+  });
+});
+
+describe('ページ基本構造: 主要UI要素の存在', () => {
+  it('検索ボタン (commitSearchBtn) が存在する', () => {
+    const html = getRepositoriesPage(minimalUser);
+    expect(html).toContain('id="commitSearchBtn"');
+  });
+
+  it('検索入力欄 (commitSearchInput) が存在する', () => {
+    const html = getRepositoriesPage(minimalUser);
+    expect(html).toContain('id="commitSearchInput"');
+  });
+
+  it('ドロップダウンメニュー (dropdownMenu) が存在する', () => {
+    const html = getRepositoriesPage(minimalUser);
+    expect(html).toContain('id="dropdownMenu"');
+  });
+
+  it('toggleDropdown 関数が JS に存在する', () => {
+    const html = getRepositoriesPage(minimalUser);
+    expect(html).toContain('function toggleDropdown()');
+  });
+
+  it('検索履歴ボタン行 (searchHistoryRow) が存在する', () => {
+    const html = getRepositoriesPage(minimalUser);
+    expect(html).toContain('id="searchHistoryRow"');
+  });
+
+  it('検索履歴ボタン (searchHistoryOpenBtn) が存在する', () => {
+    const html = getRepositoriesPage(minimalUser);
+    expect(html).toContain('id="searchHistoryOpenBtn"');
+  });
+
+  it('カテゴリグループ編集モーダル (categoryGroupEditModal) が存在する', () => {
+    const html = getRepositoriesPage(minimalUser);
+    expect(html).toContain('id="categoryGroupEditModal"');
+  });
+
+  it('カテゴリグループ削除確認モーダル (cgDeleteConfirmModal) が存在する', () => {
+    const html = getRepositoriesPage(minimalUser);
+    expect(html).toContain('id="cgDeleteConfirmModal"');
+  });
+
+  it('openCategoryGroupEditModal がグローバル関数として公開されている', () => {
+    const html = getRepositoriesPage(minimalUser);
+    expect(html).toContain('window.openCategoryGroupEditModal');
+  });
+});
+
+describe('ページ基本構造: script タグ内 JS の構文チェック', () => {
+  it('script タグ内の JS に構文エラーがない', () => {
+    const html = getRepositoriesPage(minimalUser);
+    // <script>タグを全部抽出してacornでパース
+    const scriptContents: string[] = [];
+    const scriptRe = /<script>([\s\S]*?)<\/script>/g;
+    let m;
+    while ((m = scriptRe.exec(html)) !== null) {
+      scriptContents.push(m[1]);
+    }
+    expect(scriptContents.length).toBeGreaterThan(0);
+
+    for (const js of scriptContents) {
+      // new Function() はfunctionの引数にカッコがあるとエラーになるため
+      // ラッパー関数で包んで構文チェック
+      expect(() => {
+        new Function(`(function(){\n${js}\n})`);
+      }).not.toThrow();
+    }
   });
 });
