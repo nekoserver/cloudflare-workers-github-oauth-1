@@ -616,6 +616,8 @@ INSERT OR REPLACE INTO table_column_keys (table_name, column_name, key_type, fk_
   group_name TEXT NOT NULL,
   description TEXT,
   categories TEXT NOT NULL,
+  is_deleted INTEGER NOT NULL DEFAULT 0,
+  deleted_at TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -628,6 +630,27 @@ INSERT OR REPLACE INTO table_column_keys (table_name, column_name, key_type, fk_
 INSERT OR REPLACE INTO table_column_keys (table_name, column_name, key_type, fk_target_table) VALUES
 ('keyword_category_groups', 'user_id', 'fk', 'user_sessions');`,
 };
+
+async function ensureGroupTable(db: D1Database): Promise<void> {
+  await db.prepare(
+    `CREATE TABLE IF NOT EXISTS keyword_category_groups (
+      id TEXT PRIMARY KEY, user_id TEXT NOT NULL, group_name TEXT NOT NULL,
+      description TEXT, categories TEXT NOT NULL,
+      is_deleted INTEGER NOT NULL DEFAULT 0, deleted_at TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )`
+  ).run();
+  for (const ddl of [
+    `ALTER TABLE keyword_category_groups ADD COLUMN description TEXT`,
+    `ALTER TABLE keyword_category_groups ADD COLUMN is_deleted INTEGER NOT NULL DEFAULT 0`,
+    `ALTER TABLE keyword_category_groups ADD COLUMN deleted_at TEXT`,
+  ]) {
+    try { await db.prepare(ddl).run(); } catch { /* already exists */ }
+  }
+  try { await db.prepare(`CREATE INDEX IF NOT EXISTS idx_keyword_category_groups_user_id ON keyword_category_groups(user_id)`).run(); } catch { /* ignore */ }
+  try { await db.prepare(`CREATE UNIQUE INDEX IF NOT EXISTS idx_keyword_category_groups_user_name ON keyword_category_groups(user_id, group_name)`).run(); } catch { /* ignore */ }
+}
 
 function jsonUtf8(payload: unknown, status = 200): Response {
   return new Response(JSON.stringify(payload), {
@@ -5524,9 +5547,10 @@ app.get('/api/repositories/search/category-group', authMiddleware, async (c) => 
   if (selectedLabels.length < 2) return jsonUtf8({ group: null });
   try {
     const rows = await db.prepare(
-      `SELECT id, group_name, categories FROM keyword_category_groups WHERE user_id = ?`
-    ).bind(user.sub).all<{ id: string; group_name: string; categories: string }>();
-    const matched = (rows.results ?? []).find((row) => {
+      `SELECT id, group_name, description, categories, is_deleted FROM keyword_category_groups WHERE user_id = ?`
+    ).bind(user.sub).all<{ id: string; group_name: string; description: string | null; categories: string; is_deleted: number }>();
+    const filteredResults = (rows.results ?? []).filter((row) => !row.is_deleted);
+    const matched = filteredResults.find((row) => {
       try {
         const cats: string[] = JSON.parse(row.categories);
         const sorted = cats.slice().sort();
@@ -5535,7 +5559,10 @@ app.get('/api/repositories/search/category-group', authMiddleware, async (c) => 
         return false;
       }
     });
-    return jsonUtf8({ group: matched ? { id: matched.id, group_name: matched.group_name } : null });
+    if (!matched) return jsonUtf8({ group: null });
+    let matchCats: string[] = [];
+    try { matchCats = JSON.parse(matched.categories); } catch { /* ignore */ }
+    return jsonUtf8({ group: { id: matched.id, group_name: matched.group_name, description: matched.description ?? null, categories: matchCats } });
   } catch {
     return jsonUtf8({ group: null });
   }
@@ -5547,12 +5574,12 @@ app.get('/api/repositories/search/category-groups', authMiddleware, async (c) =>
   if (!db) return jsonUtf8({ groups: [] });
   try {
     const rows = await db.prepare(
-      `SELECT id, group_name, categories FROM keyword_category_groups WHERE user_id = ? ORDER BY group_name ASC`
-    ).bind(user.sub).all<{ id: string; group_name: string; categories: string }>();
+      `SELECT id, group_name, description, categories FROM keyword_category_groups WHERE user_id = ? AND (is_deleted = 0 OR is_deleted IS NULL) ORDER BY group_name ASC`
+    ).bind(user.sub).all<{ id: string; group_name: string; description: string | null; categories: string }>();
     const groups = (rows.results ?? []).map((r) => {
       let cats: string[] = [];
       try { cats = JSON.parse(r.categories); } catch { /* ignore */ }
-      return { id: r.id, group_name: r.group_name, categories: cats };
+      return { id: r.id, group_name: r.group_name, description: r.description ?? null, categories: cats };
     });
     return jsonUtf8({ groups });
   } catch {
@@ -5585,11 +5612,7 @@ app.post('/api/repositories/search/category-group', authMiddleware, async (c) =>
   const db = c.env.DB;
   if (!db) return jsonUtf8({ error: 'Database not available' }, 500);
   let body: { group_name?: string; description?: string; categories?: string[] };
-  try {
-    body = await c.req.json();
-  } catch {
-    return jsonUtf8({ error: 'Invalid JSON' }, 400);
-  }
+  try { body = await c.req.json(); } catch { return jsonUtf8({ error: 'Invalid JSON' }, 400); }
   const groupName = (body.group_name ?? '').trim();
   const description = (body.description ?? '').trim() || null;
   const categories = Array.isArray(body.categories) ? body.categories.map((c) => String(c).trim()).filter(Boolean) : [];
@@ -5597,59 +5620,76 @@ app.post('/api/repositories/search/category-group', authMiddleware, async (c) =>
   if (categories.length < 2) return jsonUtf8({ error: 'カテゴリは2つ以上必要です' }, 400);
   const id = crypto.randomUUID();
   const categoriesJson = JSON.stringify(categories.slice().sort());
-
-  const doInsert = () =>
-    db.prepare(
-      `INSERT INTO keyword_category_groups (id, user_id, group_name, description, categories, created_at, updated_at) VALUES (?, ?, ?, ?, ?, datetime('now'), datetime('now'))`
-    ).bind(id, user.sub, groupName, description, categoriesJson).run();
-
-  const ensureSchema = async () => {
-    await db.prepare(
-      `CREATE TABLE IF NOT EXISTS keyword_category_groups (
-        id TEXT PRIMARY KEY,
-        user_id TEXT NOT NULL,
-        group_name TEXT NOT NULL,
-        description TEXT,
-        categories TEXT NOT NULL,
-        created_at TEXT NOT NULL DEFAULT (datetime('now')),
-        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
-      )`
-    ).run();
-    try {
-      await db.prepare(`ALTER TABLE keyword_category_groups ADD COLUMN description TEXT`).run();
-    } catch { /* カラムが既に存在する場合は無視 */ }
-    await db.prepare(
-      `CREATE INDEX IF NOT EXISTS idx_keyword_category_groups_user_id ON keyword_category_groups(user_id)`
-    ).run();
-    await db.prepare(
-      `CREATE UNIQUE INDEX IF NOT EXISTS idx_keyword_category_groups_user_name ON keyword_category_groups(user_id, group_name)`
-    ).run();
-  };
-
+  const doInsert = () => db.prepare(
+    `INSERT INTO keyword_category_groups (id, user_id, group_name, description, categories, created_at, updated_at) VALUES (?, ?, ?, ?, ?, datetime('now'), datetime('now'))`
+  ).bind(id, user.sub, groupName, description, categoriesJson).run();
   try {
     await doInsert();
     return jsonUtf8({ ok: true, id, group_name: groupName });
   } catch (err) {
     const msg = err instanceof Error ? err.message : '';
-    if (msg.includes('UNIQUE') || msg.includes('unique')) {
-      return jsonUtf8({ error: '同じ名前のグループがすでに存在します' }, 409);
-    }
+    if (msg.includes('UNIQUE') || msg.includes('unique')) return jsonUtf8({ error: '同じ名前のグループがすでに存在します' }, 409);
     if (msg.includes('no such table') || msg.includes('no column named')) {
       try {
-        await ensureSchema();
+        await ensureGroupTable(db);
         await doInsert();
         return jsonUtf8({ ok: true, id, group_name: groupName });
       } catch (retryErr) {
         const retryMsg = retryErr instanceof Error ? retryErr.message : '';
-        if (retryMsg.includes('UNIQUE') || retryMsg.includes('unique')) {
-          return jsonUtf8({ error: '同じ名前のグループがすでに存在します' }, 409);
-        }
+        if (retryMsg.includes('UNIQUE') || retryMsg.includes('unique')) return jsonUtf8({ error: '同じ名前のグループがすでに存在します' }, 409);
         logger.warn('category group insert retry failed', { error: retryMsg });
         return jsonUtf8({ error: 'グループの登録に失敗しました: ' + retryMsg }, 500);
       }
     }
     logger.warn('category group insert failed', { error: msg });
     return jsonUtf8({ error: 'グループの登録に失敗しました: ' + msg }, 500);
+  }
+});
+
+app.put('/api/repositories/search/category-group/:id', authMiddleware, async (c) => {
+  const user = c.get('user');
+  const db = c.env.DB;
+  if (!db) return jsonUtf8({ error: 'Database not available' }, 500);
+  const id = c.req.param('id');
+  let body: { group_name?: string; description?: string; categories?: string[] };
+  try { body = await c.req.json(); } catch { return jsonUtf8({ error: 'Invalid JSON' }, 400); }
+  const groupName = (body.group_name ?? '').trim();
+  const description = (body.description ?? '').trim() || null;
+  const categories = Array.isArray(body.categories) ? body.categories.map((c) => String(c).trim()).filter(Boolean) : [];
+  if (!groupName) return jsonUtf8({ error: 'グループ名を入力してください' }, 400);
+  if (categories.length < 2) return jsonUtf8({ error: 'カテゴリグループに所属するカテゴリバッジは2つ以上必要です' }, 400);
+  const categoriesJson = JSON.stringify(categories.slice().sort());
+  try {
+    await ensureGroupTable(db);
+    const result = await db.prepare(
+      `UPDATE keyword_category_groups SET group_name = ?, description = ?, categories = ?, updated_at = datetime('now') WHERE id = ? AND user_id = ? AND (is_deleted = 0 OR is_deleted IS NULL)`
+    ).bind(groupName, description, categoriesJson, id, user.sub).run();
+    if ((result.meta?.changes ?? 0) === 0) return jsonUtf8({ error: '対象のグループが見つかりません' }, 404);
+    return jsonUtf8({ ok: true });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : '';
+    if (msg.includes('UNIQUE') || msg.includes('unique')) return jsonUtf8({ error: '同じ名前のグループがすでに存在します' }, 409);
+    logger.warn('category group update failed', { error: msg });
+    return jsonUtf8({ error: 'グループの更新に失敗しました: ' + msg }, 500);
+  }
+});
+
+app.delete('/api/repositories/search/category-group/:id', authMiddleware, async (c) => {
+  const user = c.get('user');
+  const db = c.env.DB;
+  if (!db) return jsonUtf8({ error: 'Database not available' }, 500);
+  const id = c.req.param('id');
+  try {
+    await ensureGroupTable(db);
+    const result = await db.prepare(
+      `UPDATE keyword_category_groups SET is_deleted = 1, deleted_at = datetime('now'), updated_at = datetime('now') WHERE id = ? AND user_id = ? AND (is_deleted = 0 OR is_deleted IS NULL)`
+    ).bind(id, user.sub).run();
+    if ((result.meta?.changes ?? 0) === 0) return jsonUtf8({ error: '対象のグループが見つかりません' }, 404);
+    return jsonUtf8({ ok: true });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : '';
+    logger.warn('category group delete failed', { error: msg });
+    return jsonUtf8({ error: 'グループの削除に失敗しました: ' + msg }, 500);
   }
 });
 

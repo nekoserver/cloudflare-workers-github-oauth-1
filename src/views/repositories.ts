@@ -1935,6 +1935,49 @@ export function getRepositoriesPage(user: {
     </div>
   </div>
 
+  <!-- Category Group Edit Modal -->
+  <div id="categoryGroupEditModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:10400;align-items:center;justify-content:center;">
+    <div style="background:var(--card-bg);border-radius:14px;padding:28px 28px 22px;max-width:440px;width:92%;box-shadow:0 8px 32px rgba(0,0,0,.22);position:relative;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+        <span style="font-weight:700;font-size:15px;color:var(--text-primary);">カテゴリグループを編集する</span>
+        <button id="cgeClose" style="border:none;background:none;font-size:20px;cursor:pointer;color:var(--text-muted);line-height:1;">&times;</button>
+      </div>
+      <div style="font-size:12px;color:var(--text-muted);margin-bottom:8px;">グループに含めるカテゴリ（タップでON/OFF）:</div>
+      <div id="cgeCategoryBadges" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:18px;"></div>
+      <div style="margin-bottom:10px;">
+        <label style="font-size:12px;color:var(--text-muted);display:block;margin-bottom:4px;">グループ名 <span style="color:#e53e3e;">*</span></label>
+        <input id="cgeGroupName" type="text" maxlength="64" style="width:100%;box-sizing:border-box;padding:8px 12px;border:1px solid var(--border-color);border-radius:6px;background:var(--card-bg);color:var(--text-primary);font-size:13px;" />
+        <div id="cgeNameError" style="font-size:11px;color:#e53e3e;margin-top:3px;min-height:16px;"></div>
+      </div>
+      <div style="margin-bottom:18px;">
+        <label style="font-size:12px;color:var(--text-muted);display:block;margin-bottom:4px;">説明（任意）</label>
+        <input id="cgeDescription" type="text" maxlength="200" style="width:100%;box-sizing:border-box;padding:8px 12px;border:1px solid var(--border-color);border-radius:6px;background:var(--card-bg);color:var(--text-primary);font-size:13px;" />
+      </div>
+      <div style="display:flex;justify-content:flex-end;gap:8px;">
+        <button id="cgeCancel" style="padding:7px 18px;border-radius:6px;font-size:13px;cursor:pointer;border:1px solid var(--border-color);background:var(--bg-secondary);color:var(--text-muted);">キャンセル</button>
+        <button id="cgeDelete" style="padding:7px 18px;border-radius:6px;font-size:13px;cursor:pointer;border:none;background:#e53e3e;color:#fff;display:none;">削除</button>
+        <button id="cgeConfirm" disabled style="padding:7px 18px;border-radius:6px;font-size:13px;cursor:pointer;border:none;background:#3b82f6;color:#fff;opacity:0.45;transition:opacity .15s;">変更</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Category Group Delete Confirm Modal -->
+  <div id="cgDeleteConfirmModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:10450;align-items:center;justify-content:center;">
+    <div style="background:var(--card-bg);border-radius:12px;padding:28px;max-width:360px;width:90%;box-shadow:0 8px 32px rgba(0,0,0,.25);">
+      <p style="font-size:14px;color:var(--text-primary);margin-bottom:20px;line-height:1.6;">このカテゴリグループを削除しますか？<br>削除後は元に戻せません。</p>
+      <div style="display:flex;justify-content:flex-end;gap:8px;">
+        <button id="cgDeleteCancel" style="padding:7px 18px;border-radius:6px;font-size:13px;cursor:pointer;border:1px solid var(--border-color);background:var(--bg-secondary);color:var(--text-muted);">キャンセル</button>
+        <button id="cgDeleteConfirmBtn" style="padding:7px 18px;border-radius:6px;font-size:13px;cursor:pointer;border:none;background:#e53e3e;color:#fff;">はい、削除する</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Category Group Validation Alert (stays until OK) -->
+  <div id="cgValidationAlert" style="display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:10500;background:#ffe4e6;border:1px solid #fca5a5;border-radius:10px;padding:20px 28px;max-width:360px;width:90%;text-align:center;box-shadow:0 4px 20px rgba(0,0,0,.2);">
+    <p id="cgValidationMsg" style="font-size:14px;color:#9f1239;margin-bottom:16px;line-height:1.6;"></p>
+    <button id="cgValidationOk" style="padding:6px 24px;border-radius:6px;border:none;background:#e53e3e;color:#fff;font-size:13px;cursor:pointer;">OK</button>
+  </div>
+
   <!-- Search History Grid Modal -->
   <div class="modal-overlay" id="searchHistoryModal">
     <div class="history-modal-content">
@@ -5347,7 +5390,8 @@ export function getRepositoriesPage(user: {
               if (!matchData) return;
               categoryGroupHint.style.display = '';
               if (matchData.group) {
-                categoryGroupHint.innerHTML = '<span class="category-group-hint-found">これらの検索キーカテゴリは「' + escHtml(matchData.group.group_name) + '」というカテゴリグループに含まれています</span>';
+                categoryGroupHint.innerHTML = '<span class="category-group-hint-found">これらの検索キーカテゴリは「' + escHtml(matchData.group.group_name) + '」というカテゴリグループに含まれています</span>'
+                  + ' <button type="button" onclick="openCategoryGroupEditModal(\'' + escHtml(matchData.group.id) + '\')" style="font-size:11px;padding:2px 10px;border-radius:10px;border:1px solid #3b82f6;background:transparent;color:#3b82f6;cursor:pointer;white-space:nowrap;vertical-align:middle;margin-left:6px;">このカテゴリグループの内容を編集する</button>';
               } else {
                 categoryGroupHint.innerHTML = '<span class="category-group-hint-none">これらのカテゴリはまだ特定のグループに所属していません</span>'
                   + ' <button id="cgmOpenBtn" type="button" style="font-size:11px;padding:2px 10px;border-radius:10px;border:1px solid #3b82f6;background:transparent;color:#3b82f6;cursor:pointer;white-space:nowrap;vertical-align:middle;margin-left:6px;" onclick="openCategoryGroupCreateModal()">これらのカテゴリに対して新規にグループ名を割り当てる</button>';
@@ -5357,6 +5401,191 @@ export function getRepositoriesPage(user: {
             });
         }, 300);
       }
+
+      // ===== カテゴリグループ編集モーダル =====
+      (function() {
+        var modal = document.getElementById('categoryGroupEditModal');
+        var badgesEl = document.getElementById('cgeCategoryBadges');
+        var nameInput = document.getElementById('cgeGroupName');
+        var descInput = document.getElementById('cgeDescription');
+        var nameError = document.getElementById('cgeNameError');
+        var confirmBtn = document.getElementById('cgeConfirm');
+        var deleteBtn = document.getElementById('cgeDelete');
+        var deleteConfirmModal = document.getElementById('cgDeleteConfirmModal');
+        var validationAlert = document.getElementById('cgValidationAlert');
+        var validationMsg = document.getElementById('cgValidationMsg');
+        var validationOk = document.getElementById('cgValidationOk');
+        var currentGroupId = null;
+        var origName = '', origDesc = '', origCats = [];
+        var activeCats = [];
+        var nameCheckTimer = null;
+        var nameIsValid = true;
+
+        function showValidation(msg) {
+          if (!validationAlert || !validationMsg) return;
+          validationMsg.textContent = msg;
+          validationAlert.style.display = 'block';
+        }
+        if (validationOk) validationOk.onclick = function() { if (validationAlert) validationAlert.style.display = 'none'; };
+
+        function setChanged() {
+          var name = nameInput ? nameInput.value.trim() : '';
+          var desc = descInput ? descInput.value.trim() : '';
+          var catsSorted = activeCats.slice().sort().join(',');
+          var origSorted = origCats.slice().sort().join(',');
+          var changed = (name !== origName || desc !== (origDesc || '') || catsSorted !== origSorted);
+          var valid = name.length > 0 && nameIsValid && activeCats.length >= 2;
+          var enabled = changed && valid;
+          if (confirmBtn) { confirmBtn.disabled = !enabled; confirmBtn.style.opacity = enabled ? '1' : '0.45'; }
+          if (deleteBtn) deleteBtn.style.display = enabled ? 'none' : '';
+        }
+
+        function renderBadges() {
+          if (!badgesEl) return;
+          var allCats = Array.from(new Set(getAllCategoryLabels().concat(origCats)));
+          badgesEl.innerHTML = '';
+          allCats.forEach(function(cat) {
+            var on = activeCats.indexOf(cat) !== -1;
+            var btn = document.createElement('button');
+            btn.type = 'button';
+            btn.textContent = cat;
+            btn.style.cssText = 'font-size:11px;padding:3px 11px;border-radius:10px;cursor:pointer;white-space:nowrap;transition:background .12s,color .12s;border:1px solid;';
+            btn.style.background = on ? '#dbeafe' : 'var(--bg-secondary)';
+            btn.style.color = on ? '#1d4ed8' : 'var(--text-muted)';
+            btn.style.borderColor = on ? '#3b82f6' : 'var(--border-color)';
+            btn.setAttribute('data-cat', cat);
+            btn.addEventListener('click', function() {
+              var idx = activeCats.indexOf(cat);
+              if (idx !== -1) {
+                if (activeCats.length <= 2) {
+                  showValidation('カテゴリグループに所属するカテゴリバッジは2つ以上でなければなりません');
+                  return;
+                }
+                activeCats.splice(idx, 1);
+              } else {
+                activeCats.push(cat);
+              }
+              renderBadges();
+              setChanged();
+            });
+            badgesEl.appendChild(btn);
+          });
+        }
+
+        function open(groupId) {
+          if (!modal) return;
+          var group = cachedGroups ? cachedGroups.find(function(g) { return g.id === groupId; }) : null;
+          if (!group) return;
+          currentGroupId = groupId;
+          origName = group.group_name;
+          origDesc = group.description || '';
+          origCats = group.categories.slice();
+          activeCats = group.categories.slice();
+          if (nameInput) nameInput.value = origName;
+          if (descInput) descInput.value = origDesc;
+          if (nameError) nameError.textContent = '';
+          nameIsValid = true;
+          renderBadges();
+          setChanged();
+          modal.style.display = 'flex';
+          if (nameInput) nameInput.focus();
+        }
+
+        function close() {
+          if (modal) modal.style.display = 'none';
+          if (deleteConfirmModal) deleteConfirmModal.style.display = 'none';
+          currentGroupId = null;
+        }
+
+        window.openCategoryGroupEditModal = function(id) { open(id); };
+
+        if (document.getElementById('cgeClose')) document.getElementById('cgeClose').onclick = close;
+        if (document.getElementById('cgeCancel')) document.getElementById('cgeCancel').onclick = close;
+        if (modal) modal.addEventListener('click', function(e) { if (e.target === modal) close(); });
+        document.addEventListener('keydown', function(e) {
+          if (e.key === 'Escape') {
+            if (deleteConfirmModal && deleteConfirmModal.style.display === 'flex') { deleteConfirmModal.style.display = 'none'; return; }
+            if (modal && modal.style.display === 'flex') { close(); return; }
+          }
+        });
+
+        if (nameInput) {
+          nameInput.addEventListener('input', function() {
+            var name = nameInput.value.trim();
+            if (!name) { nameIsValid = false; if (nameError) nameError.textContent = 'グループ名を入力してください'; setChanged(); return; }
+            if (name === origName) { nameIsValid = true; if (nameError) nameError.textContent = ''; setChanged(); return; }
+            clearTimeout(nameCheckTimer);
+            nameCheckTimer = setTimeout(function() {
+              fetch('/api/repositories/search/category-group/check-name?name=' + encodeURIComponent(name), { credentials: 'same-origin', cache: 'no-store' })
+                .then(function(res) { return res.ok ? res.json() : null; })
+                .then(function(data) {
+                  if (!data) return;
+                  if (data.exists) { nameIsValid = false; if (nameError) nameError.textContent = '同じ名前のグループがすでに存在します'; }
+                  else { nameIsValid = true; if (nameError) nameError.textContent = ''; }
+                  setChanged();
+                }).catch(function() {});
+            }, 350);
+          });
+        }
+        if (descInput) descInput.addEventListener('input', setChanged);
+
+        if (confirmBtn) {
+          confirmBtn.addEventListener('click', function() {
+            var name = nameInput ? nameInput.value.trim() : '';
+            var desc = descInput ? descInput.value.trim() : '';
+            if (!name || !nameIsValid || activeCats.length < 2) return;
+            confirmBtn.disabled = true; confirmBtn.style.opacity = '0.45';
+            fetch('/api/repositories/search/category-group/' + encodeURIComponent(currentGroupId), {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              credentials: 'same-origin',
+              body: JSON.stringify({ group_name: name, description: desc || null, categories: activeCats })
+            }).then(function(res) { return res.json(); })
+              .then(function(data) {
+                if (data.ok) {
+                  close();
+                  showToast('カテゴリグループを更新しました', 'success', 3000);
+                  cachedGroups = null; loadGroupList(); checkCategoryGroup();
+                } else {
+                  if (nameError) nameError.textContent = data.error || '更新に失敗しました';
+                  confirmBtn.disabled = false; confirmBtn.style.opacity = '1';
+                }
+              }).catch(function() {
+                if (nameError) nameError.textContent = '通信エラーが発生しました';
+                confirmBtn.disabled = false; confirmBtn.style.opacity = '1';
+              });
+          });
+        }
+
+        if (deleteBtn) {
+          deleteBtn.addEventListener('click', function() {
+            if (deleteConfirmModal) deleteConfirmModal.style.display = 'flex';
+          });
+        }
+        if (document.getElementById('cgDeleteCancel')) {
+          document.getElementById('cgDeleteCancel').onclick = function() { if (deleteConfirmModal) deleteConfirmModal.style.display = 'none'; };
+        }
+        if (document.getElementById('cgDeleteConfirmBtn')) {
+          document.getElementById('cgDeleteConfirmBtn').onclick = function() {
+            fetch('/api/repositories/search/category-group/' + encodeURIComponent(currentGroupId), {
+              method: 'DELETE', credentials: 'same-origin'
+            }).then(function(res) { return res.json(); })
+              .then(function(data) {
+                if (data.ok) {
+                  close();
+                  showToast('カテゴリグループを削除しました', 'info', 3000);
+                  cachedGroups = null; loadGroupList(); checkCategoryGroup();
+                } else {
+                  if (deleteConfirmModal) deleteConfirmModal.style.display = 'none';
+                  showToast(data.error || '削除に失敗しました', 'error', 4000);
+                }
+              }).catch(function() {
+                if (deleteConfirmModal) deleteConfirmModal.style.display = 'none';
+                showToast('通信エラーが発生しました', 'error', 4000);
+              });
+          };
+        }
+      }());
 
       // ===== カテゴリグループ新規作成モーダル =====
       (function() {
