@@ -5545,10 +5545,22 @@ app.get('/api/repositories/search/category-group', authMiddleware, async (c) => 
   if (!labelsParam) return jsonUtf8({ group: null });
   const selectedLabels = labelsParam.split(',').map((l) => l.trim()).filter(Boolean).sort();
   if (selectedLabels.length < 2) return jsonUtf8({ group: null });
+  const doSelect = () => db.prepare(
+    `SELECT id, group_name, description, categories, is_deleted FROM keyword_category_groups WHERE user_id = ?`
+  ).bind(user.sub).all<{ id: string; group_name: string; description: string | null; categories: string; is_deleted: number }>();
   try {
-    const rows = await db.prepare(
-      `SELECT id, group_name, description, categories, is_deleted FROM keyword_category_groups WHERE user_id = ?`
-    ).bind(user.sub).all<{ id: string; group_name: string; description: string | null; categories: string; is_deleted: number }>();
+    let rows;
+    try {
+      rows = await doSelect();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : '';
+      if (msg.includes('no such table') || msg.includes('no column named')) {
+        await ensureGroupTable(db);
+        rows = await doSelect();
+      } else {
+        throw err;
+      }
+    }
     const filteredResults = (rows.results ?? []).filter((row) => !row.is_deleted);
     const matched = filteredResults.find((row) => {
       try {
@@ -5572,10 +5584,22 @@ app.get('/api/repositories/search/category-groups', authMiddleware, async (c) =>
   const user = c.get('user');
   const db = c.env.DB;
   if (!db) return jsonUtf8({ groups: [] });
+  const doSelect = () => db.prepare(
+    `SELECT id, group_name, description, categories FROM keyword_category_groups WHERE user_id = ? AND (is_deleted = 0 OR is_deleted IS NULL) ORDER BY group_name ASC`
+  ).bind(user.sub).all<{ id: string; group_name: string; description: string | null; categories: string }>();
   try {
-    const rows = await db.prepare(
-      `SELECT id, group_name, description, categories FROM keyword_category_groups WHERE user_id = ? AND (is_deleted = 0 OR is_deleted IS NULL) ORDER BY group_name ASC`
-    ).bind(user.sub).all<{ id: string; group_name: string; description: string | null; categories: string }>();
+    let rows;
+    try {
+      rows = await doSelect();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : '';
+      if (msg.includes('no such table') || msg.includes('no column named')) {
+        await ensureGroupTable(db);
+        rows = await doSelect();
+      } else {
+        throw err;
+      }
+    }
     const groups = (rows.results ?? []).map((r) => {
       let cats: string[] = [];
       try { cats = JSON.parse(r.categories); } catch { /* ignore */ }
