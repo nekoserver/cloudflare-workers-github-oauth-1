@@ -3636,36 +3636,51 @@ app.get('/function-changelog', authMiddleware, async (c) => {
   }
 
   try {
-    const result = await db.prepare(`
-      SELECT
-        cl.commit_at,
-        cl.commit_hash,
-        cl.subject,
-        m.file_path,
-        m.function_name,
-        COALESCE(f.purpose, '') AS purpose,
-        m.change_type,
-        m.lines_added,
-        m.lines_deleted,
-        i.impact_type,
-        i.severity,
-        i.contribution,
-        i.notes,
-        r.full_name AS repo_full_name
-      FROM ts_commit_function_map m
-      JOIN ts_commit_log cl ON m.repo_id = cl.repo_id AND m.commit_hash = cl.commit_hash
-      JOIN ts_repository r ON m.repo_id = r.id
-      LEFT JOIN ts_function_catalog f
-             ON m.repo_id = f.repo_id AND m.file_path = f.file_path AND m.function_name = f.function_name
-      LEFT JOIN ts_function_impact i
-             ON m.repo_id = i.repo_id AND m.commit_hash = i.commit_hash
-            AND m.file_path = i.file_path AND m.function_name = i.function_name
-      ORDER BY cl.commit_at DESC, m.file_path, m.function_name
-      LIMIT 1000
-    `).all<FunctionChangeRow>();
+    const repoIdParam = c.req.query('repo');
+    const selectedRepoId = repoIdParam ? parseInt(repoIdParam, 10) : null;
+
+    const reposResult = await db.prepare(
+      `SELECT id, full_name FROM ts_repository ORDER BY id`
+    ).all<{ id: number; full_name: string }>();
+    const repos = reposResult.results ?? [];
+
+    let rows: FunctionChangeRow[] = [];
+    if (selectedRepoId !== null && !isNaN(selectedRepoId)) {
+      const result = await db.prepare(`
+        SELECT
+          cl.commit_at,
+          cl.commit_hash,
+          cl.subject,
+          m.file_path,
+          m.function_name,
+          COALESCE(f.purpose, '') AS purpose,
+          m.change_type,
+          m.lines_added,
+          m.lines_deleted,
+          i.impact_type,
+          i.severity,
+          i.contribution,
+          i.notes,
+          r.full_name AS repo_full_name
+        FROM ts_commit_function_map m
+        JOIN ts_commit_log cl ON m.repo_id = cl.repo_id AND m.commit_hash = cl.commit_hash
+        JOIN ts_repository r ON m.repo_id = r.id
+        LEFT JOIN ts_function_catalog f
+               ON m.repo_id = f.repo_id AND m.file_path = f.file_path AND m.function_name = f.function_name
+        LEFT JOIN ts_function_impact i
+               ON m.repo_id = i.repo_id AND m.commit_hash = i.commit_hash
+              AND m.file_path = i.file_path AND m.function_name = i.function_name
+        WHERE m.repo_id = ?
+        ORDER BY cl.commit_at DESC, m.file_path, m.function_name
+        LIMIT 1000
+      `).bind(selectedRepoId).all<FunctionChangeRow>();
+      rows = result.results ?? [];
+    }
 
     const html = getFunctionChangelogPage({
-      rows: result.results ?? [],
+      rows,
+      repos,
+      selectedRepoId,
       generatedAt: new Date().toISOString(),
     });
 
