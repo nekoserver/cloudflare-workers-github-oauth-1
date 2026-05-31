@@ -5584,6 +5584,29 @@ app.post('/api/repositories/search/category-group', authMiddleware, async (c) =>
       `INSERT INTO keyword_category_groups (id, user_id, group_name, description, categories, created_at, updated_at) VALUES (?, ?, ?, ?, ?, datetime('now'), datetime('now'))`
     ).bind(id, user.sub, groupName, description, categoriesJson).run();
 
+  const ensureSchema = async () => {
+    await db.prepare(
+      `CREATE TABLE IF NOT EXISTS keyword_category_groups (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        group_name TEXT NOT NULL,
+        description TEXT,
+        categories TEXT NOT NULL,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+      )`
+    ).run();
+    try {
+      await db.prepare(`ALTER TABLE keyword_category_groups ADD COLUMN description TEXT`).run();
+    } catch { /* カラムが既に存在する場合は無視 */ }
+    await db.prepare(
+      `CREATE INDEX IF NOT EXISTS idx_keyword_category_groups_user_id ON keyword_category_groups(user_id)`
+    ).run();
+    await db.prepare(
+      `CREATE UNIQUE INDEX IF NOT EXISTS idx_keyword_category_groups_user_name ON keyword_category_groups(user_id, group_name)`
+    ).run();
+  };
+
   try {
     await doInsert();
     return jsonUtf8({ ok: true, id, group_name: groupName });
@@ -5592,25 +5615,9 @@ app.post('/api/repositories/search/category-group', authMiddleware, async (c) =>
     if (msg.includes('UNIQUE') || msg.includes('unique')) {
       return jsonUtf8({ error: '同じ名前のグループがすでに存在します' }, 409);
     }
-    if (msg.includes('no such table') || msg.includes('SQLITE_ERROR')) {
+    if (msg.includes('no such table') || msg.includes('no column named')) {
       try {
-        await db.prepare(
-          `CREATE TABLE IF NOT EXISTS keyword_category_groups (
-            id TEXT PRIMARY KEY,
-            user_id TEXT NOT NULL,
-            group_name TEXT NOT NULL,
-            description TEXT,
-            categories TEXT NOT NULL,
-            created_at TEXT NOT NULL DEFAULT (datetime('now')),
-            updated_at TEXT NOT NULL DEFAULT (datetime('now'))
-          )`
-        ).run();
-        await db.prepare(
-          `CREATE INDEX IF NOT EXISTS idx_keyword_category_groups_user_id ON keyword_category_groups(user_id)`
-        ).run();
-        await db.prepare(
-          `CREATE UNIQUE INDEX IF NOT EXISTS idx_keyword_category_groups_user_name ON keyword_category_groups(user_id, group_name)`
-        ).run();
+        await ensureSchema();
         await doInsert();
         return jsonUtf8({ ok: true, id, group_name: groupName });
       } catch (retryErr) {
