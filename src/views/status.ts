@@ -3435,9 +3435,7 @@ export function getCacheStatusPage(user: {
         var rows = getStatusTableRows();
         for (var i = 0; i < rows.length; i++) {
           var gid = rows[i].getAttribute('data-group-id');
-          var tableName = rows[i].getAttribute('data-table-name');
-          var forceVisible = tableName === 'commit_agent_log' && filterVal !== '0';
-          rows[i].style.display = (forceVisible || !filterVal || gid === filterVal) ? '' : 'none';
+          rows[i].style.display = (!filterVal || gid === filterVal) ? '' : 'none';
         }
       }
 
