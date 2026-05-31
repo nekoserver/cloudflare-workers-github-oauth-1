@@ -5545,22 +5545,11 @@ app.get('/api/repositories/search/category-group', authMiddleware, async (c) => 
   if (!labelsParam) return jsonUtf8({ group: null });
   const selectedLabels = labelsParam.split(',').map((l) => l.trim()).filter(Boolean).sort();
   if (selectedLabels.length < 2) return jsonUtf8({ group: null });
-  const doSelect = () => db.prepare(
-    `SELECT id, group_name, description, categories, is_deleted FROM keyword_category_groups WHERE user_id = ?`
-  ).bind(user.sub).all<{ id: string; group_name: string; description: string | null; categories: string; is_deleted: number }>();
   try {
-    let rows;
-    try {
-      rows = await doSelect();
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : '';
-      if (msg.includes('no such table') || msg.includes('no column named')) {
-        await ensureGroupTable(db);
-        rows = await doSelect();
-      } else {
-        throw err;
-      }
-    }
+    await ensureGroupTable(db);
+    const rows = await db.prepare(
+      `SELECT id, group_name, description, categories, is_deleted FROM keyword_category_groups WHERE user_id = ?`
+    ).bind(user.sub).all<{ id: string; group_name: string; description: string | null; categories: string; is_deleted: number }>();
     const filteredResults = (rows.results ?? []).filter((row) => !row.is_deleted);
     const matched = filteredResults.find((row) => {
       try {
@@ -5584,22 +5573,11 @@ app.get('/api/repositories/search/category-groups', authMiddleware, async (c) =>
   const user = c.get('user');
   const db = c.env.DB;
   if (!db) return jsonUtf8({ groups: [] });
-  const doSelect = () => db.prepare(
-    `SELECT id, group_name, description, categories FROM keyword_category_groups WHERE user_id = ? AND (is_deleted = 0 OR is_deleted IS NULL) ORDER BY group_name ASC`
-  ).bind(user.sub).all<{ id: string; group_name: string; description: string | null; categories: string }>();
   try {
-    let rows;
-    try {
-      rows = await doSelect();
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : '';
-      if (msg.includes('no such table') || msg.includes('no column named')) {
-        await ensureGroupTable(db);
-        rows = await doSelect();
-      } else {
-        throw err;
-      }
-    }
+    await ensureGroupTable(db);
+    const rows = await db.prepare(
+      `SELECT id, group_name, description, categories FROM keyword_category_groups WHERE user_id = ? AND (is_deleted = 0 OR is_deleted IS NULL) ORDER BY group_name ASC`
+    ).bind(user.sub).all<{ id: string; group_name: string; description: string | null; categories: string }>();
     const groups = (rows.results ?? []).map((r) => {
       let cats: string[] = [];
       try { cats = JSON.parse(r.categories); } catch { /* ignore */ }
@@ -5618,13 +5596,14 @@ app.get('/api/repositories/search/category-group/check-name', authMiddleware, as
   const name = (c.req.query('name') ?? '').trim();
   if (!name) return jsonUtf8({ exists: false });
   try {
+    await ensureGroupTable(db);
     const row = await db.prepare(
-      `SELECT id FROM keyword_category_groups WHERE user_id = ? AND group_name = ? LIMIT 1`
+      `SELECT id FROM keyword_category_groups WHERE user_id = ? AND group_name = ? AND (is_deleted = 0 OR is_deleted IS NULL) LIMIT 1`
     ).bind(user.sub, name).first<{ id: string }>();
     return jsonUtf8({ exists: !!row });
   } catch (err) {
     const msg = err instanceof Error ? err.message : '';
-    if (!msg.includes('no such table') && !msg.includes('SQLITE_ERROR')) {
+    if (!msg.includes('no such table')) {
       logger.warn('category group name check failed', { error: msg });
     }
     return jsonUtf8({ exists: false });
