@@ -21,6 +21,7 @@ import { getMarkdownPreviewPage } from './views/markdown-preview';
 import { getCacheStatusPage, CacheStatusData, TableStatusEntry, UserContextInfo, RepoColorEntry, RepoGroupEntry } from './views/status';
 import { renderColumnStatsHtml } from './views/columnStats';
 import { getFunctionChangelogPage, type FunctionChangeRow } from './views/functionChangelog';
+
 import { computeColumnRelationStats, verifyColumnStats, type TableSchema, type Relation } from './utils/columnRelationStats';
 import { ensureDefaultWorkspace, getCurrentWorkspace, getUserWorkspaces, switchWorkspace } from './utils/workspace';
 import { getGitHubAccessToken, getGitHubLatestCommit, getGitHubCommitCount, getGitHubCommits, getGitHubCommitsForStats, computeCommitStats, getGitHubRepoOpenIssuesCount, getGitHubRepoCommitsByMonth, getGitHubRepoCommitsByDate, getGitHubRepoInfo, getGitHubTokenScopes, getGitHubUser, getGitHubUserEmail, getGitHubUserRepos, createGitHubRepo, GitHubTokenScopesError, buildRepoInstallationPermissionsMap, RepoInstallationPermissions, getGitHubUserInstallationsWithDiag, getGitHubInstallationRepos, getExternalServiceLinkedRepos, getSlackLinkedReposByWebhooks, sumCountsTotal, buildPastMonthRange, CommitDetail, toClientCommit } from './utils/github';
@@ -3645,42 +3646,49 @@ app.get('/function-changelog', authMiddleware, async (c) => {
     const repos = reposResult.results ?? [];
 
     let rows: FunctionChangeRow[] = [];
+    let availableFiles: string[] = [];
+    let availableFunctions: { file_path: string; function_name: string }[] = [];
+
     if (selectedRepoId !== null && !isNaN(selectedRepoId)) {
-      const result = await db.prepare(`
-        SELECT
-          cl.commit_at,
-          cl.commit_hash,
-          cl.subject,
-          m.file_path,
-          m.function_name,
-          COALESCE(f.purpose, '') AS purpose,
-          m.change_type,
-          m.lines_added,
-          m.lines_deleted,
-          i.impact_type,
-          i.severity,
-          i.contribution,
-          i.notes,
-          r.full_name AS repo_full_name
-        FROM ts_commit_function_map m
-        JOIN ts_commit_log cl ON m.repo_id = cl.repo_id AND m.commit_hash = cl.commit_hash
-        JOIN ts_repository r ON m.repo_id = r.id
-        LEFT JOIN ts_function_catalog f
-               ON m.repo_id = f.repo_id AND m.file_path = f.file_path AND m.function_name = f.function_name
-        LEFT JOIN ts_function_impact i
-               ON m.repo_id = i.repo_id AND m.commit_hash = i.commit_hash
-              AND m.file_path = i.file_path AND m.function_name = i.function_name
-        WHERE m.repo_id = ?
-        ORDER BY cl.commit_at DESC, m.file_path, m.function_name
-        LIMIT 1000
-      `).bind(selectedRepoId).all<FunctionChangeRow>();
-      rows = result.results ?? [];
+      const [rowResult, fileResult, funcResult] = await Promise.all([
+        db.prepare(`
+          SELECT
+            cl.commit_at, cl.commit_hash, cl.subject,
+            m.file_path, m.function_name,
+            COALESCE(f.purpose, '') AS purpose,
+            m.change_type, m.lines_added, m.lines_deleted,
+            i.impact_type, i.severity, i.contribution, i.notes,
+            r.full_name AS repo_full_name
+          FROM ts_commit_function_map m
+          JOIN ts_commit_log cl ON m.repo_id = cl.repo_id AND m.commit_hash = cl.commit_hash
+          JOIN ts_repository r ON m.repo_id = r.id
+          LEFT JOIN ts_function_catalog f
+                 ON m.repo_id = f.repo_id AND m.file_path = f.file_path AND m.function_name = f.function_name
+          LEFT JOIN ts_function_impact i
+                 ON m.repo_id = i.repo_id AND m.commit_hash = i.commit_hash
+                AND m.file_path = i.file_path AND m.function_name = i.function_name
+          WHERE m.repo_id = ?
+          ORDER BY cl.commit_at DESC, m.file_path, m.function_name
+          LIMIT 1000
+        `).bind(selectedRepoId).all<FunctionChangeRow>(),
+        db.prepare(
+          `SELECT DISTINCT file_path FROM ts_function_catalog WHERE repo_id = ? ORDER BY file_path`
+        ).bind(selectedRepoId).all<{ file_path: string }>(),
+        db.prepare(
+          `SELECT DISTINCT file_path, function_name FROM ts_function_catalog WHERE repo_id = ? ORDER BY file_path, function_name`
+        ).bind(selectedRepoId).all<{ file_path: string; function_name: string }>(),
+      ]);
+      rows = rowResult.results ?? [];
+      availableFiles = (fileResult.results ?? []).map(r => r.file_path);
+      availableFunctions = funcResult.results ?? [];
     }
 
     const html = getFunctionChangelogPage({
       rows,
       repos,
       selectedRepoId,
+      availableFiles,
+      availableFunctions,
       generatedAt: new Date().toISOString(),
     });
 
