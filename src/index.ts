@@ -100,6 +100,7 @@ const STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
   { name: 'repo_commit_index', migration: '0034', description: 'コミットインデックス（コミットハッシュ・順番・PR番号）', syncPolicy: 'manual' },
   { name: 'ai_chat_shares', migration: '0036', description: 'AIチャット共有Q&Aレコード', syncPolicy: 'auto' },
   { name: 'keyword_category_groups', migration: '0037', description: '検索キーワードカテゴリグループ定義', syncPolicy: 'auto' },
+  { name: 'keyword_multi_labels', migration: '0039', description: 'キーワードの複数カテゴリ分類', syncPolicy: 'auto' },
   { name: 'ts_repository',           migration: 'ts-catalog', description: '関数カタログ: リポジトリ一覧',             syncPolicy: 'manual' },
   { name: 'ts_function_catalog',     migration: 'ts-catalog', description: '関数カタログ: 関数定義一覧',               syncPolicy: 'manual' },
   { name: 'ts_commit_log',           migration: 'ts-catalog', description: '関数カタログ: コミット履歴',               syncPolicy: 'manual' },
@@ -639,6 +640,22 @@ INSERT OR REPLACE INTO table_column_keys (table_name, column_name, key_type, fk_
 INSERT OR REPLACE INTO table_column_keys (table_name, column_name, key_type, fk_target_table) VALUES
 ('keyword_category_groups', 'user_id', 'fk', 'user_sessions');`,
   '0038': `ALTER TABLE commit_search_keyword_labels ADD COLUMN classify_status TEXT;`,
+  '0039': `CREATE TABLE IF NOT EXISTS keyword_multi_labels (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id TEXT NOT NULL,
+  search_query TEXT NOT NULL,
+  categories TEXT NOT NULL DEFAULT '[]',
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE(user_id, search_query)
+);
+CREATE INDEX IF NOT EXISTS idx_keyword_multi_labels_user ON keyword_multi_labels(user_id);
+INSERT OR IGNORE INTO table_catalog (table_name, group_name, description, migration, sync_policy, display_order) VALUES
+('keyword_multi_labels', 'search', 'キーワードの複数カテゴリ分類', '0039', 'auto', 0);
+INSERT OR REPLACE INTO table_column_keys (table_name, column_name, key_type, fk_target_table) VALUES
+('keyword_multi_labels', 'id', 'pk', NULL);
+INSERT OR REPLACE INTO table_column_keys (table_name, column_name, key_type, fk_target_table) VALUES
+('keyword_multi_labels', 'user_id', 'fk', 'user_sessions');`,
   'ts-catalog': `CREATE TABLE IF NOT EXISTS ts_repository (
   id            INTEGER PRIMARY KEY AUTOINCREMENT,
   full_name     TEXT NOT NULL UNIQUE,
@@ -925,6 +942,7 @@ export const TABLE_COLUMN_KEYS: Record<string, ColumnKeyInfo> = {
   repo_commit_index: { commit_hash: 'pk', seq_num: 'idx', github_pr_number: 'idx', repo_name: 'idx' },
   ai_chat_shares: { id: 'pk', user_id: 'fk', user_hash: 'idx' },
   keyword_category_groups: { id: 'pk', user_id: 'fk' },
+  keyword_multi_labels: { id: 'pk', user_id: 'fk', search_query: 'idx' },
   ts_repository:          { id: 'pk', full_name: 'uk' },
   ts_function_catalog:    { id: 'pk', repo_id: 'fk', file_path: 'idx', function_name: 'idx' },
   ts_commit_log:          { id: 'pk', repo_id: 'fk', commit_hash: 'uk', commit_at: 'idx', pr_number: 'idx', branch_name: 'idx' },
@@ -987,6 +1005,7 @@ export const TABLE_GROUP_MAP: Record<string, string> = {
   ai_summary_link_access_log: 'ai',
   ai_chat_shares: 'ai',
   keyword_category_groups: 'search',
+  keyword_multi_labels: 'search',
   ts_repository:          'ts-catalog',
   ts_function_catalog:    'ts-catalog',
   ts_commit_log:          'ts-catalog',
@@ -1136,6 +1155,7 @@ export const COLUMN_FK_TARGETS: Record<string, Record<string, string>> = {
   repo_commit_index: { repo_name: 'installation_permissions' },
   ai_chat_shares: { user_id: 'user_sessions' },
   keyword_category_groups: { user_id: 'user_sessions' },
+  keyword_multi_labels: { user_id: 'user_sessions' },
 
   // ========================================================================
   // メタデータ系
@@ -1522,6 +1542,22 @@ export function shouldReclassifyKeyword(
   if (row.label !== 'uncategorized') return false;
   if (row.classify_status === 'ai_success') return false;
   return true;
+}
+
+/** デフォルトカテゴリとDBから取得したユーザー定義カテゴリをマージし重複除去して返す */
+export const DEFAULT_KEYWORD_LABELS = ['feature', 'ui', 'tech', 'database', 'bugfix', 'ops', 'uncategorized'] as const;
+
+export function mergeAllCategories(dbLabels: string[]): string[] {
+  const defaults = [...DEFAULT_KEYWORD_LABELS] as string[];
+  const merged = [...new Set([...defaults, ...dbLabels.filter((l) => l && l !== 'uncategorized')])];
+  // uncategorized を末尾に固定
+  if (!merged.includes('uncategorized')) merged.push('uncategorized');
+  else {
+    const idx = merged.indexOf('uncategorized');
+    merged.splice(idx, 1);
+    merged.push('uncategorized');
+  }
+  return merged;
 }
 
 interface ClassifyResult {
@@ -6350,6 +6386,84 @@ app.get('/api/repositories/search/keyword-stats', optionalAuthMiddleware, async 
       error: error instanceof Error ? error.message : 'Unknown error',
     });
     return jsonUtf8({ error: 'Failed to fetch keyword stats' }, 500);
+  }
+});
+
+app.get('/api/repositories/search/keyword-multi-labels', optionalAuthMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!user) return jsonUtf8({ error: 'Unauthorized' }, 401);
+  if (!c.env.DB) return jsonUtf8({ error: 'Database not available' }, 500);
+
+  const q = (c.req.query('q') ?? '').trim();
+  if (!q || q.length < 2) return jsonUtf8({ error: 'Query required' }, 400);
+
+  try {
+    const [multiRow, dbLabelRows] = await Promise.all([
+      c.env.DB.prepare(
+        `SELECT categories FROM keyword_multi_labels WHERE user_id = ? AND search_query = ?`
+      ).bind(user.sub, q).first<{ categories: string }>().catch(() => null),
+      c.env.DB.prepare(
+        `SELECT DISTINCT label FROM commit_search_keyword_labels WHERE user_id = ? AND label IS NOT NULL`
+      ).bind(user.sub).all<{ label: string }>().catch(() => ({ results: [] })),
+    ]);
+
+    let assignedCategories: string[] = [];
+    try {
+      assignedCategories = multiRow ? JSON.parse(multiRow.categories) : [];
+      if (!Array.isArray(assignedCategories)) assignedCategories = [];
+    } catch { assignedCategories = []; }
+
+    const dbLabels = (dbLabelRows.results ?? []).map((r) => r.label).filter(Boolean);
+    const allCategories = mergeAllCategories(dbLabels);
+
+    return jsonUtf8({
+      search_query: q,
+      assigned_categories: assignedCategories,
+      all_categories: allCategories,
+    });
+  } catch (error) {
+    logger.warn('Failed to fetch keyword multi-labels', {
+      query: q,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    return jsonUtf8({ error: 'Failed to fetch keyword multi-labels' }, 500);
+  }
+});
+
+app.post('/api/repositories/search/keyword-multi-labels', authMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!c.env.DB) return jsonUtf8({ error: 'Database not available' }, 500);
+
+  let body: { search_query?: string; categories?: string[] };
+  try { body = await c.req.json(); } catch { return jsonUtf8({ error: 'Invalid JSON' }, 400); }
+
+  const searchQuery = (body.search_query ?? '').trim();
+  if (!searchQuery || searchQuery.length < 2) return jsonUtf8({ error: '無効なパラメータです' }, 400);
+
+  const rawCats = Array.isArray(body.categories) ? body.categories : [];
+  const categories = [...new Set(rawCats.filter((c) => typeof c === 'string' && c.trim()))].map((c) => c.trim());
+  const categoriesJson = JSON.stringify(categories);
+
+  try {
+    try {
+      await c.env.DB.prepare(
+        `INSERT INTO keyword_multi_labels (user_id, search_query, categories, created_at, updated_at)
+         VALUES (?, ?, ?, datetime('now'), datetime('now'))
+         ON CONFLICT(user_id, search_query) DO UPDATE SET categories = excluded.categories, updated_at = datetime('now')`
+      ).bind(user.sub, searchQuery, categoriesJson).run();
+    } catch {
+      await c.env.DB.prepare(
+        `INSERT INTO keyword_multi_labels (user_id, search_query, categories, created_at, updated_at)
+         VALUES (?, ?, ?, datetime('now'), datetime('now'))`
+      ).bind(user.sub, searchQuery, categoriesJson).run();
+    }
+    return jsonUtf8({ ok: true, search_query: searchQuery, categories });
+  } catch (error) {
+    logger.warn('Failed to save keyword multi-labels', {
+      query: searchQuery,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    return jsonUtf8({ error: '保存に失敗しました' }, 500);
   }
 });
 
