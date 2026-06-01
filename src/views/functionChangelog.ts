@@ -306,17 +306,29 @@ export function getFunctionChangelogPage(input: FunctionChangelogInput): string 
     .kp-cat-btn.active {
       border-color: var(--accent); background: light-dark(#ddf4ff,#0d2136); color: var(--accent); font-weight: 600;
     }
-    .key-picker-body { overflow-y: auto; flex: 1; padding: 10px 14px; }
-    .kp-empty { font-size: 12px; color: var(--text-muted); padding: 20px 0; text-align: center; }
-    .kp-loading { font-size: 12px; color: var(--text-muted); padding: 20px 0; text-align: center; }
-    .kp-kw-list { display: flex; flex-wrap: wrap; gap: 6px; }
-    .kp-kw-btn {
-      font-size: 12px; padding: 4px 12px; border-radius: 14px;
-      border: 1px solid var(--border); background: light-dark(#f6f8fa,#21262d);
-      color: var(--text); cursor: pointer; white-space: nowrap;
-      transition: background 0.15s, color 0.15s, border-color 0.15s;
+    .key-picker-body { overflow-y: auto; flex: 1; padding: 0; }
+    .kp-empty { font-size: 12px; color: var(--text-muted); padding: 20px; text-align: center; }
+    .kp-loading { font-size: 12px; color: var(--text-muted); padding: 20px; text-align: center; }
+    .kp-grid-wrap { display: flex; gap: 0; }
+    .kp-grid-col { flex: 1; min-width: 0; }
+    .kp-grid-col table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    .kp-grid-col th {
+      background: var(--th-bg); color: var(--text-muted); text-align: left;
+      padding: 6px 10px; font-size: 10px; text-transform: uppercase; letter-spacing: 0.4px;
+      border-bottom: 1px solid var(--border); border-right: 1px solid var(--border);
+      position: sticky; top: 0;
     }
-    .kp-kw-btn:hover { border-color: var(--accent); background: light-dark(#ddf4ff,#0d2136); color: var(--accent); }
+    .kp-grid-col th:last-child { border-right: none; }
+    .kp-grid-col td { padding: 6px 10px; border-bottom: 1px solid var(--border); border-right: 1px solid var(--border); vertical-align: middle; }
+    .kp-grid-col td:last-child { border-right: none; }
+    .kp-grid-col tr:last-child td { border-bottom: none; }
+    .kp-grid-col tr { cursor: pointer; }
+    .kp-grid-col tr:hover td { background: light-dark(rgba(0,0,0,.04), rgba(255,255,255,.04)); }
+    .kp-hit-badge {
+      display: inline-block; background: light-dark(#e8f0fe,#1c2d4a); color: light-dark(#1a56db,#60a5fa);
+      border-radius: 10px; font-size: 10px; padding: 1px 7px; font-weight: 600; white-space: nowrap;
+    }
+    .kp-kw-cell { color: var(--text); word-break: break-all; }
     .btn-key-picker {
       padding: 5px 8px; border-radius: 6px; font-size: 13px;
       border: 1px solid var(--border); background: transparent;
@@ -835,30 +847,96 @@ export function getFunctionChangelogPage(input: FunctionChangelogInput): string 
       overlay.classList.remove('open');
     }
 
-    // ---- キーワードピッカー ----
+    // ---- キーワードピッカー（検索履歴モーダルと同一データ・同一グリッド描画） ----
     var keyPickerOverlay = document.getElementById('keyPickerOverlay');
     var keyPickerClose   = document.getElementById('keyPickerClose');
     var keyPickerCats    = document.getElementById('keyPickerCats');
     var keyPickerBody    = document.getElementById('keyPickerBody');
     var btnKeyPicker     = document.getElementById('btnKeyPicker');
 
-    var kpAllItems = [];
+    var kpAllItems   = [];
     var kpActiveLabel = '';
+    var KP_ROWS_PER_COL = 20;
+    var KP_MIN_COLS = 1;
+    var KP_MAX_COLS = 3;
 
-    function kpRenderKeywords(items) {
+    function kpDedupeAndSort(history) {
+      var map = {};
+      history.forEach(function(item) {
+        var key = item.search_query;
+        if (!map[key] || item.total_hits > map[key].total_hits) {
+          map[key] = { search_query: key, total_hits: item.total_hits, label: item.label || 'uncategorized' };
+        }
+      });
+      var arr = [];
+      for (var k in map) { if (Object.prototype.hasOwnProperty.call(map, k)) arr.push(map[k]); }
+      arr.sort(function(a, b) { return b.total_hits - a.total_hits; });
+      return arr;
+    }
+
+    function kpSyncFilterBar(items) {
+      var existing = new Set(Array.from(keyPickerCats.querySelectorAll('.kp-cat-btn[data-label]')).map(function(b) { return b.getAttribute('data-label'); }));
+      var uncatBtn = keyPickerCats.querySelector('[data-label="uncategorized"]');
+      items.forEach(function(item) {
+        var lbl = item.label;
+        if (!lbl || lbl === 'uncategorized' || existing.has(lbl)) return;
+        existing.add(lbl);
+        var btn = document.createElement('button');
+        btn.className = 'kp-cat-btn';
+        btn.setAttribute('data-label', lbl);
+        btn.setAttribute('data-label-name', lbl);
+        btn.textContent = lbl;
+        btn.addEventListener('click', kpCatClick);
+        if (uncatBtn) keyPickerCats.insertBefore(btn, uncatBtn);
+        else keyPickerCats.appendChild(btn);
+      });
+    }
+
+    function kpUpdateBadgeCounts(items) {
+      var counts = {};
+      var total = items.length;
+      items.forEach(function(item) {
+        var lbl = item.label || 'uncategorized';
+        counts[lbl] = (counts[lbl] || 0) + 1;
+      });
+      keyPickerCats.querySelectorAll('.kp-cat-btn').forEach(function(btn) {
+        var lbl = btn.getAttribute('data-label');
+        if (lbl === null) return;
+        var baseName = btn.getAttribute('data-label-name') || btn.textContent.replace(/\s*\(\d+\)$/, '').trim();
+        if (!btn.getAttribute('data-label-name')) btn.setAttribute('data-label-name', baseName);
+        var cnt = lbl === '' ? total : (counts[lbl] || 0);
+        btn.textContent = baseName + ' (' + cnt + ')';
+      });
+    }
+
+    function kpRenderGrid(items) {
       if (items.length === 0) {
         keyPickerBody.innerHTML = '<div class="kp-empty">このカテゴリにキーワードがありません</div>';
         return;
       }
-      var html = '<div class="kp-kw-list">';
-      items.forEach(function(item) {
-        html += '<button class="kp-kw-btn" data-kw="' + escHtml(item.search_query) + '">' + escHtml(item.search_query) + '</button>';
-      });
+      var numCols = Math.ceil(items.length / KP_ROWS_PER_COL);
+      if (numCols < KP_MIN_COLS) numCols = KP_MIN_COLS;
+      if (numCols > KP_MAX_COLS) numCols = KP_MAX_COLS;
+      var rowsPerCol = Math.ceil(items.length / numCols);
+      var html = '<div class="kp-grid-wrap">';
+      for (var c = 0; c < numCols; c++) {
+        var start = c * rowsPerCol;
+        var end = Math.min(start + rowsPerCol, items.length);
+        html += '<div class="kp-grid-col"><table>'
+          + '<thead><tr><th>総ヒット数</th><th>キーワード</th></tr></thead><tbody>';
+        for (var r = start; r < end; r++) {
+          html += '<tr data-kw="' + escHtml(items[r].search_query) + '">'
+            + '<td><span class="kp-hit-badge">' + items[r].total_hits + '</span></td>'
+            + '<td class="kp-kw-cell" title="' + escHtml(items[r].search_query) + '">' + escHtml(items[r].search_query) + '</td>'
+            + '</tr>';
+        }
+        html += '</tbody></table></div>';
+      }
       html += '</div>';
       keyPickerBody.innerHTML = html;
-      keyPickerBody.querySelectorAll('.kp-kw-btn').forEach(function(btn) {
-        btn.addEventListener('click', function() {
-          var kw = btn.getAttribute('data-kw');
+      keyPickerBody.querySelectorAll('tr[data-kw]').forEach(function(row) {
+        row.addEventListener('click', function() {
+          var kw = row.getAttribute('data-kw');
           if (kw) {
             modalSearch.value = kw;
             modalSearch.dispatchEvent(new Event('input'));
@@ -872,40 +950,24 @@ export function getFunctionChangelogPage(input: FunctionChangelogInput): string 
       var filtered = kpActiveLabel === ''
         ? kpAllItems
         : kpAllItems.filter(function(item) { return (item.label || 'uncategorized') === kpActiveLabel; });
-      kpRenderKeywords(filtered);
+      kpRenderGrid(filtered);
     }
 
     function openKeyPicker() {
       keyPickerOverlay.classList.add('open');
       if (kpAllItems.length > 0) { kpApplyFilter(); return; }
       keyPickerBody.innerHTML = '<div class="kp-loading">読み込み中…</div>';
-      fetch('/api/repositories/search/keyword-stats', { credentials: 'same-origin', cache: 'no-store' })
-        .then(function(res) { return res.json(); })
+      fetch('/api/repositories/search/history', { credentials: 'same-origin', cache: 'no-store' })
+        .then(function(res) { return res.ok ? res.json() : Promise.reject(); })
         .then(function(data) {
-          var items = (data.keywords || data.stats || data || []);
-          if (!Array.isArray(items)) items = [];
-          items.sort(function(a, b) { return (b.total_hits || 0) - (a.total_hits || 0); });
-          kpAllItems = items;
-          var existing = new Set(Array.from(keyPickerCats.querySelectorAll('.kp-cat-btn[data-label]')).map(function(b) { return b.getAttribute('data-label'); }));
-          var customLabels = new Set();
-          items.forEach(function(item) {
-            var lbl = item.label || 'uncategorized';
-            if (lbl !== 'uncategorized' && !existing.has(lbl)) customLabels.add(lbl);
-          });
-          var uncatBtn = keyPickerCats.querySelector('[data-label="uncategorized"]');
-          customLabels.forEach(function(lbl) {
-            var btn = document.createElement('button');
-            btn.className = 'kp-cat-btn';
-            btn.setAttribute('data-label', lbl);
-            btn.textContent = lbl;
-            if (uncatBtn) keyPickerCats.insertBefore(btn, uncatBtn);
-            else keyPickerCats.appendChild(btn);
-            btn.addEventListener('click', kpCatClick);
-          });
+          var raw = (data && data.history) ? data.history : [];
+          kpAllItems = kpDedupeAndSort(raw);
+          kpSyncFilterBar(kpAllItems);
+          kpUpdateBadgeCounts(kpAllItems);
           kpApplyFilter();
         })
         .catch(function() {
-          keyPickerBody.innerHTML = '<div class="kp-empty">キーワードの取得に失敗しました</div>';
+          keyPickerBody.innerHTML = '<div class="kp-empty">キーワード履歴の取得に失敗しました</div>';
         });
     }
 
