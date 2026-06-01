@@ -638,6 +638,7 @@ INSERT OR REPLACE INTO table_column_keys (table_name, column_name, key_type, fk_
 ('keyword_category_groups', 'id', 'pk', NULL);
 INSERT OR REPLACE INTO table_column_keys (table_name, column_name, key_type, fk_target_table) VALUES
 ('keyword_category_groups', 'user_id', 'fk', 'user_sessions');`,
+  '0038': `ALTER TABLE commit_search_keyword_labels ADD COLUMN classify_status TEXT;`,
   'ts-catalog': `CREATE TABLE IF NOT EXISTS ts_repository (
   id            INTEGER PRIMARY KEY AUTOINCREMENT,
   full_name     TEXT NOT NULL UNIQUE,
@@ -1507,6 +1508,20 @@ export function pickBestLabelFromResponse(raw: string, labels: string[]): string
   if (matched.length === 0) return 'uncategorized';
   if (matched.length === 1) return matched[0];
   return matched.reduce((best, l) => raw.indexOf(l) < raw.indexOf(best) ? l : best);
+}
+
+/**
+ * AI自動分類の再試行が必要かどうかを判定する。
+ * classify_status が 'ai_success' の場合は AI が正常終了済みとみなし再分類しない。
+ * タイムアウト・フォールバック使用時(ai_fallback)は再試行対象とする。
+ */
+export function shouldReclassifyKeyword(
+  row: { label: string; classify_status?: string | null } | null | undefined
+): boolean {
+  if (!row) return false;
+  if (row.label !== 'uncategorized') return false;
+  if (row.classify_status === 'ai_success') return false;
+  return true;
 }
 
 interface ClassifyResult {
@@ -5769,16 +5784,27 @@ app.get('/api/repositories/search/commits', optionalAuthMiddleware, async (c) =>
       logger.warn('keyword label insert failed', { query: q, error: labelErr instanceof Error ? labelErr.message : 'Unknown error' });
     }
 
-    // 既存の未分類キーワードも auto-classify モード時は再分類対象にする
+    // 既存の未分類キーワードも auto-classify モード時は再分類対象にする。
+    // classify_status='ai_success' の場合はAI正常終了済みとみなし再分類しない。
     if (!isNewKeyword && searchLabelMode === 'auto-classify') {
       try {
         const existingRow = await c.env.DB.prepare(
-          `SELECT label FROM commit_search_keyword_labels WHERE user_id = ? AND search_query = ?`
-        ).bind(user.sub, q).first<{ label: string }>();
-        if (existingRow?.label === 'uncategorized') {
+          `SELECT label, classify_status FROM commit_search_keyword_labels WHERE user_id = ? AND search_query = ?`
+        ).bind(user.sub, q).first<{ label: string; classify_status: string | null }>();
+        if (shouldReclassifyKeyword(existingRow)) {
           isNewKeyword = true;
         }
-      } catch { /* 判定失敗時は isNewKeyword のまま */ }
+      } catch {
+        // classify_status カラム未作成（マイグレーション0038未実行）の場合は旧来チェックにフォールバック
+        try {
+          const existingRowLegacy = await c.env.DB.prepare(
+            `SELECT label FROM commit_search_keyword_labels WHERE user_id = ? AND search_query = ?`
+          ).bind(user.sub, q).first<{ label: string }>();
+          if (existingRowLegacy?.label === 'uncategorized') {
+            isNewKeyword = true;
+          }
+        } catch { /* 判定失敗時は isNewKeyword のまま */ }
+      }
     }
 
     if (isNewKeyword && searchLabelMode === 'auto-classify') {
@@ -5806,24 +5832,34 @@ app.get('/api/repositories/search/commits', optionalAuthMiddleware, async (c) =>
               fallback: classifyResult.fallback ?? null,
             };
           }
-          if (autoLabel !== 'uncategorized') {
-            // 実際に分類に使ったモデル名（フォールバック時はフォールバックモデル）
+          {
+            // フォールバックなし＝プライマリモデルが正常応答 → ai_success（再分類不要）
+            // フォールバックあり＝プライマリがタイムアウト → ai_fallback（次回再試行可）
+            const classifyStatus = classifyResult.fallback ? 'ai_fallback' : 'ai_success';
             const usedModel = classifyResult.fallback ? classifyResult.fallback.model : classifyResult.model;
             let labelSaved = false;
             try {
               await c.env.DB.prepare(
-                `UPDATE commit_search_keyword_labels SET label = ?, ai_model = ?, updated_at = datetime('now') WHERE user_id = ? AND search_query = ?`
-              ).bind(autoLabel, usedModel, user.sub, q).run();
+                `UPDATE commit_search_keyword_labels SET label = ?, ai_model = ?, classify_status = ?, updated_at = datetime('now') WHERE user_id = ? AND search_query = ?`
+              ).bind(autoLabel, usedModel, classifyStatus, user.sub, q).run();
               labelSaved = true;
             } catch {
-              // ai_model カラム未作成（マイグレーション未実行）の場合はカラムなしで再試行
+              // classify_status カラム未作成（マイグレーション0038未実行）の場合は ai_model のみで再試行
               try {
                 await c.env.DB.prepare(
-                  `UPDATE commit_search_keyword_labels SET label = ?, updated_at = datetime('now') WHERE user_id = ? AND search_query = ?`
-                ).bind(autoLabel, user.sub, q).run();
+                  `UPDATE commit_search_keyword_labels SET label = ?, ai_model = ?, updated_at = datetime('now') WHERE user_id = ? AND search_query = ?`
+                ).bind(autoLabel, usedModel, user.sub, q).run();
                 labelSaved = true;
-              } catch (updateErr) {
-                logger.warn('auto-classify label update failed', { query: q, error: updateErr instanceof Error ? updateErr.message : 'Unknown error' });
+              } catch {
+                // ai_model カラムも未作成の場合は label のみで再試行
+                try {
+                  await c.env.DB.prepare(
+                    `UPDATE commit_search_keyword_labels SET label = ?, updated_at = datetime('now') WHERE user_id = ? AND search_query = ?`
+                  ).bind(autoLabel, user.sub, q).run();
+                  labelSaved = true;
+                } catch (updateErr) {
+                  logger.warn('auto-classify label update failed', { query: q, error: updateErr instanceof Error ? updateErr.message : 'Unknown error' });
+                }
               }
             }
             if (!labelSaved) {
@@ -5862,9 +5898,16 @@ app.post('/api/repositories/search/keyword-label', authMiddleware, async (c) => 
   const label = (body.label ?? '').trim();
   if (!searchQuery || !label) return jsonUtf8({ error: '無効なパラメータです' }, 400);
   try {
-    await db.prepare(
-      `INSERT INTO commit_search_keyword_labels (user_id, search_query, label, created_at, updated_at) VALUES (?, ?, ?, datetime('now'), datetime('now')) ON CONFLICT(user_id, search_query) DO UPDATE SET label = excluded.label, updated_at = excluded.updated_at`
-    ).bind(user.sub, searchQuery, label).run();
+    try {
+      await db.prepare(
+        `INSERT INTO commit_search_keyword_labels (user_id, search_query, label, created_at, updated_at) VALUES (?, ?, ?, datetime('now'), datetime('now')) ON CONFLICT(user_id, search_query) DO UPDATE SET label = excluded.label, classify_status = 'manual', updated_at = excluded.updated_at`
+      ).bind(user.sub, searchQuery, label).run();
+    } catch {
+      // classify_status カラム未作成（マイグレーション0038未実行）の場合はカラムなしで再試行
+      await db.prepare(
+        `INSERT INTO commit_search_keyword_labels (user_id, search_query, label, created_at, updated_at) VALUES (?, ?, ?, datetime('now'), datetime('now')) ON CONFLICT(user_id, search_query) DO UPDATE SET label = excluded.label, updated_at = excluded.updated_at`
+      ).bind(user.sub, searchQuery, label).run();
+    }
     return jsonUtf8({ ok: true, search_query: searchQuery, label });
   } catch (error) {
     logger.warn('keyword label upsert failed', { searchQuery, error: error instanceof Error ? error.message : 'Unknown error' });
