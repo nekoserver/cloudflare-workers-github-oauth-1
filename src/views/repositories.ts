@@ -6302,43 +6302,48 @@ export function getRepositoriesPage(user: {
           classifyBtn.addEventListener('click', function() { showLabelClassificationModal(query); });
         }
 
-        // 複数カテゴリ数バッジを取得・更新（onclick で上書きしリスナー重複防止）
-        var kmlBadgeData = { assigned: [], all: [] };
-        function kmlLoadAndBindBadge(q) {
-          fetch('/api/repositories/search/keyword-multi-labels?q=' + encodeURIComponent(q), { credentials: 'same-origin', cache: 'no-store' })
+        // 複数カテゴリ数バッジ: クリック時は必ずDBを参照して最新状態でモーダルを開く
+        (function() {
+          var badgeBtn = document.getElementById('kmlCountBadge');
+          if (!badgeBtn) return;
+
+          // onclick をパネル生成直後に即時セット（fetch完了を待たない）
+          // 毎回 API を呼んで最新の DB 登録内容を取得し、モーダルのバッジ選択状況に反映する
+          badgeBtn.onclick = function() {
+            var numEl = document.getElementById('kmlCountNum');
+            if (numEl) numEl.textContent = '(…)';
+            fetch('/api/repositories/search/keyword-multi-labels?q=' + encodeURIComponent(query), { credentials: 'same-origin', cache: 'no-store' })
+              .then(function(res) { return res.ok ? res.json() : null; })
+              .then(function(d) {
+                if (!d) return;
+                var assigned = Array.isArray(d.assigned_categories) ? d.assigned_categories : [];
+                var all = Array.isArray(d.all_categories) ? d.all_categories : [];
+                if (numEl) numEl.textContent = '(' + assigned.length + '/' + all.length + ')';
+                window.showKmlModal(query, assigned, all);
+              })
+              .catch(function() {
+                var numEl2 = document.getElementById('kmlCountNum');
+                if (numEl2) numEl2.textContent = '(-/-)';
+              });
+          };
+
+          // 初期カウント表示の取得（クリック時の fetch とは独立）
+          fetch('/api/repositories/search/keyword-multi-labels?q=' + encodeURIComponent(query), { credentials: 'same-origin', cache: 'no-store' })
             .then(function(res) { return res.ok ? res.json() : null; })
             .then(function(d) {
               if (!d) return;
-              kmlBadgeData.assigned = Array.isArray(d.assigned_categories) ? d.assigned_categories : [];
-              kmlBadgeData.all = Array.isArray(d.all_categories) ? d.all_categories : [];
               var numEl = document.getElementById('kmlCountNum');
-              if (numEl) numEl.textContent = '(' + kmlBadgeData.assigned.length + '/' + kmlBadgeData.all.length + ')';
-              var badgeBtn = document.getElementById('kmlCountBadge');
-              if (badgeBtn) {
-                badgeBtn.onclick = function() {
-                  var numEl2 = document.getElementById('kmlCountNum');
-                  if (numEl2) numEl2.textContent = '(…)';
-                  fetch('/api/repositories/search/keyword-multi-labels?q=' + encodeURIComponent(q), { credentials: 'same-origin', cache: 'no-store' })
-                    .then(function(res2) { return res2.ok ? res2.json() : null; })
-                    .then(function(d2) {
-                      if (!d2) return;
-                      kmlBadgeData.assigned = Array.isArray(d2.assigned_categories) ? d2.assigned_categories : [];
-                      kmlBadgeData.all = Array.isArray(d2.all_categories) ? d2.all_categories : [];
-                      if (numEl2) numEl2.textContent = '(' + kmlBadgeData.assigned.length + '/' + kmlBadgeData.all.length + ')';
-                      showKmlModal(q, kmlBadgeData.assigned, kmlBadgeData.all);
-                    })
-                    .catch(function() {
-                      if (numEl2) numEl2.textContent = '(-/-)';
-                    });
-                };
+              if (numEl) {
+                var n = Array.isArray(d.assigned_categories) ? d.assigned_categories.length : 0;
+                var t = Array.isArray(d.all_categories) ? d.all_categories.length : 0;
+                numEl.textContent = '(' + n + '/' + t + ')';
               }
             })
             .catch(function() {
               var numEl = document.getElementById('kmlCountNum');
               if (numEl) numEl.textContent = '(-/-)';
             });
-        }
-        kmlLoadAndBindBadge(query);
+        }());
 
         fetch('/api/repositories/search/keyword-stats?q=' + encodeURIComponent(query), { credentials: 'same-origin', cache: 'no-store' })
           .then(function(res) { return res.ok ? res.json() : null; })
