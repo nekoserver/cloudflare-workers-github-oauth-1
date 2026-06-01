@@ -884,6 +884,12 @@ export function getRepositoriesPage(user: {
     .history-grid-col tr.history-row-dimmed td { color: #bbb !important; }
     .hist-view-toggle-btn { font-size:11px; padding:3px 10px; border-radius:12px; border:1px solid var(--border-color); background:var(--bg-secondary); color:var(--text-muted); cursor:pointer; transition:background .15s,color .15s,border-color .15s; }
     .hist-view-toggle-btn:hover { border-color:#3b82f6; color:#3b82f6; }
+    .hist-row-count-display { font-size:11px; color:var(--text-muted); margin-top:4px; display:flex; align-items:center; gap:6px; min-height:16px; }
+    .hist-row-count-ok { font-size:10px; padding:1px 7px; border-radius:4px; background:#dcfce7; color:#166534; font-weight:700; }
+    [data-theme="dark"] .hist-row-count-ok { background:rgba(34,197,94,0.18); color:#86efac; }
+    .hist-row-count-ng { font-size:10px; padding:1px 7px; border-radius:4px; background:#fce7f3; color:#9d174d; font-weight:700; }
+    [data-theme="dark"] .hist-row-count-ng { background:rgba(236,72,153,0.15); color:#f9a8d4; }
+    .hist-no-cell { color:var(--text-muted); font-size:10px; text-align:right; white-space:nowrap; }
     .hist-1col-table { width:100%; border-collapse:collapse; font-size:12px; color:var(--text-primary,#c9d1d9); }
     .hist-1col-table th { background:var(--bg-secondary); color:var(--text-muted); text-align:left; padding:6px 10px; font-size:10px; text-transform:uppercase; letter-spacing:.4px; border-bottom:1px solid var(--border-color); position:sticky; top:0; z-index:1; }
     .hist-1col-table td { padding:6px 10px; border-bottom:1px solid var(--border-color); vertical-align:middle; }
@@ -2070,8 +2076,9 @@ export function getRepositoriesPage(user: {
       </div>
       <div id="categoryGroupHint" style="display:none;padding:4px 24px 4px;font-size:12px;"></div>
       <div id="categoryGroupList" style="display:none;padding:2px 24px 8px;font-size:12px;"></div>
-      <div id="histViewToggleBar" style="padding:5px 24px;border-bottom:1px solid var(--border-color);">
+      <div id="histViewToggleBar" style="padding:5px 24px 6px;border-bottom:1px solid var(--border-color);">
         <button id="histViewToggleBtn" class="hist-view-toggle-btn" type="button">一列表示に切り替える</button>
+        <div id="histRowCountDisplay" class="hist-row-count-display"></div>
       </div>
       <div class="history-modal-body" id="historyModalBody">
       </div>
@@ -5153,6 +5160,7 @@ export function getRepositoriesPage(user: {
       var hRepoSelect = document.getElementById('historyRepoSelect');
       var hIncrSearchToggle = document.getElementById('historyIncrSearchToggle');
       var historyLabelFilter = document.getElementById('historyLabelFilter');
+      var histRowCountDisplay = document.getElementById('histRowCountDisplay');
       if (!historyRow || !historyOpenBtn || !historyModal || !historyModalBody) return;
 
       var isIncrementalSearchEnabled = getCookie('history_incr_search') === 'on';
@@ -5399,9 +5407,9 @@ export function getRepositoriesPage(user: {
           catThLabel = 'カテゴリ ▼';
         }
         var html = '<table class="hist-1col-table">'
-          + '<colgroup><col style="width:52px"><col style="width:72px"><col style="width:28%"><col></colgroup>'
-          + '<thead><tr><th>当該</th><th>総ヒット数</th><th>キーワード</th><th class="hist-cat-th">' + catThLabel + '</th></tr></thead><tbody>';
-        items.forEach(function(item) {
+          + '<colgroup><col style="width:32px"><col style="width:52px"><col style="width:72px"><col style="width:28%"><col></colgroup>'
+          + '<thead><tr><th>No.</th><th>当該</th><th>総ヒット数</th><th>キーワード</th><th class="hist-cat-th">' + catThLabel + '</th></tr></thead><tbody>';
+        items.forEach(function(item, idx) {
           var rowClasses = [];
           if (highlightKey && item.search_query === highlightKey) {
             rowClasses.push(highlightType === 'new' ? 'history-row-new' : 'history-row-updated');
@@ -5421,7 +5429,8 @@ export function getRepositoriesPage(user: {
             var cls = lbl === 'uncategorized' ? 'hist-label-badge-uncat' : 'hist-label-badge';
             catsHtml = '<span class="' + cls + '">' + escHtml(lbl) + '</span>';
           }
-          html += '<tr' + rowClass + ' data-query="' + escHtml(kw) + '">'
+          html += '<tr' + rowClass + ' data-query="' + escHtml(kw) + '" data-no="' + (idx + 1) + '">'
+            + '<td class="hist-no-cell">' + (idx + 1) + '</td>'
             + '<td>' + repoHit + '</td>'
             + '<td><span class="history-hit-badge">' + item.total_hits + '</span></td>'
             + '<td title="' + escHtml(kw) + '">' + escHtml(kw) + '</td>'
@@ -6205,7 +6214,7 @@ export function getRepositoriesPage(user: {
           var start = c * rowsPerCol;
           var end = Math.min(start + rowsPerCol, items.length);
           html += '<div class="history-grid-col"><table>'
-            + '<thead><tr><th>当該</th><th>総ヒット数</th><th>キーワード</th></tr></thead><tbody>';
+            + '<thead><tr><th>No.</th><th>当該</th><th>総ヒット数</th><th>キーワード</th></tr></thead><tbody>';
           for (var r = start; r < end; r++) {
             var rowClasses = [];
             if (highlightKey && items[r].search_query === highlightKey) {
@@ -6216,14 +6225,15 @@ export function getRepositoriesPage(user: {
             }
             var rowClass = rowClasses.length > 0 ? ' class="' + rowClasses.join(' ') + '"' : '';
             var repoHit = (items[r].repoHitCount != null) ? items[r].repoHitCount : '-';
-            html += '<tr' + rowClass + ' data-query="' + escHtml(items[r].search_query) + '">'
+            html += '<tr' + rowClass + ' data-query="' + escHtml(items[r].search_query) + '" data-no="' + (r + 1) + '">'
+              + '<td class="hist-no-cell">' + (r + 1) + '</td>'
               + '<td>' + repoHit + '</td>'
               + '<td><span class="history-hit-badge">' + items[r].total_hits + '</span></td>'
               + '<td title="' + escHtml(items[r].search_query) + '">' + escHtml(items[r].search_query) + '</td>'
               + '</tr>';
           }
           if (start >= items.length) {
-            html += '<tr><td colspan="3" style="color:var(--text-muted);text-align:center;padding:20px 0;font-size:12px;">&mdash;</td></tr>';
+            html += '<tr><td colspan="4" style="color:var(--text-muted);text-align:center;padding:20px 0;font-size:12px;">&mdash;</td></tr>';
           }
           html += '</tbody></table></div>';
         }
@@ -6580,6 +6590,17 @@ export function getRepositoriesPage(user: {
           }
         }
         applyRepoHighlight();
+        updateRowCountDisplay(displayItems.length, baseItems.length);
+      }
+
+      function updateRowCountDisplay(displayed, base) {
+        if (!histRowCountDisplay) return;
+        var renderedRows = historyModalBody.querySelectorAll('tr[data-query]').length;
+        var isOk = renderedRows === displayed;
+        var statusBadge = isOk
+          ? '<span class="hist-row-count-ok">OK</span>'
+          : '<span class="hist-row-count-ng">NG</span>';
+        histRowCountDisplay.innerHTML = displayed + '/' + base + ' 行を表示中 ' + statusBadge;
       }
 
       function openCategoryFilterModal(items) {
