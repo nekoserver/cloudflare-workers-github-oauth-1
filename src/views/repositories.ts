@@ -6303,23 +6303,23 @@ export function getRepositoriesPage(user: {
         }
 
         // 複数カテゴリ数バッジ: クリック時は必ずDBを参照して最新状態でモーダルを開く
-        (function() {
+        // panel.innerHTML が再生成される箇所からも呼べるよう名前付き関数に切り出す
+        function setupKmlBadge(q) {
           var badgeBtn = document.getElementById('kmlCountBadge');
           if (!badgeBtn) return;
 
           // onclick をパネル生成直後に即時セット（fetch完了を待たない）
-          // 毎回 API を呼んで最新の DB 登録内容を取得し、モーダルのバッジ選択状況に反映する
           badgeBtn.onclick = function() {
             var numEl = document.getElementById('kmlCountNum');
             if (numEl) numEl.textContent = '(…)';
-            fetch('/api/repositories/search/keyword-multi-labels?q=' + encodeURIComponent(query), { credentials: 'same-origin', cache: 'no-store' })
+            fetch('/api/repositories/search/keyword-multi-labels?q=' + encodeURIComponent(q), { credentials: 'same-origin', cache: 'no-store' })
               .then(function(res) { return res.ok ? res.json() : null; })
               .then(function(d) {
                 if (!d) return;
                 var assigned = Array.isArray(d.assigned_categories) ? d.assigned_categories : [];
                 var all = Array.isArray(d.all_categories) ? d.all_categories : [];
                 if (numEl) numEl.textContent = '(' + assigned.length + '/' + all.length + ')';
-                window.showKmlModal(query, assigned, all);
+                window.showKmlModal(q, assigned, all);
               })
               .catch(function() {
                 var numEl2 = document.getElementById('kmlCountNum');
@@ -6328,7 +6328,7 @@ export function getRepositoriesPage(user: {
           };
 
           // 初期カウント表示の取得（クリック時の fetch とは独立）
-          fetch('/api/repositories/search/keyword-multi-labels?q=' + encodeURIComponent(query), { credentials: 'same-origin', cache: 'no-store' })
+          fetch('/api/repositories/search/keyword-multi-labels?q=' + encodeURIComponent(q), { credentials: 'same-origin', cache: 'no-store' })
             .then(function(res) { return res.ok ? res.json() : null; })
             .then(function(d) {
               if (!d) return;
@@ -6343,7 +6343,8 @@ export function getRepositoriesPage(user: {
               var numEl = document.getElementById('kmlCountNum');
               if (numEl) numEl.textContent = '(-/-)';
             });
-        }());
+        }
+        setupKmlBadge(query);
 
         fetch('/api/repositories/search/keyword-stats?q=' + encodeURIComponent(query), { credentials: 'same-origin', cache: 'no-store' })
           .then(function(res) { return res.ok ? res.json() : null; })
@@ -6415,7 +6416,7 @@ export function getRepositoriesPage(user: {
               if (classifyBtn2) {
                 classifyBtn2.addEventListener('click', function() { showLabelClassificationModal(query); });
               }
-              kmlLoadAndBindBadge(query);
+              setupKmlBadge(query);
               panel.querySelectorAll('[data-cokey]').forEach(function(el) {
                 el.addEventListener('click', function() {
                   var cokey = el.getAttribute('data-cokey');
