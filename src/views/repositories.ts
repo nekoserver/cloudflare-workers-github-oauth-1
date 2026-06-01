@@ -5219,7 +5219,12 @@ export function getRepositoriesPage(user: {
           syncFilterBarFromItems(currentItems);
           updateLabelBadgeCounts(currentItems);
           activateAllLabels();
-          refreshGrid(null, null);
+          // リポジトリフィルターが選択中の場合は repoHitCount を再適用してから描画
+          if (selectedRepo) {
+            loadRepoFilter(selectedRepo);
+          } else {
+            refreshGrid(null, null);
+          }
           var pendingAuto = window.__pendingAutoLabel;
           window.__pendingAutoLabel = null;
           if (pendingAuto && pendingAuto.label && pendingAuto.label !== 'uncategorized') {
@@ -6510,8 +6515,13 @@ export function getRepositoriesPage(user: {
         if (!found) {
           currentItems.push({ search_query: query, total_hits: totalHits, repoHitCount: null, label: label || 'uncategorized' });
         }
-        currentItems.sort(function(a, b) { return b.total_hits - a.total_hits; });
-        refreshGrid(query, highlightType);
+        // リポジトリフィルター選択中は repoHitCount を再取得して再描画
+        if (selectedRepo) {
+          loadRepoFilter(selectedRepo);
+        } else {
+          currentItems.sort(function(a, b) { return b.total_hits - a.total_hits; });
+          refreshGrid(query, highlightType);
+        }
       }
 
       function executeModalSearch() {
