@@ -882,6 +882,22 @@ export function getRepositoriesPage(user: {
     .history-grid-col tr.selected td { background: rgba(102,126,234,0.12); }
     .history-grid-col tr.history-row-cokey td { color: var(--accent-color, #48bb78) !important; font-weight: 700; }
     .history-grid-col tr.history-row-dimmed td { color: #bbb !important; }
+    .hist-view-toggle-btn { font-size:11px; padding:3px 10px; border-radius:12px; border:1px solid var(--border-color); background:var(--bg-secondary); color:var(--text-muted); cursor:pointer; transition:background .15s,color .15s,border-color .15s; }
+    .hist-view-toggle-btn:hover { border-color:#3b82f6; color:#3b82f6; }
+    .hist-1col-table { width:100%; border-collapse:collapse; font-size:12px; }
+    .hist-1col-table th { background:var(--bg-secondary); color:var(--text-muted); text-align:left; padding:6px 10px; font-size:10px; text-transform:uppercase; letter-spacing:.4px; border-bottom:1px solid var(--border-color); position:sticky; top:0; }
+    .hist-1col-table td { padding:6px 10px; border-bottom:1px solid var(--border-color); vertical-align:middle; }
+    .hist-1col-table tr { cursor:pointer; }
+    .hist-1col-table tr:hover td { background:var(--hover-bg,rgba(0,0,0,.04)); }
+    .hist-1col-table tr.selected td { background:rgba(102,126,234,0.12); }
+    .hist-1col-table tr.history-row-new td { animation:historyRowFlash 1.5s ease; }
+    .hist-1col-table tr.history-row-updated td { animation:historyRowUpdate 1.5s ease; }
+    .hist-1col-table tr.history-row-cokey td { color:var(--accent-color,#48bb78) !important; font-weight:700; }
+    .hist-1col-table tr.history-row-dimmed td { color:#bbb !important; }
+    .hist-1col-cats { display:flex; flex-wrap:wrap; gap:4px; }
+    .hist-label-badge { font-size:10px; padding:2px 8px; border-radius:10px; border:1px solid #3b82f6; background:#dbeafe; color:#1d4ed8; font-weight:600; white-space:nowrap; }
+    [data-theme="dark"] .hist-label-badge { border-color:#60a5fa; background:rgba(59,130,246,0.25); color:#93c5fd; }
+    .hist-label-badge-uncat { font-size:10px; padding:2px 8px; border-radius:10px; border:1px solid var(--border-color); background:var(--bg-secondary); color:var(--text-muted); white-space:nowrap; }
     .history-incr-toggle { font-size:12px; padding:4px 10px; border-radius:6px; border:1px solid var(--border-color); background:var(--bg-secondary); color:var(--text-muted); cursor:pointer; white-space:nowrap; }
     .history-incr-toggle.active { background:var(--accent-color,#48bb78); color:#fff; border-color:var(--accent-color,#48bb78); }
     .history-label-mode-toggle { font-size:12px; padding:4px 10px; border-radius:6px; border:1px solid var(--border-color); background:var(--bg-secondary); color:var(--text-muted); cursor:pointer; white-space:nowrap; transition:background .15s,color .15s,border-color .15s; }
@@ -2036,6 +2052,9 @@ export function getRepositoriesPage(user: {
       </div>
       <div id="categoryGroupHint" style="display:none;padding:4px 24px 4px;font-size:12px;"></div>
       <div id="categoryGroupList" style="display:none;padding:2px 24px 8px;font-size:12px;"></div>
+      <div id="histViewToggleBar" style="padding:5px 24px;border-bottom:1px solid var(--border-color);">
+        <button id="histViewToggleBtn" class="hist-view-toggle-btn" type="button">一列表示に切り替える</button>
+      </div>
       <div class="history-modal-body" id="historyModalBody">
       </div>
       <div id="keywordDetailPanel" style="display:none"></div>
@@ -5307,6 +5326,60 @@ export function getRepositoriesPage(user: {
       }
 
       var activeLabels = new Set();
+      var histViewMode = 'multi';
+      var histMultiLabelsMap = null;
+
+      function histLoadMultiLabels(callback) {
+        if (histMultiLabelsMap !== null) { callback(); return; }
+        fetch('/api/repositories/search/keyword-multi-labels-all', { credentials: 'same-origin', cache: 'no-store' })
+          .then(function(res) { return res.ok ? res.json() : null; })
+          .then(function(d) {
+            histMultiLabelsMap = {};
+            if (d && Array.isArray(d.items)) {
+              d.items.forEach(function(entry) {
+                histMultiLabelsMap[entry.search_query] = Array.isArray(entry.categories) ? entry.categories : [];
+              });
+            }
+            callback();
+          })
+          .catch(function() { histMultiLabelsMap = {}; callback(); });
+      }
+
+      function renderGrid1Col(items, highlightKey, highlightType) {
+        if (items.length === 0) return '<div class="search-empty">検索履歴がありません。</div>';
+        var html = '<table class="hist-1col-table">'
+          + '<thead><tr><th>当該</th><th>総ヒット数</th><th>キーワード</th><th>カテゴリ</th></tr></thead><tbody>';
+        items.forEach(function(item) {
+          var rowClasses = [];
+          if (highlightKey && item.search_query === highlightKey) {
+            rowClasses.push(highlightType === 'new' ? 'history-row-new' : 'history-row-updated');
+          }
+          if (selectedKeyword && item.search_query === selectedKeyword) rowClasses.push('selected');
+          var rowClass = rowClasses.length > 0 ? ' class="' + rowClasses.join(' ') + '"' : '';
+          var repoHit = (item.repoHitCount != null) ? item.repoHitCount : '-';
+          var kw = item.search_query;
+          var catsHtml = '';
+          if (histMultiLabelsMap !== null && histMultiLabelsMap[kw] && histMultiLabelsMap[kw].length > 0) {
+            histMultiLabelsMap[kw].forEach(function(cat) {
+              var cls = cat === 'uncategorized' ? 'hist-label-badge-uncat' : 'hist-label-badge';
+              catsHtml += '<span class="' + cls + '">' + escHtml(cat) + '</span> ';
+            });
+          } else {
+            var lbl = item.label || 'uncategorized';
+            var cls = lbl === 'uncategorized' ? 'hist-label-badge-uncat' : 'hist-label-badge';
+            catsHtml = '<span class="' + cls + '">' + escHtml(lbl) + '</span>';
+          }
+          html += '<tr' + rowClass + ' data-query="' + escHtml(kw) + '">'
+            + '<td>' + repoHit + '</td>'
+            + '<td><span class="history-hit-badge">' + item.total_hits + '</span></td>'
+            + '<td title="' + escHtml(kw) + '">' + escHtml(kw) + '</td>'
+            + '<td><div class="hist-1col-cats">' + catsHtml + '</div></td>'
+            + '</tr>';
+        });
+        html += '</tbody></table>';
+        return html;
+      }
+
       var searchLabelMode = (function() {
         var v = getCookie('user_search_label_mode');
         return (v === 'manual-modal' || v === 'auto-classify') ? v : 'uncategorized';
@@ -6395,7 +6468,9 @@ export function getRepositoriesPage(user: {
       function refreshGrid(highlightKey, highlightType) {
         updateTitle();
         var displayItems = getIncrementalFilteredItems();
-        historyModalBody.innerHTML = renderGrid(displayItems, highlightKey, highlightType);
+        historyModalBody.innerHTML = histViewMode === 'single'
+          ? renderGrid1Col(displayItems, highlightKey, highlightType)
+          : renderGrid(displayItems, highlightKey, highlightType);
         historyModalBody.querySelectorAll('tr[data-query]').forEach(function(row) {
           row.addEventListener('click', function() {
             var q = row.getAttribute('data-query');
@@ -6554,6 +6629,21 @@ export function getRepositoriesPage(user: {
             + escHtml(r) + '</option>';
         });
         hRepoSelect.innerHTML = opts;
+      }
+
+      var histViewToggleBtn = document.getElementById('histViewToggleBtn');
+      if (histViewToggleBtn) {
+        histViewToggleBtn.addEventListener('click', function() {
+          if (histViewMode === 'multi') {
+            histViewMode = 'single';
+            histViewToggleBtn.textContent = '複数列表示に切り替える';
+            histLoadMultiLabels(function() { refreshGrid(null, null); });
+          } else {
+            histViewMode = 'multi';
+            histViewToggleBtn.textContent = '一列表示に切り替える';
+            refreshGrid(null, null);
+          }
+        });
       }
 
       historyOpenBtn.addEventListener('click', function() {
