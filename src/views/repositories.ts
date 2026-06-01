@@ -884,8 +884,8 @@ export function getRepositoriesPage(user: {
     .history-grid-col tr.history-row-dimmed td { color: #bbb !important; }
     .hist-view-toggle-btn { font-size:11px; padding:3px 10px; border-radius:12px; border:1px solid var(--border-color); background:var(--bg-secondary); color:var(--text-muted); cursor:pointer; transition:background .15s,color .15s,border-color .15s; }
     .hist-view-toggle-btn:hover { border-color:#3b82f6; color:#3b82f6; }
-    .hist-1col-table { width:100%; border-collapse:collapse; font-size:12px; }
-    .hist-1col-table th { background:var(--bg-secondary); color:var(--text-muted); text-align:left; padding:6px 10px; font-size:10px; text-transform:uppercase; letter-spacing:.4px; border-bottom:1px solid var(--border-color); position:sticky; top:0; }
+    .hist-1col-table { width:100%; border-collapse:collapse; font-size:12px; color:var(--text-primary,#c9d1d9); }
+    .hist-1col-table th { background:var(--bg-secondary); color:var(--text-muted); text-align:left; padding:6px 10px; font-size:10px; text-transform:uppercase; letter-spacing:.4px; border-bottom:1px solid var(--border-color); position:sticky; top:0; z-index:1; }
     .hist-1col-table td { padding:6px 10px; border-bottom:1px solid var(--border-color); vertical-align:middle; }
     .hist-1col-table tr { cursor:pointer; }
     .hist-1col-table tr:hover td { background:var(--hover-bg,rgba(0,0,0,.04)); }
@@ -5348,6 +5348,7 @@ export function getRepositoriesPage(user: {
       function renderGrid1Col(items, highlightKey, highlightType) {
         if (items.length === 0) return '<div class="search-empty">検索履歴がありません。</div>';
         var html = '<table class="hist-1col-table">'
+          + '<colgroup><col style="width:52px"><col style="width:72px"><col style="width:28%"><col></colgroup>'
           + '<thead><tr><th>当該</th><th>総ヒット数</th><th>キーワード</th><th>カテゴリ</th></tr></thead><tbody>';
         items.forEach(function(item) {
           var rowClasses = [];
@@ -6105,7 +6106,12 @@ export function getRepositoriesPage(user: {
             });
           }
         }
-        items = items.slice().sort(function(a, b) { return b.total_hits - a.total_hits; });
+        items = items.slice().sort(function(a, b) {
+          if (selectedRepo && a.repoHitCount != null && b.repoHitCount != null) {
+            return b.repoHitCount - a.repoHitCount;
+          }
+          return b.total_hits - a.total_hits;
+        });
         if (!isIncrementalSearchEnabled) return items;
         var val = hSearchInput ? hSearchInput.value.trim().toLowerCase() : '';
         if (!val) return items;
