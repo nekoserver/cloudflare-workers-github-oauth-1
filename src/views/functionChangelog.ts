@@ -441,6 +441,7 @@ export function getFunctionChangelogPage(input: FunctionChangelogInput): string 
     .purpose-item:hover { background: light-dark(#f0f6ff,#1c2333); }
     .purpose-item.active { background: light-dark(#ddf4ff,#0d2136); border-left: 3px solid var(--accent); }
     .purpose-item-empty { color: var(--text-muted); font-style: italic; }
+    .kw-highlight { background: rgba(255,230,80,0.45); border-radius: 2px; padding: 0 1px; }
   </style>
 </head>
 <body>
@@ -694,11 +695,29 @@ export function getFunctionChangelogPage(input: FunctionChangelogInput): string 
       purposeSpacerTop.style.height = h + 'px';
     }
 
+    function highlightKeyword(text, keyword) {
+      if (!keyword || !text) return escHtml(text);
+      var lowerText = text.toLowerCase();
+      var lowerKw = keyword.toLowerCase();
+      var result = '';
+      var pos = 0;
+      var idx = lowerText.indexOf(lowerKw);
+      while (idx !== -1) {
+        result += escHtml(text.slice(pos, idx));
+        result += '<span class="kw-highlight">' + escHtml(text.slice(idx, idx + keyword.length)) + '</span>';
+        pos = idx + keyword.length;
+        idx = lowerText.indexOf(lowerKw, pos);
+      }
+      return result + escHtml(text.slice(pos));
+    }
+
     function syncPurposeList() {
       if (layoutMode !== '2pane') return;
       var lis = Array.from(funcList.querySelectorAll('li'));
       purposeList.innerHTML = '';
       lis.forEach(function(li) { li.style.minHeight = ''; });
+
+      var currentKw = modalSearch ? modalSearch.value.trim() : '';
 
       lis.forEach(function(li) {
         var file = li.dataset.file || '';
@@ -711,7 +730,7 @@ export function getFunctionChangelogPage(input: FunctionChangelogInput): string 
         div.dataset.file = file;
         div.dataset.func = func;
         if (purpose) {
-          div.textContent = purpose;
+          div.innerHTML = highlightKeyword(purpose, currentKw);
         } else {
           var s = document.createElement('span');
           s.className = 'purpose-item-empty';
@@ -911,7 +930,7 @@ export function getFunctionChangelogPage(input: FunctionChangelogInput): string 
       overlay.classList.remove('open');
     }
 
-    ${renderKeyPickerJs({ targetInputId: 'modalSearch', triggerBtnId: 'btnKeyPicker' })}
+    ${renderKeyPickerJs({ targetInputId: 'modalSearch', triggerBtnId: 'btnKeyPicker', afterSelectJs: 'if(typeof layoutMode!=="undefined"&&layoutMode==="3pane")switch2Pane()' })}
 
     modalSearch.addEventListener('input', function() {
       var q = modalSearch.value.trim().toLowerCase();
