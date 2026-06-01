@@ -1,4 +1,5 @@
 import { escapeHtml } from '../utils/html';
+import { renderKeyPickerCss, renderKeyPickerHtml, renderKeyPickerJs } from '../utils/keywordPickerWidget';
 
 export interface FunctionChangeRow {
   commit_at: string;
@@ -270,65 +271,6 @@ export function getFunctionChangelogPage(input: FunctionChangelogInput): string 
       align-items: flex-start; justify-content: center; padding-top: 60px;
     }
     .modal-overlay.open { display: flex; }
-    .key-picker-overlay {
-      display: none; position: fixed; inset: 0;
-      background: rgba(0,0,0,0.35); z-index: 2000;
-      align-items: flex-start; justify-content: center; padding-top: 80px;
-    }
-    .key-picker-overlay.open { display: flex; }
-    .key-picker-modal {
-      background: var(--panel); border: 1px solid var(--border);
-      border-radius: 12px; width: min(640px, 96vw); max-height: 72vh;
-      display: flex; flex-direction: column; overflow: hidden;
-      box-shadow: 0 20px 60px rgba(0,0,0,0.5);
-    }
-    .key-picker-header {
-      display: flex; align-items: center; gap: 10px;
-      padding: 12px 16px; border-bottom: 1px solid var(--border); flex-shrink: 0;
-    }
-    .key-picker-title { font-size: 13px; font-weight: 700; color: var(--text-strong); flex: 1; }
-    .key-picker-close {
-      border: none; background: none; color: var(--text-muted);
-      font-size: 18px; cursor: pointer; padding: 2px 6px; border-radius: 4px;
-    }
-    .key-picker-close:hover { color: var(--text-strong); background: light-dark(#eaeef2,#21262d); }
-    .key-picker-cats {
-      padding: 10px 14px; border-bottom: 1px solid var(--border);
-      display: flex; flex-wrap: wrap; gap: 6px; flex-shrink: 0;
-    }
-    .kp-cat-btn {
-      font-size: 11px; padding: 3px 10px; border-radius: 12px;
-      border: 1px solid var(--border); background: light-dark(#f6f8fa,#21262d);
-      color: var(--text-muted); cursor: pointer; white-space: nowrap;
-      transition: background 0.15s, color 0.15s, border-color 0.15s;
-    }
-    .kp-cat-btn:hover { border-color: var(--accent); color: var(--accent); }
-    .kp-cat-btn.active {
-      border-color: var(--accent); background: light-dark(#ddf4ff,#0d2136); color: var(--accent); font-weight: 600;
-    }
-    .key-picker-body { overflow-y: auto; flex: 1; padding: 0; }
-    .kp-empty { font-size: 12px; color: var(--text-muted); padding: 20px; text-align: center; }
-    .kp-loading { font-size: 12px; color: var(--text-muted); padding: 20px; text-align: center; }
-    .kp-grid-wrap { display: flex; gap: 0; }
-    .kp-grid-col { flex: 1; min-width: 0; }
-    .kp-grid-col table { width: 100%; border-collapse: collapse; font-size: 12px; }
-    .kp-grid-col th {
-      background: var(--th-bg); color: var(--text-muted); text-align: left;
-      padding: 6px 10px; font-size: 10px; text-transform: uppercase; letter-spacing: 0.4px;
-      border-bottom: 1px solid var(--border); border-right: 1px solid var(--border);
-      position: sticky; top: 0;
-    }
-    .kp-grid-col th:last-child { border-right: none; }
-    .kp-grid-col td { padding: 6px 10px; border-bottom: 1px solid var(--border); border-right: 1px solid var(--border); vertical-align: middle; }
-    .kp-grid-col td:last-child { border-right: none; }
-    .kp-grid-col tr:last-child td { border-bottom: none; }
-    .kp-grid-col tr { cursor: pointer; }
-    .kp-grid-col tr:hover td { background: light-dark(rgba(0,0,0,.04), rgba(255,255,255,.04)); }
-    .kp-hit-badge {
-      display: inline-block; background: light-dark(#e8f0fe,#1c2d4a); color: light-dark(#1a56db,#60a5fa);
-      border-radius: 10px; font-size: 10px; padding: 1px 7px; font-weight: 600; white-space: nowrap;
-    }
-    .kp-kw-cell { color: var(--text); word-break: break-all; }
     .btn-key-picker {
       padding: 5px 8px; border-radius: 6px; font-size: 13px;
       border: 1px solid var(--border); background: transparent;
@@ -336,6 +278,7 @@ export function getFunctionChangelogPage(input: FunctionChangelogInput): string 
       transition: background 0.15s, color 0.15s;
     }
     .btn-key-picker:hover { background: light-dark(#f0f6ff,#1c2333); color: var(--text-strong); }
+    ${renderKeyPickerCss()}
     .modal {
       background: var(--panel); border: 1px solid var(--border);
       border-radius: 12px; width: min(800px, 96vw); max-height: 80vh;
@@ -543,28 +486,7 @@ export function getFunctionChangelogPage(input: FunctionChangelogInput): string 
     データ投入: <code>ts_commit_function_map</code>, <code>ts_function_impact</code>
   </div>
 
-  <!-- キーワードピッカーモーダル（z-index 2000、関数モーダルの上に重なる） -->
-  <div class="key-picker-overlay" id="keyPickerOverlay">
-    <div class="key-picker-modal" role="dialog" aria-modal="true">
-      <div class="key-picker-header">
-        <span class="key-picker-title">🔑 検索キーワードを選ぶ</span>
-        <button class="key-picker-close" id="keyPickerClose" aria-label="閉じる">✕</button>
-      </div>
-      <div class="key-picker-cats" id="keyPickerCats">
-        <button class="kp-cat-btn active" data-label="">すべて</button>
-        <button class="kp-cat-btn" data-label="feature">feature</button>
-        <button class="kp-cat-btn" data-label="ui">ui</button>
-        <button class="kp-cat-btn" data-label="tech">tech</button>
-        <button class="kp-cat-btn" data-label="database">database</button>
-        <button class="kp-cat-btn" data-label="bugfix">bugfix</button>
-        <button class="kp-cat-btn" data-label="ops">ops</button>
-        <button class="kp-cat-btn" data-label="uncategorized">未分類</button>
-      </div>
-      <div class="key-picker-body" id="keyPickerBody">
-        <div class="kp-empty">キーワードを読み込んでいます…</div>
-      </div>
-    </div>
-  </div>
+  ${renderKeyPickerHtml()}
 
   <!-- 関数履歴モーダル -->
   <div class="modal-overlay" id="historyOverlay">
@@ -847,157 +769,7 @@ export function getFunctionChangelogPage(input: FunctionChangelogInput): string 
       overlay.classList.remove('open');
     }
 
-    // ---- キーワードピッカー（検索履歴モーダルと同一データ・同一グリッド描画） ----
-    var keyPickerOverlay = document.getElementById('keyPickerOverlay');
-    var keyPickerClose   = document.getElementById('keyPickerClose');
-    var keyPickerCats    = document.getElementById('keyPickerCats');
-    var keyPickerBody    = document.getElementById('keyPickerBody');
-    var btnKeyPicker     = document.getElementById('btnKeyPicker');
-
-    var kpAllItems   = [];
-    var kpActiveLabel = '';
-    var KP_ROWS_PER_COL = 20;
-    var KP_MIN_COLS = 1;
-    var KP_MAX_COLS = 3;
-
-    function kpDedupeAndSort(history) {
-      var map = {};
-      history.forEach(function(item) {
-        var key = item.search_query;
-        if (!map[key] || item.total_hits > map[key].total_hits) {
-          map[key] = { search_query: key, total_hits: item.total_hits, label: item.label || 'uncategorized' };
-        }
-      });
-      var arr = [];
-      for (var k in map) { if (Object.prototype.hasOwnProperty.call(map, k)) arr.push(map[k]); }
-      arr.sort(function(a, b) { return b.total_hits - a.total_hits; });
-      return arr;
-    }
-
-    function kpSyncFilterBar(items) {
-      var existing = new Set(Array.from(keyPickerCats.querySelectorAll('.kp-cat-btn[data-label]')).map(function(b) { return b.getAttribute('data-label'); }));
-      var uncatBtn = keyPickerCats.querySelector('[data-label="uncategorized"]');
-      items.forEach(function(item) {
-        var lbl = item.label;
-        if (!lbl || lbl === 'uncategorized' || existing.has(lbl)) return;
-        existing.add(lbl);
-        var btn = document.createElement('button');
-        btn.className = 'kp-cat-btn';
-        btn.setAttribute('data-label', lbl);
-        btn.setAttribute('data-label-name', lbl);
-        btn.textContent = lbl;
-        btn.addEventListener('click', kpCatClick);
-        if (uncatBtn) keyPickerCats.insertBefore(btn, uncatBtn);
-        else keyPickerCats.appendChild(btn);
-      });
-    }
-
-    function kpUpdateBadgeCounts(items) {
-      var counts = {};
-      var total = items.length;
-      items.forEach(function(item) {
-        var lbl = item.label || 'uncategorized';
-        counts[lbl] = (counts[lbl] || 0) + 1;
-      });
-      keyPickerCats.querySelectorAll('.kp-cat-btn').forEach(function(btn) {
-        var lbl = btn.getAttribute('data-label');
-        if (lbl === null) return;
-        var baseName = btn.getAttribute('data-label-name') || btn.textContent.replace(/\s*\(\d+\)$/, '').trim();
-        if (!btn.getAttribute('data-label-name')) btn.setAttribute('data-label-name', baseName);
-        var cnt = lbl === '' ? total : (counts[lbl] || 0);
-        btn.textContent = baseName + ' (' + cnt + ')';
-      });
-    }
-
-    function kpRenderGrid(items) {
-      if (items.length === 0) {
-        keyPickerBody.innerHTML = '<div class="kp-empty">このカテゴリにキーワードがありません</div>';
-        return;
-      }
-      var numCols = Math.ceil(items.length / KP_ROWS_PER_COL);
-      if (numCols < KP_MIN_COLS) numCols = KP_MIN_COLS;
-      if (numCols > KP_MAX_COLS) numCols = KP_MAX_COLS;
-      var rowsPerCol = Math.ceil(items.length / numCols);
-      var html = '<div class="kp-grid-wrap">';
-      for (var c = 0; c < numCols; c++) {
-        var start = c * rowsPerCol;
-        var end = Math.min(start + rowsPerCol, items.length);
-        html += '<div class="kp-grid-col"><table>'
-          + '<thead><tr><th>総ヒット数</th><th>キーワード</th></tr></thead><tbody>';
-        for (var r = start; r < end; r++) {
-          html += '<tr data-kw="' + escHtml(items[r].search_query) + '">'
-            + '<td><span class="kp-hit-badge">' + items[r].total_hits + '</span></td>'
-            + '<td class="kp-kw-cell" title="' + escHtml(items[r].search_query) + '">' + escHtml(items[r].search_query) + '</td>'
-            + '</tr>';
-        }
-        html += '</tbody></table></div>';
-      }
-      html += '</div>';
-      keyPickerBody.innerHTML = html;
-      keyPickerBody.querySelectorAll('tr[data-kw]').forEach(function(row) {
-        row.addEventListener('click', function() {
-          var kw = row.getAttribute('data-kw');
-          if (kw) {
-            modalSearch.value = kw;
-            modalSearch.dispatchEvent(new Event('input'));
-            closeKeyPicker();
-          }
-        });
-      });
-    }
-
-    function kpApplyFilter() {
-      var filtered = kpActiveLabel === ''
-        ? kpAllItems
-        : kpAllItems.filter(function(item) { return (item.label || 'uncategorized') === kpActiveLabel; });
-      kpRenderGrid(filtered);
-    }
-
-    function openKeyPicker() {
-      keyPickerOverlay.classList.add('open');
-      if (kpAllItems.length > 0) { kpApplyFilter(); return; }
-      keyPickerBody.innerHTML = '<div class="kp-loading">読み込み中…</div>';
-      fetch('/api/repositories/search/history', { credentials: 'same-origin', cache: 'no-store' })
-        .then(function(res) { return res.ok ? res.json() : Promise.reject(); })
-        .then(function(data) {
-          var raw = (data && data.history) ? data.history : [];
-          kpAllItems = kpDedupeAndSort(raw);
-          kpSyncFilterBar(kpAllItems);
-          kpUpdateBadgeCounts(kpAllItems);
-          kpApplyFilter();
-        })
-        .catch(function() {
-          keyPickerBody.innerHTML = '<div class="kp-empty">キーワード履歴の取得に失敗しました</div>';
-        });
-    }
-
-    function closeKeyPicker() {
-      keyPickerOverlay.classList.remove('open');
-    }
-
-    function kpCatClick() {
-      var lbl = this.getAttribute('data-label');
-      kpActiveLabel = lbl;
-      keyPickerCats.querySelectorAll('.kp-cat-btn').forEach(function(b) { b.classList.remove('active'); });
-      this.classList.add('active');
-      kpApplyFilter();
-    }
-
-    keyPickerCats.querySelectorAll('.kp-cat-btn').forEach(function(btn) {
-      btn.addEventListener('click', kpCatClick.bind(btn));
-    });
-
-    if (btnKeyPicker) btnKeyPicker.addEventListener('click', openKeyPicker);
-    if (keyPickerClose) keyPickerClose.addEventListener('click', closeKeyPicker);
-    keyPickerOverlay.addEventListener('click', function(e) {
-      if (e.target === keyPickerOverlay) closeKeyPicker();
-    });
-    document.addEventListener('keydown', function(e) {
-      if (e.key === 'Escape' && keyPickerOverlay.classList.contains('open')) {
-        e.stopPropagation();
-        closeKeyPicker();
-      }
-    });
+    ${renderKeyPickerJs({ targetInputId: 'modalSearch', triggerBtnId: 'btnKeyPicker' })}
 
     modalSearch.addEventListener('input', function() {
       var q = modalSearch.value.trim().toLowerCase();
