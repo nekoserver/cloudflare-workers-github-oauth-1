@@ -254,6 +254,103 @@ export function getFunctionChangelogPage(input: FunctionChangelogInput): string 
     .empty-cell { text-align:center; color:var(--text-muted); padding:32px; }
     .footer { margin-top:20px; color:var(--text-muted); font-size:11px; border-top:1px solid var(--border); padding-top:12px; }
     a { color: var(--accent); }
+    .btn-history {
+      padding: 5px 12px; border-radius: 6px; font-size: 12px; font-weight: 600;
+      border: 1.5px solid var(--accent); color: var(--accent); background: transparent;
+      cursor: pointer; transition: background 0.15s, color 0.15s;
+      white-space: nowrap;
+    }
+    .btn-history:hover { background: var(--accent); color: var(--panel); }
+    .btn-history:disabled { opacity: 0.35; cursor: not-allowed; }
+    .modal-overlay {
+      display: none; position: fixed; inset: 0;
+      background: rgba(0,0,0,0.55); z-index: 1000;
+      align-items: flex-start; justify-content: center; padding-top: 60px;
+    }
+    .modal-overlay.open { display: flex; }
+    .modal {
+      background: var(--panel); border: 1px solid var(--border);
+      border-radius: 12px; width: min(800px, 96vw); max-height: 80vh;
+      display: flex; flex-direction: column; overflow: hidden;
+      box-shadow: 0 16px 48px rgba(0,0,0,0.4);
+    }
+    .modal-header {
+      display: flex; align-items: center; gap: 10px;
+      padding: 14px 18px; border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    .modal-title { font-size: 14px; font-weight: 700; color: var(--text-strong); flex: 1; }
+    .modal-close {
+      border: none; background: none; color: var(--text-muted);
+      font-size: 18px; cursor: pointer; padding: 2px 6px; border-radius: 4px;
+    }
+    .modal-close:hover { color: var(--text-strong); background: light-dark(#eaeef2,#21262d); }
+    .modal-body { display: flex; flex: 1; overflow: hidden; }
+    .modal-left {
+      width: 280px; flex-shrink: 0; border-right: 1px solid var(--border);
+      display: flex; flex-direction: column; overflow: hidden;
+    }
+    .modal-search {
+      padding: 10px 12px; border-bottom: 1px solid var(--border); flex-shrink: 0;
+    }
+    .modal-search input {
+      width: 100%; padding: 6px 10px; border-radius: 6px;
+      border: 1px solid var(--border); background: var(--bg); color: var(--text);
+      font-size: 12px;
+    }
+    .modal-func-list {
+      overflow-y: auto; flex: 1; list-style: none; margin: 0; padding: 6px 0;
+    }
+    .modal-func-list li {
+      padding: 7px 14px; cursor: pointer; font-size: 12px;
+      border-left: 3px solid transparent;
+      transition: background 0.1s;
+    }
+    .modal-func-list li:hover { background: light-dark(#f0f6ff,#1c2333); }
+    .modal-func-list li.active {
+      background: light-dark(#ddf4ff,#0d2136);
+      border-left-color: var(--accent);
+      color: var(--accent); font-weight: 600;
+    }
+    .modal-func-name { display: block; }
+    .modal-func-file { display: block; font-size: 10px; color: var(--text-muted); margin-top: 1px; word-break: break-all; }
+    .modal-right {
+      flex: 1; display: flex; flex-direction: column; overflow: hidden;
+    }
+    .modal-right-header {
+      padding: 10px 16px; border-bottom: 1px solid var(--border); flex-shrink: 0;
+      font-size: 12px; color: var(--text-muted);
+    }
+    .modal-right-header strong { color: var(--text-strong); display: block; font-size: 13px; margin-bottom: 2px; }
+    .modal-history { overflow-y: auto; flex: 1; }
+    .history-empty {
+      padding: 40px; text-align: center; color: var(--text-muted); font-size: 12px;
+    }
+    .history-loading {
+      padding: 40px; text-align: center; color: var(--text-muted); font-size: 12px;
+    }
+    .history-table {
+      width: 100%; border-collapse: collapse; font-size: 12px;
+    }
+    .history-table th {
+      background: var(--th-bg); color: var(--text-muted); text-align: left;
+      padding: 7px 12px; font-size: 10px; text-transform: uppercase;
+      letter-spacing: 0.4px; position: sticky; top: 0;
+      border-bottom: 1px solid var(--border);
+    }
+    .history-table td {
+      padding: 8px 12px; border-bottom: 1px solid var(--border); vertical-align: top;
+    }
+    .history-table tr:last-child td { border-bottom: none; }
+    .history-table tr:hover td { background: light-dark(rgba(0,0,0,.03),rgba(255,255,255,.03)); }
+    .h-date { white-space: nowrap; color: var(--text-muted); }
+    .h-hash { font-family: 'SFMono-Regular',Consolas,monospace; font-size: 11px; color: var(--accent); }
+    .h-subject { color: var(--text); }
+    .h-branch { font-size: 10px; color: var(--text-muted); }
+    .h-type { white-space: nowrap; }
+    .h-diff-add { color: var(--add-fg); }
+    .h-diff-del { color: var(--del-fg); }
+    .modal-func-count { padding: 6px 12px; font-size: 11px; color: var(--text-muted); border-bottom: 1px solid var(--border); flex-shrink: 0; }
   </style>
 </head>
 <body>
@@ -297,6 +394,7 @@ export function getFunctionChangelogPage(input: FunctionChangelogInput): string 
       <option value="chore"${input.filterImpact === 'chore' ? ' selected' : ''}>その他</option>
     </select>
     <span class="count-label" id="rowCount">${noRepoSelected ? '—' : rows.length + ' 件'}</span>
+    <button class="btn-history" id="btnHistory"${noRepoSelected ? ' disabled' : ''}>🔍 関数を選んで履歴を調べる</button>
   </div>
 
   <div class="step-banner" id="stepBanner"></div>
@@ -319,6 +417,34 @@ export function getFunctionChangelogPage(input: FunctionChangelogInput): string 
     生成: ${escapeHtml(generatedAt)} &nbsp;/&nbsp;
     <a href="/status">/status</a> &nbsp;/&nbsp;
     データ投入: <code>ts_commit_function_map</code>, <code>ts_function_impact</code>
+  </div>
+
+  <!-- 関数履歴モーダル -->
+  <div class="modal-overlay" id="historyOverlay">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+      <div class="modal-header">
+        <span class="modal-title" id="modalTitle">🔍 関数を選んで変更履歴を調べる</span>
+        <button class="modal-close" id="modalClose" aria-label="閉じる">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="modal-left">
+          <div class="modal-search">
+            <input type="search" id="funcSearch" placeholder="関数名・ファイル名で絞り込み…" autocomplete="off">
+          </div>
+          <div class="modal-func-count" id="funcCount">— 件</div>
+          <ul class="modal-func-list" id="funcList" role="listbox"></ul>
+        </div>
+        <div class="modal-right">
+          <div class="modal-right-header" id="historyHeader">
+            <strong>（左から関数を選択してください）</strong>
+            コミット履歴がここに表示されます
+          </div>
+          <div class="modal-history" id="historyBody">
+            <div class="history-empty">関数を選択するとそのファイルへの変更履歴が表示されます。<br>ts_commit_function_map にデータがない場合は空になります。</div>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 
   <script>
@@ -432,6 +558,143 @@ export function getFunctionChangelogPage(input: FunctionChangelogInput): string 
         }, 9000);
       }
     }
+
+    // ---- 関数履歴モーダル ----
+    var REPO_ID = ${selectedRepoId ?? 'null'};
+    var overlay    = document.getElementById('historyOverlay');
+    var modalClose = document.getElementById('modalClose');
+    var funcSearch = document.getElementById('funcSearch');
+    var funcList   = document.getElementById('funcList');
+    var funcCount  = document.getElementById('funcCount');
+    var historyHeader = document.getElementById('historyHeader');
+    var historyBody   = document.getElementById('historyBody');
+    var btnHistory    = document.getElementById('btnHistory');
+
+    var filteredFunctions = ALL_FUNCTIONS.slice();
+    var selectedFuncEntry = null;
+
+    function renderFuncList(items) {
+      funcList.innerHTML = '';
+      funcCount.textContent = items.length + ' 件';
+      items.forEach(function(e) {
+        var li = document.createElement('li');
+        li.setAttribute('role', 'option');
+        li.dataset.file = e.file;
+        li.dataset.func = e.func;
+        li.innerHTML =
+          '<span class="modal-func-name">' + escHtml(e.func) + '</span>' +
+          '<span class="modal-func-file">' + escHtml(e.file) + '</span>';
+        li.addEventListener('click', function() {
+          document.querySelectorAll('.modal-func-list li').forEach(function(el) { el.classList.remove('active'); });
+          li.classList.add('active');
+          selectedFuncEntry = e;
+          loadHistory(e);
+        });
+        funcList.appendChild(li);
+      });
+    }
+
+    function escHtml(s) {
+      return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    function changeTypeBadgeHtml(t) {
+      if (t === 'add')    return '<span class="badge badge-add">追加</span>';
+      if (t === 'delete') return '<span class="badge badge-del">削除</span>';
+      return '<span class="badge badge-mod">変更</span>';
+    }
+
+    function loadHistory(e) {
+      historyHeader.innerHTML =
+        '<strong>' + escHtml(e.func) + '</strong>' +
+        escHtml(e.file);
+      historyBody.innerHTML = '<div class="history-loading">読み込み中…</div>';
+
+      var url = '/api/function-file-history?repo_id=' + encodeURIComponent(REPO_ID) +
+                '&function_name=' + encodeURIComponent(e.func) +
+                '&file_path=' + encodeURIComponent(e.file);
+
+      fetch(url)
+        .then(function(res) { return res.json(); })
+        .then(function(data) {
+          if (!data.ok) {
+            historyBody.innerHTML = '<div class="history-empty">エラー: ' + escHtml(data.error || '取得失敗') + '</div>';
+            return;
+          }
+          if (!data.commits || data.commits.length === 0) {
+            historyBody.innerHTML =
+              '<div class="history-empty">コミット履歴がありません。<br>' +
+              'ts_commit_function_map に <code>' + escHtml(e.func) + '</code> のレコードを追加すると表示されます。</div>';
+            return;
+          }
+          var rows = data.commits.map(function(c) {
+            var diffHtml = (c.lines_added || c.lines_deleted)
+              ? '<span class="h-diff-add">+' + c.lines_added + '</span> <span class="h-diff-del">-' + c.lines_deleted + '</span>'
+              : '—';
+            return '<tr>' +
+              '<td class="h-date">' + escHtml((c.commit_at || '').slice(0, 10)) + '</td>' +
+              '<td class="h-hash"><code>' + escHtml((c.commit_hash || '').slice(0, 7)) + '</code></td>' +
+              '<td><span class="h-subject">' + escHtml(c.subject || '') + '</span>' +
+                (c.branch_name ? '<br><span class="h-branch">🌿 ' + escHtml(c.branch_name) + '</span>' : '') +
+              '</td>' +
+              '<td class="h-type">' + changeTypeBadgeHtml(c.change_type) + '</td>' +
+              '<td>' + diffHtml + '</td>' +
+              '</tr>';
+          }).join('');
+          historyBody.innerHTML =
+            '<table class="history-table">' +
+            '<thead><tr><th>日付</th><th>ハッシュ</th><th>コミット概要</th><th>種別</th><th>差分</th></tr></thead>' +
+            '<tbody>' + rows + '</tbody></table>';
+        })
+        .catch(function(err) {
+          historyBody.innerHTML = '<div class="history-empty">通信エラー: ' + escHtml(String(err)) + '</div>';
+        });
+    }
+
+    function openModal() {
+      filteredFunctions = ALL_FUNCTIONS.slice();
+      renderFuncList(filteredFunctions);
+      overlay.classList.add('open');
+      funcSearch.value = '';
+      funcSearch.focus();
+    }
+
+    function closeModal() {
+      overlay.classList.remove('open');
+    }
+
+    if (btnHistory) {
+      btnHistory.addEventListener('click', openModal);
+    }
+    if (modalClose) {
+      modalClose.addEventListener('click', closeModal);
+    }
+    overlay.addEventListener('click', function(e) {
+      if (e.target === overlay) closeModal();
+    });
+    document.addEventListener('keydown', function(e) {
+      if (e.key === 'Escape' && overlay.classList.contains('open')) closeModal();
+    });
+
+    funcSearch.addEventListener('input', function() {
+      var q = funcSearch.value.toLowerCase();
+      filteredFunctions = ALL_FUNCTIONS.filter(function(e) {
+        return e.func.toLowerCase().includes(q) || e.file.toLowerCase().includes(q);
+      });
+      renderFuncList(filteredFunctions);
+      if (selectedFuncEntry) {
+        var stillVisible = filteredFunctions.some(function(e) {
+          return e.func === selectedFuncEntry.func && e.file === selectedFuncEntry.file;
+        });
+        if (stillVisible) {
+          document.querySelectorAll('.modal-func-list li').forEach(function(li) {
+            if (li.dataset.func === selectedFuncEntry.func && li.dataset.file === selectedFuncEntry.file) {
+              li.classList.add('active');
+            }
+          });
+        }
+      }
+    });
   </script>
 </body>
 </html>`;

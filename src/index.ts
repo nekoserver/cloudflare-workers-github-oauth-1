@@ -3848,6 +3848,58 @@ app.get('/function-changelog', authMiddleware, async (c) => {
 });
 
 /**
+ * 関数ファイル変更履歴 API
+ * GET /api/function-file-history?repo_id=X&function_name=Y&file_path=Z
+ * ts_commit_function_map JOIN ts_commit_log からその関数のファイルに触れたコミット一覧を返す。
+ */
+app.get('/api/function-file-history', authMiddleware, async (c) => {
+  const db = c.env.DB;
+  if (!db) return c.json({ ok: false, error: 'DB not available' }, 500);
+
+  const repoIdStr    = c.req.query('repo_id');
+  const functionName = c.req.query('function_name');
+  const filePath     = c.req.query('file_path');
+
+  if (!repoIdStr || !functionName || !filePath) {
+    return c.json({ ok: false, error: 'repo_id, function_name, file_path は必須です' }, 400);
+  }
+  const repoId = parseInt(repoIdStr, 10);
+  if (isNaN(repoId)) return c.json({ ok: false, error: 'repo_id は整数でなければなりません' }, 400);
+
+  try {
+    const result = await db.prepare(`
+      SELECT
+        m.commit_hash, cl.commit_at, cl.subject, cl.author_email,
+        cl.branch_name, cl.files_changed,
+        m.change_type, m.lines_added, m.lines_deleted
+      FROM ts_commit_function_map m
+      JOIN ts_commit_log cl ON m.repo_id = cl.repo_id AND m.commit_hash = cl.commit_hash
+      WHERE m.repo_id = ? AND m.file_path = ? AND m.function_name = ?
+      ORDER BY cl.commit_at DESC
+      LIMIT 200
+    `).bind(repoId, filePath, functionName).all<{
+      commit_hash: string; commit_at: string; subject: string;
+      author_email: string | null; branch_name: string | null;
+      files_changed: number | null;
+      change_type: string; lines_added: number; lines_deleted: number;
+    }>();
+
+    const commits = result.results ?? [];
+    return c.json({
+      ok: true,
+      repo_id: repoId,
+      function_name: functionName,
+      file_path: filePath,
+      commits,
+      total: commits.length,
+    });
+  } catch (error) {
+    logger.warn('function-file-history error', { error: error instanceof Error ? error.message : String(error) });
+    return c.json({ ok: false, error: 'DB query failed' }, 500);
+  }
+});
+
+/**
  * カラム別「物理FK検証」API
  * /status/column-stats の「検証する」ボタンから呼び出され、各カラムに注釈を返す。
  *
