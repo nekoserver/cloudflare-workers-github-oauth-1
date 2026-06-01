@@ -105,6 +105,28 @@ export function renderKeyPickerCss(): string {
       border-radius: 10px; font-size: 10px; padding: 1px 7px; font-weight: 600; white-space: nowrap;
     }
     .kp-kw-cell { color: var(--text, #c9d1d9); word-break: break-all; }
+    .kp-view-toggle-bar {
+      padding: 7px 14px; border-bottom: 1px solid var(--border, #30363d); flex-shrink: 0;
+    }
+    .kp-view-toggle-btn {
+      font-size: 11px; padding: 3px 10px; border-radius: 12px;
+      border: 1px solid var(--border, #30363d); background: light-dark(#f6f8fa,#21262d);
+      color: var(--text-muted, #8b949e); cursor: pointer;
+      transition: background 0.15s, color 0.15s, border-color 0.15s;
+    }
+    .kp-view-toggle-btn:hover { border-color: var(--accent, #58a6ff); color: var(--accent, #58a6ff); }
+    .kp-1col-cats { display: flex; flex-wrap: wrap; gap: 4px; padding: 4px 10px; align-items: center; }
+    .kp-label-badge {
+      font-size: 10px; padding: 2px 8px; border-radius: 10px;
+      border: 1px solid light-dark(#3b82f6,#60a5fa);
+      background: light-dark(#dbeafe, rgba(59,130,246,0.25));
+      color: light-dark(#1d4ed8,#93c5fd); font-weight: 600; white-space: nowrap;
+    }
+    .kp-label-badge-uncat {
+      font-size: 10px; padding: 2px 8px; border-radius: 10px;
+      border: 1px solid var(--border, #30363d); background: light-dark(#f6f8fa,#21262d);
+      color: var(--text-muted, #8b949e); white-space: nowrap;
+    }
   `;
 }
 
@@ -130,6 +152,9 @@ export function renderKeyPickerHtml(): string {
         <button class="kp-cat-btn" data-label="uncategorized" data-label-name="未分類">未分類</button>
       </div>
       <div class="kp-groups" id="kpGroups" style="display:none;"></div>
+      <div class="kp-view-toggle-bar" id="kpViewToggleBar">
+        <button id="kpViewToggleBtn" class="kp-view-toggle-btn" type="button">一列表示に切り替える</button>
+      </div>
       <div class="kp-body" id="kpBody">
         <div class="kp-msg">読み込み中…</div>
       </div>
@@ -146,12 +171,16 @@ export function renderKeyPickerJs(opts: KeyPickerOptions): string {
     var kpCloseBtn  = document.getElementById('kpCloseBtn');
     var kpMaxBtn    = document.getElementById('kpMaxBtn');
     var kpDragHandle= document.getElementById('kpDragHandle');
-    var kpCats      = document.getElementById('kpCats');
-    var kpGroups    = document.getElementById('kpGroups');
-    var kpBody      = document.getElementById('kpBody');
+    var kpCats           = document.getElementById('kpCats');
+    var kpGroups         = document.getElementById('kpGroups');
+    var kpBody           = document.getElementById('kpBody');
+    var kpViewToggleBtn  = document.getElementById('kpViewToggleBtn');
     var triggerBtn  = document.getElementById(${JSON.stringify(triggerBtnId)});
     var targetInput = document.getElementById(${JSON.stringify(targetInputId)});
     if (!kpOverlay || !kpModal || !kpCats || !kpBody || !targetInput) return;
+
+    var kpViewMode = 'multi';
+    var kpMultiLabelsMap = null;
 
     var kpIsMaximized = false;
 
@@ -378,6 +407,74 @@ export function renderKeyPickerJs(opts: KeyPickerOptions): string {
       });
     }
 
+    function kpRenderGrid1Col(items) {
+      if (items.length === 0) { kpBody.innerHTML = '<div class="kp-msg">このカテゴリにキーワードがありません</div>'; return; }
+      var thStyle = 'background:var(--th-bg,#1c2128);color:var(--text-muted,#8b949e);text-align:left;padding:6px 10px;font-size:10px;text-transform:uppercase;letter-spacing:.4px;border-bottom:1px solid var(--border,#30363d);position:sticky;top:0;';
+      var html = '<table style="width:100%;border-collapse:collapse;font-size:12px;">';
+      html += '<thead><tr><th style="' + thStyle + 'width:70px;">総ヒット数</th><th style="' + thStyle + 'width:40%;">キーワード</th><th style="' + thStyle + '">カテゴリ</th></tr></thead><tbody>';
+      items.forEach(function(item) {
+        var kw = item.search_query;
+        var catsHtml = '';
+        if (kpMultiLabelsMap !== null && kpMultiLabelsMap[kw] && kpMultiLabelsMap[kw].length > 0) {
+          kpMultiLabelsMap[kw].forEach(function(cat) {
+            var cls = cat === 'uncategorized' ? 'kp-label-badge-uncat' : 'kp-label-badge';
+            catsHtml += '<span class="' + cls + '">' + kpEsc(cat) + '</span> ';
+          });
+        } else {
+          var lbl = item.label || 'uncategorized';
+          var cls = lbl === 'uncategorized' ? 'kp-label-badge-uncat' : 'kp-label-badge';
+          catsHtml = '<span class="' + cls + '">' + kpEsc(lbl) + '</span>';
+        }
+        html += '<tr data-kw="' + kpEsc(kw) + '" style="cursor:pointer;">'
+          + '<td style="padding:6px 10px;border-bottom:1px solid var(--border,#30363d);vertical-align:middle;"><span class="kp-hit-badge">' + item.total_hits + '</span></td>'
+          + '<td style="padding:6px 10px;border-bottom:1px solid var(--border,#30363d);vertical-align:middle;" class="kp-kw-cell">' + kpEsc(kw) + '</td>'
+          + '<td style="padding:6px 10px;border-bottom:1px solid var(--border,#30363d);vertical-align:middle;"><div class="kp-1col-cats">' + catsHtml + '</div></td>'
+          + '</tr>';
+      });
+      html += '</tbody></table>';
+      kpBody.innerHTML = html;
+      kpBody.querySelectorAll('tr[data-kw]').forEach(function(row) {
+        row.addEventListener('click', function() {
+          var kw = row.getAttribute('data-kw');
+          if (!kw) return;
+          targetInput.value = kw;
+          targetInput.dispatchEvent(new Event('input'));
+          ${afterSelectJs ? afterSelectJs + ';' : ''}
+          kpClose();
+        });
+      });
+    }
+
+    function kpLoadMultiLabels(callback) {
+      if (kpMultiLabelsMap !== null) { callback(); return; }
+      fetch('/api/repositories/search/keyword-multi-labels-all', { credentials: 'same-origin', cache: 'no-store' })
+        .then(function(res) { return res.ok ? res.json() : null; })
+        .then(function(d) {
+          kpMultiLabelsMap = {};
+          if (d && Array.isArray(d.items)) {
+            d.items.forEach(function(entry) {
+              kpMultiLabelsMap[entry.search_query] = Array.isArray(entry.categories) ? entry.categories : [];
+            });
+          }
+          callback();
+        })
+        .catch(function() { kpMultiLabelsMap = {}; callback(); });
+    }
+
+    if (kpViewToggleBtn) {
+      kpViewToggleBtn.addEventListener('click', function() {
+        if (kpViewMode === 'multi') {
+          kpViewMode = 'single';
+          kpViewToggleBtn.textContent = '複数列表示に切り替える';
+          kpLoadMultiLabels(function() { kpApply(); });
+        } else {
+          kpViewMode = 'multi';
+          kpViewToggleBtn.textContent = '一列表示に切り替える';
+          kpApply();
+        }
+      });
+    }
+
     function kpApply() {
       var allLabels = kpGetAllLabels();
       var allOn = allLabels.length > 0 && allLabels.every(function(l) { return kpActiveLabels.has(l); });
@@ -392,7 +489,11 @@ export function renderKeyPickerJs(opts: KeyPickerOptions): string {
       if (kpShouldHideZeroHits()) {
         base = base.filter(function(i) { return i.total_hits > 0; });
       }
-      kpRenderGrid(base);
+      if (kpViewMode === 'single') {
+        kpRenderGrid1Col(base);
+      } else {
+        kpRenderGrid(base);
+      }
     }
 
     function kpOpen() {

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { mergeAllCategories, DEFAULT_KEYWORD_LABELS } from './index';
+import { mergeAllCategories, DEFAULT_KEYWORD_LABELS, resolveKeywordDisplayLabels } from './index';
 
 describe('mergeAllCategories', () => {
   it('DBラベルが空の場合はデフォルトカテゴリのみ返す', () => {
@@ -37,5 +37,27 @@ describe('mergeAllCategories', () => {
     const uncat = result.filter((l) => l === 'uncategorized');
     expect(uncat.length).toBe(1);
     expect(result[result.length - 1]).toBe('uncategorized');
+  });
+});
+
+describe('resolveKeywordDisplayLabels', () => {
+  it('multiCategoriesが空でない場合はそれを返す', () => {
+    expect(resolveKeywordDisplayLabels(['feature', 'ui'], 'bugfix')).toEqual(['feature', 'ui']);
+  });
+
+  it('multiCategoriesがnullの場合はsingleLabelを配列で返す', () => {
+    expect(resolveKeywordDisplayLabels(null, 'feature')).toEqual(['feature']);
+  });
+
+  it('multiCategoriesがundefinedの場合はsingleLabelを配列で返す', () => {
+    expect(resolveKeywordDisplayLabels(undefined, 'bugfix')).toEqual(['bugfix']);
+  });
+
+  it('multiCategoriesが空配列の場合はsingleLabelを配列で返す', () => {
+    expect(resolveKeywordDisplayLabels([], 'ui')).toEqual(['ui']);
+  });
+
+  it('singleLabelが空文字の場合はuncategorizedを返す', () => {
+    expect(resolveKeywordDisplayLabels(null, '')).toEqual(['uncategorized']);
   });
 });
