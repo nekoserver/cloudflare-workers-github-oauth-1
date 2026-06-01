@@ -5906,10 +5906,26 @@ export function getRepositoriesPage(user: {
               // バッジ更新（kmlBadgeData は showKeywordDetail スコープにあるが保存時点では参照できないため kmlAllCats を使う）
               var numEl = document.getElementById('kmlCountNum');
               if (numEl) numEl.textContent = '(' + cats.length + '/' + kmlAllCats.length + ')';
-              // histMultiLabelsMap を更新し、一列表示中なら該当行のカテゴリバッジを即時再描画
+              // histMultiLabelsMap を更新
               if (histMultiLabelsMap !== null) {
                 histMultiLabelsMap[kmlCurrentQuery] = cats.slice();
               }
+              // currentItems の該当キーワードの label を更新してラベルフィルターと一致させる
+              // 保存カテゴリが空の場合は 'uncategorized'、複数ある場合は最初の非uncategorized を使用
+              var newLabel = 'uncategorized';
+              var nonUncat = cats.filter(function(c) { return c !== 'uncategorized'; });
+              if (nonUncat.length > 0) newLabel = nonUncat[0];
+              for (var ci = 0; ci < currentItems.length; ci++) {
+                if (currentItems[ci].search_query === kmlCurrentQuery) {
+                  currentItems[ci].label = newLabel;
+                  break;
+                }
+              }
+              // 新しいラベルがフィルターバーになければ追加し activeLabels にも追加
+              syncFilterBarFromItems(currentItems);
+              if (newLabel !== 'uncategorized') activeLabels.add(newLabel);
+              syncBtnStyles();
+              // 一列表示中なら即時再描画
               if (histViewMode === 'single') {
                 refreshGrid(null, null);
               }
