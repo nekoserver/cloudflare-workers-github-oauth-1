@@ -99,6 +99,12 @@ const STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
   { name: 'repo_commit_index', migration: '0034', description: 'コミットインデックス（コミットハッシュ・順番・PR番号）', syncPolicy: 'manual' },
   { name: 'ai_chat_shares', migration: '0036', description: 'AIチャット共有Q&Aレコード', syncPolicy: 'auto' },
   { name: 'keyword_category_groups', migration: '0037', description: '検索キーワードカテゴリグループ定義', syncPolicy: 'auto' },
+  { name: 'ts_repository',           migration: 'ts-catalog', description: '関数カタログ: リポジトリ一覧',             syncPolicy: 'manual' },
+  { name: 'ts_function_catalog',     migration: 'ts-catalog', description: '関数カタログ: 関数定義一覧',               syncPolicy: 'manual' },
+  { name: 'ts_commit_log',           migration: 'ts-catalog', description: '関数カタログ: コミット履歴',               syncPolicy: 'manual' },
+  { name: 'ts_commit_function_map',  migration: 'ts-catalog', description: '関数カタログ: コミット×関数マッピング',    syncPolicy: 'manual' },
+  { name: 'ts_function_impact',      migration: 'ts-catalog', description: '関数カタログ: 変更インパクト評価',         syncPolicy: 'manual' },
+  { name: 'ts_commit_quality',       migration: 'ts-catalog', description: '関数カタログ: コミット品質評価',           syncPolicy: 'manual' },
 ];
 
 const REQUIRED_STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
@@ -631,6 +637,121 @@ INSERT OR REPLACE INTO table_column_keys (table_name, column_name, key_type, fk_
 ('keyword_category_groups', 'id', 'pk', NULL);
 INSERT OR REPLACE INTO table_column_keys (table_name, column_name, key_type, fk_target_table) VALUES
 ('keyword_category_groups', 'user_id', 'fk', 'user_sessions');`,
+  'ts-catalog': `CREATE TABLE IF NOT EXISTS ts_repository (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  full_name     TEXT NOT NULL UNIQUE,
+  owner         TEXT NOT NULL,
+  repo_name     TEXT NOT NULL,
+  description   TEXT,
+  language      TEXT,
+  registered_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS ts_function_catalog (
+  id                INTEGER PRIMARY KEY AUTOINCREMENT,
+  repo_id           INTEGER NOT NULL REFERENCES ts_repository(id),
+  file_path         TEXT NOT NULL,
+  function_name     TEXT NOT NULL,
+  purpose           TEXT NOT NULL,
+  is_exported       INTEGER NOT NULL DEFAULT 1,
+  is_async          INTEGER NOT NULL DEFAULT 0,
+  first_commit_hash TEXT,
+  first_commit_at   TEXT,
+  is_deleted        INTEGER NOT NULL DEFAULT 0,
+  deleted_at        TEXT,
+  recorded_at       TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE(repo_id, file_path, function_name)
+);
+
+CREATE INDEX IF NOT EXISTS idx_tfc_repo  ON ts_function_catalog(repo_id);
+CREATE INDEX IF NOT EXISTS idx_tfc_file  ON ts_function_catalog(repo_id, file_path);
+CREATE INDEX IF NOT EXISTS idx_tfc_name  ON ts_function_catalog(function_name);
+
+CREATE TABLE IF NOT EXISTS ts_commit_log (
+  id              INTEGER PRIMARY KEY AUTOINCREMENT,
+  repo_id         INTEGER NOT NULL REFERENCES ts_repository(id),
+  commit_hash     TEXT NOT NULL,
+  commit_at       TEXT NOT NULL,
+  author_email    TEXT,
+  branch_name     TEXT,
+  pr_number       INTEGER,
+  subject         TEXT NOT NULL,
+  body            TEXT,
+  files_changed   INTEGER,
+  insertions      INTEGER,
+  deletions       INTEGER,
+  is_merge_commit INTEGER NOT NULL DEFAULT 0,
+  recorded_at     TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE(repo_id, commit_hash)
+);
+
+CREATE INDEX IF NOT EXISTS idx_tcl_repo      ON ts_commit_log(repo_id);
+CREATE INDEX IF NOT EXISTS idx_tcl_commit_at ON ts_commit_log(repo_id, commit_at);
+CREATE INDEX IF NOT EXISTS idx_tcl_pr        ON ts_commit_log(repo_id, pr_number);
+CREATE INDEX IF NOT EXISTS idx_tcl_branch    ON ts_commit_log(repo_id, branch_name);
+
+CREATE TABLE IF NOT EXISTS ts_commit_function_map (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  commit_hash   TEXT NOT NULL,
+  repo_id       INTEGER NOT NULL REFERENCES ts_repository(id),
+  file_path     TEXT NOT NULL,
+  function_name TEXT NOT NULL,
+  change_type   TEXT NOT NULL CHECK(change_type IN ('add','modify','delete')),
+  lines_added   INTEGER NOT NULL DEFAULT 0,
+  lines_deleted INTEGER NOT NULL DEFAULT 0,
+  recorded_at   TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE(repo_id, commit_hash, file_path, function_name),
+  FOREIGN KEY (repo_id, commit_hash) REFERENCES ts_commit_log(repo_id, commit_hash)
+);
+
+CREATE INDEX IF NOT EXISTS idx_tcfm_repo   ON ts_commit_function_map(repo_id);
+CREATE INDEX IF NOT EXISTS idx_tcfm_commit ON ts_commit_function_map(repo_id, commit_hash);
+CREATE INDEX IF NOT EXISTS idx_tcfm_func   ON ts_commit_function_map(repo_id, file_path, function_name);
+CREATE INDEX IF NOT EXISTS idx_tcfm_type   ON ts_commit_function_map(change_type);
+
+CREATE TABLE IF NOT EXISTS ts_function_impact (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  repo_id       INTEGER NOT NULL REFERENCES ts_repository(id),
+  commit_hash   TEXT NOT NULL,
+  file_path     TEXT NOT NULL,
+  function_name TEXT NOT NULL,
+  impact_type   TEXT NOT NULL CHECK(impact_type IN (
+                  'feature','bugfix','regression','refactor',
+                  'perf','test','docs','chore'
+                )),
+  severity      INTEGER NOT NULL DEFAULT 2 CHECK(severity BETWEEN 1 AND 5),
+  contribution  INTEGER NOT NULL DEFAULT 3 CHECK(contribution BETWEEN 1 AND 5),
+  notes         TEXT,
+  evaluator     TEXT NOT NULL DEFAULT 'manual',
+  evaluated_at  TEXT NOT NULL DEFAULT (datetime('now')),
+  FOREIGN KEY (repo_id, commit_hash) REFERENCES ts_commit_log(repo_id, commit_hash)
+);
+
+CREATE INDEX IF NOT EXISTS idx_tfi_repo    ON ts_function_impact(repo_id);
+CREATE INDEX IF NOT EXISTS idx_tfi_commit  ON ts_function_impact(repo_id, commit_hash);
+CREATE INDEX IF NOT EXISTS idx_tfi_func    ON ts_function_impact(repo_id, file_path, function_name);
+CREATE INDEX IF NOT EXISTS idx_tfi_type    ON ts_function_impact(impact_type);
+CREATE INDEX IF NOT EXISTS idx_tfi_contrib ON ts_function_impact(contribution);
+
+CREATE TABLE IF NOT EXISTS ts_commit_quality (
+  id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+  repo_id            INTEGER NOT NULL REFERENCES ts_repository(id),
+  commit_hash        TEXT NOT NULL,
+  functions_touched  INTEGER NOT NULL DEFAULT 0,
+  files_touched      INTEGER NOT NULL DEFAULT 0,
+  granularity_score  INTEGER CHECK(granularity_score BETWEEN 1 AND 5),
+  is_atomic          INTEGER,
+  branch_was_needed  INTEGER,
+  branch_timing_note TEXT,
+  feature_allocation TEXT,
+  evaluator          TEXT NOT NULL DEFAULT 'manual',
+  evaluated_at       TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE(repo_id, commit_hash),
+  FOREIGN KEY (repo_id, commit_hash) REFERENCES ts_commit_log(repo_id, commit_hash)
+);
+
+CREATE INDEX IF NOT EXISTS idx_tcq_repo  ON ts_commit_quality(repo_id);
+CREATE INDEX IF NOT EXISTS idx_tcq_score ON ts_commit_quality(repo_id, granularity_score);`,
 };
 
 async function ensureGroupTable(db: D1Database): Promise<void> {
@@ -802,6 +923,12 @@ export const TABLE_COLUMN_KEYS: Record<string, ColumnKeyInfo> = {
   repo_commit_index: { commit_hash: 'pk', seq_num: 'idx', github_pr_number: 'idx', repo_name: 'idx' },
   ai_chat_shares: { id: 'pk', user_id: 'fk', user_hash: 'idx' },
   keyword_category_groups: { id: 'pk', user_id: 'fk' },
+  ts_repository:          { id: 'pk', full_name: 'uk' },
+  ts_function_catalog:    { id: 'pk', repo_id: 'fk', file_path: 'idx', function_name: 'idx' },
+  ts_commit_log:          { id: 'pk', repo_id: 'fk', commit_hash: 'uk', commit_at: 'idx', pr_number: 'idx', branch_name: 'idx' },
+  ts_commit_function_map: { id: 'pk', repo_id: 'pk+fk', commit_hash: 'pk+fk', file_path: 'idx', function_name: 'idx', change_type: 'idx' },
+  ts_function_impact:     { id: 'pk', repo_id: 'fk', commit_hash: 'fk', file_path: 'idx', function_name: 'idx', impact_type: 'idx', contribution: 'idx' },
+  ts_commit_quality:      { id: 'pk', repo_id: 'pk+fk', commit_hash: 'pk+fk', granularity_score: 'idx' },
 };
 
 export function getColumnKeyType(tableName: string, columnName: string): ColumnKeyType {
@@ -858,6 +985,12 @@ export const TABLE_GROUP_MAP: Record<string, string> = {
   ai_summary_link_access_log: 'ai',
   ai_chat_shares: 'ai',
   keyword_category_groups: 'search',
+  ts_repository:          'ts-catalog',
+  ts_function_catalog:    'ts-catalog',
+  ts_commit_log:          'ts-catalog',
+  ts_commit_function_map: 'ts-catalog',
+  ts_function_impact:     'ts-catalog',
+  ts_commit_quality:      'ts-catalog',
 };
 
 async function recordAiSummaryLinkAccess(
@@ -903,6 +1036,8 @@ export const GROUP_LABELS: Record<string, string> = {
   ai: 'AI Summary',
   email: 'Email / Resend',
   config: 'Config / Settings',
+  search: 'Search',
+  'ts-catalog': 'TS Function Catalog',
   undefined: 'Undefined',
 };
 
@@ -912,6 +1047,8 @@ export const GROUP_COLORS: Record<string, string> = {
   ai: '#d29922',
   email: '#f85149',
   config: '#a371f7',
+  search: '#58a6ff',
+  'ts-catalog': '#e879f9',
   undefined: '#8b949e',
 };
 
@@ -1002,6 +1139,15 @@ export const COLUMN_FK_TARGETS: Record<string, Record<string, string>> = {
   // メタデータ系
   // ========================================================================
   table_column_keys: { table_name: 'table_catalog' },
+
+  // ========================================================================
+  // 関数カタログ系 (ts_*)
+  // ========================================================================
+  ts_function_catalog:    { repo_id: 'ts_repository' },
+  ts_commit_log:          { repo_id: 'ts_repository' },
+  ts_commit_function_map: { repo_id: 'ts_repository', commit_hash: 'ts_commit_log' },
+  ts_function_impact:     { repo_id: 'ts_repository', commit_hash: 'ts_commit_log' },
+  ts_commit_quality:      { repo_id: 'ts_repository', commit_hash: 'ts_commit_log' },
 };
 
 /**
