@@ -919,6 +919,24 @@ export function getRepositoriesPage(user: {
     [data-theme="dark"] .cg-group-btn.active { border-color:#60a5fa; background:rgba(59,130,246,0.25); color:#93c5fd; }
     .cg-group-btn.count-updated { background:#fefcbf !important; border-color:#f6e05e !important; color:#744210 !important; }
     [data-theme="dark"] .cg-group-btn.count-updated { background:rgba(246,224,94,0.15) !important; border-color:#f6e05e !important; color:#f6e05e !important; }
+    .hist-cat-th { cursor:pointer; user-select:none; }
+    .hist-cat-th:hover { color:var(--text-primary) !important; background:var(--hover-bg,rgba(0,0,0,.06)) !important; }
+    .hist-cat-filter-badge { font-size:9px; padding:1px 6px; border-radius:8px; border:1px solid #3b82f6; background:#dbeafe; color:#1d4ed8; font-weight:600; white-space:nowrap; margin-left:4px; }
+    [data-theme="dark"] .hist-cat-filter-badge { border-color:#60a5fa; background:rgba(59,130,246,0.25); color:#93c5fd; }
+    .cat-filter-modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.55); z-index:10000; display:flex; align-items:center; justify-content:center; }
+    .cat-filter-modal-content { background:var(--card-bg,#fff); border-radius:12px; box-shadow:0 8px 40px rgba(0,0,0,0.25); width:320px; max-width:90vw; max-height:60vh; display:flex; flex-direction:column; overflow:hidden; }
+    .cat-filter-modal-header { display:flex; align-items:center; justify-content:space-between; padding:12px 16px; border-bottom:1px solid var(--border-color); flex-shrink:0; }
+    .cat-filter-modal-title { font-size:14px; font-weight:700; color:var(--text-primary); }
+    .cat-filter-modal-body { overflow-y:auto; flex:1; }
+    .cat-filter-table { width:100%; border-collapse:collapse; font-size:12px; }
+    .cat-filter-table thead th { background:var(--bg-secondary); color:var(--text-muted); text-align:left; padding:6px 16px; font-size:10px; text-transform:uppercase; letter-spacing:.4px; border-bottom:1px solid var(--border-color); }
+    .cat-filter-table td { padding:8px 16px; border-bottom:1px solid var(--border-color); vertical-align:middle; }
+    .cat-filter-row { cursor:pointer; }
+    .cat-filter-row:hover td { background:var(--hover-bg,rgba(0,0,0,.04)); }
+    .cat-filter-row.active td { background:rgba(102,126,234,0.12); }
+    .cat-filter-clear-row { cursor:pointer; }
+    .cat-filter-clear-row td { color:var(--text-muted); font-size:11px; }
+    .cat-filter-clear-row:hover td { background:var(--hover-bg,rgba(0,0,0,.04)); }
     .history-repo-select {
       font-size:12px; padding:4px 8px; border-radius:6px;
       border:1px solid var(--border-color); background:var(--bg-secondary);
@@ -2058,6 +2076,16 @@ export function getRepositoriesPage(user: {
       <div class="history-modal-body" id="historyModalBody">
       </div>
       <div id="keywordDetailPanel" style="display:none"></div>
+    </div>
+  </div>
+
+  <div class="cat-filter-modal-overlay" id="catFilterModalOverlay" style="display:none;">
+    <div class="cat-filter-modal-content">
+      <div class="cat-filter-modal-header">
+        <span class="cat-filter-modal-title">カテゴリでフィルタ</span>
+        <button class="modal-close" id="catFilterModalClose">&times;</button>
+      </div>
+      <div class="cat-filter-modal-body" id="catFilterModalBody"></div>
     </div>
   </div>
 
@@ -5344,6 +5372,7 @@ export function getRepositoriesPage(user: {
       var activeLabels = new Set();
       var histViewMode = 'multi';
       var histMultiLabelsMap = null;
+      var hist1colCatFilter = null;
 
       function histLoadMultiLabels(callback) {
         if (histMultiLabelsMap !== null) { callback(); return; }
@@ -5363,9 +5392,15 @@ export function getRepositoriesPage(user: {
 
       function renderGrid1Col(items, highlightKey, highlightType) {
         if (items.length === 0) return '<div class="search-empty">検索履歴がありません。</div>';
+        var catThLabel;
+        if (hist1colCatFilter) {
+          catThLabel = 'カテゴリ <span class="hist-cat-filter-badge">' + escHtml(hist1colCatFilter) + '</span>';
+        } else {
+          catThLabel = 'カテゴリ ▼';
+        }
         var html = '<table class="hist-1col-table">'
           + '<colgroup><col style="width:52px"><col style="width:72px"><col style="width:28%"><col></colgroup>'
-          + '<thead><tr><th>当該</th><th>総ヒット数</th><th>キーワード</th><th>カテゴリ</th></tr></thead><tbody>';
+          + '<thead><tr><th>当該</th><th>総ヒット数</th><th>キーワード</th><th class="hist-cat-th">' + catThLabel + '</th></tr></thead><tbody>';
         items.forEach(function(item) {
           var rowClasses = [];
           if (highlightKey && item.search_query === highlightKey) {
@@ -6512,7 +6547,20 @@ export function getRepositoriesPage(user: {
 
       function refreshGrid(highlightKey, highlightType) {
         updateTitle();
-        var displayItems = getIncrementalFilteredItems();
+        var baseItems = getIncrementalFilteredItems();
+        var displayItems = baseItems;
+        if (histViewMode === 'single' && hist1colCatFilter) {
+          displayItems = baseItems.filter(function(item) {
+            var kw = item.search_query;
+            var cats;
+            if (histMultiLabelsMap !== null && histMultiLabelsMap[kw] && histMultiLabelsMap[kw].length > 0) {
+              cats = histMultiLabelsMap[kw];
+            } else {
+              cats = [item.label || 'uncategorized'];
+            }
+            return cats.indexOf(hist1colCatFilter) !== -1;
+          });
+        }
         historyModalBody.innerHTML = histViewMode === 'single'
           ? renderGrid1Col(displayItems, highlightKey, highlightType)
           : renderGrid(displayItems, highlightKey, highlightType);
@@ -6522,7 +6570,60 @@ export function getRepositoriesPage(user: {
             if (q) showKeywordDetail(q);
           });
         });
+        if (histViewMode === 'single') {
+          var catTh = historyModalBody.querySelector('.hist-cat-th');
+          if (catTh) {
+            catTh.addEventListener('click', function(e) {
+              e.stopPropagation();
+              openCategoryFilterModal(baseItems);
+            });
+          }
+        }
         applyRepoHighlight();
+      }
+
+      function openCategoryFilterModal(items) {
+        var catCounts = {};
+        items.forEach(function(item) {
+          var kw = item.search_query;
+          var cats;
+          if (histMultiLabelsMap !== null && histMultiLabelsMap[kw] && histMultiLabelsMap[kw].length > 0) {
+            cats = histMultiLabelsMap[kw];
+          } else {
+            cats = [item.label || 'uncategorized'];
+          }
+          cats.forEach(function(cat) {
+            catCounts[cat] = (catCounts[cat] || 0) + 1;
+          });
+        });
+        var sorted = Object.keys(catCounts).sort(function(a, b) { return catCounts[b] - catCounts[a]; });
+        var html = '<table class="cat-filter-table"><thead><tr><th>カテゴリ</th><th>件数</th></tr></thead><tbody>';
+        if (hist1colCatFilter) {
+          html += '<tr class="cat-filter-clear-row" data-cat=""><td colspan="2">すべて表示（フィルタ解除）</td></tr>';
+        }
+        sorted.forEach(function(cat) {
+          var cls = cat === 'uncategorized' ? 'hist-label-badge-uncat' : 'hist-label-badge';
+          var isActive = hist1colCatFilter === cat;
+          html += '<tr class="cat-filter-row' + (isActive ? ' active' : '') + '" data-cat="' + escHtml(cat) + '">'
+            + '<td><span class="' + cls + '">' + escHtml(cat) + '</span></td>'
+            + '<td>' + catCounts[cat] + '</td>'
+            + '</tr>';
+        });
+        html += '</tbody></table>';
+        var body = document.getElementById('catFilterModalBody');
+        if (body) body.innerHTML = html;
+        var overlay = document.getElementById('catFilterModalOverlay');
+        if (overlay) overlay.style.display = '';
+        if (body) {
+          body.querySelectorAll('tr[data-cat]').forEach(function(row) {
+            row.addEventListener('click', function() {
+              var cat = row.getAttribute('data-cat');
+              hist1colCatFilter = cat || null;
+              if (overlay) overlay.style.display = 'none';
+              refreshGrid(null, null);
+            });
+          });
+        }
       }
 
       function setSearchStatus(text, cls) {
@@ -6685,6 +6786,21 @@ export function getRepositoriesPage(user: {
         hRepoSelect.innerHTML = opts;
       }
 
+      (function() {
+        var overlay = document.getElementById('catFilterModalOverlay');
+        var closeBtn = document.getElementById('catFilterModalClose');
+        if (closeBtn) {
+          closeBtn.addEventListener('click', function() {
+            if (overlay) overlay.style.display = 'none';
+          });
+        }
+        if (overlay) {
+          overlay.addEventListener('click', function(e) {
+            if (e.target === overlay) overlay.style.display = 'none';
+          });
+        }
+      })();
+
       var histViewToggleBtn = document.getElementById('histViewToggleBtn');
       if (histViewToggleBtn) {
         histViewToggleBtn.addEventListener('click', function() {
@@ -6694,6 +6810,7 @@ export function getRepositoriesPage(user: {
             histLoadMultiLabels(function() { refreshGrid(null, null); });
           } else {
             histViewMode = 'multi';
+            hist1colCatFilter = null;
             histViewToggleBtn.textContent = '一列表示に切り替える';
             refreshGrid(null, null);
           }
