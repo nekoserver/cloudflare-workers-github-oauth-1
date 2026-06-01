@@ -992,6 +992,27 @@ export function getRepositoriesPage(user: {
     .kd-bar { fill: rgba(102,126,234,0.7); transition: fill 0.15s; }
     .keyword-detail-classify-btn { font-size:11px; padding:3px 11px; border-radius:12px; border:1px solid var(--accent-color,#48bb78); background:transparent; color:var(--accent-color,#48bb78); cursor:pointer; white-space:nowrap; margin-right:8px; transition:background .15s,color .15s; }
     .keyword-detail-classify-btn:hover { background:var(--accent-color,#48bb78); color:#fff; }
+    .kml-count-badge { font-size:11px; padding:3px 10px; border-radius:12px; border:1px solid var(--border-color); background:transparent; color:var(--text-muted); cursor:pointer; white-space:nowrap; transition:background .15s,color .15s; }
+    .kml-count-badge:hover { border-color:var(--accent-color,#58a6ff); color:var(--accent-color,#58a6ff); }
+    .kml-count-num { font-weight:700; color:var(--accent-color,#58a6ff); }
+    .kml-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.45); z-index:3000; align-items:center; justify-content:center; }
+    .kml-overlay.open { display:flex; }
+    .kml-modal { background:var(--panel,#161b22); border:1px solid var(--border,#30363d); border-radius:12px; width:min(520px,96vw); max-height:80vh; display:flex; flex-direction:column; overflow:hidden; box-shadow:0 20px 60px rgba(0,0,0,.5); }
+    .kml-header { display:flex; align-items:center; justify-content:space-between; padding:12px 16px; border-bottom:1px solid var(--border,#30363d); flex-shrink:0; }
+    .kml-header-title { font-size:13px; font-weight:700; color:var(--text-primary); }
+    .kml-header-close { border:none; background:none; font-size:18px; cursor:pointer; color:var(--text-muted); padding:0 4px; border-radius:4px; }
+    .kml-header-close:hover { color:var(--text-primary); background:light-dark(#eaeef2,#21262d); }
+    .kml-body { padding:16px; overflow-y:auto; flex:1; }
+    .kml-hint { font-size:11px; color:var(--text-muted); margin-bottom:10px; }
+    .kml-cats { display:flex; flex-wrap:wrap; gap:8px; }
+    .kml-cat-btn { font-size:12px; padding:5px 14px; border-radius:16px; border:1px solid var(--border,#30363d); background:light-dark(#f6f8fa,#21262d); color:var(--text-muted); cursor:pointer; transition:background .15s,color .15s,border-color .15s; }
+    .kml-cat-btn.active { border-color:var(--accent,#58a6ff); background:light-dark(#ddf4ff,#0d2136); color:var(--accent,#58a6ff); font-weight:600; }
+    .kml-cat-btn:hover:not(.active) { border-color:var(--accent,#58a6ff); color:var(--accent,#58a6ff); }
+    .kml-footer { padding:12px 16px; border-top:1px solid var(--border,#30363d); display:flex; justify-content:flex-end; gap:8px; flex-shrink:0; }
+    .kml-footer-cancel { font-size:13px; padding:6px 18px; border-radius:8px; border:1px solid var(--border,#30363d); background:transparent; color:var(--text-muted); cursor:pointer; }
+    .kml-footer-confirm { font-size:13px; padding:6px 18px; border-radius:8px; border:none; background:var(--accent,#58a6ff); color:#fff; cursor:pointer; font-weight:600; }
+    .kml-footer-confirm:hover { opacity:.85; }
+    .kml-save-status { font-size:11px; color:var(--text-muted); align-self:center; margin-right:auto; }
     .kd-bar:hover { fill: rgba(102,126,234,1); }
     .kd-label { font-size: 9px; fill: var(--text-muted, #888); }
     .kd-value { font-size: 9px; fill: var(--text-primary, #333); font-weight: 700; }
@@ -5740,6 +5761,123 @@ export function getRepositoriesPage(user: {
         refreshGrid(null, null);
       }
 
+      // ===== 複数カテゴリ分類モーダル =====
+      (function() {
+        var overlay = document.createElement('div');
+        overlay.id = 'kmlOverlay';
+        overlay.className = 'kml-overlay';
+        overlay.innerHTML =
+          '<div class="kml-modal" role="dialog" aria-modal="true">'
+          + '<div class="kml-header">'
+          + '<span class="kml-header-title" id="kmlModalTitle"></span>'
+          + '<button class="kml-header-close" id="kmlCloseBtn" aria-label="閉じる">&times;</button>'
+          + '</div>'
+          + '<div class="kml-body">'
+          + '<div class="kml-hint">タップしてカテゴリをON/OFFに切り替えてください（複数選択可）</div>'
+          + '<div class="kml-cats" id="kmlCats"></div>'
+          + '</div>'
+          + '<div class="kml-footer">'
+          + '<span class="kml-save-status" id="kmlSaveStatus"></span>'
+          + '<button class="kml-footer-cancel" id="kmlCancelBtn">キャンセル</button>'
+          + '<button class="kml-footer-confirm" id="kmlConfirmBtn">決定</button>'
+          + '</div>'
+          + '</div>';
+        document.body.appendChild(overlay);
+
+        var kmlCurrentQuery = '';
+        var kmlSelectedCats = new Set();
+        var kmlAllCats = [];
+
+        function kmlClose() { overlay.classList.remove('open'); }
+
+        document.getElementById('kmlCloseBtn').addEventListener('click', kmlClose);
+        document.getElementById('kmlCancelBtn').addEventListener('click', kmlClose);
+        overlay.addEventListener('click', function(e) { if (e.target === overlay) kmlClose(); });
+        document.addEventListener('keydown', function(e) {
+          if (e.key === 'Escape' && overlay.classList.contains('open')) { e.stopPropagation(); kmlClose(); }
+        });
+
+        document.getElementById('kmlConfirmBtn').addEventListener('click', function() {
+          var statusEl = document.getElementById('kmlSaveStatus');
+          if (statusEl) statusEl.textContent = '保存中…';
+          var cats = Array.from(kmlSelectedCats);
+          fetch('/api/repositories/search/keyword-multi-labels', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'same-origin',
+            body: JSON.stringify({ search_query: kmlCurrentQuery, categories: cats })
+          }).then(function(res) { return res.ok ? res.json() : Promise.reject(); })
+            .then(function() {
+              if (statusEl) statusEl.textContent = '保存しました';
+              // バッジ更新
+              var numEl = document.getElementById('kmlCountNum');
+              if (numEl) numEl.textContent = '(' + cats.length + '/' + kmlAllCats.length + ')';
+              setTimeout(function() { kmlClose(); }, 600);
+            })
+            .catch(function() {
+              if (statusEl) statusEl.textContent = '保存に失敗しました';
+            });
+        });
+
+        window.showKmlModal = function(query, assignedCategories, allCategories) {
+          kmlCurrentQuery = query;
+          kmlAllCats = allCategories || [];
+          kmlSelectedCats = new Set(Array.isArray(assignedCategories) ? assignedCategories : []);
+
+          var titleEl = document.getElementById('kmlModalTitle');
+          if (titleEl) titleEl.textContent = '「' + query + '」のカテゴリ分類';
+
+          var statusEl = document.getElementById('kmlSaveStatus');
+          if (statusEl) statusEl.textContent = '';
+
+          var catsEl = document.getElementById('kmlCats');
+          if (!catsEl) return;
+          catsEl.innerHTML = '';
+
+          // 「すべて」ボタン（全選択/全解除トグル）
+          var allBtn = document.createElement('button');
+          allBtn.className = 'kml-cat-btn' + (kmlSelectedCats.size === kmlAllCats.length && kmlAllCats.length > 0 ? ' active' : '');
+          allBtn.textContent = 'すべて';
+          allBtn.setAttribute('data-cat', '__all__');
+          catsEl.appendChild(allBtn);
+
+          kmlAllCats.forEach(function(cat) {
+            var btn = document.createElement('button');
+            btn.className = 'kml-cat-btn' + (kmlSelectedCats.has(cat) ? ' active' : '');
+            btn.textContent = cat === 'uncategorized' ? '未分類' : cat;
+            btn.setAttribute('data-cat', cat);
+            catsEl.appendChild(btn);
+          });
+
+          catsEl.addEventListener('click', function(e) {
+            var btn = e.target.closest('.kml-cat-btn');
+            if (!btn) return;
+            var cat = btn.getAttribute('data-cat');
+            if (cat === '__all__') {
+              if (kmlSelectedCats.size === kmlAllCats.length) {
+                kmlSelectedCats = new Set();
+              } else {
+                kmlSelectedCats = new Set(kmlAllCats);
+              }
+            } else {
+              if (kmlSelectedCats.has(cat)) kmlSelectedCats.delete(cat);
+              else kmlSelectedCats.add(cat);
+            }
+            // バッジ状態更新
+            catsEl.querySelectorAll('.kml-cat-btn').forEach(function(b) {
+              var c = b.getAttribute('data-cat');
+              if (c === '__all__') {
+                b.classList.toggle('active', kmlSelectedCats.size === kmlAllCats.length && kmlAllCats.length > 0);
+              } else {
+                b.classList.toggle('active', kmlSelectedCats.has(c));
+              }
+            });
+          });
+
+          overlay.classList.add('open');
+        };
+      }());
+
       function showLabelClassificationModal(query) {
         var modal = document.getElementById('labelClassifyModal');
         var queryEl = document.getElementById('labelClassifyQuery');
@@ -5963,7 +6101,8 @@ export function getRepositoriesPage(user: {
         keywordDetailPanel.style.display = '';
         keywordDetailPanel.innerHTML = '<div class="keyword-detail-panel"><div class="keyword-detail-panel-header">'
           + '<span class="keyword-detail-panel-title">「' + escHtml(query) + '」の詳細集計</span>'
-          + '<div style="display:flex;align-items:center;gap:4px;">'
+          + '<div style="display:flex;align-items:center;gap:6px;">'
+          + '<button class="kml-count-badge" id="kmlCountBadge" type="button" title="複数カテゴリ分類を編集">現在分類中のカテゴリ数 : <span class="kml-count-num" id="kmlCountNum">…</span></button>'
           + '<button class="keyword-detail-classify-btn" id="keywordDetailClassifyBtn" type="button">このキーワードを分類する</button>'
           + '<button class="keyword-detail-panel-close" id="keywordDetailClose" type="button">&times;</button>'
           + '</div>'
@@ -5983,6 +6122,30 @@ export function getRepositoriesPage(user: {
         if (classifyBtn) {
           classifyBtn.addEventListener('click', function() { showLabelClassificationModal(query); });
         }
+
+        // 複数カテゴリ数バッジを並行して取得・更新
+        function kmlLoadAndBindBadge(q) {
+          fetch('/api/repositories/search/keyword-multi-labels?q=' + encodeURIComponent(q), { credentials: 'same-origin', cache: 'no-store' })
+            .then(function(res) { return res.ok ? res.json() : null; })
+            .then(function(d) {
+              var numEl = document.getElementById('kmlCountNum');
+              if (!numEl || !d) return;
+              var assigned = Array.isArray(d.assigned_categories) ? d.assigned_categories : [];
+              var all = Array.isArray(d.all_categories) ? d.all_categories : [];
+              numEl.textContent = '(' + assigned.length + '/' + all.length + ')';
+              var badgeBtn = document.getElementById('kmlCountBadge');
+              if (badgeBtn) {
+                badgeBtn.addEventListener('click', function() {
+                  showKmlModal(q, assigned, all);
+                });
+              }
+            })
+            .catch(function() {
+              var numEl = document.getElementById('kmlCountNum');
+              if (numEl) numEl.textContent = '(- /-)';
+            });
+        }
+        kmlLoadAndBindBadge(query);
 
         fetch('/api/repositories/search/keyword-stats?q=' + encodeURIComponent(query), { credentials: 'same-origin', cache: 'no-store' })
           .then(function(res) { return res.ok ? res.json() : null; })
@@ -6034,7 +6197,8 @@ export function getRepositoriesPage(user: {
             if (panel) {
               panel.innerHTML = '<div class="keyword-detail-panel-header">'
                 + '<span class="keyword-detail-panel-title">「' + escHtml(query) + '」の詳細集計</span>'
-                + '<div style="display:flex;align-items:center;gap:4px;">'
+                + '<div style="display:flex;align-items:center;gap:6px;">'
+                + '<button class="kml-count-badge" id="kmlCountBadge" type="button" title="複数カテゴリ分類を編集">現在分類中のカテゴリ数 : <span class="kml-count-num" id="kmlCountNum">…</span></button>'
                 + '<button class="keyword-detail-classify-btn" id="keywordDetailClassifyBtn2" type="button">このキーワードを分類する</button>'
                 + '<button class="keyword-detail-panel-close" id="keywordDetailClose" type="button">&times;</button>'
                 + '</div>'
@@ -6053,6 +6217,7 @@ export function getRepositoriesPage(user: {
               if (classifyBtn2) {
                 classifyBtn2.addEventListener('click', function() { showLabelClassificationModal(query); });
               }
+              kmlLoadAndBindBadge(query);
               panel.querySelectorAll('[data-cokey]').forEach(function(el) {
                 el.addEventListener('click', function() {
                   var cokey = el.getAttribute('data-cokey');
