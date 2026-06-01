@@ -1560,6 +1560,14 @@ export function mergeAllCategories(dbLabels: string[]): string[] {
   return merged;
 }
 
+export function resolveKeywordDisplayLabels(
+  multiCategories: string[] | null | undefined,
+  singleLabel: string
+): string[] {
+  if (Array.isArray(multiCategories) && multiCategories.length > 0) return multiCategories;
+  return [singleLabel || 'uncategorized'];
+}
+
 interface ClassifyResult {
   label: string;
   prompt: string;
@@ -6464,6 +6472,30 @@ app.post('/api/repositories/search/keyword-multi-labels', authMiddleware, async 
       error: error instanceof Error ? error.message : 'Unknown error',
     });
     return jsonUtf8({ error: '保存に失敗しました' }, 500);
+  }
+});
+
+app.get('/api/repositories/search/keyword-multi-labels-all', authMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!c.env.DB) return jsonUtf8({ error: 'Database not available' }, 500);
+
+  try {
+    const rows = await c.env.DB.prepare(
+      `SELECT search_query, categories FROM keyword_multi_labels WHERE user_id = ?`
+    ).bind(user.sub).all<{ search_query: string; categories: string }>().catch(() => ({ results: [] }));
+
+    const items = (rows.results ?? []).map((r) => {
+      let cats: string[] = [];
+      try { cats = JSON.parse(r.categories); if (!Array.isArray(cats)) cats = []; } catch { cats = []; }
+      return { search_query: r.search_query, categories: cats };
+    });
+
+    return jsonUtf8({ items });
+  } catch (error) {
+    logger.warn('Failed to fetch all keyword multi-labels', {
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    return jsonUtf8({ error: 'Failed to fetch keyword multi-labels' }, 500);
   }
 });
 
