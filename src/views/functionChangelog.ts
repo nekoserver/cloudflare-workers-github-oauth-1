@@ -22,10 +22,17 @@ export interface RepoOption {
   full_name: string;
 }
 
+export interface FileFunctionEntry {
+  file_path: string;
+  function_name: string;
+}
+
 export interface FunctionChangelogInput {
   rows: FunctionChangeRow[];
   repos: RepoOption[];
   selectedRepoId: number | null;
+  availableFiles: string[];
+  availableFunctions: FileFunctionEntry[];
   generatedAt: string;
   filterFile?: string;
   filterFunction?: string;
@@ -50,8 +57,7 @@ function impactBadge(t: string | null): string {
     refactor: 'リファクタ', perf: 'パフォーマンス', test: 'テスト',
     docs: 'ドキュメント', chore: 'その他',
   };
-  const cls = map[t] ?? 'badge-none';
-  return `<span class="badge ${cls}">${label[t] ?? escapeHtml(t)}</span>`;
+  return `<span class="badge ${map[t] ?? 'badge-none'}">${label[t] ?? escapeHtml(t)}</span>`;
 }
 
 function severityDots(n: number | null): string {
@@ -60,11 +66,15 @@ function severityDots(n: number | null): string {
 }
 
 export function getFunctionChangelogPage(input: FunctionChangelogInput): string {
-  const { rows, repos, selectedRepoId, generatedAt } = input;
+  const { rows, repos, selectedRepoId, availableFiles, availableFunctions, generatedAt } = input;
   const noRepoSelected = selectedRepoId === null;
 
   const repoOptions = repos.map(r =>
     `<option value="${r.id}"${selectedRepoId === r.id ? ' selected' : ''}>${escapeHtml(r.full_name)}</option>`
+  ).join('\n');
+
+  const fileOptions = availableFiles.map(f =>
+    `<option value="${escapeHtml(f)}"${input.filterFile === f ? ' selected' : ''}>${escapeHtml(f)}</option>`
   ).join('\n');
 
   const tableRows = rows.map(r => {
@@ -75,7 +85,7 @@ export function getFunctionChangelogPage(input: FunctionChangelogInput): string 
     const notesCell = r.notes
       ? `<span class="notes-text" title="${escapeHtml(r.notes)}">${escapeHtml(r.notes.slice(0, 60))}${r.notes.length > 60 ? '…' : ''}</span>`
       : '—';
-    return `<tr data-file="${escapeHtml(r.file_path.toLowerCase())}" data-func="${escapeHtml(r.function_name.toLowerCase())}" data-impact="${escapeHtml(r.impact_type ?? '')}">
+    return `<tr data-file="${escapeHtml(r.file_path)}" data-func="${escapeHtml(r.function_name)}" data-impact="${escapeHtml(r.impact_type ?? '')}">
       <td class="col-date">${escapeHtml(r.commit_at.slice(0, 10))}</td>
       <td class="col-hash"><code title="${escapeHtml(r.commit_hash)}">${escapeHtml(shortHash)}</code><br><span class="subject">${escapeHtml(r.subject)}</span></td>
       <td class="col-file"><code>${escapeHtml(r.file_path)}</code></td>
@@ -89,29 +99,31 @@ export function getFunctionChangelogPage(input: FunctionChangelogInput): string 
 
   const emptyRow = '<tr><td colspan="8" class="empty-cell">データなし — ts_commit_function_map にレコードを追加してください</td></tr>';
 
-  let guidanceBanner = '';
+  let repoBanner = '';
   if (repos.length === 0) {
-    guidanceBanner = `
-  <div class="guidance-banner guidance-banner--error" id="guidanceBanner">
-    <span class="guidance-icon">🚫</span>
-    <span class="guidance-text">このページは事前にデータベース上に任意のリポジトリに定義済みの関数データが存在しなければ正常動作しません。</span>
+    repoBanner = `
+  <div class="banner banner--error" id="repoBanner">
+    <span class="banner-icon">🚫</span>
+    <span class="banner-text">このページは事前にデータベース上に任意のリポジトリに定義済みの関数データが存在しなければ正常動作しません。</span>
+  </div>`;
+  } else if (noRepoSelected) {
+    repoBanner = `
+  <div class="banner banner--warn" id="repoBanner">
+    <span class="banner-icon">⚠️</span>
+    <span class="banner-text">このページの表示にはデータベース内に登録済みのプロジェクト（リポジトリ）の選択が必要です。右上のドロップダウンからプロジェクトを選択してください。現在 <strong>${repos.length}</strong> 件のプロジェクトが登録されています。</span>
   </div>`;
   } else {
-    const sentence3 = `現在 <strong>${repos.length}</strong> 件のプロジェクトが登録されています。`;
-    if (noRepoSelected) {
-      const sentences12 = 'このページの表示にはデータベース内に登録済みのプロジェクト（リポジトリ）の選択が必要です。右上のドロップダウンからプロジェクトを選択してください。';
-      guidanceBanner = `
-  <div class="guidance-banner" id="guidanceBanner">
-    <span class="guidance-icon">⚠️</span>
-    <span class="guidance-text">${sentences12}${sentence3}</span>
+    repoBanner = `
+  <div class="banner banner--info" id="repoBanner">
+    <span class="banner-text">現在 <strong>${repos.length}</strong> 件のプロジェクトが登録されています。</span>
   </div>`;
-    } else {
-      guidanceBanner = `
-  <div class="guidance-banner guidance-banner--info" id="guidanceBanner">
-    <span class="guidance-text">${sentence3}</span>
-  </div>`;
-    }
   }
+
+  const allFunctionsJson = JSON.stringify(
+    availableFunctions.map(f => ({ file: f.file_path, func: f.function_name }))
+  );
+
+  const dis = noRepoSelected ? ' disabled' : '';
 
   return `<!DOCTYPE html>
 <html lang="ja">
@@ -122,20 +134,25 @@ export function getFunctionChangelogPage(input: FunctionChangelogInput): string 
   <style>
     :root {
       color-scheme: light dark;
-      --bg:          light-dark(#f6f8fa, #0d1117);
-      --panel:       light-dark(#ffffff, #161b22);
-      --border:      light-dark(#d0d7de, #30363d);
-      --text:        light-dark(#1f2328, #c9d1d9);
-      --text-muted:  light-dark(#636c76, #8b949e);
-      --text-strong: light-dark(#1f2328, #f0f6fc);
-      --accent:      light-dark(#0969da, #58a6ff);
-      --th-bg:       light-dark(#f6f8fa, #1c2128);
-      --add-fg:      light-dark(#1a7f37, #3fb950);
-      --del-fg:      light-dark(#cf222e, #f85149);
-      --danger:      light-dark(#cf222e, #f85149);
-      --warn-bg:     light-dark(#fff8c5, #2d2a00);
-      --warn-border: light-dark(#d4a72c, #9e6a03);
-      --warn-text:   light-dark(#7d4e00, #e3b341);
+      --bg:           light-dark(#f6f8fa, #0d1117);
+      --panel:        light-dark(#ffffff, #161b22);
+      --border:       light-dark(#d0d7de, #30363d);
+      --text:         light-dark(#1f2328, #c9d1d9);
+      --text-muted:   light-dark(#636c76, #8b949e);
+      --text-strong:  light-dark(#1f2328, #f0f6fc);
+      --accent:       light-dark(#0969da, #58a6ff);
+      --th-bg:        light-dark(#f6f8fa, #1c2128);
+      --add-fg:       light-dark(#1a7f37, #3fb950);
+      --del-fg:       light-dark(#cf222e, #f85149);
+      --danger:       light-dark(#cf222e, #f85149);
+      --danger-glow:  light-dark(rgba(207,34,46,.18), rgba(248,81,73,.22));
+      --info-bg:      light-dark(#ddf4ff, #0d2136);
+      --info-border:  light-dark(#54aeff, #1f6feb);
+      --info-text:    light-dark(#0550ae, #79c0ff);
+      --info-glow:    light-dark(rgba(84,174,255,.18), rgba(31,111,235,.22));
+      --warn-bg:      light-dark(#fff8c5, #2d2a00);
+      --warn-border:  light-dark(#d4a72c, #9e6a03);
+      --warn-text:    light-dark(#7d4e00, #e3b341);
     }
     * { box-sizing: border-box; }
     body {
@@ -149,130 +166,94 @@ export function getFunctionChangelogPage(input: FunctionChangelogInput): string 
       display: flex; align-items: center; gap: 12px;
       margin-bottom: 20px; flex-wrap: wrap;
     }
-    .subtitle {
-      color: var(--text-muted); font-size: 12px;
-      flex: 1; min-width: 0;
-    }
-    .repo-selector-wrap {
-      display: flex; align-items: center; gap: 8px; flex-shrink: 0;
-    }
-    .repo-selector-label {
-      color: var(--text-muted); font-size: 12px; white-space: nowrap;
-    }
+    .subtitle { color: var(--text-muted); font-size: 12px; flex: 1; min-width: 0; }
+    .repo-selector-wrap { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+    .repo-selector-label { color: var(--text-muted); font-size: 12px; white-space: nowrap; }
     #repoSelect {
       padding: 5px 10px; border-radius: 6px;
       border: 2px solid var(--border);
       background: var(--panel); color: var(--text);
-      font-size: 12px; min-width: 240px;
-      transition: border-color 0.2s;
+      font-size: 12px; min-width: 240px; transition: border-color 0.2s, box-shadow 0.2s;
     }
-    #repoSelect.needs-selection {
+    #repoSelect.sel-needed {
       border-color: var(--danger);
-      box-shadow: 0 0 0 3px light-dark(rgba(207,34,46,.15), rgba(248,81,73,.2));
-      animation: pulse-border 1.5s ease-in-out 3;
+      box-shadow: 0 0 0 3px var(--danger-glow);
+      animation: pulse 1.5s ease-in-out 3;
     }
-    @keyframes pulse-border {
-      0%, 100% { box-shadow: 0 0 0 3px light-dark(rgba(207,34,46,.15), rgba(248,81,73,.2)); }
-      50%       { box-shadow: 0 0 0 5px light-dark(rgba(207,34,46,.25), rgba(248,81,73,.35)); }
-    }
-    .guidance-banner {
+    .banner {
       display: flex; align-items: flex-start; gap: 10px;
-      background: var(--warn-bg); border: 1px solid var(--warn-border);
-      border-radius: 8px; padding: 12px 16px; margin-bottom: 20px;
-      color: var(--warn-text); font-size: 12px; line-height: 1.6;
-      transition: opacity 0.6s ease, margin 0.6s ease, padding 0.6s ease, max-height 0.6s ease;
-      max-height: 120px; overflow: hidden;
+      border-radius: 8px; padding: 10px 14px; margin-bottom: 16px;
+      font-size: 12px; line-height: 1.6;
+      transition: opacity 0.6s ease, max-height 0.6s ease, padding 0.6s ease, margin 0.6s ease;
+      max-height: 100px; overflow: hidden;
     }
-    .guidance-banner--info {
-      background: light-dark(#ddf4ff, #0d2136);
-      border-color: light-dark(#54aeff, #1f6feb);
-      color: light-dark(#0550ae, #79c0ff);
-    }
-    .guidance-banner--error {
-      background: light-dark(#fff0ee, #2d0e0a);
-      border-color: light-dark(#cf222e, #f85149);
-      color: light-dark(#82071e, #ff7b72);
-    }
-    .guidance-banner.fading {
-      opacity: 0; max-height: 0; padding-top: 0; padding-bottom: 0; margin-bottom: 0;
-    }
-    .guidance-icon { font-size: 16px; flex-shrink: 0; margin-top: 1px; }
-    .guidance-text code {
-      background: light-dark(rgba(0,0,0,.08), rgba(255,255,255,.1));
-      padding: 1px 5px; border-radius: 4px;
-      font-family: 'SFMono-Regular', Consolas, monospace; font-size: 11px;
-    }
+    .banner--warn  { background: var(--warn-bg); border: 1px solid var(--warn-border); color: var(--warn-text); }
+    .banner--info  { background: var(--info-bg); border: 1px solid var(--info-border); color: var(--info-text); }
+    .banner--error { background: light-dark(#fff0ee,#2d0e0a); border: 1px solid var(--danger); color: light-dark(#82071e,#ff7b72); }
+    .banner.fading { opacity: 0; max-height: 0; padding-top: 0; padding-bottom: 0; margin-bottom: 0; }
+    .banner-icon { font-size: 15px; flex-shrink: 0; margin-top: 1px; }
     .toolbar {
-      display: flex; gap: 10px; flex-wrap: wrap;
-      margin-bottom: 16px; align-items: center;
+      display: flex; gap: 8px; flex-wrap: wrap;
+      margin-bottom: 0; align-items: center;
     }
-    .toolbar input, .toolbar select {
-      padding: 6px 10px; border-radius: 6px;
-      border: 1px solid var(--border);
-      background: var(--panel); color: var(--text);
-      font-size: 12px;
-    }
-    .toolbar input { width: 220px; }
     .toolbar label { color: var(--text-muted); font-size: 12px; }
-    .toolbar input:disabled, .toolbar select:disabled {
-      opacity: 0.4; cursor: not-allowed;
+    .toolbar select {
+      padding: 5px 8px; border-radius: 6px;
+      border: 2px solid var(--border);
+      background: var(--panel); color: var(--text);
+      font-size: 12px; transition: border-color 0.2s, box-shadow 0.2s;
     }
-    table {
-      width: 100%; border-collapse: collapse;
-      background: var(--panel); border: 1px solid var(--border);
-      border-radius: 8px; overflow: hidden;
+    .toolbar select:disabled { opacity: 0.4; cursor: not-allowed; }
+    #filterFile  { min-width: 260px; }
+    #filterFunc  { min-width: 200px; }
+    #filterImpact { min-width: 120px; }
+    .sel-needed {
+      border-color: var(--danger) !important;
+      box-shadow: 0 0 0 3px var(--danger-glow) !important;
+      animation: pulse 1.5s ease-in-out 3;
     }
-    th {
-      background: var(--th-bg); color: var(--text-muted);
-      text-align: left; padding: 8px 12px;
-      font-size: 11px; text-transform: uppercase; letter-spacing: 0.4px;
-      border-bottom: 1px solid var(--border); white-space: nowrap;
+    .sel-done {
+      border-color: var(--info-border) !important;
+      box-shadow: 0 0 0 2px var(--info-glow) !important;
     }
+    @keyframes pulse {
+      0%,100% { box-shadow: 0 0 0 3px var(--danger-glow); }
+      50%      { box-shadow: 0 0 0 5px light-dark(rgba(207,34,46,.3),rgba(248,81,73,.35)); }
+    }
+    .step-banner {
+      display: none; border-radius: 8px; padding: 10px 14px; margin: 12px 0;
+      font-size: 12px; line-height: 1.6;
+      transition: background 0.4s, border-color 0.4s, color 0.4s;
+    }
+    .step-banner.visible { display: block; }
+    .step-banner--warn { background: var(--warn-bg); border: 1px solid var(--warn-border); color: var(--warn-text); }
+    .step-banner--info { background: var(--info-bg); border: 1px solid var(--info-border); color: var(--info-text); }
+    .table-wrap { opacity: ${noRepoSelected ? '0.35' : '1'}; pointer-events: ${noRepoSelected ? 'none' : 'auto'}; margin-top: 16px; }
+    table { width: 100%; border-collapse: collapse; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+    th { background: var(--th-bg); color: var(--text-muted); text-align: left; padding: 8px 12px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.4px; border-bottom: 1px solid var(--border); white-space: nowrap; }
     td { padding: 8px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
     tr:last-child td { border-bottom: none; }
-    tr:hover td { background: light-dark(rgba(0,0,0,.03), rgba(255,255,255,.03)); }
-    code {
-      background: light-dark(#eaeef2, #0d1117);
-      padding: 1px 5px; border-radius: 4px;
-      font-family: 'SFMono-Regular', Consolas, monospace; font-size: 11px;
-    }
+    tr:hover td { background: light-dark(rgba(0,0,0,.03),rgba(255,255,255,.03)); }
+    code { background: light-dark(#eaeef2,#0d1117); padding: 1px 5px; border-radius: 4px; font-family: 'SFMono-Regular',Consolas,monospace; font-size: 11px; }
     .subject { font-size: 11px; color: var(--text-muted); display: block; margin-top: 2px; }
     .purpose { font-size: 11px; color: var(--text-muted); display: block; margin-top: 2px; }
     .notes-text { color: var(--text-muted); font-size: 11px; }
     .lines-add { color: var(--add-fg); font-variant-numeric: tabular-nums; }
     .lines-del { color: var(--del-fg); font-variant-numeric: tabular-nums; }
-    .col-date     { width: 90px; white-space: nowrap; }
-    .col-hash     { width: 160px; }
-    .col-file     { width: 200px; word-break: break-all; }
-    .col-func     { width: 200px; word-break: break-all; }
-    .col-change   { width: 90px; white-space: nowrap; }
-    .col-impact   { width: 110px; }
-    .col-severity { width: 100px; font-size: 11px; letter-spacing: -1px; color: var(--text-muted); }
-    .col-notes    { min-width: 160px; }
-    .badge {
-      display: inline-block; padding: 2px 7px; border-radius: 10px;
-      font-size: 10px; font-weight: 600; white-space: nowrap;
-    }
-    .badge-add        { background: rgba(63,185,80,.2);   color: #3fb950; }
-    .badge-mod        { background: rgba(88,166,255,.2);  color: #58a6ff; }
-    .badge-del        { background: rgba(248,81,73,.2);   color: #f85149; }
-    .badge-feature    { background: rgba(63,185,80,.2);   color: #3fb950; }
-    .badge-bugfix     { background: rgba(248,81,73,.2);   color: #f85149; }
-    .badge-regression { background: rgba(210,30,30,.35);  color: #ff7b72; }
-    .badge-refactor   { background: rgba(88,166,255,.2);  color: #58a6ff; }
-    .badge-perf       { background: rgba(210,153,34,.2);  color: #e3b341; }
-    .badge-test       { background: rgba(130,80,255,.2);  color: #bc8cff; }
-    .badge-docs       { background: rgba(139,148,158,.2); color: #8b949e; }
-    .badge-chore      { background: rgba(139,148,158,.15);color: #8b949e; }
-    .badge-none       { color: var(--text-muted); background: none; padding: 0; }
-    .table-wrap { opacity: ${noRepoSelected ? '0.35' : '1'}; pointer-events: ${noRepoSelected ? 'none' : 'auto'}; }
-    .empty-cell { text-align: center; color: var(--text-muted); padding: 32px; }
-    .footer {
-      margin-top: 20px; color: var(--text-muted); font-size: 11px;
-      border-top: 1px solid var(--border); padding-top: 12px;
-    }
-    a { color: var(--accent); }
+    .col-date{width:90px;white-space:nowrap} .col-hash{width:160px} .col-file{width:200px;word-break:break-all}
+    .col-func{width:200px;word-break:break-all} .col-change{width:90px;white-space:nowrap}
+    .col-impact{width:110px} .col-severity{width:100px;font-size:11px;letter-spacing:-1px;color:var(--text-muted)} .col-notes{min-width:160px}
+    .badge { display:inline-block; padding:2px 7px; border-radius:10px; font-size:10px; font-weight:600; white-space:nowrap; }
+    .badge-add{background:rgba(63,185,80,.2);color:#3fb950} .badge-mod{background:rgba(88,166,255,.2);color:#58a6ff}
+    .badge-del{background:rgba(248,81,73,.2);color:#f85149} .badge-feature{background:rgba(63,185,80,.2);color:#3fb950}
+    .badge-bugfix{background:rgba(248,81,73,.2);color:#f85149} .badge-regression{background:rgba(210,30,30,.35);color:#ff7b72}
+    .badge-refactor{background:rgba(88,166,255,.2);color:#58a6ff} .badge-perf{background:rgba(210,153,34,.2);color:#e3b341}
+    .badge-test{background:rgba(130,80,255,.2);color:#bc8cff} .badge-docs{background:rgba(139,148,158,.2);color:#8b949e}
+    .badge-chore{background:rgba(139,148,158,.15);color:#8b949e} .badge-none{color:var(--text-muted);background:none;padding:0}
     .count-label { color: var(--text-muted); font-size: 12px; margin-left: auto; }
+    .empty-cell { text-align:center; color:var(--text-muted); padding:32px; }
+    .footer { margin-top:20px; color:var(--text-muted); font-size:11px; border-top:1px solid var(--border); padding-top:12px; }
+    a { color: var(--accent); }
   </style>
 </head>
 <body>
@@ -284,22 +265,27 @@ export function getFunctionChangelogPage(input: FunctionChangelogInput): string 
     </div>
     <div class="repo-selector-wrap">
       <span class="repo-selector-label">プロジェクト</span>
-      <select id="repoSelect" class="${noRepoSelected ? 'needs-selection' : ''}">
+      <select id="repoSelect" class="${noRepoSelected ? 'sel-needed' : 'sel-done'}">
         <option value="">— 選択してください —</option>
         ${repoOptions}
       </select>
     </div>
   </div>
 
-  ${guidanceBanner}
+  ${repoBanner}
 
   <div class="toolbar">
     <label>ファイル</label>
-    <input type="text" id="filterFile" placeholder="src/utils/github.ts" value="${escapeHtml(input.filterFile ?? '')}"${noRepoSelected ? ' disabled' : ''}>
+    <select id="filterFile"${dis}>
+      <option value="">すべて</option>
+      ${fileOptions}
+    </select>
     <label>関数名</label>
-    <input type="text" id="filterFunc" placeholder="getGitHubUser" value="${escapeHtml(input.filterFunction ?? '')}"${noRepoSelected ? ' disabled' : ''}>
+    <select id="filterFunc"${dis}>
+      <option value="">すべて</option>
+    </select>
     <label>インパクト</label>
-    <select id="filterImpact"${noRepoSelected ? ' disabled' : ''}>
+    <select id="filterImpact"${dis}>
       <option value="">すべて</option>
       <option value="feature"${input.filterImpact === 'feature' ? ' selected' : ''}>機能追加</option>
       <option value="bugfix"${input.filterImpact === 'bugfix' ? ' selected' : ''}>バグ修正</option>
@@ -313,18 +299,14 @@ export function getFunctionChangelogPage(input: FunctionChangelogInput): string 
     <span class="count-label" id="rowCount">${noRepoSelected ? '—' : rows.length + ' 件'}</span>
   </div>
 
+  <div class="step-banner" id="stepBanner"></div>
+
   <div class="table-wrap" id="tableWrap">
     <table id="changelogTable">
       <thead>
         <tr>
-          <th>日付</th>
-          <th>コミット</th>
-          <th>ファイル</th>
-          <th>関数</th>
-          <th>変更種別</th>
-          <th>インパクト</th>
-          <th>重要度</th>
-          <th>備考</th>
+          <th>日付</th><th>コミット</th><th>ファイル</th><th>関数</th>
+          <th>変更種別</th><th>インパクト</th><th>重要度</th><th>備考</th>
         </tr>
       </thead>
       <tbody id="tableBody">
@@ -340,55 +322,115 @@ export function getFunctionChangelogPage(input: FunctionChangelogInput): string 
   </div>
 
   <script>
+    var ALL_FUNCTIONS = ${allFunctionsJson};
     var allRows = Array.from(document.querySelectorAll('#tableBody tr[data-file]'));
 
-    var repoSelect = document.getElementById('repoSelect');
+    var repoSelect   = document.getElementById('repoSelect');
+    var filterFile   = document.getElementById('filterFile');
+    var filterFunc   = document.getElementById('filterFunc');
+    var filterImpact = document.getElementById('filterImpact');
+    var stepBanner   = document.getElementById('stepBanner');
+    var repoBanner   = document.getElementById('repoBanner');
+    var tableWrap    = document.getElementById('tableWrap');
+    var rowCount     = document.getElementById('rowCount');
+
     repoSelect.addEventListener('change', function() {
       var val = repoSelect.value;
       var url = new URL(window.location.href);
-      if (val) {
-        url.searchParams.set('repo', val);
-      } else {
-        url.searchParams.delete('repo');
-      }
+      if (val) { url.searchParams.set('repo', val); } else { url.searchParams.delete('repo'); }
       window.location.href = url.toString();
     });
 
+    function populateFuncOptions(fileVal) {
+      var prev = filterFunc.value;
+      filterFunc.innerHTML = '<option value="">すべて</option>';
+      var funcs = fileVal
+        ? ALL_FUNCTIONS.filter(function(e) { return e.file === fileVal; })
+        : ALL_FUNCTIONS;
+      var seen = {};
+      funcs.forEach(function(e) {
+        if (!seen[e.func]) {
+          seen[e.func] = true;
+          var opt = document.createElement('option');
+          opt.value = e.func;
+          opt.textContent = e.func;
+          if (e.func === prev) opt.selected = true;
+          filterFunc.appendChild(opt);
+        }
+      });
+    }
+
     function applyFilter() {
-      var file   = document.getElementById('filterFile').value.toLowerCase();
-      var func   = document.getElementById('filterFunc').value.toLowerCase();
-      var impact = document.getElementById('filterImpact').value;
+      var file   = filterFile.value;
+      var func   = filterFunc.value;
+      var impact = filterImpact.value;
       var visible = 0;
       allRows.forEach(function(tr) {
         var f = tr.getAttribute('data-file') || '';
         var n = tr.getAttribute('data-func') || '';
         var i = tr.getAttribute('data-impact') || '';
-        var show = (!file || f.indexOf(file) !== -1)
-                && (!func || n.indexOf(func) !== -1)
+        var show = (!file || f === file)
+                && (!func || n === func)
                 && (!impact || i === impact);
         tr.style.display = show ? '' : 'none';
         if (show) visible++;
       });
-      document.getElementById('rowCount').textContent = visible + ' 件';
+      rowCount.textContent = visible + ' 件';
     }
 
-    document.getElementById('filterFile').addEventListener('input', applyFilter);
-    document.getElementById('filterFunc').addEventListener('input', applyFilter);
-    document.getElementById('filterImpact').addEventListener('change', applyFilter);
+    function setStep(step) {
+      if (step === 1) {
+        stepBanner.className = 'step-banner visible step-banner--warn';
+        stepBanner.textContent = '次にこの左上にあるファイル選択リスト内から対象ファイル（すべて指定可能）を選択してください。';
+        filterFile.classList.add('sel-needed');
+        filterFile.classList.remove('sel-done');
+        filterFunc.classList.remove('sel-needed', 'sel-done');
+        filterFile.focus();
+      } else if (step === 2) {
+        var label = filterFile.value === '' ? 'すべてのファイル' : filterFile.value;
+        stepBanner.className = 'step-banner visible step-banner--info';
+        stepBanner.textContent = label + ' が選択されました。次にそれらのファイル群にある調べたい関数を選択してください。';
+        filterFile.classList.remove('sel-needed');
+        filterFile.classList.add('sel-done');
+        filterFunc.classList.add('sel-needed');
+        filterFunc.classList.remove('sel-done');
+        filterFunc.focus();
+      } else if (step === 3) {
+        stepBanner.className = 'step-banner visible step-banner--info';
+        var fLabel = filterFile.value === '' ? 'すべてのファイル' : filterFile.value;
+        var nLabel = filterFunc.value === '' ? 'すべての関数' : filterFunc.value;
+        stepBanner.textContent = fLabel + ' / ' + nLabel + ' が選択されました。';
+        filterFunc.classList.remove('sel-needed');
+        filterFunc.classList.add('sel-done');
+      }
+    }
 
-    var banner = document.getElementById('guidanceBanner');
-    var filterFile = document.getElementById('filterFile');
-    if (banner && filterFile && !filterFile.disabled) {
-      var origPlaceholder = filterFile.placeholder;
-      setTimeout(function() {
-        banner.classList.add('fading');
-        banner.addEventListener('transitionend', function() {
-          banner.style.display = 'none';
-          filterFile.placeholder = 'ファイル名でフィルタできます（例: src/utils/github.ts）';
-          filterFile.focus();
-          setTimeout(function() { filterFile.placeholder = origPlaceholder; }, 5000);
-        }, { once: true });
-      }, 9000);
+    filterFile.addEventListener('change', function() {
+      populateFuncOptions(filterFile.value);
+      applyFilter();
+      setStep(2);
+    });
+
+    filterFunc.addEventListener('change', function() {
+      applyFilter();
+      if (filterFunc.value !== '') setStep(3);
+    });
+
+    filterImpact.addEventListener('change', applyFilter);
+
+    var repoSelected = ${!noRepoSelected};
+    if (repoSelected) {
+      populateFuncOptions('');
+
+      if (repoBanner) {
+        setTimeout(function() {
+          repoBanner.classList.add('fading');
+          repoBanner.addEventListener('transitionend', function() {
+            repoBanner.style.display = 'none';
+            setStep(1);
+          }, { once: true });
+        }, 9000);
+      }
     }
   </script>
 </body>
