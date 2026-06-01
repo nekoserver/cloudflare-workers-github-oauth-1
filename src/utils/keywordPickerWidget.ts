@@ -87,7 +87,24 @@ export function renderKeyPickerCss(): string {
       display: inline-block; background: light-dark(#e8f0fe,#1c2d4a); color: light-dark(#1a56db,#60a5fa);
       border-radius: 10px; font-size: 10px; padding: 1px 7px; font-weight: 600; white-space: nowrap;
     }
-    .kp-kw-cell { color: var(--text, #c9d1d9); word-break: break-all; }`;
+    .kp-kw-cell { color: var(--text, #c9d1d9); word-break: break-all; }
+    .kp-groups {
+      padding: 4px 14px 8px; border-bottom: 1px solid var(--border, #30363d);
+      display: flex; flex-wrap: wrap; align-items: center; gap: 4px; flex-shrink: 0; font-size: 12px;
+    }
+    .kp-list-label { color: var(--text-muted, #8b949e); margin-right: 4px; white-space: nowrap; }
+    .kp-group-btn {
+      font-size: 11px; padding: 3px 10px; border-radius: 2px;
+      border: 1px solid var(--border, #30363d); background: light-dark(#f6f8fa,#21262d);
+      color: var(--text-muted, #8b949e); cursor: pointer; white-space: nowrap;
+      transition: background 0.15s, color 0.15s, border-color 0.15s;
+    }
+    .kp-group-btn:hover { border-color: var(--accent, #58a6ff); color: var(--accent, #58a6ff); }
+    .kp-group-btn.active {
+      border-color: var(--accent, #58a6ff);
+      background: light-dark(#ddf4ff,#0d2136);
+      color: var(--accent, #58a6ff); font-weight: 600;
+    }`;
 }
 
 export function renderKeyPickerHtml(): string {
@@ -108,6 +125,7 @@ export function renderKeyPickerHtml(): string {
         <button class="kp-cat-btn" data-label="ops" data-label-name="ops">ops</button>
         <button class="kp-cat-btn" data-label="uncategorized" data-label-name="未分類">未分類</button>
       </div>
+      <div class="kp-groups" id="kpGroups" style="display:none;"></div>
       <div class="kp-body" id="kpBody">
         <div class="kp-msg">読み込み中…</div>
       </div>
@@ -122,6 +140,7 @@ export function renderKeyPickerJs(opts: KeyPickerOptions): string {
     var kpOverlay   = document.getElementById('kpOverlay');
     var kpCloseBtn  = document.getElementById('kpCloseBtn');
     var kpCats      = document.getElementById('kpCats');
+    var kpGroups    = document.getElementById('kpGroups');
     var kpBody      = document.getElementById('kpBody');
     var triggerBtn  = document.getElementById(${JSON.stringify(triggerBtnId)});
     var targetInput = document.getElementById(${JSON.stringify(targetInputId)});
@@ -130,6 +149,8 @@ export function renderKeyPickerJs(opts: KeyPickerOptions): string {
     var KP_ROWS = 20, KP_MIN_COLS = 1, KP_MAX_COLS = 3;
     var kpItems = [];
     var kpActiveLabels = new Set();
+    var kpCachedGroups = null;
+    var kpSelectedGroupId = null;
 
     function kpEsc(s) {
       return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
@@ -163,6 +184,68 @@ export function renderKeyPickerJs(opts: KeyPickerOptions): string {
           btn.classList.toggle('active', kpActiveLabels.has(lbl));
         }
       });
+      kpSyncGroupSelection();
+    }
+
+    function kpRenderGroupList(groups) {
+      if (!kpGroups) return;
+      if (!groups || groups.length === 0) { kpGroups.style.display = 'none'; return; }
+      var groupsWithCount = groups.map(function(g) {
+        var count = new Set(
+          kpItems.filter(function(item) { return g.categories.indexOf(item.label) !== -1; })
+                 .map(function(item) { return item.search_query; })
+        ).size;
+        return { g: g, count: count };
+      });
+      groupsWithCount.sort(function(a, b) { return b.count - a.count; });
+      var html = '<span class="kp-list-label">既存のキーワードグループ : </span>';
+      groupsWithCount.forEach(function(entry) {
+        var g = entry.g;
+        var isActive = kpSelectedGroupId === g.id;
+        html += '<button type="button" class="kp-group-btn' + (isActive ? ' active' : '') + '" data-group-id="' + kpEsc(g.id) + '" data-group-cats="' + kpEsc(JSON.stringify(g.categories)) + '">' + kpEsc(g.group_name) + ' (' + entry.count + ')</button>';
+      });
+      kpGroups.innerHTML = html;
+      kpGroups.style.display = '';
+      kpGroups.querySelectorAll('.kp-group-btn').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+          var gid = btn.getAttribute('data-group-id');
+          if (kpSelectedGroupId === gid) {
+            kpSelectedGroupId = null;
+            kpActivateAll();
+          } else {
+            kpSelectedGroupId = gid;
+            try {
+              var cats = JSON.parse(btn.getAttribute('data-group-cats') || '[]');
+              kpActiveLabels = new Set();
+              cats.forEach(function(l) { kpActiveLabels.add(l); });
+              kpSyncBtnStyles();
+              kpApply();
+            } catch (e) { /* ignore */ }
+          }
+          kpRenderGroupList(kpCachedGroups);
+        });
+      });
+    }
+
+    function kpSyncGroupSelection() {
+      if (!kpCachedGroups) return;
+      var labels = Array.from(kpActiveLabels).sort();
+      var matched = kpCachedGroups.find(function(g) {
+        var sorted = g.categories.slice().sort();
+        return sorted.length === labels.length && sorted.every(function(v, i) { return v === labels[i]; });
+      });
+      kpSelectedGroupId = matched ? matched.id : null;
+      kpRenderGroupList(kpCachedGroups);
+    }
+
+    function kpLoadGroups() {
+      fetch('/api/repositories/search/category-groups', { credentials: 'same-origin', cache: 'no-store' })
+        .then(function(res) { return res.ok ? res.json() : null; })
+        .then(function(data) {
+          kpCachedGroups = (data && Array.isArray(data.groups)) ? data.groups : [];
+          kpSyncGroupSelection();
+        })
+        .catch(function() {});
     }
 
     function kpActivateAll() {
@@ -242,18 +325,28 @@ export function renderKeyPickerJs(opts: KeyPickerOptions): string {
 
     function kpOpen() {
       kpOverlay.classList.add('open');
-      if (kpItems.length > 0) { kpApply(); return; }
+      if (kpItems.length > 0) {
+        kpSyncGroupSelection();
+        kpApply();
+        return;
+      }
       kpBody.innerHTML = '<div class="kp-msg">読み込み中…</div>';
-      fetch('/api/repositories/search/history', { credentials: 'same-origin', cache: 'no-store' })
-        .then(function(res) { return res.ok ? res.json() : Promise.reject(); })
-        .then(function(data) {
-          kpItems = kpDedupeSort((data && data.history) ? data.history : []);
-          kpSyncCats(kpItems);
-          kpUpdateCounts(kpItems);
-          kpActivateAll();
-          kpApply();
-        })
-        .catch(function() { kpBody.innerHTML = '<div class="kp-msg">取得に失敗しました</div>'; });
+      Promise.all([
+        fetch('/api/repositories/search/history', { credentials: 'same-origin', cache: 'no-store' })
+          .then(function(res) { return res.ok ? res.json() : Promise.reject(); }),
+        fetch('/api/repositories/search/category-groups', { credentials: 'same-origin', cache: 'no-store' })
+          .then(function(res) { return res.ok ? res.json() : null; })
+          .catch(function() { return null; })
+      ]).then(function(results) {
+        var data = results[0];
+        var groupData = results[1];
+        kpItems = kpDedupeSort((data && data.history) ? data.history : []);
+        kpCachedGroups = (groupData && Array.isArray(groupData.groups)) ? groupData.groups : [];
+        kpSyncCats(kpItems);
+        kpUpdateCounts(kpItems);
+        kpActivateAll();
+        kpApply();
+      }).catch(function() { kpBody.innerHTML = '<div class="kp-msg">取得に失敗しました</div>'; });
     }
 
     function kpClose() { kpOverlay.classList.remove('open'); }
