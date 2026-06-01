@@ -167,6 +167,11 @@ export function renderKeyPickerJs(opts: KeyPickerOptions): string {
       return arr.sort(function(a, b) { return b.total_hits - a.total_hits; });
     }
 
+    function kpShouldHideZeroHits() {
+      var m = document.cookie.match('(^|;)\\s*kp_hide_zero_hits=([^;]*)');
+      return m ? decodeURIComponent(m[2]) === 'on' : false;
+    }
+
     function kpGetAllLabels() {
       return Array.from(kpCats.querySelectorAll('.kp-cat-btn[data-label]'))
         .map(function(b) { return b.getAttribute('data-label'); })
@@ -312,15 +317,18 @@ export function renderKeyPickerJs(opts: KeyPickerOptions): string {
     function kpApply() {
       var allLabels = kpGetAllLabels();
       var allOn = allLabels.length > 0 && allLabels.every(function(l) { return kpActiveLabels.has(l); });
-      var filtered;
+      var base;
       if (allOn) {
-        filtered = kpItems;
+        base = kpItems;
       } else if (kpActiveLabels.size === 0) {
-        filtered = [];
+        base = [];
       } else {
-        filtered = kpItems.filter(function(i) { return kpActiveLabels.has(i.label || 'uncategorized'); });
+        base = kpItems.filter(function(i) { return kpActiveLabels.has(i.label || 'uncategorized'); });
       }
-      kpRenderGrid(filtered);
+      if (kpShouldHideZeroHits()) {
+        base = base.filter(function(i) { return i.total_hits > 0; });
+      }
+      kpRenderGrid(base);
     }
 
     function kpOpen() {
