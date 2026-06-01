@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildKeywordClassificationPrompt, pickBestLabelFromResponse } from './index';
+import { buildKeywordClassificationPrompt, pickBestLabelFromResponse, shouldReclassifyKeyword } from './index';
 
 describe('buildKeywordClassificationPrompt', () => {
   it('キーワードとラベル一覧をプロンプトに含める', () => {
@@ -47,5 +47,38 @@ describe('pickBestLabelFromResponse', () => {
 
   it('空レスポンスの場合は uncategorized を返す', () => {
     expect(pickBestLabelFromResponse('', ['feature', 'bugfix'])).toBe('uncategorized');
+  });
+});
+
+describe('shouldReclassifyKeyword', () => {
+  it('rowがnull/undefinedの場合はfalseを返す（INSERT時に新規扱いになるため）', () => {
+    expect(shouldReclassifyKeyword(null)).toBe(false);
+    expect(shouldReclassifyKeyword(undefined)).toBe(false);
+  });
+
+  it('labelがuncategorized以外の場合はfalseを返す', () => {
+    expect(shouldReclassifyKeyword({ label: 'feature', classify_status: null })).toBe(false);
+    expect(shouldReclassifyKeyword({ label: 'bugfix', classify_status: 'ai_success' })).toBe(false);
+    expect(shouldReclassifyKeyword({ label: 'ui', classify_status: undefined })).toBe(false);
+  });
+
+  it('classify_statusがai_successの場合はfalseを返す（AI正常終了済み・再分類不要）', () => {
+    expect(shouldReclassifyKeyword({ label: 'uncategorized', classify_status: 'ai_success' })).toBe(false);
+  });
+
+  it('classify_statusがnullの場合はtrueを返す（未分類・AI未実行）', () => {
+    expect(shouldReclassifyKeyword({ label: 'uncategorized', classify_status: null })).toBe(true);
+  });
+
+  it('classify_statusが未定義の場合はtrueを返す（旧スキーマ互換）', () => {
+    expect(shouldReclassifyKeyword({ label: 'uncategorized' })).toBe(true);
+  });
+
+  it('classify_statusがai_fallbackの場合はtrueを返す（フォールバック使用・再分類可）', () => {
+    expect(shouldReclassifyKeyword({ label: 'uncategorized', classify_status: 'ai_fallback' })).toBe(true);
+  });
+
+  it('classify_statusがpendingの場合はtrueを返す（明示的に未処理）', () => {
+    expect(shouldReclassifyKeyword({ label: 'uncategorized', classify_status: 'pending' })).toBe(true);
   });
 });
