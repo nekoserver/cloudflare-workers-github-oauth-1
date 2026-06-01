@@ -104,6 +104,7 @@
 
 1. **できないことを何度も試すな** — ツールやAPIが使えないと判明したら即座にユーザーに伝え、代替手段を提示する。同じ方法のバリエーションを繰り返し試さない
 2. **PRはブラウザで作成** — この環境からGitHub APIは使えない。compareリンクを提示して終わり
+2a. **PRマージ通知を画面に積み上げるな** — `subscribe_pr_activity` / `mcp__github__subscribe_pr_activity` は **絶対に呼ばない**。マージ済みPR通知はClaude Codeのウェブ画面に消せない形で蓄積しユーザー体験を著しく損なう。PRを作成したら比較リンクを提示して終わり。その後の監視・自動マージ・CI追跡はすべてユーザーに委ねる
 3. **デプロイはユーザーに委ねる** — `CLOUDFLARE_API_TOKEN` がないため `wrangler deploy` は不可能。コード修正とpushまでが責務
 4. **秘密情報は `[vars]` に書かない** — `GITHUB_CLIENT_ID`、`GITHUB_CLIENT_SECRET`、`JWT_SECRET` はすべて `wrangler secret` で管理。`wrangler.toml` に平文で書き戻さない
 5. **テンプレートからクローンしたら最初に確認する3項目**:
