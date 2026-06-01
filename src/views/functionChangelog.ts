@@ -300,6 +300,14 @@ export function getFunctionChangelogPage(input: FunctionChangelogInput): string 
     .modal-file-select {
       padding: 10px 12px; border-bottom: 1px solid var(--border); flex-shrink: 0;
     }
+    .modal-search-box {
+      padding: 10px 12px; border-bottom: 1px solid var(--border); flex-shrink: 0;
+    }
+    .modal-search-box input {
+      width: 100%; padding: 6px 10px; border-radius: 6px;
+      border: 1px solid var(--border); background: var(--bg); color: var(--text);
+      font-size: 12px;
+    }
     .modal-file-select label {
       display: block; font-size: 10px; color: var(--text-muted);
       text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 5px;
@@ -479,6 +487,9 @@ export function getFunctionChangelogPage(input: FunctionChangelogInput): string 
       </div>
       <div class="modal-body">
         <div class="modal-left">
+          <div class="modal-search-box">
+            <input type="search" id="modalSearch" placeholder="関数名・説明で絞り込み…" autocomplete="off">
+          </div>
           <div class="modal-file-select">
             <label for="modalFileSelect">① ファイルを選択</label>
             <select id="modalFileSelect" class="sel-needed">
@@ -615,6 +626,7 @@ export function getFunctionChangelogPage(input: FunctionChangelogInput): string 
     var REPO_ID = ${selectedRepoId ?? 'null'};
     var overlay         = document.getElementById('historyOverlay');
     var modalClose      = document.getElementById('modalClose');
+    var modalSearch     = document.getElementById('modalSearch');
     var modalFileSelect = document.getElementById('modalFileSelect');
     var funcList        = document.getElementById('funcList');
     var funcCount       = document.getElementById('funcCount');
@@ -623,6 +635,7 @@ export function getFunctionChangelogPage(input: FunctionChangelogInput): string 
     var btnHistory      = document.getElementById('btnHistory');
 
     var selectedEntry = null;
+    var searchMode = false;
 
     function escHtml(s) {
       return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
@@ -634,23 +647,34 @@ export function getFunctionChangelogPage(input: FunctionChangelogInput): string 
       return '<span class="badge badge-mod">変更</span>';
     }
 
-    function renderFuncList(items) {
+    function renderFuncList(items, showFile) {
       funcList.innerHTML = '';
       if (items.length === 0) {
-        funcCount.textContent = 'このファイルに関数が登録されていません';
+        var msg = searchMode ? '一致する関数が見つかりません' : 'このファイルに関数が登録されていません';
+        funcCount.textContent = msg;
         return;
       }
-      funcCount.textContent = '② 関数を選択 (' + items.length + ' 件)';
+      var label = searchMode ? '検索結果 (' + items.length + ' 件)' : '② 関数を選択 (' + items.length + ' 件)';
+      funcCount.textContent = label;
       items.forEach(function(e) {
         var li = document.createElement('li');
         li.setAttribute('role', 'option');
         li.dataset.file = e.file;
         li.dataset.func = e.func;
-        li.innerHTML = '<span class="modal-func-name">' + escHtml(e.func) + '</span>';
+        var inner = '<span class="modal-func-name">' + escHtml(e.func) + '</span>';
+        if (showFile) {
+          inner += '<span class="modal-func-file">' + escHtml(e.file) + '</span>';
+        }
+        li.innerHTML = inner;
         li.addEventListener('click', function() {
           document.querySelectorAll('.modal-func-list li').forEach(function(el) { el.classList.remove('active'); });
           li.classList.add('active');
           selectedEntry = e;
+          if (showFile) {
+            modalFileSelect.value = e.file;
+            modalFileSelect.classList.remove('sel-needed');
+            modalFileSelect.classList.add('sel-done');
+          }
           showFunctionDetail(e);
         });
         funcList.appendChild(li);
@@ -715,6 +739,8 @@ export function getFunctionChangelogPage(input: FunctionChangelogInput): string 
     }
 
     function openModal() {
+      modalSearch.value = '';
+      searchMode = false;
       modalFileSelect.value = '';
       modalFileSelect.classList.add('sel-needed');
       modalFileSelect.classList.remove('sel-done');
@@ -724,26 +750,51 @@ export function getFunctionChangelogPage(input: FunctionChangelogInput): string 
       rightBody.innerHTML = '';
       selectedEntry = null;
       overlay.classList.add('open');
-      modalFileSelect.focus();
+      modalSearch.focus();
     }
 
     function closeModal() {
       overlay.classList.remove('open');
     }
 
+    modalSearch.addEventListener('input', function() {
+      var q = modalSearch.value.trim().toLowerCase();
+      if (q === '') {
+        searchMode = false;
+        var fileVal = modalFileSelect.value;
+        if (fileVal) {
+          var funcs = ALL_FUNCTIONS.filter(function(e) { return e.file === fileVal; });
+          renderFuncList(funcs, false);
+        } else {
+          funcList.innerHTML = '';
+          funcCount.textContent = 'ファイルを選択すると関数一覧が表示されます';
+        }
+        return;
+      }
+      searchMode = true;
+      var results = ALL_FUNCTIONS.filter(function(e) {
+        return e.func.toLowerCase().includes(q) || (e.purpose && e.purpose.toLowerCase().includes(q));
+      });
+      renderFuncList(results, true);
+    });
+
     modalFileSelect.addEventListener('change', function() {
       var fileVal = modalFileSelect.value;
       if (!fileVal) {
         modalFileSelect.classList.add('sel-needed');
         modalFileSelect.classList.remove('sel-done');
-        funcList.innerHTML = '';
-        funcCount.textContent = 'ファイルを選択すると関数一覧が表示されます';
+        if (!searchMode) {
+          funcList.innerHTML = '';
+          funcCount.textContent = 'ファイルを選択すると関数一覧が表示されます';
+        }
         return;
       }
       modalFileSelect.classList.remove('sel-needed');
       modalFileSelect.classList.add('sel-done');
-      var funcs = ALL_FUNCTIONS.filter(function(e) { return e.file === fileVal; });
-      renderFuncList(funcs);
+      if (!searchMode) {
+        var funcs = ALL_FUNCTIONS.filter(function(e) { return e.file === fileVal; });
+        renderFuncList(funcs, false);
+      }
     });
 
     if (btnHistory) {
