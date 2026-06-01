@@ -28,12 +28,12 @@ export function renderKeyPickerCss(): string {
     .kp-overlay {
       display: none; position: fixed; inset: 0;
       background: rgba(0,0,0,0.35); z-index: 2000;
-      align-items: flex-start; justify-content: center; padding-top: 80px;
+      align-items: flex-start; justify-content: center; padding-top: 40px;
     }
     .kp-overlay.open { display: flex; }
     .kp-modal {
       background: var(--panel, #161b22); border: 1px solid var(--border, #30363d);
-      border-radius: 12px; width: min(640px, 96vw); max-height: 82vh;
+      border-radius: 12px; width: min(640px, 96vw); max-height: 88vh;
       display: flex; flex-direction: column; overflow: hidden;
       box-shadow: 0 20px 60px rgba(0,0,0,0.5);
     }
@@ -63,7 +63,7 @@ export function renderKeyPickerCss(): string {
       background: light-dark(#ddf4ff,#0d2136);
       color: var(--accent, #58a6ff); font-weight: 600;
     }
-    .kp-body { overflow-y: auto; flex: 1; padding: 0; min-height: 120px; }
+    .kp-body { overflow-y: auto; flex: 1; padding: 0; min-height: 480px; }
     .kp-msg { font-size: 12px; color: var(--text-muted, #8b949e); padding: 20px; text-align: center; }
     .kp-grid-wrap { display: flex; gap: 0; }
     .kp-grid-col { flex: 1; min-width: 0; }
