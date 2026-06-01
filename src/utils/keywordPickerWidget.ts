@@ -129,7 +129,7 @@ export function renderKeyPickerJs(opts: KeyPickerOptions): string {
 
     var KP_ROWS = 20, KP_MIN_COLS = 1, KP_MAX_COLS = 3;
     var kpItems = [];
-    var kpActiveLabel = '';
+    var kpActiveLabels = new Set();
 
     function kpEsc(s) {
       return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
@@ -146,6 +146,30 @@ export function renderKeyPickerJs(opts: KeyPickerOptions): string {
       return arr.sort(function(a, b) { return b.total_hits - a.total_hits; });
     }
 
+    function kpGetAllLabels() {
+      return Array.from(kpCats.querySelectorAll('.kp-cat-btn[data-label]'))
+        .map(function(b) { return b.getAttribute('data-label'); })
+        .filter(function(l) { return l !== ''; });
+    }
+
+    function kpSyncBtnStyles() {
+      var allLabels = kpGetAllLabels();
+      var allOn = allLabels.length > 0 && allLabels.every(function(l) { return kpActiveLabels.has(l); });
+      kpCats.querySelectorAll('.kp-cat-btn').forEach(function(btn) {
+        var lbl = btn.getAttribute('data-label');
+        if (lbl === '') {
+          btn.classList.toggle('active', allOn);
+        } else {
+          btn.classList.toggle('active', kpActiveLabels.has(lbl));
+        }
+      });
+    }
+
+    function kpActivateAll() {
+      kpGetAllLabels().forEach(function(l) { kpActiveLabels.add(l); });
+      kpSyncBtnStyles();
+    }
+
     function kpSyncCats(items) {
       var existing = new Set(Array.from(kpCats.querySelectorAll('.kp-cat-btn[data-label]')).map(function(b) { return b.getAttribute('data-label'); }));
       var uncatBtn = kpCats.querySelector('[data-label="uncategorized"]');
@@ -158,7 +182,6 @@ export function renderKeyPickerJs(opts: KeyPickerOptions): string {
         btn.setAttribute('data-label', lbl);
         btn.setAttribute('data-label-name', lbl);
         btn.textContent = lbl;
-        btn.addEventListener('click', kpCatClick);
         if (uncatBtn) kpCats.insertBefore(btn, uncatBtn); else kpCats.appendChild(btn);
       });
     }
@@ -204,7 +227,16 @@ export function renderKeyPickerJs(opts: KeyPickerOptions): string {
     }
 
     function kpApply() {
-      var filtered = kpActiveLabel === '' ? kpItems : kpItems.filter(function(i) { return (i.label || 'uncategorized') === kpActiveLabel; });
+      var allLabels = kpGetAllLabels();
+      var allOn = allLabels.length > 0 && allLabels.every(function(l) { return kpActiveLabels.has(l); });
+      var filtered;
+      if (allOn) {
+        filtered = kpItems;
+      } else if (kpActiveLabels.size === 0) {
+        filtered = [];
+      } else {
+        filtered = kpItems.filter(function(i) { return kpActiveLabels.has(i.label || 'uncategorized'); });
+      }
       kpRenderGrid(filtered);
     }
 
@@ -218,6 +250,7 @@ export function renderKeyPickerJs(opts: KeyPickerOptions): string {
           kpItems = kpDedupeSort((data && data.history) ? data.history : []);
           kpSyncCats(kpItems);
           kpUpdateCounts(kpItems);
+          kpActivateAll();
           kpApply();
         })
         .catch(function() { kpBody.innerHTML = '<div class="kp-msg">取得に失敗しました</div>'; });
@@ -225,14 +258,28 @@ export function renderKeyPickerJs(opts: KeyPickerOptions): string {
 
     function kpClose() { kpOverlay.classList.remove('open'); }
 
-    function kpCatClick() {
-      kpActiveLabel = this.getAttribute('data-label');
-      kpCats.querySelectorAll('.kp-cat-btn').forEach(function(b) { b.classList.remove('active'); });
-      this.classList.add('active');
+    kpCats.addEventListener('click', function(e) {
+      var btn = e.target.closest('.kp-cat-btn');
+      if (!btn) return;
+      var lbl = btn.getAttribute('data-label');
+      if (lbl === '') {
+        var allLabels = kpGetAllLabels();
+        var allOn = allLabels.length > 0 && allLabels.every(function(l) { return kpActiveLabels.has(l); });
+        if (allOn) {
+          kpActiveLabels = new Set();
+        } else {
+          allLabels.forEach(function(l) { kpActiveLabels.add(l); });
+        }
+      } else {
+        if (kpActiveLabels.has(lbl)) {
+          kpActiveLabels.delete(lbl);
+        } else {
+          kpActiveLabels.add(lbl);
+        }
+      }
+      kpSyncBtnStyles();
       kpApply();
-    }
-
-    kpCats.querySelectorAll('.kp-cat-btn').forEach(function(btn) { btn.addEventListener('click', kpCatClick.bind(btn)); });
+    });
     if (triggerBtn) triggerBtn.addEventListener('click', kpOpen);
     kpCloseBtn.addEventListener('click', kpClose);
     kpOverlay.addEventListener('click', function(e) { if (e.target === kpOverlay) kpClose(); });
