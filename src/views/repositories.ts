@@ -6492,7 +6492,7 @@ export function getRepositoriesPage(user: {
         hSearchStatus.className = 'history-search-status' + (cls ? ' ' + cls : '');
       }
 
-      function mergeResult(query, totalHits) {
+      function mergeResult(query, totalHits, label) {
         var found = false;
         var highlightType = 'new';
         for (var i = 0; i < currentItems.length; i++) {
@@ -6508,7 +6508,7 @@ export function getRepositoriesPage(user: {
           }
         }
         if (!found) {
-          currentItems.push({ search_query: query, total_hits: totalHits, repoHitCount: null });
+          currentItems.push({ search_query: query, total_hits: totalHits, repoHitCount: null, label: label || 'uncategorized' });
         }
         currentItems.sort(function(a, b) { return b.total_hits - a.total_hits; });
         refreshGrid(query, highlightType);
@@ -6563,7 +6563,11 @@ export function getRepositoriesPage(user: {
               mergeResult(query, total);
               if (typeof window.__reloadSearchHistory === 'function') window.__reloadSearchHistory();
             } else {
-              mergeResult(query, 0);
+              var zeroLabel = (data.isNewKeyword && data.autoLabel) ? data.autoLabel : 'uncategorized';
+              mergeResult(query, 0, zeroLabel);
+              if (data.isNewKeyword && data.autoLabel != null && typeof window.__reloadSearchHistory === 'function') {
+                window.__reloadSearchHistory();
+              }
             }
           })
           .catch(function(err) {

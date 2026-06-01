@@ -5500,19 +5500,17 @@ app.get('/api/repositories/:owner/:repo/commits-calendar', optionalAuthMiddlewar
   if (c.env.DB && workspaceId) {
     const cachedAt = now.toISOString();
 
-    // 過去月のカレンダーキャッシュ（counts + total_count）を保存
-    if (isPastMonth) {
-      try {
-        const totalCount = sumCountsTotal(counts);
-        await c.env.DB.prepare(
-          'INSERT INTO commit_calendar_cache (workspace_id, owner, repo, year, month, counts, total_count, cached_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT (workspace_id, owner, repo, year, month) DO UPDATE SET counts = excluded.counts, total_count = excluded.total_count, cached_at = excluded.cached_at'
-        ).bind(workspaceId, owner, repo, year, month, JSON.stringify(counts), totalCount, cachedAt).run();
-      } catch (e) {
-        logger.warn('Failed to write commit calendar cache to D1', {
-          owner, repo, year: String(year), month: String(month),
-          error: e instanceof Error ? e.message : 'Unknown error',
-        });
-      }
+    // カレンダーキャッシュ（counts + total_count）を保存（過去月・当月ともに保存）
+    try {
+      const totalCount = sumCountsTotal(counts);
+      await c.env.DB.prepare(
+        'INSERT INTO commit_calendar_cache (workspace_id, owner, repo, year, month, counts, total_count, cached_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT (workspace_id, owner, repo, year, month) DO UPDATE SET counts = excluded.counts, total_count = excluded.total_count, cached_at = excluded.cached_at'
+      ).bind(workspaceId, owner, repo, year, month, JSON.stringify(counts), totalCount, cachedAt).run();
+    } catch (e) {
+      logger.warn('Failed to write commit calendar cache to D1', {
+        owner, repo, year: String(year), month: String(month),
+        error: e instanceof Error ? e.message : 'Unknown error',
+      });
     }
 
     // コミット詳細を日別に commit_list_cache へ一括保存
@@ -5654,10 +5652,27 @@ app.get('/api/repositories/this-month-commits', optionalAuthMiddleware, async (c
   const ym = `${jstYM.year}-${String(jstYM.month).padStart(2, '0')}`;
 
   try {
-    const rows = await c.env.DB.prepare(
-      "SELECT owner, repo, MAX(date) AS latest_date FROM commit_list_cache WHERE workspace_id = ? AND date LIKE ? AND commit_count > 0 GROUP BY owner, repo ORDER BY latest_date DESC"
-    ).bind(workspaceId, `${ym}-%`).all<{ owner: string; repo: string; latest_date: string }>();
-    return c.json({ repos: (rows.results ?? []).map(r => ({ owner: r.owner, repo: r.repo, latestDate: r.latest_date })) });
+    // commit_list_cache（日別詳細）と commit_calendar_cache（月別集計）の両方から集約
+    const [listRows, calRows] = await Promise.all([
+      c.env.DB.prepare(
+        "SELECT owner, repo, MAX(date) AS latest_date FROM commit_list_cache WHERE workspace_id = ? AND date LIKE ? AND commit_count > 0 GROUP BY owner, repo"
+      ).bind(workspaceId, `${ym}-%`).all<{ owner: string; repo: string; latest_date: string }>(),
+      c.env.DB.prepare(
+        "SELECT owner, repo FROM commit_calendar_cache WHERE workspace_id = ? AND year = ? AND month = ? AND total_count > 0"
+      ).bind(workspaceId, jstYM.year, jstYM.month).all<{ owner: string; repo: string }>(),
+    ]);
+    const repoMap = new Map<string, { owner: string; repo: string; latestDate: string }>();
+    for (const r of listRows.results ?? []) {
+      repoMap.set(`${r.owner}/${r.repo}`, { owner: r.owner, repo: r.repo, latestDate: r.latest_date });
+    }
+    for (const r of calRows.results ?? []) {
+      const key = `${r.owner}/${r.repo}`;
+      if (!repoMap.has(key)) {
+        repoMap.set(key, { owner: r.owner, repo: r.repo, latestDate: ym });
+      }
+    }
+    const repos = [...repoMap.values()].sort((a, b) => b.latestDate.localeCompare(a.latestDate));
+    return c.json({ repos });
   } catch (e) {
     logger.warn('this-month-commits failed', { error: e instanceof Error ? e.message : String(e) });
     return c.json({ repos: [] });
