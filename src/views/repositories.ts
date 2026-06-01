@@ -893,9 +893,9 @@ export function getRepositoriesPage(user: {
     .history-label-btn.active { border-color:#3b82f6; background:#dbeafe; color:#1d4ed8; }
     [data-theme="dark"] .history-label-btn.active { border-color:#60a5fa; background:rgba(59,130,246,0.25); color:#93c5fd; }
     .history-repo-label { font-size:12px; color:var(--text-muted); white-space:nowrap; margin-left:auto; }
-    .category-group-hint-found { color:#1d4ed8; background:#dbeafe; border:1px solid #bfdbfe; border-radius:6px; padding:3px 10px; display:inline-block; }
+    .category-group-hint-found { color:#166534; background:#dcfce7; border:1px solid #86efac; border-radius:6px; padding:3px 10px; display:inline-block; }
     .category-group-hint-none { color:var(--text-muted); background:var(--bg-secondary); border:1px solid var(--border-color); border-radius:6px; padding:3px 10px; display:inline-block; }
-    [data-theme="dark"] .category-group-hint-found { color:#93c5fd; background:rgba(59,130,246,0.18); border-color:rgba(59,130,246,0.4); }
+    [data-theme="dark"] .category-group-hint-found { color:#86efac; background:rgba(34,197,94,0.15); border-color:rgba(34,197,94,0.35); }
     .cg-list-label { color:var(--text-muted); margin-right:8px; }
     .cg-group-btn { font-size:11px; padding:3px 11px; border-radius:2px; border:1px solid var(--border-color); background:var(--bg-secondary); color:var(--text-muted); cursor:pointer; white-space:nowrap; transition:background .15s,color .15s,border-color .15s; margin-right:4px; margin-bottom:2px; }
     .cg-group-btn:hover { border-color:#3b82f6; color:#3b82f6; }
