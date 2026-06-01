@@ -5216,9 +5216,18 @@ export function getRepositoriesPage(user: {
             return;
           }
           currentItems = dedupeAndSort(hData.history);
+          var prevLabels = new Set(getAllCategoryLabels());
           syncFilterBarFromItems(currentItems);
           updateLabelBadgeCounts(currentItems);
-          activateAllLabels();
+          // activeLabels が空(初回)の場合は全ラベルを有効化
+          // 2回目以降は既存フィルター状態を保持し、新しく追加されたラベルのみONにする
+          if (activeLabels.size === 0) {
+            activateAllLabels();
+          } else {
+            getAllCategoryLabels().forEach(function(l) {
+              if (!prevLabels.has(l)) activeLabels.add(l);
+            });
+          }
           // リポジトリフィルターが選択中の場合は repoHitCount を再適用してから描画
           if (selectedRepo) {
             loadRepoFilter(selectedRepo);
@@ -5259,6 +5268,8 @@ export function getRepositoriesPage(user: {
         historyModal.classList.remove('show');
         document.body.style.overflow = '';
         activateAllLabels();
+        selectedRepo = '';
+        if (hRepoSelect) hRepoSelect.value = '';
         selectedGroupId = null;
         cachedGroups = null;
         if (categoryGroupHint) categoryGroupHint.style.display = 'none';
