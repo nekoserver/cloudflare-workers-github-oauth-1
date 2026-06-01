@@ -901,6 +901,8 @@ export function getRepositoriesPage(user: {
     .cg-group-btn:hover { border-color:#3b82f6; color:#3b82f6; }
     .cg-group-btn.active { border-color:#3b82f6; background:#dbeafe; color:#1d4ed8; }
     [data-theme="dark"] .cg-group-btn.active { border-color:#60a5fa; background:rgba(59,130,246,0.25); color:#93c5fd; }
+    .cg-group-btn.count-updated { background:#fefcbf !important; border-color:#f6e05e !important; color:#744210 !important; }
+    [data-theme="dark"] .cg-group-btn.count-updated { background:rgba(246,224,94,0.15) !important; border-color:#f6e05e !important; color:#f6e05e !important; }
     .history-repo-select {
       font-size:12px; padding:4px 8px; border-radius:6px;
       border:1px solid var(--border-color); background:var(--bg-secondary);
@@ -6579,6 +6581,16 @@ export function getRepositoriesPage(user: {
             updateTitle();
             return;
           }
+          // 旧グループ件数を保存（新 currentItems 設定前）
+          var oldGroupCounts = {};
+          if (cachedGroups) {
+            cachedGroups.forEach(function(g) {
+              oldGroupCounts[g.id] = new Set(
+                currentItems.filter(function(item) { return g.categories.indexOf(item.label) !== -1; })
+                            .map(function(item) { return item.search_query; })
+              ).size;
+            });
+          }
           currentItems = dedupeAndSort(data.history);
           syncFilterBarFromItems(currentItems);
           updateLabelBadgeCounts(currentItems);
@@ -6598,6 +6610,26 @@ export function getRepositoriesPage(user: {
             selectLabelFilter(pendingAuto.label);
           } else if (pendingAuto) {
             syncLabelFilterToKeyword(pendingAuto.query);
+          }
+          // 新キーワード追加後にグループ件数を更新・増加バッジをハイライト
+          if (pendingAuto && cachedGroups) {
+            renderGroupList(cachedGroups);
+            if (categoryGroupListEl) {
+              categoryGroupListEl.querySelectorAll('.cg-group-btn').forEach(function(btn) {
+                var gid = btn.getAttribute('data-group-id');
+                if (gid == null || oldGroupCounts[gid] == null) return;
+                var g = cachedGroups.find(function(gr) { return gr.id === gid; });
+                if (!g) return;
+                var newCount = new Set(
+                  currentItems.filter(function(item) { return g.categories.indexOf(item.label) !== -1; })
+                              .map(function(item) { return item.search_query; })
+                ).size;
+                if (newCount > oldGroupCounts[gid]) {
+                  btn.classList.add('count-updated');
+                  setTimeout(function() { btn.classList.remove('count-updated'); }, 3000);
+                }
+              });
+            }
           }
         }).catch(function() {
           currentItems = [];
