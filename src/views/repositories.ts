@@ -993,25 +993,27 @@ export function getRepositoriesPage(user: {
     .keyword-detail-classify-btn { font-size:11px; padding:3px 11px; border-radius:12px; border:1px solid var(--accent-color,#48bb78); background:transparent; color:var(--accent-color,#48bb78); cursor:pointer; white-space:nowrap; margin-right:8px; transition:background .15s,color .15s; }
     .keyword-detail-classify-btn:hover { background:var(--accent-color,#48bb78); color:#fff; }
     .kml-count-badge { font-size:11px; padding:3px 10px; border-radius:12px; border:1px solid var(--border-color); background:transparent; color:var(--text-muted); cursor:pointer; white-space:nowrap; transition:background .15s,color .15s; }
-    .kml-count-badge:hover { border-color:var(--accent-color,#58a6ff); color:var(--accent-color,#58a6ff); }
-    .kml-count-num { font-weight:700; color:var(--accent-color,#58a6ff); }
+    .kml-count-badge:hover { border-color:#3b82f6; color:#3b82f6; }
+    .kml-count-num { font-weight:700; color:#3b82f6; }
+    [data-theme="dark"] .kml-count-num { color:#60a5fa; }
     .kml-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.45); z-index:3000; align-items:center; justify-content:center; }
     .kml-overlay.open { display:flex; }
-    .kml-modal { background:var(--panel,#161b22); border:1px solid var(--border,#30363d); border-radius:12px; width:min(520px,96vw); max-height:80vh; display:flex; flex-direction:column; overflow:hidden; box-shadow:0 20px 60px rgba(0,0,0,.5); }
-    .kml-header { display:flex; align-items:center; justify-content:space-between; padding:12px 16px; border-bottom:1px solid var(--border,#30363d); flex-shrink:0; }
+    .kml-modal { background:var(--bg-primary,#ffffff); border:1px solid var(--border-color); border-radius:12px; width:min(520px,96vw); max-height:80vh; display:flex; flex-direction:column; overflow:hidden; box-shadow:0 20px 60px rgba(0,0,0,.3); }
+    .kml-header { display:flex; align-items:center; justify-content:space-between; padding:12px 16px; border-bottom:1px solid var(--border-color); flex-shrink:0; }
     .kml-header-title { font-size:13px; font-weight:700; color:var(--text-primary); }
     .kml-header-close { border:none; background:none; font-size:18px; cursor:pointer; color:var(--text-muted); padding:0 4px; border-radius:4px; }
-    .kml-header-close:hover { color:var(--text-primary); background:light-dark(#eaeef2,#21262d); }
+    .kml-header-close:hover { color:var(--text-primary); background:var(--bg-secondary); }
     .kml-body { padding:16px; overflow-y:auto; flex:1; }
     .kml-hint { font-size:11px; color:var(--text-muted); margin-bottom:10px; }
-    .kml-cats { display:flex; flex-wrap:wrap; gap:8px; }
-    .kml-cat-btn { font-size:12px; padding:5px 14px; border-radius:16px; border:1px solid var(--border,#30363d); background:light-dark(#f6f8fa,#21262d); color:var(--text-muted); cursor:pointer; transition:background .15s,color .15s,border-color .15s; }
-    .kml-cat-btn.active { border-color:var(--accent,#58a6ff); background:light-dark(#ddf4ff,#0d2136); color:var(--accent,#58a6ff); font-weight:600; }
-    .kml-cat-btn:hover:not(.active) { border-color:var(--accent,#58a6ff); color:var(--accent,#58a6ff); }
-    .kml-footer { padding:12px 16px; border-top:1px solid var(--border,#30363d); display:flex; justify-content:flex-end; gap:8px; flex-shrink:0; }
-    .kml-footer-cancel { font-size:13px; padding:6px 18px; border-radius:8px; border:1px solid var(--border,#30363d); background:transparent; color:var(--text-muted); cursor:pointer; }
-    .kml-footer-confirm { font-size:13px; padding:6px 18px; border-radius:8px; border:none; background:var(--accent,#58a6ff); color:#fff; cursor:pointer; font-weight:600; }
-    .kml-footer-confirm:hover { opacity:.85; }
+    .kml-cats { display:flex; flex-wrap:wrap; gap:6px; }
+    .kml-cat-btn { font-size:11px; padding:3px 11px; border-radius:12px; border:1px solid var(--border-color); background:var(--bg-secondary); color:var(--text-muted); cursor:pointer; transition:background .15s,color .15s,border-color .15s; white-space:nowrap; }
+    .kml-cat-btn:hover { border-color:#3b82f6; color:#3b82f6; }
+    .kml-cat-btn.active { border-color:#3b82f6; background:#dbeafe; color:#1d4ed8; font-weight:600; }
+    [data-theme="dark"] .kml-cat-btn.active { border-color:#60a5fa; background:rgba(59,130,246,0.25); color:#93c5fd; }
+    .kml-footer { padding:12px 16px; border-top:1px solid var(--border-color); display:flex; justify-content:flex-end; gap:8px; flex-shrink:0; }
+    .kml-footer-cancel { font-size:13px; padding:6px 18px; border-radius:8px; border:1px solid var(--border-color); background:transparent; color:var(--text-muted); cursor:pointer; }
+    .kml-footer-confirm { font-size:13px; padding:6px 18px; border-radius:8px; border:none; background:#3b82f6; color:#fff; cursor:pointer; font-weight:600; }
+    .kml-footer-confirm:hover { background:#2563eb; }
     .kml-save-status { font-size:11px; color:var(--text-muted); align-self:center; margin-right:auto; }
     .kd-bar:hover { fill: rgba(102,126,234,1); }
     .kd-label { font-size: 9px; fill: var(--text-muted, #888); }
@@ -5809,7 +5811,7 @@ export function getRepositoriesPage(user: {
           }).then(function(res) { return res.ok ? res.json() : Promise.reject(); })
             .then(function() {
               if (statusEl) statusEl.textContent = '保存しました';
-              // バッジ更新
+              // バッジ更新（kmlBadgeData は showKeywordDetail スコープにあるが保存時点では参照できないため kmlAllCats を使う）
               var numEl = document.getElementById('kmlCountNum');
               if (numEl) numEl.textContent = '(' + cats.length + '/' + kmlAllCats.length + ')';
               setTimeout(function() { kmlClose(); }, 600);
@@ -5819,37 +5821,24 @@ export function getRepositoriesPage(user: {
             });
         });
 
-        window.showKmlModal = function(query, assignedCategories, allCategories) {
-          kmlCurrentQuery = query;
-          kmlAllCats = allCategories || [];
-          kmlSelectedCats = new Set(Array.isArray(assignedCategories) ? assignedCategories : []);
+        var catsEl = document.getElementById('kmlCats');
 
-          var titleEl = document.getElementById('kmlModalTitle');
-          if (titleEl) titleEl.textContent = '「' + query + '」のカテゴリ分類';
-
-          var statusEl = document.getElementById('kmlSaveStatus');
-          if (statusEl) statusEl.textContent = '';
-
-          var catsEl = document.getElementById('kmlCats');
+        function kmlSyncBadges() {
           if (!catsEl) return;
-          catsEl.innerHTML = '';
-
-          // 「すべて」ボタン（全選択/全解除トグル）
-          var allBtn = document.createElement('button');
-          allBtn.className = 'kml-cat-btn' + (kmlSelectedCats.size === kmlAllCats.length && kmlAllCats.length > 0 ? ' active' : '');
-          allBtn.textContent = 'すべて';
-          allBtn.setAttribute('data-cat', '__all__');
-          catsEl.appendChild(allBtn);
-
-          kmlAllCats.forEach(function(cat) {
-            var btn = document.createElement('button');
-            btn.className = 'kml-cat-btn' + (kmlSelectedCats.has(cat) ? ' active' : '');
-            btn.textContent = cat === 'uncategorized' ? '未分類' : cat;
-            btn.setAttribute('data-cat', cat);
-            catsEl.appendChild(btn);
+          var allActive = kmlAllCats.length > 0 && kmlSelectedCats.size === kmlAllCats.length;
+          catsEl.querySelectorAll('.kml-cat-btn').forEach(function(b) {
+            var c = b.getAttribute('data-cat');
+            if (c === '__all__') {
+              b.classList.toggle('active', allActive);
+            } else {
+              b.classList.toggle('active', kmlSelectedCats.has(c));
+            }
           });
+        }
 
-          catsEl.addEventListener('click', function(e) {
+        // onclick で上書きすることでリスナー重複を防ぐ
+        if (catsEl) {
+          catsEl.onclick = function(e) {
             var btn = e.target.closest('.kml-cat-btn');
             if (!btn) return;
             var cat = btn.getAttribute('data-cat');
@@ -5863,16 +5852,41 @@ export function getRepositoriesPage(user: {
               if (kmlSelectedCats.has(cat)) kmlSelectedCats.delete(cat);
               else kmlSelectedCats.add(cat);
             }
-            // バッジ状態更新
-            catsEl.querySelectorAll('.kml-cat-btn').forEach(function(b) {
-              var c = b.getAttribute('data-cat');
-              if (c === '__all__') {
-                b.classList.toggle('active', kmlSelectedCats.size === kmlAllCats.length && kmlAllCats.length > 0);
-              } else {
-                b.classList.toggle('active', kmlSelectedCats.has(c));
-              }
-            });
+            kmlSyncBadges();
+          };
+        }
+
+        window.showKmlModal = function(query, assignedCategories, allCategories) {
+          kmlCurrentQuery = query;
+          kmlAllCats = allCategories || [];
+          kmlSelectedCats = new Set(Array.isArray(assignedCategories) ? assignedCategories : []);
+
+          var titleEl = document.getElementById('kmlModalTitle');
+          if (titleEl) titleEl.textContent = '「' + query + '」のカテゴリ分類';
+
+          var statusEl = document.getElementById('kmlSaveStatus');
+          if (statusEl) statusEl.textContent = '';
+
+          if (!catsEl) return;
+          catsEl.innerHTML = '';
+
+          // 「すべて」ボタン（全選択/全解除トグル）
+          var allBtn = document.createElement('button');
+          allBtn.className = 'kml-cat-btn';
+          allBtn.textContent = 'すべて';
+          allBtn.setAttribute('data-cat', '__all__');
+          catsEl.appendChild(allBtn);
+
+          kmlAllCats.forEach(function(cat) {
+            var btn = document.createElement('button');
+            btn.className = 'kml-cat-btn';
+            btn.textContent = cat === 'uncategorized' ? '未分類' : cat;
+            btn.setAttribute('data-cat', cat);
+            catsEl.appendChild(btn);
           });
+
+          // 初期状態のバッジ反映（active クラスを各ボタン生成後に一括付与）
+          kmlSyncBadges();
 
           overlay.classList.add('open');
         };
@@ -6123,26 +6137,27 @@ export function getRepositoriesPage(user: {
           classifyBtn.addEventListener('click', function() { showLabelClassificationModal(query); });
         }
 
-        // 複数カテゴリ数バッジを並行して取得・更新
+        // 複数カテゴリ数バッジを取得・更新（onclick で上書きしリスナー重複防止）
+        var kmlBadgeData = { assigned: [], all: [] };
         function kmlLoadAndBindBadge(q) {
           fetch('/api/repositories/search/keyword-multi-labels?q=' + encodeURIComponent(q), { credentials: 'same-origin', cache: 'no-store' })
             .then(function(res) { return res.ok ? res.json() : null; })
             .then(function(d) {
+              if (!d) return;
+              kmlBadgeData.assigned = Array.isArray(d.assigned_categories) ? d.assigned_categories : [];
+              kmlBadgeData.all = Array.isArray(d.all_categories) ? d.all_categories : [];
               var numEl = document.getElementById('kmlCountNum');
-              if (!numEl || !d) return;
-              var assigned = Array.isArray(d.assigned_categories) ? d.assigned_categories : [];
-              var all = Array.isArray(d.all_categories) ? d.all_categories : [];
-              numEl.textContent = '(' + assigned.length + '/' + all.length + ')';
+              if (numEl) numEl.textContent = '(' + kmlBadgeData.assigned.length + '/' + kmlBadgeData.all.length + ')';
               var badgeBtn = document.getElementById('kmlCountBadge');
               if (badgeBtn) {
-                badgeBtn.addEventListener('click', function() {
-                  showKmlModal(q, assigned, all);
-                });
+                badgeBtn.onclick = function() {
+                  showKmlModal(q, kmlBadgeData.assigned, kmlBadgeData.all);
+                };
               }
             })
             .catch(function() {
               var numEl = document.getElementById('kmlCountNum');
-              if (numEl) numEl.textContent = '(- /-)';
+              if (numEl) numEl.textContent = '(-/-)';
             });
         }
         kmlLoadAndBindBadge(query);
