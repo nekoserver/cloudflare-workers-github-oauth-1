@@ -5895,6 +5895,13 @@ export function getRepositoriesPage(user: {
               // バッジ更新（kmlBadgeData は showKeywordDetail スコープにあるが保存時点では参照できないため kmlAllCats を使う）
               var numEl = document.getElementById('kmlCountNum');
               if (numEl) numEl.textContent = '(' + cats.length + '/' + kmlAllCats.length + ')';
+              // histMultiLabelsMap を更新し、一列表示中なら該当行のカテゴリバッジを即時再描画
+              if (histMultiLabelsMap !== null) {
+                histMultiLabelsMap[kmlCurrentQuery] = cats.slice();
+              }
+              if (histViewMode === 'single') {
+                refreshGrid(null, null);
+              }
               setTimeout(function() { kmlClose(); }, 600);
             })
             .catch(function() {
