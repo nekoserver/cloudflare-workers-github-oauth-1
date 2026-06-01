@@ -6151,7 +6151,20 @@ export function getRepositoriesPage(user: {
               var badgeBtn = document.getElementById('kmlCountBadge');
               if (badgeBtn) {
                 badgeBtn.onclick = function() {
-                  showKmlModal(q, kmlBadgeData.assigned, kmlBadgeData.all);
+                  var numEl2 = document.getElementById('kmlCountNum');
+                  if (numEl2) numEl2.textContent = '(…)';
+                  fetch('/api/repositories/search/keyword-multi-labels?q=' + encodeURIComponent(q), { credentials: 'same-origin', cache: 'no-store' })
+                    .then(function(res2) { return res2.ok ? res2.json() : null; })
+                    .then(function(d2) {
+                      if (!d2) return;
+                      kmlBadgeData.assigned = Array.isArray(d2.assigned_categories) ? d2.assigned_categories : [];
+                      kmlBadgeData.all = Array.isArray(d2.all_categories) ? d2.all_categories : [];
+                      if (numEl2) numEl2.textContent = '(' + kmlBadgeData.assigned.length + '/' + kmlBadgeData.all.length + ')';
+                      showKmlModal(q, kmlBadgeData.assigned, kmlBadgeData.all);
+                    })
+                    .catch(function() {
+                      if (numEl2) numEl2.textContent = '(-/-)';
+                    });
                 };
               }
             })
