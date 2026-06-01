@@ -418,6 +418,29 @@ export function getFunctionChangelogPage(input: FunctionChangelogInput): string 
     .h-diff-add { color: var(--add-fg); }
     .h-diff-del { color: var(--del-fg); }
     .modal-func-count { padding: 6px 12px; font-size: 11px; color: var(--text-muted); border-bottom: 1px solid var(--border); flex-shrink: 0; }
+    .btn-layout-toggle {
+      padding: 4px 10px; border-radius: 6px; font-size: 11px; font-weight: 600;
+      border: 1px solid var(--border); background: transparent;
+      color: var(--text-muted); cursor: pointer; flex-shrink: 0;
+      transition: background 0.15s, color 0.15s;
+    }
+    .btn-layout-toggle:hover { background: light-dark(#f0f6ff,#1c2333); color: var(--text-strong); }
+    .modal-purpose-th {
+      padding: 6px 12px; flex-shrink: 0;
+      background: var(--th-bg); color: var(--text-muted);
+      font-size: 11px; border-bottom: 1px solid var(--border);
+      border-left: 1px solid var(--border);
+    }
+    .modal-purpose-list { overflow-y: auto; flex: 1; border-left: 1px solid var(--border); }
+    .purpose-item {
+      padding: 7px 14px; font-size: 12px; color: var(--text);
+      border-bottom: 1px solid var(--border); cursor: pointer;
+      line-height: 1.5; transition: background 0.1s;
+    }
+    .purpose-item:last-child { border-bottom: none; }
+    .purpose-item:hover { background: light-dark(#f0f6ff,#1c2333); }
+    .purpose-item.active { background: light-dark(#ddf4ff,#0d2136); border-left: 3px solid var(--accent); }
+    .purpose-item-empty { color: var(--text-muted); font-style: italic; }
   </style>
 </head>
 <body>
@@ -494,6 +517,7 @@ export function getFunctionChangelogPage(input: FunctionChangelogInput): string 
       <div class="modal-header">
         <span class="modal-title" id="modalTitle">🔍 関数を選んで変更履歴を調べる</span>
         ${selectedRepoName ? `<span class="modal-repo-label">現在選択中のリポジトリ: <strong>${escapeHtml(selectedRepoName)}</strong></span>` : ''}
+        <button class="btn-layout-toggle" id="btnLayoutToggle" title="2ペイン一覧表示に切り替え">⊞ 一覧</button>
         <button class="modal-close" id="modalClose" aria-label="閉じる">✕</button>
       </div>
       <div class="modal-body">
@@ -512,7 +536,9 @@ export function getFunctionChangelogPage(input: FunctionChangelogInput): string 
           <div class="modal-func-count" id="funcCount">ファイルを選択すると関数一覧が表示されます</div>
           <ul class="modal-func-list" id="funcList" role="listbox"></ul>
         </div>
-        <div class="modal-right">
+        <div class="modal-right" id="modalRight">
+          <div class="modal-purpose-th" id="purposeTh" style="display:none;">この関数について</div>
+          <div class="modal-purpose-list" id="purposeList" style="display:none;"></div>
           <div class="modal-right-header" id="rightHeader">
             <div class="fn-placeholder">（左からファイル → 関数の順に選択してください）</div>
           </div>
@@ -646,8 +672,115 @@ export function getFunctionChangelogPage(input: FunctionChangelogInput): string 
     var rightBody       = document.getElementById('rightBody');
     var btnHistory      = document.getElementById('btnHistory');
 
+    var modalRight       = document.getElementById('modalRight');
+    var purposeTh        = document.getElementById('purposeTh');
+    var purposeList      = document.getElementById('purposeList');
+    var btnLayoutToggle  = document.getElementById('btnLayoutToggle');
+
     var selectedEntry = null;
     var searchMode = false;
+    var layoutMode = '3pane';
+    var purposeSpacerTop = null;
+
+    function ensurePurposeSpacerTop() {
+      if (!purposeSpacerTop) {
+        purposeSpacerTop = document.createElement('div');
+        purposeSpacerTop.style.flexShrink = '0';
+        modalRight.insertBefore(purposeSpacerTop, purposeTh);
+      }
+      var searchBoxEl = document.querySelector('.modal-search-box');
+      var fileSelectEl = document.querySelector('.modal-file-select');
+      var h = (searchBoxEl ? searchBoxEl.offsetHeight : 0) + (fileSelectEl ? fileSelectEl.offsetHeight : 0);
+      purposeSpacerTop.style.height = h + 'px';
+    }
+
+    function syncPurposeList() {
+      if (layoutMode !== '2pane') return;
+      var lis = Array.from(funcList.querySelectorAll('li'));
+      purposeList.innerHTML = '';
+      lis.forEach(function(li) { li.style.minHeight = ''; });
+
+      lis.forEach(function(li) {
+        var file = li.dataset.file || '';
+        var func = li.dataset.func || '';
+        var entry = ALL_FUNCTIONS.find(function(e) { return e.file === file && e.func === func; });
+        var purpose = entry ? (entry.purpose || '') : '';
+
+        var div = document.createElement('div');
+        div.className = 'purpose-item' + (li.classList.contains('active') ? ' active' : '');
+        div.dataset.file = file;
+        div.dataset.func = func;
+        if (purpose) {
+          div.textContent = purpose;
+        } else {
+          var s = document.createElement('span');
+          s.className = 'purpose-item-empty';
+          s.textContent = '（説明未登録）';
+          div.appendChild(s);
+        }
+        div.addEventListener('click', function() {
+          var e = ALL_FUNCTIONS.find(function(x) { return x.file === div.dataset.file && x.func === div.dataset.func; });
+          if (!e) return;
+          document.querySelectorAll('.modal-func-list li').forEach(function(l) { l.classList.remove('active'); });
+          var matchLi = Array.from(funcList.querySelectorAll('li')).find(function(l) { return l.dataset.file === e.file && l.dataset.func === e.func; });
+          if (matchLi) matchLi.classList.add('active');
+          selectedEntry = e;
+          switch3Pane();
+          showFunctionDetail(e);
+        });
+        purposeList.appendChild(div);
+      });
+
+      requestAnimationFrame(function() {
+        var freshLis = Array.from(funcList.querySelectorAll('li'));
+        var divs = Array.from(purposeList.querySelectorAll('.purpose-item'));
+        var n = Math.min(freshLis.length, divs.length);
+        for (var i = 0; i < n; i++) { freshLis[i].style.minHeight = ''; divs[i].style.minHeight = ''; }
+        requestAnimationFrame(function() {
+          for (var i = 0; i < n; i++) {
+            var h = Math.max(freshLis[i].offsetHeight, divs[i].offsetHeight);
+            freshLis[i].style.minHeight = h + 'px';
+            divs[i].style.minHeight = h + 'px';
+          }
+        });
+      });
+    }
+
+    function onFuncScroll() { purposeList.scrollTop = funcList.scrollTop; }
+    function onPurposeScroll() { funcList.scrollTop = purposeList.scrollTop; }
+
+    function switch2Pane() {
+      layoutMode = '2pane';
+      btnLayoutToggle.textContent = '⊟ 詳細';
+      btnLayoutToggle.title = '3ペイン詳細表示に切り替え';
+      purposeTh.style.display = 'block';
+      purposeList.style.display = 'flex';
+      purposeList.style.flexDirection = 'column';
+      rightHeader.style.display = 'none';
+      rightBody.style.display = 'none';
+      ensurePurposeSpacerTop();
+      syncPurposeList();
+      funcList.addEventListener('scroll', onFuncScroll);
+      purposeList.addEventListener('scroll', onPurposeScroll);
+    }
+
+    function switch3Pane() {
+      layoutMode = '3pane';
+      btnLayoutToggle.textContent = '⊞ 一覧';
+      btnLayoutToggle.title = '2ペイン一覧表示に切り替え';
+      purposeTh.style.display = 'none';
+      purposeList.style.display = 'none';
+      rightHeader.style.display = '';
+      rightBody.style.display = '';
+      funcList.removeEventListener('scroll', onFuncScroll);
+      purposeList.removeEventListener('scroll', onPurposeScroll);
+    }
+
+    if (btnLayoutToggle) {
+      btnLayoutToggle.addEventListener('click', function() {
+        if (layoutMode === '3pane') switch2Pane(); else switch3Pane();
+      });
+    }
 
     function escHtml(s) {
       return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
@@ -681,16 +814,21 @@ export function getFunctionChangelogPage(input: FunctionChangelogInput): string 
         li.addEventListener('click', function() {
           document.querySelectorAll('.modal-func-list li').forEach(function(el) { el.classList.remove('active'); });
           li.classList.add('active');
+          document.querySelectorAll('.purpose-item').forEach(function(d) { d.classList.remove('active'); });
+          var matchDiv = Array.from(purposeList.querySelectorAll('.purpose-item')).find(function(d) { return d.dataset.file === e.file && d.dataset.func === e.func; });
+          if (matchDiv) matchDiv.classList.add('active');
           selectedEntry = e;
           if (showFile) {
             modalFileSelect.value = e.file;
             modalFileSelect.classList.remove('sel-needed');
             modalFileSelect.classList.add('sel-done');
           }
+          if (layoutMode === '2pane') switch3Pane();
           showFunctionDetail(e);
         });
         funcList.appendChild(li);
       });
+      syncPurposeList();
     }
 
     function showFunctionDetail(e) {
@@ -757,11 +895,15 @@ export function getFunctionChangelogPage(input: FunctionChangelogInput): string 
       modalFileSelect.classList.add('sel-needed');
       modalFileSelect.classList.remove('sel-done');
       funcList.innerHTML = '';
+      purposeList.innerHTML = '';
       funcCount.textContent = 'ファイルを選択すると関数一覧が表示されます';
       rightHeader.innerHTML = '<div class="fn-placeholder">（左からファイル → 関数の順に選択してください）</div>';
       rightBody.innerHTML = '';
       selectedEntry = null;
       overlay.classList.add('open');
+      if (layoutMode === '2pane') {
+        requestAnimationFrame(ensurePurposeSpacerTop);
+      }
       modalSearch.focus();
     }
 
