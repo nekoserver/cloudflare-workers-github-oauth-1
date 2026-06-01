@@ -68,6 +68,7 @@ function severityDots(n: number | null): string {
 export function getFunctionChangelogPage(input: FunctionChangelogInput): string {
   const { rows, repos, selectedRepoId, availableFiles, availableFunctions, generatedAt } = input;
   const noRepoSelected = selectedRepoId === null;
+  const selectedRepoName = repos.find(r => r.id === selectedRepoId)?.full_name ?? null;
 
   const repoOptions = repos.map(r =>
     `<option value="${r.id}"${selectedRepoId === r.id ? ' selected' : ''}>${escapeHtml(r.full_name)}</option>`
@@ -280,6 +281,11 @@ export function getFunctionChangelogPage(input: FunctionChangelogInput): string 
       flex-shrink: 0;
     }
     .modal-title { font-size: 14px; font-weight: 700; color: var(--text-strong); flex: 1; }
+    .modal-repo-label {
+      font-size: 11px; color: var(--text-muted); white-space: nowrap;
+      flex-shrink: 0;
+    }
+    .modal-repo-label strong { color: var(--accent); }
     .modal-close {
       border: none; background: none; color: var(--text-muted);
       font-size: 18px; cursor: pointer; padding: 2px 6px; border-radius: 4px;
@@ -287,16 +293,25 @@ export function getFunctionChangelogPage(input: FunctionChangelogInput): string 
     .modal-close:hover { color: var(--text-strong); background: light-dark(#eaeef2,#21262d); }
     .modal-body { display: flex; flex: 1; overflow: hidden; }
     .modal-left {
-      width: 280px; flex-shrink: 0; border-right: 1px solid var(--border);
+      width: 300px; flex-shrink: 0; border-right: 1px solid var(--border);
       display: flex; flex-direction: column; overflow: hidden;
     }
-    .modal-search {
+    .modal-file-select {
       padding: 10px 12px; border-bottom: 1px solid var(--border); flex-shrink: 0;
     }
-    .modal-search input {
-      width: 100%; padding: 6px 10px; border-radius: 6px;
-      border: 1px solid var(--border); background: var(--bg); color: var(--text);
-      font-size: 12px;
+    .modal-file-select label {
+      display: block; font-size: 10px; color: var(--text-muted);
+      text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 5px;
+    }
+    .modal-file-select select {
+      width: 100%; padding: 6px 8px; border-radius: 6px;
+      border: 1.5px solid var(--border); background: var(--bg); color: var(--text);
+      font-size: 11px;
+    }
+    .modal-file-select select.sel-needed {
+      border-color: var(--danger);
+      box-shadow: 0 0 0 2px var(--danger-glow);
+      animation: pulse 1.5s ease-in-out 3;
     }
     .modal-func-list {
       overflow-y: auto; flex: 1; list-style: none; margin: 0; padding: 6px 0;
@@ -424,14 +439,19 @@ export function getFunctionChangelogPage(input: FunctionChangelogInput): string 
     <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
       <div class="modal-header">
         <span class="modal-title" id="modalTitle">🔍 関数を選んで変更履歴を調べる</span>
+        ${selectedRepoName ? `<span class="modal-repo-label">現在選択中のリポジトリ: <strong>${escapeHtml(selectedRepoName)}</strong></span>` : ''}
         <button class="modal-close" id="modalClose" aria-label="閉じる">✕</button>
       </div>
       <div class="modal-body">
         <div class="modal-left">
-          <div class="modal-search">
-            <input type="search" id="funcSearch" placeholder="関数名・ファイル名で絞り込み…" autocomplete="off">
+          <div class="modal-file-select">
+            <label for="modalFileSelect">① ファイルを選択</label>
+            <select id="modalFileSelect" class="sel-needed">
+              <option value="">— ファイルを選んでください —</option>
+              ${availableFiles.map(f => `<option value="${escapeHtml(f)}">${escapeHtml(f)}</option>`).join('\n              ')}
+            </select>
           </div>
-          <div class="modal-func-count" id="funcCount">— 件</div>
+          <div class="modal-func-count" id="funcCount">ファイルを選択すると関数一覧が表示されます</div>
           <ul class="modal-func-list" id="funcList" role="listbox"></ul>
         </div>
         <div class="modal-right">
@@ -561,29 +581,30 @@ export function getFunctionChangelogPage(input: FunctionChangelogInput): string 
 
     // ---- 関数履歴モーダル ----
     var REPO_ID = ${selectedRepoId ?? 'null'};
-    var overlay    = document.getElementById('historyOverlay');
-    var modalClose = document.getElementById('modalClose');
-    var funcSearch = document.getElementById('funcSearch');
-    var funcList   = document.getElementById('funcList');
-    var funcCount  = document.getElementById('funcCount');
-    var historyHeader = document.getElementById('historyHeader');
-    var historyBody   = document.getElementById('historyBody');
-    var btnHistory    = document.getElementById('btnHistory');
+    var overlay         = document.getElementById('historyOverlay');
+    var modalClose      = document.getElementById('modalClose');
+    var modalFileSelect = document.getElementById('modalFileSelect');
+    var funcList        = document.getElementById('funcList');
+    var funcCount       = document.getElementById('funcCount');
+    var historyHeader   = document.getElementById('historyHeader');
+    var historyBody     = document.getElementById('historyBody');
+    var btnHistory      = document.getElementById('btnHistory');
 
-    var filteredFunctions = ALL_FUNCTIONS.slice();
     var selectedFuncEntry = null;
 
     function renderFuncList(items) {
       funcList.innerHTML = '';
-      funcCount.textContent = items.length + ' 件';
+      if (items.length === 0) {
+        funcCount.textContent = 'このファイルに関数が登録されていません';
+        return;
+      }
+      funcCount.textContent = '② 関数を選択 (' + items.length + ' 件)';
       items.forEach(function(e) {
         var li = document.createElement('li');
         li.setAttribute('role', 'option');
         li.dataset.file = e.file;
         li.dataset.func = e.func;
-        li.innerHTML =
-          '<span class="modal-func-name">' + escHtml(e.func) + '</span>' +
-          '<span class="modal-func-file">' + escHtml(e.file) + '</span>';
+        li.innerHTML = '<span class="modal-func-name">' + escHtml(e.func) + '</span>';
         li.addEventListener('click', function() {
           document.querySelectorAll('.modal-func-list li').forEach(function(el) { el.classList.remove('active'); });
           li.classList.add('active');
@@ -652,16 +673,36 @@ export function getFunctionChangelogPage(input: FunctionChangelogInput): string 
     }
 
     function openModal() {
-      filteredFunctions = ALL_FUNCTIONS.slice();
-      renderFuncList(filteredFunctions);
+      modalFileSelect.value = '';
+      modalFileSelect.classList.add('sel-needed');
+      modalFileSelect.classList.remove('sel-done');
+      funcList.innerHTML = '';
+      funcCount.textContent = 'ファイルを選択すると関数一覧が表示されます';
+      historyHeader.innerHTML = '<strong>（左からファイル → 関数の順に選択してください）</strong>';
+      historyBody.innerHTML = '<div class="history-empty">関数を選択するとそのファイルへの変更履歴が表示されます。<br>ts_commit_function_map にデータがない場合は空になります。</div>';
+      selectedFuncEntry = null;
       overlay.classList.add('open');
-      funcSearch.value = '';
-      funcSearch.focus();
+      modalFileSelect.focus();
     }
 
     function closeModal() {
       overlay.classList.remove('open');
     }
+
+    modalFileSelect.addEventListener('change', function() {
+      var fileVal = modalFileSelect.value;
+      if (!fileVal) {
+        modalFileSelect.classList.add('sel-needed');
+        modalFileSelect.classList.remove('sel-done');
+        funcList.innerHTML = '';
+        funcCount.textContent = 'ファイルを選択すると関数一覧が表示されます';
+        return;
+      }
+      modalFileSelect.classList.remove('sel-needed');
+      modalFileSelect.classList.add('sel-done');
+      var funcs = ALL_FUNCTIONS.filter(function(e) { return e.file === fileVal; });
+      renderFuncList(funcs);
+    });
 
     if (btnHistory) {
       btnHistory.addEventListener('click', openModal);
@@ -674,26 +715,6 @@ export function getFunctionChangelogPage(input: FunctionChangelogInput): string 
     });
     document.addEventListener('keydown', function(e) {
       if (e.key === 'Escape' && overlay.classList.contains('open')) closeModal();
-    });
-
-    funcSearch.addEventListener('input', function() {
-      var q = funcSearch.value.toLowerCase();
-      filteredFunctions = ALL_FUNCTIONS.filter(function(e) {
-        return e.func.toLowerCase().includes(q) || e.file.toLowerCase().includes(q);
-      });
-      renderFuncList(filteredFunctions);
-      if (selectedFuncEntry) {
-        var stillVisible = filteredFunctions.some(function(e) {
-          return e.func === selectedFuncEntry.func && e.file === selectedFuncEntry.file;
-        });
-        if (stillVisible) {
-          document.querySelectorAll('.modal-func-list li').forEach(function(li) {
-            if (li.dataset.func === selectedFuncEntry.func && li.dataset.file === selectedFuncEntry.file) {
-              li.classList.add('active');
-            }
-          });
-        }
-      }
     });
   </script>
 </body>
