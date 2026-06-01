@@ -31,20 +31,37 @@ export function renderKeyPickerCss(): string {
       align-items: flex-start; justify-content: center; padding-top: 40px;
     }
     .kp-overlay.open { display: flex; }
+    .kp-overlay.kp-maximized { padding-top: 0; align-items: stretch; }
     .kp-modal {
       background: var(--panel, #161b22); border: 1px solid var(--border, #30363d);
       border-radius: 12px; width: min(640px, 96vw); max-height: 88vh;
       display: flex; flex-direction: column; overflow: hidden;
       box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+      position: relative; user-select: none;
+    }
+    .kp-overlay.kp-maximized .kp-modal {
+      width: 100%; max-height: 100vh; height: 100%;
+      border-radius: 0; border: none; box-shadow: none; left: 0 !important; top: 0 !important;
+    }
+    .kp-modal.kp-floating {
+      position: fixed; cursor: default;
     }
     .kp-header {
       display: flex; align-items: center; gap: 10px;
       padding: 12px 16px; border-bottom: 1px solid var(--border, #30363d); flex-shrink: 0;
     }
-    .kp-title { font-size: 13px; font-weight: 700; color: var(--text-strong, #f0f6fc); flex: 1; }
+    .kp-header-draggable { cursor: grab; flex: 1; display: flex; align-items: center; gap: 10px; min-width: 0; }
+    .kp-header-draggable:active { cursor: grabbing; }
+    .kp-overlay.kp-maximized .kp-header-draggable { cursor: default; }
+    .kp-title { font-size: 13px; font-weight: 700; color: var(--text-strong, #f0f6fc); }
+    .kp-max-btn {
+      border: none; background: none; color: var(--text-muted, #8b949e);
+      font-size: 15px; cursor: pointer; padding: 2px 6px; border-radius: 4px; flex-shrink: 0;
+    }
+    .kp-max-btn:hover { color: var(--text-strong, #f0f6fc); background: light-dark(#eaeef2,#21262d); }
     .kp-close-btn {
       border: none; background: none; color: var(--text-muted, #8b949e);
-      font-size: 18px; cursor: pointer; padding: 2px 6px; border-radius: 4px;
+      font-size: 18px; cursor: pointer; padding: 2px 6px; border-radius: 4px; flex-shrink: 0;
     }
     .kp-close-btn:hover { color: var(--text-strong, #f0f6fc); background: light-dark(#eaeef2,#21262d); }
     .kp-cats {
@@ -88,23 +105,7 @@ export function renderKeyPickerCss(): string {
       border-radius: 10px; font-size: 10px; padding: 1px 7px; font-weight: 600; white-space: nowrap;
     }
     .kp-kw-cell { color: var(--text, #c9d1d9); word-break: break-all; }
-    .kp-groups {
-      padding: 4px 14px 8px; border-bottom: 1px solid var(--border, #30363d);
-      display: flex; flex-wrap: wrap; align-items: center; gap: 4px; flex-shrink: 0; font-size: 12px;
-    }
-    .kp-list-label { color: var(--text-muted, #8b949e); margin-right: 4px; white-space: nowrap; }
-    .kp-group-btn {
-      font-size: 11px; padding: 3px 10px; border-radius: 2px;
-      border: 1px solid var(--border, #30363d); background: light-dark(#f6f8fa,#21262d);
-      color: var(--text-muted, #8b949e); cursor: pointer; white-space: nowrap;
-      transition: background 0.15s, color 0.15s, border-color 0.15s;
-    }
-    .kp-group-btn:hover { border-color: var(--accent, #58a6ff); color: var(--accent, #58a6ff); }
-    .kp-group-btn.active {
-      border-color: var(--accent, #58a6ff);
-      background: light-dark(#ddf4ff,#0d2136);
-      color: var(--accent, #58a6ff); font-weight: 600;
-    }`;
+  `;
 }
 
 export function renderKeyPickerHtml(): string {
@@ -112,7 +113,10 @@ export function renderKeyPickerHtml(): string {
   <div class="kp-overlay" id="kpOverlay">
     <div class="kp-modal" role="dialog" aria-modal="true">
       <div class="kp-header">
-        <span class="kp-title">🔑 検索キーワードを選ぶ</span>
+        <div class="kp-header-draggable" id="kpDragHandle">
+          <span class="kp-title">🔑 検索キーワードを選ぶ</span>
+        </div>
+        <button class="kp-max-btn" id="kpMaxBtn" aria-label="最大化">⛶</button>
         <button class="kp-close-btn" id="kpCloseBtn" aria-label="閉じる">✕</button>
       </div>
       <div class="kp-cats" id="kpCats">
@@ -138,13 +142,73 @@ export function renderKeyPickerJs(opts: KeyPickerOptions): string {
   return `
   (function() {
     var kpOverlay   = document.getElementById('kpOverlay');
+    var kpModal     = kpOverlay ? kpOverlay.querySelector('.kp-modal') : null;
     var kpCloseBtn  = document.getElementById('kpCloseBtn');
+    var kpMaxBtn    = document.getElementById('kpMaxBtn');
+    var kpDragHandle= document.getElementById('kpDragHandle');
     var kpCats      = document.getElementById('kpCats');
     var kpGroups    = document.getElementById('kpGroups');
     var kpBody      = document.getElementById('kpBody');
     var triggerBtn  = document.getElementById(${JSON.stringify(triggerBtnId)});
     var targetInput = document.getElementById(${JSON.stringify(targetInputId)});
-    if (!kpOverlay || !kpCats || !kpBody || !targetInput) return;
+    if (!kpOverlay || !kpModal || !kpCats || !kpBody || !targetInput) return;
+
+    var kpIsMaximized = false;
+
+    function kpToggleMaximize() {
+      kpIsMaximized = !kpIsMaximized;
+      if (kpIsMaximized) {
+        kpModal.classList.remove('kp-floating');
+        kpModal.style.left = '';
+        kpModal.style.top = '';
+        kpOverlay.classList.add('kp-maximized');
+        kpMaxBtn.textContent = '⊡';
+        kpMaxBtn.setAttribute('aria-label', '元のサイズに戻す');
+      } else {
+        kpOverlay.classList.remove('kp-maximized');
+        kpMaxBtn.textContent = '⛶';
+        kpMaxBtn.setAttribute('aria-label', '最大化');
+      }
+    }
+
+    if (kpMaxBtn) kpMaxBtn.addEventListener('click', kpToggleMaximize);
+
+    // ドラッグ移動（通常サイズ時のみ）
+    var kpDragging = false;
+    var kpDragOffX = 0, kpDragOffY = 0;
+
+    if (kpDragHandle) {
+      kpDragHandle.addEventListener('mousedown', function(e) {
+        if (kpIsMaximized) return;
+        kpDragging = true;
+        var rect = kpModal.getBoundingClientRect();
+        kpDragOffX = e.clientX - rect.left;
+        kpDragOffY = e.clientY - rect.top;
+        kpModal.classList.add('kp-floating');
+        kpModal.style.left = rect.left + 'px';
+        kpModal.style.top  = rect.top  + 'px';
+        kpOverlay.style.pointerEvents = 'none';
+        kpModal.style.pointerEvents = 'auto';
+        e.preventDefault();
+      });
+    }
+
+    document.addEventListener('mousemove', function(e) {
+      if (!kpDragging) return;
+      var x = e.clientX - kpDragOffX;
+      var y = e.clientY - kpDragOffY;
+      var maxX = window.innerWidth  - kpModal.offsetWidth;
+      var maxY = window.innerHeight - kpModal.offsetHeight;
+      kpModal.style.left = Math.max(0, Math.min(x, maxX)) + 'px';
+      kpModal.style.top  = Math.max(0, Math.min(y, maxY)) + 'px';
+    });
+
+    document.addEventListener('mouseup', function() {
+      if (!kpDragging) return;
+      kpDragging = false;
+      kpOverlay.style.pointerEvents = '';
+      kpModal.style.pointerEvents = '';
+    });
 
     var KP_ROWS = 20, KP_MIN_COLS = 1, KP_MAX_COLS = 3;
     var kpItems = [];
