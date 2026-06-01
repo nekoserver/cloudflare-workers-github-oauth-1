@@ -38,6 +38,7 @@ import { executeCreateRepo } from './utils/repoValidation';
 import { validateReturnTo } from './utils/returnTo';
 import * as logger from './utils/logger';
 import { resolveIdleTimeoutSeconds, type Bindings, type Variables, type GitHubWebhookInstallationPayload, type GitHubWebhookRepositoryPayload, type GitHubWebhookPullRequestPayload, type ResendWebhookPayload } from './types';
+import { withAiTimeout, AI_CLASSIFY_TIMEOUT_MS } from './utils/aiTimeout';
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -1528,15 +1529,14 @@ async function classifyKeywordWithAI(
 ): Promise<ClassifyResult> {
   const prompt = buildKeywordClassificationPrompt(keyword, labels);
   const runAi = async (m: string): Promise<string> => {
-    try {
+    const call = (async () => {
       const result = await (ai as unknown as { run: (model: string, opts: Record<string, unknown>) => Promise<{ response?: string }> }).run(m, {
         messages: [{ role: 'user', content: prompt }],
         max_tokens: 20,
       });
       return (result?.response ?? '').trim();
-    } catch {
-      return '';
-    }
+    })();
+    return withAiTimeout(call, AI_CLASSIFY_TIMEOUT_MS);
   };
 
   const rawResponse = await runAi(model);

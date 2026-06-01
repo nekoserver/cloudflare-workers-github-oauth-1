@@ -6248,9 +6248,13 @@ export function getRepositoriesPage(user: {
         hSearchBtn.disabled = true;
         setSearchStatus('検索中...', 'searching');
 
-        fetch('/api/repositories/search/commits?q=' + encodeURIComponent(query), { credentials: 'same-origin', cache: 'no-store' })
+        var searchAbort = new AbortController();
+        var searchTimeoutId = setTimeout(function() { searchAbort.abort(); }, 10000);
+
+        fetch('/api/repositories/search/commits?q=' + encodeURIComponent(query), { credentials: 'same-origin', cache: 'no-store', signal: searchAbort.signal })
           .then(function(res) { return res.json(); })
           .then(function(data) {
+            clearTimeout(searchTimeoutId);
             hSearchBtn.disabled = false;
             if (data.error) {
               setSearchStatus(data.error, 'error');
@@ -6286,9 +6290,14 @@ export function getRepositoriesPage(user: {
               mergeResult(query, 0);
             }
           })
-          .catch(function() {
+          .catch(function(err) {
+            clearTimeout(searchTimeoutId);
             hSearchBtn.disabled = false;
-            setSearchStatus('検索に失敗しました', 'error');
+            if (err && err.name === 'AbortError') {
+              setSearchStatus('タイムアウト（10秒）— 再度お試しください', 'error');
+            } else {
+              setSearchStatus('検索に失敗しました', 'error');
+            }
           });
       }
 
