@@ -99,33 +99,84 @@ describe('FunctionFileHistoryResponse 型バリデーション', () => {
 
 describe('モーダル用関数リストの絞り込みロジック', () => {
   const allFunctions = [
-    { file: 'src/views/functionChangelog.ts', func: 'getFunctionChangelogPage' },
-    { file: 'src/views/functionChangelog.ts', func: 'changeTypeBadge' },
-    { file: 'src/utils/html.ts', func: 'escapeHtml' },
-    { file: 'src/index.ts', func: 'handleRequest' },
+    { file: 'src/views/functionChangelog.ts', func: 'getFunctionChangelogPage', purpose: '関数変更ログページのHTMLを生成' },
+    { file: 'src/views/functionChangelog.ts', func: 'changeTypeBadge', purpose: '変更種別バッジHTMLを返す' },
+    { file: 'src/utils/html.ts', func: 'escapeHtml', purpose: 'HTML特殊文字をエスケープ' },
+    { file: 'src/index.ts', func: 'handleRequest', purpose: 'リクエストハンドラ' },
   ];
 
-  it('検索文字列で関数名を絞り込める', () => {
-    const query = 'changelog';
-    const result = allFunctions.filter(e =>
-      e.func.toLowerCase().includes(query.toLowerCase()) ||
-      e.file.toLowerCase().includes(query.toLowerCase())
-    );
+  it('ファイルで絞り込むと該当ファイルの関数のみ返る', () => {
+    const file = 'src/views/functionChangelog.ts';
+    const result = allFunctions.filter(e => e.file === file);
     expect(result).toHaveLength(2);
-    expect(result.every(e => e.file.includes('functionChangelog'))).toBe(true);
+    expect(result.every(e => e.file === file)).toBe(true);
   });
 
-  it('空文字クエリは全件返す', () => {
-    const result = allFunctions.filter(e =>
-      e.func.toLowerCase().includes('') || e.file.toLowerCase().includes('')
-    );
-    expect(result).toHaveLength(allFunctions.length);
-  });
-
-  it('一致なしの場合は0件', () => {
-    const result = allFunctions.filter(e =>
-      e.func.toLowerCase().includes('zzznomatch')
-    );
+  it('一致なしファイルは0件', () => {
+    const result = allFunctions.filter(e => e.file === 'src/nonexistent.ts');
     expect(result).toHaveLength(0);
+  });
+
+  it('purpose フィールドが存在する', () => {
+    allFunctions.forEach(e => {
+      expect(typeof e.purpose).toBe('string');
+      expect(e.purpose.length).toBeGreaterThan(0);
+    });
+  });
+});
+
+export interface FunctionSourceResponse {
+  ok: boolean;
+  repo_id: number;
+  file_path: string;
+  function_name: string;
+  purpose: string;
+  source_snippet: string | null;
+  github_url: string | null;
+}
+
+describe('FunctionSourceResponse 型バリデーション', () => {
+  function validateSourceResponse(data: unknown): data is FunctionSourceResponse {
+    if (typeof data !== 'object' || data === null) return false;
+    const d = data as Record<string, unknown>;
+    if (typeof d['ok'] !== 'boolean') return false;
+    if (typeof d['file_path'] !== 'string') return false;
+    if (typeof d['function_name'] !== 'string') return false;
+    if (typeof d['purpose'] !== 'string') return false;
+    if (d['source_snippet'] !== null && typeof d['source_snippet'] !== 'string') return false;
+    if (d['github_url'] !== null && typeof d['github_url'] !== 'string') return false;
+    return true;
+  }
+
+  it('source_snippet あり の正常レスポンス', () => {
+    const data: FunctionSourceResponse = {
+      ok: true, repo_id: 1,
+      file_path: 'src/utils/html.ts',
+      function_name: 'escapeHtml',
+      purpose: 'HTML特殊文字をエスケープ',
+      source_snippet: 'export function escapeHtml(s: string): string { ... }',
+      github_url: 'https://github.com/nekoserver/cloudflare-workers-github-oauth-1/blob/main/src/utils/html.ts',
+    };
+    expect(validateSourceResponse(data)).toBe(true);
+    expect(data.source_snippet).not.toBeNull();
+  });
+
+  it('source_snippet なし・github_url フォールバック', () => {
+    const data: FunctionSourceResponse = {
+      ok: true, repo_id: 1,
+      file_path: 'src/utils/html.ts',
+      function_name: 'escapeHtml',
+      purpose: 'HTML特殊文字をエスケープ',
+      source_snippet: null,
+      github_url: 'https://github.com/nekoserver/cloudflare-workers-github-oauth-1/blob/main/src/utils/html.ts',
+    };
+    expect(validateSourceResponse(data)).toBe(true);
+    expect(data.source_snippet).toBeNull();
+    expect(data.github_url).not.toBeNull();
+  });
+
+  it('ok=false はエラー', () => {
+    const data = { ok: false, error: 'not found' };
+    expect(validateSourceResponse(data)).toBe(false);
   });
 });

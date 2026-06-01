@@ -3793,7 +3793,7 @@ app.get('/function-changelog', authMiddleware, async (c) => {
 
     let rows: FunctionChangeRow[] = [];
     let availableFiles: string[] = [];
-    let availableFunctions: { file_path: string; function_name: string }[] = [];
+    let availableFunctions: { file_path: string; function_name: string; purpose: string }[] = [];
 
     if (selectedRepoId !== null && !isNaN(selectedRepoId)) {
       const [rowResult, fileResult, funcResult] = await Promise.all([
@@ -3821,8 +3821,8 @@ app.get('/function-changelog', authMiddleware, async (c) => {
           `SELECT DISTINCT file_path FROM ts_function_catalog WHERE repo_id = ? ORDER BY file_path`
         ).bind(selectedRepoId).all<{ file_path: string }>(),
         db.prepare(
-          `SELECT DISTINCT file_path, function_name FROM ts_function_catalog WHERE repo_id = ? ORDER BY file_path, function_name`
-        ).bind(selectedRepoId).all<{ file_path: string; function_name: string }>(),
+          `SELECT file_path, function_name, COALESCE(purpose,'') AS purpose FROM ts_function_catalog WHERE repo_id = ? ORDER BY file_path, function_name`
+        ).bind(selectedRepoId).all<{ file_path: string; function_name: string; purpose: string }>(),
       ]);
       rows = rowResult.results ?? [];
       availableFiles = (fileResult.results ?? []).map(r => r.file_path);
@@ -3895,6 +3895,70 @@ app.get('/api/function-file-history', authMiddleware, async (c) => {
     });
   } catch (error) {
     logger.warn('function-file-history error', { error: error instanceof Error ? error.message : String(error) });
+    return c.json({ ok: false, error: 'DB query failed' }, 500);
+  }
+});
+
+/**
+ * 関数ソース取得 API
+ * GET /api/function-source?repo_id=X&function_name=Y&file_path=Z
+ * ts_function_catalog から purpose と source_snippet を返す。
+ * source_snippet カラムが未追加の場合は null を返し github_url でフォールバック。
+ */
+app.get('/api/function-source', authMiddleware, async (c) => {
+  const db = c.env.DB;
+  if (!db) return c.json({ ok: false, error: 'DB not available' }, 500);
+
+  const repoIdStr    = c.req.query('repo_id');
+  const functionName = c.req.query('function_name');
+  const filePath     = c.req.query('file_path');
+
+  if (!repoIdStr || !functionName || !filePath) {
+    return c.json({ ok: false, error: 'repo_id, function_name, file_path は必須です' }, 400);
+  }
+  const repoId = parseInt(repoIdStr, 10);
+  if (isNaN(repoId)) return c.json({ ok: false, error: 'repo_id は整数でなければなりません' }, 400);
+
+  try {
+    const repoResult = await db.prepare(
+      `SELECT full_name FROM ts_repository WHERE id = ?`
+    ).bind(repoId).first<{ full_name: string }>();
+
+    const repoFullName = repoResult?.full_name ?? null;
+    const githubUrl = repoFullName && filePath
+      ? `https://github.com/${repoFullName}/blob/main/${filePath}`
+      : null;
+
+    let purpose = '';
+    let sourceSnippet: string | null = null;
+
+    try {
+      const row = await db.prepare(
+        `SELECT COALESCE(purpose,'') AS purpose, source_snippet FROM ts_function_catalog
+         WHERE repo_id = ? AND file_path = ? AND function_name = ? LIMIT 1`
+      ).bind(repoId, filePath, functionName).first<{ purpose: string; source_snippet: string | null }>();
+      purpose = row?.purpose ?? '';
+      sourceSnippet = row?.source_snippet ?? null;
+    } catch {
+      const row = await db.prepare(
+        `SELECT COALESCE(purpose,'') AS purpose FROM ts_function_catalog
+         WHERE repo_id = ? AND file_path = ? AND function_name = ? LIMIT 1`
+      ).bind(repoId, filePath, functionName).first<{ purpose: string }>();
+      purpose = row?.purpose ?? '';
+      sourceSnippet = null;
+    }
+
+    return c.json({
+      ok: true,
+      repo_id: repoId,
+      file_path: filePath,
+      function_name: functionName,
+      purpose,
+      source_snippet: sourceSnippet,
+      github_url: githubUrl,
+    });
+  } catch (error) {
+    logger.warn('function-source error', { error: error instanceof Error ? error.message : String(error) });
     return c.json({ ok: false, error: 'DB query failed' }, 500);
   }
 });

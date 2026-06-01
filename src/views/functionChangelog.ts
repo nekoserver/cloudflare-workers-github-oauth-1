@@ -25,6 +25,7 @@ export interface RepoOption {
 export interface FileFunctionEntry {
   file_path: string;
   function_name: string;
+  purpose: string;
 }
 
 export interface FunctionChangelogInput {
@@ -121,7 +122,7 @@ export function getFunctionChangelogPage(input: FunctionChangelogInput): string 
   }
 
   const allFunctionsJson = JSON.stringify(
-    availableFunctions.map(f => ({ file: f.file_path, func: f.function_name }))
+    availableFunctions.map(f => ({ file: f.file_path, func: f.function_name, purpose: f.purpose }))
   );
 
   const dis = noRepoSelected ? ' disabled' : '';
@@ -333,34 +334,68 @@ export function getFunctionChangelogPage(input: FunctionChangelogInput): string 
       flex: 1; display: flex; flex-direction: column; overflow: hidden;
     }
     .modal-right-header {
-      padding: 10px 16px; border-bottom: 1px solid var(--border); flex-shrink: 0;
+      padding: 12px 16px; border-bottom: 1px solid var(--border); flex-shrink: 0;
+    }
+    .modal-right-header .fn-name {
+      font-size: 14px; font-weight: 700; color: var(--text-strong);
+      font-family: 'SFMono-Regular',Consolas,monospace;
+    }
+    .modal-right-header .fn-file {
+      font-size: 11px; color: var(--text-muted); margin-top: 2px; word-break: break-all;
+    }
+    .modal-right-header .fn-placeholder {
       font-size: 12px; color: var(--text-muted);
     }
-    .modal-right-header strong { color: var(--text-strong); display: block; font-size: 13px; margin-bottom: 2px; }
-    .modal-history { overflow-y: auto; flex: 1; }
-    .history-empty {
-      padding: 40px; text-align: center; color: var(--text-muted); font-size: 12px;
+    .modal-right-body { overflow-y: auto; flex: 1; padding: 16px; display: flex; flex-direction: column; gap: 16px; }
+    .purpose-block {
+      background: light-dark(#f6f8fa, #161b22);
+      border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px;
     }
-    .history-loading {
-      padding: 40px; text-align: center; color: var(--text-muted); font-size: 12px;
+    .purpose-label {
+      font-size: 10px; color: var(--text-muted); text-transform: uppercase;
+      letter-spacing: 0.5px; margin-bottom: 8px;
     }
-    .history-table {
-      width: 100%; border-collapse: collapse; font-size: 12px;
+    .purpose-text {
+      font-size: 13px; color: var(--text-strong); line-height: 1.7;
     }
+    .purpose-empty { font-size: 12px; color: var(--text-muted); font-style: italic; }
+    .btn-view-source {
+      align-self: flex-start; padding: 7px 16px; border-radius: 6px; font-size: 12px;
+      font-weight: 600; border: 1.5px solid var(--accent); color: var(--accent);
+      background: transparent; cursor: pointer; transition: background 0.15s, color 0.15s;
+    }
+    .btn-view-source:hover { background: var(--accent); color: var(--panel); }
+    .source-block { flex: 1; }
+    .source-block pre {
+      margin: 0; padding: 14px; border-radius: 8px; overflow: auto;
+      background: light-dark(#f6f8fa,#0d1117); border: 1px solid var(--border);
+      font-family: 'SFMono-Regular',Consolas,monospace; font-size: 11px;
+      line-height: 1.6; color: var(--text); max-height: 320px;
+    }
+    .source-fallback {
+      font-size: 12px; color: var(--text-muted); padding: 14px;
+      background: light-dark(#f6f8fa,#161b22); border: 1px solid var(--border);
+      border-radius: 8px; line-height: 1.7;
+    }
+    .source-fallback a { color: var(--accent); }
+    .source-loading { font-size: 12px; color: var(--text-muted); padding: 12px 0; }
+    .history-section { flex: 1; }
+    .history-section-label {
+      font-size: 10px; color: var(--text-muted); text-transform: uppercase;
+      letter-spacing: 0.5px; margin-bottom: 8px;
+    }
+    .history-empty { font-size: 12px; color: var(--text-muted); padding: 12px 0; }
+    .history-loading { font-size: 12px; color: var(--text-muted); padding: 12px 0; }
+    .history-table { width: 100%; border-collapse: collapse; font-size: 12px; }
     .history-table th {
       background: var(--th-bg); color: var(--text-muted); text-align: left;
-      padding: 7px 12px; font-size: 10px; text-transform: uppercase;
-      letter-spacing: 0.4px; position: sticky; top: 0;
-      border-bottom: 1px solid var(--border);
+      padding: 6px 10px; font-size: 10px; text-transform: uppercase;
+      letter-spacing: 0.4px; border-bottom: 1px solid var(--border);
     }
-    .history-table td {
-      padding: 8px 12px; border-bottom: 1px solid var(--border); vertical-align: top;
-    }
+    .history-table td { padding: 7px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
     .history-table tr:last-child td { border-bottom: none; }
-    .history-table tr:hover td { background: light-dark(rgba(0,0,0,.03),rgba(255,255,255,.03)); }
     .h-date { white-space: nowrap; color: var(--text-muted); }
     .h-hash { font-family: 'SFMono-Regular',Consolas,monospace; font-size: 11px; color: var(--accent); }
-    .h-subject { color: var(--text); }
     .h-branch { font-size: 10px; color: var(--text-muted); }
     .h-type { white-space: nowrap; }
     .h-diff-add { color: var(--add-fg); }
@@ -455,13 +490,10 @@ export function getFunctionChangelogPage(input: FunctionChangelogInput): string 
           <ul class="modal-func-list" id="funcList" role="listbox"></ul>
         </div>
         <div class="modal-right">
-          <div class="modal-right-header" id="historyHeader">
-            <strong>（左から関数を選択してください）</strong>
-            コミット履歴がここに表示されます
+          <div class="modal-right-header" id="rightHeader">
+            <div class="fn-placeholder">（左からファイル → 関数の順に選択してください）</div>
           </div>
-          <div class="modal-history" id="historyBody">
-            <div class="history-empty">関数を選択するとそのファイルへの変更履歴が表示されます。<br>ts_commit_function_map にデータがない場合は空になります。</div>
-          </div>
+          <div class="modal-right-body" id="rightBody"></div>
         </div>
       </div>
     </div>
@@ -586,11 +618,21 @@ export function getFunctionChangelogPage(input: FunctionChangelogInput): string 
     var modalFileSelect = document.getElementById('modalFileSelect');
     var funcList        = document.getElementById('funcList');
     var funcCount       = document.getElementById('funcCount');
-    var historyHeader   = document.getElementById('historyHeader');
-    var historyBody     = document.getElementById('historyBody');
+    var rightHeader     = document.getElementById('rightHeader');
+    var rightBody       = document.getElementById('rightBody');
     var btnHistory      = document.getElementById('btnHistory');
 
-    var selectedFuncEntry = null;
+    var selectedEntry = null;
+
+    function escHtml(s) {
+      return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    function changeTypeBadgeHtml(t) {
+      if (t === 'add')    return '<span class="badge badge-add">追加</span>';
+      if (t === 'delete') return '<span class="badge badge-del">削除</span>';
+      return '<span class="badge badge-mod">変更</span>';
+    }
 
     function renderFuncList(items) {
       funcList.innerHTML = '';
@@ -608,30 +650,40 @@ export function getFunctionChangelogPage(input: FunctionChangelogInput): string 
         li.addEventListener('click', function() {
           document.querySelectorAll('.modal-func-list li').forEach(function(el) { el.classList.remove('active'); });
           li.classList.add('active');
-          selectedFuncEntry = e;
-          loadHistory(e);
+          selectedEntry = e;
+          showFunctionDetail(e);
         });
         funcList.appendChild(li);
       });
     }
 
-    function escHtml(s) {
-      return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    function showFunctionDetail(e) {
+      rightHeader.innerHTML =
+        '<div class="fn-name">' + escHtml(e.func) + '</div>' +
+        '<div class="fn-file">' + escHtml(e.file) + '</div>';
+
+      var purposeText = e.purpose
+        ? '<p class="purpose-text">' + escHtml(e.purpose) + '</p>'
+        : '<p class="purpose-empty">purpose 未登録（ts_function_catalog に purpose を入力してください）</p>';
+
+      rightBody.innerHTML =
+        '<div class="purpose-block">' +
+          '<div class="purpose-label">この関数について</div>' +
+          purposeText +
+        '</div>' +
+        '<button class="btn-view-source" id="btnViewSource">実装内容を見る</button>' +
+        '<div class="source-block" id="sourceBlock"></div>';
+
+      document.getElementById('btnViewSource').addEventListener('click', function() {
+        loadSource(e);
+      });
     }
 
-    function changeTypeBadgeHtml(t) {
-      if (t === 'add')    return '<span class="badge badge-add">追加</span>';
-      if (t === 'delete') return '<span class="badge badge-del">削除</span>';
-      return '<span class="badge badge-mod">変更</span>';
-    }
+    function loadSource(e) {
+      var sourceBlock = document.getElementById('sourceBlock');
+      sourceBlock.innerHTML = '<div class="source-loading">読み込み中…</div>';
 
-    function loadHistory(e) {
-      historyHeader.innerHTML =
-        '<strong>' + escHtml(e.func) + '</strong>' +
-        escHtml(e.file);
-      historyBody.innerHTML = '<div class="history-loading">読み込み中…</div>';
-
-      var url = '/api/function-file-history?repo_id=' + encodeURIComponent(REPO_ID) +
+      var url = '/api/function-source?repo_id=' + encodeURIComponent(REPO_ID) +
                 '&function_name=' + encodeURIComponent(e.func) +
                 '&file_path=' + encodeURIComponent(e.file);
 
@@ -639,36 +691,26 @@ export function getFunctionChangelogPage(input: FunctionChangelogInput): string 
         .then(function(res) { return res.json(); })
         .then(function(data) {
           if (!data.ok) {
-            historyBody.innerHTML = '<div class="history-empty">エラー: ' + escHtml(data.error || '取得失敗') + '</div>';
+            sourceBlock.innerHTML = '<div class="source-fallback">エラー: ' + escHtml(data.error || '取得失敗') + '</div>';
             return;
           }
-          if (!data.commits || data.commits.length === 0) {
-            historyBody.innerHTML =
-              '<div class="history-empty">コミット履歴がありません。<br>' +
-              'ts_commit_function_map に <code>' + escHtml(e.func) + '</code> のレコードを追加すると表示されます。</div>';
-            return;
+          if (data.source_snippet) {
+            sourceBlock.innerHTML =
+              '<pre><code>' + escHtml(data.source_snippet) + '</code></pre>';
+          } else {
+            var linkHtml = data.github_url
+              ? '<a href="' + escHtml(data.github_url) + '" target="_blank" rel="noopener">GitHub でファイルを開く →</a>'
+              : '';
+            sourceBlock.innerHTML =
+              '<div class="source-fallback">' +
+              'ソースコードが登録されていません。<br>' +
+              'ts_function_catalog の <code>source_snippet</code> カラムに内容を追加すると表示されます。<br><br>' +
+              linkHtml +
+              '</div>';
           }
-          var rows = data.commits.map(function(c) {
-            var diffHtml = (c.lines_added || c.lines_deleted)
-              ? '<span class="h-diff-add">+' + c.lines_added + '</span> <span class="h-diff-del">-' + c.lines_deleted + '</span>'
-              : '—';
-            return '<tr>' +
-              '<td class="h-date">' + escHtml((c.commit_at || '').slice(0, 10)) + '</td>' +
-              '<td class="h-hash"><code>' + escHtml((c.commit_hash || '').slice(0, 7)) + '</code></td>' +
-              '<td><span class="h-subject">' + escHtml(c.subject || '') + '</span>' +
-                (c.branch_name ? '<br><span class="h-branch">🌿 ' + escHtml(c.branch_name) + '</span>' : '') +
-              '</td>' +
-              '<td class="h-type">' + changeTypeBadgeHtml(c.change_type) + '</td>' +
-              '<td>' + diffHtml + '</td>' +
-              '</tr>';
-          }).join('');
-          historyBody.innerHTML =
-            '<table class="history-table">' +
-            '<thead><tr><th>日付</th><th>ハッシュ</th><th>コミット概要</th><th>種別</th><th>差分</th></tr></thead>' +
-            '<tbody>' + rows + '</tbody></table>';
         })
         .catch(function(err) {
-          historyBody.innerHTML = '<div class="history-empty">通信エラー: ' + escHtml(String(err)) + '</div>';
+          sourceBlock.innerHTML = '<div class="source-fallback">通信エラー: ' + escHtml(String(err)) + '</div>';
         });
     }
 
@@ -678,9 +720,9 @@ export function getFunctionChangelogPage(input: FunctionChangelogInput): string 
       modalFileSelect.classList.remove('sel-done');
       funcList.innerHTML = '';
       funcCount.textContent = 'ファイルを選択すると関数一覧が表示されます';
-      historyHeader.innerHTML = '<strong>（左からファイル → 関数の順に選択してください）</strong>';
-      historyBody.innerHTML = '<div class="history-empty">関数を選択するとそのファイルへの変更履歴が表示されます。<br>ts_commit_function_map にデータがない場合は空になります。</div>';
-      selectedFuncEntry = null;
+      rightHeader.innerHTML = '<div class="fn-placeholder">（左からファイル → 関数の順に選択してください）</div>';
+      rightBody.innerHTML = '';
+      selectedEntry = null;
       overlay.classList.add('open');
       modalFileSelect.focus();
     }
