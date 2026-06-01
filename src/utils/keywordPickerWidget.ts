@@ -33,7 +33,7 @@ export function renderKeyPickerCss(): string {
     .kp-overlay.open { display: flex; }
     .kp-modal {
       background: var(--panel, #161b22); border: 1px solid var(--border, #30363d);
-      border-radius: 12px; width: min(640px, 96vw); max-height: 72vh;
+      border-radius: 12px; width: min(640px, 96vw); max-height: 82vh;
       display: flex; flex-direction: column; overflow: hidden;
       box-shadow: 0 20px 60px rgba(0,0,0,0.5);
     }
@@ -63,7 +63,7 @@ export function renderKeyPickerCss(): string {
       background: light-dark(#ddf4ff,#0d2136);
       color: var(--accent, #58a6ff); font-weight: 600;
     }
-    .kp-body { overflow-y: auto; flex: 1; padding: 0; }
+    .kp-body { overflow-y: auto; flex: 1; padding: 0; min-height: 120px; }
     .kp-msg { font-size: 12px; color: var(--text-muted, #8b949e); padding: 20px; text-align: center; }
     .kp-grid-wrap { display: flex; gap: 0; }
     .kp-grid-col { flex: 1; min-width: 0; }
@@ -165,6 +165,11 @@ export function renderKeyPickerJs(opts: KeyPickerOptions): string {
       });
       var arr = Object.keys(map).map(function(k) { return map[k]; });
       return arr.sort(function(a, b) { return b.total_hits - a.total_hits; });
+    }
+
+    function kpShouldHideZeroHits() {
+      var m = document.cookie.match('(^|;)\\s*kp_hide_zero_hits=([^;]*)');
+      return m ? decodeURIComponent(m[2]) === 'on' : false;
     }
 
     function kpGetAllLabels() {
@@ -312,15 +317,18 @@ export function renderKeyPickerJs(opts: KeyPickerOptions): string {
     function kpApply() {
       var allLabels = kpGetAllLabels();
       var allOn = allLabels.length > 0 && allLabels.every(function(l) { return kpActiveLabels.has(l); });
-      var filtered;
+      var base;
       if (allOn) {
-        filtered = kpItems;
+        base = kpItems;
       } else if (kpActiveLabels.size === 0) {
-        filtered = [];
+        base = [];
       } else {
-        filtered = kpItems.filter(function(i) { return kpActiveLabels.has(i.label || 'uncategorized'); });
+        base = kpItems.filter(function(i) { return kpActiveLabels.has(i.label || 'uncategorized'); });
       }
-      kpRenderGrid(filtered);
+      if (kpShouldHideZeroHits()) {
+        base = base.filter(function(i) { return i.total_hits > 0; });
+      }
+      kpRenderGrid(base);
     }
 
     function kpOpen() {

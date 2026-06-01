@@ -466,6 +466,16 @@ export function getSettingsPage(user: {
             </div>
           </div>
           <div class="info-item">
+            <span class="info-label">検索キーワードの総ヒット件数がゼロの場合表示されないようにする</span>
+            <div class="setting-control" style="justify-content: flex-end;">
+              <span class="theme-label" id="kpHideZeroHitsLabel">OFF</span>
+              <label class="theme-toggle-switch">
+                <input type="checkbox" id="kpHideZeroHitsCheckbox" onchange="onKpHideZeroHitsChange()">
+                <span class="theme-toggle-slider"></span>
+              </label>
+            </div>
+          </div>
+          <div class="info-item">
             <span class="info-label">検索キーワードのカテゴリバッジ内に件数を表示する</span>
             <div class="setting-control" style="justify-content: flex-end;">
               <span class="theme-label" id="keywordBadgeCountLabel">ON</span>
@@ -697,6 +707,24 @@ export function getSettingsPage(user: {
       var enabled = cb.checked;
       label.textContent = enabled ? 'ON' : 'OFF';
       document.cookie = 'history_incr_search=' + (enabled ? 'on' : 'off') + '; Path=/; SameSite=Lax; Max-Age=31536000';
+    }
+
+    // 検索キーワードピッカーのゼロヒット非表示設定の初期化
+    (function() {
+      var m = document.cookie.match('(^|;)\\\\s*kp_hide_zero_hits=([^;]*)');
+      var val = m ? decodeURIComponent(m[2]) : 'off';
+      var cb = document.getElementById('kpHideZeroHitsCheckbox');
+      var label = document.getElementById('kpHideZeroHitsLabel');
+      if (cb) cb.checked = (val === 'on');
+      if (label) label.textContent = (val === 'on') ? 'ON' : 'OFF';
+    })();
+
+    function onKpHideZeroHitsChange() {
+      var cb = document.getElementById('kpHideZeroHitsCheckbox');
+      var label = document.getElementById('kpHideZeroHitsLabel');
+      var enabled = cb.checked;
+      label.textContent = enabled ? 'ON' : 'OFF';
+      document.cookie = 'kp_hide_zero_hits=' + (enabled ? 'on' : 'off') + '; Path=/; SameSite=Lax; Max-Age=31536000';
     }
 
     // 検索キーワードカテゴリバッジ件数表示の初期化
