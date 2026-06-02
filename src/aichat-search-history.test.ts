@@ -64,6 +64,55 @@ describe('aichat_search_history マイグレーションファイル', () => {
   });
 });
 
+describe('aichat_search_log / aichat_search_history に result_count を追加するマイグレーション', () => {
+  it('migrations/0042_alter_aichat_search_log_add_columns.sql が存在する', () => {
+    const file = path.join(MIGRATIONS_DIR, '0042_alter_aichat_search_log_add_columns.sql');
+    expect(fs.existsSync(file)).toBe(true);
+  });
+
+  it('0042 に deleted_at カラムの ALTER TABLE が含まれる', () => {
+    const file = path.join(MIGRATIONS_DIR, '0042_alter_aichat_search_log_add_columns.sql');
+    const sql = fs.readFileSync(file, 'utf-8');
+    expect(sql).toContain('deleted_at');
+    expect(sql).toContain('aichat_search_log');
+  });
+
+  it('0042 に result_count カラムの ALTER TABLE が含まれる', () => {
+    const file = path.join(MIGRATIONS_DIR, '0042_alter_aichat_search_log_add_columns.sql');
+    const sql = fs.readFileSync(file, 'utf-8');
+    expect(sql).toContain('result_count');
+  });
+
+  it('migrations/0043_alter_aichat_search_history_add_result_count.sql が存在する', () => {
+    const file = path.join(MIGRATIONS_DIR, '0043_alter_aichat_search_history_add_result_count.sql');
+    expect(fs.existsSync(file)).toBe(true);
+  });
+
+  it('0043 に result_count カラムの ALTER TABLE が含まれる', () => {
+    const file = path.join(MIGRATIONS_DIR, '0043_alter_aichat_search_history_add_result_count.sql');
+    const sql = fs.readFileSync(file, 'utf-8');
+    expect(sql).toContain('result_count');
+    expect(sql).toContain('aichat_search_history');
+  });
+});
+
+describe('POST /api/aichat/search-log が result_count を記録する', () => {
+  it('POST ハンドラが resultCount を受け取り aichat_search_log に書き込む', () => {
+    const idx = INDEX_SRC.indexOf("app.post('/api/aichat/search-log'");
+    expect(idx).toBeGreaterThan(-1);
+    const handler = INDEX_SRC.slice(idx, idx + 1800);
+    expect(handler).toContain('resultCount');
+    expect(handler).toContain('result_count');
+  });
+
+  it('aichat_search_history の INSERT に result_count が含まれる', () => {
+    const idx = INDEX_SRC.indexOf('INSERT INTO aichat_search_history');
+    expect(idx).toBeGreaterThan(-1);
+    const nearby = INDEX_SRC.slice(idx, idx + 500);
+    expect(nearby).toContain('result_count');
+  });
+});
+
 describe('GET /api/aichat/shares/:id エンドポイント', () => {
   it('index.ts に app.get の shares/:id ハンドラが存在する', () => {
     const idx = INDEX_SRC.indexOf("app.get('/api/aichat/shares/:id'");

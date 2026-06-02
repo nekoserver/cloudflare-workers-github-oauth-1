@@ -234,6 +234,15 @@ describe('AIチャットサイドバー: 検索キーワードハイライト', 
     expect(fnBody).toContain('showHistoryModal(r, keyword)');
     expect(fnBody).toContain('showResultsPanel(r, keyword)');
   });
+
+  it('showHistoryPreview が POST body に resultCount を含める', () => {
+    const html = getAiChatPage(minimalUser);
+    const idx = html.indexOf('function showHistoryPreview(');
+    expect(idx).toBeGreaterThan(-1);
+    const fnBody = html.slice(idx, idx + 600);
+    expect(fnBody).toContain('resultCount');
+    expect(fnBody).toContain('currentResults.length');
+  });
 });
 
 describe('AIチャット: 検索履歴モーダル', () => {

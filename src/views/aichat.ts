@@ -1389,7 +1389,7 @@ export function getAiChatPage(user: {
           method: 'POST',
           credentials: 'same-origin',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ keyword: keyword, shareId: String(r.id) })
+          body: JSON.stringify({ keyword: keyword, shareId: String(r.id), resultCount: currentResults.length })
         }).catch(function() {});
       }
       if (getHistoryPreviewMode() === 'center-modal') {
