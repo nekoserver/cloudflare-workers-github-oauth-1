@@ -98,6 +98,66 @@ describe('設定ページ: キーワード詳細パネル閉時のすべてフ�
   });
 });
 
+describe('設定ページ: AIチャット過去ログプレビューモード設定', () => {
+  it('aichatHistoryPreviewModeSelect が存在する', () => {
+    const html = getSettingsPage(minimalUser);
+    expect(html).toContain('id="aichatHistoryPreviewModeSelect"');
+  });
+
+  it('aichatHistoryPreviewModeButtonContainer が存在する', () => {
+    const html = getSettingsPage(minimalUser);
+    expect(html).toContain('id="aichatHistoryPreviewModeButtonContainer"');
+  });
+
+  it('saveAichatHistoryPreviewMode 関数が存在する', () => {
+    const html = getSettingsPage(minimalUser);
+    expect(html).toContain('function saveAichatHistoryPreviewMode()');
+  });
+
+  it('cancelAichatHistoryPreviewMode 関数が存在する', () => {
+    const html = getSettingsPage(minimalUser);
+    expect(html).toContain('function cancelAichatHistoryPreviewMode()');
+  });
+
+  it('onAichatHistoryPreviewModeChange でボタンコンテナを show/hide する', () => {
+    const html = getSettingsPage(minimalUser);
+    const idx = html.indexOf('function onAichatHistoryPreviewModeChange()');
+    expect(idx).toBeGreaterThan(-1);
+    const fnBody = html.slice(idx, idx + 400);
+    expect(fnBody).toContain('aichatHistoryPreviewModeButtonContainer');
+    expect(fnBody).toContain('show');
+  });
+
+  it('Cookie 保存時に Secure フラグが含まれる', () => {
+    const html = getSettingsPage(minimalUser);
+    const idx = html.indexOf('function saveAichatHistoryPreviewMode()');
+    expect(idx).toBeGreaterThan(-1);
+    const fnBody = html.slice(idx, idx + 500);
+    expect(fnBody).toContain('aichat_history_preview_mode');
+    expect(fnBody).toContain('; Secure');
+  });
+
+  it('showSettingsToast 関数が存在する', () => {
+    const html = getSettingsPage(minimalUser);
+    expect(html).toContain('function showSettingsToast(');
+  });
+
+  it('settingsToast 要素が HTML に含まれる', () => {
+    const html = getSettingsPage(minimalUser);
+    expect(html).toContain('id="settingsToast"');
+  });
+
+  it('settings-toast CSS が存在する', () => {
+    const html = getSettingsPage(minimalUser);
+    expect(html).toContain('.settings-toast');
+  });
+
+  it('aichat_sidebar_tap_close 初期化の正規表現が正しい（4スラッシュバグなし）', () => {
+    const html = getSettingsPage(minimalUser);
+    expect(html).not.toContain('\\\\s*aichat_sidebar_tap_close');
+  });
+});
+
 describe('設定ページ: 検索履歴インクリメントサーチ設定', () => {
   it('historyIncrSearchCheckbox が存在する', () => {
     const html = getSettingsPage(minimalUser);
