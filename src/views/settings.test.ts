@@ -8,6 +8,36 @@ const minimalUser = {
   expiresAtTimestamp: 1234567890,
 };
 
+describe('設定ページ: カテゴリグループOFF時に全バッジをOFFにする設定', () => {
+  it('cgGroupOffClearsBadgesCheckbox が存在する', () => {
+    const html = getSettingsPage(minimalUser);
+    expect(html).toContain('id="cgGroupOffClearsBadgesCheckbox"');
+  });
+
+  it('cg_group_off_clears_badges Cookie を参照する', () => {
+    const html = getSettingsPage(minimalUser);
+    expect(html).toContain('cg_group_off_clears_badges');
+  });
+
+  it('onCgGroupOffClearsBadgesChange 関数が存在する', () => {
+    const html = getSettingsPage(minimalUser);
+    expect(html).toContain('function onCgGroupOffClearsBadgesChange()');
+  });
+
+  it('設定項目の説明ラベルが存在する', () => {
+    const html = getSettingsPage(minimalUser);
+    expect(html).toContain('カテゴリグループのトグルスイッチがOFFになったら');
+  });
+
+  it('デフォルトは ON (checked)', () => {
+    const html = getSettingsPage(minimalUser);
+    const idx = html.indexOf('id="cgGroupOffClearsBadgesCheckbox"');
+    expect(idx).toBeGreaterThan(-1);
+    const snippet = html.slice(idx, idx + 200);
+    expect(snippet).toContain('checked');
+  });
+});
+
 describe('設定ページ: キーワード詳細パネル外タップでパネルを閉じる設定', () => {
   it('kwPanelTapCloseCheckbox が存在する', () => {
     const html = getSettingsPage(minimalUser);

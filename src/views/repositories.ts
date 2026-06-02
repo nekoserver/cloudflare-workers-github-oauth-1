@@ -5503,8 +5503,12 @@ export function getRepositoriesPage(user: {
             var gid = btn.getAttribute('data-group-id');
             if (selectedGroupId === gid) {
               selectedGroupId = null;
-              activeLabels.clear();
-              syncBtnStyles();
+              if (getCookie('cg_group_off_clears_badges') !== 'off') {
+                activeLabels.clear();
+                syncBtnStyles();
+              } else {
+                activateAllLabels();
+              }
               refreshGrid(null, null);
             } else {
               selectedGroupId = gid;
