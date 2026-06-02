@@ -2696,7 +2696,7 @@ app.get('/api/aichat/shares/search', authMiddleware, async (c) => {
   const rows = await c.env.DB.prepare(
     `SELECT id, user_hash, question, answer, model, created_at, access_count
      FROM ai_chat_shares
-     WHERE user_id = ? AND (question LIKE ? OR answer LIKE ?)
+     WHERE user_id = ? AND deleted_at IS NULL AND (question LIKE ? OR answer LIKE ?)
      ORDER BY created_at DESC LIMIT 30`
   ).bind(user.sub, like, like).all<{
     id: string; user_hash: string; question: string; answer: string;
@@ -2714,7 +2714,7 @@ app.get('/api/aichat/shares/calendar', authMiddleware, async (c) => {
   const rows = await c.env.DB.prepare(
     `SELECT substr(created_at, 1, 10) as date, COUNT(*) as count
      FROM ai_chat_shares
-     WHERE user_id = ? AND created_at LIKE ?
+     WHERE user_id = ? AND deleted_at IS NULL AND created_at LIKE ?
      GROUP BY date ORDER BY date`
   ).bind(user.sub, `${month}%`).all<{ date: string; count: number }>();
 
@@ -2731,7 +2731,7 @@ app.get('/api/aichat/shares/by-date', authMiddleware, async (c) => {
   const rows = await c.env.DB.prepare(
     `SELECT id, user_hash, question, answer, model, created_at, access_count
      FROM ai_chat_shares
-     WHERE user_id = ? AND created_at LIKE ?
+     WHERE user_id = ? AND deleted_at IS NULL AND created_at LIKE ?
      ORDER BY created_at DESC LIMIT 50`
   ).bind(user.sub, `${date}%`).all<{
     id: string; user_hash: string; question: string; answer: string;
@@ -2739,6 +2739,27 @@ app.get('/api/aichat/shares/by-date', authMiddleware, async (c) => {
   }>();
 
   return jsonUtf8({ date, results: rows.results ?? [] });
+});
+
+/**
+ * AIチャット過去ログ論理削除 API（認証が必要）
+ */
+app.delete('/api/aichat/shares/:id', authMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+
+  const id = c.req.param('id');
+  const row = await c.env.DB.prepare(
+    'SELECT id FROM ai_chat_shares WHERE id = ? AND user_id = ? AND deleted_at IS NULL'
+  ).bind(id, user.sub).first<{ id: string }>();
+
+  if (!row) return jsonUtf8({ error: '見つかりません' }, 404);
+
+  await c.env.DB.prepare(
+    'UPDATE ai_chat_shares SET deleted_at = ? WHERE id = ?'
+  ).bind(new Date().toISOString(), id).run();
+
+  return jsonUtf8({ ok: true });
 });
 
 /**
@@ -2789,7 +2810,7 @@ app.get('/s/:userHash/:shareToken', async (c) => {
   const shareToken = c.req.param('shareToken');
 
   const row = await c.env.DB.prepare(
-    'SELECT id, user_id, question, answer, model, created_at, access_count FROM ai_chat_shares WHERE id = ? AND user_hash = ?'
+    'SELECT id, user_id, question, answer, model, created_at, access_count FROM ai_chat_shares WHERE id = ? AND user_hash = ? AND deleted_at IS NULL'
   ).bind(shareToken, userHash).first<{
     id: string; user_id: string; question: string; answer: string;
     model: string; created_at: string; access_count: number;
