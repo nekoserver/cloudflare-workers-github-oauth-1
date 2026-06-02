@@ -74,6 +74,15 @@ describe('AIチャット詳細プレビューモーダル: 日付リンク', () 
     expect(fnBody).toContain('loadCalendar');
     expect(fnBody).toContain('doDateLoad');
   });
+
+  it('日付リンクのクリックで質問分析モーダルが開いていれば閉じる', () => {
+    const html = getAiChatPage(minimalUser);
+    const idx = html.indexOf('historyModalDateLink.addEventListener');
+    expect(idx).toBeGreaterThan(-1);
+    const fnBody = html.slice(idx, idx + 900);
+    expect(fnBody).toContain('searchKwAnalysisOverlay');
+    expect(fnBody).toContain('closeSearchKwAnalysis');
+  });
 });
 
 describe('AIチャットサイドバー: フォーカスなし・ハイライトなし', () => {

@@ -1413,6 +1413,7 @@ export function getAiChatPage(user: {
       if (!dateOnly || dateOnly.length < 10) return;
       var monthStr = dateOnly.slice(0, 7);
       closeHistoryModal();
+      if (searchKwAnalysisOverlay.classList.contains('open')) closeSearchKwAnalysis();
       clearHistorySelection();
       if (!sidebarOpen) {
         sidebarOpen = true;
