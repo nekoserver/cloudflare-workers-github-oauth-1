@@ -192,6 +192,7 @@ export function getAiChatPage(user: {
       border: none; border-radius: 7px; font-size: 13px; font-weight: 600; cursor: pointer;
     }
     .delete-confirm-ok:hover { background: #c53030; }
+    .kw-highlight { background: #fef08a; color: #1a1a1a; border-radius: 2px; padding: 0 1px; }
 
     /* ======= カレンダーヒートマップ ======= */
     .sidebar-calendar {
@@ -1036,20 +1037,51 @@ export function getAiChatPage(user: {
       historyModalChat.appendChild(el);
     }
 
-    function showResultsPanel(r) {
+    function applyKeywordHighlight(el, keyword) {
+      if (!keyword) return;
+      var escaped = keyword.replace(/[.*+?^$\{}()|[\]\\]/g, '\\$&');
+      var re = new RegExp(escaped, 'gi');
+      var walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, null);
+      var nodes = [];
+      var n;
+      while ((n = walker.nextNode())) nodes.push(n);
+      nodes.forEach(function(tn) {
+        if (!re.test(tn.nodeValue)) { re.lastIndex = 0; return; }
+        re.lastIndex = 0;
+        var frag = document.createDocumentFragment();
+        var last = 0, m;
+        while ((m = re.exec(tn.nodeValue)) !== null) {
+          if (m.index > last) frag.appendChild(document.createTextNode(tn.nodeValue.slice(last, m.index)));
+          var mark = document.createElement('mark');
+          mark.className = 'kw-highlight';
+          mark.textContent = m[0];
+          frag.appendChild(mark);
+          last = re.lastIndex;
+        }
+        if (last < tn.nodeValue.length) frag.appendChild(document.createTextNode(tn.nodeValue.slice(last)));
+        tn.parentNode.replaceChild(frag, tn);
+      });
+    }
+
+    function showResultsPanel(r, keyword) {
       closeHistoryModal();
       resultsPanelQ.textContent = r.question;
       resultsPanelA.innerHTML = parseMd(r.answer);
+      if (keyword) {
+        applyKeywordHighlight(resultsPanelQ, keyword);
+        applyKeywordHighlight(resultsPanelA, keyword);
+      }
       resultsPanelMeta.textContent = formatHistoryMeta(r);
       resultsPanelShareLink.href = '/s/' + r.user_hash + '/' + r.id;
       resultsPanel.classList.add('open');
     }
 
-    function showHistoryModal(r) {
+    function showHistoryModal(r, keyword) {
       closeResultsPanel();
       historyModalChat.innerHTML = '';
       appendHistoryModalBubble(r.question, 'user');
       appendHistoryModalBubble(r.answer, 'assistant');
+      if (keyword) applyKeywordHighlight(historyModalChat, keyword);
       historyModalDateLink.textContent = r.created_at.slice(0, 10);
       historyModalTime.textContent = ' ' + r.created_at.slice(11, 16);
       historyModalMeta.textContent = r.model + '　👁 ' + (r.access_count || 0);
@@ -1060,10 +1092,19 @@ export function getAiChatPage(user: {
     }
 
     function showHistoryPreview(r) {
+      var keyword = (currentMode === 'search') ? sidebarSearch.value.trim() : '';
+      if (keyword) {
+        fetch('/api/aichat/search-log', {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ keyword: keyword, shareId: String(r.id) })
+        }).catch(function() {});
+      }
       if (getHistoryPreviewMode() === 'center-modal') {
-        showHistoryModal(r);
+        showHistoryModal(r, keyword);
       } else {
-        showResultsPanel(r);
+        showResultsPanel(r, keyword);
       }
     }
 

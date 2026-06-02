@@ -187,3 +187,51 @@ describe('AIチャットサイドバー: デフォルトプレビューモード
     expect(snippet).toContain('closeResultsPanel');
   });
 });
+
+describe('AIチャットサイドバー: 検索キーワードハイライト', () => {
+  it('kw-highlight CSS クラスが存在する', () => {
+    const html = getAiChatPage(minimalUser);
+    expect(html).toContain('.kw-highlight');
+  });
+
+  it('applyKeywordHighlight 関数が存在する', () => {
+    const html = getAiChatPage(minimalUser);
+    expect(html).toContain('function applyKeywordHighlight(');
+  });
+
+  it('showHistoryModal がキーワード引数を受け取りハイライトを適用する', () => {
+    const html = getAiChatPage(minimalUser);
+    const idx = html.indexOf('function showHistoryModal(');
+    expect(idx).toBeGreaterThan(-1);
+    const fnBody = html.slice(idx, idx + 500);
+    expect(fnBody).toContain('keyword');
+    expect(fnBody).toContain('applyKeywordHighlight');
+  });
+
+  it('showResultsPanel がキーワード引数を受け取りハイライトを適用する', () => {
+    const html = getAiChatPage(minimalUser);
+    const idx = html.indexOf('function showResultsPanel(');
+    expect(idx).toBeGreaterThan(-1);
+    const fnBody = html.slice(idx, idx + 400);
+    expect(fnBody).toContain('keyword');
+    expect(fnBody).toContain('applyKeywordHighlight');
+  });
+
+  it('showHistoryPreview が search モード時に search-log API を POST 呼ぶ', () => {
+    const html = getAiChatPage(minimalUser);
+    const idx = html.indexOf('function showHistoryPreview(');
+    expect(idx).toBeGreaterThan(-1);
+    const fnBody = html.slice(idx, idx + 600);
+    expect(fnBody).toContain('/api/aichat/search-log');
+    expect(fnBody).toContain("method: 'POST'");
+  });
+
+  it('showHistoryPreview が keyword を showHistoryModal または showResultsPanel に渡す', () => {
+    const html = getAiChatPage(minimalUser);
+    const idx = html.indexOf('function showHistoryPreview(');
+    expect(idx).toBeGreaterThan(-1);
+    const fnBody = html.slice(idx, idx + 600);
+    expect(fnBody).toContain('showHistoryModal(r, keyword)');
+    expect(fnBody).toContain('showResultsPanel(r, keyword)');
+  });
+});
