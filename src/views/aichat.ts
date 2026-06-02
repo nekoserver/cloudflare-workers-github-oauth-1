@@ -894,6 +894,7 @@ export function getAiChatPage(user: {
 
     historyModalDateLink.addEventListener('click', function(e) {
       e.preventDefault();
+      e.stopPropagation();
       var dateOnly = historyModalDateLink.textContent;
       if (!dateOnly || dateOnly.length < 10) return;
       var monthStr = dateOnly.slice(0, 7);
