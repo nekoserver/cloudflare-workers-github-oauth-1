@@ -141,6 +141,7 @@
     - **未作成（赤文字）**: テーブル自体が存在しない（`exists=false`）。CSSクラス `status-missing`
     - 新しいテーブルを `STATUS_TABLE_DEFINITIONS` に追加した場合、同時に `TABLE_COLUMN_KEYS`・`TABLE_GROUP_MAP`・`COLUMN_FK_TARGETS`・`STATUS_MIGRATION_SQL` への登録も必須。登録漏れは `/status` に表示されない原因になる
 24. **PR マージ後に `repo_commit_index` を更新する** — PR がマージされるたびに（または新規コミットが main に追加されるたびに）、`SPEC.cloudflare-workers-github-oauth-1.COMMITDB.md` の手順に従い、D1 の `repo_commit_index` テーブルに新規コミットを追記すること。手順の要点: (1) `SELECT MAX(seq_num)` で現在の最大値 N を取得、(2) `git log main --reverse --format="%H|||%s" | tail -n +$((N+1))` で新規コミット一覧を取得、(3) `INSERT OR IGNORE` で追記、(4) `COUNT(*)` と `git rev-list --count main` が一致することを確認。
+25. **Cookie のセキュリティ属性（`Secure`・`HttpOnly`・`SameSite`）を削除・緩和するな** — 「開発環境で動かない」「HTTP で動かない」といった理由で `Secure` フラグや他のセキュリティ属性を除去・弱体化することは**絶対に禁止**。開発環境固有の問題は環境側（HTTPS 化・プロキシ設定等）で解決するか、バグの真因を特定してから対処すること。セキュリティ属性の除去は「修正」ではなくセキュリティ退行であり、コードレビューで即リジェクトされる種類の変更である。発見した場合は除去せずに別の原因を調査すること。
 
 ---
 

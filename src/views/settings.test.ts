@@ -128,13 +128,13 @@ describe('設定ページ: AIチャット過去ログプレビューモード設
     expect(fnBody).toContain('show');
   });
 
-  it('Cookie 保存時に Secure フラグを含まない（HTTP環境でも動作）', () => {
+  it('Cookie 保存時に Secure フラグが含まれる', () => {
     const html = getSettingsPage(minimalUser);
     const idx = html.indexOf('function saveAichatHistoryPreviewMode()');
     expect(idx).toBeGreaterThan(-1);
     const fnBody = html.slice(idx, idx + 500);
     expect(fnBody).toContain('aichat_history_preview_mode');
-    expect(fnBody).not.toContain('; Secure');
+    expect(fnBody).toContain('; Secure');
   });
 
   it('showSettingsToast 関数が存在する', () => {

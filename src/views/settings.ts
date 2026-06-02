@@ -1319,7 +1319,7 @@ export function getSettingsPage(user: {
       var select = document.getElementById('aichatHistoryPreviewModeSelect');
       var container = document.getElementById('aichatHistoryPreviewModeButtonContainer');
       var mode = select && select.value === 'center-modal' ? 'center-modal' : 'bottom-panel';
-      document.cookie = 'aichat_history_preview_mode=' + mode + '; Path=/; SameSite=Lax; Max-Age=31536000';
+      document.cookie = 'aichat_history_preview_mode=' + mode + '; Path=/; Secure; SameSite=Lax; Max-Age=31536000';
       _aichatHistoryPreviewModeOriginal = mode;
       if (container) container.classList.remove('show');
       showSettingsToast('✓ プレビュー表示場所を保存しました');
