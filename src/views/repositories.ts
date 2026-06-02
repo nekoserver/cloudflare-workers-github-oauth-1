@@ -6174,7 +6174,6 @@ export function getRepositoriesPage(user: {
         selectedKeyword = null;
         keywordDetailPanel.style.display = 'none';
         keywordDetailPanel.innerHTML = '';
-        if (getCookie('kw_panel_no_all_focus') !== 'on') selectLabelFilter('');
         refreshGrid(null, null);
       });
 
