@@ -2827,6 +2827,32 @@ app.get('/api/aichat/search-history', authMiddleware, async (c) => {
   return jsonUtf8({ rows: rows.results ?? [] });
 });
 
+app.get('/api/aichat/search-keyword-analysis', authMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  const rows = await c.env.DB.prepare(
+    `SELECT h.share_id, c.question, h.keyword, MAX(h.seq_num) AS max_seq_num
+     FROM aichat_search_history h
+     LEFT JOIN ai_chat_shares c ON c.id = h.share_id
+     WHERE h.user_id = ? AND h.deleted_at IS NULL
+     GROUP BY h.share_id, h.keyword
+     ORDER BY h.share_id, max_seq_num DESC`
+  ).bind(user.sub).all<{
+    share_id: string; question: string | null;
+    keyword: string; max_seq_num: number;
+  }>();
+
+  const map = new Map<string, { share_id: string; question: string | null; keywords: Array<{ keyword: string; max_seq_num: number }> }>();
+  for (const row of (rows.results ?? [])) {
+    if (!map.has(row.share_id)) {
+      map.set(row.share_id, { share_id: row.share_id, question: row.question, keywords: [] });
+    }
+    map.get(row.share_id)!.keywords.push({ keyword: row.keyword, max_seq_num: row.max_seq_num });
+  }
+
+  return jsonUtf8({ items: Array.from(map.values()) });
+});
+
 app.post('/api/aichat/search-log', authMiddleware, async (c) => {
   const user = c.get('user');
   if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);

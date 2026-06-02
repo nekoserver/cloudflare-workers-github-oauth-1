@@ -89,6 +89,12 @@ export function getAiChatPage(user: {
       line-height: 1.4; transition: color 0.15s, border-color 0.15s;
     }
     .search-hist-btn:hover { color: var(--text-primary); border-color: var(--accent-color, #667eea); }
+    .kw-analysis-badge {
+      display: inline-block; background: var(--accent-bg, #ede9fe); color: var(--accent-fg, #5b21b6);
+      border-radius: 10px; font-size: 11px; padding: 1px 7px; margin: 2px 2px;
+      white-space: nowrap; line-height: 1.6;
+    }
+    .kw-analysis-badges { max-width: 340px; line-height: 1.8; }
     .search-log-overlay {
       position: fixed; inset: 0; z-index: 700; display: none;
       align-items: flex-start; justify-content: center;
@@ -473,6 +479,7 @@ export function getAiChatPage(user: {
     <a href="/welcome" class="navbar-brand">🤖 AI チャット<span class="navbar-model">${modelShortName}</span></a>
     <div class="navbar-spacer"></div>
     <div class="user-menu">
+      <button class="search-hist-btn" id="searchKwAnalysisBtn" title="質問×キーワード分析">📊 質問分析</button>
       <button class="search-hist-btn" id="searchHistoryBtn" title="検索明細履歴">🗂 検索明細</button>
       <button class="search-log-btn" id="searchLogBtn" title="検索履歴">📋 検索履歴</button>
       ${getThemeToggleHTML()}
@@ -557,6 +564,18 @@ export function getAiChatPage(user: {
     </div>
   </div>
 
+  <div class="search-log-overlay" id="searchKwAnalysisOverlay" aria-hidden="true">
+    <div class="search-log-modal" role="dialog" aria-modal="true">
+      <div class="search-log-head">
+        <span class="search-log-title">質問×キーワード分析（検索明細より）</span>
+        <button class="search-log-close" id="searchKwAnalysisClose" aria-label="閉じる">✕</button>
+      </div>
+      <div class="search-log-body" id="searchKwAnalysisBody">
+        <div class="search-log-loading">読み込み中...</div>
+      </div>
+    </div>
+  </div>
+
   <div class="search-log-overlay" id="searchHistoryOverlay" aria-hidden="true">
     <div class="search-log-modal" role="dialog" aria-modal="true">
       <div class="search-log-head">
@@ -617,6 +636,67 @@ export function getAiChatPage(user: {
     var dropdownMenu = document.getElementById('dropdownMenu');
     userIcon.addEventListener('click', function(e) { e.stopPropagation(); dropdownMenu.classList.toggle('show'); });
     document.addEventListener('click', function() { dropdownMenu.classList.remove('show'); });
+
+    // ===== 質問×キーワード分析モーダル =====
+    var searchKwAnalysisOverlay = document.getElementById('searchKwAnalysisOverlay');
+    var searchKwAnalysisBtn = document.getElementById('searchKwAnalysisBtn');
+    var searchKwAnalysisClose = document.getElementById('searchKwAnalysisClose');
+    var searchKwAnalysisBody = document.getElementById('searchKwAnalysisBody');
+
+    function openSearchKwAnalysis() {
+      searchKwAnalysisOverlay.classList.add('open');
+      searchKwAnalysisOverlay.setAttribute('aria-hidden', 'false');
+      searchKwAnalysisBody.innerHTML = '<div class="search-log-loading">読み込み中...</div>';
+      fetch('/api/aichat/search-keyword-analysis', { credentials: 'same-origin' })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          var items = data.items || [];
+          if (items.length === 0) {
+            searchKwAnalysisBody.innerHTML = '<div class="search-log-empty">データがありません</div>';
+            return;
+          }
+          var html = '<table class="search-log-table"><thead><tr>' +
+            '<th>総数</th><th>質問（概要）</th><th>キーワード（最大検索回数）</th>' +
+            '</tr></thead><tbody>';
+          items.forEach(function(item) {
+            var qText = (item.question || '').toLowerCase();
+            var matched = (item.keywords || []).filter(function(k) {
+              return qText.indexOf(k.keyword.toLowerCase()) >= 0;
+            });
+            matched.sort(function(a, b) { return b.max_seq_num - a.max_seq_num; });
+            var count = matched.length;
+            var q = item.question || '';
+            var qShort = q.length > 40 ? q.slice(0, 40) + '…' : q || '(削除済み)';
+            var badges = matched.map(function(k) {
+              return '<span class="kw-analysis-badge">' + escHtml(k.keyword) + '(' + k.max_seq_num + ')</span>';
+            }).join('');
+            html += '<tr>';
+            html += '<td class="search-log-count">' + count + '</td>';
+            html += '<td class="search-log-q" title="' + escHtml(q) + '">' + escHtml(qShort) + '</td>';
+            html += '<td class="kw-analysis-badges">' + (badges || '<span style="color:var(--text-muted);font-size:12px">-</span>') + '</td>';
+            html += '</tr>';
+          });
+          html += '</tbody></table>';
+          searchKwAnalysisBody.innerHTML = html;
+        })
+        .catch(function() {
+          searchKwAnalysisBody.innerHTML = '<div class="search-log-empty">読み込みエラー</div>';
+        });
+    }
+
+    function closeSearchKwAnalysis() {
+      searchKwAnalysisOverlay.classList.remove('open');
+      searchKwAnalysisOverlay.setAttribute('aria-hidden', 'true');
+    }
+
+    searchKwAnalysisBtn.addEventListener('click', function(e) { e.stopPropagation(); openSearchKwAnalysis(); });
+    searchKwAnalysisClose.addEventListener('click', function() { closeSearchKwAnalysis(); });
+    searchKwAnalysisOverlay.addEventListener('click', function(e) {
+      if (e.target === searchKwAnalysisOverlay) closeSearchKwAnalysis();
+    });
+    document.addEventListener('keydown', function(e) {
+      if (e.key === 'Escape' && searchKwAnalysisOverlay.classList.contains('open')) closeSearchKwAnalysis();
+    });
 
     // ===== 検索明細履歴モーダル =====
     var searchHistoryOverlay = document.getElementById('searchHistoryOverlay');

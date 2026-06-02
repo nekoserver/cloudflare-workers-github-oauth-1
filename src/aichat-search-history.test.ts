@@ -93,6 +93,38 @@ describe('GET /api/aichat/search-history エンドポイント', () => {
   });
 });
 
+describe('GET /api/aichat/search-keyword-analysis エンドポイント', () => {
+  it('index.ts に app.get の search-keyword-analysis ハンドラが存在する', () => {
+    const idx = INDEX_SRC.indexOf("app.get('/api/aichat/search-keyword-analysis'");
+    expect(idx).toBeGreaterThan(-1);
+  });
+
+  it('ハンドラが aichat_search_history を GROUP BY で集計する', () => {
+    const idx = INDEX_SRC.indexOf("app.get('/api/aichat/search-keyword-analysis'");
+    expect(idx).toBeGreaterThan(-1);
+    const handler = INDEX_SRC.slice(idx, idx + 700);
+    expect(handler).toContain('aichat_search_history');
+    expect(handler).toContain('GROUP BY');
+    expect(handler).toContain('MAX');
+  });
+
+  it('ハンドラが ai_chat_shares を LEFT JOIN する', () => {
+    const idx = INDEX_SRC.indexOf("app.get('/api/aichat/search-keyword-analysis'");
+    expect(idx).toBeGreaterThan(-1);
+    const handler = INDEX_SRC.slice(idx, idx + 700);
+    expect(handler).toContain('ai_chat_shares');
+    expect(handler).toContain('LEFT JOIN');
+  });
+
+  it('ハンドラが share_id でグループ化したレスポンスを返す', () => {
+    const idx = INDEX_SRC.indexOf("app.get('/api/aichat/search-keyword-analysis'");
+    expect(idx).toBeGreaterThan(-1);
+    const handler = INDEX_SRC.slice(idx, idx + 1200);
+    expect(handler).toContain('share_id');
+    expect(handler).toContain('items');
+  });
+});
+
 describe('POST /api/aichat/search-log が aichat_search_history へも書き込む', () => {
   it('index.ts の search-log POST ハンドラに aichat_search_history への INSERT が含まれる', () => {
     const idx = INDEX_SRC.indexOf("app.post('/api/aichat/search-log'");
