@@ -103,6 +103,7 @@ const STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
   { name: 'keyword_multi_labels', migration: '0039', description: 'キーワードの複数カテゴリ分類', syncPolicy: 'auto' },
   { name: 'aichat_search_log', migration: '0040', description: 'AIチャット検索キーワード選択ログ（集計）', syncPolicy: 'auto' },
   { name: 'aichat_search_history', migration: '0041', description: 'AIチャット検索キーワード選択履歴（明細）', syncPolicy: 'auto' },
+  { name: 'aichat_search_impressions', migration: '0044', description: 'AIチャット検索露出ログ（検索結果全件）', syncPolicy: 'auto' },
   { name: 'ts_repository',           migration: 'ts-catalog', description: '関数カタログ: リポジトリ一覧',             syncPolicy: 'manual' },
   { name: 'ts_function_catalog',     migration: 'ts-catalog', description: '関数カタログ: 関数定義一覧',               syncPolicy: 'manual' },
   { name: 'ts_commit_log',           migration: 'ts-catalog', description: '関数カタログ: コミット履歴',               syncPolicy: 'manual' },
@@ -695,6 +696,22 @@ INSERT OR REPLACE INTO table_column_keys (table_name, column_name, key_type, fk_
 ('aichat_search_history', 'user_id', 'fk', 'user_sessions');
 INSERT OR REPLACE INTO table_column_keys (table_name, column_name, key_type, fk_target_table) VALUES
 ('aichat_search_history', 'share_id', 'fk', 'ai_chat_shares');`,
+  '0044': `CREATE TABLE IF NOT EXISTS aichat_search_impressions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id TEXT NOT NULL,
+  share_id TEXT NOT NULL,
+  result_count INTEGER,
+  searched_at TEXT NOT NULL,
+  deleted_at TEXT
+);
+INSERT OR IGNORE INTO table_catalog (table_name, group_name, description, migration, sync_policy, display_order) VALUES
+('aichat_search_impressions', 'ai', 'AIチャット検索露出ログ（検索結果全件）', '0044', 'auto', 0);
+INSERT OR REPLACE INTO table_column_keys (table_name, column_name, key_type, fk_target_table) VALUES
+('aichat_search_impressions', 'id', 'pk', NULL);
+INSERT OR REPLACE INTO table_column_keys (table_name, column_name, key_type, fk_target_table) VALUES
+('aichat_search_impressions', 'user_id', 'fk', 'user_sessions');
+INSERT OR REPLACE INTO table_column_keys (table_name, column_name, key_type, fk_target_table) VALUES
+('aichat_search_impressions', 'share_id', 'fk', 'ai_chat_shares');`,
   'ts-catalog': `CREATE TABLE IF NOT EXISTS ts_repository (
   id            INTEGER PRIMARY KEY AUTOINCREMENT,
   full_name     TEXT NOT NULL UNIQUE,
@@ -982,6 +999,7 @@ export const TABLE_COLUMN_KEYS: Record<string, ColumnKeyInfo> = {
   ai_chat_shares: { id: 'pk', user_id: 'fk', user_hash: 'idx' },
   aichat_search_log: { id: 'pk', user_id: 'fk', share_id: 'fk', keyword: 'idx' },
   aichat_search_history: { id: 'pk', user_id: 'fk', share_id: 'fk', keyword: 'idx', seq_num: 'idx' },
+  aichat_search_impressions: { id: 'pk', user_id: 'fk', share_id: 'fk' },
   keyword_category_groups: { id: 'pk', user_id: 'fk' },
   keyword_multi_labels: { id: 'pk', user_id: 'fk', search_query: 'idx' },
   ts_repository:          { id: 'pk', full_name: 'uk' },
@@ -1047,6 +1065,7 @@ export const TABLE_GROUP_MAP: Record<string, string> = {
   ai_chat_shares: 'ai',
   aichat_search_log: 'ai',
   aichat_search_history: 'ai',
+  aichat_search_impressions: 'ai',
   keyword_category_groups: 'search',
   keyword_multi_labels: 'search',
   ts_repository:          'ts-catalog',
@@ -1199,6 +1218,7 @@ export const COLUMN_FK_TARGETS: Record<string, Record<string, string>> = {
   ai_chat_shares: { user_id: 'user_sessions' },
   aichat_search_log: { user_id: 'user_sessions', share_id: 'ai_chat_shares' },
   aichat_search_history: { user_id: 'user_sessions', share_id: 'ai_chat_shares' },
+  aichat_search_impressions: { user_id: 'user_sessions', share_id: 'ai_chat_shares' },
   keyword_category_groups: { user_id: 'user_sessions' },
   keyword_multi_labels: { user_id: 'user_sessions' },
 
@@ -2877,6 +2897,38 @@ app.post('/api/aichat/search-log', authMiddleware, async (c) => {
        ?, ?)`
   ).bind(user.sub, keyword, shareId, user.sub, keyword, shareId, now, resultCount).run();
   return jsonUtf8({ ok: true });
+});
+
+app.get('/api/aichat/search-impressions', authMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  const rows = await c.env.DB.prepare(
+    `SELECT i.id, i.share_id, i.result_count, i.searched_at,
+            s.question
+     FROM aichat_search_impressions i
+     LEFT JOIN ai_chat_shares s ON s.id = i.share_id
+     WHERE i.user_id = ? AND i.deleted_at IS NULL
+     ORDER BY i.id DESC
+     LIMIT 30`
+  ).bind(user.sub).all<{ id: number; share_id: string; result_count: number | null; searched_at: string; question: string | null }>();
+  return jsonUtf8({ results: rows.results ?? [] });
+});
+
+app.post('/api/aichat/search-impressions', authMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  const body = await c.req.json<{ shareIds?: string[]; resultCount?: number }>();
+  const shareIds = Array.isArray(body.shareIds) ? body.shareIds : [];
+  const resultCount = typeof body.resultCount === 'number' ? body.resultCount : null;
+  if (shareIds.length === 0) return jsonUtf8({ ok: true, inserted: 0 });
+  const now = new Date().toISOString();
+  const stmts = shareIds.map((shareId) =>
+    c.env.DB.prepare(
+      `INSERT INTO aichat_search_impressions (user_id, share_id, result_count, searched_at) VALUES (?, ?, ?, ?)`
+    ).bind(user.sub, String(shareId).slice(0, 100), resultCount, now)
+  );
+  await c.env.DB.batch(stmts);
+  return jsonUtf8({ ok: true, inserted: shareIds.length });
 });
 
 /**
