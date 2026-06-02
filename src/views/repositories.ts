@@ -6205,7 +6205,16 @@ export function getRepositoriesPage(user: {
             items = [];
           } else {
             items = items.filter(function(item) {
-              return activeLabels.has(item.label || 'uncategorized');
+              var kw = item.search_query;
+              var cats;
+              if (histViewMode === 'single' && histMultiLabelsMap !== null) {
+                cats = (histMultiLabelsMap[kw] && histMultiLabelsMap[kw].length > 0)
+                  ? histMultiLabelsMap[kw]
+                  : [item.label || 'uncategorized'];
+              } else {
+                cats = [item.label || 'uncategorized'];
+              }
+              return cats.some(function(cat) { return activeLabels.has(cat); });
             });
           }
         }
@@ -6622,11 +6631,11 @@ export function getRepositoriesPage(user: {
       function updateRowCountDisplay(displayed, base) {
         if (!histRowCountDisplay) return;
         var renderedRows = historyModalBody.querySelectorAll('tr[data-query]').length;
-        var isOk = renderedRows === displayed;
-        var statusBadge = isOk
-          ? '<span class="hist-row-count-ok">OK</span>'
-          : '<span class="hist-row-count-ng">NG</span>';
-        histRowCountDisplay.innerHTML = displayed + '/' + base + ' 行を表示中 ' + statusBadge;
+        var isOk = displayed > 0 && renderedRows === displayed;
+        var statusBadge = displayed > 0
+          ? (isOk ? '<span class="hist-row-count-ok">OK</span>' : '<span class="hist-row-count-ng">NG</span>')
+          : '';
+        histRowCountDisplay.innerHTML = displayed + '/' + base + ' 行を表示中' + (statusBadge ? ' ' + statusBadge : '');
       }
 
       function openCategoryFilterModal(items) {

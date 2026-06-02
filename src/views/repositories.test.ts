@@ -506,4 +506,20 @@ describe('ページ基本構造: script タグ内 JS の構文チェック', () 
       }).not.toThrow();
     }
   });
+
+  it('updateRowCountDisplay は displayed > 0 の時のみ OK バッジを表示する', () => {
+    const html = getRepositoriesPage(minimalUser);
+    const idx = html.indexOf('function updateRowCountDisplay(');
+    expect(idx).toBeGreaterThan(-1);
+    const fnBody = html.slice(idx, idx + 600);
+    expect(fnBody).toContain('displayed > 0');
+  });
+
+  it('getIncrementalFilteredItems は一列表示かつ histMultiLabelsMap 読み込み済み時にマルチラベルでフィルタする', () => {
+    const html = getRepositoriesPage(minimalUser);
+    const idx = html.indexOf('function getIncrementalFilteredItems()');
+    expect(idx).toBeGreaterThan(-1);
+    const fnBody = html.slice(idx, idx + 800);
+    expect(fnBody).toContain('histMultiLabelsMap');
+  });
 });
