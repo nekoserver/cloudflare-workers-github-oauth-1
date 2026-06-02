@@ -64,6 +64,31 @@ describe('aichat_search_history マイグレーションファイル', () => {
   });
 });
 
+describe('GET /api/aichat/shares/:id エンドポイント', () => {
+  it('index.ts に app.get の shares/:id ハンドラが存在する', () => {
+    const idx = INDEX_SRC.indexOf("app.get('/api/aichat/shares/:id'");
+    expect(idx).toBeGreaterThan(-1);
+  });
+
+  it('ハンドラが ai_chat_shares から当該ユーザーのレコードを取得する', () => {
+    const idx = INDEX_SRC.indexOf("app.get('/api/aichat/shares/:id'");
+    expect(idx).toBeGreaterThan(-1);
+    const handler = INDEX_SRC.slice(idx, idx + 600);
+    expect(handler).toContain('ai_chat_shares');
+    expect(handler).toContain('user_id');
+    expect(handler).toContain('deleted_at IS NULL');
+  });
+
+  it('ハンドラが question・answer・created_at を返す', () => {
+    const idx = INDEX_SRC.indexOf("app.get('/api/aichat/shares/:id'");
+    expect(idx).toBeGreaterThan(-1);
+    const handler = INDEX_SRC.slice(idx, idx + 600);
+    expect(handler).toContain('question');
+    expect(handler).toContain('answer');
+    expect(handler).toContain('created_at');
+  });
+});
+
 describe('GET /api/aichat/search-history エンドポイント', () => {
   it('index.ts に app.get の search-history ハンドラが存在する', () => {
     const idx = INDEX_SRC.indexOf("app.get('/api/aichat/search-history'");

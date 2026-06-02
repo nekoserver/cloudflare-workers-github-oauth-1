@@ -2880,6 +2880,21 @@ app.post('/api/aichat/search-log', authMiddleware, async (c) => {
 /**
  * AIチャット過去ログ論理削除 API（認証が必要）
  */
+app.get('/api/aichat/shares/:id', authMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  const id = c.req.param('id');
+  const row = await c.env.DB.prepare(
+    `SELECT id, user_hash, question, answer, model, created_at, access_count
+     FROM ai_chat_shares WHERE id = ? AND user_id = ? AND deleted_at IS NULL`
+  ).bind(id, user.sub).first<{
+    id: string; user_hash: string; question: string; answer: string;
+    model: string; created_at: string; access_count: number;
+  }>();
+  if (!row) return jsonUtf8({ error: 'Not found' }, 404);
+  return jsonUtf8(row);
+});
+
 app.delete('/api/aichat/shares/:id', authMiddleware, async (c) => {
   const user = c.get('user');
   if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);

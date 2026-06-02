@@ -403,4 +403,22 @@ describe('AIチャット: 質問×キーワード分析モーダル', () => {
     expect(fnBody).toContain('max_seq_num');
     expect(fnBody).toContain('kw-analysis-badge');
   });
+
+  it('質問セルに data-share-id 属性が付与される', () => {
+    const html = getAiChatPage(minimalUser);
+    const idx = html.indexOf('function openSearchKwAnalysis(');
+    expect(idx).toBeGreaterThan(-1);
+    const fnBody = html.slice(idx, idx + 2000);
+    expect(fnBody).toContain('data-share-id');
+  });
+
+  it('質問セルクリックで /api/aichat/shares/ を fetch して showHistoryModal を呼ぶ', () => {
+    const html = getAiChatPage(minimalUser);
+    const idx = html.indexOf('function openSearchKwAnalysis(');
+    expect(idx).toBeGreaterThan(-1);
+    const fnBody = html.slice(idx, idx + 3000);
+    expect(fnBody).toContain('/api/aichat/shares/');
+    expect(fnBody).toContain('showHistoryModal');
+    expect(fnBody).toContain('data-share-id');
+  });
 });
