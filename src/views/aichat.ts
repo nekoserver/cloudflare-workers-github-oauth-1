@@ -77,6 +77,54 @@ export function getAiChatPage(user: {
     .navbar-model { font-size: 11px; font-weight: 400; color: var(--text-muted); }
 
     .navbar-spacer { flex: 1; }
+    .search-log-btn {
+      background: none; border: 1px solid var(--border-color); border-radius: 7px;
+      color: var(--text-muted); cursor: pointer; font-size: 13px; padding: 4px 9px;
+      line-height: 1.4; transition: color 0.15s, border-color 0.15s;
+    }
+    .search-log-btn:hover { color: var(--text-primary); border-color: var(--accent-color, #667eea); }
+    .search-log-overlay {
+      position: fixed; inset: 0; z-index: 700; display: none;
+      align-items: flex-start; justify-content: center;
+      background: rgba(15,23,42,0.52); backdrop-filter: blur(3px);
+      padding-top: 56px;
+    }
+    .search-log-overlay.open { display: flex; }
+    .search-log-modal {
+      background: var(--card-bg); border: 1px solid var(--border-color);
+      border-radius: 14px; width: min(720px, 96vw); max-height: calc(100vh - 80px);
+      display: flex; flex-direction: column;
+      box-shadow: 0 12px 40px rgba(0,0,0,0.25);
+    }
+    .search-log-head {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 14px 18px; border-bottom: 1px solid var(--border-color); flex-shrink: 0;
+    }
+    .search-log-title { font-size: 14px; font-weight: 700; color: var(--text-primary); }
+    .search-log-close {
+      background: none; border: none; color: var(--text-muted); cursor: pointer;
+      font-size: 18px; padding: 0 4px; line-height: 1;
+    }
+    .search-log-close:hover { color: var(--text-primary); }
+    .search-log-body { flex: 1; overflow-y: auto; padding: 12px 16px; }
+    .search-log-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    .search-log-table th {
+      font-size: 10px; font-weight: 700; color: var(--text-muted); text-transform: uppercase;
+      letter-spacing: 0.05em; padding: 6px 8px; border-bottom: 2px solid var(--border-color);
+      text-align: left; white-space: nowrap; background: var(--bg-secondary);
+    }
+    .search-log-table td {
+      padding: 7px 8px; border-bottom: 1px solid var(--border-color);
+      color: var(--text-primary); vertical-align: top;
+    }
+    .search-log-table tr:last-child td { border-bottom: none; }
+    .search-log-table tbody tr:hover td { background: var(--bg-secondary); }
+    .search-log-kw { font-weight: 600; color: var(--accent-color, #667eea); max-width: 180px; word-break: break-all; }
+    .search-log-q { color: var(--text-muted); max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .search-log-count { text-align: center; font-weight: 700; }
+    .search-log-date { color: var(--text-muted); white-space: nowrap; font-size: 11px; }
+    .search-log-empty { text-align: center; color: var(--text-muted); padding: 40px 0; font-size: 13px; }
+    .search-log-loading { text-align: center; color: var(--text-muted); padding: 40px 0; font-size: 13px; }
 
     .user-menu { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
     .user-name { font-size: 13px; color: var(--text-secondary); font-weight: 500; }
@@ -419,6 +467,7 @@ export function getAiChatPage(user: {
     <a href="/welcome" class="navbar-brand">🤖 AI チャット<span class="navbar-model">${modelShortName}</span></a>
     <div class="navbar-spacer"></div>
     <div class="user-menu">
+      <button class="search-log-btn" id="searchLogBtn" title="検索履歴">📋 検索履歴</button>
       ${getThemeToggleHTML()}
       <span class="user-name">${displayName}</span>
       <div class="user-menu-container">
@@ -501,6 +550,18 @@ export function getAiChatPage(user: {
     </div>
   </div>
 
+  <div class="search-log-overlay" id="searchLogOverlay" aria-hidden="true">
+    <div class="search-log-modal" role="dialog" aria-modal="true">
+      <div class="search-log-head">
+        <span class="search-log-title">検索キーワード履歴（最新30件）</span>
+        <button class="search-log-close" id="searchLogClose" aria-label="閉じる">✕</button>
+      </div>
+      <div class="search-log-body" id="searchLogBody">
+        <div class="search-log-loading">読み込み中...</div>
+      </div>
+    </div>
+  </div>
+
   <div class="delete-confirm-overlay" id="deleteConfirmOverlay">
     <div class="delete-confirm-box">
       <div class="delete-confirm-title">過去ログを削除しますか？</div>
@@ -537,6 +598,65 @@ export function getAiChatPage(user: {
     var dropdownMenu = document.getElementById('dropdownMenu');
     userIcon.addEventListener('click', function(e) { e.stopPropagation(); dropdownMenu.classList.toggle('show'); });
     document.addEventListener('click', function() { dropdownMenu.classList.remove('show'); });
+
+    // ===== 検索履歴モーダル =====
+    var searchLogOverlay = document.getElementById('searchLogOverlay');
+    var searchLogBtn = document.getElementById('searchLogBtn');
+    var searchLogClose = document.getElementById('searchLogClose');
+    var searchLogBody = document.getElementById('searchLogBody');
+
+    function escHtml(s) {
+      return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    function openSearchLog() {
+      searchLogOverlay.classList.add('open');
+      searchLogOverlay.setAttribute('aria-hidden', 'false');
+      searchLogBody.innerHTML = '<div class="search-log-loading">読み込み中...</div>';
+      fetch('/api/aichat/search-log', { credentials: 'same-origin' })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          var rows = data.rows || [];
+          if (rows.length === 0) {
+            searchLogBody.innerHTML = '<div class="search-log-empty">検索履歴がありません</div>';
+            return;
+          }
+          var html = '<table class="search-log-table"><thead><tr>' +
+            '<th>#</th><th>キーワード</th><th>質問（概要）</th><th>最終検索</th><th>選択回数</th>' +
+            '</tr></thead><tbody>';
+          rows.forEach(function(row, i) {
+            var dateStr = row.last_searched_at ? row.last_searched_at.slice(0, 16).replace('T', ' ') : '-';
+            var rawQ = row.question || '';
+            var q = rawQ.length > 45 ? rawQ.slice(0, 45) + '…' : rawQ || '(削除済み)';
+            html += '<tr>';
+            html += '<td class="search-log-date">' + (i + 1) + '</td>';
+            html += '<td class="search-log-kw">' + escHtml(row.keyword) + '</td>';
+            html += '<td class="search-log-q" title="' + escHtml(rawQ) + '">' + escHtml(q) + '</td>';
+            html += '<td class="search-log-date">' + escHtml(dateStr) + '</td>';
+            html += '<td class="search-log-count">' + (row.select_count || 0) + '</td>';
+            html += '</tr>';
+          });
+          html += '</tbody></table>';
+          searchLogBody.innerHTML = html;
+        })
+        .catch(function() {
+          searchLogBody.innerHTML = '<div class="search-log-empty">読み込みエラー</div>';
+        });
+    }
+
+    function closeSearchLog() {
+      searchLogOverlay.classList.remove('open');
+      searchLogOverlay.setAttribute('aria-hidden', 'true');
+    }
+
+    searchLogBtn.addEventListener('click', function(e) { e.stopPropagation(); openSearchLog(); });
+    searchLogClose.addEventListener('click', function() { closeSearchLog(); });
+    searchLogOverlay.addEventListener('click', function(e) {
+      if (e.target === searchLogOverlay) closeSearchLog();
+    });
+    document.addEventListener('keydown', function(e) {
+      if (e.key === 'Escape' && searchLogOverlay.classList.contains('open')) closeSearchLog();
+    });
 
     // ===== サイドバー =====
     var sidebarToggle = document.getElementById('sidebarToggle');
