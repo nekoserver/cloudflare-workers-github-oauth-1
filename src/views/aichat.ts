@@ -240,6 +240,28 @@ export function getAiChatPage(user: {
     .results-panel-link { font-size: 11px; color: var(--accent-color, #667eea); text-decoration: none; }
     .results-panel-link:hover { text-decoration: underline; }
 
+    /* ======= Markdownプレビュー ======= */
+    .results-col-text.preview-area { white-space: normal; }
+    .chat-bubble.assistant.preview-area { white-space: normal; }
+    .preview-area h1 { font-size: 1.4em; font-weight: 700; margin: 12px 0 8px; padding-bottom: 4px; border-bottom: 1px solid var(--border-color); }
+    .preview-area h2 { font-size: 1.2em; font-weight: 600; margin: 10px 0 6px; padding-bottom: 3px; border-bottom: 1px solid var(--border-color); }
+    .preview-area h3 { font-size: 1.1em; font-weight: 600; margin: 8px 0 4px; }
+    .preview-area h4, .preview-area h5, .preview-area h6 { font-size: 1em; font-weight: 600; margin: 6px 0 4px; }
+    .preview-area p { margin: 0 0 10px; }
+    .preview-area ul, .preview-area ol { margin: 0 0 10px; padding-left: 1.5em; }
+    .preview-area li { margin: 2px 0; }
+    .preview-area code { background: var(--bg-secondary); padding: 1px 5px; border-radius: 3px; font-size: 0.88em; font-family: ui-monospace, monospace; }
+    .preview-area pre { background: var(--bg-secondary); padding: 10px 12px; border-radius: 6px; overflow-x: auto; margin: 0 0 10px; }
+    .preview-area pre code { background: none; padding: 0; font-size: 0.85em; }
+    .preview-area blockquote { border-left: 3px solid var(--border-color); margin: 0 0 10px; padding: 4px 0 4px 12px; color: var(--text-muted); }
+    .preview-area table { border-collapse: collapse; width: 100%; margin: 0 0 10px; font-size: 12px; }
+    .preview-area th, .preview-area td { border: 1px solid var(--border-color); padding: 4px 8px; }
+    .preview-area th { background: var(--bg-secondary); font-weight: 600; }
+    .preview-area hr { border: none; border-top: 1px solid var(--border-color); margin: 12px 0; }
+    .preview-area a { color: var(--accent-color, #667eea); }
+    .preview-area img { max-width: 100%; }
+    .preview-area input[type="checkbox"] { margin-right: 4px; }
+
     /* ======= チャット本体 ======= */
     .chat-wrapper {
       flex: 1; display: flex; flex-direction: column;
@@ -372,7 +394,7 @@ export function getAiChatPage(user: {
       </div>
       <div class="results-panel-col">
         <div class="results-col-label">回答</div>
-        <div class="results-col-text" id="resultsPanelA"></div>
+        <div class="results-col-text preview-area" id="resultsPanelA"></div>
       </div>
     </div>
     <div class="results-panel-footer">
@@ -609,6 +631,104 @@ export function getAiChatPage(user: {
       renderCalendar(calCurrentMonth);
     }
 
+    // ===== Markdownパーサー =====
+    function mdEsc(s) {
+      return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+    function mdInline(text) {
+      text = text.replace(/!\\[([^\\]]*)\\]\\(([^)]+)\\)/g, '<img src="$2" alt="$1">');
+      text = text.replace(/\\[([^\\]]*)\\]\\(([^)]+)\\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
+      text = text.replace(/\\*\\*\\*(.+?)\\*\\*\\*/g, '<strong><em>$1</em></strong>');
+      text = text.replace(/\\*\\*(.+?)\\*\\*/g, '<strong>$1</strong>');
+      text = text.replace(/__(.+?)__/g, '<strong>$1</strong>');
+      text = text.replace(/\\*(.+?)\\*/g, '<em>$1</em>');
+      text = text.replace(/~~(.+?)~~/g, '<del>$1</del>');
+      text = text.replace(/\\n/g, '<br>');
+      return text;
+    }
+    function mdSplitRow(line) {
+      return line.replace(/^\\|\\s*/, '').replace(/\\s*\\|$/, '').split(/\\s*\\|\\s*/);
+    }
+    function mdParseList(lines, start, tag) {
+      var items = [];
+      var i = start;
+      var pat = tag === 'ul' ? /^\\s*[-*+]\\s(.*)/ : /^\\s*\\d+\\.\\s(.*)/;
+      while (i < lines.length) {
+        var m = lines[i].match(pat);
+        if (!m) break;
+        var txt = m[1];
+        var task = txt.match(/^\\[([ xX])\\]\\s(.*)/);
+        if (task) {
+          items.push('<li><input type="checkbox"' + (task[1] !== ' ' ? ' checked' : '') + ' disabled> ' + mdInline(task[2]) + '</li>');
+        } else {
+          items.push('<li>' + mdInline(txt) + '</li>');
+        }
+        i++;
+      }
+      return '<' + tag + '>' + items.join('') + '</' + tag + '>';
+    }
+    function parseMd(src) {
+      src = src.replace(/\\r\\n?/g, '\\n');
+      var codeBlocks = [];
+      src = src.replace(/\`\`\`(\\w*)\\n([\\s\\S]*?)\`\`\`/g, function(_, lang, code) {
+        var idx = codeBlocks.length;
+        codeBlocks.push('<pre><code' + (lang ? ' class="language-' + lang + '"' : '') + '>' + mdEsc(code.replace(/\\n$/, '')) + '</code></pre>');
+        return '\\x00CB' + idx + '\\x00';
+      });
+      var inlineCodes = [];
+      src = src.replace(/\`([^\`]+)\`/g, function(_, code) {
+        var idx = inlineCodes.length;
+        inlineCodes.push('<code>' + mdEsc(code) + '</code>');
+        return '\\x00IC' + idx + '\\x00';
+      });
+      var lines = src.split('\\n');
+      var html = '';
+      var i = 0;
+      while (i < lines.length) {
+        var line = lines[i];
+        if (line.trim() === '') { i++; continue; }
+        var cbM = line.match(/^\\x00CB(\\d+)\\x00$/);
+        if (cbM) { html += codeBlocks[parseInt(cbM[1])]; i++; continue; }
+        var hM = line.match(/^(#{1,6})\\s+(.+)$/);
+        if (hM) { var lv = hM[1].length; html += '<h' + lv + '>' + mdInline(hM[2]) + '</h' + lv + '>'; i++; continue; }
+        if (/^(\\*{3,}|-{3,}|_{3,})\\s*$/.test(line)) { html += '<hr>'; i++; continue; }
+        if (i + 1 < lines.length && /^\\|/.test(line) && /^[\\|\\s:-]+$/.test(lines[i + 1])) {
+          var tbl = '<table><thead><tr>';
+          mdSplitRow(line).forEach(function(h) { tbl += '<th>' + mdInline(h.trim()) + '</th>'; });
+          tbl += '</tr></thead><tbody>';
+          i += 2;
+          while (i < lines.length && /^\\|/.test(lines[i])) {
+            tbl += '<tr>';
+            mdSplitRow(lines[i]).forEach(function(c) { tbl += '<td>' + mdInline(c.trim()) + '</td>'; });
+            tbl += '</tr>'; i++;
+          }
+          tbl += '</tbody></table>'; html += tbl; continue;
+        }
+        if (/^>\\s?/.test(line)) {
+          var bq = [];
+          while (i < lines.length && /^>\\s?/.test(lines[i])) { bq.push(lines[i].replace(/^>\\s?/, '')); i++; }
+          html += '<blockquote>' + parseMd(bq.join('\\n')) + '</blockquote>'; continue;
+        }
+        if (/^\\s*[-*+]\\s/.test(line)) {
+          html += mdParseList(lines, i, 'ul');
+          while (i < lines.length && /^\\s*[-*+]\\s/.test(lines[i])) i++;
+          continue;
+        }
+        if (/^\\s*\\d+\\.\\s/.test(line)) {
+          html += mdParseList(lines, i, 'ol');
+          while (i < lines.length && /^\\s*\\d+\\.\\s/.test(lines[i])) i++;
+          continue;
+        }
+        var pLines = [];
+        while (i < lines.length && lines[i].trim() !== '' && !/^#{1,6}\\s/.test(lines[i]) && !/^(\\*{3,}|-{3,}|_{3,})\\s*$/.test(lines[i]) && !/^>\\s?/.test(lines[i]) && !/^\\|/.test(lines[i]) && !/^\\x00CB/.test(lines[i])) {
+          pLines.push(lines[i]); i++;
+        }
+        if (pLines.length) html += '<p>' + mdInline(pLines.join('\\n')) + '</p>';
+      }
+      html = html.replace(/\\x00IC(\\d+)\\x00/g, function(_, idx) { return inlineCodes[parseInt(idx)]; });
+      return html;
+    }
+
     // ===== 詳細パネル =====
     var resultsPanel = document.getElementById('resultsPanel');
     var resultsPanelQ = document.getElementById('resultsPanelQ');
@@ -619,7 +739,7 @@ export function getAiChatPage(user: {
 
     function showResultsPanel(r) {
       resultsPanelQ.textContent = r.question;
-      resultsPanelA.textContent = r.answer;
+      resultsPanelA.innerHTML = parseMd(r.answer);
       resultsPanelMeta.textContent = r.created_at.slice(0, 16).replace('T', ' ') + '　' + r.model + '　👁 ' + (r.access_count || 0);
       resultsPanelShareLink.href = '/s/' + r.user_hash + '/' + r.id;
       resultsPanel.classList.add('open');
@@ -650,8 +770,13 @@ export function getAiChatPage(user: {
 
     function appendBubble(text, role) {
       var el = document.createElement('div');
-      el.className = 'chat-bubble ' + role;
-      el.textContent = text;
+      if (role === 'assistant') {
+        el.className = 'chat-bubble ' + role + ' preview-area';
+        el.innerHTML = parseMd(text);
+      } else {
+        el.className = 'chat-bubble ' + role;
+        el.textContent = text;
+      }
       chatLog.appendChild(el);
       chatLog.scrollTop = chatLog.scrollHeight;
       return el;
