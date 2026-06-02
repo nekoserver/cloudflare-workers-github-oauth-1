@@ -486,6 +486,16 @@ export function getSettingsPage(user: {
             </div>
           </div>
           <div class="info-item">
+            <span class="info-label">詳細集計パネルオープン時パネル領域以外をタップしてもパネルを閉じられるようにする</span>
+            <div class="setting-control" style="justify-content: flex-end;">
+              <span class="theme-label" id="kwPanelTapCloseLabel">ON</span>
+              <label class="theme-toggle-switch">
+                <input type="checkbox" id="kwPanelTapCloseCheckbox" onchange="onKwPanelTapCloseChange()" checked>
+                <span class="theme-toggle-slider"></span>
+              </label>
+            </div>
+          </div>
+          <div class="info-item">
             <span class="info-label">キーワード詳細パネルを閉じる際『すべて』にフォーカスが当たらないようにする</span>
             <div class="setting-control" style="justify-content: flex-end;">
               <span class="theme-label" id="kwPanelNoAllFocusLabel">OFF</span>
@@ -753,6 +763,24 @@ export function getSettingsPage(user: {
       var enabled = cb.checked;
       label.textContent = enabled ? 'ON' : 'OFF';
       document.cookie = 'keyword_badge_count=' + (enabled ? 'on' : 'off') + '; Path=/; SameSite=Lax; Max-Age=31536000';
+    }
+
+    // 詳細集計パネル外タップで閉じる設定の初期化
+    (function() {
+      var m = document.cookie.match('(^|;)\\\\s*kw_panel_tap_close=([^;]*)');
+      var val = m ? decodeURIComponent(m[2]) : 'on';
+      var cb = document.getElementById('kwPanelTapCloseCheckbox');
+      var label = document.getElementById('kwPanelTapCloseLabel');
+      if (cb) cb.checked = (val !== 'off');
+      if (label) label.textContent = (val !== 'off') ? 'ON' : 'OFF';
+    })();
+
+    function onKwPanelTapCloseChange() {
+      var cb = document.getElementById('kwPanelTapCloseCheckbox');
+      var label = document.getElementById('kwPanelTapCloseLabel');
+      var enabled = cb.checked;
+      label.textContent = enabled ? 'ON' : 'OFF';
+      document.cookie = 'kw_panel_tap_close=' + (enabled ? 'on' : 'off') + '; Path=/; SameSite=Lax; Max-Age=31536000';
     }
 
     // キーワード詳細パネル閉時のすべてフォーカス抑制の初期化

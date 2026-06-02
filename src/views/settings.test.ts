@@ -8,6 +8,36 @@ const minimalUser = {
   expiresAtTimestamp: 1234567890,
 };
 
+describe('設定ページ: キーワード詳細パネル外タップでパネルを閉じる設定', () => {
+  it('kwPanelTapCloseCheckbox が存在する', () => {
+    const html = getSettingsPage(minimalUser);
+    expect(html).toContain('id="kwPanelTapCloseCheckbox"');
+  });
+
+  it('kw_panel_tap_close Cookie を参照する', () => {
+    const html = getSettingsPage(minimalUser);
+    expect(html).toContain('kw_panel_tap_close');
+  });
+
+  it('onKwPanelTapCloseChange 関数が存在する', () => {
+    const html = getSettingsPage(minimalUser);
+    expect(html).toContain('function onKwPanelTapCloseChange()');
+  });
+
+  it('設定項目の説明ラベルが存在する', () => {
+    const html = getSettingsPage(minimalUser);
+    expect(html).toContain('パネル領域以外をタップしてもパネルを閉じられるようにする');
+  });
+
+  it('デフォルトは ON (checked)', () => {
+    const html = getSettingsPage(minimalUser);
+    const idx = html.indexOf('id="kwPanelTapCloseCheckbox"');
+    expect(idx).toBeGreaterThan(-1);
+    const snippet = html.slice(idx, idx + 200);
+    expect(snippet).toContain('checked');
+  });
+});
+
 describe('設定ページ: キーワード詳細パネル閉時のすべてフォーカス抑制設定', () => {
   it('kwPanelNoAllFocusCheckbox が存在する', () => {
     const html = getSettingsPage(minimalUser);
@@ -31,8 +61,8 @@ describe('設定ページ: キーワード詳細パネル閉時のすべてフ�
 
   it('デフォルトは OFF (unchecked)', () => {
     const html = getSettingsPage(minimalUser);
-    expect(html).toContain('id="kwPanelNoAllFocusCheckbox"');
     const idx = html.indexOf('id="kwPanelNoAllFocusCheckbox"');
+    expect(idx).toBeGreaterThan(-1);
     const snippet = html.slice(Math.max(0, idx - 200), idx + 100);
     expect(snippet).not.toContain('checked');
   });
