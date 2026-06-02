@@ -101,7 +101,8 @@ const STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
   { name: 'ai_chat_shares', migration: '0036', description: 'AIチャット共有Q&Aレコード', syncPolicy: 'auto' },
   { name: 'keyword_category_groups', migration: '0037', description: '検索キーワードカテゴリグループ定義', syncPolicy: 'auto' },
   { name: 'keyword_multi_labels', migration: '0039', description: 'キーワードの複数カテゴリ分類', syncPolicy: 'auto' },
-  { name: 'aichat_search_log', migration: '0040', description: 'AIチャット検索キーワード選択ログ', syncPolicy: 'auto' },
+  { name: 'aichat_search_log', migration: '0040', description: 'AIチャット検索キーワード選択ログ（集計）', syncPolicy: 'auto' },
+  { name: 'aichat_search_history', migration: '0041', description: 'AIチャット検索キーワード選択履歴（明細）', syncPolicy: 'auto' },
   { name: 'ts_repository',           migration: 'ts-catalog', description: '関数カタログ: リポジトリ一覧',             syncPolicy: 'manual' },
   { name: 'ts_function_catalog',     migration: 'ts-catalog', description: '関数カタログ: 関数定義一覧',               syncPolicy: 'manual' },
   { name: 'ts_commit_log',           migration: 'ts-catalog', description: '関数カタログ: コミット履歴',               syncPolicy: 'manual' },
@@ -675,6 +676,25 @@ INSERT OR REPLACE INTO table_column_keys (table_name, column_name, key_type, fk_
 ('aichat_search_log', 'user_id', 'fk', 'user_sessions');
 INSERT OR REPLACE INTO table_column_keys (table_name, column_name, key_type, fk_target_table) VALUES
 ('aichat_search_log', 'share_id', 'fk', 'ai_chat_shares');`,
+  '0041': `CREATE TABLE IF NOT EXISTS aichat_search_history (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id TEXT NOT NULL,
+  keyword TEXT NOT NULL,
+  share_id TEXT NOT NULL,
+  seq_num INTEGER NOT NULL,
+  searched_at TEXT NOT NULL,
+  deleted_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_aichat_search_history_lookup ON aichat_search_history(user_id, keyword, share_id);
+CREATE INDEX IF NOT EXISTS idx_aichat_search_history_user ON aichat_search_history(user_id, searched_at);
+INSERT OR IGNORE INTO table_catalog (table_name, group_name, description, migration, sync_policy, display_order) VALUES
+('aichat_search_history', 'ai', 'AIチャット検索キーワード選択履歴（明細）', '0041', 'auto', 0);
+INSERT OR REPLACE INTO table_column_keys (table_name, column_name, key_type, fk_target_table) VALUES
+('aichat_search_history', 'id', 'pk', NULL);
+INSERT OR REPLACE INTO table_column_keys (table_name, column_name, key_type, fk_target_table) VALUES
+('aichat_search_history', 'user_id', 'fk', 'user_sessions');
+INSERT OR REPLACE INTO table_column_keys (table_name, column_name, key_type, fk_target_table) VALUES
+('aichat_search_history', 'share_id', 'fk', 'ai_chat_shares');`,
   'ts-catalog': `CREATE TABLE IF NOT EXISTS ts_repository (
   id            INTEGER PRIMARY KEY AUTOINCREMENT,
   full_name     TEXT NOT NULL UNIQUE,
@@ -961,6 +981,7 @@ export const TABLE_COLUMN_KEYS: Record<string, ColumnKeyInfo> = {
   repo_commit_index: { commit_hash: 'pk', seq_num: 'idx', github_pr_number: 'idx', repo_name: 'idx' },
   ai_chat_shares: { id: 'pk', user_id: 'fk', user_hash: 'idx' },
   aichat_search_log: { id: 'pk', user_id: 'fk', share_id: 'fk', keyword: 'idx' },
+  aichat_search_history: { id: 'pk', user_id: 'fk', share_id: 'fk', keyword: 'idx', seq_num: 'idx' },
   keyword_category_groups: { id: 'pk', user_id: 'fk' },
   keyword_multi_labels: { id: 'pk', user_id: 'fk', search_query: 'idx' },
   ts_repository:          { id: 'pk', full_name: 'uk' },
@@ -1025,6 +1046,7 @@ export const TABLE_GROUP_MAP: Record<string, string> = {
   ai_summary_link_access_log: 'ai',
   ai_chat_shares: 'ai',
   aichat_search_log: 'ai',
+  aichat_search_history: 'ai',
   keyword_category_groups: 'search',
   keyword_multi_labels: 'search',
   ts_repository:          'ts-catalog',
@@ -1176,6 +1198,7 @@ export const COLUMN_FK_TARGETS: Record<string, Record<string, string>> = {
   repo_commit_index: { repo_name: 'installation_permissions' },
   ai_chat_shares: { user_id: 'user_sessions' },
   aichat_search_log: { user_id: 'user_sessions', share_id: 'ai_chat_shares' },
+  aichat_search_history: { user_id: 'user_sessions', share_id: 'ai_chat_shares' },
   keyword_category_groups: { user_id: 'user_sessions' },
   keyword_multi_labels: { user_id: 'user_sessions' },
 
@@ -2800,6 +2823,12 @@ app.post('/api/aichat/search-log', authMiddleware, async (c) => {
        last_searched_at = excluded.last_searched_at,
        select_count = select_count + 1`
   ).bind(user.sub, keyword, shareId, now, now).run();
+  await c.env.DB.prepare(
+    `INSERT INTO aichat_search_history (user_id, keyword, share_id, seq_num, searched_at)
+     VALUES (?, ?, ?,
+       (SELECT COALESCE(COUNT(*), 0) + 1 FROM aichat_search_history WHERE user_id = ? AND keyword = ? AND share_id = ?),
+       ?)`
+  ).bind(user.sub, keyword, shareId, user.sub, keyword, shareId, now).run();
   return jsonUtf8({ ok: true });
 });
 
