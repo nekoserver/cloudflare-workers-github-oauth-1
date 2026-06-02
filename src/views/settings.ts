@@ -486,6 +486,16 @@ export function getSettingsPage(user: {
             </div>
           </div>
           <div class="info-item">
+            <span class="info-label">キーワード詳細パネルを閉じる際『すべて』にフォーカスが当たらないようにする</span>
+            <div class="setting-control" style="justify-content: flex-end;">
+              <span class="theme-label" id="kwPanelNoAllFocusLabel">OFF</span>
+              <label class="theme-toggle-switch">
+                <input type="checkbox" id="kwPanelNoAllFocusCheckbox" onchange="onKwPanelNoAllFocusChange()">
+                <span class="theme-toggle-slider"></span>
+              </label>
+            </div>
+          </div>
+          <div class="info-item">
             <span class="info-label">新検索キーワード分類時のAIへの問い合わせ内容を可視化する</span>
             <div class="setting-control" style="justify-content: flex-end;">
               <span class="theme-label" id="classifyDebugLabel">OFF</span>
@@ -743,6 +753,24 @@ export function getSettingsPage(user: {
       var enabled = cb.checked;
       label.textContent = enabled ? 'ON' : 'OFF';
       document.cookie = 'keyword_badge_count=' + (enabled ? 'on' : 'off') + '; Path=/; SameSite=Lax; Max-Age=31536000';
+    }
+
+    // キーワード詳細パネル閉時のすべてフォーカス抑制の初期化
+    (function() {
+      var m = document.cookie.match('(^|;)\\\\s*kw_panel_no_all_focus=([^;]*)');
+      var val = m ? decodeURIComponent(m[2]) : 'off';
+      var cb = document.getElementById('kwPanelNoAllFocusCheckbox');
+      var label = document.getElementById('kwPanelNoAllFocusLabel');
+      if (cb) cb.checked = (val === 'on');
+      if (label) label.textContent = (val === 'on') ? 'ON' : 'OFF';
+    })();
+
+    function onKwPanelNoAllFocusChange() {
+      var cb = document.getElementById('kwPanelNoAllFocusCheckbox');
+      var label = document.getElementById('kwPanelNoAllFocusLabel');
+      var enabled = cb.checked;
+      label.textContent = enabled ? 'ON' : 'OFF';
+      document.cookie = 'kw_panel_no_all_focus=' + (enabled ? 'on' : 'off') + '; Path=/; SameSite=Lax; Max-Age=31536000';
     }
 
     // AI分類デバッグ表示の初期化

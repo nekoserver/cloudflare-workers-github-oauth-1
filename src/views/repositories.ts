@@ -5164,6 +5164,7 @@ export function getRepositoriesPage(user: {
       if (!historyRow || !historyOpenBtn || !historyModal || !historyModalBody) return;
 
       var isIncrementalSearchEnabled = getCookie('history_incr_search') === 'on';
+      var kwPanelNoAllFocus = getCookie('kw_panel_no_all_focus') === 'on';
 
       var ROWS_PER_COL = 20;
       var MIN_COLS = 3;
@@ -6293,7 +6294,7 @@ export function getRepositoriesPage(user: {
             selectedKeyword = null;
             keywordDetailPanel.style.display = 'none';
             keywordDetailPanel.innerHTML = '';
-            selectLabelFilter('');
+            if (getCookie('kw_panel_no_all_focus') !== 'on') selectLabelFilter('');
             refreshGrid(null, null);
           });
         }
@@ -6408,7 +6409,7 @@ export function getRepositoriesPage(user: {
                   selectedKeyword = null;
                   keywordDetailPanel.style.display = 'none';
                   keywordDetailPanel.innerHTML = '';
-                  selectLabelFilter('');
+                  if (getCookie('kw_panel_no_all_focus') !== 'on') selectLabelFilter('');
                   refreshGrid(null, null);
                 });
               }
