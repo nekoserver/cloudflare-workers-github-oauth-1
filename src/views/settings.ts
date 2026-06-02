@@ -536,6 +536,15 @@ export function getSettingsPage(user: {
             </div>
           </div>
           <div class="info-item">
+            <span class="info-label">AIチャットの過去ログのプレビューをどこで行うか</span>
+            <div class="setting-control">
+              <select class="timezone-select" id="aichatHistoryPreviewModeSelect" onchange="onAichatHistoryPreviewModeChange()">
+                <option value="bottom-panel">画面下パネルの右ペイン</option>
+                <option value="center-modal">画面中央のモーダル</option>
+              </select>
+            </div>
+          </div>
+          <div class="info-item">
             <span class="info-label">新規検索キーワードの分類対象</span>
             <div class="setting-control">
               <select class="timezone-select" id="searchLabelModeSelect" onchange="onSearchLabelModeChange()">
@@ -862,6 +871,19 @@ export function getSettingsPage(user: {
       var enabled = cb.checked;
       label.textContent = enabled ? 'ON' : 'OFF';
       document.cookie = 'aichat_sidebar_tap_close=' + (enabled ? 'on' : 'off') + '; Path=/; Secure; SameSite=Lax; Max-Age=31536000';
+    }
+
+    (function() {
+      var m = document.cookie.match('(^|;)\\s*aichat_history_preview_mode=([^;]*)');
+      var val = m ? decodeURIComponent(m[2]) : 'bottom-panel';
+      var select = document.getElementById('aichatHistoryPreviewModeSelect');
+      if (select) select.value = (val === 'center-modal') ? 'center-modal' : 'bottom-panel';
+    })();
+
+    function onAichatHistoryPreviewModeChange() {
+      var select = document.getElementById('aichatHistoryPreviewModeSelect');
+      var mode = select && select.value === 'center-modal' ? 'center-modal' : 'bottom-panel';
+      document.cookie = 'aichat_history_preview_mode=' + mode + '; Path=/; Secure; SameSite=Lax; Max-Age=31536000';
     }
 
     function onThemeSettingChange() {
