@@ -5503,7 +5503,9 @@ export function getRepositoriesPage(user: {
             var gid = btn.getAttribute('data-group-id');
             if (selectedGroupId === gid) {
               selectedGroupId = null;
-              activateAllLabels();
+              activeLabels.clear();
+              syncBtnStyles();
+              refreshGrid(null, null);
             } else {
               selectedGroupId = gid;
               try {
