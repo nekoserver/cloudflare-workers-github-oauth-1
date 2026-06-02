@@ -70,10 +70,10 @@ describe('GET /api/aichat/search-impressions エンドポイント', () => {
     expect(idx).toBeGreaterThan(-1);
   });
 
-  it('ハンドラが aichat_search_impressions を SELECT し LIMIT 30 で返す', () => {
+  it('ハンドラが aichat_search_impressions を SELECT する', () => {
     const idx = INDEX_SRC.indexOf("app.get('/api/aichat/search-impressions'");
     expect(idx).toBeGreaterThan(-1);
-    const handler = INDEX_SRC.slice(idx, idx + 700);
+    const handler = INDEX_SRC.slice(idx, idx + 1200);
     expect(handler).toContain('aichat_search_impressions');
     expect(handler).toContain('LIMIT 30');
   });
@@ -81,9 +81,23 @@ describe('GET /api/aichat/search-impressions エンドポイント', () => {
   it('ハンドラが ai_chat_shares を LEFT JOIN する', () => {
     const idx = INDEX_SRC.indexOf("app.get('/api/aichat/search-impressions'");
     expect(idx).toBeGreaterThan(-1);
-    const handler = INDEX_SRC.slice(idx, idx + 700);
+    const handler = INDEX_SRC.slice(idx, idx + 1200);
     expect(handler).toContain('ai_chat_shares');
     expect(handler).toContain('LEFT JOIN');
+  });
+
+  it('ハンドラが aichat_search_log を LEFT JOIN してキーワードを取得する', () => {
+    const idx = INDEX_SRC.indexOf("app.get('/api/aichat/search-impressions'");
+    expect(idx).toBeGreaterThan(-1);
+    const handler = INDEX_SRC.slice(idx, idx + 1200);
+    expect(handler).toContain('aichat_search_log');
+  });
+
+  it('ハンドラが impression_count を返す', () => {
+    const idx = INDEX_SRC.indexOf("app.get('/api/aichat/search-impressions'");
+    expect(idx).toBeGreaterThan(-1);
+    const handler = INDEX_SRC.slice(idx, idx + 1200);
+    expect(handler).toContain('impression_count');
   });
 });
 
