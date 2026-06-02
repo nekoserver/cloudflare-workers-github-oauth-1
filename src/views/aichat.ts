@@ -95,6 +95,8 @@ export function getAiChatPage(user: {
       white-space: nowrap; line-height: 1.6;
     }
     .kw-analysis-badges { max-width: 340px; line-height: 1.8; }
+    .kw-q-link { cursor: pointer; text-decoration: underline; text-decoration-color: var(--border-color); text-underline-offset: 2px; }
+    .kw-q-link:hover { color: var(--accent-color, #667eea); text-decoration-color: var(--accent-color, #667eea); }
     .search-log-overlay {
       position: fixed; inset: 0; z-index: 700; display: none;
       align-items: flex-start; justify-content: center;
@@ -673,7 +675,7 @@ export function getAiChatPage(user: {
             html += '<tr>';
             html += '<td class="search-log-count">' + count + '</td>';
             html += '<td class="search-log-date">' + (idx + 1) + '</td>';
-            html += '<td class="search-log-q" title="' + escHtml(q) + '">' + escHtml(qShort) + '</td>';
+            html += '<td class="search-log-q kw-q-link" data-share-id="' + escHtml(item.share_id) + '" title="' + escHtml(q) + '">' + escHtml(qShort) + '</td>';
             html += '<td class="kw-analysis-badges">' + (badges || '<span style="color:var(--text-muted);font-size:12px">-</span>') + '</td>';
             html += '</tr>';
           });
@@ -689,6 +691,20 @@ export function getAiChatPage(user: {
       searchKwAnalysisOverlay.classList.remove('open');
       searchKwAnalysisOverlay.setAttribute('aria-hidden', 'true');
     }
+
+    searchKwAnalysisBody.addEventListener('click', function(e) {
+      var td = e.target.closest('td[data-share-id]');
+      if (!td) return;
+      var shareId = td.getAttribute('data-share-id');
+      fetch('/api/aichat/shares/' + encodeURIComponent(shareId), { credentials: 'same-origin' })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          if (!data || !data.question) return;
+          closeSearchKwAnalysis();
+          showHistoryModal(data, '');
+        })
+        .catch(function() {});
+    });
 
     searchKwAnalysisBtn.addEventListener('click', function(e) { e.stopPropagation(); openSearchKwAnalysis(); });
     searchKwAnalysisClose.addEventListener('click', function() { closeSearchKwAnalysis(); });
@@ -1373,7 +1389,7 @@ export function getAiChatPage(user: {
           method: 'POST',
           credentials: 'same-origin',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ keyword: keyword, shareId: String(r.id) })
+          body: JSON.stringify({ keyword: keyword, shareId: String(r.id), resultCount: currentResults.length })
         }).catch(function() {});
       }
       if (getHistoryPreviewMode() === 'center-modal') {

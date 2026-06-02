@@ -2856,30 +2856,47 @@ app.get('/api/aichat/search-keyword-analysis', authMiddleware, async (c) => {
 app.post('/api/aichat/search-log', authMiddleware, async (c) => {
   const user = c.get('user');
   if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
-  const body = await c.req.json<{ keyword?: string; shareId?: string }>();
+  const body = await c.req.json<{ keyword?: string; shareId?: string; resultCount?: number }>();
   const keyword = (body.keyword ?? '').trim().slice(0, 200);
   const shareId = (body.shareId ?? '').trim().slice(0, 100);
   if (!keyword || !shareId) return jsonUtf8({ error: 'keyword と shareId は必須です' }, 400);
+  const resultCount = typeof body.resultCount === 'number' ? body.resultCount : null;
   const now = new Date().toISOString();
   await c.env.DB.prepare(
-    `INSERT INTO aichat_search_log (user_id, keyword, share_id, first_searched_at, last_searched_at, select_count)
-     VALUES (?, ?, ?, ?, ?, 1)
+    `INSERT INTO aichat_search_log (user_id, keyword, share_id, first_searched_at, last_searched_at, select_count, result_count)
+     VALUES (?, ?, ?, ?, ?, 1, ?)
      ON CONFLICT(user_id, keyword, share_id) DO UPDATE SET
        last_searched_at = excluded.last_searched_at,
-       select_count = select_count + 1`
-  ).bind(user.sub, keyword, shareId, now, now).run();
+       select_count = select_count + 1,
+       result_count = excluded.result_count`
+  ).bind(user.sub, keyword, shareId, now, now, resultCount).run();
   await c.env.DB.prepare(
-    `INSERT INTO aichat_search_history (user_id, keyword, share_id, seq_num, searched_at)
+    `INSERT INTO aichat_search_history (user_id, keyword, share_id, seq_num, searched_at, result_count)
      VALUES (?, ?, ?,
        (SELECT COALESCE(COUNT(*), 0) + 1 FROM aichat_search_history WHERE user_id = ? AND keyword = ? AND share_id = ?),
-       ?)`
-  ).bind(user.sub, keyword, shareId, user.sub, keyword, shareId, now).run();
+       ?, ?)`
+  ).bind(user.sub, keyword, shareId, user.sub, keyword, shareId, now, resultCount).run();
   return jsonUtf8({ ok: true });
 });
 
 /**
  * AIチャット過去ログ論理削除 API（認証が必要）
  */
+app.get('/api/aichat/shares/:id', authMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  const id = c.req.param('id');
+  const row = await c.env.DB.prepare(
+    `SELECT id, user_hash, question, answer, model, created_at, access_count
+     FROM ai_chat_shares WHERE id = ? AND user_id = ? AND deleted_at IS NULL`
+  ).bind(id, user.sub).first<{
+    id: string; user_hash: string; question: string; answer: string;
+    model: string; created_at: string; access_count: number;
+  }>();
+  if (!row) return jsonUtf8({ error: 'Not found' }, 404);
+  return jsonUtf8(row);
+});
+
 app.delete('/api/aichat/shares/:id', authMiddleware, async (c) => {
   const user = c.get('user');
   if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
