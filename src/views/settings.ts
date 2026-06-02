@@ -160,6 +160,14 @@ export function getSettingsPage(user: {
     .btn-save:hover { background: #38a169; }
     .btn-cancel { background: #fc8181; color: white; }
     .btn-cancel:hover { background: #f56565; }
+    .settings-toast {
+      position: fixed; bottom: 28px; left: 50%; transform: translateX(-50%) translateY(12px);
+      background: #2d3748; color: #fff; padding: 11px 22px; border-radius: 8px;
+      font-size: 13px; font-weight: 500; opacity: 0; pointer-events: none;
+      transition: opacity 0.22s, transform 0.22s; z-index: 9999; white-space: nowrap;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.22);
+    }
+    .settings-toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
     .time-remaining-warning { color: var(--danger-color); font-weight: 600; }
     .scope-badge {
       display: inline-block; padding: 4px 10px; border-radius: 999px;
@@ -585,6 +593,10 @@ export function getSettingsPage(user: {
           <button class="btn btn-cancel" onclick="cancelStatusCommitCacheSortMode()">キャンセル</button>
         </div>
         <div class="success-message" id="statusCommitCacheSortModeSuccessMessage">✓ 月別コミットキャッシュ詳細の並び替え設定を変更しました</div>
+        <div class="button-container" id="aichatHistoryPreviewModeButtonContainer">
+          <button class="btn btn-save" onclick="saveAichatHistoryPreviewMode()">保存</button>
+          <button class="btn btn-cancel" onclick="cancelAichatHistoryPreviewMode()">キャンセル</button>
+        </div>
       </div>
 
       <a href="/welcome" class="back-btn">← ホームに戻る</a>
@@ -857,7 +869,7 @@ export function getSettingsPage(user: {
     }
 
     (function() {
-      var m = document.cookie.match('(^|;)\\\\s*aichat_sidebar_tap_close=([^;]*)');
+      var m = document.cookie.match('(^|;)\\s*aichat_sidebar_tap_close=([^;]*)');
       var val = m ? decodeURIComponent(m[2]) : 'on';
       var cb = document.getElementById('aichatSidebarTapCloseCheckbox');
       var label = document.getElementById('aichatSidebarTapCloseLabel');
@@ -873,18 +885,6 @@ export function getSettingsPage(user: {
       document.cookie = 'aichat_sidebar_tap_close=' + (enabled ? 'on' : 'off') + '; Path=/; Secure; SameSite=Lax; Max-Age=31536000';
     }
 
-    (function() {
-      var m = document.cookie.match('(^|;)\\s*aichat_history_preview_mode=([^;]*)');
-      var val = m ? decodeURIComponent(m[2]) : 'bottom-panel';
-      var select = document.getElementById('aichatHistoryPreviewModeSelect');
-      if (select) select.value = (val === 'center-modal') ? 'center-modal' : 'bottom-panel';
-    })();
-
-    function onAichatHistoryPreviewModeChange() {
-      var select = document.getElementById('aichatHistoryPreviewModeSelect');
-      var mode = select && select.value === 'center-modal' ? 'center-modal' : 'bottom-panel';
-      document.cookie = 'aichat_history_preview_mode=' + mode + '; Path=/; Secure; SameSite=Lax; Max-Age=31536000';
-    }
 
     function onThemeSettingChange() {
       var cb = document.getElementById('themeCheckbox');
@@ -1294,12 +1294,61 @@ export function getSettingsPage(user: {
       }
     }
 
+    var _aichatHistoryPreviewModeOriginal = null;
+    (function() {
+      var m = document.cookie.match('(^|;)\\s*aichat_history_preview_mode=([^;]*)');
+      var val = m ? decodeURIComponent(m[2]) : 'bottom-panel';
+      var select = document.getElementById('aichatHistoryPreviewModeSelect');
+      var v = (val === 'center-modal') ? 'center-modal' : 'bottom-panel';
+      if (select) select.value = v;
+      _aichatHistoryPreviewModeOriginal = v;
+    })();
+
+    function onAichatHistoryPreviewModeChange() {
+      var select = document.getElementById('aichatHistoryPreviewModeSelect');
+      var container = document.getElementById('aichatHistoryPreviewModeButtonContainer');
+      if (!select || !container) return;
+      if (select.value !== _aichatHistoryPreviewModeOriginal) {
+        container.classList.add('show');
+      } else {
+        container.classList.remove('show');
+      }
+    }
+
+    function saveAichatHistoryPreviewMode() {
+      var select = document.getElementById('aichatHistoryPreviewModeSelect');
+      var container = document.getElementById('aichatHistoryPreviewModeButtonContainer');
+      var mode = select && select.value === 'center-modal' ? 'center-modal' : 'bottom-panel';
+      document.cookie = 'aichat_history_preview_mode=' + mode + '; Path=/; SameSite=Lax; Max-Age=31536000';
+      _aichatHistoryPreviewModeOriginal = mode;
+      if (container) container.classList.remove('show');
+      showSettingsToast('✓ プレビュー表示場所を保存しました');
+    }
+
+    function cancelAichatHistoryPreviewMode() {
+      var select = document.getElementById('aichatHistoryPreviewModeSelect');
+      var container = document.getElementById('aichatHistoryPreviewModeButtonContainer');
+      if (select) select.value = _aichatHistoryPreviewModeOriginal;
+      if (container) container.classList.remove('show');
+    }
+
+    var _settingsToastTimer = null;
+    function showSettingsToast(msg) {
+      var toast = document.getElementById('settingsToast');
+      if (!toast) return;
+      toast.textContent = msg;
+      toast.classList.add('show');
+      if (_settingsToastTimer) clearTimeout(_settingsToastTimer);
+      _settingsToastTimer = setTimeout(function() { toast.classList.remove('show'); }, 2500);
+    }
+
     window.addEventListener('click', function(e) {
       const icon = document.querySelector('.user-icon');
       const dd = document.getElementById('dropdownMenu');
       if (!icon.contains(e.target) && !dd.contains(e.target)) dd.classList.remove('show');
     });
   </script>
+  <div class="settings-toast" id="settingsToast"></div>
 </body>
 </html>`;
 }
