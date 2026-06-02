@@ -91,7 +91,26 @@ export function getAiChatSharePage(share: {
       border: 1px solid var(--border-color);
       color: var(--text-primary);
       border-bottom-left-radius: 3px;
+      white-space: normal;
     }
+    .chat-bubble.assistant h1 { font-size: 1.4em; font-weight: 700; margin: 12px 0 8px; padding-bottom: 4px; border-bottom: 1px solid var(--border-color); }
+    .chat-bubble.assistant h2 { font-size: 1.2em; font-weight: 600; margin: 10px 0 6px; padding-bottom: 3px; border-bottom: 1px solid var(--border-color); }
+    .chat-bubble.assistant h3 { font-size: 1.1em; font-weight: 600; margin: 8px 0 4px; }
+    .chat-bubble.assistant h4, .chat-bubble.assistant h5, .chat-bubble.assistant h6 { font-size: 1em; font-weight: 600; margin: 6px 0 4px; }
+    .chat-bubble.assistant p { margin: 0 0 10px; }
+    .chat-bubble.assistant ul, .chat-bubble.assistant ol { margin: 0 0 10px; padding-left: 1.5em; }
+    .chat-bubble.assistant li { margin: 2px 0; }
+    .chat-bubble.assistant code { background: var(--bg-secondary); padding: 1px 5px; border-radius: 3px; font-size: 0.88em; font-family: ui-monospace, monospace; }
+    .chat-bubble.assistant pre { background: var(--bg-secondary); padding: 10px 12px; border-radius: 6px; overflow-x: auto; margin: 0 0 10px; }
+    .chat-bubble.assistant pre code { background: none; padding: 0; font-size: 0.85em; }
+    .chat-bubble.assistant blockquote { border-left: 3px solid var(--border-color); margin: 0 0 10px; padding: 4px 0 4px 12px; color: var(--text-muted); }
+    .chat-bubble.assistant table { border-collapse: collapse; width: 100%; margin: 0 0 10px; font-size: 12px; }
+    .chat-bubble.assistant th, .chat-bubble.assistant td { border: 1px solid var(--border-color); padding: 4px 8px; }
+    .chat-bubble.assistant th { background: var(--bg-secondary); font-weight: 600; }
+    .chat-bubble.assistant hr { border: none; border-top: 1px solid var(--border-color); margin: 12px 0; }
+    .chat-bubble.assistant a { color: var(--accent-color, #667eea); }
+    .chat-bubble.assistant img { max-width: 100%; }
+    .chat-bubble.assistant input[type="checkbox"] { margin-right: 4px; }
     .bubble-label {
       font-size: 11px;
       font-weight: 600;
@@ -131,7 +150,7 @@ export function getAiChatSharePage(share: {
 
     <div>
       <div class="bubble-label">回答 — ${safeModel}</div>
-      <div class="chat-bubble assistant">${safeAnswer}</div>
+      <div class="chat-bubble assistant" id="shareAnswer"></div>
     </div>
 
     <a href="/aichat" class="back-link">← AI チャットに戻る</a>
@@ -139,6 +158,94 @@ export function getAiChatSharePage(share: {
 
   <script>
     ${getThemeToggleScript()}
+    var rawAnswer = ${JSON.stringify(share.answer)};
+    function mdEsc(s) {
+      return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+    function mdInline(text) {
+      text = text.replace(/!\\[([^\\]]*)\\]\\(([^)]+)\\)/g,'<img src="$2" alt="$1">');
+      text = text.replace(/\\[([^\\]]*)\\]\\(([^)]+)\\)/g,'<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
+      text = text.replace(/\\*\\*\\*(.+?)\\*\\*\\*/g,'<strong><em>$1</em></strong>');
+      text = text.replace(/\\*\\*(.+?)\\*\\*/g,'<strong>$1</strong>');
+      text = text.replace(/__(.+?)__/g,'<strong>$1</strong>');
+      text = text.replace(/\\*(.+?)\\*/g,'<em>$1</em>');
+      text = text.replace(/~~(.+?)~~/g,'<del>$1</del>');
+      text = text.replace(/\\n/g,'<br>');
+      return text;
+    }
+    function mdSplitRow(line) {
+      return line.replace(/^\\|\\s*/,'').replace(/\\s*\\|$/,'').split(/\\s*\\|\\s*/);
+    }
+    function mdParseList(lines, start, tag) {
+      var items = [], i = start;
+      var pat = tag === 'ul' ? /^\\s*[-*+]\\s(.*)/ : /^\\s*\\d+\\.\\s(.*)/;
+      while (i < lines.length) {
+        var m = lines[i].match(pat); if (!m) break;
+        var txt = m[1], task = txt.match(/^\\[([ xX])\\]\\s(.*)/);
+        if (task) { items.push('<li><input type="checkbox"' + (task[1] !== ' ' ? ' checked' : '') + ' disabled> ' + mdInline(task[2]) + '</li>'); }
+        else { items.push('<li>' + mdInline(txt) + '</li>'); }
+        i++;
+      }
+      return '<' + tag + '>' + items.join('') + '</' + tag + '>';
+    }
+    function parseMd(src) {
+      src = src.replace(/\\r\\n?/g,'\\n');
+      var codeBlocks = [];
+      src = src.replace(/\`\`\`(\\w*)\\n([\\s\\S]*?)\`\`\`/g, function(_, lang, code) {
+        var idx = codeBlocks.length;
+        codeBlocks.push('<pre><code' + (lang ? ' class="language-' + lang + '"' : '') + '>' + mdEsc(code.replace(/\\n$/, '')) + '</code></pre>');
+        return '\\x00CB' + idx + '\\x00';
+      });
+      var inlineCodes = [];
+      src = src.replace(/\`([^\`]+)\`/g, function(_, code) {
+        var idx = inlineCodes.length; inlineCodes.push('<code>' + mdEsc(code) + '</code>');
+        return '\\x00IC' + idx + '\\x00';
+      });
+      var lines = src.split('\\n'), html = '', i = 0;
+      while (i < lines.length) {
+        var line = lines[i];
+        if (line.trim() === '') { i++; continue; }
+        var cbM = line.match(/^\\x00CB(\\d+)\\x00$/);
+        if (cbM) { html += codeBlocks[parseInt(cbM[1])]; i++; continue; }
+        var hM = line.match(/^(#{1,6})\\s+(.+)$/);
+        if (hM) { var lv = hM[1].length; html += '<h' + lv + '>' + mdInline(hM[2]) + '</h' + lv + '>'; i++; continue; }
+        if (/^(\\*{3,}|-{3,}|_{3,})\\s*$/.test(line)) { html += '<hr>'; i++; continue; }
+        if (i + 1 < lines.length && /^\\|/.test(line) && /^[\\|\\s:-]+$/.test(lines[i + 1])) {
+          var tbl = '<table><thead><tr>';
+          mdSplitRow(line).forEach(function(h) { tbl += '<th>' + mdInline(h.trim()) + '</th>'; });
+          tbl += '</tr></thead><tbody>'; i += 2;
+          while (i < lines.length && /^\\|/.test(lines[i])) {
+            tbl += '<tr>';
+            mdSplitRow(lines[i]).forEach(function(c) { tbl += '<td>' + mdInline(c.trim()) + '</td>'; });
+            tbl += '</tr>'; i++;
+          }
+          tbl += '</tbody></table>'; html += tbl; continue;
+        }
+        if (/^>\\s?/.test(line)) {
+          var bq = [];
+          while (i < lines.length && /^>\\s?/.test(lines[i])) { bq.push(lines[i].replace(/^>\\s?/,'')); i++; }
+          html += '<blockquote>' + parseMd(bq.join('\\n')) + '</blockquote>'; continue;
+        }
+        if (/^\\s*[-*+]\\s/.test(line)) {
+          html += mdParseList(lines, i, 'ul');
+          while (i < lines.length && /^\\s*[-*+]\\s/.test(lines[i])) i++;
+          continue;
+        }
+        if (/^\\s*\\d+\\.\\s/.test(line)) {
+          html += mdParseList(lines, i, 'ol');
+          while (i < lines.length && /^\\s*\\d+\\.\\s/.test(lines[i])) i++;
+          continue;
+        }
+        var pLines = [];
+        while (i < lines.length && lines[i].trim() !== '' && !/^#{1,6}\\s/.test(lines[i]) && !/^(\\*{3,}|-{3,}|_{3,})\\s*$/.test(lines[i]) && !/^>\\s?/.test(lines[i]) && !/^\\|/.test(lines[i]) && !/^\\x00CB/.test(lines[i])) {
+          pLines.push(lines[i]); i++;
+        }
+        if (pLines.length) html += '<p>' + mdInline(pLines.join('\\n')) + '</p>';
+      }
+      html = html.replace(/\\x00IC(\\d+)\\x00/g, function(_, idx) { return inlineCodes[parseInt(idx)]; });
+      return html;
+    }
+    document.getElementById('shareAnswer').innerHTML = parseMd(rawAnswer);
   </script>
 </body>
 </html>`;

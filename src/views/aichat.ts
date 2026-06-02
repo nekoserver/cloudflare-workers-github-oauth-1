@@ -254,10 +254,12 @@ export function getAiChatPage(user: {
       display: flex; flex-direction: column; overflow: hidden;
     }
     .history-modal-head {
-      flex-shrink: 0; display: flex; align-items: center; justify-content: space-between;
+      flex-shrink: 0; display: flex; align-items: flex-start; justify-content: space-between;
       padding: 12px 16px; background: var(--card-bg); border-bottom: 1px solid var(--border-color);
     }
+    .history-modal-head-left { display: flex; flex-direction: column; gap: 3px; }
     .history-modal-title { font-size: 14px; font-weight: 700; color: var(--text-primary); }
+    .history-modal-date { font-size: 11px; color: var(--text-muted); }
     .history-modal-close {
       width: 30px; height: 30px; border: none; border-radius: 8px;
       background: transparent; color: var(--text-muted); cursor: pointer; font-size: 18px; line-height: 1;
@@ -268,6 +270,7 @@ export function getAiChatPage(user: {
       display: flex; flex-direction: column; gap: 14px;
     }
     .history-modal .chat-bubble { max-width: 88%; }
+    .history-modal .chat-bubble.user { margin-left: auto; }
     .history-modal-foot {
       flex-shrink: 0; padding: 9px 16px; border-top: 1px solid var(--border-color);
       background: var(--card-bg); display: flex; align-items: center; justify-content: space-between;
@@ -442,7 +445,10 @@ export function getAiChatPage(user: {
   <div class="history-modal-backdrop" id="historyModalBackdrop" aria-hidden="true">
     <div class="history-modal" role="dialog" aria-modal="true" aria-labelledby="historyModalTitle">
       <div class="history-modal-head">
-        <span class="history-modal-title" id="historyModalTitle">AIチャットの詳細プレビュー</span>
+        <div class="history-modal-head-left">
+          <span class="history-modal-title" id="historyModalTitle">AIチャットの詳細プレビュー</span>
+          <span class="history-modal-date" id="historyModalDate"></span>
+        </div>
         <button class="history-modal-close" id="historyModalClose" aria-label="閉じる">✕</button>
       </div>
       <div class="history-modal-chat" id="historyModalChat"></div>
@@ -788,6 +794,7 @@ export function getAiChatPage(user: {
     var resultsPanelClose = document.getElementById('resultsPanelClose');
     var historyModalBackdrop = document.getElementById('historyModalBackdrop');
     var historyModalChat = document.getElementById('historyModalChat');
+    var historyModalDate = document.getElementById('historyModalDate');
     var historyModalMeta = document.getElementById('historyModalMeta');
     var historyModalShareLink = document.getElementById('historyModalShareLink');
     var historyModalClose = document.getElementById('historyModalClose');
@@ -842,7 +849,8 @@ export function getAiChatPage(user: {
       historyModalChat.innerHTML = '';
       appendHistoryModalBubble(r.question, 'user');
       appendHistoryModalBubble(r.answer, 'assistant');
-      historyModalMeta.textContent = formatHistoryMeta(r);
+      historyModalDate.textContent = r.created_at.slice(0, 16).replace('T', ' ');
+      historyModalMeta.textContent = r.model + '　👁 ' + (r.access_count || 0);
       historyModalShareLink.href = '/s/' + r.user_hash + '/' + r.id;
       historyModalBackdrop.classList.add('open');
       historyModalBackdrop.setAttribute('aria-hidden', 'false');
