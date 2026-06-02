@@ -100,3 +100,56 @@ describe('AIチャット詳細プレビューモーダル: サイドバーハイ
     expect(fnBody).toContain('sidebarHighlightId');
   });
 });
+
+describe('AIチャットサイドバー: スワイプ削除', () => {
+  it('削除確認ダイアログの HTML が存在する', () => {
+    const html = getAiChatPage(minimalUser);
+    expect(html).toContain('id="deleteConfirmOverlay"');
+    expect(html).toContain('id="deleteConfirmOk"');
+    expect(html).toContain('id="deleteConfirmCancel"');
+  });
+
+  it('result-delete-btn CSS が存在する', () => {
+    const html = getAiChatPage(minimalUser);
+    expect(html).toContain('.result-delete-btn');
+  });
+
+  it('delete-confirm-overlay CSS が存在する', () => {
+    const html = getAiChatPage(minimalUser);
+    expect(html).toContain('.delete-confirm-overlay');
+  });
+
+  it('result-swipe-inner CSS が存在する', () => {
+    const html = getAiChatPage(minimalUser);
+    expect(html).toContain('.result-swipe-inner');
+  });
+
+  it('addSwipeBehavior 関数が存在する', () => {
+    const html = getAiChatPage(minimalUser);
+    expect(html).toContain('function addSwipeBehavior(');
+  });
+
+  it('削除 API が DELETE メソッドで呼ばれる', () => {
+    const html = getAiChatPage(minimalUser);
+    const idx = html.indexOf('deleteConfirmOk.addEventListener');
+    expect(idx).toBeGreaterThan(-1);
+    const fnBody = html.slice(idx, idx + 400);
+    expect(fnBody).toContain("method: 'DELETE'");
+    expect(fnBody).toContain('/api/aichat/shares/');
+  });
+
+  it('animateDeleteItem 関数が存在する', () => {
+    const html = getAiChatPage(minimalUser);
+    expect(html).toContain('function animateDeleteItem(');
+  });
+
+  it('renderSidebarResults が result-delete-btn と result-swipe-inner を生成する', () => {
+    const html = getAiChatPage(minimalUser);
+    const idx = html.indexOf('function renderSidebarResults(');
+    expect(idx).toBeGreaterThan(-1);
+    const fnBody = html.slice(idx, idx + 2000);
+    expect(fnBody).toContain('result-delete-btn');
+    expect(fnBody).toContain('result-swipe-inner');
+    expect(html).toContain('addSwipeBehavior(item, inner)');
+  });
+});

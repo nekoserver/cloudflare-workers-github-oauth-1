@@ -144,22 +144,60 @@ export function getAiChatPage(user: {
       flex: 1; overflow-y: auto; display: flex; flex-direction: column;
     }
     .sidebar-result-item {
-      padding: 9px 12px; border-bottom: 1px solid var(--border-color);
-      cursor: pointer; transition: background 0.12s; display: flex; gap: 7px; align-items: flex-start;
+      position: relative; overflow: hidden;
+      border-bottom: 1px solid var(--border-color); flex-shrink: 0;
     }
-    .sidebar-result-item:hover { background: var(--bg-secondary); }
-    .sidebar-result-item.selected { background: var(--accent-color, #667eea); }
+    .result-swipe-inner {
+      display: flex; gap: 7px; align-items: flex-start;
+      padding: 9px 12px; cursor: pointer;
+      background: var(--bg-primary, #f8fafc);
+      position: relative; z-index: 1;
+      transition: transform 0.2s ease, background 0.12s;
+      will-change: transform;
+    }
+    .result-swipe-inner:hover { background: var(--bg-secondary); }
+    .sidebar-result-item.selected .result-swipe-inner { background: var(--accent-color, #667eea); }
     .sidebar-result-item.selected .result-q,
     .sidebar-result-item.selected .result-meta { color: rgba(255,255,255,0.9); }
     .result-num { font-size: 10px; color: var(--text-muted); font-weight: 600; flex-shrink: 0; padding-top: 1px; min-width: 18px; }
     .sidebar-result-item.selected .result-num { color: rgba(255,255,255,0.7); }
-    .sidebar-result-item.highlight-origin { background: rgba(72,187,120,0.18); border-left: 3px solid #48bb78; }
+    .sidebar-result-item.highlight-origin .result-swipe-inner { background: rgba(72,187,120,0.18); border-left: 3px solid #48bb78; }
     .sidebar-result-item.highlight-origin .result-q { color: var(--text-primary); }
     .sidebar-result-item.highlight-origin .result-meta { color: var(--text-muted); }
     .sidebar-result-item.highlight-origin .result-num { color: var(--text-muted); }
     .result-body { min-width: 0; flex: 1; }
     .result-q { font-size: 12px; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 2px; }
     .result-meta { font-size: 10px; color: var(--text-muted); }
+    .result-delete-btn {
+      position: absolute; right: 0; top: 0; bottom: 0; width: 72px;
+      background: #e53e3e; color: #fff; border: none;
+      font-size: 12px; font-weight: 700; cursor: pointer; z-index: 0;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .result-delete-btn:active { background: #c53030; }
+    .delete-confirm-overlay {
+      position: fixed; inset: 0; z-index: 800; display: none;
+      align-items: center; justify-content: center;
+      background: rgba(15,23,42,0.52); backdrop-filter: blur(3px);
+    }
+    .delete-confirm-overlay.open { display: flex; }
+    .delete-confirm-box {
+      background: var(--card-bg); border: 1px solid var(--border-color);
+      border-radius: 14px; padding: 24px 22px 20px; width: min(300px, 90vw);
+      box-shadow: 0 12px 40px rgba(0,0,0,0.25);
+    }
+    .delete-confirm-title { font-size: 14px; font-weight: 700; color: var(--text-primary); margin-bottom: 8px; }
+    .delete-confirm-desc { font-size: 12px; color: var(--text-muted); margin-bottom: 22px; line-height: 1.55; }
+    .delete-confirm-btns { display: flex; gap: 10px; justify-content: flex-end; }
+    .delete-confirm-cancel {
+      padding: 8px 16px; background: var(--bg-secondary); color: var(--text-primary);
+      border: 1px solid var(--border-color); border-radius: 7px; font-size: 13px; cursor: pointer;
+    }
+    .delete-confirm-ok {
+      padding: 8px 16px; background: #e53e3e; color: #fff;
+      border: none; border-radius: 7px; font-size: 13px; font-weight: 600; cursor: pointer;
+    }
+    .delete-confirm-ok:hover { background: #c53030; }
 
     /* ======= カレンダーヒートマップ ======= */
     .sidebar-calendar {
@@ -459,6 +497,17 @@ export function getAiChatPage(user: {
     </div>
   </div>
 
+  <div class="delete-confirm-overlay" id="deleteConfirmOverlay">
+    <div class="delete-confirm-box">
+      <div class="delete-confirm-title">過去ログを削除しますか？</div>
+      <div class="delete-confirm-desc">この操作は取り消せません。</div>
+      <div class="delete-confirm-btns">
+        <button class="delete-confirm-cancel" id="deleteConfirmCancel">キャンセル</button>
+        <button class="delete-confirm-ok" id="deleteConfirmOk">削除する</button>
+      </div>
+    </div>
+  </div>
+
   <div class="history-modal-backdrop" id="historyModalBackdrop" aria-hidden="true">
     <div class="history-modal" role="dialog" aria-modal="true" aria-labelledby="historyModalTitle">
       <div class="history-modal-head">
@@ -579,7 +628,120 @@ export function getAiChatPage(user: {
         .catch(function() { sidebarStatus.textContent = '読み込みエラー'; });
     }
 
+    // ===== スワイプ削除 =====
+    var swipeOpenItem = null;
+    var swipeOpenInner = null;
+    var pendingDeleteId = null;
+    var pendingDeleteItem = null;
+    var deleteConfirmOverlay = document.getElementById('deleteConfirmOverlay');
+    var deleteConfirmOk = document.getElementById('deleteConfirmOk');
+    var deleteConfirmCancel = document.getElementById('deleteConfirmCancel');
+
+    function closeSwipeOpen() {
+      if (swipeOpenInner) {
+        swipeOpenInner.style.transition = 'transform 0.2s ease';
+        swipeOpenInner.style.transform = 'translateX(0)';
+      }
+      if (swipeOpenItem) swipeOpenItem.classList.remove('swipe-open');
+      swipeOpenItem = null; swipeOpenInner = null;
+    }
+
+    function showDeleteConfirm(id, item) {
+      pendingDeleteId = id; pendingDeleteItem = item;
+      deleteConfirmOverlay.classList.add('open');
+    }
+
+    function hideDeleteConfirm() {
+      deleteConfirmOverlay.classList.remove('open');
+      if (pendingDeleteItem) {
+        var inner = pendingDeleteItem.querySelector('.result-swipe-inner');
+        if (inner) { inner.style.transition = 'transform 0.2s ease'; inner.style.transform = 'translateX(0)'; }
+        pendingDeleteItem.classList.remove('swipe-open');
+        if (swipeOpenItem === pendingDeleteItem) { swipeOpenItem = null; swipeOpenInner = null; }
+      }
+      pendingDeleteId = null; pendingDeleteItem = null;
+    }
+
+    function animateDeleteItem(item, id) {
+      item.style.overflow = 'hidden';
+      var h = item.offsetHeight;
+      item.style.height = h + 'px';
+      item.style.transition = 'opacity 0.25s ease';
+      item.style.opacity = '0';
+      setTimeout(function() {
+        item.style.transition = 'height 0.3s ease, padding 0.3s ease, border 0.3s ease';
+        item.style.height = '0';
+        item.style.borderBottomWidth = '0';
+        setTimeout(function() {
+          item.remove();
+          currentResults = currentResults.filter(function(r) { return String(r.id) !== String(id); });
+          if (selectedIdx >= currentResults.length) selectedIdx = -1;
+          var nums = sidebarResults.querySelectorAll('.result-num');
+          nums.forEach(function(el, idx) { el.textContent = (idx + 1) + '.'; });
+        }, 320);
+      }, 260);
+    }
+
+    deleteConfirmCancel.addEventListener('click', function(e) { e.stopPropagation(); hideDeleteConfirm(); });
+    deleteConfirmOk.addEventListener('click', function(e) {
+      e.stopPropagation();
+      var id = pendingDeleteId; var item = pendingDeleteItem;
+      if (!id || !item) return;
+      hideDeleteConfirm();
+      fetch('/api/aichat/shares/' + encodeURIComponent(id), { method: 'DELETE', credentials: 'same-origin' })
+        .then(function(res) { if (!res.ok) throw new Error('failed'); animateDeleteItem(item, id); })
+        .catch(function() { sidebarStatus.textContent = '削除に失敗しました'; });
+    });
+    deleteConfirmOverlay.addEventListener('click', function(e) {
+      if (e.target === deleteConfirmOverlay) hideDeleteConfirm();
+    });
+
+    function addSwipeBehavior(item, inner) {
+      var startX = 0, dragging = false, moved = false;
+      var THRESHOLD = 50, BTN_W = 72;
+      function isOpen() { return swipeOpenItem === item; }
+      function onStart(x) { startX = x; dragging = true; moved = false; }
+      function onMove(x) {
+        if (!dragging) return;
+        var dx = x - startX;
+        if (Math.abs(dx) < 4) return;
+        moved = true;
+        var base = isOpen() ? -BTN_W : 0;
+        var tx = Math.max(-BTN_W, Math.min(0, base + dx));
+        inner.style.transition = 'none';
+        inner.style.transform = 'translateX(' + tx + 'px)';
+      }
+      function onEnd(x) {
+        if (!dragging) return;
+        dragging = false;
+        var dx = x - startX;
+        inner.style.transition = 'transform 0.2s ease';
+        if (!moved) return;
+        if (isOpen()) {
+          if (dx > BTN_W / 2) { closeSwipeOpen(); }
+          else { inner.style.transform = 'translateX(-' + BTN_W + 'px)'; }
+        } else {
+          if (-dx > THRESHOLD) {
+            if (swipeOpenItem && swipeOpenItem !== item) closeSwipeOpen();
+            inner.style.transform = 'translateX(-' + BTN_W + 'px)';
+            item.classList.add('swipe-open');
+            swipeOpenItem = item; swipeOpenInner = inner;
+          } else {
+            inner.style.transform = 'translateX(0)';
+          }
+        }
+      }
+      item.addEventListener('touchstart', function(e) { onStart(e.touches[0].clientX); }, { passive: true });
+      item.addEventListener('touchmove', function(e) { onMove(e.touches[0].clientX); }, { passive: true });
+      item.addEventListener('touchend', function(e) { onEnd(e.changedTouches[0].clientX); });
+      var mouseDown = false;
+      inner.addEventListener('mousedown', function(e) { if (e.button !== 0) return; mouseDown = true; onStart(e.clientX); });
+      document.addEventListener('mousemove', function(e) { if (!mouseDown) return; onMove(e.clientX); });
+      document.addEventListener('mouseup', function(e) { if (!mouseDown) return; mouseDown = false; onEnd(e.clientX); });
+    }
+
     function renderSidebarResults() {
+      closeSwipeOpen();
       sidebarResults.innerHTML = '';
       var highlightEl = null;
       currentResults.forEach(function(r, i) {
@@ -587,6 +749,15 @@ export function getAiChatPage(user: {
         var isHighlight = sidebarHighlightId != null && String(r.id) === String(sidebarHighlightId);
         item.className = 'sidebar-result-item' + (i === selectedIdx ? ' selected' : '') + (isHighlight ? ' highlight-origin' : '');
         if (isHighlight) highlightEl = item;
+
+        var delBtn = document.createElement('button');
+        delBtn.className = 'result-delete-btn';
+        delBtn.textContent = '削除';
+        delBtn.addEventListener('click', function(e) { e.stopPropagation(); showDeleteConfirm(r.id, item); });
+
+        var inner = document.createElement('div');
+        inner.className = 'result-swipe-inner';
+
         var num = document.createElement('div');
         num.className = 'result-num';
         num.textContent = (i + 1) + '.';
@@ -600,13 +771,23 @@ export function getAiChatPage(user: {
         meta.textContent = r.created_at.slice(0, 16).replace('T', ' ') + '　' + r.model.split('/').pop();
         body.appendChild(qEl);
         body.appendChild(meta);
-        item.appendChild(num);
-        item.appendChild(body);
-        item.addEventListener('click', function() {
+        inner.appendChild(num);
+        inner.appendChild(body);
+
+        var clickMoved = false;
+        inner.addEventListener('mousedown', function() { clickMoved = false; });
+        inner.addEventListener('mousemove', function() { clickMoved = true; });
+        inner.addEventListener('click', function() {
+          if (clickMoved) return;
+          if (swipeOpenItem === item) { closeSwipeOpen(); return; }
           selectedIdx = i;
           renderSidebarResults();
           showHistoryPreview(r);
         });
+
+        item.appendChild(delBtn);
+        item.appendChild(inner);
+        addSwipeBehavior(item, inner);
         sidebarResults.appendChild(item);
       });
       if (highlightEl) {
