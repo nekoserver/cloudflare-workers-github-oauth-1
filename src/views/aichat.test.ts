@@ -421,13 +421,64 @@ describe('AIチャット: 質問×キーワード分析モーダル', () => {
     expect(fnBody).toContain('data-share-id');
   });
 
+  it('質問セルに data-keywords 属性が付与される', () => {
+    const html = getAiChatPage(minimalUser);
+    const idx = html.indexOf('function openSearchKwAnalysis(');
+    expect(idx).toBeGreaterThan(-1);
+    const fnBody = html.slice(idx, idx + 2000);
+    expect(fnBody).toContain('data-keywords');
+  });
+
   it('質問セルクリックで /api/aichat/shares/ を fetch して showHistoryModal を呼ぶ', () => {
     const html = getAiChatPage(minimalUser);
     const idx = html.indexOf('function openSearchKwAnalysis(');
     expect(idx).toBeGreaterThan(-1);
-    const fnBody = html.slice(idx, idx + 3000);
+    const fnBody = html.slice(idx, idx + 3300);
     expect(fnBody).toContain('/api/aichat/shares/');
     expect(fnBody).toContain('showHistoryModal');
     expect(fnBody).toContain('data-share-id');
+  });
+
+  it('質問クリック時に closeSearchKwAnalysis を呼ばず分析モーダルを保持する', () => {
+    const html = getAiChatPage(minimalUser);
+    const idx = html.indexOf('searchKwAnalysisBody.addEventListener');
+    expect(idx).toBeGreaterThan(-1);
+    const fnBody = html.slice(idx, idx + 700);
+    expect(fnBody).not.toContain('closeSearchKwAnalysis()');
+  });
+
+  it('過去ログモーダルが開いている間は Escape で分析モーダルを閉じない', () => {
+    const html = getAiChatPage(minimalUser);
+    const idx = html.indexOf('searchKwAnalysisOverlay.classList.contains');
+    expect(idx).toBeGreaterThan(-1);
+    const fnBody = html.slice(idx, idx + 200);
+    expect(fnBody).toContain('historyModalBackdrop');
+  });
+
+  it('history-modal-backdrop の z-index が search-log-overlay より高い', () => {
+    const html = getAiChatPage(minimalUser);
+    const historyZMatch = html.match(/\.history-modal-backdrop[\s\S]{0,200}?z-index:\s*(\d+)/);
+    const overlayZMatch = html.match(/\.search-log-overlay[\s\S]{0,200}?z-index:\s*(\d+)/);
+    expect(historyZMatch).not.toBeNull();
+    expect(overlayZMatch).not.toBeNull();
+    expect(Number(historyZMatch![1])).toBeGreaterThan(Number(overlayZMatch![1]));
+  });
+});
+
+describe('AIチャット: applyKeywordHighlight の配列対応', () => {
+  it('applyKeywordHighlight が配列キーワードを受け取れる実装になっている', () => {
+    const html = getAiChatPage(minimalUser);
+    const idx = html.indexOf('function applyKeywordHighlight(');
+    expect(idx).toBeGreaterThan(-1);
+    const fnBody = html.slice(idx, idx + 500);
+    expect(fnBody).toContain('Array.isArray');
+  });
+
+  it('applyKeywordHighlight が複数キーワードを OR 結合の正規表現で処理する', () => {
+    const html = getAiChatPage(minimalUser);
+    const idx = html.indexOf('function applyKeywordHighlight(');
+    expect(idx).toBeGreaterThan(-1);
+    const fnBody = html.slice(idx, idx + 500);
+    expect(fnBody).toContain('.join(');
   });
 });

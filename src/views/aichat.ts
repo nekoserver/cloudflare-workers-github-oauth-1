@@ -347,7 +347,7 @@ export function getAiChatPage(user: {
 
     /* ======= 結果詳細モーダル（中央） ======= */
     .history-modal-backdrop {
-      position: fixed; inset: 0; z-index: 700; display: none;
+      position: fixed; inset: 0; z-index: 750; display: none;
       align-items: center; justify-content: center; padding: 28px 16px;
       background: rgba(15, 23, 42, 0.48); backdrop-filter: blur(4px);
     }
@@ -675,7 +675,8 @@ export function getAiChatPage(user: {
             html += '<tr>';
             html += '<td class="search-log-count">' + count + '</td>';
             html += '<td class="search-log-date">' + (idx + 1) + '</td>';
-            html += '<td class="search-log-q kw-q-link" data-share-id="' + escHtml(item.share_id) + '" title="' + escHtml(q) + '">' + escHtml(qShort) + '</td>';
+            var kwNames = JSON.stringify(kwSorted.map(function(k) { return k.keyword; }));
+            html += '<td class="search-log-q kw-q-link" data-share-id="' + escHtml(item.share_id) + '" data-keywords="' + escHtml(kwNames) + '" title="' + escHtml(q) + '">' + escHtml(qShort) + '</td>';
             html += '<td class="kw-analysis-badges">' + (badges || '<span style="color:var(--text-muted);font-size:12px">-</span>') + '</td>';
             html += '</tr>';
           });
@@ -696,12 +697,13 @@ export function getAiChatPage(user: {
       var td = e.target.closest('td[data-share-id]');
       if (!td) return;
       var shareId = td.getAttribute('data-share-id');
+      var keywords = [];
+      try { keywords = JSON.parse(td.getAttribute('data-keywords') || '[]'); } catch(err) {}
       fetch('/api/aichat/shares/' + encodeURIComponent(shareId), { credentials: 'same-origin' })
         .then(function(r) { return r.json(); })
         .then(function(data) {
           if (!data || !data.question) return;
-          closeSearchKwAnalysis();
-          showHistoryModal(data, '');
+          showHistoryModal(data, keywords);
         })
         .catch(function() {});
     });
@@ -712,7 +714,10 @@ export function getAiChatPage(user: {
       if (e.target === searchKwAnalysisOverlay) closeSearchKwAnalysis();
     });
     document.addEventListener('keydown', function(e) {
-      if (e.key === 'Escape' && searchKwAnalysisOverlay.classList.contains('open')) closeSearchKwAnalysis();
+      if (e.key === 'Escape' && searchKwAnalysisOverlay.classList.contains('open')) {
+        if (historyModalBackdrop.classList.contains('open')) return;
+        closeSearchKwAnalysis();
+      }
     });
 
     // ===== 検索明細履歴モーダル =====
@@ -1330,8 +1335,10 @@ export function getAiChatPage(user: {
 
     function applyKeywordHighlight(el, keyword) {
       if (!keyword) return;
-      var escaped = keyword.replace(/[.*+?^$\{}()|[\]\\]/g, '\\$&');
-      var re = new RegExp(escaped, 'gi');
+      var kwList = Array.isArray(keyword) ? keyword.filter(Boolean) : [keyword];
+      if (kwList.length === 0) return;
+      var escaped = kwList.map(function(k) { return k.replace(/[.*+?^$\{}()|[\]\\]/g, '\\$&'); });
+      var re = new RegExp(escaped.join('|'), 'gi');
       var walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, null);
       var nodes = [];
       var n;
