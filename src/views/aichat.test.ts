@@ -235,3 +235,49 @@ describe('AIチャットサイドバー: 検索キーワードハイライト', 
     expect(fnBody).toContain('showResultsPanel(r, keyword)');
   });
 });
+
+describe('AIチャット: 検索履歴モーダル', () => {
+  it('searchLogBtn ボタンが navbar に存在する', () => {
+    const html = getAiChatPage(minimalUser);
+    expect(html).toContain('id="searchLogBtn"');
+  });
+
+  it('searchLogOverlay が存在する', () => {
+    const html = getAiChatPage(minimalUser);
+    expect(html).toContain('id="searchLogOverlay"');
+    expect(html).toContain('id="searchLogClose"');
+    expect(html).toContain('id="searchLogBody"');
+  });
+
+  it('openSearchLog 関数が存在し /api/aichat/search-log を GET で呼ぶ', () => {
+    const html = getAiChatPage(minimalUser);
+    const idx = html.indexOf('function openSearchLog(');
+    expect(idx).toBeGreaterThan(-1);
+    const fnBody = html.slice(idx, idx + 400);
+    expect(fnBody).toContain('/api/aichat/search-log');
+  });
+
+  it('search-log-table CSS が存在する', () => {
+    const html = getAiChatPage(minimalUser);
+    expect(html).toContain('.search-log-table');
+  });
+
+  it('search-log-overlay CSS が存在する', () => {
+    const html = getAiChatPage(minimalUser);
+    expect(html).toContain('.search-log-overlay');
+  });
+
+  it('escHtml 関数が存在する', () => {
+    const html = getAiChatPage(minimalUser);
+    expect(html).toContain('function escHtml(');
+  });
+
+  it('テーブルヘッダーにキーワード・質問・選択回数列が含まれる', () => {
+    const html = getAiChatPage(minimalUser);
+    const idx = html.indexOf('function openSearchLog(');
+    expect(idx).toBeGreaterThan(-1);
+    const fnBody = html.slice(idx, idx + 800);
+    expect(fnBody).toContain('キーワード');
+    expect(fnBody).toContain('選択回数');
+  });
+});

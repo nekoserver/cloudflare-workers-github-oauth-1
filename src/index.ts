@@ -2766,6 +2766,25 @@ app.get('/api/aichat/shares/by-date', authMiddleware, async (c) => {
 /**
  * AIチャット検索キーワード選択ログ記録 API（認証が必要）
  */
+app.get('/api/aichat/search-log', authMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  const rows = await c.env.DB.prepare(
+    `SELECT s.keyword, s.share_id, s.first_searched_at, s.last_searched_at, s.select_count,
+            c.question
+     FROM aichat_search_log s
+     LEFT JOIN ai_chat_shares c ON c.id = s.share_id AND c.deleted_at IS NULL
+     WHERE s.user_id = ?
+     ORDER BY s.last_searched_at DESC
+     LIMIT 30`
+  ).bind(user.sub).all<{
+    keyword: string; share_id: string;
+    first_searched_at: string; last_searched_at: string;
+    select_count: number; question: string | null;
+  }>();
+  return jsonUtf8({ rows: rows.results ?? [] });
+});
+
 app.post('/api/aichat/search-log', authMiddleware, async (c) => {
   const user = c.get('user');
   if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
