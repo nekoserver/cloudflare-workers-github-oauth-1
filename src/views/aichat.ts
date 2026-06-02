@@ -156,15 +156,7 @@ export function getAiChatPage(user: {
       will-change: transform;
     }
     .result-swipe-inner:hover { background: var(--bg-secondary); }
-    .sidebar-result-item.selected .result-swipe-inner { background: var(--accent-color, #667eea); }
-    .sidebar-result-item.selected .result-q,
-    .sidebar-result-item.selected .result-meta { color: rgba(255,255,255,0.9); }
     .result-num { font-size: 10px; color: var(--text-muted); font-weight: 600; flex-shrink: 0; padding-top: 1px; min-width: 18px; }
-    .sidebar-result-item.selected .result-num { color: rgba(255,255,255,0.7); }
-    .sidebar-result-item.highlight-origin .result-swipe-inner { background: rgba(72,187,120,0.18); border-left: 3px solid #48bb78; }
-    .sidebar-result-item.highlight-origin .result-q { color: var(--text-primary); }
-    .sidebar-result-item.highlight-origin .result-meta { color: var(--text-muted); }
-    .sidebar-result-item.highlight-origin .result-num { color: var(--text-muted); }
     .result-body { min-width: 0; flex: 1; }
     .result-q { font-size: 12px; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 2px; }
     .result-meta { font-size: 10px; color: var(--text-muted); }
@@ -173,7 +165,9 @@ export function getAiChatPage(user: {
       background: #e53e3e; color: #fff; border: none;
       font-size: 12px; font-weight: 700; cursor: pointer; z-index: 0;
       display: flex; align-items: center; justify-content: center;
+      opacity: 0;
     }
+    .sidebar-result-item.swipe-open .result-delete-btn { opacity: 1; }
     .result-delete-btn:active { background: #c53030; }
     .delete-confirm-overlay {
       position: fixed; inset: 0; z-index: 800; display: none;
@@ -267,6 +261,12 @@ export function getAiChatPage(user: {
       background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 18px; padding: 0 4px; line-height: 1;
     }
     .results-panel-close:hover { color: var(--text-primary); }
+    .results-panel-to-modal {
+      background: none; border: 1px solid var(--border-color); border-radius: 6px;
+      color: var(--text-muted); cursor: pointer; font-size: 11px; padding: 3px 8px;
+      margin-right: 6px; line-height: 1.4;
+    }
+    .results-panel-to-modal:hover { color: var(--text-primary); border-color: var(--accent-color, #667eea); }
     .results-panel-body {
       flex: 1; overflow-y: auto; display: grid; grid-template-columns: 1fr 1fr; gap: 0;
     }
@@ -479,7 +479,10 @@ export function getAiChatPage(user: {
   <div class="results-panel" id="resultsPanel">
     <div class="results-panel-head">
       <span class="results-panel-title" id="resultsPanelTitle">詳細</span>
-      <button class="results-panel-close" id="resultsPanelClose">✕</button>
+      <div style="display:flex;align-items:center;gap:4px;">
+        <button class="results-panel-to-modal" id="resultsPanelToModal">モーダル表示</button>
+        <button class="results-panel-close" id="resultsPanelClose">✕</button>
+      </div>
     </div>
     <div class="results-panel-body">
       <div class="results-panel-col">
@@ -743,12 +746,9 @@ export function getAiChatPage(user: {
     function renderSidebarResults() {
       closeSwipeOpen();
       sidebarResults.innerHTML = '';
-      var highlightEl = null;
       currentResults.forEach(function(r, i) {
         var item = document.createElement('div');
-        var isHighlight = sidebarHighlightId != null && String(r.id) === String(sidebarHighlightId);
-        item.className = 'sidebar-result-item' + (i === selectedIdx ? ' selected' : '') + (isHighlight ? ' highlight-origin' : '');
-        if (isHighlight) highlightEl = item;
+        item.className = 'sidebar-result-item';
 
         var delBtn = document.createElement('button');
         delBtn.className = 'result-delete-btn';
@@ -780,8 +780,6 @@ export function getAiChatPage(user: {
         inner.addEventListener('click', function() {
           if (clickMoved) return;
           if (swipeOpenItem === item) { closeSwipeOpen(); return; }
-          selectedIdx = i;
-          renderSidebarResults();
           showHistoryPreview(r);
         });
 
@@ -790,9 +788,6 @@ export function getAiChatPage(user: {
         addSwipeBehavior(item, inner);
         sidebarResults.appendChild(item);
       });
-      if (highlightEl) {
-        setTimeout(function() { highlightEl.scrollIntoView({ block: 'nearest' }); }, 50);
-      }
     }
 
     // ===== カレンダーヒートマップ =====
@@ -1004,11 +999,10 @@ export function getAiChatPage(user: {
     var historyModalShareLink = document.getElementById('historyModalShareLink');
     var historyModalClose = document.getElementById('historyModalClose');
     var historyModalCurrentId = null;
-    var sidebarHighlightId = null;
 
     function getHistoryPreviewMode() {
       var m = document.cookie.match('(^|;)\\s*aichat_history_preview_mode=([^;]*)');
-      var val = m ? decodeURIComponent(m[2]) : 'bottom-panel';
+      var val = m ? decodeURIComponent(m[2]) : 'center-modal';
       return val === 'center-modal' ? 'center-modal' : 'bottom-panel';
     }
 
@@ -1079,7 +1073,6 @@ export function getAiChatPage(user: {
       var dateOnly = historyModalDateLink.textContent;
       if (!dateOnly || dateOnly.length < 10) return;
       var monthStr = dateOnly.slice(0, 7);
-      sidebarHighlightId = historyModalCurrentId;
       closeHistoryModal();
       clearHistorySelection();
       if (!sidebarOpen) {
@@ -1097,7 +1090,10 @@ export function getAiChatPage(user: {
 
     resultsPanelClose.addEventListener('click', function() {
       closeResultsPanel();
-      clearHistorySelection();
+    });
+    document.getElementById('resultsPanelToModal').addEventListener('click', function() {
+      document.cookie = 'aichat_history_preview_mode=center-modal; Path=/; Secure; SameSite=Lax; Max-Age=31536000';
+      closeResultsPanel();
     });
     historyModalClose.addEventListener('click', function() {
       closeHistoryModal();

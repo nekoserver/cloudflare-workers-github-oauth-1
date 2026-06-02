@@ -1297,7 +1297,7 @@ export function getSettingsPage(user: {
     var _aichatHistoryPreviewModeOriginal = null;
     (function() {
       var m = document.cookie.match('(^|;)\\s*aichat_history_preview_mode=([^;]*)');
-      var val = m ? decodeURIComponent(m[2]) : 'bottom-panel';
+      var val = m ? decodeURIComponent(m[2]) : 'center-modal';
       var select = document.getElementById('aichatHistoryPreviewModeSelect');
       var v = (val === 'center-modal') ? 'center-modal' : 'bottom-panel';
       if (select) select.value = v;
