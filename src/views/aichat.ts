@@ -240,6 +240,42 @@ export function getAiChatPage(user: {
     .results-panel-link { font-size: 11px; color: var(--accent-color, #667eea); text-decoration: none; }
     .results-panel-link:hover { text-decoration: underline; }
 
+    /* ======= 結果詳細モーダル（中央） ======= */
+    .history-modal-backdrop {
+      position: fixed; inset: 0; z-index: 700; display: none;
+      align-items: center; justify-content: center; padding: 28px 16px;
+      background: rgba(15, 23, 42, 0.48); backdrop-filter: blur(4px);
+    }
+    .history-modal-backdrop.open { display: flex; }
+    .history-modal {
+      width: min(720px, 100%); max-height: min(86vh, 760px);
+      background: var(--bg-primary, #f8fafc); border: 1px solid var(--border-color);
+      border-radius: 16px; box-shadow: 0 24px 80px rgba(0,0,0,0.28);
+      display: flex; flex-direction: column; overflow: hidden;
+    }
+    .history-modal-head {
+      flex-shrink: 0; display: flex; align-items: center; justify-content: space-between;
+      padding: 12px 16px; background: var(--card-bg); border-bottom: 1px solid var(--border-color);
+    }
+    .history-modal-title { font-size: 14px; font-weight: 700; color: var(--text-primary); }
+    .history-modal-close {
+      width: 30px; height: 30px; border: none; border-radius: 8px;
+      background: transparent; color: var(--text-muted); cursor: pointer; font-size: 18px; line-height: 1;
+    }
+    .history-modal-close:hover { background: var(--bg-secondary); color: var(--text-primary); }
+    .history-modal-chat {
+      flex: 1; min-height: 0; overflow-y: auto; padding: 18px 18px 20px;
+      display: flex; flex-direction: column; gap: 14px;
+    }
+    .history-modal .chat-bubble { max-width: 88%; }
+    .history-modal-foot {
+      flex-shrink: 0; padding: 9px 16px; border-top: 1px solid var(--border-color);
+      background: var(--card-bg); display: flex; align-items: center; justify-content: space-between;
+      gap: 12px; font-size: 11px; color: var(--text-muted);
+    }
+    .history-modal-link { font-size: 11px; color: var(--accent-color, #667eea); text-decoration: none; white-space: nowrap; }
+    .history-modal-link:hover { text-decoration: underline; }
+
     /* ======= Markdownプレビュー ======= */
     .results-col-text.preview-area { white-space: normal; }
     .chat-bubble.assistant.preview-area { white-space: normal; }
@@ -403,6 +439,20 @@ export function getAiChatPage(user: {
     </div>
   </div>
 
+  <div class="history-modal-backdrop" id="historyModalBackdrop" aria-hidden="true">
+    <div class="history-modal" role="dialog" aria-modal="true" aria-labelledby="historyModalTitle">
+      <div class="history-modal-head">
+        <span class="history-modal-title" id="historyModalTitle">AIチャットの詳細プレビュー</span>
+        <button class="history-modal-close" id="historyModalClose" aria-label="閉じる">✕</button>
+      </div>
+      <div class="history-modal-chat" id="historyModalChat"></div>
+      <div class="history-modal-foot">
+        <span id="historyModalMeta"></span>
+        <a class="history-modal-link" id="historyModalShareLink" href="#" target="_blank">🔗 共有ページを開く</a>
+      </div>
+    </div>
+  </div>
+
   <script>
     ${getThemeToggleScript()}
 
@@ -529,7 +579,7 @@ export function getAiChatPage(user: {
         item.addEventListener('click', function() {
           selectedIdx = i;
           renderSidebarResults();
-          showResultsPanel(r);
+          showHistoryPreview(r);
         });
         sidebarResults.appendChild(item);
       });
@@ -736,19 +786,95 @@ export function getAiChatPage(user: {
     var resultsPanelMeta = document.getElementById('resultsPanelMeta');
     var resultsPanelShareLink = document.getElementById('resultsPanelShareLink');
     var resultsPanelClose = document.getElementById('resultsPanelClose');
+    var historyModalBackdrop = document.getElementById('historyModalBackdrop');
+    var historyModalChat = document.getElementById('historyModalChat');
+    var historyModalMeta = document.getElementById('historyModalMeta');
+    var historyModalShareLink = document.getElementById('historyModalShareLink');
+    var historyModalClose = document.getElementById('historyModalClose');
+
+    function getHistoryPreviewMode() {
+      var m = document.cookie.match('(^|;)\\s*aichat_history_preview_mode=([^;]*)');
+      var val = m ? decodeURIComponent(m[2]) : 'bottom-panel';
+      return val === 'center-modal' ? 'center-modal' : 'bottom-panel';
+    }
+
+    function closeResultsPanel() {
+      resultsPanel.classList.remove('open');
+    }
+
+    function closeHistoryModal() {
+      historyModalBackdrop.classList.remove('open');
+      historyModalBackdrop.setAttribute('aria-hidden', 'true');
+    }
+
+    function clearHistorySelection() {
+      selectedIdx = -1;
+      renderSidebarResults();
+    }
+
+    function formatHistoryMeta(r) {
+      return r.created_at.slice(0, 16).replace('T', ' ') + '　' + r.model + '　👁 ' + (r.access_count || 0);
+    }
+
+    function appendHistoryModalBubble(text, role) {
+      var el = document.createElement('div');
+      if (role === 'assistant') {
+        el.className = 'chat-bubble assistant preview-area';
+        el.innerHTML = parseMd(text);
+      } else {
+        el.className = 'chat-bubble user';
+        el.textContent = text;
+      }
+      historyModalChat.appendChild(el);
+    }
 
     function showResultsPanel(r) {
+      closeHistoryModal();
       resultsPanelQ.textContent = r.question;
       resultsPanelA.innerHTML = parseMd(r.answer);
-      resultsPanelMeta.textContent = r.created_at.slice(0, 16).replace('T', ' ') + '　' + r.model + '　👁 ' + (r.access_count || 0);
+      resultsPanelMeta.textContent = formatHistoryMeta(r);
       resultsPanelShareLink.href = '/s/' + r.user_hash + '/' + r.id;
       resultsPanel.classList.add('open');
     }
 
+    function showHistoryModal(r) {
+      closeResultsPanel();
+      historyModalChat.innerHTML = '';
+      appendHistoryModalBubble(r.question, 'user');
+      appendHistoryModalBubble(r.answer, 'assistant');
+      historyModalMeta.textContent = formatHistoryMeta(r);
+      historyModalShareLink.href = '/s/' + r.user_hash + '/' + r.id;
+      historyModalBackdrop.classList.add('open');
+      historyModalBackdrop.setAttribute('aria-hidden', 'false');
+    }
+
+    function showHistoryPreview(r) {
+      if (getHistoryPreviewMode() === 'center-modal') {
+        showHistoryModal(r);
+      } else {
+        showResultsPanel(r);
+      }
+    }
+
     resultsPanelClose.addEventListener('click', function() {
-      resultsPanel.classList.remove('open');
-      selectedIdx = -1;
-      renderSidebarResults();
+      closeResultsPanel();
+      clearHistorySelection();
+    });
+    historyModalClose.addEventListener('click', function() {
+      closeHistoryModal();
+      clearHistorySelection();
+    });
+    historyModalBackdrop.addEventListener('click', function(e) {
+      if (e.target === historyModalBackdrop) {
+        closeHistoryModal();
+        clearHistorySelection();
+      }
+    });
+    document.addEventListener('keydown', function(e) {
+      if (e.key === 'Escape' && historyModalBackdrop.classList.contains('open')) {
+        closeHistoryModal();
+        clearHistorySelection();
+      }
     });
 
     // ===== チャット =====
