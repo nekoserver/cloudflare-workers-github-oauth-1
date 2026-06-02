@@ -153,6 +153,10 @@ export function getAiChatPage(user: {
     .sidebar-result-item.selected .result-meta { color: rgba(255,255,255,0.9); }
     .result-num { font-size: 10px; color: var(--text-muted); font-weight: 600; flex-shrink: 0; padding-top: 1px; min-width: 18px; }
     .sidebar-result-item.selected .result-num { color: rgba(255,255,255,0.7); }
+    .sidebar-result-item.highlight-origin { background: rgba(72,187,120,0.18); border-left: 3px solid #48bb78; }
+    .sidebar-result-item.highlight-origin .result-q { color: var(--text-primary); }
+    .sidebar-result-item.highlight-origin .result-meta { color: var(--text-muted); }
+    .sidebar-result-item.highlight-origin .result-num { color: var(--text-muted); }
     .result-body { min-width: 0; flex: 1; }
     .result-q { font-size: 12px; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 2px; }
     .result-meta { font-size: 10px; color: var(--text-muted); }
@@ -260,6 +264,12 @@ export function getAiChatPage(user: {
     .history-modal-head-left { display: flex; flex-direction: column; gap: 3px; }
     .history-modal-title { font-size: 14px; font-weight: 700; color: var(--text-primary); }
     .history-modal-date { font-size: 11px; color: var(--text-muted); }
+    .history-modal-date-link {
+      font-size: 11px; color: var(--accent-color, #667eea); cursor: pointer;
+      background: none; border: none; padding: 0; font-family: inherit;
+      text-decoration: underline; text-decoration-style: dashed; text-underline-offset: 2px;
+    }
+    .history-modal-date-link:hover { opacity: 0.75; }
     .history-modal-close {
       width: 30px; height: 30px; border: none; border-radius: 8px;
       background: transparent; color: var(--text-muted); cursor: pointer; font-size: 18px; line-height: 1;
@@ -270,7 +280,14 @@ export function getAiChatPage(user: {
       display: flex; flex-direction: column; gap: 14px;
     }
     .history-modal .chat-bubble { max-width: 88%; }
-    .history-modal .chat-bubble.user { margin-left: auto; }
+    .history-modal .chat-bubble.user {
+      align-self: flex-start; margin-left: 0;
+      border-bottom-right-radius: 12px; border-bottom-left-radius: 3px;
+    }
+    .history-modal .chat-bubble.assistant {
+      align-self: flex-end;
+      border-bottom-left-radius: 12px; border-bottom-right-radius: 3px;
+    }
     .history-modal-foot {
       flex-shrink: 0; padding: 9px 16px; border-top: 1px solid var(--border-color);
       background: var(--card-bg); display: flex; align-items: center; justify-content: space-between;
@@ -447,7 +464,7 @@ export function getAiChatPage(user: {
       <div class="history-modal-head">
         <div class="history-modal-head-left">
           <span class="history-modal-title" id="historyModalTitle">AIチャットの詳細プレビュー</span>
-          <span class="history-modal-date" id="historyModalDate"></span>
+          <span class="history-modal-date"><button class="history-modal-date-link" id="historyModalDateLink"></button><span id="historyModalTime"></span></span>
         </div>
         <button class="history-modal-close" id="historyModalClose" aria-label="閉じる">✕</button>
       </div>
@@ -564,9 +581,12 @@ export function getAiChatPage(user: {
 
     function renderSidebarResults() {
       sidebarResults.innerHTML = '';
+      var highlightEl = null;
       currentResults.forEach(function(r, i) {
         var item = document.createElement('div');
-        item.className = 'sidebar-result-item' + (i === selectedIdx ? ' selected' : '');
+        var isHighlight = sidebarHighlightId != null && String(r.id) === String(sidebarHighlightId);
+        item.className = 'sidebar-result-item' + (i === selectedIdx ? ' selected' : '') + (isHighlight ? ' highlight-origin' : '');
+        if (isHighlight) highlightEl = item;
         var num = document.createElement('div');
         num.className = 'result-num';
         num.textContent = (i + 1) + '.';
@@ -589,6 +609,9 @@ export function getAiChatPage(user: {
         });
         sidebarResults.appendChild(item);
       });
+      if (highlightEl) {
+        setTimeout(function() { highlightEl.scrollIntoView({ block: 'nearest' }); }, 50);
+      }
     }
 
     // ===== カレンダーヒートマップ =====
@@ -794,10 +817,13 @@ export function getAiChatPage(user: {
     var resultsPanelClose = document.getElementById('resultsPanelClose');
     var historyModalBackdrop = document.getElementById('historyModalBackdrop');
     var historyModalChat = document.getElementById('historyModalChat');
-    var historyModalDate = document.getElementById('historyModalDate');
+    var historyModalDateLink = document.getElementById('historyModalDateLink');
+    var historyModalTime = document.getElementById('historyModalTime');
     var historyModalMeta = document.getElementById('historyModalMeta');
     var historyModalShareLink = document.getElementById('historyModalShareLink');
     var historyModalClose = document.getElementById('historyModalClose');
+    var historyModalCurrentId = null;
+    var sidebarHighlightId = null;
 
     function getHistoryPreviewMode() {
       var m = document.cookie.match('(^|;)\\s*aichat_history_preview_mode=([^;]*)');
@@ -849,9 +875,11 @@ export function getAiChatPage(user: {
       historyModalChat.innerHTML = '';
       appendHistoryModalBubble(r.question, 'user');
       appendHistoryModalBubble(r.answer, 'assistant');
-      historyModalDate.textContent = r.created_at.slice(0, 16).replace('T', ' ');
+      historyModalDateLink.textContent = r.created_at.slice(0, 10);
+      historyModalTime.textContent = ' ' + r.created_at.slice(11, 16);
       historyModalMeta.textContent = r.model + '　👁 ' + (r.access_count || 0);
       historyModalShareLink.href = '/s/' + r.user_hash + '/' + r.id;
+      historyModalCurrentId = r.id;
       historyModalBackdrop.classList.add('open');
       historyModalBackdrop.setAttribute('aria-hidden', 'false');
     }
@@ -863,6 +891,27 @@ export function getAiChatPage(user: {
         showResultsPanel(r);
       }
     }
+
+    historyModalDateLink.addEventListener('click', function(e) {
+      e.preventDefault();
+      var dateOnly = historyModalDateLink.textContent;
+      if (!dateOnly || dateOnly.length < 10) return;
+      var monthStr = dateOnly.slice(0, 7);
+      sidebarHighlightId = historyModalCurrentId;
+      closeHistoryModal();
+      clearHistorySelection();
+      if (!sidebarOpen) {
+        sidebarOpen = true;
+        sidebar.classList.add('open');
+        sidebarToggle.classList.add('active');
+      }
+      calCurrentMonth = monthStr;
+      calSelectedDay = dateOnly;
+      sidebarSearch.value = '';
+      sidebarClear.classList.remove('visible');
+      loadCalendar(monthStr);
+      doDateLoad(dateOnly);
+    });
 
     resultsPanelClose.addEventListener('click', function() {
       closeResultsPanel();
