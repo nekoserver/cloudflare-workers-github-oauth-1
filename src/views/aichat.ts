@@ -655,19 +655,24 @@ export function getAiChatPage(user: {
             searchKwAnalysisBody.innerHTML = '<div class="search-log-empty">データがありません</div>';
             return;
           }
+          var sorted = items.slice().sort(function(a, b) {
+            return (b.keywords || []).length - (a.keywords || []).length;
+          });
+          var top30 = sorted.slice(0, 30);
           var html = '<table class="search-log-table"><thead><tr>' +
-            '<th>総数</th><th>質問（概要）</th><th>キーワード（最大検索回数）</th>' +
+            '<th>総数</th><th>No.</th><th>質問（概要）</th><th>キーワード（最大検索回数）</th>' +
             '</tr></thead><tbody>';
-          items.forEach(function(item) {
-            var matched = (item.keywords || []).slice().sort(function(a, b) { return b.max_seq_num - a.max_seq_num; });
-            var count = matched.length;
+          top30.forEach(function(item, idx) {
+            var kwSorted = (item.keywords || []).slice().sort(function(a, b) { return b.max_seq_num - a.max_seq_num; });
+            var count = kwSorted.length;
             var q = item.question || '';
             var qShort = q.length > 40 ? q.slice(0, 40) + '…' : q || '(削除済み)';
-            var badges = matched.map(function(k) {
+            var badges = kwSorted.map(function(k) {
               return '<span class="kw-analysis-badge">' + escHtml(k.keyword) + '(' + k.max_seq_num + ')</span>';
             }).join('');
             html += '<tr>';
             html += '<td class="search-log-count">' + count + '</td>';
+            html += '<td class="search-log-date">' + (idx + 1) + '</td>';
             html += '<td class="search-log-q" title="' + escHtml(q) + '">' + escHtml(qShort) + '</td>';
             html += '<td class="kw-analysis-badges">' + (badges || '<span style="color:var(--text-muted);font-size:12px">-</span>') + '</td>';
             html += '</tr>';

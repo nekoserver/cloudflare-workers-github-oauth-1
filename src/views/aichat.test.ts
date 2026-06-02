@@ -353,14 +353,32 @@ describe('AIチャット: 質問×キーワード分析モーダル', () => {
     expect(fnBody).toContain('/api/aichat/search-keyword-analysis');
   });
 
-  it('テーブルヘッダーに総数・質問・キーワード列が含まれる', () => {
+  it('テーブルヘッダーに総数・連番・質問・キーワード列が含まれる', () => {
     const html = getAiChatPage(minimalUser);
     const idx = html.indexOf('function openSearchKwAnalysis(');
     expect(idx).toBeGreaterThan(-1);
     const fnBody = html.slice(idx, idx + 1000);
     expect(fnBody).toContain('総数');
+    expect(fnBody).toContain('No.');
     expect(fnBody).toContain('質問');
     expect(fnBody).toContain('キーワード');
+  });
+
+  it('キーワード総数の降順でソートしてから上位30件に絞る', () => {
+    const html = getAiChatPage(minimalUser);
+    const idx = html.indexOf('function openSearchKwAnalysis(');
+    expect(idx).toBeGreaterThan(-1);
+    const fnBody = html.slice(idx, idx + 1600);
+    expect(fnBody).toContain('.sort(');
+    expect(fnBody).toContain('.slice(0, 30)');
+  });
+
+  it('連番は降順ソート後に idx+1 で付与される', () => {
+    const html = getAiChatPage(minimalUser);
+    const idx = html.indexOf('function openSearchKwAnalysis(');
+    expect(idx).toBeGreaterThan(-1);
+    const fnBody = html.slice(idx, idx + 1800);
+    expect(fnBody).toContain('idx + 1');
   });
 
   it('kw-analysis-badge CSS が存在する', () => {
