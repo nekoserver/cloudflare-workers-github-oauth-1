@@ -322,3 +322,67 @@ describe('AIチャット: 検索明細履歴モーダル（aichat_search_history
     expect(fnBody).toContain('検索日時');
   });
 });
+
+describe('AIチャット: 質問×キーワード分析モーダル', () => {
+  it('searchKwAnalysisBtn ボタンが navbar に存在する', () => {
+    const html = getAiChatPage(minimalUser);
+    expect(html).toContain('id="searchKwAnalysisBtn"');
+  });
+
+  it('searchKwAnalysisBtn が searchHistoryBtn より前（左）に配置されている', () => {
+    const html = getAiChatPage(minimalUser);
+    const idxAnalysis = html.indexOf('id="searchKwAnalysisBtn"');
+    const idxHistory = html.indexOf('id="searchHistoryBtn"');
+    expect(idxAnalysis).toBeGreaterThan(-1);
+    expect(idxHistory).toBeGreaterThan(-1);
+    expect(idxAnalysis).toBeLessThan(idxHistory);
+  });
+
+  it('searchKwAnalysisOverlay が存在する', () => {
+    const html = getAiChatPage(minimalUser);
+    expect(html).toContain('id="searchKwAnalysisOverlay"');
+    expect(html).toContain('id="searchKwAnalysisClose"');
+    expect(html).toContain('id="searchKwAnalysisBody"');
+  });
+
+  it('openSearchKwAnalysis 関数が存在し /api/aichat/search-keyword-analysis を呼ぶ', () => {
+    const html = getAiChatPage(minimalUser);
+    const idx = html.indexOf('function openSearchKwAnalysis(');
+    expect(idx).toBeGreaterThan(-1);
+    const fnBody = html.slice(idx, idx + 600);
+    expect(fnBody).toContain('/api/aichat/search-keyword-analysis');
+  });
+
+  it('テーブルヘッダーに総数・質問・キーワード列が含まれる', () => {
+    const html = getAiChatPage(minimalUser);
+    const idx = html.indexOf('function openSearchKwAnalysis(');
+    expect(idx).toBeGreaterThan(-1);
+    const fnBody = html.slice(idx, idx + 1000);
+    expect(fnBody).toContain('総数');
+    expect(fnBody).toContain('質問');
+    expect(fnBody).toContain('キーワード');
+  });
+
+  it('kw-analysis-badge CSS が存在する', () => {
+    const html = getAiChatPage(minimalUser);
+    expect(html).toContain('.kw-analysis-badge');
+  });
+
+  it('クライアント側で質問テキストへのキーワード包含チェックを行う', () => {
+    const html = getAiChatPage(minimalUser);
+    const idx = html.indexOf('function openSearchKwAnalysis(');
+    expect(idx).toBeGreaterThan(-1);
+    const fnBody = html.slice(idx, idx + 1600);
+    expect(fnBody).toContain('toLowerCase');
+    expect(fnBody).toContain('indexOf');
+  });
+
+  it('キーワードバッジが max_seq_num を括弧内に表示する', () => {
+    const html = getAiChatPage(minimalUser);
+    const idx = html.indexOf('function openSearchKwAnalysis(');
+    expect(idx).toBeGreaterThan(-1);
+    const fnBody = html.slice(idx, idx + 1600);
+    expect(fnBody).toContain('max_seq_num');
+    expect(fnBody).toContain('kw-analysis-badge');
+  });
+});
