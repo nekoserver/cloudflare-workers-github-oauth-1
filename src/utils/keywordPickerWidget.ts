@@ -265,6 +265,11 @@ export function renderKeyPickerJs(opts: KeyPickerOptions): string {
       return m ? decodeURIComponent(m[2]) === 'on' : false;
     }
 
+    function kpGroupOffClearsBadges() {
+      var m = document.cookie.match('(^|;)\\s*cg_group_off_clears_badges=([^;]*)');
+      return m ? decodeURIComponent(m[2]) !== 'off' : true;
+    }
+
     function kpGetAllLabels() {
       return Array.from(kpCats.querySelectorAll('.kp-cat-btn[data-label]'))
         .map(function(b) { return b.getAttribute('data-label'); })
@@ -309,7 +314,13 @@ export function renderKeyPickerJs(opts: KeyPickerOptions): string {
           var gid = btn.getAttribute('data-group-id');
           if (kpSelectedGroupId === gid) {
             kpSelectedGroupId = null;
-            kpActivateAll();
+            if (kpGroupOffClearsBadges()) {
+              kpActiveLabels = new Set();
+              kpSyncBtnStyles();
+              kpApply();
+            } else {
+              kpActivateAll();
+            }
           } else {
             kpSelectedGroupId = gid;
             try {

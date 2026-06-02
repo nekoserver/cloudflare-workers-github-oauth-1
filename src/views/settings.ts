@@ -486,6 +486,16 @@ export function getSettingsPage(user: {
             </div>
           </div>
           <div class="info-item">
+            <span class="info-label">カテゴリグループのトグルスイッチがOFFになったらそれに連動してすべてのカテゴリバッジのトグル状態もOFFになる</span>
+            <div class="setting-control" style="justify-content: flex-end;">
+              <span class="theme-label" id="cgGroupOffClearsBadgesLabel">ON</span>
+              <label class="theme-toggle-switch">
+                <input type="checkbox" id="cgGroupOffClearsBadgesCheckbox" onchange="onCgGroupOffClearsBadgesChange()" checked>
+                <span class="theme-toggle-slider"></span>
+              </label>
+            </div>
+          </div>
+          <div class="info-item">
             <span class="info-label">詳細集計パネルオープン時パネル領域以外をタップしてもパネルを閉じられるようにする</span>
             <div class="setting-control" style="justify-content: flex-end;">
               <span class="theme-label" id="kwPanelTapCloseLabel">ON</span>
@@ -763,6 +773,24 @@ export function getSettingsPage(user: {
       var enabled = cb.checked;
       label.textContent = enabled ? 'ON' : 'OFF';
       document.cookie = 'keyword_badge_count=' + (enabled ? 'on' : 'off') + '; Path=/; SameSite=Lax; Max-Age=31536000';
+    }
+
+    // カテゴリグループOFF時に全バッジをOFFにする設定の初期化
+    (function() {
+      var m = document.cookie.match('(^|;)\\\\s*cg_group_off_clears_badges=([^;]*)');
+      var val = m ? decodeURIComponent(m[2]) : 'on';
+      var cb = document.getElementById('cgGroupOffClearsBadgesCheckbox');
+      var label = document.getElementById('cgGroupOffClearsBadgesLabel');
+      if (cb) cb.checked = (val !== 'off');
+      if (label) label.textContent = (val !== 'off') ? 'ON' : 'OFF';
+    })();
+
+    function onCgGroupOffClearsBadgesChange() {
+      var cb = document.getElementById('cgGroupOffClearsBadgesCheckbox');
+      var label = document.getElementById('cgGroupOffClearsBadgesLabel');
+      var enabled = cb.checked;
+      label.textContent = enabled ? 'ON' : 'OFF';
+      document.cookie = 'cg_group_off_clears_badges=' + (enabled ? 'on' : 'off') + '; Path=/; SameSite=Lax; Max-Age=31536000';
     }
 
     // 詳細集計パネル外タップで閉じる設定の初期化
