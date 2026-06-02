@@ -83,6 +83,12 @@ export function getAiChatPage(user: {
       line-height: 1.4; transition: color 0.15s, border-color 0.15s;
     }
     .search-log-btn:hover { color: var(--text-primary); border-color: var(--accent-color, #667eea); }
+    .search-hist-btn {
+      background: none; border: 1px solid var(--border-color); border-radius: 7px;
+      color: var(--text-muted); cursor: pointer; font-size: 13px; padding: 4px 9px;
+      line-height: 1.4; transition: color 0.15s, border-color 0.15s;
+    }
+    .search-hist-btn:hover { color: var(--text-primary); border-color: var(--accent-color, #667eea); }
     .search-log-overlay {
       position: fixed; inset: 0; z-index: 700; display: none;
       align-items: flex-start; justify-content: center;
@@ -467,6 +473,7 @@ export function getAiChatPage(user: {
     <a href="/welcome" class="navbar-brand">🤖 AI チャット<span class="navbar-model">${modelShortName}</span></a>
     <div class="navbar-spacer"></div>
     <div class="user-menu">
+      <button class="search-hist-btn" id="searchHistoryBtn" title="検索明細履歴">🗂 検索明細</button>
       <button class="search-log-btn" id="searchLogBtn" title="検索履歴">📋 検索履歴</button>
       ${getThemeToggleHTML()}
       <span class="user-name">${displayName}</span>
@@ -550,6 +557,18 @@ export function getAiChatPage(user: {
     </div>
   </div>
 
+  <div class="search-log-overlay" id="searchHistoryOverlay" aria-hidden="true">
+    <div class="search-log-modal" role="dialog" aria-modal="true">
+      <div class="search-log-head">
+        <span class="search-log-title">検索明細履歴（最新30件）</span>
+        <button class="search-log-close" id="searchHistoryClose" aria-label="閉じる">✕</button>
+      </div>
+      <div class="search-log-body" id="searchHistoryBody">
+        <div class="search-log-loading">読み込み中...</div>
+      </div>
+    </div>
+  </div>
+
   <div class="search-log-overlay" id="searchLogOverlay" aria-hidden="true">
     <div class="search-log-modal" role="dialog" aria-modal="true">
       <div class="search-log-head">
@@ -598,6 +617,61 @@ export function getAiChatPage(user: {
     var dropdownMenu = document.getElementById('dropdownMenu');
     userIcon.addEventListener('click', function(e) { e.stopPropagation(); dropdownMenu.classList.toggle('show'); });
     document.addEventListener('click', function() { dropdownMenu.classList.remove('show'); });
+
+    // ===== 検索明細履歴モーダル =====
+    var searchHistoryOverlay = document.getElementById('searchHistoryOverlay');
+    var searchHistoryBtn = document.getElementById('searchHistoryBtn');
+    var searchHistoryClose = document.getElementById('searchHistoryClose');
+    var searchHistoryBody = document.getElementById('searchHistoryBody');
+
+    function openSearchHistory() {
+      searchHistoryOverlay.classList.add('open');
+      searchHistoryOverlay.setAttribute('aria-hidden', 'false');
+      searchHistoryBody.innerHTML = '<div class="search-log-loading">読み込み中...</div>';
+      fetch('/api/aichat/search-history', { credentials: 'same-origin' })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          var rows = data.rows || [];
+          if (rows.length === 0) {
+            searchHistoryBody.innerHTML = '<div class="search-log-empty">検索明細履歴がありません</div>';
+            return;
+          }
+          var html = '<table class="search-log-table"><thead><tr>' +
+            '<th>#</th><th>キーワード</th><th>質問（概要）</th><th>seq_num</th><th>検索日時</th>' +
+            '</tr></thead><tbody>';
+          rows.forEach(function(row, i) {
+            var dateStr = row.searched_at ? row.searched_at.slice(0, 16).replace('T', ' ') : '-';
+            var rawQ = row.question || '';
+            var q = rawQ.length > 40 ? rawQ.slice(0, 40) + '…' : rawQ || '(削除済み)';
+            html += '<tr>';
+            html += '<td class="search-log-date">' + (i + 1) + '</td>';
+            html += '<td class="search-log-kw">' + escHtml(row.keyword) + '</td>';
+            html += '<td class="search-log-q" title="' + escHtml(rawQ) + '">' + escHtml(q) + '</td>';
+            html += '<td class="search-log-count">' + (row.seq_num || '-') + '</td>';
+            html += '<td class="search-log-date">' + escHtml(dateStr) + '</td>';
+            html += '</tr>';
+          });
+          html += '</tbody></table>';
+          searchHistoryBody.innerHTML = html;
+        })
+        .catch(function() {
+          searchHistoryBody.innerHTML = '<div class="search-log-empty">読み込みエラー</div>';
+        });
+    }
+
+    function closeSearchHistory() {
+      searchHistoryOverlay.classList.remove('open');
+      searchHistoryOverlay.setAttribute('aria-hidden', 'true');
+    }
+
+    searchHistoryBtn.addEventListener('click', function(e) { e.stopPropagation(); openSearchHistory(); });
+    searchHistoryClose.addEventListener('click', function() { closeSearchHistory(); });
+    searchHistoryOverlay.addEventListener('click', function(e) {
+      if (e.target === searchHistoryOverlay) closeSearchHistory();
+    });
+    document.addEventListener('keydown', function(e) {
+      if (e.key === 'Escape' && searchHistoryOverlay.classList.contains('open')) closeSearchHistory();
+    });
 
     // ===== 検索履歴モーダル =====
     var searchLogOverlay = document.getElementById('searchLogOverlay');

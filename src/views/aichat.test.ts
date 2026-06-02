@@ -281,3 +281,44 @@ describe('AIチャット: 検索履歴モーダル', () => {
     expect(fnBody).toContain('選択回数');
   });
 });
+
+describe('AIチャット: 検索明細履歴モーダル（aichat_search_history）', () => {
+  it('searchHistoryBtn ボタンが navbar に存在する', () => {
+    const html = getAiChatPage(minimalUser);
+    expect(html).toContain('id="searchHistoryBtn"');
+  });
+
+  it('searchHistoryBtn が searchLogBtn より前（左）に配置されている', () => {
+    const html = getAiChatPage(minimalUser);
+    const idxHistory = html.indexOf('id="searchHistoryBtn"');
+    const idxLog = html.indexOf('id="searchLogBtn"');
+    expect(idxHistory).toBeGreaterThan(-1);
+    expect(idxLog).toBeGreaterThan(-1);
+    expect(idxHistory).toBeLessThan(idxLog);
+  });
+
+  it('searchHistoryOverlay が存在する', () => {
+    const html = getAiChatPage(minimalUser);
+    expect(html).toContain('id="searchHistoryOverlay"');
+    expect(html).toContain('id="searchHistoryClose"');
+    expect(html).toContain('id="searchHistoryBody"');
+  });
+
+  it('openSearchHistory 関数が存在し /api/aichat/search-history を GET で呼ぶ', () => {
+    const html = getAiChatPage(minimalUser);
+    const idx = html.indexOf('function openSearchHistory(');
+    expect(idx).toBeGreaterThan(-1);
+    const fnBody = html.slice(idx, idx + 500);
+    expect(fnBody).toContain('/api/aichat/search-history');
+  });
+
+  it('openSearchHistory テーブルヘッダーにキーワード・seq_num・検索日時列が含まれる', () => {
+    const html = getAiChatPage(minimalUser);
+    const idx = html.indexOf('function openSearchHistory(');
+    expect(idx).toBeGreaterThan(-1);
+    const fnBody = html.slice(idx, idx + 800);
+    expect(fnBody).toContain('キーワード');
+    expect(fnBody).toContain('seq_num');
+    expect(fnBody).toContain('検索日時');
+  });
+});

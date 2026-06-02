@@ -64,6 +64,35 @@ describe('aichat_search_history マイグレーションファイル', () => {
   });
 });
 
+describe('GET /api/aichat/search-history エンドポイント', () => {
+  it('index.ts に app.get の search-history ハンドラが存在する', () => {
+    const idx = INDEX_SRC.indexOf("app.get('/api/aichat/search-history'");
+    expect(idx).toBeGreaterThan(-1);
+  });
+
+  it('search-history ハンドラが aichat_search_history を SELECT する', () => {
+    const idx = INDEX_SRC.indexOf("app.get('/api/aichat/search-history'");
+    expect(idx).toBeGreaterThan(-1);
+    const handler = INDEX_SRC.slice(idx, idx + 600);
+    expect(handler).toContain('aichat_search_history');
+    expect(handler).toContain('SELECT');
+  });
+
+  it('search-history ハンドラが ai_chat_shares を LEFT JOIN する', () => {
+    const idx = INDEX_SRC.indexOf("app.get('/api/aichat/search-history'");
+    expect(idx).toBeGreaterThan(-1);
+    const handler = INDEX_SRC.slice(idx, idx + 600);
+    expect(handler).toContain('ai_chat_shares');
+  });
+
+  it('search-history ハンドラが LIMIT 30 で取得する', () => {
+    const idx = INDEX_SRC.indexOf("app.get('/api/aichat/search-history'");
+    expect(idx).toBeGreaterThan(-1);
+    const handler = INDEX_SRC.slice(idx, idx + 600);
+    expect(handler).toContain('LIMIT 30');
+  });
+});
+
 describe('POST /api/aichat/search-log が aichat_search_history へも書き込む', () => {
   it('index.ts の search-log POST ハンドラに aichat_search_history への INSERT が含まれる', () => {
     const idx = INDEX_SRC.indexOf("app.post('/api/aichat/search-log'");
