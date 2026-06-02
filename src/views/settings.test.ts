@@ -156,6 +156,12 @@ describe('設定ページ: AIチャット過去ログプレビューモード設
     const html = getSettingsPage(minimalUser);
     expect(html).not.toContain('\\\\s*aichat_sidebar_tap_close');
   });
+
+  it('AIチャット過去ログプレビューモードのデフォルトが center-modal', () => {
+    const html = getSettingsPage(minimalUser);
+    const idx = html.indexOf("decodeURIComponent(m[2]) : 'center-modal'");
+    expect(idx).toBeGreaterThan(-1);
+  });
 });
 
 describe('設定ページ: 検索履歴インクリメントサーチ設定', () => {

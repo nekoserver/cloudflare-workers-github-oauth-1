@@ -71,33 +71,36 @@ describe('AIチャット詳細プレビューモーダル: 日付リンク', () 
     const idx = html.indexOf('historyModalDateLink.addEventListener');
     expect(idx).toBeGreaterThan(-1);
     const fnBody = html.slice(idx, idx + 900);
-    expect(fnBody).toContain('sidebarHighlightId');
     expect(fnBody).toContain('loadCalendar');
     expect(fnBody).toContain('doDateLoad');
   });
 });
 
-describe('AIチャット詳細プレビューモーダル: サイドバーハイライト', () => {
-  it('highlight-origin CSSクラスが存在する', () => {
-    const html = getAiChatPage(minimalUser);
-    expect(html).toContain('highlight-origin');
-  });
-
-  it('highlight-origin の背景が薄緑色', () => {
-    const html = getAiChatPage(minimalUser);
-    const idx = html.indexOf('.sidebar-result-item.highlight-origin');
-    expect(idx).toBeGreaterThan(-1);
-    const rule = html.slice(idx, idx + 200);
-    expect(rule).toContain('rgba(72,187,120');
-  });
-
-  it('renderSidebarResults が highlight-origin クラスを付与する', () => {
+describe('AIチャットサイドバー: フォーカスなし・ハイライトなし', () => {
+  it('renderSidebarResults に selected クラスを付与するコードがない', () => {
     const html = getAiChatPage(minimalUser);
     const idx = html.indexOf('function renderSidebarResults(');
     expect(idx).toBeGreaterThan(-1);
-    const fnBody = html.slice(idx, idx + 600);
-    expect(fnBody).toContain('highlight-origin');
-    expect(fnBody).toContain('sidebarHighlightId');
+    const fnBody = html.slice(idx, idx + 1500);
+    expect(fnBody).not.toContain("' selected'");
+    expect(fnBody).not.toContain('" selected"');
+  });
+
+  it('renderSidebarResults に highlight-origin クラスを付与するコードがない', () => {
+    const html = getAiChatPage(minimalUser);
+    const idx = html.indexOf('function renderSidebarResults(');
+    expect(idx).toBeGreaterThan(-1);
+    const fnBody = html.slice(idx, idx + 1500);
+    expect(fnBody).not.toContain('highlight-origin');
+    expect(fnBody).not.toContain('sidebarHighlightId');
+  });
+
+  it('サイドバー項目クリックで selectedIdx を変更してから renderSidebarResults を呼ばない', () => {
+    const html = getAiChatPage(minimalUser);
+    const idx = html.indexOf("'click', function()");
+    expect(idx).toBeGreaterThan(-1);
+    const clickBody = html.slice(idx, idx + 300);
+    expect(clickBody).not.toContain('selectedIdx = i');
   });
 });
 
@@ -151,5 +154,36 @@ describe('AIチャットサイドバー: スワイプ削除', () => {
     expect(fnBody).toContain('result-delete-btn');
     expect(fnBody).toContain('result-swipe-inner');
     expect(html).toContain('addSwipeBehavior(item, inner)');
+  });
+
+  it('削除ボタンはデフォルト opacity:0 で swipe-open 時のみ opacity:1 になる', () => {
+    const html = getAiChatPage(minimalUser);
+    expect(html).toContain('opacity: 0');
+    expect(html).toContain('.sidebar-result-item.swipe-open .result-delete-btn');
+  });
+});
+
+describe('AIチャットサイドバー: デフォルトプレビューモードと下パネル', () => {
+  it('getHistoryPreviewMode のデフォルトが center-modal', () => {
+    const html = getAiChatPage(minimalUser);
+    const idx = html.indexOf('function getHistoryPreviewMode(');
+    expect(idx).toBeGreaterThan(-1);
+    const fnBody = html.slice(idx, idx + 200);
+    expect(fnBody).toContain("'center-modal'");
+    expect(fnBody).not.toContain("'bottom-panel'");
+  });
+
+  it('resultsPanelToModal ボタンが存在する', () => {
+    const html = getAiChatPage(minimalUser);
+    expect(html).toContain('id="resultsPanelToModal"');
+  });
+
+  it('resultsPanelToModal クリックで center-modal Cookie を保存してパネルを閉じる', () => {
+    const html = getAiChatPage(minimalUser);
+    const idx = html.indexOf("resultsPanelToModal').addEventListener");
+    expect(idx).toBeGreaterThan(-1);
+    const snippet = html.slice(idx, idx + 300);
+    expect(snippet).toContain('center-modal');
+    expect(snippet).toContain('closeResultsPanel');
   });
 });
