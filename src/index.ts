@@ -2903,15 +2903,41 @@ app.get('/api/aichat/search-impressions', authMiddleware, async (c) => {
   const user = c.get('user');
   if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
   const rows = await c.env.DB.prepare(
-    `SELECT i.id, i.share_id, i.result_count, i.searched_at,
-            s.question
+    `SELECT i.share_id, s.question,
+            COUNT(DISTINCT i.id) AS impression_count,
+            MAX(i.result_count) AS max_result_count,
+            MAX(i.searched_at) AS last_searched_at,
+            l.keyword, MAX(l.select_count) AS max_select_count
      FROM aichat_search_impressions i
      LEFT JOIN ai_chat_shares s ON s.id = i.share_id
+     LEFT JOIN aichat_search_log l ON l.user_id = i.user_id AND l.share_id = i.share_id AND l.deleted_at IS NULL
      WHERE i.user_id = ? AND i.deleted_at IS NULL
-     ORDER BY i.id DESC
-     LIMIT 30`
-  ).bind(user.sub).all<{ id: number; share_id: string; result_count: number | null; searched_at: string; question: string | null }>();
-  return jsonUtf8({ results: rows.results ?? [] });
+       AND i.share_id IN (
+         SELECT share_id FROM aichat_search_impressions
+         WHERE user_id = ? AND deleted_at IS NULL
+         GROUP BY share_id
+         ORDER BY COUNT(*) DESC
+         LIMIT 30
+       )
+     GROUP BY i.share_id, l.keyword
+     ORDER BY impression_count DESC, i.share_id, max_select_count DESC`
+  ).bind(user.sub, user.sub).all<{
+    share_id: string; question: string | null;
+    impression_count: number; max_result_count: number | null;
+    last_searched_at: string; keyword: string | null; max_select_count: number | null;
+  }>();
+
+  const map = new Map<string, { share_id: string; question: string | null; impression_count: number; max_result_count: number | null; last_searched_at: string; keywords: Array<{ keyword: string; max_select_count: number }> }>();
+  for (const row of (rows.results ?? [])) {
+    if (!map.has(row.share_id)) {
+      map.set(row.share_id, { share_id: row.share_id, question: row.question, impression_count: row.impression_count, max_result_count: row.max_result_count, last_searched_at: row.last_searched_at, keywords: [] });
+    }
+    if (row.keyword) {
+      map.get(row.share_id)!.keywords.push({ keyword: row.keyword, max_select_count: row.max_select_count ?? 0 });
+    }
+  }
+
+  return jsonUtf8({ items: Array.from(map.values()) });
 });
 
 app.post('/api/aichat/search-impressions', authMiddleware, async (c) => {

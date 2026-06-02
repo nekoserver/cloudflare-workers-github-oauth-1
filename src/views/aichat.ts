@@ -665,22 +665,36 @@ export function getAiChatPage(user: {
       fetch('/api/aichat/search-impressions', { credentials: 'same-origin' })
         .then(function(r) { return r.json(); })
         .then(function(data) {
-          var rows = data.results || [];
-          if (rows.length === 0) {
+          var items = data.items || [];
+          if (items.length === 0) {
             searchImpressionsBody.innerHTML = '<div class="search-log-empty">記録がありません</div>';
             return;
           }
-          var html = '<table class="search-log-table"><thead><tr><th>#</th><th>質問（概要）</th><th>結果数</th><th>検索日時</th></tr></thead><tbody>';
-          rows.forEach(function(row, i) {
-            var q = row.question ? row.question.slice(0, 60) : '（削除済み）';
-            var rc = row.result_count !== null && row.result_count !== undefined ? row.result_count : '-';
-            var at = row.searched_at ? row.searched_at.slice(0, 16).replace('T', ' ') : '';
-            html += '<tr><td>' + (i + 1) + '</td><td>' + q + '</td><td>' + rc + '</td><td>' + at + '</td></tr>';
+          var sorted = items.slice().sort(function(a, b) { return b.impression_count - a.impression_count; });
+          var html = '<table class="search-log-table"><thead><tr>' +
+            '<th>露出</th><th>No.</th><th>質問（概要）</th><th>キーワード（選択回数）</th><th>最終検索</th>' +
+            '</tr></thead><tbody>';
+          sorted.forEach(function(item, idx) {
+            var kwSorted = (item.keywords || []).slice().sort(function(a, b) { return b.max_select_count - a.max_select_count; });
+            var q = item.question || '';
+            var qShort = q.length > 40 ? q.slice(0, 40) + '…' : q || '(削除済み)';
+            var badges = kwSorted.map(function(k) {
+              return '<span class="kw-analysis-badge">' + escHtml(k.keyword) + '(' + k.max_select_count + ')</span>';
+            }).join('');
+            var at = item.last_searched_at ? item.last_searched_at.slice(0, 16).replace('T', ' ') : '-';
+            var kwNames = JSON.stringify(kwSorted.map(function(k) { return k.keyword; }));
+            html += '<tr>';
+            html += '<td class="search-log-count">' + item.impression_count + '</td>';
+            html += '<td class="search-log-date">' + (idx + 1) + '</td>';
+            html += '<td class="search-log-q kw-q-link" data-share-id="' + escHtml(item.share_id) + '" data-keywords="' + escHtml(kwNames) + '" title="' + escHtml(q) + '">' + escHtml(qShort) + '</td>';
+            html += '<td class="kw-analysis-badges">' + (badges || '<span style="color:var(--text-muted);font-size:12px">-</span>') + '</td>';
+            html += '<td class="search-log-date">' + escHtml(at) + '</td>';
+            html += '</tr>';
           });
           html += '</tbody></table>';
           searchImpressionsBody.innerHTML = html;
         })
-        .catch(function() { searchImpressionsBody.innerHTML = '<div class="search-log-empty">取得エラー</div>'; });
+        .catch(function() { searchImpressionsBody.innerHTML = '<div class="search-log-empty">読み込みエラー</div>'; });
     }
 
     function closeSearchImpressions() {
@@ -688,11 +702,27 @@ export function getAiChatPage(user: {
       searchImpressionsOverlay.setAttribute('aria-hidden', 'true');
     }
 
+    searchImpressionsBody.addEventListener('click', function(e) {
+      var td = e.target.closest('td[data-share-id]');
+      if (!td) return;
+      var shareId = td.getAttribute('data-share-id');
+      var keywords = [];
+      try { keywords = JSON.parse(td.getAttribute('data-keywords') || '[]'); } catch(err) {}
+      fetch('/api/aichat/shares/' + encodeURIComponent(shareId), { credentials: 'same-origin' })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          if (!data || !data.question) return;
+          showHistoryModal(data, keywords);
+        })
+        .catch(function() {});
+    });
+
     searchImpressionsBtn.addEventListener('click', function(e) { e.stopPropagation(); openSearchImpressions(); });
     searchImpressionsClose.addEventListener('click', function() { closeSearchImpressions(); });
     searchImpressionsOverlay.addEventListener('click', function(e) { if (e.target === searchImpressionsOverlay) closeSearchImpressions(); });
     document.addEventListener('keydown', function(e) {
       if (e.key === 'Escape' && searchImpressionsOverlay.classList.contains('open')) {
+        if (historyModalBackdrop.classList.contains('open')) return;
         closeSearchImpressions();
       }
     });

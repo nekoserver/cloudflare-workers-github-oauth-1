@@ -530,12 +530,45 @@ describe('AIチャット: 露出ログボタンと searchImpressionsOverlay', ()
     expect(fnBody).toContain('/api/aichat/search-impressions');
   });
 
-  it('impressions モーダルが LIMIT 30 に対応した最新30件表示をする', () => {
+  it('impressions モーダルが impression_count（露出回数）を表示する', () => {
     const html = getAiChatPage(minimalUser);
     const idx = html.indexOf('function openSearchImpressions(');
     expect(idx).toBeGreaterThan(-1);
-    const fnBody = html.slice(idx, idx + 1000);
-    expect(fnBody).toContain('result_count');
+    const fnBody = html.slice(idx, idx + 1600);
+    expect(fnBody).toContain('impression_count');
+  });
+
+  it('impressions モーダルがキーワードバッジを表示する', () => {
+    const html = getAiChatPage(minimalUser);
+    const idx = html.indexOf('function openSearchImpressions(');
+    expect(idx).toBeGreaterThan(-1);
+    const fnBody = html.slice(idx, idx + 1600);
+    expect(fnBody).toContain('kw-analysis-badge');
+  });
+
+  it('impressions 質問セルに data-share-id が付与される', () => {
+    const html = getAiChatPage(minimalUser);
+    const idx = html.indexOf('function openSearchImpressions(');
+    expect(idx).toBeGreaterThan(-1);
+    const fnBody = html.slice(idx, idx + 2000);
+    expect(fnBody).toContain('data-share-id');
+  });
+
+  it('impressions 質問セルクリックで showHistoryModal を呼ぶ', () => {
+    const html = getAiChatPage(minimalUser);
+    const idx = html.indexOf('searchImpressionsBody.addEventListener');
+    expect(idx).toBeGreaterThan(-1);
+    const fnBody = html.slice(idx, idx + 700);
+    expect(fnBody).toContain('showHistoryModal');
+    expect(fnBody).toContain('data-share-id');
+  });
+
+  it('impressions Escape キーで historyModal が開いている時は閉じない', () => {
+    const html = getAiChatPage(minimalUser);
+    const idx = html.indexOf('searchImpressionsOverlay.classList.contains');
+    expect(idx).toBeGreaterThan(-1);
+    const fnBody = html.slice(idx, idx + 200);
+    expect(fnBody).toContain('historyModalBackdrop');
   });
 });
 
