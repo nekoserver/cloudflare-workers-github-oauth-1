@@ -481,6 +481,7 @@ export function getAiChatPage(user: {
     <a href="/welcome" class="navbar-brand">🤖 AI チャット<span class="navbar-model">${modelShortName}</span></a>
     <div class="navbar-spacer"></div>
     <div class="user-menu">
+      <button class="search-hist-btn" id="searchImpressionsBtn" title="検索露出ログ">📋 露出ログ</button>
       <button class="search-hist-btn" id="searchKwAnalysisBtn" title="質問×キーワード分析">📊 質問分析</button>
       <button class="search-hist-btn" id="searchHistoryBtn" title="検索明細履歴">🗂 検索明細</button>
       <button class="search-log-btn" id="searchLogBtn" title="検索履歴">📋 検索履歴</button>
@@ -566,6 +567,18 @@ export function getAiChatPage(user: {
     </div>
   </div>
 
+  <div class="search-log-overlay" id="searchImpressionsOverlay" aria-hidden="true">
+    <div class="search-log-modal" role="dialog" aria-modal="true">
+      <div class="search-log-head">
+        <span class="search-log-title">検索露出ログ（最新30件）</span>
+        <button class="search-log-close" id="searchImpressionsClose" aria-label="閉じる">✕</button>
+      </div>
+      <div class="search-log-body" id="searchImpressionsBody">
+        <div class="search-log-loading">読み込み中...</div>
+      </div>
+    </div>
+  </div>
+
   <div class="search-log-overlay" id="searchKwAnalysisOverlay" aria-hidden="true">
     <div class="search-log-modal" role="dialog" aria-modal="true">
       <div class="search-log-head">
@@ -638,6 +651,51 @@ export function getAiChatPage(user: {
     var dropdownMenu = document.getElementById('dropdownMenu');
     userIcon.addEventListener('click', function(e) { e.stopPropagation(); dropdownMenu.classList.toggle('show'); });
     document.addEventListener('click', function() { dropdownMenu.classList.remove('show'); });
+
+    // ===== 検索露出ログモーダル =====
+    var searchImpressionsOverlay = document.getElementById('searchImpressionsOverlay');
+    var searchImpressionsBtn = document.getElementById('searchImpressionsBtn');
+    var searchImpressionsClose = document.getElementById('searchImpressionsClose');
+    var searchImpressionsBody = document.getElementById('searchImpressionsBody');
+
+    function openSearchImpressions() {
+      searchImpressionsOverlay.classList.add('open');
+      searchImpressionsOverlay.setAttribute('aria-hidden', 'false');
+      searchImpressionsBody.innerHTML = '<div class="search-log-loading">読み込み中...</div>';
+      fetch('/api/aichat/search-impressions', { credentials: 'same-origin' })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          var rows = data.results || [];
+          if (rows.length === 0) {
+            searchImpressionsBody.innerHTML = '<div class="search-log-empty">記録がありません</div>';
+            return;
+          }
+          var html = '<table class="search-log-table"><thead><tr><th>#</th><th>質問（概要）</th><th>結果数</th><th>検索日時</th></tr></thead><tbody>';
+          rows.forEach(function(row, i) {
+            var q = row.question ? row.question.slice(0, 60) : '（削除済み）';
+            var rc = row.result_count !== null && row.result_count !== undefined ? row.result_count : '-';
+            var at = row.searched_at ? row.searched_at.slice(0, 16).replace('T', ' ') : '';
+            html += '<tr><td>' + (i + 1) + '</td><td>' + q + '</td><td>' + rc + '</td><td>' + at + '</td></tr>';
+          });
+          html += '</tbody></table>';
+          searchImpressionsBody.innerHTML = html;
+        })
+        .catch(function() { searchImpressionsBody.innerHTML = '<div class="search-log-empty">取得エラー</div>'; });
+    }
+
+    function closeSearchImpressions() {
+      searchImpressionsOverlay.classList.remove('open');
+      searchImpressionsOverlay.setAttribute('aria-hidden', 'true');
+    }
+
+    searchImpressionsBtn.addEventListener('click', function(e) { e.stopPropagation(); openSearchImpressions(); });
+    searchImpressionsClose.addEventListener('click', function() { closeSearchImpressions(); });
+    searchImpressionsOverlay.addEventListener('click', function(e) { if (e.target === searchImpressionsOverlay) closeSearchImpressions(); });
+    document.addEventListener('keydown', function(e) {
+      if (e.key === 'Escape' && searchImpressionsOverlay.classList.contains('open')) {
+        closeSearchImpressions();
+      }
+    });
 
     // ===== 質問×キーワード分析モーダル =====
     var searchKwAnalysisOverlay = document.getElementById('searchKwAnalysisOverlay');
@@ -909,6 +967,16 @@ export function getAiChatPage(user: {
           selectedIdx = -1;
           renderSidebarResults();
           sidebarStatus.textContent = currentResults.length > 0 ? currentResults.length + ' 件ヒット' : '一致なし';
+          if (currentResults.length > 0) {
+            var shareIds = currentResults.map(function(r) { return String(r.id); });
+            var resultCount = currentResults.length;
+            fetch('/api/aichat/search-impressions', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              credentials: 'same-origin',
+              body: JSON.stringify({ shareIds: shareIds, resultCount: resultCount })
+            }).catch(function() {});
+          }
         })
         .catch(function() { sidebarStatus.textContent = '検索エラー'; });
     }

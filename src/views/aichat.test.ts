@@ -491,3 +491,77 @@ describe('AIチャット: applyKeywordHighlight の配列対応', () => {
     expect(fnBody).toContain('.join(');
   });
 });
+
+describe('AIチャット: 露出ログボタンと searchImpressionsOverlay', () => {
+  it('searchImpressionsBtn ボタンが存在する', () => {
+    const html = getAiChatPage(minimalUser);
+    expect(html).toContain('id="searchImpressionsBtn"');
+  });
+
+  it('searchImpressionsBtn は質問分析ボタン(searchKwAnalysisBtn)より前に配置される', () => {
+    const html = getAiChatPage(minimalUser);
+    const idxImpr = html.indexOf('id="searchImpressionsBtn"');
+    const idxAnalysis = html.indexOf('id="searchKwAnalysisBtn"');
+    expect(idxImpr).toBeGreaterThan(-1);
+    expect(idxAnalysis).toBeGreaterThan(-1);
+    expect(idxImpr).toBeLessThan(idxAnalysis);
+  });
+
+  it('searchImpressionsOverlay が存在する', () => {
+    const html = getAiChatPage(minimalUser);
+    expect(html).toContain('id="searchImpressionsOverlay"');
+  });
+
+  it('openSearchImpressions 関数が存在する', () => {
+    const html = getAiChatPage(minimalUser);
+    expect(html).toContain('function openSearchImpressions(');
+  });
+
+  it('closeSearchImpressions 関数が存在する', () => {
+    const html = getAiChatPage(minimalUser);
+    expect(html).toContain('function closeSearchImpressions(');
+  });
+
+  it('openSearchImpressions が /api/aichat/search-impressions を fetch する', () => {
+    const html = getAiChatPage(minimalUser);
+    const idx = html.indexOf('function openSearchImpressions(');
+    expect(idx).toBeGreaterThan(-1);
+    const fnBody = html.slice(idx, idx + 600);
+    expect(fnBody).toContain('/api/aichat/search-impressions');
+  });
+
+  it('impressions モーダルが LIMIT 30 に対応した最新30件表示をする', () => {
+    const html = getAiChatPage(minimalUser);
+    const idx = html.indexOf('function openSearchImpressions(');
+    expect(idx).toBeGreaterThan(-1);
+    const fnBody = html.slice(idx, idx + 1000);
+    expect(fnBody).toContain('result_count');
+  });
+});
+
+describe('AIチャット: doSearch が露出ログを POST する', () => {
+  it('doSearch 関数が /api/aichat/search-impressions へ POST する', () => {
+    const html = getAiChatPage(minimalUser);
+    const idx = html.indexOf('function doSearch(');
+    expect(idx).toBeGreaterThan(-1);
+    const fnBody = html.slice(idx, idx + 1000);
+    expect(fnBody).toContain('/api/aichat/search-impressions');
+    expect(fnBody).toContain('POST');
+  });
+
+  it('doSearch が shareIds を送信する', () => {
+    const html = getAiChatPage(minimalUser);
+    const idx = html.indexOf('function doSearch(');
+    expect(idx).toBeGreaterThan(-1);
+    const fnBody = html.slice(idx, idx + 1000);
+    expect(fnBody).toContain('shareIds');
+  });
+
+  it('doSearch が resultCount を送信する', () => {
+    const html = getAiChatPage(minimalUser);
+    const idx = html.indexOf('function doSearch(');
+    expect(idx).toBeGreaterThan(-1);
+    const fnBody = html.slice(idx, idx + 1000);
+    expect(fnBody).toContain('resultCount');
+  });
+});
