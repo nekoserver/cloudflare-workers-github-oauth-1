@@ -6148,13 +6148,7 @@ export function getRepositoriesPage(user: {
           if (!btn) return;
           var lbl = btn.getAttribute('data-label');
           if (lbl === '') {
-            var allLabels = getAllCategoryLabels();
-            var allOn = allLabels.length > 0 && allLabels.every(function(l) { return activeLabels.has(l); });
-            if (allOn) {
-              activeLabels.clear();
-            } else {
-              allLabels.forEach(function(l) { activeLabels.add(l); });
-            }
+            activateAllLabels();
           } else {
             if (activeLabels.has(lbl)) {
               activeLabels.delete(lbl);

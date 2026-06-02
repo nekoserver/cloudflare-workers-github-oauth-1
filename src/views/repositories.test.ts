@@ -522,4 +522,13 @@ describe('ページ基本構造: script タグ内 JS の構文チェック', () 
     const fnBody = html.slice(idx, idx + 800);
     expect(fnBody).toContain('histMultiLabelsMap');
   });
+
+  it('「すべて」バッジクリックは常に activateAllLabels を呼ぶ（トグルクリア禁止）', () => {
+    const html = getRepositoriesPage(minimalUser);
+    const idx = html.indexOf("historyLabelFilter.addEventListener('click'");
+    expect(idx).toBeGreaterThan(-1);
+    const handlerBody = html.slice(idx, idx + 600);
+    expect(handlerBody).toContain("activateAllLabels()");
+    expect(handlerBody).not.toContain("activeLabels.clear()");
+  });
 });
