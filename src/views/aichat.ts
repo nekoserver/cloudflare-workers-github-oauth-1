@@ -659,11 +659,7 @@ export function getAiChatPage(user: {
             '<th>総数</th><th>質問（概要）</th><th>キーワード（最大検索回数）</th>' +
             '</tr></thead><tbody>';
           items.forEach(function(item) {
-            var qText = (item.question || '').toLowerCase();
-            var matched = (item.keywords || []).filter(function(k) {
-              return qText.indexOf(k.keyword.toLowerCase()) >= 0;
-            });
-            matched.sort(function(a, b) { return b.max_seq_num - a.max_seq_num; });
+            var matched = (item.keywords || []).slice().sort(function(a, b) { return b.max_seq_num - a.max_seq_num; });
             var count = matched.length;
             var q = item.question || '';
             var qShort = q.length > 40 ? q.slice(0, 40) + '…' : q || '(削除済み)';

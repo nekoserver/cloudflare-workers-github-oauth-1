@@ -368,13 +368,13 @@ describe('AIチャット: 質問×キーワード分析モーダル', () => {
     expect(html).toContain('.kw-analysis-badge');
   });
 
-  it('クライアント側で質問テキストへのキーワード包含チェックを行う', () => {
+  it('share_id に紐づく全キーワードをフィルタせず表示する（テキスト包含チェックしない）', () => {
     const html = getAiChatPage(minimalUser);
     const idx = html.indexOf('function openSearchKwAnalysis(');
     expect(idx).toBeGreaterThan(-1);
     const fnBody = html.slice(idx, idx + 1600);
-    expect(fnBody).toContain('toLowerCase');
-    expect(fnBody).toContain('indexOf');
+    expect(fnBody).not.toContain("qText.indexOf");
+    expect(fnBody).not.toContain('.filter(function');
   });
 
   it('キーワードバッジが max_seq_num を括弧内に表示する', () => {
