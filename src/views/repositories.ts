@@ -6164,6 +6164,20 @@ export function getRepositoriesPage(user: {
       var selectedKeyword = null;
       var keywordDetailPanel = document.getElementById('keywordDetailPanel');
 
+      historyModal.addEventListener('click', function(e) {
+        if (getCookie('kw_panel_tap_close') === 'off') return;
+        if (!keywordDetailPanel || keywordDetailPanel.style.display === 'none') return;
+        if (keywordDetailPanel.contains(e.target)) return;
+        if (e.target.closest('button')) return;
+        if (e.target.closest('a')) return;
+        if (e.target.closest('[data-query]')) return;
+        selectedKeyword = null;
+        keywordDetailPanel.style.display = 'none';
+        keywordDetailPanel.innerHTML = '';
+        if (getCookie('kw_panel_no_all_focus') !== 'on') selectLabelFilter('');
+        refreshGrid(null, null);
+      });
+
       if (hRepoSelect) {
         hRepoSelect.addEventListener('change', function() {
           selectedRepo = hRepoSelect.value;
