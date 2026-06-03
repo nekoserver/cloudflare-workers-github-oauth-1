@@ -223,6 +223,8 @@ export function getAiChatPage(user: {
       position: relative; overflow: hidden;
       border-bottom: 1px solid var(--border-color); flex-shrink: 0;
     }
+    .sidebar-result-item.has-subquery .result-swipe-inner { background: rgba(56, 189, 248, 0.10); }
+    .sidebar-result-item.has-subquery .result-swipe-inner:hover { background: rgba(56, 189, 248, 0.18); }
     .result-swipe-inner {
       display: flex; gap: 7px; align-items: flex-start;
       padding: 9px 12px; cursor: pointer;
@@ -1248,7 +1250,21 @@ export function getAiChatPage(user: {
       sidebarSearch.focus();
     });
 
+    var sidebarSubqueries = null;
+
+    function fetchSidebarSubqueries() {
+      if (sidebarSubqueries !== null) return;
+      fetch('/api/aichat/share-subquery-links/all', { credentials: 'same-origin' })
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+          sidebarSubqueries = new Set((d.items || []).map(function(it) { return it.question; }));
+          if (currentResults.length > 0) renderSidebarResults();
+        })
+        .catch(function() { sidebarSubqueries = new Set(); });
+    }
+
     function doSearch(q) {
+      fetchSidebarSubqueries();
       fetch('/api/aichat/shares/search?q=' + encodeURIComponent(q), { credentials: 'same-origin' })
         .then(function(r) { return r.json(); })
         .then(function(data) {
@@ -1402,7 +1418,7 @@ export function getAiChatPage(user: {
       sidebarResults.innerHTML = '';
       currentResults.forEach(function(r, i) {
         var item = document.createElement('div');
-        item.className = 'sidebar-result-item';
+        item.className = 'sidebar-result-item' + (sidebarSubqueries && sidebarSubqueries.has(r.question) ? ' has-subquery' : '');
 
         var delBtn = document.createElement('button');
         delBtn.className = 'result-delete-btn';
@@ -2087,6 +2103,7 @@ export function getAiChatPage(user: {
         .then(function(d) {
           if (d.ok) {
             addSubqueryMsg.textContent = '登録しました';
+            sidebarSubqueries = null;
             closeAddSubqueryModal();
             loadSubqueryLinks(currentHistoryQuestion);
           } else {
