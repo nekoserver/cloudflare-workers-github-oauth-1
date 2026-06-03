@@ -120,6 +120,20 @@ export function getAiChatPage(user: {
       font-size: 18px; padding: 0 4px; line-height: 1;
     }
     .search-log-close:hover { color: var(--text-primary); }
+    .search-log-toggle-btn {
+      font-size: 11px; padding: 3px 8px; border-radius: 5px; cursor: pointer;
+      border: 1px solid var(--border-color); background: var(--bg-secondary);
+      color: var(--text-muted); white-space: nowrap; transition: background 0.15s, color 0.15s;
+    }
+    .search-log-toggle-btn.active {
+      background: var(--accent-color, #667eea); color: #fff; border-color: var(--accent-color, #667eea);
+    }
+    .impr-date-link {
+      font-size: 11px; color: var(--accent-color, #667eea); cursor: pointer;
+      background: none; border: none; padding: 0; font-family: inherit;
+      text-decoration: underline; text-decoration-style: dashed; text-underline-offset: 2px;
+    }
+    .impr-date-link:hover { opacity: 0.75; }
     .search-log-body { flex: 1; overflow-y: auto; padding: 12px 16px; }
     .search-log-table { width: 100%; border-collapse: collapse; font-size: 12px; }
     .search-log-table th {
@@ -588,6 +602,7 @@ export function getAiChatPage(user: {
     <div class="search-log-modal" role="dialog" aria-modal="true">
       <div class="search-log-head">
         <span class="search-log-title">検索露出ログ（最新30件）</span>
+        <button class="search-log-toggle-btn" id="impressionsDateToggleBtn" title="最終検索日を表示/非表示">📅 最終検索</button>
         <button class="search-log-close" id="searchImpressionsClose" aria-label="閉じる">✕</button>
       </div>
       <div class="search-log-body" id="searchImpressionsBody">
@@ -678,42 +693,70 @@ export function getAiChatPage(user: {
     var searchImpressionsBtn = document.getElementById('searchImpressionsBtn');
     var searchImpressionsClose = document.getElementById('searchImpressionsClose');
     var searchImpressionsBody = document.getElementById('searchImpressionsBody');
+    var impressionsDateToggleBtn = document.getElementById('impressionsDateToggleBtn');
+
+    var IMPR_DATE_COOKIE = 'aichat_impressions_show_date';
+    function getImpressionsDateVisible() {
+      var m = document.cookie.match(/(?:^|;\s*)aichat_impressions_show_date=([^;]*)/);
+      return m ? m[1] === 'on' : false;
+    }
+    function setImpressionsDateVisible(val) {
+      document.cookie = IMPR_DATE_COOKIE + '=' + (val ? 'on' : 'off') + '; Path=/; Secure; SameSite=Lax; Max-Age=31536000';
+    }
+
+    function renderImpressionsTable(items) {
+      if (items.length === 0) {
+        searchImpressionsBody.innerHTML = '<div class="search-log-empty">記録がありません</div>';
+        return;
+      }
+      var showDate = getImpressionsDateVisible();
+      var sorted = items.slice().sort(function(a, b) {
+        return (b.keywords || []).length - (a.keywords || []).length;
+      });
+      var html = '<table class="search-log-table"><thead><tr>' +
+        '<th>総数</th><th>No.</th><th>質問（概要）</th><th>キーワード（選択回数）</th>' +
+        (showDate ? '<th>最終検索</th>' : '') +
+        '</tr></thead><tbody>';
+      sorted.forEach(function(item, idx) {
+        var kwSorted = (item.keywords || []).slice().sort(function(a, b) { return b.max_select_count - a.max_select_count; });
+        var q = item.question || '';
+        var qShort = q.length > 40 ? q.slice(0, 40) + '…' : q || '(削除済み)';
+        var badges = kwSorted.map(function(k) {
+          return '<span class="kw-analysis-badge">' + escHtml(k.keyword) + '(' + k.max_select_count + ')</span>';
+        }).join('');
+        var kwNames = JSON.stringify(kwSorted.map(function(k) { return k.keyword; }));
+        var kwCount = kwSorted.length;
+        html += '<tr>';
+        html += '<td class="search-log-count">' + kwCount + '</td>';
+        html += '<td class="search-log-date">' + (idx + 1) + '</td>';
+        html += '<td class="search-log-q kw-q-link" data-share-id="' + escHtml(item.share_id) + '" data-keywords="' + escHtml(kwNames) + '" title="' + escHtml(q) + '">' + escHtml(qShort) + '</td>';
+        html += '<td class="kw-analysis-badges">' + (badges || '<span style="color:var(--text-muted);font-size:12px">-</span>') + '</td>';
+        if (showDate) {
+          var dateStr = item.last_searched_at ? item.last_searched_at.slice(0, 10) : '';
+          var monthStr = dateStr.slice(0, 7);
+          var dateCell = dateStr
+            ? '<button class="impr-date-link" data-month="' + escHtml(monthStr) + '" data-date="' + escHtml(dateStr) + '">' + escHtml(dateStr) + '</button>'
+            : '-';
+          html += '<td class="search-log-date">' + dateCell + '</td>';
+        }
+        html += '</tr>';
+      });
+      html += '</tbody></table>';
+      searchImpressionsBody.innerHTML = html;
+    }
+
+    var impressionsCachedItems = [];
 
     function openSearchImpressions() {
       searchImpressionsOverlay.classList.add('open');
       searchImpressionsOverlay.setAttribute('aria-hidden', 'false');
+      impressionsDateToggleBtn.classList.toggle('active', getImpressionsDateVisible());
       searchImpressionsBody.innerHTML = '<div class="search-log-loading">読み込み中...</div>';
       fetch('/api/aichat/search-impressions', { credentials: 'same-origin' })
         .then(function(r) { return r.json(); })
         .then(function(data) {
-          var items = data.items || [];
-          if (items.length === 0) {
-            searchImpressionsBody.innerHTML = '<div class="search-log-empty">記録がありません</div>';
-            return;
-          }
-          var sorted = items.slice().sort(function(a, b) { return b.impression_count - a.impression_count; });
-          var html = '<table class="search-log-table"><thead><tr>' +
-            '<th>露出</th><th>No.</th><th>質問（概要）</th><th>キーワード（選択回数）</th><th>最終検索</th>' +
-            '</tr></thead><tbody>';
-          sorted.forEach(function(item, idx) {
-            var kwSorted = (item.keywords || []).slice().sort(function(a, b) { return b.max_select_count - a.max_select_count; });
-            var q = item.question || '';
-            var qShort = q.length > 40 ? q.slice(0, 40) + '…' : q || '(削除済み)';
-            var badges = kwSorted.map(function(k) {
-              return '<span class="kw-analysis-badge">' + escHtml(k.keyword) + '(' + k.max_select_count + ')</span>';
-            }).join('');
-            var at = item.last_searched_at ? item.last_searched_at.slice(0, 16).replace('T', ' ') : '-';
-            var kwNames = JSON.stringify(kwSorted.map(function(k) { return k.keyword; }));
-            html += '<tr>';
-            html += '<td class="search-log-count">' + item.impression_count + '</td>';
-            html += '<td class="search-log-date">' + (idx + 1) + '</td>';
-            html += '<td class="search-log-q kw-q-link" data-share-id="' + escHtml(item.share_id) + '" data-keywords="' + escHtml(kwNames) + '" title="' + escHtml(q) + '">' + escHtml(qShort) + '</td>';
-            html += '<td class="kw-analysis-badges">' + (badges || '<span style="color:var(--text-muted);font-size:12px">-</span>') + '</td>';
-            html += '<td class="search-log-date">' + escHtml(at) + '</td>';
-            html += '</tr>';
-          });
-          html += '</tbody></table>';
-          searchImpressionsBody.innerHTML = html;
+          impressionsCachedItems = data.items || [];
+          renderImpressionsTable(impressionsCachedItems);
         })
         .catch(function() { searchImpressionsBody.innerHTML = '<div class="search-log-empty">読み込みエラー</div>'; });
     }
@@ -723,7 +766,36 @@ export function getAiChatPage(user: {
       searchImpressionsOverlay.setAttribute('aria-hidden', 'true');
     }
 
+    impressionsDateToggleBtn.addEventListener('click', function(e) {
+      e.stopPropagation();
+      var next = !getImpressionsDateVisible();
+      setImpressionsDateVisible(next);
+      impressionsDateToggleBtn.classList.toggle('active', next);
+      renderImpressionsTable(impressionsCachedItems);
+    });
+
     searchImpressionsBody.addEventListener('click', function(e) {
+      var dateBtn = e.target.closest('button.impr-date-link');
+      if (dateBtn) {
+        e.stopPropagation();
+        var month = dateBtn.getAttribute('data-month');
+        var date = dateBtn.getAttribute('data-date');
+        closeSearchImpressions();
+        closeHistoryModal();
+        clearHistorySelection();
+        if (!sidebarOpen) {
+          sidebarOpen = true;
+          sidebar.classList.add('open');
+          sidebarToggle.classList.add('active');
+        }
+        calCurrentMonth = month;
+        calSelectedDay = date;
+        sidebarSearch.value = '';
+        sidebarClear.classList.remove('visible');
+        loadCalendar(month);
+        doDateLoad(date);
+        return;
+      }
       var td = e.target.closest('td[data-share-id]');
       if (!td) return;
       var shareId = td.getAttribute('data-share-id');
@@ -1576,7 +1648,7 @@ export function getAiChatPage(user: {
       doSearch(kw);
     }
 
-    historyModalSearchBtn.addEventListener('click', function() { doHistoryModalSearch(); });
+    historyModalSearchBtn.addEventListener('click', function(e) { e.stopPropagation(); doHistoryModalSearch(); });
     historyModalSearchInput.addEventListener('keydown', function(e) {
       if (e.key === 'Enter') doHistoryModalSearch();
     });
