@@ -530,17 +530,27 @@ describe('AIチャット: 露出ログボタンと searchImpressionsOverlay', ()
     expect(fnBody).toContain('/api/aichat/search-impressions');
   });
 
-  it('impressions モーダルが impression_count（露出回数）を表示する', () => {
+  it('impressions モーダルが kwCount（キーワード数）を左端カラムに表示する', () => {
     const html = getAiChatPage(minimalUser);
-    const idx = html.indexOf('function openSearchImpressions(');
+    const idx = html.indexOf('function renderImpressionsTable(');
     expect(idx).toBeGreaterThan(-1);
     const fnBody = html.slice(idx, idx + 1600);
-    expect(fnBody).toContain('impression_count');
+    expect(fnBody).toContain('kwCount');
+    expect(fnBody).toContain('kwSorted.length');
+  });
+
+  it('impressions モーダルが impression_count で並べ替えしない（keywords.length で降順）', () => {
+    const html = getAiChatPage(minimalUser);
+    const idx = html.indexOf('function renderImpressionsTable(');
+    expect(idx).toBeGreaterThan(-1);
+    const fnBody = html.slice(idx, idx + 600);
+    expect(fnBody).toContain('keywords');
+    expect(fnBody).not.toContain('impression_count');
   });
 
   it('impressions モーダルがキーワードバッジを表示する', () => {
     const html = getAiChatPage(minimalUser);
-    const idx = html.indexOf('function openSearchImpressions(');
+    const idx = html.indexOf('function renderImpressionsTable(');
     expect(idx).toBeGreaterThan(-1);
     const fnBody = html.slice(idx, idx + 1600);
     expect(fnBody).toContain('kw-analysis-badge');
@@ -548,7 +558,7 @@ describe('AIチャット: 露出ログボタンと searchImpressionsOverlay', ()
 
   it('impressions 質問セルに data-share-id が付与される', () => {
     const html = getAiChatPage(minimalUser);
-    const idx = html.indexOf('function openSearchImpressions(');
+    const idx = html.indexOf('function renderImpressionsTable(');
     expect(idx).toBeGreaterThan(-1);
     const fnBody = html.slice(idx, idx + 2000);
     expect(fnBody).toContain('data-share-id');
@@ -558,7 +568,7 @@ describe('AIチャット: 露出ログボタンと searchImpressionsOverlay', ()
     const html = getAiChatPage(minimalUser);
     const idx = html.indexOf('searchImpressionsBody.addEventListener');
     expect(idx).toBeGreaterThan(-1);
-    const fnBody = html.slice(idx, idx + 700);
+    const fnBody = html.slice(idx, idx + 1400);
     expect(fnBody).toContain('showHistoryModal');
     expect(fnBody).toContain('data-share-id');
   });
@@ -569,6 +579,38 @@ describe('AIチャット: 露出ログボタンと searchImpressionsOverlay', ()
     expect(idx).toBeGreaterThan(-1);
     const fnBody = html.slice(idx, idx + 200);
     expect(fnBody).toContain('historyModalBackdrop');
+  });
+
+  it('searchImpressions モーダルに最終検索トグルボタンが存在する', () => {
+    const html = getAiChatPage(minimalUser);
+    expect(html).toContain('id="impressionsDateToggleBtn"');
+  });
+
+  it('最終検索トグルの状態が Cookie に保存される', () => {
+    const html = getAiChatPage(minimalUser);
+    const idx = html.indexOf('IMPR_DATE_COOKIE');
+    expect(idx).toBeGreaterThan(-1);
+    const fnBody = html.slice(idx, idx + 100);
+    expect(fnBody).toContain('aichat_impressions_show_date');
+  });
+
+  it('最終検索カラムの日付セルがカレンダーリンクとして機能する', () => {
+    const html = getAiChatPage(minimalUser);
+    const idx = html.indexOf('function openSearchImpressions(');
+    expect(idx).toBeGreaterThan(-1);
+    const fnBody = html.slice(idx, idx + 2500);
+    expect(fnBody).toContain('data-month');
+    expect(fnBody).toContain('data-date');
+  });
+
+  it('最終検索セルのカレンダーリンクでサイドバーとカレンダーが開く', () => {
+    const html = getAiChatPage(minimalUser);
+    const idx = html.indexOf('searchImpressionsBody.addEventListener');
+    expect(idx).toBeGreaterThan(-1);
+    const fnBody = html.slice(idx, idx + 800);
+    expect(fnBody).toContain('loadCalendar');
+    expect(fnBody).toContain('doDateLoad');
+    expect(fnBody).toContain('closeSearchImpressions');
   });
 });
 
