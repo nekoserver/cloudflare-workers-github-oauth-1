@@ -193,7 +193,6 @@ export function getAiChatPage(user: {
       display: flex; flex-direction: column;
       overflow: hidden;
       transition: width 0.25s ease;
-      position: relative;
     }
     .sidebar.open { width: 260px; }
     .sidebar-status-row { display: flex; align-items: center; padding: 4px 12px; gap: 6px; min-height: 24px; flex-shrink: 0; }
@@ -205,9 +204,11 @@ export function getAiChatPage(user: {
     }
     .sidebar-mode-btn.active { background: var(--accent-color, #667eea); color: #fff; border-color: var(--accent-color, #667eea); }
     .sidebar-kw-modal {
-      display: none; position: absolute; inset: 0; z-index: 10;
-      background: var(--card-bg); overflow-y: auto;
+      display: none; position: fixed; left: 260px; top: 44px; bottom: 0; z-index: 200;
+      width: 240px; background: var(--card-bg); overflow-y: hidden;
       flex-direction: column;
+      border-left: 1px solid var(--border-color);
+      box-shadow: 2px 0 8px rgba(0,0,0,0.12);
     }
     .sidebar-kw-modal.open { display: flex; }
     .sidebar-kw-header {
@@ -600,13 +601,6 @@ export function getAiChatPage(user: {
         </div>
       </div>
       <div class="sidebar-results" id="sidebarResults"></div>
-      <div class="sidebar-kw-modal" id="sidebarKwModal">
-        <div class="sidebar-kw-header">
-          <span style="font-size:12px;font-weight:600;color:var(--text-secondary);">当月のキーワード</span>
-          <button id="sidebarKwClose" style="background:none;border:none;font-size:14px;cursor:pointer;color:var(--text-muted);padding:2px 6px;">✕</button>
-        </div>
-        <div id="sidebarKwList" style="overflow-y:auto;flex:1;"></div>
-      </div>
 
       <!-- カレンダーヒートマップ -->
       <div class="sidebar-calendar" id="sidebarCalendar">
@@ -619,6 +613,15 @@ export function getAiChatPage(user: {
         </div>
         <div class="cal-grid" id="calGrid"></div>
       </div>
+    </div>
+
+    <!-- キーワードモーダル（サイドバー右隣に fixed 表示） -->
+    <div class="sidebar-kw-modal" id="sidebarKwModal">
+      <div class="sidebar-kw-header">
+        <span style="font-size:12px;font-weight:600;color:var(--text-secondary);">当月のキーワード</span>
+        <button id="sidebarKwClose" style="background:none;border:none;font-size:14px;cursor:pointer;color:var(--text-muted);padding:2px 6px;">✕</button>
+      </div>
+      <div id="sidebarKwList" style="overflow-y:auto;flex:1;"></div>
     </div>
 
     <!-- チャット本体 -->
@@ -1371,14 +1374,15 @@ export function getAiChatPage(user: {
     var sidebarSubqueries = null;
 
     function fetchSidebarSubqueries() {
-      if (sidebarSubqueries !== null) return;
-      fetch('/api/aichat/share-subquery-links/all', { credentials: 'same-origin' })
+      if (sidebarSubqueries !== null) return Promise.resolve(sidebarSubqueries);
+      return fetch('/api/aichat/share-subquery-links/all', { credentials: 'same-origin' })
         .then(function(r) { return r.json(); })
         .then(function(d) {
           sidebarSubqueries = new Set((d.items || []).map(function(it) { return it.question; }));
           if (currentResults.length > 0) renderSidebarResults();
+          return sidebarSubqueries;
         })
-        .catch(function() { sidebarSubqueries = new Set(); });
+        .catch(function() { sidebarSubqueries = new Set(); return sidebarSubqueries; });
     }
 
     function doSearch(q) {
@@ -1407,20 +1411,23 @@ export function getAiChatPage(user: {
     }
 
     function doDateLoad(date) {
-      fetchSidebarSubqueries();
       sidebarStatus.textContent = '読み込み中...';
-      fetch('/api/aichat/shares/by-date?date=' + encodeURIComponent(date), { credentials: 'same-origin' })
-        .then(function(r) { return r.json(); })
-        .then(function(data) {
-          currentResults = data.results || [];
-          selectedIdx = -1;
-          currentMode = 'date';
-          currentDateLabel = date;
-          renderSidebarResults();
-          sidebarStatus.textContent = date + '：' + currentResults.length + ' 件';
-          updateSidebarModeUI();
-        })
-        .catch(function() { sidebarStatus.textContent = '読み込みエラー'; });
+      Promise.all([
+        fetch('/api/aichat/shares/by-date?date=' + encodeURIComponent(date), { credentials: 'same-origin' })
+          .then(function(r) { return r.json(); }),
+        fetchSidebarSubqueries()
+      ]).then(function(results) {
+        var data = results[0];
+        var sq = results[1];
+        currentResults = data.results || [];
+        selectedIdx = -1;
+        currentMode = 'date';
+        currentDateLabel = date;
+        renderSidebarResults();
+        var sqCount = currentResults.filter(function(r) { return sq && sq.has(r.question); }).length;
+        sidebarStatus.textContent = date + ' ' + sqCount + '/' + currentResults.length + ' 件';
+        updateSidebarModeUI();
+      }).catch(function() { sidebarStatus.textContent = '読み込みエラー'; });
     }
 
     // ===== スワイプ削除 =====
