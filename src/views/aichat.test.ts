@@ -1253,3 +1253,86 @@ describe('doDateLoad — △/◯件 フォーマット', () => {
     expect(fn).toMatch(/sqCount.*\/.*currentResults\.length|sqCount.*'\/'|'\/'.*currentResults/);
   });
 });
+
+describe('キーワードモーダル：ソートトグル・件数表示・検索窓自動補完', () => {
+  it('sidebarKwCount 要素が HTML に存在する', () => {
+    const html = getAiChatPage(minimalUser, []);
+    expect(html).toContain('sidebarKwCount');
+  });
+
+  it('sidebarKwSortCount ボタンが HTML に存在する', () => {
+    const html = getAiChatPage(minimalUser, []);
+    expect(html).toContain('sidebarKwSortCount');
+  });
+
+  it('sidebarKwSortAlpha ボタンが HTML に存在する', () => {
+    const html = getAiChatPage(minimalUser, []);
+    expect(html).toContain('sidebarKwSortAlpha');
+  });
+
+  it('renderKwList 関数が HTML に存在する', () => {
+    const html = getAiChatPage(minimalUser, []);
+    expect(html).toContain('function renderKwList(');
+  });
+
+  it('kwSortOrder 変数が HTML に存在する', () => {
+    const html = getAiChatPage(minimalUser, []);
+    expect(html).toContain('kwSortOrder');
+  });
+
+  it('kwListCache 変数が HTML に存在する', () => {
+    const html = getAiChatPage(minimalUser, []);
+    expect(html).toContain('kwListCache');
+  });
+
+  it('renderKwList が localeCompare でアルファベット順ソートを行う', () => {
+    const html = getAiChatPage(minimalUser, []);
+    const idx = html.indexOf('function renderKwList(');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 600);
+    expect(fn).toContain('localeCompare');
+  });
+
+  it('キーワードクリック時に sidebarKwModal.classList.remove を呼ばない（モーダルを閉じない）', () => {
+    const html = getAiChatPage(minimalUser, []);
+    const idx = html.indexOf('function renderKwList(');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 800);
+    expect(fn).not.toContain("sidebarKwModal.classList.remove('open')");
+  });
+
+  it('キーワードクリック時に sidebarSearch.value を設定する', () => {
+    const html = getAiChatPage(minimalUser, []);
+    const idx = html.indexOf('function renderKwList(');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 1400);
+    expect(fn).toContain('sidebarSearch.value');
+  });
+
+  it('doKeywordLoad が kwSortOrder alpha の場合に localeCompare でソートする', () => {
+    const html = getAiChatPage(minimalUser, []);
+    const idx = html.indexOf('function doKeywordLoad(');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 600);
+    expect(fn).toContain('kwSortOrder');
+    expect(fn).toContain('localeCompare');
+  });
+
+  it('openSidebarKeywordModal が sidebarKwCount にキーワード件数を設定する', () => {
+    const html = getAiChatPage(minimalUser, []);
+    const idx = html.indexOf('function openSidebarKeywordModal(');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 800);
+    expect(fn).toContain('sidebarKwCount');
+  });
+
+  it('sidebarKwSortCount のクリックイベントが HTML に存在する', () => {
+    const html = getAiChatPage(minimalUser, []);
+    expect(html).toContain("sidebarKwSortCount.addEventListener(");
+  });
+
+  it('sidebarKwSortAlpha のクリックイベントが HTML に存在する', () => {
+    const html = getAiChatPage(minimalUser, []);
+    expect(html).toContain("sidebarKwSortAlpha.addEventListener(");
+  });
+});

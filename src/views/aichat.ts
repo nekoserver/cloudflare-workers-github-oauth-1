@@ -212,9 +212,16 @@ export function getAiChatPage(user: {
     }
     .sidebar-kw-modal.open { display: flex; }
     .sidebar-kw-header {
-      display: flex; align-items: center; justify-content: space-between;
-      padding: 10px 12px 8px; border-bottom: 1px solid var(--border-color); flex-shrink: 0;
+      display: flex; align-items: center; gap: 4px;
+      padding: 8px 10px; border-bottom: 1px solid var(--border-color); flex-shrink: 0;
     }
+    .sidebar-kw-sort-toggle { display: flex; gap: 2px; flex-shrink: 0; }
+    .sidebar-kw-sort-btn {
+      font-size: 10px; padding: 1px 6px; border: 1px solid var(--border-color);
+      border-radius: 4px; background: none; color: var(--text-muted); cursor: pointer;
+      transition: background 0.12s, color 0.12s; white-space: nowrap;
+    }
+    .sidebar-kw-sort-btn.active { background: var(--accent-color, #667eea); color: #fff; border-color: var(--accent-color, #667eea); }
     .sidebar-kw-item {
       padding: 6px 12px; font-size: 12px; cursor: pointer; display: flex;
       justify-content: space-between; align-items: center;
@@ -222,6 +229,7 @@ export function getAiChatPage(user: {
       color: var(--text-primary);
     }
     .sidebar-kw-item:hover { background: var(--bg-secondary); }
+    .sidebar-kw-item.selected { background: rgba(102,126,234,0.12); }
     .sidebar-kw-count { font-size: 10px; color: var(--text-muted); flex-shrink: 0; margin-left: 6px; }
 
     .sidebar-head {
@@ -618,8 +626,14 @@ export function getAiChatPage(user: {
     <!-- キーワードモーダル（サイドバー右隣に fixed 表示） -->
     <div class="sidebar-kw-modal" id="sidebarKwModal">
       <div class="sidebar-kw-header">
-        <span style="font-size:12px;font-weight:600;color:var(--text-secondary);">当月のキーワード</span>
-        <button id="sidebarKwClose" style="background:none;border:none;font-size:14px;cursor:pointer;color:var(--text-muted);padding:2px 6px;">✕</button>
+        <span style="font-size:12px;font-weight:600;color:var(--text-secondary);white-space:nowrap;">当月のキーワード</span>
+        <span id="sidebarKwCount" style="font-size:10px;color:var(--text-muted);white-space:nowrap;"></span>
+        <div style="flex:1;"></div>
+        <div class="sidebar-kw-sort-toggle">
+          <button class="sidebar-kw-sort-btn active" id="sidebarKwSortCount">回数順</button>
+          <button class="sidebar-kw-sort-btn" id="sidebarKwSortAlpha">あいうえお順</button>
+        </div>
+        <button id="sidebarKwClose" style="background:none;border:none;font-size:14px;cursor:pointer;color:var(--text-muted);padding:2px 4px;flex-shrink:0;">✕</button>
       </div>
       <div id="sidebarKwList" style="overflow-y:auto;flex:1;"></div>
     </div>
@@ -1240,7 +1254,12 @@ export function getAiChatPage(user: {
     var sidebarKwModal = document.getElementById('sidebarKwModal');
     var sidebarKwClose = document.getElementById('sidebarKwClose');
     var sidebarKwList = document.getElementById('sidebarKwList');
+    var sidebarKwCount = document.getElementById('sidebarKwCount');
+    var sidebarKwSortCount = document.getElementById('sidebarKwSortCount');
+    var sidebarKwSortAlpha = document.getElementById('sidebarKwSortAlpha');
     var sidebarOpen = false;
+    var kwSortOrder = 'count'; // 'count' | 'alpha'
+    var kwListCache = [];
 
     function isTapCloseEnabled() {
       var m = document.cookie.match(/(?:^|;\s*)aichat_sidebar_tap_close=([^;]*)/);
@@ -1292,32 +1311,54 @@ export function getAiChatPage(user: {
       }
     }
 
+    function renderKwList(kws) {
+      kwListCache = kws.slice();
+      var sorted = kws.slice();
+      if (kwSortOrder === 'alpha') {
+        sorted.sort(function(a, b) { return a.keyword.localeCompare(b.keyword, 'ja'); });
+      }
+      var html = '';
+      sorted.forEach(function(kw) {
+        var sel = currentKeywordLabel === kw.keyword ? ' selected' : '';
+        html += '<div class="sidebar-kw-item' + sel + '" data-keyword="' + escHtml(kw.keyword) + '">'
+          + '<span>' + escHtml(kw.keyword) + '</span>'
+          + '<span class="sidebar-kw-count">' + kw.total_count + '回</span>'
+          + '</div>';
+      });
+      sidebarKwList.innerHTML = html;
+      sidebarKwList.querySelectorAll('.sidebar-kw-item').forEach(function(el) {
+        el.addEventListener('click', function() {
+          var kw = el.getAttribute('data-keyword');
+          if (!kw) return;
+          sidebarKwList.querySelectorAll('.sidebar-kw-item').forEach(function(e) { e.classList.remove('selected'); });
+          el.classList.add('selected');
+          sidebarSearch.value = kw;
+          sidebarClear.classList.add('visible');
+          doKeywordLoad(kw);
+        });
+      });
+    }
+
     function openSidebarKeywordModal() {
       var month = new Date().toISOString().slice(0, 7);
       sidebarKwList.innerHTML = '<div style="padding:10px;font-size:11px;color:var(--text-muted);">読み込み中...</div>';
       sidebarKwModal.classList.add('open');
+      if (kwListCache.length > 0) {
+        sidebarKwCount.textContent = kwListCache.length + '件';
+        renderKwList(kwListCache);
+        return;
+      }
       fetch('/api/aichat/keywords/monthly?month=' + encodeURIComponent(month), { credentials: 'same-origin' })
         .then(function(r) { return r.json(); })
         .then(function(d) {
           var kws = d.keywords || [];
+          sidebarKwCount.textContent = kws.length + '件';
           if (kws.length === 0) {
+            kwListCache = [];
             sidebarKwList.innerHTML = '<div style="padding:10px;font-size:11px;color:var(--text-muted);">キーワードがありません</div>';
             return;
           }
-          var html = '';
-          kws.forEach(function(kw) {
-            html += '<div class="sidebar-kw-item" data-keyword="' + escHtml(kw.keyword) + '">'
-              + '<span>' + escHtml(kw.keyword) + '</span>'
-              + '<span class="sidebar-kw-count">' + kw.total_count + '回</span>'
-              + '</div>';
-          });
-          sidebarKwList.innerHTML = html;
-          sidebarKwList.querySelectorAll('.sidebar-kw-item').forEach(function(el) {
-            el.addEventListener('click', function() {
-              var kw = el.getAttribute('data-keyword');
-              if (kw) { sidebarKwModal.classList.remove('open'); doKeywordLoad(kw); }
-            });
-          });
+          renderKwList(kws);
         })
         .catch(function() {
           sidebarKwList.innerHTML = '<div style="padding:10px;font-size:11px;color:var(--text-muted);">取得に失敗しました</div>';
@@ -1331,6 +1372,9 @@ export function getAiChatPage(user: {
         .then(function(r) { return r.json(); })
         .then(function(data) {
           currentResults = data.results || [];
+          if (kwSortOrder === 'alpha') {
+            currentResults.sort(function(a, b) { return a.question.localeCompare(b.question, 'ja'); });
+          }
           selectedIdx = -1;
           currentMode = 'keyword';
           currentKeywordLabel = keyword;
@@ -1370,6 +1414,22 @@ export function getAiChatPage(user: {
     });
     sidebarModeKw.addEventListener('click', function() { openSidebarKeywordModal(); });
     sidebarKwClose.addEventListener('click', function() { sidebarKwModal.classList.remove('open'); });
+    sidebarKwSortCount.addEventListener('click', function() {
+      if (kwSortOrder === 'count') return;
+      kwSortOrder = 'count';
+      sidebarKwSortCount.classList.add('active');
+      sidebarKwSortAlpha.classList.remove('active');
+      if (kwListCache.length > 0) renderKwList(kwListCache);
+      if (currentMode === 'keyword' && currentKeywordLabel) doKeywordLoad(currentKeywordLabel);
+    });
+    sidebarKwSortAlpha.addEventListener('click', function() {
+      if (kwSortOrder === 'alpha') return;
+      kwSortOrder = 'alpha';
+      sidebarKwSortAlpha.classList.add('active');
+      sidebarKwSortCount.classList.remove('active');
+      if (kwListCache.length > 0) renderKwList(kwListCache);
+      if (currentMode === 'keyword' && currentKeywordLabel) doKeywordLoad(currentKeywordLabel);
+    });
 
     var sidebarSubqueries = null;
 
