@@ -1576,7 +1576,7 @@ export function getAiChatPage(user: {
       doSearch(kw);
     }
 
-    historyModalSearchBtn.addEventListener('click', function() { doHistoryModalSearch(); });
+    historyModalSearchBtn.addEventListener('click', function(e) { e.stopPropagation(); doHistoryModalSearch(); });
     historyModalSearchInput.addEventListener('keydown', function(e) {
       if (e.key === 'Enter') doHistoryModalSearch();
     });

@@ -636,6 +636,14 @@ describe('AIチャット: 過去ログモーダルのヘッダ検索窓', () => 
     expect(fn).toContain('sidebarOpen');
     expect(fn).toContain("sidebar.classList.add('open')");
   });
+
+  it('historyModalSearchBtn クリックハンドラが stopPropagation してサイドバーが即閉じされない', () => {
+    const html = getAiChatPage(minimalUser);
+    const idx = html.indexOf('historyModalSearchBtn.addEventListener');
+    expect(idx).toBeGreaterThan(-1);
+    const handler = html.slice(idx, idx + 150);
+    expect(handler).toContain('stopPropagation');
+  });
 });
 
 describe('AIチャット: 日付リンクで impressionsOverlay も閉じる', () => {
