@@ -1116,3 +1116,73 @@ describe('appendShareBtn — 別タブで開くボタン', () => {
     expect(fn).toContain('cachedUrl');
   });
 });
+
+describe('サイドバー：モデル名削除・新着/キーワードトグル・キーワードフィルタ', () => {
+  it('renderSidebarResults の result-meta にモデル名表示コードが含まれない', () => {
+    const html = getAiChatPage(minimalUser, []);
+    const idx = html.indexOf('function renderSidebarResults(');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 1200);
+    expect(fn).not.toContain('r.model');
+  });
+
+  it('sidebarModeToggle 要素が HTML に存在する', () => {
+    const html = getAiChatPage(minimalUser, []);
+    expect(html).toContain('sidebarModeToggle');
+  });
+
+  it('新着ボタン（sidebarModeNew）が HTML に存在する', () => {
+    const html = getAiChatPage(minimalUser, []);
+    expect(html).toContain('sidebarModeNew');
+  });
+
+  it('キーワードボタン（sidebarModeKw）が HTML に存在する', () => {
+    const html = getAiChatPage(minimalUser, []);
+    expect(html).toContain('sidebarModeKw');
+  });
+
+  it('sidebarKwModal 要素が HTML に存在する', () => {
+    const html = getAiChatPage(minimalUser, []);
+    expect(html).toContain('sidebarKwModal');
+  });
+
+  it('doKeywordLoad 関数が HTML に存在する', () => {
+    const html = getAiChatPage(minimalUser, []);
+    expect(html).toContain('function doKeywordLoad(');
+  });
+
+  it('doKeywordLoad が /api/aichat/shares/by-keyword を fetch する', () => {
+    const html = getAiChatPage(minimalUser, []);
+    const idx = html.indexOf('function doKeywordLoad(');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 600);
+    expect(fn).toContain('/api/aichat/shares/by-keyword');
+  });
+
+  it('openSidebarKeywordModal 関数が HTML に存在する', () => {
+    const html = getAiChatPage(minimalUser, []);
+    expect(html).toContain('function openSidebarKeywordModal(');
+  });
+
+  it('openSidebarKeywordModal が /api/aichat/keywords/monthly を fetch する', () => {
+    const html = getAiChatPage(minimalUser, []);
+    const idx = html.indexOf('function openSidebarKeywordModal(');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 600);
+    expect(fn).toContain('/api/aichat/keywords/monthly');
+  });
+
+  it('index.ts に GET /api/aichat/keywords/monthly エンドポイントが存在する', () => {
+    const { readFileSync } = require('node:fs');
+    const { resolve } = require('node:path');
+    const src = readFileSync(resolve(__dirname, '..', 'index.ts'), 'utf-8');
+    expect(src).toContain("app.get('/api/aichat/keywords/monthly'");
+  });
+
+  it('index.ts に GET /api/aichat/shares/by-keyword エンドポイントが存在する', () => {
+    const { readFileSync } = require('node:fs');
+    const { resolve } = require('node:path');
+    const src = readFileSync(resolve(__dirname, '..', 'index.ts'), 'utf-8');
+    expect(src).toContain("app.get('/api/aichat/shares/by-keyword'");
+  });
+});
