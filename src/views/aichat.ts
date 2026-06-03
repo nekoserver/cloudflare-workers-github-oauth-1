@@ -394,6 +394,8 @@ export function getAiChatPage(user: {
       transition: background 0.15s, color 0.15s;
     }
     .history-modal-search-btn:hover { background: var(--accent-color, #667eea); color: #fff; border-color: var(--accent-color, #667eea); }
+    .has-subquery { background: rgba(56, 189, 248, 0.12) !important; }
+    .has-subquery:hover { background: rgba(56, 189, 248, 0.22) !important; cursor: pointer; }
     .subqueries-add-area { padding: 10px 14px; border-bottom: 1px solid var(--border-color); display: flex; flex-direction: column; gap: 6px; }
     .subqueries-add-form { display: flex; gap: 6px; align-items: center; margin-top: 4px; }
     .subqueries-add-msg { font-size: 12px; color: var(--text-muted); }
@@ -617,6 +619,16 @@ export function getAiChatPage(user: {
     </div>
   </div>
 
+  <div class="search-log-overlay" id="impressionsSubqueryModal" aria-hidden="true" style="z-index:800;">
+    <div class="search-log-modal" style="max-width:480px;" role="dialog" aria-modal="true">
+      <div class="search-log-head">
+        <span class="search-log-title" id="impressionsSubqueryModalTitle">サブクエリリンク</span>
+        <button class="search-log-close" id="impressionsSubqueryModalClose" aria-label="閉じる">✕</button>
+      </div>
+      <div class="search-log-body" id="impressionsSubqueryModalBody"></div>
+    </div>
+  </div>
+
   <div class="search-log-overlay" id="searchKwAnalysisOverlay" aria-hidden="true">
     <div class="search-log-modal" role="dialog" aria-modal="true">
       <div class="search-log-head">
@@ -768,11 +780,12 @@ export function getAiChatPage(user: {
       document.cookie = IMPR_DATE_COOKIE + '=' + (val ? 'on' : 'off') + '; Path=/; Secure; SameSite=Lax; Max-Age=31536000';
     }
 
-    function renderImpressionsTable(items) {
+    function renderImpressionsTable(items, subqueryMap) {
       if (items.length === 0) {
         searchImpressionsBody.innerHTML = '<div class="search-log-empty">記録がありません</div>';
         return;
       }
+      var sqMap = subqueryMap || {};
       var showDate = getImpressionsDateVisible();
       var sorted = items.slice().sort(function(a, b) {
         return (b.keywords || []).length - (a.keywords || []).length;
@@ -790,7 +803,10 @@ export function getAiChatPage(user: {
         }).join('');
         var kwNames = JSON.stringify(kwSorted.map(function(k) { return k.keyword; }));
         var kwCount = kwSorted.length;
-        html += '<tr>';
+        var hasSq = q && sqMap[q] && sqMap[q].length > 0;
+        var rowClass = hasSq ? ' class="has-subquery"' : '';
+        var sqAttr = hasSq ? ' data-has-subquery="1" data-question="' + escHtml(q) + '"' : '';
+        html += '<tr' + rowClass + sqAttr + '>';
         html += '<td class="search-log-count">' + kwCount + '</td>';
         html += '<td class="search-log-date">' + (idx + 1) + '</td>';
         html += '<td class="search-log-q kw-q-link" data-share-id="' + escHtml(item.share_id) + '" data-keywords="' + escHtml(kwNames) + '" title="' + escHtml(q) + '">' + escHtml(qShort) + '</td>';
@@ -810,19 +826,23 @@ export function getAiChatPage(user: {
     }
 
     var impressionsCachedItems = [];
+    var impressionsCachedSubqueryMap = {};
 
     function openSearchImpressions() {
       searchImpressionsOverlay.classList.add('open');
       searchImpressionsOverlay.setAttribute('aria-hidden', 'false');
       impressionsDateToggleBtn.classList.toggle('active', getImpressionsDateVisible());
       searchImpressionsBody.innerHTML = '<div class="search-log-loading">読み込み中...</div>';
-      fetch('/api/aichat/search-impressions', { credentials: 'same-origin' })
-        .then(function(r) { return r.json(); })
-        .then(function(data) {
-          impressionsCachedItems = data.items || [];
-          renderImpressionsTable(impressionsCachedItems);
-        })
-        .catch(function() { searchImpressionsBody.innerHTML = '<div class="search-log-empty">読み込みエラー</div>'; });
+      Promise.all([
+        fetch('/api/aichat/search-impressions', { credentials: 'same-origin' }).then(function(r) { return r.json(); }),
+        fetch('/api/aichat/share-subquery-links/all', { credentials: 'same-origin' }).then(function(r) { return r.json(); }).catch(function() { return { items: [] }; })
+      ]).then(function(results) {
+        impressionsCachedItems = results[0].items || [];
+        var sqItems = results[1].items || [];
+        impressionsCachedSubqueryMap = {};
+        sqItems.forEach(function(g) { impressionsCachedSubqueryMap[g.question] = g.links || []; });
+        renderImpressionsTable(impressionsCachedItems, impressionsCachedSubqueryMap);
+      }).catch(function() { searchImpressionsBody.innerHTML = '<div class="search-log-empty">読み込みエラー</div>'; });
     }
 
     function closeSearchImpressions() {
@@ -835,8 +855,36 @@ export function getAiChatPage(user: {
       var next = !getImpressionsDateVisible();
       setImpressionsDateVisible(next);
       impressionsDateToggleBtn.classList.toggle('active', next);
-      renderImpressionsTable(impressionsCachedItems);
+      renderImpressionsTable(impressionsCachedItems, impressionsCachedSubqueryMap);
     });
+
+    var impressionsSubqueryModal = document.getElementById('impressionsSubqueryModal');
+    var impressionsSubqueryModalClose = document.getElementById('impressionsSubqueryModalClose');
+    var impressionsSubqueryModalTitle = document.getElementById('impressionsSubqueryModalTitle');
+    var impressionsSubqueryModalBody = document.getElementById('impressionsSubqueryModalBody');
+
+    function openImpressionsSubqueryModal(question, links) {
+      var qShort = question.length > 50 ? question.slice(0, 50) + '…' : question;
+      impressionsSubqueryModalTitle.textContent = qShort;
+      var html = '';
+      links.forEach(function(lk) {
+        html += '<div style="display:flex;gap:10px;align-items:flex-start;padding:8px 0;border-bottom:1px solid var(--border-color);">';
+        html += '<span style="flex:1;color:var(--text-secondary);font-size:13px;line-height:1.5;">' + escHtml(lk.query) + '</span>';
+        html += '<a href="' + escHtml(lk.url) + '" target="_blank" rel="noopener noreferrer" style="color:var(--accent-color,#667eea);font-size:12px;white-space:nowrap;flex-shrink:0;">🔗 開く</a>';
+        html += '</div>';
+      });
+      impressionsSubqueryModalBody.innerHTML = html || '<div style="color:var(--text-muted);">リンクがありません</div>';
+      impressionsSubqueryModal.classList.add('open');
+      impressionsSubqueryModal.setAttribute('aria-hidden', 'false');
+    }
+
+    function closeImpressionsSubqueryModal() {
+      impressionsSubqueryModal.classList.remove('open');
+      impressionsSubqueryModal.setAttribute('aria-hidden', 'true');
+    }
+
+    impressionsSubqueryModalClose.addEventListener('click', function() { closeImpressionsSubqueryModal(); });
+    impressionsSubqueryModal.addEventListener('click', function(e) { if (e.target === impressionsSubqueryModal) closeImpressionsSubqueryModal(); });
 
     searchImpressionsBody.addEventListener('click', function(e) {
       var dateBtn = e.target.closest('button.impr-date-link');
@@ -859,6 +907,15 @@ export function getAiChatPage(user: {
         loadCalendar(month);
         doDateLoad(date);
         return;
+      }
+      var row = e.target.closest('tr[data-has-subquery="1"]');
+      if (row) {
+        var q = row.getAttribute('data-question');
+        var links = impressionsCachedSubqueryMap[q] || [];
+        if (links.length > 0) {
+          openImpressionsSubqueryModal(q, links);
+          return;
+        }
       }
       var td = e.target.closest('td[data-share-id]');
       if (!td) return;
