@@ -2836,6 +2836,38 @@ app.get('/api/aichat/shares/by-date', authMiddleware, async (c) => {
   return jsonUtf8({ date, results: rows.results ?? [] });
 });
 
+app.get('/api/aichat/shares/by-keyword', authMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  const keyword = (c.req.query('keyword') ?? '').trim();
+  if (!keyword) return jsonUtf8({ results: [] });
+  const rows = await c.env.DB.prepare(
+    `SELECT DISTINCT s.id, s.user_hash, s.question, s.answer, s.model, s.created_at, s.access_count
+     FROM aichat_search_log l
+     JOIN ai_chat_shares s ON s.id = l.share_id AND s.user_id = l.user_id
+     WHERE l.user_id = ? AND l.keyword = ? AND s.deleted_at IS NULL
+     ORDER BY s.created_at DESC LIMIT 50`
+  ).bind(user.sub, keyword).all<{
+    id: string; user_hash: string; question: string; answer: string;
+    model: string; created_at: string; access_count: number;
+  }>();
+  return jsonUtf8({ keyword, results: rows.results ?? [] });
+});
+
+app.get('/api/aichat/keywords/monthly', authMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  const month = ((c.req.query('month') ?? '').slice(0, 7)) || new Date().toISOString().slice(0, 7);
+  const rows = await c.env.DB.prepare(
+    `SELECT keyword, SUM(select_count) AS total_count
+     FROM aichat_search_log
+     WHERE user_id = ? AND strftime('%Y-%m', last_searched_at) = ?
+     GROUP BY keyword
+     ORDER BY total_count DESC LIMIT 100`
+  ).bind(user.sub, month).all<{ keyword: string; total_count: number }>();
+  return jsonUtf8({ month, keywords: rows.results ?? [] });
+});
+
 /**
  * AIチャット検索キーワード選択ログ記録 API（認証が必要）
  */

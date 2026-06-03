@@ -193,8 +193,35 @@ export function getAiChatPage(user: {
       display: flex; flex-direction: column;
       overflow: hidden;
       transition: width 0.25s ease;
+      position: relative;
     }
     .sidebar.open { width: 260px; }
+    .sidebar-status-row { display: flex; align-items: center; padding: 4px 12px; gap: 6px; min-height: 24px; flex-shrink: 0; }
+    .sidebar-mode-toggle { display: flex; gap: 2px; flex-shrink: 0; }
+    .sidebar-mode-btn {
+      font-size: 10px; padding: 1px 7px; border: 1px solid var(--border-color);
+      border-radius: 4px; background: none; color: var(--text-muted); cursor: pointer;
+      transition: background 0.12s, color 0.12s;
+    }
+    .sidebar-mode-btn.active { background: var(--accent-color, #667eea); color: #fff; border-color: var(--accent-color, #667eea); }
+    .sidebar-kw-modal {
+      display: none; position: absolute; inset: 0; z-index: 10;
+      background: var(--card-bg); overflow-y: auto;
+      flex-direction: column;
+    }
+    .sidebar-kw-modal.open { display: flex; }
+    .sidebar-kw-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 10px 12px 8px; border-bottom: 1px solid var(--border-color); flex-shrink: 0;
+    }
+    .sidebar-kw-item {
+      padding: 6px 12px; font-size: 12px; cursor: pointer; display: flex;
+      justify-content: space-between; align-items: center;
+      border-bottom: 1px solid var(--border-color);
+      color: var(--text-primary);
+    }
+    .sidebar-kw-item:hover { background: var(--bg-secondary); }
+    .sidebar-kw-count { font-size: 10px; color: var(--text-muted); flex-shrink: 0; margin-left: 6px; }
 
     .sidebar-head {
       padding: 10px 12px 8px; border-bottom: 1px solid var(--border-color); flex-shrink: 0;
@@ -565,8 +592,21 @@ export function getAiChatPage(user: {
           <button class="sidebar-search-clear" id="sidebarClear" tabindex="-1">✕</button>
         </div>
       </div>
-      <div class="sidebar-status" id="sidebarStatus"></div>
+      <div class="sidebar-status-row">
+        <div class="sidebar-status" id="sidebarStatus" style="flex:1;font-size:10px;color:var(--text-muted);"></div>
+        <div class="sidebar-mode-toggle" id="sidebarModeToggle" style="display:none;">
+          <button class="sidebar-mode-btn" id="sidebarModeNew">新着</button>
+          <button class="sidebar-mode-btn" id="sidebarModeKw">キーワード</button>
+        </div>
+      </div>
       <div class="sidebar-results" id="sidebarResults"></div>
+      <div class="sidebar-kw-modal" id="sidebarKwModal">
+        <div class="sidebar-kw-header">
+          <span style="font-size:12px;font-weight:600;color:var(--text-secondary);">当月のキーワード</span>
+          <button id="sidebarKwClose" style="background:none;border:none;font-size:14px;cursor:pointer;color:var(--text-muted);padding:2px 6px;">✕</button>
+        </div>
+        <div id="sidebarKwList" style="overflow-y:auto;flex:1;"></div>
+      </div>
 
       <!-- カレンダーヒートマップ -->
       <div class="sidebar-calendar" id="sidebarCalendar">
@@ -1191,6 +1231,12 @@ export function getAiChatPage(user: {
     var sidebarClear = document.getElementById('sidebarClear');
     var sidebarStatus = document.getElementById('sidebarStatus');
     var sidebarResults = document.getElementById('sidebarResults');
+    var sidebarModeToggle = document.getElementById('sidebarModeToggle');
+    var sidebarModeNew = document.getElementById('sidebarModeNew');
+    var sidebarModeKw = document.getElementById('sidebarModeKw');
+    var sidebarKwModal = document.getElementById('sidebarKwModal');
+    var sidebarKwClose = document.getElementById('sidebarKwClose');
+    var sidebarKwList = document.getElementById('sidebarKwList');
     var sidebarOpen = false;
 
     function isTapCloseEnabled() {
@@ -1229,8 +1275,68 @@ export function getAiChatPage(user: {
     var searchTimer = null;
     var currentResults = [];
     var selectedIdx = -1;
-    var currentMode = 'search'; // 'search' | 'date'
+    var currentMode = 'search'; // 'search' | 'date' | 'keyword'
     var currentDateLabel = '';
+    var currentKeywordLabel = '';
+
+    function updateSidebarModeUI() {
+      if (currentMode === 'date' || currentMode === 'keyword') {
+        sidebarModeToggle.style.display = '';
+        sidebarModeNew.classList.toggle('active', currentMode === 'date');
+        sidebarModeKw.classList.toggle('active', currentMode === 'keyword');
+      } else {
+        sidebarModeToggle.style.display = 'none';
+      }
+    }
+
+    function openSidebarKeywordModal() {
+      var month = new Date().toISOString().slice(0, 7);
+      sidebarKwList.innerHTML = '<div style="padding:10px;font-size:11px;color:var(--text-muted);">読み込み中...</div>';
+      sidebarKwModal.classList.add('open');
+      fetch('/api/aichat/keywords/monthly?month=' + encodeURIComponent(month), { credentials: 'same-origin' })
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+          var kws = d.keywords || [];
+          if (kws.length === 0) {
+            sidebarKwList.innerHTML = '<div style="padding:10px;font-size:11px;color:var(--text-muted);">キーワードがありません</div>';
+            return;
+          }
+          var html = '';
+          kws.forEach(function(kw) {
+            html += '<div class="sidebar-kw-item" data-keyword="' + escHtml(kw.keyword) + '">'
+              + '<span>' + escHtml(kw.keyword) + '</span>'
+              + '<span class="sidebar-kw-count">' + kw.total_count + '回</span>'
+              + '</div>';
+          });
+          sidebarKwList.innerHTML = html;
+          sidebarKwList.querySelectorAll('.sidebar-kw-item').forEach(function(el) {
+            el.addEventListener('click', function() {
+              var kw = el.getAttribute('data-keyword');
+              if (kw) { sidebarKwModal.classList.remove('open'); doKeywordLoad(kw); }
+            });
+          });
+        })
+        .catch(function() {
+          sidebarKwList.innerHTML = '<div style="padding:10px;font-size:11px;color:var(--text-muted);">取得に失敗しました</div>';
+        });
+    }
+
+    function doKeywordLoad(keyword) {
+      fetchSidebarSubqueries();
+      sidebarStatus.textContent = '読み込み中...';
+      fetch('/api/aichat/shares/by-keyword?keyword=' + encodeURIComponent(keyword), { credentials: 'same-origin' })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          currentResults = data.results || [];
+          selectedIdx = -1;
+          currentMode = 'keyword';
+          currentKeywordLabel = keyword;
+          renderSidebarResults();
+          sidebarStatus.textContent = '🔍 ' + keyword + '　' + currentResults.length + ' 件';
+          updateSidebarModeUI();
+        })
+        .catch(function() { sidebarStatus.textContent = '読み込みエラー'; });
+    }
 
     sidebarSearch.addEventListener('input', function() {
       var q = sidebarSearch.value.trim();
@@ -1251,9 +1357,16 @@ export function getAiChatPage(user: {
       currentResults = [];
       currentMode = 'search';
       currentDateLabel = '';
+      updateSidebarModeUI();
       clearSelectedDay();
       sidebarSearch.focus();
     });
+
+    sidebarModeNew.addEventListener('click', function() {
+      if (currentMode !== 'date' && currentDateLabel) doDateLoad(currentDateLabel);
+    });
+    sidebarModeKw.addEventListener('click', function() { openSidebarKeywordModal(); });
+    sidebarKwClose.addEventListener('click', function() { sidebarKwModal.classList.remove('open'); });
 
     var sidebarSubqueries = null;
 
@@ -1275,8 +1388,10 @@ export function getAiChatPage(user: {
         .then(function(data) {
           currentResults = data.results || [];
           selectedIdx = -1;
+          currentMode = 'search';
           renderSidebarResults();
           sidebarStatus.textContent = currentResults.length > 0 ? currentResults.length + ' 件ヒット' : '一致なし';
+          updateSidebarModeUI();
           if (currentResults.length > 0) {
             var shareIds = currentResults.map(function(r) { return String(r.id); });
             var resultCount = currentResults.length;
@@ -1303,6 +1418,7 @@ export function getAiChatPage(user: {
           currentDateLabel = date;
           renderSidebarResults();
           sidebarStatus.textContent = date + '：' + currentResults.length + ' 件';
+          updateSidebarModeUI();
         })
         .catch(function() { sidebarStatus.textContent = '読み込みエラー'; });
     }
@@ -1444,7 +1560,7 @@ export function getAiChatPage(user: {
         qEl.textContent = r.question;
         var meta = document.createElement('div');
         meta.className = 'result-meta';
-        meta.textContent = r.created_at.slice(0, 16).replace('T', ' ') + '　' + r.model.split('/').pop();
+        meta.textContent = r.created_at.slice(0, 16).replace('T', ' ');
         body.appendChild(qEl);
         body.appendChild(meta);
         inner.appendChild(num);
