@@ -359,10 +359,27 @@ export function getAiChatPage(user: {
       display: flex; flex-direction: column; overflow: hidden;
     }
     .history-modal-head {
-      flex-shrink: 0; display: flex; align-items: flex-start; justify-content: space-between;
-      padding: 12px 16px; background: var(--card-bg); border-bottom: 1px solid var(--border-color);
+      flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; gap: 8px;
+      padding: 10px 16px; background: var(--card-bg); border-bottom: 1px solid var(--border-color);
     }
-    .history-modal-head-left { display: flex; flex-direction: column; gap: 3px; }
+    .history-modal-head-left { display: flex; flex-direction: column; gap: 3px; flex-shrink: 0; }
+    .history-modal-head-search {
+      display: flex; align-items: center; gap: 4px; flex: 1; min-width: 0;
+    }
+    .history-modal-search-input {
+      flex: 1; min-width: 0; font-size: 12px; padding: 4px 8px;
+      border: 1px solid var(--border-color); border-radius: 6px;
+      background: var(--bg-primary); color: var(--text-primary);
+      outline: none;
+    }
+    .history-modal-search-input:focus { border-color: var(--accent-color, #667eea); }
+    .history-modal-search-btn {
+      font-size: 12px; padding: 4px 8px; white-space: nowrap;
+      border: 1px solid var(--border-color); border-radius: 6px;
+      background: var(--bg-secondary); color: var(--text-secondary); cursor: pointer;
+      transition: background 0.15s, color 0.15s;
+    }
+    .history-modal-search-btn:hover { background: var(--accent-color, #667eea); color: #fff; border-color: var(--accent-color, #667eea); }
     .history-modal-title { font-size: 14px; font-weight: 700; color: var(--text-primary); }
     .history-modal-date { font-size: 11px; color: var(--text-muted); }
     .history-modal-date-link {
@@ -632,6 +649,10 @@ export function getAiChatPage(user: {
         <div class="history-modal-head-left">
           <span class="history-modal-title" id="historyModalTitle">AIチャットの詳細プレビュー</span>
           <span class="history-modal-date"><button class="history-modal-date-link" id="historyModalDateLink"></button><span id="historyModalTime"></span></span>
+        </div>
+        <div class="history-modal-head-search">
+          <input class="history-modal-search-input" id="historyModalSearchInput" type="search" placeholder="キーワードで検索..." autocomplete="off">
+          <button class="history-modal-search-btn" id="historyModalSearchBtn">🔍 検索</button>
         </div>
         <button class="history-modal-close" id="historyModalClose" aria-label="閉じる">✕</button>
       </div>
@@ -1512,6 +1533,7 @@ export function getAiChatPage(user: {
       var monthStr = dateOnly.slice(0, 7);
       closeHistoryModal();
       if (searchKwAnalysisOverlay.classList.contains('open')) closeSearchKwAnalysis();
+      if (searchImpressionsOverlay.classList.contains('open')) closeSearchImpressions();
       clearHistorySelection();
       if (!sidebarOpen) {
         sidebarOpen = true;
@@ -1533,6 +1555,32 @@ export function getAiChatPage(user: {
       document.cookie = 'aichat_history_preview_mode=center-modal; Path=/; Secure; SameSite=Lax; Max-Age=31536000';
       closeResultsPanel();
     });
+    var historyModalSearchInput = document.getElementById('historyModalSearchInput');
+    var historyModalSearchBtn = document.getElementById('historyModalSearchBtn');
+
+    function doHistoryModalSearch() {
+      var kw = historyModalSearchInput.value.trim();
+      if (!kw) return;
+      closeHistoryModal();
+      if (searchKwAnalysisOverlay.classList.contains('open')) closeSearchKwAnalysis();
+      if (searchImpressionsOverlay.classList.contains('open')) closeSearchImpressions();
+      clearHistorySelection();
+      if (!sidebarOpen) {
+        sidebarOpen = true;
+        sidebar.classList.add('open');
+        sidebarToggle.classList.add('active');
+        setTimeout(function() { sidebarSearch.focus(); }, 260);
+      }
+      sidebarSearch.value = kw;
+      sidebarClear.classList.add('visible');
+      doSearch(kw);
+    }
+
+    historyModalSearchBtn.addEventListener('click', function() { doHistoryModalSearch(); });
+    historyModalSearchInput.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') doHistoryModalSearch();
+    });
+
     historyModalClose.addEventListener('click', function() {
       closeHistoryModal();
       clearHistorySelection();

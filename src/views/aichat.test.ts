@@ -598,3 +598,52 @@ describe('AIチャット: doSearch が露出ログを POST する', () => {
     expect(fnBody).toContain('resultCount');
   });
 });
+
+describe('AIチャット: 過去ログモーダルのヘッダ検索窓', () => {
+  it('historyModalSearchInput が存在する', () => {
+    const html = getAiChatPage(minimalUser);
+    expect(html).toContain('id="historyModalSearchInput"');
+  });
+
+  it('historyModalSearchBtn が存在する', () => {
+    const html = getAiChatPage(minimalUser);
+    expect(html).toContain('id="historyModalSearchBtn"');
+  });
+
+  it('doHistoryModalSearch が closeSearchImpressions と doSearch を呼ぶ', () => {
+    const html = getAiChatPage(minimalUser);
+    const idx = html.indexOf('function doHistoryModalSearch()');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 700);
+    expect(fn).toContain('closeSearchImpressions');
+    expect(fn).toContain('doSearch');
+    expect(fn).toContain('sidebarSearch');
+  });
+
+  it('doHistoryModalSearch が closeSearchKwAnalysis も呼ぶ', () => {
+    const html = getAiChatPage(minimalUser);
+    const idx = html.indexOf('function doHistoryModalSearch()');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 700);
+    expect(fn).toContain('closeSearchKwAnalysis');
+  });
+
+  it('doHistoryModalSearch がサイドバーを開く', () => {
+    const html = getAiChatPage(minimalUser);
+    const idx = html.indexOf('function doHistoryModalSearch()');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 700);
+    expect(fn).toContain('sidebarOpen');
+    expect(fn).toContain("sidebar.classList.add('open')");
+  });
+});
+
+describe('AIチャット: 日付リンクで impressionsOverlay も閉じる', () => {
+  it('historyModalDateLink クリックで searchImpressionsOverlay を閉じる', () => {
+    const html = getAiChatPage(minimalUser);
+    const idx = html.indexOf('historyModalDateLink.addEventListener');
+    expect(idx).toBeGreaterThan(-1);
+    const handler = html.slice(idx, idx + 500);
+    expect(handler).toContain('closeSearchImpressions');
+  });
+});
