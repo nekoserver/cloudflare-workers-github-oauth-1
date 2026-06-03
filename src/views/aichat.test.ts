@@ -697,3 +697,119 @@ describe('AIチャット: 日付リンクで impressionsOverlay も閉じる', (
     expect(handler).toContain('closeSearchImpressions');
   });
 });
+
+describe('AIチャット: サブクエリ一覧', () => {
+  it('タブバーに subqueriesBtn ボタンが存在する', () => {
+    const html = getAiChatPage(minimalUser);
+    expect(html).toContain('id="subqueriesBtn"');
+  });
+
+  it('subqueriesOverlay が存在する', () => {
+    const html = getAiChatPage(minimalUser);
+    expect(html).toContain('id="subqueriesOverlay"');
+  });
+
+  it('subqueries 新規追加ボタンが存在する', () => {
+    const html = getAiChatPage(minimalUser);
+    expect(html).toContain('id="subqueriesAddBtn"');
+  });
+
+  it('subqueries 新規追加フォームが存在する', () => {
+    const html = getAiChatPage(minimalUser);
+    expect(html).toContain('id="subqueriesAddInput"');
+  });
+
+  it('openSubqueries 関数が存在する', () => {
+    const html = getAiChatPage(minimalUser);
+    expect(html).toContain('function openSubqueries(');
+  });
+
+  it('openSubqueries が /api/aichat/subqueries を fetch する', () => {
+    const html = getAiChatPage(minimalUser);
+    const idx = html.indexOf('function openSubqueries(');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 600);
+    expect(fn).toContain('/api/aichat/subqueries');
+    expect(fn).toContain('fetch');
+  });
+
+  it('subqueries 新規追加の重複チェックが存在する', () => {
+    const html = getAiChatPage(minimalUser);
+    const idx = html.indexOf('subqueriesAddBtn.addEventListener');
+    expect(idx).toBeGreaterThan(-1);
+    const handler = html.slice(idx, idx + 1000);
+    expect(handler).toContain('/api/aichat/subqueries');
+    expect(handler).toContain('fetch');
+  });
+
+  it('subqueries 追加確定ボタン subqueriesAddSubmit が存在する', () => {
+    const html = getAiChatPage(minimalUser);
+    expect(html).toContain('id="subqueriesAddSubmit"');
+  });
+});
+
+describe('AIチャット: 過去ログモーダルの追加質問登録', () => {
+  it('過去ログモーダルに addSubqueryBtn ボタンが存在する', () => {
+    const html = getAiChatPage(minimalUser);
+    expect(html).toContain('id="historyModalAddSubqueryBtn"');
+  });
+
+  it('addSubqueryModal が存在する', () => {
+    const html = getAiChatPage(minimalUser);
+    expect(html).toContain('id="addSubqueryModal"');
+  });
+
+  it('addSubqueryModal に subquery 選択リストが存在する', () => {
+    const html = getAiChatPage(minimalUser);
+    expect(html).toContain('id="addSubqueryList"');
+  });
+
+  it('addSubqueryModal に URL 入力欄が存在する', () => {
+    const html = getAiChatPage(minimalUser);
+    expect(html).toContain('id="addSubqueryUrl"');
+  });
+
+  it('addSubqueryModal に 追加ボタンが存在する', () => {
+    const html = getAiChatPage(minimalUser);
+    expect(html).toContain('id="addSubquerySubmit"');
+  });
+
+  it('openAddSubqueryModal 関数が存在する', () => {
+    const html = getAiChatPage(minimalUser);
+    expect(html).toContain('function openAddSubqueryModal(');
+  });
+
+  it('openAddSubqueryModal が /api/aichat/subqueries を fetch する', () => {
+    const html = getAiChatPage(minimalUser);
+    const idx = html.indexOf('function openAddSubqueryModal(');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 800);
+    expect(fn).toContain('/api/aichat/subqueries');
+    expect(fn).toContain('fetch');
+  });
+
+  it('addSubquerySubmit が /api/aichat/share-subquery-links に POST する', () => {
+    const html = getAiChatPage(minimalUser);
+    const idx = html.indexOf('addSubquerySubmit.addEventListener');
+    expect(idx).toBeGreaterThan(-1);
+    const handler = html.slice(idx, idx + 800);
+    expect(handler).toContain('/api/aichat/share-subquery-links');
+    expect(handler).toContain('POST');
+  });
+});
+
+describe('AIチャット: 過去ログモーダルのサブクエリリンク表示', () => {
+  it('showHistoryModal が /api/aichat/share-subquery-links を fetch する', () => {
+    const html = getAiChatPage(minimalUser);
+    const idx = html.indexOf('function loadSubqueryLinks(');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 400);
+    expect(fn).toContain('/api/aichat/share-subquery-links');
+    expect(fn).toContain('fetch');
+  });
+
+  it('historyModalSubqueryLinks エリアが存在する', () => {
+    const html = getAiChatPage(minimalUser);
+    expect(html).toContain('id="historyModalSubqueryLinks"');
+  });
+});
