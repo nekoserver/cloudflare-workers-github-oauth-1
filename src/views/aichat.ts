@@ -2379,6 +2379,13 @@ export function getAiChatPage(user: {
           return d.shareUrl;
         });
       }
+      var addBtn = document.createElement('button');
+      addBtn.className = 'chat-share-btn';
+      addBtn.innerHTML = '＋ 追加質問を登録する';
+      addBtn.onclick = function() {
+        currentHistoryQuestion = question;
+        openAddSubqueryModal();
+      };
       var btn = document.createElement('button');
       btn.className = 'chat-share-btn';
       btn.innerHTML = '🔗 リンクをコピー';
@@ -2403,6 +2410,7 @@ export function getAiChatPage(user: {
           if (url) window.open(url, '_blank', 'noopener,noreferrer');
         }).catch(function() {});
       };
+      row.appendChild(addBtn);
       row.appendChild(btn);
       row.appendChild(openBtn);
       chatLog.appendChild(row);
