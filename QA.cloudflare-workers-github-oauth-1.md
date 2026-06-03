@@ -51,3 +51,27 @@ Resend ダッシュボードの Webhook 設定で、エンドポイント URL �
 ```
 https://<ワーカードメイン>/webhook/resend
 ```
+
+---
+
+## Q2. このリポジトリで書かれている TypeScript はどのバージョンに準拠しているか？（2026-06-03）
+
+### 回答
+
+| 項目 | 値 |
+|---|---|
+| TypeScript バージョン | `^5.3.3`（TypeScript 5系） |
+| コンパイルターゲット | `ES2022` |
+| モジュール形式 | `ES2022` |
+| ライブラリ定義 | `["ES2022"]` |
+| モジュール解決 | `bundler`（Wrangler / esbuild 向け） |
+| strict モード | ON（`"strict": true`） |
+
+`tsconfig.json` の `target` / `module` / `lib` がすべて `ES2022` に設定されているため、以下の機能が利用可能:
+
+- `Array.at()` / `Object.hasOwn()` / `Object.entries()` 等の ES2022 組み込み
+- トップレベル `await`
+- クラスフィールド宣言
+- `Error.cause`
+
+実行環境は Cloudflare Workers（V8ベース）なので ES2022 の機能はネイティブサポートされている。型定義は `@cloudflare/workers-types` を使用。

@@ -486,7 +486,7 @@ export function getAiChatPage(user: {
     .chat-bubble.thinking {
       align-self: flex-start; background: var(--card-bg); border: 1px solid var(--border-color); color: var(--text-muted); font-style: italic;
     }
-    .chat-share-row { align-self: flex-start; margin-top: -6px; }
+    .chat-share-row { align-self: flex-start; margin-top: -6px; display: flex; align-items: center; gap: 4px; }
     .chat-share-btn {
       background: none; border: 1px solid var(--border-color); border-radius: 6px;
       padding: 3px 9px; font-size: 11px; color: var(--text-muted); cursor: pointer;
@@ -494,6 +494,13 @@ export function getAiChatPage(user: {
     }
     .chat-share-btn:hover { background: var(--bg-secondary); color: var(--text-primary); }
     .chat-share-btn.copied { color: var(--success-color, #48bb78); border-color: var(--success-color, #48bb78); }
+    .chat-share-open-btn {
+      background: none; border: 1px solid var(--border-color); border-radius: 6px;
+      padding: 3px 7px; font-size: 11px; color: var(--text-muted); cursor: pointer;
+      display: inline-flex; align-items: center; text-decoration: none;
+      transition: background 0.15s, color 0.15s; line-height: 1;
+    }
+    .chat-share-open-btn:hover { background: var(--bg-secondary); color: var(--text-primary); }
     .chat-form-area {
       flex-shrink: 0; background: var(--bg-primary, #f8fafc); padding: 10px 0 18px; border-top: 1px solid var(--border-color);
     }
@@ -1868,7 +1875,7 @@ export function getAiChatPage(user: {
             + '</div>';
         }).join('');
         html += '<tr>'
-          + '<td class="kw-q-link" data-question="' + escHtml(item.question) + '" style="vertical-align:top;max-width:220px;">' + escHtml(item.question) + '</td>'
+          + '<td class="kw-q-link" data-question="' + escHtml(item.question) + '" data-share-id="' + escHtml(item.share_id || '') + '" style="vertical-align:top;max-width:220px;cursor:pointer;">' + escHtml(item.question) + '</td>'
           + '<td style="vertical-align:top;">' + linkRows + '</td>'
           + '</tr>';
       });
@@ -1876,12 +1883,10 @@ export function getAiChatPage(user: {
       linkedQuestionsBody.innerHTML = html;
       linkedQuestionsBody.querySelectorAll('td.kw-q-link').forEach(function(td) {
         td.addEventListener('click', function() {
-          var q = td.getAttribute('data-question');
-          if (!q) return;
-          var matched = (currentResults.length > 0 ? currentResults : []).find(function(r) { return r.question === q; });
-          if (matched) {
+          var shareId = td.getAttribute('data-share-id');
+          if (shareId) {
             closeLinkedQuestions();
-            showHistoryPreview(matched);
+            openHistoryModalByShareId(shareId, '[]');
           }
         });
       });
@@ -2142,28 +2147,44 @@ export function getAiChatPage(user: {
     function appendShareBtn(question, answer, model) {
       var row = document.createElement('div');
       row.className = 'chat-share-row';
+      var cachedUrl = null;
+      function getShareUrl() {
+        if (cachedUrl) return Promise.resolve(cachedUrl);
+        return fetch('/api/aichat/share', {
+          method: 'POST', credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ question: question, answer: answer, model: model })
+        }).then(function(r) { return r.json(); }).then(function(d) {
+          if (d.shareUrl) { cachedUrl = d.shareUrl; }
+          return d.shareUrl;
+        });
+      }
       var btn = document.createElement('button');
       btn.className = 'chat-share-btn';
       btn.innerHTML = '🔗 リンクをコピー';
       btn.onclick = function() {
-        fetch('/api/aichat/share', {
-          method: 'POST', credentials: 'same-origin',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ question: question, answer: answer, model: model })
-        })
-          .then(function(r) { return r.json(); })
-          .then(function(d) {
-            if (d.shareUrl) {
-              navigator.clipboard.writeText(d.shareUrl).then(function() {
-                btn.innerHTML = '✓ コピーしました';
-                btn.classList.add('copied');
-                setTimeout(function() { btn.innerHTML = '🔗 リンクをコピー'; btn.classList.remove('copied'); }, 2000);
-              });
-            }
-          })
-          .catch(function() {});
+        getShareUrl().then(function(url) {
+          if (!url) return;
+          navigator.clipboard.writeText(url).then(function() {
+            btn.innerHTML = '✓ コピーしました';
+            btn.classList.add('copied');
+            setTimeout(function() { btn.innerHTML = '🔗 リンクをコピー'; btn.classList.remove('copied'); }, 2000);
+          });
+        }).catch(function() {});
+      };
+      var openBtn = document.createElement('a');
+      openBtn.className = 'chat-share-open-btn';
+      openBtn.title = '別タブで開く';
+      openBtn.innerHTML = '↗';
+      openBtn.href = '#';
+      openBtn.onclick = function(e) {
+        e.preventDefault();
+        getShareUrl().then(function(url) {
+          if (url) window.open(url, '_blank', 'noopener,noreferrer');
+        }).catch(function() {});
       };
       row.appendChild(btn);
+      row.appendChild(openBtn);
       chatLog.appendChild(row);
       chatLog.scrollTop = chatLog.scrollHeight;
     }
