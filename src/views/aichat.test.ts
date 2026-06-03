@@ -968,3 +968,34 @@ describe('AIチャット: サブクエリを持つ質問一覧', () => {
     expect(handler).toContain('aichat_subqueries');
   });
 });
+
+describe('appendShareBtn — 別タブで開くボタン', () => {
+  it('chat-share-open-btn クラスが HTML に存在する', () => {
+    const html = getAiChatPage(minimalUser, []);
+    expect(html).toContain('chat-share-open-btn');
+  });
+
+  it('appendShareBtn が window.open を呼ぶコードを含む', () => {
+    const html = getAiChatPage(minimalUser, []);
+    const idx = html.indexOf('function appendShareBtn(');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 2500);
+    expect(fn).toContain('window.open');
+  });
+
+  it('appendShareBtn の window.open に _blank が含まれる', () => {
+    const html = getAiChatPage(minimalUser, []);
+    const idx = html.indexOf('function appendShareBtn(');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 2500);
+    expect(fn).toContain("'_blank'");
+  });
+
+  it('appendShareBtn 内でコピーと開くの両方が同じ shareUrl を使う（cachedUrl 共有）', () => {
+    const html = getAiChatPage(minimalUser, []);
+    const idx = html.indexOf('function appendShareBtn(');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 2500);
+    expect(fn).toContain('cachedUrl');
+  });
+});
