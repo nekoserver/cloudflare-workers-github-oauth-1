@@ -516,6 +516,7 @@ export function getAiChatPage(user: {
     <a href="/welcome" class="navbar-brand">🤖 AI チャット<span class="navbar-model">${modelShortName}</span></a>
     <div class="navbar-spacer"></div>
     <div class="user-menu">
+      <button class="search-hist-btn" id="linkedQuestionsBtn" title="サブクエリを持つ質問一覧">📎 リンク質問</button>
       <button class="search-hist-btn" id="subqueriesBtn" title="サブクエリ一覧">🔗 サブクエリ</button>
       <button class="search-hist-btn" id="searchImpressionsBtn" title="検索露出ログ">📋 露出ログ</button>
       <button class="search-hist-btn" id="searchKwAnalysisBtn" title="質問×キーワード分析">📊 質問分析</button>
@@ -647,6 +648,18 @@ export function getAiChatPage(user: {
         <button class="search-log-close" id="searchLogClose" aria-label="閉じる">✕</button>
       </div>
       <div class="search-log-body" id="searchLogBody">
+        <div class="search-log-loading">読み込み中...</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="search-log-overlay" id="linkedQuestionsOverlay" aria-hidden="true">
+    <div class="search-log-modal" role="dialog" aria-modal="true">
+      <div class="search-log-head">
+        <span class="search-log-title">サブクエリを持つ質問一覧</span>
+        <button class="search-log-close" id="linkedQuestionsClose" aria-label="閉じる">✕</button>
+      </div>
+      <div class="search-log-body" id="linkedQuestionsBody">
         <div class="search-log-loading">読み込み中...</div>
       </div>
     </div>
@@ -1739,6 +1752,64 @@ export function getAiChatPage(user: {
     historyModalSearchInput.addEventListener('keydown', function(e) {
       if (e.key === 'Enter') doHistoryModalSearch();
     });
+
+    // ===== サブクエリを持つ質問一覧 =====
+    var linkedQuestionsOverlay = document.getElementById('linkedQuestionsOverlay');
+    var linkedQuestionsClose = document.getElementById('linkedQuestionsClose');
+    var linkedQuestionsBody = document.getElementById('linkedQuestionsBody');
+    var linkedQuestionsBtn = document.getElementById('linkedQuestionsBtn');
+
+    function renderLinkedQuestions(items) {
+      if (!items || items.length === 0) {
+        linkedQuestionsBody.innerHTML = '<div style="color:var(--text-muted);padding:10px;">サブクエリが紐付いた質問がまだありません</div>';
+        return;
+      }
+      var html = '<table class="search-log-table"><thead><tr><th>質問</th><th>サブクエリ / リンク</th></tr></thead><tbody>';
+      items.forEach(function(item) {
+        var linkRows = (item.links || []).map(function(lk) {
+          return '<div style="display:flex;gap:6px;align-items:center;margin-bottom:2px;">'
+            + '<span style="color:var(--text-secondary);font-size:12px;">' + escHtml(lk.query) + '</span>'
+            + '<a href="' + escHtml(lk.url) + '" target="_blank" rel="noopener noreferrer" style="color:var(--accent-color,#667eea);font-size:11px;white-space:nowrap;">🔗 開く</a>'
+            + '</div>';
+        }).join('');
+        html += '<tr>'
+          + '<td class="kw-q-link" data-question="' + escHtml(item.question) + '" style="vertical-align:top;max-width:220px;">' + escHtml(item.question) + '</td>'
+          + '<td style="vertical-align:top;">' + linkRows + '</td>'
+          + '</tr>';
+      });
+      html += '</tbody></table>';
+      linkedQuestionsBody.innerHTML = html;
+      linkedQuestionsBody.querySelectorAll('td.kw-q-link').forEach(function(td) {
+        td.addEventListener('click', function() {
+          var q = td.getAttribute('data-question');
+          if (!q) return;
+          var matched = (currentResults.length > 0 ? currentResults : []).find(function(r) { return r.question === q; });
+          if (matched) {
+            closeLinkedQuestions();
+            showHistoryPreview(matched);
+          }
+        });
+      });
+    }
+
+    function openLinkedQuestions() {
+      linkedQuestionsOverlay.classList.add('open');
+      linkedQuestionsOverlay.setAttribute('aria-hidden', 'false');
+      linkedQuestionsBody.innerHTML = '<div class="search-log-loading">読み込み中...</div>';
+      fetch('/api/aichat/share-subquery-links/all', { credentials: 'same-origin' })
+        .then(function(r) { return r.json(); })
+        .then(function(d) { renderLinkedQuestions(d.items || []); })
+        .catch(function() { linkedQuestionsBody.innerHTML = '<div style="color:var(--text-muted);">取得に失敗しました</div>'; });
+    }
+
+    function closeLinkedQuestions() {
+      linkedQuestionsOverlay.classList.remove('open');
+      linkedQuestionsOverlay.setAttribute('aria-hidden', 'true');
+    }
+
+    linkedQuestionsBtn.addEventListener('click', function(e) { e.stopPropagation(); openLinkedQuestions(); });
+    linkedQuestionsClose.addEventListener('click', function() { closeLinkedQuestions(); });
+    linkedQuestionsOverlay.addEventListener('click', function(e) { if (e.target === linkedQuestionsOverlay) closeLinkedQuestions(); });
 
     // ===== サブクエリ一覧 =====
     var subqueriesOverlay = document.getElementById('subqueriesOverlay');

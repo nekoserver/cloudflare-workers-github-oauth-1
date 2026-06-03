@@ -3036,6 +3036,29 @@ app.get('/api/aichat/share-subquery-links', authMiddleware, async (c) => {
 });
 
 /**
+ * サブクエリを持つ全質問一覧 API（question 単位でグループ集計）
+ */
+app.get('/api/aichat/share-subquery-links/all', authMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  const rows = await c.env.DB.prepare(
+    `SELECT l.question, l.subquery_id, l.url, q.query
+     FROM aichat_share_subquery_links l
+     JOIN aichat_subqueries q ON q.id = l.subquery_id
+     WHERE l.user_id = ?
+     ORDER BY l.question, l.id ASC`
+  ).bind(user.sub).all<{
+    question: string; subquery_id: number; url: string; query: string;
+  }>();
+  const map = new Map<string, { question: string; links: { subquery_id: number; query: string; url: string }[] }>();
+  for (const r of rows.results ?? []) {
+    if (!map.has(r.question)) map.set(r.question, { question: r.question, links: [] });
+    map.get(r.question)!.links.push({ subquery_id: r.subquery_id, query: r.query, url: r.url });
+  }
+  return jsonUtf8({ items: Array.from(map.values()) });
+});
+
+/**
  * 質問×サブクエリリンク登録 API（同一質問×サブクエリは重複無視）
  */
 app.post('/api/aichat/share-subquery-links', authMiddleware, async (c) => {

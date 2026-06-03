@@ -813,3 +813,48 @@ describe('AIチャット: 過去ログモーダルのサブクエリリンク表
     expect(html).toContain('id="historyModalSubqueryLinks"');
   });
 });
+
+describe('AIチャット: サブクエリを持つ質問一覧', () => {
+  it('linkedQuestionsBtn ボタンが存在する', () => {
+    const html = getAiChatPage(minimalUser);
+    expect(html).toContain('id="linkedQuestionsBtn"');
+  });
+
+  it('linkedQuestionsOverlay が存在する', () => {
+    const html = getAiChatPage(minimalUser);
+    expect(html).toContain('id="linkedQuestionsOverlay"');
+  });
+
+  it('openLinkedQuestions 関数が存在する', () => {
+    const html = getAiChatPage(minimalUser);
+    expect(html).toContain('function openLinkedQuestions(');
+  });
+
+  it('openLinkedQuestions が /api/aichat/share-subquery-links を fetch する', () => {
+    const html = getAiChatPage(minimalUser);
+    const idx = html.indexOf('function openLinkedQuestions(');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 600);
+    expect(fn).toContain('/api/aichat/share-subquery-links');
+    expect(fn).toContain('fetch');
+  });
+
+  it('index.ts に GET /api/aichat/share-subquery-links/all エンドポイントが存在する', () => {
+    const { readFileSync } = require('node:fs');
+    const { resolve } = require('node:path');
+    const src = readFileSync(resolve(__dirname, '..', 'index.ts'), 'utf-8');
+    const idx = src.indexOf("app.get('/api/aichat/share-subquery-links/all'");
+    expect(idx).toBeGreaterThan(-1);
+  });
+
+  it('all エンドポイントが question 単位に集計する', () => {
+    const { readFileSync } = require('node:fs');
+    const { resolve } = require('node:path');
+    const src = readFileSync(resolve(__dirname, '..', 'index.ts'), 'utf-8');
+    const idx = src.indexOf("app.get('/api/aichat/share-subquery-links/all'");
+    expect(idx).toBeGreaterThan(-1);
+    const handler = src.slice(idx, idx + 800);
+    expect(handler).toContain('aichat_share_subquery_links');
+    expect(handler).toContain('aichat_subqueries');
+  });
+});
