@@ -1288,7 +1288,7 @@ export function getAiChatPage(user: {
     });
 
     document.addEventListener('click', function(e) {
-      if (sidebarOpen && isTapCloseEnabled() && !sidebar.contains(e.target) && e.target !== sidebarToggle) {
+      if (sidebarOpen && isTapCloseEnabled() && !sidebar.contains(e.target) && !sidebarKwModal.contains(e.target) && e.target !== sidebarToggle) {
         closeSidebar();
       }
     });

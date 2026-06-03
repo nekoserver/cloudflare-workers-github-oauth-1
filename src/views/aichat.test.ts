@@ -1336,3 +1336,21 @@ describe('キーワードモーダル：ソートトグル・件数表示・検�
     expect(html).toContain("sidebarKwSortAlpha.addEventListener(");
   });
 });
+
+describe('キーワードモーダルクリック時にサイドバーが閉じない', () => {
+  it('document click ハンドラが sidebarKwModal.contains チェックを含む', () => {
+    const html = getAiChatPage(minimalUser, []);
+    const idx = html.indexOf("sidebarOpen && isTapCloseEnabled()");
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 300);
+    expect(fn).toContain('sidebarKwModal.contains');
+  });
+
+  it('document click ハンドラが sidebarKwModal 内クリックではサイドバーを閉じない条件を持つ', () => {
+    const html = getAiChatPage(minimalUser, []);
+    const idx = html.indexOf("sidebarOpen && isTapCloseEnabled()");
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 300);
+    expect(fn).toMatch(/!sidebarKwModal\.contains\(e\.target\)/);
+  });
+});
