@@ -394,8 +394,10 @@ export function getAiChatPage(user: {
       transition: background 0.15s, color 0.15s;
     }
     .history-modal-search-btn:hover { background: var(--accent-color, #667eea); color: #fff; border-color: var(--accent-color, #667eea); }
-    .has-subquery { background: rgba(56, 189, 248, 0.12) !important; }
-    .has-subquery:hover { background: rgba(56, 189, 248, 0.22) !important; cursor: pointer; }
+    td.has-subquery { background: rgba(56, 189, 248, 0.12); cursor: pointer; }
+    td.has-subquery:hover { background: rgba(56, 189, 248, 0.22); }
+    td.has-subquery .impr-q-text { cursor: pointer; }
+    .impr-kw-filter-active { cursor: pointer; margin-left: 6px; background: var(--accent-color,#667eea); color: #fff; }
     .subqueries-add-area { padding: 10px 14px; border-bottom: 1px solid var(--border-color); display: flex; flex-direction: column; gap: 6px; }
     .subqueries-add-form { display: flex; gap: 6px; align-items: center; margin-top: 4px; }
     .subqueries-add-msg { font-size: 12px; color: var(--text-muted); }
@@ -780,18 +782,26 @@ export function getAiChatPage(user: {
       document.cookie = IMPR_DATE_COOKIE + '=' + (val ? 'on' : 'off') + '; Path=/; Secure; SameSite=Lax; Max-Age=31536000';
     }
 
-    function renderImpressionsTable(items, subqueryMap) {
-      if (items.length === 0) {
-        searchImpressionsBody.innerHTML = '<div class="search-log-empty">記録がありません</div>';
+    function renderImpressionsTable(items, subqueryMap, keywordFilter) {
+      var sqMap = subqueryMap || {};
+      var filtered = keywordFilter
+        ? items.filter(function(item) {
+            return (item.keywords || []).some(function(k) { return k.keyword === keywordFilter; });
+          })
+        : items;
+      if (filtered.length === 0) {
+        searchImpressionsBody.innerHTML = '<div class="search-log-empty">' + (keywordFilter ? 'このキーワードを含む記録がありません' : '記録がありません') + '</div>';
         return;
       }
-      var sqMap = subqueryMap || {};
       var showDate = getImpressionsDateVisible();
-      var sorted = items.slice().sort(function(a, b) {
+      var sorted = filtered.slice().sort(function(a, b) {
         return (b.keywords || []).length - (a.keywords || []).length;
       });
+      var kwThExtra = keywordFilter
+        ? '<span class="kw-analysis-badge impr-kw-filter-active" title="クリックでフィルタをクリア">✕ ' + escHtml(keywordFilter) + '</span>'
+        : '';
       var html = '<table class="search-log-table"><thead><tr>' +
-        '<th>総数</th><th>No.</th><th>質問（概要）</th><th>キーワード（選択回数）</th>' +
+        '<th>総数</th><th>No.</th><th>質問（概要）</th><th>キーワード（選択回数）' + kwThExtra + '</th>' +
         (showDate ? '<th>最終検索</th>' : '') +
         '</tr></thead><tbody>';
       sorted.forEach(function(item, idx) {
@@ -799,17 +809,24 @@ export function getAiChatPage(user: {
         var q = item.question || '';
         var qShort = q.length > 40 ? q.slice(0, 40) + '…' : q || '(削除済み)';
         var badges = kwSorted.map(function(k) {
-          return '<span class="kw-analysis-badge">' + escHtml(k.keyword) + '(' + k.max_select_count + ')</span>';
+          return '<span class="kw-analysis-badge" data-keyword="' + escHtml(k.keyword) + '">' + escHtml(k.keyword) + '(' + k.max_select_count + ')</span>';
         }).join('');
         var kwNames = JSON.stringify(kwSorted.map(function(k) { return k.keyword; }));
         var kwCount = kwSorted.length;
         var hasSq = q && sqMap[q] && sqMap[q].length > 0;
-        var rowClass = hasSq ? ' class="has-subquery"' : '';
-        var sqAttr = hasSq ? ' data-has-subquery="1" data-question="' + escHtml(q) + '"' : '';
-        html += '<tr' + rowClass + sqAttr + '>';
+        var qTdClass = hasSq ? 'td.search-log-q has-subquery' : 'td.search-log-q kw-q-link';
+        var qTdContent = hasSq
+          ? '<span class="impr-q-text kw-q-link">' + escHtml(qShort) + '</span>'
+          : escHtml(qShort);
+        var sqDataAttr = hasSq ? ' data-question="' + escHtml(q) + '"' : '';
+        html += '<tr>';
         html += '<td class="search-log-count">' + kwCount + '</td>';
         html += '<td class="search-log-date">' + (idx + 1) + '</td>';
-        html += '<td class="search-log-q kw-q-link" data-share-id="' + escHtml(item.share_id) + '" data-keywords="' + escHtml(kwNames) + '" title="' + escHtml(q) + '">' + escHtml(qShort) + '</td>';
+        if (hasSq) {
+          html += '<td class="search-log-q has-subquery" data-share-id="' + escHtml(item.share_id) + '" data-keywords="' + escHtml(kwNames) + '" data-question="' + escHtml(q) + '" title="' + escHtml(q) + '">' + qTdContent + '</td>';
+        } else {
+          html += '<td class="search-log-q kw-q-link" data-share-id="' + escHtml(item.share_id) + '" data-keywords="' + escHtml(kwNames) + '" title="' + escHtml(q) + '">' + qTdContent + '</td>';
+        }
         html += '<td class="kw-analysis-badges">' + (badges || '<span style="color:var(--text-muted);font-size:12px">-</span>') + '</td>';
         if (showDate) {
           var dateStr = item.last_searched_at ? item.last_searched_at.slice(0, 10) : '';
@@ -827,11 +844,13 @@ export function getAiChatPage(user: {
 
     var impressionsCachedItems = [];
     var impressionsCachedSubqueryMap = {};
+    var impressionsKeywordFilter = null;
 
     function openSearchImpressions() {
       searchImpressionsOverlay.classList.add('open');
       searchImpressionsOverlay.setAttribute('aria-hidden', 'false');
       impressionsDateToggleBtn.classList.toggle('active', getImpressionsDateVisible());
+      impressionsKeywordFilter = null;
       searchImpressionsBody.innerHTML = '<div class="search-log-loading">読み込み中...</div>';
       Promise.all([
         fetch('/api/aichat/search-impressions', { credentials: 'same-origin' }).then(function(r) { return r.json(); }),
@@ -841,7 +860,7 @@ export function getAiChatPage(user: {
         var sqItems = results[1].items || [];
         impressionsCachedSubqueryMap = {};
         sqItems.forEach(function(g) { impressionsCachedSubqueryMap[g.question] = g.links || []; });
-        renderImpressionsTable(impressionsCachedItems, impressionsCachedSubqueryMap);
+        renderImpressionsTable(impressionsCachedItems, impressionsCachedSubqueryMap, null);
       }).catch(function() { searchImpressionsBody.innerHTML = '<div class="search-log-empty">読み込みエラー</div>'; });
     }
 
@@ -855,7 +874,7 @@ export function getAiChatPage(user: {
       var next = !getImpressionsDateVisible();
       setImpressionsDateVisible(next);
       impressionsDateToggleBtn.classList.toggle('active', next);
-      renderImpressionsTable(impressionsCachedItems, impressionsCachedSubqueryMap);
+      renderImpressionsTable(impressionsCachedItems, impressionsCachedSubqueryMap, impressionsKeywordFilter);
     });
 
     var impressionsSubqueryModal = document.getElementById('impressionsSubqueryModal');
@@ -886,6 +905,15 @@ export function getAiChatPage(user: {
     impressionsSubqueryModalClose.addEventListener('click', function() { closeImpressionsSubqueryModal(); });
     impressionsSubqueryModal.addEventListener('click', function(e) { if (e.target === impressionsSubqueryModal) closeImpressionsSubqueryModal(); });
 
+    function openHistoryModalByShareId(shareId, keywordsJson) {
+      var keywords = [];
+      try { keywords = JSON.parse(keywordsJson || '[]'); } catch(err) {}
+      fetch('/api/aichat/shares/' + encodeURIComponent(shareId), { credentials: 'same-origin' })
+        .then(function(r) { return r.json(); })
+        .then(function(data) { if (data && data.question) showHistoryModal(data, keywords); })
+        .catch(function() {});
+    }
+
     searchImpressionsBody.addEventListener('click', function(e) {
       var dateBtn = e.target.closest('button.impr-date-link');
       if (dateBtn) {
@@ -908,27 +936,37 @@ export function getAiChatPage(user: {
         doDateLoad(date);
         return;
       }
-      var row = e.target.closest('tr[data-has-subquery="1"]');
-      if (row) {
-        var q = row.getAttribute('data-question');
-        var links = impressionsCachedSubqueryMap[q] || [];
-        if (links.length > 0) {
-          openImpressionsSubqueryModal(q, links);
-          return;
-        }
+      var clearBadge = e.target.closest('.impr-kw-filter-active');
+      if (clearBadge) {
+        impressionsKeywordFilter = null;
+        renderImpressionsTable(impressionsCachedItems, impressionsCachedSubqueryMap, null);
+        return;
       }
-      var td = e.target.closest('td[data-share-id]');
-      if (!td) return;
-      var shareId = td.getAttribute('data-share-id');
-      var keywords = [];
-      try { keywords = JSON.parse(td.getAttribute('data-keywords') || '[]'); } catch(err) {}
-      fetch('/api/aichat/shares/' + encodeURIComponent(shareId), { credentials: 'same-origin' })
-        .then(function(r) { return r.json(); })
-        .then(function(data) {
-          if (!data || !data.question) return;
-          showHistoryModal(data, keywords);
-        })
-        .catch(function() {});
+      var kwBadge = e.target.closest('.kw-analysis-badge:not(.impr-kw-filter-active)');
+      if (kwBadge) {
+        var kw = kwBadge.getAttribute('data-keyword');
+        if (kw) {
+          impressionsKeywordFilter = kw;
+          renderImpressionsTable(impressionsCachedItems, impressionsCachedSubqueryMap, kw);
+        }
+        return;
+      }
+      var qSpan = e.target.closest('span.impr-q-text');
+      if (qSpan) {
+        var td = qSpan.closest('td[data-share-id]');
+        if (td) openHistoryModalByShareId(td.getAttribute('data-share-id'), td.getAttribute('data-keywords'));
+        return;
+      }
+      var sqTd = e.target.closest('td.has-subquery');
+      if (sqTd) {
+        var q = sqTd.getAttribute('data-question');
+        var links = impressionsCachedSubqueryMap[q] || [];
+        if (links.length > 0) { openImpressionsSubqueryModal(q, links); }
+        return;
+      }
+      var td2 = e.target.closest('td[data-share-id]');
+      if (!td2) return;
+      openHistoryModalByShareId(td2.getAttribute('data-share-id'), td2.getAttribute('data-keywords'));
     });
 
     searchImpressionsBtn.addEventListener('click', function(e) { e.stopPropagation(); openSearchImpressions(); });
