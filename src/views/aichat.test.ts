@@ -534,7 +534,7 @@ describe('AIチャット: 露出ログボタンと searchImpressionsOverlay', ()
     const html = getAiChatPage(minimalUser);
     const idx = html.indexOf('function renderImpressionsTable(');
     expect(idx).toBeGreaterThan(-1);
-    const fnBody = html.slice(idx, idx + 1600);
+    const fnBody = html.slice(idx, idx + 1900);
     expect(fnBody).toContain('kwCount');
     expect(fnBody).toContain('kwSorted.length');
   });
@@ -552,7 +552,7 @@ describe('AIチャット: 露出ログボタンと searchImpressionsOverlay', ()
     const html = getAiChatPage(minimalUser);
     const idx = html.indexOf('function renderImpressionsTable(');
     expect(idx).toBeGreaterThan(-1);
-    const fnBody = html.slice(idx, idx + 1600);
+    const fnBody = html.slice(idx, idx + 1900);
     expect(fnBody).toContain('kw-analysis-badge');
   });
 
@@ -560,17 +560,17 @@ describe('AIチャット: 露出ログボタンと searchImpressionsOverlay', ()
     const html = getAiChatPage(minimalUser);
     const idx = html.indexOf('function renderImpressionsTable(');
     expect(idx).toBeGreaterThan(-1);
-    const fnBody = html.slice(idx, idx + 2000);
+    const fnBody = html.slice(idx, idx + 2500);
     expect(fnBody).toContain('data-share-id');
   });
 
   it('impressions 質問セルクリックで showHistoryModal を呼ぶ', () => {
     const html = getAiChatPage(minimalUser);
-    const idx = html.indexOf('searchImpressionsBody.addEventListener');
+    const idx = html.indexOf('function openHistoryModalByShareId(');
     expect(idx).toBeGreaterThan(-1);
-    const fnBody = html.slice(idx, idx + 1700);
+    const fnBody = html.slice(idx, idx + 500);
     expect(fnBody).toContain('showHistoryModal');
-    expect(fnBody).toContain('data-share-id');
+    expect(fnBody).toContain('shareId');
   });
 
   it('impressions Escape キーで historyModal が開いている時は閉じない', () => {
@@ -598,7 +598,7 @@ describe('AIチャット: 露出ログボタンと searchImpressionsOverlay', ()
     const html = getAiChatPage(minimalUser);
     const idx = html.indexOf('function renderImpressionsTable(');
     expect(idx).toBeGreaterThan(-1);
-    const fnBody = html.slice(idx, idx + 2400);
+    const fnBody = html.slice(idx, idx + 3300);
     expect(fnBody).toContain('data-month');
     expect(fnBody).toContain('data-date');
   });
@@ -629,6 +629,77 @@ describe('AIチャット: 露出ログボタンと searchImpressionsOverlay', ()
     expect(fn).toContain('has-subquery');
   });
 
+  it('has-subquery クラスは td（質問カラム）に付与される（tr ではない）', () => {
+    const html = getAiChatPage(minimalUser);
+    const idx = html.indexOf('function renderImpressionsTable(');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 2000);
+    // td に has-subquery が付く
+    expect(fn).toContain("'td.search-log-q has-subquery'");
+    // tr には付かない
+    expect(fn).not.toContain("tr' + rowClass");
+  });
+
+  it('has-subquery の質問セル内に span.impr-q-text が生成される', () => {
+    const html = getAiChatPage(minimalUser);
+    const idx = html.indexOf('function renderImpressionsTable(');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 2000);
+    expect(fn).toContain('impr-q-text');
+  });
+
+  it('キーワードバッジに data-keyword 属性が付与される', () => {
+    const html = getAiChatPage(minimalUser);
+    const idx = html.indexOf('function renderImpressionsTable(');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 2000);
+    expect(fn).toContain('data-keyword');
+  });
+
+  it('renderImpressionsTable が keywordFilter パラメータを受け取る', () => {
+    const html = getAiChatPage(minimalUser);
+    const idx = html.indexOf('function renderImpressionsTable(');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 200);
+    expect(fn).toContain('keywordFilter');
+  });
+
+  it('th にアクティブフィルタバッジ impr-kw-filter-active が埋め込まれる', () => {
+    const html = getAiChatPage(minimalUser);
+    const idx = html.indexOf('function renderImpressionsTable(');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 2000);
+    expect(fn).toContain('impr-kw-filter-active');
+  });
+
+  it('クリックハンドラがバッジクリックでフィルタを設定して再描画する', () => {
+    const html = getAiChatPage(minimalUser);
+    const idx = html.indexOf('searchImpressionsBody.addEventListener');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 2000);
+    expect(fn).toContain('kw-analysis-badge');
+    expect(fn).toContain('data-keyword');
+    expect(fn).toContain('impressionsKeywordFilter');
+  });
+
+  it('クリックハンドラがフィルタバッジクリックでフィルタをクリアする', () => {
+    const html = getAiChatPage(minimalUser);
+    const idx = html.indexOf('searchImpressionsBody.addEventListener');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 2000);
+    expect(fn).toContain('impr-kw-filter-active');
+    expect(fn).toContain('null');
+  });
+
+  it('クリックハンドラが span.impr-q-text クリックで過去ログモーダルを開く', () => {
+    const html = getAiChatPage(minimalUser);
+    const idx = html.indexOf('searchImpressionsBody.addEventListener');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 1700);
+    expect(fn).toContain('impr-q-text');
+    expect(fn).toContain('openHistoryModalByShareId');
+  });
+
   it('openSearchImpressions が share-subquery-links/all も fetch する', () => {
     const html = getAiChatPage(minimalUser);
     const idx = html.indexOf('function openSearchImpressions(');
@@ -647,7 +718,7 @@ describe('AIチャット: 露出ログボタンと searchImpressionsOverlay', ()
     const html = getAiChatPage(minimalUser);
     const idx = html.indexOf('searchImpressionsBody.addEventListener');
     expect(idx).toBeGreaterThan(-1);
-    const fn = html.slice(idx, idx + 1200);
+    const fn = html.slice(idx, idx + 2000);
     expect(fn).toContain('has-subquery');
     expect(fn).toContain('openImpressionsSubqueryModal');
   });
