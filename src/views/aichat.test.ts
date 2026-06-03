@@ -1117,6 +1117,44 @@ describe('appendShareBtn — 別タブで開くボタン', () => {
   });
 });
 
+describe('appendShareBtn — 追加質問ボタン', () => {
+  it('appendShareBtn 内に追加質問ボタン（＋）が存在する', () => {
+    const html = getAiChatPage(minimalUser, []);
+    const idx = html.indexOf('function appendShareBtn(');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 2500);
+    expect(fn).toContain('追加質問');
+  });
+
+  it('追加質問ボタンクリック時に currentHistoryQuestion をセットする', () => {
+    const html = getAiChatPage(minimalUser, []);
+    const idx = html.indexOf('function appendShareBtn(');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 2500);
+    expect(fn).toContain('currentHistoryQuestion');
+  });
+
+  it('追加質問ボタンクリック時に openAddSubqueryModal を呼ぶ', () => {
+    const html = getAiChatPage(minimalUser, []);
+    const idx = html.indexOf('function appendShareBtn(');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 2500);
+    expect(fn).toContain('openAddSubqueryModal');
+  });
+
+  it('追加質問ボタンが リンクをコピー ボタンの前（左）に配置される', () => {
+    const html = getAiChatPage(minimalUser, []);
+    const idx = html.indexOf('function appendShareBtn(');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 2500);
+    const addIdx = fn.indexOf('追加質問');
+    const copyIdx = fn.indexOf('リンクをコピー');
+    expect(addIdx).toBeGreaterThan(-1);
+    expect(copyIdx).toBeGreaterThan(-1);
+    expect(addIdx).toBeLessThan(copyIdx);
+  });
+});
+
 describe('サイドバー：モデル名削除・新着/キーワードトグル・キーワードフィルタ', () => {
   it('renderSidebarResults の result-meta にモデル名表示コードが含まれない', () => {
     const html = getAiChatPage(minimalUser, []);
