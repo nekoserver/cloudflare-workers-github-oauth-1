@@ -394,6 +394,10 @@ export function getAiChatPage(user: {
       transition: background 0.15s, color 0.15s;
     }
     .history-modal-search-btn:hover { background: var(--accent-color, #667eea); color: #fff; border-color: var(--accent-color, #667eea); }
+    .subqueries-add-area { padding: 10px 14px; border-bottom: 1px solid var(--border-color); display: flex; flex-direction: column; gap: 6px; }
+    .subqueries-add-form { display: flex; gap: 6px; align-items: center; margin-top: 4px; }
+    .subqueries-add-msg { font-size: 12px; color: var(--text-muted); }
+    .subquery-select-item:hover { background: var(--bg-secondary) !important; }
     .history-modal-title { font-size: 14px; font-weight: 700; color: var(--text-primary); }
     .history-modal-date { font-size: 11px; color: var(--text-muted); }
     .history-modal-date-link {
@@ -512,6 +516,7 @@ export function getAiChatPage(user: {
     <a href="/welcome" class="navbar-brand">🤖 AI チャット<span class="navbar-model">${modelShortName}</span></a>
     <div class="navbar-spacer"></div>
     <div class="user-menu">
+      <button class="search-hist-btn" id="subqueriesBtn" title="サブクエリ一覧">🔗 サブクエリ</button>
       <button class="search-hist-btn" id="searchImpressionsBtn" title="検索露出ログ">📋 露出ログ</button>
       <button class="search-hist-btn" id="searchKwAnalysisBtn" title="質問×キーワード分析">📊 質問分析</button>
       <button class="search-hist-btn" id="searchHistoryBtn" title="検索明細履歴">🗂 検索明細</button>
@@ -647,6 +652,50 @@ export function getAiChatPage(user: {
     </div>
   </div>
 
+  <div class="search-log-overlay" id="subqueriesOverlay" aria-hidden="true">
+    <div class="search-log-modal" role="dialog" aria-modal="true">
+      <div class="search-log-head">
+        <span class="search-log-title">サブクエリ一覧</span>
+        <button class="search-log-close" id="subqueriesClose" aria-label="閉じる">✕</button>
+      </div>
+      <div class="search-log-body" id="subqueriesBody">
+        <div class="subqueries-add-area">
+          <button class="search-hist-btn" id="subqueriesAddBtn">＋ 新規追加</button>
+          <div class="subqueries-add-form" id="subqueriesAddForm" style="display:none;">
+            <input class="history-modal-search-input" id="subqueriesAddInput" type="text" placeholder="サブクエリを入力..." autocomplete="off" maxlength="500">
+            <button class="search-hist-btn" id="subqueriesAddSubmit" style="display:none;">追加</button>
+          </div>
+          <div class="subqueries-add-msg" id="subqueriesAddMsg"></div>
+        </div>
+        <div id="subqueriesListBody">
+          <div class="search-log-loading">読み込み中...</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="search-log-overlay" id="addSubqueryModal" aria-hidden="true" style="z-index:900;">
+    <div class="search-log-modal" role="dialog" aria-modal="true">
+      <div class="search-log-head">
+        <span class="search-log-title">追加質問を登録する</span>
+        <button class="search-log-close" id="addSubqueryClose" aria-label="閉じる">✕</button>
+      </div>
+      <div class="search-log-body">
+        <div id="addSubqueryList" style="max-height:260px;overflow-y:auto;margin-bottom:10px;"></div>
+        <div style="margin-bottom:6px;">
+          <label style="font-size:12px;color:var(--text-secondary);">選択中のサブクエリ</label>
+          <input class="history-modal-search-input" id="addSubquerySelected" type="text" readonly placeholder="上の一覧から選択..." style="background:var(--bg-secondary);cursor:default;">
+        </div>
+        <div style="margin-bottom:10px;">
+          <label style="font-size:12px;color:var(--text-secondary);">URL</label>
+          <input class="history-modal-search-input" id="addSubqueryUrl" type="url" placeholder="https://..." autocomplete="off">
+        </div>
+        <button class="search-hist-btn" id="addSubquerySubmit">登録する</button>
+        <div class="subqueries-add-msg" id="addSubqueryMsg"></div>
+      </div>
+    </div>
+  </div>
+
   <div class="delete-confirm-overlay" id="deleteConfirmOverlay">
     <div class="delete-confirm-box">
       <div class="delete-confirm-title">過去ログを削除しますか？</div>
@@ -675,7 +724,9 @@ export function getAiChatPage(user: {
       <div class="history-modal-foot">
         <span id="historyModalMeta"></span>
         <a class="history-modal-link" id="historyModalShareLink" href="#" target="_blank">🔗 共有ページを開く</a>
+        <button class="search-hist-btn" id="historyModalAddSubqueryBtn" style="margin-left:auto;">＋ 追加質問を登録する</button>
       </div>
+      <div id="historyModalSubqueryLinks" style="padding:6px 14px 8px;font-size:12px;display:none;"></div>
     </div>
   </div>
 
@@ -1565,6 +1616,38 @@ export function getAiChatPage(user: {
       resultsPanel.classList.add('open');
     }
 
+    var historyModalSubqueryLinks = document.getElementById('historyModalSubqueryLinks');
+    var historyModalAddSubqueryBtn = document.getElementById('historyModalAddSubqueryBtn');
+    var currentHistoryQuestion = '';
+
+    function renderSubqueryLinks(items) {
+      if (!items || items.length === 0) {
+        historyModalSubqueryLinks.style.display = 'none';
+        historyModalSubqueryLinks.innerHTML = '';
+        return;
+      }
+      var html = '<div style="font-weight:600;margin-bottom:4px;color:var(--text-secondary);">追加質問リンク</div>';
+      html += '<div style="display:flex;flex-direction:column;gap:4px;">';
+      items.forEach(function(item) {
+        html += '<div style="display:flex;gap:8px;align-items:center;">';
+        html += '<span style="color:var(--text-muted);">' + escHtml(item.query) + '</span>';
+        html += '<a href="' + escHtml(item.url) + '" target="_blank" rel="noopener noreferrer" style="color:var(--accent-color,#667eea);text-decoration:none;font-size:11px;">🔗 開く</a>';
+        html += '</div>';
+      });
+      html += '</div>';
+      historyModalSubqueryLinks.innerHTML = html;
+      historyModalSubqueryLinks.style.display = 'block';
+    }
+
+    function loadSubqueryLinks(question) {
+      fetch('/api/aichat/share-subquery-links?question=' + encodeURIComponent(question), {
+        credentials: 'same-origin'
+      })
+        .then(function(r) { return r.json(); })
+        .then(function(d) { renderSubqueryLinks(d.items || []); })
+        .catch(function() { historyModalSubqueryLinks.style.display = 'none'; });
+    }
+
     function showHistoryModal(r, keyword) {
       closeResultsPanel();
       historyModalChat.innerHTML = '';
@@ -1576,8 +1659,12 @@ export function getAiChatPage(user: {
       historyModalMeta.textContent = r.model + '　👁 ' + (r.access_count || 0);
       historyModalShareLink.href = '/s/' + r.user_hash + '/' + r.id;
       historyModalCurrentId = r.id;
+      currentHistoryQuestion = r.question || '';
+      historyModalSubqueryLinks.style.display = 'none';
+      historyModalSubqueryLinks.innerHTML = '';
       historyModalBackdrop.classList.add('open');
       historyModalBackdrop.setAttribute('aria-hidden', 'false');
+      if (currentHistoryQuestion) loadSubqueryLinks(currentHistoryQuestion);
     }
 
     function showHistoryPreview(r) {
@@ -1651,6 +1738,191 @@ export function getAiChatPage(user: {
     historyModalSearchBtn.addEventListener('click', function(e) { e.stopPropagation(); doHistoryModalSearch(); });
     historyModalSearchInput.addEventListener('keydown', function(e) {
       if (e.key === 'Enter') doHistoryModalSearch();
+    });
+
+    // ===== サブクエリ一覧 =====
+    var subqueriesOverlay = document.getElementById('subqueriesOverlay');
+    var subqueriesClose = document.getElementById('subqueriesClose');
+    var subqueriesAddBtn = document.getElementById('subqueriesAddBtn');
+    var subqueriesAddForm = document.getElementById('subqueriesAddForm');
+    var subqueriesAddInput = document.getElementById('subqueriesAddInput');
+    var subqueriesAddSubmit = document.getElementById('subqueriesAddSubmit');
+    var subqueriesAddMsg = document.getElementById('subqueriesAddMsg');
+    var subqueriesListBody = document.getElementById('subqueriesListBody');
+    var subqueriesBtn = document.getElementById('subqueriesBtn');
+
+    function renderSubqueriesList(items) {
+      if (!items || items.length === 0) {
+        subqueriesListBody.innerHTML = '<div style="color:var(--text-muted);padding:10px;">サブクエリがまだ登録されていません</div>';
+        return;
+      }
+      var html = '<table class="search-log-table"><thead><tr><th>#</th><th>サブクエリ</th></tr></thead><tbody>';
+      items.forEach(function(item) {
+        html += '<tr><td style="text-align:right;width:40px;">' + escHtml(String(item.id)) + '</td>';
+        html += '<td>' + escHtml(item.query) + '</td></tr>';
+      });
+      html += '</tbody></table>';
+      subqueriesListBody.innerHTML = html;
+    }
+
+    function openSubqueries() {
+      subqueriesOverlay.classList.add('open');
+      subqueriesOverlay.setAttribute('aria-hidden', 'false');
+      subqueriesAddForm.style.display = 'none';
+      subqueriesAddInput.value = '';
+      subqueriesAddSubmit.style.display = 'none';
+      subqueriesAddMsg.textContent = '';
+      subqueriesListBody.innerHTML = '<div class="search-log-loading">読み込み中...</div>';
+      fetch('/api/aichat/subqueries', { credentials: 'same-origin' })
+        .then(function(r) { return r.json(); })
+        .then(function(d) { renderSubqueriesList(d.items || []); })
+        .catch(function() { subqueriesListBody.innerHTML = '<div style="color:var(--text-muted);">取得に失敗しました</div>'; });
+    }
+
+    function closeSubqueries() {
+      subqueriesOverlay.classList.remove('open');
+      subqueriesOverlay.setAttribute('aria-hidden', 'true');
+    }
+
+    subqueriesBtn.addEventListener('click', function(e) { e.stopPropagation(); openSubqueries(); });
+    subqueriesClose.addEventListener('click', function() { closeSubqueries(); });
+    subqueriesOverlay.addEventListener('click', function(e) { if (e.target === subqueriesOverlay) closeSubqueries(); });
+
+    subqueriesAddBtn.addEventListener('click', function() {
+      var isVisible = subqueriesAddForm.style.display !== 'none';
+      subqueriesAddForm.style.display = isVisible ? 'none' : 'flex';
+      subqueriesAddInput.value = '';
+      subqueriesAddSubmit.style.display = 'none';
+      subqueriesAddMsg.textContent = '';
+      if (!isVisible) subqueriesAddInput.focus();
+    });
+
+    subqueriesAddInput.addEventListener('input', function() {
+      var val = subqueriesAddInput.value.trim();
+      subqueriesAddSubmit.style.display = '';
+      subqueriesAddMsg.textContent = '';
+      if (!val) { subqueriesAddSubmit.style.display = 'none'; return; }
+      fetch('/api/aichat/subqueries', { credentials: 'same-origin' })
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+          var exists = (d.items || []).some(function(x) { return x.query === val; });
+          if (exists) {
+            subqueriesAddSubmit.style.display = 'none';
+            subqueriesAddMsg.textContent = '同じ内容が既に登録されています';
+          } else {
+            subqueriesAddSubmit.style.display = '';
+          }
+        })
+        .catch(function() { subqueriesAddSubmit.style.display = ''; });
+    });
+
+    subqueriesAddSubmit.addEventListener('click', function() {
+      var val = subqueriesAddInput.value.trim();
+      if (!val) return;
+      fetch('/api/aichat/subqueries', {
+        method: 'POST', credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: val })
+      })
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+          if (d.ok) {
+            subqueriesAddMsg.textContent = '追加しました';
+            subqueriesAddInput.value = '';
+            subqueriesAddSubmit.style.display = 'none';
+            fetch('/api/aichat/subqueries', { credentials: 'same-origin' })
+              .then(function(r2) { return r2.json(); })
+              .then(function(d2) { renderSubqueriesList(d2.items || []); })
+              .catch(function() {});
+          } else {
+            subqueriesAddMsg.textContent = d.error || '追加に失敗しました';
+          }
+        })
+        .catch(function() { subqueriesAddMsg.textContent = '通信エラーが発生しました'; });
+    });
+
+    // ===== 追加質問モーダル =====
+    var addSubqueryModal = document.getElementById('addSubqueryModal');
+    var addSubqueryClose = document.getElementById('addSubqueryClose');
+    var addSubqueryList = document.getElementById('addSubqueryList');
+    var addSubquerySelected = document.getElementById('addSubquerySelected');
+    var addSubqueryUrl = document.getElementById('addSubqueryUrl');
+    var addSubquerySubmit = document.getElementById('addSubquerySubmit');
+    var addSubqueryMsg = document.getElementById('addSubqueryMsg');
+    var selectedSubqueryId = null;
+
+    function openAddSubqueryModal() {
+      addSubqueryModal.classList.add('open');
+      addSubqueryModal.setAttribute('aria-hidden', 'false');
+      addSubquerySelected.value = '';
+      addSubqueryUrl.value = '';
+      addSubqueryMsg.textContent = '';
+      selectedSubqueryId = null;
+      addSubqueryList.innerHTML = '<div class="search-log-loading">読み込み中...</div>';
+      fetch('/api/aichat/subqueries', { credentials: 'same-origin' })
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+          var items = (d.items || []).slice(0, 20);
+          if (items.length === 0) {
+            addSubqueryList.innerHTML = '<div style="color:var(--text-muted);padding:10px;">サブクエリがまだ登録されていません</div>';
+            return;
+          }
+          var html = '';
+          items.forEach(function(item) {
+            html += '<div class="subquery-select-item" data-id="' + escHtml(String(item.id)) + '" data-query="' + escHtml(item.query) + '" style="padding:6px 8px;cursor:pointer;border-radius:4px;border:1px solid var(--border-color);">';
+            html += '<span style="color:var(--text-muted);margin-right:6px;">' + escHtml(String(item.id)) + '</span>' + escHtml(item.query);
+            html += '</div>';
+          });
+          addSubqueryList.innerHTML = html;
+          addSubqueryList.querySelectorAll('.subquery-select-item').forEach(function(el) {
+            el.addEventListener('click', function() {
+              addSubqueryList.querySelectorAll('.subquery-select-item').forEach(function(e2) {
+                e2.style.background = '';
+              });
+              el.style.background = 'var(--accent-color-light, rgba(102,126,234,0.12))';
+              selectedSubqueryId = Number(el.getAttribute('data-id'));
+              addSubquerySelected.value = el.getAttribute('data-query');
+            });
+          });
+        })
+        .catch(function() { addSubqueryList.innerHTML = '<div style="color:var(--text-muted);">取得に失敗しました</div>'; });
+    }
+
+    function closeAddSubqueryModal() {
+      addSubqueryModal.classList.remove('open');
+      addSubqueryModal.setAttribute('aria-hidden', 'true');
+    }
+
+    historyModalAddSubqueryBtn.addEventListener('click', function(e) {
+      e.stopPropagation();
+      openAddSubqueryModal();
+    });
+    addSubqueryClose.addEventListener('click', function() { closeAddSubqueryModal(); });
+    addSubqueryModal.addEventListener('click', function(e) { if (e.target === addSubqueryModal) closeAddSubqueryModal(); });
+
+    addSubquerySubmit.addEventListener('click', function() {
+      if (!selectedSubqueryId || !currentHistoryQuestion) {
+        addSubqueryMsg.textContent = 'サブクエリと質問を選択してください';
+        return;
+      }
+      var url = addSubqueryUrl.value.trim();
+      if (!url) { addSubqueryMsg.textContent = 'URLを入力してください'; return; }
+      fetch('/api/aichat/share-subquery-links', {
+        method: 'POST', credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ question: currentHistoryQuestion, subquery_id: selectedSubqueryId, url: url })
+      })
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+          if (d.ok) {
+            addSubqueryMsg.textContent = '登録しました';
+            closeAddSubqueryModal();
+            loadSubqueryLinks(currentHistoryQuestion);
+          } else {
+            addSubqueryMsg.textContent = d.error || '登録に失敗しました';
+          }
+        })
+        .catch(function() { addSubqueryMsg.textContent = '通信エラーが発生しました'; });
     });
 
     historyModalClose.addEventListener('click', function() {

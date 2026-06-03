@@ -104,6 +104,8 @@ const STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
   { name: 'aichat_search_log', migration: '0040', description: 'AIチャット検索キーワード選択ログ（集計）', syncPolicy: 'auto' },
   { name: 'aichat_search_history', migration: '0041', description: 'AIチャット検索キーワード選択履歴（明細）', syncPolicy: 'auto' },
   { name: 'aichat_search_impressions', migration: '0044', description: 'AIチャット検索露出ログ（検索結果全件）', syncPolicy: 'auto' },
+  { name: 'aichat_subqueries', migration: '0045', description: 'AIチャットサブクエリマスタ', syncPolicy: 'manual' },
+  { name: 'aichat_share_subquery_links', migration: '0046', description: 'AIチャット共有質問×サブクエリリンク', syncPolicy: 'auto' },
   { name: 'ts_repository',           migration: 'ts-catalog', description: '関数カタログ: リポジトリ一覧',             syncPolicy: 'manual' },
   { name: 'ts_function_catalog',     migration: 'ts-catalog', description: '関数カタログ: 関数定義一覧',               syncPolicy: 'manual' },
   { name: 'ts_commit_log',           migration: 'ts-catalog', description: '関数カタログ: コミット履歴',               syncPolicy: 'manual' },
@@ -712,6 +714,29 @@ INSERT OR REPLACE INTO table_column_keys (table_name, column_name, key_type, fk_
 ('aichat_search_impressions', 'user_id', 'fk', 'user_sessions');
 INSERT OR REPLACE INTO table_column_keys (table_name, column_name, key_type, fk_target_table) VALUES
 ('aichat_search_impressions', 'share_id', 'fk', 'ai_chat_shares');`,
+  '0045': `CREATE TABLE IF NOT EXISTS aichat_subqueries (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  query TEXT NOT NULL UNIQUE
+);
+INSERT OR IGNORE INTO table_catalog (table_name, group_name, description, migration, sync_policy, display_order) VALUES
+('aichat_subqueries', 'ai', 'AIチャットサブクエリマスタ', '0045', 'manual', 0);
+INSERT OR REPLACE INTO table_column_keys (table_name, column_name, key_type, fk_target_table) VALUES
+('aichat_subqueries', 'id', 'pk', NULL);`,
+  '0046': `CREATE TABLE IF NOT EXISTS aichat_share_subquery_links (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id TEXT NOT NULL,
+  question TEXT NOT NULL,
+  subquery_id INTEGER NOT NULL,
+  url TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  UNIQUE(user_id, question, subquery_id)
+);
+INSERT OR IGNORE INTO table_catalog (table_name, group_name, description, migration, sync_policy, display_order) VALUES
+('aichat_share_subquery_links', 'ai', 'AIチャット共有質問×サブクエリリンク', '0046', 'auto', 0);
+INSERT OR REPLACE INTO table_column_keys (table_name, column_name, key_type, fk_target_table) VALUES
+('aichat_share_subquery_links', 'id', 'pk', NULL);
+INSERT OR REPLACE INTO table_column_keys (table_name, column_name, key_type, fk_target_table) VALUES
+('aichat_share_subquery_links', 'subquery_id', 'fk', 'aichat_subqueries');`,
   'ts-catalog': `CREATE TABLE IF NOT EXISTS ts_repository (
   id            INTEGER PRIMARY KEY AUTOINCREMENT,
   full_name     TEXT NOT NULL UNIQUE,
@@ -1000,6 +1025,8 @@ export const TABLE_COLUMN_KEYS: Record<string, ColumnKeyInfo> = {
   aichat_search_log: { id: 'pk', user_id: 'fk', share_id: 'fk', keyword: 'idx' },
   aichat_search_history: { id: 'pk', user_id: 'fk', share_id: 'fk', keyword: 'idx', seq_num: 'idx' },
   aichat_search_impressions: { id: 'pk', user_id: 'fk', share_id: 'fk' },
+  aichat_subqueries: { id: 'pk' },
+  aichat_share_subquery_links: { id: 'pk', subquery_id: 'fk' },
   keyword_category_groups: { id: 'pk', user_id: 'fk' },
   keyword_multi_labels: { id: 'pk', user_id: 'fk', search_query: 'idx' },
   ts_repository:          { id: 'pk', full_name: 'uk' },
@@ -1066,6 +1093,8 @@ export const TABLE_GROUP_MAP: Record<string, string> = {
   aichat_search_log: 'ai',
   aichat_search_history: 'ai',
   aichat_search_impressions: 'ai',
+  aichat_subqueries: 'ai',
+  aichat_share_subquery_links: 'ai',
   keyword_category_groups: 'search',
   keyword_multi_labels: 'search',
   ts_repository:          'ts-catalog',
@@ -1219,6 +1248,7 @@ export const COLUMN_FK_TARGETS: Record<string, Record<string, string>> = {
   aichat_search_log: { user_id: 'user_sessions', share_id: 'ai_chat_shares' },
   aichat_search_history: { user_id: 'user_sessions', share_id: 'ai_chat_shares' },
   aichat_search_impressions: { user_id: 'user_sessions', share_id: 'ai_chat_shares' },
+  aichat_share_subquery_links: { subquery_id: 'aichat_subqueries' },
   keyword_category_groups: { user_id: 'user_sessions' },
   keyword_multi_labels: { user_id: 'user_sessions' },
 
@@ -2955,6 +2985,72 @@ app.post('/api/aichat/search-impressions', authMiddleware, async (c) => {
   );
   await c.env.DB.batch(stmts);
   return jsonUtf8({ ok: true, inserted: shareIds.length });
+});
+
+/**
+ * サブクエリマスタ一覧取得 API
+ */
+app.get('/api/aichat/subqueries', authMiddleware, async (c) => {
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  const rows = await c.env.DB.prepare(
+    `SELECT id, query FROM aichat_subqueries ORDER BY id DESC LIMIT 100`
+  ).all<{ id: number; query: string }>();
+  return jsonUtf8({ items: rows.results ?? [] });
+});
+
+/**
+ * サブクエリマスタ登録 API（重複時は無視）
+ */
+app.post('/api/aichat/subqueries', authMiddleware, async (c) => {
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  const body = await c.req.json<{ query?: string }>();
+  const query = typeof body.query === 'string' ? body.query.trim() : '';
+  if (!query) return jsonUtf8({ error: 'query は必須です' }, 400);
+  const result = await c.env.DB.prepare(
+    `INSERT OR IGNORE INTO aichat_subqueries (query) VALUES (?)`
+  ).bind(query.slice(0, 500)).run();
+  const row = await c.env.DB.prepare(
+    `SELECT id, query FROM aichat_subqueries WHERE query = ?`
+  ).bind(query.slice(0, 500)).first<{ id: number; query: string }>();
+  return jsonUtf8({ ok: true, item: row, inserted: (result.meta?.changes ?? 0) > 0 });
+});
+
+/**
+ * 質問×サブクエリリンク一覧取得 API
+ */
+app.get('/api/aichat/share-subquery-links', authMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  const question = c.req.query('question') ?? '';
+  if (!question) return jsonUtf8({ items: [] });
+  const rows = await c.env.DB.prepare(
+    `SELECT l.id, l.question, l.subquery_id, l.url, q.query
+     FROM aichat_share_subquery_links l
+     JOIN aichat_subqueries q ON q.id = l.subquery_id
+     WHERE l.user_id = ? AND l.question = ?
+     ORDER BY l.id ASC`
+  ).bind(user.sub, question).all<{
+    id: number; question: string; subquery_id: number; url: string; query: string;
+  }>();
+  return jsonUtf8({ items: rows.results ?? [] });
+});
+
+/**
+ * 質問×サブクエリリンク登録 API（同一質問×サブクエリは重複無視）
+ */
+app.post('/api/aichat/share-subquery-links', authMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  const body = await c.req.json<{ question?: string; subquery_id?: number; url?: string }>();
+  const question = typeof body.question === 'string' ? body.question.trim() : '';
+  const subqueryId = typeof body.subquery_id === 'number' ? body.subquery_id : 0;
+  const url = typeof body.url === 'string' ? body.url.trim() : '';
+  if (!question || !subqueryId || !url) return jsonUtf8({ error: 'question, subquery_id, url は必須です' }, 400);
+  const now = new Date().toISOString();
+  const result = await c.env.DB.prepare(
+    `INSERT OR IGNORE INTO aichat_share_subquery_links (user_id, question, subquery_id, url, created_at) VALUES (?, ?, ?, ?, ?)`
+  ).bind(user.sub, question.slice(0, 500), subqueryId, url.slice(0, 1000), now).run();
+  return jsonUtf8({ ok: true, inserted: (result.meta?.changes ?? 0) > 0 });
 });
 
 /**
