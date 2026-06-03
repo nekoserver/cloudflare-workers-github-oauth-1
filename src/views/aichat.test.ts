@@ -568,7 +568,7 @@ describe('AIチャット: 露出ログボタンと searchImpressionsOverlay', ()
     const html = getAiChatPage(minimalUser);
     const idx = html.indexOf('searchImpressionsBody.addEventListener');
     expect(idx).toBeGreaterThan(-1);
-    const fnBody = html.slice(idx, idx + 1400);
+    const fnBody = html.slice(idx, idx + 1700);
     expect(fnBody).toContain('showHistoryModal');
     expect(fnBody).toContain('data-share-id');
   });
@@ -596,9 +596,9 @@ describe('AIチャット: 露出ログボタンと searchImpressionsOverlay', ()
 
   it('最終検索カラムの日付セルがカレンダーリンクとして機能する', () => {
     const html = getAiChatPage(minimalUser);
-    const idx = html.indexOf('function openSearchImpressions(');
+    const idx = html.indexOf('function renderImpressionsTable(');
     expect(idx).toBeGreaterThan(-1);
-    const fnBody = html.slice(idx, idx + 2500);
+    const fnBody = html.slice(idx, idx + 2400);
     expect(fnBody).toContain('data-month');
     expect(fnBody).toContain('data-date');
   });
@@ -611,6 +611,45 @@ describe('AIチャット: 露出ログボタンと searchImpressionsOverlay', ()
     expect(fnBody).toContain('loadCalendar');
     expect(fnBody).toContain('doDateLoad');
     expect(fnBody).toContain('closeSearchImpressions');
+  });
+
+  it('renderImpressionsTable がサブクエリマップを受け取る', () => {
+    const html = getAiChatPage(minimalUser);
+    const idx = html.indexOf('function renderImpressionsTable(');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 200);
+    expect(fn).toContain('subqueryMap');
+  });
+
+  it('renderImpressionsTable がサブクエリ持ち行に背景色を付ける', () => {
+    const html = getAiChatPage(minimalUser);
+    const idx = html.indexOf('function renderImpressionsTable(');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 2000);
+    expect(fn).toContain('has-subquery');
+  });
+
+  it('openSearchImpressions が share-subquery-links/all も fetch する', () => {
+    const html = getAiChatPage(minimalUser);
+    const idx = html.indexOf('function openSearchImpressions(');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 600);
+    expect(fn).toContain('/api/aichat/share-subquery-links/all');
+    expect(fn).toContain('fetch');
+  });
+
+  it('impressionsSubqueryModal が存在する', () => {
+    const html = getAiChatPage(minimalUser);
+    expect(html).toContain('id="impressionsSubqueryModal"');
+  });
+
+  it('searchImpressionsBody のクリックハンドラがサブクエリ行の処理を含む', () => {
+    const html = getAiChatPage(minimalUser);
+    const idx = html.indexOf('searchImpressionsBody.addEventListener');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 1200);
+    expect(fn).toContain('has-subquery');
+    expect(fn).toContain('openImpressionsSubqueryModal');
   });
 });
 
