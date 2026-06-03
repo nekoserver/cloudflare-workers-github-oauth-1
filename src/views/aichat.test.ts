@@ -998,6 +998,55 @@ describe('renderLinkedQuestions — 過去ログモーダル連携', () => {
   });
 });
 
+describe('サイドバー サブクエリ保有質問のハイライト', () => {
+  it('CSS に .sidebar-result-item.has-subquery スタイルが存在する', () => {
+    const html = getAiChatPage(minimalUser, []);
+    expect(html).toContain('.sidebar-result-item.has-subquery');
+  });
+
+  it('sidebarSubqueries 変数が HTML に存在する', () => {
+    const html = getAiChatPage(minimalUser, []);
+    expect(html).toContain('sidebarSubqueries');
+  });
+
+  it('fetchSidebarSubqueries 関数が HTML に存在する', () => {
+    const html = getAiChatPage(minimalUser, []);
+    expect(html).toContain('function fetchSidebarSubqueries(');
+  });
+
+  it('fetchSidebarSubqueries が /api/aichat/share-subquery-links/all を fetch する', () => {
+    const html = getAiChatPage(minimalUser, []);
+    const idx = html.indexOf('function fetchSidebarSubqueries(');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 600);
+    expect(fn).toContain('/api/aichat/share-subquery-links/all');
+  });
+
+  it('renderSidebarResults が has-subquery クラスを付与するコードを含む', () => {
+    const html = getAiChatPage(minimalUser, []);
+    const idx = html.indexOf('function renderSidebarResults(');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 1200);
+    expect(fn).toContain('has-subquery');
+  });
+
+  it('doSearch が fetchSidebarSubqueries を呼ぶ', () => {
+    const html = getAiChatPage(minimalUser, []);
+    const idx = html.indexOf('function doSearch(');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 600);
+    expect(fn).toContain('fetchSidebarSubqueries');
+  });
+
+  it('addSubquerySubmit 成功後に sidebarSubqueries をリセットする', () => {
+    const html = getAiChatPage(minimalUser, []);
+    const idx = html.indexOf('addSubquerySubmit.addEventListener(');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 800);
+    expect(fn).toContain('sidebarSubqueries');
+  });
+});
+
 describe('appendShareBtn — 別タブで開くボタン', () => {
   it('chat-share-open-btn クラスが HTML に存在する', () => {
     const html = getAiChatPage(minimalUser, []);
