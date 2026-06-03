@@ -304,6 +304,7 @@ export function getAiChatPage(user: {
     .cal-cell.has-data { cursor: pointer; }
     .cal-cell.has-data:hover { transform: scale(1.15); z-index: 1; }
     .cal-cell.selected-day { outline: 2px solid var(--accent-color, #667eea); outline-offset: 1px; }
+    .cal-cell.cal-today { box-shadow: inset 0 0 0 1px var(--accent-color, #667eea); font-weight: 700; }
     /* ヒートマップ強度 */
     .cal-cell[data-lvl="1"] { background: rgba(102,126,234,0.25); }
     .cal-cell[data-lvl="2"] { background: rgba(102,126,234,0.45); }
@@ -1210,7 +1211,11 @@ export function getAiChatPage(user: {
       sidebarToggle.classList.toggle('active', sidebarOpen);
       if (sidebarOpen) {
         setTimeout(function() { sidebarSearch.focus(); }, 260);
+        var todayDate = new Date().toISOString().slice(0, 10);
+        calCurrentMonth = todayDate.slice(0, 7);
+        calSelectedDay = todayDate;
         loadCalendar(calCurrentMonth);
+        doDateLoad(todayDate);
       }
     });
 
@@ -1287,6 +1292,7 @@ export function getAiChatPage(user: {
     }
 
     function doDateLoad(date) {
+      fetchSidebarSubqueries();
       sidebarStatus.textContent = '読み込み中...';
       fetch('/api/aichat/shares/by-date?date=' + encodeURIComponent(date), { credentials: 'same-origin' })
         .then(function(r) { return r.json(); })
@@ -1495,6 +1501,7 @@ export function getAiChatPage(user: {
       var parts = month.split('-');
       var year = parseInt(parts[0], 10);
       var mon = parseInt(parts[1], 10) - 1;
+      var todayStr = new Date().toISOString().slice(0, 10);
       titleEl.textContent = year + '年' + (mon + 1) + '月';
       grid.innerHTML = '';
 
@@ -1520,7 +1527,7 @@ export function getAiChatPage(user: {
         var dateStr = month + '-' + String(day).padStart(2, '0');
         var count = calDayData[dateStr] || 0;
         var cell = document.createElement('div');
-        cell.className = 'cal-cell' + (count > 0 ? ' has-data' : '') + (calSelectedDay === dateStr ? ' selected-day' : '');
+        cell.className = 'cal-cell' + (count > 0 ? ' has-data' : '') + (dateStr === todayStr ? ' cal-today' : '') + (calSelectedDay === dateStr ? ' selected-day' : '');
         if (count > 0) {
           var lvl = count >= maxCount * 0.75 ? 4 : count >= maxCount * 0.5 ? 3 : count >= maxCount * 0.25 ? 2 : 1;
           cell.setAttribute('data-lvl', lvl);
