@@ -1354,3 +1354,53 @@ describe('キーワードモーダルクリック時にサイドバーが閉じ�
     expect(fn).toMatch(/!sidebarKwModal\.contains\(e\.target\)/);
   });
 });
+
+describe('新着/キーワードトグル修正・キーワードモーダル外タップ閉じ', () => {
+  it('document click ハンドラがキーワードモーダルを外タップで閉じるロジックを含む', () => {
+    const html = getAiChatPage(minimalUser, []);
+    const idx = html.indexOf("sidebarKwModal.classList.contains('open')");
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 200);
+    expect(fn).toContain("sidebarKwModal.classList.remove('open')");
+  });
+
+  it('document click ハンドラがキーワードモーダルの外クリック判定を含む', () => {
+    const html = getAiChatPage(minimalUser, []);
+    const idx = html.indexOf("sidebarKwModal.classList.contains('open')");
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 200);
+    expect(fn).toMatch(/!sidebarKwModal\.contains\(e\.target\)/);
+  });
+
+  it('新着ボタンクリック時にキーワードモーダルを閉じる', () => {
+    const html = getAiChatPage(minimalUser, []);
+    const idx = html.indexOf("sidebarModeNew.addEventListener(");
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 300);
+    expect(fn).toContain("sidebarKwModal.classList.remove('open')");
+  });
+
+  it('新着ボタンクリック時に currentDateLabel が空でも today にフォールバックする', () => {
+    const html = getAiChatPage(minimalUser, []);
+    const idx = html.indexOf("sidebarModeNew.addEventListener(");
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 300);
+    expect(fn).toContain('toISOString');
+  });
+
+  it('closeSidebar がキーワードモーダルも閉じる', () => {
+    const html = getAiChatPage(minimalUser, []);
+    const idx = html.indexOf('function closeSidebar(');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 200);
+    expect(fn).toContain("sidebarKwModal.classList.remove('open')");
+  });
+
+  it('キーワードトグルボタンがモーダルのトグル動作をする（open時に閉じる）', () => {
+    const html = getAiChatPage(minimalUser, []);
+    const idx = html.indexOf("sidebarModeKw.addEventListener(");
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 200);
+    expect(fn).toContain("classList.contains('open')");
+  });
+});

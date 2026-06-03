@@ -1270,6 +1270,7 @@ export function getAiChatPage(user: {
       sidebarOpen = false;
       sidebar.classList.remove('open');
       sidebarToggle.classList.remove('active');
+      sidebarKwModal.classList.remove('open');
     }
 
     sidebarToggle.addEventListener('click', function(e) {
@@ -1288,6 +1289,9 @@ export function getAiChatPage(user: {
     });
 
     document.addEventListener('click', function(e) {
+      if (sidebarKwModal.classList.contains('open') && !sidebarKwModal.contains(e.target) && e.target !== sidebarModeKw) {
+        sidebarKwModal.classList.remove('open');
+      }
       if (sidebarOpen && isTapCloseEnabled() && !sidebar.contains(e.target) && !sidebarKwModal.contains(e.target) && e.target !== sidebarToggle) {
         closeSidebar();
       }
@@ -1410,9 +1414,18 @@ export function getAiChatPage(user: {
     });
 
     sidebarModeNew.addEventListener('click', function() {
-      if (currentMode !== 'date' && currentDateLabel) doDateLoad(currentDateLabel);
+      sidebarKwModal.classList.remove('open');
+      if (currentMode === 'date') return;
+      var date = currentDateLabel || new Date().toISOString().slice(0, 10);
+      doDateLoad(date);
     });
-    sidebarModeKw.addEventListener('click', function() { openSidebarKeywordModal(); });
+    sidebarModeKw.addEventListener('click', function() {
+      if (sidebarKwModal.classList.contains('open')) {
+        sidebarKwModal.classList.remove('open');
+      } else {
+        openSidebarKeywordModal();
+      }
+    });
     sidebarKwClose.addEventListener('click', function() { sidebarKwModal.classList.remove('open'); });
     sidebarKwSortCount.addEventListener('click', function() {
       if (kwSortOrder === 'count') return;
