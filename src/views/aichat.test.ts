@@ -1047,6 +1047,45 @@ describe('サイドバー サブクエリ保有質問のハイライト', () => 
   });
 });
 
+describe('サイドバー開時の自動日付ロード', () => {
+  it('sidebarToggle クリックハンドラが doDateLoad を呼ぶ', () => {
+    const html = getAiChatPage(minimalUser, []);
+    const idx = html.indexOf("sidebarToggle.addEventListener('click'");
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 600);
+    expect(fn).toContain('doDateLoad');
+  });
+
+  it('sidebarToggle クリックハンドラが calSelectedDay に当日をセットする', () => {
+    const html = getAiChatPage(minimalUser, []);
+    const idx = html.indexOf("sidebarToggle.addEventListener('click'");
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 600);
+    expect(fn).toContain('calSelectedDay');
+  });
+
+  it('doDateLoad が fetchSidebarSubqueries を呼ぶ', () => {
+    const html = getAiChatPage(minimalUser, []);
+    const idx = html.indexOf('function doDateLoad(');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 400);
+    expect(fn).toContain('fetchSidebarSubqueries');
+  });
+
+  it('renderCalendar が cal-today クラスを付与する', () => {
+    const html = getAiChatPage(minimalUser, []);
+    const idx = html.indexOf('function renderCalendar(');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 3200);
+    expect(fn).toContain('cal-today');
+  });
+
+  it('CSS に .cal-today スタイルが存在する', () => {
+    const html = getAiChatPage(minimalUser, []);
+    expect(html).toContain('.cal-today');
+  });
+});
+
 describe('appendShareBtn — 別タブで開くボタン', () => {
   it('chat-share-open-btn クラスが HTML に存在する', () => {
     const html = getAiChatPage(minimalUser, []);
