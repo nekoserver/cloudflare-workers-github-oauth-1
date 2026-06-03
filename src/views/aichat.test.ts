@@ -967,6 +967,35 @@ describe('AIチャット: サブクエリを持つ質問一覧', () => {
     expect(handler).toContain('aichat_share_subquery_links');
     expect(handler).toContain('aichat_subqueries');
   });
+
+  it('all エンドポイントが ai_chat_shares を JOIN して share_id を返す', () => {
+    const { readFileSync } = require('node:fs');
+    const { resolve } = require('node:path');
+    const src = readFileSync(resolve(__dirname, '..', 'index.ts'), 'utf-8');
+    const idx = src.indexOf("app.get('/api/aichat/share-subquery-links/all'");
+    expect(idx).toBeGreaterThan(-1);
+    const handler = src.slice(idx, idx + 800);
+    expect(handler).toContain('ai_chat_shares');
+    expect(handler).toContain('share_id');
+  });
+});
+
+describe('renderLinkedQuestions — 過去ログモーダル連携', () => {
+  it('renderLinkedQuestions 内の質問セルに data-share-id が付与される', () => {
+    const html = getAiChatPage(minimalUser, []);
+    const idx = html.indexOf('function renderLinkedQuestions(');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 1000);
+    expect(fn).toContain('data-share-id');
+  });
+
+  it('renderLinkedQuestions のクリックハンドラが openHistoryModalByShareId を呼ぶ', () => {
+    const html = getAiChatPage(minimalUser, []);
+    const idx = html.indexOf('function renderLinkedQuestions(');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 3000);
+    expect(fn).toContain('openHistoryModalByShareId');
+  });
 });
 
 describe('appendShareBtn — 別タブで開くボタン', () => {

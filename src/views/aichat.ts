@@ -1875,7 +1875,7 @@ export function getAiChatPage(user: {
             + '</div>';
         }).join('');
         html += '<tr>'
-          + '<td class="kw-q-link" data-question="' + escHtml(item.question) + '" style="vertical-align:top;max-width:220px;">' + escHtml(item.question) + '</td>'
+          + '<td class="kw-q-link" data-question="' + escHtml(item.question) + '" data-share-id="' + escHtml(item.share_id || '') + '" style="vertical-align:top;max-width:220px;cursor:pointer;">' + escHtml(item.question) + '</td>'
           + '<td style="vertical-align:top;">' + linkRows + '</td>'
           + '</tr>';
       });
@@ -1883,12 +1883,10 @@ export function getAiChatPage(user: {
       linkedQuestionsBody.innerHTML = html;
       linkedQuestionsBody.querySelectorAll('td.kw-q-link').forEach(function(td) {
         td.addEventListener('click', function() {
-          var q = td.getAttribute('data-question');
-          if (!q) return;
-          var matched = (currentResults.length > 0 ? currentResults : []).find(function(r) { return r.question === q; });
-          if (matched) {
+          var shareId = td.getAttribute('data-share-id');
+          if (shareId) {
             closeLinkedQuestions();
-            showHistoryPreview(matched);
+            openHistoryModalByShareId(shareId, '[]');
           }
         });
       });

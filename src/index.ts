@@ -3042,17 +3042,18 @@ app.get('/api/aichat/share-subquery-links/all', authMiddleware, async (c) => {
   const user = c.get('user');
   if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
   const rows = await c.env.DB.prepare(
-    `SELECT l.question, l.subquery_id, l.url, q.query
+    `SELECT l.question, l.subquery_id, l.url, q.query, s.id AS share_id
      FROM aichat_share_subquery_links l
      JOIN aichat_subqueries q ON q.id = l.subquery_id
+     LEFT JOIN ai_chat_shares s ON s.question = l.question AND s.user_id = l.user_id
      WHERE l.user_id = ?
      ORDER BY l.question, l.id ASC`
   ).bind(user.sub).all<{
-    question: string; subquery_id: number; url: string; query: string;
+    question: string; subquery_id: number; url: string; query: string; share_id: string | null;
   }>();
-  const map = new Map<string, { question: string; links: { subquery_id: number; query: string; url: string }[] }>();
+  const map = new Map<string, { question: string; share_id: string | null; links: { subquery_id: number; query: string; url: string }[] }>();
   for (const r of rows.results ?? []) {
-    if (!map.has(r.question)) map.set(r.question, { question: r.question, links: [] });
+    if (!map.has(r.question)) map.set(r.question, { question: r.question, share_id: r.share_id ?? null, links: [] });
     map.get(r.question)!.links.push({ subquery_id: r.subquery_id, query: r.query, url: r.url });
   }
   return jsonUtf8({ items: Array.from(map.values()) });
