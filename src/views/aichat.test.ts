@@ -1186,3 +1186,70 @@ describe('サイドバー：モデル名削除・新着/キーワードトグル
     expect(src).toContain("app.get('/api/aichat/shares/by-keyword'");
   });
 });
+
+describe('キーワードモーダル位置修正 — サイドバー外 fixed 配置', () => {
+  it('sidebar-kw-modal の CSS が position: fixed を含む', () => {
+    const html = getAiChatPage(minimalUser, []);
+    const cssIdx = html.indexOf('.sidebar-kw-modal');
+    expect(cssIdx).toBeGreaterThan(-1);
+    const css = html.slice(cssIdx, cssIdx + 200);
+    expect(css).toContain('position: fixed');
+  });
+
+  it('sidebar-kw-modal の CSS が left: 260px を含む', () => {
+    const html = getAiChatPage(minimalUser, []);
+    const cssIdx = html.indexOf('.sidebar-kw-modal');
+    expect(cssIdx).toBeGreaterThan(-1);
+    const css = html.slice(cssIdx, cssIdx + 200);
+    expect(css).toContain('260px');
+  });
+
+  it('sidebar-kw-modal の CSS が top: 44px を含む', () => {
+    const html = getAiChatPage(minimalUser, []);
+    const cssIdx = html.indexOf('.sidebar-kw-modal');
+    expect(cssIdx).toBeGreaterThan(-1);
+    const css = html.slice(cssIdx, cssIdx + 200);
+    expect(css).toContain('44px');
+  });
+
+  it('sidebarKwModal HTML 要素がサイドバー div の外側にある', () => {
+    const html = getAiChatPage(minimalUser, []);
+    const sidebarCloseIdx = html.indexOf('</div>', html.indexOf('<div class="sidebar"'));
+    const kwModalIdx = html.indexOf('id="sidebarKwModal"');
+    expect(kwModalIdx).toBeGreaterThan(sidebarCloseIdx);
+  });
+
+  it('fetchSidebarSubqueries が Promise を返す（return で始まる）', () => {
+    const html = getAiChatPage(minimalUser, []);
+    const idx = html.indexOf('function fetchSidebarSubqueries(');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 500);
+    expect(fn).toContain('return ');
+  });
+});
+
+describe('doDateLoad — △/◯件 フォーマット', () => {
+  it('doDateLoad のステータスが △/◯件 形式を含む', () => {
+    const html = getAiChatPage(minimalUser, []);
+    const idx = html.indexOf('function doDateLoad(');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 800);
+    expect(fn).toContain('sqCount');
+  });
+
+  it('doDateLoad が Promise.all を使用する', () => {
+    const html = getAiChatPage(minimalUser, []);
+    const idx = html.indexOf('function doDateLoad(');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 800);
+    expect(fn).toContain('Promise.all');
+  });
+
+  it('doDateLoad のステータスが / 区切りを含む', () => {
+    const html = getAiChatPage(minimalUser, []);
+    const idx = html.indexOf('function doDateLoad(');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 800);
+    expect(fn).toMatch(/sqCount.*\/.*currentResults\.length|sqCount.*'\/'|'\/'.*currentResults/);
+  });
+});
