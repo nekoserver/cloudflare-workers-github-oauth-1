@@ -39,7 +39,7 @@ import { validateReturnTo } from './utils/returnTo';
 import * as logger from './utils/logger';
 import { resolveIdleTimeoutSeconds, type Bindings, type Variables, type GitHubWebhookInstallationPayload, type GitHubWebhookRepositoryPayload, type GitHubWebhookPullRequestPayload, type ResendWebhookPayload } from './types';
 import { withAiTimeout, AI_CLASSIFY_TIMEOUT_MS } from './utils/aiTimeout';
-import { computeConversationHash } from './utils/conversationHash';
+import { computeConversationHash, computeQuestionHash } from './utils/conversationHash';
 import { buildAiMessages, ALLOWED_MODES, type SystemPromptMode } from './utils/buildAiMessages';
 import { stripThinkTags } from './utils/stripThinkTags';
 
@@ -757,6 +757,14 @@ INSERT OR IGNORE INTO aichat_model_colors (model_id, color, label) VALUES
   ('@cf/google/gemma-4-26b-a4b-it', '#16a34a', 'gemma-4-26b'),
   ('@cf/google/gemma-3-12b-it', '#22c55e', 'gemma-3-12b'),
   ('@cf/meta/llama-4-scout-17b-16e-instruct', '#a855f7', 'llama-4-scout-17b');`,
+  '0049': `ALTER TABLE ai_chat_shares ADD COLUMN question_hash TEXT;
+CREATE INDEX IF NOT EXISTS idx_ai_chat_shares_q_hash ON ai_chat_shares(question_hash);
+ALTER TABLE aichat_share_subquery_links ADD COLUMN question_hash TEXT;
+CREATE INDEX IF NOT EXISTS idx_asl_question_hash ON aichat_share_subquery_links(question_hash);
+INSERT OR REPLACE INTO table_column_keys (table_name, column_name, key_type, fk_target_table) VALUES
+('ai_chat_shares', 'question_hash', 'idx', NULL);
+INSERT OR REPLACE INTO table_column_keys (table_name, column_name, key_type, fk_target_table) VALUES
+('aichat_share_subquery_links', 'question_hash', 'idx', NULL);`,
   'ts-catalog': `CREATE TABLE IF NOT EXISTS ts_repository (
   id            INTEGER PRIMARY KEY AUTOINCREMENT,
   full_name     TEXT NOT NULL UNIQUE,
@@ -1041,12 +1049,12 @@ export const TABLE_COLUMN_KEYS: Record<string, ColumnKeyInfo> = {
   ai_summary_link_access_log: { id: 'pk', request_id: 'fk', route: 'idx', issue_code: 'idx', created_at: 'idx' },
   commit_stats_cache: { id: 'pk', owner: 'idx', repo: 'idx', period: 'idx' },
   repo_commit_index: { commit_hash: 'pk', seq_num: 'idx', github_pr_number: 'idx', repo_name: 'idx' },
-  ai_chat_shares: { id: 'pk', user_id: 'fk', user_hash: 'idx', conversation_hash: 'uk' },
+  ai_chat_shares: { id: 'pk', user_id: 'fk', user_hash: 'idx', conversation_hash: 'uk', question_hash: 'idx' },
   aichat_search_log: { id: 'pk', user_id: 'fk', share_id: 'fk', keyword: 'idx' },
   aichat_search_history: { id: 'pk', user_id: 'fk', share_id: 'fk', keyword: 'idx', seq_num: 'idx' },
   aichat_search_impressions: { id: 'pk', user_id: 'fk', share_id: 'fk' },
   aichat_subqueries: { id: 'pk' },
-  aichat_share_subquery_links: { id: 'pk', subquery_id: 'fk' },
+  aichat_share_subquery_links: { id: 'pk', subquery_id: 'fk', question_hash: 'idx' },
   aichat_model_colors: { model_id: 'pk' },
   keyword_category_groups: { id: 'pk', user_id: 'fk' },
   keyword_multi_labels: { id: 'pk', user_id: 'fk', search_query: 'idx' },
@@ -2800,10 +2808,11 @@ app.post('/api/aichat', authMiddleware, async (c) => {
       const shareId = Array.from(tokenBytes).map((b) => b.toString(16).padStart(2, '0')).join('');
       const now = new Date().toISOString();
       const conversationHash = await computeConversationHash(user.sub, message, response, usedModel, now);
+      const questionHash = await computeQuestionHash(user.sub, message);
       await c.env.DB.prepare(
-        'INSERT INTO ai_chat_shares (id, user_id, user_hash, question, answer, model, created_at, conversation_hash) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
-      ).bind(shareId, user.sub, userHash, message, response, usedModel, now, conversationHash).run();
-      return { shareId, userHash, conversationHash };
+        'INSERT INTO ai_chat_shares (id, user_id, user_hash, question, answer, model, created_at, conversation_hash, question_hash) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+      ).bind(shareId, user.sub, userHash, message, response, usedModel, now, conversationHash, questionHash).run();
+      return { shareId, userHash, conversationHash, questionHash };
     } catch (saveErr) {
       logger.warn('AI chat auto-save failed', {
         error: saveErr instanceof Error ? saveErr.message : 'Unknown',
@@ -3237,10 +3246,11 @@ app.post('/api/aichat/share-subquery-links', authMiddleware, async (c) => {
   const url = typeof body.url === 'string' ? body.url.trim() : '';
   if (!question || !subqueryId || !url) return jsonUtf8({ error: 'question, subquery_id, url は必須です' }, 400);
   const now = new Date().toISOString();
+  const questionHash = await computeQuestionHash(user.sub, question);
   const result = await c.env.DB.prepare(
-    `INSERT OR IGNORE INTO aichat_share_subquery_links (user_id, question, subquery_id, url, created_at) VALUES (?, ?, ?, ?, ?)`
-  ).bind(user.sub, question.slice(0, 500), subqueryId, url.slice(0, 1000), now).run();
-  return jsonUtf8({ ok: true, inserted: (result.meta?.changes ?? 0) > 0 });
+    `INSERT OR IGNORE INTO aichat_share_subquery_links (user_id, question, subquery_id, url, created_at, question_hash) VALUES (?, ?, ?, ?, ?, ?)`
+  ).bind(user.sub, question.slice(0, 500), subqueryId, url.slice(0, 1000), now, questionHash).run();
+  return jsonUtf8({ ok: true, inserted: (result.meta?.changes ?? 0) > 0, questionHash });
 });
 
 /**
@@ -3309,9 +3319,10 @@ app.post('/api/aichat/share', authMiddleware, async (c) => {
 
   const now = new Date().toISOString();
   const conversationHash = await computeConversationHash(user.sub, question, answer, model, now);
+  const questionHash = await computeQuestionHash(user.sub, question);
   await c.env.DB.prepare(
-    'INSERT INTO ai_chat_shares (id, user_id, user_hash, question, answer, model, created_at, conversation_hash) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
-  ).bind(shareToken, user.sub, userHash, question, answer, model, now, conversationHash).run();
+    'INSERT INTO ai_chat_shares (id, user_id, user_hash, question, answer, model, created_at, conversation_hash, question_hash) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+  ).bind(shareToken, user.sub, userHash, question, answer, model, now, conversationHash, questionHash).run();
 
   const origin = new URL(c.req.url).origin;
   const shareUrl = `${origin}/s/${userHash}/${shareToken}`;
