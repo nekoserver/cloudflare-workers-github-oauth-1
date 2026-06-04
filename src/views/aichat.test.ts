@@ -1155,6 +1155,114 @@ describe('appendShareBtn — 追加質問ボタン', () => {
   });
 });
 
+describe('ナビバー モデル選択ドロップダウン', () => {
+  it('modelSelect セレクト要素が HTML に存在する', () => {
+    const html = getAiChatPage(minimalUser, []);
+    expect(html).toContain('id="modelSelect"');
+  });
+
+  it('navbar-model-select クラスが HTML に存在する', () => {
+    const html = getAiChatPage(minimalUser, []);
+    expect(html).toContain('navbar-model-select');
+  });
+
+  it('モデルリストに llama-3.3-70b が含まれる', () => {
+    const html = getAiChatPage(minimalUser, []);
+    expect(html).toContain('llama-3.3-70b');
+  });
+
+  it('モデルリストに llama-3.1-8b が含まれる', () => {
+    const html = getAiChatPage(minimalUser, []);
+    expect(html).toContain('llama-3.1-8b');
+  });
+
+  it('modelSelect change イベントで lastModel を更新する', () => {
+    const html = getAiChatPage(minimalUser, []);
+    const idx = html.indexOf("modelSelect.addEventListener('change'");
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 200);
+    expect(fn).toContain('lastModel');
+  });
+
+  it('chatForm submit が model フィールドを送信する', () => {
+    const html = getAiChatPage(minimalUser, []);
+    const idx = html.indexOf("chatForm.addEventListener('submit'");
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 700);
+    expect(fn).toContain('model:');
+  });
+
+  it('CSS に .navbar-model-select スタイルが存在する', () => {
+    const html = getAiChatPage(minimalUser, []);
+    expect(html).toContain('.navbar-model-select');
+  });
+
+  it('index.ts に AICHAT_ALLOWED_MODELS が存在する', () => {
+    const { readFileSync } = require('node:fs');
+    const { resolve } = require('node:path');
+    const src = readFileSync(resolve(__dirname, '..', 'index.ts'), 'utf-8');
+    expect(src).toContain('AICHAT_ALLOWED_MODELS');
+  });
+
+  it('index.ts の /api/aichat が body.model を読む', () => {
+    const { readFileSync } = require('node:fs');
+    const { resolve } = require('node:path');
+    const src = readFileSync(resolve(__dirname, '..', 'index.ts'), 'utf-8');
+    const idx = src.indexOf("app.post('/api/aichat'");
+    expect(idx).toBeGreaterThan(-1);
+    const fn = src.slice(idx, idx + 800);
+    expect(fn).toContain('body.model');
+  });
+});
+
+describe('サブクエリ一覧モーダル：#カラム削除・追加質問総数表示・多い順ソート', () => {
+  it('renderSubqueriesList に # カラムが含まれない', () => {
+    const html = getAiChatPage(minimalUser, []);
+    const idx = html.indexOf('function renderSubqueriesList(');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 600);
+    expect(fn).not.toContain('<th>#</th>');
+  });
+
+  it('renderSubqueriesList に link_count カラムが含まれる', () => {
+    const html = getAiChatPage(minimalUser, []);
+    const idx = html.indexOf('function renderSubqueriesList(');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 600);
+    expect(fn).toContain('link_count');
+  });
+
+  it('index.ts の GET /api/aichat/subqueries が link_count を返す', () => {
+    const { readFileSync } = require('node:fs');
+    const { resolve } = require('node:path');
+    const src = readFileSync(resolve(__dirname, '..', 'index.ts'), 'utf-8');
+    const idx = src.indexOf("app.get('/api/aichat/subqueries'");
+    expect(idx).toBeGreaterThan(-1);
+    const fn = src.slice(idx, idx + 400);
+    expect(fn).toContain('link_count');
+  });
+
+  it('index.ts の GET /api/aichat/subqueries が link_count DESC でソートする', () => {
+    const { readFileSync } = require('node:fs');
+    const { resolve } = require('node:path');
+    const src = readFileSync(resolve(__dirname, '..', 'index.ts'), 'utf-8');
+    const idx = src.indexOf("app.get('/api/aichat/subqueries'");
+    expect(idx).toBeGreaterThan(-1);
+    const fn = src.slice(idx, idx + 400);
+    expect(fn).toContain('link_count DESC');
+  });
+
+  it('index.ts の GET /api/aichat/subqueries が LEFT JOIN を含む', () => {
+    const { readFileSync } = require('node:fs');
+    const { resolve } = require('node:path');
+    const src = readFileSync(resolve(__dirname, '..', 'index.ts'), 'utf-8');
+    const idx = src.indexOf("app.get('/api/aichat/subqueries'");
+    expect(idx).toBeGreaterThan(-1);
+    const fn = src.slice(idx, idx + 400);
+    expect(fn).toContain('LEFT JOIN');
+  });
+});
+
 describe('サイドバー：モデル名削除・新着/キーワードトグル・キーワードフィルタ', () => {
   it('renderSidebarResults の result-meta にモデル名表示コードが含まれない', () => {
     const html = getAiChatPage(minimalUser, []);

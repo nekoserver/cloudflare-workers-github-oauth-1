@@ -2703,12 +2703,20 @@ app.get('/aichat', authMiddleware, async (c) => {
 /**
  * AI チャット API（認証が必要）
  */
+const AICHAT_ALLOWED_MODELS = new Set([
+  '@cf/meta/llama-3.3-70b-instruct-fp8-fast',
+  '@cf/meta/llama-3.1-8b-instruct-fp8',
+  '@cf/meta/llama-3.1-70b-instruct',
+  '@cf/google/gemma-4-26b-a4b-it',
+  '@cf/deepseek-ai/deepseek-r1-distill-qwen-32b',
+]);
+
 app.post('/api/aichat', authMiddleware, async (c) => {
   const user = c.get('user');
   if (!c.env.AI) {
     return jsonUtf8({ error: 'AI バインディングが未設定です' }, 503);
   }
-  let body: { message?: string };
+  let body: { message?: string; model?: string };
   try {
     body = await c.req.json();
   } catch {
@@ -2718,9 +2726,12 @@ app.post('/api/aichat', authMiddleware, async (c) => {
   if (!message) {
     return jsonUtf8({ error: 'メッセージが空です' }, 400);
   }
+  const requestedModel = (body.model ?? '').trim();
   const configuredModel = (c.env.AI_CHAT_MODEL ?? '').trim();
   const fallbackModel = '@cf/meta/llama-3.1-8b-instruct-fp8';
-  const primaryModel = configuredModel || fallbackModel;
+  const primaryModel = (requestedModel && AICHAT_ALLOWED_MODELS.has(requestedModel))
+    ? requestedModel
+    : (configuredModel || fallbackModel);
 
   const runAi = async (model: string): Promise<string> => {
     const result = await c.env.AI!.run(model as Parameters<typeof c.env.AI.run>[0], {
@@ -2732,45 +2743,27 @@ app.post('/api/aichat', authMiddleware, async (c) => {
       : '';
   };
 
-  // AI_CHAT_MODEL が設定されているときは必ずそのモデルを使い、
-  // 失敗した場合のみフォールバックモデルで再試行する
-  if (configuredModel) {
-    try {
-      const response = await runAi(configuredModel);
-      return jsonUtf8({ response, usedModel: configuredModel });
-    } catch (primaryErr) {
-      logger.warn('AI chat primary model failed, trying fallback', {
-        model: configuredModel,
-        fallback: fallbackModel,
-        user: user.sub,
-        error: primaryErr instanceof Error ? primaryErr.message : 'Unknown error',
-      });
-      // AI_CHAT_MODEL が失敗した場合のみフォールバック
-      if (configuredModel === fallbackModel) {
-        return jsonUtf8({ error: 'AI への問い合わせに失敗しました' }, 500);
-      }
-      try {
-        const response = await runAi(fallbackModel);
-        return jsonUtf8({ response, usedModel: fallbackModel, fallbackUsed: true });
-      } catch (fallbackErr) {
-        logger.warn('AI chat fallback model also failed', {
-          model: fallbackModel,
-          user: user.sub,
-          error: fallbackErr instanceof Error ? fallbackErr.message : 'Unknown error',
-        });
-        return jsonUtf8({ error: 'AI への問い合わせに失敗しました' }, 500);
-      }
+  try {
+    const response = await runAi(primaryModel);
+    return jsonUtf8({ response, usedModel: primaryModel });
+  } catch (primaryErr) {
+    logger.warn('AI chat primary model failed, trying fallback', {
+      model: primaryModel,
+      fallback: fallbackModel,
+      user: user.sub,
+      error: primaryErr instanceof Error ? primaryErr.message : 'Unknown error',
+    });
+    if (primaryModel === fallbackModel) {
+      return jsonUtf8({ error: 'AI への問い合わせに失敗しました' }, 500);
     }
-  } else {
-    // AI_CHAT_MODEL 未設定時はフォールバックモデルで実行
     try {
-      const response = await runAi(primaryModel);
-      return jsonUtf8({ response, usedModel: primaryModel });
-    } catch (error) {
-      logger.warn('AI chat failed', {
-        model: primaryModel,
+      const response = await runAi(fallbackModel);
+      return jsonUtf8({ response, usedModel: fallbackModel, fallbackUsed: true });
+    } catch (fallbackErr) {
+      logger.warn('AI chat fallback model also failed', {
+        model: fallbackModel,
         user: user.sub,
-        error: error instanceof Error ? error.message : 'Unknown error',
+        error: fallbackErr instanceof Error ? fallbackErr.message : 'Unknown error',
       });
       return jsonUtf8({ error: 'AI への問い合わせに失敗しました' }, 500);
     }
@@ -3025,8 +3018,13 @@ app.post('/api/aichat/search-impressions', authMiddleware, async (c) => {
 app.get('/api/aichat/subqueries', authMiddleware, async (c) => {
   if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
   const rows = await c.env.DB.prepare(
-    `SELECT id, query FROM aichat_subqueries ORDER BY id DESC LIMIT 100`
-  ).all<{ id: number; query: string }>();
+    `SELECT s.id, s.query, COUNT(l.id) AS link_count
+     FROM aichat_subqueries s
+     LEFT JOIN aichat_share_subquery_links l ON l.subquery_id = s.id
+     GROUP BY s.id, s.query
+     ORDER BY link_count DESC, s.id DESC
+     LIMIT 100`
+  ).all<{ id: number; query: string; link_count: number }>();
   return jsonUtf8({ items: rows.results ?? [] });
 });
 

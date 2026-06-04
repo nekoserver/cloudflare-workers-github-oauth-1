@@ -4,6 +4,14 @@
 import { escapeHtml } from '../utils/html';
 import { getThemeCSS, getThemeInitScript, getThemeToggleCSS, getThemeToggleHTML, getThemeToggleScript } from '../utils/theme';
 
+const DEFAULT_AICHAT_MODELS: Array<{value: string; label: string}> = [
+  { value: '@cf/meta/llama-3.3-70b-instruct-fp8-fast', label: 'llama-3.3-70b-fast' },
+  { value: '@cf/meta/llama-3.1-8b-instruct-fp8', label: 'llama-3.1-8b' },
+  { value: '@cf/meta/llama-3.1-70b-instruct', label: 'llama-3.1-70b' },
+  { value: '@cf/google/gemma-4-26b-a4b-it', label: 'gemma-4-26b' },
+  { value: '@cf/deepseek-ai/deepseek-r1-distill-qwen-32b', label: 'deepseek-r1-32b' },
+];
+
 export function getAiChatPage(user: {
   name?: string;
   username: string;
@@ -11,11 +19,18 @@ export function getAiChatPage(user: {
   aiChatModel: string;
   aiChatModelConfigured?: boolean;
   fallbackModel?: string;
+  availableModels?: Array<{value: string; label: string}>;
 }): string {
   const displayName = escapeHtml(user.name || user.username);
   const initials = escapeHtml((user.name || user.username).substring(0, 2).toUpperCase());
   const safeModel = escapeHtml(user.aiChatModel);
-  const modelShortName = escapeHtml(user.aiChatModel.split('/').pop() ?? user.aiChatModel);
+  const models = user.availableModels ?? DEFAULT_AICHAT_MODELS;
+  const modelList = models.some(m => m.value === user.aiChatModel)
+    ? models
+    : [{ value: user.aiChatModel, label: user.aiChatModel.split('/').pop() ?? user.aiChatModel }, ...models];
+  const modelOptionsHtml = modelList
+    .map(m => `<option value="${escapeHtml(m.value)}"${m.value === user.aiChatModel ? ' selected' : ''}>${escapeHtml(m.label)}</option>`)
+    .join('');
 
   return `<!DOCTYPE html>
 <html lang="ja">
@@ -75,6 +90,13 @@ export function getAiChatPage(user: {
       white-space: nowrap;
     }
     .navbar-model { font-size: 11px; font-weight: 400; color: var(--text-muted); }
+    .navbar-model-select {
+      font-size: 11px; font-weight: 400; color: var(--text-muted);
+      background: transparent; border: none; outline: none; cursor: pointer;
+      padding: 0 2px; max-width: 180px; flex-shrink: 0;
+    }
+    .navbar-model-select:hover { color: var(--text-primary); }
+    .navbar-model-select option { background: var(--card-bg); color: var(--text-primary); }
 
     .navbar-spacer { flex: 1; }
     .search-log-btn {
@@ -563,7 +585,8 @@ export function getAiChatPage(user: {
   <!-- ナビバー -->
   <nav class="navbar">
     <button class="sidebar-toggle" id="sidebarToggle" title="履歴検索">☰</button>
-    <a href="/welcome" class="navbar-brand">🤖 AI チャット<span class="navbar-model">${modelShortName}</span></a>
+    <a href="/welcome" class="navbar-brand">🤖 AI チャット</a>
+    <select id="modelSelect" class="navbar-model-select">${modelOptionsHtml}</select>
     <div class="navbar-spacer"></div>
     <div class="user-menu">
       <button class="search-hist-btn" id="linkedQuestionsBtn" title="サブクエリを持つ質問一覧">📎 リンク質問</button>
@@ -2146,10 +2169,10 @@ export function getAiChatPage(user: {
         subqueriesListBody.innerHTML = '<div style="color:var(--text-muted);padding:10px;">サブクエリがまだ登録されていません</div>';
         return;
       }
-      var html = '<table class="search-log-table"><thead><tr><th>#</th><th>サブクエリ</th></tr></thead><tbody>';
+      var html = '<table class="search-log-table"><thead><tr><th>サブクエリ</th><th style="text-align:right;">追加質問数</th></tr></thead><tbody>';
       items.forEach(function(item) {
-        html += '<tr><td style="text-align:right;width:40px;">' + escHtml(String(item.id)) + '</td>';
-        html += '<td>' + escHtml(item.query) + '</td></tr>';
+        html += '<tr><td>' + escHtml(item.query) + '</td>';
+        html += '<td style="text-align:right;width:64px;color:var(--text-muted);">' + (item.link_count || 0) + '</td></tr>';
       });
       html += '</tbody></table>';
       subqueriesListBody.innerHTML = html;
@@ -2418,6 +2441,10 @@ export function getAiChatPage(user: {
     }
 
     var lastModel = ${JSON.stringify(safeModel)};
+    var modelSelect = document.getElementById('modelSelect');
+    modelSelect.addEventListener('change', function() {
+      lastModel = modelSelect.value;
+    });
 
     chatForm.addEventListener('submit', function(e) {
       e.preventDefault();
@@ -2432,7 +2459,7 @@ export function getAiChatPage(user: {
       fetch('/api/aichat', {
         method: 'POST', credentials: 'same-origin',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: msg })
+        body: JSON.stringify({ message: msg, model: lastModel })
       })
         .then(function(res) { return res.json(); })
         .then(function(data) {
