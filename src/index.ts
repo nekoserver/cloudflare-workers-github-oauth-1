@@ -39,6 +39,7 @@ import { validateReturnTo } from './utils/returnTo';
 import * as logger from './utils/logger';
 import { resolveIdleTimeoutSeconds, type Bindings, type Variables, type GitHubWebhookInstallationPayload, type GitHubWebhookRepositoryPayload, type GitHubWebhookPullRequestPayload, type ResendWebhookPayload } from './types';
 import { withAiTimeout, AI_CLASSIFY_TIMEOUT_MS } from './utils/aiTimeout';
+import { computeConversationHash } from './utils/conversationHash';
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -737,6 +738,10 @@ INSERT OR REPLACE INTO table_column_keys (table_name, column_name, key_type, fk_
 ('aichat_share_subquery_links', 'id', 'pk', NULL);
 INSERT OR REPLACE INTO table_column_keys (table_name, column_name, key_type, fk_target_table) VALUES
 ('aichat_share_subquery_links', 'subquery_id', 'fk', 'aichat_subqueries');`,
+  '0047': `ALTER TABLE ai_chat_shares ADD COLUMN conversation_hash TEXT;
+CREATE INDEX IF NOT EXISTS idx_ai_chat_shares_conv_hash ON ai_chat_shares(conversation_hash);
+INSERT OR REPLACE INTO table_column_keys (table_name, column_name, key_type, fk_target_table) VALUES
+('ai_chat_shares', 'conversation_hash', 'uk', NULL);`,
   'ts-catalog': `CREATE TABLE IF NOT EXISTS ts_repository (
   id            INTEGER PRIMARY KEY AUTOINCREMENT,
   full_name     TEXT NOT NULL UNIQUE,
@@ -1021,7 +1026,7 @@ export const TABLE_COLUMN_KEYS: Record<string, ColumnKeyInfo> = {
   ai_summary_link_access_log: { id: 'pk', request_id: 'fk', route: 'idx', issue_code: 'idx', created_at: 'idx' },
   commit_stats_cache: { id: 'pk', owner: 'idx', repo: 'idx', period: 'idx' },
   repo_commit_index: { commit_hash: 'pk', seq_num: 'idx', github_pr_number: 'idx', repo_name: 'idx' },
-  ai_chat_shares: { id: 'pk', user_id: 'fk', user_hash: 'idx' },
+  ai_chat_shares: { id: 'pk', user_id: 'fk', user_hash: 'idx', conversation_hash: 'uk' },
   aichat_search_log: { id: 'pk', user_id: 'fk', share_id: 'fk', keyword: 'idx' },
   aichat_search_history: { id: 'pk', user_id: 'fk', share_id: 'fk', keyword: 'idx', seq_num: 'idx' },
   aichat_search_impressions: { id: 'pk', user_id: 'fk', share_id: 'fk' },
@@ -2754,10 +2759,11 @@ app.post('/api/aichat', authMiddleware, async (c) => {
       crypto.getRandomValues(tokenBytes);
       const shareId = Array.from(tokenBytes).map((b) => b.toString(16).padStart(2, '0')).join('');
       const now = new Date().toISOString();
+      const conversationHash = await computeConversationHash(user.sub, message, response, usedModel, now);
       await c.env.DB.prepare(
-        'INSERT INTO ai_chat_shares (id, user_id, user_hash, question, answer, model, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
-      ).bind(shareId, user.sub, userHash, message, response, usedModel, now).run();
-      return { shareId, userHash };
+        'INSERT INTO ai_chat_shares (id, user_id, user_hash, question, answer, model, created_at, conversation_hash) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+      ).bind(shareId, user.sub, userHash, message, response, usedModel, now, conversationHash).run();
+      return { shareId, userHash, conversationHash };
     } catch (saveErr) {
       logger.warn('AI chat auto-save failed', {
         error: saveErr instanceof Error ? saveErr.message : 'Unknown',
@@ -3262,9 +3268,10 @@ app.post('/api/aichat/share', authMiddleware, async (c) => {
   const shareToken = Array.from(tokenBytes).map((b) => b.toString(16).padStart(2, '0')).join('');
 
   const now = new Date().toISOString();
+  const conversationHash = await computeConversationHash(user.sub, question, answer, model, now);
   await c.env.DB.prepare(
-    'INSERT INTO ai_chat_shares (id, user_id, user_hash, question, answer, model, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
-  ).bind(shareToken, user.sub, userHash, question, answer, model, now).run();
+    'INSERT INTO ai_chat_shares (id, user_id, user_hash, question, answer, model, created_at, conversation_hash) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+  ).bind(shareToken, user.sub, userHash, question, answer, model, now, conversationHash).run();
 
   const origin = new URL(c.req.url).origin;
   const shareUrl = `${origin}/s/${userHash}/${shareToken}`;
