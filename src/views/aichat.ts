@@ -699,7 +699,7 @@ export function getAiChatPage(user: {
       <div class="chat-log" id="chatLog"></div>
       <div class="chat-form-area">
         <form class="chat-form" id="chatForm">
-          <textarea class="chat-input" id="chatInput" placeholder="メッセージを入力... (Shift+Enter で改行)" rows="1"></textarea>
+          <textarea class="chat-input" id="chatInput" placeholder="メッセージを入力... (Ctrl+Enter または Shift+Enter で送信)" rows="1"></textarea>
           <button type="submit" class="chat-send-btn" id="chatSendBtn">送信</button>
         </form>
       </div>
@@ -2569,7 +2569,7 @@ export function getAiChatPage(user: {
       chatInput.style.height = Math.min(chatInput.scrollHeight, 160) + 'px';
     });
     chatInput.addEventListener('keydown', function(e) {
-      if (e.key === 'Enter' && !e.shiftKey) {
+      if (e.key === 'Enter' && (e.ctrlKey || e.metaKey || e.shiftKey)) {
         e.preventDefault();
         if (!chatSendBtn.disabled) chatForm.dispatchEvent(new Event('submit'));
       }
