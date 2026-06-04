@@ -53,14 +53,24 @@ describe('aichat.ts モデル名表示', () => {
     expect(html).toContain('shortModelName(model)');
   });
 
-  it('送信ハンドラーが usedModel 変数を使用している', () => {
+  it('送信ハンドラーが usedModel 変数を使用している（DB保存用）', () => {
     const html = buildPage(FULL_MODEL);
     expect(html).toContain('var usedModel = data.usedModel || lastModel');
   });
 
-  it('appendBubble の呼び出しに usedModel が渡されている', () => {
+  it('appendBubble の呼び出しにナビバー選択モデル（lastModel）が渡されている', () => {
     const html = buildPage(FULL_MODEL);
-    expect(html).toContain('appendBubble(responseText, \'assistant\', usedModel)');
+    expect(html).toContain("appendBubble(responseText, 'assistant', lastModel, data.fallbackUsed)");
+  });
+
+  it('appendBubble の呼び出しに usedModel は渡されていない（フォールバック名が表示されないよう）', () => {
+    const html = buildPage(FULL_MODEL);
+    expect(html).not.toContain("appendBubble(responseText, 'assistant', usedModel)");
+  });
+
+  it('lastModel は modelSelect.value で初期化される', () => {
+    const html = buildPage(FULL_MODEL);
+    expect(html).toContain('var lastModel = modelSelect.value');
   });
 
   it('model select に初期モデルが selected 属性付きで存在する', () => {
@@ -71,5 +81,47 @@ describe('aichat.ts モデル名表示', () => {
   it('初期モデルのラベルが select option に含まれる', () => {
     const html = buildPage(FULL_MODEL);
     expect(html).toContain(`>${SHORT_MODEL}</option>`);
+  });
+});
+
+describe('フォールバック発生時の表示', () => {
+  it('.bubble-label-fallback CSS クラスが HTML に含まれる', () => {
+    const html = buildPage(FULL_MODEL);
+    expect(html).toContain('.bubble-label-fallback');
+  });
+
+  it('.bubble-fallback-notice CSS クラスが HTML に含まれる', () => {
+    const html = buildPage(FULL_MODEL);
+    expect(html).toContain('.bubble-fallback-notice');
+  });
+
+  it('appendBubble がフォールバック引数を受け取るコードを含む', () => {
+    const html = buildPage(FULL_MODEL);
+    expect(html).toContain('isFallback');
+  });
+
+  it('フォールバック時にバブルラベルに (フォールバック) テキストを追加する', () => {
+    const html = buildPage(FULL_MODEL);
+    expect(html).toContain('(フォールバック)');
+  });
+
+  it('フォールバック時にバブル内にフォールバック通知を挿入するコードを含む', () => {
+    const html = buildPage(FULL_MODEL);
+    expect(html).toContain('bubble-fallback-notice');
+  });
+
+  it('フォールバック通知のテキストが「フォールバックされました」を含む', () => {
+    const html = buildPage(FULL_MODEL);
+    expect(html).toContain('フォールバックされました');
+  });
+
+  it('送信ハンドラーが data.fallbackUsed を参照している', () => {
+    const html = buildPage(FULL_MODEL);
+    expect(html).toContain('data.fallbackUsed');
+  });
+
+  it('appendBubble 呼び出しに isFallback 引数が渡されている', () => {
+    const html = buildPage(FULL_MODEL);
+    expect(html).toContain('appendBubble(responseText, \'assistant\', lastModel, data.fallbackUsed)');
   });
 });
