@@ -1155,6 +1155,66 @@ describe('appendShareBtn — 追加質問ボタン', () => {
   });
 });
 
+describe('ナビバー モデル選択ドロップダウン', () => {
+  it('modelSelect セレクト要素が HTML に存在する', () => {
+    const html = getAiChatPage(minimalUser, []);
+    expect(html).toContain('id="modelSelect"');
+  });
+
+  it('navbar-model-select クラスが HTML に存在する', () => {
+    const html = getAiChatPage(minimalUser, []);
+    expect(html).toContain('navbar-model-select');
+  });
+
+  it('モデルリストに llama-3.3-70b が含まれる', () => {
+    const html = getAiChatPage(minimalUser, []);
+    expect(html).toContain('llama-3.3-70b');
+  });
+
+  it('モデルリストに llama-3.1-8b が含まれる', () => {
+    const html = getAiChatPage(minimalUser, []);
+    expect(html).toContain('llama-3.1-8b');
+  });
+
+  it('modelSelect change イベントで lastModel を更新する', () => {
+    const html = getAiChatPage(minimalUser, []);
+    const idx = html.indexOf("modelSelect.addEventListener('change'");
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 200);
+    expect(fn).toContain('lastModel');
+  });
+
+  it('chatForm submit が model フィールドを送信する', () => {
+    const html = getAiChatPage(minimalUser, []);
+    const idx = html.indexOf("chatForm.addEventListener('submit'");
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 700);
+    expect(fn).toContain('model:');
+  });
+
+  it('CSS に .navbar-model-select スタイルが存在する', () => {
+    const html = getAiChatPage(minimalUser, []);
+    expect(html).toContain('.navbar-model-select');
+  });
+
+  it('index.ts に AICHAT_ALLOWED_MODELS が存在する', () => {
+    const { readFileSync } = require('node:fs');
+    const { resolve } = require('node:path');
+    const src = readFileSync(resolve(__dirname, '..', 'index.ts'), 'utf-8');
+    expect(src).toContain('AICHAT_ALLOWED_MODELS');
+  });
+
+  it('index.ts の /api/aichat が body.model を読む', () => {
+    const { readFileSync } = require('node:fs');
+    const { resolve } = require('node:path');
+    const src = readFileSync(resolve(__dirname, '..', 'index.ts'), 'utf-8');
+    const idx = src.indexOf("app.post('/api/aichat'");
+    expect(idx).toBeGreaterThan(-1);
+    const fn = src.slice(idx, idx + 800);
+    expect(fn).toContain('body.model');
+  });
+});
+
 describe('サイドバー：モデル名削除・新着/キーワードトグル・キーワードフィルタ', () => {
   it('renderSidebarResults の result-meta にモデル名表示コードが含まれない', () => {
     const html = getAiChatPage(minimalUser, []);
