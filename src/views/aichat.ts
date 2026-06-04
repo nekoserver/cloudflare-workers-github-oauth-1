@@ -2169,10 +2169,10 @@ export function getAiChatPage(user: {
         subqueriesListBody.innerHTML = '<div style="color:var(--text-muted);padding:10px;">サブクエリがまだ登録されていません</div>';
         return;
       }
-      var html = '<table class="search-log-table"><thead><tr><th>#</th><th>サブクエリ</th></tr></thead><tbody>';
+      var html = '<table class="search-log-table"><thead><tr><th>サブクエリ</th><th style="text-align:right;">追加質問数</th></tr></thead><tbody>';
       items.forEach(function(item) {
-        html += '<tr><td style="text-align:right;width:40px;">' + escHtml(String(item.id)) + '</td>';
-        html += '<td>' + escHtml(item.query) + '</td></tr>';
+        html += '<tr><td>' + escHtml(item.query) + '</td>';
+        html += '<td style="text-align:right;width:64px;color:var(--text-muted);">' + (item.link_count || 0) + '</td></tr>';
       });
       html += '</tbody></table>';
       subqueriesListBody.innerHTML = html;

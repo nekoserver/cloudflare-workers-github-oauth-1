@@ -3018,8 +3018,13 @@ app.post('/api/aichat/search-impressions', authMiddleware, async (c) => {
 app.get('/api/aichat/subqueries', authMiddleware, async (c) => {
   if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
   const rows = await c.env.DB.prepare(
-    `SELECT id, query FROM aichat_subqueries ORDER BY id DESC LIMIT 100`
-  ).all<{ id: number; query: string }>();
+    `SELECT s.id, s.query, COUNT(l.id) AS link_count
+     FROM aichat_subqueries s
+     LEFT JOIN aichat_share_subquery_links l ON l.subquery_id = s.id
+     GROUP BY s.id, s.query
+     ORDER BY link_count DESC, s.id DESC
+     LIMIT 100`
+  ).all<{ id: number; query: string; link_count: number }>();
   return jsonUtf8({ items: rows.results ?? [] });
 });
 
