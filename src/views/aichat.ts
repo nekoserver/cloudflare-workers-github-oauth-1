@@ -554,6 +554,9 @@ export function getAiChatPage(user: {
     .chat-bubble.thinking {
       align-self: flex-start; background: var(--card-bg); border: 1px solid var(--border-color); color: var(--text-muted); font-style: italic;
     }
+    .chat-bubble-wrap { align-self: flex-start; display: flex; flex-direction: column; gap: 3px; max-width: 85%; }
+    .chat-bubble-wrap .chat-bubble.assistant { align-self: auto; max-width: 100%; }
+    .bubble-label { font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; }
     .chat-share-row { align-self: flex-start; margin-top: -6px; display: flex; align-items: center; gap: 4px; }
     .chat-share-btn {
       background: none; border: 1px solid var(--border-color); border-radius: 6px;
@@ -1936,8 +1939,12 @@ export function getAiChatPage(user: {
       renderSidebarResults();
     }
 
+    function shortModelName(model) {
+      return model ? (model.split('/').pop() || model) : '';
+    }
+
     function formatHistoryMeta(r) {
-      return r.created_at.slice(0, 16).replace('T', ' ') + '　' + r.model + '　👁 ' + (r.access_count || 0);
+      return r.created_at.slice(0, 16).replace('T', ' ') + '　' + shortModelName(r.model) + '　👁 ' + (r.access_count || 0);
     }
 
     function appendHistoryModalBubble(text, role) {
@@ -2033,7 +2040,7 @@ export function getAiChatPage(user: {
       if (keyword) applyKeywordHighlight(historyModalChat, keyword);
       historyModalDateLink.textContent = r.created_at.slice(0, 10);
       historyModalTime.textContent = ' ' + r.created_at.slice(11, 16);
-      historyModalMeta.textContent = r.model + '　👁 ' + (r.access_count || 0);
+      historyModalMeta.textContent = shortModelName(r.model) + '　👁 ' + (r.access_count || 0);
       historyModalShareLink.href = '/s/' + r.user_hash + '/' + r.id;
       historyModalCurrentId = r.id;
       currentHistoryQuestion = r.question || '';
@@ -2473,11 +2480,23 @@ export function getAiChatPage(user: {
       }
     });
 
-    function appendBubble(text, role) {
+    function appendBubble(text, role, model) {
       var el = document.createElement('div');
       if (role === 'assistant') {
-        el.className = 'chat-bubble ' + role + ' preview-area';
+        el.className = 'chat-bubble assistant preview-area';
         el.innerHTML = parseMd(text);
+        if (model) {
+          var wrap = document.createElement('div');
+          wrap.className = 'chat-bubble-wrap';
+          var lbl = document.createElement('div');
+          lbl.className = 'bubble-label';
+          lbl.textContent = shortModelName(model);
+          wrap.appendChild(lbl);
+          wrap.appendChild(el);
+          chatLog.appendChild(wrap);
+          chatLog.scrollTop = chatLog.scrollHeight;
+          return el;
+        }
       } else {
         el.className = 'chat-bubble ' + role;
         el.textContent = text;
@@ -2572,8 +2591,9 @@ export function getAiChatPage(user: {
             appendBubble('エラー: ' + data.error, 'error');
           } else {
             var responseText = data.response || '(応答なし)';
-            appendBubble(responseText, 'assistant');
-            appendShareBtn(currentMsg, responseText, data.usedModel || lastModel, data.shareId, data.userHash);
+            var usedModel = data.usedModel || lastModel;
+            appendBubble(responseText, 'assistant', usedModel);
+            appendShareBtn(currentMsg, responseText, usedModel, data.shareId, data.userHash);
           }
         })
         .catch(function() { thinking.remove(); appendBubble('通信エラーが発生しました', 'error'); })
