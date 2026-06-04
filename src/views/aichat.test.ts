@@ -1738,3 +1738,46 @@ describe('サブクエリ一覧モーダル：キーワードバッジクリッ�
     expect(fn).toContain('keywords');
   });
 });
+
+describe('サブクエリ一覧：質問一覧モーダルから過去ログモーダルを開く', () => {
+  it('renderSqKwQuestionsResult が tr に data-share-id を付与する', () => {
+    const html = getAiChatPage(minimalUser, []);
+    const idx = html.indexOf('function renderSqKwQuestionsResult(');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 900);
+    expect(fn).toContain('data-share-id');
+  });
+
+  it('renderSqKwQuestionsResult の tr が cursor:pointer を持つ', () => {
+    const html = getAiChatPage(minimalUser, []);
+    const idx = html.indexOf('function renderSqKwQuestionsResult(');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 1100);
+    expect(fn).toContain('cursor:pointer');
+  });
+
+  it('sqKwQuestionsBody の click ハンドラが openHistoryModalByShareId を呼ぶ', () => {
+    const html = getAiChatPage(minimalUser, []);
+    const idx = html.indexOf("sqKwQuestionsBody.addEventListener('click'");
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 400);
+    expect(fn).toContain('openHistoryModalByShareId');
+  });
+
+  it('sqKwQuestionsBody の click ハンドラが historyModalBackdrop の z-index を引き上げる', () => {
+    const html = getAiChatPage(minimalUser, []);
+    const idx = html.indexOf("sqKwQuestionsBody.addEventListener('click'");
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 400);
+    expect(fn).toContain('historyModalBackdrop');
+    expect(fn).toContain('zIndex');
+  });
+
+  it('closeHistoryModal が historyModalBackdrop の zIndex をリセットする', () => {
+    const html = getAiChatPage(minimalUser, []);
+    const idx = html.indexOf('function closeHistoryModal(');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 200);
+    expect(fn).toContain('zIndex');
+  });
+});
