@@ -109,6 +109,7 @@ const STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
   { name: 'aichat_search_impressions', migration: '0044', description: 'AIチャット検索露出ログ（検索結果全件）', syncPolicy: 'auto' },
   { name: 'aichat_subqueries', migration: '0045', description: 'AIチャットサブクエリマスタ', syncPolicy: 'manual' },
   { name: 'aichat_share_subquery_links', migration: '0046', description: 'AIチャット共有質問×サブクエリリンク', syncPolicy: 'auto' },
+  { name: 'aichat_model_colors', migration: '0048', description: 'AIチャットモデルカラー設定', syncPolicy: 'manual' },
   { name: 'ts_repository',           migration: 'ts-catalog', description: '関数カタログ: リポジトリ一覧',             syncPolicy: 'manual' },
   { name: 'ts_function_catalog',     migration: 'ts-catalog', description: '関数カタログ: 関数定義一覧',               syncPolicy: 'manual' },
   { name: 'ts_commit_log',           migration: 'ts-catalog', description: '関数カタログ: コミット履歴',               syncPolicy: 'manual' },
@@ -744,6 +745,18 @@ INSERT OR REPLACE INTO table_column_keys (table_name, column_name, key_type, fk_
 CREATE INDEX IF NOT EXISTS idx_ai_chat_shares_conv_hash ON ai_chat_shares(conversation_hash);
 INSERT OR REPLACE INTO table_column_keys (table_name, column_name, key_type, fk_target_table) VALUES
 ('ai_chat_shares', 'conversation_hash', 'uk', NULL);`,
+  '0048': `CREATE TABLE IF NOT EXISTS aichat_model_colors (
+  model_id TEXT PRIMARY KEY,
+  color TEXT NOT NULL,
+  label TEXT NOT NULL
+);
+INSERT OR IGNORE INTO aichat_model_colors (model_id, color, label) VALUES
+  ('@cf/meta/llama-3.3-70b-instruct-fp8-fast', '#4f46e5', 'llama-3.3-70b-instruct-fp8-fast'),
+  ('@cf/meta/llama-3.1-8b-instruct-fp8', '#0ea5e9', 'llama-3.1-8b'),
+  ('@cf/meta/llama-3.1-70b-instruct', '#3b82f6', 'llama-3.1-70b'),
+  ('@cf/google/gemma-4-26b-a4b-it', '#16a34a', 'gemma-4-26b'),
+  ('@cf/google/gemma-3-12b-it', '#22c55e', 'gemma-3-12b'),
+  ('@cf/meta/llama-4-scout-17b-16e-instruct', '#a855f7', 'llama-4-scout-17b');`,
   'ts-catalog': `CREATE TABLE IF NOT EXISTS ts_repository (
   id            INTEGER PRIMARY KEY AUTOINCREMENT,
   full_name     TEXT NOT NULL UNIQUE,
@@ -1034,6 +1047,7 @@ export const TABLE_COLUMN_KEYS: Record<string, ColumnKeyInfo> = {
   aichat_search_impressions: { id: 'pk', user_id: 'fk', share_id: 'fk' },
   aichat_subqueries: { id: 'pk' },
   aichat_share_subquery_links: { id: 'pk', subquery_id: 'fk' },
+  aichat_model_colors: { model_id: 'pk' },
   keyword_category_groups: { id: 'pk', user_id: 'fk' },
   keyword_multi_labels: { id: 'pk', user_id: 'fk', search_query: 'idx' },
   ts_repository:          { id: 'pk', full_name: 'uk' },
@@ -1102,6 +1116,7 @@ export const TABLE_GROUP_MAP: Record<string, string> = {
   aichat_search_impressions: 'ai',
   aichat_subqueries: 'ai',
   aichat_share_subquery_links: 'ai',
+  aichat_model_colors: 'ai',
   keyword_category_groups: 'search',
   keyword_multi_labels: 'search',
   ts_repository:          'ts-catalog',
@@ -2697,6 +2712,17 @@ app.get('/aichat', authMiddleware, async (c) => {
   const configuredModel = (c.env.AI_CHAT_MODEL ?? '').trim();
   const fallbackModel = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
   const aiChatModel = configuredModel || fallbackModel;
+  let modelColors: Record<string, string> = {};
+  if (c.env.DB) {
+    try {
+      const rows = await c.env.DB.prepare('SELECT model_id, color FROM aichat_model_colors').all<{ model_id: string; color: string }>();
+      for (const row of rows.results ?? []) {
+        modelColors[row.model_id] = row.color;
+      }
+    } catch {
+      logger.warn('aichat_model_colors query failed, using empty map');
+    }
+  }
   return c.html(getAiChatPage({
     name: user.name,
     username: user.sub,
@@ -2704,6 +2730,7 @@ app.get('/aichat', authMiddleware, async (c) => {
     aiChatModel,
     aiChatModelConfigured: !!configuredModel,
     fallbackModel,
+    modelColors,
   }));
 });
 
@@ -2717,8 +2744,11 @@ const AICHAT_ALLOWED_MODELS = new Set([
   '@cf/google/gemma-4-26b-a4b-it',
   '@cf/google/gemma-3-12b-it',
   '@cf/meta/llama-4-scout-17b-16e-instruct',
-  '@cf/zai-org/glm-4.7-flash',
 ]);
+
+const AICHAT_MODEL_MAX_TOKENS: Readonly<Record<string, number>> = {
+  '@cf/google/gemma-4-26b-a4b-it': 16384,
+};
 
 app.post('/api/aichat', authMiddleware, async (c) => {
   const user = c.get('user');
@@ -2745,9 +2775,10 @@ app.post('/api/aichat', authMiddleware, async (c) => {
   const systemPromptMode: SystemPromptMode = (ALLOWED_MODES.has(rawMode) ? rawMode : 'a') as SystemPromptMode;
 
   const runAi = async (model: string): Promise<string> => {
+    const maxTokens = AICHAT_MODEL_MAX_TOKENS[model] ?? 4096;
     const result = await c.env.AI!.run(model as Parameters<typeof c.env.AI.run>[0], {
       messages: buildAiMessages(message, systemPromptMode),
-      max_tokens: 4096,
+      max_tokens: maxTokens,
     });
     const raw = typeof result === 'object' && result !== null && 'response' in result
       ? String((result as { response: unknown }).response ?? '')

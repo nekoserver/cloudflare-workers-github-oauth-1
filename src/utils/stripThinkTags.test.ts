@@ -35,4 +35,19 @@ describe('stripThinkTags', () => {
     const input = '  <think>推論</think>  回答  ';
     expect(stripThinkTags(input)).toBe('回答');
   });
+
+  it('閉じタグのない不完全な think ブロックを除去する（max_tokens 枯渇ケース）', () => {
+    const input = '<think>max_tokens 上限で切れた思考の途中...';
+    expect(stripThinkTags(input)).toBe('');
+  });
+
+  it('不完全な think ブロックの後に続くテキストもすべて除去する', () => {
+    const input = '<think>思考中\n途中で切れてしまった内容がここに延々と続く';
+    expect(stripThinkTags(input)).toBe('');
+  });
+
+  it('完全な think ブロックの後に不完全な think ブロックが続く場合も処理する', () => {
+    const input = '<think>完全</think>中間テキスト<think>未完了';
+    expect(stripThinkTags(input)).toBe('中間テキスト');
+  });
 });

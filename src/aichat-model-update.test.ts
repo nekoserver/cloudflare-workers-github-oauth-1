@@ -27,9 +27,9 @@ describe('モデルリスト更新: DeepSeek 削除・新モデル追加', () =>
     expect(html).toContain('@cf/meta/llama-4-scout-17b-16e-instruct');
   });
 
-  it('glm-4.7-flash が選択肢に含まれる', () => {
+  it('glm-4.7-flash が選択肢に含まれない', () => {
     const html = buildPage(LLAMA_MODEL);
-    expect(html).toContain('@cf/zai-org/glm-4.7-flash');
+    expect(html).not.toContain('@cf/zai-org/glm-4.7-flash');
   });
 
   it('gemma-3-12b のラベルが含まれる', () => {
@@ -42,9 +42,9 @@ describe('モデルリスト更新: DeepSeek 削除・新モデル追加', () =>
     expect(html).toContain('>llama-4-scout-17b</option>');
   });
 
-  it('glm-4.7-flash のラベルが含まれる', () => {
+  it('glm-4.7-flash のラベルが含まれない', () => {
     const html = buildPage(LLAMA_MODEL);
-    expect(html).toContain('>glm-4.7-flash</option>');
+    expect(html).not.toContain('>glm-4.7-flash</option>');
   });
 });
 

@@ -11,7 +11,6 @@ const DEFAULT_AICHAT_MODELS: Array<{value: string; label: string}> = [
   { value: '@cf/google/gemma-4-26b-a4b-it', label: 'gemma-4-26b' },
   { value: '@cf/google/gemma-3-12b-it', label: 'gemma-3-12b' },
   { value: '@cf/meta/llama-4-scout-17b-16e-instruct', label: 'llama-4-scout-17b' },
-  { value: '@cf/zai-org/glm-4.7-flash', label: 'glm-4.7-flash' },
 ];
 
 export function getAiChatPage(user: {
@@ -22,6 +21,7 @@ export function getAiChatPage(user: {
   aiChatModelConfigured?: boolean;
   fallbackModel?: string;
   availableModels?: Array<{value: string; label: string}>;
+  modelColors?: Record<string, string>;
 }): string {
   const displayName = escapeHtml(user.name || user.username);
   const initials = escapeHtml((user.name || user.username).substring(0, 2).toUpperCase());
@@ -33,6 +33,7 @@ export function getAiChatPage(user: {
   const modelOptionsHtml = modelList
     .map(m => `<option value="${escapeHtml(m.value)}"${m.value === user.aiChatModel ? ' selected' : ''}>${escapeHtml(m.label)}</option>`)
     .join('');
+  const modelColorsJson = JSON.stringify(user.modelColors ?? {});
 
   return `<!DOCTYPE html>
 <html lang="ja">
@@ -296,6 +297,12 @@ export function getAiChatPage(user: {
     .sidebar-result-item {
       position: relative; overflow: hidden;
       border-bottom: 1px solid var(--border-color); flex-shrink: 0;
+      border-left: 3px solid transparent;
+    }
+    .model-color-dot {
+      width: 8px; height: 8px; border-radius: 50%; display: inline-block;
+      flex-shrink: 0; background: var(--model-dot-color, var(--border-color));
+      margin-right: 3px; vertical-align: middle;
     }
     .sidebar-result-item.has-subquery .result-swipe-inner { background: rgba(56, 189, 248, 0.10); }
     .sidebar-result-item.has-subquery .result-swipe-inner:hover { background: rgba(56, 189, 248, 0.18); }
@@ -607,7 +614,7 @@ export function getAiChatPage(user: {
   <nav class="navbar">
     <button class="sidebar-toggle" id="sidebarToggle" title="履歴検索">☰</button>
     <a href="/welcome" class="navbar-brand">🤖 AI チャット</a>
-    <select id="modelSelect" class="navbar-model-select">${modelOptionsHtml}</select>
+    <span id="modelColorDot" class="model-color-dot"></span><select id="modelSelect" class="navbar-model-select">${modelOptionsHtml}</select>
     <select id="langModeSelect" class="navbar-lang-select" title="日本語モード">
       <option value="a" selected>🇯🇵 system</option>
       <option value="b">🇯🇵 prefix</option>
@@ -1682,6 +1689,8 @@ export function getAiChatPage(user: {
       currentResults.forEach(function(r, i) {
         var item = document.createElement('div');
         item.className = 'sidebar-result-item' + (sidebarSubqueries && sidebarSubqueries.has(r.question) ? ' has-subquery' : '');
+        var modelColor = r.model && MODEL_COLORS[r.model];
+        if (modelColor) item.style.borderLeftColor = modelColor;
 
         var delBtn = document.createElement('button');
         delBtn.className = 'result-delete-btn';
@@ -2585,10 +2594,20 @@ export function getAiChatPage(user: {
       chatLog.scrollTop = chatLog.scrollHeight;
     }
 
+    var MODEL_COLORS = ${modelColorsJson};
+    var modelColorDot = document.getElementById('modelColorDot');
+
+    function applyModelColor(model) {
+      var color = MODEL_COLORS[model] || '';
+      modelColorDot.style.background = color || 'var(--border-color)';
+    }
+
     var modelSelect = document.getElementById('modelSelect');
     var lastModel = modelSelect.value;
+    applyModelColor(lastModel);
     modelSelect.addEventListener('change', function() {
       lastModel = modelSelect.value;
+      applyModelColor(lastModel);
     });
 
     var langModeSelect = document.getElementById('langModeSelect');
