@@ -1213,6 +1213,33 @@ describe('ナビバー モデル選択ドロップダウン', () => {
     const fn = src.slice(idx, idx + 800);
     expect(fn).toContain('body.model');
   });
+
+  it('モデルオプションのラベルテキストに llama-3.3-70b-instruct-fp8-fast のフルネームが表示される', () => {
+    const html = getAiChatPage(minimalUser, []);
+    expect(html).toContain('>llama-3.3-70b-instruct-fp8-fast<');
+  });
+
+  it('llama-3.3-70b-instruct-fp8-fast がデフォルト選択状態になる', () => {
+    const userWithLlama = {
+      username: 'testuser',
+      aiChatModel: '@cf/meta/llama-3.3-70b-instruct-fp8-fast',
+    };
+    const html = getAiChatPage(userWithLlama, []);
+    const idx = html.indexOf('@cf/meta/llama-3.3-70b-instruct-fp8-fast');
+    expect(idx).toBeGreaterThan(-1);
+    const snippet = html.slice(idx - 30, idx + 60);
+    expect(snippet).toContain('selected');
+  });
+
+  it('index.ts の /aichat GET fallbackModel が llama-3.3-70b-instruct-fp8-fast', () => {
+    const { readFileSync } = require('node:fs');
+    const { resolve } = require('node:path');
+    const src = readFileSync(resolve(__dirname, '..', 'index.ts'), 'utf-8');
+    const idx = src.indexOf("app.get('/aichat'");
+    expect(idx).toBeGreaterThan(-1);
+    const fn = src.slice(idx, idx + 300);
+    expect(fn).toContain('llama-3.3-70b-instruct-fp8-fast');
+  });
 });
 
 describe('サブクエリ一覧モーダル：#カラム削除・追加質問総数表示・多い順ソート', () => {

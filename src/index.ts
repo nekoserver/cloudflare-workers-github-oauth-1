@@ -2688,7 +2688,7 @@ app.get('/md-preview', (c) => {
 app.get('/aichat', authMiddleware, async (c) => {
   const user = c.get('user');
   const configuredModel = (c.env.AI_CHAT_MODEL ?? '').trim();
-  const fallbackModel = '@cf/meta/llama-3.1-8b-instruct-fp8';
+  const fallbackModel = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
   const aiChatModel = configuredModel || fallbackModel;
   return c.html(getAiChatPage({
     name: user.name,
@@ -2728,7 +2728,7 @@ app.post('/api/aichat', authMiddleware, async (c) => {
   }
   const requestedModel = (body.model ?? '').trim();
   const configuredModel = (c.env.AI_CHAT_MODEL ?? '').trim();
-  const fallbackModel = '@cf/meta/llama-3.1-8b-instruct-fp8';
+  const fallbackModel = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
   const primaryModel = (requestedModel && AICHAT_ALLOWED_MODELS.has(requestedModel))
     ? requestedModel
     : (configuredModel || fallbackModel);

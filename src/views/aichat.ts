@@ -5,7 +5,7 @@ import { escapeHtml } from '../utils/html';
 import { getThemeCSS, getThemeInitScript, getThemeToggleCSS, getThemeToggleHTML, getThemeToggleScript } from '../utils/theme';
 
 const DEFAULT_AICHAT_MODELS: Array<{value: string; label: string}> = [
-  { value: '@cf/meta/llama-3.3-70b-instruct-fp8-fast', label: 'llama-3.3-70b-fast' },
+  { value: '@cf/meta/llama-3.3-70b-instruct-fp8-fast', label: 'llama-3.3-70b-instruct-fp8-fast' },
   { value: '@cf/meta/llama-3.1-8b-instruct-fp8', label: 'llama-3.1-8b' },
   { value: '@cf/meta/llama-3.1-70b-instruct', label: 'llama-3.1-70b' },
   { value: '@cf/google/gemma-4-26b-a4b-it', label: 'gemma-4-26b' },
