@@ -2154,14 +2154,23 @@ export function getAiChatPage(user: {
     var linkedQuestionsClose = document.getElementById('linkedQuestionsClose');
     var linkedQuestionsBody = document.getElementById('linkedQuestionsBody');
     var linkedQuestionsBtn = document.getElementById('linkedQuestionsBtn');
+    var linkedQuestionsAllItems = [];
+    var linkedQuestionsFilter = 'all';
 
     function renderLinkedQuestions(items) {
-      if (!items || items.length === 0) {
+      var filtered = linkedQuestionsFilter === 'all'
+        ? items
+        : items.filter(function(it) { return it.model === linkedQuestionsFilter; });
+      if (!filtered || filtered.length === 0) {
         linkedQuestionsBody.innerHTML = '<div style="color:var(--text-muted);padding:10px;">サブクエリが紐付いた質問がまだありません</div>';
         return;
       }
-      var html = '<table class="search-log-table"><thead><tr><th>質問</th><th>サブクエリ / リンク</th></tr></thead><tbody>';
-      items.forEach(function(item) {
+      var html = '<table class="search-log-table"><thead><tr>'
+        + '<th style="cursor:pointer;user-select:none;" onclick="openLinkedQuestionsFilter()">質問 ▾</th>'
+        + '<th>サブクエリ / リンク</th></tr></thead><tbody>';
+      filtered.forEach(function(item) {
+        var modelColor = MODEL_COLORS[item.model] || '';
+        var borderStyle = modelColor ? 'border-left:3px solid ' + modelColor + ';' : 'border-left:3px solid transparent;';
         var linkRows = (item.links || []).map(function(lk) {
           return '<div style="display:flex;gap:6px;align-items:center;margin-bottom:2px;">'
             + '<span style="color:var(--text-secondary);font-size:12px;">' + escHtml(lk.query) + '</span>'
@@ -2169,7 +2178,7 @@ export function getAiChatPage(user: {
             + '</div>';
         }).join('');
         html += '<tr>'
-          + '<td class="kw-q-link" data-question="' + escHtml(item.question) + '" data-share-id="' + escHtml(item.share_id || '') + '" style="vertical-align:top;max-width:220px;cursor:pointer;">' + escHtml(item.question) + '</td>'
+          + '<td class="kw-q-link" data-question="' + escHtml(item.question) + '" data-share-id="' + escHtml(item.share_id || '') + '" style="vertical-align:top;max-width:220px;cursor:pointer;padding-left:8px;' + borderStyle + '">' + escHtml(item.question) + '</td>'
           + '<td style="vertical-align:top;">' + linkRows + '</td>'
           + '</tr>';
       });
@@ -2186,13 +2195,55 @@ export function getAiChatPage(user: {
       });
     }
 
+    function openLinkedQuestionsFilter() {
+      var models = [];
+      linkedQuestionsAllItems.forEach(function(it) {
+        if (it.model && models.indexOf(it.model) === -1) models.push(it.model);
+      });
+      var overlay = document.createElement('div');
+      overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:600;display:flex;align-items:center;justify-content:center;';
+      var box = document.createElement('div');
+      box.style.cssText = 'background:var(--bg-secondary);border-radius:10px;padding:20px;min-width:240px;max-width:340px;box-shadow:0 8px 32px rgba(0,0,0,0.18);';
+      var title = document.createElement('div');
+      title.textContent = 'モデルで絞り込む';
+      title.style.cssText = 'font-weight:700;margin-bottom:12px;font-size:14px;';
+      box.appendChild(title);
+      var allModels = ['all'].concat(models);
+      allModels.forEach(function(m) {
+        var btn = document.createElement('button');
+        var label = m === 'all' ? 'すべて' : shortModelName(m);
+        btn.textContent = label;
+        var dotColor = m !== 'all' ? (MODEL_COLORS[m] || '') : '';
+        var isActive = linkedQuestionsFilter === m;
+        btn.style.cssText = 'display:block;width:100%;text-align:left;padding:8px 12px;margin-bottom:6px;border-radius:6px;border:1px solid ' + (isActive ? 'var(--accent-color,#667eea)' : 'var(--border-color)') + ';background:' + (isActive ? 'var(--accent-color,#667eea)' : 'var(--bg-primary)') + ';color:' + (isActive ? '#fff' : 'var(--text-primary)') + ';cursor:pointer;font-size:13px;border-left:' + (dotColor ? '4px solid ' + dotColor : '4px solid transparent') + ';';
+        btn.addEventListener('click', function() {
+          linkedQuestionsFilter = m;
+          document.body.removeChild(overlay);
+          renderLinkedQuestions(linkedQuestionsAllItems);
+        });
+        box.appendChild(btn);
+      });
+      var cancelBtn = document.createElement('button');
+      cancelBtn.textContent = 'キャンセル';
+      cancelBtn.style.cssText = 'display:block;width:100%;text-align:center;padding:7px;margin-top:4px;border-radius:6px;border:1px solid var(--border-color);background:transparent;color:var(--text-muted);cursor:pointer;font-size:12px;';
+      cancelBtn.addEventListener('click', function() { document.body.removeChild(overlay); });
+      box.appendChild(cancelBtn);
+      overlay.appendChild(box);
+      overlay.addEventListener('click', function(e) { if (e.target === overlay) document.body.removeChild(overlay); });
+      document.body.appendChild(overlay);
+    }
+
     function openLinkedQuestions() {
+      linkedQuestionsFilter = 'all';
       linkedQuestionsOverlay.classList.add('open');
       linkedQuestionsOverlay.setAttribute('aria-hidden', 'false');
       linkedQuestionsBody.innerHTML = '<div class="search-log-loading">読み込み中...</div>';
       fetch('/api/aichat/share-subquery-links/all', { credentials: 'same-origin' })
         .then(function(r) { return r.json(); })
-        .then(function(d) { renderLinkedQuestions(d.items || []); })
+        .then(function(d) {
+          linkedQuestionsAllItems = d.items || [];
+          renderLinkedQuestions(linkedQuestionsAllItems);
+        })
         .catch(function() { linkedQuestionsBody.innerHTML = '<div style="color:var(--text-muted);">取得に失敗しました</div>'; });
     }
 
