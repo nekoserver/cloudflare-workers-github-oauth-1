@@ -2487,12 +2487,16 @@ export function getAiChatPage(user: {
       return el;
     }
 
-    function appendShareBtn(question, answer, model) {
+    function appendShareBtn(question, answer, model, shareId, userHash) {
       var row = document.createElement('div');
       row.className = 'chat-share-row';
       var cachedUrl = null;
       function getShareUrl() {
         if (cachedUrl) return Promise.resolve(cachedUrl);
+        if (shareId && userHash) {
+          cachedUrl = '/s/' + userHash + '/' + shareId;
+          return Promise.resolve(cachedUrl);
+        }
         return fetch('/api/aichat/share', {
           method: 'POST', credentials: 'same-origin',
           headers: { 'Content-Type': 'application/json' },
@@ -2569,7 +2573,7 @@ export function getAiChatPage(user: {
           } else {
             var responseText = data.response || '(応答なし)';
             appendBubble(responseText, 'assistant');
-            appendShareBtn(currentMsg, responseText, data.usedModel || lastModel);
+            appendShareBtn(currentMsg, responseText, data.usedModel || lastModel, data.shareId, data.userHash);
           }
         })
         .catch(function() { thinking.remove(); appendBubble('通信エラーが発生しました', 'error'); })
