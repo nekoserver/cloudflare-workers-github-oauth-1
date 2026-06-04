@@ -1213,6 +1213,33 @@ describe('ナビバー モデル選択ドロップダウン', () => {
     const fn = src.slice(idx, idx + 800);
     expect(fn).toContain('body.model');
   });
+
+  it('モデルオプションのラベルテキストに llama-3.3-70b-instruct-fp8-fast のフルネームが表示される', () => {
+    const html = getAiChatPage(minimalUser, []);
+    expect(html).toContain('>llama-3.3-70b-instruct-fp8-fast<');
+  });
+
+  it('llama-3.3-70b-instruct-fp8-fast がデフォルト選択状態になる', () => {
+    const userWithLlama = {
+      username: 'testuser',
+      aiChatModel: '@cf/meta/llama-3.3-70b-instruct-fp8-fast',
+    };
+    const html = getAiChatPage(userWithLlama, []);
+    const idx = html.indexOf('@cf/meta/llama-3.3-70b-instruct-fp8-fast');
+    expect(idx).toBeGreaterThan(-1);
+    const snippet = html.slice(idx - 30, idx + 60);
+    expect(snippet).toContain('selected');
+  });
+
+  it('index.ts の /aichat GET fallbackModel が llama-3.3-70b-instruct-fp8-fast', () => {
+    const { readFileSync } = require('node:fs');
+    const { resolve } = require('node:path');
+    const src = readFileSync(resolve(__dirname, '..', 'index.ts'), 'utf-8');
+    const idx = src.indexOf("app.get('/aichat'");
+    expect(idx).toBeGreaterThan(-1);
+    const fn = src.slice(idx, idx + 300);
+    expect(fn).toContain('llama-3.3-70b-instruct-fp8-fast');
+  });
 });
 
 describe('サブクエリ一覧モーダル：#カラム削除・追加質問総数表示・多い順ソート', () => {
@@ -1228,7 +1255,7 @@ describe('サブクエリ一覧モーダル：#カラム削除・追加質問総
     const html = getAiChatPage(minimalUser, []);
     const idx = html.indexOf('function renderSubqueriesList(');
     expect(idx).toBeGreaterThan(-1);
-    const fn = html.slice(idx, idx + 600);
+    const fn = html.slice(idx, idx + 1200);
     expect(fn).toContain('link_count');
   });
 
@@ -1248,7 +1275,7 @@ describe('サブクエリ一覧モーダル：#カラム削除・追加質問総
     const src = readFileSync(resolve(__dirname, '..', 'index.ts'), 'utf-8');
     const idx = src.indexOf("app.get('/api/aichat/subqueries'");
     expect(idx).toBeGreaterThan(-1);
-    const fn = src.slice(idx, idx + 400);
+    const fn = src.slice(idx, idx + 700);
     expect(fn).toContain('link_count DESC');
   });
 
@@ -1258,8 +1285,70 @@ describe('サブクエリ一覧モーダル：#カラム削除・追加質問総
     const src = readFileSync(resolve(__dirname, '..', 'index.ts'), 'utf-8');
     const idx = src.indexOf("app.get('/api/aichat/subqueries'");
     expect(idx).toBeGreaterThan(-1);
-    const fn = src.slice(idx, idx + 400);
+    const fn = src.slice(idx, idx + 700);
     expect(fn).toContain('LEFT JOIN');
+  });
+});
+
+describe('サブクエリ一覧モーダル：追加質問カラム左端・キーワードバッジ', () => {
+  it('renderSubqueriesList のテーブルヘッダーで 追加質問数 が サブクエリ列 より前にある', () => {
+    const html = getAiChatPage(minimalUser, []);
+    const idx = html.indexOf('function renderSubqueriesList(');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 800);
+    const posLinkCount = fn.indexOf('追加質問数');
+    const posSubquery = fn.indexOf('<th>サブクエリ</th>');
+    expect(posLinkCount).toBeGreaterThan(-1);
+    expect(posSubquery).toBeGreaterThan(-1);
+    expect(posLinkCount).toBeLessThan(posSubquery);
+  });
+
+  it('renderSubqueriesList がキーワードバッジを描画する', () => {
+    const html = getAiChatPage(minimalUser, []);
+    const idx = html.indexOf('function renderSubqueriesList(');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 800);
+    expect(fn).toContain('sq-kw-badge');
+  });
+
+  it('renderSubqueriesList のキーワードバッジが "keyword (N)" 形式', () => {
+    const html = getAiChatPage(minimalUser, []);
+    const idx = html.indexOf('function renderSubqueriesList(');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 800);
+    expect(fn).toContain('kw.cnt');
+  });
+
+  it('renderSubqueriesList のキーワード td がサブクエリ td の後に html += される', () => {
+    const html = getAiChatPage(minimalUser, []);
+    const idx = html.indexOf('function renderSubqueriesList(');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 1400);
+    const posQueryTd = fn.indexOf("html += '<td>' + escHtml(item.query)");
+    const posKwTd = fn.indexOf("html += '<td>' + kwHtml");
+    expect(posQueryTd).toBeGreaterThan(-1);
+    expect(posKwTd).toBeGreaterThan(-1);
+    expect(posQueryTd).toBeLessThan(posKwTd);
+  });
+
+  it('index.ts の /api/aichat/subqueries が aichat_search_history を JOIN する', () => {
+    const { readFileSync } = require('node:fs');
+    const { resolve } = require('node:path');
+    const src = readFileSync(resolve(__dirname, '..', 'index.ts'), 'utf-8');
+    const idx = src.indexOf("app.get('/api/aichat/subqueries'");
+    expect(idx).toBeGreaterThan(-1);
+    const fn = src.slice(idx, idx + 1200);
+    expect(fn).toContain('aichat_search_history');
+  });
+
+  it('index.ts の /api/aichat/subqueries の keywords が cnt DESC でソートされる', () => {
+    const { readFileSync } = require('node:fs');
+    const { resolve } = require('node:path');
+    const src = readFileSync(resolve(__dirname, '..', 'index.ts'), 'utf-8');
+    const idx = src.indexOf("app.get('/api/aichat/subqueries'");
+    expect(idx).toBeGreaterThan(-1);
+    const fn = src.slice(idx, idx + 1200);
+    expect(fn).toContain('cnt DESC');
   });
 });
 
