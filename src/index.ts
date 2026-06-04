@@ -3066,6 +3066,50 @@ app.post('/api/aichat/subqueries', authMiddleware, async (c) => {
 });
 
 /**
+ * サブクエリ×キーワードで絞り込んだ質問一覧 API（最大25件・各質問のキーワード付き）
+ */
+app.get('/api/aichat/subquery-keyword-questions', authMiddleware, async (c) => {
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  const subqueryId = Number(c.req.query('subquery_id') ?? '');
+  const keyword = (c.req.query('keyword') ?? '').trim();
+  if (!subqueryId || !keyword) return jsonUtf8({ error: 'subquery_id と keyword は必須です' }, 400);
+  const questionsRows = await c.env.DB.prepare(
+    `SELECT DISTINCT cs.id AS share_id, cs.question
+     FROM aichat_share_subquery_links l
+     JOIN ai_chat_shares cs ON cs.question = l.question
+     JOIN aichat_search_history h ON h.share_id = cs.id
+     WHERE l.subquery_id = ?1
+       AND h.keyword = ?2
+       AND h.deleted_at IS NULL
+     ORDER BY cs.created_at DESC
+     LIMIT 25`
+  ).bind(subqueryId, keyword).all<{ share_id: string; question: string }>();
+  const questions = questionsRows.results ?? [];
+  if (questions.length === 0) return jsonUtf8({ items: [] });
+  const placeholders = questions.map(() => '?').join(',');
+  const shareIds = questions.map(q => q.share_id);
+  const kwRows = await c.env.DB.prepare(
+    `SELECT h.share_id, h.keyword, COUNT(*) AS cnt
+     FROM aichat_search_history h
+     WHERE h.share_id IN (${placeholders})
+       AND h.deleted_at IS NULL
+     GROUP BY h.share_id, h.keyword
+     ORDER BY h.share_id, cnt DESC`
+  ).bind(...shareIds).all<{ share_id: string; keyword: string; cnt: number }>();
+  const kwMap = new Map<string, Array<{ keyword: string; cnt: number }>>();
+  for (const kw of kwRows.results ?? []) {
+    if (!kwMap.has(kw.share_id)) kwMap.set(kw.share_id, []);
+    kwMap.get(kw.share_id)!.push({ keyword: kw.keyword, cnt: kw.cnt });
+  }
+  const items = questions.map(q => ({
+    share_id: q.share_id,
+    question: q.question,
+    keywords: kwMap.get(q.share_id) ?? [],
+  }));
+  return jsonUtf8({ items });
+});
+
+/**
  * 質問×サブクエリリンク一覧取得 API
  */
 app.get('/api/aichat/share-subquery-links', authMiddleware, async (c) => {
