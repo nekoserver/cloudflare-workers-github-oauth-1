@@ -2577,8 +2577,8 @@ export function getAiChatPage(user: {
       chatLog.scrollTop = chatLog.scrollHeight;
     }
 
-    var lastModel = ${JSON.stringify(safeModel)};
     var modelSelect = document.getElementById('modelSelect');
+    var lastModel = modelSelect.value;
     modelSelect.addEventListener('change', function() {
       lastModel = modelSelect.value;
     });
@@ -2608,7 +2608,7 @@ export function getAiChatPage(user: {
           } else {
             var responseText = data.response || '(応答なし)';
             var usedModel = data.usedModel || lastModel;
-            appendBubble(responseText, 'assistant', usedModel);
+            appendBubble(responseText, 'assistant', lastModel);
             appendShareBtn(currentMsg, responseText, usedModel, data.shareId, data.userHash);
           }
         })
