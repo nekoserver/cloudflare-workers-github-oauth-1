@@ -1928,6 +1928,7 @@ export function getAiChatPage(user: {
     function closeHistoryModal() {
       historyModalBackdrop.classList.remove('open');
       historyModalBackdrop.setAttribute('aria-hidden', 'true');
+      historyModalBackdrop.style.zIndex = '';
     }
 
     function clearHistorySelection() {
@@ -2226,7 +2227,9 @@ export function getAiChatPage(user: {
           var cls = kw.keyword === selectedKeyword ? 'sq-kw-badge sq-kw-badge-active' : 'sq-kw-badge';
           return '<span class="' + cls + '">' + escHtml(kw.keyword) + ' (' + kw.cnt + ')</span>';
         }).join('');
-        html += '<tr><td style="max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="' + escHtml(item.question) + '">' + escHtml(item.question) + '</td>';
+        var kwJson = JSON.stringify((item.keywords || []).map(function(kw) { return kw.keyword; }));
+        html += '<tr data-share-id="' + escHtml(String(item.share_id)) + '" data-keywords="' + escHtml(kwJson) + '" style="cursor:pointer;">';
+        html += '<td style="max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="' + escHtml(item.question) + '">' + escHtml(item.question) + '</td>';
         html += '<td>' + kwHtml2 + '</td></tr>';
       });
       html += '</tbody></table>';
@@ -2253,6 +2256,16 @@ export function getAiChatPage(user: {
         sqKwQuestionsOverlay.classList.remove('open');
         sqKwQuestionsOverlay.setAttribute('aria-hidden', 'true');
       }
+    });
+
+    sqKwQuestionsBody.addEventListener('click', function(e) {
+      var tr = e.target.closest('tr[data-share-id]');
+      if (!tr) return;
+      var shareId = tr.dataset.shareId;
+      var keywordsJson = tr.dataset.keywords || '[]';
+      if (!shareId) return;
+      historyModalBackdrop.style.zIndex = '960';
+      openHistoryModalByShareId(shareId, keywordsJson);
     });
 
     subqueriesListBody.addEventListener('click', function(e) {
