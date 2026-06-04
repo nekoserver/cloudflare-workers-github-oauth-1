@@ -3017,15 +3017,35 @@ app.post('/api/aichat/search-impressions', authMiddleware, async (c) => {
  */
 app.get('/api/aichat/subqueries', authMiddleware, async (c) => {
   if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
-  const rows = await c.env.DB.prepare(
-    `SELECT s.id, s.query, COUNT(l.id) AS link_count
-     FROM aichat_subqueries s
-     LEFT JOIN aichat_share_subquery_links l ON l.subquery_id = s.id
-     GROUP BY s.id, s.query
-     ORDER BY link_count DESC, s.id DESC
-     LIMIT 100`
-  ).all<{ id: number; query: string; link_count: number }>();
-  return jsonUtf8({ items: rows.results ?? [] });
+  const [rows, kwRows] = await Promise.all([
+    c.env.DB.prepare(
+      `SELECT s.id, s.query, COUNT(l.id) AS link_count
+       FROM aichat_subqueries s
+       LEFT JOIN aichat_share_subquery_links l ON l.subquery_id = s.id
+       GROUP BY s.id, s.query
+       ORDER BY link_count DESC, s.id DESC
+       LIMIT 100`
+    ).all<{ id: number; query: string; link_count: number }>(),
+    c.env.DB.prepare(
+      `SELECT l.subquery_id, h.keyword, COUNT(*) AS cnt
+       FROM aichat_share_subquery_links l
+       JOIN ai_chat_shares cs ON cs.question = l.question
+       JOIN aichat_search_history h ON h.share_id = cs.id
+       WHERE h.deleted_at IS NULL
+       GROUP BY l.subquery_id, h.keyword
+       ORDER BY l.subquery_id, cnt DESC`
+    ).all<{ subquery_id: number; keyword: string; cnt: number }>(),
+  ]);
+  const kwMap = new Map<number, Array<{ keyword: string; cnt: number }>>();
+  for (const kw of kwRows.results ?? []) {
+    if (!kwMap.has(kw.subquery_id)) kwMap.set(kw.subquery_id, []);
+    kwMap.get(kw.subquery_id)!.push({ keyword: kw.keyword, cnt: kw.cnt });
+  }
+  const items = (rows.results ?? []).map(r => ({
+    ...r,
+    keywords: kwMap.get(r.id) ?? [],
+  }));
+  return jsonUtf8({ items });
 });
 
 /**

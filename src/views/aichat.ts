@@ -117,6 +117,11 @@ export function getAiChatPage(user: {
       white-space: nowrap; line-height: 1.6;
     }
     .kw-analysis-badges { max-width: 340px; line-height: 1.8; }
+    .sq-kw-badge {
+      display: inline-block; background: var(--bg-secondary); color: var(--text-muted);
+      border-radius: 10px; font-size: 11px; padding: 1px 6px; margin: 1px 2px;
+      white-space: nowrap; line-height: 1.6;
+    }
     .kw-q-link { cursor: pointer; text-decoration: underline; text-decoration-color: var(--border-color); text-underline-offset: 2px; }
     .kw-q-link:hover { color: var(--accent-color, #667eea); text-decoration-color: var(--accent-color, #667eea); }
     .search-log-overlay {
@@ -2169,10 +2174,23 @@ export function getAiChatPage(user: {
         subqueriesListBody.innerHTML = '<div style="color:var(--text-muted);padding:10px;">サブクエリがまだ登録されていません</div>';
         return;
       }
-      var html = '<table class="search-log-table"><thead><tr><th>サブクエリ</th><th style="text-align:right;">追加質問数</th></tr></thead><tbody>';
+      var html = '<table class="search-log-table"><thead><tr>' +
+        '<th style="text-align:right;width:56px;">追加質問数</th>' +
+        '<th>サブクエリ</th>' +
+        '<th>キーワード</th>' +
+        '</tr></thead><tbody>';
       items.forEach(function(item) {
-        html += '<tr><td>' + escHtml(item.query) + '</td>';
-        html += '<td style="text-align:right;width:64px;color:var(--text-muted);">' + (item.link_count || 0) + '</td></tr>';
+        var kwHtml = '';
+        if (item.keywords && item.keywords.length > 0) {
+          item.keywords.forEach(function(kw) {
+            kwHtml += '<span class="sq-kw-badge">' + escHtml(kw.keyword) + ' (' + kw.cnt + ')</span>';
+          });
+        }
+        html += '<tr>';
+        html += '<td style="text-align:right;color:var(--text-muted);">' + (item.link_count || 0) + '</td>';
+        html += '<td>' + escHtml(item.query) + '</td>';
+        html += '<td>' + kwHtml + '</td>';
+        html += '</tr>';
       });
       html += '</tbody></table>';
       subqueriesListBody.innerHTML = html;
