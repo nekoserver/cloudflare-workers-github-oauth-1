@@ -120,8 +120,10 @@ export function getAiChatPage(user: {
     .sq-kw-badge {
       display: inline-block; background: var(--bg-secondary); color: var(--text-muted);
       border-radius: 10px; font-size: 11px; padding: 1px 6px; margin: 1px 2px;
-      white-space: nowrap; line-height: 1.6;
+      white-space: nowrap; line-height: 1.6; cursor: pointer;
     }
+    .sq-kw-badge:hover { background: var(--border-color); color: var(--text-primary); }
+    .sq-kw-badge-active { background: var(--accent-bg, #ede9fe); color: var(--accent-fg, #5b21b6); }
     .kw-q-link { cursor: pointer; text-decoration: underline; text-decoration-color: var(--border-color); text-underline-offset: 2px; }
     .kw-q-link:hover { color: var(--accent-color, #667eea); text-decoration-color: var(--accent-color, #667eea); }
     .search-log-overlay {
@@ -792,6 +794,18 @@ export function getAiChatPage(user: {
         <div id="subqueriesListBody">
           <div class="search-log-loading">読み込み中...</div>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="search-log-overlay" id="sqKwQuestionsOverlay" aria-hidden="true" style="z-index:850;">
+    <div class="search-log-modal" role="dialog" aria-modal="true">
+      <div class="search-log-head">
+        <span class="search-log-title" id="sqKwQuestionsTitle">質問一覧</span>
+        <button class="search-log-close" id="sqKwQuestionsClose" aria-label="閉じる">✕</button>
+      </div>
+      <div class="search-log-body" id="sqKwQuestionsBody">
+        <div class="search-log-loading">読み込み中...</div>
       </div>
     </div>
   </div>
@@ -2183,7 +2197,7 @@ export function getAiChatPage(user: {
         var kwHtml = '';
         if (item.keywords && item.keywords.length > 0) {
           item.keywords.forEach(function(kw) {
-            kwHtml += '<span class="sq-kw-badge">' + escHtml(kw.keyword) + ' (' + kw.cnt + ')</span>';
+            kwHtml += '<span class="sq-kw-badge" data-subquery-id="' + escHtml(String(item.id)) + '" data-subquery="' + escHtml(item.query) + '" data-keyword="' + escHtml(kw.keyword) + '">' + escHtml(kw.keyword) + ' (' + kw.cnt + ')</span>';
           });
         }
         html += '<tr>';
@@ -2195,6 +2209,61 @@ export function getAiChatPage(user: {
       html += '</tbody></table>';
       subqueriesListBody.innerHTML = html;
     }
+
+    var sqKwQuestionsOverlay = document.getElementById('sqKwQuestionsOverlay');
+    var sqKwQuestionsTitle = document.getElementById('sqKwQuestionsTitle');
+    var sqKwQuestionsClose = document.getElementById('sqKwQuestionsClose');
+    var sqKwQuestionsBody = document.getElementById('sqKwQuestionsBody');
+
+    function renderSqKwQuestionsResult(items, selectedKeyword) {
+      if (!items || items.length === 0) {
+        sqKwQuestionsBody.innerHTML = '<div style="color:var(--text-muted);padding:10px;">該当する質問がありません</div>';
+        return;
+      }
+      var html = '<table class="search-log-table"><thead><tr><th>質問</th><th>キーワード</th></tr></thead><tbody>';
+      items.forEach(function(item) {
+        var kwHtml2 = (item.keywords || []).map(function(kw) {
+          var cls = kw.keyword === selectedKeyword ? 'sq-kw-badge sq-kw-badge-active' : 'sq-kw-badge';
+          return '<span class="' + cls + '">' + escHtml(kw.keyword) + ' (' + kw.cnt + ')</span>';
+        }).join('');
+        html += '<tr><td style="max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="' + escHtml(item.question) + '">' + escHtml(item.question) + '</td>';
+        html += '<td>' + kwHtml2 + '</td></tr>';
+      });
+      html += '</tbody></table>';
+      sqKwQuestionsBody.innerHTML = html;
+    }
+
+    function openSqKwQuestions(subqueryId, subqueryQuery, keyword) {
+      sqKwQuestionsTitle.textContent = '「' + subqueryQuery + '」×「' + keyword + '」の質問一覧';
+      sqKwQuestionsBody.innerHTML = '<div class="search-log-loading">読み込み中...</div>';
+      sqKwQuestionsOverlay.classList.add('open');
+      sqKwQuestionsOverlay.setAttribute('aria-hidden', 'false');
+      fetch('/api/aichat/subquery-keyword-questions?subquery_id=' + encodeURIComponent(subqueryId) + '&keyword=' + encodeURIComponent(keyword), { credentials: 'same-origin' })
+        .then(function(r) { return r.json(); })
+        .then(function(d) { renderSqKwQuestionsResult(d.items || [], keyword); })
+        .catch(function() { sqKwQuestionsBody.innerHTML = '<div style="color:var(--text-muted);">取得に失敗しました</div>'; });
+    }
+
+    sqKwQuestionsClose.addEventListener('click', function() {
+      sqKwQuestionsOverlay.classList.remove('open');
+      sqKwQuestionsOverlay.setAttribute('aria-hidden', 'true');
+    });
+    sqKwQuestionsOverlay.addEventListener('click', function(e) {
+      if (e.target === sqKwQuestionsOverlay) {
+        sqKwQuestionsOverlay.classList.remove('open');
+        sqKwQuestionsOverlay.setAttribute('aria-hidden', 'true');
+      }
+    });
+
+    subqueriesListBody.addEventListener('click', function(e) {
+      var badge = e.target.closest('.sq-kw-badge');
+      if (!badge) return;
+      var subqueryId = badge.dataset.subqueryId;
+      var subqueryQuery = badge.dataset.subquery;
+      var keyword = badge.dataset.keyword;
+      if (!subqueryId || !keyword) return;
+      openSqKwQuestions(subqueryId, subqueryQuery, keyword);
+    });
 
     function openSubqueries() {
       subqueriesOverlay.classList.add('open');

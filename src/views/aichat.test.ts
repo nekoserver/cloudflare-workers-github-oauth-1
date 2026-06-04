@@ -1315,7 +1315,7 @@ describe('サブクエリ一覧モーダル：追加質問カラム左端・キ�
     const html = getAiChatPage(minimalUser, []);
     const idx = html.indexOf('function renderSubqueriesList(');
     expect(idx).toBeGreaterThan(-1);
-    const fn = html.slice(idx, idx + 800);
+    const fn = html.slice(idx, idx + 1100);
     expect(fn).toContain('kw.cnt');
   });
 
@@ -1637,5 +1637,104 @@ describe('新着/キーワードトグル修正・キーワードモーダル外
     expect(idx).toBeGreaterThan(-1);
     const fn = html.slice(idx, idx + 200);
     expect(fn).toContain("classList.contains('open')");
+  });
+});
+
+describe('サブクエリ一覧モーダル：キーワードバッジクリックで質問一覧モーダル表示', () => {
+  it('sqKwQuestionsOverlay が HTML に存在する', () => {
+    const html = getAiChatPage(minimalUser, []);
+    expect(html).toContain('id="sqKwQuestionsOverlay"');
+  });
+
+  it('sqKwQuestionsTitle が HTML に存在する', () => {
+    const html = getAiChatPage(minimalUser, []);
+    expect(html).toContain('id="sqKwQuestionsTitle"');
+  });
+
+  it('sqKwQuestionsClose が HTML に存在する', () => {
+    const html = getAiChatPage(minimalUser, []);
+    expect(html).toContain('id="sqKwQuestionsClose"');
+  });
+
+  it('sqKwQuestionsBody が HTML に存在する', () => {
+    const html = getAiChatPage(minimalUser, []);
+    expect(html).toContain('id="sqKwQuestionsBody"');
+  });
+
+  it('openSqKwQuestions 関数が存在する', () => {
+    const html = getAiChatPage(minimalUser, []);
+    expect(html).toContain('function openSqKwQuestions(');
+  });
+
+  it('subqueriesListBody の sq-kw-badge クリックでイベント委譲ハンドラが動く', () => {
+    const html = getAiChatPage(minimalUser, []);
+    const idx = html.indexOf("subqueriesListBody.addEventListener('click'");
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 300);
+    expect(fn).toContain('sq-kw-badge');
+  });
+
+  it('openSqKwQuestions が /api/aichat/subquery-keyword-questions を fetch する', () => {
+    const html = getAiChatPage(minimalUser, []);
+    const idx = html.indexOf('function openSqKwQuestions(');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 600);
+    expect(fn).toContain('/api/aichat/subquery-keyword-questions');
+  });
+
+  it('openSqKwQuestions が subquery_id と keyword をクエリパラメータで渡す', () => {
+    const html = getAiChatPage(minimalUser, []);
+    const idx = html.indexOf('function openSqKwQuestions(');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 600);
+    expect(fn).toContain('subquery_id');
+    expect(fn).toContain('keyword');
+  });
+
+  it('index.ts に GET /api/aichat/subquery-keyword-questions ルートが存在する', () => {
+    const { readFileSync } = require('node:fs');
+    const { resolve } = require('node:path');
+    const src = readFileSync(resolve(__dirname, '..', 'index.ts'), 'utf-8');
+    expect(src).toContain("app.get('/api/aichat/subquery-keyword-questions'");
+  });
+
+  it('index.ts の /api/aichat/subquery-keyword-questions が aichat_share_subquery_links を JOIN する', () => {
+    const { readFileSync } = require('node:fs');
+    const { resolve } = require('node:path');
+    const src = readFileSync(resolve(__dirname, '..', 'index.ts'), 'utf-8');
+    const idx = src.indexOf("app.get('/api/aichat/subquery-keyword-questions'");
+    expect(idx).toBeGreaterThan(-1);
+    const fn = src.slice(idx, idx + 1000);
+    expect(fn).toContain('aichat_share_subquery_links');
+  });
+
+  it('index.ts の /api/aichat/subquery-keyword-questions が aichat_search_history を JOIN してキーワードフィルタする', () => {
+    const { readFileSync } = require('node:fs');
+    const { resolve } = require('node:path');
+    const src = readFileSync(resolve(__dirname, '..', 'index.ts'), 'utf-8');
+    const idx = src.indexOf("app.get('/api/aichat/subquery-keyword-questions'");
+    expect(idx).toBeGreaterThan(-1);
+    const fn = src.slice(idx, idx + 1000);
+    expect(fn).toContain('aichat_search_history');
+  });
+
+  it('index.ts の /api/aichat/subquery-keyword-questions が LIMIT 25 を含む', () => {
+    const { readFileSync } = require('node:fs');
+    const { resolve } = require('node:path');
+    const src = readFileSync(resolve(__dirname, '..', 'index.ts'), 'utf-8');
+    const idx = src.indexOf("app.get('/api/aichat/subquery-keyword-questions'");
+    expect(idx).toBeGreaterThan(-1);
+    const fn = src.slice(idx, idx + 1200);
+    expect(fn).toContain('LIMIT 25');
+  });
+
+  it('index.ts の /api/aichat/subquery-keyword-questions が keywords フィールドを返す', () => {
+    const { readFileSync } = require('node:fs');
+    const { resolve } = require('node:path');
+    const src = readFileSync(resolve(__dirname, '..', 'index.ts'), 'utf-8');
+    const idx = src.indexOf("app.get('/api/aichat/subquery-keyword-questions'");
+    expect(idx).toBeGreaterThan(-1);
+    const fn = src.slice(idx, idx + 2200);
+    expect(fn).toContain('keywords');
   });
 });
