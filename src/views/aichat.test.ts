@@ -1353,12 +1353,16 @@ describe('サブクエリ一覧モーダル：追加質問カラム左端・キ�
 });
 
 describe('サイドバー：モデル名削除・新着/キーワードトグル・キーワードフィルタ', () => {
-  it('renderSidebarResults の result-meta にモデル名表示コードが含まれない', () => {
+  it('renderSidebarResults の result-meta にモデル名テキスト表示コードが含まれない', () => {
     const html = getAiChatPage(minimalUser, []);
     const idx = html.indexOf('function renderSidebarResults(');
     expect(idx).toBeGreaterThan(-1);
-    const fn = html.slice(idx, idx + 1200);
-    expect(fn).not.toContain('r.model');
+    const fn = html.slice(idx, idx + 1400);
+    // r.model はカラー取得（MODEL_COLORS[r.model]）での参照は許容する
+    // textContent / innerHTML への直接代入がないことを確認する
+    expect(fn).not.toContain('textContent = r.model');
+    expect(fn).not.toContain('innerHTML = r.model');
+    expect(fn).not.toContain('shortModelName(r.model)');
   });
 
   it('sidebarModeToggle 要素が HTML に存在する', () => {
