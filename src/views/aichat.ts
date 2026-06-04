@@ -566,6 +566,8 @@ export function getAiChatPage(user: {
     .chat-bubble-wrap { align-self: flex-start; display: flex; flex-direction: column; gap: 3px; max-width: 85%; }
     .chat-bubble-wrap .chat-bubble.assistant { align-self: auto; max-width: 100%; }
     .bubble-label { font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; }
+    .bubble-label-fallback { color: var(--color-error, #cf222e); }
+    .bubble-fallback-notice { font-size: 12px; color: var(--color-error, #cf222e); margin-top: 12px; padding-top: 8px; border-top: 1px solid var(--border-color); opacity: 0.85; }
     .chat-share-row { align-self: flex-start; margin-top: -6px; display: flex; align-items: center; gap: 4px; }
     .chat-share-btn {
       background: none; border: 1px solid var(--border-color); border-radius: 6px;
@@ -2494,17 +2496,23 @@ export function getAiChatPage(user: {
       }
     });
 
-    function appendBubble(text, role, model) {
+    function appendBubble(text, role, model, isFallback) {
       var el = document.createElement('div');
       if (role === 'assistant') {
         el.className = 'chat-bubble assistant preview-area';
         el.innerHTML = parseMd(text);
+        if (isFallback) {
+          var notice = document.createElement('div');
+          notice.className = 'bubble-fallback-notice';
+          notice.textContent = 'この言語モデル（' + shortModelName(model) + '）は応答に問題があったためデフォルトの言語モデルにフォールバックされました';
+          el.appendChild(notice);
+        }
         if (model) {
           var wrap = document.createElement('div');
           wrap.className = 'chat-bubble-wrap';
           var lbl = document.createElement('div');
-          lbl.className = 'bubble-label';
-          lbl.textContent = shortModelName(model);
+          lbl.className = 'bubble-label' + (isFallback ? ' bubble-label-fallback' : '');
+          lbl.textContent = shortModelName(model) + (isFallback ? ' (フォールバック)' : '');
           wrap.appendChild(lbl);
           wrap.appendChild(el);
           chatLog.appendChild(wrap);
@@ -2608,7 +2616,7 @@ export function getAiChatPage(user: {
           } else {
             var responseText = data.response || '(応答なし)';
             var usedModel = data.usedModel || lastModel;
-            appendBubble(responseText, 'assistant', lastModel);
+            appendBubble(responseText, 'assistant', lastModel, data.fallbackUsed);
             appendShareBtn(currentMsg, responseText, usedModel, data.shareId, data.userHash);
           }
         })
