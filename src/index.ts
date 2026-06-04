@@ -2743,9 +2743,34 @@ app.post('/api/aichat', authMiddleware, async (c) => {
       : '';
   };
 
+  const autoSave = async (response: string, usedModel: string) => {
+    if (!c.env.DB) return {};
+    try {
+      const usernameBytes = new TextEncoder().encode(user.sub);
+      const hashBuf = await crypto.subtle.digest('SHA-256', usernameBytes);
+      const userHash = Array.from(new Uint8Array(hashBuf).slice(0, 4))
+        .map((b) => b.toString(16).padStart(2, '0')).join('');
+      const tokenBytes = new Uint8Array(8);
+      crypto.getRandomValues(tokenBytes);
+      const shareId = Array.from(tokenBytes).map((b) => b.toString(16).padStart(2, '0')).join('');
+      const now = new Date().toISOString();
+      await c.env.DB.prepare(
+        'INSERT INTO ai_chat_shares (id, user_id, user_hash, question, answer, model, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
+      ).bind(shareId, user.sub, userHash, message, response, usedModel, now).run();
+      return { shareId, userHash };
+    } catch (saveErr) {
+      logger.warn('AI chat auto-save failed', {
+        error: saveErr instanceof Error ? saveErr.message : 'Unknown',
+        user: user.sub,
+      });
+      return {};
+    }
+  };
+
   try {
     const response = await runAi(primaryModel);
-    return jsonUtf8({ response, usedModel: primaryModel });
+    const saved = await autoSave(response, primaryModel);
+    return jsonUtf8({ response, usedModel: primaryModel, ...saved });
   } catch (primaryErr) {
     logger.warn('AI chat primary model failed, trying fallback', {
       model: primaryModel,
@@ -2758,7 +2783,8 @@ app.post('/api/aichat', authMiddleware, async (c) => {
     }
     try {
       const response = await runAi(fallbackModel);
-      return jsonUtf8({ response, usedModel: fallbackModel, fallbackUsed: true });
+      const saved = await autoSave(response, fallbackModel);
+      return jsonUtf8({ response, usedModel: fallbackModel, fallbackUsed: true, ...saved });
     } catch (fallbackErr) {
       logger.warn('AI chat fallback model also failed', {
         model: fallbackModel,

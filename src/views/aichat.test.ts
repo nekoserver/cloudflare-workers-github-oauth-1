@@ -1781,3 +1781,72 @@ describe('サブクエリ一覧：質問一覧モーダルから過去ログモ�
     expect(fn).toContain('zIndex');
   });
 });
+
+describe('AIチャット応答の自動保存（auto-save to ai_chat_shares）', () => {
+  it('index.ts の /api/aichat POST が ai_chat_shares に INSERT する', () => {
+    const { readFileSync } = require('node:fs');
+    const { resolve } = require('node:path');
+    const src = readFileSync(resolve(__dirname, '..', 'index.ts'), 'utf-8');
+    const idx = src.indexOf("app.post('/api/aichat'");
+    expect(idx).toBeGreaterThan(-1);
+    const fn = src.slice(idx, idx + 2500);
+    expect(fn).toContain('INSERT INTO ai_chat_shares');
+  });
+
+  it('index.ts の /api/aichat POST レスポンスに shareId が含まれる', () => {
+    const { readFileSync } = require('node:fs');
+    const { resolve } = require('node:path');
+    const src = readFileSync(resolve(__dirname, '..', 'index.ts'), 'utf-8');
+    const idx = src.indexOf("app.post('/api/aichat'");
+    expect(idx).toBeGreaterThan(-1);
+    const fn = src.slice(idx, idx + 2500);
+    expect(fn).toContain('shareId');
+  });
+
+  it('index.ts の /api/aichat POST レスポンスに userHash が含まれる', () => {
+    const { readFileSync } = require('node:fs');
+    const { resolve } = require('node:path');
+    const src = readFileSync(resolve(__dirname, '..', 'index.ts'), 'utf-8');
+    const idx = src.indexOf("app.post('/api/aichat'");
+    expect(idx).toBeGreaterThan(-1);
+    const fn = src.slice(idx, idx + 2500);
+    expect(fn).toContain('userHash');
+  });
+
+  it('appendShareBtn が shareId と userHash を引数に受け取る', () => {
+    const html = getAiChatPage(minimalUser, []);
+    const idx = html.indexOf('function appendShareBtn(');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 100);
+    expect(fn).toContain('shareId');
+    expect(fn).toContain('userHash');
+  });
+
+  it('appendShareBtn の getShareUrl が shareId 提供時に /api/aichat/share を呼ばない', () => {
+    const html = getAiChatPage(minimalUser, []);
+    const idx = html.indexOf('function appendShareBtn(');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 800);
+    const idxGetUrl = fn.indexOf('function getShareUrl(');
+    expect(idxGetUrl).toBeGreaterThan(-1);
+    const getUrlFn = fn.slice(idxGetUrl, idxGetUrl + 300);
+    expect(getUrlFn).toContain('shareId');
+    expect(getUrlFn).toContain('/s/');
+  });
+
+  it('chatForm submit が data.shareId を appendShareBtn に渡す', () => {
+    const html = getAiChatPage(minimalUser, []);
+    const idx = html.indexOf("chatForm.addEventListener('submit'");
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 1600);
+    expect(fn).toContain('data.shareId');
+  });
+
+  it('chatForm submit が data.userHash を appendShareBtn に渡す', () => {
+    const html = getAiChatPage(minimalUser, []);
+    const idx = html.indexOf("chatForm.addEventListener('submit'");
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 1600);
+    expect(fn).toContain('data.userHash');
+  });
+});
