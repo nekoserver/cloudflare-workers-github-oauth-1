@@ -9,7 +9,9 @@ const DEFAULT_AICHAT_MODELS: Array<{value: string; label: string}> = [
   { value: '@cf/meta/llama-3.1-8b-instruct-fp8', label: 'llama-3.1-8b' },
   { value: '@cf/meta/llama-3.1-70b-instruct', label: 'llama-3.1-70b' },
   { value: '@cf/google/gemma-4-26b-a4b-it', label: 'gemma-4-26b' },
-  { value: '@cf/deepseek-ai/deepseek-r1-distill-qwen-32b', label: 'deepseek-r1-32b' },
+  { value: '@cf/google/gemma-3-12b-it', label: 'gemma-3-12b' },
+  { value: '@cf/meta/llama-4-scout-17b-16e-instruct', label: 'llama-4-scout-17b' },
+  { value: '@cf/zai-org/glm-4.7-flash', label: 'glm-4.7-flash' },
 ];
 
 export function getAiChatPage(user: {

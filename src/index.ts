@@ -41,6 +41,7 @@ import { resolveIdleTimeoutSeconds, type Bindings, type Variables, type GitHubWe
 import { withAiTimeout, AI_CLASSIFY_TIMEOUT_MS } from './utils/aiTimeout';
 import { computeConversationHash } from './utils/conversationHash';
 import { buildAiMessages, ALLOWED_MODES, type SystemPromptMode } from './utils/buildAiMessages';
+import { stripThinkTags } from './utils/stripThinkTags';
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -2714,7 +2715,9 @@ const AICHAT_ALLOWED_MODELS = new Set([
   '@cf/meta/llama-3.1-8b-instruct-fp8',
   '@cf/meta/llama-3.1-70b-instruct',
   '@cf/google/gemma-4-26b-a4b-it',
-  '@cf/deepseek-ai/deepseek-r1-distill-qwen-32b',
+  '@cf/google/gemma-3-12b-it',
+  '@cf/meta/llama-4-scout-17b-16e-instruct',
+  '@cf/zai-org/glm-4.7-flash',
 ]);
 
 app.post('/api/aichat', authMiddleware, async (c) => {
@@ -2744,11 +2747,14 @@ app.post('/api/aichat', authMiddleware, async (c) => {
   const runAi = async (model: string): Promise<string> => {
     const result = await c.env.AI!.run(model as Parameters<typeof c.env.AI.run>[0], {
       messages: buildAiMessages(message, systemPromptMode),
-      max_tokens: 1024,
+      max_tokens: 4096,
     });
-    return typeof result === 'object' && result !== null && 'response' in result
+    const raw = typeof result === 'object' && result !== null && 'response' in result
       ? String((result as { response: unknown }).response ?? '')
       : '';
+    const cleaned = stripThinkTags(raw);
+    if (!cleaned) throw new Error('AI returned empty response');
+    return cleaned;
   };
 
   const autoSave = async (response: string, usedModel: string) => {
