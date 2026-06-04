@@ -97,6 +97,13 @@ export function getAiChatPage(user: {
     }
     .navbar-model-select:hover { color: var(--text-primary); }
     .navbar-model-select option { background: var(--card-bg); color: var(--text-primary); }
+    .navbar-lang-select {
+      font-size: 11px; font-weight: 400; color: var(--text-muted);
+      background: transparent; border: 1px solid var(--border-color); border-radius: 5px;
+      outline: none; cursor: pointer; padding: 1px 4px; flex-shrink: 0;
+    }
+    .navbar-lang-select:hover { color: var(--text-primary); }
+    .navbar-lang-select option { background: var(--card-bg); color: var(--text-primary); }
 
     .navbar-spacer { flex: 1; }
     .search-log-btn {
@@ -597,6 +604,11 @@ export function getAiChatPage(user: {
     <button class="sidebar-toggle" id="sidebarToggle" title="履歴検索">☰</button>
     <a href="/welcome" class="navbar-brand">🤖 AI チャット</a>
     <select id="modelSelect" class="navbar-model-select">${modelOptionsHtml}</select>
+    <select id="langModeSelect" class="navbar-lang-select" title="日本語モード">
+      <option value="a" selected>🇯🇵 system</option>
+      <option value="b">🇯🇵 prefix</option>
+      <option value="c">🌐 plain</option>
+    </select>
     <div class="navbar-spacer"></div>
     <div class="user-menu">
       <button class="search-hist-btn" id="linkedQuestionsBtn" title="サブクエリを持つ質問一覧">📎 リンク質問</button>
@@ -2569,6 +2581,8 @@ export function getAiChatPage(user: {
       lastModel = modelSelect.value;
     });
 
+    var langModeSelect = document.getElementById('langModeSelect');
+
     chatForm.addEventListener('submit', function(e) {
       e.preventDefault();
       var msg = chatInput.value.trim();
@@ -2582,7 +2596,7 @@ export function getAiChatPage(user: {
       fetch('/api/aichat', {
         method: 'POST', credentials: 'same-origin',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: msg, model: lastModel })
+        body: JSON.stringify({ message: msg, model: lastModel, systemPromptMode: langModeSelect.value })
       })
         .then(function(res) { return res.json(); })
         .then(function(data) {

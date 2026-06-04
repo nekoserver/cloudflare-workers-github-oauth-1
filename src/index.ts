@@ -40,6 +40,7 @@ import * as logger from './utils/logger';
 import { resolveIdleTimeoutSeconds, type Bindings, type Variables, type GitHubWebhookInstallationPayload, type GitHubWebhookRepositoryPayload, type GitHubWebhookPullRequestPayload, type ResendWebhookPayload } from './types';
 import { withAiTimeout, AI_CLASSIFY_TIMEOUT_MS } from './utils/aiTimeout';
 import { computeConversationHash } from './utils/conversationHash';
+import { buildAiMessages, ALLOWED_MODES, type SystemPromptMode } from './utils/buildAiMessages';
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -2721,7 +2722,7 @@ app.post('/api/aichat', authMiddleware, async (c) => {
   if (!c.env.AI) {
     return jsonUtf8({ error: 'AI バインディングが未設定です' }, 503);
   }
-  let body: { message?: string; model?: string };
+  let body: { message?: string; model?: string; systemPromptMode?: string };
   try {
     body = await c.req.json();
   } catch {
@@ -2737,10 +2738,12 @@ app.post('/api/aichat', authMiddleware, async (c) => {
   const primaryModel = (requestedModel && AICHAT_ALLOWED_MODELS.has(requestedModel))
     ? requestedModel
     : (configuredModel || fallbackModel);
+  const rawMode = (body.systemPromptMode ?? '').trim();
+  const systemPromptMode: SystemPromptMode = (ALLOWED_MODES.has(rawMode) ? rawMode : 'a') as SystemPromptMode;
 
   const runAi = async (model: string): Promise<string> => {
     const result = await c.env.AI!.run(model as Parameters<typeof c.env.AI.run>[0], {
-      messages: [{ role: 'user', content: message }],
+      messages: buildAiMessages(message, systemPromptMode),
       max_tokens: 1024,
     });
     return typeof result === 'object' && result !== null && 'response' in result
@@ -2776,7 +2779,7 @@ app.post('/api/aichat', authMiddleware, async (c) => {
   try {
     const response = await runAi(primaryModel);
     const saved = await autoSave(response, primaryModel);
-    return jsonUtf8({ response, usedModel: primaryModel, ...saved });
+    return jsonUtf8({ response, usedModel: primaryModel, systemPromptMode, ...saved });
   } catch (primaryErr) {
     logger.warn('AI chat primary model failed, trying fallback', {
       model: primaryModel,
@@ -2790,7 +2793,7 @@ app.post('/api/aichat', authMiddleware, async (c) => {
     try {
       const response = await runAi(fallbackModel);
       const saved = await autoSave(response, fallbackModel);
-      return jsonUtf8({ response, usedModel: fallbackModel, fallbackUsed: true, ...saved });
+      return jsonUtf8({ response, usedModel: fallbackModel, systemPromptMode, fallbackUsed: true, ...saved });
     } catch (fallbackErr) {
       logger.warn('AI chat fallback model also failed', {
         model: fallbackModel,
