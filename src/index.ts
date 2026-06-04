@@ -2720,6 +2720,10 @@ const AICHAT_ALLOWED_MODELS = new Set([
   '@cf/zai-org/glm-4.7-flash',
 ]);
 
+const AICHAT_MODEL_MAX_TOKENS: Readonly<Record<string, number>> = {
+  '@cf/google/gemma-4-26b-a4b-it': 16384,
+};
+
 app.post('/api/aichat', authMiddleware, async (c) => {
   const user = c.get('user');
   if (!c.env.AI) {
@@ -2745,9 +2749,10 @@ app.post('/api/aichat', authMiddleware, async (c) => {
   const systemPromptMode: SystemPromptMode = (ALLOWED_MODES.has(rawMode) ? rawMode : 'a') as SystemPromptMode;
 
   const runAi = async (model: string): Promise<string> => {
+    const maxTokens = AICHAT_MODEL_MAX_TOKENS[model] ?? 4096;
     const result = await c.env.AI!.run(model as Parameters<typeof c.env.AI.run>[0], {
       messages: buildAiMessages(message, systemPromptMode),
-      max_tokens: 4096,
+      max_tokens: maxTokens,
     });
     const raw = typeof result === 'object' && result !== null && 'response' in result
       ? String((result as { response: unknown }).response ?? '')
