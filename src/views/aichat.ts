@@ -1943,6 +1943,12 @@ export function getAiChatPage(user: {
     var historyModalClose = document.getElementById('historyModalClose');
     var historyModalCurrentId = null;
 
+    historyModalMeta.addEventListener('click', function(e) {
+      if (e.target && e.target.closest && e.target.closest('.history-modal-model-filter-btn')) {
+        openLinkedQuestionsFilterMaybeLoad();
+      }
+    });
+
     function getHistoryPreviewMode() {
       var m = document.cookie.match('(^|;)\\s*aichat_history_preview_mode=([^;]*)');
       var val = m ? decodeURIComponent(m[2]) : 'center-modal';
@@ -2065,7 +2071,9 @@ export function getAiChatPage(user: {
       if (keyword) applyKeywordHighlight(historyModalChat, keyword);
       historyModalDateLink.textContent = r.created_at.slice(0, 10);
       historyModalTime.textContent = ' ' + r.created_at.slice(11, 16);
-      historyModalMeta.textContent = shortModelName(r.model) + '　👁 ' + (r.access_count || 0);
+      var dotColor = MODEL_COLORS[r.model] || '';
+      var dotStyle = dotColor ? 'display:inline-block;width:8px;height:8px;border-radius:50%;background:' + dotColor + ';margin-right:4px;vertical-align:middle;' : '';
+      historyModalMeta.innerHTML = '<span class="history-modal-model-filter-btn" style="cursor:pointer;' + (dotColor ? 'color:' + dotColor + ';' : '') + 'text-decoration:underline dotted;" title="モデルで絞り込む">' + (dotStyle ? '<span style="' + dotStyle + '"></span>' : '') + escHtml(shortModelName(r.model)) + '</span>' + '　👁 ' + (r.access_count || 0);
       historyModalShareLink.href = '/s/' + r.user_hash + '/' + r.id;
       historyModalCurrentId = r.id;
       currentHistoryQuestion = r.question || '';
@@ -2195,13 +2203,24 @@ export function getAiChatPage(user: {
       });
     }
 
+    function openLinkedQuestionsFilterMaybeLoad() {
+      if (linkedQuestionsAllItems.length > 0) {
+        openLinkedQuestionsFilter();
+      } else {
+        fetch('/api/aichat/share-subquery-links/all', { credentials: 'same-origin' })
+          .then(function(r) { return r.json(); })
+          .then(function(d) { linkedQuestionsAllItems = d.items || []; openLinkedQuestionsFilter(); })
+          .catch(function() { openLinkedQuestionsFilter(); });
+      }
+    }
+
     function openLinkedQuestionsFilter() {
       var models = [];
       linkedQuestionsAllItems.forEach(function(it) {
         if (it.model && models.indexOf(it.model) === -1) models.push(it.model);
       });
       var overlay = document.createElement('div');
-      overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:600;display:flex;align-items:center;justify-content:center;';
+      overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:1100;display:flex;align-items:center;justify-content:center;';
       var box = document.createElement('div');
       box.style.cssText = 'background:var(--bg-secondary);border-radius:10px;padding:20px;min-width:240px;max-width:340px;box-shadow:0 8px 32px rgba(0,0,0,0.18);';
       var title = document.createElement('div');
