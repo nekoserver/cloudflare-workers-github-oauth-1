@@ -18,9 +18,9 @@ describe('AICHAT_MODEL_EXTRA_PARAMS', () => {
     expect((params.chat_template_kwargs as Record<string, unknown>)?.enable_thinking).toBe(false);
   });
 
-  it('Gemma-4 に reasoning_effort: none が設定されている', () => {
+  it('Gemma-4 に reasoning_effort は設定されていない（仕様外のため除去）', () => {
     const params = AICHAT_MODEL_EXTRA_PARAMS['@cf/google/gemma-4-26b-a4b-it'];
-    expect(params?.reasoning_effort).toBe('none');
+    expect(params?.reasoning_effort).toBeUndefined();
   });
 
   it('Gemma-3 には extra params が設定されていない', () => {
@@ -37,7 +37,7 @@ describe('getModelRunParams', () => {
     const base = { messages: [], max_tokens: 16384 };
     const result = getModelRunParams('@cf/google/gemma-4-26b-a4b-it', base);
     expect(result.max_tokens).toBe(16384);
-    expect(result.reasoning_effort).toBe('none');
+    expect(result.reasoning_effort).toBeUndefined();
     expect((result.chat_template_kwargs as Record<string, unknown>)?.enable_thinking).toBe(false);
   });
 

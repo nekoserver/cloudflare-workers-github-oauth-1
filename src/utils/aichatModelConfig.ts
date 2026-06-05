@@ -5,7 +5,6 @@ export const AICHAT_MODEL_MAX_TOKENS: Readonly<Record<string, number>> = {
 export const AICHAT_MODEL_EXTRA_PARAMS: Readonly<Record<string, Record<string, unknown>>> = {
   '@cf/google/gemma-4-26b-a4b-it': {
     chat_template_kwargs: { enable_thinking: false },
-    reasoning_effort: 'none',
   },
 };
 
