@@ -3217,21 +3217,55 @@ app.get('/api/aichat/share-subquery-links/all', authMiddleware, async (c) => {
   const user = c.get('user');
   if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
   const rows = await c.env.DB.prepare(
-    `SELECT l.question, l.subquery_id, l.url, q.query, s.id AS share_id, s.model
+    `SELECT l.id, l.question, l.subquery_id, l.url, q.query, l.question_hash,
+            GROUP_CONCAT(DISTINCT s.model) AS models_csv,
+            MIN(s.id) AS share_id
      FROM aichat_share_subquery_links l
      JOIN aichat_subqueries q ON q.id = l.subquery_id
-     LEFT JOIN ai_chat_shares s ON s.question = l.question AND s.user_id = l.user_id
+     LEFT JOIN ai_chat_shares s ON s.user_id = l.user_id
+       AND s.deleted_at IS NULL
+       AND (
+         CASE WHEN l.question_hash IS NOT NULL
+           THEN s.question_hash = l.question_hash
+           ELSE s.question = l.question
+         END
+       )
      WHERE l.user_id = ?
+     GROUP BY l.id
      ORDER BY l.question, l.id ASC`
   ).bind(user.sub).all<{
-    question: string; subquery_id: number; url: string; query: string; share_id: string | null; model: string | null;
+    id: number; question: string; subquery_id: number; url: string; query: string;
+    question_hash: string | null; models_csv: string | null; share_id: string | null;
   }>();
-  const map = new Map<string, { question: string; share_id: string | null; model: string | null; links: { subquery_id: number; query: string; url: string }[] }>();
+  const map = new Map<string, { question: string; share_id: string | null; links: { subquery_id: number; query: string; url: string; question_hash: string | null; models: string[] }[] }>();
   for (const r of rows.results ?? []) {
-    if (!map.has(r.question)) map.set(r.question, { question: r.question, share_id: r.share_id ?? null, model: r.model ?? null, links: [] });
-    map.get(r.question)!.links.push({ subquery_id: r.subquery_id, query: r.query, url: r.url });
+    if (!map.has(r.question)) map.set(r.question, { question: r.question, share_id: r.share_id ?? null, links: [] });
+    map.get(r.question)!.links.push({
+      subquery_id: r.subquery_id,
+      query: r.query,
+      url: r.url,
+      question_hash: r.question_hash ?? null,
+      models: (r.models_csv || '').split(',').filter(Boolean),
+    });
   }
   return jsonUtf8({ items: Array.from(map.values()) });
+});
+
+/**
+ * question_hash で紐づく ai_chat_shares の一覧（異モデル比較用）
+ */
+app.get('/api/aichat/shares-by-question-hash', authMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  const hash = (c.req.query('hash') ?? '').trim();
+  if (!hash) return jsonUtf8({ error: 'hash は必須です' }, 400);
+  const rows = await c.env.DB.prepare(
+    `SELECT id, model, question, created_at, access_count, user_hash
+     FROM ai_chat_shares
+     WHERE question_hash = ? AND user_id = ? AND deleted_at IS NULL
+     ORDER BY created_at DESC`
+  ).bind(hash, user.sub).all<{ id: string; model: string; question: string; created_at: string; access_count: number; user_hash: string }>();
+  return jsonUtf8({ items: rows.results ?? [] });
 });
 
 /**

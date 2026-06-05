@@ -22,14 +22,22 @@ describe('サブクエリを持つ質問一覧: モデルカラー表示', () =>
     expect(html).toContain('function renderLinkedQuestions');
   });
 
-  it('renderLinkedQuestions が MODEL_COLORS を参照している', () => {
+  it('renderLinkedQuestions が lk.models を参照している', () => {
     const html = buildPage();
-    expect(html).toContain('MODEL_COLORS[item.model]');
+    expect(html).toContain('lk.models');
   });
 
-  it('質問セルにモデルカラーの border-left を設定するコードを含む', () => {
+  it('リンク行にモデルカラードットを設定するコードを含む', () => {
     const html = buildPage();
-    expect(html).toContain('borderLeftColor');
+    expect(html).toContain('MODEL_COLORS[m]');
+  });
+
+  it('質問セルには border-left カラーを設定しない（リンク行に移動）', () => {
+    const html = buildPage();
+    const idx = html.indexOf('function renderLinkedQuestions(');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 3000);
+    expect(fn).not.toContain('borderStyle = modelColor');
   });
 
   it('linkedQuestionsAllItems 変数が HTML に含まれる', () => {
@@ -40,6 +48,31 @@ describe('サブクエリを持つ質問一覧: モデルカラー表示', () =>
   it('linkedQuestionsFilter 変数が HTML に含まれる', () => {
     const html = buildPage();
     expect(html).toContain('linkedQuestionsFilter');
+  });
+});
+
+describe('サブクエリを持つ質問一覧: question_hash バッジ', () => {
+  it('question_hash を参照するコードが HTML に含まれる', () => {
+    const html = buildPage();
+    expect(html).toContain('question_hash');
+  });
+
+  it('openQuestionHashModal 関数が HTML に含まれる', () => {
+    const html = buildPage();
+    expect(html).toContain('function openQuestionHashModal');
+  });
+
+  it('openQuestionHashModal が z-index 1100 以上のオーバーレイを生成する', () => {
+    const html = buildPage();
+    const idx = html.indexOf('function openQuestionHashModal');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 2000);
+    expect(fn).toMatch(/z-index.*1[1-9]\d\d/);
+  });
+
+  it('shares-by-question-hash エンドポイントを呼び出すコードを含む', () => {
+    const html = buildPage();
+    expect(html).toContain('shares-by-question-hash');
   });
 });
 
@@ -60,9 +93,12 @@ describe('サブクエリを持つ質問一覧: モデルフィルター', () =>
     expect(html).toContain('renderLinkedQuestions(linkedQuestionsAllItems)');
   });
 
-  it('質問 th クリックで openLinkedQuestionsFilter を呼び出すコードを含む', () => {
+  it('フィルターがリンクの models 配列を参照している', () => {
     const html = buildPage();
-    expect(html).toContain('openLinkedQuestionsFilter');
+    const idx = html.indexOf('function openLinkedQuestionsFilter');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 1500);
+    expect(fn).toContain('lk.models');
   });
 
   it('フィルター状態を openLinkedQuestions 開示時に all にリセットするコードを含む', () => {
@@ -72,9 +108,17 @@ describe('サブクエリを持つ質問一覧: モデルフィルター', () =>
 
   it('shortModelName をフィルターモーダルのラベルに使用している', () => {
     const html = buildPage();
-    const idx = html.indexOf('function openLinkedQuestionsFilter');
+    const idx = html.indexOf('function openLinkedQuestionsFilter(');
     expect(idx).toBeGreaterThan(-1);
     const fn = html.slice(idx, idx + 1500);
     expect(fn).toContain('shortModelName');
+  });
+
+  it('renderLinkedQuestions のフィルターが lk.models で絞り込む', () => {
+    const html = buildPage();
+    const idx = html.indexOf('function renderLinkedQuestions');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 1000);
+    expect(fn).toContain('lk.models');
   });
 });
