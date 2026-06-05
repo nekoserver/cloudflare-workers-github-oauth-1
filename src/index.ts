@@ -42,6 +42,7 @@ import { withAiTimeout, AI_CLASSIFY_TIMEOUT_MS } from './utils/aiTimeout';
 import { computeConversationHash, computeQuestionHash } from './utils/conversationHash';
 import { buildAiMessages, ALLOWED_MODES, type SystemPromptMode } from './utils/buildAiMessages';
 import { stripThinkTags } from './utils/stripThinkTags';
+import { AICHAT_MODEL_MAX_TOKENS, getModelRunParams } from './utils/aichatModelConfig';
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -2754,10 +2755,6 @@ const AICHAT_ALLOWED_MODELS = new Set([
   '@cf/meta/llama-4-scout-17b-16e-instruct',
 ]);
 
-const AICHAT_MODEL_MAX_TOKENS: Readonly<Record<string, number>> = {
-  '@cf/google/gemma-4-26b-a4b-it': 16384,
-};
-
 app.post('/api/aichat', authMiddleware, async (c) => {
   const user = c.get('user');
   if (!c.env.AI) {
@@ -2784,10 +2781,12 @@ app.post('/api/aichat', authMiddleware, async (c) => {
 
   const runAi = async (model: string): Promise<string> => {
     const maxTokens = AICHAT_MODEL_MAX_TOKENS[model] ?? 4096;
-    const result = await c.env.AI!.run(model as Parameters<typeof c.env.AI.run>[0], {
-      messages: buildAiMessages(message, systemPromptMode),
-      max_tokens: maxTokens,
-    });
+    const baseParams = { messages: buildAiMessages(message, systemPromptMode), max_tokens: maxTokens };
+    const runParams = getModelRunParams(model, baseParams);
+    const result = await c.env.AI!.run(
+      model as Parameters<typeof c.env.AI.run>[0],
+      runParams as Parameters<typeof c.env.AI.run>[1]
+    );
     const raw = typeof result === 'object' && result !== null && 'response' in result
       ? String((result as { response: unknown }).response ?? '')
       : '';
