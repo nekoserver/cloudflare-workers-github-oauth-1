@@ -2788,11 +2788,22 @@ app.post('/api/aichat', authMiddleware, async (c) => {
       runParams as Parameters<typeof c.env.AI.run>[1]
     );
     const resultKeys = typeof result === 'object' && result !== null ? Object.keys(result as object).join(',') : 'non-object';
-    const raw = typeof result === 'object' && result !== null && 'response' in result
-      ? String((result as { response: unknown }).response ?? '')
-      : '';
+    const resultObj = (typeof result === 'object' && result !== null) ? result as Record<string, unknown> : {};
+    const rawResponse = 'response' in resultObj ? String(resultObj['response'] ?? '') : '';
+    const rawReasoning = 'reasoning_content' in resultObj ? String(resultObj['reasoning_content'] ?? '') : '';
+    const raw = rawResponse || rawReasoning;
     const cleaned = stripThinkTags(raw);
-    if (!cleaned) throw new Error(`AI returned empty response [model=${model} keys=${resultKeys} rawLen=${raw.length}]`);
+    if (!cleaned) {
+      logger.warn('AI empty response diagnostic', {
+        model,
+        keys: resultKeys,
+        rawLen: raw.length,
+        responseLen: rawResponse.length,
+        reasoningLen: rawReasoning.length,
+        rawHead: raw.slice(0, 200),
+      });
+      throw new Error(`AI returned empty response [model=${model} keys=${resultKeys} rawLen=${raw.length}]`);
+    }
     return cleaned;
   };
 

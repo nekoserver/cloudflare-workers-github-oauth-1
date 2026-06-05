@@ -1,5 +1,5 @@
 export const AICHAT_MODEL_MAX_TOKENS: Readonly<Record<string, number>> = {
-  '@cf/google/gemma-4-26b-a4b-it': 16384,
+  '@cf/google/gemma-4-26b-a4b-it': 65536,
 };
 
 export const AICHAT_MODEL_EXTRA_PARAMS: Readonly<Record<string, Record<string, unknown>>> = {
