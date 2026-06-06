@@ -122,3 +122,93 @@ describe('サブクエリを持つ質問一覧: モデルフィルター', () =>
     expect(fn).toContain('lk.models');
   });
 });
+
+describe('詳細プレビューからの別モデル再問い合わせ', () => {
+  it('openHistoryModelSelectModal 関数が HTML に含まれる', () => {
+    const html = buildPage();
+    expect(html).toContain('function openHistoryModelSelectModal');
+  });
+
+  it('openReAskConfirmModal 関数が HTML に含まれる', () => {
+    const html = buildPage();
+    expect(html).toContain('function openReAskConfirmModal');
+  });
+
+  it('openReAskResponseModal 関数が HTML に含まれる', () => {
+    const html = buildPage();
+    expect(html).toContain('function openReAskResponseModal');
+  });
+
+  it('historyModalCurrentModel 変数が HTML に含まれる', () => {
+    const html = buildPage();
+    expect(html).toContain('historyModalCurrentModel');
+  });
+
+  it('確認モーダルに「この言語モデルに改めて問い合わせますか？」テキストが含まれる', () => {
+    const html = buildPage();
+    expect(html).toContain('この言語モデルに改めて問い合わせますか？');
+  });
+
+  it('確認モーダルに「はい」「いいえ」ボタンテキストが含まれる', () => {
+    const html = buildPage();
+    const idx = html.indexOf('function openReAskConfirmModal');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 3200);
+    expect(fn).toContain('はい');
+    expect(fn).toContain('いいえ');
+  });
+
+  it('確認モーダルの z-index が 1200 以上である', () => {
+    const html = buildPage();
+    const idx = html.indexOf('function openReAskConfirmModal');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 3200);
+    expect(fn).toMatch(/z-index.*1[2-9]\d\d/);
+  });
+
+  it('「はい」押下時に historyModalBackdrop を閉じるコードが含まれる', () => {
+    const html = buildPage();
+    const idx = html.indexOf('function openReAskConfirmModal');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 3200);
+    expect(fn).toContain('historyModalBackdrop');
+  });
+
+  it('応答モーダルが /api/aichat を呼び出す', () => {
+    const html = buildPage();
+    const idx = html.indexOf('function openReAskResponseModal');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 3200);
+    expect(fn).toContain('/api/aichat');
+  });
+
+  it('応答モーダルが選択モデルを POST body に含める', () => {
+    const html = buildPage();
+    const idx = html.indexOf('function openReAskResponseModal');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 3200);
+    expect(fn).toContain('model');
+    expect(fn).toContain('message');
+  });
+
+  it('showHistoryModal が historyModalCurrentModel をセットする', () => {
+    const html = buildPage();
+    const idx = html.indexOf('function showHistoryModal');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 1600);
+    expect(fn).toContain('historyModalCurrentModel');
+  });
+
+  it('モデル名クリック時に openHistoryModelSelectModal を呼ぶ', () => {
+    const html = buildPage();
+    expect(html).toContain('openHistoryModelSelectModal()');
+  });
+
+  it('応答モーダルにフォールバック通知コードが含まれる', () => {
+    const html = buildPage();
+    const idx = html.indexOf('function openReAskResponseModal');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 3200);
+    expect(fn).toContain('usedModel');
+  });
+});
