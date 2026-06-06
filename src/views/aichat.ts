@@ -2226,7 +2226,7 @@ export function getAiChatPage(user: {
 
     function getNextZ() {
       var max = 700;
-      document.querySelectorAll('div[style*="position:fixed"]').forEach(function(el) {
+      document.querySelectorAll('div[data-overlay]').forEach(function(el) {
         var z = parseInt(el.style.zIndex) || 0;
         if (z > max && z < 9000) max = z;
       });
@@ -2247,6 +2247,7 @@ export function getAiChatPage(user: {
     function openQuestionHashModal(hash) {
       if (!hash) return;
       var overlay = document.createElement('div');
+      overlay.setAttribute('data-overlay', '');
       overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:' + getNextZ() + ';display:flex;align-items:center;justify-content:center;';
       var box = document.createElement('div');
       box.style.cssText = 'background:var(--bg-secondary);border-radius:10px;padding:20px;min-width:300px;max-width:480px;max-height:80vh;overflow-y:auto;box-shadow:0 8px 32px rgba(0,0,0,0.22);';
@@ -2301,6 +2302,7 @@ export function getAiChatPage(user: {
 
     function openHistoryModelSelectModal() {
       var overlay = document.createElement('div');
+      overlay.setAttribute('data-overlay', '');
       overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:' + getNextZ() + ';display:flex;align-items:center;justify-content:center;';
       var box = document.createElement('div');
       box.style.cssText = 'background:var(--bg-secondary);border-radius:10px;padding:20px;min-width:240px;max-width:340px;box-shadow:0 8px 32px rgba(0,0,0,0.18);';
@@ -2334,6 +2336,7 @@ export function getAiChatPage(user: {
 
     function openReAskConfirmModal(selectedModel, question, selectOverlay) {
       var overlay = document.createElement('div');
+      overlay.setAttribute('data-overlay', '');
       overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:' + getNextZ() + ';display:flex;align-items:center;justify-content:center;';
       var box = document.createElement('div');
       box.style.cssText = 'background:var(--bg-secondary);border-radius:12px;padding:24px;min-width:280px;max-width:360px;box-shadow:0 8px 32px rgba(0,0,0,0.22);';
@@ -2394,6 +2397,7 @@ export function getAiChatPage(user: {
 
     function openReAskResponseModal(selectedModel, question) {
       var overlay = document.createElement('div');
+      overlay.setAttribute('data-overlay', '');
       overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:' + getNextZ() + ';display:flex;align-items:center;justify-content:center;';
       var box = document.createElement('div');
       box.style.cssText = 'background:var(--bg-secondary);border-radius:12px;padding:24px;width:min(600px,92vw);max-height:80vh;overflow-y:auto;box-shadow:0 8px 32px rgba(0,0,0,0.22);display:flex;flex-direction:column;gap:12px;';
@@ -2454,6 +2458,7 @@ export function getAiChatPage(user: {
         });
       });
       var overlay = document.createElement('div');
+      overlay.setAttribute('data-overlay', '');
       overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:' + getNextZ() + ';display:flex;align-items:center;justify-content:center;';
       var box = document.createElement('div');
       box.style.cssText = 'background:var(--bg-secondary);border-radius:10px;padding:20px;min-width:240px;max-width:340px;box-shadow:0 8px 32px rgba(0,0,0,0.18);';

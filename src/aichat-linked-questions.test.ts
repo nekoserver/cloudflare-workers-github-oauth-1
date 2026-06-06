@@ -279,12 +279,13 @@ describe('z-index 動的管理: getNextZ', () => {
     expect(html).toContain('function getNextZ');
   });
 
-  it('getNextZ が position:fixed の div をスキャンする', () => {
+  it('getNextZ が data-overlay 属性でスキャンする（ブラウザ正規化の影響を受けない）', () => {
     const html = buildPage();
     const idx = html.indexOf('function getNextZ');
     expect(idx).toBeGreaterThan(-1);
     const fn = html.slice(idx, idx + 600);
-    expect(fn).toContain('position:fixed');
+    expect(fn).toContain('data-overlay');
+    expect(fn).not.toContain('position:fixed');
   });
 
   it('getNextZ が zIndex を読み取る', () => {
@@ -301,6 +302,30 @@ describe('z-index 動的管理: getNextZ', () => {
     expect(idx).toBeGreaterThan(-1);
     const fn = html.slice(idx, idx + 400);
     expect(fn).toContain('getNextZ');
+  });
+
+  it('openQuestionHashModal が動的オーバーレイに data-overlay を付与する', () => {
+    const html = buildPage();
+    const idx = html.indexOf('function openQuestionHashModal');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 600);
+    expect(fn).toContain('data-overlay');
+  });
+
+  it('openReAskResponseModal が動的オーバーレイに data-overlay を付与する', () => {
+    const html = buildPage();
+    const idx = html.indexOf('function openReAskResponseModal');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 600);
+    expect(fn).toContain('data-overlay');
+  });
+
+  it('openHistoryModelSelectModal が動的オーバーレイに data-overlay を付与する', () => {
+    const html = buildPage();
+    const idx = html.indexOf('function openHistoryModelSelectModal');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 600);
+    expect(fn).toContain('data-overlay');
   });
 
   it('openQuestionHashModal が getNextZ を呼ぶ（固定 z-index を持たない）', () => {
@@ -343,7 +368,7 @@ describe('z-index 動的管理: getNextZ', () => {
     const html = buildPage();
     const idx = html.indexOf('function openLinkedQuestionsFilter(');
     expect(idx).toBeGreaterThan(-1);
-    const fn = html.slice(idx, idx + 500);
+    const fn = html.slice(idx, idx + 700);
     expect(fn).toContain('getNextZ');
     expect(fn).not.toContain('z-index:1100');
   });
