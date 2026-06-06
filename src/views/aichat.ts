@@ -1945,7 +1945,7 @@ export function getAiChatPage(user: {
 
     historyModalMeta.addEventListener('click', function(e) {
       if (e.target && e.target.closest && e.target.closest('.history-modal-model-filter-btn')) {
-        openLinkedQuestionsFilterMaybeLoad();
+        openHistoryModelSelectModal();
       }
     });
 
@@ -2034,6 +2034,7 @@ export function getAiChatPage(user: {
     var historyModalSubqueryLinks = document.getElementById('historyModalSubqueryLinks');
     var historyModalAddSubqueryBtn = document.getElementById('historyModalAddSubqueryBtn');
     var currentHistoryQuestion = '';
+    var historyModalCurrentModel = '';
 
     function renderSubqueryLinks(items) {
       if (!items || items.length === 0) {
@@ -2077,6 +2078,7 @@ export function getAiChatPage(user: {
       historyModalShareLink.href = '/s/' + r.user_hash + '/' + r.id;
       historyModalCurrentId = r.id;
       currentHistoryQuestion = r.question || '';
+      historyModalCurrentModel = r.model || '';
       historyModalSubqueryLinks.style.display = 'none';
       historyModalSubqueryLinks.innerHTML = '';
       historyModalBackdrop.classList.add('open');
@@ -2273,6 +2275,133 @@ export function getAiChatPage(user: {
           content.innerHTML = t;
         })
         .catch(function() { content.textContent = '取得に失敗しました'; });
+    }
+
+    function openHistoryModelSelectModal() {
+      var overlay = document.createElement('div');
+      overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:1100;display:flex;align-items:center;justify-content:center;';
+      var box = document.createElement('div');
+      box.style.cssText = 'background:var(--bg-secondary);border-radius:10px;padding:20px;min-width:240px;max-width:340px;box-shadow:0 8px 32px rgba(0,0,0,0.18);';
+      var title = document.createElement('div');
+      title.textContent = '別のモデルに質問する';
+      title.style.cssText = 'font-weight:700;margin-bottom:12px;font-size:14px;';
+      box.appendChild(title);
+      Object.keys(MODEL_COLORS).forEach(function(m) {
+        var btn = document.createElement('button');
+        var dotColor = MODEL_COLORS[m] || '';
+        var isCurrent = m === historyModalCurrentModel;
+        var dotHtml = dotColor ? '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:' + dotColor + ';margin-right:6px;vertical-align:middle;flex-shrink:0;"></span>' : '';
+        btn.innerHTML = dotHtml + escHtml(shortModelName(m)) + (isCurrent ? ' <span style="font-size:11px;opacity:0.6;">（現在）</span>' : '');
+        btn.style.cssText = 'display:flex;align-items:center;width:100%;text-align:left;padding:8px 12px;margin-bottom:6px;border-radius:6px;border:1px solid ' + (isCurrent ? 'var(--accent-color,#667eea)' : 'var(--border-color)') + ';background:' + (isCurrent ? 'rgba(102,126,234,0.08)' : 'var(--bg-primary)') + ';color:var(--text-primary);cursor:' + (isCurrent ? 'default' : 'pointer') + ';font-size:13px;';
+        if (!isCurrent) {
+          btn.addEventListener('click', function() {
+            openReAskConfirmModal(m, currentHistoryQuestion, overlay);
+          });
+        }
+        box.appendChild(btn);
+      });
+      var cancelBtn = document.createElement('button');
+      cancelBtn.textContent = 'キャンセル';
+      cancelBtn.style.cssText = 'display:block;width:100%;text-align:center;padding:7px;margin-top:4px;border-radius:6px;border:1px solid var(--border-color);background:transparent;color:var(--text-muted);cursor:pointer;font-size:12px;';
+      cancelBtn.addEventListener('click', function() { document.body.removeChild(overlay); });
+      box.appendChild(cancelBtn);
+      overlay.appendChild(box);
+      overlay.addEventListener('click', function(e) { if (e.target === overlay) document.body.removeChild(overlay); });
+      document.body.appendChild(overlay);
+    }
+
+    function openReAskConfirmModal(selectedModel, question, selectOverlay) {
+      var overlay = document.createElement('div');
+      overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:1200;display:flex;align-items:center;justify-content:center;';
+      var box = document.createElement('div');
+      box.style.cssText = 'background:var(--bg-secondary);border-radius:12px;padding:24px;min-width:280px;max-width:360px;box-shadow:0 8px 32px rgba(0,0,0,0.22);';
+      var qDiv = document.createElement('div');
+      qDiv.style.cssText = 'background:var(--bg-primary);border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:13px;color:var(--text-primary);max-height:72px;overflow:hidden;line-height:1.5;';
+      qDiv.textContent = question.length > 120 ? question.slice(0, 120) + '…' : question;
+      box.appendChild(qDiv);
+      var dotColor = MODEL_COLORS[selectedModel] || '';
+      var modelDiv = document.createElement('div');
+      modelDiv.innerHTML = (dotColor ? '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:' + dotColor + ';margin-right:6px;vertical-align:middle;"></span>' : '') + '<strong>' + escHtml(shortModelName(selectedModel)) + '</strong>';
+      modelDiv.style.cssText = 'margin-bottom:10px;font-size:14px;';
+      box.appendChild(modelDiv);
+      var msgDiv = document.createElement('div');
+      msgDiv.textContent = 'この言語モデルに改めて問い合わせますか？';
+      msgDiv.style.cssText = 'font-size:14px;margin-bottom:20px;color:var(--text-primary);';
+      box.appendChild(msgDiv);
+      var btnRow = document.createElement('div');
+      btnRow.style.cssText = 'display:flex;gap:10px;';
+      var yesBtn = document.createElement('button');
+      yesBtn.textContent = 'はい';
+      yesBtn.style.cssText = 'flex:1;padding:10px;border-radius:8px;border:none;background:var(--accent-color,#667eea);color:#fff;cursor:pointer;font-size:14px;font-weight:600;';
+      yesBtn.addEventListener('click', function() {
+        document.body.removeChild(overlay);
+        if (selectOverlay.parentNode) document.body.removeChild(selectOverlay);
+        historyModalBackdrop.classList.remove('open');
+        historyModalBackdrop.setAttribute('aria-hidden', 'true');
+        openReAskResponseModal(selectedModel, question);
+      });
+      var noBtn = document.createElement('button');
+      noBtn.textContent = 'いいえ';
+      noBtn.style.cssText = 'flex:1;padding:10px;border-radius:8px;border:1px solid var(--border-color);background:transparent;color:var(--text-primary);cursor:pointer;font-size:14px;';
+      noBtn.addEventListener('click', function() {
+        document.body.removeChild(overlay);
+        if (selectOverlay.parentNode) document.body.removeChild(selectOverlay);
+      });
+      btnRow.appendChild(yesBtn);
+      btnRow.appendChild(noBtn);
+      box.appendChild(btnRow);
+      overlay.appendChild(box);
+      document.body.appendChild(overlay);
+    }
+
+    function openReAskResponseModal(selectedModel, question) {
+      var overlay = document.createElement('div');
+      overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1100;display:flex;align-items:center;justify-content:center;';
+      var box = document.createElement('div');
+      box.style.cssText = 'background:var(--bg-secondary);border-radius:12px;padding:24px;width:min(600px,92vw);max-height:80vh;overflow-y:auto;box-shadow:0 8px 32px rgba(0,0,0,0.22);display:flex;flex-direction:column;gap:12px;';
+      var header = document.createElement('div');
+      header.style.cssText = 'display:flex;align-items:center;justify-content:space-between;';
+      var dotColor = MODEL_COLORS[selectedModel] || '';
+      var modelLabel = document.createElement('div');
+      modelLabel.innerHTML = (dotColor ? '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:' + dotColor + ';margin-right:6px;vertical-align:middle;"></span>' : '') + '<strong>' + escHtml(shortModelName(selectedModel)) + '</strong>';
+      modelLabel.style.cssText = 'font-size:14px;';
+      header.appendChild(modelLabel);
+      var closeBtn = document.createElement('button');
+      closeBtn.textContent = '✕';
+      closeBtn.style.cssText = 'background:none;border:none;cursor:pointer;font-size:18px;color:var(--text-muted);line-height:1;padding:0 4px;';
+      closeBtn.addEventListener('click', function() { document.body.removeChild(overlay); });
+      header.appendChild(closeBtn);
+      box.appendChild(header);
+      var qBubble = document.createElement('div');
+      qBubble.className = 'chat-bubble user';
+      qBubble.textContent = question;
+      box.appendChild(qBubble);
+      var loading = document.createElement('div');
+      loading.textContent = '応答を取得中…';
+      loading.style.cssText = 'color:var(--text-muted);font-size:13px;padding:8px 0;';
+      box.appendChild(loading);
+      overlay.appendChild(box);
+      document.body.appendChild(overlay);
+      fetch('/api/aichat', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: question, model: selectedModel })
+      }).then(function(r) { return r.json(); }).then(function(d) {
+        box.removeChild(loading);
+        var ansBubble = document.createElement('div');
+        ansBubble.className = 'chat-bubble assistant preview-area';
+        ansBubble.innerHTML = parseMd(d.response || '（応答なし）');
+        box.appendChild(ansBubble);
+        if (d.usedModel && d.usedModel !== selectedModel) {
+          var fallbackNote = document.createElement('div');
+          fallbackNote.textContent = '※ ' + escHtml(shortModelName(d.usedModel)) + ' にフォールバックしました';
+          fallbackNote.style.cssText = 'font-size:11px;color:var(--text-muted);margin-top:4px;';
+          box.appendChild(fallbackNote);
+        }
+      }).catch(function(err) {
+        loading.textContent = '取得に失敗しました: ' + (err.message || err);
+      });
     }
 
     function openLinkedQuestionsFilterMaybeLoad() {
