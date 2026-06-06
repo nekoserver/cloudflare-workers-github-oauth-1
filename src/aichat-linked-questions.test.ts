@@ -372,4 +372,29 @@ describe('z-index 動的管理: getNextZ', () => {
     expect(fn).toContain('getNextZ');
     expect(fn).not.toContain('z-index:1100');
   });
+
+  it('appendAiResponseRow の追加質問ボタンが stopPropagation を呼ぶ', () => {
+    const html = buildPage();
+    const idx = html.indexOf('function appendAiResponseRow');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 3000);
+    expect(fn).toContain('stopPropagation');
+  });
+
+  it('appendAiResponseRow の追加質問ボタンが親 data-overlay の z-index を読み取る', () => {
+    const html = buildPage();
+    const idx = html.indexOf('function appendAiResponseRow');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 3000);
+    expect(fn).toContain('data-overlay');
+    expect(fn).toContain('parentNode');
+  });
+
+  it('openAddSubqueryModal が baseZ 引数を受け取り上位レイヤーに表示する', () => {
+    const html = buildPage();
+    const idx = html.indexOf('function openAddSubqueryModal');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 600);
+    expect(fn).toContain('baseZ');
+  });
 });

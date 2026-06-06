@@ -2706,8 +2706,9 @@ export function getAiChatPage(user: {
     var addSubqueryMsg = document.getElementById('addSubqueryMsg');
     var selectedSubqueryId = null;
 
-    function openAddSubqueryModal() {
-      addSubqueryModal.style.zIndex = String(getNextZ());
+    function openAddSubqueryModal(baseZ) {
+      var z = (baseZ && baseZ > 0) ? baseZ + 100 : getNextZ();
+      addSubqueryModal.style.zIndex = String(z);
       addSubqueryModal.classList.add('open');
       addSubqueryModal.setAttribute('aria-hidden', 'false');
       addSubquerySelected.value = '';
@@ -2870,9 +2871,19 @@ export function getAiChatPage(user: {
       var addBtn = document.createElement('button');
       addBtn.className = 'chat-share-btn';
       addBtn.innerHTML = '＋ 追加質問を登録する';
-      addBtn.onclick = function() {
+      addBtn.onclick = function(e) {
+        e.stopPropagation();
         currentHistoryQuestion = question;
-        openAddSubqueryModal();
+        var p = container;
+        var parentZ = 0;
+        while (p && p !== document.body) {
+          if (p.getAttribute && p.getAttribute('data-overlay')) {
+            parentZ = parseInt(p.style.zIndex) || 0;
+            break;
+          }
+          p = p.parentNode;
+        }
+        openAddSubqueryModal(parentZ || undefined);
       };
       var btn = document.createElement('button');
       btn.className = 'chat-share-btn';
