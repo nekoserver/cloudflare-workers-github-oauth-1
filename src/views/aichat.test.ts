@@ -34,6 +34,33 @@ describe('AIチャット詳細パネル: Markdownプレビュー', () => {
     expect(html).toContain('results-col-text');
     expect(html).toContain('preview-area');
   });
+
+  it('mdInline が $\\rightarrow$ を変換するロジックを含む', () => {
+    const html = getAiChatPage(minimalUser);
+    const idx = html.indexOf('function mdInline');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 1500);
+    expect(fn).toContain('rightarrow');
+    expect(fn).toContain('→');
+  });
+
+  it('mdInline の LaTeX 変換マップに主要な記号が含まれる', () => {
+    const html = getAiChatPage(minimalUser);
+    const idx = html.indexOf('function mdInline');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 1500);
+    expect(fn).toContain('times');
+    expect(fn).toContain('geq');
+    expect(fn).toContain('leq');
+  });
+
+  it('mdInline が $\\command$ 形式のインライン数式に対応する', () => {
+    const html = getAiChatPage(minimalUser);
+    const idx = html.indexOf('function mdInline');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 1500);
+    expect(fn).toContain('latexMap');
+  });
 });
 
 describe('AIチャット詳細プレビューモーダル: 吹き出し配置', () => {
