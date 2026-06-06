@@ -204,11 +204,71 @@ describe('詳細プレビューからの別モデル再問い合わせ', () => {
     expect(html).toContain('openHistoryModelSelectModal()');
   });
 
-  it('応答モーダルにフォールバック通知コードが含まれる', () => {
+  it('renderAiResultInModal にフォールバック通知コードが含まれる', () => {
+    const html = buildPage();
+    const idx = html.indexOf('function renderAiResultInModal');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 1000);
+    expect(fn).toContain('usedModel');
+  });
+});
+
+describe('AI 応答表示の一本化 (appendAiResponseRow / renderAiResultInModal)', () => {
+  it('appendAiResponseRow 関数が HTML に含まれる', () => {
+    const html = buildPage();
+    expect(html).toContain('function appendAiResponseRow');
+  });
+
+  it('renderAiResultInModal 関数が HTML に含まれる', () => {
+    const html = buildPage();
+    expect(html).toContain('function renderAiResultInModal');
+  });
+
+  it('appendShareBtn は appendAiResponseRow を呼ぶ薄いラッパーである', () => {
+    const html = buildPage();
+    const idx = html.indexOf('function appendShareBtn');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 300);
+    expect(fn).toContain('appendAiResponseRow');
+  });
+
+  it('appendAiResponseRow は chat-share-row を生成する', () => {
+    const html = buildPage();
+    const idx = html.indexOf('function appendAiResponseRow');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 3000);
+    expect(fn).toContain('chat-share-row');
+  });
+
+  it('appendAiResponseRow は chat-share-btn を生成する', () => {
+    const html = buildPage();
+    const idx = html.indexOf('function appendAiResponseRow');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 3000);
+    expect(fn).toContain('chat-share-btn');
+  });
+
+  it('appendAiResponseRow はコンテナ引数に appendChild する', () => {
+    const html = buildPage();
+    const idx = html.indexOf('function appendAiResponseRow');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 3000);
+    expect(fn).toContain('container.appendChild');
+  });
+
+  it('renderAiResultInModal は appendAiResponseRow を呼ぶ', () => {
+    const html = buildPage();
+    const idx = html.indexOf('function renderAiResultInModal');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 1000);
+    expect(fn).toContain('appendAiResponseRow');
+  });
+
+  it('openReAskResponseModal は renderAiResultInModal を呼ぶ', () => {
     const html = buildPage();
     const idx = html.indexOf('function openReAskResponseModal');
     expect(idx).toBeGreaterThan(-1);
     const fn = html.slice(idx, idx + 3200);
-    expect(fn).toContain('usedModel');
+    expect(fn).toContain('renderAiResultInModal');
   });
 });
