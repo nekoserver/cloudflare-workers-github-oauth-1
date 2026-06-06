@@ -398,3 +398,76 @@ describe('z-index 動的管理: getNextZ', () => {
     expect(fn).toContain('baseZ');
   });
 });
+
+describe('サブクエリ一覧: サブクエリセルタップで選択→質問一覧モーダル', () => {
+  it('subqueriesAllItems 変数が HTML に含まれる', () => {
+    const html = buildPage();
+    expect(html).toContain('subqueriesAllItems');
+  });
+
+  it('renderSubqueriesList が sq-query-cell クラスの td を生成する', () => {
+    const html = buildPage();
+    const idx = html.indexOf('function renderSubqueriesList');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 1200);
+    expect(fn).toContain('sq-query-cell');
+  });
+
+  it('openSubquerySelectModal 関数が HTML に含まれる', () => {
+    const html = buildPage();
+    expect(html).toContain('function openSubquerySelectModal');
+  });
+
+  it('openSubqueryLinkedQuestionsModal 関数が HTML に含まれる', () => {
+    const html = buildPage();
+    expect(html).toContain('function openSubqueryLinkedQuestionsModal');
+  });
+
+  it('openSubquerySelectModal が動的オーバーレイに data-overlay を付与する', () => {
+    const html = buildPage();
+    const idx = html.indexOf('function openSubquerySelectModal');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 1000);
+    expect(fn).toContain('data-overlay');
+    expect(fn).toContain('getNextZ');
+  });
+
+  it('openSubqueryLinkedQuestionsModal が動的オーバーレイに data-overlay を付与する', () => {
+    const html = buildPage();
+    const idx = html.indexOf('function openSubqueryLinkedQuestionsModal');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 1000);
+    expect(fn).toContain('data-overlay');
+    expect(fn).toContain('getNextZ');
+  });
+
+  it('openSubquerySelectModal が link_count 降順ソートを行う', () => {
+    const html = buildPage();
+    const idx = html.indexOf('function openSubquerySelectModal');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 1500);
+    expect(fn).toContain('link_count');
+    expect(fn).toContain('sort');
+  });
+
+  it('openSubqueryLinkedQuestionsModal が subquery_id でフィルタする', () => {
+    const html = buildPage();
+    const idx = html.indexOf('function openSubqueryLinkedQuestionsModal');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 3000);
+    expect(fn).toContain('subquery_id');
+  });
+
+  it('renderLinkedQuestionsInto 関数が HTML に含まれる', () => {
+    const html = buildPage();
+    expect(html).toContain('function renderLinkedQuestionsInto');
+  });
+
+  it('openSubqueryLinkedQuestionsModal が share-subquery-links/all を呼ぶ', () => {
+    const html = buildPage();
+    const idx = html.indexOf('function openSubqueryLinkedQuestionsModal');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 3000);
+    expect(fn).toContain('share-subquery-links/all');
+  });
+});

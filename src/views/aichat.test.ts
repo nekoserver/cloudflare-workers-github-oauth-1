@@ -1351,7 +1351,7 @@ describe('サブクエリ一覧モーダル：追加質問カラム左端・キ�
     const idx = html.indexOf('function renderSubqueriesList(');
     expect(idx).toBeGreaterThan(-1);
     const fn = html.slice(idx, idx + 1400);
-    const posQueryTd = fn.indexOf("html += '<td>' + escHtml(item.query)");
+    const posQueryTd = fn.indexOf('sq-query-cell');
     const posKwTd = fn.indexOf("html += '<td>' + kwHtml");
     expect(posQueryTd).toBeGreaterThan(-1);
     expect(posKwTd).toBeGreaterThan(-1);
