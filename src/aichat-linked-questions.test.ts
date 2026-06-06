@@ -62,12 +62,12 @@ describe('サブクエリを持つ質問一覧: question_hash バッジ', () => 
     expect(html).toContain('function openQuestionHashModal');
   });
 
-  it('openQuestionHashModal が z-index 1100 以上のオーバーレイを生成する', () => {
+  it('openQuestionHashModal が getNextZ() で z-index を設定する', () => {
     const html = buildPage();
     const idx = html.indexOf('function openQuestionHashModal');
     expect(idx).toBeGreaterThan(-1);
     const fn = html.slice(idx, idx + 2000);
-    expect(fn).toMatch(/z-index.*1[1-9]\d\d/);
+    expect(fn).toContain('getNextZ()');
   });
 
   it('shares-by-question-hash エンドポイントを呼び出すコードを含む', () => {
@@ -158,12 +158,12 @@ describe('詳細プレビューからの別モデル再問い合わせ', () => {
     expect(fn).toContain('いいえ');
   });
 
-  it('確認モーダルの z-index が 1200 以上である', () => {
+  it('確認モーダルが getNextZ() で z-index を動的設定する', () => {
     const html = buildPage();
     const idx = html.indexOf('function openReAskConfirmModal');
     expect(idx).toBeGreaterThan(-1);
     const fn = html.slice(idx, idx + 3200);
-    expect(fn).toMatch(/z-index.*1[2-9]\d\d/);
+    expect(fn).toContain('getNextZ()');
   });
 
   it('「はい」押下時に historyModalBackdrop を閉じるコードが含まれる', () => {
@@ -270,5 +270,81 @@ describe('AI 応答表示の一本化 (appendAiResponseRow / renderAiResultInMod
     expect(idx).toBeGreaterThan(-1);
     const fn = html.slice(idx, idx + 3200);
     expect(fn).toContain('renderAiResultInModal');
+  });
+});
+
+describe('z-index 動的管理: getNextZ', () => {
+  it('getNextZ 関数が HTML に含まれる', () => {
+    const html = buildPage();
+    expect(html).toContain('function getNextZ');
+  });
+
+  it('getNextZ が position:fixed の div をスキャンする', () => {
+    const html = buildPage();
+    const idx = html.indexOf('function getNextZ');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 600);
+    expect(fn).toContain('position:fixed');
+  });
+
+  it('getNextZ が zIndex を読み取る', () => {
+    const html = buildPage();
+    const idx = html.indexOf('function getNextZ');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 600);
+    expect(fn).toContain('zIndex');
+  });
+
+  it('openAddSubqueryModal が getNextZ を呼ぶ', () => {
+    const html = buildPage();
+    const idx = html.indexOf('function openAddSubqueryModal');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 400);
+    expect(fn).toContain('getNextZ');
+  });
+
+  it('openQuestionHashModal が getNextZ を呼ぶ（固定 z-index を持たない）', () => {
+    const html = buildPage();
+    const idx = html.indexOf('function openQuestionHashModal');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 500);
+    expect(fn).toContain('getNextZ');
+    expect(fn).not.toContain('z-index:1100');
+  });
+
+  it('openHistoryModelSelectModal が getNextZ を呼ぶ（固定 z-index を持たない）', () => {
+    const html = buildPage();
+    const idx = html.indexOf('function openHistoryModelSelectModal');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 500);
+    expect(fn).toContain('getNextZ');
+    expect(fn).not.toContain('z-index:1100');
+  });
+
+  it('openReAskConfirmModal が getNextZ を呼ぶ（固定 z-index を持たない）', () => {
+    const html = buildPage();
+    const idx = html.indexOf('function openReAskConfirmModal');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 500);
+    expect(fn).toContain('getNextZ');
+    expect(fn).not.toContain('z-index:1200');
+  });
+
+  it('openReAskResponseModal が getNextZ を呼ぶ（固定 z-index を持たない）', () => {
+    const html = buildPage();
+    const idx = html.indexOf('function openReAskResponseModal');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 500);
+    expect(fn).toContain('getNextZ');
+    expect(fn).not.toContain('z-index:1100');
+  });
+
+  it('openLinkedQuestionsFilter が getNextZ を呼ぶ（固定 z-index を持たない）', () => {
+    const html = buildPage();
+    const idx = html.indexOf('function openLinkedQuestionsFilter(');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 500);
+    expect(fn).toContain('getNextZ');
+    expect(fn).not.toContain('z-index:1100');
   });
 });

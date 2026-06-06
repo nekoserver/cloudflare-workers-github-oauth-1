@@ -1028,6 +1028,7 @@ export function getAiChatPage(user: {
         html += '</div>';
       });
       impressionsSubqueryModalBody.innerHTML = html || '<div style="color:var(--text-muted);">リンクがありません</div>';
+      impressionsSubqueryModal.style.zIndex = String(getNextZ());
       impressionsSubqueryModal.classList.add('open');
       impressionsSubqueryModal.setAttribute('aria-hidden', 'false');
     }
@@ -2081,6 +2082,7 @@ export function getAiChatPage(user: {
       historyModalCurrentModel = r.model || '';
       historyModalSubqueryLinks.style.display = 'none';
       historyModalSubqueryLinks.innerHTML = '';
+      historyModalBackdrop.style.zIndex = String(getNextZ());
       historyModalBackdrop.classList.add('open');
       historyModalBackdrop.setAttribute('aria-hidden', 'false');
       if (currentHistoryQuestion) loadSubqueryLinks(currentHistoryQuestion);
@@ -2222,10 +2224,30 @@ export function getAiChatPage(user: {
       });
     }
 
+    function getNextZ() {
+      var max = 700;
+      document.querySelectorAll('div[style*="position:fixed"]').forEach(function(el) {
+        var z = parseInt((el as HTMLElement).style.zIndex) || 0;
+        if (z > max && z < 9000) max = z;
+      });
+      var staticZDefaults: Record<string, number> = {
+        linkedQuestionsOverlay: 700, impressionsSubqueryModal: 800,
+        sqKwQuestionsOverlay: 850, addSubqueryModal: 900, historyModalBackdrop: 750,
+      };
+      Object.keys(staticZDefaults).forEach(function(id) {
+        var el = document.getElementById(id);
+        if (el && el.classList.contains('open')) {
+          var z = parseInt((el as HTMLElement).style.zIndex) || staticZDefaults[id];
+          if (z > max) max = z;
+        }
+      });
+      return max + 100;
+    }
+
     function openQuestionHashModal(hash) {
       if (!hash) return;
       var overlay = document.createElement('div');
-      overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1100;display:flex;align-items:center;justify-content:center;';
+      overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:' + getNextZ() + ';display:flex;align-items:center;justify-content:center;';
       var box = document.createElement('div');
       box.style.cssText = 'background:var(--bg-secondary);border-radius:10px;padding:20px;min-width:300px;max-width:480px;max-height:80vh;overflow-y:auto;box-shadow:0 8px 32px rgba(0,0,0,0.22);';
       var title = document.createElement('div');
@@ -2279,7 +2301,7 @@ export function getAiChatPage(user: {
 
     function openHistoryModelSelectModal() {
       var overlay = document.createElement('div');
-      overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:1100;display:flex;align-items:center;justify-content:center;';
+      overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:' + getNextZ() + ';display:flex;align-items:center;justify-content:center;';
       var box = document.createElement('div');
       box.style.cssText = 'background:var(--bg-secondary);border-radius:10px;padding:20px;min-width:240px;max-width:340px;box-shadow:0 8px 32px rgba(0,0,0,0.18);';
       var title = document.createElement('div');
@@ -2312,7 +2334,7 @@ export function getAiChatPage(user: {
 
     function openReAskConfirmModal(selectedModel, question, selectOverlay) {
       var overlay = document.createElement('div');
-      overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:1200;display:flex;align-items:center;justify-content:center;';
+      overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:' + getNextZ() + ';display:flex;align-items:center;justify-content:center;';
       var box = document.createElement('div');
       box.style.cssText = 'background:var(--bg-secondary);border-radius:12px;padding:24px;min-width:280px;max-width:360px;box-shadow:0 8px 32px rgba(0,0,0,0.22);';
       var qDiv = document.createElement('div');
@@ -2372,7 +2394,7 @@ export function getAiChatPage(user: {
 
     function openReAskResponseModal(selectedModel, question) {
       var overlay = document.createElement('div');
-      overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1100;display:flex;align-items:center;justify-content:center;';
+      overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:' + getNextZ() + ';display:flex;align-items:center;justify-content:center;';
       var box = document.createElement('div');
       box.style.cssText = 'background:var(--bg-secondary);border-radius:12px;padding:24px;width:min(600px,92vw);max-height:80vh;overflow-y:auto;box-shadow:0 8px 32px rgba(0,0,0,0.22);display:flex;flex-direction:column;gap:12px;';
       var header = document.createElement('div');
@@ -2432,7 +2454,7 @@ export function getAiChatPage(user: {
         });
       });
       var overlay = document.createElement('div');
-      overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:1100;display:flex;align-items:center;justify-content:center;';
+      overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:' + getNextZ() + ';display:flex;align-items:center;justify-content:center;';
       var box = document.createElement('div');
       box.style.cssText = 'background:var(--bg-secondary);border-radius:10px;padding:20px;min-width:240px;max-width:340px;box-shadow:0 8px 32px rgba(0,0,0,0.18);';
       var title = document.createElement('div');
@@ -2466,6 +2488,7 @@ export function getAiChatPage(user: {
 
     function openLinkedQuestions() {
       linkedQuestionsFilter = 'all';
+      linkedQuestionsOverlay.style.zIndex = String(getNextZ());
       linkedQuestionsOverlay.classList.add('open');
       linkedQuestionsOverlay.setAttribute('aria-hidden', 'false');
       linkedQuestionsBody.innerHTML = '<div class="search-log-loading">読み込み中...</div>';
@@ -2553,6 +2576,7 @@ export function getAiChatPage(user: {
     function openSqKwQuestions(subqueryId, subqueryQuery, keyword) {
       sqKwQuestionsTitle.textContent = '「' + subqueryQuery + '」×「' + keyword + '」の質問一覧';
       sqKwQuestionsBody.innerHTML = '<div class="search-log-loading">読み込み中...</div>';
+      sqKwQuestionsOverlay.style.zIndex = String(getNextZ());
       sqKwQuestionsOverlay.classList.add('open');
       sqKwQuestionsOverlay.setAttribute('aria-hidden', 'false');
       fetch('/api/aichat/subquery-keyword-questions?subquery_id=' + encodeURIComponent(subqueryId) + '&keyword=' + encodeURIComponent(keyword), { credentials: 'same-origin' })
@@ -2578,7 +2602,6 @@ export function getAiChatPage(user: {
       var shareId = tr.dataset.shareId;
       var keywordsJson = tr.dataset.keywords || '[]';
       if (!shareId) return;
-      historyModalBackdrop.style.zIndex = '960';
       openHistoryModalByShareId(shareId, keywordsJson);
     });
 
@@ -2679,6 +2702,7 @@ export function getAiChatPage(user: {
     var selectedSubqueryId = null;
 
     function openAddSubqueryModal() {
+      addSubqueryModal.style.zIndex = String(getNextZ());
       addSubqueryModal.classList.add('open');
       addSubqueryModal.setAttribute('aria-hidden', 'false');
       addSubquerySelected.value = '';
