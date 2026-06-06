@@ -160,3 +160,78 @@ document.querySelectorAll('div[data-overlay]');
 動的に作成した要素を CSS セレクタで後から検索する必要がある場合は、
 インラインスタイルのテキストマッチングではなく
 **専用の属性（`data-*`）やクラスを付与して識別する**。
+
+---
+
+## 付記: 動的オーバーレイの中から別モーダルを開く場合は z-index を明示的に渡す
+
+### 関連バグ（2026-06-06 発見）
+
+動的生成オーバーレイ（`data-overlay` 付き `div`）の中のボタンから
+別のモーダルを開こうとしたとき、`getNextZ()` だけに頼ると
+**新しいモーダルが親オーバーレイの裏に入る**場合がある。
+
+発生した具体的なケース：
+- `openReAskResponseModal` が生成した response overlay（z=800）の中に
+  `appendAiResponseRow` が配置した「追加質問を登録する」ボタン
+- ボタン押下 → `openAddSubqueryModal()` → `getNextZ()` が親 overlay を
+  走査して z=800 を検出 → `addSubqueryModal` に z=900 をセット
+- 理論上は正しいが、`stopPropagation()` 未設定やブラウザの処理タイミングによって
+  z-index が意図通り反映されないケースが生じた
+
+---
+
+### 正しい実装パターン
+
+**モーダルを開くボタンが動的オーバーレイの中にある場合は、親の z-index を明示的に渡す。**
+
+```javascript
+// NG: getNextZ() だけに頼る（タイミング依存で裏に入ることがある）
+addBtn.onclick = function() {
+  openAddSubqueryModal();
+};
+
+// OK: stopPropagation + 親 data-overlay の z-index を渡す
+addBtn.onclick = function(e) {
+  e.stopPropagation();
+  var p = container;
+  var parentZ = 0;
+  while (p && p !== document.body) {
+    if (p.getAttribute && p.getAttribute('data-overlay')) {
+      parentZ = parseInt(p.style.zIndex) || 0;
+      break;
+    }
+    p = p.parentNode;
+  }
+  openAddSubqueryModal(parentZ || undefined);
+};
+```
+
+モーダルを開く関数側は `baseZ` 引数を受け取り、渡された場合は `baseZ + 100` を使う：
+
+```javascript
+function openAddSubqueryModal(baseZ) {
+  var z = (baseZ && baseZ > 0) ? baseZ + 100 : getNextZ();
+  modal.style.zIndex = String(z);
+  modal.classList.add('open');
+}
+```
+
+---
+
+### 予防ルール
+
+| 状況 | 対処 |
+|---|---|
+| 静的 HTML モーダル同士の重なり | `getNextZ()` を呼ぶだけでよい |
+| 動的オーバーレイの中からモーダルを開く | `parentNode` を辿って親 `data-overlay` の z-index を取得し、モーダル関数に `baseZ` として渡す |
+| どちらかわからない場合 | `baseZ` パターンを適用しておく（フォールバックで `getNextZ()` が動くため副作用なし）|
+
+また、モーダルを開くボタンには **必ず `e.stopPropagation()` を付ける**。
+付け忘れると click イベントが親要素へ伝播し、予期しない挙動（親モーダルが閉じる等）を引き起こす。
+
+### 関連コミット
+
+| コミット | 内容 |
+|---|---|
+| [`246d85f`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/246d85f) | appendAiResponseRow の追加質問ボタンに stopPropagation・baseZ 渡しを実装 |
