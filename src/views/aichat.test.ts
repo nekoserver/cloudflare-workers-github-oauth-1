@@ -1092,61 +1092,61 @@ describe('appendShareBtn — 別タブで開くボタン', () => {
     expect(html).toContain('chat-share-open-btn');
   });
 
-  it('appendShareBtn が window.open を呼ぶコードを含む', () => {
+  it('appendAiResponseRow が window.open を呼ぶコードを含む', () => {
     const html = getAiChatPage(minimalUser, []);
-    const idx = html.indexOf('function appendShareBtn(');
+    const idx = html.indexOf('function appendAiResponseRow(');
     expect(idx).toBeGreaterThan(-1);
-    const fn = html.slice(idx, idx + 2500);
+    const fn = html.slice(idx, idx + 3000);
     expect(fn).toContain('window.open');
   });
 
-  it('appendShareBtn の window.open に _blank が含まれる', () => {
+  it('appendAiResponseRow の window.open に _blank が含まれる', () => {
     const html = getAiChatPage(minimalUser, []);
-    const idx = html.indexOf('function appendShareBtn(');
+    const idx = html.indexOf('function appendAiResponseRow(');
     expect(idx).toBeGreaterThan(-1);
-    const fn = html.slice(idx, idx + 2500);
+    const fn = html.slice(idx, idx + 3000);
     expect(fn).toContain("'_blank'");
   });
 
-  it('appendShareBtn 内でコピーと開くの両方が同じ shareUrl を使う（cachedUrl 共有）', () => {
+  it('appendAiResponseRow 内でコピーと開くの両方が同じ shareUrl を使う（cachedUrl 共有）', () => {
     const html = getAiChatPage(minimalUser, []);
-    const idx = html.indexOf('function appendShareBtn(');
+    const idx = html.indexOf('function appendAiResponseRow(');
     expect(idx).toBeGreaterThan(-1);
-    const fn = html.slice(idx, idx + 2500);
+    const fn = html.slice(idx, idx + 3000);
     expect(fn).toContain('cachedUrl');
   });
 });
 
 describe('appendShareBtn — 追加質問ボタン', () => {
-  it('appendShareBtn 内に追加質問ボタン（＋）が存在する', () => {
+  it('appendAiResponseRow 内に追加質問ボタン（＋）が存在する', () => {
     const html = getAiChatPage(minimalUser, []);
-    const idx = html.indexOf('function appendShareBtn(');
+    const idx = html.indexOf('function appendAiResponseRow(');
     expect(idx).toBeGreaterThan(-1);
-    const fn = html.slice(idx, idx + 2500);
+    const fn = html.slice(idx, idx + 3000);
     expect(fn).toContain('追加質問');
   });
 
   it('追加質問ボタンクリック時に currentHistoryQuestion をセットする', () => {
     const html = getAiChatPage(minimalUser, []);
-    const idx = html.indexOf('function appendShareBtn(');
+    const idx = html.indexOf('function appendAiResponseRow(');
     expect(idx).toBeGreaterThan(-1);
-    const fn = html.slice(idx, idx + 2500);
+    const fn = html.slice(idx, idx + 3000);
     expect(fn).toContain('currentHistoryQuestion');
   });
 
   it('追加質問ボタンクリック時に openAddSubqueryModal を呼ぶ', () => {
     const html = getAiChatPage(minimalUser, []);
-    const idx = html.indexOf('function appendShareBtn(');
+    const idx = html.indexOf('function appendAiResponseRow(');
     expect(idx).toBeGreaterThan(-1);
-    const fn = html.slice(idx, idx + 2500);
+    const fn = html.slice(idx, idx + 3000);
     expect(fn).toContain('openAddSubqueryModal');
   });
 
   it('追加質問ボタンが リンクをコピー ボタンの前（左）に配置される', () => {
     const html = getAiChatPage(minimalUser, []);
-    const idx = html.indexOf('function appendShareBtn(');
+    const idx = html.indexOf('function appendAiResponseRow(');
     expect(idx).toBeGreaterThan(-1);
-    const fn = html.slice(idx, idx + 2500);
+    const fn = html.slice(idx, idx + 3000);
     const addIdx = fn.indexOf('追加質問');
     const copyIdx = fn.indexOf('リンクをコピー');
     expect(addIdx).toBeGreaterThan(-1);
@@ -1817,20 +1817,20 @@ describe('AIチャット応答の自動保存（auto-save to ai_chat_shares）',
     expect(fn).toContain('userHash');
   });
 
-  it('appendShareBtn が shareId と userHash を引数に受け取る', () => {
+  it('appendAiResponseRow が shareId と userHash を引数に受け取る', () => {
     const html = getAiChatPage(minimalUser, []);
-    const idx = html.indexOf('function appendShareBtn(');
+    const idx = html.indexOf('function appendAiResponseRow(');
     expect(idx).toBeGreaterThan(-1);
     const fn = html.slice(idx, idx + 100);
     expect(fn).toContain('shareId');
     expect(fn).toContain('userHash');
   });
 
-  it('appendShareBtn の getShareUrl が shareId 提供時に /api/aichat/share を呼ばない', () => {
+  it('appendAiResponseRow の getShareUrl が shareId 提供時に /api/aichat/share を呼ばない', () => {
     const html = getAiChatPage(minimalUser, []);
-    const idx = html.indexOf('function appendShareBtn(');
+    const idx = html.indexOf('function appendAiResponseRow(');
     expect(idx).toBeGreaterThan(-1);
-    const fn = html.slice(idx, idx + 800);
+    const fn = html.slice(idx, idx + 3000);
     const idxGetUrl = fn.indexOf('function getShareUrl(');
     expect(idxGetUrl).toBeGreaterThan(-1);
     const getUrlFn = fn.slice(idxGetUrl, idxGetUrl + 300);

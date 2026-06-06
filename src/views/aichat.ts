@@ -2354,6 +2354,22 @@ export function getAiChatPage(user: {
       document.body.appendChild(overlay);
     }
 
+    function renderAiResultInModal(box, question, selectedModel, data) {
+      var responseText = data.response || '（応答なし）';
+      var usedModel = data.usedModel || selectedModel;
+      var ansBubble = document.createElement('div');
+      ansBubble.className = 'chat-bubble assistant preview-area';
+      ansBubble.innerHTML = parseMd(responseText);
+      box.appendChild(ansBubble);
+      if (data.usedModel && data.usedModel !== selectedModel) {
+        var fallbackNote = document.createElement('div');
+        fallbackNote.textContent = '※ ' + escHtml(shortModelName(data.usedModel)) + ' にフォールバックしました';
+        fallbackNote.style.cssText = 'font-size:11px;color:var(--text-muted);';
+        box.appendChild(fallbackNote);
+      }
+      appendAiResponseRow(box, question, responseText, usedModel, data.shareId, data.userHash);
+    }
+
     function openReAskResponseModal(selectedModel, question) {
       var overlay = document.createElement('div');
       overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1100;display:flex;align-items:center;justify-content:center;';
@@ -2389,16 +2405,7 @@ export function getAiChatPage(user: {
         body: JSON.stringify({ message: question, model: selectedModel })
       }).then(function(r) { return r.json(); }).then(function(d) {
         box.removeChild(loading);
-        var ansBubble = document.createElement('div');
-        ansBubble.className = 'chat-bubble assistant preview-area';
-        ansBubble.innerHTML = parseMd(d.response || '（応答なし）');
-        box.appendChild(ansBubble);
-        if (d.usedModel && d.usedModel !== selectedModel) {
-          var fallbackNote = document.createElement('div');
-          fallbackNote.textContent = '※ ' + escHtml(shortModelName(d.usedModel)) + ' にフォールバックしました';
-          fallbackNote.style.cssText = 'font-size:11px;color:var(--text-muted);margin-top:4px;';
-          box.appendChild(fallbackNote);
-        }
+        renderAiResultInModal(box, question, selectedModel, d);
       }).catch(function(err) {
         loading.textContent = '取得に失敗しました: ' + (err.message || err);
       });
@@ -2812,7 +2819,7 @@ export function getAiChatPage(user: {
       return el;
     }
 
-    function appendShareBtn(question, answer, model, shareId, userHash) {
+    function appendAiResponseRow(container, question, answer, model, shareId, userHash) {
       var row = document.createElement('div');
       row.className = 'chat-share-row';
       var cachedUrl = null;
@@ -2865,8 +2872,12 @@ export function getAiChatPage(user: {
       row.appendChild(addBtn);
       row.appendChild(btn);
       row.appendChild(openBtn);
-      chatLog.appendChild(row);
-      chatLog.scrollTop = chatLog.scrollHeight;
+      container.appendChild(row);
+      container.scrollTop = container.scrollHeight;
+    }
+
+    function appendShareBtn(question, answer, model, shareId, userHash) {
+      appendAiResponseRow(chatLog, question, answer, model, shareId, userHash);
     }
 
     var MODEL_COLORS = ${modelColorsJson};
