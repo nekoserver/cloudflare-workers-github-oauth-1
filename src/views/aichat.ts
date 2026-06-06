@@ -2188,6 +2188,7 @@ export function getAiChatPage(user: {
     var linkedQuestionsBtn = document.getElementById('linkedQuestionsBtn');
     var linkedQuestionsAllItems = [];
     var linkedQuestionsFilter = 'all';
+    var subqueriesAllItems = [];
 
     function renderLinkedQuestions(items) {
       var filtered = linkedQuestionsFilter === 'all'
@@ -2565,7 +2566,7 @@ export function getAiChatPage(user: {
         }
         html += '<tr>';
         html += '<td style="text-align:right;color:var(--text-muted);">' + (item.link_count || 0) + '</td>';
-        html += '<td>' + escHtml(item.query) + '</td>';
+        html += '<td class="sq-query-cell" data-subquery-id="' + escHtml(String(item.id)) + '" data-subquery-query="' + escHtml(item.query) + '" style="cursor:pointer;color:var(--accent-color,#667eea);text-decoration:underline dotted;" title="タップしてこのサブクエリを含む質問一覧を表示">' + escHtml(item.query) + '</td>';
         html += '<td>' + kwHtml + '</td>';
         html += '</tr>';
       });
@@ -2631,6 +2632,11 @@ export function getAiChatPage(user: {
     });
 
     subqueriesListBody.addEventListener('click', function(e) {
+      var qCell = e.target.closest('.sq-query-cell');
+      if (qCell) {
+        openSubquerySelectModal();
+        return;
+      }
       var badge = e.target.closest('.sq-kw-badge');
       if (!badge) return;
       var subqueryId = badge.dataset.subqueryId;
@@ -2650,7 +2656,7 @@ export function getAiChatPage(user: {
       subqueriesListBody.innerHTML = '<div class="search-log-loading">読み込み中...</div>';
       fetch('/api/aichat/subqueries', { credentials: 'same-origin' })
         .then(function(r) { return r.json(); })
-        .then(function(d) { renderSubqueriesList(d.items || []); })
+        .then(function(d) { subqueriesAllItems = d.items || []; renderSubqueriesList(subqueriesAllItems); })
         .catch(function() { subqueriesListBody.innerHTML = '<div style="color:var(--text-muted);">取得に失敗しました</div>'; });
     }
 
@@ -2715,6 +2721,149 @@ export function getAiChatPage(user: {
         })
         .catch(function() { subqueriesAddMsg.textContent = '通信エラーが発生しました'; });
     });
+
+    // ===== サブクエリ選択→質問一覧モーダル =====
+    function openSubquerySelectModal() {
+      var sorted = subqueriesAllItems.slice().sort(function(a, b) { return (b.link_count || 0) - (a.link_count || 0); });
+      var overlay = document.createElement('div');
+      overlay.setAttribute('data-overlay', '');
+      overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:' + getNextZ() + ';display:flex;align-items:flex-start;justify-content:center;padding-top:80px;';
+      var box = document.createElement('div');
+      box.style.cssText = 'background:var(--bg-secondary);border-radius:12px;width:min(480px,92vw);max-height:70vh;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,0.22);';
+      var head = document.createElement('div');
+      head.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid var(--border-color);flex-shrink:0;';
+      var title = document.createElement('span');
+      title.textContent = 'サブクエリを選択（追加質問の多い順）';
+      title.style.cssText = 'font-size:14px;font-weight:700;';
+      var closeBtn = document.createElement('button');
+      closeBtn.textContent = '✕';
+      closeBtn.style.cssText = 'background:none;border:none;cursor:pointer;font-size:18px;color:var(--text-muted);padding:0 4px;';
+      closeBtn.addEventListener('click', function() { document.body.removeChild(overlay); });
+      head.appendChild(title);
+      head.appendChild(closeBtn);
+      box.appendChild(head);
+      var listDiv = document.createElement('div');
+      listDiv.style.cssText = 'overflow-y:auto;flex:1;';
+      if (sorted.length === 0) {
+        var empty = document.createElement('div');
+        empty.textContent = 'サブクエリがありません';
+        empty.style.cssText = 'color:var(--text-muted);padding:16px 18px;font-size:13px;';
+        listDiv.appendChild(empty);
+      } else {
+        sorted.forEach(function(item) {
+          var row = document.createElement('div');
+          row.style.cssText = 'display:flex;align-items:center;gap:10px;padding:11px 18px;cursor:pointer;border-bottom:1px solid var(--border-color);';
+          var badge = document.createElement('span');
+          badge.textContent = String(item.link_count || 0) + '件';
+          badge.style.cssText = 'background:var(--accent-color,#667eea);color:#fff;border-radius:10px;padding:1px 8px;font-size:11px;flex-shrink:0;';
+          var label = document.createElement('span');
+          label.textContent = item.query;
+          label.style.cssText = 'font-size:13px;color:var(--text-primary);';
+          row.appendChild(badge);
+          row.appendChild(label);
+          row.addEventListener('mouseenter', function() { row.style.background = 'var(--bg-primary)'; });
+          row.addEventListener('mouseleave', function() { row.style.background = ''; });
+          row.addEventListener('click', function() {
+            document.body.removeChild(overlay);
+            openSubqueryLinkedQuestionsModal(item.id, item.query);
+          });
+          listDiv.appendChild(row);
+        });
+      }
+      box.appendChild(listDiv);
+      overlay.appendChild(box);
+      overlay.addEventListener('click', function(e) { if (e.target === overlay) document.body.removeChild(overlay); });
+      document.body.appendChild(overlay);
+    }
+
+    function renderLinkedQuestionsInto(items, container, onItemClose) {
+      if (!items || items.length === 0) {
+        container.innerHTML = '<div style="color:var(--text-muted);padding:12px;">該当する質問がありません</div>';
+        return;
+      }
+      var html = '<table class="search-log-table"><thead><tr>'
+        + '<th>質問</th>'
+        + '<th>サブクエリ / リンク</th></tr></thead><tbody>';
+      items.forEach(function(item) {
+        var linkRows = (item.links || []).map(function(lk) {
+          var dots = (lk.models || []).map(function(m) {
+            var c = MODEL_COLORS[m] || '';
+            return c ? '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:' + c + ';flex-shrink:0;" title="' + escHtml(shortModelName(m)) + '"></span>' : '';
+          }).join('');
+          var hashBadge = lk.question_hash
+            ? '<span class="lk-hash-badge" data-hash="' + escHtml(lk.question_hash) + '" style="cursor:pointer;font-family:monospace;font-size:10px;padding:1px 5px;border-radius:4px;background:var(--bg-primary);border:1px solid var(--border-color);color:var(--text-muted);white-space:nowrap;flex-shrink:0;" title="質問ハッシュ — タップで異モデル比較">' + escHtml(lk.question_hash.slice(0, 7)) + '</span>'
+            : '';
+          return '<div style="display:flex;gap:5px;align-items:center;margin-bottom:4px;flex-wrap:wrap;">'
+            + (dots ? '<span style="display:flex;gap:2px;align-items:center;flex-shrink:0;">' + dots + '</span>' : '')
+            + hashBadge
+            + '<span style="color:var(--text-secondary);font-size:12px;">' + escHtml(lk.query) + '</span>'
+            + '<a href="' + escHtml(lk.url) + '" target="_blank" rel="noopener noreferrer" style="color:var(--accent-color,#667eea);font-size:11px;white-space:nowrap;flex-shrink:0;">🔗 開く</a>'
+            + '</div>';
+        }).join('');
+        html += '<tr>'
+          + '<td class="kw-q-link" data-share-id="' + escHtml(item.share_id || '') + '" style="vertical-align:top;max-width:220px;cursor:pointer;padding-left:8px;">' + escHtml(item.question) + '</td>'
+          + '<td style="vertical-align:top;">' + linkRows + '</td>'
+          + '</tr>';
+      });
+      html += '</tbody></table>';
+      container.innerHTML = html;
+      container.querySelectorAll('td.kw-q-link').forEach(function(td) {
+        td.addEventListener('click', function() {
+          var shareId = td.getAttribute('data-share-id');
+          if (shareId) {
+            if (onItemClose) onItemClose();
+            openHistoryModalByShareId(shareId, '[]');
+          }
+        });
+      });
+      container.querySelectorAll('.lk-hash-badge').forEach(function(badge) {
+        badge.addEventListener('click', function(e) {
+          e.stopPropagation();
+          openQuestionHashModal(badge.getAttribute('data-hash'));
+        });
+      });
+    }
+
+    function openSubqueryLinkedQuestionsModal(subqueryId, subqueryQuery) {
+      var overlay = document.createElement('div');
+      overlay.setAttribute('data-overlay', '');
+      overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:' + getNextZ() + ';display:flex;align-items:flex-start;justify-content:center;padding-top:56px;';
+      var box = document.createElement('div');
+      box.style.cssText = 'background:var(--bg-secondary);border-radius:12px;width:min(720px,96vw);max-height:calc(100vh - 80px);display:flex;flex-direction:column;box-shadow:0 12px 40px rgba(0,0,0,0.25);';
+      var head = document.createElement('div');
+      head.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid var(--border-color);flex-shrink:0;';
+      var title = document.createElement('span');
+      title.style.cssText = 'font-size:14px;font-weight:700;';
+      title.textContent = '「' + subqueryQuery + '」を含む質問一覧';
+      var closeBtn = document.createElement('button');
+      closeBtn.textContent = '✕';
+      closeBtn.style.cssText = 'background:none;border:none;cursor:pointer;font-size:18px;color:var(--text-muted);padding:0 4px;';
+      closeBtn.addEventListener('click', function() { document.body.removeChild(overlay); });
+      head.appendChild(title);
+      head.appendChild(closeBtn);
+      box.appendChild(head);
+      var bodyDiv = document.createElement('div');
+      bodyDiv.className = 'search-log-body';
+      bodyDiv.innerHTML = '<div class=\\"search-log-loading\\">読み込み中...</div>';
+      box.appendChild(bodyDiv);
+      overlay.appendChild(box);
+      overlay.addEventListener('click', function(e) { if (e.target === overlay) document.body.removeChild(overlay); });
+      document.body.appendChild(overlay);
+      function doRender(allItems) {
+        var filtered = allItems.filter(function(it) {
+          return (it.links || []).some(function(lk) { return lk.subquery_id === subqueryId; });
+        });
+        renderLinkedQuestionsInto(filtered, bodyDiv, function() { if (overlay.parentNode) document.body.removeChild(overlay); });
+      }
+      if (linkedQuestionsAllItems.length > 0) {
+        doRender(linkedQuestionsAllItems);
+      } else {
+        fetch('/api/aichat/share-subquery-links/all', { credentials: 'same-origin' })
+          .then(function(r) { return r.json(); })
+          .then(function(d) { linkedQuestionsAllItems = d.items || []; doRender(linkedQuestionsAllItems); })
+          .catch(function() { bodyDiv.innerHTML = '<div style="color:var(--text-muted);padding:12px;">取得に失敗しました</div>'; });
+      }
+    }
 
     // ===== 追加質問モーダル =====
     var addSubqueryModal = document.getElementById('addSubqueryModal');
