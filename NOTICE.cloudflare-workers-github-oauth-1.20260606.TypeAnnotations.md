@@ -126,3 +126,37 @@ awk 'NR>=<script開始行> && NR<=<script終了行>' src/views/aichat.ts \
 - 型情報が必要な場合はコメントで書く（`// @type {number}`）
 - 埋め込み JS のコードブロックは IDE で TypeScript として補完されることがあるが、
   型補完をそのまま出力に含めてはいけない
+
+---
+
+## 付記: ブラウザによるインラインスタイル正規化
+
+### 関連バグ（2026-06-06 発見）
+
+`element.style.cssText = 'position:fixed;z-index:100'` のように設定しても、
+ブラウザは CSS を正規化して `position: fixed; z-index: 100` のように
+**コロンとセミコロンの後にスペースを挿入**する。
+
+そのため `div[style*="position:fixed"]`（スペースなし）で要素を検索すると
+**マッチしない**。
+
+```javascript
+// 設定:
+overlay.style.cssText = 'position:fixed;z-index:800;';
+
+// ブラウザが保持する値:
+// element.getAttribute('style') → 'position: fixed; z-index: 800;'
+
+// NG: マッチしない
+document.querySelectorAll('div[style*="position:fixed"]');
+
+// OK: data 属性で識別する
+overlay.setAttribute('data-overlay', '');
+document.querySelectorAll('div[data-overlay]');
+```
+
+### 教訓
+
+動的に作成した要素を CSS セレクタで後から検索する必要がある場合は、
+インラインスタイルのテキストマッチングではなく
+**専用の属性（`data-*`）やクラスを付与して識別する**。
