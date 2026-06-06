@@ -2227,17 +2227,17 @@ export function getAiChatPage(user: {
     function getNextZ() {
       var max = 700;
       document.querySelectorAll('div[style*="position:fixed"]').forEach(function(el) {
-        var z = parseInt((el as HTMLElement).style.zIndex) || 0;
+        var z = parseInt(el.style.zIndex) || 0;
         if (z > max && z < 9000) max = z;
       });
-      var staticZDefaults: Record<string, number> = {
+      var staticZDefaults = {
         linkedQuestionsOverlay: 700, impressionsSubqueryModal: 800,
         sqKwQuestionsOverlay: 850, addSubqueryModal: 900, historyModalBackdrop: 750,
       };
       Object.keys(staticZDefaults).forEach(function(id) {
         var el = document.getElementById(id);
         if (el && el.classList.contains('open')) {
-          var z = parseInt((el as HTMLElement).style.zIndex) || staticZDefaults[id];
+          var z = parseInt(el.style.zIndex) || staticZDefaults[id];
           if (z > max) max = z;
         }
       });
