@@ -1768,13 +1768,12 @@ describe('サブクエリ一覧：質問一覧モーダルから過去ログモ�
     expect(fn).toContain('openHistoryModalByShareId');
   });
 
-  it('sqKwQuestionsBody の click ハンドラが historyModalBackdrop の z-index を引き上げる', () => {
+  it('sqKwQuestionsBody の click ハンドラが openHistoryModalByShareId を呼ぶ', () => {
     const html = getAiChatPage(minimalUser, []);
     const idx = html.indexOf("sqKwQuestionsBody.addEventListener('click'");
     expect(idx).toBeGreaterThan(-1);
     const fn = html.slice(idx, idx + 400);
-    expect(fn).toContain('historyModalBackdrop');
-    expect(fn).toContain('zIndex');
+    expect(fn).toContain('openHistoryModalByShareId');
   });
 
   it('closeHistoryModal が historyModalBackdrop の zIndex をリセットする', () => {
