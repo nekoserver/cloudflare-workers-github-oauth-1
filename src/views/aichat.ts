@@ -1964,7 +1964,91 @@ export function getAiChatPage(user: {
     var historyModalClose = document.getElementById('historyModalClose');
     var historyModalCurrentId = null;
 
+    var historyModalSwipeItems = [];
+    var historyModalSwipeIndex = 0;
+    var historyModalSwipeDataCache = {};
+    var historySwipeTouchStartX = 0;
+
+    function renderHistoryModalModelDots() {
+      if (historyModalSwipeItems.length <= 1) return;
+      var current = historyModalSwipeItems[historyModalSwipeIndex];
+      if (!current) return;
+      var dotColor = MODEL_COLORS[current.model] || '';
+      var dotsHtml = historyModalSwipeItems.map(function(item, idx) {
+        var isActive = idx === historyModalSwipeIndex;
+        var c = MODEL_COLORS[item.model] || 'var(--text-muted)';
+        var sz = isActive ? '12px' : '7px';
+        var shadow = isActive ? ';box-shadow:0 0 0 3px ' + (dotColor ? dotColor + '33' : 'rgba(0,0,0,0.15)') : '';
+        return '<span data-swipe-index="' + idx + '" style="display:inline-block;width:' + sz + ';height:' + sz + ';border-radius:50%;background:' + c + ';cursor:pointer;transition:all 0.2s;vertical-align:middle;flex-shrink:0;' + shadow + ';" title="' + escHtml(shortModelName(item.model)) + '"></span>';
+      }).join('');
+      var counter = '(' + (historyModalSwipeIndex + 1) + '/' + historyModalSwipeItems.length + ')';
+      historyModalMeta.innerHTML =
+        '<span class="history-modal-model-filter-btn" style="cursor:pointer;' + (dotColor ? 'color:' + dotColor + ';' : '') + 'text-decoration:underline dotted;display:inline-flex;align-items:center;gap:5px;" title="モデルで絞り込む">'
+        + '<span class="history-swipe-dots" style="display:inline-flex;gap:4px;align-items:center;">' + dotsHtml + '</span>'
+        + escHtml(shortModelName(current.model))
+        + '<span style="color:var(--text-muted);font-size:11px;">' + counter + '</span>'
+        + '</span>'
+        + '　👁 ' + (current.access_count || 0);
+    }
+
+    function historyModalSwipeNavigate(direction) {
+      if (historyModalSwipeItems.length <= 1) return;
+      var nextIdx = historyModalSwipeIndex + direction;
+      if (nextIdx < 0 || nextIdx >= historyModalSwipeItems.length) return;
+      var targetItem = historyModalSwipeItems[nextIdx];
+      var assistBubble = historyModalChat.querySelector('.chat-bubble.assistant');
+      if (assistBubble) {
+        assistBubble.style.transition = 'opacity 0.15s ease';
+        assistBubble.style.opacity = '0';
+      }
+      function applyData(data) {
+        historyModalSwipeIndex = nextIdx;
+        historyModalSwipeDataCache[targetItem.id] = data;
+        historyModalCurrentId = data.id;
+        historyModalCurrentModel = data.model;
+        historyModalShareLink.href = '/s/' + data.user_hash + '/' + data.id;
+        if (assistBubble) {
+          assistBubble.innerHTML = parseMd(data.answer);
+          assistBubble.style.opacity = '1';
+        }
+        renderHistoryModalModelDots();
+      }
+      if (historyModalSwipeDataCache[targetItem.id] && historyModalSwipeDataCache[targetItem.id].answer) {
+        setTimeout(function() { applyData(historyModalSwipeDataCache[targetItem.id]); }, 150);
+      } else {
+        fetch('/api/aichat/shares/' + encodeURIComponent(String(targetItem.id)), { credentials: 'same-origin' })
+          .then(function(r) { return r.json(); })
+          .then(function(data) { setTimeout(function() { applyData(data); }, 100); })
+          .catch(function() { if (assistBubble) assistBubble.style.opacity = '1'; });
+      }
+    }
+
+    historyModalChat.addEventListener('touchstart', function(e) {
+      historySwipeTouchStartX = e.touches[0].clientX;
+    }, { passive: true });
+
+    historyModalChat.addEventListener('touchend', function(e) {
+      var dx = e.changedTouches[0].clientX - historySwipeTouchStartX;
+      if (Math.abs(dx) > 50) historyModalSwipeNavigate(dx < 0 ? 1 : -1);
+    });
+
+    document.addEventListener('keydown', function(e) {
+      if (!historyModalBackdrop.classList.contains('open')) return;
+      if (historyModalSwipeItems.length <= 1) return;
+      if (e.key === 'ArrowLeft') { e.preventDefault(); historyModalSwipeNavigate(-1); }
+      if (e.key === 'ArrowRight') { e.preventDefault(); historyModalSwipeNavigate(1); }
+    });
+
     historyModalMeta.addEventListener('click', function(e) {
+      var dot = e.target.closest('[data-swipe-index]');
+      if (dot) {
+        e.stopPropagation();
+        var targetIdx = parseInt(dot.getAttribute('data-swipe-index'));
+        if (!isNaN(targetIdx) && targetIdx !== historyModalSwipeIndex) {
+          historyModalSwipeNavigate(targetIdx - historyModalSwipeIndex);
+        }
+        return;
+      }
       if (e.target && e.target.closest && e.target.closest('.history-modal-model-filter-btn')) {
         openHistoryModelSelectModal();
       }
@@ -2087,6 +2171,10 @@ export function getAiChatPage(user: {
 
     function showHistoryModal(r, keyword) {
       closeResultsPanel();
+      historyModalSwipeItems = [];
+      historyModalSwipeIndex = 0;
+      historyModalSwipeDataCache = {};
+      historyModalSwipeDataCache[r.id] = r;
       historyModalChat.innerHTML = '';
       appendHistoryModalBubble(r.question, 'user');
       appendHistoryModalBubble(r.answer, 'assistant');
@@ -2106,6 +2194,23 @@ export function getAiChatPage(user: {
       historyModalBackdrop.classList.add('open');
       historyModalBackdrop.setAttribute('aria-hidden', 'false');
       if (currentHistoryQuestion) loadSubqueryLinks(currentHistoryQuestion);
+      if (r.question_hash) {
+        fetch('/api/aichat/shares-by-question-hash?hash=' + encodeURIComponent(String(r.question_hash)), { credentials: 'same-origin' })
+          .then(function(res) { return res.json(); })
+          .then(function(d) {
+            var siblings = d.items || [];
+            if (siblings.length > 1) {
+              historyModalSwipeItems = siblings;
+              var idx = 0;
+              for (var i = 0; i < siblings.length; i++) {
+                if (String(siblings[i].id) === String(r.id)) { idx = i; break; }
+              }
+              historyModalSwipeIndex = idx;
+              renderHistoryModalModelDots();
+            }
+          })
+          .catch(function() {});
+      }
     }
 
     function showHistoryPreview(r) {
