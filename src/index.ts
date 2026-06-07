@@ -3272,6 +3272,23 @@ app.get('/api/aichat/share-subquery-links/all', authMiddleware, async (c) => {
 });
 
 /**
+ * 質問テキストで紐づく ai_chat_shares の一覧（question_hash が未設定の旧レコード向けフォールバック）
+ */
+app.get('/api/aichat/shares-by-question', authMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  const question = (c.req.query('question') ?? '').trim();
+  if (!question) return jsonUtf8({ error: 'question は必須です' }, 400);
+  const rows = await c.env.DB.prepare(
+    `SELECT id, model, question, created_at, access_count, user_hash
+     FROM ai_chat_shares
+     WHERE question = ? AND user_id = ? AND deleted_at IS NULL
+     ORDER BY created_at DESC`
+  ).bind(question, user.sub).all<{ id: string; model: string; question: string; created_at: string; access_count: number; user_hash: string }>();
+  return jsonUtf8({ items: rows.results ?? [] });
+});
+
+/**
  * question_hash で紐づく ai_chat_shares の一覧（異モデル比較用）
  */
 app.get('/api/aichat/shares-by-question-hash', authMiddleware, async (c) => {
