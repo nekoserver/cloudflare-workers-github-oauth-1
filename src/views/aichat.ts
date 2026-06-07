@@ -885,7 +885,7 @@ export function getAiChatPage(user: {
       </div>
       <div class="history-modal-chat" id="historyModalChat"></div>
       <div class="history-modal-foot">
-        <button class="search-hist-btn" id="historyModalHighlightToggleBtn" style="display:none;padding:3px 7px;font-size:14px;" title="キーワードハイライトON/OFF">🔑</button>
+        <button class="search-hist-btn" id="historyModalHighlightToggleBtn" style="padding:3px 7px;font-size:14px;opacity:0.2;" title="キーワードハイライトON/OFF">🔑</button>
         <span id="historyModalMeta"></span>
         <a class="history-modal-link" id="historyModalShareLink" href="#" target="_blank">🔗 共有ページを開く</a>
         <button class="search-hist-btn" id="historyModalAddSubqueryBtn" style="margin-left:auto;">＋ 追加質問を登録する</button>
@@ -2011,9 +2011,13 @@ export function getAiChatPage(user: {
         historyModalShareLink.href = '/s/' + data.user_hash + '/' + data.id;
         if (assistBubble) {
           assistBubble.innerHTML = parseMd(data.answer);
+          if (historyModalHighlightActive && historyModalCurrentKeyword) {
+            applyKeywordHighlight(assistBubble, historyModalCurrentKeyword);
+          }
           assistBubble.style.opacity = '1';
         }
         renderHistoryModalModelDots();
+        updateHighlightToggleBtn();
       }
       if (historyModalSwipeDataCache[targetItem.id] && historyModalSwipeDataCache[targetItem.id].answer) {
         setTimeout(function() { applyData(historyModalSwipeDataCache[targetItem.id]); }, 150);
@@ -2128,10 +2132,10 @@ export function getAiChatPage(user: {
     function updateHighlightToggleBtn() {
       var marks = historyModalChat.querySelectorAll('.kw-highlight');
       if (!marks || marks.length === 0) {
-        historyModalHighlightToggleBtn.style.display = 'none';
+        historyModalHighlightToggleBtn.style.opacity = '0.2';
+        historyModalHighlightToggleBtn.title = 'キーワードハイライトなし';
         return;
       }
-      historyModalHighlightToggleBtn.style.display = 'inline-block';
       if (historyModalHighlightActive) {
         historyModalHighlightToggleBtn.style.opacity = '1';
         historyModalHighlightToggleBtn.title = '🔑 ハイライト表示中（クリックで非表示）';
