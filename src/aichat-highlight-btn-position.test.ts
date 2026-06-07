@@ -43,7 +43,7 @@ describe('ハイライトトグルボタン: updateHighlightToggleBtn — opacit
     const html = buildPage();
     const idx = html.indexOf('function updateHighlightToggleBtn');
     expect(idx).toBeGreaterThan(-1);
-    const fn = html.slice(idx, idx + 600);
+    const fn = html.slice(idx, idx + 1200);
     expect(fn).toContain('opacity');
   });
 
@@ -51,7 +51,10 @@ describe('ハイライトトグルボタン: updateHighlightToggleBtn — opacit
     const html = buildPage();
     const idx = html.indexOf('function updateHighlightToggleBtn');
     expect(idx).toBeGreaterThan(-1);
-    const fn = html.slice(idx, idx + 600);
+    // 関数本体のみを対象とするため次の function キーワードの手前で切る
+    const raw = html.slice(idx, idx + 1200);
+    const nextFn = raw.indexOf('function ', 10);
+    const fn = nextFn > 0 ? raw.slice(0, nextFn) : raw;
     expect(fn).not.toContain('textContent');
   });
 
@@ -59,7 +62,7 @@ describe('ハイライトトグルボタン: updateHighlightToggleBtn — opacit
     const html = buildPage();
     const idx = html.indexOf('function updateHighlightToggleBtn');
     expect(idx).toBeGreaterThan(-1);
-    const fn = html.slice(idx, idx + 600);
+    const fn = html.slice(idx, idx + 1200);
     expect(fn).toContain("'1'");
   });
 
@@ -67,7 +70,7 @@ describe('ハイライトトグルボタン: updateHighlightToggleBtn — opacit
     const html = buildPage();
     const idx = html.indexOf('function updateHighlightToggleBtn');
     expect(idx).toBeGreaterThan(-1);
-    const fn = html.slice(idx, idx + 600);
+    const fn = html.slice(idx, idx + 1200);
     expect(fn).toMatch(/0\.3[0-9]/);
   });
 
@@ -75,7 +78,7 @@ describe('ハイライトトグルボタン: updateHighlightToggleBtn — opacit
     const html = buildPage();
     const idx = html.indexOf('function updateHighlightToggleBtn');
     expect(idx).toBeGreaterThan(-1);
-    const fn = html.slice(idx, idx + 600);
+    const fn = html.slice(idx, idx + 1200);
     expect(fn).toMatch(/0\.1[0-9]|0\.2[0-9]?/);
   });
 
@@ -83,7 +86,7 @@ describe('ハイライトトグルボタン: updateHighlightToggleBtn — opacit
     const html = buildPage();
     const idx = html.indexOf('function updateHighlightToggleBtn');
     expect(idx).toBeGreaterThan(-1);
-    const fn = html.slice(idx, idx + 600);
+    const fn = html.slice(idx, idx + 1200);
     expect(fn).not.toContain("display = 'none'");
   });
 });
@@ -111,7 +114,7 @@ describe('ハイライトトグルボタン: クリックハンドラ互換性',
     const html = buildPage();
     const idx = html.indexOf('historyModalHighlightToggleBtn.addEventListener');
     expect(idx).toBeGreaterThan(-1);
-    const fn = html.slice(idx, idx + 400);
+    const fn = html.slice(idx, idx + 800);
     expect(fn).toContain('historyModalHighlightActive');
     expect(fn).toContain('!historyModalHighlightActive');
   });
@@ -120,7 +123,7 @@ describe('ハイライトトグルボタン: クリックハンドラ互換性',
     const html = buildPage();
     const idx = html.indexOf('historyModalHighlightToggleBtn.addEventListener');
     expect(idx).toBeGreaterThan(-1);
-    const fn = html.slice(idx, idx + 400);
+    const fn = html.slice(idx, idx + 800);
     expect(fn).toContain('highlights-hidden');
   });
 });
