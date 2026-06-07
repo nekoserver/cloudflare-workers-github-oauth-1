@@ -2183,6 +2183,31 @@ export function getAiChatPage(user: {
       });
     }
 
+    function clearKeywordHighlights(container) {
+      var marks = container.querySelectorAll('.kw-highlight');
+      marks.forEach(function(mark) {
+        if (mark.parentNode) {
+          mark.parentNode.replaceChild(document.createTextNode(mark.textContent), mark);
+        }
+      });
+      if (container.normalize) container.normalize();
+    }
+
+    function buildAllKeywords() {
+      var all = [];
+      if (historyModalCurrentKeyword) {
+        if (Array.isArray(historyModalCurrentKeyword)) {
+          all = all.concat(historyModalCurrentKeyword.filter(Boolean));
+        } else {
+          all.push(historyModalCurrentKeyword);
+        }
+      }
+      historyModalKeywordsFromDB.forEach(function(k) {
+        if (k && all.indexOf(k) === -1) all.push(k);
+      });
+      return all;
+    }
+
     function updateHighlightToggleBtn() {
       var marks = historyModalChat.querySelectorAll('.kw-highlight');
       if (!marks || marks.length === 0) {
@@ -2225,6 +2250,7 @@ export function getAiChatPage(user: {
     var historyModalHighlightActive = true;
     var historyModalCurrentKeyword = '';
     var historyModalKeywordsFromDB = [];
+    var historyModalDBKeywordsApplied = false;
 
     function renderSubqueryLinks(items) {
       if (!items || items.length === 0) {
@@ -2270,6 +2296,7 @@ export function getAiChatPage(user: {
       historyModalHighlightActive = true;
       historyModalCurrentKeyword = keyword || '';
       historyModalKeywordsFromDB = [];
+      historyModalDBKeywordsApplied = false;
       historyModalChat.classList.remove('highlights-hidden');
       historyModalChat.innerHTML = '';
       appendHistoryModalBubble(r.question, 'user');
@@ -3169,16 +3196,18 @@ export function getAiChatPage(user: {
     }
 
     historyModalHighlightToggleBtn.addEventListener('click', function() {
-      var marks = historyModalChat.querySelectorAll('.kw-highlight');
-      if (!marks || marks.length === 0) {
-        if (historyModalKeywordsFromDB.length > 0) {
-          historyModalHighlightActive = true;
-          historyModalChat.classList.remove('highlights-hidden');
-          applyKeywordHighlight(historyModalChat, historyModalKeywordsFromDB);
-          updateHighlightToggleBtn();
-        }
+      if (historyModalKeywordsFromDB.length > 0 && !historyModalDBKeywordsApplied) {
+        historyModalHighlightActive = true;
+        historyModalChat.classList.remove('highlights-hidden');
+        clearKeywordHighlights(historyModalChat);
+        var allKws = buildAllKeywords();
+        if (allKws.length > 0) applyKeywordHighlight(historyModalChat, allKws);
+        historyModalDBKeywordsApplied = true;
+        updateHighlightToggleBtn();
         return;
       }
+      var marks = historyModalChat.querySelectorAll('.kw-highlight');
+      if (!marks || marks.length === 0) return;
       historyModalHighlightActive = !historyModalHighlightActive;
       if (historyModalHighlightActive) {
         historyModalChat.classList.remove('highlights-hidden');
