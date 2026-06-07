@@ -2131,7 +2131,7 @@ export function getAiChatPage(user: {
         historyModalHighlightToggleBtn.style.display = 'none';
         return;
       }
-      historyModalHighlightToggleBtn.style.display = '';
+      historyModalHighlightToggleBtn.style.display = 'inline-block';
       if (historyModalHighlightActive) {
         historyModalHighlightToggleBtn.textContent = '🔍 ハイライト非表示';
       } else {
@@ -2217,23 +2217,24 @@ export function getAiChatPage(user: {
       historyModalBackdrop.classList.add('open');
       historyModalBackdrop.setAttribute('aria-hidden', 'false');
       if (currentHistoryQuestion) loadSubqueryLinks(currentHistoryQuestion);
-      if (r.question_hash) {
-        fetch('/api/aichat/shares-by-question-hash?hash=' + encodeURIComponent(String(r.question_hash)), { credentials: 'same-origin' })
-          .then(function(res) { return res.json(); })
-          .then(function(d) {
-            var siblings = d.items || [];
-            if (siblings.length > 1) {
-              historyModalSwipeItems = siblings;
-              var idx = 0;
-              for (var i = 0; i < siblings.length; i++) {
-                if (String(siblings[i].id) === String(r.id)) { idx = i; break; }
-              }
-              historyModalSwipeIndex = idx;
-              renderHistoryModalModelDots();
+      var swipeUrl = r.question_hash
+        ? '/api/aichat/shares-by-question-hash?hash=' + encodeURIComponent(String(r.question_hash))
+        : '/api/aichat/shares-by-question?question=' + encodeURIComponent(String(r.question));
+      fetch(swipeUrl, { credentials: 'same-origin' })
+        .then(function(res) { return res.json(); })
+        .then(function(d) {
+          var siblings = d.items || [];
+          if (siblings.length > 1) {
+            historyModalSwipeItems = siblings;
+            var idx = 0;
+            for (var i = 0; i < siblings.length; i++) {
+              if (String(siblings[i].id) === String(r.id)) { idx = i; break; }
             }
-          })
-          .catch(function() {});
-      }
+            historyModalSwipeIndex = idx;
+            renderHistoryModalModelDots();
+          }
+        })
+        .catch(function() {});
     }
 
     function showHistoryPreview(r) {
