@@ -3324,6 +3324,80 @@ app.get('/api/aichat/shares-by-question-hash', authMiddleware, async (c) => {
 });
 
 /**
+ * キーワード分類: 全キーワード一覧（出現回数付き）
+ */
+app.get('/api/aichat/all-keywords', authMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  const rows = await c.env.DB.prepare(
+    `SELECT keyword, SUM(select_count) AS cnt
+     FROM aichat_search_log
+     WHERE user_id = ?
+     GROUP BY keyword
+     ORDER BY cnt DESC`
+  ).bind(user.sub).all<{ keyword: string; cnt: number }>();
+  return jsonUtf8({ keywords: rows.results ?? [] });
+});
+
+/**
+ * キーワード分類: カテゴリ一覧（keyword 指定時は is_mapped フラグ付き）
+ */
+app.get('/api/aichat/keyword-categories', authMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  const keyword = (c.req.query('keyword') ?? '').trim();
+  const rows = await c.env.DB.prepare(
+    `SELECT c.id, c.name,
+       (SELECT COUNT(*) FROM aichat_keyword_category_map m
+        WHERE m.category_id = c.id AND m.keyword = ? AND m.user_id = ?) AS is_mapped
+     FROM aichat_keyword_categories c
+     WHERE c.user_id = ?
+     ORDER BY c.name`
+  ).bind(keyword, user.sub, user.sub).all<{ id: number; name: string; is_mapped: number }>();
+  return jsonUtf8({ categories: rows.results ?? [] });
+});
+
+/**
+ * キーワード分類: カテゴリ新規作成
+ */
+app.post('/api/aichat/keyword-categories', authMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  const body = await c.req.json<{ name?: string }>();
+  const name = typeof body.name === 'string' ? body.name.trim() : '';
+  if (!name) return jsonUtf8({ error: 'name は必須です' }, 400);
+  const now = new Date().toISOString();
+  const result = await c.env.DB.prepare(
+    `INSERT OR IGNORE INTO aichat_keyword_categories (user_id, name, created_at) VALUES (?, ?, ?)`
+  ).bind(user.sub, name.slice(0, 100), now).run();
+  const row = await c.env.DB.prepare(
+    `SELECT id, name FROM aichat_keyword_categories WHERE user_id = ? AND name = ?`
+  ).bind(user.sub, name.slice(0, 100)).first<{ id: number; name: string }>();
+  return jsonUtf8({ ok: true, inserted: (result.meta?.changes ?? 0) > 0, category: row });
+});
+
+/**
+ * キーワード分類: キーワード↔カテゴリ紐付け保存
+ */
+app.post('/api/aichat/keyword-category-map', authMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  const body = await c.req.json<{ keyword?: string; category_ids?: number[] }>();
+  const keyword = typeof body.keyword === 'string' ? body.keyword.trim() : '';
+  const categoryIds = Array.isArray(body.category_ids) ? body.category_ids.filter((id) => typeof id === 'number') : [];
+  if (!keyword || categoryIds.length === 0) return jsonUtf8({ error: 'keyword と category_ids は必須です' }, 400);
+  const now = new Date().toISOString();
+  let inserted = 0;
+  for (const catId of categoryIds) {
+    const result = await c.env.DB.prepare(
+      `INSERT OR IGNORE INTO aichat_keyword_category_map (user_id, keyword, category_id, created_at) VALUES (?, ?, ?, ?)`
+    ).bind(user.sub, keyword.slice(0, 200), catId, now).run();
+    inserted += result.meta?.changes ?? 0;
+  }
+  return jsonUtf8({ ok: true, inserted });
+});
+
+/**
  * 質問×サブクエリリンク登録 API（同一質問×サブクエリは重複無視）
  */
 app.post('/api/aichat/share-subquery-links', authMiddleware, async (c) => {

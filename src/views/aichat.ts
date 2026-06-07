@@ -629,6 +629,7 @@ export function getAiChatPage(user: {
       <button class="search-hist-btn" id="searchKwAnalysisBtn" title="質問×キーワード分析">📊 質問分析</button>
       <button class="search-hist-btn" id="searchHistoryBtn" title="検索明細履歴">🗂 検索明細</button>
       <button class="search-log-btn" id="searchLogBtn" title="検索履歴">📋 検索履歴</button>
+      <button class="search-hist-btn" id="kwClassifyBtn" title="キーワード分類">🔑分類</button>
       ${getThemeToggleHTML()}
       <span class="user-name">${displayName}</span>
       <div class="user-menu-container">
@@ -821,6 +822,18 @@ export function getAiChatPage(user: {
         <div id="subqueriesListBody">
           <div class="search-log-loading">読み込み中...</div>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="search-log-overlay" id="kwClassifyListModal" aria-hidden="true" style="z-index:820;">
+    <div class="search-log-modal" role="dialog" aria-modal="true" style="max-width:560px;">
+      <div class="search-log-head">
+        <span class="search-log-title">🔑 キーワード分類</span>
+        <button class="search-log-close" id="kwClassifyListClose" aria-label="閉じる">✕</button>
+      </div>
+      <div class="search-log-body" id="kwClassifyListBody" style="padding:12px 16px;line-height:2;">
+        <div class="search-log-loading">読み込み中...</div>
       </div>
     </div>
   </div>
@@ -2402,7 +2415,7 @@ export function getAiChatPage(user: {
       });
       var staticZDefaults = {
         linkedQuestionsOverlay: 700, impressionsSubqueryModal: 800,
-        sqKwQuestionsOverlay: 850, addSubqueryModal: 900, historyModalBackdrop: 750,
+        kwClassifyListModal: 820, sqKwQuestionsOverlay: 850, addSubqueryModal: 900, historyModalBackdrop: 750,
       };
       Object.keys(staticZDefaults).forEach(function(id) {
         var el = document.getElementById(id);
@@ -3156,6 +3169,221 @@ export function getAiChatPage(user: {
         clearHistorySelection();
       }
     });
+
+    // ===== キーワード分類 =====
+    var kwClassifyBtn = document.getElementById('kwClassifyBtn');
+    var kwClassifyListModal = document.getElementById('kwClassifyListModal');
+    var kwClassifyListClose = document.getElementById('kwClassifyListClose');
+    var kwClassifyListBody = document.getElementById('kwClassifyListBody');
+
+    function openKwClassifyList() {
+      kwClassifyListModal.style.zIndex = String(getNextZ());
+      kwClassifyListModal.classList.add('open');
+      kwClassifyListBody.innerHTML = '<div class="search-log-loading">読み込み中...</div>';
+      fetch('/api/aichat/all-keywords', { credentials: 'same-origin' })
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+          var kws = d.keywords || [];
+          if (kws.length === 0) {
+            kwClassifyListBody.innerHTML = '<div class="search-log-empty">キーワードがありません</div>';
+            return;
+          }
+          var html = '';
+          kws.forEach(function(kw) {
+            html += '<span class="sq-kw-badge kw-classify-kw-badge" data-keyword="' + escHtml(kw.keyword) + '" style="font-size:13px;padding:3px 10px;margin:3px 4px;">' + escHtml(kw.keyword) + ' (' + kw.cnt + ')</span>';
+          });
+          kwClassifyListBody.innerHTML = html;
+          kwClassifyListBody.querySelectorAll('.kw-classify-kw-badge').forEach(function(el) {
+            el.addEventListener('click', function() {
+              openKwClassifyModal(el.dataset.keyword);
+            });
+          });
+        })
+        .catch(function() {
+          kwClassifyListBody.innerHTML = '<div class="search-log-empty">読み込みに失敗しました</div>';
+        });
+    }
+
+    function openKwClassifyModal(keyword) {
+      var overlay = document.createElement('div');
+      overlay.setAttribute('data-overlay', '');
+      overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:' + getNextZ() + ';display:flex;align-items:flex-start;justify-content:center;padding-top:60px;';
+
+      var box = document.createElement('div');
+      box.style.cssText = 'background:var(--bg-secondary);border-radius:12px;width:min(520px,94vw);max-height:80vh;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,0.22);';
+
+      var head = document.createElement('div');
+      head.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid var(--border-color);flex-shrink:0;';
+      var title = document.createElement('span');
+      title.textContent = '🔑 分類: ' + keyword;
+      title.style.cssText = 'font-weight:700;font-size:14px;';
+      var closeBtn = document.createElement('button');
+      closeBtn.textContent = '✕';
+      closeBtn.style.cssText = 'background:none;border:none;cursor:pointer;font-size:16px;color:var(--text-muted);padding:0 4px;';
+      closeBtn.addEventListener('click', function() { document.body.removeChild(overlay); });
+      head.appendChild(title);
+      head.appendChild(closeBtn);
+      box.appendChild(head);
+
+      var body = document.createElement('div');
+      body.style.cssText = 'padding:16px 18px;overflow-y:auto;flex:1;';
+
+      var catsSection = document.createElement('div');
+      catsSection.style.cssText = 'margin-bottom:14px;min-height:24px;line-height:2;';
+      body.appendChild(catsSection);
+
+      var inputRow = document.createElement('div');
+      inputRow.style.cssText = 'display:flex;gap:8px;align-items:center;margin-bottom:14px;';
+      var catInput = document.createElement('input');
+      catInput.type = 'text';
+      catInput.placeholder = 'カテゴリ名を入力…';
+      catInput.style.cssText = 'flex:1;padding:6px 10px;border:1px solid var(--border-color);border-radius:6px;font-size:13px;background:var(--bg-primary);color:var(--text-primary);';
+      var addCatBtn = document.createElement('button');
+      addCatBtn.textContent = '登録';
+      addCatBtn.disabled = true;
+      addCatBtn.style.cssText = 'padding:6px 14px;border-radius:6px;border:none;background:var(--accent-color,#667eea);color:#fff;font-size:13px;cursor:pointer;opacity:0.4;';
+      inputRow.appendChild(catInput);
+      inputRow.appendChild(addCatBtn);
+      body.appendChild(inputRow);
+
+      var foot = document.createElement('div');
+      foot.style.cssText = 'padding:12px 18px;border-top:1px solid var(--border-color);display:flex;justify-content:flex-end;gap:8px;flex-shrink:0;';
+      var cancelBtn = document.createElement('button');
+      cancelBtn.textContent = 'キャンセル';
+      cancelBtn.style.cssText = 'padding:7px 16px;border-radius:6px;border:1px solid var(--border-color);background:transparent;color:var(--text-muted);font-size:13px;cursor:pointer;';
+      cancelBtn.addEventListener('click', function() { document.body.removeChild(overlay); });
+      var decideBtn = document.createElement('button');
+      decideBtn.textContent = '分類決定';
+      decideBtn.disabled = true;
+      decideBtn.style.cssText = 'padding:7px 16px;border-radius:6px;border:none;background:var(--accent-color,#667eea);color:#fff;font-size:13px;cursor:pointer;opacity:0.4;';
+      foot.appendChild(cancelBtn);
+      foot.appendChild(decideBtn);
+
+      box.appendChild(body);
+      box.appendChild(foot);
+      overlay.appendChild(box);
+      overlay.addEventListener('click', function(e) { if (e.target === overlay) document.body.removeChild(overlay); });
+      document.body.appendChild(overlay);
+
+      var selectedCatIds = [];
+
+      function updateDecideBtn() {
+        var ok = selectedCatIds.length > 0;
+        decideBtn.disabled = !ok;
+        decideBtn.style.opacity = ok ? '1' : '0.4';
+      }
+
+      function renderCatBadge(cat) {
+        var badge = document.createElement('span');
+        badge.textContent = cat.name;
+        badge.style.cssText = 'display:inline-block;padding:3px 12px;margin:2px 4px;border-radius:6px;font-size:12px;cursor:pointer;border:1.5px solid var(--border-color);background:var(--bg-primary);color:var(--text-primary);user-select:none;';
+        badge.dataset.catId = String(cat.id);
+        if (cat.is_mapped) {
+          badge.style.background = 'var(--accent-bg,#ede9fe)';
+          badge.style.color = 'var(--accent-fg,#5b21b6)';
+          badge.style.borderColor = 'var(--accent-color,#667eea)';
+          selectedCatIds.push(cat.id);
+        }
+        badge.addEventListener('click', function() {
+          var id = cat.id;
+          var sel = selectedCatIds.indexOf(id) >= 0;
+          if (sel) {
+            selectedCatIds = selectedCatIds.filter(function(x) { return x !== id; });
+            badge.style.background = 'var(--bg-primary)';
+            badge.style.color = 'var(--text-primary)';
+            badge.style.borderColor = 'var(--border-color)';
+          } else {
+            selectedCatIds.push(id);
+            badge.style.background = 'var(--accent-bg,#ede9fe)';
+            badge.style.color = 'var(--accent-fg,#5b21b6)';
+            badge.style.borderColor = 'var(--accent-color,#667eea)';
+          }
+          updateDecideBtn();
+        });
+        return badge;
+      }
+
+      function loadCategories() {
+        fetch('/api/aichat/keyword-categories?keyword=' + encodeURIComponent(keyword), { credentials: 'same-origin' })
+          .then(function(r) { return r.json(); })
+          .then(function(d) {
+            var cats = d.categories || [];
+            catsSection.innerHTML = '';
+            if (cats.length === 0) {
+              catsSection.style.display = 'none';
+            } else {
+              catsSection.style.display = '';
+              cats.forEach(function(cat) {
+                catsSection.appendChild(renderCatBadge(cat));
+              });
+            }
+            updateDecideBtn();
+          })
+          .catch(function() {
+            catsSection.textContent = '読み込みに失敗しました';
+          });
+      }
+
+      loadCategories();
+
+      catInput.addEventListener('input', function() {
+        var val = catInput.value.trim();
+        if (!val) { addCatBtn.disabled = true; addCatBtn.style.opacity = '0.4'; return; }
+        var exists = Array.from(catsSection.querySelectorAll('[data-cat-id]')).some(function(el) {
+          return el.textContent === val;
+        });
+        if (exists) { addCatBtn.disabled = true; addCatBtn.style.opacity = '0.4'; return; }
+        addCatBtn.disabled = false;
+        addCatBtn.style.opacity = '1';
+      });
+
+      addCatBtn.addEventListener('click', function() {
+        var val = catInput.value.trim();
+        if (!val) return;
+        addCatBtn.disabled = true;
+        addCatBtn.style.opacity = '0.4';
+        fetch('/api/aichat/keyword-categories', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'same-origin',
+          body: JSON.stringify({ name: val }),
+        })
+          .then(function(r) { return r.json(); })
+          .then(function(d) {
+            catInput.value = '';
+            selectedCatIds = [];
+            loadCategories();
+          })
+          .catch(function() {
+            addCatBtn.disabled = false;
+            addCatBtn.style.opacity = '1';
+          });
+      });
+
+      decideBtn.addEventListener('click', function() {
+        if (selectedCatIds.length === 0) return;
+        decideBtn.disabled = true;
+        decideBtn.style.opacity = '0.4';
+        fetch('/api/aichat/keyword-category-map', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'same-origin',
+          body: JSON.stringify({ keyword: keyword, category_ids: selectedCatIds }),
+        })
+          .then(function(r) { return r.json(); })
+          .then(function() {
+            document.body.removeChild(overlay);
+          })
+          .catch(function() {
+            decideBtn.disabled = false;
+            decideBtn.style.opacity = '1';
+          });
+      });
+    }
+
+    kwClassifyBtn.addEventListener('click', function(e) { e.stopPropagation(); openKwClassifyList(); });
+    kwClassifyListClose.addEventListener('click', function() { kwClassifyListModal.classList.remove('open'); });
+    kwClassifyListModal.addEventListener('click', function(e) { if (e.target === kwClassifyListModal) kwClassifyListModal.classList.remove('open'); });
 
     // ===== チャット =====
     var chatLog = document.getElementById('chatLog');
