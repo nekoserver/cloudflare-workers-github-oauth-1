@@ -3211,7 +3211,7 @@ export function getAiChatPage(user: {
           html += '<div style="margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid var(--border-color);line-height:2.4;">';
           cats.forEach(function(cat) {
             var col = escHtml(cat.color || '#6366f1');
-            html += '<span style="display:inline-block;padding:4px 14px;margin:2px 4px;border-radius:14px;font-size:12px;font-weight:700;background:' + col + ';color:#fff;cursor:default;white-space:nowrap;letter-spacing:0.02em;">' + escHtml(cat.name) + ' (' + cat.kw_count + ')</span>';
+            html += '<span class="kw-cat-summary-badge" data-cat-id="' + escHtml(String(cat.id)) + '" data-cat-color="' + col + '" style="display:inline-block;padding:4px 14px;margin:2px 4px;border-radius:14px;font-size:12px;font-weight:700;background:' + col + ';color:#fff;cursor:pointer;white-space:nowrap;letter-spacing:0.02em;">' + escHtml(cat.name) + ' (' + cat.kw_count + ')</span>';
           });
           html += '</div>';
         }
@@ -3219,13 +3219,55 @@ export function getAiChatPage(user: {
           html += '<div class="search-log-empty">キーワードがありません</div>';
         } else {
           kws.forEach(function(kw) {
+            var catIdAttr = kw.category_id != null ? ' data-cat-id="' + escHtml(String(kw.category_id)) + '"' : '';
+            var catColorAttr = kw.category_color ? ' data-cat-color="' + escHtml(kw.category_color) + '"' : '';
             var st = kw.is_classified
               ? 'display:inline-block;font-size:13px;padding:2px 10px;margin:3px 4px;border-radius:10px;cursor:pointer;border:1.5px solid #7c3aed;color:#7c3aed;background:transparent;white-space:nowrap;user-select:none;'
               : 'display:inline-block;font-size:13px;padding:3px 10px;margin:3px 4px;border-radius:10px;cursor:pointer;border:1.5px solid var(--border-color);background:var(--bg-secondary);color:var(--text-muted);white-space:nowrap;user-select:none;';
-            html += '<span class="kw-classify-kw-badge" data-keyword="' + escHtml(kw.keyword) + '" style="' + st + '">' + escHtml(kw.keyword) + ' (' + kw.cnt + ')</span>';
+            html += '<span class="kw-classify-kw-badge" data-keyword="' + escHtml(kw.keyword) + '"' + catIdAttr + catColorAttr + ' style="' + st + '">' + escHtml(kw.keyword) + ' (' + kw.cnt + ')</span>';
           });
         }
         kwClassifyListBody.innerHTML = html;
+        var activeCatId = null;
+        kwClassifyListBody.querySelectorAll('.kw-cat-summary-badge').forEach(function(catEl) {
+          catEl.addEventListener('click', function() {
+            var catId = catEl.dataset.catId;
+            var catColor = catEl.dataset.catColor || '#6366f1';
+            if (activeCatId === catId) {
+              activeCatId = null;
+              kwClassifyListBody.querySelectorAll('.kw-classify-kw-badge').forEach(function(kwEl) {
+                var el = kwEl;
+                if (el.dataset.catId) {
+                  el.style.backgroundColor = 'transparent';
+                  el.style.color = '#7c3aed';
+                  el.style.borderColor = '#7c3aed';
+                } else {
+                  el.style.backgroundColor = '';
+                  el.style.color = '';
+                  el.style.borderColor = '';
+                }
+              });
+            } else {
+              activeCatId = catId;
+              kwClassifyListBody.querySelectorAll('.kw-classify-kw-badge').forEach(function(kwEl) {
+                var el = kwEl;
+                if (el.dataset.catId === catId) {
+                  el.style.backgroundColor = catColor;
+                  el.style.color = '#fff';
+                  el.style.borderColor = catColor;
+                } else if (el.dataset.catId) {
+                  el.style.backgroundColor = 'transparent';
+                  el.style.color = '#7c3aed';
+                  el.style.borderColor = '#7c3aed';
+                } else {
+                  el.style.backgroundColor = '';
+                  el.style.color = '';
+                  el.style.borderColor = '';
+                }
+              });
+            }
+          });
+        });
         kwClassifyListBody.querySelectorAll('.kw-classify-kw-badge').forEach(function(el) {
           el.addEventListener('click', function() { openKwClassifyModal(el.dataset.keyword); });
         });
