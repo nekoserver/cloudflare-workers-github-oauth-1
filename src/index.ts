@@ -3518,11 +3518,13 @@ app.get('/api/aichat/shares/:id', authMiddleware, async (c) => {
   if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
   const id = c.req.param('id');
   const row = await c.env.DB.prepare(
-    `SELECT id, user_hash, question, answer, model, created_at, access_count, question_hash
+    `SELECT id, user_hash, question, answer, model, created_at, access_count, question_hash,
+            input_tokens, output_tokens, total_tokens
      FROM ai_chat_shares WHERE id = ? AND user_id = ? AND deleted_at IS NULL`
   ).bind(id, user.sub).first<{
     id: string; user_hash: string; question: string; answer: string;
     model: string; created_at: string; access_count: number; question_hash: string | null;
+    input_tokens: number | null; output_tokens: number | null; total_tokens: number | null;
   }>();
   if (!row) return jsonUtf8({ error: 'Not found' }, 404);
   return jsonUtf8(row);
