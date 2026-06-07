@@ -766,6 +766,15 @@ INSERT OR REPLACE INTO table_column_keys (table_name, column_name, key_type, fk_
 ('ai_chat_shares', 'question_hash', 'idx', NULL);
 INSERT OR REPLACE INTO table_column_keys (table_name, column_name, key_type, fk_target_table) VALUES
 ('aichat_share_subquery_links', 'question_hash', 'idx', NULL);`,
+  '0050': `ALTER TABLE ai_chat_shares ADD COLUMN input_tokens INTEGER;
+ALTER TABLE ai_chat_shares ADD COLUMN output_tokens INTEGER;
+ALTER TABLE ai_chat_shares ADD COLUMN total_tokens INTEGER;
+INSERT OR REPLACE INTO table_column_keys (table_name, column_name, key_type, fk_target_table) VALUES
+('ai_chat_shares', 'input_tokens', 'idx', NULL);
+INSERT OR REPLACE INTO table_column_keys (table_name, column_name, key_type, fk_target_table) VALUES
+('ai_chat_shares', 'output_tokens', 'idx', NULL);
+INSERT OR REPLACE INTO table_column_keys (table_name, column_name, key_type, fk_target_table) VALUES
+('ai_chat_shares', 'total_tokens', 'idx', NULL);`,
   'ts-catalog': `CREATE TABLE IF NOT EXISTS ts_repository (
   id            INTEGER PRIMARY KEY AUTOINCREMENT,
   full_name     TEXT NOT NULL UNIQUE,
@@ -2779,7 +2788,8 @@ app.post('/api/aichat', authMiddleware, async (c) => {
   const rawMode = (body.systemPromptMode ?? '').trim();
   const systemPromptMode: SystemPromptMode = (ALLOWED_MODES.has(rawMode) ? rawMode : 'a') as SystemPromptMode;
 
-  const runAi = async (model: string): Promise<string> => {
+  type AiUsage = { input_tokens: number | null; output_tokens: number | null; total_tokens: number | null };
+  const runAi = async (model: string): Promise<{ text: string; usage: AiUsage }> => {
     const maxTokens = AICHAT_MODEL_MAX_TOKENS[model] ?? 4096;
     const baseParams = { messages: buildAiMessages(message, systemPromptMode), max_tokens: maxTokens };
     const runParams = getModelRunParams(model, baseParams);
@@ -2812,10 +2822,18 @@ app.post('/api/aichat', authMiddleware, async (c) => {
       });
       throw new Error(`AI returned empty response [model=${model} keys=${resultKeys} rawLen=${raw.length}]`);
     }
-    return cleaned;
+    const usageObj = (typeof resultObj['usage'] === 'object' && resultObj['usage'] !== null)
+      ? resultObj['usage'] as Record<string, unknown>
+      : {};
+    const usage: AiUsage = {
+      input_tokens: typeof usageObj['input_tokens'] === 'number' ? usageObj['input_tokens'] : null,
+      output_tokens: typeof usageObj['output_tokens'] === 'number' ? usageObj['output_tokens'] : null,
+      total_tokens: typeof usageObj['total_tokens'] === 'number' ? usageObj['total_tokens'] : null,
+    };
+    return { text: cleaned, usage };
   };
 
-  const autoSave = async (response: string, usedModel: string) => {
+  const autoSave = async (response: string, usedModel: string, usage: AiUsage) => {
     if (!c.env.DB) return {};
     try {
       const usernameBytes = new TextEncoder().encode(user.sub);
@@ -2829,8 +2847,8 @@ app.post('/api/aichat', authMiddleware, async (c) => {
       const conversationHash = await computeConversationHash(user.sub, message, response, usedModel, now);
       const questionHash = await computeQuestionHash(user.sub, message);
       await c.env.DB.prepare(
-        'INSERT INTO ai_chat_shares (id, user_id, user_hash, question, answer, model, created_at, conversation_hash, question_hash) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
-      ).bind(shareId, user.sub, userHash, message, response, usedModel, now, conversationHash, questionHash).run();
+        'INSERT INTO ai_chat_shares (id, user_id, user_hash, question, answer, model, created_at, conversation_hash, question_hash, input_tokens, output_tokens, total_tokens) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+      ).bind(shareId, user.sub, userHash, message, response, usedModel, now, conversationHash, questionHash, usage.input_tokens, usage.output_tokens, usage.total_tokens).run();
       return { shareId, userHash, conversationHash, questionHash };
     } catch (saveErr) {
       logger.warn('AI chat auto-save failed', {
@@ -2842,9 +2860,9 @@ app.post('/api/aichat', authMiddleware, async (c) => {
   };
 
   try {
-    const response = await runAi(primaryModel);
-    const saved = await autoSave(response, primaryModel);
-    return jsonUtf8({ response, usedModel: primaryModel, systemPromptMode, ...saved });
+    const { text: response, usage } = await runAi(primaryModel);
+    const saved = await autoSave(response, primaryModel, usage);
+    return jsonUtf8({ response, usedModel: primaryModel, systemPromptMode, ...usage, ...saved });
   } catch (primaryErr) {
     logger.warn('AI chat primary model failed, trying fallback', {
       model: primaryModel,
@@ -2856,10 +2874,10 @@ app.post('/api/aichat', authMiddleware, async (c) => {
       return jsonUtf8({ error: 'AI への問い合わせに失敗しました' }, 500);
     }
     try {
-      const response = await runAi(fallbackModel);
-      const saved = await autoSave(response, fallbackModel);
+      const { text: response, usage } = await runAi(fallbackModel);
+      const saved = await autoSave(response, fallbackModel, usage);
       const primaryErrMsg = primaryErr instanceof Error ? primaryErr.message : String(primaryErr);
-      return jsonUtf8({ response, usedModel: fallbackModel, systemPromptMode, fallbackUsed: true, primaryError: primaryErrMsg, ...saved });
+      return jsonUtf8({ response, usedModel: fallbackModel, systemPromptMode, fallbackUsed: true, primaryError: primaryErrMsg, ...usage, ...saved });
     } catch (fallbackErr) {
       logger.warn('AI chat fallback model also failed', {
         model: fallbackModel,
@@ -3372,6 +3390,40 @@ app.get('/api/aichat/keyword-categories', authMiddleware, async (c) => {
      ORDER BY c.name`
   ).bind(keyword, user.sub, user.sub).all<{ id: number; name: string; color: string; is_mapped: number }>();
   return jsonUtf8({ categories: rows.results ?? [] });
+});
+
+/**
+ * トークン使用量: 月別・モデル別集計
+ * ai_chat_shares の input_tokens / output_tokens / total_tokens を月・モデルでグループ集計
+ * columns 未追加の場合は空配列でフォールバック
+ */
+app.get('/api/aichat/token-usage', authMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  const months = Math.min(Math.max(parseInt(c.req.query('months') ?? '6', 10), 1), 24);
+  const since = new Date(Date.now() - months * 31 * 24 * 60 * 60 * 1000).toISOString().slice(0, 7) + '-01';
+  try {
+    const rows = await c.env.DB.prepare(
+      `SELECT
+         strftime('%Y-%m', created_at) AS month,
+         model,
+         SUM(COALESCE(input_tokens, 0)) AS input_tokens,
+         SUM(COALESCE(output_tokens, 0)) AS output_tokens,
+         SUM(COALESCE(total_tokens, 0)) AS total_tokens,
+         COUNT(*) AS request_count
+       FROM ai_chat_shares
+       WHERE user_id = ? AND created_at >= ?
+         AND (input_tokens IS NOT NULL OR output_tokens IS NOT NULL)
+       GROUP BY month, model
+       ORDER BY month ASC, model ASC`
+    ).bind(user.sub, since).all<{
+      month: string; model: string;
+      input_tokens: number; output_tokens: number; total_tokens: number; request_count: number;
+    }>();
+    return jsonUtf8({ rows: rows.results ?? [] });
+  } catch {
+    return jsonUtf8({ rows: [], _warning: 'schema not ready' });
+  }
 });
 
 /**
