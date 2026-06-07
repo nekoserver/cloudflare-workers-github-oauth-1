@@ -2261,7 +2261,9 @@ export function getAiChatPage(user: {
       var html = '<div style="font-weight:600;margin-bottom:4px;color:var(--text-secondary);">追加質問リンク</div>';
       html += '<div style="display:flex;flex-direction:column;gap:4px;">';
       items.forEach(function(item) {
+        var dotColor = (item.model && MODEL_COLORS && MODEL_COLORS[item.model]) ? MODEL_COLORS[item.model] : '#aaaaaa';
         html += '<div style="display:flex;gap:8px;align-items:center;">';
+        html += '<span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:' + dotColor + ';flex-shrink:0;" title="' + escHtml(item.model || '') + '"></span>';
         html += '<span style="color:var(--text-muted);">' + escHtml(item.query) + '</span>';
         html += '<a href="' + escHtml(item.url) + '" target="_blank" rel="noopener noreferrer" style="color:var(--accent-color,#667eea);text-decoration:none;font-size:11px;">🔗 開く</a>';
         html += '</div>';
