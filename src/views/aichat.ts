@@ -3523,6 +3523,17 @@ export function getAiChatPage(user: {
 
     var langModeSelect = document.getElementById('langModeSelect');
 
+    // ナビバー表示設定: langModeSelect と modelSelect のCookie制御
+    (function() {
+      var mLang = document.cookie.match('(^|;)\\s*aichat_show_lang_mode=([^;]*)');
+      var showLang = mLang ? decodeURIComponent(mLang[2]) === 'on' : false;
+      if (!showLang) langModeSelect.style.display = 'none';
+
+      var mModel = document.cookie.match('(^|;)\\s*aichat_show_model_name=([^;]*)');
+      var showModel = mModel ? decodeURIComponent(mModel[2]) === 'on' : false;
+      if (!showModel) modelSelect.style.display = 'none';
+    })();
+
     chatForm.addEventListener('submit', function(e) {
       e.preventDefault();
       var msg = chatInput.value.trim();
