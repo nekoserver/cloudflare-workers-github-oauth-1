@@ -938,6 +938,7 @@ export function getAiChatPage(user: {
       <div class="history-modal-foot">
         <button class="search-hist-btn" id="historyModalHighlightToggleBtn" style="padding:3px 7px;font-size:14px;opacity:0.2;" title="キーワードハイライトON/OFF">🔑</button>
         <span id="historyModalMeta"></span>
+        <span id="historyModalTokens" style="font-size:11px;color:var(--text-muted);"></span>
         <a class="history-modal-link" id="historyModalShareLink" href="#" target="_blank">🔗 共有ページを開く</a>
         <button class="search-hist-btn" id="historyModalAddSubqueryBtn" style="margin-left:auto;">＋ 追加質問を登録する</button>
       </div>
@@ -2013,6 +2014,7 @@ export function getAiChatPage(user: {
     var historyModalDateLink = document.getElementById('historyModalDateLink');
     var historyModalTime = document.getElementById('historyModalTime');
     var historyModalMeta = document.getElementById('historyModalMeta');
+    var historyModalTokens = document.getElementById('historyModalTokens');
     var historyModalShareLink = document.getElementById('historyModalShareLink');
     var historyModalClose = document.getElementById('historyModalClose');
     var historyModalCurrentId = null;
@@ -2060,6 +2062,7 @@ export function getAiChatPage(user: {
         historyModalCurrentId = data.id;
         historyModalCurrentModel = data.model;
         historyModalShareLink.href = '/s/' + data.user_hash + '/' + data.id;
+        renderHistoryModalTokens(data);
         if (assistBubble) {
           assistBubble.innerHTML = parseMd(data.answer);
           if (historyModalHighlightActive && historyModalCurrentKeyword) {
@@ -2251,6 +2254,13 @@ export function getAiChatPage(user: {
         .catch(function() { historyModalSubqueryLinks.style.display = 'none'; });
     }
 
+    function renderHistoryModalTokens(r) {
+      var parts = [];
+      if (r.input_tokens != null) parts.push('in:' + r.input_tokens);
+      if (r.output_tokens != null) parts.push('out:' + r.output_tokens);
+      historyModalTokens.textContent = parts.length > 0 ? '　📊 ' + parts.join(' / ') : '';
+    }
+
     function showHistoryModal(r, keyword) {
       closeResultsPanel();
       historyModalSwipeItems = [];
@@ -2271,6 +2281,7 @@ export function getAiChatPage(user: {
       var dotColor = MODEL_COLORS[r.model] || '';
       var dotStyle = dotColor ? 'display:inline-block;width:8px;height:8px;border-radius:50%;background:' + dotColor + ';margin-right:4px;vertical-align:middle;' : '';
       historyModalMeta.innerHTML = '<span class="history-modal-model-filter-btn" style="cursor:pointer;' + (dotColor ? 'color:' + dotColor + ';' : '') + 'text-decoration:underline dotted;" title="モデルで絞り込む">' + (dotStyle ? '<span style="' + dotStyle + '"></span>' : '') + escHtml(shortModelName(r.model)) + '</span>' + '　👁 ' + (r.access_count || 0);
+      renderHistoryModalTokens(r);
       historyModalShareLink.href = '/s/' + r.user_hash + '/' + r.id;
       historyModalCurrentId = r.id;
       currentHistoryQuestion = r.question || '';
