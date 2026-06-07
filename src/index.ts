@@ -3237,13 +3237,16 @@ app.get('/api/aichat/share-subquery-links', authMiddleware, async (c) => {
   const question = c.req.query('question') ?? '';
   if (!question) return jsonUtf8({ items: [] });
   const rows = await c.env.DB.prepare(
-    `SELECT l.id, l.question, l.subquery_id, l.url, q.query
+    `SELECT l.id, l.question, l.subquery_id, l.url, q.query,
+            s.model
      FROM aichat_share_subquery_links l
      JOIN aichat_subqueries q ON q.id = l.subquery_id
+     LEFT JOIN ai_chat_shares s ON s.id = CAST(SUBSTR(l.url, LENGTH(l.url) - INSTR(REVERSE(l.url), '/') + 2) AS INTEGER)
+       AND s.user_id = l.user_id AND s.deleted_at IS NULL
      WHERE l.user_id = ? AND l.question = ?
      ORDER BY l.id ASC`
   ).bind(user.sub, question).all<{
-    id: number; question: string; subquery_id: number; url: string; query: string;
+    id: number; question: string; subquery_id: number; url: string; query: string; model: string | null;
   }>();
   return jsonUtf8({ items: rows.results ?? [] });
 });
