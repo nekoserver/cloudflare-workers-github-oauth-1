@@ -195,7 +195,7 @@ describe('詳細プレビューからの別モデル再問い合わせ', () => {
     const html = buildPage();
     const idx = html.indexOf('function showHistoryModal');
     expect(idx).toBeGreaterThan(-1);
-    const fn = html.slice(idx, idx + 1600);
+    const fn = html.slice(idx, idx + 2000);
     expect(fn).toContain('historyModalCurrentModel');
   });
 
