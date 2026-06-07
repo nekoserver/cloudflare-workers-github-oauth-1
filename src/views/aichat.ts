@@ -3211,7 +3211,7 @@ export function getAiChatPage(user: {
           html += '<div style="margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid var(--border-color);line-height:2.4;">';
           cats.forEach(function(cat) {
             var col = escHtml(cat.color || '#6366f1');
-            html += '<span class="kw-cat-summary-badge" data-cat-id="' + escHtml(String(cat.id)) + '" data-cat-color="' + col + '" style="display:inline-block;padding:4px 14px;margin:2px 4px;border-radius:14px;font-size:12px;font-weight:700;background:' + col + ';color:#fff;cursor:pointer;white-space:nowrap;letter-spacing:0.02em;">' + escHtml(cat.name) + ' (' + cat.kw_count + ')</span>';
+            html += '<span class="kw-cat-summary-badge" data-cat-id="' + escHtml(String(cat.id)) + '" data-cat-color="' + col + '" style="display:inline-block;padding:4px 14px;margin:2px 4px;border-radius:14px;font-size:12px;font-weight:700;background:transparent;border:1.5px solid ' + col + ';color:' + col + ';cursor:pointer;white-space:nowrap;letter-spacing:0.02em;">' + escHtml(cat.name) + ' (' + cat.kw_count + ')</span>';
           });
           html += '</div>';
         }
@@ -3228,44 +3228,43 @@ export function getAiChatPage(user: {
           });
         }
         kwClassifyListBody.innerHTML = html;
-        var activeCatId = null;
+        var selectedCats = {};
+        function applyKwBadgeColors() {
+          kwClassifyListBody.querySelectorAll('.kw-classify-kw-badge').forEach(function(kwEl) {
+            var el = kwEl;
+            var cid = el.dataset.catId;
+            if (cid && selectedCats[cid]) {
+              var cc = el.dataset.catColor || '#6366f1';
+              el.style.backgroundColor = cc;
+              el.style.color = '#fff';
+              el.style.borderColor = cc;
+            } else if (cid) {
+              el.style.backgroundColor = 'transparent';
+              el.style.color = '#7c3aed';
+              el.style.borderColor = '#7c3aed';
+            } else {
+              el.style.backgroundColor = '';
+              el.style.color = '';
+              el.style.borderColor = '';
+            }
+          });
+        }
         kwClassifyListBody.querySelectorAll('.kw-cat-summary-badge').forEach(function(catEl) {
           catEl.addEventListener('click', function() {
             var catId = catEl.dataset.catId;
             var catColor = catEl.dataset.catColor || '#6366f1';
-            if (activeCatId === catId) {
-              activeCatId = null;
-              kwClassifyListBody.querySelectorAll('.kw-classify-kw-badge').forEach(function(kwEl) {
-                var el = kwEl;
-                if (el.dataset.catId) {
-                  el.style.backgroundColor = 'transparent';
-                  el.style.color = '#7c3aed';
-                  el.style.borderColor = '#7c3aed';
-                } else {
-                  el.style.backgroundColor = '';
-                  el.style.color = '';
-                  el.style.borderColor = '';
-                }
-              });
+            if (selectedCats[catId]) {
+              delete selectedCats[catId];
+              catEl.style.background = 'transparent';
+              catEl.style.color = catColor;
+              catEl.style.borderColor = catColor;
             } else {
-              activeCatId = catId;
-              kwClassifyListBody.querySelectorAll('.kw-classify-kw-badge').forEach(function(kwEl) {
-                var el = kwEl;
-                if (el.dataset.catId === catId) {
-                  el.style.backgroundColor = catColor;
-                  el.style.color = '#fff';
-                  el.style.borderColor = catColor;
-                } else if (el.dataset.catId) {
-                  el.style.backgroundColor = 'transparent';
-                  el.style.color = '#7c3aed';
-                  el.style.borderColor = '#7c3aed';
-                } else {
-                  el.style.backgroundColor = '';
-                  el.style.color = '';
-                  el.style.borderColor = '';
-                }
-              });
+              selectedCats[catId] = true;
+              catEl.style.background = catColor;
+              catEl.style.color = '#fff';
+              catEl.style.borderColor = catColor;
             }
+            applyKwBadgeColors();
           });
         });
         kwClassifyListBody.querySelectorAll('.kw-classify-kw-badge').forEach(function(el) {
