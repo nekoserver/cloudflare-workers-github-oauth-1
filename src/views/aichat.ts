@@ -675,9 +675,23 @@ export function getAiChatPage(user: {
           <div class="cal-nav">
             <button class="cal-nav-btn" id="calPrev" title="前月">‹</button>
             <button class="cal-nav-btn" id="calNext" title="翌月">›</button>
+            <button class="cal-nav-btn" id="tokenUsageBtn" title="モデル別トークン使用量" style="font-size:13px;padding:0 5px;">📊</button>
           </div>
         </div>
         <div class="cal-grid" id="calGrid"></div>
+      </div>
+    </div>
+
+    <!-- トークン使用量モーダル -->
+    <div class="search-log-overlay" id="tokenUsageModal" aria-hidden="true" style="z-index:820;">
+      <div class="search-log-modal" style="max-width:620px;">
+        <div class="search-log-head">
+          <span class="search-log-title">📊 モデル別トークン使用量</span>
+          <button id="tokenUsageClose">✕</button>
+        </div>
+        <div class="search-log-body" id="tokenUsageBody" style="padding:16px;overflow-y:auto;max-height:70vh;">
+          <div class="search-log-loading">読み込み中...</div>
+        </div>
       </div>
     </div>
 
@@ -2416,6 +2430,7 @@ export function getAiChatPage(user: {
       var staticZDefaults = {
         linkedQuestionsOverlay: 700, impressionsSubqueryModal: 800,
         kwClassifyListModal: 820, sqKwQuestionsOverlay: 850, addSubqueryModal: 900, historyModalBackdrop: 750,
+        tokenUsageModal: 820,
       };
       Object.keys(staticZDefaults).forEach(function(id) {
         var el = document.getElementById(id);
@@ -3477,6 +3492,92 @@ export function getAiChatPage(user: {
     kwClassifyListClose.addEventListener('click', function() { kwClassifyListModal.classList.remove('open'); });
     kwClassifyListModal.addEventListener('click', function(e) { if (e.target === kwClassifyListModal) kwClassifyListModal.classList.remove('open'); });
 
+    // ===== トークン使用量グラフ =====
+    var tokenUsageBtn = document.getElementById('tokenUsageBtn');
+    var tokenUsageModal = document.getElementById('tokenUsageModal');
+    var tokenUsageClose = document.getElementById('tokenUsageClose');
+    var tokenUsageBody = document.getElementById('tokenUsageBody');
+
+    function renderTokenUsageGraph() {
+      tokenUsageBody.innerHTML = '<div class="search-log-loading">読み込み中...</div>';
+      fetch('/api/aichat/token-usage?months=6', { credentials: 'same-origin' })
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+          var rows = d.rows || [];
+          if (rows.length === 0) {
+            tokenUsageBody.innerHTML = '<div class="search-log-empty">トークン使用量の記録がありません</div>';
+            return;
+          }
+          var months = [];
+          var modelSet = {};
+          rows.forEach(function(r) {
+            if (months.indexOf(r.month) < 0) months.push(r.month);
+            modelSet[r.model] = true;
+          });
+          months.sort();
+          var models = Object.keys(modelSet).sort();
+          var dataMap = {};
+          rows.forEach(function(r) {
+            if (!dataMap[r.month]) dataMap[r.month] = {};
+            dataMap[r.month][r.model] = r;
+          });
+          var MODEL_COLORS_LOCAL = (typeof MODEL_COLORS !== 'undefined' ? MODEL_COLORS : {});
+          var defaultPalette = ['#6366f1','#22c55e','#f59e0b','#ef4444','#0ea5e9','#a855f7','#14b8a6','#f97316'];
+          function modelColor(m, i) { return MODEL_COLORS_LOCAL[m] || defaultPalette[i % defaultPalette.length]; }
+          function shortModel(m) { return m.replace(/^@cf\/[^/]+\//, '').replace(/-instruct.*/, ''); }
+          var html = '';
+          html += '<div style="margin-bottom:12px;">';
+          models.forEach(function(m, i) {
+            html += '<span style="display:inline-flex;align-items:center;gap:4px;margin:2px 8px 2px 0;font-size:11px;">';
+            html += '<span style="width:10px;height:10px;border-radius:2px;background:' + escHtml(modelColor(m, i)) + ';display:inline-block;flex-shrink:0;"></span>';
+            html += escHtml(shortModel(m));
+            html += '</span>';
+          });
+          html += '</div>';
+          months.forEach(function(month) {
+            var monthData = dataMap[month] || {};
+            var totalIn = 0, totalOut = 0, totalReq = 0;
+            models.forEach(function(m) { if (monthData[m]) { totalIn += monthData[m].input_tokens || 0; totalOut += monthData[m].output_tokens || 0; totalReq += monthData[m].request_count || 0; } });
+            var maxTok = totalIn + totalOut;
+            html += '<div style="margin-bottom:16px;">';
+            html += '<div style="font-size:11px;font-weight:600;color:var(--text-secondary);margin-bottom:4px;">' + escHtml(month) + ' <span style="font-weight:400;color:var(--text-muted);">計 ' + maxTok.toLocaleString() + ' tokens / ' + totalReq + ' 件</span></div>';
+            html += '<svg width="100%" height="' + (models.length * 20 + 4) + '" style="display:block;overflow:visible;">';
+            var barW = 100 / (maxTok || 1);
+            models.forEach(function(m, i) {
+              var row = monthData[m];
+              var inTok = row ? (row.input_tokens || 0) : 0;
+              var outTok = row ? (row.output_tokens || 0) : 0;
+              var total = inTok + outTok;
+              if (total === 0) return;
+              var pct = total / (maxTok || 1) * 100;
+              var col = escHtml(modelColor(m, i));
+              var y = i * 20 + 2;
+              html += '<rect x="0" y="' + y + '" width="' + pct.toFixed(2) + '%" height="14" rx="3" fill="' + col + '" opacity="0.85"/>';
+              html += '<text x="' + (pct.toFixed(2)) + '%" y="' + (y + 11) + '" dx="4" font-size="10" fill="var(--text-muted)">' + total.toLocaleString() + ' (in:' + inTok.toLocaleString() + ' out:' + outTok.toLocaleString() + ')</text>';
+            });
+            html += '</svg>';
+            html += '</div>';
+          });
+          tokenUsageBody.innerHTML = html;
+        })
+        .catch(function() { tokenUsageBody.innerHTML = '<div style="color:var(--text-muted);">取得に失敗しました</div>'; });
+    }
+
+    tokenUsageBtn.addEventListener('click', function(e) {
+      e.stopPropagation();
+      tokenUsageModal.style.zIndex = String(getNextZ());
+      tokenUsageModal.classList.add('open');
+      tokenUsageModal.setAttribute('aria-hidden', 'false');
+      renderTokenUsageGraph();
+    });
+    tokenUsageClose.addEventListener('click', function() {
+      tokenUsageModal.classList.remove('open');
+      tokenUsageModal.setAttribute('aria-hidden', 'true');
+    });
+    tokenUsageModal.addEventListener('click', function(e) {
+      if (e.target === tokenUsageModal) { tokenUsageModal.classList.remove('open'); tokenUsageModal.setAttribute('aria-hidden', 'true'); }
+    });
+
     // ===== チャット =====
     var chatLog = document.getElementById('chatLog');
     var chatForm = document.getElementById('chatForm');
@@ -3494,7 +3595,7 @@ export function getAiChatPage(user: {
       }
     });
 
-    function appendBubble(text, role, model, isFallback) {
+    function appendBubble(text, role, model, isFallback, usage) {
       var el = document.createElement('div');
       if (role === 'assistant') {
         el.className = 'chat-bubble assistant preview-area';
@@ -3504,6 +3605,16 @@ export function getAiChatPage(user: {
           notice.className = 'bubble-fallback-notice';
           notice.textContent = 'この言語モデル（' + shortModelName(model) + '）は応答に問題があったためデフォルトの言語モデルにフォールバックされました';
           el.appendChild(notice);
+        }
+        if (usage && (usage.input_tokens != null || usage.total_tokens != null)) {
+          var tokEl = document.createElement('div');
+          tokEl.style.cssText = 'text-align:right;font-size:10px;color:var(--text-muted);margin-top:6px;letter-spacing:0.02em;';
+          var parts = [];
+          if (usage.input_tokens != null) parts.push('in:' + usage.input_tokens.toLocaleString());
+          if (usage.output_tokens != null) parts.push('out:' + usage.output_tokens.toLocaleString());
+          if (usage.total_tokens != null) parts.push('total:' + usage.total_tokens.toLocaleString());
+          tokEl.textContent = parts.join(' / ') + ' tokens';
+          el.appendChild(tokEl);
         }
         if (model) {
           var wrap = document.createElement('div');
@@ -3649,7 +3760,8 @@ export function getAiChatPage(user: {
           } else {
             var responseText = data.response || '(応答なし)';
             var usedModel = data.usedModel || lastModel;
-            appendBubble(responseText, 'assistant', lastModel, data.fallbackUsed);
+            var respUsage = { input_tokens: data.input_tokens ?? null, output_tokens: data.output_tokens ?? null, total_tokens: data.total_tokens ?? null };
+            appendBubble(responseText, 'assistant', lastModel, data.fallbackUsed, respUsage);
             appendShareBtn(currentMsg, responseText, usedModel, data.shareId, data.userHash);
           }
         })
