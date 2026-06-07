@@ -34,6 +34,7 @@ export function getAiChatPage(user: {
     .map(m => `<option value="${escapeHtml(m.value)}"${m.value === user.aiChatModel ? ' selected' : ''}>${escapeHtml(m.label)}</option>`)
     .join('');
   const modelColorsJson = JSON.stringify(user.modelColors ?? {});
+  const modelListJson = JSON.stringify(modelList.map(m => ({ value: m.value, label: m.label })));
 
   return `<!DOCTYPE html>
 <html lang="ja">
@@ -303,7 +304,30 @@ export function getAiChatPage(user: {
       width: 8px; height: 8px; border-radius: 50%; display: inline-block;
       flex-shrink: 0; background: var(--model-dot-color, var(--border-color));
       margin-right: 3px; vertical-align: middle;
+      cursor: pointer;
     }
+    .model-color-dot:hover { opacity: 0.75; }
+    .model-dot-dropdown {
+      position: fixed;
+      background: var(--card-bg);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.18);
+      min-width: 220px;
+      overflow: hidden;
+      display: none;
+    }
+    .model-dot-dropdown.open { display: block; }
+    .model-dot-dropdown-item {
+      display: flex; align-items: center; gap: 8px;
+      padding: 8px 14px; cursor: pointer;
+      font-size: 12px; color: var(--text-primary);
+      transition: background 0.1s;
+      white-space: nowrap;
+    }
+    .model-dot-dropdown-item:hover { background: var(--bg-secondary); }
+    .model-dot-dropdown-item.selected { font-weight: 600; background: var(--bg-secondary); }
+    .model-dot-dropdown-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
     .sidebar-result-item.has-subquery .result-swipe-inner { background: rgba(56, 189, 248, 0.10); }
     .sidebar-result-item.has-subquery .result-swipe-inner:hover { background: rgba(56, 189, 248, 0.18); }
     .result-swipe-inner {
@@ -615,7 +639,7 @@ export function getAiChatPage(user: {
   <nav class="navbar">
     <button class="sidebar-toggle" id="sidebarToggle" title="履歴検索">☰</button>
     <a href="/welcome" class="navbar-brand">🤖 AI チャット</a>
-    <span id="modelColorDot" class="model-color-dot"></span><select id="modelSelect" class="navbar-model-select">${modelOptionsHtml}</select>
+    <span id="modelColorDot" class="model-color-dot" title="モデル切り替え"></span><div id="modelDotDropdown" class="model-dot-dropdown"></div><select id="modelSelect" class="navbar-model-select">${modelOptionsHtml}</select>
     <select id="langModeSelect" class="navbar-lang-select" title="日本語モード">
       <option value="a" selected>🇯🇵 system</option>
       <option value="b">🇯🇵 prefix</option>
@@ -2430,7 +2454,7 @@ export function getAiChatPage(user: {
       var staticZDefaults = {
         linkedQuestionsOverlay: 700, impressionsSubqueryModal: 800,
         kwClassifyListModal: 820, sqKwQuestionsOverlay: 850, addSubqueryModal: 900, historyModalBackdrop: 750,
-        tokenUsageModal: 820,
+        tokenUsageModal: 820, modelDotDropdown: 700,
       };
       Object.keys(staticZDefaults).forEach(function(id) {
         var el = document.getElementById(id);
@@ -3524,7 +3548,7 @@ export function getAiChatPage(user: {
           var MODEL_COLORS_LOCAL = (typeof MODEL_COLORS !== 'undefined' ? MODEL_COLORS : {});
           var defaultPalette = ['#6366f1','#22c55e','#f59e0b','#ef4444','#0ea5e9','#a855f7','#14b8a6','#f97316'];
           function modelColor(m, i) { return MODEL_COLORS_LOCAL[m] || defaultPalette[i % defaultPalette.length]; }
-          function shortModel(m) { return m.replace(/^@cf\/[^/]+\//, '').replace(/-instruct.*/, ''); }
+          function shortModel(m) { return m ? (m.split('/').pop() || m).replace(/-instruct.*/, '') : ''; }
           var html = '';
           html += '<div style="margin-bottom:12px;">';
           models.forEach(function(m, i) {
@@ -3709,6 +3733,7 @@ export function getAiChatPage(user: {
     }
 
     var MODEL_COLORS = ${modelColorsJson};
+    var MODEL_LIST = ${modelListJson};
     var modelColorDot = document.getElementById('modelColorDot');
 
     function applyModelColor(model) {
@@ -3723,6 +3748,54 @@ export function getAiChatPage(user: {
       lastModel = modelSelect.value;
       applyModelColor(lastModel);
     });
+
+    var modelDotDropdown = document.getElementById('modelDotDropdown');
+
+    function buildModelDotDropdown() {
+      modelDotDropdown.innerHTML = '';
+      MODEL_LIST.forEach(function(m) {
+        var item = document.createElement('div');
+        item.className = 'model-dot-dropdown-item' + (m.value === lastModel ? ' selected' : '');
+        var dot = document.createElement('span');
+        dot.className = 'model-dot-dropdown-dot';
+        dot.style.background = MODEL_COLORS[m.value] || 'var(--border-color)';
+        var lbl = document.createElement('span');
+        lbl.textContent = m.label;
+        item.appendChild(dot);
+        item.appendChild(lbl);
+        item.addEventListener('click', function() {
+          lastModel = m.value;
+          modelSelect.value = m.value;
+          applyModelColor(lastModel);
+          closeModelDotDropdown();
+        });
+        modelDotDropdown.appendChild(item);
+      });
+    }
+
+    function openModelDotDropdown() {
+      buildModelDotDropdown();
+      var rect = modelColorDot.getBoundingClientRect();
+      modelDotDropdown.style.top = (rect.bottom + 4) + 'px';
+      modelDotDropdown.style.left = rect.left + 'px';
+      modelDotDropdown.style.zIndex = String(getNextZ());
+      modelDotDropdown.classList.add('open');
+    }
+
+    function closeModelDotDropdown() {
+      modelDotDropdown.classList.remove('open');
+    }
+
+    modelColorDot.addEventListener('click', function(e) {
+      e.stopPropagation();
+      if (modelDotDropdown.classList.contains('open')) {
+        closeModelDotDropdown();
+      } else {
+        openModelDotDropdown();
+      }
+    });
+    document.addEventListener('click', function() { closeModelDotDropdown(); });
+    modelDotDropdown.addEventListener('click', function(e) { e.stopPropagation(); });
 
     var langModeSelect = document.getElementById('langModeSelect');
 
