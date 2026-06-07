@@ -3324,55 +3324,75 @@ app.get('/api/aichat/shares-by-question-hash', authMiddleware, async (c) => {
 });
 
 /**
- * キーワード分類: 全キーワード一覧（出現回数付き）
+ * キーワード分類: 全キーワード一覧（出現回数・分類済みフラグ付き）
  */
 app.get('/api/aichat/all-keywords', authMiddleware, async (c) => {
   const user = c.get('user');
   if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
   const rows = await c.env.DB.prepare(
-    `SELECT keyword, SUM(select_count) AS cnt
-     FROM aichat_search_log
-     WHERE user_id = ?
-     GROUP BY keyword
+    `SELECT s.keyword, SUM(s.select_count) AS cnt,
+       (SELECT COUNT(*) FROM aichat_keyword_category_map m WHERE m.keyword = s.keyword AND m.user_id = ?) AS is_classified
+     FROM aichat_search_log s
+     WHERE s.user_id = ?
+     GROUP BY s.keyword
      ORDER BY cnt DESC`
-  ).bind(user.sub).all<{ keyword: string; cnt: number }>();
+  ).bind(user.sub, user.sub).all<{ keyword: string; cnt: number; is_classified: number }>();
   return jsonUtf8({ keywords: rows.results ?? [] });
 });
 
 /**
- * キーワード分類: カテゴリ一覧（keyword 指定時は is_mapped フラグ付き）
+ * キーワード分類: カテゴリ一覧（keyword 指定時は is_mapped フラグ付き、color 付き）
  */
 app.get('/api/aichat/keyword-categories', authMiddleware, async (c) => {
   const user = c.get('user');
   if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
   const keyword = (c.req.query('keyword') ?? '').trim();
   const rows = await c.env.DB.prepare(
-    `SELECT c.id, c.name,
+    `SELECT c.id, c.name, c.color,
        (SELECT COUNT(*) FROM aichat_keyword_category_map m
         WHERE m.category_id = c.id AND m.keyword = ? AND m.user_id = ?) AS is_mapped
      FROM aichat_keyword_categories c
      WHERE c.user_id = ?
      ORDER BY c.name`
-  ).bind(keyword, user.sub, user.sub).all<{ id: number; name: string; is_mapped: number }>();
+  ).bind(keyword, user.sub, user.sub).all<{ id: number; name: string; color: string; is_mapped: number }>();
   return jsonUtf8({ categories: rows.results ?? [] });
 });
 
 /**
- * キーワード分類: カテゴリ新規作成
+ * キーワード分類: カテゴリ別キーワード件数サマリー（件数多い順）
+ */
+app.get('/api/aichat/keyword-categories-summary', authMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  const rows = await c.env.DB.prepare(
+    `SELECT c.id, c.name, c.color, COUNT(DISTINCT m.keyword) AS kw_count
+     FROM aichat_keyword_categories c
+     LEFT JOIN aichat_keyword_category_map m ON m.category_id = c.id AND m.user_id = c.user_id
+     WHERE c.user_id = ?
+     GROUP BY c.id
+     ORDER BY kw_count DESC, c.name`
+  ).bind(user.sub).all<{ id: number; name: string; color: string; kw_count: number }>();
+  return jsonUtf8({ categories: rows.results ?? [] });
+});
+
+/**
+ * キーワード分類: カテゴリ新規作成（color 付き）
  */
 app.post('/api/aichat/keyword-categories', authMiddleware, async (c) => {
   const user = c.get('user');
   if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
-  const body = await c.req.json<{ name?: string }>();
+  const body = await c.req.json<{ name?: string; color?: string }>();
   const name = typeof body.name === 'string' ? body.name.trim() : '';
   if (!name) return jsonUtf8({ error: 'name は必須です' }, 400);
+  const color = typeof body.color === 'string' && /^#[0-9a-fA-F]{6}$/.test(body.color.trim())
+    ? body.color.trim() : '#6366f1';
   const now = new Date().toISOString();
   const result = await c.env.DB.prepare(
-    `INSERT OR IGNORE INTO aichat_keyword_categories (user_id, name, created_at) VALUES (?, ?, ?)`
-  ).bind(user.sub, name.slice(0, 100), now).run();
+    `INSERT OR IGNORE INTO aichat_keyword_categories (user_id, name, color, created_at) VALUES (?, ?, ?, ?)`
+  ).bind(user.sub, name.slice(0, 100), color, now).run();
   const row = await c.env.DB.prepare(
-    `SELECT id, name FROM aichat_keyword_categories WHERE user_id = ? AND name = ?`
-  ).bind(user.sub, name.slice(0, 100)).first<{ id: number; name: string }>();
+    `SELECT id, name, color FROM aichat_keyword_categories WHERE user_id = ? AND name = ?`
+  ).bind(user.sub, name.slice(0, 100)).first<{ id: number; name: string; color: string }>();
   return jsonUtf8({ ok: true, inserted: (result.meta?.changes ?? 0) > 0, category: row });
 });
 
