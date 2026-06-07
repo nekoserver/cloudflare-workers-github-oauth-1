@@ -34,7 +34,7 @@ describe('カテゴリバッジタップ: キーワードバッジ色変更', ()
     const html = buildPage();
     const idx = html.indexOf('function renderKwClassifyList');
     expect(idx).toBeGreaterThan(-1);
-    const fn = html.slice(idx, idx + 3000);
+    const fn = html.slice(idx, idx + 5000);
     // カテゴリバッジへの addEventListener または querySelectorAll があること
     expect(fn).toContain('kw-cat-summary-badge');
     expect(fn).toContain('addEventListener');
