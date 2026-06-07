@@ -2384,6 +2384,11 @@ export function getAiChatPage(user: {
       }
       sidebarSearch.value = kw;
       sidebarClear.classList.add('visible');
+      sidebarResults.innerHTML = '';
+      currentResults = [];
+      sidebarStatus.textContent = '検索中...';
+      currentMode = 'search';
+      currentDateLabel = '';
       doSearch(kw);
     }
 

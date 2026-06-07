@@ -793,7 +793,7 @@ describe('AIチャット: 過去ログモーダルのヘッダ検索窓', () => 
     const html = getAiChatPage(minimalUser);
     const idx = html.indexOf('function doHistoryModalSearch()');
     expect(idx).toBeGreaterThan(-1);
-    const fn = html.slice(idx, idx + 700);
+    const fn = html.slice(idx, idx + 1000);
     expect(fn).toContain('closeSearchImpressions');
     expect(fn).toContain('doSearch');
     expect(fn).toContain('sidebarSearch');
@@ -803,7 +803,7 @@ describe('AIチャット: 過去ログモーダルのヘッダ検索窓', () => 
     const html = getAiChatPage(minimalUser);
     const idx = html.indexOf('function doHistoryModalSearch()');
     expect(idx).toBeGreaterThan(-1);
-    const fn = html.slice(idx, idx + 700);
+    const fn = html.slice(idx, idx + 1000);
     expect(fn).toContain('closeSearchKwAnalysis');
   });
 
@@ -811,7 +811,7 @@ describe('AIチャット: 過去ログモーダルのヘッダ検索窓', () => 
     const html = getAiChatPage(minimalUser);
     const idx = html.indexOf('function doHistoryModalSearch()');
     expect(idx).toBeGreaterThan(-1);
-    const fn = html.slice(idx, idx + 700);
+    const fn = html.slice(idx, idx + 1000);
     expect(fn).toContain('sidebarOpen');
     expect(fn).toContain("sidebar.classList.add('open')");
   });
