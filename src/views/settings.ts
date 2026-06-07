@@ -534,6 +534,26 @@ export function getSettingsPage(user: {
             </div>
           </div>
           <div class="info-item">
+            <span class="info-label">AIチャットのナビバーに言語モード切替（system/prefix/plain）を表示する</span>
+            <div class="setting-control" style="justify-content: flex-end;">
+              <span class="theme-label" id="aichatShowLangModeLabel">OFF</span>
+              <label class="theme-toggle-switch">
+                <input type="checkbox" id="aichatShowLangModeCheckbox" onchange="onAichatShowLangModeChange()">
+                <span class="theme-toggle-slider"></span>
+              </label>
+            </div>
+          </div>
+          <div class="info-item">
+            <span class="info-label">AIチャットのナビバーに選択中の言語モデル名を表示する（OFFは色丸のみ）</span>
+            <div class="setting-control" style="justify-content: flex-end;">
+              <span class="theme-label" id="aichatShowModelNameLabel">OFF</span>
+              <label class="theme-toggle-switch">
+                <input type="checkbox" id="aichatShowModelNameCheckbox" onchange="onAichatShowModelNameChange()">
+                <span class="theme-toggle-slider"></span>
+              </label>
+            </div>
+          </div>
+          <div class="info-item">
             <span class="info-label">AIチャット画面の左サイドバーを余白タップでも閉じられるようにする</span>
             <div class="setting-control" style="justify-content: flex-end;">
               <span class="theme-label" id="aichatSidebarTapCloseLabel">ON</span>
@@ -883,6 +903,40 @@ export function getSettingsPage(user: {
       var enabled = cb.checked;
       label.textContent = enabled ? 'ON' : 'OFF';
       document.cookie = 'aichat_sidebar_tap_close=' + (enabled ? 'on' : 'off') + '; Path=/; Secure; SameSite=Lax; Max-Age=31536000';
+    }
+
+    (function() {
+      var m = document.cookie.match('(^|;)\\s*aichat_show_lang_mode=([^;]*)');
+      var val = m ? decodeURIComponent(m[2]) : 'off';
+      var cb = document.getElementById('aichatShowLangModeCheckbox');
+      var label = document.getElementById('aichatShowLangModeLabel');
+      if (cb) cb.checked = (val === 'on');
+      if (label) label.textContent = (val === 'on') ? 'ON' : 'OFF';
+    })();
+
+    function onAichatShowLangModeChange() {
+      var cb = document.getElementById('aichatShowLangModeCheckbox');
+      var label = document.getElementById('aichatShowLangModeLabel');
+      var enabled = cb.checked;
+      label.textContent = enabled ? 'ON' : 'OFF';
+      document.cookie = 'aichat_show_lang_mode=' + (enabled ? 'on' : 'off') + '; Path=/; Secure; SameSite=Lax; Max-Age=31536000';
+    }
+
+    (function() {
+      var m = document.cookie.match('(^|;)\\s*aichat_show_model_name=([^;]*)');
+      var val = m ? decodeURIComponent(m[2]) : 'off';
+      var cb = document.getElementById('aichatShowModelNameCheckbox');
+      var label = document.getElementById('aichatShowModelNameLabel');
+      if (cb) cb.checked = (val === 'on');
+      if (label) label.textContent = (val === 'on') ? 'ON' : 'OFF';
+    })();
+
+    function onAichatShowModelNameChange() {
+      var cb = document.getElementById('aichatShowModelNameCheckbox');
+      var label = document.getElementById('aichatShowModelNameLabel');
+      var enabled = cb.checked;
+      label.textContent = enabled ? 'ON' : 'OFF';
+      document.cookie = 'aichat_show_model_name=' + (enabled ? 'on' : 'off') + '; Path=/; Secure; SameSite=Lax; Max-Age=31536000';
     }
 
 
