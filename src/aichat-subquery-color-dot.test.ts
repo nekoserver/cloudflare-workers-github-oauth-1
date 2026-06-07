@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'fs';
 import { getAiChatPage } from './views/aichat';
 
 function buildPage(): string {
@@ -7,6 +8,24 @@ function buildPage(): string {
     aiChatModel: '@cf/meta/llama-3.3-70b-instruct-fp8-fast',
   });
 }
+
+describe('追加質問リンク: API SQL 回帰テスト', () => {
+  it('share-subquery-links の SQL が REVERSE() を使用していない（D1 非対応）', () => {
+    const src = readFileSync(new URL('./index.ts', import.meta.url), 'utf8');
+    const idx = src.indexOf("app.get('/api/aichat/share-subquery-links'");
+    expect(idx).toBeGreaterThan(-1);
+    const snippet = src.slice(idx, idx + 600);
+    expect(snippet).not.toContain('REVERSE(');
+  });
+
+  it('share-subquery-links の SQL が INSTR で share_id を抽出する', () => {
+    const src = readFileSync(new URL('./index.ts', import.meta.url), 'utf8');
+    const idx = src.indexOf("app.get('/api/aichat/share-subquery-links'");
+    const snippet = src.slice(idx, idx + 600);
+    expect(snippet).toContain('INSTR(');
+    expect(snippet).toContain('SUBSTR(');
+  });
+});
 
 describe('追加質問リンク: 色丸表示', () => {
   it('renderSubqueryLinks 関数が存在する', () => {
