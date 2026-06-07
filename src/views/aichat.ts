@@ -885,9 +885,9 @@ export function getAiChatPage(user: {
       </div>
       <div class="history-modal-chat" id="historyModalChat"></div>
       <div class="history-modal-foot">
+        <button class="search-hist-btn" id="historyModalHighlightToggleBtn" style="display:none;padding:3px 7px;font-size:14px;" title="キーワードハイライトON/OFF">🔑</button>
         <span id="historyModalMeta"></span>
         <a class="history-modal-link" id="historyModalShareLink" href="#" target="_blank">🔗 共有ページを開く</a>
-        <button class="search-hist-btn" id="historyModalHighlightToggleBtn" style="display:none;" title="キーワードハイライトの表示/非表示">🔍 ハイライト非表示</button>
         <button class="search-hist-btn" id="historyModalAddSubqueryBtn" style="margin-left:auto;">＋ 追加質問を登録する</button>
       </div>
       <div id="historyModalSubqueryLinks" style="padding:6px 14px 8px;font-size:12px;display:none;"></div>
@@ -2133,9 +2133,11 @@ export function getAiChatPage(user: {
       }
       historyModalHighlightToggleBtn.style.display = 'inline-block';
       if (historyModalHighlightActive) {
-        historyModalHighlightToggleBtn.textContent = '🔍 ハイライト非表示';
+        historyModalHighlightToggleBtn.style.opacity = '1';
+        historyModalHighlightToggleBtn.title = '🔑 ハイライト表示中（クリックで非表示）';
       } else {
-        historyModalHighlightToggleBtn.textContent = '🔍 ハイライト表示';
+        historyModalHighlightToggleBtn.style.opacity = '0.35';
+        historyModalHighlightToggleBtn.title = '🔑 ハイライト非表示（クリックで表示）';
       }
     }
 
