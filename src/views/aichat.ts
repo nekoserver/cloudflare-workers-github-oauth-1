@@ -3176,32 +3176,54 @@ export function getAiChatPage(user: {
     var kwClassifyListClose = document.getElementById('kwClassifyListClose');
     var kwClassifyListBody = document.getElementById('kwClassifyListBody');
 
+    var KW_CAT_COLORS = [
+      '#ef4444','#f97316','#f59e0b','#eab308','#84cc16','#22c55e',
+      '#10b981','#14b8a6','#06b6d4','#0ea5e9','#3b82f6','#6366f1',
+      '#8b5cf6','#a855f7','#d946ef','#ec4899','#f43f5e','#64748b',
+      '#6b7280','#1e293b'
+    ];
+
+    function renderKwClassifyList() {
+      kwClassifyListBody.innerHTML = '<div class="search-log-loading">読み込み中...</div>';
+      Promise.all([
+        fetch('/api/aichat/keyword-categories-summary', { credentials: 'same-origin' }).then(function(r) { return r.json(); }),
+        fetch('/api/aichat/all-keywords', { credentials: 'same-origin' }).then(function(r) { return r.json(); })
+      ]).then(function(results) {
+        var catData = results[0]; var kwData = results[1];
+        var cats = catData.categories || [];
+        var kws = kwData.keywords || [];
+        var html = '';
+        if (cats.length > 0) {
+          html += '<div style="margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid var(--border-color);line-height:2.2;">';
+          cats.forEach(function(cat) {
+            var col = escHtml(cat.color || '#6366f1');
+            html += '<span style="display:inline-block;padding:2px 12px;margin:2px 4px;border-radius:12px;font-size:12px;font-weight:600;background:' + col + ';color:#fff;cursor:default;white-space:nowrap;">' + escHtml(cat.name) + ' (' + cat.kw_count + ')</span>';
+          });
+          html += '</div>';
+        }
+        if (kws.length === 0) {
+          html += '<div class="search-log-empty">キーワードがありません</div>';
+        } else {
+          kws.forEach(function(kw) {
+            var st = kw.is_classified
+              ? 'display:inline-block;font-size:13px;padding:2px 10px;margin:3px 4px;border-radius:10px;cursor:pointer;border:1.5px solid #7c3aed;color:#7c3aed;background:transparent;white-space:nowrap;user-select:none;'
+              : 'display:inline-block;font-size:13px;padding:3px 10px;margin:3px 4px;border-radius:10px;cursor:pointer;border:1.5px solid var(--border-color);background:var(--bg-secondary);color:var(--text-muted);white-space:nowrap;user-select:none;';
+            html += '<span class="kw-classify-kw-badge" data-keyword="' + escHtml(kw.keyword) + '" style="' + st + '">' + escHtml(kw.keyword) + ' (' + kw.cnt + ')</span>';
+          });
+        }
+        kwClassifyListBody.innerHTML = html;
+        kwClassifyListBody.querySelectorAll('.kw-classify-kw-badge').forEach(function(el) {
+          el.addEventListener('click', function() { openKwClassifyModal(el.dataset.keyword); });
+        });
+      }).catch(function() {
+        kwClassifyListBody.innerHTML = '<div class="search-log-empty">読み込みに失敗しました</div>';
+      });
+    }
+
     function openKwClassifyList() {
       kwClassifyListModal.style.zIndex = String(getNextZ());
       kwClassifyListModal.classList.add('open');
-      kwClassifyListBody.innerHTML = '<div class="search-log-loading">読み込み中...</div>';
-      fetch('/api/aichat/all-keywords', { credentials: 'same-origin' })
-        .then(function(r) { return r.json(); })
-        .then(function(d) {
-          var kws = d.keywords || [];
-          if (kws.length === 0) {
-            kwClassifyListBody.innerHTML = '<div class="search-log-empty">キーワードがありません</div>';
-            return;
-          }
-          var html = '';
-          kws.forEach(function(kw) {
-            html += '<span class="sq-kw-badge kw-classify-kw-badge" data-keyword="' + escHtml(kw.keyword) + '" style="font-size:13px;padding:3px 10px;margin:3px 4px;">' + escHtml(kw.keyword) + ' (' + kw.cnt + ')</span>';
-          });
-          kwClassifyListBody.innerHTML = html;
-          kwClassifyListBody.querySelectorAll('.kw-classify-kw-badge').forEach(function(el) {
-            el.addEventListener('click', function() {
-              openKwClassifyModal(el.dataset.keyword);
-            });
-          });
-        })
-        .catch(function() {
-          kwClassifyListBody.innerHTML = '<div class="search-log-empty">読み込みに失敗しました</div>';
-        });
+      renderKwClassifyList();
     }
 
     function openKwClassifyModal(keyword) {
@@ -3214,14 +3236,14 @@ export function getAiChatPage(user: {
 
       var head = document.createElement('div');
       head.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid var(--border-color);flex-shrink:0;';
-      var title = document.createElement('span');
-      title.textContent = '🔑 分類: ' + keyword;
-      title.style.cssText = 'font-weight:700;font-size:14px;';
+      var titleEl = document.createElement('span');
+      titleEl.textContent = '🔑 分類: ' + keyword;
+      titleEl.style.cssText = 'font-weight:700;font-size:14px;';
       var closeBtn = document.createElement('button');
       closeBtn.textContent = '✕';
       closeBtn.style.cssText = 'background:none;border:none;cursor:pointer;font-size:16px;color:var(--text-muted);padding:0 4px;';
       closeBtn.addEventListener('click', function() { document.body.removeChild(overlay); });
-      head.appendChild(title);
+      head.appendChild(titleEl);
       head.appendChild(closeBtn);
       box.appendChild(head);
 
@@ -3231,6 +3253,28 @@ export function getAiChatPage(user: {
       var catsSection = document.createElement('div');
       catsSection.style.cssText = 'margin-bottom:14px;min-height:24px;line-height:2;';
       body.appendChild(catsSection);
+
+      var registerLabel = document.createElement('div');
+      registerLabel.textContent = '新しいカテゴリを登録';
+      registerLabel.style.cssText = 'font-size:11px;font-weight:600;color:var(--text-muted);letter-spacing:0.05em;margin-bottom:6px;';
+      body.appendChild(registerLabel);
+
+      var selectedColor = KW_CAT_COLORS[11];
+      var colorRow = document.createElement('div');
+      colorRow.style.cssText = 'display:flex;flex-wrap:wrap;gap:5px;margin-bottom:8px;';
+      KW_CAT_COLORS.forEach(function(col) {
+        var swatch = document.createElement('span');
+        swatch.dataset.color = col;
+        swatch.style.cssText = 'display:inline-block;width:22px;height:22px;border-radius:50%;background:' + col + ';cursor:pointer;box-sizing:border-box;border:2.5px solid ' + (col === selectedColor ? '#fff' : 'transparent') + ';box-shadow:0 0 0 1px rgba(0,0,0,0.15);transition:border-color 0.1s;';
+        swatch.addEventListener('click', function() {
+          selectedColor = col;
+          colorRow.querySelectorAll('span').forEach(function(s) {
+            s.style.borderColor = s.dataset.color === selectedColor ? '#fff' : 'transparent';
+          });
+        });
+        colorRow.appendChild(swatch);
+      });
+      body.appendChild(colorRow);
 
       var inputRow = document.createElement('div');
       inputRow.style.cssText = 'display:flex;gap:8px;align-items:center;margin-bottom:14px;';
@@ -3276,12 +3320,12 @@ export function getAiChatPage(user: {
       function renderCatBadge(cat) {
         var badge = document.createElement('span');
         badge.textContent = cat.name;
-        badge.style.cssText = 'display:inline-block;padding:3px 12px;margin:2px 4px;border-radius:6px;font-size:12px;cursor:pointer;border:1.5px solid var(--border-color);background:var(--bg-primary);color:var(--text-primary);user-select:none;';
+        var col = cat.color || '#6366f1';
+        badge.style.cssText = 'display:inline-block;padding:3px 12px;margin:2px 4px;border-radius:6px;font-size:12px;cursor:pointer;border:2px solid ' + col + ';background:transparent;color:' + col + ';user-select:none;font-weight:600;';
         badge.dataset.catId = String(cat.id);
         if (cat.is_mapped) {
-          badge.style.background = 'var(--accent-bg,#ede9fe)';
-          badge.style.color = 'var(--accent-fg,#5b21b6)';
-          badge.style.borderColor = 'var(--accent-color,#667eea)';
+          badge.style.background = col;
+          badge.style.color = '#fff';
           selectedCatIds.push(cat.id);
         }
         badge.addEventListener('click', function() {
@@ -3289,14 +3333,12 @@ export function getAiChatPage(user: {
           var sel = selectedCatIds.indexOf(id) >= 0;
           if (sel) {
             selectedCatIds = selectedCatIds.filter(function(x) { return x !== id; });
-            badge.style.background = 'var(--bg-primary)';
-            badge.style.color = 'var(--text-primary)';
-            badge.style.borderColor = 'var(--border-color)';
+            badge.style.background = 'transparent';
+            badge.style.color = col;
           } else {
             selectedCatIds.push(id);
-            badge.style.background = 'var(--accent-bg,#ede9fe)';
-            badge.style.color = 'var(--accent-fg,#5b21b6)';
-            badge.style.borderColor = 'var(--accent-color,#667eea)';
+            badge.style.background = col;
+            badge.style.color = '#fff';
           }
           updateDecideBtn();
         });
@@ -3304,6 +3346,7 @@ export function getAiChatPage(user: {
       }
 
       function loadCategories() {
+        selectedCatIds = [];
         fetch('/api/aichat/keyword-categories?keyword=' + encodeURIComponent(keyword), { credentials: 'same-origin' })
           .then(function(r) { return r.json(); })
           .then(function(d) {
@@ -3313,15 +3356,11 @@ export function getAiChatPage(user: {
               catsSection.style.display = 'none';
             } else {
               catsSection.style.display = '';
-              cats.forEach(function(cat) {
-                catsSection.appendChild(renderCatBadge(cat));
-              });
+              cats.forEach(function(cat) { catsSection.appendChild(renderCatBadge(cat)); });
             }
             updateDecideBtn();
           })
-          .catch(function() {
-            catsSection.textContent = '読み込みに失敗しました';
-          });
+          .catch(function() { catsSection.textContent = '読み込みに失敗しました'; });
       }
 
       loadCategories();
@@ -3346,12 +3385,11 @@ export function getAiChatPage(user: {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           credentials: 'same-origin',
-          body: JSON.stringify({ name: val }),
+          body: JSON.stringify({ name: val, color: selectedColor }),
         })
           .then(function(r) { return r.json(); })
-          .then(function(d) {
+          .then(function() {
             catInput.value = '';
-            selectedCatIds = [];
             loadCategories();
           })
           .catch(function() {
@@ -3373,6 +3411,7 @@ export function getAiChatPage(user: {
           .then(function(r) { return r.json(); })
           .then(function() {
             document.body.removeChild(overlay);
+            renderKwClassifyList();
           })
           .catch(function() {
             decideBtn.disabled = false;
