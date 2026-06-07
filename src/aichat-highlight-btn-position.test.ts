@@ -25,14 +25,21 @@ describe('ハイライトトグルボタン: 位置と見た目', () => {
     const html = buildPage();
     const idx = html.indexOf('historyModalHighlightToggleBtn');
     expect(idx).toBeGreaterThan(-1);
-    // ボタン要素直近に 🔑 があり、ハイライト非表示 等のテキストがない
     const snippet = html.slice(idx, idx + 150);
     expect(snippet).toContain('🔑');
+  });
+
+  it('ボタンは初期状態で display:none ではない（常時表示）', () => {
+    const html = buildPage();
+    const idx = html.indexOf('id="historyModalHighlightToggleBtn"');
+    expect(idx).toBeGreaterThan(-1);
+    const snippet = html.slice(idx, idx + 200);
+    expect(snippet).not.toContain('display:none');
   });
 });
 
 describe('ハイライトトグルボタン: updateHighlightToggleBtn — opacity による状態表現', () => {
-  it('updateHighlightToggleBtn がアクティブ状態で opacity を設定する', () => {
+  it('updateHighlightToggleBtn が opacity を設定する', () => {
     const html = buildPage();
     const idx = html.indexOf('function updateHighlightToggleBtn');
     expect(idx).toBeGreaterThan(-1);
@@ -45,7 +52,6 @@ describe('ハイライトトグルボタン: updateHighlightToggleBtn — opacit
     const idx = html.indexOf('function updateHighlightToggleBtn');
     expect(idx).toBeGreaterThan(-1);
     const fn = html.slice(idx, idx + 600);
-    // textContent による文字列切り替えがないこと
     expect(fn).not.toContain('textContent');
   });
 
@@ -63,6 +69,40 @@ describe('ハイライトトグルボタン: updateHighlightToggleBtn — opacit
     expect(idx).toBeGreaterThan(-1);
     const fn = html.slice(idx, idx + 600);
     expect(fn).toMatch(/0\.3[0-9]/);
+  });
+
+  it('ハイライトなし状態で opacity が 0.2 以下になる（無効状態）', () => {
+    const html = buildPage();
+    const idx = html.indexOf('function updateHighlightToggleBtn');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 600);
+    expect(fn).toMatch(/0\.1[0-9]|0\.2[0-9]?/);
+  });
+
+  it('updateHighlightToggleBtn が display:none でボタンを隠さない', () => {
+    const html = buildPage();
+    const idx = html.indexOf('function updateHighlightToggleBtn');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 600);
+    expect(fn).not.toContain("display = 'none'");
+  });
+});
+
+describe('ハイライトトグルボタン: スワイプ後の highlights 再適用', () => {
+  it('historyModalSwipeNavigate が historyModalCurrentKeyword を参照する', () => {
+    const html = buildPage();
+    const idx = html.indexOf('function historyModalSwipeNavigate');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 2000);
+    expect(fn).toContain('historyModalCurrentKeyword');
+  });
+
+  it('historyModalSwipeNavigate が applyKeywordHighlight を呼ぶ', () => {
+    const html = buildPage();
+    const idx = html.indexOf('function historyModalSwipeNavigate');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 2000);
+    expect(fn).toContain('applyKeywordHighlight');
   });
 });
 

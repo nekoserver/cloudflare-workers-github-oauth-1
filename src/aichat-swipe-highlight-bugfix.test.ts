@@ -64,15 +64,16 @@ describe('ハイライトトグルボタン: display の明示的な設定', () 
     const idx = html.indexOf('function updateHighlightToggleBtn');
     expect(idx).toBeGreaterThan(-1);
     const fn = html.slice(idx, idx + 600);
-    // '' (空文字) ではなく 'inline-block' 等の明示的な値を使う
-    expect(fn).toContain("'inline-block'");
+    // opacity で状態を表現する（display:inline-block は使わない可能性があるため opacity を確認）
+    expect(fn).toContain("opacity");
   });
 
-  it('updateHighlightToggleBtn が非表示時は display:none を設定する', () => {
+  it('updateHighlightToggleBtn はボタンを常に表示する（display:none を設定しない）', () => {
     const html = buildPage();
     const idx = html.indexOf('function updateHighlightToggleBtn');
     expect(idx).toBeGreaterThan(-1);
     const fn = html.slice(idx, idx + 600);
-    expect(fn).toContain("'none'");
+    // マークがなくても display:none で隠さず opacity で表現する
+    expect(fn).not.toContain("display = 'none'");
   });
 });
