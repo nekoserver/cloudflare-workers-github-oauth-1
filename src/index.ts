@@ -3333,12 +3333,16 @@ app.get('/api/aichat/all-keywords', authMiddleware, async (c) => {
   try {
     const rows = await c.env.DB.prepare(
       `SELECT s.keyword, SUM(s.select_count) AS cnt,
-         (SELECT COUNT(*) FROM aichat_keyword_category_map m WHERE m.keyword = s.keyword AND m.user_id = ?) AS is_classified
+         CASE WHEN m.category_id IS NOT NULL THEN 1 ELSE 0 END AS is_classified,
+         m.category_id,
+         COALESCE(c.color, '#6366f1') AS category_color
        FROM aichat_search_log s
+       LEFT JOIN aichat_keyword_category_map m ON m.keyword = s.keyword AND m.user_id = s.user_id
+       LEFT JOIN aichat_keyword_categories c ON c.id = m.category_id AND c.user_id = s.user_id
        WHERE s.user_id = ?
        GROUP BY s.keyword
-       ORDER BY cnt DESC`
-    ).bind(user.sub, user.sub).all<{ keyword: string; cnt: number; is_classified: number }>();
+       ORDER BY SUM(s.select_count) DESC`
+    ).bind(user.sub).all<{ keyword: string; cnt: number; is_classified: number; category_id: number | null; category_color: string | null }>();
     return jsonUtf8({ keywords: rows.results ?? [] });
   } catch {
     const rows = await c.env.DB.prepare(
@@ -3348,7 +3352,7 @@ app.get('/api/aichat/all-keywords', authMiddleware, async (c) => {
        GROUP BY keyword
        ORDER BY cnt DESC`
     ).bind(user.sub).all<{ keyword: string; cnt: number }>();
-    return jsonUtf8({ keywords: (rows.results ?? []).map((r) => ({ ...r, is_classified: 0 })) });
+    return jsonUtf8({ keywords: (rows.results ?? []).map((r) => ({ ...r, is_classified: 0, category_id: null, category_color: null })) });
   }
 });
 
