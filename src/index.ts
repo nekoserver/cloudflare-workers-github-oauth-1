@@ -3325,19 +3325,31 @@ app.get('/api/aichat/shares-by-question-hash', authMiddleware, async (c) => {
 
 /**
  * キーワード分類: 全キーワード一覧（出現回数・分類済みフラグ付き）
+ * aichat_keyword_category_map が未作成の場合は is_classified=0 でフォールバック
  */
 app.get('/api/aichat/all-keywords', authMiddleware, async (c) => {
   const user = c.get('user');
   if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
-  const rows = await c.env.DB.prepare(
-    `SELECT s.keyword, SUM(s.select_count) AS cnt,
-       (SELECT COUNT(*) FROM aichat_keyword_category_map m WHERE m.keyword = s.keyword AND m.user_id = ?) AS is_classified
-     FROM aichat_search_log s
-     WHERE s.user_id = ?
-     GROUP BY s.keyword
-     ORDER BY cnt DESC`
-  ).bind(user.sub, user.sub).all<{ keyword: string; cnt: number; is_classified: number }>();
-  return jsonUtf8({ keywords: rows.results ?? [] });
+  try {
+    const rows = await c.env.DB.prepare(
+      `SELECT s.keyword, SUM(s.select_count) AS cnt,
+         (SELECT COUNT(*) FROM aichat_keyword_category_map m WHERE m.keyword = s.keyword AND m.user_id = ?) AS is_classified
+       FROM aichat_search_log s
+       WHERE s.user_id = ?
+       GROUP BY s.keyword
+       ORDER BY cnt DESC`
+    ).bind(user.sub, user.sub).all<{ keyword: string; cnt: number; is_classified: number }>();
+    return jsonUtf8({ keywords: rows.results ?? [] });
+  } catch {
+    const rows = await c.env.DB.prepare(
+      `SELECT keyword, SUM(select_count) AS cnt
+       FROM aichat_search_log
+       WHERE user_id = ?
+       GROUP BY keyword
+       ORDER BY cnt DESC`
+    ).bind(user.sub).all<{ keyword: string; cnt: number }>();
+    return jsonUtf8({ keywords: (rows.results ?? []).map((r) => ({ ...r, is_classified: 0 })) });
+  }
 });
 
 /**
@@ -3360,19 +3372,25 @@ app.get('/api/aichat/keyword-categories', authMiddleware, async (c) => {
 
 /**
  * キーワード分類: カテゴリ別キーワード件数サマリー（件数多い順）
+ * color カラム未追加・map テーブル未作成の場合は空配列で応答
  */
 app.get('/api/aichat/keyword-categories-summary', authMiddleware, async (c) => {
   const user = c.get('user');
   if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
-  const rows = await c.env.DB.prepare(
-    `SELECT c.id, c.name, c.color, COUNT(DISTINCT m.keyword) AS kw_count
-     FROM aichat_keyword_categories c
-     LEFT JOIN aichat_keyword_category_map m ON m.category_id = c.id AND m.user_id = c.user_id
-     WHERE c.user_id = ?
-     GROUP BY c.id
-     ORDER BY kw_count DESC, c.name`
-  ).bind(user.sub).all<{ id: number; name: string; color: string; kw_count: number }>();
-  return jsonUtf8({ categories: rows.results ?? [] });
+  try {
+    const rows = await c.env.DB.prepare(
+      `SELECT c.id, c.name, COALESCE(c.color, '#6366f1') AS color,
+         COUNT(DISTINCT m.keyword) AS kw_count
+       FROM aichat_keyword_categories c
+       LEFT JOIN aichat_keyword_category_map m ON m.category_id = c.id AND m.user_id = c.user_id
+       WHERE c.user_id = ?
+       GROUP BY c.id
+       ORDER BY kw_count DESC, c.name`
+    ).bind(user.sub).all<{ id: number; name: string; color: string; kw_count: number }>();
+    return jsonUtf8({ categories: rows.results ?? [] });
+  } catch {
+    return jsonUtf8({ categories: [], _warning: 'schema not ready' });
+  }
 });
 
 /**

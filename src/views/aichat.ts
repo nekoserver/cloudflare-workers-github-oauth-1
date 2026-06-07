@@ -3185,19 +3185,20 @@ export function getAiChatPage(user: {
 
     function renderKwClassifyList() {
       kwClassifyListBody.innerHTML = '<div class="search-log-loading">読み込み中...</div>';
-      Promise.all([
+      Promise.allSettled([
         fetch('/api/aichat/keyword-categories-summary', { credentials: 'same-origin' }).then(function(r) { return r.json(); }),
         fetch('/api/aichat/all-keywords', { credentials: 'same-origin' }).then(function(r) { return r.json(); })
       ]).then(function(results) {
-        var catData = results[0]; var kwData = results[1];
+        var catData = results[0].status === 'fulfilled' ? results[0].value : {};
+        var kwData  = results[1].status === 'fulfilled' ? results[1].value : {};
         var cats = catData.categories || [];
-        var kws = kwData.keywords || [];
+        var kws  = kwData.keywords  || [];
         var html = '';
         if (cats.length > 0) {
-          html += '<div style="margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid var(--border-color);line-height:2.2;">';
+          html += '<div style="margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid var(--border-color);line-height:2.4;">';
           cats.forEach(function(cat) {
             var col = escHtml(cat.color || '#6366f1');
-            html += '<span style="display:inline-block;padding:2px 12px;margin:2px 4px;border-radius:12px;font-size:12px;font-weight:600;background:' + col + ';color:#fff;cursor:default;white-space:nowrap;">' + escHtml(cat.name) + ' (' + cat.kw_count + ')</span>';
+            html += '<span style="display:inline-block;padding:4px 14px;margin:2px 4px;border-radius:14px;font-size:12px;font-weight:700;background:' + col + ';color:#fff;cursor:default;white-space:nowrap;letter-spacing:0.02em;">' + escHtml(cat.name) + ' (' + cat.kw_count + ')</span>';
           });
           html += '</div>';
         }
@@ -3215,8 +3216,6 @@ export function getAiChatPage(user: {
         kwClassifyListBody.querySelectorAll('.kw-classify-kw-badge').forEach(function(el) {
           el.addEventListener('click', function() { openKwClassifyModal(el.dataset.keyword); });
         });
-      }).catch(function() {
-        kwClassifyListBody.innerHTML = '<div class="search-log-empty">読み込みに失敗しました</div>';
       });
     }
 
