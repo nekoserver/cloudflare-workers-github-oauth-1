@@ -3241,7 +3241,7 @@ app.get('/api/aichat/share-subquery-links', authMiddleware, async (c) => {
             s.model
      FROM aichat_share_subquery_links l
      JOIN aichat_subqueries q ON q.id = l.subquery_id
-     LEFT JOIN ai_chat_shares s ON s.id = CAST(SUBSTR(l.url, LENGTH(l.url) - INSTR(REVERSE(l.url), '/') + 2) AS INTEGER)
+     LEFT JOIN ai_chat_shares s ON s.id = CAST(SUBSTR(l.url, INSTR(l.url, '/s/') + 3 + INSTR(SUBSTR(l.url, INSTR(l.url, '/s/') + 3), '/')) AS INTEGER)
        AND s.user_id = l.user_id AND s.deleted_at IS NULL
      WHERE l.user_id = ? AND l.question = ?
      ORDER BY l.id ASC`
