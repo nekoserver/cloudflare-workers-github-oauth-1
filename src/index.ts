@@ -3272,6 +3272,24 @@ app.get('/api/aichat/share-subquery-links/all', authMiddleware, async (c) => {
 });
 
 /**
+ * share_id に紐づくキーワード一覧（aichat_search_log から取得）
+ */
+app.get('/api/aichat/share-keywords', authMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  const shareId = (c.req.query('shareId') ?? '').trim();
+  if (!shareId) return jsonUtf8({ error: 'shareId は必須です' }, 400);
+  const rows = await c.env.DB.prepare(
+    `SELECT DISTINCT keyword
+     FROM aichat_search_log
+     WHERE share_id = ? AND user_id = ?
+     ORDER BY select_count DESC
+     LIMIT 10`
+  ).bind(shareId, user.sub).all<{ keyword: string }>();
+  return jsonUtf8({ keywords: (rows.results ?? []).map((r) => r.keyword) });
+});
+
+/**
  * 質問テキストで紐づく ai_chat_shares の一覧（question_hash が未設定の旧レコード向けフォールバック）
  */
 app.get('/api/aichat/shares-by-question', authMiddleware, async (c) => {

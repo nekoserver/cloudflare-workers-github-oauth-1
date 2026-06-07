@@ -66,7 +66,7 @@ describe('詳細プレビューモーダル: ハイライトトグルボタン �
     const html = buildPage();
     const idx = html.indexOf('function updateHighlightToggleBtn');
     expect(idx).toBeGreaterThan(-1);
-    const fn = html.slice(idx, idx + 600);
+    const fn = html.slice(idx, idx + 1200);
     expect(fn).toContain('非表示');
   });
 
@@ -74,7 +74,7 @@ describe('詳細プレビューモーダル: ハイライトトグルボタン �
     const html = buildPage();
     const idx = html.indexOf('function updateHighlightToggleBtn');
     expect(idx).toBeGreaterThan(-1);
-    const fn = html.slice(idx, idx + 600);
+    const fn = html.slice(idx, idx + 1200);
     expect(fn).toContain('表示');
   });
 });
@@ -93,7 +93,7 @@ describe('詳細プレビューモーダル: ハイライトトグルボタン �
     const html = buildPage();
     const idx = html.indexOf('historyModalHighlightToggleBtn.addEventListener');
     expect(idx).toBeGreaterThan(-1);
-    const fn = html.slice(idx, idx + 400);
+    const fn = html.slice(idx, idx + 800);
     expect(fn).toContain('historyModalHighlightActive');
     expect(fn).toContain('!historyModalHighlightActive');
   });
@@ -102,7 +102,7 @@ describe('詳細プレビューモーダル: ハイライトトグルボタン �
     const html = buildPage();
     const idx = html.indexOf('historyModalHighlightToggleBtn.addEventListener');
     expect(idx).toBeGreaterThan(-1);
-    const fn = html.slice(idx, idx + 400);
+    const fn = html.slice(idx, idx + 800);
     expect(fn).toContain('highlights-hidden');
   });
 
@@ -110,7 +110,7 @@ describe('詳細プレビューモーダル: ハイライトトグルボタン �
     const html = buildPage();
     const idx = html.indexOf('historyModalHighlightToggleBtn.addEventListener');
     expect(idx).toBeGreaterThan(-1);
-    const fn = html.slice(idx, idx + 400);
+    const fn = html.slice(idx, idx + 800);
     expect(fn).toContain('updateHighlightToggleBtn');
   });
 });

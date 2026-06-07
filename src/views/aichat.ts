@@ -2132,8 +2132,13 @@ export function getAiChatPage(user: {
     function updateHighlightToggleBtn() {
       var marks = historyModalChat.querySelectorAll('.kw-highlight');
       if (!marks || marks.length === 0) {
-        historyModalHighlightToggleBtn.style.opacity = '0.2';
-        historyModalHighlightToggleBtn.title = 'キーワードハイライトなし';
+        if (historyModalKeywordsFromDB.length > 0) {
+          historyModalHighlightToggleBtn.style.opacity = '1';
+          historyModalHighlightToggleBtn.title = '🔑 クリックでキーワードをハイライト表示';
+        } else {
+          historyModalHighlightToggleBtn.style.opacity = '0.2';
+          historyModalHighlightToggleBtn.title = 'キーワードハイライトなし';
+        }
         return;
       }
       if (historyModalHighlightActive) {
@@ -2165,6 +2170,7 @@ export function getAiChatPage(user: {
     var historyModalCurrentModel = '';
     var historyModalHighlightActive = true;
     var historyModalCurrentKeyword = '';
+    var historyModalKeywordsFromDB = [];
 
     function renderSubqueryLinks(items) {
       if (!items || items.length === 0) {
@@ -2202,6 +2208,7 @@ export function getAiChatPage(user: {
       historyModalSwipeDataCache[r.id] = r;
       historyModalHighlightActive = true;
       historyModalCurrentKeyword = keyword || '';
+      historyModalKeywordsFromDB = [];
       historyModalChat.classList.remove('highlights-hidden');
       historyModalChat.innerHTML = '';
       appendHistoryModalBubble(r.question, 'user');
@@ -2223,6 +2230,13 @@ export function getAiChatPage(user: {
       historyModalBackdrop.classList.add('open');
       historyModalBackdrop.setAttribute('aria-hidden', 'false');
       if (currentHistoryQuestion) loadSubqueryLinks(currentHistoryQuestion);
+      fetch('/api/aichat/share-keywords?shareId=' + encodeURIComponent(String(r.id)), { credentials: 'same-origin' })
+        .then(function(res) { return res.json(); })
+        .then(function(d) {
+          historyModalKeywordsFromDB = d.keywords || [];
+          updateHighlightToggleBtn();
+        })
+        .catch(function() {});
       var swipeUrl = r.question_hash
         ? '/api/aichat/shares-by-question-hash?hash=' + encodeURIComponent(String(r.question_hash))
         : '/api/aichat/shares-by-question?question=' + encodeURIComponent(String(r.question));
@@ -3074,6 +3088,16 @@ export function getAiChatPage(user: {
     }
 
     historyModalHighlightToggleBtn.addEventListener('click', function() {
+      var marks = historyModalChat.querySelectorAll('.kw-highlight');
+      if (!marks || marks.length === 0) {
+        if (historyModalKeywordsFromDB.length > 0) {
+          historyModalHighlightActive = true;
+          historyModalChat.classList.remove('highlights-hidden');
+          applyKeywordHighlight(historyModalChat, historyModalKeywordsFromDB);
+          updateHighlightToggleBtn();
+        }
+        return;
+      }
       historyModalHighlightActive = !historyModalHighlightActive;
       if (historyModalHighlightActive) {
         historyModalChat.classList.remove('highlights-hidden');
