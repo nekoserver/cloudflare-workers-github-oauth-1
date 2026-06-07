@@ -352,6 +352,7 @@ export function getAiChatPage(user: {
     }
     .delete-confirm-ok:hover { background: #c53030; }
     .kw-highlight { background: #fef08a; color: #1a1a1a; border-radius: 2px; padding: 0 1px; }
+    .history-modal-chat.highlights-hidden .kw-highlight { background: transparent; color: inherit; outline: none; }
 
     /* ======= カレンダーヒートマップ ======= */
     .sidebar-calendar {
@@ -886,6 +887,7 @@ export function getAiChatPage(user: {
       <div class="history-modal-foot">
         <span id="historyModalMeta"></span>
         <a class="history-modal-link" id="historyModalShareLink" href="#" target="_blank">🔗 共有ページを開く</a>
+        <button class="search-hist-btn" id="historyModalHighlightToggleBtn" style="display:none;" title="キーワードハイライトの表示/非表示">🔍 ハイライト非表示</button>
         <button class="search-hist-btn" id="historyModalAddSubqueryBtn" style="margin-left:auto;">＋ 追加質問を登録する</button>
       </div>
       <div id="historyModalSubqueryLinks" style="padding:6px 14px 8px;font-size:12px;display:none;"></div>
@@ -2123,6 +2125,20 @@ export function getAiChatPage(user: {
       });
     }
 
+    function updateHighlightToggleBtn() {
+      var marks = historyModalChat.querySelectorAll('.kw-highlight');
+      if (!marks || marks.length === 0) {
+        historyModalHighlightToggleBtn.style.display = 'none';
+        return;
+      }
+      historyModalHighlightToggleBtn.style.display = '';
+      if (historyModalHighlightActive) {
+        historyModalHighlightToggleBtn.textContent = '🔍 ハイライト非表示';
+      } else {
+        historyModalHighlightToggleBtn.textContent = '🔍 ハイライト表示';
+      }
+    }
+
     function showResultsPanel(r, keyword) {
       closeHistoryModal();
       resultsPanelQ.textContent = r.question;
@@ -2138,8 +2154,11 @@ export function getAiChatPage(user: {
 
     var historyModalSubqueryLinks = document.getElementById('historyModalSubqueryLinks');
     var historyModalAddSubqueryBtn = document.getElementById('historyModalAddSubqueryBtn');
+    var historyModalHighlightToggleBtn = document.getElementById('historyModalHighlightToggleBtn');
     var currentHistoryQuestion = '';
     var historyModalCurrentModel = '';
+    var historyModalHighlightActive = true;
+    var historyModalCurrentKeyword = '';
 
     function renderSubqueryLinks(items) {
       if (!items || items.length === 0) {
@@ -2175,10 +2194,14 @@ export function getAiChatPage(user: {
       historyModalSwipeIndex = 0;
       historyModalSwipeDataCache = {};
       historyModalSwipeDataCache[r.id] = r;
+      historyModalHighlightActive = true;
+      historyModalCurrentKeyword = keyword || '';
+      historyModalChat.classList.remove('highlights-hidden');
       historyModalChat.innerHTML = '';
       appendHistoryModalBubble(r.question, 'user');
       appendHistoryModalBubble(r.answer, 'assistant');
       if (keyword) applyKeywordHighlight(historyModalChat, keyword);
+      updateHighlightToggleBtn();
       historyModalDateLink.textContent = r.created_at.slice(0, 10);
       historyModalTime.textContent = ' ' + r.created_at.slice(11, 16);
       var dotColor = MODEL_COLORS[r.model] || '';
@@ -3023,6 +3046,16 @@ export function getAiChatPage(user: {
       addSubqueryModal.classList.remove('open');
       addSubqueryModal.setAttribute('aria-hidden', 'true');
     }
+
+    historyModalHighlightToggleBtn.addEventListener('click', function() {
+      historyModalHighlightActive = !historyModalHighlightActive;
+      if (historyModalHighlightActive) {
+        historyModalChat.classList.remove('highlights-hidden');
+      } else {
+        historyModalChat.classList.add('highlights-hidden');
+      }
+      updateHighlightToggleBtn();
+    });
 
     historyModalAddSubqueryBtn.addEventListener('click', function(e) {
       e.stopPropagation();

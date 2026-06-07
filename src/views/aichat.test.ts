@@ -239,7 +239,7 @@ describe('AIチャットサイドバー: 検索キーワードハイライト', 
     const html = getAiChatPage(minimalUser);
     const idx = html.indexOf('function showHistoryModal(');
     expect(idx).toBeGreaterThan(-1);
-    const fnBody = html.slice(idx, idx + 500);
+    const fnBody = html.slice(idx, idx + 900);
     expect(fnBody).toContain('keyword');
     expect(fnBody).toContain('applyKeywordHighlight');
   });
