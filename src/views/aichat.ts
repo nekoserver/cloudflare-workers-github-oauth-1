@@ -2728,11 +2728,12 @@ export function getAiChatPage(user: {
     var subqueriesListBody = document.getElementById('subqueriesListBody');
     var subqueriesBtn = document.getElementById('subqueriesBtn');
 
-    function renderSubqueriesList(items) {
+    function renderSubqueriesList(items, classifiedSet) {
       if (!items || items.length === 0) {
         subqueriesListBody.innerHTML = '<div style="color:var(--text-muted);padding:10px;">サブクエリがまだ登録されていません</div>';
         return;
       }
+      var clsSet = classifiedSet || {};
       var html = '<table class="search-log-table"><thead><tr>' +
         '<th style="text-align:right;width:56px;">追加質問数</th>' +
         '<th>サブクエリ</th>' +
@@ -2742,7 +2743,10 @@ export function getAiChatPage(user: {
         var kwHtml = '';
         if (item.keywords && item.keywords.length > 0) {
           item.keywords.forEach(function(kw) {
-            kwHtml += '<span class="sq-kw-badge" data-subquery-id="' + escHtml(String(item.id)) + '" data-subquery="' + escHtml(item.query) + '" data-keyword="' + escHtml(kw.keyword) + '">' + escHtml(kw.keyword) + ' (' + kw.cnt + ')</span>';
+            var kwStyle = clsSet[kw.keyword]
+              ? ' style="border:1.5px solid #7c3aed;color:#7c3aed;background:transparent;"'
+              : '';
+            kwHtml += '<span class="sq-kw-badge" data-subquery-id="' + escHtml(String(item.id)) + '" data-subquery="' + escHtml(item.query) + '" data-keyword="' + escHtml(kw.keyword) + '"' + kwStyle + '>' + escHtml(kw.keyword) + ' (' + kw.cnt + ')</span>';
           });
         }
         html += '<tr>';
@@ -2835,10 +2839,19 @@ export function getAiChatPage(user: {
       subqueriesAddSubmit.style.display = 'none';
       subqueriesAddMsg.textContent = '';
       subqueriesListBody.innerHTML = '<div class="search-log-loading">読み込み中...</div>';
-      fetch('/api/aichat/subqueries', { credentials: 'same-origin' })
-        .then(function(r) { return r.json(); })
-        .then(function(d) { subqueriesAllItems = d.items || []; renderSubqueriesList(subqueriesAllItems); })
-        .catch(function() { subqueriesListBody.innerHTML = '<div style="color:var(--text-muted);">取得に失敗しました</div>'; });
+      Promise.allSettled([
+        fetch('/api/aichat/subqueries', { credentials: 'same-origin' }).then(function(r) { return r.json(); }),
+        fetch('/api/aichat/all-keywords', { credentials: 'same-origin' }).then(function(r) { return r.json(); })
+      ]).then(function(results) {
+        var sqData = results[0].status === 'fulfilled' ? results[0].value : {};
+        var kwData = results[1].status === 'fulfilled' ? results[1].value : {};
+        subqueriesAllItems = sqData.items || [];
+        var classifiedSet = {};
+        (kwData.keywords || []).forEach(function(kw) {
+          if (kw.is_classified) classifiedSet[kw.keyword] = true;
+        });
+        renderSubqueriesList(subqueriesAllItems, classifiedSet);
+      }).catch(function() { subqueriesListBody.innerHTML = '<div style="color:var(--text-muted);">取得に失敗しました</div>'; });
     }
 
     function closeSubqueries() {

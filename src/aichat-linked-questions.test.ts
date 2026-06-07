@@ -409,7 +409,7 @@ describe('サブクエリ一覧: サブクエリセルタップで選択→質�
     const html = buildPage();
     const idx = html.indexOf('function renderSubqueriesList');
     expect(idx).toBeGreaterThan(-1);
-    const fn = html.slice(idx, idx + 1200);
+    const fn = html.slice(idx, idx + 1600);
     expect(fn).toContain('sq-query-cell');
   });
 

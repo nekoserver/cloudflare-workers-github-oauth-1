@@ -1282,7 +1282,7 @@ describe('サブクエリ一覧モーダル：#カラム削除・追加質問総
     const html = getAiChatPage(minimalUser, []);
     const idx = html.indexOf('function renderSubqueriesList(');
     expect(idx).toBeGreaterThan(-1);
-    const fn = html.slice(idx, idx + 1200);
+    const fn = html.slice(idx, idx + 1600);
     expect(fn).toContain('link_count');
   });
 
@@ -1334,7 +1334,7 @@ describe('サブクエリ一覧モーダル：追加質問カラム左端・キ�
     const html = getAiChatPage(minimalUser, []);
     const idx = html.indexOf('function renderSubqueriesList(');
     expect(idx).toBeGreaterThan(-1);
-    const fn = html.slice(idx, idx + 800);
+    const fn = html.slice(idx, idx + 1200);
     expect(fn).toContain('sq-kw-badge');
   });
 
@@ -1350,7 +1350,7 @@ describe('サブクエリ一覧モーダル：追加質問カラム左端・キ�
     const html = getAiChatPage(minimalUser, []);
     const idx = html.indexOf('function renderSubqueriesList(');
     expect(idx).toBeGreaterThan(-1);
-    const fn = html.slice(idx, idx + 1400);
+    const fn = html.slice(idx, idx + 1800);
     const posQueryTd = fn.indexOf('sq-query-cell');
     const posKwTd = fn.indexOf("html += '<td>' + kwHtml");
     expect(posQueryTd).toBeGreaterThan(-1);
