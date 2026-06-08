@@ -874,7 +874,7 @@ export function getAiChatPage(user: {
         <span class="search-log-title">🔑 キーワード分類</span>
         <button class="search-log-close" id="kwClassifyListClose" aria-label="閉じる">✕</button>
       </div>
-      <div class="search-log-body" id="kwClassifyListBody" style="padding:12px 16px;line-height:2;">
+      <div class="search-log-body" id="kwClassifyListBody" style="padding:12px 16px;">
         <div class="search-log-loading">読み込み中...</div>
       </div>
     </div>
@@ -3307,12 +3307,14 @@ export function getAiChatPage(user: {
         if (kws.length === 0) {
           html += '<div class="search-log-empty">キーワードがありません</div>';
         } else {
+          html += '<div style="line-height:1;">';
           kws.forEach(function(kw) {
             var catIdAttr = kw.category_id != null ? ' data-cat-id="' + escHtml(String(kw.category_id)) + '"' : '';
             var catColorAttr = kw.category_color ? ' data-cat-color="' + escHtml(kw.category_color) + '"' : '';
             var kwCls = 'kw-classify-kw-badge sq-kw-badge' + (kw.is_classified ? ' kw-kw-classified' : '');
             html += '<span class="' + kwCls + '" data-keyword="' + escHtml(kw.keyword) + '"' + catIdAttr + catColorAttr + '>' + escHtml(kw.keyword) + ' (' + kw.cnt + ')</span>';
           });
+          html += '</div>';
         }
         kwClassifyListBody.innerHTML = html;
         var selectedCats = {};
@@ -3321,7 +3323,13 @@ export function getAiChatPage(user: {
             var el = kwEl;
             var cid = el.dataset.catId;
             var base = 'kw-classify-kw-badge sq-kw-badge';
-            el.className = cid ? base + ' kw-kw-classified' : base;
+            if (cid && selectedCats[cid]) {
+              el.className = base + ' sq-kw-badge-active';
+            } else if (cid) {
+              el.className = base + ' kw-kw-classified';
+            } else {
+              el.className = base;
+            }
           });
         }
         kwClassifyListBody.querySelectorAll('.kw-cat-summary-badge').forEach(function(catEl) {

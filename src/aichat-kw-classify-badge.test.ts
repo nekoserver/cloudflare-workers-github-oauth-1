@@ -136,7 +136,7 @@ describe('キーワード分類モーダル: kw-classify-kw-badge のスタイ�
     const html = buildPage();
     const idx = html.indexOf('function applyKwBadgeColors');
     expect(idx).toBeGreaterThan(-1);
-    const snippet = html.slice(idx, idx + 300);
+    const snippet = html.slice(idx, idx + 500);
     expect(snippet).toContain('el.className');
     expect(snippet).not.toContain('el.style.backgroundColor');
   });
@@ -146,5 +146,37 @@ describe('キーワード分類モーダル: kw-classify-kw-badge のスタイ�
     const idx = html.indexOf('function applyKwBadgeColors');
     const snippet = html.slice(idx, idx + 500);
     expect(snippet).toContain('kw-kw-classified');
+  });
+
+  it('applyKwBadgeColors が selectedCats[cid] で選択カテゴリを判定する', () => {
+    const html = buildPage();
+    const idx = html.indexOf('function applyKwBadgeColors');
+    const snippet = html.slice(idx, idx + 500);
+    expect(snippet).toContain('selectedCats[cid]');
+  });
+
+  it('applyKwBadgeColors が選択カテゴリ内キーワードに sq-kw-badge-active を適用する', () => {
+    const html = buildPage();
+    const idx = html.indexOf('function applyKwBadgeColors');
+    const snippet = html.slice(idx, idx + 500);
+    expect(snippet).toContain('sq-kw-badge-active');
+  });
+});
+
+// ===== 縦余白: kwClassifyListBody の line-height:2 を除去 =====
+describe('キーワード分類モーダル: キーワードバッジ縦余白', () => {
+  it('kwClassifyListBody に line-height:2 がない', () => {
+    const html = buildPage();
+    const idx = html.indexOf('kwClassifyListBody');
+    expect(idx).toBeGreaterThan(-1);
+    const snippet = html.slice(idx, idx + 200);
+    expect(snippet).not.toContain('line-height:2');
+  });
+
+  it('キーワードバッジが line-height:1 のラッパー div 内にある', () => {
+    const html = buildPage();
+    const idx = html.indexOf('function renderKwClassifyList');
+    const fn = html.slice(idx, idx + 2000);
+    expect(fn).toContain('line-height:1');
   });
 });
