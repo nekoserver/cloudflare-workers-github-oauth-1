@@ -948,6 +948,18 @@ export function getAiChatPage(user: {
   </div>`;
   })()}
 
+  <div class="search-log-overlay" id="kwCatGroupModal" aria-hidden="true">
+    <div class="search-log-modal" role="dialog" aria-modal="true" style="max-width:480px;">
+      <div class="search-log-head">
+        <span class="search-log-title">🗂 大分類カテゴリに束ねる</span>
+        <button class="search-log-close" id="kwCatGroupClose" aria-label="閉じる">✕</button>
+      </div>
+      <div class="search-log-body" id="kwCatGroupBody" style="padding:16px;overflow-y:auto;max-height:70vh;">
+        <div class="search-log-loading">読み込み中...</div>
+      </div>
+    </div>
+  </div>
+
   <div class="search-log-overlay" id="sqKwQuestionsOverlay" aria-hidden="true" style="z-index:850;">
     <div class="search-log-modal" role="dialog" aria-modal="true">
       <div class="search-log-head">
@@ -2572,7 +2584,7 @@ export function getAiChatPage(user: {
         linkedQuestionsOverlay: 700, impressionsSubqueryModal: 800,
         kwClassifyListModal: 820, sqKwQuestionsOverlay: 850, addSubqueryModal: 900, historyModalBackdrop: 750,
         tokenUsageModal: 820, dailyStatsModal: 820, modelDotDropdown: 700,
-        kwColorPaletteModal: 900,
+        kwColorPaletteModal: 900, kwCatGroupModal: 920,
       };
       Object.keys(staticZDefaults).forEach(function(id) {
         var el = document.getElementById(id);
@@ -3421,6 +3433,76 @@ export function getAiChatPage(user: {
     });
     kwColorPaletteBtn.addEventListener('click', function(e) { e.stopPropagation(); openKwColorPaletteModal(); });
 
+    // ===== 大分類カテゴリグループ =====
+    var kwCatGroupModal = document.getElementById('kwCatGroupModal');
+    var kwCatGroupClose = document.getElementById('kwCatGroupClose');
+    var kwCatGroupBody = document.getElementById('kwCatGroupBody');
+    var kwCachedCatGroups = null;
+
+    function renderKwCatGroupList(groups, selectedIds, catMap) {
+      var html = '';
+      if (groups && groups.length > 0) {
+        html += '<div style="font-size:11px;font-weight:600;color:var(--text-secondary);margin-bottom:6px;">既存の大分類カテゴリ :</div>';
+        html += '<div style="margin-bottom:12px;">';
+        groups.forEach(function(g) {
+          var matchedNames = (g.category_ids || []).map(function(id) { return catMap[id] ? catMap[id].name : '#' + id; }).join('・');
+          html += '<button type="button" class="cg-group-btn" data-group-id="' + escHtml(g.id) + '" data-group-ids="' + escHtml(JSON.stringify(g.category_ids)) + '" style="display:block;width:100%;text-align:left;margin-bottom:4px;">';
+          html += '<span style="font-weight:600;">' + escHtml(g.group_name) + '</span> <span style="font-size:10px;color:var(--text-muted);">(' + escHtml(matchedNames) + ')</span>';
+          html += '</button>';
+        });
+        html += '</div>';
+      }
+      html += '<div style="border-top:1px solid var(--border-color);padding-top:12px;">';
+      html += '<div style="font-size:11px;font-weight:600;color:var(--text-secondary);margin-bottom:6px;">新しい大分類カテゴリとして登録 :</div>';
+      html += '<div style="font-size:11px;color:var(--text-muted);margin-bottom:8px;">選択中のカテゴリ: ' + selectedIds.map(function(id) { return escHtml(catMap[id] ? catMap[id].name : '#' + id); }).join('・') + '</div>';
+      html += '<div style="display:flex;gap:6px;align-items:center;">';
+      html += '<input id="kwCatGroupNameInput" type="text" maxlength="64" placeholder="大分類名を入力" style="flex:1;padding:6px 10px;font-size:12px;border:1px solid var(--border-color);border-radius:4px;background:var(--card-bg);color:var(--text-primary);">';
+      html += '<button id="kwCatGroupConfirm" style="padding:6px 14px;font-size:12px;border-radius:4px;border:none;background:#3b82f6;color:#fff;cursor:pointer;white-space:nowrap;">登録</button>';
+      html += '</div>';
+      html += '<div id="kwCatGroupError" style="font-size:11px;color:#e53e3e;margin-top:4px;min-height:14px;"></div>';
+      html += '</div>';
+      kwCatGroupBody.innerHTML = html;
+      kwCatGroupBody.querySelectorAll('.cg-group-btn').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+          var ids = JSON.parse(btn.dataset.groupIds || '[]');
+          var newSel = {};
+          ids.forEach(function(id) { newSel[String(id)] = true; });
+          if (typeof applyKwBadgeColorsExternal === 'function') applyKwBadgeColorsExternal(newSel);
+          kwCatGroupModal.classList.remove('open');
+          kwCatGroupModal.setAttribute('aria-hidden', 'true');
+        });
+      });
+      var nameInput = document.getElementById('kwCatGroupNameInput');
+      var confirmBtn = document.getElementById('kwCatGroupConfirm');
+      var errDiv = document.getElementById('kwCatGroupError');
+      if (nameInput && confirmBtn) {
+        confirmBtn.addEventListener('click', function() {
+          var name = nameInput.value.trim();
+          if (!name) { errDiv.textContent = 'グループ名を入力してください'; return; }
+          confirmBtn.disabled = true;
+          fetch('/api/aichat/category-groups', {
+            method: 'POST', credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ group_name: name, category_ids: selectedIds })
+          }).then(function(r) { return r.json(); })
+            .then(function(d) {
+              if (d.error) { errDiv.textContent = d.error; confirmBtn.disabled = false; return; }
+              kwCachedCatGroups = null;
+              kwCatGroupModal.classList.remove('open');
+              kwCatGroupModal.setAttribute('aria-hidden', 'true');
+            })
+            .catch(function() { errDiv.textContent = '登録に失敗しました'; confirmBtn.disabled = false; });
+        });
+      }
+    }
+
+    function loadKwCatGroups(cb) {
+      fetch('/api/aichat/category-groups', { credentials: 'same-origin', cache: 'no-store' })
+        .then(function(r) { return r.ok ? r.json() : null; })
+        .then(function(d) { kwCachedCatGroups = (d && Array.isArray(d.groups)) ? d.groups : []; if (cb) cb(kwCachedCatGroups); })
+        .catch(function() { kwCachedCatGroups = []; if (cb) cb([]); });
+    }
+
     // ===== キーワード分類 =====
     var kwClassifyBtn = document.getElementById('kwClassifyBtn');
     var kwClassifyListModal = document.getElementById('kwClassifyListModal');
@@ -3491,6 +3573,16 @@ export function getAiChatPage(user: {
               catEl.classList.add('kw-cat-badge-active');
             }
             applyKwBadgeColors();
+            var selCount = Object.keys(selectedCats).length;
+            if (selCount >= 2) {
+              var catMap = {};
+              cats.forEach(function(cat) { catMap[String(cat.id)] = { name: cat.name, color: cat.color || '#6366f1' }; });
+              var selectedIds = Object.keys(selectedCats).map(Number);
+              openKwCatGroupModal(selectedIds, catMap, function(newSel) {
+                selectedCats = newSel;
+                applyKwBadgeColors();
+              });
+            }
           });
         });
         kwClassifyListBody.querySelectorAll('.kw-classify-kw-badge').forEach(function(el) {
@@ -3498,6 +3590,26 @@ export function getAiChatPage(user: {
         });
       });
     }
+
+    var applyKwBadgeColorsExternal = null;
+
+    function openKwCatGroupModal(selectedCatIds, catMap, applyFn) {
+      applyKwBadgeColorsExternal = applyFn || null;
+      kwCatGroupBody.innerHTML = '<div class="search-log-loading">読み込み中...</div>';
+      kwCatGroupModal.style.zIndex = String(getNextZ());
+      kwCatGroupModal.classList.add('open');
+      kwCatGroupModal.setAttribute('aria-hidden', 'false');
+      loadKwCatGroups(function(groups) {
+        renderKwCatGroupList(groups, selectedCatIds, catMap || {});
+      });
+    }
+
+    kwCatGroupClose.addEventListener('click', function() {
+      kwCatGroupModal.classList.remove('open'); kwCatGroupModal.setAttribute('aria-hidden', 'true');
+    });
+    kwCatGroupModal.addEventListener('click', function(e) {
+      if (e.target === kwCatGroupModal) { kwCatGroupModal.classList.remove('open'); kwCatGroupModal.setAttribute('aria-hidden', 'true'); }
+    });
 
     function openKwClassifyList() {
       kwClassifyListModal.style.zIndex = String(getNextZ());
