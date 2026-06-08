@@ -84,7 +84,7 @@ describe('日次統計グラフ: renderDailyStatsChart 関数', () => {
     const html = buildPage();
     const idx = html.indexOf('function renderDailyStatsChart');
     expect(idx).toBeGreaterThan(-1);
-    const fn = html.slice(idx, idx + 6000);
+    const fn = html.slice(idx, idx + 10000);
     expect(fn).toContain('polyline');
   });
 
@@ -92,7 +92,7 @@ describe('日次統計グラフ: renderDailyStatsChart 関数', () => {
     const html = buildPage();
     const idx = html.indexOf('function renderDailyStatsChart');
     expect(idx).toBeGreaterThan(-1);
-    const fn = html.slice(idx, idx + 6000);
+    const fn = html.slice(idx, idx + 10000);
     expect(fn).toContain('<rect ');
   });
 
@@ -100,7 +100,7 @@ describe('日次統計グラフ: renderDailyStatsChart 関数', () => {
     const html = buildPage();
     const idx = html.indexOf('function renderDailyStatsChart');
     expect(idx).toBeGreaterThan(-1);
-    const fn = html.slice(idx, idx + 6000);
+    const fn = html.slice(idx, idx + 10000);
     expect(fn).toContain('kw_count');
   });
 
@@ -108,7 +108,7 @@ describe('日次統計グラフ: renderDailyStatsChart 関数', () => {
     const html = buildPage();
     const idx = html.indexOf('function renderDailyStatsChart');
     expect(idx).toBeGreaterThan(-1);
-    const fn = html.slice(idx, idx + 6000);
+    const fn = html.slice(idx, idx + 10000);
     expect(fn).toContain('d.models');
   });
 });
@@ -207,5 +207,67 @@ describe('日次統計グラフ: backend API', () => {
     expect(idx).toBeGreaterThan(-1);
     const snippet = src.slice(idx, idx + 2200);
     expect(snippet).toContain('kw_count');
+  });
+});
+
+// ===========================================================
+// 左パネル: 総数リスト・パイチャート・比率リスト
+// ===========================================================
+describe('日次統計グラフ: 左パネル（総数・パイチャート・比率）', () => {
+  it('totalsByModel を計算する', () => {
+    const html = buildPage();
+    const idx = html.indexOf('function renderDailyStatsChart');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 9000);
+    expect(fn).toContain('totalsByModel');
+  });
+
+  it('モデルを総数降順でソートする', () => {
+    const html = buildPage();
+    const idx = html.indexOf('function renderDailyStatsChart');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 9000);
+    expect(fn).toContain('sortedModels');
+  });
+
+  it('SVG path でパイチャートを描画する', () => {
+    const html = buildPage();
+    const idx = html.indexOf('function renderDailyStatsChart');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 9000);
+    expect(fn).toContain('<path ');
+  });
+
+  it('deepseek-r1-distill-qwen-32b をパイチャートから除外する', () => {
+    const html = buildPage();
+    const idx = html.indexOf('function renderDailyStatsChart');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 9000);
+    expect(fn).toContain('PIE_EXCLUDE');
+    expect(fn).toContain('deepseek-r1-distill');
+  });
+
+  it('比率を toFixed(1) で小数点一桁表示する', () => {
+    const html = buildPage();
+    const idx = html.indexOf('function renderDailyStatsChart');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 9000);
+    expect(fn).toContain('.toFixed(1)');
+  });
+
+  it('比率リストに % を表示する', () => {
+    const html = buildPage();
+    const idx = html.indexOf('function renderDailyStatsChart');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 9000);
+    expect(fn).toContain("'%'");
+  });
+
+  it('左右2カラムレイアウト (grid-template-columns) を使う', () => {
+    const html = buildPage();
+    const idx = html.indexOf('function renderDailyStatsChart');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 12000);
+    expect(fn).toContain('grid-template-columns');
   });
 });
