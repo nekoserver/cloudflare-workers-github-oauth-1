@@ -22,12 +22,13 @@ describe('日次統計グラフ: カレンダー内の📈ボタン', () => {
     expect(html).toContain('id="dailyStatsBtn"');
   });
 
-  it('📈 ボタンが cal-nav 内にある (calPrev/calNext の近く)', () => {
+  it('📈 ボタンが cal-head 内にある (calPrev/calNext の近く)', () => {
     const html = buildPage();
-    const calNavIdx = html.indexOf('class="cal-nav"');
-    expect(calNavIdx).toBeGreaterThan(-1);
-    const snippet = html.slice(calNavIdx, calNavIdx + 400);
+    const calHeadIdx = html.indexOf('class="cal-head"');
+    expect(calHeadIdx).toBeGreaterThan(-1);
+    const snippet = html.slice(calHeadIdx, calHeadIdx + 600);
     expect(snippet).toContain('dailyStatsBtn');
+    expect(snippet).toContain('calPrev');
   });
 });
 

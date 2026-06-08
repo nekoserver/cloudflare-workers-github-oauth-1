@@ -699,11 +699,13 @@ export function getAiChatPage(user: {
       <!-- カレンダーヒートマップ -->
       <div class="sidebar-calendar" id="sidebarCalendar">
         <div class="cal-head">
-          <span class="cal-title" id="calTitle"></span>
+          <div style="display:flex;align-items:center;gap:3px;flex:1;min-width:0;overflow:hidden;">
+            <button class="cal-nav-btn" id="dailyStatsBtn" title="日ごとキーワード数・質問数グラフ" style="font-size:13px;padding:0 4px;flex-shrink:0;">📈</button>
+            <span class="cal-title" id="calTitle" style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></span>
+          </div>
           <div class="cal-nav">
             <button class="cal-nav-btn" id="calPrev" title="前月">‹</button>
             <button class="cal-nav-btn" id="calNext" title="翌月">›</button>
-            <button class="cal-nav-btn" id="dailyStatsBtn" title="日ごとキーワード数・質問数グラフ" style="font-size:13px;padding:0 5px;">📈</button>
             <button class="cal-nav-btn" id="tokenUsageBtn" title="モデル別トークン使用量" style="font-size:13px;padding:0 5px;">📊</button>
           </div>
         </div>
