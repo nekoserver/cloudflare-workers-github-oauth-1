@@ -45,10 +45,10 @@ describe('カテゴリバッジタップ: キーワードバッジ色変更', ()
     const idx = html.indexOf('function renderKwClassifyList');
     expect(idx).toBeGreaterThan(-1);
     const fn = html.slice(idx, idx + 4000);
-    // catId を参照して背景色を適用するコードがある
+    // catId を参照してクラスを切り替えるコードがある
     expect(fn).toContain('catId');
-    // background に cat color を適用する
-    expect(fn).toContain('backgroundColor');
+    // el.className で sq-kw-badge クラスを切り替える
+    expect(fn).toContain('el.className');
   });
 });
 
