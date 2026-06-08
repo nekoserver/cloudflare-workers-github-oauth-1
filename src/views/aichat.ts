@@ -136,9 +136,12 @@ export function getAiChatPage(user: {
     .sq-kw-badge:hover { background: var(--border-color); color: var(--text-primary); }
     .sq-kw-badge-active { background: var(--kwcat-bg, #ede9fe); color: var(--kwcat-color, #5b21b6); border: 1px solid var(--kwcat-color, #5b21b6); }
     .kw-classify-kw-badge { margin:1px; }
-    .kw-kw-classified { border:1.5px solid #7c3aed; color:#7c3aed; background:transparent; }
-    .kw-cat-badge-active { border-color:#3b82f6 !important; background:#dbeafe !important; color:#1d4ed8 !important; }
-    [data-theme="dark"] .kw-cat-badge-active { border-color:#60a5fa !important; background:rgba(59,130,246,0.25) !important; color:#93c5fd !important; }
+    .kw-kw-classified { border:1.5px solid var(--kw-pal-cls,#7c3aed); color:var(--kw-pal-cls,#7c3aed); background:transparent; }
+    .kw-cat-badge-active { border-color:var(--kw-pal-cat,#3b82f6) !important; background:var(--kw-pal-cat-bg,#dbeafe) !important; color:var(--kw-pal-cat,#1d4ed8) !important; }
+    [data-theme="dark"] .kw-cat-badge-active { border-color:var(--kw-pal-cat,#60a5fa) !important; background:var(--kw-pal-cat-bg,rgba(59,130,246,0.25)) !important; color:var(--kw-pal-cat,#93c5fd) !important; }
+    .kw-color-swatch { display:inline-block;width:18px;height:18px;border-radius:3px;margin:1px;cursor:pointer;border:2px solid transparent;box-sizing:border-box;vertical-align:middle; }
+    .kw-color-swatch:hover { opacity:0.8; }
+    .kw-color-swatch-selected { border-color:var(--text-primary) !important; }
     .kw-q-link { cursor: pointer; text-decoration: underline; text-decoration-color: var(--border-color); text-underline-offset: 2px; }
     .kw-q-link:hover { color: var(--accent-color, #667eea); text-decoration-color: var(--accent-color, #667eea); }
     .search-log-overlay {
@@ -893,13 +896,57 @@ export function getAiChatPage(user: {
     <div class="search-log-modal" role="dialog" aria-modal="true" style="max-width:560px;">
       <div class="search-log-head">
         <span class="search-log-title">🔑 キーワード分類</span>
-        <button class="search-log-close" id="kwClassifyListClose" aria-label="閉じる">✕</button>
+        <div style="display:flex;align-items:center;gap:4px;">
+          <button id="kwColorPaletteBtn" title="配色カスタマイズ" style="background:none;border:none;cursor:pointer;font-size:16px;padding:2px 4px;line-height:1;">🎨</button>
+          <button class="search-log-close" id="kwClassifyListClose" aria-label="閉じる">✕</button>
+        </div>
       </div>
       <div class="search-log-body" id="kwClassifyListBody" style="padding:12px 16px;">
         <div class="search-log-loading">読み込み中...</div>
       </div>
     </div>
   </div>
+
+  ${((): string => {
+    const PALETTE_ROWS = [
+      ['#fecaca','#f87171','#ef4444','#dc2626','#991b1b'],
+      ['#fed7aa','#fb923c','#f97316','#ea580c','#9a3412'],
+      ['#fef08a','#a3e635','#84cc16','#65a30d','#365314'],
+      ['#a5f3fc','#22d3ee','#06b6d4','#0891b2','#155e75'],
+      ['#bfdbfe','#60a5fa','#3b82f6','#2563eb','#1e3a8a'],
+      ['#e9d5ff','#c084fc','#a855f7','#7c3aed','#4c1d95'],
+      ['#fbcfe8','#f472b6','#ec4899','#db2777','#831843'],
+      ['#f1f5f9','#94a3b8','#64748b','#334155','#0f172a'],
+    ];
+    const swatchRows = PALETTE_ROWS.map(row =>
+      '<div>' + row.map(c => `<span class="kw-color-swatch" data-color="${c}" style="background:${c}" title="${c}"></span>`).join('') + '</div>'
+    ).join('');
+    const sections = [
+      { key: 'cat', label: '分類カテゴリの配色' },
+      { key: 'cls', label: '分類済みキーワードの色' },
+      { key: 'unc', label: '未分類キーワードの色' },
+      { key: 'act', label: '選択中の分類カテゴリ内のキーワードの色' },
+    ].map(s =>
+      `<div style="margin-bottom:14px;" data-palette-key="${s.key}">` +
+      `<div style="font-size:11px;font-weight:600;color:var(--text-secondary);margin-bottom:4px;">${s.label}</div>` +
+      swatchRows +
+      `</div>`
+    ).join('');
+    return `<div class="search-log-overlay" id="kwColorPaletteModal" aria-hidden="true">
+    <div class="search-log-modal" role="dialog" aria-modal="true" style="max-width:400px;">
+      <div class="search-log-head">
+        <span class="search-log-title">🎨 配色カスタマイズ</span>
+        <button class="search-log-close" id="kwColorPaletteClose" aria-label="閉じる">✕</button>
+      </div>
+      <div class="search-log-body" id="kwColorPaletteBody" style="padding:16px;overflow-y:auto;max-height:70vh;">
+        ${sections}
+        <div style="text-align:right;margin-top:12px;">
+          <button id="kwColorPaletteConfirm" style="font-size:12px;padding:5px 16px;border-radius:4px;border:1px solid var(--border-color);background:var(--accent-color,#667eea);color:#fff;cursor:pointer;">決定</button>
+        </div>
+      </div>
+    </div>
+  </div>`;
+  })()}
 
   <div class="search-log-overlay" id="sqKwQuestionsOverlay" aria-hidden="true" style="z-index:850;">
     <div class="search-log-modal" role="dialog" aria-modal="true">
@@ -2525,6 +2572,7 @@ export function getAiChatPage(user: {
         linkedQuestionsOverlay: 700, impressionsSubqueryModal: 800,
         kwClassifyListModal: 820, sqKwQuestionsOverlay: 850, addSubqueryModal: 900, historyModalBackdrop: 750,
         tokenUsageModal: 820, dailyStatsModal: 820, modelDotDropdown: 700,
+        kwColorPaletteModal: 900,
       };
       Object.keys(staticZDefaults).forEach(function(id) {
         var el = document.getElementById(id);
@@ -3294,6 +3342,85 @@ export function getAiChatPage(user: {
       }
     });
 
+    // ===== カラーパレット =====
+    var kwPaletteActColor = '';
+    function readKwPaletteFromCookies() {
+      var map = {};
+      document.cookie.split(';').forEach(function(c) {
+        var p = c.trim().split('='); map[p[0]] = decodeURIComponent(p.slice(1).join('='));
+      });
+      return { cat: map['kw_pal_cat'] || '', cls: map['kw_pal_cls'] || '', unc: map['kw_pal_unc'] || '', act: map['kw_pal_act'] || '' };
+    }
+    function saveKwPaletteToCookies(colors) {
+      var maxAge = 60 * 60 * 24 * 365;
+      ['cat','cls','unc','act'].forEach(function(k) {
+        document.cookie = 'kw_pal_' + k + '=' + encodeURIComponent(colors[k] || '') + '; max-age=' + maxAge + '; path=/; SameSite=Lax; Secure';
+      });
+    }
+    function applyKwPaletteToDom(colors) {
+      var r = document.documentElement;
+      var cat = colors.cat || '#3b82f6';
+      r.style.setProperty('--kw-pal-cat', cat);
+      r.style.setProperty('--kw-pal-cat-bg', cat + '33');
+      var cls = colors.cls || '#7c3aed';
+      r.style.setProperty('--kw-pal-cls', cls);
+      if (colors.unc) { r.style.setProperty('--kw-pal-unc-bg', colors.unc + '22'); r.style.setProperty('--kw-pal-unc-fg', colors.unc); }
+      else { r.style.removeProperty('--kw-pal-unc-bg'); r.style.removeProperty('--kw-pal-unc-fg'); }
+      kwPaletteActColor = colors.act || '';
+    }
+    (function() { applyKwPaletteToDom(readKwPaletteFromCookies()); })();
+
+    var kwColorPaletteModal = document.getElementById('kwColorPaletteModal');
+    var kwColorPaletteClose = document.getElementById('kwColorPaletteClose');
+    var kwColorPaletteBody = document.getElementById('kwColorPaletteBody');
+    var kwColorPaletteConfirm = document.getElementById('kwColorPaletteConfirm');
+    var kwColorPaletteBtn = document.getElementById('kwColorPaletteBtn');
+    var pendingPalette = { cat: '', cls: '', unc: '', act: '' };
+
+    function openKwColorPaletteModal() {
+      pendingPalette = readKwPaletteFromCookies();
+      kwColorPaletteBody.querySelectorAll('.kw-color-swatch').forEach(function(sw) {
+        var key = sw.closest('[data-palette-key]') ? sw.closest('[data-palette-key]').dataset.paletteKey : '';
+        var col = sw.dataset.color;
+        if (key && pendingPalette[key] === col) { sw.classList.add('kw-color-swatch-selected'); }
+        else { sw.classList.remove('kw-color-swatch-selected'); }
+      });
+      kwColorPaletteModal.style.zIndex = String(getNextZ());
+      kwColorPaletteModal.classList.add('open');
+      kwColorPaletteModal.setAttribute('aria-hidden', 'false');
+    }
+
+    kwColorPaletteBody.querySelectorAll('.kw-color-swatch').forEach(function(sw) {
+      sw.addEventListener('click', function() {
+        var section = sw.closest('[data-palette-key]');
+        if (!section) return;
+        var key = section.dataset.paletteKey;
+        section.querySelectorAll('.kw-color-swatch').forEach(function(s) { s.classList.remove('kw-color-swatch-selected'); });
+        sw.classList.add('kw-color-swatch-selected');
+        pendingPalette[key] = sw.dataset.color || '';
+        applyKwPaletteToDom(pendingPalette);
+        var body = document.getElementById('kwClassifyListBody');
+        if (body && body.querySelector('.kw-classify-kw-badge')) {
+          body.querySelectorAll('.kw-classify-kw-badge').forEach(function(el) {
+            var cid = el.dataset.catId;
+            if (!cid) { if (pendingPalette.unc) { el.style.background = pendingPalette.unc + '22'; el.style.color = pendingPalette.unc; } else { el.style.background = ''; el.style.color = ''; } }
+          });
+        }
+      });
+    });
+    kwColorPaletteConfirm.addEventListener('click', function() {
+      saveKwPaletteToCookies(pendingPalette);
+      kwColorPaletteModal.classList.remove('open');
+      kwColorPaletteModal.setAttribute('aria-hidden', 'true');
+    });
+    kwColorPaletteClose.addEventListener('click', function() {
+      kwColorPaletteModal.classList.remove('open'); kwColorPaletteModal.setAttribute('aria-hidden', 'true');
+    });
+    kwColorPaletteModal.addEventListener('click', function(e) {
+      if (e.target === kwColorPaletteModal) { kwColorPaletteModal.classList.remove('open'); kwColorPaletteModal.setAttribute('aria-hidden', 'true'); }
+    });
+    kwColorPaletteBtn.addEventListener('click', function(e) { e.stopPropagation(); openKwColorPaletteModal(); });
+
     // ===== キーワード分類 =====
     var kwClassifyBtn = document.getElementById('kwClassifyBtn');
     var kwClassifyListModal = document.getElementById('kwClassifyListModal');
@@ -3344,7 +3471,7 @@ export function getAiChatPage(user: {
             var el = kwEl, cid = el.dataset.catId;
             var base = 'kw-classify-kw-badge sq-kw-badge';
             if (cid && selectedCats[cid]) {
-              var c = el.dataset.catColor || '#6366f1';
+              var c = kwPaletteActColor || (el.dataset.catColor || '#6366f1');
               el.className = base + ' sq-kw-badge-active';
               el.style.setProperty('--kwcat-color', c);
               el.style.setProperty('--kwcat-bg', c + '33');
