@@ -3689,13 +3689,80 @@ export function getAiChatPage(user: {
           var mon = parseInt(parts[1]) - 1;
           var daysInM = new Date(year, mon + 1, 0).getDate();
 
-          var kwByDay = {}, modelsByDay = {};
+          var kwByDay = {}, modelsByDay = {}, totalsByModel = {};
           days.forEach(function(dayObj) {
             var dayNum = parseInt(dayObj.date.split('-')[2]);
             kwByDay[dayNum] = dayObj.kw_count || 0;
             modelsByDay[dayNum] = dayObj.models || {};
+            Object.keys(dayObj.models || {}).forEach(function(m) {
+              totalsByModel[m] = (totalsByModel[m] || 0) + (dayObj.models[m] || 0);
+            });
           });
 
+          var sortedModels = Object.keys(totalsByModel).sort(function(a, b) {
+            return totalsByModel[b] - totalsByModel[a];
+          });
+
+          var MC = (typeof MODEL_COLORS !== 'undefined' ? MODEL_COLORS : {});
+          var pal = ['#6366f1','#22c55e','#f59e0b','#ef4444','#0ea5e9','#a855f7','#14b8a6','#f97316'];
+          var midxMap = {};
+          models.forEach(function(m, i) { midxMap[m] = i; });
+          function mCol(m) { return MC[m] || pal[(midxMap[m] !== undefined ? midxMap[m] : 0) % pal.length]; }
+          function mShort(m) { return m ? (m.split('/').pop() || m).replace(/-instruct.*/, '').replace(/-fp8.*/, '').replace(/-distill.*/, '') : '?'; }
+
+          // ===== 左パネル: 質問総数リスト =====
+          var leftHtml = '<div style="font-size:10px;font-weight:600;color:var(--text-secondary);margin-bottom:4px;">質問総数（多い順）</div>';
+          sortedModels.forEach(function(m) {
+            var cnt = totalsByModel[m] || 0;
+            leftHtml += '<div style="display:flex;align-items:center;gap:5px;margin-bottom:3px;">';
+            leftHtml += '<span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:' + escHtml(mCol(m)) + ';flex-shrink:0;"></span>';
+            leftHtml += '<span style="font-size:11px;color:var(--text-primary);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="' + escHtml(m) + '">' + escHtml(mShort(m)) + '</span>';
+            leftHtml += '<span style="font-size:11px;color:var(--text-muted);flex-shrink:0;">' + cnt + '件</span>';
+            leftHtml += '</div>';
+          });
+
+          // ===== 左パネル: パイチャート（PIE_EXCLUDE モデルを除外）=====
+          var PIE_EXCLUDE = 'deepseek-r1-distill' + '-qwen-32b';
+          var pieModels = sortedModels.filter(function(m) { return m.indexOf(PIE_EXCLUDE) < 0; });
+          var pieTotal = pieModels.reduce(function(s, m) { return s + (totalsByModel[m] || 0); }, 0);
+
+          if (pieTotal > 0) {
+            leftHtml += '<div style="font-size:10px;font-weight:600;color:var(--text-secondary);margin-top:12px;margin-bottom:4px;">モデル比率 <span style="font-weight:400;color:var(--text-muted);">※ ' + escHtml(mShort(PIE_EXCLUDE)) + ' 除く</span></div>';
+            leftHtml += '<div style="display:flex;align-items:flex-start;gap:8px;">';
+
+            var PR = 46, PCX = 50, PCY = 50, PSZ = 100;
+            var pieSvg = '<svg viewBox="0 0 ' + PSZ + ' ' + PSZ + '" width="' + PSZ + '" height="' + PSZ + '" style="flex-shrink:0;">';
+            var ang = -Math.PI / 2;
+            pieModels.forEach(function(m) {
+              var cnt = totalsByModel[m] || 0;
+              if (cnt <= 0) return;
+              var slice = cnt / pieTotal * 2 * Math.PI;
+              var endAng = ang + slice;
+              var x1 = PCX + PR * Math.cos(ang), y1 = PCY + PR * Math.sin(ang);
+              var x2 = PCX + PR * Math.cos(endAng), y2 = PCY + PR * Math.sin(endAng);
+              var la = slice > Math.PI ? 1 : 0;
+              pieSvg += '<path d="M ' + PCX + ' ' + PCY + ' L ' + x1.toFixed(2) + ' ' + y1.toFixed(2) + ' A ' + PR + ' ' + PR + ' 0 ' + la + ' 1 ' + x2.toFixed(2) + ' ' + y2.toFixed(2) + ' Z" fill="' + escHtml(mCol(m)) + '" opacity="0.9" stroke="var(--card-bg)" stroke-width="0.5"/>';
+              ang = endAng;
+            });
+            pieSvg += '</svg>';
+
+            var ratioHtml = '<div style="flex:1;min-width:0;">';
+            pieModels.forEach(function(m) {
+              var cnt = totalsByModel[m] || 0;
+              if (cnt <= 0) return;
+              var ratio = Math.round(cnt / pieTotal * 1000) / 10;
+              ratioHtml += '<div style="display:flex;align-items:center;gap:4px;margin-bottom:2px;">';
+              ratioHtml += '<span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:' + escHtml(mCol(m)) + ';flex-shrink:0;"></span>';
+              ratioHtml += '<span style="font-size:10px;color:var(--text-primary);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="' + escHtml(m) + '">' + escHtml(mShort(m)) + '</span>';
+              ratioHtml += '<span style="font-size:10px;color:var(--text-muted);flex-shrink:0;margin-left:2px;">' + ratio.toFixed(1) + '%' + '</span>';
+              ratioHtml += '</div>';
+            });
+            ratioHtml += '</div>';
+
+            leftHtml += pieSvg + ratioHtml + '</div>';
+          }
+
+          // ===== 右パネル: 日次折れ線 + 棒グラフ =====
           var maxKw = 1, maxQ = 1;
           for (var i = 1; i <= daysInM; i++) {
             if ((kwByDay[i] || 0) > maxKw) maxKw = kwByDay[i];
@@ -3704,43 +3771,34 @@ export function getAiChatPage(user: {
             if (tot > maxQ) maxQ = tot;
           }
 
-          var MC = (typeof MODEL_COLORS !== 'undefined' ? MODEL_COLORS : {});
-          var pal = ['#6366f1','#22c55e','#f59e0b','#ef4444','#0ea5e9','#a855f7','#14b8a6','#f97316'];
-          function mCol(m, idx) { return MC[m] || pal[idx % pal.length]; }
-          function mShort(m) { return m ? (m.split('/').pop() || m).replace(/-instruct.*/, '').replace(/-fp8.*/, '') : '?'; }
-
-          var W = 680, ML = 34, MR = 8;
-          var lineTop = 14, lineH = 90;
-          var midGap = 28;
+          var W = 380, ML = 26, MR = 4;
+          var lineTop = 12, lineH = 80;
+          var midGap = 24;
           var barTop = lineTop + lineH + midGap;
-          var barH = 90;
-          var xLbY = barTop + barH + 14;
-          var svgH = xLbY + 6;
+          var barH = 80;
+          var xLbY = barTop + barH + 12;
+          var svgH = xLbY + 4;
           var chartW = W - ML - MR;
           var slotW = chartW / daysInM;
 
           var svg = '<svg viewBox="0 0 ' + W + ' ' + svgH + '" width="100%" style="display:block;overflow:visible;">';
-
-          var bgLineBottom = lineTop + lineH;
-          var bgBarBottom = barTop + barH;
-          svg += '<rect x="' + ML + '" y="' + lineTop + '" width="' + chartW + '" height="' + lineH + '" fill="var(--bg-secondary)" rx="3" opacity="0.6"/>';
-          svg += '<rect x="' + ML + '" y="' + barTop + '" width="' + chartW + '" height="' + barH + '" fill="var(--bg-secondary)" rx="3" opacity="0.6"/>';
-
-          svg += '<text x="' + (ML - 2) + '" y="' + (lineTop + 8) + '" font-size="8" fill="var(--text-muted)" text-anchor="end">KW</text>';
-          svg += '<text x="' + (ML - 2) + '" y="' + (barTop + 8) + '" font-size="8" fill="var(--text-muted)" text-anchor="end">質問</text>';
+          svg += '<rect x="' + ML + '" y="' + lineTop + '" width="' + chartW + '" height="' + lineH + '" fill="var(--bg-secondary)" rx="2" opacity="0.5"/>';
+          svg += '<rect x="' + ML + '" y="' + barTop + '" width="' + chartW + '" height="' + barH + '" fill="var(--bg-secondary)" rx="2" opacity="0.5"/>';
+          svg += '<text x="' + (ML - 2) + '" y="' + (lineTop + 8) + '" font-size="7" fill="var(--text-muted)" text-anchor="end">KW</text>';
+          svg += '<text x="' + (ML - 2) + '" y="' + (barTop + 8) + '" font-size="7" fill="var(--text-muted)" text-anchor="end">Q</text>';
 
           for (var gi = 0; gi <= 4; gi++) {
             var kwY = lineTop + lineH - Math.round(lineH * gi / 4);
             var kwV = Math.round(maxKw * gi / 4);
             svg += '<line x1="' + ML + '" y1="' + kwY + '" x2="' + (W - MR) + '" y2="' + kwY + '" stroke="var(--border-color)" stroke-width="0.5" stroke-dasharray="3,3"/>';
-            if (gi > 0) svg += '<text x="' + (ML - 3) + '" y="' + (kwY + 3) + '" font-size="8" fill="var(--text-muted)" text-anchor="end">' + kwV + '</text>';
+            if (gi > 0) svg += '<text x="' + (ML - 2) + '" y="' + (kwY + 3) + '" font-size="7" fill="var(--text-muted)" text-anchor="end">' + kwV + '</text>';
             var qY = barTop + barH - Math.round(barH * gi / 4);
             var qV = Math.round(maxQ * gi / 4);
             svg += '<line x1="' + ML + '" y1="' + qY + '" x2="' + (W - MR) + '" y2="' + qY + '" stroke="var(--border-color)" stroke-width="0.5" stroke-dasharray="3,3"/>';
-            if (gi > 0) svg += '<text x="' + (ML - 3) + '" y="' + (qY + 3) + '" font-size="8" fill="var(--text-muted)" text-anchor="end">' + qV + '</text>';
+            if (gi > 0) svg += '<text x="' + (ML - 2) + '" y="' + (qY + 3) + '" font-size="7" fill="var(--text-muted)" text-anchor="end">' + qV + '</text>';
           }
 
-          var fillPts = (ML).toFixed(1) + ',' + (lineTop + lineH).toFixed(1);
+          var fillPts = ML.toFixed(1) + ',' + (lineTop + lineH).toFixed(1);
           var linePts = '';
           for (var i = 1; i <= daysInM; i++) {
             var cx = ML + (i - 0.5) * slotW;
@@ -3757,50 +3815,40 @@ export function getAiChatPage(user: {
             if (kw > 0) {
               var cx = ML + (i - 0.5) * slotW;
               var cy = lineTop + lineH - (kw / maxKw) * lineH;
-              svg += '<circle cx="' + cx.toFixed(1) + '" cy="' + cy.toFixed(1) + '" r="2.5" fill="#6366f1"/>';
+              svg += '<circle cx="' + cx.toFixed(1) + '" cy="' + cy.toFixed(1) + '" r="2" fill="#6366f1"/>';
             }
           }
 
-          var barW = Math.max(2, slotW * 0.72);
+          var barW = Math.max(1.5, slotW * 0.72);
           for (var i = 1; i <= daysInM; i++) {
             var mData = modelsByDay[i] || {};
-            var mKeys = Object.keys(mData);
-            if (mKeys.length === 0) continue;
+            if (Object.keys(mData).length === 0) continue;
             var bx = ML + (i - 0.5) * slotW - barW / 2;
             var stackY = barTop + barH;
-            models.forEach(function(m, mi) {
+            sortedModels.forEach(function(m) {
               var cnt = mData[m] || 0;
               if (cnt <= 0) return;
               var bh = (cnt / maxQ) * barH;
               stackY -= bh;
-              svg += '<rect x="' + bx.toFixed(1) + '" y="' + stackY.toFixed(1) + '" width="' + barW.toFixed(1) + '" height="' + bh.toFixed(1) + '" fill="' + escHtml(mCol(m, mi)) + '" rx="1" opacity="0.88"/>';
+              svg += '<rect x="' + bx.toFixed(1) + '" y="' + stackY.toFixed(1) + '" width="' + barW.toFixed(1) + '" height="' + bh.toFixed(1) + '" fill="' + escHtml(mCol(m)) + '" rx="1" opacity="0.88"/>';
             });
           }
 
           for (var i = 1; i <= daysInM; i++) {
-            if (i === 1 || i === 10 || i === 20 || i === daysInM || (daysInM <= 20 && i % 5 === 0) || i % 10 === 0) {
+            if (i === 1 || i === 10 || i === 20 || i === daysInM || i % 10 === 0) {
               var lx = ML + (i - 0.5) * slotW;
-              svg += '<text x="' + lx.toFixed(1) + '" y="' + xLbY + '" font-size="9" fill="var(--text-muted)" text-anchor="middle">' + i + '</text>';
+              svg += '<text x="' + lx.toFixed(1) + '" y="' + xLbY + '" font-size="8" fill="var(--text-muted)" text-anchor="middle">' + i + '</text>';
             }
           }
 
           var midY = ((lineTop + lineH + barTop) / 2).toFixed(1);
           svg += '<line x1="' + ML + '" y1="' + midY + '" x2="' + (W - MR) + '" y2="' + midY + '" stroke="var(--border-color)" stroke-width="0.5"/>';
-          svg += '<text x="' + ((W + ML) / 2).toFixed(1) + '" y="' + (parseFloat(midY) + 4) + '" font-size="8" fill="var(--text-muted)" text-anchor="middle">▲ ユニークKW数　　質問総数（モデル別）▼</text>';
           svg += '</svg>';
 
-          var leg = '<div style="display:flex;flex-wrap:wrap;gap:4px 10px;margin-bottom:10px;">';
-          leg += '<span style="display:inline-flex;align-items:center;gap:4px;font-size:11px;color:var(--text-muted);">';
-          leg += '<span style="display:inline-block;width:20px;height:2px;background:#6366f1;border-radius:1px;vertical-align:middle;margin-right:2px;"></span>KW数（折れ線）</span>';
-          models.forEach(function(m, mi) {
-            leg += '<span style="display:inline-flex;align-items:center;gap:3px;font-size:11px;color:var(--text-muted);">';
-            leg += '<span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:' + escHtml(mCol(m, mi)) + ';flex-shrink:0;"></span>';
-            leg += escHtml(mShort(m));
-            leg += '</span>';
-          });
-          leg += '</div>';
-
-          dailyStatsBody.innerHTML = leg + svg;
+          dailyStatsBody.innerHTML = '<div style="display:grid;grid-template-columns:160px 1fr;gap:14px;align-items:start;">' +
+            '<div>' + leftHtml + '</div>' +
+            '<div>' + svg + '</div>' +
+            '</div>';
         })
         .catch(function() { dailyStatsBody.innerHTML = '<div style="color:var(--text-muted);padding:20px 0;">取得に失敗しました</div>'; });
     }
