@@ -775,6 +775,24 @@ INSERT OR REPLACE INTO table_column_keys (table_name, column_name, key_type, fk_
 ('ai_chat_shares', 'output_tokens', 'idx', NULL);
 INSERT OR REPLACE INTO table_column_keys (table_name, column_name, key_type, fk_target_table) VALUES
 ('ai_chat_shares', 'total_tokens', 'idx', NULL);`,
+  '0051': `CREATE TABLE IF NOT EXISTS aichat_category_groups (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES user_sessions(username),
+  group_name TEXT NOT NULL,
+  category_ids TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  is_deleted INTEGER NOT NULL DEFAULT 0,
+  deleted_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_aichat_cat_groups_user ON aichat_category_groups(user_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_aichat_cat_groups_name ON aichat_category_groups(user_id, group_name);
+INSERT OR IGNORE INTO table_catalog (table_name, group_name, description, migration_name, sync_policy, display_order) VALUES
+('aichat_category_groups', 'ai', 'AIチャット分類カテゴリグループ', '0051', 'auto', 0);
+INSERT OR REPLACE INTO table_column_keys (table_name, column_name, key_type, fk_target_table) VALUES
+('aichat_category_groups', 'id', 'pk', NULL);
+INSERT OR REPLACE INTO table_column_keys (table_name, column_name, key_type, fk_target_table) VALUES
+('aichat_category_groups', 'user_id', 'fk', 'user_sessions');`,
   'ts-catalog': `CREATE TABLE IF NOT EXISTS ts_repository (
   id            INTEGER PRIMARY KEY AUTOINCREMENT,
   full_name     TEXT NOT NULL UNIQUE,
@@ -1066,6 +1084,7 @@ export const TABLE_COLUMN_KEYS: Record<string, ColumnKeyInfo> = {
   aichat_subqueries: { id: 'pk' },
   aichat_share_subquery_links: { id: 'pk', subquery_id: 'fk', question_hash: 'idx' },
   aichat_model_colors: { model_id: 'pk' },
+  aichat_category_groups: { id: 'pk', user_id: 'fk' },
   keyword_category_groups: { id: 'pk', user_id: 'fk' },
   keyword_multi_labels: { id: 'pk', user_id: 'fk', search_query: 'idx' },
   ts_repository:          { id: 'pk', full_name: 'uk' },
@@ -1135,6 +1154,7 @@ export const TABLE_GROUP_MAP: Record<string, string> = {
   aichat_subqueries: 'ai',
   aichat_share_subquery_links: 'ai',
   aichat_model_colors: 'ai',
+  aichat_category_groups: 'ai',
   keyword_category_groups: 'search',
   keyword_multi_labels: 'search',
   ts_repository:          'ts-catalog',
@@ -3476,6 +3496,61 @@ app.get('/api/aichat/token-usage', authMiddleware, async (c) => {
     return jsonUtf8({ rows: rows.results ?? [] });
   } catch {
     return jsonUtf8({ rows: [], _warning: 'schema not ready' });
+  }
+});
+
+app.get('/api/aichat/category-groups', authMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!c.env.DB) return jsonUtf8({ groups: [] });
+  try {
+    const rows = await c.env.DB.prepare(
+      `SELECT id, group_name, category_ids FROM aichat_category_groups WHERE user_id = ? AND is_deleted = 0 ORDER BY group_name ASC`
+    ).bind(user.sub).all<{ id: string; group_name: string; category_ids: string }>();
+    const groups = (rows.results ?? []).map((r) => {
+      let ids: number[] = [];
+      try { ids = JSON.parse(r.category_ids); } catch { /* ignore */ }
+      return { id: r.id, group_name: r.group_name, category_ids: ids };
+    });
+    return jsonUtf8({ groups });
+  } catch {
+    return jsonUtf8({ groups: [] });
+  }
+});
+
+app.post('/api/aichat/category-groups', authMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  let body: { group_name?: string; category_ids?: number[] };
+  try { body = await c.req.json(); } catch { return jsonUtf8({ error: 'Invalid JSON' }, 400); }
+  const groupName = (body.group_name ?? '').trim();
+  const categoryIds = Array.isArray(body.category_ids) ? body.category_ids.map(Number).filter((n) => !isNaN(n)) : [];
+  if (!groupName) return jsonUtf8({ error: 'グループ名を入力してください' }, 400);
+  if (categoryIds.length < 2) return jsonUtf8({ error: 'カテゴリは2つ以上必要です' }, 400);
+  const id = crypto.randomUUID();
+  const idsJson = JSON.stringify([...categoryIds].sort((a, b) => a - b));
+  try {
+    await c.env.DB.prepare(
+      `INSERT INTO aichat_category_groups (id, user_id, group_name, category_ids, created_at, updated_at) VALUES (?, ?, ?, ?, datetime('now'), datetime('now'))`
+    ).bind(id, user.sub, groupName, idsJson).run();
+    return jsonUtf8({ ok: true, id, group_name: groupName });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : '';
+    if (msg.includes('UNIQUE') || msg.includes('unique')) return jsonUtf8({ error: '同じ名前のグループがすでに存在します' }, 409);
+    return jsonUtf8({ error: 'グループの登録に失敗しました: ' + msg }, 500);
+  }
+});
+
+app.delete('/api/aichat/category-groups/:id', authMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  const groupId = c.req.param('id');
+  try {
+    await c.env.DB.prepare(
+      `UPDATE aichat_category_groups SET is_deleted = 1, deleted_at = datetime('now') WHERE id = ? AND user_id = ?`
+    ).bind(groupId, user.sub).run();
+    return jsonUtf8({ ok: true });
+  } catch (err) {
+    return jsonUtf8({ error: 'グループの削除に失敗しました' }, 500);
   }
 });
 
