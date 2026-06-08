@@ -3689,12 +3689,15 @@ export function getAiChatPage(user: {
           var mon = parseInt(parts[1]) - 1;
           var daysInM = new Date(year, mon + 1, 0).getDate();
 
+          var EXCL = 'deepseek-r1';
           var kwByDay = {}, modelsByDay = {}, totalsByModel = {};
           days.forEach(function(dayObj) {
             var dayNum = parseInt(dayObj.date.split('-')[2]);
             kwByDay[dayNum] = dayObj.kw_count || 0;
-            modelsByDay[dayNum] = dayObj.models || {};
+            modelsByDay[dayNum] = {};
             Object.keys(dayObj.models || {}).forEach(function(m) {
+              if (m.indexOf(EXCL) >= 0) return;
+              modelsByDay[dayNum][m] = dayObj.models[m];
               totalsByModel[m] = (totalsByModel[m] || 0) + (dayObj.models[m] || 0);
             });
           });
@@ -3721,13 +3724,12 @@ export function getAiChatPage(user: {
             leftHtml += '</div>';
           });
 
-          // ===== 左パネル: パイチャート（PIE_EXCLUDE モデルを除外）=====
-          var PIE_EXCLUDE = 'deepseek-r1-distill' + '-qwen-32b';
-          var pieModels = sortedModels.filter(function(m) { return m.indexOf(PIE_EXCLUDE) < 0; });
+          // ===== 左パネル: パイチャート =====
+          var pieModels = sortedModels;
           var pieTotal = pieModels.reduce(function(s, m) { return s + (totalsByModel[m] || 0); }, 0);
 
           if (pieTotal > 0) {
-            leftHtml += '<div style="font-size:10px;font-weight:600;color:var(--text-secondary);margin-top:12px;margin-bottom:4px;">モデル比率 <span style="font-weight:400;color:var(--text-muted);">※ ' + escHtml(mShort(PIE_EXCLUDE)) + ' 除く</span></div>';
+            leftHtml += '<div style="font-size:10px;font-weight:600;color:var(--text-secondary);margin-top:12px;margin-bottom:4px;">モデル比率</div>';
             leftHtml += '<div style="display:flex;align-items:flex-start;gap:8px;">';
 
             var PR = 46, PCX = 50, PCY = 50, PSZ = 100;
@@ -3762,10 +3764,15 @@ export function getAiChatPage(user: {
             leftHtml += pieSvg + ratioHtml + '</div>';
           }
 
-          // ===== 右パネル: 日次折れ線 + 棒グラフ =====
-          var maxKw = 1, maxQ = 1;
+          // ===== 右パネル: 日次折れ線（累計KW）+ 棒グラフ =====
+          var cumKwByDay = {}, cumSum = 0;
           for (var i = 1; i <= daysInM; i++) {
-            if ((kwByDay[i] || 0) > maxKw) maxKw = kwByDay[i];
+            cumSum += (kwByDay[i] || 0);
+            cumKwByDay[i] = cumSum;
+          }
+          var maxKw = Math.max(1, cumSum);
+          var maxQ = 1;
+          for (var i = 1; i <= daysInM; i++) {
             var tot = 0;
             if (modelsByDay[i]) { var ms = modelsByDay[i]; Object.keys(ms).forEach(function(mk) { tot += ms[mk]; }); }
             if (tot > maxQ) maxQ = tot;
@@ -3802,7 +3809,7 @@ export function getAiChatPage(user: {
           var linePts = '';
           for (var i = 1; i <= daysInM; i++) {
             var cx = ML + (i - 0.5) * slotW;
-            var kw = kwByDay[i] || 0;
+            var kw = cumKwByDay[i] || 0;
             var cy = lineTop + lineH - (kw / maxKw) * lineH;
             fillPts += ' ' + cx.toFixed(1) + ',' + cy.toFixed(1);
             linePts += (i === 1 ? '' : ' ') + cx.toFixed(1) + ',' + cy.toFixed(1);
@@ -3811,7 +3818,7 @@ export function getAiChatPage(user: {
           svg += '<polygon points="' + fillPts + '" fill="#6366f1" opacity="0.15"/>';
           svg += '<polyline points="' + linePts + '" fill="none" stroke="#6366f1" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/>';
           for (var i = 1; i <= daysInM; i++) {
-            var kw = kwByDay[i] || 0;
+            var kw = cumKwByDay[i] || 0;
             if (kw > 0) {
               var cx = ML + (i - 0.5) * slotW;
               var cy = lineTop + lineH - (kw / maxKw) * lineH;
