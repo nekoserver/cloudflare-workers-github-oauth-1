@@ -16,12 +16,12 @@ describe('カテゴリバッジ: 初期中抜き・個別ON/OFF トグル', () =
     const html = buildPage();
     const idx = html.indexOf('function renderKwClassifyList');
     expect(idx).toBeGreaterThan(-1);
-    // カテゴリバッジ html += の行に background:transparent が含まれる
+    // カテゴリバッジ html += の行に background:var(--bg-secondary) が含まれる
     const fn = html.slice(idx, idx + 2000);
     const catBadgeIdx = fn.indexOf('kw-cat-summary-badge');
     expect(catBadgeIdx).toBeGreaterThan(-1);
     const catBadgeSnippet = fn.slice(catBadgeIdx, catBadgeIdx + 600);
-    expect(catBadgeSnippet).toContain('background:transparent');
+    expect(catBadgeSnippet).toContain('background:var(--bg-secondary)');
   });
 
   it('カテゴリバッジの初期スタイルに color:{col} (枠色と同色テキスト) がある', () => {
@@ -32,8 +32,8 @@ describe('カテゴリバッジ: 初期中抜き・個別ON/OFF トグル', () =
     const catBadgeIdx = fn.indexOf('kw-cat-summary-badge');
     expect(catBadgeIdx).toBeGreaterThan(-1);
     const catBadgeSnippet = fn.slice(catBadgeIdx, catBadgeIdx + 600);
-    // border に col を使う
-    expect(catBadgeSnippet).toContain('border:1.5px solid');
+    // border に var(--border-color) を使う（cg-group-btn 同等スタイル）
+    expect(catBadgeSnippet).toContain('border:1px solid');
   });
 
   it('selectedCats オブジェクトが使われている (activeCatId 単一ではなく複数対応)', () => {

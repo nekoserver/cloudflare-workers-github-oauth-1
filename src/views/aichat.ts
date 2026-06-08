@@ -3294,10 +3294,9 @@ export function getAiChatPage(user: {
         var kws  = kwData.keywords  || [];
         var html = '';
         if (cats.length > 0) {
-          html += '<div style="margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid var(--border-color);line-height:2.4;">';
+          html += '<div style="margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid var(--border-color);">';
           cats.forEach(function(cat) {
-            var col = escHtml(cat.color || '#6366f1');
-            html += '<span class="kw-cat-summary-badge" data-cat-id="' + escHtml(String(cat.id)) + '" data-cat-color="' + col + '" style="display:inline-block;padding:0 6px;margin:1px 2px;border-radius:10px;font-size:11px;background:transparent;border:1.5px solid ' + col + ';color:' + col + ';cursor:pointer;white-space:nowrap;">' + escHtml(cat.name) + ' (' + cat.kw_count + ')</span>';
+            html += '<span class="kw-cat-summary-badge" data-cat-id="' + escHtml(String(cat.id)) + '" data-cat-color="' + escHtml(cat.color || '#6366f1') + '" style="display:inline-block;font-size:11px;padding:3px 11px;border-radius:2px;border:1px solid var(--border-color);background:var(--bg-secondary);color:var(--text-muted);cursor:pointer;white-space:nowrap;margin-right:4px;margin-bottom:2px;">' + escHtml(cat.name) + ' (' + cat.kw_count + ')</span>';
           });
           html += '</div>';
         }
@@ -3307,10 +3306,8 @@ export function getAiChatPage(user: {
           kws.forEach(function(kw) {
             var catIdAttr = kw.category_id != null ? ' data-cat-id="' + escHtml(String(kw.category_id)) + '"' : '';
             var catColorAttr = kw.category_color ? ' data-cat-color="' + escHtml(kw.category_color) + '"' : '';
-            var st = kw.is_classified
-              ? 'display:inline-block;font-size:11px;padding:0 6px;margin:1px 2px;border-radius:10px;cursor:pointer;border:1.5px solid #7c3aed;color:#7c3aed;background:transparent;white-space:nowrap;user-select:none;'
-              : 'display:inline-block;font-size:11px;padding:0 6px;margin:1px 2px;border-radius:10px;cursor:pointer;border:1.5px solid var(--border-color);background:var(--bg-secondary);color:var(--text-muted);white-space:nowrap;user-select:none;';
-            html += '<span class="kw-classify-kw-badge" data-keyword="' + escHtml(kw.keyword) + '"' + catIdAttr + catColorAttr + ' style="' + st + '">' + escHtml(kw.keyword) + ' (' + kw.cnt + ')</span>';
+            var kwCls = 'kw-classify-kw-badge sq-kw-badge' + (kw.is_classified ? ' sq-kw-badge-active' : '');
+            html += '<span class="' + kwCls + '" data-keyword="' + escHtml(kw.keyword) + '"' + catIdAttr + catColorAttr + '>' + escHtml(kw.keyword) + ' (' + kw.cnt + ')</span>';
           });
         }
         kwClassifyListBody.innerHTML = html;
@@ -3319,36 +3316,23 @@ export function getAiChatPage(user: {
           kwClassifyListBody.querySelectorAll('.kw-classify-kw-badge').forEach(function(kwEl) {
             var el = kwEl;
             var cid = el.dataset.catId;
-            if (cid && selectedCats[cid]) {
-              var cc = el.dataset.catColor || '#6366f1';
-              el.style.backgroundColor = cc;
-              el.style.color = '#fff';
-              el.style.borderColor = cc;
-            } else if (cid) {
-              el.style.backgroundColor = 'transparent';
-              el.style.color = '#7c3aed';
-              el.style.borderColor = '#7c3aed';
-            } else {
-              el.style.backgroundColor = '';
-              el.style.color = '';
-              el.style.borderColor = '';
-            }
+            var base = 'kw-classify-kw-badge sq-kw-badge';
+            el.className = cid ? base + ' sq-kw-badge-active' : base;
           });
         }
         kwClassifyListBody.querySelectorAll('.kw-cat-summary-badge').forEach(function(catEl) {
           catEl.addEventListener('click', function() {
             var catId = catEl.dataset.catId;
-            var catColor = catEl.dataset.catColor || '#6366f1';
             if (selectedCats[catId]) {
               delete selectedCats[catId];
-              catEl.style.background = 'transparent';
-              catEl.style.color = catColor;
-              catEl.style.borderColor = catColor;
+              catEl.style.borderColor = '';
+              catEl.style.background = '';
+              catEl.style.color = '';
             } else {
               selectedCats[catId] = true;
-              catEl.style.background = catColor;
-              catEl.style.color = '#fff';
-              catEl.style.borderColor = catColor;
+              catEl.style.borderColor = '#3b82f6';
+              catEl.style.background = '#dbeafe';
+              catEl.style.color = '#1d4ed8';
             }
             applyKwBadgeColors();
           });
