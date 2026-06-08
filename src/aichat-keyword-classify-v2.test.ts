@@ -48,13 +48,13 @@ describe('キーワード分類拡張: renderKwClassifyList', () => {
     expect(fn).toContain('/api/aichat/all-keywords');
   });
 
-  it('is_classified のキーワードバッジを sq-kw-badge-active クラスで描画する', () => {
+  it('is_classified のキーワードバッジを kw-kw-classified クラスで描画する', () => {
     const html = buildPage();
     const idx = html.indexOf('function renderKwClassifyList');
     expect(idx).toBeGreaterThan(-1);
     const fn = html.slice(idx, idx + 2200);
     expect(fn).toContain('is_classified');
-    expect(fn).toContain('sq-kw-badge-active');
+    expect(fn).toContain('kw-kw-classified');
   });
 
   it('openKwClassifyList が renderKwClassifyList を呼ぶ', () => {

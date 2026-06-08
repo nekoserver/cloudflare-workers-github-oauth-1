@@ -135,6 +135,10 @@ export function getAiChatPage(user: {
     }
     .sq-kw-badge:hover { background: var(--border-color); color: var(--text-primary); }
     .sq-kw-badge-active { background: var(--accent-bg, #ede9fe); color: var(--accent-fg, #5b21b6); }
+    .kw-classify-kw-badge { margin:1px; }
+    .kw-kw-classified { border:1.5px solid #7c3aed; color:#7c3aed; background:transparent; }
+    .kw-cat-badge-active { border-color:#3b82f6 !important; background:#dbeafe !important; color:#1d4ed8 !important; }
+    [data-theme="dark"] .kw-cat-badge-active { border-color:#60a5fa !important; background:rgba(59,130,246,0.25) !important; color:#93c5fd !important; }
     .kw-q-link { cursor: pointer; text-decoration: underline; text-decoration-color: var(--border-color); text-underline-offset: 2px; }
     .kw-q-link:hover { color: var(--accent-color, #667eea); text-decoration-color: var(--accent-color, #667eea); }
     .search-log-overlay {
@@ -3296,7 +3300,7 @@ export function getAiChatPage(user: {
         if (cats.length > 0) {
           html += '<div style="margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid var(--border-color);">';
           cats.forEach(function(cat) {
-            html += '<span class="kw-cat-summary-badge" data-cat-id="' + escHtml(String(cat.id)) + '" data-cat-color="' + escHtml(cat.color || '#6366f1') + '" style="display:inline-block;font-size:11px;padding:3px 11px;border-radius:2px;border:1px solid var(--border-color);background:var(--bg-secondary);color:var(--text-muted);cursor:pointer;white-space:nowrap;margin-right:4px;margin-bottom:2px;">' + escHtml(cat.name) + ' (' + cat.kw_count + ')</span>';
+            html += '<span class="kw-cat-summary-badge" data-cat-id="' + escHtml(String(cat.id)) + '" data-cat-color="' + escHtml(cat.color || '#6366f1') + '" style="display:inline-block;font-size:11px;padding:3px 11px;border-radius:2px;border:1px solid var(--border-color);background:var(--bg-secondary);color:var(--text-muted);cursor:pointer;white-space:nowrap;margin:1px;">' + escHtml(cat.name) + ' (' + cat.kw_count + ')</span>';
           });
           html += '</div>';
         }
@@ -3306,7 +3310,7 @@ export function getAiChatPage(user: {
           kws.forEach(function(kw) {
             var catIdAttr = kw.category_id != null ? ' data-cat-id="' + escHtml(String(kw.category_id)) + '"' : '';
             var catColorAttr = kw.category_color ? ' data-cat-color="' + escHtml(kw.category_color) + '"' : '';
-            var kwCls = 'kw-classify-kw-badge sq-kw-badge' + (kw.is_classified ? ' sq-kw-badge-active' : '');
+            var kwCls = 'kw-classify-kw-badge sq-kw-badge' + (kw.is_classified ? ' kw-kw-classified' : '');
             html += '<span class="' + kwCls + '" data-keyword="' + escHtml(kw.keyword) + '"' + catIdAttr + catColorAttr + '>' + escHtml(kw.keyword) + ' (' + kw.cnt + ')</span>';
           });
         }
@@ -3317,7 +3321,7 @@ export function getAiChatPage(user: {
             var el = kwEl;
             var cid = el.dataset.catId;
             var base = 'kw-classify-kw-badge sq-kw-badge';
-            el.className = cid ? base + ' sq-kw-badge-active' : base;
+            el.className = cid ? base + ' kw-kw-classified' : base;
           });
         }
         kwClassifyListBody.querySelectorAll('.kw-cat-summary-badge').forEach(function(catEl) {
@@ -3325,14 +3329,10 @@ export function getAiChatPage(user: {
             var catId = catEl.dataset.catId;
             if (selectedCats[catId]) {
               delete selectedCats[catId];
-              catEl.style.borderColor = '';
-              catEl.style.background = '';
-              catEl.style.color = '';
+              catEl.classList.remove('kw-cat-badge-active');
             } else {
               selectedCats[catId] = true;
-              catEl.style.borderColor = '#3b82f6';
-              catEl.style.background = '#dbeafe';
-              catEl.style.color = '#1d4ed8';
+              catEl.classList.add('kw-cat-badge-active');
             }
             applyKwBadgeColors();
           });
