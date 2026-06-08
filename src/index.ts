@@ -2928,6 +2928,47 @@ app.get('/api/aichat/shares/calendar', authMiddleware, async (c) => {
   return jsonUtf8({ month, days: rows.results ?? [] });
 });
 
+app.get('/api/aichat/daily-stats', authMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  const month = ((c.req.query('month') ?? '').slice(0, 7)) || new Date().toISOString().slice(0, 7);
+
+  const [kwRows, qRows] = await Promise.all([
+    c.env.DB.prepare(
+      `SELECT substr(searched_at,1,10) as date, COUNT(DISTINCT keyword) as kw_count
+       FROM aichat_search_history
+       WHERE user_id=? AND searched_at LIKE ? AND deleted_at IS NULL
+       GROUP BY date ORDER BY date`
+    ).bind(user.sub, `${month}%`).all<{ date: string; kw_count: number }>(),
+    c.env.DB.prepare(
+      `SELECT substr(created_at,1,10) as date, model, COUNT(*) as q_count
+       FROM ai_chat_shares
+       WHERE user_id=? AND deleted_at IS NULL AND created_at LIKE ?
+       GROUP BY date, model ORDER BY date`
+    ).bind(user.sub, `${month}%`).all<{ date: string; model: string; q_count: number }>(),
+  ]);
+
+  const kwMap: Record<string, number> = {};
+  (kwRows.results ?? []).forEach(r => { kwMap[r.date] = r.kw_count; });
+
+  const qMap: Record<string, Record<string, number>> = {};
+  const modelSet = new Set<string>();
+  (qRows.results ?? []).forEach(r => {
+    if (!qMap[r.date]) qMap[r.date] = {};
+    qMap[r.date][r.model] = r.q_count;
+    modelSet.add(r.model);
+  });
+
+  const allDates = new Set<string>([...Object.keys(kwMap), ...Object.keys(qMap)]);
+  const days = Array.from(allDates).sort().map(date => ({
+    date,
+    kw_count: kwMap[date] ?? 0,
+    models: qMap[date] ?? {},
+  }));
+
+  return jsonUtf8({ month, days, models: Array.from(modelSet) });
+});
+
 app.get('/api/aichat/shares/by-date', authMiddleware, async (c) => {
   const user = c.get('user');
   if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
