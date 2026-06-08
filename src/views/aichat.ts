@@ -3297,7 +3297,7 @@ export function getAiChatPage(user: {
           html += '<div style="margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid var(--border-color);line-height:2.4;">';
           cats.forEach(function(cat) {
             var col = escHtml(cat.color || '#6366f1');
-            html += '<span class="kw-cat-summary-badge" data-cat-id="' + escHtml(String(cat.id)) + '" data-cat-color="' + col + '" style="display:inline-block;padding:1px 6px;margin:1px 2px;border-radius:10px;font-size:11px;background:transparent;border:1.5px solid ' + col + ';color:' + col + ';cursor:pointer;white-space:nowrap;">' + escHtml(cat.name) + ' (' + cat.kw_count + ')</span>';
+            html += '<span class="kw-cat-summary-badge" data-cat-id="' + escHtml(String(cat.id)) + '" data-cat-color="' + col + '" style="display:inline-block;padding:0 6px;margin:1px 2px;border-radius:10px;font-size:11px;background:transparent;border:1.5px solid ' + col + ';color:' + col + ';cursor:pointer;white-space:nowrap;">' + escHtml(cat.name) + ' (' + cat.kw_count + ')</span>';
           });
           html += '</div>';
         }
@@ -3308,8 +3308,8 @@ export function getAiChatPage(user: {
             var catIdAttr = kw.category_id != null ? ' data-cat-id="' + escHtml(String(kw.category_id)) + '"' : '';
             var catColorAttr = kw.category_color ? ' data-cat-color="' + escHtml(kw.category_color) + '"' : '';
             var st = kw.is_classified
-              ? 'display:inline-block;font-size:11px;padding:1px 6px;margin:1px 2px;border-radius:10px;cursor:pointer;border:1.5px solid #7c3aed;color:#7c3aed;background:transparent;white-space:nowrap;user-select:none;'
-              : 'display:inline-block;font-size:11px;padding:1px 6px;margin:1px 2px;border-radius:10px;cursor:pointer;border:1.5px solid var(--border-color);background:var(--bg-secondary);color:var(--text-muted);white-space:nowrap;user-select:none;';
+              ? 'display:inline-block;font-size:11px;padding:0 6px;margin:1px 2px;border-radius:10px;cursor:pointer;border:1.5px solid #7c3aed;color:#7c3aed;background:transparent;white-space:nowrap;user-select:none;'
+              : 'display:inline-block;font-size:11px;padding:0 6px;margin:1px 2px;border-radius:10px;cursor:pointer;border:1.5px solid var(--border-color);background:var(--bg-secondary);color:var(--text-muted);white-space:nowrap;user-select:none;';
             html += '<span class="kw-classify-kw-badge" data-keyword="' + escHtml(kw.keyword) + '"' + catIdAttr + catColorAttr + ' style="' + st + '">' + escHtml(kw.keyword) + ' (' + kw.cnt + ')</span>';
           });
         }

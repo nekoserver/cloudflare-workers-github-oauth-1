@@ -10,7 +10,7 @@ function buildPage(): string {
 
 const SQ_BADGE_RADIUS = 'border-radius:10px';
 const SQ_BADGE_FONT   = 'font-size:11px';
-const SQ_BADGE_PAD    = 'padding:1px 6px';
+const SQ_BADGE_PAD    = 'padding:0 6px';
 const SQ_BADGE_MARGIN = 'margin:1px 2px';
 
 describe('キーワード分類モーダル: kw-cat-summary-badge のサイズ・形', () => {
@@ -29,11 +29,18 @@ describe('キーワード分類モーダル: kw-cat-summary-badge のサイズ�
     expect(snippet).toContain(SQ_BADGE_FONT);
   });
 
-  it('padding が 1px 6px である', () => {
+  it('padding が 0 6px である（上下 0px・左右 6px）', () => {
     const html = buildPage();
     const idx = html.indexOf('kw-cat-summary-badge');
     const snippet = html.slice(idx, idx + 400);
     expect(snippet).toContain(SQ_BADGE_PAD);
+  });
+
+  it('padding:1px 6px は使われない', () => {
+    const html = buildPage();
+    const idx = html.indexOf('kw-cat-summary-badge');
+    const snippet = html.slice(idx, idx + 400);
+    expect(snippet).not.toContain('padding:1px 6px');
   });
 
   it('margin が 1px 2px である', () => {
@@ -60,11 +67,18 @@ describe('キーワード分類モーダル: kw-classify-kw-badge のサイズ�
     expect(snippet).toContain(SQ_BADGE_FONT);
   });
 
-  it('分類済みバッジの padding が 1px 6px である', () => {
+  it('分類済みバッジの padding が 0 6px である（上下 0px・左右 6px）', () => {
     const html = buildPage();
     const idx = html.indexOf('var st = kw.is_classified');
     const snippet = html.slice(idx, idx + 400);
     expect(snippet).toContain(SQ_BADGE_PAD);
+  });
+
+  it('padding:1px 6px は使われない', () => {
+    const html = buildPage();
+    const idx = html.indexOf('var st = kw.is_classified');
+    const snippet = html.slice(idx, idx + 400);
+    expect(snippet).not.toContain('padding:1px 6px');
   });
 
   it('分類済みバッジの margin が 1px 2px である', () => {
