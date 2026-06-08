@@ -134,7 +134,7 @@ export function getAiChatPage(user: {
       white-space: nowrap; line-height: 1.6; cursor: pointer;
     }
     .sq-kw-badge:hover { background: var(--border-color); color: var(--text-primary); }
-    .sq-kw-badge-active { background: var(--accent-bg, #ede9fe); color: var(--accent-fg, #5b21b6); }
+    .sq-kw-badge-active { background: var(--kwcat-bg, #ede9fe); color: var(--kwcat-color, #5b21b6); border: 1px solid var(--kwcat-color, #5b21b6); }
     .kw-classify-kw-badge { margin:1px; }
     .kw-kw-classified { border:1.5px solid #7c3aed; color:#7c3aed; background:transparent; }
     .kw-cat-badge-active { border-color:#3b82f6 !important; background:#dbeafe !important; color:#1d4ed8 !important; }
@@ -3341,15 +3341,15 @@ export function getAiChatPage(user: {
         var selectedCats = {};
         function applyKwBadgeColors() {
           kwClassifyListBody.querySelectorAll('.kw-classify-kw-badge').forEach(function(kwEl) {
-            var el = kwEl;
-            var cid = el.dataset.catId;
+            var el = kwEl, cid = el.dataset.catId;
             var base = 'kw-classify-kw-badge sq-kw-badge';
             if (cid && selectedCats[cid]) {
+              var c = el.dataset.catColor || '#6366f1';
               el.className = base + ' sq-kw-badge-active';
-            } else if (cid) {
-              el.className = base + ' kw-kw-classified';
+              el.style.setProperty('--kwcat-color', c);
+              el.style.setProperty('--kwcat-bg', c + '33');
             } else {
-              el.className = base;
+              el.className = base + (cid ? ' kw-kw-classified' : '');
             }
           });
         }
