@@ -50,7 +50,7 @@ describe('カテゴリバッジ: 初期中抜き・個別ON/OFF トグル', () =
     const idx = html.indexOf('function renderKwClassifyList');
     expect(idx).toBeGreaterThan(-1);
     const fn = html.slice(idx, idx + 4000);
-    // catEl.style を更新するコード
-    expect(fn).toContain('catEl.style');
+    // classList で kw-cat-badge-active を ON/OFF するコード
+    expect(fn).toContain('kw-cat-badge-active');
   });
 });
