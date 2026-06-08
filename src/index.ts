@@ -777,7 +777,7 @@ INSERT OR REPLACE INTO table_column_keys (table_name, column_name, key_type, fk_
 ('ai_chat_shares', 'total_tokens', 'idx', NULL);`,
   '0051': `CREATE TABLE IF NOT EXISTS aichat_category_groups (
   id TEXT PRIMARY KEY,
-  user_id TEXT NOT NULL REFERENCES user_sessions(username),
+  user_id TEXT NOT NULL,
   group_name TEXT NOT NULL,
   category_ids TEXT NOT NULL,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
@@ -792,7 +792,7 @@ INSERT OR IGNORE INTO table_catalog (table_name, group_name, description, migrat
 INSERT OR REPLACE INTO table_column_keys (table_name, column_name, key_type, fk_target_table) VALUES
 ('aichat_category_groups', 'id', 'pk', NULL);
 INSERT OR REPLACE INTO table_column_keys (table_name, column_name, key_type, fk_target_table) VALUES
-('aichat_category_groups', 'user_id', 'fk', 'user_sessions');`,
+('aichat_category_groups', 'user_id', 'idx', NULL);`,
   'ts-catalog': `CREATE TABLE IF NOT EXISTS ts_repository (
   id            INTEGER PRIMARY KEY AUTOINCREMENT,
   full_name     TEXT NOT NULL UNIQUE,
@@ -1084,7 +1084,7 @@ export const TABLE_COLUMN_KEYS: Record<string, ColumnKeyInfo> = {
   aichat_subqueries: { id: 'pk' },
   aichat_share_subquery_links: { id: 'pk', subquery_id: 'fk', question_hash: 'idx' },
   aichat_model_colors: { model_id: 'pk' },
-  aichat_category_groups: { id: 'pk', user_id: 'fk' },
+  aichat_category_groups: { id: 'pk', user_id: 'idx' },
   keyword_category_groups: { id: 'pk', user_id: 'fk' },
   keyword_multi_labels: { id: 'pk', user_id: 'fk', search_query: 'idx' },
   ts_repository:          { id: 'pk', full_name: 'uk' },
