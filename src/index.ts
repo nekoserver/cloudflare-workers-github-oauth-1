@@ -787,7 +787,7 @@ INSERT OR REPLACE INTO table_column_keys (table_name, column_name, key_type, fk_
 );
 CREATE INDEX IF NOT EXISTS idx_aichat_cat_groups_user ON aichat_category_groups(user_id);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_aichat_cat_groups_name ON aichat_category_groups(user_id, group_name);
-INSERT OR IGNORE INTO table_catalog (table_name, group_name, description, migration_name, sync_policy, display_order) VALUES
+INSERT OR IGNORE INTO table_catalog (table_name, group_name, description, migration, sync_policy, display_order) VALUES
 ('aichat_category_groups', 'ai', 'AIチャット分類カテゴリグループ', '0051', 'auto', 0);
 INSERT OR REPLACE INTO table_column_keys (table_name, column_name, key_type, fk_target_table) VALUES
 ('aichat_category_groups', 'id', 'pk', NULL);
