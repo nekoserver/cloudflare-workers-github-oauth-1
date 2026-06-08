@@ -3762,10 +3762,15 @@ export function getAiChatPage(user: {
             leftHtml += pieSvg + ratioHtml + '</div>';
           }
 
-          // ===== 右パネル: 日次折れ線 + 棒グラフ =====
-          var maxKw = 1, maxQ = 1;
+          // ===== 右パネル: 日次折れ線（累計KW）+ 棒グラフ =====
+          var cumKwByDay = {}, cumSum = 0;
           for (var i = 1; i <= daysInM; i++) {
-            if ((kwByDay[i] || 0) > maxKw) maxKw = kwByDay[i];
+            cumSum += (kwByDay[i] || 0);
+            cumKwByDay[i] = cumSum;
+          }
+          var maxKw = Math.max(1, cumSum);
+          var maxQ = 1;
+          for (var i = 1; i <= daysInM; i++) {
             var tot = 0;
             if (modelsByDay[i]) { var ms = modelsByDay[i]; Object.keys(ms).forEach(function(mk) { tot += ms[mk]; }); }
             if (tot > maxQ) maxQ = tot;
@@ -3802,7 +3807,7 @@ export function getAiChatPage(user: {
           var linePts = '';
           for (var i = 1; i <= daysInM; i++) {
             var cx = ML + (i - 0.5) * slotW;
-            var kw = kwByDay[i] || 0;
+            var kw = cumKwByDay[i] || 0;
             var cy = lineTop + lineH - (kw / maxKw) * lineH;
             fillPts += ' ' + cx.toFixed(1) + ',' + cy.toFixed(1);
             linePts += (i === 1 ? '' : ' ') + cx.toFixed(1) + ',' + cy.toFixed(1);
@@ -3811,7 +3816,7 @@ export function getAiChatPage(user: {
           svg += '<polygon points="' + fillPts + '" fill="#6366f1" opacity="0.15"/>';
           svg += '<polyline points="' + linePts + '" fill="none" stroke="#6366f1" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/>';
           for (var i = 1; i <= daysInM; i++) {
-            var kw = kwByDay[i] || 0;
+            var kw = cumKwByDay[i] || 0;
             if (kw > 0) {
               var cx = ML + (i - 0.5) * slotW;
               var cy = lineTop + lineH - (kw / maxKw) * lineH;

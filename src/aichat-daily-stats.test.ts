@@ -211,6 +211,38 @@ describe('日次統計グラフ: backend API', () => {
 });
 
 // ===========================================================
+// 折れ線チャート: 日ごと累計
+// ===========================================================
+describe('日次統計グラフ: 折れ線は日ごと累計KW数', () => {
+  it('cumKwByDay 変数が存在する', () => {
+    const html = buildPage();
+    const idx = html.indexOf('function renderDailyStatsChart');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 12000);
+    expect(fn).toContain('cumKwByDay');
+  });
+
+  it('累計を cumSum で加算している', () => {
+    const html = buildPage();
+    const idx = html.indexOf('function renderDailyStatsChart');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 12000);
+    expect(fn).toContain('cumSum');
+  });
+
+  it('折れ線描画で cumKwByDay を参照する', () => {
+    const html = buildPage();
+    const idx = html.indexOf('function renderDailyStatsChart');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 12000);
+    const polylineIdx = fn.indexOf('polyline');
+    expect(polylineIdx).toBeGreaterThan(-1);
+    const aroundLine = fn.slice(Math.max(0, polylineIdx - 600), polylineIdx + 100);
+    expect(aroundLine).toContain('cumKwByDay');
+  });
+});
+
+// ===========================================================
 // 左パネル: 総数リスト・パイチャート・比率リスト
 // ===========================================================
 describe('日次統計グラフ: 左パネル（総数・パイチャート・比率）', () => {
