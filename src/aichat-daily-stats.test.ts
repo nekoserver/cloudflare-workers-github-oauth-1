@@ -270,13 +270,13 @@ describe('日次統計グラフ: 左パネル（総数・パイチャート・�
     expect(fn).toContain('<path ');
   });
 
-  it('deepseek-r1-distill-qwen-32b をパイチャートから除外する', () => {
+  it('deepseek-r1 をデータ取り込み時に除外する (EXCL 定数)', () => {
     const html = buildPage();
     const idx = html.indexOf('function renderDailyStatsChart');
     expect(idx).toBeGreaterThan(-1);
     const fn = html.slice(idx, idx + 9000);
-    expect(fn).toContain('PIE_EXCLUDE');
-    expect(fn).toContain('deepseek-r1-distill');
+    expect(fn).toContain('EXCL');
+    expect(fn).toContain('deepseek-r1');
   });
 
   it('比率を toFixed(1) で小数点一桁表示する', () => {

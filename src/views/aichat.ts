@@ -3689,12 +3689,15 @@ export function getAiChatPage(user: {
           var mon = parseInt(parts[1]) - 1;
           var daysInM = new Date(year, mon + 1, 0).getDate();
 
+          var EXCL = 'deepseek-r1';
           var kwByDay = {}, modelsByDay = {}, totalsByModel = {};
           days.forEach(function(dayObj) {
             var dayNum = parseInt(dayObj.date.split('-')[2]);
             kwByDay[dayNum] = dayObj.kw_count || 0;
-            modelsByDay[dayNum] = dayObj.models || {};
+            modelsByDay[dayNum] = {};
             Object.keys(dayObj.models || {}).forEach(function(m) {
+              if (m.indexOf(EXCL) >= 0) return;
+              modelsByDay[dayNum][m] = dayObj.models[m];
               totalsByModel[m] = (totalsByModel[m] || 0) + (dayObj.models[m] || 0);
             });
           });
@@ -3721,13 +3724,12 @@ export function getAiChatPage(user: {
             leftHtml += '</div>';
           });
 
-          // ===== 左パネル: パイチャート（PIE_EXCLUDE モデルを除外）=====
-          var PIE_EXCLUDE = 'deepseek-r1-distill' + '-qwen-32b';
-          var pieModels = sortedModels.filter(function(m) { return m.indexOf(PIE_EXCLUDE) < 0; });
+          // ===== 左パネル: パイチャート =====
+          var pieModels = sortedModels;
           var pieTotal = pieModels.reduce(function(s, m) { return s + (totalsByModel[m] || 0); }, 0);
 
           if (pieTotal > 0) {
-            leftHtml += '<div style="font-size:10px;font-weight:600;color:var(--text-secondary);margin-top:12px;margin-bottom:4px;">モデル比率 <span style="font-weight:400;color:var(--text-muted);">※ ' + escHtml(mShort(PIE_EXCLUDE)) + ' 除く</span></div>';
+            leftHtml += '<div style="font-size:10px;font-weight:600;color:var(--text-secondary);margin-top:12px;margin-bottom:4px;">モデル比率</div>';
             leftHtml += '<div style="display:flex;align-items:flex-start;gap:8px;">';
 
             var PR = 46, PCX = 50, PCY = 50, PSZ = 100;
