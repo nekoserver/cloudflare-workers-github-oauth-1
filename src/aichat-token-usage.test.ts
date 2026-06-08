@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { getAiChatPage } from './views/aichat';
+import { extractAiUsage } from './index';
 
 const minimalUser = {
   username: 'testuser',
@@ -7,6 +8,49 @@ const minimalUser = {
   modelColors: { '@cf/meta/llama-3.3-70b-instruct-fp8-fast': '#4f46e5' },
 };
 function buildPage(): string { return getAiChatPage(minimalUser); }
+
+// ===========================================================
+// extractAiUsage: Cloudflare Workers AI レスポンスのトークン数抽出
+// ===========================================================
+describe('extractAiUsage', () => {
+  it('input_tokens / output_tokens / total_tokens をそのまま返す', () => {
+    const r = extractAiUsage({ input_tokens: 10, output_tokens: 20, total_tokens: 30 });
+    expect(r).toEqual({ input_tokens: 10, output_tokens: 20, total_tokens: 30 });
+  });
+
+  it('prompt_tokens を input_tokens、completion_tokens を output_tokens にマップする', () => {
+    const r = extractAiUsage({ prompt_tokens: 15, completion_tokens: 25, total_tokens: 40 });
+    expect(r.input_tokens).toBe(15);
+    expect(r.output_tokens).toBe(25);
+    expect(r.total_tokens).toBe(40);
+  });
+
+  it('total_tokens が null でも input + output から補完する', () => {
+    const r = extractAiUsage({ prompt_tokens: 10, completion_tokens: 20 });
+    expect(r.input_tokens).toBe(10);
+    expect(r.output_tokens).toBe(20);
+    expect(r.total_tokens).toBe(30);
+  });
+
+  it('input_tokens と prompt_tokens が両方あるとき input_tokens を優先する', () => {
+    const r = extractAiUsage({ input_tokens: 5, prompt_tokens: 99, output_tokens: 6, completion_tokens: 99 });
+    expect(r.input_tokens).toBe(5);
+    expect(r.output_tokens).toBe(6);
+  });
+
+  it('空オブジェクトはすべて null', () => {
+    expect(extractAiUsage({})).toEqual({ input_tokens: null, output_tokens: null, total_tokens: null });
+  });
+
+  it('null はすべて null', () => {
+    expect(extractAiUsage(null)).toEqual({ input_tokens: null, output_tokens: null, total_tokens: null });
+  });
+
+  it('数値以外の値は null にする', () => {
+    const r = extractAiUsage({ input_tokens: 'abc', output_tokens: true, total_tokens: null });
+    expect(r).toEqual({ input_tokens: null, output_tokens: null, total_tokens: null });
+  });
+});
 
 // ===========================================================
 // index.ts: マイグレーション & AI 呼び出し
@@ -23,15 +67,10 @@ describe('トークン使用量: index.ts バックエンド', () => {
     expect(snippet).toContain('total_tokens');
   });
 
-  it('runAi が usage オブジェクトを取得するコードを持つ', () => {
+  it('runAi が extractAiUsage を使って usage を取得するコードを持つ', () => {
     const fs = require('fs');
     const src = fs.readFileSync(__dirname + '/index.ts', 'utf-8');
-    // AiUsage 型定義 + aichat 専用 runAi を探す
-    const idx = src.indexOf('AiUsage');
-    expect(idx).toBeGreaterThan(-1);
-    const fn = src.slice(idx, idx + 3500);
-    expect(fn).toContain('usage');
-    expect(fn).toContain('input_tokens');
+    expect(src).toContain('const usage: AiUsage = extractAiUsage(usageObj)');
   });
 
   it('autoSave が input_tokens / output_tokens / total_tokens を INSERT する', () => {
