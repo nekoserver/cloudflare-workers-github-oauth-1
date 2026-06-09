@@ -74,10 +74,16 @@ describe('大分類カテゴリグループ: JS関数', () => {
 
   it('POST /api/aichat/category-groups で新規グループを登録する', () => {
     const html = buildPage();
-    const idx = html.indexOf('/api/aichat/category-groups');
-    expect(idx).toBeGreaterThan(-1);
-    const snippet = html.slice(idx - 100, idx + 300);
-    expect(snippet).toContain('POST');
+    let searchFrom = 0;
+    let found = false;
+    while (true) {
+      const idx = html.indexOf('/api/aichat/category-groups', searchFrom);
+      if (idx === -1) break;
+      const snippet = html.slice(Math.max(0, idx - 100), idx + 300);
+      if (snippet.includes('POST')) { found = true; break; }
+      searchFrom = idx + 1;
+    }
+    expect(found).toBe(true);
   });
 
   it('グループ名入力フィールド (kwCatGroupNameInput) が存在する or JS 内に input がある', () => {
