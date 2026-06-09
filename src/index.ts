@@ -3117,6 +3117,53 @@ app.get('/api/aichat/search-keyword-analysis', authMiddleware, async (c) => {
   return jsonUtf8({ items: Array.from(map.values()) });
 });
 
+app.post('/api/aichat/search-log/open-modal', authMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  const body = await c.req.json<{ keyword?: string; shareIds?: string[] }>();
+  const keyword = (body.keyword ?? '').trim().slice(0, 200);
+  const shareIds = Array.isArray(body.shareIds) ? body.shareIds.slice(0, 50) : [];
+  if (!keyword || !shareIds.length) return jsonUtf8({ entries: [] });
+  const placeholders = shareIds.map(() => '?').join(',');
+  const existing = await c.env.DB.prepare(
+    `SELECT share_id FROM aichat_search_log WHERE user_id = ? AND keyword = ? AND share_id IN (${placeholders})`
+  ).bind(user.sub, keyword, ...shareIds).all();
+  const registeredSet = new Set(existing.results.map((r: any) => String(r.share_id)));
+  const rows = await c.env.DB.prepare(
+    `SELECT s.id, s.question, s.model FROM ai_chat_shares s WHERE s.id IN (${placeholders}) AND s.deleted_at IS NULL`
+  ).bind(...shareIds).all();
+  const shareMap = new Map(rows.results.map((r: any) => [String(r.id), r]));
+  const entries = shareIds.map((id: string) => {
+    const share = shareMap.get(id);
+    return {
+      shareId: id,
+      model: share ? String(share.model) : '',
+      question: share ? String(share.question).slice(0, 100) : '',
+      isNew: !registeredSet.has(id),
+    };
+  });
+  return jsonUtf8({ entries });
+});
+
+app.post('/api/aichat/search-log/approve', authMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  const body = await c.req.json<{ keyword?: string; shareIds?: string[] }>();
+  const keyword = (body.keyword ?? '').trim().slice(0, 200);
+  const shareIds = Array.isArray(body.shareIds) ? body.shareIds.slice(0, 50) : [];
+  if (!keyword || !shareIds.length) return jsonUtf8({ ok: true, count: 0 });
+  const now = new Date().toISOString();
+  const stmts = shareIds.map((shareId: string) =>
+    c.env.DB.prepare(
+      `INSERT INTO aichat_search_log (user_id, keyword, share_id, first_searched_at, last_searched_at, select_count)
+       VALUES (?, ?, ?, ?, ?, 1)
+       ON CONFLICT(user_id, keyword, share_id) DO NOTHING`
+    ).bind(user.sub, keyword, shareId, now, now)
+  );
+  await c.env.DB.batch(stmts);
+  return jsonUtf8({ ok: true, count: shareIds.length });
+});
+
 app.post('/api/aichat/search-log', authMiddleware, async (c) => {
   const user = c.get('user');
   if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
