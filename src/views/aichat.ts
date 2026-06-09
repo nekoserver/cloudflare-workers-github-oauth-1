@@ -3738,7 +3738,7 @@ export function getAiChatPage(user: {
           html += '<div style="margin-bottom:10px;padding-bottom:10px;border-bottom:1px solid var(--border-color);">';
           html += '<span style="font-size:11px;font-weight:600;color:var(--text-secondary);margin-right:6px;">大分類 :</span>';
           groups.forEach(function(g) {
-            html += '<span class="kw-group-summary-badge" data-group-id="' + escHtml(g.id) + '" style="display:inline-block;font-size:11px;padding:3px 11px;border-radius:2px;border:1px solid var(--border-color);background:var(--bg-secondary);color:var(--text-muted);white-space:nowrap;margin:1px;">' + escHtml(g.group_name) + ' (' + (g.kw_count || 0) + ')</span>';
+            html += '<span class="kw-group-summary-badge" data-group-id="' + escHtml(g.id) + '" data-cat-ids="' + escHtml(JSON.stringify(g.category_ids || [])) + '" style="display:inline-block;font-size:11px;padding:3px 11px;border-radius:2px;border:1px solid var(--border-color);background:var(--bg-secondary);color:var(--text-muted);cursor:pointer;white-space:nowrap;margin:1px;">' + escHtml(g.group_name) + ' (' + (g.kw_count || 0) + ')</span>';
           });
           html += '</div>';
         }
@@ -3779,6 +3779,15 @@ export function getAiChatPage(user: {
         });
         kwClassifyListBody.querySelectorAll('.kw-classify-kw-badge').forEach(function(el) {
           el.addEventListener('click', function() { openKwClassifyModal(el.dataset.keyword); });
+        });
+        kwClassifyListBody.querySelectorAll('.kw-group-summary-badge').forEach(function(grpEl) {
+          grpEl.addEventListener('click', function() {
+            var catIds = [];
+            try { catIds = JSON.parse(grpEl.dataset.catIds || '[]'); } catch(e) {}
+            selectedCats = {};
+            catIds.forEach(function(id) { selectedCats[String(id)] = true; });
+            applyKwBadgeColors();
+          });
         });
       });
     }
