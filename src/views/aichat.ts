@@ -3700,6 +3700,8 @@ export function getAiChatPage(user: {
               kwCachedCatGroups = null;
               kwCatGroupModal.classList.remove('open');
               kwCatGroupModal.setAttribute('aria-hidden', 'true');
+              selectedGroupId = d.id;
+              renderKwClassifyList();
             })
             .catch(function() { errDiv.textContent = '登録に失敗しました'; confirmBtn.disabled = false; });
         });
