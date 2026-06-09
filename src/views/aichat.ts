@@ -606,15 +606,15 @@ export function getAiChatPage(user: {
     }
     .chat-bubble.assistant {
       align-self: flex-start; background: var(--card-bg); border: 1px solid var(--border-color); color: var(--text-primary); border-bottom-left-radius: 3px;
-      position: relative; padding-top: 28px;
+      position: relative; padding-bottom: 28px;
     }
     .bubble-copy-btn {
-      position: absolute; top: 5px; right: 6px;
+      position: absolute; bottom: 5px; left: 8px;
       background: none; border: 1px solid var(--border-color); border-radius: 5px;
       padding: 1px 7px; font-size: 11px; color: var(--text-muted); cursor: pointer;
-      opacity: 0; transition: opacity 0.15s; line-height: 1.6;
+      line-height: 1.6;
     }
-    .chat-bubble.assistant:hover .bubble-copy-btn { opacity: 1; }
+    .bubble-copy-btn:hover { background: var(--bg-secondary); }
     .bubble-copy-btn.copied { color: var(--success-color, #48bb78); border-color: var(--success-color, #48bb78); }
     .chat-bubble.error {
       align-self: flex-start; background: rgba(207,34,46,0.08); border: 1px solid rgba(207,34,46,0.3); color: #cf222e;

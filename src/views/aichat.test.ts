@@ -1272,6 +1272,24 @@ describe('回答バブル コピーボタン', () => {
     const html = getAiChatPage(minimalUser, []);
     expect(html).toContain('.bubble-copy-btn');
   });
+
+  it('コピーボタンは opacity:0 を持たず常時表示である', () => {
+    const html = getAiChatPage(minimalUser, []);
+    const idx = html.indexOf('.bubble-copy-btn');
+    expect(idx).toBeGreaterThan(-1);
+    const snippet = html.slice(idx, idx + 300);
+    expect(snippet).not.toContain('opacity: 0');
+    expect(snippet).not.toContain('opacity:0');
+  });
+
+  it('コピーボタンは bottom / left で左下に配置される', () => {
+    const html = getAiChatPage(minimalUser, []);
+    const idx = html.indexOf('.bubble-copy-btn');
+    expect(idx).toBeGreaterThan(-1);
+    const snippet = html.slice(idx, idx + 200);
+    expect(snippet).toContain('bottom');
+    expect(snippet).toContain('left');
+  });
 });
 
 describe('ナビバー モデル選択ドロップダウン', () => {
