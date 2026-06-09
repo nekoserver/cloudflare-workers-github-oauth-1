@@ -2660,6 +2660,7 @@ export function getAiChatPage(user: {
       currentMode = 'search';
       currentDateLabel = '';
       doSearch(kw);
+      historyModalSearchInput.value = '';
     }
 
     historyModalSearchBtn.addEventListener('click', function(e) { e.stopPropagation(); doHistoryModalSearch(); });
