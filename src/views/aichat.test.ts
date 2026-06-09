@@ -952,6 +952,34 @@ describe('AIチャット: サブクエリ一覧', () => {
     expect(html).toContain('sqSelectedCats');
     expect(html).toContain('sqSelectedGroupId');
   });
+
+  it('renderSubqueriesList がカテゴリ選択時にキーワードバッジへ sq-kw-badge-active を付与する', () => {
+    const html = getAiChatPage(minimalUser);
+    const idx = html.indexOf('function renderSubqueriesList(');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 4000);
+    expect(fn).toContain('sq-kw-badge-active');
+  });
+
+  it('renderSubqueriesList が sqSelectedCats を参照してキーワードハイライトを制御する', () => {
+    const html = getAiChatPage(minimalUser);
+    const idx = html.indexOf('function renderSubqueriesList(');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 4000);
+    const kwBadgeSection = fn.indexOf('kwHtml +=');
+    expect(kwBadgeSection).toBeGreaterThan(-1);
+    // sqSelectedCats はキーワードバッジ生成の直前（isActive 判定）に現れる
+    const kwBadgeSnippet = fn.slice(Math.max(0, kwBadgeSection - 700), kwBadgeSection + 200);
+    expect(kwBadgeSnippet).toContain('sqSelectedCats');
+  });
+
+  it('renderSubqueriesList がカテゴリカラーを --kwcat-color で注入する', () => {
+    const html = getAiChatPage(minimalUser);
+    const idx = html.indexOf('function renderSubqueriesList(');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 4000);
+    expect(fn).toContain('--kwcat-color');
+  });
 });
 
 describe('AIチャット: 過去ログモーダルの追加質問登録', () => {
@@ -1392,7 +1420,7 @@ describe('サブクエリ一覧モーダル：#カラム削除・追加質問総
     const html = getAiChatPage(minimalUser, []);
     const idx = html.indexOf('function renderSubqueriesList(');
     expect(idx).toBeGreaterThan(-1);
-    const fn = html.slice(idx, idx + 3600);
+    const fn = html.slice(idx, idx + 4200);
     expect(fn).toContain('link_count');
   });
 
@@ -1444,7 +1472,7 @@ describe('サブクエリ一覧モーダル：追加質問カラム左端・キ�
     const html = getAiChatPage(minimalUser, []);
     const idx = html.indexOf('function renderSubqueriesList(');
     expect(idx).toBeGreaterThan(-1);
-    const fn = html.slice(idx, idx + 3000);
+    const fn = html.slice(idx, idx + 3200);
     expect(fn).toContain('sq-kw-badge');
   });
 
@@ -1452,7 +1480,7 @@ describe('サブクエリ一覧モーダル：追加質問カラム左端・キ�
     const html = getAiChatPage(minimalUser, []);
     const idx = html.indexOf('function renderSubqueriesList(');
     expect(idx).toBeGreaterThan(-1);
-    const fn = html.slice(idx, idx + 3200);
+    const fn = html.slice(idx, idx + 3900);
     expect(fn).toContain('kw.cnt');
   });
 
@@ -1460,7 +1488,7 @@ describe('サブクエリ一覧モーダル：追加質問カラム左端・キ�
     const html = getAiChatPage(minimalUser, []);
     const idx = html.indexOf('function renderSubqueriesList(');
     expect(idx).toBeGreaterThan(-1);
-    const fn = html.slice(idx, idx + 3700);
+    const fn = html.slice(idx, idx + 4500);
     const posQueryTd = fn.indexOf('sq-query-cell');
     const posKwTd = fn.indexOf("html += '<td>' + kwHtml");
     expect(posQueryTd).toBeGreaterThan(-1);
