@@ -3041,12 +3041,14 @@ app.get('/api/aichat/keywords/monthly', authMiddleware, async (c) => {
   if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
   const month = ((c.req.query('month') ?? '').slice(0, 7)) || new Date().toISOString().slice(0, 7);
   const rows = await c.env.DB.prepare(
-    `SELECT keyword, SUM(select_count) AS total_count
-     FROM aichat_search_log
-     WHERE user_id = ? AND strftime('%Y-%m', last_searched_at) = ?
-     GROUP BY keyword
+    `SELECT l.keyword, SUM(l.select_count) AS total_count,
+            GROUP_CONCAT(DISTINCT s.model) AS models
+     FROM aichat_search_log l
+     LEFT JOIN ai_chat_shares s ON s.id = l.share_id AND s.deleted_at IS NULL
+     WHERE l.user_id = ? AND strftime('%Y-%m', l.last_searched_at) = ?
+     GROUP BY l.keyword
      ORDER BY total_count DESC LIMIT 100`
-  ).bind(user.sub, month).all<{ keyword: string; total_count: number }>();
+  ).bind(user.sub, month).all<{ keyword: string; total_count: number; models: string | null }>();
   return jsonUtf8({ month, keywords: rows.results ?? [] });
 });
 
