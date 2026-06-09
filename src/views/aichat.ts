@@ -621,6 +621,9 @@ export function getAiChatPage(user: {
     .bubble-label { font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; }
     .bubble-label-fallback { color: var(--color-error, #cf222e); }
     .bubble-fallback-notice { font-size: 12px; color: var(--color-error, #cf222e); margin-top: 12px; padding-top: 8px; border-top: 1px solid var(--border-color); opacity: 0.85; }
+    .bubble-copy-btn { background:none;border:none;cursor:pointer;font-size:13px;color:var(--text-muted);padding:2px 5px;border-radius:4px;line-height:1;opacity:0.55;transition:opacity 0.15s; }
+    .bubble-copy-btn:hover { opacity:1; }
+    .bubble-copy-btn.copied { color:var(--accent-color,#667eea);opacity:1; }
     .chat-share-row { align-self: flex-start; margin-top: -6px; display: flex; align-items: center; gap: 4px; }
     .chat-share-btn {
       background: none; border: 1px solid var(--border-color); border-radius: 6px;
@@ -2389,6 +2392,7 @@ export function getAiChatPage(user: {
       if (role === 'assistant') {
         el.className = 'chat-bubble assistant preview-area';
         el.innerHTML = parseMd(text);
+        attachBubbleCopyBtn(el, text);
       } else {
         el.className = 'chat-bubble user';
         el.textContent = text;
@@ -2923,6 +2927,7 @@ export function getAiChatPage(user: {
       var ansBubble = document.createElement('div');
       ansBubble.className = 'chat-bubble assistant preview-area';
       ansBubble.innerHTML = parseMd(responseText);
+      attachBubbleCopyBtn(ansBubble, responseText);
       box.appendChild(ansBubble);
       if (data.usedModel && data.usedModel !== selectedModel) {
         var fallbackNote = document.createElement('div');
@@ -4505,6 +4510,25 @@ export function getAiChatPage(user: {
       }
     });
 
+    function attachBubbleCopyBtn(el, text) {
+      var row = document.createElement('div');
+      row.style.cssText = 'display:flex;justify-content:flex-start;margin-top:8px;';
+      var copyBtn = document.createElement('button');
+      copyBtn.className = 'bubble-copy-btn';
+      copyBtn.title = '回答をコピー';
+      copyBtn.innerHTML = '📋';
+      copyBtn.addEventListener('click', function(e) {
+        e.stopPropagation();
+        navigator.clipboard.writeText(text).then(function() {
+          copyBtn.innerHTML = '✓';
+          copyBtn.classList.add('copied');
+          setTimeout(function() { copyBtn.innerHTML = '📋'; copyBtn.classList.remove('copied'); }, 1500);
+        }).catch(function() {});
+      });
+      row.appendChild(copyBtn);
+      el.appendChild(row);
+    }
+
     function appendBubble(text, role, model, isFallback, usage) {
       var el = document.createElement('div');
       if (role === 'assistant') {
@@ -4526,6 +4550,7 @@ export function getAiChatPage(user: {
           tokEl.textContent = parts.join(' / ') + ' tokens';
           el.appendChild(tokEl);
         }
+        attachBubbleCopyBtn(el, text);
         if (model) {
           var wrap = document.createElement('div');
           wrap.className = 'chat-bubble-wrap';
