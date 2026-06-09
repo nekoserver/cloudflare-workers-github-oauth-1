@@ -851,6 +851,24 @@ describe('AIチャット: サブクエリ一覧', () => {
     expect(html).toContain('id="subqueriesAddBtn"');
   });
 
+  it('subqueriesAddBtn がモーダルヘッダ（search-log-head）内に配置される', () => {
+    const html = getAiChatPage(minimalUser);
+    const headStart = html.indexOf('id="subqueriesOverlay"');
+    expect(headStart).toBeGreaterThan(-1);
+    const overlay = html.slice(headStart, headStart + 600);
+    const headEnd = overlay.indexOf('</div>');
+    const headSection = overlay.slice(0, headEnd + 6);
+    expect(headSection).toContain('id="subqueriesAddBtn"');
+  });
+
+  it('subqueriesAddBtn がモーダルボディ（search-log-body）の外に移動している', () => {
+    const html = getAiChatPage(minimalUser);
+    const bodyStart = html.indexOf('id="subqueriesBody"');
+    expect(bodyStart).toBeGreaterThan(-1);
+    const bodySection = html.slice(bodyStart, bodyStart + 800);
+    expect(bodySection).not.toContain('id="subqueriesAddBtn"');
+  });
+
   it('subqueries 新規追加フォームが存在する', () => {
     const html = getAiChatPage(minimalUser);
     expect(html).toContain('id="subqueriesAddInput"');

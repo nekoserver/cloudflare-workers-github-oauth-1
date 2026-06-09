@@ -898,12 +898,14 @@ export function getAiChatPage(user: {
   <div class="search-log-overlay" id="subqueriesOverlay" aria-hidden="true">
     <div class="search-log-modal" role="dialog" aria-modal="true">
       <div class="search-log-head">
-        <span class="search-log-title">サブクエリ一覧</span>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span class="search-log-title">サブクエリ一覧</span>
+          <button class="search-hist-btn" id="subqueriesAddBtn">＋ 新規追加</button>
+        </div>
         <button class="search-log-close" id="subqueriesClose" aria-label="閉じる">✕</button>
       </div>
       <div class="search-log-body" id="subqueriesBody">
-        <div class="subqueries-add-area">
-          <button class="search-hist-btn" id="subqueriesAddBtn">＋ 新規追加</button>
+        <div class="subqueries-add-area" id="subqueriesAddArea">
           <div class="subqueries-add-form" id="subqueriesAddForm" style="display:none;">
             <input class="history-modal-search-input" id="subqueriesAddInput" type="text" placeholder="サブクエリを入力..." autocomplete="off" maxlength="500">
             <button class="search-hist-btn" id="subqueriesAddSubmit" style="display:none;">追加</button>
