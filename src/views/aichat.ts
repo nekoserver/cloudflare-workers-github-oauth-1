@@ -876,6 +876,7 @@ export function getAiChatPage(user: {
     <div class="search-log-modal" role="dialog" aria-modal="true">
       <div class="search-log-head">
         <span class="search-log-title">サブクエリを持つ質問一覧</span>
+        <button id="linkedQuestionsSortToggle" style="font-size:11px;padding:3px 8px;border-radius:5px;border:1px solid var(--border-color);background:var(--bg-primary);color:var(--text-secondary);cursor:pointer;white-space:nowrap;flex-shrink:0;" title="並び順を切り替える">現状順</button>
         <button class="search-log-close" id="linkedQuestionsClose" aria-label="閉じる">✕</button>
       </div>
       <div class="search-log-body" id="linkedQuestionsBody">
@@ -2670,14 +2671,23 @@ export function getAiChatPage(user: {
     var linkedQuestionsClose = document.getElementById('linkedQuestionsClose');
     var linkedQuestionsBody = document.getElementById('linkedQuestionsBody');
     var linkedQuestionsBtn = document.getElementById('linkedQuestionsBtn');
+    var linkedQuestionsSortToggle = document.getElementById('linkedQuestionsSortToggle');
     var linkedQuestionsAllItems = [];
     var linkedQuestionsFilter = 'all';
+    var linkedQuestionsSortOrder = 'default';
     var subqueriesAllItems = [];
 
     function renderLinkedQuestions(items) {
+      var sorted = linkedQuestionsSortOrder === 'newest'
+        ? items.slice().sort(function(a, b) {
+            var ai = parseInt(a.share_id) || 0;
+            var bi = parseInt(b.share_id) || 0;
+            return bi - ai;
+          })
+        : items.slice();
       var filtered = linkedQuestionsFilter === 'all'
-        ? items
-        : items.filter(function(it) {
+        ? sorted
+        : sorted.filter(function(it) {
             return (it.links || []).some(function(lk) {
               return (lk.models || []).indexOf(linkedQuestionsFilter) !== -1;
             });
@@ -3019,6 +3029,8 @@ export function getAiChatPage(user: {
 
     function openLinkedQuestions() {
       linkedQuestionsFilter = 'all';
+      linkedQuestionsSortOrder = 'default';
+      linkedQuestionsSortToggle.textContent = '現状順';
       linkedQuestionsOverlay.style.zIndex = String(getNextZ());
       linkedQuestionsOverlay.classList.add('open');
       linkedQuestionsOverlay.setAttribute('aria-hidden', 'false');
@@ -3037,6 +3049,11 @@ export function getAiChatPage(user: {
       linkedQuestionsOverlay.setAttribute('aria-hidden', 'true');
     }
 
+    linkedQuestionsSortToggle.addEventListener('click', function() {
+      linkedQuestionsSortOrder = linkedQuestionsSortOrder === 'newest' ? 'default' : 'newest';
+      linkedQuestionsSortToggle.textContent = linkedQuestionsSortOrder === 'newest' ? '最新順' : '現状順';
+      renderLinkedQuestions(linkedQuestionsAllItems);
+    });
     linkedQuestionsBtn.addEventListener('click', function(e) { e.stopPropagation(); openLinkedQuestions(); });
     linkedQuestionsClose.addEventListener('click', function() { closeLinkedQuestions(); });
     linkedQuestionsOverlay.addEventListener('click', function(e) { if (e.target === linkedQuestionsOverlay) closeLinkedQuestions(); });
