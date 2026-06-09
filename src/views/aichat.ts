@@ -3137,11 +3137,11 @@ export function getAiChatPage(user: {
               var kwClass = 'sq-kw-badge';
               var kwStyle = '';
               if (isActive) {
-                var catColor = sqCatColorMap[String(cid)] || '#6366f1';
+                var catColor = kwPaletteActColor || sqCatColorMap[String(cid)] || '#6366f1';
                 kwClass += ' sq-kw-badge-active';
                 kwStyle = ' style="--kwcat-color:' + escHtml(catColor) + ';--kwcat-bg:' + escHtml(catColor) + '33;"';
               } else if (classifiedSet[kw.keyword]) {
-                kwStyle = ' style="border:1.5px solid #7c3aed;color:#7c3aed;background:transparent;"';
+                kwClass += ' kw-kw-classified';
               }
               kwHtml += '<span class="' + kwClass + '" data-subquery-id="' + escHtml(String(item.id)) + '" data-subquery="' + escHtml(item.query) + '" data-keyword="' + escHtml(kw.keyword) + '"' + kwStyle + '>' + escHtml(kw.keyword) + ' (' + kw.cnt + ')</span>';
             });

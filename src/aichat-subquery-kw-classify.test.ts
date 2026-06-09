@@ -21,12 +21,12 @@ describe('サブクエリ一覧: 分類済みキーワードバッジの中抜�
     expect(fn).toContain('/api/aichat/all-keywords');
   });
 
-  it('renderSubqueriesList が 7c3aed の中抜きスタイルを使う', () => {
+  it('renderSubqueriesList が分類済みキーワードに kw-kw-classified クラスを使う', () => {
     const html = buildPage();
     const idx = html.indexOf('function renderSubqueriesList');
     expect(idx).toBeGreaterThan(-1);
     const fn = html.slice(idx, idx + 3600);
-    expect(fn).toContain('7c3aed');
+    expect(fn).toContain('kw-kw-classified');
   });
 
   it('renderSubqueriesList が is_classified または classifiedSet を参照する', () => {
@@ -36,5 +36,22 @@ describe('サブクエリ一覧: 分類済みキーワードバッジの中抜�
     const fn = html.slice(idx, idx + 400);
     const hasClassifiedSet = fn.includes('classifiedSet') || fn.includes('is_classified') || fn.includes('classifiedKws');
     expect(hasClassifiedSet).toBe(true);
+  });
+
+  it('renderSubqueriesList が分類済みキーワードに kw-kw-classified クラスを使う（#7c3aed インラインハードコード禁止）', () => {
+    const html = buildPage();
+    const idx = html.indexOf('function renderSubqueriesList');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 5000);
+    expect(fn).toContain('kw-kw-classified');
+    expect(fn).not.toContain('border:1.5px solid #7c3aed');
+  });
+
+  it('renderSubqueriesList がアクティブキーワードに kwPaletteActColor を参照する', () => {
+    const html = buildPage();
+    const idx = html.indexOf('function renderSubqueriesList');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 5000);
+    expect(fn).toContain('kwPaletteActColor');
   });
 });
