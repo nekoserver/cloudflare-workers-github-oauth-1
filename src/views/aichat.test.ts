@@ -901,6 +901,57 @@ describe('AIチャット: サブクエリ一覧', () => {
     const html = getAiChatPage(minimalUser);
     expect(html).toContain('id="subqueriesAddSubmit"');
   });
+
+  it('openSubqueries が /api/aichat/keyword-categories-summary を fetch する', () => {
+    const html = getAiChatPage(minimalUser);
+    const idx = html.indexOf('function openSubqueries(');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 1200);
+    expect(fn).toContain('/api/aichat/keyword-categories-summary');
+  });
+
+  it('openSubqueries が /api/aichat/category-groups を fetch する', () => {
+    const html = getAiChatPage(minimalUser);
+    const idx = html.indexOf('function openSubqueries(');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 1200);
+    expect(fn).toContain('/api/aichat/category-groups');
+  });
+
+  it('renderSubqueriesList が kw-cat-summary-badge を出力する', () => {
+    const html = getAiChatPage(minimalUser);
+    const idx = html.indexOf('function renderSubqueriesList(');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 3000);
+    expect(fn).toContain('kw-cat-summary-badge');
+  });
+
+  it('renderSubqueriesList が kw-group-summary-badge と「大分類 :」を出力する', () => {
+    const html = getAiChatPage(minimalUser);
+    const idx = html.indexOf('function renderSubqueriesList(');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 3000);
+    expect(fn).toContain('kw-group-summary-badge');
+    expect(fn).toContain('大分類 :');
+  });
+
+  it('renderSubqueriesList がカテゴリフィルタを th より前に配置する', () => {
+    const html = getAiChatPage(minimalUser);
+    const idx = html.indexOf('function renderSubqueriesList(');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 3000);
+    const catIdx = fn.indexOf('kw-cat-summary-badge');
+    const thIdx = fn.indexOf('<th');
+    expect(catIdx).toBeGreaterThan(-1);
+    expect(thIdx).toBeGreaterThan(-1);
+    expect(catIdx).toBeLessThan(thIdx);
+  });
+
+  it('sqSelectedCats / sqSelectedGroupId 状態変数が存在する', () => {
+    const html = getAiChatPage(minimalUser);
+    expect(html).toContain('sqSelectedCats');
+    expect(html).toContain('sqSelectedGroupId');
+  });
 });
 
 describe('AIチャット: 過去ログモーダルの追加質問登録', () => {
@@ -1221,6 +1272,24 @@ describe('回答バブル コピーボタン', () => {
     const html = getAiChatPage(minimalUser, []);
     expect(html).toContain('.bubble-copy-btn');
   });
+
+  it('コピーボタンは opacity:0 を持たず常時表示である', () => {
+    const html = getAiChatPage(minimalUser, []);
+    const idx = html.indexOf('.bubble-copy-btn');
+    expect(idx).toBeGreaterThan(-1);
+    const snippet = html.slice(idx, idx + 300);
+    expect(snippet).not.toContain('opacity: 0');
+    expect(snippet).not.toContain('opacity:0');
+  });
+
+  it('コピーボタンは bottom / left で左下に配置される', () => {
+    const html = getAiChatPage(minimalUser, []);
+    const idx = html.indexOf('.bubble-copy-btn');
+    expect(idx).toBeGreaterThan(-1);
+    const snippet = html.slice(idx, idx + 200);
+    expect(snippet).toContain('bottom');
+    expect(snippet).toContain('left');
+  });
 });
 
 describe('ナビバー モデル選択ドロップダウン', () => {
@@ -1323,7 +1392,7 @@ describe('サブクエリ一覧モーダル：#カラム削除・追加質問総
     const html = getAiChatPage(minimalUser, []);
     const idx = html.indexOf('function renderSubqueriesList(');
     expect(idx).toBeGreaterThan(-1);
-    const fn = html.slice(idx, idx + 1600);
+    const fn = html.slice(idx, idx + 3600);
     expect(fn).toContain('link_count');
   });
 
@@ -1363,7 +1432,7 @@ describe('サブクエリ一覧モーダル：追加質問カラム左端・キ�
     const html = getAiChatPage(minimalUser, []);
     const idx = html.indexOf('function renderSubqueriesList(');
     expect(idx).toBeGreaterThan(-1);
-    const fn = html.slice(idx, idx + 800);
+    const fn = html.slice(idx, idx + 2600);
     const posLinkCount = fn.indexOf('追加質問数');
     const posSubquery = fn.indexOf('<th>サブクエリ</th>');
     expect(posLinkCount).toBeGreaterThan(-1);
@@ -1375,7 +1444,7 @@ describe('サブクエリ一覧モーダル：追加質問カラム左端・キ�
     const html = getAiChatPage(minimalUser, []);
     const idx = html.indexOf('function renderSubqueriesList(');
     expect(idx).toBeGreaterThan(-1);
-    const fn = html.slice(idx, idx + 1200);
+    const fn = html.slice(idx, idx + 3000);
     expect(fn).toContain('sq-kw-badge');
   });
 
@@ -1383,7 +1452,7 @@ describe('サブクエリ一覧モーダル：追加質問カラム左端・キ�
     const html = getAiChatPage(minimalUser, []);
     const idx = html.indexOf('function renderSubqueriesList(');
     expect(idx).toBeGreaterThan(-1);
-    const fn = html.slice(idx, idx + 1100);
+    const fn = html.slice(idx, idx + 3200);
     expect(fn).toContain('kw.cnt');
   });
 
@@ -1391,7 +1460,7 @@ describe('サブクエリ一覧モーダル：追加質問カラム左端・キ�
     const html = getAiChatPage(minimalUser, []);
     const idx = html.indexOf('function renderSubqueriesList(');
     expect(idx).toBeGreaterThan(-1);
-    const fn = html.slice(idx, idx + 1800);
+    const fn = html.slice(idx, idx + 3700);
     const posQueryTd = fn.indexOf('sq-query-cell');
     const posKwTd = fn.indexOf("html += '<td>' + kwHtml");
     expect(posQueryTd).toBeGreaterThan(-1);

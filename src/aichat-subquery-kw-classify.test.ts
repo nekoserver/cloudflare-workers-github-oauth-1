@@ -25,7 +25,7 @@ describe('サブクエリ一覧: 分類済みキーワードバッジの中抜�
     const html = buildPage();
     const idx = html.indexOf('function renderSubqueriesList');
     expect(idx).toBeGreaterThan(-1);
-    const fn = html.slice(idx, idx + 1200);
+    const fn = html.slice(idx, idx + 3000);
     expect(fn).toContain('7c3aed');
   });
 
@@ -33,7 +33,7 @@ describe('サブクエリ一覧: 分類済みキーワードバッジの中抜�
     const html = buildPage();
     const idx = html.indexOf('function renderSubqueriesList');
     expect(idx).toBeGreaterThan(-1);
-    const fn = html.slice(idx, idx + 1200);
+    const fn = html.slice(idx, idx + 400);
     const hasClassifiedSet = fn.includes('classifiedSet') || fn.includes('is_classified') || fn.includes('classifiedKws');
     expect(hasClassifiedSet).toBe(true);
   });
