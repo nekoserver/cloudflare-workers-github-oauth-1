@@ -82,7 +82,7 @@ describe('大分類ON状態: 未選択カテゴリタップで add-mode', () => 
   it('add-mode で kwAddToCatId がセットされる', () => {
     const html = buildPage();
     const idx = html.indexOf("catEl.addEventListener('click'");
-    const fn = html.slice(idx, idx + 600);
+    const fn = html.slice(idx, idx + 1200);
     expect(fn).toContain('kwAddToCatId');
   });
 
@@ -100,7 +100,7 @@ describe('大分類カテゴリに束ねるモーダル: add-mode 確認ダイ�
     const html = buildPage();
     const idx = html.indexOf('function renderKwCatGroupList');
     expect(idx).toBeGreaterThan(-1);
-    const fn = html.slice(idx, idx + 2500);
+    const fn = html.slice(idx, idx + 8000);
     expect(fn).toContain('kwAddToCatId');
   });
 

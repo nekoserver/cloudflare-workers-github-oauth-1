@@ -3612,12 +3612,14 @@ export function getAiChatPage(user: {
     var kwCatGroupBody = document.getElementById('kwCatGroupBody');
     var kwCachedCatGroups = null;
 
-    function renderKwCatGroupList(groups, selectedIds, catMap) {
+    function renderKwCatGroupList(groups, selectedIds, catMap, ownerGroupId) {
+      var isRemoveMode = !!ownerGroupId;
       var html = '';
       if (groups && groups.length > 0) {
         html += '<div style="font-size:11px;font-weight:600;color:var(--text-secondary);margin-bottom:6px;">既存の大分類カテゴリ :</div>';
         html += '<div style="margin-bottom:12px;">';
         groups.forEach(function(g) {
+          if (isRemoveMode && String(g.id) !== String(ownerGroupId)) return;
           var matchedNames = (g.category_ids || []).map(function(id) { return catMap[id] ? catMap[id].name : '#' + id; }).join('・');
           html += '<button type="button" class="cg-group-btn" data-group-id="' + escHtml(g.id) + '" data-group-name="' + escHtml(g.group_name) + '" data-group-ids="' + escHtml(JSON.stringify(g.category_ids)) + '" style="display:block;width:100%;text-align:left;margin-bottom:4px;">';
           html += '<span style="font-weight:600;">' + escHtml(g.group_name) + '</span> <span style="font-size:10px;color:var(--text-muted);">(' + escHtml(matchedNames) + ')</span>';
@@ -3625,86 +3627,142 @@ export function getAiChatPage(user: {
         });
         html += '</div>';
       }
-      html += '<div style="border-top:1px solid var(--border-color);padding-top:12px;">';
-      html += '<div style="font-size:11px;font-weight:600;color:var(--text-secondary);margin-bottom:6px;">新しい大分類カテゴリとして登録 :</div>';
-      html += '<div style="font-size:11px;color:var(--text-muted);margin-bottom:8px;">選択中のカテゴリ: ' + selectedIds.map(function(id) { return escHtml(catMap[id] ? catMap[id].name : '#' + id); }).join('・') + '</div>';
-      html += '<div style="display:flex;gap:6px;align-items:center;">';
-      html += '<input id="kwCatGroupNameInput" type="text" maxlength="64" placeholder="大分類名を入力" style="flex:1;padding:6px 10px;font-size:12px;border:1px solid var(--border-color);border-radius:4px;background:var(--card-bg);color:var(--text-primary);">';
-      html += '<button id="kwCatGroupConfirm" style="padding:6px 14px;font-size:12px;border-radius:4px;border:none;background:#3b82f6;color:#fff;cursor:pointer;white-space:nowrap;">登録</button>';
-      html += '</div>';
-      html += '<div id="kwCatGroupError" style="font-size:11px;color:#e53e3e;margin-top:4px;min-height:14px;"></div>';
-      html += '</div>';
+      if (isRemoveMode) {
+        html += '<div id="kwCatGroupRemoveRow" style="display:none;margin-top:8px;">';
+        html += '<button id="kwCatGroupRemoveBtn" style="padding:7px 14px;font-size:12px;border-radius:4px;border:none;background:#e53e3e;color:#fff;cursor:pointer;width:100%;">この大分類から削除する</button>';
+        html += '</div>';
+      } else {
+        html += '<div style="border-top:1px solid var(--border-color);padding-top:12px;">';
+        html += '<div style="font-size:11px;font-weight:600;color:var(--text-secondary);margin-bottom:6px;">新しい大分類カテゴリとして登録 :</div>';
+        html += '<div style="font-size:11px;color:var(--text-muted);margin-bottom:8px;">選択中のカテゴリ: ' + selectedIds.map(function(id) { return escHtml(catMap[id] ? catMap[id].name : '#' + id); }).join('・') + '</div>';
+        html += '<div style="display:flex;gap:6px;align-items:center;">';
+        html += '<input id="kwCatGroupNameInput" type="text" maxlength="64" placeholder="大分類名を入力" style="flex:1;padding:6px 10px;font-size:12px;border:1px solid var(--border-color);border-radius:4px;background:var(--card-bg);color:var(--text-primary);">';
+        html += '<button id="kwCatGroupConfirm" style="padding:6px 14px;font-size:12px;border-radius:4px;border:none;background:#3b82f6;color:#fff;cursor:pointer;white-space:nowrap;">登録</button>';
+        html += '</div>';
+        html += '<div id="kwCatGroupError" style="font-size:11px;color:#e53e3e;margin-top:4px;min-height:14px;"></div>';
+        html += '</div>';
+      }
       kwCatGroupBody.innerHTML = html;
-      kwCatGroupBody.querySelectorAll('.cg-group-btn').forEach(function(btn) {
-        btn.addEventListener('click', function() {
-          if (kwAddToCatId != null) {
-            var groupId = btn.dataset.groupId;
-            var groupName = btn.dataset.groupName || '';
+      if (isRemoveMode) {
+        var ownerBtn = kwCatGroupBody.querySelector('.cg-group-btn[data-group-id="' + ownerGroupId + '"]');
+        var removeRow = document.getElementById('kwCatGroupRemoveRow');
+        var removeBtn = document.getElementById('kwCatGroupRemoveBtn');
+        if (ownerBtn) {
+          ownerBtn.classList.add('cg-group-btn-active');
+          ownerBtn.addEventListener('click', function() {
+            ownerBtn.classList.toggle('cg-group-btn-active');
+            if (removeRow) {
+              removeRow.style.display = ownerBtn.classList.contains('cg-group-btn-active') ? 'none' : 'block';
+            }
+          });
+        }
+        if (removeBtn) {
+          removeBtn.addEventListener('click', function() {
             var confirmOverlay = document.createElement('div');
             confirmOverlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.55);display:flex;align-items:center;justify-content:center;z-index:' + String(getNextZ()) + ';';
             var confirmBox = document.createElement('div');
             confirmBox.style.cssText = 'background:var(--card-bg);border-radius:10px;padding:22px 24px;max-width:340px;width:90%;box-shadow:0 8px 32px rgba(0,0,0,0.18);';
-            confirmBox.innerHTML = '<div style="font-size:13px;line-height:1.6;margin-bottom:18px;color:var(--text-primary);">「' + escHtml(groupName) + '」に「' + escHtml(kwAddToCatName) + '」を追加登録しますか？</div>' +
+            confirmBox.innerHTML = '<div style="font-size:13px;line-height:1.6;margin-bottom:18px;color:var(--text-primary);">分類カテゴリ「' + escHtml(kwRemoveFromCatName) + '」を大分類カテゴリから削除します</div>' +
               '<div style="display:flex;gap:10px;justify-content:flex-end;">' +
-              '<button id="kwAddCatNo" style="padding:7px 16px;border-radius:6px;border:1px solid var(--border-color);background:var(--bg-secondary);color:var(--text-primary);font-size:13px;cursor:pointer;">いいえ</button>' +
-              '<button id="kwAddCatYes" style="padding:7px 16px;border-radius:6px;border:none;background:#3b82f6;color:#fff;font-size:13px;cursor:pointer;">はい</button>' +
+              '<button id="kwRemoveCatNo" style="padding:7px 16px;border-radius:6px;border:1px solid var(--border-color);background:var(--bg-secondary);color:var(--text-primary);font-size:13px;cursor:pointer;">いいえ</button>' +
+              '<button id="kwRemoveCatYes" style="padding:7px 16px;border-radius:6px;border:none;background:#e53e3e;color:#fff;font-size:13px;cursor:pointer;">はい</button>' +
               '</div>';
             confirmOverlay.appendChild(confirmBox);
             document.body.appendChild(confirmOverlay);
-            confirmBox.querySelector('#kwAddCatNo').addEventListener('click', function() {
+            confirmBox.querySelector('#kwRemoveCatNo').addEventListener('click', function() {
               document.body.removeChild(confirmOverlay);
             });
-            confirmBox.querySelector('#kwAddCatYes').addEventListener('click', function() {
-              var yesBtn = confirmBox.querySelector('#kwAddCatYes');
+            confirmBox.querySelector('#kwRemoveCatYes').addEventListener('click', function() {
+              var yesBtn = confirmBox.querySelector('#kwRemoveCatYes');
               yesBtn.disabled = true;
-              var addId = kwAddToCatId;
-              fetch('/api/aichat/category-groups/' + encodeURIComponent(groupId) + '/add-category', {
+              var removeId = kwRemoveFromCatId;
+              fetch('/api/aichat/category-groups/' + encodeURIComponent(String(ownerGroupId)) + '/remove-category', {
                 method: 'POST', credentials: 'same-origin',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ category_id: addId })
+                body: JSON.stringify({ category_id: removeId })
               }).then(function(r) { return r.json(); }).then(function() {
-                kwAddToCatId = null;
-                kwAddToCatName = '';
+                kwRemoveFromCatId = null;
+                kwRemoveFromCatName = '';
                 document.body.removeChild(confirmOverlay);
                 kwCatGroupModal.classList.remove('open');
                 kwCatGroupModal.setAttribute('aria-hidden', 'true');
-                selectedGroupId = groupId;
                 renderKwClassifyList();
               }).catch(function() { yesBtn.disabled = false; });
             });
-          } else {
-            var ids = JSON.parse(btn.dataset.groupIds || '[]');
-            var newSel = {};
-            ids.forEach(function(id) { newSel[String(id)] = true; });
-            if (typeof applyKwBadgeColorsExternal === 'function') applyKwBadgeColorsExternal(newSel);
-            kwCatGroupModal.classList.remove('open');
-            kwCatGroupModal.setAttribute('aria-hidden', 'true');
-          }
-        });
-      });
-      var nameInput = document.getElementById('kwCatGroupNameInput');
-      var confirmBtn = document.getElementById('kwCatGroupConfirm');
-      var errDiv = document.getElementById('kwCatGroupError');
-      if (nameInput && confirmBtn) {
-        confirmBtn.addEventListener('click', function() {
-          var name = nameInput.value.trim();
-          if (!name) { errDiv.textContent = 'グループ名を入力してください'; return; }
-          confirmBtn.disabled = true;
-          fetch('/api/aichat/category-groups', {
-            method: 'POST', credentials: 'same-origin',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ group_name: name, category_ids: selectedIds })
-          }).then(function(r) { return r.json(); })
-            .then(function(d) {
-              if (d.error) { errDiv.textContent = d.error; confirmBtn.disabled = false; return; }
-              kwCachedCatGroups = null;
+          });
+        }
+      } else {
+        kwCatGroupBody.querySelectorAll('.cg-group-btn').forEach(function(btn) {
+          btn.addEventListener('click', function() {
+            if (kwAddToCatId != null) {
+              var groupId = btn.dataset.groupId;
+              var groupName = btn.dataset.groupName || '';
+              var confirmOverlay = document.createElement('div');
+              confirmOverlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.55);display:flex;align-items:center;justify-content:center;z-index:' + String(getNextZ()) + ';';
+              var confirmBox = document.createElement('div');
+              confirmBox.style.cssText = 'background:var(--card-bg);border-radius:10px;padding:22px 24px;max-width:340px;width:90%;box-shadow:0 8px 32px rgba(0,0,0,0.18);';
+              confirmBox.innerHTML = '<div style="font-size:13px;line-height:1.6;margin-bottom:18px;color:var(--text-primary);">「' + escHtml(groupName) + '」に「' + escHtml(kwAddToCatName) + '」を追加登録しますか？</div>' +
+                '<div style="display:flex;gap:10px;justify-content:flex-end;">' +
+                '<button id="kwAddCatNo" style="padding:7px 16px;border-radius:6px;border:1px solid var(--border-color);background:var(--bg-secondary);color:var(--text-primary);font-size:13px;cursor:pointer;">いいえ</button>' +
+                '<button id="kwAddCatYes" style="padding:7px 16px;border-radius:6px;border:none;background:#3b82f6;color:#fff;font-size:13px;cursor:pointer;">はい</button>' +
+                '</div>';
+              confirmOverlay.appendChild(confirmBox);
+              document.body.appendChild(confirmOverlay);
+              confirmBox.querySelector('#kwAddCatNo').addEventListener('click', function() {
+                document.body.removeChild(confirmOverlay);
+              });
+              confirmBox.querySelector('#kwAddCatYes').addEventListener('click', function() {
+                var yesBtn = confirmBox.querySelector('#kwAddCatYes');
+                yesBtn.disabled = true;
+                var addId = kwAddToCatId;
+                fetch('/api/aichat/category-groups/' + encodeURIComponent(groupId) + '/add-category', {
+                  method: 'POST', credentials: 'same-origin',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ category_id: addId })
+                }).then(function(r) { return r.json(); }).then(function() {
+                  kwAddToCatId = null;
+                  kwAddToCatName = '';
+                  document.body.removeChild(confirmOverlay);
+                  kwCatGroupModal.classList.remove('open');
+                  kwCatGroupModal.setAttribute('aria-hidden', 'true');
+                  selectedGroupId = groupId;
+                  renderKwClassifyList();
+                }).catch(function() { yesBtn.disabled = false; });
+              });
+            } else {
+              var ids = JSON.parse(btn.dataset.groupIds || '[]');
+              var newSel = {};
+              ids.forEach(function(id) { newSel[String(id)] = true; });
+              if (typeof applyKwBadgeColorsExternal === 'function') applyKwBadgeColorsExternal(newSel);
               kwCatGroupModal.classList.remove('open');
               kwCatGroupModal.setAttribute('aria-hidden', 'true');
-              selectedGroupId = d.id;
-              renderKwClassifyList();
-            })
-            .catch(function() { errDiv.textContent = '登録に失敗しました'; confirmBtn.disabled = false; });
+            }
+          });
         });
+        var nameInput = document.getElementById('kwCatGroupNameInput');
+        var confirmBtn = document.getElementById('kwCatGroupConfirm');
+        var errDiv = document.getElementById('kwCatGroupError');
+        if (nameInput && confirmBtn) {
+          confirmBtn.addEventListener('click', function() {
+            var name = nameInput.value.trim();
+            if (!name) { errDiv.textContent = 'グループ名を入力してください'; return; }
+            confirmBtn.disabled = true;
+            fetch('/api/aichat/category-groups', {
+              method: 'POST', credentials: 'same-origin',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ group_name: name, category_ids: selectedIds })
+            }).then(function(r) { return r.json(); })
+              .then(function(d) {
+                if (d.error) { errDiv.textContent = d.error; confirmBtn.disabled = false; return; }
+                kwCachedCatGroups = null;
+                kwCatGroupModal.classList.remove('open');
+                kwCatGroupModal.setAttribute('aria-hidden', 'true');
+                selectedGroupId = d.id;
+                renderKwClassifyList();
+              })
+              .catch(function() { errDiv.textContent = '登録に失敗しました'; confirmBtn.disabled = false; });
+          });
+        }
       }
     }
 
@@ -3732,6 +3790,8 @@ export function getAiChatPage(user: {
     var selectedGroupId = null;
     var kwAddToCatId = null;
     var kwAddToCatName = '';
+    var kwRemoveFromCatId = null;
+    var kwRemoveFromCatName = '';
 
     function applyKwGroupBadgeState() {
       kwClassifyListBody.querySelectorAll('.kw-group-summary-badge').forEach(function(el) {
@@ -3822,6 +3882,18 @@ export function getAiChatPage(user: {
         kwClassifyListBody.querySelectorAll('.kw-cat-summary-badge').forEach(function(catEl) {
           catEl.addEventListener('click', function() {
             var catId = catEl.dataset.catId;
+            if (selectedGroupId && selectedCats[catId]) {
+              var catMap = {};
+              cats.forEach(function(cat) { catMap[String(cat.id)] = { name: cat.name, color: cat.color || '#6366f1' }; });
+              kwRemoveFromCatId = Number(catId);
+              kwRemoveFromCatName = catMap[catId] ? catMap[catId].name : catId;
+              kwCatGroupBody.innerHTML = '<div class="search-log-loading">読み込み中...</div>';
+              kwCatGroupModal.style.zIndex = String(getNextZ());
+              kwCatGroupModal.classList.add('open');
+              kwCatGroupModal.setAttribute('aria-hidden', 'false');
+              loadKwCatGroups(function(grps) { renderKwCatGroupList(grps, [], catMap, selectedGroupId); });
+              return;
+            }
             if (selectedGroupId && !selectedCats[catId]) {
               var catMap = {};
               cats.forEach(function(cat) { catMap[String(cat.id)] = { name: cat.name, color: cat.color || '#6366f1' }; });
