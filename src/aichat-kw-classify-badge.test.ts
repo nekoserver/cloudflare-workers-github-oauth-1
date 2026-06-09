@@ -12,7 +12,7 @@ function buildPage(): string {
 describe('キーワード分類モーダル: kw-cat-summary-badge のスタイル（cg-group-btn 準拠）', () => {
   it('border-radius が 2px である（丸なし）', () => {
     const html = buildPage();
-    const idx = html.indexOf('kw-cat-summary-badge');
+    const idx = html.indexOf('class="kw-cat-summary-badge"');
     expect(idx).toBeGreaterThan(-1);
     const snippet = html.slice(idx, idx + 400);
     expect(snippet).toContain('border-radius:2px');
@@ -20,42 +20,42 @@ describe('キーワード分類モーダル: kw-cat-summary-badge のスタイ�
 
   it('border が 1px solid var(--border-color) である', () => {
     const html = buildPage();
-    const idx = html.indexOf('kw-cat-summary-badge');
+    const idx = html.indexOf('class="kw-cat-summary-badge"');
     const snippet = html.slice(idx, idx + 400);
     expect(snippet).toContain('border:1px solid var(--border-color)');
   });
 
   it('font-size が 11px である', () => {
     const html = buildPage();
-    const idx = html.indexOf('kw-cat-summary-badge');
+    const idx = html.indexOf('class="kw-cat-summary-badge"');
     const snippet = html.slice(idx, idx + 400);
     expect(snippet).toContain('font-size:11px');
   });
 
   it('padding が 3px 11px である', () => {
     const html = buildPage();
-    const idx = html.indexOf('kw-cat-summary-badge');
+    const idx = html.indexOf('class="kw-cat-summary-badge"');
     const snippet = html.slice(idx, idx + 400);
     expect(snippet).toContain('padding:3px 11px');
   });
 
   it('margin が 1px である', () => {
     const html = buildPage();
-    const idx = html.indexOf('kw-cat-summary-badge');
+    const idx = html.indexOf('class="kw-cat-summary-badge"');
     const snippet = html.slice(idx, idx + 400);
     expect(snippet).toContain('margin:1px');
   });
 
   it('border-radius:10px は使われない', () => {
     const html = buildPage();
-    const idx = html.indexOf('kw-cat-summary-badge');
+    const idx = html.indexOf('class="kw-cat-summary-badge"');
     const snippet = html.slice(idx, idx + 400);
     expect(snippet).not.toContain('border-radius:10px');
   });
 
   it('border:1.5px solid は使われない', () => {
     const html = buildPage();
-    const idx = html.indexOf('kw-cat-summary-badge');
+    const idx = html.indexOf('class="kw-cat-summary-badge"');
     const snippet = html.slice(idx, idx + 400);
     expect(snippet).not.toContain('border:1.5px solid');
   });
@@ -119,7 +119,7 @@ describe('キーワード分類モーダル: kw-classify-kw-badge のスタイ�
 
   it('分類済みバッジが kw-kw-classified クラスを使う', () => {
     const html = buildPage();
-    const idx = html.indexOf("'kw-classify-kw-badge sq-kw-badge'");
+    const idx = html.indexOf("var kwCls = 'kw-classify-kw-badge sq-kw-badge'");
     expect(idx).toBeGreaterThan(-1);
     const snippet = html.slice(idx, idx + 200);
     expect(snippet).toContain('kw-kw-classified');
@@ -127,7 +127,7 @@ describe('キーワード分類モーダル: kw-classify-kw-badge のスタイ�
 
   it('分類済みバッジが sq-kw-badge-active を使わない', () => {
     const html = buildPage();
-    const idx = html.indexOf("'kw-classify-kw-badge sq-kw-badge'");
+    const idx = html.indexOf("var kwCls = 'kw-classify-kw-badge sq-kw-badge'");
     const snippet = html.slice(idx, idx + 200);
     expect(snippet).not.toContain('sq-kw-badge-active');
   });

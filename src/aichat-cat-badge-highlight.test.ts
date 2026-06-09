@@ -42,7 +42,7 @@ describe('カテゴリバッジタップ: キーワードバッジ色変更', ()
 
   it('カテゴリバッジクリック時に kw-classify-kw-badge の背景色を変えるコードがある', () => {
     const html = buildPage();
-    const idx = html.indexOf('function renderKwClassifyList');
+    const idx = html.indexOf('function applyKwBadgeColors');
     expect(idx).toBeGreaterThan(-1);
     const fn = html.slice(idx, idx + 4000);
     // catId を参照してクラスを切り替えるコードがある
