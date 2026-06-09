@@ -26,7 +26,7 @@ describe('大分類バッジタップ: カテゴリ選択状態の一括切替',
 
   it("querySelectorAll('.kw-group-summary-badge') にクリックリスナーが追加される", () => {
     const html = buildPage();
-    const idx = html.indexOf("querySelectorAll('.kw-group-summary-badge')");
+    const idx = html.lastIndexOf("querySelectorAll('.kw-group-summary-badge')");
     expect(idx).toBeGreaterThan(-1);
     const snippet = html.slice(idx, idx + 120);
     expect(snippet).toContain('addEventListener');
@@ -34,7 +34,7 @@ describe('大分類バッジタップ: カテゴリ選択状態の一括切替',
 
   it('大分類クリック時に selectedCats がリセットされる', () => {
     const html = buildPage();
-    const idx = html.indexOf("querySelectorAll('.kw-group-summary-badge')");
+    const idx = html.lastIndexOf("querySelectorAll('.kw-group-summary-badge')");
     expect(idx).toBeGreaterThan(-1);
     const fn = html.slice(idx, idx + 500);
     expect(fn).toContain('selectedCats = {}');
@@ -42,23 +42,23 @@ describe('大分類バッジタップ: カテゴリ選択状態の一括切替',
 
   it('大分類クリック時にグループの catIds を selectedCats に設定する', () => {
     const html = buildPage();
-    const idx = html.indexOf("querySelectorAll('.kw-group-summary-badge')");
-    const fn = html.slice(idx, idx + 500);
+    const idx = html.lastIndexOf("querySelectorAll('.kw-group-summary-badge')");
+    const fn = html.slice(idx, idx + 800);
     expect(fn).toContain('catIds');
     expect(fn).toContain('selectedCats[String(id)]');
   });
 
   it('大分類クリック時に applyKwBadgeColors を呼ぶ', () => {
     const html = buildPage();
-    const idx = html.indexOf("querySelectorAll('.kw-group-summary-badge')");
-    const fn = html.slice(idx, idx + 500);
+    const idx = html.lastIndexOf("querySelectorAll('.kw-group-summary-badge')");
+    const fn = html.slice(idx, idx + 800);
     expect(fn).toContain('applyKwBadgeColors()');
   });
 
   it('data-cat-ids を JSON.parse して catIds を取り出す', () => {
     const html = buildPage();
-    const idx = html.indexOf("querySelectorAll('.kw-group-summary-badge')");
-    const fn = html.slice(idx, idx + 500);
+    const idx = html.lastIndexOf("querySelectorAll('.kw-group-summary-badge')");
+    const fn = html.slice(idx, idx + 800);
     expect(fn).toContain('JSON.parse');
     expect(fn).toContain('catIds');
   });

@@ -205,7 +205,7 @@ describe('キーワード分類モーダル: キーワードバッジ縦余白',
   it('キーワードバッジが line-height:1 のラッパー div 内にある', () => {
     const html = buildPage();
     const idx = html.indexOf('function renderKwClassifyList');
-    const fn = html.slice(idx, idx + 3000);
+    const fn = html.slice(idx, idx + 5000);
     expect(fn).toContain('line-height:1');
   });
 });

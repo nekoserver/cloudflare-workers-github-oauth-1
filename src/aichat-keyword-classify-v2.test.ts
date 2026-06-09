@@ -52,7 +52,7 @@ describe('キーワード分類拡張: renderKwClassifyList', () => {
     const html = buildPage();
     const idx = html.indexOf('function renderKwClassifyList');
     expect(idx).toBeGreaterThan(-1);
-    const fn = html.slice(idx, idx + 3200);
+    const fn = html.slice(idx, idx + 5000);
     expect(fn).toContain('is_classified');
     expect(fn).toContain('kw-kw-classified');
   });

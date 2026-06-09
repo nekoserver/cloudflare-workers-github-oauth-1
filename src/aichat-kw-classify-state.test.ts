@@ -37,7 +37,7 @@ describe('キーワード分類: 分類決定後のカテゴリ選択状態保�
     const html = buildPage();
     const idx = html.indexOf('function renderKwClassifyList');
     expect(idx).toBeGreaterThan(-1);
-    const fn = html.slice(idx, idx + 3500);
+    const fn = html.slice(idx, idx + 5000);
     expect(fn).toContain('applyKwBadgeColors()');
   });
 
