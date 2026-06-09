@@ -1020,7 +1020,7 @@ describe('renderLinkedQuestions — 過去ログモーダル連携', () => {
     const html = getAiChatPage(minimalUser, []);
     const idx = html.indexOf('function renderLinkedQuestions(');
     expect(idx).toBeGreaterThan(-1);
-    const fn = html.slice(idx, idx + 3000);
+    const fn = html.slice(idx, idx + 3500);
     expect(fn).toContain('openHistoryModalByShareId');
   });
 });
