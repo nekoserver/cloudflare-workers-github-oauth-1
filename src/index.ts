@@ -3557,12 +3557,20 @@ app.get('/api/aichat/category-groups', authMiddleware, async (c) => {
   if (!c.env.DB) return jsonUtf8({ groups: [] });
   try {
     const rows = await c.env.DB.prepare(
-      `SELECT id, group_name, category_ids FROM aichat_category_groups WHERE user_id = ? AND is_deleted = 0 ORDER BY group_name ASC`
-    ).bind(user.sub).all<{ id: string; group_name: string; category_ids: string }>();
+      `SELECT ag.id, ag.group_name, ag.category_ids,
+         COUNT(DISTINCT m.keyword) AS kw_count
+       FROM aichat_category_groups ag
+       LEFT JOIN json_each(ag.category_ids) je
+       LEFT JOIN aichat_keyword_category_map m
+         ON m.user_id = ag.user_id AND m.category_id = CAST(je.value AS INTEGER)
+       WHERE ag.user_id = ? AND (ag.is_deleted = 0 OR ag.is_deleted IS NULL)
+       GROUP BY ag.id
+       ORDER BY kw_count DESC, ag.group_name ASC`
+    ).bind(user.sub).all<{ id: string; group_name: string; category_ids: string; kw_count: number }>();
     const groups = (rows.results ?? []).map((r) => {
       let ids: number[] = [];
       try { ids = JSON.parse(r.category_ids); } catch { /* ignore */ }
-      return { id: r.id, group_name: r.group_name, category_ids: ids };
+      return { id: r.id, group_name: r.group_name, category_ids: ids, kw_count: r.kw_count ?? 0 };
     });
     return jsonUtf8({ groups });
   } catch {
