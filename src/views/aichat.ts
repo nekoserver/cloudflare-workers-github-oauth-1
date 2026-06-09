@@ -271,13 +271,14 @@ export function getAiChatPage(user: {
     .sidebar-kw-sort-btn.active { background: var(--accent-color, #667eea); color: #fff; border-color: var(--accent-color, #667eea); }
     .sidebar-kw-item {
       padding: 6px 12px; font-size: 12px; cursor: pointer; display: flex;
-      justify-content: space-between; align-items: center;
+      justify-content: space-between; align-items: flex-start;
       border-bottom: 1px solid var(--border-color);
       color: var(--text-primary);
     }
     .sidebar-kw-item:hover { background: var(--bg-secondary); }
     .sidebar-kw-item.selected { background: rgba(102,126,234,0.12); }
     .sidebar-kw-count { font-size: 10px; color: var(--text-muted); flex-shrink: 0; margin-left: 6px; }
+    .kw-model-tag { display:inline-block; font-size:9px; color:var(--text-secondary); background:var(--bg-secondary); border:1px solid var(--border-color); border-radius:3px; padding:0 3px; margin:1px 2px 1px 0; vertical-align:middle; max-width:120px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 
     .sidebar-head {
       padding: 10px 12px 8px; border-bottom: 1px solid var(--border-color); flex-shrink: 0;
@@ -1565,8 +1566,18 @@ export function getAiChatPage(user: {
       var html = '';
       sorted.forEach(function(kw) {
         var sel = currentKeywordLabel === kw.keyword ? ' selected' : '';
+        var modelTags = '';
+        if (kw.models) {
+          kw.models.split(',').forEach(function(m) {
+            var short = m.trim().split('/').pop();
+            if (short) modelTags += '<span class="kw-model-tag" title="' + escHtml(m.trim()) + '">' + escHtml(short) + '</span>';
+          });
+        }
         html += '<div class="sidebar-kw-item' + sel + '" data-keyword="' + escHtml(kw.keyword) + '">'
-          + '<span>' + escHtml(kw.keyword) + '</span>'
+          + '<div style="flex:1;min-width:0;">'
+          + '<div>' + escHtml(kw.keyword) + '</div>'
+          + (modelTags ? '<div style="margin-top:2px;">' + modelTags + '</div>' : '')
+          + '</div>'
           + '<span class="sidebar-kw-count">' + kw.total_count + '回</span>'
           + '</div>';
       });

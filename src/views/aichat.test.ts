@@ -1571,7 +1571,7 @@ describe('キーワードモーダル：ソートトグル・件数表示・検�
     const html = getAiChatPage(minimalUser, []);
     const idx = html.indexOf('function renderKwList(');
     expect(idx).toBeGreaterThan(-1);
-    const fn = html.slice(idx, idx + 1400);
+    const fn = html.slice(idx, idx + 2200);
     expect(fn).toContain('sidebarSearch.value');
   });
 
