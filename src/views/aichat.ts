@@ -314,7 +314,7 @@ export function getAiChatPage(user: {
     .slm-q { font-size:10px; color:var(--text-muted); margin-top:4px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 
     .sidebar-results {
-      flex: 1; overflow-y: auto; display: flex; flex-direction: column;
+      flex: 1; overflow-y: auto; display: flex; flex-direction: column; min-height: 0;
     }
     .sidebar-result-item {
       position: relative; overflow: hidden;
@@ -2054,7 +2054,7 @@ export function getAiChatPage(user: {
           (data.days || []).forEach(function(d) { calDayData[d.date] = d.count; });
           renderCalendar(month);
         })
-        .catch(function() {});
+        .catch(function() { renderCalendar(month); });
     }
 
     function renderCalendar(month) {
@@ -3700,6 +3700,8 @@ export function getAiChatPage(user: {
               kwCachedCatGroups = null;
               kwCatGroupModal.classList.remove('open');
               kwCatGroupModal.setAttribute('aria-hidden', 'true');
+              selectedGroupId = d.id;
+              renderKwClassifyList();
             })
             .catch(function() { errDiv.textContent = '登録に失敗しました'; confirmBtn.disabled = false; });
         });
