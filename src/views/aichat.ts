@@ -3717,17 +3717,28 @@ export function getAiChatPage(user: {
       kwClassifyListBody.innerHTML = '<div class="search-log-loading">読み込み中...</div>';
       Promise.allSettled([
         fetch('/api/aichat/keyword-categories-summary', { credentials: 'same-origin' }).then(function(r) { return r.json(); }),
-        fetch('/api/aichat/all-keywords', { credentials: 'same-origin' }).then(function(r) { return r.json(); })
+        fetch('/api/aichat/all-keywords', { credentials: 'same-origin' }).then(function(r) { return r.json(); }),
+        fetch('/api/aichat/category-groups', { credentials: 'same-origin' }).then(function(r) { return r.json(); })
       ]).then(function(results) {
-        var catData = results[0].status === 'fulfilled' ? results[0].value : {};
-        var kwData  = results[1].status === 'fulfilled' ? results[1].value : {};
-        var cats = catData.categories || [];
-        var kws  = kwData.keywords  || [];
+        var catData   = results[0].status === 'fulfilled' ? results[0].value : {};
+        var kwData    = results[1].status === 'fulfilled' ? results[1].value : {};
+        var groupData = results[2].status === 'fulfilled' ? results[2].value : {};
+        var cats   = catData.categories  || [];
+        var kws    = kwData.keywords     || [];
+        var groups = (groupData.groups || []).slice().sort(function(a, b) { return (b.kw_count || 0) - (a.kw_count || 0); });
         var html = '';
         if (cats.length > 0) {
-          html += '<div style="margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid var(--border-color);">';
+          html += '<div style="margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid var(--border-color);">';
           cats.forEach(function(cat) {
             html += '<span class="kw-cat-summary-badge" data-cat-id="' + escHtml(String(cat.id)) + '" data-cat-color="' + escHtml(cat.color || '#6366f1') + '" style="display:inline-block;font-size:11px;padding:3px 11px;border-radius:2px;border:1px solid var(--border-color);background:var(--bg-secondary);color:var(--text-muted);cursor:pointer;white-space:nowrap;margin:1px;">' + escHtml(cat.name) + ' (' + cat.kw_count + ')</span>';
+          });
+          html += '</div>';
+        }
+        if (groups.length > 0) {
+          html += '<div style="margin-bottom:10px;padding-bottom:10px;border-bottom:1px solid var(--border-color);">';
+          html += '<span style="font-size:11px;font-weight:600;color:var(--text-secondary);margin-right:6px;">大分類 :</span>';
+          groups.forEach(function(g) {
+            html += '<span class="kw-group-summary-badge" data-group-id="' + escHtml(g.id) + '" style="display:inline-block;font-size:11px;padding:3px 11px;border-radius:2px;border:1px solid var(--border-color);background:var(--bg-secondary);color:var(--text-muted);white-space:nowrap;margin:1px;">' + escHtml(g.group_name) + ' (' + (g.kw_count || 0) + ')</span>';
           });
           html += '</div>';
         }
