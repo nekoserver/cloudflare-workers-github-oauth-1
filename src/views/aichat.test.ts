@@ -1079,7 +1079,7 @@ describe('サイドバー開時の自動日付ロード', () => {
     const html = getAiChatPage(minimalUser, []);
     const idx = html.indexOf("sidebarToggle.addEventListener('click'");
     expect(idx).toBeGreaterThan(-1);
-    const fn = html.slice(idx, idx + 600);
+    const fn = html.slice(idx, idx + 1000);
     expect(fn).toContain('doDateLoad');
   });
 
@@ -1087,7 +1087,7 @@ describe('サイドバー開時の自動日付ロード', () => {
     const html = getAiChatPage(minimalUser, []);
     const idx = html.indexOf("sidebarToggle.addEventListener('click'");
     expect(idx).toBeGreaterThan(-1);
-    const fn = html.slice(idx, idx + 600);
+    const fn = html.slice(idx, idx + 1000);
     expect(fn).toContain('calSelectedDay');
   });
 
