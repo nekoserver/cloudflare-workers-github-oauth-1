@@ -3126,14 +3126,24 @@ export function getAiChatPage(user: {
           '<th>サブクエリ</th>' +
           '<th>キーワード</th>' +
           '</tr></thead><tbody>';
+        var sqCatColorMap = {};
+        subqueriesCats.forEach(function(cat) { sqCatColorMap[String(cat.id)] = cat.color || '#6366f1'; });
         filtered.forEach(function(item) {
           var kwHtml = '';
           if (item.keywords && item.keywords.length > 0) {
             item.keywords.forEach(function(kw) {
-              var kwStyle = classifiedSet[kw.keyword]
-                ? ' style="border:1.5px solid #7c3aed;color:#7c3aed;background:transparent;"'
-                : '';
-              kwHtml += '<span class="sq-kw-badge" data-subquery-id="' + escHtml(String(item.id)) + '" data-subquery="' + escHtml(item.query) + '" data-keyword="' + escHtml(kw.keyword) + '"' + kwStyle + '>' + escHtml(kw.keyword) + ' (' + kw.cnt + ')</span>';
+              var cid = subqueriesKwCatMap[kw.keyword];
+              var isActive = cid != null && sqSelectedCats[String(cid)];
+              var kwClass = 'sq-kw-badge';
+              var kwStyle = '';
+              if (isActive) {
+                var catColor = sqCatColorMap[String(cid)] || '#6366f1';
+                kwClass += ' sq-kw-badge-active';
+                kwStyle = ' style="--kwcat-color:' + escHtml(catColor) + ';--kwcat-bg:' + escHtml(catColor) + '33;"';
+              } else if (classifiedSet[kw.keyword]) {
+                kwStyle = ' style="border:1.5px solid #7c3aed;color:#7c3aed;background:transparent;"';
+              }
+              kwHtml += '<span class="' + kwClass + '" data-subquery-id="' + escHtml(String(item.id)) + '" data-subquery="' + escHtml(item.query) + '" data-keyword="' + escHtml(kw.keyword) + '"' + kwStyle + '>' + escHtml(kw.keyword) + ' (' + kw.cnt + ')</span>';
             });
           }
           html += '<tr>';

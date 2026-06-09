@@ -25,7 +25,7 @@ describe('サブクエリ一覧: 分類済みキーワードバッジの中抜�
     const html = buildPage();
     const idx = html.indexOf('function renderSubqueriesList');
     expect(idx).toBeGreaterThan(-1);
-    const fn = html.slice(idx, idx + 3000);
+    const fn = html.slice(idx, idx + 3600);
     expect(fn).toContain('7c3aed');
   });
 
