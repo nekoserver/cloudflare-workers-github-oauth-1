@@ -3688,6 +3688,31 @@ export function getAiChatPage(user: {
       '#6b7280','#1e293b'
     ];
 
+    var selectedCats = {};
+
+    function applyKwBadgeColors() {
+      kwClassifyListBody.querySelectorAll('.kw-classify-kw-badge').forEach(function(kwEl) {
+        var el = kwEl, cid = el.dataset.catId;
+        var base = 'kw-classify-kw-badge sq-kw-badge';
+        if (cid && selectedCats[cid]) {
+          var c = kwPaletteActColor || (el.dataset.catColor || '#6366f1');
+          el.className = base + ' sq-kw-badge-active';
+          el.style.setProperty('--kwcat-color', c);
+          el.style.setProperty('--kwcat-bg', c + '33');
+        } else {
+          el.className = base + (cid ? ' kw-kw-classified' : '');
+        }
+      });
+      kwClassifyListBody.querySelectorAll('.kw-cat-summary-badge').forEach(function(catEl) {
+        var catId = catEl.dataset.catId;
+        if (selectedCats[catId]) {
+          catEl.classList.add('kw-cat-badge-active');
+        } else {
+          catEl.classList.remove('kw-cat-badge-active');
+        }
+      });
+    }
+
     function renderKwClassifyList() {
       kwClassifyListBody.innerHTML = '<div class="search-log-loading">読み込み中...</div>';
       Promise.allSettled([
@@ -3719,30 +3744,14 @@ export function getAiChatPage(user: {
           html += '</div>';
         }
         kwClassifyListBody.innerHTML = html;
-        var selectedCats = {};
-        function applyKwBadgeColors() {
-          kwClassifyListBody.querySelectorAll('.kw-classify-kw-badge').forEach(function(kwEl) {
-            var el = kwEl, cid = el.dataset.catId;
-            var base = 'kw-classify-kw-badge sq-kw-badge';
-            if (cid && selectedCats[cid]) {
-              var c = kwPaletteActColor || (el.dataset.catColor || '#6366f1');
-              el.className = base + ' sq-kw-badge-active';
-              el.style.setProperty('--kwcat-color', c);
-              el.style.setProperty('--kwcat-bg', c + '33');
-            } else {
-              el.className = base + (cid ? ' kw-kw-classified' : '');
-            }
-          });
-        }
+        applyKwBadgeColors();
         kwClassifyListBody.querySelectorAll('.kw-cat-summary-badge').forEach(function(catEl) {
           catEl.addEventListener('click', function() {
             var catId = catEl.dataset.catId;
             if (selectedCats[catId]) {
               delete selectedCats[catId];
-              catEl.classList.remove('kw-cat-badge-active');
             } else {
               selectedCats[catId] = true;
-              catEl.classList.add('kw-cat-badge-active');
             }
             applyKwBadgeColors();
             var selCount = Object.keys(selectedCats).length;
@@ -3784,6 +3793,7 @@ export function getAiChatPage(user: {
     });
 
     function openKwClassifyList() {
+      selectedCats = {};
       kwClassifyListModal.style.zIndex = String(getNextZ());
       kwClassifyListModal.classList.add('open');
       renderKwClassifyList();

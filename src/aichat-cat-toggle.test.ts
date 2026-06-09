@@ -47,7 +47,7 @@ describe('カテゴリバッジ: 初期中抜き・個別ON/OFF トグル', () =
 
   it('カテゴリバッジタップ時に自バッジのスタイルを ON/OFF で更新するコードがある', () => {
     const html = buildPage();
-    const idx = html.indexOf('function renderKwClassifyList');
+    const idx = html.indexOf('function applyKwBadgeColors');
     expect(idx).toBeGreaterThan(-1);
     const fn = html.slice(idx, idx + 4000);
     // classList で kw-cat-badge-active を ON/OFF するコード
