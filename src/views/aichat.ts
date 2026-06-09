@@ -1515,21 +1515,44 @@ export function getAiChatPage(user: {
       sidebar.classList.remove('open');
       sidebarToggle.classList.remove('active');
       sidebarKwModal.classList.remove('open');
+      sidebarResults.innerHTML = '';
+      currentResults = [];
+      searchLogRecordBtn.style.display = 'none';
+      sidebarStatus.textContent = '';
+      currentMode = 'search';
+      currentDateLabel = '';
+      currentKeywordLabel = '';
+      sidebarModeToggle.style.display = 'none';
     }
 
     sidebarToggle.addEventListener('click', function(e) {
       e.stopPropagation();
-      sidebarOpen = !sidebarOpen;
-      sidebar.classList.toggle('open', sidebarOpen);
-      sidebarToggle.classList.toggle('active', sidebarOpen);
       if (sidebarOpen) {
-        setTimeout(function() { sidebarSearch.focus(); }, 260);
+        closeSidebar();
+        return;
+      }
+      sidebarOpen = true;
+      sidebar.classList.add('open');
+      sidebarToggle.classList.add('active');
+      var q = sidebarSearch.value.trim();
+      if (q) {
+        sidebarResults.innerHTML = '';
+        currentResults = [];
+        searchLogRecordBtn.style.display = 'none';
+        sidebarStatus.textContent = '検索中...';
+        currentMode = 'search';
+        currentDateLabel = '';
+        currentKeywordLabel = '';
+        sidebarModeToggle.style.display = 'none';
+        doSearch(q);
+      } else {
         var todayDate = new Date().toISOString().slice(0, 10);
         calCurrentMonth = todayDate.slice(0, 7);
         calSelectedDay = todayDate;
         loadCalendar(calCurrentMonth);
         doDateLoad(todayDate);
       }
+      setTimeout(function() { sidebarSearch.focus(); }, 260);
     });
 
     document.addEventListener('click', function(e) {
