@@ -107,7 +107,7 @@ describe('検索ログモーダル: JS関数', () => {
     const html = buildPage();
     const idx = html.indexOf('function openSearchLogRecordModal');
     expect(idx).toBeGreaterThan(-1);
-    const fn = html.slice(idx, idx + 600);
+    const fn = html.slice(idx, idx + 800);
     expect(fn).toContain('/api/aichat/search-log/open-modal');
     expect(fn).toContain('POST');
   });

@@ -3162,8 +3162,12 @@ app.post('/api/aichat/search-log/approve', authMiddleware, async (c) => {
        ON CONFLICT(user_id, keyword, share_id) DO NOTHING`
     ).bind(user.sub, keyword, shareId, now, now)
   );
-  await c.env.DB.batch(stmts);
-  return jsonUtf8({ ok: true, count: shareIds.length });
+  try {
+    await c.env.DB.batch(stmts);
+    return jsonUtf8({ ok: true, count: shareIds.length });
+  } catch (e: any) {
+    return jsonUtf8({ ok: false, error: String(e?.message ?? e) }, 500);
+  }
 });
 
 app.post('/api/aichat/search-log', authMiddleware, async (c) => {

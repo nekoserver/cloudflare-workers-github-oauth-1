@@ -1488,6 +1488,8 @@ export function getAiChatPage(user: {
     var searchLogRecordTitle = document.getElementById('searchLogRecordTitle');
     var searchLogApproveBtn = document.getElementById('searchLogApproveBtn');
     var searchLogPendingNewIds = [];
+    var searchLogCurrentKeyword = '';
+    var searchLogCurrentShareIds = [];
     var sidebarStatus = document.getElementById('sidebarStatus');
     var sidebarResults = document.getElementById('sidebarResults');
     var sidebarModeToggle = document.getElementById('sidebarModeToggle');
@@ -1738,6 +1740,8 @@ export function getAiChatPage(user: {
     }
 
     function openSearchLogRecordModal(keyword, shareIds) {
+      searchLogCurrentKeyword = keyword;
+      searchLogCurrentShareIds = shareIds;
       searchLogRecordTitle.textContent = '📋 検索ログ: ' + keyword;
       searchLogRecordModalBody.innerHTML = '<div class="search-log-loading">読み込み中...</div>';
       searchLogApproveBtn.style.display = 'none';
@@ -1788,26 +1792,20 @@ export function getAiChatPage(user: {
       if (e.target === searchLogRecordModal) { searchLogRecordModal.classList.remove('open'); searchLogRecordModal.setAttribute('aria-hidden', 'true'); }
     });
     searchLogApproveBtn.addEventListener('click', function() {
-      var q = sidebarSearch.value.trim();
-      if (!q || !searchLogPendingNewIds.length) return;
+      if (!searchLogCurrentKeyword || !searchLogPendingNewIds.length) return;
       searchLogApproveBtn.disabled = true;
       fetch('/api/aichat/search-log/approve', {
         method: 'POST', credentials: 'same-origin',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ keyword: q, shareIds: searchLogPendingNewIds })
+        body: JSON.stringify({ keyword: searchLogCurrentKeyword, shareIds: searchLogPendingNewIds })
       }).then(function(r) { return r.json(); })
-        .then(function() {
-          searchLogApproveBtn.style.display = 'none';
+        .then(function(data) {
           searchLogApproveBtn.disabled = false;
-          searchLogPendingNewIds = [];
-          searchLogRecordModalBody.querySelectorAll('.slm-entry-new').forEach(function(el) {
-            el.classList.remove('slm-entry-new');
-            el.classList.add('slm-entry-registered');
-            var badge = el.querySelector('.slm-entry-new-badge');
-            if (badge) { badge.className = 'slm-entry-reg-badge'; badge.textContent = '登録済'; }
-          });
-          var summary = searchLogRecordModalBody.querySelector('div');
-          if (summary) summary.innerHTML = '登録が完了しました';
+          if (data.ok) {
+            openSearchLogRecordModal(searchLogCurrentKeyword, searchLogCurrentShareIds);
+          } else {
+            searchLogRecordModalBody.innerHTML = '<div style="color:#e53e3e;font-size:12px;">登録に失敗しました: ' + escHtml(String(data.error || '')) + '</div>';
+          }
         })
         .catch(function() { searchLogApproveBtn.disabled = false; });
     });
