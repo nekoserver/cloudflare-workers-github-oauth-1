@@ -52,6 +52,11 @@ describe('検索ログモーダル: モーダルHTML', () => {
     expect(html).toContain('id="searchLogRecordModalBody"');
   });
 
+  it('承認ボタン (searchLogApproveBtn) が存在する', () => {
+    const html = buildPage();
+    expect(html).toContain('id="searchLogApproveBtn"');
+  });
+
   it('searchLogRecordModal が staticZDefaults に登録されている', () => {
     const html = buildPage();
     const idx = html.indexOf('staticZDefaults');
@@ -68,17 +73,26 @@ describe('検索ログモーダル: CSS', () => {
     expect(html).toContain('.slm-entry');
   });
 
-  it('.slm-entry-new が定義されている', () => {
+  it('.slm-entry-new が定義されている（赤枠・背景透明）', () => {
     const html = buildPage();
     expect(html).toContain('.slm-entry-new');
-  });
-
-  it('.slm-entry-new が赤枠 (#e53e3e) を持つ', () => {
-    const html = buildPage();
     const idx = html.indexOf('.slm-entry-new');
-    expect(idx).toBeGreaterThan(-1);
     const snippet = html.slice(idx, idx + 150);
     expect(snippet).toContain('#e53e3e');
+  });
+
+  it('.slm-entry-registered が定義されている（薄緑背景）', () => {
+    const html = buildPage();
+    expect(html).toContain('.slm-entry-registered');
+  });
+
+  it('.slm-entry-registered が緑系の背景色を持つ', () => {
+    const html = buildPage();
+    const idx = html.indexOf('.slm-entry-registered');
+    expect(idx).toBeGreaterThan(-1);
+    const snippet = html.slice(idx, idx + 150);
+    const hasGreen = snippet.includes('#f0fdf4') || snippet.includes('#dcfce7') || snippet.includes('#d1fae5') || snippet.includes('green');
+    expect(hasGreen).toBe(true);
   });
 });
 
@@ -89,7 +103,7 @@ describe('検索ログモーダル: JS関数', () => {
     expect(html).toContain('function openSearchLogRecordModal');
   });
 
-  it('openSearchLogRecordModal が /api/aichat/search-log/open-modal を POST する', () => {
+  it('openSearchLogRecordModal がモーダルオープン時は /open-modal に POST するが INSERT しない', () => {
     const html = buildPage();
     const idx = html.indexOf('function openSearchLogRecordModal');
     expect(idx).toBeGreaterThan(-1);
@@ -98,12 +112,21 @@ describe('検索ログモーダル: JS関数', () => {
     expect(fn).toContain('POST');
   });
 
-  it('isNew で slm-entry-new クラスを付与する', () => {
+  it('isNew で slm-entry-new を, 登録済みで slm-entry-registered を付与する', () => {
     const html = buildPage();
     const idx = html.indexOf('function openSearchLogRecordModal');
     const fn = html.slice(idx, idx + 2000);
     expect(fn).toContain('isNew');
     expect(fn).toContain('slm-entry-new');
+    expect(fn).toContain('slm-entry-registered');
+  });
+
+  it('承認ボタンが /api/aichat/search-log/approve を POST する', () => {
+    const html = buildPage();
+    expect(html).toContain('/api/aichat/search-log/approve');
+    const idx = html.indexOf('/api/aichat/search-log/approve');
+    const snippet = html.slice(idx - 200, idx + 100);
+    expect(snippet).toContain('POST');
   });
 
   it('searchLogRecordBtn クリックで openSearchLogRecordModal を呼ぶ', () => {
@@ -117,28 +140,24 @@ describe('検索ログモーダル: JS関数', () => {
 
 // ===== バックエンド =====
 describe('検索ログモーダル: バックエンド', () => {
-  it('/api/aichat/search-log/open-modal エンドポイントが index.ts に存在する', () => {
-    const fs = require('fs');
-    const src = fs.readFileSync(__dirname + '/index.ts', 'utf-8');
-    expect(src).toContain('/api/aichat/search-log/open-modal');
-  });
-
-  it('open-modal エンドポイントが isNew を返す', () => {
+  it('/api/aichat/search-log/open-modal が存在し SELECT のみ（INSERT なし）', () => {
     const fs = require('fs');
     const src = fs.readFileSync(__dirname + '/index.ts', 'utf-8');
     const idx = src.indexOf('/api/aichat/search-log/open-modal');
     expect(idx).toBeGreaterThan(-1);
-    const snippet = src.slice(idx, idx + 2000);
-    expect(snippet).toContain('isNew');
+    const endIdx = src.indexOf('\napp.', idx + 10);
+    const handler = src.slice(idx, endIdx > idx ? endIdx : idx + 1500);
+    expect(handler).toContain('isNew');
+    expect(handler).not.toContain('INSERT');
   });
 
-  it('open-modal が aichat_search_log に INSERT する', () => {
+  it('/api/aichat/search-log/approve が存在し INSERT する', () => {
     const fs = require('fs');
     const src = fs.readFileSync(__dirname + '/index.ts', 'utf-8');
-    const idx = src.indexOf('/api/aichat/search-log/open-modal');
+    const idx = src.indexOf('/api/aichat/search-log/approve');
     expect(idx).toBeGreaterThan(-1);
-    const snippet = src.slice(idx, idx + 2000);
-    expect(snippet).toContain('aichat_search_log');
+    const snippet = src.slice(idx, idx + 1000);
     expect(snippet).toContain('INSERT');
+    expect(snippet).toContain('aichat_search_log');
   });
 });

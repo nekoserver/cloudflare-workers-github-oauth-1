@@ -302,8 +302,10 @@ export function getAiChatPage(user: {
     .sidebar-log-btn:hover { opacity:1; }
     .result-model-label { font-size:9px; color:var(--text-muted); background:var(--bg-secondary); border:1px solid var(--border-color); border-radius:3px; padding:0 3px; margin-right:4px; vertical-align:middle; }
     .slm-entry { border:1px solid var(--border-color); border-radius:6px; padding:10px 12px; margin-bottom:8px; background:var(--card-bg); }
-    .slm-entry-new { border:2px solid #e53e3e; }
+    .slm-entry-new { border:2px solid #e53e3e; background:transparent; }
+    .slm-entry-registered { background:#f0fdf4; border:1px solid #bbf7d0; }
     .slm-entry-new-badge { display:inline-block; font-size:9px; color:#e53e3e; border:1px solid #e53e3e; border-radius:3px; padding:0 4px; margin-left:6px; vertical-align:middle; }
+    .slm-entry-reg-badge { display:inline-block; font-size:9px; color:#16a34a; border:1px solid #86efac; border-radius:3px; padding:0 4px; margin-left:6px; vertical-align:middle; }
     .slm-kw { font-size:11px; font-weight:600; color:var(--text-primary); }
     .slm-model { font-size:10px; color:var(--text-secondary); margin-top:2px; }
     .slm-id { font-size:9px; color:var(--text-muted); margin-top:2px; font-family:monospace; }
@@ -965,8 +967,11 @@ export function getAiChatPage(user: {
         <span class="search-log-title" id="searchLogRecordTitle">📋 検索ログ</span>
         <button class="search-log-close" id="searchLogRecordClose" aria-label="閉じる">✕</button>
       </div>
-      <div class="search-log-body" id="searchLogRecordModalBody" style="padding:12px 16px;overflow-y:auto;max-height:70vh;">
+      <div class="search-log-body" id="searchLogRecordModalBody" style="padding:12px 16px;overflow-y:auto;max-height:calc(70vh - 56px);">
         <div class="search-log-loading">読み込み中...</div>
+      </div>
+      <div style="padding:10px 16px;border-top:1px solid var(--border-color);display:flex;justify-content:flex-end;gap:8px;">
+        <button id="searchLogApproveBtn" style="display:none;padding:7px 18px;font-size:12px;border-radius:5px;border:none;background:#3b82f6;color:#fff;cursor:pointer;font-weight:600;">承認して登録</button>
       </div>
     </div>
   </div>
@@ -1480,6 +1485,8 @@ export function getAiChatPage(user: {
     var searchLogRecordModal = document.getElementById('searchLogRecordModal');
     var searchLogRecordModalBody = document.getElementById('searchLogRecordModalBody');
     var searchLogRecordTitle = document.getElementById('searchLogRecordTitle');
+    var searchLogApproveBtn = document.getElementById('searchLogApproveBtn');
+    var searchLogPendingNewIds = [];
     var sidebarStatus = document.getElementById('sidebarStatus');
     var sidebarResults = document.getElementById('sidebarResults');
     var sidebarModeToggle = document.getElementById('sidebarModeToggle');
@@ -1722,6 +1729,8 @@ export function getAiChatPage(user: {
     function openSearchLogRecordModal(keyword, shareIds) {
       searchLogRecordTitle.textContent = '📋 検索ログ: ' + keyword;
       searchLogRecordModalBody.innerHTML = '<div class="search-log-loading">読み込み中...</div>';
+      searchLogApproveBtn.style.display = 'none';
+      searchLogPendingNewIds = [];
       searchLogRecordModal.style.zIndex = String(getNextZ());
       searchLogRecordModal.classList.add('open');
       searchLogRecordModal.setAttribute('aria-hidden', 'false');
@@ -1733,20 +1742,29 @@ export function getAiChatPage(user: {
         .then(function(data) {
           var entries = data.entries || [];
           if (!entries.length) { searchLogRecordModalBody.innerHTML = '<div style="color:var(--text-muted);font-size:12px;padding:8px 0;">データがありません</div>'; return; }
-          var newCount = entries.filter(function(e) { return e.isNew; }).length;
-          var summary = '<div style="font-size:11px;color:var(--text-muted);margin-bottom:10px;">' + entries.length + ' 件中 <span style="color:#e53e3e;font-weight:600;">' + newCount + ' 件</span> が新規登録</div>';
+          var newIds = entries.filter(function(e) { return e.isNew; }).map(function(e) { return e.shareId; });
+          searchLogPendingNewIds = newIds;
+          var newCount = newIds.length;
+          var summary = '<div style="font-size:11px;color:var(--text-muted);margin-bottom:10px;">'
+            + entries.length + ' 件中 '
+            + '<span style="color:#e53e3e;font-weight:600;">' + newCount + ' 件が未登録</span>'
+            + '、<span style="color:#16a34a;font-weight:600;">' + (entries.length - newCount) + ' 件が登録済み</span>'
+            + '</div>';
           var html = summary;
           entries.forEach(function(e) {
             var modelShort = e.model ? e.model.split('/').pop() : '?';
-            var cls = 'slm-entry' + (e.isNew ? ' slm-entry-new' : '');
+            var cls = 'slm-entry' + (e.isNew ? ' slm-entry-new' : ' slm-entry-registered');
             html += '<div class="' + cls + '">';
-            html += '<div class="slm-kw">' + escHtml(keyword) + (e.isNew ? '<span class="slm-entry-new-badge">新規</span>' : '') + '</div>';
+            html += '<div class="slm-kw">' + escHtml(keyword)
+              + (e.isNew ? '<span class="slm-entry-new-badge">未登録</span>' : '<span class="slm-entry-reg-badge">登録済</span>')
+              + '</div>';
             html += '<div class="slm-model">モデル: ' + escHtml(modelShort) + '</div>';
             html += '<div class="slm-id">ID: ' + escHtml(e.shareId) + '</div>';
             if (e.question) html += '<div class="slm-q">質問: ' + escHtml(e.question) + '</div>';
             html += '</div>';
           });
           searchLogRecordModalBody.innerHTML = html;
+          if (newCount > 0) searchLogApproveBtn.style.display = 'inline-block';
         })
         .catch(function() { searchLogRecordModalBody.innerHTML = '<div style="color:#e53e3e;font-size:12px;">読み込みエラー</div>'; });
     }
@@ -1757,6 +1775,30 @@ export function getAiChatPage(user: {
     });
     searchLogRecordModal.addEventListener('click', function(e) {
       if (e.target === searchLogRecordModal) { searchLogRecordModal.classList.remove('open'); searchLogRecordModal.setAttribute('aria-hidden', 'true'); }
+    });
+    searchLogApproveBtn.addEventListener('click', function() {
+      var q = sidebarSearch.value.trim();
+      if (!q || !searchLogPendingNewIds.length) return;
+      searchLogApproveBtn.disabled = true;
+      fetch('/api/aichat/search-log/approve', {
+        method: 'POST', credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ keyword: q, shareIds: searchLogPendingNewIds })
+      }).then(function(r) { return r.json(); })
+        .then(function() {
+          searchLogApproveBtn.style.display = 'none';
+          searchLogApproveBtn.disabled = false;
+          searchLogPendingNewIds = [];
+          searchLogRecordModalBody.querySelectorAll('.slm-entry-new').forEach(function(el) {
+            el.classList.remove('slm-entry-new');
+            el.classList.add('slm-entry-registered');
+            var badge = el.querySelector('.slm-entry-new-badge');
+            if (badge) { badge.className = 'slm-entry-reg-badge'; badge.textContent = '登録済'; }
+          });
+          var summary = searchLogRecordModalBody.querySelector('div');
+          if (summary) summary.innerHTML = '登録が完了しました';
+        })
+        .catch(function() { searchLogApproveBtn.disabled = false; });
     });
     searchLogRecordBtn.addEventListener('click', function() {
       var q = sidebarSearch.value.trim();
