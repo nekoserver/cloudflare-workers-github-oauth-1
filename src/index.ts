@@ -3601,6 +3601,34 @@ app.post('/api/aichat/category-groups', authMiddleware, async (c) => {
   }
 });
 
+app.post('/api/aichat/category-groups/:id/add-category', authMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  const groupId = c.req.param('id');
+  let body: { category_id?: number };
+  try { body = await c.req.json(); } catch { return jsonUtf8({ error: 'Invalid JSON' }, 400); }
+  const catId = Number(body.category_id);
+  if (!catId || isNaN(catId)) return jsonUtf8({ error: 'category_id は必須です' }, 400);
+  try {
+    const row = await c.env.DB.prepare(
+      `SELECT category_ids FROM aichat_category_groups WHERE id = ? AND user_id = ? AND (is_deleted = 0 OR is_deleted IS NULL)`
+    ).bind(groupId, user.sub).first<{ category_ids: string }>();
+    if (!row) return jsonUtf8({ error: 'グループが見つかりません' }, 404);
+    let ids: number[] = [];
+    try { ids = JSON.parse(row.category_ids); } catch { /* ignore */ }
+    if (!ids.includes(catId)) {
+      ids.push(catId);
+      ids.sort((a, b) => a - b);
+    }
+    await c.env.DB.prepare(
+      `UPDATE aichat_category_groups SET category_ids = ?, updated_at = datetime('now') WHERE id = ? AND user_id = ?`
+    ).bind(JSON.stringify(ids), groupId, user.sub).run();
+    return jsonUtf8({ ok: true, category_ids: ids });
+  } catch (err: any) {
+    return jsonUtf8({ error: 'カテゴリの追加に失敗しました: ' + String(err?.message ?? err) }, 500);
+  }
+});
+
 app.delete('/api/aichat/category-groups/:id', authMiddleware, async (c) => {
   const user = c.get('user');
   if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);

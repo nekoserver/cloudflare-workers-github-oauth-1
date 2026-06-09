@@ -139,6 +139,7 @@ export function getAiChatPage(user: {
     .kw-kw-classified { border:1.5px solid var(--kw-pal-cls,#7c3aed); color:var(--kw-pal-cls,#7c3aed); background:transparent; }
     .kw-cat-badge-active { border-color:var(--kw-pal-cat,#3b82f6) !important; background:var(--kw-pal-cat-bg,#dbeafe) !important; color:var(--kw-pal-cat,#1d4ed8) !important; }
     [data-theme="dark"] .kw-cat-badge-active { border-color:var(--kw-pal-cat,#60a5fa) !important; background:var(--kw-pal-cat-bg,rgba(59,130,246,0.25)) !important; color:var(--kw-pal-cat,#93c5fd) !important; }
+    .kw-group-badge-active { border-color:#3b82f6 !important; background:#3b82f6 !important; color:#fff !important; }
     .kw-color-swatch { display:inline-block;width:18px;height:18px;border-radius:3px;margin:1px;cursor:pointer;border:2px solid transparent;box-sizing:border-box;vertical-align:middle; }
     .kw-color-swatch:hover { opacity:0.8; }
     .kw-color-swatch-selected { border-color:var(--text-primary) !important; }
@@ -3618,7 +3619,7 @@ export function getAiChatPage(user: {
         html += '<div style="margin-bottom:12px;">';
         groups.forEach(function(g) {
           var matchedNames = (g.category_ids || []).map(function(id) { return catMap[id] ? catMap[id].name : '#' + id; }).join('・');
-          html += '<button type="button" class="cg-group-btn" data-group-id="' + escHtml(g.id) + '" data-group-ids="' + escHtml(JSON.stringify(g.category_ids)) + '" style="display:block;width:100%;text-align:left;margin-bottom:4px;">';
+          html += '<button type="button" class="cg-group-btn" data-group-id="' + escHtml(g.id) + '" data-group-name="' + escHtml(g.group_name) + '" data-group-ids="' + escHtml(JSON.stringify(g.category_ids)) + '" style="display:block;width:100%;text-align:left;margin-bottom:4px;">';
           html += '<span style="font-weight:600;">' + escHtml(g.group_name) + '</span> <span style="font-size:10px;color:var(--text-muted);">(' + escHtml(matchedNames) + ')</span>';
           html += '</button>';
         });
@@ -3636,12 +3637,49 @@ export function getAiChatPage(user: {
       kwCatGroupBody.innerHTML = html;
       kwCatGroupBody.querySelectorAll('.cg-group-btn').forEach(function(btn) {
         btn.addEventListener('click', function() {
-          var ids = JSON.parse(btn.dataset.groupIds || '[]');
-          var newSel = {};
-          ids.forEach(function(id) { newSel[String(id)] = true; });
-          if (typeof applyKwBadgeColorsExternal === 'function') applyKwBadgeColorsExternal(newSel);
-          kwCatGroupModal.classList.remove('open');
-          kwCatGroupModal.setAttribute('aria-hidden', 'true');
+          if (kwAddToCatId != null) {
+            var groupId = btn.dataset.groupId;
+            var groupName = btn.dataset.groupName || '';
+            var confirmOverlay = document.createElement('div');
+            confirmOverlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.55);display:flex;align-items:center;justify-content:center;z-index:' + String(getNextZ()) + ';';
+            var confirmBox = document.createElement('div');
+            confirmBox.style.cssText = 'background:var(--card-bg);border-radius:10px;padding:22px 24px;max-width:340px;width:90%;box-shadow:0 8px 32px rgba(0,0,0,0.18);';
+            confirmBox.innerHTML = '<div style="font-size:13px;line-height:1.6;margin-bottom:18px;color:var(--text-primary);">「' + escHtml(groupName) + '」に「' + escHtml(kwAddToCatName) + '」を追加登録しますか？</div>' +
+              '<div style="display:flex;gap:10px;justify-content:flex-end;">' +
+              '<button id="kwAddCatNo" style="padding:7px 16px;border-radius:6px;border:1px solid var(--border-color);background:var(--bg-secondary);color:var(--text-primary);font-size:13px;cursor:pointer;">いいえ</button>' +
+              '<button id="kwAddCatYes" style="padding:7px 16px;border-radius:6px;border:none;background:#3b82f6;color:#fff;font-size:13px;cursor:pointer;">はい</button>' +
+              '</div>';
+            confirmOverlay.appendChild(confirmBox);
+            document.body.appendChild(confirmOverlay);
+            confirmBox.querySelector('#kwAddCatNo').addEventListener('click', function() {
+              document.body.removeChild(confirmOverlay);
+            });
+            confirmBox.querySelector('#kwAddCatYes').addEventListener('click', function() {
+              var yesBtn = confirmBox.querySelector('#kwAddCatYes');
+              yesBtn.disabled = true;
+              var addId = kwAddToCatId;
+              fetch('/api/aichat/category-groups/' + encodeURIComponent(groupId) + '/add-category', {
+                method: 'POST', credentials: 'same-origin',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ category_id: addId })
+              }).then(function(r) { return r.json(); }).then(function() {
+                kwAddToCatId = null;
+                kwAddToCatName = '';
+                document.body.removeChild(confirmOverlay);
+                kwCatGroupModal.classList.remove('open');
+                kwCatGroupModal.setAttribute('aria-hidden', 'true');
+                selectedGroupId = groupId;
+                renderKwClassifyList();
+              }).catch(function() { yesBtn.disabled = false; });
+            });
+          } else {
+            var ids = JSON.parse(btn.dataset.groupIds || '[]');
+            var newSel = {};
+            ids.forEach(function(id) { newSel[String(id)] = true; });
+            if (typeof applyKwBadgeColorsExternal === 'function') applyKwBadgeColorsExternal(newSel);
+            kwCatGroupModal.classList.remove('open');
+            kwCatGroupModal.setAttribute('aria-hidden', 'true');
+          }
         });
       });
       var nameInput = document.getElementById('kwCatGroupNameInput');
@@ -3689,6 +3727,19 @@ export function getAiChatPage(user: {
     ];
 
     var selectedCats = {};
+    var selectedGroupId = null;
+    var kwAddToCatId = null;
+    var kwAddToCatName = '';
+
+    function applyKwGroupBadgeState() {
+      kwClassifyListBody.querySelectorAll('.kw-group-summary-badge').forEach(function(el) {
+        if (el.dataset.groupId === selectedGroupId) {
+          el.classList.add('kw-group-badge-active');
+        } else {
+          el.classList.remove('kw-group-badge-active');
+        }
+      });
+    }
 
     function applyKwBadgeColors() {
       kwClassifyListBody.querySelectorAll('.kw-classify-kw-badge').forEach(function(kwEl) {
@@ -3726,6 +3777,15 @@ export function getAiChatPage(user: {
         var cats   = catData.categories  || [];
         var kws    = kwData.keywords     || [];
         var groups = (groupData.groups || []).slice().sort(function(a, b) { return (b.kw_count || 0) - (a.kw_count || 0); });
+        if (selectedGroupId) {
+          var activeGroup = groups.find(function(g) { return g.id === selectedGroupId; });
+          if (activeGroup) {
+            selectedCats = {};
+            (activeGroup.category_ids || []).forEach(function(id) { selectedCats[String(id)] = true; });
+          } else {
+            selectedGroupId = null;
+          }
+        }
         var html = '';
         if (cats.length > 0) {
           html += '<div style="margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid var(--border-color);">';
@@ -3756,9 +3816,22 @@ export function getAiChatPage(user: {
         }
         kwClassifyListBody.innerHTML = html;
         applyKwBadgeColors();
+        applyKwGroupBadgeState();
         kwClassifyListBody.querySelectorAll('.kw-cat-summary-badge').forEach(function(catEl) {
           catEl.addEventListener('click', function() {
             var catId = catEl.dataset.catId;
+            if (selectedGroupId && !selectedCats[catId]) {
+              var catMap = {};
+              cats.forEach(function(cat) { catMap[String(cat.id)] = { name: cat.name, color: cat.color || '#6366f1' }; });
+              kwAddToCatId = Number(catId);
+              kwAddToCatName = catMap[catId] ? catMap[catId].name : catId;
+              kwCatGroupBody.innerHTML = '<div class="search-log-loading">読み込み中...</div>';
+              kwCatGroupModal.style.zIndex = String(getNextZ());
+              kwCatGroupModal.classList.add('open');
+              kwCatGroupModal.setAttribute('aria-hidden', 'false');
+              loadKwCatGroups(function(grps) { renderKwCatGroupList(grps, [], catMap); });
+              return;
+            }
             if (selectedCats[catId]) {
               delete selectedCats[catId];
             } else {
@@ -3782,11 +3855,19 @@ export function getAiChatPage(user: {
         });
         kwClassifyListBody.querySelectorAll('.kw-group-summary-badge').forEach(function(grpEl) {
           grpEl.addEventListener('click', function() {
+            var groupId = grpEl.dataset.groupId;
             var catIds = [];
             try { catIds = JSON.parse(grpEl.dataset.catIds || '[]'); } catch(e) {}
-            selectedCats = {};
-            catIds.forEach(function(id) { selectedCats[String(id)] = true; });
+            if (selectedGroupId === groupId) {
+              selectedGroupId = null;
+              selectedCats = {};
+            } else {
+              selectedGroupId = groupId;
+              selectedCats = {};
+              catIds.forEach(function(id) { selectedCats[String(id)] = true; });
+            }
             applyKwBadgeColors();
+            applyKwGroupBadgeState();
           });
         });
       });
@@ -3814,6 +3895,9 @@ export function getAiChatPage(user: {
 
     function openKwClassifyList() {
       selectedCats = {};
+      selectedGroupId = null;
+      kwAddToCatId = null;
+      kwAddToCatName = '';
       kwClassifyListModal.style.zIndex = String(getNextZ());
       kwClassifyListModal.classList.add('open');
       renderKwClassifyList();
