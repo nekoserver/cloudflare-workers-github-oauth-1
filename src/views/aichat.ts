@@ -606,7 +606,16 @@ export function getAiChatPage(user: {
     }
     .chat-bubble.assistant {
       align-self: flex-start; background: var(--card-bg); border: 1px solid var(--border-color); color: var(--text-primary); border-bottom-left-radius: 3px;
+      position: relative; padding-top: 28px;
     }
+    .bubble-copy-btn {
+      position: absolute; top: 5px; right: 6px;
+      background: none; border: 1px solid var(--border-color); border-radius: 5px;
+      padding: 1px 7px; font-size: 11px; color: var(--text-muted); cursor: pointer;
+      opacity: 0; transition: opacity 0.15s; line-height: 1.6;
+    }
+    .chat-bubble.assistant:hover .bubble-copy-btn { opacity: 1; }
+    .bubble-copy-btn.copied { color: var(--success-color, #48bb78); border-color: var(--success-color, #48bb78); }
     .chat-bubble.error {
       align-self: flex-start; background: rgba(207,34,46,0.08); border: 1px solid rgba(207,34,46,0.3); color: #cf222e;
     }
@@ -4510,6 +4519,19 @@ export function getAiChatPage(user: {
       if (role === 'assistant') {
         el.className = 'chat-bubble assistant preview-area';
         el.innerHTML = parseMd(text);
+        var copyBtn = document.createElement('button');
+        copyBtn.className = 'bubble-copy-btn';
+        copyBtn.title = '回答をコピー';
+        copyBtn.textContent = '📋';
+        copyBtn.onclick = function(e) {
+          e.stopPropagation();
+          navigator.clipboard.writeText(text).then(function() {
+            copyBtn.textContent = '✓';
+            copyBtn.classList.add('copied');
+            setTimeout(function() { copyBtn.textContent = '📋'; copyBtn.classList.remove('copied'); }, 2000);
+          }).catch(function() {});
+        };
+        el.appendChild(copyBtn);
         if (isFallback) {
           var notice = document.createElement('div');
           notice.className = 'bubble-fallback-notice';

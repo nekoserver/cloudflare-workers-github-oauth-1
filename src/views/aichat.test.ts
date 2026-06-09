@@ -1182,6 +1182,29 @@ describe('appendShareBtn — 追加質問ボタン', () => {
   });
 });
 
+describe('回答バブル コピーボタン', () => {
+  it('appendBubble 関数に bubble-copy-btn クラスのボタンが含まれる', () => {
+    const html = getAiChatPage(minimalUser, []);
+    const idx = html.indexOf('function appendBubble(');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 3000);
+    expect(fn).toContain('bubble-copy-btn');
+  });
+
+  it('コピーボタンに navigator.clipboard.writeText が紐づいている', () => {
+    const html = getAiChatPage(minimalUser, []);
+    const idx = html.indexOf('function appendBubble(');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 3000);
+    expect(fn).toContain('navigator.clipboard.writeText');
+  });
+
+  it('.bubble-copy-btn の CSS スタイルが存在する', () => {
+    const html = getAiChatPage(minimalUser, []);
+    expect(html).toContain('.bubble-copy-btn');
+  });
+});
+
 describe('ナビバー モデル選択ドロップダウン', () => {
   it('modelSelect セレクト要素が HTML に存在する', () => {
     const html = getAiChatPage(minimalUser, []);
