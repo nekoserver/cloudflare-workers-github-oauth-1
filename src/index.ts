@@ -43,6 +43,7 @@ import { computeConversationHash, computeQuestionHash } from './utils/conversati
 import { buildAiMessages, ALLOWED_MODES, type SystemPromptMode } from './utils/buildAiMessages';
 import { stripThinkTags } from './utils/stripThinkTags';
 import { AICHAT_MODEL_MAX_TOKENS, getModelRunParams } from './utils/aichatModelConfig';
+import { extractFunctionSource } from './utils/extractFunctionSource';
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -5056,6 +5057,31 @@ app.get('/api/function-source', authMiddleware, async (c) => {
       ).bind(repoId, filePath, functionName).first<{ purpose: string }>();
       purpose = row?.purpose ?? '';
       sourceSnippet = null;
+    }
+
+    // source_snippet が未登録の場合は GitHub API からファイルを取得して抽出する
+    if (sourceSnippet === null && repoFullName && filePath) {
+      try {
+        const user = c.get('user');
+        const userSession = await getUserSession(db, user.sub);
+        const accessToken = userSession?.githubAccessToken ?? user.github_access_token ?? undefined;
+        if (accessToken) {
+          const contentsUrl = `https://api.github.com/repos/${repoFullName}/contents/${filePath}`;
+          const resp = await fetch(contentsUrl, {
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+              Accept: 'application/vnd.github.v3.raw',
+              'User-Agent': 'cloudflare-workers-github-oauth',
+            },
+          });
+          if (resp.ok) {
+            const fileContent = await resp.text();
+            sourceSnippet = extractFunctionSource(fileContent, functionName);
+          }
+        }
+      } catch {
+        // GitHub 取得失敗は無視して github_url フォールバックを返す
+      }
     }
 
     return c.json({
