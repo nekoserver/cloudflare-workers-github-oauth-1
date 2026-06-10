@@ -606,7 +606,9 @@ export function getFunctionChangelogPage(input: FunctionChangelogInput): string 
       rowCount.textContent = visible + ' 件';
     }
 
+    var currentStep = 0;
     function setStep(step) {
+      currentStep = step;
       if (step === 1) {
         stepBanner.className = 'step-banner visible step-banner--warn';
         stepBanner.textContent = '次にこの左上にあるファイル選択リスト内から対象ファイル（すべて指定可能）を選択してください。';
@@ -655,7 +657,7 @@ export function getFunctionChangelogPage(input: FunctionChangelogInput): string 
           repoBanner.classList.add('fading');
           repoBanner.addEventListener('transitionend', function() {
             repoBanner.style.display = 'none';
-            setStep(1);
+            if (currentStep === 0) setStep(1);
           }, { once: true });
         }, 9000);
       }
