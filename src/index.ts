@@ -2154,7 +2154,6 @@ async function updateUserSession(
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT (user_id) DO UPDATE SET
         timezone = excluded.timezone,
-        session_duration = excluded.session_duration,
         last_login_at = excluded.last_login_at,
         current_login_at = excluded.current_login_at,
         updated_at = excluded.updated_at,
@@ -2516,14 +2515,25 @@ app.get('/auth/github/callback', async (c) => {
       timezone = userSession.timezone;
       sessionDuration = userSession.sessionDuration;
     } else {
-      // 新規ユーザーの場合、クッキーから取得（もしあれば）
+      // getUserSession が失敗した場合（migration未適用等）、session_duration だけ別クエリで取得
+      let sessionDurationFromDB: string | null = null;
+      if (c.env.DB) {
+        try {
+          const minimal = await c.env.DB.prepare(
+            'SELECT session_duration FROM user_sessions WHERE user_id = ?'
+          ).bind(userId).first<{ session_duration: string }>();
+          sessionDurationFromDB = minimal?.session_duration ?? null;
+        } catch {
+          // テーブル未作成等の場合は無視
+        }
+      }
+
       const cookieVals = getCookieValues(cookieHeader, ['user_timezone', 'user_session_duration']);
       if (cookieVals['user_timezone']) {
         timezone = cookieVals['user_timezone'];
       }
-      if (cookieVals['user_session_duration']) {
-        sessionDuration = cookieVals['user_session_duration'];
-      }
+      // 解決順序: D1再クエリ → Cookie → デフォルト '1h'
+      sessionDuration = sessionDurationFromDB ?? cookieVals['user_session_duration'] ?? '1h';
     }
 
     // D1にログイン情報を保存（付与スコープも含む）
@@ -2588,6 +2598,7 @@ app.get('/auth/github/callback', async (c) => {
     redirectHeaders.append('Set-Cookie', `auth_token=${token}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${sessionDurationSeconds}`);
     redirectHeaders.append('Set-Cookie', `login_timestamp=${Date.now()}; Path=/; Secure; SameSite=Lax; Max-Age=${sessionDurationSeconds}`);
     redirectHeaders.append('Set-Cookie', `last_activity=${Date.now()}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${idleTimeoutSeconds}`);
+    redirectHeaders.append('Set-Cookie', `user_session_duration=${sessionDuration}; Path=/; Secure; SameSite=Lax; Max-Age=31536000`);
     redirectHeaders.append('Set-Cookie', `show_welcome_message=1; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=60`);
     // 使用済みのOAuthクッキーを削除
     redirectHeaders.append('Set-Cookie', `oauth_state=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0`);
