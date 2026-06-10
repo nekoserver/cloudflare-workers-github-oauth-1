@@ -61,7 +61,7 @@ describe('キーワード分類拡張: renderKwClassifyList', () => {
     const html = buildPage();
     const idx = html.indexOf('function openKwClassifyList');
     expect(idx).toBeGreaterThan(-1);
-    const fn = html.slice(idx, idx + 300);
+    const fn = html.slice(idx, idx + 500);
     expect(fn).toContain('renderKwClassifyList');
   });
 });

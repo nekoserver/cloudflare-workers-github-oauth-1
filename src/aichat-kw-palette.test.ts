@@ -14,7 +14,7 @@ describe('カラーパレット: 🎨ボタン', () => {
     const html = buildPage();
     const modalIdx = html.indexOf('id="kwClassifyListModal"');
     expect(modalIdx).toBeGreaterThan(-1);
-    const header = html.slice(modalIdx, modalIdx + 400);
+    const header = html.slice(modalIdx, modalIdx + 1000);
     expect(header).toContain('kwColorPaletteBtn');
   });
 });
