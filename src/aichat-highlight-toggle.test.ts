@@ -93,7 +93,7 @@ describe('詳細プレビューモーダル: ハイライトトグルボタン �
     const html = buildPage();
     const idx = html.indexOf('historyModalHighlightToggleBtn.addEventListener');
     expect(idx).toBeGreaterThan(-1);
-    const fn = html.slice(idx, idx + 800);
+    const fn = html.slice(idx, idx + 1200);
     expect(fn).toContain('historyModalHighlightActive');
     expect(fn).toContain('!historyModalHighlightActive');
   });

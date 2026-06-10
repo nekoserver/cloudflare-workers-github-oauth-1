@@ -2322,6 +2322,10 @@ export function getAiChatPage(user: {
           }
           assistBubble.style.opacity = '1';
         }
+        var wasDbApplied = historyModalDBKeywordsApplied;
+        historyModalDBKeywordsApplied = false;
+        historyModalKeywordsFromDB = [];
+        fetchShareKeywords(data.id, function() { if (wasDbApplied && historyModalHighlightActive) applyAllDbKeywordHighlights(); });
         renderHistoryModalModelDots();
         updateHighlightToggleBtn();
       }
@@ -2458,6 +2462,30 @@ export function getAiChatPage(user: {
         if (k && all.indexOf(k) === -1) all.push(k);
       });
       return all;
+    }
+
+    function applyAllDbKeywordHighlights() {
+      historyModalHighlightActive = true;
+      historyModalChat.classList.remove('highlights-hidden');
+      clearKeywordHighlights(historyModalChat);
+      var allKws = buildAllKeywords();
+      if (allKws.length > 0) applyKeywordHighlight(historyModalChat, allKws);
+      historyModalDBKeywordsApplied = true;
+      updateHighlightToggleBtn();
+    }
+
+    function fetchShareKeywords(shareId, cb) {
+      fetch('/api/aichat/share-keywords?shareId=' + encodeURIComponent(String(shareId)), { credentials: 'same-origin' })
+        .then(function(res) { return res.json(); })
+        .then(function(d) {
+          historyModalKeywordsFromDB = d.keywords || [];
+          updateHighlightToggleBtn();
+          if (cb) cb();
+        })
+        .catch(function() {
+          updateHighlightToggleBtn();
+          if (cb) cb();
+        });
     }
 
     function updateHighlightToggleBtn() {
@@ -3554,12 +3582,12 @@ export function getAiChatPage(user: {
         historyModalHighlightActive = true;
         historyModalChat.classList.remove('highlights-hidden');
         clearKeywordHighlights(historyModalChat);
-        var allKws = buildAllKeywords();
-        if (allKws.length > 0) applyKeywordHighlight(historyModalChat, allKws);
+        applyKeywordHighlight(historyModalChat, buildAllKeywords());
         historyModalDBKeywordsApplied = true;
         updateHighlightToggleBtn();
         return;
       }
+      if (!historyModalDBKeywordsApplied && historyModalCurrentId) { fetchShareKeywords(historyModalCurrentId, applyAllDbKeywordHighlights); return; }
       var marks = historyModalChat.querySelectorAll('.kw-highlight');
       if (!marks || marks.length === 0) return;
       historyModalHighlightActive = !historyModalHighlightActive;
