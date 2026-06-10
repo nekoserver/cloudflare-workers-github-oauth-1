@@ -923,7 +923,10 @@ export function getAiChatPage(user: {
     <div class="search-log-modal" role="dialog" aria-modal="true" style="max-width:560px;">
       <div class="search-log-head">
         <span class="search-log-title">🔑 キーワード分類</span>
-        <div style="display:flex;align-items:center;gap:4px;">
+        <div style="display:flex;align-items:center;gap:6px;flex:1;margin-left:10px;">
+          <input id="kwClassifySearchInput" type="search" placeholder="キーワードを検索…" autocomplete="off" style="flex:1;min-width:0;padding:4px 10px;border:1px solid var(--border-color);border-radius:6px;font-size:12px;background:var(--bg-primary);color:var(--text-primary);outline:none;" />
+        </div>
+        <div style="display:flex;align-items:center;gap:4px;margin-left:6px;">
           <button id="kwColorPaletteBtn" title="配色カスタマイズ" style="background:none;border:none;cursor:pointer;font-size:16px;padding:2px 4px;line-height:1;">🎨</button>
           <button class="search-log-close" id="kwClassifyListClose" aria-label="閉じる">✕</button>
         </div>
@@ -3900,6 +3903,19 @@ export function getAiChatPage(user: {
     var kwClassifyListModal = document.getElementById('kwClassifyListModal');
     var kwClassifyListClose = document.getElementById('kwClassifyListClose');
     var kwClassifyListBody = document.getElementById('kwClassifyListBody');
+    var kwClassifySearchInput = document.getElementById('kwClassifySearchInput');
+
+    function applyKwClassifySearchFilter() {
+      var q = kwClassifySearchInput.value.trim().toLowerCase();
+      kwClassifyListBody.querySelectorAll('.kw-classify-kw-badge').forEach(function(el) {
+        var kw = (el.dataset.keyword || '').toLowerCase();
+        el.style.display = (!q || kw.indexOf(q) >= 0) ? '' : 'none';
+      });
+    }
+
+    kwClassifySearchInput.addEventListener('input', function() {
+      applyKwClassifySearchFilter();
+    });
 
     var KW_CAT_COLORS = [
       '#ef4444','#f97316','#f59e0b','#eab308','#84cc16','#22c55e',
@@ -4001,6 +4017,7 @@ export function getAiChatPage(user: {
         kwClassifyListBody.innerHTML = html;
         applyKwBadgeColors();
         applyKwGroupBadgeState();
+        applyKwClassifySearchFilter();
         kwClassifyListBody.querySelectorAll('.kw-cat-summary-badge').forEach(function(catEl) {
           catEl.addEventListener('click', function() {
             var catId = catEl.dataset.catId;
@@ -4094,6 +4111,7 @@ export function getAiChatPage(user: {
       selectedGroupId = null;
       kwAddToCatId = null;
       kwAddToCatName = '';
+      kwClassifySearchInput.value = '';
       kwClassifyListModal.style.zIndex = String(getNextZ());
       kwClassifyListModal.classList.add('open');
       renderKwClassifyList();
