@@ -1280,9 +1280,9 @@ describe('appendShareBtn — 追加質問ボタン', () => {
 });
 
 describe('回答バブル コピーボタン', () => {
-  it('appendBubble 関数に bubble-copy-btn クラスのボタンが含まれる', () => {
+  it('buildAssistantBubble 関数に bubble-copy-btn クラスのボタンが含まれる', () => {
     const html = getAiChatPage(minimalUser, []);
-    const idx = html.indexOf('function appendBubble(');
+    const idx = html.indexOf('function buildAssistantBubble(');
     expect(idx).toBeGreaterThan(-1);
     const fn = html.slice(idx, idx + 3000);
     expect(fn).toContain('bubble-copy-btn');
@@ -1290,7 +1290,7 @@ describe('回答バブル コピーボタン', () => {
 
   it('コピーボタンに navigator.clipboard.writeText が紐づいている', () => {
     const html = getAiChatPage(minimalUser, []);
-    const idx = html.indexOf('function appendBubble(');
+    const idx = html.indexOf('function buildAssistantBubble(');
     expect(idx).toBeGreaterThan(-1);
     const fn = html.slice(idx, idx + 3000);
     expect(fn).toContain('navigator.clipboard.writeText');
