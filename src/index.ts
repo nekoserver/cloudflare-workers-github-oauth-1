@@ -30,7 +30,7 @@ import { verifyResendWebhookSignature } from './utils/resendWebhook';
 import { verifyGitHubWebhookSignature } from './utils/githubWebhook';
 import { postSlackMessage, openSlackModal, respondToInteraction } from './utils/slack';
 import { fetchPrDiff, runSummaryPipeline, buildSlackMessage, buildSummaryModal, buildSummaryFallbackBlocks, classifySummaryResult, resolveAiModel, extractDesignDiff, sanitizeBoxDrawing, detectCommitAgentFromText, detectCommitAgentFromPrText, describeModelSwitch, WORKER_BASE_URL, DESIGN_SPEC_CHECKLIST, DEFAULT_AI_MODEL, FALLBACK_AI_MODEL, type SummaryModalRow } from './utils/aiSummary';
-import { getSessionDurationSeconds, renewSession } from './utils/session';
+import { getSessionDurationSeconds, renewSession, resolveSessionDuration } from './utils/session';
 import { buildCommitAgentLogEntry } from './utils/commitAgentLog';
 import { verifySlackSignature } from './utils/slackSignature';
 import { handleSlackInteraction } from './utils/slackInteraction';
@@ -3878,7 +3878,6 @@ app.get('/settings', authMiddleware, async (c) => {
     'user_search_label_mode',
   ]);
   const timezone = cookieVals['user_timezone'] || DEFAULT_TIMEZONE;
-  const sessionDuration = cookieVals['user_session_duration'] || '1h';
   const recentCommitsCount = parseInt(cookieVals['user_recent_commits_count'] || '20', 10) || 20;
   const toastDuration = parseInt(cookieVals['user_toast_duration'] || '10', 10) || 10;
   const statusCommitCacheSortMode = cookieVals['user_status_commit_cache_sort_mode'] === 'toggle' ? 'toggle' : 'off';
@@ -3900,6 +3899,7 @@ app.get('/settings', authMiddleware, async (c) => {
   const userSession = await getUserSession(c.env.DB, user.sub);
   const accessToken = userSession?.githubAccessToken ?? user.github_access_token ?? undefined;
   const resolvedTimezone = userSession?.timezone || getCookieValues(cookieHeader, ['user_timezone'])['user_timezone'] || DEFAULT_TIMEZONE;
+  const sessionDuration = resolveSessionDuration(userSession?.sessionDuration, cookieVals['user_session_duration']);
 
   let grantedScopes: string[] | null = null;
   let scopesError: string | null = null;

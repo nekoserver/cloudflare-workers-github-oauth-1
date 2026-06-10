@@ -13,6 +13,17 @@ export function getSessionDurationSeconds(duration: string): number {
   }
 }
 
+const VALID_SESSION_DURATIONS = ['1h', '3h', '8h', '1d', '3d', '1w'];
+
+export function resolveSessionDuration(
+  dbValue: string | null | undefined,
+  cookieValue: string | null | undefined
+): string {
+  if (dbValue && VALID_SESSION_DURATIONS.includes(dbValue)) return dbValue;
+  if (cookieValue && VALID_SESSION_DURATIONS.includes(cookieValue)) return cookieValue;
+  return '1h';
+}
+
 export type RenewSessionParams = {
   currentUser: JWTPayload;
   newDuration: string;
