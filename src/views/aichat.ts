@@ -3124,8 +3124,8 @@ export function getAiChatPage(user: {
       var filtered = Object.keys(sqSelectedCats).length > 0
         ? subqueriesAllItems.filter(function(item) {
             return (item.keywords || []).some(function(kw) {
-              var cid = subqueriesKwCatMap[kw.keyword];
-              return cid != null && sqSelectedCats[String(cid)];
+              var cids = subqueriesKwCatMap[kw.keyword] || [];
+              return cids.some(function(id) { return sqSelectedCats[String(id)]; });
             });
           })
         : subqueriesAllItems;
@@ -3163,12 +3163,16 @@ export function getAiChatPage(user: {
           var kwHtml = '';
           if (item.keywords && item.keywords.length > 0) {
             item.keywords.forEach(function(kw) {
-              var cid = subqueriesKwCatMap[kw.keyword];
-              var isActive = cid != null && sqSelectedCats[String(cid)];
+              var cids = subqueriesKwCatMap[kw.keyword] || [];
+              var activeCid = null;
+              cids.forEach(function(id) {
+                if (activeCid == null && sqSelectedCats[String(id)]) activeCid = String(id);
+              });
+              var isActive = activeCid != null;
               var kwClass = 'sq-kw-badge';
               var kwStyle = '';
               if (isActive) {
-                var catColor = kwPaletteActColor || sqCatColorMap[String(cid)] || '#6366f1';
+                var catColor = kwPaletteActColor || sqCatColorMap[activeCid] || '#6366f1';
                 kwClass += ' sq-kw-badge-active';
                 kwStyle = ' style="--kwcat-color:' + escHtml(catColor) + ';--kwcat-bg:' + escHtml(catColor) + '33;"';
               } else if (classifiedSet[kw.keyword]) {
@@ -3314,7 +3318,16 @@ export function getAiChatPage(user: {
         subqueriesKwCatMap = {};
         subqueriesClassifiedSet = {};
         (kwData.keywords || []).forEach(function(kw) {
-          if (kw.category_id != null) subqueriesKwCatMap[kw.keyword] = kw.category_id;
+          var ids = [];
+          if (kw.category_pairs) {
+            String(kw.category_pairs).split(',').forEach(function(pair) {
+              var sep = pair.indexOf(':');
+              if (sep > 0) ids.push(pair.slice(0, sep));
+            });
+          } else if (kw.category_id != null) {
+            ids.push(String(kw.category_id));
+          }
+          if (ids.length > 0) subqueriesKwCatMap[kw.keyword] = ids;
           if (kw.is_classified) subqueriesClassifiedSet[kw.keyword] = true;
         });
         renderSubqueriesList();
