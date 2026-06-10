@@ -81,7 +81,7 @@ describe('キーワード分類: カテゴリ登録フロー', () => {
   it('POST /api/aichat/keyword-categories を呼ぶコードがある', () => {
     const html = buildPage();
     // POST fetch は GET fetch より後に現れるため lastIndexOf で探す
-    const idx = html.lastIndexOf('/api/aichat/keyword-categories');
+    const idx = html.lastIndexOf("/api/aichat/keyword-categories'");
     expect(idx).toBeGreaterThan(-1);
     const snippet = html.slice(Math.max(0, idx - 200), idx + 100);
     expect(snippet).toContain('POST');
