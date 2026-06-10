@@ -4470,14 +4470,78 @@ export function getAiChatPage(user: {
     var dailyStatsTitleEl = document.getElementById('dailyStatsTitle');
     var dailyStatsCurrentMonth = new Date().toISOString().slice(0, 7);
 
+    function buildKwClassifyStatsHtml(kwAll, cats) {
+      var classified = 0, unclassified = 0;
+      kwAll.forEach(function(kw) {
+        if (kw.is_classified) classified++; else unclassified++;
+      });
+      var total = classified + unclassified;
+      if (total === 0) return '';
+      var CLS_COLOR = '#7c3aed', UNC_COLOR = '#94a3b8';
+      var html = '<div style="font-size:10px;font-weight:600;color:var(--text-secondary);margin-top:14px;margin-bottom:4px;">キーワード分類状況</div>';
+      html += '<div style="font-size:11px;color:var(--text-primary);margin-bottom:2px;"><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:' + CLS_COLOR + ';margin-right:4px;"></span>分類済みキーワード総数 : ' + classified + '</div>';
+      html += '<div style="font-size:11px;color:var(--text-primary);margin-bottom:6px;"><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:' + UNC_COLOR + ';margin-right:4px;"></span>未分類キーワード総数 : ' + unclassified + '</div>';
+
+      var PR = 46, PCX = 50, PCY = 50, PSZ = 100;
+      var pieSvg = '<svg viewBox="0 0 ' + PSZ + ' ' + PSZ + '" width="' + PSZ + '" height="' + PSZ + '" style="flex-shrink:0;">';
+      if (classified === 0 || unclassified === 0) {
+        pieSvg += '<circle cx="' + PCX + '" cy="' + PCY + '" r="' + PR + '" fill="' + (classified > 0 ? CLS_COLOR : UNC_COLOR) + '" opacity="0.9" stroke="var(--card-bg)" stroke-width="0.5"/>';
+      } else {
+        var ang = -Math.PI / 2;
+        [[classified, CLS_COLOR], [unclassified, UNC_COLOR]].forEach(function(pair) {
+          var cnt = pair[0];
+          var slice = cnt / total * 2 * Math.PI;
+          var endAng = ang + slice;
+          var x1 = PCX + PR * Math.cos(ang), y1 = PCY + PR * Math.sin(ang);
+          var x2 = PCX + PR * Math.cos(endAng), y2 = PCY + PR * Math.sin(endAng);
+          var la = slice > Math.PI ? 1 : 0;
+          pieSvg += '<path d="M ' + PCX + ' ' + PCY + ' L ' + x1.toFixed(2) + ' ' + y1.toFixed(2) + ' A ' + PR + ' ' + PR + ' 0 ' + la + ' 1 ' + x2.toFixed(2) + ' ' + y2.toFixed(2) + ' Z" fill="' + pair[1] + '" opacity="0.9" stroke="var(--card-bg)" stroke-width="0.5"/>';
+          ang = endAng;
+        });
+      }
+      pieSvg += '</svg>';
+
+      var clsRatio = Math.round(classified / total * 1000) / 10;
+      var uncRatio = Math.round((1000 - classified / total * 1000)) / 10;
+      var ratioHtml = '<div style="flex:1;min-width:0;">';
+      ratioHtml += '<div style="font-size:10px;color:var(--text-primary);margin-bottom:2px;">分類済み <span style="color:var(--text-muted);">' + clsRatio.toFixed(1) + '%</span></div>';
+      ratioHtml += '<div style="font-size:10px;color:var(--text-primary);">未分類 <span style="color:var(--text-muted);">' + uncRatio.toFixed(1) + '%</span></div>';
+      ratioHtml += '</div>';
+      html += '<div style="display:flex;align-items:flex-start;gap:8px;">' + pieSvg + ratioHtml + '</div>';
+
+      var sorted = (cats || []).slice()
+        .filter(function(c) { return (c.kw_count || 0) > 0; })
+        .sort(function(a, b) { return (b.kw_count || 0) - (a.kw_count || 0); });
+      if (sorted.length > 0) {
+        var maxCnt = Math.max(1, sorted[0].kw_count || 0);
+        html += '<div style="font-size:10px;font-weight:600;color:var(--text-secondary);margin-top:12px;margin-bottom:4px;">分類カテゴリ別キーワード数</div>';
+        sorted.forEach(function(c) {
+          var cnt = c.kw_count || 0;
+          var pct = Math.round(cnt / maxCnt * 100);
+          html += '<div style="display:flex;align-items:center;gap:5px;margin-bottom:3px;">';
+          html += '<span style="font-size:10px;color:var(--text-primary);width:64px;flex-shrink:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="' + escHtml(c.name) + '">' + escHtml(c.name) + '</span>';
+          html += '<span style="flex:1;height:8px;background:var(--bg-secondary);border-radius:4px;overflow:hidden;"><span style="display:block;height:100%;width:' + pct + '%;background:' + escHtml(c.color || '#6366f1') + ';border-radius:4px;"></span></span>';
+          html += '<span style="font-size:10px;color:var(--text-muted);flex-shrink:0;">' + cnt + '</span>';
+          html += '</div>';
+        });
+      }
+      return html;
+    }
+
     function renderDailyStatsChart() {
       var month = dailyStatsCurrentMonth;
       var parts = month.split('-');
       dailyStatsTitleEl.textContent = parseInt(parts[0]) + '年' + parseInt(parts[1]) + '月';
       dailyStatsBody.innerHTML = '<div class="search-log-loading">読み込み中...</div>';
-      fetch('/api/aichat/daily-stats?month=' + encodeURIComponent(month), { credentials: 'same-origin' })
-        .then(function(r) { return r.json(); })
-        .then(function(d) {
+      Promise.allSettled([
+        fetch('/api/aichat/daily-stats?month=' + encodeURIComponent(month), { credentials: 'same-origin' }).then(function(r) { return r.json(); }),
+        fetch('/api/aichat/all-keywords', { credentials: 'same-origin' }).then(function(r) { return r.json(); }),
+        fetch('/api/aichat/keyword-categories-summary', { credentials: 'same-origin' }).then(function(r) { return r.json(); })
+      ])
+        .then(function(results) {
+          var d = results[0].status === 'fulfilled' ? results[0].value : {};
+          var kwAll = results[1].status === 'fulfilled' ? (results[1].value.keywords || []) : [];
+          var catSummary = results[2].status === 'fulfilled' ? (results[2].value.categories || []) : [];
           var days = d.days || [];
           var models = d.models || [];
           if (days.length === 0) {
@@ -4563,6 +4627,9 @@ export function getAiChatPage(user: {
 
             leftHtml += pieSvg + ratioHtml + '</div>';
           }
+
+          // ===== 左パネル最下段: キーワード分類状況（総数・円グラフ・カテゴリ別棒グラフ） =====
+          leftHtml += buildKwClassifyStatsHtml(kwAll, catSummary);
 
           // ===== 右パネル: 日次折れ線（累計KW）+ 棒グラフ =====
           var cumKwByDay = {}, cumSum = 0;

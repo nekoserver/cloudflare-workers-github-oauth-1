@@ -101,7 +101,7 @@ describe('キーワード分類拡張: 色選択スウォッチ', () => {
 
   it('カテゴリ登録 POST に color を含む', () => {
     const html = buildPage();
-    const idx = html.lastIndexOf('/api/aichat/keyword-categories');
+    const idx = html.lastIndexOf("/api/aichat/keyword-categories'");
     expect(idx).toBeGreaterThan(-1);
     // POST fetch は URL より後の body に color が含まれる
     const snippet = html.slice(Math.max(0, idx - 200), idx + 400);
