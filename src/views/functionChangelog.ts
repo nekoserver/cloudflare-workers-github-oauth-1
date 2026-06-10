@@ -29,6 +29,17 @@ export interface FileFunctionEntry {
   purpose: string;
 }
 
+export interface CatalogFunctionRow {
+  file_path: string;
+  function_name: string;
+  purpose: string;
+  is_exported: number;
+  is_async: number;
+  start_line: number | null;
+  end_line: number | null;
+  caller_count: number;
+}
+
 export interface FunctionChangelogInput {
   rows: FunctionChangeRow[];
   repos: RepoOption[];
@@ -39,6 +50,8 @@ export interface FunctionChangelogInput {
   filterFile?: string;
   filterFunction?: string;
   filterImpact?: string;
+  catalogRows: CatalogFunctionRow[];
+  indexedFiles: string[];
 }
 
 function changeTypeBadge(t: string): string {
@@ -76,9 +89,25 @@ export function getFunctionChangelogPage(input: FunctionChangelogInput): string 
     `<option value="${r.id}"${selectedRepoId === r.id ? ' selected' : ''}>${escapeHtml(r.full_name)}</option>`
   ).join('\n');
 
-  const fileOptions = availableFiles.map(f =>
-    `<option value="${escapeHtml(f)}"${input.filterFile === f ? ' selected' : ''}>${escapeHtml(f)}</option>`
-  ).join('\n');
+  const indexedSet = new Set(input.indexedFiles);
+  function buildFileOptgroups(files: string[], selectedVal?: string): string {
+    const indexed = files.filter(f => indexedSet.has(f));
+    const partial = files.filter(f => !indexedSet.has(f));
+    const sel = (f: string) => selectedVal === f ? ' selected' : '';
+    const indexedOpts = indexed.map(f =>
+      `<option value="${escapeHtml(f)}"${sel(f)}>${escapeHtml(f)}</option>`
+    ).join('\n');
+    const partialOpts = partial.map(f =>
+      `<option value="${escapeHtml(f)}"${sel(f)}>${escapeHtml(f)}</option>`
+    ).join('\n');
+    let result = '';
+    if (indexedOpts) result += `<optgroup label="● インデックス済み">\n${indexedOpts}\n</optgroup>`;
+    if (partialOpts) result += `\n<optgroup label="○ 未インデックス" disabled>\n${partialOpts}\n</optgroup>`;
+    return result;
+  }
+
+  const fileOptions = buildFileOptgroups(availableFiles, input.filterFile);
+  const modalFileOptions = buildFileOptgroups(availableFiles);
 
   const tableRows = rows.map(r => {
     const shortHash = r.commit_hash.slice(0, 7);
@@ -255,6 +284,18 @@ export function getFunctionChangelogPage(input: FunctionChangelogInput): string 
     .badge-chore{background:rgba(139,148,158,.15);color:#8b949e} .badge-none{color:var(--text-muted);background:none;padding:0}
     .count-label { color: var(--text-muted); font-size: 12px; margin-left: auto; }
     .empty-cell { text-align:center; color:var(--text-muted); padding:32px; }
+    .col-cat-file{width:220px;word-break:break-all} .col-cat-func{width:180px;word-break:break-all}
+    .col-cat-purpose{min-width:200px} .col-cat-lines{width:90px;white-space:nowrap;font-family:'SFMono-Regular',Consolas,monospace;font-size:11px;color:var(--text-muted)}
+    .col-cat-attrs{width:100px;white-space:nowrap} .col-cat-callers{width:70px;text-align:right;color:var(--text-muted)}
+    .badge-exp{background:rgba(63,185,80,.2);color:#3fb950} .badge-async{background:rgba(88,166,255,.2);color:#58a6ff}
+    .btn-catalog-toggle {
+      padding: 5px 12px; border-radius: 6px; font-size: 12px; font-weight: 600;
+      border: 1.5px solid var(--border); color: var(--text-muted); background: transparent;
+      cursor: pointer; transition: background 0.15s, color 0.15s, border-color 0.15s;
+      white-space: nowrap;
+    }
+    .btn-catalog-toggle:hover { background: light-dark(#f0f6ff,#1c2333); color: var(--text-strong); border-color: var(--accent); }
+    .btn-catalog-toggle.active { border-color: var(--accent); color: var(--accent); background: light-dark(#ddf4ff,#0d2136); }
     .footer { margin-top:20px; color:var(--text-muted); font-size:11px; border-top:1px solid var(--border); padding-top:12px; }
     a { color: var(--accent); }
     .btn-history {
@@ -485,6 +526,7 @@ export function getFunctionChangelogPage(input: FunctionChangelogInput): string 
       <option value="chore"${input.filterImpact === 'chore' ? ' selected' : ''}>その他</option>
     </select>
     <span class="count-label" id="rowCount">${noRepoSelected ? '—' : rows.length + ' 件'}</span>
+    <button class="btn-catalog-toggle" id="btnCatalogToggle"${noRepoSelected ? ' disabled' : ''}>📚 カタログ</button>
     <button class="btn-history" id="btnHistory"${noRepoSelected ? ' disabled' : ''}>🔍 関数を選んで履歴を調べる</button>
   </div>
 
@@ -500,6 +542,24 @@ export function getFunctionChangelogPage(input: FunctionChangelogInput): string 
       </thead>
       <tbody id="tableBody">
         ${tableRows || emptyRow}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="table-wrap" id="catalogWrap" style="display:none; margin-top: 16px;">
+    <table id="catalogTable">
+      <thead>
+        <tr>
+          <th class="col-cat-file">ファイル</th>
+          <th class="col-cat-func">関数名</th>
+          <th class="col-cat-purpose">説明</th>
+          <th class="col-cat-lines">行</th>
+          <th class="col-cat-attrs">属性</th>
+          <th class="col-cat-callers">呼び出し元</th>
+        </tr>
+      </thead>
+      <tbody id="catalogBody">
+        <tr><td colspan="6" class="empty-cell">データなし</td></tr>
       </tbody>
     </table>
   </div>
@@ -531,7 +591,7 @@ export function getFunctionChangelogPage(input: FunctionChangelogInput): string 
             <label for="modalFileSelect">① ファイルを選択</label>
             <select id="modalFileSelect" class="sel-needed">
               <option value="">— ファイルを選んでください —</option>
-              ${availableFiles.map(f => `<option value="${escapeHtml(f)}">${escapeHtml(f)}</option>`).join('\n              ')}
+              ${modalFileOptions}
             </select>
           </div>
           <div class="modal-func-count" id="funcCount">ファイルを選択すると関数一覧が表示されます</div>
@@ -551,6 +611,8 @@ export function getFunctionChangelogPage(input: FunctionChangelogInput): string 
 
   <script>
     var ALL_FUNCTIONS = ${allFunctionsJson};
+    var CATALOG_ROWS = ${JSON.stringify(input.catalogRows)};
+    var INDEXED_FILES = ${JSON.stringify(input.indexedFiles)};
     var allRows = Array.from(document.querySelectorAll('#tableBody tr[data-file]'));
 
     var repoSelect   = document.getElementById('repoSelect');
@@ -568,6 +630,58 @@ export function getFunctionChangelogPage(input: FunctionChangelogInput): string 
       if (val) { url.searchParams.set('repo', val); } else { url.searchParams.delete('repo'); }
       window.location.href = url.toString();
     });
+
+    // ---- カタログモード ----
+    var catalogMode = false;
+    var catalogWrap = document.getElementById('catalogWrap');
+    var btnCatalogToggle = document.getElementById('btnCatalogToggle');
+
+    function renderCatalogTable() {
+      var tbody = document.getElementById('catalogBody');
+      var fileVal = filterFile ? filterFile.value : '';
+      var filtered = fileVal
+        ? CATALOG_ROWS.filter(function(r) { return r.file_path === fileVal; })
+        : CATALOG_ROWS;
+      if (!filtered.length) {
+        tbody.innerHTML = '<tr><td colspan="6" class="empty-cell">データなし — ts_function_catalog にレコードを追加するか、npx tsx scripts/index-functions.ts を実行してください</td></tr>';
+        return;
+      }
+      tbody.innerHTML = filtered.map(function(r) {
+        var lines = r.start_line ? 'L' + r.start_line + (r.end_line ? '–' + r.end_line : '') : '—';
+        var attrs = [
+          r.is_exported ? '<span class="badge badge-exp">export</span>' : '',
+          r.is_async ? '<span class="badge badge-async">async</span>' : ''
+        ].filter(Boolean).join(' ');
+        return '<tr>' +
+          '<td class="col-cat-file"><code>' + escHtml(r.file_path) + '</code></td>' +
+          '<td class="col-cat-func"><code>' + escHtml(r.function_name) + '</code></td>' +
+          '<td class="col-cat-purpose"><span class="purpose">' + escHtml(r.purpose || '') + '</span></td>' +
+          '<td class="col-cat-lines">' + lines + '</td>' +
+          '<td class="col-cat-attrs">' + (attrs || '—') + '</td>' +
+          '<td class="col-cat-callers">' + r.caller_count + '</td>' +
+          '</tr>';
+      }).join('');
+    }
+
+    function enterCatalogMode() {
+      catalogMode = true;
+      if (btnCatalogToggle) { btnCatalogToggle.textContent = '📋 変更ログ'; btnCatalogToggle.classList.add('active'); }
+      if (tableWrap) tableWrap.style.display = 'none';
+      if (catalogWrap) { catalogWrap.style.display = ''; renderCatalogTable(); }
+    }
+
+    function exitCatalogMode() {
+      catalogMode = false;
+      if (btnCatalogToggle) { btnCatalogToggle.textContent = '📚 カタログ'; btnCatalogToggle.classList.remove('active'); }
+      if (tableWrap) tableWrap.style.display = '';
+      if (catalogWrap) catalogWrap.style.display = 'none';
+    }
+
+    if (btnCatalogToggle) {
+      btnCatalogToggle.addEventListener('click', function() {
+        if (catalogMode) exitCatalogMode(); else enterCatalogMode();
+      });
+    }
 
     function populateFuncOptions(fileVal) {
       var prev = filterFunc.value;
@@ -606,7 +720,9 @@ export function getFunctionChangelogPage(input: FunctionChangelogInput): string 
       rowCount.textContent = visible + ' 件';
     }
 
+    var currentStep = 0;
     function setStep(step) {
+      currentStep = step;
       if (step === 1) {
         stepBanner.className = 'step-banner visible step-banner--warn';
         stepBanner.textContent = '次にこの左上にあるファイル選択リスト内から対象ファイル（すべて指定可能）を選択してください。';
@@ -636,6 +752,7 @@ export function getFunctionChangelogPage(input: FunctionChangelogInput): string 
     filterFile.addEventListener('change', function() {
       populateFuncOptions(filterFile.value);
       applyFilter();
+      if (catalogMode) renderCatalogTable();
       setStep(2);
     });
 
@@ -655,7 +772,7 @@ export function getFunctionChangelogPage(input: FunctionChangelogInput): string 
           repoBanner.classList.add('fading');
           repoBanner.addEventListener('transitionend', function() {
             repoBanner.style.display = 'none';
-            setStep(1);
+            if (currentStep === 0) setStep(1);
           }, { once: true });
         }, 9000);
       }

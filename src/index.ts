@@ -20,7 +20,7 @@ import { getUserInfoPage } from './views/userinfo';
 import { getMarkdownPreviewPage } from './views/markdown-preview';
 import { getCacheStatusPage, CacheStatusData, TableStatusEntry, UserContextInfo, RepoColorEntry, RepoGroupEntry } from './views/status';
 import { renderColumnStatsHtml } from './views/columnStats';
-import { getFunctionChangelogPage, type FunctionChangeRow } from './views/functionChangelog';
+import { getFunctionChangelogPage, type FunctionChangeRow, type CatalogFunctionRow } from './views/functionChangelog';
 
 import { computeColumnRelationStats, verifyColumnStats, type TableSchema, type Relation } from './utils/columnRelationStats';
 import { ensureDefaultWorkspace, getCurrentWorkspace, getUserWorkspaces, switchWorkspace } from './utils/workspace';
@@ -4954,9 +4954,11 @@ app.get('/function-changelog', authMiddleware, async (c) => {
     let rows: FunctionChangeRow[] = [];
     let availableFiles: string[] = [];
     let availableFunctions: { file_path: string; function_name: string; purpose: string }[] = [];
+    let catalogRows: CatalogFunctionRow[] = [];
+    let indexedFiles: string[] = [];
 
     if (selectedRepoId !== null && !isNaN(selectedRepoId)) {
-      const [rowResult, fileResult, funcResult] = await Promise.all([
+      const [rowResult, fileResult, funcResult, catalogResult, indexedResult] = await Promise.all([
         db.prepare(`
           SELECT
             cl.commit_at, cl.commit_hash, cl.subject,
@@ -4983,10 +4985,25 @@ app.get('/function-changelog', authMiddleware, async (c) => {
         db.prepare(
           `SELECT file_path, function_name, COALESCE(purpose,'') AS purpose FROM ts_function_catalog WHERE repo_id = ? ORDER BY file_path, function_name`
         ).bind(selectedRepoId).all<{ file_path: string; function_name: string; purpose: string }>(),
+        db.prepare(`
+          SELECT f.file_path, f.function_name, COALESCE(f.purpose,'') AS purpose,
+            f.is_exported, f.is_async, f.start_line, f.end_line,
+            COUNT(c.id) AS caller_count
+          FROM ts_function_catalog f
+          LEFT JOIN ts_function_callers c ON c.callee_id = f.id
+          WHERE f.repo_id = ?
+          GROUP BY f.id
+          ORDER BY f.file_path, f.function_name
+        `).bind(selectedRepoId).all<CatalogFunctionRow>(),
+        db.prepare(
+          `SELECT DISTINCT file_path FROM ts_function_catalog WHERE repo_id = ? AND start_line IS NOT NULL ORDER BY file_path`
+        ).bind(selectedRepoId).all<{ file_path: string }>(),
       ]);
       rows = rowResult.results ?? [];
       availableFiles = (fileResult.results ?? []).map(r => r.file_path);
       availableFunctions = funcResult.results ?? [];
+      catalogRows = catalogResult.results ?? [];
+      indexedFiles = (indexedResult.results ?? []).map(r => r.file_path);
     }
 
     const html = getFunctionChangelogPage({
@@ -4996,6 +5013,8 @@ app.get('/function-changelog', authMiddleware, async (c) => {
       availableFiles,
       availableFunctions,
       generatedAt: new Date().toISOString(),
+      catalogRows,
+      indexedFiles,
     });
 
     return new Response(html, { status: 200, headers: { 'Content-Type': 'text/html; charset=utf-8' } });
