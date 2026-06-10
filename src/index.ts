@@ -118,6 +118,7 @@ const STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
   { name: 'ts_commit_function_map',  migration: 'ts-catalog', description: '関数カタログ: コミット×関数マッピング',    syncPolicy: 'manual' },
   { name: 'ts_function_impact',      migration: 'ts-catalog', description: '関数カタログ: 変更インパクト評価',         syncPolicy: 'manual' },
   { name: 'ts_commit_quality',       migration: 'ts-catalog', description: '関数カタログ: コミット品質評価',           syncPolicy: 'manual' },
+  { name: 'ts_function_callers',     migration: '0053',       description: '関数カタログ: 関数呼び出し元マッピング',   syncPolicy: 'manual' },
 ];
 
 const REQUIRED_STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
@@ -796,6 +797,19 @@ INSERT OR REPLACE INTO table_column_keys (table_name, column_name, key_type, fk_
 ('aichat_category_groups', 'user_id', 'idx', NULL);`,
   '0052': `ALTER TABLE user_sessions ADD COLUMN recent_commits_count INTEGER NOT NULL DEFAULT 20;
 ALTER TABLE user_sessions ADD COLUMN toast_duration INTEGER NOT NULL DEFAULT 10;`,
+  '0053': `ALTER TABLE ts_function_catalog ADD COLUMN start_line INTEGER;
+ALTER TABLE ts_function_catalog ADD COLUMN end_line INTEGER;
+CREATE TABLE IF NOT EXISTS ts_function_callers (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  repo_id     INTEGER NOT NULL REFERENCES ts_repository(id),
+  callee_id   INTEGER NOT NULL REFERENCES ts_function_catalog(id),
+  caller_file TEXT NOT NULL,
+  caller_line INTEGER NOT NULL,
+  updated_at  TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE(callee_id, caller_file, caller_line)
+);
+CREATE INDEX IF NOT EXISTS idx_tfcr_callee ON ts_function_callers(callee_id);
+CREATE INDEX IF NOT EXISTS idx_tfcr_file   ON ts_function_callers(repo_id, caller_file);`,
   'ts-catalog': `CREATE TABLE IF NOT EXISTS ts_repository (
   id            INTEGER PRIMARY KEY AUTOINCREMENT,
   full_name     TEXT NOT NULL UNIQUE,
@@ -910,7 +924,19 @@ CREATE TABLE IF NOT EXISTS ts_commit_quality (
 );
 
 CREATE INDEX IF NOT EXISTS idx_tcq_repo  ON ts_commit_quality(repo_id);
-CREATE INDEX IF NOT EXISTS idx_tcq_score ON ts_commit_quality(repo_id, granularity_score);`,
+CREATE INDEX IF NOT EXISTS idx_tcq_score ON ts_commit_quality(repo_id, granularity_score);
+
+CREATE TABLE IF NOT EXISTS ts_function_callers (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  repo_id     INTEGER NOT NULL REFERENCES ts_repository(id),
+  callee_id   INTEGER NOT NULL REFERENCES ts_function_catalog(id),
+  caller_file TEXT NOT NULL,
+  caller_line INTEGER NOT NULL,
+  updated_at  TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE(callee_id, caller_file, caller_line)
+);
+CREATE INDEX IF NOT EXISTS idx_tfcr_callee ON ts_function_callers(callee_id);
+CREATE INDEX IF NOT EXISTS idx_tfcr_file   ON ts_function_callers(repo_id, caller_file);`,
 };
 
 async function ensureGroupTable(db: D1Database): Promise<void> {
@@ -1096,6 +1122,7 @@ export const TABLE_COLUMN_KEYS: Record<string, ColumnKeyInfo> = {
   ts_commit_function_map: { id: 'pk', repo_id: 'pk+fk', commit_hash: 'pk+fk', file_path: 'idx', function_name: 'idx', change_type: 'idx' },
   ts_function_impact:     { id: 'pk', repo_id: 'fk', commit_hash: 'fk', file_path: 'idx', function_name: 'idx', impact_type: 'idx', contribution: 'idx' },
   ts_commit_quality:      { id: 'pk', repo_id: 'pk+fk', commit_hash: 'pk+fk', granularity_score: 'idx' },
+  ts_function_callers:    { id: 'pk', repo_id: 'fk', callee_id: 'fk', caller_file: 'idx' },
 };
 
 export function getColumnKeyType(tableName: string, columnName: string): ColumnKeyType {
@@ -1162,6 +1189,7 @@ export const TABLE_GROUP_MAP: Record<string, string> = {
   keyword_multi_labels: 'search',
   ts_repository:          'ts-catalog',
   ts_function_catalog:    'ts-catalog',
+  ts_function_callers:    'ts-catalog',
   ts_commit_log:          'ts-catalog',
   ts_commit_function_map: 'ts-catalog',
   ts_function_impact:     'ts-catalog',
@@ -1324,6 +1352,7 @@ export const COLUMN_FK_TARGETS: Record<string, Record<string, string>> = {
   // 関数カタログ系 (ts_*)
   // ========================================================================
   ts_function_catalog:    { repo_id: 'ts_repository' },
+  ts_function_callers:    { repo_id: 'ts_repository', callee_id: 'ts_function_catalog' },
   ts_commit_log:          { repo_id: 'ts_repository' },
   ts_commit_function_map: { repo_id: 'ts_repository', commit_hash: 'ts_commit_log' },
   ts_function_impact:     { repo_id: 'ts_repository', commit_hash: 'ts_commit_log' },
@@ -2125,7 +2154,6 @@ async function updateUserSession(
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT (user_id) DO UPDATE SET
         timezone = excluded.timezone,
-        session_duration = excluded.session_duration,
         last_login_at = excluded.last_login_at,
         current_login_at = excluded.current_login_at,
         updated_at = excluded.updated_at,
@@ -2487,14 +2515,25 @@ app.get('/auth/github/callback', async (c) => {
       timezone = userSession.timezone;
       sessionDuration = userSession.sessionDuration;
     } else {
-      // 新規ユーザーの場合、クッキーから取得（もしあれば）
+      // getUserSession が失敗した場合（migration未適用等）、session_duration だけ別クエリで取得
+      let sessionDurationFromDB: string | null = null;
+      if (c.env.DB) {
+        try {
+          const minimal = await c.env.DB.prepare(
+            'SELECT session_duration FROM user_sessions WHERE user_id = ?'
+          ).bind(userId).first<{ session_duration: string }>();
+          sessionDurationFromDB = minimal?.session_duration ?? null;
+        } catch {
+          // テーブル未作成等の場合は無視
+        }
+      }
+
       const cookieVals = getCookieValues(cookieHeader, ['user_timezone', 'user_session_duration']);
       if (cookieVals['user_timezone']) {
         timezone = cookieVals['user_timezone'];
       }
-      if (cookieVals['user_session_duration']) {
-        sessionDuration = cookieVals['user_session_duration'];
-      }
+      // 解決順序: D1再クエリ → Cookie → デフォルト '1h'
+      sessionDuration = sessionDurationFromDB ?? cookieVals['user_session_duration'] ?? '1h';
     }
 
     // D1にログイン情報を保存（付与スコープも含む）
@@ -2559,6 +2598,7 @@ app.get('/auth/github/callback', async (c) => {
     redirectHeaders.append('Set-Cookie', `auth_token=${token}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${sessionDurationSeconds}`);
     redirectHeaders.append('Set-Cookie', `login_timestamp=${Date.now()}; Path=/; Secure; SameSite=Lax; Max-Age=${sessionDurationSeconds}`);
     redirectHeaders.append('Set-Cookie', `last_activity=${Date.now()}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${idleTimeoutSeconds}`);
+    redirectHeaders.append('Set-Cookie', `user_session_duration=${sessionDuration}; Path=/; Secure; SameSite=Lax; Max-Age=31536000`);
     redirectHeaders.append('Set-Cookie', `show_welcome_message=1; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=60`);
     // 使用済みのOAuthクッキーを削除
     redirectHeaders.append('Set-Cookie', `oauth_state=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0`);

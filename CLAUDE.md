@@ -287,8 +287,8 @@ NOTICE.<リポジトリ名>.<YYYYMMDD>.md
 
 ## コミット前の新関数検出（必須）
 
-`git commit` を実行する前に、このリポジトリの TypeScript ソースに新しく追加された関数を
-`ts_function_catalog` へ反映するための検出ステップを必ず実行すること。
+`git commit` を実行する前に、このリポジトリの TypeScript ソースに新しく追加・変更された関数を
+`ts_function_catalog`（行番号・呼び出し元含む）へ反映するためのステップを必ず実行すること。
 
 ### 実行手順
 
@@ -299,39 +299,36 @@ NOTICE.<リポジトリ名>.<YYYYMMDD>.md
    ```
    変更された `.ts` ファイルを列挙する（テストファイル `*.test.ts` は除外）。
 
-2. **変更ファイルの関数名を抽出**
-   変更された各 `.ts` ファイルを Read ツールで読み、以下のパターンに該当する関数を列挙する:
-   - `export function NAME`
-   - `export async function NAME`
-   - `export const NAME = (` または `export const NAME = async (`
-   - クラスメソッドは除く。型定義 (`type`, `interface`) は除く。
-
-3. **`ts_function_catalog` との突合**
-   D1 の `ts_function_catalog` に登録済みの関数と比較し、**未登録のものだけ**を抽出する。
-   登録済み確認は `SPEC.cloudflare-workers-github-oauth-1.FUNCTIONS.sql` の seed データを
-   参照するか、セッション中にすでに D1 クエリ結果が得られていればそれを使う。
-
-4. **purpose を生成して INSERT SQL を提示**
-   未登録の関数ごとに、コードの内容から日本語の `purpose`（1文・体言止め）を生成し、
-   以下の形式で INSERT SQL をユーザーに提示する（コメントなし）:
-   ```sql
-   INSERT OR IGNORE INTO ts_function_catalog
-     (repo_id, file_path, function_name, purpose, is_exported, is_async, first_commit_hash, first_commit_at)
-   VALUES
-     (1,'<file_path>','<function_name>','<purpose>',<is_exported>,<is_async>,'<commit_hash>','<YYYY-MM-DD>');
+2. **インデクサースクリプトを実行して SQL を生成**
+   変更されたファイルを引数に渡してスクリプトを実行する:
+   ```bash
+   npx tsx scripts/index-functions.ts <changed-file1.ts> [<changed-file2.ts> ...]
    ```
-   `first_commit_hash` はこれからコミットするハッシュではなく、**直前の HEAD ハッシュ**を使う
-   （コミット前に確定しているため）。コミット後に実際のハッシュで UPDATE する場合はユーザーに伝える。
+   引数なしにすると `src/` 以下の全 `.ts` ファイルを対象にする（初回一括投入時のみ）。
 
-5. **新関数がなければスキップ**
-   変更ファイルに新関数が一切なければこのステップはスキップしてよい。
+   スクリプトは以下の SQL を標準出力に出力する:
+   - **既存関数**: `start_line` / `end_line` / `is_exported` / `is_async` を UPDATE（`purpose` は保持）
+   - **新規関数**: `purpose='(自動検出)'` でフォールバック INSERT
+   - **呼び出し元**: `ts_function_callers` テーブルを DELETE + INSERT で最新化
+
+3. **新規関数の purpose を日本語に修正**
+   出力 SQL に `purpose='(自動検出)'` の行が含まれる場合は、コードの内容から
+   日本語の `purpose`（1文・体言止め）を生成して SQL 内で修正してからユーザーに提示する。
+
+4. **SQL をユーザーに提示して D1 で実行**
+   修正後の SQL をコードブロックで提示する（`--` コメント禁止）。
+   ユーザーが D1 コンソールにそのまま貼り付けて実行できる形式にすること。
+
+5. **新関数も変更もなければスキップ**
+   変更ファイルに関数の追加・変更が一切なければこのステップはスキップしてよい。
    その場合も「新関数なし、スキップします」とひと言報告すること。
 
 ### 注意事項
 
-- `SPEC.cloudflare-workers-github-oauth-1.FUNCTIONS.sql` の seed データを正とみなす。
-  D1 コンソールでの追加・削除がある場合はユーザーに最新状態の確認を求める。
-- INSERT SQL はユーザーが D1 コンソールにそのまま貼れる形式にする（`--` コメント禁止）。
+- スクリプトはトップレベル関数（インデントなし）のみを検出する。クラスメソッドは除外される。
+- 行番号はコミットのたびに変わりうるため、変更があったファイルは毎回スクリプトにかけること。
+- 呼び出し元の検出はテキスト検索（`functionName(`）のため、同名の変数と誤検知する場合がある。
+  カタログ用途のため誤検知は許容範囲内とする。
 - このステップは `npx vitest run` の後・`git commit` の前に実行する。
 
 ---
