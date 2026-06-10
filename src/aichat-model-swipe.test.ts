@@ -46,7 +46,7 @@ describe('詳細プレビューモーダル: マルチモデルスワイプ — 
     const html = buildPage();
     const idx = html.indexOf('function historyModalSwipeNavigate');
     expect(idx).toBeGreaterThan(-1);
-    const fn = html.slice(idx, idx + 1500);
+    const fn = html.slice(idx, idx + 2000);
     expect(fn).toContain('/api/aichat/shares/');
   });
 

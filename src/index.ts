@@ -3429,7 +3429,7 @@ app.get('/api/aichat/share-keywords', authMiddleware, async (c) => {
      FROM aichat_search_log
      WHERE share_id = ? AND user_id = ?
      ORDER BY select_count DESC
-     LIMIT 10`
+     LIMIT 50`
   ).bind(shareId, user.sub).all<{ keyword: string }>();
   return jsonUtf8({ keywords: (rows.results ?? []).map((r) => r.keyword) });
 });
