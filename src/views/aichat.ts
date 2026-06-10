@@ -2968,16 +2968,9 @@ export function getAiChatPage(user: {
     function renderAiResultInModal(box, question, selectedModel, data) {
       var responseText = data.response || '（応答なし）';
       var usedModel = data.usedModel || selectedModel;
-      var ansBubble = document.createElement('div');
-      ansBubble.className = 'chat-bubble assistant preview-area';
-      ansBubble.innerHTML = parseMd(responseText);
+      var isFallback = !!data.fallbackUsed || (data.usedModel != null && data.usedModel !== selectedModel);
+      var ansBubble = buildAssistantBubble(responseText, selectedModel, isFallback, extractRespUsage(data));
       box.appendChild(ansBubble);
-      if (data.usedModel && data.usedModel !== selectedModel) {
-        var fallbackNote = document.createElement('div');
-        fallbackNote.textContent = '※ ' + escHtml(shortModelName(data.usedModel)) + ' にフォールバックしました';
-        fallbackNote.style.cssText = 'font-size:11px;color:var(--text-muted);';
-        box.appendChild(fallbackNote);
-      }
       appendAiResponseRow(box, question, responseText, usedModel, data.shareId, data.userHash);
     }
 
@@ -4785,40 +4778,54 @@ export function getAiChatPage(user: {
       }
     });
 
-    function appendBubble(text, role, model, isFallback, usage) {
+    function extractRespUsage(data) {
+      return {
+        input_tokens: (data && data.input_tokens) ?? null,
+        output_tokens: (data && data.output_tokens) ?? null,
+        total_tokens: (data && data.total_tokens) ?? null
+      };
+    }
+
+    function buildAssistantBubble(text, model, isFallback, usage) {
       var el = document.createElement('div');
+      el.className = 'chat-bubble assistant preview-area';
+      el.innerHTML = parseMd(text);
+      var copyBtn = document.createElement('button');
+      copyBtn.className = 'bubble-copy-btn';
+      copyBtn.title = '回答をコピー';
+      copyBtn.textContent = '📋';
+      copyBtn.onclick = function(e) {
+        e.stopPropagation();
+        navigator.clipboard.writeText(text).then(function() {
+          copyBtn.textContent = '✓';
+          copyBtn.classList.add('copied');
+          setTimeout(function() { copyBtn.textContent = '📋'; copyBtn.classList.remove('copied'); }, 2000);
+        }).catch(function() {});
+      };
+      el.appendChild(copyBtn);
+      if (isFallback) {
+        var notice = document.createElement('div');
+        notice.className = 'bubble-fallback-notice';
+        notice.textContent = 'この言語モデル（' + shortModelName(model) + '）は応答に問題があったためデフォルトの言語モデルにフォールバックされました';
+        el.appendChild(notice);
+      }
+      if (usage && (usage.input_tokens != null || usage.total_tokens != null)) {
+        var tokEl = document.createElement('div');
+        tokEl.style.cssText = 'text-align:right;font-size:10px;color:var(--text-muted);margin-top:6px;letter-spacing:0.02em;';
+        var parts = [];
+        if (usage.input_tokens != null) parts.push('in:' + usage.input_tokens.toLocaleString());
+        if (usage.output_tokens != null) parts.push('out:' + usage.output_tokens.toLocaleString());
+        if (usage.total_tokens != null) parts.push('total:' + usage.total_tokens.toLocaleString());
+        tokEl.textContent = parts.join(' / ') + ' tokens';
+        el.appendChild(tokEl);
+      }
+      return el;
+    }
+
+    function appendBubble(text, role, model, isFallback, usage) {
+      var el;
       if (role === 'assistant') {
-        el.className = 'chat-bubble assistant preview-area';
-        el.innerHTML = parseMd(text);
-        var copyBtn = document.createElement('button');
-        copyBtn.className = 'bubble-copy-btn';
-        copyBtn.title = '回答をコピー';
-        copyBtn.textContent = '📋';
-        copyBtn.onclick = function(e) {
-          e.stopPropagation();
-          navigator.clipboard.writeText(text).then(function() {
-            copyBtn.textContent = '✓';
-            copyBtn.classList.add('copied');
-            setTimeout(function() { copyBtn.textContent = '📋'; copyBtn.classList.remove('copied'); }, 2000);
-          }).catch(function() {});
-        };
-        el.appendChild(copyBtn);
-        if (isFallback) {
-          var notice = document.createElement('div');
-          notice.className = 'bubble-fallback-notice';
-          notice.textContent = 'この言語モデル（' + shortModelName(model) + '）は応答に問題があったためデフォルトの言語モデルにフォールバックされました';
-          el.appendChild(notice);
-        }
-        if (usage && (usage.input_tokens != null || usage.total_tokens != null)) {
-          var tokEl = document.createElement('div');
-          tokEl.style.cssText = 'text-align:right;font-size:10px;color:var(--text-muted);margin-top:6px;letter-spacing:0.02em;';
-          var parts = [];
-          if (usage.input_tokens != null) parts.push('in:' + usage.input_tokens.toLocaleString());
-          if (usage.output_tokens != null) parts.push('out:' + usage.output_tokens.toLocaleString());
-          if (usage.total_tokens != null) parts.push('total:' + usage.total_tokens.toLocaleString());
-          tokEl.textContent = parts.join(' / ') + ' tokens';
-          el.appendChild(tokEl);
-        }
+        el = buildAssistantBubble(text, model, isFallback, usage);
         if (model) {
           var wrap = document.createElement('div');
           wrap.className = 'chat-bubble-wrap';
@@ -4832,6 +4839,7 @@ export function getAiChatPage(user: {
           return el;
         }
       } else {
+        el = document.createElement('div');
         el.className = 'chat-bubble ' + role;
         el.textContent = text;
       }
@@ -5012,7 +5020,7 @@ export function getAiChatPage(user: {
           } else {
             var responseText = data.response || '(応答なし)';
             var usedModel = data.usedModel || lastModel;
-            var respUsage = { input_tokens: data.input_tokens ?? null, output_tokens: data.output_tokens ?? null, total_tokens: data.total_tokens ?? null };
+            var respUsage = extractRespUsage(data);
             appendBubble(responseText, 'assistant', lastModel, data.fallbackUsed, respUsage);
             appendShareBtn(currentMsg, responseText, usedModel, data.shareId, data.userHash);
           }
