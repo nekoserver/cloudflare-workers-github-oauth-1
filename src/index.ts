@@ -3477,17 +3477,18 @@ app.get('/api/aichat/all-keywords', authMiddleware, async (c) => {
   if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
   try {
     const rows = await c.env.DB.prepare(
-      `SELECT s.keyword, SUM(s.select_count) AS cnt,
-         CASE WHEN m.category_id IS NOT NULL THEN 1 ELSE 0 END AS is_classified,
-         m.category_id,
-         COALESCE(c.color, '#6366f1') AS category_color
-       FROM aichat_search_log s
+      `SELECT s.keyword, s.cnt,
+         CASE WHEN COUNT(m.category_id) > 0 THEN 1 ELSE 0 END AS is_classified,
+         MIN(m.category_id) AS category_id,
+         COALESCE(MIN(c.color), '#6366f1') AS category_color,
+         GROUP_CONCAT(m.category_id || ':' || COALESCE(c.color, '#6366f1')) AS category_pairs
+       FROM (SELECT user_id, keyword, SUM(select_count) AS cnt
+             FROM aichat_search_log WHERE user_id = ? GROUP BY keyword) s
        LEFT JOIN aichat_keyword_category_map m ON m.keyword = s.keyword AND m.user_id = s.user_id
-       LEFT JOIN aichat_keyword_categories c ON c.id = m.category_id AND c.user_id = s.user_id
-       WHERE s.user_id = ?
+       LEFT JOIN aichat_keyword_categories c ON c.id = m.category_id AND c.user_id = ?
        GROUP BY s.keyword
-       ORDER BY SUM(s.select_count) DESC`
-    ).bind(user.sub).all<{ keyword: string; cnt: number; is_classified: number; category_id: number | null; category_color: string | null }>();
+       ORDER BY s.cnt DESC`
+    ).bind(user.sub, user.sub).all<{ keyword: string; cnt: number; is_classified: number; category_id: number | null; category_color: string | null; category_pairs: string | null }>();
     return jsonUtf8({ keywords: rows.results ?? [] });
   } catch {
     const rows = await c.env.DB.prepare(
@@ -3497,7 +3498,7 @@ app.get('/api/aichat/all-keywords', authMiddleware, async (c) => {
        GROUP BY keyword
        ORDER BY cnt DESC`
     ).bind(user.sub).all<{ keyword: string; cnt: number }>();
-    return jsonUtf8({ keywords: (rows.results ?? []).map((r) => ({ ...r, is_classified: 0, category_id: null, category_color: null })) });
+    return jsonUtf8({ keywords: (rows.results ?? []).map((r) => ({ ...r, is_classified: 0, category_id: null, category_color: null, category_pairs: null })) });
   }
 });
 

@@ -136,7 +136,7 @@ describe('キーワード分類モーダル: kw-classify-kw-badge のスタイ�
     const html = buildPage();
     const idx = html.indexOf('function applyKwBadgeColors');
     expect(idx).toBeGreaterThan(-1);
-    const snippet = html.slice(idx, idx + 500);
+    const snippet = html.slice(idx, idx + 1500);
     expect(snippet).toContain('el.className');
     expect(snippet).not.toContain('el.style.backgroundColor');
   });
@@ -144,21 +144,21 @@ describe('キーワード分類モーダル: kw-classify-kw-badge のスタイ�
   it('applyKwBadgeColors が kw-kw-classified を使う', () => {
     const html = buildPage();
     const idx = html.indexOf('function applyKwBadgeColors');
-    const snippet = html.slice(idx, idx + 700);
+    const snippet = html.slice(idx, idx + 1500);
     expect(snippet).toContain('kw-kw-classified');
   });
 
   it('applyKwBadgeColors が selectedCats[cid] で選択カテゴリを判定する', () => {
     const html = buildPage();
     const idx = html.indexOf('function applyKwBadgeColors');
-    const snippet = html.slice(idx, idx + 500);
-    expect(snippet).toContain('selectedCats[cid]');
+    const snippet = html.slice(idx, idx + 1500);
+    expect(snippet).toContain('selectedCats[String(');
   });
 
   it('applyKwBadgeColors が選択カテゴリ内キーワードに sq-kw-badge-active を適用する', () => {
     const html = buildPage();
     const idx = html.indexOf('function applyKwBadgeColors');
-    const snippet = html.slice(idx, idx + 500);
+    const snippet = html.slice(idx, idx + 1500);
     expect(snippet).toContain('sq-kw-badge-active');
   });
 
@@ -166,7 +166,7 @@ describe('キーワード分類モーダル: kw-classify-kw-badge のスタイ�
     const html = buildPage();
     const idx = html.indexOf('function applyKwBadgeColors');
     expect(idx).toBeGreaterThan(-1);
-    const snippet = html.slice(idx, idx + 600);
+    const snippet = html.slice(idx, idx + 1500);
     expect(snippet).toContain('setProperty');
     expect(snippet).toContain('--kwcat-color');
     expect(snippet).toContain('--kwcat-bg');

@@ -3944,14 +3944,23 @@ export function getAiChatPage(user: {
     function applyKwBadgeColors() {
       kwClassifyListBody.querySelectorAll('.kw-classify-kw-badge').forEach(function(kwEl) {
         var el = kwEl, cid = el.dataset.catId;
+        var catIds = [];
+        try { catIds = JSON.parse(el.dataset.catIds || '[]'); } catch(e) {}
+        if (catIds.length === 0 && cid) catIds = [cid];
+        var activeId = null;
+        catIds.forEach(function(id) {
+          if (activeId == null && selectedCats[String(id)]) activeId = String(id);
+        });
         var base = 'kw-classify-kw-badge sq-kw-badge';
-        if (cid && selectedCats[cid]) {
-          var c = kwPaletteActColor || (el.dataset.catColor || '#6366f1');
+        if (activeId != null) {
+          var catColors = {};
+          try { catColors = JSON.parse(el.dataset.catColors || '{}'); } catch(e) {}
+          var c = kwPaletteActColor || catColors[activeId] || el.dataset.catColor || '#6366f1';
           el.className = base + ' sq-kw-badge-active';
           el.style.setProperty('--kwcat-color', c);
           el.style.setProperty('--kwcat-bg', c + '33');
         } else {
-          el.className = base + (cid ? ' kw-kw-classified' : '');
+          el.className = base + (catIds.length > 0 ? ' kw-kw-classified' : '');
         }
       });
       kwClassifyListBody.querySelectorAll('.kw-cat-summary-badge').forEach(function(catEl) {
@@ -4007,10 +4016,25 @@ export function getAiChatPage(user: {
         } else {
           html += '<div style="line-height:1;">';
           kws.forEach(function(kw) {
+            var catIds = [];
+            var catColors = {};
+            if (kw.category_pairs) {
+              String(kw.category_pairs).split(',').forEach(function(pair) {
+                var sep = pair.indexOf(':');
+                if (sep <= 0) return;
+                var pid = pair.slice(0, sep);
+                catIds.push(pid);
+                catColors[pid] = pair.slice(sep + 1);
+              });
+            } else if (kw.category_id != null) {
+              catIds.push(String(kw.category_id));
+              catColors[String(kw.category_id)] = kw.category_color || '#6366f1';
+            }
             var catIdAttr = kw.category_id != null ? ' data-cat-id="' + escHtml(String(kw.category_id)) + '"' : '';
             var catColorAttr = kw.category_color ? ' data-cat-color="' + escHtml(kw.category_color) + '"' : '';
+            var catIdsAttr = catIds.length > 0 ? ' data-cat-ids="' + escHtml(JSON.stringify(catIds)) + '" data-cat-colors="' + escHtml(JSON.stringify(catColors)) + '"' : '';
             var kwCls = 'kw-classify-kw-badge sq-kw-badge' + (kw.is_classified ? ' kw-kw-classified' : '');
-            html += '<span class="' + kwCls + '" data-keyword="' + escHtml(kw.keyword) + '"' + catIdAttr + catColorAttr + '>' + escHtml(kw.keyword) + ' (' + kw.cnt + ')</span>';
+            html += '<span class="' + kwCls + '" data-keyword="' + escHtml(kw.keyword) + '"' + catIdAttr + catColorAttr + catIdsAttr + '>' + escHtml(kw.keyword) + ' (' + kw.cnt + ')</span>';
           });
           html += '</div>';
         }
