@@ -794,6 +794,8 @@ INSERT OR REPLACE INTO table_column_keys (table_name, column_name, key_type, fk_
 ('aichat_category_groups', 'id', 'pk', NULL);
 INSERT OR REPLACE INTO table_column_keys (table_name, column_name, key_type, fk_target_table) VALUES
 ('aichat_category_groups', 'user_id', 'idx', NULL);`,
+  '0052': `ALTER TABLE user_sessions ADD COLUMN recent_commits_count INTEGER NOT NULL DEFAULT 20;
+ALTER TABLE user_sessions ADD COLUMN toast_duration INTEGER NOT NULL DEFAULT 10;`,
   'ts-catalog': `CREATE TABLE IF NOT EXISTS ts_repository (
   id            INTEGER PRIMARY KEY AUTOINCREMENT,
   full_name     TEXT NOT NULL UNIQUE,
@@ -2148,6 +2150,8 @@ async function getUserSession(db: D1Database | undefined, userId: string): Promi
   lastLoginAt: string | null;
   githubAccessToken?: string | null;
   githubGrantedScopes?: string | null;
+  recentCommitsCount: number | null;
+  toastDuration: number | null;
 } | null> {
   if (!db) {
     return null;
@@ -2155,13 +2159,15 @@ async function getUserSession(db: D1Database | undefined, userId: string): Promi
 
   try {
     const result = await db.prepare(
-      'SELECT timezone, session_duration, last_login_at, github_access_token, github_granted_scopes FROM user_sessions WHERE user_id = ?'
+      'SELECT timezone, session_duration, last_login_at, github_access_token, github_granted_scopes, recent_commits_count, toast_duration FROM user_sessions WHERE user_id = ?'
     ).bind(userId).first<{
       timezone: string;
       session_duration: string;
       last_login_at: string | null;
       github_access_token: string | null;
       github_granted_scopes: string | null;
+      recent_commits_count: number | null;
+      toast_duration: number | null;
     }>();
 
     if (!result) {
@@ -2174,6 +2180,8 @@ async function getUserSession(db: D1Database | undefined, userId: string): Promi
       lastLoginAt: result.last_login_at,
       githubAccessToken: result.github_access_token,
       githubGrantedScopes: result.github_granted_scopes,
+      recentCommitsCount: result.recent_commits_count ?? null,
+      toastDuration: result.toast_duration ?? null,
     };
   } catch (error) {
     logger.error('Error getting user session', {
@@ -2188,7 +2196,7 @@ async function getUserSession(db: D1Database | undefined, userId: string): Promi
 async function updateUserSettings(
   db: D1Database | undefined,
   userId: string,
-  field: 'timezone' | 'session_duration' | 'display_name',
+  field: 'timezone' | 'session_duration' | 'display_name' | 'recent_commits_count' | 'toast_duration',
   value: string
 ): Promise<boolean> {
   if (!db) {
@@ -3878,8 +3886,6 @@ app.get('/settings', authMiddleware, async (c) => {
     'user_search_label_mode',
   ]);
   const timezone = cookieVals['user_timezone'] || DEFAULT_TIMEZONE;
-  const recentCommitsCount = parseInt(cookieVals['user_recent_commits_count'] || '20', 10) || 20;
-  const toastDuration = parseInt(cookieVals['user_toast_duration'] || '10', 10) || 10;
   const statusCommitCacheSortMode = cookieVals['user_status_commit_cache_sort_mode'] === 'toggle' ? 'toggle' : 'off';
   const statusChartMode = cookieVals['user_status_chart_mode'] === 'repo' ? 'repo' : 'gradient';
   const statusChartSortOrder = cookieVals['user_status_chart_sort_order'] === 'date' ? 'date' : 'count';
@@ -3900,6 +3906,8 @@ app.get('/settings', authMiddleware, async (c) => {
   const accessToken = userSession?.githubAccessToken ?? user.github_access_token ?? undefined;
   const resolvedTimezone = userSession?.timezone || getCookieValues(cookieHeader, ['user_timezone'])['user_timezone'] || DEFAULT_TIMEZONE;
   const sessionDuration = resolveSessionDuration(userSession?.sessionDuration, cookieVals['user_session_duration']);
+  const recentCommitsCount = userSession?.recentCommitsCount ?? (parseInt(cookieVals['user_recent_commits_count'] ?? '', 10) || 20);
+  const toastDuration = userSession?.toastDuration ?? (parseInt(cookieVals['user_toast_duration'] ?? '', 10) || 10);
 
   let grantedScopes: string[] | null = null;
   let scopesError: string | null = null;
@@ -8095,6 +8103,7 @@ app.post('/api/settings/theme', authMiddleware, async (c) => {
  */
 app.post('/api/settings/recent-commits-count', authMiddleware, async (c) => {
   try {
+    const user = c.get('user');
     const { count } = await c.req.json();
     const num = parseInt(count, 10);
 
@@ -8102,6 +8111,7 @@ app.post('/api/settings/recent-commits-count', authMiddleware, async (c) => {
       return c.json({ error: '表示件数は5〜100の範囲で指定してください' }, 400);
     }
 
+    await updateUserSettings(c.env.DB, user.sub, 'recent_commits_count', String(num));
     c.header('Set-Cookie', `user_recent_commits_count=${num}; Path=/; Secure; SameSite=Lax; Max-Age=31536000`);
 
     return c.json({ message: '表示件数を変更しました', count: num }, 200);
@@ -8120,6 +8130,7 @@ app.post('/api/settings/recent-commits-count', authMiddleware, async (c) => {
  */
 app.post('/api/settings/toast-duration', authMiddleware, async (c) => {
   try {
+    const user = c.get('user');
     const { duration } = await c.req.json();
     const num = parseInt(duration, 10);
 
@@ -8127,6 +8138,7 @@ app.post('/api/settings/toast-duration', authMiddleware, async (c) => {
       return c.json({ error: 'トースト表示時間は1〜60秒の範囲で指定してください' }, 400);
     }
 
+    await updateUserSettings(c.env.DB, user.sub, 'toast_duration', String(num));
     c.header('Set-Cookie', `user_toast_duration=${num}; Path=/; Secure; SameSite=Lax; Max-Age=31536000`);
 
     return c.json({ message: 'トースト表示時間を変更しました', duration: num }, 200);
