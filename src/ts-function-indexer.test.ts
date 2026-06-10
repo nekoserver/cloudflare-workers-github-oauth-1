@@ -54,6 +54,31 @@ describe('parseFunctions: function キーワード', () => {
   });
 });
 
+describe('parseFunctions: 複数行の引数オブジェクト型', () => {
+  it('引数のオブジェクト型リテラルの閉じ括弧を関数終端と誤検出しない', () => {
+    const src = [
+      'export function getPage(user: {',
+      '  name?: string;',
+      '  username: string;',
+      '}): string {',
+      '  const x = 1;',
+      '  return String(x);',
+      '}',
+    ].join('\n');
+    const result = parseFunctions(src);
+    expect(result).toHaveLength(1);
+    expect(result[0].name).toBe('getPage');
+    expect(result[0].startLine).toBe(1);
+    expect(result[0].endLine).toBe(7);
+  });
+
+  it('1行で完結する関数も正しく検出する', () => {
+    const src = 'function one() { return 1; }\n';
+    const result = parseFunctions(src);
+    expect(result[0].endLine).toBe(1);
+  });
+});
+
 describe('parseFunctions: const arrow 関数', () => {
   it('export const arrowFunc を検出する', () => {
     const src = `export const arrowFunc = (x: number): number => {\n  return x * 2;\n};\n`;

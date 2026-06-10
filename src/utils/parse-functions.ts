@@ -62,11 +62,11 @@ function findEndLine(lines: string[], startIdx: number): number {
   for (let j = startIdx; j < lines.length; j++) {
     for (const ch of lines[j]) {
       if (ch === '{') { depth++; foundOpen = true; }
-      else if (ch === '}') {
-        depth--;
-        if (foundOpen && depth === 0) return j + 1;
-      }
+      else if (ch === '}') depth--;
     }
+    // 行の途中で一時的に depth 0 になるケース（`}): string {` 等の
+    // 複数行引数オブジェクト型）を誤検出しないよう、判定は行末で行う
+    if (foundOpen && depth <= 0) return j + 1;
   }
   return startIdx + 1;
 }

@@ -286,7 +286,13 @@ export function getFunctionChangelogPage(input: FunctionChangelogInput): string 
     .empty-cell { text-align:center; color:var(--text-muted); padding:32px; }
     .col-cat-file{width:220px;word-break:break-all} .col-cat-func{width:180px;word-break:break-all}
     .col-cat-purpose{min-width:200px} .col-cat-lines{width:90px;white-space:nowrap;font-family:'SFMono-Regular',Consolas,monospace;font-size:11px;color:var(--text-muted)}
+    .col-cat-linecount{width:70px;text-align:right;font-variant-numeric:tabular-nums;color:var(--text-muted)}
     .col-cat-attrs{width:100px;white-space:nowrap} .col-cat-callers{width:70px;text-align:right;color:var(--text-muted)}
+    th.sortable-th { cursor: pointer; user-select: none; }
+    th.sortable-th:hover { color: var(--accent); }
+    .sort-indicator { font-size: 9px; margin-left: 2px; }
+    tr.has-callers td { background: light-dark(#dafbe1, #12261e); }
+    tr.has-callers:hover td { background: light-dark(#c8f0d4, #173526); }
     .badge-exp{background:rgba(63,185,80,.2);color:#3fb950} .badge-async{background:rgba(88,166,255,.2);color:#58a6ff}
     .btn-catalog-toggle {
       padding: 5px 12px; border-radius: 6px; font-size: 12px; font-weight: 600;
@@ -553,13 +559,14 @@ export function getFunctionChangelogPage(input: FunctionChangelogInput): string 
           <th class="col-cat-file">ファイル</th>
           <th class="col-cat-func">関数名</th>
           <th class="col-cat-purpose">説明</th>
+          <th class="col-cat-linecount sortable-th" id="thCatLineCount" title="タップで行数の多い/少ない順に並び替え">行数</th>
           <th class="col-cat-lines">行</th>
           <th class="col-cat-attrs">属性</th>
-          <th class="col-cat-callers">呼び出し元</th>
+          <th class="col-cat-callers sortable-th" id="thCatCallers" title="タップで呼び出し元数の多い/少ない順に並び替え">呼び出し元</th>
         </tr>
       </thead>
       <tbody id="catalogBody">
-        <tr><td colspan="6" class="empty-cell">データなし</td></tr>
+        <tr><td colspan="7" class="empty-cell">データなし</td></tr>
       </tbody>
     </table>
   </div>
@@ -636,31 +643,85 @@ export function getFunctionChangelogPage(input: FunctionChangelogInput): string 
     var catalogWrap = document.getElementById('catalogWrap');
     var btnCatalogToggle = document.getElementById('btnCatalogToggle');
 
+    var catalogSortKey = null;
+    var catalogSortDir = 'desc';
+
+    function catalogLineCount(r) {
+      return (r.start_line && r.end_line) ? (r.end_line - r.start_line + 1) : null;
+    }
+
     function renderCatalogTable() {
       var tbody = document.getElementById('catalogBody');
       var fileVal = filterFile ? filterFile.value : '';
       var filtered = fileVal
         ? CATALOG_ROWS.filter(function(r) { return r.file_path === fileVal; })
-        : CATALOG_ROWS;
+        : CATALOG_ROWS.slice();
       if (!filtered.length) {
-        tbody.innerHTML = '<tr><td colspan="6" class="empty-cell">データなし — ts_function_catalog にレコードを追加するか、npx tsx scripts/index-functions.ts を実行してください</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="7" class="empty-cell">データなし — ts_function_catalog にレコードを追加するか、npx tsx scripts/index-functions.ts を実行してください</td></tr>';
+        updateCatalogSortIndicators();
         return;
+      }
+      if (catalogSortKey) {
+        var dir = catalogSortDir === 'asc' ? 1 : -1;
+        filtered = filtered.slice().sort(function(a, b) {
+          var av, bv;
+          if (catalogSortKey === 'linecount') {
+            av = catalogLineCount(a); bv = catalogLineCount(b);
+          } else {
+            av = a.caller_count; bv = b.caller_count;
+          }
+          if (av === null) av = -1;
+          if (bv === null) bv = -1;
+          return (av - bv) * dir;
+        });
       }
       tbody.innerHTML = filtered.map(function(r) {
         var lines = r.start_line ? 'L' + r.start_line + (r.end_line ? '–' + r.end_line : '') : '—';
+        var lineCount = catalogLineCount(r);
         var attrs = [
           r.is_exported ? '<span class="badge badge-exp">export</span>' : '',
           r.is_async ? '<span class="badge badge-async">async</span>' : ''
         ].filter(Boolean).join(' ');
-        return '<tr>' +
+        var rowClass = r.caller_count > 0 ? ' class="has-callers"' : '';
+        return '<tr' + rowClass + '>' +
           '<td class="col-cat-file"><code>' + escHtml(r.file_path) + '</code></td>' +
           '<td class="col-cat-func"><code>' + escHtml(r.function_name) + '</code></td>' +
           '<td class="col-cat-purpose"><span class="purpose">' + escHtml(r.purpose || '') + '</span></td>' +
+          '<td class="col-cat-linecount">' + (lineCount !== null ? lineCount : '—') + '</td>' +
           '<td class="col-cat-lines">' + lines + '</td>' +
           '<td class="col-cat-attrs">' + (attrs || '—') + '</td>' +
           '<td class="col-cat-callers">' + r.caller_count + '</td>' +
           '</tr>';
       }).join('');
+      updateCatalogSortIndicators();
+    }
+
+    function updateCatalogSortIndicators() {
+      var thLineCount = document.getElementById('thCatLineCount');
+      var thCallers = document.getElementById('thCatCallers');
+      if (!thLineCount || !thCallers) return;
+      var arrow = catalogSortDir === 'asc' ? '↑' : '↓';
+      thLineCount.innerHTML = '行数' + (catalogSortKey === 'linecount' ? ' <span class="sort-indicator">' + arrow + '</span>' : '');
+      thCallers.innerHTML = '呼び出し元' + (catalogSortKey === 'callers' ? ' <span class="sort-indicator">' + arrow + '</span>' : '');
+    }
+
+    function toggleCatalogSort(key) {
+      if (catalogSortKey === key) {
+        catalogSortDir = catalogSortDir === 'desc' ? 'asc' : 'desc';
+      } else {
+        catalogSortKey = key;
+        catalogSortDir = 'desc';
+      }
+      renderCatalogTable();
+    }
+
+    var thCatLineCount = document.getElementById('thCatLineCount');
+    var thCatCallers = document.getElementById('thCatCallers');
+    if (thCatLineCount) {
+      thCatLineCount.addEventListener('click', function() { toggleCatalogSort('linecount'); });
+    }
+    if (thCatCallers) {
+      thCatCallers.addEventListener('click', function() { toggleCatalogSort('callers'); });
     }
 
     function enterCatalogMode() {
