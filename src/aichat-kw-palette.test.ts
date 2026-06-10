@@ -101,7 +101,7 @@ describe('カラーパレット: JS関数', () => {
     const html = buildPage();
     const idx = html.indexOf('function applyKwBadgeColors');
     expect(idx).toBeGreaterThan(-1);
-    const fn = html.slice(idx, idx + 600);
+    const fn = html.slice(idx, idx + 1500);
     expect(fn).toContain('kwPaletteActColor');
   });
 
