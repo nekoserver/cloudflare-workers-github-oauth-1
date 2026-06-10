@@ -4519,11 +4519,11 @@ export function getAiChatPage(user: {
             var kwY = lineTop + lineH - Math.round(lineH * gi / 4);
             var kwV = Math.round(maxKw * gi / 4);
             svg += '<line x1="' + ML + '" y1="' + kwY + '" x2="' + (W - MR) + '" y2="' + kwY + '" stroke="var(--border-color)" stroke-width="0.5" stroke-dasharray="3,3"/>';
-            if (gi > 0) svg += '<text x="' + (ML - 2) + '" y="' + (kwY + 3) + '" font-size="7" fill="var(--text-muted)" text-anchor="end">' + kwV + '</text>';
+            if (gi > 0) svg += '<text x="' + (ML - 2) + '" y="' + (kwY + 3) + '" font-size="14" fill="var(--text-muted)" text-anchor="end">' + kwV + '</text>';
             var qY = barTop + barH - Math.round(barH * gi / 4);
             var qV = Math.round(maxQ * gi / 4);
             svg += '<line x1="' + ML + '" y1="' + qY + '" x2="' + (W - MR) + '" y2="' + qY + '" stroke="var(--border-color)" stroke-width="0.5" stroke-dasharray="3,3"/>';
-            if (gi > 0) svg += '<text x="' + (ML - 2) + '" y="' + (qY + 3) + '" font-size="7" fill="var(--text-muted)" text-anchor="end">' + qV + '</text>';
+            if (gi > 0) svg += '<text x="' + (ML - 2) + '" y="' + (qY + 3) + '" font-size="14" fill="var(--text-muted)" text-anchor="end">' + qV + '</text>';
           }
 
           var fillPts = ML.toFixed(1) + ',' + (lineTop + lineH).toFixed(1);
