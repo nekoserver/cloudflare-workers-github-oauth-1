@@ -1157,7 +1157,7 @@ export function getRepositoriesPage(user: {
       background: var(--code-bg); padding: 1px 5px; border-radius: 4px; font-size: 11px;
     }
     .toast {
-      position: fixed; right: 24px; bottom: 24px; z-index: 10300;
+      position: fixed; right: 24px; bottom: 24px;
       padding: 12px 14px; border-radius: 12px; font-size: 13px; font-weight: 700;
       box-shadow: 0 16px 36px rgba(0,0,0,0.25); display: none; max-width: 360px;
       align-items: center; gap: 12px; justify-content: space-between;
@@ -1165,6 +1165,7 @@ export function getRepositoriesPage(user: {
     .toast.show { display: flex; animation: toastIn 0.2s ease; }
     .toast.success { background: #c6f6d5; color: #22543d; }
     .toast.error { background: #fed7e2; color: #97266d; }
+    .toast.info { background: #fefcbf; color: #744210; }
     .toast-message { flex: 1; }
     .toast-btn {
       border: none; border-radius: 999px; padding: 4px 10px; font-weight: 800;
@@ -2097,14 +2098,27 @@ export function getRepositoriesPage(user: {
   </div>
 
   <script>
+    function getNextZ() {
+      var maxZ = 100;
+      document.querySelectorAll('*').forEach(function(el) {
+        var style = window.getComputedStyle(el);
+        if (style.position === 'fixed' || style.position === 'absolute') {
+          var z = parseInt(style.zIndex);
+          if (!isNaN(z) && z > maxZ) maxZ = z;
+        }
+      });
+      return maxZ + 100;
+    }
+
     var toastEl = document.getElementById('repoToast');
     var toastMessageEl = document.getElementById('repoToastMessage');
     var toastCloseBtn = document.getElementById('repoToastClose');
     var toastTimer = null;
     function showToast(message, type, durationMs) {
       if (!toastEl || !toastMessageEl) return;
+      toastEl.style.zIndex = String(getNextZ());
       toastMessageEl.textContent = message;
-      toastEl.classList.remove('success', 'error');
+      toastEl.classList.remove('success', 'error', 'info');
       toastEl.classList.add(type);
       toastEl.classList.add('show');
       if (toastTimer) {
@@ -5096,16 +5110,7 @@ export function getRepositoriesPage(user: {
                 var notifMsg = isSuccess
                   ? 'キーワード「' + data.query + '」は「' + data.autoLabel + '」に分類されました'
                   : data.query + 'は適切なカテゴリが存在しないので未分類に分類されました';
-                var notif = document.createElement('div');
-                notif.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);'
-                  + (isSuccess
-                    ? 'background:#c6f6d5;color:#276749;border:1px solid #9ae6b4;'
-                    : 'background:#fefcbf;color:#744210;border:1px solid #f6e05e;')
-                  + 'padding:14px 24px;border-radius:10px;font-size:14px;z-index:10000;text-align:center;'
-                  + 'box-shadow:0 4px 16px rgba(0,0,0,0.15);max-width:360px;line-height:1.5;';
-                notif.textContent = notifMsg;
-                document.body.appendChild(notif);
-                setTimeout(function() { if (notif.parentNode) notif.parentNode.removeChild(notif); }, 9000);
+                showToast(notifMsg, isSuccess ? 'success' : 'info', 9000);
                 if (data.classifyDebug && getCookie('keyword_classify_debug') === 'on') {
                   showClassifyDebugModal(data.classifyDebug);
                 }
