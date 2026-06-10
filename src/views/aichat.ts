@@ -4185,7 +4185,7 @@ export function getAiChatPage(user: {
       var selectedCatIds = [];
 
       function updateDecideBtn() {
-        var ok = selectedCatIds.length > 0;
+        var ok = selectedCatIds.length > 0 || catInput.value.trim().length > 0;
         decideBtn.disabled = !ok;
         decideBtn.style.opacity = ok ? '1' : '0.4';
       }
@@ -4240,6 +4240,7 @@ export function getAiChatPage(user: {
 
       catInput.addEventListener('input', function() {
         var val = catInput.value.trim();
+        updateDecideBtn();
         if (!val) { addCatBtn.disabled = true; addCatBtn.style.opacity = '0.4'; return; }
         var exists = Array.from(catsSection.querySelectorAll('[data-cat-id]')).some(function(el) {
           return el.textContent === val;
@@ -4272,24 +4273,60 @@ export function getAiChatPage(user: {
       });
 
       decideBtn.addEventListener('click', function() {
-        if (selectedCatIds.length === 0) return;
+        var pendingName = catInput.value.trim();
+        if (selectedCatIds.length === 0 && !pendingName) return;
         decideBtn.disabled = true;
         decideBtn.style.opacity = '0.4';
-        fetch('/api/aichat/keyword-category-map', {
+
+        function restoreDecideBtn() {
+          decideBtn.disabled = false;
+          decideBtn.style.opacity = '1';
+        }
+
+        function saveMapping(catIds) {
+          if (catIds.length === 0) { restoreDecideBtn(); return; }
+          fetch('/api/aichat/keyword-category-map', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'same-origin',
+            body: JSON.stringify({ keyword: keyword, category_ids: catIds }),
+          })
+            .then(function(r) { return r.json(); })
+            .then(function() {
+              document.body.removeChild(overlay);
+              renderKwClassifyList();
+            })
+            .catch(restoreDecideBtn);
+        }
+
+        if (!pendingName) { saveMapping(selectedCatIds); return; }
+
+        var existingEl = Array.from(catsSection.querySelectorAll('[data-cat-id]')).filter(function(el) {
+          return el.textContent === pendingName;
+        })[0];
+        if (existingEl) {
+          var existingId = parseInt(existingEl.dataset.catId, 10);
+          if (selectedCatIds.indexOf(existingId) < 0) selectedCatIds.push(existingId);
+          saveMapping(selectedCatIds);
+          return;
+        }
+
+        fetch('/api/aichat/keyword-categories', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           credentials: 'same-origin',
-          body: JSON.stringify({ keyword: keyword, category_ids: selectedCatIds }),
+          body: JSON.stringify({ name: pendingName, color: selectedColor }),
         })
           .then(function(r) { return r.json(); })
-          .then(function() {
-            document.body.removeChild(overlay);
-            renderKwClassifyList();
+          .then(function(d) {
+            if (d && d.category && typeof d.category.id === 'number') {
+              if (selectedCatIds.indexOf(d.category.id) < 0) selectedCatIds.push(d.category.id);
+              saveMapping(selectedCatIds);
+            } else {
+              restoreDecideBtn();
+            }
           })
-          .catch(function() {
-            decideBtn.disabled = false;
-            decideBtn.style.opacity = '1';
-          });
+          .catch(restoreDecideBtn);
       });
     }
 

@@ -54,7 +54,7 @@ describe('キーワード分類: 分類決定後のカテゴリ選択状態保�
     const html = buildPage();
     const idx = html.indexOf("decideBtn.addEventListener('click'");
     expect(idx).toBeGreaterThan(-1);
-    const snippet = html.slice(idx, idx + 700);
+    const snippet = html.slice(idx, idx + 2500);
     expect(snippet).toContain('renderKwClassifyList');
   });
 });
