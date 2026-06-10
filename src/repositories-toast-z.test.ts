@@ -77,3 +77,66 @@ describe('repositories.ts: ラベル通知が showToast 経由になっている
     expect(snippet).toContain('showToast(');
   });
 });
+
+// ===========================================================
+// バグ再修正: 検索履歴モーダル内からの検索（hSearchBtn）にも
+// 旧来の z-index:10000 固定 notif が残っていた
+// ===========================================================
+describe('repositories.ts: 固定 z-index notif の全廃', () => {
+  it('z-index:10000 固定の notif 生成コードがファイル全体から消えている', () => {
+    const src = sliceRepoTs();
+    expect(src).not.toContain("var notif = document.createElement");
+  });
+
+  it('autoLabel 通知の showToast 呼び出しが2パスとも存在する', () => {
+    const src = sliceRepoTs();
+    const matches = src.match(/showToast\(notifMsg, isSuccess \? 'success' : 'info', 9000\)/g) || [];
+    expect(matches.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('履歴モーダル内検索パス（hSearchBtn）でも showToast を使う', () => {
+    const src = sliceRepoTs();
+    const idx = src.indexOf('hSearchBtn.disabled = false');
+    expect(idx).toBeGreaterThan(-1);
+    const snippet = src.slice(idx, idx + 1500);
+    expect(snippet).toContain('showToast(');
+    expect(snippet).not.toContain('z-index:10000');
+  });
+});
+
+describe('repositories.ts: showClassifyDebugModal の z-index 動的化', () => {
+  it('showClassifyDebugModal が getNextZ を使う', () => {
+    const src = sliceRepoTs();
+    const idx = src.indexOf('function showClassifyDebugModal');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = src.slice(idx, idx + 500);
+    expect(fn).toContain('getNextZ()');
+    expect(fn).not.toContain('z-index:10100');
+  });
+});
+
+describe('repositories.ts: トーストはモーダルより後に最上位を取得する', () => {
+  it('検索ボタンパス: showClassifyDebugModal の後に showToast が呼ばれる', () => {
+    const src = sliceRepoTs();
+    const idx = src.indexOf("searchBtn.disabled = false");
+    expect(idx).toBeGreaterThan(-1);
+    const snippet = src.slice(idx, idx + 2000);
+    const debugIdx = snippet.indexOf('showClassifyDebugModal(');
+    const toastIdx = snippet.indexOf('showToast(');
+    expect(debugIdx).toBeGreaterThan(-1);
+    expect(toastIdx).toBeGreaterThan(-1);
+    expect(debugIdx).toBeLessThan(toastIdx);
+  });
+
+  it('履歴モーダル内検索パス: showClassifyDebugModal の後に showToast が呼ばれる', () => {
+    const src = sliceRepoTs();
+    const idx = src.indexOf('hSearchBtn.disabled = false');
+    expect(idx).toBeGreaterThan(-1);
+    const snippet = src.slice(idx, idx + 2000);
+    const debugIdx = snippet.indexOf('showClassifyDebugModal(');
+    const toastIdx = snippet.indexOf('showToast(');
+    expect(debugIdx).toBeGreaterThan(-1);
+    expect(toastIdx).toBeGreaterThan(-1);
+    expect(debugIdx).toBeLessThan(toastIdx);
+  });
+});

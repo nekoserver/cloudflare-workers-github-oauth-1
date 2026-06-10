@@ -2793,7 +2793,7 @@ export function getRepositoriesPage(user: {
 
     function showClassifyDebugModal(debug) {
       var overlay = document.createElement('div');
-      overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:10100;display:flex;align-items:center;justify-content:center;';
+      overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:' + getNextZ() + ';display:flex;align-items:center;justify-content:center;';
       var modal = document.createElement('div');
       modal.style.cssText = 'background:var(--card-bg);color:var(--text-primary);border:1px solid var(--border-color);border-radius:12px;padding:24px;max-width:620px;width:90%;max-height:80vh;overflow-y:auto;box-shadow:0 8px 32px rgba(0,0,0,0.35);font-size:13px;';
       var esc = function(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); };
@@ -5110,10 +5110,10 @@ export function getRepositoriesPage(user: {
                 var notifMsg = isSuccess
                   ? 'キーワード「' + data.query + '」は「' + data.autoLabel + '」に分類されました'
                   : data.query + 'は適切なカテゴリが存在しないので未分類に分類されました';
-                showToast(notifMsg, isSuccess ? 'success' : 'info', 9000);
                 if (data.classifyDebug && getCookie('keyword_classify_debug') === 'on') {
                   showClassifyDebugModal(data.classifyDebug);
                 }
+                showToast(notifMsg, isSuccess ? 'success' : 'info', 9000);
                 // 自動分類完了後：モーダルが開いていれば即時反映、閉じていれば開いて反映
                 window.__pendingAutoLabel = { query: data.query, label: data.autoLabel };
                 if (typeof window.__reloadSearchHistory === 'function') window.__reloadSearchHistory();
@@ -6742,21 +6742,13 @@ export function getRepositoriesPage(user: {
             // __pendingAutoLabel を先にセットしてから __reloadSearchHistory を呼ぶ
             if (data.isNewKeyword && data.autoLabel != null) {
               var isSuccess = data.autoLabel !== 'uncategorized';
-              var notif = document.createElement('div');
-              notif.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);'
-                + (isSuccess
-                  ? 'background:#c6f6d5;color:#276749;border:1px solid #9ae6b4;'
-                  : 'background:#fefcbf;color:#744210;border:1px solid #f6e05e;')
-                + 'padding:14px 24px;border-radius:10px;font-size:14px;z-index:10000;text-align:center;'
-                + 'box-shadow:0 4px 16px rgba(0,0,0,0.15);max-width:360px;line-height:1.5;';
-              notif.textContent = isSuccess
+              var notifMsg = isSuccess
                 ? 'キーワード「' + data.query + '」は「' + data.autoLabel + '」に分類されました'
                 : data.query + 'は適切なカテゴリが存在しないので未分類に分類されました';
-              document.body.appendChild(notif);
-              setTimeout(function() { if (notif.parentNode) notif.parentNode.removeChild(notif); }, 9000);
               if (data.classifyDebug && getCookie('keyword_classify_debug') === 'on') {
                 showClassifyDebugModal(data.classifyDebug);
               }
+              showToast(notifMsg, isSuccess ? 'success' : 'info', 9000);
               window.__pendingAutoLabel = { query: data.query, label: data.autoLabel };
             }
             if (total > 0) {
