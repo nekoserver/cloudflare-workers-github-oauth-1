@@ -303,3 +303,24 @@ describe('日次統計グラフ: 左パネル（総数・パイチャート・�
     expect(fn).toContain('grid-template-columns');
   });
 });
+
+describe('日次統計モーダル: y軸目盛り数字の文字サイズ', () => {
+  it('KW軸（キーワード総数）の目盛り数字が font-size 14 で描画される', () => {
+    const html = buildPage();
+    expect(html).toContain('font-size="14" fill="var(--text-muted)" text-anchor="end">\' + kwV');
+  });
+
+  it('Q軸（質問総数）の目盛り数字が font-size 14 で描画される', () => {
+    const html = buildPage();
+    expect(html).toContain('font-size="14" fill="var(--text-muted)" text-anchor="end">\' + qV');
+  });
+
+  it('KW/Q の軸ラベル自体は従来サイズ (font-size 7) のまま', () => {
+    const html = buildPage();
+    expect(html).toContain('text-anchor="end">KW</text>');
+    expect(html).toContain('text-anchor="end">Q</text>');
+    const kwLabelIdx = html.indexOf('text-anchor="end">KW</text>');
+    const before = html.slice(kwLabelIdx - 80, kwLabelIdx);
+    expect(before).toContain('font-size="7"');
+  });
+});
