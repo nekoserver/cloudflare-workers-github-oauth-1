@@ -436,6 +436,15 @@ export function getFunctionChangelogPage(input: FunctionChangelogInput): string 
       font-family: 'SFMono-Regular',Consolas,monospace; font-size: 11px;
       line-height: 1.6; color: var(--text); max-height: 320px;
     }
+    .source-block .srcview-code-flex { max-height: 60vh; margin-bottom: 8px; }
+    .source-block .srcview-code-flex pre {
+      border-radius: 0; border: none; overflow: visible; max-height: none;
+      background: transparent; font-size: 11px; line-height: 1.6;
+    }
+    .source-block .srcview-gutter {
+      background: light-dark(#eef1f4,#161b22);
+      border-right: 1px solid var(--border);
+    }
     .source-fallback {
       font-size: 12px; color: var(--text-muted); padding: 14px;
       background: light-dark(#f6f8fa,#161b22); border: 1px solid var(--border);
@@ -1366,8 +1375,13 @@ export function getFunctionChangelogPage(input: FunctionChangelogInput): string 
             return;
           }
           if (data.source_snippet) {
+            var snippet2 = data.source_snippet.replace(/\\n$/, '');
+            var lineTotal2 = snippet2.split('\\n').length;
             sourceBlock.innerHTML =
-              '<pre><code>' + escHtml(data.source_snippet) + '</code></pre>';
+              '<div class="srcview-code-flex">' +
+              '<pre class="srcview-gutter">' + buildGutter(lineTotal2, data.start_line) + '</pre>' +
+              '<pre class="srcview-code"><code>' + highlightTs(snippet2) + '</code></pre>' +
+              '</div>';
           } else {
             var linkHtml = data.github_url
               ? '<a href="' + escHtml(data.github_url) + '" target="_blank" rel="noopener">GitHub でファイルを開く →</a>'
