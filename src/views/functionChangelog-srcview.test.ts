@@ -1,8 +1,21 @@
 import { describe, it, expect } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
+import { getFunctionChangelogPage } from './functionChangelog';
 
 const src = fs.readFileSync(path.join(__dirname, 'functionChangelog.ts'), 'utf-8');
+
+// レンダリング後の HTML（ブラウザに届く実際の JS を検証するため）
+const rendered = getFunctionChangelogPage({
+  rows: [],
+  repos: [{ id: 1, full_name: 'owner/repo' }],
+  selectedRepoId: 1,
+  availableFiles: ['src/index.ts'],
+  availableFunctions: [{ file_path: 'src/index.ts', function_name: 'fn', purpose: 'テスト' }],
+  generatedAt: '2026-06-11 00:00:00',
+  catalogRows: [],
+  indexedFiles: ['src/index.ts'],
+});
 
 // ===========================================================
 // 関数名クリック → ソースビューアモーダル テスト
@@ -99,6 +112,48 @@ describe('functionChangelog: シンタックスハイライト CSS', () => {
 
   it('hl-num クラスが存在する', () => {
     expect(src).toContain('.hl-num');
+  });
+});
+
+describe('functionChangelog: TOKEN_RE がブラウザで有効な正規表現としてコンパイルできる', () => {
+  // バグ再発防止: TS テンプレートリテラル → ブラウザ文字列リテラルの2段階で
+  // バックスラッシュが剥がれ "nothing to repeat" になる問題の検証
+
+  function extractTokenRe(): { source: string; flags: string } {
+    const m = rendered.match(/var TOKEN_RE = \/([^]+?)\/(g[a-z]*);/);
+    expect(m).not.toBeNull();
+    return { source: m![1], flags: m![2] };
+  }
+
+  it('レンダリング後の JS に TOKEN_RE の正規表現リテラルが存在する', () => {
+    extractTokenRe();
+  });
+
+  it('抽出した正規表現がエラーなくコンパイルできる', () => {
+    const { source, flags } = extractTokenRe();
+    expect(() => new RegExp(source, flags)).not.toThrow();
+  });
+
+  it('コンパイルした正規表現がコメント・文字列・キーワード・数値を正しくトークン化する', () => {
+    const { source, flags } = extractTokenRe();
+    const re = new RegExp(source, flags);
+    const code = "// comment\nconst x = 'str' + 42;";
+    const groups: string[][] = [];
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(code)) !== null) {
+      groups.push(m.slice(1).map(g => g ?? ''));
+      if (m.index === re.lastIndex) re.lastIndex++;
+    }
+    const flat = groups.flat().filter(Boolean);
+    expect(flat).toContain('// comment');
+    expect(flat).toContain('const');
+    expect(flat).toContain("'str'");
+    expect(flat).toContain('42');
+  });
+
+  it('レンダリング後の JS に壊れたパターン（[sS] や *?* ）が含まれない', () => {
+    expect(rendered).not.toContain('[sS]*?');
+    expect(rendered).not.toContain('*?*');
   });
 });
 
