@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseHunks, diffForRange } from './git-diff';
+import { parseHunks, diffForRange, classifyFunctionChanges, type FunctionSnapshot } from './git-diff';
 
 // unified diff サンプル（--unified=0 形式）
 const SAMPLE_DIFF = `
@@ -111,5 +111,85 @@ describe('diffForRange', () => {
     const hunks = parseHunks(diff);
     expect(diffForRange(hunks, 5, 5).linesAdded).toBe(1);
     expect(diffForRange(hunks, 6, 10).linesAdded).toBe(0);
+  });
+});
+
+// ---------------------------------------------------
+// classifyFunctionChanges テスト
+// ---------------------------------------------------
+
+const MODIFY_DIFF = `@@ -10,3 +10,4 @@
+-old
++new1
++new2
+`.trim();
+
+describe('classifyFunctionChanges', () => {
+  const prev: FunctionSnapshot[] = [
+    { name: 'alpha', startLine: 5,  endLine: 15 },
+    { name: 'beta',  startLine: 20, endLine: 30 },
+    { name: 'gamma', startLine: 35, endLine: 50 },
+  ];
+  const curr: FunctionSnapshot[] = [
+    { name: 'alpha', startLine: 5,  endLine: 16 }, // modified (line range changed)
+    { name: 'delta', startLine: 20, endLine: 30 }, // new (beta deleted, delta added)
+    { name: 'gamma', startLine: 37, endLine: 52 }, // not touched (no diff)
+  ];
+  const hunks = parseHunks(MODIFY_DIFF); // hunk at new lines 10-13, overlaps alpha (5-16)
+
+  it('diff がある既存関数を modify として検出する', () => {
+    const changes = classifyFunctionChanges(prev, curr, hunks);
+    const alpha = changes.find(c => c.name === 'alpha');
+    expect(alpha).toBeDefined();
+    expect(alpha!.changeType).toBe('modify');
+    expect(alpha!.linesAdded).toBe(2);
+    expect(alpha!.linesDeleted).toBe(1);
+  });
+
+  it('前バージョンにない関数を add として検出する', () => {
+    const changes = classifyFunctionChanges(prev, curr, hunks);
+    const delta = changes.find(c => c.name === 'delta');
+    expect(delta).toBeDefined();
+    expect(delta!.changeType).toBe('add');
+    expect(delta!.newStartLine).toBe(20);
+    expect(delta!.newEndLine).toBe(30);
+  });
+
+  it('add のとき linesAdded は関数の行数（diff がない場合）', () => {
+    const changes = classifyFunctionChanges([], curr, []);
+    const delta = changes.find(c => c.name === 'delta')!;
+    expect(delta.linesAdded).toBe(30 - 20 + 1);
+  });
+
+  it('現行バージョンにない関数を delete として検出する', () => {
+    const changes = classifyFunctionChanges(prev, curr, hunks);
+    const beta = changes.find(c => c.name === 'beta');
+    expect(beta).toBeDefined();
+    expect(beta!.changeType).toBe('delete');
+    expect(beta!.linesDeleted).toBe(30 - 20 + 1);
+    expect(beta!.newStartLine).toBeNull();
+    expect(beta!.newEndLine).toBeNull();
+  });
+
+  it('diff が当たっていない既存関数は結果に含まれない', () => {
+    const changes = classifyFunctionChanges(prev, curr, hunks);
+    const gamma = changes.find(c => c.name === 'gamma' && c.changeType === 'modify');
+    expect(gamma).toBeUndefined();
+  });
+
+  it('空入力はすべて空を返す', () => {
+    expect(classifyFunctionChanges([], [], [])).toHaveLength(0);
+  });
+
+  it('前バージョンが空ならすべて add になる', () => {
+    const changes = classifyFunctionChanges([], curr, []);
+    expect(changes.every(c => c.changeType === 'add')).toBe(true);
+    expect(changes).toHaveLength(curr.length);
+  });
+
+  it('現行バージョンが空ならすべて delete になる', () => {
+    const changes = classifyFunctionChanges(prev, [], []);
+    expect(changes.every(c => c.changeType === 'delete')).toBe(true);
+    expect(changes).toHaveLength(prev.length);
   });
 });

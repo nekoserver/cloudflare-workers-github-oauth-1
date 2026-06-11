@@ -1,3 +1,18 @@
+export interface FunctionSnapshot {
+  name: string;
+  startLine: number;
+  endLine: number;
+}
+
+export interface FunctionChange {
+  name: string;
+  changeType: 'add' | 'modify' | 'delete';
+  linesAdded: number;
+  linesDeleted: number;
+  newStartLine: number | null;
+  newEndLine: number | null;
+}
+
 export interface HunkInfo {
   oldStart: number;
   oldCount: number;
@@ -66,4 +81,62 @@ export function diffForRange(
     }
   }
   return { linesAdded, linesDeleted };
+}
+
+/**
+ * 直前バージョン・現行バージョンの関数スナップショットと diff ハンクから、
+ * 各関数の変更種別（add / modify / delete）と行差分を求める。
+ *
+ * - add    : 前バージョンに存在しない関数（新規追加）
+ * - modify : 前バージョンにも存在し、かつ diff が 1 行以上ある関数
+ * - delete : 前バージョンに存在したが現行では消えた関数
+ *
+ * diff のない既存関数（コミットに触れられていない関数）は結果に含まれない。
+ */
+export function classifyFunctionChanges(
+  prevFuncs: FunctionSnapshot[],
+  currFuncs: FunctionSnapshot[],
+  hunks: HunkInfo[],
+): FunctionChange[] {
+  const prevMap = new Map(prevFuncs.map(f => [f.name, f]));
+  const currMap = new Map(currFuncs.map(f => [f.name, f]));
+  const results: FunctionChange[] = [];
+
+  for (const fn of currFuncs) {
+    const d = diffForRange(hunks, fn.startLine, fn.endLine);
+    if (!prevMap.has(fn.name)) {
+      results.push({
+        name: fn.name,
+        changeType: 'add',
+        linesAdded:   d.linesAdded > 0 ? d.linesAdded : fn.endLine - fn.startLine + 1,
+        linesDeleted: d.linesDeleted,
+        newStartLine: fn.startLine,
+        newEndLine:   fn.endLine,
+      });
+    } else if (d.linesAdded > 0 || d.linesDeleted > 0) {
+      results.push({
+        name: fn.name,
+        changeType: 'modify',
+        linesAdded:   d.linesAdded,
+        linesDeleted: d.linesDeleted,
+        newStartLine: fn.startLine,
+        newEndLine:   fn.endLine,
+      });
+    }
+  }
+
+  for (const fn of prevFuncs) {
+    if (!currMap.has(fn.name)) {
+      results.push({
+        name: fn.name,
+        changeType: 'delete',
+        linesAdded:   0,
+        linesDeleted: fn.endLine - fn.startLine + 1,
+        newStartLine: null,
+        newEndLine:   null,
+      });
+    }
+  }
+
+  return results;
 }

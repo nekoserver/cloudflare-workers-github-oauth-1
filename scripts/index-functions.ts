@@ -14,7 +14,13 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { execSync } from 'child_process';
-import { parseHunks, diffForRange, type HunkInfo } from '../src/utils/git-diff';
+import {
+  parseHunks,
+  diffForRange,
+  classifyFunctionChanges,
+  type HunkInfo,
+  type FunctionSnapshot,
+} from '../src/utils/git-diff';
 
 const ROOT = path.resolve(__dirname, '..');
 
@@ -22,6 +28,10 @@ const ROOT = path.resolve(__dirname, '..');
 const { parseFunctions, findCallers } = require(path.join(ROOT, 'src/utils/parse-functions'));
 
 const REPO_ID = 1;
+
+// ---------------------------------------------------------------------------
+// ファイルユーティリティ
+// ---------------------------------------------------------------------------
 
 function getAllTsFiles(dir: string): string[] {
   const results: string[] = [];
@@ -49,40 +59,88 @@ function esc(s: string): string {
   return s.replace(/'/g, "''");
 }
 
-/** ファイルの最終コミット日時（ISO 8601）を返す。git 外なら null */
-function getLastModifiedAt(filePath: string): string | null {
+// ---------------------------------------------------------------------------
+// git ユーティリティ
+// ---------------------------------------------------------------------------
+
+function git(cmd: string): string | null {
   try {
-    const out = execSync(`git log -1 --format="%ci" -- "${filePath}"`, {
+    return execSync(cmd, {
       cwd: ROOT,
       encoding: 'utf-8',
       stdio: ['pipe', 'pipe', 'pipe'],
     }).trim();
-    return out || null;
   } catch {
     return null;
   }
 }
 
-/**
- * ファイルに対する直前コミットとの diff ハンクを返す。
- * HEAD~1 が存在しない（初回コミット）場合は HEAD の内容全体を diff として扱う。
- */
-function getFileHunks(filePath: string): HunkInfo[] {
-  const tryCmd = (cmd: string): string | null => {
-    try {
-      return execSync(cmd, { cwd: ROOT, encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'] });
-    } catch {
-      return null;
-    }
+interface CommitMeta {
+  hash: string;
+  at: string;
+  subject: string;
+  authorName: string;
+  authorEmail: string;
+  filesChanged: number;
+  insertions: number;
+  deletions: number;
+  isMerge: boolean;
+  branchName: string;
+}
+
+function getCommitMeta(): CommitMeta | null {
+  const hash = git('git rev-parse HEAD');
+  if (!hash) return null;
+
+  const at          = git('git log -1 --format="%ci" HEAD') ?? '';
+  const subject     = git('git log -1 --format="%s" HEAD') ?? '';
+  const authorName  = git('git log -1 --format="%an" HEAD') ?? '';
+  const authorEmail = git('git log -1 --format="%ae" HEAD') ?? '';
+  const parents     = git('git log -1 --format="%P" HEAD') ?? '';
+  const branchName  = git('git rev-parse --abbrev-ref HEAD') ?? '';
+
+  // --shortstat から "N files changed, M insertions(+), K deletions(-)" を解析
+  const stat = git('git show --shortstat --format="" HEAD') ?? '';
+  const fc  = stat.match(/(\d+) file/)?.[1]  ?? '0';
+  const ins = stat.match(/(\d+) insertion/)?.[1] ?? '0';
+  const del = stat.match(/(\d+) deletion/)?.[1]  ?? '0';
+
+  return {
+    hash,
+    at,
+    subject,
+    authorName,
+    authorEmail,
+    filesChanged: parseInt(fc,  10),
+    insertions:   parseInt(ins, 10),
+    deletions:    parseInt(del, 10),
+    isMerge:      parents.includes(' '),
+    branchName,
   };
+}
 
+/** ファイルの最終コミット日時（ISO 8601）を返す */
+function getLastModifiedAt(filePath: string): string | null {
+  return git(`git log -1 --format="%ci" -- "${filePath}"`);
+}
+
+/** HEAD~1 との diff ハンクを返す（初回コミット時は git show HEAD で代替） */
+function getFileHunks(filePath: string): HunkInfo[] {
   const diff =
-    tryCmd(`git diff HEAD~1 HEAD --unified=0 -- "${filePath}"`) ??
-    tryCmd(`git show HEAD --unified=0 -- "${filePath}"`) ??
+    git(`git diff HEAD~1 HEAD --unified=0 -- "${filePath}"`) ??
+    git(`git show HEAD --unified=0 -- "${filePath}"`) ??
     '';
-
   return parseHunks(diff);
 }
+
+/** HEAD~1 時点のファイル内容を返す（新規ファイルなら null） */
+function getPrevFileContent(repoRelPath: string): string | null {
+  return git(`git show HEAD~1:"${repoRelPath}"`);
+}
+
+// ---------------------------------------------------------------------------
+// メイン
+// ---------------------------------------------------------------------------
 
 const args = process.argv.slice(2);
 const targetFiles =
@@ -96,23 +154,37 @@ for (const f of allFiles) {
   fileContents.set(rel(f), fs.readFileSync(f, 'utf-8'));
 }
 
+const commit = getCommitMeta();
 const lines: string[] = [];
+
+// ts_commit_log への INSERT（コミット情報を記録）
+if (commit) {
+  lines.push(
+    `INSERT OR IGNORE INTO ts_commit_log (repo_id, commit_hash, commit_at, author_email, branch_name, subject, files_changed, insertions, deletions, is_merge_commit)` +
+      ` VALUES (${REPO_ID}, '${esc(commit.hash)}', '${esc(commit.at)}', '${esc(commit.authorEmail)}',` +
+      ` '${esc(commit.branchName)}', '${esc(commit.subject)}',` +
+      ` ${commit.filesChanged}, ${commit.insertions}, ${commit.deletions}, ${commit.isMerge ? 1 : 0});`
+  );
+}
 
 for (const file of targetFiles) {
   const r = rel(file);
   const source = fs.readFileSync(file, 'utf-8');
-  const functions: Array<{
-    name: string;
-    startLine: number;
-    endLine: number;
-    isExported: boolean;
-    isAsync: boolean;
-  }> = parseFunctions(source);
+  const functions: FunctionSnapshot[] = parseFunctions(source).map(
+    (f: { name: string; startLine: number; endLine: number }) => ({
+      name: f.name, startLine: f.startLine, endLine: f.endLine,
+    })
+  );
 
   const lastModifiedAt = getLastModifiedAt(file);
   const hunks = getFileHunks(file);
 
-  for (const fn of functions) {
+  // ---- ts_function_catalog UPSERT ----
+  const fullFunctions: Array<{
+    name: string; startLine: number; endLine: number; isExported: boolean; isAsync: boolean;
+  }> = parseFunctions(source);
+
+  for (const fn of fullFunctions) {
     const { linesAdded, linesDeleted } = diffForRange(hunks, fn.startLine, fn.endLine);
     const lastMod = lastModifiedAt ? `'${esc(lastModifiedAt)}'` : 'NULL';
 
@@ -127,11 +199,8 @@ for (const file of targetFiles) {
     );
 
     const callers: Array<{ callerFile: string; callerLine: number }> = findCallers(
-      fn.name,
-      fileContents,
-      r
+      fn.name, fileContents, r
     );
-
     if (callers.length > 0) {
       lines.push(
         `DELETE FROM ts_function_callers WHERE callee_id = (SELECT id FROM ts_function_catalog WHERE repo_id=${REPO_ID} AND file_path='${esc(r)}' AND function_name='${esc(fn.name)}');`
@@ -144,6 +213,32 @@ for (const file of targetFiles) {
             ` '${esc(caller.callerFile)}', ${caller.callerLine});`
         );
       }
+    }
+  }
+
+  // ---- ts_function_activity_log INSERT（差分があったファイルのみ）----
+  if (commit && hunks.length > 0) {
+    const prevSource = getPrevFileContent(r);
+    const prevFuncs: FunctionSnapshot[] = prevSource
+      ? (parseFunctions(prevSource) as Array<{ name: string; startLine: number; endLine: number }>).map(f => ({
+          name: f.name, startLine: f.startLine, endLine: f.endLine,
+        }))
+      : [];
+
+    const changes = classifyFunctionChanges(prevFuncs, functions, hunks);
+
+    for (const ch of changes) {
+      const nsl = ch.newStartLine !== null ? String(ch.newStartLine) : 'NULL';
+      const nel = ch.newEndLine   !== null ? String(ch.newEndLine)   : 'NULL';
+      lines.push(
+        `INSERT OR IGNORE INTO ts_function_activity_log` +
+          ` (repo_id, commit_hash, commit_at, commit_subject, author_name, author_email, branch_name,` +
+          ` file_path, function_name, change_type, lines_added, lines_deleted, new_start_line, new_end_line)` +
+          ` VALUES (${REPO_ID}, '${esc(commit.hash)}', '${esc(commit.at)}', '${esc(commit.subject)}',` +
+          ` '${esc(commit.authorName)}', '${esc(commit.authorEmail)}', '${esc(commit.branchName)}',` +
+          ` '${esc(r)}', '${esc(ch.name)}', '${ch.changeType}',` +
+          ` ${ch.linesAdded}, ${ch.linesDeleted}, ${nsl}, ${nel});`
+      );
     }
   }
 }
