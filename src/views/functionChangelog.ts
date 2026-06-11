@@ -712,19 +712,7 @@ export function getFunctionChangelogPage(input: FunctionChangelogInput): string 
 
     // ---- シンタックスハイライター（TypeScript/JavaScript） ----
     function highlightTs(raw) {
-      var KWS = 'const|let|var|function|async|await|return|export|default|import|from|if|else|for|while|do|switch|case|break|continue|new|this|typeof|instanceof|void|null|undefined|true|false|class|extends|interface|type|enum|implements|abstract|readonly|private|public|protected|static|super|try|catch|finally|throw|in|of|as|keyof|never|unknown|any|declare|namespace|module|satisfies|override';
-      var TOKEN_RE = new RegExp(
-        '(\\/\\/[^\\n]*)' +
-        '|(\\/\\*[\\s\\S]*?\\*\\/)' +
-        '|(\x60[^\x60\\\\]*(?:\\\\.[^\x60\\\\]*)*\x60)' +
-        '|("(?:[^"\\\\\\n]|\\\\.)*")' +
-        "|('(?:[^'\\\\\\n]|\\\\.)*')" +
-        '|\\b(' + KWS + ')\\b' +
-        '|\\b([A-Z][A-Za-z0-9_]*)\\b' +
-        '|\\b(\\d+(?:\\.\\d+)?(?:[eE][+-]?\\d+)?)\\b' +
-        '|([\\s\\S])',
-        'g'
-      );
+      var TOKEN_RE = /(\\/\\/[^\\n]*)|(\\/\\*[\\s\\S]*?\\*\\/)|(\x60[^\x60\\\\]*(?:\\\\.[^\x60\\\\]*)*\x60)|("(?:[^"\\\\\\n]|\\\\.)*")|('(?:[^'\\\\\\n]|\\\\.)*')|\\b(const|let|var|function|async|await|return|export|default|import|from|if|else|for|while|do|switch|case|break|continue|new|this|typeof|instanceof|void|null|undefined|true|false|class|extends|interface|type|enum|implements|abstract|readonly|private|public|protected|static|super|try|catch|finally|throw|in|of|as|keyof|never|unknown|any|declare|namespace|module|satisfies|override)\\b|\\b([A-Z][A-Za-z0-9_]*)\\b|\\b(\\d+(?:\\.\\d+)?(?:[eE][+-]?\\d+)?)\\b|([\\s\\S])/g;
       var result = '';
       var m;
       while ((m = TOKEN_RE.exec(raw)) !== null) {
