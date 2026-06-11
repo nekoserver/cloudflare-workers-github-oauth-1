@@ -485,6 +485,26 @@ export function getFunctionChangelogPage(input: FunctionChangelogInput): string 
       line-height: 1.65; color: var(--text); max-height: calc(90vh - 220px);
       tab-size: 2;
     }
+    /* 行番号ガター付きコード表示 */
+    .srcview-code-flex {
+      display: flex; overflow: auto; max-height: calc(90vh - 220px);
+      border: 1px solid var(--border); border-radius: 8px;
+      background: light-dark(#f6f8fa,#0d1117);
+      font-family: 'SFMono-Regular',Consolas,monospace; font-size: 11.5px;
+      line-height: 1.65; tab-size: 2;
+    }
+    .srcview-gutter {
+      position: sticky; left: 0; margin: 0; flex-shrink: 0;
+      padding: 14px 10px 14px 12px; text-align: right;
+      color: var(--text-muted); user-select: none;
+      background: light-dark(#eef1f4,#161b22);
+      border-right: 1px solid var(--border);
+      font-variant-numeric: tabular-nums;
+    }
+    .srcview-code-flex pre.srcview-code {
+      margin: 0; padding: 14px; border: none; background: transparent;
+      color: var(--text); flex: 1; overflow: visible; max-height: none;
+    }
     .srcview-fallback {
       font-size: 12px; color: var(--text-muted); padding: 14px;
       background: light-dark(#f6f8fa,#161b22); border: 1px solid var(--border);
@@ -729,6 +749,21 @@ export function getFunctionChangelogPage(input: FunctionChangelogInput): string 
       return result;
     }
 
+    // ---- 行番号ガター生成 ----
+    // 各行に「通し番号:ファイル内絶対行番号」を表示する。
+    // startLine が null（カタログ未登録）の場合は通し番号のみにフォールバック。
+    function buildGutter(lineTotal, startLine) {
+      var out = [];
+      for (var i = 1; i <= lineTotal; i++) {
+        if (startLine !== null && startLine !== undefined) {
+          out.push(i + ':' + (startLine + i - 1));
+        } else {
+          out.push(String(i));
+        }
+      }
+      return out.join('\\n');
+    }
+
     // ---- ソースビューアモーダル ----
     var srcViewOverlay = document.getElementById('srcViewOverlay');
     var srcViewTitle   = document.getElementById('srcViewTitle');
@@ -756,7 +791,13 @@ export function getFunctionChangelogPage(input: FunctionChangelogInput): string 
             : '<div class="srcview-purpose empty">（説明未登録）</div>';
           var codeHtml;
           if (data.source_snippet) {
-            codeHtml = '<div class="srcview-code-wrap"><pre><code>' + highlightTs(data.source_snippet) + '</code></pre></div>';
+            var snippet = data.source_snippet.replace(/\\n$/, '');
+            var lineTotal = snippet.split('\\n').length;
+            codeHtml =
+              '<div class="srcview-code-flex">' +
+              '<pre class="srcview-gutter">' + buildGutter(lineTotal, data.start_line) + '</pre>' +
+              '<pre class="srcview-code"><code>' + highlightTs(snippet) + '</code></pre>' +
+              '</div>';
           } else {
             var linkHtml = data.github_url
               ? '<a href="' + escHtml(data.github_url) + '" target="_blank" rel="noopener">GitHub でファイルを開く →</a>'
