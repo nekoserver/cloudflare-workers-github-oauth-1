@@ -469,6 +469,29 @@ export function getFunctionChangelogPage(input: FunctionChangelogInput): string 
       color: var(--text-muted); flex-shrink: 0;
     }
     .srcview-close:hover { background: light-dark(#ffd7d7,#3d1a1a); color: var(--danger); border-color: var(--danger); }
+    .srcview-settings-btn {
+      background: none; border: 1px solid var(--border); border-radius: 6px;
+      padding: 3px 9px; cursor: pointer; font-size: 12px;
+      color: var(--text-muted); flex-shrink: 0; transition: background 0.15s;
+    }
+    .srcview-settings-btn:hover { background: light-dark(#f0f6ff,#1c2333); color: var(--text); }
+    .srcview-settings-btn.active { background: light-dark(#ddf4ff,#0d2136); color: var(--accent); border-color: var(--accent); }
+    .srcview-settings-panel {
+      display: none; border-top: 1px solid var(--border); padding: 10px 16px;
+      background: var(--th-bg); flex-shrink: 0;
+      font-size: 12px; color: var(--text-muted);
+      align-items: center; gap: 12px;
+    }
+    .srcview-settings-panel.open { display: flex; }
+    .srcview-settings-label { font-size: 11px; color: var(--text-muted); white-space: nowrap; }
+    .srcview-opt-group { display: flex; gap: 6px; }
+    .srcview-opt {
+      padding: 3px 12px; border-radius: 20px; font-size: 11px; cursor: pointer;
+      border: 1px solid var(--border); background: var(--panel); color: var(--text-muted);
+      transition: background 0.15s, color 0.15s, border-color 0.15s;
+    }
+    .srcview-opt:hover { background: light-dark(#f0f6ff,#1c2333); color: var(--text); }
+    .srcview-opt.selected { background: var(--accent); color: #fff; border-color: var(--accent); font-weight: 600; }
     .srcview-body { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 10px; }
     .srcview-meta { font-size: 11px; color: var(--text-muted); }
     .srcview-meta code { font-size: 11px; color: var(--text); }
@@ -658,7 +681,15 @@ export function getFunctionChangelogPage(input: FunctionChangelogInput): string 
     <div id="srcViewModal" role="dialog" aria-modal="true" aria-labelledby="srcViewTitle">
       <div class="srcview-header">
         <span class="srcview-title" id="srcViewTitle">— 関数ソース —</span>
+        <button class="srcview-settings-btn" id="srcViewSettingsBtn" title="表示設定">⚙ 設定</button>
         <button class="srcview-close" id="srcViewClose" aria-label="閉じる">✕ 閉じる</button>
+      </div>
+      <div class="srcview-settings-panel" id="srcViewSettingsPanel">
+        <span class="srcview-settings-label">最大表示行数</span>
+        <div class="srcview-opt-group" id="srcViewOptGroup">
+          <button class="srcview-opt" data-val="10000" id="srcOptDefault">10,000行（デフォルト）</button>
+          <button class="srcview-opt" data-val="unlimited" id="srcOptUnlimited">上限なし</button>
+        </div>
       </div>
       <div class="srcview-body" id="srcViewBody">
         <div class="srcview-fallback">関数を選択してください</div>
@@ -764,11 +795,51 @@ export function getFunctionChangelogPage(input: FunctionChangelogInput): string 
       return out.join('\\n');
     }
 
+    // ---- Cookie ユーティリティ ----
+    function getCookie(name) {
+      var m = document.cookie.match('(?:^|; )' + name + '=([^;]*)');
+      return m ? decodeURIComponent(m[1]) : null;
+    }
+    function setCookie(name, value) {
+      document.cookie = name + '=' + encodeURIComponent(value) + '; path=/; max-age=' + (365 * 24 * 3600);
+    }
+
     // ---- ソースビューアモーダル ----
-    var srcViewOverlay = document.getElementById('srcViewOverlay');
-    var srcViewTitle   = document.getElementById('srcViewTitle');
-    var srcViewBody    = document.getElementById('srcViewBody');
-    var srcViewClose   = document.getElementById('srcViewClose');
+    var srcViewOverlay      = document.getElementById('srcViewOverlay');
+    var srcViewTitle        = document.getElementById('srcViewTitle');
+    var srcViewBody         = document.getElementById('srcViewBody');
+    var srcViewClose        = document.getElementById('srcViewClose');
+    var srcViewSettingsBtn  = document.getElementById('srcViewSettingsBtn');
+    var srcViewSettingsPanel = document.getElementById('srcViewSettingsPanel');
+    var srcViewOptGroup     = document.getElementById('srcViewOptGroup');
+
+    // Cookie から設定を復元（デフォルト: '10000'）
+    var srcMaxLines = getCookie('srcview_maxlines') || '10000';
+
+    function applySrcOptUI() {
+      var opts = srcViewOptGroup ? srcViewOptGroup.querySelectorAll('.srcview-opt') : [];
+      opts.forEach(function(btn) {
+        btn.classList.toggle('selected', btn.dataset.val === srcMaxLines);
+      });
+    }
+    applySrcOptUI();
+
+    if (srcViewSettingsBtn) {
+      srcViewSettingsBtn.addEventListener('click', function() {
+        var open = srcViewSettingsPanel && srcViewSettingsPanel.classList.toggle('open');
+        srcViewSettingsBtn.classList.toggle('active', !!open);
+      });
+    }
+
+    if (srcViewOptGroup) {
+      srcViewOptGroup.addEventListener('click', function(e) {
+        var btn = e.target.closest('.srcview-opt');
+        if (!btn) return;
+        srcMaxLines = btn.dataset.val;
+        setCookie('srcview_maxlines', srcMaxLines);
+        applySrcOptUI();
+      });
+    }
 
     function openSrcViewer(funcName, filePath) {
       srcViewTitle.textContent = funcName + '  (' + filePath + ')';
@@ -778,7 +849,8 @@ export function getFunctionChangelogPage(input: FunctionChangelogInput): string 
 
       var url = '/api/function-source?repo_id=' + encodeURIComponent(REPO_ID) +
                 '&function_name=' + encodeURIComponent(funcName) +
-                '&file_path=' + encodeURIComponent(filePath);
+                '&file_path=' + encodeURIComponent(filePath) +
+                '&max_lines=' + encodeURIComponent(srcMaxLines);
       fetch(url)
         .then(function(res) { return res.json(); })
         .then(function(data) {
@@ -1283,7 +1355,8 @@ export function getFunctionChangelogPage(input: FunctionChangelogInput): string 
 
       var url = '/api/function-source?repo_id=' + encodeURIComponent(REPO_ID) +
                 '&function_name=' + encodeURIComponent(e.func) +
-                '&file_path=' + encodeURIComponent(e.file);
+                '&file_path=' + encodeURIComponent(e.file) +
+                '&max_lines=' + encodeURIComponent(srcMaxLines);
 
       fetch(url)
         .then(function(res) { return res.json(); })
