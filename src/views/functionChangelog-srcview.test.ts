@@ -172,3 +172,56 @@ describe('functionChangelog: getNextZ の staticZDefaults に両モーダルが�
     expect(block).toContain('srcViewOverlay');
   });
 });
+
+// ---------------------------------------------------
+// 行番号ガター（通し番号:ファイル内絶対行番号）テスト
+// ---------------------------------------------------
+
+const indexSrc = fs.readFileSync(path.join(__dirname, '..', 'index.ts'), 'utf-8');
+
+describe('functionChangelog: ソースビューアの行番号ガター', () => {
+  it('buildGutter 関数が存在する', () => {
+    expect(src).toContain('function buildGutter');
+  });
+
+  it('ガター用 CSS クラス srcview-gutter が定義されている', () => {
+    expect(src).toContain('.srcview-gutter');
+  });
+
+  it('コード横並びレイアウト用 CSS クラス srcview-code-flex が定義されている', () => {
+    expect(src).toContain('.srcview-code-flex');
+  });
+
+  it('ガターは通し番号と絶対行番号を「:」区切りで表示する', () => {
+    const idx = src.indexOf('function buildGutter');
+    expect(idx).toBeGreaterThan(-1);
+    const block = src.slice(idx, idx + 600);
+    expect(block).toMatch(/['"]:['"]/);
+  });
+
+  it('start_line が null の場合は通し番号のみ表示にフォールバックする', () => {
+    const idx = src.indexOf('function buildGutter');
+    const block = src.slice(idx, idx + 600);
+    expect(block).toContain('null');
+  });
+
+  it('openSrcViewer は data.start_line をガター生成に使う', () => {
+    expect(src).toMatch(/buildGutter\([^)]*start_line/);
+  });
+});
+
+describe('/api/function-source: start_line / end_line を返す', () => {
+  it('ts_function_catalog クエリで start_line と end_line を SELECT している', () => {
+    const idx = indexSrc.indexOf("app.get('/api/function-source'");
+    expect(idx).toBeGreaterThan(-1);
+    const block = indexSrc.slice(idx, idx + 2500);
+    expect(block).toContain('start_line');
+    expect(block).toContain('end_line');
+  });
+
+  it('レスポンス JSON に start_line が含まれる', () => {
+    const idx = indexSrc.indexOf("app.get('/api/function-source'");
+    const block = indexSrc.slice(idx, idx + 4000);
+    expect(block).toMatch(/start_line:\s*\w+/);
+  });
+});

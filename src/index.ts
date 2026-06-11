@@ -5110,21 +5110,27 @@ app.get('/api/function-source', authMiddleware, async (c) => {
 
     let purpose = '';
     let sourceSnippet: string | null = null;
+    let startLine: number | null = null;
+    let endLine: number | null = null;
 
     try {
       const row = await db.prepare(
-        `SELECT COALESCE(purpose,'') AS purpose, source_snippet FROM ts_function_catalog
+        `SELECT COALESCE(purpose,'') AS purpose, source_snippet, start_line, end_line FROM ts_function_catalog
          WHERE repo_id = ? AND file_path = ? AND function_name = ? LIMIT 1`
-      ).bind(repoId, filePath, functionName).first<{ purpose: string; source_snippet: string | null }>();
+      ).bind(repoId, filePath, functionName).first<{ purpose: string; source_snippet: string | null; start_line: number | null; end_line: number | null }>();
       purpose = row?.purpose ?? '';
       sourceSnippet = row?.source_snippet ?? null;
+      startLine = row?.start_line ?? null;
+      endLine = row?.end_line ?? null;
     } catch {
       const row = await db.prepare(
-        `SELECT COALESCE(purpose,'') AS purpose FROM ts_function_catalog
+        `SELECT COALESCE(purpose,'') AS purpose, start_line, end_line FROM ts_function_catalog
          WHERE repo_id = ? AND file_path = ? AND function_name = ? LIMIT 1`
-      ).bind(repoId, filePath, functionName).first<{ purpose: string }>();
+      ).bind(repoId, filePath, functionName).first<{ purpose: string; start_line: number | null; end_line: number | null }>();
       purpose = row?.purpose ?? '';
       sourceSnippet = null;
+      startLine = row?.start_line ?? null;
+      endLine = row?.end_line ?? null;
     }
 
     // source_snippet が未登録の場合は GitHub API からファイルを取得して抽出する
@@ -5159,6 +5165,8 @@ app.get('/api/function-source', authMiddleware, async (c) => {
       function_name: functionName,
       purpose,
       source_snippet: sourceSnippet,
+      start_line: startLine,
+      end_line: endLine,
       github_url: githubUrl,
     });
   } catch (error) {
