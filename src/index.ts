@@ -1817,6 +1817,80 @@ async function classifyKeywordWithAI(
   };
 }
 
+export interface KeywordClassifyDebug {
+  prompt: string;
+  rawResponse: string;
+  resolvedLabel: string;
+  model: string;
+  fallback: { model: string; rawResponse: string; label: string } | null;
+}
+
+export async function runKeywordAutoClassification(
+  env: { AI?: Ai; DB?: D1Database; AI_MODEL?: string },
+  userId: string,
+  q: string,
+  classifyDebugEnabled: boolean
+): Promise<{ autoLabel: string; classifyDebug: KeywordClassifyDebug | null }> {
+  if (!env.AI || !env.DB) {
+    logger.warn('auto-classify skipped: AI binding not available', { query: q });
+    return { autoLabel: 'uncategorized', classifyDebug: null };
+  }
+  const DEFAULT_CLASSIFY_LABELS = ['feature', 'ui', 'tech', 'database', 'bugfix', 'ops'];
+  let classifyLabels = DEFAULT_CLASSIFY_LABELS;
+  try {
+    const userLabelRows = await env.DB.prepare(
+      `SELECT DISTINCT label FROM commit_search_keyword_labels WHERE user_id = ? AND label != 'uncategorized' ORDER BY label`
+    ).bind(userId).all<{ label: string }>();
+    const userLabels = (userLabelRows.results ?? []).map((r) => r.label).filter(Boolean);
+    if (userLabels.length > 0) {
+      classifyLabels = [...new Set([...DEFAULT_CLASSIFY_LABELS, ...userLabels])];
+    }
+  } catch { /* デフォルトラベルを使用 */ }
+  const model = resolveAiModel(env.AI_MODEL);
+  const classifyResult = await classifyKeywordWithAI(env.AI, model, q, classifyLabels);
+  let autoLabel = classifyResult.label;
+  let classifyDebug: KeywordClassifyDebug | null = null;
+  if (classifyDebugEnabled) {
+    classifyDebug = {
+      prompt: classifyResult.prompt,
+      rawResponse: classifyResult.rawResponse,
+      resolvedLabel: classifyResult.label,
+      model: classifyResult.model,
+      fallback: classifyResult.fallback ?? null,
+    };
+  }
+  const classifyStatus = classifyResult.fallback ? 'ai_fallback' : 'ai_success';
+  const usedModel = classifyResult.fallback ? classifyResult.fallback.model : classifyResult.model;
+  let labelSaved = false;
+  try {
+    await env.DB.prepare(
+      `UPDATE commit_search_keyword_labels SET label = ?, ai_model = ?, classify_status = ?, updated_at = datetime('now') WHERE user_id = ? AND search_query = ?`
+    ).bind(autoLabel, usedModel, classifyStatus, userId, q).run();
+    labelSaved = true;
+  } catch {
+    try {
+      await env.DB.prepare(
+        `UPDATE commit_search_keyword_labels SET label = ?, ai_model = ?, updated_at = datetime('now') WHERE user_id = ? AND search_query = ?`
+      ).bind(autoLabel, usedModel, userId, q).run();
+      labelSaved = true;
+    } catch {
+      try {
+        await env.DB.prepare(
+          `UPDATE commit_search_keyword_labels SET label = ?, updated_at = datetime('now') WHERE user_id = ? AND search_query = ?`
+        ).bind(autoLabel, userId, q).run();
+        labelSaved = true;
+      } catch (updateErr) {
+        logger.warn('auto-classify label update failed', { query: q, error: updateErr instanceof Error ? updateErr.message : 'Unknown error' });
+      }
+    }
+  }
+  if (!labelSaved) {
+    autoLabel = 'uncategorized';
+    if (classifyDebug) classifyDebug.resolvedLabel = 'uncategorized';
+  }
+  return { autoLabel, classifyDebug };
+}
+
 export function buildPreviewQueryFromTemplate(
   template: string,
   userId: string,
@@ -7027,71 +7101,10 @@ app.get('/api/repositories/search/commits', optionalAuthMiddleware, async (c) =>
     }
 
     if (isNewKeyword && searchLabelMode === 'auto-classify') {
-        if (c.env.AI) {
-          const DEFAULT_CLASSIFY_LABELS = ['feature', 'ui', 'tech', 'database', 'bugfix', 'ops'];
-          let classifyLabels = DEFAULT_CLASSIFY_LABELS;
-          try {
-            const userLabelRows = await c.env.DB.prepare(
-              `SELECT DISTINCT label FROM commit_search_keyword_labels WHERE user_id = ? AND label != 'uncategorized' ORDER BY label`
-            ).bind(user.sub).all<{ label: string }>();
-            const userLabels = (userLabelRows.results ?? []).map((r) => r.label).filter(Boolean);
-            if (userLabels.length > 0) {
-              classifyLabels = [...new Set([...DEFAULT_CLASSIFY_LABELS, ...userLabels])];
-            }
-          } catch { /* デフォルトラベルを使用 */ }
-          const model = resolveAiModel(c.env.AI_MODEL);
-          const classifyResult = await classifyKeywordWithAI(c.env.AI, model, q, classifyLabels);
-          autoLabel = classifyResult.label;
-          if (classifyDebugEnabled) {
-            classifyDebug = {
-              prompt: classifyResult.prompt,
-              rawResponse: classifyResult.rawResponse,
-              resolvedLabel: classifyResult.label,
-              model: classifyResult.model,
-              fallback: classifyResult.fallback ?? null,
-            };
-          }
-          {
-            // フォールバックなし＝プライマリモデルが正常応答 → ai_success（再分類不要）
-            // フォールバックあり＝プライマリがタイムアウト → ai_fallback（次回再試行可）
-            const classifyStatus = classifyResult.fallback ? 'ai_fallback' : 'ai_success';
-            const usedModel = classifyResult.fallback ? classifyResult.fallback.model : classifyResult.model;
-            let labelSaved = false;
-            try {
-              await c.env.DB.prepare(
-                `UPDATE commit_search_keyword_labels SET label = ?, ai_model = ?, classify_status = ?, updated_at = datetime('now') WHERE user_id = ? AND search_query = ?`
-              ).bind(autoLabel, usedModel, classifyStatus, user.sub, q).run();
-              labelSaved = true;
-            } catch {
-              // classify_status カラム未作成（マイグレーション0038未実行）の場合は ai_model のみで再試行
-              try {
-                await c.env.DB.prepare(
-                  `UPDATE commit_search_keyword_labels SET label = ?, ai_model = ?, updated_at = datetime('now') WHERE user_id = ? AND search_query = ?`
-                ).bind(autoLabel, usedModel, user.sub, q).run();
-                labelSaved = true;
-              } catch {
-                // ai_model カラムも未作成の場合は label のみで再試行
-                try {
-                  await c.env.DB.prepare(
-                    `UPDATE commit_search_keyword_labels SET label = ?, updated_at = datetime('now') WHERE user_id = ? AND search_query = ?`
-                  ).bind(autoLabel, user.sub, q).run();
-                  labelSaved = true;
-                } catch (updateErr) {
-                  logger.warn('auto-classify label update failed', { query: q, error: updateErr instanceof Error ? updateErr.message : 'Unknown error' });
-                }
-              }
-            }
-            if (!labelSaved) {
-              autoLabel = 'uncategorized';
-              if (classifyDebug) classifyDebug.resolvedLabel = 'uncategorized';
-            }
-          }
-        } else {
-          // AI バインディング未設定: 未分類にフォールバック
-          autoLabel = 'uncategorized';
-          logger.warn('auto-classify skipped: AI binding not available', { query: q });
-        }
-      }
+      const classifyOutcome = await runKeywordAutoClassification(c.env, user.sub, q, classifyDebugEnabled);
+      autoLabel = classifyOutcome.autoLabel;
+      classifyDebug = classifyOutcome.classifyDebug;
+    }
 
     return jsonUtf8({ results, query: q, total: totalMatches, isNewKeyword, autoLabel, classifyDebug });
   } catch (error) {
@@ -7100,6 +7113,53 @@ app.get('/api/repositories/search/commits', optionalAuthMiddleware, async (c) =>
       error: error instanceof Error ? error.message : 'Unknown error',
     });
     return jsonUtf8({ error: 'Search failed' }, 500);
+  }
+});
+
+app.get('/api/repositories/search/keyword-classify-check', authMiddleware, async (c) => {
+  const user = c.get('user');
+  const db = c.env.DB;
+  if (!db) return jsonUtf8({ error: 'Database not available' }, 500);
+  const q = (c.req.query('q') ?? '').trim();
+  if (!q || q.length < 2) {
+    return jsonUtf8({ error: '2文字以上のキーワードを指定してください' }, 400);
+  }
+  const cookieHeader = c.req.header('Cookie');
+  const classifyDebugEnabled = getCookieValues(cookieHeader, ['keyword_classify_debug'])['keyword_classify_debug'] === 'on';
+  try {
+    let row: { label: string; classify_status: string | null } | null = null;
+    try {
+      row = await db.prepare(
+        `SELECT label, classify_status FROM commit_search_keyword_labels WHERE user_id = ? AND search_query = ?`
+      ).bind(user.sub, q).first<{ label: string; classify_status: string | null }>();
+    } catch {
+      try {
+        const legacy = await db.prepare(
+          `SELECT label FROM commit_search_keyword_labels WHERE user_id = ? AND search_query = ?`
+        ).bind(user.sub, q).first<{ label: string }>();
+        row = legacy ? { label: legacy.label, classify_status: null } : null;
+      } catch {
+        row = null;
+      }
+    }
+    const registered = row !== null;
+    if (row && !shouldReclassifyKeyword(row)) {
+      return jsonUtf8({ query: q, registered: true, skipped: true, label: row.label, autoLabel: null, classifyDebug: null });
+    }
+    if (!registered) {
+      try {
+        await db.prepare(
+          `INSERT OR IGNORE INTO commit_search_keyword_labels (user_id, search_query, label, created_at, updated_at) VALUES (?, ?, 'uncategorized', datetime('now'), datetime('now'))`
+        ).bind(user.sub, q).run();
+      } catch (insertErr) {
+        logger.warn('keyword classify check: insert failed', { query: q, error: insertErr instanceof Error ? insertErr.message : 'Unknown error' });
+      }
+    }
+    const { autoLabel, classifyDebug } = await runKeywordAutoClassification(c.env, user.sub, q, classifyDebugEnabled);
+    return jsonUtf8({ query: q, registered, skipped: false, label: autoLabel, autoLabel, classifyDebug });
+  } catch (error) {
+    logger.warn('keyword classify check failed', { query: q, error: error instanceof Error ? error.message : 'Unknown error' });
+    return jsonUtf8({ error: '分類チェックに失敗しました' }, 500);
   }
 });
 

@@ -5279,6 +5279,7 @@ export function getRepositoriesPage(user: {
           }
           var pendingAuto = window.__pendingAutoLabel;
           window.__pendingAutoLabel = null;
+          pendingAuto = ensureAutoLabelCategoryExists(pendingAuto);
           if (pendingAuto && pendingAuto.label && pendingAuto.label !== 'uncategorized') {
             selectLabelFilter(pendingAuto.label);
           } else if (pendingAuto) {
@@ -6219,7 +6220,9 @@ export function getRepositoriesPage(user: {
         var allOn = allLabels.length > 0 && allLabels.every(function(l) { return activeLabels.has(l); });
         var items = currentItems;
         if (!allOn) {
-          if (activeLabels.size > 0) {
+          if (activeLabels.size === 0) {
+            items = [];
+          } else {
             items = items.filter(function(item) {
               var kw = item.search_query;
               var cats;
@@ -6316,6 +6319,29 @@ export function getRepositoriesPage(user: {
         var found = currentItems.find(function(item) { return item.search_query === query; });
         var label = (found && found.label) ? found.label : 'uncategorized';
         selectLabelFilter(label);
+      }
+
+      function ensureAutoLabelCategoryExists(pending) {
+        if (!pending || !pending.label || pending.label === 'uncategorized') return pending;
+        if (getAllCategoryLabels().indexOf(pending.label) !== -1) return pending;
+        showToast('AIは今現在存在しないカテゴリ「' + pending.label + '」への分類を提案していましたが未分類に分類します', 'error', 9000);
+        fetch('/api/repositories/search/keyword-label', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'same-origin',
+          body: JSON.stringify({ search_query: pending.query, label: 'uncategorized' })
+        }).then(function(res) {
+          if (!res.ok) showToast('未分類への変更の保存に失敗しました', 'error', 6000);
+        }).catch(function() {
+          showToast('未分類への変更の保存に失敗しました', 'error', 6000);
+        });
+        for (var i = 0; i < currentItems.length; i++) {
+          if (currentItems[i].search_query === pending.query) {
+            currentItems[i].label = 'uncategorized';
+            break;
+          }
+        }
+        return { query: pending.query, label: 'uncategorized' };
       }
 
       function showKeywordDetail(query) {
@@ -6798,6 +6824,36 @@ export function getRepositoriesPage(user: {
       if (hSearchBtn) {
         hSearchBtn.addEventListener('click', executeModalSearch);
       }
+
+      var incrClassifyTimer = null;
+      var lastIncrClassifyQuery = '';
+
+      function runIncrementalClassifyCheck(query) {
+        lastIncrClassifyQuery = query;
+        fetch('/api/repositories/search/keyword-classify-check?q=' + encodeURIComponent(query), { credentials: 'same-origin', cache: 'no-store' })
+          .then(function(res) { return res.ok ? res.json() : null; })
+          .then(function(data) {
+            if (!data || data.error) {
+              showToast('「' + query + '」の分類チェックに失敗しました' + (data && data.error ? '（' + data.error + '）' : ''), 'error', 6000);
+              return;
+            }
+            if (data.skipped) {
+              showToast('「' + query + '」は分類済み（' + (data.label || 'uncategorized') + '）のためAIラベル分類をスキップしました', 'info', 6000);
+              return;
+            }
+            var lbl = data.autoLabel || 'uncategorized';
+            showToast('「' + query + '」をAIで自動ラベル分類しました → 「' + lbl + '」', 'success', 6000);
+            if (data.classifyDebug && getCookie('keyword_classify_debug') === 'on') {
+              showClassifyDebugModal(data.classifyDebug);
+            }
+            window.__pendingAutoLabel = { query: query, label: lbl };
+            if (typeof window.__reloadSearchHistory === 'function') window.__reloadSearchHistory();
+          })
+          .catch(function() {
+            showToast('「' + query + '」の分類チェックに失敗しました', 'error', 6000);
+          });
+      }
+
       if (hSearchInput) {
         hSearchInput.addEventListener('keydown', function(e) {
           if (e.key === 'Enter') executeModalSearch();
@@ -6806,6 +6862,11 @@ export function getRepositoriesPage(user: {
           if (isIncrementalSearchEnabled && currentItems.length > 0) {
             refreshGrid(null, null);
           }
+          if (incrClassifyTimer) clearTimeout(incrClassifyTimer);
+          if (!isIncrementalSearchEnabled) return;
+          var q = hSearchInput.value.trim();
+          if (q.length < 2 || q === lastIncrClassifyQuery) return;
+          incrClassifyTimer = setTimeout(function() { runIncrementalClassifyCheck(q); }, 800);
         });
       }
 
@@ -6936,6 +6997,7 @@ export function getRepositoriesPage(user: {
           // 自動分類完了済みのキーワードを分類先カテゴリにフォーカスする
           var pendingAuto = window.__pendingAutoLabel;
           window.__pendingAutoLabel = null;
+          pendingAuto = ensureAutoLabelCategoryExists(pendingAuto);
           if (pendingAuto && pendingAuto.label && pendingAuto.label !== 'uncategorized') {
             selectLabelFilter(pendingAuto.label);
           } else if (pendingAuto) {
