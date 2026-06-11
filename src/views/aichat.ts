@@ -11,7 +11,6 @@ const DEFAULT_AICHAT_MODELS: Array<{value: string; label: string}> = [
   { value: '@cf/google/gemma-4-26b-a4b-it', label: 'gemma-4-26b' },
   { value: '@cf/google/gemma-3-12b-it', label: 'gemma-3-12b' },
   { value: '@cf/meta/llama-4-scout-17b-16e-instruct', label: 'llama-4-scout-17b' },
-  { value: '@cf/openai/gpt-oss-120b', label: 'gpt-oss-120b' },
 ];
 
 export function getAiChatPage(user: {
