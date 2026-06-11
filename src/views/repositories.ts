@@ -5912,6 +5912,16 @@ export function getRepositoriesPage(user: {
         refreshGrid(null, null);
       }
 
+      var savedLabelFilterState = null;
+
+      function restoreLabelFilterState() {
+        if (savedLabelFilterState === null) return;
+        activeLabels.clear();
+        savedLabelFilterState.forEach(function(l) { activeLabels.add(l); });
+        savedLabelFilterState = null;
+        syncBtnStyles();
+      }
+
       // ===== 複数カテゴリ分類モーダル =====
       (function() {
         var overlay = document.createElement('div');
@@ -6186,6 +6196,7 @@ export function getRepositoriesPage(user: {
         selectedKeyword = null;
         keywordDetailPanel.style.display = 'none';
         keywordDetailPanel.innerHTML = '';
+        savedLabelFilterState = null;
         refreshGrid(null, null);
       });
 
@@ -6197,6 +6208,7 @@ export function getRepositoriesPage(user: {
             keywordDetailPanel.innerHTML = '';
             selectedKeyword = null;
             activeCokeySet = {};
+            savedLabelFilterState = null;
           }
           loadRepoFilter(selectedRepo);
         });
@@ -6308,6 +6320,9 @@ export function getRepositoriesPage(user: {
 
       function showKeywordDetail(query) {
         selectedKeyword = query;
+        if (savedLabelFilterState === null) {
+          savedLabelFilterState = Array.from(activeLabels);
+        }
         syncLabelFilterToKeyword(query);
         if (!keywordDetailPanel) return;
         keywordDetailPanel.style.display = '';
@@ -6326,7 +6341,8 @@ export function getRepositoriesPage(user: {
             selectedKeyword = null;
             keywordDetailPanel.style.display = 'none';
             keywordDetailPanel.innerHTML = '';
-            if (getCookie('kw_panel_no_all_focus') !== 'on') selectLabelFilter('');
+            if (getCookie('kw_panel_no_all_focus') !== 'on') restoreLabelFilterState();
+            else savedLabelFilterState = null;
             refreshGrid(null, null);
           });
         }
@@ -6441,7 +6457,8 @@ export function getRepositoriesPage(user: {
                   selectedKeyword = null;
                   keywordDetailPanel.style.display = 'none';
                   keywordDetailPanel.innerHTML = '';
-                  if (getCookie('kw_panel_no_all_focus') !== 'on') selectLabelFilter('');
+                  if (getCookie('kw_panel_no_all_focus') !== 'on') restoreLabelFilterState();
+                  else savedLabelFilterState = null;
                   refreshGrid(null, null);
                 });
               }
