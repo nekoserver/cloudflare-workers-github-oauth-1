@@ -4989,6 +4989,7 @@ export function getRepositoriesPage(user: {
       }
 
       function openSearchModal() {
+        searchModal.style.zIndex = String(getNextZ());
         searchModal.classList.add('show');
         document.body.style.overflow = 'hidden';
       }
