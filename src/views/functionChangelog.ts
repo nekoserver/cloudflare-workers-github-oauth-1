@@ -121,7 +121,7 @@ export function getFunctionChangelogPage(input: FunctionChangelogInput): string 
       <td class="col-date">${escapeHtml(r.commit_at.slice(0, 10))}</td>
       <td class="col-hash"><code title="${escapeHtml(r.commit_hash)}">${escapeHtml(shortHash)}</code><br><span class="subject">${escapeHtml(r.subject)}</span></td>
       <td class="col-file"><code>${escapeHtml(r.file_path)}</code></td>
-      <td class="col-func"><code>${escapeHtml(r.function_name)}</code><br><span class="purpose">${escapeHtml(r.purpose)}</span></td>
+      <td class="col-func"><code class="fn-link" data-func="${escapeHtml(r.function_name)}" data-file="${escapeHtml(r.file_path)}">${escapeHtml(r.function_name)}</code><br><span class="purpose">${escapeHtml(r.purpose)}</span></td>
       <td class="col-change">${changeTypeBadge(r.change_type)}<br>${diffStr}</td>
       <td class="col-impact">${impactBadge(r.impact_type)}</td>
       <td class="col-severity">${severityDots(r.severity)}</td>
@@ -443,6 +443,60 @@ export function getFunctionChangelogPage(input: FunctionChangelogInput): string 
     }
     .source-fallback a { color: var(--accent); }
     .source-loading { font-size: 12px; color: var(--text-muted); padding: 12px 0; }
+    /* 関数名クリックリンク */
+    .fn-link { cursor: pointer; border-bottom: 1px dotted var(--accent); }
+    .fn-link:hover { color: var(--accent); background: light-dark(rgba(9,105,218,.08), rgba(88,166,255,.12)); border-radius: 2px; }
+    /* ソースビューアモーダル */
+    #srcViewOverlay {
+      display: none; position: fixed; inset: 0;
+      background: rgba(0,0,0,0.55); align-items: center; justify-content: center;
+    }
+    #srcViewOverlay.open { display: flex; }
+    #srcViewModal {
+      background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+      width: min(860px, 96vw); max-height: 90vh;
+      display: flex; flex-direction: column; overflow: hidden;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.28);
+    }
+    .srcview-header {
+      display: flex; align-items: center; gap: 10px;
+      padding: 12px 16px; border-bottom: 1px solid var(--border); flex-shrink: 0;
+    }
+    .srcview-title { flex: 1; font-size: 14px; font-weight: 600; color: var(--text-strong); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .srcview-close {
+      background: none; border: 1px solid var(--border); border-radius: 6px;
+      padding: 3px 10px; cursor: pointer; font-size: 13px;
+      color: var(--text-muted); flex-shrink: 0;
+    }
+    .srcview-close:hover { background: light-dark(#ffd7d7,#3d1a1a); color: var(--danger); border-color: var(--danger); }
+    .srcview-body { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+    .srcview-meta { font-size: 11px; color: var(--text-muted); }
+    .srcview-meta code { font-size: 11px; color: var(--text); }
+    .srcview-purpose {
+      font-size: 12px; color: var(--text); padding: 8px 12px;
+      background: var(--th-bg); border-left: 3px solid var(--accent); border-radius: 0 6px 6px 0;
+    }
+    .srcview-purpose.empty { color: var(--text-muted); font-style: italic; }
+    .srcview-code-wrap { flex: 1; min-height: 0; }
+    .srcview-code-wrap pre {
+      margin: 0; padding: 14px; border-radius: 8px; overflow: auto;
+      background: light-dark(#f6f8fa,#0d1117); border: 1px solid var(--border);
+      font-family: 'SFMono-Regular',Consolas,monospace; font-size: 11.5px;
+      line-height: 1.65; color: var(--text); max-height: calc(90vh - 220px);
+      tab-size: 2;
+    }
+    .srcview-fallback {
+      font-size: 12px; color: var(--text-muted); padding: 14px;
+      background: light-dark(#f6f8fa,#161b22); border: 1px solid var(--border);
+      border-radius: 8px; line-height: 1.7;
+    }
+    .srcview-fallback a { color: var(--accent); }
+    /* シンタックスハイライト */
+    .hl-comment { color: light-dark(#6a737d,#8b949e); font-style: italic; }
+    .hl-string  { color: light-dark(#032f62,#a5d6ff); }
+    .hl-kw      { color: light-dark(#d73a49,#ff7b72); font-weight: 600; }
+    .hl-type    { color: light-dark(#6f42c1,#d2a8ff); }
+    .hl-num     { color: light-dark(#005cc5,#79c0ff); }
     .history-section { flex: 1; }
     .history-section-label {
       font-size: 10px; color: var(--text-muted); text-transform: uppercase;
@@ -579,6 +633,19 @@ export function getFunctionChangelogPage(input: FunctionChangelogInput): string 
 
   ${renderKeyPickerHtml()}
 
+  <!-- ソースビューアモーダル -->
+  <div id="srcViewOverlay">
+    <div id="srcViewModal" role="dialog" aria-modal="true" aria-labelledby="srcViewTitle">
+      <div class="srcview-header">
+        <span class="srcview-title" id="srcViewTitle">— 関数ソース —</span>
+        <button class="srcview-close" id="srcViewClose" aria-label="閉じる">✕ 閉じる</button>
+      </div>
+      <div class="srcview-body" id="srcViewBody">
+        <div class="srcview-fallback">関数を選択してください</div>
+      </div>
+    </div>
+  </div>
+
   <!-- 関数履歴モーダル -->
   <div class="modal-overlay" id="historyOverlay">
     <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
@@ -621,6 +688,137 @@ export function getFunctionChangelogPage(input: FunctionChangelogInput): string 
     var CATALOG_ROWS = ${JSON.stringify(input.catalogRows)};
     var INDEXED_FILES = ${JSON.stringify(input.indexedFiles)};
     var allRows = Array.from(document.querySelectorAll('#tableBody tr[data-file]'));
+
+    // ---- getNextZ ----
+    function getNextZ() {
+      var staticZDefaults = { historyOverlay: 1000, srcViewOverlay: 1100 };
+      var max = 900;
+      document.querySelectorAll('[style*="z-index"]').forEach(function(el) {
+        var z = parseInt(el.style.zIndex, 10);
+        if (!isNaN(z) && z > max) max = z;
+      });
+      Object.keys(staticZDefaults).forEach(function(id) {
+        var el = document.getElementById(id);
+        if (el && el.style.zIndex) {
+          var z = parseInt(el.style.zIndex, 10);
+          if (!isNaN(z) && z > max) max = z;
+        } else {
+          var def = staticZDefaults[id];
+          if (def > max) max = def;
+        }
+      });
+      return max + 100;
+    }
+
+    // ---- シンタックスハイライター（TypeScript/JavaScript） ----
+    function highlightTs(raw) {
+      var KWS = 'const|let|var|function|async|await|return|export|default|import|from|if|else|for|while|do|switch|case|break|continue|new|this|typeof|instanceof|void|null|undefined|true|false|class|extends|interface|type|enum|implements|abstract|readonly|private|public|protected|static|super|try|catch|finally|throw|in|of|as|keyof|never|unknown|any|declare|namespace|module|satisfies|override';
+      var TOKEN_RE = new RegExp(
+        '(\\/\\/[^\\n]*)' +
+        '|(\\/\\*[\\s\\S]*?\\*\\/)' +
+        '|(\x60[^\x60\\\\]*(?:\\\\.[^\x60\\\\]*)*\x60)' +
+        '|("(?:[^"\\\\\\n]|\\\\.)*")' +
+        "|('(?:[^'\\\\\\n]|\\\\.)*')" +
+        '|\\b(' + KWS + ')\\b' +
+        '|\\b([A-Z][A-Za-z0-9_]*)\\b' +
+        '|\\b(\\d+(?:\\.\\d+)?(?:[eE][+-]?\\d+)?)\\b' +
+        '|([\\s\\S])',
+        'g'
+      );
+      var result = '';
+      var m;
+      while ((m = TOKEN_RE.exec(raw)) !== null) {
+        if      (m[1]) result += '<span class="hl-comment">' + escHtml(m[1]) + '</span>';
+        else if (m[2]) result += '<span class="hl-comment">' + escHtml(m[2]) + '</span>';
+        else if (m[3]) result += '<span class="hl-string">'  + escHtml(m[3]) + '</span>';
+        else if (m[4]) result += '<span class="hl-string">'  + escHtml(m[4]) + '</span>';
+        else if (m[5]) result += '<span class="hl-string">'  + escHtml(m[5]) + '</span>';
+        else if (m[6]) result += '<span class="hl-kw">'      + escHtml(m[6]) + '</span>';
+        else if (m[7]) result += '<span class="hl-type">'    + escHtml(m[7]) + '</span>';
+        else if (m[8]) result += '<span class="hl-num">'     + escHtml(m[8]) + '</span>';
+        else           result += escHtml(m[9]);
+      }
+      return result;
+    }
+
+    // ---- ソースビューアモーダル ----
+    var srcViewOverlay = document.getElementById('srcViewOverlay');
+    var srcViewTitle   = document.getElementById('srcViewTitle');
+    var srcViewBody    = document.getElementById('srcViewBody');
+    var srcViewClose   = document.getElementById('srcViewClose');
+
+    function openSrcViewer(funcName, filePath) {
+      srcViewTitle.textContent = funcName + '  (' + filePath + ')';
+      srcViewBody.innerHTML = '<div class="source-loading">読み込み中…</div>';
+      srcViewOverlay.style.zIndex = String(getNextZ());
+      srcViewOverlay.classList.add('open');
+
+      var url = '/api/function-source?repo_id=' + encodeURIComponent(REPO_ID) +
+                '&function_name=' + encodeURIComponent(funcName) +
+                '&file_path=' + encodeURIComponent(filePath);
+      fetch(url)
+        .then(function(res) { return res.json(); })
+        .then(function(data) {
+          if (!data.ok) {
+            srcViewBody.innerHTML = '<div class="srcview-fallback">エラー: ' + escHtml(data.error || '取得失敗') + '</div>';
+            return;
+          }
+          var purposeHtml = data.purpose
+            ? '<div class="srcview-purpose">' + escHtml(data.purpose) + '</div>'
+            : '<div class="srcview-purpose empty">（説明未登録）</div>';
+          var codeHtml;
+          if (data.source_snippet) {
+            codeHtml = '<div class="srcview-code-wrap"><pre><code>' + highlightTs(data.source_snippet) + '</code></pre></div>';
+          } else {
+            var linkHtml = data.github_url
+              ? '<a href="' + escHtml(data.github_url) + '" target="_blank" rel="noopener">GitHub でファイルを開く →</a>'
+              : '';
+            codeHtml = '<div class="srcview-fallback">ソースコードが登録されていません。<br>scripts/index-functions.ts を実行して source_snippet を追加すると表示されます。<br><br>' + linkHtml + '</div>';
+          }
+          srcViewBody.innerHTML =
+            '<div class="srcview-meta"><code>' + escHtml(filePath) + '</code></div>' +
+            purposeHtml + codeHtml;
+        })
+        .catch(function(err) {
+          srcViewBody.innerHTML = '<div class="srcview-fallback">通信エラー: ' + escHtml(String(err)) + '</div>';
+        });
+    }
+
+    function closeSrcViewer() {
+      srcViewOverlay.classList.remove('open');
+    }
+
+    if (srcViewClose) srcViewClose.addEventListener('click', closeSrcViewer);
+    srcViewOverlay.addEventListener('click', function(e) {
+      if (e.target === srcViewOverlay) closeSrcViewer();
+    });
+    document.addEventListener('keydown', function(e) {
+      if (e.key === 'Escape' && srcViewOverlay.classList.contains('open')) closeSrcViewer();
+    });
+
+    // イベントデリゲーション: 主テーブル
+    var tableBodyEl = document.getElementById('tableBody');
+    if (tableBodyEl) {
+      tableBodyEl.addEventListener('click', function(e) {
+        var link = e.target.closest('.fn-link');
+        if (!link) return;
+        var funcName = link.dataset.func;
+        var filePath = link.dataset.file;
+        if (funcName && filePath) openSrcViewer(funcName, filePath);
+      });
+    }
+
+    // イベントデリゲーション: カタログテーブル
+    var catalogBodyEl = document.getElementById('catalogBody');
+    if (catalogBodyEl) {
+      catalogBodyEl.addEventListener('click', function(e) {
+        var link = e.target.closest('.fn-link');
+        if (!link) return;
+        var funcName = link.dataset.func;
+        var filePath = link.dataset.file;
+        if (funcName && filePath) openSrcViewer(funcName, filePath);
+      });
+    }
 
     var repoSelect   = document.getElementById('repoSelect');
     var filterFile   = document.getElementById('filterFile');
@@ -685,7 +883,7 @@ export function getFunctionChangelogPage(input: FunctionChangelogInput): string 
         var rowClass = r.caller_count > 0 ? ' class="has-callers"' : '';
         return '<tr' + rowClass + '>' +
           '<td class="col-cat-file"><code>' + escHtml(r.file_path) + '</code></td>' +
-          '<td class="col-cat-func"><code>' + escHtml(r.function_name) + '</code></td>' +
+          '<td class="col-cat-func"><code class="fn-link" data-func="' + escHtml(r.function_name) + '" data-file="' + escHtml(r.file_path) + '">' + escHtml(r.function_name) + '</code></td>' +
           '<td class="col-cat-purpose"><span class="purpose">' + escHtml(r.purpose || '') + '</span></td>' +
           '<td class="col-cat-linecount">' + (lineCount !== null ? lineCount : '—') + '</td>' +
           '<td class="col-cat-lines">' + lines + '</td>' +
