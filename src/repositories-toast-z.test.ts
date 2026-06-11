@@ -167,3 +167,85 @@ describe('repositories.ts: トーストはモーダルより後に最上位を�
     expect(debugIdx).toBeLessThan(toastIdx);
   });
 });
+
+// ===========================================================
+// バグ: 「すべて」ボタンのトグル処理が正常に機能しなくなった
+// activeLabels.size === 0 の時に items=[] を返していたため
+// clear() するとアイテムが消える → toggle を廃止してしまった
+// 修正: size===0 は「フィルターなし=全表示」として扱う
+// ===========================================================
+describe('repositories.ts: getIncrementalFilteredItems の size===0 ハンドリング', () => {
+  it('activeLabels.size === 0 の時に items=[] を返すコードが存在しない', () => {
+    const src = sliceRepoTs();
+    const idx = src.indexOf('function getIncrementalFilteredItems()');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = src.slice(idx, idx + 600);
+    expect(fn).not.toContain('items = []');
+  });
+});
+
+describe('repositories.ts: 「すべて」ボタンのトグル処理', () => {
+  it('historyLabelFilter addEventListener コールバック内で activeLabels.clear() が含まれる', () => {
+    const src = sliceRepoTs();
+    const idx = src.indexOf("historyLabelFilter.addEventListener('click'");
+    expect(idx).toBeGreaterThan(-1);
+    const snippet = src.slice(idx, idx + 600);
+    expect(snippet).toContain('activeLabels.clear()');
+  });
+
+  it('historyLabelFilter addEventListener コールバック内で activateAllLabels も呼ばれる', () => {
+    const src = sliceRepoTs();
+    const idx = src.indexOf("historyLabelFilter.addEventListener('click'");
+    expect(idx).toBeGreaterThan(-1);
+    const snippet = src.slice(idx, idx + 600);
+    expect(snippet).toContain('activateAllLabels()');
+  });
+});
+
+// ===========================================================
+// バグ: 詳細集計パネルの「x」ボタンで閉じると selectLabelFilter('')
+// → activateAllLabels() が呼ばれ「すべて」バッジが勝手にONになる
+// 修正: パネルを開く前のフィルター状態をスナップショットし、
+// 閉じる時はスナップショットを復元する
+// ===========================================================
+describe('repositories.ts: 詳細集計パネル閉鎖時のフィルター状態復元', () => {
+  it('savedLabelFilterState 変数と restoreLabelFilterState 関数が定義されている', () => {
+    const src = sliceRepoTs();
+    expect(src).toContain('savedLabelFilterState');
+    expect(src).toContain('function restoreLabelFilterState()');
+  });
+
+  it('showKeywordDetail が syncLabelFilterToKeyword の前にスナップショットを取る', () => {
+    const src = sliceRepoTs();
+    const idx = src.indexOf('function showKeywordDetail(');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = src.slice(idx, idx + 400);
+    const snapIdx = fn.indexOf('savedLabelFilterState');
+    const syncIdx = fn.indexOf('syncLabelFilterToKeyword(');
+    expect(snapIdx).toBeGreaterThan(-1);
+    expect(syncIdx).toBeGreaterThan(-1);
+    expect(snapIdx).toBeLessThan(syncIdx);
+  });
+
+  it("「x」ボタンの close ハンドラが selectLabelFilter('') を呼ばない", () => {
+    const src = sliceRepoTs();
+    const matches = src.match(/selectLabelFilter\(''\)/g) || [];
+    expect(matches.length).toBe(0);
+  });
+
+  it('restoreLabelFilterState の呼び出しが2つの close ハンドラに存在する', () => {
+    const src = sliceRepoTs();
+    const matches = src.match(/restoreLabelFilterState\(\)/g) || [];
+    expect(matches.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('restoreLabelFilterState がスナップショットを activeLabels に書き戻す', () => {
+    const src = sliceRepoTs();
+    const idx = src.indexOf('function restoreLabelFilterState()');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = src.slice(idx, idx + 500);
+    expect(fn).toContain('activeLabels.clear()');
+    expect(fn).toContain('activeLabels.add');
+    expect(fn).toContain('syncBtnStyles()');
+  });
+});
