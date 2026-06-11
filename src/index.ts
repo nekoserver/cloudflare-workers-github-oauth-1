@@ -5091,6 +5091,13 @@ app.get('/api/function-source', authMiddleware, async (c) => {
   const repoIdStr    = c.req.query('repo_id');
   const functionName = c.req.query('function_name');
   const filePath     = c.req.query('file_path');
+  const maxLinesStr  = c.req.query('max_lines');
+  const maxLines: number | null =
+    maxLinesStr === 'unlimited' || maxLinesStr === '0'
+      ? null
+      : maxLinesStr && !isNaN(parseInt(maxLinesStr, 10))
+        ? parseInt(maxLinesStr, 10)
+        : 10000;
 
   if (!repoIdStr || !functionName || !filePath) {
     return c.json({ ok: false, error: 'repo_id, function_name, file_path は必須です' }, 400);
@@ -5150,7 +5157,7 @@ app.get('/api/function-source', authMiddleware, async (c) => {
           });
           if (resp.ok) {
             const fileContent = await resp.text();
-            sourceSnippet = extractFunctionSource(fileContent, functionName);
+            sourceSnippet = extractFunctionSource(fileContent, functionName, maxLines);
           }
         }
       } catch {

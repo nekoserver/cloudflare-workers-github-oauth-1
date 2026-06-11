@@ -76,7 +76,6 @@ describe('extractFunctionSource', () => {
     expect(result).not.toBeNull();
     expect(result).toContain('function nested');
     expect(result).toContain('inner()');
-    // 閉じ括弧が揃っていること（外側の } で終わる）
     const braceOpen = (result ?? '').split('{').length - 1;
     const braceClose = (result ?? '').split('}').length - 1;
     expect(braceOpen).toBe(braceClose);
@@ -101,7 +100,9 @@ export function add(a: number, b: number) { return a + b; }
     expect(result).not.toContain('addExtra');
   });
 
-  it('200行を超える関数は 200行で打ち切る', () => {
+  // ---- maxLines パラメータ ----
+
+  it('デフォルト（maxLines=10000）では 300行関数を全行抽出する', () => {
     const lines = ['export function huge() {'];
     for (let i = 0; i < 300; i++) lines.push(`  const x${i} = ${i};`);
     lines.push('}');
@@ -109,6 +110,37 @@ export function add(a: number, b: number) { return a + b; }
     const result = extractFunctionSource(src, 'huge');
     expect(result).not.toBeNull();
     const lineCount = (result ?? '').split('\n').length;
-    expect(lineCount).toBeLessThanOrEqual(201);
+    expect(lineCount).toBe(302); // 宣言行 + 300行 + 閉じ括弧
+  });
+
+  it('maxLines=5 で指定行数で打ち切る', () => {
+    const lines = ['export function huge() {'];
+    for (let i = 0; i < 300; i++) lines.push(`  const x${i} = ${i};`);
+    lines.push('}');
+    const src = lines.join('\n');
+    const result = extractFunctionSource(src, 'huge', 5);
+    expect(result).not.toBeNull();
+    const lineCount = (result ?? '').split('\n').length;
+    expect(lineCount).toBeLessThanOrEqual(5);
+  });
+
+  it('maxLines=null（上限なし）で全行抽出する', () => {
+    const lines = ['export function huge() {'];
+    for (let i = 0; i < 500; i++) lines.push(`  const x${i} = ${i};`);
+    lines.push('}');
+    const src = lines.join('\n');
+    const result = extractFunctionSource(src, 'huge', null);
+    expect(result).not.toBeNull();
+    const lineCount = (result ?? '').split('\n').length;
+    expect(lineCount).toBe(502); // 全行
+  });
+
+  it('旧デフォルト 200行制限はもはや適用されない（300行関数が 201行以上返る）', () => {
+    const lines = ['export function huge() {'];
+    for (let i = 0; i < 300; i++) lines.push(`  const x${i} = ${i};`);
+    lines.push('}');
+    const src = lines.join('\n');
+    const result = extractFunctionSource(src, 'huge');
+    expect((result ?? '').split('\n').length).toBeGreaterThan(201);
   });
 });

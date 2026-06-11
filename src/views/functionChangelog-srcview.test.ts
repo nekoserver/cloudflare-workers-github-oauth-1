@@ -225,3 +225,78 @@ describe('/api/function-source: start_line / end_line を返す', () => {
     expect(block).toMatch(/start_line:\s*\w+/);
   });
 });
+
+// ---------------------------------------------------
+// 最大表示行数設定 UI（Cookie: srcview_maxlines）テスト
+// ---------------------------------------------------
+
+describe('functionChangelog: ソースビューア最大行数設定パネル', () => {
+  it('srcViewSettingsBtn が存在する', () => {
+    expect(src).toMatch(/id=["']srcViewSettingsBtn["']/);
+  });
+
+  it('srcViewSettingsPanel が存在する', () => {
+    expect(src).toMatch(/id=["']srcViewSettingsPanel["']/);
+  });
+
+  it('srcViewOptGroup が存在する', () => {
+    expect(src).toMatch(/id=["']srcViewOptGroup["']/);
+  });
+
+  it('data-val="10000" の選択肢が存在する', () => {
+    expect(src).toContain('data-val="10000"');
+  });
+
+  it('data-val="unlimited" の選択肢が存在する', () => {
+    expect(src).toContain('data-val="unlimited"');
+  });
+
+  it('getCookie 関数が存在する', () => {
+    expect(src).toContain('function getCookie');
+  });
+
+  it('setCookie 関数が存在する', () => {
+    expect(src).toContain('function setCookie');
+  });
+
+  it('Cookie キー名 srcview_maxlines が使われている', () => {
+    expect(src).toContain('srcview_maxlines');
+  });
+
+  it('srcMaxLines 変数が定義されている', () => {
+    expect(src).toContain('srcMaxLines');
+  });
+
+  it('applySrcOptUI 関数が存在する', () => {
+    expect(src).toContain('function applySrcOptUI');
+  });
+
+  it('openSrcViewer のフェッチ URL に max_lines パラメータが含まれる', () => {
+    const idx = src.indexOf('function openSrcViewer');
+    expect(idx).toBeGreaterThan(-1);
+    const block = src.slice(idx, idx + 1500);
+    expect(block).toContain('max_lines');
+    expect(block).toContain('srcMaxLines');
+  });
+});
+
+describe('/api/function-source: max_lines クエリパラメータ対応', () => {
+  it('max_lines クエリパラメータを読み取っている', () => {
+    const idx = indexSrc.indexOf("app.get('/api/function-source'");
+    expect(idx).toBeGreaterThan(-1);
+    const block = indexSrc.slice(idx, idx + 3000);
+    expect(block).toContain('max_lines');
+  });
+
+  it('"unlimited" を null（上限なし）に変換している', () => {
+    const idx = indexSrc.indexOf("app.get('/api/function-source'");
+    const block = indexSrc.slice(idx, idx + 3000);
+    expect(block).toContain('unlimited');
+  });
+
+  it('maxLines を extractFunctionSource に渡している', () => {
+    const idx = indexSrc.indexOf("app.get('/api/function-source'");
+    const block = indexSrc.slice(idx, idx + 4000);
+    expect(block).toMatch(/extractFunctionSource\([^)]*maxLines/);
+  });
+});
