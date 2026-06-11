@@ -104,6 +104,33 @@ describe('repositories.ts: 固定 z-index notif の全廃', () => {
   });
 });
 
+// ===========================================================
+// バグ: 検索結果モーダル（commitSearchModal）が CSS 固定 z-index:2000 のまま
+// 開かれるため、AIラベル分類トースト等が getNextZ() で 2000 超を取った後だと
+// 検索結果モーダルが裏に隠れる
+// ===========================================================
+describe('repositories.ts: openSearchModal の z-index 動的化', () => {
+  it('openSearchModal が getNextZ を使って z-index をセットする', () => {
+    const src = sliceRepoTs();
+    const idx = src.indexOf('function openSearchModal()');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = src.slice(idx, idx + 400);
+    expect(fn).toContain('getNextZ()');
+    expect(fn).toContain('searchModal.style.zIndex');
+  });
+
+  it('z-index セットは classList.add より前に行う', () => {
+    const src = sliceRepoTs();
+    const idx = src.indexOf('function openSearchModal()');
+    const fn = src.slice(idx, idx + 400);
+    const zIdx = fn.indexOf('getNextZ()');
+    const showIdx = fn.indexOf("classList.add('show')");
+    expect(zIdx).toBeGreaterThan(-1);
+    expect(showIdx).toBeGreaterThan(-1);
+    expect(zIdx).toBeLessThan(showIdx);
+  });
+});
+
 describe('repositories.ts: showClassifyDebugModal の z-index 動的化', () => {
   it('showClassifyDebugModal が getNextZ を使う', () => {
     const src = sliceRepoTs();
