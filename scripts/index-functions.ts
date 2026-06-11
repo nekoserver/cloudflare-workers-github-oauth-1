@@ -13,12 +13,11 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+import { execSync } from 'child_process';
+import { parseHunks, diffForRange, type HunkInfo } from '../src/utils/git-diff';
 
-// parse-functions は src/utils/ にあるが、tsx はそのまま import できる
 const ROOT = path.resolve(__dirname, '..');
 
-// src/utils/parse-functions を動的に読んで使う
-// (tsconfig exclude に scripts/ が含まれないため型は any で扱う)
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const { parseFunctions, findCallers } = require(path.join(ROOT, 'src/utils/parse-functions'));
 
@@ -50,6 +49,41 @@ function esc(s: string): string {
   return s.replace(/'/g, "''");
 }
 
+/** ファイルの最終コミット日時（ISO 8601）を返す。git 外なら null */
+function getLastModifiedAt(filePath: string): string | null {
+  try {
+    const out = execSync(`git log -1 --format="%ci" -- "${filePath}"`, {
+      cwd: ROOT,
+      encoding: 'utf-8',
+      stdio: ['pipe', 'pipe', 'pipe'],
+    }).trim();
+    return out || null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * ファイルに対する直前コミットとの diff ハンクを返す。
+ * HEAD~1 が存在しない（初回コミット）場合は HEAD の内容全体を diff として扱う。
+ */
+function getFileHunks(filePath: string): HunkInfo[] {
+  const tryCmd = (cmd: string): string | null => {
+    try {
+      return execSync(cmd, { cwd: ROOT, encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'] });
+    } catch {
+      return null;
+    }
+  };
+
+  const diff =
+    tryCmd(`git diff HEAD~1 HEAD --unified=0 -- "${filePath}"`) ??
+    tryCmd(`git show HEAD --unified=0 -- "${filePath}"`) ??
+    '';
+
+  return parseHunks(diff);
+}
+
 const args = process.argv.slice(2);
 const targetFiles =
   args.length > 0
@@ -75,13 +109,21 @@ for (const file of targetFiles) {
     isAsync: boolean;
   }> = parseFunctions(source);
 
+  const lastModifiedAt = getLastModifiedAt(file);
+  const hunks = getFileHunks(file);
+
   for (const fn of functions) {
+    const { linesAdded, linesDeleted } = diffForRange(hunks, fn.startLine, fn.endLine);
+    const lastMod = lastModifiedAt ? `'${esc(lastModifiedAt)}'` : 'NULL';
+
     lines.push(
-      `INSERT INTO ts_function_catalog (repo_id, file_path, function_name, purpose, is_exported, is_async, start_line, end_line)` +
-        ` VALUES (${REPO_ID}, '${esc(r)}', '${esc(fn.name)}', '(自動検出)', ${fn.isExported ? 1 : 0}, ${fn.isAsync ? 1 : 0}, ${fn.startLine}, ${fn.endLine})` +
+      `INSERT INTO ts_function_catalog (repo_id, file_path, function_name, purpose, is_exported, is_async, start_line, end_line, lines_added, lines_deleted, last_modified_at)` +
+        ` VALUES (${REPO_ID}, '${esc(r)}', '${esc(fn.name)}', '(自動検出)', ${fn.isExported ? 1 : 0}, ${fn.isAsync ? 1 : 0}, ${fn.startLine}, ${fn.endLine}, ${linesAdded}, ${linesDeleted}, ${lastMod})` +
         ` ON CONFLICT(repo_id, file_path, function_name) DO UPDATE SET` +
         ` start_line = excluded.start_line, end_line = excluded.end_line,` +
-        ` is_exported = excluded.is_exported, is_async = excluded.is_async;`
+        ` is_exported = excluded.is_exported, is_async = excluded.is_async,` +
+        ` lines_added = excluded.lines_added, lines_deleted = excluded.lines_deleted,` +
+        ` last_modified_at = COALESCE(excluded.last_modified_at, ts_function_catalog.last_modified_at);`
     );
 
     const callers: Array<{ callerFile: string; callerLine: number }> = findCallers(
