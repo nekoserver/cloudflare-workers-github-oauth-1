@@ -175,12 +175,12 @@ describe('repositories.ts: トーストはモーダルより後に最上位を�
 // 修正: size===0 は「フィルターなし=全表示」として扱う
 // ===========================================================
 describe('repositories.ts: getIncrementalFilteredItems の size===0 ハンドリング', () => {
-  it('activeLabels.size === 0 の時に items=[] を返すコードが存在しない', () => {
+  it('activeLabels.size === 0 の時に items=[] を返す（フィルター未選択＝何も表示しない）', () => {
     const src = sliceRepoTs();
     const idx = src.indexOf('function getIncrementalFilteredItems()');
     expect(idx).toBeGreaterThan(-1);
     const fn = src.slice(idx, idx + 600);
-    expect(fn).not.toContain('items = []');
+    expect(fn).toContain('items = []');
   });
 });
 

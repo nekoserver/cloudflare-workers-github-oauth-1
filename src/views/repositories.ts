@@ -6219,7 +6219,9 @@ export function getRepositoriesPage(user: {
         var allOn = allLabels.length > 0 && allLabels.every(function(l) { return activeLabels.has(l); });
         var items = currentItems;
         if (!allOn) {
-          if (activeLabels.size > 0) {
+          if (activeLabels.size === 0) {
+            items = [];
+          } else {
             items = items.filter(function(item) {
               var kw = item.search_query;
               var cats;
