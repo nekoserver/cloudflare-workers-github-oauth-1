@@ -167,3 +167,37 @@ describe('repositories.ts: トーストはモーダルより後に最上位を�
     expect(debugIdx).toBeLessThan(toastIdx);
   });
 });
+
+// ===========================================================
+// バグ: 「すべて」ボタンのトグル処理が正常に機能しなくなった
+// activeLabels.size === 0 の時に items=[] を返していたため
+// clear() するとアイテムが消える → toggle を廃止してしまった
+// 修正: size===0 は「フィルターなし=全表示」として扱う
+// ===========================================================
+describe('repositories.ts: getIncrementalFilteredItems の size===0 ハンドリング', () => {
+  it('activeLabels.size === 0 の時に items=[] を返すコードが存在しない', () => {
+    const src = sliceRepoTs();
+    const idx = src.indexOf('function getIncrementalFilteredItems()');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = src.slice(idx, idx + 600);
+    expect(fn).not.toContain('items = []');
+  });
+});
+
+describe('repositories.ts: 「すべて」ボタンのトグル処理', () => {
+  it('historyLabelFilter addEventListener コールバック内で activeLabels.clear() が含まれる', () => {
+    const src = sliceRepoTs();
+    const idx = src.indexOf("historyLabelFilter.addEventListener('click'");
+    expect(idx).toBeGreaterThan(-1);
+    const snippet = src.slice(idx, idx + 600);
+    expect(snippet).toContain('activeLabels.clear()');
+  });
+
+  it('historyLabelFilter addEventListener コールバック内で activateAllLabels も呼ばれる', () => {
+    const src = sliceRepoTs();
+    const idx = src.indexOf("historyLabelFilter.addEventListener('click'");
+    expect(idx).toBeGreaterThan(-1);
+    const snippet = src.slice(idx, idx + 600);
+    expect(snippet).toContain('activateAllLabels()');
+  });
+});

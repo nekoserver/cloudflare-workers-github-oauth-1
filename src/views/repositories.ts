@@ -6154,7 +6154,13 @@ export function getRepositoriesPage(user: {
           if (!btn) return;
           var lbl = btn.getAttribute('data-label');
           if (lbl === '') {
-            activateAllLabels();
+            var allLabels2 = getAllCategoryLabels();
+            var allOn2 = allLabels2.length > 0 && allLabels2.every(function(l) { return activeLabels.has(l); });
+            if (allOn2) {
+              activeLabels.clear();
+            } else {
+              activateAllLabels();
+            }
           } else {
             if (activeLabels.has(lbl)) {
               activeLabels.delete(lbl);
@@ -6201,9 +6207,7 @@ export function getRepositoriesPage(user: {
         var allOn = allLabels.length > 0 && allLabels.every(function(l) { return activeLabels.has(l); });
         var items = currentItems;
         if (!allOn) {
-          if (activeLabels.size === 0) {
-            items = [];
-          } else {
+          if (activeLabels.size > 0) {
             items = items.filter(function(item) {
               var kw = item.search_query;
               var cats;
