@@ -1064,7 +1064,7 @@ export function getAiChatPage(user: {
         <button class="history-modal-close" id="historyModalClose" aria-label="閉じる">✕</button>
       </div>
       <div class="history-modal-chat" id="historyModalChat"></div>
-      <div id="historyModalKeywordChips" style="display:none;padding:6px 14px 4px;display:none;flex-wrap:wrap;gap:5px;border-top:1px solid var(--border-color);"></div>
+      <div id="historyModalKeywordChips" style="display:none;padding:6px 14px 4px;flex-wrap:wrap;gap:1px;border-top:1px solid var(--border-color);"></div>
       <div class="history-modal-foot">
         <button class="search-hist-btn" id="historyModalHighlightToggleBtn" style="padding:3px 7px;font-size:14px;opacity:0.2;" title="キーワードハイライトON/OFF">🔑</button>
         <span id="historyModalMeta"></span>
@@ -2512,11 +2512,15 @@ export function getAiChatPage(user: {
       sorted.forEach(function(item) {
         var kw = typeof item === 'object' ? item.keyword : item;
         var cnt = typeof item === 'object' ? item.count : null;
+        var isClassified = typeof item === 'object' ? !!item.is_classified : false;
         var label = cnt != null ? escHtml(kw) + ' <span style="opacity:0.6">(' + cnt + ')</span>' : escHtml(kw);
         var chip = document.createElement('span');
-        chip.style.cssText = 'display:inline-block;padding:3px 9px;border-radius:12px;font-size:11px;background:var(--border-color);color:var(--text-primary);white-space:nowrap;cursor:pointer;transition:background 0.15s;';
+        var chipStyle = isClassified
+          ? 'display:inline-block;padding:3px 9px;border-radius:12px;font-size:11px;white-space:nowrap;cursor:pointer;border:1.5px solid var(--kw-pal-cls,#7c3aed);color:var(--kw-pal-cls,#7c3aed);background:transparent;'
+          : 'display:inline-block;padding:3px 9px;border-radius:12px;font-size:11px;white-space:nowrap;cursor:pointer;background:var(--kw-pal-unc-bg,var(--border-color));color:var(--kw-pal-unc-fg,var(--text-muted));border:1px solid transparent;';
+        chip.style.cssText = chipStyle;
         chip.innerHTML = label;
-        chip.title = kw + (cnt != null ? ' (出現回数: ' + cnt + ')' : '');
+        chip.title = kw + (cnt != null ? ' (出現回数: ' + cnt + ')' : '') + (isClassified ? ' [分類済]' : ' [未分類]');
         chip.addEventListener('click', function() {
           historyModalChipsPinned = true;
           clearKeywordHighlights(historyModalChat);
@@ -2622,7 +2626,7 @@ export function getAiChatPage(user: {
       historyModalSwipeDataCache = {};
       historyModalSwipeDataCache[r.id] = r;
       historyModalHighlightActive = true;
-      historyModalChipsPinned = false;
+      historyModalChipsPinned = true;
       historyModalCurrentKeyword = keyword || '';
       historyModalKeywordsFromDB = [];
       historyModalDBKeywordsApplied = false;

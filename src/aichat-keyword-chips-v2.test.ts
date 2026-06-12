@@ -58,7 +58,7 @@ describe('キーワードチップ: タップ時の動作', () => {
     const html = buildPage();
     const idx = html.indexOf('function renderKeywordChips');
     expect(idx).toBeGreaterThan(-1);
-    const fn = html.slice(idx, idx + 1500);
+    const fn = html.slice(idx, idx + 2400);
     expect(fn).toContain('addEventListener');
     expect(fn).toContain('click');
   });
@@ -67,7 +67,7 @@ describe('キーワードチップ: タップ時の動作', () => {
     const html = buildPage();
     const idx = html.indexOf('function renderKeywordChips');
     expect(idx).toBeGreaterThan(-1);
-    const fn = html.slice(idx, idx + 1500);
+    const fn = html.slice(idx, idx + 2400);
     expect(fn).toContain('clearKeywordHighlights');
   });
 
@@ -75,7 +75,7 @@ describe('キーワードチップ: タップ時の動作', () => {
     const html = buildPage();
     const idx = html.indexOf('function renderKeywordChips');
     expect(idx).toBeGreaterThan(-1);
-    const fn = html.slice(idx, idx + 1500);
+    const fn = html.slice(idx, idx + 2400);
     expect(fn).toContain('applyKeywordHighlight');
   });
 
@@ -83,7 +83,7 @@ describe('キーワードチップ: タップ時の動作', () => {
     const html = buildPage();
     const idx = html.indexOf('function renderKeywordChips');
     expect(idx).toBeGreaterThan(-1);
-    const fn = html.slice(idx, idx + 2000);
+    const fn = html.slice(idx, idx + 2400);
     expect(fn).toContain('scrollIntoView');
   });
 });
