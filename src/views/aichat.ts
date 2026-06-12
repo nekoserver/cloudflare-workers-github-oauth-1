@@ -1064,6 +1064,7 @@ export function getAiChatPage(user: {
         <button class="history-modal-close" id="historyModalClose" aria-label="閉じる">✕</button>
       </div>
       <div class="history-modal-chat" id="historyModalChat"></div>
+      <div id="historyModalKeywordChips" style="display:none;padding:6px 14px 4px;display:none;flex-wrap:wrap;gap:5px;border-top:1px solid var(--border-color);"></div>
       <div class="history-modal-foot">
         <button class="search-hist-btn" id="historyModalHighlightToggleBtn" style="padding:3px 7px;font-size:14px;opacity:0.2;" title="キーワードハイライトON/OFF">🔑</button>
         <span id="historyModalMeta"></span>
@@ -2491,8 +2492,26 @@ export function getAiChatPage(user: {
         });
     }
 
+    function renderKeywordChips(show) {
+      var chipsEl = document.getElementById('historyModalKeywordChips');
+      if (!chipsEl) return;
+      if (!show || historyModalKeywordsFromDB.length === 0) {
+        chipsEl.style.display = 'none';
+        chipsEl.innerHTML = '';
+        return;
+      }
+      var html = historyModalKeywordsFromDB.map(function(kw, i) {
+        var opacity = Math.max(0.45, 1 - i * 0.07);
+        return '<span style="display:inline-block;padding:2px 8px;border-radius:12px;font-size:11px;background:var(--border-color);color:var(--text-primary);opacity:' + opacity + ';white-space:nowrap;">' + escHtml(kw) + '</span>';
+      }).join('');
+      chipsEl.innerHTML = html;
+      chipsEl.style.display = 'flex';
+    }
+
     function updateHighlightToggleBtn() {
       var marks = historyModalChat.querySelectorAll('.kw-highlight');
+      var highlightsVisible = marks && marks.length > 0 && historyModalHighlightActive;
+      renderKeywordChips(!highlightsVisible);
       if (!marks || marks.length === 0) {
         if (historyModalKeywordsFromDB.length > 0) {
           historyModalHighlightToggleBtn.style.opacity = '1';
