@@ -2463,7 +2463,8 @@ export function getAiChatPage(user: {
         }
       }
       historyModalKeywordsFromDB.forEach(function(k) {
-        if (k && all.indexOf(k) === -1) all.push(k);
+        var kw = k && typeof k === 'object' ? k.keyword : k;
+        if (kw && all.indexOf(kw) === -1) all.push(kw);
       });
       return all;
     }
@@ -2500,12 +2501,32 @@ export function getAiChatPage(user: {
         chipsEl.innerHTML = '';
         return;
       }
-      var html = historyModalKeywordsFromDB.map(function(kw, i) {
-        var opacity = Math.max(0.45, 1 - i * 0.07);
-        return '<span style="display:inline-block;padding:2px 8px;border-radius:12px;font-size:11px;background:var(--border-color);color:var(--text-primary);opacity:' + opacity + ';white-space:nowrap;">' + escHtml(kw) + '</span>';
-      }).join('');
-      chipsEl.innerHTML = html;
+      chipsEl.innerHTML = '';
       chipsEl.style.display = 'flex';
+      var sorted = historyModalKeywordsFromDB.slice().sort(function(a, b) {
+        var ca = typeof a === 'object' ? (a.count || 0) : 0;
+        var cb = typeof b === 'object' ? (b.count || 0) : 0;
+        return cb - ca;
+      });
+      sorted.forEach(function(item) {
+        var kw = typeof item === 'object' ? item.keyword : item;
+        var cnt = typeof item === 'object' ? item.count : null;
+        var label = cnt != null ? escHtml(kw) + ' <span style="opacity:0.6">(' + cnt + ')</span>' : escHtml(kw);
+        var chip = document.createElement('span');
+        chip.style.cssText = 'display:inline-block;padding:3px 9px;border-radius:12px;font-size:11px;background:var(--border-color);color:var(--text-primary);white-space:nowrap;cursor:pointer;transition:background 0.15s;';
+        chip.innerHTML = label;
+        chip.title = kw + (cnt != null ? ' (出現回数: ' + cnt + ')' : '');
+        chip.addEventListener('click', function() {
+          clearKeywordHighlights(historyModalChat);
+          applyKeywordHighlight(historyModalChat, kw);
+          historyModalHighlightActive = true;
+          historyModalChat.classList.remove('highlights-hidden');
+          var first = historyModalChat.querySelector('.kw-highlight');
+          if (first) first.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          updateHighlightToggleBtn();
+        });
+        chipsEl.appendChild(chip);
+      });
     }
 
     function updateHighlightToggleBtn() {

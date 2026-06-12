@@ -3539,13 +3539,14 @@ app.get('/api/aichat/share-keywords', authMiddleware, async (c) => {
   const shareId = (c.req.query('shareId') ?? '').trim();
   if (!shareId) return jsonUtf8({ error: 'shareId は必須です' }, 400);
   const rows = await c.env.DB.prepare(
-    `SELECT DISTINCT keyword
+    `SELECT keyword, SUM(select_count) AS count
      FROM aichat_search_log
      WHERE share_id = ? AND user_id = ?
-     ORDER BY select_count DESC
+     GROUP BY keyword
+     ORDER BY count DESC
      LIMIT 50`
-  ).bind(shareId, user.sub).all<{ keyword: string }>();
-  return jsonUtf8({ keywords: (rows.results ?? []).map((r) => r.keyword) });
+  ).bind(shareId, user.sub).all<{ keyword: string; count: number }>();
+  return jsonUtf8({ keywords: (rows.results ?? []).map((r) => ({ keyword: r.keyword, count: r.count })) });
 });
 
 /**
