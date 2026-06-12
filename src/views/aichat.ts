@@ -2328,6 +2328,7 @@ export function getAiChatPage(user: {
         }
         var wasDbApplied = historyModalDBKeywordsApplied;
         historyModalDBKeywordsApplied = false;
+        historyModalChipsPinned = false;
         historyModalKeywordsFromDB = [];
         fetchShareKeywords(data.id, function() { if (wasDbApplied && historyModalHighlightActive) applyAllDbKeywordHighlights(); });
         renderHistoryModalModelDots();
@@ -2517,6 +2518,7 @@ export function getAiChatPage(user: {
         chip.innerHTML = label;
         chip.title = kw + (cnt != null ? ' (出現回数: ' + cnt + ')' : '');
         chip.addEventListener('click', function() {
+          historyModalChipsPinned = true;
           clearKeywordHighlights(historyModalChat);
           applyKeywordHighlight(historyModalChat, kw);
           historyModalHighlightActive = true;
@@ -2532,7 +2534,7 @@ export function getAiChatPage(user: {
     function updateHighlightToggleBtn() {
       var marks = historyModalChat.querySelectorAll('.kw-highlight');
       var highlightsVisible = marks && marks.length > 0 && historyModalHighlightActive;
-      renderKeywordChips(!highlightsVisible);
+      renderKeywordChips(!highlightsVisible || historyModalChipsPinned);
       if (!marks || marks.length === 0) {
         if (historyModalKeywordsFromDB.length > 0) {
           historyModalHighlightToggleBtn.style.opacity = '1';
@@ -2574,6 +2576,7 @@ export function getAiChatPage(user: {
     var historyModalCurrentKeyword = '';
     var historyModalKeywordsFromDB = [];
     var historyModalDBKeywordsApplied = false;
+    var historyModalChipsPinned = false;
 
     function renderSubqueryLinks(items) {
       if (!items || items.length === 0) {
@@ -2619,6 +2622,7 @@ export function getAiChatPage(user: {
       historyModalSwipeDataCache = {};
       historyModalSwipeDataCache[r.id] = r;
       historyModalHighlightActive = true;
+      historyModalChipsPinned = false;
       historyModalCurrentKeyword = keyword || '';
       historyModalKeywordsFromDB = [];
       historyModalDBKeywordsApplied = false;
@@ -3628,6 +3632,7 @@ export function getAiChatPage(user: {
 
     historyModalHighlightToggleBtn.addEventListener('click', function() {
       if (historyModalKeywordsFromDB.length > 0 && !historyModalDBKeywordsApplied) {
+        historyModalChipsPinned = false;
         historyModalHighlightActive = true;
         historyModalChat.classList.remove('highlights-hidden');
         clearKeywordHighlights(historyModalChat);
@@ -3641,6 +3646,7 @@ export function getAiChatPage(user: {
       if (!marks || marks.length === 0) return;
       historyModalHighlightActive = !historyModalHighlightActive;
       if (historyModalHighlightActive) {
+        historyModalChipsPinned = false;
         historyModalChat.classList.remove('highlights-hidden');
       } else {
         historyModalChat.classList.add('highlights-hidden');
