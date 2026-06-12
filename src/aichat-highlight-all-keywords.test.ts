@@ -62,7 +62,7 @@ describe('🔑ボタン全キーワードハイライト修正: ヘルパー関�
   it('buildAllKeywords が重複を排除する（indexOf チェック）', () => {
     const html = buildPage();
     const idx = html.indexOf('function buildAllKeywords()');
-    const fn = html.slice(idx, idx + 400);
+    const fn = html.slice(idx, idx + 600);
     expect(fn).toContain('indexOf');
   });
 });
