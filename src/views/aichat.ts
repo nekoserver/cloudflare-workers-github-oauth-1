@@ -145,6 +145,11 @@ export function getAiChatPage(user: {
     .kw-color-swatch-selected { border-color:var(--text-primary) !important; }
     .kw-q-link { cursor: pointer; text-decoration: underline; text-decoration-color: var(--border-color); text-underline-offset: 2px; }
     .kw-q-link:hover { color: var(--accent-color, #667eea); text-decoration-color: var(--accent-color, #667eea); }
+    .hist-kw-chip { display:inline-block; padding:3px 9px; border-radius:12px; font-size:11px; white-space:nowrap; cursor:pointer; box-sizing:border-box; }
+    .hist-kw-chip-cls { border:1.5px solid var(--kw-pal-cls,#7c3aed); color:var(--kw-pal-cls,#7c3aed); background:transparent; }
+    .hist-kw-chip-unc { background:var(--kw-pal-unc-bg,rgba(0,0,0,0.07)); color:var(--kw-pal-unc-fg,var(--text-secondary,#6b7280)); border:1.5px solid transparent; }
+    [data-theme="dark"] .hist-kw-chip-unc { background:var(--kw-pal-unc-bg,rgba(255,255,255,0.1)); color:var(--kw-pal-unc-fg,var(--text-secondary,#9ca3af)); }
+    .hist-kw-chip-active { background:var(--kw-pal-act,#6366f1) !important; color:#fff !important; border-color:var(--kw-pal-act,#6366f1) !important; }
     .search-log-overlay {
       position: fixed; inset: 0; z-index: 700; display: none;
       align-items: flex-start; justify-content: center;
@@ -2329,6 +2334,7 @@ export function getAiChatPage(user: {
         var wasDbApplied = historyModalDBKeywordsApplied;
         historyModalDBKeywordsApplied = false;
         historyModalChipsPinned = false;
+        historyModalActiveChipKeyword = '';
         historyModalKeywordsFromDB = [];
         fetchShareKeywords(data.id, function() { if (wasDbApplied && historyModalHighlightActive) applyAllDbKeywordHighlights(); });
         renderHistoryModalModelDots();
@@ -2513,22 +2519,23 @@ export function getAiChatPage(user: {
         var kw = typeof item === 'object' ? item.keyword : item;
         var cnt = typeof item === 'object' ? item.count : null;
         var isClassified = typeof item === 'object' ? !!item.is_classified : false;
+        var isActive = kw === historyModalActiveChipKeyword;
         var label = cnt != null ? escHtml(kw) + ' <span style="opacity:0.6">(' + cnt + ')</span>' : escHtml(kw);
         var chip = document.createElement('span');
-        var chipStyle = isClassified
-          ? 'display:inline-block;padding:3px 9px;border-radius:12px;font-size:11px;white-space:nowrap;cursor:pointer;border:1.5px solid var(--kw-pal-cls,#7c3aed);color:var(--kw-pal-cls,#7c3aed);background:transparent;'
-          : 'display:inline-block;padding:3px 9px;border-radius:12px;font-size:11px;white-space:nowrap;cursor:pointer;background:var(--kw-pal-unc-bg,var(--border-color));color:var(--kw-pal-unc-fg,var(--text-muted));border:1px solid transparent;';
-        chip.style.cssText = chipStyle;
+        chip.className = 'hist-kw-chip ' + (isClassified ? 'hist-kw-chip-cls' : 'hist-kw-chip-unc') + (isActive ? ' hist-kw-chip-active' : '');
         chip.innerHTML = label;
         chip.title = kw + (cnt != null ? ' (出現回数: ' + cnt + ')' : '') + (isClassified ? ' [分類済]' : ' [未分類]');
         chip.addEventListener('click', function() {
           historyModalChipsPinned = true;
+          historyModalActiveChipKeyword = kw;
           clearKeywordHighlights(historyModalChat);
           applyKeywordHighlight(historyModalChat, kw);
           historyModalHighlightActive = true;
           historyModalChat.classList.remove('highlights-hidden');
           var first = historyModalChat.querySelector('.kw-highlight');
           if (first) first.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          chipsEl.querySelectorAll('.hist-kw-chip').forEach(function(c) { c.classList.remove('hist-kw-chip-active'); });
+          chip.classList.add('hist-kw-chip-active');
           updateHighlightToggleBtn();
         });
         chipsEl.appendChild(chip);
@@ -2581,6 +2588,7 @@ export function getAiChatPage(user: {
     var historyModalKeywordsFromDB = [];
     var historyModalDBKeywordsApplied = false;
     var historyModalChipsPinned = false;
+    var historyModalActiveChipKeyword = '';
 
     function renderSubqueryLinks(items) {
       if (!items || items.length === 0) {
@@ -2627,6 +2635,7 @@ export function getAiChatPage(user: {
       historyModalSwipeDataCache[r.id] = r;
       historyModalHighlightActive = true;
       historyModalChipsPinned = true;
+      historyModalActiveChipKeyword = '';
       historyModalCurrentKeyword = keyword || '';
       historyModalKeywordsFromDB = [];
       historyModalDBKeywordsApplied = false;
@@ -3733,6 +3742,8 @@ export function getAiChatPage(user: {
       if (colors.unc) { r.style.setProperty('--kw-pal-unc-bg', colors.unc + '22'); r.style.setProperty('--kw-pal-unc-fg', colors.unc); }
       else { r.style.removeProperty('--kw-pal-unc-bg'); r.style.removeProperty('--kw-pal-unc-fg'); }
       kwPaletteActColor = colors.act || '';
+      if (colors.act) r.style.setProperty('--kw-pal-act', colors.act);
+      else r.style.removeProperty('--kw-pal-act');
     }
     (function() { applyKwPaletteToDom(readKwPaletteFromCookies()); })();
 
