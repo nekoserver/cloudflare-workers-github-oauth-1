@@ -224,6 +224,12 @@ const EDGES = [
   { from: 'pal_css',          to: 'ui_chip_panel',      type: 'color', label: '.hist-kw-chip-cls/unc/active' },
   { from: 'pal_css',          to: 'ui_classify_modal',  type: 'color', label: '.kw-kw-classified / sq-kw-badge-active' },
 
+  // ai_chat_shares → 詳細プレビューモーダル（回答内容表示）
+  { from: 'tbl_chat_shares',  to: 'ui_history_modal',    type: 'read',  label: 'question, answer, model' },
+
+  // 詳細プレビューモーダル → share-keywords API（モーダル展開時にキーワード取得）
+  { from: 'ui_history_modal', to: 'api_share_kw',        type: 'read',  label: 'shareId でキーワード取得' },
+
   // Unused table note
   { from: 'tbl_multi_labels', to: 'api_share_kw',       type: 'note',  label: '旧実装（現在未使用）' },
 ];
