@@ -21,6 +21,7 @@ import { getMarkdownPreviewPage } from './views/markdown-preview';
 import { getCacheStatusPage, CacheStatusData, TableStatusEntry, UserContextInfo, RepoColorEntry, RepoGroupEntry } from './views/status';
 import { renderColumnStatsHtml } from './views/columnStats';
 import { getFunctionChangelogPage, type FunctionChangeRow, type CatalogFunctionRow } from './views/functionChangelog';
+import { getKwArchitecturePage } from './views/kw-architecture';
 
 import { computeColumnRelationStats, verifyColumnStats, type TableSchema, type Relation } from './utils/columnRelationStats';
 import { ensureDefaultWorkspace, getCurrentWorkspace, getUserWorkspaces, switchWorkspace } from './utils/workspace';
@@ -4103,6 +4104,10 @@ app.get('/userinfo', authMiddleware, async (c) => {
     email: user.email,
     githubId: user.github_id,
   }));
+});
+
+app.get('/kw-architecture', authMiddleware, (c) => {
+  return c.html(getKwArchitecturePage());
 });
 
 /**
