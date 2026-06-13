@@ -23,6 +23,7 @@ import { getCacheStatusPage, CacheStatusData, TableStatusEntry, UserContextInfo,
 import { renderColumnStatsHtml } from './views/columnStats';
 import { getFunctionChangelogPage, type FunctionChangeRow, type CatalogFunctionRow } from './views/functionChangelog';
 import { getKwArchitecturePage } from './views/kw-architecture';
+import { getKwDrilldownPage } from './views/kw-drilldown';
 
 import { computeColumnRelationStats, verifyColumnStats, type TableSchema, type Relation } from './utils/columnRelationStats';
 import { ensureDefaultWorkspace, getCurrentWorkspace, getUserWorkspaces, switchWorkspace } from './utils/workspace';
@@ -4105,6 +4106,15 @@ app.get('/userinfo', authMiddleware, async (c) => {
     email: user.email,
     githubId: user.github_id,
   }));
+});
+
+app.get('/kw-drilldown', authMiddleware, async (c) => {
+  const user = c.get('user');
+  const userSession = await getUserSession(c.env.DB, user.sub);
+  if (!userSession) {
+    return c.html(getSessionExpiredPage(), 403);
+  }
+  return c.html(getKwDrilldownPage());
 });
 
 app.get('/kw-architecture', authMiddleware, async (c) => {

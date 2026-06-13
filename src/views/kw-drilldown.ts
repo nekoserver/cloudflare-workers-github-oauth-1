@@ -1,0 +1,531 @@
+export function getKwDrilldownPage(): string {
+  return `
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>キーワード分類ドリルダウン</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: #0d1117; color: #e6edf3; font-family: 'Segoe UI', system-ui, sans-serif; overflow: hidden; }
+canvas { display: block; cursor: default; }
+canvas.clickable { cursor: pointer; }
+
+#breadcrumb {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 10;
+  height: 44px; background: #161b22; border-bottom: 1px solid #21262d;
+  display: flex; align-items: center; padding: 0 16px; gap: 8px;
+  font-size: 13px;
+}
+.bc-sep { color: #444d56; }
+.bc-item {
+  color: #8b949e; cursor: pointer; padding: 2px 6px; border-radius: 4px;
+  white-space: nowrap;
+}
+.bc-item:hover { color: #58a6ff; background: #21262d; }
+.bc-item.current { color: #e6edf3; cursor: default; }
+.bc-item.current:hover { background: transparent; }
+
+#back-btn {
+  position: fixed; bottom: 20px; left: 20px; z-index: 10;
+  background: #21262d; border: 1px solid #30363d; color: #8b949e;
+  border-radius: 8px; padding: 8px 16px; font-size: 13px; cursor: pointer;
+  display: none;
+}
+#back-btn:hover { background: #30363d; color: #e6edf3; }
+
+#status {
+  position: fixed; top: 44px; left: 0; right: 0; bottom: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 14px; color: #8b949e; pointer-events: none;
+}
+
+#tooltip {
+  position: fixed; pointer-events: none; z-index: 20;
+  background: #1c2128; border: 1px solid #30363d; border-radius: 6px;
+  padding: 6px 10px; font-size: 12px; color: #e6edf3;
+  display: none; max-width: 240px; line-height: 1.5;
+}
+
+#count-label {
+  position: fixed; bottom: 20px; right: 20px; z-index: 10;
+  font-size: 11px; color: #6e7681;
+}
+</style>
+</head>
+<body>
+<div id="breadcrumb">
+  <span class="bc-item current" id="bc-root" style="color:#e6edf3">キーワード分類</span>
+</div>
+<canvas id="canvas"></canvas>
+<button id="back-btn">← 戻る</button>
+<div id="status">読み込み中…</div>
+<div id="tooltip"></div>
+<div id="count-label"></div>
+
+<script>
+// =====================================================================
+// MODEL
+// =====================================================================
+// level: 0=top, 1=group, 2=keywords
+let level = 0;
+let selectedGroup = null;   // 'classified' | 'unclassified'
+let selectedCat   = null;   // { id, name, color, kw_count }
+
+// Raw data from API
+let allKeywords   = [];  // [{keyword, count, is_classified, category_pairs:[{id,name,color}]}]
+let categories    = [];  // [{id, name, color, kw_count}]
+
+// Derived
+let classifiedMap  = {};  // catId -> { id, name, color, keywords:[{keyword,count}] }
+let unclassifiedKws = []; // [{keyword,count}]
+
+function buildDerivedData() {
+  classifiedMap  = {};
+  unclassifiedKws = [];
+
+  categories.forEach(cat => {
+    classifiedMap[cat.id] = { id: cat.id, name: cat.name, color: cat.color || '#58a6ff', keywords: [] };
+  });
+
+  allKeywords.forEach(kw => {
+    if (kw.is_classified && kw.category_pairs && kw.category_pairs.length > 0) {
+      kw.category_pairs.forEach(pair => {
+        if (classifiedMap[pair.id]) {
+          const already = classifiedMap[pair.id].keywords.some(k => k.keyword === kw.keyword);
+          if (!already) classifiedMap[pair.id].keywords.push({ keyword: kw.keyword, count: kw.count });
+        }
+      });
+    } else {
+      unclassifiedKws.push({ keyword: kw.keyword, count: kw.count });
+    }
+  });
+
+  unclassifiedKws.sort((a, b) => b.count - a.count);
+  Object.values(classifiedMap).forEach(cat => cat.keywords.sort((a, b) => b.count - a.count));
+}
+
+// =====================================================================
+// VIEW NODES (computed from state)
+// =====================================================================
+let viewNodes = [];   // { id, label, sub, color, w, h, x, y, data, type }
+let scrollY = 0;
+let maxScrollY = 0;
+
+const CANVAS_TOP_PAD = 44;  // breadcrumb height
+const PAD = 24;
+
+const NODE_SIZES = {
+  group:    { w: 220, h: 90 },
+  category: { w: 160, h: 68 },
+  keyword:  null,  // dynamic
+};
+
+function buildViewNodes() {
+  if (level === 0) {
+    const totalCls = allKeywords.filter(k => k.is_classified).length;
+    const totalUncls = unclassifiedKws.length;
+    viewNodes = [
+      {
+        id: 'classified', type: 'group',
+        label: '分類済み', sub: totalCls + ' キーワード',
+        color: '#3fb950', data: null,
+      },
+      {
+        id: 'unclassified', type: 'group',
+        label: '未分類', sub: totalUncls + ' キーワード',
+        color: '#6e7681', data: null,
+      },
+    ];
+  } else if (level === 1 && selectedGroup === 'classified') {
+    viewNodes = Object.values(classifiedMap).filter(c => c.keywords.length > 0).map(cat => ({
+      id: 'cat_' + cat.id, type: 'category',
+      label: cat.name, sub: cat.keywords.length + ' 件',
+      color: cat.color, data: cat,
+    }));
+    viewNodes.sort((a, b) => b.data.keywords.length - a.data.keywords.length);
+  } else if (level === 1 && selectedGroup === 'unclassified') {
+    viewNodes = unclassifiedKws.map(kw => ({
+      id: 'kw_' + kw.keyword, type: 'keyword',
+      label: kw.keyword, sub: '×' + kw.count,
+      color: '#6e7681', data: kw,
+    }));
+  } else if (level === 2) {
+    const kwList = selectedCat ? (classifiedMap[selectedCat.id]?.keywords || []) : [];
+    viewNodes = kwList.map(kw => ({
+      id: 'kw_' + kw.keyword, type: 'keyword',
+      label: kw.keyword, sub: '×' + kw.count,
+      color: selectedCat.color, data: kw,
+    }));
+  }
+
+  scrollY = 0;
+  layoutViewNodes();
+}
+
+function layoutViewNodes() {
+  if (!viewNodes.length) return;
+  const type0 = viewNodes[0].type;
+  const canvasW = W;
+  const availH = H - CANVAS_TOP_PAD;
+
+  if (type0 === 'group') {
+    const gw = NODE_SIZES.group.w, gh = NODE_SIZES.group.h;
+    const total = viewNodes.length;
+    const rowW = total * gw + (total - 1) * PAD;
+    let cx = (canvasW - rowW) / 2;
+    const cy = CANVAS_TOP_PAD + availH / 2;
+    viewNodes.forEach(n => {
+      n.w = gw; n.h = gh;
+      n.x = cx + gw / 2; n.y = cy;
+      cx += gw + PAD;
+    });
+    maxScrollY = 0;
+
+  } else if (type0 === 'category') {
+    const cw = NODE_SIZES.category.w, ch = NODE_SIZES.category.h;
+    const cols = Math.max(1, Math.min(5, Math.floor((canvasW - PAD * 2) / (cw + PAD))));
+    const rows = Math.ceil(viewNodes.length / cols);
+    const gridW = cols * cw + (cols - 1) * PAD;
+    const startX = (canvasW - gridW) / 2;
+    const startY = CANVAS_TOP_PAD + PAD + 20;
+    viewNodes.forEach((n, i) => {
+      n.w = cw; n.h = ch;
+      const col = i % cols, row = Math.floor(i / cols);
+      n.x = startX + col * (cw + PAD) + cw / 2;
+      n.y = startY + row * (ch + PAD) + ch / 2;
+    });
+    maxScrollY = Math.max(0, startY + rows * (ch + PAD) - H + PAD);
+
+  } else {
+    // keyword chips: measure text, wrap into rows
+    ctx.font = '13px Consolas, monospace';
+    viewNodes.forEach(n => {
+      const tw = ctx.measureText(n.label).width;
+      n.w = Math.min(Math.max(tw + 40, 80), 220);
+      n.h = 34;
+    });
+    const rowH = 34, rowGapY = 12, rowGapX = 10;
+    let rx = PAD, ry = CANVAS_TOP_PAD + PAD + 16;
+    viewNodes.forEach(n => {
+      if (rx + n.w > canvasW - PAD && rx > PAD) {
+        rx = PAD; ry += rowH + rowGapY;
+      }
+      n.x = rx + n.w / 2; n.y = ry + rowH / 2;
+      rx += n.w + rowGapX;
+    });
+    maxScrollY = Math.max(0, ry + rowH - H + PAD + 32);
+  }
+}
+
+// =====================================================================
+// CANVAS
+// =====================================================================
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+let W = window.innerWidth, H = window.innerHeight;
+canvas.width = W; canvas.height = H;
+
+function drawRoundRect(x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x+r, y);
+  ctx.lineTo(x+w-r, y); ctx.quadraticCurveTo(x+w, y, x+w, y+r);
+  ctx.lineTo(x+w, y+h-r); ctx.quadraticCurveTo(x+w, y+h, x+w-r, y+h);
+  ctx.lineTo(x+r, y+h); ctx.quadraticCurveTo(x, y+h, x, y+h-r);
+  ctx.lineTo(x, y+r); ctx.quadraticCurveTo(x, y, x+r, y);
+  ctx.closePath();
+}
+
+let hoverId = null;
+
+function render() {
+  ctx.clearRect(0, 0, W, H);
+  ctx.save();
+  ctx.translate(0, -scrollY);
+
+  viewNodes.forEach(n => {
+    const isHov = n.id === hoverId;
+    const col = n.color || '#58a6ff';
+    const lx = n.x - n.w / 2, ly = n.y - n.h / 2;
+
+    if (isHov) { ctx.shadowColor = col; ctx.shadowBlur = 14; }
+
+    drawRoundRect(lx, ly, n.w, n.h, n.type === 'keyword' ? 17 : 10);
+    ctx.fillStyle = isHov ? col + '28' : col + '14';
+    ctx.fill();
+    ctx.strokeStyle = isHov ? col : col + '88';
+    ctx.lineWidth = isHov ? 2 : 1.5;
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+
+    if (n.type === 'group') {
+      ctx.font = 'bold 18px system-ui';
+      ctx.fillStyle = isHov ? '#e6edf3' : '#c9d1d9';
+      ctx.textAlign = 'center';
+      ctx.fillText(n.label, n.x, n.y - 10);
+      ctx.font = '13px system-ui';
+      ctx.fillStyle = col + 'cc';
+      ctx.fillText(n.sub, n.x, n.y + 14);
+
+      // 展開矢印
+      ctx.font = '14px system-ui';
+      ctx.fillStyle = col + 'aa';
+      ctx.fillText('▶', n.x + n.w/2 - 20, n.y + 6);
+
+    } else if (n.type === 'category') {
+      const dotR = 5;
+      ctx.beginPath();
+      ctx.arc(lx + 14, n.y, dotR, 0, Math.PI * 2);
+      ctx.fillStyle = col;
+      ctx.fill();
+
+      ctx.font = 'bold 13px system-ui';
+      ctx.fillStyle = isHov ? '#e6edf3' : '#c9d1d9';
+      ctx.textAlign = 'left';
+      let txt = n.label;
+      const maxTW = n.w - 30;
+      while (ctx.measureText(txt).width > maxTW && txt.length > 4) txt = txt.slice(0, -4) + '…';
+      ctx.fillText(txt, lx + 22, n.y - 6);
+
+      ctx.font = '11px system-ui';
+      ctx.fillStyle = col + 'cc';
+      ctx.fillText(n.sub, lx + 22, n.y + 12);
+
+    } else {
+      // keyword chip
+      ctx.font = '13px Consolas, monospace';
+      ctx.fillStyle = isHov ? '#e6edf3' : '#c9d1d9';
+      ctx.textAlign = 'center';
+      ctx.fillText(n.label, n.x - 10, n.y + 5);
+
+      ctx.font = 'bold 10px system-ui';
+      ctx.fillStyle = col + 'cc';
+      ctx.textAlign = 'right';
+      ctx.fillText(n.sub, n.x + n.w/2 - 6, n.y + 5);
+    }
+  });
+
+  ctx.restore();
+}
+
+function loop() { render(); requestAnimationFrame(loop); }
+loop();
+
+// =====================================================================
+// HIT TEST
+// =====================================================================
+function hitNode(cx, cy) {
+  const wy = cy + scrollY;
+  for (let i = viewNodes.length - 1; i >= 0; i--) {
+    const n = viewNodes[i];
+    if (cx >= n.x - n.w/2 && cx <= n.x + n.w/2 &&
+        wy >= n.y - n.h/2 && wy <= n.y + n.h/2) return n;
+  }
+  return null;
+}
+
+// =====================================================================
+// INTERACTION
+// =====================================================================
+function handleClick(cx, cy) {
+  const hit = hitNode(cx, cy);
+  if (!hit) return;
+
+  if (hit.type === 'group') {
+    selectedGroup = hit.id;
+    level = 1;
+    buildViewNodes();
+    updateBreadcrumb();
+    updateBackBtn();
+
+  } else if (hit.type === 'category') {
+    selectedCat = hit.data;
+    level = 2;
+    buildViewNodes();
+    updateBreadcrumb();
+    updateBackBtn();
+  }
+  // keyword nodes: no drill-down (leaf)
+}
+
+function goBack() {
+  if (level === 2) {
+    level = 1;
+    selectedCat = null;
+  } else if (level === 1) {
+    level = 0;
+    selectedGroup = null;
+  }
+  buildViewNodes();
+  updateBreadcrumb();
+  updateBackBtn();
+}
+
+// ── マウス ──
+let isPanning = false, panStartY = 0, panScrollStart = 0, panMoved = false;
+
+canvas.addEventListener('mousedown', e => {
+  isPanning = true; panMoved = false;
+  panStartY = e.clientY; panScrollStart = scrollY;
+});
+canvas.addEventListener('mousemove', e => {
+  if (isPanning) {
+    const dy = panStartY - e.clientY;
+    if (Math.abs(dy) > 3) panMoved = true;
+    scrollY = Math.max(0, Math.min(maxScrollY, panScrollStart + dy));
+  }
+  const hit = hitNode(e.clientX, e.clientY);
+  hoverId = hit ? hit.id : null;
+  canvas.className = hit ? 'clickable' : '';
+
+  const tip = document.getElementById('tooltip');
+  if (hit && hit.type === 'keyword') {
+    tip.style.display = 'block';
+    tip.style.left = (e.clientX + 14) + 'px';
+    tip.style.top  = (e.clientY - 10) + 'px';
+    tip.textContent = hit.label + '  (' + hit.sub + ')';
+  } else { tip.style.display = 'none'; }
+});
+canvas.addEventListener('mouseup', e => {
+  isPanning = false;
+  if (!panMoved) handleClick(e.clientX, e.clientY);
+});
+canvas.addEventListener('mouseleave', () => { isPanning = false; hoverId = null; canvas.className = ''; });
+
+canvas.addEventListener('wheel', e => {
+  e.preventDefault();
+  scrollY = Math.max(0, Math.min(maxScrollY, scrollY + e.deltaY * 0.8));
+}, { passive: false });
+
+// ── タッチ ──
+let touchStartY2 = 0, touchScrollStart = 0, touchMoved2 = false, touchStartPos2 = null;
+canvas.addEventListener('touchstart', e => {
+  e.preventDefault();
+  if (e.touches.length === 1) {
+    touchStartY2 = e.touches[0].clientY;
+    touchScrollStart = scrollY;
+    touchStartPos2 = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+    touchMoved2 = false;
+  }
+}, { passive: false });
+canvas.addEventListener('touchmove', e => {
+  e.preventDefault();
+  if (e.touches.length === 1) {
+    const dy = touchStartY2 - e.touches[0].clientY;
+    if (Math.abs(dy) > 5) touchMoved2 = true;
+    scrollY = Math.max(0, Math.min(maxScrollY, touchScrollStart + dy));
+  }
+}, { passive: false });
+canvas.addEventListener('touchend', e => {
+  if (!touchMoved2 && touchStartPos2 && e.changedTouches.length === 1) {
+    const t = e.changedTouches[0];
+    handleClick(t.clientX, t.clientY);
+  }
+  touchStartPos2 = null; touchMoved2 = false;
+});
+
+document.getElementById('back-btn').addEventListener('click', goBack);
+
+// =====================================================================
+// BREADCRUMB & BACK BUTTON
+// =====================================================================
+function updateBreadcrumb() {
+  const bc = document.getElementById('breadcrumb');
+  bc.innerHTML = '';
+
+  function addItem(label, onclick, isCurrent) {
+    if (bc.children.length > 0) {
+      const sep = document.createElement('span');
+      sep.className = 'bc-sep'; sep.textContent = '/';
+      bc.appendChild(sep);
+    }
+    const item = document.createElement('span');
+    item.className = 'bc-item' + (isCurrent ? ' current' : '');
+    item.textContent = label;
+    if (onclick) item.addEventListener('click', onclick);
+    bc.appendChild(item);
+  }
+
+  if (level === 0) {
+    addItem('キーワード分類', null, true);
+  } else if (level === 1) {
+    addItem('キーワード分類', () => { level = 0; selectedGroup = null; buildViewNodes(); updateBreadcrumb(); updateBackBtn(); }, false);
+    const groupLabel = selectedGroup === 'classified' ? '分類済み' : '未分類';
+    addItem(groupLabel, null, true);
+  } else if (level === 2) {
+    addItem('キーワード分類', () => { level = 0; selectedGroup = null; selectedCat = null; buildViewNodes(); updateBreadcrumb(); updateBackBtn(); }, false);
+    addItem('分類済み', () => { level = 1; selectedCat = null; buildViewNodes(); updateBreadcrumb(); updateBackBtn(); }, false);
+    addItem(selectedCat ? selectedCat.name : '', null, true);
+  }
+}
+
+function updateBackBtn() {
+  document.getElementById('back-btn').style.display = level > 0 ? 'block' : 'none';
+}
+
+// =====================================================================
+// RESIZE
+// =====================================================================
+window.addEventListener('resize', () => {
+  W = window.innerWidth; H = window.innerHeight;
+  canvas.width = W; canvas.height = H;
+  layoutViewNodes();
+});
+
+// =====================================================================
+// DATA FETCH
+// =====================================================================
+async function fetchData() {
+  const statusEl = document.getElementById('status');
+  try {
+    const [kwRes, catRes] = await Promise.all([
+      fetch('/api/aichat/all-keywords'),
+      fetch('/api/aichat/keyword-categories-summary'),
+    ]);
+
+    if (!kwRes.ok || !catRes.ok) {
+      throw new Error('API エラー (HTTP ' + (!kwRes.ok ? kwRes.status : catRes.status) + ')');
+    }
+
+    const kwData  = await kwRes.json();
+    const catData = await catRes.json();
+
+    allKeywords = kwData.keywords || [];
+    categories  = Array.isArray(catData) ? catData : (catData.categories || []);
+
+    buildDerivedData();
+    buildViewNodes();
+    updateBreadcrumb();
+    updateBackBtn();
+    updateCountLabel();
+    statusEl.style.display = 'none';
+
+  } catch (err) {
+    statusEl.innerHTML =
+      '<div style="text-align:center">' +
+      '<div style="color:#f85149;margin-bottom:8px">データ取得失敗</div>' +
+      '<div style="font-size:12px;color:#6e7681">' + escHtml(err.message) + '</div>' +
+      '<div style="font-size:11px;color:#6e7681;margin-top:6px">' +
+      'このページは <code style="background:#21262d;padding:1px 4px;border-radius:3px">/kw-drilldown</code> ルートから配信する必要があります</div>' +
+      '</div>';
+  }
+}
+
+function updateCountLabel() {
+  const el = document.getElementById('count-label');
+  const cls = allKeywords.filter(k => k.is_classified).length;
+  const uncls = unclassifiedKws.length;
+  el.textContent = '合計 ' + allKeywords.length + ' キーワード（分類済み ' + cls + ' / 未分類 ' + uncls + '）';
+}
+
+function escHtml(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+fetchData();
+</script>
+</body>
+</html>
+`;
+}
