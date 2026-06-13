@@ -31,6 +31,12 @@ canvas.dragging { cursor: grabbing; }
 #info .conn-label { font-size: 11px; color: #6e7681; margin-bottom: 3px; }
 #info .conn-item { font-size: 11px; color: #e6edf3; padding: 2px 0; cursor: pointer; }
 #info .conn-item:hover { color: #58a6ff; }
+#info-open-table {
+  display: none; margin-top: 10px; width: 100%;
+  background: #21262d; border: 1px solid #388bfd66; color: #58a6ff;
+  border-radius: 6px; padding: 5px 10px; cursor: pointer; font-size: 12px;
+}
+#info-open-table:hover { background: #388bfd22; }
 
 #controls {
   position: fixed; bottom: 16px; right: 16px; z-index: 10;
@@ -47,6 +53,56 @@ button:hover { background: #30363d; }
   background: #1c2128; border: 1px solid #30363d; border-radius: 6px;
   padding: 6px 10px; font-size: 12px; color: #e6edf3;
   display: none; max-width: 260px; line-height: 1.5;
+}
+
+/* ── テーブルデータモーダル ── */
+#table-modal {
+  display: none; position: fixed; inset: 0; z-index: 200;
+  background: #0d111799; overflow: auto;
+}
+#table-modal-inner {
+  margin: 48px auto 48px; max-width: 960px;
+  background: #161b22; border: 1px solid #30363d; border-radius: 12px;
+  padding: 20px; min-height: 200px;
+}
+#table-modal-header {
+  display: flex; align-items: center; gap: 10px; margin-bottom: 14px;
+}
+#table-modal-title {
+  font-size: 14px; font-family: monospace; color: #58a6ff; flex: 1;
+}
+#table-modal-desc {
+  font-size: 11px; color: #8b949e; margin-bottom: 12px;
+}
+#table-modal-close {
+  background: transparent; border: 1px solid #30363d; color: #8b949e;
+  border-radius: 6px; padding: 4px 10px; cursor: pointer; font-size: 13px;
+}
+#table-modal-close:hover { background: #30363d; color: #e6edf3; }
+#table-modal-body { overflow-x: auto; }
+#table-modal-body table {
+  width: 100%; border-collapse: collapse; font-size: 11px;
+}
+#table-modal-body th {
+  background: #21262d; color: #8b949e; padding: 6px 8px;
+  border: 1px solid #30363d; text-align: left; font-weight: normal;
+  white-space: nowrap; position: sticky; top: 0;
+}
+#table-modal-body td {
+  padding: 5px 8px; border: 1px solid #21262d; color: #c9d1d9;
+  max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+#table-modal-body tr:hover td { background: #1c2128; }
+.key-badge {
+  display: inline-block; font-size: 9px; padding: 1px 4px; border-radius: 3px;
+  margin-left: 4px; vertical-align: middle; font-weight: bold;
+}
+.key-PK  { background:#ffebe9; color:#cf222e; }
+.key-FK  { background:#ddf4ff; color:#0969da; }
+.key-UK  { background:#fff8c5; color:#9a6700; }
+.key-IDX { background:#f0f0f0; color:#656d76; }
+#table-modal-meta {
+  font-size: 11px; color: #6e7681; margin-top: 10px;
 }
 </style>
 </head>
@@ -70,6 +126,7 @@ button:hover { background: #30363d; }
   <h3 id="info-name"></h3>
   <div class="desc" id="info-desc"></div>
   <div class="conns" id="info-conns"></div>
+  <button id="info-open-table">テーブルデータを表示 →</button>
 </div>
 
 <div id="tooltip"></div>
@@ -77,6 +134,19 @@ button:hover { background: #30363d; }
 <div id="controls">
   <button id="btn-fit">全体表示</button>
   <button id="btn-reset">リセット</button>
+</div>
+
+<!-- テーブルデータモーダル -->
+<div id="table-modal">
+  <div id="table-modal-inner">
+    <div id="table-modal-header">
+      <span id="table-modal-title"></span>
+      <button id="table-modal-close">✕ 閉じる</button>
+    </div>
+    <div id="table-modal-desc"></div>
+    <div id="table-modal-body"></div>
+    <div id="table-modal-meta"></div>
+  </div>
 </div>
 
 <script>
@@ -101,26 +171,31 @@ const NODES = [
   // ── D1 Tables (y=0.80) ── 5ノードを均等に配置
   { id: 'tbl_search_log',
     label: 'aichat_search_log',
+    tableName: 'aichat_search_log',
     type: 'table',
     desc: 'ユーザーがAIチャット結果をキーワード検索するたびに記録。keyword, share_id, select_count, user_id などを保持。share-keywords APIの主テーブル。',
     fx: 0.14, fy: 0.80 },
   { id: 'tbl_cat_map',
     label: 'aichat_keyword_category_map',
+    tableName: 'aichat_keyword_category_map',
     type: 'table',
     desc: 'キーワードとカテゴリの多対多紐付けテーブル。分類済み判定の根拠 (is_classified = COUNT(category_id) > 0)。',
     fx: 0.28, fy: 0.80 },
   { id: 'tbl_categories',
     label: 'aichat_keyword_categories',
+    tableName: 'aichat_keyword_categories',
     type: 'table',
     desc: 'ユーザーが作成したキーワードカテゴリ。id, name, color を保持。',
     fx: 0.42, fy: 0.80 },
   { id: 'tbl_chat_shares',
     label: 'ai_chat_shares',
+    tableName: 'ai_chat_shares',
     type: 'table',
     desc: 'AIチャットの回答記録。share_id, question, answer, model などを保持。詳細プレビューモーダルの表示元。',
     fx: 0.56, fy: 0.80 },
   { id: 'tbl_multi_labels',
     label: 'keyword_multi_labels',
+    tableName: 'keyword_multi_labels',
     type: 'table',
     desc: '別システム: キーワードの複数ラベル分類 (JSON配列)。share-keywords APIでは現在使用していない（aichat_keyword_category_mapに統一済み）。',
     fx: 0.70, fy: 0.80 },
@@ -148,13 +223,10 @@ const NODES = [
     fx: 0.62, fy: 0.55 },
 
   // ── Palette nodes（右端列）──
-  // Cookie は API と同じ高さ、CSS変数は UI と API の中間に配置
-  // → オレンジ矢印（CSS変数 → UI モーダル）はUI層の下から斜めに上がるため
-  //   モーダルエンティティを貫通しない
   { id: 'pal_cookie',
     label: 'Cookie: kw_pal_*',
     type: 'palette',
-    desc: 'ブラウザCookieに保存された配色設定。kw_pal_cls / kw_pal_unc / kw_pal_act / kw_pal_cat の4値。最大1年保持。',
+    desc: 'ブラウザCookieに保存された配色設定。kw_pal_cls / kw_pal_unc / kw_pal_act / kw_pal_cat の4値。最大1年保持。D1には書き込まれない。',
     fx: 0.88, fy: 0.55 },
   { id: 'pal_css',
     label: 'CSS変数: --kw-pal-*',
@@ -162,7 +234,7 @@ const NODES = [
     desc: ':rootに設定されるCSS変数。--kw-pal-cls (分類済み色) / --kw-pal-unc-bg・fg (未分類色) / --kw-pal-act (選択中色)。applyKwPaletteToDom() でCookieから読み込み反映。',
     fx: 0.88, fy: 0.37 },
 
-  // ── UI Modals (y=0.20) ── 4ノードを左寄り（palette_modal を右端、pal_css より左）
+  // ── UI Modals (y=0.20) ──
   { id: 'ui_history_modal',
     label: '詳細プレビューモーダル',
     type: 'ui',
@@ -181,7 +253,7 @@ const NODES = [
   { id: 'ui_palette_modal',
     label: '配色カスタマイズモーダル (🎨)',
     type: 'ui',
-    desc: 'cls・unc・act・catの4色を設定するモーダル。決定するとCookieに保存し、applyKwPaletteToDom()でCSS変数に即時反映。全モーダルのバッジ色に影響する。',
+    desc: 'cls・unc・act・catの4色を設定するモーダル。決定するとCookieに保存（D1には保存しない）し、applyKwPaletteToDom()でCSS変数に即時反映。全モーダルのバッジ色に影響する。',
     fx: 0.68, fy: 0.20 },
 ];
 
@@ -203,35 +275,30 @@ const EDGES = [
   { from: 'tbl_categories',   to: 'api_cat_summary', type: 'read',  label: 'id, name, color' },
   { from: 'tbl_categories',   to: 'api_cat_groups',  type: 'read',  label: 'グループ＋カテゴリ' },
 
+  // Tables → UI (direct)
+  { from: 'tbl_chat_shares',  to: 'ui_history_modal',   type: 'read',  label: 'question, answer, model' },
+
   // APIs → UI
-  { from: 'api_share_kw',     to: 'ui_chip_panel',      type: 'read',  label: 'keyword, count, is_classified' },
-  { from: 'api_all_kw',       to: 'ui_classify_modal',  type: 'read',  label: 'keywords[]' },
-  { from: 'api_cat_summary',  to: 'ui_classify_modal',  type: 'read',  label: 'categories[]' },
-  { from: 'api_cat_groups',   to: 'ui_classify_modal',  type: 'read',  label: 'groups[]' },
+  { from: 'ui_history_modal', to: 'api_share_kw',        type: 'read',  label: 'shareId でキーワード取得' },
+  { from: 'api_share_kw',     to: 'ui_chip_panel',       type: 'read',  label: 'keyword, count, is_classified' },
+  { from: 'api_all_kw',       to: 'ui_classify_modal',   type: 'read',  label: 'keywords[]' },
+  { from: 'api_cat_summary',  to: 'ui_classify_modal',   type: 'read',  label: 'categories[]' },
+  { from: 'api_cat_groups',   to: 'ui_classify_modal',   type: 'read',  label: 'groups[]' },
 
   // UI → UI containment
-  { from: 'ui_history_modal', to: 'ui_chip_panel',      type: 'note',  label: '内包' },
+  { from: 'ui_history_modal', to: 'ui_chip_panel',       type: 'note',  label: '内包' },
 
   // UI → Table (write)
-  { from: 'ui_classify_modal', to: 'tbl_cat_map',       type: 'write', label: '分類登録・削除' },
+  { from: 'ui_classify_modal', to: 'tbl_cat_map',        type: 'write', label: '分類登録・削除' },
 
-  // Palette flow:
-  //   ui_palette_modal → pal_cookie (右下へ): 貫通なし
-  //   pal_cookie → pal_css (真上へ): 貫通なし
-  //   pal_css → ui_chip_panel / ui_classify_modal (左上へ、UI層の右端より下から斜め): 貫通なし
-  { from: 'ui_palette_modal', to: 'pal_cookie',         type: 'color', label: '保存 (max-age 1年)' },
-  { from: 'pal_cookie',       to: 'pal_css',            type: 'color', label: 'applyKwPaletteToDom()' },
-  { from: 'pal_css',          to: 'ui_chip_panel',      type: 'color', label: '.hist-kw-chip-cls/unc/active' },
-  { from: 'pal_css',          to: 'ui_classify_modal',  type: 'color', label: '.kw-kw-classified / sq-kw-badge-active' },
-
-  // ai_chat_shares → 詳細プレビューモーダル（回答内容表示）
-  { from: 'tbl_chat_shares',  to: 'ui_history_modal',    type: 'read',  label: 'question, answer, model' },
-
-  // 詳細プレビューモーダル → share-keywords API（モーダル展開時にキーワード取得）
-  { from: 'ui_history_modal', to: 'api_share_kw',        type: 'read',  label: 'shareId でキーワード取得' },
+  // Palette flow
+  { from: 'ui_palette_modal', to: 'pal_cookie',          type: 'color', label: '保存 (max-age 1年)' },
+  { from: 'pal_cookie',       to: 'pal_css',             type: 'color', label: 'applyKwPaletteToDom()' },
+  { from: 'pal_css',          to: 'ui_chip_panel',       type: 'color', label: '.hist-kw-chip-cls/unc/active' },
+  { from: 'pal_css',          to: 'ui_classify_modal',   type: 'color', label: '.kw-kw-classified / sq-kw-badge-active' },
 
   // Unused table note
-  { from: 'tbl_multi_labels', to: 'api_share_kw',       type: 'note',  label: '旧実装（現在未使用）' },
+  { from: 'tbl_multi_labels', to: 'api_share_kw',        type: 'note',  label: '旧実装（現在未使用）' },
 ];
 
 // ─────────────────────────────────────────────────────────
@@ -242,7 +309,6 @@ const ctx = canvas.getContext('2d');
 let W = window.innerWidth, H = window.innerHeight;
 canvas.width = W; canvas.height = H;
 
-// ノード幅はウィンドウ幅に対してスケール（小画面でも重ならない）
 function nodeW() { return Math.min(155, W * 0.115); }
 const NODE_H = 44;
 
@@ -308,12 +374,10 @@ function drawRoundRect(x, y, w, h, r) {
   ctx.closePath();
 }
 
-// エッジの端点をノードの矩形境界にクリップ
 function edgeEndpoints(a, b) {
   const dx = b.x - a.x, dy = b.y - a.y;
   const len = Math.sqrt(dx*dx + dy*dy) || 1;
   const ux = dx/len, uy = dy/len;
-  // 矩形境界クリップ（X方向かY方向か判定）
   function clip(n, ux, uy, inset) {
     const scaleX = ux !== 0 ? (n.w/2 + inset) / Math.abs(ux) : Infinity;
     const scaleY = uy !== 0 ? (n.h/2 + inset) / Math.abs(uy) : Infinity;
@@ -325,7 +389,6 @@ function edgeEndpoints(a, b) {
   return { ax: ap.x, ay: ap.y, bx: bp.x, by: bp.y, ux, uy };
 }
 
-// 同一from→toのエッジ束の中でオフセットを振る（並行エッジの重なり防止）
 const edgeBundles = new Map();
 EDGES.forEach((e, i) => {
   const key = [e.from, e.to].sort().join('|');
@@ -348,7 +411,6 @@ function render() {
 
   const hlIds = getHighlightedIds();
 
-  // ── レイヤー帯 ──
   const bands = [
     { fy: 0.80, color: '#388bfd08', label: 'D1 テーブル' },
     { fy: 0.55, color: '#3fb95008', label: 'API / 配色設定' },
@@ -366,7 +428,6 @@ function render() {
     }
   });
 
-  // ── エッジ ──
   EDGES.forEach((e, i) => {
     const a = nodeMap[e.from], b = nodeMap[e.to];
     if (!a || !b) return;
@@ -389,7 +450,6 @@ function render() {
     ctx.quadraticCurveTo(mx, my, bx, by);
     ctx.stroke();
 
-    // 矢印
     if (e.type !== 'note') {
       const angle = Math.atan2(by - my, bx - mx);
       ctx.setLineDash([]);
@@ -402,12 +462,11 @@ function render() {
       ctx.fill();
     }
 
-    // エッジラベル
     if (T.k > 0.5 && (isHl || !hlIds)) {
       const lx = mx;
       const ly = my - 6;
       ctx.save();
-      ctx.font = `${Math.max(8, 9 / T.k * 0.6)}px system-ui`;
+      ctx.font = Math.max(8, 9 / T.k * 0.6) + 'px system-ui';
       ctx.fillStyle = isHl ? et.color : '#6e7681';
       ctx.globalAlpha = isHl ? 0.9 : 0.50;
       ctx.textAlign = 'center';
@@ -426,7 +485,6 @@ function render() {
     ctx.setLineDash([]);
   });
 
-  // ── ノード ──
   NODES.forEach(n => {
     const t = TYPES[n.type];
     const isHl = hlIds ? hlIds.has(n.id) : false;
@@ -447,13 +505,13 @@ function render() {
 
     if (T.k > 0.25) {
       const badgeSz = Math.max(7, 8.5 / T.k * 0.6);
-      ctx.font = `bold ${badgeSz}px system-ui`;
+      ctx.font = 'bold ' + badgeSz + 'px system-ui';
       ctx.fillStyle = t.color + 'aa';
       ctx.textAlign = 'left';
       ctx.fillText(t.label, n.x - n.w/2 + 6, n.y - n.h/2 + badgeSz + 3);
 
       const fontSize = Math.max(9, 11 / T.k * 0.6);
-      ctx.font = `${fontSize}px 'Consolas', monospace`;
+      ctx.font = fontSize + "px 'Consolas', monospace";
       ctx.fillStyle = isHl ? '#e6edf3' : (dimmed ? '#6e7681' : '#c9d1d9');
       ctx.textAlign = 'center';
       let txt = n.label;
@@ -559,12 +617,29 @@ canvas.addEventListener('touchend', () => { touchPanStart = null; pinchDist0 = n
 // ─────────────────────────────────────────────────────────
 // INFO PANEL
 // ─────────────────────────────────────────────────────────
+let currentTableNode = null;
+
 function showInfoPanel(node) {
   const panel = document.getElementById('info');
-  if (!node) { panel.style.display = 'none'; return; }
+  const openBtn = document.getElementById('info-open-table');
+  if (!node) {
+    panel.style.display = 'none';
+    currentTableNode = null;
+    return;
+  }
   panel.style.display = 'block';
   document.getElementById('info-name').textContent = node.label;
   document.getElementById('info-desc').textContent = node.desc || '';
+
+  if (node.type === 'table' && node.tableName) {
+    currentTableNode = node;
+    openBtn.style.display = 'block';
+    openBtn.textContent = 'テーブルデータを表示 → ' + node.tableName;
+  } else {
+    currentTableNode = null;
+    openBtn.style.display = 'none';
+  }
+
   const conns = document.getElementById('info-conns');
   conns.innerHTML = '';
   const to   = edgesTo[node.id]   || [];
@@ -594,6 +669,96 @@ function showInfoPanel(node) {
     });
   }
 }
+
+document.getElementById('info-open-table').addEventListener('click', () => {
+  if (currentTableNode) openTableModal(currentTableNode);
+});
+
+// ─────────────────────────────────────────────────────────
+// TABLE DATA MODAL
+// ─────────────────────────────────────────────────────────
+const tableModal    = document.getElementById('table-modal');
+const tableModalInner = document.getElementById('table-modal-inner');
+
+function escHtml(s) {
+  return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+async function openTableModal(node) {
+  tableModal.style.display = 'block';
+  document.getElementById('table-modal-title').textContent = node.tableName;
+  document.getElementById('table-modal-desc').textContent = '';
+  document.getElementById('table-modal-body').innerHTML = '<p style="color:#8b949e;padding:20px 0">読み込み中…</p>';
+  document.getElementById('table-modal-meta').textContent = '';
+
+  let data;
+  try {
+    const res = await fetch('/api/status/tables/' + encodeURIComponent(node.tableName) + '/rows');
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    data = await res.json();
+  } catch (err) {
+    document.getElementById('table-modal-body').innerHTML =
+      '<p style="color:#f85149;padding:20px 0">取得失敗: ' + escHtml(err.message) +
+      '<br><span style="color:#8b949e;font-size:11px">このページが /kw-architecture ルートとして配信されていない場合、' +
+      'fetch は認証を通過できません。Worker へのデプロイ後にご利用ください。</span></p>';
+    return;
+  }
+
+  if (data.error) {
+    document.getElementById('table-modal-body').innerHTML =
+      '<p style="color:#f85149;padding:20px 0">エラー: ' + escHtml(data.error) + '</p>';
+    return;
+  }
+
+  document.getElementById('table-modal-desc').textContent = data.description || '';
+
+  const cols = data.columns || [];
+  const rows = data.rows || [];
+  const keyInfo = data.columnKeyInfo || {};
+
+  if (cols.length === 0) {
+    document.getElementById('table-modal-body').innerHTML =
+      '<p style="color:#8b949e;padding:20px 0">カラム情報が取得できませんでした。</p>';
+    return;
+  }
+
+  const KEY_LABELS = { PK:'PK', FK:'FK', UK:'UK', IDX:'IDX' };
+  let html = '<table><thead><tr>';
+  cols.forEach(col => {
+    const k = keyInfo[col];
+    const badge = k ? ' <span class="key-badge key-' + escHtml(k) + '">' + escHtml(KEY_LABELS[k] || k) + '</span>' : '';
+    html += '<th>' + escHtml(col) + badge + '</th>';
+  });
+  html += '</tr></thead><tbody>';
+
+  if (rows.length === 0) {
+    html += '<tr><td colspan="' + cols.length + '" style="color:#6e7681;text-align:center;padding:16px">データなし</td></tr>';
+  } else {
+    rows.forEach(row => {
+      html += '<tr>';
+      cols.forEach(col => {
+        const v = row[col];
+        html += '<td title="' + escHtml(String(v ?? '')) + '">' + escHtml(String(v ?? '')) + '</td>';
+      });
+      html += '</tr>';
+    });
+  }
+  html += '</tbody></table>';
+
+  document.getElementById('table-modal-body').innerHTML = html;
+  document.getElementById('table-modal-meta').textContent =
+    rows.length + ' 件表示（最大 ' + (data.limit || '?') + ' 件）';
+}
+
+document.getElementById('table-modal-close').addEventListener('click', () => {
+  tableModal.style.display = 'none';
+});
+tableModal.addEventListener('click', e => {
+  if (e.target === tableModal) tableModal.style.display = 'none';
+});
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') tableModal.style.display = 'none';
+});
 
 // ─────────────────────────────────────────────────────────
 // CONTROLS
