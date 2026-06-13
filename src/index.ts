@@ -10,6 +10,7 @@ import { createJWT, JWTPayload } from './utils/jwt';
 // Cloudflare Workersはステートレスなため、アプリ内でのレートリミットには
 // Durable ObjectsやKVなどの外部ストアが必要です
 import { authMiddleware, optionalAuthMiddleware } from './middleware/auth';
+import { getSessionExpiredPage } from './views/session-expired';
 import { getLoginPage } from './views/login';
 import { getWelcomePage } from './views/welcome';
 import { getAiChatPage } from './views/aichat';
@@ -4098,7 +4099,12 @@ app.get('/userinfo', authMiddleware, async (c) => {
   }));
 });
 
-app.get('/kw-architecture', authMiddleware, (c) => {
+app.get('/kw-architecture', authMiddleware, async (c) => {
+  const user = c.get('user');
+  const userSession = await getUserSession(c.env.DB, user.sub);
+  if (!userSession) {
+    return c.html(getSessionExpiredPage(), 403);
+  }
   return c.html(getKwArchitecturePage());
 });
 
