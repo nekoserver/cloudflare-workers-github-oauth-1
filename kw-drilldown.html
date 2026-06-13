@@ -88,15 +88,21 @@ function buildDerivedData() {
   });
 
   allKeywords.forEach(kw => {
-    if (kw.is_classified && kw.category_pairs && kw.category_pairs.length > 0) {
-      kw.category_pairs.forEach(pair => {
-        if (classifiedMap[pair.id]) {
-          const already = classifiedMap[pair.id].keywords.some(k => k.keyword === kw.keyword);
-          if (!already) classifiedMap[pair.id].keywords.push({ keyword: kw.keyword, count: kw.count });
-        }
+    const count = kw.cnt || kw.count || 0;
+    const isClassified = kw.is_classified === 1 || kw.is_classified === true;
+
+    if (isClassified && kw.category_pairs) {
+      // category_pairs は GROUP_CONCAT の文字列 "id:color,id:color"
+      String(kw.category_pairs).split(',').forEach(pair => {
+        const colonIdx = pair.indexOf(':');
+        if (colonIdx < 0) return;
+        const catId = parseInt(pair.slice(0, colonIdx), 10);
+        if (!classifiedMap[catId]) return;
+        const already = classifiedMap[catId].keywords.some(k => k.keyword === kw.keyword);
+        if (!already) classifiedMap[catId].keywords.push({ keyword: kw.keyword, count });
       });
     } else {
-      unclassifiedKws.push({ keyword: kw.keyword, count: kw.count });
+      unclassifiedKws.push({ keyword: kw.keyword, count });
     }
   });
 
@@ -122,7 +128,7 @@ const NODE_SIZES = {
 
 function buildViewNodes() {
   if (level === 0) {
-    const totalCls = allKeywords.filter(k => k.is_classified).length;
+    const totalCls = allKeywords.filter(k => k.is_classified === 1 || k.is_classified === true).length;
     const totalUncls = unclassifiedKws.length;
     viewNodes = [
       {
@@ -490,6 +496,7 @@ async function fetchData() {
     const catData = await catRes.json();
 
     allKeywords = kwData.keywords || [];
+    // keyword-categories-summary は { categories: [...] } で包まれている
     categories  = Array.isArray(catData) ? catData : (catData.categories || []);
 
     buildDerivedData();
@@ -512,7 +519,7 @@ async function fetchData() {
 
 function updateCountLabel() {
   const el = document.getElementById('count-label');
-  const cls = allKeywords.filter(k => k.is_classified).length;
+  const cls = allKeywords.filter(k => k.is_classified === 1 || k.is_classified === true).length;
   const uncls = unclassifiedKws.length;
   el.textContent = '合計 ' + allKeywords.length + ' キーワード（分類済み ' + cls + ' / 未分類 ' + uncls + '）';
 }
