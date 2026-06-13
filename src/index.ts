@@ -2634,7 +2634,7 @@ app.get('/auth/github/callback', async (c) => {
     }
 
     const sessionDurationSeconds = getSessionDurationSeconds(sessionDuration);
-    const idleTimeoutSeconds = resolveIdleTimeoutSeconds(c.env.SESSION_IDLE_TIMEOUT_SECONDS, sessionDurationSeconds);
+    const idleTimeoutSeconds = resolveIdleTimeoutSeconds(c.env.SESSION_IDLE_TIMEOUT_SECONDS, sessionDurationSeconds, sessionDurationSeconds);
 
     // JWTトークンを生成
     // D1保存が成功した場合はJWTにaccess_tokenを含めない（D1から取得する）
