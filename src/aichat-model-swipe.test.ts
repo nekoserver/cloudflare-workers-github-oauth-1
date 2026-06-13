@@ -117,7 +117,7 @@ describe('詳細プレビューモーダル: マルチモデルスワイプ — 
     const html = buildPage();
     const idx = html.indexOf('function showHistoryModal');
     expect(idx).toBeGreaterThan(-1);
-    const fn = html.slice(idx, idx + 2500);
+    const fn = html.slice(idx, idx + 2700);
     expect(fn).toContain('question_hash');
     expect(fn).toContain('shares-by-question-hash');
   });

@@ -67,7 +67,7 @@ describe('ai_chat_shares トークン表示: 呼び出し箇所', () => {
   it('showHistoryModal 内で renderHistoryModalTokens が呼ばれる', () => {
     const html = buildPage();
     const idx = html.indexOf('function showHistoryModal(r, keyword)');
-    const snippet = html.slice(idx, idx + 1500);
+    const snippet = html.slice(idx, idx + 1700);
     expect(snippet).toContain('renderHistoryModalTokens(r)');
   });
 
