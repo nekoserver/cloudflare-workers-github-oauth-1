@@ -571,6 +571,9 @@ canvas.addEventListener('mouseup', e => {
     if (hit) {
       highlightId = highlightId === hit.id ? null : hit.id;
       showInfoPanel(highlightId ? hit : null);
+      if (highlightId && hit.type === 'table' && hit.tableName) {
+        openTableModal(hit);
+      }
     } else {
       highlightId = null; showInfoPanel(null);
     }
@@ -586,22 +589,27 @@ canvas.addEventListener('wheel', e => {
   T.k = Math.min(4, Math.max(0.15, T.k * f));
 }, { passive: false });
 
-let touchPanStart = null, pinchDist0 = null;
+let touchPanStart = null, pinchDist0 = null, touchStartPos = null, touchMoved = false;
 canvas.addEventListener('touchstart', e => {
   e.preventDefault();
   if (e.touches.length === 1) {
     touchPanStart = { x: e.touches[0].clientX - T.x, y: e.touches[0].clientY - T.y };
+    touchStartPos = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+    touchMoved = false;
   } else if (e.touches.length === 2) {
     const dx = e.touches[0].clientX - e.touches[1].clientX;
     const dy = e.touches[0].clientY - e.touches[1].clientY;
     pinchDist0 = Math.sqrt(dx*dx + dy*dy);
+    touchStartPos = null;
   }
 }, { passive: false });
 canvas.addEventListener('touchmove', e => {
   e.preventDefault();
   if (e.touches.length === 1 && touchPanStart) {
-    T.x = e.touches[0].clientX - touchPanStart.x;
-    T.y = e.touches[0].clientY - touchPanStart.y;
+    const nx = e.touches[0].clientX - touchPanStart.x;
+    const ny = e.touches[0].clientY - touchPanStart.y;
+    if (touchStartPos && (Math.abs(nx - T.x) > 5 || Math.abs(ny - T.y) > 5)) touchMoved = true;
+    T.x = nx; T.y = ny;
   } else if (e.touches.length === 2 && pinchDist0) {
     const dx = e.touches[0].clientX - e.touches[1].clientX;
     const dy = e.touches[0].clientY - e.touches[1].clientY;
@@ -614,7 +622,23 @@ canvas.addEventListener('touchmove', e => {
     T.k = Math.min(4, Math.max(0.15, T.k * f));
   }
 }, { passive: false });
-canvas.addEventListener('touchend', () => { touchPanStart = null; pinchDist0 = null; });
+canvas.addEventListener('touchend', e => {
+  if (!touchMoved && touchStartPos && e.changedTouches.length === 1) {
+    const t = e.changedTouches[0];
+    const { x: wx, y: wy } = s2w(t.clientX, t.clientY);
+    const hit = hitNode(wx, wy);
+    if (hit) {
+      highlightId = highlightId === hit.id ? null : hit.id;
+      showInfoPanel(highlightId ? hit : null);
+      if (highlightId && hit.type === 'table' && hit.tableName) {
+        openTableModal(hit);
+      }
+    } else {
+      highlightId = null; showInfoPanel(null);
+    }
+  }
+  touchPanStart = null; pinchDist0 = null; touchStartPos = null; touchMoved = false;
+});
 
 // ─────────────────────────────────────────────────────────
 // INFO PANEL
