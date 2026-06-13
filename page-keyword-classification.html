@@ -1,0 +1,578 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ページ別キーワード分類構造図</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: #0d1117; color: #e6edf3; font-family: 'Segoe UI', system-ui, sans-serif; overflow: hidden; }
+canvas { display: block; cursor: grab; }
+canvas.dragging { cursor: grabbing; }
+#legend {
+  position: fixed; top: 12px; left: 12px; z-index: 10;
+  background: #161b22cc; border: 1px solid #30363d; border-radius: 8px;
+  padding: 10px 14px; font-size: 12px; min-width: 180px;
+}
+#legend h3 { font-size: 12px; color: #8b949e; margin-bottom: 8px; font-weight: normal; letter-spacing: 0.05em; }
+.lg { display: flex; align-items: center; gap: 7px; margin-bottom: 5px; }
+.lg-dot { width: 14px; height: 14px; border-radius: 3px; flex-shrink: 0; }
+.lg-line { width: 28px; height: 2px; flex-shrink: 0; }
+#info {
+  position: fixed; top: 12px; right: 12px; z-index: 10;
+  background: #161b22; border: 1px solid #30363d; border-radius: 8px;
+  padding: 12px 16px; max-width: 300px; font-size: 12px; display: none;
+}
+#info h3 { font-size: 13px; color: #58a6ff; margin-bottom: 6px; word-break: break-all; }
+#info .desc { color: #8b949e; line-height: 1.6; }
+#info .conns { margin-top: 8px; }
+#info .conn-label { font-size: 11px; color: #6e7681; margin-bottom: 3px; }
+#info .conn-item { font-size: 11px; color: #e6edf3; padding: 2px 0; cursor: pointer; }
+#info .conn-item:hover { color: #58a6ff; }
+#controls { position: fixed; bottom: 16px; right: 16px; z-index: 10; display: flex; gap: 6px; }
+button { background: #21262d; border: 1px solid #30363d; color: #e6edf3; border-radius: 6px; padding: 6px 12px; cursor: pointer; font-size: 12px; }
+button:hover { background: #30363d; }
+#tooltip {
+  position: fixed; pointer-events: none; z-index: 20;
+  background: #1c2128; border: 1px solid #30363d; border-radius: 6px;
+  padding: 6px 10px; font-size: 12px; color: #e6edf3;
+  display: none; max-width: 280px; line-height: 1.5;
+}
+</style>
+</head>
+<body>
+<canvas id="canvas"></canvas>
+
+<div id="legend">
+  <h3>凡例</h3>
+  <div class="lg"><div class="lg-dot" style="background:#a371f722;border:1.5px solid #a371f7"></div>ページ</div>
+  <div class="lg"><div class="lg-dot" style="background:#388bfd22;border:1.5px solid #388bfd"></div>キーワード元テーブル</div>
+  <div class="lg"><div class="lg-dot" style="background:#e6a00022;border:1.5px solid #e6a000"></div>第一分類（カテゴリ）</div>
+  <div class="lg"><div class="lg-dot" style="background:#3fb95022;border:1.5px solid #3fb950"></div>第二分類（グループ）</div>
+  <hr style="border-color:#30363d;margin:8px 0">
+  <div class="lg" style="margin-bottom:2px"><div class="lg-dot" style="background:#58a6ff33;border:1.5px solid #58a6ff66;border-radius:50%"></div>AIチャット系</div>
+  <div class="lg"><div class="lg-dot" style="background:#f7816633;border:1.5px solid #f7816666;border-radius:50%"></div>コミットログ系</div>
+  <hr style="border-color:#30363d;margin:8px 0">
+  <div class="lg"><div class="lg-line" style="background:#8b949e"></div>データ参照</div>
+  <div class="lg"><div class="lg-line" style="background:#3fb950"></div>分類登録 (WRITE)</div>
+  <div class="lg"><div class="lg-line" style="background:#8b949e;height:1px;border-top:2px dashed #8b949e;background:none"></div>共有 / 補足</div>
+</div>
+
+<div id="info">
+  <h3 id="info-name"></h3>
+  <div class="desc" id="info-desc"></div>
+  <div class="conns" id="info-conns"></div>
+</div>
+<div id="tooltip"></div>
+<div id="controls">
+  <button id="btn-fit">全体表示</button>
+  <button id="btn-reset">リセット</button>
+</div>
+
+<script>
+// ─────────────────────────────────────────────────────────
+// 型定義
+// ─────────────────────────────────────────────────────────
+// レイヤー設計:
+//   y=0.12  ページ層
+//   y=0.33  キーワード元データ層
+//   y=0.56  第一分類層（カテゴリ）
+//   y=0.80  第二分類層（グループ）
+//
+// 水平配置:
+//   x=0.10〜0.55  AIチャット / 検索履歴系
+//   x=0.60〜0.90  コミットログ系
+
+const TYPES = {
+  page:  { color: '#a371f7', fill: '#a371f718', label: 'PAGE' },
+  kw:    { color: '#388bfd', fill: '#388bfd18', label: 'KW SOURCE' },
+  cls1:  { color: '#e6a000', fill: '#e6a00018', label: '第一分類' },
+  cls2:  { color: '#3fb950', fill: '#3fb95018', label: '第二分類' },
+};
+
+const NODES = [
+  // ────────────────────────────────
+  // ページ層 (y=0.12)
+  // ────────────────────────────────
+  { id: 'page_aichat',
+    label: 'AIチャットページ',
+    type: 'page', fx: 0.20, fy: 0.12,
+    desc: 'AIチャットの質問・回答を閲覧するメインページ。左サイドバーでキーワード検索し、ヒットした過去Q&Aを一覧表示。検索クリック時に aichat_search_log へ記録。',
+    system: 'ai' },
+  { id: 'page_search_hist',
+    label: '検索履歴ページ',
+    type: 'page', fx: 0.42, fy: 0.12,
+    desc: 'AIチャット検索の露出ログ・選択ログを集計表示するページ。aichat_search_impressions / aichat_search_log を参照し、どのキーワードでどのQ&Aに到達したかを可視化。',
+    system: 'ai' },
+  { id: 'page_commit',
+    label: 'コミットログページ',
+    type: 'page', fx: 0.76, fy: 0.12,
+    desc: 'GitHubコミット履歴の全文検索ページ。検索クエリを commit_search_history に記録し、クエリに対してラベルを付与・グループ化することで傾向分析が可能。',
+    system: 'commit' },
+
+  // ────────────────────────────────
+  // キーワード元データ層 (y=0.33)
+  // ────────────────────────────────
+  { id: 'kw_search_log',
+    label: 'aichat_search_log',
+    type: 'kw', fx: 0.14, fy: 0.33,
+    desc: '(user_id, keyword, share_id) をキーにキーワード検索クリックを集計。select_count が検索→クリック累計数。第一分類のキーワード母集団。',
+    system: 'ai' },
+  { id: 'kw_impressions',
+    label: 'aichat_search_impressions',
+    type: 'kw', fx: 0.36, fy: 0.33,
+    desc: '検索実行のたびに露出した全share_idを記録（検索結果全件ログ）。result_count・searched_at を保持。検索履歴ページの主データソース。',
+    system: 'ai' },
+  { id: 'kw_search_history',
+    label: 'aichat_search_history',
+    type: 'kw', fx: 0.52, fy: 0.33,
+    desc: 'キーワード検索クリックの明細ログ。(user_id, keyword, share_id) 毎に seq_num で連番管理。検索明細履歴モーダルの表示元。',
+    system: 'ai' },
+  { id: 'kw_commit_hist',
+    label: 'commit_search_history',
+    type: 'kw', fx: 0.76, fy: 0.33,
+    desc: 'コミット全文検索クエリの履歴。search_query・hit_count・searched_at を保持。コミットログページでの検索実行ごとに記録。第一分類のキーワード母集団。',
+    system: 'commit' },
+
+  // ────────────────────────────────
+  // 第一分類層 (y=0.56)
+  // ────────────────────────────────
+  { id: 'cls1_cat_map',
+    label: 'aichat_keyword_category_map',
+    type: 'cls1', fx: 0.16, fy: 0.56,
+    desc: 'keyword → category_id の多対多紐付けテーブル。ユーザーがキーワード分類モーダルで分類操作を行うと INSERT/DELETE される。is_classified 判定の根拠。',
+    system: 'ai' },
+  { id: 'cls1_categories',
+    label: 'aichat_keyword_categories',
+    type: 'cls1', fx: 0.36, fy: 0.56,
+    desc: 'AIチャットキーワードのカテゴリ定義テーブル。id・name・color を保持。ユーザーが自由に作成でき、chip の色分けに利用される。第一分類の実体。',
+    system: 'ai' },
+  { id: 'cls1_commit_labels',
+    label: 'commit_search_keyword_labels',
+    type: 'cls1', fx: 0.76, fy: 0.56,
+    desc: 'コミット検索クエリへのラベル付けテーブル。(user_id, search_query) がユニークキー。label フィールド（自由テキスト）と classify_status（フラグ）を保持。第一分類の実体。',
+    system: 'commit' },
+
+  // ────────────────────────────────
+  // 第二分類層 (y=0.80)
+  // ────────────────────────────────
+  { id: 'cls2_aichat_groups',
+    label: 'aichat_category_groups',
+    type: 'cls2', fx: 0.26, fy: 0.80,
+    desc: 'AIチャット分類カテゴリのグループ定義。category_ids (JSON配列) で複数のカテゴリをまとめる。group_name でカテゴリを束ねた第二分類。キーワード分析・絞り込みに活用。',
+    system: 'ai' },
+  { id: 'cls2_commit_groups',
+    label: 'keyword_category_groups',
+    type: 'cls2', fx: 0.76, fy: 0.80,
+    desc: 'コミット検索キーワードのカテゴリグループ定義。categories (JSON配列) で複数のラベル名をまとめる。group_name でラベルを束ねた第二分類。コミット検索の傾向分析に活用。',
+    system: 'commit' },
+];
+
+const EDGE_TYPES = {
+  ref:   { color: '#8b949e', dash: [] },
+  write: { color: '#3fb950', dash: [] },
+  share: { color: '#8b949e', dash: [5, 4] },
+};
+
+const EDGES = [
+  // ページ → キーワード元
+  { from: 'page_aichat',       to: 'kw_search_log',    type: 'ref',   label: '検索クリック記録' },
+  { from: 'page_aichat',       to: 'kw_impressions',   type: 'ref',   label: '検索実行ログ' },
+  { from: 'page_search_hist',  to: 'kw_impressions',   type: 'ref',   label: '参照 (露出ログ)' },
+  { from: 'page_search_hist',  to: 'kw_search_history',type: 'ref',   label: '参照 (明細ログ)' },
+  { from: 'page_search_hist',  to: 'kw_search_log',    type: 'ref',   label: '参照 (集計ログ)' },
+  { from: 'page_commit',       to: 'kw_commit_hist',   type: 'ref',   label: '検索クエリ記録' },
+
+  // キーワード元 → 第一分類
+  { from: 'kw_search_log',     to: 'cls1_cat_map',      type: 'ref',  label: 'keyword が分類対象' },
+  { from: 'kw_search_log',     to: 'cls1_categories',   type: 'ref',  label: '(経由: cat_map)' },
+  { from: 'kw_commit_hist',    to: 'cls1_commit_labels',type: 'ref',  label: 'search_query へ label 付与' },
+
+  // 第一分類 → 第一分類 (map → categories)
+  { from: 'cls1_cat_map',      to: 'cls1_categories',   type: 'ref',  label: 'category_id で参照' },
+
+  // ページ → 第一分類 (分類操作 WRITE)
+  { from: 'page_aichat',       to: 'cls1_cat_map',      type: 'write',label: 'キーワード分類モーダルで分類' },
+  { from: 'page_commit',       to: 'cls1_commit_labels',type: 'write',label: 'ラベル付け操作' },
+
+  // 第一分類 → 第二分類
+  { from: 'cls1_categories',   to: 'cls2_aichat_groups',  type: 'ref', label: 'category_ids で束ねる' },
+  { from: 'cls1_commit_labels',to: 'cls2_commit_groups',  type: 'ref', label: 'label名で束ねる' },
+
+  // 検索履歴 → 第一・第二分類（参照）
+  { from: 'page_search_hist',  to: 'cls1_categories',    type: 'ref', label: '分類色で可視化' },
+  { from: 'page_search_hist',  to: 'cls2_aichat_groups', type: 'ref', label: 'グループ絞り込み' },
+];
+
+// ─────────────────────────────────────────────────────────
+// CANVAS
+// ─────────────────────────────────────────────────────────
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+let W = window.innerWidth, H = window.innerHeight;
+canvas.width = W; canvas.height = H;
+
+function nodeW() { return Math.min(160, W * 0.12); }
+const NODE_H = 46;
+
+function layoutNodes() {
+  const nw = nodeW();
+  NODES.forEach(n => { n.x = n.fx * W; n.y = n.fy * H; n.w = nw; n.h = NODE_H; });
+}
+layoutNodes();
+
+const nodeMap = {};
+NODES.forEach(n => nodeMap[n.id] = n);
+const edgesFrom = {}, edgesTo = {};
+NODES.forEach(n => { edgesFrom[n.id] = []; edgesTo[n.id] = []; });
+EDGES.forEach(e => { edgesFrom[e.from].push(e); edgesTo[e.to].push(e); });
+
+// 並行エッジオフセット
+const edgeBundles = new Map();
+EDGES.forEach((e, i) => {
+  const key = [e.from, e.to].sort().join('|');
+  if (!edgeBundles.has(key)) edgeBundles.set(key, []);
+  edgeBundles.get(key).push(i);
+});
+const edgeOffsets = {};
+EDGES.forEach((e, i) => {
+  const key = [e.from, e.to].sort().join('|');
+  const arr = edgeBundles.get(key);
+  edgeOffsets[i] = (arr.indexOf(i) - (arr.length - 1) / 2) * 14;
+});
+
+// ─────────────────────────────────────────────────────────
+// CAMERA
+// ─────────────────────────────────────────────────────────
+const T = { x: 0, y: 0, k: 1 };
+function s2w(x, y) { return { x: (x - T.x) / T.k, y: (y - T.y) / T.k }; }
+
+// ─────────────────────────────────────────────────────────
+// RENDER
+// ─────────────────────────────────────────────────────────
+let highlightId = null;
+
+function hitNode(wx, wy) {
+  for (let i = NODES.length - 1; i >= 0; i--) {
+    const n = NODES[i];
+    if (wx >= n.x - n.w/2 && wx <= n.x + n.w/2 &&
+        wy >= n.y - n.h/2 && wy <= n.y + n.h/2) return n;
+  }
+  return null;
+}
+
+function getHighlightedIds() {
+  if (!highlightId) return null;
+  const ids = new Set([highlightId]);
+  EDGES.forEach(e => {
+    if (e.from === highlightId) ids.add(e.to);
+    if (e.to   === highlightId) ids.add(e.from);
+  });
+  return ids;
+}
+
+function drawRoundRect(x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x+r, y);
+  ctx.lineTo(x+w-r, y); ctx.quadraticCurveTo(x+w, y, x+w, y+r);
+  ctx.lineTo(x+w, y+h-r); ctx.quadraticCurveTo(x+w, y+h, x+w-r, y+h);
+  ctx.lineTo(x+r, y+h); ctx.quadraticCurveTo(x, y+h, x, y+h-r);
+  ctx.lineTo(x, y+r); ctx.quadraticCurveTo(x, y, x+r, y);
+  ctx.closePath();
+}
+
+function edgeEndpoints(a, b) {
+  const dx = b.x-a.x, dy = b.y-a.y;
+  const len = Math.sqrt(dx*dx+dy*dy)||1;
+  const ux = dx/len, uy = dy/len;
+  function clip(n, ux, uy, ins) {
+    const sx = ux!==0 ? (n.w/2+ins)/Math.abs(ux) : Infinity;
+    const sy = uy!==0 ? (n.h/2+ins)/Math.abs(uy) : Infinity;
+    const s = Math.min(sx, sy);
+    return { x: n.x+ux*s, y: n.y+uy*s };
+  }
+  const ap = clip(a,  ux,  uy, 0);
+  const bp = clip(b, -ux, -uy, 7);
+  return { ax: ap.x, ay: ap.y, bx: bp.x, by: bp.y, ux, uy };
+}
+
+// システム背景ゾーン
+const AI_ZONE     = { x1: 0.03, y1: 0.06, x2: 0.56, y2: 0.94 };
+const COMMIT_ZONE = { x1: 0.60, y1: 0.06, x2: 0.94, y2: 0.94 };
+
+function render() {
+  ctx.clearRect(0, 0, W, H);
+  ctx.save();
+  ctx.translate(T.x, T.y);
+  ctx.scale(T.k, T.k);
+
+  const hlIds = getHighlightedIds();
+
+  // ── システムゾーン背景 ──
+  function drawZone(z, color, label) {
+    const x = z.x1*W, y = z.y1*H, w = (z.x2-z.x1)*W, h = (z.y2-z.y1)*H;
+    ctx.fillStyle = color;
+    ctx.strokeStyle = color.replace('08','20');
+    ctx.lineWidth = 1;
+    ctx.setLineDash([6, 4]);
+    ctx.beginPath();
+    ctx.roundRect ? ctx.roundRect(x, y, w, h, 12) : ctx.rect(x, y, w, h);
+    ctx.fill(); ctx.stroke();
+    ctx.setLineDash([]);
+    if (T.k > 0.25) {
+      ctx.font = `bold ${Math.max(11, 13/T.k*0.6)}px system-ui`;
+      ctx.fillStyle = color.replace('08','40');
+      ctx.textAlign = 'left';
+      ctx.fillText(label, x + 10, y + 20);
+    }
+  }
+  drawZone(AI_ZONE,     '#58a6ff08', 'AIチャット / 検索履歴 系');
+  drawZone(COMMIT_ZONE, '#f7816608', 'コミットログ 系');
+
+  // ── レイヤー帯 ──
+  const layers = [
+    { fy: 0.12, color: '#a371f708', label: 'ページ' },
+    { fy: 0.33, color: '#388bfd06', label: 'キーワード元データ' },
+    { fy: 0.56, color: '#e6a00008', label: '第一分類（カテゴリ）' },
+    { fy: 0.80, color: '#3fb95008', label: '第二分類（グループ）' },
+  ];
+  layers.forEach(b => {
+    const cy = b.fy * H;
+    ctx.fillStyle = b.color;
+    ctx.fillRect(-2000, cy - NODE_H/2 - 22, 6000, NODE_H + 44);
+    if (T.k > 0.28) {
+      ctx.font = `11px system-ui`;
+      ctx.fillStyle = '#ffffff14';
+      ctx.textAlign = 'right';
+      ctx.fillText(b.label, W - 24/T.k, cy + 5);
+    }
+  });
+
+  // ── エッジ ──
+  EDGES.forEach((e, i) => {
+    const a = nodeMap[e.from], b = nodeMap[e.to];
+    if (!a || !b) return;
+    const et = EDGE_TYPES[e.type];
+    const isHl = hlIds && (hlIds.has(e.from) || hlIds.has(e.to));
+    const dimmed = hlIds && !isHl;
+
+    ctx.globalAlpha = dimmed ? 0.06 : (isHl ? 1 : 0.45);
+    ctx.strokeStyle = isHl ? et.color : '#6e7681';
+    ctx.lineWidth = isHl ? 2 : 1.3;
+    ctx.setLineDash(et.dash);
+
+    const { ax, ay, bx, by } = edgeEndpoints(a, b);
+    const perp = edgeOffsets[i];
+    const uy = (by - ay) / (Math.sqrt((bx-ax)**2+(by-ay)**2)||1);
+    const ux = (bx - ax) / (Math.sqrt((bx-ax)**2+(by-ay)**2)||1);
+    const mx = (ax+bx)/2 + uy * perp;
+    const my = (ay+by)/2 - ux * perp;
+
+    ctx.beginPath();
+    ctx.moveTo(ax, ay);
+    ctx.quadraticCurveTo(mx, my, bx, by);
+    ctx.stroke();
+
+    if (e.type !== 'share') {
+      const angle = Math.atan2(by-my, bx-mx);
+      ctx.setLineDash([]);
+      ctx.fillStyle = isHl ? et.color : '#6e7681';
+      ctx.beginPath();
+      ctx.moveTo(bx, by);
+      ctx.lineTo(bx - 8*Math.cos(angle-0.38), by - 8*Math.sin(angle-0.38));
+      ctx.lineTo(bx - 8*Math.cos(angle+0.38), by - 8*Math.sin(angle+0.38));
+      ctx.closePath(); ctx.fill();
+    }
+
+    if (T.k > 0.52 && (isHl || !hlIds)) {
+      ctx.save();
+      ctx.font = `${Math.max(8, 8.5/T.k*0.6)}px system-ui`;
+      ctx.fillStyle = isHl ? et.color : '#6e7681';
+      ctx.globalAlpha = isHl ? 0.9 : 0.45;
+      ctx.textAlign = 'center';
+      ctx.fillText(e.label || '', mx, my - 6);
+      ctx.restore();
+    }
+
+    ctx.globalAlpha = 1;
+    ctx.setLineDash([]);
+  });
+
+  // ── ノード ──
+  NODES.forEach(n => {
+    const t = TYPES[n.type];
+    const isHl = hlIds ? hlIds.has(n.id) : false;
+    const dimmed = hlIds && !isHl;
+    const isSel = n.id === highlightId;
+
+    ctx.globalAlpha = dimmed ? 0.16 : 1;
+    if (isSel) { ctx.shadowColor = t.color; ctx.shadowBlur = 18; }
+
+    drawRoundRect(n.x - n.w/2, n.y - n.h/2, n.w, n.h, 9);
+    ctx.fillStyle = isHl ? t.color + '30' : t.fill;
+    ctx.fill();
+    ctx.strokeStyle = isSel ? t.color : (isHl ? t.color + 'cc' : t.color + '66');
+    ctx.lineWidth = isSel ? 2.5 : 1.5;
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+
+    if (T.k > 0.22) {
+      const bsz = Math.max(7, 8/T.k*0.6);
+      ctx.font = `bold ${bsz}px system-ui`;
+      ctx.fillStyle = t.color + 'aa';
+      ctx.textAlign = 'left';
+      ctx.fillText(t.label, n.x - n.w/2 + 6, n.y - n.h/2 + bsz + 3);
+
+      const fsz = Math.max(9, 10.5/T.k*0.6);
+      ctx.font = `${fsz}px 'Consolas', monospace`;
+      ctx.fillStyle = isHl ? '#e6edf3' : (dimmed ? '#6e7681' : '#c9d1d9');
+      ctx.textAlign = 'center';
+      let txt = n.label;
+      const maxW = n.w - 12;
+      while (ctx.measureText(txt).width > maxW && txt.length > 4)
+        txt = txt.slice(0, -4) + '…';
+      ctx.fillText(txt, n.x, n.y + 6);
+    }
+
+    ctx.globalAlpha = 1;
+  });
+
+  ctx.restore();
+}
+
+function loop() { render(); requestAnimationFrame(loop); }
+loop();
+
+// ─────────────────────────────────────────────────────────
+// INTERACTION
+// ─────────────────────────────────────────────────────────
+let isPanning = false, panStart = null, panMoved = false;
+canvas.addEventListener('mousedown', e => {
+  isPanning = true; panMoved = false;
+  panStart = { x: e.clientX - T.x, y: e.clientY - T.y };
+  canvas.classList.add('dragging');
+});
+canvas.addEventListener('mousemove', e => {
+  if (isPanning && panStart) {
+    const nx = e.clientX - panStart.x, ny = e.clientY - panStart.y;
+    if (Math.abs(nx-T.x) > 3 || Math.abs(ny-T.y) > 3) panMoved = true;
+    T.x = nx; T.y = ny;
+  }
+  const { x: wx, y: wy } = s2w(e.clientX, e.clientY);
+  const hit = hitNode(wx, wy);
+  const tip = document.getElementById('tooltip');
+  if (hit) {
+    tip.style.display = 'block';
+    tip.style.left = (e.clientX + 14) + 'px';
+    tip.style.top  = (e.clientY - 10) + 'px';
+    tip.innerHTML  = '<strong>' + hit.label + '</strong><br><span style="color:#8b949e;font-size:11px">' +
+                     (hit.desc||'').slice(0, 130) + '…</span>';
+  } else { tip.style.display = 'none'; }
+});
+canvas.addEventListener('mouseup', e => {
+  isPanning = false; panStart = null;
+  canvas.classList.remove('dragging');
+  if (!panMoved) {
+    const { x: wx, y: wy } = s2w(e.clientX, e.clientY);
+    const hit = hitNode(wx, wy);
+    if (hit) { highlightId = highlightId === hit.id ? null : hit.id; showInfoPanel(highlightId ? hit : null); }
+    else      { highlightId = null; showInfoPanel(null); }
+  }
+});
+canvas.addEventListener('mouseleave', () => { isPanning = false; panStart = null; });
+canvas.addEventListener('wheel', e => {
+  e.preventDefault();
+  const f = e.deltaY > 0 ? 0.85 : 1.18;
+  T.x = e.clientX - (e.clientX-T.x)*f;
+  T.y = e.clientY - (e.clientY-T.y)*f;
+  T.k = Math.min(4, Math.max(0.15, T.k*f));
+}, { passive: false });
+
+let touchPanStart = null, pinchDist0 = null;
+canvas.addEventListener('touchstart', e => {
+  e.preventDefault();
+  if (e.touches.length === 1) touchPanStart = { x: e.touches[0].clientX-T.x, y: e.touches[0].clientY-T.y };
+  else if (e.touches.length === 2) {
+    const dx = e.touches[0].clientX-e.touches[1].clientX;
+    const dy = e.touches[0].clientY-e.touches[1].clientY;
+    pinchDist0 = Math.sqrt(dx*dx+dy*dy);
+  }
+}, { passive: false });
+canvas.addEventListener('touchmove', e => {
+  e.preventDefault();
+  if (e.touches.length === 1 && touchPanStart) {
+    T.x = e.touches[0].clientX-touchPanStart.x; T.y = e.touches[0].clientY-touchPanStart.y;
+  } else if (e.touches.length === 2 && pinchDist0) {
+    const dx = e.touches[0].clientX-e.touches[1].clientX;
+    const dy = e.touches[0].clientY-e.touches[1].clientY;
+    const d = Math.sqrt(dx*dx+dy*dy), f = d/pinchDist0; pinchDist0 = d;
+    const mx = (e.touches[0].clientX+e.touches[1].clientX)/2;
+    const my = (e.touches[0].clientY+e.touches[1].clientY)/2;
+    T.x = mx-(mx-T.x)*f; T.y = my-(my-T.y)*f;
+    T.k = Math.min(4, Math.max(0.15, T.k*f));
+  }
+}, { passive: false });
+canvas.addEventListener('touchend', () => { touchPanStart = null; pinchDist0 = null; });
+
+// ─────────────────────────────────────────────────────────
+// INFO PANEL
+// ─────────────────────────────────────────────────────────
+function showInfoPanel(node) {
+  const panel = document.getElementById('info');
+  if (!node) { panel.style.display = 'none'; return; }
+  panel.style.display = 'block';
+  document.getElementById('info-name').textContent = node.label;
+  document.getElementById('info-desc').textContent = node.desc || '';
+  const conns = document.getElementById('info-conns');
+  conns.innerHTML = '';
+  const to = edgesTo[node.id]||[], from = edgesFrom[node.id]||[];
+  if (to.length > 0) {
+    const h = document.createElement('div');
+    h.className = 'conn-label'; h.textContent = '← 参照元:'; conns.appendChild(h);
+    to.forEach(e => {
+      const d = document.createElement('div');
+      d.className = 'conn-item';
+      d.textContent = '  ' + e.from + (e.label ? '  (' + e.label + ')' : '');
+      d.addEventListener('click', () => { const n = nodeMap[e.from]; if (n) { highlightId = n.id; showInfoPanel(n); } });
+      conns.appendChild(d);
+    });
+  }
+  if (from.length > 0) {
+    const h = document.createElement('div');
+    h.className = 'conn-label'; h.style.marginTop = '6px'; h.textContent = '→ 参照先:'; conns.appendChild(h);
+    from.forEach(e => {
+      const d = document.createElement('div');
+      d.className = 'conn-item';
+      d.textContent = '  ' + e.to + (e.label ? '  (' + e.label + ')' : '');
+      d.addEventListener('click', () => { const n = nodeMap[e.to]; if (n) { highlightId = n.id; showInfoPanel(n); } });
+      conns.appendChild(d);
+    });
+  }
+}
+
+// ─────────────────────────────────────────────────────────
+// CONTROLS
+// ─────────────────────────────────────────────────────────
+function fitAll() {
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  NODES.forEach(n => {
+    minX = Math.min(minX, n.x-n.w/2); minY = Math.min(minY, n.y-n.h/2);
+    maxX = Math.max(maxX, n.x+n.w/2); maxY = Math.max(maxY, n.y+n.h/2);
+  });
+  const pw = maxX-minX+120, ph = maxY-minY+100;
+  const k = Math.min(W/pw, H/ph, 2);
+  T.k = k;
+  T.x = W/2 - ((minX+maxX)/2)*k;
+  T.y = H/2 - ((minY+maxY)/2)*k;
+}
+document.getElementById('btn-fit').addEventListener('click', fitAll);
+document.getElementById('btn-reset').addEventListener('click', () => { highlightId = null; showInfoPanel(null); fitAll(); });
+window.addEventListener('resize', () => {
+  W = window.innerWidth; H = window.innerHeight;
+  canvas.width = W; canvas.height = H;
+  layoutNodes(); fitAll();
+});
+fitAll();
+</script>
+</body>
+</html>
