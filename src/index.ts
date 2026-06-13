@@ -2627,7 +2627,7 @@ app.get('/auth/github/callback', async (c) => {
     }
 
     const sessionDurationSeconds = getSessionDurationSeconds(sessionDuration);
-    const idleTimeoutSeconds = resolveIdleTimeoutSeconds(c.env.SESSION_IDLE_TIMEOUT_SECONDS, sessionDurationSeconds);
+    const idleTimeoutSeconds = resolveIdleTimeoutSeconds(c.env.SESSION_IDLE_TIMEOUT_SECONDS, sessionDurationSeconds, sessionDurationSeconds);
 
     // JWTにaccess_tokenを常に含める
     // D1への書き込み直後はレプリカが追いついていない場合があり、

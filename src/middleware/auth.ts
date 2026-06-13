@@ -88,6 +88,7 @@ export async function authMiddleware(c: Context<{ Bindings: Bindings; Variables:
     const nowMs = Date.now();
     const cookieHeader = c.req.header('Cookie');
     const lastActivity = parseTimestampMs(getCookieValue(cookieHeader, 'last_activity'));
+    const loginTimestamp = parseTimestampMs(getCookieValue(cookieHeader, 'login_timestamp'));
     const remainingSeconds = Math.max(payload.exp - Math.floor(nowMs / 1000), 0);
     const configuredDuration = getCookieValue(cookieHeader, 'user_session_duration');
     const idleFromSettings = configuredDuration ? getSessionDurationSeconds(configuredDuration) : undefined;
@@ -97,7 +98,11 @@ export async function authMiddleware(c: Context<{ Bindings: Bindings; Variables:
       idleFromSettings
     );
 
-    if (!lastActivity || nowMs - lastActivity > idleTimeoutSeconds * 1000) {
+    // last_activity が消えている場合は login_timestamp をフォールバックに使う。
+    // login_timestamp も存在しない場合のみ即座にセッション切れとする。
+    const effectiveLastActivity = lastActivity ?? loginTimestamp;
+
+    if (!effectiveLastActivity || nowMs - effectiveLastActivity > idleTimeoutSeconds * 1000) {
       const clearHeaders = new Headers();
       clearHeaders.append('Set-Cookie', 'auth_token=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0');
       clearHeaders.append('Set-Cookie', 'last_activity=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0');
