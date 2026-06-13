@@ -705,6 +705,9 @@ INSERT OR REPLACE INTO table_column_keys (table_name, column_name, key_type, fk_
 ('aichat_search_history', 'user_id', 'fk', 'user_sessions');
 INSERT OR REPLACE INTO table_column_keys (table_name, column_name, key_type, fk_target_table) VALUES
 ('aichat_search_history', 'share_id', 'fk', 'ai_chat_shares');`,
+  '0042': `ALTER TABLE aichat_search_log ADD COLUMN deleted_at TEXT;
+ALTER TABLE aichat_search_log ADD COLUMN result_count INTEGER;`,
+  '0043': `ALTER TABLE aichat_search_history ADD COLUMN result_count INTEGER;`,
   '0044': `CREATE TABLE IF NOT EXISTS aichat_search_impressions (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   user_id TEXT NOT NULL,
@@ -3546,17 +3549,29 @@ app.get('/api/aichat/share-keywords', authMiddleware, async (c) => {
   if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
   const shareId = (c.req.query('shareId') ?? '').trim();
   if (!shareId) return jsonUtf8({ error: 'shareId は必須です' }, 400);
-  const rows = await c.env.DB.prepare(
-    `SELECT s.keyword, SUM(s.select_count) AS count,
-            CASE WHEN COUNT(m.category_id) > 0 THEN 1 ELSE 0 END AS is_classified
-     FROM aichat_search_log s
-     LEFT JOIN aichat_keyword_category_map m ON m.keyword = s.keyword AND m.user_id = s.user_id
-     WHERE s.share_id = ? AND s.user_id = ?
-     GROUP BY s.keyword
-     ORDER BY count DESC
-     LIMIT 50`
-  ).bind(shareId, user.sub).all<{ keyword: string; count: number; is_classified: number }>();
-  return jsonUtf8({ keywords: (rows.results ?? []).map((r) => ({ keyword: r.keyword, count: r.count, is_classified: r.is_classified === 1 })) });
+  try {
+    const rows = await c.env.DB.prepare(
+      `SELECT s.keyword, SUM(s.select_count) AS count,
+              CASE WHEN COUNT(m.category_id) > 0 THEN 1 ELSE 0 END AS is_classified
+       FROM aichat_search_log s
+       LEFT JOIN aichat_keyword_category_map m ON m.keyword = s.keyword AND m.user_id = s.user_id
+       WHERE s.share_id = ? AND s.user_id = ?
+       GROUP BY s.keyword
+       ORDER BY count DESC
+       LIMIT 50`
+    ).bind(shareId, user.sub).all<{ keyword: string; count: number; is_classified: number }>();
+    return jsonUtf8({ keywords: (rows.results ?? []).map((r) => ({ keyword: r.keyword, count: r.count, is_classified: r.is_classified === 1 })) });
+  } catch {
+    const rows = await c.env.DB.prepare(
+      `SELECT keyword, SUM(select_count) AS count
+       FROM aichat_search_log
+       WHERE share_id = ? AND user_id = ?
+       GROUP BY keyword
+       ORDER BY count DESC
+       LIMIT 50`
+    ).bind(shareId, user.sub).all<{ keyword: string; count: number }>();
+    return jsonUtf8({ keywords: (rows.results ?? []).map((r) => ({ keyword: r.keyword, count: r.count, is_classified: false })) });
+  }
 });
 
 /**
