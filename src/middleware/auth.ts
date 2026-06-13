@@ -88,7 +88,6 @@ export async function authMiddleware(c: Context<{ Bindings: Bindings; Variables:
     const nowMs = Date.now();
     const cookieHeader = c.req.header('Cookie');
     const lastActivity = parseTimestampMs(getCookieValue(cookieHeader, 'last_activity'));
-    const loginTimestamp = parseTimestampMs(getCookieValue(cookieHeader, 'login_timestamp'));
     const remainingSeconds = Math.max(payload.exp - Math.floor(nowMs / 1000), 0);
     const configuredDuration = getCookieValue(cookieHeader, 'user_session_duration');
     const idleFromSettings = configuredDuration ? getSessionDurationSeconds(configuredDuration) : undefined;
@@ -98,9 +97,16 @@ export async function authMiddleware(c: Context<{ Bindings: Bindings; Variables:
       idleFromSettings
     );
 
-    // last_activity が消えている場合は login_timestamp をフォールバックに使う。
-    // login_timestamp も存在しない場合のみ即座にセッション切れとする。
-    const effectiveLastActivity = lastActivity ?? loginTimestamp;
+    // last_activity Cookie が消えている場合は D1 の last_activity_at をフォールバックに使う
+    let effectiveLastActivity: number | null = lastActivity;
+    if (!effectiveLastActivity && c.env.DB) {
+      const row = await c.env.DB.prepare(
+        'SELECT last_activity_at FROM user_sessions WHERE user_id = ?'
+      ).bind(payload.sub).first<{ last_activity_at: string | null }>();
+      if (row?.last_activity_at) {
+        effectiveLastActivity = new Date(row.last_activity_at).getTime();
+      }
+    }
 
     if (!effectiveLastActivity || nowMs - effectiveLastActivity > idleTimeoutSeconds * 1000) {
       const clearHeaders = new Headers();
@@ -124,6 +130,14 @@ export async function authMiddleware(c: Context<{ Bindings: Bindings; Variables:
 
     idleTimeoutToSet = idleTimeoutSeconds;
     lastActivityToSet = nowMs;
+
+    // D1 に last_activity_at を書き込む（5分スロットリング、fire-and-forget）
+    const D1_WRITE_THRESHOLD_MS = 5 * 60 * 1000;
+    if (c.env.DB && (!lastActivity || nowMs - lastActivity > D1_WRITE_THRESHOLD_MS)) {
+      c.env.DB.prepare(
+        'UPDATE user_sessions SET last_activity_at = ? WHERE user_id = ?'
+      ).bind(new Date(nowMs).toISOString(), payload.sub).run().catch(() => {});
+    }
   }
 
   // Contextに認証ユーザー情報を設定

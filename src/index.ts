@@ -816,6 +816,7 @@ CREATE TABLE IF NOT EXISTS ts_function_callers (
 );
 CREATE INDEX IF NOT EXISTS idx_tfcr_callee ON ts_function_callers(callee_id);
 CREATE INDEX IF NOT EXISTS idx_tfcr_file   ON ts_function_callers(repo_id, caller_file);`,
+  '0054': `ALTER TABLE user_sessions ADD COLUMN last_activity_at TEXT;`,
   'ts-catalog': `CREATE TABLE IF NOT EXISTS ts_repository (
   id            INTEGER PRIMARY KEY AUTOINCREMENT,
   full_name     TEXT NOT NULL UNIQUE,
@@ -2256,6 +2257,7 @@ async function getUserSession(db: D1Database | undefined, userId: string): Promi
   timezone: string;
   sessionDuration: string;
   lastLoginAt: string | null;
+  lastActivityAt: string | null;
   githubAccessToken?: string | null;
   githubGrantedScopes?: string | null;
   recentCommitsCount: number | null;
@@ -2267,11 +2269,12 @@ async function getUserSession(db: D1Database | undefined, userId: string): Promi
 
   try {
     const result = await db.prepare(
-      'SELECT timezone, session_duration, last_login_at, github_access_token, github_granted_scopes, recent_commits_count, toast_duration FROM user_sessions WHERE user_id = ?'
+      'SELECT timezone, session_duration, last_login_at, last_activity_at, github_access_token, github_granted_scopes, recent_commits_count, toast_duration FROM user_sessions WHERE user_id = ?'
     ).bind(userId).first<{
       timezone: string;
       session_duration: string;
       last_login_at: string | null;
+      last_activity_at: string | null;
       github_access_token: string | null;
       github_granted_scopes: string | null;
       recent_commits_count: number | null;
@@ -2286,6 +2289,7 @@ async function getUserSession(db: D1Database | undefined, userId: string): Promi
       timezone: result.timezone,
       sessionDuration: result.session_duration,
       lastLoginAt: result.last_login_at,
+      lastActivityAt: result.last_activity_at ?? null,
       githubAccessToken: result.github_access_token,
       githubGrantedScopes: result.github_granted_scopes,
       recentCommitsCount: result.recent_commits_count ?? null,
