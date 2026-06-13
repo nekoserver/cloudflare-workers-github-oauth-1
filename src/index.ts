@@ -3548,9 +3548,9 @@ app.get('/api/aichat/share-keywords', authMiddleware, async (c) => {
   if (!shareId) return jsonUtf8({ error: 'shareId は必須です' }, 400);
   const rows = await c.env.DB.prepare(
     `SELECT s.keyword, SUM(s.select_count) AS count,
-            CASE WHEN kml.categories IS NOT NULL AND kml.categories != '[]' THEN 1 ELSE 0 END AS is_classified
+            CASE WHEN COUNT(m.category_id) > 0 THEN 1 ELSE 0 END AS is_classified
      FROM aichat_search_log s
-     LEFT JOIN keyword_multi_labels kml ON kml.user_id = s.user_id AND kml.search_query = s.keyword
+     LEFT JOIN aichat_keyword_category_map m ON m.keyword = s.keyword AND m.user_id = s.user_id
      WHERE s.share_id = ? AND s.user_id = ?
      GROUP BY s.keyword
      ORDER BY count DESC
