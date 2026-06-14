@@ -483,6 +483,8 @@ function filterEndpoints(v) {
   _currentFilter = v || '';
   renderSidebar(v, true); // フィルタ中は展開して表示
   if (v) document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  // descパネルが開いていたらハイライトを更新
+  if (openDescGi >= 0) updateDescPanelContent(openDescGi);
 }
 
 // ── 説明パネル ────────────────────────────────────────
@@ -491,11 +493,29 @@ function setDescPanelCookie(gi) {
   document.cookie = 'apis_desc_panel_gi=' + val + ';path=/;max-age=31536000;SameSite=Lax';
 }
 
+function updateDescPanelPosition(gi) {
+  const panel = document.getElementById('desc-panel');
+  const bodyRow = document.getElementById('body-row');
+  if (!panel || !bodyRow) return;
+  const lbl = document.getElementById('lbl-' + gi);
+  const btnEl = lbl ? lbl.querySelector('.expand-btn') : null;
+  const rowRect = bodyRow.getBoundingClientRect();
+  let topOffset = 0;
+  if (btnEl) {
+    const btnRect = btnEl.getBoundingClientRect();
+    topOffset = Math.max(0, btnRect.top - rowRect.top);
+  }
+  panel.style.top = topOffset + 'px';
+  panel.style.maxHeight = (rowRect.height - topOffset) + 'px';
+}
+
 function updateDescPanelContent(gi) {
   const g = APIS[gi];
   if (!g) return;
   openDescGi = gi;
   setDescPanelCookie(gi);
+
+  updateDescPanelPosition(gi);
 
   document.querySelectorAll('.expand-btn').forEach(b => b.classList.remove('open'));
   const lbl = document.getElementById('lbl-' + gi);
@@ -517,16 +537,6 @@ function toggleDescPanel(gi, g, btnEl) {
   if (openDescGi === gi && panel.classList.contains('open')) {
     closeDescPanel();
     return;
-  }
-
-  // パネルの上端をクリックされた▶ボタンのY座標に合わせる
-  const bodyRow = document.getElementById('body-row');
-  if (btnEl && bodyRow) {
-    const btnRect = btnEl.getBoundingClientRect();
-    const rowRect = bodyRow.getBoundingClientRect();
-    const topOffset = Math.max(0, btnRect.top - rowRect.top);
-    panel.style.top = topOffset + 'px';
-    panel.style.maxHeight = (rowRect.height - topOffset) + 'px';
   }
 
   updateDescPanelContent(gi);
@@ -673,13 +683,8 @@ renderSidebar(null, _sidebarOpen === 'on');
   const raw = (document.cookie.split(';').find(c => c.trim().startsWith('apis_desc_panel_gi='))?.split('=')[1] ?? 'off').trim();
   const gi = parseInt(raw, 10);
   if (!isNaN(gi) && gi >= 0 && APIS[gi]) {
-    const panel = document.getElementById('desc-panel');
-    const bodyRow = document.getElementById('body-row');
-    if (panel && bodyRow) {
-      panel.style.top = '0px';
-      panel.style.maxHeight = bodyRow.getBoundingClientRect().height + 'px';
-    }
     updateDescPanelContent(gi);
+    const panel = document.getElementById('desc-panel');
     if (panel) panel.classList.add('open');
   }
 })();
