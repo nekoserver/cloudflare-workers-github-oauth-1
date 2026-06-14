@@ -52,10 +52,37 @@ body{display:flex;flex-direction:column;height:100vh;height:100dvh;overflow:hidd
   overflow:hidden;background:var(--surface);display:flex;flex-direction:column;
 }
 #sidebar-search{padding:7px 8px;border-bottom:1px solid var(--border);flex-shrink:0;}
-#sidebar-search input{
-  width:100%;padding:4px 8px;border:1px solid var(--border);border-radius:var(--radius);
-  background:var(--bg);color:var(--text);font-size:11px;
+#sidebar-search-row{display:flex;align-items:center;gap:4px;}
+#search-input{flex:1;padding:4px 8px;border:1px solid var(--border);border-radius:var(--radius);
+  background:var(--bg);color:var(--text);font-size:11px;min-width:0;}
+#search-save-btn{
+  display:none;flex-shrink:0;background:none;border:none;cursor:pointer;
+  font-size:14px;padding:2px 3px;line-height:1;border-radius:3px;
+  transition:background .1s;
 }
+#search-save-btn:hover{background:var(--bg);}
+#search-save-modal-overlay{
+  display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:1000;
+  align-items:center;justify-content:center;
+}
+#search-save-modal-overlay.open{display:flex;}
+#search-save-modal{
+  background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);
+  padding:20px 24px;min-width:300px;max-width:420px;width:90%;box-shadow:0 8px 32px rgba(0,0,0,.18);
+}
+#search-save-modal h3{margin:0 0 14px;font-size:14px;color:var(--text);}
+#search-save-modal input{
+  width:100%;box-sizing:border-box;padding:6px 10px;font-size:13px;
+  border:1px solid var(--border);border-radius:var(--radius);background:var(--bg);color:var(--text);
+  margin-bottom:12px;
+}
+#search-save-stats{font-size:12px;color:var(--muted);margin-bottom:16px;line-height:1.7;}
+#search-save-modal-btns{display:flex;gap:8px;justify-content:flex-end;}
+#search-save-modal-btns button{
+  padding:6px 16px;font-size:12px;border-radius:var(--radius);cursor:pointer;border:none;
+}
+#search-save-cancel{background:var(--bg);color:var(--text);border:1px solid var(--border) !important;}
+#search-save-submit{background:var(--link);color:#fff;}
 #groups{flex:1;overflow-y:auto;}
 .group-block{border-bottom:1px solid var(--border);}
 .group-label{
@@ -161,7 +188,10 @@ mark.hl-match{
 <div id="body-row">
   <div id="sidebar">
     <div id="sidebar-search">
-      <input id="search-input" placeholder="エンドポイントを検索…" oninput="filterEndpoints(this.value)">
+      <div id="sidebar-search-row">
+        <input id="search-input" placeholder="エンドポイントを検索…" oninput="filterEndpoints(this.value)">
+        <button id="search-save-btn" title="検索キーワードを登録" onclick="openSearchSaveModal()">✍️</button>
+      </div>
     </div>
     <div id="groups"></div>
   </div>
@@ -352,6 +382,7 @@ let openDescGi = -1; // 説明パネルが開いているグループ index
 let _accordionMode = false; // アコーディオンモード: ONのとき非フォーカスセクションを自動で閉じる
 let _currentFilter = ''; // 現在の検索キーワード（descパネルのハイライトに使用）
 let _descMode = true; // trueのとき日本語説明を表示（▶ボタン非表示）
+let _searchHits = { total: 0, sections: [] }; // 現在の検索ヒット情報
 
 // ── 他グループを閉じるヘルパー ────────────────────────
 function collapseOtherGroups(openGi) {
@@ -497,18 +528,77 @@ function filterEndpoints(v) {
   if (v) document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
   // descパネルが開いていたらハイライトを更新
   if (openDescGi >= 0) updateDescPanelContent(openDescGi);
-  // ナビバーのヒットセクションを中抜き表示
+  // ナビバーのヒットセクションを中抜き表示 & ヒット情報を集計
   const fl = (v || '').toLowerCase();
-  APIS.forEach((g, i) => {
+  var total = 0;
+  var sections = [];
+  APIS.forEach(function(g, i) {
     const btn = document.getElementById('navbtn-' + i);
-    if (!btn) return;
-    const hits = fl && g.endpoints.some(ep =>
-      ep.path.toLowerCase().includes(fl) ||
-      ep.method.toLowerCase().includes(fl) ||
-      ep.desc.toLowerCase().includes(fl)
-    );
-    btn.classList.toggle('has-match', !!hits);
+    var cnt = 0;
+    if (fl) {
+      g.endpoints.forEach(function(ep) {
+        if (ep.path.toLowerCase().includes(fl) ||
+            ep.method.toLowerCase().includes(fl) ||
+            ep.desc.toLowerCase().includes(fl)) cnt++;
+      });
+    }
+    if (btn) btn.classList.toggle('has-match', cnt > 0);
+    if (cnt > 0) { total += cnt; sections.push({ name: g.group, count: cnt }); }
   });
+  _searchHits = { total: total, sections: sections };
+  var saveBtn = document.getElementById('search-save-btn');
+  if (saveBtn) saveBtn.style.display = (fl && total > 0) ? '' : 'none';
+}
+
+function openSearchSaveModal() {
+  var overlay = document.getElementById('search-save-modal-overlay');
+  var input = document.getElementById('search-save-input');
+  var stats = document.getElementById('search-save-stats');
+  if (!overlay) return;
+  input.value = _currentFilter;
+  var lines = _currentFilter
+    ? [_currentFilter + ' の検索結果: ' + _searchHits.total + '件（' + _searchHits.sections.length + 'セクション）']
+    : [];
+  _searchHits.sections.forEach(function(s) {
+    lines.push('・' + s.name + ': ' + s.count + '件');
+  });
+  stats.textContent = lines.join('\n');
+  stats.style.whiteSpace = 'pre-line';
+  overlay.classList.add('open');
+  setTimeout(function() { input.focus(); input.select(); }, 50);
+}
+
+function closeSearchSaveModal(e) {
+  if (e && e.target !== document.getElementById('search-save-modal-overlay')) return;
+  document.getElementById('search-save-modal-overlay').classList.remove('open');
+}
+
+async function submitSearchKeyword() {
+  var input = document.getElementById('search-save-input');
+  var kw = (input.value || '').trim();
+  if (!kw) { input.focus(); return; }
+  var btn = document.getElementById('search-save-submit');
+  btn.disabled = true;
+  btn.textContent = '登録中…';
+  try {
+    var res = await fetch('/api/search-keywords', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ keyword: kw, totalCount: _searchHits.total, sections: _searchHits.sections })
+    });
+    if (!res.ok) throw new Error('failed');
+    btn.textContent = '登録済み ✓';
+    setTimeout(function() {
+      document.getElementById('search-save-modal-overlay').classList.remove('open');
+      btn.disabled = false;
+      btn.textContent = '登録する';
+    }, 1000);
+  } catch(e) {
+    alert('登録に失敗しました');
+    btn.disabled = false;
+    btn.textContent = '登録する';
+  }
 }
 
 // ── 説明パネル ────────────────────────────────────────
@@ -747,6 +837,17 @@ renderSidebar(null, _sidebarOpen === 'on');
   }
 })();
 </script>
+<div id="search-save-modal-overlay" onclick="closeSearchSaveModal(event)">
+  <div id="search-save-modal">
+    <h3>検索キーワードを登録</h3>
+    <input id="search-save-input" type="text" placeholder="キーワード">
+    <div id="search-save-stats"></div>
+    <div id="search-save-modal-btns">
+      <button id="search-save-cancel" onclick="closeSearchSaveModal()">キャンセル</button>
+      <button id="search-save-submit" onclick="submitSearchKeyword()">登録する</button>
+    </div>
+  </div>
+</div>
 </body>
 </html>`;
 }

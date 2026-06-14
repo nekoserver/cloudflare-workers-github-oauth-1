@@ -127,6 +127,8 @@ const STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
   { name: 'ts_function_callers',     migration: '0053',       description: '関数カタログ: 関数呼び出し元マッピング',   syncPolicy: 'manual' },
   { name: 'aichat_rate_limit',       migration: '0055',       description: 'AIチャットレートリミットカウンタ',            syncPolicy: 'auto' },
   { name: 'api_endpoint_stats',      migration: '0056',       description: 'APIエンドポイント別アクセス集計',              syncPolicy: 'auto' },
+  { name: 'api_search_keywords',     migration: '0057',       description: 'APIページ検索キーワード登録',                   syncPolicy: 'manual' },
+  { name: 'api_search_keyword_sections', migration: '0058',   description: 'APIページ検索キーワードのセクション別件数',       syncPolicy: 'manual' },
 ];
 
 const REQUIRED_STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
@@ -838,6 +840,21 @@ CREATE INDEX IF NOT EXISTS idx_aichat_rl_window ON aichat_rate_limit(window_key)
   PRIMARY KEY (endpoint, status_code)
 );
 CREATE INDEX IF NOT EXISTS idx_api_endpoint_stats_endpoint ON api_endpoint_stats(endpoint);`,
+  '0057': `CREATE TABLE IF NOT EXISTS api_search_keywords (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  keyword TEXT NOT NULL,
+  total_count INTEGER NOT NULL DEFAULT 0,
+  section_count INTEGER NOT NULL DEFAULT 0,
+  recorded_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_api_search_keywords_keyword ON api_search_keywords(keyword);`,
+  '0058': `CREATE TABLE IF NOT EXISTS api_search_keyword_sections (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  keyword_id INTEGER NOT NULL REFERENCES api_search_keywords(id),
+  section_name TEXT NOT NULL,
+  count INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_api_search_keyword_sections_keyword_id ON api_search_keyword_sections(keyword_id);`,
 
   'ts-catalog': `CREATE TABLE IF NOT EXISTS ts_repository (
   id            INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1153,7 +1170,9 @@ export const TABLE_COLUMN_KEYS: Record<string, ColumnKeyInfo> = {
   ts_commit_quality:      { id: 'pk', repo_id: 'pk+fk', commit_hash: 'pk+fk', granularity_score: 'idx' },
   ts_function_callers:    { id: 'pk', repo_id: 'fk', callee_id: 'fk', caller_file: 'idx' },
   aichat_rate_limit:      { user_id: 'pk+fk', window_key: 'pk+idx' },
-  api_endpoint_stats:     { endpoint: 'pk+idx', status_code: 'pk' },
+  api_endpoint_stats:         { endpoint: 'pk+idx', status_code: 'pk' },
+  api_search_keywords:        { id: 'pk', keyword: 'idx' },
+  api_search_keyword_sections: { id: 'pk', keyword_id: 'fk+idx', section_name: '' },
 };
 
 export function getColumnKeyType(tableName: string, columnName: string): ColumnKeyType {
@@ -1218,6 +1237,8 @@ export const TABLE_GROUP_MAP: Record<string, string> = {
   aichat_category_groups: 'ai',
   aichat_rate_limit: 'ai',
   api_endpoint_stats: 'system',
+  api_search_keywords: 'system',
+  api_search_keyword_sections: 'system',
   keyword_category_groups: 'search',
   keyword_multi_labels: 'search',
   ts_repository:          'ts-catalog',
@@ -1390,6 +1411,7 @@ export const COLUMN_FK_TARGETS: Record<string, Record<string, string>> = {
   ts_commit_function_map: { repo_id: 'ts_repository', commit_hash: 'ts_commit_log' },
   ts_function_impact:     { repo_id: 'ts_repository', commit_hash: 'ts_commit_log' },
   ts_commit_quality:      { repo_id: 'ts_repository', commit_hash: 'ts_commit_log' },
+  api_search_keyword_sections: { keyword_id: 'api_search_keywords' },
 };
 
 /**
@@ -8694,6 +8716,42 @@ app.post('/api/settings/apis-nav-flash', authMiddleware, async (c) => {
       error: error instanceof Error ? error.message : 'Unknown error',
     });
     return c.json({ error: 'ナビバー点滅設定の変更に失敗しました' }, 500);
+  }
+});
+
+app.post('/api/search-keywords', authMiddleware, async (c) => {
+  try {
+    const { keyword, totalCount, sections } = await c.req.json() as {
+      keyword: string;
+      totalCount: number;
+      sections: { name: string; count: number }[];
+    };
+    if (!keyword || typeof totalCount !== 'number' || !Array.isArray(sections)) {
+      return c.json({ error: '無効なリクエストです' }, 400);
+    }
+    if (!c.env.DB) return c.json({ error: 'DBが利用できません' }, 503);
+    const hitSections = sections.filter(s => s.count > 0);
+    const result = await c.env.DB.prepare(
+      `INSERT INTO api_search_keywords (keyword, total_count, section_count, recorded_at)
+       VALUES (?, ?, ?, datetime('now'))`
+    ).bind(keyword.trim(), totalCount, hitSections.length).run();
+    const keywordId = result.meta.last_row_id;
+    if (hitSections.length > 0) {
+      const stmts = hitSections.map(s =>
+        c.env.DB!.prepare(
+          `INSERT INTO api_search_keyword_sections (keyword_id, section_name, count) VALUES (?, ?, ?)`
+        ).bind(keywordId, s.name, s.count)
+      );
+      await c.env.DB.batch(stmts);
+    }
+    return c.json({ id: keywordId, keyword: keyword.trim(), totalCount, sectionCount: hitSections.length }, 201);
+  } catch (error) {
+    const user = c.get('user');
+    logger.error('Search keyword save error', {
+      userId: user?.sub,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    return c.json({ error: '検索キーワードの登録に失敗しました' }, 500);
   }
 });
 
