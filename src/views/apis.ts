@@ -39,6 +39,8 @@ body{display:flex;flex-direction:column;height:100vh;height:100dvh;overflow:hidd
 }
 .nav-btn:hover{background:var(--bg);color:var(--text);}
 .nav-btn.active{background:var(--link);color:#fff;}
+.nav-btn.has-match{background:none;color:var(--link);box-shadow:inset 0 0 0 1.5px var(--link);}
+.nav-btn.active.has-match{background:var(--link);color:#fff;box-shadow:none;}
 
 /* ── body row ── */
 #body-row{display:flex;flex:1;overflow:hidden;position:relative;}
@@ -485,6 +487,18 @@ function filterEndpoints(v) {
   if (v) document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
   // descパネルが開いていたらハイライトを更新
   if (openDescGi >= 0) updateDescPanelContent(openDescGi);
+  // ナビバーのヒットセクションを中抜き表示
+  const fl = (v || '').toLowerCase();
+  APIS.forEach((g, i) => {
+    const btn = document.getElementById('navbtn-' + i);
+    if (!btn) return;
+    const hits = fl && g.endpoints.some(ep =>
+      ep.path.toLowerCase().includes(fl) ||
+      ep.method.toLowerCase().includes(fl) ||
+      ep.desc.toLowerCase().includes(fl)
+    );
+    btn.classList.toggle('has-match', !!hits);
+  });
 }
 
 // ── 説明パネル ────────────────────────────────────────
