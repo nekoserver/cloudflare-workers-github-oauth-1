@@ -55,12 +55,15 @@ body{display:flex;flex-direction:column;height:100vh;height:100dvh;overflow:hidd
 #sidebar-search-row{display:flex;align-items:center;gap:4px;}
 #search-input{flex:1;padding:4px 8px;border:1px solid var(--border);border-radius:var(--radius);
   background:var(--bg);color:var(--text);font-size:11px;min-width:0;}
-#search-save-btn{
-  visibility:hidden;flex-shrink:0;background:none;border:none;cursor:pointer;
+#search-save-btn,#search-history-btn{
+  flex-shrink:0;background:none;border:none;cursor:pointer;
   font-size:14px;padding:2px 3px;line-height:1;border-radius:3px;
   transition:background .1s;
 }
-#search-save-btn:hover{background:var(--bg);}
+#search-save-btn{visibility:hidden;position:absolute;}
+#search-history-btn{visibility:visible;}
+#search-save-btn:hover,#search-history-btn:hover{background:var(--bg);}
+#search-btn-wrap{position:relative;flex-shrink:0;width:22px;height:22px;display:flex;align-items:center;justify-content:center;}
 #search-save-modal-overlay{
   display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:1000;
   align-items:center;justify-content:center;
@@ -190,7 +193,10 @@ mark.hl-match{
     <div id="sidebar-search">
       <div id="sidebar-search-row">
         <input id="search-input" placeholder="エンドポイントを検索…" oninput="filterEndpoints(this.value)">
-        <button id="search-save-btn" title="検索キーワードを登録" onclick="openSearchSaveModal()">✍️</button>
+        <span id="search-btn-wrap">
+          <button id="search-save-btn" title="検索キーワードを登録" onclick="openSearchSaveModal()">✍️</button>
+          <button id="search-history-btn" title="登録キーワード履歴" onclick="openSearchHistoryModal()">🗒️</button>
+        </span>
       </div>
     </div>
     <div id="groups"></div>
@@ -546,8 +552,25 @@ function filterEndpoints(v) {
     if (cnt > 0) { total += cnt; sections.push({ name: g.group, count: cnt }); }
   });
   _searchHits = { total: total, sections: sections };
+  setSearchBtnMode(fl && total > 0 ? 'save' : 'history');
+}
+
+function setSearchBtnMode(mode) {
   var saveBtn = document.getElementById('search-save-btn');
-  if (saveBtn) saveBtn.style.visibility = (fl && total > 0) ? 'visible' : 'hidden';
+  var histBtn = document.getElementById('search-history-btn');
+  if (!saveBtn || !histBtn) return;
+  if (mode === 'save') {
+    saveBtn.style.visibility = 'visible';
+    histBtn.style.visibility = 'hidden';
+  } else {
+    saveBtn.style.visibility = 'hidden';
+    histBtn.style.visibility = 'visible';
+  }
+}
+
+function resetSearch() {
+  var inp = document.getElementById('search-input');
+  if (inp) { inp.value = ''; filterEndpoints(''); }
 }
 
 function openSearchSaveModal() {
@@ -571,6 +594,7 @@ function openSearchSaveModal() {
 function closeSearchSaveModal(e) {
   if (e && e.target !== document.getElementById('search-save-modal-overlay')) return;
   document.getElementById('search-save-modal-overlay').classList.remove('open');
+  resetSearch();
 }
 
 async function submitSearchKeyword() {
@@ -593,12 +617,56 @@ async function submitSearchKeyword() {
       document.getElementById('search-save-modal-overlay').classList.remove('open');
       btn.disabled = false;
       btn.textContent = '登録する';
+      resetSearch();
     }, 1000);
   } catch(e) {
     alert('登録に失敗しました');
     btn.disabled = false;
     btn.textContent = '登録する';
   }
+}
+
+async function openSearchHistoryModal() {
+  var overlay = document.getElementById('search-history-modal-overlay');
+  var body = document.getElementById('search-history-body');
+  if (!overlay || !body) return;
+  body.innerHTML = '<div style="color:var(--muted);padding:12px 0;">読み込み中…</div>';
+  overlay.style.display = 'flex';
+  try {
+    var res = await fetch('/api/search-keywords', { credentials: 'include' });
+    if (!res.ok) throw new Error('failed');
+    var data = await res.json();
+    var rows = data.keywords || [];
+    if (!rows.length) {
+      body.innerHTML = '<div style="color:var(--muted);padding:12px 0;">登録キーワードはありません</div>';
+      return;
+    }
+    var html = '<table style="width:100%;border-collapse:collapse;font-size:12px;">' +
+      '<thead><tr style="border-bottom:2px solid var(--border);">' +
+      '<th style="text-align:left;padding:4px 8px;color:var(--muted);font-weight:600;">キーワード</th>' +
+      '<th style="text-align:right;padding:4px 8px;color:var(--muted);font-weight:600;">件数</th>' +
+      '<th style="text-align:right;padding:4px 8px;color:var(--muted);font-weight:600;">セクション数</th>' +
+      '<th style="text-align:right;padding:4px 8px;color:var(--muted);font-weight:600;">登録日時</th>' +
+      '</tr></thead><tbody>';
+    rows.forEach(function(r) {
+      var dt = r.recorded_at ? r.recorded_at.replace('T', ' ').slice(0, 16) : '';
+      html += '<tr style="border-bottom:1px solid var(--border);">' +
+        '<td style="padding:5px 8px;">' + esc(r.keyword) + '</td>' +
+        '<td style="padding:5px 8px;text-align:right;">' + r.total_count + '</td>' +
+        '<td style="padding:5px 8px;text-align:right;">' + r.section_count + '</td>' +
+        '<td style="padding:5px 8px;text-align:right;color:var(--muted);">' + esc(dt) + '</td>' +
+        '</tr>';
+    });
+    html += '</tbody></table>';
+    body.innerHTML = html;
+  } catch(e) {
+    body.innerHTML = '<div style="color:var(--danger,#cf222e);padding:12px 0;">読み込みに失敗しました</div>';
+  }
+}
+
+function closeSearchHistoryModal(e) {
+  if (e && e.target !== document.getElementById('search-history-modal-overlay')) return;
+  document.getElementById('search-history-modal-overlay').style.display = 'none';
 }
 
 // ── 説明パネル ────────────────────────────────────────
@@ -837,6 +905,15 @@ renderSidebar(null, _sidebarOpen === 'on');
   }
 })();
 </script>
+<div id="search-history-modal-overlay" onclick="closeSearchHistoryModal(event)" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:1001;align-items:center;justify-content:center;">
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:20px 24px;min-width:360px;max-width:560px;width:92%;max-height:80vh;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,.18);">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+      <h3 style="margin:0;font-size:14px;color:var(--text);">登録キーワード履歴（最新20件）</h3>
+      <button onclick="closeSearchHistoryModal()" style="background:none;border:none;cursor:pointer;font-size:16px;color:var(--muted);padding:2px 6px;">✕</button>
+    </div>
+    <div id="search-history-body" style="overflow-y:auto;flex:1;font-size:12px;"></div>
+  </div>
+</div>
 <div id="search-save-modal-overlay" onclick="closeSearchSaveModal(event)">
   <div id="search-save-modal">
     <h3>検索キーワードを登録</h3>
