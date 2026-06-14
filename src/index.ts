@@ -126,6 +126,7 @@ const STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
   { name: 'ts_commit_quality',       migration: 'ts-catalog', description: '関数カタログ: コミット品質評価',           syncPolicy: 'manual' },
   { name: 'ts_function_callers',     migration: '0053',       description: '関数カタログ: 関数呼び出し元マッピング',   syncPolicy: 'manual' },
   { name: 'aichat_rate_limit',       migration: '0055',       description: 'AIチャットレートリミットカウンタ',            syncPolicy: 'auto' },
+  { name: 'api_endpoint_stats',      migration: '0056',       description: 'APIエンドポイント別アクセス集計',              syncPolicy: 'auto' },
 ];
 
 const REQUIRED_STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
@@ -829,6 +830,14 @@ CREATE INDEX IF NOT EXISTS idx_tfcr_file   ON ts_function_callers(repo_id, calle
   PRIMARY KEY (user_id, window_key)
 );
 CREATE INDEX IF NOT EXISTS idx_aichat_rl_window ON aichat_rate_limit(window_key);`,
+  '0056': `CREATE TABLE IF NOT EXISTS api_endpoint_stats (
+  endpoint TEXT NOT NULL,
+  status_code INTEGER NOT NULL DEFAULT 0,
+  count INTEGER NOT NULL DEFAULT 1,
+  last_called_at TEXT NOT NULL DEFAULT (datetime('now')),
+  PRIMARY KEY (endpoint, status_code)
+);
+CREATE INDEX IF NOT EXISTS idx_api_endpoint_stats_endpoint ON api_endpoint_stats(endpoint);`,
 
   'ts-catalog': `CREATE TABLE IF NOT EXISTS ts_repository (
   id            INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1144,6 +1153,7 @@ export const TABLE_COLUMN_KEYS: Record<string, ColumnKeyInfo> = {
   ts_commit_quality:      { id: 'pk', repo_id: 'pk+fk', commit_hash: 'pk+fk', granularity_score: 'idx' },
   ts_function_callers:    { id: 'pk', repo_id: 'fk', callee_id: 'fk', caller_file: 'idx' },
   aichat_rate_limit:      { user_id: 'pk+fk', window_key: 'pk+idx' },
+  api_endpoint_stats:     { endpoint: 'pk+idx', status_code: 'pk' },
 };
 
 export function getColumnKeyType(tableName: string, columnName: string): ColumnKeyType {
@@ -1207,6 +1217,7 @@ export const TABLE_GROUP_MAP: Record<string, string> = {
   aichat_model_colors: 'ai',
   aichat_category_groups: 'ai',
   aichat_rate_limit: 'ai',
+  api_endpoint_stats: 'system',
   keyword_category_groups: 'search',
   keyword_multi_labels: 'search',
   ts_repository:          'ts-catalog',
@@ -1815,6 +1826,20 @@ async function checkAiChatRateLimit(db: D1Database | undefined, userId: string):
   } catch {
     return false;
   }
+}
+
+async function recordApiAccess(db: D1Database | undefined, method: string, routePath: string, statusCode: number): Promise<void> {
+  if (!db || !routePath) return;
+  const endpoint = `${method} ${routePath}`;
+  try {
+    await db.prepare(
+      `INSERT INTO api_endpoint_stats (endpoint, status_code, count, last_called_at)
+       VALUES (?, ?, 1, datetime('now'))
+       ON CONFLICT(endpoint, status_code) DO UPDATE SET
+         count = count + 1,
+         last_called_at = datetime('now')`
+    ).bind(endpoint, statusCode).run();
+  } catch {}
 }
 
 interface ClassifyResult {
@@ -2449,6 +2474,18 @@ app.use('/*', async (c, next) => {
   headers.set('Referrer-Policy', 'no-referrer');
   headers.set('Permissions-Policy', 'geolocation=(), microphone=(), camera=()');
   headers.set('Strict-Transport-Security', 'max-age=63072000; includeSubDomains; preload');
+});
+
+// /api/* へのリクエストをすべてエンドポイント別に集計する（成否含む）
+// 新規APIルートを追加しても自動的に記録される
+app.use('/api/*', async (c, next) => {
+  await next();
+  try {
+    const ctx = c.executionCtx;
+    if (ctx?.waitUntil && c.env.DB) {
+      ctx.waitUntil(recordApiAccess(c.env.DB, c.req.method, c.req.routePath, c.res.status));
+    }
+  } catch {}
 });
 
 // =====================================================
