@@ -56,7 +56,7 @@ body{display:flex;flex-direction:column;height:100vh;height:100dvh;overflow:hidd
 #search-input{flex:1;padding:4px 8px;border:1px solid var(--border);border-radius:var(--radius);
   background:var(--bg);color:var(--text);font-size:11px;min-width:0;}
 #search-save-btn{
-  display:none;flex-shrink:0;background:none;border:none;cursor:pointer;
+  visibility:hidden;flex-shrink:0;background:none;border:none;cursor:pointer;
   font-size:14px;padding:2px 3px;line-height:1;border-radius:3px;
   transition:background .1s;
 }
@@ -547,7 +547,7 @@ function filterEndpoints(v) {
   });
   _searchHits = { total: total, sections: sections };
   var saveBtn = document.getElementById('search-save-btn');
-  if (saveBtn) saveBtn.style.display = (fl && total > 0) ? '' : 'none';
+  if (saveBtn) saveBtn.style.visibility = (fl && total > 0) ? 'visible' : 'hidden';
 }
 
 function openSearchSaveModal() {
