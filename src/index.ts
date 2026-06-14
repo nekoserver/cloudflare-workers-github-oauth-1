@@ -8731,7 +8731,7 @@ app.get('/api/search-keywords', authMiddleware, async (c) => {
   try {
     if (!c.env.DB) return c.json({ error: 'DBが利用できません' }, 503);
     const rows = await c.env.DB.prepare(
-      `SELECT id, keyword, total_count, section_count, recorded_at FROM api_search_keywords ORDER BY recorded_at DESC LIMIT 20`
+      `SELECT id, keyword, total_count, section_count, recorded_at FROM api_search_keywords ORDER BY total_count DESC, recorded_at DESC LIMIT 20`
     ).all();
     return c.json({ keywords: rows.results ?? [] });
   } catch (error) {
