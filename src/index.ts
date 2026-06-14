@@ -24,6 +24,7 @@ import { renderColumnStatsHtml } from './views/columnStats';
 import { getFunctionChangelogPage, type FunctionChangeRow, type CatalogFunctionRow } from './views/functionChangelog';
 import { getKwArchitecturePage } from './views/kw-architecture';
 import { getKwDrilldownPage } from './views/kw-drilldown';
+import { getCfDashboardPage } from './views/cf-dashboard';
 
 import { computeColumnRelationStats, verifyColumnStats, type TableSchema, type Relation } from './utils/columnRelationStats';
 import { ensureDefaultWorkspace, getCurrentWorkspace, getUserWorkspaces, switchWorkspace } from './utils/workspace';
@@ -47,6 +48,7 @@ import { buildAiMessages, ALLOWED_MODES, type SystemPromptMode } from './utils/b
 import { stripThinkTags } from './utils/stripThinkTags';
 import { AICHAT_MODEL_MAX_TOKENS, getModelRunParams } from './utils/aichatModelConfig';
 import { extractFunctionSource } from './utils/extractFunctionSource';
+import { listD1Databases, getD1Tables } from './utils/cloudflareApi';
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -4130,6 +4132,51 @@ app.get('/kw-architecture', authMiddleware, async (c) => {
     return c.html(getSessionExpiredPage(), 403);
   }
   return c.html(getKwArchitecturePage());
+});
+
+/**
+ * Cloudflare D1 ダッシュボード API
+ * D1 データベース一覧と各テーブルの行数を返す
+ */
+app.get('/api/cf-dashboard/d1', authMiddleware, async (c) => {
+  const token = c.env.CLOUDFLARE_API_TOKEN;
+  const accountId = c.env.CLOUDFLARE_ACCOUNT_ID;
+  if (!token || !accountId) {
+    return jsonUtf8({ error: 'CLOUDFLARE_API_TOKEN または CLOUDFLARE_ACCOUNT_ID が未設定です', configured: false }, 200);
+  }
+  try {
+    const databases = await listD1Databases(token, accountId);
+    return jsonUtf8({ configured: true, databases });
+  } catch (err) {
+    return jsonUtf8({ error: err instanceof Error ? err.message : 'Unknown error', configured: true }, 500);
+  }
+});
+
+app.get('/api/cf-dashboard/d1/:dbId/tables', authMiddleware, async (c) => {
+  const token = c.env.CLOUDFLARE_API_TOKEN;
+  const accountId = c.env.CLOUDFLARE_ACCOUNT_ID;
+  if (!token || !accountId) {
+    return jsonUtf8({ error: 'CLOUDFLARE_API_TOKEN または CLOUDFLARE_ACCOUNT_ID が未設定です' }, 503);
+  }
+  const dbId = c.req.param('dbId');
+  try {
+    const tables = await getD1Tables(token, accountId, dbId);
+    return jsonUtf8({ tables });
+  } catch (err) {
+    return jsonUtf8({ error: err instanceof Error ? err.message : 'Unknown error' }, 500);
+  }
+});
+
+/**
+ * Cloudflare D1 ダッシュボードページ（認証が必要）
+ */
+app.get('/cf-dashboard', authMiddleware, async (c) => {
+  const user = c.get('user');
+  const userSession = await getUserSession(c.env.DB, user.sub);
+  if (!userSession) {
+    return c.html(getSessionExpiredPage(), 403);
+  }
+  return c.html(getCfDashboardPage());
 });
 
 /**
