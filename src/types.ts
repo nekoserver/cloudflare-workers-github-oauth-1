@@ -25,6 +25,8 @@ export type Bindings = {
   AI?: Ai;
   AI_MODEL?: string;
   AI_CHAT_MODEL?: string;
+  CLOUDFLARE_API_TOKEN?: string;
+  CLOUDFLARE_ACCOUNT_ID?: string;
 };
 
 /** Hono コンテキスト変数 */

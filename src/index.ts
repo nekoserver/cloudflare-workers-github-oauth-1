@@ -24,6 +24,7 @@ import { renderColumnStatsHtml } from './views/columnStats';
 import { getFunctionChangelogPage, type FunctionChangeRow, type CatalogFunctionRow } from './views/functionChangelog';
 import { getKwArchitecturePage } from './views/kw-architecture';
 import { getKwDrilldownPage } from './views/kw-drilldown';
+import { getCfDashboardPage } from './views/cf-dashboard';
 
 import { computeColumnRelationStats, verifyColumnStats, type TableSchema, type Relation } from './utils/columnRelationStats';
 import { ensureDefaultWorkspace, getCurrentWorkspace, getUserWorkspaces, switchWorkspace } from './utils/workspace';
@@ -47,6 +48,7 @@ import { buildAiMessages, ALLOWED_MODES, type SystemPromptMode } from './utils/b
 import { stripThinkTags } from './utils/stripThinkTags';
 import { AICHAT_MODEL_MAX_TOKENS, getModelRunParams } from './utils/aichatModelConfig';
 import { extractFunctionSource } from './utils/extractFunctionSource';
+import { listD1Databases, getD1Tables } from './utils/cloudflareApi';
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -122,7 +124,7 @@ const STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
   { name: 'ts_function_impact',      migration: 'ts-catalog', description: '関数カタログ: 変更インパクト評価',         syncPolicy: 'manual' },
   { name: 'ts_commit_quality',       migration: 'ts-catalog', description: '関数カタログ: コミット品質評価',           syncPolicy: 'manual' },
   { name: 'ts_function_callers',     migration: '0053',       description: '関数カタログ: 関数呼び出し元マッピング',   syncPolicy: 'manual' },
-  { name: 'aichat_response_keyword_hits', migration: '0055', description: 'AI応答×キーワードヒットログ', syncPolicy: 'auto' },
+  { name: 'aichat_rate_limit',       migration: '0055',       description: 'AIチャットレートリミットカウンタ',            syncPolicy: 'auto' },
 ];
 
 const REQUIRED_STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
@@ -818,27 +820,15 @@ CREATE TABLE IF NOT EXISTS ts_function_callers (
 CREATE INDEX IF NOT EXISTS idx_tfcr_callee ON ts_function_callers(callee_id);
 CREATE INDEX IF NOT EXISTS idx_tfcr_file   ON ts_function_callers(repo_id, caller_file);`,
   '0054': `ALTER TABLE user_sessions ADD COLUMN last_activity_at TEXT;`,
-  '0055': `CREATE TABLE IF NOT EXISTS aichat_response_keyword_hits (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  '0055': `CREATE TABLE IF NOT EXISTS aichat_rate_limit (
   user_id TEXT NOT NULL,
-  share_id TEXT NOT NULL,
-  keyword TEXT NOT NULL,
-  match_count INTEGER NOT NULL DEFAULT 1,
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  UNIQUE(user_id, share_id, keyword)
+  window_key TEXT NOT NULL,
+  request_count INTEGER NOT NULL DEFAULT 1,
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  PRIMARY KEY (user_id, window_key)
 );
-CREATE INDEX IF NOT EXISTS idx_arwkh_user_share ON aichat_response_keyword_hits(user_id, share_id);
-CREATE INDEX IF NOT EXISTS idx_arwkh_user_keyword ON aichat_response_keyword_hits(user_id, keyword);
-INSERT OR IGNORE INTO table_catalog (table_name, group_name, description, migration, sync_policy, display_order) VALUES
-('aichat_response_keyword_hits', 'ai', 'AI応答×キーワードヒットログ', '0055', 'auto', 0);
-INSERT OR REPLACE INTO table_column_keys (table_name, column_name, key_type, fk_target_table) VALUES
-('aichat_response_keyword_hits', 'id', 'pk', NULL);
-INSERT OR REPLACE INTO table_column_keys (table_name, column_name, key_type, fk_target_table) VALUES
-('aichat_response_keyword_hits', 'user_id', 'fk', 'user_sessions');
-INSERT OR REPLACE INTO table_column_keys (table_name, column_name, key_type, fk_target_table) VALUES
-('aichat_response_keyword_hits', 'share_id', 'fk', 'ai_chat_shares');
-INSERT OR REPLACE INTO table_column_keys (table_name, column_name, key_type, fk_target_table) VALUES
-('aichat_response_keyword_hits', 'keyword', 'idx', NULL);`,
+CREATE INDEX IF NOT EXISTS idx_aichat_rl_window ON aichat_rate_limit(window_key);`,
+
   'ts-catalog': `CREATE TABLE IF NOT EXISTS ts_repository (
   id            INTEGER PRIMARY KEY AUTOINCREMENT,
   full_name     TEXT NOT NULL UNIQUE,
@@ -1152,7 +1142,7 @@ export const TABLE_COLUMN_KEYS: Record<string, ColumnKeyInfo> = {
   ts_function_impact:     { id: 'pk', repo_id: 'fk', commit_hash: 'fk', file_path: 'idx', function_name: 'idx', impact_type: 'idx', contribution: 'idx' },
   ts_commit_quality:      { id: 'pk', repo_id: 'pk+fk', commit_hash: 'pk+fk', granularity_score: 'idx' },
   ts_function_callers:    { id: 'pk', repo_id: 'fk', callee_id: 'fk', caller_file: 'idx' },
-  aichat_response_keyword_hits: { id: 'pk', user_id: 'fk', share_id: 'fk', keyword: 'idx' },
+  aichat_rate_limit:      { user_id: 'pk+fk', window_key: 'pk+idx' },
 };
 
 export function getColumnKeyType(tableName: string, columnName: string): ColumnKeyType {
@@ -1215,7 +1205,7 @@ export const TABLE_GROUP_MAP: Record<string, string> = {
   aichat_share_subquery_links: 'ai',
   aichat_model_colors: 'ai',
   aichat_category_groups: 'ai',
-  aichat_response_keyword_hits: 'ai',
+  aichat_rate_limit: 'ai',
   keyword_category_groups: 'search',
   keyword_multi_labels: 'search',
   ts_repository:          'ts-catalog',
@@ -1368,7 +1358,6 @@ export const COLUMN_FK_TARGETS: Record<string, Record<string, string>> = {
   repo_commit_index: { repo_name: 'installation_permissions' },
   ai_chat_shares: { user_id: 'user_sessions' },
   aichat_search_log: { user_id: 'user_sessions', share_id: 'ai_chat_shares' },
-  aichat_response_keyword_hits: { user_id: 'user_sessions', share_id: 'ai_chat_shares' },
   aichat_search_history: { user_id: 'user_sessions', share_id: 'ai_chat_shares' },
   aichat_search_impressions: { user_id: 'user_sessions', share_id: 'ai_chat_shares' },
   aichat_share_subquery_links: { subquery_id: 'aichat_subqueries' },
@@ -1800,31 +1789,31 @@ export function extractAiUsage(raw: Record<string, unknown> | null | undefined):
   return { input_tokens: it, output_tokens: ot, total_tokens: tt };
 }
 
+/** AI チャットの 1 分間あたり最大リクエスト数 */
+const AICHAT_RATE_LIMIT_PER_MIN = 10;
+
 /**
- * AI 応答テキスト中の各キーワードの出現回数を返す。
- * 大文字小文字を区別しない完全一致（単語境界なし）で照合する。
- * 出現しないキーワードは結果に含まない。
+ * D1 ベースのレートリミットチェック。
+ * window_key = "userId:YYYYMMDDHHMI" (1 分ウィンドウ) で集計し、
+ * 上限を超えていれば true を返す。DB がない場合は制限しない。
  */
-export function countKeywordOccurrences(
-  responseText: string,
-  keywords: string[]
-): Array<{ keyword: string; matchCount: number }> {
-  const lower = responseText.toLowerCase();
-  const results: Array<{ keyword: string; matchCount: number }> = [];
-  for (const kw of keywords) {
-    const kwLower = kw.toLowerCase();
-    if (!kwLower) continue;
-    let count = 0;
-    let pos = 0;
-    while ((pos = lower.indexOf(kwLower, pos)) !== -1) {
-      count++;
-      pos += kwLower.length;
-    }
-    if (count > 0) {
-      results.push({ keyword: kw, matchCount: count });
-    }
+async function checkAiChatRateLimit(db: D1Database | undefined, userId: string): Promise<boolean> {
+  if (!db) return false;
+  const now = new Date();
+  const windowKey = `${userId}:${now.toISOString().slice(0, 16).replace(/[-:T]/g, '')}`;
+  try {
+    const result = await db.prepare(
+      `INSERT INTO aichat_rate_limit (user_id, window_key, request_count, updated_at)
+       VALUES (?, ?, 1, datetime('now'))
+       ON CONFLICT(user_id, window_key) DO UPDATE SET
+         request_count = request_count + 1,
+         updated_at = datetime('now')
+       RETURNING request_count`
+    ).bind(userId, windowKey).first<{ request_count: number }>();
+    return (result?.request_count ?? 1) > AICHAT_RATE_LIMIT_PER_MIN;
+  } catch {
+    return false;
   }
-  return results;
 }
 
 interface ClassifyResult {
@@ -2433,8 +2422,17 @@ async function getInstallationPermissionsFromD1(
   }
 }
 
-// CORSの設定
-app.use('/*', cors());
+// CORSの設定: 自オリジンと開発環境のみ許可
+const ALLOWED_ORIGINS = [
+  'https://cloudflare-workers-github-oauth-1.nekoflare.workers.dev',
+  'http://localhost:8787',
+];
+app.use('/*', cors({
+  origin: (origin) => ALLOWED_ORIGINS.includes(origin) ? origin : null,
+  allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowHeaders: ['Content-Type', 'Authorization'],
+  credentials: true,
+}));
 app.use('/*', async (c, next) => {
   await next();
 
@@ -2575,7 +2573,8 @@ app.get('/auth/github/callback', async (c) => {
 
     phase = 'validate-query';
     if (error) {
-      return jsonUtf8({ error: `GitHub OAuth error: ${error}` }, 400);
+      logger.warn('GitHub OAuth callback error', { error, phase: 'oauth-callback' });
+      return jsonUtf8({ error: 'OAuth 認証に失敗しました' }, 400);
     }
 
     if (!code) {
@@ -2761,11 +2760,7 @@ app.get('/auth/github/callback', async (c) => {
       }).catch(() => { /* 通知失敗は無視 */ });
     }
 
-    return jsonUtf8({
-      error: 'Authentication failed',
-      phase,
-      details: error instanceof Error ? error.message : 'Unknown error'
-    }, 500);
+    return jsonUtf8({ error: 'Authentication failed' }, 500);
   }
 });
 
@@ -2989,6 +2984,9 @@ app.post('/api/aichat', authMiddleware, async (c) => {
   if (!message) {
     return jsonUtf8({ error: 'メッセージが空です' }, 400);
   }
+  if (await checkAiChatRateLimit(c.env.DB, user.sub)) {
+    return jsonUtf8({ error: 'リクエストが多すぎます。しばらく待ってから再試行してください。' }, 429);
+  }
   const requestedModel = (body.model ?? '').trim();
   const configuredModel = (c.env.AI_CHAT_MODEL ?? '').trim();
   const fallbackModel = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
@@ -3065,38 +3063,9 @@ app.post('/api/aichat', authMiddleware, async (c) => {
     }
   };
 
-  const matchKeywords = async (response: string, shareId: string) => {
-    if (!c.env.DB || !shareId) return;
-    try {
-      const kwRows = await c.env.DB.prepare(
-        'SELECT DISTINCT keyword FROM aichat_search_log WHERE user_id = ? AND deleted_at IS NULL'
-      ).bind(user.sub).all<{ keyword: string }>();
-      const keywords = (kwRows.results ?? []).map((r) => r.keyword).filter(Boolean);
-      if (keywords.length === 0) return;
-      const hits = countKeywordOccurrences(response, keywords);
-      if (hits.length === 0) return;
-      const now = new Date().toISOString();
-      const stmts = hits.map(({ keyword, matchCount }) =>
-        c.env.DB!.prepare(
-          'INSERT OR REPLACE INTO aichat_response_keyword_hits (user_id, share_id, keyword, match_count, created_at) VALUES (?, ?, ?, ?, ?)'
-        ).bind(user.sub, shareId, keyword, matchCount, now)
-      );
-      await c.env.DB.batch(stmts);
-    } catch (err) {
-      logger.warn('keyword match save failed', {
-        error: err instanceof Error ? err.message : 'Unknown',
-        user: user.sub,
-        shareId,
-      });
-    }
-  };
-
   try {
     const { text: response, usage } = await runAi(primaryModel);
     const saved = await autoSave(response, primaryModel, usage);
-    if (saved.shareId) {
-      c.executionCtx.waitUntil(matchKeywords(response, saved.shareId));
-    }
     return jsonUtf8({ response, usedModel: primaryModel, systemPromptMode, ...usage, ...saved });
   } catch (primaryErr) {
     logger.warn('AI chat primary model failed, trying fallback', {
@@ -3111,9 +3080,6 @@ app.post('/api/aichat', authMiddleware, async (c) => {
     try {
       const { text: response, usage } = await runAi(fallbackModel);
       const saved = await autoSave(response, fallbackModel, usage);
-      if (saved.shareId) {
-        c.executionCtx.waitUntil(matchKeywords(response, saved.shareId));
-      }
       const primaryErrMsg = primaryErr instanceof Error ? primaryErr.message : String(primaryErr);
       return jsonUtf8({ response, usedModel: fallbackModel, systemPromptMode, fallbackUsed: true, primaryError: primaryErrMsg, ...usage, ...saved });
     } catch (fallbackErr) {
@@ -4204,6 +4170,51 @@ app.get('/kw-architecture', authMiddleware, async (c) => {
     return c.html(getSessionExpiredPage(), 403);
   }
   return c.html(getKwArchitecturePage());
+});
+
+/**
+ * Cloudflare D1 ダッシュボード API
+ * D1 データベース一覧と各テーブルの行数を返す
+ */
+app.get('/api/cf-dashboard/d1', authMiddleware, async (c) => {
+  const token = c.env.CLOUDFLARE_API_TOKEN;
+  const accountId = c.env.CLOUDFLARE_ACCOUNT_ID;
+  if (!token || !accountId) {
+    return jsonUtf8({ error: 'CLOUDFLARE_API_TOKEN または CLOUDFLARE_ACCOUNT_ID が未設定です', configured: false }, 200);
+  }
+  try {
+    const databases = await listD1Databases(token, accountId);
+    return jsonUtf8({ configured: true, databases });
+  } catch (err) {
+    return jsonUtf8({ error: err instanceof Error ? err.message : 'Unknown error', configured: true }, 500);
+  }
+});
+
+app.get('/api/cf-dashboard/d1/:dbId/tables', authMiddleware, async (c) => {
+  const token = c.env.CLOUDFLARE_API_TOKEN;
+  const accountId = c.env.CLOUDFLARE_ACCOUNT_ID;
+  if (!token || !accountId) {
+    return jsonUtf8({ error: 'CLOUDFLARE_API_TOKEN または CLOUDFLARE_ACCOUNT_ID が未設定です' }, 503);
+  }
+  const dbId = c.req.param('dbId');
+  try {
+    const tables = await getD1Tables(token, accountId, dbId);
+    return jsonUtf8({ tables });
+  } catch (err) {
+    return jsonUtf8({ error: err instanceof Error ? err.message : 'Unknown error' }, 500);
+  }
+});
+
+/**
+ * Cloudflare D1 ダッシュボードページ（認証が必要）
+ */
+app.get('/cf-dashboard', authMiddleware, async (c) => {
+  const user = c.get('user');
+  const userSession = await getUserSession(c.env.DB, user.sub);
+  if (!userSession) {
+    return c.html(getSessionExpiredPage(), 403);
+  }
+  return c.html(getCfDashboardPage());
 });
 
 /**
