@@ -8727,6 +8727,18 @@ app.post('/api/settings/apis-nav-flash', authMiddleware, async (c) => {
   }
 });
 
+app.get('/api/search-keywords', authMiddleware, async (c) => {
+  try {
+    if (!c.env.DB) return c.json({ error: 'DBが利用できません' }, 503);
+    const rows = await c.env.DB.prepare(
+      `SELECT id, keyword, total_count, section_count, recorded_at FROM api_search_keywords ORDER BY recorded_at DESC LIMIT 20`
+    ).all();
+    return c.json({ keywords: rows.results ?? [] });
+  } catch (error) {
+    return c.json({ error: '取得に失敗しました' }, 500);
+  }
+});
+
 app.post('/api/search-keywords', authMiddleware, async (c) => {
   try {
     const { keyword, totalCount, sections } = await c.req.json() as {
