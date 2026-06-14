@@ -124,6 +124,7 @@ const STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
   { name: 'ts_function_impact',      migration: 'ts-catalog', description: '関数カタログ: 変更インパクト評価',         syncPolicy: 'manual' },
   { name: 'ts_commit_quality',       migration: 'ts-catalog', description: '関数カタログ: コミット品質評価',           syncPolicy: 'manual' },
   { name: 'ts_function_callers',     migration: '0053',       description: '関数カタログ: 関数呼び出し元マッピング',   syncPolicy: 'manual' },
+  { name: 'aichat_rate_limit',       migration: '0055',       description: 'AIチャットレートリミットカウンタ',            syncPolicy: 'auto' },
 ];
 
 const REQUIRED_STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
@@ -819,6 +820,14 @@ CREATE TABLE IF NOT EXISTS ts_function_callers (
 CREATE INDEX IF NOT EXISTS idx_tfcr_callee ON ts_function_callers(callee_id);
 CREATE INDEX IF NOT EXISTS idx_tfcr_file   ON ts_function_callers(repo_id, caller_file);`,
   '0054': `ALTER TABLE user_sessions ADD COLUMN last_activity_at TEXT;`,
+  '0055': `CREATE TABLE IF NOT EXISTS aichat_rate_limit (
+  user_id TEXT NOT NULL,
+  window_key TEXT NOT NULL,
+  request_count INTEGER NOT NULL DEFAULT 1,
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  PRIMARY KEY (user_id, window_key)
+);
+CREATE INDEX IF NOT EXISTS idx_aichat_rl_window ON aichat_rate_limit(window_key);`,
 
   'ts-catalog': `CREATE TABLE IF NOT EXISTS ts_repository (
   id            INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1133,6 +1142,7 @@ export const TABLE_COLUMN_KEYS: Record<string, ColumnKeyInfo> = {
   ts_function_impact:     { id: 'pk', repo_id: 'fk', commit_hash: 'fk', file_path: 'idx', function_name: 'idx', impact_type: 'idx', contribution: 'idx' },
   ts_commit_quality:      { id: 'pk', repo_id: 'pk+fk', commit_hash: 'pk+fk', granularity_score: 'idx' },
   ts_function_callers:    { id: 'pk', repo_id: 'fk', callee_id: 'fk', caller_file: 'idx' },
+  aichat_rate_limit:      { user_id: 'pk+fk', window_key: 'pk+idx' },
 };
 
 export function getColumnKeyType(tableName: string, columnName: string): ColumnKeyType {
@@ -1195,6 +1205,7 @@ export const TABLE_GROUP_MAP: Record<string, string> = {
   aichat_share_subquery_links: 'ai',
   aichat_model_colors: 'ai',
   aichat_category_groups: 'ai',
+  aichat_rate_limit: 'ai',
   keyword_category_groups: 'search',
   keyword_multi_labels: 'search',
   ts_repository:          'ts-catalog',
@@ -1778,6 +1789,32 @@ export function extractAiUsage(raw: Record<string, unknown> | null | undefined):
   return { input_tokens: it, output_tokens: ot, total_tokens: tt };
 }
 
+/** AI チャットの 1 分間あたり最大リクエスト数 */
+const AICHAT_RATE_LIMIT_PER_MIN = 10;
+
+/**
+ * D1 ベースのレートリミットチェック。
+ * window_key = "userId:YYYYMMDDHHMI" (1 分ウィンドウ) で集計し、
+ * 上限を超えていれば true を返す。DB がない場合は制限しない。
+ */
+async function checkAiChatRateLimit(db: D1Database | undefined, userId: string): Promise<boolean> {
+  if (!db) return false;
+  const now = new Date();
+  const windowKey = `${userId}:${now.toISOString().slice(0, 16).replace(/[-:T]/g, '')}`;
+  try {
+    const result = await db.prepare(
+      `INSERT INTO aichat_rate_limit (user_id, window_key, request_count, updated_at)
+       VALUES (?, ?, 1, datetime('now'))
+       ON CONFLICT(user_id, window_key) DO UPDATE SET
+         request_count = request_count + 1,
+         updated_at = datetime('now')
+       RETURNING request_count`
+    ).bind(userId, windowKey).first<{ request_count: number }>();
+    return (result?.request_count ?? 1) > AICHAT_RATE_LIMIT_PER_MIN;
+  } catch {
+    return false;
+  }
+}
 
 interface ClassifyResult {
   label: string;
@@ -2385,8 +2422,17 @@ async function getInstallationPermissionsFromD1(
   }
 }
 
-// CORSの設定
-app.use('/*', cors());
+// CORSの設定: 自オリジンと開発環境のみ許可
+const ALLOWED_ORIGINS = [
+  'https://cloudflare-workers-github-oauth-1.nekoflare.workers.dev',
+  'http://localhost:8787',
+];
+app.use('/*', cors({
+  origin: (origin) => ALLOWED_ORIGINS.includes(origin) ? origin : null,
+  allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowHeaders: ['Content-Type', 'Authorization'],
+  credentials: true,
+}));
 app.use('/*', async (c, next) => {
   await next();
 
@@ -2527,7 +2573,8 @@ app.get('/auth/github/callback', async (c) => {
 
     phase = 'validate-query';
     if (error) {
-      return jsonUtf8({ error: `GitHub OAuth error: ${error}` }, 400);
+      logger.warn('GitHub OAuth callback error', { error, phase: 'oauth-callback' });
+      return jsonUtf8({ error: 'OAuth 認証に失敗しました' }, 400);
     }
 
     if (!code) {
@@ -2721,11 +2768,7 @@ app.get('/auth/github/callback', async (c) => {
       }).catch(() => { /* 通知失敗は無視 */ });
     }
 
-    return jsonUtf8({
-      error: 'Authentication failed',
-      phase,
-      details: error instanceof Error ? error.message : 'Unknown error'
-    }, 500);
+    return jsonUtf8({ error: 'Authentication failed' }, 500);
   }
 });
 
@@ -2948,6 +2991,9 @@ app.post('/api/aichat', authMiddleware, async (c) => {
   const message = (body.message ?? '').trim();
   if (!message) {
     return jsonUtf8({ error: 'メッセージが空です' }, 400);
+  }
+  if (await checkAiChatRateLimit(c.env.DB, user.sub)) {
+    return jsonUtf8({ error: 'リクエストが多すぎます。しばらく待ってから再試行してください。' }, 429);
   }
   const requestedModel = (body.model ?? '').trim();
   const configuredModel = (c.env.AI_CHAT_MODEL ?? '').trim();
