@@ -700,18 +700,29 @@ function highlight(text, query) {
 }
 
 function flashNavBtns(count) {
-  var btns = document.querySelectorAll('.nav-btn');
+  var btns = Array.from(document.querySelectorAll('.nav-btn'));
+  if (!btns.length) return;
+  // フェーズ1: 全ボタンを count 回同時点滅（500ms以内に収める）
+  var p1Step = Math.max(20, Math.floor(500 / (count * 2)));
   var i = 0;
-  var total = count * 2;
-  var iv = setInterval(function() {
-    if (i >= total) {
-      clearInterval(iv);
+  var iv1 = setInterval(function() {
+    if (i >= count * 2) {
+      clearInterval(iv1);
       btns.forEach(function(b) { b.classList.remove('nav-flash'); });
+      // フェーズ2: 左端から右端へ1つずつ点灯（残り500ms以内）
+      var p2Step = Math.max(20, Math.floor(500 / btns.length));
+      var j = 0;
+      var iv2 = setInterval(function() {
+        btns.forEach(function(b) { b.classList.remove('nav-flash'); });
+        if (j >= btns.length) { clearInterval(iv2); return; }
+        btns[j].classList.add('nav-flash');
+        j++;
+      }, p2Step);
       return;
     }
     btns.forEach(function(b) { b.classList.toggle('nav-flash', i % 2 === 0); });
     i++;
-  }, 150);
+  }, p1Step);
 }
 
 renderTopNav();
