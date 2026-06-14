@@ -3095,7 +3095,7 @@ app.post('/api/aichat', authMiddleware, async (c) => {
     const { text: response, usage } = await runAi(primaryModel);
     const saved = await autoSave(response, primaryModel, usage);
     if (saved.shareId) {
-      matchKeywords(response, saved.shareId).catch(() => {});
+      c.executionCtx.waitUntil(matchKeywords(response, saved.shareId));
     }
     return jsonUtf8({ response, usedModel: primaryModel, systemPromptMode, ...usage, ...saved });
   } catch (primaryErr) {
@@ -3112,7 +3112,7 @@ app.post('/api/aichat', authMiddleware, async (c) => {
       const { text: response, usage } = await runAi(fallbackModel);
       const saved = await autoSave(response, fallbackModel, usage);
       if (saved.shareId) {
-        matchKeywords(response, saved.shareId).catch(() => {});
+        c.executionCtx.waitUntil(matchKeywords(response, saved.shareId));
       }
       const primaryErrMsg = primaryErr instanceof Error ? primaryErr.message : String(primaryErr);
       return jsonUtf8({ response, usedModel: fallbackModel, systemPromptMode, fallbackUsed: true, primaryError: primaryErrMsg, ...usage, ...saved });
