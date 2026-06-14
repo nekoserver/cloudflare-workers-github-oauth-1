@@ -967,7 +967,7 @@ function renderTables(schema) {
     }
     makeDraggable(el, table.name);
   }
-  drawRelations();
+  requestAnimationFrame(drawRelations);
 }
 
 function adaptApiData(apiData) {
@@ -1167,9 +1167,33 @@ function makeDraggable(el, tableName) {
   });
 }
 
+function ensureArrowheadDefs(svg) {
+  if (svg.querySelector('defs #arrowhead')) return;
+  const defs = svg.querySelector('defs') || document.createElementNS('http://www.w3.org/2000/svg', 'defs');
+  const marker = document.createElementNS('http://www.w3.org/2000/svg', 'marker');
+  marker.setAttribute('id', 'arrowhead');
+  marker.setAttribute('markerWidth', '8');
+  marker.setAttribute('markerHeight', '6');
+  marker.setAttribute('refX', '8');
+  marker.setAttribute('refY', '3');
+  marker.setAttribute('orient', 'auto');
+  const polygon = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+  polygon.setAttribute('points', '0 0, 8 3, 0 6');
+  const lineColor = getComputedStyle(document.documentElement).getPropertyValue('--line-color').trim() || '#8b949e';
+  polygon.setAttribute('fill', lineColor);
+  marker.appendChild(polygon);
+  defs.appendChild(marker);
+  if (!svg.querySelector('defs')) svg.insertBefore(defs, svg.firstChild);
+}
+
 function drawRelations() {
   const svg = document.getElementById('svg-layer');
-  svg.innerHTML = '';
+
+  // defsは保持したまま、line/text要素のみ削除
+  Array.from(svg.children).forEach(c => { if (c.tagName !== 'defs') c.remove(); });
+
+  // defsとマーカーをlines描画前に確保
+  ensureArrowheadDefs(svg);
 
   for (const rel of RELATIONS) {
     const fromEl = tableElements[rel.from];
@@ -1177,8 +1201,12 @@ function drawRelations() {
     if (!fromEl || !toEl) continue;
     if (fromEl.style.display === 'none' || toEl.style.display === 'none') continue;
 
-    const fromRect = { x: positions[rel.from].x, y: positions[rel.from].y, w: fromEl.offsetWidth, h: fromEl.offsetHeight };
-    const toRect = { x: positions[rel.to].x, y: positions[rel.to].y, w: toEl.offsetWidth, h: toEl.offsetHeight };
+    const fw = fromEl.offsetWidth, fh = fromEl.offsetHeight;
+    const tw = toEl.offsetWidth,   th = toEl.offsetHeight;
+    if (!fw || !fh || !tw || !th) continue;
+
+    const fromRect = { x: positions[rel.from].x, y: positions[rel.from].y, w: fw, h: fh };
+    const toRect   = { x: positions[rel.to].x,   y: positions[rel.to].y,   w: tw, h: th };
 
     const fromCx = fromRect.x + fromRect.w / 2;
     const fromCy = fromRect.y + fromRect.h / 2;
@@ -1203,23 +1231,6 @@ function drawRelations() {
     label.classList.add('fk-label');
     label.textContent = rel.fromCol;
     svg.appendChild(label);
-  }
-
-  if (!svg.querySelector('defs')) {
-    const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
-    const marker = document.createElementNS('http://www.w3.org/2000/svg', 'marker');
-    marker.setAttribute('id', 'arrowhead');
-    marker.setAttribute('markerWidth', '8');
-    marker.setAttribute('markerHeight', '6');
-    marker.setAttribute('refX', '8');
-    marker.setAttribute('refY', '3');
-    marker.setAttribute('orient', 'auto');
-    const polygon = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
-    polygon.setAttribute('points', '0 0, 8 3, 0 6');
-    polygon.setAttribute('fill', 'var(--line-color)');
-    marker.appendChild(polygon);
-    defs.appendChild(marker);
-    svg.insertBefore(defs, svg.firstChild);
   }
 }
 
