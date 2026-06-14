@@ -22,6 +22,7 @@ export function getSettingsPage(user: {
   statusShowAutoDetectedTables?: string;
   statusIgnoreUnknownUnclassifiedWarning?: string;
   searchLabelMode?: string;
+  apisSidebarOpen?: string;
   githubScopes?: string;
   githubGrantedScopes?: string[] | null;
   githubScopeError?: string | null;
@@ -39,6 +40,7 @@ export function getSettingsPage(user: {
   const currentStatusShowAutoDetectedTables = user.statusShowAutoDetectedTables === 'on' ? 'on' : 'off';
   const currentStatusIgnoreUnknownUnclassifiedWarning = user.statusIgnoreUnknownUnclassifiedWarning === 'off' ? 'off' : 'on';
   const currentSearchLabelMode = ['manual-modal', 'auto-classify'].includes(user.searchLabelMode ?? '') ? user.searchLabelMode : 'uncategorized';
+  const currentApisSidebarOpen = user.apisSidebarOpen === 'on' ? 'on' : 'off';
   const requestedScopes = user.githubScopes ? user.githubScopes.split(/\s+/).filter(Boolean) : [];
   const grantedScopes = user.githubGrantedScopes ?? null;
   const scopeError = user.githubScopeError ? escapeHtml(user.githubScopeError) : null;
@@ -580,6 +582,17 @@ export function getSettingsPage(user: {
                 <option value="manual-modal" ${currentSearchLabelMode === 'manual-modal' ? 'selected' : ''}>新規キーワード追加時にラベル選択モーダルを表示</option>
                 <option value="auto-classify" ${currentSearchLabelMode === 'auto-classify' ? 'selected' : ''}>AIが自動分類する（Workers AI）</option>
               </select>
+            </div>
+          </div>
+          <div class="info-item">
+            <span class="info-label">APIページのサイドバーグループを初期状態で展開する</span>
+            <div class="setting-control" style="justify-content: flex-end;">
+              <span class="theme-label" id="apisSidebarOpenLabel">${currentApisSidebarOpen === 'on' ? 'ON' : 'OFF'}</span>
+              <label class="theme-toggle-switch">
+                <input type="checkbox" id="apisSidebarOpenCheckbox" onchange="onApisSidebarOpenChange()"
+                  ${currentApisSidebarOpen === 'on' ? 'checked' : ''}>
+                <span class="theme-toggle-slider"></span>
+              </label>
             </div>
           </div>
         </div>
@@ -1345,6 +1358,24 @@ export function getSettingsPage(user: {
       } catch(e) {
         alert('分類モード設定の変更に失敗しました');
         sel.value = 'uncategorized';
+      }
+    }
+
+    async function onApisSidebarOpenChange() {
+      var cb = document.getElementById('apisSidebarOpenCheckbox');
+      var label = document.getElementById('apisSidebarOpenLabel');
+      var mode = cb.checked ? 'on' : 'off';
+      label.textContent = cb.checked ? 'ON' : 'OFF';
+      try {
+        var res = await fetch('/api/settings/apis-sidebar-open', {
+          method: 'POST', headers: {'Content-Type':'application/json'}, credentials: 'include',
+          body: JSON.stringify({ mode })
+        });
+        if (!res.ok) throw new Error('failed');
+      } catch(e) {
+        alert('APIページサイドバー設定の変更に失敗しました');
+        cb.checked = !cb.checked;
+        label.textContent = cb.checked ? 'ON' : 'OFF';
       }
     }
 
