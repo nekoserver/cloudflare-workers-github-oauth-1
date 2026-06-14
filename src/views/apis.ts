@@ -562,7 +562,7 @@ function openSearchSaveModal() {
   _searchHits.sections.forEach(function(s) {
     lines.push('・' + s.name + ': ' + s.count + '件');
   });
-  stats.textContent = lines.join('\n');
+  stats.textContent = lines.join('\\n');
   stats.style.whiteSpace = 'pre-line';
   overlay.classList.add('open');
   setTimeout(function() { input.focus(); input.select(); }, 50);
