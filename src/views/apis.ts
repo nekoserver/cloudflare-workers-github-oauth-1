@@ -350,6 +350,7 @@ let currentEp = null;
 let openDescGi = -1; // 説明パネルが開いているグループ index
 let _accordionMode = false; // アコーディオンモード: ONのとき非フォーカスセクションを自動で閉じる
 let _currentFilter = ''; // 現在の検索キーワード（descパネルのハイライトに使用）
+let _descMode = true; // trueのとき日本語説明を表示（▶ボタン非表示）
 
 // ── 他グループを閉じるヘルパー ────────────────────────
 function collapseOtherGroups(openGi) {
@@ -445,18 +446,20 @@ function renderSidebar(filter, sectionsOpen) {
       eps.style.display = collapsed ? 'none' : '';
     };
 
-    // 右端: 説明パネル展開ボタン ▶
-    const expandBtn = document.createElement('button');
-    expandBtn.className = 'expand-btn';
-    expandBtn.title = '説明パネルを開く';
-    expandBtn.textContent = '▶';
-    expandBtn.onclick = (e) => {
-      e.stopPropagation();
-      toggleDescPanel(gi, g, expandBtn);
-    };
-
     label.appendChild(textWrap);
-    label.appendChild(expandBtn);
+
+    // 右端: 説明パネル展開ボタン ▶（descModeのときは非表示）
+    if (!_descMode) {
+      const expandBtn = document.createElement('button');
+      expandBtn.className = 'expand-btn';
+      expandBtn.title = '説明パネルを開く';
+      expandBtn.textContent = '▶';
+      expandBtn.onclick = (e) => {
+        e.stopPropagation();
+        toggleDescPanel(gi, g, expandBtn);
+      };
+      label.appendChild(expandBtn);
+    }
 
     const eps = document.createElement('div');
     eps.className = 'group-endpoints';
@@ -468,9 +471,15 @@ function renderSidebar(filter, sectionsOpen) {
     filtered.forEach(ep => {
       const item = document.createElement('div');
       item.className = 'ep-item';
-      item.innerHTML =
-        \`<span class="badge badge-\${ep.method}">\${highlight(ep.method, fl)}</span>\` +
-        \`<span class="ep-path" title="\${esc(ep.path)}">\${highlight(ep.path, fl)}</span>\`;
+      if (_descMode) {
+        item.innerHTML =
+          \`<span class="badge badge-\${ep.method}">\${highlight(ep.method, fl)}</span>\` +
+          \`<span class="ep-path" title="\${esc(ep.path)}">\${highlight(ep.desc, fl)}</span>\`;
+      } else {
+        item.innerHTML =
+          \`<span class="badge badge-\${ep.method}">\${highlight(ep.method, fl)}</span>\` +
+          \`<span class="ep-path" title="\${esc(ep.path)}">\${highlight(ep.path, fl)}</span>\`;
+      }
       item.onclick = () => selectEndpoint(ep, item);
       eps.appendChild(item);
     });
@@ -692,6 +701,7 @@ function highlight(text, query) {
 renderTopNav();
 const _sidebarOpen = (document.cookie.split(';').find(c => c.trim().startsWith('user_apis_sidebar_open='))?.split('=')[1] ?? 'off').trim();
 _accordionMode = (document.cookie.split(';').find(c => c.trim().startsWith('user_apis_sidebar_accordion='))?.split('=')[1] ?? 'off').trim() === 'on';
+_descMode = (document.cookie.split(';').find(c => c.trim().startsWith('user_apis_desc_mode='))?.split('=')[1] ?? 'on').trim() !== 'off';
 renderSidebar(null, _sidebarOpen === 'on');
 (function restoreDescPanel() {
   const raw = (document.cookie.split(';').find(c => c.trim().startsWith('apis_desc_panel_gi='))?.split('=')[1] ?? 'off').trim();

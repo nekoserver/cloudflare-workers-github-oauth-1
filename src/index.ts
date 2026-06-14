@@ -4113,6 +4113,7 @@ app.get('/settings', authMiddleware, async (c) => {
     'user_search_label_mode',
     'user_apis_sidebar_open',
     'user_apis_sidebar_accordion',
+    'user_apis_desc_mode',
   ]);
   const timezone = cookieVals['user_timezone'] || DEFAULT_TIMEZONE;
   const statusCommitCacheSortMode = cookieVals['user_status_commit_cache_sort_mode'] === 'toggle' ? 'toggle' : 'off';
@@ -4124,6 +4125,7 @@ app.get('/settings', authMiddleware, async (c) => {
   const searchLabelMode = ['manual-modal', 'auto-classify'].includes(cookieVals['user_search_label_mode'] ?? '') ? cookieVals['user_search_label_mode'] : 'uncategorized';
   const apisSidebarOpen = cookieVals['user_apis_sidebar_open'] === 'on' ? 'on' : 'off';
   const apisSidebarAccordion = cookieVals['user_apis_sidebar_accordion'] === 'on' ? 'on' : 'off';
+  const apisDescMode = cookieVals['user_apis_desc_mode'] === 'off' ? 'off' : 'on';
 
   let issuedAt: string;
   let expiresAt: string;
@@ -4186,6 +4188,7 @@ app.get('/settings', authMiddleware, async (c) => {
     searchLabelMode,
     apisSidebarOpen,
     apisSidebarAccordion,
+    apisDescMode,
     githubScopes: GITHUB_OAUTH_SCOPE,
     githubGrantedScopes: grantedScopes,
     githubScopeError: scopesError,
@@ -8659,6 +8662,24 @@ app.post('/api/settings/apis-sidebar-accordion', authMiddleware, async (c) => {
       error: error instanceof Error ? error.message : 'Unknown error',
     });
     return c.json({ error: 'APIページアコーディオン設定の変更に失敗しました' }, 500);
+  }
+});
+
+app.post('/api/settings/apis-desc-mode', authMiddleware, async (c) => {
+  try {
+    const { mode } = await c.req.json();
+    if (mode !== 'on' && mode !== 'off') {
+      return c.json({ error: '無効な値です' }, 400);
+    }
+    c.header('Set-Cookie', `user_apis_desc_mode=${mode}; Path=/; Secure; SameSite=Lax; Max-Age=31536000`);
+    return c.json({ message: 'APIページ表示モード設定を変更しました', mode }, 200);
+  } catch (error) {
+    const user = c.get('user');
+    logger.error('APIs desc mode setting error', {
+      userId: user?.sub,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    return c.json({ error: 'APIページ表示モード設定の変更に失敗しました' }, 500);
   }
 });
 
