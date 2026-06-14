@@ -4106,6 +4106,7 @@ app.get('/settings', authMiddleware, async (c) => {
     'user_apis_sidebar_open',
     'user_apis_sidebar_accordion',
     'user_apis_desc_mode',
+    'user_apis_nav_flash',
   ]);
   const timezone = cookieVals['user_timezone'] || DEFAULT_TIMEZONE;
   const statusCommitCacheSortMode = cookieVals['user_status_commit_cache_sort_mode'] === 'toggle' ? 'toggle' : 'off';
@@ -4118,6 +4119,7 @@ app.get('/settings', authMiddleware, async (c) => {
   const apisSidebarOpen = cookieVals['user_apis_sidebar_open'] === 'on' ? 'on' : 'off';
   const apisSidebarAccordion = cookieVals['user_apis_sidebar_accordion'] === 'on' ? 'on' : 'off';
   const apisDescMode = cookieVals['user_apis_desc_mode'] === 'off' ? 'off' : 'on';
+  const apisNavFlash = cookieVals['user_apis_nav_flash'] ?? '7';
 
   let issuedAt: string;
   let expiresAt: string;
@@ -4181,6 +4183,7 @@ app.get('/settings', authMiddleware, async (c) => {
     apisSidebarOpen,
     apisSidebarAccordion,
     apisDescMode,
+    apisNavFlash,
     githubScopes: GITHUB_OAUTH_SCOPE,
     githubGrantedScopes: grantedScopes,
     githubScopeError: scopesError,
@@ -8672,6 +8675,25 @@ app.post('/api/settings/apis-desc-mode', authMiddleware, async (c) => {
       error: error instanceof Error ? error.message : 'Unknown error',
     });
     return c.json({ error: 'APIページ表示モード設定の変更に失敗しました' }, 500);
+  }
+});
+
+app.post('/api/settings/apis-nav-flash', authMiddleware, async (c) => {
+  try {
+    const { mode } = await c.req.json();
+    const valid = mode === 'off' || /^[0-9]+$/.test(mode);
+    if (!valid) {
+      return c.json({ error: '無効な値です' }, 400);
+    }
+    c.header('Set-Cookie', `user_apis_nav_flash=${mode}; Path=/; Secure; SameSite=Lax; Max-Age=31536000`);
+    return c.json({ message: 'ナビバー点滅設定を変更しました', mode }, 200);
+  } catch (error) {
+    const user = c.get('user');
+    logger.error('APIs nav flash setting error', {
+      userId: user?.sub,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    return c.json({ error: 'ナビバー点滅設定の変更に失敗しました' }, 500);
   }
 });
 

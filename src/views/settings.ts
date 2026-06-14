@@ -25,6 +25,7 @@ export function getSettingsPage(user: {
   apisSidebarOpen?: string;
   apisSidebarAccordion?: string;
   apisDescMode?: string;
+  apisNavFlash?: string;
   githubScopes?: string;
   githubGrantedScopes?: string[] | null;
   githubScopeError?: string | null;
@@ -45,6 +46,9 @@ export function getSettingsPage(user: {
   const currentApisSidebarOpen = user.apisSidebarOpen === 'on' ? 'on' : 'off';
   const currentApisSidebarAccordion = user.apisSidebarAccordion === 'on' ? 'on' : 'off';
   const currentApisDescMode = user.apisDescMode === 'off' ? 'off' : 'on';
+  const rawNavFlash = user.apisNavFlash ?? '7';
+  const currentApisNavFlashOn = rawNavFlash !== 'off';
+  const currentApisNavFlashCount = (currentApisNavFlashOn && /^[0-9]+$/.test(rawNavFlash)) ? rawNavFlash : '7';
   const requestedScopes = user.githubScopes ? user.githubScopes.split(/\s+/).filter(Boolean) : [];
   const grantedScopes = user.githubGrantedScopes ?? null;
   const scopeError = user.githubScopeError ? escapeHtml(user.githubScopeError) : null;
@@ -617,6 +621,22 @@ export function getSettingsPage(user: {
               <label class="theme-toggle-switch">
                 <input type="checkbox" id="apisDescModeCheckbox" onchange="onApisDescModeChange()"
                   ${currentApisDescMode === 'on' ? 'checked' : ''}>
+                <span class="theme-toggle-slider"></span>
+              </label>
+            </div>
+          </div>
+          <div class="info-item">
+            <span class="info-label">APIページ: 読み込み時にナビバーを点滅させる</span>
+            <div class="setting-control" style="justify-content: flex-end; gap: 8px;">
+              <select id="apisNavFlashCountSelect" onchange="onApisNavFlashChange()"
+                style="font-size:11px;padding:2px 4px;border:1px solid var(--border);border-radius:4px;background:var(--surface);color:var(--text);"
+                ${!currentApisNavFlashOn ? 'disabled' : ''}>
+                ${['3','5','7','10','15','20'].map(n => `<option value="${n}"${currentApisNavFlashCount === n ? ' selected' : ''}>${n}回</option>`).join('')}
+              </select>
+              <span class="theme-label" id="apisNavFlashLabel">${currentApisNavFlashOn ? 'ON' : 'OFF'}</span>
+              <label class="theme-toggle-switch">
+                <input type="checkbox" id="apisNavFlashCheckbox" onchange="onApisNavFlashChange()"
+                  ${currentApisNavFlashOn ? 'checked' : ''}>
                 <span class="theme-toggle-slider"></span>
               </label>
             </div>
@@ -1438,6 +1458,27 @@ export function getSettingsPage(user: {
         alert('APIページ表示モード設定の変更に失敗しました');
         cb.checked = !cb.checked;
         label.textContent = cb.checked ? 'ON' : 'OFF';
+      }
+    }
+
+    async function onApisNavFlashChange() {
+      var cb = document.getElementById('apisNavFlashCheckbox');
+      var label = document.getElementById('apisNavFlashLabel');
+      var sel = document.getElementById('apisNavFlashCountSelect');
+      var mode = cb.checked ? sel.value : 'off';
+      label.textContent = cb.checked ? 'ON' : 'OFF';
+      sel.disabled = !cb.checked;
+      try {
+        var res = await fetch('/api/settings/apis-nav-flash', {
+          method: 'POST', headers: {'Content-Type':'application/json'}, credentials: 'include',
+          body: JSON.stringify({ mode })
+        });
+        if (!res.ok) throw new Error('failed');
+      } catch(e) {
+        alert('ナビバー点滅設定の変更に失敗しました');
+        cb.checked = !cb.checked;
+        label.textContent = cb.checked ? 'ON' : 'OFF';
+        sel.disabled = !cb.checked;
       }
     }
 
