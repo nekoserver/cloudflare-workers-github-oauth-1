@@ -46,18 +46,19 @@ body{display:flex;flex-direction:column;height:100vh;height:100dvh;overflow:hidd
 /* ── sidebar ── */
 #sidebar{
   width:220px;min-width:220px;border-right:1px solid var(--border);
-  overflow-y:auto;background:var(--surface);display:flex;flex-direction:column;
+  overflow:hidden;background:var(--surface);display:flex;flex-direction:column;
 }
 #sidebar-search{padding:7px 8px;border-bottom:1px solid var(--border);flex-shrink:0;}
 #sidebar-search input{
   width:100%;padding:4px 8px;border:1px solid var(--border);border-radius:var(--radius);
   background:var(--bg);color:var(--text);font-size:11px;
 }
+#groups{flex:1;overflow-y:auto;}
 .group-block{border-bottom:1px solid var(--border);}
 .group-label{
   padding:6px 8px 6px 10px;font-size:11px;font-weight:700;color:var(--muted);
   text-transform:uppercase;letter-spacing:.4px;display:flex;align-items:center;
-  position:sticky;top:0;z-index:1;background:inherit;
+  position:sticky;top:0;z-index:1;background:var(--surface);
 }
 .group-label-text{flex:1;cursor:pointer;user-select:none;padding-right:4px;}
 /* 折りたたみ三角 (左側) */
@@ -370,36 +371,40 @@ function renderTopNav() {
 }
 
 function jumpGroup(gi) {
-  // ナビボタンのアクティブ切り替え
+  // 1. descパネルが開いていたら先に閉じる
+  closeDescPanel();
+
+  // 2. ナビボタンのアクティブ切り替え
   document.querySelectorAll('.nav-btn').forEach((b, i) => b.classList.toggle('active', i === gi));
 
   const block = document.getElementById('grp-' + gi);
   if (!block) return;
-  // group-label に直接ハイライト (sticky + background:inherit の問題を回避)
-  const hlLabel = block.querySelector('.group-label');
-  if (hlLabel) {
-    hlLabel.style.transition = 'background 0s';
-    hlLabel.style.background = 'var(--hl)';
+
+  // 3. 対象以外のセクションを閉じる（ナビ選択時は常に）
+  collapseOtherGroups(gi);
+
+  // 4. 対象セクションを開く
+  const label = block.querySelector('.group-label');
+  const eps   = block.querySelector('.group-endpoints');
+  if (label && eps) {
+    label.classList.remove('collapsed');
+    eps.style.display = '';
+  }
+
+  // 5. ハイライト
+  if (label) {
+    label.style.transition = 'background 0s';
+    label.style.background = 'var(--hl)';
     requestAnimationFrame(() => requestAnimationFrame(() => {
-      hlLabel.style.transition = 'background 1.5s ease';
-      hlLabel.style.background = '';
+      label.style.transition = 'background 1.5s ease';
+      label.style.background = '';
     }));
   }
 
-  // グループを開く（アコーディオンモードなら他を閉じる）
-  const label = block.querySelector('.group-label');
-  const eps   = block.querySelector('.group-endpoints');
-  if (label && label.classList.contains('collapsed')) {
-    if (_accordionMode) collapseOtherGroups(gi);
-    label.classList.remove('collapsed');
-    eps.style.display = '';
-  } else if (_accordionMode) {
-    collapseOtherGroups(gi);
-  }
-  // window 全体をスクロールさせないよう sidebar を直接スクロール
-  const sidebar = document.getElementById('sidebar');
-  const relTop = block.getBoundingClientRect().top - sidebar.getBoundingClientRect().top + sidebar.scrollTop;
-  sidebar.scrollTo({ top: relTop, behavior: 'smooth' });
+  // 6. #groups 内をスクロール（window をスクロールさせない）
+  const groups = document.getElementById('groups');
+  const relTop = block.getBoundingClientRect().top - groups.getBoundingClientRect().top + groups.scrollTop;
+  groups.scrollTo({ top: relTop, behavior: 'smooth' });
 }
 
 // ── sidebar ──────────────────────────────────────────
