@@ -371,8 +371,10 @@ function renderTopNav() {
 }
 
 function jumpGroup(gi) {
-  // 1. descパネルが開いていたら先に閉じる
-  closeDescPanel();
+  // 1. descパネルが開いていたら内容を新しいグループに切り替える（閉じない）
+  if (openDescGi >= 0) {
+    updateDescPanelContent(gi);
+  }
 
   // 2. ナビボタンのアクティブ切り替え
   document.querySelectorAll('.nav-btn').forEach((b, i) => b.classList.toggle('active', i === gi));
@@ -484,28 +486,18 @@ function filterEndpoints(v) {
 }
 
 // ── 説明パネル ────────────────────────────────────────
-function toggleDescPanel(gi, g, btnEl) {
-  const panel = document.getElementById('desc-panel');
-  // 同じボタンを押したら閉じる
-  if (openDescGi === gi && panel.classList.contains('open')) {
-    closeDescPanel();
-    return;
-  }
+function setDescPanelCookie(gi) {
+  const val = gi >= 0 ? String(gi) : 'off';
+  document.cookie = 'apis_desc_panel_gi=' + val + ';path=/;max-age=31536000;SameSite=Lax';
+}
+
+function updateDescPanelContent(gi) {
+  const g = APIS[gi];
+  if (!g) return;
   openDescGi = gi;
+  setDescPanelCookie(gi);
 
-  // パネルの上端をクリックされた▶ボタンのY座標に合わせる
-  const bodyRow = document.getElementById('body-row');
-  if (btnEl && bodyRow) {
-    const btnRect = btnEl.getBoundingClientRect();
-    const rowRect = bodyRow.getBoundingClientRect();
-    const topOffset = Math.max(0, btnRect.top - rowRect.top);
-    panel.style.top = topOffset + 'px';
-    panel.style.maxHeight = (rowRect.height - topOffset) + 'px';
-  }
-
-  // 全ての expand-btn の open クラスをリセット
   document.querySelectorAll('.expand-btn').forEach(b => b.classList.remove('open'));
-  // 対象グループのボタンを open にする (DOM再構築後でも有効)
   const lbl = document.getElementById('lbl-' + gi);
   if (lbl) lbl.querySelector('.expand-btn').classList.add('open');
 
@@ -517,7 +509,27 @@ function toggleDescPanel(gi, g, btnEl) {
       <span class="desc-text">\${highlight(ep.desc, _currentFilter)}</span>
     </div>\`
   ).join('');
+}
 
+function toggleDescPanel(gi, g, btnEl) {
+  const panel = document.getElementById('desc-panel');
+  // 同じボタンを押したら閉じる
+  if (openDescGi === gi && panel.classList.contains('open')) {
+    closeDescPanel();
+    return;
+  }
+
+  // パネルの上端をクリックされた▶ボタンのY座標に合わせる
+  const bodyRow = document.getElementById('body-row');
+  if (btnEl && bodyRow) {
+    const btnRect = btnEl.getBoundingClientRect();
+    const rowRect = bodyRow.getBoundingClientRect();
+    const topOffset = Math.max(0, btnRect.top - rowRect.top);
+    panel.style.top = topOffset + 'px';
+    panel.style.maxHeight = (rowRect.height - topOffset) + 'px';
+  }
+
+  updateDescPanelContent(gi);
   panel.classList.add('open');
 }
 
@@ -525,6 +537,7 @@ function closeDescPanel() {
   document.getElementById('desc-panel').classList.remove('open');
   document.querySelectorAll('.expand-btn').forEach(b => b.classList.remove('open'));
   openDescGi = -1;
+  setDescPanelCookie(-1);
 }
 
 function selectFromDesc(gi, ei) {
@@ -656,6 +669,20 @@ renderTopNav();
 const _sidebarOpen = (document.cookie.split(';').find(c => c.trim().startsWith('user_apis_sidebar_open='))?.split('=')[1] ?? 'off').trim();
 _accordionMode = (document.cookie.split(';').find(c => c.trim().startsWith('user_apis_sidebar_accordion='))?.split('=')[1] ?? 'off').trim() === 'on';
 renderSidebar(null, _sidebarOpen === 'on');
+(function restoreDescPanel() {
+  const raw = (document.cookie.split(';').find(c => c.trim().startsWith('apis_desc_panel_gi='))?.split('=')[1] ?? 'off').trim();
+  const gi = parseInt(raw, 10);
+  if (!isNaN(gi) && gi >= 0 && APIS[gi]) {
+    const panel = document.getElementById('desc-panel');
+    const bodyRow = document.getElementById('body-row');
+    if (panel && bodyRow) {
+      panel.style.top = '0px';
+      panel.style.maxHeight = bodyRow.getBoundingClientRect().height + 'px';
+    }
+    updateDescPanelContent(gi);
+    if (panel) panel.classList.add('open');
+  }
+})();
 </script>
 </body>
 </html>`;
