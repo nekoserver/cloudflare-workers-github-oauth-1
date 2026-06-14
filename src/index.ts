@@ -25,6 +25,7 @@ import { getFunctionChangelogPage, type FunctionChangeRow, type CatalogFunctionR
 import { getKwArchitecturePage } from './views/kw-architecture';
 import { getKwDrilldownPage } from './views/kw-drilldown';
 import { getCfDashboardPage } from './views/cf-dashboard';
+import { getApisPage } from './views/apis';
 
 import { computeColumnRelationStats, verifyColumnStats, type TableSchema, type Relation } from './utils/columnRelationStats';
 import { ensureDefaultWorkspace, getCurrentWorkspace, getUserWorkspaces, switchWorkspace } from './utils/workspace';
@@ -4223,6 +4224,18 @@ app.get('/cf-dashboard', authMiddleware, async (c) => {
     return c.html(getSessionExpiredPage(), 403);
   }
   return c.html(getCfDashboardPage());
+});
+
+/**
+ * API テスターページ（認証が必要）
+ */
+app.get('/apis', authMiddleware, async (c) => {
+  const user = c.get('user');
+  const userSession = await getUserSession(c.env.DB, user.sub);
+  if (!userSession) {
+    return c.html(getSessionExpiredPage(), 403);
+  }
+  return c.html(getApisPage());
 });
 
 /**
