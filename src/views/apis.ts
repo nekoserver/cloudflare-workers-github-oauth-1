@@ -11,21 +11,21 @@ export function getApisPage(): string {
   --link:#0969da;--nav-h:40px;--radius:6px;--hl:#fff8e1;
   --get:#1a7f37;--get-bg:#dafbe1;--post:#0969da;--post-bg:#ddf4ff;
   --put:#9a6700;--put-bg:#fff8c5;--delete:#cf222e;--delete-bg:#ffebe9;
-  --patch:#6639ba;--patch-bg:#fbefff;
+  --patch:#6639ba;--patch-bg:#fbefff;--hl:#ddf4ff;
 }
 @media(prefers-color-scheme:dark){
   :root{--bg:#0d1117;--surface:#161b22;--border:#30363d;--text:#e6edf3;--muted:#8b949e;
-  --link:#58a6ff;--hl:#1a1a00;
+  --link:#58a6ff;--hl:#0c2d6b;
   --get:#3fb950;--get-bg:#0f2b18;--post:#58a6ff;--post-bg:#0c2d6b;
   --put:#e3b341;--put-bg:#2d1f00;--delete:#f85149;--delete-bg:#300a0a;
   --patch:#bc8cff;--patch-bg:#1d0f33;}
 }
 *{box-sizing:border-box;margin:0;padding:0;}
-body{display:flex;flex-direction:column;height:100vh;overflow:hidden;background:var(--bg);color:var(--text);font:13px/1.5 system-ui,sans-serif;}
+body{display:flex;flex-direction:column;height:100vh;height:100dvh;overflow:hidden;background:var(--bg);color:var(--text);font:13px/1.5 system-ui,sans-serif;}
 
 /* ── top nav ── */
 #topnav{
-  height:var(--nav-h);min-height:var(--nav-h);
+  height:var(--nav-h);min-height:var(--nav-h);flex-shrink:0;
   background:var(--surface);border-bottom:1px solid var(--border);
   display:flex;align-items:center;gap:1px;padding:0 8px;overflow-x:auto;
   scrollbar-width:none;
@@ -52,8 +52,9 @@ body{display:flex;flex-direction:column;height:100vh;overflow:hidden;background:
   width:100%;padding:4px 8px;border:1px solid var(--border);border-radius:var(--radius);
   background:var(--bg);color:var(--text);font-size:11px;
 }
-.group-block{border-bottom:1px solid var(--border);transition:background .25s;}
-.group-block.hl{background:var(--hl);}
+.group-block{border-bottom:1px solid var(--border);}
+@keyframes hlFlash{0%,60%{background:var(--hl);}100%{background:transparent;}}
+.group-block.hl{animation:hlFlash 1.6s ease forwards;}
 .group-label{
   padding:6px 8px 6px 10px;font-size:11px;font-weight:700;color:var(--muted);
   text-transform:uppercase;letter-spacing:.4px;display:flex;align-items:center;
@@ -359,7 +360,7 @@ function jumpGroup(gi) {
   const block = document.getElementById('grp-' + gi);
   if (!block) return;
   block.classList.add('hl');
-  setTimeout(() => block.classList.remove('hl'), 1200);
+  block.addEventListener('animationend', () => block.classList.remove('hl'), { once: true });
 
   // グループを開く
   const label = block.querySelector('.group-label');
@@ -368,7 +369,10 @@ function jumpGroup(gi) {
     label.classList.remove('collapsed');
     eps.style.display = '';
   }
-  block.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  // window 全体をスクロールさせないよう sidebar を直接スクロール
+  const sidebar = document.getElementById('sidebar');
+  const relTop = block.getBoundingClientRect().top - sidebar.getBoundingClientRect().top + sidebar.scrollTop;
+  sidebar.scrollTo({ top: relTop, behavior: 'smooth' });
 }
 
 // ── sidebar ──────────────────────────────────────────
