@@ -340,6 +340,20 @@ const APIS = [
 
 let currentEp = null;
 let openDescGi = -1; // 説明パネルが開いているグループ index
+let _accordionMode = false; // アコーディオンモード: ONのとき非フォーカスセクションを自動で閉じる
+
+// ── 他グループを閉じるヘルパー ────────────────────────
+function collapseOtherGroups(openGi) {
+  document.querySelectorAll('.group-block').forEach(bl => {
+    if (bl.id === 'grp-' + openGi) return;
+    const lbl = bl.querySelector('.group-label');
+    const ep  = bl.querySelector('.group-endpoints');
+    if (lbl && ep && !lbl.classList.contains('collapsed')) {
+      lbl.classList.add('collapsed');
+      ep.style.display = 'none';
+    }
+  });
+}
 
 // ── top nav ──────────────────────────────────────────
 function renderTopNav() {
@@ -366,12 +380,15 @@ function jumpGroup(gi) {
     }));
   }
 
-  // グループを開く
+  // グループを開く（アコーディオンモードなら他を閉じる）
   const label = block.querySelector('.group-label');
   const eps   = block.querySelector('.group-endpoints');
   if (label && label.classList.contains('collapsed')) {
+    if (_accordionMode) collapseOtherGroups(gi);
     label.classList.remove('collapsed');
     eps.style.display = '';
+  } else if (_accordionMode) {
+    collapseOtherGroups(gi);
   }
   // window 全体をスクロールさせないよう sidebar を直接スクロール
   const sidebar = document.getElementById('sidebar');
@@ -408,6 +425,7 @@ function renderSidebar(filter, sectionsOpen) {
     textWrap.innerHTML = \`<span class="toggle-arrow">▾</span>\${esc(g.group)}\`;
     textWrap.onclick = () => {
       const collapsed = !label.classList.contains('collapsed');
+      if (!collapsed && _accordionMode) collapseOtherGroups(gi);
       label.classList.toggle('collapsed', collapsed);
       eps.style.display = collapsed ? 'none' : '';
     };
@@ -606,6 +624,7 @@ function esc(s) {
 
 renderTopNav();
 const _sidebarOpen = (document.cookie.split(';').find(c => c.trim().startsWith('user_apis_sidebar_open='))?.split('=')[1] ?? 'off').trim();
+_accordionMode = (document.cookie.split(';').find(c => c.trim().startsWith('user_apis_sidebar_accordion='))?.split('=')[1] ?? 'off').trim() === 'on';
 renderSidebar(null, _sidebarOpen === 'on');
 </script>
 </body>

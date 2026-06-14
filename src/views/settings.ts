@@ -23,6 +23,7 @@ export function getSettingsPage(user: {
   statusIgnoreUnknownUnclassifiedWarning?: string;
   searchLabelMode?: string;
   apisSidebarOpen?: string;
+  apisSidebarAccordion?: string;
   githubScopes?: string;
   githubGrantedScopes?: string[] | null;
   githubScopeError?: string | null;
@@ -41,6 +42,7 @@ export function getSettingsPage(user: {
   const currentStatusIgnoreUnknownUnclassifiedWarning = user.statusIgnoreUnknownUnclassifiedWarning === 'off' ? 'off' : 'on';
   const currentSearchLabelMode = ['manual-modal', 'auto-classify'].includes(user.searchLabelMode ?? '') ? user.searchLabelMode : 'uncategorized';
   const currentApisSidebarOpen = user.apisSidebarOpen === 'on' ? 'on' : 'off';
+  const currentApisSidebarAccordion = user.apisSidebarAccordion === 'on' ? 'on' : 'off';
   const requestedScopes = user.githubScopes ? user.githubScopes.split(/\s+/).filter(Boolean) : [];
   const grantedScopes = user.githubGrantedScopes ?? null;
   const scopeError = user.githubScopeError ? escapeHtml(user.githubScopeError) : null;
@@ -591,6 +593,17 @@ export function getSettingsPage(user: {
               <label class="theme-toggle-switch">
                 <input type="checkbox" id="apisSidebarOpenCheckbox" onchange="onApisSidebarOpenChange()"
                   ${currentApisSidebarOpen === 'on' ? 'checked' : ''}>
+                <span class="theme-toggle-slider"></span>
+              </label>
+            </div>
+          </div>
+          <div class="info-item">
+            <span class="info-label">APIページ: フォーカスの当たっていないセクションのメニューはすべて閉じた状態にする</span>
+            <div class="setting-control" style="justify-content: flex-end;">
+              <span class="theme-label" id="apisSidebarAccordionLabel">${currentApisSidebarAccordion === 'on' ? 'ON' : 'OFF'}</span>
+              <label class="theme-toggle-switch">
+                <input type="checkbox" id="apisSidebarAccordionCheckbox" onchange="onApisSidebarAccordionChange()"
+                  ${currentApisSidebarAccordion === 'on' ? 'checked' : ''}>
                 <span class="theme-toggle-slider"></span>
               </label>
             </div>
@@ -1374,6 +1387,24 @@ export function getSettingsPage(user: {
         if (!res.ok) throw new Error('failed');
       } catch(e) {
         alert('APIページサイドバー設定の変更に失敗しました');
+        cb.checked = !cb.checked;
+        label.textContent = cb.checked ? 'ON' : 'OFF';
+      }
+    }
+
+    async function onApisSidebarAccordionChange() {
+      var cb = document.getElementById('apisSidebarAccordionCheckbox');
+      var label = document.getElementById('apisSidebarAccordionLabel');
+      var mode = cb.checked ? 'on' : 'off';
+      label.textContent = cb.checked ? 'ON' : 'OFF';
+      try {
+        var res = await fetch('/api/settings/apis-sidebar-accordion', {
+          method: 'POST', headers: {'Content-Type':'application/json'}, credentials: 'include',
+          body: JSON.stringify({ mode })
+        });
+        if (!res.ok) throw new Error('failed');
+      } catch(e) {
+        alert('APIページアコーディオン設定の変更に失敗しました');
         cb.checked = !cb.checked;
         label.textContent = cb.checked ? 'ON' : 'OFF';
       }
