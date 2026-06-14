@@ -650,8 +650,10 @@ async function openSearchHistoryModal() {
       '</tr></thead><tbody>';
     rows.forEach(function(r) {
       var dt = r.recorded_at ? r.recorded_at.replace('T', ' ').slice(0, 16) : '';
+      var kwEsc = esc(r.keyword).replace(/'/g, '&#39;');
       html += '<tr style="border-bottom:1px solid var(--border);">' +
-        '<td style="padding:5px 8px;">' + esc(r.keyword) + '</td>' +
+        '<td style="padding:5px 8px;"><a href="#" style="color:var(--link);text-decoration:none;" ' +
+        'onclick="applyHistoryKeyword(\'' + kwEsc + '\');return false;">' + esc(r.keyword) + '</a></td>' +
         '<td style="padding:5px 8px;text-align:right;">' + r.total_count + '</td>' +
         '<td style="padding:5px 8px;text-align:right;">' + r.section_count + '</td>' +
         '<td style="padding:5px 8px;text-align:right;color:var(--muted);">' + esc(dt) + '</td>' +
@@ -667,6 +669,12 @@ async function openSearchHistoryModal() {
 function closeSearchHistoryModal(e) {
   if (e && e.target !== document.getElementById('search-history-modal-overlay')) return;
   document.getElementById('search-history-modal-overlay').style.display = 'none';
+}
+
+function applyHistoryKeyword(kw) {
+  document.getElementById('search-history-modal-overlay').style.display = 'none';
+  var inp = document.getElementById('search-input');
+  if (inp) { inp.value = kw; filterEndpoints(kw); }
 }
 
 // ── 説明パネル ────────────────────────────────────────
