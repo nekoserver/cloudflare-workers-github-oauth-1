@@ -122,7 +122,6 @@ const STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
   { name: 'ts_function_impact',      migration: 'ts-catalog', description: '関数カタログ: 変更インパクト評価',         syncPolicy: 'manual' },
   { name: 'ts_commit_quality',       migration: 'ts-catalog', description: '関数カタログ: コミット品質評価',           syncPolicy: 'manual' },
   { name: 'ts_function_callers',     migration: '0053',       description: '関数カタログ: 関数呼び出し元マッピング',   syncPolicy: 'manual' },
-  { name: 'aichat_response_keyword_hits', migration: '0055', description: 'AI応答×キーワードヒットログ', syncPolicy: 'auto' },
 ];
 
 const REQUIRED_STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
@@ -818,27 +817,7 @@ CREATE TABLE IF NOT EXISTS ts_function_callers (
 CREATE INDEX IF NOT EXISTS idx_tfcr_callee ON ts_function_callers(callee_id);
 CREATE INDEX IF NOT EXISTS idx_tfcr_file   ON ts_function_callers(repo_id, caller_file);`,
   '0054': `ALTER TABLE user_sessions ADD COLUMN last_activity_at TEXT;`,
-  '0055': `CREATE TABLE IF NOT EXISTS aichat_response_keyword_hits (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  user_id TEXT NOT NULL,
-  share_id TEXT NOT NULL,
-  keyword TEXT NOT NULL,
-  match_count INTEGER NOT NULL DEFAULT 1,
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  UNIQUE(user_id, share_id, keyword)
-);
-CREATE INDEX IF NOT EXISTS idx_arwkh_user_share ON aichat_response_keyword_hits(user_id, share_id);
-CREATE INDEX IF NOT EXISTS idx_arwkh_user_keyword ON aichat_response_keyword_hits(user_id, keyword);
-INSERT OR IGNORE INTO table_catalog (table_name, group_name, description, migration, sync_policy, display_order) VALUES
-('aichat_response_keyword_hits', 'ai', 'AI応答×キーワードヒットログ', '0055', 'auto', 0);
-INSERT OR REPLACE INTO table_column_keys (table_name, column_name, key_type, fk_target_table) VALUES
-('aichat_response_keyword_hits', 'id', 'pk', NULL);
-INSERT OR REPLACE INTO table_column_keys (table_name, column_name, key_type, fk_target_table) VALUES
-('aichat_response_keyword_hits', 'user_id', 'fk', 'user_sessions');
-INSERT OR REPLACE INTO table_column_keys (table_name, column_name, key_type, fk_target_table) VALUES
-('aichat_response_keyword_hits', 'share_id', 'fk', 'ai_chat_shares');
-INSERT OR REPLACE INTO table_column_keys (table_name, column_name, key_type, fk_target_table) VALUES
-('aichat_response_keyword_hits', 'keyword', 'idx', NULL);`,
+
   'ts-catalog': `CREATE TABLE IF NOT EXISTS ts_repository (
   id            INTEGER PRIMARY KEY AUTOINCREMENT,
   full_name     TEXT NOT NULL UNIQUE,
@@ -1152,7 +1131,6 @@ export const TABLE_COLUMN_KEYS: Record<string, ColumnKeyInfo> = {
   ts_function_impact:     { id: 'pk', repo_id: 'fk', commit_hash: 'fk', file_path: 'idx', function_name: 'idx', impact_type: 'idx', contribution: 'idx' },
   ts_commit_quality:      { id: 'pk', repo_id: 'pk+fk', commit_hash: 'pk+fk', granularity_score: 'idx' },
   ts_function_callers:    { id: 'pk', repo_id: 'fk', callee_id: 'fk', caller_file: 'idx' },
-  aichat_response_keyword_hits: { id: 'pk', user_id: 'fk', share_id: 'fk', keyword: 'idx' },
 };
 
 export function getColumnKeyType(tableName: string, columnName: string): ColumnKeyType {
@@ -1215,7 +1193,6 @@ export const TABLE_GROUP_MAP: Record<string, string> = {
   aichat_share_subquery_links: 'ai',
   aichat_model_colors: 'ai',
   aichat_category_groups: 'ai',
-  aichat_response_keyword_hits: 'ai',
   keyword_category_groups: 'search',
   keyword_multi_labels: 'search',
   ts_repository:          'ts-catalog',
@@ -1368,7 +1345,6 @@ export const COLUMN_FK_TARGETS: Record<string, Record<string, string>> = {
   repo_commit_index: { repo_name: 'installation_permissions' },
   ai_chat_shares: { user_id: 'user_sessions' },
   aichat_search_log: { user_id: 'user_sessions', share_id: 'ai_chat_shares' },
-  aichat_response_keyword_hits: { user_id: 'user_sessions', share_id: 'ai_chat_shares' },
   aichat_search_history: { user_id: 'user_sessions', share_id: 'ai_chat_shares' },
   aichat_search_impressions: { user_id: 'user_sessions', share_id: 'ai_chat_shares' },
   aichat_share_subquery_links: { subquery_id: 'aichat_subqueries' },
@@ -1800,32 +1776,6 @@ export function extractAiUsage(raw: Record<string, unknown> | null | undefined):
   return { input_tokens: it, output_tokens: ot, total_tokens: tt };
 }
 
-/**
- * AI 応答テキスト中の各キーワードの出現回数を返す。
- * 大文字小文字を区別しない完全一致（単語境界なし）で照合する。
- * 出現しないキーワードは結果に含まない。
- */
-export function countKeywordOccurrences(
-  responseText: string,
-  keywords: string[]
-): Array<{ keyword: string; matchCount: number }> {
-  const lower = responseText.toLowerCase();
-  const results: Array<{ keyword: string; matchCount: number }> = [];
-  for (const kw of keywords) {
-    const kwLower = kw.toLowerCase();
-    if (!kwLower) continue;
-    let count = 0;
-    let pos = 0;
-    while ((pos = lower.indexOf(kwLower, pos)) !== -1) {
-      count++;
-      pos += kwLower.length;
-    }
-    if (count > 0) {
-      results.push({ keyword: kw, matchCount: count });
-    }
-  }
-  return results;
-}
 
 interface ClassifyResult {
   label: string;
@@ -3073,38 +3023,9 @@ app.post('/api/aichat', authMiddleware, async (c) => {
     }
   };
 
-  const matchKeywords = async (response: string, shareId: string) => {
-    if (!c.env.DB || !shareId) return;
-    try {
-      const kwRows = await c.env.DB.prepare(
-        'SELECT DISTINCT keyword FROM aichat_search_log WHERE user_id = ? AND deleted_at IS NULL'
-      ).bind(user.sub).all<{ keyword: string }>();
-      const keywords = (kwRows.results ?? []).map((r) => r.keyword).filter(Boolean);
-      if (keywords.length === 0) return;
-      const hits = countKeywordOccurrences(response, keywords);
-      if (hits.length === 0) return;
-      const now = new Date().toISOString();
-      const stmts = hits.map(({ keyword, matchCount }) =>
-        c.env.DB!.prepare(
-          'INSERT OR REPLACE INTO aichat_response_keyword_hits (user_id, share_id, keyword, match_count, created_at) VALUES (?, ?, ?, ?, ?)'
-        ).bind(user.sub, shareId, keyword, matchCount, now)
-      );
-      await c.env.DB.batch(stmts);
-    } catch (err) {
-      logger.warn('keyword match save failed', {
-        error: err instanceof Error ? err.message : 'Unknown',
-        user: user.sub,
-        shareId,
-      });
-    }
-  };
-
   try {
     const { text: response, usage } = await runAi(primaryModel);
     const saved = await autoSave(response, primaryModel, usage);
-    if (saved.shareId) {
-      c.executionCtx.waitUntil(matchKeywords(response, saved.shareId));
-    }
     return jsonUtf8({ response, usedModel: primaryModel, systemPromptMode, ...usage, ...saved });
   } catch (primaryErr) {
     logger.warn('AI chat primary model failed, trying fallback', {
@@ -3119,9 +3040,6 @@ app.post('/api/aichat', authMiddleware, async (c) => {
     try {
       const { text: response, usage } = await runAi(fallbackModel);
       const saved = await autoSave(response, fallbackModel, usage);
-      if (saved.shareId) {
-        c.executionCtx.waitUntil(matchKeywords(response, saved.shareId));
-      }
       const primaryErrMsg = primaryErr instanceof Error ? primaryErr.message : String(primaryErr);
       return jsonUtf8({ response, usedModel: fallbackModel, systemPromptMode, fallbackUsed: true, primaryError: primaryErrMsg, ...usage, ...saved });
     } catch (fallbackErr) {
