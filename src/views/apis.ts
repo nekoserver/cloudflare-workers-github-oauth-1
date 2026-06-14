@@ -12,13 +12,14 @@ export function getApisPage(): string {
   --get:#1a7f37;--get-bg:#dafbe1;--post:#0969da;--post-bg:#ddf4ff;
   --put:#9a6700;--put-bg:#fff8c5;--delete:#cf222e;--delete-bg:#ffebe9;
   --patch:#6639ba;--patch-bg:#fbefff;--hl:#ddf4ff;
+  --search-hl:#ffe066;--search-hl-text:#1f2328;
 }
 @media(prefers-color-scheme:dark){
   :root{--bg:#0d1117;--surface:#161b22;--border:#30363d;--text:#e6edf3;--muted:#8b949e;
   --link:#58a6ff;--hl:#0c2d6b;
   --get:#3fb950;--get-bg:#0f2b18;--post:#58a6ff;--post-bg:#0c2d6b;
   --put:#e3b341;--put-bg:#2d1f00;--delete:#f85149;--delete-bg:#300a0a;
-  --patch:#bc8cff;--patch-bg:#1d0f33;}
+  --patch:#bc8cff;--patch-bg:#1d0f33;--search-hl:#6b5000;--search-hl-text:#e6edf3;}
 }
 *{box-sizing:border-box;margin:0;padding:0;}
 body{display:flex;flex-direction:column;height:100vh;height:100dvh;overflow:hidden;background:var(--bg);color:var(--text);font:13px/1.5 system-ui,sans-serif;}
@@ -91,6 +92,10 @@ body{display:flex;flex-direction:column;height:100vh;height:100dvh;overflow:hidd
   font-size:11px;color:var(--text);flex:1;min-width:0;
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
   direction:rtl;text-align:left;
+}
+mark.hl-match{
+  background:var(--search-hl);color:var(--search-hl-text);
+  border-radius:2px;padding:0 1px;font-style:normal;font-weight:700;
 }
 
 /* ── desc panel (絶対位置フロートパネル) ── */
@@ -341,6 +346,7 @@ const APIS = [
 let currentEp = null;
 let openDescGi = -1; // 説明パネルが開いているグループ index
 let _accordionMode = false; // アコーディオンモード: ONのとき非フォーカスセクションを自動で閉じる
+let _currentFilter = ''; // 現在の検索キーワード（descパネルのハイライトに使用）
 
 // ── 他グループを閉じるヘルパー ────────────────────────
 function collapseOtherGroups(openGi) {
@@ -454,8 +460,8 @@ function renderSidebar(filter, sectionsOpen) {
       const item = document.createElement('div');
       item.className = 'ep-item';
       item.innerHTML =
-        \`<span class="badge badge-\${ep.method}">\${ep.method}</span>\` +
-        \`<span class="ep-path" title="\${esc(ep.path)}">\${esc(ep.path)}</span>\`;
+        \`<span class="badge badge-\${ep.method}">\${highlight(ep.method, fl)}</span>\` +
+        \`<span class="ep-path" title="\${esc(ep.path)}">\${highlight(ep.path, fl)}</span>\`;
       item.onclick = () => selectEndpoint(ep, item);
       eps.appendChild(item);
     });
@@ -467,6 +473,7 @@ function renderSidebar(filter, sectionsOpen) {
 }
 
 function filterEndpoints(v) {
+  _currentFilter = v || '';
   renderSidebar(v, true); // フィルタ中は展開して表示
   if (v) document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
 }
@@ -501,8 +508,8 @@ function toggleDescPanel(gi, g, btnEl) {
   const list = document.getElementById('desc-panel-list');
   list.innerHTML = g.endpoints.map((ep, ei) =>
     \`<div class="desc-item" onclick="selectFromDesc(\${gi},\${ei})">
-      <span class="badge badge-\${ep.method}">\${ep.method}</span>
-      <span class="desc-text">\${esc(ep.desc)}</span>
+      <span class="badge badge-\${ep.method}">\${highlight(ep.method, _currentFilter)}</span>
+      <span class="desc-text">\${highlight(ep.desc, _currentFilter)}</span>
     </div>\`
   ).join('');
 
@@ -620,6 +627,24 @@ async function sendRequest() {
 
 function esc(s) {
   return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function highlight(text, query) {
+  const escaped = esc(text);
+  if (!query) return escaped;
+  const q = esc(query).toLowerCase();
+  if (!q) return escaped;
+  const lower = escaped.toLowerCase();
+  let result = '';
+  let i = 0;
+  while (i < escaped.length) {
+    const idx = lower.indexOf(q, i);
+    if (idx === -1) { result += escaped.slice(i); break; }
+    result += escaped.slice(i, idx) +
+      '<mark class="hl-match">' + escaped.slice(idx, idx + q.length) + '</mark>';
+    i = idx + q.length;
+  }
+  return result;
 }
 
 renderTopNav();
