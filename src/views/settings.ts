@@ -24,6 +24,7 @@ export function getSettingsPage(user: {
   searchLabelMode?: string;
   apisSidebarOpen?: string;
   apisSidebarAccordion?: string;
+  apisDescMode?: string;
   githubScopes?: string;
   githubGrantedScopes?: string[] | null;
   githubScopeError?: string | null;
@@ -43,6 +44,7 @@ export function getSettingsPage(user: {
   const currentSearchLabelMode = ['manual-modal', 'auto-classify'].includes(user.searchLabelMode ?? '') ? user.searchLabelMode : 'uncategorized';
   const currentApisSidebarOpen = user.apisSidebarOpen === 'on' ? 'on' : 'off';
   const currentApisSidebarAccordion = user.apisSidebarAccordion === 'on' ? 'on' : 'off';
+  const currentApisDescMode = user.apisDescMode === 'off' ? 'off' : 'on';
   const requestedScopes = user.githubScopes ? user.githubScopes.split(/\s+/).filter(Boolean) : [];
   const grantedScopes = user.githubGrantedScopes ?? null;
   const scopeError = user.githubScopeError ? escapeHtml(user.githubScopeError) : null;
@@ -604,6 +606,17 @@ export function getSettingsPage(user: {
               <label class="theme-toggle-switch">
                 <input type="checkbox" id="apisSidebarAccordionCheckbox" onchange="onApisSidebarAccordionChange()"
                   ${currentApisSidebarAccordion === 'on' ? 'checked' : ''}>
+                <span class="theme-toggle-slider"></span>
+              </label>
+            </div>
+          </div>
+          <div class="info-item">
+            <span class="info-label">APIページ: サイドバーにパスの代わりに日本語説明を表示する（▶ボタン非表示）</span>
+            <div class="setting-control" style="justify-content: flex-end;">
+              <span class="theme-label" id="apisDescModeLabel">${currentApisDescMode === 'on' ? 'ON' : 'OFF'}</span>
+              <label class="theme-toggle-switch">
+                <input type="checkbox" id="apisDescModeCheckbox" onchange="onApisDescModeChange()"
+                  ${currentApisDescMode === 'on' ? 'checked' : ''}>
                 <span class="theme-toggle-slider"></span>
               </label>
             </div>
@@ -1405,6 +1418,24 @@ export function getSettingsPage(user: {
         if (!res.ok) throw new Error('failed');
       } catch(e) {
         alert('APIページアコーディオン設定の変更に失敗しました');
+        cb.checked = !cb.checked;
+        label.textContent = cb.checked ? 'ON' : 'OFF';
+      }
+    }
+
+    async function onApisDescModeChange() {
+      var cb = document.getElementById('apisDescModeCheckbox');
+      var label = document.getElementById('apisDescModeLabel');
+      var mode = cb.checked ? 'on' : 'off';
+      label.textContent = cb.checked ? 'ON' : 'OFF';
+      try {
+        var res = await fetch('/api/settings/apis-desc-mode', {
+          method: 'POST', headers: {'Content-Type':'application/json'}, credentials: 'include',
+          body: JSON.stringify({ mode })
+        });
+        if (!res.ok) throw new Error('failed');
+      } catch(e) {
+        alert('APIページ表示モード設定の変更に失敗しました');
         cb.checked = !cb.checked;
         label.textContent = cb.checked ? 'ON' : 'OFF';
       }
