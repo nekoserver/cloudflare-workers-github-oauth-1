@@ -40,7 +40,7 @@ body{display:flex;flex-direction:column;height:100vh;height:100dvh;overflow:hidd
 .nav-btn.active{background:var(--link);color:#fff;}
 
 /* ── body row ── */
-#body-row{display:flex;flex:1;overflow:hidden;}
+#body-row{display:flex;flex:1;overflow:hidden;position:relative;}
 
 /* ── sidebar ── */
 #sidebar{
@@ -53,8 +53,6 @@ body{display:flex;flex-direction:column;height:100vh;height:100dvh;overflow:hidd
   background:var(--bg);color:var(--text);font-size:11px;
 }
 .group-block{border-bottom:1px solid var(--border);}
-@keyframes hlFlash{0%,60%{background:var(--hl);}100%{background:transparent;}}
-.group-block.hl{animation:hlFlash 1.6s ease forwards;}
 .group-label{
   padding:6px 8px 6px 10px;font-size:11px;font-weight:700;color:var(--muted);
   text-transform:uppercase;letter-spacing:.4px;display:flex;align-items:center;
@@ -71,7 +69,7 @@ body{display:flex;flex-direction:column;height:100vh;height:100dvh;overflow:hidd
   transition:background .1s,color .1s;
 }
 .expand-btn:hover{background:var(--border);color:var(--text);}
-.expand-btn.open{color:var(--link);background:var(--post-bg);}
+.expand-btn.open{color:#fff !important;background:var(--link) !important;}
 
 .group-endpoints{}
 .ep-item{
@@ -95,32 +93,32 @@ body{display:flex;flex-direction:column;height:100vh;height:100dvh;overflow:hidd
   direction:rtl;text-align:left;
 }
 
-/* ── desc panel ── */
+/* ── desc panel (絶対位置フロートパネル) ── */
 #desc-panel{
-  width:0;min-width:0;overflow:hidden;
-  border-right:0 solid var(--border);
-  background:var(--surface);
-  transition:width .2s,min-width .2s,border-right-width .2s;
+  position:absolute;left:220px;top:0;z-index:5;
+  width:0;overflow:hidden;
+  background:var(--surface);border:1px solid var(--border);
+  box-shadow:2px 4px 12px rgba(0,0,0,.12);border-radius:0 var(--radius) var(--radius) 0;
+  transition:width .2s;
   display:flex;flex-direction:column;
-  flex-shrink:0;
+  max-height:100%;
 }
-#desc-panel.open{width:220px;min-width:220px;border-right-width:1px;}
+#desc-panel.open{width:220px;}
 #desc-panel-header{
-  padding:8px 10px;font-size:11px;font-weight:700;color:var(--muted);
+  padding:6px 8px 6px 10px;font-size:11px;font-weight:700;color:var(--muted);
   text-transform:uppercase;letter-spacing:.4px;border-bottom:1px solid var(--border);
   display:flex;align-items:center;justify-content:space-between;flex-shrink:0;
 }
-#desc-panel-close{cursor:pointer;font-size:14px;color:var(--muted);background:none;border:none;line-height:1;}
+#desc-panel-close{cursor:pointer;font-size:14px;color:var(--muted);background:none;border:none;line-height:1;padding:0 2px;}
 #desc-panel-close:hover{color:var(--text);}
 #desc-panel-list{overflow-y:auto;flex:1;}
 .desc-item{
-  display:flex;align-items:flex-start;gap:5px;padding:6px 10px;
-  border-bottom:1px solid var(--border);cursor:pointer;
+  display:flex;align-items:center;gap:5px;padding:4px 8px 4px 12px;
+  border-bottom:1px solid var(--border);cursor:pointer;overflow:hidden;
 }
 .desc-item:hover{background:var(--bg);}
 .desc-item:last-child{border-bottom:none;}
-.desc-item .badge{margin-top:1px;}
-.desc-text{font-size:11px;color:var(--text);line-height:1.4;}
+.desc-text{font-size:11px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;direction:rtl;text-align:left;}
 
 /* ── main ── */
 #main{flex:1;overflow-y:auto;display:flex;flex-direction:column;}
@@ -355,12 +353,18 @@ function jumpGroup(gi) {
   // ナビボタンのアクティブ切り替え
   document.querySelectorAll('.nav-btn').forEach((b, i) => b.classList.toggle('active', i === gi));
 
-  // グループブロックのハイライト
-  document.querySelectorAll('.group-block').forEach(b => b.classList.remove('hl'));
   const block = document.getElementById('grp-' + gi);
   if (!block) return;
-  block.classList.add('hl');
-  block.addEventListener('animationend', () => block.classList.remove('hl'), { once: true });
+  // group-label に直接ハイライト (sticky + background:inherit の問題を回避)
+  const hlLabel = block.querySelector('.group-label');
+  if (hlLabel) {
+    hlLabel.style.transition = 'background 0s';
+    hlLabel.style.background = 'var(--hl)';
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      hlLabel.style.transition = 'background 1.5s ease';
+      hlLabel.style.background = '';
+    }));
+  }
 
   // グループを開く
   const label = block.querySelector('.group-label');
@@ -376,7 +380,7 @@ function jumpGroup(gi) {
 }
 
 // ── sidebar ──────────────────────────────────────────
-function renderSidebar(filter) {
+function renderSidebar(filter, sectionsOpen) {
   const fl = (filter || '').toLowerCase();
   const container = document.getElementById('groups');
   container.innerHTML = '';
@@ -415,7 +419,7 @@ function renderSidebar(filter) {
     expandBtn.textContent = '▶';
     expandBtn.onclick = (e) => {
       e.stopPropagation();
-      toggleDescPanel(gi, g);
+      toggleDescPanel(gi, g, expandBtn);
     };
 
     label.appendChild(textWrap);
@@ -423,6 +427,10 @@ function renderSidebar(filter) {
 
     const eps = document.createElement('div');
     eps.className = 'group-endpoints';
+    if (!sectionsOpen) {
+      label.classList.add('collapsed');
+      eps.style.display = 'none';
+    }
 
     filtered.forEach(ep => {
       const item = document.createElement('div');
@@ -441,12 +449,12 @@ function renderSidebar(filter) {
 }
 
 function filterEndpoints(v) {
-  renderSidebar(v);
+  renderSidebar(v, true); // フィルタ中は展開して表示
   if (v) document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
 }
 
 // ── 説明パネル ────────────────────────────────────────
-function toggleDescPanel(gi, g) {
+function toggleDescPanel(gi, g, btnEl) {
   const panel = document.getElementById('desc-panel');
   // 同じボタンを押したら閉じる
   if (openDescGi === gi && panel.classList.contains('open')) {
@@ -454,6 +462,16 @@ function toggleDescPanel(gi, g) {
     return;
   }
   openDescGi = gi;
+
+  // パネルの上端をクリックされた▶ボタンのY座標に合わせる
+  const bodyRow = document.getElementById('body-row');
+  if (btnEl && bodyRow) {
+    const btnRect = btnEl.getBoundingClientRect();
+    const rowRect = bodyRow.getBoundingClientRect();
+    const topOffset = Math.max(0, btnRect.top - rowRect.top);
+    panel.style.top = topOffset + 'px';
+    panel.style.maxHeight = (rowRect.height - topOffset) + 'px';
+  }
 
   // 全ての expand-btn の open クラスをリセット
   document.querySelectorAll('.expand-btn').forEach(b => b.classList.remove('open'));
@@ -587,7 +605,8 @@ function esc(s) {
 }
 
 renderTopNav();
-renderSidebar();
+const _sidebarOpen = (document.cookie.split(';').find(c => c.trim().startsWith('user_apis_sidebar_open='))?.split('=')[1] ?? 'off').trim();
+renderSidebar(null, _sidebarOpen === 'on');
 </script>
 </body>
 </html>`;
