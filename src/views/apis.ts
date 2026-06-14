@@ -8,14 +8,15 @@ export function getApisPage(): string {
 <style>
 :root{
   --bg:#f6f8fa;--surface:#fff;--border:#d0d7de;--text:#1f2328;--muted:#656d76;
-  --link:#0969da;--nav-h:44px;--radius:6px;
+  --link:#0969da;--nav-h:40px;--radius:6px;--hl:#fff8e1;
   --get:#1a7f37;--get-bg:#dafbe1;--post:#0969da;--post-bg:#ddf4ff;
   --put:#9a6700;--put-bg:#fff8c5;--delete:#cf222e;--delete-bg:#ffebe9;
   --patch:#6639ba;--patch-bg:#fbefff;
 }
 @media(prefers-color-scheme:dark){
   :root{--bg:#0d1117;--surface:#161b22;--border:#30363d;--text:#e6edf3;--muted:#8b949e;
-  --link:#58a6ff;--get:#3fb950;--get-bg:#0f2b18;--post:#58a6ff;--post-bg:#0c2d6b;
+  --link:#58a6ff;--hl:#1a1a00;
+  --get:#3fb950;--get-bg:#0f2b18;--post:#58a6ff;--post-bg:#0c2d6b;
   --put:#e3b341;--put-bg:#2d1f00;--delete:#f85149;--delete-bg:#300a0a;
   --patch:#bc8cff;--patch-bg:#1d0f33;}
 }
@@ -26,50 +27,61 @@ body{display:flex;flex-direction:column;height:100vh;overflow:hidden;background:
 #topnav{
   height:var(--nav-h);min-height:var(--nav-h);
   background:var(--surface);border-bottom:1px solid var(--border);
-  display:flex;align-items:center;gap:4px;padding:0 12px;overflow-x:auto;
+  display:flex;align-items:center;gap:1px;padding:0 8px;overflow-x:auto;
   scrollbar-width:none;
 }
 #topnav::-webkit-scrollbar{display:none;}
 .nav-btn{
-  white-space:nowrap;padding:4px 12px;border-radius:20px;border:1px solid transparent;
-  font-size:12px;font-weight:600;cursor:pointer;background:none;color:var(--muted);
-  transition:background .12s,color .12s;flex-shrink:0;
+  white-space:nowrap;padding:3px 9px;border-radius:4px;border:none;
+  font-size:11px;font-weight:600;cursor:pointer;background:none;color:var(--muted);
+  transition:background .1s,color .1s;flex-shrink:0;
 }
 .nav-btn:hover{background:var(--bg);color:var(--text);}
-.nav-btn.active{background:var(--link);color:#fff;border-color:var(--link);}
+.nav-btn.active{background:var(--link);color:#fff;}
 
 /* ── body row ── */
 #body-row{display:flex;flex:1;overflow:hidden;}
 
 /* ── sidebar ── */
 #sidebar{
-  width:240px;min-width:240px;border-right:1px solid var(--border);
+  width:220px;min-width:220px;border-right:1px solid var(--border);
   overflow-y:auto;background:var(--surface);display:flex;flex-direction:column;
 }
-#sidebar-search{padding:8px 10px;border-bottom:1px solid var(--border);flex-shrink:0;}
+#sidebar-search{padding:7px 8px;border-bottom:1px solid var(--border);flex-shrink:0;}
 #sidebar-search input{
-  width:100%;padding:5px 9px;border:1px solid var(--border);border-radius:var(--radius);
-  background:var(--bg);color:var(--text);font-size:12px;
+  width:100%;padding:4px 8px;border:1px solid var(--border);border-radius:var(--radius);
+  background:var(--bg);color:var(--text);font-size:11px;
 }
-.group-block{border-bottom:1px solid var(--border);}
+.group-block{border-bottom:1px solid var(--border);transition:background .25s;}
+.group-block.hl{background:var(--hl);}
 .group-label{
-  padding:7px 12px;font-size:11px;font-weight:700;color:var(--muted);
-  text-transform:uppercase;letter-spacing:.5px;display:flex;align-items:center;
-  justify-content:space-between;cursor:pointer;user-select:none;
-  background:var(--surface);position:sticky;top:0;z-index:1;
+  padding:6px 8px 6px 10px;font-size:11px;font-weight:700;color:var(--muted);
+  text-transform:uppercase;letter-spacing:.4px;display:flex;align-items:center;
+  position:sticky;top:0;z-index:1;background:inherit;
 }
-.group-label .arrow{font-size:10px;transition:transform .15s;}
-.group-label.collapsed .arrow{transform:rotate(-90deg);}
+.group-label-text{flex:1;cursor:pointer;user-select:none;padding-right:4px;}
+/* 折りたたみ三角 (左側) */
+.toggle-arrow{font-size:9px;margin-right:5px;transition:transform .15s;display:inline-block;}
+.group-label.collapsed .toggle-arrow{transform:rotate(-90deg);}
+/* 説明パネル展開ボタン (右端) */
+.expand-btn{
+  font-size:11px;cursor:pointer;padding:2px 5px;border-radius:3px;
+  color:var(--muted);background:none;border:none;flex-shrink:0;
+  transition:background .1s,color .1s;
+}
+.expand-btn:hover{background:var(--border);color:var(--text);}
+.expand-btn.open{color:var(--link);background:var(--post-bg);}
+
 .group-endpoints{}
 .ep-item{
-  display:flex;align-items:center;gap:6px;padding:5px 12px 5px 14px;
+  display:flex;align-items:center;gap:5px;padding:4px 8px 4px 12px;
   cursor:pointer;border-left:3px solid transparent;overflow:hidden;
 }
 .ep-item:hover{background:var(--bg);}
 .ep-item.active{background:var(--bg);border-left-color:var(--link);}
 .badge{
   font-size:10px;font-weight:700;padding:1px 4px;border-radius:3px;
-  min-width:44px;text-align:center;flex-shrink:0;
+  min-width:42px;text-align:center;flex-shrink:0;
 }
 .badge-GET{background:var(--get-bg);color:var(--get);}
 .badge-POST{background:var(--post-bg);color:var(--post);}
@@ -82,12 +94,39 @@ body{display:flex;flex-direction:column;height:100vh;overflow:hidden;background:
   direction:rtl;text-align:left;
 }
 
+/* ── desc panel ── */
+#desc-panel{
+  width:0;min-width:0;overflow:hidden;
+  border-right:0 solid var(--border);
+  background:var(--surface);
+  transition:width .2s,min-width .2s,border-right-width .2s;
+  display:flex;flex-direction:column;
+  flex-shrink:0;
+}
+#desc-panel.open{width:220px;min-width:220px;border-right-width:1px;}
+#desc-panel-header{
+  padding:8px 10px;font-size:11px;font-weight:700;color:var(--muted);
+  text-transform:uppercase;letter-spacing:.4px;border-bottom:1px solid var(--border);
+  display:flex;align-items:center;justify-content:space-between;flex-shrink:0;
+}
+#desc-panel-close{cursor:pointer;font-size:14px;color:var(--muted);background:none;border:none;line-height:1;}
+#desc-panel-close:hover{color:var(--text);}
+#desc-panel-list{overflow-y:auto;flex:1;}
+.desc-item{
+  display:flex;align-items:flex-start;gap:5px;padding:6px 10px;
+  border-bottom:1px solid var(--border);cursor:pointer;
+}
+.desc-item:hover{background:var(--bg);}
+.desc-item:last-child{border-bottom:none;}
+.desc-item .badge{margin-top:1px;}
+.desc-text{font-size:11px;color:var(--text);line-height:1.4;}
+
 /* ── main ── */
 #main{flex:1;overflow-y:auto;display:flex;flex-direction:column;}
 #welcome{display:flex;align-items:center;justify-content:center;flex:1;color:var(--muted);font-size:14px;}
-#detail{display:none;flex-direction:column;padding:24px;gap:16px;max-width:860px;width:100%;}
-.ep-header{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
-.ep-title{font-size:16px;font-weight:600;font-family:monospace;word-break:break-all;}
+#detail{display:none;flex-direction:column;padding:20px 24px;gap:14px;max-width:820px;width:100%;}
+.ep-header{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+.ep-title{font-size:15px;font-weight:600;font-family:monospace;word-break:break-all;}
 .ep-desc{color:var(--muted);font-size:13px;}
 .section-title{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px;}
 .param-table{width:100%;border-collapse:collapse;font-size:12px;border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;}
@@ -96,15 +135,15 @@ body{display:flex;flex-direction:column;height:100vh;overflow:hidden;background:
 .param-table tr:last-child td{border-bottom:none;}
 .param-table input{width:100%;padding:3px 7px;border:1px solid var(--border);border-radius:4px;background:var(--surface);color:var(--text);font-size:12px;}
 .req-badge{background:var(--delete-bg);color:var(--delete);font-size:10px;padding:1px 4px;border-radius:3px;font-weight:600;}
-.body-area{font-family:monospace;font-size:12px;width:100%;min-height:120px;padding:8px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);color:var(--text);resize:vertical;}
-.send-btn{background:var(--link);color:#fff;border:none;border-radius:var(--radius);padding:7px 18px;font-size:13px;font-weight:600;cursor:pointer;}
+.body-area{font-family:monospace;font-size:12px;width:100%;min-height:110px;padding:8px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);color:var(--text);resize:vertical;}
+.send-btn{background:var(--link);color:#fff;border:none;border-radius:var(--radius);padding:6px 16px;font-size:13px;font-weight:600;cursor:pointer;}
 .send-btn:hover{opacity:.85;}
 .send-btn:disabled{opacity:.5;cursor:not-allowed;}
 .response-box{border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;}
-.res-header{display:flex;align-items:center;gap:10px;padding:7px 12px;background:var(--bg);border-bottom:1px solid var(--border);font-size:12px;}
+.res-header{display:flex;align-items:center;gap:10px;padding:6px 12px;background:var(--bg);border-bottom:1px solid var(--border);font-size:12px;}
 .status-ok{color:var(--get);font-weight:700;}
 .status-err{color:var(--delete);font-weight:700;}
-.res-body{font-family:monospace;font-size:12px;padding:12px;white-space:pre-wrap;word-break:break-all;max-height:380px;overflow-y:auto;background:var(--surface);}
+.res-body{font-family:monospace;font-size:12px;padding:12px;white-space:pre-wrap;word-break:break-all;max-height:360px;overflow-y:auto;background:var(--surface);}
 </style>
 </head>
 <body>
@@ -117,6 +156,14 @@ body{display:flex;flex-direction:column;height:100vh;overflow:hidden;background:
       <input id="search-input" placeholder="エンドポイントを検索…" oninput="filterEndpoints(this.value)">
     </div>
     <div id="groups"></div>
+  </div>
+
+  <div id="desc-panel">
+    <div id="desc-panel-header">
+      <span id="desc-panel-title"></span>
+      <button id="desc-panel-close" onclick="closeDescPanel()">✕</button>
+    </div>
+    <div id="desc-panel-list"></div>
   </div>
 
   <div id="main">
@@ -133,7 +180,7 @@ body{display:flex;flex-direction:column;height:100vh;overflow:hidden;background:
       </div>
       <div id="query-params-sec" style="display:none">
         <div class="section-title">クエリパラメータ</div>
-        <table class="param-table"><thead><tr><th>名前</th><th style="width:64px">必須</th><th>値</th></tr></thead><tbody id="query-params-body"></tbody></table>
+        <table class="param-table"><thead><tr><th>名前</th><th style="width:60px">必須</th><th>値</th></tr></thead><tbody id="query-params-body"></tbody></table>
       </div>
       <div id="body-sec" style="display:none">
         <div class="section-title">リクエストボディ (JSON)</div>
@@ -293,6 +340,7 @@ const APIS = [
 ];
 
 let currentEp = null;
+let openDescGi = -1; // 説明パネルが開いているグループ index
 
 // ── top nav ──────────────────────────────────────────
 function renderTopNav() {
@@ -303,18 +351,23 @@ function renderTopNav() {
 }
 
 function jumpGroup(gi) {
-  // アクティブボタン切り替え
+  // ナビボタンのアクティブ切り替え
   document.querySelectorAll('.nav-btn').forEach((b, i) => b.classList.toggle('active', i === gi));
-  // グループを開く
+
+  // グループブロックのハイライト
+  document.querySelectorAll('.group-block').forEach(b => b.classList.remove('hl'));
   const block = document.getElementById('grp-' + gi);
   if (!block) return;
+  block.classList.add('hl');
+  setTimeout(() => block.classList.remove('hl'), 1200);
+
+  // グループを開く
   const label = block.querySelector('.group-label');
   const eps   = block.querySelector('.group-endpoints');
   if (label && label.classList.contains('collapsed')) {
     label.classList.remove('collapsed');
     eps.style.display = '';
   }
-  // サイドバーをスクロール
   block.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
@@ -336,14 +389,33 @@ function renderSidebar(filter) {
     block.className = 'group-block';
     block.id = 'grp-' + gi;
 
+    // グループラベル行
     const label = document.createElement('div');
     label.className = 'group-label';
-    label.innerHTML = esc(g.group) + \` <span class="arrow">▾</span>\`;
-    label.onclick = () => {
-      const isNowCollapsed = !label.classList.contains('collapsed');
-      label.classList.toggle('collapsed', isNowCollapsed);
-      eps.style.display = isNowCollapsed ? 'none' : '';
+    label.id = 'lbl-' + gi;
+
+    // 左側: 折りたたみ三角 + グループ名テキスト
+    const textWrap = document.createElement('span');
+    textWrap.className = 'group-label-text';
+    textWrap.innerHTML = \`<span class="toggle-arrow">▾</span>\${esc(g.group)}\`;
+    textWrap.onclick = () => {
+      const collapsed = !label.classList.contains('collapsed');
+      label.classList.toggle('collapsed', collapsed);
+      eps.style.display = collapsed ? 'none' : '';
     };
+
+    // 右端: 説明パネル展開ボタン ▶
+    const expandBtn = document.createElement('button');
+    expandBtn.className = 'expand-btn';
+    expandBtn.title = '説明パネルを開く';
+    expandBtn.textContent = '▶';
+    expandBtn.onclick = (e) => {
+      e.stopPropagation();
+      toggleDescPanel(gi, g);
+    };
+
+    label.appendChild(textWrap);
+    label.appendChild(expandBtn);
 
     const eps = document.createElement('div');
     eps.className = 'group-endpoints';
@@ -351,9 +423,6 @@ function renderSidebar(filter) {
     filtered.forEach(ep => {
       const item = document.createElement('div');
       item.className = 'ep-item';
-      item.dataset.path = ep.path;
-      item.dataset.method = ep.method;
-      // path: show with rtl ellipsis so tail is visible
       item.innerHTML =
         \`<span class="badge badge-\${ep.method}">\${ep.method}</span>\` +
         \`<span class="ep-path" title="\${esc(ep.path)}">\${esc(ep.path)}</span>\`;
@@ -369,8 +438,56 @@ function renderSidebar(filter) {
 
 function filterEndpoints(v) {
   renderSidebar(v);
-  // 検索中はナビボタンのアクティブ解除
   if (v) document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+}
+
+// ── 説明パネル ────────────────────────────────────────
+function toggleDescPanel(gi, g) {
+  const panel = document.getElementById('desc-panel');
+  // 同じボタンを押したら閉じる
+  if (openDescGi === gi && panel.classList.contains('open')) {
+    closeDescPanel();
+    return;
+  }
+  openDescGi = gi;
+
+  // 全ての expand-btn の open クラスをリセット
+  document.querySelectorAll('.expand-btn').forEach(b => b.classList.remove('open'));
+  // 対象グループのボタンを open にする (DOM再構築後でも有効)
+  const lbl = document.getElementById('lbl-' + gi);
+  if (lbl) lbl.querySelector('.expand-btn').classList.add('open');
+
+  document.getElementById('desc-panel-title').textContent = g.group;
+  const list = document.getElementById('desc-panel-list');
+  list.innerHTML = g.endpoints.map((ep, ei) =>
+    \`<div class="desc-item" onclick="selectFromDesc(\${gi},\${ei})">
+      <span class="badge badge-\${ep.method}">\${ep.method}</span>
+      <span class="desc-text">\${esc(ep.desc)}</span>
+    </div>\`
+  ).join('');
+
+  panel.classList.add('open');
+}
+
+function closeDescPanel() {
+  document.getElementById('desc-panel').classList.remove('open');
+  document.querySelectorAll('.expand-btn').forEach(b => b.classList.remove('open'));
+  openDescGi = -1;
+}
+
+function selectFromDesc(gi, ei) {
+  const ep = APIS[gi].endpoints[ei];
+  if (!ep) return;
+  // サイドバーの対応アイテムを探してクリック状態にする
+  const block = document.getElementById('grp-' + gi);
+  if (block) {
+    const items = block.querySelectorAll('.ep-item');
+    if (items[ei]) {
+      document.querySelectorAll('.ep-item').forEach(el => el.classList.remove('active'));
+      items[ei].classList.add('active');
+    }
+  }
+  selectEndpoint(ep, document.createElement('div'));
 }
 
 // ── endpoint detail ───────────────────────────────────
@@ -387,9 +504,8 @@ function selectEndpoint(ep, item) {
   document.getElementById('d-desc').textContent = ep.desc || '';
   document.getElementById('response-sec').style.display = 'none';
 
-  // path params
   const pathParams = ep.path_params || [];
-  const pathSec = document.getElementById('path-params-sec');
+  const pathSec  = document.getElementById('path-params-sec');
   const pathBody = document.getElementById('path-params-body');
   if (pathParams.length) {
     pathBody.innerHTML = pathParams.map(p =>
@@ -398,18 +514,16 @@ function selectEndpoint(ep, item) {
     pathSec.style.display = '';
   } else { pathSec.style.display = 'none'; }
 
-  // query params
   const queryParams = ep.query || [];
   const qSec  = document.getElementById('query-params-sec');
   const qBody = document.getElementById('query-params-body');
   if (queryParams.length) {
     qBody.innerHTML = queryParams.map(p =>
-      \`<tr><td><code>\${esc(p.n)}</code></td><td>\${p.req ? '<span class="req-badge">必須</span>' : ''}</td><td><input type="text" id="qp-\${esc(p.n)}" placeholder="\${esc(p.n)}"></td></tr>\`
+      \`<tr><td><code>\${esc(p.n)}</code></td><td>\${p.req?'<span class="req-badge">必須</span>':''}</td><td><input type="text" id="qp-\${esc(p.n)}" placeholder="\${esc(p.n)}"></td></tr>\`
     ).join('');
     qSec.style.display = '';
   } else { qSec.style.display = 'none'; }
 
-  // body
   const bodyFields = ep.body || [];
   const bSec  = document.getElementById('body-sec');
   const bArea = document.getElementById('body-area');
