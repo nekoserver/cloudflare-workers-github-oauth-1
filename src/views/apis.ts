@@ -653,7 +653,7 @@ async function openSearchHistoryModal() {
       var kwEsc = esc(r.keyword).replace(/'/g, '&#39;');
       html += '<tr style="border-bottom:1px solid var(--border);">' +
         '<td style="padding:5px 8px;"><a href="#" style="color:var(--link);text-decoration:none;" ' +
-        'onclick="applyHistoryKeyword(\'' + kwEsc + '\');return false;">' + esc(r.keyword) + '</a></td>' +
+        'onclick="applyHistoryKeyword(&#39;' + kwEsc + '&#39;);return false;">' + esc(r.keyword) + '</a></td>' +
         '<td style="padding:5px 8px;text-align:right;">' + r.total_count + '</td>' +
         '<td style="padding:5px 8px;text-align:right;">' + r.section_count + '</td>' +
         '<td style="padding:5px 8px;text-align:right;color:var(--muted);">' + esc(dt) + '</td>' +
