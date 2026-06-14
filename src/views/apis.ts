@@ -389,6 +389,7 @@ let _accordionMode = false; // アコーディオンモード: ONのとき非フ
 let _currentFilter = ''; // 現在の検索キーワード（descパネルのハイライトに使用）
 let _descMode = true; // trueのとき日本語説明を表示（▶ボタン非表示）
 let _searchHits = { total: 0, sections: [] }; // 現在の検索ヒット情報
+var _historyRows = []; // 履歴モーダルに読み込んだキーワード行
 
 // ── 他グループを閉じるヘルパー ────────────────────────
 function collapseOtherGroups(openGi) {
@@ -629,40 +630,105 @@ async function submitSearchKeyword() {
 async function openSearchHistoryModal() {
   var overlay = document.getElementById('search-history-modal-overlay');
   var body = document.getElementById('search-history-body');
+  var histSearchInp = document.getElementById('history-search-input');
   if (!overlay || !body) return;
   body.innerHTML = '<div style="color:var(--muted);padding:12px 0;">読み込み中…</div>';
+  if (histSearchInp) histSearchInp.value = '';
+  setHistoryRegisterBtn('');
   overlay.style.display = 'flex';
   try {
     var res = await fetch('/api/search-keywords', { credentials: 'include' });
     if (!res.ok) throw new Error('failed');
     var data = await res.json();
-    var rows = data.keywords || [];
-    if (!rows.length) {
-      body.innerHTML = '<div style="color:var(--muted);padding:12px 0;">登録キーワードはありません</div>';
-      return;
-    }
-    var html = '<table style="width:100%;border-collapse:collapse;font-size:12px;">' +
-      '<thead><tr style="border-bottom:2px solid var(--border);">' +
-      '<th style="text-align:left;padding:4px 8px;color:var(--muted);font-weight:600;">キーワード</th>' +
-      '<th style="text-align:right;padding:4px 8px;color:var(--muted);font-weight:600;">件数</th>' +
-      '<th style="text-align:right;padding:4px 8px;color:var(--muted);font-weight:600;">セクション数</th>' +
-      '<th style="text-align:right;padding:4px 8px;color:var(--muted);font-weight:600;">登録日時</th>' +
-      '</tr></thead><tbody>';
-    rows.forEach(function(r) {
-      var dt = r.recorded_at ? r.recorded_at.replace('T', ' ').slice(0, 16) : '';
-      var kwEsc = esc(r.keyword).replace(/'/g, '&#39;');
-      html += '<tr style="border-bottom:1px solid var(--border);">' +
-        '<td style="padding:5px 8px;"><a href="#" style="color:var(--link);text-decoration:none;" ' +
-        'onclick="applyHistoryKeyword(&#39;' + kwEsc + '&#39;);return false;">' + esc(r.keyword) + '</a></td>' +
-        '<td style="padding:5px 8px;text-align:right;">' + r.total_count + '</td>' +
-        '<td style="padding:5px 8px;text-align:right;">' + r.section_count + '</td>' +
-        '<td style="padding:5px 8px;text-align:right;color:var(--muted);">' + esc(dt) + '</td>' +
-        '</tr>';
-    });
-    html += '</tbody></table>';
-    body.innerHTML = html;
+    _historyRows = data.keywords || [];
+    renderHistoryTable('');
   } catch(e) {
     body.innerHTML = '<div style="color:var(--danger,#cf222e);padding:12px 0;">読み込みに失敗しました</div>';
+  }
+}
+
+function renderHistoryTable(filter) {
+  var body = document.getElementById('search-history-body');
+  if (!body) return;
+  var fl = (filter || '').trim().toLowerCase();
+  var rows = _historyRows.filter(function(r) {
+    return !fl || r.keyword.toLowerCase().indexOf(fl) !== -1;
+  });
+  if (!_historyRows.length) {
+    body.innerHTML = '<div style="color:var(--muted);padding:12px 0;">登録キーワードはありません</div>';
+    return;
+  }
+  if (!rows.length) {
+    body.innerHTML = '<div style="color:var(--muted);padding:12px 0;">一致するキーワードはありません</div>';
+    return;
+  }
+  var html = '<table style="width:100%;border-collapse:collapse;font-size:12px;">' +
+    '<thead><tr style="border-bottom:2px solid var(--border);">' +
+    '<th style="text-align:left;padding:4px 8px;color:var(--muted);font-weight:600;">キーワード</th>' +
+    '<th style="text-align:right;padding:4px 8px;color:var(--muted);font-weight:600;">件数</th>' +
+    '<th style="text-align:right;padding:4px 8px;color:var(--muted);font-weight:600;">セクション数</th>' +
+    '<th style="text-align:right;padding:4px 8px;color:var(--muted);font-weight:600;">登録日時</th>' +
+    '</tr></thead><tbody>';
+  rows.forEach(function(r) {
+    var dt = r.recorded_at ? r.recorded_at.replace('T', ' ').slice(0, 16) : '';
+    var kwEsc = esc(r.keyword).replace(/'/g, '&#39;');
+    html += '<tr style="border-bottom:1px solid var(--border);">' +
+      '<td style="padding:5px 8px;"><a href="#" style="color:var(--link);text-decoration:none;" ' +
+      'onclick="applyHistoryKeyword(&#39;' + kwEsc + '&#39;);return false;">' + esc(r.keyword) + '</a></td>' +
+      '<td style="padding:5px 8px;text-align:right;">' + r.total_count + '</td>' +
+      '<td style="padding:5px 8px;text-align:right;">' + r.section_count + '</td>' +
+      '<td style="padding:5px 8px;text-align:right;color:var(--muted);">' + esc(dt) + '</td>' +
+      '</tr>';
+  });
+  html += '</tbody></table>';
+  body.innerHTML = html;
+}
+
+function filterHistoryList(v) {
+  var fl = (v || '').trim().toLowerCase();
+  var hasMatch = _historyRows.some(function(r) { return r.keyword.toLowerCase().indexOf(fl) !== -1; });
+  setHistoryRegisterBtn(fl && !hasMatch ? fl : '');
+  renderHistoryTable(v);
+}
+
+function setHistoryRegisterBtn(keyword) {
+  var btn = document.getElementById('history-register-btn');
+  if (!btn) return;
+  if (keyword) {
+    btn.textContent = '登録';
+    btn.setAttribute('data-kw', keyword);
+    btn.style.display = 'inline-block';
+  } else {
+    btn.style.display = 'none';
+  }
+}
+
+async function registerFromHistorySearch() {
+  var btn = document.getElementById('history-register-btn');
+  var kw = btn ? btn.getAttribute('data-kw') : '';
+  if (!kw) return;
+  btn.disabled = true;
+  btn.textContent = '登録中…';
+  try {
+    var res = await fetch('/api/search-keywords', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ keyword: kw, totalCount: 0, sections: [] })
+    });
+    if (!res.ok) throw new Error('failed');
+    var histSearchInp = document.getElementById('history-search-input');
+    if (histSearchInp) histSearchInp.value = '';
+    btn.style.display = 'none';
+    var freshRes = await fetch('/api/search-keywords', { credentials: 'include' });
+    if (freshRes.ok) {
+      var data = await freshRes.json();
+      _historyRows = data.keywords || [];
+      renderHistoryTable('');
+    }
+  } catch(e) {
+    btn.textContent = '登録';
+    btn.disabled = false;
   }
 }
 
@@ -915,9 +981,13 @@ renderSidebar(null, _sidebarOpen === 'on');
 </script>
 <div id="search-history-modal-overlay" onclick="closeSearchHistoryModal(event)" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:1001;align-items:center;justify-content:center;">
   <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:20px 24px;min-width:360px;max-width:560px;width:92%;max-height:80vh;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,.18);">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
       <h3 style="margin:0;font-size:14px;color:var(--text);">登録キーワード履歴（最新20件）</h3>
       <button onclick="closeSearchHistoryModal()" style="background:none;border:none;cursor:pointer;font-size:16px;color:var(--muted);padding:2px 6px;">✕</button>
+    </div>
+    <div style="display:flex;align-items:center;gap:6px;margin-bottom:12px;">
+      <input id="history-search-input" type="text" placeholder="キーワードを検索…" oninput="filterHistoryList(this.value)" style="flex:1;padding:5px 8px;font-size:12px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--text);outline:none;">
+      <button id="history-register-btn" onclick="registerFromHistorySearch()" style="display:none;padding:4px 10px;font-size:12px;background:var(--link);color:#fff;border:none;border-radius:4px;cursor:pointer;white-space:nowrap;">登録</button>
     </div>
     <div id="search-history-body" style="overflow-y:auto;flex:1;font-size:12px;"></div>
   </div>
