@@ -31,6 +31,14 @@ canvas:active { cursor:grabbing; }
 code { background:#21262d; padding:1px 5px; border-radius:3px; font-family:monospace; font-size:10px; }
 hr { border:none; border-top:1px solid #30363d; margin:12px 0; }
 .tip { background:#0c2d4e; border-radius:6px; padding:8px 10px; font-size:11px; color:#8b949e; line-height:1.7; margin-bottom:12px; }
+.ctrl-label { font-size:11px; color:#8b949e; margin-bottom:4px; }
+.ctrl-row { margin-bottom:12px; }
+textarea#charPool { width:100%; height:64px; background:#21262d; border:1px solid #30363d; border-radius:4px; color:#e6edf3; font-family:monospace; font-size:11px; padding:6px; resize:vertical; }
+.slider-row { display:flex; align-items:center; gap:8px; }
+input[type=range]#fontSz { flex:1; accent-color:#3fb950; }
+#fontSzVal { font-family:monospace; font-size:11px; color:#3fb950; min-width:28px; }
+button#applyBtn { width:100%; padding:7px; background:#238636; border:none; border-radius:5px; color:#fff; font-size:12px; font-weight:600; cursor:pointer; margin-top:4px; }
+button#applyBtn:hover { background:#2ea043; }
 </style>
 </head>
 <body>
@@ -94,6 +102,22 @@ void main() {
   </div>
   <div class="side">
     <div class="tip">ドラッグ: 回転 | ホイール: ズーム | ダブルクリック: 自動回転 ON/OFF</div>
+
+    <h2>テクスチャ設定</h2>
+    <div class="ctrl-row">
+      <div class="ctrl-label">文字プール（自由に編集）</div>
+      <textarea id="charPool">アイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホマミムメモヤユヨラリルレロワン認証無効強制削除警告通過失敗成功要求応答暗号復号検証発行失効更新ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$</textarea>
+    </div>
+    <div class="ctrl-row">
+      <div class="ctrl-label">文字サイズ</div>
+      <div class="slider-row">
+        <input type="range" id="fontSz" min="8" max="48" value="15">
+        <span id="fontSzVal">15</span>px
+      </div>
+    </div>
+    <button id="applyBtn">テクスチャを再生成</button>
+
+    <hr>
     <h2>実装ポイント</h2>
 
     <div class="item">
@@ -102,7 +126,7 @@ void main() {
     </div>
     <div class="item">
       <div class="item-title">テキストテクスチャ（Canvas 2D）</div>
-      <div class="item-desc">512×512 の Canvas に片仮名・漢字・ASCII を 16×16 グリッドで描画。明暗のグラデーションでストリーム感を表現し WebGL テクスチャとしてアップロード。</div>
+      <div class="item-desc">512×512 の Canvas に任意の文字を格子状に描画。文字サイズを変えるとセル数が変わり密度が変化する。</div>
     </div>
     <div class="item">
       <div class="item-title">列ごとに異なるスクロール速度</div>
@@ -112,11 +136,6 @@ void main() {
       <div class="item-title">リム（縁）グロー</div>
       <div class="item-desc">頂点シェーダーで法線と視線ベクトルの内積から縁付近を検出し <code>vRim</code> として補間。球の輪郭にほのかな緑の発光を付加。</div>
     </div>
-    <div class="item">
-      <div class="item-title">Phong ライティング</div>
-      <div class="item-desc">平行光源との法線内積でディフューズ成分を算出。暗面でも最低限のアンビエント光を保ち文字が読み取れる明度を維持。</div>
-    </div>
-    <hr>
     <div class="item">
       <div class="item-title">テクスチャ繰り返し（REPEAT）</div>
       <div class="item-desc"><code>gl.REPEAT</code> ラッピングを設定することで UV が 0〜1 を超えても GL 側で自動的に折り返し、スクロールを seamless に継続できる。</div>
@@ -144,7 +163,6 @@ void main() {
   var gl = canvas.getContext("webgl") || canvas.getContext("experimental-webgl");
   if (!gl) { hud.textContent = "WebGL が利用できません"; return; }
 
-  // シェーダーコンパイル
   function compileShader(type, src) {
     var s = gl.createShader(type);
     gl.shaderSource(s, src);
@@ -160,7 +178,6 @@ void main() {
   gl.linkProgram(prog);
   gl.useProgram(prog);
 
-  // ── 球体ジオメトリ生成 ──
   var LAT = 48, LON = 96;
   var verts = [], idxs = [];
   for (var i = 0; i <= LAT; i++) {
@@ -171,7 +188,6 @@ void main() {
       var x = sinT * Math.cos(phi);
       var y = cosT;
       var z = sinT * Math.sin(phi);
-      // pos, norm, uv
       verts.push(x, y, z,  x, y, z,  j / LON, i / LAT);
     }
   }
@@ -206,53 +222,67 @@ void main() {
   gl.uniform3f(uLight, 1.5, 2.0, 2.5);
   gl.uniform1i(uTex, 0);
 
-  // ── テキストテクスチャ生成 ──
+  // ── テキストテクスチャ生成（再利用可能） ──
   var TW = 512, TH = 512;
-  var tc = document.createElement("canvas");
-  tc.width = TW; tc.height = TH;
-  var ctx = tc.getContext("2d");
-  ctx.fillStyle = "#000";
-  ctx.fillRect(0, 0, TW, TH);
+  var tex = gl.createTexture();
 
-  var katakana = "アイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホマミムメモヤユヨラリルレロワン";
-  var kanji    = "認証無効強制削除警告通過失敗成功要求応答暗号復号検証発行失効更新";
-  var ascii    = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$";
-  var pool     = katakana + kanji + ascii;
-  var poolLen  = pool.length;
+  function buildTexture(poolStr, fsize) {
+    var pool = poolStr && poolStr.length > 0 ? poolStr : "0123456789";
+    var poolLen = pool.length;
+    var cellH = Math.max(8, Math.min(64, fsize));
+    var cellW = cellH;
+    var cols = Math.floor(TW / cellW);
+    var rows = Math.floor(TH / cellH);
 
-  var cellW = 16, cellH = 16;
-  var cols  = TW / cellW;  // 32
-  var rows  = TH / cellH;  // 32
-  ctx.textBaseline = "top";
+    var tc = document.createElement("canvas");
+    tc.width = TW; tc.height = TH;
+    var ctx = tc.getContext("2d");
+    ctx.fillStyle = "#000";
+    ctx.fillRect(0, 0, TW, TH);
+    ctx.textBaseline = "top";
+    ctx.font = (cellH - 1) + "px monospace";
 
-  for (var col = 0; col < cols; col++) {
-    var headRow = Math.floor(Math.random() * rows);
-    var streamLen = 4 + Math.floor(Math.random() * 12);
-    for (var row = 0; row < rows; row++) {
-      var dist = (row - headRow + rows) % rows;
-      if (dist > streamLen) continue;
-      var fade = dist === 0 ? 1.0 : (streamLen - dist) / streamLen;
-      if (dist === 0) {
-        ctx.fillStyle = "rgba(220, 255, 220, " + fade + ")";
-      } else {
-        var g = Math.floor((0.3 + fade * 0.7) * 220);
-        ctx.fillStyle = "rgba(0," + g + "," + Math.floor(fade * 80) + "," + fade + ")";
+    for (var col = 0; col < cols; col++) {
+      var headRow = Math.floor(Math.random() * rows);
+      var streamLen = 4 + Math.floor(Math.random() * 12);
+      for (var row = 0; row < rows; row++) {
+        var dist = (row - headRow + rows) % rows;
+        if (dist > streamLen) continue;
+        var fade = dist === 0 ? 1.0 : (streamLen - dist) / streamLen;
+        if (dist === 0) {
+          ctx.fillStyle = "rgba(220,255,220," + fade + ")";
+        } else {
+          var g = Math.floor((0.3 + fade * 0.7) * 220);
+          ctx.fillStyle = "rgba(0," + g + "," + Math.floor(fade * 80) + "," + fade + ")";
+        }
+        var ch = pool[Math.floor(Math.random() * poolLen)];
+        ctx.fillText(ch, col * cellW, row * cellH);
       }
-      var ch = pool[Math.floor(Math.random() * poolLen)];
-      ctx.font = (cellH - 1) + "px monospace";
-      ctx.fillText(ch, col * cellW, row * cellH);
     }
+
+    gl.bindTexture(gl.TEXTURE_2D, tex);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, tc);
+    gl.generateMipmap(gl.TEXTURE_2D);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
   }
 
-  // テクスチャアップロード
-  var tex = gl.createTexture();
-  gl.bindTexture(gl.TEXTURE_2D, tex);
-  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, tc);
-  gl.generateMipmap(gl.TEXTURE_2D);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  var poolEl  = document.getElementById("charPool");
+  var fontSzEl = document.getElementById("fontSz");
+  var fontSzValEl = document.getElementById("fontSzVal");
+
+  fontSzEl.addEventListener("input", function() {
+    fontSzValEl.textContent = fontSzEl.value;
+  });
+
+  document.getElementById("applyBtn").addEventListener("click", function() {
+    buildTexture(poolEl.value, parseInt(fontSzEl.value, 10));
+  });
+
+  // 初回生成
+  buildTexture(poolEl.value, 15);
 
   // ── 行列ユーティリティ ──
   function m4()      { return new Float32Array(16); }
