@@ -117,6 +117,7 @@ export interface CacheStatusData {
   groupColors: Record<string, string>;
   tableFkPairs: [string, string][];
   userContext: UserContextInfo;
+  pendingColumnMigrations: { migration: string; table: string; column: string; sql: string }[];
 }
 
 export function getCacheStatusPage(user: {
@@ -1435,6 +1436,38 @@ export function getCacheStatusPage(user: {
     <div class="page-card">
       <h1 class="page-title">📊 DB・キャッシュ状況</h1>
       <p class="page-subtitle">${safeUsername} のデータ状況</p>
+
+      ${data.pendingColumnMigrations.length > 0 ? `
+      <!-- カラムマイグレーション未適用バナー -->
+      <div style="background:#4d1a1a;border:2px solid #cf222e;border-radius:8px;padding:14px 18px;margin-bottom:18px;">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+          <span style="font-size:18px">⚠️</span>
+          <strong style="color:#ff8182;font-size:14px">カラムマイグレーション未適用（${data.pendingColumnMigrations.length}件）</strong>
+        </div>
+        <p style="color:#ffa0a0;font-size:12px;margin-bottom:10px">
+          以下のカラムが D1 に存在しません。Worker は旧スキーマで動作中のため一部機能が無効になっています。<br>
+          D1 コンソールまたは <code style="background:#2d1117;padding:1px 4px;border-radius:3px">wrangler d1 execute</code> で SQL を実行してください。
+        </p>
+        <table style="width:100%;border-collapse:collapse;font-size:12px;">
+          <thead>
+            <tr style="color:#ffa0a0;">
+              <th style="text-align:left;padding:4px 8px;border-bottom:1px solid #7f1d1d;">migration</th>
+              <th style="text-align:left;padding:4px 8px;border-bottom:1px solid #7f1d1d;">テーブル</th>
+              <th style="text-align:left;padding:4px 8px;border-bottom:1px solid #7f1d1d;">不足カラム</th>
+              <th style="text-align:left;padding:4px 8px;border-bottom:1px solid #7f1d1d;">実行SQL</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${data.pendingColumnMigrations.map(m => `
+            <tr>
+              <td style="padding:4px 8px;color:#fc8181;font-weight:600">${escapeHtml(m.migration)}</td>
+              <td style="padding:4px 8px;color:#e5e7eb">${escapeHtml(m.table)}</td>
+              <td style="padding:4px 8px;color:#fbbf24;font-family:monospace">${escapeHtml(m.column)}</td>
+              <td style="padding:4px 8px"><code style="background:#2d1117;padding:2px 6px;border-radius:3px;color:#fca5a5;font-family:monospace;font-size:11px;user-select:all">${escapeHtml(m.sql)}</code></td>
+            </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>` : ''}
 
       <!-- ユーザーコンテキスト -->
       <div class="section">

@@ -20,6 +20,7 @@ const minimalData: CacheStatusData = {
   unclassifiedAutoDetectedTables: [],
   groupLabels: {},
   userContext: { teamName: null, teamId: null, workspaceName: null, workspaceId: null, role: null, allWorkspaces: [] },
+  pendingColumnMigrations: [],
 };
 
 const minimalUser = { username: 'testuser' };
