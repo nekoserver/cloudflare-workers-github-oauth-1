@@ -26,6 +26,7 @@ import { getKwArchitecturePage } from './views/kw-architecture';
 import { getKwDrilldownPage } from './views/kw-drilldown';
 import { getCfDashboardPage } from './views/cf-dashboard';
 import { getApisPage } from './views/apis';
+import { getHtmlRewriterDemoPage } from './views/htmlrewriterDemo';
 import { getAuthFlowPage } from './views/authFlow';
 
 import { computeColumnRelationStats, verifyColumnStats, type TableSchema, type Relation } from './utils/columnRelationStats';
@@ -4148,6 +4149,131 @@ app.get('/s/:userHash/:shareToken', async (c) => {
   ).bind(new Date().toISOString(), shareToken).run();
 
   return c.html(getAiChatSharePage({ ...row, access_count: row.access_count + 1 }));
+});
+
+/**
+ * HTMLRewriter デモページ
+ */
+app.get('/htmlrewriter-demo', authMiddleware, async (c) => {
+  const user = c.get('user');
+
+  // 変換前の「外部HTMLのつもり」サンプル
+  const sourceHtml = `<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>外部ページのタイトル</title>
+  <style>
+    body { font-family: sans-serif; padding: 20px; }
+    .highlight { background: yellow; }
+    a { color: blue; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>ようこそ</h1>
+    <p class="greeting">こんにちは、<span class="username">（未注入）</span> さん</p>
+  </header>
+  <main>
+    <section data-section="links">
+      <h2>リンク集</h2>
+      <ul>
+        <li><a href="https://developers.cloudflare.com">Cloudflare Docs（外部）</a></li>
+        <li><a href="https://github.com">GitHub（外部）</a></li>
+        <li><a href="/settings">設定ページ（内部）</a></li>
+      </ul>
+    </section>
+    <section data-section="items">
+      <h2>アイテム一覧</h2>
+      <ul>
+        <li class="item">🍎 Apple</li>
+        <li class="item">🍌 Banana</li>
+        <li class="item">🍒 Cherry</li>
+      </ul>
+    </section>
+    <section>
+      <h2>コードブロック</h2>
+      <pre><code>const rewriter = new HTMLRewriter()
+  .on('title', handler)
+  .transform(response);</code></pre>
+    </section>
+  </main>
+  <footer>
+    <p class="footer-note">フッター（置換対象）</p>
+  </footer>
+</body>
+</html>`;
+
+  const rules: { selector: string; action: string; description: string }[] = [
+    { selector: 'title',         action: 'element.setInnerContent()',  description: '<title> をサービス名 + ユーザー名に書き換え' },
+    { selector: '.username',     action: 'element.setInnerContent()',  description: '.username スパンにログイン中のユーザー名を注入' },
+    { selector: 'a[href^="http"]', action: 'element.setAttribute()',  description: '外部リンクに target="_blank" rel="noopener noreferrer" を付与' },
+    { selector: '.item',         action: 'element.setAttribute()',     description: '.item の style を変更してハイライト表示' },
+    { selector: 'code',          action: 'element.before()',           description: '<code> の前に 📋 アイコンを挿入（HTML として）' },
+    { selector: '.footer-note',  action: 'element.setInnerContent()',  description: 'フッターに変換日時を注入' },
+    { selector: 'body',          action: 'element.prepend()',          description: '<body> の先頭に「HTMLRewriter適用済み」バナーを挿入' },
+  ];
+
+  const now = new Date().toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' });
+  const safeUser = (user.name || user.sub).replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+  let transformedHtml: string;
+  try {
+    const res = new HTMLRewriter()
+      .on('title', {
+        element(el) {
+          el.setInnerContent(`HTMLRewriter デモ | ${user.sub}`);
+        },
+      })
+      .on('.username', {
+        element(el) {
+          el.setInnerContent(safeUser, { html: false });
+        },
+      })
+      .on('a[href^="http"]', {
+        element(el) {
+          el.setAttribute('target', '_blank');
+          el.setAttribute('rel', 'noopener noreferrer');
+          el.setAttribute('style', 'color:#0969da;font-weight:600');
+        },
+      })
+      .on('.item', {
+        element(el) {
+          el.setAttribute('style', 'background:#ddf4ff;padding:4px 10px;border-radius:6px;margin:3px 0;display:inline-block;font-weight:600');
+        },
+      })
+      .on('code', {
+        element(el) {
+          el.before('<span style="font-size:14px;margin-right:4px">📋</span>', { html: true });
+          el.setAttribute('style', 'background:#f0f0f0;padding:12px;display:block;border-radius:6px;font-size:12px;line-height:1.6');
+        },
+      })
+      .on('.footer-note', {
+        element(el) {
+          el.setInnerContent(`HTMLRewriter によって変換されました — ${now} (JST)`, { html: false });
+          el.setAttribute('style', 'color:#57606a;font-size:11px');
+        },
+      })
+      .on('body', {
+        element(el) {
+          el.prepend(
+            '<div style="background:#dafbe1;border:1px solid #4ac26b;border-radius:6px;padding:8px 14px;margin:16px;font-size:12px;font-weight:600;color:#1a7f37">✅ このページは Cloudflare Workers HTMLRewriter によって変換されました</div>',
+            { html: true }
+          );
+        },
+      })
+      .transform(new Response(sourceHtml, { headers: { 'Content-Type': 'text/html; charset=utf-8' } }));
+    transformedHtml = await res.text();
+  } catch {
+    transformedHtml = '（この環境では HTMLRewriter が利用できません）';
+  }
+
+  return c.html(getHtmlRewriterDemoPage({
+    username: user.sub,
+    sourceHtml,
+    transformedHtml,
+    rules,
+  }));
 });
 
 /**
