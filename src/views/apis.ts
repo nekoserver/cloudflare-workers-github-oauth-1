@@ -53,8 +53,10 @@ body{display:flex;flex-direction:column;height:100vh;height:100dvh;overflow:hidd
 }
 #sidebar-search{padding:7px 8px;border-bottom:1px solid var(--border);flex-shrink:0;}
 #sidebar-search-row{display:flex;align-items:center;gap:4px;}
-#search-input{flex:1;padding:4px 8px;border:1px solid var(--border);border-radius:var(--radius);
-  background:var(--bg);color:var(--text);font-size:11px;min-width:0;}
+#search-input-wrap{position:relative;flex:1;min-width:0;}
+#search-input{width:100%;padding:4px 22px 4px 8px;border:1px solid var(--border);border-radius:var(--radius);
+  background:var(--bg);color:var(--text);font-size:11px;box-sizing:border-box;}
+#search-clear-btn{position:absolute;right:4px;top:50%;transform:translateY(-50%);display:none;background:none;border:none;cursor:pointer;font-size:12px;color:var(--muted);padding:0;line-height:1;}
 #search-save-btn,#search-history-btn{
   flex-shrink:0;background:none;border:none;cursor:pointer;
   font-size:14px;padding:2px 3px;line-height:1;border-radius:3px;
@@ -192,7 +194,10 @@ mark.hl-match{
   <div id="sidebar">
     <div id="sidebar-search">
       <div id="sidebar-search-row">
-        <input id="search-input" placeholder="エンドポイントを検索…" oninput="filterEndpoints(this.value)">
+        <span id="search-input-wrap">
+          <input id="search-input" placeholder="エンドポイントを検索…" oninput="filterEndpoints(this.value)">
+          <button id="search-clear-btn" title="クリア" onclick="clearSearchInput()">✕</button>
+        </span>
         <span id="search-btn-wrap">
           <button id="search-save-btn" title="検索キーワードを登録" onclick="openSearchSaveModal()">✍️</button>
           <button id="search-history-btn" title="登録キーワード履歴" onclick="openSearchHistoryModal()">🗒️</button>
@@ -554,6 +559,14 @@ function filterEndpoints(v) {
   });
   _searchHits = { total: total, sections: sections };
   setSearchBtnMode(fl && total > 0 ? 'save' : 'history');
+  var clearBtn = document.getElementById('search-clear-btn');
+  if (clearBtn) clearBtn.style.display = fl ? 'block' : 'none';
+}
+
+function clearSearchInput() {
+  var inp = document.getElementById('search-input');
+  if (inp) { inp.value = ''; inp.focus(); }
+  filterEndpoints('');
 }
 
 function setSearchBtnMode(mode) {
