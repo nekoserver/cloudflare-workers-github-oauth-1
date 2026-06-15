@@ -117,9 +117,17 @@ export async function authMiddleware(c: Context<{ Bindings: Bindings; Variables:
     let effectiveLastActivity: number | null = lastActivity;
     let idleTimeoutFromDB: number | undefined;
     if (c.env.DB) {
-      const row = await c.env.DB.prepare(
-        'SELECT last_activity_at, revoked_at, idle_timeout_seconds FROM user_sessions WHERE user_id = ?'
-      ).bind(payload.sub).first<{ last_activity_at: string | null; revoked_at: string | null; idle_timeout_seconds: number | null }>();
+      let row: { last_activity_at: string | null; revoked_at: string | null; idle_timeout_seconds?: number | null } | null = null;
+      try {
+        row = await c.env.DB.prepare(
+          'SELECT last_activity_at, revoked_at, idle_timeout_seconds FROM user_sessions WHERE user_id = ?'
+        ).bind(payload.sub).first<{ last_activity_at: string | null; revoked_at: string | null; idle_timeout_seconds: number | null }>();
+      } catch {
+        // migration 未適用時のフォールバック
+        row = await c.env.DB.prepare(
+          'SELECT last_activity_at, revoked_at FROM user_sessions WHERE user_id = ?'
+        ).bind(payload.sub).first<{ last_activity_at: string | null; revoked_at: string | null }>().catch(() => null);
+      }
       if (row && checkRevoked(row)) {
         notifyRevokedAccess(c, tokenInfo.source, payload.sub);
         const clearHeaders = new Headers();

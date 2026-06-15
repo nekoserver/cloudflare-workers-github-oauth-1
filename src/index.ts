@@ -2394,9 +2394,43 @@ async function getUserSession(db: D1Database | undefined, userId: string): Promi
       idleTimeoutSeconds: result.idle_timeout_seconds ?? null,
     };
   } catch (error) {
+    const msg = error instanceof Error ? error.message : '';
+    // migration 未適用でカラムが存在しない場合はフォールバッククエリで継続
+    if (msg.includes('no such column') || msg.includes('no column')) {
+      logger.warn('getUserSession fallback: column missing, retrying without new columns', { userId, error: msg });
+      try {
+        const fallback = await db.prepare(
+          'SELECT timezone, session_duration, last_login_at, last_activity_at, github_access_token, github_granted_scopes, recent_commits_count, toast_duration FROM user_sessions WHERE user_id = ?'
+        ).bind(userId).first<{
+          timezone: string;
+          session_duration: string;
+          last_login_at: string | null;
+          last_activity_at: string | null;
+          github_access_token: string | null;
+          github_granted_scopes: string | null;
+          recent_commits_count: number | null;
+          toast_duration: number | null;
+        }>();
+        if (!fallback) return null;
+        return {
+          timezone: fallback.timezone,
+          sessionDuration: fallback.session_duration,
+          lastLoginAt: fallback.last_login_at,
+          lastActivityAt: fallback.last_activity_at ?? null,
+          githubAccessToken: fallback.github_access_token,
+          githubGrantedScopes: fallback.github_granted_scopes,
+          recentCommitsCount: fallback.recent_commits_count ?? null,
+          toastDuration: fallback.toast_duration ?? null,
+          idleTimeoutSeconds: null,
+        };
+      } catch (fallbackError) {
+        logger.error('getUserSession fallback also failed', { userId, error: fallbackError instanceof Error ? fallbackError.message : 'Unknown' });
+        return null;
+      }
+    }
     logger.error('Error getting user session', {
       userId,
-      error: error instanceof Error ? error.message : 'Unknown error',
+      error: msg,
     });
     return null;
   }
