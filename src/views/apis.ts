@@ -184,6 +184,12 @@ mark.hl-match{
 .status-ok{color:var(--get);font-weight:700;}
 .status-err{color:var(--delete);font-weight:700;}
 .res-body{font-family:monospace;font-size:12px;padding:12px;white-space:pre-wrap;word-break:break-all;max-height:360px;overflow-y:auto;background:var(--surface);}
+.example-code{font-family:monospace;font-size:11px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:9px 11px;overflow-x:auto;white-space:pre;margin:0;line-height:1.55;}
+.req-note-list{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:7px;}
+.req-note{font-size:10px;padding:1px 6px;border-radius:3px;font-weight:600;}
+.req-note-auth{background:#ddf4ff;color:#0969da;}
+.req-note-null{background:#ffebe9;color:#cf222e;}
+.type-badge{color:var(--muted);font-size:10px;font-weight:normal;}
 </style>
 </head>
 <body>
@@ -235,6 +241,15 @@ mark.hl-match{
         <div class="section-title">リクエストボディ (JSON)</div>
         <textarea class="body-area" id="body-area" spellcheck="false"></textarea>
       </div>
+      <div id="req-example-sec" style="display:none">
+        <div class="section-title">リクエスト例</div>
+        <div id="req-note-list" class="req-note-list"></div>
+        <pre id="req-example-code" class="example-code"></pre>
+      </div>
+      <div id="res-example-sec" style="display:none">
+        <div class="section-title">レスポンス例</div>
+        <pre id="res-example-code" class="example-code"></pre>
+      </div>
       <div><button class="send-btn" id="send-btn" onclick="sendRequest()">送信</button></div>
       <div id="response-sec" style="display:none">
         <div class="section-title">レスポンス</div>
@@ -253,138 +268,249 @@ mark.hl-match{
 <script>
 const APIS = [
   { group: 'AI チャット', endpoints: [
-    { method:'POST', path:'/api/aichat', desc:'AI にメッセージを送信', body:[{n:'message',req:true,s:'Cloudflare Workersについて教えてください'},{n:'model',s:'claude-haiku-4-5-20251001'},{n:'systemPromptMode',s:'default'}] },
-    { method:'GET',  path:'/api/aichat/shares/search', desc:'AIチャット全文検索', query:[{n:'q',req:true,s:'cloudflare'}] },
-    { method:'GET',  path:'/api/aichat/shares/calendar', desc:'月別カレンダー', query:[{n:'month',s:'2026-06'}] },
-    { method:'GET',  path:'/api/aichat/daily-stats', desc:'日別統計（キーワード・モデル）', query:[{n:'month',s:'2026-06'}] },
-    { method:'GET',  path:'/api/aichat/shares/by-date', desc:'日付別共有一覧', query:[{n:'date',req:true,s:'2026-06-15'}] },
-    { method:'GET',  path:'/api/aichat/shares/by-keyword', desc:'キーワード一致共有一覧', query:[{n:'keyword',req:true,s:'cloudflare'}] },
-    { method:'GET',  path:'/api/aichat/keywords/monthly', desc:'月別キーワード集計', query:[{n:'month',s:'2026-06'}] },
-    { method:'GET',  path:'/api/aichat/search-log', desc:'検索ログ一覧' },
-    { method:'GET',  path:'/api/aichat/search-history', desc:'検索履歴一覧' },
-    { method:'GET',  path:'/api/aichat/search-keyword-analysis', desc:'キーワード分析' },
-    { method:'POST', path:'/api/aichat/search-log/open-modal', desc:'検索ログモーダル準備', body:[{n:'keyword',req:true,s:'cloudflare'},{n:'shareIds',req:true,s:[1]}] },
-    { method:'POST', path:'/api/aichat/search-log/approve', desc:'検索ログ承認登録', body:[{n:'keyword',req:true,s:'cloudflare'},{n:'shareIds',req:true,s:[1]}] },
-    { method:'POST', path:'/api/aichat/search-log', desc:'検索ログ記録', body:[{n:'keyword',req:true,s:'cloudflare'},{n:'shareId',req:true,s:1},{n:'resultCount',s:5}] },
-    { method:'GET',  path:'/api/aichat/search-impressions', desc:'検索露出統計' },
-    { method:'POST', path:'/api/aichat/search-impressions', desc:'検索露出記録', body:[{n:'shareIds',req:true,s:[1]},{n:'resultCount',s:5}] },
-    { method:'GET',  path:'/api/aichat/subqueries', desc:'サブクエリ一覧' },
-    { method:'POST', path:'/api/aichat/subqueries', desc:'サブクエリ登録', body:[{n:'query',req:true,s:'Workers KVの使い方'}] },
+    { method:'POST', path:'/api/aichat', desc:'AI にメッセージを送信', body:[{n:'message',req:true,s:'Cloudflare Workersについて教えてください'},{n:'model',s:'claude-haiku-4-5-20251001'},{n:'systemPromptMode',s:'default'}],
+      res:{ok:true,shareId:'a1b2c3d4',answer:'Cloudflare Workers はエッジで動くサーバーレス実行環境です。',model:'claude-haiku-4-5-20251001',tokenUsage:{inputTokens:20,outputTokens:80}} },
+    { method:'GET',  path:'/api/aichat/shares/search', desc:'AIチャット全文検索', query:[{n:'q',req:true,s:'cloudflare'}],
+      res:{results:[{id:'a1b2c3d4',question:'Cloudflare Workersとは？',answer_preview:'エッジで動くサーバーレス実行環境です。',model:'claude-haiku-4-5-20251001',created_at:'2026-06-15T00:00:00.000Z'}],total:1} },
+    { method:'GET',  path:'/api/aichat/shares/calendar', desc:'月別カレンダー', query:[{n:'month',s:'2026-06'}],
+      res:{month:'2026-06',days:[{date:'2026-06-15',count:3}]} },
+    { method:'GET',  path:'/api/aichat/daily-stats', desc:'日別統計（キーワード・モデル）', query:[{n:'month',s:'2026-06'}],
+      res:{stats:[{date:'2026-06-15',keyword_count:5,model_count:2}]} },
+    { method:'GET',  path:'/api/aichat/shares/by-date', desc:'日付別共有一覧', query:[{n:'date',req:true,s:'2026-06-15'}],
+      res:{shares:[{id:'a1b2c3d4',question:'Cloudflare Workersとは？',model:'claude-haiku-4-5-20251001',created_at:'2026-06-15T00:00:00.000Z'}]} },
+    { method:'GET',  path:'/api/aichat/shares/by-keyword', desc:'キーワード一致共有一覧', query:[{n:'keyword',req:true,s:'cloudflare'}],
+      res:{shares:[{id:'a1b2c3d4',question:'Cloudflare Workersとは？',model:'claude-haiku-4-5-20251001',created_at:'2026-06-15T00:00:00.000Z'}]} },
+    { method:'GET',  path:'/api/aichat/keywords/monthly', desc:'月別キーワード集計', query:[{n:'month',s:'2026-06'}],
+      res:{month:'2026-06',keywords:[{keyword:'cloudflare',count:10},{keyword:'workers',count:5}]} },
+    { method:'GET',  path:'/api/aichat/search-log', desc:'検索ログ一覧',
+      res:{rows:[{keyword:'cloudflare',share_id:'a1b2c3d4',first_searched_at:'2026-06-01T00:00:00.000Z',last_searched_at:'2026-06-15T00:00:00.000Z',select_count:3,question:'Cloudflare Workersとは？'}]} },
+    { method:'GET',  path:'/api/aichat/search-history', desc:'検索履歴一覧',
+      res:{history:[{keyword:'cloudflare',searched_at:'2026-06-15T12:00:00.000Z'}]} },
+    { method:'GET',  path:'/api/aichat/search-keyword-analysis', desc:'キーワード分析',
+      res:{analysis:[{keyword:'cloudflare',total_count:10,share_count:3,avg_results:5}]} },
+    { method:'POST', path:'/api/aichat/search-log/open-modal', desc:'検索ログモーダル準備', body:[{n:'keyword',req:true,s:'cloudflare'},{n:'shareIds',req:true,s:[1]}],
+      res:{ok:true,shares:[{id:'a1b2c3d4',question:'Cloudflare Workersとは？',answer_preview:'エッジで動くサーバーレス実行環境です。'}]} },
+    { method:'POST', path:'/api/aichat/search-log/approve', desc:'検索ログ承認登録', body:[{n:'keyword',req:true,s:'cloudflare'},{n:'shareIds',req:true,s:[1]}],
+      res:{ok:true,inserted:1} },
+    { method:'POST', path:'/api/aichat/search-log', desc:'検索ログ記録', body:[{n:'keyword',req:true,s:'cloudflare'},{n:'shareId',req:true,s:1},{n:'resultCount',s:5}],
+      res:{ok:true} },
+    { method:'GET',  path:'/api/aichat/search-impressions', desc:'検索露出統計',
+      res:{stats:[{share_id:'a1b2c3d4',impression_count:15,last_shown_at:'2026-06-15T00:00:00.000Z'}]} },
+    { method:'POST', path:'/api/aichat/search-impressions', desc:'検索露出記録', body:[{n:'shareIds',req:true,s:[1]},{n:'resultCount',s:5}],
+      res:{ok:true} },
+    { method:'GET',  path:'/api/aichat/subqueries', desc:'サブクエリ一覧',
+      res:{items:[{id:1,query:'Workers KVの使い方',link_count:2,keywords:[{keyword:'cloudflare',cnt:3}]}]} },
+    { method:'POST', path:'/api/aichat/subqueries', desc:'サブクエリ登録', body:[{n:'query',req:true,s:'Workers KVの使い方'}],
+      res:{ok:true,id:1,query:'Workers KVの使い方'} },
     { method:'GET',  path:'/api/aichat/subquery-keyword-questions', desc:'サブクエリ×キーワード質問一覧', query:[{n:'subquery_id',req:true,s:'1'},{n:'keyword',req:true,s:'cloudflare'}] },
     { method:'GET',  path:'/api/aichat/share-subquery-links', desc:'質問のサブクエリリンク一覧', query:[{n:'question',req:true,s:'Cloudflare Workersとは'}] },
     { method:'GET',  path:'/api/aichat/share-subquery-links/all', desc:'全サブクエリリンク（質問別）' },
-    { method:'POST', path:'/api/aichat/share-subquery-links', desc:'サブクエリリンク登録', body:[{n:'question',req:true,s:'Cloudflare Workersとは'},{n:'subquery_id',req:true,s:1},{n:'url',s:''}] },
-    { method:'GET',  path:'/api/aichat/share-keywords', desc:'共有のキーワード一覧', query:[{n:'shareId',req:true,s:'1'}] },
+    { method:'POST', path:'/api/aichat/share-subquery-links', desc:'サブクエリリンク登録', body:[{n:'question',req:true,s:'Cloudflare Workersとは'},{n:'subquery_id',req:true,s:1},{n:'url',s:''}],
+      res:{ok:true} },
+    { method:'GET',  path:'/api/aichat/share-keywords', desc:'共有のキーワード一覧', query:[{n:'shareId',req:true,s:'1'}],
+      res:{keywords:[{keyword:'cloudflare',count:3},{keyword:'workers',count:2}]} },
     { method:'GET',  path:'/api/aichat/shares-by-question', desc:'質問テキストで共有検索', query:[{n:'question',req:true,s:'Cloudflare Workers'}] },
     { method:'GET',  path:'/api/aichat/shares-by-question-hash', desc:'質問ハッシュで共有検索', query:[{n:'hash',req:true,s:'abc123'}] },
-    { method:'GET',  path:'/api/aichat/all-keywords', desc:'全キーワード一覧（分類状況付き）' },
-    { method:'GET',  path:'/api/aichat/keyword-categories', desc:'キーワードのカテゴリ一覧', query:[{n:'keyword',s:'cloudflare'}] },
-    { method:'POST', path:'/api/aichat/keyword-categories', desc:'カテゴリ新規作成', body:[{n:'name',req:true,s:'インフラ'},{n:'color',req:true,s:'#0969da'}] },
-    { method:'POST', path:'/api/aichat/keyword-category-map', desc:'キーワードとカテゴリのマッピング保存', body:[{n:'keyword',req:true,s:'cloudflare'},{n:'category_ids',req:true,s:[1]}] },
-    { method:'GET',  path:'/api/aichat/keyword-categories-summary', desc:'カテゴリ別キーワード数サマリ' },
-    { method:'GET',  path:'/api/aichat/token-usage', desc:'トークン使用量統計', query:[{n:'months',s:'3'}] },
-    { method:'GET',  path:'/api/aichat/category-groups', desc:'カテゴリグループ一覧' },
-    { method:'POST', path:'/api/aichat/category-groups', desc:'カテゴリグループ作成', body:[{n:'group_name',req:true,s:'インフラ系'},{n:'category_ids',req:true,s:[1]}] },
-    { method:'POST', path:'/api/aichat/category-groups/:id/add-category', desc:'グループにカテゴリ追加', path_params:['id'], pp:{id:'1'}, body:[{n:'category_id',req:true,s:2}] },
-    { method:'POST', path:'/api/aichat/category-groups/:id/remove-category', desc:'グループからカテゴリ除去', path_params:['id'], pp:{id:'1'}, body:[{n:'category_id',req:true,s:2}] },
-    { method:'DELETE', path:'/api/aichat/category-groups/:id', desc:'カテゴリグループ削除', path_params:['id'], pp:{id:'1'} },
-    { method:'GET',  path:'/api/aichat/shares/:id', desc:'共有詳細取得', path_params:['id'], pp:{id:'1'} },
-    { method:'DELETE', path:'/api/aichat/shares/:id', desc:'共有を論理削除', path_params:['id'], pp:{id:'1'} },
-    { method:'POST', path:'/api/aichat/share', desc:'共有リンク作成', body:[{n:'question',req:true,s:'Cloudflare Workersとは？'},{n:'answer',req:true,s:'エッジで動くサーバーレス実行環境です。'},{n:'model',req:true,s:'claude-haiku-4-5-20251001'}] },
+    { method:'GET',  path:'/api/aichat/all-keywords', desc:'全キーワード一覧（分類状況付き）',
+      res:{keywords:[{keyword:'cloudflare',cnt:10,is_classified:1,category_id:1,category_color:'#0969da',category_pairs:'[["インフラ",1]]'}]} },
+    { method:'GET',  path:'/api/aichat/keyword-categories', desc:'キーワードのカテゴリ一覧', query:[{n:'keyword',s:'cloudflare'}],
+      res:{categories:[{id:1,name:'インフラ',color:'#0969da',keyword_count:5}]} },
+    { method:'POST', path:'/api/aichat/keyword-categories', desc:'カテゴリ新規作成', body:[{n:'name',req:true,s:'インフラ'},{n:'color',req:true,s:'#0969da'}],
+      res:{ok:true,id:1,name:'インフラ',color:'#0969da'} },
+    { method:'POST', path:'/api/aichat/keyword-category-map', desc:'キーワードとカテゴリのマッピング保存', body:[{n:'keyword',req:true,s:'cloudflare'},{n:'category_ids',req:true,s:[1]}],
+      res:{ok:true} },
+    { method:'GET',  path:'/api/aichat/keyword-categories-summary', desc:'カテゴリ別キーワード数サマリ',
+      res:{summary:[{id:1,name:'インフラ',color:'#0969da',count:5}]} },
+    { method:'GET',  path:'/api/aichat/token-usage', desc:'トークン使用量統計', query:[{n:'months',s:'3'}],
+      res:{usage:[{month:'2026-06',model:'claude-haiku-4-5-20251001',total_tokens:15000,prompt_tokens:10000,completion_tokens:5000,count:10}]} },
+    { method:'GET',  path:'/api/aichat/category-groups', desc:'カテゴリグループ一覧',
+      res:{groups:[{id:1,group_name:'インフラ系',category_ids:[1,2],kw_count:5}]} },
+    { method:'POST', path:'/api/aichat/category-groups', desc:'カテゴリグループ作成', body:[{n:'group_name',req:true,s:'インフラ系'},{n:'category_ids',req:true,s:[1]}],
+      res:{ok:true,id:1} },
+    { method:'POST', path:'/api/aichat/category-groups/:id/add-category', desc:'グループにカテゴリ追加', path_params:['id'], pp:{id:'1'}, body:[{n:'category_id',req:true,s:2}],
+      res:{ok:true} },
+    { method:'POST', path:'/api/aichat/category-groups/:id/remove-category', desc:'グループからカテゴリ除去', path_params:['id'], pp:{id:'1'}, body:[{n:'category_id',req:true,s:2}],
+      res:{ok:true} },
+    { method:'DELETE', path:'/api/aichat/category-groups/:id', desc:'カテゴリグループ削除', path_params:['id'], pp:{id:'1'},
+      res:{ok:true} },
+    { method:'GET',  path:'/api/aichat/shares/:id', desc:'共有詳細取得', path_params:['id'], pp:{id:'1'},
+      res:{ok:true,share:{id:'a1b2c3d4',question:'Cloudflare Workersとは？',answer:'エッジで動くサーバーレス実行環境です。',model:'claude-haiku-4-5-20251001',created_at:'2026-06-15T00:00:00.000Z',is_deleted:0}} },
+    { method:'DELETE', path:'/api/aichat/shares/:id', desc:'共有を論理削除', path_params:['id'], pp:{id:'1'},
+      res:{ok:true} },
+    { method:'POST', path:'/api/aichat/share', desc:'共有リンク作成', body:[{n:'question',req:true,s:'Cloudflare Workersとは？'},{n:'answer',req:true,s:'エッジで動くサーバーレス実行環境です。'},{n:'model',req:true,s:'claude-haiku-4-5-20251001'}],
+      res:{ok:true,shareId:'a1b2c3d4',url:'/s/a1b2c3d4'} },
   ]},
   { group: 'AI サマリー', endpoints: [
-    { method:'GET',    path:'/api/ai-summary/:id', desc:'AI サマリー詳細取得', path_params:['id'], pp:{id:'1'} },
-    { method:'POST',   path:'/api/ai-summary/:id/feedback', desc:'サマリーフィードバック投稿', path_params:['id'], pp:{id:'1'}, body:[{n:'rating',s:5},{n:'reviewer_type',s:'human'},{n:'reviewer_name',s:'test'},{n:'review_model',s:''},{n:'comment',s:'LGTM'}] },
-    { method:'POST',   path:'/api/ai-summary/:id/resolve', desc:'解決ステータス更新', path_params:['id'], pp:{id:'1'}, body:[{n:'resolved',req:true,s:true},{n:'resolution_note',s:'対応済み'}] },
+    { method:'GET',    path:'/api/ai-summary/:id', desc:'AI サマリー詳細取得', path_params:['id'], pp:{id:'1'},
+      res:{id:1,repo:'nekoserver/cloudflare-workers-github-oauth-1',summary:'バグ修正: Cookie セキュリティ属性の修正',status:'open',created_at:'2026-06-15T00:00:00.000Z'} },
+    { method:'POST',   path:'/api/ai-summary/:id/feedback', desc:'サマリーフィードバック投稿', path_params:['id'], pp:{id:'1'}, body:[{n:'rating',s:5},{n:'reviewer_type',s:'human'},{n:'reviewer_name',s:'test'},{n:'review_model',s:''},{n:'comment',s:'LGTM'}],
+      res:{ok:true} },
+    { method:'POST',   path:'/api/ai-summary/:id/resolve', desc:'解決ステータス更新', path_params:['id'], pp:{id:'1'}, body:[{n:'resolved',req:true,s:true},{n:'resolution_note',s:'対応済み'}],
+      res:{ok:true} },
   ]},
   { group: 'リポジトリ', endpoints: [
-    { method:'POST',   path:'/api/repositories', desc:'リポジトリ作成', body:[{n:'name',req:true,s:'my-test-repo'},{n:'isPrivate',s:false},{n:'description',s:'テスト用リポジトリ'}] },
-    { method:'GET',    path:'/api/repositories/:owner/:repo/issues-count', desc:'オープン Issue 数', path_params:['owner','repo'], pp:{owner:'nekoserver',repo:'cloudflare-workers-github-oauth-1'} },
-    { method:'GET',    path:'/api/repositories/:owner/:repo/commits', desc:'最近のコミット一覧', path_params:['owner','repo'], pp:{owner:'nekoserver',repo:'cloudflare-workers-github-oauth-1'}, query:[{n:'per_page',s:'5'}] },
-    { method:'GET',    path:'/api/repositories/:owner/:repo/commit-stats', desc:'コミット統計（著者別）', path_params:['owner','repo'], pp:{owner:'nekoserver',repo:'cloudflare-workers-github-oauth-1'}, query:[{n:'period',s:'30d'}] },
-    { method:'GET',    path:'/api/repositories/:owner/:repo/commit-months', desc:'コミット月一覧', path_params:['owner','repo'], pp:{owner:'nekoserver',repo:'cloudflare-workers-github-oauth-1'} },
-    { method:'GET',    path:'/api/repositories/:owner/:repo/commits-by-month', desc:'月別コミット一覧', path_params:['owner','repo'], pp:{owner:'nekoserver',repo:'cloudflare-workers-github-oauth-1'}, query:[{n:'period',s:'2026-06'}] },
-    { method:'GET',    path:'/api/repositories/:owner/:repo/commits-calendar', desc:'月カレンダー（コミット数）', path_params:['owner','repo'], pp:{owner:'nekoserver',repo:'cloudflare-workers-github-oauth-1'}, query:[{n:'year',s:'2026'},{n:'month',s:'6'}] },
-    { method:'GET',    path:'/api/repositories/:owner/:repo/commits-by-date', desc:'日付別コミット一覧', path_params:['owner','repo'], pp:{owner:'nekoserver',repo:'cloudflare-workers-github-oauth-1'}, query:[{n:'date',s:'2026-06-15'}] },
-    { method:'GET',    path:'/api/repositories/this-month-commits', desc:'今月コミットのあるリポジトリ' },
-    { method:'GET',    path:'/api/repositories/search/commits', desc:'コミット全文検索', query:[{n:'q',req:true,s:'fix'}] },
-    { method:'GET',    path:'/api/repositories/search/keyword-classify-check', desc:'キーワード分類状況確認', query:[{n:'q',req:true,s:'cloudflare'}] },
-    { method:'POST',   path:'/api/repositories/search/keyword-label', desc:'キーワードラベル保存', body:[{n:'search_query',req:true,s:'cloudflare'},{n:'label',req:true,s:'インフラ'}] },
-    { method:'GET',    path:'/api/repositories/search/category-group', desc:'一致カテゴリグループ取得', query:[{n:'labels',req:true,s:'インフラ'}] },
-    { method:'GET',    path:'/api/repositories/search/category-groups', desc:'カテゴリグループ一覧' },
-    { method:'GET',    path:'/api/repositories/search/category-group/check-name', desc:'グループ名存在確認', query:[{n:'name',req:true,s:'インフラ系'}] },
-    { method:'POST',   path:'/api/repositories/search/category-group', desc:'カテゴリグループ作成', body:[{n:'group_name',req:true,s:'インフラ系'},{n:'description',s:'インフラ関連'},{n:'categories',req:true,s:['cloudflare']}] },
-    { method:'PUT',    path:'/api/repositories/search/category-group/:id', desc:'カテゴリグループ更新', path_params:['id'], pp:{id:'1'}, body:[{n:'group_name',s:'インフラ系（更新）'},{n:'description',s:''},{n:'categories',s:['cloudflare']}] },
-    { method:'DELETE', path:'/api/repositories/search/category-group/:id', desc:'カテゴリグループ削除', path_params:['id'], pp:{id:'1'} },
-    { method:'GET',    path:'/api/repositories/search/repo-keywords', desc:'リポジトリ別キーワード', query:[{n:'repo',req:true,s:'cloudflare-workers-github-oauth-1'}] },
-    { method:'GET',    path:'/api/repositories/search/repo-list', desc:'検索ヒットのあるリポジトリ一覧' },
-    { method:'GET',    path:'/api/repositories/search/history', desc:'検索履歴一覧' },
-    { method:'GET',    path:'/api/repositories/search/history/:id', desc:'検索履歴詳細', path_params:['id'], pp:{id:'1'} },
-    { method:'GET',    path:'/api/repositories/search/keyword-stats', desc:'キーワード統計', query:[{n:'q',req:true,s:'cloudflare'},{n:'repo',s:'cloudflare-workers-github-oauth-1'}] },
-    { method:'GET',    path:'/api/repositories/search/keyword-multi-labels', desc:'キーワードのマルチラベル', query:[{n:'q',req:true,s:'cloudflare'}] },
-    { method:'POST',   path:'/api/repositories/search/keyword-multi-labels', desc:'マルチラベル保存', body:[{n:'search_query',req:true,s:'cloudflare'},{n:'categories',req:true,s:['インフラ']}] },
-    { method:'GET',    path:'/api/repositories/search/keyword-multi-labels-all', desc:'全マルチラベル割り当て' },
-    { method:'GET',    path:'/api/repo-permissions', desc:'インストール権限一覧' },
+    { method:'POST',   path:'/api/repositories', desc:'リポジトリ作成', body:[{n:'name',req:true,s:'my-test-repo'},{n:'isPrivate',s:false},{n:'description',s:'テスト用リポジトリ'}],
+      res:{ok:true,id:'nekoserver/my-test-repo',url:'https://github.com/nekoserver/my-test-repo'} },
+    { method:'GET',    path:'/api/repositories/:owner/:repo/issues-count', desc:'オープン Issue 数', path_params:['owner','repo'], pp:{owner:'nekoserver',repo:'cloudflare-workers-github-oauth-1'},
+      res:{count:5} },
+    { method:'GET',    path:'/api/repositories/:owner/:repo/commits', desc:'最近のコミット一覧', path_params:['owner','repo'], pp:{owner:'nekoserver',repo:'cloudflare-workers-github-oauth-1'}, query:[{n:'per_page',s:'5'}],
+      res:{commits:[{sha:'abc1234',message:'fix: バグ修正',date:'2026-06-15T00:00:00.000Z',author:'nekoserver',url:'https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/abc1234'}],total:1,cached:false} },
+    { method:'GET',    path:'/api/repositories/:owner/:repo/commit-stats', desc:'コミット統計（著者別）', path_params:['owner','repo'], pp:{owner:'nekoserver',repo:'cloudflare-workers-github-oauth-1'}, query:[{n:'period',s:'30d'}],
+      res:{period:'30d',rows:[{author:'nekoserver',count:42}],cached:false} },
+    { method:'GET',    path:'/api/repositories/:owner/:repo/commit-months', desc:'コミット月一覧', path_params:['owner','repo'], pp:{owner:'nekoserver',repo:'cloudflare-workers-github-oauth-1'},
+      res:{months:['2026-06','2026-05'],currentMonth:'2026-06',details:[{month:'2026-06',count:20}],cachedRepoCount:1} },
+    { method:'GET',    path:'/api/repositories/:owner/:repo/commits-by-month', desc:'月別コミット一覧', path_params:['owner','repo'], pp:{owner:'nekoserver',repo:'cloudflare-workers-github-oauth-1'}, query:[{n:'period',s:'2026-06'}],
+      res:{period:'2026-06',commits:[{sha:'abc1234',message:'fix: バグ修正',date:'2026-06-15T00:00:00.000Z',author:'nekoserver'}],cached:false} },
+    { method:'GET',    path:'/api/repositories/:owner/:repo/commits-calendar', desc:'月カレンダー（コミット数）', path_params:['owner','repo'], pp:{owner:'nekoserver',repo:'cloudflare-workers-github-oauth-1'}, query:[{n:'year',s:'2026'},{n:'month',s:'6'}],
+      res:{year:2026,month:6,counts:{15:3,14:1},cached:false} },
+    { method:'GET',    path:'/api/repositories/:owner/:repo/commits-by-date', desc:'日付別コミット一覧', path_params:['owner','repo'], pp:{owner:'nekoserver',repo:'cloudflare-workers-github-oauth-1'}, query:[{n:'date',s:'2026-06-15'}],
+      res:{commits:[{sha:'abc1234',message:'fix: バグ修正',date:'2026-06-15T00:00:00.000Z',author:'nekoserver'}]} },
+    { method:'GET',    path:'/api/repositories/this-month-commits', desc:'今月コミットのあるリポジトリ',
+      res:{repos:[{owner:'nekoserver',repo:'cloudflare-workers-github-oauth-1',latestDate:'2026-06-15'}]} },
+    { method:'GET',    path:'/api/repositories/search/commits', desc:'コミット全文検索', query:[{n:'q',req:true,s:'fix'}],
+      res:{results:[{repo:'nekoserver/cloudflare-workers-github-oauth-1',sha:'abc1234',message:'fix: バグ修正',date:'2026-06-15T00:00:00.000Z',author:'nekoserver'}],total:1} },
+    { method:'GET',    path:'/api/repositories/search/keyword-classify-check', desc:'キーワード分類状況確認', query:[{n:'q',req:true,s:'cloudflare'}],
+      res:{keyword:'cloudflare',classified:true,labels:['インフラ'],categories:[{id:1,name:'インフラ',color:'#0969da'}]} },
+    { method:'POST',   path:'/api/repositories/search/keyword-label', desc:'キーワードラベル保存', body:[{n:'search_query',req:true,s:'cloudflare'},{n:'label',req:true,s:'インフラ'}],
+      res:{ok:true} },
+    { method:'GET',    path:'/api/repositories/search/category-group', desc:'一致カテゴリグループ取得', query:[{n:'labels',req:true,s:'インフラ'}],
+      res:{groups:[{id:1,group_name:'インフラ系',categories:['インフラ','ネットワーク']}]} },
+    { method:'GET',    path:'/api/repositories/search/category-groups', desc:'カテゴリグループ一覧',
+      res:{groups:[{id:1,group_name:'インフラ系',description:'インフラ関連',categories:['cloudflare','workers']}]} },
+    { method:'GET',    path:'/api/repositories/search/category-group/check-name', desc:'グループ名存在確認', query:[{n:'name',req:true,s:'インフラ系'}],
+      res:{exists:false} },
+    { method:'POST',   path:'/api/repositories/search/category-group', desc:'カテゴリグループ作成', body:[{n:'group_name',req:true,s:'インフラ系'},{n:'description',s:'インフラ関連'},{n:'categories',req:true,s:['cloudflare']}],
+      res:{ok:true,id:1} },
+    { method:'PUT',    path:'/api/repositories/search/category-group/:id', desc:'カテゴリグループ更新', path_params:['id'], pp:{id:'1'}, body:[{n:'group_name',s:'インフラ系（更新）'},{n:'description',s:''},{n:'categories',s:['cloudflare']}],
+      res:{ok:true} },
+    { method:'DELETE', path:'/api/repositories/search/category-group/:id', desc:'カテゴリグループ削除', path_params:['id'], pp:{id:'1'},
+      res:{ok:true} },
+    { method:'GET',    path:'/api/repositories/search/repo-keywords', desc:'リポジトリ別キーワード', query:[{n:'repo',req:true,s:'cloudflare-workers-github-oauth-1'}],
+      res:{repo:'cloudflare-workers-github-oauth-1',keywords:[{keyword:'cloudflare',count:10},{keyword:'workers',count:5}]} },
+    { method:'GET',    path:'/api/repositories/search/repo-list', desc:'検索ヒットのあるリポジトリ一覧',
+      res:{repos:['cloudflare-workers-github-oauth-1','another-repo']} },
+    { method:'GET',    path:'/api/repositories/search/history', desc:'検索履歴一覧',
+      res:{history:[{id:1,query:'fix',repo:'cloudflare-workers-github-oauth-1',result_count:5,searched_at:'2026-06-15T00:00:00.000Z'}]} },
+    { method:'GET',    path:'/api/repositories/search/history/:id', desc:'検索履歴詳細', path_params:['id'], pp:{id:'1'},
+      res:{id:1,query:'fix',repo:'cloudflare-workers-github-oauth-1',result_count:5,searched_at:'2026-06-15T00:00:00.000Z',results:[{sha:'abc1234',message:'fix: バグ修正'}]} },
+    { method:'GET',    path:'/api/repositories/search/keyword-stats', desc:'キーワード統計', query:[{n:'q',req:true,s:'cloudflare'},{n:'repo',s:'cloudflare-workers-github-oauth-1'}],
+      res:{keyword:'cloudflare',total_count:10,repo_count:2,repos:[{repo:'cloudflare-workers-github-oauth-1',count:8}]} },
+    { method:'GET',    path:'/api/repositories/search/keyword-multi-labels', desc:'キーワードのマルチラベル', query:[{n:'q',req:true,s:'cloudflare'}],
+      res:{keyword:'cloudflare',categories:['インフラ','ネットワーク']} },
+    { method:'POST',   path:'/api/repositories/search/keyword-multi-labels', desc:'マルチラベル保存', body:[{n:'search_query',req:true,s:'cloudflare'},{n:'categories',req:true,s:['インフラ']}],
+      res:{ok:true} },
+    { method:'GET',    path:'/api/repositories/search/keyword-multi-labels-all', desc:'全マルチラベル割り当て',
+      res:{assignments:[{keyword:'cloudflare',categories:['インフラ']}]} },
+    { method:'GET',    path:'/api/repo-permissions', desc:'インストール権限一覧',
+      res:{permissions:[{repo:'cloudflare-workers-github-oauth-1',owner:'nekoserver',permission:'write'}]} },
   ]},
   { group: 'リポジトリ色・グループ', endpoints: [
-    { method:'GET',    path:'/api/repo-colors', desc:'リポジトリカラー設定一覧' },
-    { method:'POST',   path:'/api/repo-colors/sync', desc:'コミットキャッシュからカラー同期' },
-    { method:'PATCH',  path:'/api/repo-colors/:repoName', desc:'リポジトリカラー更新', path_params:['repoName'], pp:{repoName:'cloudflare-workers-github-oauth-1'}, body:[{n:'colorCode',s:'#0969da'},{n:'tags',s:[]},{n:'isVisible',s:true},{n:'displayOrder',s:0}] },
-    { method:'GET',    path:'/api/repo-groups', desc:'リポジトリグループ一覧' },
-    { method:'POST',   path:'/api/repo-groups', desc:'リポジトリグループ作成', body:[{n:'name',req:true,s:'メインプロジェクト'},{n:'description',s:'テスト用グループ'},{n:'colorCode',s:'#0969da'},{n:'icon',s:'🚀'},{n:'slackChannelId',s:''},{n:'repos',s:[]}] },
-    { method:'PATCH',  path:'/api/repo-groups/:id', desc:'リポジトリグループ更新', path_params:['id'], pp:{id:'1'}, body:[{n:'name',s:'メインプロジェクト（更新）'},{n:'description',s:''},{n:'colorCode',s:''},{n:'icon',s:''},{n:'slackChannelId',s:''},{n:'displayOrder',s:0},{n:'repos',s:[]}] },
-    { method:'DELETE', path:'/api/repo-groups/:id', desc:'リポジトリグループ削除', path_params:['id'], pp:{id:'1'} },
-    { method:'GET',    path:'/api/repo-groups/:id/oauth-apps', desc:'グループの OAuth アプリ一覧', path_params:['id'], pp:{id:'1'} },
-    { method:'POST',   path:'/api/repo-groups/:id/oauth-apps', desc:'OAuth アプリ追加', path_params:['id'], pp:{id:'1'}, body:[{n:'appName',req:true,s:'my-oauth-app'},{n:'appNote',s:'テスト用'}] },
-    { method:'DELETE', path:'/api/repo-groups/:id/oauth-apps/:appName', desc:'OAuth アプリ削除', path_params:['id','appName'], pp:{id:'1',appName:'my-oauth-app'} },
-    { method:'GET',    path:'/api/repo-oauth-apps', desc:'リポジトリ別 OAuth アプリ' },
+    { method:'GET',    path:'/api/repo-colors', desc:'リポジトリカラー設定一覧',
+      res:{colors:[{repoName:'cloudflare-workers-github-oauth-1',colorCode:'#0969da',displayOrder:0,tags:'',isVisible:true}]} },
+    { method:'POST',   path:'/api/repo-colors/sync', desc:'コミットキャッシュからカラー同期',
+      res:{ok:true,synced:3} },
+    { method:'PATCH',  path:'/api/repo-colors/:repoName', desc:'リポジトリカラー更新', path_params:['repoName'], pp:{repoName:'cloudflare-workers-github-oauth-1'}, body:[{n:'colorCode',s:'#0969da'},{n:'tags',s:[]},{n:'isVisible',s:true},{n:'displayOrder',s:0}],
+      res:{ok:true} },
+    { method:'GET',    path:'/api/repo-groups', desc:'リポジトリグループ一覧',
+      res:{groups:[{id:1,name:'メインプロジェクト',description:'テスト用グループ',colorCode:'#0969da',icon:'🚀',slackChannelId:'',displayOrder:0,repos:['cloudflare-workers-github-oauth-1']}]} },
+    { method:'POST',   path:'/api/repo-groups', desc:'リポジトリグループ作成', body:[{n:'name',req:true,s:'メインプロジェクト'},{n:'description',s:'テスト用グループ'},{n:'colorCode',s:'#0969da'},{n:'icon',s:'🚀'},{n:'slackChannelId',s:''},{n:'repos',s:[]}],
+      res:{ok:true,id:1} },
+    { method:'PATCH',  path:'/api/repo-groups/:id', desc:'リポジトリグループ更新', path_params:['id'], pp:{id:'1'}, body:[{n:'name',s:'メインプロジェクト（更新）'},{n:'description',s:''},{n:'colorCode',s:''},{n:'icon',s:''},{n:'slackChannelId',s:''},{n:'displayOrder',s:0},{n:'repos',s:[]}],
+      res:{ok:true} },
+    { method:'DELETE', path:'/api/repo-groups/:id', desc:'リポジトリグループ削除', path_params:['id'], pp:{id:'1'},
+      res:{ok:true} },
+    { method:'GET',    path:'/api/repo-groups/:id/oauth-apps', desc:'グループの OAuth アプリ一覧', path_params:['id'], pp:{id:'1'},
+      res:{apps:[{appName:'my-oauth-app',appNote:'テスト用',createdAt:'2026-06-15T00:00:00.000Z'}]} },
+    { method:'POST',   path:'/api/repo-groups/:id/oauth-apps', desc:'OAuth アプリ追加', path_params:['id'], pp:{id:'1'}, body:[{n:'appName',req:true,s:'my-oauth-app'},{n:'appNote',s:'テスト用'}],
+      res:{ok:true} },
+    { method:'DELETE', path:'/api/repo-groups/:id/oauth-apps/:appName', desc:'OAuth アプリ削除', path_params:['id','appName'], pp:{id:'1',appName:'my-oauth-app'},
+      res:{ok:true} },
+    { method:'GET',    path:'/api/repo-oauth-apps', desc:'リポジトリ別 OAuth アプリ',
+      res:{apps:[{repo:'cloudflare-workers-github-oauth-1',appName:'my-oauth-app',appNote:'テスト用'}]} },
   ]},
   { group: 'ステータス・スキーマ', endpoints: [
-    { method:'GET',  path:'/api/status/schema', desc:'全テーブル定義・カラム・リレーション' },
-    { method:'GET',  path:'/api/status/tables/:table/rows', desc:'テーブル行プレビュー', path_params:['table'], pp:{table:'user_sessions'} },
-    { method:'GET',  path:'/api/status/tables/:table/ym-summary', desc:'年月別サマリ', path_params:['table'], pp:{table:'ai_summary_log'} },
-    { method:'GET',  path:'/api/status/tables/:table/calendar', desc:'日別カレンダー', path_params:['table'], pp:{table:'ai_summary_log'}, query:[{n:'ym',s:'2026-06'}] },
-    { method:'GET',  path:'/api/status/tables/:table/migration-details', desc:'マイグレーション詳細', path_params:['table'], pp:{table:'user_sessions'} },
-    { method:'GET',  path:'/api/status/tables/:table/group-er', desc:'テーブルグループ ER 図', path_params:['table'], pp:{table:'user_sessions'} },
-    { method:'GET',  path:'/api/status/migrations/:migration/sql', desc:'マイグレーション SQL 取得', path_params:['migration'], pp:{migration:'0001'} },
-    { method:'GET',  path:'/api/status/column-stats/verify', desc:'カラム FK 統計検証' },
-    { method:'POST', path:'/api/status/fk-verify', desc:'FK サンプルデータ検証', body:[{n:'fromTable',req:true,s:'ai_summary_reviews'},{n:'fromCol',req:true,s:'log_id'},{n:'toTable',req:true,s:'ai_summary_log'},{n:'toCol',req:true,s:'id'}] },
+    { method:'GET',  path:'/api/status/schema', desc:'全テーブル定義・カラム・リレーション',
+      res:{tables:[{name:'user_sessions',cols:[{name:'id',type:'INTEGER',keys:['PK']},{name:'user_id',type:'TEXT',keys:['IDX']}]}],relations:[['ai_summary_reviews','log_id','ai_summary_log','id','FK']]} },
+    { method:'GET',  path:'/api/status/tables/:table/rows', desc:'テーブル行プレビュー', path_params:['table'], pp:{table:'user_sessions'},
+      res:{table:'user_sessions',migration:'0001',description:'ユーザーセッション',columns:['id','user_id','created_at'],columnKeyInfo:{id:'PK',user_id:'IDX'},filterableColumns:['user_id'],rows:[{id:1,user_id:'nekoserver',created_at:'2026-06-15T00:00:00.000Z'}],limit:20} },
+    { method:'GET',  path:'/api/status/tables/:table/ym-summary', desc:'年月別サマリ', path_params:['table'], pp:{table:'ai_summary_log'},
+      res:{table:'ai_summary_log',rows:[{ym:'2026-06',count:15}]} },
+    { method:'GET',  path:'/api/status/tables/:table/calendar', desc:'日別カレンダー', path_params:['table'], pp:{table:'ai_summary_log'}, query:[{n:'ym',s:'2026-06'}],
+      res:{table:'ai_summary_log',ym:'2026-06',days:[{date:'2026-06-15',count:3}]} },
+    { method:'GET',  path:'/api/status/tables/:table/migration-details', desc:'マイグレーション詳細', path_params:['table'], pp:{table:'user_sessions'},
+      res:{table:'user_sessions',migration:'0001',cols:[{name:'id',type:'INTEGER'},{name:'user_id',type:'TEXT'}]} },
+    { method:'GET',  path:'/api/status/tables/:table/group-er', desc:'テーブルグループ ER 図', path_params:['table'], pp:{table:'user_sessions'},
+      res:{tables:['user_sessions'],relations:[]} },
+    { method:'GET',  path:'/api/status/migrations/:migration/sql', desc:'マイグレーション SQL 取得', path_params:['migration'], pp:{migration:'0001'},
+      res:{migration:'0001',sql:'CREATE TABLE IF NOT EXISTS user_sessions (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id TEXT NOT NULL);'} },
+    { method:'GET',  path:'/api/status/column-stats/verify', desc:'カラム FK 統計検証',
+      res:{ok:true,verified:5,issues:[]} },
+    { method:'POST', path:'/api/status/fk-verify', desc:'FK サンプルデータ検証', body:[{n:'fromTable',req:true,s:'ai_summary_reviews'},{n:'fromCol',req:true,s:'log_id'},{n:'toTable',req:true,s:'ai_summary_log'},{n:'toCol',req:true,s:'id'}],
+      res:{ok:true,fromTable:'ai_summary_reviews',fromCol:'log_id',toTable:'ai_summary_log',toCol:'id',sampleRows:[{log_id:1,id:1}]} },
   ]},
   { group: 'Cloudflare', endpoints: [
-    { method:'GET',  path:'/api/cf-dashboard/d1', desc:'D1 データベース一覧' },
-    { method:'GET',  path:'/api/cf-dashboard/d1/:dbId/tables', desc:'D1 テーブル行数一覧', path_params:['dbId'] },
-    { method:'GET',  path:'/api/debug/d1', desc:'D1 接続診断' },
-    { method:'GET',  path:'/api/debug/installations', desc:'GitHub App インストール診断' },
-    { method:'GET',  path:'/api/cloudflare-setup-pending', desc:'セットアップ待ち通知一覧' },
-    { method:'POST', path:'/api/cloudflare-setup-pending/:id/dismiss', desc:'通知を個別却下', path_params:['id'], pp:{id:'1'} },
-    { method:'POST', path:'/api/cloudflare-setup-pending/dismiss-all', desc:'通知を一括却下' },
+    { method:'GET',  path:'/api/cf-dashboard/d1', desc:'D1 データベース一覧',
+      res:{databases:[{id:'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx',name:'cloudflare-workers-github-oauth-1-db',created_at:'2026-01-01T00:00:00.000Z'}]} },
+    { method:'GET',  path:'/api/cf-dashboard/d1/:dbId/tables', desc:'D1 テーブル行数一覧', path_params:['dbId'],
+      res:{tables:[{name:'user_sessions',row_count:1},{name:'ai_summary_log',row_count:42}]} },
+    { method:'GET',  path:'/api/debug/d1', desc:'D1 接続診断',
+      res:{ok:true,binding:'DB',tables:[{name:'user_sessions',count:1}]} },
+    { method:'GET',  path:'/api/debug/installations', desc:'GitHub App インストール診断',
+      res:{ok:true,installations:[{id:12345678,account:'nekoserver',repos:['cloudflare-workers-github-oauth-1']}]} },
+    { method:'GET',  path:'/api/cloudflare-setup-pending', desc:'セットアップ待ち通知一覧',
+      res:{notifications:[{id:1,type:'worker_not_deployed',message:'Worker がデプロイされていません',created_at:'2026-06-15T00:00:00.000Z'}]} },
+    { method:'POST', path:'/api/cloudflare-setup-pending/:id/dismiss', desc:'通知を個別却下', path_params:['id'], pp:{id:'1'},
+      res:{ok:true} },
+    { method:'POST', path:'/api/cloudflare-setup-pending/dismiss-all', desc:'通知を一括却下',
+      res:{ok:true,dismissed:3} },
   ]},
   { group: 'プロフィール・設定', endpoints: [
-    { method:'GET',  path:'/api/profile', desc:'ユーザープロフィール取得' },
-    { method:'PUT',  path:'/api/profile', desc:'プロフィール更新', body:[{n:'name',s:'テストユーザー'}] },
-    { method:'POST', path:'/api/settings/timezone', desc:'タイムゾーン設定', body:[{n:'timezone',req:true,s:'Asia/Tokyo'}] },
-    { method:'POST', path:'/api/settings/session-duration', desc:'セッション期間設定', body:[{n:'sessionDuration',req:true,s:'24h'}] },
-    { method:'POST', path:'/api/settings/theme', desc:'テーマ設定', body:[{n:'theme',req:true,s:'dark'}] },
-    { method:'POST', path:'/api/settings/recent-commits-count', desc:'最近のコミット表示件数設定', body:[{n:'count',req:true,s:10}] },
-    { method:'POST', path:'/api/settings/toast-duration', desc:'トースト表示時間設定', body:[{n:'duration',req:true,s:3000}] },
-    { method:'POST', path:'/api/settings/status-commit-cache-sort-mode', desc:'キャッシュソートモード設定', body:[{n:'mode',req:true,s:'date'}] },
-    { method:'POST', path:'/api/settings/status-chart-mode', desc:'チャートモード設定', body:[{n:'mode',req:true,s:'bar'}] },
-    { method:'POST', path:'/api/settings/status-chart-sort-order', desc:'チャートソート順設定', body:[{n:'order',req:true,s:'desc'}] },
-    { method:'POST', path:'/api/settings/status-table-autodetect', desc:'テーブル自動検出設定', body:[{n:'mode',req:true,s:'on'}] },
-    { method:'POST', path:'/api/settings/status-show-autodetected-tables', desc:'自動検出テーブル表示設定', body:[{n:'mode',req:true,s:'on'}] },
-    { method:'POST', path:'/api/settings/status-ignore-unknown-unclassified-warning', desc:'未分類警告抑制設定', body:[{n:'mode',req:true,s:'off'}] },
-    { method:'POST', path:'/api/settings/search-label-mode', desc:'検索ラベルモード設定', body:[{n:'mode',req:true,s:'on'}] },
+    { method:'GET',  path:'/api/profile', desc:'ユーザープロフィール取得',
+      res:{profile:{username:'nekoserver',name:'Neko Server',email:'okiraku.cloud@gmail.com',issuedAt:'2026-06-15T00:00:00.000Z',expiresAt:'2026-06-16T00:00:00.000Z'}} },
+    { method:'PUT',  path:'/api/profile', desc:'プロフィール更新', body:[{n:'name',s:'テストユーザー'}],
+      res:{ok:true,name:'テストユーザー'} },
+    { method:'POST', path:'/api/settings/timezone', desc:'タイムゾーン設定', body:[{n:'timezone',req:true,s:'Asia/Tokyo'}],
+      res:{ok:true,timezone:'Asia/Tokyo'} },
+    { method:'POST', path:'/api/settings/session-duration', desc:'セッション期間設定', body:[{n:'sessionDuration',req:true,s:'24h'}],
+      res:{ok:true,sessionDuration:'24h'} },
+    { method:'POST', path:'/api/settings/theme', desc:'テーマ設定', body:[{n:'theme',req:true,s:'dark'}],
+      res:{ok:true,theme:'dark'} },
+    { method:'POST', path:'/api/settings/recent-commits-count', desc:'最近のコミット表示件数設定', body:[{n:'count',req:true,s:10}],
+      res:{ok:true,count:10} },
+    { method:'POST', path:'/api/settings/toast-duration', desc:'トースト表示時間設定', body:[{n:'duration',req:true,s:3000}],
+      res:{ok:true,duration:3000} },
+    { method:'POST', path:'/api/settings/status-commit-cache-sort-mode', desc:'キャッシュソートモード設定', body:[{n:'mode',req:true,s:'date'}],
+      res:{ok:true,mode:'date'} },
+    { method:'POST', path:'/api/settings/status-chart-mode', desc:'チャートモード設定', body:[{n:'mode',req:true,s:'bar'}],
+      res:{ok:true,mode:'bar'} },
+    { method:'POST', path:'/api/settings/status-chart-sort-order', desc:'チャートソート順設定', body:[{n:'order',req:true,s:'desc'}],
+      res:{ok:true,order:'desc'} },
+    { method:'POST', path:'/api/settings/status-table-autodetect', desc:'テーブル自動検出設定', body:[{n:'mode',req:true,s:'on'}],
+      res:{ok:true,mode:'on'} },
+    { method:'POST', path:'/api/settings/status-show-autodetected-tables', desc:'自動検出テーブル表示設定', body:[{n:'mode',req:true,s:'on'}],
+      res:{ok:true,mode:'on'} },
+    { method:'POST', path:'/api/settings/status-ignore-unknown-unclassified-warning', desc:'未分類警告抑制設定', body:[{n:'mode',req:true,s:'off'}],
+      res:{ok:true,mode:'off'} },
+    { method:'POST', path:'/api/settings/search-label-mode', desc:'検索ラベルモード設定', body:[{n:'mode',req:true,s:'on'}],
+      res:{ok:true,mode:'on'} },
   ]},
   { group: 'ワークスペース・関数', endpoints: [
-    { method:'GET',  path:'/api/workspaces', desc:'ワークスペース一覧' },
-    { method:'POST', path:'/api/workspaces/switch', desc:'ワークスペース切り替え', body:[{n:'workspaceId',req:true,s:1}] },
-    { method:'GET',  path:'/api/function-file-history', desc:'関数ファイル変更履歴', query:[{n:'repo_id',req:true,s:'1'},{n:'function_name',req:true,s:'recordApiAccess'},{n:'file_path',req:true,s:'src/index.ts'}] },
-    { method:'GET',  path:'/api/function-source', desc:'関数ソースコード取得', query:[{n:'repo_id',req:true,s:'1'},{n:'function_name',req:true,s:'recordApiAccess'},{n:'file_path',req:true,s:'src/index.ts'},{n:'max_lines',s:'50'}] },
+    { method:'GET',  path:'/api/workspaces', desc:'ワークスペース一覧',
+      res:{workspaces:[{workspaceId:'ws_1',workspaceName:'メインワークスペース',teamId:'team_1',teamName:'Neko Team'}],current:{workspaceId:'ws_1',workspaceName:'メインワークスペース',teamId:'team_1',teamName:'Neko Team'}} },
+    { method:'POST', path:'/api/workspaces/switch', desc:'ワークスペース切り替え', body:[{n:'workspaceId',req:true,s:1}],
+      res:{ok:true,workspaceId:1} },
+    { method:'GET',  path:'/api/function-file-history', desc:'関数ファイル変更履歴', query:[{n:'repo_id',req:true,s:'1'},{n:'function_name',req:true,s:'recordApiAccess'},{n:'file_path',req:true,s:'src/index.ts'}],
+      res:{function_name:'recordApiAccess',file_path:'src/index.ts',history:[{commit_hash:'abc1234',commit_message:'feat: API集計追加',committed_at:'2026-06-15T00:00:00.000Z',start_line:100,end_line:130}]} },
+    { method:'GET',  path:'/api/function-source', desc:'関数ソースコード取得', query:[{n:'repo_id',req:true,s:'1'},{n:'function_name',req:true,s:'recordApiAccess'},{n:'file_path',req:true,s:'src/index.ts'},{n:'max_lines',s:'50'}],
+      res:{function_name:'recordApiAccess',file_path:'src/index.ts',start_line:100,end_line:130,source:'async function recordApiAccess(...) { ... }'} },
   ]},
   { group: 'その他', endpoints: [
-    { method:'GET', path:'/api', desc:'API 情報・ルート一覧' },
-    { method:'GET', path:'/api/public', desc:'認証不要テストエンドポイント' },
-    { method:'GET', path:'/api/protected', desc:'認証テストエンドポイント' },
+    { method:'GET', path:'/api', desc:'API 情報・ルート一覧',
+      res:{message:'Cloudflare Workers GitHub OAuth API',version:'1.0.0',authentication:{github_oauth:'GET /auth/github',logout:'GET /auth/logout'},endpoints:{public:['GET /api','GET /api/public'],protected:['GET /api/protected','GET /api/profile']}} },
+    { method:'GET', path:'/api/public', desc:'認証不要テストエンドポイント',
+      res:{message:'Public endpoint - no authentication required'} },
+    { method:'GET', path:'/api/protected', desc:'認証テストエンドポイント',
+      res:{message:'Protected endpoint - authenticated',user:'nekoserver'} },
   ]},
 ];
 
@@ -877,6 +1003,78 @@ function selectEndpoint(ep, item) {
     bArea.value = JSON.stringify(obj, null, 2);
     bSec.style.display = '';
   } else { bSec.style.display = 'none'; }
+
+  // ── リクエスト例 ──────────────────────────────────────
+  var reqExSec = document.getElementById('req-example-sec');
+  var reqNoteList = document.getElementById('req-note-list');
+  var reqExCode = document.getElementById('req-example-code');
+  var curlLines = [];
+  var resolvedPath = ep.path;
+  (ep.path_params || []).forEach(function(p) {
+    var val = ep.pp && ep.pp[p] !== undefined ? String(ep.pp[p]) : ':' + p;
+    resolvedPath = resolvedPath.split(':' + p).join(encodeURIComponent(val));
+  });
+  var qParts = (ep.query || []).filter(function(p) { return p.s !== undefined; }).map(function(p) {
+    return encodeURIComponent(p.n) + '=' + encodeURIComponent(String(p.s));
+  });
+  if (qParts.length) resolvedPath += '?' + qParts.join('&');
+  var BSLNL = String.fromCharCode(32, 92, 10) + '  ';
+  var SQ = String.fromCharCode(39);
+  curlLines.push('curl -X ' + ep.method + ' ' + SQ + window.location.origin + resolvedPath + SQ);
+  curlLines.push('-H ' + SQ + 'Cookie: auth_token=<JWT_TOKEN>' + SQ);
+  if (ep.body && ep.body.length) {
+    var sampleObj = {};
+    ep.body.forEach(function(f) { sampleObj[f.n] = f.s !== undefined ? f.s : (f.req ? '<必須>' : null); });
+    curlLines.push('-H ' + SQ + 'Content-Type: application/json' + SQ);
+    curlLines.push('-d ' + SQ + JSON.stringify(sampleObj) + SQ);
+  }
+  reqExCode.textContent = curlLines.join(BSLNL);
+  var isPublic = ep.path === '/api/public' || ep.path === '/api';
+  var noteHtml = '';
+  if (!isPublic) noteHtml += '<span class="req-note req-note-auth">認証必須</span>';
+  (ep.body || []).filter(function(f) { return f.req; }).forEach(function(f) {
+    noteHtml += '<span class="req-note req-note-null">' + esc(f.n) + ': null 不可</span>';
+  });
+  (ep.query || []).filter(function(q) { return q.req; }).forEach(function(q) {
+    noteHtml += '<span class="req-note req-note-null">?' + esc(q.n) + ': null 不可</span>';
+  });
+  reqNoteList.innerHTML = noteHtml;
+  reqExSec.style.display = '';
+
+  // ── レスポンス例 ──────────────────────────────────────
+  var resExSec = document.getElementById('res-example-sec');
+  var resExCode = document.getElementById('res-example-code');
+  if (ep.res !== undefined) {
+    resExCode.innerHTML = renderResAnnotated(ep.res, 0);
+    resExSec.style.display = '';
+  } else {
+    resExSec.style.display = 'none';
+  }
+}
+
+function renderResAnnotated(val, depth) {
+  var pad = '';
+  var pad1 = '';
+  for (var i = 0; i < depth; i++) pad += '  ';
+  for (var i = 0; i <= depth; i++) pad1 += '  ';
+  if (val === null) return '<span style="color:var(--muted)">null</span><span class="type-badge"> // null</span>';
+  if (typeof val === 'boolean') return '<span style="color:#0969da">' + val + '</span><span class="type-badge"> // boolean</span>';
+  if (typeof val === 'number') return '<span style="color:#0969da">' + val + '</span><span class="type-badge"> // number</span>';
+  if (typeof val === 'string') return '<span style="color:#1a7f37">"' + esc(val) + '"</span><span class="type-badge"> // string</span>';
+  if (Array.isArray(val)) {
+    if (!val.length) return '<span style="color:var(--muted)">[]</span><span class="type-badge"> // array</span>';
+    var items = val.map(function(item) { return pad1 + renderResAnnotated(item, depth + 1); });
+    return '[' + String.fromCharCode(10) + items.join(',' + String.fromCharCode(10)) + String.fromCharCode(10) + pad + ']<span class="type-badge"> // array(' + val.length + ')</span>';
+  }
+  if (typeof val === 'object') {
+    var keys = Object.keys(val);
+    if (!keys.length) return '{}';
+    var lines = keys.map(function(k) {
+      return pad1 + '<span style="color:var(--text)">"' + esc(k) + '"</span>: ' + renderResAnnotated(val[k], depth + 1);
+    });
+    return '{' + String.fromCharCode(10) + lines.join(',' + String.fromCharCode(10)) + String.fromCharCode(10) + pad + '}';
+  }
+  return esc(String(val));
 }
 
 // ── send ─────────────────────────────────────────────
