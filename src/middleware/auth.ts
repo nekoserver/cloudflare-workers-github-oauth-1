@@ -112,18 +112,14 @@ export async function authMiddleware(c: Context<{ Bindings: Bindings; Variables:
     const remainingSeconds = Math.max(payload.exp - Math.floor(nowMs / 1000), 0);
     const configuredDuration = getCookieValue(cookieHeader, 'user_session_duration');
     const idleFromSettings = configuredDuration ? getSessionDurationSeconds(configuredDuration) : undefined;
-    const idleTimeoutSeconds = resolveIdleTimeoutSeconds(
-      c.env.SESSION_IDLE_TIMEOUT_SECONDS,
-      remainingSeconds,
-      idleFromSettings
-    );
 
     // last_activity Cookie が消えている場合 or revoke チェックのために D1 を参照する
     let effectiveLastActivity: number | null = lastActivity;
+    let idleTimeoutFromDB: number | undefined;
     if (c.env.DB) {
       const row = await c.env.DB.prepare(
-        'SELECT last_activity_at, revoked_at FROM user_sessions WHERE user_id = ?'
-      ).bind(payload.sub).first<{ last_activity_at: string | null; revoked_at: string | null }>();
+        'SELECT last_activity_at, revoked_at, idle_timeout_seconds FROM user_sessions WHERE user_id = ?'
+      ).bind(payload.sub).first<{ last_activity_at: string | null; revoked_at: string | null; idle_timeout_seconds: number | null }>();
       if (row && checkRevoked(row)) {
         notifyRevokedAccess(c, tokenInfo.source, payload.sub);
         const clearHeaders = new Headers();
@@ -140,7 +136,16 @@ export async function authMiddleware(c: Context<{ Bindings: Bindings; Variables:
       if (!effectiveLastActivity && row?.last_activity_at) {
         effectiveLastActivity = new Date(row.last_activity_at).getTime();
       }
+      if (row?.idle_timeout_seconds && row.idle_timeout_seconds > 0) {
+        idleTimeoutFromDB = row.idle_timeout_seconds;
+      }
     }
+
+    const idleTimeoutSeconds = resolveIdleTimeoutSeconds(
+      c.env.SESSION_IDLE_TIMEOUT_SECONDS,
+      remainingSeconds,
+      idleTimeoutFromDB ?? idleFromSettings
+    );
 
     if (!effectiveLastActivity || nowMs - effectiveLastActivity > idleTimeoutSeconds * 1000) {
       const clearHeaders = new Headers();

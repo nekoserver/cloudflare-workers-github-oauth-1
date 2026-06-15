@@ -860,6 +860,8 @@ CREATE INDEX IF NOT EXISTS idx_api_search_keyword_sections_keyword_id ON api_sea
   '0059': `ALTER TABLE user_sessions ADD COLUMN revoked_at TEXT;
 CREATE INDEX IF NOT EXISTS idx_user_sessions_revoked_at ON user_sessions(revoked_at);`,
 
+  '0060': `ALTER TABLE user_sessions ADD COLUMN idle_timeout_seconds INTEGER;`,
+
   'ts-catalog': `CREATE TABLE IF NOT EXISTS ts_repository (
   id            INTEGER PRIMARY KEY AUTOINCREMENT,
   full_name     TEXT NOT NULL UNIQUE,
@@ -2355,6 +2357,7 @@ async function getUserSession(db: D1Database | undefined, userId: string): Promi
   githubGrantedScopes?: string | null;
   recentCommitsCount: number | null;
   toastDuration: number | null;
+  idleTimeoutSeconds: number | null;
 } | null> {
   if (!db) {
     return null;
@@ -2362,7 +2365,7 @@ async function getUserSession(db: D1Database | undefined, userId: string): Promi
 
   try {
     const result = await db.prepare(
-      'SELECT timezone, session_duration, last_login_at, last_activity_at, github_access_token, github_granted_scopes, recent_commits_count, toast_duration FROM user_sessions WHERE user_id = ?'
+      'SELECT timezone, session_duration, last_login_at, last_activity_at, github_access_token, github_granted_scopes, recent_commits_count, toast_duration, idle_timeout_seconds FROM user_sessions WHERE user_id = ?'
     ).bind(userId).first<{
       timezone: string;
       session_duration: string;
@@ -2372,6 +2375,7 @@ async function getUserSession(db: D1Database | undefined, userId: string): Promi
       github_granted_scopes: string | null;
       recent_commits_count: number | null;
       toast_duration: number | null;
+      idle_timeout_seconds: number | null;
     }>();
 
     if (!result) {
@@ -2387,6 +2391,7 @@ async function getUserSession(db: D1Database | undefined, userId: string): Promi
       githubGrantedScopes: result.github_granted_scopes,
       recentCommitsCount: result.recent_commits_count ?? null,
       toastDuration: result.toast_duration ?? null,
+      idleTimeoutSeconds: result.idle_timeout_seconds ?? null,
     };
   } catch (error) {
     logger.error('Error getting user session', {
@@ -4207,6 +4212,7 @@ app.get('/settings', authMiddleware, async (c) => {
     sessionDuration,
     recentCommitsCount,
     toastDuration,
+    idleTimeoutSeconds: userSession?.idleTimeoutSeconds ?? null,
     statusCommitCacheSortMode,
     statusChartMode,
     statusChartSortOrder,
@@ -8509,6 +8515,31 @@ app.post('/api/settings/toast-duration', authMiddleware, async (c) => {
       error: error instanceof Error ? error.message : 'Unknown error',
     });
     return c.json({ error: 'トースト表示時間の変更に失敗しました' }, 500);
+  }
+});
+
+/**
+ * アイドルタイムアウト設定変更
+ */
+app.post('/api/settings/idle-timeout', authMiddleware, async (c) => {
+  try {
+    const user = c.get('user');
+    if (!c.env.DB) return c.json({ error: 'DBが利用できません' }, 503);
+    const { idleTimeoutSeconds } = await c.req.json() as { idleTimeoutSeconds: number | null };
+    if (idleTimeoutSeconds !== null && (typeof idleTimeoutSeconds !== 'number' || !Number.isFinite(idleTimeoutSeconds) || idleTimeoutSeconds < 0)) {
+      return c.json({ error: 'idleTimeoutSeconds は正の整数またはnullを指定してください' }, 400);
+    }
+    await c.env.DB.prepare(
+      'UPDATE user_sessions SET idle_timeout_seconds = ? WHERE user_id = ?'
+    ).bind(idleTimeoutSeconds ?? null, user.sub).run();
+    return c.json({ ok: true, idleTimeoutSeconds });
+  } catch (error) {
+    const user = c.get('user');
+    logger.error('Idle timeout update error', {
+      userId: user?.sub,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    return c.json({ error: 'アイドルタイムアウトの変更に失敗しました' }, 500);
   }
 });
 
