@@ -50,6 +50,7 @@ import { stripThinkTags } from './utils/stripThinkTags';
 import { AICHAT_MODEL_MAX_TOKENS, getModelRunParams } from './utils/aichatModelConfig';
 import { extractFunctionSource } from './utils/extractFunctionSource';
 import { listD1Databases, getD1Tables } from './utils/cloudflareApi';
+import { validateRevokeRequest } from './utils/revoke';
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -856,6 +857,11 @@ CREATE INDEX IF NOT EXISTS idx_api_search_keywords_keyword ON api_search_keyword
 );
 CREATE INDEX IF NOT EXISTS idx_api_search_keyword_sections_keyword_id ON api_search_keyword_sections(keyword_id);`,
 
+  '0059': `ALTER TABLE user_sessions ADD COLUMN revoked_at TEXT;
+CREATE INDEX IF NOT EXISTS idx_user_sessions_revoked_at ON user_sessions(revoked_at);`,
+
+  '0060': `ALTER TABLE user_sessions ADD COLUMN idle_timeout_seconds INTEGER;`,
+
   'ts-catalog': `CREATE TABLE IF NOT EXISTS ts_repository (
   id            INTEGER PRIMARY KEY AUTOINCREMENT,
   full_name     TEXT NOT NULL UNIQUE,
@@ -1120,7 +1126,7 @@ export interface ColumnKeyInfo {
 }
 
 export const TABLE_COLUMN_KEYS: Record<string, ColumnKeyInfo> = {
-  user_sessions: { id: 'pk', user_id: 'uk', current_workspace_id: 'fk' },
+  user_sessions: { id: 'pk', user_id: 'uk', current_workspace_id: 'fk', revoked_at: 'idx' },
   teams: { id: 'pk' },
   workspaces: { id: 'pk', team_id: 'fk' },
   team_members: { team_id: 'pk+fk', user_id: 'pk+fk' },
@@ -2351,6 +2357,7 @@ async function getUserSession(db: D1Database | undefined, userId: string): Promi
   githubGrantedScopes?: string | null;
   recentCommitsCount: number | null;
   toastDuration: number | null;
+  idleTimeoutSeconds: number | null;
 } | null> {
   if (!db) {
     return null;
@@ -2358,7 +2365,7 @@ async function getUserSession(db: D1Database | undefined, userId: string): Promi
 
   try {
     const result = await db.prepare(
-      'SELECT timezone, session_duration, last_login_at, last_activity_at, github_access_token, github_granted_scopes, recent_commits_count, toast_duration FROM user_sessions WHERE user_id = ?'
+      'SELECT timezone, session_duration, last_login_at, last_activity_at, github_access_token, github_granted_scopes, recent_commits_count, toast_duration, idle_timeout_seconds FROM user_sessions WHERE user_id = ?'
     ).bind(userId).first<{
       timezone: string;
       session_duration: string;
@@ -2368,6 +2375,7 @@ async function getUserSession(db: D1Database | undefined, userId: string): Promi
       github_granted_scopes: string | null;
       recent_commits_count: number | null;
       toast_duration: number | null;
+      idle_timeout_seconds: number | null;
     }>();
 
     if (!result) {
@@ -2383,6 +2391,7 @@ async function getUserSession(db: D1Database | undefined, userId: string): Promi
       githubGrantedScopes: result.github_granted_scopes,
       recentCommitsCount: result.recent_commits_count ?? null,
       toastDuration: result.toast_duration ?? null,
+      idleTimeoutSeconds: result.idle_timeout_seconds ?? null,
     };
   } catch (error) {
     logger.error('Error getting user session', {
@@ -4195,6 +4204,7 @@ app.get('/settings', authMiddleware, async (c) => {
     sessionDuration,
     recentCommitsCount,
     toastDuration,
+    idleTimeoutSeconds: userSession?.idleTimeoutSeconds ?? null,
     statusCommitCacheSortMode,
     statusChartMode,
     statusChartSortOrder,
@@ -8501,6 +8511,31 @@ app.post('/api/settings/toast-duration', authMiddleware, async (c) => {
 });
 
 /**
+ * アイドルタイムアウト設定変更
+ */
+app.post('/api/settings/idle-timeout', authMiddleware, async (c) => {
+  try {
+    const user = c.get('user');
+    if (!c.env.DB) return c.json({ error: 'DBが利用できません' }, 503);
+    const { idleTimeoutSeconds } = await c.req.json() as { idleTimeoutSeconds: number | null };
+    if (idleTimeoutSeconds !== null && (typeof idleTimeoutSeconds !== 'number' || !Number.isFinite(idleTimeoutSeconds) || idleTimeoutSeconds < 0)) {
+      return c.json({ error: 'idleTimeoutSeconds は正の整数またはnullを指定してください' }, 400);
+    }
+    await c.env.DB.prepare(
+      'UPDATE user_sessions SET idle_timeout_seconds = ? WHERE user_id = ?'
+    ).bind(idleTimeoutSeconds ?? null, user.sub).run();
+    return c.json({ ok: true, idleTimeoutSeconds });
+  } catch (error) {
+    const user = c.get('user');
+    logger.error('Idle timeout update error', {
+      userId: user?.sub,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    return c.json({ error: 'アイドルタイムアウトの変更に失敗しました' }, 500);
+  }
+});
+
+/**
  * /status の月別コミットキャッシュ詳細ソート設定変更
  */
 app.post('/api/settings/status-commit-cache-sort-mode', authMiddleware, async (c) => {
@@ -8765,6 +8800,39 @@ app.post('/api/search-keywords', authMiddleware, async (c) => {
     });
     return c.json({ error: '検索キーワードの登録に失敗しました' }, 500);
   }
+});
+
+app.post('/api/admin/revoke-session', authMiddleware, async (c) => {
+  const actor = c.get('user');
+  const db = c.env.DB;
+  if (!db) return c.json({ error: 'DBが利用できません' }, 503);
+  let body: { userId?: unknown; reason?: unknown };
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: 'JSONの解析に失敗しました' }, 400);
+  }
+  const validation = validateRevokeRequest(body as { userId: unknown; reason?: unknown });
+  if (!validation.ok) return c.json({ error: validation.error }, 400);
+  const targetUserId = (body.userId as string).trim();
+  const reason = typeof body.reason === 'string' ? body.reason.trim() : null;
+  const revokedAt = new Date().toISOString();
+  const result = await db.prepare(
+    'UPDATE user_sessions SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL'
+  ).bind(revokedAt, targetUserId).run();
+  if (result.meta.changes === 0) {
+    return c.json({ error: 'セッションが見つからないか既にrevoke済みです' }, 404);
+  }
+  const slackToken = c.env.SLACK_OAUTH_TOKEN;
+  const slackChannel = c.env.SLACK_CHANNEL_ID;
+  if (slackToken && slackChannel) {
+    postSlackMessage({
+      token: slackToken,
+      channel: slackChannel,
+      text: `[管理操作] セッション強制revoke\n対象ユーザー: ${targetUserId}\n操作者: ${actor.sub}\n理由: ${reason ?? '（未記入）'}`,
+    }).catch(() => {});
+  }
+  return c.json({ ok: true, revokedAt, targetUserId, reason });
 });
 
 /**

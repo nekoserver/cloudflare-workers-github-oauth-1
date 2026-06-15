@@ -15,6 +15,7 @@ export function getSettingsPage(user: {
   sessionDuration?: string;
   recentCommitsCount?: number;
   toastDuration?: number;
+  idleTimeoutSeconds?: number | null;
   statusCommitCacheSortMode?: string;
   statusChartMode?: string;
   statusChartSortOrder?: string;
@@ -36,6 +37,7 @@ export function getSettingsPage(user: {
   const currentSessionDuration = user.sessionDuration || '1h';
   const currentRecentCommitsCount = user.recentCommitsCount || 20;
   const currentToastDuration = user.toastDuration || 10;
+  const currentIdleTimeoutSeconds = user.idleTimeoutSeconds ?? null;
   const currentStatusCommitCacheSortMode = user.statusCommitCacheSortMode === 'toggle' ? 'toggle' : 'off';
   const currentStatusChartMode = user.statusChartMode === 'repo' ? 'repo' : 'gradient';
   const currentStatusChartSortOrder = user.statusChartSortOrder === 'date' ? 'date' : 'count';
@@ -271,12 +273,35 @@ export function getSettingsPage(user: {
               <input type="checkbox" class="setting-checkbox" id="sessionDurationCheckbox" onchange="toggleSessionDurationEdit()">
             </div>
           </div>
+          <div class="info-item disabled" id="idleTimeoutItem">
+            <span class="info-label">アイドルタイムアウト <span style="font-size:11px;color:var(--muted)">（一定時間操作がないと自動ログアウト）</span></span>
+            <div class="setting-control">
+              <div class="setting-select-wrapper">
+                <select class="timezone-select" id="idleTimeoutSelect" onchange="onIdleTimeoutChange()" disabled>
+                  <option value="0" ${currentIdleTimeoutSeconds === null ? 'selected' : ''}>セッション期限まで（デフォルト）</option>
+                  <option value="300"  ${currentIdleTimeoutSeconds === 300  ? 'selected' : ''}>5分</option>
+                  <option value="900"  ${currentIdleTimeoutSeconds === 900  ? 'selected' : ''}>15分</option>
+                  <option value="1800" ${currentIdleTimeoutSeconds === 1800 ? 'selected' : ''}>30分</option>
+                  <option value="3600" ${currentIdleTimeoutSeconds === 3600 ? 'selected' : ''}>1時間</option>
+                  <option value="7200" ${currentIdleTimeoutSeconds === 7200 ? 'selected' : ''}>2時間</option>
+                  <option value="14400" ${currentIdleTimeoutSeconds === 14400 ? 'selected' : ''}>4時間</option>
+                  <option value="28800" ${currentIdleTimeoutSeconds === 28800 ? 'selected' : ''}>8時間</option>
+                </select>
+              </div>
+              <input type="checkbox" class="setting-checkbox" id="idleTimeoutCheckbox" onchange="toggleIdleTimeoutEdit()">
+            </div>
+          </div>
         </div>
         <div class="button-container" id="sessionButtonContainer">
           <button class="btn btn-save" onclick="saveSessionDuration()">保存</button>
           <button class="btn btn-cancel" onclick="cancelSessionDuration()">キャンセル</button>
         </div>
         <div class="success-message" id="sessionSuccessMessage">✓ セッション有効期限を変更しました</div>
+        <div class="button-container" id="idleTimeoutButtonContainer" style="display:none">
+          <button class="btn btn-save" onclick="saveIdleTimeout()">保存</button>
+          <button class="btn btn-cancel" onclick="cancelIdleTimeout()">キャンセル</button>
+        </div>
+        <div class="success-message" id="idleTimeoutSuccessMessage">✓ アイドルタイムアウトを変更しました</div>
       </div>
 
       <div class="section">
@@ -717,6 +742,7 @@ export function getSettingsPage(user: {
 
     let originalTimezone = '${currentTimezone}';
     let originalSessionDuration = '${currentSessionDuration}';
+    let originalIdleTimeout = '${currentIdleTimeoutSeconds === null ? '0' : String(currentIdleTimeoutSeconds)}';
     let originalRecentCommitsCount = '${currentRecentCommitsCount}';
     let originalToastDuration = '${currentToastDuration}';
     let originalStatusChartMode = '${currentStatusChartMode}';
@@ -1170,6 +1196,41 @@ export function getSettingsPage(user: {
       document.getElementById('sessionDurationCheckbox').checked = false;
       document.getElementById('sessionDurationSelect').disabled = true;
       document.getElementById('sessionDurationItem').classList.add('disabled');
+    }
+    function toggleIdleTimeoutEdit() {
+      var cb = document.getElementById('idleTimeoutCheckbox');
+      var sel = document.getElementById('idleTimeoutSelect');
+      var item = document.getElementById('idleTimeoutItem');
+      if (cb.checked) { sel.disabled = false; item.classList.remove('disabled'); }
+      else { sel.disabled = true; item.classList.add('disabled'); sel.value = originalIdleTimeout; document.getElementById('idleTimeoutButtonContainer').style.display = 'none'; }
+    }
+    function onIdleTimeoutChange() {
+      var cb = document.getElementById('idleTimeoutCheckbox');
+      var sel = document.getElementById('idleTimeoutSelect');
+      if (cb.checked && sel.value !== originalIdleTimeout) document.getElementById('idleTimeoutButtonContainer').style.display = '';
+      else document.getElementById('idleTimeoutButtonContainer').style.display = 'none';
+    }
+    async function saveIdleTimeout() {
+      var val = document.getElementById('idleTimeoutSelect').value;
+      var idleTimeoutSeconds = parseInt(val, 10) || null;
+      var res = await fetch('/api/settings/idle-timeout', { method: 'POST', headers: {'Content-Type':'application/json'}, credentials: 'include', body: JSON.stringify({ idleTimeoutSeconds }) });
+      if (res.ok) {
+        originalIdleTimeout = val;
+        document.getElementById('idleTimeoutButtonContainer').style.display = 'none';
+        var msg = document.getElementById('idleTimeoutSuccessMessage');
+        msg.classList.add('show');
+        document.getElementById('idleTimeoutCheckbox').checked = false;
+        document.getElementById('idleTimeoutSelect').disabled = true;
+        document.getElementById('idleTimeoutItem').classList.add('disabled');
+        setTimeout(function() { msg.classList.remove('show'); }, 1500);
+      } else { alert('アイドルタイムアウトの変更に失敗しました'); }
+    }
+    function cancelIdleTimeout() {
+      document.getElementById('idleTimeoutSelect').value = originalIdleTimeout;
+      document.getElementById('idleTimeoutButtonContainer').style.display = 'none';
+      document.getElementById('idleTimeoutCheckbox').checked = false;
+      document.getElementById('idleTimeoutSelect').disabled = true;
+      document.getElementById('idleTimeoutItem').classList.add('disabled');
     }
     function toggleRecentCommitsCountEdit() {
       const cb = document.getElementById('recentCommitsCountCheckbox');
