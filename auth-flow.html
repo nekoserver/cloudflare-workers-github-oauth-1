@@ -1,0 +1,644 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>認証・Revoke フローチャート</title>
+<style>
+  :root {
+    --bg: #f6f8fa;
+    --surface: #ffffff;
+    --border: #d0d7de;
+    --text: #1f2328;
+    --muted: #57606a;
+    --ok: #1a7f37;
+    --ok-bg: #dafbe1;
+    --ok-border: #4ac26b;
+    --ng: #cf222e;
+    --ng-bg: #ffebe9;
+    --ng-border: #ff818266;
+    --warn: #9a6700;
+    --warn-bg: #fff8c5;
+    --warn-border: #d4a72c;
+    --blue: #0969da;
+    --blue-bg: #ddf4ff;
+    --blue-border: #54aeff66;
+    --purple: #6639ba;
+    --purple-bg: #fbefff;
+    --purple-border: #c297ff;
+    --neutral-bg: #f0f0f0;
+    --neutral-border: #d0d7de;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0d1117;
+      --surface: #161b22;
+      --border: #30363d;
+      --text: #e6edf3;
+      --muted: #8b949e;
+      --ok: #3fb950;
+      --ok-bg: #0f2d1a;
+      --ok-border: #238636;
+      --ng: #f85149;
+      --ng-bg: #2d1117;
+      --ng-border: #da3633;
+      --warn: #d29922;
+      --warn-bg: #2d2200;
+      --warn-border: #9e6a03;
+      --blue: #58a6ff;
+      --blue-bg: #0c2d4e;
+      --blue-border: #1f6feb;
+      --purple: #bc8cff;
+      --purple-bg: #1a0938;
+      --purple-border: #6e40c9;
+      --neutral-bg: #21262d;
+      --neutral-border: #30363d;
+    }
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-size: 13px;
+    min-height: 100vh;
+  }
+  h1 {
+    font-size: 16px;
+    font-weight: 600;
+    padding: 16px 20px 12px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+  }
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    padding: 10px 20px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+  }
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    color: var(--muted);
+  }
+  .legend-box {
+    width: 14px; height: 14px; border-radius: 3px; border: 1.5px solid;
+  }
+  .scroll-wrap {
+    overflow: auto;
+    padding: 20px;
+  }
+  svg {
+    display: block;
+    overflow: visible;
+  }
+
+  /* ノードスタイル */
+  .node-start rect    { fill: var(--neutral-bg); stroke: var(--neutral-border); stroke-width: 1.5; rx: 20; }
+  .node-check rect   { fill: var(--warn-bg);    stroke: var(--warn-border);   stroke-width: 1.5; }
+  .node-action rect  { fill: var(--blue-bg);    stroke: var(--blue-border);   stroke-width: 1.5; }
+  .node-ok rect      { fill: var(--ok-bg);      stroke: var(--ok-border);     stroke-width: 1.5; rx: 8; }
+  .node-ng rect      { fill: var(--ng-bg);      stroke: var(--ng-border);     stroke-width: 1.5; rx: 8; }
+  .node-warn rect    { fill: var(--purple-bg);  stroke: var(--purple-border); stroke-width: 1.5; rx: 8; }
+
+  text { font-family: inherit; font-size: 11.5px; fill: var(--text); }
+  .label-ok  { fill: var(--ok); font-weight: 600; }
+  .label-ng  { fill: var(--ng); font-weight: 600; }
+  .label-warn { fill: var(--warn); font-weight: 600; }
+  .label-blue { fill: var(--blue); font-weight: 600; }
+  .label-muted { fill: var(--muted); font-size: 10px; }
+
+  .edge { stroke: var(--muted); stroke-width: 1.5; fill: none; marker-end: url(#arrow); }
+  .edge-ok   { stroke: var(--ok); }
+  .edge-ng   { stroke: var(--ng); }
+  .edge-warn { stroke: var(--warn); }
+  .edge-blue { stroke: var(--blue); }
+
+  .edge-label {
+    font-size: 10px;
+    fill: var(--muted);
+  }
+  .edge-label-ok   { fill: var(--ok); font-weight: 600; }
+  .edge-label-ng   { fill: var(--ng); font-weight: 600; }
+</style>
+</head>
+<body>
+<h1>認証・セッション revoke フローチャート</h1>
+<div class="legend">
+  <div class="legend-item"><div class="legend-box" style="background:var(--neutral-bg);border-color:var(--neutral-border)"></div>開始・分岐</div>
+  <div class="legend-item"><div class="legend-box" style="background:var(--warn-bg);border-color:var(--warn-border)"></div>判定（Yes/No）</div>
+  <div class="legend-item"><div class="legend-box" style="background:var(--blue-bg);border-color:var(--blue-border)"></div>処理・参照</div>
+  <div class="legend-item"><div class="legend-box" style="background:var(--ok-bg);border-color:var(--ok-border)"></div>正常終端（通過）</div>
+  <div class="legend-item"><div class="legend-box" style="background:var(--ng-bg);border-color:var(--ng-border)"></div>異常終端（401）</div>
+  <div class="legend-item"><div class="legend-box" style="background:var(--purple-bg);border-color:var(--purple-border)"></div>副作用（Slack通知）</div>
+</div>
+<div class="scroll-wrap">
+<svg id="chart" width="1200" height="3100" viewBox="0 0 1200 3100">
+<defs>
+  <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+    <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--muted)"/>
+  </marker>
+  <marker id="arrow-ok" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+    <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--ok)"/>
+  </marker>
+  <marker id="arrow-ng" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+    <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--ng)"/>
+  </marker>
+  <marker id="arrow-blue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+    <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--blue)"/>
+  </marker>
+</defs>
+
+<!-- ========== NODES ========== -->
+
+<!-- [S] リクエスト受信 -->
+<g transform="translate(450,30)">
+  <rect x="0" y="0" width="300" height="44" rx="22" fill="var(--neutral-bg)" stroke="var(--neutral-border)" stroke-width="1.5"/>
+  <text x="150" y="27" text-anchor="middle" font-weight="600">リクエスト受信</text>
+</g>
+
+<!-- [1] トークンあり？ -->
+<g transform="translate(420,120)">
+  <rect x="0" y="0" width="360" height="50" fill="var(--warn-bg)" stroke="var(--warn-border)" stroke-width="1.5"/>
+  <text x="180" y="21" text-anchor="middle" font-weight="600">トークンがある？</text>
+  <text x="180" y="38" text-anchor="middle" class="label-muted">Authorization: Bearer ヘッダー or Cookie auth_token</text>
+</g>
+
+<!-- [NG1] 401 No token -->
+<g transform="translate(860,120)">
+  <rect x="0" y="0" width="280" height="50" rx="8" fill="var(--ng-bg)" stroke="var(--ng-border)" stroke-width="1.5"/>
+  <text x="140" y="20" text-anchor="middle" class="label-ng">401 Unauthorized</text>
+  <text x="140" y="37" text-anchor="middle" class="label-muted">「認証が必要です」</text>
+</g>
+
+<!-- [2] JWTが有効か？ -->
+<g transform="translate(390,220)">
+  <rect x="0" y="0" width="420" height="50" fill="var(--warn-bg)" stroke="var(--warn-border)" stroke-width="1.5"/>
+  <text x="210" y="21" text-anchor="middle" font-weight="600">JWT署名・期限が有効か？</text>
+  <text x="210" y="38" text-anchor="middle" class="label-muted">JWT_SECRET で検証。期限切れ・改ざんは Invalid</text>
+</g>
+
+<!-- [WARN2] Slack通知: invalid JWT -->
+<g transform="translate(870,210)">
+  <rect x="0" y="0" width="260" height="60" rx="8" fill="var(--purple-bg)" stroke="var(--purple-border)" stroke-width="1.5"/>
+  <text x="130" y="18" text-anchor="middle" font-weight="600" fill="var(--purple)">Slack通知</text>
+  <text x="130" y="34" text-anchor="middle" class="label-muted">[セキュリティ警告]</text>
+  <text x="130" y="49" text-anchor="middle" class="label-muted">無効なJWTトークンによる試行</text>
+</g>
+
+<!-- [NG2] 401 invalid JWT -->
+<g transform="translate(870,300)">
+  <rect x="0" y="0" width="260" height="50" rx="8" fill="var(--ng-bg)" stroke="var(--ng-border)" stroke-width="1.5"/>
+  <text x="130" y="20" text-anchor="middle" class="label-ng">401 Unauthorized</text>
+  <text x="130" y="37" text-anchor="middle" class="label-muted">「無効なトークンです」</text>
+</g>
+
+<!-- [3] ソース分岐 -->
+<g transform="translate(395,320)">
+  <rect x="0" y="0" width="410" height="50" fill="var(--neutral-bg)" stroke="var(--neutral-border)" stroke-width="1.5"/>
+  <text x="205" y="21" text-anchor="middle" font-weight="600">トークンのソース</text>
+  <text x="205" y="38" text-anchor="middle" class="label-muted">Cookie auth_token  または  Authorization: Bearer</text>
+</g>
+
+<!-- ============ COOKIE PATH ============ -->
+
+<!-- [C1] D1参照 (cookie) -->
+<g transform="translate(80,430)">
+  <rect x="0" y="0" width="360" height="66" fill="var(--blue-bg)" stroke="var(--blue-border)" stroke-width="1.5"/>
+  <text x="180" y="18" text-anchor="middle" font-weight="600" fill="var(--blue)">D1参照</text>
+  <text x="180" y="34" text-anchor="middle" class="label-muted">user_sessions WHERE user_id = ?</text>
+  <text x="180" y="50" text-anchor="middle" class="label-muted">取得: last_activity_at, revoked_at, idle_timeout_seconds</text>
+</g>
+
+<!-- [C2] revoke済み？ (cookie) -->
+<g transform="translate(80,548)">
+  <rect x="0" y="0" width="360" height="50" fill="var(--warn-bg)" stroke="var(--warn-border)" stroke-width="1.5"/>
+  <text x="180" y="21" text-anchor="middle" font-weight="600">revoked_at が設定されている？</text>
+  <text x="180" y="38" text-anchor="middle" class="label-muted">NULL でなければ強制revoke済み</text>
+</g>
+
+<!-- [WARN-C2] Slack通知: revoked cookie -->
+<g transform="translate(30,648)">
+  <rect x="0" y="0" width="200" height="60" rx="8" fill="var(--purple-bg)" stroke="var(--purple-border)" stroke-width="1.5"/>
+  <text x="100" y="18" text-anchor="middle" font-weight="600" fill="var(--purple)">Slack通知</text>
+  <text x="100" y="34" text-anchor="middle" class="label-muted">[セキュリティ警告]</text>
+  <text x="100" y="49" text-anchor="middle" class="label-muted">revoke済みセッション試行</text>
+</g>
+
+<!-- [NG-C2] 401 revoked (cookie) -->
+<g transform="translate(30,748)">
+  <rect x="0" y="0" width="200" height="60" rx="8" fill="var(--ng-bg)" stroke="var(--ng-border)" stroke-width="1.5"/>
+  <text x="100" y="20" text-anchor="middle" class="label-ng">401 Unauthorized</text>
+  <text x="100" y="37" text-anchor="middle" class="label-muted">Cookie削除</text>
+  <text x="100" y="52" text-anchor="middle" class="label-muted">「セッションが無効化されました」</text>
+</g>
+
+<!-- [C3] アイドルタイムアウト計算 -->
+<g transform="translate(80,648)">
+  <rect x="0" y="0" width="360" height="80" fill="var(--blue-bg)" stroke="var(--blue-border)" stroke-width="1.5"/>
+  <text x="180" y="18" text-anchor="middle" font-weight="600" fill="var(--blue)">アイドルタイムアウト算出</text>
+  <text x="180" y="34" text-anchor="middle" class="label-muted">優先度: 環境変数 SESSION_IDLE_TIMEOUT_SECONDS</text>
+  <text x="180" y="50" text-anchor="middle" class="label-muted">→ D1 idle_timeout_seconds (設定ページで変更可)</text>
+  <text x="180" y="66" text-anchor="middle" class="label-muted">→ session_duration → デフォルト30分</text>
+</g>
+
+<!-- [C4] last_activity チェック -->
+<g transform="translate(80,782)">
+  <rect x="0" y="0" width="360" height="66" fill="var(--warn-bg)" stroke="var(--warn-border)" stroke-width="1.5"/>
+  <text x="180" y="21" text-anchor="middle" font-weight="600">最終アクティビティからの経過時間</text>
+  <text x="180" y="38" text-anchor="middle" class="label-muted">Cookie last_activity または D1 last_activity_at</text>
+  <text x="180" y="55" text-anchor="middle" class="label-muted">を参照。どちらもNULLならタイムアウト扱い</text>
+</g>
+
+<!-- [NG-C4] 401 idle timeout -->
+<g transform="translate(30,908)">
+  <rect x="0" y="0" width="200" height="60" rx="8" fill="var(--ng-bg)" stroke="var(--ng-border)" stroke-width="1.5"/>
+  <text x="100" y="20" text-anchor="middle" class="label-ng">401 Unauthorized</text>
+  <text x="100" y="37" text-anchor="middle" class="label-muted">Cookie削除</text>
+  <text x="100" y="52" text-anchor="middle" class="label-muted">「セッションの有効期限が切れました」</text>
+</g>
+
+<!-- [C5] D1 last_activity_at 更新 (スロットリング) -->
+<g transform="translate(80,908)">
+  <rect x="0" y="0" width="360" height="60" fill="var(--blue-bg)" stroke="var(--blue-border)" stroke-width="1.5"/>
+  <text x="180" y="18" text-anchor="middle" font-weight="600" fill="var(--blue)">last_activity を更新（fire-and-forget）</text>
+  <text x="180" y="34" text-anchor="middle" class="label-muted">Cookie last_activity を Set-Cookie で更新</text>
+  <text x="180" y="50" text-anchor="middle" class="label-muted">D1 last_activity_at は5分スロットリング</text>
+</g>
+
+<!-- [OK-cookie] 通過 -->
+<g transform="translate(90,1020)">
+  <rect x="0" y="0" width="340" height="50" rx="8" fill="var(--ok-bg)" stroke="var(--ok-border)" stroke-width="1.5"/>
+  <text x="170" y="20" text-anchor="middle" class="label-ok">✓ 認証通過（Cookie）</text>
+  <text x="170" y="38" text-anchor="middle" class="label-muted">c.set('user', payload) → next()</text>
+</g>
+
+<!-- ============ BEARER PATH ============ -->
+
+<!-- [B1] D1参照 (bearer) -->
+<g transform="translate(740,430)">
+  <rect x="0" y="0" width="360" height="66" fill="var(--blue-bg)" stroke="var(--blue-border)" stroke-width="1.5"/>
+  <text x="180" y="18" text-anchor="middle" font-weight="600" fill="var(--blue)">D1参照（DBが存在する場合）</text>
+  <text x="180" y="34" text-anchor="middle" class="label-muted">user_sessions WHERE user_id = ?</text>
+  <text x="180" y="50" text-anchor="middle" class="label-muted">取得: revoked_at</text>
+</g>
+
+<!-- [B2] revoke済み？ (bearer) -->
+<g transform="translate(740,548)">
+  <rect x="0" y="0" width="360" height="50" fill="var(--warn-bg)" stroke="var(--warn-border)" stroke-width="1.5"/>
+  <text x="180" y="21" text-anchor="middle" font-weight="600">revoked_at が設定されている？</text>
+  <text x="180" y="38" text-anchor="middle" class="label-muted">NULL でなければ強制revoke済み</text>
+</g>
+
+<!-- [WARN-B2] Slack通知 -->
+<g transform="translate(740,648)">
+  <rect x="0" y="0" width="200" height="60" rx="8" fill="var(--purple-bg)" stroke="var(--purple-border)" stroke-width="1.5"/>
+  <text x="100" y="18" text-anchor="middle" font-weight="600" fill="var(--purple)">Slack通知</text>
+  <text x="100" y="34" text-anchor="middle" class="label-muted">[セキュリティ警告]</text>
+  <text x="100" y="49" text-anchor="middle" class="label-muted">revoke済みセッション試行</text>
+</g>
+
+<!-- [NG-B2] 401 revoked bearer -->
+<g transform="translate(740,748)">
+  <rect x="0" y="0" width="200" height="50" rx="8" fill="var(--ng-bg)" stroke="var(--ng-border)" stroke-width="1.5"/>
+  <text x="100" y="20" text-anchor="middle" class="label-ng">401 Unauthorized</text>
+  <text x="100" y="37" text-anchor="middle" class="label-muted">「セッションが無効化されました」</text>
+</g>
+
+<!-- Bearer: アイドルチェックなし -->
+<g transform="translate(740,648)">
+  <rect x="220" y="0" width="220" height="60" fill="var(--neutral-bg)" stroke="var(--neutral-border)" stroke-width="1.5"/>
+  <text x="330" y="18" text-anchor="middle" font-weight="600">アイドルタイムアウト</text>
+  <text x="330" y="34" text-anchor="middle" class="label-muted">チェックなし</text>
+  <text x="330" y="50" text-anchor="middle" class="label-muted">（Bearer はステートレス）</text>
+</g>
+
+<!-- [OK-bearer] 通過 -->
+<g transform="translate(760,748)">
+  <rect x="220" y="0" width="200" height="50" rx="8" fill="var(--ok-bg)" stroke="var(--ok-border)" stroke-width="1.5"/>
+  <text x="310" y="20" text-anchor="middle" class="label-ok">✓ 認証通過（Bearer）</text>
+  <text x="310" y="38" text-anchor="middle" class="label-muted">c.set('user', payload) → next()</text>
+</g>
+
+<!-- ============ ADMIN REVOKE ============ -->
+
+<g transform="translate(400,1140)">
+  <rect x="0" y="0" width="400" height="30" rx="0" fill="none" stroke="none"/>
+  <text x="200" y="20" text-anchor="middle" font-weight="700" font-size="13" fill="var(--muted)">── 管理操作: POST /api/admin/revoke-session ──</text>
+</g>
+
+<!-- [ADM-S] 管理者リクエスト -->
+<g transform="translate(450,1190)">
+  <rect x="0" y="0" width="300" height="44" rx="22" fill="var(--neutral-bg)" stroke="var(--neutral-border)" stroke-width="1.5"/>
+  <text x="150" y="28" text-anchor="middle" font-weight="600">POST /api/admin/revoke-session</text>
+</g>
+
+<!-- [ADM-1] 認証必須 -->
+<g transform="translate(420,1282)">
+  <rect x="0" y="0" width="360" height="50" fill="var(--warn-bg)" stroke="var(--warn-border)" stroke-width="1.5"/>
+  <text x="180" y="21" text-anchor="middle" font-weight="600">authMiddleware 通過（操作者のJWT検証）</text>
+  <text x="180" y="38" text-anchor="middle" class="label-muted">操作者も同じ認証フローを通る</text>
+</g>
+
+<!-- [ADM-2] validateRevokeRequest -->
+<g transform="translate(420,1382)">
+  <rect x="0" y="0" width="360" height="50" fill="var(--warn-bg)" stroke="var(--warn-border)" stroke-width="1.5"/>
+  <text x="180" y="21" text-anchor="middle" font-weight="600">入力バリデーション</text>
+  <text x="180" y="38" text-anchor="middle" class="label-muted">validateRevokeRequest: userId が非空文字列か？</text>
+</g>
+
+<!-- [NG-ADM] 400 -->
+<g transform="translate(870,1382)">
+  <rect x="0" y="0" width="220" height="50" rx="8" fill="var(--ng-bg)" stroke="var(--ng-border)" stroke-width="1.5"/>
+  <text x="110" y="20" text-anchor="middle" class="label-ng">400 Bad Request</text>
+  <text x="110" y="37" text-anchor="middle" class="label-muted">「userId は必須です」</text>
+</g>
+
+<!-- [ADM-3] D1更新 -->
+<g transform="translate(420,1482)">
+  <rect x="0" y="0" width="360" height="66" fill="var(--blue-bg)" stroke="var(--blue-border)" stroke-width="1.5"/>
+  <text x="180" y="18" text-anchor="middle" font-weight="600" fill="var(--blue)">D1更新</text>
+  <text x="180" y="34" text-anchor="middle" class="label-muted">UPDATE user_sessions SET revoked_at = now</text>
+  <text x="180" y="50" text-anchor="middle" class="label-muted">WHERE user_id = ? AND revoked_at IS NULL</text>
+</g>
+
+<!-- [ADM-4] 変更あった？ -->
+<g transform="translate(420,1598)">
+  <rect x="0" y="0" width="360" height="50" fill="var(--warn-bg)" stroke="var(--warn-border)" stroke-width="1.5"/>
+  <text x="180" y="21" text-anchor="middle" font-weight="600">変更行数 &gt; 0？</text>
+  <text x="180" y="38" text-anchor="middle" class="label-muted">既にrevoke済み or ユーザー不在 → changes=0</text>
+</g>
+
+<!-- [NG-ADM4] 404 -->
+<g transform="translate(870,1598)">
+  <rect x="0" y="0" width="220" height="50" rx="8" fill="var(--ng-bg)" stroke="var(--ng-border)" stroke-width="1.5"/>
+  <text x="110" y="20" text-anchor="middle" class="label-ng">404 Not Found</text>
+  <text x="110" y="37" text-anchor="middle" class="label-muted">「既にrevoke済みか見つかりません」</text>
+</g>
+
+<!-- [WARN-ADM] Slack通知: admin revoke -->
+<g transform="translate(420,1698)">
+  <rect x="0" y="0" width="360" height="60" rx="8" fill="var(--purple-bg)" stroke="var(--purple-border)" stroke-width="1.5"/>
+  <text x="180" y="18" text-anchor="middle" font-weight="600" fill="var(--purple)">Slack通知</text>
+  <text x="180" y="34" text-anchor="middle" class="label-muted">[管理操作] セッション強制revoke</text>
+  <text x="180" y="50" text-anchor="middle" class="label-muted">対象ユーザー・操作者・理由を通知</text>
+</g>
+
+<!-- [OK-ADM] 200 -->
+<g transform="translate(430,1808)">
+  <rect x="0" y="0" width="340" height="50" rx="8" fill="var(--ok-bg)" stroke="var(--ok-border)" stroke-width="1.5"/>
+  <text x="170" y="20" text-anchor="middle" class="label-ok">200 OK</text>
+  <text x="170" y="38" text-anchor="middle" class="label-muted">{ok:true, revokedAt, targetUserId, reason}</text>
+</g>
+
+<!-- ============ SUMMARY TABLE ============ -->
+<g transform="translate(0,1940)">
+  <rect x="30" y="0" width="1140" height="30" fill="var(--neutral-bg)" stroke="var(--neutral-border)" stroke-width="1"/>
+  <text x="600" y="20" text-anchor="middle" font-weight="700" font-size="13">正常 / 異常パターン早見表</text>
+</g>
+
+<!-- テーブルヘッダー -->
+<g transform="translate(30,1970)">
+  <rect x="0" y="0" width="140" height="32" fill="var(--neutral-bg)" stroke="var(--neutral-border)" stroke-width="1"/>
+  <text x="70" y="20" text-anchor="middle" font-weight="600" font-size="11">状況</text>
+  <rect x="140" y="0" width="280" height="32" fill="var(--neutral-bg)" stroke="var(--neutral-border)" stroke-width="1"/>
+  <text x="280" y="20" text-anchor="middle" font-weight="600" font-size="11">条件</text>
+  <rect x="420" y="0" width="200" height="32" fill="var(--neutral-bg)" stroke="var(--neutral-border)" stroke-width="1"/>
+  <text x="520" y="20" text-anchor="middle" font-weight="600" font-size="11">結果</text>
+  <rect x="620" y="0" width="520" height="32" fill="var(--neutral-bg)" stroke="var(--neutral-border)" stroke-width="1"/>
+  <text x="880" y="20" text-anchor="middle" font-weight="600" font-size="11">備考</text>
+</g>
+
+<!-- テーブル行 (y=2002〜) -->
+<g font-size="11">
+
+  <!-- 行1 -->
+  <g transform="translate(30,2002)">
+    <rect x="0" y="0" width="140" height="34" fill="var(--ok-bg)" stroke="var(--border)" stroke-width="1"/>
+    <text x="70" y="22" text-anchor="middle" fill="var(--ok)" font-weight="600">✓ 正常（Cookie）</text>
+    <rect x="140" y="0" width="280" height="34" fill="var(--surface)" stroke="var(--border)" stroke-width="1"/>
+    <text x="280" y="14" text-anchor="middle">有効JWT + revoked_at=NULL</text>
+    <text x="280" y="28" text-anchor="middle" fill="var(--muted)" font-size="10">+ last_activity が idle内</text>
+    <rect x="420" y="0" width="200" height="34" fill="var(--surface)" stroke="var(--border)" stroke-width="1"/>
+    <text x="520" y="22" text-anchor="middle">200 通過</text>
+    <rect x="620" y="0" width="520" height="34" fill="var(--surface)" stroke="var(--border)" stroke-width="1"/>
+    <text x="880" y="22" text-anchor="middle" fill="var(--muted)">last_activity Cookie を更新して next() へ</text>
+  </g>
+
+  <!-- 行2 -->
+  <g transform="translate(30,2036)">
+    <rect x="0" y="0" width="140" height="34" fill="var(--ok-bg)" stroke="var(--border)" stroke-width="1"/>
+    <text x="70" y="22" text-anchor="middle" fill="var(--ok)" font-weight="600">✓ 正常（Bearer）</text>
+    <rect x="140" y="0" width="280" height="34" fill="var(--surface)" stroke="var(--border)" stroke-width="1"/>
+    <text x="280" y="14" text-anchor="middle">有効JWT + revoked_at=NULL</text>
+    <text x="280" y="28" text-anchor="middle" fill="var(--muted)" font-size="10">DBなしでも通過（DB無しは revoke不可）</text>
+    <rect x="420" y="0" width="200" height="34" fill="var(--surface)" stroke="var(--border)" stroke-width="1"/>
+    <text x="520" y="22" text-anchor="middle">200 通過</text>
+    <rect x="620" y="0" width="520" height="34" fill="var(--surface)" stroke="var(--border)" stroke-width="1"/>
+    <text x="880" y="22" text-anchor="middle" fill="var(--muted)">アイドルタイムアウトなし。セッション期限のみ</text>
+  </g>
+
+  <!-- 行3 -->
+  <g transform="translate(30,2070)">
+    <rect x="0" y="0" width="140" height="34" fill="var(--ng-bg)" stroke="var(--border)" stroke-width="1"/>
+    <text x="70" y="22" text-anchor="middle" fill="var(--ng)" font-weight="600">✗ 異常: 未認証</text>
+    <rect x="140" y="0" width="280" height="34" fill="var(--surface)" stroke="var(--border)" stroke-width="1"/>
+    <text x="280" y="22" text-anchor="middle">Cookie も Bearer も存在しない</text>
+    <rect x="420" y="0" width="200" height="34" fill="var(--surface)" stroke="var(--border)" stroke-width="1"/>
+    <text x="520" y="22" text-anchor="middle">401「認証が必要です」</text>
+    <rect x="620" y="0" width="520" height="34" fill="var(--surface)" stroke="var(--border)" stroke-width="1"/>
+    <text x="880" y="22" text-anchor="middle" fill="var(--muted)">ブラウザからならセッション期限切れページを表示</text>
+  </g>
+
+  <!-- 行4 -->
+  <g transform="translate(30,2104)">
+    <rect x="0" y="0" width="140" height="46" fill="var(--ng-bg)" stroke="var(--border)" stroke-width="1"/>
+    <text x="70" y="20" text-anchor="middle" fill="var(--ng)" font-weight="600">✗ 異常:</text>
+    <text x="70" y="36" text-anchor="middle" fill="var(--ng)" font-weight="600">不正JWT</text>
+    <rect x="140" y="0" width="280" height="46" fill="var(--surface)" stroke="var(--border)" stroke-width="1"/>
+    <text x="280" y="16" text-anchor="middle">署名が不正 / 期限切れJWT</text>
+    <text x="280" y="32" text-anchor="middle" fill="var(--muted)" font-size="10">例: 別サービスのJWT、改ざんトークン</text>
+    <rect x="420" y="0" width="200" height="46" fill="var(--surface)" stroke="var(--border)" stroke-width="1"/>
+    <text x="520" y="28" text-anchor="middle">401「無効なトークンです」</text>
+    <rect x="620" y="0" width="520" height="46" fill="var(--surface)" stroke="var(--border)" stroke-width="1"/>
+    <text x="880" y="16" text-anchor="middle" fill="var(--muted)">Slack通知あり「無効なJWTトークンによるアクセス試行」</text>
+    <text x="880" y="32" text-anchor="middle" fill="var(--muted)">IP・パス・ソース（header/cookie）を記録</text>
+  </g>
+
+  <!-- 行5 -->
+  <g transform="translate(30,2150)">
+    <rect x="0" y="0" width="140" height="46" fill="var(--ng-bg)" stroke="var(--border)" stroke-width="1"/>
+    <text x="70" y="20" text-anchor="middle" fill="var(--ng)" font-weight="600">✗ 異常:</text>
+    <text x="70" y="36" text-anchor="middle" fill="var(--ng)" font-weight="600">revoke済み</text>
+    <rect x="140" y="0" width="280" height="46" fill="var(--surface)" stroke="var(--border)" stroke-width="1"/>
+    <text x="280" y="16" text-anchor="middle">有効JWTだが revoked_at に日時が入っている</text>
+    <text x="280" y="32" text-anchor="middle" fill="var(--muted)" font-size="10">管理者が /api/admin/revoke-session を実行済み</text>
+    <rect x="420" y="0" width="200" height="46" fill="var(--surface)" stroke="var(--border)" stroke-width="1"/>
+    <text x="520" y="16" text-anchor="middle">401「セッションが</text>
+    <text x="520" y="32" text-anchor="middle">無効化されました」</text>
+    <rect x="620" y="0" width="520" height="46" fill="var(--surface)" stroke="var(--border)" stroke-width="1"/>
+    <text x="880" y="16" text-anchor="middle" fill="var(--muted)">Slack通知あり「revoke済みセッションによるアクセス試行」</text>
+    <text x="880" y="32" text-anchor="middle" fill="var(--muted)">Cookie認証の場合は同時にCookieをすべて削除</text>
+  </g>
+
+  <!-- 行6 -->
+  <g transform="translate(30,2196)">
+    <rect x="0" y="0" width="140" height="58" fill="var(--ng-bg)" stroke="var(--border)" stroke-width="1"/>
+    <text x="70" y="22" text-anchor="middle" fill="var(--ng)" font-weight="600">✗ 異常:</text>
+    <text x="70" y="40" text-anchor="middle" fill="var(--ng)" font-weight="600">アイドル超過</text>
+    <rect x="140" y="0" width="280" height="58" fill="var(--surface)" stroke="var(--border)" stroke-width="1"/>
+    <text x="280" y="16" text-anchor="middle">Cookie認証で last_activity が古い / NULL</text>
+    <text x="280" y="32" text-anchor="middle" fill="var(--muted)" font-size="10">or アイドルタイムアウト設定時間を超過</text>
+    <text x="280" y="46" text-anchor="middle" fill="var(--muted)" font-size="10">デフォルト30分。設定ページで変更可</text>
+    <rect x="420" y="0" width="200" height="58" fill="var(--surface)" stroke="var(--border)" stroke-width="1"/>
+    <text x="520" y="22" text-anchor="middle">401「セッションの</text>
+    <text x="520" y="38" text-anchor="middle">有効期限が切れました」</text>
+    <rect x="620" y="0" width="520" height="58" fill="var(--surface)" stroke="var(--border)" stroke-width="1"/>
+    <text x="880" y="16" text-anchor="middle" fill="var(--muted)">Slack通知なし。Cookie削除のみ。</text>
+    <text x="880" y="32" text-anchor="middle" fill="var(--muted)">Bearer認証にはこのチェックがない（ステートレス）</text>
+    <text x="880" y="48" text-anchor="middle" fill="var(--muted)">→ アイドル管理が必要なら Cookie 認証を使うこと</text>
+  </g>
+
+  <!-- 行7 -->
+  <g transform="translate(30,2254)">
+    <rect x="0" y="0" width="140" height="46" fill="var(--warn-bg)" stroke="var(--border)" stroke-width="1"/>
+    <text x="70" y="22" text-anchor="middle" fill="var(--warn)" font-weight="600">⚠ 注意:</text>
+    <text x="70" y="38" text-anchor="middle" fill="var(--warn)" font-weight="600">Bearer+期限切れ</text>
+    <rect x="140" y="0" width="280" height="46" fill="var(--surface)" stroke="var(--border)" stroke-width="1"/>
+    <text x="280" y="16" text-anchor="middle">JWTの exp が過ぎている Bearer トークン</text>
+    <text x="280" y="32" text-anchor="middle" fill="var(--muted)" font-size="10">（期限切れでも revoke される前に試みた場合）</text>
+    <rect x="420" y="0" width="200" height="46" fill="var(--surface)" stroke="var(--border)" stroke-width="1"/>
+    <text x="520" y="22" text-anchor="middle">401「無効なトークンです」</text>
+    <rect x="620" y="0" width="520" height="46" fill="var(--surface)" stroke="var(--border)" stroke-width="1"/>
+    <text x="880" y="22" text-anchor="middle" fill="var(--muted)">JWT検証段階で弾かれる。Slack通知あり</text>
+  </g>
+
+  <!-- 行8 -->
+  <g transform="translate(30,2300)">
+    <rect x="0" y="0" width="140" height="46" fill="var(--warn-bg)" stroke="var(--border)" stroke-width="1"/>
+    <text x="70" y="22" text-anchor="middle" fill="var(--warn)" font-weight="600">⚠ 注意:</text>
+    <text x="70" y="38" text-anchor="middle" fill="var(--warn)" font-weight="600">revoke後の猶予</text>
+    <rect x="140" y="0" width="280" height="46" fill="var(--surface)" stroke="var(--border)" stroke-width="1"/>
+    <text x="280" y="16" text-anchor="middle">revoke実行〜次のリクエストまでの間隔</text>
+    <text x="280" y="32" text-anchor="middle" fill="var(--muted)" font-size="10">JWT自体は有効期限まで署名として有効</text>
+    <rect x="420" y="0" width="200" height="46" fill="var(--surface)" stroke="var(--border)" stroke-width="1"/>
+    <text x="520" y="22" text-anchor="middle">次のリクエスト時に401</text>
+    <rect x="620" y="0" width="520" height="46" fill="var(--surface)" stroke="var(--border)" stroke-width="1"/>
+    <text x="880" y="16" text-anchor="middle" fill="var(--muted)">D1を毎リクエストで参照するため、revoke後の</text>
+    <text x="880" y="32" text-anchor="middle" fill="var(--muted)">次リクエストで即時に弾ける。猶予はない</text>
+  </g>
+
+</g>
+
+<!-- ========== EDGES ========== -->
+
+<!-- S → 1 -->
+<line x1="600" y1="74" x2="600" y2="120" class="edge" marker-end="url(#arrow)"/>
+
+<!-- 1 → NG1 (No) -->
+<line x1="780" y1="145" x2="860" y2="145" class="edge edge-ng" marker-end="url(#arrow-ng)"/>
+<text x="808" y="138" class="edge-label-ng">No</text>
+
+<!-- 1 → 2 (Yes) -->
+<line x1="600" y1="170" x2="600" y2="220" class="edge edge-ok" marker-end="url(#arrow-ok)"/>
+<text x="604" y="200" class="edge-label-ok">Yes</text>
+
+<!-- 2 → WARN2 (No: invalid) -->
+<line x1="810" y1="245" x2="870" y2="240" class="edge edge-ng" marker-end="url(#arrow-ng)"/>
+<text x="820" y="236" class="edge-label-ng">No</text>
+
+<!-- WARN2 → NG2 -->
+<line x1="1000" y1="270" x2="1000" y2="300" class="edge" marker-end="url(#arrow)"/>
+
+<!-- 2 → 3 (Yes) -->
+<line x1="600" y1="270" x2="600" y2="320" class="edge edge-ok" marker-end="url(#arrow-ok)"/>
+<text x="604" y="302" class="edge-label-ok">Yes</text>
+
+<!-- 3 → C1 (Cookie) -->
+<path d="M 500 370 Q 440 390 440 430" class="edge edge-blue" marker-end="url(#arrow-blue)" fill="none"/>
+<text x="420" y="408" class="edge-label" fill="var(--blue)" font-weight="600">Cookie</text>
+
+<!-- 3 → B1 (Bearer) -->
+<path d="M 700 370 Q 800 390 800 430" class="edge edge-blue" marker-end="url(#arrow-blue)" fill="none"/>
+<text x="745" y="408" class="edge-label" fill="var(--blue)" font-weight="600">Bearer</text>
+
+<!-- C1 → C2 -->
+<line x1="260" y1="496" x2="260" y2="548" class="edge" marker-end="url(#arrow)"/>
+
+<!-- C2 → WARN-C2 (Yes) -->
+<path d="M 80 573 L 60 573 L 60 648 L 30 648" class="edge edge-ng" marker-end="url(#arrow-ng)" fill="none"/>
+<text x="28" y="640" class="edge-label-ng" text-anchor="end" transform="rotate(-90,28,640)">Yes</text>
+
+<!-- WARN-C2 → NG-C2 -->
+<line x1="130" y1="708" x2="130" y2="748" class="edge" marker-end="url(#arrow)"/>
+
+<!-- C2 → C3 (No) -->
+<line x1="260" y1="598" x2="260" y2="648" class="edge edge-ok" marker-end="url(#arrow-ok)"/>
+<text x="263" y="632" class="edge-label-ok">No</text>
+
+<!-- C3 → C4 -->
+<line x1="260" y1="728" x2="260" y2="782" class="edge" marker-end="url(#arrow)"/>
+
+<!-- C4 → NG-C4 (超過) -->
+<path d="M 80 815 L 60 815 L 60 908 L 30 908" class="edge edge-ng" marker-end="url(#arrow-ng)" fill="none"/>
+<text x="18" y="860" class="edge-label-ng" text-anchor="end">超過</text>
+
+<!-- C4 → C5 (以内) -->
+<line x1="260" y1="848" x2="260" y2="908" class="edge edge-ok" marker-end="url(#arrow-ok)"/>
+<text x="263" y="886" class="edge-label-ok">以内</text>
+
+<!-- C5 → OK-cookie -->
+<line x1="260" y1="968" x2="260" y2="1020" class="edge edge-ok" marker-end="url(#arrow-ok)"/>
+
+<!-- B1 → B2 -->
+<line x1="920" y1="496" x2="920" y2="548" class="edge" marker-end="url(#arrow)"/>
+
+<!-- B2 → WARN-B2 (Yes: revoked) -->
+<path d="M 740 573 L 720 573 L 720 648 L 740 648" class="edge edge-ng" marker-end="url(#arrow-ng)" fill="none"/>
+<text x="710" y="630" class="edge-label-ng" text-anchor="end">Yes</text>
+
+<!-- WARN-B2 → NG-B2 -->
+<line x1="840" y1="708" x2="840" y2="748" class="edge" marker-end="url(#arrow)"/>
+
+<!-- B2 → idle_note (No) -->
+<line x1="1000" y1="598" x2="1000" y2="648" class="edge edge-ok" marker-end="url(#arrow-ok)"/>
+<text x="1004" y="632" class="edge-label-ok">No</text>
+
+<!-- idle_note → OK-bearer -->
+<line x1="1000" y1="708" x2="1000" y2="748" class="edge edge-ok" marker-end="url(#arrow-ok)"/>
+
+<!-- ADM-S → ADM-1 -->
+<line x1="600" y1="1234" x2="600" y2="1282" class="edge" marker-end="url(#arrow)"/>
+
+<!-- ADM-1 → ADM-2 -->
+<line x1="600" y1="1332" x2="600" y2="1382" class="edge" marker-end="url(#arrow)"/>
+
+<!-- ADM-2 → NG-ADM (No) -->
+<line x1="780" y1="1407" x2="870" y2="1407" class="edge edge-ng" marker-end="url(#arrow-ng)"/>
+<text x="808" y="1400" class="edge-label-ng">NG</text>
+
+<!-- ADM-2 → ADM-3 (OK) -->
+<line x1="600" y1="1432" x2="600" y2="1482" class="edge edge-ok" marker-end="url(#arrow-ok)"/>
+<text x="604" y="1464" class="edge-label-ok">OK</text>
+
+<!-- ADM-3 → ADM-4 -->
+<line x1="600" y1="1548" x2="600" y2="1598" class="edge" marker-end="url(#arrow)"/>
+
+<!-- ADM-4 → NG-ADM4 (No) -->
+<line x1="780" y1="1623" x2="870" y2="1623" class="edge edge-ng" marker-end="url(#arrow-ng)"/>
+<text x="808" y="1616" class="edge-label-ng">No</text>
+
+<!-- ADM-4 → WARN-ADM (Yes) -->
+<line x1="600" y1="1648" x2="600" y2="1698" class="edge edge-ok" marker-end="url(#arrow-ok)"/>
+<text x="604" y="1680" class="edge-label-ok">Yes</text>
+
+<!-- WARN-ADM → OK-ADM -->
+<line x1="600" y1="1758" x2="600" y2="1808" class="edge edge-ok" marker-end="url(#arrow-ok)"/>
+
+</svg>
+</div>
+</body>
+</html>

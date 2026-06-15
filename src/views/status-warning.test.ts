@@ -15,6 +15,7 @@ const data: CacheStatusData = {
   unclassifiedAutoDetectedTables: [],
   groupLabels: { ai: 'AI Summary' },
   userContext: { teamName: null, teamId: null, workspaceName: null, workspaceId: null, role: null, allWorkspaces: [] },
+  pendingColumnMigrations: [],
 };
 
 describe('/status 未分類警告スクリプト', () => {

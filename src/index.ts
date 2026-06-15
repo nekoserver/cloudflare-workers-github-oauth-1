@@ -26,6 +26,7 @@ import { getKwArchitecturePage } from './views/kw-architecture';
 import { getKwDrilldownPage } from './views/kw-drilldown';
 import { getCfDashboardPage } from './views/cf-dashboard';
 import { getApisPage } from './views/apis';
+import { getAuthFlowPage } from './views/authFlow';
 
 import { computeColumnRelationStats, verifyColumnStats, type TableSchema, type Relation } from './utils/columnRelationStats';
 import { ensureDefaultWorkspace, getCurrentWorkspace, getUserWorkspaces, switchWorkspace } from './utils/workspace';
@@ -2394,9 +2395,43 @@ async function getUserSession(db: D1Database | undefined, userId: string): Promi
       idleTimeoutSeconds: result.idle_timeout_seconds ?? null,
     };
   } catch (error) {
+    const msg = error instanceof Error ? error.message : '';
+    // migration 未適用でカラムが存在しない場合はフォールバッククエリで継続
+    if (msg.includes('no such column') || msg.includes('no column')) {
+      logger.warn('getUserSession fallback: column missing, retrying without new columns', { userId, error: msg });
+      try {
+        const fallback = await db.prepare(
+          'SELECT timezone, session_duration, last_login_at, last_activity_at, github_access_token, github_granted_scopes, recent_commits_count, toast_duration FROM user_sessions WHERE user_id = ?'
+        ).bind(userId).first<{
+          timezone: string;
+          session_duration: string;
+          last_login_at: string | null;
+          last_activity_at: string | null;
+          github_access_token: string | null;
+          github_granted_scopes: string | null;
+          recent_commits_count: number | null;
+          toast_duration: number | null;
+        }>();
+        if (!fallback) return null;
+        return {
+          timezone: fallback.timezone,
+          sessionDuration: fallback.session_duration,
+          lastLoginAt: fallback.last_login_at,
+          lastActivityAt: fallback.last_activity_at ?? null,
+          githubAccessToken: fallback.github_access_token,
+          githubGrantedScopes: fallback.github_granted_scopes,
+          recentCommitsCount: fallback.recent_commits_count ?? null,
+          toastDuration: fallback.toast_duration ?? null,
+          idleTimeoutSeconds: null,
+        };
+      } catch (fallbackError) {
+        logger.error('getUserSession fallback also failed', { userId, error: fallbackError instanceof Error ? fallbackError.message : 'Unknown' });
+        return null;
+      }
+    }
     logger.error('Error getting user session', {
       userId,
-      error: error instanceof Error ? error.message : 'Unknown error',
+      error: msg,
     });
     return null;
   }
@@ -4222,6 +4257,8 @@ app.get('/settings', authMiddleware, async (c) => {
   }));
 });
 
+app.get('/auth-flow', authMiddleware, (c) => c.html(getAuthFlowPage()));
+
 /**
  * ユーザー情報ページ（認証が必要）
  */
@@ -4339,6 +4376,12 @@ app.get('/status', authMiddleware, async (c) => {
   const userSession = await getUserSession(c.env.DB, user.sub);
   const timezone = userSession?.timezone || getCookieValues(cookieHeader, ['user_timezone'])['user_timezone'] || DEFAULT_TIMEZONE;
 
+  // カラムマイグレーション未適用チェック定義
+  const REQUIRED_COLUMNS: { migration: string; table: string; column: string; sql: string }[] = [
+    { migration: '0059', table: 'user_sessions', column: 'revoked_at',           sql: 'ALTER TABLE user_sessions ADD COLUMN revoked_at TEXT;' },
+    { migration: '0060', table: 'user_sessions', column: 'idle_timeout_seconds', sql: 'ALTER TABLE user_sessions ADD COLUMN idle_timeout_seconds INTEGER;' },
+  ];
+
   const data: CacheStatusData = {
     commitCache: { totalEntries: 0, totalCommits: 0, repos: [], byMonth: [], byMonthByRepo: [], entries: [] },
     repoColors: [],
@@ -4363,6 +4406,7 @@ app.get('/status', authMiddleware, async (c) => {
       role: null,
       allWorkspaces: [],
     },
+    pendingColumnMigrations: [],
   };
 
   if (db) {
@@ -4396,6 +4440,22 @@ app.get('/status', authMiddleware, async (c) => {
       appliedMigrationNames = (migrationRows.results ?? []).map((row) => row.name).filter((v): v is string => typeof v === 'string');
     } catch {
       // d1_migrations が存在しない環境は無視
+    }
+
+    // カラムマイグレーション未適用チェック（PRAGMA table_info でカラム実在確認）
+    try {
+      const tableColumnCache: Record<string, Set<string>> = {};
+      for (const req of REQUIRED_COLUMNS) {
+        if (!tableColumnCache[req.table]) {
+          const pragma = await db.prepare(`PRAGMA table_info(${req.table})`).all<{ name: string }>();
+          tableColumnCache[req.table] = new Set((pragma.results ?? []).map(r => r.name));
+        }
+        if (!tableColumnCache[req.table].has(req.column)) {
+          data.pendingColumnMigrations.push(req);
+        }
+      }
+    } catch {
+      // PRAGMA 失敗は無視
     }
 
     // 新テーブルを table_catalog へ自動登録（マイグレーション実行後の初回 /status ロードで反映）
