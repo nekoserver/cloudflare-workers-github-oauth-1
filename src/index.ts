@@ -50,6 +50,7 @@ import { stripThinkTags } from './utils/stripThinkTags';
 import { AICHAT_MODEL_MAX_TOKENS, getModelRunParams } from './utils/aichatModelConfig';
 import { extractFunctionSource } from './utils/extractFunctionSource';
 import { listD1Databases, getD1Tables } from './utils/cloudflareApi';
+import { validateRevokeRequest } from './utils/revoke';
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -856,6 +857,9 @@ CREATE INDEX IF NOT EXISTS idx_api_search_keywords_keyword ON api_search_keyword
 );
 CREATE INDEX IF NOT EXISTS idx_api_search_keyword_sections_keyword_id ON api_search_keyword_sections(keyword_id);`,
 
+  '0059': `ALTER TABLE user_sessions ADD COLUMN revoked_at TEXT;
+CREATE INDEX IF NOT EXISTS idx_user_sessions_revoked_at ON user_sessions(revoked_at);`,
+
   'ts-catalog': `CREATE TABLE IF NOT EXISTS ts_repository (
   id            INTEGER PRIMARY KEY AUTOINCREMENT,
   full_name     TEXT NOT NULL UNIQUE,
@@ -1120,7 +1124,7 @@ export interface ColumnKeyInfo {
 }
 
 export const TABLE_COLUMN_KEYS: Record<string, ColumnKeyInfo> = {
-  user_sessions: { id: 'pk', user_id: 'uk', current_workspace_id: 'fk' },
+  user_sessions: { id: 'pk', user_id: 'uk', current_workspace_id: 'fk', revoked_at: 'idx' },
   teams: { id: 'pk' },
   workspaces: { id: 'pk', team_id: 'fk' },
   team_members: { team_id: 'pk+fk', user_id: 'pk+fk' },
@@ -8773,6 +8777,39 @@ app.post('/api/search-keywords', authMiddleware, async (c) => {
     });
     return c.json({ error: '検索キーワードの登録に失敗しました' }, 500);
   }
+});
+
+app.post('/api/admin/revoke-session', authMiddleware, async (c) => {
+  const actor = c.get('user');
+  const db = c.env.DB;
+  if (!db) return c.json({ error: 'DBが利用できません' }, 503);
+  let body: { userId?: unknown; reason?: unknown };
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: 'JSONの解析に失敗しました' }, 400);
+  }
+  const validation = validateRevokeRequest(body as { userId: unknown; reason?: unknown });
+  if (!validation.ok) return c.json({ error: validation.error }, 400);
+  const targetUserId = (body.userId as string).trim();
+  const reason = typeof body.reason === 'string' ? body.reason.trim() : null;
+  const revokedAt = new Date().toISOString();
+  const result = await db.prepare(
+    'UPDATE user_sessions SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL'
+  ).bind(revokedAt, targetUserId).run();
+  if (result.meta.changes === 0) {
+    return c.json({ error: 'セッションが見つからないか既にrevoke済みです' }, 404);
+  }
+  const slackToken = c.env.SLACK_OAUTH_TOKEN;
+  const slackChannel = c.env.SLACK_CHANNEL_ID;
+  if (slackToken && slackChannel) {
+    postSlackMessage({
+      token: slackToken,
+      channel: slackChannel,
+      text: `[管理操作] セッション強制revoke\n対象ユーザー: ${targetUserId}\n操作者: ${actor.sub}\n理由: ${reason ?? '（未記入）'}`,
+    }).catch(() => {});
+  }
+  return c.json({ ok: true, revokedAt, targetUserId, reason });
 });
 
 /**

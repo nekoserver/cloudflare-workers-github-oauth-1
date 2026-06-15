@@ -37,6 +37,27 @@ function parseTimestampMs(value: string | null | undefined): number | null {
 }
 
 /**
+ * D1 から取得したセッション行が強制 revoke 済みかどうかを返す
+ */
+export function checkRevoked(row: { revoked_at: string | null | undefined; last_activity_at: string | null }): boolean {
+  return !!row.revoked_at;
+}
+
+function notifyRevokedAccess(c: Context<{ Bindings: Bindings; Variables: Variables }>, source: string, userId: string) {
+  const slackToken = c.env.SLACK_OAUTH_TOKEN;
+  const slackChannel = c.env.SLACK_CHANNEL_ID;
+  if (!slackToken || !slackChannel) return;
+  const path = c.req.path;
+  const method = c.req.method;
+  const ip = c.req.header('CF-Connecting-IP') ?? c.req.header('X-Forwarded-For') ?? 'unknown';
+  postSlackMessage({
+    token: slackToken,
+    channel: slackChannel,
+    text: `[セキュリティ警告] revoke済みセッションによるアクセス試行\nユーザー: ${userId}\nパス: ${method} ${path}\nIP: ${ip}\nソース: ${source}`,
+  }).catch(() => {});
+}
+
+/**
  * JWT認証ミドルウェア
  * Authorizationヘッダーまたはクッキーからトークンを取得し、検証します
  */
@@ -97,13 +118,26 @@ export async function authMiddleware(c: Context<{ Bindings: Bindings; Variables:
       idleFromSettings
     );
 
-    // last_activity Cookie が消えている場合は D1 の last_activity_at をフォールバックに使う
+    // last_activity Cookie が消えている場合 or revoke チェックのために D1 を参照する
     let effectiveLastActivity: number | null = lastActivity;
-    if (!effectiveLastActivity && c.env.DB) {
+    if (c.env.DB) {
       const row = await c.env.DB.prepare(
-        'SELECT last_activity_at FROM user_sessions WHERE user_id = ?'
-      ).bind(payload.sub).first<{ last_activity_at: string | null }>();
-      if (row?.last_activity_at) {
+        'SELECT last_activity_at, revoked_at FROM user_sessions WHERE user_id = ?'
+      ).bind(payload.sub).first<{ last_activity_at: string | null; revoked_at: string | null }>();
+      if (row && checkRevoked(row)) {
+        notifyRevokedAccess(c, tokenInfo.source, payload.sub);
+        const clearHeaders = new Headers();
+        clearHeaders.append('Set-Cookie', 'auth_token=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0');
+        clearHeaders.append('Set-Cookie', 'last_activity=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0');
+        clearHeaders.append('Set-Cookie', 'login_timestamp=; Path=/; Secure; SameSite=Lax; Max-Age=0');
+        if (isBrowserRequest) {
+          clearHeaders.set('Content-Type', 'text/html; charset=utf-8');
+          return new Response(getSessionExpiredPage(), { status: 401, headers: clearHeaders });
+        }
+        clearHeaders.set('Content-Type', 'application/json; charset=utf-8');
+        return new Response(JSON.stringify({ error: 'セッションが無効化されました' }), { status: 401, headers: clearHeaders });
+      }
+      if (!effectiveLastActivity && row?.last_activity_at) {
         effectiveLastActivity = new Date(row.last_activity_at).getTime();
       }
     }
@@ -137,6 +171,17 @@ export async function authMiddleware(c: Context<{ Bindings: Bindings; Variables:
       c.env.DB.prepare(
         'UPDATE user_sessions SET last_activity_at = ? WHERE user_id = ?'
       ).bind(new Date(nowMs).toISOString(), payload.sub).run().catch(() => {});
+    }
+  }
+
+  // Bearer トークンの場合も revoke チェックを行う（Cookie ブロックでは既にチェック済み）
+  if (tokenInfo.source === 'header' && c.env.DB) {
+    const row = await c.env.DB.prepare(
+      'SELECT revoked_at FROM user_sessions WHERE user_id = ?'
+    ).bind(payload.sub).first<{ revoked_at: string | null }>();
+    if (row && row.revoked_at) {
+      notifyRevokedAccess(c, 'header', payload.sub);
+      return c.json({ error: 'セッションが無効化されました' }, 401);
     }
   }
 
