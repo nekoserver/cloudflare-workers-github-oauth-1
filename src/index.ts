@@ -27,6 +27,7 @@ import { getKwDrilldownPage } from './views/kw-drilldown';
 import { getCfDashboardPage } from './views/cf-dashboard';
 import { getApisPage } from './views/apis';
 import { getHtmlRewriterDemoPage } from './views/htmlrewriterDemo';
+import { getWebGLDemoPage } from './views/webglDemo';
 import { getAuthFlowPage } from './views/authFlow';
 
 import { computeColumnRelationStats, verifyColumnStats, type TableSchema, type Relation } from './utils/columnRelationStats';
@@ -4149,6 +4150,14 @@ app.get('/s/:userHash/:shareToken', async (c) => {
   ).bind(new Date().toISOString(), shareToken).run();
 
   return c.html(getAiChatSharePage({ ...row, access_count: row.access_count + 1 }));
+});
+
+/**
+ * WebGL デモページ
+ */
+app.get('/webgl-demo', authMiddleware, async (c) => {
+  const user = c.get('user');
+  return c.html(getWebGLDemoPage(user.sub));
 });
 
 /**
