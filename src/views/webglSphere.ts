@@ -111,7 +111,7 @@ void main() {
     <div class="ctrl-row">
       <div class="ctrl-label">文字サイズ</div>
       <div class="slider-row">
-        <input type="range" id="fontSz" min="8" max="48" value="15">
+        <input type="range" id="fontSz" min="8" max="80" value="15">
         <span id="fontSzVal">15</span>px
       </div>
     </div>
@@ -229,7 +229,7 @@ void main() {
   function buildTexture(poolStr, fsize) {
     var pool = poolStr && poolStr.length > 0 ? poolStr : "0123456789";
     var poolLen = pool.length;
-    var cellH = Math.max(8, Math.min(64, fsize));
+    var cellH = Math.max(8, Math.min(80, fsize));
     var cellW = cellH;
     var cols = Math.floor(TW / cellW);
     var rows = Math.floor(TH / cellH);
@@ -239,8 +239,10 @@ void main() {
     var ctx = tc.getContext("2d");
     ctx.fillStyle = "#000";
     ctx.fillRect(0, 0, TW, TH);
-    ctx.textBaseline = "top";
-    ctx.font = (cellH - 1) + "px monospace";
+    ctx.textBaseline = "middle";
+    ctx.textAlign = "center";
+    var fontSize = Math.floor(cellH * 0.82);
+    ctx.font = fontSize + "px monospace";
 
     for (var col = 0; col < cols; col++) {
       var headRow = Math.floor(Math.random() * rows);
@@ -256,7 +258,7 @@ void main() {
           ctx.fillStyle = "rgba(0," + g + "," + Math.floor(fade * 80) + "," + fade + ")";
         }
         var ch = pool[Math.floor(Math.random() * poolLen)];
-        ctx.fillText(ch, col * cellW, row * cellH);
+        ctx.fillText(ch, col * cellW + cellW * 0.5, row * cellH + cellH * 0.5);
       }
     }
 
