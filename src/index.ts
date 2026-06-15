@@ -28,6 +28,7 @@ import { getCfDashboardPage } from './views/cf-dashboard';
 import { getApisPage } from './views/apis';
 import { getHtmlRewriterDemoPage } from './views/htmlrewriterDemo';
 import { getWebGLDemoPage } from './views/webglDemo';
+import { getWebGLSpherePage } from './views/webglSphere';
 import { getAuthFlowPage } from './views/authFlow';
 
 import { computeColumnRelationStats, verifyColumnStats, type TableSchema, type Relation } from './utils/columnRelationStats';
@@ -4158,6 +4159,14 @@ app.get('/s/:userHash/:shareToken', async (c) => {
 app.get('/webgl-demo', authMiddleware, async (c) => {
   const user = c.get('user');
   return c.html(getWebGLDemoPage(user.sub));
+});
+
+/**
+ * WebGL 球体デモページ（テキストスクロール）
+ */
+app.get('/webgl-sphere', authMiddleware, async (c) => {
+  const user = c.get('user');
+  return c.html(getWebGLSpherePage(user.sub));
 });
 
 /**
