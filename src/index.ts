@@ -26,6 +26,7 @@ import { getKwArchitecturePage } from './views/kw-architecture';
 import { getKwDrilldownPage } from './views/kw-drilldown';
 import { getCfDashboardPage } from './views/cf-dashboard';
 import { getApisPage } from './views/apis';
+import { getAuthFlowPage } from './views/authFlow';
 
 import { computeColumnRelationStats, verifyColumnStats, type TableSchema, type Relation } from './utils/columnRelationStats';
 import { ensureDefaultWorkspace, getCurrentWorkspace, getUserWorkspaces, switchWorkspace } from './utils/workspace';
@@ -4263,6 +4264,8 @@ app.get('/settings', authMiddleware, async (c) => {
     githubScopeError: scopesError,
   }));
 });
+
+app.get('/auth-flow', authMiddleware, (c) => c.html(getAuthFlowPage()));
 
 /**
  * ユーザー情報ページ（認証が必要）
