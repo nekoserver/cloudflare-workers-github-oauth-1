@@ -500,7 +500,7 @@ void main() {
     var m = utcTime.slice(3, 5);
     var next = h >= 24;
     h = h % 24;
-    return (next ? "翌" : "") + (h < 10 ? "0" : "") + h + ":" + m + " JST";
+    return (next ? "翌" : "") + (h < 10 ? "0" : "") + h + ":" + m + " JST(UTC+9)";
   }
 
   function toET(utcTime) {
@@ -508,7 +508,7 @@ void main() {
     var m = utcTime.slice(3, 5);
     var prev = h < 0;
     if (prev) h += 24;
-    return (h < 10 ? "0" : "") + h + ":" + m + " ET" + (prev ? "(前日)" : "");
+    return (h < 10 ? "0" : "") + h + ":" + m + " ET(UTC-4)" + (prev ? " 前日" : "");
   }
 
   function findCountryByFlag(flag) {
@@ -614,11 +614,11 @@ void main() {
       schedulePanel.classList.remove("open");
       showMatchDetail(a, b, row.dataset.date, row.dataset.time, true);
     }
-    spBody.addEventListener("click", function(e) { spRowTap(e.target.closest(".sp-match")); });
-    spBody.addEventListener("touchend", function(e) {
+    spBody.onclick = function(e) { spRowTap(e.target.closest(".sp-match")); };
+    spBody.ontouchend = function(e) {
       var row = e.target.closest(".sp-match");
       if (row) { e.preventDefault(); spRowTap(row); }
-    });
+    };
     schedulePanel.classList.add("open");
     hideTooltip();
   }
