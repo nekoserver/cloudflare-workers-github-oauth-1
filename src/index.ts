@@ -29,6 +29,7 @@ import { getApisPage } from './views/apis';
 import { getHtmlRewriterDemoPage } from './views/htmlrewriterDemo';
 import { getWebGLDemoPage } from './views/webglDemo';
 import { getWebGLSpherePage } from './views/webglSphere';
+import { getWebGLCubePage } from './views/webglCube';
 import { getAuthFlowPage } from './views/authFlow';
 
 import { computeColumnRelationStats, verifyColumnStats, type TableSchema, type Relation } from './utils/columnRelationStats';
@@ -4167,6 +4168,11 @@ app.get('/webgl-demo', authMiddleware, async (c) => {
 app.get('/webgl-sphere', authMiddleware, async (c) => {
   const user = c.get('user');
   return c.html(getWebGLSpherePage(user.sub));
+});
+
+app.get('/webgl-cube', authMiddleware, async (c) => {
+  const user = c.get('user');
+  return c.html(getWebGLCubePage(user.sub));
 });
 
 /**

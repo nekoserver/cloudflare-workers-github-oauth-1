@@ -23,7 +23,7 @@ body { background:#000; color:#e6edf3; font-family:-apple-system,BlinkMacSystemF
 .topbar a { color:#58a6ff; text-decoration:none; font-size:12px; }
 h1 { font-size:14px; font-weight:700; }
 .badge { background:#0c2d4e; color:#58a6ff; font-size:10px; padding:2px 7px; border-radius:10px; font-weight:600; }
-.body { display:grid; grid-template-columns:1fr 280px; flex:1; min-height:0; }
+.body { display:grid; grid-template-columns:1fr 280px; grid-template-rows:1fr; flex:1; min-height:0; }
 @media(max-width:700px){ .body{ grid-template-columns:1fr; } .side{ display:none; } }
 .canvas-wrap { position:relative; background:#000010; overflow:hidden; }
 canvas { position:absolute; inset:0; width:100%; height:100%; cursor:grab; touch-action:none; display:block; }
@@ -155,8 +155,13 @@ void main() {
   var markersDiv = document.getElementById("markers");
 
   function resize() {
-    canvas.width  = wrap.clientWidth;
-    canvas.height = wrap.clientHeight;
+    var r = wrap.getBoundingClientRect();
+    var w = Math.round(r.width);
+    var h = Math.round(r.height);
+    if (w > 0 && h > 0 && (canvas.width !== w || canvas.height !== h)) {
+      canvas.width  = w;
+      canvas.height = h;
+    }
   }
   resize();
   window.addEventListener("resize", resize);
