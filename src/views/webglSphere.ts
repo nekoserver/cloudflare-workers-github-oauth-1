@@ -384,7 +384,12 @@ void main() {
   var MOMENTUM_DECAY = 0.92;
 
   canvas.addEventListener("mousedown",  function(e){ drag=true; lx=e.clientX; ly=e.clientY; momentumY=0; momentumX=0; velY=0; velX=0; });
-  window.addEventListener("mouseup",    function(){ if(!drag)return; drag=false; momentumY=velY; momentumX=velX; velY=0; velX=0; });
+  function applySpinBoost(v) {
+    var spd = parseFloat(rotSpdEl.value);
+    var factor = Math.random() * spd;
+    return v * (1 + factor);
+  }
+  window.addEventListener("mouseup",    function(){ if(!drag)return; drag=false; momentumY=applySpinBoost(velY); momentumX=applySpinBoost(velX); velY=0; velX=0; });
   window.addEventListener("mousemove",  function(e){ if(!drag)return; var dy=(e.clientX-lx)*0.008; var dx=(e.clientY-ly)*0.008; rotYv+=dy; velY=velY*0.4+dy*0.6; if(!axisLocked){ rotXv=clampElev(rotXv+dx); velX=velX*0.4+dx*0.6; } lx=e.clientX; ly=e.clientY; });
   canvas.addEventListener("wheel",      function(e){ e.preventDefault(); zoom=Math.max(1.6,Math.min(10,zoom+e.deltaY*0.01)); },{passive:false});
   canvas.addEventListener("dblclick",   function(){ autoRot=!autoRot; btnAutoRot.textContent = autoRot ? "⏸ 自転停止" : "▶ 回転"; if(autoRot){btnAutoRot.classList.remove("active");}else{btnAutoRot.classList.add("active");} });
@@ -392,7 +397,7 @@ void main() {
   canvas.addEventListener("touchmove",  function(e){ e.preventDefault(); touchMoved=true; if(e.touches.length===1&&drag){ var dy=(e.touches[0].clientX-lx)*0.008; var dx=(e.touches[0].clientY-ly)*0.008; rotYv+=dy; velY=velY*0.4+dy*0.6; if(!axisLocked){rotXv=clampElev(rotXv+dx); velX=velX*0.4+dx*0.6;} lx=e.touches[0].clientX;ly=e.touches[0].clientY;} if(e.touches.length===2){var d=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);zoom=Math.max(1.6,Math.min(10,zoom-(d-pinch0)*0.02));pinch0=d;} },{passive:false});
   canvas.addEventListener("touchend", function(e){
     drag=false;
-    momentumY=velY; momentumX=velX; velY=0; velX=0;
+    momentumY=applySpinBoost(velY); momentumX=applySpinBoost(velX); velY=0; velX=0;
     if (!touchMoved && e.changedTouches.length === 1) {
       momentumY=0; momentumX=0;
       hideTooltip();
