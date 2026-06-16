@@ -23,6 +23,9 @@ h1 { font-size:14px; font-weight:700; }
 canvas { display:block; width:100%; height:100%; cursor:grab; touch-action:none; }
 canvas:active { cursor:grabbing; }
 .hud { position:absolute; top:10px; left:10px; background:rgba(0,0,0,.7); border:1px solid #30363d; border-radius:6px; padding:6px 10px; font-size:11px; font-family:monospace; color:#58a6ff; line-height:1.9; pointer-events:none; }
+#markers { position:absolute; top:0; left:0; width:100%; height:100%; pointer-events:none; overflow:hidden; }
+.mk { position:absolute; transform:translate(-50%,-50%); line-height:1; font-size:18px; text-shadow:0 1px 3px #000,0 0 8px rgba(0,0,0,0.9); }
+.mk-ball { font-size:28px; }
 .side { background:#0d1117; border-left:1px solid #30363d; overflow-y:auto; padding:16px; }
 .side h2 { font-size:11px; font-weight:700; color:#58a6ff; text-transform:uppercase; letter-spacing:.5px; margin-bottom:10px; }
 .item { margin-bottom:12px; }
@@ -89,17 +92,18 @@ void main() {
   <span style="flex:1"></span>
   <a href="/webgl-demo">3D Cube</a>
   <a href="/htmlrewriter-demo">HTMLRewriter</a>
-  <a href="/settings">⚙</a>
+  <a href="/settings">&#9881;</a>
   <span style="color:#8b949e;font-size:11px">${safeUser}</span>
 </div>
 
 <div class="body">
   <div class="canvas-wrap">
     <canvas id="c"></canvas>
+    <div id="markers"></div>
     <div class="hud" id="hud">テクスチャ読み込み中...</div>
   </div>
   <div class="side">
-    <div class="tip">ドラッグ: 回転 | ホイール: ズーム | ダブルクリック: 自動回転 ON/OFF</div>
+    <div class="tip">ドラッグ: 回転 | ホイール: ズーム | ダブルクリック: 自動回転 ON/OFF<br>&#9917; = 2026 FIFAワールドカップ開催地（北米） | 各国旗 = 出場48ヵ国</div>
 
     <h2>コントロール</h2>
     <div class="ctrl-row">
@@ -137,6 +141,7 @@ void main() {
   var canvas = document.getElementById("c");
   var wrap   = canvas.parentElement;
   var hud    = document.getElementById("hud");
+  var markersDiv = document.getElementById("markers");
 
   function resize() {
     canvas.width  = wrap.clientWidth;
@@ -161,7 +166,6 @@ void main() {
   gl.linkProgram(prog);
   gl.useProgram(prog);
 
-  // ── 球体ジオメトリ ──
   var LAT = 64, LON = 128;
   var verts = [], idxs = [];
   for (var i = 0; i <= LAT; i++) {
@@ -200,7 +204,6 @@ void main() {
   var uTex   = gl.getUniformLocation(prog, "uTex");
   gl.uniform1i(uTex, 0);
 
-  // ── 現在UTC時刻から太陽方向を計算 ──
   function getSunDir() {
     var now = new Date();
     var utcH = now.getUTCHours() + now.getUTCMinutes() / 60 + now.getUTCSeconds() / 3600;
@@ -215,11 +218,9 @@ void main() {
     ];
   }
 
-  // ── 地球テクスチャ（/earth.jpg からロード）──
   var texEarth = gl.createTexture();
   gl.activeTexture(gl.TEXTURE0);
   gl.bindTexture(gl.TEXTURE_2D, texEarth);
-  // ロード中プレースホルダー（深青 1x1）
   gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([10, 30, 70, 255]));
 
   var earthImg = new Image();
@@ -238,7 +239,6 @@ void main() {
   };
   earthImg.src = "/earth.jpg";
 
-  // ── 行列ユーティリティ ──
   function m4()      { return new Float32Array(16); }
   function ident(m)  { for(var i=0;i<16;i++) m[i]=0; m[0]=m[5]=m[10]=m[15]=1; return m; }
   function mul(o,a,b){
@@ -256,7 +256,6 @@ void main() {
   function rotZ(m,r){ ident(m); var c=Math.cos(r),s=Math.sin(r); m[0]=c;m[1]=s;m[4]=-s;m[5]=c; return m; }
   function trans(m,x,y,z){ ident(m); m[12]=x;m[13]=y;m[14]=z; return m; }
 
-  // 地軸の傾き（23.4°固定）。視点の上下に関わらず軸方向は一定に保つ
   var axialTilt = -23.4 * Math.PI / 180;
   var ELEV_MAX = Math.PI / 2 - 0.02;
   function clampElev(v){ return v < -ELEV_MAX ? -ELEV_MAX : (v > ELEV_MAX ? ELEV_MAX : v); }
@@ -277,6 +276,80 @@ void main() {
   canvas.addEventListener("touchstart", function(e){ e.preventDefault(); if(e.touches.length===1){drag=true;lx=e.touches[0].clientX;ly=e.touches[0].clientY;} if(e.touches.length===2){pinch0=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);} },{passive:false});
   canvas.addEventListener("touchmove",  function(e){ e.preventDefault(); if(e.touches.length===1&&drag){rotYv+=(e.touches[0].clientX-lx)*0.008;rotXv=clampElev(rotXv+(e.touches[0].clientY-ly)*0.008);lx=e.touches[0].clientX;ly=e.touches[0].clientY;} if(e.touches.length===2){var d=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);zoom=Math.max(1.6,Math.min(10,zoom-(d-pinch0)*0.02));pinch0=d;} },{passive:false});
   canvas.addEventListener("touchend",   function(){ drag=false; });
+
+  // 2026 FIFAワールドカップ出場国（⚽=開催地マーカー）
+  var wc2026 = [
+    {flag:"⚽", lat:34, lon:-99, ball:true},
+    {flag:"🇺🇸", lat:39, lon:-95},
+    {flag:"🇨🇦", lat:56, lon:-96},
+    {flag:"🇲🇽", lat:23, lon:-102},
+    {flag:"🇵🇦", lat:9, lon:-80},
+    {flag:"🇨🇷", lat:10, lon:-84},
+    {flag:"🇭🇳", lat:15, lon:-87},
+    {flag:"🇦🇷", lat:-34, lon:-64},
+    {flag:"🇧🇷", lat:-10, lon:-53},
+    {flag:"🇨🇴", lat:4, lon:-72},
+    {flag:"🇺🇾", lat:-33, lon:-56},
+    {flag:"🇪🇨", lat:-2, lon:-78},
+    {flag:"🇵🇾", lat:-23, lon:-58},
+    {flag:"🇻🇪", lat:8, lon:-66},
+    {flag:"🇪🇸", lat:40, lon:-4},
+    {flag:"🏴󠁧󠁢󠁥󠁮󠁧󠁿", lat:52, lon:-1},
+    {flag:"🇫🇷", lat:46, lon:2},
+    {flag:"🇩🇪", lat:51, lon:10},
+    {flag:"🇵🇹", lat:39, lon:-8},
+    {flag:"🇳🇱", lat:52, lon:5},
+    {flag:"🇮🇹", lat:42, lon:12},
+    {flag:"🇧🇪", lat:50, lon:4},
+    {flag:"🇭🇷", lat:45, lon:16},
+    {flag:"🇦🇹", lat:47, lon:14},
+    {flag:"🇨🇭", lat:47, lon:8},
+    {flag:"🇩🇰", lat:56, lon:10},
+    {flag:"🇷🇸", lat:44, lon:21},
+    {flag:"🇹🇷", lat:39, lon:35},
+    {flag:"🏴󠁧󠁢󠁳󠁣󠁴󠁿", lat:57, lon:-4},
+    {flag:"🇸🇰", lat:48, lon:19},
+    {flag:"🇲🇦", lat:32, lon:-6},
+    {flag:"🇳🇬", lat:10, lon:8},
+    {flag:"🇸🇳", lat:14, lon:-14},
+    {flag:"🇪🇬", lat:26, lon:30},
+    {flag:"🇨🇮", lat:7, lon:-5},
+    {flag:"🇿🇦", lat:-29, lon:25},
+    {flag:"🇨🇩", lat:-4, lon:24},
+    {flag:"🇬🇭", lat:8, lon:-1},
+    {flag:"🇩🇿", lat:28, lon:3},
+    {flag:"🇹🇳", lat:34, lon:9},
+    {flag:"🇯🇵", lat:36, lon:138},
+    {flag:"🇰🇷", lat:36, lon:128},
+    {flag:"🇮🇷", lat:32, lon:53},
+    {flag:"🇮🇶", lat:33, lon:44},
+    {flag:"🇦🇺", lat:-27, lon:133},
+    {flag:"🇯🇴", lat:31, lon:36},
+    {flag:"🇺🇿", lat:41, lon:64},
+    {flag:"🇸🇦", lat:24, lon:45},
+    {flag:"🇳🇿", lat:-41, lon:174},
+    {flag:"🇮🇩", lat:-7, lon:117}
+  ];
+
+  function latLonTo3D(lat, lon) {
+    var latR = lat * Math.PI / 180;
+    var lonPhi = lon * Math.PI / 180 + Math.PI;
+    return [
+      Math.cos(latR) * Math.cos(lonPhi),
+      Math.sin(latR),
+      Math.cos(latR) * Math.sin(lonPhi)
+    ];
+  }
+
+  var mkEls = [];
+  for (var mi = 0; mi < wc2026.length; mi++) {
+    var mdata = wc2026[mi];
+    var mel = document.createElement("div");
+    mel.className = "mk" + (mdata.ball ? " mk-ball" : "");
+    mel.textContent = mdata.flag;
+    markersDiv.appendChild(mel);
+    mkEls.push({el: mel, pos3d: latLonTo3D(mdata.lat, mdata.lon)});
+  }
 
   gl.enable(gl.DEPTH_TEST);
   gl.enable(gl.CULL_FACE);
@@ -299,8 +372,6 @@ void main() {
 
     persp(proj, Math.PI / 4, W / H, 0.1, 100);
     trans(view, 0, 0, -zoom);
-    // 自転(rotY=極軸まわり) → 地軸傾き(rotZ固定) → 視点仰角(rotX)
-    // この順序により極軸は視点に対して常に一定方向を保ち、回転で歪まない
     rotY(ry, rotYv); rotZ(tz, axialTilt); rotX(rx, rotXv);
     mul(tmp2, tz, ry);
     mul(model, rx, tmp2);
@@ -313,8 +384,27 @@ void main() {
     gl.uniformMatrix4fv(uModel, false, model);
 
     gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, texEarth);
-
     gl.drawElements(gl.TRIANGLES, idxs.length, gl.UNSIGNED_SHORT, 0);
+
+    for (var mi = 0; mi < mkEls.length; mi++) {
+      var mk = mkEls[mi];
+      var mp = mk.pos3d;
+      var mz = model[2]*mp[0] + model[6]*mp[1] + model[10]*mp[2];
+      if (mz > 0.05) {
+        var mcx = mvp[0]*mp[0] + mvp[4]*mp[1] + mvp[8]*mp[2]  + mvp[12];
+        var mcy = mvp[1]*mp[0] + mvp[5]*mp[1] + mvp[9]*mp[2]  + mvp[13];
+        var mcw = mvp[3]*mp[0] + mvp[7]*mp[1] + mvp[11]*mp[2] + mvp[15];
+        if (mcw > 0) {
+          mk.el.style.left = ((mcx/mcw+1)*0.5*W) + "px";
+          mk.el.style.top  = ((1-mcy/mcw)*0.5*H) + "px";
+          mk.el.style.opacity = "1";
+        } else {
+          mk.el.style.opacity = "0";
+        }
+      } else {
+        mk.el.style.opacity = "0";
+      }
+    }
 
     frames++;
     var dt = now - lastFps;
