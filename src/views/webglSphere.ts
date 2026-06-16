@@ -12,7 +12,7 @@ export function getWebGLSpherePage(username: string): string {
 <title>WebGL 地球儀</title>
 <style>
 * { box-sizing:border-box; margin:0; padding:0; }
-body { background:#000; color:#e6edf3; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; font-size:13px; height:100vh; display:flex; flex-direction:column; overflow:hidden; }
+body { background:#000; color:#e6edf3; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; font-size:13px; height:calc(100vh + 100px); display:flex; flex-direction:column; overflow:hidden; }
 .topbar { background:#0d1117; border-bottom:1px solid #30363d; padding:8px 18px; display:flex; align-items:center; gap:10px; flex-shrink:0; }
 .topbar a { color:#58a6ff; text-decoration:none; font-size:12px; }
 h1 { font-size:14px; font-weight:700; }
