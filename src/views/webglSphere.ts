@@ -392,55 +392,54 @@ void main() {
   // 2026 FIFAワールドカップ出場国（⚽=開催地マーカー）
   var wc2026 = [
     {flag:"⚽", name:"2026 FIFA W杯 開催地", lat:34, lon:-99, ball:true},
-    {flag:"🇺🇸", name:"アメリカ合衆国", lat:39, lon:-95},
-    {flag:"🇨🇦", name:"カナダ", lat:56, lon:-96},
     {flag:"🇲🇽", name:"メキシコ", lat:23, lon:-102},
-    {flag:"🇵🇦", name:"パナマ", lat:9, lon:-80},
-    {flag:"🇨🇷", name:"コスタリカ", lat:10, lon:-84},
-    {flag:"🇭🇳", name:"ホンジュラス", lat:15, lon:-87},
-    {flag:"🇦🇷", name:"アルゼンチン", lat:-34, lon:-64},
-    {flag:"🇧🇷", name:"ブラジル", lat:-10, lon:-53},
-    {flag:"🇨🇴", name:"コロンビア", lat:4, lon:-72},
-    {flag:"🇺🇾", name:"ウルグアイ", lat:-33, lon:-56},
-    {flag:"🇪🇨", name:"エクアドル", lat:-2, lon:-78},
-    {flag:"🇵🇾", name:"パラグアイ", lat:-23, lon:-58},
-    {flag:"🇻🇪", name:"ベネズエラ", lat:8, lon:-66},
-    {flag:"🇪🇸", name:"スペイン", lat:40, lon:-4},
-    {flag:"🏴󠁧󠁢󠁥󠁮󠁧󠁿", name:"イングランド", lat:52, lon:-1},
-    {flag:"🇫🇷", name:"フランス", lat:46, lon:2},
-    {flag:"🇩🇪", name:"ドイツ", lat:51, lon:10},
-    {flag:"🇵🇹", name:"ポルトガル", lat:39, lon:-8},
-    {flag:"🇳🇱", name:"オランダ", lat:52, lon:5},
-    {flag:"🇮🇹", name:"イタリア", lat:42, lon:12},
-    {flag:"🇧🇪", name:"ベルギー", lat:50, lon:4},
-    {flag:"🇭🇷", name:"クロアチア", lat:45, lon:16},
-    {flag:"🇦🇹", name:"オーストリア", lat:47, lon:14},
-    {flag:"🇨🇭", name:"スイス", lat:47, lon:8},
-    {flag:"🇩🇰", name:"デンマーク", lat:56, lon:10},
-    {flag:"🇷🇸", name:"セルビア", lat:44, lon:21},
-    {flag:"🇹🇷", name:"トルコ", lat:39, lon:35},
-    {flag:"🏴󠁧󠁢󠁳󠁣󠁴󠁿", name:"スコットランド", lat:57, lon:-4},
-    {flag:"🇸🇰", name:"スロバキア", lat:48, lon:19},
-    {flag:"🇲🇦", name:"モロッコ", lat:32, lon:-6},
-    {flag:"🇳🇬", name:"ナイジェリア", lat:10, lon:8},
-    {flag:"🇸🇳", name:"セネガル", lat:14, lon:-14},
-    {flag:"🇪🇬", name:"エジプト", lat:26, lon:30},
-    {flag:"🇨🇮", name:"コートジボワール", lat:7, lon:-5},
     {flag:"🇿🇦", name:"南アフリカ", lat:-29, lon:25},
-    {flag:"🇨🇩", name:"コンゴ民主共和国", lat:-4, lon:24},
-    {flag:"🇬🇭", name:"ガーナ", lat:8, lon:-1},
-    {flag:"🇩🇿", name:"アルジェリア", lat:28, lon:3},
-    {flag:"🇹🇳", name:"チュニジア", lat:34, lon:9},
-    {flag:"🇯🇵", name:"日本", lat:36, lon:138},
     {flag:"🇰🇷", name:"韓国", lat:36, lon:128},
-    {flag:"🇮🇷", name:"イラン", lat:32, lon:53},
-    {flag:"🇮🇶", name:"イラク", lat:33, lon:44},
+    {flag:"🇨🇿", name:"チェコ", lat:50, lon:15},
+    {flag:"🇨🇦", name:"カナダ", lat:56, lon:-96},
+    {flag:"🇧🇦", name:"ボスニア・ヘルツェゴビナ", lat:44, lon:17},
+    {flag:"🇶🇦", name:"カタール", lat:25, lon:51},
+    {flag:"🇨🇭", name:"スイス", lat:47, lon:8},
+    {flag:"🏴󠁧󠁢󠁳󠁣󠁴", name:"スコットランド", lat:57, lon:-4},
+    {flag:"🇧🇷", name:"ブラジル", lat:-10, lon:-53},
+    {flag:"🇲🇦", name:"モロッコ", lat:32, lon:-6},
+    {flag:"🇭🇹", name:"ハイチ", lat:19, lon:-73},
+    {flag:"🇺🇸", name:"アメリカ合衆国", lat:39, lon:-95},
     {flag:"🇦🇺", name:"オーストラリア", lat:-27, lon:133},
-    {flag:"🇯🇴", name:"ヨルダン", lat:31, lon:36},
-    {flag:"🇺🇿", name:"ウズベキスタン", lat:41, lon:64},
-    {flag:"🇸🇦", name:"サウジアラビア", lat:24, lon:45},
+    {flag:"🇹🇷", name:"トルコ", lat:39, lon:35},
+    {flag:"🇵🇾", name:"パラグアイ", lat:-23, lon:-58},
+    {flag:"🇩🇪", name:"ドイツ", lat:51, lon:10},
+    {flag:"🇨🇮", name:"コートジボワール", lat:7, lon:-5},
+    {flag:"🇪🇨", name:"エクアドル", lat:-2, lon:-78},
+    {flag:"🇨🇼", name:"キュラソー", lat:12, lon:-69},
+    {flag:"🇸🇪", name:"スウェーデン", lat:60, lon:18},
+    {flag:"🇯🇵", name:"日本", lat:36, lon:138},
+    {flag:"🇳🇱", name:"オランダ", lat:52, lon:5},
+    {flag:"🇹🇳", name:"チュニジア", lat:34, lon:9},
+    {flag:"🇮🇷", name:"イラン", lat:32, lon:53},
     {flag:"🇳🇿", name:"ニュージーランド", lat:-41, lon:174},
-    {flag:"🇮🇩", name:"インドネシア", lat:-7, lon:117}
+    {flag:"🇧🇪", name:"ベルギー", lat:50, lon:4},
+    {flag:"🇪🇬", name:"エジプト", lat:26, lon:30},
+    {flag:"🇸🇦", name:"サウジアラビア", lat:24, lon:45},
+    {flag:"🇺🇾", name:"ウルグアイ", lat:-33, lon:-56},
+    {flag:"🇨🇻", name:"カーボベルデ", lat:16, lon:-24},
+    {flag:"🇪🇸", name:"スペイン", lat:40, lon:-4},
+    {flag:"🇫🇷", name:"フランス", lat:46, lon:2},
+    {flag:"🇮🇶", name:"イラク", lat:33, lon:44},
+    {flag:"🇳🇴", name:"ノルウェー", lat:61, lon:8},
+    {flag:"🇸🇳", name:"セネガル", lat:14, lon:-14},
+    {flag:"🇩🇿", name:"アルジェリア", lat:28, lon:3},
+    {flag:"🇦🇷", name:"アルゼンチン", lat:-34, lon:-64},
+    {flag:"🇦🇹", name:"オーストリア", lat:47, lon:14},
+    {flag:"🇯🇴", name:"ヨルダン", lat:31, lon:36},
+    {flag:"🇨🇴", name:"コロンビア", lat:4, lon:-72},
+    {flag:"🇨🇩", name:"コンゴ民主共和国", lat:-4, lon:24},
+    {flag:"🇵🇹", name:"ポルトガル", lat:39, lon:-8},
+    {flag:"🇺🇿", name:"ウズベキスタン", lat:41, lon:64},
+    {flag:"🇭🇷", name:"クロアチア", lat:45, lon:16},
+    {flag:"🏴󠁧󠁢󠁥󠁮󠁧󠁿", name:"イングランド", lat:52, lon:-1},
+    {flag:"🇬🇭", name:"ガーナ", lat:8, lon:-1},
+    {flag:"🇵🇦", name:"パナマ", lat:9, lon:-80}
   ];
 
   function latLonTo3D(lat, lon) {
@@ -453,32 +452,87 @@ void main() {
     ];
   }
 
-  var GD = [
-    {t:["🇺🇸","🇵🇦","🇺🇾","🇸🇦"],d1:"2026-06-12",d2:"2026-06-19",d3:"2026-06-26"},
-    {t:["🇨🇦","🇨🇷","🇦🇷","🇩🇿"],d1:"2026-06-13",d2:"2026-06-20",d3:"2026-06-27"},
-    {t:["🇲🇽","🇭🇳","🇪🇨","🇲🇦"],d1:"2026-06-13",d2:"2026-06-20",d3:"2026-06-27"},
-    {t:["🇧🇷","🇻🇪","🇯🇵","🇳🇿"],d1:"2026-06-14",d2:"2026-06-21",d3:"2026-06-28"},
-    {t:["🇨🇴","🇵🇾","🇰🇷","🇳🇬"],d1:"2026-06-14",d2:"2026-06-21",d3:"2026-06-28"},
-    {t:["🇪🇸","🇷🇸","🇸🇳","🇮🇩"],d1:"2026-06-15",d2:"2026-06-22",d3:"2026-06-29"},
-    {t:["🇫🇷","🇦🇹","🇪🇬","🇯🇴"],d1:"2026-06-15",d2:"2026-06-22",d3:"2026-06-29"},
-    {t:["🇩🇪","🇭🇷","🇬🇭","🇺🇿"],d1:"2026-06-16",d2:"2026-06-23",d3:"2026-06-30"},
-    {t:["🏴󠁧󠁢󠁥󠁮󠁧󠁿","🇧🇪","🇮🇷","🇨🇩"],d1:"2026-06-16",d2:"2026-06-23",d3:"2026-06-30"},
-    {t:["🇵🇹","🇩🇰","🇨🇮","🇹🇷"],d1:"2026-06-17",d2:"2026-06-24",d3:"2026-07-01"},
-    {t:["🇳🇱","🇨🇭","🏴󠁧󠁢󠁳󠁣󠁴󠁿","🇮🇶"],d1:"2026-06-17",d2:"2026-06-24",d3:"2026-07-01"},
-    {t:["🇮🇹","🇸🇰","🇿🇦","🇹🇳"],d1:"2026-06-18",d2:"2026-06-25",d3:"2026-07-02"}
+  var MATCHES = [
+    {a:"🇲🇽",b:"🇿🇦",date:"2026-06-11",time:"19:00"},
+    {a:"🇰🇷",b:"🇨🇿",date:"2026-06-12",time:"02:00"},
+    {a:"🇨🇦",b:"🇧🇦",date:"2026-06-12",time:"19:00"},
+    {a:"🇺🇸",b:"🇵🇾",date:"2026-06-13",time:"01:00"},
+    {a:"🇶🇦",b:"🇨🇭",date:"2026-06-13",time:"19:00"},
+    {a:"🇧🇷",b:"🇲🇦",date:"2026-06-13",time:"22:00"},
+    {a:"🇭🇹",b:"🏴󠁧󠁢󠁳󠁣󠁴",date:"2026-06-14",time:"01:00"},
+    {a:"🇦🇺",b:"🇹🇷",date:"2026-06-14",time:"04:00"},
+    {a:"🇩🇪",b:"🇨🇼",date:"2026-06-14",time:"17:00"},
+    {a:"🇳🇱",b:"🇯🇵",date:"2026-06-14",time:"20:00"},
+    {a:"🇨🇮",b:"🇪🇨",date:"2026-06-14",time:"23:00"},
+    {a:"🇸🇪",b:"🇹🇳",date:"2026-06-15",time:"02:00"},
+    {a:"🇪🇸",b:"🇨🇻",date:"2026-06-15",time:"16:00"},
+    {a:"🇧🇪",b:"🇪🇬",date:"2026-06-15",time:"19:00"},
+    {a:"🇸🇦",b:"🇺🇾",date:"2026-06-15",time:"22:00"},
+    {a:"🇮🇷",b:"🇳🇿",date:"2026-06-16",time:"01:00"},
+    {a:"🇫🇷",b:"🇸🇳",date:"2026-06-16",time:"19:00"},
+    {a:"🇮🇶",b:"🇳🇴",date:"2026-06-16",time:"22:00"},
+    {a:"🇦🇷",b:"🇩🇿",date:"2026-06-17",time:"01:00"},
+    {a:"🇦🇹",b:"🇯🇴",date:"2026-06-17",time:"04:00"},
+    {a:"🇵🇹",b:"🇨🇩",date:"2026-06-17",time:"17:00"},
+    {a:"🏴󠁧󠁢󠁥󠁮󠁧󠁿",b:"🇭🇷",date:"2026-06-17",time:"20:00"},
+    {a:"🇬🇭",b:"🇵🇦",date:"2026-06-17",time:"23:00"},
+    {a:"🇺🇿",b:"🇨🇴",date:"2026-06-18",time:"02:00"},
+    {a:"🇨🇿",b:"🇿🇦",date:"2026-06-18",time:"16:00"},
+    {a:"🇨🇭",b:"🇧🇦",date:"2026-06-18",time:"19:00"},
+    {a:"🇨🇦",b:"🇶🇦",date:"2026-06-18",time:"22:00"},
+    {a:"🇲🇽",b:"🇰🇷",date:"2026-06-19",time:"01:00"},
+    {a:"🇺🇸",b:"🇦🇺",date:"2026-06-19",time:"19:00"},
+    {a:"🏴󠁧󠁢󠁳󠁣󠁴",b:"🇲🇦",date:"2026-06-19",time:"22:00"},
+    {a:"🇧🇷",b:"🇭🇹",date:"2026-06-20",time:"00:30"},
+    {a:"🇹🇷",b:"🇵🇾",date:"2026-06-20",time:"03:00"},
+    {a:"🇳🇱",b:"🇸🇪",date:"2026-06-20",time:"17:00"},
+    {a:"🇩🇪",b:"🇨🇮",date:"2026-06-20",time:"20:00"},
+    {a:"🇪🇨",b:"🇨🇼",date:"2026-06-21",time:"00:00"},
+    {a:"🇹🇳",b:"🇯🇵",date:"2026-06-21",time:"04:00"},
+    {a:"🇪🇸",b:"🇸🇦",date:"2026-06-21",time:"16:00"},
+    {a:"🇧🇪",b:"🇮🇷",date:"2026-06-21",time:"19:00"},
+    {a:"🇺🇾",b:"🇨🇻",date:"2026-06-21",time:"22:00"},
+    {a:"🇳🇿",b:"🇪🇬",date:"2026-06-22",time:"01:00"},
+    {a:"🇦🇷",b:"🇦🇹",date:"2026-06-22",time:"17:00"},
+    {a:"🇫🇷",b:"🇮🇶",date:"2026-06-22",time:"21:00"},
+    {a:"🇳🇴",b:"🇸🇳",date:"2026-06-23",time:"00:00"},
+    {a:"🇯🇴",b:"🇩🇿",date:"2026-06-23",time:"03:00"},
+    {a:"🇵🇹",b:"🇺🇿",date:"2026-06-23",time:"17:00"},
+    {a:"🏴󠁧󠁢󠁥󠁮󠁧󠁿",b:"🇬🇭",date:"2026-06-23",time:"20:00"},
+    {a:"🇵🇦",b:"🇭🇷",date:"2026-06-23",time:"23:00"},
+    {a:"🇨🇴",b:"🇨🇩",date:"2026-06-24",time:"02:00"},
+    {a:"🇨🇭",b:"🇨🇦",date:"2026-06-24",time:"19:00"},
+    {a:"🇧🇦",b:"🇶🇦",date:"2026-06-24",time:"19:00"},
+    {a:"🏴󠁧󠁢󠁳󠁣󠁴",b:"🇧🇷",date:"2026-06-24",time:"22:00"},
+    {a:"🇲🇦",b:"🇭🇹",date:"2026-06-24",time:"22:00"},
+    {a:"🇨🇿",b:"🇲🇽",date:"2026-06-25",time:"01:00"},
+    {a:"🇿🇦",b:"🇰🇷",date:"2026-06-25",time:"01:00"},
+    {a:"🇨🇼",b:"🇨🇮",date:"2026-06-25",time:"20:00"},
+    {a:"🇪🇨",b:"🇩🇪",date:"2026-06-25",time:"20:00"},
+    {a:"🇯🇵",b:"🇸🇪",date:"2026-06-25",time:"23:00"},
+    {a:"🇹🇳",b:"🇳🇱",date:"2026-06-25",time:"23:00"},
+    {a:"🇹🇷",b:"🇺🇸",date:"2026-06-26",time:"02:00"},
+    {a:"🇵🇾",b:"🇦🇺",date:"2026-06-26",time:"02:00"},
+    {a:"🇳🇴",b:"🇫🇷",date:"2026-06-26",time:"19:00"},
+    {a:"🇸🇳",b:"🇮🇶",date:"2026-06-26",time:"19:00"},
+    {a:"🇨🇻",b:"🇸🇦",date:"2026-06-27",time:"00:00"},
+    {a:"🇺🇾",b:"🇪🇸",date:"2026-06-27",time:"00:00"},
+    {a:"🇪🇬",b:"🇮🇷",date:"2026-06-27",time:"03:00"},
+    {a:"🇳🇿",b:"🇧🇪",date:"2026-06-27",time:"03:00"},
+    {a:"🇵🇦",b:"🏴󠁧󠁢󠁥󠁮󠁧󠁿",date:"2026-06-27",time:"21:00"},
+    {a:"🇭🇷",b:"🇬🇭",date:"2026-06-27",time:"21:00"},
+    {a:"🇨🇴",b:"🇵🇹",date:"2026-06-27",time:"23:30"},
+    {a:"🇨🇩",b:"🇺🇿",date:"2026-06-27",time:"23:30"},
+    {a:"🇩🇿",b:"🇦🇹",date:"2026-06-28",time:"02:00"},
+    {a:"🇯🇴",b:"🇦🇷",date:"2026-06-28",time:"02:00"}
   ];
-  var PAIRS = [[0,1,"18:00"],[2,3,"21:00"],[0,2,"18:00"],[1,3,"21:00"],[0,3,"21:00"],[1,2,"18:00"]];
   var teamMatches = {};
   var ELIMINATED = {};
-  GD.forEach(function(g) {
-    var ds = [g.d1, g.d2, g.d3];
-    PAIRS.forEach(function(p, pi) {
-      var a = g.t[p[0]], b = g.t[p[1]], d = ds[Math.floor(pi/2)], ti = p[2];
-      if (!teamMatches[a]) teamMatches[a] = [];
-      if (!teamMatches[b]) teamMatches[b] = [];
-      teamMatches[a].push({opp:b, date:d, time:ti});
-      teamMatches[b].push({opp:a, date:d, time:ti});
-    });
+  MATCHES.forEach(function(m) {
+    if (!teamMatches[m.a]) teamMatches[m.a] = [];
+    if (!teamMatches[m.b]) teamMatches[m.b] = [];
+    teamMatches[m.a].push({opp:m.b, date:m.date, time:m.time});
+    teamMatches[m.b].push({opp:m.a, date:m.date, time:m.time});
   });
 
   function getNextMatch(flag) {
@@ -580,17 +634,7 @@ void main() {
 
   function showSchedulePanel() {
     var todayStr = new Date().toISOString().slice(0, 10);
-    var allMatches = [];
-    var PAIRS2 = [[0,1,"18:00"],[2,3,"21:00"],[0,2,"18:00"],[1,3,"21:00"],[0,3,"21:00"],[1,2,"18:00"]];
-    GD.forEach(function(g) {
-      var ds = [g.d1, g.d2, g.d3];
-      PAIRS2.forEach(function(p, pi) {
-        var d = ds[Math.floor(pi/2)];
-        if (d >= todayStr) {
-          allMatches.push({date:d, time:p[2], a:g.t[p[0]], b:g.t[p[1]]});
-        }
-      });
-    });
+    var allMatches = MATCHES.filter(function(m) { return m.date >= todayStr; });
     allMatches.sort(function(a, b) { return (a.date + a.time) < (b.date + b.time) ? -1 : 1; });
     var html = "";
     var lastDate = "";
@@ -668,16 +712,7 @@ void main() {
   document.getElementById("miClose").addEventListener("click", function(e) { e.stopPropagation(); closeMatchDetail(); });
 
   function buildDrawer() {
-    var PAIRS3 = [[0,1,"18:00"],[2,3,"21:00"],[0,2,"18:00"],[1,3,"21:00"],[0,3,"21:00"],[1,2,"18:00"]];
-    var allM = [];
-    GD.forEach(function(g) {
-      var ds = [g.d1, g.d2, g.d3];
-      PAIRS3.forEach(function(p, pi) {
-        var d = ds[Math.floor(pi/2)];
-        allM.push({date:d, time:p[2], a:g.t[p[0]], b:g.t[p[1]]});
-      });
-    });
-    allM.sort(function(x, y) { return (x.date + x.time) < (y.date + y.time) ? -1 : 1; });
+    var allM = MATCHES.slice().sort(function(x, y) { return (x.date + x.time) < (y.date + y.time) ? -1 : 1; });
     var nowMs = Date.now();
     var todayStr = new Date().toISOString().slice(0, 10);
     var html = "";
