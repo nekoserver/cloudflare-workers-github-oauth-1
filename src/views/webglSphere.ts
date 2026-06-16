@@ -70,6 +70,30 @@ input[type=range] { flex:1; accent-color:#58a6ff; }
 .canvas-ctrl-btn { background:rgba(13,17,23,0.88); border:1px solid #30363d; border-radius:6px; color:#e6edf3; font-size:12px; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; padding:6px 12px; cursor:pointer; white-space:nowrap; transition:background .15s,border-color .15s,color .15s; text-align:left; }
 .canvas-ctrl-btn:hover { background:rgba(13,17,23,1); border-color:#58a6ff; }
 .canvas-ctrl-btn.active { background:#0c2d4e; border-color:#58a6ff; color:#58a6ff; }
+#drawer-overlay { position:fixed; inset:0; z-index:68; background:rgba(0,0,0,.55); display:none; }
+#drawer-overlay.open { display:block; }
+#left-drawer { position:fixed; top:0; left:0; bottom:0; width:300px; max-width:90vw; z-index:69; background:#0d1117; border-right:2px solid #30363d; transform:translateX(-100%); transition:transform .3s ease; display:flex; flex-direction:column; }
+#left-drawer.open { transform:translateX(0); }
+.drw-hdr { display:flex; align-items:center; justify-content:space-between; padding:12px 14px 10px; border-bottom:1px solid #30363d; flex-shrink:0; background:#0d1117; }
+.drw-title { font-size:13px; font-weight:700; color:#58a6ff; }
+.drw-close { background:none; border:none; color:#8b949e; font-size:22px; line-height:1; cursor:pointer; padding:0 2px; }
+#drw-body { overflow-y:auto; flex:1; }
+.drw-date { padding:8px 14px 4px; font-size:10px; font-weight:700; color:#8b949e; letter-spacing:1px; text-transform:uppercase; position:sticky; top:0; background:#0d1117; border-bottom:1px solid #21262d; }
+.drw-row { display:flex; align-items:center; justify-content:space-between; padding:9px 14px; border-bottom:1px solid #21262d; cursor:pointer; gap:8px; -webkit-tap-highlight-color:transparent; }
+.drw-row:active { background:#21262d; }
+.drw-flags { font-size:22px; letter-spacing:3px; flex-shrink:0; }
+.drw-meta { font-family:monospace; font-size:11px; color:#58a6ff; text-align:right; white-space:nowrap; }
+.drw-row.drw-past { opacity:0.38; }
+.drw-row.drw-live { background:rgba(63,185,80,.08); border-left:3px solid #3fb950; }
+#match-detail { position:fixed; inset:0; z-index:80; background:rgba(0,0,0,.93); display:flex; flex-direction:column; align-items:center; justify-content:center; opacity:0; pointer-events:none; transition:opacity .2s; }
+#match-detail.open { opacity:1; pointer-events:auto; }
+.detail-flags { font-size:90px; letter-spacing:12px; line-height:1.1; text-align:center; }
+.detail-dash { font-size:40px; color:#30363d; margin:0 8px; }
+.detail-time { font-size:14px; color:#58a6ff; font-family:monospace; margin-top:16px; }
+.detail-date { font-size:12px; color:#8b949e; margin-top:6px; }
+.detail-hint { font-size:11px; color:#444d56; margin-top:28px; }
+#drawer-open-btn { position:absolute; left:10px; bottom:14px; z-index:5; background:rgba(13,17,23,0.88); border:1px solid #30363d; border-radius:6px; color:#e6edf3; font-size:12px; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; padding:6px 12px; cursor:pointer; white-space:nowrap; transition:background .15s,border-color .15s; }
+#drawer-open-btn:hover { background:rgba(13,17,23,1); border-color:#58a6ff; }
 </style>
 </head>
 <body>
@@ -138,6 +162,7 @@ void main() {
       <button class="canvas-ctrl-btn" id="btnAxisLock" title="地軸を画面に対して垂直に固定するモード">＋ 軸垂直固定</button>
       <button class="canvas-ctrl-btn" id="btnAutoRot" title="自転の停止/再開">⏸ 自転停止</button>
     </div>
+    <button id="drawer-open-btn" title="試合一覧を開く">&#9776; 試合一覧</button>
   </div>
   <div class="side">
     <div class="tip">ドラッグ: 回転 | ホイール: ズーム | ダブルクリック: 自動回転 ON/OFF<br>&#9917; = 2026 FIFAワールドカップ開催地（北米） | 各国旗 = 出場48ヵ国</div>
@@ -174,6 +199,20 @@ void main() {
 </div>
 
 <div id="mk-tooltip"></div>
+<div id="drawer-overlay"></div>
+<div id="left-drawer">
+  <div class="drw-hdr">
+    <span class="drw-title">&#9917; 2026 FIFA W杯 全72試合</span>
+    <button class="drw-close" id="drwClose">&#10005;</button>
+  </div>
+  <div id="drw-body"></div>
+</div>
+<div id="match-detail">
+  <div class="detail-flags" id="detail-flags"></div>
+  <div class="detail-time" id="detail-time"></div>
+  <div class="detail-date" id="detail-date"></div>
+  <div class="detail-hint">タップして閉じる</div>
+</div>
 <div id="schedule-panel">
   <div class="sp-hdr">
     <span class="sp-title">&#9917; 2026 FIFA W杯 試合スケジュール</span>
@@ -554,6 +593,83 @@ void main() {
   document.getElementById("spClose").addEventListener("click", function() {
     schedulePanel.classList.remove("open");
   });
+
+  var leftDrawer = document.getElementById("left-drawer");
+  var drwOverlay = document.getElementById("drawer-overlay");
+  var drwBody    = document.getElementById("drw-body");
+  var matchDetail = document.getElementById("match-detail");
+  var detailFlags = document.getElementById("detail-flags");
+  var detailTime  = document.getElementById("detail-time");
+  var detailDate  = document.getElementById("detail-date");
+  var drwBuilt = false;
+
+  function openDrawer() {
+    if (!drwBuilt) { buildDrawer(); drwBuilt = true; }
+    leftDrawer.classList.add("open");
+    drwOverlay.classList.add("open");
+    hideTooltip();
+    schedulePanel.classList.remove("open");
+  }
+  function closeDrawer() {
+    leftDrawer.classList.remove("open");
+    drwOverlay.classList.remove("open");
+  }
+  function showMatchDetail(a, b, date, time) {
+    detailFlags.textContent = a + "  " + b;
+    detailTime.textContent  = time + " UTC";
+    detailDate.textContent  = date.slice(5).replace("-", "/");
+    matchDetail.classList.add("open");
+  }
+  function closeMatchDetail() { matchDetail.classList.remove("open"); }
+
+  function buildDrawer() {
+    var PAIRS3 = [[0,1,"18:00"],[2,3,"21:00"],[0,2,"18:00"],[1,3,"21:00"],[0,3,"21:00"],[1,2,"18:00"]];
+    var allM = [];
+    GD.forEach(function(g) {
+      var ds = [g.d1, g.d2, g.d3];
+      PAIRS3.forEach(function(p, pi) {
+        var d = ds[Math.floor(pi/2)];
+        allM.push({date:d, time:p[2], a:g.t[p[0]], b:g.t[p[1]]});
+      });
+    });
+    allM.sort(function(x, y) { return (x.date + x.time) < (y.date + y.time) ? -1 : 1; });
+    var nowMs = Date.now();
+    var todayStr = new Date().toISOString().slice(0, 10);
+    var html = "";
+    var lastDate = "";
+    allM.forEach(function(m) {
+      if (m.date !== lastDate) {
+        var label = m.date === todayStr ? "TODAY  " + m.date.slice(5).replace("-","/") : m.date.slice(5).replace("-","/");
+        html += '<div class="drw-date">' + label + '</div>';
+        lastDate = m.date;
+      }
+      var koMs = new Date(m.date + "T" + m.time + ":00Z").getTime();
+      var isPast = koMs < nowMs - 110*60000;
+      var isLive = !isPast && koMs <= nowMs + 110*60000 && koMs >= nowMs - 110*60000;
+      var cls = "drw-row" + (isPast ? " drw-past" : "") + (isLive ? " drw-live" : "");
+      var enc_a = m.a.replace(/&/g,"&amp;");
+      var enc_b = m.b.replace(/&/g,"&amp;");
+      html += '<div class="' + cls + '" data-a="' + enc_a + '" data-b="' + enc_b + '" data-date="' + m.date + '" data-time="' + m.time + '"><span class="drw-flags">' + m.a + '  ' + m.b + '</span><span class="drw-meta">' + m.date.slice(5).replace("-","/") + '<br>' + m.time + ' UTC</span></div>';
+    });
+    drwBody.innerHTML = html;
+    drwBody.addEventListener("click", function(e) {
+      var row = e.target.closest(".drw-row");
+      if (!row) return;
+      showMatchDetail(row.dataset.a, row.dataset.b, row.dataset.date, row.dataset.time);
+    });
+    drwBody.addEventListener("touchend", function(e) {
+      var row = e.target.closest(".drw-row");
+      if (!row) return;
+      e.preventDefault();
+      showMatchDetail(row.dataset.a, row.dataset.b, row.dataset.date, row.dataset.time);
+    });
+  }
+
+  document.getElementById("drawer-open-btn").addEventListener("click", openDrawer);
+  document.getElementById("drwClose").addEventListener("click", closeDrawer);
+  drwOverlay.addEventListener("click", closeDrawer);
+  matchDetail.addEventListener("click", closeMatchDetail);
+  matchDetail.addEventListener("touchend", function(e) { e.preventDefault(); closeMatchDetail(); });
 
   var mkEls = [];
   for (var mi = 0; mi < wc2026.length; mi++) {
