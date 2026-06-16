@@ -67,9 +67,6 @@ void main() {
 <script id="fs" type="x-shader/x-fragment">
 precision mediump float;
 uniform sampler2D uTex;
-uniform sampler2D uCloud;
-uniform float uTime;
-uniform float uRotSpeed;
 varying vec2 vUV;
 varying float vDiff;
 varying float vSpec;
@@ -77,14 +74,11 @@ varying float vRim;
 void main() {
   vec4 earth = texture2D(uTex, vUV);
   float isOcean = clamp((earth.b - earth.r * 0.8 - earth.g * 0.3) * 3.0, 0.0, 1.0);
-  vec2 cuv = vec2(mod(vUV.x + uTime * uRotSpeed * 0.04, 1.0), vUV.y);
-  vec4 cloud = texture2D(uCloud, cuv);
-  float amb = 0.1;
+  float amb = 0.25;
   vec3 col = earth.rgb * (amb + vDiff * (1.0 - amb));
-  col += vec3(0.7, 0.85, 1.0) * vSpec * isOcean * 0.5;
-  col = mix(col, vec3(1.0), cloud.r * (amb + vDiff) * 0.85);
-  col += vec3(0.25, 0.55, 1.0) * vRim * 0.55;
-  col += vec3(0.1,  0.3,  0.9) * vRim * vRim * 0.3;
+  col += vec3(0.6, 0.8, 1.0) * vSpec * isOcean * 0.4;
+  col += vec3(0.25, 0.55, 1.0) * vRim * 0.5;
+  col += vec3(0.1,  0.3,  0.9) * vRim * vRim * 0.25;
   gl_FragColor = vec4(col, 1.0);
 }
 </script>
@@ -115,13 +109,6 @@ void main() {
         <span class="sval" id="rotSpdVal">1.0</span>
       </div>
     </div>
-    <div class="ctrl-row">
-      <div class="ctrl-label">雲の流れ速度</div>
-      <div class="slider-row">
-        <input type="range" id="cloudSpd" min="0" max="5" step="0.1" value="1">
-        <span class="sval" id="cloudSpdVal">1.0</span>
-      </div>
-    </div>
 
     <hr>
     <h2>実装ポイント</h2>
@@ -129,10 +116,6 @@ void main() {
     <div class="item">
       <div class="item-title">テクスチャ（NASA Blue Marble）</div>
       <div class="item-desc">NASA が公開する Blue Marble 2048×1024 の正距円筒図法画像を Workers Static Assets で配信。<code>/earth.jpg</code> として同一オリジンから取得するため CORS 不要。</div>
-    </div>
-    <div class="item">
-      <div class="item-title">雲レイヤー（Canvas 2D 手続き生成）</div>
-      <div class="item-desc">512×256 の Canvas にパーリン風ノイズで雲模様を生成。<code>uTime * uRotSpeed</code> で UV を横スクロールさせ、地表と異なる速度で流す。</div>
     </div>
     <div class="item">
       <div class="item-title">海洋スペキュラー</div>
@@ -211,16 +194,12 @@ void main() {
   gl.enableVertexAttribArray(aNorm); gl.vertexAttribPointer(aNorm, 3, gl.FLOAT, false, stride, 12);
   gl.enableVertexAttribArray(aUV);   gl.vertexAttribPointer(aUV,   2, gl.FLOAT, false, stride, 24);
 
-  var uMVP      = gl.getUniformLocation(prog, "uMVP");
-  var uModel    = gl.getUniformLocation(prog, "uModel");
-  var uLight    = gl.getUniformLocation(prog, "uLight");
-  var uTex      = gl.getUniformLocation(prog, "uTex");
-  var uCloud    = gl.getUniformLocation(prog, "uCloud");
-  var uTime     = gl.getUniformLocation(prog, "uTime");
-  var uRotSpeed = gl.getUniformLocation(prog, "uRotSpeed");
+  var uMVP   = gl.getUniformLocation(prog, "uMVP");
+  var uModel = gl.getUniformLocation(prog, "uModel");
+  var uLight = gl.getUniformLocation(prog, "uLight");
+  var uTex   = gl.getUniformLocation(prog, "uTex");
   gl.uniform3f(uLight, 2.0, 1.5, 2.5);
-  gl.uniform1i(uTex,   0);
-  gl.uniform1i(uCloud, 1);
+  gl.uniform1i(uTex, 0);
 
   // ── 地球テクスチャ（/earth.jpg からロード）──
   var texEarth = gl.createTexture();
@@ -245,52 +224,6 @@ void main() {
   };
   earthImg.src = "/earth.jpg";
 
-  // ── 雲テクスチャ（Canvas 2D 手続き生成）──
-  function makeCloudTex() {
-    var W = 512, H = 256;
-    var tc = document.createElement("canvas");
-    tc.width = W; tc.height = H;
-    var ctx = tc.getContext("2d");
-    ctx.fillStyle = "#000";
-    ctx.fillRect(0, 0, W, H);
-
-    function noise(x, y, f) {
-      var v = 0, amp = 1, tot = 0;
-      for (var o = 0; o < 5; o++) {
-        var sc = f * Math.pow(2, o);
-        v += amp * (Math.sin(x * sc + o * 7.3) * Math.cos(y * sc * 1.7 + o * 5.1) * 0.5 + 0.5);
-        tot += amp; amp *= 0.55;
-      }
-      return v / tot;
-    }
-    var id = ctx.createImageData(W, H);
-    var d  = id.data;
-    for (var py = 0; py < H; py++) {
-      var lat = (0.5 - py / H) * Math.PI;
-      for (var px = 0; px < W; px++) {
-        var lon = (px / W - 0.5) * Math.PI * 2;
-        var v = Math.max(0, noise(lon, lat, 3.5) - 0.45) * 3.5;
-        v *= Math.max(0, 1 - Math.abs(lat) / (Math.PI * 0.45));
-        v  = Math.min(1, v);
-        var i4 = (py * W + px) * 4;
-        d[i4] = d[i4+1] = d[i4+2] = Math.round(v * 255);
-        d[i4+3] = 255;
-      }
-    }
-    ctx.putImageData(id, 0, 0);
-    return tc;
-  }
-
-  var texCloud = gl.createTexture();
-  gl.activeTexture(gl.TEXTURE1);
-  gl.bindTexture(gl.TEXTURE_2D, texCloud);
-  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, makeCloudTex());
-  gl.generateMipmap(gl.TEXTURE_2D);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-
   // ── 行列ユーティリティ ──
   function m4()      { return new Float32Array(16); }
   function ident(m)  { for(var i=0;i<16;i++) m[i]=0; m[0]=m[5]=m[10]=m[15]=1; return m; }
@@ -312,12 +245,9 @@ void main() {
   var rotXv = 0.3, rotYv = 0.6, zoom = 3.2, autoRot = true;
   var drag = false, lx = 0, ly = 0, pinch0 = 0;
 
-  var rotSpdEl      = document.getElementById("rotSpd");
-  var rotSpdValEl   = document.getElementById("rotSpdVal");
-  var cloudSpdEl    = document.getElementById("cloudSpd");
-  var cloudSpdValEl = document.getElementById("cloudSpdVal");
-  rotSpdEl.addEventListener("input",   function(){ rotSpdValEl.textContent   = parseFloat(rotSpdEl.value).toFixed(1); });
-  cloudSpdEl.addEventListener("input", function(){ cloudSpdValEl.textContent = parseFloat(cloudSpdEl.value).toFixed(1); });
+  var rotSpdEl    = document.getElementById("rotSpd");
+  var rotSpdValEl = document.getElementById("rotSpdVal");
+  rotSpdEl.addEventListener("input", function(){ rotSpdValEl.textContent = parseFloat(rotSpdEl.value).toFixed(1); });
 
   canvas.addEventListener("mousedown",  function(e){ drag=true; lx=e.clientX; ly=e.clientY; });
   window.addEventListener("mouseup",    function(){ drag=false; });
@@ -344,8 +274,7 @@ void main() {
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
     var t = (now - startTime) * 0.001;
-    var spd  = parseFloat(rotSpdEl.value);
-    var cspd = parseFloat(cloudSpdEl.value);
+    var spd = parseFloat(rotSpdEl.value);
     if (autoRot) rotYv += 0.003 * spd;
 
     persp(proj, Math.PI / 4, W / H, 0.1, 100);
@@ -357,11 +286,8 @@ void main() {
 
     gl.uniformMatrix4fv(uMVP,   false, mvp);
     gl.uniformMatrix4fv(uModel, false, model);
-    gl.uniform1f(uTime,     t);
-    gl.uniform1f(uRotSpeed, cspd);
 
     gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, texEarth);
-    gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, texCloud);
 
     gl.drawElements(gl.TRIANGLES, idxs.length, gl.UNSIGNED_SHORT, 0);
 
