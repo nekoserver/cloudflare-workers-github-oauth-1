@@ -12,7 +12,7 @@ export function getWebGLSpherePage(username: string): string {
 <title>WebGL 地球儀</title>
 <style>
 * { box-sizing:border-box; margin:0; padding:0; }
-body { background:#000; color:#e6edf3; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; font-size:13px; height:100vh; display:flex; flex-direction:column; overflow:hidden; }
+body { background:#000; color:#e6edf3; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; font-size:13px; height:calc(100vh + 100px); display:flex; flex-direction:column; overflow:hidden; }
 .topbar { background:#0d1117; border-bottom:1px solid #30363d; padding:8px 18px; display:flex; align-items:center; gap:10px; flex-shrink:0; }
 .topbar a { color:#58a6ff; text-decoration:none; font-size:12px; }
 h1 { font-size:14px; font-weight:700; }
@@ -175,7 +175,7 @@ void main() {
     var sinT = Math.sin(theta), cosT = Math.cos(theta);
     for (var j = 0; j <= LON; j++) {
       var phi = j / LON * 2 * Math.PI;
-      var x = sinT * Math.cos(phi), y = cosT, z = sinT * Math.sin(phi);
+      var x = -sinT * Math.cos(phi), y = cosT, z = sinT * Math.sin(phi);
       verts.push(x, y, z, x, y, z, j / LON, i / LAT);
     }
   }
@@ -214,9 +214,9 @@ void main() {
     var doy = Math.floor((now.getTime() - start.getTime()) / 86400000);
     var sunLat = 23.45 * Math.PI / 180 * Math.sin(2 * Math.PI * (doy - 80) / 365);
     return [
-      -Math.cos(sunLat) * Math.cos(sunLon),
+      Math.cos(sunLat) * Math.cos(sunLon),
       Math.sin(sunLat),
-      -Math.cos(sunLat) * Math.sin(sunLon)
+      Math.cos(sunLat) * Math.sin(sunLon)
     ];
   }
 
@@ -335,11 +335,11 @@ void main() {
 
   function latLonTo3D(lat, lon) {
     var latR = lat * Math.PI / 180;
-    var lonPhi = lon * Math.PI / 180 + Math.PI;
+    var lonR = lon * Math.PI / 180;
     return [
-      Math.cos(latR) * Math.cos(lonPhi),
+      Math.cos(latR) * Math.cos(lonR),
       Math.sin(latR),
-      Math.cos(latR) * Math.sin(lonPhi)
+      -Math.cos(latR) * Math.sin(lonR)
     ];
   }
 
