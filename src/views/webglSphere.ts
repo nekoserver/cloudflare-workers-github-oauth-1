@@ -354,14 +354,14 @@ void main() {
 
   var tooltip = document.getElementById("mk-tooltip");
   var tooltipTimer = null;
+  var activeMarkerIdx = -1;
 
-  function showTooltip(el, name) {
-    tooltip.textContent = name;
-    tooltip.style.left = el.style.left;
-    tooltip.style.top  = el.style.top;
+  function showTooltip(idx) {
+    tooltip.textContent = wc2026[idx].name;
     tooltip.style.opacity = "1";
+    activeMarkerIdx = idx;
     if (tooltipTimer) clearTimeout(tooltipTimer);
-    tooltipTimer = setTimeout(function() { tooltip.style.opacity = "0"; tooltipTimer = null; }, 2500);
+    tooltipTimer = setTimeout(function() { tooltip.style.opacity = "0"; activeMarkerIdx = -1; tooltipTimer = null; }, 2500);
   }
 
   var mkEls = [];
@@ -372,16 +372,10 @@ void main() {
     mel.textContent = mdata.flag;
     mel.style.opacity = "0";
     mel.dataset.name = mdata.name;
-    (function(el) {
-      el.addEventListener("click", function(e) {
-        e.stopPropagation();
-        showTooltip(el, el.dataset.name);
-      });
-      el.addEventListener("touchend", function(e) {
-        e.stopPropagation();
-        showTooltip(el, el.dataset.name);
-      });
-    })(mel);
+    (function(idx) {
+      mel.addEventListener("click", function(e) { e.stopPropagation(); showTooltip(idx); });
+      mel.addEventListener("touchend", function(e) { e.stopPropagation(); showTooltip(idx); });
+    })(mi);
     markersDiv.appendChild(mel);
     mkEls.push({el: mel, pos3d: latLonTo3D(mdata.lat, mdata.lon)});
   }
@@ -431,14 +425,22 @@ void main() {
         var mcy = mvp[1]*mp[0] + mvp[5]*mp[1] + mvp[9]*mp[2]  + mvp[13];
         var mcw = mvp[3]*mp[0] + mvp[7]*mp[1] + mvp[11]*mp[2] + mvp[15];
         if (mcw > 0) {
-          mk.el.style.left = ((mcx/mcw+1)*0.5*W) + "px";
-          mk.el.style.top  = ((1-mcy/mcw)*0.5*H) + "px";
+          var sx = ((mcx/mcw+1)*0.5*W) + "px";
+          var sy = ((1-mcy/mcw)*0.5*H) + "px";
+          mk.el.style.left = sx;
+          mk.el.style.top  = sy;
           mk.el.style.opacity = "1";
+          if (mi === activeMarkerIdx) {
+            tooltip.style.left = sx;
+            tooltip.style.top  = sy;
+          }
         } else {
           mk.el.style.opacity = "0";
+          if (mi === activeMarkerIdx) tooltip.style.opacity = "0";
         }
       } else {
         mk.el.style.opacity = "0";
+        if (mi === activeMarkerIdx) tooltip.style.opacity = "0";
       }
     }
 
