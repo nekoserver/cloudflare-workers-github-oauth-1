@@ -73,10 +73,6 @@ void main() { gl_FragColor = vec4(vCol, 1.0); }
   <h1>ルービックキューブ</h1>
   <span class="badge">WebGL</span>
   <span style="flex:1"></span>
-  <a href="/webgl-sphere">地球儀</a>
-  <a href="/webgl-demo">3D Demo</a>
-  <a href="/settings">&#9881;</a>
-  <span style="color:#8b949e;font-size:11px">${safeUser}</span>
 </div>
 
 <div class="body">
