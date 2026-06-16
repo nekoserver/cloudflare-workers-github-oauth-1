@@ -32,13 +32,26 @@ canvas:active { cursor:grabbing; }
 #markers { position:absolute; top:0; left:0; width:100%; height:100%; pointer-events:none; overflow:hidden; }
 .mk { position:absolute; transform:translate(-50%,-50%); line-height:1; font-size:18px; text-shadow:0 1px 3px #000,0 0 8px rgba(0,0,0,0.9); pointer-events:auto; cursor:pointer; user-select:none; -webkit-user-select:none; }
 .mk-ball { font-size:28px; }
-#mk-tooltip { position:absolute; background:rgba(13,17,23,0.97); border:1px solid #58a6ff; border-radius:8px; padding:7px 12px; font-size:12px; color:#e6edf3; white-space:nowrap; pointer-events:none; opacity:0; transition:opacity .15s; z-index:10; transform:translate(-50%,-140%); line-height:1.7; }
+#mk-tooltip { position:fixed; background:rgba(13,17,23,0.97); border:1px solid #58a6ff; border-radius:8px; padding:7px 12px; font-size:12px; color:#e6edf3; white-space:nowrap; pointer-events:none; opacity:0; transition:opacity .15s; z-index:60; transform:translate(-50%,-110%); line-height:1.7; }
+#mk-tooltip.below { transform:translate(-50%, 14px); }
 #mk-tooltip .tt-name { font-weight:700; font-size:13px; }
-#mk-tooltip .tt-match { color:#8b949e; font-size:12px; margin-top:2px; }
+#mk-tooltip .tt-match { font-size:12px; margin-top:3px; }
 #mk-tooltip .tt-flags { font-size:18px; letter-spacing:2px; }
 #mk-tooltip .tt-time { color:#58a6ff; font-family:monospace; }
-#mk-tooltip .tt-past { color:#6e7681; }
+#mk-tooltip .tt-past { color:#555d68; }
 .mk.elim { filter:grayscale(0.85) brightness(0.28) saturate(0.15); }
+#schedule-panel { position:fixed; bottom:0; left:0; right:0; z-index:55; background:#0d1117; border-top:2px solid #58a6ff; border-radius:12px 12px 0 0; max-height:68vh; overflow-y:auto; transform:translateY(100%); transition:transform .3s ease; box-shadow:0 -4px 30px rgba(0,0,0,.8); }
+#schedule-panel.open { transform:translateY(0); }
+.sp-hdr { display:flex; align-items:center; justify-content:space-between; padding:12px 16px 8px; border-bottom:1px solid #30363d; position:sticky; top:0; background:#0d1117; z-index:1; }
+.sp-title { font-size:13px; font-weight:700; color:#58a6ff; }
+.sp-close { background:none; border:none; color:#8b949e; font-size:22px; line-height:1; cursor:pointer; padding:0 2px; }
+.sp-date { padding:8px 16px 4px; font-size:10px; font-weight:700; color:#8b949e; text-transform:uppercase; letter-spacing:1px; }
+.sp-match { display:flex; justify-content:space-between; align-items:center; padding:7px 16px; border-bottom:1px solid #21262d; }
+.sp-match:last-child { border-bottom:none; }
+.sp-flags { font-size:18px; letter-spacing:2px; }
+.sp-time { font-family:monospace; font-size:12px; color:#58a6ff; }
+.sp-match.sp-past { opacity:0.45; }
+.sp-match.sp-today { background:rgba(88,166,255,0.07); }
 .side { background:#0d1117; border-left:1px solid #30363d; overflow-y:auto; padding:16px; }
 .side h2 { font-size:11px; font-weight:700; color:#58a6ff; text-transform:uppercase; letter-spacing:.5px; margin-bottom:10px; }
 .item { margin-bottom:12px; }
@@ -57,6 +70,30 @@ input[type=range] { flex:1; accent-color:#58a6ff; }
 .canvas-ctrl-btn { background:rgba(13,17,23,0.88); border:1px solid #30363d; border-radius:6px; color:#e6edf3; font-size:12px; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; padding:6px 12px; cursor:pointer; white-space:nowrap; transition:background .15s,border-color .15s,color .15s; text-align:left; }
 .canvas-ctrl-btn:hover { background:rgba(13,17,23,1); border-color:#58a6ff; }
 .canvas-ctrl-btn.active { background:#0c2d4e; border-color:#58a6ff; color:#58a6ff; }
+#drawer-overlay { position:fixed; inset:0; z-index:68; background:rgba(0,0,0,.55); display:none; }
+#drawer-overlay.open { display:block; }
+#left-drawer { position:fixed; top:0; left:0; bottom:0; width:300px; max-width:90vw; z-index:69; background:#0d1117; border-right:2px solid #30363d; transform:translateX(-100%); transition:transform .3s ease; display:flex; flex-direction:column; }
+#left-drawer.open { transform:translateX(0); }
+.drw-hdr { display:flex; align-items:center; justify-content:space-between; padding:12px 14px 10px; border-bottom:1px solid #30363d; flex-shrink:0; background:#0d1117; }
+.drw-title { font-size:13px; font-weight:700; color:#58a6ff; }
+.drw-close { background:none; border:none; color:#8b949e; font-size:22px; line-height:1; cursor:pointer; padding:0 2px; }
+#drw-body { overflow-y:auto; flex:1; }
+.drw-date { padding:8px 14px 4px; font-size:10px; font-weight:700; color:#8b949e; letter-spacing:1px; text-transform:uppercase; position:sticky; top:0; background:#0d1117; border-bottom:1px solid #21262d; }
+.drw-row { display:flex; align-items:center; justify-content:space-between; padding:9px 14px; border-bottom:1px solid #21262d; cursor:pointer; gap:8px; -webkit-tap-highlight-color:transparent; }
+.drw-row:active { background:#21262d; }
+.drw-flags { font-size:22px; letter-spacing:3px; flex-shrink:0; }
+.drw-meta { font-family:monospace; font-size:11px; color:#58a6ff; text-align:right; white-space:nowrap; }
+.drw-row.drw-past { opacity:0.38; }
+.drw-row.drw-live { background:rgba(63,185,80,.08); border-left:3px solid #3fb950; }
+#match-detail { position:fixed; inset:0; z-index:80; background:rgba(0,0,0,.93); display:flex; flex-direction:column; align-items:center; justify-content:center; opacity:0; pointer-events:none; transition:opacity .2s; }
+#match-detail.open { opacity:1; pointer-events:auto; }
+.detail-flags { font-size:90px; letter-spacing:12px; line-height:1.1; text-align:center; }
+.detail-dash { font-size:40px; color:#30363d; margin:0 8px; }
+.detail-time { font-size:14px; color:#58a6ff; font-family:monospace; margin-top:16px; }
+.detail-date { font-size:12px; color:#8b949e; margin-top:6px; }
+.detail-hint { font-size:11px; color:#444d56; margin-top:28px; }
+#drawer-open-btn { position:absolute; left:10px; bottom:14px; z-index:5; background:rgba(13,17,23,0.88); border:1px solid #30363d; border-radius:6px; color:#e6edf3; font-size:12px; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; padding:6px 12px; cursor:pointer; white-space:nowrap; transition:background .15s,border-color .15s; }
+#drawer-open-btn:hover { background:rgba(13,17,23,1); border-color:#58a6ff; }
 </style>
 </head>
 <body>
@@ -120,12 +157,12 @@ void main() {
   <div class="canvas-wrap">
     <canvas id="c"></canvas>
     <div id="markers"></div>
-    <div id="mk-tooltip"></div>
     <div class="hud" id="hud">テクスチャ読み込み中...</div>
     <div class="canvas-ctrl-btns">
       <button class="canvas-ctrl-btn" id="btnAxisLock" title="地軸を画面に対して垂直に固定するモード">＋ 軸垂直固定</button>
       <button class="canvas-ctrl-btn" id="btnAutoRot" title="自転の停止/再開">⏸ 自転停止</button>
     </div>
+    <button id="drawer-open-btn" title="試合一覧を開く">&#9776; 試合一覧</button>
   </div>
   <div class="side">
     <div class="tip">ドラッグ: 回転 | ホイール: ズーム | ダブルクリック: 自動回転 ON/OFF<br>&#9917; = 2026 FIFAワールドカップ開催地（北米） | 各国旗 = 出場48ヵ国</div>
@@ -159,6 +196,29 @@ void main() {
       <div class="item-desc"><code>wrangler.toml</code> に <code>assets = &#123; directory = "./public" &#125;</code> を追記。<code>public/</code> 内のファイルが Worker を経由せず Cloudflare CDN から直配信される。</div>
     </div>
   </div>
+</div>
+
+<div id="mk-tooltip"></div>
+<div id="drawer-overlay"></div>
+<div id="left-drawer">
+  <div class="drw-hdr">
+    <span class="drw-title">&#9917; 2026 FIFA W杯 全72試合</span>
+    <button class="drw-close" id="drwClose">&#10005;</button>
+  </div>
+  <div id="drw-body"></div>
+</div>
+<div id="match-detail">
+  <div class="detail-flags" id="detail-flags"></div>
+  <div class="detail-time" id="detail-time"></div>
+  <div class="detail-date" id="detail-date"></div>
+  <div class="detail-hint">タップして閉じる</div>
+</div>
+<div id="schedule-panel">
+  <div class="sp-hdr">
+    <span class="sp-title">&#9917; 2026 FIFA W杯 試合スケジュール</span>
+    <button class="sp-close" id="spClose">&#10005;</button>
+  </div>
+  <div id="sp-body"></div>
 </div>
 
 <script>
@@ -456,29 +516,160 @@ void main() {
   }
 
   var tooltip = document.getElementById("mk-tooltip");
+  var schedulePanel = document.getElementById("schedule-panel");
+  var spBody = document.getElementById("sp-body");
   var activeMarkerIdx = -1;
+  var canvasRect = {left:0, top:0, width:0, height:0};
 
-  function showTooltip(idx) {
-    var d = wc2026[idx];
-    var nm = "<div class=\\"tt-name\\">" + d.name + "</div>";
-    var info = getNextMatch(d.flag);
-    var matchHtml = "";
-    if (info) {
-      var m = info.m;
-      var md = m.date.slice(5).replace("-", "/");
-      if (info.past) {
-        matchHtml = "<div class=\\"tt-match tt-past\\"><span class=\\"tt-flags\\">" + d.flag + " - " + m.opp + "</span>  " + md + " " + m.time + " UTC 終了</div>";
-      } else {
-        matchHtml = "<div class=\\"tt-match\\"><span class=\\"tt-flags\\">" + d.flag + " - " + m.opp + "</span>  " + md + " <span class=\\"tt-time\\">" + m.time + " UTC</span></div>";
-      }
-    } else if (d.ball) {
-      matchHtml = "<div class=\\"tt-match\\">2026 FIFA W杯 北米開催</div>";
+  function updateCanvasRect() { canvasRect = canvas.getBoundingClientRect(); }
+  window.addEventListener("resize", updateCanvasRect);
+  updateCanvasRect();
+
+  function hideTooltip() { tooltip.style.opacity = "0"; activeMarkerIdx = -1; }
+
+  function positionTooltip(vx, vy) {
+    var isNearTop = vy < canvasRect.top + 80;
+    tooltip.style.left = vx + "px";
+    tooltip.style.top  = vy + "px";
+    if (isNearTop) { tooltip.classList.add("below"); } else { tooltip.classList.remove("below"); }
+  }
+
+  function buildMatchHtml(flag, name) {
+    var nm = '<div class="tt-name">' + name + '</div>';
+    var info = getNextMatch(flag);
+    if (!info) return nm;
+    var m = info.m;
+    var md = m.date.slice(5).replace("-", "/");
+    if (info.past) {
+      return nm + '<div class="tt-match tt-past"><span class="tt-flags">' + flag + ' - ' + m.opp + '</span>  ' + md + ' ' + m.time + ' UTC 終了</div>';
     }
-    tooltip.innerHTML = nm + matchHtml;
+    return nm + '<div class="tt-match"><span class="tt-flags">' + flag + ' - ' + m.opp + '</span>  ' + md + ' <span class="tt-time">' + m.time + ' UTC</span></div>';
+  }
+
+  function showTooltip(idx, vx, vy) {
+    var d = wc2026[idx];
+    if (d.ball) { showSchedulePanel(); return; }
+    tooltip.innerHTML = buildMatchHtml(d.flag, d.name);
+    positionTooltip(vx, vy);
     tooltip.style.opacity = "1";
     activeMarkerIdx = idx;
-    if (!d.ball) flyTo(d.lat, d.lon);
+    flyTo(d.lat, d.lon);
   }
+
+  function showSchedulePanel() {
+    var todayStr = new Date().toISOString().slice(0, 10);
+    var allMatches = [];
+    var PAIRS2 = [[0,1,"18:00"],[2,3,"21:00"],[0,2,"18:00"],[1,3,"21:00"],[0,3,"21:00"],[1,2,"18:00"]];
+    GD.forEach(function(g) {
+      var ds = [g.d1, g.d2, g.d3];
+      PAIRS2.forEach(function(p, pi) {
+        var d = ds[Math.floor(pi/2)];
+        if (d >= todayStr) {
+          allMatches.push({date:d, time:p[2], a:g.t[p[0]], b:g.t[p[1]]});
+        }
+      });
+    });
+    allMatches.sort(function(a, b) { return (a.date + a.time) < (b.date + b.time) ? -1 : 1; });
+    var html = "";
+    var lastDate = "";
+    var nowMs = Date.now();
+    allMatches.forEach(function(m) {
+      if (m.date !== lastDate) {
+        var label = m.date === todayStr ? "本日 " + m.date.slice(5).replace("-","/") : m.date.slice(5).replace("-","/");
+        html += '<div class="sp-date">' + label + '</div>';
+        lastDate = m.date;
+      }
+      var koMs = new Date(m.date + "T" + m.time + ":00Z").getTime();
+      var isPast = koMs < nowMs - 110*60000;
+      var isTod  = m.date === todayStr;
+      var cls = "sp-match" + (isPast ? " sp-past" : "") + (isTod && !isPast ? " sp-today" : "");
+      html += '<div class="' + cls + '"><span class="sp-flags">' + m.a + ' - ' + m.b + '</span><span class="sp-time">' + m.time + ' UTC</span></div>';
+    });
+    spBody.innerHTML = html || '<div style="padding:16px;color:#8b949e">本日以降の試合はありません</div>';
+    schedulePanel.classList.add("open");
+    hideTooltip();
+  }
+
+  document.getElementById("spClose").addEventListener("click", function() {
+    schedulePanel.classList.remove("open");
+  });
+
+  var leftDrawer = document.getElementById("left-drawer");
+  var drwOverlay = document.getElementById("drawer-overlay");
+  var drwBody    = document.getElementById("drw-body");
+  var matchDetail = document.getElementById("match-detail");
+  var detailFlags = document.getElementById("detail-flags");
+  var detailTime  = document.getElementById("detail-time");
+  var detailDate  = document.getElementById("detail-date");
+  var drwBuilt = false;
+
+  function openDrawer() {
+    if (!drwBuilt) { buildDrawer(); drwBuilt = true; }
+    leftDrawer.classList.add("open");
+    drwOverlay.classList.add("open");
+    hideTooltip();
+    schedulePanel.classList.remove("open");
+  }
+  function closeDrawer() {
+    leftDrawer.classList.remove("open");
+    drwOverlay.classList.remove("open");
+  }
+  function showMatchDetail(a, b, date, time) {
+    detailFlags.textContent = a + "  " + b;
+    detailTime.textContent  = time + " UTC";
+    detailDate.textContent  = date.slice(5).replace("-", "/");
+    matchDetail.classList.add("open");
+  }
+  function closeMatchDetail() { matchDetail.classList.remove("open"); }
+
+  function buildDrawer() {
+    var PAIRS3 = [[0,1,"18:00"],[2,3,"21:00"],[0,2,"18:00"],[1,3,"21:00"],[0,3,"21:00"],[1,2,"18:00"]];
+    var allM = [];
+    GD.forEach(function(g) {
+      var ds = [g.d1, g.d2, g.d3];
+      PAIRS3.forEach(function(p, pi) {
+        var d = ds[Math.floor(pi/2)];
+        allM.push({date:d, time:p[2], a:g.t[p[0]], b:g.t[p[1]]});
+      });
+    });
+    allM.sort(function(x, y) { return (x.date + x.time) < (y.date + y.time) ? -1 : 1; });
+    var nowMs = Date.now();
+    var todayStr = new Date().toISOString().slice(0, 10);
+    var html = "";
+    var lastDate = "";
+    allM.forEach(function(m) {
+      if (m.date !== lastDate) {
+        var label = m.date === todayStr ? "TODAY  " + m.date.slice(5).replace("-","/") : m.date.slice(5).replace("-","/");
+        html += '<div class="drw-date">' + label + '</div>';
+        lastDate = m.date;
+      }
+      var koMs = new Date(m.date + "T" + m.time + ":00Z").getTime();
+      var isPast = koMs < nowMs - 110*60000;
+      var isLive = !isPast && koMs <= nowMs + 110*60000 && koMs >= nowMs - 110*60000;
+      var cls = "drw-row" + (isPast ? " drw-past" : "") + (isLive ? " drw-live" : "");
+      var enc_a = m.a.replace(/&/g,"&amp;");
+      var enc_b = m.b.replace(/&/g,"&amp;");
+      html += '<div class="' + cls + '" data-a="' + enc_a + '" data-b="' + enc_b + '" data-date="' + m.date + '" data-time="' + m.time + '"><span class="drw-flags">' + m.a + '  ' + m.b + '</span><span class="drw-meta">' + m.date.slice(5).replace("-","/") + '<br>' + m.time + ' UTC</span></div>';
+    });
+    drwBody.innerHTML = html;
+    drwBody.addEventListener("click", function(e) {
+      var row = e.target.closest(".drw-row");
+      if (!row) return;
+      showMatchDetail(row.dataset.a, row.dataset.b, row.dataset.date, row.dataset.time);
+    });
+    drwBody.addEventListener("touchend", function(e) {
+      var row = e.target.closest(".drw-row");
+      if (!row) return;
+      e.preventDefault();
+      showMatchDetail(row.dataset.a, row.dataset.b, row.dataset.date, row.dataset.time);
+    });
+  }
+
+  document.getElementById("drawer-open-btn").addEventListener("click", openDrawer);
+  document.getElementById("drwClose").addEventListener("click", closeDrawer);
+  drwOverlay.addEventListener("click", closeDrawer);
+  matchDetail.addEventListener("click", closeMatchDetail);
+  matchDetail.addEventListener("touchend", function(e) { e.preventDefault(); closeMatchDetail(); });
 
   var mkEls = [];
   for (var mi = 0; mi < wc2026.length; mi++) {
@@ -489,14 +680,23 @@ void main() {
     mel.style.opacity = "0";
     mel.dataset.name = mdata.name;
     (function(idx) {
-      mel.addEventListener("click", function(e) { e.stopPropagation(); showTooltip(idx); });
-      mel.addEventListener("touchend", function(e) { e.stopPropagation(); showTooltip(idx); });
+      mel.addEventListener("click", function(e) {
+        e.stopPropagation();
+        var r = mel.getBoundingClientRect();
+        showTooltip(idx, r.left + r.width/2, r.top + r.height/2);
+      });
+      mel.addEventListener("touchend", function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        var r = mel.getBoundingClientRect();
+        showTooltip(idx, r.left + r.width/2, r.top + r.height/2);
+      });
     })(mi);
     markersDiv.appendChild(mel);
     mkEls.push({el: mel, pos3d: latLonTo3D(mdata.lat, mdata.lon)});
   }
 
-  canvas.addEventListener("click", function() { tooltip.style.opacity = "0"; activeMarkerIdx = -1; });
+  canvas.addEventListener("click", function() { hideTooltip(); schedulePanel.classList.remove("open"); });
 
   gl.enable(gl.DEPTH_TEST);
 
@@ -550,22 +750,21 @@ void main() {
         var mcy = mvp[1]*mp[0] + mvp[5]*mp[1] + mvp[9]*mp[2]  + mvp[13];
         var mcw = mvp[3]*mp[0] + mvp[7]*mp[1] + mvp[11]*mp[2] + mvp[15];
         if (mcw > 0) {
-          var sx = ((mcx/mcw+1)*0.5*W) + "px";
-          var sy = ((1-mcy/mcw)*0.5*H) + "px";
-          mk.el.style.left = sx;
-          mk.el.style.top  = sy;
+          var px = (mcx/mcw+1)*0.5*W;
+          var py = (1-mcy/mcw)*0.5*H;
+          mk.el.style.left = px + "px";
+          mk.el.style.top  = py + "px";
           mk.el.style.opacity = "1";
           if (mi === activeMarkerIdx) {
-            tooltip.style.left = sx;
-            tooltip.style.top  = sy;
+            positionTooltip(canvasRect.left + px, canvasRect.top + py);
           }
         } else {
           mk.el.style.opacity = "0";
-          if (mi === activeMarkerIdx) tooltip.style.opacity = "0";
+          if (mi === activeMarkerIdx) hideTooltip();
         }
       } else {
         mk.el.style.opacity = "0";
-        if (mi === activeMarkerIdx) tooltip.style.opacity = "0";
+        if (mi === activeMarkerIdx) hideTooltip();
       }
     }
 
