@@ -292,7 +292,7 @@ void main() {
 
     var t = (now - startTime) * 0.001;
     var spd = parseFloat(rotSpdEl.value);
-    if (autoRot) rotYv -= 0.003 * spd;
+    if (autoRot) rotYv += 0.003 * spd;
 
     persp(proj, Math.PI / 4, W / H, 0.1, 100);
     trans(view, 0, 0, -zoom);
