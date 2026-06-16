@@ -353,15 +353,12 @@ void main() {
   }
 
   var tooltip = document.getElementById("mk-tooltip");
-  var tooltipTimer = null;
   var activeMarkerIdx = -1;
 
   function showTooltip(idx) {
     tooltip.textContent = wc2026[idx].name;
     tooltip.style.opacity = "1";
     activeMarkerIdx = idx;
-    if (tooltipTimer) clearTimeout(tooltipTimer);
-    tooltipTimer = setTimeout(function() { tooltip.style.opacity = "0"; activeMarkerIdx = -1; tooltipTimer = null; }, 2500);
   }
 
   var mkEls = [];
@@ -380,7 +377,7 @@ void main() {
     mkEls.push({el: mel, pos3d: latLonTo3D(mdata.lat, mdata.lon)});
   }
 
-  canvas.addEventListener("click", function() { tooltip.style.opacity = "0"; });
+  canvas.addEventListener("click", function() { tooltip.style.opacity = "0"; activeMarkerIdx = -1; });
 
   gl.enable(gl.DEPTH_TEST);
 
