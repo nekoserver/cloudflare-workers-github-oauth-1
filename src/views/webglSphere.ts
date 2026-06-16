@@ -253,9 +253,15 @@ void main() {
   }
   function rotX(m,r){ ident(m); var c=Math.cos(r),s=Math.sin(r); m[5]=c;m[6]=s;m[9]=-s;m[10]=c; return m; }
   function rotY(m,r){ ident(m); var c=Math.cos(r),s=Math.sin(r); m[0]=c;m[2]=-s;m[8]=s;m[10]=c; return m; }
+  function rotZ(m,r){ ident(m); var c=Math.cos(r),s=Math.sin(r); m[0]=c;m[1]=s;m[4]=-s;m[5]=c; return m; }
   function trans(m,x,y,z){ ident(m); m[12]=x;m[13]=y;m[14]=z; return m; }
 
-  var proj=m4(),view=m4(),model=m4(),rx=m4(),ry=m4(),tmp=m4(),mvp=m4();
+  // 地軸の傾き（23.4°固定）。視点の上下に関わらず軸方向は一定に保つ
+  var axialTilt = 23.4 * Math.PI / 180;
+  var ELEV_MAX = Math.PI / 2 - 0.02;
+  function clampElev(v){ return v < -ELEV_MAX ? -ELEV_MAX : (v > ELEV_MAX ? ELEV_MAX : v); }
+
+  var proj=m4(),view=m4(),model=m4(),rx=m4(),ry=m4(),tz=m4(),tmp=m4(),tmp2=m4(),mvp=m4();
   var rotXv = 0.3, rotYv = 0.6, zoom = 3.2, autoRot = true;
   var drag = false, lx = 0, ly = 0, pinch0 = 0;
 
@@ -265,18 +271,18 @@ void main() {
 
   canvas.addEventListener("mousedown",  function(e){ drag=true; lx=e.clientX; ly=e.clientY; });
   window.addEventListener("mouseup",    function(){ drag=false; });
-  window.addEventListener("mousemove",  function(e){ if(!drag)return; rotYv+=(e.clientX-lx)*0.008; rotXv+=(e.clientY-ly)*0.008; lx=e.clientX; ly=e.clientY; });
+  window.addEventListener("mousemove",  function(e){ if(!drag)return; rotYv+=(e.clientX-lx)*0.008; rotXv=clampElev(rotXv+(e.clientY-ly)*0.008); lx=e.clientX; ly=e.clientY; });
   canvas.addEventListener("wheel",      function(e){ e.preventDefault(); zoom=Math.max(1.6,Math.min(10,zoom+e.deltaY*0.01)); },{passive:false});
   canvas.addEventListener("dblclick",   function(){ autoRot=!autoRot; });
   canvas.addEventListener("touchstart", function(e){ e.preventDefault(); if(e.touches.length===1){drag=true;lx=e.touches[0].clientX;ly=e.touches[0].clientY;} if(e.touches.length===2){pinch0=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);} },{passive:false});
-  canvas.addEventListener("touchmove",  function(e){ e.preventDefault(); if(e.touches.length===1&&drag){rotYv+=(e.touches[0].clientX-lx)*0.008;rotXv+=(e.touches[0].clientY-ly)*0.008;lx=e.touches[0].clientX;ly=e.touches[0].clientY;} if(e.touches.length===2){var d=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);zoom=Math.max(1.6,Math.min(10,zoom-(d-pinch0)*0.02));pinch0=d;} },{passive:false});
+  canvas.addEventListener("touchmove",  function(e){ e.preventDefault(); if(e.touches.length===1&&drag){rotYv+=(e.touches[0].clientX-lx)*0.008;rotXv=clampElev(rotXv+(e.touches[0].clientY-ly)*0.008);lx=e.touches[0].clientX;ly=e.touches[0].clientY;} if(e.touches.length===2){var d=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);zoom=Math.max(1.6,Math.min(10,zoom-(d-pinch0)*0.02));pinch0=d;} },{passive:false});
   canvas.addEventListener("touchend",   function(){ drag=false; });
 
   gl.enable(gl.DEPTH_TEST);
   gl.enable(gl.CULL_FACE);
 
   var startTime = performance.now();
-  var frames = 0, lastFps = startTime, texReady = false;
+  var frames = 0, lastFps = startTime;
 
   function frame(now) {
     requestAnimationFrame(frame);
@@ -293,8 +299,11 @@ void main() {
 
     persp(proj, Math.PI / 4, W / H, 0.1, 100);
     trans(view, 0, 0, -zoom);
-    rotX(rx, rotXv); rotY(ry, rotYv);
-    mul(model, ry, rx);
+    // 自転(rotY=極軸まわり) → 地軸傾き(rotZ固定) → 視点仰角(rotX)
+    // この順序により極軸は視点に対して常に一定方向を保ち、回転で歪まない
+    rotY(ry, rotYv); rotZ(tz, axialTilt); rotX(rx, rotXv);
+    mul(tmp2, tz, ry);
+    mul(model, rx, tmp2);
     mul(tmp, view, model);
     mul(mvp, proj, tmp);
 
@@ -311,8 +320,8 @@ void main() {
     var dt = now - lastFps;
     if (dt >= 600) {
       var fps = Math.round(frames * 1000 / dt);
-      var now = new Date();
-      var utcH = now.getUTCHours() + now.getUTCMinutes() / 60;
+      var clock = new Date();
+      var utcH = clock.getUTCHours() + clock.getUTCMinutes() / 60;
       var sunLonDeg = Math.round((utcH - 12) * 15);
       var ew = sunLonDeg >= 0 ? "E" : "W";
       var label = earthImg.complete && earthImg.naturalWidth > 0 ? "" : "テクスチャ読込中 | ";
