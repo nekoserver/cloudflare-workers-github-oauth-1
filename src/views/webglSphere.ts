@@ -32,13 +32,26 @@ canvas:active { cursor:grabbing; }
 #markers { position:absolute; top:0; left:0; width:100%; height:100%; pointer-events:none; overflow:hidden; }
 .mk { position:absolute; transform:translate(-50%,-50%); line-height:1; font-size:18px; text-shadow:0 1px 3px #000,0 0 8px rgba(0,0,0,0.9); pointer-events:auto; cursor:pointer; user-select:none; -webkit-user-select:none; }
 .mk-ball { font-size:28px; }
-#mk-tooltip { position:absolute; background:rgba(13,17,23,0.97); border:1px solid #58a6ff; border-radius:8px; padding:7px 12px; font-size:12px; color:#e6edf3; white-space:nowrap; pointer-events:none; opacity:0; transition:opacity .15s; z-index:10; transform:translate(-50%,-140%); line-height:1.7; }
+#mk-tooltip { position:fixed; background:rgba(13,17,23,0.97); border:1px solid #58a6ff; border-radius:8px; padding:7px 12px; font-size:12px; color:#e6edf3; white-space:nowrap; pointer-events:none; opacity:0; transition:opacity .15s; z-index:60; transform:translate(-50%,-110%); line-height:1.7; }
+#mk-tooltip.below { transform:translate(-50%, 14px); }
 #mk-tooltip .tt-name { font-weight:700; font-size:13px; }
-#mk-tooltip .tt-match { color:#8b949e; font-size:12px; margin-top:2px; }
+#mk-tooltip .tt-match { font-size:12px; margin-top:3px; }
 #mk-tooltip .tt-flags { font-size:18px; letter-spacing:2px; }
 #mk-tooltip .tt-time { color:#58a6ff; font-family:monospace; }
-#mk-tooltip .tt-past { color:#6e7681; }
+#mk-tooltip .tt-past { color:#555d68; }
 .mk.elim { filter:grayscale(0.85) brightness(0.28) saturate(0.15); }
+#schedule-panel { position:fixed; bottom:0; left:0; right:0; z-index:55; background:#0d1117; border-top:2px solid #58a6ff; border-radius:12px 12px 0 0; max-height:68vh; overflow-y:auto; transform:translateY(100%); transition:transform .3s ease; box-shadow:0 -4px 30px rgba(0,0,0,.8); }
+#schedule-panel.open { transform:translateY(0); }
+.sp-hdr { display:flex; align-items:center; justify-content:space-between; padding:12px 16px 8px; border-bottom:1px solid #30363d; position:sticky; top:0; background:#0d1117; z-index:1; }
+.sp-title { font-size:13px; font-weight:700; color:#58a6ff; }
+.sp-close { background:none; border:none; color:#8b949e; font-size:22px; line-height:1; cursor:pointer; padding:0 2px; }
+.sp-date { padding:8px 16px 4px; font-size:10px; font-weight:700; color:#8b949e; text-transform:uppercase; letter-spacing:1px; }
+.sp-match { display:flex; justify-content:space-between; align-items:center; padding:7px 16px; border-bottom:1px solid #21262d; }
+.sp-match:last-child { border-bottom:none; }
+.sp-flags { font-size:18px; letter-spacing:2px; }
+.sp-time { font-family:monospace; font-size:12px; color:#58a6ff; }
+.sp-match.sp-past { opacity:0.45; }
+.sp-match.sp-today { background:rgba(88,166,255,0.07); }
 .side { background:#0d1117; border-left:1px solid #30363d; overflow-y:auto; padding:16px; }
 .side h2 { font-size:11px; font-weight:700; color:#58a6ff; text-transform:uppercase; letter-spacing:.5px; margin-bottom:10px; }
 .item { margin-bottom:12px; }
@@ -120,7 +133,6 @@ void main() {
   <div class="canvas-wrap">
     <canvas id="c"></canvas>
     <div id="markers"></div>
-    <div id="mk-tooltip"></div>
     <div class="hud" id="hud">テクスチャ読み込み中...</div>
     <div class="canvas-ctrl-btns">
       <button class="canvas-ctrl-btn" id="btnAxisLock" title="地軸を画面に対して垂直に固定するモード">＋ 軸垂直固定</button>
@@ -159,6 +171,15 @@ void main() {
       <div class="item-desc"><code>wrangler.toml</code> に <code>assets = &#123; directory = "./public" &#125;</code> を追記。<code>public/</code> 内のファイルが Worker を経由せず Cloudflare CDN から直配信される。</div>
     </div>
   </div>
+</div>
+
+<div id="mk-tooltip"></div>
+<div id="schedule-panel">
+  <div class="sp-hdr">
+    <span class="sp-title">&#9917; 2026 FIFA W杯 試合スケジュール</span>
+    <button class="sp-close" id="spClose">&#10005;</button>
+  </div>
+  <div id="sp-body"></div>
 </div>
 
 <script>
@@ -456,29 +477,83 @@ void main() {
   }
 
   var tooltip = document.getElementById("mk-tooltip");
+  var schedulePanel = document.getElementById("schedule-panel");
+  var spBody = document.getElementById("sp-body");
   var activeMarkerIdx = -1;
+  var canvasRect = {left:0, top:0, width:0, height:0};
 
-  function showTooltip(idx) {
-    var d = wc2026[idx];
-    var nm = "<div class=\\"tt-name\\">" + d.name + "</div>";
-    var info = getNextMatch(d.flag);
-    var matchHtml = "";
-    if (info) {
-      var m = info.m;
-      var md = m.date.slice(5).replace("-", "/");
-      if (info.past) {
-        matchHtml = "<div class=\\"tt-match tt-past\\"><span class=\\"tt-flags\\">" + d.flag + " - " + m.opp + "</span>  " + md + " " + m.time + " UTC 終了</div>";
-      } else {
-        matchHtml = "<div class=\\"tt-match\\"><span class=\\"tt-flags\\">" + d.flag + " - " + m.opp + "</span>  " + md + " <span class=\\"tt-time\\">" + m.time + " UTC</span></div>";
-      }
-    } else if (d.ball) {
-      matchHtml = "<div class=\\"tt-match\\">2026 FIFA W杯 北米開催</div>";
+  function updateCanvasRect() { canvasRect = canvas.getBoundingClientRect(); }
+  window.addEventListener("resize", updateCanvasRect);
+  updateCanvasRect();
+
+  function hideTooltip() { tooltip.style.opacity = "0"; activeMarkerIdx = -1; }
+
+  function positionTooltip(vx, vy) {
+    var isNearTop = vy < canvasRect.top + 80;
+    tooltip.style.left = vx + "px";
+    tooltip.style.top  = vy + "px";
+    if (isNearTop) { tooltip.classList.add("below"); } else { tooltip.classList.remove("below"); }
+  }
+
+  function buildMatchHtml(flag, name) {
+    var nm = '<div class="tt-name">' + name + '</div>';
+    var info = getNextMatch(flag);
+    if (!info) return nm;
+    var m = info.m;
+    var md = m.date.slice(5).replace("-", "/");
+    if (info.past) {
+      return nm + '<div class="tt-match tt-past"><span class="tt-flags">' + flag + ' - ' + m.opp + '</span>  ' + md + ' ' + m.time + ' UTC 終了</div>';
     }
-    tooltip.innerHTML = nm + matchHtml;
+    return nm + '<div class="tt-match"><span class="tt-flags">' + flag + ' - ' + m.opp + '</span>  ' + md + ' <span class="tt-time">' + m.time + ' UTC</span></div>';
+  }
+
+  function showTooltip(idx, vx, vy) {
+    var d = wc2026[idx];
+    if (d.ball) { showSchedulePanel(); return; }
+    tooltip.innerHTML = buildMatchHtml(d.flag, d.name);
+    positionTooltip(vx, vy);
     tooltip.style.opacity = "1";
     activeMarkerIdx = idx;
-    if (!d.ball) flyTo(d.lat, d.lon);
+    flyTo(d.lat, d.lon);
   }
+
+  function showSchedulePanel() {
+    var todayStr = new Date().toISOString().slice(0, 10);
+    var allMatches = [];
+    var PAIRS2 = [[0,1,"18:00"],[2,3,"21:00"],[0,2,"18:00"],[1,3,"21:00"],[0,3,"21:00"],[1,2,"18:00"]];
+    GD.forEach(function(g) {
+      var ds = [g.d1, g.d2, g.d3];
+      PAIRS2.forEach(function(p, pi) {
+        var d = ds[Math.floor(pi/2)];
+        if (d >= todayStr) {
+          allMatches.push({date:d, time:p[2], a:g.t[p[0]], b:g.t[p[1]]});
+        }
+      });
+    });
+    allMatches.sort(function(a, b) { return (a.date + a.time) < (b.date + b.time) ? -1 : 1; });
+    var html = "";
+    var lastDate = "";
+    var nowMs = Date.now();
+    allMatches.forEach(function(m) {
+      if (m.date !== lastDate) {
+        var label = m.date === todayStr ? "本日 " + m.date.slice(5).replace("-","/") : m.date.slice(5).replace("-","/");
+        html += '<div class="sp-date">' + label + '</div>';
+        lastDate = m.date;
+      }
+      var koMs = new Date(m.date + "T" + m.time + ":00Z").getTime();
+      var isPast = koMs < nowMs - 110*60000;
+      var isTod  = m.date === todayStr;
+      var cls = "sp-match" + (isPast ? " sp-past" : "") + (isTod && !isPast ? " sp-today" : "");
+      html += '<div class="' + cls + '"><span class="sp-flags">' + m.a + ' - ' + m.b + '</span><span class="sp-time">' + m.time + ' UTC</span></div>';
+    });
+    spBody.innerHTML = html || '<div style="padding:16px;color:#8b949e">本日以降の試合はありません</div>';
+    schedulePanel.classList.add("open");
+    hideTooltip();
+  }
+
+  document.getElementById("spClose").addEventListener("click", function() {
+    schedulePanel.classList.remove("open");
+  });
 
   var mkEls = [];
   for (var mi = 0; mi < wc2026.length; mi++) {
@@ -489,14 +564,23 @@ void main() {
     mel.style.opacity = "0";
     mel.dataset.name = mdata.name;
     (function(idx) {
-      mel.addEventListener("click", function(e) { e.stopPropagation(); showTooltip(idx); });
-      mel.addEventListener("touchend", function(e) { e.stopPropagation(); showTooltip(idx); });
+      mel.addEventListener("click", function(e) {
+        e.stopPropagation();
+        var r = mel.getBoundingClientRect();
+        showTooltip(idx, r.left + r.width/2, r.top + r.height/2);
+      });
+      mel.addEventListener("touchend", function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        var r = mel.getBoundingClientRect();
+        showTooltip(idx, r.left + r.width/2, r.top + r.height/2);
+      });
     })(mi);
     markersDiv.appendChild(mel);
     mkEls.push({el: mel, pos3d: latLonTo3D(mdata.lat, mdata.lon)});
   }
 
-  canvas.addEventListener("click", function() { tooltip.style.opacity = "0"; activeMarkerIdx = -1; });
+  canvas.addEventListener("click", function() { hideTooltip(); schedulePanel.classList.remove("open"); });
 
   gl.enable(gl.DEPTH_TEST);
 
@@ -550,22 +634,21 @@ void main() {
         var mcy = mvp[1]*mp[0] + mvp[5]*mp[1] + mvp[9]*mp[2]  + mvp[13];
         var mcw = mvp[3]*mp[0] + mvp[7]*mp[1] + mvp[11]*mp[2] + mvp[15];
         if (mcw > 0) {
-          var sx = ((mcx/mcw+1)*0.5*W) + "px";
-          var sy = ((1-mcy/mcw)*0.5*H) + "px";
-          mk.el.style.left = sx;
-          mk.el.style.top  = sy;
+          var px = (mcx/mcw+1)*0.5*W;
+          var py = (1-mcy/mcw)*0.5*H;
+          mk.el.style.left = px + "px";
+          mk.el.style.top  = py + "px";
           mk.el.style.opacity = "1";
           if (mi === activeMarkerIdx) {
-            tooltip.style.left = sx;
-            tooltip.style.top  = sy;
+            positionTooltip(canvasRect.left + px, canvasRect.top + py);
           }
         } else {
           mk.el.style.opacity = "0";
-          if (mi === activeMarkerIdx) tooltip.style.opacity = "0";
+          if (mi === activeMarkerIdx) hideTooltip();
         }
       } else {
         mk.el.style.opacity = "0";
-        if (mi === activeMarkerIdx) tooltip.style.opacity = "0";
+        if (mi === activeMarkerIdx) hideTooltip();
       }
     }
 
