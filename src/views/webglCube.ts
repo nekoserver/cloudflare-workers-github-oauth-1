@@ -76,7 +76,10 @@ void main() { gl_FragColor = vec4(vCol, 1.0); }
 </div>
 
 <div class="body">
-  <div class="canvas-wrap"><canvas id="c"></canvas></div>
+  <div class="canvas-wrap">
+    <canvas id="c"></canvas>
+    <canvas id="fc" style="position:absolute;bottom:10px;right:10px;border:1px solid #30363d;border-radius:4px;image-rendering:pixelated;display:none;"></canvas>
+  </div>
   <div class="side">
     <h2>サイズ</h2>
     <div class="seg" id="sizesel">
@@ -270,6 +273,41 @@ void main() { gl_FragColor = vec4(vCol, 1.0); }
   canvas.addEventListener("touchmove",function(e){e.preventDefault();if(e.touches.length===1&&drag){rotYv+=(e.touches[0].clientX-lx)*0.01;rotXv+=(e.touches[0].clientY-ly)*0.01;lx=e.touches[0].clientX;ly=e.touches[0].clientY;}else if(e.touches.length===2){var d=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);zoom=Math.max(1.5,Math.min(10,zoom-(d-pinch0)*0.02));pinch0=d;}},{passive:false});
   canvas.addEventListener("touchend",function(){drag=false;});
 
+  // --- 6面展開図 ---
+  var fc=document.getElementById("fc");
+  var fc2d=fc.getContext("2d");
+  var HEX=["#f0f0f0","#ffd800","#00a030","#1450e8","#e01010","#ff8000","#141414"];
+
+  function getCb(x,y,z) {
+    for (var i=0;i<cubies.length;i++) if(cubies[i].x===x&&cubies[i].y===y&&cubies[i].z===z) return cubies[i];
+    return null;
+  }
+
+  function drawFaces() {
+    var cell=Math.max(3,Math.min(14,Math.floor(44/N)));
+    var gap=cell>=5?1:0;
+    var cs=cell+gap;
+    var pad=4;
+    fc.width=4*N*cs+pad*2;
+    fc.height=3*N*cs+pad*2;
+    fc2d.fillStyle="#0d1117";
+    fc2d.fillRect(0,0,fc.width,fc.height);
+    var n1=N-1;
+    function df(nr,nc,gfn) {
+      var ox=pad+nc*N*cs,oy=pad+nr*N*cs;
+      for (var r=0;r<N;r++) for (var c=0;c<N;c++) {
+        fc2d.fillStyle=HEX[gfn(r,c)];
+        fc2d.fillRect(ox+c*cs,oy+r*cs,cell,cell);
+      }
+    }
+    df(0,1,function(r,c){return getCb(c,n1,r).c[2];});
+    df(1,0,function(r,c){return getCb(0,n1-r,c).c[1];});
+    df(1,1,function(r,c){return getCb(c,n1-r,n1).c[4];});
+    df(1,2,function(r,c){return getCb(n1,n1-r,n1-c).c[0];});
+    df(1,3,function(r,c){return getCb(n1-c,n1-r,0).c[5];});
+    df(2,1,function(r,c){return getCb(c,0,n1-r).c[3];});
+  }
+
   // Animation
   var moveQ=[],animMv=null,animProg=0,scramMvs=[],allMvs=[],mvIdx=0,solving=false;
   var stEl=document.getElementById("st"),mbEl=document.getElementById("mb");
@@ -307,6 +345,7 @@ void main() { gl_FragColor = vec4(vCol, 1.0); }
     allMvs=sm.map(function(m){return {axis:m.axis,layer:m.layer,dir:m.dir,n:mname(m.axis,m.layer,m.dir)};});
     moveQ=sm.slice(); mvIdx=0; solving=true;
     stEl.textContent="ソルブ中...";
+    fc.style.display="block"; drawFaces();
     updDisplay();
   }
 
@@ -314,6 +353,7 @@ void main() { gl_FragColor = vec4(vCol, 1.0); }
     if (animMv) return;
     initCube(N); scramMvs=[]; allMvs=[]; moveQ=[]; mvIdx=0; solving=false;
     stEl.textContent="ソルブ済み"; mbEl.innerHTML="";
+    fc.style.display="none";
   }
 
   document.getElementById("btnS").addEventListener("click",doScramble);
@@ -354,7 +394,8 @@ void main() { gl_FragColor = vec4(vCol, 1.0); }
         applyMove(animMv.axis,animMv.layer,animMv.dir);
         animMv=null; animProg=0; mvIdx++;
         updDisplay();
-        if (moveQ.length===0&&solving) { stEl.textContent="ソルブ完了！"; solving=false; scramMvs=[]; }
+        if (solving) drawFaces();
+        if (moveQ.length===0&&solving) { stEl.textContent="ソルブ完了！"; solving=false; scramMvs=[]; fc.style.display="none"; }
       } else { aa=animMv.axis;al=animMv.layer;ad=animMv.dir;ang=animProg*Math.PI/2; }
     } else if (moveQ.length>0) { animMv=moveQ.shift(); animProg=0; }
 
