@@ -47,7 +47,6 @@ attribute vec2 aUV;
 uniform mat4 uMVP;
 uniform mat4 uModel;
 uniform vec3 uLight;
-uniform float uTime;
 varying vec2 vUV;
 varying float vDiff;
 varying float vSpec;
@@ -76,19 +75,16 @@ varying float vDiff;
 varying float vSpec;
 varying float vRim;
 void main() {
-  vec2 uv = vUV;
-  vec4 earth = texture2D(uTex, uv);
-  float isOcean = earth.b - earth.r * 0.8 - earth.g * 0.3;
-  isOcean = clamp(isOcean * 3.0, 0.0, 1.0);
-  vec2 cuv = vec2(mod(uv.x + uTime * uRotSpeed * 0.15, 1.0), uv.y);
+  vec4 earth = texture2D(uTex, vUV);
+  float isOcean = clamp((earth.b - earth.r * 0.8 - earth.g * 0.3) * 3.0, 0.0, 1.0);
+  vec2 cuv = vec2(mod(vUV.x + uTime * uRotSpeed * 0.04, 1.0), vUV.y);
   vec4 cloud = texture2D(uCloud, cuv);
-  float amb = 0.12;
+  float amb = 0.1;
   vec3 col = earth.rgb * (amb + vDiff * (1.0 - amb));
-  col += vec3(0.7, 0.85, 1.0) * vSpec * isOcean * 0.6;
-  col = mix(col, vec3(1.0, 1.0, 1.0), cloud.r * (amb + vDiff) * 0.8);
-  vec3 atmColor = vec3(0.25, 0.55, 1.0);
-  col += atmColor * vRim * 0.5;
-  col += atmColor * vRim * vRim * 0.3;
+  col += vec3(0.7, 0.85, 1.0) * vSpec * isOcean * 0.5;
+  col = mix(col, vec3(1.0), cloud.r * (amb + vDiff) * 0.85);
+  col += vec3(0.25, 0.55, 1.0) * vRim * 0.55;
+  col += vec3(0.1,  0.3,  0.9) * vRim * vRim * 0.3;
   gl_FragColor = vec4(col, 1.0);
 }
 </script>
@@ -106,7 +102,7 @@ void main() {
 <div class="body">
   <div class="canvas-wrap">
     <canvas id="c"></canvas>
-    <div class="hud" id="hud">起動中...</div>
+    <div class="hud" id="hud">テクスチャ読み込み中...</div>
   </div>
   <div class="side">
     <div class="tip">ドラッグ: 回転 | ホイール: ズーム | ダブルクリック: 自動回転 ON/OFF</div>
@@ -131,24 +127,24 @@ void main() {
     <h2>実装ポイント</h2>
 
     <div class="item">
-      <div class="item-title">正距円筒図法テクスチャ（Canvas 2D）</div>
-      <div class="item-desc">1024×512 の Canvas に大陸ポリゴン・海洋グラデーション・氷冠を描画。外部画像を一切使わず完全手続き生成。</div>
+      <div class="item-title">テクスチャ（NASA Blue Marble）</div>
+      <div class="item-desc">NASA が公開する Blue Marble 2048×1024 の正距円筒図法画像を Workers Static Assets で配信。<code>/earth.jpg</code> として同一オリジンから取得するため CORS 不要。</div>
     </div>
     <div class="item">
-      <div class="item-title">雲レイヤー（別テクスチャ）</div>
-      <div class="item-desc">512×256 の Canvas 2D にパーリン風ノイズで雲模様を生成し、フラグメントシェーダーで UV オフセットを加えて地球の自転と異なる速度で流す。</div>
+      <div class="item-title">雲レイヤー（Canvas 2D 手続き生成）</div>
+      <div class="item-desc">512×256 の Canvas にパーリン風ノイズで雲模様を生成。<code>uTime * uRotSpeed</code> で UV を横スクロールさせ、地表と異なる速度で流す。</div>
     </div>
     <div class="item">
       <div class="item-title">海洋スペキュラー</div>
-      <div class="item-desc">テクスチャの B-R 差分で海陸を推定し、海面にのみブリン・フォン鏡面反射を適用。陸地ではスペキュラーが出ない。</div>
+      <div class="item-desc">フラグメントシェーダーでテクスチャの B-R 差分から海陸を推定し、海面にのみブリン・フォン鏡面反射を適用。</div>
     </div>
     <div class="item">
       <div class="item-title">大気散乱グロー</div>
-      <div class="item-desc">法線と視線の内積から縁付近を検出。青色 <code>vRim</code> 成分を2乗で積み重ねて地球縁のオレンジ→青の大気を模倣。</div>
+      <div class="item-desc">法線と視線内積の 3 乗から縁付近を検出。青を 2 段で加算し地球縁の大気発光を表現。</div>
     </div>
     <div class="item">
-      <div class="item-title">UV 球体 + デュアルテクスチャ</div>
-      <div class="item-desc">緯度 64 × 経度 128 分割の UV 球体。<code>uTex</code>（地表）と <code>uCloud</code>（雲）の 2 枚のテクスチャを <code>gl.TEXTURE0</code>/<code>gl.TEXTURE1</code> にバインドしてブレンド。</div>
+      <div class="item-title">Workers Static Assets</div>
+      <div class="item-desc"><code>wrangler.toml</code> に <code>assets = &#123; directory = "./public" &#125;</code> を追記。<code>public/</code> 内のファイルが Worker を経由せず Cloudflare CDN から直配信される。</div>
     </div>
   </div>
 </div>
@@ -226,95 +222,30 @@ void main() {
   gl.uniform1i(uTex,   0);
   gl.uniform1i(uCloud, 1);
 
-  // ── 地球テクスチャ（Canvas 2D）──
-  function makeEarthTex() {
-    var W = 1024, H = 512;
-    var tc = document.createElement("canvas");
-    tc.width = W; tc.height = H;
-    var ctx = tc.getContext("2d");
+  // ── 地球テクスチャ（/earth.jpg からロード）──
+  var texEarth = gl.createTexture();
+  gl.activeTexture(gl.TEXTURE0);
+  gl.bindTexture(gl.TEXTURE_2D, texEarth);
+  // ロード中プレースホルダー（深青 1x1）
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([10, 30, 70, 255]));
 
-    // 海洋グラデーション
-    var og = ctx.createLinearGradient(0, 0, 0, H);
-    og.addColorStop(0,    "#0a1a3a");
-    og.addColorStop(0.15, "#0d2b5e");
-    og.addColorStop(0.5,  "#0e3d6e");
-    og.addColorStop(0.85, "#0d2b5e");
-    og.addColorStop(1,    "#0a1a3a");
-    ctx.fillStyle = og;
-    ctx.fillRect(0, 0, W, H);
+  var earthImg = new Image();
+  earthImg.onload = function() {
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, texEarth);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, earthImg);
+    gl.generateMipmap(gl.TEXTURE_2D);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  };
+  earthImg.onerror = function() {
+    hud.textContent = "テクスチャ読み込み失敗 — /earth.jpg が見つかりません";
+  };
+  earthImg.src = "/earth.jpg";
 
-    function ll(lon, lat) { return [(lon + 180) / 360 * W, (90 - lat) / 180 * H]; }
-
-    function poly(pts, fill) {
-      ctx.beginPath();
-      var p0 = ll(pts[0][0], pts[0][1]);
-      ctx.moveTo(p0[0], p0[1]);
-      for (var k = 1; k < pts.length; k++) {
-        var pk = ll(pts[k][0], pts[k][1]);
-        ctx.lineTo(pk[0], pk[1]);
-      }
-      ctx.closePath();
-      ctx.fillStyle = fill;
-      ctx.fill();
-    }
-
-    var landColor = "#2d5a1b";
-    var landDark  = "#1e3d10";
-    var desert    = "#8b7344";
-    var tundra    = "#4a5e3a";
-
-    // 北アメリカ
-    poly([[-168,72],[-140,70],[-120,70],[-100,74],[-82,73],[-64,63],[-53,47],[-65,44],[-77,26],[-80,10],[-83,10],[-87,16],[-92,16],[-90,20],[-104,19],[-110,23],[-118,32],[-125,49],[-141,60],[-168,72]], landColor);
-    // グリーンランド
-    poly([[-50,83],[-20,83],[-17,75],[-30,68],[-45,68],[-52,72],[-50,83]], "#c8dce8");
-
-    // 南アメリカ
-    poly([[-80,12],[-62,8],[-52,4],[-36,-4],[-35,-10],[-40,-22],[-58,-34],[-65,-55],[-72,-48],[-70,-18],[-76,-2],[-80,12]], landColor);
-
-    // ヨーロッパ
-    poly([[-10,36],[30,36],[32,48],[15,55],[30,60],[22,65],[15,68],[5,58],[-10,48],[-10,36]], landColor);
-    // スカンジナビア半島
-    poly([[5,58],[32,60],[28,68],[15,70],[5,63],[5,58]], tundra);
-
-    // アフリカ
-    poly([[-18,37],[37,37],[43,12],[50,-12],[35,-35],[18,-35],[14,-17],[10,5],[-5,5],[-18,15],[-18,37]], landColor);
-    // サハラ（砂漠色）
-    poly([[-18,37],[37,37],[43,22],[35,22],[20,25],[10,22],[0,22],[-10,28],[-18,37]], desert);
-
-    // アジア（西〜中央）
-    poly([[26,47],[60,37],[70,22],[80,8],[100,2],[105,12],[110,20],[118,24],[120,30],[127,36],[129,43],[125,50],[110,53],[90,55],[70,55],[50,47],[26,47]], landColor);
-    // アラビア半島
-    poly([[37,30],[56,22],[58,14],[43,12],[37,22],[37,30]], desert);
-    // インド
-    poly([[66,22],[80,8],[84,8],[92,22],[80,28],[66,22]], landColor);
-
-    // 東アジア・日本付近（大まかに）
-    poly([[120,25],[122,30],[125,40],[129,43],[140,43],[142,38],[135,35],[120,25]], landColor);
-
-    // 日本（本州・簡略）
-    poly([[130,34],[132,35],[138,37],[141,40],[140,42],[132,38],[130,34]], "#3a6b23");
-
-    // 東南アジア半島
-    poly([[96,28],[105,22],[100,2],[95,4],[96,16],[96,28]], landColor);
-
-    // オーストラリア
-    poly([[113,-22],[130,-15],[137,-12],[142,-11],[148,-18],[153,-27],[150,-38],[138,-36],[117,-35],[113,-22]], landColor);
-    // 内陸砂漠
-    poly([[120,-22],[135,-20],[140,-28],[135,-35],[120,-30],[120,-22]], desert);
-
-    // 南極
-    var antY = ll(0, -65)[1];
-    ctx.fillStyle = "#ddeeff";
-    ctx.fillRect(0, antY, W, H - antY);
-
-    // 北極（上端）
-    ctx.fillStyle = "#ddeeff";
-    ctx.fillRect(0, 0, W, ll(0, 72)[1]);
-
-    return tc;
-  }
-
-  // ── 雲テクスチャ（パーリン風ノイズ）──
+  // ── 雲テクスチャ（Canvas 2D 手続き生成）──
   function makeCloudTex() {
     var W = 512, H = 256;
     var tc = document.createElement("canvas");
@@ -323,64 +254,42 @@ void main() {
     ctx.fillStyle = "#000";
     ctx.fillRect(0, 0, W, H);
 
-    // 簡易ノイズでまだら雲
     function noise(x, y, f) {
       var v = 0, amp = 1, tot = 0;
       for (var o = 0; o < 5; o++) {
         var sc = f * Math.pow(2, o);
         v += amp * (Math.sin(x * sc + o * 7.3) * Math.cos(y * sc * 1.7 + o * 5.1) * 0.5 + 0.5);
-        tot += amp;
-        amp *= 0.55;
+        tot += amp; amp *= 0.55;
       }
       return v / tot;
     }
-
     var id = ctx.createImageData(W, H);
     var d  = id.data;
     for (var py = 0; py < H; py++) {
       var lat = (0.5 - py / H) * Math.PI;
       for (var px = 0; px < W; px++) {
         var lon = (px / W - 0.5) * Math.PI * 2;
-        var v = noise(lon, lat, 3.5);
-        v = Math.max(0, v - 0.45) * 3.5;
-        var latFade = Math.max(0, 1 - Math.abs(lat) / (Math.PI * 0.45));
-        v *= latFade;
-        v = Math.min(1, v);
-        var idx4 = (py * W + px) * 4;
-        d[idx4]   = Math.round(v * 255);
-        d[idx4+1] = Math.round(v * 255);
-        d[idx4+2] = Math.round(v * 255);
-        d[idx4+3] = 255;
+        var v = Math.max(0, noise(lon, lat, 3.5) - 0.45) * 3.5;
+        v *= Math.max(0, 1 - Math.abs(lat) / (Math.PI * 0.45));
+        v  = Math.min(1, v);
+        var i4 = (py * W + px) * 4;
+        d[i4] = d[i4+1] = d[i4+2] = Math.round(v * 255);
+        d[i4+3] = 255;
       }
     }
     ctx.putImageData(id, 0, 0);
-
-    // ガウスぼかし
-    ctx.filter = "blur(3px)";
-    var tmp = document.createElement("canvas");
-    tmp.width = W; tmp.height = H;
-    tmp.getContext("2d").drawImage(tc, 0, 0);
-    ctx.drawImage(tmp, 0, 0);
-    ctx.filter = "none";
     return tc;
   }
 
-  function uploadTex(slot, imgCanvas, repeat) {
-    var t = gl.createTexture();
-    gl.activeTexture(slot);
-    gl.bindTexture(gl.TEXTURE_2D, t);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, imgCanvas);
-    gl.generateMipmap(gl.TEXTURE_2D);
-    var wrap = repeat ? gl.REPEAT : gl.CLAMP_TO_EDGE;
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, wrap);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-    return t;
-  }
-
-  var texEarth = uploadTex(gl.TEXTURE0, makeEarthTex(), true);
-  var texCloud = uploadTex(gl.TEXTURE1, makeCloudTex(), true);
+  var texCloud = gl.createTexture();
+  gl.activeTexture(gl.TEXTURE1);
+  gl.bindTexture(gl.TEXTURE_2D, texCloud);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, makeCloudTex());
+  gl.generateMipmap(gl.TEXTURE_2D);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
 
   // ── 行列ユーティリティ ──
   function m4()      { return new Float32Array(16); }
@@ -403,12 +312,11 @@ void main() {
   var rotXv = 0.3, rotYv = 0.6, zoom = 3.2, autoRot = true;
   var drag = false, lx = 0, ly = 0, pinch0 = 0;
 
-  // スライダー
-  var rotSpdEl    = document.getElementById("rotSpd");
-  var rotSpdValEl = document.getElementById("rotSpdVal");
-  var cloudSpdEl  = document.getElementById("cloudSpd");
+  var rotSpdEl      = document.getElementById("rotSpd");
+  var rotSpdValEl   = document.getElementById("rotSpdVal");
+  var cloudSpdEl    = document.getElementById("cloudSpd");
   var cloudSpdValEl = document.getElementById("cloudSpdVal");
-  rotSpdEl.addEventListener("input", function(){ rotSpdValEl.textContent = parseFloat(rotSpdEl.value).toFixed(1); });
+  rotSpdEl.addEventListener("input",   function(){ rotSpdValEl.textContent   = parseFloat(rotSpdEl.value).toFixed(1); });
   cloudSpdEl.addEventListener("input", function(){ cloudSpdValEl.textContent = parseFloat(cloudSpdEl.value).toFixed(1); });
 
   canvas.addEventListener("mousedown",  function(e){ drag=true; lx=e.clientX; ly=e.clientY; });
@@ -424,7 +332,7 @@ void main() {
   gl.enable(gl.CULL_FACE);
 
   var startTime = performance.now();
-  var frames = 0, lastFps = startTime;
+  var frames = 0, lastFps = startTime, texReady = false;
 
   function frame(now) {
     requestAnimationFrame(frame);
@@ -436,7 +344,7 @@ void main() {
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
     var t = (now - startTime) * 0.001;
-    var spd = parseFloat(rotSpdEl.value);
+    var spd  = parseFloat(rotSpdEl.value);
     var cspd = parseFloat(cloudSpdEl.value);
     if (autoRot) rotYv += 0.003 * spd;
 
@@ -461,7 +369,11 @@ void main() {
     var dt = now - lastFps;
     if (dt >= 600) {
       var fps = Math.round(frames * 1000 / dt);
-      hud.textContent = "FPS: " + fps + "  |  " + (autoRot ? "自動回転 ON" : "自動回転 OFF (ダブルクリックで切替)");
+      if (earthImg.complete && earthImg.naturalWidth > 0) {
+        hud.textContent = "FPS: " + fps + "  |  " + (autoRot ? "自動回転 ON" : "自動回転 OFF");
+      } else {
+        hud.textContent = "テクスチャ読み込み中... FPS: " + fps;
+      }
       frames = 0; lastFps = now;
     }
   }
