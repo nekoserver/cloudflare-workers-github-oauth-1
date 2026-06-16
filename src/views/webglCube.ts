@@ -84,6 +84,8 @@ void main() { gl_FragColor = vec4(vCol, 1.0); }
       <div class="seg-btn active" data-n="3">3×3</div>
       <div class="seg-btn" data-n="4">4×4</div>
       <div class="seg-btn" data-n="5">5×5</div>
+      <div class="seg-btn" data-n="7">7×7</div>
+      <div class="seg-btn" data-n="11">11×11</div>
     </div>
     <h2>操作</h2>
     <div class="btn-row">
@@ -289,7 +291,7 @@ void main() { gl_FragColor = vec4(vCol, 1.0); }
   function doScramble() {
     if (animMv) return;
     initCube(N);
-    var len=N<=2?12:N===3?20:N===4?30:40;
+    var len=N<=2?12:N===3?20:N===4?30:N<=5?40:N<=7?60:100;
     scramMvs=genScramble(len);
     allMvs=scramMvs.map(function(m){return {axis:m.axis,layer:m.layer,dir:m.dir,n:mname(m.axis,m.layer,m.dir)};});
     for (var i=0;i<scramMvs.length;i++) applyMove(scramMvs[i].axis,scramMvs[i].layer,scramMvs[i].dir);
