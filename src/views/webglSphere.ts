@@ -583,7 +583,7 @@ void main() {
 
   function flyTo(lat, lon) {
     var ty = -(Math.PI/2 + lon * Math.PI/180);
-    var tx = -lat * Math.PI/180;
+    var tx = lat * Math.PI/180;
     var dy = ty - rotYv;
     while (dy > Math.PI) dy -= 2*Math.PI;
     while (dy < -Math.PI) dy += 2*Math.PI;
