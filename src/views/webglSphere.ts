@@ -28,7 +28,7 @@ h1 { font-size:14px; font-weight:700; }
 .canvas-wrap { position:relative; background:#000010; overflow:hidden; }
 canvas { position:absolute; inset:0; width:100%; height:100%; cursor:grab; touch-action:none; display:block; }
 canvas:active { cursor:grabbing; }
-.hud { position:absolute; top:10px; left:10px; background:rgba(0,0,0,.7); border:1px solid #30363d; border-radius:6px; padding:6px 10px; font-size:11px; font-family:monospace; color:#58a6ff; line-height:1.9; pointer-events:none; }
+.hud { position:absolute; bottom:10px; left:10px; background:rgba(0,0,0,.7); border:1px solid #30363d; border-radius:6px; padding:6px 10px; font-size:11px; font-family:monospace; color:#58a6ff; line-height:1.9; pointer-events:none; }
 #markers { position:absolute; top:0; left:0; width:100%; height:100%; pointer-events:none; overflow:hidden; }
 .mk { position:absolute; transform:translate(-50%,-50%); line-height:1; font-size:18px; text-shadow:0 1px 3px #000,0 0 8px rgba(0,0,0,0.9); pointer-events:auto; cursor:pointer; user-select:none; -webkit-user-select:none; }
 .mk-ball { font-size:28px; }
@@ -66,7 +66,7 @@ hr { border:none; border-top:1px solid #30363d; margin:12px 0; }
 .slider-row { display:flex; align-items:center; gap:8px; }
 input[type=range] { flex:1; accent-color:#58a6ff; }
 .sval { font-family:monospace; font-size:11px; color:#58a6ff; min-width:36px; }
-.canvas-ctrl-btns { position:absolute; bottom:14px; right:14px; display:flex; flex-direction:column; gap:6px; z-index:5; }
+.canvas-ctrl-btns { position:absolute; top:10px; right:10px; display:flex; flex-direction:row; gap:6px; z-index:5; }
 .canvas-ctrl-btn { background:rgba(13,17,23,0.88); border:1px solid #30363d; border-radius:6px; color:#e6edf3; font-size:12px; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; padding:6px 12px; cursor:pointer; white-space:nowrap; transition:background .15s,border-color .15s,color .15s; text-align:left; }
 .canvas-ctrl-btn:hover { background:rgba(13,17,23,1); border-color:#58a6ff; }
 .canvas-ctrl-btn.active { background:#0c2d4e; border-color:#58a6ff; color:#58a6ff; }
@@ -92,7 +92,7 @@ input[type=range] { flex:1; accent-color:#58a6ff; }
 .detail-time { font-size:14px; color:#58a6ff; font-family:monospace; margin-top:16px; }
 .detail-date { font-size:12px; color:#8b949e; margin-top:6px; }
 .detail-hint { font-size:11px; color:#444d56; margin-top:28px; }
-#drawer-open-btn { position:absolute; left:10px; bottom:14px; z-index:5; background:rgba(13,17,23,0.88); border:1px solid #30363d; border-radius:6px; color:#e6edf3; font-size:12px; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; padding:6px 12px; cursor:pointer; white-space:nowrap; transition:background .15s,border-color .15s; }
+#drawer-open-btn { position:absolute; left:10px; top:10px; z-index:5; background:rgba(13,17,23,0.88); border:1px solid #30363d; border-radius:6px; color:#e6edf3; font-size:12px; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; padding:6px 12px; cursor:pointer; white-space:nowrap; transition:background .15s,border-color .15s; }
 #drawer-open-btn:hover { background:rgba(13,17,23,1); border-color:#58a6ff; }
 </style>
 </head>
