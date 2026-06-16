@@ -312,7 +312,7 @@ void main() { gl_FragColor = vec4(vCol, 1.0); }
   }
 
   // Animation
-  var moveQ=[],animMv=null,animProg=0,scramMvs=[],allMvs=[],mvIdx=0,solving=false;
+  var moveQ=[],animMv=null,animProg=0,scramMvs=[],allMvs=[],mvIdx=0,solving=false,scrambling=false;
   var stEl=document.getElementById("st"),mbEl=document.getElementById("mb");
   var spdEl=document.getElementById("spd"),spdvEl=document.getElementById("spdv");
   spdEl.addEventListener("input",function(){spdvEl.textContent=spdEl.value;});
@@ -332,30 +332,29 @@ void main() { gl_FragColor = vec4(vCol, 1.0); }
   function doScramble() {
     if (animMv) return;
     initCube(N);
-    var len=N<=2?12:N===3?20:N===4?30:N<=5?40:N<=7?60:100;
+    var len=Math.floor(Math.random()*100)+1;
     scramMvs=genScramble(len);
     allMvs=scramMvs.map(function(m){return {axis:m.axis,layer:m.layer,dir:m.dir,n:mname(m.axis,m.layer,m.dir)};});
-    for (var i=0;i<scramMvs.length;i++) applyMove(scramMvs[i].axis,scramMvs[i].layer,scramMvs[i].dir);
-    moveQ=[]; mvIdx=allMvs.length; solving=false;
-    stEl.textContent="スクランブル済み ("+len+"手)";
+    moveQ=scramMvs.slice(); mvIdx=0; scrambling=true; solving=false;
+    stEl.textContent="スクランブル中... 0/"+len+"手";
     fc.style.display="block"; drawFaces();
     updDisplay();
   }
 
   function doSolve() {
-    if (animMv||scramMvs.length===0) return;
+    if (animMv||scramMvs.length===0||scrambling) return;
     var sm=[];
     for (var i=scramMvs.length-1;i>=0;i--) sm.push({axis:scramMvs[i].axis,layer:scramMvs[i].layer,dir:-scramMvs[i].dir});
     allMvs=sm.map(function(m){return {axis:m.axis,layer:m.layer,dir:m.dir,n:mname(m.axis,m.layer,m.dir)};});
-    moveQ=sm.slice(); mvIdx=0; solving=true;
-    stEl.textContent="ソルブ中...";
+    moveQ=sm.slice(); mvIdx=0; solving=true; scrambling=false;
+    stEl.textContent="ソルブ中... 0/"+scramMvs.length+"手";
     fc.style.display="block"; drawFaces();
     updDisplay();
   }
 
   function doReset() {
     if (animMv) return;
-    initCube(N); scramMvs=[]; allMvs=[]; moveQ=[]; mvIdx=0; solving=false;
+    initCube(N); scramMvs=[]; allMvs=[]; moveQ=[]; mvIdx=0; solving=false; scrambling=false;
     stEl.textContent="ソルブ済み"; mbEl.innerHTML="";
     fc.style.display="none";
   }
@@ -397,9 +396,15 @@ void main() { gl_FragColor = vec4(vCol, 1.0); }
       if (animProg>=1) {
         applyMove(animMv.axis,animMv.layer,animMv.dir);
         animMv=null; animProg=0; mvIdx++;
-        updDisplay();
-        if (solving) drawFaces();
-        if (moveQ.length===0&&solving) { stEl.textContent="ソルブ完了！"; solving=false; scramMvs=[]; fc.style.display="none"; }
+        updDisplay(); drawFaces();
+        var total=allMvs.length;
+        if (scrambling) {
+          if (moveQ.length===0) { scrambling=false; stEl.textContent="スクランブル完了 ("+total+"手)"; }
+          else stEl.textContent="スクランブル中... "+mvIdx+"/"+total+"手";
+        } else if (solving) {
+          if (moveQ.length===0) { solving=false; scramMvs=[]; stEl.textContent="ソルブ完了！"; fc.style.display="none"; }
+          else stEl.textContent="ソルブ中... "+mvIdx+"/"+total+"手";
+        }
       } else { aa=animMv.axis;al=animMv.layer;ad=animMv.dir;ang=animProg*Math.PI/2; }
     } else if (moveQ.length>0) { animMv=moveQ.shift(); animProg=0; }
 
