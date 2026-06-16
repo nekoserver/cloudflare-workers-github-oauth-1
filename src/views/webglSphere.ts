@@ -47,6 +47,10 @@ hr { border:none; border-top:1px solid #30363d; margin:12px 0; }
 .slider-row { display:flex; align-items:center; gap:8px; }
 input[type=range] { flex:1; accent-color:#58a6ff; }
 .sval { font-family:monospace; font-size:11px; color:#58a6ff; min-width:36px; }
+.canvas-ctrl-btns { position:absolute; bottom:14px; right:14px; display:flex; flex-direction:column; gap:6px; z-index:5; }
+.canvas-ctrl-btn { background:rgba(13,17,23,0.88); border:1px solid #30363d; border-radius:6px; color:#e6edf3; font-size:12px; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; padding:6px 12px; cursor:pointer; white-space:nowrap; transition:background .15s,border-color .15s,color .15s; text-align:left; }
+.canvas-ctrl-btn:hover { background:rgba(13,17,23,1); border-color:#58a6ff; }
+.canvas-ctrl-btn.active { background:#0c2d4e; border-color:#58a6ff; color:#58a6ff; }
 </style>
 </head>
 <body>
@@ -112,6 +116,10 @@ void main() {
     <div id="markers"></div>
     <div id="mk-tooltip"></div>
     <div class="hud" id="hud">テクスチャ読み込み中...</div>
+    <div class="canvas-ctrl-btns">
+      <button class="canvas-ctrl-btn" id="btnAxisLock" title="地軸を画面に対して垂直に固定するモード">＋ 軸垂直固定</button>
+      <button class="canvas-ctrl-btn" id="btnAutoRot" title="自転の停止/再開">⏸ 自転停止</button>
+    </div>
   </div>
   <div class="side">
     <div class="tip">ドラッグ: 回転 | ホイール: ズーム | ダブルクリック: 自動回転 ON/OFF<br>&#9917; = 2026 FIFAワールドカップ開催地（北米） | 各国旗 = 出場48ヵ国</div>
@@ -280,17 +288,40 @@ void main() {
   var rotXv = 0.3, rotYv = 0.6, zoom = 3.2, autoRot = true;
   var drag = false, lx = 0, ly = 0, pinch0 = 0;
 
+  var axisLocked = false;
+
+  var btnAxisLock = document.getElementById("btnAxisLock");
+  var btnAutoRot  = document.getElementById("btnAutoRot");
+
+  btnAxisLock.addEventListener("click", function() {
+    axisLocked = !axisLocked;
+    if (axisLocked) {
+      rotXv = 0;
+      btnAxisLock.classList.add("active");
+      btnAxisLock.textContent = "＋ 軸固定中";
+    } else {
+      btnAxisLock.classList.remove("active");
+      btnAxisLock.textContent = "＋ 軸垂直固定";
+    }
+  });
+
+  btnAutoRot.addEventListener("click", function() {
+    autoRot = !autoRot;
+    btnAutoRot.textContent = autoRot ? "⏸ 自転停止" : "▶ 回転";
+    if (autoRot) { btnAutoRot.classList.remove("active"); } else { btnAutoRot.classList.add("active"); }
+  });
+
   var rotSpdEl    = document.getElementById("rotSpd");
   var rotSpdValEl = document.getElementById("rotSpdVal");
   rotSpdEl.addEventListener("input", function(){ rotSpdValEl.textContent = parseFloat(rotSpdEl.value).toFixed(1); });
 
   canvas.addEventListener("mousedown",  function(e){ drag=true; lx=e.clientX; ly=e.clientY; });
   window.addEventListener("mouseup",    function(){ drag=false; });
-  window.addEventListener("mousemove",  function(e){ if(!drag)return; rotYv+=(e.clientX-lx)*0.008; rotXv=clampElev(rotXv+(e.clientY-ly)*0.008); lx=e.clientX; ly=e.clientY; });
+  window.addEventListener("mousemove",  function(e){ if(!drag)return; rotYv+=(e.clientX-lx)*0.008; if(!axisLocked){ rotXv=clampElev(rotXv+(e.clientY-ly)*0.008); } lx=e.clientX; ly=e.clientY; });
   canvas.addEventListener("wheel",      function(e){ e.preventDefault(); zoom=Math.max(1.6,Math.min(10,zoom+e.deltaY*0.01)); },{passive:false});
-  canvas.addEventListener("dblclick",   function(){ autoRot=!autoRot; });
+  canvas.addEventListener("dblclick",   function(){ autoRot=!autoRot; btnAutoRot.textContent = autoRot ? "⏸ 自転停止" : "▶ 回転"; if(autoRot){btnAutoRot.classList.remove("active");}else{btnAutoRot.classList.add("active");} });
   canvas.addEventListener("touchstart", function(e){ e.preventDefault(); if(e.touches.length===1){drag=true;lx=e.touches[0].clientX;ly=e.touches[0].clientY;} if(e.touches.length===2){pinch0=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);} },{passive:false});
-  canvas.addEventListener("touchmove",  function(e){ e.preventDefault(); if(e.touches.length===1&&drag){rotYv+=(e.touches[0].clientX-lx)*0.008;rotXv=clampElev(rotXv+(e.touches[0].clientY-ly)*0.008);lx=e.touches[0].clientX;ly=e.touches[0].clientY;} if(e.touches.length===2){var d=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);zoom=Math.max(1.6,Math.min(10,zoom-(d-pinch0)*0.02));pinch0=d;} },{passive:false});
+  canvas.addEventListener("touchmove",  function(e){ e.preventDefault(); if(e.touches.length===1&&drag){rotYv+=(e.touches[0].clientX-lx)*0.008; if(!axisLocked){rotXv=clampElev(rotXv+(e.touches[0].clientY-ly)*0.008);}lx=e.touches[0].clientX;ly=e.touches[0].clientY;} if(e.touches.length===2){var d=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);zoom=Math.max(1.6,Math.min(10,zoom-(d-pinch0)*0.02));pinch0=d;} },{passive:false});
   canvas.addEventListener("touchend",   function(){ drag=false; });
 
   // 2026 FIFAワールドカップ出場国（⚽=開催地マーカー）
@@ -401,6 +432,7 @@ void main() {
     var t = (now - startTime) * 0.001;
     var spd = parseFloat(rotSpdEl.value);
     if (autoRot) rotYv += 0.003 * spd;
+    if (axisLocked) rotXv = 0;
 
     persp(proj, Math.PI / 4, W / H, 0.1, 100);
     trans(view, 0, 0, -zoom);
