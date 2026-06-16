@@ -257,7 +257,7 @@ void main() {
   function trans(m,x,y,z){ ident(m); m[12]=x;m[13]=y;m[14]=z; return m; }
 
   // 地軸の傾き（23.4°固定）。視点の上下に関わらず軸方向は一定に保つ
-  var axialTilt = 23.4 * Math.PI / 180;
+  var axialTilt = -23.4 * Math.PI / 180;
   var ELEV_MAX = Math.PI / 2 - 0.02;
   function clampElev(v){ return v < -ELEV_MAX ? -ELEV_MAX : (v > ELEV_MAX ? ELEV_MAX : v); }
 
