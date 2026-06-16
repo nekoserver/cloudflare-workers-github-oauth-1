@@ -380,16 +380,21 @@ void main() {
   var rotSpdValEl = document.getElementById("rotSpdVal");
   rotSpdEl.addEventListener("input", function(){ rotSpdValEl.textContent = parseFloat(rotSpdEl.value).toFixed(1); });
 
-  canvas.addEventListener("mousedown",  function(e){ drag=true; lx=e.clientX; ly=e.clientY; });
-  window.addEventListener("mouseup",    function(){ drag=false; });
-  window.addEventListener("mousemove",  function(e){ if(!drag)return; rotYv+=(e.clientX-lx)*0.008; if(!axisLocked){ rotXv=clampElev(rotXv+(e.clientY-ly)*0.008); } lx=e.clientX; ly=e.clientY; });
+  var velY = 0, velX = 0, momentumY = 0, momentumX = 0;
+  var MOMENTUM_DECAY = 0.92;
+
+  canvas.addEventListener("mousedown",  function(e){ drag=true; lx=e.clientX; ly=e.clientY; momentumY=0; momentumX=0; velY=0; velX=0; });
+  window.addEventListener("mouseup",    function(){ if(!drag)return; drag=false; momentumY=velY; momentumX=velX; velY=0; velX=0; });
+  window.addEventListener("mousemove",  function(e){ if(!drag)return; var dy=(e.clientX-lx)*0.008; var dx=(e.clientY-ly)*0.008; rotYv+=dy; velY=velY*0.4+dy*0.6; if(!axisLocked){ rotXv=clampElev(rotXv+dx); velX=velX*0.4+dx*0.6; } lx=e.clientX; ly=e.clientY; });
   canvas.addEventListener("wheel",      function(e){ e.preventDefault(); zoom=Math.max(1.6,Math.min(10,zoom+e.deltaY*0.01)); },{passive:false});
   canvas.addEventListener("dblclick",   function(){ autoRot=!autoRot; btnAutoRot.textContent = autoRot ? "⏸ 自転停止" : "▶ 回転"; if(autoRot){btnAutoRot.classList.remove("active");}else{btnAutoRot.classList.add("active");} });
-  canvas.addEventListener("touchstart", function(e){ e.preventDefault(); touchMoved=false; if(e.touches.length===1){drag=true;lx=e.touches[0].clientX;ly=e.touches[0].clientY;} if(e.touches.length===2){pinch0=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);} },{passive:false});
-  canvas.addEventListener("touchmove",  function(e){ e.preventDefault(); touchMoved=true; if(e.touches.length===1&&drag){rotYv+=(e.touches[0].clientX-lx)*0.008; if(!axisLocked){rotXv=clampElev(rotXv+(e.touches[0].clientY-ly)*0.008);}lx=e.touches[0].clientX;ly=e.touches[0].clientY;} if(e.touches.length===2){var d=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);zoom=Math.max(1.6,Math.min(10,zoom-(d-pinch0)*0.02));pinch0=d;} },{passive:false});
+  canvas.addEventListener("touchstart", function(e){ e.preventDefault(); touchMoved=false; momentumY=0; momentumX=0; velY=0; velX=0; if(e.touches.length===1){drag=true;lx=e.touches[0].clientX;ly=e.touches[0].clientY;} if(e.touches.length===2){pinch0=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);} },{passive:false});
+  canvas.addEventListener("touchmove",  function(e){ e.preventDefault(); touchMoved=true; if(e.touches.length===1&&drag){ var dy=(e.touches[0].clientX-lx)*0.008; var dx=(e.touches[0].clientY-ly)*0.008; rotYv+=dy; velY=velY*0.4+dy*0.6; if(!axisLocked){rotXv=clampElev(rotXv+dx); velX=velX*0.4+dx*0.6;} lx=e.touches[0].clientX;ly=e.touches[0].clientY;} if(e.touches.length===2){var d=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);zoom=Math.max(1.6,Math.min(10,zoom-(d-pinch0)*0.02));pinch0=d;} },{passive:false});
   canvas.addEventListener("touchend", function(e){
     drag=false;
+    momentumY=velY; momentumX=velX; velY=0; velX=0;
     if (!touchMoved && e.changedTouches.length === 1) {
+      momentumY=0; momentumX=0;
       hideTooltip();
       schedulePanel.classList.remove("open");
       var ball = wc2026[0];
@@ -587,6 +592,7 @@ void main() {
     var dy = ty - rotYv;
     while (dy > Math.PI) dy -= 2*Math.PI;
     while (dy < -Math.PI) dy += 2*Math.PI;
+    momentumY = 0; momentumX = 0;
     flyFrom = {ry: rotYv, rx: rotXv};
     flyTarget = {ry: rotYv + dy, rx: tx};
     flyStart = performance.now();
@@ -817,6 +823,8 @@ void main() {
       if (fp >= 1) flyTarget = null;
     } else {
       if (autoRot) rotYv += 0.003 * spd;
+      if (Math.abs(momentumY) > 0.0002) { rotYv += momentumY; momentumY *= MOMENTUM_DECAY; } else { momentumY = 0; }
+      if (!axisLocked && Math.abs(momentumX) > 0.0002) { rotXv = clampElev(rotXv + momentumX); momentumX *= MOMENTUM_DECAY; } else { momentumX = 0; }
       if (axisLocked) rotXv = 0;
     }
 
