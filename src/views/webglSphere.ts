@@ -493,7 +493,30 @@ void main() {
   }
 
   var flyTarget = null, flyFrom = null, flyStart = 0;
-  var FLY_DUR = 1400;
+  var FLY_DUR = 2500;
+
+  function toJST(utcTime) {
+    var h = parseInt(utcTime.slice(0, 2)) + 9;
+    var m = utcTime.slice(3, 5);
+    var next = h >= 24;
+    h = h % 24;
+    return (next ? "翌" : "") + (h < 10 ? "0" : "") + h + ":" + m + " JST";
+  }
+
+  function toET(utcTime) {
+    var h = parseInt(utcTime.slice(0, 2)) - 4;
+    var m = utcTime.slice(3, 5);
+    var prev = h < 0;
+    if (prev) h += 24;
+    return (h < 10 ? "0" : "") + h + ":" + m + " ET" + (prev ? "(前日)" : "");
+  }
+
+  function findCountryByFlag(flag) {
+    for (var i = 0; i < wc2026.length; i++) {
+      if (wc2026[i].flag === flag) return i;
+    }
+    return -1;
+  }
 
   function flyTo(lat, lon) {
     var ty = -(Math.PI/2 + lon * Math.PI/180);
@@ -542,7 +565,7 @@ void main() {
     if (info.past) {
       return nm + '<div class="tt-match tt-past"><span class="tt-flags">' + flag + ' - ' + m.opp + '</span>  ' + md + ' ' + m.time + ' UTC 終了</div>';
     }
-    return nm + '<div class="tt-match"><span class="tt-flags">' + flag + ' - ' + m.opp + '</span>  ' + md + ' <span class="tt-time">' + m.time + ' UTC</span></div>';
+    return nm + '<div class="tt-match"><span class="tt-flags">' + flag + ' - ' + m.opp + '</span>  ' + md + '<br><span class="tt-time">' + m.time + ' UTC / ' + toET(m.time) + ' / ' + toJST(m.time) + '</span></div>';
   }
 
   function showTooltip(idx, vx, vy) {
@@ -582,9 +605,20 @@ void main() {
       var isPast = koMs < nowMs - 110*60000;
       var isTod  = m.date === todayStr;
       var cls = "sp-match" + (isPast ? " sp-past" : "") + (isTod && !isPast ? " sp-today" : "");
-      html += '<div class="' + cls + '"><span class="sp-flags">' + m.a + ' - ' + m.b + '</span><span class="sp-time">' + m.time + ' UTC</span></div>';
+      html += '<div class="' + cls + '" data-a="' + m.a + '" data-b="' + m.b + '" data-date="' + m.date + '" data-time="' + m.time + '" style="cursor:pointer"><span class="sp-flags">' + m.a + ' - ' + m.b + '</span><span class="sp-time">' + m.time + ' UTC<br>' + toET(m.time) + '<br>' + toJST(m.time) + '</span></div>';
     });
     spBody.innerHTML = html || '<div style="padding:16px;color:#8b949e">本日以降の試合はありません</div>';
+    function spRowTap(row) {
+      if (!row) return;
+      var a = row.dataset.a, b = row.dataset.b;
+      schedulePanel.classList.remove("open");
+      showMatchDetail(a, b, row.dataset.date, row.dataset.time, true);
+    }
+    spBody.addEventListener("click", function(e) { spRowTap(e.target.closest(".sp-match")); });
+    spBody.addEventListener("touchend", function(e) {
+      var row = e.target.closest(".sp-match");
+      if (row) { e.preventDefault(); spRowTap(row); }
+    });
     schedulePanel.classList.add("open");
     hideTooltip();
   }
@@ -613,12 +647,22 @@ void main() {
     leftDrawer.classList.remove("open");
     drwOverlay.classList.remove("open");
   }
-  function showMatchDetail(a, b, date, time) {
+  function showMatchDetail(a, b, date, time, doFly) {
     miFlags.textContent = a + "  " + b;
-    miTime.textContent  = time + " UTC";
+    miTime.textContent  = time + " UTC / " + toET(time) + " / " + toJST(time);
     miDate.textContent  = date.slice(5).replace("-", "/");
     matchInfo.classList.add("open");
     closeDrawer();
+    schedulePanel.classList.remove("open");
+    if (doFly) {
+      var tidx = findCountryByFlag(a);
+      if (tidx >= 0) {
+        var td = wc2026[tidx];
+        tooltip.innerHTML = buildMatchHtml(td.flag, td.name);
+        activeMarkerIdx = tidx;
+        flyTo(td.lat, td.lon);
+      }
+    }
   }
   function closeMatchDetail() { matchInfo.classList.remove("open"); }
   document.getElementById("miClose").addEventListener("click", function(e) { e.stopPropagation(); closeMatchDetail(); });
@@ -650,7 +694,7 @@ void main() {
       var cls = "drw-row" + (isPast ? " drw-past" : "") + (isLive ? " drw-live" : "");
       var enc_a = m.a.replace(/&/g,"&amp;");
       var enc_b = m.b.replace(/&/g,"&amp;");
-      html += '<div class="' + cls + '" data-a="' + enc_a + '" data-b="' + enc_b + '" data-date="' + m.date + '" data-time="' + m.time + '"><span class="drw-flags">' + m.a + '  ' + m.b + '</span><span class="drw-meta">' + m.date.slice(5).replace("-","/") + '<br>' + m.time + ' UTC</span></div>';
+      html += '<div class="' + cls + '" data-a="' + enc_a + '" data-b="' + enc_b + '" data-date="' + m.date + '" data-time="' + m.time + '"><span class="drw-flags">' + m.a + '  ' + m.b + '</span><span class="drw-meta">' + m.date.slice(5).replace("-","/") + '<br>' + m.time + ' UTC<br>' + toET(m.time) + '<br>' + toJST(m.time) + '</span></div>';
     });
     drwBody.innerHTML = html;
     drwBody.addEventListener("click", function(e) {
@@ -756,6 +800,7 @@ void main() {
           mk.el.style.opacity = "1";
           if (mi === activeMarkerIdx) {
             positionTooltip(canvasRect.left + px, canvasRect.top + py);
+            tooltip.style.opacity = "1";
           }
         } else {
           mk.el.style.opacity = "0";
