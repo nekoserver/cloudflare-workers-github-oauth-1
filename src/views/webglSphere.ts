@@ -77,9 +77,11 @@ varying float vRim;
 void main() {
   vec4 earth = texture2D(uTex, vUV);
   float isOcean = clamp((earth.b - earth.r * 0.8 - earth.g * 0.3) * 3.0, 0.0, 1.0);
+  vec3 oceanColor = vec3(0.05, 0.18, 0.52);
+  vec3 baseColor = mix(earth.rgb, oceanColor, isOcean);
   float amb = 0.25;
-  vec3 col = earth.rgb * (amb + vDiff * (1.0 - amb));
-  col += vec3(0.6, 0.8, 1.0) * vSpec * isOcean * 0.4;
+  vec3 col = baseColor * (amb + vDiff * (1.0 - amb));
+  col += vec3(0.5, 0.8, 1.0) * vSpec * isOcean * 0.7;
   col += vec3(0.25, 0.55, 1.0) * vRim * 0.5;
   col += vec3(0.1,  0.3,  0.9) * vRim * vRim * 0.25;
   gl_FragColor = vec4(col, 1.0);
@@ -347,6 +349,7 @@ void main() {
     var mel = document.createElement("div");
     mel.className = "mk" + (mdata.ball ? " mk-ball" : "");
     mel.textContent = mdata.flag;
+    mel.style.opacity = "0";
     markersDiv.appendChild(mel);
     mkEls.push({el: mel, pos3d: latLonTo3D(mdata.lat, mdata.lon)});
   }
@@ -390,7 +393,7 @@ void main() {
       var mk = mkEls[mi];
       var mp = mk.pos3d;
       var mz = model[2]*mp[0] + model[6]*mp[1] + model[10]*mp[2];
-      if (mz > 0.05) {
+      if (mz > 0.12) {
         var mcx = mvp[0]*mp[0] + mvp[4]*mp[1] + mvp[8]*mp[2]  + mvp[12];
         var mcy = mvp[1]*mp[0] + mvp[5]*mp[1] + mvp[9]*mp[2]  + mvp[13];
         var mcw = mvp[3]*mp[0] + mvp[7]*mp[1] + mvp[11]*mp[2] + mvp[15];
