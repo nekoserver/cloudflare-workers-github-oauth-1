@@ -721,9 +721,11 @@ void main() {
   document.getElementById("miClose").addEventListener("click", function(e) { e.stopPropagation(); closeMatchDetail(); });
 
   function buildDrawer() {
-    var allM = MATCHES.slice().sort(function(x, y) { return (x.date + x.time) < (y.date + y.time) ? -1 : 1; });
     var nowMs = Date.now();
     var todayStr = new Date().toISOString().slice(0, 10);
+    var upcoming = MATCHES.filter(function(m) { return m.date >= todayStr; }).sort(function(x, y) { return (x.date + x.time) < (y.date + y.time) ? -1 : 1; });
+    var past = MATCHES.filter(function(m) { return m.date < todayStr; }).sort(function(x, y) { return (x.date + x.time) < (y.date + y.time) ? -1 : 1; });
+    var allM = upcoming.concat(past);
     var html = "";
     var lastDate = "";
     allM.forEach(function(m) {
