@@ -25,8 +25,8 @@ h1 { font-size:14px; font-weight:700; }
 .badge { background:#0c2d4e; color:#58a6ff; font-size:10px; padding:2px 7px; border-radius:10px; font-weight:600; }
 .body { display:grid; grid-template-columns:1fr 280px; flex:1; min-height:0; }
 @media(max-width:700px){ .body{ grid-template-columns:1fr; } .side{ display:none; } }
-.canvas-wrap { position:relative; background:#000010; }
-canvas { display:block; width:100%; height:100%; cursor:grab; touch-action:none; }
+.canvas-wrap { position:relative; background:#000010; overflow:hidden; }
+canvas { position:absolute; inset:0; width:100%; height:100%; cursor:grab; touch-action:none; display:block; }
 canvas:active { cursor:grabbing; }
 .hud { position:absolute; top:10px; left:10px; background:rgba(0,0,0,.7); border:1px solid #30363d; border-radius:6px; padding:6px 10px; font-size:11px; font-family:monospace; color:#58a6ff; line-height:1.9; pointer-events:none; }
 #markers { position:absolute; top:0; left:0; width:100%; height:100%; pointer-events:none; overflow:hidden; }
@@ -41,6 +41,7 @@ canvas:active { cursor:grabbing; }
 code { background:#21262d; padding:1px 5px; border-radius:3px; font-family:monospace; font-size:10px; }
 hr { border:none; border-top:1px solid #30363d; margin:12px 0; }
 .tip { background:#0c2d4e; border-radius:6px; padding:8px 10px; font-size:11px; color:#8b949e; line-height:1.7; margin-bottom:12px; }
+@media (display-mode: standalone) { .pwa-hide { display:none !important; } }
 .ctrl-row { margin-bottom:10px; }
 .ctrl-label { font-size:11px; color:#8b949e; margin-bottom:4px; }
 .slider-row { display:flex; align-items:center; gap:8px; }
@@ -99,10 +100,10 @@ void main() {
   <h1>WebGL 地球儀</h1>
   <span class="badge">WebGL</span>
   <span style="flex:1"></span>
-  <a href="/webgl-demo">3D Cube</a>
-  <a href="/htmlrewriter-demo">HTMLRewriter</a>
-  <a href="/settings">&#9881;</a>
-  <span style="color:#8b949e;font-size:11px">${safeUser}</span>
+  <a href="/webgl-demo" class="pwa-hide">3D Cube</a>
+  <a href="/htmlrewriter-demo" class="pwa-hide">HTMLRewriter</a>
+  <a href="/settings" class="pwa-hide">&#9881;</a>
+  <span class="pwa-hide" style="color:#8b949e;font-size:11px">${safeUser}</span>
 </div>
 
 <div class="body">
