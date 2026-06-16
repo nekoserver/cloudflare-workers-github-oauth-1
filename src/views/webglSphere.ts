@@ -355,7 +355,6 @@ void main() {
   }
 
   gl.enable(gl.DEPTH_TEST);
-  gl.enable(gl.CULL_FACE);
 
   var startTime = performance.now();
   var frames = 0, lastFps = startTime;
