@@ -18,17 +18,17 @@ export function getWebGLSpherePage(username: string): string {
 <title>WebGL 地球儀</title>
 <style>
 * { box-sizing:border-box; margin:0; padding:0; }
-body { background:#000; color:#e6edf3; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; font-size:13px; height:calc(100vh + 100px); display:flex; flex-direction:column; overflow:hidden; }
+body { background:#000; color:#e6edf3; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; font-size:13px; height:100vh; height:100dvh; display:flex; flex-direction:column; overflow:hidden; }
 .topbar { background:#0d1117; border-bottom:1px solid #30363d; padding:8px 18px; display:flex; align-items:center; gap:10px; flex-shrink:0; }
 .topbar a { color:#58a6ff; text-decoration:none; font-size:12px; }
 h1 { font-size:14px; font-weight:700; }
 .badge { background:#0c2d4e; color:#58a6ff; font-size:10px; padding:2px 7px; border-radius:10px; font-weight:600; }
 .body { display:grid; grid-template-columns:1fr 280px; grid-template-rows:1fr; flex:1; min-height:0; }
-@media(max-width:700px){ .body{ grid-template-columns:1fr; } .side{ display:none; } }
+@media(max-width:900px){ .body{ grid-template-columns:1fr; } .side{ display:none; } }
 .canvas-wrap { position:relative; background:#000010; overflow:hidden; }
 canvas { position:absolute; inset:0; width:100%; height:100%; cursor:grab; touch-action:none; display:block; }
 canvas:active { cursor:grabbing; }
-.hud { position:absolute; top:10px; left:10px; background:rgba(0,0,0,.7); border:1px solid #30363d; border-radius:6px; padding:6px 10px; font-size:11px; font-family:monospace; color:#58a6ff; line-height:1.9; pointer-events:none; }
+.hud { position:absolute; bottom:10px; left:10px; background:rgba(0,0,0,.7); border:1px solid #30363d; border-radius:6px; padding:6px 10px; font-size:11px; font-family:monospace; color:#58a6ff; line-height:1.9; pointer-events:none; }
 #markers { position:absolute; top:0; left:0; width:100%; height:100%; pointer-events:none; overflow:hidden; }
 .mk { position:absolute; transform:translate(-50%,-50%); line-height:1; font-size:18px; text-shadow:0 1px 3px #000,0 0 8px rgba(0,0,0,0.9); pointer-events:auto; cursor:pointer; user-select:none; -webkit-user-select:none; }
 .mk-ball { font-size:28px; }
@@ -66,7 +66,7 @@ hr { border:none; border-top:1px solid #30363d; margin:12px 0; }
 .slider-row { display:flex; align-items:center; gap:8px; }
 input[type=range] { flex:1; accent-color:#58a6ff; }
 .sval { font-family:monospace; font-size:11px; color:#58a6ff; min-width:36px; }
-.canvas-ctrl-btns { position:absolute; bottom:14px; right:14px; display:flex; flex-direction:column; gap:6px; z-index:5; }
+.canvas-ctrl-btns { position:absolute; top:10px; right:10px; display:flex; flex-direction:row; gap:6px; z-index:5; }
 .canvas-ctrl-btn { background:rgba(13,17,23,0.88); border:1px solid #30363d; border-radius:6px; color:#e6edf3; font-size:12px; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; padding:6px 12px; cursor:pointer; white-space:nowrap; transition:background .15s,border-color .15s,color .15s; text-align:left; }
 .canvas-ctrl-btn:hover { background:rgba(13,17,23,1); border-color:#58a6ff; }
 .canvas-ctrl-btn.active { background:#0c2d4e; border-color:#58a6ff; color:#58a6ff; }
@@ -85,14 +85,13 @@ input[type=range] { flex:1; accent-color:#58a6ff; }
 .drw-meta { font-family:monospace; font-size:11px; color:#58a6ff; text-align:right; white-space:nowrap; }
 .drw-row.drw-past { opacity:0.38; }
 .drw-row.drw-live { background:rgba(63,185,80,.08); border-left:3px solid #3fb950; }
-#match-detail { position:fixed; inset:0; z-index:80; background:rgba(0,0,0,.93); display:flex; flex-direction:column; align-items:center; justify-content:center; opacity:0; pointer-events:none; transition:opacity .2s; }
-#match-detail.open { opacity:1; pointer-events:auto; }
-.detail-flags { font-size:90px; letter-spacing:12px; line-height:1.1; text-align:center; }
-.detail-dash { font-size:40px; color:#30363d; margin:0 8px; }
-.detail-time { font-size:14px; color:#58a6ff; font-family:monospace; margin-top:16px; }
-.detail-date { font-size:12px; color:#8b949e; margin-top:6px; }
-.detail-hint { font-size:11px; color:#444d56; margin-top:28px; }
-#drawer-open-btn { position:absolute; left:10px; bottom:14px; z-index:5; background:rgba(13,17,23,0.88); border:1px solid #30363d; border-radius:6px; color:#e6edf3; font-size:12px; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; padding:6px 12px; cursor:pointer; white-space:nowrap; transition:background .15s,border-color .15s; }
+#match-info { position:absolute; top:52px; left:50%; transform:translateX(-50%); z-index:6; background:rgba(13,17,23,0.93); border:1px solid #30363d; border-radius:12px; padding:14px 28px 12px; text-align:center; opacity:0; pointer-events:none; transition:opacity .2s; white-space:nowrap; box-shadow:0 4px 24px rgba(0,0,0,.7); }
+#match-info.open { opacity:1; pointer-events:auto; }
+.mi-flags { font-size:64px; letter-spacing:14px; line-height:1.1; }
+.mi-time { font-size:13px; color:#58a6ff; font-family:monospace; margin-top:6px; }
+.mi-date { font-size:11px; color:#8b949e; margin-top:3px; }
+.mi-close { position:absolute; top:6px; right:10px; background:none; border:none; color:#8b949e; font-size:18px; line-height:1; cursor:pointer; padding:0; }
+#drawer-open-btn { position:absolute; left:10px; top:10px; z-index:5; background:rgba(13,17,23,0.88); border:1px solid #30363d; border-radius:6px; color:#e6edf3; font-size:12px; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; padding:6px 12px; cursor:pointer; white-space:nowrap; transition:background .15s,border-color .15s; }
 #drawer-open-btn:hover { background:rgba(13,17,23,1); border-color:#58a6ff; }
 </style>
 </head>
@@ -163,6 +162,12 @@ void main() {
       <button class="canvas-ctrl-btn" id="btnAutoRot" title="自転の停止/再開">⏸ 自転停止</button>
     </div>
     <button id="drawer-open-btn" title="試合一覧を開く">&#9776; 試合一覧</button>
+    <div id="match-info">
+      <button class="mi-close" id="miClose">&#10005;</button>
+      <div class="mi-flags" id="mi-flags"></div>
+      <div class="mi-time"  id="mi-time"></div>
+      <div class="mi-date"  id="mi-date"></div>
+    </div>
   </div>
   <div class="side">
     <div class="tip">ドラッグ: 回転 | ホイール: ズーム | ダブルクリック: 自動回転 ON/OFF<br>&#9917; = 2026 FIFAワールドカップ開催地（北米） | 各国旗 = 出場48ヵ国</div>
@@ -206,12 +211,6 @@ void main() {
     <button class="drw-close" id="drwClose">&#10005;</button>
   </div>
   <div id="drw-body"></div>
-</div>
-<div id="match-detail">
-  <div class="detail-flags" id="detail-flags"></div>
-  <div class="detail-time" id="detail-time"></div>
-  <div class="detail-date" id="detail-date"></div>
-  <div class="detail-hint">タップして閉じる</div>
 </div>
 <div id="schedule-panel">
   <div class="sp-hdr">
@@ -597,10 +596,10 @@ void main() {
   var leftDrawer = document.getElementById("left-drawer");
   var drwOverlay = document.getElementById("drawer-overlay");
   var drwBody    = document.getElementById("drw-body");
-  var matchDetail = document.getElementById("match-detail");
-  var detailFlags = document.getElementById("detail-flags");
-  var detailTime  = document.getElementById("detail-time");
-  var detailDate  = document.getElementById("detail-date");
+  var matchInfo  = document.getElementById("match-info");
+  var miFlags    = document.getElementById("mi-flags");
+  var miTime     = document.getElementById("mi-time");
+  var miDate     = document.getElementById("mi-date");
   var drwBuilt = false;
 
   function openDrawer() {
@@ -615,12 +614,14 @@ void main() {
     drwOverlay.classList.remove("open");
   }
   function showMatchDetail(a, b, date, time) {
-    detailFlags.textContent = a + "  " + b;
-    detailTime.textContent  = time + " UTC";
-    detailDate.textContent  = date.slice(5).replace("-", "/");
-    matchDetail.classList.add("open");
+    miFlags.textContent = a + "  " + b;
+    miTime.textContent  = time + " UTC";
+    miDate.textContent  = date.slice(5).replace("-", "/");
+    matchInfo.classList.add("open");
+    closeDrawer();
   }
-  function closeMatchDetail() { matchDetail.classList.remove("open"); }
+  function closeMatchDetail() { matchInfo.classList.remove("open"); }
+  document.getElementById("miClose").addEventListener("click", function(e) { e.stopPropagation(); closeMatchDetail(); });
 
   function buildDrawer() {
     var PAIRS3 = [[0,1,"18:00"],[2,3,"21:00"],[0,2,"18:00"],[1,3,"21:00"],[0,3,"21:00"],[1,2,"18:00"]];
@@ -668,8 +669,6 @@ void main() {
   document.getElementById("drawer-open-btn").addEventListener("click", openDrawer);
   document.getElementById("drwClose").addEventListener("click", closeDrawer);
   drwOverlay.addEventListener("click", closeDrawer);
-  matchDetail.addEventListener("click", closeMatchDetail);
-  matchDetail.addEventListener("touchend", function(e) { e.preventDefault(); closeMatchDetail(); });
 
   var mkEls = [];
   for (var mi = 0; mi < wc2026.length; mi++) {
