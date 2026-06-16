@@ -22,8 +22,9 @@ h1 { font-size:14px; font-weight:700; }
 .canvas-wrap { position:relative; background:#0a0c10; overflow:hidden; }
 canvas { position:absolute; inset:0; width:100%; height:100%; cursor:grab; touch-action:none; display:block; }
 canvas:active { cursor:grabbing; }
-.side { background:#0d1117; border-left:1px solid #30363d; overflow-y:auto; padding:16px; }
+.side { background:#0d1117; border-left:1px solid #30363d; overflow:hidden; padding:16px; display:flex; flex-direction:column; }
 .side h2 { font-size:11px; font-weight:700; color:#58a6ff; text-transform:uppercase; letter-spacing:.5px; margin-bottom:8px; }
+.side-scroll { flex:1; overflow-y:auto; }
 .seg { display:flex; gap:4px; margin-bottom:12px; }
 .seg-btn { flex:1; text-align:center; background:#21262d; border:1px solid #30363d; color:#8b949e; padding:5px; border-radius:5px; cursor:pointer; font-size:12px; font-weight:600; user-select:none; }
 .seg-btn.active { background:#0c2d4e; border-color:#58a6ff; color:#58a6ff; }
@@ -41,7 +42,7 @@ input[type=range] { flex:1; accent-color:#58a6ff; }
 hr { border:none; border-top:1px solid #30363d; margin:12px 0; }
 .status { font-size:11px; color:#58a6ff; margin-bottom:6px; font-family:monospace; min-height:16px; }
 .moves-label { font-size:11px; color:#8b949e; margin-bottom:4px; }
-.moves-box { background:#161b22; border:1px solid #30363d; border-radius:6px; padding:8px; font-family:monospace; font-size:11px; color:#8b949e; min-height:50px; max-height:140px; overflow-y:auto; line-height:2; word-break:break-all; }
+.moves-box { background:#161b22; border:1px solid #30363d; border-radius:6px; padding:8px; font-family:monospace; font-size:11px; color:#8b949e; flex:1; overflow-y:auto; line-height:2; word-break:break-all; }
 .md { color:#3fb950; }
 .mc { color:#f0883e; font-weight:bold; }
 .mn { color:#484f58; }
@@ -104,7 +105,9 @@ void main() { gl_FragColor = vec4(vCol, 1.0); }
     <hr>
     <div class="status" id="st">ソルブ済み</div>
     <div class="moves-label">手順</div>
-    <div class="moves-box" id="mb"></div>
+    <div style="flex:1;display:flex;flex-direction:column;min-height:0;">
+      <div class="moves-box" id="mb"></div>
+    </div>
   </div>
 </div>
 
@@ -335,6 +338,7 @@ void main() { gl_FragColor = vec4(vCol, 1.0); }
     for (var i=0;i<scramMvs.length;i++) applyMove(scramMvs[i].axis,scramMvs[i].layer,scramMvs[i].dir);
     moveQ=[]; mvIdx=allMvs.length; solving=false;
     stEl.textContent="スクランブル済み ("+len+"手)";
+    fc.style.display="block"; drawFaces();
     updDisplay();
   }
 
