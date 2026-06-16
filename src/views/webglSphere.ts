@@ -351,7 +351,7 @@ void main() {
 
   var proj=m4(),view=m4(),model=m4(),rx=m4(),ry=m4(),tz=m4(),tmp=m4(),tmp2=m4(),mvp=m4();
   var rotXv = 0.3, rotYv = 0.6, zoom = 3.2, autoRot = true;
-  var drag = false, lx = 0, ly = 0, pinch0 = 0;
+  var drag = false, lx = 0, ly = 0, pinch0 = 0, touchMoved = false;
 
   var axisLocked = false;
 
@@ -385,9 +385,18 @@ void main() {
   window.addEventListener("mousemove",  function(e){ if(!drag)return; rotYv+=(e.clientX-lx)*0.008; if(!axisLocked){ rotXv=clampElev(rotXv+(e.clientY-ly)*0.008); } lx=e.clientX; ly=e.clientY; });
   canvas.addEventListener("wheel",      function(e){ e.preventDefault(); zoom=Math.max(1.6,Math.min(10,zoom+e.deltaY*0.01)); },{passive:false});
   canvas.addEventListener("dblclick",   function(){ autoRot=!autoRot; btnAutoRot.textContent = autoRot ? "⏸ 自転停止" : "▶ 回転"; if(autoRot){btnAutoRot.classList.remove("active");}else{btnAutoRot.classList.add("active");} });
-  canvas.addEventListener("touchstart", function(e){ e.preventDefault(); if(e.touches.length===1){drag=true;lx=e.touches[0].clientX;ly=e.touches[0].clientY;} if(e.touches.length===2){pinch0=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);} },{passive:false});
-  canvas.addEventListener("touchmove",  function(e){ e.preventDefault(); if(e.touches.length===1&&drag){rotYv+=(e.touches[0].clientX-lx)*0.008; if(!axisLocked){rotXv=clampElev(rotXv+(e.touches[0].clientY-ly)*0.008);}lx=e.touches[0].clientX;ly=e.touches[0].clientY;} if(e.touches.length===2){var d=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);zoom=Math.max(1.6,Math.min(10,zoom-(d-pinch0)*0.02));pinch0=d;} },{passive:false});
-  canvas.addEventListener("touchend",   function(){ drag=false; });
+  canvas.addEventListener("touchstart", function(e){ e.preventDefault(); touchMoved=false; if(e.touches.length===1){drag=true;lx=e.touches[0].clientX;ly=e.touches[0].clientY;} if(e.touches.length===2){pinch0=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);} },{passive:false});
+  canvas.addEventListener("touchmove",  function(e){ e.preventDefault(); touchMoved=true; if(e.touches.length===1&&drag){rotYv+=(e.touches[0].clientX-lx)*0.008; if(!axisLocked){rotXv=clampElev(rotXv+(e.touches[0].clientY-ly)*0.008);}lx=e.touches[0].clientX;ly=e.touches[0].clientY;} if(e.touches.length===2){var d=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);zoom=Math.max(1.6,Math.min(10,zoom-(d-pinch0)*0.02));pinch0=d;} },{passive:false});
+  canvas.addEventListener("touchend", function(e){
+    drag=false;
+    if (!touchMoved && e.changedTouches.length === 1) {
+      hideTooltip();
+      schedulePanel.classList.remove("open");
+      var ball = wc2026[0];
+      activeMarkerIdx = 0;
+      flyTo(ball.lat, ball.lon);
+    }
+  });
 
   // 2026 FIFAワールドカップ出場国（⚽=開催地マーカー）
   var wc2026 = [
