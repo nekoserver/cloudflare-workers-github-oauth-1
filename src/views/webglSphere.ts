@@ -209,9 +209,9 @@ void main() {
     var doy = Math.floor((now.getTime() - start.getTime()) / 86400000);
     var sunLat = 23.45 * Math.PI / 180 * Math.sin(2 * Math.PI * (doy - 80) / 365);
     return [
-      Math.cos(sunLat) * Math.cos(sunLon),
+      -Math.cos(sunLat) * Math.cos(sunLon),
       Math.sin(sunLat),
-      Math.cos(sunLat) * Math.sin(sunLon)
+      -Math.cos(sunLat) * Math.sin(sunLon)
     ];
   }
 
@@ -322,7 +322,7 @@ void main() {
       var fps = Math.round(frames * 1000 / dt);
       var clock = new Date();
       var utcH = clock.getUTCHours() + clock.getUTCMinutes() / 60;
-      var sunLonDeg = Math.round((utcH - 12) * 15);
+      var sunLonDeg = Math.round((12 - utcH) * 15);
       var ew = sunLonDeg >= 0 ? "E" : "W";
       var label = earthImg.complete && earthImg.naturalWidth > 0 ? "" : "テクスチャ読込中 | ";
       hud.textContent = label + "FPS: " + fps + "  |  太陽: " + Math.abs(sunLonDeg) + "°" + ew + "  |  " + (autoRot ? "自動回転 ON" : "自動回転 OFF");
