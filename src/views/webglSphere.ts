@@ -85,13 +85,12 @@ input[type=range] { flex:1; accent-color:#58a6ff; }
 .drw-meta { font-family:monospace; font-size:11px; color:#58a6ff; text-align:right; white-space:nowrap; }
 .drw-row.drw-past { opacity:0.38; }
 .drw-row.drw-live { background:rgba(63,185,80,.08); border-left:3px solid #3fb950; }
-#match-detail { position:fixed; inset:0; z-index:80; background:rgba(0,0,0,.93); display:flex; flex-direction:column; align-items:center; justify-content:center; opacity:0; pointer-events:none; transition:opacity .2s; }
-#match-detail.open { opacity:1; pointer-events:auto; }
-.detail-flags { font-size:90px; letter-spacing:12px; line-height:1.1; text-align:center; }
-.detail-dash { font-size:40px; color:#30363d; margin:0 8px; }
-.detail-time { font-size:14px; color:#58a6ff; font-family:monospace; margin-top:16px; }
-.detail-date { font-size:12px; color:#8b949e; margin-top:6px; }
-.detail-hint { font-size:11px; color:#444d56; margin-top:28px; }
+#match-info { position:absolute; top:52px; left:50%; transform:translateX(-50%); z-index:6; background:rgba(13,17,23,0.93); border:1px solid #30363d; border-radius:12px; padding:14px 28px 12px; text-align:center; opacity:0; pointer-events:none; transition:opacity .2s; white-space:nowrap; box-shadow:0 4px 24px rgba(0,0,0,.7); }
+#match-info.open { opacity:1; pointer-events:auto; }
+.mi-flags { font-size:64px; letter-spacing:14px; line-height:1.1; }
+.mi-time { font-size:13px; color:#58a6ff; font-family:monospace; margin-top:6px; }
+.mi-date { font-size:11px; color:#8b949e; margin-top:3px; }
+.mi-close { position:absolute; top:6px; right:10px; background:none; border:none; color:#8b949e; font-size:18px; line-height:1; cursor:pointer; padding:0; }
 #drawer-open-btn { position:absolute; left:10px; top:10px; z-index:5; background:rgba(13,17,23,0.88); border:1px solid #30363d; border-radius:6px; color:#e6edf3; font-size:12px; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; padding:6px 12px; cursor:pointer; white-space:nowrap; transition:background .15s,border-color .15s; }
 #drawer-open-btn:hover { background:rgba(13,17,23,1); border-color:#58a6ff; }
 </style>
@@ -163,6 +162,12 @@ void main() {
       <button class="canvas-ctrl-btn" id="btnAutoRot" title="自転の停止/再開">⏸ 自転停止</button>
     </div>
     <button id="drawer-open-btn" title="試合一覧を開く">&#9776; 試合一覧</button>
+    <div id="match-info">
+      <button class="mi-close" id="miClose">&#10005;</button>
+      <div class="mi-flags" id="mi-flags"></div>
+      <div class="mi-time"  id="mi-time"></div>
+      <div class="mi-date"  id="mi-date"></div>
+    </div>
   </div>
   <div class="side">
     <div class="tip">ドラッグ: 回転 | ホイール: ズーム | ダブルクリック: 自動回転 ON/OFF<br>&#9917; = 2026 FIFAワールドカップ開催地（北米） | 各国旗 = 出場48ヵ国</div>
@@ -206,12 +211,6 @@ void main() {
     <button class="drw-close" id="drwClose">&#10005;</button>
   </div>
   <div id="drw-body"></div>
-</div>
-<div id="match-detail">
-  <div class="detail-flags" id="detail-flags"></div>
-  <div class="detail-time" id="detail-time"></div>
-  <div class="detail-date" id="detail-date"></div>
-  <div class="detail-hint">タップして閉じる</div>
 </div>
 <div id="schedule-panel">
   <div class="sp-hdr">
@@ -597,10 +596,10 @@ void main() {
   var leftDrawer = document.getElementById("left-drawer");
   var drwOverlay = document.getElementById("drawer-overlay");
   var drwBody    = document.getElementById("drw-body");
-  var matchDetail = document.getElementById("match-detail");
-  var detailFlags = document.getElementById("detail-flags");
-  var detailTime  = document.getElementById("detail-time");
-  var detailDate  = document.getElementById("detail-date");
+  var matchInfo  = document.getElementById("match-info");
+  var miFlags    = document.getElementById("mi-flags");
+  var miTime     = document.getElementById("mi-time");
+  var miDate     = document.getElementById("mi-date");
   var drwBuilt = false;
 
   function openDrawer() {
@@ -615,12 +614,14 @@ void main() {
     drwOverlay.classList.remove("open");
   }
   function showMatchDetail(a, b, date, time) {
-    detailFlags.textContent = a + "  " + b;
-    detailTime.textContent  = time + " UTC";
-    detailDate.textContent  = date.slice(5).replace("-", "/");
-    matchDetail.classList.add("open");
+    miFlags.textContent = a + "  " + b;
+    miTime.textContent  = time + " UTC";
+    miDate.textContent  = date.slice(5).replace("-", "/");
+    matchInfo.classList.add("open");
+    closeDrawer();
   }
-  function closeMatchDetail() { matchDetail.classList.remove("open"); }
+  function closeMatchDetail() { matchInfo.classList.remove("open"); }
+  document.getElementById("miClose").addEventListener("click", function(e) { e.stopPropagation(); closeMatchDetail(); });
 
   function buildDrawer() {
     var PAIRS3 = [[0,1,"18:00"],[2,3,"21:00"],[0,2,"18:00"],[1,3,"21:00"],[0,3,"21:00"],[1,2,"18:00"]];
@@ -668,8 +669,6 @@ void main() {
   document.getElementById("drawer-open-btn").addEventListener("click", openDrawer);
   document.getElementById("drwClose").addEventListener("click", closeDrawer);
   drwOverlay.addEventListener("click", closeDrawer);
-  matchDetail.addEventListener("click", closeMatchDetail);
-  matchDetail.addEventListener("touchend", function(e) { e.preventDefault(); closeMatchDetail(); });
 
   var mkEls = [];
   for (var mi = 0; mi < wc2026.length; mi++) {
