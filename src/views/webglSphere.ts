@@ -9,6 +9,12 @@ export function getWebGLSpherePage(username: string): string {
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#0d1117">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="地球儀">
+<link rel="manifest" href="/manifest.json">
 <title>WebGL 地球儀</title>
 <style>
 * { box-sizing:border-box; margin:0; padding:0; }
@@ -24,8 +30,9 @@ canvas { display:block; width:100%; height:100%; cursor:grab; touch-action:none;
 canvas:active { cursor:grabbing; }
 .hud { position:absolute; top:10px; left:10px; background:rgba(0,0,0,.7); border:1px solid #30363d; border-radius:6px; padding:6px 10px; font-size:11px; font-family:monospace; color:#58a6ff; line-height:1.9; pointer-events:none; }
 #markers { position:absolute; top:0; left:0; width:100%; height:100%; pointer-events:none; overflow:hidden; }
-.mk { position:absolute; transform:translate(-50%,-50%); line-height:1; font-size:18px; text-shadow:0 1px 3px #000,0 0 8px rgba(0,0,0,0.9); }
+.mk { position:absolute; transform:translate(-50%,-50%); line-height:1; font-size:18px; text-shadow:0 1px 3px #000,0 0 8px rgba(0,0,0,0.9); pointer-events:auto; cursor:pointer; user-select:none; -webkit-user-select:none; }
 .mk-ball { font-size:28px; }
+#mk-tooltip { position:absolute; background:rgba(13,17,23,0.95); border:1px solid #58a6ff; border-radius:6px; padding:5px 10px; font-size:12px; font-weight:600; color:#e6edf3; white-space:nowrap; pointer-events:none; opacity:0; transition:opacity .15s; z-index:10; transform:translate(-50%,-130%); }
 .side { background:#0d1117; border-left:1px solid #30363d; overflow-y:auto; padding:16px; }
 .side h2 { font-size:11px; font-weight:700; color:#58a6ff; text-transform:uppercase; letter-spacing:.5px; margin-bottom:10px; }
 .item { margin-bottom:12px; }
@@ -102,6 +109,7 @@ void main() {
   <div class="canvas-wrap">
     <canvas id="c"></canvas>
     <div id="markers"></div>
+    <div id="mk-tooltip"></div>
     <div class="hud" id="hud">テクスチャ読み込み中...</div>
   </div>
   <div class="side">
@@ -281,56 +289,56 @@ void main() {
 
   // 2026 FIFAワールドカップ出場国（⚽=開催地マーカー）
   var wc2026 = [
-    {flag:"⚽", lat:34, lon:-99, ball:true},
-    {flag:"🇺🇸", lat:39, lon:-95},
-    {flag:"🇨🇦", lat:56, lon:-96},
-    {flag:"🇲🇽", lat:23, lon:-102},
-    {flag:"🇵🇦", lat:9, lon:-80},
-    {flag:"🇨🇷", lat:10, lon:-84},
-    {flag:"🇭🇳", lat:15, lon:-87},
-    {flag:"🇦🇷", lat:-34, lon:-64},
-    {flag:"🇧🇷", lat:-10, lon:-53},
-    {flag:"🇨🇴", lat:4, lon:-72},
-    {flag:"🇺🇾", lat:-33, lon:-56},
-    {flag:"🇪🇨", lat:-2, lon:-78},
-    {flag:"🇵🇾", lat:-23, lon:-58},
-    {flag:"🇻🇪", lat:8, lon:-66},
-    {flag:"🇪🇸", lat:40, lon:-4},
-    {flag:"🏴󠁧󠁢󠁥󠁮󠁧󠁿", lat:52, lon:-1},
-    {flag:"🇫🇷", lat:46, lon:2},
-    {flag:"🇩🇪", lat:51, lon:10},
-    {flag:"🇵🇹", lat:39, lon:-8},
-    {flag:"🇳🇱", lat:52, lon:5},
-    {flag:"🇮🇹", lat:42, lon:12},
-    {flag:"🇧🇪", lat:50, lon:4},
-    {flag:"🇭🇷", lat:45, lon:16},
-    {flag:"🇦🇹", lat:47, lon:14},
-    {flag:"🇨🇭", lat:47, lon:8},
-    {flag:"🇩🇰", lat:56, lon:10},
-    {flag:"🇷🇸", lat:44, lon:21},
-    {flag:"🇹🇷", lat:39, lon:35},
-    {flag:"🏴󠁧󠁢󠁳󠁣󠁴󠁿", lat:57, lon:-4},
-    {flag:"🇸🇰", lat:48, lon:19},
-    {flag:"🇲🇦", lat:32, lon:-6},
-    {flag:"🇳🇬", lat:10, lon:8},
-    {flag:"🇸🇳", lat:14, lon:-14},
-    {flag:"🇪🇬", lat:26, lon:30},
-    {flag:"🇨🇮", lat:7, lon:-5},
-    {flag:"🇿🇦", lat:-29, lon:25},
-    {flag:"🇨🇩", lat:-4, lon:24},
-    {flag:"🇬🇭", lat:8, lon:-1},
-    {flag:"🇩🇿", lat:28, lon:3},
-    {flag:"🇹🇳", lat:34, lon:9},
-    {flag:"🇯🇵", lat:36, lon:138},
-    {flag:"🇰🇷", lat:36, lon:128},
-    {flag:"🇮🇷", lat:32, lon:53},
-    {flag:"🇮🇶", lat:33, lon:44},
-    {flag:"🇦🇺", lat:-27, lon:133},
-    {flag:"🇯🇴", lat:31, lon:36},
-    {flag:"🇺🇿", lat:41, lon:64},
-    {flag:"🇸🇦", lat:24, lon:45},
-    {flag:"🇳🇿", lat:-41, lon:174},
-    {flag:"🇮🇩", lat:-7, lon:117}
+    {flag:"⚽", name:"2026 FIFA W杯 開催地", lat:34, lon:-99, ball:true},
+    {flag:"🇺🇸", name:"アメリカ合衆国", lat:39, lon:-95},
+    {flag:"🇨🇦", name:"カナダ", lat:56, lon:-96},
+    {flag:"🇲🇽", name:"メキシコ", lat:23, lon:-102},
+    {flag:"🇵🇦", name:"パナマ", lat:9, lon:-80},
+    {flag:"🇨🇷", name:"コスタリカ", lat:10, lon:-84},
+    {flag:"🇭🇳", name:"ホンジュラス", lat:15, lon:-87},
+    {flag:"🇦🇷", name:"アルゼンチン", lat:-34, lon:-64},
+    {flag:"🇧🇷", name:"ブラジル", lat:-10, lon:-53},
+    {flag:"🇨🇴", name:"コロンビア", lat:4, lon:-72},
+    {flag:"🇺🇾", name:"ウルグアイ", lat:-33, lon:-56},
+    {flag:"🇪🇨", name:"エクアドル", lat:-2, lon:-78},
+    {flag:"🇵🇾", name:"パラグアイ", lat:-23, lon:-58},
+    {flag:"🇻🇪", name:"ベネズエラ", lat:8, lon:-66},
+    {flag:"🇪🇸", name:"スペイン", lat:40, lon:-4},
+    {flag:"🏴󠁧󠁢󠁥󠁮󠁧󠁿", name:"イングランド", lat:52, lon:-1},
+    {flag:"🇫🇷", name:"フランス", lat:46, lon:2},
+    {flag:"🇩🇪", name:"ドイツ", lat:51, lon:10},
+    {flag:"🇵🇹", name:"ポルトガル", lat:39, lon:-8},
+    {flag:"🇳🇱", name:"オランダ", lat:52, lon:5},
+    {flag:"🇮🇹", name:"イタリア", lat:42, lon:12},
+    {flag:"🇧🇪", name:"ベルギー", lat:50, lon:4},
+    {flag:"🇭🇷", name:"クロアチア", lat:45, lon:16},
+    {flag:"🇦🇹", name:"オーストリア", lat:47, lon:14},
+    {flag:"🇨🇭", name:"スイス", lat:47, lon:8},
+    {flag:"🇩🇰", name:"デンマーク", lat:56, lon:10},
+    {flag:"🇷🇸", name:"セルビア", lat:44, lon:21},
+    {flag:"🇹🇷", name:"トルコ", lat:39, lon:35},
+    {flag:"🏴󠁧󠁢󠁳󠁣󠁴󠁿", name:"スコットランド", lat:57, lon:-4},
+    {flag:"🇸🇰", name:"スロバキア", lat:48, lon:19},
+    {flag:"🇲🇦", name:"モロッコ", lat:32, lon:-6},
+    {flag:"🇳🇬", name:"ナイジェリア", lat:10, lon:8},
+    {flag:"🇸🇳", name:"セネガル", lat:14, lon:-14},
+    {flag:"🇪🇬", name:"エジプト", lat:26, lon:30},
+    {flag:"🇨🇮", name:"コートジボワール", lat:7, lon:-5},
+    {flag:"🇿🇦", name:"南アフリカ", lat:-29, lon:25},
+    {flag:"🇨🇩", name:"コンゴ民主共和国", lat:-4, lon:24},
+    {flag:"🇬🇭", name:"ガーナ", lat:8, lon:-1},
+    {flag:"🇩🇿", name:"アルジェリア", lat:28, lon:3},
+    {flag:"🇹🇳", name:"チュニジア", lat:34, lon:9},
+    {flag:"🇯🇵", name:"日本", lat:36, lon:138},
+    {flag:"🇰🇷", name:"韓国", lat:36, lon:128},
+    {flag:"🇮🇷", name:"イラン", lat:32, lon:53},
+    {flag:"🇮🇶", name:"イラク", lat:33, lon:44},
+    {flag:"🇦🇺", name:"オーストラリア", lat:-27, lon:133},
+    {flag:"🇯🇴", name:"ヨルダン", lat:31, lon:36},
+    {flag:"🇺🇿", name:"ウズベキスタン", lat:41, lon:64},
+    {flag:"🇸🇦", name:"サウジアラビア", lat:24, lon:45},
+    {flag:"🇳🇿", name:"ニュージーランド", lat:-41, lon:174},
+    {flag:"🇮🇩", name:"インドネシア", lat:-7, lon:117}
   ];
 
   function latLonTo3D(lat, lon) {
@@ -343,6 +351,18 @@ void main() {
     ];
   }
 
+  var tooltip = document.getElementById("mk-tooltip");
+  var tooltipTimer = null;
+
+  function showTooltip(el, name) {
+    tooltip.textContent = name;
+    tooltip.style.left = el.style.left;
+    tooltip.style.top  = el.style.top;
+    tooltip.style.opacity = "1";
+    if (tooltipTimer) clearTimeout(tooltipTimer);
+    tooltipTimer = setTimeout(function() { tooltip.style.opacity = "0"; tooltipTimer = null; }, 2500);
+  }
+
   var mkEls = [];
   for (var mi = 0; mi < wc2026.length; mi++) {
     var mdata = wc2026[mi];
@@ -350,9 +370,22 @@ void main() {
     mel.className = "mk" + (mdata.ball ? " mk-ball" : "");
     mel.textContent = mdata.flag;
     mel.style.opacity = "0";
+    mel.dataset.name = mdata.name;
+    (function(el) {
+      el.addEventListener("click", function(e) {
+        e.stopPropagation();
+        showTooltip(el, el.dataset.name);
+      });
+      el.addEventListener("touchend", function(e) {
+        e.stopPropagation();
+        showTooltip(el, el.dataset.name);
+      });
+    })(mel);
     markersDiv.appendChild(mel);
     mkEls.push({el: mel, pos3d: latLonTo3D(mdata.lat, mdata.lon)});
   }
+
+  canvas.addEventListener("click", function() { tooltip.style.opacity = "0"; });
 
   gl.enable(gl.DEPTH_TEST);
 
@@ -423,6 +456,11 @@ void main() {
   }
   requestAnimationFrame(frame);
 })();
+</script>
+<script>
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/sw.js').catch(function(){});
+}
 </script>
 </body>
 </html>`;
