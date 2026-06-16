@@ -411,6 +411,7 @@ void main() {
   // 2026 FIFAワールドカップ出場国（⚽=開催地マーカー）
   var wc2026 = [
     {flag:"⚽", name:"2026 FIFA W杯 開催地", lat:34, lon:-99, ball:true},
+    {flag:"🏟️", name:"Lumen Field（シアトル）", lat:47.595, lon:-122.332},
     {flag:"🇲🇽", name:"メキシコ", lat:23, lon:-102},
     {flag:"🇿🇦", name:"南アフリカ", lat:-29, lon:25},
     {flag:"🇰🇷", name:"韓国", lat:36, lon:128},
