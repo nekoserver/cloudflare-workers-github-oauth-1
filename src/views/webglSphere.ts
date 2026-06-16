@@ -774,7 +774,13 @@ void main() {
     mkEls.push({el: mel, pos3d: latLonTo3D(mdata.lat, mdata.lon)});
   }
 
-  canvas.addEventListener("click", function() { hideTooltip(); schedulePanel.classList.remove("open"); });
+  canvas.addEventListener("click", function() {
+    hideTooltip();
+    schedulePanel.classList.remove("open");
+    var ball = wc2026[0];
+    activeMarkerIdx = 0;
+    flyTo(ball.lat, ball.lon);
+  });
 
   gl.enable(gl.DEPTH_TEST);
 
