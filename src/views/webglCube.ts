@@ -14,19 +14,20 @@ export function getWebGLCubePage(username: string): string {
 * { box-sizing:border-box; margin:0; padding:0; }
 body { background:#0d1117; color:#e6edf3; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; font-size:13px; height:100vh; display:flex; flex-direction:column; overflow:hidden; }
 .topbar { background:#0d1117; border-bottom:1px solid #30363d; padding:8px 18px; display:flex; align-items:center; gap:10px; flex-shrink:0; }
-.topbar a { color:#58a6ff; text-decoration:none; font-size:12px; }
 h1 { font-size:14px; font-weight:700; }
 .badge { background:#0c2d4e; color:#58a6ff; font-size:10px; padding:2px 7px; border-radius:10px; font-weight:600; }
 .body { display:grid; grid-template-columns:1fr 260px; grid-template-rows:1fr; flex:1; min-height:0; }
 @media(max-width:700px){ .body{ grid-template-columns:1fr; } .side{ display:none; } }
 .canvas-wrap { position:relative; background:#0a0c10; overflow:hidden; }
-canvas { position:absolute; inset:0; width:100%; height:100%; cursor:grab; touch-action:none; display:block; }
-canvas:active { cursor:grabbing; }
+#netbig { position:absolute; inset:0; width:100%; height:100%; display:none; image-rendering:pixelated; z-index:1; pointer-events:none; }
+#cw { position:absolute; top:0; left:0; width:100%; height:100%; z-index:2; transition:top .55s cubic-bezier(.4,0,.2,1),left .55s cubic-bezier(.4,0,.2,1),width .55s cubic-bezier(.4,0,.2,1),height .55s cubic-bezier(.4,0,.2,1); }
+#cw.sm { top:12px; left:54%; width:44%; height:44%; }
+#c { position:absolute; inset:0; width:100%; height:100%; cursor:grab; touch-action:none; display:block; }
+#c:active { cursor:grabbing; }
 .side { background:#0d1117; border-left:1px solid #30363d; overflow:hidden; padding:16px; display:flex; flex-direction:column; }
 .side h2 { font-size:11px; font-weight:700; color:#58a6ff; text-transform:uppercase; letter-spacing:.5px; margin-bottom:8px; }
-.side-scroll { flex:1; overflow-y:auto; }
-.seg { display:flex; gap:4px; margin-bottom:12px; }
-.seg-btn { flex:1; text-align:center; background:#21262d; border:1px solid #30363d; color:#8b949e; padding:5px; border-radius:5px; cursor:pointer; font-size:12px; font-weight:600; user-select:none; }
+.seg { display:flex; gap:3px; margin-bottom:12px; flex-wrap:wrap; }
+.seg-btn { flex:1; min-width:36px; text-align:center; background:#21262d; border:1px solid #30363d; color:#8b949e; padding:4px; border-radius:5px; cursor:pointer; font-size:11px; font-weight:600; user-select:none; }
 .seg-btn.active { background:#0c2d4e; border-color:#58a6ff; color:#58a6ff; }
 .btn-row { display:flex; gap:6px; margin-bottom:12px; flex-wrap:wrap; }
 .btn { background:#21262d; border:1px solid #30363d; color:#e6edf3; padding:6px 12px; border-radius:6px; cursor:pointer; font-size:12px; font-weight:600; }
@@ -77,9 +78,9 @@ void main() { gl_FragColor = vec4(vCol, 1.0); }
 </div>
 
 <div class="body">
-  <div class="canvas-wrap">
-    <canvas id="c"></canvas>
-    <canvas id="fc" style="position:absolute;bottom:10px;right:10px;border:1px solid #30363d;border-radius:4px;image-rendering:pixelated;display:none;"></canvas>
+  <div class="canvas-wrap" id="cwrap">
+    <canvas id="netbig"></canvas>
+    <div id="cw"><canvas id="c"></canvas></div>
   </div>
   <div class="side">
     <h2>サイズ</h2>
@@ -113,13 +114,10 @@ void main() { gl_FragColor = vec4(vCol, 1.0); }
 
 <script>
 (function() {
-  // Colors: 0=white(U) 1=yellow(D) 2=green(F) 3=blue(B) 4=red(R) 5=orange(L) 6=black
   var COLS = [
     [0.95,0.95,0.95],[1.0,0.85,0.0],[0.0,0.6,0.2],
     [0.1,0.35,0.95],[0.9,0.1,0.1],[1.0,0.5,0.0],[0.07,0.07,0.07]
   ];
-  // cubie.c[0..5] = color idx for face +x,-x,+y,-y,+z,-z
-  // outer face default: +x=R=4, -x=L=5, +y=U=0, -y=D=1, +z=F=2, -z=B=3
   var N = 3;
   var cubies = [];
 
@@ -190,8 +188,12 @@ void main() { gl_FragColor = vec4(vCol, 1.0); }
 
   // --- WebGL ---
   var canvas=document.getElementById("c");
-  var wrap=canvas.parentElement;
+  var cw=document.getElementById("cw");
+  var cwrap=document.getElementById("cwrap");
+  var netbig=document.getElementById("netbig");
+  var nb2d=netbig.getContext("2d");
   var gl=canvas.getContext("webgl")||canvas.getContext("experimental-webgl");
+
   function cs(type,id) {
     var s=gl.createShader(type);
     gl.shaderSource(s,document.getElementById(id).textContent);
@@ -209,7 +211,6 @@ void main() { gl_FragColor = vec4(vCol, 1.0); }
   gl.enableVertexAttribArray(aPos); gl.enableVertexAttribArray(aNorm); gl.enableVertexAttribArray(aCol);
   var vbo=gl.createBuffer();
 
-  // Face quads (CCW winding from outside): +x,-x,+y,-y,+z,-z
   var FN=[[1,0,0],[-1,0,0],[0,1,0],[0,-1,0],[0,0,1],[0,0,-1]];
   var FV=[
     [[0.5,0.5,0.5],[0.5,-0.5,0.5],[0.5,-0.5,-0.5],[0.5,0.5,-0.5]],
@@ -255,7 +256,6 @@ void main() { gl_FragColor = vec4(vCol, 1.0); }
     return new Float32Array(v);
   }
 
-  // Matrix helpers
   function m4(){return new Float32Array(16);}
   function id(m){for(var i=0;i<16;i++)m[i]=0;m[0]=m[5]=m[10]=m[15]=1;return m;}
   function mul(o,a,b){for(var i=0;i<4;i++)for(var j=0;j<4;j++){var s=0;for(var k=0;k<4;k++)s+=a[i+k*4]*b[k+j*4];o[i+j*4]=s;}return o;}
@@ -276,9 +276,7 @@ void main() { gl_FragColor = vec4(vCol, 1.0); }
   canvas.addEventListener("touchmove",function(e){e.preventDefault();if(e.touches.length===1&&drag){rotYv+=(e.touches[0].clientX-lx)*0.01;rotXv+=(e.touches[0].clientY-ly)*0.01;lx=e.touches[0].clientX;ly=e.touches[0].clientY;}else if(e.touches.length===2){var d=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);zoom=Math.max(1.5,Math.min(10,zoom-(d-pinch0)*0.02));pinch0=d;}},{passive:false});
   canvas.addEventListener("touchend",function(){drag=false;});
 
-  // --- 6面展開図 ---
-  var fc=document.getElementById("fc");
-  var fc2d=fc.getContext("2d");
+  // --- 2D net (big) ---
   var HEX=["#f0f0f0","#ffd800","#00a030","#1450e8","#e01010","#ff8000","#141414"];
 
   function getCb(x,y,z) {
@@ -286,21 +284,26 @@ void main() { gl_FragColor = vec4(vCol, 1.0); }
     return null;
   }
 
-  function drawFaces() {
-    var cell=Math.max(3,Math.min(14,Math.floor(44/N)));
-    var gap=cell>=5?1:0;
+  function drawNetBig() {
+    var wr=cwrap.getBoundingClientRect();
+    var W=Math.round(wr.width), H=Math.round(wr.height);
+    if(W<=0||H<=0) return;
+    netbig.width=W; netbig.height=H;
+    nb2d.fillStyle="#0a0c10";
+    nb2d.fillRect(0,0,W,H);
+    var gap=2;
+    var cellW=Math.floor((W*0.88)/(4*N+3));
+    var cellH=Math.floor((H*0.82)/(3*N+2));
+    var cell=Math.max(4,Math.min(cellW,cellH));
     var cs=cell+gap;
-    var pad=4;
-    fc.width=4*N*cs+pad*2;
-    fc.height=3*N*cs+pad*2;
-    fc2d.fillStyle="#0d1117";
-    fc2d.fillRect(0,0,fc.width,fc.height);
+    var netW=4*N*cs-gap, netH=3*N*cs-gap;
+    var ox=Math.floor((W-netW)/2), oy=Math.floor((H-netH)/2);
     var n1=N-1;
     function df(nr,nc,gfn) {
-      var ox=pad+nc*N*cs,oy=pad+nr*N*cs;
+      var bx=ox+nc*N*cs, by=oy+nr*N*cs;
       for (var r=0;r<N;r++) for (var c=0;c<N;c++) {
-        fc2d.fillStyle=HEX[gfn(r,c)];
-        fc2d.fillRect(ox+c*cs,oy+r*cs,cell,cell);
+        nb2d.fillStyle=HEX[gfn(r,c)];
+        nb2d.fillRect(bx+c*cs,by+r*cs,cell,cell);
       }
     }
     df(0,1,function(r,c){return getCb(c,n1,r).c[2];});
@@ -309,10 +312,21 @@ void main() { gl_FragColor = vec4(vCol, 1.0); }
     df(1,2,function(r,c){return getCb(n1,n1-r,n1-c).c[0];});
     df(1,3,function(r,c){return getCb(n1-c,n1-r,0).c[5];});
     df(2,1,function(r,c){return getCb(c,0,n1-r).c[3];});
+    // face labels
+    nb2d.fillStyle="#58a6ff";
+    nb2d.font="bold "+(Math.max(9,cell-2))+"px monospace";
+    nb2d.textAlign="center";
+    var lc=cell/2;
+    var labels=[["U",0,1],["L",1,0],["F",1,1],["R",1,2],["B",1,3],["D",2,1]];
+    for(var li=0;li<labels.length;li++){
+      var lb=labels[li];
+      nb2d.fillText(lb[0], ox+lb[2]*N*cs+N*cs/2, oy+lb[1]*N*cs-3);
+    }
   }
 
-  // Animation
-  var moveQ=[],animMv=null,animProg=0,scramMvs=[],allMvs=[],mvIdx=0,solving=false,scrambling=false;
+  // --- Animation state ---
+  var moveQ=[],animMv=null,animProg=0,scramMvs=[],allMvs=[],mvIdx=0;
+  var solving=false,scrambling=false;
   var stEl=document.getElementById("st"),mbEl=document.getElementById("mb");
   var spdEl=document.getElementById("spd"),spdvEl=document.getElementById("spdv");
   spdEl.addEventListener("input",function(){spdvEl.textContent=spdEl.value;});
@@ -329,16 +343,32 @@ void main() { gl_FragColor = vec4(vCol, 1.0); }
     if (cur) cur.scrollIntoView({block:"nearest"});
   }
 
+  function enterScrambleView() {
+    cw.classList.add("sm");
+    netbig.style.display="block";
+    drawNetBig();
+  }
+
+  function exitScrambleView() {
+    cw.classList.remove("sm");
+    netbig.style.display="none";
+  }
+
   function doScramble() {
     if (animMv) return;
     initCube(N);
-    var len=Math.floor(Math.random()*100)+1;
+    var len=Math.floor(Math.random()*31)+70;
     scramMvs=genScramble(len);
     allMvs=scramMvs.map(function(m){return {axis:m.axis,layer:m.layer,dir:m.dir,n:mname(m.axis,m.layer,m.dir)};});
-    moveQ=scramMvs.slice(); mvIdx=0; scrambling=true; solving=false;
-    stEl.textContent="スクランブル中... 0/"+len+"手";
-    fc.style.display="block"; drawFaces();
-    updDisplay();
+    mvIdx=0; solving=false; scrambling=false; moveQ=[];
+    mbEl.innerHTML="";
+    enterScrambleView();
+    stEl.textContent="3秒後にスクランブル開始 ("+len+"手)...";
+    setTimeout(function(){
+      moveQ=scramMvs.slice(); scrambling=true;
+      stEl.textContent="スクランブル中... 0/"+len+"手";
+      updDisplay();
+    },3000);
   }
 
   function doSolve() {
@@ -348,7 +378,6 @@ void main() { gl_FragColor = vec4(vCol, 1.0); }
     allMvs=sm.map(function(m){return {axis:m.axis,layer:m.layer,dir:m.dir,n:mname(m.axis,m.layer,m.dir)};});
     moveQ=sm.slice(); mvIdx=0; solving=true; scrambling=false;
     stEl.textContent="ソルブ中... 0/"+scramMvs.length+"手";
-    fc.style.display="block"; drawFaces();
     updDisplay();
   }
 
@@ -356,7 +385,7 @@ void main() { gl_FragColor = vec4(vCol, 1.0); }
     if (animMv) return;
     initCube(N); scramMvs=[]; allMvs=[]; moveQ=[]; mvIdx=0; solving=false; scrambling=false;
     stEl.textContent="ソルブ済み"; mbEl.innerHTML="";
-    fc.style.display="none";
+    exitScrambleView();
   }
 
   document.getElementById("btnS").addEventListener("click",doScramble);
@@ -370,11 +399,15 @@ void main() { gl_FragColor = vec4(vCol, 1.0); }
   });
 
   function resize(){
-    var r=wrap.getBoundingClientRect();
+    var r=cw.getBoundingClientRect();
     var w=Math.round(r.width),h=Math.round(r.height);
     if(w>0&&h>0&&(canvas.width!==w||canvas.height!==h)){canvas.width=w;canvas.height=h;}
   }
-  resize(); window.addEventListener("resize",resize);
+  resize();
+  window.addEventListener("resize",function(){
+    resize();
+    if(netbig.style.display!=="none") drawNetBig();
+  });
 
   gl.enable(gl.DEPTH_TEST);
   gl.enable(gl.CULL_FACE);
@@ -389,26 +422,25 @@ void main() { gl_FragColor = vec4(vCol, 1.0); }
     gl.clearColor(0.07,0.08,0.09,1);
     gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);
 
-    // Advance animation
     var aa=-1,al=-1,ad=0,ang=0;
     if (animMv) {
       animProg+=getSpd();
       if (animProg>=1) {
         applyMove(animMv.axis,animMv.layer,animMv.dir);
         animMv=null; animProg=0; mvIdx++;
-        updDisplay(); drawFaces();
+        updDisplay();
+        drawNetBig();
         var total=allMvs.length;
         if (scrambling) {
           if (moveQ.length===0) { scrambling=false; stEl.textContent="スクランブル完了 ("+total+"手)"; }
           else stEl.textContent="スクランブル中... "+mvIdx+"/"+total+"手";
         } else if (solving) {
-          if (moveQ.length===0) { solving=false; scramMvs=[]; stEl.textContent="ソルブ完了！"; fc.style.display="none"; }
+          if (moveQ.length===0) { solving=false; scramMvs=[]; stEl.textContent="ソルブ完了！"; exitScrambleView(); }
           else stEl.textContent="ソルブ中... "+mvIdx+"/"+total+"手";
         }
       } else { aa=animMv.axis;al=animMv.layer;ad=animMv.dir;ang=animProg*Math.PI/2; }
     } else if (moveQ.length>0) { animMv=moveQ.shift(); animProg=0; }
 
-    // Matrices
     rX(rx,rotXv); rY(ry,rotYv);
     mul(model,rx,ry);
     tr(view,0,0,-zoom);
@@ -420,7 +452,6 @@ void main() { gl_FragColor = vec4(vCol, 1.0); }
       model[0],model[1],model[2],model[4],model[5],model[6],model[8],model[9],model[10]
     ]));
 
-    // Build and upload geometry
     var verts=buildVerts(aa,al,ad,ang);
     gl.bindBuffer(gl.ARRAY_BUFFER,vbo);
     gl.bufferData(gl.ARRAY_BUFFER,verts,gl.DYNAMIC_DRAW);
