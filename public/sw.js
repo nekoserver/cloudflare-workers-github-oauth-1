@@ -1,4 +1,4 @@
-var CACHE = 'globe-v2';
+var CACHE = 'globe-v3';
 var PRECACHE = ['/webgl-sphere'];
 
 self.addEventListener('install', function(e) {
@@ -15,17 +15,26 @@ self.addEventListener('activate', function(e) {
   self.clients.claim();
 });
 
+function addCors(res) {
+  var h = new Headers(res.headers);
+  h.set('Access-Control-Allow-Origin', '*');
+  return new Response(res.body, {status: res.status, statusText: res.statusText, headers: h});
+}
+
 self.addEventListener('fetch', function(e) {
   if (e.request.method !== 'GET') return;
-  if (e.request.url.indexOf('/earth.jpg') !== -1) return;
+  var isEarth = e.request.url.indexOf('/earth.jpg') !== -1;
+  var isSphere = e.request.url.indexOf('/webgl-sphere') !== -1;
+  if (!isEarth && !isSphere) return;
   e.respondWith(
     caches.match(e.request).then(function(r) {
-      return r || fetch(e.request).then(function(res) {
-        if (res.ok && e.request.url.indexOf('/webgl-sphere') !== -1) {
-          var clone = res.clone();
-          caches.open(CACHE).then(function(c) { c.put(e.request, clone); });
+      if (r) return isEarth ? addCors(r) : r;
+      return fetch(e.request).then(function(res) {
+        if (res.ok) {
+          var toStore = isEarth ? addCors(res.clone()) : res.clone();
+          caches.open(CACHE).then(function(c) { c.put(e.request, toStore); });
         }
-        return res;
+        return isEarth ? addCors(res) : res;
       });
     })
   );

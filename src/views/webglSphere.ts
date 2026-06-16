@@ -240,6 +240,7 @@ void main() {
   gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([10, 30, 70, 255]));
 
   var earthImg = new Image();
+  earthImg.crossOrigin = "anonymous";
   earthImg.onload = function() {
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, texEarth);
