@@ -198,8 +198,22 @@ void main() {
   var uModel = gl.getUniformLocation(prog, "uModel");
   var uLight = gl.getUniformLocation(prog, "uLight");
   var uTex   = gl.getUniformLocation(prog, "uTex");
-  gl.uniform3f(uLight, 2.0, 1.5, 2.5);
   gl.uniform1i(uTex, 0);
+
+  // ── 現在UTC時刻から太陽方向を計算 ──
+  function getSunDir() {
+    var now = new Date();
+    var utcH = now.getUTCHours() + now.getUTCMinutes() / 60 + now.getUTCSeconds() / 3600;
+    var sunLon = (utcH - 12) / 24 * 2 * Math.PI;
+    var start = new Date(Date.UTC(now.getUTCFullYear(), 0, 1));
+    var doy = Math.floor((now.getTime() - start.getTime()) / 86400000);
+    var sunLat = 23.45 * Math.PI / 180 * Math.sin(2 * Math.PI * (doy - 80) / 365);
+    return [
+      Math.cos(sunLat) * Math.cos(sunLon),
+      Math.sin(sunLat),
+      Math.cos(sunLat) * Math.sin(sunLon)
+    ];
+  }
 
   // ── 地球テクスチャ（/earth.jpg からロード）──
   var texEarth = gl.createTexture();
@@ -284,6 +298,8 @@ void main() {
     mul(tmp, view, model);
     mul(mvp, proj, tmp);
 
+    var sd = getSunDir();
+    gl.uniform3f(uLight, sd[0], sd[1], sd[2]);
     gl.uniformMatrix4fv(uMVP,   false, mvp);
     gl.uniformMatrix4fv(uModel, false, model);
 
@@ -295,11 +311,12 @@ void main() {
     var dt = now - lastFps;
     if (dt >= 600) {
       var fps = Math.round(frames * 1000 / dt);
-      if (earthImg.complete && earthImg.naturalWidth > 0) {
-        hud.textContent = "FPS: " + fps + "  |  " + (autoRot ? "自動回転 ON" : "自動回転 OFF");
-      } else {
-        hud.textContent = "テクスチャ読み込み中... FPS: " + fps;
-      }
+      var now = new Date();
+      var utcH = now.getUTCHours() + now.getUTCMinutes() / 60;
+      var sunLonDeg = Math.round((utcH - 12) * 15);
+      var ew = sunLonDeg >= 0 ? "E" : "W";
+      var label = earthImg.complete && earthImg.naturalWidth > 0 ? "" : "テクスチャ読込中 | ";
+      hud.textContent = label + "FPS: " + fps + "  |  太陽: " + Math.abs(sunLonDeg) + "°" + ew + "  |  " + (autoRot ? "自動回転 ON" : "自動回転 OFF");
       frames = 0; lastFps = now;
     }
   }
