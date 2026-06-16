@@ -823,9 +823,27 @@ void main() {
       if (fp >= 1) flyTarget = null;
     } else {
       if (autoRot) rotYv += 0.003 * spd;
+      var wasSpinning = Math.abs(momentumY) > 0.0002 || Math.abs(momentumX) > 0.0002;
       if (Math.abs(momentumY) > 0.0002) { rotYv += momentumY; momentumY *= MOMENTUM_DECAY; } else { momentumY = 0; }
       if (!axisLocked && Math.abs(momentumX) > 0.0002) { rotXv = clampElev(rotXv + momentumX); momentumX *= MOMENTUM_DECAY; } else { momentumX = 0; }
       if (axisLocked) rotXv = 0;
+      var nowSpinning = Math.abs(momentumY) > 0.0002 || Math.abs(momentumX) > 0.0002;
+      if (wasSpinning && !nowSpinning && !autoRot) {
+        var bestIdx = -1, bestMz = -1;
+        for (var si = 0; si < wc2026.length; si++) {
+          if (wc2026[si].ball) continue;
+          var sp = mkEls[si] ? mkEls[si].pos3d : null;
+          if (!sp) continue;
+          var smz = model[2]*sp[0] + model[6]*sp[1] + model[10]*sp[2];
+          if (smz > bestMz) { bestMz = smz; bestIdx = si; }
+        }
+        if (bestIdx >= 0) {
+          var bd = wc2026[bestIdx];
+          tooltip.innerHTML = buildMatchHtml(bd.flag, bd.name);
+          activeMarkerIdx = bestIdx;
+          flyTo(bd.lat, bd.lon);
+        }
+      }
     }
 
     persp(proj, Math.PI / 4, W / H, 0.1, 100);
