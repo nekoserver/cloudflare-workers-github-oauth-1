@@ -204,7 +204,7 @@ void main() {
   function getSunDir() {
     var now = new Date();
     var utcH = now.getUTCHours() + now.getUTCMinutes() / 60 + now.getUTCSeconds() / 3600;
-    var sunLon = (utcH - 12) / 24 * 2 * Math.PI;
+    var sunLon = (12 - utcH) / 24 * 2 * Math.PI;
     var start = new Date(Date.UTC(now.getUTCFullYear(), 0, 1));
     var doy = Math.floor((now.getTime() - start.getTime()) / 86400000);
     var sunLat = 23.45 * Math.PI / 180 * Math.sin(2 * Math.PI * (doy - 80) / 365);
@@ -295,7 +295,7 @@ void main() {
 
     var t = (now - startTime) * 0.001;
     var spd = parseFloat(rotSpdEl.value);
-    if (autoRot) rotYv += 0.003 * spd;
+    if (autoRot) rotYv -= 0.003 * spd;
 
     persp(proj, Math.PI / 4, W / H, 0.1, 100);
     trans(view, 0, 0, -zoom);
@@ -322,7 +322,7 @@ void main() {
       var fps = Math.round(frames * 1000 / dt);
       var clock = new Date();
       var utcH = clock.getUTCHours() + clock.getUTCMinutes() / 60;
-      var sunLonDeg = Math.round((utcH - 12) * 15);
+      var sunLonDeg = Math.round((12 - utcH) * 15);
       var ew = sunLonDeg >= 0 ? "E" : "W";
       var label = earthImg.complete && earthImg.naturalWidth > 0 ? "" : "テクスチャ読込中 | ";
       hud.textContent = label + "FPS: " + fps + "  |  太陽: " + Math.abs(sunLonDeg) + "°" + ew + "  |  " + (autoRot ? "自動回転 ON" : "自動回転 OFF");
