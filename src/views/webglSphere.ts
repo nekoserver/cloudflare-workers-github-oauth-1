@@ -32,7 +32,13 @@ canvas:active { cursor:grabbing; }
 #markers { position:absolute; top:0; left:0; width:100%; height:100%; pointer-events:none; overflow:hidden; }
 .mk { position:absolute; transform:translate(-50%,-50%); line-height:1; font-size:18px; text-shadow:0 1px 3px #000,0 0 8px rgba(0,0,0,0.9); pointer-events:auto; cursor:pointer; user-select:none; -webkit-user-select:none; }
 .mk-ball { font-size:28px; }
-#mk-tooltip { position:absolute; background:rgba(13,17,23,0.95); border:1px solid #58a6ff; border-radius:6px; padding:5px 10px; font-size:12px; font-weight:600; color:#e6edf3; white-space:nowrap; pointer-events:none; opacity:0; transition:opacity .15s; z-index:10; transform:translate(-50%,-130%); }
+#mk-tooltip { position:absolute; background:rgba(13,17,23,0.97); border:1px solid #58a6ff; border-radius:8px; padding:7px 12px; font-size:12px; color:#e6edf3; white-space:nowrap; pointer-events:none; opacity:0; transition:opacity .15s; z-index:10; transform:translate(-50%,-140%); line-height:1.7; }
+#mk-tooltip .tt-name { font-weight:700; font-size:13px; }
+#mk-tooltip .tt-match { color:#8b949e; font-size:12px; margin-top:2px; }
+#mk-tooltip .tt-flags { font-size:18px; letter-spacing:2px; }
+#mk-tooltip .tt-time { color:#58a6ff; font-family:monospace; }
+#mk-tooltip .tt-past { color:#6e7681; }
+.mk.elim { filter:grayscale(0.85) brightness(0.28) saturate(0.15); }
 .side { background:#0d1117; border-left:1px solid #30363d; overflow-y:auto; padding:16px; }
 .side h2 { font-size:11px; font-weight:700; color:#58a6ff; text-transform:uppercase; letter-spacing:.5px; margin-bottom:10px; }
 .item { margin-bottom:12px; }
@@ -388,20 +394,97 @@ void main() {
     ];
   }
 
+  var GD = [
+    {t:["🇺🇸","🇵🇦","🇺🇾","🇸🇦"],d1:"2026-06-12",d2:"2026-06-19",d3:"2026-06-26"},
+    {t:["🇨🇦","🇨🇷","🇦🇷","🇩🇿"],d1:"2026-06-13",d2:"2026-06-20",d3:"2026-06-27"},
+    {t:["🇲🇽","🇭🇳","🇪🇨","🇲🇦"],d1:"2026-06-13",d2:"2026-06-20",d3:"2026-06-27"},
+    {t:["🇧🇷","🇻🇪","🇯🇵","🇳🇿"],d1:"2026-06-14",d2:"2026-06-21",d3:"2026-06-28"},
+    {t:["🇨🇴","🇵🇾","🇰🇷","🇳🇬"],d1:"2026-06-14",d2:"2026-06-21",d3:"2026-06-28"},
+    {t:["🇪🇸","🇷🇸","🇸🇳","🇮🇩"],d1:"2026-06-15",d2:"2026-06-22",d3:"2026-06-29"},
+    {t:["🇫🇷","🇦🇹","🇪🇬","🇯🇴"],d1:"2026-06-15",d2:"2026-06-22",d3:"2026-06-29"},
+    {t:["🇩🇪","🇭🇷","🇬🇭","🇺🇿"],d1:"2026-06-16",d2:"2026-06-23",d3:"2026-06-30"},
+    {t:["🏴󠁧󠁢󠁥󠁮󠁧󠁿","🇧🇪","🇮🇷","🇨🇩"],d1:"2026-06-16",d2:"2026-06-23",d3:"2026-06-30"},
+    {t:["🇵🇹","🇩🇰","🇨🇮","🇹🇷"],d1:"2026-06-17",d2:"2026-06-24",d3:"2026-07-01"},
+    {t:["🇳🇱","🇨🇭","🏴󠁧󠁢󠁳󠁣󠁴󠁿","🇮🇶"],d1:"2026-06-17",d2:"2026-06-24",d3:"2026-07-01"},
+    {t:["🇮🇹","🇸🇰","🇿🇦","🇹🇳"],d1:"2026-06-18",d2:"2026-06-25",d3:"2026-07-02"}
+  ];
+  var PAIRS = [[0,1,"18:00"],[2,3,"21:00"],[0,2,"18:00"],[1,3,"21:00"],[0,3,"21:00"],[1,2,"18:00"]];
+  var teamMatches = {};
+  var ELIMINATED = {};
+  GD.forEach(function(g) {
+    var ds = [g.d1, g.d2, g.d3];
+    PAIRS.forEach(function(p, pi) {
+      var a = g.t[p[0]], b = g.t[p[1]], d = ds[Math.floor(pi/2)], ti = p[2];
+      if (!teamMatches[a]) teamMatches[a] = [];
+      if (!teamMatches[b]) teamMatches[b] = [];
+      teamMatches[a].push({opp:b, date:d, time:ti});
+      teamMatches[b].push({opp:a, date:d, time:ti});
+    });
+  });
+
+  function getNextMatch(flag) {
+    var ms = teamMatches[flag];
+    if (!ms) return null;
+    var now = Date.now();
+    for (var i = 0; i < ms.length; i++) {
+      var ko = new Date(ms[i].date + "T" + ms[i].time + ":00Z").getTime();
+      if (ko > now - 110*60000) return {m: ms[i], past: ko < now, ko: ko};
+    }
+    return {m: ms[ms.length-1], past: true, ko: 0};
+  }
+
+  var flyTarget = null, flyFrom = null, flyStart = 0;
+  var FLY_DUR = 1400;
+
+  function flyTo(lat, lon) {
+    var ty = -(Math.PI/2 + lon * Math.PI/180);
+    var tx = -lat * Math.PI/180;
+    var dy = ty - rotYv;
+    while (dy > Math.PI) dy -= 2*Math.PI;
+    while (dy < -Math.PI) dy += 2*Math.PI;
+    flyFrom = {ry: rotYv, rx: rotXv};
+    flyTarget = {ry: rotYv + dy, rx: tx};
+    flyStart = performance.now();
+    autoRot = false;
+    btnAutoRot.textContent = "▶ 回転";
+    btnAutoRot.classList.add("active");
+    if (axisLocked) {
+      axisLocked = false;
+      btnAxisLock.classList.remove("active");
+      btnAxisLock.textContent = "＋ 軸垂直固定";
+    }
+  }
+
   var tooltip = document.getElementById("mk-tooltip");
   var activeMarkerIdx = -1;
 
   function showTooltip(idx) {
-    tooltip.textContent = wc2026[idx].name;
+    var d = wc2026[idx];
+    var nm = "<div class=\\"tt-name\\">" + d.name + "</div>";
+    var info = getNextMatch(d.flag);
+    var matchHtml = "";
+    if (info) {
+      var m = info.m;
+      var md = m.date.slice(5).replace("-", "/");
+      if (info.past) {
+        matchHtml = "<div class=\\"tt-match tt-past\\"><span class=\\"tt-flags\\">" + d.flag + " - " + m.opp + "</span>  " + md + " " + m.time + " UTC 終了</div>";
+      } else {
+        matchHtml = "<div class=\\"tt-match\\"><span class=\\"tt-flags\\">" + d.flag + " - " + m.opp + "</span>  " + md + " <span class=\\"tt-time\\">" + m.time + " UTC</span></div>";
+      }
+    } else if (d.ball) {
+      matchHtml = "<div class=\\"tt-match\\">2026 FIFA W杯 北米開催</div>";
+    }
+    tooltip.innerHTML = nm + matchHtml;
     tooltip.style.opacity = "1";
     activeMarkerIdx = idx;
+    if (!d.ball) flyTo(d.lat, d.lon);
   }
 
   var mkEls = [];
   for (var mi = 0; mi < wc2026.length; mi++) {
     var mdata = wc2026[mi];
     var mel = document.createElement("div");
-    mel.className = "mk" + (mdata.ball ? " mk-ball" : "");
+    mel.className = "mk" + (mdata.ball ? " mk-ball" : "") + (ELIMINATED[mdata.flag] ? " elim" : "");
     mel.textContent = mdata.flag;
     mel.style.opacity = "0";
     mel.dataset.name = mdata.name;
@@ -431,8 +514,16 @@ void main() {
 
     var t = (now - startTime) * 0.001;
     var spd = parseFloat(rotSpdEl.value);
-    if (autoRot) rotYv += 0.003 * spd;
-    if (axisLocked) rotXv = 0;
+    if (flyTarget !== null) {
+      var fp = Math.min((now - flyStart) / FLY_DUR, 1);
+      var fe = fp * fp * (3 - 2 * fp);
+      rotYv = flyFrom.ry + (flyTarget.ry - flyFrom.ry) * fe;
+      rotXv = flyFrom.rx + (flyTarget.rx - flyFrom.rx) * fe;
+      if (fp >= 1) flyTarget = null;
+    } else {
+      if (autoRot) rotYv += 0.003 * spd;
+      if (axisLocked) rotXv = 0;
+    }
 
     persp(proj, Math.PI / 4, W / H, 0.1, 100);
     trans(view, 0, 0, -zoom);
