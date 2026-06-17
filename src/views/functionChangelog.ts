@@ -129,7 +129,7 @@ export function getFunctionChangelogPage(input: FunctionChangelogInput): string 
     </tr>`;
   }).join('\n');
 
-  const emptyRow = '<tr><td colspan="8" class="empty-cell">データなし — ts_commit_function_map にレコードを追加してください</td></tr>';
+  const emptyRow = '<tr><td colspan="8" class="empty-cell">データなし — npx tsx scripts/index-functions.ts を実行してください</td></tr>';
 
   let repoBanner = '';
   if (repos.length === 0) {
@@ -1677,7 +1677,7 @@ export function getFunctionChangelogPage(input: FunctionChangelogInput): string 
       if (chartTitleEl) chartTitleEl.textContent = '📈 ' + (chartDim === 'file' ? 'ファイル別' : '関数別') + chartMetricLabel;
       if (data.length === 0) {
         if (pieCtx) pieCtx.clearRect(0, 0, 220, 220);
-        var msg = PIE_HAS_REPO ? 'データなし — ts_commit_function_map にレコードがありません' : 'リポジトリを選択してください';
+        var msg = PIE_HAS_REPO ? 'データなし — npx tsx scripts/index-functions.ts を実行してください' : 'リポジトリを選択してください';
         chartLegendEl.innerHTML = '<div class="chart-empty">' + msg + '</div>';
         return;
       }
