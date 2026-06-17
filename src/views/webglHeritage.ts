@@ -48,9 +48,11 @@ canvas:active { cursor:grabbing; }
 .list-scroll::-webkit-scrollbar { width:4px; }
 .list-scroll::-webkit-scrollbar-track { background:#0d1117; }
 .list-scroll::-webkit-scrollbar-thumb { background:#30363d; border-radius:2px; }
-.site-item { display:flex; align-items:center; gap:8px; padding:8px 10px; border-bottom:1px solid #161b22; cursor:pointer; transition:background .1s; }
+.site-item { display:flex; align-items:center; gap:8px; padding:8px 10px; border-bottom:1px solid #161b22; cursor:pointer; transition:background .1s; border-left:3px solid transparent; }
 .site-item:hover { background:#161b22; }
-.site-item.active { background:#0c2d1a; }
+.site-item.active { background:rgba(255,240,30,0.09); border-left-color:#c8960a; }
+.spd-row { padding:8px 10px 6px; border-bottom:1px solid #21262d; flex-shrink:0; }
+.spd-row .ctrl-label { font-size:10px; font-weight:700; color:#3fb950; text-transform:uppercase; letter-spacing:.5px; margin-bottom:4px; }
 .site-thumb { width:48px; height:36px; border-radius:4px; display:flex; align-items:center; justify-content:center; font-size:20px; flex-shrink:0; border:1px solid #21262d; }
 .site-body { flex:1; min-width:0; }
 .site-top { display:flex; align-items:center; gap:4px; margin-bottom:2px; }
@@ -132,8 +134,8 @@ void main() {
   <h1>世界遺産 地球儀</h1>
   <span class="badge">世界遺産</span>
   <span style="flex:1"></span>
-  <a href="/webgl-sphere">&#9917; W杯</a>
-  <a href="/webgl-lv-sphere">🔮 LV Sphere</a>
+  <a href="/webgl-sphere" class="pwa-hide">&#9917; W杯</a>
+  <a href="/webgl-lv-sphere" class="pwa-hide">🔮 LV Sphere</a>
   <a href="/settings" class="pwa-hide">&#9881;</a>
   <span class="pwa-hide" style="color:#8b949e;font-size:11px">${safeUser}</span>
 </div>
@@ -155,6 +157,13 @@ void main() {
     </div>
 
     <div class="panel-body visible" id="panelList">
+      <div class="spd-row">
+        <div class="ctrl-label">自転速度</div>
+        <div class="slider-row">
+          <input type="range" id="rotSpd" min="0" max="5" step="0.1" value="1">
+          <span class="sval" id="rotSpdVal">1.0</span>
+        </div>
+      </div>
       <div class="side-header">
         <div class="search-wrap">
           <span class="search-icon">🔍</span>
@@ -167,13 +176,6 @@ void main() {
 
     <div class="panel-body" id="panelCtrl">
       <div class="ctrl-panel">
-        <div class="ctrl-row">
-          <div class="ctrl-label">自転速度</div>
-          <div class="slider-row">
-            <input type="range" id="rotSpd" min="0" max="5" step="0.1" value="1">
-            <span class="sval" id="rotSpdVal">1.0</span>
-          </div>
-        </div>
         <div class="ctrl-row">
           <div class="ctrl-label">スピンブースト</div>
           <div class="slider-row">
@@ -222,11 +224,15 @@ void main() {
   var spinBoostEl = document.getElementById('spinBoost');
   var spinBoostValEl = document.getElementById('spinBoostVal');
 
+  var isListMode = true;
+
   tabList.addEventListener('click', function() {
+    isListMode = true;
     tabList.classList.add('active'); tabCtrl.classList.remove('active');
     panelList.classList.add('visible'); panelCtrl.classList.remove('visible');
   });
   tabCtrl.addEventListener('click', function() {
+    isListMode = false;
     tabCtrl.classList.add('active'); tabList.classList.remove('active');
     panelCtrl.classList.add('visible'); panelList.classList.remove('visible');
   });
@@ -657,6 +663,23 @@ void main() {
     mul(model, rx, tmp2);
     mul(tmp, view, model);
     mul(mvp, proj, tmp);
+
+    if (autoRot && isListMode && flyTarget === null) {
+      var nearestIdx2 = -1, nearestMz2 = -1;
+      for (var si2 = 0; si2 < HERITAGE.length; si2++) {
+        var sp2 = mkEls[si2] ? mkEls[si2].pos3d : null;
+        if (!sp2) continue;
+        var smz2 = model[2]*sp2[0] + model[6]*sp2[1] + model[10]*sp2[2];
+        if (smz2 > nearestMz2) { nearestMz2 = smz2; nearestIdx2 = si2; }
+      }
+      if (nearestIdx2 >= 0 && nearestIdx2 !== activeIdx) {
+        activeIdx = nearestIdx2;
+        var nd = HERITAGE[nearestIdx2];
+        var nc = typeColor(nd.t);
+        tooltip.innerHTML = '<div class="tt-name">' + nd.e + ' ' + nd.f + ' ' + nd.n + '</div><div class="tt-sub"><span style="color:' + nc + ';font-weight:600">' + nd.t + '</span>  ' + nd.c + '  ' + nd.y + '年登録</div>';
+        tooltip.style.opacity = '1';
+      }
+    }
 
     var sd = getSunDir();
     gl.uniform3f(uLight, sd[0], sd[1], sd[2]);
