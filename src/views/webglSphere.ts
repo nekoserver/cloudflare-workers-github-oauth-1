@@ -2,11 +2,8 @@ function esc(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
-export function getWebGLSpherePage(username: string, mode: string = 'wc'): string {
+export function getWebGLSpherePage(username: string): string {
   const safeUser = esc(username);
-  const isHeritage = mode === 'heritage';
-  const pageTitle = isHeritage ? '世界遺産 地球儀' : 'WebGL 地球儀';
-  const badgeText = isHeritage ? '世界遺産' : 'WebGL';
   return `<!DOCTYPE html>
 <html lang="ja">
 <head>
@@ -18,7 +15,7 @@ export function getWebGLSpherePage(username: string, mode: string = 'wc'): strin
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="地球儀">
 <link rel="manifest" href="/manifest.json">
-<title>${pageTitle}</title>
+<title>WebGL 地球儀</title>
 <style>
 * { box-sizing:border-box; margin:0; padding:0; }
 body { background:#000; color:#e6edf3; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; font-size:13px; height:100vh; height:100dvh; display:flex; flex-direction:column; overflow:hidden; }
@@ -148,10 +145,10 @@ void main() {
 </script>
 
 <div class="topbar">
-  <h1>${pageTitle}</h1>
-  <span class="badge">${badgeText}</span>
+  <h1>WebGL 地球儀</h1>
+  <span class="badge">WebGL</span>
   <span style="flex:1"></span>
-  ${isHeritage ? '<a href="/webgl-sphere">⚽ W杯</a>' : '<a href="/webgl-heritage">🏛️ 世界遺産</a>'}
+  <a href="/webgl-heritage">🏛️ 世界遺産</a>
   <a href="/webgl-demo" class="pwa-hide">3D Cube</a>
   <a href="/htmlrewriter-demo" class="pwa-hide">HTMLRewriter</a>
   <a href="/settings" class="pwa-hide">&#9881;</a>
@@ -167,7 +164,7 @@ void main() {
       <button class="canvas-ctrl-btn" id="btnAxisLock" title="地軸を画面に対して垂直に固定するモード">＋ 軸垂直固定</button>
       <button class="canvas-ctrl-btn" id="btnAutoRot" title="自転の停止/再開">⏸ 自転停止</button>
     </div>
-    ${isHeritage ? '' : '<button id="drawer-open-btn" title="試合一覧を開く">&#9776; 試合一覧</button>'}
+    <button id="drawer-open-btn" title="試合一覧を開く">&#9776; 試合一覧</button>
     <div id="match-info">
       <button class="mi-close" id="miClose">&#10005;</button>
       <div class="mi-flags" id="mi-flags"></div>
@@ -176,7 +173,7 @@ void main() {
     </div>
   </div>
   <div class="side">
-    <div class="tip">${isHeritage ? 'ドラッグ: 回転 | ホイール: ズーム | ダブルクリック: 自動回転 ON/OFF<br>🏛️ = 文化遺産 | 🌿 = 自然遺産 | ⭐ = 複合遺産' : 'ドラッグ: 回転 | ホイール: ズーム | ダブルクリック: 自動回転 ON/OFF<br>&#9917; = 2026 FIFAワールドカップ開催地（北米） | 各国旗 = 出場48ヵ国'}</div>
+    <div class="tip">ドラッグ: 回転 | ホイール: ズーム | ダブルクリック: 自動回転 ON/OFF<br>&#9917; = 2026 FIFAワールドカップ開催地（北米） | 各国旗 = 出場48ヵ国</div>
 
     <h2>コントロール</h2>
     <div class="ctrl-row">
@@ -210,7 +207,7 @@ void main() {
 </div>
 
 <div id="mk-tooltip"></div>
-${isHeritage ? '' : `<div id="drawer-overlay"></div>
+<div id="drawer-overlay"></div>
 <div id="left-drawer">
   <div class="drw-hdr">
     <span class="drw-title">&#9917; 2026 FIFA W杯 全72試合</span>
@@ -224,7 +221,7 @@ ${isHeritage ? '' : `<div id="drawer-overlay"></div>
     <button class="sp-close" id="spClose">&#10005;</button>
   </div>
   <div id="sp-body"></div>
-</div>`}
+</div>
 
 <script>
 (function() {
@@ -360,8 +357,6 @@ ${isHeritage ? '' : `<div id="drawer-overlay"></div>
   var drag = false, lx = 0, ly = 0, pinch0 = 0, touchMoved = false;
 
   var axisLocked = false;
-  var heritageMode = ${isHeritage ? 'true' : 'false'};
-  var activeHwIdx = -1;
 
   var btnAxisLock = document.getElementById("btnAxisLock");
   var btnAutoRot  = document.getElementById("btnAutoRot");
@@ -411,12 +406,9 @@ ${isHeritage ? '' : `<div id="drawer-overlay"></div>
       momentumY=0; momentumX=0;
       hideTooltip();
       schedulePanel.classList.remove("open");
-      activeHwIdx = -1;
-      if (!heritageMode) {
-        var ball = wc2026[0];
-        activeMarkerIdx = 0;
-        flyTo(ball.lat, ball.lon);
-      }
+      var ball = wc2026[0];
+      activeMarkerIdx = 0;
+      flyTo(ball.lat, ball.lon);
     }
   });
 
@@ -472,74 +464,6 @@ ${isHeritage ? '' : `<div id="drawer-overlay"></div>
     {flag:"🏴󠁧󠁢󠁥󠁮󠁧󠁿", name:"イングランド", lat:52, lon:-1},
     {flag:"🇬🇭", name:"ガーナ", lat:8, lon:-1},
     {flag:"🇵🇦", name:"パナマ", lat:9, lon:-80}
-  ];
-
-  var HERITAGE = [
-    {e:'🏛️',n:'万里の長城',c:'中国',t:'文化遺産',y:1987,lat:40.4,lon:116.6},
-    {e:'🏛️',n:'故宮（北京）',c:'中国',t:'文化遺産',y:1987,lat:39.9,lon:116.4},
-    {e:'🏛️',n:'兵馬俑',c:'中国',t:'文化遺産',y:1987,lat:34.4,lon:109.3},
-    {e:'🏛️',n:'タージ・マハル',c:'インド',t:'文化遺産',y:1983,lat:27.2,lon:78.0},
-    {e:'🏛️',n:'アクロポリス（アテネ）',c:'ギリシャ',t:'文化遺産',y:1987,lat:37.97,lon:23.73},
-    {e:'🏛️',n:'ローマ歴史地区',c:'イタリア',t:'文化遺産',y:1980,lat:41.89,lon:12.49},
-    {e:'🏛️',n:'ギザのピラミッド',c:'エジプト',t:'文化遺産',y:1979,lat:29.98,lon:31.13},
-    {e:'🏛️',n:'ペトラ',c:'ヨルダン',t:'文化遺産',y:1985,lat:30.33,lon:35.44},
-    {e:'🏛️',n:'マチュ・ピチュ',c:'ペルー',t:'文化遺産',y:1983,lat:-13.16,lon:-72.54},
-    {e:'🏛️',n:'チチェン・イッツァ',c:'メキシコ',t:'文化遺産',y:1988,lat:20.68,lon:-88.57},
-    {e:'🏛️',n:'ボロブドゥール',c:'インドネシア',t:'文化遺産',y:1991,lat:-7.61,lon:110.20},
-    {e:'🏛️',n:'アンコール遺跡群',c:'カンボジア',t:'文化遺産',y:1992,lat:13.41,lon:103.87},
-    {e:'🏛️',n:'ストーンヘンジ',c:'英国',t:'文化遺産',y:1986,lat:51.18,lon:-1.83},
-    {e:'🏛️',n:'ペルセポリス',c:'イラン',t:'文化遺産',y:1979,lat:29.94,lon:52.89},
-    {e:'🏛️',n:'ヴェルサイユ宮殿と庭園',c:'フランス',t:'文化遺産',y:1979,lat:48.81,lon:2.12},
-    {e:'🏛️',n:'モン・サン＝ミシェル',c:'フランス',t:'文化遺産',y:1979,lat:48.64,lon:-1.51},
-    {e:'🏛️',n:'アルハンブラ宮殿',c:'スペイン',t:'文化遺産',y:1984,lat:37.18,lon:-3.59},
-    {e:'🏛️',n:'バルセロナのガウディ建築群',c:'スペイン',t:'文化遺産',y:1984,lat:41.41,lon:2.17},
-    {e:'🏛️',n:'ドゥブロヴニク旧市街',c:'クロアチア',t:'文化遺産',y:1979,lat:42.65,lon:18.09},
-    {e:'🏛️',n:'プラハ歴史地区',c:'チェコ',t:'文化遺産',y:1992,lat:50.09,lon:14.42},
-    {e:'🏛️',n:'クラクフ歴史地区',c:'ポーランド',t:'文化遺産',y:1978,lat:50.06,lon:19.94},
-    {e:'🏛️',n:'サンクトペテルブルク',c:'ロシア',t:'文化遺産',y:1990,lat:59.95,lon:30.32},
-    {e:'🏛️',n:'イスタンブール歴史地区',c:'トルコ',t:'文化遺産',y:1985,lat:41.01,lon:28.98},
-    {e:'🏛️',n:'サマルカンド',c:'ウズベキスタン',t:'文化遺産',y:2001,lat:39.65,lon:66.97},
-    {e:'🏛️',n:'ルクソール（古代テーベ）',c:'エジプト',t:'文化遺産',y:1979,lat:25.69,lon:32.63},
-    {e:'🏛️',n:'ティカル',c:'グアテマラ',t:'文化遺産',y:1979,lat:17.22,lon:-89.62},
-    {e:'🏛️',n:'ポンペイ遺跡',c:'イタリア',t:'文化遺産',y:1997,lat:40.75,lon:14.49},
-    {e:'🏛️',n:'アクスム',c:'エチオピア',t:'文化遺産',y:1980,lat:14.13,lon:38.72},
-    {e:'🏛️',n:'グレート・ジンバブエ',c:'ジンバブエ',t:'文化遺産',y:1986,lat:-20.27,lon:30.93},
-    {e:'🏛️',n:'日光の社寺',c:'日本',t:'文化遺産',y:1999,lat:36.76,lon:139.60},
-    {e:'🏛️',n:'白川郷・五箇山の合掌造り集落',c:'日本',t:'文化遺産',y:1995,lat:36.26,lon:136.91},
-    {e:'🏛️',n:'厳島神社',c:'日本',t:'文化遺産',y:1996,lat:34.30,lon:132.32},
-    {e:'🏛️',n:'法隆寺地域の仏教建造物群',c:'日本',t:'文化遺産',y:1993,lat:34.61,lon:135.74},
-    {e:'🏛️',n:'原爆ドーム',c:'日本',t:'文化遺産',y:1996,lat:34.40,lon:132.45},
-    {e:'🏛️',n:'古都京都の文化財',c:'日本',t:'文化遺産',y:1994,lat:35.01,lon:135.77},
-    {e:'🏛️',n:'古都奈良の文化財',c:'日本',t:'文化遺産',y:1998,lat:34.69,lon:135.84},
-    {e:'🏛️',n:'琉球王国のグスク及び関連遺産群',c:'日本',t:'文化遺産',y:2000,lat:26.21,lon:127.72},
-    {e:'🏛️',n:'カルタヘナの港、要塞、建造物群',c:'コロンビア',t:'文化遺産',y:1984,lat:10.42,lon:-75.54},
-    {e:'🏛️',n:'オールド・ハバナと要塞',c:'キューバ',t:'文化遺産',y:1982,lat:23.14,lon:-82.36},
-    {e:'🌿',n:'グランドキャニオン国立公園',c:'アメリカ',t:'自然遺産',y:1979,lat:36.10,lon:-112.11},
-    {e:'🌿',n:'イエローストーン国立公園',c:'アメリカ',t:'自然遺産',y:1978,lat:44.43,lon:-110.59},
-    {e:'🌿',n:'ガラパゴス諸島',c:'エクアドル',t:'自然遺産',y:1978,lat:-0.53,lon:-90.43},
-    {e:'🌿',n:'グレート・バリア・リーフ',c:'オーストラリア',t:'自然遺産',y:1981,lat:-18.29,lon:147.70},
-    {e:'🌿',n:'セレンゲティ国立公園',c:'タンザニア',t:'自然遺産',y:1981,lat:-2.33,lon:34.83},
-    {e:'🌿',n:'ビクトリア滝',c:'ジンバブエ/ザンビア',t:'自然遺産',y:1989,lat:-17.92,lon:25.86},
-    {e:'🌿',n:'イグアスの滝',c:'アルゼンチン/ブラジル',t:'自然遺産',y:1984,lat:-25.69,lon:-54.44},
-    {e:'🌿',n:'フィヨルド（西ノルウェー）',c:'ノルウェー',t:'自然遺産',y:2005,lat:60.63,lon:6.61},
-    {e:'🌿',n:'サガルマータ国立公園（エベレスト）',c:'ネパール',t:'自然遺産',y:1979,lat:27.99,lon:86.93},
-    {e:'🌿',n:'バイカル湖',c:'ロシア',t:'自然遺産',y:1996,lat:53.50,lon:107.99},
-    {e:'🌿',n:'コモド国立公園',c:'インドネシア',t:'自然遺産',y:1991,lat:-8.55,lon:119.48},
-    {e:'🌿',n:'キリマンジャロ国立公園',c:'タンザニア',t:'自然遺産',y:1987,lat:-3.07,lon:37.35},
-    {e:'🌿',n:'屋久島',c:'日本',t:'自然遺産',y:1993,lat:30.34,lon:130.53},
-    {e:'🌿',n:'知床',c:'日本',t:'自然遺産',y:2005,lat:44.07,lon:145.08},
-    {e:'🌿',n:'小笠原諸島',c:'日本',t:'自然遺産',y:2011,lat:27.05,lon:142.22},
-    {e:'🌿',n:'奄美大島・徳之島・西表島',c:'日本',t:'自然遺産',y:2021,lat:28.38,lon:129.50},
-    {e:'🌿',n:'ハ・ロン湾',c:'ベトナム',t:'自然遺産',y:1994,lat:20.91,lon:107.18},
-    {e:'🌿',n:'カナディアン・ロッキー',c:'カナダ',t:'自然遺産',y:1984,lat:51.50,lon:-116.16},
-    {e:'🌿',n:'ロス・グラシアレス国立公園',c:'アルゼンチン',t:'自然遺産',y:1981,lat:-50.59,lon:-73.09},
-    {e:'🌿',n:'ンゴロンゴロ保全地域',c:'タンザニア',t:'自然遺産',y:1979,lat:-3.18,lon:35.58},
-    {e:'🌿',n:'カカドゥ国立公園',c:'オーストラリア',t:'自然遺産',y:1981,lat:-12.87,lon:132.56},
-    {e:'🌿',n:'中央アマゾン保全地域群',c:'ブラジル',t:'自然遺産',y:2000,lat:-2.50,lon:-60.50},
-    {e:'⭐',n:'ウルル・カタ・ジュタ国立公園',c:'オーストラリア',t:'複合遺産',y:1987,lat:-25.36,lon:131.03},
-    {e:'⭐',n:'トンガリロ国立公園',c:'ニュージーランド',t:'複合遺産',y:1990,lat:-39.18,lon:175.63},
-    {e:'⭐',n:'泰山',c:'中国',t:'複合遺産',y:1987,lat:36.27,lon:117.10},
-    {e:'⭐',n:'黄山',c:'中国',t:'複合遺産',y:1990,lat:30.13,lon:118.16}
   ];
 
   function latLonTo3D(lat, lon) {
@@ -694,7 +618,7 @@ ${isHeritage ? '' : `<div id="drawer-overlay"></div>
 
   var tooltip = document.getElementById("mk-tooltip");
   var schedulePanel = document.getElementById("schedule-panel");
-  var spBody = schedulePanel ? schedulePanel.querySelector("#sp-body") : null;
+  var spBody = schedulePanel.querySelector("#sp-body");
   var activeMarkerIdx = -1;
   var canvasRect = {left:0, top:0, width:0, height:0};
 
@@ -733,51 +657,6 @@ ${isHeritage ? '' : `<div id="drawer-overlay"></div>
     flyTo(d.lat, d.lon);
   }
 
-  function showHeritageTooltip(idx, vx, vy) {
-    var d = HERITAGE[idx];
-    var typeColor = d.t === '文化遺産' ? '#e3a838' : (d.t === '自然遺産' ? '#3fb950' : '#a371f7');
-    tooltip.innerHTML = '<div class="tt-name">' + d.e + ' ' + d.n + '</div><div class="tt-match"><span style="color:' + typeColor + ';font-weight:600">' + d.t + '</span>  ' + d.c + '  ' + d.y + '年登録</div>';
-    positionTooltip(vx, vy);
-    tooltip.style.opacity = "1";
-    activeHwIdx = idx;
-    flyTo(d.lat, d.lon);
-  }
-
-  function showSchedulePanel() {
-    var todayStr = new Date().toISOString().slice(0, 10);
-    var allMatches = MATCHES.filter(function(m) { return m.date >= todayStr; });
-    allMatches.sort(function(a, b) { return (a.date + a.time) < (b.date + b.time) ? -1 : 1; });
-    var html = "";
-    var lastDate = "";
-    var nowMs = Date.now();
-    allMatches.forEach(function(m) {
-      if (m.date !== lastDate) {
-        var label = m.date === todayStr ? "本日 " + m.date.slice(5).replace("-","/") : m.date.slice(5).replace("-","/");
-        html += '<div class="sp-date">' + label + '</div>';
-        lastDate = m.date;
-      }
-      var koMs = new Date(m.date + "T" + m.time + ":00Z").getTime();
-      var isPast = koMs < nowMs - 110*60000;
-      var isTod  = m.date === todayStr;
-      var cls = "sp-match" + (isPast ? " sp-past" : "") + (isTod && !isPast ? " sp-today" : "");
-      html += '<div class="' + cls + '" data-a="' + m.a + '" data-b="' + m.b + '" data-date="' + m.date + '" data-time="' + m.time + '" style="cursor:pointer"><span class="sp-flags">' + m.a + ' - ' + m.b + '</span><span class="sp-time">' + m.time + ' UTC<br>' + toET(m.time) + '<br>' + toJST(m.time) + '</span></div>';
-    });
-    spBody.innerHTML = html || '<div style="padding:16px;color:#8b949e">本日以降の試合はありません</div>';
-    function spRowTap(row) {
-      if (!row) return;
-      var a = row.dataset.a, b = row.dataset.b;
-      schedulePanel.classList.remove("open");
-      showMatchDetail(a, b, row.dataset.date, row.dataset.time, true);
-    }
-    spBody.onclick = function(e) { spRowTap(e.target.closest(".sp-match")); };
-    spBody.ontouchend = function(e) {
-      var row = e.target.closest(".sp-match");
-      if (row) { e.preventDefault(); spRowTap(row); }
-    };
-    schedulePanel.classList.add("open");
-    hideTooltip();
-  }
-
   var leftDrawer = document.getElementById("left-drawer");
   var drwOverlay = document.getElementById("drawer-overlay");
   var drwBody    = document.getElementById("drw-body");
@@ -788,25 +667,23 @@ ${isHeritage ? '' : `<div id="drawer-overlay"></div>
   var drwBuilt = false;
 
   function openDrawer() {
-    if (!leftDrawer) return;
     if (!drwBuilt) { buildDrawer(); drwBuilt = true; }
     leftDrawer.classList.add("open");
-    if (drwOverlay) drwOverlay.classList.add("open");
+    drwOverlay.classList.add("open");
     hideTooltip();
-    if (schedulePanel) schedulePanel.classList.remove("open");
+    schedulePanel.classList.remove("open");
   }
   function closeDrawer() {
-    if (leftDrawer) leftDrawer.classList.remove("open");
-    if (drwOverlay) drwOverlay.classList.remove("open");
+    leftDrawer.classList.remove("open");
+    drwOverlay.classList.remove("open");
   }
   function showMatchDetail(a, b, date, time, doFly) {
-    if (!matchInfo) return;
     miFlags.textContent = a + "  " + b;
     miTime.textContent  = time + " UTC / " + toET(time) + " / " + toJST(time);
     miDate.textContent  = date.slice(5).replace("-", "/");
     matchInfo.classList.add("open");
     closeDrawer();
-    if (schedulePanel) schedulePanel.classList.remove("open");
+    schedulePanel.classList.remove("open");
     if (doFly) {
       var tidx = findCountryByFlag(a);
       if (tidx >= 0) {
@@ -817,14 +694,13 @@ ${isHeritage ? '' : `<div id="drawer-overlay"></div>
       }
     }
   }
-  function closeMatchDetail() { if (matchInfo) matchInfo.classList.remove("open"); }
+  function closeMatchDetail() { matchInfo.classList.remove("open"); }
   var miCloseBtn = document.getElementById("miClose");
-  if (miCloseBtn) miCloseBtn.addEventListener("click", function(e) { e.stopPropagation(); closeMatchDetail(); });
+  miCloseBtn.addEventListener("click", function(e) { e.stopPropagation(); closeMatchDetail(); });
   var spCloseBtn = document.getElementById("spClose");
-  if (spCloseBtn) spCloseBtn.addEventListener("click", function() { if (schedulePanel) schedulePanel.classList.remove("open"); });
+  spCloseBtn.addEventListener("click", function() { schedulePanel.classList.remove("open"); });
 
   function showSchedulePanel() {
-    if (!schedulePanel || !spBody) return;
     var todayStr = new Date().toISOString().slice(0, 10);
     var allMatches = MATCHES.filter(function(m) { return m.date >= todayStr; });
     allMatches.sort(function(a, b) { return (a.date + a.time) < (b.date + b.time) ? -1 : 1; });
@@ -897,10 +773,10 @@ ${isHeritage ? '' : `<div id="drawer-overlay"></div>
   }
 
   var drawerOpenBtn = document.getElementById("drawer-open-btn");
-  if (drawerOpenBtn) drawerOpenBtn.addEventListener("click", openDrawer);
+  drawerOpenBtn.addEventListener("click", openDrawer);
   var drwCloseBtn = document.getElementById("drwClose");
-  if (drwCloseBtn) drwCloseBtn.addEventListener("click", closeDrawer);
-  if (drwOverlay) drwOverlay.addEventListener("click", closeDrawer);
+  drwCloseBtn.addEventListener("click", closeDrawer);
+  drwOverlay.addEventListener("click", closeDrawer);
 
   var mkEls = [];
   for (var mi = 0; mi < wc2026.length; mi++) {
@@ -927,40 +803,12 @@ ${isHeritage ? '' : `<div id="drawer-overlay"></div>
     mkEls.push({el: mel, pos3d: latLonTo3D(mdata.lat, mdata.lon)});
   }
 
-  var hwEls = [];
-  for (var hi = 0; hi < HERITAGE.length; hi++) {
-    var hdata = HERITAGE[hi];
-    var hel = document.createElement("div");
-    hel.className = "mk mk-hw";
-    hel.textContent = hdata.e;
-    hel.style.opacity = "0";
-    hel.style.display = "none";
-    (function(idx) {
-      hel.addEventListener("click", function(e) {
-        e.stopPropagation();
-        var r = hel.getBoundingClientRect();
-        showHeritageTooltip(idx, r.left + r.width/2, r.top + r.height/2);
-      });
-      hel.addEventListener("touchend", function(e) {
-        e.preventDefault();
-        e.stopPropagation();
-        var r = hel.getBoundingClientRect();
-        showHeritageTooltip(idx, r.left + r.width/2, r.top + r.height/2);
-      });
-    })(hi);
-    markersDiv.appendChild(hel);
-    hwEls.push({el: hel, pos3d: latLonTo3D(hdata.lat, hdata.lon)});
-  }
-
   canvas.addEventListener("click", function() {
     hideTooltip();
     schedulePanel.classList.remove("open");
-    activeHwIdx = -1;
-    if (!heritageMode) {
-      var ball = wc2026[0];
-      activeMarkerIdx = 0;
-      flyTo(ball.lat, ball.lon);
-    }
+    var ball = wc2026[0];
+    activeMarkerIdx = 0;
+    flyTo(ball.lat, ball.lon);
   });
 
   gl.enable(gl.DEPTH_TEST);
@@ -994,34 +842,18 @@ ${isHeritage ? '' : `<div id="drawer-overlay"></div>
       var nowSpinning = Math.abs(momentumY) > 0.0002 || Math.abs(momentumX) > 0.0002;
       if (wasSpinning && !nowSpinning && !autoRot) {
         var bestIdx = -1, bestMz = -1;
-        if (heritageMode) {
-          for (var si = 0; si < HERITAGE.length; si++) {
-            var sp = hwEls[si] ? hwEls[si].pos3d : null;
-            if (!sp) continue;
-            var smz = model[2]*sp[0] + model[6]*sp[1] + model[10]*sp[2];
-            if (smz > bestMz) { bestMz = smz; bestIdx = si; }
-          }
-          if (bestIdx >= 0) {
-            var hbd = HERITAGE[bestIdx];
-            var hbColor = hbd.t === '文化遺産' ? '#e3a838' : (hbd.t === '自然遺産' ? '#3fb950' : '#a371f7');
-            tooltip.innerHTML = '<div class="tt-name">' + hbd.e + ' ' + hbd.n + '</div><div class="tt-match"><span style="color:' + hbColor + ';font-weight:600">' + hbd.t + '</span>  ' + hbd.c + '  ' + hbd.y + '年登録</div>';
-            activeHwIdx = bestIdx;
-            flyTo(hbd.lat, hbd.lon);
-          }
-        } else {
-          for (var si = 0; si < wc2026.length; si++) {
-            if (wc2026[si].ball) continue;
-            var sp = mkEls[si] ? mkEls[si].pos3d : null;
-            if (!sp) continue;
-            var smz = model[2]*sp[0] + model[6]*sp[1] + model[10]*sp[2];
-            if (smz > bestMz) { bestMz = smz; bestIdx = si; }
-          }
-          if (bestIdx >= 0) {
-            var bd = wc2026[bestIdx];
-            tooltip.innerHTML = buildMatchHtml(bd.flag, bd.name);
-            activeMarkerIdx = bestIdx;
-            flyTo(bd.lat, bd.lon);
-          }
+        for (var si = 0; si < wc2026.length; si++) {
+          if (wc2026[si].ball) continue;
+          var sp = mkEls[si] ? mkEls[si].pos3d : null;
+          if (!sp) continue;
+          var smz = model[2]*sp[0] + model[6]*sp[1] + model[10]*sp[2];
+          if (smz > bestMz) { bestMz = smz; bestIdx = si; }
+        }
+        if (bestIdx >= 0) {
+          var bd = wc2026[bestIdx];
+          tooltip.innerHTML = buildMatchHtml(bd.flag, bd.name);
+          activeMarkerIdx = bestIdx;
+          flyTo(bd.lat, bd.lon);
         }
       }
     }
@@ -1044,7 +876,6 @@ ${isHeritage ? '' : `<div id="drawer-overlay"></div>
 
     for (var mi = 0; mi < mkEls.length; mi++) {
       var mk = mkEls[mi];
-      if (heritageMode) { mk.el.style.display = "none"; continue; }
       mk.el.style.display = "";
       var mp = mk.pos3d;
       var mz = model[2]*mp[0] + model[6]*mp[1] + model[10]*mp[2];
@@ -1071,36 +902,6 @@ ${isHeritage ? '' : `<div id="drawer-overlay"></div>
         if (mi === activeMarkerIdx) hideTooltip();
       }
     }
-    for (var hi = 0; hi < hwEls.length; hi++) {
-      var hw = hwEls[hi];
-      if (!heritageMode) { hw.el.style.display = "none"; continue; }
-      hw.el.style.display = "";
-      var hp = hw.pos3d;
-      var hz = model[2]*hp[0] + model[6]*hp[1] + model[10]*hp[2];
-      if (hz > 0.12) {
-        var hcx = mvp[0]*hp[0] + mvp[4]*hp[1] + mvp[8]*hp[2]  + mvp[12];
-        var hcy = mvp[1]*hp[0] + mvp[5]*hp[1] + mvp[9]*hp[2]  + mvp[13];
-        var hcw = mvp[3]*hp[0] + mvp[7]*hp[1] + mvp[11]*hp[2] + mvp[15];
-        if (hcw > 0) {
-          var hpx = (hcx/hcw+1)*0.5*W;
-          var hpy = (1-hcy/hcw)*0.5*H;
-          hw.el.style.left = hpx + "px";
-          hw.el.style.top  = hpy + "px";
-          hw.el.style.opacity = "1";
-          if (hi === activeHwIdx) {
-            positionTooltip(canvasRect.left + hpx, canvasRect.top + hpy);
-            tooltip.style.opacity = "1";
-          }
-        } else {
-          hw.el.style.opacity = "0";
-          if (hi === activeHwIdx) { hideTooltip(); activeHwIdx = -1; }
-        }
-      } else {
-        hw.el.style.opacity = "0";
-        if (hi === activeHwIdx) { hideTooltip(); activeHwIdx = -1; }
-      }
-    }
-
     frames++;
     var dt = now - lastFps;
     if (dt >= 600) {
