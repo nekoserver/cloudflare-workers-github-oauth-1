@@ -23,8 +23,8 @@ body { background:#000; color:#e6edf3; font-family:-apple-system,BlinkMacSystemF
 .topbar a { color:#58a6ff; text-decoration:none; font-size:12px; }
 h1 { font-size:14px; font-weight:700; }
 .badge { background:#0c2d1a; color:#3fb950; font-size:10px; padding:2px 7px; border-radius:10px; font-weight:600; }
-.body { display:grid; grid-template-columns:1fr 280px; grid-template-rows:1fr; flex:1; min-height:0; }
-@media(max-width:900px){ .body{ grid-template-columns:1fr; } .side{ display:none; } }
+.body { display:grid; grid-template-columns:1fr 260px; grid-template-rows:1fr; flex:1; min-height:0; }
+@media(max-width:800px){ .body{ grid-template-columns:1fr; } .side{ display:none; } }
 .canvas-wrap { position:relative; background:#000010; overflow:hidden; }
 canvas { position:absolute; inset:0; width:100%; height:100%; cursor:grab; touch-action:none; display:block; }
 canvas:active { cursor:grabbing; }
@@ -35,26 +35,34 @@ canvas:active { cursor:grabbing; }
 #mk-tooltip.below { transform:translate(-50%, 14px); }
 #mk-tooltip .tt-name { font-weight:700; font-size:13px; }
 #mk-tooltip .tt-sub { font-size:12px; margin-top:3px; }
-.side { background:#0d1117; border-left:1px solid #30363d; overflow-y:auto; padding:16px; }
-.side h2 { font-size:11px; font-weight:700; color:#3fb950; text-transform:uppercase; letter-spacing:.5px; margin-bottom:10px; }
-.item { margin-bottom:12px; }
-.item-title { font-weight:600; font-size:12px; margin-bottom:3px; }
-.item-desc { color:#8b949e; font-size:11px; line-height:1.6; }
-hr { border:none; border-top:1px solid #30363d; margin:12px 0; }
-.tip { background:#0c2d1a; border-radius:6px; padding:8px 10px; font-size:11px; color:#8b949e; line-height:1.7; margin-bottom:12px; }
-@media (display-mode: standalone) { .pwa-hide { display:none !important; } }
-.ctrl-row { margin-bottom:10px; }
-.ctrl-label { font-size:11px; color:#8b949e; margin-bottom:4px; }
-.slider-row { display:flex; align-items:center; gap:8px; }
-input[type=range] { flex:1; accent-color:#3fb950; }
-.sval { font-family:monospace; font-size:11px; color:#3fb950; min-width:36px; }
+.side { background:#0d1117; border-left:1px solid #30363d; display:flex; flex-direction:column; overflow:hidden; }
+.side-header { padding:10px 10px 8px; border-bottom:1px solid #21262d; flex-shrink:0; }
+.side-title { font-size:10px; font-weight:700; color:#3fb950; text-transform:uppercase; letter-spacing:.5px; margin-bottom:6px; }
+.search-wrap { position:relative; }
+.search-wrap input { width:100%; background:#161b22; border:1px solid #30363d; border-radius:6px; padding:6px 10px 6px 28px; color:#e6edf3; font-size:12px; outline:none; }
+.search-wrap input:focus { border-color:#3fb950; }
+.search-wrap input::placeholder { color:#484f58; }
+.search-icon { position:absolute; left:9px; top:50%; transform:translateY(-50%); color:#484f58; font-size:12px; pointer-events:none; }
+#result-count { font-size:10px; color:#484f58; margin-top:5px; text-align:right; }
+.list-scroll { flex:1; overflow-y:auto; overflow-x:hidden; }
+.list-scroll::-webkit-scrollbar { width:4px; }
+.list-scroll::-webkit-scrollbar-track { background:#0d1117; }
+.list-scroll::-webkit-scrollbar-thumb { background:#30363d; border-radius:2px; }
+.site-item { display:flex; align-items:center; gap:8px; padding:8px 10px; border-bottom:1px solid #161b22; cursor:pointer; transition:background .1s; }
+.site-item:hover { background:#161b22; }
+.site-item.active { background:#0c2d1a; }
+.site-thumb { width:48px; height:36px; border-radius:4px; display:flex; align-items:center; justify-content:center; font-size:20px; flex-shrink:0; border:1px solid #21262d; }
+.site-body { flex:1; min-width:0; }
+.site-top { display:flex; align-items:center; gap:4px; margin-bottom:2px; }
+.site-flag { font-size:13px; flex-shrink:0; }
+.site-name { font-size:11px; font-weight:600; color:#e6edf3; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.site-meta { font-size:10px; color:#484f58; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.type-label { font-weight:600; }
 .canvas-ctrl-btns { position:absolute; top:10px; right:10px; display:flex; flex-direction:row; gap:6px; z-index:5; }
-.canvas-ctrl-btn { background:rgba(13,17,23,0.88); border:1px solid #30363d; border-radius:6px; color:#e6edf3; font-size:12px; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; padding:6px 12px; cursor:pointer; white-space:nowrap; transition:background .15s,border-color .15s,color .15s; text-align:left; }
+.canvas-ctrl-btn { background:rgba(13,17,23,0.88); border:1px solid #30363d; border-radius:6px; color:#e6edf3; font-size:12px; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; padding:6px 12px; cursor:pointer; white-space:nowrap; transition:background .15s,border-color .15s,color .15s; }
 .canvas-ctrl-btn:hover { background:rgba(13,17,23,1); border-color:#3fb950; }
 .canvas-ctrl-btn.active { background:#0c2d1a; border-color:#3fb950; color:#3fb950; }
-.legend { display:flex; flex-direction:column; gap:6px; margin-bottom:12px; }
-.legend-row { display:flex; align-items:center; gap:8px; font-size:12px; }
-.legend-dot { font-size:16px; line-height:1; }
+@media (display-mode: standalone) { .pwa-hide { display:none !important; } }
 </style>
 </head>
 <body>
@@ -109,7 +117,7 @@ void main() {
   <span class="badge">世界遺産</span>
   <span style="flex:1"></span>
   <a href="/webgl-sphere">&#9917; W杯</a>
-  <a href="/webgl-demo" class="pwa-hide">3D Cube</a>
+  <a href="/webgl-lv-sphere">🔮 LV Sphere</a>
   <a href="/settings" class="pwa-hide">&#9881;</a>
   <span class="pwa-hide" style="color:#8b949e;font-size:11px">${safeUser}</span>
 </div>
@@ -125,30 +133,15 @@ void main() {
     </div>
   </div>
   <div class="side">
-    <div class="tip">ドラッグ: 回転 | ホイール: ズーム | ダブルクリック: 自動回転 ON/OFF</div>
-
-    <h2>凡例</h2>
-    <div class="legend">
-      <div class="legend-row"><span class="legend-dot">🏛️</span><span style="color:#e3a838;font-weight:600">文化遺産</span></div>
-      <div class="legend-row"><span class="legend-dot">🌿</span><span style="color:#3fb950;font-weight:600">自然遺産</span></div>
-      <div class="legend-row"><span class="legend-dot">⭐</span><span style="color:#a371f7;font-weight:600">複合遺産</span></div>
-    </div>
-
-    <hr>
-    <h2>コントロール</h2>
-    <div class="ctrl-row">
-      <div class="ctrl-label">自転速度</div>
-      <div class="slider-row">
-        <input type="range" id="rotSpd" min="0" max="5" step="0.1" value="1">
-        <span class="sval" id="rotSpdVal">1.0</span>
+    <div class="side-header">
+      <div class="side-title">▼ 正面から近い順</div>
+      <div class="search-wrap">
+        <span class="search-icon">🔍</span>
+        <input type="search" id="searchInput" placeholder="遺産名・国・種別で検索...">
       </div>
+      <div id="result-count"></div>
     </div>
-
-    <hr>
-    <h2>収録数</h2>
-    <div class="item">
-      <div class="item-desc">UNESCO世界遺産 65件（文化遺産 39件 / 自然遺産 22件 / 複合遺産 4件）<br>日本の世界遺産を全件収録。</div>
-    </div>
+    <div class="list-scroll" id="siteList"></div>
   </div>
 </div>
 
@@ -160,14 +153,15 @@ void main() {
   var wrap   = canvas.parentElement;
   var hud    = document.getElementById('hud');
   var markersDiv = document.getElementById('markers');
+  var siteList = document.getElementById('siteList');
+  var searchInput = document.getElementById('searchInput');
+  var resultCount = document.getElementById('result-count');
 
   function resize() {
     var r = wrap.getBoundingClientRect();
-    var w = Math.round(r.width);
-    var h = Math.round(r.height);
+    var w = Math.round(r.width), h = Math.round(r.height);
     if (w > 0 && h > 0 && (canvas.width !== w || canvas.height !== h)) {
-      canvas.width  = w;
-      canvas.height = h;
+      canvas.width = w; canvas.height = h;
     }
   }
   resize();
@@ -241,7 +235,6 @@ void main() {
   gl.activeTexture(gl.TEXTURE0);
   gl.bindTexture(gl.TEXTURE_2D, texEarth);
   gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([10, 30, 70, 255]));
-
   var earthImg = new Image();
   earthImg.onload = function() {
     gl.activeTexture(gl.TEXTURE0);
@@ -288,20 +281,11 @@ void main() {
     if (autoRot) { btnAutoRot.classList.remove('active'); } else { btnAutoRot.classList.add('active'); }
   });
 
-  var rotSpdEl    = document.getElementById('rotSpd');
-  var rotSpdValEl = document.getElementById('rotSpdVal');
-  rotSpdEl.addEventListener('input', function(){ rotSpdValEl.textContent = parseFloat(rotSpdEl.value).toFixed(1); });
-
   var velY = 0, velX = 0, momentumY = 0, momentumX = 0;
   var MOMENTUM_DECAY = 0.92;
 
-  function applySpinBoost(v) {
-    var spd = parseFloat(rotSpdEl.value);
-    return v * (1 + Math.random() * spd);
-  }
-
   canvas.addEventListener('mousedown',  function(e){ drag=true; lx=e.clientX; ly=e.clientY; momentumY=0; momentumX=0; velY=0; velX=0; });
-  window.addEventListener('mouseup',    function(){ if(!drag)return; drag=false; momentumY=applySpinBoost(velY); momentumX=applySpinBoost(velX); velY=0; velX=0; });
+  window.addEventListener('mouseup',    function(){ if(!drag)return; drag=false; momentumY=velY; momentumX=velX; velY=0; velX=0; });
   window.addEventListener('mousemove',  function(e){ if(!drag)return; var dy=(e.clientX-lx)*0.008; var dx=(e.clientY-ly)*0.008; rotYv+=dy; velY=velY*0.4+dy*0.6; if(!axisLocked){rotXv=clampElev(rotXv+dx); velX=velX*0.4+dx*0.6;} lx=e.clientX; ly=e.clientY; });
   canvas.addEventListener('wheel',      function(e){ e.preventDefault(); zoom=Math.max(1.6,Math.min(10,zoom+e.deltaY*0.01)); },{passive:false});
   canvas.addEventListener('dblclick',   function(){ autoRot=!autoRot; btnAutoRot.textContent=autoRot?'⏸ 自転停止':'▶ 回転'; if(autoRot){btnAutoRot.classList.remove('active');}else{btnAutoRot.classList.add('active');} });
@@ -309,80 +293,84 @@ void main() {
   canvas.addEventListener('touchmove',  function(e){ e.preventDefault(); touchMoved=true; if(e.touches.length===1&&drag){var dy=(e.touches[0].clientX-lx)*0.008; var dx=(e.touches[0].clientY-ly)*0.008; rotYv+=dy; velY=velY*0.4+dy*0.6; if(!axisLocked){rotXv=clampElev(rotXv+dx); velX=velX*0.4+dx*0.6;} lx=e.touches[0].clientX;ly=e.touches[0].clientY;} if(e.touches.length===2){var d=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);zoom=Math.max(1.6,Math.min(10,zoom-(d-pinch0)*0.02));pinch0=d;} },{passive:false});
   canvas.addEventListener('touchend', function(e){
     drag=false;
-    momentumY=applySpinBoost(velY); momentumX=applySpinBoost(velX); velY=0; velX=0;
-    if (!touchMoved && e.changedTouches.length === 1) {
-      momentumY=0; momentumX=0;
-      hideTooltip();
-    }
+    momentumY=velY; momentumX=velX; velY=0; velX=0;
+    if (!touchMoved && e.changedTouches.length === 1) { momentumY=0; momentumX=0; hideTooltip(); }
   });
 
   var HERITAGE = [
-    {e:'🏛️',n:'万里の長城',c:'中国',t:'文化遺産',y:1987,lat:40.4,lon:116.6},
-    {e:'🏛️',n:'故宮（北京）',c:'中国',t:'文化遺産',y:1987,lat:39.9,lon:116.4},
-    {e:'🏛️',n:'兵馬俑',c:'中国',t:'文化遺産',y:1987,lat:34.4,lon:109.3},
-    {e:'🏛️',n:'タージ・マハル',c:'インド',t:'文化遺産',y:1983,lat:27.2,lon:78.0},
-    {e:'🏛️',n:'アクロポリス（アテネ）',c:'ギリシャ',t:'文化遺産',y:1987,lat:37.97,lon:23.73},
-    {e:'🏛️',n:'ローマ歴史地区',c:'イタリア',t:'文化遺産',y:1980,lat:41.89,lon:12.49},
-    {e:'🏛️',n:'ギザのピラミッド',c:'エジプト',t:'文化遺産',y:1979,lat:29.98,lon:31.13},
-    {e:'🏛️',n:'ペトラ',c:'ヨルダン',t:'文化遺産',y:1985,lat:30.33,lon:35.44},
-    {e:'🏛️',n:'マチュ・ピチュ',c:'ペルー',t:'文化遺産',y:1983,lat:-13.16,lon:-72.54},
-    {e:'🏛️',n:'チチェン・イッツァ',c:'メキシコ',t:'文化遺産',y:1988,lat:20.68,lon:-88.57},
-    {e:'🏛️',n:'ボロブドゥール',c:'インドネシア',t:'文化遺産',y:1991,lat:-7.61,lon:110.20},
-    {e:'🏛️',n:'アンコール遺跡群',c:'カンボジア',t:'文化遺産',y:1992,lat:13.41,lon:103.87},
-    {e:'🏛️',n:'ストーンヘンジ',c:'英国',t:'文化遺産',y:1986,lat:51.18,lon:-1.83},
-    {e:'🏛️',n:'ペルセポリス',c:'イラン',t:'文化遺産',y:1979,lat:29.94,lon:52.89},
-    {e:'🏛️',n:'ヴェルサイユ宮殿と庭園',c:'フランス',t:'文化遺産',y:1979,lat:48.81,lon:2.12},
-    {e:'🏛️',n:'モン・サン＝ミシェル',c:'フランス',t:'文化遺産',y:1979,lat:48.64,lon:-1.51},
-    {e:'🏛️',n:'アルハンブラ宮殿',c:'スペイン',t:'文化遺産',y:1984,lat:37.18,lon:-3.59},
-    {e:'🏛️',n:'バルセロナのガウディ建築群',c:'スペイン',t:'文化遺産',y:1984,lat:41.41,lon:2.17},
-    {e:'🏛️',n:'ドゥブロヴニク旧市街',c:'クロアチア',t:'文化遺産',y:1979,lat:42.65,lon:18.09},
-    {e:'🏛️',n:'プラハ歴史地区',c:'チェコ',t:'文化遺産',y:1992,lat:50.09,lon:14.42},
-    {e:'🏛️',n:'クラクフ歴史地区',c:'ポーランド',t:'文化遺産',y:1978,lat:50.06,lon:19.94},
-    {e:'🏛️',n:'サンクトペテルブルク',c:'ロシア',t:'文化遺産',y:1990,lat:59.95,lon:30.32},
-    {e:'🏛️',n:'イスタンブール歴史地区',c:'トルコ',t:'文化遺産',y:1985,lat:41.01,lon:28.98},
-    {e:'🏛️',n:'サマルカンド',c:'ウズベキスタン',t:'文化遺産',y:2001,lat:39.65,lon:66.97},
-    {e:'🏛️',n:'ルクソール（古代テーベ）',c:'エジプト',t:'文化遺産',y:1979,lat:25.69,lon:32.63},
-    {e:'🏛️',n:'ティカル',c:'グアテマラ',t:'文化遺産',y:1979,lat:17.22,lon:-89.62},
-    {e:'🏛️',n:'ポンペイ遺跡',c:'イタリア',t:'文化遺産',y:1997,lat:40.75,lon:14.49},
-    {e:'🏛️',n:'アクスム',c:'エチオピア',t:'文化遺産',y:1980,lat:14.13,lon:38.72},
-    {e:'🏛️',n:'グレート・ジンバブエ',c:'ジンバブエ',t:'文化遺産',y:1986,lat:-20.27,lon:30.93},
-    {e:'🏛️',n:'日光の社寺',c:'日本',t:'文化遺産',y:1999,lat:36.76,lon:139.60},
-    {e:'🏛️',n:'白川郷・五箇山の合掌造り集落',c:'日本',t:'文化遺産',y:1995,lat:36.26,lon:136.91},
-    {e:'🏛️',n:'厳島神社',c:'日本',t:'文化遺産',y:1996,lat:34.30,lon:132.32},
-    {e:'🏛️',n:'法隆寺地域の仏教建造物群',c:'日本',t:'文化遺産',y:1993,lat:34.61,lon:135.74},
-    {e:'🏛️',n:'原爆ドーム',c:'日本',t:'文化遺産',y:1996,lat:34.40,lon:132.45},
-    {e:'🏛️',n:'古都京都の文化財',c:'日本',t:'文化遺産',y:1994,lat:35.01,lon:135.77},
-    {e:'🏛️',n:'古都奈良の文化財',c:'日本',t:'文化遺産',y:1998,lat:34.69,lon:135.84},
-    {e:'🏛️',n:'琉球王国のグスク及び関連遺産群',c:'日本',t:'文化遺産',y:2000,lat:26.21,lon:127.72},
-    {e:'🏛️',n:'カルタヘナの港、要塞、建造物群',c:'コロンビア',t:'文化遺産',y:1984,lat:10.42,lon:-75.54},
-    {e:'🏛️',n:'オールド・ハバナと要塞',c:'キューバ',t:'文化遺産',y:1982,lat:23.14,lon:-82.36},
-    {e:'🌿',n:'グランドキャニオン国立公園',c:'アメリカ',t:'自然遺産',y:1979,lat:36.10,lon:-112.11},
-    {e:'🌿',n:'イエローストーン国立公園',c:'アメリカ',t:'自然遺産',y:1978,lat:44.43,lon:-110.59},
-    {e:'🌿',n:'ガラパゴス諸島',c:'エクアドル',t:'自然遺産',y:1978,lat:-0.53,lon:-90.43},
-    {e:'🌿',n:'グレート・バリア・リーフ',c:'オーストラリア',t:'自然遺産',y:1981,lat:-18.29,lon:147.70},
-    {e:'🌿',n:'セレンゲティ国立公園',c:'タンザニア',t:'自然遺産',y:1981,lat:-2.33,lon:34.83},
-    {e:'🌿',n:'ビクトリア滝',c:'ジンバブエ/ザンビア',t:'自然遺産',y:1989,lat:-17.92,lon:25.86},
-    {e:'🌿',n:'イグアスの滝',c:'アルゼンチン/ブラジル',t:'自然遺産',y:1984,lat:-25.69,lon:-54.44},
-    {e:'🌿',n:'フィヨルド（西ノルウェー）',c:'ノルウェー',t:'自然遺産',y:2005,lat:60.63,lon:6.61},
-    {e:'🌿',n:'サガルマータ国立公園（エベレスト）',c:'ネパール',t:'自然遺産',y:1979,lat:27.99,lon:86.93},
-    {e:'🌿',n:'バイカル湖',c:'ロシア',t:'自然遺産',y:1996,lat:53.50,lon:107.99},
-    {e:'🌿',n:'コモド国立公園',c:'インドネシア',t:'自然遺産',y:1991,lat:-8.55,lon:119.48},
-    {e:'🌿',n:'キリマンジャロ国立公園',c:'タンザニア',t:'自然遺産',y:1987,lat:-3.07,lon:37.35},
-    {e:'🌿',n:'屋久島',c:'日本',t:'自然遺産',y:1993,lat:30.34,lon:130.53},
-    {e:'🌿',n:'知床',c:'日本',t:'自然遺産',y:2005,lat:44.07,lon:145.08},
-    {e:'🌿',n:'小笠原諸島',c:'日本',t:'自然遺産',y:2011,lat:27.05,lon:142.22},
-    {e:'🌿',n:'奄美大島・徳之島・西表島',c:'日本',t:'自然遺産',y:2021,lat:28.38,lon:129.50},
-    {e:'🌿',n:'ハ・ロン湾',c:'ベトナム',t:'自然遺産',y:1994,lat:20.91,lon:107.18},
-    {e:'🌿',n:'カナディアン・ロッキー',c:'カナダ',t:'自然遺産',y:1984,lat:51.50,lon:-116.16},
-    {e:'🌿',n:'ロス・グラシアレス国立公園',c:'アルゼンチン',t:'自然遺産',y:1981,lat:-50.59,lon:-73.09},
-    {e:'🌿',n:'ンゴロンゴロ保全地域',c:'タンザニア',t:'自然遺産',y:1979,lat:-3.18,lon:35.58},
-    {e:'🌿',n:'カカドゥ国立公園',c:'オーストラリア',t:'自然遺産',y:1981,lat:-12.87,lon:132.56},
-    {e:'🌿',n:'中央アマゾン保全地域群',c:'ブラジル',t:'自然遺産',y:2000,lat:-2.50,lon:-60.50},
-    {e:'⭐',n:'ウルル・カタ・ジュタ国立公園',c:'オーストラリア',t:'複合遺産',y:1987,lat:-25.36,lon:131.03},
-    {e:'⭐',n:'トンガリロ国立公園',c:'ニュージーランド',t:'複合遺産',y:1990,lat:-39.18,lon:175.63},
-    {e:'⭐',n:'泰山',c:'中国',t:'複合遺産',y:1987,lat:36.27,lon:117.10},
-    {e:'⭐',n:'黄山',c:'中国',t:'複合遺産',y:1990,lat:30.13,lon:118.16}
+    {e:'🏛️',f:'🇨🇳',n:'万里の長城',c:'中国',t:'文化遺産',y:1987,lat:40.4,lon:116.6},
+    {e:'🏛️',f:'🇨🇳',n:'故宮（北京）',c:'中国',t:'文化遺産',y:1987,lat:39.9,lon:116.4},
+    {e:'🏛️',f:'🇨🇳',n:'兵馬俑',c:'中国',t:'文化遺産',y:1987,lat:34.4,lon:109.3},
+    {e:'🏛️',f:'🇮🇳',n:'タージ・マハル',c:'インド',t:'文化遺産',y:1983,lat:27.2,lon:78.0},
+    {e:'🏛️',f:'🇬🇷',n:'アクロポリス（アテネ）',c:'ギリシャ',t:'文化遺産',y:1987,lat:37.97,lon:23.73},
+    {e:'🏛️',f:'🇮🇹',n:'ローマ歴史地区',c:'イタリア',t:'文化遺産',y:1980,lat:41.89,lon:12.49},
+    {e:'🏛️',f:'🇪🇬',n:'ギザのピラミッド',c:'エジプト',t:'文化遺産',y:1979,lat:29.98,lon:31.13},
+    {e:'🏛️',f:'🇯🇴',n:'ペトラ',c:'ヨルダン',t:'文化遺産',y:1985,lat:30.33,lon:35.44},
+    {e:'🏛️',f:'🇵🇪',n:'マチュ・ピチュ',c:'ペルー',t:'文化遺産',y:1983,lat:-13.16,lon:-72.54},
+    {e:'🏛️',f:'🇲🇽',n:'チチェン・イッツァ',c:'メキシコ',t:'文化遺産',y:1988,lat:20.68,lon:-88.57},
+    {e:'🏛️',f:'🇮🇩',n:'ボロブドゥール',c:'インドネシア',t:'文化遺産',y:1991,lat:-7.61,lon:110.20},
+    {e:'🏛️',f:'🇰🇭',n:'アンコール遺跡群',c:'カンボジア',t:'文化遺産',y:1992,lat:13.41,lon:103.87},
+    {e:'🏛️',f:'🇬🇧',n:'ストーンヘンジ',c:'英国',t:'文化遺産',y:1986,lat:51.18,lon:-1.83},
+    {e:'🏛️',f:'🇮🇷',n:'ペルセポリス',c:'イラン',t:'文化遺産',y:1979,lat:29.94,lon:52.89},
+    {e:'🏛️',f:'🇫🇷',n:'ヴェルサイユ宮殿と庭園',c:'フランス',t:'文化遺産',y:1979,lat:48.81,lon:2.12},
+    {e:'🏛️',f:'🇫🇷',n:'モン・サン＝ミシェル',c:'フランス',t:'文化遺産',y:1979,lat:48.64,lon:-1.51},
+    {e:'🏛️',f:'🇪🇸',n:'アルハンブラ宮殿',c:'スペイン',t:'文化遺産',y:1984,lat:37.18,lon:-3.59},
+    {e:'🏛️',f:'🇪🇸',n:'バルセロナのガウディ建築群',c:'スペイン',t:'文化遺産',y:1984,lat:41.41,lon:2.17},
+    {e:'🏛️',f:'🇭🇷',n:'ドゥブロヴニク旧市街',c:'クロアチア',t:'文化遺産',y:1979,lat:42.65,lon:18.09},
+    {e:'🏛️',f:'🇨🇿',n:'プラハ歴史地区',c:'チェコ',t:'文化遺産',y:1992,lat:50.09,lon:14.42},
+    {e:'🏛️',f:'🇵🇱',n:'クラクフ歴史地区',c:'ポーランド',t:'文化遺産',y:1978,lat:50.06,lon:19.94},
+    {e:'🏛️',f:'🇷🇺',n:'サンクトペテルブルク',c:'ロシア',t:'文化遺産',y:1990,lat:59.95,lon:30.32},
+    {e:'🏛️',f:'🇹🇷',n:'イスタンブール歴史地区',c:'トルコ',t:'文化遺産',y:1985,lat:41.01,lon:28.98},
+    {e:'🏛️',f:'🇺🇿',n:'サマルカンド',c:'ウズベキスタン',t:'文化遺産',y:2001,lat:39.65,lon:66.97},
+    {e:'🏛️',f:'🇪🇬',n:'ルクソール（古代テーベ）',c:'エジプト',t:'文化遺産',y:1979,lat:25.69,lon:32.63},
+    {e:'🏛️',f:'🇬🇹',n:'ティカル',c:'グアテマラ',t:'文化遺産',y:1979,lat:17.22,lon:-89.62},
+    {e:'🏛️',f:'🇮🇹',n:'ポンペイ遺跡',c:'イタリア',t:'文化遺産',y:1997,lat:40.75,lon:14.49},
+    {e:'🏛️',f:'🇪🇹',n:'アクスム',c:'エチオピア',t:'文化遺産',y:1980,lat:14.13,lon:38.72},
+    {e:'🏛️',f:'🇿🇼',n:'グレート・ジンバブエ',c:'ジンバブエ',t:'文化遺産',y:1986,lat:-20.27,lon:30.93},
+    {e:'🏛️',f:'🇯🇵',n:'日光の社寺',c:'日本',t:'文化遺産',y:1999,lat:36.76,lon:139.60},
+    {e:'🏛️',f:'🇯🇵',n:'白川郷・五箇山の合掌造り集落',c:'日本',t:'文化遺産',y:1995,lat:36.26,lon:136.91},
+    {e:'🏛️',f:'🇯🇵',n:'厳島神社',c:'日本',t:'文化遺産',y:1996,lat:34.30,lon:132.32},
+    {e:'🏛️',f:'🇯🇵',n:'法隆寺地域の仏教建造物群',c:'日本',t:'文化遺産',y:1993,lat:34.61,lon:135.74},
+    {e:'🏛️',f:'🇯🇵',n:'原爆ドーム',c:'日本',t:'文化遺産',y:1996,lat:34.40,lon:132.45},
+    {e:'🏛️',f:'🇯🇵',n:'古都京都の文化財',c:'日本',t:'文化遺産',y:1994,lat:35.01,lon:135.77},
+    {e:'🏛️',f:'🇯🇵',n:'古都奈良の文化財',c:'日本',t:'文化遺産',y:1998,lat:34.69,lon:135.84},
+    {e:'🏛️',f:'🇯🇵',n:'琉球王国のグスク及び関連遺産群',c:'日本',t:'文化遺産',y:2000,lat:26.21,lon:127.72},
+    {e:'🏛️',f:'🇨🇴',n:'カルタヘナの港、要塞、建造物群',c:'コロンビア',t:'文化遺産',y:1984,lat:10.42,lon:-75.54},
+    {e:'🏛️',f:'🇨🇺',n:'オールド・ハバナと要塞',c:'キューバ',t:'文化遺産',y:1982,lat:23.14,lon:-82.36},
+    {e:'🌿',f:'🇺🇸',n:'グランドキャニオン国立公園',c:'アメリカ',t:'自然遺産',y:1979,lat:36.10,lon:-112.11},
+    {e:'🌿',f:'🇺🇸',n:'イエローストーン国立公園',c:'アメリカ',t:'自然遺産',y:1978,lat:44.43,lon:-110.59},
+    {e:'🌿',f:'🇪🇨',n:'ガラパゴス諸島',c:'エクアドル',t:'自然遺産',y:1978,lat:-0.53,lon:-90.43},
+    {e:'🌿',f:'🇦🇺',n:'グレート・バリア・リーフ',c:'オーストラリア',t:'自然遺産',y:1981,lat:-18.29,lon:147.70},
+    {e:'🌿',f:'🇹🇿',n:'セレンゲティ国立公園',c:'タンザニア',t:'自然遺産',y:1981,lat:-2.33,lon:34.83},
+    {e:'🌿',f:'🇿🇼',n:'ビクトリア滝',c:'ジンバブエ/ザンビア',t:'自然遺産',y:1989,lat:-17.92,lon:25.86},
+    {e:'🌿',f:'🇦🇷',n:'イグアスの滝',c:'アルゼンチン/ブラジル',t:'自然遺産',y:1984,lat:-25.69,lon:-54.44},
+    {e:'🌿',f:'🇳🇴',n:'フィヨルド（西ノルウェー）',c:'ノルウェー',t:'自然遺産',y:2005,lat:60.63,lon:6.61},
+    {e:'🌿',f:'🇳🇵',n:'サガルマータ国立公園（エベレスト）',c:'ネパール',t:'自然遺産',y:1979,lat:27.99,lon:86.93},
+    {e:'🌿',f:'🇷🇺',n:'バイカル湖',c:'ロシア',t:'自然遺産',y:1996,lat:53.50,lon:107.99},
+    {e:'🌿',f:'🇮🇩',n:'コモド国立公園',c:'インドネシア',t:'自然遺産',y:1991,lat:-8.55,lon:119.48},
+    {e:'🌿',f:'🇹🇿',n:'キリマンジャロ国立公園',c:'タンザニア',t:'自然遺産',y:1987,lat:-3.07,lon:37.35},
+    {e:'🌿',f:'🇯🇵',n:'屋久島',c:'日本',t:'自然遺産',y:1993,lat:30.34,lon:130.53},
+    {e:'🌿',f:'🇯🇵',n:'知床',c:'日本',t:'自然遺産',y:2005,lat:44.07,lon:145.08},
+    {e:'🌿',f:'🇯🇵',n:'小笠原諸島',c:'日本',t:'自然遺産',y:2011,lat:27.05,lon:142.22},
+    {e:'🌿',f:'🇯🇵',n:'奄美大島・徳之島・西表島',c:'日本',t:'自然遺産',y:2021,lat:28.38,lon:129.50},
+    {e:'🌿',f:'🇻🇳',n:'ハ・ロン湾',c:'ベトナム',t:'自然遺産',y:1994,lat:20.91,lon:107.18},
+    {e:'🌿',f:'🇨🇦',n:'カナディアン・ロッキー',c:'カナダ',t:'自然遺産',y:1984,lat:51.50,lon:-116.16},
+    {e:'🌿',f:'🇦🇷',n:'ロス・グラシアレス国立公園',c:'アルゼンチン',t:'自然遺産',y:1981,lat:-50.59,lon:-73.09},
+    {e:'🌿',f:'🇹🇿',n:'ンゴロンゴロ保全地域',c:'タンザニア',t:'自然遺産',y:1979,lat:-3.18,lon:35.58},
+    {e:'🌿',f:'🇦🇺',n:'カカドゥ国立公園',c:'オーストラリア',t:'自然遺産',y:1981,lat:-12.87,lon:132.56},
+    {e:'🌿',f:'🇧🇷',n:'中央アマゾン保全地域群',c:'ブラジル',t:'自然遺産',y:2000,lat:-2.50,lon:-60.50},
+    {e:'⭐',f:'🇦🇺',n:'ウルル・カタ・ジュタ国立公園',c:'オーストラリア',t:'複合遺産',y:1987,lat:-25.36,lon:131.03},
+    {e:'⭐',f:'🇳🇿',n:'トンガリロ国立公園',c:'ニュージーランド',t:'複合遺産',y:1990,lat:-39.18,lon:175.63},
+    {e:'⭐',f:'🇨🇳',n:'泰山',c:'中国',t:'複合遺産',y:1987,lat:36.27,lon:117.10},
+    {e:'⭐',f:'🇨🇳',n:'黄山',c:'中国',t:'複合遺産',y:1990,lat:30.13,lon:118.16}
   ];
+
+  function typeColor(t) {
+    return t === '文化遺産' ? '#e3a838' : (t === '自然遺産' ? '#3fb950' : '#a371f7');
+  }
+  function thumbBg(t) {
+    return t === '文化遺産' ? '#1a0d00' : (t === '自然遺産' ? '#0a1e0a' : '#100a20');
+  }
 
   function latLonTo3D(lat, lon) {
     var latR = lat * Math.PI / 180;
@@ -430,19 +418,23 @@ void main() {
     if (isNearTop) { tooltip.classList.add('below'); } else { tooltip.classList.remove('below'); }
   }
 
-  function typeColor(t) {
-    return t === '文化遺産' ? '#e3a838' : (t === '自然遺産' ? '#3fb950' : '#a371f7');
-  }
-
   function showMarkerTooltip(idx, vx, vy) {
     var d = HERITAGE[idx];
-    tooltip.innerHTML = '<div class="tt-name">' + d.e + ' ' + d.n + '</div><div class="tt-sub"><span style="color:' + typeColor(d.t) + ';font-weight:600">' + d.t + '</span>  ' + d.c + '  ' + d.y + '年登録</div>';
-    positionTooltip(vx, vy);
+    var col = typeColor(d.t);
+    tooltip.innerHTML = '<div class="tt-name">' + d.e + ' ' + d.f + ' ' + d.n + '</div><div class="tt-sub"><span style="color:' + col + ';font-weight:600">' + d.t + '</span>  ' + d.c + '  ' + d.y + '年登録</div>';
+    if (vx === 0 && vy === 0) {
+      var cx = canvasRect.left + canvasRect.width / 2;
+      var cy = canvasRect.top + canvasRect.height / 2;
+      positionTooltip(cx, cy);
+    } else {
+      positionTooltip(vx, vy);
+    }
     tooltip.style.opacity = '1';
     activeIdx = idx;
     flyTo(d.lat, d.lon);
   }
 
+  // Build marker DOM elements
   var mkEls = [];
   for (var i = 0; i < HERITAGE.length; i++) {
     var d = HERITAGE[i];
@@ -457,8 +449,7 @@ void main() {
         showMarkerTooltip(idx, r.left + r.width/2, r.top + r.height/2);
       });
       el.addEventListener('touchend', function(e) {
-        e.preventDefault();
-        e.stopPropagation();
+        e.preventDefault(); e.stopPropagation();
         var r = el.getBoundingClientRect();
         showMarkerTooltip(idx, r.left + r.width/2, r.top + r.height/2);
       });
@@ -466,6 +457,67 @@ void main() {
     markersDiv.appendChild(el);
     mkEls.push({el: el, pos3d: latLonTo3D(d.lat, d.lon)});
   }
+
+  // Build proximity list DOM (pre-create all items)
+  var listItemEls = HERITAGE.map(function(d, i) {
+    var col = typeColor(d.t);
+    var bg = thumbBg(d.t);
+    var el = document.createElement('div');
+    el.className = 'site-item';
+    el.innerHTML =
+      '<div class="site-thumb" style="background:' + bg + '">' + d.e + '</div>' +
+      '<div class="site-body">' +
+        '<div class="site-top">' +
+          '<span class="site-flag">' + d.f + '</span>' +
+          '<span class="site-name">' + d.n + '</span>' +
+        '</div>' +
+        '<div class="site-meta"><span class="type-label" style="color:' + col + '">' + d.t + '</span> · ' + d.c + ' ' + d.y + '年</div>' +
+      '</div>';
+    el.addEventListener('click', function() { showMarkerTooltip(i, 0, 0); });
+    siteList.appendChild(el);
+    return el;
+  });
+
+  var searchText = '';
+  var listUpdateTick = 0;
+
+  function updateProximityList() {
+    var order = HERITAGE.map(function(d, i) {
+      var p = mkEls[i].pos3d;
+      var mz = model[2]*p[0] + model[6]*p[1] + model[10]*p[2];
+      return {i: i, mz: mz};
+    });
+    order.sort(function(a, b) { return b.mz - a.mz; });
+
+    var q = searchText.toLowerCase();
+    var visible = 0;
+    var frag = document.createDocumentFragment();
+    var hidden = [];
+    order.forEach(function(item) {
+      var d = HERITAGE[item.i];
+      var show = !q || d.n.indexOf(q) >= 0 || d.c.indexOf(q) >= 0 || d.t.indexOf(q) >= 0;
+      if (show) { frag.appendChild(listItemEls[item.i]); visible++; }
+      else { hidden.push(listItemEls[item.i]); }
+    });
+    hidden.forEach(function(el) { frag.appendChild(el); });
+    siteList.appendChild(frag);
+
+    // Toggle visibility
+    order.forEach(function(item) {
+      var d = HERITAGE[item.i];
+      var show = !q || d.n.indexOf(q) >= 0 || d.c.indexOf(q) >= 0 || d.t.indexOf(q) >= 0;
+      listItemEls[item.i].style.display = show ? '' : 'none';
+    });
+
+    // Highlight active
+    listItemEls.forEach(function(el, i) { el.classList.toggle('active', i === activeIdx); });
+    resultCount.textContent = q ? (visible + ' / ' + HERITAGE.length + ' 件') : (HERITAGE.length + ' 件');
+  }
+
+  searchInput.addEventListener('input', function() {
+    searchText = searchInput.value;
+    updateProximityList();
+  });
 
   canvas.addEventListener('click', function() { hideTooltip(); });
 
@@ -483,7 +535,6 @@ void main() {
     gl.clearColor(0, 0, 0.02, 1);
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
-    var spd = parseFloat(rotSpdEl.value);
     if (flyTarget !== null) {
       var fp = Math.min((now - flyStart) / FLY_DUR, 1);
       var fe = fp * fp * (3 - 2 * fp);
@@ -491,7 +542,7 @@ void main() {
       rotXv = flyFrom.rx + (flyTarget.rx - flyFrom.rx) * fe;
       if (fp >= 1) flyTarget = null;
     } else {
-      if (autoRot) rotYv += 0.003 * spd;
+      if (autoRot) rotYv += 0.003;
       var wasSpinning = Math.abs(momentumY) > 0.0002 || Math.abs(momentumX) > 0.0002;
       if (Math.abs(momentumY) > 0.0002) { rotYv += momentumY; momentumY *= MOMENTUM_DECAY; } else { momentumY = 0; }
       if (!axisLocked && Math.abs(momentumX) > 0.0002) { rotXv = clampElev(rotXv + momentumX); momentumX *= MOMENTUM_DECAY; } else { momentumX = 0; }
@@ -507,10 +558,7 @@ void main() {
         }
         if (bestIdx >= 0) {
           var bd = HERITAGE[bestIdx];
-          var col = typeColor(bd.t);
-          tooltip.innerHTML = '<div class="tt-name">' + bd.e + ' ' + bd.n + '</div><div class="tt-sub"><span style="color:' + col + ';font-weight:600">' + bd.t + '</span>  ' + bd.c + '  ' + bd.y + '年登録</div>';
-          activeIdx = bestIdx;
-          flyTo(bd.lat, bd.lon);
+          showMarkerTooltip(bestIdx, 0, 0);
         }
       }
     }
@@ -559,6 +607,13 @@ void main() {
       }
     }
 
+    // Update proximity list every 30 frames
+    listUpdateTick++;
+    if (listUpdateTick >= 30) {
+      listUpdateTick = 0;
+      updateProximityList();
+    }
+
     frames++;
     var dt = now - lastFps;
     if (dt >= 600) {
@@ -572,6 +627,8 @@ void main() {
       frames = 0; lastFps = now;
     }
   }
+
+  updateProximityList();
   requestAnimationFrame(frame);
 })();
 </script>
