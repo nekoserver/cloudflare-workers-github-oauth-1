@@ -1571,6 +1571,8 @@ export function getFunctionChangelogPage(input: FunctionChangelogInput): string 
     var chartDim        = 'file';
     var hoveredIdx      = -1;
 
+    var chartMetricLabel = '行数';
+
     function buildPieData(dim) {
       var map = {};
       PIE_ROWS.forEach(function(r) {
@@ -1578,6 +1580,17 @@ export function getFunctionChangelogPage(input: FunctionChangelogInput): string 
         var val = (r.added || 0) + (r.deleted || 0);
         map[key] = (map[key] || 0) + val;
       });
+      var total = Object.keys(map).reduce(function(s, k) { return s + map[k]; }, 0);
+      if (total === 0) {
+        map = {};
+        PIE_ROWS.forEach(function(r) {
+          var key = dim === 'file' ? r.file : (r.func + ' (' + r.file + ')');
+          map[key] = (map[key] || 0) + 1;
+        });
+        chartMetricLabel = '変更件数';
+      } else {
+        chartMetricLabel = '行数';
+      }
       var entries = Object.keys(map).map(function(k) { return { label: k, value: map[k] }; });
       entries.sort(function(a, b) { return b.value - a.value; });
       return entries;
@@ -1632,7 +1645,7 @@ export function getFunctionChangelogPage(input: FunctionChangelogInput): string 
         item.innerHTML =
           '<div class="legend-dot" style="background:' + color + '"></div>' +
           '<span class="legend-label">' + escHtml(d.label) + '</span>' +
-          '<span class="legend-val">' + d.value + ' (' + pct + '%)</span>';
+          '<span class="legend-val">' + d.value + chartMetricLabel + ' (' + pct + '%)</span>';
         item.addEventListener('mouseenter', function() {
           hoveredIdx = i;
           drawPie(data, i);
@@ -1649,8 +1662,11 @@ export function getFunctionChangelogPage(input: FunctionChangelogInput): string 
       });
     }
 
+    var chartTitleEl = document.querySelector('#chartModal .chart-title');
+
     function renderChart() {
       var data = buildPieData(chartDim);
+      if (chartTitleEl) chartTitleEl.textContent = '📈 ' + (chartDim === 'file' ? 'ファイル別' : '関数別') + chartMetricLabel;
       if (data.length === 0) {
         if (pieCtx) pieCtx.clearRect(0, 0, 220, 220);
         chartLegendEl.innerHTML = '<div class="chart-empty">データなし</div>';
