@@ -1556,7 +1556,6 @@ export function getFunctionChangelogPage(input: FunctionChangelogInput): string 
     });
 
     // ---- 円グラフモーダル ----
-    var PIE_ROWS = ${JSON.stringify(rows.map(r => ({ file: r.file_path, func: r.function_name, added: r.lines_added, deleted: r.lines_deleted })))};
     var PIE_COLORS = [
       '#58a6ff','#3fb950','#e3b341','#f85149','#bc8cff','#79c0ff','#ff7b72','#56d364',
       '#ffa657','#d2a8ff','#7ee787','#f0883e','#a5d6ff','#ff9bce','#85e89d','#b392f0'
@@ -1571,26 +1570,21 @@ export function getFunctionChangelogPage(input: FunctionChangelogInput): string 
     var chartDim        = 'file';
     var hoveredIdx      = -1;
 
-    var chartMetricLabel = '行数';
+    var chartMetricLabel = '変更件数';
 
     function buildPieData(dim) {
       var map = {};
-      PIE_ROWS.forEach(function(r) {
-        var key = dim === 'file' ? r.file : (r.func + ' (' + r.file + ')');
-        var val = (r.added || 0) + (r.deleted || 0);
-        map[key] = (map[key] || 0) + val;
+      var visibleRows = Array.from(document.querySelectorAll('#tableBody tr[data-file]')).filter(function(tr) {
+        return (tr.style.display !== 'none');
       });
-      var total = Object.keys(map).reduce(function(s, k) { return s + map[k]; }, 0);
-      if (total === 0) {
-        map = {};
-        PIE_ROWS.forEach(function(r) {
-          var key = dim === 'file' ? r.file : (r.func + ' (' + r.file + ')');
-          map[key] = (map[key] || 0) + 1;
-        });
-        chartMetricLabel = '変更件数';
-      } else {
-        chartMetricLabel = '行数';
-      }
+      visibleRows.forEach(function(tr) {
+        var file = tr.getAttribute('data-file') || '';
+        var func = tr.getAttribute('data-func') || '';
+        var key = dim === 'file' ? file : (func + ' (' + file + ')');
+        if (!key) return;
+        map[key] = (map[key] || 0) + 1;
+      });
+      chartMetricLabel = '変更件数';
       var entries = Object.keys(map).map(function(k) { return { label: k, value: map[k] }; });
       entries.sort(function(a, b) { return b.value - a.value; });
       return entries;
