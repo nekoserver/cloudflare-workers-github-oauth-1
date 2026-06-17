@@ -22,7 +22,7 @@ h1 { font-size:14px; font-weight:700; color:#f0b020; }
 canvas { position:absolute; inset:0; width:100%; height:100%; cursor:grab; touch-action:none; display:block; }
 canvas:active { cursor:grabbing; }
 .hud { position:absolute; bottom:12px; left:50%; transform:translateX(-50%); background:rgba(10,5,0,0.8); border:1px solid #3a2800; border-radius:20px; padding:6px 18px; font-size:11px; color:#c8900a; font-family:monospace; white-space:nowrap; pointer-events:none; }
-.mode-btns { position:absolute; top:10px; right:10px; display:flex; gap:6px; }
+.mode-btns { position:absolute; top:10px; right:10px; display:flex; gap:6px; flex-wrap:wrap; justify-content:flex-end; }
 .mode-btn { background:rgba(10,5,0,0.85); border:1px solid #3a2800; border-radius:6px; color:#c8900a; font-size:11px; padding:5px 10px; cursor:pointer; transition:all .15s; }
 .mode-btn:hover { border-color:#f0b020; color:#f0b020; }
 .mode-btn.active { background:#2a1800; border-color:#f0b020; color:#f0b020; }
@@ -39,9 +39,12 @@ uniform mat4 uModel;
 varying vec2 vUV;
 varying vec3 vWorldNorm;
 void main() {
+  vec3 oblate = vec3(1.38, 1.0, 1.38);
+  vec3 scaledPos = aPos * oblate;
+  vec3 scaledNorm = normalize(aNorm / (oblate * oblate));
   vUV = aUV;
-  vWorldNorm = normalize((uModel * vec4(aNorm, 0.0)).xyz);
-  gl_Position = uMVP * vec4(aPos, 1.0);
+  vWorldNorm = normalize((uModel * vec4(scaledNorm, 0.0)).xyz);
+  gl_Position = uMVP * vec4(scaledPos, 1.0);
 }
 </script>
 
@@ -92,7 +95,7 @@ void main() {
     float ring = fract(abs(lat) / PI * 8.0 - t * 0.5);
     ring = smoothstep(0.4, 0.5, ring) * smoothstep(0.6, 0.5, ring);
     color = hue2rgb(h) * (0.5 + v * 0.5 + ring * 0.3);
-  } else {
+  } else if (uMode == 2) {
     float sparkle = sin(lon * 40.0 + t * 7.0) * sin(lat * 20.0 - t * 5.0);
     sparkle = pow(max(0.0, sparkle), 6.0);
     float base = sin(lon * 2.0 - t) * sin(lat * 3.0 + t * 0.7) * 0.5 + 0.5;
@@ -101,11 +104,92 @@ void main() {
     vec3 white3 = vec3(1.0, 1.0, 1.0);
     color = mix(blue, cyan, base);
     color = mix(color, white3, sparkle);
+  } else {
+    // MODE 3: 目 — realistic blinking eye, stays facing viewer
+    // Compute camera basis vectors from uCamDir (unit vec from scene center to camera)
+    vec3 camZ = normalize(uCamDir);
+    vec3 camX = normalize(cross(vec3(0.0, 1.0, 0.0), camZ));
+    vec3 camY = cross(camZ, camX);
+
+    vec3 nn = normalize(vWorldNorm);
+    float nx = dot(nn, camX);
+    float ny = dot(nn, camY);
+    float nz = dot(nn, camZ);
+
+    // Blink: every 3.5s a quick 0.28s blink
+    float bCycle = mod(t, 3.5);
+    float blinkAmt = 0.0;
+    if (bCycle < 0.13) blinkAmt = bCycle / 0.13;
+    else if (bCycle < 0.28) blinkAmt = 1.0 - (bCycle - 0.13) / 0.15;
+
+    // Slow glancing motion
+    float glanceX = sin(t * 0.23) * 0.07;
+    float glanceY = sin(t * 0.17 + 1.3) * 0.04;
+
+    // Eye shape in camera-normal space
+    float eyeHW = 0.70;
+    float topLidY = mix(0.36, -0.03, blinkAmt);
+    float botLidY = -0.23;
+    float xFrac = nx / eyeHW;
+    float topCurve = topLidY * (1.0 - xFrac * xFrac * 0.55);
+    float botCurve = botLidY * (1.0 - xFrac * xFrac * 0.38);
+
+    bool inAlmond = abs(nx) < eyeHW && ny < topCurve && ny > botCurve;
+    bool inLidBox = abs(nx) < eyeHW * 1.08 && ny < 0.38 && ny > -0.27;
+
+    // Iris and pupil
+    float dIris = length(vec2(nx - glanceX, ny - glanceY));
+    float irisR = 0.27;
+    float pupilR = 0.115;
+
+    // Iris texture: radial lines + ring texture
+    float ia = atan(ny - glanceY, nx - glanceX);
+    float irisTexture = sin(ia * 24.0) * 0.10 + sin(ia * 9.0) * 0.06 + sin(dIris * 52.0) * 0.05;
+
+    vec3 cSclera = vec3(0.96, 0.93, 0.88);
+    vec3 cIrisBase = vec3(0.28, 0.50, 0.76);
+    vec3 cIris = clamp(cIrisBase * (1.0 + irisTexture), 0.05, 1.0);
+    vec3 cPupil = vec3(0.02, 0.01, 0.01);
+    vec3 cLid = vec3(0.60, 0.47, 0.37);
+
+    // Limbus darkening at iris edge
+    float limbusMix = smoothstep(irisR * 0.68, irisR * 0.98, dIris);
+    cIris *= mix(1.0, 0.28, limbusMix);
+
+    // Specular highlight in pupil
+    float hiDist = length(vec2(nx - glanceX + 0.055, ny - glanceY + 0.055));
+    float highlight = smoothstep(0.04, 0.01, hiDist);
+
+    // Subtle blood vessels in sclera
+    float veinPat = pow(max(0.0, sin(nx * 28.0 + 0.8) * sin(ny * 22.0 + 0.3)), 6.0);
+    vec3 scleraColor = cSclera + vec3(veinPat * 0.15, -veinPat * 0.4, -veinPat * 0.4);
+
+    vec3 eyeColor = vec3(0.03, 0.02, 0.01);
+    if (nz > 0.12 && inLidBox) {
+      if (inAlmond) {
+        if (dIris < pupilR) {
+          eyeColor = cPupil + vec3(highlight * 0.9);
+        } else if (dIris < irisR) {
+          eyeColor = cIris;
+        } else {
+          eyeColor = scleraColor;
+        }
+      } else {
+        eyeColor = cLid;
+      }
+    }
+    color = eyeColor;
   }
 
+  // Rim lighting
   float rim = pow(1.0 - abs(dot(vWorldNorm, normalize(uCamDir))), 2.5);
-  vec3 rimColor = (uMode == 1) ? vec3(0.8, 0.2, 1.0) : (uMode == 2 ? vec3(0.1, 0.5, 1.0) : vec3(1.0, 0.7, 0.0));
-  color += rimColor * rim * 1.2;
+  vec3 rimColor;
+  float rimStr;
+  if (uMode == 1) { rimColor = vec3(0.8, 0.2, 1.0); rimStr = 1.2; }
+  else if (uMode == 2) { rimColor = vec3(0.1, 0.5, 1.0); rimStr = 1.2; }
+  else if (uMode == 3) { rimColor = vec3(0.7, 0.5, 0.3); rimStr = 0.2; }
+  else { rimColor = vec3(1.0, 0.7, 0.0); rimStr = 1.2; }
+  color += rimColor * rim * rimStr;
 
   float frame = 0.12;
   float mask = led * 2.2 + (1.0 - led) * frame;
@@ -131,8 +215,8 @@ void main() {
     smoothstep(0.03, 0.0, abs(fract(vPos.x * 3.0) - 0.5)),
     smoothstep(0.03, 0.0, abs(fract(vPos.z * 3.0) - 0.5))
   );
-  vec3 gc = uMode == 1 ? vec3(0.1, 0.0, 0.2) : (uMode == 2 ? vec3(0.0, 0.05, 0.15) : vec3(0.12, 0.06, 0.0));
-  vec3 lc = uMode == 1 ? vec3(0.5, 0.1, 0.8) : (uMode == 2 ? vec3(0.1, 0.4, 0.9) : vec3(0.7, 0.4, 0.0));
+  vec3 gc = uMode == 1 ? vec3(0.1, 0.0, 0.2) : (uMode == 2 ? vec3(0.0, 0.05, 0.15) : (uMode == 3 ? vec3(0.05, 0.04, 0.03) : vec3(0.12, 0.06, 0.0)));
+  vec3 lc = uMode == 1 ? vec3(0.5, 0.1, 0.8) : (uMode == 2 ? vec3(0.1, 0.4, 0.9) : (uMode == 3 ? vec3(0.4, 0.3, 0.2) : vec3(0.7, 0.4, 0.0)));
   float dist = length(vec2(vPos.x, vPos.z));
   float fade = exp(-dist * 0.25);
   gl_FragColor = vec4(mix(gc, lc, grid * fade * 0.6) * fade, 1.0);
@@ -174,6 +258,7 @@ void main() {
     <button class="mode-btn active" id="btn0">🟡 ゴールド</button>
     <button class="mode-btn" id="btn1">🌈 レインボー</button>
     <button class="mode-btn" id="btn2">💙 ブルー</button>
+    <button class="mode-btn" id="btn3">👁️ 目</button>
   </div>
 </div>
 
@@ -218,7 +303,7 @@ void main() {
   var progGround = makeProgram('vs-ground', 'fs-ground');
   var progStar   = makeProgram('vs-star',   'fs-star');
 
-  // --- Sphere geometry ---
+  // Oblate sphere geometry (x,z scaled by 1.38 in vertex shader)
   var LAT = 80, LON = 160;
   var sv = [], si = [];
   for (var i = 0; i <= LAT; i++) {
@@ -239,14 +324,14 @@ void main() {
   var sVBO = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, sVBO); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(sv), gl.STATIC_DRAW);
   var sIBO = gl.createBuffer(); gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, sIBO); gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(si), gl.STATIC_DRAW);
 
-  // --- Ground plane geometry ---
-  var gr = 12;
+  // Ground plane — y=0 in local space, translated to y=-1.01 (oblate sphere bottom = -1.0)
+  var gr = 14;
   var gv = [-gr,0,-gr, -gr,0,gr, gr,0,gr, gr,0,-gr];
   var gi = [0,1,2, 0,2,3];
   var gVBO = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, gVBO); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(gv), gl.STATIC_DRAW);
   var gIBO = gl.createBuffer(); gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, gIBO); gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(gi), gl.STATIC_DRAW);
 
-  // --- Stars ---
+  // Stars
   var starV = [], starB = [];
   for (var k = 0; k < 800; k++) {
     var u = Math.random(), v = Math.random();
@@ -260,7 +345,6 @@ void main() {
   var starPosVBO = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, starPosVBO); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(starV), gl.STATIC_DRAW);
   var starBriVBO = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, starBriVBO); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(starB), gl.STATIC_DRAW);
 
-  // --- Matrix helpers ---
   function m4() { return new Float32Array(16); }
   function ident(m) { for(var i=0;i<16;i++) m[i]=0; m[0]=m[5]=m[10]=m[15]=1; return m; }
   function mul(o,a,b) { for(var i=0;i<4;i++) for(var j=0;j<4;j++){var s=0;for(var k2=0;k2<4;k2++) s+=a[i+k2*4]*b[k2+j*4];o[i+j*4]=s;} return o; }
@@ -271,13 +355,11 @@ void main() {
   }
   function trans(m,x,y,z) { ident(m); m[12]=x; m[13]=y; m[14]=z; return m; }
   function rotY(m,r) { ident(m); var c=Math.cos(r),s=Math.sin(r); m[0]=c;m[2]=-s;m[8]=s;m[10]=c; return m; }
-  function scale(m,s2) { ident(m); m[0]=m[5]=m[10]=s2; return m; }
 
   function lookAt(ex,ey,ez, tx,ty,tz) {
     var zx=ex-tx,zy=ey-ty,zz=ez-tz;
     var zl=Math.sqrt(zx*zx+zy*zy+zz*zz); zx/=zl;zy/=zl;zz/=zl;
-    var ux=0,uy=1,uz=0;
-    var xx=uy*zz-uz*zy, xy=uz*zx-ux*zz, xz=ux*zy-uy*zx;
+    var xx=zy*0-zz*1, xy=zz*0-zx*0, xz=zx*1-zy*0;
     var xl=Math.sqrt(xx*xx+xy*xy+xz*xz); xx/=xl;xy/=xl;xz/=xl;
     var yx=zy*xz-zz*xy, yy=zz*xx-zx*xz, yz=zx*xy-zy*xx;
     var m=m4();
@@ -291,45 +373,50 @@ void main() {
     return m;
   }
 
-  // --- Camera state ---
-  var camTheta = 0.4, camPhi = 0.18, camRadius = 4.2;
+  var camTheta = 0.4, camPhi = 0.22, camRadius = 4.0;
   var autoRot = true;
-  var drag = false, lx = 0, ly = 0, touchMoved = false;
+  var drag = false, lx = 0, ly = 0;
   var displayMode = 0;
   var sphereRotY = 0;
 
-  // --- Mode buttons ---
-  var modeButtons = [document.getElementById('btn0'), document.getElementById('btn1'), document.getElementById('btn2')];
+  var modeButtons = [
+    document.getElementById('btn0'),
+    document.getElementById('btn1'),
+    document.getElementById('btn2'),
+    document.getElementById('btn3')
+  ];
   modeButtons.forEach(function(btn, idx) {
     btn.addEventListener('click', function() {
       displayMode = idx;
+      if (idx === 3) {
+        autoRot = false;
+        sphereRotY = 0;
+      }
       modeButtons.forEach(function(b, i) {
         if (i === idx) { b.classList.add('active'); } else { b.classList.remove('active'); }
       });
     });
   });
 
-  // --- Input ---
   canvas.addEventListener('mousedown', function(e) { drag=true; lx=e.clientX; ly=e.clientY; });
   window.addEventListener('mouseup',   function() { drag=false; });
   window.addEventListener('mousemove', function(e) {
     if (!drag) return;
     camTheta -= (e.clientX - lx) * 0.007;
-    camPhi    = Math.max(-0.4, Math.min(0.8, camPhi + (e.clientY - ly) * 0.005));
+    camPhi    = Math.max(-0.35, Math.min(0.75, camPhi + (e.clientY - ly) * 0.005));
     lx = e.clientX; ly = e.clientY;
     autoRot = false;
   });
   canvas.addEventListener('wheel', function(e) {
     e.preventDefault();
-    camRadius = Math.max(2.0, Math.min(9.0, camRadius + e.deltaY * 0.005));
+    camRadius = Math.max(2.2, Math.min(9.0, camRadius + e.deltaY * 0.005));
   }, {passive:false});
   canvas.addEventListener('dblclick', function() { autoRot = !autoRot; });
-  canvas.addEventListener('touchstart', function(e) { e.preventDefault(); touchMoved=false; if(e.touches.length===1){drag=true;lx=e.touches[0].clientX;ly=e.touches[0].clientY;} },{passive:false});
-  canvas.addEventListener('touchmove',  function(e) { e.preventDefault(); touchMoved=true; if(e.touches.length===1&&drag){ camTheta-=(e.touches[0].clientX-lx)*0.007; camPhi=Math.max(-0.4,Math.min(0.8,camPhi+(e.touches[0].clientY-ly)*0.005)); lx=e.touches[0].clientX;ly=e.touches[0].clientY; autoRot=false; } },{passive:false});
+  canvas.addEventListener('touchstart', function(e) { e.preventDefault(); if(e.touches.length===1){drag=true;lx=e.touches[0].clientX;ly=e.touches[0].clientY;} },{passive:false});
+  canvas.addEventListener('touchmove',  function(e) { e.preventDefault(); if(e.touches.length===1&&drag){ camTheta-=(e.touches[0].clientX-lx)*0.007; camPhi=Math.max(-0.35,Math.min(0.75,camPhi+(e.touches[0].clientY-ly)*0.005)); lx=e.touches[0].clientX;ly=e.touches[0].clientY; autoRot=false; } },{passive:false});
   canvas.addEventListener('touchend',   function() { drag=false; });
 
-  // --- Render ---
-  var proj=m4(), view=m4(), model=m4(), mvp=m4(), tmp=m4(), tmp2=m4(), ry2=m4(), sc=m4();
+  var proj=m4(), view=m4(), model=m4(), mvp=m4(), tmp=m4(), tmp2=m4();
   var startTime = performance.now();
   var frames = 0, lastFps = startTime;
 
@@ -347,11 +434,11 @@ void main() {
     }
 
     var ex = Math.cos(camPhi) * Math.sin(camTheta) * camRadius;
-    var ey = Math.sin(camPhi) * camRadius + 0.3;
+    var ey = Math.sin(camPhi) * camRadius + 0.1;
     var ez = Math.cos(camPhi) * Math.cos(camTheta) * camRadius;
     var el = Math.sqrt(ex*ex+ey*ey+ez*ez);
 
-    view = lookAt(ex, ey, ez, 0, 0.3, 0);
+    view = lookAt(ex, ey, ez, 0, 0.1, 0);
     persp(proj, Math.PI/4, W/H, 0.1, 200);
     mul(mvp, proj, view);
 
@@ -359,10 +446,9 @@ void main() {
     gl.clearColor(0.04, 0.02, 0.0, 1);
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
-    // === Stars ===
+    // Stars
     gl.useProgram(progStar);
-    var uMVPstar = gl.getUniformLocation(progStar, 'uMVP');
-    gl.uniformMatrix4fv(uMVPstar, false, mvp);
+    gl.uniformMatrix4fv(gl.getUniformLocation(progStar, 'uMVP'), false, mvp);
     gl.bindBuffer(gl.ARRAY_BUFFER, starPosVBO);
     var aPosS = gl.getAttribLocation(progStar, 'aPos');
     gl.enableVertexAttribArray(aPosS);
@@ -373,8 +459,8 @@ void main() {
     gl.vertexAttribPointer(aBriS, 1, gl.FLOAT, false, 0, 0);
     gl.drawArrays(gl.POINTS, 0, 800);
 
-    // === Ground ===
-    trans(tmp2, 0, -1.05, 0);
+    // Ground — translated so y=-1.01 matches oblate sphere bottom
+    trans(tmp2, 0, -1.01, 0);
     mul(tmp, mvp, tmp2);
     gl.useProgram(progGround);
     gl.uniformMatrix4fv(gl.getUniformLocation(progGround, 'uMVP'),   false, tmp);
@@ -387,12 +473,7 @@ void main() {
     gl.vertexAttribPointer(aPosG, 3, gl.FLOAT, false, 0, 0);
     gl.drawElements(gl.TRIANGLES, 6, gl.UNSIGNED_SHORT, 0);
 
-    // === Sphere ===
-    rotY(ry2, sphereRotY);
-    scale(sc, 1.05);
-    mul(tmp2, sc, ry2);
-    mul(model, tmp2, m4());
-    ident(model);
+    // Sphere
     rotY(model, sphereRotY);
     mul(tmp, mvp, model);
 
@@ -414,12 +495,11 @@ void main() {
     gl.enableVertexAttribArray(aUV2); gl.vertexAttribPointer(aUV2, 2, gl.FLOAT, false, stride, 24);
     gl.drawElements(gl.TRIANGLES, si.length, gl.UNSIGNED_SHORT, 0);
 
-    // HUD
     frames++;
     var dt = now - lastFps;
     if (dt >= 600) {
       var fps = Math.round(frames * 1000 / dt);
-      var modeLabel = ['ゴールド', 'レインボー', 'ブルー'][displayMode];
+      var modeLabel = ['ゴールド', 'レインボー', 'ブルー', '目'][displayMode];
       hud.textContent = 'FPS: ' + fps + '  |  ' + modeLabel + '  |  ダブルクリック: 自動回転 ' + (autoRot ? 'ON' : 'OFF');
       frames = 0; lastFps = now;
     }
