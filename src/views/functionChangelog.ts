@@ -312,6 +312,63 @@ export function getFunctionChangelogPage(input: FunctionChangelogInput): string 
     }
     .btn-history:hover { background: var(--accent); color: var(--panel); }
     .btn-history:disabled { opacity: 0.35; cursor: not-allowed; }
+    .h1-row { display: flex; align-items: center; gap: 10px; margin: 0 0 8px; }
+    .h1-row h1 { margin: 0; }
+    .btn-chart {
+      padding: 3px 8px; border-radius: 6px; font-size: 16px; line-height: 1;
+      border: 1px solid var(--border); background: transparent;
+      color: var(--text-muted); cursor: pointer; transition: background 0.15s, color 0.15s;
+      flex-shrink: 0;
+    }
+    .btn-chart:hover { background: light-dark(#f0f6ff,#1c2333); color: var(--text-strong); }
+    #chartOverlay {
+      display: none; position: fixed; inset: 0;
+      background: rgba(0,0,0,0.6); align-items: center; justify-content: center;
+    }
+    #chartOverlay.open { display: flex; }
+    #chartModal {
+      background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+      width: min(640px, 96vw); max-height: 88vh;
+      display: flex; flex-direction: column; overflow: hidden;
+      box-shadow: 0 16px 48px rgba(0,0,0,0.45);
+    }
+    .chart-header {
+      display: flex; align-items: center; gap: 10px;
+      padding: 12px 16px; border-bottom: 1px solid var(--border); flex-shrink: 0;
+    }
+    .chart-title { font-size: 14px; font-weight: 700; color: var(--text-strong); flex: 1; }
+    .chart-tab-group { display: flex; gap: 4px; }
+    .chart-tab {
+      padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 600;
+      border: 1px solid var(--border); background: transparent; cursor: pointer;
+      color: var(--text-muted); transition: background 0.15s, color 0.15s;
+    }
+    .chart-tab:hover { background: light-dark(#f0f6ff,#1c2333); color: var(--text-strong); }
+    .chart-tab.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+    .chart-close {
+      background: none; border: 1px solid var(--border); border-radius: 6px;
+      padding: 3px 10px; cursor: pointer; font-size: 13px;
+      color: var(--text-muted); flex-shrink: 0;
+    }
+    .chart-close:hover { background: light-dark(#ffd7d7,#3d1a1a); color: var(--danger); border-color: var(--danger); }
+    .chart-body { display: flex; gap: 0; flex: 1; overflow: hidden; }
+    .chart-canvas-wrap { flex-shrink: 0; padding: 20px; display: flex; align-items: center; justify-content: center; }
+    #pieCanvas { display: block; }
+    .chart-legend { flex: 1; overflow-y: auto; padding: 12px 16px 12px 0; }
+    .chart-legend::-webkit-scrollbar { width: 4px; }
+    .chart-legend::-webkit-scrollbar-track { background: transparent; }
+    .chart-legend::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+    .legend-item {
+      display: flex; align-items: flex-start; gap: 8px;
+      padding: 5px 6px; border-radius: 6px; cursor: default;
+      transition: background 0.1s; font-size: 11px; line-height: 1.4;
+    }
+    .legend-item:hover { background: light-dark(rgba(0,0,0,.04), rgba(255,255,255,.04)); }
+    .legend-item.legend-active { background: light-dark(rgba(9,105,218,.1), rgba(88,166,255,.12)); }
+    .legend-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; margin-top: 2px; }
+    .legend-label { color: var(--text); word-break: break-all; flex: 1; }
+    .legend-val { color: var(--text-muted); white-space: nowrap; margin-left: 4px; font-variant-numeric: tabular-nums; }
+    .chart-empty { padding: 40px; text-align: center; color: var(--text-muted); font-size: 13px; }
     .modal-overlay {
       display: none; position: fixed; inset: 0;
       background: rgba(0,0,0,0.55); z-index: 1000;
@@ -598,7 +655,10 @@ export function getFunctionChangelogPage(input: FunctionChangelogInput): string 
   </style>
 </head>
 <body>
-  <h1>関数変更ログ</h1>
+  <div class="h1-row">
+    <h1>関数変更ログ</h1>
+    <button class="btn-chart" id="btnChart" title="行数内訳を円グラフで表示">📈</button>
+  </div>
 
   <div class="subtitle-row">
     <div class="subtitle">
@@ -685,6 +745,24 @@ export function getFunctionChangelogPage(input: FunctionChangelogInput): string 
 
   ${renderKeyPickerHtml()}
 
+  <!-- 円グラフモーダル -->
+  <div id="chartOverlay">
+    <div id="chartModal" role="dialog" aria-modal="true">
+      <div class="chart-header">
+        <span class="chart-title">📈 行数内訳</span>
+        <div class="chart-tab-group">
+          <button class="chart-tab active" id="chartTabFile">ファイル別</button>
+          <button class="chart-tab" id="chartTabFunc">関数別</button>
+        </div>
+        <button class="chart-close" id="chartClose">✕ 閉じる</button>
+      </div>
+      <div class="chart-body" id="chartBody">
+        <div class="chart-canvas-wrap"><canvas id="pieCanvas" width="220" height="220"></canvas></div>
+        <div class="chart-legend" id="chartLegend"></div>
+      </div>
+    </div>
+  </div>
+
   <!-- ソースビューアモーダル -->
   <div id="srcViewOverlay">
     <div id="srcViewModal" role="dialog" aria-modal="true" aria-labelledby="srcViewTitle">
@@ -751,7 +829,7 @@ export function getFunctionChangelogPage(input: FunctionChangelogInput): string 
 
     // ---- getNextZ ----
     function getNextZ() {
-      var staticZDefaults = { historyOverlay: 1000, srcViewOverlay: 1100 };
+      var staticZDefaults = { historyOverlay: 1000, srcViewOverlay: 1100, chartOverlay: 1200 };
       var max = 900;
       document.querySelectorAll('[style*="z-index"]').forEach(function(el) {
         var z = parseInt(el.style.zIndex, 10);
@@ -1476,6 +1554,181 @@ export function getFunctionChangelogPage(input: FunctionChangelogInput): string 
     document.addEventListener('keydown', function(e) {
       if (e.key === 'Escape' && overlay.classList.contains('open')) closeModal();
     });
+
+    // ---- 円グラフモーダル ----
+    var PIE_ROWS = ${JSON.stringify(rows.map(r => ({ file: r.file_path, func: r.function_name, added: r.lines_added, deleted: r.lines_deleted })))};
+    var PIE_COLORS = [
+      '#58a6ff','#3fb950','#e3b341','#f85149','#bc8cff','#79c0ff','#ff7b72','#56d364',
+      '#ffa657','#d2a8ff','#7ee787','#f0883e','#a5d6ff','#ff9bce','#85e89d','#b392f0'
+    ];
+    var chartOverlayEl  = document.getElementById('chartOverlay');
+    var chartCloseEl    = document.getElementById('chartClose');
+    var chartTabFileEl  = document.getElementById('chartTabFile');
+    var chartTabFuncEl  = document.getElementById('chartTabFunc');
+    var chartLegendEl   = document.getElementById('chartLegend');
+    var pieCanvas       = document.getElementById('pieCanvas');
+    var pieCtx          = pieCanvas ? pieCanvas.getContext('2d') : null;
+    var chartDim        = 'file';
+    var hoveredIdx      = -1;
+
+    function buildPieData(dim) {
+      var map = {};
+      PIE_ROWS.forEach(function(r) {
+        var key = dim === 'file' ? r.file : (r.func + ' (' + r.file + ')');
+        var val = (r.added || 0) + (r.deleted || 0);
+        map[key] = (map[key] || 0) + val;
+      });
+      var entries = Object.keys(map).map(function(k) { return { label: k, value: map[k] }; });
+      entries.sort(function(a, b) { return b.value - a.value; });
+      return entries;
+    }
+
+    function drawPie(data, hIdx) {
+      if (!pieCtx) return;
+      var W = 220, H = 220, cx = W / 2, cy = H / 2, R = 88, IR = 44;
+      pieCtx.clearRect(0, 0, W, H);
+      var total = data.reduce(function(s, d) { return s + d.value; }, 0);
+      if (total === 0) return;
+      var angle = -Math.PI / 2;
+      var gap = 0.012;
+      data.forEach(function(d, i) {
+        var slice = (d.value / total) * Math.PI * 2;
+        var color = PIE_COLORS[i % PIE_COLORS.length];
+        var isHov = i === hIdx;
+        var rr = isHov ? R + 7 : R;
+        pieCtx.beginPath();
+        pieCtx.moveTo(cx, cy);
+        pieCtx.arc(cx, cy, rr, angle + gap, angle + slice - gap);
+        pieCtx.closePath();
+        pieCtx.fillStyle = color;
+        pieCtx.globalAlpha = isHov ? 1.0 : 0.85;
+        pieCtx.fill();
+        pieCtx.globalAlpha = 1.0;
+        angle += slice;
+      });
+      pieCtx.beginPath();
+      pieCtx.arc(cx, cy, IR, 0, Math.PI * 2);
+      var isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      pieCtx.fillStyle = isDark ? '#161b22' : '#ffffff';
+      pieCtx.fill();
+      if (hIdx >= 0 && data[hIdx]) {
+        var pct = Math.round(data[hIdx].value / total * 100);
+        pieCtx.fillStyle = isDark ? '#c9d1d9' : '#1f2328';
+        pieCtx.font = 'bold 14px sans-serif';
+        pieCtx.textAlign = 'center';
+        pieCtx.textBaseline = 'middle';
+        pieCtx.fillText(pct + '%', cx, cy);
+      }
+    }
+
+    function renderChartLegend(data) {
+      chartLegendEl.innerHTML = '';
+      var total = data.reduce(function(s, d) { return s + d.value; }, 0);
+      data.forEach(function(d, i) {
+        var color = PIE_COLORS[i % PIE_COLORS.length];
+        var pct = total > 0 ? Math.round(d.value / total * 100) : 0;
+        var item = document.createElement('div');
+        item.className = 'legend-item';
+        item.innerHTML =
+          '<div class="legend-dot" style="background:' + color + '"></div>' +
+          '<span class="legend-label">' + escHtml(d.label) + '</span>' +
+          '<span class="legend-val">' + d.value + ' (' + pct + '%)</span>';
+        item.addEventListener('mouseenter', function() {
+          hoveredIdx = i;
+          drawPie(data, i);
+          chartLegendEl.querySelectorAll('.legend-item').forEach(function(el, j) {
+            el.classList.toggle('legend-active', j === i);
+          });
+        });
+        item.addEventListener('mouseleave', function() {
+          hoveredIdx = -1;
+          drawPie(data, -1);
+          chartLegendEl.querySelectorAll('.legend-item').forEach(function(el) { el.classList.remove('legend-active'); });
+        });
+        chartLegendEl.appendChild(item);
+      });
+    }
+
+    function renderChart() {
+      var data = buildPieData(chartDim);
+      if (data.length === 0) {
+        if (pieCtx) pieCtx.clearRect(0, 0, 220, 220);
+        chartLegendEl.innerHTML = '<div class="chart-empty">データなし</div>';
+        return;
+      }
+      drawPie(data, -1);
+      renderChartLegend(data);
+    }
+
+    function openChartModal() {
+      chartOverlayEl.style.zIndex = String(getNextZ());
+      chartOverlayEl.classList.add('open');
+      renderChart();
+    }
+    function closeChartModal() {
+      chartOverlayEl.classList.remove('open');
+    }
+
+    var btnChart = document.getElementById('btnChart');
+    if (btnChart) {
+      btnChart.addEventListener('click', openChartModal);
+    }
+    if (chartCloseEl) {
+      chartCloseEl.addEventListener('click', closeChartModal);
+    }
+    chartOverlayEl.addEventListener('click', function(e) {
+      if (e.target === chartOverlayEl) closeChartModal();
+    });
+    document.addEventListener('keydown', function(e) {
+      if (e.key === 'Escape' && chartOverlayEl.classList.contains('open')) closeChartModal();
+    });
+
+    chartTabFileEl.addEventListener('click', function() {
+      chartDim = 'file';
+      chartTabFileEl.classList.add('active');
+      chartTabFuncEl.classList.remove('active');
+      renderChart();
+    });
+    chartTabFuncEl.addEventListener('click', function() {
+      chartDim = 'func';
+      chartTabFuncEl.classList.add('active');
+      chartTabFileEl.classList.remove('active');
+      renderChart();
+    });
+
+    if (pieCanvas) {
+      pieCanvas.addEventListener('mousemove', function(e) {
+        var data = buildPieData(chartDim);
+        var total = data.reduce(function(s, d) { return s + d.value; }, 0);
+        if (total === 0) return;
+        var rect = pieCanvas.getBoundingClientRect();
+        var mx = e.clientX - rect.left - 110, my = e.clientY - rect.top - 110;
+        var dist = Math.sqrt(mx * mx + my * my);
+        if (dist < 44 || dist > 95) {
+          if (hoveredIdx !== -1) { hoveredIdx = -1; drawPie(data, -1); chartLegendEl.querySelectorAll('.legend-item').forEach(function(el) { el.classList.remove('legend-active'); }); }
+          return;
+        }
+        var angle = Math.atan2(my, mx) - (-Math.PI / 2);
+        if (angle < 0) angle += Math.PI * 2;
+        var cum = 0, found = -1;
+        data.forEach(function(d, i) {
+          var slice = (d.value / total) * Math.PI * 2;
+          if (found === -1 && angle >= cum && angle < cum + slice) found = i;
+          cum += slice;
+        });
+        if (found !== hoveredIdx) {
+          hoveredIdx = found;
+          drawPie(data, found);
+          chartLegendEl.querySelectorAll('.legend-item').forEach(function(el, j) { el.classList.toggle('legend-active', j === found); });
+        }
+      });
+      pieCanvas.addEventListener('mouseleave', function() {
+        var data = buildPieData(chartDim);
+        hoveredIdx = -1;
+        drawPie(data, -1);
+        chartLegendEl.querySelectorAll('.legend-item').forEach(function(el) { el.classList.remove('legend-active'); });
+      });
+    }
   </script>
 </body>
 </html>`;
