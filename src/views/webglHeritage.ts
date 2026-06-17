@@ -48,9 +48,11 @@ canvas:active { cursor:grabbing; }
 .list-scroll::-webkit-scrollbar { width:4px; }
 .list-scroll::-webkit-scrollbar-track { background:#0d1117; }
 .list-scroll::-webkit-scrollbar-thumb { background:#30363d; border-radius:2px; }
-.site-item { display:flex; align-items:center; gap:8px; padding:8px 10px; border-bottom:1px solid #161b22; cursor:pointer; transition:background .1s; }
+.site-item { display:flex; align-items:center; gap:8px; padding:8px 10px; border-bottom:1px solid #161b22; cursor:pointer; transition:background .1s; border-left:3px solid transparent; }
 .site-item:hover { background:#161b22; }
-.site-item.active { background:#0c2d1a; }
+.site-item.active { background:rgba(255,240,30,0.09); border-left-color:#c8960a; }
+.spd-row { padding:8px 10px 6px; border-bottom:1px solid #21262d; flex-shrink:0; }
+.spd-row .ctrl-label { font-size:10px; font-weight:700; color:#3fb950; text-transform:uppercase; letter-spacing:.5px; margin-bottom:4px; }
 .site-thumb { width:48px; height:36px; border-radius:4px; display:flex; align-items:center; justify-content:center; font-size:20px; flex-shrink:0; border:1px solid #21262d; }
 .site-body { flex:1; min-width:0; }
 .site-top { display:flex; align-items:center; gap:4px; margin-bottom:2px; }
@@ -62,6 +64,22 @@ canvas:active { cursor:grabbing; }
 .canvas-ctrl-btn { background:rgba(13,17,23,0.88); border:1px solid #30363d; border-radius:6px; color:#e6edf3; font-size:12px; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; padding:6px 12px; cursor:pointer; white-space:nowrap; transition:background .15s,border-color .15s,color .15s; }
 .canvas-ctrl-btn:hover { background:rgba(13,17,23,1); border-color:#3fb950; }
 .canvas-ctrl-btn.active { background:#0c2d1a; border-color:#3fb950; color:#3fb950; }
+.panel-tabs { display:flex; border-bottom:1px solid #21262d; flex-shrink:0; }
+.panel-tab { flex:1; padding:8px 4px; font-size:11px; font-weight:600; color:#484f58; background:none; border:none; border-bottom:2px solid transparent; cursor:pointer; transition:color .15s,border-color .15s; }
+.panel-tab:hover { color:#8b949e; }
+.panel-tab.active { color:#3fb950; border-bottom-color:#3fb950; }
+.panel-body { display:none; flex:1; flex-direction:column; overflow:hidden; }
+.panel-body.visible { display:flex; }
+.ctrl-panel { padding:14px 12px; display:flex; flex-direction:column; gap:14px; }
+.ctrl-row { display:flex; flex-direction:column; gap:5px; }
+.ctrl-label { font-size:11px; color:#8b949e; font-weight:600; }
+.slider-row { display:flex; align-items:center; gap:8px; }
+.slider-row input[type=range] { flex:1; accent-color:#3fb950; }
+.sval { font-family:monospace; font-size:11px; color:#3fb950; min-width:36px; }
+.ctrl-sep { border:none; border-top:1px solid #21262d; margin:0; }
+.legend { display:flex; flex-direction:column; gap:7px; }
+.legend-row { display:flex; align-items:center; gap:8px; font-size:12px; }
+.legend-dot { font-size:16px; }
 @media (display-mode: standalone) { .pwa-hide { display:none !important; } }
 </style>
 </head>
@@ -116,8 +134,8 @@ void main() {
   <h1>世界遺産 地球儀</h1>
   <span class="badge">世界遺産</span>
   <span style="flex:1"></span>
-  <a href="/webgl-sphere">&#9917; W杯</a>
-  <a href="/webgl-lv-sphere">🔮 LV Sphere</a>
+  <a href="/webgl-sphere" class="pwa-hide">&#9917; W杯</a>
+  <a href="/webgl-lv-sphere" class="pwa-hide">🔮 LV Sphere</a>
   <a href="/settings" class="pwa-hide">&#9881;</a>
   <span class="pwa-hide" style="color:#8b949e;font-size:11px">${safeUser}</span>
 </div>
@@ -133,15 +151,56 @@ void main() {
     </div>
   </div>
   <div class="side">
-    <div class="side-header">
-      <div class="side-title">▼ 正面から近い順</div>
-      <div class="search-wrap">
-        <span class="search-icon">🔍</span>
-        <input type="search" id="searchInput" placeholder="遺産名・国・種別で検索...">
-      </div>
-      <div id="result-count"></div>
+    <div class="panel-tabs">
+      <button class="panel-tab active" id="tabList">▼ 近接リスト</button>
+      <button class="panel-tab" id="tabCtrl">⚙ コントロール</button>
     </div>
-    <div class="list-scroll" id="siteList"></div>
+
+    <div class="panel-body visible" id="panelList">
+      <div class="spd-row">
+        <div class="ctrl-label">自転速度</div>
+        <div class="slider-row">
+          <input type="range" id="rotSpd" min="0" max="5" step="0.1" value="1">
+          <span class="sval" id="rotSpdVal">1.0</span>
+        </div>
+      </div>
+      <div class="side-header">
+        <div class="search-wrap">
+          <span class="search-icon">🔍</span>
+          <input type="search" id="searchInput" placeholder="遺産名・国・種別で検索...">
+        </div>
+        <div id="result-count"></div>
+      </div>
+      <div class="list-scroll" id="siteList"></div>
+    </div>
+
+    <div class="panel-body" id="panelCtrl">
+      <div class="ctrl-panel">
+        <div class="ctrl-row">
+          <div class="ctrl-label">スピンブースト</div>
+          <div class="slider-row">
+            <input type="range" id="spinBoost" min="1" max="4" step="0.1" value="2">
+            <span class="sval" id="spinBoostVal">2.0</span>
+          </div>
+        </div>
+        <hr class="ctrl-sep">
+        <div class="ctrl-row">
+          <div class="ctrl-label">凡例</div>
+          <div class="legend">
+            <div class="legend-row"><span class="legend-dot">🏛️</span><span style="color:#e3a838;font-weight:600">文化遺産</span></div>
+            <div class="legend-row"><span class="legend-dot">🌿</span><span style="color:#3fb950;font-weight:600">自然遺産</span></div>
+            <div class="legend-row"><span class="legend-dot">⭐</span><span style="color:#a371f7;font-weight:600">複合遺産</span></div>
+          </div>
+        </div>
+        <hr class="ctrl-sep">
+        <div style="font-size:11px;color:#484f58;line-height:1.7">
+          ドラッグ: 回転<br>
+          ホイール: ズーム<br>
+          フリック: 慣性スピン → 最寄り遺産スナップ<br>
+          ダブルクリック: 自動回転 ON/OFF
+        </div>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -156,6 +215,32 @@ void main() {
   var siteList = document.getElementById('siteList');
   var searchInput = document.getElementById('searchInput');
   var resultCount = document.getElementById('result-count');
+  var tabList = document.getElementById('tabList');
+  var tabCtrl = document.getElementById('tabCtrl');
+  var panelList = document.getElementById('panelList');
+  var panelCtrl = document.getElementById('panelCtrl');
+  var rotSpdEl = document.getElementById('rotSpd');
+  var rotSpdValEl = document.getElementById('rotSpdVal');
+  var spinBoostEl = document.getElementById('spinBoost');
+  var spinBoostValEl = document.getElementById('spinBoostVal');
+
+  var isListMode = true;
+
+  tabList.addEventListener('click', function() {
+    isListMode = true;
+    tabList.classList.add('active'); tabCtrl.classList.remove('active');
+    panelList.classList.add('visible'); panelCtrl.classList.remove('visible');
+  });
+  tabCtrl.addEventListener('click', function() {
+    isListMode = false;
+    tabCtrl.classList.add('active'); tabList.classList.remove('active');
+    panelCtrl.classList.add('visible'); panelList.classList.remove('visible');
+  });
+  rotSpdEl.addEventListener('input', function() { rotSpdValEl.textContent = parseFloat(rotSpdEl.value).toFixed(1); });
+  spinBoostEl.addEventListener('input', function() {
+    SPIN_BOOST = parseFloat(spinBoostEl.value);
+    spinBoostValEl.textContent = SPIN_BOOST.toFixed(1);
+  });
 
   function resize() {
     var r = wrap.getBoundingClientRect();
@@ -282,10 +367,17 @@ void main() {
   });
 
   var velY = 0, velX = 0, momentumY = 0, momentumX = 0;
-  var MOMENTUM_DECAY = 0.92;
+  var MOMENTUM_DECAY = 0.94;
+  var SPIN_BOOST = 2.0;
+  var rotSpd = 1.0;
+
+  function applyMomentum(vy, vx) {
+    momentumY = vy * SPIN_BOOST;
+    momentumX = axisLocked ? 0 : (vx * SPIN_BOOST);
+  }
 
   canvas.addEventListener('mousedown',  function(e){ drag=true; lx=e.clientX; ly=e.clientY; momentumY=0; momentumX=0; velY=0; velX=0; });
-  window.addEventListener('mouseup',    function(){ if(!drag)return; drag=false; momentumY=velY; momentumX=velX; velY=0; velX=0; });
+  window.addEventListener('mouseup',    function(){ if(!drag)return; drag=false; applyMomentum(velY, velX); velY=0; velX=0; });
   window.addEventListener('mousemove',  function(e){ if(!drag)return; var dy=(e.clientX-lx)*0.008; var dx=(e.clientY-ly)*0.008; rotYv+=dy; velY=velY*0.4+dy*0.6; if(!axisLocked){rotXv=clampElev(rotXv+dx); velX=velX*0.4+dx*0.6;} lx=e.clientX; ly=e.clientY; });
   canvas.addEventListener('wheel',      function(e){ e.preventDefault(); zoom=Math.max(1.6,Math.min(10,zoom+e.deltaY*0.01)); },{passive:false});
   canvas.addEventListener('dblclick',   function(){ autoRot=!autoRot; btnAutoRot.textContent=autoRot?'⏸ 自転停止':'▶ 回転'; if(autoRot){btnAutoRot.classList.remove('active');}else{btnAutoRot.classList.add('active');} });
@@ -293,7 +385,7 @@ void main() {
   canvas.addEventListener('touchmove',  function(e){ e.preventDefault(); touchMoved=true; if(e.touches.length===1&&drag){var dy=(e.touches[0].clientX-lx)*0.008; var dx=(e.touches[0].clientY-ly)*0.008; rotYv+=dy; velY=velY*0.4+dy*0.6; if(!axisLocked){rotXv=clampElev(rotXv+dx); velX=velX*0.4+dx*0.6;} lx=e.touches[0].clientX;ly=e.touches[0].clientY;} if(e.touches.length===2){var d=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);zoom=Math.max(1.6,Math.min(10,zoom-(d-pinch0)*0.02));pinch0=d;} },{passive:false});
   canvas.addEventListener('touchend', function(e){
     drag=false;
-    momentumY=velY; momentumX=velX; velY=0; velX=0;
+    applyMomentum(velY, velX); velY=0; velX=0;
     if (!touchMoved && e.changedTouches.length === 1) { momentumY=0; momentumX=0; hideTooltip(); }
   });
 
@@ -542,7 +634,8 @@ void main() {
       rotXv = flyFrom.rx + (flyTarget.rx - flyFrom.rx) * fe;
       if (fp >= 1) flyTarget = null;
     } else {
-      if (autoRot) rotYv += 0.003;
+      rotSpd = parseFloat(rotSpdEl.value);
+      if (autoRot) rotYv += 0.003 * rotSpd;
       var wasSpinning = Math.abs(momentumY) > 0.0002 || Math.abs(momentumX) > 0.0002;
       if (Math.abs(momentumY) > 0.0002) { rotYv += momentumY; momentumY *= MOMENTUM_DECAY; } else { momentumY = 0; }
       if (!axisLocked && Math.abs(momentumX) > 0.0002) { rotXv = clampElev(rotXv + momentumX); momentumX *= MOMENTUM_DECAY; } else { momentumX = 0; }
@@ -570,6 +663,23 @@ void main() {
     mul(model, rx, tmp2);
     mul(tmp, view, model);
     mul(mvp, proj, tmp);
+
+    if (autoRot && isListMode && flyTarget === null) {
+      var nearestIdx2 = -1, nearestMz2 = -1;
+      for (var si2 = 0; si2 < HERITAGE.length; si2++) {
+        var sp2 = mkEls[si2] ? mkEls[si2].pos3d : null;
+        if (!sp2) continue;
+        var smz2 = model[2]*sp2[0] + model[6]*sp2[1] + model[10]*sp2[2];
+        if (smz2 > nearestMz2) { nearestMz2 = smz2; nearestIdx2 = si2; }
+      }
+      if (nearestIdx2 >= 0 && nearestIdx2 !== activeIdx) {
+        activeIdx = nearestIdx2;
+        var nd = HERITAGE[nearestIdx2];
+        var nc = typeColor(nd.t);
+        tooltip.innerHTML = '<div class="tt-name">' + nd.e + ' ' + nd.f + ' ' + nd.n + '</div><div class="tt-sub"><span style="color:' + nc + ';font-weight:600">' + nd.t + '</span>  ' + nd.c + '  ' + nd.y + '年登録</div>';
+        tooltip.style.opacity = '1';
+      }
+    }
 
     var sd = getSunDir();
     gl.uniform3f(uLight, sd[0], sd[1], sd[2]);
