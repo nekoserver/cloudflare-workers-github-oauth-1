@@ -4167,7 +4167,12 @@ app.get('/webgl-demo', authMiddleware, async (c) => {
  */
 app.get('/webgl-sphere', authMiddleware, async (c) => {
   const user = c.get('user');
-  return c.html(getWebGLSpherePage(user.sub));
+  return c.html(getWebGLSpherePage(user.sub, 'wc'));
+});
+
+app.get('/webgl-heritage', authMiddleware, async (c) => {
+  const user = c.get('user');
+  return c.html(getWebGLSpherePage(user.sub, 'heritage'));
 });
 
 app.get('/webgl-cube', authMiddleware, async (c) => {

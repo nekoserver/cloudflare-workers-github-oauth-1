@@ -2,8 +2,11 @@ function esc(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
-export function getWebGLSpherePage(username: string): string {
+export function getWebGLSpherePage(username: string, mode: string = 'wc'): string {
   const safeUser = esc(username);
+  const isHeritage = mode === 'heritage';
+  const pageTitle = isHeritage ? '世界遺産 地球儀' : 'WebGL 地球儀';
+  const badgeText = isHeritage ? '世界遺産' : 'WebGL';
   return `<!DOCTYPE html>
 <html lang="ja">
 <head>
@@ -15,7 +18,7 @@ export function getWebGLSpherePage(username: string): string {
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="地球儀">
 <link rel="manifest" href="/manifest.json">
-<title>WebGL 地球儀</title>
+<title>${pageTitle}</title>
 <style>
 * { box-sizing:border-box; margin:0; padding:0; }
 body { background:#000; color:#e6edf3; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; font-size:13px; height:100vh; height:100dvh; display:flex; flex-direction:column; overflow:hidden; }
@@ -145,9 +148,10 @@ void main() {
 </script>
 
 <div class="topbar">
-  <h1>WebGL 地球儀</h1>
-  <span class="badge">WebGL</span>
+  <h1>${pageTitle}</h1>
+  <span class="badge">${badgeText}</span>
   <span style="flex:1"></span>
+  ${isHeritage ? '<a href="/webgl-sphere">⚽ W杯</a>' : '<a href="/webgl-heritage">🏛️ 世界遺産</a>'}
   <a href="/webgl-demo" class="pwa-hide">3D Cube</a>
   <a href="/htmlrewriter-demo" class="pwa-hide">HTMLRewriter</a>
   <a href="/settings" class="pwa-hide">&#9881;</a>
@@ -162,9 +166,8 @@ void main() {
     <div class="canvas-ctrl-btns">
       <button class="canvas-ctrl-btn" id="btnAxisLock" title="地軸を画面に対して垂直に固定するモード">＋ 軸垂直固定</button>
       <button class="canvas-ctrl-btn" id="btnAutoRot" title="自転の停止/再開">⏸ 自転停止</button>
-      <button class="canvas-ctrl-btn" id="btnHeritage">🏛️ 世界遺産</button>
     </div>
-    <button id="drawer-open-btn" title="試合一覧を開く">&#9776; 試合一覧</button>
+    ${isHeritage ? '' : '<button id="drawer-open-btn" title="試合一覧を開く">&#9776; 試合一覧</button>'}
     <div id="match-info">
       <button class="mi-close" id="miClose">&#10005;</button>
       <div class="mi-flags" id="mi-flags"></div>
@@ -173,7 +176,7 @@ void main() {
     </div>
   </div>
   <div class="side">
-    <div class="tip">ドラッグ: 回転 | ホイール: ズーム | ダブルクリック: 自動回転 ON/OFF<br>&#9917; = 2026 FIFAワールドカップ開催地（北米） | 各国旗 = 出場48ヵ国</div>
+    <div class="tip">${isHeritage ? 'ドラッグ: 回転 | ホイール: ズーム | ダブルクリック: 自動回転 ON/OFF<br>🏛️ = 文化遺産 | 🌿 = 自然遺産 | ⭐ = 複合遺産' : 'ドラッグ: 回転 | ホイール: ズーム | ダブルクリック: 自動回転 ON/OFF<br>&#9917; = 2026 FIFAワールドカップ開催地（北米） | 各国旗 = 出場48ヵ国'}</div>
 
     <h2>コントロール</h2>
     <div class="ctrl-row">
@@ -207,7 +210,7 @@ void main() {
 </div>
 
 <div id="mk-tooltip"></div>
-<div id="drawer-overlay"></div>
+${isHeritage ? '' : `<div id="drawer-overlay"></div>
 <div id="left-drawer">
   <div class="drw-hdr">
     <span class="drw-title">&#9917; 2026 FIFA W杯 全72試合</span>
@@ -221,7 +224,7 @@ void main() {
     <button class="sp-close" id="spClose">&#10005;</button>
   </div>
   <div id="sp-body"></div>
-</div>
+</div>`}
 
 <script>
 (function() {
@@ -357,7 +360,7 @@ void main() {
   var drag = false, lx = 0, ly = 0, pinch0 = 0, touchMoved = false;
 
   var axisLocked = false;
-  var heritageMode = false;
+  var heritageMode = ${isHeritage ? 'true' : 'false'};
   var activeHwIdx = -1;
 
   var btnAxisLock = document.getElementById("btnAxisLock");
@@ -381,25 +384,6 @@ void main() {
     if (autoRot) { btnAutoRot.classList.remove("active"); } else { btnAutoRot.classList.add("active"); }
   });
 
-  var btnHeritage = document.getElementById("btnHeritage");
-  btnHeritage.addEventListener("click", function() {
-    heritageMode = !heritageMode;
-    if (heritageMode) {
-      btnHeritage.classList.add("active");
-      btnHeritage.textContent = "⚽ W杯";
-      for (var i = 0; i < mkEls.length; i++) mkEls[i].el.style.opacity = "0";
-      hideTooltip();
-      schedulePanel.classList.remove("open");
-      closeDrawer();
-      closeMatchDetail();
-    } else {
-      btnHeritage.classList.remove("active");
-      btnHeritage.textContent = "🏛️ 世界遺産";
-      for (var i = 0; i < hwEls.length; i++) hwEls[i].el.style.opacity = "0";
-      hideTooltip();
-      activeHwIdx = -1;
-    }
-  });
 
   var rotSpdEl    = document.getElementById("rotSpd");
   var rotSpdValEl = document.getElementById("rotSpdVal");
@@ -710,7 +694,7 @@ void main() {
 
   var tooltip = document.getElementById("mk-tooltip");
   var schedulePanel = document.getElementById("schedule-panel");
-  var spBody = document.getElementById("sp-body");
+  var spBody = schedulePanel ? schedulePanel.querySelector("#sp-body") : null;
   var activeMarkerIdx = -1;
   var canvasRect = {left:0, top:0, width:0, height:0};
 
@@ -794,10 +778,6 @@ void main() {
     hideTooltip();
   }
 
-  document.getElementById("spClose").addEventListener("click", function() {
-    schedulePanel.classList.remove("open");
-  });
-
   var leftDrawer = document.getElementById("left-drawer");
   var drwOverlay = document.getElementById("drawer-overlay");
   var drwBody    = document.getElementById("drw-body");
@@ -808,23 +788,25 @@ void main() {
   var drwBuilt = false;
 
   function openDrawer() {
+    if (!leftDrawer) return;
     if (!drwBuilt) { buildDrawer(); drwBuilt = true; }
     leftDrawer.classList.add("open");
-    drwOverlay.classList.add("open");
+    if (drwOverlay) drwOverlay.classList.add("open");
     hideTooltip();
-    schedulePanel.classList.remove("open");
+    if (schedulePanel) schedulePanel.classList.remove("open");
   }
   function closeDrawer() {
-    leftDrawer.classList.remove("open");
-    drwOverlay.classList.remove("open");
+    if (leftDrawer) leftDrawer.classList.remove("open");
+    if (drwOverlay) drwOverlay.classList.remove("open");
   }
   function showMatchDetail(a, b, date, time, doFly) {
+    if (!matchInfo) return;
     miFlags.textContent = a + "  " + b;
     miTime.textContent  = time + " UTC / " + toET(time) + " / " + toJST(time);
     miDate.textContent  = date.slice(5).replace("-", "/");
     matchInfo.classList.add("open");
     closeDrawer();
-    schedulePanel.classList.remove("open");
+    if (schedulePanel) schedulePanel.classList.remove("open");
     if (doFly) {
       var tidx = findCountryByFlag(a);
       if (tidx >= 0) {
@@ -835,10 +817,50 @@ void main() {
       }
     }
   }
-  function closeMatchDetail() { matchInfo.classList.remove("open"); }
-  document.getElementById("miClose").addEventListener("click", function(e) { e.stopPropagation(); closeMatchDetail(); });
+  function closeMatchDetail() { if (matchInfo) matchInfo.classList.remove("open"); }
+  var miCloseBtn = document.getElementById("miClose");
+  if (miCloseBtn) miCloseBtn.addEventListener("click", function(e) { e.stopPropagation(); closeMatchDetail(); });
+  var spCloseBtn = document.getElementById("spClose");
+  if (spCloseBtn) spCloseBtn.addEventListener("click", function() { if (schedulePanel) schedulePanel.classList.remove("open"); });
+
+  function showSchedulePanel() {
+    if (!schedulePanel || !spBody) return;
+    var todayStr = new Date().toISOString().slice(0, 10);
+    var allMatches = MATCHES.filter(function(m) { return m.date >= todayStr; });
+    allMatches.sort(function(a, b) { return (a.date + a.time) < (b.date + b.time) ? -1 : 1; });
+    var html = "";
+    var lastDate = "";
+    var nowMs = Date.now();
+    allMatches.forEach(function(m) {
+      if (m.date !== lastDate) {
+        var label = m.date === todayStr ? "本日 " + m.date.slice(5).replace("-","/") : m.date.slice(5).replace("-","/");
+        html += '<div class="sp-date">' + label + '</div>';
+        lastDate = m.date;
+      }
+      var koMs = new Date(m.date + "T" + m.time + ":00Z").getTime();
+      var isPast = koMs < nowMs - 110*60000;
+      var isTod  = m.date === todayStr;
+      var cls = "sp-match" + (isPast ? " sp-past" : "") + (isTod && !isPast ? " sp-today" : "");
+      html += '<div class="' + cls + '" data-a="' + m.a + '" data-b="' + m.b + '" data-date="' + m.date + '" data-time="' + m.time + '" style="cursor:pointer"><span class="sp-flags">' + m.a + ' - ' + m.b + '</span><span class="sp-time">' + m.time + ' UTC<br>' + toET(m.time) + '<br>' + toJST(m.time) + '</span></div>';
+    });
+    spBody.innerHTML = html || '<div style="padding:16px;color:#8b949e">本日以降の試合はありません</div>';
+    function spRowTap(row) {
+      if (!row) return;
+      var a = row.dataset.a, b = row.dataset.b;
+      schedulePanel.classList.remove("open");
+      showMatchDetail(a, b, row.dataset.date, row.dataset.time, true);
+    }
+    spBody.onclick = function(e) { spRowTap(e.target.closest(".sp-match")); };
+    spBody.ontouchend = function(e) {
+      var row = e.target.closest(".sp-match");
+      if (row) { e.preventDefault(); spRowTap(row); }
+    };
+    schedulePanel.classList.add("open");
+    hideTooltip();
+  }
 
   function buildDrawer() {
+    if (!drwBody) return;
     var nowMs = Date.now();
     var todayStr = new Date().toISOString().slice(0, 10);
     var upcoming = MATCHES.filter(function(m) { return m.date >= todayStr; }).sort(function(x, y) { return (x.date + x.time) < (y.date + y.time) ? -1 : 1; });
@@ -874,9 +896,11 @@ void main() {
     });
   }
 
-  document.getElementById("drawer-open-btn").addEventListener("click", openDrawer);
-  document.getElementById("drwClose").addEventListener("click", closeDrawer);
-  drwOverlay.addEventListener("click", closeDrawer);
+  var drawerOpenBtn = document.getElementById("drawer-open-btn");
+  if (drawerOpenBtn) drawerOpenBtn.addEventListener("click", openDrawer);
+  var drwCloseBtn = document.getElementById("drwClose");
+  if (drwCloseBtn) drwCloseBtn.addEventListener("click", closeDrawer);
+  if (drwOverlay) drwOverlay.addEventListener("click", closeDrawer);
 
   var mkEls = [];
   for (var mi = 0; mi < wc2026.length; mi++) {
