@@ -1663,7 +1663,9 @@ export function getFunctionChangelogPage(input: FunctionChangelogInput): string 
       if (chartTitleEl) chartTitleEl.textContent = '📈 ' + (chartDim === 'file' ? 'ファイル別' : '関数別') + chartMetricLabel;
       if (data.length === 0) {
         if (pieCtx) pieCtx.clearRect(0, 0, 220, 220);
-        chartLegendEl.innerHTML = '<div class="chart-empty">データなし</div>';
+        var diagCount = document.querySelectorAll('#tableBody tr[data-file]').length;
+        var diagVisible = Array.from(document.querySelectorAll('#tableBody tr[data-file]')).filter(function(tr) { return tr.style.display !== 'none'; }).length;
+        chartLegendEl.innerHTML = '<div class="chart-empty">データなし<br><span style="font-size:10px;color:var(--text-muted)">DOM行数: ' + diagCount + ' / 表示中: ' + diagVisible + '</span></div>';
         return;
       }
       drawPie(data, -1);
