@@ -62,6 +62,22 @@ canvas:active { cursor:grabbing; }
 .canvas-ctrl-btn { background:rgba(13,17,23,0.88); border:1px solid #30363d; border-radius:6px; color:#e6edf3; font-size:12px; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; padding:6px 12px; cursor:pointer; white-space:nowrap; transition:background .15s,border-color .15s,color .15s; }
 .canvas-ctrl-btn:hover { background:rgba(13,17,23,1); border-color:#3fb950; }
 .canvas-ctrl-btn.active { background:#0c2d1a; border-color:#3fb950; color:#3fb950; }
+.panel-tabs { display:flex; border-bottom:1px solid #21262d; flex-shrink:0; }
+.panel-tab { flex:1; padding:8px 4px; font-size:11px; font-weight:600; color:#484f58; background:none; border:none; border-bottom:2px solid transparent; cursor:pointer; transition:color .15s,border-color .15s; }
+.panel-tab:hover { color:#8b949e; }
+.panel-tab.active { color:#3fb950; border-bottom-color:#3fb950; }
+.panel-body { display:none; flex:1; flex-direction:column; overflow:hidden; }
+.panel-body.visible { display:flex; }
+.ctrl-panel { padding:14px 12px; display:flex; flex-direction:column; gap:14px; }
+.ctrl-row { display:flex; flex-direction:column; gap:5px; }
+.ctrl-label { font-size:11px; color:#8b949e; font-weight:600; }
+.slider-row { display:flex; align-items:center; gap:8px; }
+.slider-row input[type=range] { flex:1; accent-color:#3fb950; }
+.sval { font-family:monospace; font-size:11px; color:#3fb950; min-width:36px; }
+.ctrl-sep { border:none; border-top:1px solid #21262d; margin:0; }
+.legend { display:flex; flex-direction:column; gap:7px; }
+.legend-row { display:flex; align-items:center; gap:8px; font-size:12px; }
+.legend-dot { font-size:16px; }
 @media (display-mode: standalone) { .pwa-hide { display:none !important; } }
 </style>
 </head>
@@ -133,15 +149,56 @@ void main() {
     </div>
   </div>
   <div class="side">
-    <div class="side-header">
-      <div class="side-title">▼ 正面から近い順</div>
-      <div class="search-wrap">
-        <span class="search-icon">🔍</span>
-        <input type="search" id="searchInput" placeholder="遺産名・国・種別で検索...">
-      </div>
-      <div id="result-count"></div>
+    <div class="panel-tabs">
+      <button class="panel-tab active" id="tabList">▼ 近接リスト</button>
+      <button class="panel-tab" id="tabCtrl">⚙ コントロール</button>
     </div>
-    <div class="list-scroll" id="siteList"></div>
+
+    <div class="panel-body visible" id="panelList">
+      <div class="side-header">
+        <div class="search-wrap">
+          <span class="search-icon">🔍</span>
+          <input type="search" id="searchInput" placeholder="遺産名・国・種別で検索...">
+        </div>
+        <div id="result-count"></div>
+      </div>
+      <div class="list-scroll" id="siteList"></div>
+    </div>
+
+    <div class="panel-body" id="panelCtrl">
+      <div class="ctrl-panel">
+        <div class="ctrl-row">
+          <div class="ctrl-label">自転速度</div>
+          <div class="slider-row">
+            <input type="range" id="rotSpd" min="0" max="5" step="0.1" value="1">
+            <span class="sval" id="rotSpdVal">1.0</span>
+          </div>
+        </div>
+        <div class="ctrl-row">
+          <div class="ctrl-label">スピンブースト</div>
+          <div class="slider-row">
+            <input type="range" id="spinBoost" min="1" max="4" step="0.1" value="2">
+            <span class="sval" id="spinBoostVal">2.0</span>
+          </div>
+        </div>
+        <hr class="ctrl-sep">
+        <div class="ctrl-row">
+          <div class="ctrl-label">凡例</div>
+          <div class="legend">
+            <div class="legend-row"><span class="legend-dot">🏛️</span><span style="color:#e3a838;font-weight:600">文化遺産</span></div>
+            <div class="legend-row"><span class="legend-dot">🌿</span><span style="color:#3fb950;font-weight:600">自然遺産</span></div>
+            <div class="legend-row"><span class="legend-dot">⭐</span><span style="color:#a371f7;font-weight:600">複合遺産</span></div>
+          </div>
+        </div>
+        <hr class="ctrl-sep">
+        <div style="font-size:11px;color:#484f58;line-height:1.7">
+          ドラッグ: 回転<br>
+          ホイール: ズーム<br>
+          フリック: 慣性スピン → 最寄り遺産スナップ<br>
+          ダブルクリック: 自動回転 ON/OFF
+        </div>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -156,6 +213,28 @@ void main() {
   var siteList = document.getElementById('siteList');
   var searchInput = document.getElementById('searchInput');
   var resultCount = document.getElementById('result-count');
+  var tabList = document.getElementById('tabList');
+  var tabCtrl = document.getElementById('tabCtrl');
+  var panelList = document.getElementById('panelList');
+  var panelCtrl = document.getElementById('panelCtrl');
+  var rotSpdEl = document.getElementById('rotSpd');
+  var rotSpdValEl = document.getElementById('rotSpdVal');
+  var spinBoostEl = document.getElementById('spinBoost');
+  var spinBoostValEl = document.getElementById('spinBoostVal');
+
+  tabList.addEventListener('click', function() {
+    tabList.classList.add('active'); tabCtrl.classList.remove('active');
+    panelList.classList.add('visible'); panelCtrl.classList.remove('visible');
+  });
+  tabCtrl.addEventListener('click', function() {
+    tabCtrl.classList.add('active'); tabList.classList.remove('active');
+    panelCtrl.classList.add('visible'); panelList.classList.remove('visible');
+  });
+  rotSpdEl.addEventListener('input', function() { rotSpdValEl.textContent = parseFloat(rotSpdEl.value).toFixed(1); });
+  spinBoostEl.addEventListener('input', function() {
+    SPIN_BOOST = parseFloat(spinBoostEl.value);
+    spinBoostValEl.textContent = SPIN_BOOST.toFixed(1);
+  });
 
   function resize() {
     var r = wrap.getBoundingClientRect();
@@ -284,6 +363,7 @@ void main() {
   var velY = 0, velX = 0, momentumY = 0, momentumX = 0;
   var MOMENTUM_DECAY = 0.94;
   var SPIN_BOOST = 2.0;
+  var rotSpd = 1.0;
 
   function applyMomentum(vy, vx) {
     momentumY = vy * SPIN_BOOST;
@@ -548,7 +628,8 @@ void main() {
       rotXv = flyFrom.rx + (flyTarget.rx - flyFrom.rx) * fe;
       if (fp >= 1) flyTarget = null;
     } else {
-      if (autoRot) rotYv += 0.003;
+      rotSpd = parseFloat(rotSpdEl.value);
+      if (autoRot) rotYv += 0.003 * rotSpd;
       var wasSpinning = Math.abs(momentumY) > 0.0002 || Math.abs(momentumX) > 0.0002;
       if (Math.abs(momentumY) > 0.0002) { rotYv += momentumY; momentumY *= MOMENTUM_DECAY; } else { momentumY = 0; }
       if (!axisLocked && Math.abs(momentumX) > 0.0002) { rotXv = clampElev(rotXv + momentumX); momentumX *= MOMENTUM_DECAY; } else { momentumX = 0; }
