@@ -129,7 +129,7 @@ export function getFunctionChangelogPage(input: FunctionChangelogInput): string 
     </tr>`;
   }).join('\n');
 
-  const emptyRow = '<tr><td colspan="8" class="empty-cell">データなし — ts_commit_function_map にレコードを追加してください</td></tr>';
+  const emptyRow = '<tr><td colspan="8" class="empty-cell">データなし — npx tsx scripts/index-functions.ts を実行してください</td></tr>';
 
   let repoBanner = '';
   if (repos.length === 0) {
@@ -150,6 +150,30 @@ export function getFunctionChangelogPage(input: FunctionChangelogInput): string 
     <span class="banner-text">現在 <strong>${repos.length}</strong> 件のプロジェクトが登録されています。</span>
   </div>`;
   }
+
+  // 円グラフ用集計（サーバーサイド）
+  function buildPieAgg(dim: 'file' | 'func'): Array<{label: string; value: number}> {
+    const map: Record<string, number> = {};
+    let hasLines = false;
+    for (const r of rows) {
+      const lines = (r.lines_added || 0) + (r.lines_deleted || 0);
+      if (lines > 0) hasLines = true;
+      const key = dim === 'file' ? r.file_path : `${r.function_name} (${r.file_path})`;
+      map[key] = (map[key] || 0) + (hasLines ? lines : 0);
+    }
+    if (!hasLines) {
+      for (const k of Object.keys(map)) map[k] = 0;
+      for (const r of rows) {
+        const key = dim === 'file' ? r.file_path : `${r.function_name} (${r.file_path})`;
+        map[key] = (map[key] || 0) + 1;
+      }
+    }
+    return Object.entries(map).map(([label, value]) => ({ label, value }))
+      .sort((a, b) => b.value - a.value);
+  }
+  const pieFileData = JSON.stringify(buildPieAgg('file'));
+  const pieFuncData = JSON.stringify(buildPieAgg('func'));
+  const pieMetric = rows.some(r => (r.lines_added || 0) + (r.lines_deleted || 0) > 0) ? '行数' : '変更件数';
 
   const allFunctionsJson = JSON.stringify(
     availableFunctions.map(f => ({ file: f.file_path, func: f.function_name, purpose: f.purpose }))
@@ -1556,6 +1580,10 @@ export function getFunctionChangelogPage(input: FunctionChangelogInput): string 
     });
 
     // ---- 円グラフモーダル ----
+    var PIE_FILE_DATA = ${pieFileData};
+    var PIE_FUNC_DATA = ${pieFuncData};
+    var PIE_METRIC    = '${pieMetric}';
+    var PIE_HAS_REPO  = ${!noRepoSelected};
     var PIE_COLORS = [
       '#58a6ff','#3fb950','#e3b341','#f85149','#bc8cff','#79c0ff','#ff7b72','#56d364',
       '#ffa657','#d2a8ff','#7ee787','#f0883e','#a5d6ff','#ff9bce','#85e89d','#b392f0'
@@ -1570,24 +1598,10 @@ export function getFunctionChangelogPage(input: FunctionChangelogInput): string 
     var chartDim        = 'file';
     var hoveredIdx      = -1;
 
-    var chartMetricLabel = '変更件数';
+    var chartMetricLabel = PIE_METRIC;
 
     function buildPieData(dim) {
-      var map = {};
-      var visibleRows = Array.from(document.querySelectorAll('#tableBody tr[data-file]')).filter(function(tr) {
-        return (tr.style.display !== 'none');
-      });
-      visibleRows.forEach(function(tr) {
-        var file = tr.getAttribute('data-file') || '';
-        var func = tr.getAttribute('data-func') || '';
-        var key = dim === 'file' ? file : (func + ' (' + file + ')');
-        if (!key) return;
-        map[key] = (map[key] || 0) + 1;
-      });
-      chartMetricLabel = '変更件数';
-      var entries = Object.keys(map).map(function(k) { return { label: k, value: map[k] }; });
-      entries.sort(function(a, b) { return b.value - a.value; });
-      return entries;
+      return dim === 'file' ? PIE_FILE_DATA : PIE_FUNC_DATA;
     }
 
     function drawPie(data, hIdx) {
@@ -1663,9 +1677,8 @@ export function getFunctionChangelogPage(input: FunctionChangelogInput): string 
       if (chartTitleEl) chartTitleEl.textContent = '📈 ' + (chartDim === 'file' ? 'ファイル別' : '関数別') + chartMetricLabel;
       if (data.length === 0) {
         if (pieCtx) pieCtx.clearRect(0, 0, 220, 220);
-        var diagCount = document.querySelectorAll('#tableBody tr[data-file]').length;
-        var diagVisible = Array.from(document.querySelectorAll('#tableBody tr[data-file]')).filter(function(tr) { return tr.style.display !== 'none'; }).length;
-        chartLegendEl.innerHTML = '<div class="chart-empty">データなし<br><span style="font-size:10px;color:var(--text-muted)">DOM行数: ' + diagCount + ' / 表示中: ' + diagVisible + '</span></div>';
+        var msg = PIE_HAS_REPO ? 'データなし — npx tsx scripts/index-functions.ts を実行してください' : 'リポジトリを選択してください';
+        chartLegendEl.innerHTML = '<div class="chart-empty">' + msg + '</div>';
         return;
       }
       drawPie(data, -1);
