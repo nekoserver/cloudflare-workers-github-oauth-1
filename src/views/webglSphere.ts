@@ -97,11 +97,38 @@ input[type=range] { flex:1; accent-color:#58a6ff; }
 .grp-row { display:flex; align-items:center; gap:6px; margin-bottom:5px; }
 .grp-label { font-size:10px; font-weight:700; color:#58a6ff; background:rgba(88,166,255,0.1); border:1px solid rgba(88,166,255,0.2); border-radius:4px; padding:1px 5px; width:20px; text-align:center; flex-shrink:0; }
 .grp-flags { font-size:18px; letter-spacing:2px; }
+.grp-flag-today { display:inline-block; border:2.5px solid rgba(255,240,60,0.55); border-radius:5px; padding:2px 4px; line-height:1; margin:0 1px; }
 .mi-time { font-size:13px; color:#58a6ff; font-family:monospace; margin-top:6px; }
 .mi-date { font-size:11px; color:#8b949e; margin-top:3px; }
 .mi-close { position:absolute; top:6px; right:10px; background:none; border:none; color:#8b949e; font-size:18px; line-height:1; cursor:pointer; padding:0; }
 #drawer-open-btn { position:absolute; left:10px; top:10px; z-index:5; background:rgba(13,17,23,0.88); border:1px solid #30363d; border-radius:6px; color:#e6edf3; font-size:12px; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; padding:6px 12px; cursor:pointer; white-space:nowrap; transition:background .15s,border-color .15s; }
 #drawer-open-btn:hover { background:rgba(13,17,23,1); border-color:#58a6ff; }
+#tnmt-btn { position:absolute; left:10px; top:50px; z-index:5; background:rgba(13,17,23,0.88); border:1px solid #30363d; border-radius:6px; color:#e6edf3; font-size:12px; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; padding:6px 12px; cursor:pointer; white-space:nowrap; transition:background .15s,border-color .15s; }
+#tnmt-btn:hover { background:rgba(13,17,23,1); border-color:#f0b429; color:#f0b429; }
+#tnmt-overlay { position:fixed; inset:0; z-index:300; background:rgba(0,0,0,0.88); display:none; overflow-y:auto; }
+#tnmt-overlay.open { display:block; }
+.tnmt-modal { background:#0d1117; border:1px solid #30363d; border-radius:12px; margin:20px auto; max-width:980px; overflow:hidden; }
+.tnmt-hdr { display:flex; align-items:center; justify-content:space-between; padding:14px 18px; border-bottom:1px solid #30363d; position:sticky; top:0; background:#0d1117; z-index:1; }
+.tnmt-title { font-size:14px; font-weight:700; color:#f0b429; }
+.tnmt-close { background:none; border:none; color:#8b949e; font-size:22px; line-height:1; cursor:pointer; padding:0 4px; }
+.tnmt-close:hover { color:#e6edf3; }
+.tnmt-body { padding:16px; overflow-x:auto; }
+.tnmt-bracket { display:flex; gap:10px; min-width:820px; align-items:flex-start; }
+.tnmt-col { display:flex; flex-direction:column; flex:1; min-width:0; }
+.tnmt-col-hdr { font-size:10px; font-weight:700; color:#58a6ff; text-transform:uppercase; letter-spacing:.5px; text-align:center; padding:5px 4px 8px; border-bottom:1px solid #21262d; margin-bottom:8px; white-space:nowrap; }
+.tnmt-col-final .tnmt-col-hdr { color:#f0b429; }
+.tnmt-spacer { flex:1; }
+.tnmt-match { background:#161b22; border:1px solid #30363d; border-radius:6px; padding:6px 8px; margin-bottom:6px; }
+.tnmt-match-date { font-size:9px; color:#484f58; font-family:monospace; margin-bottom:4px; text-align:right; }
+.tnmt-team { display:flex; align-items:center; gap:5px; padding:3px 2px; border-radius:3px; }
+.tnmt-team + .tnmt-team { border-top:1px solid #21262d; margin-top:2px; padding-top:5px; }
+.tnmt-team-flag { font-size:18px; line-height:1; }
+.tnmt-team-code { font-size:10px; font-weight:700; color:#8b949e; font-family:'SFMono-Regular',Consolas,monospace; }
+.tnmt-team-tbd { font-size:11px; color:#484f58; font-style:italic; }
+.tnmt-winner { color:#f0b429; }
+.tnmt-winner .tnmt-team-code { color:#f0b429; }
+.tnmt-3rd { margin-top:16px; border-top:1px solid #30363d; padding-top:14px; }
+.tnmt-3rd-label { font-size:11px; font-weight:700; color:#8b949e; text-align:center; margin-bottom:8px; }
 </style>
 </head>
 <body>
@@ -172,6 +199,7 @@ void main() {
       <button class="canvas-ctrl-btn" id="btnAutoRot" title="自転の停止/再開">⏸ 自転停止</button>
     </div>
     <button id="drawer-open-btn" title="試合一覧を開く">&#9776; 試合一覧</button>
+    <button id="tnmt-btn" title="トーナメント表を開く">&#127942; トーナメント</button>
     <div id="match-info">
       <button class="mi-close" id="miClose">&#10005;</button>
       <div class="mi-flags" id="mi-flags"></div>
@@ -184,18 +212,7 @@ void main() {
 
     <div class="grp-section">
     <h2>グループ一覧</h2>
-    <div class="grp-row"><span class="grp-label">A</span><span class="grp-flags">🇲🇽 🇿🇦 🇰🇷 🇨🇿</span></div>
-    <div class="grp-row"><span class="grp-label">B</span><span class="grp-flags">🇨🇦 🇧🇦 🇶🇦 🇨🇭</span></div>
-    <div class="grp-row"><span class="grp-label">C</span><span class="grp-flags">🇺🇸 🇵🇾 🇦🇺 🇹🇷</span></div>
-    <div class="grp-row"><span class="grp-label">D</span><span class="grp-flags">🇧🇷 🇲🇦 🇭🇹 🏴󠁧󠁢󠁳󠁣󠁴󠁿</span></div>
-    <div class="grp-row"><span class="grp-label">E</span><span class="grp-flags">🇩🇪 🇨🇼 🇨🇮 🇪🇨</span></div>
-    <div class="grp-row"><span class="grp-label">F</span><span class="grp-flags">🇳🇱 🇯🇵 🇸🇪 🇹🇳</span></div>
-    <div class="grp-row"><span class="grp-label">G</span><span class="grp-flags">🇪🇸 🇨🇻 🇸🇦 🇺🇾</span></div>
-    <div class="grp-row"><span class="grp-label">H</span><span class="grp-flags">🇧🇪 🇪🇬 🇮🇷 🇳🇿</span></div>
-    <div class="grp-row"><span class="grp-label">I</span><span class="grp-flags">🇫🇷 🇸🇳 🇮🇶 🇳🇴</span></div>
-    <div class="grp-row"><span class="grp-label">J</span><span class="grp-flags">🇦🇷 🇩🇿 🇦🇹 🇯🇴</span></div>
-    <div class="grp-row"><span class="grp-label">K</span><span class="grp-flags">🇵🇹 🇨🇩 🇺🇿 🇨🇴</span></div>
-    <div class="grp-row"><span class="grp-label">L</span><span class="grp-flags">🏴󠁧󠁢󠁥󠁮󠁧󠁿 🇭🇷 🇬🇭 🇵🇦</span></div>
+    <div id="grp-body"></div>
   </div>
   <h2>コントロール</h2>
     <div class="ctrl-row">
@@ -228,6 +245,15 @@ void main() {
   </div>
 </div>
 
+<div id="tnmt-overlay">
+  <div class="tnmt-modal">
+    <div class="tnmt-hdr">
+      <span class="tnmt-title">&#127942; 2026 FIFA ワールドカップ トーナメント</span>
+      <button class="tnmt-close" id="tnmtClose">&#10005;</button>
+    </div>
+    <div class="tnmt-body" id="tnmt-body"></div>
+  </div>
+</div>
 <div id="mk-tooltip"></div>
 <div id="drawer-overlay"></div>
 <div id="left-drawer">
@@ -245,6 +271,17 @@ void main() {
   <div id="sp-body"></div>
 </div>
 
+<script>
+function getNextZ() {
+  var max = 100;
+  var els = document.querySelectorAll('*');
+  for (var i = 0; i < els.length; i++) {
+    var z = parseInt(window.getComputedStyle(els[i]).zIndex, 10);
+    if (!isNaN(z) && z > max) max = z;
+  }
+  return max + 100;
+}
+</script>
 <script>
 (function() {
   var canvas = document.getElementById("c");
@@ -584,6 +621,136 @@ void main() {
   };
   function flagCode(f) { return FLAG_CODE[f] || ''; }
   function fc(f) { var c = flagCode(f); return c ? '<span class="tm-code">' + c + '</span>' : ''; }
+
+  var GROUPS = [
+    {g:'A', f:['🇲🇽','🇿🇦','🇰🇷','🇨🇿']},
+    {g:'B', f:['🇨🇦','🇧🇦','🇶🇦','🇨🇭']},
+    {g:'C', f:['🇧🇷','🇲🇦','🇭🇹','🏴󠁧󠁢󠁳󠁣󠁴󠁿']},
+    {g:'D', f:['🇺🇸','🇵🇾','🇦🇺','🇹🇷']},
+    {g:'E', f:['🇩🇪','🇨🇼','🇨🇮','🇪🇨']},
+    {g:'F', f:['🇳🇱','🇯🇵','🇸🇪','🇹🇳']},
+    {g:'G', f:['🇧🇪','🇪🇬','🇮🇷','🇳🇿']},
+    {g:'H', f:['🇪🇸','🇨🇻','🇸🇦','🇺🇾']},
+    {g:'I', f:['🇫🇷','🇸🇳','🇮🇶','🇳🇴']},
+    {g:'J', f:['🇦🇷','🇩🇿','🇦🇹','🇯🇴']},
+    {g:'K', f:['🇵🇹','🇨🇩','🇺🇿','🇨🇴']},
+    {g:'L', f:['🏴󠁧󠁢󠁥󠁮󠁧󠁿','🇭🇷','🇬🇭','🇵🇦']}
+  ];
+
+  function buildGroupsPanel() {
+    var grpBody = document.getElementById('grp-body');
+    if (!grpBody) return;
+    var todayStr = new Date().toISOString().slice(0, 10);
+    var todayFlags = {};
+    MATCHES.forEach(function(m) {
+      if (m.date === todayStr) { todayFlags[m.a] = true; todayFlags[m.b] = true; }
+    });
+    var html = '';
+    GROUPS.forEach(function(grp) {
+      html += '<div class="grp-row"><span class="grp-label">' + grp.g + '</span><span class="grp-flags">';
+      grp.f.forEach(function(flag) {
+        if (todayFlags[flag]) {
+          html += '<span class="grp-flag-today">' + flag + '</span>';
+        } else {
+          html += flag;
+        }
+        html += ' ';
+      });
+      html += '</span></div>';
+    });
+    grpBody.innerHTML = html;
+  }
+
+  var TNMT_ROUNDS = [
+    { label: 'ラウンド32', key: 'r32', matches: [
+      {id:'r32-1', date:'7/1', a:null, b:null, slotA:'1A', slotB:'2C'},
+      {id:'r32-2', date:'7/1', a:null, b:null, slotA:'1B', slotB:'2D'},
+      {id:'r32-3', date:'7/2', a:null, b:null, slotA:'1C', slotB:'2A'},
+      {id:'r32-4', date:'7/2', a:null, b:null, slotA:'1D', slotB:'2B'},
+      {id:'r32-5', date:'7/3', a:null, b:null, slotA:'1E', slotB:'2G'},
+      {id:'r32-6', date:'7/3', a:null, b:null, slotA:'1F', slotB:'2H'},
+      {id:'r32-7', date:'7/4', a:null, b:null, slotA:'1G', slotB:'2E'},
+      {id:'r32-8', date:'7/4', a:null, b:null, slotA:'1H', slotB:'2F'},
+      {id:'r32-9', date:'7/5', a:null, b:null, slotA:'1I', slotB:'2K'},
+      {id:'r32-10', date:'7/5', a:null, b:null, slotA:'1J', slotB:'2L'},
+      {id:'r32-11', date:'7/6', a:null, b:null, slotA:'1K', slotB:'2I'},
+      {id:'r32-12', date:'7/6', a:null, b:null, slotA:'1L', slotB:'2J'},
+      {id:'r32-13', date:'7/1', a:null, b:null, slotA:'3位(ABCD)', slotB:'3位(EFGH)'},
+      {id:'r32-14', date:'7/2', a:null, b:null, slotA:'3位(IJKL)', slotB:'3位(ABEF)'},
+      {id:'r32-15', date:'7/3', a:null, b:null, slotA:'3位(CDIJ)', slotB:'3位(GHKL)'},
+      {id:'r32-16', date:'7/4', a:null, b:null, slotA:'3位(ABCD)', slotB:'3位(IJKL)'}
+    ]},
+    { label: 'ベスト16', key: 'r16', matches: [
+      {id:'r16-1', date:'7/8', a:null, b:null, slotA:'R32-M1勝', slotB:'R32-M2勝'},
+      {id:'r16-2', date:'7/8', a:null, b:null, slotA:'R32-M3勝', slotB:'R32-M4勝'},
+      {id:'r16-3', date:'7/9', a:null, b:null, slotA:'R32-M5勝', slotB:'R32-M6勝'},
+      {id:'r16-4', date:'7/9', a:null, b:null, slotA:'R32-M7勝', slotB:'R32-M8勝'},
+      {id:'r16-5', date:'7/10', a:null, b:null, slotA:'R32-M9勝', slotB:'R32-M10勝'},
+      {id:'r16-6', date:'7/10', a:null, b:null, slotA:'R32-M11勝', slotB:'R32-M12勝'},
+      {id:'r16-7', date:'7/11', a:null, b:null, slotA:'R32-M13勝', slotB:'R32-M14勝'},
+      {id:'r16-8', date:'7/12', a:null, b:null, slotA:'R32-M15勝', slotB:'R32-M16勝'}
+    ]},
+    { label: '準々決勝', key: 'qf', matches: [
+      {id:'qf-1', date:'7/14', a:null, b:null, slotA:'R16-M1勝', slotB:'R16-M2勝'},
+      {id:'qf-2', date:'7/14', a:null, b:null, slotA:'R16-M3勝', slotB:'R16-M4勝'},
+      {id:'qf-3', date:'7/15', a:null, b:null, slotA:'R16-M5勝', slotB:'R16-M6勝'},
+      {id:'qf-4', date:'7/16', a:null, b:null, slotA:'R16-M7勝', slotB:'R16-M8勝'}
+    ]},
+    { label: '準決勝', key: 'sf', matches: [
+      {id:'sf-1', date:'7/19', a:null, b:null, slotA:'QF1勝', slotB:'QF2勝'},
+      {id:'sf-2', date:'7/20', a:null, b:null, slotA:'QF3勝', slotB:'QF4勝'}
+    ]},
+    { label: '決勝', key: 'final', matches: [
+      {id:'final', date:'7/26', a:null, b:null, slotA:'SF1勝', slotB:'SF2勝'}
+    ]}
+  ];
+
+  var TNMT_3RD = {id:'3rd', date:'7/23', a:null, b:null, slotA:'SF1負', slotB:'SF2負'};
+
+  function buildTournamentModal() {
+    var body = document.getElementById('tnmt-body');
+    if (!body) return;
+    function teamSlot(flag, slot) {
+      if (flag) {
+        var code = flagCode(flag);
+        return '<div class="tnmt-team"><span class="tnmt-team-flag">' + flag + '</span><span class="tnmt-team-code">' + code + '</span></div>';
+      }
+      return '<div class="tnmt-team"><span class="tnmt-team-tbd">' + slot + '</span></div>';
+    }
+    function matchCard(m) {
+      return '<div class="tnmt-match"><div class="tnmt-match-date">' + m.date + '</div>' +
+        teamSlot(m.a, m.slotA) + teamSlot(m.b, m.slotB) + '</div>';
+    }
+    var bracketHtml = '<div class="tnmt-bracket">';
+    TNMT_ROUNDS.forEach(function(rnd) {
+      var isFinal = rnd.key === 'final';
+      bracketHtml += '<div class="tnmt-col' + (isFinal ? ' tnmt-col-final' : '') + '">';
+      bracketHtml += '<div class="tnmt-col-hdr">' + rnd.label + '</div>';
+      rnd.matches.forEach(function(m) { bracketHtml += matchCard(m); });
+      bracketHtml += '</div>';
+    });
+    bracketHtml += '</div>';
+    bracketHtml += '<div class="tnmt-3rd"><div class="tnmt-3rd-label">3位決定戦 (7/23)</div>' +
+      matchCard(TNMT_3RD) + '</div>';
+    body.innerHTML = bracketHtml;
+  }
+
+  var tnmtOverlay = document.getElementById('tnmt-overlay');
+  var tnmtBtn = document.getElementById('tnmt-btn');
+  var tnmtClose = document.getElementById('tnmtClose');
+  var tnmtBuilt = false;
+
+  function openTournament() {
+    if (!tnmtBuilt) { buildTournamentModal(); tnmtBuilt = true; }
+    tnmtOverlay.style.zIndex = String(getNextZ());
+    tnmtOverlay.classList.add('open');
+  }
+  function closeTournament() { tnmtOverlay.classList.remove('open'); }
+  tnmtBtn.addEventListener('click', openTournament);
+  tnmtClose.addEventListener('click', closeTournament);
+  tnmtOverlay.addEventListener('click', function(e) {
+    if (e.target === tnmtOverlay) closeTournament();
+  });
 
   var teamMatches = {};
   var ELIMINATED = {};
@@ -950,6 +1117,7 @@ void main() {
       frames = 0; lastFps = now;
     }
   }
+  buildGroupsPanel();
   requestAnimationFrame(frame);
 })();
 </script>
