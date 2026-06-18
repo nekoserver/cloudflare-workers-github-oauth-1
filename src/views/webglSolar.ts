@@ -56,6 +56,8 @@ input[type=range] { accent-color:#fdb813; width:120px; }
   <button class="btn active" id="btnPlanetLabels">惑星ラベル</button>
   <button class="btn" id="btnConst">星座線</button>
   <button class="btn" id="btnEarth">🌍 地球目線</button>
+  <button class="btn" id="btnMoon">🌑 月面着陸</button>
+  <button class="btn" id="btnISS">🛸 ISS</button>
 </div>
 
 <script>
@@ -70,6 +72,8 @@ input[type=range] { accent-color:#fdb813; width:120px; }
   var btnPlanetLabels = document.getElementById('btnPlanetLabels');
   var btnConst = document.getElementById('btnConst');
   var btnEarth = document.getElementById('btnEarth');
+  var btnMoon = document.getElementById('btnMoon');
+  var btnISS = document.getElementById('btnISS');
 
   var showOrbits = true;
   var showStarLabels = true;
@@ -77,7 +81,7 @@ input[type=range] { accent-color:#fdb813; width:120px; }
   var showConstellations = false;
   var speed = 1.0;
   var t = 0;
-  var earthViewMode = false;
+  var skyViewMode = '';
   var viewAngle = 0;
   var viewElev = 0;
   var fovH = Math.PI * 2 / 3;
@@ -111,14 +115,19 @@ input[type=range] { accent-color:#fdb813; width:120px; }
     btnConst.classList.toggle('active', showConstellations);
   });
 
-  btnEarth.addEventListener('click', function() {
-    earthViewMode = !earthViewMode;
-    btnEarth.classList.toggle('active', earthViewMode);
+  function setSkyMode(mode) {
+    skyViewMode = (skyViewMode === mode) ? '' : mode;
+    btnEarth.classList.toggle('active', skyViewMode === 'earth');
+    btnMoon.classList.toggle('active', skyViewMode === 'moon');
+    btnISS.classList.toggle('active', skyViewMode === 'iss');
     hideTooltip();
-  });
+  }
+  btnEarth.addEventListener('click', function() { setSkyMode('earth'); });
+  btnMoon.addEventListener('click', function() { setSkyMode('moon'); });
+  btnISS.addEventListener('click', function() { setSkyMode('iss'); });
 
   function startDrag(clientX, clientY) {
-    if (!earthViewMode) return;
+    if (skyViewMode === '') return;
     dragActive = true;
     dragStartX = clientX;
     dragStartY = clientY;
@@ -151,7 +160,7 @@ input[type=range] { accent-color:#fdb813; width:120px; }
   canvas.addEventListener('mouseleave', function() { dragActive = false; });
 
   canvas.addEventListener('wheel', function(e) {
-    if (!earthViewMode) return;
+    if (skyViewMode === '') return;
     e.preventDefault();
     fovH = Math.max(Math.PI / 8, Math.min(Math.PI * 0.85, fovH + e.deltaY * 0.0015));
   }, { passive: false });
@@ -264,24 +273,52 @@ input[type=range] { accent-color:#fdb813; width:120px; }
     ctx.restore();
   }
 
-  function drawEarthView() {
+  function drawSkyView() {
+    var ep = getEarthPos();
+    var moonEaSV = planets[2].angle + t / planets[2].period;
+    var mEXsv = Math.cos(moonEaSV) * planets[2].orbitR;
+    var mEYsv = Math.sin(moonEaSV) * planets[2].orbitR;
+    var moonAngSV = moon.angle + t / moon.period;
+    var moonAbsX = mEXsv + moon.orbitR * Math.cos(moonAngSV);
+    var moonAbsY = mEYsv + moon.orbitR * Math.sin(moonAngSV);
+    var issAngSV = iss.angle + t / iss.period;
+    var issAbsX = mEXsv + iss.orbitR * Math.cos(issAngSV);
+    var issAbsY = mEYsv + iss.orbitR * Math.sin(issAngSV);
+
+    var camX, camY;
+    if (skyViewMode === 'moon') { camX = moonAbsX; camY = moonAbsY; }
+    else if (skyViewMode === 'iss') { camX = issAbsX; camY = issAbsY; }
+    else { camX = ep.x; camY = ep.y; }
+
+    var sunLon = Math.atan2(-camY, -camX);
     var focal = (W / 2) / Math.tan(fovH / 2);
     var cp3 = Math.cos(viewElev), sp3 = Math.sin(viewElev);
     var horizonY = H / 2 - (sp3 / cp3) * focal;
 
+    var skyTop = skyViewMode === 'moon' ? '#000008' : (skyViewMode === 'iss' ? '#000005' : '#000018');
+    var skyHor  = skyViewMode === 'moon' ? '#000015' : (skyViewMode === 'iss' ? '#000018' : '#000c28');
     var grad = ctx.createLinearGradient(0, 0, 0, Math.max(0, horizonY));
-    grad.addColorStop(0, '#000018');
-    grad.addColorStop(1, '#000c28');
+    grad.addColorStop(0, skyTop);
+    grad.addColorStop(1, skyHor);
     ctx.fillStyle = grad;
-    ctx.fillRect(0, 0, W, W);
+    ctx.fillRect(0, 0, W, H);
 
     if (horizonY < H) {
-      ctx.fillStyle = '#060e06';
+      if (skyViewMode === 'moon') {
+        var moonSurf = ctx.createLinearGradient(0, Math.max(0, horizonY), 0, H);
+        moonSurf.addColorStop(0, '#2a2518');
+        moonSurf.addColorStop(1, '#1a170f');
+        ctx.fillStyle = moonSurf;
+      } else if (skyViewMode === 'iss') {
+        var issSurf = ctx.createLinearGradient(0, Math.max(0, horizonY), 0, H);
+        issSurf.addColorStop(0, '#0a2050');
+        issSurf.addColorStop(1, '#061030');
+        ctx.fillStyle = issSurf;
+      } else {
+        ctx.fillStyle = '#060e06';
+      }
       ctx.fillRect(0, Math.max(0, horizonY), W, H);
     }
-
-    var ep = getEarthPos();
-    var sunLon = Math.atan2(-ep.y, -ep.x);
 
     for (var si4 = 0; si4 < skyStars.length; si4++) {
       var ss = skyStars[si4];
@@ -301,18 +338,12 @@ input[type=range] { accent-color:#fdb813; width:120px; }
       var ns3 = namedStars[ni3];
       var nPos = projectSky(starLon[ni3], starLat[ni3]);
       if (!nPos) continue;
-      ctx.beginPath();
-      ctx.arc(nPos.x, nPos.y, 5, 0, Math.PI * 2);
-      ctx.fillStyle = ns3.color;
-      ctx.fill();
-      ctx.beginPath();
-      ctx.arc(nPos.x, nPos.y, 8, 0, Math.PI * 2);
-      ctx.strokeStyle = ns3.color + '44';
-      ctx.lineWidth = 2;
-      ctx.stroke();
+      ctx.beginPath(); ctx.arc(nPos.x, nPos.y, 5, 0, Math.PI * 2);
+      ctx.fillStyle = ns3.color; ctx.fill();
+      ctx.beginPath(); ctx.arc(nPos.x, nPos.y, 8, 0, Math.PI * 2);
+      ctx.strokeStyle = ns3.color + '44'; ctx.lineWidth = 2; ctx.stroke();
       if (showStarLabels) {
-        ctx.font = '11px sans-serif';
-        ctx.fillStyle = ns3.color;
+        ctx.font = '11px sans-serif'; ctx.fillStyle = ns3.color;
         ctx.fillText(ns3.name, nPos.x + 10, nPos.y + 4);
       }
       starScreenPos.push({ x: nPos.x, y: nPos.y, item: ns3 });
@@ -328,14 +359,11 @@ input[type=range] { accent-color:#fdb813; width:120px; }
       }
       for (var stli = 0; stli < 3; stli++) {
         var pa = stPts[stli], pb = stPts[(stli + 1) % 3];
-        if (pa && pb) {
-          ctx.beginPath(); ctx.moveTo(pa.x, pa.y); ctx.lineTo(pb.x, pb.y); ctx.stroke();
-        }
+        if (pa && pb) { ctx.beginPath(); ctx.moveTo(pa.x, pa.y); ctx.lineTo(pb.x, pb.y); ctx.stroke(); }
       }
       if (stPts[0] && showStarLabels) {
         ctx.setLineDash([]);
-        ctx.font = '10px sans-serif';
-        ctx.fillStyle = 'rgba(180,220,255,0.7)';
+        ctx.font = '10px sans-serif'; ctx.fillStyle = 'rgba(180,220,255,0.7)';
         ctx.fillText('夏の大三角', stPts[0].x + 12, stPts[0].y - 14);
       }
       ctx.strokeStyle = 'rgba(255,220,150,0.4)';
@@ -343,9 +371,7 @@ input[type=range] { accent-color:#fdb813; width:120px; }
       for (var bli2 = 0; bli2 < bigDipperLines.length; bli2++) {
         var bpa = projectSky(bigDipper[bigDipperLines[bli2][0]].lon, bigDipper[bigDipperLines[bli2][0]].lat);
         var bpb = projectSky(bigDipper[bigDipperLines[bli2][1]].lon, bigDipper[bigDipperLines[bli2][1]].lat);
-        if (bpa && bpb) {
-          ctx.beginPath(); ctx.moveTo(bpa.x, bpa.y); ctx.lineTo(bpb.x, bpb.y); ctx.stroke();
-        }
+        if (bpa && bpb) { ctx.beginPath(); ctx.moveTo(bpa.x, bpa.y); ctx.lineTo(bpb.x, bpb.y); ctx.stroke(); }
       }
       ctx.setLineDash([]);
       for (var bdi2 = 0; bdi2 < bigDipper.length; bdi2++) {
@@ -357,8 +383,7 @@ input[type=range] { accent-color:#fdb813; width:120px; }
       if (showStarLabels) {
         var bd0 = projectSky(bigDipper[0].lon, bigDipper[0].lat);
         if (bd0) {
-          ctx.font = '10px sans-serif';
-          ctx.fillStyle = 'rgba(255,220,150,0.7)';
+          ctx.font = '10px sans-serif'; ctx.fillStyle = 'rgba(255,220,150,0.7)';
           ctx.fillText('北斗七星', bd0.x - 10, bd0.y - 14);
         }
       }
@@ -368,16 +393,11 @@ input[type=range] { accent-color:#fdb813; width:120px; }
     if (sunPos) {
       drawGlow(sunPos.x, sunPos.y, 32, '#fdb813');
       var sg3 = ctx.createRadialGradient(sunPos.x - 6, sunPos.y - 6, 3, sunPos.x, sunPos.y, 30);
-      sg3.addColorStop(0, '#fff5a0');
-      sg3.addColorStop(0.5, '#fdb813');
-      sg3.addColorStop(1, '#f57c00');
-      ctx.beginPath();
-      ctx.arc(sunPos.x, sunPos.y, 30, 0, Math.PI * 2);
-      ctx.fillStyle = sg3;
-      ctx.fill();
+      sg3.addColorStop(0, '#fff5a0'); sg3.addColorStop(0.5, '#fdb813'); sg3.addColorStop(1, '#f57c00');
+      ctx.beginPath(); ctx.arc(sunPos.x, sunPos.y, 30, 0, Math.PI * 2);
+      ctx.fillStyle = sg3; ctx.fill();
       if (showPlanetLabels) {
-        ctx.font = 'bold 12px sans-serif';
-        ctx.fillStyle = '#fdb813';
+        ctx.font = 'bold 12px sans-serif'; ctx.fillStyle = '#fdb813';
         ctx.fillText('太陽', sunPos.x + 34, sunPos.y + 4);
       }
       planetScreenPos.push({ x: sunPos.x, y: sunPos.y, item: { name: '太陽', type: '恒星', fact: '太陽系の中心恒星。直径は地球の約109倍、質量は太陽系全体の99.86%を占めます' } });
@@ -385,12 +405,47 @@ input[type=range] { accent-color:#fdb813; width:120px; }
 
     for (var pi3 = 0; pi3 < planets.length; pi3++) {
       var pl3 = planets[pi3];
-      if (pl3.name === '地球') continue;
       var pa3 = pl3.angle + t / pl3.period;
       var plx3 = Math.cos(pa3) * pl3.orbitR;
       var ply3 = Math.sin(pa3) * pl3.orbitR;
-      var dx3 = plx3 - ep.x;
-      var dy3 = ply3 - ep.y;
+      if (pl3.name === '地球') {
+        if (skyViewMode !== 'earth') {
+          var edx = plx3 - camX, edy = ply3 - camY;
+          var eLon = Math.atan2(edy, edx);
+          var ePos = projectSky(eLon, 0);
+          if (ePos) {
+            var eAppRad = skyViewMode === 'iss' ? 0.52 : 0.16;
+            var ePixR = Math.tan(eAppRad) * focal;
+            var eGrad = ctx.createRadialGradient(ePos.x - ePixR * 0.3, ePos.y - ePixR * 0.2, ePixR * 0.05, ePos.x, ePos.y, ePixR);
+            eGrad.addColorStop(0, '#90d0ff'); eGrad.addColorStop(0.35, '#4fa3e0');
+            eGrad.addColorStop(0.7, '#2060a0'); eGrad.addColorStop(1, '#0a2040');
+            ctx.beginPath(); ctx.arc(ePos.x, ePos.y, ePixR, 0, Math.PI * 2);
+            ctx.fillStyle = eGrad; ctx.fill();
+            ctx.save();
+            ctx.beginPath(); ctx.arc(ePos.x, ePos.y, ePixR, 0, Math.PI * 2); ctx.clip();
+            ctx.fillStyle = 'rgba(55,140,45,0.4)';
+            ctx.beginPath();
+            ctx.ellipse(ePos.x - ePixR * 0.15, ePos.y - ePixR * 0.05, ePixR * 0.22, ePixR * 0.38, 0.4, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.ellipse(ePos.x + ePixR * 0.2, ePos.y + ePixR * 0.18, ePixR * 0.28, ePixR * 0.22, -0.3, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = 'rgba(255,255,255,0.15)';
+            ctx.beginPath();
+            ctx.ellipse(ePos.x - ePixR * 0.1, ePos.y - ePixR * 0.35, ePixR * 0.5, ePixR * 0.12, 0.2, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+            drawGlow(ePos.x, ePos.y, ePixR * 0.7, '#4fa3e0');
+            if (showPlanetLabels) {
+              ctx.font = 'bold 12px sans-serif'; ctx.fillStyle = '#4fa3e0';
+              ctx.fillText('地球', ePos.x + ePixR + 6, ePos.y + 4);
+            }
+            planetScreenPos.push({ x: ePos.x, y: ePos.y, item: pl3 });
+          }
+        }
+        continue;
+      }
+      var dx3 = plx3 - camX, dy3 = ply3 - camY;
       var dist3 = Math.sqrt(dx3 * dx3 + dy3 * dy3);
       var plon3 = Math.atan2(dy3, dx3);
       var pPos = projectSky(plon3, 0);
@@ -399,75 +454,71 @@ input[type=range] { accent-color:#fdb813; width:120px; }
       if (pl3.hasRings) drawRings(pPos.x, pPos.y, appR);
       drawPlanet(pPos.x, pPos.y, appR, pl3.color);
       if (showPlanetLabels) {
-        ctx.font = '11px sans-serif';
-        ctx.fillStyle = '#c9d1d9';
+        ctx.font = '11px sans-serif'; ctx.fillStyle = '#c9d1d9';
         ctx.fillText(pl3.jaName, pPos.x + appR + 4, pPos.y + 4);
       }
       planetScreenPos.push({ x: pPos.x, y: pPos.y, item: pl3 });
     }
 
-    var moonEa2 = planets[2].angle + t / planets[2].period;
-    var mEX = Math.cos(moonEa2) * planets[2].orbitR;
-    var mEY = Math.sin(moonEa2) * planets[2].orbitR;
-    var moonAng3 = moon.angle + t / moon.period;
-    var mAbsX2 = mEX + moon.orbitR * Math.cos(moonAng3);
-    var mAbsY2 = mEY + moon.orbitR * Math.sin(moonAng3);
-    var mDx2 = mAbsX2 - ep.x;
-    var mDy2 = mAbsY2 - ep.y;
-    var mLon2 = Math.atan2(mDy2, mDx2);
-    var mPos = projectSky(mLon2, 0.05);
-    if (mPos) {
-      var phaseAngle = ((mLon2 - sunLon) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2);
-      var phaseNorm = phaseAngle / (Math.PI * 2);
-      drawMoonPhase(mPos.x, mPos.y, 16, phaseNorm);
-      if (showPlanetLabels) {
-        ctx.font = '11px sans-serif';
-        ctx.fillStyle = '#aaa';
-        ctx.fillText('月', mPos.x + 20, mPos.y + 4);
+    if (skyViewMode !== 'moon') {
+      var mDxSV = moonAbsX - camX, mDySV = moonAbsY - camY;
+      var mLonSV = Math.atan2(mDySV, mDxSV);
+      var mPosSV = projectSky(mLonSV, 0.05);
+      if (mPosSV) {
+        var phaseAng = ((mLonSV - sunLon) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2);
+        drawMoonPhase(mPosSV.x, mPosSV.y, 16, phaseAng / (Math.PI * 2));
+        if (showPlanetLabels) {
+          ctx.font = '11px sans-serif'; ctx.fillStyle = '#aaa';
+          ctx.fillText('月', mPosSV.x + 20, mPosSV.y + 4);
+        }
+        planetScreenPos.push({ x: mPosSV.x, y: mPosSV.y, item: moon });
       }
-      planetScreenPos.push({ x: mPos.x, y: mPos.y, item: moon });
     }
 
-    var issEa2 = planets[2].angle + t / planets[2].period;
-    var iEX2 = Math.cos(issEa2) * planets[2].orbitR;
-    var iEY2 = Math.sin(issEa2) * planets[2].orbitR;
-    var issAng2 = iss.angle + t / iss.period;
-    var iAbsX2 = iEX2 + iss.orbitR * Math.cos(issAng2);
-    var iAbsY2 = iEY2 + iss.orbitR * Math.sin(issAng2);
-    var iDx2 = iAbsX2 - ep.x;
-    var iDy2 = iAbsY2 - ep.y;
-    var iLon2 = Math.atan2(iDy2, iDx2);
-    var iPos2 = projectSky(iLon2, 0.09);
-    if (iPos2) {
-      var issAlp = 0.5 + 0.5 * Math.sin(t * 25);
-      ctx.strokeStyle = 'rgba(136,255,204,' + issAlp.toFixed(2) + ')';
-      ctx.lineWidth = 1.5;
-      ctx.beginPath();
-      ctx.moveTo(iPos2.x - 6, iPos2.y); ctx.lineTo(iPos2.x + 6, iPos2.y);
-      ctx.moveTo(iPos2.x, iPos2.y - 6); ctx.lineTo(iPos2.x, iPos2.y + 6);
-      ctx.stroke();
-      ctx.beginPath(); ctx.arc(iPos2.x, iPos2.y, 2, 0, Math.PI * 2);
-      ctx.fillStyle = 'rgba(136,255,204,' + issAlp.toFixed(2) + ')'; ctx.fill();
-      if (showPlanetLabels) {
-        ctx.font = '10px sans-serif';
-        ctx.fillStyle = 'rgba(136,255,204,0.9)';
-        ctx.fillText('ISS', iPos2.x + 8, iPos2.y - 3);
+    if (skyViewMode !== 'iss') {
+      var iDxSV = issAbsX - camX, iDySV = issAbsY - camY;
+      var iLonSV = Math.atan2(iDySV, iDxSV);
+      var iPosSV = projectSky(iLonSV, 0.09);
+      if (iPosSV) {
+        var issAlpSV = 0.5 + 0.5 * Math.sin(t * 25);
+        ctx.strokeStyle = 'rgba(136,255,204,' + issAlpSV.toFixed(2) + ')';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(iPosSV.x - 6, iPosSV.y); ctx.lineTo(iPosSV.x + 6, iPosSV.y);
+        ctx.moveTo(iPosSV.x, iPosSV.y - 6); ctx.lineTo(iPosSV.x, iPosSV.y + 6);
+        ctx.stroke();
+        ctx.beginPath(); ctx.arc(iPosSV.x, iPosSV.y, 2, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(136,255,204,' + issAlpSV.toFixed(2) + ')'; ctx.fill();
+        if (showPlanetLabels) {
+          ctx.font = '10px sans-serif'; ctx.fillStyle = 'rgba(136,255,204,0.9)';
+          ctx.fillText('ISS', iPosSV.x + 8, iPosSV.y - 3);
+        }
+        planetScreenPos.push({ x: iPosSV.x, y: iPosSV.y, item: iss });
       }
-      planetScreenPos.push({ x: iPos2.x, y: iPos2.y, item: iss });
+    }
+
+    if (skyViewMode === 'moon' && horizonY > 0 && horizonY < H) {
+      for (var ci = 0; ci < 12; ci++) {
+        var cx2 = W * ci / 11;
+        var cr = 8 + pseudoRand() * 14;
+        var cy2 = horizonY + cr * 0.4;
+        ctx.beginPath(); ctx.arc(cx2, cy2, cr, 0, Math.PI * 2);
+        ctx.fillStyle = '#252018'; ctx.fill();
+      }
     }
 
     if (horizonY > 0 && horizonY < H) {
-      ctx.beginPath();
-      ctx.moveTo(0, horizonY);
-      ctx.lineTo(W, horizonY);
-      ctx.strokeStyle = 'rgba(80,160,80,0.4)';
-      ctx.lineWidth = 1;
-      ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(0, horizonY); ctx.lineTo(W, horizonY);
+      ctx.strokeStyle = skyViewMode === 'moon' ? 'rgba(160,150,110,0.6)' :
+                        (skyViewMode === 'iss' ? 'rgba(40,140,255,0.5)' : 'rgba(80,160,80,0.4)');
+      ctx.lineWidth = 1; ctx.stroke();
     }
 
-    ctx.font = '12px sans-serif';
-    ctx.fillStyle = 'rgba(100,180,255,0.65)';
-    ctx.fillText('🌍 地球目線  ドラッグ:視点回転  ピンチ/スクロール:ズーム', 10, 28);
+    var hudText = skyViewMode === 'moon' ? '🌑 月面  ドラッグ:視点回転  ピンチ/スクロール:ズーム' :
+                  (skyViewMode === 'iss' ? '🛸 ISS  ドラッグ:視点回転  ピンチ/スクロール:ズーム' :
+                  '🌍 地球目線  ドラッグ:視点回転  ピンチ/スクロール:ズーム');
+    ctx.font = '12px sans-serif'; ctx.fillStyle = 'rgba(100,180,255,0.65)';
+    ctx.fillText(hudText, 10, 28);
   }
 
   var planets = [
@@ -616,7 +667,7 @@ input[type=range] { accent-color:#fdb813; width:120px; }
   }
 
   canvas.addEventListener('click', function(e) {
-    if (earthViewMode) return;
+    if (skyViewMode !== '') return;
     var pos = getCanvasPos(e);
     var item = hitTest(pos.x, pos.y);
     if (item) { showTooltip(item, e.clientX, e.clientY); activeItem = item; }
@@ -637,8 +688,8 @@ input[type=range] { accent-color:#fdb813; width:120px; }
     planetScreenPos = [];
     starScreenPos = [];
 
-    if (earthViewMode) {
-      drawEarthView();
+    if (skyViewMode !== '') {
+      drawSkyView();
       return;
     }
 
