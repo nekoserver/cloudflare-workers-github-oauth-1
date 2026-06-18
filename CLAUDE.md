@@ -350,6 +350,16 @@ NOTICE.<リポジトリ名>.<YYYYMMDD>.md
   カタログ用途のため誤検知は許容範囲内とする。
 - このステップは `npx vitest run` の後・`git commit` の前に実行する。
 
+### `/function-changelog` の集計データを増やす方法
+
+`/function-changelog` ページ（関数変更ログ）および📈円グラフは `ts_function_activity_log` テーブルのデータを表示する。
+このテーブルはインデクサースクリプトを実行したファイル分のデータしか入らないため、過去のファイルは手動で追加が必要。
+
+- **特定ファイルだけ追加**: `npx tsx scripts/index-functions.ts src/views/foo.ts src/index.ts`
+- **全ファイル一括（大量SQL生成注意）**: `npx tsx scripts/index-functions.ts`
+
+全件実行すると SQL が大量になるため、D1 コンソールへの貼り付けはファイルを絞って少しずつ実行すること。
+
 ---
 
 ## 崩れない罫線（区切り線・表罫線）の書き方
