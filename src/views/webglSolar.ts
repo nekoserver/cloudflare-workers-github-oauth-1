@@ -60,6 +60,7 @@ input[type=range] { accent-color:#fdb813; width:120px; }
   <button class="btn" id="btnISS">🛸 ISS</button>
   <button class="btn" id="btnToday">🌟 今日の空</button>
   <button class="btn" id="btnPole">🧭 地軸固定</button>
+  <button class="btn" id="btnGrid">グリッド</button>
   <button class="btn" id="btnShot">📷 スクショ</button>
 </div>
 
@@ -79,6 +80,7 @@ input[type=range] { accent-color:#fdb813; width:120px; }
   var btnISS = document.getElementById('btnISS');
   var btnToday = document.getElementById('btnToday');
   var btnPole = document.getElementById('btnPole');
+  var btnGrid = document.getElementById('btnGrid');
   var btnShot = document.getElementById('btnShot');
 
   var showOrbits = true;
@@ -122,6 +124,10 @@ input[type=range] { accent-color:#fdb813; width:120px; }
   });
 
   var showGrid = false;
+  btnGrid.addEventListener('click', function() {
+    showGrid = !showGrid;
+    btnGrid.classList.toggle('active', showGrid);
+  });
 
   function setSkyMode(mode) {
     if (mode === 'today' && skyViewMode !== 'today') {
@@ -158,11 +164,6 @@ input[type=range] { accent-color:#fdb813; width:120px; }
       document.body.appendChild(a); a.click(); document.body.removeChild(a);
       URL.revokeObjectURL(a.href);
     });
-  });
-  document.addEventListener('keydown', function(e) {
-    if (e.key === 'g' || e.key === 'G') {
-      showGrid = !showGrid;
-    }
   });
 
   function startDrag(clientX, clientY) {
@@ -420,7 +421,7 @@ input[type=range] { accent-color:#fdb813; width:120px; }
     var hh2 = nowD.getHours(), mn2 = nowD.getMinutes();
     var mn2s = mn2 < 10 ? '0'+mn2 : ''+mn2;
     ctx.font = '12px sans-serif'; ctx.fillStyle = 'rgba(100,220,255,0.8)';
-    ctx.fillText('🌟 今日の空  ' + yy2 + '/' + mm2 + '/' + dd2 + ' ' + hh2 + ':' + mn2s + '  ドラッグ:視点回転  [G]:グリッド', 10, 28);
+    ctx.fillText('🌟 今日の空  ' + yy2 + '/' + mm2 + '/' + dd2 + ' ' + hh2 + ':' + mn2s + '  ドラッグ:視点回転', 10, 28);
   }
 
   function drawPoleView() {
@@ -483,7 +484,7 @@ input[type=range] { accent-color:#fdb813; width:120px; }
       if (showStarLabels) { ctx.font = '11px sans-serif'; ctx.fillStyle = '#e8f0ff'; ctx.fillText('ポラリス(北極星)', polaris.x+8, polaris.y+4); }
     }
     ctx.font = '12px sans-serif'; ctx.fillStyle = 'rgba(100,180,255,0.65)';
-    ctx.fillText('🧭 地軸固定  北天極を中心に星が回転  ドラッグ:視点調整  [G]:グリッド', 10, 28);
+    ctx.fillText('🧭 地軸固定  北天極を中心に星が回転  ドラッグ:視点調整', 10, 28);
   }
 
   function project3D(dX, dY, dZ) {
