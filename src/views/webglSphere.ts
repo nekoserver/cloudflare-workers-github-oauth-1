@@ -97,6 +97,7 @@ input[type=range] { flex:1; accent-color:#58a6ff; }
 .grp-row { display:flex; align-items:center; gap:6px; margin-bottom:5px; }
 .grp-label { font-size:10px; font-weight:700; color:#58a6ff; background:rgba(88,166,255,0.1); border:1px solid rgba(88,166,255,0.2); border-radius:4px; padding:1px 5px; width:20px; text-align:center; flex-shrink:0; }
 .grp-flags { font-size:18px; letter-spacing:2px; }
+.grp-flag-today { display:inline-block; border:2.5px solid rgba(255,240,60,0.55); border-radius:5px; padding:2px 4px; line-height:1; margin:0 1px; }
 .mi-time { font-size:13px; color:#58a6ff; font-family:monospace; margin-top:6px; }
 .mi-date { font-size:11px; color:#8b949e; margin-top:3px; }
 .mi-close { position:absolute; top:6px; right:10px; background:none; border:none; color:#8b949e; font-size:18px; line-height:1; cursor:pointer; padding:0; }
@@ -184,18 +185,7 @@ void main() {
 
     <div class="grp-section">
     <h2>グループ一覧</h2>
-    <div class="grp-row"><span class="grp-label">A</span><span class="grp-flags">🇲🇽 🇿🇦 🇰🇷 🇨🇿</span></div>
-    <div class="grp-row"><span class="grp-label">B</span><span class="grp-flags">🇨🇦 🇧🇦 🇶🇦 🇨🇭</span></div>
-    <div class="grp-row"><span class="grp-label">C</span><span class="grp-flags">🇧🇷 🇲🇦 🇭🇹 🏴󠁧󠁢󠁳󠁣󠁴󠁿</span></div>
-    <div class="grp-row"><span class="grp-label">D</span><span class="grp-flags">🇺🇸 🇵🇾 🇦🇺 🇹🇷</span></div>
-    <div class="grp-row"><span class="grp-label">E</span><span class="grp-flags">🇩🇪 🇨🇼 🇨🇮 🇪🇨</span></div>
-    <div class="grp-row"><span class="grp-label">F</span><span class="grp-flags">🇳🇱 🇯🇵 🇸🇪 🇹🇳</span></div>
-    <div class="grp-row"><span class="grp-label">G</span><span class="grp-flags">🇧🇪 🇪🇬 🇮🇷 🇳🇿</span></div>
-    <div class="grp-row"><span class="grp-label">H</span><span class="grp-flags">🇪🇸 🇨🇻 🇸🇦 🇺🇾</span></div>
-    <div class="grp-row"><span class="grp-label">I</span><span class="grp-flags">🇫🇷 🇸🇳 🇮🇶 🇳🇴</span></div>
-    <div class="grp-row"><span class="grp-label">J</span><span class="grp-flags">🇦🇷 🇩🇿 🇦🇹 🇯🇴</span></div>
-    <div class="grp-row"><span class="grp-label">K</span><span class="grp-flags">🇵🇹 🇨🇩 🇺🇿 🇨🇴</span></div>
-    <div class="grp-row"><span class="grp-label">L</span><span class="grp-flags">🏴󠁧󠁢󠁥󠁮󠁧󠁿 🇭🇷 🇬🇭 🇵🇦</span></div>
+    <div id="grp-body"></div>
   </div>
   <h2>コントロール</h2>
     <div class="ctrl-row">
@@ -585,6 +575,45 @@ void main() {
   function flagCode(f) { return FLAG_CODE[f] || ''; }
   function fc(f) { var c = flagCode(f); return c ? '<span class="tm-code">' + c + '</span>' : ''; }
 
+  var GROUPS = [
+    {g:'A', f:['🇲🇽','🇿🇦','🇰🇷','🇨🇿']},
+    {g:'B', f:['🇨🇦','🇧🇦','🇶🇦','🇨🇭']},
+    {g:'C', f:['🇧🇷','🇲🇦','🇭🇹','🏴󠁧󠁢󠁳󠁣󠁴󠁿']},
+    {g:'D', f:['🇺🇸','🇵🇾','🇦🇺','🇹🇷']},
+    {g:'E', f:['🇩🇪','🇨🇼','🇨🇮','🇪🇨']},
+    {g:'F', f:['🇳🇱','🇯🇵','🇸🇪','🇹🇳']},
+    {g:'G', f:['🇧🇪','🇪🇬','🇮🇷','🇳🇿']},
+    {g:'H', f:['🇪🇸','🇨🇻','🇸🇦','🇺🇾']},
+    {g:'I', f:['🇫🇷','🇸🇳','🇮🇶','🇳🇴']},
+    {g:'J', f:['🇦🇷','🇩🇿','🇦🇹','🇯🇴']},
+    {g:'K', f:['🇵🇹','🇨🇩','🇺🇿','🇨🇴']},
+    {g:'L', f:['🏴󠁧󠁢󠁥󠁮󠁧󠁿','🇭🇷','🇬🇭','🇵🇦']}
+  ];
+
+  function buildGroupsPanel() {
+    var grpBody = document.getElementById('grp-body');
+    if (!grpBody) return;
+    var todayStr = new Date().toISOString().slice(0, 10);
+    var todayFlags = {};
+    MATCHES.forEach(function(m) {
+      if (m.date === todayStr) { todayFlags[m.a] = true; todayFlags[m.b] = true; }
+    });
+    var html = '';
+    GROUPS.forEach(function(grp) {
+      html += '<div class="grp-row"><span class="grp-label">' + grp.g + '</span><span class="grp-flags">';
+      grp.f.forEach(function(flag) {
+        if (todayFlags[flag]) {
+          html += '<span class="grp-flag-today">' + flag + '</span>';
+        } else {
+          html += flag;
+        }
+        html += ' ';
+      });
+      html += '</span></div>';
+    });
+    grpBody.innerHTML = html;
+  }
+
   var teamMatches = {};
   var ELIMINATED = {};
   MATCHES.forEach(function(m) {
@@ -950,6 +979,7 @@ void main() {
       frames = 0; lastFps = now;
     }
   }
+  buildGroupsPanel();
   requestAnimationFrame(frame);
 })();
 </script>
