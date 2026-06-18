@@ -112,6 +112,7 @@ input[type=range] { flex:1; accent-color:#58a6ff; }
 .cal-match { color:#e6edf3; }
 .cal-today { outline:1.5px solid #58a6ff; outline-offset:-1px; }
 .cal-rlabel { font-size:7px; font-weight:700; color:rgba(255,255,255,0.75); line-height:1; margin-top:1px; }
+.drw-cal-wrap { padding:10px 14px 12px; border-bottom:1px solid #30363d; flex-shrink:0; }
 .mi-time { font-size:13px; color:#58a6ff; font-family:monospace; margin-top:6px; }
 .mi-date { font-size:11px; color:#8b949e; margin-top:3px; }
 .mi-close { position:absolute; top:6px; right:10px; background:none; border:none; color:#8b949e; font-size:18px; line-height:1; cursor:pointer; padding:0; }
@@ -275,6 +276,7 @@ void main() {
     <span class="drw-title">&#9917; 2026 FIFA W杯 全72試合</span>
     <button class="drw-close" id="drwClose">&#10005;</button>
   </div>
+  <div id="drw-cal"></div>
   <div id="drw-body"></div>
 </div>
 <div id="schedule-panel">
@@ -666,6 +668,7 @@ function getNextZ() {
     26:CAL_FIN_BG
   };
   var CAL_LABELS = {1:'R32',8:'R16',14:'QF',19:'SF',23:'3位',26:'決勝'};
+  var CAL_ICONS_JUL = {27:'🏆'};
 
   function buildCalendar() {
     var sec = document.getElementById('cal-section');
@@ -689,7 +692,38 @@ function getNextZ() {
       var bg = CAL_DAYS[di] || '';
       var cls = 'cal-cell' + (bg ? ' cal-match' : '') + (di === todayDay ? ' cal-today' : '');
       var style = bg ? 'background:' + bg : '';
-      var lbl = CAL_LABELS[di] ? '<div class="cal-rlabel">' + CAL_LABELS[di] + '</div>' : '';
+      var lbl = (CAL_LABELS[di] ? '<div class="cal-rlabel">' + CAL_LABELS[di] + '</div>' : '') +
+                (CAL_ICONS_JUL[di] ? '<div class="cal-rlabel">' + CAL_ICONS_JUL[di] + '</div>' : '');
+      html += '<div class="' + cls + '" style="' + style + '">' + di + lbl + '</div>';
+    }
+    html += '</div></div>';
+    sec.innerHTML = html;
+  }
+
+  function buildDrawerCalendar() {
+    var sec = document.getElementById('drw-cal');
+    if (!sec) return;
+    var juneDays = {};
+    MATCHES.forEach(function(m) {
+      if (m.date.startsWith('2026-06-')) juneDays[parseInt(m.date.slice(8), 10)] = true;
+    });
+    var firstDow = new Date(2026, 5, 1).getDay();
+    var todayStr = new Date().toISOString().slice(0, 10);
+    var todayDay = todayStr.startsWith('2026-06-') ? parseInt(todayStr.slice(8), 10) : 0;
+    var GS_BG = 'rgba(88,166,255,0.18)';
+    var wdays = ['日','月','火','水','木','金','土'];
+    var html = '<div class="cal-wrap drw-cal-wrap">';
+    html += '<div class="cal-title">&#9917; 6月 グループステージ</div>';
+    html += '<div class="cal-legend"><span class="cal-leg" style="background:' + GS_BG + '">グループステージ</span></div>';
+    html += '<div class="cal-grid">';
+    for (var wi = 0; wi < 7; wi++) { html += '<div class="cal-cell cal-hdr">' + wdays[wi] + '</div>'; }
+    for (var ei = 0; ei < firstDow; ei++) { html += '<div class="cal-cell"></div>'; }
+    for (var di = 1; di <= 30; di++) {
+      var isMatch = juneDays[di] || false;
+      var isToday = di === todayDay;
+      var cls = 'cal-cell' + (isMatch ? ' cal-match' : '') + (isToday ? ' cal-today' : '');
+      var style = isMatch ? 'background:' + GS_BG : '';
+      var lbl = isToday ? '<div class="cal-rlabel">🏁</div>' : '';
       html += '<div class="' + cls + '" style="' + style + '">' + di + lbl + '</div>';
     }
     html += '</div></div>';
@@ -1210,6 +1244,7 @@ function getNextZ() {
     }
   }
   buildCalendar();
+  buildDrawerCalendar();
   buildGroupsPanel();
   requestAnimationFrame(frame);
 })();
