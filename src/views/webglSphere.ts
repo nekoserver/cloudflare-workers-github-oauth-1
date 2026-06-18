@@ -81,7 +81,6 @@ input[type=range] { flex:1; accent-color:#58a6ff; }
 .drw-title { font-size:13px; font-weight:700; color:#58a6ff; }
 .drw-close { background:none; border:none; color:#8b949e; font-size:22px; line-height:1; cursor:pointer; padding:0 2px; }
 #drw-body { overflow-y:auto; flex:1; }
-.drw-date { padding:8px 14px 4px; font-size:10px; font-weight:700; color:#8b949e; letter-spacing:1px; text-transform:uppercase; position:sticky; top:0; background:#0d1117; border-bottom:1px solid #21262d; }
 .drw-row { display:flex; align-items:center; justify-content:space-between; padding:9px 14px; border-bottom:1px solid #21262d; cursor:pointer; gap:8px; -webkit-tap-highlight-color:transparent; }
 .drw-row:active { background:#21262d; }
 .drw-flags { font-size:22px; letter-spacing:3px; flex-shrink:0; }
@@ -102,6 +101,14 @@ input[type=range] { flex:1; accent-color:#58a6ff; }
 .grp-flag-today:hover { border-color:rgba(139,148,158,0.75); background:rgba(139,148,158,0.06); }
 .grp-flag-active { border-color:rgba(255,200,0,0.9) !important; background:rgba(255,200,0,0.07); }
 .drw-row.drw-highlight { background:rgba(255,240,60,0.12); border-left:3px solid rgba(255,240,60,0.7); }
+.drw-section-body { display:none; }
+.drw-section.open .drw-section-body { display:block; }
+.drw-date { padding:8px 14px 4px; font-size:10px; font-weight:700; color:#8b949e; letter-spacing:1px; text-transform:uppercase; position:sticky; top:0; background:#0d1117; border-bottom:1px solid #21262d; cursor:pointer; display:flex; justify-content:space-between; align-items:center; user-select:none; -webkit-user-select:none; }
+.drw-chevron { font-size:9px; opacity:0.5; transition:transform .2s; }
+.drw-section.open .drw-chevron { transform:rotate(180deg); }
+.cal-match { cursor:pointer; }
+.cal-match:hover { filter:brightness(1.15); }
+.cal-selected { outline:2px solid rgba(88,166,255,0.7); outline-offset:-1px; }
 .cal-wrap { margin-bottom:14px; }
 .cal-title { font-size:10px; font-weight:700; color:#58a6ff; text-transform:uppercase; letter-spacing:.5px; margin-bottom:5px; }
 .cal-legend { display:flex; flex-wrap:wrap; gap:3px; margin-bottom:5px; }
@@ -113,6 +120,12 @@ input[type=range] { flex:1; accent-color:#58a6ff; }
 .cal-today { outline:1.5px solid #58a6ff; outline-offset:-1px; }
 .cal-rlabel { font-size:7px; font-weight:700; color:rgba(255,255,255,0.75); line-height:1; margin-top:1px; }
 .drw-cal-wrap { padding:10px 14px 12px; border-bottom:1px solid #30363d; flex-shrink:0; }
+.tnmt-grp-list { display:flex; flex-wrap:wrap; gap:6px; padding:10px 16px 12px; border-bottom:1px solid #30363d; }
+.tnmt-grp-item { display:flex; align-items:center; gap:3px; }
+.tnmt-grp-badge { font-size:9px; font-weight:700; color:#58a6ff; background:rgba(88,166,255,0.1); border:1px solid rgba(88,166,255,0.2); border-radius:3px; padding:1px 4px; flex-shrink:0; }
+.tnmt-grp-flags { font-size:15px; letter-spacing:1px; }
+@keyframes cal-blink { 0%,100%{box-shadow:none;background-color:transparent} 50%{box-shadow:0 0 0 2px rgba(255,200,0,0.9);background-color:rgba(255,200,0,0.28)} }
+.cal-today-blink { animation:cal-blink 0.35s ease 7; }
 .mi-time { font-size:13px; color:#58a6ff; font-family:monospace; margin-top:6px; }
 .mi-date { font-size:11px; color:#8b949e; margin-top:3px; }
 .mi-close { position:absolute; top:6px; right:10px; background:none; border:none; color:#8b949e; font-size:18px; line-height:1; cursor:pointer; padding:0; }
@@ -134,7 +147,7 @@ input[type=range] { flex:1; accent-color:#58a6ff; }
 .tnmt-col-final .tnmt-col-hdr { color:#f0b429; }
 .tnmt-spacer { flex:1; }
 .tnmt-match { background:#161b22; border:1px solid #30363d; border-radius:6px; padding:6px 8px; margin-bottom:6px; }
-.tnmt-match-date { font-size:9px; color:#484f58; font-family:monospace; margin-bottom:4px; text-align:right; }
+.tnmt-match-date { font-size:9px; color:#e6edf3; font-family:monospace; margin-bottom:4px; text-align:right; }
 .tnmt-team { display:flex; align-items:center; gap:5px; padding:3px 2px; border-radius:3px; }
 .tnmt-team + .tnmt-team { border-top:1px solid #21262d; margin-top:2px; padding-top:5px; }
 .tnmt-team-flag { font-size:18px; line-height:1; }
@@ -273,7 +286,7 @@ void main() {
 <div id="drawer-overlay"></div>
 <div id="left-drawer">
   <div class="drw-hdr">
-    <span class="drw-title">&#9917; 2026 FIFA W杯 全72試合</span>
+    <span class="drw-title">&#9917; 2026 FIFA W杯 全104試合(32+72)</span>
     <button class="drw-close" id="drwClose">&#10005;</button>
   </div>
   <div id="drw-cal"></div>
@@ -667,7 +680,7 @@ function getNextZ() {
     23:CAL_3RD_BG,
     26:CAL_FIN_BG
   };
-  var CAL_LABELS = {1:'R32',8:'R16',14:'QF',19:'SF',23:'3位',26:'決勝者'};
+  var CAL_LABELS = {1:'R32',8:'R16',14:'QF',19:'SF',23:'3位',26:'決勝'};
   var CAL_ICONS_JUL = {27:'🏆'};
 
   function buildCalendar() {
@@ -678,7 +691,7 @@ function getNextZ() {
     var todayDay = todayStr.startsWith('2026-07-') ? parseInt(todayStr.slice(8), 10) : 0;
     var wdays = ['日','月','火','水','木','金','土'];
     var html = '<div class="cal-wrap">';
-    html += '<div class="cal-title">&#127942; 7月 ノックアウトステージ</div>';
+    html += '<div class="cal-title">🏆 7️⃣月 ノックアウトステージ (32)🏃</div>';
     html += '<div class="cal-legend">';
     html += '<span class="cal-leg" style="background:' + CAL_R32_BG + '">R32</span>';
     html += '<span class="cal-leg" style="background:' + CAL_R16_BG + '">R16</span>';
@@ -713,7 +726,7 @@ function getNextZ() {
     var GS_BG = 'rgba(88,166,255,0.18)';
     var wdays = ['日','月','火','水','木','金','土'];
     var html = '<div class="cal-wrap drw-cal-wrap">';
-    html += '<div class="cal-title">&#9917; 6月 グループステージ</div>';
+    html += '<div class="cal-title">🏃6️⃣月 グループステージ (72)</div>';
     html += '<div class="cal-legend"><span class="cal-leg" style="background:' + GS_BG + '">グループステージ</span></div>';
     html += '<div class="cal-grid">';
     for (var wi = 0; wi < 7; wi++) { html += '<div class="cal-cell cal-hdr">' + wdays[wi] + '</div>'; }
@@ -724,10 +737,22 @@ function getNextZ() {
       var cls = 'cal-cell' + (isMatch ? ' cal-match' : '') + (isToday ? ' cal-today' : '');
       var style = isMatch ? 'background:' + GS_BG : '';
       var lbl = isToday ? '<div class="cal-rlabel">🏁</div>' : '';
-      html += '<div class="' + cls + '" style="' + style + '">' + di + lbl + '</div>';
+      var dStr = '2026-06-' + (di < 10 ? '0' + di : '' + di);
+      var dateAttr = isMatch ? ' data-date="' + dStr + '"' : '';
+      html += '<div class="' + cls + '"' + dateAttr + ' style="' + style + '">' + di + lbl + '</div>';
     }
     html += '</div></div>';
     sec.innerHTML = html;
+    sec.addEventListener('click', function(e) {
+      var cell = e.target.closest('.cal-match');
+      if (!cell || !cell.dataset.date) return;
+      var ds = cell.dataset.date;
+      sec.querySelectorAll('.cal-selected').forEach(function(el) { el.classList.remove('cal-selected'); });
+      cell.classList.add('cal-selected');
+      if (!drwBuilt) { buildDrawer(); drwBuilt = true; }
+      openDateSection(ds);
+      updateActiveDateFlags(ds);
+    });
   }
 
   function buildGroupsPanel() {
@@ -764,11 +789,21 @@ function getNextZ() {
         if (mm.date === todayStr2 && (mm.a === flag || mm.b === flag)) { todayMatch = mm; break; }
       }
       openDrawer();
+      blinkCalToday();
       highlightDrawerFlag(flag);
       if (todayMatch) {
         showMatchDetail(todayMatch.a, todayMatch.b, todayMatch.date, todayMatch.time, true, true);
       }
     });
+  }
+
+  function blinkCalToday() {
+    var cell = document.querySelector('#drw-cal .cal-today');
+    if (!cell) return;
+    cell.classList.remove('cal-today-blink');
+    void cell.offsetWidth;
+    cell.classList.add('cal-today-blink');
+    cell.addEventListener('animationend', function() { cell.classList.remove('cal-today-blink'); }, {once: true});
   }
 
   function highlightDrawerFlag(flag) {
@@ -782,6 +817,11 @@ function getNextZ() {
       }
     }
     if (target) {
+      var sec = target.closest('.drw-section');
+      if (sec) {
+        drwBody.querySelectorAll('.drw-section').forEach(function(s) { s.classList.remove('open'); });
+        sec.classList.add('open');
+      }
       target.classList.add('drw-highlight');
       setTimeout(function() { target.scrollIntoView({behavior:'smooth', block:'center'}); }, 80);
     }
@@ -816,26 +856,39 @@ function getNextZ() {
       {id:'r16-7', date:'7/11', a:null, b:null, slotA:'R32-M13勝者', slotB:'R32-M14勝者'},
       {id:'r16-8', date:'7/12', a:null, b:null, slotA:'R32-M15勝者', slotB:'R32-M16勝者'}
     ]},
-    { label: '準々決勝者', key: 'qf', matches: [
+    { label: '準々決勝', key: 'qf', matches: [
       {id:'qf-1', date:'7/14', a:null, b:null, slotA:'R16-M1勝者', slotB:'R16-M2勝者'},
       {id:'qf-2', date:'7/14', a:null, b:null, slotA:'R16-M3勝者', slotB:'R16-M4勝者'},
       {id:'qf-3', date:'7/15', a:null, b:null, slotA:'R16-M5勝者', slotB:'R16-M6勝者'},
       {id:'qf-4', date:'7/16', a:null, b:null, slotA:'R16-M7勝者', slotB:'R16-M8勝者'}
     ]},
-    { label: '準決勝者', key: 'sf', matches: [
+    { label: '準決勝', key: 'sf', matches: [
       {id:'sf-1', date:'7/19', a:null, b:null, slotA:'QF1勝者', slotB:'QF2勝者'},
       {id:'sf-2', date:'7/20', a:null, b:null, slotA:'QF3勝者', slotB:'QF4勝者'}
     ]},
-    { label: '決勝者', key: 'final', matches: [
+    { label: '決勝', key: 'final', matches: [
       {id:'final', date:'7/26', a:null, b:null, slotA:'SF1勝者', slotB:'SF2勝者'}
     ]}
   ];
 
   var TNMT_3RD = {id:'3rd', date:'7/23', a:null, b:null, slotA:'SF1負', slotB:'SF2負'};
 
+  var DOW_JA = ['日','月','火','水','木','金','土'];
+  function dateWithDow(ds) {
+    var p = ds.split('/');
+    if (p.length !== 2) return ds;
+    var d = new Date(2026, parseInt(p[0], 10) - 1, parseInt(p[1], 10));
+    return ds + '(' + DOW_JA[d.getDay()] + ')';
+  }
+
   function buildTournamentModal() {
     var body = document.getElementById('tnmt-body');
     if (!body) return;
+    var groupsHtml = '<div class="tnmt-grp-list">';
+    GROUPS.forEach(function(grp) {
+      groupsHtml += '<div class="tnmt-grp-item"><span class="tnmt-grp-badge">' + grp.g + '</span><span class="tnmt-grp-flags">' + grp.f.join('') + '</span></div>';
+    });
+    groupsHtml += '</div>';
     function teamSlot(flag, slot) {
       if (flag) {
         var code = flagCode(flag);
@@ -844,7 +897,7 @@ function getNextZ() {
       return '<div class="tnmt-team"><span class="tnmt-team-tbd">' + slot + '</span></div>';
     }
     function matchCard(m) {
-      return '<div class="tnmt-match"><div class="tnmt-match-date">' + m.date + '</div>' +
+      return '<div class="tnmt-match"><div class="tnmt-match-date">' + dateWithDow(m.date) + '</div>' +
         teamSlot(m.a, m.slotA) + teamSlot(m.b, m.slotB) + '</div>';
     }
     var bracketHtml = '<div class="tnmt-bracket">';
@@ -856,9 +909,9 @@ function getNextZ() {
       bracketHtml += '</div>';
     });
     bracketHtml += '</div>';
-    bracketHtml += '<div class="tnmt-3rd"><div class="tnmt-3rd-label">3位決定戦 (7/23)</div>' +
+    bracketHtml += '<div class="tnmt-3rd"><div class="tnmt-3rd-label">3位決定戦 (' + dateWithDow('7/23') + ')</div>' +
       matchCard(TNMT_3RD) + '</div>';
-    body.innerHTML = bracketHtml;
+    body.innerHTML = groupsHtml + bracketHtml;
   }
 
   var tnmtOverlay = document.getElementById('tnmt-overlay');
@@ -1063,6 +1116,30 @@ function getNextZ() {
     hideTooltip();
   }
 
+  function openDateSection(dateStr) {
+    if (!drwBody) return;
+    drwBody.querySelectorAll('.drw-section').forEach(function(s) { s.classList.remove('open'); });
+    var target = drwBody.querySelector('.drw-section[data-date="' + dateStr + '"]');
+    if (target) {
+      target.classList.add('open');
+      setTimeout(function() { target.scrollIntoView({behavior:'smooth', block:'start'}); }, 80);
+    }
+  }
+
+  function updateActiveDateFlags(dateStr) {
+    var grpBody = document.getElementById('grp-body');
+    if (!grpBody) return;
+    var dateFlags = {};
+    MATCHES.forEach(function(m) {
+      if (m.date === dateStr) { dateFlags[m.a] = true; dateFlags[m.b] = true; }
+    });
+    grpBody.querySelectorAll('.grp-flag').forEach(function(span) {
+      var flag = span.dataset.flag;
+      span.classList.remove('grp-flag-today', 'grp-flag-active');
+      if (dateFlags[flag]) span.classList.add('grp-flag-today');
+    });
+  }
+
   function buildDrawer() {
     if (!drwBody) return;
     var nowMs = Date.now();
@@ -1070,33 +1147,54 @@ function getNextZ() {
     var upcoming = MATCHES.filter(function(m) { return m.date >= todayStr; }).sort(function(x, y) { return (x.date + x.time) < (y.date + y.time) ? -1 : 1; });
     var past = MATCHES.filter(function(m) { return m.date < todayStr; }).sort(function(x, y) { return (x.date + x.time) < (y.date + y.time) ? -1 : 1; });
     var allM = upcoming.concat(past);
-    var html = "";
-    var lastDate = "";
+    var dateMap = {};
+    var dateOrder = [];
     allM.forEach(function(m) {
-      if (m.date !== lastDate) {
-        var label = m.date === todayStr ? "TODAY  " + m.date.slice(5).replace("-","/") : m.date.slice(5).replace("-","/");
-        html += '<div class="drw-date">' + label + '</div>';
-        lastDate = m.date;
-      }
-      var koMs = new Date(m.date + "T" + m.time + ":00Z").getTime();
-      var isPast = koMs < nowMs - 110*60000;
-      var isLive = !isPast && koMs <= nowMs + 110*60000 && koMs >= nowMs - 110*60000;
-      var cls = "drw-row" + (isPast ? " drw-past" : "") + (isLive ? " drw-live" : "");
-      var enc_a = m.a.replace(/&/g,"&amp;");
-      var enc_b = m.b.replace(/&/g,"&amp;");
-      html += '<div class="' + cls + '" data-a="' + enc_a + '" data-b="' + enc_b + '" data-date="' + m.date + '" data-time="' + m.time + '"><span class="drw-flags">' + fc(m.a) + ' ' + m.a + '  ' + m.b + ' ' + fc(m.b) + '</span><span class="drw-meta">' + m.date.slice(5).replace("-","/") + '<br>' + m.time + ' UTC<br>' + toET(m.time) + '<br>' + toJST(m.time) + '</span></div>';
+      if (!dateMap[m.date]) { dateMap[m.date] = []; dateOrder.push(m.date); }
+      dateMap[m.date].push(m);
+    });
+    var html = "";
+    dateOrder.forEach(function(date) {
+      var label = date === todayStr ? "TODAY  " + date.slice(5).replace("-","/") : date.slice(5).replace("-","/");
+      html += '<div class="drw-section" data-date="' + date + '">';
+      html += '<div class="drw-date"><span>' + label + '</span><span class="drw-chevron">&#9660;</span></div>';
+      html += '<div class="drw-section-body">';
+      dateMap[date].forEach(function(m) {
+        var koMs = new Date(m.date + "T" + m.time + ":00Z").getTime();
+        var isPast = koMs < nowMs - 110*60000;
+        var isLive = !isPast && koMs <= nowMs + 110*60000 && koMs >= nowMs - 110*60000;
+        var cls = "drw-row" + (isPast ? " drw-past" : "") + (isLive ? " drw-live" : "");
+        var enc_a = m.a.replace(/&/g,"&amp;");
+        var enc_b = m.b.replace(/&/g,"&amp;");
+        html += '<div class="' + cls + '" data-a="' + enc_a + '" data-b="' + enc_b + '" data-date="' + m.date + '" data-time="' + m.time + '"><span class="drw-flags">' + fc(m.a) + ' ' + m.a + '  ' + m.b + ' ' + fc(m.b) + '</span><span class="drw-meta">' + m.date.slice(5).replace("-","/") + '<br>' + m.time + ' UTC<br>' + toET(m.time) + '<br>' + toJST(m.time) + '</span></div>';
+      });
+      html += '</div></div>';
     });
     drwBody.innerHTML = html;
+    var todaySection = drwBody.querySelector('.drw-section[data-date="' + todayStr + '"]');
+    if (todaySection) todaySection.classList.add('open');
     drwBody.addEventListener("click", function(e) {
+      var hdr = e.target.closest(".drw-date");
+      if (hdr) {
+        var sec = hdr.closest(".drw-section");
+        if (sec) {
+          var wasOpen = sec.classList.contains('open');
+          drwBody.querySelectorAll('.drw-section').forEach(function(s) { s.classList.remove('open'); });
+          if (!wasOpen) sec.classList.add('open');
+        }
+        return;
+      }
       var row = e.target.closest(".drw-row");
       if (!row) return;
-      showMatchDetail(row.dataset.a, row.dataset.b, row.dataset.date, row.dataset.time);
+      showMatchDetail(row.dataset.a, row.dataset.b, row.dataset.date, row.dataset.time, true);
     });
     drwBody.addEventListener("touchend", function(e) {
+      var hdr = e.target.closest(".drw-date");
+      if (hdr) { return; }
       var row = e.target.closest(".drw-row");
       if (!row) return;
       e.preventDefault();
-      showMatchDetail(row.dataset.a, row.dataset.b, row.dataset.date, row.dataset.time);
+      showMatchDetail(row.dataset.a, row.dataset.b, row.dataset.date, row.dataset.time, true);
     });
   }
 
