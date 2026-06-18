@@ -117,6 +117,7 @@ input[type=range] { flex:1; accent-color:#58a6ff; }
 .cal-match { cursor:pointer; }
 .cal-match:hover { filter:brightness(1.15); }
 .cal-selected { outline:2px solid rgba(88,166,255,0.7); outline-offset:-1px; }
+.cal-month-hdr { text-align:center; font-size:20px; padding:3px 0 4px; line-height:1; }
 .cal-wrap { margin-bottom:14px; }
 .cal-title { font-size:10px; font-weight:700; color:#58a6ff; text-transform:uppercase; letter-spacing:.5px; margin-bottom:5px; }
 .cal-legend { display:flex; flex-wrap:wrap; gap:3px; margin-bottom:5px; }
@@ -698,8 +699,9 @@ function getNextZ() {
     var todayStr = new Date().toISOString().slice(0, 10);
     var todayDay = todayStr.startsWith('2026-07-') ? parseInt(todayStr.slice(8), 10) : 0;
     var wdays = ['日','月','火','水','木','金','土'];
-    var html = '<div class="cal-wrap">';
-    html += '<div class="cal-title">🏆 7️⃣月 ノックアウトステージ (32)🏃</div>';
+    var html = '<div class="cal-month-hdr">📅7️⃣</div>';
+    html += '<div class="cal-wrap">';
+    html += '<div class="cal-title">🏆 ノックアウトステージ (32)🏃‍♂️‍➡️</div>';
     html += '<div class="cal-legend">';
     html += '<span class="cal-leg" style="background:' + CAL_R32_BG + '">R32</span>';
     html += '<span class="cal-leg" style="background:' + CAL_R16_BG + '">R16</span>';
@@ -715,7 +717,8 @@ function getNextZ() {
       var style = bg ? 'background:' + bg : '';
       var lbl = (CAL_LABELS[di] ? '<div class="cal-rlabel">' + CAL_LABELS[di] + '</div>' : '') +
                 (CAL_ICONS_JUL[di] ? '<div class="cal-rlabel">' + CAL_ICONS_JUL[di] + '</div>' : '');
-      html += '<div class="' + cls + '" style="' + style + '">' + di + lbl + '</div>';
+      var julDate = '2026-07-' + (di < 10 ? '0' + di : '' + di);
+      html += '<div class="' + cls + '" data-date="' + julDate + '" style="' + style + '">' + di + lbl + '</div>';
     }
     html += '</div></div>';
     sec.innerHTML = html;
@@ -733,8 +736,9 @@ function getNextZ() {
     var todayDay = todayStr.startsWith('2026-06-') ? parseInt(todayStr.slice(8), 10) : 0;
     var GS_BG = 'rgba(88,166,255,0.18)';
     var wdays = ['日','月','火','水','木','金','土'];
-    var html = '<div class="cal-wrap drw-cal-wrap">';
-    html += '<div class="cal-title">🏃‍♂️‍➡️6️⃣月 グループステージ (72)</div>';
+    var html = '<div class="cal-month-hdr">📅6️⃣</div>';
+    html += '<div class="cal-wrap drw-cal-wrap">';
+    html += '<div class="cal-title">🏃‍♂️‍➡️ グループステージ (72)</div>';
     html += '<div class="cal-legend"><span class="cal-leg" style="background:' + GS_BG + '">グループステージ</span></div>';
     html += '<div class="cal-grid">';
     for (var wi = 0; wi < 7; wi++) { html += '<div class="cal-cell cal-hdr">' + wdays[wi] + '</div>'; }
@@ -812,6 +816,7 @@ function getNextZ() {
       }
       openDrawer();
       blinkCalToday();
+      blinkCalDate(match ? match.date : null);
       highlightDrawerFlag(targetFlag);
       if (match) { updateActiveDateFlags(match.date); }
       var tidx2 = findCountryByFlag(targetFlag);
@@ -834,6 +839,18 @@ function getNextZ() {
 
   function blinkCalToday() {
     var cell = document.querySelector('#drw-cal .cal-today');
+    if (!cell) return;
+    cell.classList.remove('cal-today-blink');
+    void cell.offsetWidth;
+    cell.classList.add('cal-today-blink');
+    cell.addEventListener('animationend', function() { cell.classList.remove('cal-today-blink'); }, {once: true});
+  }
+
+  function blinkCalDate(dateStr) {
+    if (!dateStr) return;
+    var container = dateStr.startsWith('2026-06-') ? document.getElementById('drw-cal') : document.getElementById('cal-section');
+    if (!container) return;
+    var cell = container.querySelector('[data-date="' + dateStr + '"]');
     if (!cell) return;
     cell.classList.remove('cal-today-blink');
     void cell.offsetWidth;
@@ -1162,6 +1179,7 @@ function getNextZ() {
     miTime.textContent  = time + " UTC / " + toET(time) + " / " + toJST(time);
     miDate.textContent  = date.slice(5).replace("-", "/");
     matchInfo.classList.add("open");
+    blinkCalDate(date);
     if (!keepDrawer) closeDrawer();
     schedulePanel.classList.remove("open");
     if (doFly) {
