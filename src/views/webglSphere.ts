@@ -81,7 +81,6 @@ input[type=range] { flex:1; accent-color:#58a6ff; }
 .drw-title { font-size:13px; font-weight:700; color:#58a6ff; }
 .drw-close { background:none; border:none; color:#8b949e; font-size:22px; line-height:1; cursor:pointer; padding:0 2px; }
 #drw-body { overflow-y:auto; flex:1; }
-.drw-date { padding:8px 14px 4px; font-size:10px; font-weight:700; color:#8b949e; letter-spacing:1px; text-transform:uppercase; position:sticky; top:0; background:#0d1117; border-bottom:1px solid #21262d; }
 .drw-row { display:flex; align-items:center; justify-content:space-between; padding:9px 14px; border-bottom:1px solid #21262d; cursor:pointer; gap:8px; -webkit-tap-highlight-color:transparent; }
 .drw-row:active { background:#21262d; }
 .drw-flags { font-size:22px; letter-spacing:3px; flex-shrink:0; }
@@ -102,6 +101,14 @@ input[type=range] { flex:1; accent-color:#58a6ff; }
 .grp-flag-today:hover { border-color:rgba(139,148,158,0.75); background:rgba(139,148,158,0.06); }
 .grp-flag-active { border-color:rgba(255,200,0,0.9) !important; background:rgba(255,200,0,0.07); }
 .drw-row.drw-highlight { background:rgba(255,240,60,0.12); border-left:3px solid rgba(255,240,60,0.7); }
+.drw-section-body { display:none; }
+.drw-section.open .drw-section-body { display:block; }
+.drw-date { padding:8px 14px 4px; font-size:10px; font-weight:700; color:#8b949e; letter-spacing:1px; text-transform:uppercase; position:sticky; top:0; background:#0d1117; border-bottom:1px solid #21262d; cursor:pointer; display:flex; justify-content:space-between; align-items:center; user-select:none; -webkit-user-select:none; }
+.drw-chevron { font-size:9px; opacity:0.5; transition:transform .2s; }
+.drw-section.open .drw-chevron { transform:rotate(180deg); }
+.cal-match { cursor:pointer; }
+.cal-match:hover { filter:brightness(1.15); }
+.cal-selected { outline:2px solid rgba(88,166,255,0.7); outline-offset:-1px; }
 .cal-wrap { margin-bottom:14px; }
 .cal-title { font-size:10px; font-weight:700; color:#58a6ff; text-transform:uppercase; letter-spacing:.5px; margin-bottom:5px; }
 .cal-legend { display:flex; flex-wrap:wrap; gap:3px; margin-bottom:5px; }
@@ -730,10 +737,22 @@ function getNextZ() {
       var cls = 'cal-cell' + (isMatch ? ' cal-match' : '') + (isToday ? ' cal-today' : '');
       var style = isMatch ? 'background:' + GS_BG : '';
       var lbl = isToday ? '<div class="cal-rlabel">🏁</div>' : '';
-      html += '<div class="' + cls + '" style="' + style + '">' + di + lbl + '</div>';
+      var dStr = '2026-06-' + (di < 10 ? '0' + di : '' + di);
+      var dateAttr = isMatch ? ' data-date="' + dStr + '"' : '';
+      html += '<div class="' + cls + '"' + dateAttr + ' style="' + style + '">' + di + lbl + '</div>';
     }
     html += '</div></div>';
     sec.innerHTML = html;
+    sec.addEventListener('click', function(e) {
+      var cell = e.target.closest('.cal-match');
+      if (!cell || !cell.dataset.date) return;
+      var ds = cell.dataset.date;
+      sec.querySelectorAll('.cal-selected').forEach(function(el) { el.classList.remove('cal-selected'); });
+      cell.classList.add('cal-selected');
+      if (!drwBuilt) { buildDrawer(); drwBuilt = true; }
+      openDateSection(ds);
+      updateActiveDateFlags(ds);
+    });
   }
 
   function buildGroupsPanel() {
@@ -798,6 +817,11 @@ function getNextZ() {
       }
     }
     if (target) {
+      var sec = target.closest('.drw-section');
+      if (sec) {
+        drwBody.querySelectorAll('.drw-section').forEach(function(s) { s.classList.remove('open'); });
+        sec.classList.add('open');
+      }
       target.classList.add('drw-highlight');
       setTimeout(function() { target.scrollIntoView({behavior:'smooth', block:'center'}); }, 80);
     }
@@ -1092,6 +1116,30 @@ function getNextZ() {
     hideTooltip();
   }
 
+  function openDateSection(dateStr) {
+    if (!drwBody) return;
+    drwBody.querySelectorAll('.drw-section').forEach(function(s) { s.classList.remove('open'); });
+    var target = drwBody.querySelector('.drw-section[data-date="' + dateStr + '"]');
+    if (target) {
+      target.classList.add('open');
+      setTimeout(function() { target.scrollIntoView({behavior:'smooth', block:'start'}); }, 80);
+    }
+  }
+
+  function updateActiveDateFlags(dateStr) {
+    var grpBody = document.getElementById('grp-body');
+    if (!grpBody) return;
+    var dateFlags = {};
+    MATCHES.forEach(function(m) {
+      if (m.date === dateStr) { dateFlags[m.a] = true; dateFlags[m.b] = true; }
+    });
+    grpBody.querySelectorAll('.grp-flag').forEach(function(span) {
+      var flag = span.dataset.flag;
+      span.classList.remove('grp-flag-today', 'grp-flag-active');
+      if (dateFlags[flag]) span.classList.add('grp-flag-today');
+    });
+  }
+
   function buildDrawer() {
     if (!drwBody) return;
     var nowMs = Date.now();
@@ -1099,33 +1147,54 @@ function getNextZ() {
     var upcoming = MATCHES.filter(function(m) { return m.date >= todayStr; }).sort(function(x, y) { return (x.date + x.time) < (y.date + y.time) ? -1 : 1; });
     var past = MATCHES.filter(function(m) { return m.date < todayStr; }).sort(function(x, y) { return (x.date + x.time) < (y.date + y.time) ? -1 : 1; });
     var allM = upcoming.concat(past);
-    var html = "";
-    var lastDate = "";
+    var dateMap = {};
+    var dateOrder = [];
     allM.forEach(function(m) {
-      if (m.date !== lastDate) {
-        var label = m.date === todayStr ? "TODAY  " + m.date.slice(5).replace("-","/") : m.date.slice(5).replace("-","/");
-        html += '<div class="drw-date">' + label + '</div>';
-        lastDate = m.date;
-      }
-      var koMs = new Date(m.date + "T" + m.time + ":00Z").getTime();
-      var isPast = koMs < nowMs - 110*60000;
-      var isLive = !isPast && koMs <= nowMs + 110*60000 && koMs >= nowMs - 110*60000;
-      var cls = "drw-row" + (isPast ? " drw-past" : "") + (isLive ? " drw-live" : "");
-      var enc_a = m.a.replace(/&/g,"&amp;");
-      var enc_b = m.b.replace(/&/g,"&amp;");
-      html += '<div class="' + cls + '" data-a="' + enc_a + '" data-b="' + enc_b + '" data-date="' + m.date + '" data-time="' + m.time + '"><span class="drw-flags">' + fc(m.a) + ' ' + m.a + '  ' + m.b + ' ' + fc(m.b) + '</span><span class="drw-meta">' + m.date.slice(5).replace("-","/") + '<br>' + m.time + ' UTC<br>' + toET(m.time) + '<br>' + toJST(m.time) + '</span></div>';
+      if (!dateMap[m.date]) { dateMap[m.date] = []; dateOrder.push(m.date); }
+      dateMap[m.date].push(m);
+    });
+    var html = "";
+    dateOrder.forEach(function(date) {
+      var label = date === todayStr ? "TODAY  " + date.slice(5).replace("-","/") : date.slice(5).replace("-","/");
+      html += '<div class="drw-section" data-date="' + date + '">';
+      html += '<div class="drw-date"><span>' + label + '</span><span class="drw-chevron">&#9660;</span></div>';
+      html += '<div class="drw-section-body">';
+      dateMap[date].forEach(function(m) {
+        var koMs = new Date(m.date + "T" + m.time + ":00Z").getTime();
+        var isPast = koMs < nowMs - 110*60000;
+        var isLive = !isPast && koMs <= nowMs + 110*60000 && koMs >= nowMs - 110*60000;
+        var cls = "drw-row" + (isPast ? " drw-past" : "") + (isLive ? " drw-live" : "");
+        var enc_a = m.a.replace(/&/g,"&amp;");
+        var enc_b = m.b.replace(/&/g,"&amp;");
+        html += '<div class="' + cls + '" data-a="' + enc_a + '" data-b="' + enc_b + '" data-date="' + m.date + '" data-time="' + m.time + '"><span class="drw-flags">' + fc(m.a) + ' ' + m.a + '  ' + m.b + ' ' + fc(m.b) + '</span><span class="drw-meta">' + m.date.slice(5).replace("-","/") + '<br>' + m.time + ' UTC<br>' + toET(m.time) + '<br>' + toJST(m.time) + '</span></div>';
+      });
+      html += '</div></div>';
     });
     drwBody.innerHTML = html;
+    var todaySection = drwBody.querySelector('.drw-section[data-date="' + todayStr + '"]');
+    if (todaySection) todaySection.classList.add('open');
     drwBody.addEventListener("click", function(e) {
+      var hdr = e.target.closest(".drw-date");
+      if (hdr) {
+        var sec = hdr.closest(".drw-section");
+        if (sec) {
+          var wasOpen = sec.classList.contains('open');
+          drwBody.querySelectorAll('.drw-section').forEach(function(s) { s.classList.remove('open'); });
+          if (!wasOpen) sec.classList.add('open');
+        }
+        return;
+      }
       var row = e.target.closest(".drw-row");
       if (!row) return;
-      showMatchDetail(row.dataset.a, row.dataset.b, row.dataset.date, row.dataset.time);
+      showMatchDetail(row.dataset.a, row.dataset.b, row.dataset.date, row.dataset.time, true);
     });
     drwBody.addEventListener("touchend", function(e) {
+      var hdr = e.target.closest(".drw-date");
+      if (hdr) { return; }
       var row = e.target.closest(".drw-row");
       if (!row) return;
       e.preventDefault();
-      showMatchDetail(row.dataset.a, row.dataset.b, row.dataset.date, row.dataset.time);
+      showMatchDetail(row.dataset.a, row.dataset.b, row.dataset.date, row.dataset.time, true);
     });
   }
 
