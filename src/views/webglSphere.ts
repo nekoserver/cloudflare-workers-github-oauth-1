@@ -43,7 +43,7 @@ canvas:active { cursor:grabbing; }
 #mk-tooltip .tt-past { color:#555d68; }
 #mk-tooltip .tt-mrow { margin-top:3px; font-size:12px; }
 #mk-tooltip .tt-mrow.tt-past { color:#555d68; }
-#mk-tooltip .tt-opp-tap { cursor:pointer; }
+#mk-tooltip .tt-opp-tap { cursor:pointer; font-size:36px; line-height:1.2; }
 #mk-tooltip .tt-opp-tap:hover { opacity:0.75; }
 #mk-tooltip .tt-date-tap { cursor:pointer; text-decoration:none; }
 #mk-tooltip .tt-date-tap:hover { opacity:0.75; }
@@ -294,7 +294,7 @@ void main() {
 <div id="drawer-overlay"></div>
 <div id="left-drawer">
   <div class="drw-hdr">
-    <span class="drw-title">&#9917; 2026 FIFA W杯 全104試合(32+72)</span>
+    <span class="drw-title">&#9917; 2026 FIFA W杯 全104試合(72+32)</span>
     <button class="drw-close" id="drwClose">&#10005;</button>
   </div>
   <div id="drw-cal"></div>
@@ -734,7 +734,7 @@ function getNextZ() {
     var GS_BG = 'rgba(88,166,255,0.18)';
     var wdays = ['日','月','火','水','木','金','土'];
     var html = '<div class="cal-wrap drw-cal-wrap">';
-    html += '<div class="cal-title">🏃6️⃣月 グループステージ (72)</div>';
+    html += '<div class="cal-title">🏃‍♂️‍➡️6️⃣月 グループステージ (72)</div>';
     html += '<div class="cal-legend"><span class="cal-leg" style="background:' + GS_BG + '">グループステージ</span></div>';
     html += '<div class="cal-grid">';
     for (var wi = 0; wi < 7; wi++) { html += '<div class="cal-cell cal-hdr">' + wdays[wi] + '</div>'; }
@@ -807,9 +807,21 @@ function getNextZ() {
       openDrawer();
       blinkCalToday();
       highlightDrawerFlag(flag);
-      if (match) {
-        updateActiveDateFlags(match.date);
-        showMatchDetail(match.a, match.b, match.date, match.time, true, true);
+      if (match) { updateActiveDateFlags(match.date); }
+      var tidx2 = findCountryByFlag(flag);
+      if (tidx2 >= 0) {
+        var td2 = wc2026[tidx2];
+        flyTo(td2.lat, td2.lon);
+        setTimeout(function() {
+          var mkEls = document.querySelectorAll('.mk');
+          var el2 = mkEls[tidx2];
+          var cx2 = el2 ? el2.getBoundingClientRect().left + el2.getBoundingClientRect().width/2 : canvasRect.left + canvasRect.width/2;
+          var cy2 = el2 ? el2.getBoundingClientRect().top + el2.getBoundingClientRect().height/2 : canvasRect.top + canvasRect.height/2;
+          tooltip.innerHTML = buildAllMatchesHtml(td2.flag, td2.name);
+          positionTooltip(cx2, cy2);
+          tooltip.style.opacity = '1';
+          activeMarkerIdx = tidx2;
+        }, 900);
       }
     });
   }
