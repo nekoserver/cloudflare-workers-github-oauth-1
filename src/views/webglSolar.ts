@@ -60,6 +60,7 @@ input[type=range] { accent-color:#fdb813; width:120px; }
   <button class="btn" id="btnISS">🛸 ISS</button>
   <button class="btn" id="btnToday">🌟 今日の空</button>
   <button class="btn" id="btnPole">🧭 地軸固定</button>
+  <button class="btn" id="btnSpin">🌀 自転</button>
   <button class="btn" id="btnGrid">グリッド</button>
   <button class="btn" id="btnShot">📷 スクショ</button>
 </div>
@@ -80,6 +81,7 @@ input[type=range] { accent-color:#fdb813; width:120px; }
   var btnISS = document.getElementById('btnISS');
   var btnToday = document.getElementById('btnToday');
   var btnPole = document.getElementById('btnPole');
+  var btnSpin = document.getElementById('btnSpin');
   var btnGrid = document.getElementById('btnGrid');
   var btnShot = document.getElementById('btnShot');
 
@@ -142,12 +144,18 @@ input[type=range] { accent-color:#fdb813; width:120px; }
       viewElev = Math.PI * 0.44;
       fovH = Math.PI * 0.6;
     }
+    if (mode === 'spin' && skyViewMode !== 'spin') {
+      viewAngle = 0;
+      viewElev = 0.55;
+      fovH = Math.PI * 0.65;
+    }
     skyViewMode = (skyViewMode === mode) ? '' : mode;
     btnEarth.classList.toggle('active', skyViewMode === 'earth');
     btnMoon.classList.toggle('active', skyViewMode === 'moon');
     btnISS.classList.toggle('active', skyViewMode === 'iss');
     btnToday.classList.toggle('active', skyViewMode === 'today');
     btnPole.classList.toggle('active', skyViewMode === 'pole');
+    btnSpin.classList.toggle('active', skyViewMode === 'spin');
     hideTooltip();
   }
   btnEarth.addEventListener('click', function() { setSkyMode('earth'); });
@@ -155,6 +163,7 @@ input[type=range] { accent-color:#fdb813; width:120px; }
   btnISS.addEventListener('click', function() { setSkyMode('iss'); });
   btnToday.addEventListener('click', function() { setSkyMode('today'); });
   btnPole.addEventListener('click', function() { setSkyMode('pole'); });
+  btnSpin.addEventListener('click', function() { setSkyMode('spin'); });
   btnShot.addEventListener('click', function() {
     canvas.toBlob(function(blob) {
       var a = document.createElement('a');
@@ -485,6 +494,59 @@ input[type=range] { accent-color:#fdb813; width:120px; }
     }
     ctx.font = '12px sans-serif'; ctx.fillStyle = 'rgba(100,180,255,0.65)';
     ctx.fillText('🧭 地軸固定  北天極を中心に星が回転  ドラッグ:視点調整', 10, 28);
+  }
+
+  function drawSpinView() {
+    ctx.fillStyle = '#000010'; ctx.fillRect(0, 0, W, H);
+
+    for (var si7 = 0; si7 < skyStars.length; si7++) {
+      var ss7 = skyStars[si7];
+      var sp7 = projectSky(ss7.lon, ss7.lat);
+      if (!sp7) continue;
+      var alp7 = ss7.twinkle ? 0.5 + 0.5*Math.sin(t*3+ss7.phase) : 1;
+      ctx.beginPath(); ctx.arc(sp7.x, sp7.y, ss7.r, 0, Math.PI*2);
+      ctx.fillStyle = 'rgba(255,255,255,'+alp7.toFixed(2)+')'; ctx.fill();
+    }
+    drawGrid();
+    starScreenPos = [];
+    for (var ni7 = 0; ni7 < namedStars.length; ni7++) {
+      var ns7 = namedStars[ni7];
+      var np7 = projectSky(starLon[ni7], starLat[ni7]);
+      if (!np7) continue;
+      ctx.beginPath(); ctx.arc(np7.x, np7.y, 5, 0, Math.PI*2); ctx.fillStyle = ns7.color; ctx.fill();
+      ctx.beginPath(); ctx.arc(np7.x, np7.y, 8, 0, Math.PI*2); ctx.strokeStyle = ns7.color+'44'; ctx.lineWidth = 2; ctx.stroke();
+      if (showStarLabels) { ctx.font = '11px sans-serif'; ctx.fillStyle = ns7.color; ctx.fillText(ns7.name, np7.x+10, np7.y+4); }
+      starScreenPos.push({ x: np7.x, y: np7.y, item: ns7 });
+    }
+    if (showConstellations) {
+      ctx.lineWidth = 1; ctx.setLineDash([4,4]); ctx.strokeStyle = 'rgba(180,220,255,0.4)';
+      var stPtsS = [];
+      for (var stiS = 0; stiS < summerTriIdx.length; stiS++) stPtsS.push(projectSky(starLon[summerTriIdx[stiS]], starLat[summerTriIdx[stiS]]));
+      for (var stliS = 0; stliS < 3; stliS++) {
+        var paS = stPtsS[stliS], pbS = stPtsS[(stliS+1)%3];
+        if (paS && pbS) { ctx.beginPath(); ctx.moveTo(paS.x, paS.y); ctx.lineTo(pbS.x, pbS.y); ctx.stroke(); }
+      }
+      ctx.strokeStyle = 'rgba(255,220,150,0.4)';
+      for (var bliS = 0; bliS < bigDipperLines.length; bliS++) {
+        var bpaS = projectSky(bigDipper[bigDipperLines[bliS][0]].lon, bigDipper[bigDipperLines[bliS][0]].lat);
+        var bpbS = projectSky(bigDipper[bigDipperLines[bliS][1]].lon, bigDipper[bigDipperLines[bliS][1]].lat);
+        if (bpaS && bpbS) { ctx.beginPath(); ctx.moveTo(bpaS.x, bpaS.y); ctx.lineTo(bpbS.x, bpbS.y); ctx.stroke(); }
+      }
+      ctx.setLineDash([]);
+      for (var bdiS = 0; bdiS < bigDipper.length; bdiS++) {
+        var bdpS = projectSky(bigDipper[bdiS].lon, bigDipper[bdiS].lat);
+        if (!bdpS) continue;
+        ctx.beginPath(); ctx.arc(bdpS.x, bdpS.y, 2.5, 0, Math.PI*2); ctx.fillStyle = '#ffdd88'; ctx.fill();
+      }
+    }
+    var polaris7 = projectSky(0.662, 1.527);
+    if (polaris7) {
+      ctx.beginPath(); ctx.arc(polaris7.x, polaris7.y, 5, 0, Math.PI*2); ctx.fillStyle = '#e8f0ff'; ctx.fill();
+      ctx.beginPath(); ctx.arc(polaris7.x, polaris7.y, 9, 0, Math.PI*2); ctx.strokeStyle = 'rgba(100,200,255,0.6)'; ctx.lineWidth = 1.5; ctx.stroke();
+      if (showStarLabels) { ctx.font = '11px sans-serif'; ctx.fillStyle = '#e8f0ff'; ctx.fillText('ポラリス', polaris7.x+11, polaris7.y+4); }
+    }
+    ctx.font = '12px sans-serif'; ctx.fillStyle = 'rgba(100,180,255,0.65)';
+    ctx.fillText('🌀 自転  地球の自転で星が回転  ドラッグ:視点調整  速度スライダー対応', 10, 28);
   }
 
   function project3D(dX, dY, dZ) {
@@ -963,8 +1025,13 @@ input[type=range] { accent-color:#fdb813; width:120px; }
 
     if (skyViewMode === 'today') { drawTodaySky(); return; }
     if (skyViewMode === 'pole') {
-      viewAngle += dt * 0.003;
+      viewAngle += dt * 0.003 * speed;
       drawPoleView();
+      return;
+    }
+    if (skyViewMode === 'spin') {
+      viewAngle += dt * 0.009 * speed;
+      drawSpinView();
       return;
     }
     if (skyViewMode !== '') {
