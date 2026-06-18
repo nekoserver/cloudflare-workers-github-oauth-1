@@ -32,7 +32,7 @@ canvas:active { cursor:grabbing; }
 #markers { position:absolute; top:0; left:0; width:100%; height:100%; pointer-events:none; overflow:hidden; }
 .mk { position:absolute; transform:translate(-50%,-50%); line-height:1; font-size:18px; text-shadow:0 1px 3px #000,0 0 8px rgba(0,0,0,0.9); pointer-events:auto; cursor:pointer; user-select:none; -webkit-user-select:none; }
 .mk-ball { font-size:28px; }
-#mk-tooltip { position:fixed; background:rgba(13,17,23,0.97); border:1px solid #58a6ff; border-radius:8px; padding:7px 12px; font-size:12px; color:#e6edf3; white-space:nowrap; pointer-events:none; opacity:0; transition:opacity .15s; z-index:60; transform:translate(-50%,-110%); line-height:1.7; }
+#mk-tooltip { position:fixed; background:rgba(13,17,23,0.97); border:1px solid #58a6ff; border-radius:8px; padding:7px 12px; font-size:12px; color:#e6edf3; white-space:nowrap; pointer-events:none; opacity:0; transition:opacity .15s; z-index:60; transform:translate(-50%,-110%); line-height:1.7; text-align:center; }
 #mk-tooltip.below { transform:translate(-50%, 14px); }
 #mk-tooltip .tt-name { font-weight:700; font-size:13px; }
 #mk-tooltip .tt-match { font-size:12px; margin-top:3px; }
@@ -112,6 +112,7 @@ input[type=range] { flex:1; accent-color:#58a6ff; }
 .cal-match { color:#e6edf3; }
 .cal-today { outline:1.5px solid #58a6ff; outline-offset:-1px; }
 .cal-rlabel { font-size:7px; font-weight:700; color:rgba(255,255,255,0.75); line-height:1; margin-top:1px; }
+.drw-cal-wrap { padding:10px 14px 12px; border-bottom:1px solid #30363d; flex-shrink:0; }
 .mi-time { font-size:13px; color:#58a6ff; font-family:monospace; margin-top:6px; }
 .mi-date { font-size:11px; color:#8b949e; margin-top:3px; }
 .mi-close { position:absolute; top:6px; right:10px; background:none; border:none; color:#8b949e; font-size:18px; line-height:1; cursor:pointer; padding:0; }
@@ -138,7 +139,7 @@ input[type=range] { flex:1; accent-color:#58a6ff; }
 .tnmt-team + .tnmt-team { border-top:1px solid #21262d; margin-top:2px; padding-top:5px; }
 .tnmt-team-flag { font-size:18px; line-height:1; }
 .tnmt-team-code { font-size:10px; font-weight:700; color:#8b949e; font-family:'SFMono-Regular',Consolas,monospace; }
-.tnmt-team-tbd { font-size:11px; color:#484f58; font-style:italic; }
+.tnmt-team-tbd { font-size:11px; color:#e6edf3; font-style:italic; }
 .tnmt-winner { color:#f0b429; }
 .tnmt-winner .tnmt-team-code { color:#f0b429; }
 .tnmt-3rd { margin-top:16px; border-top:1px solid #30363d; padding-top:14px; }
@@ -275,6 +276,7 @@ void main() {
     <span class="drw-title">&#9917; 2026 FIFA W杯 全72試合</span>
     <button class="drw-close" id="drwClose">&#10005;</button>
   </div>
+  <div id="drw-cal"></div>
   <div id="drw-body"></div>
 </div>
 <div id="schedule-panel">
@@ -665,7 +667,8 @@ function getNextZ() {
     23:CAL_3RD_BG,
     26:CAL_FIN_BG
   };
-  var CAL_LABELS = {1:'R32',8:'R16',14:'QF',19:'SF',23:'3位',26:'決勝'};
+  var CAL_LABELS = {1:'R32',8:'R16',14:'QF',19:'SF',23:'3位',26:'決勝者'};
+  var CAL_ICONS_JUL = {27:'🏆'};
 
   function buildCalendar() {
     var sec = document.getElementById('cal-section');
@@ -689,7 +692,38 @@ function getNextZ() {
       var bg = CAL_DAYS[di] || '';
       var cls = 'cal-cell' + (bg ? ' cal-match' : '') + (di === todayDay ? ' cal-today' : '');
       var style = bg ? 'background:' + bg : '';
-      var lbl = CAL_LABELS[di] ? '<div class="cal-rlabel">' + CAL_LABELS[di] + '</div>' : '';
+      var lbl = (CAL_LABELS[di] ? '<div class="cal-rlabel">' + CAL_LABELS[di] + '</div>' : '') +
+                (CAL_ICONS_JUL[di] ? '<div class="cal-rlabel">' + CAL_ICONS_JUL[di] + '</div>' : '');
+      html += '<div class="' + cls + '" style="' + style + '">' + di + lbl + '</div>';
+    }
+    html += '</div></div>';
+    sec.innerHTML = html;
+  }
+
+  function buildDrawerCalendar() {
+    var sec = document.getElementById('drw-cal');
+    if (!sec) return;
+    var juneDays = {};
+    MATCHES.forEach(function(m) {
+      if (m.date.startsWith('2026-06-')) juneDays[parseInt(m.date.slice(8), 10)] = true;
+    });
+    var firstDow = new Date(2026, 5, 1).getDay();
+    var todayStr = new Date().toISOString().slice(0, 10);
+    var todayDay = todayStr.startsWith('2026-06-') ? parseInt(todayStr.slice(8), 10) : 0;
+    var GS_BG = 'rgba(88,166,255,0.18)';
+    var wdays = ['日','月','火','水','木','金','土'];
+    var html = '<div class="cal-wrap drw-cal-wrap">';
+    html += '<div class="cal-title">&#9917; 6月 グループステージ</div>';
+    html += '<div class="cal-legend"><span class="cal-leg" style="background:' + GS_BG + '">グループステージ</span></div>';
+    html += '<div class="cal-grid">';
+    for (var wi = 0; wi < 7; wi++) { html += '<div class="cal-cell cal-hdr">' + wdays[wi] + '</div>'; }
+    for (var ei = 0; ei < firstDow; ei++) { html += '<div class="cal-cell"></div>'; }
+    for (var di = 1; di <= 30; di++) {
+      var isMatch = juneDays[di] || false;
+      var isToday = di === todayDay;
+      var cls = 'cal-cell' + (isMatch ? ' cal-match' : '') + (isToday ? ' cal-today' : '');
+      var style = isMatch ? 'background:' + GS_BG : '';
+      var lbl = isToday ? '<div class="cal-rlabel">🏁</div>' : '';
       html += '<div class="' + cls + '" style="' + style + '">' + di + lbl + '</div>';
     }
     html += '</div></div>';
@@ -723,15 +757,16 @@ function getNextZ() {
       var allToday = grpBody.querySelectorAll('.grp-flag-today');
       for (var ti = 0; ti < allToday.length; ti++) allToday[ti].classList.remove('grp-flag-active');
       span.classList.add('grp-flag-active');
+      var todayStr2 = new Date().toISOString().slice(0, 10);
+      var todayMatch = null;
+      for (var mi2 = 0; mi2 < MATCHES.length; mi2++) {
+        var mm = MATCHES[mi2];
+        if (mm.date === todayStr2 && (mm.a === flag || mm.b === flag)) { todayMatch = mm; break; }
+      }
       openDrawer();
       highlightDrawerFlag(flag);
-      var cidx = findCountryByFlag(flag);
-      if (cidx >= 0) {
-        var cd = wc2026[cidx];
-        tooltip.innerHTML = buildMatchHtml(cd.flag, cd.name);
-        tooltip.style.opacity = '1';
-        activeMarkerIdx = cidx;
-        flyTo(cd.lat, cd.lon);
+      if (todayMatch) {
+        showMatchDetail(todayMatch.a, todayMatch.b, todayMatch.date, todayMatch.time, true, true);
       }
     });
   }
@@ -772,27 +807,27 @@ function getNextZ() {
       {id:'r32-16', date:'7/4', a:null, b:null, slotA:'3位(ABCD)', slotB:'3位(IJKL)'}
     ]},
     { label: 'ベスト16', key: 'r16', matches: [
-      {id:'r16-1', date:'7/8', a:null, b:null, slotA:'R32-M1勝', slotB:'R32-M2勝'},
-      {id:'r16-2', date:'7/8', a:null, b:null, slotA:'R32-M3勝', slotB:'R32-M4勝'},
-      {id:'r16-3', date:'7/9', a:null, b:null, slotA:'R32-M5勝', slotB:'R32-M6勝'},
-      {id:'r16-4', date:'7/9', a:null, b:null, slotA:'R32-M7勝', slotB:'R32-M8勝'},
-      {id:'r16-5', date:'7/10', a:null, b:null, slotA:'R32-M9勝', slotB:'R32-M10勝'},
-      {id:'r16-6', date:'7/10', a:null, b:null, slotA:'R32-M11勝', slotB:'R32-M12勝'},
-      {id:'r16-7', date:'7/11', a:null, b:null, slotA:'R32-M13勝', slotB:'R32-M14勝'},
-      {id:'r16-8', date:'7/12', a:null, b:null, slotA:'R32-M15勝', slotB:'R32-M16勝'}
+      {id:'r16-1', date:'7/8', a:null, b:null, slotA:'R32-M1勝者', slotB:'R32-M2勝者'},
+      {id:'r16-2', date:'7/8', a:null, b:null, slotA:'R32-M3勝者', slotB:'R32-M4勝者'},
+      {id:'r16-3', date:'7/9', a:null, b:null, slotA:'R32-M5勝者', slotB:'R32-M6勝者'},
+      {id:'r16-4', date:'7/9', a:null, b:null, slotA:'R32-M7勝者', slotB:'R32-M8勝者'},
+      {id:'r16-5', date:'7/10', a:null, b:null, slotA:'R32-M9勝者', slotB:'R32-M10勝者'},
+      {id:'r16-6', date:'7/10', a:null, b:null, slotA:'R32-M11勝者', slotB:'R32-M12勝者'},
+      {id:'r16-7', date:'7/11', a:null, b:null, slotA:'R32-M13勝者', slotB:'R32-M14勝者'},
+      {id:'r16-8', date:'7/12', a:null, b:null, slotA:'R32-M15勝者', slotB:'R32-M16勝者'}
     ]},
-    { label: '準々決勝', key: 'qf', matches: [
-      {id:'qf-1', date:'7/14', a:null, b:null, slotA:'R16-M1勝', slotB:'R16-M2勝'},
-      {id:'qf-2', date:'7/14', a:null, b:null, slotA:'R16-M3勝', slotB:'R16-M4勝'},
-      {id:'qf-3', date:'7/15', a:null, b:null, slotA:'R16-M5勝', slotB:'R16-M6勝'},
-      {id:'qf-4', date:'7/16', a:null, b:null, slotA:'R16-M7勝', slotB:'R16-M8勝'}
+    { label: '準々決勝者', key: 'qf', matches: [
+      {id:'qf-1', date:'7/14', a:null, b:null, slotA:'R16-M1勝者', slotB:'R16-M2勝者'},
+      {id:'qf-2', date:'7/14', a:null, b:null, slotA:'R16-M3勝者', slotB:'R16-M4勝者'},
+      {id:'qf-3', date:'7/15', a:null, b:null, slotA:'R16-M5勝者', slotB:'R16-M6勝者'},
+      {id:'qf-4', date:'7/16', a:null, b:null, slotA:'R16-M7勝者', slotB:'R16-M8勝者'}
     ]},
-    { label: '準決勝', key: 'sf', matches: [
-      {id:'sf-1', date:'7/19', a:null, b:null, slotA:'QF1勝', slotB:'QF2勝'},
-      {id:'sf-2', date:'7/20', a:null, b:null, slotA:'QF3勝', slotB:'QF4勝'}
+    { label: '準決勝者', key: 'sf', matches: [
+      {id:'sf-1', date:'7/19', a:null, b:null, slotA:'QF1勝者', slotB:'QF2勝者'},
+      {id:'sf-2', date:'7/20', a:null, b:null, slotA:'QF3勝者', slotB:'QF4勝者'}
     ]},
-    { label: '決勝', key: 'final', matches: [
-      {id:'final', date:'7/26', a:null, b:null, slotA:'SF1勝', slotB:'SF2勝'}
+    { label: '決勝者', key: 'final', matches: [
+      {id:'final', date:'7/26', a:null, b:null, slotA:'SF1勝者', slotB:'SF2勝者'}
     ]}
   ];
 
@@ -970,12 +1005,12 @@ function getNextZ() {
     leftDrawer.classList.remove("open");
     drwOverlay.classList.remove("open");
   }
-  function showMatchDetail(a, b, date, time, doFly) {
+  function showMatchDetail(a, b, date, time, doFly, keepDrawer) {
     miFlags.innerHTML = fc(a) + ' ' + a + '<span class="mi-vs">vs</span>' + b + ' ' + fc(b);
     miTime.textContent  = time + " UTC / " + toET(time) + " / " + toJST(time);
     miDate.textContent  = date.slice(5).replace("-", "/");
     matchInfo.classList.add("open");
-    closeDrawer();
+    if (!keepDrawer) closeDrawer();
     schedulePanel.classList.remove("open");
     if (doFly) {
       var tidx = findCountryByFlag(a);
@@ -1209,6 +1244,7 @@ function getNextZ() {
     }
   }
   buildCalendar();
+  buildDrawerCalendar();
   buildGroupsPanel();
   requestAnimationFrame(frame);
 })();
