@@ -49,6 +49,7 @@ canvas:active { cursor:grabbing; }
 .sp-match { display:flex; justify-content:space-between; align-items:center; padding:7px 16px; border-bottom:1px solid #21262d; }
 .sp-match:last-child { border-bottom:none; }
 .sp-flags { font-size:18px; letter-spacing:2px; }
+.tm-code { font-size:10px; font-weight:700; letter-spacing:1px; color:#8b949e; font-family:'SFMono-Regular',Consolas,monospace; vertical-align:middle; }
 .sp-time { font-family:monospace; font-size:12px; color:#58a6ff; }
 .sp-match.sp-past { opacity:0.45; }
 .sp-match.sp-today { background:rgba(88,166,255,0.07); }
@@ -550,6 +551,19 @@ void main() {
     {a:"🇩🇿",b:"🇦🇹",date:"2026-06-28",time:"02:00"},
     {a:"🇯🇴",b:"🇦🇷",date:"2026-06-28",time:"02:00"}
   ];
+  var FLAG_CODE = {
+    '🇲🇽':'MEX','🇿🇦':'RSA','🇰🇷':'KOR','🇨🇿':'CZE','🇨🇦':'CAN','🇧🇦':'BIH',
+    '🇺🇸':'USA','🇵🇾':'PAR','🇶🇦':'QAT','🇨🇭':'SUI','🇧🇷':'BRA','🇲🇦':'MAR',
+    '🇭🇹':'HAI','🇦🇺':'AUS','🇹🇷':'TUR','🇩🇪':'GER','🇨🇼':'CUW','🇳🇱':'NED',
+    '🇯🇵':'JPN','🇨🇮':'CIV','🇪🇨':'ECU','🇸🇪':'SWE','🇹🇳':'TUN','🇪🇸':'ESP',
+    '🇨🇻':'CPV','🇧🇪':'BEL','🇪🇬':'EGY','🇸🇦':'KSA','🇺🇾':'URU','🇮🇷':'IRN',
+    '🇳🇿':'NZL','🇫🇷':'FRA','🇸🇳':'SEN','🇮🇶':'IRQ','🇳🇴':'NOR','🇦🇷':'ARG',
+    '🇩🇿':'ALG','🇦🇹':'AUT','🇯🇴':'JOR','🇵🇹':'POR','🇨🇩':'COD','🇭🇷':'CRO',
+    '🇬🇭':'GHA','🇵🇦':'PAN','🇺🇿':'UZB','🇨🇴':'COL','🏴󠁧󠁢󠁳󠁣󠁴󠁿':'SCO','🏴󠁧󠁢󠁥󠁮󠁧󠁿':'ENG'
+  };
+  function flagCode(f) { return FLAG_CODE[f] || ''; }
+  function fc(f) { var c = flagCode(f); return c ? '<span class="tm-code">' + c + '</span>' : ''; }
+
   var teamMatches = {};
   var ELIMINATED = {};
   MATCHES.forEach(function(m) {
@@ -717,7 +731,7 @@ void main() {
       var isPast = koMs < nowMs - 110*60000;
       var isTod  = m.date === todayStr;
       var cls = "sp-match" + (isPast ? " sp-past" : "") + (isTod && !isPast ? " sp-today" : "");
-      html += '<div class="' + cls + '" data-a="' + m.a + '" data-b="' + m.b + '" data-date="' + m.date + '" data-time="' + m.time + '" style="cursor:pointer"><span class="sp-flags">' + m.a + ' - ' + m.b + '</span><span class="sp-time">' + m.time + ' UTC<br>' + toET(m.time) + '<br>' + toJST(m.time) + '</span></div>';
+      html += '<div class="' + cls + '" data-a="' + m.a + '" data-b="' + m.b + '" data-date="' + m.date + '" data-time="' + m.time + '" style="cursor:pointer"><span class="sp-flags">' + fc(m.a) + ' ' + m.a + ' <span style="color:#484f58">-</span> ' + m.b + ' ' + fc(m.b) + '</span><span class="sp-time">' + m.time + ' UTC<br>' + toET(m.time) + '<br>' + toJST(m.time) + '</span></div>';
     });
     spBody.innerHTML = html || '<div style="padding:16px;color:#8b949e">本日以降の試合はありません</div>';
     function spRowTap(row) {
@@ -756,7 +770,7 @@ void main() {
       var cls = "drw-row" + (isPast ? " drw-past" : "") + (isLive ? " drw-live" : "");
       var enc_a = m.a.replace(/&/g,"&amp;");
       var enc_b = m.b.replace(/&/g,"&amp;");
-      html += '<div class="' + cls + '" data-a="' + enc_a + '" data-b="' + enc_b + '" data-date="' + m.date + '" data-time="' + m.time + '"><span class="drw-flags">' + m.a + '  ' + m.b + '</span><span class="drw-meta">' + m.date.slice(5).replace("-","/") + '<br>' + m.time + ' UTC<br>' + toET(m.time) + '<br>' + toJST(m.time) + '</span></div>';
+      html += '<div class="' + cls + '" data-a="' + enc_a + '" data-b="' + enc_b + '" data-date="' + m.date + '" data-time="' + m.time + '"><span class="drw-flags">' + fc(m.a) + ' ' + m.a + '  ' + m.b + ' ' + fc(m.b) + '</span><span class="drw-meta">' + m.date.slice(5).replace("-","/") + '<br>' + m.time + ' UTC<br>' + toET(m.time) + '<br>' + toJST(m.time) + '</span></div>';
     });
     drwBody.innerHTML = html;
     drwBody.addEventListener("click", function(e) {
