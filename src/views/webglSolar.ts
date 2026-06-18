@@ -54,6 +54,7 @@ input[type=range] { accent-color:#fdb813; width:120px; }
   <button class="btn active" id="btnOrbits">軌道を表示</button>
   <button class="btn active" id="btnLabels">恒星ラベル</button>
   <button class="btn active" id="btnPlanetLabels">惑星ラベル</button>
+  <button class="btn" id="btnEarth">🌍 地球目線</button>
 </div>
 
 <script>
@@ -66,12 +67,23 @@ input[type=range] { accent-color:#fdb813; width:120px; }
   var btnOrbits = document.getElementById('btnOrbits');
   var btnLabels = document.getElementById('btnLabels');
   var btnPlanetLabels = document.getElementById('btnPlanetLabels');
+  var btnEarth = document.getElementById('btnEarth');
 
   var showOrbits = true;
   var showStarLabels = true;
   var showPlanetLabels = true;
   var speed = 1.0;
   var t = 0;
+  var earthViewMode = false;
+  var viewAngle = 0;
+  var viewElev = 0;
+  var FOV_H = Math.PI * 2 / 3;
+  var FOV_V = Math.PI * 4 / 9;
+  var dragActive = false;
+  var dragStartX = 0;
+  var dragStartY = 0;
+  var dragStartAngle = 0;
+  var dragStartElev = 0;
 
   btnOrbits.addEventListener('click', function() {
     showOrbits = !showOrbits;
@@ -89,6 +101,208 @@ input[type=range] { accent-color:#fdb813; width:120px; }
     speed = parseFloat(speedSlider.value);
     speedVal.textContent = speed.toFixed(1) + 'x';
   });
+
+  btnEarth.addEventListener('click', function() {
+    earthViewMode = !earthViewMode;
+    btnEarth.classList.toggle('active', earthViewMode);
+    hideTooltip();
+  });
+
+  function startDrag(clientX, clientY) {
+    if (!earthViewMode) return;
+    dragActive = true;
+    dragStartX = clientX;
+    dragStartY = clientY;
+    dragStartAngle = viewAngle;
+    dragStartElev = viewElev;
+  }
+  function moveDrag(clientX, clientY) {
+    if (!dragActive) return;
+    var dx = clientX - dragStartX;
+    var dy = clientY - dragStartY;
+    viewAngle = dragStartAngle - dx * (FOV_H / W);
+    viewElev = Math.max(-Math.PI / 2.5, Math.min(Math.PI / 2.5, dragStartElev + dy * (FOV_V / H)));
+  }
+  function endDrag(clientX, clientY, isTouch) {
+    if (!earthViewMode) { dragActive = false; return; }
+    var dx = clientX - dragStartX;
+    var dy = clientY - dragStartY;
+    if (!dragActive || (Math.abs(dx) < 4 && Math.abs(dy) < 4)) {
+      if (!isTouch) {
+        var pos = getCanvasPos({ clientX: clientX, clientY: clientY });
+        var item = hitTest(pos.x, pos.y);
+        if (item) { showTooltip(item, clientX, clientY); activeItem = item; }
+        else hideTooltip();
+      }
+    }
+    dragActive = false;
+  }
+
+  canvas.addEventListener('mousedown', function(e) { startDrag(e.clientX, e.clientY); });
+  canvas.addEventListener('mousemove', function(e) { moveDrag(e.clientX, e.clientY); });
+  canvas.addEventListener('mouseup', function(e) { endDrag(e.clientX, e.clientY, false); });
+  canvas.addEventListener('mouseleave', function() { dragActive = false; });
+
+  canvas.addEventListener('touchstart', function(e) {
+    if (e.touches.length === 1) startDrag(e.touches[0].clientX, e.touches[0].clientY);
+  }, { passive: true });
+  canvas.addEventListener('touchmove', function(e) {
+    if (e.touches.length === 1) { e.preventDefault(); moveDrag(e.touches[0].clientX, e.touches[0].clientY); }
+  }, { passive: false });
+  canvas.addEventListener('touchend', function(e) {
+    if (e.changedTouches.length > 0) {
+      var touch = e.changedTouches[0];
+      endDrag(touch.clientX, touch.clientY, true);
+    }
+  });
+
+  var starLon = [1.76, 1.53, 1.38, 1.22, 4.34, 4.99, 5.15, 5.48, 3.56, 3.09];
+  var starLat = [-0.68, -0.28, -0.54, -0.09, -0.09, 1.08, 0.51, 1.05, -0.03, 0.54];
+
+  function projectSky(lon, lat) {
+    var dLon = lon - viewAngle;
+    while (dLon > Math.PI) dLon -= 2 * Math.PI;
+    while (dLon < -Math.PI) dLon += 2 * Math.PI;
+    var dLat = lat - viewElev;
+    if (Math.abs(dLon) > FOV_H / 2 + 0.15) return null;
+    if (Math.abs(dLat) > FOV_V / 2 + 0.15) return null;
+    return {
+      x: W / 2 + dLon / (FOV_H / 2) * W / 2,
+      y: H / 2 - dLat / (FOV_V / 2) * H / 2
+    };
+  }
+
+  function getEarthPos() {
+    var ep = planets[2];
+    var ea = ep.angle + t / ep.period;
+    return { x: Math.cos(ea) * ep.orbitR, y: Math.sin(ea) * ep.orbitR };
+  }
+
+  function drawEarthView() {
+    ctx.fillStyle = '#000008';
+    ctx.fillRect(0, 0, W, H);
+
+    var ep = getEarthPos();
+
+    for (var si2 = 0; si2 < stars.length; si2++) {
+      var st = stars[si2];
+      var slon = Math.atan2(st.y, st.x);
+      var sPos = projectSky(slon, 0);
+      if (!sPos) continue;
+      var alpha2 = 1;
+      if (st.twinkle) alpha2 = 0.5 + 0.5 * Math.sin(t * 3 + st.phase);
+      ctx.beginPath();
+      ctx.arc(sPos.x, sPos.y, st.r, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(255,255,255,' + alpha2.toFixed(2) + ')';
+      ctx.fill();
+    }
+
+    starScreenPos = [];
+    for (var ni2 = 0; ni2 < namedStars.length; ni2++) {
+      var ns2 = namedStars[ni2];
+      var nPos = projectSky(starLon[ni2], starLat[ni2]);
+      if (!nPos) continue;
+      ctx.beginPath();
+      ctx.arc(nPos.x, nPos.y, 5, 0, Math.PI * 2);
+      ctx.fillStyle = ns2.color;
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(nPos.x, nPos.y, 7, 0, Math.PI * 2);
+      ctx.strokeStyle = ns2.color + '55';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      if (showStarLabels) {
+        ctx.font = '11px sans-serif';
+        ctx.fillStyle = ns2.color;
+        ctx.fillText(ns2.name, nPos.x + 9, nPos.y + 4);
+      }
+      starScreenPos.push({ x: nPos.x, y: nPos.y, item: ns2 });
+    }
+
+    var sunDx = -ep.x, sunDy = -ep.y;
+    var sunLon = Math.atan2(sunDy, sunDx);
+    var sunPos = projectSky(sunLon, 0);
+    if (sunPos) {
+      drawGlow(sunPos.x, sunPos.y, 30, '#fdb813');
+      var sg2 = ctx.createRadialGradient(sunPos.x - 5, sunPos.y - 5, 3, sunPos.x, sunPos.y, 28);
+      sg2.addColorStop(0, '#fff5a0');
+      sg2.addColorStop(0.5, '#fdb813');
+      sg2.addColorStop(1, '#f57c00');
+      ctx.beginPath();
+      ctx.arc(sunPos.x, sunPos.y, 28, 0, Math.PI * 2);
+      ctx.fillStyle = sg2;
+      ctx.fill();
+      if (showPlanetLabels) {
+        ctx.font = 'bold 12px sans-serif';
+        ctx.fillStyle = '#fdb813';
+        ctx.fillText('太陽', sunPos.x + 32, sunPos.y + 4);
+      }
+      planetScreenPos.push({ x: sunPos.x, y: sunPos.y, item: { name: '太陽', type: '恒星', fact: '太陽系の中心恒星。直径は地球の約109倍、質量は太陽系全体の99.86%を占めます' } });
+    }
+
+    for (var pi2 = 0; pi2 < planets.length; pi2++) {
+      var pl2 = planets[pi2];
+      if (pl2.name === '地球') continue;
+      var pa = pl2.angle + t / pl2.period;
+      var plx = Math.cos(pa) * pl2.orbitR;
+      var ply = Math.sin(pa) * pl2.orbitR;
+      var dx2 = plx - ep.x;
+      var dy2 = ply - ep.y;
+      var dist2 = Math.sqrt(dx2 * dx2 + dy2 * dy2);
+      var plon = Math.atan2(dy2, dx2);
+      var pPos = projectSky(plon, 0);
+      if (!pPos) continue;
+      var appR = Math.max(4, pl2.radius * 120 / Math.max(dist2, 30));
+      if (pl2.hasRings) drawRings(pPos.x, pPos.y, appR);
+      drawPlanet(pPos.x, pPos.y, appR, pl2.color);
+      if (showPlanetLabels) {
+        ctx.font = '11px sans-serif';
+        ctx.fillStyle = '#c9d1d9';
+        ctx.fillText(pl2.jaName, pPos.x + appR + 4, pPos.y + 4);
+      }
+      planetScreenPos.push({ x: pPos.x, y: pPos.y, item: pl2 });
+    }
+
+    var moonEa = planets[2].angle + t / planets[2].period;
+    var mEarthX = Math.cos(moonEa) * planets[2].orbitR;
+    var mEarthY = Math.sin(moonEa) * planets[2].orbitR;
+    var moonAng2 = moon.angle + t / moon.period;
+    var mAbsX = mEarthX + moon.orbitR * Math.cos(moonAng2);
+    var mAbsY = mEarthY + moon.orbitR * Math.sin(moonAng2);
+    var mDx = mAbsX - ep.x;
+    var mDy = mAbsY - ep.y;
+    var mLon = Math.atan2(mDy, mDx);
+    var mLat = Math.atan2(mDy, Math.sqrt(mDx * mDx + mDy * mDy) * 10);
+    var mPos = projectSky(mLon, mLat * 0.05);
+    if (mPos) {
+      drawPlanet(mPos.x, mPos.y, 14, '#cccccc');
+      if (showPlanetLabels) {
+        ctx.font = '11px sans-serif';
+        ctx.fillStyle = '#aaa';
+        ctx.fillText('月', mPos.x + 17, mPos.y + 4);
+      }
+      planetScreenPos.push({ x: mPos.x, y: mPos.y, item: moon });
+    }
+
+    var horizY = H / 2 - (-viewElev) / (FOV_V / 2) * H / 2;
+    ctx.beginPath();
+    ctx.moveTo(0, horizY);
+    ctx.lineTo(W, horizY);
+    ctx.strokeStyle = 'rgba(100,180,100,0.3)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
+    ctx.fillStyle = 'rgba(0,30,0,0.35)';
+    ctx.fillRect(0, horizY, W, H - horizY);
+
+    ctx.font = '11px sans-serif';
+    ctx.fillStyle = 'rgba(100,200,100,0.6)';
+    ctx.fillText('地平線', 10, horizY - 5);
+
+    ctx.font = '12px sans-serif';
+    ctx.fillStyle = 'rgba(100,180,255,0.7)';
+    ctx.fillText('🌍 地球目線モード  ドラッグで視点回転', 10, 28);
+  }
 
   var planets = [
     { name: '水星', jaName: '水星', type: '岩石惑星', orbitR: 80, radius: 4, period: 0.24, color: '#b5b5b5', angle: 0, fact: '太陽系最小の惑星。表面温度は-180°Cから430°Cと激しく変動します' },
@@ -236,29 +450,11 @@ input[type=range] { accent-color:#fdb813; width:120px; }
   }
 
   canvas.addEventListener('click', function(e) {
+    if (earthViewMode) return;
     var pos = getCanvasPos(e);
     var item = hitTest(pos.x, pos.y);
-    if (item) {
-      showTooltip(item, e.clientX, e.clientY);
-      activeItem = item;
-    } else {
-      hideTooltip();
-    }
-  });
-
-  canvas.addEventListener('touchend', function(e) {
-    if (e.changedTouches.length > 0) {
-      var touch = e.changedTouches[0];
-      var pos = getCanvasPos(touch);
-      var item = hitTest(pos.x, pos.y);
-      if (item) {
-        e.preventDefault();
-        showTooltip(item, touch.clientX, touch.clientY);
-        activeItem = item;
-      } else {
-        hideTooltip();
-      }
-    }
+    if (item) { showTooltip(item, e.clientX, e.clientY); activeItem = item; }
+    else hideTooltip();
   });
 
   var lastTime = null;
@@ -271,6 +467,14 @@ input[type=range] { accent-color:#fdb813; width:120px; }
     t += dt * speed;
 
     ctx.clearRect(0, 0, W, H);
+
+    planetScreenPos = [];
+    starScreenPos = [];
+
+    if (earthViewMode) {
+      drawEarthView();
+      return;
+    }
 
     ctx.fillStyle = '#000010';
     ctx.fillRect(0, 0, W, H);
@@ -295,7 +499,6 @@ input[type=range] { accent-color:#fdb813; width:120px; }
 
     var sc = scale || 1;
 
-    starScreenPos = [];
     for (var ni = 0; ni < namedStars.length; ni++) {
       var ns = namedStars[ni];
       var nsx = cx + ns.ox * sc;
@@ -329,7 +532,6 @@ input[type=range] { accent-color:#fdb813; width:120px; }
     ctx.fillStyle = sunGrad;
     ctx.fill();
 
-    planetScreenPos = [];
     planetScreenPos.push({ x: cx, y: cy, item: { name: '太陽', type: '恒星', fact: '太陽系の中心恒星。直径は地球の約109倍、質量は太陽系全体の99.86%を占めます' } });
 
     var earthX = cx, earthY = cy;
