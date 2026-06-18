@@ -32,7 +32,7 @@ canvas:active { cursor:grabbing; }
 #markers { position:absolute; top:0; left:0; width:100%; height:100%; pointer-events:none; overflow:hidden; }
 .mk { position:absolute; transform:translate(-50%,-50%); line-height:1; font-size:18px; text-shadow:0 1px 3px #000,0 0 8px rgba(0,0,0,0.9); pointer-events:auto; cursor:pointer; user-select:none; -webkit-user-select:none; }
 .mk-ball { font-size:28px; }
-#mk-tooltip { position:fixed; background:rgba(13,17,23,0.97); border:1px solid #58a6ff; border-radius:8px; padding:7px 12px; font-size:12px; color:#e6edf3; white-space:nowrap; pointer-events:none; opacity:0; transition:opacity .15s; z-index:60; transform:translate(-50%,-110%); line-height:1.7; }
+#mk-tooltip { position:fixed; background:rgba(13,17,23,0.97); border:1px solid #58a6ff; border-radius:8px; padding:7px 12px; font-size:12px; color:#e6edf3; white-space:nowrap; pointer-events:none; opacity:0; transition:opacity .15s; z-index:60; transform:translate(-50%,-110%); line-height:1.7; text-align:center; }
 #mk-tooltip.below { transform:translate(-50%, 14px); }
 #mk-tooltip .tt-name { font-weight:700; font-size:13px; }
 #mk-tooltip .tt-match { font-size:12px; margin-top:3px; }
@@ -723,15 +723,16 @@ function getNextZ() {
       var allToday = grpBody.querySelectorAll('.grp-flag-today');
       for (var ti = 0; ti < allToday.length; ti++) allToday[ti].classList.remove('grp-flag-active');
       span.classList.add('grp-flag-active');
+      var todayStr2 = new Date().toISOString().slice(0, 10);
+      var todayMatch = null;
+      for (var mi2 = 0; mi2 < MATCHES.length; mi2++) {
+        var mm = MATCHES[mi2];
+        if (mm.date === todayStr2 && (mm.a === flag || mm.b === flag)) { todayMatch = mm; break; }
+      }
       openDrawer();
       highlightDrawerFlag(flag);
-      var cidx = findCountryByFlag(flag);
-      if (cidx >= 0) {
-        var cd = wc2026[cidx];
-        tooltip.innerHTML = buildMatchHtml(cd.flag, cd.name);
-        tooltip.style.opacity = '1';
-        activeMarkerIdx = cidx;
-        flyTo(cd.lat, cd.lon);
+      if (todayMatch) {
+        showMatchDetail(todayMatch.a, todayMatch.b, todayMatch.date, todayMatch.time, true, true);
       }
     });
   }
@@ -970,12 +971,12 @@ function getNextZ() {
     leftDrawer.classList.remove("open");
     drwOverlay.classList.remove("open");
   }
-  function showMatchDetail(a, b, date, time, doFly) {
+  function showMatchDetail(a, b, date, time, doFly, keepDrawer) {
     miFlags.innerHTML = fc(a) + ' ' + a + '<span class="mi-vs">vs</span>' + b + ' ' + fc(b);
     miTime.textContent  = time + " UTC / " + toET(time) + " / " + toJST(time);
     miDate.textContent  = date.slice(5).replace("-", "/");
     matchInfo.classList.add("open");
-    closeDrawer();
+    if (!keepDrawer) closeDrawer();
     schedulePanel.classList.remove("open");
     if (doFly) {
       var tidx = findCountryByFlag(a);
