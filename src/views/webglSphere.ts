@@ -90,7 +90,13 @@ input[type=range] { flex:1; accent-color:#58a6ff; }
 .drw-row.drw-live { background:rgba(63,185,80,.08); border-left:3px solid #3fb950; }
 #match-info { position:absolute; top:52px; left:50%; transform:translateX(-50%); z-index:6; background:rgba(13,17,23,0.93); border:1px solid #30363d; border-radius:12px; padding:14px 28px 12px; text-align:center; opacity:0; pointer-events:none; transition:opacity .2s; white-space:nowrap; box-shadow:0 4px 24px rgba(0,0,0,.7); }
 #match-info.open { opacity:1; pointer-events:auto; }
-.mi-flags { font-size:64px; letter-spacing:14px; line-height:1.1; }
+.mi-flags { font-size:56px; letter-spacing:4px; line-height:1.1; display:flex; align-items:center; justify-content:center; gap:10px; }
+.mi-vs { font-size:16px; color:#484f58; font-weight:700; }
+.grp-section { margin-bottom:18px; }
+.grp-section h2 { font-size:11px; font-weight:700; color:#58a6ff; text-transform:uppercase; letter-spacing:.5px; margin-bottom:8px; }
+.grp-row { display:flex; align-items:center; gap:6px; margin-bottom:5px; }
+.grp-label { font-size:10px; font-weight:700; color:#58a6ff; background:rgba(88,166,255,0.1); border:1px solid rgba(88,166,255,0.2); border-radius:4px; padding:1px 5px; width:20px; text-align:center; flex-shrink:0; }
+.grp-flags { font-size:18px; letter-spacing:2px; }
 .mi-time { font-size:13px; color:#58a6ff; font-family:monospace; margin-top:6px; }
 .mi-date { font-size:11px; color:#8b949e; margin-top:3px; }
 .mi-close { position:absolute; top:6px; right:10px; background:none; border:none; color:#8b949e; font-size:18px; line-height:1; cursor:pointer; padding:0; }
@@ -176,7 +182,22 @@ void main() {
   <div class="side">
     <div class="tip">ドラッグ: 回転 | ホイール: ズーム | ダブルクリック: 自動回転 ON/OFF<br>&#9917; = 2026 FIFAワールドカップ開催地（北米） | 各国旗 = 出場48ヵ国</div>
 
-    <h2>コントロール</h2>
+    <div class="grp-section">
+    <h2>グループ一覧</h2>
+    <div class="grp-row"><span class="grp-label">A</span><span class="grp-flags">🇲🇽 🇿🇦 🇰🇷 🇨🇿</span></div>
+    <div class="grp-row"><span class="grp-label">B</span><span class="grp-flags">🇨🇦 🇧🇦 🇶🇦 🇨🇭</span></div>
+    <div class="grp-row"><span class="grp-label">C</span><span class="grp-flags">🇺🇸 🇵🇾 🇦🇺 🇹🇷</span></div>
+    <div class="grp-row"><span class="grp-label">D</span><span class="grp-flags">🇧🇷 🇲🇦 🇭🇹 🏴󠁧󠁢󠁳󠁣󠁴󠁿</span></div>
+    <div class="grp-row"><span class="grp-label">E</span><span class="grp-flags">🇩🇪 🇨🇼 🇨🇮 🇪🇨</span></div>
+    <div class="grp-row"><span class="grp-label">F</span><span class="grp-flags">🇳🇱 🇯🇵 🇸🇪 🇹🇳</span></div>
+    <div class="grp-row"><span class="grp-label">G</span><span class="grp-flags">🇪🇸 🇨🇻 🇸🇦 🇺🇾</span></div>
+    <div class="grp-row"><span class="grp-label">H</span><span class="grp-flags">🇧🇪 🇪🇬 🇮🇷 🇳🇿</span></div>
+    <div class="grp-row"><span class="grp-label">I</span><span class="grp-flags">🇫🇷 🇸🇳 🇮🇶 🇳🇴</span></div>
+    <div class="grp-row"><span class="grp-label">J</span><span class="grp-flags">🇦🇷 🇩🇿 🇦🇹 🇯🇴</span></div>
+    <div class="grp-row"><span class="grp-label">K</span><span class="grp-flags">🇵🇹 🇨🇩 🇺🇿 🇨🇴</span></div>
+    <div class="grp-row"><span class="grp-label">L</span><span class="grp-flags">🏴󠁧󠁢󠁥󠁮󠁧󠁿 🇭🇷 🇬🇭 🇵🇦</span></div>
+  </div>
+  <h2>コントロール</h2>
     <div class="ctrl-row">
       <div class="ctrl-label">自転速度</div>
       <div class="slider-row">
@@ -692,7 +713,7 @@ void main() {
     drwOverlay.classList.remove("open");
   }
   function showMatchDetail(a, b, date, time, doFly) {
-    miFlags.textContent = a + "  " + b;
+    miFlags.innerHTML = fc(a) + ' ' + a + '<span class="mi-vs">vs</span>' + b + ' ' + fc(b);
     miTime.textContent  = time + " UTC / " + toET(time) + " / " + toJST(time);
     miDate.textContent  = date.slice(5).replace("-", "/");
     matchInfo.classList.add("open");
