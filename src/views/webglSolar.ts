@@ -132,12 +132,13 @@ input[type=range] { accent-color:#fdb813; width:120px; }
     });
   }
 
-  var W, H;
+  var W, H, scale;
   function resize() {
     W = canvas.offsetWidth;
     H = canvas.offsetHeight;
     canvas.width = W;
     canvas.height = H;
+    scale = Math.min(W, H) / 1400;
   }
   resize();
   window.addEventListener('resize', resize);
@@ -180,7 +181,7 @@ input[type=range] { accent-color:#fdb813; width:120px; }
   function drawOrbit(cx, cy, r) {
     ctx.beginPath();
     ctx.arc(cx, cy, r, 0, Math.PI * 2);
-    ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+    ctx.strokeStyle = 'rgba(255,255,255,0.2)';
     ctx.lineWidth = 1;
     ctx.stroke();
   }
@@ -292,11 +293,14 @@ input[type=range] { accent-color:#fdb813; width:120px; }
       ctx.fill();
     }
 
+    var sc = scale || 1;
+
     starScreenPos = [];
     for (var ni = 0; ni < namedStars.length; ni++) {
       var ns = namedStars[ni];
-      var nsx = cx + ns.ox;
-      var nsy = cy + ns.oy;
+      var nsx = cx + ns.ox * sc;
+      var nsy = cy + ns.oy * sc;
+      if (nsx < -20 || nsx > W + 20 || nsy < -20 || nsy > H + 20) continue;
       ctx.beginPath();
       ctx.arc(nsx, nsy, 5, 0, Math.PI * 2);
       ctx.fillStyle = ns.color;
@@ -307,17 +311,18 @@ input[type=range] { accent-color:#fdb813; width:120px; }
       ctx.lineWidth = 2;
       ctx.stroke();
       if (showStarLabels) {
-        ctx.font = '10px sans-serif';
+        ctx.font = '11px sans-serif';
         ctx.fillStyle = ns.color;
         ctx.fillText(ns.name, nsx + 8, nsy + 4);
       }
       starScreenPos.push({ x: nsx, y: nsy, item: ns });
     }
 
-    drawGlow(cx, cy, 40, '#fdb813');
+    var sunR = Math.max(16, 40 * sc);
+    drawGlow(cx, cy, sunR, '#fdb813');
     ctx.beginPath();
-    ctx.arc(cx, cy, 40, 0, Math.PI * 2);
-    var sunGrad = ctx.createRadialGradient(cx - 8, cy - 8, 4, cx, cy, 40);
+    ctx.arc(cx, cy, sunR, 0, Math.PI * 2);
+    var sunGrad = ctx.createRadialGradient(cx - sunR * 0.2, cy - sunR * 0.2, sunR * 0.1, cx, cy, sunR);
     sunGrad.addColorStop(0, '#fff5a0');
     sunGrad.addColorStop(0.5, '#fdb813');
     sunGrad.addColorStop(1, '#f57c00');
@@ -332,33 +337,35 @@ input[type=range] { accent-color:#fdb813; width:120px; }
     for (var pi = 0; pi < planets.length; pi++) {
       var pl = planets[pi];
       var ang = pl.angle + t / pl.period;
-      var px = cx + pl.orbitR * Math.cos(ang);
-      var py = cy + pl.orbitR * Math.sin(ang);
+      var orbitScaled = pl.orbitR * sc;
+      var px = cx + orbitScaled * Math.cos(ang);
+      var py = cy + orbitScaled * Math.sin(ang);
+      var pr = Math.max(3, pl.radius * sc * 1.4);
 
       if (pl.name === '地球') {
         earthX = px;
         earthY = py;
       }
 
-      if (showOrbits) drawOrbit(cx, cy, pl.orbitR);
+      if (showOrbits) drawOrbit(cx, cy, orbitScaled);
 
       if (pl.hasRings) {
-        drawRings(px, py, pl.radius);
+        drawRings(px, py, pr);
       }
 
-      drawPlanet(px, py, pl.radius, pl.color);
+      drawPlanet(px, py, pr, pl.color);
 
       if (pl.name === '木星') {
         ctx.save();
         ctx.beginPath();
-        ctx.arc(px, py, pl.radius, 0, Math.PI * 2);
+        ctx.arc(px, py, pr, 0, Math.PI * 2);
         ctx.clip();
         ctx.strokeStyle = 'rgba(160,100,40,0.4)';
         ctx.lineWidth = 3;
         for (var band = -3; band <= 3; band++) {
           ctx.beginPath();
-          ctx.moveTo(px - pl.radius, py + band * 6);
-          ctx.lineTo(px + pl.radius, py + band * 6);
+          ctx.moveTo(px - pr, py + band * (pr / 3));
+          ctx.lineTo(px + pr, py + band * (pr / 3));
           ctx.stroke();
         }
         ctx.restore();
@@ -367,30 +374,32 @@ input[type=range] { accent-color:#fdb813; width:120px; }
       if (showPlanetLabels) {
         ctx.font = '11px sans-serif';
         ctx.fillStyle = '#c9d1d9';
-        ctx.fillText(pl.jaName, px + pl.radius + 4, py + 4);
+        ctx.fillText(pl.jaName, px + pr + 4, py + 4);
       }
 
       planetScreenPos.push({ x: px, y: py, item: pl });
     }
 
+    var moonOrbitScaled = moon.orbitR * sc;
     if (showOrbits) {
       ctx.save();
       ctx.setLineDash([3, 4]);
-      drawOrbit(earthX, earthY, moon.orbitR);
+      drawOrbit(earthX, earthY, moonOrbitScaled);
       ctx.setLineDash([]);
       ctx.restore();
     }
 
     var moonAng = moon.angle + t / moon.period;
-    var moonX = earthX + moon.orbitR * Math.cos(moonAng);
-    var moonY = earthY + moon.orbitR * Math.sin(moonAng);
-    drawPlanet(moonX, moonY, moon.radius, moon.color);
+    var moonX = earthX + moonOrbitScaled * Math.cos(moonAng);
+    var moonY = earthY + moonOrbitScaled * Math.sin(moonAng);
+    var moonR = Math.max(2, moon.radius * sc * 1.4);
+    drawPlanet(moonX, moonY, moonR, moon.color);
     planetScreenPos.push({ x: moonX, y: moonY, item: moon });
 
     if (showPlanetLabels) {
       ctx.font = '10px sans-serif';
       ctx.fillStyle = '#888';
-      ctx.fillText('月', moonX + 5, moonY + 3);
+      ctx.fillText('月', moonX + moonR + 3, moonY + 3);
     }
   }
 
