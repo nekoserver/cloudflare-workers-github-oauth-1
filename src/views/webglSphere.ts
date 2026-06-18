@@ -43,7 +43,7 @@ canvas:active { cursor:grabbing; }
 #mk-tooltip .tt-past { color:#555d68; }
 #mk-tooltip .tt-mrow { margin-top:3px; font-size:12px; }
 #mk-tooltip .tt-mrow.tt-past { color:#555d68; }
-#mk-tooltip .tt-opp-tap { cursor:pointer; }
+#mk-tooltip .tt-opp-tap { cursor:pointer; font-size:36px; line-height:1.2; }
 #mk-tooltip .tt-opp-tap:hover { opacity:0.75; }
 #mk-tooltip .tt-date-tap { cursor:pointer; text-decoration:none; }
 #mk-tooltip .tt-date-tap:hover { opacity:0.75; }
@@ -104,7 +104,7 @@ input[type=range] { flex:1; accent-color:#58a6ff; }
 .grp-row { display:flex; align-items:center; gap:4px; margin-bottom:4px; }
 .grp-label { font-size:10px; font-weight:700; color:#58a6ff; background:rgba(88,166,255,0.1); border:1px solid rgba(88,166,255,0.2); border-radius:4px; padding:1px 4px; width:18px; text-align:center; flex-shrink:0; }
 .grp-flags { display:flex; gap:1px; }
-.grp-flag { display:inline-flex; width:30px; justify-content:center; align-items:center; border:2px solid #0d1117; border-radius:4px; padding:2px 0; line-height:1; font-size:16px; box-sizing:border-box; flex-shrink:0; }
+.grp-flag { display:inline-flex; width:30px; justify-content:center; align-items:center; border:2px solid #0d1117; border-radius:4px; padding:2px 0; line-height:1; font-size:16px; box-sizing:border-box; flex-shrink:0; cursor:pointer; }
 .grp-flag-today { border-color:rgba(139,148,158,0.45); cursor:pointer; }
 .grp-flag-today:hover { border-color:rgba(139,148,158,0.75); background:rgba(139,148,158,0.06); }
 .grp-flag-active { border-color:rgba(255,200,0,0.9) !important; background:rgba(255,200,0,0.07); }
@@ -294,7 +294,7 @@ void main() {
 <div id="drawer-overlay"></div>
 <div id="left-drawer">
   <div class="drw-hdr">
-    <span class="drw-title">&#9917; 2026 FIFA W杯 全104試合(32+72)</span>
+    <span class="drw-title">&#9917; 2026 FIFA W杯 全104試合(72+32)</span>
     <button class="drw-close" id="drwClose">&#10005;</button>
   </div>
   <div id="drw-cal"></div>
@@ -734,7 +734,7 @@ function getNextZ() {
     var GS_BG = 'rgba(88,166,255,0.18)';
     var wdays = ['日','月','火','水','木','金','土'];
     var html = '<div class="cal-wrap drw-cal-wrap">';
-    html += '<div class="cal-title">🏃6️⃣月 グループステージ (72)</div>';
+    html += '<div class="cal-title">🏃‍♂️‍➡️6️⃣月 グループステージ (72)</div>';
     html += '<div class="cal-legend"><span class="cal-leg" style="background:' + GS_BG + '">グループステージ</span></div>';
     html += '<div class="cal-grid">';
     for (var wi = 0; wi < 7; wi++) { html += '<div class="cal-cell cal-hdr">' + wdays[wi] + '</div>'; }
@@ -793,23 +793,41 @@ function getNextZ() {
       var nextMatch = null;
       var nextKo = Infinity;
       var fallback = null;
+      var fallbackKo = -Infinity;
       for (var mi2 = 0; mi2 < MATCHES.length; mi2++) {
         var mm = MATCHES[mi2];
         if (mm.a !== flag && mm.b !== flag) continue;
-        var ko2 = new Date(mm.date + "T" + mm.time + ":00Z").getTime();
+        var ko2 = new Date(mm.date + 'T' + mm.time + ':00Z').getTime();
         if (ko2 > now2 - 110*60000) {
           if (ko2 < nextKo) { nextMatch = mm; nextKo = ko2; }
         } else {
-          fallback = mm;
+          if (ko2 > fallbackKo) { fallback = mm; fallbackKo = ko2; }
         }
       }
       var match = nextMatch || fallback;
+      var targetFlag = flag;
+      if (match) {
+        if (match.a === flag) { targetFlag = match.a; }
+        else { targetFlag = match.b; }
+      }
       openDrawer();
       blinkCalToday();
-      highlightDrawerFlag(flag);
-      if (match) {
-        updateActiveDateFlags(match.date);
-        showMatchDetail(match.a, match.b, match.date, match.time, true, true);
+      highlightDrawerFlag(targetFlag);
+      if (match) { updateActiveDateFlags(match.date); }
+      var tidx2 = findCountryByFlag(targetFlag);
+      if (tidx2 >= 0) {
+        var td2 = wc2026[tidx2];
+        flyTo(td2.lat, td2.lon);
+        setTimeout(function() {
+          var mkEls = document.querySelectorAll('.mk');
+          var el2 = mkEls[tidx2];
+          var cx2 = el2 ? el2.getBoundingClientRect().left + el2.getBoundingClientRect().width/2 : canvasRect.left + canvasRect.width/2;
+          var cy2 = el2 ? el2.getBoundingClientRect().top + el2.getBoundingClientRect().height/2 : canvasRect.top + canvasRect.height/2;
+          tooltip.innerHTML = buildAllMatchesHtml(td2.flag, td2.name);
+          positionTooltip(cx2, cy2);
+          tooltip.style.opacity = '1';
+          activeMarkerIdx = tidx2;
+        }, 900);
       }
     });
   }
@@ -826,21 +844,27 @@ function getNextZ() {
   function highlightDrawerFlag(flag) {
     var rows = drwBody.querySelectorAll('.drw-row');
     var target = null;
+    var pastFallback = null;
     for (var i = 0; i < rows.length; i++) {
       rows[i].classList.remove('drw-highlight');
-      var a = rows[i].dataset.a, b = rows[i].dataset.b;
-      if ((a === flag || b === flag) && !rows[i].classList.contains('drw-past')) {
-        if (!target) target = rows[i];
+      var ra = rows[i].dataset.a, rb = rows[i].dataset.b;
+      if (ra === flag || rb === flag) {
+        if (!rows[i].classList.contains('drw-past')) {
+          if (!target) target = rows[i];
+        } else {
+          pastFallback = rows[i];
+        }
       }
     }
-    if (target) {
-      var sec = target.closest('.drw-section');
+    var chosen = target || pastFallback;
+    if (chosen) {
+      var sec = chosen.closest('.drw-section');
       if (sec) {
         drwBody.querySelectorAll('.drw-section').forEach(function(s) { s.classList.remove('open'); });
         sec.classList.add('open');
       }
-      target.classList.add('drw-highlight');
-      setTimeout(function() { target.scrollIntoView({behavior:'smooth', block:'center'}); }, 80);
+      chosen.classList.add('drw-highlight');
+      setTimeout(function() { chosen.scrollIntoView({behavior:'smooth', block:'center'}); }, 80);
     }
   }
 
