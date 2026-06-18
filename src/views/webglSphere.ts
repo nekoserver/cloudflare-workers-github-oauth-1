@@ -94,10 +94,23 @@ input[type=range] { flex:1; accent-color:#58a6ff; }
 .mi-vs { font-size:16px; color:#484f58; font-weight:700; }
 .grp-section { margin-bottom:18px; }
 .grp-section h2 { font-size:11px; font-weight:700; color:#58a6ff; text-transform:uppercase; letter-spacing:.5px; margin-bottom:8px; }
-.grp-row { display:flex; align-items:center; gap:6px; margin-bottom:5px; }
-.grp-label { font-size:10px; font-weight:700; color:#58a6ff; background:rgba(88,166,255,0.1); border:1px solid rgba(88,166,255,0.2); border-radius:4px; padding:1px 5px; width:20px; text-align:center; flex-shrink:0; }
-.grp-flags { font-size:18px; letter-spacing:2px; }
-.grp-flag-today { display:inline-block; border:2.5px solid rgba(255,240,60,0.55); border-radius:5px; padding:2px 4px; line-height:1; margin:0 1px; }
+.grp-row { display:flex; align-items:center; gap:4px; margin-bottom:4px; }
+.grp-label { font-size:10px; font-weight:700; color:#58a6ff; background:rgba(88,166,255,0.1); border:1px solid rgba(88,166,255,0.2); border-radius:4px; padding:1px 4px; width:18px; text-align:center; flex-shrink:0; }
+.grp-flags { display:flex; gap:1px; }
+.grp-flag { display:inline-flex; width:30px; justify-content:center; align-items:center; border:2px solid #0d1117; border-radius:4px; padding:2px 0; line-height:1; font-size:16px; box-sizing:border-box; flex-shrink:0; }
+.grp-flag-today { border-color:rgba(255,240,60,0.55); cursor:pointer; }
+.grp-flag-today:hover { border-color:rgba(255,240,60,0.85); background:rgba(255,240,60,0.06); }
+.drw-row.drw-highlight { background:rgba(255,240,60,0.12); border-left:3px solid rgba(255,240,60,0.7); }
+.cal-wrap { margin-bottom:14px; }
+.cal-title { font-size:10px; font-weight:700; color:#58a6ff; text-transform:uppercase; letter-spacing:.5px; margin-bottom:5px; }
+.cal-legend { display:flex; flex-wrap:wrap; gap:3px; margin-bottom:5px; }
+.cal-leg { font-size:8px; font-weight:700; padding:1px 4px; border-radius:3px; color:#e6edf3; }
+.cal-grid { display:grid; grid-template-columns:repeat(7,1fr); gap:2px; }
+.cal-cell { font-size:9px; text-align:center; padding:3px 0 2px; border-radius:3px; color:#484f58; line-height:1.3; }
+.cal-hdr { font-weight:700; color:#30363d; font-size:8px; padding-bottom:3px; }
+.cal-match { color:#e6edf3; }
+.cal-today { outline:1.5px solid #58a6ff; outline-offset:-1px; }
+.cal-rlabel { font-size:7px; font-weight:700; color:rgba(255,255,255,0.75); line-height:1; margin-top:1px; }
 .mi-time { font-size:13px; color:#58a6ff; font-family:monospace; margin-top:6px; }
 .mi-date { font-size:11px; color:#8b949e; margin-top:3px; }
 .mi-close { position:absolute; top:6px; right:10px; background:none; border:none; color:#8b949e; font-size:18px; line-height:1; cursor:pointer; padding:0; }
@@ -208,7 +221,7 @@ void main() {
     </div>
   </div>
   <div class="side">
-    <div class="tip">ドラッグ: 回転 | ホイール: ズーム | ダブルクリック: 自動回転 ON/OFF<br>&#9917; = 2026 FIFAワールドカップ開催地（北米） | 各国旗 = 出場48ヵ国</div>
+    <div id="cal-section"></div>
 
     <div class="grp-section">
     <h2>グループ一覧</h2>
@@ -637,6 +650,51 @@ function getNextZ() {
     {g:'L', f:['🏴󠁧󠁢󠁥󠁮󠁧󠁿','🇭🇷','🇬🇭','🇵🇦']}
   ];
 
+  var CAL_R32_BG = 'rgba(88,166,255,0.18)';
+  var CAL_R16_BG = 'rgba(88,166,255,0.32)';
+  var CAL_QF_BG  = 'rgba(88,166,255,0.50)';
+  var CAL_SF_BG  = 'rgba(88,166,255,0.66)';
+  var CAL_3RD_BG = 'rgba(88,166,255,0.50)';
+  var CAL_FIN_BG = 'rgba(88,166,255,0.90)';
+  var CAL_DAYS = {
+    1:CAL_R32_BG,2:CAL_R32_BG,3:CAL_R32_BG,4:CAL_R32_BG,5:CAL_R32_BG,6:CAL_R32_BG,
+    8:CAL_R16_BG,9:CAL_R16_BG,10:CAL_R16_BG,11:CAL_R16_BG,12:CAL_R16_BG,
+    14:CAL_QF_BG,15:CAL_QF_BG,16:CAL_QF_BG,
+    19:CAL_SF_BG,20:CAL_SF_BG,
+    23:CAL_3RD_BG,
+    26:CAL_FIN_BG
+  };
+  var CAL_LABELS = {1:'R32',8:'R16',14:'QF',19:'SF',23:'3位',26:'決勝'};
+
+  function buildCalendar() {
+    var sec = document.getElementById('cal-section');
+    if (!sec) return;
+    var firstDow = new Date(2026, 6, 1).getDay();
+    var todayStr = new Date().toISOString().slice(0, 10);
+    var todayDay = todayStr.startsWith('2026-07-') ? parseInt(todayStr.slice(8), 10) : 0;
+    var wdays = ['日','月','火','水','木','金','土'];
+    var html = '<div class="cal-wrap">';
+    html += '<div class="cal-title">&#127942; 7月 ノックアウトステージ</div>';
+    html += '<div class="cal-legend">';
+    html += '<span class="cal-leg" style="background:' + CAL_R32_BG + '">R32</span>';
+    html += '<span class="cal-leg" style="background:' + CAL_R16_BG + '">R16</span>';
+    html += '<span class="cal-leg" style="background:' + CAL_QF_BG  + '">QF</span>';
+    html += '<span class="cal-leg" style="background:' + CAL_SF_BG  + '">SF</span>';
+    html += '<span class="cal-leg" style="background:' + CAL_FIN_BG + ';color:#0d1117">決勝</span>';
+    html += '</div><div class="cal-grid">';
+    for (var wi = 0; wi < 7; wi++) { html += '<div class="cal-cell cal-hdr">' + wdays[wi] + '</div>'; }
+    for (var ei = 0; ei < firstDow; ei++) { html += '<div class="cal-cell"></div>'; }
+    for (var di = 1; di <= 31; di++) {
+      var bg = CAL_DAYS[di] || '';
+      var cls = 'cal-cell' + (bg ? ' cal-match' : '') + (di === todayDay ? ' cal-today' : '');
+      var style = bg ? 'background:' + bg : '';
+      var lbl = CAL_LABELS[di] ? '<div class="cal-rlabel">' + CAL_LABELS[di] + '</div>' : '';
+      html += '<div class="' + cls + '" style="' + style + '">' + di + lbl + '</div>';
+    }
+    html += '</div></div>';
+    sec.innerHTML = html;
+  }
+
   function buildGroupsPanel() {
     var grpBody = document.getElementById('grp-body');
     if (!grpBody) return;
@@ -649,16 +707,37 @@ function getNextZ() {
     GROUPS.forEach(function(grp) {
       html += '<div class="grp-row"><span class="grp-label">' + grp.g + '</span><span class="grp-flags">';
       grp.f.forEach(function(flag) {
-        if (todayFlags[flag]) {
-          html += '<span class="grp-flag-today">' + flag + '</span>';
-        } else {
-          html += flag;
-        }
-        html += ' ';
+        var cls = 'grp-flag' + (todayFlags[flag] ? ' grp-flag-today' : '');
+        var enc = flag.replace(/&/g, '&amp;');
+        html += '<span class="' + cls + '" data-flag="' + enc + '">' + flag + '</span>';
       });
       html += '</span></div>';
     });
     grpBody.innerHTML = html;
+    grpBody.addEventListener('click', function(e) {
+      var span = e.target.closest('.grp-flag-today');
+      if (!span) return;
+      var flag = span.dataset.flag;
+      if (!flag) return;
+      openDrawer();
+      highlightDrawerFlag(flag);
+    });
+  }
+
+  function highlightDrawerFlag(flag) {
+    var rows = drwBody.querySelectorAll('.drw-row');
+    var target = null;
+    for (var i = 0; i < rows.length; i++) {
+      rows[i].classList.remove('drw-highlight');
+      var a = rows[i].dataset.a, b = rows[i].dataset.b;
+      if ((a === flag || b === flag) && !rows[i].classList.contains('drw-past')) {
+        if (!target) target = rows[i];
+      }
+    }
+    if (target) {
+      target.classList.add('drw-highlight');
+      setTimeout(function() { target.scrollIntoView({behavior:'smooth', block:'center'}); }, 80);
+    }
   }
 
   var TNMT_ROUNDS = [
@@ -1117,6 +1196,7 @@ function getNextZ() {
       frames = 0; lastFps = now;
     }
   }
+  buildCalendar();
   buildGroupsPanel();
   requestAnimationFrame(frame);
 })();
