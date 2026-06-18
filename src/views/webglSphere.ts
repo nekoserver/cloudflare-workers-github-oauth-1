@@ -32,13 +32,18 @@ canvas:active { cursor:grabbing; }
 #markers { position:absolute; top:0; left:0; width:100%; height:100%; pointer-events:none; overflow:hidden; }
 .mk { position:absolute; transform:translate(-50%,-50%); line-height:1; font-size:18px; text-shadow:0 1px 3px #000,0 0 8px rgba(0,0,0,0.9); pointer-events:auto; cursor:pointer; user-select:none; -webkit-user-select:none; }
 .mk-ball { font-size:28px; }
-#mk-tooltip { position:fixed; background:rgba(13,17,23,0.97); border:1px solid #58a6ff; border-radius:8px; padding:7px 12px; font-size:12px; color:#e6edf3; white-space:nowrap; pointer-events:none; opacity:0; transition:opacity .15s; z-index:60; transform:translate(-50%,-110%); line-height:1.7; text-align:center; }
+#mk-tooltip { position:fixed; background:rgba(13,17,23,0.97); border:1px solid #58a6ff; border-radius:8px; padding:7px 12px; font-size:12px; color:#e6edf3; white-space:normal; max-width:300px; pointer-events:auto; opacity:0; transition:opacity .15s; z-index:60; transform:translate(-50%,-110%); line-height:1.7; text-align:center; }
 #mk-tooltip.below { transform:translate(-50%, 14px); }
 #mk-tooltip .tt-name { font-weight:700; font-size:13px; }
 #mk-tooltip .tt-match { font-size:12px; margin-top:3px; }
 #mk-tooltip .tt-flags { font-size:18px; letter-spacing:2px; }
 #mk-tooltip .tt-time { color:#58a6ff; font-family:monospace; }
 #mk-tooltip .tt-past { color:#555d68; }
+#mk-tooltip .tt-mrow { margin-top:2px; font-size:12px; }
+#mk-tooltip .tt-mrow.tt-past { color:#555d68; }
+#mk-tooltip .tt-opp-tap { cursor:pointer; font-size:17px; }
+#mk-tooltip .tt-opp-tap:hover { opacity:0.75; }
+#mk-tooltip .tt-date-tap { cursor:pointer; color:#58a6ff; font-size:11px; text-decoration:underline; }
 .mk.elim { filter:grayscale(0.85) brightness(0.28) saturate(0.15); }
 #schedule-panel { position:fixed; bottom:0; left:0; right:0; z-index:55; background:#0d1117; border-top:2px solid #58a6ff; border-radius:12px 12px 0 0; max-height:68vh; overflow-y:auto; transform:translateY(100%); transition:transform .3s ease; box-shadow:0 -4px 30px rgba(0,0,0,.8); }
 #schedule-panel.open { transform:translateY(0); }
@@ -1018,6 +1023,42 @@ function getNextZ() {
 
   function hideTooltip() { tooltip.style.opacity = "0"; activeMarkerIdx = -1; }
 
+  function navigateToFlag(flag) {
+    var idx2 = findCountryByFlag(flag);
+    if (idx2 < 0) return;
+    var d2 = wc2026[idx2];
+    hideTooltip();
+    activeMarkerIdx = idx2;
+    flyTo(d2.lat, d2.lon);
+    setTimeout(function() {
+      var r2 = document.querySelectorAll('.mk')[idx2];
+      var cx = r2 ? r2.getBoundingClientRect().left + r2.getBoundingClientRect().width/2 : canvasRect.left + canvasRect.width/2;
+      var cy = r2 ? r2.getBoundingClientRect().top + r2.getBoundingClientRect().height/2 : canvasRect.top + canvasRect.height/2;
+      tooltip.innerHTML = buildAllMatchesHtml(d2.flag, d2.name);
+      positionTooltip(cx, cy);
+      tooltip.style.opacity = '1';
+    }, 900);
+  }
+
+  tooltip.addEventListener('click', function(e) {
+    e.stopPropagation();
+    var oppSpan = e.target.closest('.tt-opp-tap');
+    if (oppSpan) {
+      var oppFlag = oppSpan.dataset.flag;
+      if (oppFlag) { navigateToFlag(oppFlag); return; }
+    }
+    var dateTap = e.target.closest('.tt-date-tap');
+    if (dateTap) {
+      var dateStr2 = dateTap.dataset.date;
+      if (dateStr2) {
+        hideTooltip();
+        openDrawer();
+        openDateSection(dateStr2);
+        updateActiveDateFlags(dateStr2);
+      }
+    }
+  });
+
   function positionTooltip(vx, vy) {
     var isNearTop = vy < canvasRect.top + 80;
     tooltip.style.left = vx + "px";
@@ -1025,22 +1066,41 @@ function getNextZ() {
     if (isNearTop) { tooltip.classList.add("below"); } else { tooltip.classList.remove("below"); }
   }
 
-  function buildMatchHtml(flag, name) {
+  function buildAllMatchesHtml(flag, name) {
     var nm = '<div class="tt-name">' + name + '</div>';
-    var info = getNextMatch(flag);
-    if (!info) return nm;
-    var m = info.m;
-    var md = m.date.slice(5).replace("-", "/");
-    if (info.past) {
-      return nm + '<div class="tt-match tt-past"><span class="tt-flags">' + flag + ' - ' + m.opp + '</span>  ' + md + ' ' + m.time + ' UTC 終了</div>';
+    var ms = teamMatches[flag];
+    if (!ms || ms.length === 0) return nm;
+    var now2 = Date.now();
+    var sorted = ms.slice().sort(function(x, y) { return (x.date + x.time) < (y.date + y.time) ? -1 : 1; });
+    var nearestFutureIdx = -1;
+    for (var i = 0; i < sorted.length; i++) {
+      var ko2 = new Date(sorted[i].date + 'T' + sorted[i].time + ':00Z').getTime();
+      if (ko2 > now2 - 110*60000) { nearestFutureIdx = i; break; }
     }
-    return nm + '<div class="tt-match"><span class="tt-flags">' + flag + ' - ' + m.opp + '</span>  ' + md + '<br><span class="tt-time">' + m.time + ' UTC / ' + toET(m.time) + ' / ' + toJST(m.time) + '</span></div>';
+    var html = nm;
+    for (var j = 0; j < sorted.length; j++) {
+      var m2 = sorted[j];
+      var md2 = m2.date.slice(5).replace('-', '/');
+      var ko3 = new Date(m2.date + 'T' + m2.time + ':00Z').getTime();
+      var isPast = ko3 <= now2 - 110*60000;
+      var isNearest = (j === nearestFutureIdx);
+      var oppCode = flagCode(m2.opp);
+      var oppSpan = '<span class="tt-opp-tap" data-flag="' + m2.opp + '">' + m2.opp + (oppCode ? oppCode : '') + '</span>';
+      if (isPast) {
+        html += '<div class="tt-mrow tt-past">' + flag + ' - ' + oppSpan + ' ' + md2 + '</div>';
+      } else if (isNearest) {
+        html += '<div class="tt-mrow">' + flag + ' - ' + oppSpan + ' ' + md2 + '<br><span class="tt-time">' + m2.time + ' UTC / ' + toET(m2.time) + ' / ' + toJST(m2.time) + '</span></div>';
+      } else {
+        html += '<div class="tt-mrow"><span class="tt-date-tap" data-date="' + m2.date + '">' + md2 + '</span> ' + flag + ' - ' + oppSpan + '</div>';
+      }
+    }
+    return html;
   }
 
   function showTooltip(idx, vx, vy) {
     var d = wc2026[idx];
     if (d.ball) { showSchedulePanel(); return; }
-    tooltip.innerHTML = buildMatchHtml(d.flag, d.name);
+    tooltip.innerHTML = buildAllMatchesHtml(d.flag, d.name);
     positionTooltip(vx, vy);
     tooltip.style.opacity = "1";
     activeMarkerIdx = idx;
@@ -1078,7 +1138,7 @@ function getNextZ() {
       var tidx = findCountryByFlag(a);
       if (tidx >= 0) {
         var td = wc2026[tidx];
-        tooltip.innerHTML = buildMatchHtml(td.flag, td.name);
+        tooltip.innerHTML = buildAllMatchesHtml(td.flag, td.name);
         activeMarkerIdx = tidx;
         flyTo(td.lat, td.lon);
       }
@@ -1286,7 +1346,7 @@ function getNextZ() {
         }
         if (bestIdx >= 0) {
           var bd = wc2026[bestIdx];
-          tooltip.innerHTML = buildMatchHtml(bd.flag, bd.name);
+          tooltip.innerHTML = buildAllMatchesHtml(bd.flag, bd.name);
           activeMarkerIdx = bestIdx;
           flyTo(bd.lat, bd.lon);
         }
