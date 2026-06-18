@@ -775,24 +775,33 @@ function getNextZ() {
     });
     grpBody.innerHTML = html;
     grpBody.addEventListener('click', function(e) {
-      var span = e.target.closest('.grp-flag-today');
+      var span = e.target.closest('.grp-flag');
       if (!span) return;
       var flag = span.dataset.flag;
       if (!flag) return;
-      var allToday = grpBody.querySelectorAll('.grp-flag-today');
-      for (var ti = 0; ti < allToday.length; ti++) allToday[ti].classList.remove('grp-flag-active');
+      grpBody.querySelectorAll('.grp-flag').forEach(function(s) { s.classList.remove('grp-flag-active'); });
       span.classList.add('grp-flag-active');
-      var todayStr2 = new Date().toISOString().slice(0, 10);
-      var todayMatch = null;
+      var now2 = Date.now();
+      var nextMatch = null;
+      var nextKo = Infinity;
+      var fallback = null;
       for (var mi2 = 0; mi2 < MATCHES.length; mi2++) {
         var mm = MATCHES[mi2];
-        if (mm.date === todayStr2 && (mm.a === flag || mm.b === flag)) { todayMatch = mm; break; }
+        if (mm.a !== flag && mm.b !== flag) continue;
+        var ko2 = new Date(mm.date + "T" + mm.time + ":00Z").getTime();
+        if (ko2 > now2 - 110*60000) {
+          if (ko2 < nextKo) { nextMatch = mm; nextKo = ko2; }
+        } else {
+          fallback = mm;
+        }
       }
+      var match = nextMatch || fallback;
       openDrawer();
       blinkCalToday();
       highlightDrawerFlag(flag);
-      if (todayMatch) {
-        showMatchDetail(todayMatch.a, todayMatch.b, todayMatch.date, todayMatch.time, true, true);
+      if (match) {
+        updateActiveDateFlags(match.date);
+        showMatchDetail(match.a, match.b, match.date, match.time, true, true);
       }
     });
   }
