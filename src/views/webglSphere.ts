@@ -32,18 +32,21 @@ canvas:active { cursor:grabbing; }
 #markers { position:absolute; top:0; left:0; width:100%; height:100%; pointer-events:none; overflow:hidden; }
 .mk { position:absolute; transform:translate(-50%,-50%); line-height:1; font-size:18px; text-shadow:0 1px 3px #000,0 0 8px rgba(0,0,0,0.9); pointer-events:auto; cursor:pointer; user-select:none; -webkit-user-select:none; }
 .mk-ball { font-size:28px; }
-#mk-tooltip { position:fixed; background:rgba(13,17,23,0.97); border:1px solid #58a6ff; border-radius:8px; padding:7px 12px; font-size:12px; color:#e6edf3; white-space:normal; max-width:300px; pointer-events:auto; opacity:0; transition:opacity .15s; z-index:60; transform:translate(-50%,-110%); line-height:1.7; text-align:center; }
+#mk-tooltip { position:fixed; background:rgba(13,17,23,0.97); border:1px solid #58a6ff; border-radius:8px; padding:8px 14px; font-size:12px; color:#e6edf3; white-space:normal; max-width:320px; pointer-events:auto; opacity:0; transition:opacity .15s; z-index:60; transform:translate(-50%,-110%); line-height:1.7; text-align:center; }
 #mk-tooltip.below { transform:translate(-50%, 14px); }
+#mk-tooltip .tt-flag-lg { font-size:28px; line-height:1.3; display:block; }
 #mk-tooltip .tt-name { font-weight:700; font-size:13px; }
+#mk-tooltip .tt-code { font-size:11px; color:#8b949e; letter-spacing:1px; margin-bottom:4px; }
 #mk-tooltip .tt-match { font-size:12px; margin-top:3px; }
 #mk-tooltip .tt-flags { font-size:18px; letter-spacing:2px; }
-#mk-tooltip .tt-time { color:#58a6ff; font-family:monospace; }
+#mk-tooltip .tt-time { color:#58a6ff; font-family:monospace; white-space:nowrap; font-size:11px; display:block; }
 #mk-tooltip .tt-past { color:#555d68; }
-#mk-tooltip .tt-mrow { margin-top:2px; font-size:12px; }
+#mk-tooltip .tt-mrow { margin-top:3px; font-size:12px; }
 #mk-tooltip .tt-mrow.tt-past { color:#555d68; }
-#mk-tooltip .tt-opp-tap { cursor:pointer; font-size:17px; }
+#mk-tooltip .tt-opp-tap { cursor:pointer; }
 #mk-tooltip .tt-opp-tap:hover { opacity:0.75; }
-#mk-tooltip .tt-date-tap { cursor:pointer; color:#58a6ff; font-size:11px; text-decoration:underline; }
+#mk-tooltip .tt-date-tap { cursor:pointer; text-decoration:none; }
+#mk-tooltip .tt-date-tap:hover { opacity:0.75; }
 .mk.elim { filter:grayscale(0.85) brightness(0.28) saturate(0.15); }
 #schedule-panel { position:fixed; bottom:0; left:0; right:0; z-index:55; background:#0d1117; border-top:2px solid #58a6ff; border-radius:12px 12px 0 0; max-height:68vh; overflow-y:auto; transform:translateY(100%); transition:transform .3s ease; box-shadow:0 -4px 30px rgba(0,0,0,.8); }
 #schedule-panel.open { transform:translateY(0); }
@@ -1067,9 +1070,10 @@ function getNextZ() {
   }
 
   function buildAllMatchesHtml(flag, name) {
-    var nm = '<div class="tt-name">' + name + '</div>';
+    var code = flagCode(flag);
+    var hdr = '<span class="tt-flag-lg">' + flag + '</span><div class="tt-name">' + name + '</div>' + (code ? '<div class="tt-code">' + code + '</div>' : '');
     var ms = teamMatches[flag];
-    if (!ms || ms.length === 0) return nm;
+    if (!ms || ms.length === 0) return hdr;
     var now2 = Date.now();
     var sorted = ms.slice().sort(function(x, y) { return (x.date + x.time) < (y.date + y.time) ? -1 : 1; });
     var nearestFutureIdx = -1;
@@ -1077,7 +1081,7 @@ function getNextZ() {
       var ko2 = new Date(sorted[i].date + 'T' + sorted[i].time + ':00Z').getTime();
       if (ko2 > now2 - 110*60000) { nearestFutureIdx = i; break; }
     }
-    var html = nm;
+    var html = hdr;
     for (var j = 0; j < sorted.length; j++) {
       var m2 = sorted[j];
       var md2 = m2.date.slice(5).replace('-', '/');
@@ -1085,13 +1089,15 @@ function getNextZ() {
       var isPast = ko3 <= now2 - 110*60000;
       var isNearest = (j === nearestFutureIdx);
       var oppCode = flagCode(m2.opp);
-      var oppSpan = '<span class="tt-opp-tap" data-flag="' + m2.opp + '">' + m2.opp + (oppCode ? oppCode : '') + '</span>';
+      var oppTap = '<span class="tt-opp-tap" data-flag="' + m2.opp + '">' + m2.opp + '</span>';
+      var oppCodeSpan = oppCode ? '<span class="tt-opp-tap" data-flag="' + m2.opp + '">' + oppCode + '</span>' : '';
+      var dateTap = '<span class="tt-date-tap" data-date="' + m2.date + '">' + md2 + '</span>';
       if (isPast) {
-        html += '<div class="tt-mrow tt-past">' + flag + ' - ' + oppSpan + ' ' + md2 + '</div>';
+        html += '<div class="tt-mrow tt-past">' + oppTap + ' ' + oppCodeSpan + ' ' + dateTap + '</div>';
       } else if (isNearest) {
-        html += '<div class="tt-mrow">' + flag + ' - ' + oppSpan + ' ' + md2 + '<br><span class="tt-time">' + m2.time + ' UTC / ' + toET(m2.time) + ' / ' + toJST(m2.time) + '</span></div>';
+        html += '<div class="tt-mrow">' + oppTap + ' ' + oppCodeSpan + ' ' + dateTap + '<span class="tt-time">' + m2.time + ' UTC / ' + toET(m2.time) + ' / ' + toJST(m2.time) + '</span></div>';
       } else {
-        html += '<div class="tt-mrow"><span class="tt-date-tap" data-date="' + m2.date + '">' + md2 + '</span> ' + flag + ' - ' + oppSpan + '</div>';
+        html += '<div class="tt-mrow">' + oppTap + ' ' + oppCodeSpan + ' ' + dateTap + '</div>';
       }
     }
     return html;
