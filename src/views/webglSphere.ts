@@ -182,22 +182,7 @@ void main() {
   <div class="side">
     <div class="tip">ドラッグ: 回転 | ホイール: ズーム | ダブルクリック: 自動回転 ON/OFF<br>&#9917; = 2026 FIFAワールドカップ開催地（北米） | 各国旗 = 出場48ヵ国</div>
 
-    <div class="grp-section">
-    <h2>グループ一覧</h2>
-    <div class="grp-row"><span class="grp-label">A</span><span class="grp-flags">🇲🇽 🇿🇦 🇰🇷 🇨🇿</span></div>
-    <div class="grp-row"><span class="grp-label">B</span><span class="grp-flags">🇨🇦 🇧🇦 🇶🇦 🇨🇭</span></div>
-    <div class="grp-row"><span class="grp-label">C</span><span class="grp-flags">🇺🇸 🇵🇾 🇦🇺 🇹🇷</span></div>
-    <div class="grp-row"><span class="grp-label">D</span><span class="grp-flags">🇧🇷 🇲🇦 🇭🇹 🏴󠁧󠁢󠁳󠁣󠁴󠁿</span></div>
-    <div class="grp-row"><span class="grp-label">E</span><span class="grp-flags">🇩🇪 🇨🇼 🇨🇮 🇪🇨</span></div>
-    <div class="grp-row"><span class="grp-label">F</span><span class="grp-flags">🇳🇱 🇯🇵 🇸🇪 🇹🇳</span></div>
-    <div class="grp-row"><span class="grp-label">G</span><span class="grp-flags">🇪🇸 🇨🇻 🇸🇦 🇺🇾</span></div>
-    <div class="grp-row"><span class="grp-label">H</span><span class="grp-flags">🇧🇪 🇪🇬 🇮🇷 🇳🇿</span></div>
-    <div class="grp-row"><span class="grp-label">I</span><span class="grp-flags">🇫🇷 🇸🇳 🇮🇶 🇳🇴</span></div>
-    <div class="grp-row"><span class="grp-label">J</span><span class="grp-flags">🇦🇷 🇩🇿 🇦🇹 🇯🇴</span></div>
-    <div class="grp-row"><span class="grp-label">K</span><span class="grp-flags">🇵🇹 🇨🇩 🇺🇿 🇨🇴</span></div>
-    <div class="grp-row"><span class="grp-label">L</span><span class="grp-flags">🏴󠁧󠁢󠁥󠁮󠁧󠁿 🇭🇷 🇬🇭 🇵🇦</span></div>
-  </div>
-  <h2>コントロール</h2>
+    <h2>コントロール</h2>
     <div class="ctrl-row">
       <div class="ctrl-label">自転速度</div>
       <div class="slider-row">
