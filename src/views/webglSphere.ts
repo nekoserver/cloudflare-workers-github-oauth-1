@@ -699,7 +699,7 @@ function getNextZ() {
     var todayStr = new Date().toISOString().slice(0, 10);
     var todayDay = todayStr.startsWith('2026-07-') ? parseInt(todayStr.slice(8), 10) : 0;
     var wdays = ['日','月','火','水','木','金','土'];
-    var html = '<div class="cal-month-hdr">📅7️⃣</div>';
+    var html = '<div class="cal-month-hdr">7️⃣</div>';
     html += '<div class="cal-wrap">';
     html += '<div class="cal-title">🏆 ノックアウトステージ (32)🏃‍♂️‍➡️</div>';
     html += '<div class="cal-legend">';
@@ -736,7 +736,7 @@ function getNextZ() {
     var todayDay = todayStr.startsWith('2026-06-') ? parseInt(todayStr.slice(8), 10) : 0;
     var GS_BG = 'rgba(88,166,255,0.18)';
     var wdays = ['日','月','火','水','木','金','土'];
-    var html = '<div class="cal-month-hdr">📅6️⃣</div>';
+    var html = '<div class="cal-month-hdr">6️⃣</div>';
     html += '<div class="cal-wrap drw-cal-wrap">';
     html += '<div class="cal-title">🏃‍♂️‍➡️ グループステージ (72)</div>';
     html += '<div class="cal-legend"><span class="cal-leg" style="background:' + GS_BG + '">グループステージ</span></div>';
@@ -816,7 +816,7 @@ function getNextZ() {
       }
       openDrawer();
       blinkCalToday();
-      blinkCalDate(match ? match.date : null);
+      blinkCalDate(match ? match.date : null, true);
       highlightDrawerFlag(targetFlag);
       if (match) { updateActiveDateFlags(match.date); }
       var tidx2 = findCountryByFlag(targetFlag);
@@ -846,16 +846,29 @@ function getNextZ() {
     cell.addEventListener('animationend', function() { cell.classList.remove('cal-today-blink'); }, {once: true});
   }
 
-  function blinkCalDate(dateStr) {
+  function blinkCalDate(dateStr, withPin) {
     if (!dateStr) return;
     var container = dateStr.startsWith('2026-06-') ? document.getElementById('drw-cal') : document.getElementById('cal-section');
     if (!container) return;
     var cell = container.querySelector('[data-date="' + dateStr + '"]');
     if (!cell) return;
+    var pinEl = cell.querySelector('.cal-pin');
+    if (pinEl) { pinEl.parentNode.removeChild(pinEl); }
     cell.classList.remove('cal-today-blink');
     void cell.offsetWidth;
     cell.classList.add('cal-today-blink');
-    cell.addEventListener('animationend', function() { cell.classList.remove('cal-today-blink'); }, {once: true});
+    cell.addEventListener('animationend', function() {
+      cell.classList.remove('cal-today-blink');
+      if (withPin) {
+        var oldPin = cell.querySelector('.cal-pin');
+        if (!oldPin) {
+          var p = document.createElement('div');
+          p.className = 'cal-rlabel cal-pin';
+          p.textContent = '⛳';
+          cell.appendChild(p);
+        }
+      }
+    }, {once: true});
   }
 
   function highlightDrawerFlag(flag) {
