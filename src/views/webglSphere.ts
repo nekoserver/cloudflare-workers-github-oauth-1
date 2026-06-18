@@ -748,7 +748,7 @@ function getNextZ() {
       var isToday = di === todayDay;
       var cls = 'cal-cell' + (isMatch ? ' cal-match' : '') + (isToday ? ' cal-today' : '');
       var style = isMatch ? 'background:' + GS_BG : '';
-      var lbl = isToday ? '<div class="cal-rlabel">🏁</div>' : '';
+      var lbl = '';
       var dStr = '2026-06-' + (di < 10 ? '0' + di : '' + di);
       var dateAttr = isMatch ? ' data-date="' + dStr + '"' : '';
       html += '<div class="' + cls + '"' + dateAttr + ' style="' + style + '">' + di + lbl + '</div>';
@@ -816,6 +816,7 @@ function getNextZ() {
       }
       openDrawer();
       blinkCalToday();
+      document.querySelectorAll('.cal-pin').forEach(function(p) { p.parentNode.removeChild(p); });
       blinkCalDate(match ? match.date : null, true);
       highlightDrawerFlag(targetFlag);
       if (match) { updateActiveDateFlags(match.date); }
@@ -852,21 +853,16 @@ function getNextZ() {
     if (!container) return;
     var cell = container.querySelector('[data-date="' + dateStr + '"]');
     if (!cell) return;
-    var pinEl = cell.querySelector('.cal-pin');
-    if (pinEl) { pinEl.parentNode.removeChild(pinEl); }
     cell.classList.remove('cal-today-blink');
     void cell.offsetWidth;
     cell.classList.add('cal-today-blink');
     cell.addEventListener('animationend', function() {
       cell.classList.remove('cal-today-blink');
       if (withPin) {
-        var oldPin = cell.querySelector('.cal-pin');
-        if (!oldPin) {
-          var p = document.createElement('div');
-          p.className = 'cal-rlabel cal-pin';
-          p.textContent = '⛳';
-          cell.appendChild(p);
-        }
+        var p = document.createElement('div');
+        p.className = 'cal-rlabel cal-pin';
+        p.textContent = '⛳';
+        cell.appendChild(p);
       }
     }, {once: true});
   }
