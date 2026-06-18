@@ -97,7 +97,10 @@ input[type=range] { flex:1; accent-color:#58a6ff; }
 .grp-row { display:flex; align-items:center; gap:6px; margin-bottom:5px; }
 .grp-label { font-size:10px; font-weight:700; color:#58a6ff; background:rgba(88,166,255,0.1); border:1px solid rgba(88,166,255,0.2); border-radius:4px; padding:1px 5px; width:20px; text-align:center; flex-shrink:0; }
 .grp-flags { font-size:18px; letter-spacing:2px; }
-.grp-flag-today { display:inline-block; border:2.5px solid rgba(255,240,60,0.55); border-radius:5px; padding:2px 4px; line-height:1; margin:0 1px; }
+.grp-flag { display:inline-block; border:2.5px solid #0d1117; border-radius:5px; padding:2px 4px; line-height:1; margin:0 1px; }
+.grp-flag-today { border-color:rgba(255,240,60,0.55); cursor:pointer; }
+.grp-flag-today:hover { border-color:rgba(255,240,60,0.85); background:rgba(255,240,60,0.06); }
+.drw-row.drw-highlight { background:rgba(255,240,60,0.12); border-left:3px solid rgba(255,240,60,0.7); }
 .mi-time { font-size:13px; color:#58a6ff; font-family:monospace; margin-top:6px; }
 .mi-date { font-size:11px; color:#8b949e; margin-top:3px; }
 .mi-close { position:absolute; top:6px; right:10px; background:none; border:none; color:#8b949e; font-size:18px; line-height:1; cursor:pointer; padding:0; }
@@ -649,16 +652,37 @@ function getNextZ() {
     GROUPS.forEach(function(grp) {
       html += '<div class="grp-row"><span class="grp-label">' + grp.g + '</span><span class="grp-flags">';
       grp.f.forEach(function(flag) {
-        if (todayFlags[flag]) {
-          html += '<span class="grp-flag-today">' + flag + '</span>';
-        } else {
-          html += flag;
-        }
-        html += ' ';
+        var cls = 'grp-flag' + (todayFlags[flag] ? ' grp-flag-today' : '');
+        var enc = flag.replace(/&/g, '&amp;');
+        html += '<span class="' + cls + '" data-flag="' + enc + '">' + flag + '</span>';
       });
       html += '</span></div>';
     });
     grpBody.innerHTML = html;
+    grpBody.addEventListener('click', function(e) {
+      var span = e.target.closest('.grp-flag-today');
+      if (!span) return;
+      var flag = span.dataset.flag;
+      if (!flag) return;
+      openDrawer();
+      highlightDrawerFlag(flag);
+    });
+  }
+
+  function highlightDrawerFlag(flag) {
+    var rows = drwBody.querySelectorAll('.drw-row');
+    var target = null;
+    for (var i = 0; i < rows.length; i++) {
+      rows[i].classList.remove('drw-highlight');
+      var a = rows[i].dataset.a, b = rows[i].dataset.b;
+      if ((a === flag || b === flag) && !rows[i].classList.contains('drw-past')) {
+        if (!target) target = rows[i];
+      }
+    }
+    if (target) {
+      target.classList.add('drw-highlight');
+      setTimeout(function() { target.scrollIntoView({behavior:'smooth', block:'center'}); }, 80);
+    }
   }
 
   var TNMT_ROUNDS = [
