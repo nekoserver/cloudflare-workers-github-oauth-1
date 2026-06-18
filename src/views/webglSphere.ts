@@ -98,8 +98,9 @@ input[type=range] { flex:1; accent-color:#58a6ff; }
 .grp-label { font-size:10px; font-weight:700; color:#58a6ff; background:rgba(88,166,255,0.1); border:1px solid rgba(88,166,255,0.2); border-radius:4px; padding:1px 4px; width:18px; text-align:center; flex-shrink:0; }
 .grp-flags { display:flex; gap:1px; }
 .grp-flag { display:inline-flex; width:30px; justify-content:center; align-items:center; border:2px solid #0d1117; border-radius:4px; padding:2px 0; line-height:1; font-size:16px; box-sizing:border-box; flex-shrink:0; }
-.grp-flag-today { border-color:rgba(255,240,60,0.55); cursor:pointer; }
-.grp-flag-today:hover { border-color:rgba(255,240,60,0.85); background:rgba(255,240,60,0.06); }
+.grp-flag-today { border-color:rgba(139,148,158,0.45); cursor:pointer; }
+.grp-flag-today:hover { border-color:rgba(139,148,158,0.75); background:rgba(139,148,158,0.06); }
+.grp-flag-active { border-color:rgba(255,200,0,0.9) !important; background:rgba(255,200,0,0.07); }
 .drw-row.drw-highlight { background:rgba(255,240,60,0.12); border-left:3px solid rgba(255,240,60,0.7); }
 .cal-wrap { margin-bottom:14px; }
 .cal-title { font-size:10px; font-weight:700; color:#58a6ff; text-transform:uppercase; letter-spacing:.5px; margin-bottom:5px; }
@@ -719,8 +720,19 @@ function getNextZ() {
       if (!span) return;
       var flag = span.dataset.flag;
       if (!flag) return;
+      var allToday = grpBody.querySelectorAll('.grp-flag-today');
+      for (var ti = 0; ti < allToday.length; ti++) allToday[ti].classList.remove('grp-flag-active');
+      span.classList.add('grp-flag-active');
       openDrawer();
       highlightDrawerFlag(flag);
+      var cidx = findCountryByFlag(flag);
+      if (cidx >= 0) {
+        var cd = wc2026[cidx];
+        tooltip.innerHTML = buildMatchHtml(cd.flag, cd.name);
+        tooltip.style.opacity = '1';
+        activeMarkerIdx = cidx;
+        flyTo(cd.lat, cd.lon);
+      }
     });
   }
 
