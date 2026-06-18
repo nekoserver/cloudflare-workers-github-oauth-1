@@ -113,6 +113,7 @@ input[type=range] { flex:1; accent-color:#58a6ff; }
 .drw-section.open .drw-section-body { display:block; }
 .drw-date { padding:8px 14px 4px; font-size:10px; font-weight:700; color:#8b949e; letter-spacing:1px; text-transform:uppercase; position:sticky; top:0; background:#0d1117; border-bottom:1px solid #21262d; cursor:pointer; display:flex; justify-content:space-between; align-items:center; user-select:none; -webkit-user-select:none; }
 .drw-chevron { font-size:9px; opacity:0.5; transition:transform .2s; }
+.drw-pin { font-size:11px; margin-right:4px; }
 .drw-section.open .drw-chevron { transform:rotate(180deg); }
 .cal-match { cursor:pointer; }
 .cal-match:hover { filter:brightness(1.15); }
@@ -748,7 +749,7 @@ function getNextZ() {
       var isToday = di === todayDay;
       var cls = 'cal-cell' + (isMatch ? ' cal-match' : '') + (isToday ? ' cal-today' : '');
       var style = isMatch ? 'background:' + GS_BG : '';
-      var lbl = isToday ? '<div class="cal-rlabel">🏁</div>' : '';
+      var lbl = '';
       var dStr = '2026-06-' + (di < 10 ? '0' + di : '' + di);
       var dateAttr = isMatch ? ' data-date="' + dStr + '"' : '';
       html += '<div class="' + cls + '"' + dateAttr + ' style="' + style + '">' + di + lbl + '</div>';
@@ -816,6 +817,7 @@ function getNextZ() {
       }
       openDrawer();
       blinkCalToday();
+      document.querySelectorAll('.cal-pin, .drw-pin').forEach(function(p) { p.parentNode.removeChild(p); });
       blinkCalDate(match ? match.date : null, true);
       highlightDrawerFlag(targetFlag);
       if (match) { updateActiveDateFlags(match.date); }
@@ -852,20 +854,25 @@ function getNextZ() {
     if (!container) return;
     var cell = container.querySelector('[data-date="' + dateStr + '"]');
     if (!cell) return;
-    var pinEl = cell.querySelector('.cal-pin');
-    if (pinEl) { pinEl.parentNode.removeChild(pinEl); }
     cell.classList.remove('cal-today-blink');
     void cell.offsetWidth;
     cell.classList.add('cal-today-blink');
     cell.addEventListener('animationend', function() {
       cell.classList.remove('cal-today-blink');
       if (withPin) {
-        var oldPin = cell.querySelector('.cal-pin');
-        if (!oldPin) {
-          var p = document.createElement('div');
-          p.className = 'cal-rlabel cal-pin';
-          p.textContent = '⛳';
-          cell.appendChild(p);
+        var p = document.createElement('div');
+        p.className = 'cal-rlabel cal-pin';
+        p.textContent = '⛳';
+        cell.appendChild(p);
+        var drwSec = document.querySelector('#drw-body .drw-section[data-date="' + dateStr + '"]');
+        if (drwSec) {
+          var chevron = drwSec.querySelector('.drw-chevron');
+          if (chevron) {
+            var dp = document.createElement('span');
+            dp.className = 'drw-pin';
+            dp.textContent = '⛳';
+            chevron.parentNode.insertBefore(dp, chevron);
+          }
         }
       }
     }, {once: true});
