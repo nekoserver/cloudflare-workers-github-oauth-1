@@ -139,7 +139,7 @@ input[type=range] { flex:1; accent-color:#58a6ff; }
 .tnmt-team + .tnmt-team { border-top:1px solid #21262d; margin-top:2px; padding-top:5px; }
 .tnmt-team-flag { font-size:18px; line-height:1; }
 .tnmt-team-code { font-size:10px; font-weight:700; color:#8b949e; font-family:'SFMono-Regular',Consolas,monospace; }
-.tnmt-team-tbd { font-size:11px; color:#484f58; font-style:italic; }
+.tnmt-team-tbd { font-size:11px; color:#e6edf3; font-style:italic; }
 .tnmt-winner { color:#f0b429; }
 .tnmt-winner .tnmt-team-code { color:#f0b429; }
 .tnmt-3rd { margin-top:16px; border-top:1px solid #30363d; padding-top:14px; }
@@ -667,7 +667,7 @@ function getNextZ() {
     23:CAL_3RD_BG,
     26:CAL_FIN_BG
   };
-  var CAL_LABELS = {1:'R32',8:'R16',14:'QF',19:'SF',23:'3位',26:'決勝'};
+  var CAL_LABELS = {1:'R32',8:'R16',14:'QF',19:'SF',23:'3位',26:'決勝者'};
   var CAL_ICONS_JUL = {27:'🏆'};
 
   function buildCalendar() {
@@ -807,27 +807,27 @@ function getNextZ() {
       {id:'r32-16', date:'7/4', a:null, b:null, slotA:'3位(ABCD)', slotB:'3位(IJKL)'}
     ]},
     { label: 'ベスト16', key: 'r16', matches: [
-      {id:'r16-1', date:'7/8', a:null, b:null, slotA:'R32-M1勝', slotB:'R32-M2勝'},
-      {id:'r16-2', date:'7/8', a:null, b:null, slotA:'R32-M3勝', slotB:'R32-M4勝'},
-      {id:'r16-3', date:'7/9', a:null, b:null, slotA:'R32-M5勝', slotB:'R32-M6勝'},
-      {id:'r16-4', date:'7/9', a:null, b:null, slotA:'R32-M7勝', slotB:'R32-M8勝'},
-      {id:'r16-5', date:'7/10', a:null, b:null, slotA:'R32-M9勝', slotB:'R32-M10勝'},
-      {id:'r16-6', date:'7/10', a:null, b:null, slotA:'R32-M11勝', slotB:'R32-M12勝'},
-      {id:'r16-7', date:'7/11', a:null, b:null, slotA:'R32-M13勝', slotB:'R32-M14勝'},
-      {id:'r16-8', date:'7/12', a:null, b:null, slotA:'R32-M15勝', slotB:'R32-M16勝'}
+      {id:'r16-1', date:'7/8', a:null, b:null, slotA:'R32-M1勝者', slotB:'R32-M2勝者'},
+      {id:'r16-2', date:'7/8', a:null, b:null, slotA:'R32-M3勝者', slotB:'R32-M4勝者'},
+      {id:'r16-3', date:'7/9', a:null, b:null, slotA:'R32-M5勝者', slotB:'R32-M6勝者'},
+      {id:'r16-4', date:'7/9', a:null, b:null, slotA:'R32-M7勝者', slotB:'R32-M8勝者'},
+      {id:'r16-5', date:'7/10', a:null, b:null, slotA:'R32-M9勝者', slotB:'R32-M10勝者'},
+      {id:'r16-6', date:'7/10', a:null, b:null, slotA:'R32-M11勝者', slotB:'R32-M12勝者'},
+      {id:'r16-7', date:'7/11', a:null, b:null, slotA:'R32-M13勝者', slotB:'R32-M14勝者'},
+      {id:'r16-8', date:'7/12', a:null, b:null, slotA:'R32-M15勝者', slotB:'R32-M16勝者'}
     ]},
-    { label: '準々決勝', key: 'qf', matches: [
-      {id:'qf-1', date:'7/14', a:null, b:null, slotA:'R16-M1勝', slotB:'R16-M2勝'},
-      {id:'qf-2', date:'7/14', a:null, b:null, slotA:'R16-M3勝', slotB:'R16-M4勝'},
-      {id:'qf-3', date:'7/15', a:null, b:null, slotA:'R16-M5勝', slotB:'R16-M6勝'},
-      {id:'qf-4', date:'7/16', a:null, b:null, slotA:'R16-M7勝', slotB:'R16-M8勝'}
+    { label: '準々決勝者', key: 'qf', matches: [
+      {id:'qf-1', date:'7/14', a:null, b:null, slotA:'R16-M1勝者', slotB:'R16-M2勝者'},
+      {id:'qf-2', date:'7/14', a:null, b:null, slotA:'R16-M3勝者', slotB:'R16-M4勝者'},
+      {id:'qf-3', date:'7/15', a:null, b:null, slotA:'R16-M5勝者', slotB:'R16-M6勝者'},
+      {id:'qf-4', date:'7/16', a:null, b:null, slotA:'R16-M7勝者', slotB:'R16-M8勝者'}
     ]},
-    { label: '準決勝', key: 'sf', matches: [
-      {id:'sf-1', date:'7/19', a:null, b:null, slotA:'QF1勝', slotB:'QF2勝'},
-      {id:'sf-2', date:'7/20', a:null, b:null, slotA:'QF3勝', slotB:'QF4勝'}
+    { label: '準決勝者', key: 'sf', matches: [
+      {id:'sf-1', date:'7/19', a:null, b:null, slotA:'QF1勝者', slotB:'QF2勝者'},
+      {id:'sf-2', date:'7/20', a:null, b:null, slotA:'QF3勝者', slotB:'QF4勝者'}
     ]},
-    { label: '決勝', key: 'final', matches: [
-      {id:'final', date:'7/26', a:null, b:null, slotA:'SF1勝', slotB:'SF2勝'}
+    { label: '決勝者', key: 'final', matches: [
+      {id:'final', date:'7/26', a:null, b:null, slotA:'SF1勝者', slotB:'SF2勝者'}
     ]}
   ];
 
