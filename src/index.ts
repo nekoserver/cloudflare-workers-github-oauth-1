@@ -8230,6 +8230,66 @@ app.post('/slack/interactions', async (c) => {
 });
 
 /**
+ * cf-auth.nekoflare.workers.dev からのwebhook受信エンドポイント
+ * ログイン等のイベントを受け取りSlackへ通知する
+ */
+app.post('/webhook/cf-auth', async (c) => {
+  const webhookSecret = c.env.CF_AUTH_WEBHOOK_SECRET;
+  if (!webhookSecret) {
+    logger.error('CF_AUTH_WEBHOOK_SECRET is not configured');
+    return c.json({ error: 'Webhook endpoint is not available' }, 500);
+  }
+
+  const rawBody = await c.req.text();
+  const signatureHeader = c.req.header('X-Hub-Signature-256');
+
+  const verification = await verifyGitHubWebhookSignature(rawBody, signatureHeader, webhookSecret);
+  if (!verification.success) {
+    logger.warn('Rejected cf-auth webhook', { reason: verification.reason });
+    return c.json({ error: 'Unauthorized webhook' }, 401);
+  }
+
+  let payload: Record<string, unknown>;
+  try {
+    payload = rawBody ? JSON.parse(rawBody) : {};
+  } catch {
+    return c.json({ error: 'Invalid webhook payload' }, 400);
+  }
+
+  const event = typeof payload.event === 'string' ? payload.event : 'unknown';
+  const user = typeof payload.user === 'string' ? payload.user
+    : typeof payload.login === 'string' ? payload.login
+    : typeof payload.email === 'string' ? payload.email
+    : 'unknown';
+  const action = typeof payload.action === 'string' ? payload.action : '';
+
+  logger.info('cf-auth webhook received', { event, user, action });
+
+  const slackToken = c.env.SLACK_OAUTH_TOKEN;
+  const slackChannel = c.env.SLACK_CHANNEL_ID;
+  if (slackToken && slackChannel) {
+    const lines = [
+      `cf-auth: ${event}${action ? ' / ' + action : ''}`,
+      `ユーザー: ${user}`,
+    ];
+    const extra = Object.entries(payload)
+      .filter(([k]) => !['event', 'action', 'user', 'login', 'email'].includes(k))
+      .map(([k, v]) => `${k}: ${typeof v === 'object' ? JSON.stringify(v) : String(v)}`);
+    if (extra.length > 0) lines.push(...extra.slice(0, 5));
+
+    try {
+      await postSlackMessage({ token: slackToken, channel: slackChannel, text: lines.join('\n') });
+    } catch (error) {
+      logger.error('Slack notification failed for cf-auth webhook', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+  }
+
+  return c.json({ ok: true });
+});
+
+/**
  * Resend webhook受信用エンドポイント
  * イベントタイプを/lib/resend-webhook.shtml?event=xxxへGETで通知し、Resendへのレスポンスを返す
  */
