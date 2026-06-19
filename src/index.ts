@@ -33,6 +33,7 @@ import { getWebGLHeritagePage } from './views/webglHeritage';
 import { getWebGLLVSpherePage } from './views/webglLVSphere';
 import { getWebGLCubePage } from './views/webglCube';
 import { getWebGLSolarPage } from './views/webglSolar';
+import { getWorldCupWdlPage } from './views/worldCupWdl';
 import { getAuthFlowPage } from './views/authFlow';
 
 import { computeColumnRelationStats, verifyColumnStats, type TableSchema, type Relation } from './utils/columnRelationStats';
@@ -4191,6 +4192,10 @@ app.get('/webgl-cube', authMiddleware, async (c) => {
 app.get('/webgl-solar', authMiddleware, async (c) => {
   const user = c.get('user');
   return c.html(getWebGLSolarPage(user.sub));
+});
+
+app.get('/worldcup-wdl', authMiddleware, async (c) => {
+  return c.html(getWorldCupWdlPage());
 });
 
 /**
