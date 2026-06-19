@@ -329,7 +329,7 @@ void main() {
     <span class="sdp-title">&#127967; 2026 W杯 全16会場</span>
     <button class="sdp-close" id="sdpClose">&#10005;</button>
   </div>
-  <button class="sdp-tour-btn" id="sdpTourBtn">&#9654; 東から順に自動巡回</button>
+  <button class="sdp-tour-btn" id="sdpTourBtn">東から順に自動巡回</button>
   <div id="sdp-body"></div>
 </div>
 <div id="schedule-panel">
@@ -542,22 +542,22 @@ function getNextZ() {
 
   // 2026 FIFA W杯 全16会場（東→西順）
   var wc2026Stadiums = [
-    {num:1,  flag:"🏟️", name:"Gillette Stadium",              city:"フォックスボロ、MA",   lat:42.091, lon:-71.264},
-    {num:2,  flag:"🏟️", name:"MetLife Stadium",               city:"イーストラザフォード、NJ", lat:40.814, lon:-74.074},
-    {num:3,  flag:"🏟️", name:"Lincoln Financial Field",       city:"フィラデルフィア、PA", lat:39.901, lon:-75.168},
-    {num:4,  flag:"🏟️", name:"BMO Field",                    city:"トロント、カナダ",     lat:43.633, lon:-79.419},
-    {num:5,  flag:"🏟️", name:"Hard Rock Stadium",             city:"マイアミガーデンズ、FL",lat:25.958, lon:-80.239},
-    {num:6,  flag:"🏟️", name:"Bank of America Stadium",       city:"シャーロット、NC",    lat:35.226, lon:-80.853},
-    {num:7,  flag:"🏟️", name:"Arrowhead Stadium",             city:"カンザスシティ、MO",  lat:39.049, lon:-94.484},
-    {num:8,  flag:"🏟️", name:"NRG Stadium",                  city:"ヒューストン、TX",    lat:29.685, lon:-95.411},
-    {num:9,  flag:"🏟️", name:"AT&T Stadium",                 city:"アーリントン、TX",    lat:32.748, lon:-97.093},
-    {num:10, flag:"🏟️", name:"Estadio Azteca",               city:"メキシコシティ、MX",  lat:19.303, lon:-99.150},
-    {num:11, flag:"🏟️", name:"Estadio BBVA",                 city:"モンテレイ、MX",      lat:25.669, lon:-100.244},
-    {num:12, flag:"🏟️", name:"Estadio Akron",                city:"グアダラハラ、MX",    lat:20.669, lon:-103.318},
-    {num:13, flag:"🏟️", name:"SoFi Stadium",                 city:"イングルウッド、CA",  lat:33.954, lon:-118.339},
-    {num:14, flag:"🏟️", name:"Levi's Stadium",               city:"サンタクララ、CA",    lat:37.403, lon:-121.970},
-    {num:15, flag:"🏟️", name:"Lumen Field",                  city:"シアトル、WA",        lat:47.595, lon:-122.332},
-    {num:16, flag:"🏟️", name:"BC Place",                     city:"バンクーバー、カナダ",  lat:49.277, lon:-123.112}
+    {num:1,  flag:"🏟️", ctry:"🇺🇸", name:"Gillette Stadium",              city:"フォックスボロ、MA",   lat:42.091, lon:-71.264},
+    {num:2,  flag:"🏟️", ctry:"🇺🇸", name:"MetLife Stadium",               city:"イーストラザフォード、NJ", lat:40.814, lon:-74.074},
+    {num:3,  flag:"🏟️", ctry:"🇺🇸", name:"Lincoln Financial Field",       city:"フィラデルフィア、PA", lat:39.901, lon:-75.168},
+    {num:4,  flag:"🏟️", ctry:"🇨🇦", name:"BMO Field",                    city:"トロント、カナダ",     lat:43.633, lon:-79.419},
+    {num:5,  flag:"🏟️", ctry:"🇺🇸", name:"Hard Rock Stadium",             city:"マイアミガーデンズ、FL",lat:25.958, lon:-80.239},
+    {num:6,  flag:"🏟️", ctry:"🇺🇸", name:"Bank of America Stadium",       city:"シャーロット、NC",    lat:35.226, lon:-80.853},
+    {num:7,  flag:"🏟️", ctry:"🇺🇸", name:"Arrowhead Stadium",             city:"カンザスシティ、MO",  lat:39.049, lon:-94.484},
+    {num:8,  flag:"🏟️", ctry:"🇺🇸", name:"NRG Stadium",                  city:"ヒューストン、TX",    lat:29.685, lon:-95.411},
+    {num:9,  flag:"🏟️", ctry:"🇺🇸", name:"AT&T Stadium",                 city:"アーリントン、TX",    lat:32.748, lon:-97.093},
+    {num:10, flag:"🏟️", ctry:"🇲🇽", name:"Estadio Azteca",               city:"メキシコシティ、MX",  lat:19.303, lon:-99.150},
+    {num:11, flag:"🏟️", ctry:"🇲🇽", name:"Estadio BBVA",                 city:"モンテレイ、MX",      lat:25.669, lon:-100.244},
+    {num:12, flag:"🏟️", ctry:"🇲🇽", name:"Estadio Akron",                city:"グアダラハラ、MX",    lat:20.669, lon:-103.318},
+    {num:13, flag:"🏟️", ctry:"🇺🇸", name:"SoFi Stadium",                 city:"イングルウッド、CA",  lat:33.954, lon:-118.339},
+    {num:14, flag:"🏟️", ctry:"🇺🇸", name:"Levi's Stadium",               city:"サンタクララ、CA",    lat:37.403, lon:-121.970},
+    {num:15, flag:"🏟️", ctry:"🇺🇸", name:"Lumen Field",                  city:"シアトル、WA",        lat:47.595, lon:-122.332},
+    {num:16, flag:"🏟️", ctry:"🇨🇦", name:"BC Place",                     city:"バンクーバー、カナダ",  lat:49.277, lon:-123.112}
   ];
 
   // 2026 FIFAワールドカップ出場国（⚽=開催地マーカー）
@@ -1434,8 +1434,7 @@ function getNextZ() {
     (function(sidx) {
       function onStadiumTap(e) {
         e.stopPropagation();
-        var r = smel.getBoundingClientRect();
-        showStadiumTooltip(sidx, r.left + r.width/2, r.top + r.height/2);
+        showStadiumTooltip(sidx);
       }
       smel.addEventListener("click", onStadiumTap);
       smel.addEventListener("touchend", function(e) { e.preventDefault(); onStadiumTap(e); });
@@ -1444,14 +1443,20 @@ function getNextZ() {
     stadiumMkEls.push({el: smel, pos3d: latLonTo3D(sdata.lat, sdata.lon)});
   }
 
-  function showStadiumTooltip(idx, vx, vy) {
+  function showStadiumTooltip(idx) {
     var sd = wc2026Stadiums[idx];
-    tooltip.innerHTML = '<span class="tt-flag-lg">&#127967;</span><div class="tt-name">' + sd.name + '</div><div class="tt-code">' + sd.city + '</div>';
-    positionTooltip(vx, vy);
-    tooltip.style.opacity = "1";
-    activeMarkerIdx = -1;
+    hideTooltip();
     flyTo(sd.lat, sd.lon);
     setStadiumActive(idx);
+    setTimeout(function() {
+      var mel = stadiumMkEls[idx] ? stadiumMkEls[idx].el : null;
+      var r = mel ? mel.getBoundingClientRect() : null;
+      var cx = r ? r.left + r.width/2 : canvasRect.left + canvasRect.width/2;
+      var cy = r ? r.top + r.height/2 : canvasRect.top + 100;
+      tooltip.innerHTML = '<span class="tt-flag-lg">&#127967; ' + sd.ctry + '</span><div class="tt-name">' + sd.name + '</div><div class="tt-code">' + sd.city + '</div>';
+      positionTooltip(cx, cy);
+      tooltip.style.opacity = "1";
+    }, 900);
   }
 
   function setStadiumActive(idx) {
@@ -1470,7 +1475,7 @@ function getNextZ() {
     tourActive = false;
     if (tourTimer) { clearTimeout(tourTimer); tourTimer = null; }
     var tb = document.getElementById('sdpTourBtn');
-    if (tb) { tb.textContent = '&#9654; 東から順に自動巡回'; tb.classList.remove('touring'); }
+    if (tb) { tb.textContent = '東から順に自動巡回'; tb.classList.remove('touring'); }
     var btn = document.getElementById('btnStadiumTour');
     if (btn) btn.classList.remove('active');
   }
@@ -1483,7 +1488,12 @@ function getNextZ() {
     var capturedIdx = tourIdx;
     setTimeout(function() {
       if (!tourActive || tourIdx !== capturedIdx) return;
-      tooltip.innerHTML = '<span class="tt-flag-lg">&#127967;</span><div class="tt-name">' + sd.name + '</div><div class="tt-code">' + sd.city + '</div>';
+      var mel = stadiumMkEls[capturedIdx] ? stadiumMkEls[capturedIdx].el : null;
+      var r = mel ? mel.getBoundingClientRect() : null;
+      var cx = r ? r.left + r.width/2 : canvasRect.left + canvasRect.width/2;
+      var cy = r ? r.top + r.height/2 : canvasRect.top + 100;
+      tooltip.innerHTML = '<span class="tt-flag-lg">&#127967; ' + sd.ctry + '</span><div class="tt-name">' + sd.name + '</div><div class="tt-code">' + sd.city + '</div>';
+      positionTooltip(cx, cy);
       tooltip.style.opacity = "1";
     }, 1800);
     tourTimer = setTimeout(function() {
@@ -1499,7 +1509,7 @@ function getNextZ() {
     tourActive = true;
     tourIdx = 0;
     var tb = document.getElementById('sdpTourBtn');
-    if (tb) { tb.textContent = '&#9209; 巡回停止'; tb.classList.add('touring'); }
+    if (tb) { tb.textContent = '巡回停止'; tb.classList.add('touring'); }
     var btn = document.getElementById('btnStadiumTour');
     if (btn) btn.classList.add('active');
     document.getElementById('stadium-panel').classList.add('open');
@@ -1516,7 +1526,7 @@ function getNextZ() {
       var lonStr = (-sd.lon).toFixed(3) + 'W';
       html += '<div class="sdp-row" data-idx="' + i + '">';
       html += '<span class="sdp-num">' + sd.num + '</span>';
-      html += '<span class="sdp-icon">' + sd.flag + '</span>';
+      html += '<span class="sdp-icon">' + sd.ctry + '</span>';
       html += '<div class="sdp-info">';
       html += '<div class="sdp-name">' + sd.name.replace(/&/g,'&amp;') + '</div>';
       html += '<div class="sdp-city">' + sd.city + '</div>';
@@ -1529,7 +1539,7 @@ function getNextZ() {
       if (!row) return;
       stopTour();
       var idx = parseInt(row.dataset.idx, 10);
-      showStadiumTooltip(idx, canvasRect.left + canvasRect.width * 0.35, canvasRect.top + 120);
+      showStadiumTooltip(idx);
     });
     body.addEventListener('touchend', function(e) {
       var row = e.target.closest('.sdp-row');
@@ -1537,7 +1547,7 @@ function getNextZ() {
       e.preventDefault();
       stopTour();
       var idx = parseInt(row.dataset.idx, 10);
-      showStadiumTooltip(idx, canvasRect.left + canvasRect.width * 0.35, canvasRect.top + 120);
+      showStadiumTooltip(idx);
     });
   }
 
