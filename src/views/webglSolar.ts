@@ -252,8 +252,8 @@ input[type=range] { accent-color:#fdb813; width:120px; }
     skyStars.push({ lon: ssLon, lat: ssLat, r: pseudoRand() < 0.25 ? 2 : 1, twinkle: pseudoRand() < 0.18, phase: pseudoRand() * Math.PI * 2 });
   }
 
-  var starLon = [1.817, 1.53, 1.38, 1.22, 4.34, 4.99, 5.267, 5.853, 3.558, 3.565, 1.977, 1.428, 1.927];
-  var starLat = [-0.691, -0.28, -0.54, -0.09, -0.09, 1.08, 0.511, 1.046, -0.036, 0.536, 0.116, 0.400, 0.176];
+  var starLon = [1.817, 1.53, 1.38, 1.22, 4.34, 4.99, 5.267, 5.853, 3.558, 3.565, 1.977, 1.428, 1.927, 2.222];
+  var starLat = [-0.691, -0.28, -0.54, -0.09, -0.09, 1.08, 0.511, 1.046, -0.036, 0.536, 0.116, 0.400, 0.176, 0.022];
 
   var bigDipper = [
     { lon: 2.360, lat: 0.868 },
@@ -377,7 +377,14 @@ input[type=range] { accent-color:#fdb813; width:120px; }
       var ns5 = namedStars[ni5];
       var np5 = projectSky(starLon[ni5], starLat[ni5]);
       if (!np5) continue;
-      ctx.beginPath(); ctx.arc(np5.x, np5.y, 4, 0, Math.PI*2); ctx.fillStyle = ns5.color; ctx.fill();
+      if (ns5.cluster) {
+        var cg5 = ctx.createRadialGradient(np5.x, np5.y, 0, np5.x, np5.y, 9);
+        cg5.addColorStop(0, ns5.color+'cc'); cg5.addColorStop(1, ns5.color+'00');
+        ctx.beginPath(); ctx.arc(np5.x, np5.y, 9, 0, Math.PI*2); ctx.fillStyle = cg5; ctx.fill();
+        ctx.beginPath(); ctx.arc(np5.x, np5.y, 2, 0, Math.PI*2); ctx.fillStyle = ns5.color; ctx.fill();
+      } else {
+        ctx.beginPath(); ctx.arc(np5.x, np5.y, 4, 0, Math.PI*2); ctx.fillStyle = ns5.color; ctx.fill();
+      }
       if (showStarLabels) { ctx.font = '10px sans-serif'; ctx.fillStyle = ns5.color; ctx.fillText(ns5.name, np5.x+8, np5.y+3); }
       starScreenPos.push({ x: np5.x, y: np5.y, item: ns5 });
     }
@@ -454,8 +461,15 @@ input[type=range] { accent-color:#fdb813; width:120px; }
       var ns6 = namedStars[ni6];
       var np6 = projectSky(starLon[ni6], starLat[ni6]);
       if (!np6) continue;
-      ctx.beginPath(); ctx.arc(np6.x, np6.y, 5, 0, Math.PI*2); ctx.fillStyle = ns6.color; ctx.fill();
-      ctx.beginPath(); ctx.arc(np6.x, np6.y, 8, 0, Math.PI*2); ctx.strokeStyle = ns6.color+'44'; ctx.lineWidth = 2; ctx.stroke();
+      if (ns6.cluster) {
+        var cg6 = ctx.createRadialGradient(np6.x, np6.y, 0, np6.x, np6.y, 10);
+        cg6.addColorStop(0, ns6.color+'cc'); cg6.addColorStop(1, ns6.color+'00');
+        ctx.beginPath(); ctx.arc(np6.x, np6.y, 10, 0, Math.PI*2); ctx.fillStyle = cg6; ctx.fill();
+        ctx.beginPath(); ctx.arc(np6.x, np6.y, 3, 0, Math.PI*2); ctx.fillStyle = ns6.color; ctx.fill();
+      } else {
+        ctx.beginPath(); ctx.arc(np6.x, np6.y, 5, 0, Math.PI*2); ctx.fillStyle = ns6.color; ctx.fill();
+        ctx.beginPath(); ctx.arc(np6.x, np6.y, 8, 0, Math.PI*2); ctx.strokeStyle = ns6.color+'44'; ctx.lineWidth = 2; ctx.stroke();
+      }
       if (showStarLabels) { ctx.font = '11px sans-serif'; ctx.fillStyle = ns6.color; ctx.fillText(ns6.name, np6.x+10, np6.y+4); }
       starScreenPos.push({ x: np6.x, y: np6.y, item: ns6 });
     }
@@ -513,8 +527,15 @@ input[type=range] { accent-color:#fdb813; width:120px; }
       var ns7 = namedStars[ni7];
       var np7 = projectSky(starLon[ni7], starLat[ni7]);
       if (!np7) continue;
-      ctx.beginPath(); ctx.arc(np7.x, np7.y, 5, 0, Math.PI*2); ctx.fillStyle = ns7.color; ctx.fill();
-      ctx.beginPath(); ctx.arc(np7.x, np7.y, 8, 0, Math.PI*2); ctx.strokeStyle = ns7.color+'44'; ctx.lineWidth = 2; ctx.stroke();
+      if (ns7.cluster) {
+        var cg7 = ctx.createRadialGradient(np7.x, np7.y, 0, np7.x, np7.y, 10);
+        cg7.addColorStop(0, ns7.color+'cc'); cg7.addColorStop(1, ns7.color+'00');
+        ctx.beginPath(); ctx.arc(np7.x, np7.y, 10, 0, Math.PI*2); ctx.fillStyle = cg7; ctx.fill();
+        ctx.beginPath(); ctx.arc(np7.x, np7.y, 3, 0, Math.PI*2); ctx.fillStyle = ns7.color; ctx.fill();
+      } else {
+        ctx.beginPath(); ctx.arc(np7.x, np7.y, 5, 0, Math.PI*2); ctx.fillStyle = ns7.color; ctx.fill();
+        ctx.beginPath(); ctx.arc(np7.x, np7.y, 8, 0, Math.PI*2); ctx.strokeStyle = ns7.color+'44'; ctx.lineWidth = 2; ctx.stroke();
+      }
       if (showStarLabels) { ctx.font = '11px sans-serif'; ctx.fillStyle = ns7.color; ctx.fillText(ns7.name, np7.x+10, np7.y+4); }
       starScreenPos.push({ x: np7.x, y: np7.y, item: ns7 });
     }
@@ -668,10 +689,19 @@ input[type=range] { accent-color:#fdb813; width:120px; }
       var ns3 = namedStars[ni3];
       var nPos = projectSky(starLon[ni3], starLat[ni3]);
       if (!nPos) continue;
-      ctx.beginPath(); ctx.arc(nPos.x, nPos.y, 5, 0, Math.PI * 2);
-      ctx.fillStyle = ns3.color; ctx.fill();
-      ctx.beginPath(); ctx.arc(nPos.x, nPos.y, 8, 0, Math.PI * 2);
-      ctx.strokeStyle = ns3.color + '44'; ctx.lineWidth = 2; ctx.stroke();
+      if (ns3.cluster) {
+        var cg = ctx.createRadialGradient(nPos.x, nPos.y, 0, nPos.x, nPos.y, 10);
+        cg.addColorStop(0, ns3.color + 'cc'); cg.addColorStop(1, ns3.color + '00');
+        ctx.beginPath(); ctx.arc(nPos.x, nPos.y, 10, 0, Math.PI * 2);
+        ctx.fillStyle = cg; ctx.fill();
+        ctx.beginPath(); ctx.arc(nPos.x, nPos.y, 3, 0, Math.PI * 2);
+        ctx.fillStyle = ns3.color; ctx.fill();
+      } else {
+        ctx.beginPath(); ctx.arc(nPos.x, nPos.y, 5, 0, Math.PI * 2);
+        ctx.fillStyle = ns3.color; ctx.fill();
+        ctx.beginPath(); ctx.arc(nPos.x, nPos.y, 8, 0, Math.PI * 2);
+        ctx.strokeStyle = ns3.color + '44'; ctx.lineWidth = 2; ctx.stroke();
+      }
       if (showStarLabels) {
         ctx.font = '11px sans-serif'; ctx.fillStyle = ns3.color;
         ctx.fillText(ns3.name, nPos.x + 10, nPos.y + 4);
@@ -879,7 +909,8 @@ input[type=range] { accent-color:#fdb813; width:120px; }
     { name: 'アークトゥルス', color: '#ffad42', ox: -680, oy: -150, fact: 'うしかい座のオレンジ色巨星。北天で最も明るい星のひとつです' },
     { name: 'ポルックス', color: '#ffd080', ox: -480, oy: 320, fact: 'ふたご座の最も明るい星。オレンジ色の巨星で少なくとも1つの惑星を持ちます' },
     { name: 'カペラ', color: '#fff0a0', ox: 460, oy: -370, fact: 'ぎょしゃ座の一等星。2つの巨星が互いを公転する連星系で、全天6番目の明るさです' },
-    { name: 'カストル', color: '#d0e8ff', ox: -420, oy: 280, fact: 'ふたご座αで、ポルックスとペアを成す。実際は6つの星からなる多重連星系です' }
+    { name: 'カストル', color: '#d0e8ff', ox: -420, oy: 280, fact: 'ふたご座αで、ポルックスとペアを成す。実際は6つの星からなる多重連星系です' },
+    { name: 'プレセペ星団', color: '#ffd8a0', ox: 380, oy: -200, cluster: true, fact: 'かに座のM44散開星団。約1000個の恒星からなり、距離約520光年。肉眼でぼんやり見える星の集まりです' }
   ];
 
   var stars = [];
