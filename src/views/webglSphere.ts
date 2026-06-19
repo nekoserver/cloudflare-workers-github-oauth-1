@@ -329,7 +329,7 @@ void main() {
     <span class="sdp-title">&#127967; 2026 W杯 全16会場</span>
     <button class="sdp-close" id="sdpClose">&#10005;</button>
   </div>
-  <button class="sdp-tour-btn" id="sdpTourBtn">&#9654; 東から順に自動巡回</button>
+  <button class="sdp-tour-btn" id="sdpTourBtn">東から順に自動巡回</button>
   <div id="sdp-body"></div>
 </div>
 <div id="schedule-panel">
@@ -1475,7 +1475,7 @@ function getNextZ() {
     tourActive = false;
     if (tourTimer) { clearTimeout(tourTimer); tourTimer = null; }
     var tb = document.getElementById('sdpTourBtn');
-    if (tb) { tb.textContent = '&#9654; 東から順に自動巡回'; tb.classList.remove('touring'); }
+    if (tb) { tb.textContent = '東から順に自動巡回'; tb.classList.remove('touring'); }
     var btn = document.getElementById('btnStadiumTour');
     if (btn) btn.classList.remove('active');
   }
@@ -1509,7 +1509,7 @@ function getNextZ() {
     tourActive = true;
     tourIdx = 0;
     var tb = document.getElementById('sdpTourBtn');
-    if (tb) { tb.textContent = '&#9209; 巡回停止'; tb.classList.add('touring'); }
+    if (tb) { tb.textContent = '巡回停止'; tb.classList.add('touring'); }
     var btn = document.getElementById('btnStadiumTour');
     if (btn) btn.classList.add('active');
     document.getElementById('stadium-panel').classList.add('open');
