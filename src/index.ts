@@ -139,6 +139,7 @@ const STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
   { name: 'api_endpoint_stats',      migration: '0056',       description: 'APIエンドポイント別アクセス集計',              syncPolicy: 'auto' },
   { name: 'api_search_keywords',     migration: '0057',       description: 'APIページ検索キーワード登録',                   syncPolicy: 'manual' },
   { name: 'api_search_keyword_sections', migration: '0058',   description: 'APIページ検索キーワードのセクション別件数',       syncPolicy: 'manual' },
+  { name: 'webhook_log',               migration: '0061',   description: 'Webhook受信ログ（全ソース共通）',                   syncPolicy: 'auto' },
 ];
 
 const REQUIRED_STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
@@ -871,6 +872,18 @@ CREATE INDEX IF NOT EXISTS idx_user_sessions_revoked_at ON user_sessions(revoked
 
   '0060': `ALTER TABLE user_sessions ADD COLUMN idle_timeout_seconds INTEGER;`,
 
+  '0061': `CREATE TABLE IF NOT EXISTS webhook_log (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  source TEXT NOT NULL,
+  event_type TEXT,
+  status TEXT NOT NULL,
+  payload TEXT,
+  error TEXT,
+  received_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_webhook_log_source ON webhook_log(source);
+CREATE INDEX IF NOT EXISTS idx_webhook_log_received_at ON webhook_log(received_at);`,
+
   'ts-catalog': `CREATE TABLE IF NOT EXISTS ts_repository (
   id            INTEGER PRIMARY KEY AUTOINCREMENT,
   full_name     TEXT NOT NULL UNIQUE,
@@ -1188,6 +1201,7 @@ export const TABLE_COLUMN_KEYS: Record<string, ColumnKeyInfo> = {
   api_endpoint_stats:         { endpoint: 'pk+idx', status_code: 'pk' },
   api_search_keywords:        { id: 'pk', keyword: 'idx' },
   api_search_keyword_sections: { id: 'pk', keyword_id: 'fk+idx', section_name: '' },
+  webhook_log: { id: 'pk', source: 'idx', received_at: 'idx' },
 };
 
 export function getColumnKeyType(tableName: string, columnName: string): ColumnKeyType {
@@ -1254,6 +1268,7 @@ export const TABLE_GROUP_MAP: Record<string, string> = {
   api_endpoint_stats: 'system',
   api_search_keywords: 'system',
   api_search_keyword_sections: 'system',
+  webhook_log: 'system',
   keyword_category_groups: 'search',
   keyword_multi_labels: 'search',
   ts_repository:          'ts-catalog',
@@ -1862,6 +1877,31 @@ async function checkAiChatRateLimit(db: D1Database | undefined, userId: string):
     return (result?.request_count ?? 1) > AICHAT_RATE_LIMIT_PER_MIN;
   } catch {
     return false;
+  }
+}
+
+async function logWebhookEvent(
+  db: D1Database | undefined,
+  source: string,
+  eventType: string | null,
+  status: 'ok' | 'rejected' | 'error',
+  payload: Record<string, unknown> | null,
+  error?: string
+): Promise<void> {
+  if (!db) return;
+  try {
+    await db.prepare(
+      'INSERT INTO webhook_log (source, event_type, status, payload, error, received_at) VALUES (?, ?, ?, ?, ?, ?)'
+    ).bind(
+      source,
+      eventType ?? null,
+      status,
+      payload ? JSON.stringify(payload) : null,
+      error ?? null,
+      new Date().toISOString()
+    ).run();
+  } catch (e) {
+    logger.error('Failed to log webhook event', { source, error: e instanceof Error ? e.message : 'Unknown' });
   }
 }
 
@@ -6207,6 +6247,7 @@ app.post('/webhook/github', async (c) => {
       reason: verification.reason,
       path: c.req.path,
     });
+    c.executionCtx?.waitUntil(logWebhookEvent(c.env.DB, 'github', null, 'rejected', null, verification.reason));
     return c.json({ error: 'Unauthorized webhook' }, 401);
   }
 
@@ -6223,6 +6264,7 @@ app.post('/webhook/github', async (c) => {
   const action = typeof payload?.action === 'string' ? payload.action : 'unknown';
 
   logger.info('GitHub webhook received', { eventType, action, deliveryId });
+  c.executionCtx?.waitUntil(logWebhookEvent(c.env.DB, 'github', eventType, 'ok', { action, deliveryId }));
 
   // installation イベントを処理
   if (eventType === 'installation' || eventType === 'installation_repositories') {
@@ -8230,6 +8272,68 @@ app.post('/slack/interactions', async (c) => {
 });
 
 /**
+ * cf-auth.nekoflare.workers.dev からのwebhook受信エンドポイント
+ * ログイン等のイベントを受け取りSlackへ通知する
+ */
+app.post('/webhook/cf-auth', async (c) => {
+  const webhookSecret = c.env.CF_AUTH_WEBHOOK_SECRET;
+  if (!webhookSecret) {
+    logger.error('CF_AUTH_WEBHOOK_SECRET is not configured');
+    return c.json({ error: 'Webhook endpoint is not available' }, 500);
+  }
+
+  const rawBody = await c.req.text();
+  const signatureHeader = c.req.header('X-Hub-Signature-256');
+
+  const verification = await verifyGitHubWebhookSignature(rawBody, signatureHeader, webhookSecret);
+  if (!verification.success) {
+    logger.warn('Rejected cf-auth webhook', { reason: verification.reason });
+    c.executionCtx?.waitUntil(logWebhookEvent(c.env.DB, 'cf-auth', null, 'rejected', null, verification.reason));
+    return c.json({ error: 'Unauthorized webhook' }, 401);
+  }
+
+  let payload: Record<string, unknown>;
+  try {
+    payload = rawBody ? JSON.parse(rawBody) : {};
+  } catch {
+    return c.json({ error: 'Invalid webhook payload' }, 400);
+  }
+
+  const event = typeof payload.event === 'string' ? payload.event : 'unknown';
+  const user = typeof payload.user === 'string' ? payload.user
+    : typeof payload.login === 'string' ? payload.login
+    : typeof payload.email === 'string' ? payload.email
+    : 'unknown';
+  const action = typeof payload.action === 'string' ? payload.action : '';
+
+  logger.info('cf-auth webhook received', { event, user, action });
+  c.executionCtx?.waitUntil(logWebhookEvent(c.env.DB, 'cf-auth', event, 'ok', { user, action }));
+
+  const slackToken = c.env.SLACK_OAUTH_TOKEN;
+  const slackChannel = c.env.SLACK_CHANNEL_ID;
+  if (slackToken && slackChannel) {
+    const lines = [
+      `cf-auth: ${event}${action ? ' / ' + action : ''}`,
+      `ユーザー: ${user}`,
+    ];
+    const extra = Object.entries(payload)
+      .filter(([k]) => !['event', 'action', 'user', 'login', 'email'].includes(k))
+      .map(([k, v]) => `${k}: ${typeof v === 'object' ? JSON.stringify(v) : String(v)}`);
+    if (extra.length > 0) lines.push(...extra.slice(0, 5));
+
+    try {
+      await postSlackMessage({ token: slackToken, channel: slackChannel, text: lines.join('\n') });
+    } catch (error) {
+      logger.error('Slack notification failed for cf-auth webhook', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+  }
+
+  return c.json({ ok: true });
+});
+
+/**
  * Resend webhook受信用エンドポイント
  * イベントタイプを/lib/resend-webhook.shtml?event=xxxへGETで通知し、Resendへのレスポンスを返す
  */
@@ -8272,6 +8376,7 @@ app.post('/webhook/resend/:sourceId', async (c) => {
       path: c.req.path,
       method: c.req.method,
     });
+    c.executionCtx?.waitUntil(logWebhookEvent(c.env.DB, `resend:${sourceId}`, null, 'rejected', null, verification.reason));
     return c.json({ error: 'Unauthorized webhook' }, 401);
   }
 
@@ -8311,6 +8416,7 @@ app.post('/webhook/resend/:sourceId', async (c) => {
     : 'unknown';
 
   logger.info('Resend webhook received', { eventType });
+  c.executionCtx?.waitUntil(logWebhookEvent(c.env.DB, `resend:${sourceId}`, eventType, 'ok', null));
 
   const webhookData = payload?.data ?? {};
   const resendEmailId = typeof webhookData.email_id === 'string' && webhookData.email_id.trim().length > 0

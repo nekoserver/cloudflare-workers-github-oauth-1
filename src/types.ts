@@ -21,6 +21,7 @@ export type Bindings = {
   COMMIT_HISTORY_PAGE_SIZE?: string;
   RESEND_WEBHOOK_DEDUP_TTL_SECONDS?: string;
   GITHUB_WEBHOOK_SECRET?: string;
+  CF_AUTH_WEBHOOK_SECRET?: string;
   GITHUB_TOKEN?: string;
   AI?: Ai;
   AI_MODEL?: string;
