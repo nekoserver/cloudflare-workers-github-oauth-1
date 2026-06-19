@@ -167,6 +167,27 @@ input[type=range] { flex:1; accent-color:#58a6ff; }
 .tnmt-winner .tnmt-team-code { color:#f0b429; }
 .tnmt-3rd { margin-top:16px; border-top:1px solid #30363d; padding-top:14px; }
 .tnmt-3rd-label { font-size:11px; font-weight:700; color:#8b949e; text-align:center; margin-bottom:8px; }
+#stadium-panel { position:fixed; top:0; right:0; bottom:0; width:280px; max-width:92vw; z-index:70; background:#0d1117; border-left:2px solid #f0b429; display:flex; flex-direction:column; transform:translateX(100%); transition:transform .3s ease; box-shadow:-4px 0 30px rgba(0,0,0,.8); }
+#stadium-panel.open { transform:translateX(0); }
+.sdp-hdr { display:flex; align-items:center; justify-content:space-between; padding:12px 14px 10px; border-bottom:1px solid #30363d; flex-shrink:0; background:#0d1117; }
+.sdp-title { font-size:13px; font-weight:700; color:#f0b429; }
+.sdp-close { background:none; border:none; color:#8b949e; font-size:22px; line-height:1; cursor:pointer; padding:0 2px; }
+.sdp-tour-btn { width:calc(100% - 28px); margin:10px 14px 8px; background:#0c2d4e; border:1px solid #58a6ff; border-radius:6px; color:#58a6ff; font-size:12px; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; padding:7px 12px; cursor:pointer; font-weight:600; transition:background .15s; }
+.sdp-tour-btn:hover { background:#1a3d5e; }
+.sdp-tour-btn.touring { background:#0c2d1a; border-color:#3fb950; color:#3fb950; }
+#sdp-body { overflow-y:auto; flex:1; }
+.sdp-row { display:flex; align-items:center; gap:8px; padding:9px 14px; border-bottom:1px solid #21262d; cursor:pointer; -webkit-tap-highlight-color:transparent; transition:background .1s; }
+.sdp-row:hover { background:#161b22; }
+.sdp-row.sdp-active { background:rgba(240,180,41,0.12); border-left:3px solid #f0b429; padding-left:11px; }
+.sdp-num { font-size:10px; font-weight:700; color:#484f58; font-family:monospace; min-width:18px; }
+.sdp-icon { font-size:20px; line-height:1; }
+.sdp-info { flex:1; min-width:0; }
+.sdp-name { font-size:12px; font-weight:600; color:#e6edf3; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.sdp-city { font-size:10px; color:#8b949e; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.sdp-coord { font-family:monospace; font-size:9px; color:#484f58; }
+#btnStadiumTour { position:absolute; right:10px; top:50px; z-index:5; background:rgba(13,17,23,0.88); border:1px solid #30363d; border-radius:6px; color:#e6edf3; font-size:12px; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; padding:6px 12px; cursor:pointer; white-space:nowrap; transition:background .15s,border-color .15s,color .15s; }
+#btnStadiumTour:hover { background:rgba(13,17,23,1); border-color:#f0b429; color:#f0b429; }
+#btnStadiumTour.active { background:#1a1200; border-color:#f0b429; color:#f0b429; }
 </style>
 </head>
 <body>
@@ -238,6 +259,7 @@ void main() {
     </div>
     <button id="drawer-open-btn" title="試合一覧を開く">&#9776; 試合一覧</button>
     <button id="tnmt-btn" title="トーナメント表を開く">&#127942; トーナメント</button>
+    <button id="btnStadiumTour" title="全16会場を巡回">&#127967; 会場巡回</button>
     <div id="match-info">
       <button class="mi-close" id="miClose">&#10005;</button>
       <div class="mi-flags" id="mi-flags"></div>
@@ -301,6 +323,14 @@ void main() {
   </div>
   <div id="drw-cal"></div>
   <div id="drw-body"></div>
+</div>
+<div id="stadium-panel">
+  <div class="sdp-hdr">
+    <span class="sdp-title">&#127967; 2026 W杯 全16会場</span>
+    <button class="sdp-close" id="sdpClose">&#10005;</button>
+  </div>
+  <button class="sdp-tour-btn" id="sdpTourBtn">&#9654; 東から順に自動巡回</button>
+  <div id="sdp-body"></div>
 </div>
 <div id="schedule-panel">
   <div class="sp-hdr">
@@ -510,11 +540,29 @@ function getNextZ() {
     }
   });
 
+  // 2026 FIFA W杯 全16会場（東→西順）
+  var wc2026Stadiums = [
+    {num:1,  flag:"🏟️", name:"Gillette Stadium",              city:"フォックスボロ、MA",   lat:42.091, lon:-71.264},
+    {num:2,  flag:"🏟️", name:"MetLife Stadium",               city:"イーストラザフォード、NJ", lat:40.814, lon:-74.074},
+    {num:3,  flag:"🏟️", name:"Lincoln Financial Field",       city:"フィラデルフィア、PA", lat:39.901, lon:-75.168},
+    {num:4,  flag:"🏟️", name:"BMO Field",                    city:"トロント、カナダ",     lat:43.633, lon:-79.419},
+    {num:5,  flag:"🏟️", name:"Hard Rock Stadium",             city:"マイアミガーデンズ、FL",lat:25.958, lon:-80.239},
+    {num:6,  flag:"🏟️", name:"Bank of America Stadium",       city:"シャーロット、NC",    lat:35.226, lon:-80.853},
+    {num:7,  flag:"🏟️", name:"Arrowhead Stadium",             city:"カンザスシティ、MO",  lat:39.049, lon:-94.484},
+    {num:8,  flag:"🏟️", name:"NRG Stadium",                  city:"ヒューストン、TX",    lat:29.685, lon:-95.411},
+    {num:9,  flag:"🏟️", name:"AT&T Stadium",                 city:"アーリントン、TX",    lat:32.748, lon:-97.093},
+    {num:10, flag:"🏟️", name:"Estadio Azteca",               city:"メキシコシティ、MX",  lat:19.303, lon:-99.150},
+    {num:11, flag:"🏟️", name:"Estadio BBVA",                 city:"モンテレイ、MX",      lat:25.669, lon:-100.244},
+    {num:12, flag:"🏟️", name:"Estadio Akron",                city:"グアダラハラ、MX",    lat:20.669, lon:-103.318},
+    {num:13, flag:"🏟️", name:"SoFi Stadium",                 city:"イングルウッド、CA",  lat:33.954, lon:-118.339},
+    {num:14, flag:"🏟️", name:"Levi's Stadium",               city:"サンタクララ、CA",    lat:37.403, lon:-121.970},
+    {num:15, flag:"🏟️", name:"Lumen Field",                  city:"シアトル、WA",        lat:47.595, lon:-122.332},
+    {num:16, flag:"🏟️", name:"BC Place",                     city:"バンクーバー、カナダ",  lat:49.277, lon:-123.112}
+  ];
+
   // 2026 FIFAワールドカップ出場国（⚽=開催地マーカー）
   var wc2026 = [
     {flag:"⚽", name:"2026 FIFA W杯 開催地", lat:34, lon:-99, ball:true},
-    {flag:"🏟️", name:"Lumen Field（シアトル）", lat:47.595, lon:-122.332},
-    {flag:"🏟️", name:"Hard Rock Stadium（マイアミガーデンズ）", lat:25.958, lon:-80.239},
     {flag:"🇲🇽", name:"メキシコ", lat:23, lon:-102},
     {flag:"🇿🇦", name:"南アフリカ", lat:-29, lon:25},
     {flag:"🇰🇷", name:"韓国", lat:36, lon:128},
@@ -1375,6 +1423,138 @@ function getNextZ() {
     flyTo(ball.lat, ball.lon);
   });
 
+  var stadiumMkEls = [];
+  for (var smi = 0; smi < wc2026Stadiums.length; smi++) {
+    var sdata = wc2026Stadiums[smi];
+    var smel = document.createElement("div");
+    smel.className = "mk";
+    smel.textContent = sdata.flag;
+    smel.style.opacity = "0";
+    smel.dataset.sidx = String(smi);
+    (function(sidx) {
+      function onStadiumTap(e) {
+        e.stopPropagation();
+        var r = smel.getBoundingClientRect();
+        showStadiumTooltip(sidx, r.left + r.width/2, r.top + r.height/2);
+      }
+      smel.addEventListener("click", onStadiumTap);
+      smel.addEventListener("touchend", function(e) { e.preventDefault(); onStadiumTap(e); });
+    })(smi);
+    markersDiv.appendChild(smel);
+    stadiumMkEls.push({el: smel, pos3d: latLonTo3D(sdata.lat, sdata.lon)});
+  }
+
+  function showStadiumTooltip(idx, vx, vy) {
+    var sd = wc2026Stadiums[idx];
+    tooltip.innerHTML = '<span class="tt-flag-lg">&#127967;</span><div class="tt-name">' + sd.name + '</div><div class="tt-code">' + sd.city + '</div>';
+    positionTooltip(vx, vy);
+    tooltip.style.opacity = "1";
+    activeMarkerIdx = -1;
+    flyTo(sd.lat, sd.lon);
+    setStadiumActive(idx);
+  }
+
+  function setStadiumActive(idx) {
+    var rows = document.querySelectorAll('.sdp-row');
+    for (var ri = 0; ri < rows.length; ri++) {
+      rows[ri].classList.toggle('sdp-active', ri === idx);
+    }
+    if (rows[idx]) rows[idx].scrollIntoView({block:'nearest'});
+  }
+
+  var tourActive = false;
+  var tourIdx = 0;
+  var tourTimer = null;
+
+  function stopTour() {
+    tourActive = false;
+    if (tourTimer) { clearTimeout(tourTimer); tourTimer = null; }
+    var tb = document.getElementById('sdpTourBtn');
+    if (tb) { tb.textContent = '&#9654; 東から順に自動巡回'; tb.classList.remove('touring'); }
+    var btn = document.getElementById('btnStadiumTour');
+    if (btn) btn.classList.remove('active');
+  }
+
+  function doTourStep() {
+    if (!tourActive || tourIdx >= wc2026Stadiums.length) { stopTour(); return; }
+    var sd = wc2026Stadiums[tourIdx];
+    flyTo(sd.lat, sd.lon);
+    setStadiumActive(tourIdx);
+    var capturedIdx = tourIdx;
+    setTimeout(function() {
+      if (!tourActive || tourIdx !== capturedIdx) return;
+      tooltip.innerHTML = '<span class="tt-flag-lg">&#127967;</span><div class="tt-name">' + sd.name + '</div><div class="tt-code">' + sd.city + '</div>';
+      tooltip.style.opacity = "1";
+    }, 1800);
+    tourTimer = setTimeout(function() {
+      if (!tourActive) return;
+      hideTooltip();
+      tourIdx++;
+      doTourStep();
+    }, 3600);
+  }
+
+  function startTour() {
+    if (tourActive) { stopTour(); return; }
+    tourActive = true;
+    tourIdx = 0;
+    var tb = document.getElementById('sdpTourBtn');
+    if (tb) { tb.textContent = '&#9209; 巡回停止'; tb.classList.add('touring'); }
+    var btn = document.getElementById('btnStadiumTour');
+    if (btn) btn.classList.add('active');
+    document.getElementById('stadium-panel').classList.add('open');
+    doTourStep();
+  }
+
+  function buildStadiumPanel() {
+    var body = document.getElementById('sdp-body');
+    if (!body) return;
+    var html = '';
+    for (var i = 0; i < wc2026Stadiums.length; i++) {
+      var sd = wc2026Stadiums[i];
+      var latStr = sd.lat.toFixed(3) + 'N';
+      var lonStr = (-sd.lon).toFixed(3) + 'W';
+      html += '<div class="sdp-row" data-idx="' + i + '">';
+      html += '<span class="sdp-num">' + sd.num + '</span>';
+      html += '<span class="sdp-icon">' + sd.flag + '</span>';
+      html += '<div class="sdp-info">';
+      html += '<div class="sdp-name">' + sd.name.replace(/&/g,'&amp;') + '</div>';
+      html += '<div class="sdp-city">' + sd.city + '</div>';
+      html += '<div class="sdp-coord">' + latStr + ' / ' + lonStr + '</div>';
+      html += '</div></div>';
+    }
+    body.innerHTML = html;
+    body.addEventListener('click', function(e) {
+      var row = e.target.closest('.sdp-row');
+      if (!row) return;
+      stopTour();
+      var idx = parseInt(row.dataset.idx, 10);
+      showStadiumTooltip(idx, canvasRect.left + canvasRect.width * 0.35, canvasRect.top + 120);
+    });
+    body.addEventListener('touchend', function(e) {
+      var row = e.target.closest('.sdp-row');
+      if (!row) return;
+      e.preventDefault();
+      stopTour();
+      var idx = parseInt(row.dataset.idx, 10);
+      showStadiumTooltip(idx, canvasRect.left + canvasRect.width * 0.35, canvasRect.top + 120);
+    });
+  }
+
+  var stadiumPanel = document.getElementById('stadium-panel');
+  document.getElementById('sdpClose').addEventListener('click', function() {
+    stadiumPanel.classList.remove('open');
+    stopTour();
+  });
+  document.getElementById('sdpTourBtn').addEventListener('click', function() {
+    if (tourActive) { stopTour(); } else { startTour(); }
+  });
+  document.getElementById('btnStadiumTour').addEventListener('click', function() {
+    stadiumPanel.classList.toggle('open');
+    if (!stadiumPanel.classList.contains('open')) stopTour();
+  });
+  buildStadiumPanel();
+
   gl.enable(gl.DEPTH_TEST);
 
   var startTime = performance.now();
@@ -1466,6 +1646,24 @@ function getNextZ() {
         if (mi === activeMarkerIdx) hideTooltip();
       }
     }
+    for (var smi2 = 0; smi2 < stadiumMkEls.length; smi2++) {
+      var smk = stadiumMkEls[smi2];
+      var smp = smk.pos3d;
+      var smz = model[2]*smp[0] + model[6]*smp[1] + model[10]*smp[2];
+      if (smz > 0.12) {
+        var smcx = mvp[0]*smp[0] + mvp[4]*smp[1] + mvp[8]*smp[2]  + mvp[12];
+        var smcy = mvp[1]*smp[0] + mvp[5]*smp[1] + mvp[9]*smp[2]  + mvp[13];
+        var smcw = mvp[3]*smp[0] + mvp[7]*smp[1] + mvp[11]*smp[2] + mvp[15];
+        if (smcw > 0) {
+          var spx = (smcx/smcw+1)*0.5*W;
+          var spy = (1-smcy/smcw)*0.5*H;
+          smk.el.style.left = spx + "px";
+          smk.el.style.top  = spy + "px";
+          smk.el.style.opacity = "1";
+        } else { smk.el.style.opacity = "0"; }
+      } else { smk.el.style.opacity = "0"; }
+    }
+
     frames++;
     var dt = now - lastFps;
     if (dt >= 600) {
