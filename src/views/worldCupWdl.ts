@@ -69,11 +69,11 @@ select, button { padding: 5px 9px; border-radius: 4px; border: 1px solid var(--b
   <table>
     <thead>
       <tr>
-        <th>&#x52DD;&#x70B9;</th><th>W</th><th>D</th><th>L</th>
         <th class="grp">A</th><th class="grp">B</th><th class="grp">C</th>
         <th class="grp">D</th><th class="grp">E</th><th class="grp">F</th>
         <th class="grp">G</th><th class="grp">H</th><th class="grp">I</th>
         <th class="grp">J</th><th class="grp">K</th><th class="grp">L</th>
+        <th>W</th><th>D</th><th>L</th><th>&#x52DD;&#x70B9;</th>
       </tr>
     </thead>
     <tbody id="tbody"></tbody>
@@ -139,7 +139,7 @@ function render(){
   var h="";
   rows.forEach(function(r){
     var cls=bc(r.w,r.d,r.l);
-    h+="<tr><td class='pts'>"+r.p+"</td><td class='meta'>"+r.w+"</td><td class='meta'>"+r.d+"</td><td class='meta'>"+r.l+"</td>";
+    h+="<tr>";
     GS.forEach(function(g){
       var ts=st[g].filter(function(t){return t.w===r.w&&t.d===r.d&&t.l===r.l;});
       h+="<td class='grp-cell'>";
@@ -147,6 +147,7 @@ function render(){
       else{ts.forEach(function(t){h+="<span class='"+cls+"' title='"+t.n+"'>"+t.f+"</span>";});}
       h+="</td>";
     });
+    h+="<td class='meta'>"+r.w+"</td><td class='meta'>"+r.d+"</td><td class='meta'>"+r.l+"</td><td class='pts'>"+r.p+"</td>";
     h+="</tr>";
   });
   document.getElementById("tbody").innerHTML=h;
