@@ -1826,6 +1826,7 @@ function getNextZ() {
   function frame(now) {
     requestAnimationFrame(frame);
     resize();
+    canvasRect = canvas.getBoundingClientRect();
     var W = canvas.width, H = canvas.height;
     if (W === 0 || H === 0) return;
     gl.viewport(0, 0, W, H);
@@ -1933,9 +1934,9 @@ function getNextZ() {
           if (smi2 === activeStadiumIdx) {
             var ttx, tty;
             if (stadiumTooltipLeftMode) {
-              var smBR = smk.el.getBoundingClientRect();
-              ttx = smBR.left;
-              tty = smBR.top + smBR.height / 2;
+              var MK_HALF_W = 11;
+              ttx = canvasRect.left + spx - MK_HALF_W;
+              tty = canvasRect.top + spy;
             } else {
               ttx = canvasRect.left + spx;
               tty = canvasRect.top + spy;
