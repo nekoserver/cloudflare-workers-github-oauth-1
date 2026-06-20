@@ -4254,6 +4254,20 @@ app.get('/api/mlb-schedule', authMiddleware, async (c) => {
   }
 });
 
+app.get('/api/mlb-boxscore', authMiddleware, async (c) => {
+  const gamePk = c.req.query('gamePk');
+  if (!gamePk || !/^\d+$/.test(gamePk)) return c.json({error: 'invalid gamePk'}, 400);
+  try {
+    const url = `https://statsapi.mlb.com/api/v1/game/${gamePk}/boxscore`;
+    const res = await fetch(url, {headers: {'User-Agent': 'Mozilla/5.0'}});
+    if (!res.ok) return c.json({error: 'upstream error', status: res.status}, 502);
+    const data = await res.json();
+    return c.json(data);
+  } catch (e) {
+    return c.json({error: 'fetch failed', detail: String(e)}, 502);
+  }
+});
+
 app.get('/worldcup-wdl', authMiddleware, async (c) => {
   return c.html(getWorldCupWdlPage());
 });

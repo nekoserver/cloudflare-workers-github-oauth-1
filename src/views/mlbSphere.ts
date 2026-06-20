@@ -91,8 +91,8 @@ canvas:active { cursor:grabbing; }
 .game-home { color:#e6edf3; }
 .game-meta { display:flex; justify-content:space-between; align-items:flex-start; gap:6px; }
 .game-venue { font-size:10px; color:#484f58; flex:1; min-width:0; }
-.game-times { text-align:right; flex-shrink:0; }
-.game-time { font-family:monospace; font-size:11px; color:#58a6ff; display:block; }
+.game-times { display:flex; flex-direction:column; align-items:flex-end; flex-shrink:0; }
+.game-time { font-family:monospace; font-size:11px; color:#58a6ff; white-space:nowrap; }
 .game-live { color:#3fb950; font-weight:700; font-size:11px; }
 .game-final { color:#555d68; font-size:11px; }
 .drw-msg { padding:20px; color:#8b949e; text-align:center; font-size:13px; }
@@ -438,27 +438,34 @@ void main(){
     return sp>=0?nm.substring(sp+1):nm;
   }
 
-  function buildLineupHtml(lineups,awayAbbr,homeAbbr){
-    if(!lineups)return '<div class="tt-lu-none">スタメン未発表</div>';
-    var aw=lineups.awayPlayers||[], hm=lineups.homePlayers||[];
-    var asp=lineups.awayStartingPitcher, hsp=lineups.homeStartingPitcher;
-    if(!aw.length&&!hm.length&&!asp&&!hsp)return '<div class="tt-lu-none">スタメン未発表</div>';
-    aw.sort(function(a,b){return (a.battingOrder||999)-(b.battingOrder||999);});
-    hm.sort(function(a,b){return (a.battingOrder||999)-(b.battingOrder||999);});
+  function buildLineupHtml(lu,awayAbbr,homeAbbr){
+    if(!lu)return '<div class="tt-lu-none">&#8987; スタメン取得中...</div>';
+    if(lu==='none')return '<div class="tt-lu-none">スタメン未発表</div>';
+    function extractBatters(side){
+      var batters=side.batters||[], players=side.players||{}, result=[];
+      for(var i=0;i<batters.length;i++){
+        var pl=players['ID'+batters[i]]; if(!pl)continue;
+        var ord=parseInt(pl.battingOrder||'0',10);
+        if(ord>0&&ord%100===0)result.push({name:pl.person&&pl.person.fullName?pl.person.fullName:'?',pos:pl.position&&pl.position.abbreviation?pl.position.abbreviation:''});
+      }
+      return result;
+    }
+    function extractSP(side){
+      var pitchers=side.pitchers||[], players=side.players||{};
+      if(!pitchers.length)return null;
+      var pl=players['ID'+pitchers[0]];
+      return pl&&pl.person?pl.person.fullName:null;
+    }
+    var awBat=extractBatters(lu.away||{}), hmBat=extractBatters(lu.home||{});
+    var awSP=extractSP(lu.away||{}), hmSP=extractSP(lu.home||{});
+    if(!awBat.length&&!hmBat.length&&!awSP&&!hmSP)return '<div class="tt-lu-none">スタメン未発表</div>';
     var html='<div class="tt-lu-wrap"><div class="tt-lu-hdr">&#127358; スタメン</div><div class="tt-lu-grid">';
-    html+='<div class="tt-lu-col"><div class="tt-lu-team">'+awayAbbr+' (Away)</div>';
-    if(asp)html+='<div class="tt-lu-sp">P '+fmtLName(asp)+'</div>';
-    for(var i=0;i<aw.length;i++){
-      var p=aw[i], pos=(p.primaryPosition&&p.primaryPosition.abbreviation)||'';
-      html+='<div class="tt-lu-row">'+(i+1)+' '+pos+' '+fmtLName(p)+'</div>';
-    }
-    html+='</div>';
-    html+='<div class="tt-lu-col"><div class="tt-lu-team">'+homeAbbr+' (Home)</div>';
-    if(hsp)html+='<div class="tt-lu-sp">P '+fmtLName(hsp)+'</div>';
-    for(var j=0;j<hm.length;j++){
-      var p2=hm[j], pos2=(p2.primaryPosition&&p2.primaryPosition.abbreviation)||'';
-      html+='<div class="tt-lu-row">'+(j+1)+' '+pos2+' '+fmtLName(p2)+'</div>';
-    }
+    html+='<div class="tt-lu-col"><div class="tt-lu-team">'+awayAbbr+'</div>';
+    if(awSP)html+='<div class="tt-lu-sp">P '+fmtLName({fullName:awSP})+'</div>';
+    for(var i=0;i<awBat.length;i++)html+='<div class="tt-lu-row">'+(i+1)+' '+awBat[i].pos+' '+fmtLName({fullName:awBat[i].name})+'</div>';
+    html+='</div><div class="tt-lu-col"><div class="tt-lu-team">'+homeAbbr+'</div>';
+    if(hmSP)html+='<div class="tt-lu-sp">P '+fmtLName({fullName:hmSP})+'</div>';
+    for(var j=0;j<hmBat.length;j++)html+='<div class="tt-lu-row">'+(j+1)+' '+hmBat[j].pos+' '+fmtLName({fullName:hmBat[j].name})+'</div>';
     html+='</div></div></div>';
     return html;
   }
@@ -495,6 +502,16 @@ void main(){
     document.querySelectorAll('.team-badge[data-tid="'+homeId+'"]').forEach(function(b){b.classList.add('active');});
     flyTo(sd.lat,sd.lon);
     setTimeout(function(){if(activeHomeId===homeId)tooltip.style.opacity='1';},900);
+    games.forEach(function(g){
+      if(!g.gamePk||g.lineups!==null)return;
+      fetch('/api/mlb-boxscore?gamePk='+g.gamePk)
+        .then(function(r){return r.json();})
+        .then(function(data){
+          g.lineups=data.teams?{away:data.teams.away,home:data.teams.home}:'none';
+          if(activeHomeId===homeId)tooltip.innerHTML=buildTooltipHtml(homeId);
+        })
+        .catch(function(){g.lineups='none';});
+    });
   }
 
   function buildMarkers(){
@@ -624,7 +641,7 @@ void main(){
         awayName:at.name||'', awayAbbr:asd?asd.abbr:(at.name||'').split(' ').pop(),
         gameDate:g.gameDate||'', status:g.status||null,
         venue:g.venue?g.venue.name:'',
-        lineups:g.lineups||null
+        gamePk:g.gamePk||null, lineups:null
       });
     }
     list.sort(function(a,b){return a.gameDate<b.gameDate?-1:(a.gameDate>b.gameDate?1:0);});
