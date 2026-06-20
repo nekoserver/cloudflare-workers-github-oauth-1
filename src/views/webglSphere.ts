@@ -108,6 +108,9 @@ input[type=range] { flex:1; accent-color:#58a6ff; }
 .grp-flag-today { border-color:rgba(139,148,158,0.45); cursor:pointer; }
 .grp-flag-today:hover { border-color:rgba(139,148,158,0.75); background:rgba(139,148,158,0.06); }
 .grp-flag-active { border-color:rgba(255,200,0,0.9) !important; background:rgba(255,200,0,0.07); }
+.grp-stadium-btn { background:none; border:none; cursor:pointer; font-size:16px; padding:0 2px 0 4px; line-height:1; opacity:0; pointer-events:none; transition:opacity .2s; flex-shrink:0; }
+.grp-stadium-btn.active { opacity:0.85; pointer-events:auto; }
+.grp-stadium-btn.active:hover { opacity:1; }
 .drw-row.drw-highlight { background:rgba(255,240,60,0.12); border-left:3px solid rgba(255,240,60,0.7); }
 .drw-section-body { display:none; }
 .drw-section.open .drw-section-body { display:block; }
@@ -172,6 +175,8 @@ input[type=range] { flex:1; accent-color:#58a6ff; }
 .sdp-hdr { display:flex; align-items:center; justify-content:space-between; padding:12px 14px 10px; border-bottom:1px solid #30363d; flex-shrink:0; background:#0d1117; }
 .sdp-title { font-size:13px; font-weight:700; color:#f0b429; }
 .sdp-close { background:none; border:none; color:#8b949e; font-size:22px; line-height:1; cursor:pointer; padding:0 2px; }
+.sdp-mode-btn { background:none; border:none; cursor:pointer; font-size:18px; padding:0 4px; line-height:1; opacity:0.8; transition:opacity .15s; }
+.sdp-mode-btn:hover { opacity:1; }
 .sdp-tour-btn { width:calc(100% - 28px); margin:10px 14px 8px; background:#0c2d4e; border:1px solid #58a6ff; border-radius:6px; color:#58a6ff; font-size:12px; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; padding:7px 12px; cursor:pointer; font-weight:600; transition:background .15s; }
 .sdp-tour-btn:hover { background:#1a3d5e; }
 .sdp-tour-btn.touring { background:#0c2d1a; border-color:#3fb950; color:#3fb950; }
@@ -361,6 +366,7 @@ void main() {
 <div id="stadium-panel">
   <div class="sdp-hdr">
     <span class="sdp-title">&#127967; 2026 W杯 全16会場</span>
+    <button class="sdp-mode-btn" id="sdpModeBtn" title="全会場表示の切替">&#128193;</button>
     <button class="sdp-close" id="sdpClose">&#10005;</button>
   </div>
   <button class="sdp-tour-btn" id="sdpTourBtn">東から順に自動巡回</button>
@@ -766,6 +772,11 @@ function getNextZ() {
     {g:'L', f:['🏴󠁧󠁢󠁥󠁮󠁧󠁿','🇭🇷','🇬🇭','🇵🇦']}
   ];
 
+  var flagToGroup = {};
+  GROUPS.forEach(function(grp) { grp.f.forEach(function(f) { flagToGroup[f] = grp.g; }); });
+  var flagToName = {};
+  wc2026.forEach(function(d) { if (d.flag && d.name) flagToName[d.flag] = d.name; });
+
   var CAL_R32_BG = 'rgba(88,166,255,0.18)';
   var CAL_R16_BG = 'rgba(88,166,255,0.32)';
   var CAL_QF_BG  = 'rgba(88,166,255,0.50)';
@@ -854,6 +865,7 @@ function getNextZ() {
       cell.classList.add('cal-selected');
       if (!drwBuilt) { buildDrawer(); drwBuilt = true; }
       openDateSection(ds);
+      selectedDate = ds;
       updateActiveDateFlags(ds);
     });
   }
@@ -868,15 +880,16 @@ function getNextZ() {
     });
     var html = '';
     GROUPS.forEach(function(grp) {
-      html += '<div class="grp-row"><span class="grp-label">' + grp.g + '</span><span class="grp-flags">';
+      html += '<div class="grp-row" data-g="' + grp.g + '"><span class="grp-label">' + grp.g + '</span><span class="grp-flags">';
       grp.f.forEach(function(flag) {
         var cls = 'grp-flag' + (todayFlags[flag] ? ' grp-flag-today' : '');
         var enc = flag.replace(/&/g, '&amp;');
         html += '<span class="' + cls + '" data-flag="' + enc + '">' + flag + '</span>';
       });
-      html += '</span></div>';
+      html += '</span><button class="grp-stadium-btn" data-g="' + grp.g + '">&#127967;</button></div>';
     });
     grpBody.innerHTML = html;
+    updateGroupStadiumIcons(selectedDate);
     grpBody.addEventListener('click', function(e) {
       var span = e.target.closest('.grp-flag');
       if (!span) return;
@@ -1170,6 +1183,7 @@ function getNextZ() {
   var spBody = schedulePanel.querySelector("#sp-body");
   var activeMarkerIdx = -1;
   var activeStadiumIdx = -1;
+  var selectedDate = new Date().toISOString().slice(0, 10);
   var canvasRect = {left:0, top:0, width:0, height:0};
 
   function updateCanvasRect() { canvasRect = canvas.getBoundingClientRect(); }
@@ -1355,6 +1369,7 @@ function getNextZ() {
   }
 
   function updateActiveDateFlags(dateStr) {
+    selectedDate = dateStr;
     var grpBody = document.getElementById('grp-body');
     if (!grpBody) return;
     var dateFlags = {};
@@ -1366,6 +1381,77 @@ function getNextZ() {
       span.classList.remove('grp-flag-today', 'grp-flag-active');
       if (dateFlags[flag]) span.classList.add('grp-flag-today');
     });
+    updateGroupStadiumIcons(dateStr);
+  }
+
+  function updateGroupStadiumIcons(dateStr) {
+    var grpBody = document.getElementById('grp-body');
+    if (!grpBody) return;
+    GROUPS.forEach(function(grp) {
+      var btn = grpBody.querySelector('.grp-stadium-btn[data-g="' + grp.g + '"]');
+      if (!btn) return;
+      var matchIdx = -1;
+      var venueIdx = -1;
+      for (var i = 0; i < MATCHES.length && i < MATCH_VENUE.length; i++) {
+        if (MATCHES[i].date !== dateStr) continue;
+        if (grp.f.indexOf(MATCHES[i].a) >= 0 || grp.f.indexOf(MATCHES[i].b) >= 0) {
+          matchIdx = i; venueIdx = MATCH_VENUE[i]; break;
+        }
+      }
+      if (matchIdx < 0) {
+        btn.classList.remove('active');
+        btn.onclick = null;
+      } else {
+        btn.classList.add('active');
+        var capturedVenue = venueIdx;
+        var capturedDate = dateStr;
+        btn.onclick = function(e) {
+          e.stopPropagation();
+          showStadiumOnDate(capturedVenue, capturedDate);
+        };
+      }
+    });
+  }
+
+  function buildStadiumDateTooltipHtml(venueIdx, dateStr) {
+    var sd = wc2026Stadiums[venueIdx];
+    var html = '<span class="tt-flag-lg">&#127967; ' + sd.ctry + '</span><div class="tt-name">' + sd.name + '</div><div class="tt-code">' + sd.city + '</div>';
+    var midxs = stadiumMatches[venueIdx] || [];
+    var dayMatches = [];
+    for (var k = 0; k < midxs.length; k++) {
+      if (MATCHES[midxs[k]].date === dateStr) dayMatches.push(MATCHES[midxs[k]]);
+    }
+    if (dayMatches.length === 0) return buildStadiumTooltipHtml(venueIdx);
+    var md = dateStr.slice(5).replace('-', '/');
+    html += '<div style="font-size:10px;font-weight:700;color:#f0b429;margin-top:5px">' + md + '</div>';
+    for (var j = 0; j < dayMatches.length; j++) {
+      var m = dayMatches[j];
+      var nameA = flagToName[m.a] || m.a;
+      var nameB = flagToName[m.b] || m.b;
+      html += '<div class="tt-mrow">' + m.a + ' ' + nameA + '</div>';
+      html += '<div class="tt-mrow">' + m.b + ' ' + nameB + '</div>';
+      html += '<div class="tt-time">' + toET(m.time) + '</div>';
+      if (j < dayMatches.length - 1) html += '<hr style="border:none;border-top:1px solid #30363d;margin:4px 0">';
+    }
+    return html;
+  }
+
+  function showStadiumOnDate(venueIdx, dateStr) {
+    hideTooltip();
+    activeStadiumIdx = venueIdx;
+    var sd = wc2026Stadiums[venueIdx];
+    flyTo(sd.lat, sd.lon);
+    setStadiumActive(venueIdx);
+    setTimeout(function() {
+      if (activeStadiumIdx !== venueIdx) return;
+      var mel = stadiumMkEls[venueIdx] ? stadiumMkEls[venueIdx].el : null;
+      var r = mel ? mel.getBoundingClientRect() : null;
+      var cx = r ? r.left + r.width/2 : canvasRect.left + canvasRect.width/2;
+      var cy = r ? r.top + r.height/2 : canvasRect.top + 100;
+      tooltip.innerHTML = buildStadiumDateTooltipHtml(venueIdx, dateStr);
+      positionTooltip(cx, cy);
+      tooltip.style.opacity = '1';
+    }, 900);
   }
 
   function buildDrawer() {
@@ -1539,6 +1625,23 @@ function getNextZ() {
     if (rows[idx]) rows[idx].scrollIntoView({block:'nearest'});
   }
 
+  var showAllStadiums = false;
+  var todayStadiumSet = (function() {
+    var s = {};
+    var today = new Date().toISOString().slice(0, 10);
+    for (var i = 0; i < MATCHES.length && i < MATCH_VENUE.length; i++) {
+      if (MATCHES[i].date === today) s[MATCH_VENUE[i]] = true;
+    }
+    return s;
+  })();
+
+  function stadiumVisible(sidx) {
+    if (sidx === activeStadiumIdx) return true;
+    if (tourActive) return sidx === tourIdx;
+    if (showAllStadiums) return true;
+    return todayStadiumSet[sidx] === true;
+  }
+
   var tourActive = false;
   var tourIdx = 0;
   var tourTimer = null;
@@ -1637,6 +1740,13 @@ function getNextZ() {
     stadiumPanel.classList.toggle('open');
     if (!stadiumPanel.classList.contains('open')) stopTour();
   });
+  document.getElementById('sdpModeBtn').addEventListener('click', function() {
+    showAllStadiums = !showAllStadiums;
+    this.innerHTML = showAllStadiums ? '&#127967;' : '&#128193;';
+    if (!showAllStadiums && activeStadiumIdx >= 0 && !todayStadiumSet[activeStadiumIdx]) {
+      hideTooltip();
+    }
+  });
   buildStadiumPanel();
 
   gl.enable(gl.DEPTH_TEST);
@@ -1734,6 +1844,11 @@ function getNextZ() {
     }
     for (var smi2 = 0; smi2 < stadiumMkEls.length; smi2++) {
       var smk = stadiumMkEls[smi2];
+      if (!stadiumVisible(smi2)) {
+        smk.el.style.opacity = "0";
+        if (smi2 === activeStadiumIdx) hideTooltip();
+        continue;
+      }
       var smp = smk.pos3d;
       var smz = model[2]*smp[0] + model[6]*smp[1] + model[10]*smp[2];
       if (smz > 0.12) {
