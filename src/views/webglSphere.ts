@@ -34,6 +34,7 @@ canvas:active { cursor:grabbing; }
 .mk-ball { font-size:28px; }
 #mk-tooltip { position:fixed; background:rgba(13,17,23,0.97); border:1px solid #58a6ff; border-radius:8px; padding:8px 14px; font-size:12px; color:#e6edf3; white-space:normal; max-width:320px; pointer-events:auto; opacity:0; transition:opacity .15s; z-index:60; transform:translate(-50%,-110%); line-height:1.7; text-align:center; }
 #mk-tooltip.below { transform:translate(-50%, 14px); }
+#mk-tooltip.tt-left-side { transform:translate(-100%, -50%); }
 #mk-tooltip .tt-flag-lg { font-size:28px; line-height:1.3; display:block; }
 #mk-tooltip .tt-name { font-weight:700; font-size:13px; }
 #mk-tooltip .tt-code { font-size:11px; color:#8b949e; letter-spacing:1px; margin-bottom:4px; }
@@ -42,6 +43,7 @@ canvas:active { cursor:grabbing; }
 #mk-tooltip .tt-time { color:#58a6ff; font-family:monospace; white-space:nowrap; font-size:11px; display:block; }
 #mk-tooltip .tt-past { color:#555d68; }
 #mk-tooltip .tt-mrow { margin-top:3px; font-size:12px; }
+#mk-tooltip .tt-mrow-today { background:rgba(88,166,255,0.1); border-radius:4px; border-left:2px solid #58a6ff; padding-left:6px; margin-left:-6px; }
 #mk-tooltip .tt-mrow.tt-past { color:#555d68; }
 #mk-tooltip .tt-opp-tap { cursor:pointer; font-size:36px; line-height:1.2; }
 #mk-tooltip .tt-opp-tap:hover { opacity:0.75; }
@@ -1195,7 +1197,9 @@ function getNextZ() {
   window.addEventListener("resize", updateCanvasRect);
   updateCanvasRect();
 
-  function hideTooltip() { tooltip.style.opacity = "0"; activeMarkerIdx = -1; activeStadiumIdx = -1; }
+  var stadiumTooltipLeftMode = false;
+
+  function hideTooltip() { tooltip.style.opacity = "0"; activeMarkerIdx = -1; activeStadiumIdx = -1; stadiumTooltipLeftMode = false; tooltip.classList.remove('tt-left-side'); }
 
   function navigateToFlag(flag) {
     var idx2 = findCountryByFlag(flag);
@@ -1235,10 +1239,16 @@ function getNextZ() {
   });
 
   function positionTooltip(vx, vy) {
-    var isNearTop = vy < canvasRect.top + 80;
     tooltip.style.left = vx + "px";
     tooltip.style.top  = vy + "px";
-    if (isNearTop) { tooltip.classList.add("below"); } else { tooltip.classList.remove("below"); }
+    if (stadiumTooltipLeftMode) {
+      tooltip.classList.add("tt-left-side");
+      tooltip.classList.remove("below");
+    } else {
+      tooltip.classList.remove("tt-left-side");
+      var isNearTop = vy < canvasRect.top + 80;
+      if (isNearTop) { tooltip.classList.add("below"); } else { tooltip.classList.remove("below"); }
+    }
   }
 
   function buildAllMatchesHtml(flag, name) {
@@ -1620,16 +1630,17 @@ function getNextZ() {
     var midxs = stadiumMatches[sidx] || [];
     if (midxs.length > 0) {
       var now2 = Date.now();
+      var todayStr3 = new Date().toISOString().slice(0, 10);
       var items = [];
       for (var k = 0; k < midxs.length; k++) {
         var m = MATCHES[midxs[k]];
         var ko = new Date(m.date + 'T' + m.time + ':00Z').getTime();
-        items.push({m: m, ko: ko, past: ko <= now2 - 110*60000});
+        items.push({m: m, ko: ko, past: ko <= now2 - 110*60000, isToday: m.date === todayStr3});
       }
       items.sort(function(x, y) { return x.ko - y.ko; });
       var future = items.filter(function(it) { return !it.past; });
       var past2 = items.filter(function(it) { return it.past; });
-      var show = future.concat(past2).slice(0, 5);
+      var show = future.concat(past2).slice(0, 8);
       for (var k2 = 0; k2 < show.length; k2++) {
         var it = show[k2];
         var md = it.m.date.slice(5).replace('-', '/');
@@ -1637,10 +1648,12 @@ function getNextZ() {
         var grpB = flagToGroup[it.m.b] || '';
         var grpStr = (grpA === grpB && grpA) ? 'G-' + grpA : (grpA && grpB ? 'G-' + grpA + '/' + grpB : '');
         var dateGrp = md + (grpStr ? '  ' + grpStr : '');
-        if (it.past) {
-          html += '<div class="tt-mrow tt-past"><span style="font-size:10px">' + dateGrp + '</span><br>' + it.m.a + fc(it.m.a) + ' vs ' + it.m.b + fc(it.m.b) + '</div>';
+        var rowCls = 'tt-mrow' + (it.past && !it.isToday ? ' tt-past' : '') + (it.isToday ? ' tt-mrow-today' : '');
+        var dateStyle = it.isToday ? 'font-size:10px;color:#58a6ff;font-weight:700' : (it.past ? 'font-size:10px' : 'font-size:10px;color:#f0b429');
+        if (it.past && !it.isToday) {
+          html += '<div class="' + rowCls + '"><span style="' + dateStyle + '">' + dateGrp + '</span><br>' + it.m.a + fc(it.m.a) + ' vs ' + it.m.b + fc(it.m.b) + '</div>';
         } else {
-          html += '<div class="tt-mrow"><span style="font-size:10px;color:#f0b429">' + dateGrp + '</span><br>' + it.m.a + fc(it.m.a) + ' vs ' + it.m.b + fc(it.m.b) + '<span class="tt-time">' + it.m.time + ' UTC</span><span class="tt-time">' + toET(it.m.time) + '</span><span class="tt-time">' + toJST(it.m.time) + '</span></div>';
+          html += '<div class="' + rowCls + '"><span style="' + dateStyle + '">' + dateGrp + '</span><br>' + it.m.a + fc(it.m.a) + ' vs ' + it.m.b + fc(it.m.b) + '<span class="tt-time">' + it.m.time + ' UTC</span><span class="tt-time">' + toET(it.m.time) + '</span><span class="tt-time">' + toJST(it.m.time) + '</span></div>';
         }
       }
     }
@@ -1650,13 +1663,15 @@ function getNextZ() {
   function showStadiumTooltip(idx) {
     var sd = wc2026Stadiums[idx];
     hideTooltip();
+    stadiumTooltipLeftMode = true;
     activeStadiumIdx = idx;
     flyTo(sd.lat, sd.lon);
     setStadiumActive(idx);
     setTimeout(function() {
+      if (activeStadiumIdx !== idx) return;
       var mel = stadiumMkEls[idx] ? stadiumMkEls[idx].el : null;
       var r = mel ? mel.getBoundingClientRect() : null;
-      var cx = r ? r.left + r.width/2 : canvasRect.left + canvasRect.width/2;
+      var cx = r ? r.left : canvasRect.left + canvasRect.width/2;
       var cy = r ? r.top + r.height/2 : canvasRect.top + 100;
       tooltip.innerHTML = buildStadiumTooltipHtml(idx);
       positionTooltip(cx, cy);
@@ -1763,7 +1778,7 @@ function getNextZ() {
       if (!row) return;
       stopTour();
       var idx = parseInt(row.dataset.idx, 10);
-      showStadiumTooltip(idx);
+      if (dateFilterMode) { showStadiumOnDate(idx, selectedDate); } else { showStadiumTooltip(idx); }
     });
     body.addEventListener('touchend', function(e) {
       var row = e.target.closest('.sdp-row');
@@ -1771,7 +1786,7 @@ function getNextZ() {
       e.preventDefault();
       stopTour();
       var idx = parseInt(row.dataset.idx, 10);
-      showStadiumTooltip(idx);
+      if (dateFilterMode) { showStadiumOnDate(idx, selectedDate); } else { showStadiumTooltip(idx); }
     });
   }
 
@@ -1916,7 +1931,16 @@ function getNextZ() {
           smk.el.style.top  = spy + "px";
           smk.el.style.opacity = "1";
           if (smi2 === activeStadiumIdx) {
-            positionTooltip(canvasRect.left + spx, canvasRect.top + spy);
+            var ttx, tty;
+            if (stadiumTooltipLeftMode) {
+              var smBR = smk.el.getBoundingClientRect();
+              ttx = smBR.left;
+              tty = smBR.top + smBR.height / 2;
+            } else {
+              ttx = canvasRect.left + spx;
+              tty = canvasRect.top + spy;
+            }
+            positionTooltip(ttx, tty);
             tooltip.style.opacity = "1";
           }
         } else {
