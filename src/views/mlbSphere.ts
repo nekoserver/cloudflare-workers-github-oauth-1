@@ -140,6 +140,7 @@ void main(){
     <div class="hud" id="hud">&#35501;&#12415;&#36796;&#12415;&#20013;...</div>
     <div class="canvas-ctrl-btns">
       <button class="ctrl-btn" id="btnGames">&#9918; &#35430;&#21512;&#19968;&#35239;</button>
+      <button class="ctrl-btn" id="btnMLBView">&#127279; &#20840;&#29699;&#22280;</button>
       <button class="ctrl-btn" id="btnAutoRot">&#9208; &#33258;&#36578;&#20572;&#27490;</button>
       <button class="ctrl-btn" id="btnNight">&#127769; &#22812;&#26223;</button>
     </div>
@@ -205,6 +206,29 @@ void main(){
     {name:'NL Central', teams:[112,113,158,134,138]},
     {name:'NL West', teams:[109,115,119,135,137]}
   ];
+
+  var MLB_CENTER_LAT=0, MLB_CENTER_LON=0, MLB_FIT_ZOOM=2.2;
+  (function(){
+    var ids=Object.keys(MLB_STADIUMS), n=ids.length, sx=0,sy=0,sz=0;
+    for(var i=0;i<n;i++){
+      var sd=MLB_STADIUMS[parseInt(ids[i])];
+      var lr=sd.lat*Math.PI/180, lo=sd.lon*Math.PI/180;
+      sx+=Math.cos(lr)*Math.cos(lo); sy+=Math.cos(lr)*Math.sin(lo); sz+=Math.sin(lr);
+    }
+    sx/=n; sy/=n; sz/=n;
+    MLB_CENTER_LAT=Math.atan2(sz,Math.sqrt(sx*sx+sy*sy))*180/Math.PI;
+    MLB_CENTER_LON=Math.atan2(sy,sx)*180/Math.PI;
+    var clr=MLB_CENTER_LAT*Math.PI/180, clo=MLB_CENTER_LON*Math.PI/180, maxD=0;
+    for(var j=0;j<n;j++){
+      var sd2=MLB_STADIUMS[parseInt(ids[j])];
+      var lr2=sd2.lat*Math.PI/180, lo2=sd2.lon*Math.PI/180;
+      var dot=Math.sin(clr)*Math.sin(lr2)+Math.cos(clr)*Math.cos(lr2)*Math.cos(lo2-clo);
+      var d=Math.acos(Math.max(-1,Math.min(1,dot)));
+      if(d>maxD)maxD=d;
+    }
+    var margin=0.78, fh=Math.PI/8;
+    MLB_FIT_ZOOM=Math.max(1.6, Math.sin(maxD)/(margin*Math.tan(fh))+Math.cos(maxD));
+  })();
 
   var todayGames = [], stadiumGames = {}, gameCache = {};
 
@@ -614,6 +638,23 @@ void main(){
       }else{mk.el.style.opacity='0';if(mk.homeId===activeHomeId)hideTooltip();}
     }
   }
+
+  var mlbLocked=false;
+  var btnMLBView=document.getElementById('btnMLBView');
+  btnMLBView.addEventListener('click',function(){
+    mlbLocked=!mlbLocked;
+    if(mlbLocked){
+      flyTo(MLB_CENTER_LAT, MLB_CENTER_LON);
+      zoomTarget=MLB_FIT_ZOOM;
+      btnMLBView.classList.add('active');
+      btnMLBView.textContent='&#128274; &#20840;&#29699;&#22280;';
+    }else{
+      btnMLBView.classList.remove('active');
+      btnMLBView.textContent='&#127279; &#20840;&#29699;&#22280;';
+    }
+  });
+  canvas.addEventListener('mousedown',function(){if(mlbLocked){mlbLocked=false;btnMLBView.classList.remove('active');btnMLBView.textContent='&#127279; &#20840;&#29699;&#22280;';}});
+  canvas.addEventListener('touchstart',function(){if(mlbLocked){mlbLocked=false;btnMLBView.classList.remove('active');btnMLBView.textContent='&#127279; &#20840;&#29699;&#22280;';}},{passive:true});
 
   // init
   var mm=now.getMonth()+1, dd=now.getDate(), yyyy=now.getFullYear();
