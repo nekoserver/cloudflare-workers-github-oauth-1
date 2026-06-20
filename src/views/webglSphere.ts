@@ -2089,6 +2089,25 @@ function getNextZ() {
       }
     }
 
+    for (var cmi2 = 0; cmi2 < costMkEls.length; cmi2++) {
+      var cmk = costMkEls[cmi2];
+      if (cmi2 !== activeCostMkIdx) { cmk.el.style.opacity = "0"; continue; }
+      var cmp = cmk.pos3d;
+      var cmz = model[2]*cmp[0] + model[6]*cmp[1] + model[10]*cmp[2];
+      if (cmz > 0.12) {
+        var cmcx = mvp[0]*cmp[0] + mvp[4]*cmp[1] + mvp[8]*cmp[2]  + mvp[12];
+        var cmcy = mvp[1]*cmp[0] + mvp[5]*cmp[1] + mvp[9]*cmp[2]  + mvp[13];
+        var cmcw = mvp[3]*cmp[0] + mvp[7]*cmp[1] + mvp[11]*cmp[2] + mvp[15];
+        if (cmcw > 0) {
+          var cpx = (cmcx/cmcw+1)*0.5*W;
+          var cpy = (1-cmcy/cmcw)*0.5*H;
+          cmk.el.style.left = cpx + "px";
+          cmk.el.style.top  = cpy + "px";
+          cmk.el.style.opacity = "1";
+        } else { cmk.el.style.opacity = "0"; }
+      } else { cmk.el.style.opacity = "0"; }
+    }
+
     frames++;
     var dt = now - lastFps;
     if (dt >= 600) {
@@ -2214,16 +2233,32 @@ function getNextZ() {
     {name:"Lusail Stadium",             lat:25.428, lon:51.489},
     {name:"Cape Town Stadium",          lat:-33.904, lon:18.411}
   ];
+  var activeCostMkIdx = -1;
+  var costMkEls = [];
+  for (var cmi = 0; cmi < costStadiums.length; cmi++) {
+    var cmel = document.createElement("div");
+    cmel.className = "mk";
+    cmel.textContent = "🏟️";
+    cmel.style.opacity = "0";
+    markersDiv.appendChild(cmel);
+    costMkEls.push({el: cmel, pos3d: latLonTo3D(costStadiums[cmi].lat, costStadiums[cmi].lon)});
+  }
   var costTourActive = false;
   var costTourIdx = 0;
   var costTourTimer = null;
   function setCostRowActive(idx) {
+    activeCostMkIdx = idx;
     var rows = document.querySelectorAll('.cost-row');
     for (var i = 0; i < rows.length; i++) {
       rows[i].classList.toggle('cost-active', parseInt(rows[i].dataset.cidx, 10) === idx);
     }
+    if (idx >= 0) {
+      var activeRow = document.querySelector('.cost-row[data-cidx="' + idx + '"]');
+      if (activeRow) activeRow.scrollIntoView({block:'nearest', behavior:'smooth'});
+    }
   }
   function stopCostTour() {
+    activeCostMkIdx = -1;
     costTourActive = false;
     if (costTourTimer) { clearTimeout(costTourTimer); costTourTimer = null; }
     var btn = document.getElementById('costTourBtn');
@@ -2234,6 +2269,7 @@ function getNextZ() {
     if (!costTourActive || costTourIdx >= costStadiums.length) { stopCostTour(); return; }
     var sd = costStadiums[costTourIdx];
     hideTooltip();
+    zoomTarget = 3.2;
     flyTo(sd.lat, sd.lon);
     setCostRowActive(costTourIdx);
     costTourTimer = setTimeout(function() {
