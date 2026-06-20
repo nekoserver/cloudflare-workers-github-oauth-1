@@ -4240,6 +4240,20 @@ app.get('/mlb', authMiddleware, async (c) => {
   return c.html(getMLBSpherePage(user.sub));
 });
 
+app.get('/api/mlb-schedule', authMiddleware, async (c) => {
+  const date = c.req.query('date') || new Date().toISOString().slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return c.json({error: 'invalid date'}, 400);
+  try {
+    const url = `https://statsapi.mlb.com/api/v1/schedule?sportId=1&date=${date}&hydrate=team,venue`;
+    const res = await fetch(url, {headers: {'User-Agent': 'Mozilla/5.0'}});
+    if (!res.ok) return c.json({error: 'upstream error', status: res.status}, 502);
+    const data = await res.json();
+    return c.json(data);
+  } catch (e) {
+    return c.json({error: 'fetch failed', detail: String(e)}, 502);
+  }
+});
+
 app.get('/worldcup-wdl', authMiddleware, async (c) => {
   return c.html(getWorldCupWdlPage());
 });
