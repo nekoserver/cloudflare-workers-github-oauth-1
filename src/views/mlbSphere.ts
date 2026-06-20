@@ -80,14 +80,18 @@ canvas:active { cursor:grabbing; }
 .cal-sel { background:#0c2d4e; color:#58a6ff; font-weight:700; }
 #game-list { flex:1; }
 .game-date-hdr { padding:7px 12px 4px; font-size:10px; font-weight:700; color:#8b949e; letter-spacing:.5px; text-transform:uppercase; border-bottom:1px solid #21262d; position:sticky; top:0; background:#0d1117; }
-.game-card { padding:8px 12px; border-bottom:1px solid #21262d; cursor:pointer; }
+.game-card { padding:8px 12px; border-bottom:1px solid #21262d; cursor:pointer; border-left:2px solid transparent; }
 .game-card:hover { background:#21262d; }
 .game-card:active { background:#21262d; }
-.game-matchup { font-size:12px; font-weight:600; color:#e6edf3; margin-bottom:2px; }
+.game-card.live-now { background:rgba(63,185,80,0.07); border-left-color:#3fb950; }
+.game-card.up-next { background:rgba(88,166,255,0.06); border-left-color:#58a6ff; }
+.game-matchup { font-size:12px; font-weight:600; color:#e6edf3; margin-bottom:3px; }
 .game-away { color:#c9d1d9; font-weight:400; }
 .game-vs { color:#484f58; }
 .game-home { color:#e6edf3; }
-.game-venue { font-size:10px; color:#484f58; margin:1px 0 2px; }
+.game-meta { display:flex; justify-content:space-between; align-items:flex-start; gap:6px; }
+.game-venue { font-size:10px; color:#484f58; flex:1; min-width:0; }
+.game-times { text-align:right; flex-shrink:0; }
 .game-time { font-family:monospace; font-size:11px; color:#58a6ff; display:block; }
 .game-live { color:#3fb950; font-weight:700; font-size:11px; }
 .game-final { color:#555d68; font-size:11px; }
@@ -554,28 +558,36 @@ void main(){
       return;
     }
     var html='<div class="game-date-hdr">'+label+' ('+games.length+'試合)</div>';
+    var nowMs=Date.now();
     for(var i=0;i<games.length;i++){
       var g=games[i], sd=MLB_STADIUMS[g.homeId];
       var state=(g.status&&g.status.abstractGameState)||'Preview';
       var isLive=state==='Live', isFinal=state==='Final';
       var venue=sd?sd.name:(g.venue||'');
       var city=sd?sd.city:'';
+      var startMs=g.gameDate?new Date(g.gameDate).getTime():0;
+      var endMs=startMs+3.5*3600000;
+      var isLiveNow=isLive||(startMs>0&&nowMs>=startMs&&nowMs<=endMs&&!isFinal);
+      var isUpNext=!isLiveNow&&!isFinal&&startMs>0&&nowMs<startMs&&(startMs-nowMs)<=1800000;
+      var cardCls='game-card'+(isLiveNow?' live-now':isUpNext?' up-next':'');
       var timeHtml='';
-      if(isLive){timeHtml='<div class="game-live">&#9679; LIVE</div>';}
-      else if(isFinal){timeHtml='<div class="game-final">&#32199;&#20102;</div>';}
+      if(isLive){timeHtml='<span class="game-live">&#9679; LIVE</span>';}
+      else if(isFinal){timeHtml='<span class="game-final">&#32199;&#20102;</span>';}
       else{
         timeHtml='<span class="game-time">'+fmtTime(g.gameDate,'America/New_York','ET')+'</span>';
         timeHtml+='<span class="game-time">'+fmtTime(g.gameDate,'America/Los_Angeles','PT')+'</span>';
         timeHtml+='<span class="game-time">'+fmtTime(g.gameDate,'Asia/Tokyo','JST')+'</span>';
       }
-      html+='<div class="game-card" data-hid="'+g.homeId+'">';
+      html+='<div class="'+cardCls+'" data-hid="'+g.homeId+'">';
       html+='<div class="game-matchup">';
       html+='<span class="game-away">'+g.awayAbbr+' '+g.awayName+'</span>';
       html+='<span class="game-vs"> @ </span>';
       html+='<span class="game-home">'+(sd?sd.abbr:'')+' '+g.homeName+'</span>';
       html+='</div>';
+      html+='<div class="game-meta">';
       html+='<div class="game-venue">&#127967; '+venue+(city?' &mdash; '+city:'')+'</div>';
-      html+=timeHtml;
+      html+='<div class="game-times">'+timeHtml+'</div>';
+      html+='</div>';
       html+='</div>';
     }
     document.getElementById('game-list').innerHTML=html;
