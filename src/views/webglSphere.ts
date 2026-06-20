@@ -517,7 +517,7 @@ function getNextZ() {
   function clampElev(v){ return v < -ELEV_MAX ? -ELEV_MAX : (v > ELEV_MAX ? ELEV_MAX : v); }
 
   var proj=m4(),view=m4(),model=m4(),rx=m4(),ry=m4(),tz=m4(),tmp=m4(),tmp2=m4(),mvp=m4();
-  var rotXv = 0.3, rotYv = 0.6, zoom = 3.2, autoRot = true;
+  var rotXv = 0.3, rotYv = 0.6, zoom = 3.2, zoomTarget = 3.2, autoRot = true;
   var drag = false, lx = 0, ly = 0, pinch0 = 0, touchMoved = false;
 
   var axisLocked = false;
@@ -559,10 +559,10 @@ function getNextZ() {
   }
   window.addEventListener("mouseup",    function(){ if(!drag)return; drag=false; momentumY=applySpinBoost(velY); momentumX=applySpinBoost(velX); velY=0; velX=0; });
   window.addEventListener("mousemove",  function(e){ if(!drag)return; var dy=(e.clientX-lx)*0.008; var dx=(e.clientY-ly)*0.008; rotYv+=dy; velY=velY*0.4+dy*0.6; if(!axisLocked){ rotXv=clampElev(rotXv+dx); velX=velX*0.4+dx*0.6; } lx=e.clientX; ly=e.clientY; });
-  canvas.addEventListener("wheel",      function(e){ e.preventDefault(); zoom=Math.max(1.6,Math.min(10,zoom+e.deltaY*0.01)); },{passive:false});
+  canvas.addEventListener("wheel",      function(e){ e.preventDefault(); var delta = e.deltaMode === 1 ? e.deltaY * 18 : (e.deltaMode === 2 ? e.deltaY * 300 : e.deltaY); zoomTarget=Math.max(1.6,Math.min(10,zoomTarget+delta*0.004)); },{passive:false});
   canvas.addEventListener("dblclick",   function(){ autoRot=!autoRot; btnAutoRot.textContent = autoRot ? "⏸ 自転停止" : "▶ 回転"; if(autoRot){btnAutoRot.classList.remove("active");}else{btnAutoRot.classList.add("active");} });
   canvas.addEventListener("touchstart", function(e){ e.preventDefault(); touchMoved=false; momentumY=0; momentumX=0; velY=0; velX=0; if(e.touches.length===1){drag=true;lx=e.touches[0].clientX;ly=e.touches[0].clientY;} if(e.touches.length===2){pinch0=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);} },{passive:false});
-  canvas.addEventListener("touchmove",  function(e){ e.preventDefault(); touchMoved=true; if(e.touches.length===1&&drag){ var dy=(e.touches[0].clientX-lx)*0.008; var dx=(e.touches[0].clientY-ly)*0.008; rotYv+=dy; velY=velY*0.4+dy*0.6; if(!axisLocked){rotXv=clampElev(rotXv+dx); velX=velX*0.4+dx*0.6;} lx=e.touches[0].clientX;ly=e.touches[0].clientY;} if(e.touches.length===2){var d=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);zoom=Math.max(1.6,Math.min(10,zoom-(d-pinch0)*0.02));pinch0=d;} },{passive:false});
+  canvas.addEventListener("touchmove",  function(e){ e.preventDefault(); touchMoved=true; if(e.touches.length===1&&drag){ var dy=(e.touches[0].clientX-lx)*0.008; var dx=(e.touches[0].clientY-ly)*0.008; rotYv+=dy; velY=velY*0.4+dy*0.6; if(!axisLocked){rotXv=clampElev(rotXv+dx); velX=velX*0.4+dx*0.6;} lx=e.touches[0].clientX;ly=e.touches[0].clientY;} if(e.touches.length===2){var d=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);zoomTarget=Math.max(1.6,Math.min(10,zoomTarget-(d-pinch0)*0.015));pinch0=d;} },{passive:false});
   canvas.addEventListener("touchend", function(e){
     drag=false;
     momentumY=applySpinBoost(velY); momentumX=applySpinBoost(velX); velY=0; velX=0;
@@ -1169,13 +1169,14 @@ function getNextZ() {
   var schedulePanel = document.getElementById("schedule-panel");
   var spBody = schedulePanel.querySelector("#sp-body");
   var activeMarkerIdx = -1;
+  var activeStadiumIdx = -1;
   var canvasRect = {left:0, top:0, width:0, height:0};
 
   function updateCanvasRect() { canvasRect = canvas.getBoundingClientRect(); }
   window.addEventListener("resize", updateCanvasRect);
   updateCanvasRect();
 
-  function hideTooltip() { tooltip.style.opacity = "0"; activeMarkerIdx = -1; }
+  function hideTooltip() { tooltip.style.opacity = "0"; activeMarkerIdx = -1; activeStadiumIdx = -1; }
 
   function navigateToFlag(flag) {
     var idx2 = findCountryByFlag(flag);
@@ -1516,6 +1517,7 @@ function getNextZ() {
   function showStadiumTooltip(idx) {
     var sd = wc2026Stadiums[idx];
     hideTooltip();
+    activeStadiumIdx = idx;
     flyTo(sd.lat, sd.lon);
     setStadiumActive(idx);
     setTimeout(function() {
@@ -1553,6 +1555,8 @@ function getNextZ() {
   function doTourStep() {
     if (!tourActive || tourIdx >= wc2026Stadiums.length) { stopTour(); return; }
     var sd = wc2026Stadiums[tourIdx];
+    hideTooltip();
+    activeStadiumIdx = tourIdx;
     flyTo(sd.lat, sd.lon);
     setStadiumActive(tourIdx);
     var capturedIdx = tourIdx;
@@ -1650,6 +1654,7 @@ function getNextZ() {
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
     var t = (now - startTime) * 0.001;
+    zoom += (zoomTarget - zoom) * 0.15;
     var spd = parseFloat(rotSpdEl.value);
     if (flyTarget !== null) {
       var fp = Math.min((now - flyStart) / FLY_DUR, 1);
@@ -1741,8 +1746,18 @@ function getNextZ() {
           smk.el.style.left = spx + "px";
           smk.el.style.top  = spy + "px";
           smk.el.style.opacity = "1";
-        } else { smk.el.style.opacity = "0"; }
-      } else { smk.el.style.opacity = "0"; }
+          if (smi2 === activeStadiumIdx) {
+            positionTooltip(canvasRect.left + spx, canvasRect.top + spy);
+            tooltip.style.opacity = "1";
+          }
+        } else {
+          smk.el.style.opacity = "0";
+          if (smi2 === activeStadiumIdx) hideTooltip();
+        }
+      } else {
+        smk.el.style.opacity = "0";
+        if (smi2 === activeStadiumIdx) hideTooltip();
+      }
     }
 
     frames++;
