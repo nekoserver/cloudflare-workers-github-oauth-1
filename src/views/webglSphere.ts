@@ -177,6 +177,12 @@ input[type=range] { flex:1; accent-color:#58a6ff; }
 .sdp-close { background:none; border:none; color:#8b949e; font-size:22px; line-height:1; cursor:pointer; padding:0 2px; }
 .sdp-mode-btn { background:none; border:none; cursor:pointer; font-size:18px; padding:0 4px; line-height:1; opacity:0.8; transition:opacity .15s; }
 .sdp-mode-btn:hover { opacity:1; }
+.sdp-side { text-align:right; flex-shrink:0; min-width:64px; }
+.sdp-ord { font-size:10px; color:#f0b429; display:block; white-space:nowrap; font-weight:700; }
+.sdp-times { font-size:8px; color:#8b949e; font-family:monospace; display:block; white-space:normal; word-break:break-all; line-height:1.4; }
+#mk-tooltip { position:fixed; }
+#mk-tooltip .tt-close { position:absolute; top:4px; right:6px; background:none; border:none; color:#8b949e; font-size:16px; cursor:pointer; padding:0; line-height:1; z-index:1; }
+#mk-tooltip .tt-close:hover { color:#e6edf3; }
 .sdp-tour-btn { width:calc(100% - 28px); margin:10px 14px 8px; background:#0c2d4e; border:1px solid #58a6ff; border-radius:6px; color:#58a6ff; font-size:12px; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; padding:7px 12px; cursor:pointer; font-weight:600; transition:background .15s; }
 .sdp-tour-btn:hover { background:#1a3d5e; }
 .sdp-tour-btn.touring { background:#0c2d1a; border-color:#3fb950; color:#3fb950; }
@@ -367,6 +373,7 @@ void main() {
   <div class="sdp-hdr">
     <span class="sdp-title">&#127967; 2026 W杯 全16会場</span>
     <button class="sdp-mode-btn" id="sdpModeBtn" title="全会場表示の切替">&#128193;</button>
+    <button class="sdp-mode-btn" id="sdpDateFilterBtn" title="日付フィルター">&#128467;</button>
     <button class="sdp-close" id="sdpClose">&#10005;</button>
   </div>
   <button class="sdp-tour-btn" id="sdpTourBtn">東から順に自動巡回</button>
@@ -1211,6 +1218,7 @@ function getNextZ() {
 
   tooltip.addEventListener('click', function(e) {
     e.stopPropagation();
+    if (e.target.closest('.tt-close')) { hideTooltip(); return; }
     var oppSpan = e.target.closest('.tt-opp-tap');
     if (oppSpan) {
       var oppFlag = oppSpan.dataset.flag;
@@ -1237,7 +1245,7 @@ function getNextZ() {
 
   function buildAllMatchesHtml(flag, name) {
     var code = flagCode(flag);
-    var hdr = '<span class="tt-flag-lg">' + flag + '</span><div class="tt-name">' + name + '</div>' + (code ? '<div class="tt-code">' + code + '</div>' : '');
+    var hdr = '<button class="tt-close">&#10005;</button><span class="tt-flag-lg">' + flag + '</span><div class="tt-name">' + name + '</div>' + (code ? '<div class="tt-code">' + code + '</div>' : '');
     var ms = teamMatches[flag];
     if (!ms || ms.length === 0) return hdr;
     var now2 = Date.now();
@@ -1382,6 +1390,25 @@ function getNextZ() {
       if (dateFlags[flag]) span.classList.add('grp-flag-today');
     });
     updateGroupStadiumIcons(dateStr);
+    refreshStadiumList();
+  }
+
+  function refreshStadiumList() {
+    var rows = document.querySelectorAll('#sdp-body .sdp-row');
+    for (var ri = 0; ri < rows.length; ri++) {
+      var row = rows[ri];
+      var ridx = parseInt(row.dataset.idx, 10);
+      if (!dateFilterMode) {
+        row.style.display = '';
+      } else {
+        var rmidxs = stadiumMatches[ridx] || [];
+        var hasOnDate = false;
+        for (var rk = 0; rk < rmidxs.length; rk++) {
+          if (MATCHES[rmidxs[rk]].date === selectedDate) { hasOnDate = true; break; }
+        }
+        row.style.display = hasOnDate ? '' : 'none';
+      }
+    }
   }
 
   function updateGroupStadiumIcons(dateStr) {
@@ -1415,7 +1442,7 @@ function getNextZ() {
 
   function buildStadiumDateTooltipHtml(venueIdx, dateStr) {
     var sd = wc2026Stadiums[venueIdx];
-    var html = '<span class="tt-flag-lg">&#127967; ' + sd.ctry + '</span><div class="tt-name">' + sd.name + '</div><div class="tt-code">' + sd.city + '</div>';
+    var html = '<button class="tt-close">&#10005;</button><span class="tt-flag-lg">&#127967; ' + sd.ctry + '</span><div class="tt-name">' + sd.name + '</div><div class="tt-code">' + sd.city + '</div>';
     var midxs = stadiumMatches[venueIdx] || [];
     var dayMatches = [];
     for (var k = 0; k < midxs.length; k++) {
@@ -1426,11 +1453,15 @@ function getNextZ() {
     html += '<div style="font-size:10px;font-weight:700;color:#f0b429;margin-top:5px">' + md + '</div>';
     for (var j = 0; j < dayMatches.length; j++) {
       var m = dayMatches[j];
+      var grpA = flagToGroup[m.a] || '';
+      var grpB = flagToGroup[m.b] || '';
+      var grpStr = (grpA === grpB && grpA) ? 'グループ ' + grpA : (grpA && grpB ? 'グループ ' + grpA + '/' + grpB : '');
       var nameA = flagToName[m.a] || m.a;
       var nameB = flagToName[m.b] || m.b;
-      html += '<div class="tt-mrow">' + m.a + ' ' + nameA + '</div>';
-      html += '<div class="tt-mrow">' + m.b + ' ' + nameB + '</div>';
-      html += '<div class="tt-time">' + toET(m.time) + '</div>';
+      if (grpStr) html += '<div style="font-size:10px;color:#8b949e">' + grpStr + '</div>';
+      html += '<div class="tt-mrow">' + m.a + fc(m.a) + ' ' + nameA + '</div>';
+      html += '<div class="tt-mrow">' + m.b + fc(m.b) + ' ' + nameB + '</div>';
+      html += '<div class="tt-time">' + m.time + ' UTC / ' + toET(m.time) + ' / ' + toJST(m.time) + '</div>';
       if (j < dayMatches.length - 1) html += '<hr style="border:none;border-top:1px solid #30363d;margin:4px 0">';
     }
     return html;
@@ -1573,7 +1604,7 @@ function getNextZ() {
 
   function buildStadiumTooltipHtml(sidx) {
     var sd = wc2026Stadiums[sidx];
-    var html = '<span class="tt-flag-lg">&#127967; ' + sd.ctry + '</span><div class="tt-name">' + sd.name + '</div><div class="tt-code">' + sd.city + '</div>';
+    var html = '<button class="tt-close">&#10005;</button><span class="tt-flag-lg">&#127967; ' + sd.ctry + '</span><div class="tt-name">' + sd.name + '</div><div class="tt-code">' + sd.city + '</div>';
     var midxs = stadiumMatches[sidx] || [];
     if (midxs.length > 0) {
       var now2 = Date.now();
@@ -1585,15 +1616,19 @@ function getNextZ() {
       }
       items.sort(function(x, y) { return x.ko - y.ko; });
       var future = items.filter(function(it) { return !it.past; });
-      var past = items.filter(function(it) { return it.past; });
-      var show = future.concat(past).slice(0, 5);
+      var past2 = items.filter(function(it) { return it.past; });
+      var show = future.concat(past2).slice(0, 5);
       for (var k2 = 0; k2 < show.length; k2++) {
         var it = show[k2];
         var md = it.m.date.slice(5).replace('-', '/');
+        var grpA = flagToGroup[it.m.a] || '';
+        var grpB = flagToGroup[it.m.b] || '';
+        var grpStr = (grpA === grpB && grpA) ? 'G-' + grpA : (grpA && grpB ? 'G-' + grpA + '/' + grpB : '');
+        var dateGrp = md + (grpStr ? '  ' + grpStr : '');
         if (it.past) {
-          html += '<div class="tt-mrow tt-past">' + it.m.a + ' vs ' + it.m.b + ' ' + md + '</div>';
+          html += '<div class="tt-mrow tt-past"><span style="font-size:10px">' + dateGrp + '</span><br>' + it.m.a + fc(it.m.a) + ' vs ' + it.m.b + fc(it.m.b) + '</div>';
         } else {
-          html += '<div class="tt-mrow">' + it.m.a + ' vs ' + it.m.b + ' ' + md + '<span class="tt-time">' + toET(it.m.time) + '</span></div>';
+          html += '<div class="tt-mrow"><span style="font-size:10px;color:#f0b429">' + dateGrp + '</span><br>' + it.m.a + fc(it.m.a) + ' vs ' + it.m.b + fc(it.m.b) + '<span class="tt-time">' + it.m.time + ' UTC / ' + toET(it.m.time) + ' / ' + toJST(it.m.time) + '</span></div>';
         }
       }
     }
@@ -1696,19 +1731,25 @@ function getNextZ() {
   function buildStadiumPanel() {
     var body = document.getElementById('sdp-body');
     if (!body) return;
+    var circled = ['','①','②','③','④','⑤','⑥','⑦','⑧','⑨','⑩'];
     var html = '';
     for (var i = 0; i < wc2026Stadiums.length; i++) {
       var sd = wc2026Stadiums[i];
-      var latStr = sd.lat.toFixed(3) + 'N';
-      var lonStr = (-sd.lon).toFixed(3) + 'W';
+      var midxs = stadiumMatches[i] || [];
+      var cnt = midxs.length;
+      var ordStr = cnt <= 0 ? '' : (cnt === 1 ? '①' : ('①-' + (cnt < circled.length ? circled[cnt] : cnt + '')));
+      var times = [];
+      for (var ti = 0; ti < midxs.length; ti++) { times.push(MATCHES[midxs[ti]].time); }
+      var timesStr = times.join(', ');
       html += '<div class="sdp-row" data-idx="' + i + '">';
       html += '<span class="sdp-num">' + sd.num + '</span>';
       html += '<span class="sdp-icon">' + sd.ctry + '</span>';
       html += '<div class="sdp-info">';
       html += '<div class="sdp-name">' + sd.name.replace(/&/g,'&amp;') + '</div>';
       html += '<div class="sdp-city">' + sd.city + '</div>';
-      html += '<div class="sdp-coord">' + latStr + ' / ' + lonStr + '</div>';
-      html += '</div></div>';
+      html += '</div>';
+      html += '<div class="sdp-side"><span class="sdp-ord">' + sd.ctry + ' ' + ordStr + '</span><span class="sdp-times">' + timesStr + '</span></div>';
+      html += '</div>';
     }
     body.innerHTML = html;
     body.addEventListener('click', function(e) {
@@ -1746,6 +1787,13 @@ function getNextZ() {
     if (!showAllStadiums && activeStadiumIdx >= 0 && !todayStadiumSet[activeStadiumIdx]) {
       hideTooltip();
     }
+  });
+
+  var dateFilterMode = false;
+  document.getElementById('sdpDateFilterBtn').addEventListener('click', function() {
+    dateFilterMode = !dateFilterMode;
+    this.innerHTML = dateFilterMode ? '&#128197;' : '&#128467;';
+    refreshStadiumList();
   });
   buildStadiumPanel();
 
