@@ -522,7 +522,7 @@ void main() {
     document.getElementById('hdr-date').textContent = yyyy + '/' + mmStr + '/' + ddStr;
     document.getElementById('drw-title').textContent = '⚾ ' + mm + '/' + dd + ' のMLB';
     hud.textContent = 'テクスチャ読み込み中...';
-    var url = 'https://statsapi.mlb.com/api/v1/schedule?sportId=1&date=' + dateStr + '&hydrate=team,venue';
+    var url = '/api/mlb-schedule?date=' + dateStr;
     fetch(url)
       .then(function(r) { return r.json(); })
       .then(function(data) {
