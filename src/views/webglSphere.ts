@@ -1473,7 +1473,7 @@ function getNextZ() {
       if (grpStr) html += '<div style="font-size:10px;color:#8b949e">' + grpStr + '</div>';
       html += '<div class="tt-mrow">' + m.a + fc(m.a) + ' ' + nameA + '</div>';
       html += '<div class="tt-mrow">' + m.b + fc(m.b) + ' ' + nameB + '</div>';
-      html += '<div class="tt-time">' + m.time + ' UTC / ' + toET(m.time) + ' / ' + toJST(m.time) + '</div>';
+      html += '<div class="tt-time">' + m.time + ' UTC</div><div class="tt-time">' + toET(m.time) + '</div><div class="tt-time">' + toJST(m.time) + '</div>';
       if (j < dayMatches.length - 1) html += '<hr style="border:none;border-top:1px solid #30363d;margin:4px 0">';
     }
     return html;
@@ -1640,7 +1640,7 @@ function getNextZ() {
         if (it.past) {
           html += '<div class="tt-mrow tt-past"><span style="font-size:10px">' + dateGrp + '</span><br>' + it.m.a + fc(it.m.a) + ' vs ' + it.m.b + fc(it.m.b) + '</div>';
         } else {
-          html += '<div class="tt-mrow"><span style="font-size:10px;color:#f0b429">' + dateGrp + '</span><br>' + it.m.a + fc(it.m.a) + ' vs ' + it.m.b + fc(it.m.b) + '<span class="tt-time">' + it.m.time + ' UTC / ' + toET(it.m.time) + ' / ' + toJST(it.m.time) + '</span></div>';
+          html += '<div class="tt-mrow"><span style="font-size:10px;color:#f0b429">' + dateGrp + '</span><br>' + it.m.a + fc(it.m.a) + ' vs ' + it.m.b + fc(it.m.b) + '<span class="tt-time">' + it.m.time + ' UTC</span><span class="tt-time">' + toET(it.m.time) + '</span><span class="tt-time">' + toJST(it.m.time) + '</span></div>';
         }
       }
     }
