@@ -68,7 +68,7 @@ canvas:active { cursor:grabbing; }
 .cal-dow { font-size:9px; color:#8b949e; text-align:center; padding:3px 0; font-weight:700; }
 .cal-day { font-size:11px; text-align:center; padding:5px 2px; border-radius:4px; cursor:pointer; color:#c9d1d9; }
 .cal-day:hover { background:#21262d; }
-.cal-today { color:#58a6ff; font-weight:700; }
+.cal-today { color:#58a6ff; font-weight:700; border:1px solid #58a6ff; border-radius:4px; }
 .cal-sel { background:#0c2d4e; color:#58a6ff; font-weight:700; }
 #game-list { flex:1; }
 .game-date-hdr { padding:7px 12px 4px; font-size:10px; font-weight:700; color:#8b949e; letter-spacing:.5px; text-transform:uppercase; border-bottom:1px solid #21262d; position:sticky; top:0; background:#0d1117; }
