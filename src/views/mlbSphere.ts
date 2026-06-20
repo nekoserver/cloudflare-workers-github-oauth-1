@@ -26,7 +26,7 @@ canvas:active { cursor:grabbing; }
 #markers { position:absolute; inset:0; pointer-events:none; overflow:hidden; }
 .mlb-mk { position:absolute; transform:translate(-50%,-50%); color:#fff; font-size:9px; font-weight:700; font-family:monospace; padding:3px 6px; border-radius:4px; border:1.5px solid rgba(255,255,255,0.25); pointer-events:auto; cursor:pointer; user-select:none; -webkit-user-select:none; letter-spacing:0.5px; white-space:nowrap; box-shadow:0 1px 4px rgba(0,0,0,0.7); line-height:1.4; }
 .mlb-mk.active { border-color:#58a6ff !important; box-shadow:0 0 0 2px rgba(88,166,255,0.5),0 1px 4px rgba(0,0,0,0.7); }
-#mk-tooltip { position:fixed; background:rgba(13,17,23,0.97); border:1px solid #58a6ff; border-radius:8px; padding:10px 14px; font-size:12px; color:#e6edf3; max-width:280px; pointer-events:none; opacity:0; transition:opacity .15s; z-index:60; transform:translate(-50%,-110%); line-height:1.6; }
+#mk-tooltip { position:fixed; background:rgba(13,17,23,0.97); border:1px solid #58a6ff; border-radius:8px; padding:10px 14px; font-size:12px; color:#e6edf3; max-width:340px; max-height:80vh; overflow-y:auto; pointer-events:none; opacity:0; transition:opacity .15s; z-index:60; transform:translate(-50%,-110%); line-height:1.6; }
 #mk-tooltip.below { transform:translate(-50%,14px); }
 .tt-stadium { font-weight:700; font-size:13px; }
 .tt-city { color:#8b949e; font-size:11px; margin-bottom:4px; }
@@ -38,6 +38,14 @@ canvas:active { cursor:grabbing; }
 .tt-time { font-family:monospace; font-size:11px; color:#58a6ff; display:block; }
 .tt-live { color:#3fb950; font-weight:700; font-size:11px; }
 .tt-final { color:#8b949e; font-size:11px; }
+.tt-lu-wrap { margin-top:8px; padding-top:8px; border-top:1px solid #21262d; }
+.tt-lu-hdr { font-size:9px; color:#8b949e; font-weight:700; text-transform:uppercase; letter-spacing:.5px; margin-bottom:5px; }
+.tt-lu-grid { display:grid; grid-template-columns:1fr 1fr; gap:4px 8px; }
+.tt-lu-col { font-size:10px; }
+.tt-lu-team { font-size:9px; font-weight:700; color:#58a6ff; margin-bottom:3px; text-transform:uppercase; }
+.tt-lu-sp { color:#f0883e; font-weight:700; margin-bottom:4px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.tt-lu-row { color:#c9d1d9; padding:1px 0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.tt-lu-none { font-size:10px; color:#484f58; font-style:italic; margin-top:3px; }
 .canvas-ctrl-btns { position:absolute; top:10px; right:10px; display:flex; gap:6px; z-index:5; }
 .ctrl-btn { background:rgba(13,17,23,0.88); border:1px solid #30363d; border-radius:6px; color:#e6edf3; font-size:12px; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; padding:6px 12px; cursor:pointer; white-space:nowrap; }
 .ctrl-btn:hover { border-color:#58a6ff; }
@@ -140,7 +148,7 @@ void main(){
     <div class="hud" id="hud">&#35501;&#12415;&#36796;&#12415;&#20013;...</div>
     <div class="canvas-ctrl-btns">
       <button class="ctrl-btn" id="btnGames">&#9918; &#35430;&#21512;&#19968;&#35239;</button>
-      <button class="ctrl-btn" id="btnMLBView">&#127279; &#20840;&#29699;&#22280;</button>
+      <button class="ctrl-btn" id="btnMLBView">&#9918; &#20840;&#29699;&#22243;</button>
       <button class="ctrl-btn" id="btnAutoRot">&#9208; &#33258;&#36578;&#20572;&#27490;</button>
       <button class="ctrl-btn" id="btnNight">&#127769; &#22812;&#26223;</button>
     </div>
@@ -226,7 +234,7 @@ void main(){
       var d=Math.acos(Math.max(-1,Math.min(1,dot)));
       if(d>maxD)maxD=d;
     }
-    var margin=0.78, fh=Math.PI/8;
+    var margin=0.68, fh=Math.PI/8;
     MLB_FIT_ZOOM=Math.max(1.6, Math.sin(maxD)/(margin*Math.tan(fh))+Math.cos(maxD));
   })();
 
@@ -405,6 +413,37 @@ void main(){
     catch(e2){return utcStr;}
   }
 
+  function fmtLName(p){
+    if(!p||!p.fullName)return '?';
+    var nm=p.fullName, sp=nm.lastIndexOf(' ');
+    return sp>=0?nm.substring(sp+1):nm;
+  }
+
+  function buildLineupHtml(lineups,awayAbbr,homeAbbr){
+    if(!lineups)return '<div class="tt-lu-none">スタメン未発表</div>';
+    var aw=lineups.awayPlayers||[], hm=lineups.homePlayers||[];
+    var asp=lineups.awayStartingPitcher, hsp=lineups.homeStartingPitcher;
+    if(!aw.length&&!hm.length&&!asp&&!hsp)return '<div class="tt-lu-none">スタメン未発表</div>';
+    aw.sort(function(a,b){return (a.battingOrder||999)-(b.battingOrder||999);});
+    hm.sort(function(a,b){return (a.battingOrder||999)-(b.battingOrder||999);});
+    var html='<div class="tt-lu-wrap"><div class="tt-lu-hdr">&#127358; スタメン</div><div class="tt-lu-grid">';
+    html+='<div class="tt-lu-col"><div class="tt-lu-team">'+awayAbbr+' (Away)</div>';
+    if(asp)html+='<div class="tt-lu-sp">P '+fmtLName(asp)+'</div>';
+    for(var i=0;i<aw.length;i++){
+      var p=aw[i], pos=(p.primaryPosition&&p.primaryPosition.abbreviation)||'';
+      html+='<div class="tt-lu-row">'+(i+1)+' '+pos+' '+fmtLName(p)+'</div>';
+    }
+    html+='</div>';
+    html+='<div class="tt-lu-col"><div class="tt-lu-team">'+homeAbbr+' (Home)</div>';
+    if(hsp)html+='<div class="tt-lu-sp">P '+fmtLName(hsp)+'</div>';
+    for(var j=0;j<hm.length;j++){
+      var p2=hm[j], pos2=(p2.primaryPosition&&p2.primaryPosition.abbreviation)||'';
+      html+='<div class="tt-lu-row">'+(j+1)+' '+pos2+' '+fmtLName(p2)+'</div>';
+    }
+    html+='</div></div></div>';
+    return html;
+  }
+
   function buildTooltipHtml(homeId){
     var sd=MLB_STADIUMS[homeId], games=stadiumGames[homeId]||[];
     var html='<div class="tt-stadium">&#127967; '+sd.name+'</div><div class="tt-city">'+sd.city+'</div>';
@@ -420,6 +459,8 @@ void main(){
         html+='<span class="tt-time">'+fmtTime(g.gameDate,'America/Los_Angeles','PT')+'</span>';
         html+='<span class="tt-time">'+fmtTime(g.gameDate,'Asia/Tokyo','JST')+'</span>';
       }
+      var awAbbr=g.awayAbbr||(g.awayName||'').split(' ').pop()||'';
+      html+=buildLineupHtml(g.lineups||null,awAbbr,sd.abbr);
       html+='</div>';
     }
     return html;
@@ -555,7 +596,8 @@ void main(){
         homeId:ht.id, homeName:ht.name||'', homeAbbr:hsd?hsd.abbr:'',
         awayName:at.name||'', awayAbbr:asd?asd.abbr:(at.name||'').split(' ').pop(),
         gameDate:g.gameDate||'', status:g.status||null,
-        venue:g.venue?g.venue.name:''
+        venue:g.venue?g.venue.name:'',
+        lineups:g.lineups||null
       });
     }
     list.sort(function(a,b){return a.gameDate<b.gameDate?-1:(a.gameDate>b.gameDate?1:0);});
@@ -647,14 +689,14 @@ void main(){
       flyTo(MLB_CENTER_LAT, MLB_CENTER_LON);
       zoomTarget=MLB_FIT_ZOOM;
       btnMLBView.classList.add('active');
-      btnMLBView.textContent='&#128274; &#20840;&#29699;&#22280;';
+      btnMLBView.textContent='🔒 全球団';
     }else{
       btnMLBView.classList.remove('active');
-      btnMLBView.textContent='&#127279; &#20840;&#29699;&#22280;';
+      btnMLBView.textContent='⚾ 全球団';
     }
   });
-  canvas.addEventListener('mousedown',function(){if(mlbLocked){mlbLocked=false;btnMLBView.classList.remove('active');btnMLBView.textContent='&#127279; &#20840;&#29699;&#22280;';}});
-  canvas.addEventListener('touchstart',function(){if(mlbLocked){mlbLocked=false;btnMLBView.classList.remove('active');btnMLBView.textContent='&#127279; &#20840;&#29699;&#22280;';}},{passive:true});
+  canvas.addEventListener('mousedown',function(){if(mlbLocked){mlbLocked=false;btnMLBView.classList.remove('active');btnMLBView.textContent='⚾ 全球団';}});
+  canvas.addEventListener('touchstart',function(){if(mlbLocked){mlbLocked=false;btnMLBView.classList.remove('active');btnMLBView.textContent='⚾ 全球団';}},{passive:true});
 
   // init
   var mm=now.getMonth()+1, dd=now.getDate(), yyyy=now.getFullYear();
