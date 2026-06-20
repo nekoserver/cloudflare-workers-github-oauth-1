@@ -172,6 +172,8 @@ input[type=range] { flex:1; accent-color:#58a6ff; }
 .sdp-hdr { display:flex; align-items:center; justify-content:space-between; padding:12px 14px 10px; border-bottom:1px solid #30363d; flex-shrink:0; background:#0d1117; }
 .sdp-title { font-size:13px; font-weight:700; color:#f0b429; }
 .sdp-close { background:none; border:none; color:#8b949e; font-size:22px; line-height:1; cursor:pointer; padding:0 2px; }
+.sdp-mode-btn { background:none; border:none; cursor:pointer; font-size:18px; padding:0 4px; line-height:1; opacity:0.8; transition:opacity .15s; }
+.sdp-mode-btn:hover { opacity:1; }
 .sdp-tour-btn { width:calc(100% - 28px); margin:10px 14px 8px; background:#0c2d4e; border:1px solid #58a6ff; border-radius:6px; color:#58a6ff; font-size:12px; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; padding:7px 12px; cursor:pointer; font-weight:600; transition:background .15s; }
 .sdp-tour-btn:hover { background:#1a3d5e; }
 .sdp-tour-btn.touring { background:#0c2d1a; border-color:#3fb950; color:#3fb950; }
@@ -361,6 +363,7 @@ void main() {
 <div id="stadium-panel">
   <div class="sdp-hdr">
     <span class="sdp-title">&#127967; 2026 W杯 全16会場</span>
+    <button class="sdp-mode-btn" id="sdpModeBtn" title="全会場表示の切替">&#128193;</button>
     <button class="sdp-close" id="sdpClose">&#10005;</button>
   </div>
   <button class="sdp-tour-btn" id="sdpTourBtn">東から順に自動巡回</button>
@@ -1539,6 +1542,22 @@ function getNextZ() {
     if (rows[idx]) rows[idx].scrollIntoView({block:'nearest'});
   }
 
+  var showAllStadiums = false;
+  var todayStadiumSet = (function() {
+    var s = {};
+    var today = new Date().toISOString().slice(0, 10);
+    for (var i = 0; i < MATCHES.length && i < MATCH_VENUE.length; i++) {
+      if (MATCHES[i].date === today) s[MATCH_VENUE[i]] = true;
+    }
+    return s;
+  })();
+
+  function stadiumVisible(sidx) {
+    if (tourActive) return sidx === tourIdx;
+    if (showAllStadiums) return true;
+    return todayStadiumSet[sidx] === true;
+  }
+
   var tourActive = false;
   var tourIdx = 0;
   var tourTimer = null;
@@ -1637,6 +1656,13 @@ function getNextZ() {
     stadiumPanel.classList.toggle('open');
     if (!stadiumPanel.classList.contains('open')) stopTour();
   });
+  document.getElementById('sdpModeBtn').addEventListener('click', function() {
+    showAllStadiums = !showAllStadiums;
+    this.innerHTML = showAllStadiums ? '&#127967;' : '&#128193;';
+    if (!showAllStadiums && activeStadiumIdx >= 0 && !todayStadiumSet[activeStadiumIdx]) {
+      hideTooltip();
+    }
+  });
   buildStadiumPanel();
 
   gl.enable(gl.DEPTH_TEST);
@@ -1734,6 +1760,11 @@ function getNextZ() {
     }
     for (var smi2 = 0; smi2 < stadiumMkEls.length; smi2++) {
       var smk = stadiumMkEls[smi2];
+      if (!stadiumVisible(smi2)) {
+        smk.el.style.opacity = "0";
+        if (smi2 === activeStadiumIdx) hideTooltip();
+        continue;
+      }
       var smp = smk.pos3d;
       var smz = model[2]*smp[0] + model[6]*smp[1] + model[10]*smp[2];
       if (smz > 0.12) {
