@@ -228,17 +228,32 @@ void main(){
       sx+=Math.cos(lr)*Math.cos(lo); sy+=Math.cos(lr)*Math.sin(lo); sz+=Math.sin(lr);
     }
     sx/=n; sy/=n; sz/=n;
-    MLB_CENTER_LAT=Math.atan2(sz,Math.sqrt(sx*sx+sy*sy))*180/Math.PI;
-    MLB_CENTER_LON=Math.atan2(sy,sx)*180/Math.PI;
-    var clr=MLB_CENTER_LAT*Math.PI/180, clo=MLB_CENTER_LON*Math.PI/180, maxD=0;
-    for(var j=0;j<n;j++){
-      var sd2=MLB_STADIUMS[parseInt(ids[j])];
-      var lr2=sd2.lat*Math.PI/180, lo2=sd2.lon*Math.PI/180;
-      var dot=Math.sin(clr)*Math.sin(lr2)+Math.cos(clr)*Math.cos(lr2)*Math.cos(lo2-clo);
-      var d=Math.acos(Math.max(-1,Math.min(1,dot)));
-      if(d>maxD)maxD=d;
+    var cx=Math.atan2(sz,Math.sqrt(sx*sx+sy*sy))*180/Math.PI;
+    var cy=Math.atan2(sy,sx)*180/Math.PI;
+    function maxDist(clat,clon){
+      var clr=clat*Math.PI/180,clo2=clon*Math.PI/180,md=0;
+      for(var k=0;k<n;k++){
+        var s=MLB_STADIUMS[parseInt(ids[k])];
+        var lr2=s.lat*Math.PI/180,lo2=s.lon*Math.PI/180;
+        var dot=Math.sin(clr)*Math.sin(lr2)+Math.cos(clr)*Math.cos(lr2)*Math.cos(lo2-clo2);
+        var d=Math.acos(Math.max(-1,Math.min(1,dot)));
+        if(d>md)md=d;
+      }
+      return md;
     }
-    var margin=0.68, fh=Math.PI/8;
+    var step=4.0;
+    for(var iter=0;iter<400;iter++){
+      var best=maxDist(cx,cy),improved=false;
+      var dirs=[[step,0],[-step,0],[0,step],[0,-step]];
+      for(var di=0;di<4;di++){
+        var nd=maxDist(cx+dirs[di][0],cy+dirs[di][1]);
+        if(nd<best-1e-9){best=nd;cx+=dirs[di][0];cy+=dirs[di][1];improved=true;break;}
+      }
+      if(!improved)step*=0.5;
+      if(step<0.0005)break;
+    }
+    MLB_CENTER_LAT=cx; MLB_CENTER_LON=cy;
+    var margin=0.68, fh=Math.PI/8, maxD=maxDist(cx,cy);
     MLB_FIT_ZOOM=Math.max(1.6, Math.sin(maxD)/(margin*Math.tan(fh))+Math.cos(maxD));
   })();
 
