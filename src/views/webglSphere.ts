@@ -227,6 +227,10 @@ input[type=range] { flex:1; accent-color:#58a6ff; }
 .cost-val { font-size:11px; font-weight:700; color:#3fb950; white-space:nowrap; flex-shrink:0; text-align:right; }
 .cost-bar-wrap { height:3px; background:#21262d; border-radius:2px; margin-top:3px; }
 .cost-bar { height:3px; border-radius:2px; background:linear-gradient(90deg,#f0b429,#3fb950); }
+.cost-tour-btn { width:100%; margin-bottom:10px; background:#0c1a0c; border:1px solid #3fb950; border-radius:6px; color:#3fb950; font-size:11px; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; padding:6px 10px; cursor:pointer; font-weight:600; transition:background .15s,border-color .15s,color .15s; }
+.cost-tour-btn:hover { background:#132813; }
+.cost-tour-btn.touring { background:#0c2d1a; border-color:#f0b429; color:#f0b429; }
+.cost-row.cost-active { background:rgba(240,180,41,0.12); border-left:3px solid #f0b429; padding-left:5px; }
 </style>
 </head>
 <body>
@@ -366,8 +370,9 @@ void main() {
     <div class="cost-section">
       <h2>&#127942; FIFA W杯 建設費ランキング</h2>
       <div class="cost-subtitle">建設コスト上位10スタジアム</div>
+      <button class="cost-tour-btn" id="costTourBtn">&#127968; 建設費順に自動巡回</button>
 
-      <div class="cost-row">
+      <div class="cost-row" data-cidx="0">
         <span class="cost-rank">1</span>
         <span class="cost-icon">&#127967;</span>
         <div class="cost-info">
@@ -378,7 +383,7 @@ void main() {
         <div class="cost-val">$5.1B</div>
       </div>
 
-      <div class="cost-row">
+      <div class="cost-row" data-cidx="1">
         <span class="cost-rank">2</span>
         <span class="cost-icon">&#127967;</span>
         <div class="cost-info">
@@ -389,7 +394,7 @@ void main() {
         <div class="cost-val">$1.5B</div>
       </div>
 
-      <div class="cost-row">
+      <div class="cost-row" data-cidx="2">
         <span class="cost-rank">3</span>
         <span class="cost-icon">&#127967;</span>
         <div class="cost-info">
@@ -400,7 +405,7 @@ void main() {
         <div class="cost-val">$1.5B</div>
       </div>
 
-      <div class="cost-row">
+      <div class="cost-row" data-cidx="3">
         <span class="cost-rank">4</span>
         <span class="cost-icon">&#127967;</span>
         <div class="cost-info">
@@ -411,7 +416,7 @@ void main() {
         <div class="cost-val">$1.3B</div>
       </div>
 
-      <div class="cost-row">
+      <div class="cost-row" data-cidx="4">
         <span class="cost-rank">5</span>
         <span class="cost-icon">&#127967;</span>
         <div class="cost-info">
@@ -422,7 +427,7 @@ void main() {
         <div class="cost-val">$1.2B</div>
       </div>
 
-      <div class="cost-row">
+      <div class="cost-row" data-cidx="5">
         <span class="cost-rank">6</span>
         <span class="cost-icon">&#127967;</span>
         <div class="cost-info">
@@ -433,7 +438,7 @@ void main() {
         <div class="cost-val">$1.2B</div>
       </div>
 
-      <div class="cost-row">
+      <div class="cost-row" data-cidx="6">
         <span class="cost-rank">7</span>
         <span class="cost-icon">&#127967;</span>
         <div class="cost-info">
@@ -444,7 +449,7 @@ void main() {
         <div class="cost-val">$780M</div>
       </div>
 
-      <div class="cost-row">
+      <div class="cost-row" data-cidx="7">
         <span class="cost-rank">8</span>
         <span class="cost-icon">&#127967;</span>
         <div class="cost-info">
@@ -455,7 +460,7 @@ void main() {
         <div class="cost-val">$760M</div>
       </div>
 
-      <div class="cost-row">
+      <div class="cost-row" data-cidx="8">
         <span class="cost-rank">9</span>
         <span class="cost-icon">&#127967;</span>
         <div class="cost-info">
@@ -466,7 +471,7 @@ void main() {
         <div class="cost-val">$710M</div>
       </div>
 
-      <div class="cost-row">
+      <div class="cost-row" data-cidx="9">
         <span class="cost-rank">10</span>
         <span class="cost-icon">&#127967;</span>
         <div class="cost-info">
@@ -2195,6 +2200,70 @@ function getNextZ() {
   });
   searchOverlay.addEventListener('click', function(e) {
     if (e.target === searchOverlay) closeSearch();
+  });
+
+  var costStadiums = [
+    {name:"SoFi Stadium",              lat:33.954, lon:-118.339},
+    {name:"MetLife Stadium",            lat:40.814, lon:-74.074},
+    {name:"Mercedes-Benz Stadium",      lat:33.755, lon:-84.401},
+    {name:"Saint Petersburg Stadium",   lat:59.972, lon:30.221},
+    {name:"AT&T Stadium",               lat:32.748, lon:-97.093},
+    {name:"Levi's Stadium",             lat:37.403, lon:-121.970},
+    {name:"Al Bayt Stadium",            lat:25.667, lon:51.490},
+    {name:"Mane Garrincha Stadium",     lat:-15.783, lon:-47.899},
+    {name:"Lusail Stadium",             lat:25.428, lon:51.489},
+    {name:"Cape Town Stadium",          lat:-33.904, lon:18.411}
+  ];
+  var costTourActive = false;
+  var costTourIdx = 0;
+  var costTourTimer = null;
+  function setCostRowActive(idx) {
+    var rows = document.querySelectorAll('.cost-row');
+    for (var i = 0; i < rows.length; i++) {
+      rows[i].classList.toggle('cost-active', parseInt(rows[i].dataset.cidx, 10) === idx);
+    }
+  }
+  function stopCostTour() {
+    costTourActive = false;
+    if (costTourTimer) { clearTimeout(costTourTimer); costTourTimer = null; }
+    var btn = document.getElementById('costTourBtn');
+    if (btn) { btn.innerHTML = '&#127968; 建設費順に自動巡回'; btn.classList.remove('touring'); }
+    setCostRowActive(-1);
+  }
+  function doCostTourStep() {
+    if (!costTourActive || costTourIdx >= costStadiums.length) { stopCostTour(); return; }
+    var sd = costStadiums[costTourIdx];
+    hideTooltip();
+    flyTo(sd.lat, sd.lon);
+    setCostRowActive(costTourIdx);
+    costTourTimer = setTimeout(function() {
+      if (!costTourActive) return;
+      costTourIdx++;
+      doCostTourStep();
+    }, 3600);
+  }
+  function startCostTour() {
+    if (costTourActive) { stopCostTour(); return; }
+    stopTour();
+    costTourActive = true;
+    costTourIdx = 0;
+    var btn = document.getElementById('costTourBtn');
+    if (btn) { btn.innerHTML = '&#9646;&#9646; 巡回停止'; btn.classList.add('touring'); }
+    doCostTourStep();
+  }
+  document.getElementById('costTourBtn').addEventListener('click', function() {
+    if (costTourActive) { stopCostTour(); } else { startCostTour(); }
+  });
+  document.querySelectorAll('.cost-row').forEach(function(row) {
+    row.style.cursor = 'pointer';
+    row.addEventListener('click', function() {
+      var idx = parseInt(row.dataset.cidx, 10);
+      if (!isNaN(idx) && costStadiums[idx]) {
+        stopCostTour();
+        flyTo(costStadiums[idx].lat, costStadiums[idx].lon);
+        setCostRowActive(idx);
+      }
+    });
   });
 
   buildCalendar();
