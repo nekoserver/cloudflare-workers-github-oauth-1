@@ -4244,7 +4244,56 @@ app.get('/api/mlb-schedule', authMiddleware, async (c) => {
   const date = c.req.query('date') || new Date().toISOString().slice(0, 10);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return c.json({error: 'invalid date'}, 400);
   try {
-    const url = `https://statsapi.mlb.com/api/v1/schedule?sportId=1&date=${date}&hydrate=team,venue`;
+    const url = `https://statsapi.mlb.com/api/v1/schedule?sportId=1&date=${date}&hydrate=team,venue,lineups`;
+    const res = await fetch(url, {headers: {'User-Agent': 'Mozilla/5.0'}});
+    if (!res.ok) return c.json({error: 'upstream error', status: res.status}, 502);
+    const data = await res.json();
+    return c.json(data);
+  } catch (e) {
+    return c.json({error: 'fetch failed', detail: String(e)}, 502);
+  }
+});
+
+app.get('/api/mlb-boxscore', authMiddleware, async (c) => {
+  const gamePk = c.req.query('gamePk');
+  if (!gamePk || !/^\d+$/.test(gamePk)) return c.json({error: 'invalid gamePk'}, 400);
+  try {
+    const url = `https://statsapi.mlb.com/api/v1/game/${gamePk}/boxscore`;
+    const res = await fetch(url, {headers: {'User-Agent': 'Mozilla/5.0'}});
+    if (!res.ok) return c.json({error: 'upstream error', status: res.status}, 502);
+    const data = await res.json();
+    return c.json(data);
+  } catch (e) {
+    return c.json({error: 'fetch failed', detail: String(e)}, 502);
+  }
+});
+
+app.get('/api/mlb-player-stats', authMiddleware, async (c) => {
+  const playerId = c.req.query('playerId');
+  const group = c.req.query('group') || 'hitting';
+  if (!playerId || !/^\d+$/.test(playerId)) return c.json({error: 'invalid playerId'}, 400);
+  if (group !== 'hitting' && group !== 'pitching') return c.json({error: 'invalid group'}, 400);
+  try {
+    const season = new Date().getFullYear();
+    const url = `https://statsapi.mlb.com/api/v1/people/${playerId}/stats?stats=season&group=${group}&season=${season}`;
+    const res = await fetch(url, {headers: {'User-Agent': 'Mozilla/5.0'}});
+    if (!res.ok) return c.json({error: 'upstream error', status: res.status}, 502);
+    const data = await res.json();
+    return c.json(data);
+  } catch (e) {
+    return c.json({error: 'fetch failed', detail: String(e)}, 502);
+  }
+});
+
+app.get('/api/mlb-next-start', authMiddleware, async (c) => {
+  const teamId = c.req.query('teamId');
+  if (!teamId || !/^\d+$/.test(teamId)) return c.json({error: 'invalid teamId'}, 400);
+  try {
+    const today = new Date();
+    const startDate = today.toISOString().split('T')[0];
+    const end = new Date(today.getTime() + 20 * 24 * 60 * 60 * 1000);
+    const endDate = end.toISOString().split('T')[0];
+    const url = `https://statsapi.mlb.com/api/v1/schedule?teamId=${teamId}&hydrate=probablePitcher&startDate=${startDate}&endDate=${endDate}&sportId=1`;
     const res = await fetch(url, {headers: {'User-Agent': 'Mozilla/5.0'}});
     if (!res.ok) return c.json({error: 'upstream error', status: res.status}, 502);
     const data = await res.json();
