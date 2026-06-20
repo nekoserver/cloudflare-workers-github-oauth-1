@@ -177,9 +177,7 @@ input[type=range] { flex:1; accent-color:#58a6ff; }
 .sdp-close { background:none; border:none; color:#8b949e; font-size:22px; line-height:1; cursor:pointer; padding:0 2px; }
 .sdp-mode-btn { background:none; border:none; cursor:pointer; font-size:18px; padding:0 4px; line-height:1; opacity:0.8; transition:opacity .15s; }
 .sdp-mode-btn:hover { opacity:1; }
-.sdp-side { text-align:right; flex-shrink:0; min-width:64px; }
-.sdp-ord { font-size:10px; color:#f0b429; display:block; white-space:nowrap; font-weight:700; }
-.sdp-times { font-size:8px; color:#8b949e; font-family:monospace; display:block; white-space:normal; word-break:break-all; line-height:1.4; }
+.grp-match-info { font-size:12px; color:#e6edf3; line-height:1; margin-left:2px; white-space:nowrap; flex-shrink:0; }
 #mk-tooltip { position:fixed; }
 #mk-tooltip .tt-close { position:absolute; top:4px; right:6px; background:none; border:none; color:#8b949e; font-size:16px; cursor:pointer; padding:0; line-height:1; z-index:1; }
 #mk-tooltip .tt-close:hover { color:#e6edf3; }
@@ -893,7 +891,7 @@ function getNextZ() {
         var enc = flag.replace(/&/g, '&amp;');
         html += '<span class="' + cls + '" data-flag="' + enc + '">' + flag + '</span>';
       });
-      html += '</span><button class="grp-stadium-btn" data-g="' + grp.g + '">&#127967;</button></div>';
+      html += '</span><button class="grp-stadium-btn" data-g="' + grp.g + '">&#127967;</button><span class="grp-match-info" data-g="' + grp.g + '"></span></div>';
     });
     grpBody.innerHTML = html;
     updateGroupStadiumIcons(selectedDate);
@@ -1414,8 +1412,17 @@ function getNextZ() {
   function updateGroupStadiumIcons(dateStr) {
     var grpBody = document.getElementById('grp-body');
     if (!grpBody) return;
+    var circledOrd = ['①','②','③','④','⑤','⑥','⑦','⑧','⑨','⑩'];
+    var dayMatchList = [];
+    for (var di = 0; di < MATCHES.length && di < MATCH_VENUE.length; di++) {
+      if (MATCHES[di].date === dateStr) dayMatchList.push({mi: di, time: MATCHES[di].time});
+    }
+    dayMatchList.sort(function(a, b) { return a.time < b.time ? -1 : (a.time > b.time ? 1 : 0); });
+    var timeOrder = {};
+    for (var oi = 0; oi < dayMatchList.length; oi++) { timeOrder[dayMatchList[oi].mi] = oi + 1; }
     GROUPS.forEach(function(grp) {
       var btn = grpBody.querySelector('.grp-stadium-btn[data-g="' + grp.g + '"]');
+      var infoSpan = grpBody.querySelector('.grp-match-info[data-g="' + grp.g + '"]');
       if (!btn) return;
       var matchIdx = -1;
       var venueIdx = -1;
@@ -1428,8 +1435,13 @@ function getNextZ() {
       if (matchIdx < 0) {
         btn.classList.remove('active');
         btn.onclick = null;
+        if (infoSpan) infoSpan.innerHTML = '';
       } else {
         btn.classList.add('active');
+        var ord = timeOrder[matchIdx] || 0;
+        var ordStr = ord > 0 && ord <= circledOrd.length ? circledOrd[ord - 1] : '' + ord;
+        var sdCtry = wc2026Stadiums[venueIdx] ? wc2026Stadiums[venueIdx].ctry : '';
+        if (infoSpan) infoSpan.innerHTML = sdCtry + ' ' + ordStr + ' <span style="font-size:10px;font-family:monospace;color:#58a6ff">' + MATCHES[matchIdx].time + '</span>';
         var capturedVenue = venueIdx;
         var capturedDate = dateStr;
         btn.onclick = function(e) {
@@ -1731,25 +1743,19 @@ function getNextZ() {
   function buildStadiumPanel() {
     var body = document.getElementById('sdp-body');
     if (!body) return;
-    var circled = ['','①','②','③','④','⑤','⑥','⑦','⑧','⑨','⑩'];
     var html = '';
     for (var i = 0; i < wc2026Stadiums.length; i++) {
       var sd = wc2026Stadiums[i];
-      var midxs = stadiumMatches[i] || [];
-      var cnt = midxs.length;
-      var ordStr = cnt <= 0 ? '' : (cnt === 1 ? '①' : ('①-' + (cnt < circled.length ? circled[cnt] : cnt + '')));
-      var times = [];
-      for (var ti = 0; ti < midxs.length; ti++) { times.push(MATCHES[midxs[ti]].time); }
-      var timesStr = times.join(', ');
+      var latStr = sd.lat.toFixed(3) + 'N';
+      var lonStr = (-sd.lon).toFixed(3) + 'W';
       html += '<div class="sdp-row" data-idx="' + i + '">';
       html += '<span class="sdp-num">' + sd.num + '</span>';
       html += '<span class="sdp-icon">' + sd.ctry + '</span>';
       html += '<div class="sdp-info">';
       html += '<div class="sdp-name">' + sd.name.replace(/&/g,'&amp;') + '</div>';
       html += '<div class="sdp-city">' + sd.city + '</div>';
-      html += '</div>';
-      html += '<div class="sdp-side"><span class="sdp-ord">' + sd.ctry + ' ' + ordStr + '</span><span class="sdp-times">' + timesStr + '</span></div>';
-      html += '</div>';
+      html += '<div class="sdp-coord">' + latStr + ' / ' + lonStr + '</div>';
+      html += '</div></div>';
     }
     body.innerHTML = html;
     body.addEventListener('click', function(e) {
