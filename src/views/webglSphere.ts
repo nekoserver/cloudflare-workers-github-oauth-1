@@ -188,6 +188,21 @@ input[type=range] { flex:1; accent-color:#58a6ff; }
 #btnStadiumTour { position:absolute; right:10px; top:50px; z-index:5; background:rgba(13,17,23,0.88); border:1px solid #30363d; border-radius:6px; color:#e6edf3; font-size:12px; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; padding:6px 12px; cursor:pointer; white-space:nowrap; transition:background .15s,border-color .15s,color .15s; }
 #btnStadiumTour:hover { background:rgba(13,17,23,1); border-color:#f0b429; color:#f0b429; }
 #btnStadiumTour.active { background:#1a1200; border-color:#f0b429; color:#f0b429; }
+#btnSearch { position:absolute; right:10px; top:90px; z-index:5; background:rgba(13,17,23,0.88); border:1px solid #30363d; border-radius:6px; color:#e6edf3; font-size:12px; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; padding:6px 12px; cursor:pointer; white-space:nowrap; transition:background .15s,border-color .15s,color .15s; }
+#btnSearch:hover { background:rgba(13,17,23,1); border-color:#58a6ff; color:#58a6ff; }
+#btnSearch.active { background:#0c2d4e; border-color:#58a6ff; color:#58a6ff; }
+#btnNight { position:absolute; right:10px; top:130px; z-index:5; background:rgba(13,17,23,0.88); border:1px solid #30363d; border-radius:6px; color:#e6edf3; font-size:12px; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; padding:6px 12px; cursor:pointer; white-space:nowrap; transition:background .15s,border-color .15s,color .15s; }
+#btnNight:hover { background:rgba(13,17,23,1); border-color:#f0d070; color:#f0d070; }
+#btnNight.active { background:#1a1800; border-color:#f0d070; color:#f0d070; }
+#search-overlay { position:absolute; top:0; left:0; right:0; bottom:0; z-index:20; display:none; }
+#search-overlay.open { display:block; }
+.srch-wrap { position:absolute; top:10px; left:50%; transform:translateX(-50%); width:300px; max-width:80vw; }
+#search-input { width:100%; background:rgba(13,17,23,0.97); border:1.5px solid #58a6ff; border-radius:8px; color:#e6edf3; font-size:13px; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; padding:8px 14px; outline:none; box-shadow:0 4px 20px rgba(0,0,0,.7); }
+#search-results { background:rgba(13,17,23,0.97); border:1px solid #30363d; border-radius:0 0 8px 8px; max-height:280px; overflow-y:auto; margin-top:-2px; }
+.srch-item { padding:9px 14px; cursor:pointer; font-size:12px; border-bottom:1px solid #21262d; display:flex; align-items:center; gap:6px; }
+.srch-item:last-child { border-bottom:none; }
+.srch-item:hover { background:#21262d; }
+.srch-item-type { font-size:9px; font-weight:700; color:#8b949e; letter-spacing:1px; text-transform:uppercase; }
 </style>
 </head>
 <body>
@@ -219,20 +234,31 @@ void main() {
 <script id="fs" type="x-shader/x-fragment">
 precision mediump float;
 uniform sampler2D uTex;
+uniform float uNight;
 varying vec2 vUV;
 varying float vDiff;
 varying float vSpec;
 varying float vRim;
+float hash(vec2 p) {
+  return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
+}
 void main() {
   vec4 earth = texture2D(uTex, vUV);
   float isOcean = clamp((earth.b - earth.r * 0.8 - earth.g * 0.3) * 3.0, 0.0, 1.0);
   vec3 oceanColor = vec3(0.05, 0.18, 0.52);
   vec3 baseColor = mix(earth.rgb, oceanColor, isOcean);
-  float amb = 0.25;
+  float night = clamp(1.0 - vDiff * 8.0, 0.0, 1.0) * uNight;
+  float amb = mix(0.25, 0.03, night);
   vec3 col = baseColor * (amb + vDiff * (1.0 - amb));
   col += vec3(0.5, 0.8, 1.0) * vSpec * isOcean * 0.7;
   col += vec3(0.25, 0.55, 1.0) * vRim * 0.5;
   col += vec3(0.1,  0.3,  0.9) * vRim * vRim * 0.25;
+  float isLand = 1.0 - isOcean;
+  vec2 c1 = floor(vUV * 192.0);
+  float city1 = step(0.955, hash(c1)) * isLand;
+  vec2 c2 = floor(vUV * 512.0);
+  float city2 = step(0.982, hash(c2 + vec2(17.0, 31.0))) * isLand;
+  col += vec3(1.0, 0.75, 0.35) * (city1 * 0.7 + city2 * 0.3) * night;
   gl_FragColor = vec4(col, 1.0);
 }
 </script>
@@ -260,6 +286,14 @@ void main() {
     <button id="drawer-open-btn" title="試合一覧を開く">&#9776; 試合一覧</button>
     <button id="tnmt-btn" title="トーナメント表を開く">&#127942; トーナメント</button>
     <button id="btnStadiumTour" title="全16会場を巡回">&#127967; 会場巡回</button>
+    <button id="btnSearch" title="国名・会場名で検索">&#128269; 検索</button>
+    <button id="btnNight" title="夜景モードの切替">&#127769; 夜景</button>
+    <div id="search-overlay">
+      <div class="srch-wrap">
+        <input type="text" id="search-input" placeholder="国名・会場名で検索..." autocomplete="off">
+        <div id="search-results"></div>
+      </div>
+    </div>
     <div id="match-info">
       <button class="mi-close" id="miClose">&#10005;</button>
       <div class="mi-flags" id="mi-flags"></div>
@@ -418,11 +452,13 @@ function getNextZ() {
   gl.enableVertexAttribArray(aNorm); gl.vertexAttribPointer(aNorm, 3, gl.FLOAT, false, stride, 12);
   gl.enableVertexAttribArray(aUV);   gl.vertexAttribPointer(aUV,   2, gl.FLOAT, false, stride, 24);
 
-  var uMVP   = gl.getUniformLocation(prog, "uMVP");
-  var uModel = gl.getUniformLocation(prog, "uModel");
-  var uLight = gl.getUniformLocation(prog, "uLight");
-  var uTex   = gl.getUniformLocation(prog, "uTex");
+  var uMVP    = gl.getUniformLocation(prog, "uMVP");
+  var uModel  = gl.getUniformLocation(prog, "uModel");
+  var uLight  = gl.getUniformLocation(prog, "uLight");
+  var uTex    = gl.getUniformLocation(prog, "uTex");
+  var uNightL = gl.getUniformLocation(prog, "uNight");
   gl.uniform1i(uTex, 0);
+  gl.uniform1f(uNightL, 0.0);
 
   function getSunDir() {
     var now = new Date();
@@ -697,6 +733,11 @@ function getNextZ() {
     {a:"🇩🇿",b:"🇦🇹",date:"2026-06-28",time:"02:00"},
     {a:"🇯🇴",b:"🇦🇷",date:"2026-06-28",time:"02:00"}
   ];
+  var MATCH_VENUE = [4,1,3,1,6,7,8,12,2,14,5,13,4,8,1,10,11,12,1,0,14,3,2,7,0,6,15,8,12,7,9,12,15,5,6,13,2,10,4,8,0,11,12,1,14,3,2,7,15,6,9,7,4,1,5,2,14,15,1,12,11,13,4,2,10,8,3,0,13,14,5,1];
+  var stadiumMatches = {};
+  for (var _vi = 0; _vi < 16; _vi++) stadiumMatches[_vi] = [];
+  for (var _mi = 0; _mi < MATCHES.length && _mi < MATCH_VENUE.length; _mi++) stadiumMatches[MATCH_VENUE[_mi]].push(_mi);
+
   var FLAG_CODE = {
     '🇲🇽':'MEX','🇿🇦':'RSA','🇰🇷':'KOR','🇨🇿':'CZE','🇨🇦':'CAN','🇧🇦':'BIH',
     '🇺🇸':'USA','🇵🇾':'PAR','🇶🇦':'QAT','🇨🇭':'SUI','🇧🇷':'BRA','🇲🇦':'MAR',
@@ -1443,6 +1484,35 @@ function getNextZ() {
     stadiumMkEls.push({el: smel, pos3d: latLonTo3D(sdata.lat, sdata.lon)});
   }
 
+  function buildStadiumTooltipHtml(sidx) {
+    var sd = wc2026Stadiums[sidx];
+    var html = '<span class="tt-flag-lg">&#127967; ' + sd.ctry + '</span><div class="tt-name">' + sd.name + '</div><div class="tt-code">' + sd.city + '</div>';
+    var midxs = stadiumMatches[sidx] || [];
+    if (midxs.length > 0) {
+      var now2 = Date.now();
+      var items = [];
+      for (var k = 0; k < midxs.length; k++) {
+        var m = MATCHES[midxs[k]];
+        var ko = new Date(m.date + 'T' + m.time + ':00Z').getTime();
+        items.push({m: m, ko: ko, past: ko <= now2 - 110*60000});
+      }
+      items.sort(function(x, y) { return x.ko - y.ko; });
+      var future = items.filter(function(it) { return !it.past; });
+      var past = items.filter(function(it) { return it.past; });
+      var show = future.concat(past).slice(0, 5);
+      for (var k2 = 0; k2 < show.length; k2++) {
+        var it = show[k2];
+        var md = it.m.date.slice(5).replace('-', '/');
+        if (it.past) {
+          html += '<div class="tt-mrow tt-past">' + it.m.a + ' vs ' + it.m.b + ' ' + md + '</div>';
+        } else {
+          html += '<div class="tt-mrow">' + it.m.a + ' vs ' + it.m.b + ' ' + md + '<span class="tt-time">' + toET(it.m.time) + '</span></div>';
+        }
+      }
+    }
+    return html;
+  }
+
   function showStadiumTooltip(idx) {
     var sd = wc2026Stadiums[idx];
     hideTooltip();
@@ -1453,7 +1523,7 @@ function getNextZ() {
       var r = mel ? mel.getBoundingClientRect() : null;
       var cx = r ? r.left + r.width/2 : canvasRect.left + canvasRect.width/2;
       var cy = r ? r.top + r.height/2 : canvasRect.top + 100;
-      tooltip.innerHTML = '<span class="tt-flag-lg">&#127967; ' + sd.ctry + '</span><div class="tt-name">' + sd.name + '</div><div class="tt-code">' + sd.city + '</div>';
+      tooltip.innerHTML = buildStadiumTooltipHtml(idx);
       positionTooltip(cx, cy);
       tooltip.style.opacity = "1";
     }, 900);
@@ -1492,7 +1562,7 @@ function getNextZ() {
       var r = mel ? mel.getBoundingClientRect() : null;
       var cx = r ? r.left + r.width/2 : canvasRect.left + canvasRect.width/2;
       var cy = r ? r.top + r.height/2 : canvasRect.top + 100;
-      tooltip.innerHTML = '<span class="tt-flag-lg">&#127967; ' + sd.ctry + '</span><div class="tt-name">' + sd.name + '</div><div class="tt-code">' + sd.city + '</div>';
+      tooltip.innerHTML = buildStadiumTooltipHtml(capturedIdx);
       positionTooltip(cx, cy);
       tooltip.style.opacity = "1";
     }, 1800);
@@ -1622,6 +1692,7 @@ function getNextZ() {
 
     var sd = getSunDir();
     gl.uniform3f(uLight, sd[0], sd[1], sd[2]);
+    gl.uniform1f(uNightL, nightMode ? 1.0 : 0.0);
     gl.uniformMatrix4fv(uMVP,   false, mvp);
     gl.uniformMatrix4fv(uModel, false, model);
 
@@ -1687,6 +1758,106 @@ function getNextZ() {
       frames = 0; lastFps = now;
     }
   }
+  var nightMode = false;
+  var btnNight = document.getElementById('btnNight');
+  btnNight.addEventListener('click', function() {
+    nightMode = !nightMode;
+    if (nightMode) {
+      btnNight.classList.add('active');
+      btnNight.textContent = '☀ 夜景 ON';
+    } else {
+      btnNight.classList.remove('active');
+      btnNight.textContent = '🌙 夜景';
+    }
+  });
+
+  var searchActive = false;
+  var btnSearch = document.getElementById('btnSearch');
+  var searchOverlay = document.getElementById('search-overlay');
+  var searchInput = document.getElementById('search-input');
+  var searchResultsEl = document.getElementById('search-results');
+  var _lastResults = [];
+
+  function openSearch() {
+    searchActive = true;
+    searchOverlay.style.zIndex = String(getNextZ());
+    searchOverlay.classList.add('open');
+    btnSearch.classList.add('active');
+    searchInput.value = '';
+    searchResultsEl.innerHTML = '';
+    setTimeout(function() { searchInput.focus(); }, 50);
+  }
+  function closeSearch() {
+    searchActive = false;
+    searchOverlay.classList.remove('open');
+    btnSearch.classList.remove('active');
+  }
+
+  function renderSearchResults(q) {
+    var lq = q.toLowerCase();
+    if (!lq) { searchResultsEl.innerHTML = ''; _lastResults = []; return; }
+    var results = [];
+    for (var i = 0; i < wc2026.length; i++) {
+      var d = wc2026[i];
+      if (d.ball) continue;
+      if (d.name.toLowerCase().indexOf(lq) >= 0) {
+        results.push({type:'country', idx:i, flag:d.flag, label:d.name, lat:d.lat, lon:d.lon});
+      }
+    }
+    for (var j = 0; j < wc2026Stadiums.length; j++) {
+      var s = wc2026Stadiums[j];
+      if (s.name.toLowerCase().indexOf(lq) >= 0 || s.city.toLowerCase().indexOf(lq) >= 0) {
+        results.push({type:'stadium', idx:j, flag:s.ctry, label:s.name + ' — ' + s.city, lat:s.lat, lon:s.lon});
+      }
+    }
+    _lastResults = results;
+    if (results.length === 0) {
+      searchResultsEl.innerHTML = '<div class="srch-item" style="color:#8b949e">見つかりません</div>';
+      return;
+    }
+    var html = '';
+    for (var k = 0; k < results.length && k < 10; k++) {
+      var r = results[k];
+      html += '<div class="srch-item" data-k="' + k + '">' + r.flag + ' <span>' + r.label + '</span> <span class="srch-item-type">' + (r.type === 'stadium' ? '会場' : '国') + '</span></div>';
+    }
+    searchResultsEl.innerHTML = html;
+  }
+
+  searchResultsEl.addEventListener('click', function(e) {
+    var item = e.target.closest('.srch-item');
+    if (!item || item.dataset.k === undefined) return;
+    var ki = parseInt(item.dataset.k, 10);
+    var res = _lastResults[ki];
+    if (!res) return;
+    closeSearch();
+    if (res.type === 'stadium') {
+      showStadiumTooltip(res.idx);
+    } else {
+      hideTooltip();
+      flyTo(res.lat, res.lon);
+      var fidx = res.idx;
+      setTimeout(function() {
+        var mkEl = document.querySelectorAll('.mk')[fidx];
+        var cx = mkEl ? mkEl.getBoundingClientRect().left + mkEl.getBoundingClientRect().width/2 : canvasRect.left + canvasRect.width/2;
+        var cy = mkEl ? mkEl.getBoundingClientRect().top + mkEl.getBoundingClientRect().height/2 : canvasRect.top + canvasRect.height/2;
+        tooltip.innerHTML = buildAllMatchesHtml(wc2026[fidx].flag, wc2026[fidx].name);
+        positionTooltip(cx, cy);
+        tooltip.style.opacity = '1';
+        activeMarkerIdx = fidx;
+      }, 900);
+    }
+  });
+  searchInput.addEventListener('input', function() { renderSearchResults(searchInput.value); });
+  searchInput.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') closeSearch();
+  });
+  btnSearch.addEventListener('click', function() {
+    if (searchActive) closeSearch(); else openSearch();
+  });
+  searchOverlay.addEventListener('click', function(e) {
+    if (e.target === searchOverlay) closeSearch();
+  });
+
   buildCalendar();
   buildDrawerCalendar();
   buildGroupsPanel();
