@@ -214,6 +214,19 @@ input[type=range] { flex:1; accent-color:#58a6ff; }
 .srch-item:last-child { border-bottom:none; }
 .srch-item:hover { background:#21262d; }
 .srch-item-type { font-size:9px; font-weight:700; color:#8b949e; letter-spacing:1px; text-transform:uppercase; }
+.cost-section { margin-top:4px; }
+.cost-section h2 { font-size:11px; font-weight:700; color:#f0b429; text-transform:uppercase; letter-spacing:.5px; margin-bottom:8px; }
+.cost-subtitle { font-size:10px; color:#8b949e; margin-bottom:10px; line-height:1.5; }
+.cost-row { display:flex; align-items:center; gap:7px; padding:7px 0; border-bottom:1px solid #21262d; }
+.cost-row:last-child { border-bottom:none; }
+.cost-rank { font-size:13px; font-weight:700; color:#f0b429; font-family:monospace; min-width:20px; text-align:right; flex-shrink:0; }
+.cost-icon { font-size:16px; flex-shrink:0; }
+.cost-info { flex:1; min-width:0; }
+.cost-name { font-size:11px; font-weight:600; color:#e6edf3; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.cost-meta { font-size:10px; color:#8b949e; margin-top:1px; }
+.cost-val { font-size:11px; font-weight:700; color:#3fb950; white-space:nowrap; flex-shrink:0; text-align:right; }
+.cost-bar-wrap { height:3px; background:#21262d; border-radius:2px; margin-top:3px; }
+.cost-bar { height:3px; border-radius:2px; background:linear-gradient(90deg,#f0b429,#3fb950); }
 </style>
 </head>
 <body>
@@ -347,6 +360,122 @@ void main() {
     <div class="item">
       <div class="item-title">Workers Static Assets</div>
       <div class="item-desc"><code>wrangler.toml</code> に <code>assets = &#123; directory = "./public" &#125;</code> を追記。<code>public/</code> 内のファイルが Worker を経由せず Cloudflare CDN から直配信される。</div>
+    </div>
+
+    <hr>
+    <div class="cost-section">
+      <h2>&#127942; FIFA W杯 建設費ランキング</h2>
+      <div class="cost-subtitle">建設コスト上位10スタジアム</div>
+
+      <div class="cost-row">
+        <span class="cost-rank">1</span>
+        <span class="cost-icon">&#127967;</span>
+        <div class="cost-info">
+          <div class="cost-name">SoFi Stadium</div>
+          <div class="cost-meta">&#127482;&#127480; USA &middot; W杯2026</div>
+          <div class="cost-bar-wrap"><div class="cost-bar" style="width:100%"></div></div>
+        </div>
+        <div class="cost-val">$5.1B</div>
+      </div>
+
+      <div class="cost-row">
+        <span class="cost-rank">2</span>
+        <span class="cost-icon">&#127967;</span>
+        <div class="cost-info">
+          <div class="cost-name">MetLife Stadium</div>
+          <div class="cost-meta">&#127482;&#127480; USA &middot; 2026決勝</div>
+          <div class="cost-bar-wrap"><div class="cost-bar" style="width:29%"></div></div>
+        </div>
+        <div class="cost-val">$1.5B</div>
+      </div>
+
+      <div class="cost-row">
+        <span class="cost-rank">3</span>
+        <span class="cost-icon">&#127967;</span>
+        <div class="cost-info">
+          <div class="cost-name">Mercedes-Benz Stadium</div>
+          <div class="cost-meta">&#127482;&#127480; USA &middot; W杯2026</div>
+          <div class="cost-bar-wrap"><div class="cost-bar" style="width:29%"></div></div>
+        </div>
+        <div class="cost-val">$1.5B</div>
+      </div>
+
+      <div class="cost-row">
+        <span class="cost-rank">4</span>
+        <span class="cost-icon">&#127967;</span>
+        <div class="cost-info">
+          <div class="cost-name">Saint Petersburg Stadium</div>
+          <div class="cost-meta">&#127479;&#127482; Russia &middot; W杯2018</div>
+          <div class="cost-bar-wrap"><div class="cost-bar" style="width:25%"></div></div>
+        </div>
+        <div class="cost-val">$1.3B</div>
+      </div>
+
+      <div class="cost-row">
+        <span class="cost-rank">5</span>
+        <span class="cost-icon">&#127967;</span>
+        <div class="cost-info">
+          <div class="cost-name">AT&amp;T Stadium</div>
+          <div class="cost-meta">&#127482;&#127480; USA &middot; W杯2026</div>
+          <div class="cost-bar-wrap"><div class="cost-bar" style="width:24%"></div></div>
+        </div>
+        <div class="cost-val">$1.2B</div>
+      </div>
+
+      <div class="cost-row">
+        <span class="cost-rank">6</span>
+        <span class="cost-icon">&#127967;</span>
+        <div class="cost-info">
+          <div class="cost-name">Levi&#39;s Stadium</div>
+          <div class="cost-meta">&#127482;&#127480; USA &middot; W杯2026</div>
+          <div class="cost-bar-wrap"><div class="cost-bar" style="width:24%"></div></div>
+        </div>
+        <div class="cost-val">$1.2B</div>
+      </div>
+
+      <div class="cost-row">
+        <span class="cost-rank">7</span>
+        <span class="cost-icon">&#127967;</span>
+        <div class="cost-info">
+          <div class="cost-name">Al Bayt Stadium</div>
+          <div class="cost-meta">&#127478;&#127462; Qatar &middot; W杯2022</div>
+          <div class="cost-bar-wrap"><div class="cost-bar" style="width:15%"></div></div>
+        </div>
+        <div class="cost-val">$780M</div>
+      </div>
+
+      <div class="cost-row">
+        <span class="cost-rank">8</span>
+        <span class="cost-icon">&#127967;</span>
+        <div class="cost-info">
+          <div class="cost-name">Man&#233; Garrincha Stadium</div>
+          <div class="cost-meta">&#127463;&#127479; Brazil &middot; W杯2014</div>
+          <div class="cost-bar-wrap"><div class="cost-bar" style="width:15%"></div></div>
+        </div>
+        <div class="cost-val">$760M</div>
+      </div>
+
+      <div class="cost-row">
+        <span class="cost-rank">9</span>
+        <span class="cost-icon">&#127967;</span>
+        <div class="cost-info">
+          <div class="cost-name">Lusail Stadium</div>
+          <div class="cost-meta">&#127478;&#127462; Qatar &middot; W杯2022</div>
+          <div class="cost-bar-wrap"><div class="cost-bar" style="width:14%"></div></div>
+        </div>
+        <div class="cost-val">$710M</div>
+      </div>
+
+      <div class="cost-row">
+        <span class="cost-rank">10</span>
+        <span class="cost-icon">&#127967;</span>
+        <div class="cost-info">
+          <div class="cost-name">Cape Town Stadium</div>
+          <div class="cost-meta">&#127487;&#127462; South Africa &middot; W杯2010</div>
+          <div class="cost-bar-wrap"><div class="cost-bar" style="width:11%"></div></div>
+        </div>
+        <div class="cost-val">$540M</div>
+      </div>
     </div>
   </div>
 </div>
