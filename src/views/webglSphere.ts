@@ -279,6 +279,7 @@ void main() {
   <span class="badge">WebGL</span>
   <span style="flex:1"></span>
   <a href="/webgl-heritage">🏛️ 世界遺産</a>
+  <a href="/mlb">⚾ MLB</a>
   <a href="/webgl-demo" class="pwa-hide">3D Cube</a>
   <a href="/htmlrewriter-demo" class="pwa-hide">HTMLRewriter</a>
   <a href="/settings" class="pwa-hide">&#9881;</a>
