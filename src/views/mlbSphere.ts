@@ -97,6 +97,28 @@ canvas:active { cursor:grabbing; }
 .game-final { color:#555d68; font-size:11px; }
 .drw-msg { padding:20px; color:#8b949e; text-align:center; font-size:13px; }
 @media(display-mode:standalone){ .pwa-hide{ display:none !important; } }
+.drw-tabs { display:flex; flex:1; }
+.drw-tab { flex:1; padding:7px 4px; text-align:center; font-size:11px; font-weight:700; color:#8b949e; cursor:pointer; border-bottom:2px solid transparent; }
+.drw-tab.active { color:#58a6ff; border-bottom-color:#58a6ff; }
+.jp-wrap { padding:8px 10px 16px; }
+.jp-sec-hdr { font-size:10px; font-weight:700; color:#8b949e; text-transform:uppercase; letter-spacing:.5px; margin:12px 0 5px; padding-bottom:3px; border-bottom:1px solid #21262d; }
+.jp-tbl { width:100%; border-collapse:collapse; font-size:10px; }
+.jp-tbl th { text-align:right; color:#484f58; font-weight:700; font-size:9px; padding:3px 3px; white-space:nowrap; }
+.jp-tbl th:first-child { text-align:left; }
+.jp-tbl td { padding:5px 3px; border-bottom:1px solid #21262d; vertical-align:middle; text-align:right; }
+.jp-tbl td:first-child { text-align:left; }
+.jp-name { font-weight:700; color:#e6edf3; font-size:11px; }
+.jp-num { color:#8b949e; font-size:9px; margin-left:2px; }
+.jp-pos { color:#8b949e; font-size:9px; }
+.jp-team-tag { font-size:8px; font-family:monospace; padding:1px 3px; border-radius:3px; color:#fff; display:inline-block; margin-top:1px; }
+.jp-today-start { color:#3fb950; font-size:10px; font-weight:700; }
+.jp-today-game { color:#58a6ff; font-size:10px; }
+.jp-today-none { color:#484f58; font-size:10px; }
+.jp-stat { color:#c9d1d9; font-family:monospace; }
+.jp-stat-na { color:#484f58; font-family:monospace; }
+.jp-next-date { color:#f0883e; font-size:10px; }
+.jp-next-none { color:#484f58; font-size:10px; }
+.jp-loading { color:#484f58; font-style:italic; font-size:11px; padding:12px; text-align:center; }
 </style>
 </head>
 <body>
@@ -166,7 +188,10 @@ void main(){
 <div id="drawer-overlay"></div>
 <div id="left-drawer">
   <div class="drw-hdr">
-    <span class="drw-title" id="drw-title">&#9918; MLB &#12473;&#12465;&#12472;&#12517;&#12540;&#12523;</span>
+    <div class="drw-tabs">
+      <div class="drw-tab active" id="tabGames">&#9918; &#20840;&#35430;&#21512;</div>
+      <div class="drw-tab" id="tabJP">&#127991; &#26085;&#26412;&#20154;</div>
+    </div>
     <button class="drw-close" id="drwClose">&#10005;</button>
   </div>
   <div id="cal-wrap"></div>
@@ -218,6 +243,21 @@ void main(){
     {name:'NL Central', teams:[112,113,158,134,138]},
     {name:'NL West', teams:[109,115,119,135,137]}
   ];
+
+  var JP_PLAYERS = [
+    {id:660271,name:'大谷翔平',team:'LAD',teamId:119,num:17,pos:'TWP',type:'2W'},
+    {id:808967,name:'山本由伸',team:'LAD',teamId:119,num:18,pos:'SP',type:'P'},
+    {id:808963,name:'佐々木朗希',team:'LAD',teamId:119,num:11,pos:'SP',type:'P'},
+    {id:684007,name:'今永昇太',team:'CHC',teamId:112,num:18,pos:'SP',type:'P'},
+    {id:579328,name:'菊池雄星',team:'LAA',teamId:108,num:16,pos:'SP',type:'P'},
+    {id:506433,name:'ダルビッシュ有',team:'SD',teamId:135,num:11,pos:'SP',type:'P'},
+    {id:673513,name:'松井裕樹',team:'SD',teamId:135,num:1,pos:'RP',type:'P'},
+    {id:673548,name:'鈴木誠也',team:'CHC',teamId:112,num:27,pos:'RF',type:'H'},
+    {id:807799,name:'吉田正尚',team:'BOS',teamId:111,num:7,pos:'DH',type:'H'},
+    {id:672960,name:'岡本和真',team:'TOR',teamId:141,num:7,pos:'3B',type:'H'}
+  ];
+  var jpStatsCache={}, jpNextCache={}, jpBoxCache={};
+  var activeTab='games';
 
   var MLB_CENTER_LAT=0, MLB_CENTER_LON=0, MLB_FIT_ZOOM=2.2;
   (function(){
@@ -638,7 +678,7 @@ void main(){
       var hsd=MLB_STADIUMS[ht.id], asd=MLB_STADIUMS[at.id];
       list.push({
         homeId:ht.id, homeName:ht.name||'', homeAbbr:hsd?hsd.abbr:'',
-        awayName:at.name||'', awayAbbr:asd?asd.abbr:(at.name||'').split(' ').pop(),
+        awayTeamId:at.id, awayName:at.name||'', awayAbbr:asd?asd.abbr:(at.name||'').split(' ').pop(),
         gameDate:g.gameDate||'', status:g.status||null,
         venue:g.venue?g.venue.name:'',
         gamePk:g.gamePk||null, lineups:null
@@ -725,6 +765,241 @@ void main(){
     }
   }
 
+  function findTodayGame(teamId){
+    for(var i=0;i<todayGames.length;i++){
+      var g=todayGames[i];
+      if(g.homeId===teamId||g.awayTeamId===teamId)return g;
+    }
+    return null;
+  }
+
+  function isPlayerStarting(lineups,playerId){
+    if(!lineups||lineups==='none')return null;
+    var sides=['away','home'];
+    for(var s=0;s<sides.length;s++){
+      var side=lineups[sides[s]]||{};
+      var batters=side.batters||[], pitchers=side.pitchers||[], players=side.players||{};
+      var allStarters=batters.concat(pitchers);
+      for(var i=0;i<allStarters.length;i++){
+        if(allStarters[i]===playerId){
+          var pl=players['ID'+playerId];
+          if(!pl)return true;
+          var ord=parseInt(pl.battingOrder||'0',10);
+          if(ord===0||ord%100===0)return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  function fmtDecimal(val,dec){
+    if(val===null||val===undefined||val==='')return '-';
+    var n=parseFloat(val);
+    if(isNaN(n))return '-';
+    return n.toFixed(dec);
+  }
+
+  function fmtAvg(val){
+    if(val===null||val===undefined||val==='')return '.---';
+    var n=parseFloat(val);
+    if(isNaN(n))return '.---';
+    return n.toFixed(3).replace(/^0/,'');
+  }
+
+  function fmtERA(val){return fmtDecimal(val,2);}
+  function fmtWHIP(val){return fmtDecimal(val,3);}
+  function fmtOPS(val){
+    if(val===null||val===undefined||val==='')return '.---';
+    var n=parseFloat(val);
+    if(isNaN(n))return '.---';
+    return n.toFixed(3).replace(/^0/,'');
+  }
+
+  function buildJPTodayCell(teamId,playerId){
+    var g=findTodayGame(teamId);
+    if(!g)return '<span class="jp-today-none">-</span>';
+    var state=(g.status&&g.status.abstractGameState)||'Preview';
+    if(state==='Final')return '<span class="jp-today-none">終了</span>';
+    if(state==='Live'){
+      var starting=isPlayerStarting(g.lineups,playerId);
+      if(starting===true)return '<span class="jp-today-start">● LIVE先発</span>';
+      return '<span class="jp-today-game">● LIVE</span>';
+    }
+    if(!g.lineups){
+      return '<span class="jp-today-game">試合あり</span>';
+    }
+    if(g.lineups==='none')return '<span class="jp-today-game">試合あり</span>';
+    var starting=isPlayerStarting(g.lineups,playerId);
+    if(starting===true)return '<span class="jp-today-start">先発</span>';
+    return '<span class="jp-today-none">控え/未</span>';
+  }
+
+  function buildJPNextCell(teamId,playerId){
+    var key='ns'+playerId;
+    var v=jpNextCache[key];
+    if(v===undefined)return '<span class="jp-next-none">取得中</span>';
+    if(!v)return '<span class="jp-next-none">-</span>';
+    var parts=v.date.split('-');
+    var label=(parseInt(parts[1],10))+'/'+(parseInt(parts[2],10));
+    return '<span class="jp-next-date">'+label+'</span>';
+  }
+
+  function renderJPView(){
+    var pitchers=JP_PLAYERS.filter(function(p){return p.type==='P'||p.type==='2W';});
+    var hitters=JP_PLAYERS.filter(function(p){return p.type==='H'||p.type==='2W';});
+    var sd119=MLB_STADIUMS[119];
+    var html='<div class="jp-wrap">';
+
+    html+='<div class="jp-sec-hdr">&#9918; &#25237;&#25163;&#38542;</div>';
+    html+='<table class="jp-tbl"><thead><tr>';
+    html+='<th>&#36984;&#25163;</th><th>&#20170;&#26085;</th><th>&#27425;&#22238;</th><th>W-L</th><th>ERA</th><th>WHIP</th><th>K</th>';
+    html+='</tr></thead><tbody>';
+    for(var i=0;i<pitchers.length;i++){
+      var p=pitchers[i];
+      var sd=MLB_STADIUMS[p.teamId];
+      var color=sd?sd.color:'#333';
+      var ps=jpStatsCache['p'+p.id];
+      var st=ps||{};
+      var wins=st.wins!==undefined?st.wins:'-';
+      var losses=st.losses!==undefined?st.losses:'-';
+      var era=ps?fmtERA(st.era):'-';
+      var whip=ps?fmtWHIP(st.whip):'-';
+      var so=st.strikeOuts!==undefined?st.strikeOuts:'-';
+      var statCls=ps?'jp-stat':'jp-stat-na';
+      html+='<tr>';
+      html+='<td><div class="jp-name">'+p.name+'<span class="jp-num">#'+p.num+'</span></div>';
+      html+='<span class="jp-team-tag" style="background:'+color+'">'+p.team+'</span> <span class="jp-pos">'+p.pos+'</span></td>';
+      html+='<td>'+buildJPTodayCell(p.teamId,p.id)+'</td>';
+      html+='<td>'+buildJPNextCell(p.teamId,p.id)+'</td>';
+      html+='<td class="'+statCls+'">'+wins+'-'+losses+'</td>';
+      html+='<td class="'+statCls+'">'+era+'</td>';
+      html+='<td class="'+statCls+'">'+whip+'</td>';
+      html+='<td class="'+statCls+'">'+so+'</td>';
+      html+='</tr>';
+    }
+    html+='</tbody></table>';
+
+    html+='<div class="jp-sec-hdr">&#127966; &#37326;&#25163;&#38542;</div>';
+    html+='<table class="jp-tbl"><thead><tr>';
+    html+='<th>&#36984;&#25163;</th><th>&#20170;&#26085;</th><th>AVG</th><th>HR</th><th>RBI</th><th>OPS</th>';
+    html+='</tr></thead><tbody>';
+    for(var j=0;j<hitters.length;j++){
+      var h=hitters[j];
+      var sdh=MLB_STADIUMS[h.teamId];
+      var hcolor=sdh?sdh.color:'#333';
+      var hs=jpStatsCache['h'+h.id];
+      var hst=hs||{};
+      var avg=hs?fmtAvg(hst.avg):'.---';
+      var hr=hst.homeRuns!==undefined?hst.homeRuns:'-';
+      var rbi=hst.rbi!==undefined?hst.rbi:'-';
+      var ops=hs?fmtOPS(hst.ops):'.---';
+      var hstatCls=hs?'jp-stat':'jp-stat-na';
+      html+='<tr>';
+      html+='<td><div class="jp-name">'+h.name+'<span class="jp-num">#'+h.num+'</span></div>';
+      html+='<span class="jp-team-tag" style="background:'+hcolor+'">'+h.team+'</span> <span class="jp-pos">'+h.pos+'</span></td>';
+      html+='<td>'+buildJPTodayCell(h.teamId,h.id)+'</td>';
+      html+='<td class="'+hstatCls+'">'+avg+'</td>';
+      html+='<td class="'+hstatCls+'">'+hr+'</td>';
+      html+='<td class="'+hstatCls+'">'+rbi+'</td>';
+      html+='<td class="'+hstatCls+'">'+ops+'</td>';
+      html+='</tr>';
+    }
+    html+='</tbody></table></div>';
+
+    document.getElementById('game-list').innerHTML=html;
+    document.getElementById('cal-wrap').style.display='none';
+  }
+
+  function fetchAllJPStats(){
+    var pitchers=JP_PLAYERS.filter(function(p){return p.type==='P'||p.type==='2W';});
+    var hitters=JP_PLAYERS.filter(function(p){return p.type==='H'||p.type==='2W';});
+    pitchers.forEach(function(p){
+      if(jpStatsCache['p'+p.id]!==undefined)return;
+      jpStatsCache['p'+p.id]=null;
+      fetch('/api/mlb-player-stats?playerId='+p.id+'&group=pitching')
+        .then(function(r){return r.json();})
+        .then(function(data){
+          var sp=data.stats&&data.stats[0]&&data.stats[0].splits&&data.stats[0].splits[0];
+          jpStatsCache['p'+p.id]=sp?sp.stat:null;
+          if(activeTab==='jp')renderJPView();
+        })
+        .catch(function(){if(activeTab==='jp')renderJPView();});
+    });
+    hitters.forEach(function(p){
+      if(jpStatsCache['h'+p.id]!==undefined)return;
+      jpStatsCache['h'+p.id]=null;
+      fetch('/api/mlb-player-stats?playerId='+p.id+'&group=hitting')
+        .then(function(r){return r.json();})
+        .then(function(data){
+          var sp=data.stats&&data.stats[0]&&data.stats[0].splits&&data.stats[0].splits[0];
+          jpStatsCache['h'+p.id]=sp?sp.stat:null;
+          if(activeTab==='jp')renderJPView();
+        })
+        .catch(function(){if(activeTab==='jp')renderJPView();});
+    });
+    var pitcherTeams={};
+    pitchers.forEach(function(p){pitcherTeams[p.teamId]=pitcherTeams[p.teamId]||[];pitcherTeams[p.teamId].push(p.id);});
+    Object.keys(pitcherTeams).forEach(function(teamId){
+      fetch('/api/mlb-next-start?teamId='+teamId)
+        .then(function(r){return r.json();})
+        .then(function(data){
+          var pids=pitcherTeams[teamId];
+          pids.forEach(function(pid){jpNextCache['ns'+pid]=null;});
+          if(!data.dates)return;
+          for(var di=0;di<data.dates.length;di++){
+            var games=data.dates[di].games||[];
+            for(var gi=0;gi<games.length;gi++){
+              var g=games[gi], teams=g.teams||{};
+              var sides=['home','away'];
+              for(var si=0;si<sides.length;si++){
+                var pp=teams[sides[si]]&&teams[sides[si]].probablePitcher;
+                if(!pp)continue;
+                for(var pi=0;pi<pids.length;pi++){
+                  if(pp.id===pids[pi]&&jpNextCache['ns'+pids[pi]]===null){
+                    jpNextCache['ns'+pids[pi]]={date:data.dates[di].date,gamePk:g.gamePk};
+                  }
+                }
+              }
+            }
+          }
+          if(activeTab==='jp')renderJPView();
+        })
+        .catch(function(){});
+    });
+    var jpTeams={};
+    JP_PLAYERS.forEach(function(p){jpTeams[p.teamId]=true;});
+    Object.keys(jpTeams).forEach(function(tid){
+      var tidN=parseInt(tid,10);
+      var g=findTodayGame(tidN);
+      if(!g||!g.gamePk||g.lineups!==null)return;
+      fetch('/api/mlb-boxscore?gamePk='+g.gamePk)
+        .then(function(r){return r.json();})
+        .then(function(data){
+          g.lineups=data.teams?{away:data.teams.away,home:data.teams.home}:'none';
+          if(activeTab==='jp')renderJPView();
+        })
+        .catch(function(){g.lineups='none';});
+    });
+  }
+
+  function switchTab(tab){
+    activeTab=tab;
+    var tabGames=document.getElementById('tabGames');
+    var tabJP=document.getElementById('tabJP');
+    var calWrap=document.getElementById('cal-wrap');
+    if(tab==='games'){
+      tabGames.className='drw-tab active';
+      tabJP.className='drw-tab';
+      calWrap.style.display='';
+      buildGameList(todayGames,selectedDate);
+    }else{
+      tabGames.className='drw-tab';
+      tabJP.className='drw-tab active';
+      renderJPView();
+      fetchAllJPStats();
+    }
+  }
+
   var mlbLocked=false;
   var btnMLBView=document.getElementById('btnMLBView');
   btnMLBView.addEventListener('click',function(){
@@ -741,6 +1016,9 @@ void main(){
   });
   canvas.addEventListener('mousedown',function(){if(mlbLocked){mlbLocked=false;btnMLBView.classList.remove('active');btnMLBView.textContent='⚾ 全球団';}});
   canvas.addEventListener('touchstart',function(){if(mlbLocked){mlbLocked=false;btnMLBView.classList.remove('active');btnMLBView.textContent='⚾ 全球団';}},{passive:true});
+
+  document.getElementById('tabGames').addEventListener('click',function(){switchTab('games');});
+  document.getElementById('tabJP').addEventListener('click',function(){switchTab('jp');});
 
   // init
   var mm=now.getMonth()+1, dd=now.getDate(), yyyy=now.getFullYear();
