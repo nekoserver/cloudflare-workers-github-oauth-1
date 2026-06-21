@@ -265,7 +265,7 @@ void main(){
     {id:673548,name:'鈴木誠也',team:'CHC',teamId:112,num:27,pos:'RF',type:'H'},
     {id:807799,name:'吉田正尚',team:'BOS',teamId:111,num:7,pos:'DH',type:'H'},
     {id:672960,name:'岡本和真',team:'TOR',teamId:141,num:7,pos:'3B',type:'H'},
-    {id:808959,name:'村上宗隆',team:'CWS',teamId:145,num:55,pos:'3B',type:'H'}
+    {id:808959,name:'村上宗隆',team:'CWS',teamId:145,num:5,pos:'1B',type:'H'}
   ];
   var jpStatsCache={}, jpNextCache={}, jpBoxCache={};
   var activeTab='games';
