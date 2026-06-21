@@ -144,7 +144,11 @@ input[type=range] { flex:1; accent-color:#58a6ff; }
 .cal-match { cursor:pointer; }
 .cal-match:hover { filter:brightness(1.15); }
 .cal-selected { outline:2px solid rgba(88,166,255,0.7); outline-offset:-1px; }
-.cal-month-hdr { text-align:center; font-size:20px; padding:3px 0 4px; line-height:1; }
+.cal-month-hdr { display:flex; align-items:center; justify-content:center; font-size:20px; padding:3px 0 4px; line-height:1; position:relative; }
+.host-filter-btns { position:absolute; right:0; display:flex; gap:3px; }
+.host-btn { font-size:18px; background:none; border:2px solid transparent; border-radius:5px; padding:1px 3px; cursor:pointer; line-height:1; transition:border-color .12s,background .12s; }
+.host-btn:hover { border-color:rgba(240,180,41,0.5); }
+.host-btn.active { border-color:#f0b429; background:rgba(240,180,41,0.09); }
 .cal-wrap { margin-bottom:14px; }
 .cal-title { font-size:10px; font-weight:700; color:#58a6ff; text-transform:uppercase; letter-spacing:.5px; margin-bottom:5px; }
 .cal-legend { display:flex; flex-wrap:wrap; gap:3px; margin-bottom:5px; }
@@ -1234,7 +1238,7 @@ function getNextZ() {
     var todayDay = todayStr.startsWith('2026-06-') ? parseInt(todayStr.slice(8), 10) : 0;
     var GS_BG = 'rgba(88,166,255,0.18)';
     var wdays = ['日','月','火','水','木','金','土'];
-    var html = '<div class="cal-month-hdr">6️⃣</div>';
+    var html = '<div class="cal-month-hdr">6️⃣<div class="host-filter-btns"><button class="host-btn" data-ctry="USA">&#127482;&#127480;</button><button class="host-btn" data-ctry="CAN">&#127464;&#127462;</button><button class="host-btn" data-ctry="MEX">&#127474;&#127485;</button></div></div>';
     html += '<div class="cal-wrap drw-cal-wrap">';
     html += '<div class="cal-title">🏃‍♂️‍➡️ グループステージ (72)</div>';
     html += '<div class="cal-legend"><span class="cal-leg" style="background:' + GS_BG + '">グループステージ</span></div>';
@@ -1254,6 +1258,8 @@ function getNextZ() {
     html += '</div></div>';
     sec.innerHTML = html;
     sec.addEventListener('click', function(e) {
+      var hostBtn = e.target.closest('.host-btn');
+      if (hostBtn) { filterDrawerByHost(hostBtn.dataset.ctry); return; }
       var cell = e.target.closest('.cal-match');
       if (!cell || !cell.dataset.date) return;
       var ds = cell.dataset.date;
@@ -1264,6 +1270,36 @@ function getNextZ() {
       selectedDate = ds;
       updateActiveDateFlags(ds);
     });
+  }
+
+  var hostFilterCtry = null;
+  function filterDrawerByHost(ctry) {
+    hostFilterCtry = (hostFilterCtry === ctry) ? null : ctry;
+    document.querySelectorAll('.host-btn').forEach(function(btn) {
+      btn.classList.toggle('active', btn.dataset.ctry === hostFilterCtry);
+    });
+    if (!drwBuilt) { buildDrawer(); drwBuilt = true; }
+    openDrawer();
+    var sections = document.querySelectorAll('#drw-body .drw-section');
+    sections.forEach(function(sec) {
+      var rows = sec.querySelectorAll('.drw-row');
+      var hasMatch = false;
+      rows.forEach(function(row) {
+        var vidx = parseInt(row.dataset.vidx, 10);
+        var rowCtry = (vidx >= 0 && wc2026Stadiums[vidx]) ? wc2026Stadiums[vidx].code3 : null;
+        var show = !hostFilterCtry || rowCtry === hostFilterCtry;
+        row.style.display = show ? '' : 'none';
+        if (show) hasMatch = true;
+      });
+      sec.style.display = (!hostFilterCtry || hasMatch) ? '' : 'none';
+      if (hostFilterCtry && hasMatch) { sec.classList.add('open'); }
+    });
+    if (!hostFilterCtry) {
+      var todayStr2 = new Date().toISOString().slice(0, 10);
+      var todaySection = document.querySelector('#drw-body .drw-section[data-date="' + todayStr2 + '"]');
+      document.querySelectorAll('#drw-body .drw-section').forEach(function(s) { s.classList.remove('open'); });
+      if (todaySection) todaySection.classList.add('open');
+    }
   }
 
   function buildGroupsPanel() {
