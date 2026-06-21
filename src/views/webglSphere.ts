@@ -1901,9 +1901,10 @@ function getNextZ() {
       if (activeStadiumIdx !== venueIdx) return;
       var mel = stadiumMkEls[venueIdx] ? stadiumMkEls[venueIdx].el : null;
       var r = mel ? mel.getBoundingClientRect() : null;
-      var cx = r ? r.left + r.width/2 : canvasRect.left + canvasRect.width/2;
+      var cx = r ? r.left : canvasRect.left + canvasRect.width/2;
       var cy = r ? r.top + r.height/2 : canvasRect.top + 100;
       tooltip.innerHTML = buildStadiumDateTooltipHtml(venueIdx, dateStr);
+      stadiumTooltipLeftMode = true;
       positionTooltip(cx, cy);
       tooltip.style.opacity = '1';
     }, 900);
