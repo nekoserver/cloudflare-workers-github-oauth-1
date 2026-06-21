@@ -2222,16 +2222,16 @@ function getNextZ() {
   });
 
   var costStadiums = [
-    {name:"SoFi Stadium",              lat:33.954, lon:-118.339},
-    {name:"MetLife Stadium",            lat:40.814, lon:-74.074},
-    {name:"Mercedes-Benz Stadium",      lat:33.755, lon:-84.401},
-    {name:"Saint Petersburg Stadium",   lat:59.972, lon:30.221},
-    {name:"AT&T Stadium",               lat:32.748, lon:-97.093},
-    {name:"Levi's Stadium",             lat:37.403, lon:-121.970},
-    {name:"Al Bayt Stadium",            lat:25.667, lon:51.490},
-    {name:"Mane Garrincha Stadium",     lat:-15.783, lon:-47.899},
-    {name:"Lusail Stadium",             lat:25.428, lon:51.489},
-    {name:"Cape Town Stadium",          lat:-33.904, lon:18.411}
+    {rank:1,  name:"SoFi Stadium",              cost:"$5.1B", ctry:"&#127482;&#127480; USA &middot; W杯2026",   lat:33.954, lon:-118.339},
+    {rank:2,  name:"MetLife Stadium",            cost:"$1.5B", ctry:"&#127482;&#127480; USA &middot; 2026決勝",  lat:40.814, lon:-74.074},
+    {rank:3,  name:"Mercedes-Benz Stadium",      cost:"$1.5B", ctry:"&#127482;&#127480; USA &middot; W杯2026",   lat:33.755, lon:-84.401},
+    {rank:4,  name:"Saint Petersburg Stadium",   cost:"$1.3B", ctry:"&#127479;&#127482; Russia &middot; W杯2018",lat:59.972, lon:30.221},
+    {rank:5,  name:"AT&amp;T Stadium",           cost:"$1.2B", ctry:"&#127482;&#127480; USA &middot; W杯2026",   lat:32.748, lon:-97.093},
+    {rank:6,  name:"Levi&#39;s Stadium",         cost:"$1.2B", ctry:"&#127482;&#127480; USA &middot; W杯2026",   lat:37.403, lon:-121.970},
+    {rank:7,  name:"Al Bayt Stadium",            cost:"$780M", ctry:"&#127478;&#127462; Qatar &middot; W杯2022", lat:25.667, lon:51.490},
+    {rank:8,  name:"Mané Garrincha Stadium",cost:"$760M", ctry:"&#127463;&#127479; Brazil &middot; W杯2014",lat:-15.783, lon:-47.899},
+    {rank:9,  name:"Lusail Stadium",             cost:"$710M", ctry:"&#127478;&#127462; Qatar &middot; W杯2022", lat:25.428, lon:51.489},
+    {rank:10, name:"Cape Town Stadium",          cost:"$540M", ctry:"&#127487;&#127462; South Africa &middot; W杯2010",lat:-33.904, lon:18.411}
   ];
   var activeCostMkIdx = -1;
   var costMkEls = [];
@@ -2261,6 +2261,7 @@ function getNextZ() {
     activeCostMkIdx = -1;
     costTourActive = false;
     if (costTourTimer) { clearTimeout(costTourTimer); costTourTimer = null; }
+    hideTooltip();
     var btn = document.getElementById('costTourBtn');
     if (btn) { btn.innerHTML = '&#127968; 建設費順に自動巡回'; btn.classList.remove('touring'); }
     setCostRowActive(-1);
@@ -2268,15 +2269,33 @@ function getNextZ() {
   function doCostTourStep() {
     if (!costTourActive || costTourIdx >= costStadiums.length) { stopCostTour(); return; }
     var sd = costStadiums[costTourIdx];
+    var capturedIdx = costTourIdx;
     hideTooltip();
     zoomTarget = 3.2;
     flyTo(sd.lat, sd.lon);
-    setCostRowActive(costTourIdx);
+    setCostRowActive(capturedIdx);
     costTourTimer = setTimeout(function() {
-      if (!costTourActive) return;
-      costTourIdx++;
-      doCostTourStep();
-    }, 3600);
+      if (!costTourActive || costTourIdx !== capturedIdx) return;
+      var cmk = costMkEls[capturedIdx];
+      var cx = canvasRect.left + canvasRect.width / 2;
+      var cy = canvasRect.top + canvasRect.height / 2;
+      if (cmk && parseFloat(cmk.el.style.opacity) > 0.5) {
+        var r = cmk.el.getBoundingClientRect();
+        cx = r.left + r.width / 2;
+        cy = r.top + r.height / 2;
+      }
+      tooltip.innerHTML = '<div class="tt-stadium">&#127967; #' + sd.rank + ' ' + sd.name + '</div>'
+        + '<div class="tt-city">' + sd.ctry + '</div>'
+        + '<div style="color:#3fb950;font-weight:700;font-size:14px;margin-top:6px">' + sd.cost + '</div>';
+      positionTooltip(cx, cy);
+      tooltip.style.opacity = '1';
+      costTourTimer = setTimeout(function() {
+        if (!costTourActive) return;
+        hideTooltip();
+        costTourIdx++;
+        doCostTourStep();
+      }, 3000);
+    }, 900);
   }
   function startCostTour() {
     if (costTourActive) { stopCostTour(); return; }
