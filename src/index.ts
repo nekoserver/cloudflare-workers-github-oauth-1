@@ -4316,30 +4316,6 @@ app.get('/api/mlb-schedule', authMiddleware, async (c) => {
   }
 });
 
-app.get('/api/mlb-month-schedule', authMiddleware, async (c) => {
-  const startDate = c.req.query('startDate');
-  const endDate = c.req.query('endDate');
-  if (!startDate || !endDate || !/^\d{4}-\d{2}-\d{2}$/.test(startDate) || !/^\d{4}-\d{2}-\d{2}$/.test(endDate)) {
-    return c.json({error: 'invalid params'}, 400);
-  }
-  try {
-    const url = `https://statsapi.mlb.com/api/v1/schedule?sportId=1&startDate=${startDate}&endDate=${endDate}&hydrate=team,venue`;
-    const res = await fetch(url, {headers: {'User-Agent': 'Mozilla/5.0'}});
-    if (!res.ok) return c.json({error: 'upstream error', status: res.status}, 502);
-    const raw: any = await res.json();
-    const dates = (raw.dates || []).map((d: any) => ({
-      date: d.date,
-      games: (d.games || []).map((g: any) => ({
-        homeTeamId: g.teams?.home?.team?.id,
-        venueName: g.venue?.name || ''
-      }))
-    }));
-    return c.json({dates});
-  } catch (e) {
-    return c.json({error: 'fetch failed', detail: String(e)}, 502);
-  }
-});
-
 app.get('/api/mlb-boxscore', authMiddleware, async (c) => {
   const gamePk = c.req.query('gamePk');
   if (!gamePk || !/^\d+$/.test(gamePk)) return c.json({error: 'invalid gamePk'}, 400);
