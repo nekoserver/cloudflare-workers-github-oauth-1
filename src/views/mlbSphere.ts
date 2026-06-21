@@ -30,7 +30,8 @@ canvas:active { cursor:grabbing; }
 #markers { position:absolute; inset:0; pointer-events:none; overflow:hidden; }
 .mlb-mk { position:absolute; transform:translate(-50%,-50%); color:#fff; font-size:9px; font-weight:700; font-family:monospace; padding:3px 6px; border-radius:4px; border:1.5px solid rgba(255,255,255,0.25); pointer-events:auto; cursor:pointer; user-select:none; -webkit-user-select:none; letter-spacing:0.5px; white-space:nowrap; box-shadow:0 1px 4px rgba(0,0,0,0.7); line-height:1.4; }
 .mlb-mk.active { border-color:#58a6ff !important; box-shadow:0 0 0 2px rgba(88,166,255,0.5),0 1px 4px rgba(0,0,0,0.7); }
-#mk-tooltip { position:fixed; background:rgba(13,17,23,0.97); border:1px solid #58a6ff; border-radius:8px; padding:10px 14px; font-size:12px; color:#e6edf3; max-width:340px; max-height:80vh; overflow-y:auto; pointer-events:none; opacity:0; transition:opacity .15s; z-index:60; transform:translate(-50%,-110%); line-height:1.6; }
+.mlb-us-center { font-size:22px; padding:0; background:none !important; border:none !important; box-shadow:none !important; filter:drop-shadow(0 1px 3px rgba(0,0,0,0.8)); }
+#mk-tooltip { position:fixed; background:rgba(13,17,23,0.97); border:1px solid #58a6ff; border-radius:8px; padding:10px 14px; font-size:12px; color:#e6edf3; max-width:340px; max-height:80vh; overflow-y:auto; pointer-events:none; opacity:0; transition:opacity .15s; z-index:60; transform:translate(-50%,-110%); line-height:1.6; text-align:center; }
 #mk-tooltip.below { transform:translate(-50%,14px); }
 .tt-stadium { font-weight:700; font-size:13px; }
 .tt-city { color:#8b949e; font-size:11px; margin-bottom:4px; }
@@ -44,7 +45,7 @@ canvas:active { cursor:grabbing; }
 .tt-final { color:#8b949e; font-size:11px; }
 .tt-lu-wrap { margin-top:8px; padding-top:8px; border-top:1px solid #21262d; }
 .tt-lu-hdr { font-size:9px; color:#8b949e; font-weight:700; text-transform:uppercase; letter-spacing:.5px; margin-bottom:5px; }
-.tt-lu-grid { display:grid; grid-template-columns:1fr 1fr; gap:4px 8px; }
+.tt-lu-grid { display:grid; grid-template-columns:1fr 1fr; gap:4px 8px; text-align:left; }
 .tt-lu-col { font-size:10px; }
 .tt-lu-team { font-size:9px; font-weight:700; color:#58a6ff; margin-bottom:3px; text-transform:uppercase; }
 .tt-lu-sp { color:#f0883e; font-weight:700; margin-bottom:4px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
@@ -617,6 +618,10 @@ void main(){
       markersDiv.appendChild(el);
       mkEls.push({el:el,pos3d:latLonTo3D(sd.lat,sd.lon),homeId:hid});
     }
+    var usCenter=document.createElement('div');
+    usCenter.className='mlb-mk mlb-us-center'; usCenter.textContent='⚾'; usCenter.style.pointerEvents='none';
+    markersDiv.appendChild(usCenter);
+    mkEls.push({el:usCenter,pos3d:latLonTo3D(39.5,-98.35),homeId:-1});
   }
 
   function buildSidePanel(){
@@ -647,12 +652,7 @@ void main(){
     var monthKey=calYear+'-'+(mm2<10?'0'+mm2:mm2);
     var monthData=monthScheduleCache[monthKey];
     if(countryFilter && monthData === undefined) fetchMonthSchedule(calYear, mm2);
-    var html='<div class="cal-flags">';
-    html+='<button class="cal-flag-btn'+(countryFilter==='US'?' active':'')+'" id="flagUS">&#127482;&#127480;</button>';
-    html+='<button class="cal-flag-btn'+(countryFilter==='CA'?' active':'')+'" id="flagCA">&#127464;&#127462;</button>';
-    html+='<button class="cal-flag-btn'+(countryFilter==='MX'?' active':'')+'" id="flagMX">&#127474;&#127485;</button>';
-    html+='</div>';
-    html+='<div class="cal-hdr">';
+    var html='<div class="cal-hdr">';
     html+='<button class="cal-nav" id="calPrev">&#8592;</button>';
     html+='<span class="cal-month-lbl">'+MONTHS[calMonth]+' '+calYear+'</span>';
     html+='<button class="cal-nav" id="calNext">&#8594;</button>';
