@@ -1301,8 +1301,12 @@ function getNextZ() {
   }
 
   function flyTo(lat, lon) {
-    var ty = -(Math.PI/2 + lon * Math.PI/180);
-    var tx = Math.atan(Math.cos(axialTilt) * Math.tan(lat * Math.PI/180));
+    var latR = lat * Math.PI / 180;
+    var lonR = lon * Math.PI / 180;
+    var sinDy = Math.tan(axialTilt) * Math.tan(latR);
+    sinDy = sinDy < -1 ? -1 : sinDy > 1 ? 1 : sinDy;
+    var ty = -(Math.PI/2 + lonR) + Math.asin(sinDy);
+    var tx = Math.atan(Math.cos(axialTilt) * Math.tan(latR));
     var dy = ty - rotYv;
     while (dy > Math.PI) dy -= 2*Math.PI;
     while (dy < -Math.PI) dy += 2*Math.PI;
