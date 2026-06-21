@@ -93,6 +93,8 @@ input[type=range] { accent-color:#fdb813; width:120px; }
   var SOL_TCOS = Math.cos(23.4 * Math.PI / 180);
   var solsticeOrbAngle = 0;
   var solsticeSpinT = 0;
+  var solsticeZoom = 1.0;
+  var solsticeZoomStart = 1.0;
 
   var showOrbits = true;
   var showStarLabels = true;
@@ -161,6 +163,7 @@ input[type=range] { accent-color:#fdb813; width:120px; }
     if (mode === 'solstice' && skyViewMode !== 'solstice') {
       solsticeOrbAngle = 0;
       solsticeSpinT = 0;
+      solsticeZoom = 1.0;
     }
     skyViewMode = (skyViewMode === mode) ? '' : mode;
     btnEarth.classList.toggle('active', skyViewMode === 'earth');
@@ -226,7 +229,11 @@ input[type=range] { accent-color:#fdb813; width:120px; }
   canvas.addEventListener('wheel', function(e) {
     if (skyViewMode === '') return;
     e.preventDefault();
-    fovH = Math.max(Math.PI / 8, Math.min(Math.PI * 0.85, fovH + e.deltaY * 0.0015));
+    if (skyViewMode === 'solstice') {
+      solsticeZoom = Math.max(0.3, Math.min(5.0, solsticeZoom * (1 - e.deltaY * 0.001)));
+    } else {
+      fovH = Math.max(Math.PI / 8, Math.min(Math.PI * 0.85, fovH + e.deltaY * 0.0015));
+    }
   }, { passive: false });
 
   canvas.addEventListener('touchstart', function(e) {
@@ -236,6 +243,7 @@ input[type=range] { accent-color:#fdb813; width:120px; }
       var ddy = e.touches[0].clientY - e.touches[1].clientY;
       pinchStartDist = Math.sqrt(ddx * ddx + ddy * ddy);
       pinchStartFov = fovH;
+      solsticeZoomStart = solsticeZoom;
     } else if (e.touches.length === 1) {
       startDrag(e.touches[0].clientX, e.touches[0].clientY);
     }
@@ -247,7 +255,11 @@ input[type=range] { accent-color:#fdb813; width:120px; }
       var ddy = e.touches[0].clientY - e.touches[1].clientY;
       var d = Math.sqrt(ddx * ddx + ddy * ddy);
       if (pinchStartDist > 0) {
-        fovH = Math.max(Math.PI / 8, Math.min(Math.PI * 0.85, pinchStartFov * pinchStartDist / d));
+        if (skyViewMode === 'solstice') {
+          solsticeZoom = Math.max(0.3, Math.min(5.0, solsticeZoomStart * d / pinchStartDist));
+        } else {
+          fovH = Math.max(Math.PI / 8, Math.min(Math.PI * 0.85, pinchStartFov * pinchStartDist / d));
+        }
       }
     } else if (e.touches.length === 1) {
       e.preventDefault();
@@ -584,7 +596,7 @@ input[type=range] { accent-color:#fdb813; width:120px; }
   function drawSolsticeView() {
     ctx.fillStyle = '#000010'; ctx.fillRect(0, 0, W, H);
     var cx = W / 2, cy = H / 2;
-    var sc9 = Math.min(W, H) / 900;
+    var sc9 = Math.min(W, H) / 900 * solsticeZoom;
     var sunR = Math.max(22, 34 * sc9);
     var orbitR = Math.max(120, 220 * sc9);
     var earthR = Math.max(16, 26 * sc9);
@@ -745,7 +757,7 @@ input[type=range] { accent-color:#fdb813; width:120px; }
     planetScreenPos.push({ x: ex9, y: ey9, item: { name: '地球', type: '岩石惑星', fact: '夏至(6/21): 地軸の傾き23.4°で北半球が太陽に最接近。北極圏は白夜、南極圏は極夜になります' } });
 
     ctx.font = '12px sans-serif'; ctx.fillStyle = 'rgba(255,220,100,0.9)';
-    ctx.fillText('🌞 夏至 (Summer Solstice) — 公転 + 自転 + 地軸傾き 23.4°', 10, 28);
+    ctx.fillText('🌞 夏至 (Summer Solstice) — 公転 + 自転 + 地軸傾き 23.4°  スクロール/ピンチ:ズーム', 10, 28);
     ctx.font = '11px sans-serif'; ctx.fillStyle = 'rgba(180,220,255,0.7)';
     ctx.fillText('黄点線=地軸  橙線=赤道  金点=北回帰線(太陽直上)  緑点=自転マーカー', 10, 46);
 
