@@ -1,5 +1,9 @@
-export function getMLBSpherePage(username: string): string {
+type MonthGameDates = Record<string, {US: boolean, CA: boolean, MX: boolean}>;
+type MonthPreload = {key: string, dates: MonthGameDates} | null;
+
+export function getMLBSpherePage(username: string, monthPreload: MonthPreload = null): string {
   const safeUser = username.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const preloadJson = monthPreload ? JSON.stringify(monthPreload) : 'null';
   return `<!DOCTYPE html>
 <html lang="ja">
 <head>
@@ -306,7 +310,44 @@ void main(){
 
   var todayGames = [], stadiumGames = {}, gameCache = {};
   var countryFilter = null;
-  var monthScheduleCache = {};
+  var monthScheduleCache = (function(){
+    var pre = ${preloadJson};
+    if (pre && pre.key && pre.dates) {
+      var c = {}; c[pre.key] = pre.dates; return c;
+    }
+    return {};
+  })();
+  var MEXICO_KW = ['Harp', 'Monterrey', 'Mexico', 'Estadio'];
+  function venueCountry(homeTeamId, venueName) {
+    if (homeTeamId === 141) return 'CA';
+    for (var k = 0; k < MEXICO_KW.length; k++) { if (venueName.indexOf(MEXICO_KW[k]) >= 0) return 'MX'; }
+    return 'US';
+  }
+  function fetchMonthSchedule(year, month) {
+    var mm = month < 10 ? '0' + month : '' + month;
+    var key = year + '-' + mm;
+    if (monthScheduleCache[key] !== undefined) return;
+    monthScheduleCache[key] = null;
+    var lastDay = new Date(year, month, 0).getDate();
+    var startDate = key + '-01';
+    var endDate = key + '-' + (lastDay < 10 ? '0' + lastDay : '' + lastDay);
+    fetch('/api/mlb-schedule?startDate=' + startDate + '&endDate=' + endDate)
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        var result = {};
+        (data.dates || []).forEach(function(d) {
+          var ctry = {US: false, CA: false, MX: false};
+          (d.games || []).forEach(function(g) {
+            var c = venueCountry(g.teams && g.teams.home && g.teams.home.team && g.teams.home.team.id, g.venue && g.venue.name || '');
+            ctry[c] = true;
+          });
+          result[d.date] = ctry;
+        });
+        monthScheduleCache[key] = result;
+        buildCalendar();
+      })
+      .catch(function() { monthScheduleCache[key] = {}; });
+  }
 
   var now = new Date();
   function toDateStr(d) {
@@ -597,43 +638,6 @@ void main(){
     });
   }
 
-  var CANADA_TEAM_ID = 141;
-  var MEXICO_VENUE_KEYWORDS = ['Harp', 'Monterrey', 'Mexico', 'Estadio'];
-
-  function venueCountry(homeTeamId, venueName) {
-    if (homeTeamId === CANADA_TEAM_ID) return 'CA';
-    for (var k = 0; k < MEXICO_VENUE_KEYWORDS.length; k++) {
-      if (venueName.indexOf(MEXICO_VENUE_KEYWORDS[k]) >= 0) return 'MX';
-    }
-    return 'US';
-  }
-
-  function fetchMonthSchedule(year, month) {
-    var mm = month < 10 ? '0' + month : '' + month;
-    var key = year + '-' + mm;
-    if (monthScheduleCache[key] !== undefined) return;
-    monthScheduleCache[key] = null;
-    var startDate = key + '-01';
-    var lastDay = new Date(year, month, 0).getDate();
-    var endDate = key + '-' + (lastDay < 10 ? '0' + lastDay : '' + lastDay);
-    fetch('/api/mlb-month-schedule?startDate=' + startDate + '&endDate=' + endDate)
-      .then(function(r) { return r.json(); })
-      .then(function(data) {
-        var result = {};
-        (data.dates || []).forEach(function(d) {
-          var countries = {US: false, CA: false, MX: false};
-          (d.games || []).forEach(function(g) {
-            var c = venueCountry(g.homeTeamId, g.venueName || '');
-            countries[c] = true;
-          });
-          result[d.date] = countries;
-        });
-        monthScheduleCache[key] = result;
-        buildCalendar();
-      })
-      .catch(function() { monthScheduleCache[key] = {}; });
-  }
-
   function buildCalendar(){
     var MONTHS=['January','February','March','April','May','June','July','August','September','October','November','December'];
     var firstDay=new Date(calYear,calMonth,1).getDay();
@@ -658,8 +662,8 @@ void main(){
     for(var day=1;day<=daysInMonth;day++){
       var isToday=(calYear===todayY&&calMonth===todayM&&day===todayD);
       var ds=calYear+'-'+(mm2<10?'0'+mm2:mm2)+'-'+(day<10?'0'+day:day);
-      var hasCountryGame=countryFilter && monthData && monthData[ds] && monthData[ds][countryFilter];
-      var cls='cal-day'+(isToday?' cal-today':'')+(ds===selectedDate?' cal-sel':'')+(hasCountryGame?' cal-country-hl':'');
+      var hasHl=!!(countryFilter && monthData && monthData[ds] && monthData[ds][countryFilter]);
+      var cls='cal-day'+(isToday?' cal-today':'')+(ds===selectedDate?' cal-sel':'')+(hasHl?' cal-country-hl':'');
       html+='<div class="'+cls+'" data-date="'+ds+'">'+day+'</div>';
     }
     html+='</div>';
