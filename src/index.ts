@@ -8718,6 +8718,9 @@ app.get('/api', (c) => {
         'GET /api/protected',
         'GET /api/profile',
         'PUT /api/profile',
+        'POST /api/uuid/save',
+        'GET /api/uuid/search',
+        'DELETE /api/uuid/history',
       ],
     },
   });
