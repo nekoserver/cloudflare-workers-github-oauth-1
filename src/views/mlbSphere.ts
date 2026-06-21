@@ -30,6 +30,7 @@ canvas:active { cursor:grabbing; }
 #markers { position:absolute; inset:0; pointer-events:none; overflow:hidden; }
 .mlb-mk { position:absolute; transform:translate(-50%,-50%); color:#fff; font-size:9px; font-weight:700; font-family:monospace; padding:3px 6px; border-radius:4px; border:1.5px solid rgba(255,255,255,0.25); pointer-events:auto; cursor:pointer; user-select:none; -webkit-user-select:none; letter-spacing:0.5px; white-space:nowrap; box-shadow:0 1px 4px rgba(0,0,0,0.7); line-height:1.4; }
 .mlb-mk.active { border-color:#58a6ff !important; box-shadow:0 0 0 2px rgba(88,166,255,0.5),0 1px 4px rgba(0,0,0,0.7); }
+.mlb-us-center { font-size:22px; padding:0; background:none !important; border:none !important; box-shadow:none !important; filter:drop-shadow(0 1px 3px rgba(0,0,0,0.8)); }
 #mk-tooltip { position:fixed; background:rgba(13,17,23,0.97); border:1px solid #58a6ff; border-radius:8px; padding:10px 14px; font-size:12px; color:#e6edf3; max-width:340px; max-height:80vh; overflow-y:auto; pointer-events:none; opacity:0; transition:opacity .15s; z-index:60; transform:translate(-50%,-110%); line-height:1.6; }
 #mk-tooltip.below { transform:translate(-50%,14px); }
 .tt-stadium { font-weight:700; font-size:13px; }
@@ -617,6 +618,10 @@ void main(){
       markersDiv.appendChild(el);
       mkEls.push({el:el,pos3d:latLonTo3D(sd.lat,sd.lon),homeId:hid});
     }
+    var usCenter=document.createElement('div');
+    usCenter.className='mlb-mk mlb-us-center'; usCenter.textContent='⚾'; usCenter.style.pointerEvents='none';
+    markersDiv.appendChild(usCenter);
+    mkEls.push({el:usCenter,pos3d:latLonTo3D(39.5,-98.35),homeId:-1});
   }
 
   function buildSidePanel(){
