@@ -210,6 +210,9 @@ input[type=range] { flex:1; accent-color:#58a6ff; }
 #btnFamousStadiums { position:absolute; right:10px; top:170px; z-index:5; background:rgba(13,17,23,0.88); border:1px solid #30363d; border-radius:6px; color:#e6edf3; font-size:12px; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; padding:6px 12px; cursor:pointer; white-space:nowrap; transition:background .15s,border-color .15s,color .15s; }
 #btnFamousStadiums:hover { background:rgba(13,17,23,1); border-color:#ff7b54; color:#ff7b54; }
 #btnFamousStadiums.active { background:#2a0e00; border-color:#ff7b54; color:#ff7b54; }
+#btnLatLines { position:absolute; right:10px; top:210px; z-index:5; background:rgba(13,17,23,0.88); border:1px solid #30363d; border-radius:6px; color:#e6edf3; font-size:12px; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; padding:6px 12px; cursor:pointer; white-space:nowrap; transition:background .15s,border-color .15s,color .15s; }
+#btnLatLines:hover { background:rgba(13,17,23,1); border-color:#3dd6f5; color:#3dd6f5; }
+#btnLatLines.active { background:#002a30; border-color:#3dd6f5; color:#3dd6f5; }
 .mk-famous { font-size:14px; cursor:pointer; pointer-events:auto; user-select:none; position:absolute; transform:translate(-50%,-50%); text-shadow:0 0 6px rgba(255,123,84,0.7); transition:opacity .2s; }
 #search-overlay { position:absolute; top:0; left:0; right:0; bottom:0; z-index:20; display:none; }
 #search-overlay.open { display:block; }
@@ -297,6 +300,21 @@ void main() {
 }
 </script>
 
+<script id="vs-line" type="x-shader/x-vertex">
+attribute vec3 aPos;
+uniform mat4 uMVP;
+void main() {
+  gl_Position = uMVP * vec4(aPos, 1.0);
+}
+</script>
+<script id="fs-line" type="x-shader/x-fragment">
+precision mediump float;
+uniform vec4 uColor;
+void main() {
+  gl_FragColor = uColor;
+}
+</script>
+
 <div class="topbar">
   <h1>WebGL 地球儀</h1>
   <span class="badge">WebGL</span>
@@ -324,6 +342,7 @@ void main() {
     <button id="btnSearch" title="国名・会場名で検索">&#128269; 検索</button>
     <button id="btnNight" title="夜景モードの切替">&#127769; 夜景</button>
     <button id="btnFamousStadiums" title="有名スタジアムを表示">&#128512; 有名球場</button>
+    <button id="btnLatLines" class="active" title="赤道・回帰線の表示切替">&#127775; 緯線</button>
     <div id="search-overlay">
       <div class="srch-wrap">
         <input type="text" id="search-input" placeholder="国名・会場名で検索..." autocomplete="off">
@@ -598,6 +617,43 @@ function getNextZ() {
   var ibo = gl.createBuffer();
   gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ibo);
   gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(idxs), gl.STATIC_DRAW);
+
+  var progLine = gl.createProgram();
+  gl.attachShader(progLine, compileShader(gl.VERTEX_SHADER,   document.getElementById("vs-line").textContent));
+  gl.attachShader(progLine, compileShader(gl.FRAGMENT_SHADER, document.getElementById("fs-line").textContent));
+  gl.linkProgram(progLine);
+  var uMVPLine   = gl.getUniformLocation(progLine, "uMVP");
+  var uColorLine = gl.getUniformLocation(progLine, "uColor");
+  var aPosLine   = gl.getAttribLocation(progLine, "aPos");
+
+  function buildLatCircle(latDeg, segs) {
+    var r = Math.cos(latDeg * Math.PI / 180);
+    var y = Math.sin(latDeg * Math.PI / 180);
+    var pts = [];
+    for (var k = 0; k <= segs; k++) {
+      var a = k / segs * 2 * Math.PI;
+      pts.push(r * Math.cos(a), y, r * Math.sin(a));
+    }
+    return pts;
+  }
+  var SEG = 128;
+  var equatorVerts = buildLatCircle(0,   SEG);
+  var tropic1Verts = buildLatCircle(23.4,  SEG);
+  var tropic2Verts = buildLatCircle(-23.4, SEG);
+  function makeLineBuf(pts) {
+    var b = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, b);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(pts), gl.STATIC_DRAW);
+    return b;
+  }
+  var equatorBuf = makeLineBuf(equatorVerts);
+  var tropic1Buf = makeLineBuf(tropic1Verts);
+  var tropic2Buf = makeLineBuf(tropic2Verts);
+  var showLatLines = true;
+
+  gl.useProgram(prog);
+  gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
+  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ibo);
 
   var stride = 8 * 4;
   var aPos  = gl.getAttribLocation(prog, "aPos");
@@ -2144,6 +2200,27 @@ function getNextZ() {
     gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, texEarth);
     gl.drawElements(gl.TRIANGLES, idxs.length, gl.UNSIGNED_SHORT, 0);
 
+    if (showLatLines) {
+      gl.useProgram(progLine);
+      gl.uniformMatrix4fv(uMVPLine, false, mvp);
+      gl.enableVertexAttribArray(aPosLine);
+      function drawLatLine(buf, r, g, b, a) {
+        gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+        gl.vertexAttribPointer(aPosLine, 3, gl.FLOAT, false, 0, 0);
+        gl.uniform4f(uColorLine, r, g, b, a);
+        gl.drawArrays(gl.LINE_STRIP, 0, SEG + 1);
+      }
+      drawLatLine(equatorBuf, 0.2, 0.8, 1.0, 0.7);
+      drawLatLine(tropic1Buf, 1.0, 0.85, 0.2, 0.4);
+      drawLatLine(tropic2Buf, 1.0, 0.85, 0.2, 0.4);
+      gl.useProgram(prog);
+      gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
+      gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ibo);
+      gl.enableVertexAttribArray(aPos);  gl.vertexAttribPointer(aPos,  3, gl.FLOAT, false, stride, 0);
+      gl.enableVertexAttribArray(aNorm); gl.vertexAttribPointer(aNorm, 3, gl.FLOAT, false, stride, 12);
+      gl.enableVertexAttribArray(aUV);   gl.vertexAttribPointer(aUV,   2, gl.FLOAT, false, stride, 24);
+    }
+
     for (var mi = 0; mi < mkEls.length; mi++) {
       var mk = mkEls[mi];
       mk.el.style.display = "";
@@ -2285,6 +2362,16 @@ function getNextZ() {
     } else {
       btnNight.classList.remove('active');
       btnNight.textContent = '🌙 夜景';
+    }
+  });
+
+  var btnLatLines = document.getElementById('btnLatLines');
+  btnLatLines.addEventListener('click', function() {
+    showLatLines = !showLatLines;
+    if (showLatLines) {
+      btnLatLines.classList.add('active');
+    } else {
+      btnLatLines.classList.remove('active');
     }
   });
 
