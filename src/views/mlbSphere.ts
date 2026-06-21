@@ -652,12 +652,7 @@ void main(){
     var monthKey=calYear+'-'+(mm2<10?'0'+mm2:mm2);
     var monthData=monthScheduleCache[monthKey];
     if(countryFilter && monthData === undefined) fetchMonthSchedule(calYear, mm2);
-    var html='<div class="cal-flags">';
-    html+='<button class="cal-flag-btn'+(countryFilter==='US'?' active':'')+'" id="flagUS">&#127482;&#127480;</button>';
-    html+='<button class="cal-flag-btn'+(countryFilter==='CA'?' active':'')+'" id="flagCA">&#127464;&#127462;</button>';
-    html+='<button class="cal-flag-btn'+(countryFilter==='MX'?' active':'')+'" id="flagMX">&#127474;&#127485;</button>';
-    html+='</div>';
-    html+='<div class="cal-hdr">';
+    var html='<div class="cal-hdr">';
     html+='<button class="cal-nav" id="calPrev">&#8592;</button>';
     html+='<span class="cal-month-lbl">'+MONTHS[calMonth]+' '+calYear+'</span>';
     html+='<button class="cal-nav" id="calNext">&#8594;</button>';
