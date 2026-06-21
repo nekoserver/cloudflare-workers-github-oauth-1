@@ -87,6 +87,8 @@ canvas:active { cursor:grabbing; }
 .cal-country-hl { background:#3a2e00; color:#ffd700; }
 .cal-country-hl.cal-today { border-color:#ffd700; }
 .cal-country-hl.cal-sel { background:#0c2d4e; color:#ffd700; }
+.cal-allstar { position:relative; }
+.cal-allstar::after { content:'★'; position:absolute; top:1px; right:2px; font-size:7px; color:#ffd700; line-height:1; }
 .cal-flags { display:flex; gap:5px; padding:6px 0 2px; }
 .cal-flag-btn { background:none; border:1px solid #30363d; border-radius:5px; font-size:16px; cursor:pointer; padding:3px 8px; line-height:1.4; transition:border-color .15s,background .15s; }
 .cal-flag-btn:hover { border-color:#58a6ff; }
@@ -304,6 +306,12 @@ void main(){
     var margin=0.68, fh=Math.PI/8, maxD=maxDist(cx,cy);
     MLB_FIT_ZOOM=Math.max(1.6, Math.sin(maxD)/(margin*Math.tan(fh))+Math.cos(maxD));
   })();
+
+  var ALL_STAR_EVENTS = {
+    '2026-07-10': 'All-Star Futures Game',
+    '2026-07-11': 'Home Run Derby',
+    '2026-07-14': 'All-Star Game'
+  };
 
   var todayGames = [], stadiumGames = {}, gameCache = {};
   var countryFilter = null;
@@ -665,7 +673,8 @@ void main(){
       var isToday=(calYear===todayY&&calMonth===todayM&&day===todayD);
       var ds=calYear+'-'+(mm2<10?'0'+mm2:mm2)+'-'+(day<10?'0'+day:day);
       var hasHl=!!(countryFilter && monthData && monthData[ds] && monthData[ds][countryFilter]);
-      var cls='cal-day'+(isToday?' cal-today':'')+(ds===selectedDate?' cal-sel':'')+(hasHl?' cal-country-hl':'');
+      var isAllStar=!!ALL_STAR_EVENTS[ds];
+      var cls='cal-day'+(isToday?' cal-today':'')+(ds===selectedDate?' cal-sel':'')+(hasHl?' cal-country-hl':'')+(isAllStar?' cal-allstar':'');
       html+='<div class="'+cls+'" data-date="'+ds+'">'+day+'</div>';
     }
     html+='</div>';
@@ -695,11 +704,13 @@ void main(){
   function buildGameList(games,dateStr){
     var parts=dateStr.split('-');
     var label=parseInt(parts[1],10)+'/'+parseInt(parts[2],10);
+    var asEvent=ALL_STAR_EVENTS[dateStr];
+    var asHtml=asEvent?'<div style="padding:8px 12px;border-bottom:1px solid #30363d;background:rgba(255,215,0,0.07)"><span style="color:#ffd700;font-weight:700;font-size:12px">&#11088; '+asEvent+'</span><div style="font-size:10px;color:#8b949e;margin-top:2px">Target Field &mdash; Minneapolis, MN</div></div>':'';
     if(games.length===0){
-      document.getElementById('game-list').innerHTML='<div class="drw-msg">'+label+' の試合はありません</div>';
+      document.getElementById('game-list').innerHTML=asHtml+'<div class="drw-msg">'+label+' の試合はありません</div>';
       return;
     }
-    var html='<div class="game-date-hdr">'+label+' ('+games.length+'試合)</div>';
+    var html=asHtml+'<div class="game-date-hdr">'+label+' ('+games.length+'試合)</div>';
     var nowMs=Date.now();
     for(var i=0;i<games.length;i++){
       var g=games[i], sd=MLB_STADIUMS[g.homeId];
