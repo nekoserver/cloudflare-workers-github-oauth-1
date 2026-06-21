@@ -2168,7 +2168,7 @@ function getNextZ() {
         var md = it.m.date.slice(5).replace('-', '/');
         var grpA = flagToGroup[it.m.a] || '';
         var grpB = flagToGroup[it.m.b] || '';
-        var grpStr = (grpA || grpB) ? 'G-' + (grpA || grpB) : '';
+        var grpStr = (grpA && grpA === grpB) ? 'グループ ' + grpA : '';
         var dateGrp = md + (grpStr ? '  ' + grpStr : '');
         var rowCls = 'tt-mrow' + (it.past && !it.isToday ? ' tt-past' : '') + (it.isToday ? ' tt-mrow-today' : '');
         var dateStyle = it.isToday ? 'font-size:10px;color:#58a6ff;font-weight:700' : (it.past ? 'font-size:10px' : 'font-size:10px;color:#f0b429');
