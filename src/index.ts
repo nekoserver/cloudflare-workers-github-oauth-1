@@ -142,6 +142,7 @@ const STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
   { name: 'api_search_keywords',     migration: '0057',       description: 'APIページ検索キーワード登録',                   syncPolicy: 'manual' },
   { name: 'api_search_keyword_sections', migration: '0058',   description: 'APIページ検索キーワードのセクション別件数',       syncPolicy: 'manual' },
   { name: 'webhook_log',               migration: '0061',   description: 'Webhook受信ログ（全ソース共通）',                   syncPolicy: 'auto' },
+  { name: 'uuid_history',             migration: '0062',   description: 'UUID生成履歴',                                        syncPolicy: 'auto' },
 ];
 
 const REQUIRED_STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
@@ -886,6 +887,17 @@ CREATE INDEX IF NOT EXISTS idx_user_sessions_revoked_at ON user_sessions(revoked
 CREATE INDEX IF NOT EXISTS idx_webhook_log_source ON webhook_log(source);
 CREATE INDEX IF NOT EXISTS idx_webhook_log_received_at ON webhook_log(received_at);`,
 
+  '0062': `CREATE TABLE IF NOT EXISTS uuid_history (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id TEXT NOT NULL,
+  uuid TEXT NOT NULL,
+  version TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_uuid_history_user_id ON uuid_history(user_id);
+CREATE INDEX IF NOT EXISTS idx_uuid_history_uuid ON uuid_history(uuid);
+CREATE INDEX IF NOT EXISTS idx_uuid_history_created_at ON uuid_history(created_at DESC);`,
+
   'ts-catalog': `CREATE TABLE IF NOT EXISTS ts_repository (
   id            INTEGER PRIMARY KEY AUTOINCREMENT,
   full_name     TEXT NOT NULL UNIQUE,
@@ -1204,6 +1216,7 @@ export const TABLE_COLUMN_KEYS: Record<string, ColumnKeyInfo> = {
   api_search_keywords:        { id: 'pk', keyword: 'idx' },
   api_search_keyword_sections: { id: 'pk', keyword_id: 'fk+idx', section_name: '' },
   webhook_log: { id: 'pk', source: 'idx', received_at: 'idx' },
+  uuid_history: { id: 'pk', user_id: 'idx', uuid: 'idx', created_at: 'idx' },
 };
 
 export function getColumnKeyType(tableName: string, columnName: string): ColumnKeyType {
@@ -1271,6 +1284,7 @@ export const TABLE_GROUP_MAP: Record<string, string> = {
   api_search_keywords: 'system',
   api_search_keyword_sections: 'system',
   webhook_log: 'system',
+  uuid_history: 'system',
   keyword_category_groups: 'search',
   keyword_multi_labels: 'search',
   ts_repository:          'ts-catalog',
@@ -4239,6 +4253,48 @@ app.get('/webgl-solar', authMiddleware, async (c) => {
 app.get('/uuid', authMiddleware, async (c) => {
   const user = c.get('user');
   return c.html(getUuidGenPage(user.sub));
+});
+
+app.post('/api/uuid/save', authMiddleware, async (c) => {
+  const user = c.get('user');
+  const body = await c.req.json<{ uuids: { uuid: string; version: string }[] }>().catch(() => null);
+  if (!body || !Array.isArray(body.uuids) || body.uuids.length === 0) {
+    return c.json({ error: 'uuids required' }, 400);
+  }
+  const items = body.uuids.slice(0, 100);
+  const validVersions = new Set(['v4', 'v7']);
+  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const valid = items.filter(it => validVersions.has(it.version) && uuidRe.test(it.uuid));
+  if (valid.length === 0) return c.json({ saved: 0 });
+  const stmt = c.env.DB.prepare(
+    'INSERT OR IGNORE INTO uuid_history (user_id, uuid, version, created_at) VALUES (?, ?, ?, datetime(\'now\'))'
+  );
+  const batch = valid.map(it => stmt.bind(user.sub, it.uuid.toLowerCase(), it.version));
+  await c.env.DB.batch(batch);
+  return c.json({ saved: valid.length });
+});
+
+app.get('/api/uuid/search', authMiddleware, async (c) => {
+  const user = c.get('user');
+  const q = (c.req.query('q') || '').trim();
+  const limit = Math.min(100, parseInt(c.req.query('limit') || '50', 10) || 50);
+  if (q.length === 0) {
+    const rows = await c.env.DB.prepare(
+      'SELECT id, uuid, version, created_at FROM uuid_history WHERE user_id = ? ORDER BY created_at DESC LIMIT ?'
+    ).bind(user.sub, limit).all();
+    return c.json({ results: rows.results ?? [], query: q });
+  }
+  const pattern = '%' + q.replace(/%/g, '\\%').replace(/_/g, '\\_') + '%';
+  const rows = await c.env.DB.prepare(
+    "SELECT id, uuid, version, created_at FROM uuid_history WHERE user_id = ? AND uuid LIKE ? ESCAPE '\\' ORDER BY created_at DESC LIMIT ?"
+  ).bind(user.sub, pattern, limit).all();
+  return c.json({ results: rows.results ?? [], query: q });
+});
+
+app.delete('/api/uuid/history', authMiddleware, async (c) => {
+  const user = c.get('user');
+  await c.env.DB.prepare('DELETE FROM uuid_history WHERE user_id = ?').bind(user.sub).run();
+  return c.json({ ok: true });
 });
 
 app.get('/mlb', authMiddleware, async (c) => {
