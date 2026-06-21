@@ -160,6 +160,10 @@ const raw_nodes = [
   { id: 'GET /api/commits',          label: 'GET /api/commits',          file: 'index.ts', group: 'route',      desc: 'コミット一覧API' },
   { id: 'POST /logout',              label: 'POST /logout',              file: 'index.ts', group: 'route',      desc: 'ログアウト' },
   { id: 'GET /userinfo',             label: 'GET /userinfo',             file: 'index.ts', group: 'route',      desc: 'ユーザー情報ページ' },
+  { id: 'GET /uuid',                label: 'GET /uuid',                 file: 'index.ts', group: 'route',      desc: 'UUID生成ページ' },
+  { id: 'POST /api/uuid/save',      label: 'POST /api/uuid/save',       file: 'index.ts', group: 'route',      desc: 'UUID履歴をD1に保存（バッチINSERT）' },
+  { id: 'GET /api/uuid/search',     label: 'GET /api/uuid/search',      file: 'index.ts', group: 'route',      desc: 'UUID履歴をLIKE検索' },
+  { id: 'DELETE /api/uuid/history', label: 'DELETE /api/uuid/history',  file: 'index.ts', group: 'route',      desc: 'ユーザーのUUID履歴を全削除' },
 
   // ── Webhooks ──
   { id: 'POST /webhook/github',      label: 'POST /webhook/github',      file: 'index.ts', group: 'webhook',   desc: 'GitHubイベント受信' },
@@ -253,6 +257,7 @@ const raw_nodes = [
   { id: 'getFunctionChangelogPage',  label: 'getFunctionChangelogPage',  file: 'views/functionChangelog.ts', group: 'view', desc: '関数変更履歴ページHTML生成' },
   { id: 'getAiChatSharePage',        label: 'getAiChatSharePage',        file: 'views/aichat-share.ts',  group: 'view', desc: '共有AIチャットページHTML生成' },
   { id: 'getAiChatShareNotFoundPage',label: 'getAiChatShareNotFoundPage',file: 'views/aichat-share.ts',  group: 'view', desc: '共有チャット404HTML生成' },
+  { id: 'getUuidGenPage',           label: 'getUuidGenPage',            file: 'views/uuidGen.ts',       group: 'view', desc: 'UUID生成ページHTML生成（v4/v7・履歴検索）' },
   { id: 'getUserInfoPage',           label: 'getUserInfoPage',           file: 'views/userinfo.ts',      group: 'view', desc: 'ユーザー情報ページHTML生成' },
   { id: 'getMarkdownPreviewPage',    label: 'getMarkdownPreviewPage',    file: 'views/markdown-preview.ts', group: 'view', desc: 'Markdownプレビューページ生成' },
   { id: 'getSessionExpiredPage',     label: 'getSessionExpiredPage',     file: 'views/login.ts',         group: 'view', desc: 'セッション期限切れページ生成' },
@@ -317,6 +322,11 @@ const raw_edges = [
   { from: 'GET /ai-chat',              to: 'getAiChatPage',             label: 'render', type: 'call' },
   { from: 'GET /status',               to: 'getCacheStatusPage',        label: 'render', type: 'call' },
   { from: 'GET /userinfo',             to: 'getUserInfoPage',           label: 'render', type: 'call' },
+  { from: 'GET /uuid',                 to: 'authMiddleware',            label: '保護ルート', type: 'auth' },
+  { from: 'GET /uuid',                 to: 'getUuidGenPage',            label: 'render', type: 'call' },
+  { from: 'POST /api/uuid/save',       to: 'authMiddleware',            label: '保護ルート', type: 'auth' },
+  { from: 'GET /api/uuid/search',      to: 'authMiddleware',            label: '保護ルート', type: 'auth' },
+  { from: 'DELETE /api/uuid/history',  to: 'authMiddleware',            label: '保護ルート', type: 'auth' },
 
   // ── Route → GitHub API ──
   { from: 'GET /repos',                to: 'getGitHubUserRepos',        label: 'リポジトリ取得', type: 'call' },
