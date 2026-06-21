@@ -93,8 +93,10 @@ input[type=range] { flex:1; accent-color:#58a6ff; }
 #drw-body { overflow-y:auto; flex:1; }
 .drw-row { display:flex; align-items:center; justify-content:space-between; padding:9px 14px; border-bottom:1px solid #21262d; cursor:pointer; gap:8px; -webkit-tap-highlight-color:transparent; }
 .drw-row:active { background:#21262d; }
-.drw-flags { font-size:22px; letter-spacing:3px; flex-shrink:0; }
-.drw-meta { font-family:monospace; font-size:11px; color:#58a6ff; text-align:right; white-space:nowrap; }
+.drw-left { display:flex; flex-direction:column; gap:2px; flex:1; min-width:0; }
+.drw-flags { font-size:22px; letter-spacing:3px; }
+.drw-venue { font-size:9px; color:#8b949e; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.drw-meta { font-family:monospace; font-size:11px; color:#58a6ff; text-align:right; white-space:nowrap; flex-shrink:0; }
 .drw-row.drw-past { opacity:0.38; }
 .drw-row.drw-live { background:rgba(63,185,80,.08); border-left:3px solid #3fb950; }
 #match-info { position:absolute; top:52px; left:50%; transform:translateX(-50%); z-index:6; background:rgba(13,17,23,0.93); border:1px solid #30363d; border-radius:12px; padding:14px 28px 12px; text-align:center; opacity:0; pointer-events:none; transition:opacity .2s; white-space:nowrap; box-shadow:0 4px 24px rgba(0,0,0,.7); }
@@ -231,14 +233,6 @@ input[type=range] { flex:1; accent-color:#58a6ff; }
 .cost-tour-btn:hover { background:#132813; }
 .cost-tour-btn.touring { background:#0c2d1a; border-color:#f0b429; color:#f0b429; }
 .cost-row.cost-active { background:rgba(240,180,41,0.12); border-left:3px solid #f0b429; padding-left:5px; }
-.venue-section { margin-bottom:14px; }
-.venue-section h2 { font-size:11px; font-weight:700; color:#58a6ff; text-transform:uppercase; letter-spacing:.5px; margin-bottom:6px; }
-.venue-item { display:flex; align-items:center; gap:6px; padding:6px 8px; border-radius:6px; cursor:pointer; border:1px solid transparent; transition:background .12s,border-color .12s; -webkit-tap-highlight-color:transparent; }
-.venue-item:hover { background:#161b22; border-color:#30363d; }
-.venue-item.venue-active { background:rgba(88,166,255,0.1); border-color:rgba(88,166,255,0.4); }
-.venue-flag { font-size:17px; line-height:1; flex-shrink:0; }
-.venue-name { font-size:11px; font-weight:600; color:#e6edf3; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; flex:1; min-width:0; }
-.venue-city { font-size:10px; color:#8b949e; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 </style>
 </head>
 <body>
@@ -340,11 +334,6 @@ void main() {
   </div>
   <div class="side">
     <div id="cal-section"></div>
-
-    <div class="venue-section">
-      <h2>&#127967; 開催会場（16会場）</h2>
-      <div id="venue-list"></div>
-    </div>
 
     <div class="grp-section">
     <h2>グループ一覧</h2>
@@ -1659,6 +1648,12 @@ function getNextZ() {
     }, 900);
   }
 
+  var matchVenueIdx = {};
+  for (var _mvi = 0; _mvi < MATCHES.length && _mvi < MATCH_VENUE.length; _mvi++) {
+    var _mk = MATCHES[_mvi].date + '|' + MATCHES[_mvi].a + '|' + MATCHES[_mvi].b;
+    matchVenueIdx[_mk] = MATCH_VENUE[_mvi];
+  }
+
   function buildDrawer() {
     if (!drwBody) return;
     var nowMs = Date.now();
@@ -1685,13 +1680,28 @@ function getNextZ() {
         var cls = "drw-row" + (isPast ? " drw-past" : "") + (isLive ? " drw-live" : "");
         var enc_a = m.a.replace(/&/g,"&amp;");
         var enc_b = m.b.replace(/&/g,"&amp;");
-        html += '<div class="' + cls + '" data-a="' + enc_a + '" data-b="' + enc_b + '" data-date="' + m.date + '" data-time="' + m.time + '"><span class="drw-flags">' + fc(m.a) + ' ' + m.a + '  ' + m.b + ' ' + fc(m.b) + '</span><span class="drw-meta">' + m.date.slice(5).replace("-","/") + '<br>' + m.time + ' UTC<br>' + toET(m.time) + '<br>' + toJST(m.time) + '</span></div>';
+        var mk = m.date + '|' + m.a + '|' + m.b;
+        var vidx = matchVenueIdx.hasOwnProperty(mk) ? matchVenueIdx[mk] : -1;
+        var sd = (vidx >= 0 && wc2026Stadiums[vidx]) ? wc2026Stadiums[vidx] : null;
+        var venueHtml = sd ? '<span class="drw-venue">' + sd.ctry + '&#127967;' + sd.name + '</span>' : '';
+        html += '<div class="' + cls + '" data-a="' + enc_a + '" data-b="' + enc_b + '" data-date="' + m.date + '" data-time="' + m.time + '" data-vidx="' + vidx + '">';
+        html += '<div class="drw-left"><span class="drw-flags">' + fc(m.a) + ' ' + m.a + '  ' + m.b + ' ' + fc(m.b) + '</span>' + venueHtml + '</div>';
+        html += '<span class="drw-meta">' + m.date.slice(5).replace("-","/") + '<br>' + m.time + ' UTC<br>' + toET(m.time) + '<br>' + toJST(m.time) + '</span></div>';
       });
       html += '</div></div>';
     });
     drwBody.innerHTML = html;
     var todaySection = drwBody.querySelector('.drw-section[data-date="' + todayStr + '"]');
     if (todaySection) todaySection.classList.add('open');
+    function onDrawerRowTap(row) {
+      var vidx = parseInt(row.dataset.vidx, 10);
+      closeDrawer();
+      if (!isNaN(vidx) && vidx >= 0) {
+        showStadiumOnDate(vidx, row.dataset.date);
+      } else {
+        showMatchDetail(row.dataset.a, row.dataset.b, row.dataset.date, row.dataset.time, true);
+      }
+    }
     drwBody.addEventListener("click", function(e) {
       var hdr = e.target.closest(".drw-date");
       if (hdr) {
@@ -1705,7 +1715,7 @@ function getNextZ() {
       }
       var row = e.target.closest(".drw-row");
       if (!row) return;
-      showMatchDetail(row.dataset.a, row.dataset.b, row.dataset.date, row.dataset.time, true);
+      onDrawerRowTap(row);
     });
     drwBody.addEventListener("touchend", function(e) {
       var hdr = e.target.closest(".drw-date");
@@ -1713,7 +1723,7 @@ function getNextZ() {
       var row = e.target.closest(".drw-row");
       if (!row) return;
       e.preventDefault();
-      showMatchDetail(row.dataset.a, row.dataset.b, row.dataset.date, row.dataset.time, true);
+      onDrawerRowTap(row);
     });
   }
 
@@ -1940,33 +1950,6 @@ function getNextZ() {
       var idx = parseInt(row.dataset.idx, 10);
       if (dateFilterMode) { showStadiumOnDate(idx, selectedDate); } else { showStadiumTooltip(idx); }
     });
-  }
-
-  function buildVenueList() {
-    var el = document.getElementById('venue-list');
-    if (!el) return;
-    var html = '';
-    for (var vi = 0; vi < wc2026Stadiums.length; vi++) {
-      var vs = wc2026Stadiums[vi];
-      html += '<div class="venue-item" data-vidx="' + vi + '" title="' + vs.name.replace(/"/g, '&quot;') + '">';
-      html += '<span class="venue-flag">' + vs.ctry + '&#127967;</span>';
-      html += '<div style="flex:1;min-width:0"><div class="venue-name">' + vs.name.replace(/&/g,'&amp;') + '</div>';
-      html += '<div class="venue-city">' + vs.city + '</div></div>';
-      html += '</div>';
-    }
-    el.innerHTML = html;
-    function onVenueTap(e) {
-      var item = e.target.closest('.venue-item');
-      if (!item) return;
-      e.preventDefault();
-      var vidx = parseInt(item.dataset.vidx, 10);
-      el.querySelectorAll('.venue-item').forEach(function(it) { it.classList.remove('venue-active'); });
-      item.classList.add('venue-active');
-      stopTour();
-      showStadiumTooltip(vidx);
-    }
-    el.addEventListener('click', onVenueTap);
-    el.addEventListener('touchend', onVenueTap);
   }
 
   var stadiumPanel = document.getElementById('stadium-panel');
@@ -2368,7 +2351,6 @@ function getNextZ() {
   buildCalendar();
   buildDrawerCalendar();
   buildGroupsPanel();
-  buildVenueList();
   requestAnimationFrame(frame);
 })();
 </script>
