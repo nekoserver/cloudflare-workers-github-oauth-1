@@ -579,8 +579,19 @@ void main(){
       html+='<div class="tt-game">';
       html+='<span class="tt-away">'+g.awayAbbr+' '+g.awayName+'</span>';
       html+='<span class="tt-home"><span class="tt-vs">@ </span>'+sd.abbr+' '+g.homeName+'</span>';
-      if(state==='Live'){html+='<span class="tt-live">&#9679; LIVE</span>';}
-      else if(state==='Final'){html+='<span class="tt-final">&#32199;&#20102;</span>';}
+      if(state==='Live'){
+        var liveScoreTt='';
+        if(g.awayScore!=null&&g.homeScore!=null){
+          var innTxt=g.inning?(((g.inningHalf||'').charAt(0)==='B'?'B':'T')+g.inning):'';
+          liveScoreTt=' &nbsp;<span style="font-family:monospace;font-size:14px;color:#fff;font-weight:700">'+g.awayScore+' - '+g.homeScore+'</span>'+(innTxt?' <span style="font-size:10px;color:#8b949e">'+innTxt+(g.outs!=null?' '+g.outs+'out':'')+'</span>':'');
+        }
+        html+='<span class="tt-live">&#9679; LIVE'+liveScoreTt+'</span>';
+      }
+      else if(state==='Final'){
+        var finalScoreTt='';
+        if(g.awayScore!=null&&g.homeScore!=null)finalScoreTt=' &nbsp;<span style="font-family:monospace;font-size:13px;font-weight:700">'+g.awayScore+' - '+g.homeScore+'</span>';
+        html+='<span class="tt-final">&#32199;&#20102;'+finalScoreTt+'</span>';
+      }
       else{
         html+='<span class="tt-time">'+fmtTime(g.gameDate,'America/New_York','ET')+'</span>';
         html+='<span class="tt-time">'+fmtTime(g.gameDate,'America/Los_Angeles','PT')+'</span>';
@@ -610,6 +621,12 @@ void main(){
         .then(function(r){return r.json();})
         .then(function(data){
           g.lineups=data.teams?{away:data.teams.away,home:data.teams.home}:'none';
+          if(data.teams){
+            var at=data.teams.away&&data.teams.away.teamStats&&data.teams.away.teamStats.batting;
+            var ht=data.teams.home&&data.teams.home.teamStats&&data.teams.home.teamStats.batting;
+            if(at&&at.runs!=null)g.awayScore=at.runs;
+            if(ht&&ht.runs!=null)g.homeScore=ht.runs;
+          }
           if(activeHomeId===homeId)tooltip.innerHTML=buildTooltipHtml(homeId);
         })
         .catch(function(){g.lineups='none';});
@@ -725,8 +742,19 @@ void main(){
       var isUpNext=!isLiveNow&&!isFinal&&startMs>0&&nowMs<startMs&&(startMs-nowMs)<=1800000;
       var cardCls='game-card'+(isLiveNow?' live-now':isUpNext?' up-next':'');
       var timeHtml='';
-      if(isLive){timeHtml='<span class="game-live">&#9679; LIVE</span>';}
-      else if(isFinal){timeHtml='<span class="game-final">&#32199;&#20102;</span>';}
+      if(isLive){
+        var liveScoreCard='';
+        if(g.awayScore!=null&&g.homeScore!=null){
+          var innTxtC=g.inning?(((g.inningHalf||'').charAt(0)==='B'?'B':'T')+g.inning):'';
+          liveScoreCard='<span style="font-family:monospace;font-weight:700;color:#fff"> '+g.awayScore+'-'+g.homeScore+'</span>'+(innTxtC?' <span style="font-size:10px;color:#8b949e">'+innTxtC+'</span>':'');
+        }
+        timeHtml='<span class="game-live">&#9679; LIVE'+liveScoreCard+'</span>';
+      }
+      else if(isFinal){
+        var finalScoreCard='';
+        if(g.awayScore!=null&&g.homeScore!=null)finalScoreCard=' <span style="font-family:monospace;font-weight:700">'+g.awayScore+'-'+g.homeScore+'</span>';
+        timeHtml='<span class="game-final">&#32199;&#20102;'+finalScoreCard+'</span>';
+      }
       else{
         timeHtml='<span class="game-time">'+fmtTime(g.gameDate,'America/New_York','ET')+'</span>';
         timeHtml+='<span class="game-time">'+fmtTime(g.gameDate,'America/Los_Angeles','PT')+'</span>';
@@ -750,6 +778,19 @@ void main(){
     });
   }
 
+  function extractScore(g){
+    var ls=g.linescore;
+    if(!ls)return {awayScore:null,homeScore:null,inning:null,inningHalf:null,outs:null};
+    var t=ls.teams||{};
+    return {
+      awayScore:t.away&&t.away.runs!=null?t.away.runs:null,
+      homeScore:t.home&&t.home.runs!=null?t.home.runs:null,
+      inning:ls.currentInning||null,
+      inningHalf:ls.inningHalf||null,
+      outs:ls.outs!=null?ls.outs:null
+    };
+  }
+
   function parseGames(rawGames){
     var list=[];
     for(var i=0;i<rawGames.length;i++){
@@ -758,12 +799,15 @@ void main(){
       var at=g.teams&&g.teams.away&&g.teams.away.team;
       if(!ht||!at)continue;
       var hsd=MLB_STADIUMS[ht.id], asd=MLB_STADIUMS[at.id];
+      var sc=extractScore(g);
       list.push({
         homeId:ht.id, homeName:ht.name||'', homeAbbr:hsd?hsd.abbr:'',
         awayTeamId:at.id, awayName:at.name||'', awayAbbr:asd?asd.abbr:(at.name||'').split(' ').pop(),
         gameDate:g.gameDate||'', status:g.status||null,
         venue:g.venue?g.venue.name:'',
-        gamePk:g.gamePk||null, lineups:null
+        gamePk:g.gamePk||null, lineups:null,
+        awayScore:sc.awayScore, homeScore:sc.homeScore,
+        inning:sc.inning, inningHalf:sc.inningHalf, outs:sc.outs
       });
     }
     list.sort(function(a,b){return a.gameDate<b.gameDate?-1:(a.gameDate>b.gameDate?1:0);});
@@ -778,10 +822,44 @@ void main(){
     }
     buildMarkers(); buildSidePanel(); buildGameList(games,dateStr);
     hud.textContent=games.length+'試合';
+    startLivePolling(dateStr);
+  }
+
+  var livePoller=null;
+  function startLivePolling(dateStr){
+    if(livePoller)clearInterval(livePoller);
+    livePoller=setInterval(function(){
+      var hasLive=false;
+      for(var i=0;i<todayGames.length;i++){if((todayGames[i].status&&todayGames[i].status.abstractGameState)==='Live'){hasLive=true;break;}}
+      if(!hasLive){clearInterval(livePoller);livePoller=null;return;}
+      fetch('/api/mlb-schedule?date='+dateStr)
+        .then(function(r){return r.json();})
+        .then(function(data){
+          var raw=(data.dates&&data.dates[0]&&data.dates[0].games)?data.dates[0].games:[];
+          var fresh=parseGames(raw);
+          for(var i=0;i<fresh.length;i++){
+            for(var j=0;j<todayGames.length;j++){
+              if(todayGames[j].gamePk===fresh[i].gamePk){
+                todayGames[j].status=fresh[i].status;
+                todayGames[j].awayScore=fresh[i].awayScore;
+                todayGames[j].homeScore=fresh[i].homeScore;
+                todayGames[j].inning=fresh[i].inning;
+                todayGames[j].inningHalf=fresh[i].inningHalf;
+                todayGames[j].outs=fresh[i].outs;
+                stadiumGames[todayGames[j].homeId]=stadiumGames[todayGames[j].homeId]||[];
+              }
+            }
+          }
+          buildGameList(todayGames,dateStr);
+          if(activeHomeId>=0)tooltip.innerHTML=buildTooltipHtml(activeHomeId);
+        })
+        .catch(function(){});
+    },30000);
   }
 
   function loadGamesForDate(dateStr){
     selectedDate=dateStr; buildCalendar();
+    if(livePoller){clearInterval(livePoller);livePoller=null;}
     if(gameCache[dateStr]){applyGames(gameCache[dateStr],dateStr);return;}
     document.getElementById('game-list').innerHTML='<div class="drw-msg">&#35501;&#12415;&#36796;&#12415;&#20013;...</div>';
     hud.textContent='&#35501;&#12415;&#36796;&#12415;&#20013;...';
