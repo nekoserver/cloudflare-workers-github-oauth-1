@@ -33,6 +33,7 @@ canvas:active { cursor:grabbing; }
 .mlb-us-center { font-size:22px; padding:0; background:none !important; border:none !important; box-shadow:none !important; filter:drop-shadow(0 1px 3px rgba(0,0,0,0.8)); }
 #mk-tooltip { position:fixed; background:rgba(13,17,23,0.97); border:1px solid #58a6ff; border-radius:8px; padding:10px 14px; font-size:12px; color:#e6edf3; max-width:340px; max-height:80vh; overflow-y:auto; pointer-events:none; opacity:0; transition:opacity .15s; z-index:60; transform:translate(-50%,-110%); line-height:1.6; text-align:center; }
 #mk-tooltip.below { transform:translate(-50%,14px); }
+#mk-tooltip.tt-left-side { transform:translate(-100%,-50%); }
 .tt-stadium { font-weight:700; font-size:13px; }
 .tt-city { color:#8b949e; font-size:11px; margin-bottom:4px; }
 .tt-game { margin-top:5px; padding-top:5px; border-top:1px solid #21262d; }
@@ -499,7 +500,7 @@ void main(){
     autoRot=false;btnAutoRot.textContent='▶ 回転';btnAutoRot.classList.add('active');
   }
 
-  var mkEls=[], activeHomeId=-1, canvasRect=canvas.getBoundingClientRect();
+  var mkEls=[], activeHomeId=-1, canvasRect=canvas.getBoundingClientRect(), stadiumTooltipLeftMode=false;
 
   function latLonTo3D(lat,lon){
     var latR=lat*Math.PI/180,lonR=lon*Math.PI/180;
@@ -507,14 +508,19 @@ void main(){
   }
 
   function hideTooltip(){
-    tooltip.style.opacity='0'; activeHomeId=-1;
+    tooltip.style.opacity='0'; activeHomeId=-1; stadiumTooltipLeftMode=false; tooltip.classList.remove('tt-left-side');
     for(var i=0;i<mkEls.length;i++)mkEls[i].el.classList.remove('active');
     document.querySelectorAll('.team-badge').forEach(function(b){b.classList.remove('active');});
   }
 
   function positionTooltip(vx,vy){
     tooltip.style.left=vx+'px'; tooltip.style.top=vy+'px';
-    if(vy<canvasRect.top+80){tooltip.classList.add('below');}else{tooltip.classList.remove('below');}
+    if(stadiumTooltipLeftMode){
+      tooltip.classList.add('tt-left-side'); tooltip.classList.remove('below');
+    }else{
+      tooltip.classList.remove('tt-left-side');
+      if(vy<canvasRect.top+80){tooltip.classList.add('below');}else{tooltip.classList.remove('below');}
+    }
   }
 
   function fmtTime(utcStr,tzId,label){
@@ -591,6 +597,7 @@ void main(){
     tooltip.innerHTML=buildTooltipHtml(homeId);
     for(var i=0;i<mkEls.length;i++)mkEls[i].el.classList.toggle('active',mkEls[i].homeId===homeId);
     document.querySelectorAll('.team-badge[data-tid="'+homeId+'"]').forEach(function(b){b.classList.add('active');});
+    stadiumTooltipLeftMode=true; tooltip.classList.add('tt-left-side');
     flyTo(sd.lat,sd.lon);
     setTimeout(function(){if(activeHomeId===homeId)tooltip.style.opacity='1';},900);
     games.forEach(function(g){
@@ -827,7 +834,7 @@ void main(){
         if(mcw>0){
           var px=(mcx/mcw+1)*0.5*W, py=(1-mcy/mcw)*0.5*H;
           mk.el.style.display=''; mk.el.style.left=px+'px'; mk.el.style.top=py+'px'; mk.el.style.opacity='1';
-          if(mk.homeId===activeHomeId)positionTooltip(canvasRect.left+px,canvasRect.top+py-MK_HALF);
+          if(mk.homeId===activeHomeId)positionTooltip(canvasRect.left+px-MK_HALF,canvasRect.top+py);
         }else{mk.el.style.opacity='0';if(mk.homeId===activeHomeId)hideTooltip();}
       }else{mk.el.style.opacity='0';if(mk.homeId===activeHomeId)hideTooltip();}
     }
