@@ -1320,7 +1320,7 @@ function getNextZ() {
       document.querySelectorAll('.cal-pin, .drw-pin').forEach(function(p) { p.parentNode.removeChild(p); });
       blinkCalDate(match ? match.date : null, true);
       highlightDrawerFlag(targetFlag);
-      if (match) { updateActiveDateFlags(match.date); }
+      if (match) { updateActiveDateFlags(match.date, flag); }
       var tidx2 = findCountryByFlag(targetFlag);
       if (tidx2 >= 0) {
         var td2 = wc2026[tidx2];
@@ -1779,7 +1779,7 @@ function getNextZ() {
     }
   }
 
-  function updateActiveDateFlags(dateStr) {
+  function updateActiveDateFlags(dateStr, selectedFlag) {
     selectedDate = dateStr;
     var grpBody = document.getElementById('grp-body');
     if (!grpBody) return;
@@ -1792,7 +1792,7 @@ function getNextZ() {
       span.classList.remove('grp-flag-today', 'grp-flag-active');
       if (dateFlags[flag]) span.classList.add('grp-flag-today');
     });
-    updateGroupStadiumIcons(dateStr);
+    updateGroupStadiumIcons(dateStr, selectedFlag);
     refreshStadiumList();
   }
 
@@ -1814,7 +1814,7 @@ function getNextZ() {
     }
   }
 
-  function updateGroupStadiumIcons(dateStr) {
+  function updateGroupStadiumIcons(dateStr, selectedFlag) {
     var grpBody = document.getElementById('grp-body');
     if (!grpBody) return;
     var circledOrd = ['①','②','③','④','⑤','⑥','⑦','⑧','⑨','⑩'];
@@ -1831,12 +1831,18 @@ function getNextZ() {
       if (!btn) return;
       var matchIdx = -1;
       var venueIdx = -1;
+      var fallbackIdx = -1;
+      var fallbackVenue = -1;
       for (var i = 0; i < MATCHES.length && i < MATCH_VENUE.length; i++) {
         if (MATCHES[i].date !== dateStr) continue;
         if (grp.f.indexOf(MATCHES[i].a) >= 0 || grp.f.indexOf(MATCHES[i].b) >= 0) {
-          matchIdx = i; venueIdx = MATCH_VENUE[i]; break;
+          if (selectedFlag && (MATCHES[i].a === selectedFlag || MATCHES[i].b === selectedFlag)) {
+            matchIdx = i; venueIdx = MATCH_VENUE[i]; break;
+          }
+          if (fallbackIdx < 0) { fallbackIdx = i; fallbackVenue = MATCH_VENUE[i]; }
         }
       }
+      if (matchIdx < 0 && fallbackIdx >= 0) { matchIdx = fallbackIdx; venueIdx = fallbackVenue; }
       if (matchIdx < 0) {
         btn.classList.remove('active');
         btn.onclick = null;
