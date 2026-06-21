@@ -93,8 +93,10 @@ input[type=range] { flex:1; accent-color:#58a6ff; }
 #drw-body { overflow-y:auto; flex:1; }
 .drw-row { display:flex; align-items:center; justify-content:space-between; padding:9px 14px; border-bottom:1px solid #21262d; cursor:pointer; gap:8px; -webkit-tap-highlight-color:transparent; }
 .drw-row:active { background:#21262d; }
-.drw-flags { font-size:22px; letter-spacing:3px; flex-shrink:0; }
-.drw-meta { font-family:monospace; font-size:11px; color:#58a6ff; text-align:right; white-space:nowrap; }
+.drw-left { display:flex; flex-direction:column; gap:2px; flex:1; min-width:0; }
+.drw-flags { font-size:22px; letter-spacing:3px; }
+.drw-venue { font-size:9px; color:#8b949e; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.drw-meta { font-family:monospace; font-size:11px; color:#58a6ff; text-align:right; white-space:nowrap; flex-shrink:0; }
 .drw-row.drw-past { opacity:0.38; }
 .drw-row.drw-live { background:rgba(63,185,80,.08); border-left:3px solid #3fb950; }
 #match-info { position:absolute; top:52px; left:50%; transform:translateX(-50%); z-index:6; background:rgba(13,17,23,0.93); border:1px solid #30363d; border-radius:12px; padding:14px 28px 12px; text-align:center; opacity:0; pointer-events:none; transition:opacity .2s; white-space:nowrap; box-shadow:0 4px 24px rgba(0,0,0,.7); }
@@ -1646,6 +1648,12 @@ function getNextZ() {
     }, 900);
   }
 
+  var matchVenueIdx = {};
+  for (var _mvi = 0; _mvi < MATCHES.length && _mvi < MATCH_VENUE.length; _mvi++) {
+    var _mk = MATCHES[_mvi].date + '|' + MATCHES[_mvi].a + '|' + MATCHES[_mvi].b;
+    matchVenueIdx[_mk] = MATCH_VENUE[_mvi];
+  }
+
   function buildDrawer() {
     if (!drwBody) return;
     var nowMs = Date.now();
@@ -1672,13 +1680,28 @@ function getNextZ() {
         var cls = "drw-row" + (isPast ? " drw-past" : "") + (isLive ? " drw-live" : "");
         var enc_a = m.a.replace(/&/g,"&amp;");
         var enc_b = m.b.replace(/&/g,"&amp;");
-        html += '<div class="' + cls + '" data-a="' + enc_a + '" data-b="' + enc_b + '" data-date="' + m.date + '" data-time="' + m.time + '"><span class="drw-flags">' + fc(m.a) + ' ' + m.a + '  ' + m.b + ' ' + fc(m.b) + '</span><span class="drw-meta">' + m.date.slice(5).replace("-","/") + '<br>' + m.time + ' UTC<br>' + toET(m.time) + '<br>' + toJST(m.time) + '</span></div>';
+        var mk = m.date + '|' + m.a + '|' + m.b;
+        var vidx = matchVenueIdx.hasOwnProperty(mk) ? matchVenueIdx[mk] : -1;
+        var sd = (vidx >= 0 && wc2026Stadiums[vidx]) ? wc2026Stadiums[vidx] : null;
+        var venueHtml = sd ? '<span class="drw-venue">' + sd.ctry + '&#127967;' + sd.name + '</span>' : '';
+        html += '<div class="' + cls + '" data-a="' + enc_a + '" data-b="' + enc_b + '" data-date="' + m.date + '" data-time="' + m.time + '" data-vidx="' + vidx + '">';
+        html += '<div class="drw-left"><span class="drw-flags">' + fc(m.a) + ' ' + m.a + '  ' + m.b + ' ' + fc(m.b) + '</span>' + venueHtml + '</div>';
+        html += '<span class="drw-meta">' + m.date.slice(5).replace("-","/") + '<br>' + m.time + ' UTC<br>' + toET(m.time) + '<br>' + toJST(m.time) + '</span></div>';
       });
       html += '</div></div>';
     });
     drwBody.innerHTML = html;
     var todaySection = drwBody.querySelector('.drw-section[data-date="' + todayStr + '"]');
     if (todaySection) todaySection.classList.add('open');
+    function onDrawerRowTap(row) {
+      var vidx = parseInt(row.dataset.vidx, 10);
+      closeDrawer();
+      if (!isNaN(vidx) && vidx >= 0) {
+        showStadiumOnDate(vidx, row.dataset.date);
+      } else {
+        showMatchDetail(row.dataset.a, row.dataset.b, row.dataset.date, row.dataset.time, true);
+      }
+    }
     drwBody.addEventListener("click", function(e) {
       var hdr = e.target.closest(".drw-date");
       if (hdr) {
@@ -1692,7 +1715,7 @@ function getNextZ() {
       }
       var row = e.target.closest(".drw-row");
       if (!row) return;
-      showMatchDetail(row.dataset.a, row.dataset.b, row.dataset.date, row.dataset.time, true);
+      onDrawerRowTap(row);
     });
     drwBody.addEventListener("touchend", function(e) {
       var hdr = e.target.closest(".drw-date");
@@ -1700,7 +1723,7 @@ function getNextZ() {
       var row = e.target.closest(".drw-row");
       if (!row) return;
       e.preventDefault();
-      showMatchDetail(row.dataset.a, row.dataset.b, row.dataset.date, row.dataset.time, true);
+      onDrawerRowTap(row);
     });
   }
 
