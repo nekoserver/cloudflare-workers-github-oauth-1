@@ -63,7 +63,13 @@ canvas:active { cursor:grabbing; }
 .sp-time { font-family:monospace; font-size:12px; color:#58a6ff; }
 .sp-match.sp-past { opacity:0.45; }
 .sp-match.sp-today { background:rgba(88,166,255,0.07); }
-.side { background:#0d1117; border-left:1px solid #30363d; overflow-y:auto; padding:16px; }
+.side { background:#0d1117; border-left:1px solid #30363d; display:flex; flex-direction:column; overflow:hidden; }
+.side-tabs { display:flex; border-bottom:1px solid #30363d; flex-shrink:0; }
+.side-tab { flex:1; padding:8px 4px; font-size:11px; font-weight:700; color:#8b949e; background:none; border:none; border-bottom:2px solid transparent; cursor:pointer; letter-spacing:.3px; transition:color .15s,border-color .15s; }
+.side-tab:hover { color:#e6edf3; }
+.side-tab.active { color:#58a6ff; border-bottom-color:#58a6ff; }
+.side-pane { display:none; overflow-y:auto; flex:1; padding:16px; }
+.side-pane.active { display:block; }
 .side h2 { font-size:11px; font-weight:700; color:#58a6ff; text-transform:uppercase; letter-spacing:.5px; margin-bottom:10px; }
 .item { margin-bottom:12px; }
 .item-title { font-weight:600; font-size:12px; margin-bottom:3px; }
@@ -71,6 +77,19 @@ canvas:active { cursor:grabbing; }
 code { background:#21262d; padding:1px 5px; border-radius:3px; font-family:monospace; font-size:10px; }
 hr { border:none; border-top:1px solid #30363d; margin:12px 0; }
 .tip { background:#0c2d4e; border-radius:6px; padding:8px 10px; font-size:11px; color:#8b949e; line-height:1.7; margin-bottom:12px; }
+.t20-item { display:flex; align-items:center; gap:7px; padding:7px 4px; border-bottom:1px solid #21262d; cursor:pointer; border-radius:4px; transition:background .12s; }
+.t20-item:last-child { border-bottom:none; }
+.t20-item:hover { background:rgba(88,166,255,0.1); }
+.t20-item.t20-active { background:rgba(88,166,255,0.18); border-left:3px solid #58a6ff; padding-left:5px; }
+.t20-rank { font-size:11px; font-weight:700; color:#f0b429; font-family:monospace; min-width:22px; text-align:right; flex-shrink:0; }
+.t20-flag { font-size:15px; flex-shrink:0; }
+.t20-info { flex:1; min-width:0; }
+.t20-name { font-size:11px; font-weight:600; color:#e6edf3; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.t20-meta { font-size:10px; color:#8b949e; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.t20-cap { font-size:10px; color:#3fb950; font-weight:600; flex-shrink:0; text-align:right; min-width:48px; }
+.t20-tour-btn { width:100%; margin-bottom:10px; background:#0c2d4e; border:1px solid #58a6ff; border-radius:6px; color:#58a6ff; font-size:12px; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; padding:7px 12px; cursor:pointer; font-weight:600; transition:background .15s; }
+.t20-tour-btn:hover { background:#1a3d5e; }
+.t20-tour-btn.touring { background:#0c2d1a; border-color:#3fb950; color:#3fb950; }
 @media (display-mode: standalone) { .pwa-hide { display:none !important; } }
 .mk-hw { font-size:15px; }
 #btnHeritage.active { background:#0c2d1a; border-color:#3fb950; color:#3fb950; }
@@ -366,6 +385,11 @@ void main() {
     </div>
   </div>
   <div class="side">
+    <div class="side-tabs">
+      <button class="side-tab active" data-tab="wc">&#9917; W杯</button>
+      <button class="side-tab" data-tab="top20">&#127942; Top20球場</button>
+    </div>
+    <div class="side-pane active" id="side-pane-wc">
     <div id="cal-section"></div>
 
     <div class="grp-section">
@@ -521,6 +545,11 @@ void main() {
         </div>
         <div class="cost-val">$540M</div>
       </div>
+    </div>
+    </div><!-- /side-pane-wc -->
+    <div class="side-pane" id="side-pane-top20">
+      <button class="t20-tour-btn" id="t20TourBtn">&#9654; 20位から自動巡回</button>
+      <div id="t20-body"></div>
     </div>
   </div>
 </div>
@@ -1070,6 +1099,125 @@ function getNextZ() {
     html += '</div></div>';
     sec.innerHTML = html;
   }
+
+  var TOP20_STADIUMS = [
+    { rank:1,  ctry:'🇪🇸', name:'Camp Nou',                    city:'バルセロナ、スペイン',       cap:99354,  lat:41.381,   lon:2.123   },
+    { rank:2,  ctry:'🇬🇧', name:'Wembley Stadium',              city:'ロンドン、イングランド',      cap:90000,  lat:51.556,   lon:-0.280  },
+    { rank:3,  ctry:'🇪🇸', name:'Santiago Bernabéu',       city:'マドリード、スペイン',        cap:83000,  lat:40.453,   lon:-3.688  },
+    { rank:4,  ctry:'🇩🇪', name:'Signal Iduna Park',            city:'ドルトムント、ドイツ',        cap:81365,  lat:51.493,   lon:7.451   },
+    { rank:5,  ctry:'🇧🇷', name:'Estádio do Maracanã',          city:'リオデジャネイロ、ブラジル',  cap:78000,  lat:-22.912,  lon:-43.230 },
+    { rank:6,  ctry:'🇮🇹', name:'Stadio San Siro',              city:'ミラノ、イタリア',            cap:75000,  lat:45.478,   lon:9.124   },
+    { rank:7,  ctry:'🇬🇧', name:'Old Trafford',                 city:'マンチェスター、イングランド',cap:74000,  lat:53.463,   lon:-2.291  },
+    { rank:8,  ctry:'🇦🇷', name:'Estadio Monumental',           city:'ブエノスアイレス、アルゼンチン',cap:84567, lat:-34.545,  lon:-58.449 },
+    { rank:9,  ctry:'🇬🇧', name:'Tottenham Hotspur Stadium',    city:'ロンドン、イングランド',      cap:62850,  lat:51.604,   lon:-0.066  },
+    { rank:10, ctry:'🇫🇷', name:'Stade de France',              city:'パリ、フランス',              cap:81000,  lat:48.924,   lon:2.360   },
+    { rank:11, ctry:'🇵🇹', name:'Estádio da Luz',          city:'リスボン、ポルトガル',        cap:65000,  lat:38.752,   lon:-9.184  },
+    { rank:12, ctry:'🇳🇱', name:'Johan Cruyff Arena',           city:'アムステルダム、オランダ',    cap:55000,  lat:52.314,   lon:4.942   },
+    { rank:13, ctry:'🇲🇽', name:'Estadio Azteca',               city:'メキシコシティ、メキシコ',   cap:87000,  lat:19.303,   lon:-99.151 },
+    { rank:14, ctry:'🇩🇪', name:'Allianz Arena',                city:'ミュンヘン、ドイツ',          cap:75000,  lat:48.219,   lon:11.625  },
+    { rank:15, ctry:'🏴󠁧󠁢󠁳󠁣󠁴󠁿', name:'Celtic Park',                  city:'グラスゴー、スコットランド',  cap:60000,  lat:55.850,   lon:-4.205  },
+    { rank:16, ctry:'🇵🇹', name:'Estádio do Dragão',  city:'ポルト、ポルトガル',          cap:50000,  lat:41.161,   lon:-8.583  },
+    { rank:17, ctry:'🇦🇷', name:'La Bombonera',                 city:'ブエノスアイレス、アルゼンチン',cap:54000, lat:-34.636,  lon:-58.365 },
+    { rank:18, ctry:'🇪🇸', name:'Metropolitano Stadium',        city:'マドリード、スペイン',        cap:70000,  lat:40.436,   lon:-3.600  },
+    { rank:19, ctry:'🇬🇧', name:'Anfield',                      city:'リバプール、イングランド',    cap:61000,  lat:53.431,   lon:-2.961  },
+    { rank:20, ctry:'🇲🇾', name:'National Stadium Bukit Jalil', city:'クアラルンプール、マレーシア', cap:87000, lat:3.057,    lon:101.693 }
+  ];
+
+  var t20ActiveIdx = -1;
+  var t20TourActive = false;
+  var t20TourTimer = null;
+  var t20TourPos = 19;
+
+  function buildTop20List() {
+    var body = document.getElementById('t20-body');
+    if (!body) return;
+    var html = '';
+    for (var ti = 0; ti < TOP20_STADIUMS.length; ti++) {
+      var sd = TOP20_STADIUMS[ti];
+      html += '<div class="t20-item" data-t20="' + ti + '">' +
+        '<span class="t20-rank">' + sd.rank + '</span>' +
+        '<span class="t20-flag">' + sd.ctry + '</span>' +
+        '<div class="t20-info">' +
+          '<div class="t20-name">' + sd.name + '</div>' +
+          '<div class="t20-meta">' + sd.city + '</div>' +
+        '</div>' +
+        '<span class="t20-cap">' + (sd.cap / 1000).toFixed(0) + 'k</span>' +
+        '</div>';
+    }
+    body.innerHTML = html;
+    body.addEventListener('click', function(e) {
+      var row = e.target.closest('.t20-item');
+      if (!row) return;
+      stopT20Tour();
+      var idx = parseInt(row.dataset.t20, 10);
+      showT20Tooltip(idx);
+    });
+  }
+
+  function showT20Tooltip(idx) {
+    var sd = TOP20_STADIUMS[idx];
+    t20ActiveIdx = idx;
+    document.querySelectorAll('.t20-item').forEach(function(el) { el.classList.remove('t20-active'); });
+    var row = document.querySelector('.t20-item[data-t20="' + idx + '"]');
+    if (row) {
+      row.classList.add('t20-active');
+      row.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+    hideTooltip();
+    flyTo(sd.lat, sd.lon);
+    setTimeout(function() {
+      if (t20ActiveIdx !== idx) return;
+      tooltip.innerHTML = '<button class="tt-close">&#10005;</button>' +
+        '<span class="tt-flag-lg">&#127967; ' + sd.ctry + '</span>' +
+        '<div class="tt-name">' + sd.name + '</div>' +
+        '<div class="tt-code">' + sd.city + '</div>' +
+        '<div class="tt-code" style="font-size:10px;color:#3fb950;font-weight:700">#' + sd.rank + '位 &nbsp; ' + sd.cap.toLocaleString() + '席</div>';
+      var canvasRect2 = canvas.getBoundingClientRect();
+      positionTooltip(canvasRect2.left + canvasRect2.width * 0.5, canvasRect2.top + canvasRect2.height * 0.4);
+      tooltip.style.opacity = '1';
+    }, 900);
+  }
+
+  function stopT20Tour() {
+    t20TourActive = false;
+    if (t20TourTimer) { clearTimeout(t20TourTimer); t20TourTimer = null; }
+    var btn = document.getElementById('t20TourBtn');
+    if (btn) { btn.textContent = '► 20位から自動巡回'; btn.classList.remove('touring'); }
+  }
+
+  function doT20TourStep() {
+    if (!t20TourActive) return;
+    showT20Tooltip(t20TourPos);
+    if (t20TourPos === 0) { stopT20Tour(); return; }
+    t20TourPos--;
+    t20TourTimer = setTimeout(doT20TourStep, 4000);
+  }
+
+  function startT20Tour() {
+    if (t20TourActive) { stopT20Tour(); return; }
+    t20TourActive = true;
+    t20TourPos = 19;
+    var btn = document.getElementById('t20TourBtn');
+    if (btn) { btn.textContent = '⏹ 巡回停止'; btn.classList.add('touring'); }
+    doT20TourStep();
+  }
+
+  document.getElementById('t20TourBtn').addEventListener('click', function() {
+    if (t20TourActive) { stopT20Tour(); } else { startT20Tour(); }
+  });
+
+  document.querySelectorAll('.side-tab').forEach(function(tab) {
+    tab.addEventListener('click', function() {
+      var targetPane = tab.dataset.tab;
+      document.querySelectorAll('.side-tab').forEach(function(t) { t.classList.remove('active'); });
+      document.querySelectorAll('.side-pane').forEach(function(p) { p.classList.remove('active'); });
+      tab.classList.add('active');
+      document.getElementById('side-pane-' + targetPane).classList.add('active');
+      if (targetPane === 'top20' && !document.querySelector('#t20-body .t20-item')) {
+        buildTop20List();
+      }
+    });
+  });
 
   function buildDrawerCalendar() {
     var sec = document.getElementById('drw-cal');
