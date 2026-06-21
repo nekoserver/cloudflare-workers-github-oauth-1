@@ -58,6 +58,7 @@ input[type=range] { accent-color:#fdb813; width:120px; }
   <button class="btn" id="btnEarth">🌍 地球目線</button>
   <button class="btn" id="btnMoon">🌑 月面着陸</button>
   <button class="btn" id="btnISS">🛸 ISS</button>
+  <button class="btn" id="btnSolstice">🌞 夏至</button>
   <button class="btn" id="btnToday">🌟 今日の空</button>
   <button class="btn" id="btnPole">🧭 地軸固定</button>
   <button class="btn" id="btnSpin">🌀 自転</button>
@@ -79,11 +80,19 @@ input[type=range] { accent-color:#fdb813; width:120px; }
   var btnEarth = document.getElementById('btnEarth');
   var btnMoon = document.getElementById('btnMoon');
   var btnISS = document.getElementById('btnISS');
+  var btnSolstice = document.getElementById('btnSolstice');
   var btnToday = document.getElementById('btnToday');
   var btnPole = document.getElementById('btnPole');
   var btnSpin = document.getElementById('btnSpin');
   var btnGrid = document.getElementById('btnGrid');
   var btnShot = document.getElementById('btnShot');
+
+  var SOL_SV = Math.sin(35 * Math.PI / 180);
+  var SOL_CV = Math.cos(35 * Math.PI / 180);
+  var SOL_TSIN = Math.sin(23.4 * Math.PI / 180);
+  var SOL_TCOS = Math.cos(23.4 * Math.PI / 180);
+  var solsticeOrbAngle = 0;
+  var solsticeSpinT = 0;
 
   var showOrbits = true;
   var showStarLabels = true;
@@ -149,10 +158,15 @@ input[type=range] { accent-color:#fdb813; width:120px; }
       viewElev = 0.55;
       fovH = Math.PI * 0.65;
     }
+    if (mode === 'solstice' && skyViewMode !== 'solstice') {
+      solsticeOrbAngle = 0;
+      solsticeSpinT = 0;
+    }
     skyViewMode = (skyViewMode === mode) ? '' : mode;
     btnEarth.classList.toggle('active', skyViewMode === 'earth');
     btnMoon.classList.toggle('active', skyViewMode === 'moon');
     btnISS.classList.toggle('active', skyViewMode === 'iss');
+    btnSolstice.classList.toggle('active', skyViewMode === 'solstice');
     btnToday.classList.toggle('active', skyViewMode === 'today');
     btnPole.classList.toggle('active', skyViewMode === 'pole');
     btnSpin.classList.toggle('active', skyViewMode === 'spin');
@@ -161,6 +175,7 @@ input[type=range] { accent-color:#fdb813; width:120px; }
   btnEarth.addEventListener('click', function() { setSkyMode('earth'); });
   btnMoon.addEventListener('click', function() { setSkyMode('moon'); });
   btnISS.addEventListener('click', function() { setSkyMode('iss'); });
+  btnSolstice.addEventListener('click', function() { setSkyMode('solstice'); });
   btnToday.addEventListener('click', function() { setSkyMode('today'); });
   btnPole.addEventListener('click', function() { setSkyMode('pole'); });
   btnSpin.addEventListener('click', function() { setSkyMode('spin'); });
@@ -564,6 +579,185 @@ input[type=range] { accent-color:#fdb813; width:120px; }
     }
     ctx.font = '12px sans-serif'; ctx.fillStyle = 'rgba(100,180,255,0.65)';
     ctx.fillText('🌀 自転  地球の自転で星が回転  ドラッグ:視点調整  速度スライダー対応', 10, 28);
+  }
+
+  function drawSolsticeView() {
+    ctx.fillStyle = '#000010'; ctx.fillRect(0, 0, W, H);
+    var cx = W / 2, cy = H / 2;
+    var sc9 = Math.min(W, H) / 900;
+    var sunR = Math.max(22, 34 * sc9);
+    var orbitR = Math.max(120, 220 * sc9);
+    var earthR = Math.max(16, 26 * sc9);
+
+    for (var si9 = 0; si9 < stars.length; si9++) {
+      var st9 = stars[si9];
+      var sx9 = cx + st9.x * 0.45, sy9 = cy + st9.y * 0.45;
+      if (sx9 < -5 || sx9 > W + 5 || sy9 < -5 || sy9 > H + 5) continue;
+      ctx.beginPath(); ctx.arc(sx9, sy9, st9.r, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(255,255,255,0.35)'; ctx.fill();
+    }
+
+    ctx.beginPath();
+    ctx.ellipse(cx, cy, orbitR, orbitR * SOL_SV, 0, 0, Math.PI * 2);
+    ctx.strokeStyle = 'rgba(255,255,255,0.1)'; ctx.lineWidth = 1; ctx.stroke();
+
+    var seas9 = [
+      { angle: 0,             label: '夏至', sub: '6/21 今日', color: '#ffd700', big: true  },
+      { angle: Math.PI / 2,   label: '秋分', sub: '9/23',     color: '#88bbff', big: false },
+      { angle: Math.PI,       label: '冬至', sub: '12/21',    color: '#aaddff', big: false },
+      { angle: -Math.PI / 2,  label: '春分', sub: '3/20',     color: '#90ee90', big: false }
+    ];
+    seas9.forEach(function(s) {
+      var mx = cx + orbitR * Math.cos(s.angle);
+      var my = cy + orbitR * Math.sin(s.angle) * SOL_SV;
+      ctx.beginPath(); ctx.arc(mx, my, s.big ? 6 : 3.5, 0, Math.PI * 2);
+      ctx.fillStyle = s.color; ctx.fill();
+      if (s.big) {
+        ctx.beginPath(); ctx.arc(mx, my, 10, 0, Math.PI * 2);
+        ctx.strokeStyle = s.color + '55'; ctx.lineWidth = 1.5; ctx.stroke();
+      }
+      ctx.textAlign = 'center';
+      ctx.font = (s.big ? 'bold ' : '') + '11px sans-serif'; ctx.fillStyle = s.color;
+      var lx = cx + (orbitR + 24) * Math.cos(s.angle);
+      var ly = cy + (orbitR + 24) * Math.sin(s.angle) * SOL_SV + 4;
+      ctx.fillText(s.label, lx, ly);
+      ctx.font = '9px sans-serif'; ctx.fillStyle = s.color + 'bb';
+      ctx.fillText(s.sub, lx, ly + 13);
+      ctx.textAlign = 'left';
+    });
+
+    for (var ray9 = 0; ray9 < 16; ray9++) {
+      var rA9 = ray9 * Math.PI / 8 + t * 0.03;
+      ctx.beginPath();
+      ctx.moveTo(cx + Math.cos(rA9) * sunR * 1.5, cy + Math.sin(rA9) * sunR * 1.5 * SOL_SV);
+      ctx.lineTo(cx + Math.cos(rA9) * sunR * 3.2, cy + Math.sin(rA9) * sunR * 3.2 * SOL_SV);
+      ctx.strokeStyle = 'rgba(253,184,19,0.11)'; ctx.lineWidth = 2; ctx.stroke();
+    }
+
+    drawGlow(cx, cy, sunR, '#fdb813');
+    ctx.beginPath(); ctx.arc(cx, cy, sunR, 0, Math.PI * 2);
+    var sg9 = ctx.createRadialGradient(cx - sunR * 0.2, cy - sunR * 0.2, sunR * 0.1, cx, cy, sunR);
+    sg9.addColorStop(0, '#fff5a0'); sg9.addColorStop(0.5, '#fdb813'); sg9.addColorStop(1, '#f57c00');
+    ctx.fillStyle = sg9; ctx.fill();
+    if (showPlanetLabels) {
+      ctx.textAlign = 'center'; ctx.font = 'bold 11px sans-serif'; ctx.fillStyle = '#fdb813';
+      ctx.fillText('太陽', cx, cy + sunR + 15); ctx.textAlign = 'left';
+    }
+    planetScreenPos.push({ x: cx, y: cy, item: { name: '太陽', type: '恒星', fact: '夏至のとき太陽は黄経90°(黄道最北端)。北半球で昼が最長になります' } });
+
+    var th9 = solsticeOrbAngle;
+    var ex9 = cx + orbitR * Math.cos(th9);
+    var ey9 = cy + orbitR * Math.sin(th9) * SOL_SV;
+
+    var toSunA9 = Math.atan2(cy - ey9, cx - ex9);
+
+    var rayDirX = Math.cos(toSunA9), rayDirY = Math.sin(toSunA9);
+    var perpX9 = -rayDirY, perpY9 = rayDirX;
+    ctx.strokeStyle = 'rgba(253,184,19,0.07)'; ctx.lineWidth = 1.5;
+    for (var pr9 = -4; pr9 <= 4; pr9++) {
+      var ox9 = perpX9 * pr9 * 10, oy9 = perpY9 * pr9 * 10;
+      ctx.beginPath();
+      ctx.moveTo(cx + rayDirX * sunR + ox9, cy + rayDirY * sunR + oy9);
+      ctx.lineTo(ex9 - rayDirX * earthR * 1.4 + ox9, ey9 - rayDirY * earthR * 1.4 + oy9);
+      ctx.stroke();
+    }
+
+    ctx.save();
+    ctx.translate(ex9, ey9);
+
+    ctx.beginPath(); ctx.arc(0, 0, earthR, 0, Math.PI * 2);
+    ctx.fillStyle = '#0d1b35'; ctx.fill();
+
+    ctx.beginPath();
+    ctx.arc(0, 0, earthR, toSunA9 - Math.PI / 2, toSunA9 + Math.PI / 2);
+    ctx.lineTo(0, 0); ctx.closePath();
+    ctx.fillStyle = '#2a7de1'; ctx.fill();
+
+    var atm9 = ctx.createRadialGradient(0, 0, earthR * 0.85, 0, 0, earthR * 1.28);
+    atm9.addColorStop(0, 'rgba(80,140,255,0.22)');
+    atm9.addColorStop(1, 'rgba(80,140,255,0)');
+    ctx.beginPath(); ctx.arc(0, 0, earthR * 1.28, 0, Math.PI * 2);
+    ctx.fillStyle = atm9; ctx.fill();
+
+    ctx.beginPath(); ctx.arc(0, 0, earthR, 0, Math.PI * 2);
+    ctx.strokeStyle = 'rgba(100,180,255,0.5)'; ctx.lineWidth = 1.5; ctx.stroke();
+
+    var axLen9 = earthR * 1.7;
+    var npOx = -Math.cos(th9) * SOL_TSIN;
+    var npOy = -Math.sin(th9) * SOL_TSIN;
+    var npOz = SOL_TCOS;
+    var npSx = npOx * axLen9;
+    var npSy = (npOy * SOL_SV - npOz * SOL_CV) * axLen9;
+
+    ctx.beginPath(); ctx.moveTo(-npSx, -npSy); ctx.lineTo(npSx, npSy);
+    ctx.strokeStyle = 'rgba(255,255,180,0.92)'; ctx.lineWidth = 2; ctx.setLineDash([4, 3]);
+    ctx.stroke(); ctx.setLineDash([]);
+
+    ctx.font = 'bold 10px sans-serif'; ctx.fillStyle = '#ffffaa';
+    ctx.fillText('N', npSx + 3, npSy + 4);
+    ctx.fillStyle = '#888'; ctx.fillText('S', -npSx - 13, -npSy + 4);
+    ctx.font = '9px sans-serif'; ctx.fillStyle = 'rgba(255,255,140,0.75)';
+    ctx.fillText('23.4deg', npSx * 0.45 + 4, npSy * 0.45 - 3);
+
+    var e1Ox9 = Math.sin(th9), e1Oy9 = -Math.cos(th9);
+    ctx.beginPath();
+    ctx.moveTo(-e1Ox9 * earthR, -e1Oy9 * earthR * SOL_SV);
+    ctx.lineTo(e1Ox9 * earthR, e1Oy9 * earthR * SOL_SV);
+    ctx.strokeStyle = 'rgba(255,130,50,0.6)'; ctx.lineWidth = 1; ctx.stroke();
+
+    var tropSx = Math.cos(toSunA9) * earthR * 0.88;
+    var tropSy = Math.sin(toSunA9) * earthR * 0.88;
+    ctx.beginPath(); ctx.arc(tropSx, tropSy, 3, 0, Math.PI * 2);
+    ctx.fillStyle = '#ffd700'; ctx.fill();
+    ctx.font = '8px sans-serif'; ctx.fillStyle = '#ffd700';
+    ctx.fillText('北回帰線', tropSx + 5, tropSy - 4);
+
+    var e2Ox9 = Math.cos(th9) * SOL_TCOS, e2Oy9 = Math.sin(th9) * SOL_TCOS, e2Oz9 = SOL_TSIN;
+    var mPhi9 = solsticeSpinT;
+    var mOx9 = e1Ox9 * Math.cos(mPhi9) + e2Ox9 * Math.sin(mPhi9);
+    var mOy9 = e1Oy9 * Math.cos(mPhi9) + e2Oy9 * Math.sin(mPhi9);
+    var mOz9 = e2Oz9 * Math.sin(mPhi9);
+    var mDot9 = mOx9 * (-Math.cos(th9)) + mOy9 * (-Math.sin(th9));
+    var spinR9 = earthR * 0.88;
+    if (mDot9 > 0) {
+      var mSx9 = mOx9 * spinR9;
+      var mSy9 = (mOy9 * SOL_SV - mOz9 * SOL_CV) * spinR9;
+      ctx.beginPath(); ctx.arc(mSx9, mSy9, 2.5, 0, Math.PI * 2);
+      ctx.fillStyle = '#aaffaa'; ctx.fill();
+      ctx.beginPath(); ctx.moveTo(mSx9, mSy9);
+      for (var tr9 = 1; tr9 <= 7; tr9++) {
+        var tphi9 = mPhi9 - tr9 * 0.15;
+        var tOx9 = e1Ox9 * Math.cos(tphi9) + e2Ox9 * Math.sin(tphi9);
+        var tOy9 = e1Oy9 * Math.cos(tphi9) + e2Oy9 * Math.sin(tphi9);
+        var tOz9 = e2Oz9 * Math.sin(tphi9);
+        var tDot9 = tOx9 * (-Math.cos(th9)) + tOy9 * (-Math.sin(th9));
+        if (tDot9 > 0) ctx.lineTo(tOx9 * spinR9, (tOy9 * SOL_SV - tOz9 * SOL_CV) * spinR9);
+      }
+      ctx.strokeStyle = 'rgba(170,255,170,0.35)'; ctx.lineWidth = 1; ctx.stroke();
+    }
+
+    ctx.restore();
+
+    if (showPlanetLabels) {
+      ctx.font = '11px sans-serif'; ctx.fillStyle = '#c9d1d9';
+      ctx.fillText('地球', ex9 + earthR + 6, ey9 + 4);
+    }
+    planetScreenPos.push({ x: ex9, y: ey9, item: { name: '地球', type: '岩石惑星', fact: '夏至(6/21): 地軸の傾き23.4°で北半球が太陽に最接近。北極圏は白夜、南極圏は極夜になります' } });
+
+    ctx.font = '12px sans-serif'; ctx.fillStyle = 'rgba(255,220,100,0.9)';
+    ctx.fillText('🌞 夏至 (Summer Solstice) — 公転 + 自転 + 地軸傾き 23.4°', 10, 28);
+    ctx.font = '11px sans-serif'; ctx.fillStyle = 'rgba(180,220,255,0.7)';
+    ctx.fillText('黄点線=地軸  橙線=赤道  金点=北回帰線(太陽直上)  緑点=自転マーカー', 10, 46);
+
+    var infoL = ['夏至のポイント', '・北半球: 昼が1年で最長', '・北回帰線(23.4°N)に太陽が真上', '・北極圏: 白夜  南極圏: 極夜', '・地軸傾き23.4°(N極→太陽方向)'];
+    var iy9 = H - infoL.length * 16 - 14;
+    ctx.fillStyle = 'rgba(0,0,20,0.72)';
+    ctx.fillRect(6, iy9 - 8, 252, infoL.length * 16 + 12);
+    for (var ili9 = 0; ili9 < infoL.length; ili9++) {
+      ctx.font = '10px sans-serif';
+      ctx.fillStyle = ili9 === 0 ? '#ffd700' : 'rgba(200,220,255,0.82)';
+      ctx.fillText(infoL[ili9], 12, iy9 + ili9 * 16 + 4);
+    }
   }
 
   function project3D(dX, dY, dZ) {
@@ -1078,6 +1272,12 @@ input[type=range] { accent-color:#fdb813; width:120px; }
     if (skyViewMode === 'spin') {
       viewAngle += dt * 0.009 * speed;
       drawSpinView();
+      return;
+    }
+    if (skyViewMode === 'solstice') {
+      solsticeOrbAngle += dt * 0.22 * speed;
+      solsticeSpinT += dt * 1.8 * speed;
+      drawSolsticeView();
       return;
     }
     if (skyViewMode !== '') {
