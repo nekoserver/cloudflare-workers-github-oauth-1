@@ -207,6 +207,10 @@ input[type=range] { flex:1; accent-color:#58a6ff; }
 #btnNight { position:absolute; right:10px; top:130px; z-index:5; background:rgba(13,17,23,0.88); border:1px solid #30363d; border-radius:6px; color:#e6edf3; font-size:12px; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; padding:6px 12px; cursor:pointer; white-space:nowrap; transition:background .15s,border-color .15s,color .15s; }
 #btnNight:hover { background:rgba(13,17,23,1); border-color:#f0d070; color:#f0d070; }
 #btnNight.active { background:#1a1800; border-color:#f0d070; color:#f0d070; }
+#btnFamousStadiums { position:absolute; right:10px; top:170px; z-index:5; background:rgba(13,17,23,0.88); border:1px solid #30363d; border-radius:6px; color:#e6edf3; font-size:12px; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; padding:6px 12px; cursor:pointer; white-space:nowrap; transition:background .15s,border-color .15s,color .15s; }
+#btnFamousStadiums:hover { background:rgba(13,17,23,1); border-color:#ff7b54; color:#ff7b54; }
+#btnFamousStadiums.active { background:#2a0e00; border-color:#ff7b54; color:#ff7b54; }
+.mk-famous { font-size:14px; cursor:pointer; pointer-events:auto; user-select:none; position:absolute; transform:translate(-50%,-50%); text-shadow:0 0 6px rgba(255,123,84,0.7); transition:opacity .2s; }
 #search-overlay { position:absolute; top:0; left:0; right:0; bottom:0; z-index:20; display:none; }
 #search-overlay.open { display:block; }
 .srch-wrap { position:absolute; top:10px; left:50%; transform:translateX(-50%); width:300px; max-width:80vw; }
@@ -319,6 +323,7 @@ void main() {
     <button id="btnStadiumTour" title="全16会場を巡回">&#127967; 会場巡回</button>
     <button id="btnSearch" title="国名・会場名で検索">&#128269; 検索</button>
     <button id="btnNight" title="夜景モードの切替">&#127769; 夜景</button>
+    <button id="btnFamousStadiums" title="有名スタジアムを表示">&#128512; 有名球場</button>
     <div id="search-overlay">
       <div class="srch-wrap">
         <input type="text" id="search-input" placeholder="国名・会場名で検索..." autocomplete="off">
@@ -745,6 +750,31 @@ function getNextZ() {
     {num:14, flag:"🏟️", ctry:"🇺🇸", code3:"USA", name:"Levi's Stadium",               city:"サンタクララ、CA",           cap:68500,  opened:2014, lat:37.403, lon:-121.970},
     {num:15, flag:"🏟️", ctry:"🇺🇸", code3:"USA", name:"Lumen Field",                  city:"シアトル、WA",               cap:68740,  opened:2002, lat:47.595, lon:-122.332},
     {num:16, flag:"🏟️", ctry:"🇨🇦", code3:"CAN", name:"BC Place",                     city:"バンクーバー、カナダ",         cap:54500,  opened:1983, lat:49.277, lon:-123.112}
+  ];
+
+  // 有名スタジアム（W杯会場外）— NFL/MLB/欧州/アジア等
+  // league: NFL/MLB/NBA/Soccer/Rugby, code3: ISO3166-1 alpha-3
+  var FAMOUS_STADIUMS = [
+    { ctry:"🇺🇸", code3:"USA", name:"Soldier Field",          city:"シカゴ、IL",              league:"NFL",    team:"シカゴ・ベアーズ",      cap:61500,  opened:1924, lat:41.862, lon:-87.617 },
+    { ctry:"🇺🇸", code3:"USA", name:"Yankee Stadium",          city:"ブロンクス、NY",           league:"MLB",    team:"NY ヤンキース",         cap:46537,  opened:2009, lat:40.829, lon:-73.926 },
+    { ctry:"🇺🇸", code3:"USA", name:"Fenway Park",             city:"ボストン、MA",             league:"MLB",    team:"ボストン・レッドソックス",cap:37755,  opened:1912, lat:42.347, lon:-71.097 },
+    { ctry:"🇺🇸", code3:"USA", name:"Dodger Stadium",          city:"ロサンゼルス、CA",         league:"MLB",    team:"LA ドジャース",          cap:56000,  opened:1962, lat:34.074, lon:-118.240 },
+    { ctry:"🇺🇸", code3:"USA", name:"Wrigley Field",           city:"シカゴ、IL",              league:"MLB",    team:"シカゴ・カブス",         cap:41649,  opened:1914, lat:41.948, lon:-87.656 },
+    { ctry:"🇺🇸", code3:"USA", name:"Oracle Park",             city:"サンフランシスコ、CA",     league:"MLB",    team:"SF ジャイアンツ",        cap:41915,  opened:2000, lat:37.778, lon:-122.389 },
+    { ctry:"🇺🇸", code3:"USA", name:"Lambeau Field",           city:"グリーンベイ、WI",         league:"NFL",    team:"グリーンベイ・パッカーズ",cap:81441,  opened:1957, lat:44.501, lon:-88.062 },
+    { ctry:"🇺🇸", code3:"USA", name:"AT&T Park (Oracle Arena)", city:"オークランド、CA",        league:"NBA",    team:"ゴールデンステート・ウォリアーズ（旧）", cap:19596, opened:1966, lat:37.751, lon:-122.203 },
+    { ctry:"🇬🇧", code3:"GBR", name:"Wembley Stadium",         city:"ロンドン、イングランド",    league:"Soccer", team:"イングランド代表ほか",  cap:90000,  opened:2007, lat:51.556, lon:-0.280 },
+    { ctry:"🇬🇧", code3:"GBR", name:"Old Trafford",            city:"マンチェスター、イングランド",league:"Soccer",team:"マンチェスター・ユナイテッド",cap:74140,opened:1910, lat:53.463, lon:-2.291 },
+    { ctry:"🇪🇸", code3:"ESP", name:"Camp Nou",                city:"バルセロナ、スペイン",     league:"Soccer", team:"FCバルセロナ",           cap:99354,  opened:1957, lat:41.381, lon:2.123 },
+    { ctry:"🇩🇪", code3:"DEU", name:"Allianz Arena",           city:"ミュンヘン、ドイツ",       league:"Soccer", team:"バイエルン・ミュンヘン",  cap:75000,  opened:2005, lat:48.219, lon:11.625 },
+    { ctry:"🇮🇹", code3:"ITA", name:"Stadio San Siro",         city:"ミラノ、イタリア",         league:"Soccer", team:"AC/インテル ミラン",     cap:80018,  opened:1926, lat:45.478, lon:9.124 },
+    { ctry:"🇧🇷", code3:"BRA", name:"Estádio do Maracanã",     city:"リオデジャネイロ、ブラジル",league:"Soccer", team:"フラメンゴほか",         cap:78838,  opened:1950, lat:-22.912, lon:-43.230 },
+    { ctry:"🇦🇺", code3:"AUS", name:"Melbourne Cricket Ground", city:"メルボルン、オーストラリア",league:"Cricket",team:"オーストラリア代表",     cap:100024, opened:1853, lat:-37.820, lon:144.983 },
+    { ctry:"🇯🇵", code3:"JPN", name:"横浜国際総合競技場",       city:"横浜、神奈川",             league:"Soccer", team:"横浜F・マリノスほか",    cap:72327,  opened:1998, lat:35.510, lon:139.606 },
+    { ctry:"🇯🇵", code3:"JPN", name:"東京ドーム",               city:"文京区、東京",             league:"MLB",    team:"読売ジャイアンツ",       cap:55000,  opened:1988, lat:35.706, lon:139.752 },
+    { ctry:"🇰🇷", code3:"KOR", name:"ソウルワールドカップ競技場", city:"ソウル、韓国",            league:"Soccer", team:"FC ソウルほか",          cap:66806,  opened:2001, lat:37.569, lon:126.899 },
+    { ctry:"🇿🇦", code3:"ZAF", name:"FNB Stadium",             city:"ヨハネスブルグ、南アフリカ",league:"Soccer", team:"南アフリカ代表",         cap:94736,  opened:1989, lat:-26.232, lon:27.980 },
+    { ctry:"🇦🇷", code3:"ARG", name:"Estadio Monumental",      city:"ブエノスアイレス、アルゼンチン",league:"Soccer",team:"リバープレート",       cap:84567,  opened:1938, lat:-34.545, lon:-58.449 }
   ];
 
   // 2026 FIFAワールドカップ出場国（⚽=開催地マーカー）
@@ -1332,6 +1362,7 @@ function getNextZ() {
   var spBody = schedulePanel.querySelector("#sp-body");
   var activeMarkerIdx = -1;
   var activeStadiumIdx = -1;
+  var activeFamousIdx = -1;
   var selectedDate = new Date().toISOString().slice(0, 10);
   var canvasRect = {left:0, top:0, width:0, height:0};
 
@@ -1341,7 +1372,7 @@ function getNextZ() {
 
   var stadiumTooltipLeftMode = false;
 
-  function hideTooltip() { tooltip.style.opacity = "0"; activeMarkerIdx = -1; activeStadiumIdx = -1; stadiumTooltipLeftMode = false; tooltip.classList.remove('tt-left-side'); }
+  function hideTooltip() { tooltip.style.opacity = "0"; activeMarkerIdx = -1; activeStadiumIdx = -1; activeFamousIdx = -1; stadiumTooltipLeftMode = false; tooltip.classList.remove('tt-left-side'); }
 
   function navigateToFlag(flag) {
     var idx2 = findCountryByFlag(flag);
@@ -1789,6 +1820,68 @@ function getNextZ() {
     stadiumMkEls.push({el: smel, pos3d: latLonTo3D(sdata.lat, sdata.lon)});
   }
 
+  var showFamousStadiums = false;
+  var famousMkEls = [];
+  for (var fmi = 0; fmi < FAMOUS_STADIUMS.length; fmi++) {
+    var fdata = FAMOUS_STADIUMS[fmi];
+    var fmel = document.createElement('div');
+    fmel.className = 'mk mk-famous';
+    fmel.textContent = '🏟️';
+    fmel.style.opacity = '0';
+    fmel.dataset.fidx = String(fmi);
+    (function(fidx) {
+      function onFamousTap(e) {
+        e.stopPropagation();
+        var r = fmel.getBoundingClientRect();
+        showFamousTooltip(fidx, r.left, r.top + r.height / 2);
+      }
+      fmel.addEventListener('click', onFamousTap);
+      fmel.addEventListener('touchend', function(e) { e.preventDefault(); onFamousTap(e); });
+    })(fmi);
+    markersDiv.appendChild(fmel);
+    famousMkEls.push({ el: fmel, pos3d: latLonTo3D(fdata.lat, fdata.lon) });
+  }
+
+  function buildFamousTooltipHtml(fidx) {
+    var sd = FAMOUS_STADIUMS[fidx];
+    var capFmt = sd.cap ? sd.cap.toLocaleString() + '席' : '';
+    var meta = [sd.code3, sd.league, capFmt, sd.opened ? sd.opened + '年開場' : ''].filter(function(s) { return !!s; }).join(' / ');
+    return '<button class="tt-close">&#10005;</button>' +
+      '<span class="tt-flag-lg">&#127967; ' + sd.ctry + ' <span style="font-size:12px;font-weight:700;letter-spacing:.05em">' + sd.code3 + '</span></span>' +
+      '<div class="tt-name">' + sd.name + '</div>' +
+      '<div class="tt-code">' + sd.city + '</div>' +
+      (sd.team ? '<div class="tt-code" style="color:#58a6ff;font-size:11px">&#9889; ' + sd.team + '</div>' : '') +
+      (meta ? '<div class="tt-code" style="font-size:10px;color:#8b949e">' + meta + '</div>' : '');
+  }
+
+  function showFamousTooltip(fidx, vx, vy) {
+    hideTooltip();
+    activeFamousIdx = fidx;
+    var sd = FAMOUS_STADIUMS[fidx];
+    flyTo(sd.lat, sd.lon);
+    setTimeout(function() {
+      if (activeFamousIdx !== fidx) return;
+      var mel = famousMkEls[fidx] ? famousMkEls[fidx].el : null;
+      var r = mel ? mel.getBoundingClientRect() : null;
+      var cx = r ? r.left : vx;
+      var cy = r ? r.top + r.height / 2 : vy;
+      tooltip.innerHTML = buildFamousTooltipHtml(fidx);
+      tooltip.classList.add('tt-left-side');
+      positionTooltip(cx, cy);
+      tooltip.style.opacity = '1';
+    }, 900);
+  }
+
+  var btnFamousStadiums = document.getElementById('btnFamousStadiums');
+  btnFamousStadiums.addEventListener('click', function() {
+    showFamousStadiums = !showFamousStadiums;
+    btnFamousStadiums.classList.toggle('active', showFamousStadiums);
+    if (!showFamousStadiums) {
+      activeFamousIdx = -1;
+      famousMkEls.forEach(function(m) { m.el.style.opacity = '0'; });
+    }
+  });
+
   function buildStadiumTooltipHtml(sidx) {
     var sd = wc2026Stadiums[sidx];
     var capFmt = sd.cap ? sd.cap.toLocaleString() + '席' : '';
@@ -2118,6 +2211,35 @@ function getNextZ() {
       } else {
         smk.el.style.opacity = "0";
         if (smi2 === activeStadiumIdx) hideTooltip();
+      }
+    }
+
+    for (var fmi2 = 0; fmi2 < famousMkEls.length; fmi2++) {
+      var fmk = famousMkEls[fmi2];
+      if (!showFamousStadiums) { fmk.el.style.opacity = '0'; continue; }
+      var fmp = fmk.pos3d;
+      var fmz = model[2]*fmp[0] + model[6]*fmp[1] + model[10]*fmp[2];
+      if (fmz > 0.12) {
+        var fmcx = mvp[0]*fmp[0] + mvp[4]*fmp[1] + mvp[8]*fmp[2]  + mvp[12];
+        var fmcy = mvp[1]*fmp[0] + mvp[5]*fmp[1] + mvp[9]*fmp[2]  + mvp[13];
+        var fmcw = mvp[3]*fmp[0] + mvp[7]*fmp[1] + mvp[11]*fmp[2] + mvp[15];
+        if (fmcw > 0) {
+          var fpx = (fmcx/fmcw+1)*0.5*W;
+          var fpy = (1-fmcy/fmcw)*0.5*H;
+          fmk.el.style.left = fpx + 'px';
+          fmk.el.style.top  = fpy + 'px';
+          fmk.el.style.opacity = '1';
+          if (fmi2 === activeFamousIdx) {
+            positionTooltip(canvasRect.left + fpx, canvasRect.top + fpy);
+            tooltip.style.opacity = '1';
+          }
+        } else {
+          fmk.el.style.opacity = '0';
+          if (fmi2 === activeFamousIdx) hideTooltip();
+        }
+      } else {
+        fmk.el.style.opacity = '0';
+        if (fmi2 === activeFamousIdx) hideTooltip();
       }
     }
 
