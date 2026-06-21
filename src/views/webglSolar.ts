@@ -252,8 +252,8 @@ input[type=range] { accent-color:#fdb813; width:120px; }
     skyStars.push({ lon: ssLon, lat: ssLat, r: pseudoRand() < 0.25 ? 2 : 1, twinkle: pseudoRand() < 0.18, phase: pseudoRand() * Math.PI * 2 });
   }
 
-  var starLon = [1.817, 1.53, 1.38, 1.22, 4.34, 4.99, 5.267, 5.853, 3.558, 3.565, 1.977, 1.428, 1.927, 2.271];
-  var starLat = [-0.691, -0.28, -0.54, -0.09, -0.09, 1.08, 0.511, 1.046, -0.036, 0.536, 0.116, 0.400, 0.176, 0.343];
+  var starLon = [1.817, 1.53, 1.38, 1.22, 4.34, 4.99, 5.267, 5.853, 3.558, 3.565, 1.977, 1.428, 1.927, 2.271, 3.254, 3.349, 3.277, 3.208];
+  var starLat = [-0.691, -0.28, -0.54, -0.09, -0.09, 1.08, 0.511, 1.046, -0.036, 0.536, 0.116, 0.400, 0.176, 0.343, -1.101, -1.042, -0.997, -1.025];
 
   var bigDipper = [
     { lon: 2.360, lat: 0.868 },
@@ -266,6 +266,7 @@ input[type=range] { accent-color:#fdb813; width:120px; }
   ];
   var bigDipperLines = [[0,1],[1,2],[2,3],[3,0],[3,4],[4,5],[5,6]];
   var summerTriIdx = [5, 6, 7];
+  var cruxLines = [[14,16],[17,15]];
   var iss = { name: 'ISS', jaName: 'ISS', type: '宇宙ステーション', orbitR: 14, radius: 2, period: 0.004, color: '#88ffcc', angle: 1.2, fact: '国際宇宙ステーション。高度約400kmを約90分で一周。常時6名が滞在しています' };
 
   function todayJD() {
@@ -389,6 +390,12 @@ input[type=range] { accent-color:#fdb813; width:120px; }
         var paT = stPtsT[stliT], pbT = stPtsT[(stliT+1)%3];
         if (paT && pbT) { ctx.beginPath(); ctx.moveTo(paT.x, paT.y); ctx.lineTo(pbT.x, pbT.y); ctx.stroke(); }
       }
+      ctx.strokeStyle = 'rgba(180,255,220,0.35)';
+      for (var cliT = 0; cliT < cruxLines.length; cliT++) {
+        var cpaT = projectSky(starLon[cruxLines[cliT][0]], starLat[cruxLines[cliT][0]]);
+        var cpbT = projectSky(starLon[cruxLines[cliT][1]], starLat[cruxLines[cliT][1]]);
+        if (cpaT && cpbT) { ctx.beginPath(); ctx.moveTo(cpaT.x, cpaT.y); ctx.lineTo(cpbT.x, cpbT.y); ctx.stroke(); }
+      }
       ctx.setLineDash([]);
     }
     var sunPos5 = projectSky(sLonR, 0);
@@ -472,6 +479,12 @@ input[type=range] { accent-color:#fdb813; width:120px; }
         var bpbP = projectSky(bigDipper[bigDipperLines[bliP][1]].lon, bigDipper[bigDipperLines[bliP][1]].lat);
         if (bpaP && bpbP) { ctx.beginPath(); ctx.moveTo(bpaP.x, bpaP.y); ctx.lineTo(bpbP.x, bpbP.y); ctx.stroke(); }
       }
+      ctx.strokeStyle = 'rgba(180,255,220,0.4)';
+      for (var cliP = 0; cliP < cruxLines.length; cliP++) {
+        var cpaP = projectSky(starLon[cruxLines[cliP][0]], starLat[cruxLines[cliP][0]]);
+        var cpbP = projectSky(starLon[cruxLines[cliP][1]], starLat[cruxLines[cliP][1]]);
+        if (cpaP && cpbP) { ctx.beginPath(); ctx.moveTo(cpaP.x, cpaP.y); ctx.lineTo(cpbP.x, cpbP.y); ctx.stroke(); }
+      }
       ctx.setLineDash([]);
       for (var bdiP = 0; bdiP < bigDipper.length; bdiP++) {
         var bdpP = projectSky(bigDipper[bdiP].lon, bigDipper[bdiP].lat);
@@ -529,6 +542,12 @@ input[type=range] { accent-color:#fdb813; width:120px; }
         var bpaS = projectSky(bigDipper[bigDipperLines[bliS][0]].lon, bigDipper[bigDipperLines[bliS][0]].lat);
         var bpbS = projectSky(bigDipper[bigDipperLines[bliS][1]].lon, bigDipper[bigDipperLines[bliS][1]].lat);
         if (bpaS && bpbS) { ctx.beginPath(); ctx.moveTo(bpaS.x, bpaS.y); ctx.lineTo(bpbS.x, bpbS.y); ctx.stroke(); }
+      }
+      ctx.strokeStyle = 'rgba(180,255,220,0.4)';
+      for (var cliS = 0; cliS < cruxLines.length; cliS++) {
+        var cpaS = projectSky(starLon[cruxLines[cliS][0]], starLat[cruxLines[cliS][0]]);
+        var cpbS = projectSky(starLon[cruxLines[cliS][1]], starLat[cruxLines[cliS][1]]);
+        if (cpaS && cpbS) { ctx.beginPath(); ctx.moveTo(cpaS.x, cpaS.y); ctx.lineTo(cpbS.x, cpbS.y); ctx.stroke(); }
       }
       ctx.setLineDash([]);
       for (var bdiS = 0; bdiS < bigDipper.length; bdiS++) {
@@ -698,6 +717,13 @@ input[type=range] { accent-color:#fdb813; width:120px; }
         var bpb = projectSky(bigDipper[bigDipperLines[bli2][1]].lon, bigDipper[bigDipperLines[bli2][1]].lat);
         if (bpa && bpb) { ctx.beginPath(); ctx.moveTo(bpa.x, bpa.y); ctx.lineTo(bpb.x, bpb.y); ctx.stroke(); }
       }
+      ctx.strokeStyle = 'rgba(180,255,220,0.4)';
+      ctx.setLineDash([4, 4]);
+      for (var cli2 = 0; cli2 < cruxLines.length; cli2++) {
+        var cpa2 = projectSky(starLon[cruxLines[cli2][0]], starLat[cruxLines[cli2][0]]);
+        var cpb2 = projectSky(starLon[cruxLines[cli2][1]], starLat[cruxLines[cli2][1]]);
+        if (cpa2 && cpb2) { ctx.beginPath(); ctx.moveTo(cpa2.x, cpa2.y); ctx.lineTo(cpb2.x, cpb2.y); ctx.stroke(); }
+      }
       ctx.setLineDash([]);
       for (var bdi2 = 0; bdi2 < bigDipper.length; bdi2++) {
         var bdp = projectSky(bigDipper[bdi2].lon, bigDipper[bdi2].lat);
@@ -710,6 +736,11 @@ input[type=range] { accent-color:#fdb813; width:120px; }
         if (bd0) {
           ctx.font = '10px sans-serif'; ctx.fillStyle = 'rgba(255,220,150,0.7)';
           ctx.fillText('北斗七星', bd0.x - 10, bd0.y - 14);
+        }
+        var cruxTop = projectSky(starLon[16], starLat[16]);
+        if (cruxTop) {
+          ctx.font = '10px sans-serif'; ctx.fillStyle = 'rgba(180,255,220,0.7)';
+          ctx.fillText('南十字星', cruxTop.x + 10, cruxTop.y - 10);
         }
       }
     }
@@ -875,7 +906,11 @@ input[type=range] { accent-color:#fdb813; width:120px; }
     { name: 'ポルックス', color: '#ffd080', ox: -480, oy: 320, fact: 'ふたご座の最も明るい星。オレンジ色の巨星で少なくとも1つの惑星を持ちます' },
     { name: 'カペラ', color: '#fff0a0', ox: 460, oy: -370, fact: 'ぎょしゃ座の一等星。2つの巨星が互いを公転する連星系で、全天6番目の明るさです' },
     { name: 'カストル', color: '#d0e8ff', ox: -420, oy: 280, fact: 'ふたご座αで、ポルックスとペアを成す。実際は6つの星からなる多重連星系です' },
-    { name: 'プレセペ星団', color: '#ffe8c0', ox: -120, oy: 370, fact: 'かに座の散開星団（M44/蜂の巣星団）。約1000個の星が集まり肉眼でも見える。距離は約577光年', isCluster: true }
+    { name: 'プレセペ星団', color: '#ffe8c0', ox: -120, oy: 370, fact: 'かに座の散開星団（M44/蜂の巣星団）。約1000個の星が集まり肉眼でも見える。距離は約577光年', isCluster: true },
+    { name: 'アクルックス', color: '#b0d4ff', ox: 470, oy: 640, fact: '南十字座α星・最輝星。2等星の青白色連星で、南天の指標として航海に使われました。距離は約321光年' },
+    { name: 'ミモサ', color: '#9bc4ff', ox: 565, oy: 555, fact: '南十字座β星。南十字の右腕に位置する青白色巨星です。距離は約280光年' },
+    { name: 'ガクルックス', color: '#ff7755', ox: 460, oy: 490, fact: '南十字座γ星・頂点の星。南十字の最北端に位置する赤色巨星。距離は約88光年' },
+    { name: 'デルタクルキス', color: '#aac8ff', ox: 360, oy: 565, fact: '南十字座δ星。南十字の左腕に位置する青色巨星です。距離は約364光年' }
   ];
 
   var stars = [];
@@ -1202,15 +1237,23 @@ input[type=range] { accent-color:#fdb813; width:120px; }
 
     if (showConstellations) {
       var sc2 = scale || 1;
-      ctx.strokeStyle = 'rgba(180,220,255,0.3)';
       ctx.lineWidth = 1;
       ctx.setLineDash([4, 4]);
+      ctx.strokeStyle = 'rgba(180,220,255,0.3)';
       var triIdx = [5, 6, 7];
       for (var tli = 0; tli < 3; tli++) {
         var ta = namedStars[triIdx[tli]], tb = namedStars[triIdx[(tli + 1) % 3]];
         ctx.beginPath();
         ctx.moveTo(cx + ta.ox * sc2, cy + ta.oy * sc2);
         ctx.lineTo(cx + tb.ox * sc2, cy + tb.oy * sc2);
+        ctx.stroke();
+      }
+      ctx.strokeStyle = 'rgba(180,255,220,0.3)';
+      for (var cliO = 0; cliO < cruxLines.length; cliO++) {
+        var caO = namedStars[cruxLines[cliO][0]], cbO = namedStars[cruxLines[cliO][1]];
+        ctx.beginPath();
+        ctx.moveTo(cx + caO.ox * sc2, cy + caO.oy * sc2);
+        ctx.lineTo(cx + cbO.ox * sc2, cy + cbO.oy * sc2);
         ctx.stroke();
       }
       ctx.setLineDash([]);
