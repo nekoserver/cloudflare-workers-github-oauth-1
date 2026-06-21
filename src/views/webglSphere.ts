@@ -777,6 +777,8 @@ function getNextZ() {
   var proj=m4(),view=m4(),model=m4(),rx=m4(),ry=m4(),tz=m4(),tmp=m4(),tmp2=m4(),mvp=m4();
   var rotXv = 0.3, rotYv = 0.6, zoom = 3.2, zoomTarget = 3.2, autoRot = true;
   var drag = false, lx = 0, ly = 0, pinch0 = 0, touchMoved = false;
+  var touchStartX = 0, touchStartY = 0;
+  var TOUCH_SLOP = 8;
 
   var axisLocked = false;
 
@@ -819,8 +821,8 @@ function getNextZ() {
   window.addEventListener("mousemove",  function(e){ if(!drag)return; var dy=(e.clientX-lx)*0.008; var dx=(e.clientY-ly)*0.008; rotYv+=dy; velY=velY*0.4+dy*0.6; if(!axisLocked){ rotXv=clampElev(rotXv+dx); velX=velX*0.4+dx*0.6; } lx=e.clientX; ly=e.clientY; });
   canvas.addEventListener("wheel",      function(e){ e.preventDefault(); var delta = e.deltaMode === 1 ? e.deltaY * 18 : (e.deltaMode === 2 ? e.deltaY * 300 : e.deltaY); zoomTarget=Math.max(1.6,Math.min(10,zoomTarget+delta*0.004)); },{passive:false});
   canvas.addEventListener("dblclick",   function(){ autoRot=!autoRot; btnAutoRot.textContent = autoRot ? "⏸ 自転停止" : "▶ 回転"; if(autoRot){btnAutoRot.classList.remove("active");}else{btnAutoRot.classList.add("active");} });
-  canvas.addEventListener("touchstart", function(e){ e.preventDefault(); touchMoved=false; momentumY=0; momentumX=0; velY=0; velX=0; if(e.touches.length===1){drag=true;lx=e.touches[0].clientX;ly=e.touches[0].clientY;} if(e.touches.length===2){pinch0=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);} },{passive:false});
-  canvas.addEventListener("touchmove",  function(e){ e.preventDefault(); touchMoved=true; if(e.touches.length===1&&drag){ var dy=(e.touches[0].clientX-lx)*0.008; var dx=(e.touches[0].clientY-ly)*0.008; rotYv+=dy; velY=velY*0.4+dy*0.6; if(!axisLocked){rotXv=clampElev(rotXv+dx); velX=velX*0.4+dx*0.6;} lx=e.touches[0].clientX;ly=e.touches[0].clientY;} if(e.touches.length===2){var d=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);zoomTarget=Math.max(1.6,Math.min(10,zoomTarget-(d-pinch0)*0.015));pinch0=d;} },{passive:false});
+  canvas.addEventListener("touchstart", function(e){ e.preventDefault(); touchMoved=false; momentumY=0; momentumX=0; velY=0; velX=0; if(e.touches.length===1){drag=true;lx=e.touches[0].clientX;ly=e.touches[0].clientY;touchStartX=lx;touchStartY=ly;} if(e.touches.length===2){pinch0=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);} },{passive:false});
+  canvas.addEventListener("touchmove",  function(e){ e.preventDefault(); if(e.touches.length===1&&drag){ var cx=e.touches[0].clientX,cy=e.touches[0].clientY; if(!touchMoved){ if(Math.hypot(cx-touchStartX,cy-touchStartY)<TOUCH_SLOP){return;} touchMoved=true; lx=cx; ly=cy; } var dy=(cx-lx)*0.008; var dx=(cy-ly)*0.008; rotYv+=dy; velY=velY*0.4+dy*0.6; if(!axisLocked){rotXv=clampElev(rotXv+dx); velX=velX*0.4+dx*0.6;} lx=cx;ly=cy;} if(e.touches.length===2){touchMoved=true; var d=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);zoomTarget=Math.max(1.6,Math.min(10,zoomTarget-(d-pinch0)*0.015));pinch0=d;} },{passive:false});
   canvas.addEventListener("touchend", function(e){
     drag=false;
     momentumY=applySpinBoost(velY); momentumX=applySpinBoost(velX); velY=0; velX=0;
