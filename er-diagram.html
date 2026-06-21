@@ -669,6 +669,7 @@ const GROUPS = {
   ai:        { color: '#d29922', label: 'AI Summary / Chat',  tables: ['ai_summary_log','ai_summary_reviews','commit_agent_log','ai_summary_link_access_log','ai_chat_shares','aichat_search_log','aichat_search_history','aichat_search_impressions','aichat_subqueries','aichat_share_subquery_links'] },
   email:     { color: '#f85149', label: 'Email / Resend',    tables: ['resend_webhook_sources','resend_webhook_log','email_send_log','email_suppression_list','email_mfa_challenges','email_audit_anomalies'] },
   config:    { color: '#a371f7', label: 'Config / Settings', tables: ['installation_permissions','repo_color_settings','repo_groups','repo_group_members','group_oauth_apps','table_catalog','table_column_keys'] },
+  system:    { color: '#3fb950', label: 'System / Utility',  tables: ['uuid_history'] },
   undefined: { color: '#8b949e', label: 'Undefined',          tables: [] }
 };
 
@@ -858,6 +859,10 @@ let SCHEMA = [
   { name:'table_column_keys', cols:[
     {n:'table_name',pk:true,fk:'table_catalog',t:'TEXT'},{n:'column_name',pk:true,t:'TEXT'},
     {n:'key_type',t:'TEXT'},{n:'fk_target_table',t:'TEXT'}
+  ]},
+  { name:'uuid_history', cols:[
+    {n:'id',pk:true,t:'INT'},{n:'user_id',fk:'user_sessions',idx:true,t:'TEXT'},
+    {n:'uuid',idx:true,t:'TEXT'},{n:'version',t:'TEXT'},{n:'created_at',idx:true,t:'TEXT'}
   ]}
 ];
 
@@ -900,7 +905,8 @@ let RELATIONS = [
   { from:'aichat_search_history', fromCol:'share_id', to:'ai_chat_shares', toCol:'id' },
   { from:'aichat_search_impressions', fromCol:'user_id', to:'user_sessions', toCol:'user_id' },
   { from:'aichat_search_impressions', fromCol:'share_id', to:'ai_chat_shares', toCol:'id' },
-  { from:'aichat_share_subquery_links', fromCol:'subquery_id', to:'aichat_subqueries', toCol:'id' }
+  { from:'aichat_share_subquery_links', fromCol:'subquery_id', to:'aichat_subqueries', toCol:'id' },
+  { from:'uuid_history', fromCol:'user_id', to:'user_sessions', toCol:'user_id' }
 ];
 
 const DEFAULT_POSITIONS = {
@@ -941,7 +947,8 @@ const DEFAULT_POSITIONS = {
   "aichat_search_history":      { "x": 2700, "y": 560 },
   "aichat_search_impressions":  { "x": 3000, "y": 320 },
   "aichat_subqueries":          { "x": 3000, "y": 40 },
-  "aichat_share_subquery_links":{ "x": 3000, "y": 560 }
+  "aichat_share_subquery_links":{ "x": 3000, "y": 560 },
+  "uuid_history":               { "x": 3300, "y": 40 }
 };
 
 let positions = {};

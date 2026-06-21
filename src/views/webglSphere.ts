@@ -1722,7 +1722,7 @@ function getNextZ() {
       var m = dayMatches[j];
       var grpA = flagToGroup[m.a] || '';
       var grpB = flagToGroup[m.b] || '';
-      var grpStr = (grpA === grpB && grpA) ? 'グループ ' + grpA : (grpA && grpB ? 'グループ ' + grpA + '/' + grpB : '');
+      var grpStr = (grpA && grpA === grpB) ? 'グループ ' + grpA : '';
       var nameA = flagToName[m.a] || m.a;
       var nameB = flagToName[m.b] || m.b;
       if (grpStr) html += '<div style="font-size:10px;color:#8b949e">' + grpStr + '</div>';
@@ -2010,7 +2010,7 @@ function getNextZ() {
         var md = it.m.date.slice(5).replace('-', '/');
         var grpA = flagToGroup[it.m.a] || '';
         var grpB = flagToGroup[it.m.b] || '';
-        var grpStr = (grpA === grpB && grpA) ? 'G-' + grpA : (grpA && grpB ? 'G-' + grpA + '/' + grpB : '');
+        var grpStr = (grpA && grpA === grpB) ? 'G-' + grpA : '';
         var dateGrp = md + (grpStr ? '  ' + grpStr : '');
         var rowCls = 'tt-mrow' + (it.past && !it.isToday ? ' tt-past' : '') + (it.isToday ? ' tt-mrow-today' : '');
         var dateStyle = it.isToday ? 'font-size:10px;color:#58a6ff;font-weight:700' : (it.past ? 'font-size:10px' : 'font-size:10px;color:#f0b429');
