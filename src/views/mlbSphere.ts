@@ -78,6 +78,13 @@ canvas:active { cursor:grabbing; }
 .cal-day:hover { background:#21262d; }
 .cal-today { color:#58a6ff; font-weight:700; border:1px solid #58a6ff; border-radius:4px; }
 .cal-sel { background:#0c2d4e; color:#58a6ff; font-weight:700; }
+.cal-country-hl { background:#3a2e00; color:#ffd700; }
+.cal-country-hl.cal-today { border-color:#ffd700; }
+.cal-country-hl.cal-sel { background:#0c2d4e; color:#ffd700; }
+.cal-flags { display:flex; gap:5px; padding:6px 0 2px; }
+.cal-flag-btn { background:none; border:1px solid #30363d; border-radius:5px; font-size:16px; cursor:pointer; padding:3px 8px; line-height:1.4; transition:border-color .15s,background .15s; }
+.cal-flag-btn:hover { border-color:#58a6ff; }
+.cal-flag-btn.active { border-color:#ffd700; background:rgba(255,215,0,0.12); }
 #game-list { flex:1; }
 .game-date-hdr { padding:7px 12px 4px; font-size:10px; font-weight:700; color:#8b949e; letter-spacing:.5px; text-transform:uppercase; border-bottom:1px solid #21262d; position:sticky; top:0; background:#0d1117; }
 .game-card { padding:8px 12px; border-bottom:1px solid #21262d; cursor:pointer; border-left:2px solid transparent; }
@@ -298,6 +305,8 @@ void main(){
   })();
 
   var todayGames = [], stadiumGames = {}, gameCache = {};
+  var countryFilter = null;
+  var monthScheduleCache = {};
 
   var now = new Date();
   function toDateStr(d) {
@@ -588,12 +597,58 @@ void main(){
     });
   }
 
+  var CANADA_TEAM_ID = 141;
+  var MEXICO_VENUE_KEYWORDS = ['Harp', 'Monterrey', 'Mexico', 'Estadio'];
+
+  function venueCountry(homeTeamId, venueName) {
+    if (homeTeamId === CANADA_TEAM_ID) return 'CA';
+    for (var k = 0; k < MEXICO_VENUE_KEYWORDS.length; k++) {
+      if (venueName.indexOf(MEXICO_VENUE_KEYWORDS[k]) >= 0) return 'MX';
+    }
+    return 'US';
+  }
+
+  function fetchMonthSchedule(year, month) {
+    var mm = month < 10 ? '0' + month : '' + month;
+    var key = year + '-' + mm;
+    if (monthScheduleCache[key] !== undefined) return;
+    monthScheduleCache[key] = null;
+    var startDate = key + '-01';
+    var lastDay = new Date(year, month, 0).getDate();
+    var endDate = key + '-' + (lastDay < 10 ? '0' + lastDay : '' + lastDay);
+    fetch('/api/mlb-month-schedule?startDate=' + startDate + '&endDate=' + endDate)
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        var result = {};
+        (data.dates || []).forEach(function(d) {
+          var countries = {US: false, CA: false, MX: false};
+          (d.games || []).forEach(function(g) {
+            var c = venueCountry(g.homeTeamId, g.venueName || '');
+            countries[c] = true;
+          });
+          result[d.date] = countries;
+        });
+        monthScheduleCache[key] = result;
+        buildCalendar();
+      })
+      .catch(function() { monthScheduleCache[key] = {}; });
+  }
+
   function buildCalendar(){
     var MONTHS=['January','February','March','April','May','June','July','August','September','October','November','December'];
     var firstDay=new Date(calYear,calMonth,1).getDay();
     var daysInMonth=new Date(calYear,calMonth+1,0).getDate();
     var todayY=now.getFullYear(),todayM=now.getMonth(),todayD=now.getDate();
-    var html='<div class="cal-hdr">';
+    var mm2=calMonth+1;
+    var monthKey=calYear+'-'+(mm2<10?'0'+mm2:mm2);
+    var monthData=monthScheduleCache[monthKey];
+    if(countryFilter && monthData === undefined) fetchMonthSchedule(calYear, mm2);
+    var html='<div class="cal-flags">';
+    html+='<button class="cal-flag-btn'+(countryFilter==='US'?' active':'')+'" id="flagUS">&#127482;&#127480;</button>';
+    html+='<button class="cal-flag-btn'+(countryFilter==='CA'?' active':'')+'" id="flagCA">&#127464;&#127462;</button>';
+    html+='<button class="cal-flag-btn'+(countryFilter==='MX'?' active':'')+'" id="flagMX">&#127474;&#127485;</button>';
+    html+='</div>';
+    html+='<div class="cal-hdr">';
     html+='<button class="cal-nav" id="calPrev">&#8592;</button>';
     html+='<span class="cal-month-lbl">'+MONTHS[calMonth]+' '+calYear+'</span>';
     html+='<button class="cal-nav" id="calNext">&#8594;</button>';
@@ -602,8 +657,9 @@ void main(){
     for(var i=0;i<firstDay;i++)html+='<div></div>';
     for(var day=1;day<=daysInMonth;day++){
       var isToday=(calYear===todayY&&calMonth===todayM&&day===todayD);
-      var mm2=calMonth+1, ds=calYear+'-'+(mm2<10?'0'+mm2:mm2)+'-'+(day<10?'0'+day:day);
-      var cls='cal-day'+(isToday?' cal-today':'')+(ds===selectedDate?' cal-sel':'');
+      var ds=calYear+'-'+(mm2<10?'0'+mm2:mm2)+'-'+(day<10?'0'+day:day);
+      var hasCountryGame=countryFilter && monthData && monthData[ds] && monthData[ds][countryFilter];
+      var cls='cal-day'+(isToday?' cal-today':'')+(ds===selectedDate?' cal-sel':'')+(hasCountryGame?' cal-country-hl':'');
       html+='<div class="'+cls+'" data-date="'+ds+'">'+day+'</div>';
     }
     html+='</div>';
@@ -618,6 +674,14 @@ void main(){
       el.addEventListener('click',function(){
         selectedDate=this.dataset.date;
         loadGamesForDate(selectedDate);
+      });
+    });
+    ['US','CA','MX'].forEach(function(cc){
+      var btn=document.getElementById('flag'+cc);
+      if(btn) btn.addEventListener('click',function(){
+        countryFilter=(countryFilter===cc)?null:cc;
+        if(countryFilter) fetchMonthSchedule(calYear, mm2);
+        buildCalendar();
       });
     });
   }
