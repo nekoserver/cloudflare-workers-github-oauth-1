@@ -4297,16 +4297,65 @@ app.delete('/api/uuid/history', authMiddleware, async (c) => {
   return c.json({ ok: true });
 });
 
+const MEXICO_VENUE_KEYWORDS = ['Harp', 'Monterrey', 'Mexico', 'Estadio'];
+
+function buildMonthGameDates(rawDates: any[]): Record<string, {US: boolean, CA: boolean, MX: boolean}> {
+  const result: Record<string, {US: boolean, CA: boolean, MX: boolean}> = {};
+  for (const d of rawDates) {
+    const countries = {US: false, CA: false, MX: false};
+    for (const g of d.games || []) {
+      const hid = g.teams?.home?.team?.id;
+      const vname: string = g.venue?.name || '';
+      if (hid === 141) {
+        countries.CA = true;
+      } else if (MEXICO_VENUE_KEYWORDS.some(k => vname.includes(k))) {
+        countries.MX = true;
+      } else {
+        countries.US = true;
+      }
+    }
+    result[d.date] = countries;
+  }
+  return result;
+}
+
 app.get('/mlb', authMiddleware, async (c) => {
   const user = c.get('user');
-  return c.html(getMLBSpherePage(user.sub));
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = now.getMonth() + 1;
+  const mm = month < 10 ? '0' + month : String(month);
+  const lastDay = new Date(year, month, 0).getDate();
+  const startDate = `${year}-${mm}-01`;
+  const endDate = `${year}-${mm}-${lastDay < 10 ? '0' + lastDay : lastDay}`;
+  let preload: {key: string, dates: Record<string, {US: boolean, CA: boolean, MX: boolean}>} | null = null;
+  try {
+    const mlbUrl = `https://statsapi.mlb.com/api/v1/schedule?sportId=1&startDate=${startDate}&endDate=${endDate}&hydrate=team,venue`;
+    const res = await fetch(mlbUrl, {headers: {'User-Agent': 'Mozilla/5.0'}});
+    if (res.ok) {
+      const raw: any = await res.json();
+      preload = {key: `${year}-${mm}`, dates: buildMonthGameDates(raw.dates || [])};
+    }
+  } catch (_) {}
+  return c.html(getMLBSpherePage(user.sub, preload));
 });
 
 app.get('/api/mlb-schedule', authMiddleware, async (c) => {
-  const date = c.req.query('date') || new Date().toISOString().slice(0, 10);
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return c.json({error: 'invalid date'}, 400);
+  const startDate = c.req.query('startDate');
+  const endDate = c.req.query('endDate');
+  const date = c.req.query('date');
+  let url: string;
+  if (startDate && endDate) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(startDate) || !/^\d{4}-\d{2}-\d{2}$/.test(endDate)) {
+      return c.json({error: 'invalid date'}, 400);
+    }
+    url = `https://statsapi.mlb.com/api/v1/schedule?sportId=1&startDate=${startDate}&endDate=${endDate}&hydrate=team,venue`;
+  } else {
+    const d = date || new Date().toISOString().slice(0, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) return c.json({error: 'invalid date'}, 400);
+    url = `https://statsapi.mlb.com/api/v1/schedule?sportId=1&date=${d}&hydrate=team,venue,lineups`;
+  }
   try {
-    const url = `https://statsapi.mlb.com/api/v1/schedule?sportId=1&date=${date}&hydrate=team,venue,lineups`;
     const res = await fetch(url, {headers: {'User-Agent': 'Mozilla/5.0'}});
     if (!res.ok) return c.json({error: 'upstream error', status: res.status}, 502);
     const data = await res.json();
