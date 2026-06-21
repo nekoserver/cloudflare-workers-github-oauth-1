@@ -727,23 +727,24 @@ function getNextZ() {
   });
 
   // 2026 FIFA W杯 全16会場（東→西順）
+  // code3: ISO 3166-1 alpha-3, cap: 収容人数, opened: 開場年
   var wc2026Stadiums = [
-    {num:1,  flag:"🏟️", ctry:"🇺🇸", name:"Gillette Stadium",              city:"フォックスボロ、MA",   lat:42.091, lon:-71.264},
-    {num:2,  flag:"🏟️", ctry:"🇺🇸", name:"MetLife Stadium",               city:"イーストラザフォード、NJ", lat:40.814, lon:-74.074},
-    {num:3,  flag:"🏟️", ctry:"🇺🇸", name:"Lincoln Financial Field",       city:"フィラデルフィア、PA", lat:39.901, lon:-75.168},
-    {num:4,  flag:"🏟️", ctry:"🇨🇦", name:"BMO Field",                    city:"トロント、カナダ",     lat:43.633, lon:-79.419},
-    {num:5,  flag:"🏟️", ctry:"🇺🇸", name:"Hard Rock Stadium",             city:"マイアミガーデンズ、FL",lat:25.958, lon:-80.239},
-    {num:6,  flag:"🏟️", ctry:"🇺🇸", name:"Bank of America Stadium",       city:"シャーロット、NC",    lat:35.226, lon:-80.853},
-    {num:7,  flag:"🏟️", ctry:"🇺🇸", name:"Arrowhead Stadium",             city:"カンザスシティ、MO",  lat:39.049, lon:-94.484},
-    {num:8,  flag:"🏟️", ctry:"🇺🇸", name:"NRG Stadium",                  city:"ヒューストン、TX",    lat:29.685, lon:-95.411},
-    {num:9,  flag:"🏟️", ctry:"🇺🇸", name:"AT&T Stadium",                 city:"アーリントン、TX",    lat:32.748, lon:-97.093},
-    {num:10, flag:"🏟️", ctry:"🇲🇽", name:"Estadio Azteca",               city:"メキシコシティ、MX",  lat:19.303, lon:-99.150},
-    {num:11, flag:"🏟️", ctry:"🇲🇽", name:"Estadio BBVA",                 city:"モンテレイ、MX",      lat:25.669, lon:-100.244},
-    {num:12, flag:"🏟️", ctry:"🇲🇽", name:"Estadio Akron",                city:"グアダラハラ、MX",    lat:20.669, lon:-103.318},
-    {num:13, flag:"🏟️", ctry:"🇺🇸", name:"SoFi Stadium",                 city:"イングルウッド、CA",  lat:33.954, lon:-118.339},
-    {num:14, flag:"🏟️", ctry:"🇺🇸", name:"Levi's Stadium",               city:"サンタクララ、CA",    lat:37.403, lon:-121.970},
-    {num:15, flag:"🏟️", ctry:"🇺🇸", name:"Lumen Field",                  city:"シアトル、WA",        lat:47.595, lon:-122.332},
-    {num:16, flag:"🏟️", ctry:"🇨🇦", name:"BC Place",                     city:"バンクーバー、カナダ",  lat:49.277, lon:-123.112}
+    {num:1,  flag:"🏟️", ctry:"🇺🇸", code3:"USA", name:"Gillette Stadium",              city:"フォックスボロ、MA",       cap:65878,  opened:2002, lat:42.091, lon:-71.264},
+    {num:2,  flag:"🏟️", ctry:"🇺🇸", code3:"USA", name:"MetLife Stadium",               city:"イーストラザフォード、NJ",   cap:82500,  opened:2010, lat:40.814, lon:-74.074},
+    {num:3,  flag:"🏟️", ctry:"🇺🇸", code3:"USA", name:"Lincoln Financial Field",       city:"フィラデルフィア、PA",       cap:69176,  opened:2003, lat:39.901, lon:-75.168},
+    {num:4,  flag:"🏟️", ctry:"🇨🇦", code3:"CAN", name:"BMO Field",                    city:"トロント、カナダ",           cap:30000,  opened:2007, lat:43.633, lon:-79.419},
+    {num:5,  flag:"🏟️", ctry:"🇺🇸", code3:"USA", name:"Hard Rock Stadium",             city:"マイアミガーデンズ、FL",     cap:65326,  opened:1987, lat:25.958, lon:-80.239},
+    {num:6,  flag:"🏟️", ctry:"🇺🇸", code3:"USA", name:"Bank of America Stadium",       city:"シャーロット、NC",           cap:74867,  opened:1996, lat:35.226, lon:-80.853},
+    {num:7,  flag:"🏟️", ctry:"🇺🇸", code3:"USA", name:"Arrowhead Stadium",             city:"カンザスシティ、MO",         cap:76416,  opened:1972, lat:39.049, lon:-94.484},
+    {num:8,  flag:"🏟️", ctry:"🇺🇸", code3:"USA", name:"NRG Stadium",                  city:"ヒューストン、TX",           cap:72220,  opened:2002, lat:29.685, lon:-95.411},
+    {num:9,  flag:"🏟️", ctry:"🇺🇸", code3:"USA", name:"AT&T Stadium",                 city:"アーリントン、TX",           cap:80000,  opened:2009, lat:32.748, lon:-97.093},
+    {num:10, flag:"🏟️", ctry:"🇲🇽", code3:"MEX", name:"Estadio Azteca",               city:"メキシコシティ、MX",         cap:87523,  opened:1966, lat:19.303, lon:-99.150},
+    {num:11, flag:"🏟️", ctry:"🇲🇽", code3:"MEX", name:"Estadio BBVA",                 city:"モンテレイ、MX",             cap:53500,  opened:2015, lat:25.669, lon:-100.244},
+    {num:12, flag:"🏟️", ctry:"🇲🇽", code3:"MEX", name:"Estadio Akron",                city:"グアダラハラ、MX",           cap:49850,  opened:2010, lat:20.669, lon:-103.318},
+    {num:13, flag:"🏟️", ctry:"🇺🇸", code3:"USA", name:"SoFi Stadium",                 city:"イングルウッド、CA",         cap:70240,  opened:2020, lat:33.954, lon:-118.339},
+    {num:14, flag:"🏟️", ctry:"🇺🇸", code3:"USA", name:"Levi's Stadium",               city:"サンタクララ、CA",           cap:68500,  opened:2014, lat:37.403, lon:-121.970},
+    {num:15, flag:"🏟️", ctry:"🇺🇸", code3:"USA", name:"Lumen Field",                  city:"シアトル、WA",               cap:68740,  opened:2002, lat:47.595, lon:-122.332},
+    {num:16, flag:"🏟️", ctry:"🇨🇦", code3:"CAN", name:"BC Place",                     city:"バンクーバー、カナダ",         cap:54500,  opened:1983, lat:49.277, lon:-123.112}
   ];
 
   // 2026 FIFAワールドカップ出場国（⚽=開催地マーカー）
@@ -1605,7 +1606,9 @@ function getNextZ() {
 
   function buildStadiumDateTooltipHtml(venueIdx, dateStr) {
     var sd = wc2026Stadiums[venueIdx];
-    var html = '<button class="tt-close">&#10005;</button><span class="tt-flag-lg">&#127967; ' + sd.ctry + '</span><div class="tt-name">' + sd.name + '</div><div class="tt-code">' + sd.city + '</div>';
+    var capFmt2 = sd.cap ? sd.cap.toLocaleString() + '席' : '';
+    var meta2 = [sd.code3, capFmt2, sd.opened ? sd.opened + '年開場' : ''].filter(function(s){ return !!s; }).join(' / ');
+    var html = '<button class="tt-close">&#10005;</button><span class="tt-flag-lg">&#127967; ' + sd.ctry + ' <span style="font-size:12px;font-weight:700;letter-spacing:.05em">' + (sd.code3 || '') + '</span></span><div class="tt-name">' + sd.name + '</div><div class="tt-code">' + sd.city + '</div>' + (meta2 ? '<div class="tt-code" style="font-size:10px;color:#8b949e">' + meta2 + '</div>' : '');
     var midxs = stadiumMatches[venueIdx] || [];
     var dayMatches = [];
     for (var k = 0; k < midxs.length; k++) {
@@ -1788,7 +1791,9 @@ function getNextZ() {
 
   function buildStadiumTooltipHtml(sidx) {
     var sd = wc2026Stadiums[sidx];
-    var html = '<button class="tt-close">&#10005;</button><span class="tt-flag-lg">&#127967; ' + sd.ctry + '</span><div class="tt-name">' + sd.name + '</div><div class="tt-code">' + sd.city + '</div>';
+    var capFmt = sd.cap ? sd.cap.toLocaleString() + '席' : '';
+    var meta = [sd.code3, capFmt, sd.opened ? sd.opened + '年開場' : ''].filter(function(s){ return !!s; }).join(' / ');
+    var html = '<button class="tt-close">&#10005;</button><span class="tt-flag-lg">&#127967; ' + sd.ctry + ' <span style="font-size:12px;font-weight:700;letter-spacing:.05em">' + (sd.code3 || '') + '</span></span><div class="tt-name">' + sd.name + '</div><div class="tt-code">' + sd.city + '</div>' + (meta ? '<div class="tt-code" style="font-size:10px;color:#8b949e">' + meta + '</div>' : '');
     var midxs = stadiumMatches[sidx] || [];
     if (midxs.length > 0) {
       var now2 = Date.now();
@@ -1930,8 +1935,8 @@ function getNextZ() {
       html += '<span class="sdp-icon">' + sd.ctry + '</span>';
       html += '<div class="sdp-info">';
       html += '<div class="sdp-name">' + sd.name.replace(/&/g,'&amp;') + '</div>';
-      html += '<div class="sdp-city">' + sd.city + '</div>';
-      html += '<div class="sdp-coord">' + latStr + ' / ' + lonStr + '</div>';
+      html += '<div class="sdp-city">' + sd.city + (sd.code3 ? ' <span style="font-size:10px;font-weight:700;color:#58a6ff">' + sd.code3 + '</span>' : '') + '</div>';
+      html += '<div class="sdp-coord">' + latStr + ' / ' + lonStr + (sd.cap ? ' &nbsp;&#127970;' + sd.cap.toLocaleString() : '') + '</div>';
       html += '</div></div>';
     }
     body.innerHTML = html;
