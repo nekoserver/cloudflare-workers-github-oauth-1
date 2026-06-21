@@ -873,7 +873,8 @@ function getNextZ() {
     { ctry:"🇯🇵", code3:"JPN", name:"東京ドーム",               city:"文京区、東京",             league:"MLB",    team:"読売ジャイアンツ",       cap:55000,  opened:1988, lat:35.706, lon:139.752 },
     { ctry:"🇰🇷", code3:"KOR", name:"ソウルワールドカップ競技場", city:"ソウル、韓国",            league:"Soccer", team:"FC ソウルほか",          cap:66806,  opened:2001, lat:37.569, lon:126.899 },
     { ctry:"🇿🇦", code3:"ZAF", name:"FNB Stadium",             city:"ヨハネスブルグ、南アフリカ",league:"Soccer", team:"南アフリカ代表",         cap:94736,  opened:1989, lat:-26.232, lon:27.980 },
-    { ctry:"🇦🇷", code3:"ARG", name:"Estadio Monumental",      city:"ブエノスアイレス、アルゼンチン",league:"Soccer",team:"リバープレート",       cap:84567,  opened:1938, lat:-34.545, lon:-58.449 }
+    { ctry:"🇦🇷", code3:"ARG", name:"Estadio Monumental",      city:"ブエノスアイレス、アルゼンチン",league:"Soccer",team:"リバープレート",       cap:84567,  opened:1938, lat:-34.545, lon:-58.449 },
+    { ctry:"🇺🇸", code3:"USA", name:"Kyle Field",               city:"カレッジステーション、TX",  league:"NCAA",   team:"テキサスA&Mアギーズ",    cap:102733, opened:1927, lat:30.610,  lon:-96.340 }
   ];
 
   // 2026 FIFAワールドカップ出場国（⚽=開催地マーカー）
