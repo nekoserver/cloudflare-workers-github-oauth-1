@@ -838,7 +838,7 @@ function getNextZ() {
     {num:3,  flag:"🏟️", ctry:"🇺🇸", code3:"USA", name:"Lincoln Financial Field",       city:"フィラデルフィア、PA",       cap:69176,  opened:2003, lat:39.901, lon:-75.168},
     {num:4,  flag:"🏟️", ctry:"🇨🇦", code3:"CAN", name:"BMO Field",                    city:"トロント、カナダ",           cap:30000,  opened:2007, lat:43.633, lon:-79.419},
     {num:5,  flag:"🏟️", ctry:"🇺🇸", code3:"USA", name:"Hard Rock Stadium",             city:"マイアミガーデンズ、FL",     cap:65326,  opened:1987, lat:25.958, lon:-80.239},
-    {num:6,  flag:"🏟️", ctry:"🇺🇸", code3:"USA", name:"Bank of America Stadium",       city:"シャーロット、NC",           cap:74867,  opened:1996, lat:35.226, lon:-80.853},
+    {num:6,  flag:"🏟️", ctry:"🇺🇸", code3:"USA", name:"Mercedes-Benz Stadium",          city:"アトランタ、GA",             cap:71000,  opened:2017, lat:33.755, lon:-84.401},
     {num:7,  flag:"🏟️", ctry:"🇺🇸", code3:"USA", name:"Arrowhead Stadium",             city:"カンザスシティ、MO",         cap:76416,  opened:1972, lat:39.049, lon:-94.484},
     {num:8,  flag:"🏟️", ctry:"🇺🇸", code3:"USA", name:"NRG Stadium",                  city:"ヒューストン、TX",           cap:72220,  opened:2002, lat:29.685, lon:-95.411},
     {num:9,  flag:"🏟️", ctry:"🇺🇸", code3:"USA", name:"AT&T Stadium",                 city:"アーリントン、TX",           cap:80000,  opened:2009, lat:32.748, lon:-97.093},
@@ -944,83 +944,82 @@ function getNextZ() {
   }
 
   var MATCHES = [
-    {a:"🇲🇽",b:"🇿🇦",date:"2026-06-11",time:"19:00"},
-    {a:"🇰🇷",b:"🇨🇿",date:"2026-06-12",time:"02:00"},
-    {a:"🇨🇦",b:"🇧🇦",date:"2026-06-12",time:"19:00"},
-    {a:"🇺🇸",b:"🇵🇾",date:"2026-06-13",time:"01:00"},
-    {a:"🇶🇦",b:"🇨🇭",date:"2026-06-13",time:"19:00"},
-    {a:"🇧🇷",b:"🇲🇦",date:"2026-06-13",time:"22:00"},
-    {a:"🇭🇹",b:"🏴󠁧󠁢󠁳󠁣󠁴󠁿",date:"2026-06-14",time:"01:00"},
-    {a:"🇦🇺",b:"🇹🇷",date:"2026-06-14",time:"04:00"},
-    {a:"🇩🇪",b:"🇨🇼",date:"2026-06-14",time:"17:00"},
-    {a:"🇳🇱",b:"🇯🇵",date:"2026-06-14",time:"20:00"},
-    {a:"🇨🇮",b:"🇪🇨",date:"2026-06-14",time:"23:00"},
-    {a:"🇸🇪",b:"🇹🇳",date:"2026-06-15",time:"02:00"},
-    {a:"🇪🇸",b:"🇨🇻",date:"2026-06-15",time:"16:00"},
-    {a:"🇧🇪",b:"🇪🇬",date:"2026-06-15",time:"19:00"},
-    {a:"🇸🇦",b:"🇺🇾",date:"2026-06-15",time:"22:00"},
-    {a:"🇮🇷",b:"🇳🇿",date:"2026-06-16",time:"01:00"},
-    {a:"🇫🇷",b:"🇸🇳",date:"2026-06-16",time:"19:00"},
-    {a:"🇮🇶",b:"🇳🇴",date:"2026-06-16",time:"22:00"},
-    {a:"🇦🇷",b:"🇩🇿",date:"2026-06-17",time:"01:00"},
-    {a:"🇦🇹",b:"🇯🇴",date:"2026-06-17",time:"04:00"},
-    {a:"🇵🇹",b:"🇨🇩",date:"2026-06-17",time:"17:00"},
-    {a:"🏴󠁧󠁢󠁥󠁮󠁧󠁿",b:"🇭🇷",date:"2026-06-17",time:"20:00"},
-    {a:"🇬🇭",b:"🇵🇦",date:"2026-06-17",time:"23:00"},
-    {a:"🇺🇿",b:"🇨🇴",date:"2026-06-18",time:"02:00"},
-    {a:"🇨🇿",b:"🇿🇦",date:"2026-06-18",time:"16:00"},
-    {a:"🇨🇭",b:"🇧🇦",date:"2026-06-18",time:"19:00"},
-    {a:"🇨🇦",b:"🇶🇦",date:"2026-06-18",time:"22:00"},
-    {a:"🇲🇽",b:"🇰🇷",date:"2026-06-19",time:"01:00"},
-    {a:"🇺🇸",b:"🇦🇺",date:"2026-06-19",time:"19:00"},
-    {a:"🏴󠁧󠁢󠁳󠁣󠁴󠁿",b:"🇲🇦",date:"2026-06-19",time:"22:00"},
-    {a:"🇧🇷",b:"🇭🇹",date:"2026-06-20",time:"00:30"},
-    {a:"🇹🇷",b:"🇵🇾",date:"2026-06-20",time:"03:00"},
-    {a:"🇳🇱",b:"🇸🇪",date:"2026-06-20",time:"17:00"},
-    {a:"🇩🇪",b:"🇨🇮",date:"2026-06-20",time:"20:00"},
-    {a:"🇪🇨",b:"🇨🇼",date:"2026-06-21",time:"00:00"},
-    {a:"🇹🇳",b:"🇯🇵",date:"2026-06-21",time:"04:00"},
-    {a:"🇪🇸",b:"🇸🇦",date:"2026-06-21",time:"16:00"},
-    {a:"🇧🇪",b:"🇮🇷",date:"2026-06-21",time:"19:00"},
-    {a:"🇺🇾",b:"🇨🇻",date:"2026-06-21",time:"22:00"},
-    {a:"🇳🇿",b:"🇪🇬",date:"2026-06-22",time:"01:00"},
-    {a:"🇦🇷",b:"🇦🇹",date:"2026-06-22",time:"17:00"},
-    {a:"🇫🇷",b:"🇮🇶",date:"2026-06-22",time:"21:00"},
-    {a:"🇳🇴",b:"🇸🇳",date:"2026-06-23",time:"00:00"},
-    {a:"🇯🇴",b:"🇩🇿",date:"2026-06-23",time:"03:00"},
-    {a:"🇵🇹",b:"🇺🇿",date:"2026-06-23",time:"17:00"},
-    {a:"🏴󠁧󠁢󠁥󠁮󠁧󠁿",b:"🇬🇭",date:"2026-06-23",time:"20:00"},
-    {a:"🇵🇦",b:"🇭🇷",date:"2026-06-23",time:"23:00"},
-    {a:"🇨🇴",b:"🇨🇩",date:"2026-06-24",time:"02:00"},
-    {a:"🇨🇭",b:"🇨🇦",date:"2026-06-24",time:"19:00"},
-    {a:"🇧🇦",b:"🇶🇦",date:"2026-06-24",time:"19:00"},
-    {a:"🏴󠁧󠁢󠁳󠁣󠁴󠁿",b:"🇧🇷",date:"2026-06-24",time:"22:00"},
-    {a:"🇲🇦",b:"🇭🇹",date:"2026-06-24",time:"22:00"},
-    {a:"🇨🇿",b:"🇲🇽",date:"2026-06-25",time:"01:00"},
-    {a:"🇿🇦",b:"🇰🇷",date:"2026-06-25",time:"01:00"},
-    {a:"🇨🇼",b:"🇨🇮",date:"2026-06-25",time:"20:00"},
-    {a:"🇪🇨",b:"🇩🇪",date:"2026-06-25",time:"20:00"},
-    {a:"🇯🇵",b:"🇸🇪",date:"2026-06-25",time:"23:00"},
-    {a:"🇹🇳",b:"🇳🇱",date:"2026-06-25",time:"23:00"},
-    {a:"🇹🇷",b:"🇺🇸",date:"2026-06-26",time:"02:00"},
-    {a:"🇵🇾",b:"🇦🇺",date:"2026-06-26",time:"02:00"},
-    {a:"🇳🇴",b:"🇫🇷",date:"2026-06-26",time:"19:00"},
-    {a:"🇸🇳",b:"🇮🇶",date:"2026-06-26",time:"19:00"},
-    {a:"🇨🇻",b:"🇸🇦",date:"2026-06-27",time:"00:00"},
-    {a:"🇺🇾",b:"🇪🇸",date:"2026-06-27",time:"00:00"},
-    {a:"🇪🇬",b:"🇮🇷",date:"2026-06-27",time:"03:00"},
-    {a:"🇳🇿",b:"🇧🇪",date:"2026-06-27",time:"03:00"},
-    {a:"🇵🇦",b:"🏴󠁧󠁢󠁥󠁮󠁧󠁿",date:"2026-06-27",time:"21:00"},
-    {a:"🇭🇷",b:"🇬🇭",date:"2026-06-27",time:"21:00"},
-    {a:"🇨🇴",b:"🇵🇹",date:"2026-06-27",time:"23:30"},
-    {a:"🇨🇩",b:"🇺🇿",date:"2026-06-27",time:"23:30"},
-    {a:"🇩🇿",b:"🇦🇹",date:"2026-06-28",time:"02:00"},
-    {a:"🇯🇴",b:"🇦🇷",date:"2026-06-28",time:"02:00"}
+    {a:"🇲🇽",b:"🇿🇦",date:"2026-06-11",time:"19:00",venue:9},
+    {a:"🇰🇷",b:"🇨🇿",date:"2026-06-12",time:"02:00",venue:11},
+    {a:"🇨🇦",b:"🇧🇦",date:"2026-06-12",time:"19:00",venue:3},
+    {a:"🇺🇸",b:"🇵🇾",date:"2026-06-13",time:"01:00",venue:12},
+    {a:"🇶🇦",b:"🇨🇭",date:"2026-06-13",time:"19:00",venue:13},
+    {a:"🇧🇷",b:"🇲🇦",date:"2026-06-13",time:"22:00",venue:1},
+    {a:"🇭🇹",b:"🏴󠁧󠁢󠁳󠁣󠁴󠁿",date:"2026-06-14",time:"01:00",venue:0},
+    {a:"🇦🇺",b:"🇹🇷",date:"2026-06-14",time:"04:00",venue:15},
+    {a:"🇩🇪",b:"🇨🇼",date:"2026-06-14",time:"17:00",venue:7},
+    {a:"🇳🇱",b:"🇯🇵",date:"2026-06-14",time:"20:00",venue:8},
+    {a:"🇨🇮",b:"🇪🇨",date:"2026-06-14",time:"23:00",venue:2},
+    {a:"🇸🇪",b:"🇹🇳",date:"2026-06-15",time:"02:00",venue:10},
+    {a:"🇪🇸",b:"🇨🇻",date:"2026-06-15",time:"16:00",venue:5},
+    {a:"🇧🇪",b:"🇪🇬",date:"2026-06-15",time:"19:00",venue:14},
+    {a:"🇸🇦",b:"🇺🇾",date:"2026-06-15",time:"22:00",venue:4},
+    {a:"🇮🇷",b:"🇳🇿",date:"2026-06-16",time:"01:00",venue:12},
+    {a:"🇫🇷",b:"🇸🇳",date:"2026-06-16",time:"19:00",venue:1},
+    {a:"🇮🇶",b:"🇳🇴",date:"2026-06-16",time:"22:00",venue:0},
+    {a:"🇦🇷",b:"🇩🇿",date:"2026-06-17",time:"01:00",venue:6},
+    {a:"🇦🇹",b:"🇯🇴",date:"2026-06-17",time:"04:00",venue:13},
+    {a:"🇵🇹",b:"🇨🇩",date:"2026-06-17",time:"17:00",venue:7},
+    {a:"🏴󠁧󠁢󠁥󠁮󠁧󠁿",b:"🇭🇷",date:"2026-06-17",time:"20:00",venue:8},
+    {a:"🇬🇭",b:"🇵🇦",date:"2026-06-17",time:"23:00",venue:3},
+    {a:"🇺🇿",b:"🇨🇴",date:"2026-06-18",time:"02:00",venue:9},
+    {a:"🇨🇿",b:"🇿🇦",date:"2026-06-18",time:"16:00",venue:5},
+    {a:"🇨🇭",b:"🇧🇦",date:"2026-06-18",time:"19:00",venue:12},
+    {a:"🇨🇦",b:"🇶🇦",date:"2026-06-18",time:"22:00",venue:15},
+    {a:"🇲🇽",b:"🇰🇷",date:"2026-06-19",time:"01:00",venue:11},
+    {a:"🇺🇸",b:"🇦🇺",date:"2026-06-19",time:"19:00",venue:14},
+    {a:"🏴󠁧󠁢󠁳󠁣󠁴󠁿",b:"🇲🇦",date:"2026-06-19",time:"22:00",venue:0},
+    {a:"🇧🇷",b:"🇭🇹",date:"2026-06-20",time:"00:30",venue:2},
+    {a:"🇹🇷",b:"🇵🇾",date:"2026-06-20",time:"03:00",venue:12},
+    {a:"🇳🇱",b:"🇸🇪",date:"2026-06-20",time:"17:00",venue:7},
+    {a:"🇩🇪",b:"🇨🇮",date:"2026-06-20",time:"20:00",venue:3},
+    {a:"🇪🇨",b:"🇨🇼",date:"2026-06-21",time:"00:00",venue:6},
+    {a:"🇹🇳",b:"🇯🇵",date:"2026-06-21",time:"04:00",venue:10},
+    {a:"🇪🇸",b:"🇸🇦",date:"2026-06-21",time:"16:00",venue:5},
+    {a:"🇧🇪",b:"🇮🇷",date:"2026-06-21",time:"19:00",venue:12},
+    {a:"🇺🇾",b:"🇨🇻",date:"2026-06-21",time:"22:00",venue:4},
+    {a:"🇳🇿",b:"🇪🇬",date:"2026-06-22",time:"01:00",venue:15},
+    {a:"🇦🇷",b:"🇦🇹",date:"2026-06-22",time:"17:00",venue:8},
+    {a:"🇫🇷",b:"🇮🇶",date:"2026-06-22",time:"21:00",venue:2},
+    {a:"🇳🇴",b:"🇸🇳",date:"2026-06-23",time:"00:00",venue:1},
+    {a:"🇯🇴",b:"🇩🇿",date:"2026-06-23",time:"03:00",venue:13},
+    {a:"🇵🇹",b:"🇺🇿",date:"2026-06-23",time:"17:00",venue:7},
+    {a:"🏴󠁧󠁢󠁥󠁮󠁧󠁿",b:"🇬🇭",date:"2026-06-23",time:"20:00",venue:0},
+    {a:"🇵🇦",b:"🇭🇷",date:"2026-06-23",time:"23:00",venue:3},
+    {a:"🇨🇴",b:"🇨🇩",date:"2026-06-24",time:"02:00",venue:11},
+    {a:"🇨🇭",b:"🇨🇦",date:"2026-06-24",time:"19:00",venue:15},
+    {a:"🇧🇦",b:"🇶🇦",date:"2026-06-24",time:"19:00",venue:14},
+    {a:"🏴󠁧󠁢󠁳󠁣󠁴󠁿",b:"🇧🇷",date:"2026-06-24",time:"22:00",venue:4},
+    {a:"🇲🇦",b:"🇭🇹",date:"2026-06-24",time:"22:00",venue:5},
+    {a:"🇨🇿",b:"🇲🇽",date:"2026-06-25",time:"01:00",venue:9},
+    {a:"🇿🇦",b:"🇰🇷",date:"2026-06-25",time:"01:00",venue:10},
+    {a:"🇨🇼",b:"🇨🇮",date:"2026-06-25",time:"20:00",venue:2},
+    {a:"🇪🇨",b:"🇩🇪",date:"2026-06-25",time:"20:00",venue:1},
+    {a:"🇯🇵",b:"🇸🇪",date:"2026-06-25",time:"23:00",venue:8},
+    {a:"🇹🇳",b:"🇳🇱",date:"2026-06-25",time:"23:00",venue:6},
+    {a:"🇹🇷",b:"🇺🇸",date:"2026-06-26",time:"02:00",venue:12},
+    {a:"🇵🇾",b:"🇦🇺",date:"2026-06-26",time:"02:00",venue:13},
+    {a:"🇳🇴",b:"🇫🇷",date:"2026-06-26",time:"19:00",venue:0},
+    {a:"🇸🇳",b:"🇮🇶",date:"2026-06-26",time:"19:00",venue:3},
+    {a:"🇨🇻",b:"🇸🇦",date:"2026-06-27",time:"00:00",venue:7},
+    {a:"🇺🇾",b:"🇪🇸",date:"2026-06-27",time:"00:00",venue:11},
+    {a:"🇪🇬",b:"🇮🇷",date:"2026-06-27",time:"03:00",venue:14},
+    {a:"🇳🇿",b:"🇧🇪",date:"2026-06-27",time:"03:00",venue:15},
+    {a:"🇵🇦",b:"🏴󠁧󠁢󠁥󠁮󠁧󠁿",date:"2026-06-27",time:"21:00",venue:1},
+    {a:"🇭🇷",b:"🇬🇭",date:"2026-06-27",time:"21:00",venue:2},
+    {a:"🇨🇴",b:"🇵🇹",date:"2026-06-27",time:"23:30",venue:4},
+    {a:"🇨🇩",b:"🇺🇿",date:"2026-06-27",time:"23:30",venue:5},
+    {a:"🇩🇿",b:"🇦🇹",date:"2026-06-28",time:"02:00",venue:6},
+    {a:"🇯🇴",b:"🇦🇷",date:"2026-06-28",time:"02:00",venue:8}
   ];
-  var MATCH_VENUE = [4,1,3,1,6,7,8,12,2,14,5,13,4,8,1,10,11,12,1,0,14,3,2,7,0,6,15,8,12,7,9,12,15,5,6,13,2,10,4,8,0,11,12,1,14,3,2,7,15,6,9,7,4,1,5,2,14,15,1,12,11,13,4,2,10,8,3,0,13,14,5,1];
   var stadiumMatches = {};
   for (var _vi = 0; _vi < 16; _vi++) stadiumMatches[_vi] = [];
-  for (var _mi = 0; _mi < MATCHES.length && _mi < MATCH_VENUE.length; _mi++) stadiumMatches[MATCH_VENUE[_mi]].push(_mi);
+  for (var _mi = 0; _mi < MATCHES.length; _mi++) stadiumMatches[MATCHES[_mi].venue].push(_mi);
 
   var FLAG_CODE = {
     '🇲🇽':'MEX','🇿🇦':'RSA','🇰🇷':'KOR','🇨🇿':'CZE','🇨🇦':'CAN','🇧🇦':'BIH',
@@ -1320,7 +1319,7 @@ function getNextZ() {
       document.querySelectorAll('.cal-pin, .drw-pin').forEach(function(p) { p.parentNode.removeChild(p); });
       blinkCalDate(match ? match.date : null, true);
       highlightDrawerFlag(targetFlag);
-      if (match) { updateActiveDateFlags(match.date); }
+      if (match) { updateActiveDateFlags(match.date, flag); }
       var tidx2 = findCountryByFlag(targetFlag);
       if (tidx2 >= 0) {
         var td2 = wc2026[tidx2];
@@ -1779,7 +1778,7 @@ function getNextZ() {
     }
   }
 
-  function updateActiveDateFlags(dateStr) {
+  function updateActiveDateFlags(dateStr, selectedFlag) {
     selectedDate = dateStr;
     var grpBody = document.getElementById('grp-body');
     if (!grpBody) return;
@@ -1792,7 +1791,7 @@ function getNextZ() {
       span.classList.remove('grp-flag-today', 'grp-flag-active');
       if (dateFlags[flag]) span.classList.add('grp-flag-today');
     });
-    updateGroupStadiumIcons(dateStr);
+    updateGroupStadiumIcons(dateStr, selectedFlag);
     refreshStadiumList();
   }
 
@@ -1814,12 +1813,12 @@ function getNextZ() {
     }
   }
 
-  function updateGroupStadiumIcons(dateStr) {
+  function updateGroupStadiumIcons(dateStr, selectedFlag) {
     var grpBody = document.getElementById('grp-body');
     if (!grpBody) return;
     var circledOrd = ['①','②','③','④','⑤','⑥','⑦','⑧','⑨','⑩'];
     var dayMatchList = [];
-    for (var di = 0; di < MATCHES.length && di < MATCH_VENUE.length; di++) {
+    for (var di = 0; di < MATCHES.length && di < MATCHES.length; di++) {
       if (MATCHES[di].date === dateStr) dayMatchList.push({mi: di, time: MATCHES[di].time});
     }
     dayMatchList.sort(function(a, b) { return a.time < b.time ? -1 : (a.time > b.time ? 1 : 0); });
@@ -1831,12 +1830,18 @@ function getNextZ() {
       if (!btn) return;
       var matchIdx = -1;
       var venueIdx = -1;
-      for (var i = 0; i < MATCHES.length && i < MATCH_VENUE.length; i++) {
+      var fallbackIdx = -1;
+      var fallbackVenue = -1;
+      for (var i = 0; i < MATCHES.length && i < MATCHES.length; i++) {
         if (MATCHES[i].date !== dateStr) continue;
         if (grp.f.indexOf(MATCHES[i].a) >= 0 || grp.f.indexOf(MATCHES[i].b) >= 0) {
-          matchIdx = i; venueIdx = MATCH_VENUE[i]; break;
+          if (selectedFlag && (MATCHES[i].a === selectedFlag || MATCHES[i].b === selectedFlag)) {
+            matchIdx = i; venueIdx = MATCHES[i].venue; break;
+          }
+          if (fallbackIdx < 0) { fallbackIdx = i; fallbackVenue = MATCHES[i].venue; }
         }
       }
+      if (matchIdx < 0 && fallbackIdx >= 0) { matchIdx = fallbackIdx; venueIdx = fallbackVenue; }
       if (matchIdx < 0) {
         btn.classList.remove('active');
         btn.onclick = null;
@@ -1905,9 +1910,9 @@ function getNextZ() {
   }
 
   var matchVenueIdx = {};
-  for (var _mvi = 0; _mvi < MATCHES.length && _mvi < MATCH_VENUE.length; _mvi++) {
+  for (var _mvi = 0; _mvi < MATCHES.length && _mvi < MATCHES.length; _mvi++) {
     var _mk = MATCHES[_mvi].date + '|' + MATCHES[_mvi].a + '|' + MATCHES[_mvi].b;
-    matchVenueIdx[_mk] = MATCH_VENUE[_mvi];
+    matchVenueIdx[_mk] = MATCHES[_mvi].venue;
   }
 
   function buildDrawer() {
@@ -2207,8 +2212,8 @@ function getNextZ() {
   var todayStadiumSet = (function() {
     var s = {};
     var today = new Date().toISOString().slice(0, 10);
-    for (var i = 0; i < MATCHES.length && i < MATCH_VENUE.length; i++) {
-      if (MATCHES[i].date === today) s[MATCH_VENUE[i]] = true;
+    for (var i = 0; i < MATCHES.length && i < MATCHES.length; i++) {
+      if (MATCHES[i].date === today) s[MATCHES[i].venue] = true;
     }
     return s;
   })();
