@@ -188,7 +188,7 @@ void main(){
     <div class="canvas-ctrl-btns">
       <button class="ctrl-btn" id="btnGames">&#9918; &#35430;&#21512;&#19968;&#35239;</button>
       <button class="ctrl-btn" id="btnMLBView">&#9918; &#20840;&#29699;&#22243;</button>
-      <button class="ctrl-btn" id="btnAutoRot">&#9208; &#33258;&#36578;&#20572;&#27490;</button>
+      <button class="ctrl-btn active" id="btnAutoRot">&#9654; &#22238;&#36578;</button>
       <button class="ctrl-btn" id="btnNight">&#127769; &#22812;&#26223;</button>
     </div>
   </div>
@@ -447,7 +447,7 @@ void main(){
   var axialTilt=-23.4*Math.PI/180, ELEV_MAX=Math.PI/2-0.02;
   function clampElev(v){return v<-ELEV_MAX?-ELEV_MAX:(v>ELEV_MAX?ELEV_MAX:v);}
   var proj=m4(),view=m4(),model=m4(),rx=m4(),ry=m4(),tz=m4(),tmp=m4(),tmp2=m4(),mvp=m4();
-  var rotXv=0.35, rotYv=0.1, zoom=3.2, zoomTarget=3.2, autoRot=true;
+  var rotXv=0.35, rotYv=0.1, zoom=3.2, zoomTarget=3.2, autoRot=false;
   var drag=false, lx=0, ly=0, velY=0, velX=0, momentumY=0, momentumX=0, MOMENTUM_DECAY=0.92;
 
   var btnAutoRot=document.getElementById('btnAutoRot');
