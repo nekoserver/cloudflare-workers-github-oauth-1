@@ -173,11 +173,6 @@ void main(){
 <div class="topbar">
   <h1>&#9918; MLB</h1>
   <span class="badge" id="hdr-date"></span>
-  <span style="flex:1"></span>
-  <a href="/webgl-sphere" class="pwa-hide">&#9917; W&#26609;</a>
-  <a href="/webgl-heritage" class="pwa-hide">&#127963; &#19990;&#30028;&#36942;&#30003;</a>
-  <a href="/settings" class="pwa-hide">&#9881;</a>
-  <span class="pwa-hide" style="color:#8b949e;font-size:11px">${safeUser}</span>
 </div>
 
 <div class="body">
