@@ -240,6 +240,15 @@ input[type=range] { flex:1; accent-color:#58a6ff; }
 .cost-tour-btn:hover { background:#132813; }
 .cost-tour-btn.touring { background:#0c2d1a; border-color:#f0b429; color:#f0b429; }
 .cost-row.cost-active { background:rgba(240,180,41,0.12); border-left:3px solid #f0b429; padding-left:5px; }
+.famous-item { display:flex; align-items:center; gap:8px; padding:6px 4px; border-bottom:1px solid #21262d; cursor:pointer; border-radius:4px; transition:background .12s; }
+.famous-item:last-child { border-bottom:none; }
+.famous-item:hover { background:rgba(255,123,84,0.12); }
+.famous-item.famous-active { background:rgba(255,123,84,0.18); border-left:3px solid #ff7b54; padding-left:5px; }
+.famous-flag { font-size:16px; flex-shrink:0; }
+.famous-info { flex:1; min-width:0; }
+.famous-name { font-size:11px; font-weight:600; color:#e6edf3; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.famous-meta { font-size:10px; color:#8b949e; margin-top:1px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.famous-league { font-size:10px; color:#ff7b54; font-weight:600; flex-shrink:0; }
 </style>
 </head>
 <body>
@@ -393,6 +402,11 @@ void main() {
     </div>
 
     <hr>
+    <div id="famous-list-section" style="display:none">
+      <h2>&#127967; 有名スタジアム</h2>
+      <div id="famous-list-body"></div>
+      <hr>
+    </div>
     <div class="cost-section">
       <h2>&#127942; FIFA W杯 建設費ランキング</h2>
       <div class="cost-subtitle">建設コスト上位10スタジアム</div>
@@ -1928,11 +1942,45 @@ function getNextZ() {
     }, 900);
   }
 
+  var famousListSection = document.getElementById('famous-list-section');
+  var famousListBody    = document.getElementById('famous-list-body');
+  var sidePanel = document.querySelector('.side');
+
+  function buildFamousList() {
+    famousListBody.innerHTML = '';
+    for (var fi = 0; fi < FAMOUS_STADIUMS.length; fi++) {
+      (function(idx) {
+        var sd = FAMOUS_STADIUMS[idx];
+        var item = document.createElement('div');
+        item.className = 'famous-item';
+        item.dataset.fidx = String(idx);
+        item.innerHTML =
+          '<span class="famous-flag">' + sd.ctry + '</span>' +
+          '<div class="famous-info">' +
+            '<div class="famous-name">' + sd.name + '</div>' +
+            '<div class="famous-meta">' + sd.city + ' &middot; ' + sd.cap.toLocaleString() + '席 &middot; ' + sd.opened + '年</div>' +
+          '</div>' +
+          '<span class="famous-league">' + sd.league + '</span>';
+        item.addEventListener('click', function() {
+          showFamousTooltip(idx);
+          document.querySelectorAll('.famous-item').forEach(function(el) { el.classList.remove('famous-active'); });
+          item.classList.add('famous-active');
+        });
+        famousListBody.appendChild(item);
+      })(fi);
+    }
+  }
+
   var btnFamousStadiums = document.getElementById('btnFamousStadiums');
   btnFamousStadiums.addEventListener('click', function() {
     showFamousStadiums = !showFamousStadiums;
     btnFamousStadiums.classList.toggle('active', showFamousStadiums);
-    if (!showFamousStadiums) {
+    if (showFamousStadiums) {
+      buildFamousList();
+      famousListSection.style.display = '';
+      sidePanel.scrollTop = 0;
+    } else {
+      famousListSection.style.display = 'none';
       activeFamousIdx = -1;
       famousMkEls.forEach(function(m) { m.el.style.opacity = '0'; });
     }
