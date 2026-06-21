@@ -231,6 +231,14 @@ input[type=range] { flex:1; accent-color:#58a6ff; }
 .cost-tour-btn:hover { background:#132813; }
 .cost-tour-btn.touring { background:#0c2d1a; border-color:#f0b429; color:#f0b429; }
 .cost-row.cost-active { background:rgba(240,180,41,0.12); border-left:3px solid #f0b429; padding-left:5px; }
+.venue-section { margin-bottom:14px; }
+.venue-section h2 { font-size:11px; font-weight:700; color:#58a6ff; text-transform:uppercase; letter-spacing:.5px; margin-bottom:6px; }
+.venue-item { display:flex; align-items:center; gap:6px; padding:6px 8px; border-radius:6px; cursor:pointer; border:1px solid transparent; transition:background .12s,border-color .12s; -webkit-tap-highlight-color:transparent; }
+.venue-item:hover { background:#161b22; border-color:#30363d; }
+.venue-item.venue-active { background:rgba(88,166,255,0.1); border-color:rgba(88,166,255,0.4); }
+.venue-flag { font-size:17px; line-height:1; flex-shrink:0; }
+.venue-name { font-size:11px; font-weight:600; color:#e6edf3; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; flex:1; min-width:0; }
+.venue-city { font-size:10px; color:#8b949e; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 </style>
 </head>
 <body>
@@ -332,6 +340,11 @@ void main() {
   </div>
   <div class="side">
     <div id="cal-section"></div>
+
+    <div class="venue-section">
+      <h2>&#127967; 開催会場（16会場）</h2>
+      <div id="venue-list"></div>
+    </div>
 
     <div class="grp-section">
     <h2>グループ一覧</h2>
@@ -1929,6 +1942,33 @@ function getNextZ() {
     });
   }
 
+  function buildVenueList() {
+    var el = document.getElementById('venue-list');
+    if (!el) return;
+    var html = '';
+    for (var vi = 0; vi < wc2026Stadiums.length; vi++) {
+      var vs = wc2026Stadiums[vi];
+      html += '<div class="venue-item" data-vidx="' + vi + '" title="' + vs.name.replace(/"/g, '&quot;') + '">';
+      html += '<span class="venue-flag">' + vs.ctry + '&#127967;</span>';
+      html += '<div style="flex:1;min-width:0"><div class="venue-name">' + vs.name.replace(/&/g,'&amp;') + '</div>';
+      html += '<div class="venue-city">' + vs.city + '</div></div>';
+      html += '</div>';
+    }
+    el.innerHTML = html;
+    function onVenueTap(e) {
+      var item = e.target.closest('.venue-item');
+      if (!item) return;
+      e.preventDefault();
+      var vidx = parseInt(item.dataset.vidx, 10);
+      el.querySelectorAll('.venue-item').forEach(function(it) { it.classList.remove('venue-active'); });
+      item.classList.add('venue-active');
+      stopTour();
+      showStadiumTooltip(vidx);
+    }
+    el.addEventListener('click', onVenueTap);
+    el.addEventListener('touchend', onVenueTap);
+  }
+
   var stadiumPanel = document.getElementById('stadium-panel');
   document.getElementById('sdpClose').addEventListener('click', function() {
     stadiumPanel.classList.remove('open');
@@ -2328,6 +2368,7 @@ function getNextZ() {
   buildCalendar();
   buildDrawerCalendar();
   buildGroupsPanel();
+  buildVenueList();
   requestAnimationFrame(frame);
 })();
 </script>
