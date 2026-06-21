@@ -1273,10 +1273,27 @@ function getNextZ() {
   }
 
   var hostFilterCtry = null;
+  var HOST_HL_BG = 'rgba(240,210,40,0.28)';
+  var GS_BG_DEFAULT = 'rgba(88,166,255,0.18)';
   function filterDrawerByHost(ctry) {
     hostFilterCtry = (hostFilterCtry === ctry) ? null : ctry;
     document.querySelectorAll('.host-btn').forEach(function(btn) {
       btn.classList.toggle('active', btn.dataset.ctry === hostFilterCtry);
+    });
+    var hostMatchDates = {};
+    if (hostFilterCtry) {
+      MATCHES.forEach(function(m) {
+        if (m.date.startsWith('2026-06-')) {
+          var vstadium = wc2026Stadiums[m.venue];
+          if (vstadium && vstadium.code3 === hostFilterCtry) {
+            hostMatchDates[m.date] = true;
+          }
+        }
+      });
+    }
+    document.querySelectorAll('#drw-cal .cal-match').forEach(function(cell) {
+      var d = cell.dataset.date;
+      cell.style.background = (hostFilterCtry && hostMatchDates[d]) ? HOST_HL_BG : GS_BG_DEFAULT;
     });
     if (!drwBuilt) { buildDrawer(); drwBuilt = true; }
     openDrawer();
