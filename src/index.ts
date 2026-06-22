@@ -9334,6 +9334,21 @@ app.post('/api/search-keywords', authMiddleware, async (c) => {
   }
 });
 
+app.delete('/api/search-keywords/:id', authMiddleware, async (c) => {
+  try {
+    const id = Number(c.req.param('id'));
+    if (!id || isNaN(id)) return c.json({ error: '無効なIDです' }, 400);
+    if (!c.env.DB) return c.json({ error: 'DBが利用できません' }, 503);
+    await c.env.DB.batch([
+      c.env.DB.prepare('DELETE FROM api_search_keyword_sections WHERE keyword_id = ?').bind(id),
+      c.env.DB.prepare('DELETE FROM api_search_keywords WHERE id = ?').bind(id),
+    ]);
+    return c.json({ ok: true });
+  } catch (error) {
+    return c.json({ error: '削除に失敗しました' }, 500);
+  }
+});
+
 app.post('/api/admin/revoke-session', authMiddleware, async (c) => {
   const actor = c.get('user');
   const db = c.env.DB;

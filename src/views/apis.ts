@@ -66,6 +66,16 @@ body{display:flex;flex-direction:column;height:100vh;height:100dvh;overflow:hidd
 #search-history-btn{visibility:visible;}
 #search-save-btn:hover,#search-history-btn:hover{background:var(--bg);}
 #search-btn-wrap{position:relative;flex-shrink:0;width:22px;height:22px;display:flex;align-items:center;justify-content:center;}
+.hist-row{position:relative;overflow:hidden;border-bottom:1px solid var(--border);}
+.hist-row-inner{display:grid;grid-template-columns:1fr auto auto auto;align-items:center;gap:0;background:var(--surface);position:relative;z-index:1;transition:transform 0.2s ease;will-change:transform;cursor:pointer;}
+.hist-row-inner:hover{background:var(--bg);}
+.hist-row-kw{padding:6px 8px;color:var(--link);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.hist-row-cnt{padding:6px 8px;text-align:right;font-size:12px;color:var(--text);}
+.hist-row-sec{padding:6px 8px;text-align:right;font-size:12px;color:var(--text);}
+.hist-row-dt{padding:6px 8px;text-align:right;font-size:11px;color:var(--muted);}
+.hist-row-del{position:absolute;right:0;top:0;bottom:0;width:68px;background:#e53e3e;color:#fff;border:none;font-size:12px;font-weight:700;cursor:pointer;z-index:0;display:flex;align-items:center;justify-content:center;opacity:0;}
+.hist-row.swipe-open .hist-row-del{opacity:1;}
+.hist-row-del:active{background:#c53030;}
 #search-save-modal-overlay{
   display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:1000;
   align-items:center;justify-content:center;
@@ -547,6 +557,8 @@ let _currentFilter = ''; // 現在の検索キーワード（descパネルのハ
 let _descMode = true; // trueのとき日本語説明を表示（▶ボタン非表示）
 let _searchHits = { total: 0, sections: [] }; // 現在の検索ヒット情報
 var _historyRows = []; // 履歴モーダルに読み込んだキーワード行
+var _registeredKeywords = new Set(); // 登録済みキーワードのSet（✍️/🚫判定用）
+var _histSwipeOpenItem = null, _histSwipeOpenInner = null; // 履歴スワイプ状態
 
 // ── 他グループを閉じるヘルパー ────────────────────────
 function collapseOtherGroups(openGi) {
@@ -726,6 +738,9 @@ function setSearchBtnMode(mode) {
   var histBtn = document.getElementById('search-history-btn');
   if (!saveBtn || !histBtn) return;
   if (mode === 'save') {
+    var alreadyRegistered = _registeredKeywords.has((_currentFilter || '').trim().toLowerCase());
+    saveBtn.textContent = alreadyRegistered ? '🚫' : '✍️';
+    saveBtn.title = alreadyRegistered ? '登録済みのキーワードです' : '検索キーワードを登録';
     saveBtn.style.visibility = 'visible';
     histBtn.style.visibility = 'hidden';
   } else {
@@ -778,6 +793,7 @@ async function submitSearchKeyword() {
       body: JSON.stringify({ keyword: kw, totalCount: _searchHits.total, sections: _searchHits.sections })
     });
     if (!res.ok) throw new Error('failed');
+    _registeredKeywords.add(kw.toLowerCase());
     btn.textContent = '登録済み ✓';
     setTimeout(function() {
       document.getElementById('search-save-modal-overlay').classList.remove('open');
@@ -806,15 +822,98 @@ async function openSearchHistoryModal() {
     if (!res.ok) throw new Error('failed');
     var data = await res.json();
     _historyRows = data.keywords || [];
+    _registeredKeywords = new Set(_historyRows.map(function(r) { return r.keyword.toLowerCase(); }));
+    setSearchBtnMode(_currentFilter && _searchHits.total > 0 ? 'save' : 'history');
     renderHistoryTable('');
   } catch(e) {
     body.innerHTML = '<div style="color:var(--danger,#cf222e);padding:12px 0;">読み込みに失敗しました</div>';
   }
 }
 
+function closeHistSwipeOpen() {
+  if (_histSwipeOpenInner) {
+    _histSwipeOpenInner.style.transition = 'transform 0.2s ease';
+    _histSwipeOpenInner.style.transform = 'translateX(0)';
+  }
+  if (_histSwipeOpenItem) _histSwipeOpenItem.classList.remove('swipe-open');
+  _histSwipeOpenItem = null; _histSwipeOpenInner = null;
+}
+
+function addHistSwipeBehavior(item, inner, onDelete) {
+  var startX = 0, dragging = false, moved = false;
+  var THRESHOLD = 50, BTN_W = 68;
+  function isOpen() { return _histSwipeOpenItem === item; }
+  function onStart(x) { startX = x; dragging = true; moved = false; }
+  function onMove(x) {
+    if (!dragging) return;
+    var dx = x - startX;
+    if (Math.abs(dx) < 4) return;
+    moved = true;
+    var base = isOpen() ? -BTN_W : 0;
+    var tx = Math.max(-BTN_W, Math.min(0, base + dx));
+    inner.style.transition = 'none';
+    inner.style.transform = 'translateX(' + tx + 'px)';
+  }
+  function onEnd(x) {
+    if (!dragging) return;
+    dragging = false;
+    var dx = x - startX;
+    inner.style.transition = 'transform 0.2s ease';
+    if (!moved) { if (!isOpen()) { onDelete(); } return; }
+    if (isOpen()) {
+      if (dx > BTN_W / 2) { closeHistSwipeOpen(); }
+      else { inner.style.transform = 'translateX(-' + BTN_W + 'px)'; }
+    } else {
+      if (-dx > THRESHOLD) {
+        if (_histSwipeOpenItem && _histSwipeOpenItem !== item) closeHistSwipeOpen();
+        inner.style.transform = 'translateX(-' + BTN_W + 'px)';
+        item.classList.add('swipe-open');
+        _histSwipeOpenItem = item; _histSwipeOpenInner = inner;
+      } else {
+        inner.style.transform = 'translateX(0)';
+      }
+    }
+  }
+  item.addEventListener('touchstart', function(e) { onStart(e.touches[0].clientX); }, { passive: true });
+  item.addEventListener('touchmove', function(e) { onMove(e.touches[0].clientX); }, { passive: true });
+  item.addEventListener('touchend', function(e) { onEnd(e.changedTouches[0].clientX); });
+  var mouseDown = false;
+  inner.addEventListener('mousedown', function(e) { if (e.button !== 0) return; mouseDown = true; onStart(e.clientX); });
+  document.addEventListener('mousemove', function(e) { if (!mouseDown) return; onMove(e.clientX); });
+  document.addEventListener('mouseup', function(e) { if (!mouseDown) return; mouseDown = false; onEnd(e.clientX); });
+}
+
+function deleteHistoryRow(id, keyword, item) {
+  fetch('/api/search-keywords/' + encodeURIComponent(id), { method: 'DELETE', credentials: 'include' })
+    .then(function(res) { if (!res.ok) throw new Error('failed'); })
+    .then(function() {
+      item.style.overflow = 'hidden';
+      item.style.height = item.offsetHeight + 'px';
+      item.style.transition = 'opacity 0.2s';
+      item.style.opacity = '0';
+      setTimeout(function() {
+        item.style.transition = 'height 0.25s, padding 0.25s, border 0.25s';
+        item.style.height = '0';
+        item.style.borderBottomWidth = '0';
+        setTimeout(function() {
+          item.remove();
+          _historyRows = _historyRows.filter(function(r) { return r.id !== id; });
+          _registeredKeywords.delete(keyword.toLowerCase());
+          setSearchBtnMode(_currentFilter && _searchHits.total > 0 ? 'save' : 'history');
+          var body = document.getElementById('search-history-body');
+          if (body && !body.querySelector('.hist-row')) {
+            body.innerHTML = '<div style="color:var(--muted);padding:12px 0;">登録キーワードはありません</div>';
+          }
+        }, 260);
+      }, 220);
+    })
+    .catch(function() { alert('削除に失敗しました'); });
+}
+
 function renderHistoryTable(filter) {
   var body = document.getElementById('search-history-body');
   if (!body) return;
+  closeHistSwipeOpen();
   var fl = (filter || '').trim().toLowerCase();
   var rows = _historyRows.filter(function(r) {
     return !fl || r.keyword.toLowerCase().indexOf(fl) !== -1;
@@ -827,26 +926,50 @@ function renderHistoryTable(filter) {
     body.innerHTML = '<div style="color:var(--muted);padding:12px 0;">一致するキーワードはありません</div>';
     return;
   }
-  var html = '<table style="width:100%;border-collapse:collapse;font-size:12px;">' +
-    '<thead><tr style="border-bottom:2px solid var(--border);">' +
-    '<th style="text-align:left;padding:4px 8px;color:var(--muted);font-weight:600;">キーワード</th>' +
-    '<th style="text-align:right;padding:4px 8px;color:var(--muted);font-weight:600;">件数</th>' +
-    '<th style="text-align:right;padding:4px 8px;color:var(--muted);font-weight:600;">セクション数</th>' +
-    '<th style="text-align:right;padding:4px 8px;color:var(--muted);font-weight:600;">登録日時</th>' +
-    '</tr></thead><tbody>';
+  var hdr = document.createElement('div');
+  hdr.style.cssText = 'display:grid;grid-template-columns:1fr auto auto auto;border-bottom:2px solid var(--border);';
+  ['キーワード','件数','セクション数','登録日時'].forEach(function(t, i) {
+    var th = document.createElement('div');
+    th.textContent = t;
+    th.style.cssText = 'padding:4px 8px;color:var(--muted);font-weight:600;font-size:11px;' + (i > 0 ? 'text-align:right;' : '');
+    hdr.appendChild(th);
+  });
+  var frag = document.createDocumentFragment();
+  frag.appendChild(hdr);
   rows.forEach(function(r) {
     var dt = r.recorded_at ? r.recorded_at.replace('T', ' ').slice(0, 16) : '';
-    var kwEsc = esc(r.keyword).replace(/'/g, '&#39;');
-    html += '<tr style="border-bottom:1px solid var(--border);">' +
-      '<td style="padding:5px 8px;"><a href="#" style="color:var(--link);text-decoration:none;" ' +
-      'onclick="applyHistoryKeyword(&#39;' + kwEsc + '&#39;);return false;">' + esc(r.keyword) + '</a></td>' +
-      '<td style="padding:5px 8px;text-align:right;">' + r.total_count + '</td>' +
-      '<td style="padding:5px 8px;text-align:right;">' + r.section_count + '</td>' +
-      '<td style="padding:5px 8px;text-align:right;color:var(--muted);">' + esc(dt) + '</td>' +
-      '</tr>';
+    var item = document.createElement('div');
+    item.className = 'hist-row';
+    var delBtn = document.createElement('button');
+    delBtn.className = 'hist-row-del';
+    delBtn.textContent = '削除';
+    delBtn.addEventListener('click', function(e) { e.stopPropagation(); deleteHistoryRow(r.id, r.keyword, item); });
+    var inner = document.createElement('div');
+    inner.className = 'hist-row-inner';
+    var kw = document.createElement('div');
+    kw.className = 'hist-row-kw';
+    kw.textContent = r.keyword;
+    kw.addEventListener('click', function() { applyHistoryKeyword(r.keyword); });
+    var cnt = document.createElement('div');
+    cnt.className = 'hist-row-cnt';
+    cnt.textContent = r.total_count;
+    var sec = document.createElement('div');
+    sec.className = 'hist-row-sec';
+    sec.textContent = r.section_count;
+    var dtEl = document.createElement('div');
+    dtEl.className = 'hist-row-dt';
+    dtEl.textContent = dt;
+    inner.appendChild(kw);
+    inner.appendChild(cnt);
+    inner.appendChild(sec);
+    inner.appendChild(dtEl);
+    item.appendChild(delBtn);
+    item.appendChild(inner);
+    addHistSwipeBehavior(item, inner, function() { applyHistoryKeyword(r.keyword); });
+    frag.appendChild(item);
   });
-  html += '</tbody></table>';
-  body.innerHTML = html;
+  body.innerHTML = '';
+  body.appendChild(frag);
 }
 
 function filterHistoryList(v) {
@@ -889,6 +1012,8 @@ async function registerFromHistorySearch() {
     if (freshRes.ok) {
       var data = await freshRes.json();
       _historyRows = data.keywords || [];
+      _registeredKeywords = new Set(_historyRows.map(function(r) { return r.keyword.toLowerCase(); }));
+      setSearchBtnMode(_currentFilter && _searchHits.total > 0 ? 'save' : 'history');
       renderHistoryTable('');
     }
   } catch(e) {
