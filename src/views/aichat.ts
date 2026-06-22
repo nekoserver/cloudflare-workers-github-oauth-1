@@ -3064,7 +3064,7 @@ export function getAiChatPage(user: {
         method: 'POST',
         credentials: 'same-origin',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: question, model: selectedModel })
+        body: JSON.stringify({ message: question, model: selectedModel, source: 'textbox' })
       }).then(function(r) { return r.json(); }).then(function(d) {
         box.removeChild(loading);
         renderAiResultInModal(box, question, selectedModel, d);
@@ -5071,7 +5071,7 @@ export function getAiChatPage(user: {
       fetch('/api/aichat', {
         method: 'POST', credentials: 'same-origin',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: msg, model: lastModel, systemPromptMode: langModeSelect.value })
+        body: JSON.stringify({ message: msg, model: lastModel, systemPromptMode: langModeSelect.value, source: 'textbox' })
       })
         .then(function(res) { return res.json(); })
         .then(function(data) {
