@@ -272,6 +272,39 @@ input[type=range] { flex:1; accent-color:#58a6ff; }
 .famous-name { font-size:11px; font-weight:600; color:#e6edf3; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .famous-meta { font-size:10px; color:#8b949e; margin-top:1px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .famous-league { font-size:10px; color:#ff7b54; font-weight:600; flex-shrink:0; }
+#league-btn { position:absolute; left:10px; top:90px; z-index:5; background:rgba(13,17,23,0.88); border:1px solid #30363d; border-radius:6px; color:#e6edf3; font-size:12px; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; padding:6px 12px; cursor:pointer; white-space:nowrap; transition:background .15s,border-color .15s; }
+#league-btn:hover { background:rgba(13,17,23,1); border-color:#3fb950; color:#3fb950; }
+#league-overlay { position:fixed; inset:0; z-index:300; background:rgba(0,0,0,0.88); display:none; overflow-y:auto; }
+#league-overlay.open { display:block; }
+.lg-modal { background:#0d1117; border:1px solid #30363d; border-radius:12px; margin:20px auto; max-width:1100px; overflow:hidden; }
+.lg-hdr { display:flex; align-items:center; justify-content:space-between; padding:14px 18px; border-bottom:1px solid #30363d; position:sticky; top:0; background:#0d1117; z-index:1; }
+.lg-title { font-size:14px; font-weight:700; color:#3fb950; }
+.lg-close { background:none; border:none; color:#8b949e; font-size:22px; line-height:1; cursor:pointer; padding:0 4px; }
+.lg-close:hover { color:#e6edf3; }
+.lg-body { padding:16px; }
+.lg-updated { font-size:10px; color:#484f58; text-align:right; padding:0 4px 10px; }
+.lg-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; }
+@media(max-width:900px) { .lg-grid { grid-template-columns:repeat(2,1fr); } }
+@media(max-width:560px) { .lg-grid { grid-template-columns:1fr; } }
+.lg-grp { background:#161b22; border:1px solid #30363d; border-radius:8px; overflow:hidden; }
+.lg-grp-hdr { display:flex; align-items:center; gap:8px; padding:7px 10px; background:#21262d; border-bottom:1px solid #30363d; }
+.lg-grp-badge { display:inline-flex; align-items:center; justify-content:center; width:22px; height:22px; background:#0d1117; border-radius:50%; font-size:11px; font-weight:700; color:#f0b429; }
+.lg-tbl { width:100%; border-collapse:collapse; font-size:11px; }
+.lg-tbl th { padding:4px 4px; text-align:center; color:#484f58; font-weight:600; font-size:10px; border-bottom:1px solid #30363d; background:#161b22; white-space:nowrap; }
+.lg-tbl th.lg-th-team { text-align:left; padding-left:8px; min-width:90px; }
+.lg-tbl td { padding:5px 4px; text-align:center; color:#8b949e; border-bottom:1px solid #21262d; white-space:nowrap; }
+.lg-tbl td.lg-td-team { text-align:left; padding-left:4px; }
+.lg-tbl tr:last-child td { border-bottom:none; }
+.lg-tbl tr.lg-safe { background:rgba(63,185,80,0.07); }
+.lg-tbl tr.lg-safe td { color:#c9d1d9; }
+.lg-tbl tr.lg-safe td.lg-td-team { border-left:3px solid #3fb950; padding-left:1px; }
+.lg-tbl tr.lg-out td { color:#3d444d; }
+.lg-tbl tr.lg-out td.lg-td-team { border-left:3px solid #f85149; padding-left:1px; }
+.lg-team { display:flex; align-items:center; gap:4px; }
+.lg-flag { font-size:15px; line-height:1; }
+.lg-code { font-size:10px; font-weight:700; font-family:'SFMono-Regular',Consolas,monospace; }
+.lg-pts { font-weight:700; }
+.lg-safe .lg-pts { color:#3fb950; }
 </style>
 </head>
 <body>
@@ -370,6 +403,7 @@ void main() {
     </div>
     <button id="drawer-open-btn" title="試合一覧を開く">&#9776; 試合一覧</button>
     <button id="tnmt-btn" title="トーナメント表を開く">&#127942; トーナメント</button>
+    <button id="league-btn" title="グループリーグ順位表を開く">&#128200; リーグ表</button>
     <button id="btnStadiumTour" title="全16会場を巡回">&#127967; 会場巡回</button>
     <button id="btnSearch" title="国名・会場名で検索">&#128269; 検索</button>
     <button id="btnNight" title="夜景モードの切替">&#127769; 夜景</button>
@@ -565,6 +599,15 @@ void main() {
       <button class="tnmt-close" id="tnmtClose">&#10005;</button>
     </div>
     <div class="tnmt-body" id="tnmt-body"></div>
+  </div>
+</div>
+<div id="league-overlay">
+  <div class="lg-modal">
+    <div class="lg-hdr">
+      <span class="lg-title">&#128200; 2026 FIFA W杯 グループリーグ順位表</span>
+      <button class="lg-close" id="lgClose">&#10005;</button>
+    </div>
+    <div class="lg-body" id="lg-body"></div>
   </div>
 </div>
 <div id="mk-tooltip"></div>
@@ -1026,6 +1069,13 @@ function getNextZ() {
   var stadiumMatches = {};
   for (var _vi = 0; _vi < 16; _vi++) stadiumMatches[_vi] = [];
   for (var _mi = 0; _mi < MATCHES.length; _mi++) stadiumMatches[MATCHES[_mi].venue].push(_mi);
+
+  var WC_RESULTS_ARR = [
+    [2,0],[2,1],[1,1],[4,1],[1,1],[1,1],[0,1],[2,0],[7,1],[2,2],
+    [1,0],[5,1],[0,0],[1,1],[1,1],[2,2],[3,1],[1,4],[3,0],[3,1],
+    [1,1],[4,2],[1,0],[1,3],[1,1],[4,1],[6,0],[1,0],[2,0],[0,1],
+    [3,0],[0,1],[5,1],[2,1],[0,0],[0,4],[4,0],[0,0],[2,2],[1,3]
+  ];
 
   var FLAG_CODE = {
     '🇲🇽':'MEX','🇿🇦':'RSA','🇰🇷':'KOR','🇨🇿':'CZE','🇨🇦':'CAN','🇧🇦':'BIH',
@@ -1561,6 +1611,94 @@ function getNextZ() {
   tnmtClose.addEventListener('click', closeTournament);
   tnmtOverlay.addEventListener('click', function(e) {
     if (e.target === tnmtOverlay) closeTournament();
+  });
+
+  var leagueOverlay = document.getElementById('league-overlay');
+  var leagueBtn = document.getElementById('league-btn');
+  var lgClose = document.getElementById('lgClose');
+  var leagueBuilt = false;
+
+  function buildLeagueModal() {
+    var body = document.getElementById('lg-body');
+    if (!body) return;
+    var teamStats = {};
+    GROUPS.forEach(function(grp) {
+      grp.f.forEach(function(f) {
+        teamStats[f] = {f:f, p:0, w:0, d:0, l:0, gf:0, ga:0, pts:0, rem:0, grp:grp.g};
+      });
+    });
+    var groupMatchCounts = {};
+    GROUPS.forEach(function(grp) { groupMatchCounts[grp.g] = 0; });
+    for (var mi = 0; mi < MATCHES.length; mi++) {
+      var m = MATCHES[mi];
+      if (!teamStats[m.a] || !teamStats[m.b]) continue;
+      var grpKey = teamStats[m.a].grp;
+      var res = WC_RESULTS_ARR[mi];
+      if (res) {
+        var sa = res[0], sb = res[1];
+        teamStats[m.a].p++; teamStats[m.b].p++;
+        teamStats[m.a].gf += sa; teamStats[m.a].ga += sb;
+        teamStats[m.b].gf += sb; teamStats[m.b].ga += sa;
+        if (sa > sb) { teamStats[m.a].w++; teamStats[m.b].l++; teamStats[m.a].pts += 3; }
+        else if (sa < sb) { teamStats[m.b].w++; teamStats[m.a].l++; teamStats[m.b].pts += 3; }
+        else { teamStats[m.a].d++; teamStats[m.b].d++; teamStats[m.a].pts++; teamStats[m.b].pts++; }
+      } else {
+        var now = Date.now();
+        var ko = new Date(m.date + 'T' + m.time + ':00Z').getTime();
+        if (ko > now - 110*60000) {
+          teamStats[m.a].rem++;
+          teamStats[m.b].rem++;
+        }
+      }
+    }
+    var html = '<div class="lg-updated">更新: 2026-06-22 (MD1〜MD2 確定分)</div><div class="lg-grid">';
+    GROUPS.forEach(function(grp) {
+      var teams = grp.f.map(function(f) { return teamStats[f]; });
+      teams.sort(function(a,b) {
+        var diff = b.pts - a.pts; if (diff !== 0) return diff;
+        diff = (b.gf-b.ga) - (a.gf-a.ga); if (diff !== 0) return diff;
+        return b.gf - a.gf;
+      });
+      var second = teams[1];
+      var third = teams[2];
+      teams.forEach(function(t,i) {
+        var maxPts = t.pts + t.rem * 3;
+        var thirdMaxPts = third ? third.pts + third.rem * 3 : 0;
+        if (i < 2) {
+          t.status = (i === 0 && t.pts > thirdMaxPts) ? 'safe' :
+                     (i === 1 && t.pts > thirdMaxPts) ? 'safe' : 'contention';
+        } else {
+          t.status = (second && maxPts < second.pts) ? 'out' : 'contention';
+        }
+      });
+      html += '<div class="lg-grp"><div class="lg-grp-hdr"><span class="lg-grp-badge">' + grp.g + '</span>';
+      html += grp.f.join('') + '</div>';
+      html += '<table class="lg-tbl"><thead><tr><th class="lg-th-team">チーム</th><th>試</th><th>勝</th><th>分</th><th>負</th><th>得</th><th>失</th><th>差</th><th>点</th><th>残</th></tr></thead><tbody>';
+      teams.forEach(function(t) {
+        var gd = t.gf - t.ga;
+        var cls = t.status === 'safe' ? 'lg-safe' : t.status === 'out' ? 'lg-out' : '';
+        html += '<tr class="' + cls + '">';
+        html += '<td class="lg-td-team"><div class="lg-team"><span class="lg-flag">' + t.f + '</span><span class="lg-code">' + (FLAG_CODE[t.f] || '') + '</span></div></td>';
+        html += '<td>' + t.p + '</td><td>' + t.w + '</td><td>' + t.d + '</td><td>' + t.l + '</td>';
+        html += '<td>' + t.gf + '</td><td>' + t.ga + '</td><td>' + (gd > 0 ? '+' : '') + gd + '</td>';
+        html += '<td class="lg-pts">' + t.pts + '</td><td>' + t.rem + '</td></tr>';
+      });
+      html += '</tbody></table></div>';
+    });
+    html += '</div>';
+    body.innerHTML = html;
+  }
+
+  function openLeague() {
+    if (!leagueBuilt) { buildLeagueModal(); leagueBuilt = true; }
+    leagueOverlay.style.zIndex = String(getNextZ());
+    leagueOverlay.classList.add('open');
+  }
+  function closeLeague() { leagueOverlay.classList.remove('open'); }
+  leagueBtn.addEventListener('click', openLeague);
+  lgClose.addEventListener('click', closeLeague);
+  leagueOverlay.addEventListener('click', function(e) {
+    if (e.target === leagueOverlay) closeLeague();
   });
 
   var teamMatches = {};
