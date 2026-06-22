@@ -4297,6 +4297,12 @@ app.delete('/api/uuid/history', authMiddleware, async (c) => {
   return c.json({ ok: true });
 });
 
+app.get('/api/uuid/count', authMiddleware, async (c) => {
+  const user = c.get('user');
+  const row = await c.env.DB.prepare('SELECT COUNT(*) AS cnt FROM uuid_history WHERE user_id = ?').bind(user.sub).first<{ cnt: number }>();
+  return c.json({ count: row?.cnt ?? 0 });
+});
+
 const MEXICO_VENUE_KEYWORDS = ['Harp', 'Monterrey', 'Mexico', 'Estadio'];
 
 function buildMonthGameDates(rawDates: any[]): Record<string, {US: boolean, CA: boolean, MX: boolean}> {
@@ -8770,6 +8776,7 @@ app.get('/api', (c) => {
         'POST /api/uuid/save',
         'GET /api/uuid/search',
         'DELETE /api/uuid/history',
+        'GET /api/uuid/count',
       ],
     },
   });
