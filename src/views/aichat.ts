@@ -4476,6 +4476,14 @@ export function getAiChatPage(user: {
           var defaultPalette = ['#6366f1','#22c55e','#f59e0b','#ef4444','#0ea5e9','#a855f7','#14b8a6','#f97316'];
           function modelColor(m, i) { return MODEL_COLORS_LOCAL[m] || defaultPalette[i % defaultPalette.length]; }
           function shortModel(m) { return m ? (m.split('/').pop() || m).replace(/-instruct.*/, '') : ''; }
+          var MODEL_PRICING = {
+            '@cf/meta/llama-3.3-70b-instruct-fp8-fast': { in: 0.293, out: 2.253 },
+            '@cf/meta/llama-3.1-8b-instruct-fp8':       { in: 0.152, out: 0.287 },
+            '@cf/meta/llama-3.1-70b-instruct':          { in: 0.293, out: 2.253 },
+            '@cf/google/gemma-4-26b-a4b-it':            { in: 0.100, out: 0.300 },
+            '@cf/google/gemma-3-12b-it':                { in: 0.345, out: 0.556 },
+            '@cf/meta/llama-4-scout-17b-16e-instruct':  { in: 0.270, out: 0.850 }
+          };
           var html = '';
           html += '<div style="margin-bottom:12px;">';
           models.forEach(function(m, i) {
@@ -4509,6 +4517,29 @@ export function getAiChatPage(user: {
             html += '</svg>';
             html += '</div>';
           });
+          html += '<div style="margin-top:20px;border-top:1px solid var(--border-color);padding-top:14px;">';
+          html += '<div style="font-size:11px;font-weight:700;color:var(--text-secondary);margin-bottom:8px;">モデル単価（Cloudflare Workers AI）</div>';
+          html += '<table style="width:100%;border-collapse:collapse;font-size:11px;">';
+          html += '<thead><tr style="border-bottom:1px solid var(--border-color);">';
+          html += '<th style="text-align:left;padding:3px 6px;color:var(--text-muted);font-weight:600;">モデル</th>';
+          html += '<th style="text-align:right;padding:3px 6px;color:var(--text-muted);font-weight:600;">入力 $/1M</th>';
+          html += '<th style="text-align:right;padding:3px 6px;color:var(--text-muted);font-weight:600;">出力 $/1M</th>';
+          html += '</tr></thead><tbody>';
+          var pricingModels = Object.keys(MODEL_PRICING);
+          pricingModels.forEach(function(m, i) {
+            var p = MODEL_PRICING[m];
+            var col = escHtml(modelColor(m, i));
+            var label = escHtml(shortModel(m));
+            var inUse = modelSet[m] ? 'font-weight:600;' : 'opacity:0.55;';
+            html += '<tr style="border-bottom:1px solid var(--border-color);' + inUse + '">';
+            html += '<td style="padding:3px 6px;"><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:' + col + ';margin-right:5px;vertical-align:middle;flex-shrink:0;"></span>' + label + '</td>';
+            html += '<td style="padding:3px 6px;text-align:right;font-family:monospace;">$' + p.in.toFixed(3) + '</td>';
+            html += '<td style="padding:3px 6px;text-align:right;font-family:monospace;">$' + p.out.toFixed(3) + '</td>';
+            html += '</tr>';
+          });
+          html += '</tbody></table>';
+          html += '<div style="margin-top:6px;font-size:10px;color:var(--text-muted);">太字: 使用実績あり　<a href="https://developers.cloudflare.com/workers-ai/platform/pricing/" target="_blank" rel="noopener" style="color:var(--accent-color,#667eea);">公式料金ページ ↗</a></div>';
+          html += '</div>';
           tokenUsageBody.innerHTML = html;
         })
         .catch(function() { tokenUsageBody.innerHTML = '<div style="color:var(--text-muted);">取得に失敗しました</div>'; });
