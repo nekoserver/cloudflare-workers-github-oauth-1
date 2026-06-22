@@ -887,6 +887,8 @@ CREATE INDEX IF NOT EXISTS idx_user_sessions_revoked_at ON user_sessions(revoked
 CREATE INDEX IF NOT EXISTS idx_webhook_log_source ON webhook_log(source);
 CREATE INDEX IF NOT EXISTS idx_webhook_log_received_at ON webhook_log(received_at);`,
 
+  '0063': `ALTER TABLE ai_chat_shares ADD COLUMN source TEXT;`,
+
   '0062': `CREATE TABLE IF NOT EXISTS uuid_history (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   user_id TEXT NOT NULL,
@@ -3142,7 +3144,7 @@ app.post('/api/aichat', authMiddleware, async (c) => {
   if (!c.env.AI) {
     return jsonUtf8({ error: 'AI バインディングが未設定です' }, 503);
   }
-  let body: { message?: string; model?: string; systemPromptMode?: string };
+  let body: { message?: string; model?: string; systemPromptMode?: string; source?: string };
   try {
     body = await c.req.json();
   } catch {
@@ -3163,6 +3165,8 @@ app.post('/api/aichat', authMiddleware, async (c) => {
     : (configuredModel || fallbackModel);
   const rawMode = (body.systemPromptMode ?? '').trim();
   const systemPromptMode: SystemPromptMode = (ALLOWED_MODES.has(rawMode) ? rawMode : 'a') as SystemPromptMode;
+  const rawSource = (body.source ?? '').trim();
+  const source = rawSource === 'textbox' ? 'textbox' : 'api';
 
   type AiUsage = { input_tokens: number | null; output_tokens: number | null; total_tokens: number | null };
   const runAi = async (model: string): Promise<{ text: string; usage: AiUsage }> => {
@@ -3219,8 +3223,8 @@ app.post('/api/aichat', authMiddleware, async (c) => {
       const conversationHash = await computeConversationHash(user.sub, message, response, usedModel, now);
       const questionHash = await computeQuestionHash(user.sub, message);
       await c.env.DB.prepare(
-        'INSERT INTO ai_chat_shares (id, user_id, user_hash, question, answer, model, created_at, conversation_hash, question_hash, input_tokens, output_tokens, total_tokens) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
-      ).bind(shareId, user.sub, userHash, message, response, usedModel, now, conversationHash, questionHash, usage.input_tokens, usage.output_tokens, usage.total_tokens).run();
+        'INSERT INTO ai_chat_shares (id, user_id, user_hash, question, answer, model, created_at, conversation_hash, question_hash, input_tokens, output_tokens, total_tokens, source) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+      ).bind(shareId, user.sub, userHash, message, response, usedModel, now, conversationHash, questionHash, usage.input_tokens, usage.output_tokens, usage.total_tokens, source).run();
       return { shareId, userHash, conversationHash, questionHash };
     } catch (saveErr) {
       logger.warn('AI chat auto-save failed', {
