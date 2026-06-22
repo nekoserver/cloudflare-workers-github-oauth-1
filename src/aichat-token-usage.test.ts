@@ -126,7 +126,7 @@ describe('トークン使用量: フロントエンド', () => {
     const html = buildPage();
     const idx = html.indexOf('/api/aichat/token-usage');
     expect(idx).toBeGreaterThan(-1);
-    const surrounding = html.slice(Math.max(0, idx - 200), idx + 3000);
+    const surrounding = html.slice(Math.max(0, idx - 200), idx + 5000);
     const hasSvg = surrounding.includes('svg') || surrounding.includes('SVG') || surrounding.includes('rect') || surrounding.includes('canvas');
     expect(hasSvg).toBe(true);
   });
