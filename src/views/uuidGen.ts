@@ -69,6 +69,7 @@ input[type=text] { flex:1; min-width:160px; font-family:ui-monospace,SFMono-Regu
   <h1>🔑 UUID生成</h1>
   <a href="/">ホーム</a>
   <span class="user-badge">${safeUser}</span>
+  <span id="d1CountBadge" style="font-size:11px;background:rgba(31,111,235,.15);color:var(--accent);border-radius:12px;padding:2px 10px;display:none">D1: <span id="d1CountVal">-</span>件</span>
 </div>
 <main>
   <div class="card">
@@ -147,6 +148,16 @@ input[type=text] { flex:1; min-width:160px; font-family:ui-monospace,SFMono-Regu
 
   var currentFmt = 'hyphen';
   var generatedUuids = [];
+  var d1CountBadge = document.getElementById('d1CountBadge');
+  var d1CountVal = document.getElementById('d1CountVal');
+
+  function refreshD1Count() {
+    fetch('/api/uuid/count').then(function(r) { return r.json(); }).then(function(d) {
+      d1CountVal.textContent = d.count;
+      d1CountBadge.style.display = '';
+    }).catch(function() {});
+  }
+  refreshD1Count();
 
   document.querySelectorAll('.tab').forEach(function(tab) {
     tab.addEventListener('click', function() {
@@ -263,6 +274,7 @@ input[type=text] { flex:1; min-width:160px; font-family:ui-monospace,SFMono-Regu
       body: JSON.stringify({ uuids: items })
     }).then(function(r) { return r.json(); }).then(function(d) {
       setSaveStatus('D1保存: ' + d.saved + '件', 'ok');
+      refreshD1Count();
     }).catch(function() {
       setSaveStatus('D1保存失敗', 'err');
     });
@@ -336,6 +348,7 @@ input[type=text] { flex:1; min-width:160px; font-family:ui-monospace,SFMono-Regu
     if (!confirm('全ての履歴を削除しますか?')) return;
     fetch('/api/uuid/history', { method: 'DELETE' }).then(function(r) { return r.json(); }).then(function() {
       loadHistory('');
+      refreshD1Count();
     });
   });
 })();
