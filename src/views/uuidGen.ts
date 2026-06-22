@@ -193,7 +193,7 @@ input[type=text] { flex:1; min-width:160px; font-family:ui-monospace,SFMono-Regu
     var ms = Date.now();
     var msHi = Math.floor(ms / 0x1000);
     var msLo = ms & 0xfff;
-    var b = new Uint8Array(10);
+    var b = new Uint8Array(11);
     crypto.getRandomValues(b);
     var hi32 = (msHi >>> 0);
     var lo16 = ((msLo << 4) | (b[0] & 0x0f)) & 0xffff;
