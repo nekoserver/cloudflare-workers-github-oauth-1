@@ -97,7 +97,7 @@ h1 { font-size: 16px; font-weight: 700; }
 <div class="preview-panel">
   <div class="preview-header">iframe プレビュー（変換後HTMLをそのまま表示）</div>
   <div class="preview-body">
-    <iframe srcdoc="${transformedHtml.replace(/"/g, '&quot;').replace(/'/g, '&#39;')}" sandbox="allow-same-origin"></iframe>
+    <iframe srcdoc="${transformedHtml.replace(/"/g, '&quot;').replace(/'/g, '&#39;')}" sandbox="allow-same-origin allow-top-navigation-by-user-activation"></iframe>
   </div>
 </div>
 
