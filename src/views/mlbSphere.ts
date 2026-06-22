@@ -262,6 +262,7 @@ void main(){
     {id:579328,name:'菊池雄星',team:'LAA',teamId:108,num:16,pos:'SP',type:'P'},
     {id:506433,name:'ダルビッシュ有',team:'SD',teamId:135,num:11,pos:'SP',type:'P'},
     {id:673513,name:'松井裕樹',team:'SD',teamId:135,num:1,pos:'RP',type:'P'},
+    {id:673540,name:'千賀滉大',team:'NYM',teamId:121,num:34,pos:'SP',type:'P'},
     {id:673548,name:'鈴木誠也',team:'CHC',teamId:112,num:27,pos:'RF',type:'H'},
     {id:807799,name:'吉田正尚',team:'BOS',teamId:111,num:7,pos:'DH',type:'H'},
     {id:672960,name:'岡本和真',team:'TOR',teamId:141,num:7,pos:'3B',type:'H'},
