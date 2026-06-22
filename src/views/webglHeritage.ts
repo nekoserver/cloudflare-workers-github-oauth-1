@@ -148,6 +148,7 @@ void main() {
     <div class="canvas-ctrl-btns">
       <button class="canvas-ctrl-btn" id="btnAxisLock">＋ 軸垂直固定</button>
       <button class="canvas-ctrl-btn" id="btnAutoRot">⏸ 自転停止</button>
+      <button class="canvas-ctrl-btn" id="btnAmericaTour">🌎 アメリカ巡回</button>
     </div>
   </div>
   <div class="side">
@@ -223,6 +224,7 @@ void main() {
   var rotSpdValEl = document.getElementById('rotSpdVal');
   var spinBoostEl = document.getElementById('spinBoost');
   var spinBoostValEl = document.getElementById('spinBoostVal');
+  var btnAmericaTour = document.getElementById('btnAmericaTour');
 
   var isListMode = true;
 
@@ -625,6 +627,47 @@ void main() {
     }
   }
 
+  var AMERICAS_IDXS = [];
+  for (var ai = 0; ai < HERITAGE.length; ai++) {
+    if (HERITAGE[ai].lon < -30) AMERICAS_IDXS.push(ai);
+  }
+
+  var americaTourActive = false;
+  var americaTourPos = 0;
+  var americaTourTimer = null;
+  var AMERICAS_INTERVAL = 5000;
+
+  function stopAmericaTour() {
+    americaTourActive = false;
+    if (americaTourTimer !== null) { clearTimeout(americaTourTimer); americaTourTimer = null; }
+    btnAmericaTour.classList.remove('active');
+    btnAmericaTour.textContent = '🌎 アメリカ巡回';
+  }
+
+  function nextAmericaSite() {
+    if (!americaTourActive) return;
+    if (AMERICAS_IDXS.length === 0) { stopAmericaTour(); return; }
+    var idx = AMERICAS_IDXS[americaTourPos % AMERICAS_IDXS.length];
+    americaTourPos++;
+    showMarkerTooltip(idx, 0, 0);
+    americaTourTimer = setTimeout(nextAmericaSite, AMERICAS_INTERVAL);
+  }
+
+  function startAmericaTour() {
+    americaTourActive = true;
+    americaTourPos = 0;
+    btnAmericaTour.classList.add('active');
+    btnAmericaTour.textContent = '⏹ 巡回停止';
+    autoRot = false;
+    btnAutoRot.textContent = '▶ 回転';
+    btnAutoRot.classList.add('active');
+    nextAmericaSite();
+  }
+
+  btnAmericaTour.addEventListener('click', function() {
+    if (americaTourActive) { stopAmericaTour(); } else { startAmericaTour(); }
+  });
+
   var tooltip = document.getElementById('mk-tooltip');
   var activeIdx = -1;
   var canvasRect = {left:0, top:0, width:0, height:0};
@@ -743,7 +786,7 @@ void main() {
     updateProximityList();
   });
 
-  canvas.addEventListener('click', function() { hideTooltip(); });
+  canvas.addEventListener('click', function() { hideTooltip(); stopAmericaTour(); });
 
   gl.enable(gl.DEPTH_TEST);
 
