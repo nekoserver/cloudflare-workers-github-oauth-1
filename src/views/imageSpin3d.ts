@@ -89,13 +89,16 @@ dropZone.addEventListener('drop', function(e){
 });
 
 function loadImage(file) {
-  var url = URL.createObjectURL(file);
-  var img = new Image();
-  img.onload = function() {
-    origImage = img;
-    processImage(img, parseInt(tolSlider.value));
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    var img = new Image();
+    img.onload = function() {
+      origImage = img;
+      processImage(img, parseInt(tolSlider.value));
+    };
+    img.src = e.target.result;
   };
-  img.src = url;
+  reader.readAsDataURL(file);
 }
 
 // ── 背景除去 ───────────────────────────────────────────────
