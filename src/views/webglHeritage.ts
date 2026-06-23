@@ -31,10 +31,10 @@ canvas:active { cursor:grabbing; }
 .hud { position:absolute; bottom:10px; left:10px; background:rgba(0,0,0,.7); border:1px solid #30363d; border-radius:6px; padding:6px 10px; font-size:11px; font-family:monospace; color:#58a6ff; line-height:1.9; pointer-events:none; }
 #markers { position:absolute; top:0; left:0; width:100%; height:100%; pointer-events:none; overflow:hidden; }
 .mk { position:absolute; transform:translate(-50%,-50%); line-height:1; font-size:16px; text-shadow:0 1px 3px #000,0 0 8px rgba(0,0,0,0.9); pointer-events:auto; cursor:pointer; user-select:none; -webkit-user-select:none; }
-#mk-tooltip { position:fixed; background:rgba(13,17,23,0.97); border:1px solid #3fb950; border-radius:8px; padding:7px 12px; font-size:12px; color:#e6edf3; white-space:nowrap; pointer-events:none; opacity:0; transition:opacity .15s; z-index:60; transform:translate(-50%,-110%); line-height:1.7; }
+#mk-tooltip { position:fixed; background:rgba(13,17,23,0.97); border:1px solid #3fb950; border-radius:8px; padding:7px 12px; font-size:12px; color:#e6edf3; white-space:normal; min-width:180px; pointer-events:auto; opacity:0; transition:opacity .15s; z-index:60; transform:translate(-50%,-110%); line-height:1.7; }
+.tt-name { white-space:nowrap; font-weight:700; font-size:13px; }
+.tt-sub { white-space:nowrap; font-size:12px; margin-top:3px; }
 #mk-tooltip.below { transform:translate(-50%, 14px); }
-#mk-tooltip .tt-name { font-weight:700; font-size:13px; }
-#mk-tooltip .tt-sub { font-size:12px; margin-top:3px; }
 .side { background:#0d1117; border-left:1px solid #30363d; display:flex; flex-direction:column; overflow:hidden; }
 .side-header { padding:10px 10px 8px; border-bottom:1px solid #21262d; flex-shrink:0; }
 .side-title { font-size:10px; font-weight:700; color:#3fb950; text-transform:uppercase; letter-spacing:.5px; margin-bottom:6px; }
@@ -113,6 +113,16 @@ canvas:active { cursor:grabbing; }
 .stats-legend-list { display:flex; flex-direction:column; gap:7px; margin-top:4px; }
 .stats-legend-item { display:flex; align-items:center; gap:7px; font-size:12px; }
 .stats-legend-dot { width:10px; height:10px; border-radius:50%; flex-shrink:0; }
+.landing-overlay { display:none; position:fixed; inset:0; z-index:150; pointer-events:none; align-items:center; justify-content:flex-end; padding:0 0 40px; flex-direction:column; }
+.landing-overlay.active { display:flex; }
+.landing-card { background:rgba(13,17,23,0.97); border:1px solid #3fb950; border-radius:12px; padding:18px 28px; text-align:center; pointer-events:auto; min-width:300px; box-shadow:0 4px 32px rgba(63,185,80,0.2); }
+.landing-site-name { font-size:16px; font-weight:700; color:#e6edf3; margin-bottom:4px; }
+.landing-site-sub { font-size:12px; color:#8b949e; margin-bottom:10px; }
+.landing-status-txt { font-size:13px; color:#3fb950; margin-bottom:8px; font-weight:600; }
+.landing-prog-track { width:100%; height:6px; background:#21262d; border-radius:3px; overflow:hidden; margin-bottom:16px; }
+.landing-prog-fill { height:100%; background:linear-gradient(90deg,#3fb950,#58a6ff); border-radius:3px; width:0%; transition:width 0.15s linear; }
+.landing-exit-btn { background:#161b22; border:1px solid #3fb950; border-radius:6px; color:#3fb950; font-size:13px; padding:7px 20px; cursor:pointer; font-family:inherit; }
+.landing-exit-btn:hover { background:#0c2d1a; }
 </style>
 </head>
 <body>
@@ -252,6 +262,16 @@ void main() {
 </div>
 
 <div id="mk-tooltip"></div>
+
+<div class="landing-overlay" id="landing-overlay">
+  <div class="landing-card">
+    <div class="landing-site-name" id="landing-title"></div>
+    <div class="landing-site-sub" id="landing-sub"></div>
+    <div class="landing-status-txt" id="landing-status">着陸中...</div>
+    <div class="landing-prog-track"><div class="landing-prog-fill" id="landing-prog"></div></div>
+    <button class="landing-exit-btn" id="landing-exit">🚁 離脱する</button>
+  </div>
+</div>
 
 <div id="stats-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:200;align-items:center;justify-content:center;">
   <div id="stats-modal" style="background:#0d1117;border:1px solid #30363d;border-radius:10px;width:min(92vw,680px);max-height:86vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 8px 40px rgba(0,0,0,.8);">
@@ -792,6 +812,23 @@ void main() {
   var flyTarget = null, flyFrom = null, flyStart = 0;
   var FLY_DUR = 2500;
 
+  var landingMode = false;
+  var landingIdx = -1;
+  var landingPhase = 0;
+  var landingPhaseStart = 0;
+  var landingZoomFrom = 3.2;
+  var landingRotStart = 0;
+  var landingZoomOutFrom = 9.5;
+  var LANDING_ZOOM_TARGET = 9.5;
+  var LANDING_ZOOM_IN_DUR = 2200;
+  var LANDING_ROT_DUR = 9000;
+  var LANDING_ZOOM_OUT_DUR = 1800;
+  var landingOverlayEl = null;
+  var landingTitleEl = null;
+  var landingSubEl = null;
+  var landingStatusEl = null;
+  var landingProgEl = null;
+
   function flyTo(lat, lon) {
     var latR = lat * Math.PI / 180;
     var lonR = lon * Math.PI / 180;
@@ -818,6 +855,39 @@ void main() {
       btnAxisLock.classList.remove('active');
       btnAxisLock.textContent = '＋ 軸垂直固定';
     }
+  }
+
+  function startLanding(hidx) {
+    if (landingMode) return;
+    landingIdx = hidx;
+    var ld = HERITAGE[hidx];
+    flyTo(ld.lat, ld.lon);
+    stopAmericaTour(); stopEuropeTour(); stopAfricaTour(); stopJapanTour();
+    setTimeout(function() {
+      flyTarget = null;
+      landingMode = true;
+      landingPhase = 1;
+      landingPhaseStart = performance.now();
+      landingZoomFrom = zoom;
+      markersDiv.style.display = 'none';
+      tooltip.style.opacity = '0';
+      if (landingTitleEl) landingTitleEl.textContent = ld.e + ' ' + ld.f + ' ' + ld.n;
+      if (landingSubEl) landingSubEl.textContent = ld.t + '  ' + ld.c + '  ' + ld.y + '年登録';
+      if (landingStatusEl) landingStatusEl.textContent = '着陸中...';
+      if (landingProgEl) landingProgEl.style.width = '0%';
+      if (landingOverlayEl) landingOverlayEl.classList.add('active');
+    }, FLY_DUR + 100);
+  }
+
+  function stopLanding() {
+    landingMode = false;
+    landingPhase = 0;
+    markersDiv.style.display = '';
+    if (landingOverlayEl) landingOverlayEl.classList.remove('active');
+    zoom = 3.5;
+    autoRot = true;
+    btnAutoRot.textContent = '⏸ 自転停止';
+    btnAutoRot.classList.remove('active');
   }
 
   var sideHeader = document.querySelector('.side-header');
@@ -1216,6 +1286,14 @@ void main() {
   window.addEventListener('resize', updateCanvasRect);
   updateCanvasRect();
 
+  landingOverlayEl = document.getElementById('landing-overlay');
+  landingTitleEl   = document.getElementById('landing-title');
+  landingSubEl     = document.getElementById('landing-sub');
+  landingStatusEl  = document.getElementById('landing-status');
+  landingProgEl    = document.getElementById('landing-prog');
+  var landingExitBtn = document.getElementById('landing-exit');
+  if (landingExitBtn) landingExitBtn.addEventListener('click', stopLanding);
+
   function hideTooltip() { tooltip.style.opacity = '0'; activeIdx = -1; }
 
   function positionTooltip(vx, vy) {
@@ -1228,7 +1306,13 @@ void main() {
   function showMarkerTooltip(idx, vx, vy) {
     var d = HERITAGE[idx];
     var col = typeColor(d.t);
-    tooltip.innerHTML = '<div class="tt-name">' + d.e + ' ' + d.f + ' ' + d.n + '</div><div class="tt-sub"><span style="color:' + col + ';font-weight:600">' + d.t + '</span>  ' + d.c + '  ' + d.y + '年登録</div>';
+    tooltip.innerHTML = '<div class="tt-name">' + d.e + ' ' + d.f + ' ' + d.n + '</div><div class="tt-sub"><span style="color:' + col + ';font-weight:600">' + d.t + '</span>  ' + d.c + '  ' + d.y + '年登録</div><div style="margin-top:7px;text-align:center;"><button id="tt-land-btn" style="background:#0c2d1a;border:1px solid #3fb950;border-radius:6px;color:#3fb950;font-size:11px;padding:4px 12px;cursor:pointer;font-family:inherit;">🛬 着陸して360°周回</button></div>';
+    var landBtn = document.getElementById('tt-land-btn');
+    if (landBtn) {
+      (function(ci) {
+        landBtn.addEventListener('click', function(e) { e.stopPropagation(); startLanding(ci); });
+      })(idx);
+    }
     if (vx === 0 && vy === 0) {
       var cx = canvasRect.left + canvasRect.width / 2;
       var cy = canvasRect.top + canvasRect.height / 2;
@@ -1342,7 +1426,39 @@ void main() {
     gl.clearColor(0, 0, 0.02, 1);
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
-    if (flyTarget !== null) {
+    if (landingMode && landingPhase > 0) {
+      if (landingPhase === 1) {
+        var lp1 = Math.min((now - landingPhaseStart) / LANDING_ZOOM_IN_DUR, 1);
+        var le1 = lp1 * lp1 * (3 - 2 * lp1);
+        zoom = landingZoomFrom + (LANDING_ZOOM_TARGET - landingZoomFrom) * le1;
+        if (landingStatusEl) landingStatusEl.textContent = '着陸中...';
+        if (landingProgEl) landingProgEl.style.width = Math.round(le1 * 30) + '%';
+        if (lp1 >= 1) {
+          landingPhase = 2;
+          landingPhaseStart = now;
+          landingRotStart = rotYv;
+          zoom = LANDING_ZOOM_TARGET;
+        }
+      } else if (landingPhase === 2) {
+        var lp2 = Math.min((now - landingPhaseStart) / LANDING_ROT_DUR, 1);
+        rotYv = landingRotStart + lp2 * Math.PI * 2;
+        var deg2 = Math.round(lp2 * 360);
+        if (landingStatusEl) landingStatusEl.textContent = '360°周回中... ' + deg2 + '°';
+        if (landingProgEl) landingProgEl.style.width = Math.round(30 + lp2 * 40) + '%';
+        if (lp2 >= 1) {
+          landingPhase = 3;
+          landingPhaseStart = now;
+          landingZoomOutFrom = zoom;
+        }
+      } else if (landingPhase === 3) {
+        var lp3 = Math.min((now - landingPhaseStart) / LANDING_ZOOM_OUT_DUR, 1);
+        var le3 = lp3 * lp3 * (3 - 2 * lp3);
+        zoom = landingZoomOutFrom + (3.5 - landingZoomOutFrom) * le3;
+        if (landingStatusEl) landingStatusEl.textContent = '帰還中...';
+        if (landingProgEl) landingProgEl.style.width = Math.round(70 + le3 * 30) + '%';
+        if (lp3 >= 1) { stopLanding(); }
+      }
+    } else if (flyTarget !== null) {
       var fp = Math.min((now - flyStart) / FLY_DUR, 1);
       var fe = fp * fp * (3 - 2 * fp);
       rotYv = flyFrom.ry + (flyTarget.ry - flyFrom.ry) * fe;
