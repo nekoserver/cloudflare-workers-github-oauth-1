@@ -283,6 +283,8 @@ input[type=range] { flex:1; accent-color:#58a6ff; }
 .lg-close:hover { color:#e6edf3; }
 .lg-body { padding:16px; }
 .lg-updated { font-size:10px; color:#484f58; text-align:right; padding:0 4px 10px; }
+.lg-qual { font-size:10px; font-weight:700; color:#3fb950; margin-left:2px; }
+.tnmt-qual-badge { font-size:9px; font-weight:700; color:#3fb950; vertical-align:super; margin-left:1px; }
 .lg-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; }
 @media(max-width:900px) { .lg-grid { grid-template-columns:repeat(2,1fr); } }
 @media(max-width:560px) { .lg-grid { grid-template-columns:1fr; } }
@@ -1077,6 +1079,8 @@ function getNextZ() {
     [3,0],[0,1],[5,1],[2,1],[0,0],[0,4],[4,0],[0,0],[2,2],[1,3]
   ];
 
+  var QUALIFIED_FLAGS = {'🇲🇽':1,'🇺🇸':1,'🇩🇪':1,'🇦🇷':1,'🇫🇷':1,'🇳🇴':1};
+
   var FLAG_CODE = {
     '🇲🇽':'MEX','🇿🇦':'RSA','🇰🇷':'KOR','🇨🇿':'CZE','🇨🇦':'CAN','🇧🇦':'BIH',
     '🇺🇸':'USA','🇵🇾':'PAR','🇶🇦':'QAT','🇨🇭':'SUI','🇧🇷':'BRA','🇲🇦':'MAR',
@@ -1568,7 +1572,10 @@ function getNextZ() {
     if (!body) return;
     var groupsHtml = '<div class="tnmt-grp-list">';
     GROUPS.forEach(function(grp) {
-      groupsHtml += '<div class="tnmt-grp-item"><span class="tnmt-grp-badge">' + grp.g + '</span><span class="tnmt-grp-flags">' + grp.f.join('') + '</span></div>';
+      var flagsHtml = grp.f.map(function(f) {
+        return f + (QUALIFIED_FLAGS[f] ? '<span class="tnmt-qual-badge">✓</span>' : '');
+      }).join('');
+      groupsHtml += '<div class="tnmt-grp-item"><span class="tnmt-grp-badge">' + grp.g + '</span><span class="tnmt-grp-flags">' + flagsHtml + '</span></div>';
     });
     groupsHtml += '</div>';
     function teamSlot(flag, slot) {
@@ -1651,7 +1658,7 @@ function getNextZ() {
         }
       }
     }
-    var html = '<div class="lg-updated">更新: 2026-06-22 (MD1〜MD2 確定分)</div><div class="lg-grid">';
+    var html = '<div class="lg-updated">更新: 2026-06-23 (R32進出確定: 🇲🇽🇺🇸🇩🇪🇦🇷🇫🇷🇳🇴)</div><div class="lg-grid">';
     GROUPS.forEach(function(grp) {
       var teams = grp.f.map(function(f) { return teamStats[f]; });
       teams.sort(function(a,b) {
@@ -1664,7 +1671,9 @@ function getNextZ() {
       teams.forEach(function(t,i) {
         var maxPts = t.pts + t.rem * 3;
         var thirdMaxPts = third ? third.pts + third.rem * 3 : 0;
-        if (i < 2) {
+        if (QUALIFIED_FLAGS[t.f]) {
+          t.status = 'safe';
+        } else if (i < 2) {
           t.status = (i === 0 && t.pts > thirdMaxPts) ? 'safe' :
                      (i === 1 && t.pts > thirdMaxPts) ? 'safe' : 'contention';
         } else {
@@ -1678,7 +1687,8 @@ function getNextZ() {
         var gd = t.gf - t.ga;
         var cls = t.status === 'safe' ? 'lg-safe' : t.status === 'out' ? 'lg-out' : '';
         html += '<tr class="' + cls + '">';
-        html += '<td class="lg-td-team"><div class="lg-team"><span class="lg-flag">' + t.f + '</span><span class="lg-code">' + (FLAG_CODE[t.f] || '') + '</span></div></td>';
+        var qualMark = QUALIFIED_FLAGS[t.f] ? '<span class="lg-qual">✓</span>' : '';
+        html += '<td class="lg-td-team"><div class="lg-team"><span class="lg-flag">' + t.f + '</span><span class="lg-code">' + (FLAG_CODE[t.f] || '') + '</span>' + qualMark + '</div></td>';
         html += '<td>' + t.p + '</td><td>' + t.w + '</td><td>' + t.d + '</td><td>' + t.l + '</td>';
         html += '<td>' + t.gf + '</td><td>' + t.ga + '</td><td>' + (gd > 0 ? '+' : '') + gd + '</td>';
         html += '<td class="lg-pts">' + t.pts + '</td><td>' + t.rem + '</td></tr>';
