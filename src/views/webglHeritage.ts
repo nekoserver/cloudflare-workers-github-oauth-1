@@ -81,6 +81,20 @@ canvas:active { cursor:grabbing; }
 .legend-row { display:flex; align-items:center; gap:8px; font-size:12px; }
 .legend-dot { font-size:16px; }
 @media (display-mode: standalone) { .pwa-hide { display:none !important; } }
+.stats-tab { flex:1; padding:9px 4px; font-size:12px; font-weight:600; color:#484f58; background:none; border:none; border-bottom:2px solid transparent; cursor:pointer; transition:color .15s,border-color .15s; }
+.stats-tab:hover { color:#8b949e; }
+.stats-tab.active { color:#3fb950; border-bottom-color:#3fb950; }
+.stats-bar-row { display:flex; align-items:center; gap:8px; margin-bottom:9px; font-size:12px; }
+.stats-bar-label { width:160px; flex-shrink:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; color:#e6edf3; }
+.stats-bar-track { flex:1; height:12px; background:#161b22; border-radius:6px; overflow:hidden; }
+.stats-bar-fill { height:100%; border-radius:6px; transition:width .4s; }
+.stats-bar-num { width:56px; text-align:right; color:#8b949e; font-variant-numeric:tabular-nums; flex-shrink:0; }
+.stats-section-title { font-size:11px; font-weight:700; color:#3fb950; text-transform:uppercase; letter-spacing:.5px; margin:12px 0 8px; }
+.stats-type-card { display:flex; align-items:center; gap:12px; padding:10px 14px; background:#161b22; border-radius:8px; margin-bottom:8px; }
+.stats-donut-wrap { position:relative; }
+.stats-legend-list { display:flex; flex-direction:column; gap:7px; margin-top:4px; }
+.stats-legend-item { display:flex; align-items:center; gap:7px; font-size:12px; }
+.stats-legend-dot { width:10px; height:10px; border-radius:50%; flex-shrink:0; }
 </style>
 </head>
 <body>
@@ -149,6 +163,7 @@ void main() {
       <button class="canvas-ctrl-btn" id="btnAxisLock">＋ 軸垂直固定</button>
       <button class="canvas-ctrl-btn" id="btnAutoRot">⏸ 自転停止</button>
       <button class="canvas-ctrl-btn" id="btnAmericaTour">🌎 アメリカ巡回</button>
+      <button class="canvas-ctrl-btn" id="btnStats">📊 内訳</button>
     </div>
   </div>
   <div class="side">
@@ -206,6 +221,24 @@ void main() {
 </div>
 
 <div id="mk-tooltip"></div>
+
+<div id="stats-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:200;align-items:center;justify-content:center;">
+  <div id="stats-modal" style="background:#0d1117;border:1px solid #30363d;border-radius:10px;width:min(92vw,680px);max-height:86vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 8px 40px rgba(0,0,0,.8);">
+    <div style="padding:14px 18px;border-bottom:1px solid #21262d;display:flex;align-items:center;gap:10px;flex-shrink:0;">
+      <span style="font-size:15px;font-weight:700;">📊 世界遺産 内訳統計</span>
+      <span id="stats-total-badge" style="background:#0c2d1a;color:#3fb950;font-size:11px;padding:2px 8px;border-radius:10px;font-weight:600;"></span>
+      <span style="flex:1"></span>
+      <button id="btnStatsClose" style="background:none;border:none;color:#8b949e;font-size:18px;cursor:pointer;line-height:1;padding:2px 6px;">✕</button>
+    </div>
+    <div style="display:flex;border-bottom:1px solid #21262d;flex-shrink:0;">
+      <button class="stats-tab active" data-tab="region">🌐 地域別</button>
+      <button class="stats-tab" data-tab="country">🏳️ 国別 Top30</button>
+      <button class="stats-tab" data-tab="type">🏷️ 種別</button>
+      <button class="stats-tab" data-tab="decade">📅 登録年代</button>
+    </div>
+    <div id="stats-body" style="flex:1;overflow-y:auto;padding:16px 18px;"></div>
+  </div>
+</div>
 
 <script>
 (function() {
@@ -667,6 +700,156 @@ void main() {
   btnAmericaTour.addEventListener('click', function() {
     if (americaTourActive) { stopAmericaTour(); } else { startAmericaTour(); }
   });
+
+  var REGION_MAP = {
+    '🇨🇳':'アジア','🇯🇵':'アジア','🇮🇳':'アジア','🇰🇷':'アジア','🇮🇩':'アジア','🇰🇭':'アジア','🇻🇳':'アジア','🇹🇭':'アジア','🇲🇾':'アジア','🇵🇰':'アジア','🇧🇩':'アジア','🇲🇳':'アジア','🇳🇵':'アジア','🇱🇰':'アジア','🇵🇭':'アジア','🇲🇲':'アジア','🇰🇿':'アジア','🇺🇿':'アジア','🇹🇲':'アジア','🇰🇬':'アジア','🇹🇯':'アジア','🇦🇫':'アジア',
+    '🇫🇷':'ヨーロッパ','🇩🇪':'ヨーロッパ','🇬🇧':'ヨーロッパ','🇮🇹':'ヨーロッパ','🇪🇸':'ヨーロッパ','🇵🇹':'ヨーロッパ','🇬🇷':'ヨーロッパ','🇭🇷':'ヨーロッパ','🇨🇿':'ヨーロッパ','🇵🇱':'ヨーロッパ','🇷🇺':'ヨーロッパ','🇹🇷':'ヨーロッパ','🇦🇹':'ヨーロッパ','🇨🇭':'ヨーロッパ','🇧🇪':'ヨーロッパ','🇳🇱':'ヨーロッパ','🇸🇪':'ヨーロッパ','🇳🇴':'ヨーロッパ','🇩🇰':'ヨーロッパ','🇫🇮':'ヨーロッパ','🇮🇸':'ヨーロッパ','🇮🇪':'ヨーロッパ','🇭🇺':'ヨーロッパ','🇷🇴':'ヨーロッパ','🇧🇬':'ヨーロッパ','🇸🇰':'ヨーロッパ','🇸🇮':'ヨーロッパ','🇱🇻':'ヨーロッパ','🇱🇹':'ヨーロッパ','🇪🇪':'ヨーロッパ','🇺🇦':'ヨーロッパ','🇲🇹':'ヨーロッパ','🇱🇺':'ヨーロッパ','🇲🇪':'ヨーロッパ','🇷🇸':'ヨーロッパ','🇲🇰':'ヨーロッパ','🇧🇦':'ヨーロッパ','🇦🇱':'ヨーロッパ','🇦🇿':'コーカサス・中央アジア','🇬🇪':'コーカサス・中央アジア','🇦🇲':'コーカサス・中央アジア',
+    '🇺🇸':'北アメリカ','🇨🇦':'北アメリカ','🇲🇽':'北アメリカ',
+    '🇧🇷':'南アメリカ','🇵🇪':'南アメリカ','🇦🇷':'南アメリカ','🇨🇱':'南アメリカ','🇧🇴':'南アメリカ','🇨🇴':'南アメリカ','🇪🇨':'南アメリカ','🇵🇾':'南アメリカ','🇺🇾':'南アメリカ','🇻🇪':'南アメリカ','🇬🇾':'南アメリカ','🇸🇷':'南アメリカ',
+    '🇬🇹':'中米・カリブ','🇲🇽':'中米・カリブ','🇨🇺':'中米・カリブ','🇩🇴':'中米・カリブ','🇯🇲':'中米・カリブ','🇭🇳':'中米・カリブ','🇵🇦':'中米・カリブ','🇨🇷':'中米・カリブ','🇸🇻':'中米・カリブ','🇳🇮':'中米・カリブ','🇧🇿':'中米・カリブ','🇹🇹':'中米・カリブ',
+    '🇪🇬':'アフリカ・北アフリカ','🇲🇦':'アフリカ・北アフリカ','🇹🇳':'アフリカ・北アフリカ','🇩🇿':'アフリカ・北アフリカ','🇱🇾':'アフリカ・北アフリカ','🇸🇩':'アフリカ・北アフリカ',
+    '🇪🇹':'アフリカ・サブサハラ','🇿🇼':'アフリカ・サブサハラ','🇿🇦':'アフリカ・サブサハラ','🇳🇦':'アフリカ・サブサハラ','🇸🇳':'アフリカ・サブサハラ','🇹🇿':'アフリカ・サブサハラ','🇰🇪':'アフリカ・サブサハラ','🇺🇬':'アフリカ・サブサハラ','🇷🇼':'アフリカ・サブサハラ','🇲🇿':'アフリカ・サブサハラ','🇲🇼':'アフリカ・サブサハラ','🇿🇲':'アフリカ・サブサハラ','🇲🇬':'アフリカ・サブサハラ','🇬🇭':'アフリカ・サブサハラ','🇨🇲':'アフリカ・サブサハラ','🇨🇩':'アフリカ・サブサハラ','🇨🇬':'アフリカ・サブサハラ','🇬🇦':'アフリカ・サブサハラ','🇧🇯':'アフリカ・サブサハラ','🇨🇮':'アフリカ・サブサハラ','🇲🇱':'アフリカ・サブサハラ','🇳🇪':'アフリカ・サブサハラ','🇸🇱':'アフリカ・サブサハラ','🇩🇯':'アフリカ・サブサハラ','🇸🇴':'アフリカ・サブサハラ','🇧🇼':'アフリカ・サブサハラ','🇲🇺':'アフリカ・サブサハラ','🇸🇿':'アフリカ・サブサハラ','🇱🇸':'アフリカ・サブサハラ','🇪🇷':'アフリカ・サブサハラ','🇳🇬':'アフリカ・サブサハラ',
+    '🇮🇱':'中東','🇯🇴':'中東','🇱🇧':'中東','🇸🇾':'中東','🇮🇶':'中東','🇮🇷':'中東','🇸🇦':'中東','🇾🇪':'中東','🇴🇲':'中東','🇦🇪':'中東','🇶🇦':'中東','🇧🇭':'中東','🇰🇼':'中東',
+    '🇦🇺':'オセアニア','🇳🇿':'オセアニア','🇵🇬':'オセアニア','🇫🇯':'オセアニア','🇸🇧':'オセアニア','🇻🇺':'オセアニア',
+    '🇺🇿':'コーカサス・中央アジア'
+  };
+  var REGION_ORDER = ['アジア','ヨーロッパ','アフリカ・サブサハラ','アフリカ・北アフリカ','中東','北アメリカ','南アメリカ','中米・カリブ','コーカサス・中央アジア','オセアニア','その他'];
+  var REGION_COLORS = {'アジア':'#e3a838','ヨーロッパ':'#58a6ff','アフリカ・サブサハラ':'#3fb950','アフリカ・北アフリカ':'#7ee787','中東':'#f0883e','北アメリカ':'#a371f7','南アメリカ':'#79c0ff','中米・カリブ':'#d2a8ff','コーカサス・中央アジア':'#ffa657','オセアニア':'#39d353','その他':'#484f58'};
+  var TYPE_COLORS = {'文化遺産':'#e3a838','自然遺産':'#3fb950','複合遺産':'#a371f7'};
+
+  function buildStats() {
+    var regionMap = {}, countryMap = {}, typeMap = {}, decadeMap = {};
+    var total = HERITAGE.length;
+    for (var i = 0; i < HERITAGE.length; i++) {
+      var h = HERITAGE[i];
+      var region = REGION_MAP[h.f] || 'その他';
+      regionMap[region] = (regionMap[region] || 0) + 1;
+      var ckey = h.f + ' ' + h.c;
+      countryMap[ckey] = (countryMap[ckey] || 0) + 1;
+      typeMap[h.t] = (typeMap[h.t] || 0) + 1;
+      var decade = Math.floor(h.y / 10) * 10 + 's';
+      decadeMap[decade] = (decadeMap[decade] || 0) + 1;
+    }
+    return {total:total, region:regionMap, country:countryMap, type:typeMap, decade:decadeMap};
+  }
+
+  function makeBars(data, maxVal, colors, order, total) {
+    var keys = order ? order.filter(function(k){ return data[k]; }) : Object.keys(data).sort(function(a,b){ return data[b]-data[a]; });
+    var html = '';
+    for (var i = 0; i < keys.length; i++) {
+      var k = keys[i]; var v = data[k]; if (!v) continue;
+      var pct = Math.round(v/total*100);
+      var barW = Math.round(v/maxVal*100);
+      var col = (colors && colors[k]) ? colors[k] : '#58a6ff';
+      html += '<div class="stats-bar-row">';
+      html += '<div class="stats-bar-label" title="' + k + '">' + k + '</div>';
+      html += '<div class="stats-bar-track"><div class="stats-bar-fill" style="width:' + barW + '%;background:' + col + ';"></div></div>';
+      html += '<div class="stats-bar-num">' + v + ' <span style="color:#484f58;font-size:10px;">(' + pct + '%)</span></div>';
+      html += '</div>';
+    }
+    return html;
+  }
+
+  function renderStatsTab(tab, stats) {
+    var body = document.getElementById('stats-body');
+    var html = '';
+    if (tab === 'region') {
+      var maxV = 0;
+      for (var k in stats.region) { if (stats.region[k] > maxV) maxV = stats.region[k]; }
+      html += '<div class="stats-section-title">地域別件数（全' + stats.total + '件）</div>';
+      html += makeBars(stats.region, maxV, REGION_COLORS, REGION_ORDER, stats.total);
+    } else if (tab === 'country') {
+      var pairs = [];
+      for (var k in stats.country) { pairs.push([k, stats.country[k]]); }
+      pairs.sort(function(a,b){ return b[1]-a[1]; });
+      pairs = pairs.slice(0,30);
+      var maxV = pairs[0] ? pairs[0][1] : 1;
+      html += '<div class="stats-section-title">国別件数 Top30（全' + stats.total + '件）</div>';
+      for (var i = 0; i < pairs.length; i++) {
+        var k = pairs[i][0]; var v = pairs[i][1];
+        var pct = Math.round(v/stats.total*100);
+        var barW = Math.round(v/maxV*100);
+        html += '<div class="stats-bar-row">';
+        html += '<div class="stats-bar-label" title="' + k + '">' + (i+1) + '. ' + k + '</div>';
+        html += '<div class="stats-bar-track"><div class="stats-bar-fill" style="width:' + barW + '%;background:#58a6ff;"></div></div>';
+        html += '<div class="stats-bar-num">' + v + ' <span style="color:#484f58;font-size:10px;">(' + pct + '%)</span></div>';
+        html += '</div>';
+      }
+    } else if (tab === 'type') {
+      var total = stats.total;
+      var cvs = document.createElement('canvas'); cvs.width = 160; cvs.height = 160;
+      var ctx = cvs.getContext('2d');
+      var types = Object.keys(TYPE_COLORS); var startA = -Math.PI/2;
+      for (var i = 0; i < types.length; i++) {
+        var v = stats.type[types[i]] || 0;
+        var sweep = (v/total) * Math.PI * 2;
+        ctx.beginPath(); ctx.moveTo(80,80); ctx.arc(80,80,72,startA,startA+sweep);
+        ctx.closePath(); ctx.fillStyle = TYPE_COLORS[types[i]]; ctx.fill();
+        startA += sweep;
+      }
+      ctx.beginPath(); ctx.arc(80,80,36,0,Math.PI*2); ctx.fillStyle='#0d1117'; ctx.fill();
+      html += '<div class="stats-section-title">種別内訳</div>';
+      html += '<div style="display:flex;gap:24px;align-items:flex-start;flex-wrap:wrap;">';
+      html += '<div class="stats-donut-wrap">' + cvs.outerHTML + '</div>';
+      html += '<div style="flex:1;min-width:160px;padding-top:8px;">';
+      for (var i = 0; i < types.length; i++) {
+        var v = stats.type[types[i]] || 0;
+        var pct = Math.round(v/total*100);
+        html += '<div class="stats-legend-item">';
+        html += '<div class="stats-legend-dot" style="background:' + TYPE_COLORS[types[i]] + ';"></div>';
+        html += '<span style="font-weight:600;color:' + TYPE_COLORS[types[i]] + ';">' + types[i] + '</span>';
+        html += '<span style="color:#8b949e;margin-left:auto;">' + v + '件 (' + pct + '%)</span>';
+        html += '</div>';
+      }
+      html += '</div></div>';
+    } else if (tab === 'decade') {
+      var decades = Object.keys(stats.decade).sort();
+      var maxV = 0;
+      for (var i = 0; i < decades.length; i++) { if (stats.decade[decades[i]] > maxV) maxV = stats.decade[decades[i]]; }
+      html += '<div class="stats-section-title">登録年代別（全' + stats.total + '件）</div>';
+      for (var i = 0; i < decades.length; i++) {
+        var d = decades[i]; var v = stats.decade[d];
+        var pct = Math.round(v/stats.total*100);
+        var barW = Math.round(v/maxV*100);
+        html += '<div class="stats-bar-row">';
+        html += '<div class="stats-bar-label">' + d + '</div>';
+        html += '<div class="stats-bar-track"><div class="stats-bar-fill" style="width:' + barW + '%;background:#f0883e;"></div></div>';
+        html += '<div class="stats-bar-num">' + v + ' <span style="color:#484f58;font-size:10px;">(' + pct + '%)</span></div>';
+        html += '</div>';
+      }
+    }
+    body.innerHTML = html;
+  }
+
+  var statsOverlay = document.getElementById('stats-overlay');
+  var currentStatsTab = 'region';
+  var cachedStats = null;
+
+  document.getElementById('btnStats').addEventListener('click', function() {
+    if (!cachedStats) cachedStats = buildStats();
+    document.getElementById('stats-total-badge').textContent = '全' + cachedStats.total + '件';
+    statsOverlay.style.display = 'flex';
+    renderStatsTab(currentStatsTab, cachedStats);
+  });
+
+  document.getElementById('btnStatsClose').addEventListener('click', function() {
+    statsOverlay.style.display = 'none';
+  });
+
+  statsOverlay.addEventListener('click', function(e) {
+    if (e.target === statsOverlay) statsOverlay.style.display = 'none';
+  });
+
+  var statsTabs = document.querySelectorAll('.stats-tab');
+  for (var sti = 0; sti < statsTabs.length; sti++) {
+    statsTabs[sti].addEventListener('click', function() {
+      for (var j = 0; j < statsTabs.length; j++) statsTabs[j].classList.remove('active');
+      this.classList.add('active');
+      currentStatsTab = this.getAttribute('data-tab');
+      if (!cachedStats) cachedStats = buildStats();
+      renderStatsTab(currentStatsTab, cachedStats);
+    });
+  }
 
   var tooltip = document.getElementById('mk-tooltip');
   var activeIdx = -1;
