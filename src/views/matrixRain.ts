@@ -12,30 +12,31 @@ export function getMatrixRainPage(): string {
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Matrix Rain</title>
+<title>Matrix Rain 3D</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box;}
-body{background:#000;overflow:hidden;width:100vw;height:100vh;}
+body{background:#000;overflow:hidden;width:100vw;height:100vh;cursor:grab;}
+body.dragging{cursor:grabbing;}
 canvas{display:block;}
 #ui{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);display:flex;gap:10px;z-index:10;}
 .btn{padding:8px 18px;border-radius:6px;border:1px solid #00ff41;background:rgba(0,0,0,0.7);color:#00ff41;font-size:12px;font-family:monospace;cursor:pointer;letter-spacing:.1em;transition:background .15s;}
 .btn:hover{background:rgba(0,255,65,0.15);}
-#info{position:fixed;top:16px;left:50%;transform:translateX(-50%);color:#00ff41;font-family:monospace;font-size:11px;opacity:0.5;letter-spacing:.15em;}
+#info{position:fixed;top:16px;left:50%;transform:translateX(-50%);color:#00ff41;font-family:monospace;font-size:11px;opacity:0.5;letter-spacing:.15em;text-align:center;}
 </style>
 </head>
 <body>
 <canvas id="c"></canvas>
-<div id="info">MATRIX RAIN &mdash; anime.js powered</div>
+<div id="info">MATRIX RAIN 3D &mdash; drag to rotate</div>
 <div id="ui">
-  <button class="btn" id="btn-speed-down">&#9664; 遅く</button>
   <button class="btn" id="btn-color">色変更</button>
-  <button class="btn" id="btn-speed-up">速く &#9654;</button>
+  <button class="btn" id="btn-reset">視点リセット</button>
 </div>
 <script>${animeJs}</script>
 <script>
 var canvas = document.getElementById('c');
 var ctx = canvas.getContext('2d');
-var CHARS = 'アイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホマミムメモヤユヨラリルレロワヲン0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ@#$%&*';
+
+var CHARS = 'アイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホマミムメモヤユヨラリルレロワヲン0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ';
 var PALETTES = [
   { head: '#ffffff', body: '#00ff41' },
   { head: '#ffffff', body: '#00cfff' },
@@ -44,55 +45,179 @@ var PALETTES = [
   { head: '#ffffff', body: '#cc44ff' },
 ];
 var paletteIdx = 0;
-var FONT_SIZE = 16;
-var cols, drops, colChars, speeds;
-var speedFactor = 1.0;
-function init() {
-  canvas.width = window.innerWidth;
-  canvas.height = window.innerHeight;
-  cols = Math.floor(canvas.width / FONT_SIZE);
-  drops = []; colChars = []; speeds = [];
-  for (var i = 0; i < cols; i++) {
-    drops.push(Math.random() * -50);
-    colChars.push(randomChar());
-    speeds.push(0.3 + Math.random() * 0.7);
+
+// 3D グリッド設定
+var GRID = 14;       // X/Z 方向の列数
+var SPREAD = 320;    // 3D空間の広がり
+var FONT = 14;
+var FOV = 600;
+
+// 視点回転
+var rotX = 0.35, rotY = 0.3;
+var velX = 0, velY = 0;
+
+// ストリーム生成: GRID×GRID 本の縦列を3D空間に配置
+var streams = [];
+for (var gi = 0; gi < GRID; gi++) {
+  for (var gk = 0; gk < GRID; gk++) {
+    var sx = (gi / (GRID - 1) - 0.5) * SPREAD;
+    var sz = (gk / (GRID - 1) - 0.5) * SPREAD;
+    var len = 8 + Math.floor(Math.random() * 18);
+    streams.push({
+      x: sx, z: sz,
+      y: Math.random() * -400,
+      len: len,
+      speed: 0.4 + Math.random() * 0.8,
+      chars: Array.from({length: len}, function() { return rndChar(); })
+    });
   }
 }
-function randomChar() { return CHARS[Math.floor(Math.random() * CHARS.length)]; }
+
+function rndChar() { return CHARS[Math.floor(Math.random() * CHARS.length)]; }
+
+// 3D → 2D 透視投影 (rotY→rotX の順で回転)
+function project(x, y, z) {
+  // rotY (Y軸回転)
+  var cosY = Math.cos(rotY), sinY = Math.sin(rotY);
+  var x1 = x * cosY + z * sinY;
+  var z1 = -x * sinY + z * cosY;
+  // rotX (X軸回転)
+  var cosX = Math.cos(rotX), sinX = Math.sin(rotX);
+  var y2 = y * cosX - z1 * sinX;
+  var z2 = y * sinX + z1 * cosX;
+  // 透視
+  var w = FOV / (FOV + z2 + 200);
+  return {
+    sx: canvas.width  * 0.5 + x1 * w,
+    sy: canvas.height * 0.5 + y2 * w,
+    w: w, z2: z2
+  };
+}
+
 function draw() {
   var pal = PALETTES[paletteIdx];
-  ctx.fillStyle = 'rgba(0,0,0,0.05)';
+  ctx.fillStyle = 'rgba(0,0,0,0.18)';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
-  ctx.font = FONT_SIZE + 'px monospace';
-  for (var i = 0; i < cols; i++) {
-    var y = Math.floor(drops[i]) * FONT_SIZE;
-    ctx.fillStyle = pal.head; ctx.shadowBlur = 8; ctx.shadowColor = pal.body;
-    ctx.fillText(colChars[i], i * FONT_SIZE, y);
-    ctx.fillStyle = pal.body; ctx.shadowBlur = 4; ctx.shadowColor = pal.body;
-    if (y - FONT_SIZE > 0) ctx.fillText(randomChar(), i * FONT_SIZE, y - FONT_SIZE);
-    ctx.shadowBlur = 0;
-    drops[i] += speeds[i] * speedFactor;
-    colChars[i] = randomChar();
-    if (drops[i] * FONT_SIZE > canvas.height && Math.random() > 0.975) drops[i] = 0;
+
+  // ストリームを奥から手前の順に描画 (z2 昇順)
+  var rendered = [];
+  for (var si = 0; si < streams.length; si++) {
+    var st = streams[si];
+    var baseP = project(st.x, st.y, st.z);
+    rendered.push({ st: st, z2: baseP.z2 });
+  }
+  rendered.sort(function(a, b) { return a.z2 - b.z2; });
+
+  for (var ri = 0; ri < rendered.length; ri++) {
+    var st = rendered[ri].st;
+    for (var ci = 0; ci < st.len; ci++) {
+      var worldY = st.y - ci * FONT * 1.2;
+      var p = project(st.x, worldY, st.z);
+      if (p.w < 0.05) continue;
+      var fs = Math.max(6, Math.floor(FONT * p.w * 2.2));
+      ctx.font = 'bold ' + fs + 'px monospace';
+
+      if (ci === 0) {
+        ctx.fillStyle = pal.head;
+        ctx.shadowBlur = 10 * p.w;
+        ctx.shadowColor = pal.body;
+      } else {
+        var alpha = Math.max(0.05, (1 - ci / st.len) * p.w * 1.5);
+        ctx.fillStyle = pal.body;
+        ctx.globalAlpha = alpha;
+        ctx.shadowBlur = 4 * p.w;
+        ctx.shadowColor = pal.body;
+      }
+      ctx.fillText(st.chars[ci], p.sx, p.sy);
+      ctx.globalAlpha = 1;
+      ctx.shadowBlur = 0;
+    }
+
+    // ストリームを下に進める
+    st.y += st.speed;
+    st.chars[0] = rndChar();
+    if (st.y > 400) { st.y = -350 - Math.random() * 200; }
   }
 }
+
+// anime.js でフレームループ
 var ticker = { t: 0 };
-anime({ targets: ticker, t: 1000000, duration: 1000000, easing: 'linear', update: draw, loop: true });
-init();
-window.addEventListener('resize', init);
-var speedProxy = { v: 1.0 };
-function setSpeed(target) {
-  anime({ targets: speedProxy, v: Math.max(0.2, Math.min(4.0, target)), duration: 600, easing: 'easeOutCubic', update: function() { speedFactor = speedProxy.v; } });
-}
-document.getElementById('btn-speed-down').addEventListener('click', function() { setSpeed(speedProxy.v - 0.4); });
-document.getElementById('btn-speed-up').addEventListener('click', function() { setSpeed(speedProxy.v + 0.4); });
+anime({ targets: ticker, t: 1e7, duration: 1e7, easing: 'linear', update: draw, loop: true });
+
+// リサイズ
+function resize() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
+resize();
+window.addEventListener('resize', resize);
+
+// ドラッグ回転
+var drag = false, lastX = 0, lastY = 0, dragVX = 0, dragVY = 0;
+var inertiaAnim = null;
+
+canvas.addEventListener('mousedown', function(e) {
+  drag = true; lastX = e.clientX; lastY = e.clientY;
+  dragVX = 0; dragVY = 0;
+  if (inertiaAnim) { inertiaAnim.pause(); inertiaAnim = null; }
+  document.body.classList.add('dragging');
+});
+window.addEventListener('mousemove', function(e) {
+  if (!drag) return;
+  dragVY = (e.clientX - lastX) * 0.008;
+  dragVX = (e.clientY - lastY) * 0.008;
+  rotY += dragVY;
+  rotX += dragVX;
+  lastX = e.clientX; lastY = e.clientY;
+});
+window.addEventListener('mouseup', function() {
+  if (!drag) return;
+  drag = false;
+  document.body.classList.remove('dragging');
+  // 慣性: anime.js で velocity を 0 に減衰
+  var vel = { vx: dragVX, vy: dragVY };
+  inertiaAnim = anime({
+    targets: vel, vx: 0, vy: 0,
+    duration: 1200, easing: 'easeOutCubic',
+    update: function() { rotY += vel.vy; rotX += vel.vx; }
+  });
+});
+
+// タッチ対応
+var lastTX = 0, lastTY = 0;
+canvas.addEventListener('touchstart', function(e) {
+  lastTX = e.touches[0].clientX; lastTY = e.touches[0].clientY;
+  dragVX = 0; dragVY = 0;
+  if (inertiaAnim) { inertiaAnim.pause(); inertiaAnim = null; }
+}, { passive: true });
+canvas.addEventListener('touchmove', function(e) {
+  dragVY = (e.touches[0].clientX - lastTX) * 0.008;
+  dragVX = (e.touches[0].clientY - lastTY) * 0.008;
+  rotY += dragVY; rotX += dragVX;
+  lastTX = e.touches[0].clientX; lastTY = e.touches[0].clientY;
+}, { passive: true });
+canvas.addEventListener('touchend', function() {
+  var vel = { vx: dragVX, vy: dragVY };
+  inertiaAnim = anime({
+    targets: vel, vx: 0, vy: 0,
+    duration: 1200, easing: 'easeOutCubic',
+    update: function() { rotY += vel.vy; rotX += vel.vx; }
+  });
+});
+
+// 色変更
 document.getElementById('btn-color').addEventListener('click', function() {
   paletteIdx = (paletteIdx + 1) % PALETTES.length;
   var overlay = document.createElement('div');
   overlay.style.cssText = 'position:fixed;inset:0;background:#fff;z-index:5;pointer-events:none;opacity:0;';
   document.body.appendChild(overlay);
-  anime({ targets: overlay, opacity: [0, 0.35, 0], duration: 400, easing: 'easeOutQuad', complete: function() { overlay.remove(); } });
-  for (var i = 0; i < drops.length; i++) drops[i] = Math.random() * -30;
+  anime({ targets: overlay, opacity: [0, 0.3, 0], duration: 400, easing: 'easeOutQuad',
+    complete: function() { overlay.remove(); } });
+});
+
+// 視点リセット
+document.getElementById('btn-reset').addEventListener('click', function() {
+  if (inertiaAnim) { inertiaAnim.pause(); inertiaAnim = null; }
+  var rot = { x: rotX, y: rotY };
+  anime({ targets: rot, x: 0.35, y: 0.3, duration: 800, easing: 'easeOutCubic',
+    update: function() { rotX = rot.x; rotY = rot.y; } });
 });
 </script>
 </body>
