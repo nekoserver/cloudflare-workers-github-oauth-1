@@ -81,6 +81,20 @@ canvas:active { cursor:grabbing; }
 .legend-row { display:flex; align-items:center; gap:8px; font-size:12px; }
 .legend-dot { font-size:16px; }
 @media (display-mode: standalone) { .pwa-hide { display:none !important; } }
+.tour-panel { display:none; flex-direction:column; flex:1; overflow:hidden; }
+.tour-panel.visible { display:flex; }
+.tour-panel-header { padding:8px 12px; background:#0d1117; border-bottom:1px solid #21262d; flex-shrink:0; display:flex; align-items:center; gap:8px; }
+.tour-panel-title { font-size:12px; font-weight:700; color:#3fb950; flex:1; }
+.tour-panel-count { font-size:11px; color:#484f58; }
+.tour-list-scroll { flex:1; overflow-y:auto; }
+.tour-item { display:flex; align-items:center; gap:10px; padding:8px 12px; border-bottom:1px solid #161b22; cursor:pointer; transition:background .12s; }
+.tour-item:hover { background:#161b22; }
+.tour-item.active { background:#0c2d1a; border-left:3px solid #3fb950; padding-left:9px; }
+.tour-item-num { font-size:10px; color:#484f58; font-variant-numeric:tabular-nums; min-width:22px; text-align:right; flex-shrink:0; }
+.tour-item-body { flex:1; min-width:0; }
+.tour-item-name { font-size:11px; font-weight:600; color:#e6edf3; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.tour-item-meta { font-size:10px; color:#484f58; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.tour-item.active .tour-item-name { color:#3fb950; }
 .stats-tab { flex:1; padding:9px 4px; font-size:12px; font-weight:600; color:#484f58; background:none; border:none; border-bottom:2px solid transparent; cursor:pointer; transition:color .15s,border-color .15s; }
 .stats-tab:hover { color:#8b949e; }
 .stats-tab.active { color:#3fb950; border-bottom-color:#3fb950; }
@@ -190,6 +204,13 @@ void main() {
         <div id="result-count"></div>
       </div>
       <div class="list-scroll" id="siteList"></div>
+      <div class="tour-panel" id="tourPanel">
+        <div class="tour-panel-header">
+          <span class="tour-panel-title" id="tourPanelTitle">巡回リスト</span>
+          <span class="tour-panel-count" id="tourPanelCount"></span>
+        </div>
+        <div class="tour-list-scroll" id="tourListScroll"></div>
+      </div>
     </div>
 
     <div class="panel-body" id="panelCtrl">
@@ -251,6 +272,10 @@ void main() {
   var siteList = document.getElementById('siteList');
   var searchInput = document.getElementById('searchInput');
   var resultCount = document.getElementById('result-count');
+  var tourPanel = document.getElementById('tourPanel');
+  var tourListScroll = document.getElementById('tourListScroll');
+  var tourPanelTitle = document.getElementById('tourPanelTitle');
+  var tourPanelCount = document.getElementById('tourPanelCount');
   var tabList = document.getElementById('tabList');
   var tabCtrl = document.getElementById('tabCtrl');
   var panelList = document.getElementById('panelList');
@@ -762,10 +787,13 @@ void main() {
     }
   }
 
+  var sideHeader = document.querySelector('.side-header');
+
   var AMERICAS_IDXS = [];
   for (var ai = 0; ai < HERITAGE.length; ai++) {
     if (HERITAGE[ai].lon < -30) AMERICAS_IDXS.push(ai);
   }
+  AMERICAS_IDXS.sort(function(a, b) { return HERITAGE[b].lon - HERITAGE[a].lon; });
 
   var americaTourActive = false;
   var americaTourPos = 0;
@@ -777,6 +805,7 @@ void main() {
     if (americaTourTimer !== null) { clearTimeout(americaTourTimer); americaTourTimer = null; }
     btnAmericaTour.classList.remove('active');
     btnAmericaTour.textContent = '🌎 アメリカ巡回';
+    hideTourPanel();
   }
 
   function nextAmericaSite() {
@@ -785,6 +814,7 @@ void main() {
     var idx = AMERICAS_IDXS[americaTourPos % AMERICAS_IDXS.length];
     americaTourPos++;
     showMarkerTooltip(idx, 0, 0);
+    highlightTourItem(idx);
     americaTourTimer = setTimeout(nextAmericaSite, AMERICAS_INTERVAL);
   }
 
@@ -798,6 +828,7 @@ void main() {
     autoRot = false;
     btnAutoRot.textContent = '▶ 回転';
     btnAutoRot.classList.add('active');
+    showTourPanel(AMERICAS_IDXS, '🌎 アメリカ巡回');
     nextAmericaSite();
   }
 
@@ -831,6 +862,54 @@ void main() {
     if (rg === 'ヨーロッパ') EUROPE_IDXS.push(ri);
     if (rg === 'アフリカ・サブサハラ' || rg === 'アフリカ・北アフリカ') AFRICA_IDXS.push(ri);
   }
+  EUROPE_IDXS.sort(function(a, b) { return HERITAGE[b].lon - HERITAGE[a].lon; });
+  AFRICA_IDXS.sort(function(a, b) { return HERITAGE[b].lon - HERITAGE[a].lon; });
+
+  function showTourPanel(idxs, title) {
+    tourPanelTitle.textContent = title;
+    tourPanelCount.textContent = idxs.length + '件';
+    var html = '';
+    for (var ti = 0; ti < idxs.length; ti++) {
+      var h = HERITAGE[idxs[ti]];
+      var col = typeColor(h.t);
+      html += '<div class="tour-item" id="tour-item-' + idxs[ti] + '" data-hidx="' + idxs[ti] + '">' +
+        '<span class="tour-item-num">' + (ti + 1) + '</span>' +
+        '<span style="font-size:16px;flex-shrink:0">' + h.e + '</span>' +
+        '<div class="tour-item-body">' +
+          '<div class="tour-item-name">' + h.f + ' ' + h.n + '</div>' +
+          '<div class="tour-item-meta" style="color:' + col + '">' + h.t + ' · ' + h.c + ' ' + h.y + '年</div>' +
+        '</div>' +
+        '</div>';
+    }
+    tourListScroll.innerHTML = html;
+    var tourItems = tourListScroll.querySelectorAll('.tour-item');
+    tourItems.forEach(function(el) {
+      el.addEventListener('click', function() {
+        var hidx = parseInt(el.getAttribute('data-hidx'));
+        showMarkerTooltip(hidx, 0, 0);
+      });
+    });
+    if (sideHeader) sideHeader.style.display = 'none';
+    siteList.style.display = 'none';
+    tourPanel.classList.add('visible');
+  }
+
+  function hideTourPanel() {
+    tourPanel.classList.remove('visible');
+    siteList.style.display = '';
+    if (sideHeader) sideHeader.style.display = '';
+    tourListScroll.innerHTML = '';
+  }
+
+  function highlightTourItem(idx) {
+    var prev = tourListScroll.querySelector('.tour-item.active');
+    if (prev) prev.classList.remove('active');
+    var el = document.getElementById('tour-item-' + idx);
+    if (el) {
+      el.classList.add('active');
+      el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    }
+  }
 
   var europeTourActive = false;
   var europeTourPos = 0;
@@ -841,6 +920,7 @@ void main() {
     europeTourActive = false;
     if (europeTourTimer !== null) { clearTimeout(europeTourTimer); europeTourTimer = null; }
     if (btnEuropeTour) { btnEuropeTour.classList.remove('active'); btnEuropeTour.textContent = '🏰 ヨーロッパ巡回'; }
+    hideTourPanel();
   }
 
   function nextEuropeSite() {
@@ -849,6 +929,7 @@ void main() {
     var idx = EUROPE_IDXS[europeTourPos % EUROPE_IDXS.length];
     europeTourPos++;
     showMarkerTooltip(idx, 0, 0);
+    highlightTourItem(idx);
     europeTourTimer = setTimeout(nextEuropeSite, TOUR_INTERVAL);
   }
 
@@ -861,6 +942,7 @@ void main() {
     autoRot = false;
     btnAutoRot.textContent = '▶ 回転';
     btnAutoRot.classList.add('active');
+    showTourPanel(EUROPE_IDXS, '🏰 ヨーロッパ巡回');
     nextEuropeSite();
   }
 
@@ -878,6 +960,7 @@ void main() {
     africaTourActive = false;
     if (africaTourTimer !== null) { clearTimeout(africaTourTimer); africaTourTimer = null; }
     if (btnAfricaTour) { btnAfricaTour.classList.remove('active'); btnAfricaTour.textContent = '🌍 アフリカ巡回'; }
+    hideTourPanel();
   }
 
   function nextAfricaSite() {
@@ -886,6 +969,7 @@ void main() {
     var idx = AFRICA_IDXS[africaTourPos % AFRICA_IDXS.length];
     africaTourPos++;
     showMarkerTooltip(idx, 0, 0);
+    highlightTourItem(idx);
     africaTourTimer = setTimeout(nextAfricaSite, TOUR_INTERVAL);
   }
 
@@ -898,6 +982,7 @@ void main() {
     autoRot = false;
     btnAutoRot.textContent = '▶ 回転';
     btnAutoRot.classList.add('active');
+    showTourPanel(AFRICA_IDXS, '🌍 アフリカ巡回');
     nextAfricaSite();
   }
 
