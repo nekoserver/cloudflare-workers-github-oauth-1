@@ -163,6 +163,8 @@ void main() {
       <button class="canvas-ctrl-btn" id="btnAxisLock">＋ 軸垂直固定</button>
       <button class="canvas-ctrl-btn" id="btnAutoRot">⏸ 自転停止</button>
       <button class="canvas-ctrl-btn" id="btnAmericaTour">🌎 アメリカ巡回</button>
+      <button class="canvas-ctrl-btn" id="btnEuropeTour">🏰 ヨーロッパ巡回</button>
+      <button class="canvas-ctrl-btn" id="btnAfricaTour">🌍 アフリカ巡回</button>
       <button class="canvas-ctrl-btn" id="btnStats">📊 内訳</button>
     </div>
   </div>
@@ -787,6 +789,8 @@ void main() {
   }
 
   function startAmericaTour() {
+    stopEuropeTour();
+    stopAfricaTour();
     americaTourActive = true;
     americaTourPos = 0;
     btnAmericaTour.classList.add('active');
@@ -800,6 +804,9 @@ void main() {
   btnAmericaTour.addEventListener('click', function() {
     if (americaTourActive) { stopAmericaTour(); } else { startAmericaTour(); }
   });
+
+  var btnEuropeTour = document.getElementById('btnEuropeTour');
+  var btnAfricaTour = document.getElementById('btnAfricaTour');
 
   var REGION_MAP = {
     '🇨🇳':'アジア','🇯🇵':'アジア','🇮🇳':'アジア','🇰🇷':'アジア','🇮🇩':'アジア','🇰🇭':'アジア','🇻🇳':'アジア','🇹🇭':'アジア','🇲🇾':'アジア','🇵🇰':'アジア','🇧🇩':'アジア','🇲🇳':'アジア','🇳🇵':'アジア','🇱🇰':'アジア','🇵🇭':'アジア','🇲🇲':'アジア','🇰🇿':'アジア','🇺🇿':'アジア','🇹🇲':'アジア','🇰🇬':'アジア','🇹🇯':'アジア','🇦🇫':'アジア',
@@ -816,6 +823,89 @@ void main() {
   var REGION_ORDER = ['アジア','ヨーロッパ','アフリカ・サブサハラ','アフリカ・北アフリカ','中東','北アメリカ','南アメリカ','中米・カリブ','コーカサス・中央アジア','オセアニア','その他'];
   var REGION_COLORS = {'アジア':'#e3a838','ヨーロッパ':'#58a6ff','アフリカ・サブサハラ':'#3fb950','アフリカ・北アフリカ':'#7ee787','中東':'#f0883e','北アメリカ':'#a371f7','南アメリカ':'#79c0ff','中米・カリブ':'#d2a8ff','コーカサス・中央アジア':'#ffa657','オセアニア':'#39d353','その他':'#484f58'};
   var TYPE_COLORS = {'文化遺産':'#e3a838','自然遺産':'#3fb950','複合遺産':'#a371f7'};
+
+  var EUROPE_IDXS = [];
+  var AFRICA_IDXS = [];
+  for (var ri = 0; ri < HERITAGE.length; ri++) {
+    var rg = REGION_MAP[HERITAGE[ri].f] || '';
+    if (rg === 'ヨーロッパ') EUROPE_IDXS.push(ri);
+    if (rg === 'アフリカ・サブサハラ' || rg === 'アフリカ・北アフリカ') AFRICA_IDXS.push(ri);
+  }
+
+  var europeTourActive = false;
+  var europeTourPos = 0;
+  var europeTourTimer = null;
+  var TOUR_INTERVAL = 5000;
+
+  function stopEuropeTour() {
+    europeTourActive = false;
+    if (europeTourTimer !== null) { clearTimeout(europeTourTimer); europeTourTimer = null; }
+    if (btnEuropeTour) { btnEuropeTour.classList.remove('active'); btnEuropeTour.textContent = '🏰 ヨーロッパ巡回'; }
+  }
+
+  function nextEuropeSite() {
+    if (!europeTourActive) return;
+    if (EUROPE_IDXS.length === 0) { stopEuropeTour(); return; }
+    var idx = EUROPE_IDXS[europeTourPos % EUROPE_IDXS.length];
+    europeTourPos++;
+    showMarkerTooltip(idx, 0, 0);
+    europeTourTimer = setTimeout(nextEuropeSite, TOUR_INTERVAL);
+  }
+
+  function startEuropeTour() {
+    stopAmericaTour();
+    stopAfricaTour();
+    europeTourActive = true;
+    europeTourPos = 0;
+    if (btnEuropeTour) { btnEuropeTour.classList.add('active'); btnEuropeTour.textContent = '⏹ 巡回停止'; }
+    autoRot = false;
+    btnAutoRot.textContent = '▶ 回転';
+    btnAutoRot.classList.add('active');
+    nextEuropeSite();
+  }
+
+  if (btnEuropeTour) {
+    btnEuropeTour.addEventListener('click', function() {
+      if (europeTourActive) { stopEuropeTour(); } else { startEuropeTour(); }
+    });
+  }
+
+  var africaTourActive = false;
+  var africaTourPos = 0;
+  var africaTourTimer = null;
+
+  function stopAfricaTour() {
+    africaTourActive = false;
+    if (africaTourTimer !== null) { clearTimeout(africaTourTimer); africaTourTimer = null; }
+    if (btnAfricaTour) { btnAfricaTour.classList.remove('active'); btnAfricaTour.textContent = '🌍 アフリカ巡回'; }
+  }
+
+  function nextAfricaSite() {
+    if (!africaTourActive) return;
+    if (AFRICA_IDXS.length === 0) { stopAfricaTour(); return; }
+    var idx = AFRICA_IDXS[africaTourPos % AFRICA_IDXS.length];
+    africaTourPos++;
+    showMarkerTooltip(idx, 0, 0);
+    africaTourTimer = setTimeout(nextAfricaSite, TOUR_INTERVAL);
+  }
+
+  function startAfricaTour() {
+    stopAmericaTour();
+    stopEuropeTour();
+    africaTourActive = true;
+    africaTourPos = 0;
+    if (btnAfricaTour) { btnAfricaTour.classList.add('active'); btnAfricaTour.textContent = '⏹ 巡回停止'; }
+    autoRot = false;
+    btnAutoRot.textContent = '▶ 回転';
+    btnAutoRot.classList.add('active');
+    nextAfricaSite();
+  }
+
+  if (btnAfricaTour) {
+    btnAfricaTour.addEventListener('click', function() {
+      if (africaTourActive) { stopAfricaTour(); } else { startAfricaTour(); }
+    });
+  }
 
   function buildStats() {
     var regionMap = {}, countryMap = {}, typeMap = {}, decadeMap = {};
@@ -1069,7 +1159,7 @@ void main() {
     updateProximityList();
   });
 
-  canvas.addEventListener('click', function() { hideTooltip(); stopAmericaTour(); });
+  canvas.addEventListener('click', function() { hideTooltip(); stopAmericaTour(); stopEuropeTour(); stopAfricaTour(); });
 
   gl.enable(gl.DEPTH_TEST);
 
