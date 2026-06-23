@@ -37,6 +37,7 @@ import { getUuidGenPage } from './views/uuidGen';
 import { getMLBSpherePage } from './views/mlbSphere';
 import { getWorldCupWdlPage } from './views/worldCupWdl';
 import { getMatrixRainPage } from './views/matrixRain';
+import { getImageSpin3dPage } from './views/imageSpin3d';
 import { getAuthFlowPage } from './views/authFlow';
 
 import { computeColumnRelationStats, verifyColumnStats, type TableSchema, type Relation } from './utils/columnRelationStats';
@@ -4257,6 +4258,10 @@ app.get('/webgl-solar', authMiddleware, async (c) => {
 
 app.get('/matrix', (c) => {
   return c.html(getMatrixRainPage());
+});
+
+app.get('/image3d', (c) => {
+  return c.html(getImageSpin3dPage());
 });
 
 app.get('/uuid', authMiddleware, async (c) => {
