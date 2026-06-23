@@ -183,6 +183,7 @@ void main() {
     <div class="canvas-ctrl-btns">
       <button class="canvas-ctrl-btn" id="btnAxisLock">＋ 軸垂直固定</button>
       <button class="canvas-ctrl-btn" id="btnAutoRot">⏸ 自転停止</button>
+      <button class="canvas-ctrl-btn" id="btnJapanTour">🗾 日本巡回</button>
       <button class="canvas-ctrl-btn" id="btnAmericaTour">🌎 アメリカ巡回</button>
       <button class="canvas-ctrl-btn" id="btnEuropeTour">🏰 ヨーロッパ巡回</button>
       <button class="canvas-ctrl-btn" id="btnAfricaTour">🌍 アフリカ巡回</button>
@@ -517,6 +518,20 @@ void main() {
     {e:'🌿',f:'🇯🇵',n:'知床',c:'日本',t:'自然遺産',y:2005,lat:44.07,lon:145.08},
     {e:'🌿',f:'🇯🇵',n:'小笠原諸島',c:'日本',t:'自然遺産',y:2011,lat:27.05,lon:142.22},
     {e:'🌿',f:'🇯🇵',n:'奄美大島・徳之島・西表島',c:'日本',t:'自然遺産',y:2021,lat:28.38,lon:129.50},
+    {e:'🏛️',f:'🇯🇵',n:'姫路城',c:'日本',t:'文化遺産',y:1993,lat:34.84,lon:134.69},
+    {e:'🌿',f:'🇯🇵',n:'白神山地',c:'日本',t:'自然遺産',y:1993,lat:40.47,lon:140.12},
+    {e:'🏛️',f:'🇯🇵',n:'紀伊山地の霊場と参詣道',c:'日本',t:'文化遺産',y:2004,lat:34.17,lon:135.60},
+    {e:'🏛️',f:'🇯🇵',n:'石見銀山遺跡とその文化的景観',c:'日本',t:'文化遺産',y:2007,lat:35.10,lon:132.43},
+    {e:'🏛️',f:'🇯🇵',n:'平泉',c:'日本',t:'文化遺産',y:2011,lat:38.99,lon:141.11},
+    {e:'🏛️',f:'🇯🇵',n:'富士山',c:'日本',t:'文化遺産',y:2013,lat:35.36,lon:138.73},
+    {e:'🏛️',f:'🇯🇵',n:'富岡製糸場と絹産業遺産群',c:'日本',t:'文化遺産',y:2014,lat:36.26,lon:138.89},
+    {e:'🏛️',f:'🇯🇵',n:'明治日本の産業革命遺産',c:'日本',t:'文化遺産',y:2015,lat:33.88,lon:130.87},
+    {e:'🏛️',f:'🇯🇵',n:'ル・コルビュジエの建築作品（国立西洋美術館）',c:'日本',t:'文化遺産',y:2016,lat:35.71,lon:139.77},
+    {e:'🏛️',f:'🇯🇵',n:'「神宿る島」宗像・沖ノ島と関連遺産群',c:'日本',t:'文化遺産',y:2017,lat:34.25,lon:130.10},
+    {e:'🏛️',f:'🇯🇵',n:'長崎と天草地方の潜伏キリシタン関連遺産',c:'日本',t:'文化遺産',y:2018,lat:32.76,lon:130.08},
+    {e:'🏛️',f:'🇯🇵',n:'百舌鳥・古市古墳群',c:'日本',t:'文化遺産',y:2019,lat:34.56,lon:135.50},
+    {e:'🏛️',f:'🇯🇵',n:'北海道・北東北の縄文遺跡群',c:'日本',t:'文化遺産',y:2021,lat:41.50,lon:140.85},
+    {e:'🏛️',f:'🇯🇵',n:'佐渡島の金山',c:'日本',t:'文化遺産',y:2024,lat:38.06,lon:138.52},
     {e:'🌿',f:'🇻🇳',n:'ハ・ロン湾',c:'ベトナム',t:'自然遺産',y:1994,lat:20.91,lon:107.18},
     {e:'🌿',f:'🇨🇦',n:'カナディアン・ロッキー',c:'カナダ',t:'自然遺産',y:1984,lat:51.50,lon:-116.16},
     {e:'🌿',f:'🇦🇷',n:'ロス・グラシアレス国立公園',c:'アルゼンチン',t:'自然遺産',y:1981,lat:-50.59,lon:-73.09},
@@ -839,6 +854,7 @@ void main() {
   function startAmericaTour() {
     stopEuropeTour();
     stopAfricaTour();
+    stopJapanTour();
     americaTourActive = true;
     americaTourPos = 0;
     btnAmericaTour.classList.add('active');
@@ -875,13 +891,17 @@ void main() {
 
   var EUROPE_IDXS = [];
   var AFRICA_IDXS = [];
+  var JAPAN_IDXS = [];
   for (var ri = 0; ri < HERITAGE.length; ri++) {
     var rg = REGION_MAP[HERITAGE[ri].f] || '';
     if (rg === 'ヨーロッパ') EUROPE_IDXS.push(ri);
     if (rg === 'アフリカ・サブサハラ' || rg === 'アフリカ・北アフリカ') AFRICA_IDXS.push(ri);
+    if (HERITAGE[ri].f === '🇯🇵') JAPAN_IDXS.push(ri);
   }
   EUROPE_IDXS.sort(function(a, b) { return HERITAGE[b].lon - HERITAGE[a].lon; });
   AFRICA_IDXS.sort(function(a, b) { return HERITAGE[b].lon - HERITAGE[a].lon; });
+  var JAPAN_PANEL_IDXS = JAPAN_IDXS.slice().sort(function(a, b) { return HERITAGE[b].y - HERITAGE[a].y; });
+  var JAPAN_TOUR_IDXS  = JAPAN_IDXS.slice().sort(function(a, b) { return HERITAGE[a].y - HERITAGE[b].y; });
 
   function showTourPanel(idxs, title) {
     tourPanelTitle.textContent = title;
@@ -954,6 +974,7 @@ void main() {
   function startEuropeTour() {
     stopAmericaTour();
     stopAfricaTour();
+    stopJapanTour();
     europeTourActive = true;
     europeTourPos = 0;
     if (btnEuropeTour) { btnEuropeTour.classList.add('active'); btnEuropeTour.textContent = '⏹ 巡回停止'; }
@@ -994,6 +1015,7 @@ void main() {
   function startAfricaTour() {
     stopAmericaTour();
     stopEuropeTour();
+    stopJapanTour();
     africaTourActive = true;
     africaTourPos = 0;
     if (btnAfricaTour) { btnAfricaTour.classList.add('active'); btnAfricaTour.textContent = '⏹ 巡回停止'; }
@@ -1007,6 +1029,48 @@ void main() {
   if (btnAfricaTour) {
     btnAfricaTour.addEventListener('click', function() {
       if (africaTourActive) { stopAfricaTour(); } else { startAfricaTour(); }
+    });
+  }
+
+  var btnJapanTour = document.getElementById('btnJapanTour');
+  var japanTourActive = false;
+  var japanTourPos = 0;
+  var japanTourTimer = null;
+
+  function stopJapanTour() {
+    japanTourActive = false;
+    if (japanTourTimer !== null) { clearTimeout(japanTourTimer); japanTourTimer = null; }
+    if (btnJapanTour) { btnJapanTour.classList.remove('active'); btnJapanTour.textContent = '🗾 日本巡回'; }
+    hideTourPanel();
+  }
+
+  function nextJapanSite() {
+    if (!japanTourActive) return;
+    if (JAPAN_TOUR_IDXS.length === 0) { stopJapanTour(); return; }
+    var idx = JAPAN_TOUR_IDXS[japanTourPos % JAPAN_TOUR_IDXS.length];
+    japanTourPos++;
+    showMarkerTooltip(idx, 0, 0);
+    highlightTourItem(idx);
+    japanTourTimer = setTimeout(nextJapanSite, TOUR_INTERVAL);
+  }
+
+  function startJapanTour() {
+    stopAmericaTour();
+    stopEuropeTour();
+    stopAfricaTour();
+    japanTourActive = true;
+    japanTourPos = 0;
+    if (btnJapanTour) { btnJapanTour.classList.add('active'); btnJapanTour.textContent = '⏹ 巡回停止'; }
+    autoRot = false;
+    btnAutoRot.textContent = '▶ 回転';
+    btnAutoRot.classList.add('active');
+    showTourPanel(JAPAN_PANEL_IDXS, '🗾 日本巡回');
+    nextJapanSite();
+  }
+
+  if (btnJapanTour) {
+    btnJapanTour.addEventListener('click', function() {
+      if (japanTourActive) { stopJapanTour(); } else { startJapanTour(); }
     });
   }
 
