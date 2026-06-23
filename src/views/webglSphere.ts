@@ -912,6 +912,7 @@ function getNextZ() {
     { ctry:"🇺🇸", code3:"USA", name:"Wrigley Field",           city:"シカゴ、IL",              league:"MLB",    team:"シカゴ・カブス",         cap:41649,  opened:1914, lat:41.948, lon:-87.656 },
     { ctry:"🇺🇸", code3:"USA", name:"Oracle Park",             city:"サンフランシスコ、CA",     league:"MLB",    team:"SF ジャイアンツ",        cap:41915,  opened:2000, lat:37.778, lon:-122.389 },
     { ctry:"🇺🇸", code3:"USA", name:"Lambeau Field",           city:"グリーンベイ、WI",         league:"NFL",    team:"グリーンベイ・パッカーズ",cap:81441,  opened:1957, lat:44.501, lon:-88.062 },
+    { ctry:"🇺🇸", code3:"USA", name:"Lumen Field",             city:"シアトル、WA",             league:"NFL",    team:"シアトル・シーホークス/サウンダーズ", cap:69000, opened:2002, lat:47.595, lon:-122.332 },
     { ctry:"🇺🇸", code3:"USA", name:"AT&T Park (Oracle Arena)", city:"オークランド、CA",        league:"NBA",    team:"ゴールデンステート・ウォリアーズ（旧）", cap:19596, opened:1966, lat:37.751, lon:-122.203 },
     { ctry:"🇬🇧", code3:"GBR", name:"Wembley Stadium",         city:"ロンドン、イングランド",    league:"Soccer", team:"イングランド代表ほか",  cap:90000,  opened:2007, lat:51.556, lon:-0.280 },
     { ctry:"🇬🇧", code3:"GBR", name:"Old Trafford",            city:"マンチェスター、イングランド",league:"Soccer",team:"マンチェスター・ユナイテッド",cap:74140,opened:1910, lat:53.463, lon:-2.291 },
