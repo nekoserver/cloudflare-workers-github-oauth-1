@@ -778,8 +778,16 @@ void main() {
   var FLY_DUR = 2500;
 
   function flyTo(lat, lon) {
-    var ty = -(Math.PI/2 + lon * Math.PI/180);
-    var tx = Math.atan(Math.cos(axialTilt) * Math.tan(lat * Math.PI/180));
+    var latR = lat * Math.PI / 180;
+    var lonR = lon * Math.PI / 180;
+    var a = axialTilt;
+    var tanA = Math.tan(a);
+    var tanL = Math.tan(latR);
+    var cosVal = Math.max(-1, Math.min(1, tanA * tanL));
+    var ty = -Math.acos(cosVal) - lonR;
+    var sinSq = 1 - cosVal * cosVal;
+    var denom = Math.cos(a) * Math.sqrt(Math.max(0, sinSq));
+    var tx = denom < 1e-6 ? (latR >= 0 ? Math.PI / 2 : -Math.PI / 2) : Math.atan(tanL / denom);
     var dy = ty - rotYv;
     while (dy > Math.PI) dy -= 2*Math.PI;
     while (dy < -Math.PI) dy += 2*Math.PI;
