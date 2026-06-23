@@ -1437,7 +1437,6 @@ void main() {
         var lp1 = Math.min((now - landingPhaseStart) / LANDING_ZOOM_IN_DUR, 1);
         var le1 = lp1 * lp1 * (3 - 2 * lp1);
         zoom = landingZoomFrom + (LANDING_ZOOM_TARGET - landingZoomFrom) * le1;
-        rotXv = landingRotXFrom + (0.08 - landingRotXFrom) * le1;
         if (landingStatusEl) landingStatusEl.textContent = '降下中...';
         if (landingProgEl) landingProgEl.style.width = Math.round(le1 * 35) + '%';
         if (lp1 >= 1) {
@@ -1445,7 +1444,6 @@ void main() {
           landingPhaseStart = now;
           landingSpinAngle = 0;
           zoom = LANDING_ZOOM_TARGET;
-          rotXv = 0.08;
         }
       } else if (landingPhase === 2) {
         var lp2 = Math.min((now - landingPhaseStart) / LANDING_ROT_DUR, 1);
@@ -1462,7 +1460,7 @@ void main() {
         var lp3 = Math.min((now - landingPhaseStart) / LANDING_ZOOM_OUT_DUR, 1);
         var le3 = lp3 * lp3 * (3 - 2 * lp3);
         zoom = landingZoomOutFrom + (LANDING_ZOOM_RETURN - landingZoomOutFrom) * le3;
-        rotXv = 0.08 + (0.3 - 0.08) * le3;
+        rotXv = landingRotXFrom + (0.3 - landingRotXFrom) * le3;
         if (landingStatusEl) landingStatusEl.textContent = '帰還中...';
         if (landingProgEl) landingProgEl.style.width = Math.round(75 + le3 * 25) + '%';
         if (lp3 >= 1) { landingSpinAngle = 0; stopLanding(); }
