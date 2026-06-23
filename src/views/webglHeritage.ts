@@ -434,13 +434,15 @@ void main() {
   function rotX(m,r){ ident(m); var c=Math.cos(r),s=Math.sin(r); m[5]=c;m[6]=s;m[9]=-s;m[10]=c; return m; }
   function rotY(m,r){ ident(m); var c=Math.cos(r),s=Math.sin(r); m[0]=c;m[2]=-s;m[8]=s;m[10]=c; return m; }
   function rotZ(m,r){ ident(m); var c=Math.cos(r),s=Math.sin(r); m[0]=c;m[1]=s;m[4]=-s;m[5]=c; return m; }
+  function rotAround(m,ax,ay,az,angle){ ident(m); var c=Math.cos(angle),s=Math.sin(angle),t=1-c; m[0]=t*ax*ax+c; m[4]=t*ax*ay-s*az; m[8]=t*ax*az+s*ay; m[1]=t*ax*ay+s*az; m[5]=t*ay*ay+c; m[9]=t*ay*az-s*ax; m[2]=t*ax*az-s*ay; m[6]=t*ay*az+s*ax; m[10]=t*az*az+c; return m; }
   function trans(m,x,y,z){ ident(m); m[12]=x;m[13]=y;m[14]=z; return m; }
 
   var axialTilt = -23.4 * Math.PI / 180;
   var ELEV_MAX = Math.PI / 2 - 0.02;
   function clampElev(v){ return v < -ELEV_MAX ? -ELEV_MAX : (v > ELEV_MAX ? ELEV_MAX : v); }
 
-  var proj=m4(),view=m4(),model=m4(),rx=m4(),ry=m4(),tz=m4(),tmp=m4(),tmp2=m4(),mvp=m4();
+  var proj=m4(),view=m4(),model=m4(),rx=m4(),ry=m4(),tz=m4(),tmp=m4(),tmp2=m4(),mvp=m4(),landSpin=m4();
+  var landingSpinAngle = 0;
   var rotXv = 0.3, rotYv = 0.6, zoom = 3.2, autoRot = true;
   var drag = false, lx = 0, ly = 0, pinch0 = 0, touchMoved = false;
   var axisLocked = false;
@@ -1441,13 +1443,13 @@ void main() {
         if (lp1 >= 1) {
           landingPhase = 2;
           landingPhaseStart = now;
-          landingRotStart = rotYv;
+          landingSpinAngle = 0;
           zoom = LANDING_ZOOM_TARGET;
           rotXv = 0.08;
         }
       } else if (landingPhase === 2) {
         var lp2 = Math.min((now - landingPhaseStart) / LANDING_ROT_DUR, 1);
-        rotYv = landingRotStart + lp2 * Math.PI * 2;
+        landingSpinAngle = lp2 * Math.PI * 2;
         var deg2 = Math.round(lp2 * 360);
         if (landingStatusEl) landingStatusEl.textContent = '地表を見渡し中... ' + deg2 + '°';
         if (landingProgEl) landingProgEl.style.width = Math.round(35 + lp2 * 40) + '%';
@@ -1463,7 +1465,7 @@ void main() {
         rotXv = 0.08 + (0.3 - 0.08) * le3;
         if (landingStatusEl) landingStatusEl.textContent = '帰還中...';
         if (landingProgEl) landingProgEl.style.width = Math.round(75 + le3 * 25) + '%';
-        if (lp3 >= 1) { stopLanding(); }
+        if (lp3 >= 1) { landingSpinAngle = 0; stopLanding(); }
       }
     } else if (flyTarget !== null) {
       var fp = Math.min((now - flyStart) / FLY_DUR, 1);
@@ -1501,6 +1503,13 @@ void main() {
     rotY(ry, rotYv); rotZ(tz, axialTilt); rotX(rx, rotXv);
     mul(tmp2, tz, ry);
     mul(model, rx, tmp2);
+    if (landingMode && landingPhase === 2 && landingIdx >= 0) {
+      var lsite = HERITAGE[landingIdx];
+      var lsp = latLonTo3D(lsite.lat, lsite.lon);
+      rotAround(landSpin, lsp[0], lsp[1], lsp[2], landingSpinAngle);
+      mul(tmp2, model, landSpin);
+      model.set(tmp2);
+    }
     mul(tmp, view, model);
     mul(mvp, proj, tmp);
 
