@@ -824,6 +824,7 @@ function getNextZ() {
   var drag = false, lx = 0, ly = 0, pinch0 = 0, touchMoved = false;
   var touchStartX = 0, touchStartY = 0;
   var TOUCH_SLOP = 8;
+  var zoomCursorLat = null, zoomCursorLon = null;
 
   var axisLocked = false;
 
@@ -864,10 +865,10 @@ function getNextZ() {
   }
   window.addEventListener("mouseup",    function(){ if(!drag)return; drag=false; momentumY=applySpinBoost(velY); momentumX=applySpinBoost(velX); velY=0; velX=0; });
   window.addEventListener("mousemove",  function(e){ if(!drag)return; var dy=(e.clientX-lx)*0.008; var dx=(e.clientY-ly)*0.008; rotYv+=dy; velY=velY*0.4+dy*0.6; if(!axisLocked){ rotXv=clampElev(rotXv+dx); velX=velX*0.4+dx*0.6; } lx=e.clientX; ly=e.clientY; });
-  canvas.addEventListener("wheel",      function(e){ e.preventDefault(); var delta = e.deltaMode === 1 ? e.deltaY * 18 : (e.deltaMode === 2 ? e.deltaY * 300 : e.deltaY); var dz=delta*0.004; var newZoom=Math.max(1.0,Math.min(10,zoomTarget+dz)); var actualDz=newZoom-zoomTarget; if(actualDz!==0){ var cW=canvasRect.width,cH=canvasRect.height; if(cW>0&&cH>0){ var nx=(e.clientX-(canvasRect.left+cW*0.5))/(cW*0.5); var ny=-((e.clientY-(canvasRect.top+cH*0.5))/(cH*0.5)); var fovT=0.4142; var zf=zoomTarget/Math.max(0.1,zoomTarget-1); rotYv+=nx*(cW/cH)*fovT*actualDz*zf; rotXv=clampElev(rotXv+ny*fovT*actualDz*zf); } } zoomTarget=newZoom; },{passive:false});
+  canvas.addEventListener("wheel",      function(e){ e.preventDefault(); var delta = e.deltaMode === 1 ? e.deltaY * 18 : (e.deltaMode === 2 ? e.deltaY * 300 : e.deltaY); var dz=delta*0.004; var newZoom=Math.max(1.0,Math.min(10,zoomTarget+dz)); if(newZoom!==zoomTarget){ var cW=canvasRect.width,cH=canvasRect.height; if(cW>0&&cH>0){ var cursorLatLon=screenToLatLon(e.clientX-canvasRect.left, e.clientY-canvasRect.top, cW, cH, zoom, rotXv, rotYv); if(cursorLatLon){zoomCursorLat=cursorLatLon.lat; zoomCursorLon=cursorLatLon.lon;} } } zoomTarget=newZoom; },{passive:false});
   canvas.addEventListener("dblclick",   function(){ autoRot=!autoRot; btnAutoRot.textContent = autoRot ? "⏸ 自転停止" : "▶ 回転"; if(autoRot){btnAutoRot.classList.remove("active");}else{btnAutoRot.classList.add("active");} });
   canvas.addEventListener("touchstart", function(e){ e.preventDefault(); touchMoved=false; momentumY=0; momentumX=0; velY=0; velX=0; if(e.touches.length===1){drag=true;lx=e.touches[0].clientX;ly=e.touches[0].clientY;touchStartX=lx;touchStartY=ly;} if(e.touches.length===2){pinch0=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);} },{passive:false});
-  canvas.addEventListener("touchmove",  function(e){ e.preventDefault(); if(e.touches.length===1&&drag){ var cx=e.touches[0].clientX,cy=e.touches[0].clientY; if(!touchMoved){ if(Math.hypot(cx-touchStartX,cy-touchStartY)<TOUCH_SLOP){return;} touchMoved=true; lx=cx; ly=cy; } var dy=(cx-lx)*0.008; var dx=(cy-ly)*0.008; rotYv+=dy; velY=velY*0.4+dy*0.6; if(!axisLocked){rotXv=clampElev(rotXv+dx); velX=velX*0.4+dx*0.6;} lx=cx;ly=cy;} if(e.touches.length===2){touchMoved=true; var d=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY); var newZoomP=Math.max(1.0,Math.min(10,zoomTarget-(d-pinch0)*0.015)); var actualDzP=newZoomP-zoomTarget; if(actualDzP!==0){ var pcW=canvasRect.width,pcH=canvasRect.height; if(pcW>0&&pcH>0){ var pmcX=(e.touches[0].clientX+e.touches[1].clientX)*0.5; var pmcY=(e.touches[0].clientY+e.touches[1].clientY)*0.5; var pnx=(pmcX-(canvasRect.left+pcW*0.5))/(pcW*0.5); var pny=-((pmcY-(canvasRect.top+pcH*0.5))/(pcH*0.5)); var pfovT=0.4142; var pzf=zoomTarget/Math.max(0.1,zoomTarget-1); rotYv+=pnx*(pcW/pcH)*pfovT*actualDzP*pzf; rotXv=clampElev(rotXv+pny*pfovT*actualDzP*pzf); } } zoomTarget=newZoomP; pinch0=d;} },{passive:false});
+  canvas.addEventListener("touchmove",  function(e){ e.preventDefault(); if(e.touches.length===1&&drag){ var cx=e.touches[0].clientX,cy=e.touches[0].clientY; if(!touchMoved){ if(Math.hypot(cx-touchStartX,cy-touchStartY)<TOUCH_SLOP){return;} touchMoved=true; lx=cx; ly=cy; } var dy=(cx-lx)*0.008; var dx=(cy-ly)*0.008; rotYv+=dy; velY=velY*0.4+dy*0.6; if(!axisLocked){rotXv=clampElev(rotXv+dx); velX=velX*0.4+dx*0.6;} lx=cx;ly=cy;} if(e.touches.length===2){touchMoved=true; var d=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY); var newZoomP=Math.max(1.0,Math.min(10,zoomTarget-(d-pinch0)*0.015)); if(newZoomP!==zoomTarget){ var pcW=canvasRect.width,pcH=canvasRect.height; if(pcW>0&&pcH>0){ var pmcX=(e.touches[0].clientX+e.touches[1].clientX)*0.5-canvasRect.left; var pmcY=(e.touches[0].clientY+e.touches[1].clientY)*0.5-canvasRect.top; var pinchLatLon=screenToLatLon(pmcX, pmcY, pcW, pcH, zoom, rotXv, rotYv); if(pinchLatLon){zoomCursorLat=pinchLatLon.lat; zoomCursorLon=pinchLatLon.lon;} } } zoomTarget=newZoomP; pinch0=d;} },{passive:false});
   canvas.addEventListener("touchend", function(e){
     drag=false;
     momentumY=applySpinBoost(velY); momentumX=applySpinBoost(velX); velY=0; velX=0;
@@ -1764,6 +1765,37 @@ function getNextZ() {
     return -1;
   }
 
+  function screenToLatLon(sx, sy, W, H, curZoom, curRotX, curRotY) {
+    if (W <= 0 || H <= 0) return null;
+    var nx = (sx - W * 0.5) / (W * 0.5);
+    var ny = -((sy - H * 0.5) / (H * 0.5));
+    var fov = Math.PI / 4;
+    var tanFOV = Math.tan(fov * 0.5);
+    var aspect = W / H;
+    var rx = nx * aspect * tanFOV;
+    var ry = ny * tanFOV;
+    var rz = -1;
+    var rlen = Math.sqrt(rx*rx + ry*ry + rz*rz);
+    rx /= rlen; ry /= rlen; rz /= rlen;
+    var cosRx = Math.cos(curRotX), sinRx = Math.sin(curRotX);
+    var cosRy = Math.cos(curRotY), sinRy = Math.sin(curRotY);
+    var cosTilt = Math.cos(axialTilt), sinTilt = Math.sin(axialTilt);
+    var rx1 = rx, ry1 = cosRx*ry - sinRx*rz, rz1 = sinRx*ry + cosRx*rz;
+    var rx2 = cosRy*rx1 + sinRy*rz1, ry2 = ry1, rz2 = -sinRy*rx1 + cosRy*rz1;
+    var rx3 = rx2, ry3 = cosTilt*ry2 - sinTilt*rz2, rz3 = sinTilt*ry2 + cosTilt*rz2;
+    var a = rx3*rx3 + ry3*ry3 + rz3*rz3;
+    var b = 2 * (rx3*0 + ry3*0 + rz3*0);
+    var c = 0*0 + 0*0 + 0*0 - 1;
+    var disc = b*b - 4*a*c;
+    if (disc < 0) return null;
+    var t = (-b - Math.sqrt(disc)) / (2*a);
+    if (t < 0) return null;
+    var px = t * rx3, py = t * ry3, pz = t * rz3;
+    var lat = Math.atan2(py, Math.sqrt(px*px + pz*pz)) * 180 / Math.PI;
+    var lon = Math.atan2(pz, px) * 180 / Math.PI;
+    return {lat: lat, lon: lon};
+  }
+
   function flyTo(lat, lon) {
     var latR = lat * Math.PI / 180;
     var lonR = lon * Math.PI / 180;
@@ -2566,7 +2598,14 @@ function getNextZ() {
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
     var t = (now - startTime) * 0.001;
+    var prevZoom = zoom;
     zoom += (zoomTarget - zoom) * 0.15;
+    if (zoomCursorLat !== null && Math.abs(zoom - zoomTarget) < 0.01) {
+      if (Math.abs(prevZoom - zoomTarget) >= 0.01) {
+        flyTo(zoomCursorLat, zoomCursorLon);
+      }
+      zoomCursorLat = null; zoomCursorLon = null;
+    }
     var spd = parseFloat(rotSpdEl.value);
     if (flyTarget !== null) {
       var fp = Math.min((now - flyStart) / FLY_DUR, 1);
@@ -2581,7 +2620,7 @@ function getNextZ() {
       if (!axisLocked && Math.abs(momentumX) > 0.0002) { rotXv = clampElev(rotXv + momentumX); momentumX *= MOMENTUM_DECAY; } else { momentumX = 0; }
       if (axisLocked) rotXv = 0;
       var nowSpinning = Math.abs(momentumY) > 0.0002 || Math.abs(momentumX) > 0.0002;
-      if (wasSpinning && !nowSpinning && !autoRot) {
+      if (wasSpinning && !nowSpinning && !autoRot && !showFamousStadiums) {
         var bestIdx = -1, bestMz = -1;
         for (var si = 0; si < wc2026.length; si++) {
           if (wc2026[si].ball) continue;
