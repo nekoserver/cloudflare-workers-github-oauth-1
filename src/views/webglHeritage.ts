@@ -269,7 +269,7 @@ void main() {
     <div class="landing-site-sub" id="landing-sub"></div>
     <div class="landing-status-txt" id="landing-status">着陸中...</div>
     <div class="landing-prog-track"><div class="landing-prog-fill" id="landing-prog"></div></div>
-    <button class="landing-exit-btn" id="landing-exit">🚁 離脱する</button>
+    <button class="landing-exit-btn" id="landing-exit">🚀 宇宙に戻る</button>
   </div>
 </div>
 
@@ -818,11 +818,13 @@ void main() {
   var landingPhaseStart = 0;
   var landingZoomFrom = 3.2;
   var landingRotStart = 0;
-  var landingZoomOutFrom = 9.5;
-  var LANDING_ZOOM_TARGET = 9.5;
-  var LANDING_ZOOM_IN_DUR = 2200;
-  var LANDING_ROT_DUR = 9000;
-  var LANDING_ZOOM_OUT_DUR = 1800;
+  var landingRotXFrom = 0;
+  var landingZoomOutFrom = 1.12;
+  var LANDING_ZOOM_TARGET = 1.12;
+  var LANDING_ZOOM_RETURN = 3.5;
+  var LANDING_ZOOM_IN_DUR = 3500;
+  var LANDING_ROT_DUR = 14000;
+  var LANDING_ZOOM_OUT_DUR = 2500;
   var landingOverlayEl = null;
   var landingTitleEl = null;
   var landingSubEl = null;
@@ -869,6 +871,7 @@ void main() {
       landingPhase = 1;
       landingPhaseStart = performance.now();
       landingZoomFrom = zoom;
+      landingRotXFrom = rotXv;
       markersDiv.style.display = 'none';
       tooltip.style.opacity = '0';
       if (landingTitleEl) landingTitleEl.textContent = ld.e + ' ' + ld.f + ' ' + ld.n;
@@ -884,7 +887,8 @@ void main() {
     landingPhase = 0;
     markersDiv.style.display = '';
     if (landingOverlayEl) landingOverlayEl.classList.remove('active');
-    zoom = 3.5;
+    zoom = LANDING_ZOOM_RETURN;
+    rotXv = 0.3;
     autoRot = true;
     btnAutoRot.textContent = '⏸ 自転停止';
     btnAutoRot.classList.remove('active');
@@ -1306,7 +1310,7 @@ void main() {
   function showMarkerTooltip(idx, vx, vy) {
     var d = HERITAGE[idx];
     var col = typeColor(d.t);
-    tooltip.innerHTML = '<div class="tt-name">' + d.e + ' ' + d.f + ' ' + d.n + '</div><div class="tt-sub"><span style="color:' + col + ';font-weight:600">' + d.t + '</span>  ' + d.c + '  ' + d.y + '年登録</div><div style="margin-top:7px;text-align:center;"><button id="tt-land-btn" style="background:#0c2d1a;border:1px solid #3fb950;border-radius:6px;color:#3fb950;font-size:11px;padding:4px 12px;cursor:pointer;font-family:inherit;">🛬 着陸して360°周回</button></div>';
+    tooltip.innerHTML = '<div class="tt-name">' + d.e + ' ' + d.f + ' ' + d.n + '</div><div class="tt-sub"><span style="color:' + col + ';font-weight:600">' + d.t + '</span>  ' + d.c + '  ' + d.y + '年登録</div><div style="margin-top:7px;text-align:center;"><button id="tt-land-btn" style="background:#0c2d1a;border:1px solid #3fb950;border-radius:6px;color:#3fb950;font-size:11px;padding:4px 12px;cursor:pointer;font-family:inherit;">🚶 地表に降り立つ</button></div>';
     var landBtn = document.getElementById('tt-land-btn');
     if (landBtn) {
       (function(ci) {
@@ -1431,20 +1435,22 @@ void main() {
         var lp1 = Math.min((now - landingPhaseStart) / LANDING_ZOOM_IN_DUR, 1);
         var le1 = lp1 * lp1 * (3 - 2 * lp1);
         zoom = landingZoomFrom + (LANDING_ZOOM_TARGET - landingZoomFrom) * le1;
-        if (landingStatusEl) landingStatusEl.textContent = '着陸中...';
-        if (landingProgEl) landingProgEl.style.width = Math.round(le1 * 30) + '%';
+        rotXv = landingRotXFrom + (0.08 - landingRotXFrom) * le1;
+        if (landingStatusEl) landingStatusEl.textContent = '降下中...';
+        if (landingProgEl) landingProgEl.style.width = Math.round(le1 * 35) + '%';
         if (lp1 >= 1) {
           landingPhase = 2;
           landingPhaseStart = now;
           landingRotStart = rotYv;
           zoom = LANDING_ZOOM_TARGET;
+          rotXv = 0.08;
         }
       } else if (landingPhase === 2) {
         var lp2 = Math.min((now - landingPhaseStart) / LANDING_ROT_DUR, 1);
         rotYv = landingRotStart + lp2 * Math.PI * 2;
         var deg2 = Math.round(lp2 * 360);
-        if (landingStatusEl) landingStatusEl.textContent = '360°周回中... ' + deg2 + '°';
-        if (landingProgEl) landingProgEl.style.width = Math.round(30 + lp2 * 40) + '%';
+        if (landingStatusEl) landingStatusEl.textContent = '地表を見渡し中... ' + deg2 + '°';
+        if (landingProgEl) landingProgEl.style.width = Math.round(35 + lp2 * 40) + '%';
         if (lp2 >= 1) {
           landingPhase = 3;
           landingPhaseStart = now;
@@ -1453,9 +1459,10 @@ void main() {
       } else if (landingPhase === 3) {
         var lp3 = Math.min((now - landingPhaseStart) / LANDING_ZOOM_OUT_DUR, 1);
         var le3 = lp3 * lp3 * (3 - 2 * lp3);
-        zoom = landingZoomOutFrom + (3.5 - landingZoomOutFrom) * le3;
+        zoom = landingZoomOutFrom + (LANDING_ZOOM_RETURN - landingZoomOutFrom) * le3;
+        rotXv = 0.08 + (0.3 - 0.08) * le3;
         if (landingStatusEl) landingStatusEl.textContent = '帰還中...';
-        if (landingProgEl) landingProgEl.style.width = Math.round(70 + le3 * 30) + '%';
+        if (landingProgEl) landingProgEl.style.width = Math.round(75 + le3 * 25) + '%';
         if (lp3 >= 1) { stopLanding(); }
       }
     } else if (flyTarget !== null) {
@@ -1487,7 +1494,9 @@ void main() {
       }
     }
 
-    persp(proj, Math.PI / 4, W / H, 0.1, 100);
+    var landFov = landingMode ? Math.PI / 2.8 : Math.PI / 4;
+    var landNear = landingMode ? 0.02 : 0.1;
+    persp(proj, landFov, W / H, landNear, 100);
     trans(view, 0, 0, -zoom);
     rotY(ry, rotYv); rotZ(tz, axialTilt); rotX(rx, rotXv);
     mul(tmp2, tz, ry);
