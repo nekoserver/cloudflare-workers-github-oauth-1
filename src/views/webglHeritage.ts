@@ -64,6 +64,10 @@ canvas:active { cursor:grabbing; }
 .canvas-ctrl-btn { background:rgba(13,17,23,0.88); border:1px solid #30363d; border-radius:6px; color:#e6edf3; font-size:12px; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; padding:6px 12px; cursor:pointer; white-space:nowrap; transition:background .15s,border-color .15s,color .15s; }
 .canvas-ctrl-btn:hover { background:rgba(13,17,23,1); border-color:#3fb950; }
 .canvas-ctrl-btn.active { background:#0c2d1a; border-color:#3fb950; color:#3fb950; }
+.dbg-rect { position:absolute; pointer-events:none; box-sizing:border-box; }
+#dbg-globe-rect { border:1px dashed #3fb950; }
+#dbg-zoom-rect { border:1px dashed #58a6ff; }
+#dbg-info { position:absolute; bottom:10px; left:10px; background:rgba(0,0,0,.75); border:1px solid #21262d; border-radius:5px; padding:5px 9px; font-size:10px; font-family:monospace; color:#8b949e; line-height:1.7; pointer-events:none; z-index:6; }
 .panel-tabs { display:flex; border-bottom:1px solid #21262d; flex-shrink:0; }
 .panel-tab { flex:1; padding:8px 4px; font-size:11px; font-weight:600; color:#484f58; background:none; border:none; border-bottom:2px solid transparent; cursor:pointer; transition:color .15s,border-color .15s; }
 .panel-tab:hover { color:#8b949e; }
@@ -173,6 +177,9 @@ void main() {
     <canvas id="c"></canvas>
     <div id="markers"></div>
     <div class="hud" id="hud">テクスチャ読み込み中...</div>
+    <div id="dbg-info"></div>
+    <div class="dbg-rect" id="dbg-globe-rect"></div>
+    <div class="dbg-rect" id="dbg-zoom-rect"></div>
     <div class="canvas-ctrl-btns">
       <button class="canvas-ctrl-btn" id="btnAxisLock">＋ 軸垂直固定</button>
       <button class="canvas-ctrl-btn" id="btnAutoRot">⏸ 自転停止</button>
@@ -267,7 +274,10 @@ void main() {
 (function() {
   var canvas = document.getElementById('c');
   var wrap   = canvas.parentElement;
-  var hud    = document.getElementById('hud');
+  var hud         = document.getElementById('hud');
+  var dbgInfo     = document.getElementById('dbg-info');
+  var dbgGlobeRect = document.getElementById('dbg-globe-rect');
+  var dbgZoomRect  = document.getElementById('dbg-zoom-rect');
   var markersDiv = document.getElementById('markers');
   var siteList = document.getElementById('siteList');
   var searchInput = document.getElementById('searchInput');
@@ -1357,6 +1367,28 @@ void main() {
       updateProximityList();
     }
 
+    var tanHalfFov = Math.tan(Math.PI / 8);
+    var sinAlpha = 1 / zoom;
+    var cosAlpha = Math.sqrt(1 - sinAlpha * sinAlpha);
+    var tanAlpha = sinAlpha / cosAlpha;
+    var globeR = Math.round((H / 2) * tanAlpha / tanHalfFov);
+    var gcx = Math.round(W / 2);
+    var gcy = Math.round(H / 2);
+    dbgGlobeRect.style.left = (gcx - globeR) + 'px';
+    dbgGlobeRect.style.top  = (gcy - globeR) + 'px';
+    dbgGlobeRect.style.width  = (globeR * 2) + 'px';
+    dbgGlobeRect.style.height = (globeR * 2) + 'px';
+    var visHalfDeg = Math.round(Math.asin(sinAlpha) * 180 / Math.PI);
+    var zoomR = Math.round(globeR / zoom);
+    dbgZoomRect.style.left = (gcx - zoomR) + 'px';
+    dbgZoomRect.style.top  = (gcy - zoomR) + 'px';
+    dbgZoomRect.style.width  = (zoomR * 2) + 'px';
+    dbgZoomRect.style.height = (zoomR * 2) + 'px';
+    dbgInfo.innerHTML =
+      'Canvas: ' + W + ' x ' + H + '<br>' +
+      'Globe: (' + (gcx - globeR) + ', ' + (gcy - globeR) + ') - (' + (gcx + globeR) + ', ' + (gcy + globeR) + ') r=' + globeR + '<br>' +
+      'Zoom: ' + zoom.toFixed(2) + 'x  |  Visible: +/-' + visHalfDeg + 'deg';
+
     frames++;
     var dt = now - lastFps;
     if (dt >= 600) {
@@ -1366,7 +1398,7 @@ void main() {
       var sunLonDeg = Math.round((12 - utcH) * 15);
       var ew = sunLonDeg >= 0 ? 'E' : 'W';
       var label = earthImg.complete && earthImg.naturalWidth > 0 ? '' : 'テクスチャ読込中 | ';
-      hud.textContent = label + 'FPS: ' + fps + '  |  太陽: ' + Math.abs(sunLonDeg) + '°' + ew + '  |  ' + (autoRot ? '自動回転 ON' : '自動回転 OFF');
+      hud.textContent = label + 'FPS: ' + fps + '  |  太陽: ' + Math.abs(sunLonDeg) + '°' + ew + '  |  ' + (autoRot ? '自転回転 ON' : '自転回転 OFF');
       frames = 0; lastFps = now;
     }
   }
