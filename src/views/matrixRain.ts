@@ -24,36 +24,38 @@ canvas{display:block;}
   <button class="btn" id="btn-speed-up">速く &#9654;</button>
 </div>
 
-<script type="module">
-import anime from 'https://cdn.jsdelivr.net/npm/animejs@4.0.2/+esm';
+<script src="https://cdnjs.cloudflare.com/ajax/libs/animejs/3.2.1/anime.min.js"></script>
+<script>
+var canvas = document.getElementById('c');
+var ctx = canvas.getContext('2d');
 
-const canvas = document.getElementById('c');
-const ctx = canvas.getContext('2d');
+var CHARS = 'アイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホマミムメモヤユヨラリルレロワヲン0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ@#$%&*';
 
-// キャラクターセット: カタカナ + 数字 + アルファベット
-const CHARS = 'アイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホマミムメモヤユヨラリルレロワヲン0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ@#$%&*';
-
-const PALETTES = [
-  { head: '#ffffff', body: '#00ff41', dim: '#003b10' },  // 緑 (classic)
-  { head: '#ffffff', body: '#00cfff', dim: '#00314a' },  // 青
-  { head: '#ffffff', body: '#ff4488', dim: '#3a0020' },  // ピンク
-  { head: '#ffffff', body: '#ffaa00', dim: '#3a2500' },  // オレンジ
-  { head: '#ffffff', body: '#cc44ff', dim: '#2a0040' },  // 紫
+var PALETTES = [
+  { head: '#ffffff', body: '#00ff41' },
+  { head: '#ffffff', body: '#00cfff' },
+  { head: '#ffffff', body: '#ff4488' },
+  { head: '#ffffff', body: '#ffaa00' },
+  { head: '#ffffff', body: '#cc44ff' },
 ];
-let paletteIdx = 0;
+var paletteIdx = 0;
 
-const FONT_SIZE = 16;
-let cols, drops, colChars, speeds;
-let intervalId = null;
-let speedFactor = 1.0;
+var FONT_SIZE = 16;
+var cols, drops, colChars, speeds;
+var speedFactor = 1.0;
 
 function init() {
   canvas.width = window.innerWidth;
   canvas.height = window.innerHeight;
   cols = Math.floor(canvas.width / FONT_SIZE);
-  drops = new Array(cols).fill(0).map(() => Math.random() * -50);
-  colChars = new Array(cols).fill('').map(() => randomChar());
-  speeds = new Array(cols).fill(0).map(() => 0.3 + Math.random() * 0.7);
+  drops = [];
+  colChars = [];
+  speeds = [];
+  for (var i = 0; i < cols; i++) {
+    drops.push(Math.random() * -50);
+    colChars.push(randomChar());
+    speeds.push(0.3 + Math.random() * 0.7);
+  }
 }
 
 function randomChar() {
@@ -61,92 +63,88 @@ function randomChar() {
 }
 
 function draw() {
-  const pal = PALETTES[paletteIdx];
-
-  // フェードトレイル
+  var pal = PALETTES[paletteIdx];
   ctx.fillStyle = 'rgba(0,0,0,0.05)';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
-
   ctx.font = FONT_SIZE + 'px monospace';
 
-  for (let i = 0; i < cols; i++) {
-    const y = Math.floor(drops[i]) * FONT_SIZE;
+  for (var i = 0; i < cols; i++) {
+    var y = Math.floor(drops[i]) * FONT_SIZE;
 
-    // 先頭文字 (白く光る)
     ctx.fillStyle = pal.head;
     ctx.shadowBlur = 8;
     ctx.shadowColor = pal.body;
     ctx.fillText(colChars[i], i * FONT_SIZE, y);
 
-    // 直前の文字は本体色
     ctx.fillStyle = pal.body;
     ctx.shadowBlur = 4;
     ctx.shadowColor = pal.body;
     if (y - FONT_SIZE > 0) {
       ctx.fillText(randomChar(), i * FONT_SIZE, y - FONT_SIZE);
     }
-
     ctx.shadowBlur = 0;
 
     drops[i] += speeds[i] * speedFactor;
     colChars[i] = randomChar();
 
-    // 画面下に達したらランダムにリセット
     if (drops[i] * FONT_SIZE > canvas.height && Math.random() > 0.975) {
       drops[i] = 0;
     }
   }
 }
 
-// anime.js でフレームループを駆動
-let anim;
-function startAnim() {
-  if (anim) anim.pause();
-  const ticker = { t: 0 };
-  anim = anime.animate(ticker, {
-    t: 1e9,
-    duration: 1e9,
-    easing: 'linear',
-    onUpdate: draw,
-  });
-}
+// anime.js の update コールバックでフレームループを駆動
+var ticker = { t: 0 };
+var anim = anime({
+  targets: ticker,
+  t: 1000000,
+  duration: 1000000,
+  easing: 'linear',
+  update: draw,
+  loop: true,
+});
 
 init();
-startAnim();
-window.addEventListener('resize', () => { init(); });
+window.addEventListener('resize', init);
 
-// ─── 速度変更 (anime.js でスムーズに補間) ─────────────────────────
-const speedProxy = { v: 1.0 };
+// 速度変更: anime.js でスムーズに補間
+var speedProxy = { v: 1.0 };
 
 function setSpeed(target) {
-  anime.animate(speedProxy, {
+  anime({
+    targets: speedProxy,
     v: Math.max(0.2, Math.min(4.0, target)),
     duration: 600,
     easing: 'easeOutCubic',
-    onUpdate: () => { speedFactor = speedProxy.v; },
+    update: function() { speedFactor = speedProxy.v; },
   });
 }
 
-document.getElementById('btn-speed-down').addEventListener('click', () => setSpeed(speedProxy.v - 0.4));
-document.getElementById('btn-speed-up').addEventListener('click',   () => setSpeed(speedProxy.v + 0.4));
+document.getElementById('btn-speed-down').addEventListener('click', function() {
+  setSpeed(speedProxy.v - 0.4);
+});
+document.getElementById('btn-speed-up').addEventListener('click', function() {
+  setSpeed(speedProxy.v + 0.4);
+});
 
-// ─── 色変更: anime.js でキャンバスをフラッシュ ──────────────────────
-document.getElementById('btn-color').addEventListener('click', () => {
+// 色変更: anime.js でフラッシュ演出
+document.getElementById('btn-color').addEventListener('click', function() {
   paletteIdx = (paletteIdx + 1) % PALETTES.length;
 
-  // 白フラッシュ演出
-  const overlay = document.createElement('div');
+  var overlay = document.createElement('div');
   overlay.style.cssText = 'position:fixed;inset:0;background:#fff;z-index:5;pointer-events:none;opacity:0;';
   document.body.appendChild(overlay);
-  anime.animate(overlay, {
-    opacity: [0, 0.3, 0],
+  anime({
+    targets: overlay,
+    opacity: [0, 0.35, 0],
     duration: 400,
     easing: 'easeOutQuad',
-    onComplete: () => overlay.remove(),
+    complete: function() { overlay.remove(); },
   });
 
-  // 全列をリセット
-  drops = drops.map(() => Math.random() * -30);
+  for (var i = 0; i < drops.length; i++) {
+    drops[i] = Math.random() * -30;
+  }
 });
 </script>
 </body>
