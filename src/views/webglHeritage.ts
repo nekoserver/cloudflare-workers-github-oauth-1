@@ -2734,6 +2734,17 @@ void main() {
 
   updateProximityList();
   requestAnimationFrame(frame);
+
+  (function() {
+    var sp = new URLSearchParams(window.location.search);
+    var cityName = sp.get('city');
+    var lat = parseFloat(sp.get('lat') || '');
+    var lon = parseFloat(sp.get('lon') || '');
+    var cc = sp.get('cc') || '';
+    if (cityName && !isNaN(lat) && !isNaN(lon)) {
+      openCityFlyPanel(cityName, cc, lat, lon);
+    }
+  })();
 })();
 </script>
 <script>

@@ -157,6 +157,13 @@ function fmtPop(n) {
   return n.toLocaleString();
 }
 
+function cityLink(r) {
+  var url = '/webgl-heritage?city=' + encodeURIComponent(r.city_name) +
+    '&lat=' + r.city_lat + '&lon=' + r.city_lon +
+    (r.country_code ? '&cc=' + encodeURIComponent(r.country_code) : '');
+  return '<a href="' + url + '" style="color:inherit;text-decoration:none;border-bottom:1px dotted #444">' + r.city_name + '</a>';
+}
+
 var allRows = [];
 var viewMode = 'all';
 
@@ -223,7 +230,7 @@ function renderAll(rows) {
     html += '<tr' + rowClass + '>' +
       '<td class="rank">' + (i + 1) + '</td>' +
       '<td class="flag">' + ccToFlag(r.country_code) + '</td>' +
-      '<td class="city">' + r.city_name + '</td>' +
+      '<td class="city">' + cityLink(r) + '</td>' +
       '<td class="country">' + ccToJp(r.country_code) + '</td>' +
       '<td><div style="display:flex;align-items:center;gap:6px">' +
         '<div class="bar" style="width:' + barW + 'px"></div>' +
@@ -273,7 +280,7 @@ function renderCountry(rows) {
       html += '<tr>' +
         '<td class="rank">' + globalRank + '</td>' +
         '<td class="flag">' + ccToFlag(r.country_code) + '</td>' +
-        '<td class="city">' + r.city_name + '</td>' +
+        '<td class="city">' + cityLink(r) + '</td>' +
         '<td class="country">' + ccToJp(r.country_code) + '</td>' +
         '<td><div style="display:flex;align-items:center;gap:6px">' +
           '<div class="bar" style="width:' + barW + 'px"></div>' +
