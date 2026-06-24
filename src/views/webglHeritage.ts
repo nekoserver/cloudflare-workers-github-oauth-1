@@ -179,8 +179,10 @@ canvas:active { cursor:grabbing; }
 .cl-item { display:flex; align-items:center; gap:8px; padding:6px; border-bottom:1px solid #21262d; cursor:pointer; border-radius:4px; transition:background .12s; }
 .cl-item:last-child { border-bottom:none; }
 .cl-item:hover { background:rgba(56,139,253,.08); }
-.cl-item-name { flex:1; font-size:12px; color:#c9d1d9; }
-.cl-item-count { font-size:11px; color:#58a6ff; font-weight:600; flex-shrink:0; min-width:44px; text-align:right; }
+.cl-item-flag { font-size:15px; flex-shrink:0; }
+.cl-item-name { flex:1; font-size:12px; color:#58a6ff; text-decoration:underline; text-underline-offset:2px; cursor:pointer; }
+.cl-item-name:hover { color:#79c0ff; }
+.cl-item-count { font-size:11px; color:#8b949e; font-weight:600; flex-shrink:0; min-width:44px; text-align:right; }
 .ch2-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,.9); z-index:500; align-items:flex-start; justify-content:center; padding-top:40px; }
 .ch2-overlay.open { display:flex; }
 .ch2-panel { background:#0d1117; border:1px solid #30363d; border-radius:10px; width:min(92vw,540px); max-height:80vh; display:flex; flex-direction:column; overflow:hidden; box-shadow:0 8px 48px rgba(0,0,0,.98); }
@@ -1836,8 +1838,10 @@ void main() {
       var html = '';
       cities.forEach(function(city) {
         var safeCity = city.city_name.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+        var flagEmoji = city.country_code ? ccToFlag(city.country_code) : '🏙️';
         html += '<div class="cl-item" data-city="' + safeCity + '" data-lat="' + city.lat + '" data-lon="' + city.lon + '">' +
-          '<span class="cl-item-name">🏙️ ' + safeCity + '</span>' +
+          '<span class="cl-item-flag">' + flagEmoji + '</span>' +
+          '<span class="cl-item-name">' + safeCity + '</span>' +
           '<span class="cl-item-count">' + city.near_count + '遺産地</span>' +
           '</div>';
       });
@@ -1849,6 +1853,16 @@ void main() {
           var lon = parseFloat(el.getAttribute('data-lon'));
           openCityHeritageModal(cityName, lat, lon, names);
         });
+        var nameEl = el.querySelector('.cl-item-name');
+        if(nameEl) {
+          nameEl.addEventListener('click', function(e) {
+            e.stopPropagation();
+            var lat = parseFloat(el.getAttribute('data-lat'));
+            var lon = parseFloat(el.getAttribute('data-lon'));
+            clOverlay.classList.remove('open');
+            flyTo(lat, lon);
+          });
+        }
       });
     }).catch(function() {
       clBody.innerHTML = '<div style="color:#8b949e;text-align:center;padding:20px">取得エラー</div>';
