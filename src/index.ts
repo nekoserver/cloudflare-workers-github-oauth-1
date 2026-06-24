@@ -38,6 +38,7 @@ import { getMLBSpherePage } from './views/mlbSphere';
 import { getWorldCupWdlPage } from './views/worldCupWdl';
 import { getMatrixRainPage } from './views/matrixRain';
 import { getImageSpin3dPage } from './views/imageSpin3d';
+import { findNearbyCities } from './utils/worldCities';
 import { getAuthFlowPage } from './views/authFlow';
 
 import { computeColumnRelationStats, verifyColumnStats, type TableSchema, type Relation } from './utils/columnRelationStats';
@@ -4302,32 +4303,15 @@ app.post('/api/heritage-cities', authMiddleware, async (c) => {
   }
 
   type CityRow = { city_name: string; city_lat: number; city_lon: number; population: number | null; distance_km: number };
-  let cities: CityRow[] = [];
 
-  try {
-    const query = `[out:json][timeout:25];node["place"~"^(city|town)$"]["population"](around:500000,${lat},${lon});out body 30;`;
-    const resp = await fetch('https://overpass-api.de/api/interpreter', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: 'data=' + encodeURIComponent(query),
-      signal: AbortSignal.timeout(30000),
-    });
-    if (resp.ok) {
-      const data = await resp.json<{ elements: Array<{ lat: number; lon: number; tags?: { name?: string; population?: string } }> }>();
-      for (const el of data.elements || []) {
-        const cityName = el.tags?.name;
-        if (!cityName) continue;
-        const popRaw = parseInt(el.tags?.population || '', 10);
-        const pop = isNaN(popRaw) ? null : popRaw;
-        const dist = Math.round(haversineKm(lat, lon, el.lat, el.lon));
-        cities.push({ city_name: cityName, city_lat: el.lat, city_lon: el.lon, population: pop, distance_km: dist });
-      }
-      cities.sort((a, b) => a.distance_km - b.distance_km);
-      cities = cities.slice(0, 15);
-    }
-  } catch (_e) {
-    /* Overpass unavailable - store empty result */
-  }
+  const nearby = findNearbyCities(lat, lon, 500, 15);
+  const cities: CityRow[] = nearby.map(c => ({
+    city_name: c.name,
+    city_lat: c.lat,
+    city_lon: c.lon,
+    population: c.population,
+    distance_km: Math.round(c.distanceKm),
+  }));
 
   if (cities.length > 0) {
     const stmt = db.prepare('INSERT OR IGNORE INTO heritage_cities (heritage_name, city_name, city_lat, city_lon, population, distance_km) VALUES (?, ?, ?, ?, ?, ?)');
