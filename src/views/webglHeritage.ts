@@ -1890,7 +1890,6 @@ void main() {
   var ch2Title = document.getElementById('ch2-title');
   var ch2Body = document.getElementById('ch2-body');
   document.getElementById('ch2-close').addEventListener('click', function() { ch2Overlay.classList.remove('open'); });
-  ch2Overlay.addEventListener('click', function(e) { if(e.target === ch2Overlay) ch2Overlay.classList.remove('open'); });
 
   var cityFlyPanel = document.getElementById('city-fly-panel');
   var cityFlyFlag = document.getElementById('city-fly-flag');
