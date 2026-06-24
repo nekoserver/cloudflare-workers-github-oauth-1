@@ -61,6 +61,19 @@ td.pop{text-align:right;color:#8b949e;font-size:11px;min-width:64px}
 .acc-dist{color:#58a6ff;font-size:11px;font-weight:600;white-space:nowrap;min-width:56px;text-align:right}
 .acc-loading{color:#484f58;font-size:12px;padding:8px 0}
 .acc-toggle{font-size:10px;color:#484f58;margin-left:4px;flex-shrink:0}
+.acc-ai-panel{margin-top:6px;padding:8px 0 4px;border-top:1px solid #21262d}
+.acc-ai-label{font-size:11px;color:#8b949e;margin-bottom:6px}
+.acc-ai-btns{display:flex;flex-wrap:wrap;gap:6px}
+.acc-ai-btn{background:#0d1117;border:1px solid #30363d;border-radius:6px;color:#c9d1d9;font-size:11px;padding:4px 10px;cursor:pointer;font-family:inherit;transition:border-color .15s,color .15s}
+.acc-ai-btn:hover{border-color:#58a6ff;color:#58a6ff}
+.acc-ai-btn:disabled{color:#484f58;cursor:default;border-color:#21262d}
+.ai-modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.78);align-items:center;justify-content:center}
+.ai-modal-overlay.open{display:flex}
+.ai-modal{background:#0d1117;border:1px solid #30363d;border-radius:10px;width:min(92vw,560px);max-height:80vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 8px 40px rgba(0,0,0,.9)}
+.ai-modal-head{padding:12px 16px;border-bottom:1px solid #21262d;display:flex;align-items:center;gap:8px;flex-shrink:0}
+.ai-modal-title{font-size:13px;font-weight:700;flex:1;color:#e6edf3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ai-modal-close{background:none;border:none;color:#8b949e;font-size:18px;cursor:pointer;padding:2px 6px;line-height:1}
+.ai-modal-body{overflow-y:auto;padding:16px;font-size:13px;line-height:1.7;color:#c9d1d9;white-space:pre-wrap;word-break:break-word}
 </style>
 </head>
 <body>
@@ -90,6 +103,15 @@ td.pop{text-align:right;color:#8b949e;font-size:11px;min-width:64px}
     <button class="mode-tab" id="tab-country">国別グループ</button>
   </div>
   <button id="btn-load">読み込む</button>
+</div>
+<div id="ai-modal-overlay" class="ai-modal-overlay">
+  <div class="ai-modal">
+    <div class="ai-modal-head">
+      <span class="ai-modal-title" id="ai-modal-title">AI回答</span>
+      <button class="ai-modal-close" id="ai-modal-close">✕</button>
+    </div>
+    <div class="ai-modal-body" id="ai-modal-body"></div>
+  </div>
 </div>
 <div class="summary" id="summary"></div>
 <div class="tbl-wrap" id="tbl-wrap">
@@ -237,6 +259,57 @@ function bindCountrySelect() {
   if (el) el.addEventListener('change', onCountryChange);
 }
 
+var aiModalOverlay = document.getElementById('ai-modal-overlay');
+var aiModalTitle = document.getElementById('ai-modal-title');
+var aiModalBody = document.getElementById('ai-modal-body');
+document.getElementById('ai-modal-close').addEventListener('click', function() {
+  aiModalOverlay.classList.remove('open');
+});
+aiModalOverlay.addEventListener('click', function(e) {
+  if (e.target === aiModalOverlay) aiModalOverlay.classList.remove('open');
+});
+
+function getNextZ() {
+  var els = document.querySelectorAll('[style*="z-index"]');
+  var max = 100;
+  for (var i = 0; i < els.length; i++) {
+    var z = parseInt(els[i].style.zIndex, 10);
+    if (!isNaN(z) && z > max) max = z;
+  }
+  return max + 100;
+}
+
+var AI_TOPICS = ['交通手段', '見どころ', '最寄り空港', '鉄道でのアクセス'];
+
+function askAI(heritageName, topic) {
+  var prompt = '「' + heritageName + '」の「' + topic + '」について説明してください';
+  aiModalTitle.textContent = heritageName + ' — ' + topic;
+  aiModalBody.textContent = '読み込み中...';
+  aiModalOverlay.style.zIndex = getNextZ();
+  aiModalOverlay.classList.add('open');
+  fetch('/api/aichat', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ message: prompt, source: 'api' })
+  }).then(function(r) { return r.json(); }).then(function(data) {
+    aiModalBody.textContent = data.response || data.error || '（応答なし）';
+  }).catch(function() {
+    aiModalBody.textContent = '通信エラーが発生しました。';
+  });
+}
+
+function buildAiPanel(heritageName) {
+  var html = '<div class="acc-ai-panel">' +
+    '<div class="acc-ai-label">AIに何を質問しますか</div>' +
+    '<div class="acc-ai-btns">';
+  AI_TOPICS.forEach(function(topic) {
+    html += '<button class="acc-ai-btn" data-topic="' + topic + '" data-heritage="' +
+      heritageName.replace(/"/g, '&quot;') + '">' + topic + '</button>';
+  });
+  html += '</div></div>';
+  return html;
+}
+
 function closeAllAccordions() {
   var rows = document.querySelectorAll('.accordion-row');
   for (var i = 0; i < rows.length; i++) rows[i].parentNode.removeChild(rows[i]);
@@ -269,14 +342,36 @@ function openAccordion(tr) {
     var html = '<div class="acc-heritage-list">';
     heritages.forEach(function(h) {
       var dist = h.distance_km < 10 ? h.distance_km.toFixed(1) : Math.round(h.distance_km);
-      html += '<div class="acc-row">' +
+      var safeName = h.heritage_name.replace(/&/g,'&amp;').replace(/</g,'&lt;');
+      html += '<div class="acc-row" data-heritage="' + h.heritage_name.replace(/"/g,'&quot;') + '">' +
         '<span class="acc-emoji">🏛️</span>' +
-        '<span class="acc-name">' + h.heritage_name.replace(/&/g,'&amp;').replace(/</g,'&lt;') + '</span>' +
+        '<span class="acc-name">' + safeName + '</span>' +
         '<span class="acc-dist">' + dist + ' km</span>' +
+        '</div>' +
+        '<div class="acc-ai-wrap" id="acc-ai-' + Math.random().toString(36).slice(2) + '" style="display:none">' +
+        buildAiPanel(h.heritage_name) +
         '</div>';
     });
     html += '</div>';
     inner.innerHTML = html;
+    inner.querySelectorAll('.acc-row[data-heritage]').forEach(function(rowEl) {
+      rowEl.style.cursor = 'pointer';
+      rowEl.addEventListener('click', function() {
+        var wrap = rowEl.nextSibling;
+        if (!wrap || !wrap.classList || !wrap.classList.contains('acc-ai-wrap')) return;
+        var isOpen = wrap.style.display !== 'none';
+        inner.querySelectorAll('.acc-ai-wrap').forEach(function(w) { w.style.display = 'none'; });
+        if (!isOpen) wrap.style.display = '';
+      });
+    });
+    inner.querySelectorAll('.acc-ai-btn').forEach(function(btn) {
+      btn.addEventListener('click', function(e) {
+        e.stopPropagation();
+        var topic = btn.getAttribute('data-topic');
+        var name = btn.getAttribute('data-heritage');
+        askAI(name, topic);
+      });
+    });
   }).catch(function() {
     var inner = accTr.querySelector('.accordion-inner');
     if (inner) inner.innerHTML = '<div class="acc-loading">取得エラー</div>';
