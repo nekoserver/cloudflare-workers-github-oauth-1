@@ -4399,6 +4399,28 @@ app.post('/api/heritage-city-heritages', authMiddleware, async (c) => {
   return c.json({ heritages: rows.results });
 });
 
+app.post('/api/city-all-heritages', authMiddleware, async (c) => {
+  const db = c.env.DB;
+  if (!db) return c.json({ heritages: [] });
+  const body = await c.req.json<{ city_name: string; lat: number; lon: number }>().catch(() => null);
+  if (!body || !body.city_name || body.lat == null || body.lon == null) {
+    return c.json({ heritages: [] });
+  }
+  const lat3 = Math.round(body.lat * 1000) / 1000;
+  const lon3 = Math.round(body.lon * 1000) / 1000;
+  const rows = await db.prepare(
+    `SELECT heritage_name, MIN(distance_km) AS distance_km
+     FROM heritage_cities
+     WHERE city_name = ?
+       AND ROUND(city_lat,3) = ?
+       AND ROUND(city_lon,3) = ?
+     GROUP BY heritage_name
+     ORDER BY distance_km
+     LIMIT 100`
+  ).bind(body.city_name, lat3, lon3).all<{ heritage_name: string; distance_km: number }>();
+  return c.json({ heritages: rows.results });
+});
+
 app.get('/webgl-lv-sphere', authMiddleware, async (c) => {
   const user = c.get('user');
   return c.html(getWebGLLVSpherePage(user.sub));

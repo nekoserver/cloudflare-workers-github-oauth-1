@@ -1859,11 +1859,10 @@ void main() {
     cityFlyCity.textContent = cityName;
     cityFlyBody.innerHTML = '<div style="color:#8b949e;text-align:center;padding:16px;font-size:12px">読み込み中...</div>';
     cityFlyPanel.classList.add('open');
-    var allNames = HERITAGE.map(function(d) { return d.n; });
-    fetch('/api/heritage-city-heritages', {
+    fetch('/api/city-all-heritages', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ city_name: cityName, lat: lat, lon: lon, names: allNames.slice(0, 200) })
+      body: JSON.stringify({ city_name: cityName, lat: lat, lon: lon })
     }).then(function(r) { return r.json(); }).then(function(data) {
       var heritages = data.heritages || [];
       if(heritages.length === 0) {
