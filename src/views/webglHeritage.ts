@@ -881,6 +881,13 @@ void main() {
     return String(p);
   }
 
+  function ccToFlag(cc) {
+    if(!cc || cc.length !== 2) return '';
+    var a = cc.toUpperCase().charCodeAt(0) - 65 + 0x1F1E6;
+    var b = cc.toUpperCase().charCodeAt(1) - 65 + 0x1F1E6;
+    return String.fromCodePoint(a) + String.fromCodePoint(b);
+  }
+
   function buildCityMarkers(cities) {
     clearCityMarkers();
     if(!cityMarkersDiv || !cities || cities.length === 0) return;
@@ -889,7 +896,8 @@ void main() {
       var el = document.createElement('div');
       el.className = 'city-mk';
       var pop = city.population ? (' ' + formatPop(city.population)) : '';
-      el.innerHTML = '<span class="city-mk-dot"></span>' + city.city_name + pop;
+      var flag = city.country_code ? (ccToFlag(city.country_code) + ' ') : '';
+      el.innerHTML = '<span class="city-mk-dot"></span>' + flag + city.city_name + pop;
       cityMarkersDiv.appendChild(el);
       cityMkEls.push({ el: el, pos3d: latLonTo3D(city.city_lat, city.city_lon) });
     });
@@ -901,7 +909,8 @@ void main() {
     var html = '';
     cities.forEach(function(city) {
       var pop = city.population ? (' <span style="color:#8b949e">(' + formatPop(city.population) + ')</span>') : '';
-      html += '<div class="landing-city-item"><span>🌆 ' + city.city_name + pop + '</span><span class="landing-city-dist">' + city.distance_km + 'km</span></div>';
+      var flag = city.country_code ? (ccToFlag(city.country_code) + ' ') : '';
+      html += '<div class="landing-city-item"><span>' + flag + city.city_name + pop + '</span><span class="landing-city-dist">' + city.distance_km + 'km</span></div>';
     });
     landingCityListEl.innerHTML = html;
   }
