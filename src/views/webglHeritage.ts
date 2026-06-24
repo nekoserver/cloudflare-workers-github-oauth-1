@@ -196,6 +196,18 @@ canvas:active { cursor:grabbing; }
 .ch2-item-emoji { font-size:16px; flex-shrink:0; width:24px; text-align:center; }
 .ch2-item-name { flex:1; font-size:12px; color:#c9d1d9; }
 .ch2-item-dist { font-size:11px; color:#58a6ff; font-weight:600; flex-shrink:0; min-width:56px; text-align:right; }
+.city-fly-panel { display:none; position:fixed; bottom:70px; right:12px; width:min(88vw,300px); max-height:55vh; background:#161b22; border:1px solid #30363d; border-radius:10px; z-index:300; flex-direction:column; box-shadow:0 6px 28px rgba(0,0,0,.85); overflow:hidden; }
+.city-fly-panel.open { display:flex; }
+.city-fly-head { display:flex; align-items:center; gap:6px; padding:9px 12px; border-bottom:1px solid #21262d; flex-shrink:0; background:#0d1117; }
+.city-fly-city { font-size:13px; font-weight:700; color:#e6edf3; flex:1; }
+.city-fly-close { background:none; border:none; color:#8b949e; font-size:16px; cursor:pointer; padding:2px 4px; line-height:1; }
+.city-fly-body { flex:1; overflow-y:auto; padding:6px 8px 10px; }
+.city-fly-row { display:flex; align-items:center; gap:6px; padding:5px 4px; border-radius:4px; cursor:pointer; transition:background .12s; }
+.city-fly-row:hover { background:rgba(56,139,253,.1); }
+.city-fly-row-emoji { font-size:13px; flex-shrink:0; width:20px; text-align:center; }
+.city-fly-row-flag { font-size:13px; flex-shrink:0; }
+.city-fly-row-name { flex:1; font-size:11px; color:#c9d1d9; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.city-fly-row-dist { font-size:10px; color:#58a6ff; flex-shrink:0; font-weight:600; }
 </style>
 </head>
 <body>
@@ -422,6 +434,15 @@ void main() {
     </div>
     <div class="ch2-body" id="ch2-body"></div>
   </div>
+</div>
+
+<div id="city-fly-panel" class="city-fly-panel">
+  <div class="city-fly-head">
+    <span id="city-fly-flag" style="font-size:18px;flex-shrink:0"></span>
+    <span id="city-fly-city" class="city-fly-city"></span>
+    <button id="city-fly-close" class="city-fly-close">✕</button>
+  </div>
+  <div id="city-fly-body" class="city-fly-body"></div>
 </div>
 
 <script>
@@ -1819,6 +1840,63 @@ void main() {
   document.getElementById('ch2-close').addEventListener('click', function() { ch2Overlay.classList.remove('open'); });
   ch2Overlay.addEventListener('click', function(e) { if(e.target === ch2Overlay) ch2Overlay.classList.remove('open'); });
 
+  var cityFlyPanel = document.getElementById('city-fly-panel');
+  var cityFlyFlag = document.getElementById('city-fly-flag');
+  var cityFlyCity = document.getElementById('city-fly-city');
+  var cityFlyBody = document.getElementById('city-fly-body');
+  document.getElementById('city-fly-close').addEventListener('click', function() { cityFlyPanel.classList.remove('open'); });
+
+  function closeAllHeritageModals() {
+    ch2Overlay.classList.remove('open');
+    clOverlay.classList.remove('open');
+    chOverlay.classList.remove('open');
+    citiesModalOverlay.classList.remove('open');
+    cityStatsOverlay.classList.remove('open');
+  }
+
+  function openCityFlyPanel(cityName, cc, lat, lon) {
+    cityFlyFlag.textContent = cc ? ccToFlag(cc) : '';
+    cityFlyCity.textContent = cityName;
+    cityFlyBody.innerHTML = '<div style="color:#8b949e;text-align:center;padding:16px;font-size:12px">読み込み中...</div>';
+    cityFlyPanel.classList.add('open');
+    var allNames = HERITAGE.map(function(d) { return d.n; });
+    fetch('/api/heritage-city-heritages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ city_name: cityName, lat: lat, lon: lon, names: allNames.slice(0, 200) })
+    }).then(function(r) { return r.json(); }).then(function(data) {
+      var heritages = data.heritages || [];
+      if(heritages.length === 0) {
+        cityFlyBody.innerHTML = '<div style="color:#8b949e;text-align:center;padding:16px;font-size:12px">近隣の世界遺産なし</div>';
+        return;
+      }
+      var html = '';
+      heritages.forEach(function(h) {
+        var hd = HERITAGE.filter(function(d){ return d.n === h.heritage_name; })[0];
+        var emoji = hd ? hd.e : '🏛️';
+        var hFlag = hd ? hd.f : '';
+        var safeName = h.heritage_name.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+        var distStr = h.distance_km < 10 ? h.distance_km.toFixed(1) + 'km' : Math.round(h.distance_km) + 'km';
+        var idx = hd ? HERITAGE.indexOf(hd) : -1;
+        html += '<div class="city-fly-row"' + (idx >= 0 ? ' data-idx="' + idx + '"' : '') + '>' +
+          '<span class="city-fly-row-emoji">' + emoji + '</span>' +
+          '<span class="city-fly-row-flag">' + hFlag + '</span>' +
+          '<span class="city-fly-row-name">' + safeName + '</span>' +
+          '<span class="city-fly-row-dist">' + distStr + '</span>' +
+          '</div>';
+      });
+      cityFlyBody.innerHTML = html;
+      cityFlyBody.querySelectorAll('.city-fly-row[data-idx]').forEach(function(el) {
+        el.addEventListener('click', function() {
+          cityFlyPanel.classList.remove('open');
+          showMarkerTooltip(parseInt(el.getAttribute('data-idx')), 0, 0);
+        });
+      });
+    }).catch(function() {
+      cityFlyBody.innerHTML = '<div style="color:#8b949e;text-align:center;padding:16px;font-size:12px">取得エラー</div>';
+    });
+  }
+
   function openCityListModal(names, countryLabel) {
     clTitle.textContent = countryLabel + ' 都市一覧';
     clBadge.textContent = '';
@@ -1839,7 +1917,7 @@ void main() {
       cities.forEach(function(city) {
         var safeCity = city.city_name.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
         var flagEmoji = city.country_code ? ccToFlag(city.country_code) : '🏙️';
-        html += '<div class="cl-item" data-city="' + safeCity + '" data-lat="' + city.lat + '" data-lon="' + city.lon + '">' +
+        html += '<div class="cl-item" data-city="' + safeCity + '" data-lat="' + city.lat + '" data-lon="' + city.lon + '" data-cc="' + (city.country_code || '') + '">' +
           '<span class="cl-item-flag">' + flagEmoji + '</span>' +
           '<span class="cl-item-name">' + safeCity + '</span>' +
           '<span class="cl-item-count">' + city.near_count + '遺産地</span>' +
@@ -1857,12 +1935,13 @@ void main() {
         if(nameEl) {
           nameEl.addEventListener('click', function(e) {
             e.stopPropagation();
+            var cityName = el.getAttribute('data-city');
             var lat = parseFloat(el.getAttribute('data-lat'));
             var lon = parseFloat(el.getAttribute('data-lon'));
-            ch2Overlay.classList.remove('open');
-            clOverlay.classList.remove('open');
-            chOverlay.classList.remove('open');
+            var cc = el.getAttribute('data-cc');
+            closeAllHeritageModals();
             flyTo(lat, lon);
+            openCityFlyPanel(cityName, cc, lat, lon);
           });
         }
       });
