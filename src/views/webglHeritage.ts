@@ -2196,7 +2196,6 @@ void main() {
       cityFlyBody.innerHTML = html;
       cityFlyBody.querySelectorAll('.city-fly-row[data-idx]').forEach(function(el) {
         el.addEventListener('click', function() {
-          cityFlyPanel.classList.remove('open');
           showMarkerTooltip(parseInt(el.getAttribute('data-idx')), 0, 0);
         });
       });
