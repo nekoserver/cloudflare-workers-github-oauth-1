@@ -133,6 +133,21 @@ canvas:active { cursor:grabbing; }
 .landing-city-loading { color:#8b949e; text-align:center; padding:4px; }
 .city-mk { position:absolute; transform:translate(-50%,-50%); background:rgba(13,17,23,0.92); border:1px solid #388bfd; border-radius:10px; color:#c9d1d9; font-size:9px; padding:2px 6px; white-space:nowrap; pointer-events:none; opacity:0; transition:opacity .3s; display:flex; align-items:center; gap:3px; }
 .city-mk-dot { width:5px; height:5px; border-radius:50%; background:#388bfd; flex-shrink:0; }
+.city-icon-btn { background:none; border:none; cursor:pointer; font-size:13px; line-height:1; padding:0 0 0 4px; opacity:.85; vertical-align:middle; }
+.city-icon-btn:hover { opacity:1; }
+.cities-modal-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,.72); z-index:250; align-items:center; justify-content:center; }
+.cities-modal-overlay.open { display:flex; }
+.cities-modal { background:#0d1117; border:1px solid #30363d; border-radius:10px; width:min(90vw,480px); max-height:80vh; display:flex; flex-direction:column; overflow:hidden; box-shadow:0 8px 40px rgba(0,0,0,.85); }
+.cities-modal-head { padding:12px 16px; border-bottom:1px solid #21262d; display:flex; align-items:center; gap:8px; flex-shrink:0; }
+.cities-modal-title { font-size:14px; font-weight:700; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.cities-modal-close { background:none; border:none; color:#8b949e; font-size:18px; cursor:pointer; padding:2px 6px; line-height:1; }
+.cities-modal-body { overflow-y:auto; padding:10px 16px 14px; }
+.cities-modal-row { display:flex; align-items:center; gap:8px; padding:5px 0; border-bottom:1px solid #21262d; font-size:12px; }
+.cities-modal-row:last-child { border-bottom:none; }
+.cities-modal-flag { font-size:16px; flex-shrink:0; }
+.cities-modal-name { flex:1; color:#c9d1d9; }
+.cities-modal-pop { color:#8b949e; font-size:11px; flex-shrink:0; }
+.cities-modal-dist { color:#58a6ff; font-size:11px; font-weight:600; flex-shrink:0; min-width:48px; text-align:right; }
 </style>
 </head>
 <body>
@@ -304,6 +319,16 @@ void main() {
       <button class="stats-tab" data-tab="decade">📅 登録年代</button>
     </div>
     <div id="stats-body" style="flex:1;overflow-y:auto;padding:16px 18px;"></div>
+  </div>
+</div>
+
+<div id="cities-modal-overlay" class="cities-modal-overlay">
+  <div class="cities-modal">
+    <div class="cities-modal-head">
+      <span class="cities-modal-title" id="cities-modal-title">近隣都市</span>
+      <button class="cities-modal-close" id="cities-modal-close">✕</button>
+    </div>
+    <div class="cities-modal-body" id="cities-modal-body"></div>
   </div>
 </div>
 
@@ -857,7 +882,7 @@ void main() {
   var hasCityDataSet = {};
 
   fetch('/api/heritage-city-fetched-list').then(function(r){ return r.json(); }).then(function(d){
-    if(d && d.names) { d.names.forEach(function(n){ hasCityDataSet[n] = true; }); }
+    if(d && d.names) { d.names.forEach(function(n){ hasCityDataSet[n] = true; }); updateCityIcons(); }
   }).catch(function(){});
 
   function haversineKm(la1, lo1, la2, lo2) {
@@ -886,6 +911,67 @@ void main() {
     var a = cc.toUpperCase().charCodeAt(0) - 65 + 0x1F1E6;
     var b = cc.toUpperCase().charCodeAt(1) - 65 + 0x1F1E6;
     return String.fromCodePoint(a) + String.fromCodePoint(b);
+  }
+
+  var citiesModalOverlay = null;
+  var citiesModalTitle = null;
+  var citiesModalBody = null;
+
+  function showCitiesModal(hidx) {
+    var d = HERITAGE[hidx];
+    if(!d) return;
+    citiesModalTitle.textContent = d.f + ' ' + d.n + ' 近隣都市';
+    citiesModalBody.innerHTML = '<div style="color:#8b949e;text-align:center;padding:16px">読み込み中...</div>';
+    citiesModalOverlay.classList.add('open');
+    fetch('/api/heritage-cities?name=' + encodeURIComponent(d.n))
+      .then(function(r){ return r.json(); })
+      .then(function(data) {
+        if(!data.fetched || !data.cities || data.cities.length === 0) {
+          citiesModalBody.innerHTML = '<div style="color:#8b949e;text-align:center;padding:16px">都市データなし</div>';
+          return;
+        }
+        var html = '';
+        data.cities.forEach(function(city) {
+          var flag = city.country_code ? ccToFlag(city.country_code) : '';
+          var pop = city.population ? formatPop(city.population) : '';
+          html += '<div class="cities-modal-row">' +
+            '<span class="cities-modal-flag">' + flag + '</span>' +
+            '<span class="cities-modal-name">' + city.city_name + '</span>' +
+            (pop ? '<span class="cities-modal-pop">人口 ' + pop + '</span>' : '') +
+            '<span class="cities-modal-dist">' + city.distance_km + ' km</span>' +
+            '</div>';
+        });
+        citiesModalBody.innerHTML = html;
+      })
+      .catch(function() {
+        citiesModalBody.innerHTML = '<div style="color:#8b949e;text-align:center;padding:16px">取得エラー</div>';
+      });
+  }
+
+  function updateCityIcons() {
+    if(typeof listItemEls === 'undefined') return;
+    HERITAGE.forEach(function(d, i) {
+      var el = listItemEls[i];
+      if(!el) return;
+      var existing = el.querySelector('.city-icon-btn');
+      if(hasCityDataSet[d.n]) {
+        if(!existing) {
+          var btn = document.createElement('button');
+          btn.className = 'city-icon-btn';
+          btn.title = '近隣都市を表示';
+          btn.textContent = '🌇';
+          btn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            showCitiesModal(i);
+          });
+          var nameEl = el.querySelector('.site-name');
+          if(nameEl) nameEl.parentNode.insertBefore(btn, nameEl.nextSibling);
+          else el.querySelector('.site-body').appendChild(btn);
+        }
+      } else {
+        if(existing) existing.parentNode.removeChild(existing);
+      }
+    });
   }
 
   function buildCityMarkers(cities) {
@@ -924,7 +1010,7 @@ void main() {
       .then(function(data) {
         if(data.fetched) {
           landingCities = data.cities || [];
-          if(landingCities.length > 0) hasCityDataSet[ld.n] = true;
+          if(landingCities.length > 0) { hasCityDataSet[ld.n] = true; updateCityIcons(); }
           buildCityMarkers(landingCities);
           renderCityList(landingCities);
         } else {
@@ -934,7 +1020,7 @@ void main() {
             body: JSON.stringify({ name: ld.n, lat: ld.lat, lon: ld.lon })
           }).then(function(r){ return r.json(); }).then(function(d) {
             landingCities = d.cities || [];
-            if(landingCities.length > 0) hasCityDataSet[ld.n] = true;
+            if(landingCities.length > 0) { hasCityDataSet[ld.n] = true; updateCityIcons(); }
             buildCityMarkers(landingCities);
             renderCityList(landingCities);
           });
@@ -1417,6 +1503,15 @@ void main() {
   landingCityListEl = document.getElementById('landing-city-list');
   landingSpinToggleEl = document.getElementById('landing-spin-toggle');
   cityMarkersDiv = document.getElementById('city-markers-div');
+  citiesModalOverlay = document.getElementById('cities-modal-overlay');
+  citiesModalTitle = document.getElementById('cities-modal-title');
+  citiesModalBody = document.getElementById('cities-modal-body');
+  document.getElementById('cities-modal-close').addEventListener('click', function() {
+    citiesModalOverlay.classList.remove('open');
+  });
+  citiesModalOverlay.addEventListener('click', function(e) {
+    if(e.target === citiesModalOverlay) citiesModalOverlay.classList.remove('open');
+  });
   var landingExitBtn = document.getElementById('landing-exit');
   if (landingExitBtn) landingExitBtn.addEventListener('click', stopLanding);
   if (landingSpinToggleEl) {
