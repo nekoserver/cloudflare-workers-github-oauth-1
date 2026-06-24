@@ -4290,16 +4290,21 @@ app.get('/api/heritage-cities', authMiddleware, async (c) => {
 app.post('/api/heritage-cities', authMiddleware, async (c) => {
   const db = c.env.DB;
   if (!db) return c.json({ error: 'DB unavailable' }, 503);
-  const body = await c.req.json<{ name: string; lat: number; lon: number }>().catch(() => null);
+  const body = await c.req.json<{ name: string; lat: number; lon: number; force?: boolean }>().catch(() => null);
   if (!body || !body.name || body.lat == null || body.lon == null) return c.json({ error: 'name, lat, lon required' }, 400);
-  const { name, lat, lon } = body;
+  const { name, lat, lon, force } = body;
 
-  const existing = await db.prepare('SELECT city_count FROM heritage_city_fetched WHERE heritage_name = ?').bind(name).first<{ city_count: number }>();
-  if (existing) {
-    const result = await db.prepare(
-      'SELECT city_name, city_lat, city_lon, population, distance_km, country_code FROM heritage_cities WHERE heritage_name = ? ORDER BY distance_km'
-    ).bind(name).all<{ city_name: string; city_lat: number; city_lon: number; population: number | null; distance_km: number; country_code: string | null }>();
-    return c.json({ fetched: true, cities: result.results });
+  if (!force) {
+    const existing = await db.prepare('SELECT city_count FROM heritage_city_fetched WHERE heritage_name = ?').bind(name).first<{ city_count: number }>();
+    if (existing) {
+      const result = await db.prepare(
+        'SELECT city_name, city_lat, city_lon, population, distance_km, country_code FROM heritage_cities WHERE heritage_name = ? ORDER BY distance_km'
+      ).bind(name).all<{ city_name: string; city_lat: number; city_lon: number; population: number | null; distance_km: number; country_code: string | null }>();
+      return c.json({ fetched: true, cities: result.results });
+    }
+  } else {
+    await db.prepare('DELETE FROM heritage_cities WHERE heritage_name = ?').bind(name).run();
+    await db.prepare('DELETE FROM heritage_city_fetched WHERE heritage_name = ?').bind(name).run();
   }
 
   const cities = findNearbyCities(lat, lon, 500, 15);

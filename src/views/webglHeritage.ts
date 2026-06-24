@@ -929,35 +929,59 @@ void main() {
   var citiesModalTitle = null;
   var citiesModalBody = null;
 
+  function renderCitiesModalRows(cities) {
+    var html = '';
+    cities.forEach(function(city) {
+      var flag = city.country_code ? (ccToFlag(city.country_code) + ' ') : '';
+      var pop = city.population ? formatPop(city.population) : '';
+      html += '<div class="cities-modal-row">' +
+        '<span class="cities-modal-name">' + flag + city.city_name + '</span>' +
+        (pop ? '<span class="cities-modal-pop">\u4eba\u53e3 ' + pop + '</span>' : '') +
+        '<span class="cities-modal-dist">' + city.distance_km + ' km</span>' +
+        '</div>';
+    });
+    return html;
+  }
+
+  function loadCitiesIntoModal(hidx, force) {
+    var d = HERITAGE[hidx];
+    if(!d) return;
+    citiesModalBody.innerHTML = '<div style="color:#8b949e;text-align:center;padding:16px">\u8aad\u307f\u8fbc\u307f\u4e2d...</div>';
+    var req = force
+      ? fetch('/api/heritage-cities', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: d.n, lat: d.lat, lon: d.lon, force: true }) })
+      : fetch('/api/heritage-cities?name=' + encodeURIComponent(d.n));
+    req.then(function(r){ return r.json(); })
+      .then(function(data) {
+        if(!data.fetched || !data.cities || data.cities.length === 0) {
+          citiesModalBody.innerHTML = '<div style="color:#8b949e;text-align:center;padding:16px">\u90fd\u5e02\u30c7\u30fc\u30bf\u306a\u3057</div>';
+          return;
+        }
+        var stale = data.cities.some(function(c){ return !c.country_code; });
+        var html = renderCitiesModalRows(data.cities);
+        if(stale) {
+          html += '<div style="text-align:center;padding:8px 0 4px">' +
+            '<button id="cities-modal-refresh" style="background:#21262d;border:1px solid #30363d;color:#c9d1d9;border-radius:6px;padding:4px 14px;font-size:11px;cursor:pointer;">\ud83d\udd04 \u56fd\u65d7\u60c5\u5831\u3092\u66f4\u65b0</button>' +
+            '</div>';
+        }
+        citiesModalBody.innerHTML = html;
+        if(stale) {
+          var refreshBtn = document.getElementById('cities-modal-refresh');
+          if(refreshBtn) refreshBtn.addEventListener('click', function() { loadCitiesIntoModal(hidx, true); });
+        }
+      })
+      .catch(function() {
+        citiesModalBody.innerHTML = '<div style="color:#8b949e;text-align:center;padding:16px">\u53d6\u5f97\u30a8\u30e9\u30fc</div>';
+      });
+  }
+
   function showCitiesModal(hidx) {
     var d = HERITAGE[hidx];
     if(!d) return;
-    citiesModalTitle.textContent = d.f + ' ' + d.n + ' 近隣都市';
-    citiesModalBody.innerHTML = '<div style="color:#8b949e;text-align:center;padding:16px">読み込み中...</div>';
+    citiesModalTitle.textContent = d.f + ' ' + d.n + ' \u8fd1\u9130\u90fd\u5e02';
     citiesModalOverlay.classList.add('open');
-    fetch('/api/heritage-cities?name=' + encodeURIComponent(d.n))
-      .then(function(r){ return r.json(); })
-      .then(function(data) {
-        if(!data.fetched || !data.cities || data.cities.length === 0) {
-          citiesModalBody.innerHTML = '<div style="color:#8b949e;text-align:center;padding:16px">都市データなし</div>';
-          return;
-        }
-        var html = '';
-        data.cities.forEach(function(city) {
-          var flag = city.country_code ? (ccToFlag(city.country_code) + ' ') : '';
-          var pop = city.population ? formatPop(city.population) : '';
-          html += '<div class="cities-modal-row">' +
-            '<span class="cities-modal-name">' + flag + city.city_name + '</span>' +
-            (pop ? '<span class="cities-modal-pop">人口 ' + pop + '</span>' : '') +
-            '<span class="cities-modal-dist">' + city.distance_km + ' km</span>' +
-            '</div>';
-        });
-        citiesModalBody.innerHTML = html;
-      })
-      .catch(function() {
-        citiesModalBody.innerHTML = '<div style="color:#8b949e;text-align:center;padding:16px">取得エラー</div>';
-      });
+    loadCitiesIntoModal(hidx, false);
   }
+
 
   function updateCityIcons() {
     if(typeof listItemEls === 'undefined') return;
