@@ -223,6 +223,7 @@ void main() {
       <button class="canvas-ctrl-btn" id="btnEuropeTour">🏰 ヨーロッパ巡回</button>
       <button class="canvas-ctrl-btn" id="btnAfricaTour">🌍 アフリカ巡回</button>
       <button class="canvas-ctrl-btn" id="btnStats">📊 内訳</button>
+      <button class="canvas-ctrl-btn" id="btnCityStats">🌇 都市統計</button>
     </div>
   </div>
   <div class="side">
@@ -329,6 +330,17 @@ void main() {
       <button class="cities-modal-close" id="cities-modal-close">✕</button>
     </div>
     <div class="cities-modal-body" id="cities-modal-body"></div>
+  </div>
+</div>
+
+<div id="city-stats-overlay" class="cities-modal-overlay">
+  <div class="cities-modal" style="width:min(90vw,520px)">
+    <div class="cities-modal-head">
+      <span class="cities-modal-title">🌇 近隣都市データ 国別集計</span>
+      <span id="city-stats-badge" style="background:#0c2d1a;color:#3fb950;font-size:11px;padding:2px 8px;border-radius:10px;font-weight:600;"></span>
+      <button class="cities-modal-close" id="city-stats-close">✕</button>
+    </div>
+    <div class="cities-modal-body" id="city-stats-body"></div>
   </div>
 </div>
 
@@ -1512,6 +1524,53 @@ void main() {
   citiesModalOverlay.addEventListener('click', function(e) {
     if(e.target === citiesModalOverlay) citiesModalOverlay.classList.remove('open');
   });
+
+  var cityStatsOverlay = document.getElementById('city-stats-overlay');
+  var cityStatsBody = document.getElementById('city-stats-body');
+  var cityStatsBadge = document.getElementById('city-stats-badge');
+  document.getElementById('city-stats-close').addEventListener('click', function() {
+    cityStatsOverlay.classList.remove('open');
+  });
+  cityStatsOverlay.addEventListener('click', function(e) {
+    if(e.target === cityStatsOverlay) cityStatsOverlay.classList.remove('open');
+  });
+
+  document.getElementById('btnCityStats').addEventListener('click', function() {
+    cityStatsBody.innerHTML = '<div style="color:#8b949e;text-align:center;padding:20px">読み込み中...</div>';
+    cityStatsBadge.textContent = '';
+    cityStatsOverlay.classList.add('open');
+    fetch('/api/heritage-country-stats')
+      .then(function(r){ return r.json(); })
+      .then(function(data) {
+        var rows = data.rows || [];
+        if(rows.length === 0) {
+          cityStatsBody.innerHTML = '<div style="color:#8b949e;text-align:center;padding:20px">データなし</div>';
+          return;
+        }
+        var total = 0;
+        rows.forEach(function(r){ total += r.heritage_count; });
+        cityStatsBadge.textContent = '計 ' + total + ' 件';
+        var max = rows[0].heritage_count;
+        var html = '';
+        rows.forEach(function(r) {
+          var flag = ccToFlag(r.country_code);
+          var barW = Math.round(r.heritage_count / max * 100);
+          html += '<div class="cities-modal-row" style="gap:10px">' +
+            '<span class="cities-modal-flag">' + flag + '</span>' +
+            '<span style="color:#8b949e;font-size:10px;min-width:28px">' + r.country_code + '</span>' +
+            '<div style="flex:1;background:#161b22;border-radius:4px;height:10px;overflow:hidden">' +
+              '<div style="background:#388bfd;height:100%;width:' + barW + '%"></div>' +
+            '</div>' +
+            '<span style="color:#c9d1d9;font-size:12px;font-weight:600;min-width:28px;text-align:right">' + r.heritage_count + '</span>' +
+            '</div>';
+        });
+        cityStatsBody.innerHTML = html;
+      })
+      .catch(function() {
+        cityStatsBody.innerHTML = '<div style="color:#8b949e;text-align:center;padding:20px">取得エラー</div>';
+      });
+  });
+
   var landingExitBtn = document.getElementById('landing-exit');
   if (landingExitBtn) landingExitBtn.addEventListener('click', stopLanding);
   if (landingSpinToggleEl) {

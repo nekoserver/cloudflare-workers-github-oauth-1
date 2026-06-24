@@ -4320,6 +4320,15 @@ app.get('/api/heritage-city-fetched-list', authMiddleware, async (c) => {
   return c.json({ names: rows.results.map(r => r.heritage_name) });
 });
 
+app.get('/api/heritage-country-stats', authMiddleware, async (c) => {
+  const db = c.env.DB;
+  if (!db) return c.json({ rows: [] });
+  const rows = await db.prepare(
+    'SELECT country_code, COUNT(DISTINCT heritage_name) AS heritage_count FROM heritage_cities WHERE country_code IS NOT NULL GROUP BY country_code ORDER BY heritage_count DESC'
+  ).all<{ country_code: string; heritage_count: number }>();
+  return c.json({ rows: rows.results });
+});
+
 app.get('/webgl-lv-sphere', authMiddleware, async (c) => {
   const user = c.get('user');
   return c.html(getWebGLLVSpherePage(user.sub));
