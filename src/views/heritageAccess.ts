@@ -25,7 +25,9 @@ table{width:100%;border-collapse:collapse;font-size:12px}
 thead th{background:#161b22;color:#8b949e;font-weight:600;padding:8px 10px;border-bottom:1px solid #30363d;white-space:nowrap;position:sticky;top:0;z-index:2}
 thead th.num{text-align:right}
 tbody tr{border-bottom:1px solid #21262d;transition:background .1s}
-tbody tr:hover{background:#161b22}
+tbody tr:not(.accordion-row):not(.group-head-tr){cursor:pointer}
+tbody tr:not(.accordion-row):not(.group-head-tr):hover{background:#161b22}
+tbody tr.row-open{background:#1a2030}
 td{padding:7px 10px;vertical-align:middle}
 td.rank{color:#484f58;font-size:11px;text-align:right;width:36px}
 td.flag{font-size:16px;text-align:center;width:28px}
@@ -49,6 +51,16 @@ td.pop{text-align:right;color:#8b949e;font-size:11px;min-width:64px}
 .mode-tab:last-child{border-radius:0 6px 6px 0;border-left:none}
 .mode-tab.active{background:#1f6feb;border-color:#1f6feb;color:#fff}
 #sel-country{max-width:160px}
+.accordion-row td{padding:0;border-bottom:1px solid #30363d}
+.accordion-inner{padding:10px 16px 14px 48px;background:#0d1117}
+.acc-heritage-list{display:flex;flex-direction:column;gap:4px;max-height:320px;overflow-y:auto}
+.acc-row{display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid #21262d;font-size:12px}
+.acc-row:last-child{border-bottom:none}
+.acc-emoji{font-size:14px;flex-shrink:0;width:20px;text-align:center}
+.acc-name{flex:1;color:#c9d1d9}
+.acc-dist{color:#58a6ff;font-size:11px;font-weight:600;white-space:nowrap;min-width:56px;text-align:right}
+.acc-loading{color:#484f58;font-size:12px;padding:8px 0}
+.acc-toggle{font-size:10px;color:#484f58;margin-left:4px;flex-shrink:0}
 </style>
 </head>
 <body>
@@ -225,6 +237,73 @@ function bindCountrySelect() {
   if (el) el.addEventListener('change', onCountryChange);
 }
 
+function closeAllAccordions() {
+  var rows = document.querySelectorAll('.accordion-row');
+  for (var i = 0; i < rows.length; i++) rows[i].parentNode.removeChild(rows[i]);
+  var opens = document.querySelectorAll('.row-open');
+  for (var j = 0; j < opens.length; j++) opens[j].classList.remove('row-open');
+}
+
+function openAccordion(tr) {
+  var cityName = tr.getAttribute('data-city');
+  var lat = parseFloat(tr.getAttribute('data-lat'));
+  var lon = parseFloat(tr.getAttribute('data-lon'));
+  var accTr = document.createElement('tr');
+  accTr.className = 'accordion-row';
+  var colCount = tr.cells.length;
+  accTr.innerHTML = '<td colspan="' + colCount + '"><div class="accordion-inner"><div class="acc-loading">読み込み中...</div></div></td>';
+  tr.parentNode.insertBefore(accTr, tr.nextSibling);
+  tr.classList.add('row-open');
+  fetch('/api/city-all-heritages', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ city_name: cityName, lat: lat, lon: lon })
+  }).then(function(r) { return r.json(); }).then(function(data) {
+    var heritages = data.heritages || [];
+    var inner = accTr.querySelector('.accordion-inner');
+    if (!inner) return;
+    if (heritages.length === 0) {
+      inner.innerHTML = '<div class="acc-loading">近隣の世界遺産データなし</div>';
+      return;
+    }
+    var html = '<div class="acc-heritage-list">';
+    heritages.forEach(function(h) {
+      var dist = h.distance_km < 10 ? h.distance_km.toFixed(1) : Math.round(h.distance_km);
+      html += '<div class="acc-row">' +
+        '<span class="acc-emoji">🏛️</span>' +
+        '<span class="acc-name">' + h.heritage_name.replace(/&/g,'&amp;').replace(/</g,'&lt;') + '</span>' +
+        '<span class="acc-dist">' + dist + ' km</span>' +
+        '</div>';
+    });
+    html += '</div>';
+    inner.innerHTML = html;
+  }).catch(function() {
+    var inner = accTr.querySelector('.accordion-inner');
+    if (inner) inner.innerHTML = '<div class="acc-loading">取得エラー</div>';
+  });
+}
+
+function bindRowAccordion() {
+  var tbody = document.querySelector('tbody');
+  if (!tbody) return;
+  tbody.addEventListener('click', function(e) {
+    var target = e.target;
+    if (target.tagName === 'A' || target.closest('a') || target.tagName === 'SELECT' || target.closest('select')) return;
+    var tr = target.closest('tr');
+    if (!tr || tr.classList.contains('accordion-row') || tr.classList.contains('group-head-tr')) return;
+    if (tr.classList.contains('row-open')) {
+      var next = tr.nextSibling;
+      if (next && next.classList && next.classList.contains('accordion-row')) {
+        next.parentNode.removeChild(next);
+      }
+      tr.classList.remove('row-open');
+      return;
+    }
+    closeAllAccordions();
+    openAccordion(tr);
+  });
+}
+
 function summaryHtml(rows, ccStats, dist) {
   var countryCount = ccStats.length;
   var badge = '<span class="dist-badge">' + dist + ' km</span>';
@@ -301,6 +380,7 @@ function renderAll(rows) {
   document.getElementById('tbl-wrap').innerHTML = html;
   var selCC = getSelCountry();
   bindCountrySelect();
+  bindRowAccordion();
   if (selCC) {
     var el = document.getElementById('sel-country');
     if (el) el.value = selCC;
@@ -327,7 +407,7 @@ function renderCountry(rows) {
     var cities = byCountry[cc];
     var flag = ccToFlag(cc === '__' ? null : cc);
     var jpName = ccToJp(cc === '__' ? null : cc);
-    html += '<tr><td colspan="7" class="group-head">' + flag + ' ' + jpName +
+    html += '<tr class="group-head-tr"><td colspan="7" class="group-head">' + flag + ' ' + jpName +
       ' <span style="color:#484f58;margin-left:6px">' + cities.length + '都市</span></td></tr>';
     cities.forEach(function(r) {
       globalRank++;
@@ -354,6 +434,7 @@ function renderCountry(rows) {
   document.getElementById('tbl-wrap').innerHTML = html;
   var selCC = getSelCountry();
   bindCountrySelect();
+  bindRowAccordion();
   if (selCC) {
     var el = document.getElementById('sel-country');
     if (el) el.value = selCC;
