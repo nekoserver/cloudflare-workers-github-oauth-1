@@ -145,6 +145,8 @@ const STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
   { name: 'api_search_keyword_sections', migration: '0058',   description: 'APIページ検索キーワードのセクション別件数',       syncPolicy: 'manual' },
   { name: 'webhook_log',               migration: '0061',   description: 'Webhook受信ログ（全ソース共通）',                   syncPolicy: 'auto' },
   { name: 'uuid_history',             migration: '0062',   description: 'UUID生成履歴',                                        syncPolicy: 'auto' },
+  { name: 'heritage_cities',          migration: '0063',   description: '世界遺産周辺都市キャッシュ',                              syncPolicy: 'auto' },
+  { name: 'heritage_city_fetched',    migration: '0063',   description: '世界遺産都市検索済みフラグ',                              syncPolicy: 'auto' },
 ];
 
 const REQUIRED_STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
@@ -902,6 +904,24 @@ CREATE INDEX IF NOT EXISTS idx_uuid_history_user_id ON uuid_history(user_id);
 CREATE INDEX IF NOT EXISTS idx_uuid_history_uuid ON uuid_history(uuid);
 CREATE INDEX IF NOT EXISTS idx_uuid_history_created_at ON uuid_history(created_at DESC);`,
 
+  '0063': `CREATE TABLE IF NOT EXISTS heritage_cities (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  heritage_name TEXT NOT NULL,
+  city_name TEXT NOT NULL,
+  city_lat REAL NOT NULL,
+  city_lon REAL NOT NULL,
+  population INTEGER,
+  distance_km REAL NOT NULL,
+  fetched_at TEXT DEFAULT (datetime('now'))
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_heritage_cities_unique ON heritage_cities(heritage_name, city_name);
+CREATE INDEX IF NOT EXISTS idx_heritage_cities_name ON heritage_cities(heritage_name);
+CREATE TABLE IF NOT EXISTS heritage_city_fetched (
+  heritage_name TEXT PRIMARY KEY,
+  fetched_at TEXT DEFAULT (datetime('now')),
+  city_count INTEGER DEFAULT 0
+);`,
+
   'ts-catalog': `CREATE TABLE IF NOT EXISTS ts_repository (
   id            INTEGER PRIMARY KEY AUTOINCREMENT,
   full_name     TEXT NOT NULL UNIQUE,
@@ -1221,6 +1241,8 @@ export const TABLE_COLUMN_KEYS: Record<string, ColumnKeyInfo> = {
   api_search_keyword_sections: { id: 'pk', keyword_id: 'fk+idx', section_name: '' },
   webhook_log: { id: 'pk', source: 'idx', received_at: 'idx' },
   uuid_history: { id: 'pk', user_id: 'idx', uuid: 'idx', created_at: 'idx' },
+  heritage_cities: { id: 'pk', heritage_name: 'idx', city_name: 'uk' },
+  heritage_city_fetched: { heritage_name: 'pk' },
 };
 
 export function getColumnKeyType(tableName: string, columnName: string): ColumnKeyType {
@@ -1289,6 +1311,8 @@ export const TABLE_GROUP_MAP: Record<string, string> = {
   api_search_keyword_sections: 'system',
   webhook_log: 'system',
   uuid_history: 'system',
+  heritage_cities: 'system',
+  heritage_city_fetched: 'system',
   keyword_category_groups: 'search',
   keyword_multi_labels: 'search',
   ts_repository:          'ts-catalog',
@@ -4239,6 +4263,86 @@ app.get('/webgl-sphere', authMiddleware, async (c) => {
 app.get('/webgl-heritage', authMiddleware, async (c) => {
   const user = c.get('user');
   return c.html(getWebGLHeritagePage(user.sub));
+});
+
+function haversineKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6371;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+app.get('/api/heritage-cities', authMiddleware, async (c) => {
+  const db = c.env.DB;
+  if (!db) return c.json({ error: 'DB unavailable' }, 503);
+  const name = c.req.query('name') || '';
+  if (!name) return c.json({ error: 'name required' }, 400);
+  const fetched = await db.prepare('SELECT city_count FROM heritage_city_fetched WHERE heritage_name = ?').bind(name).first<{ city_count: number }>();
+  if (!fetched) return c.json({ fetched: false });
+  const result = await db.prepare(
+    'SELECT city_name, city_lat, city_lon, population, distance_km FROM heritage_cities WHERE heritage_name = ? ORDER BY distance_km'
+  ).bind(name).all<{ city_name: string; city_lat: number; city_lon: number; population: number | null; distance_km: number }>();
+  return c.json({ fetched: true, cities: result.results });
+});
+
+app.post('/api/heritage-cities', authMiddleware, async (c) => {
+  const db = c.env.DB;
+  if (!db) return c.json({ error: 'DB unavailable' }, 503);
+  const body = await c.req.json<{ name: string; lat: number; lon: number }>().catch(() => null);
+  if (!body || !body.name || body.lat == null || body.lon == null) return c.json({ error: 'name, lat, lon required' }, 400);
+  const { name, lat, lon } = body;
+
+  const existing = await db.prepare('SELECT city_count FROM heritage_city_fetched WHERE heritage_name = ?').bind(name).first<{ city_count: number }>();
+  if (existing) {
+    const result = await db.prepare(
+      'SELECT city_name, city_lat, city_lon, population, distance_km FROM heritage_cities WHERE heritage_name = ? ORDER BY distance_km'
+    ).bind(name).all<{ city_name: string; city_lat: number; city_lon: number; population: number | null; distance_km: number }>();
+    return c.json({ fetched: true, cities: result.results });
+  }
+
+  type CityRow = { city_name: string; city_lat: number; city_lon: number; population: number | null; distance_km: number };
+  let cities: CityRow[] = [];
+
+  try {
+    const query = `[out:json][timeout:25];node["place"~"^(city|town)$"]["population"](around:500000,${lat},${lon});out body 30;`;
+    const resp = await fetch('https://overpass-api.de/api/interpreter', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: 'data=' + encodeURIComponent(query),
+      signal: AbortSignal.timeout(30000),
+    });
+    if (resp.ok) {
+      const data = await resp.json<{ elements: Array<{ lat: number; lon: number; tags?: { name?: string; population?: string } }> }>();
+      for (const el of data.elements || []) {
+        const cityName = el.tags?.name;
+        if (!cityName) continue;
+        const popRaw = parseInt(el.tags?.population || '', 10);
+        const pop = isNaN(popRaw) ? null : popRaw;
+        const dist = Math.round(haversineKm(lat, lon, el.lat, el.lon));
+        cities.push({ city_name: cityName, city_lat: el.lat, city_lon: el.lon, population: pop, distance_km: dist });
+      }
+      cities.sort((a, b) => a.distance_km - b.distance_km);
+      cities = cities.slice(0, 15);
+    }
+  } catch (_e) {
+    /* Overpass unavailable - store empty result */
+  }
+
+  if (cities.length > 0) {
+    const stmt = db.prepare('INSERT OR IGNORE INTO heritage_cities (heritage_name, city_name, city_lat, city_lon, population, distance_km) VALUES (?, ?, ?, ?, ?, ?)');
+    await db.batch(cities.map(city => stmt.bind(name, city.city_name, city.city_lat, city.city_lon, city.population, city.distance_km)));
+  }
+  await db.prepare('INSERT OR REPLACE INTO heritage_city_fetched (heritage_name, city_count) VALUES (?, ?)').bind(name, cities.length).run();
+
+  return c.json({ fetched: true, cities });
+});
+
+app.get('/api/heritage-city-fetched-list', authMiddleware, async (c) => {
+  const db = c.env.DB;
+  if (!db) return c.json({ names: [] });
+  const rows = await db.prepare('SELECT heritage_name FROM heritage_city_fetched WHERE city_count > 0').all<{ heritage_name: string }>();
+  return c.json({ names: rows.results.map(r => r.heritage_name) });
 });
 
 app.get('/webgl-lv-sphere', authMiddleware, async (c) => {
