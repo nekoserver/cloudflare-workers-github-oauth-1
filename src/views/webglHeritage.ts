@@ -196,12 +196,14 @@ canvas:active { cursor:grabbing; }
 .ch2-item-emoji { font-size:16px; flex-shrink:0; width:24px; text-align:center; }
 .ch2-item-name { flex:1; font-size:12px; color:#c9d1d9; }
 .ch2-item-dist { font-size:11px; color:#58a6ff; font-weight:600; flex-shrink:0; min-width:56px; text-align:right; }
-.city-fly-panel { display:none; position:fixed; bottom:70px; right:12px; width:min(88vw,300px); max-height:55vh; background:#161b22; border:1px solid #30363d; border-radius:10px; z-index:300; flex-direction:column; box-shadow:0 6px 28px rgba(0,0,0,.85); overflow:hidden; }
+.city-fly-panel { display:none; position:fixed; width:min(88vw,300px); height:320px; min-width:180px; min-height:120px; background:#161b22; border:1px solid #30363d; border-radius:10px; z-index:300; flex-direction:column; box-shadow:0 6px 28px rgba(0,0,0,.85); overflow:hidden; resize:both; }
 .city-fly-panel.open { display:flex; }
-.city-fly-head { display:flex; align-items:center; gap:6px; padding:9px 12px; border-bottom:1px solid #21262d; flex-shrink:0; background:#0d1117; }
-.city-fly-city { font-size:13px; font-weight:700; color:#e6edf3; flex:1; }
-.city-fly-close { background:none; border:none; color:#8b949e; font-size:16px; cursor:pointer; padding:2px 4px; line-height:1; }
-.city-fly-body { flex:1; overflow-y:auto; padding:6px 8px 10px; }
+.city-fly-head { display:flex; align-items:center; gap:6px; padding:9px 12px; border-bottom:1px solid #21262d; flex-shrink:0; background:#0d1117; cursor:grab; user-select:none; -webkit-user-select:none; }
+.city-fly-head.dragging { cursor:grabbing; }
+.city-fly-city { flex:1; font-size:12px; font-weight:700; color:#e6edf3; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.city-fly-count { font-size:10px; color:#3fb950; font-weight:600; flex-shrink:0; }
+.city-fly-close { background:none; border:none; color:#8b949e; font-size:16px; cursor:pointer; padding:2px 4px; line-height:1; flex-shrink:0; }
+.city-fly-body { flex:1; overflow-y:scroll; padding:6px 8px 10px; min-height:0; }
 .city-fly-row { display:flex; align-items:center; gap:6px; padding:5px 4px; border-radius:4px; cursor:pointer; transition:background .12s; }
 .city-fly-row:hover { background:rgba(56,139,253,.1); }
 .city-fly-row-emoji { font-size:13px; flex-shrink:0; width:20px; text-align:center; }
@@ -437,13 +439,15 @@ void main() {
 </div>
 
 <div id="city-fly-panel" class="city-fly-panel">
-  <div class="city-fly-head">
+  <div class="city-fly-head" id="city-fly-head">
     <span id="city-fly-flag" style="font-size:18px;flex-shrink:0"></span>
     <span id="city-fly-city" class="city-fly-city"></span>
+    <span id="city-fly-count" class="city-fly-count"></span>
     <button id="city-fly-close" class="city-fly-close">✕</button>
   </div>
   <div id="city-fly-body" class="city-fly-body"></div>
 </div>
+<div id="city-fly-pin" style="display:none;position:fixed;font-size:22px;z-index:295;pointer-events:none;transform:translate(-50%,-100%);line-height:1">📍</div>
 
 <script>
 (function() {
@@ -1843,8 +1847,37 @@ void main() {
   var cityFlyPanel = document.getElementById('city-fly-panel');
   var cityFlyFlag = document.getElementById('city-fly-flag');
   var cityFlyCity = document.getElementById('city-fly-city');
+  var cityFlyCount = document.getElementById('city-fly-count');
   var cityFlyBody = document.getElementById('city-fly-body');
-  document.getElementById('city-fly-close').addEventListener('click', function() { cityFlyPanel.classList.remove('open'); });
+  var cityFlyHead = document.getElementById('city-fly-head');
+  var cityFlyPin = document.getElementById('city-fly-pin');
+  var cityFlyPos3d = null;
+  var cityFlyJustOpened = false;
+  var cfDragging = false, cfDragOx = 0, cfDragOy = 0;
+  cityFlyHead.addEventListener('mousedown', function(e) {
+    if (e.target.tagName === 'BUTTON') return;
+    cfDragging = true;
+    var r = cityFlyPanel.getBoundingClientRect();
+    cfDragOx = e.clientX - r.left;
+    cfDragOy = e.clientY - r.top;
+    cityFlyHead.classList.add('dragging');
+    e.preventDefault();
+  });
+  document.addEventListener('mousemove', function(e) {
+    if (!cfDragging) return;
+    cityFlyPanel.style.left = (e.clientX - cfDragOx) + 'px';
+    cityFlyPanel.style.top = (e.clientY - cfDragOy) + 'px';
+    cityFlyPanel.style.right = 'auto';
+    cityFlyPanel.style.bottom = 'auto';
+  });
+  document.addEventListener('mouseup', function() {
+    if (cfDragging) { cfDragging = false; cityFlyHead.classList.remove('dragging'); }
+  });
+  document.getElementById('city-fly-close').addEventListener('click', function() {
+    cityFlyPanel.classList.remove('open');
+    cityFlyPin.style.display = 'none';
+    cityFlyPos3d = null;
+  });
 
   function closeAllHeritageModals() {
     ch2Overlay.classList.remove('open');
@@ -1855,9 +1888,13 @@ void main() {
   }
 
   function openCityFlyPanel(cityName, cc, lat, lon) {
+    cityFlyPos3d = latLonTo3D(lat, lon);
+    cityFlyJustOpened = true;
     cityFlyFlag.textContent = cc ? ccToFlag(cc) : '';
     cityFlyCity.textContent = cityName;
+    cityFlyCount.textContent = '';
     cityFlyBody.innerHTML = '<div style="color:#8b949e;text-align:center;padding:16px;font-size:12px">読み込み中...</div>';
+    cityFlyPin.style.display = '';
     cityFlyPanel.classList.add('open');
     fetch('/api/city-all-heritages', {
       method: 'POST',
@@ -1865,6 +1902,7 @@ void main() {
       body: JSON.stringify({ city_name: cityName, lat: lat, lon: lon })
     }).then(function(r) { return r.json(); }).then(function(data) {
       var heritages = data.heritages || [];
+      cityFlyCount.textContent = '(' + heritages.length + '件)';
       if(heritages.length === 0) {
         cityFlyBody.innerHTML = '<div style="color:#8b949e;text-align:center;padding:16px;font-size:12px">近隣の世界遺産なし</div>';
         return;
@@ -2347,6 +2385,38 @@ void main() {
         }
       } else {
         cmk.el.style.opacity = '0';
+      }
+    }
+
+    if (cityFlyPos3d) {
+      var cfp = cityFlyPos3d;
+      var cfmz = model[2]*cfp[0] + model[6]*cfp[1] + model[10]*cfp[2];
+      if (cfmz > 0.05) {
+        var cfcx = mvp[0]*cfp[0] + mvp[4]*cfp[1] + mvp[8]*cfp[2]  + mvp[12];
+        var cfcy = mvp[1]*cfp[0] + mvp[5]*cfp[1] + mvp[9]*cfp[2]  + mvp[13];
+        var cfcw = mvp[3]*cfp[0] + mvp[7]*cfp[1] + mvp[11]*cfp[2] + mvp[15];
+        if (cfcw > 0) {
+          var cfsx = canvasRect.left + (cfcx/cfcw+1)*0.5*W;
+          var cfsy = canvasRect.top + (1-cfcy/cfcw)*0.5*H;
+          cityFlyPin.style.left = cfsx + 'px';
+          cityFlyPin.style.top = cfsy + 'px';
+          cityFlyPin.style.display = '';
+          if (cityFlyJustOpened && cityFlyPanel.classList.contains('open')) {
+            cityFlyJustOpened = false;
+            var panW = cityFlyPanel.offsetWidth || 300;
+            var panH = cityFlyPanel.offsetHeight || 320;
+            var cfLx = Math.max(4, cfsx - panW - 20);
+            var cfLy = Math.max(4, Math.min(window.innerHeight - panH - 4, cfsy - panH / 2));
+            cityFlyPanel.style.left = cfLx + 'px';
+            cityFlyPanel.style.top = cfLy + 'px';
+            cityFlyPanel.style.right = 'auto';
+            cityFlyPanel.style.bottom = 'auto';
+          }
+        } else {
+          cityFlyPin.style.display = 'none';
+        }
+      } else {
+        cityFlyPin.style.display = 'none';
       }
     }
 
