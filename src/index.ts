@@ -4303,7 +4303,6 @@ app.post('/api/heritage-cities', authMiddleware, async (c) => {
       return c.json({ fetched: true, cities: result.results });
     }
   } else {
-    await db.prepare('DELETE FROM heritage_cities WHERE heritage_name = ?').bind(name).run();
     await db.prepare('DELETE FROM heritage_city_fetched WHERE heritage_name = ?').bind(name).run();
   }
 
