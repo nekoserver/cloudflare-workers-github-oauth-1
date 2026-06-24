@@ -4302,16 +4302,7 @@ app.post('/api/heritage-cities', authMiddleware, async (c) => {
     return c.json({ fetched: true, cities: result.results });
   }
 
-  type CityRow = { city_name: string; city_lat: number; city_lon: number; population: number | null; distance_km: number };
-
-  const nearby = findNearbyCities(lat, lon, 500, 15);
-  const cities: CityRow[] = nearby.map(c => ({
-    city_name: c.name,
-    city_lat: c.lat,
-    city_lon: c.lon,
-    population: c.population,
-    distance_km: Math.round(c.distanceKm),
-  }));
+  const cities = findNearbyCities(lat, lon, 500, 15);
 
   if (cities.length > 0) {
     const stmt = db.prepare('INSERT OR IGNORE INTO heritage_cities (heritage_name, city_name, city_lat, city_lon, population, distance_km) VALUES (?, ?, ?, ?, ?, ?)');
