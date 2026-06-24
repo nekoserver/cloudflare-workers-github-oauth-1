@@ -1336,6 +1336,23 @@ void main() {
       } else {
         if(existing) existing.parentNode.removeChild(existing);
       }
+      var tourEl = document.getElementById('tour-item-' + i);
+      if(tourEl) {
+        var tourNameEl = tourEl.querySelector('.tour-item-name');
+        if(tourNameEl) {
+          var existingTourIcon = tourNameEl.querySelector('.tour-city-icon');
+          if(hasCityDataSet[d.n]) {
+            if(!existingTourIcon) {
+              var span = document.createElement('span');
+              span.className = 'tour-city-icon';
+              span.textContent = ' 🌆';
+              tourNameEl.appendChild(span);
+            }
+          } else {
+            if(existingTourIcon) existingTourIcon.parentNode.removeChild(existingTourIcon);
+          }
+        }
+      }
     });
   }
 
@@ -1554,11 +1571,12 @@ void main() {
     for (var ti = 0; ti < idxs.length; ti++) {
       var h = HERITAGE[idxs[ti]];
       var col = typeColor(h.t);
+      var cityIcon = hasCityDataSet[h.n] ? ' <span class="tour-city-icon">🌆</span>' : '';
       html += '<div class="tour-item" id="tour-item-' + idxs[ti] + '" data-hidx="' + idxs[ti] + '">' +
         '<span class="tour-item-num">' + (ti + 1) + '</span>' +
         '<span style="font-size:16px;flex-shrink:0">' + h.e + '</span>' +
         '<div class="tour-item-body">' +
-          '<div class="tour-item-name">' + h.f + ' ' + h.n + '</div>' +
+          '<div class="tour-item-name">' + h.f + ' ' + h.n + cityIcon + '</div>' +
           '<div class="tour-item-meta" style="color:' + col + '">' + h.t + ' · ' + h.c + ' ' + h.y + '年</div>' +
         '</div>' +
         '</div>';
