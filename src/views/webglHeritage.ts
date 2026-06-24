@@ -1863,6 +1863,16 @@ void main() {
     cityFlyHead.classList.add('dragging');
     e.preventDefault();
   });
+  cityFlyHead.addEventListener('touchstart', function(e) {
+    if (e.target.tagName === 'BUTTON') return;
+    if (e.touches.length !== 1) return;
+    cfDragging = true;
+    var r = cityFlyPanel.getBoundingClientRect();
+    cfDragOx = e.touches[0].clientX - r.left;
+    cfDragOy = e.touches[0].clientY - r.top;
+    cityFlyHead.classList.add('dragging');
+    e.preventDefault();
+  }, {passive: false});
   document.addEventListener('mousemove', function(e) {
     if (!cfDragging) return;
     cityFlyPanel.style.left = (e.clientX - cfDragOx) + 'px';
@@ -1870,7 +1880,19 @@ void main() {
     cityFlyPanel.style.right = 'auto';
     cityFlyPanel.style.bottom = 'auto';
   });
+  document.addEventListener('touchmove', function(e) {
+    if (!cfDragging) return;
+    if (e.touches.length !== 1) return;
+    cityFlyPanel.style.left = (e.touches[0].clientX - cfDragOx) + 'px';
+    cityFlyPanel.style.top = (e.touches[0].clientY - cfDragOy) + 'px';
+    cityFlyPanel.style.right = 'auto';
+    cityFlyPanel.style.bottom = 'auto';
+    e.preventDefault();
+  }, {passive: false});
   document.addEventListener('mouseup', function() {
+    if (cfDragging) { cfDragging = false; cityFlyHead.classList.remove('dragging'); }
+  });
+  document.addEventListener('touchend', function() {
     if (cfDragging) { cfDragging = false; cityFlyHead.classList.remove('dragging'); }
   });
   document.getElementById('city-fly-close').addEventListener('click', function() {
