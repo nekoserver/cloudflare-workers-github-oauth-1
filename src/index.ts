@@ -30,6 +30,7 @@ import { getHtmlRewriterDemoPage } from './views/htmlrewriterDemo';
 import { getWebGLDemoPage } from './views/webglDemo';
 import { getWebGLSpherePage } from './views/webglSphere';
 import { getWebGLHeritagePage } from './views/webglHeritage';
+import { getHeritageAccessPage } from './views/heritageAccess';
 import { getWebGLLVSpherePage } from './views/webglLVSphere';
 import { getWebGLCubePage } from './views/webglCube';
 import { getWebGLSolarPage } from './views/webglSolar';
@@ -4418,6 +4419,42 @@ app.post('/api/city-all-heritages', authMiddleware, async (c) => {
      LIMIT 100`
   ).bind(body.city_name, lat3, lon3).all<{ heritage_name: string; distance_km: number }>();
   return c.json({ heritages: rows.results });
+});
+
+app.get('/api/heritage-access-ranking', authMiddleware, async (c) => {
+  const db = c.env.DB;
+  if (!db) return c.json({ rows: [] });
+  const maxDist = Math.min(2000, parseInt(c.req.query('max_dist') || '500', 10) || 500);
+  const limit = Math.min(500, parseInt(c.req.query('limit') || '200', 10) || 200);
+  const rows = await db.prepare(
+    `SELECT
+       city_name,
+       country_code,
+       ROUND(AVG(city_lat), 4) AS city_lat,
+       ROUND(AVG(city_lon), 4) AS city_lon,
+       MAX(population) AS population,
+       COUNT(DISTINCT heritage_name) AS heritage_count,
+       ROUND(MIN(distance_km), 1) AS nearest_km
+     FROM heritage_cities
+     WHERE distance_km <= ?
+     GROUP BY city_name, country_code
+     ORDER BY heritage_count DESC, nearest_km ASC
+     LIMIT ?`
+  ).bind(maxDist, limit).all<{
+    city_name: string;
+    country_code: string | null;
+    city_lat: number;
+    city_lon: number;
+    population: number | null;
+    heritage_count: number;
+    nearest_km: number;
+  }>();
+  return c.json({ rows: rows.results, max_dist: maxDist });
+});
+
+app.get('/heritage-access', authMiddleware, async (c) => {
+  const user = c.get('user');
+  return c.html(getHeritageAccessPage(user.sub));
 });
 
 app.get('/webgl-lv-sphere', authMiddleware, async (c) => {
