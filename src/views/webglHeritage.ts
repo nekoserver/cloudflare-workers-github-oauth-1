@@ -123,6 +123,16 @@ canvas:active { cursor:grabbing; }
 .landing-prog-fill { height:100%; background:linear-gradient(90deg,#3fb950,#58a6ff); border-radius:3px; width:0%; transition:width 0.15s linear; }
 .landing-exit-btn { background:#161b22; border:1px solid #3fb950; border-radius:6px; color:#3fb950; font-size:13px; padding:7px 20px; cursor:pointer; font-family:inherit; }
 .landing-exit-btn:hover { background:#0c2d1a; }
+.landing-btn-row { display:flex; gap:6px; align-items:center; justify-content:center; }
+.landing-spin-btn { background:#161b22; border:1px solid #30363d; border-radius:6px; color:#8b949e; font-size:11px; padding:6px 10px; cursor:pointer; font-family:inherit; white-space:nowrap; }
+.landing-spin-btn.active { border-color:#3fb950; color:#3fb950; }
+.landing-spin-btn:hover { border-color:#58a6ff; color:#58a6ff; }
+.landing-city-list { font-size:10px; color:#8b949e; margin-top:8px; text-align:left; max-height:90px; overflow-y:auto; border-top:1px solid #21262d; padding-top:6px; }
+.landing-city-item { display:flex; justify-content:space-between; gap:8px; padding:1px 0; color:#c9d1d9; }
+.landing-city-dist { color:#58a6ff; flex-shrink:0; }
+.landing-city-loading { color:#8b949e; text-align:center; padding:4px; }
+.city-mk { position:absolute; transform:translate(-50%,-50%); background:rgba(13,17,23,0.92); border:1px solid #388bfd; border-radius:10px; color:#c9d1d9; font-size:9px; padding:2px 6px; white-space:nowrap; pointer-events:none; opacity:0; transition:opacity .3s; display:flex; align-items:center; gap:3px; }
+.city-mk-dot { width:5px; height:5px; border-radius:50%; background:#388bfd; flex-shrink:0; }
 </style>
 </head>
 <body>
@@ -269,9 +279,15 @@ void main() {
     <div class="landing-site-sub" id="landing-sub"></div>
     <div class="landing-status-txt" id="landing-status">着陸中...</div>
     <div class="landing-prog-track"><div class="landing-prog-fill" id="landing-prog"></div></div>
-    <button class="landing-exit-btn" id="landing-exit">🚀 宇宙に戻る</button>
+    <div class="landing-btn-row">
+      <button class="landing-exit-btn" id="landing-exit">🚀 宇宙に戻る</button>
+      <button class="landing-spin-btn" id="landing-spin-toggle">🔄 360°スイープ</button>
+    </div>
+    <div class="landing-city-list" id="landing-city-list"></div>
   </div>
 </div>
+
+<div id="city-markers-div" style="position:absolute;inset:0;pointer-events:none;display:none;overflow:hidden;"></div>
 
 <div id="stats-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:200;align-items:center;justify-content:center;">
   <div id="stats-modal" style="background:#0d1117;border:1px solid #30363d;border-radius:10px;width:min(92vw,680px);max-height:86vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 8px 40px rgba(0,0,0,.8);">
@@ -832,6 +848,93 @@ void main() {
   var landingSubEl = null;
   var landingStatusEl = null;
   var landingProgEl = null;
+  var landingCityListEl = null;
+  var landingSpinToggleEl = null;
+  var spin360Enabled = false;
+  var landingCities = [];
+  var cityMkEls = [];
+  var cityMarkersDiv = null;
+  var hasCityDataSet = {};
+
+  fetch('/api/heritage-city-fetched-list').then(function(r){ return r.json(); }).then(function(d){
+    if(d && d.names) { d.names.forEach(function(n){ hasCityDataSet[n] = true; }); }
+  }).catch(function(){});
+
+  function haversineKm(la1, lo1, la2, lo2) {
+    var R = 6371;
+    var dLa = (la2 - la1) * Math.PI / 180;
+    var dLo = (lo2 - lo1) * Math.PI / 180;
+    var a = Math.sin(dLa/2)*Math.sin(dLa/2) + Math.cos(la1*Math.PI/180)*Math.cos(la2*Math.PI/180)*Math.sin(dLo/2)*Math.sin(dLo/2);
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  }
+
+  function clearCityMarkers() {
+    cityMkEls.forEach(function(el){ if(el.parentNode) el.parentNode.removeChild(el); });
+    cityMkEls = [];
+    if(cityMarkersDiv) cityMarkersDiv.style.display = 'none';
+  }
+
+  function formatPop(p) {
+    if(!p) return '';
+    if(p >= 1000000) return (p/1000000).toFixed(1) + 'M';
+    if(p >= 1000) return Math.round(p/1000) + 'k';
+    return String(p);
+  }
+
+  function buildCityMarkers(cities) {
+    clearCityMarkers();
+    if(!cityMarkersDiv || !cities || cities.length === 0) return;
+    cityMarkersDiv.style.display = '';
+    cities.forEach(function(city) {
+      var el = document.createElement('div');
+      el.className = 'city-mk';
+      var pop = city.population ? (' ' + formatPop(city.population)) : '';
+      el.innerHTML = '<span class="city-mk-dot"></span>' + city.city_name + pop;
+      cityMarkersDiv.appendChild(el);
+      cityMkEls.push({ el: el, pos3d: latLonTo3D(city.city_lat, city.city_lon) });
+    });
+  }
+
+  function renderCityList(cities) {
+    if(!landingCityListEl) return;
+    if(!cities || cities.length === 0) { landingCityListEl.innerHTML = ''; return; }
+    var html = '';
+    cities.forEach(function(city) {
+      var pop = city.population ? (' <span style="color:#8b949e">(' + formatPop(city.population) + ')</span>') : '';
+      html += '<div class="landing-city-item"><span>🌆 ' + city.city_name + pop + '</span><span class="landing-city-dist">' + city.distance_km + 'km</span></div>';
+    });
+    landingCityListEl.innerHTML = html;
+  }
+
+  function loadLandingCities(hidx) {
+    var ld = HERITAGE[hidx];
+    if(!ld) return;
+    if(landingCityListEl) landingCityListEl.innerHTML = '<div class="landing-city-loading">🌆 周辺都市を検索中...</div>';
+    fetch('/api/heritage-cities?name=' + encodeURIComponent(ld.n))
+      .then(function(r){ return r.json(); })
+      .then(function(data) {
+        if(data.fetched) {
+          landingCities = data.cities || [];
+          if(landingCities.length > 0) hasCityDataSet[ld.n] = true;
+          buildCityMarkers(landingCities);
+          renderCityList(landingCities);
+        } else {
+          return fetch('/api/heritage-cities', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: ld.n, lat: ld.lat, lon: ld.lon })
+          }).then(function(r){ return r.json(); }).then(function(d) {
+            landingCities = d.cities || [];
+            if(landingCities.length > 0) hasCityDataSet[ld.n] = true;
+            buildCityMarkers(landingCities);
+            renderCityList(landingCities);
+          });
+        }
+      })
+      .catch(function() {
+        if(landingCityListEl) landingCityListEl.innerHTML = '';
+      });
+  }
 
   function flyTo(lat, lon) {
     var latR = lat * Math.PI / 180;
@@ -880,15 +983,20 @@ void main() {
       if (landingSubEl) landingSubEl.textContent = ld.t + '  ' + ld.c + '  ' + ld.y + '年登録';
       if (landingStatusEl) landingStatusEl.textContent = '着陸中...';
       if (landingProgEl) landingProgEl.style.width = '0%';
+      if (landingCityListEl) landingCityListEl.innerHTML = '';
       if (landingOverlayEl) landingOverlayEl.classList.add('active');
+      loadLandingCities(hidx);
     }, FLY_DUR + 100);
   }
 
   function stopLanding() {
     landingMode = false;
     landingPhase = 0;
+    landingCities = [];
+    clearCityMarkers();
     markersDiv.style.display = '';
     if (landingOverlayEl) landingOverlayEl.classList.remove('active');
+    if (landingCityListEl) landingCityListEl.innerHTML = '';
     zoom = LANDING_ZOOM_RETURN;
     rotXv = 0.3;
     autoRot = true;
@@ -1297,8 +1405,24 @@ void main() {
   landingSubEl     = document.getElementById('landing-sub');
   landingStatusEl  = document.getElementById('landing-status');
   landingProgEl    = document.getElementById('landing-prog');
+  landingCityListEl = document.getElementById('landing-city-list');
+  landingSpinToggleEl = document.getElementById('landing-spin-toggle');
+  cityMarkersDiv = document.getElementById('city-markers-div');
   var landingExitBtn = document.getElementById('landing-exit');
   if (landingExitBtn) landingExitBtn.addEventListener('click', stopLanding);
+  if (landingSpinToggleEl) {
+    landingSpinToggleEl.addEventListener('click', function() {
+      spin360Enabled = !spin360Enabled;
+      if(spin360Enabled) {
+        landingSpinToggleEl.classList.add('active');
+        landingSpinToggleEl.textContent = '🔄 360°スイープ ON';
+      } else {
+        landingSpinToggleEl.classList.remove('active');
+        landingSpinToggleEl.textContent = '🔄 360°スイープ';
+        landingSpinAngle = 0;
+      }
+    });
+  }
 
   function hideTooltip() { tooltip.style.opacity = '0'; activeIdx = -1; }
 
@@ -1312,7 +1436,8 @@ void main() {
   function showMarkerTooltip(idx, vx, vy) {
     var d = HERITAGE[idx];
     var col = typeColor(d.t);
-    tooltip.innerHTML = '<div class="tt-name">' + d.e + ' ' + d.f + ' ' + d.n + '</div><div class="tt-sub"><span style="color:' + col + ';font-weight:600">' + d.t + '</span>  ' + d.c + '  ' + d.y + '年登録</div><div style="margin-top:7px;text-align:center;"><button id="tt-land-btn" style="background:#0c2d1a;border:1px solid #3fb950;border-radius:6px;color:#3fb950;font-size:11px;padding:4px 12px;cursor:pointer;font-family:inherit;">🚶 地表に降り立つ</button></div>';
+    var cityIcon = hasCityDataSet[d.n] ? ' 🌆' : '';
+    tooltip.innerHTML = '<div class="tt-name">' + d.e + ' ' + d.f + ' ' + d.n + cityIcon + '</div><div class="tt-sub"><span style="color:' + col + ';font-weight:600">' + d.t + '</span>  ' + d.c + '  ' + d.y + '年登録</div><div style="margin-top:7px;text-align:center;"><button id="tt-land-btn" style="background:#0c2d1a;border:1px solid #3fb950;border-radius:6px;color:#3fb950;font-size:11px;padding:4px 12px;cursor:pointer;font-family:inherit;">🚶 地表に降り立つ</button></div>';
     var landBtn = document.getElementById('tt-land-btn');
     if (landBtn) {
       (function(ci) {
@@ -1447,9 +1572,14 @@ void main() {
         }
       } else if (landingPhase === 2) {
         var lp2 = Math.min((now - landingPhaseStart) / LANDING_ROT_DUR, 1);
-        landingSpinAngle = lp2 * Math.PI * 2;
-        var deg2 = Math.round(lp2 * 360);
-        if (landingStatusEl) landingStatusEl.textContent = '地表を見渡し中... ' + deg2 + '°';
+        if (spin360Enabled) {
+          landingSpinAngle = lp2 * Math.PI * 2;
+          var deg2 = Math.round(lp2 * 360);
+          if (landingStatusEl) landingStatusEl.textContent = '地表を見渡し中... ' + deg2 + '°';
+        } else {
+          landingSpinAngle = 0;
+          if (landingStatusEl) landingStatusEl.textContent = '地表を見渡し中';
+        }
         if (landingProgEl) landingProgEl.style.width = Math.round(35 + lp2 * 40) + '%';
         if (lp2 >= 1) {
           landingPhase = 3;
@@ -1561,6 +1691,28 @@ void main() {
       } else {
         mk.el.style.opacity = '0';
         if (mi === activeIdx) hideTooltip();
+      }
+    }
+
+    for (var ci = 0; ci < cityMkEls.length; ci++) {
+      var cmk = cityMkEls[ci];
+      var cp = cmk.pos3d;
+      var cmz = model[2]*cp[0] + model[6]*cp[1] + model[10]*cp[2];
+      if (cmz > 0.05) {
+        var ccx = mvp[0]*cp[0] + mvp[4]*cp[1] + mvp[8]*cp[2]  + mvp[12];
+        var ccy = mvp[1]*cp[0] + mvp[5]*cp[1] + mvp[9]*cp[2]  + mvp[13];
+        var ccw = mvp[3]*cp[0] + mvp[7]*cp[1] + mvp[11]*cp[2] + mvp[15];
+        if (ccw > 0) {
+          var cpx = (ccx/ccw+1)*0.5*W;
+          var cpy = (1-ccy/ccw)*0.5*H;
+          cmk.el.style.left = cpx + 'px';
+          cmk.el.style.top  = cpy + 'px';
+          cmk.el.style.opacity = '1';
+        } else {
+          cmk.el.style.opacity = '0';
+        }
+      } else {
+        cmk.el.style.opacity = '0';
       }
     }
 
