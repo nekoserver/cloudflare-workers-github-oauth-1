@@ -471,17 +471,17 @@ export function findNearbyCities(
   lon: number,
   radiusKm: number,
   limit: number
-): Array<{ city_name: string; city_lat: number; city_lon: number; population: number | null; distance_km: number }> {
+): Array<{ city_name: string; city_lat: number; city_lon: number; population: number | null; distance_km: number; country_code: string }> {
   const R = 6371;
-  const results: Array<{ city_name: string; city_lat: number; city_lon: number; population: number | null; distance_km: number }> = [];
+  const results: Array<{ city_name: string; city_lat: number; city_lon: number; population: number | null; distance_km: number; country_code: string }> = [];
 
-  for (const [cLat, cLon, popK, name] of WORLD_CITIES) {
+  for (const [cLat, cLon, popK, name, cc] of WORLD_CITIES) {
     const dLat = (cLat - lat) * Math.PI / 180;
     const dLon = (cLon - lon) * Math.PI / 180;
     const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat * Math.PI / 180) * Math.cos(cLat * Math.PI / 180) * Math.sin(dLon / 2) ** 2;
     const dist = Math.round(R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
     if (dist <= radiusKm) {
-      results.push({ city_name: name, city_lat: cLat, city_lon: cLon, population: popK * 1000, distance_km: dist });
+      results.push({ city_name: name, city_lat: cLat, city_lon: cLon, population: popK * 1000, distance_km: dist, country_code: cc });
     }
   }
 

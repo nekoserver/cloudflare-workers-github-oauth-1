@@ -4282,8 +4282,8 @@ app.get('/api/heritage-cities', authMiddleware, async (c) => {
   const fetched = await db.prepare('SELECT city_count FROM heritage_city_fetched WHERE heritage_name = ?').bind(name).first<{ city_count: number }>();
   if (!fetched) return c.json({ fetched: false });
   const result = await db.prepare(
-    'SELECT city_name, city_lat, city_lon, population, distance_km FROM heritage_cities WHERE heritage_name = ? ORDER BY distance_km'
-  ).bind(name).all<{ city_name: string; city_lat: number; city_lon: number; population: number | null; distance_km: number }>();
+    'SELECT city_name, city_lat, city_lon, population, distance_km, country_code FROM heritage_cities WHERE heritage_name = ? ORDER BY distance_km'
+  ).bind(name).all<{ city_name: string; city_lat: number; city_lon: number; population: number | null; distance_km: number; country_code: string | null }>();
   return c.json({ fetched: true, cities: result.results });
 });
 
@@ -4297,16 +4297,16 @@ app.post('/api/heritage-cities', authMiddleware, async (c) => {
   const existing = await db.prepare('SELECT city_count FROM heritage_city_fetched WHERE heritage_name = ?').bind(name).first<{ city_count: number }>();
   if (existing) {
     const result = await db.prepare(
-      'SELECT city_name, city_lat, city_lon, population, distance_km FROM heritage_cities WHERE heritage_name = ? ORDER BY distance_km'
-    ).bind(name).all<{ city_name: string; city_lat: number; city_lon: number; population: number | null; distance_km: number }>();
+      'SELECT city_name, city_lat, city_lon, population, distance_km, country_code FROM heritage_cities WHERE heritage_name = ? ORDER BY distance_km'
+    ).bind(name).all<{ city_name: string; city_lat: number; city_lon: number; population: number | null; distance_km: number; country_code: string | null }>();
     return c.json({ fetched: true, cities: result.results });
   }
 
   const cities = findNearbyCities(lat, lon, 500, 15);
 
   if (cities.length > 0) {
-    const stmt = db.prepare('INSERT OR IGNORE INTO heritage_cities (heritage_name, city_name, city_lat, city_lon, population, distance_km) VALUES (?, ?, ?, ?, ?, ?)');
-    await db.batch(cities.map(city => stmt.bind(name, city.city_name, city.city_lat, city.city_lon, city.population, city.distance_km)));
+    const stmt = db.prepare('INSERT OR IGNORE INTO heritage_cities (heritage_name, city_name, city_lat, city_lon, population, distance_km, country_code) VALUES (?, ?, ?, ?, ?, ?, ?)');
+    await db.batch(cities.map(city => stmt.bind(name, city.city_name, city.city_lat, city.city_lon, city.population, city.distance_km, city.country_code)));
   }
   await db.prepare('INSERT OR REPLACE INTO heritage_city_fetched (heritage_name, city_count) VALUES (?, ?)').bind(name, cities.length).run();
 
