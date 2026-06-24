@@ -223,6 +223,7 @@ void main() {
       <button class="canvas-ctrl-btn" id="btnEuropeTour">🏰 ヨーロッパ巡回</button>
       <button class="canvas-ctrl-btn" id="btnAfricaTour">🌍 アフリカ巡回</button>
       <button class="canvas-ctrl-btn" id="btnStats">📊 内訳</button>
+      <button class="canvas-ctrl-btn" id="btnCityStats">🌇 都市統計</button>
     </div>
   </div>
   <div class="side">
@@ -329,6 +330,17 @@ void main() {
       <button class="cities-modal-close" id="cities-modal-close">✕</button>
     </div>
     <div class="cities-modal-body" id="cities-modal-body"></div>
+  </div>
+</div>
+
+<div id="city-stats-overlay" class="cities-modal-overlay">
+  <div class="cities-modal" style="width:min(90vw,520px)">
+    <div class="cities-modal-head">
+      <span class="cities-modal-title">🌇 近隣都市データ 国別集計</span>
+      <span id="city-stats-badge" style="background:#0c2d1a;color:#3fb950;font-size:11px;padding:2px 8px;border-radius:10px;font-weight:600;"></span>
+      <button class="cities-modal-close" id="city-stats-close">✕</button>
+    </div>
+    <div class="cities-modal-body" id="city-stats-body"></div>
   </div>
 </div>
 
@@ -917,36 +929,59 @@ void main() {
   var citiesModalTitle = null;
   var citiesModalBody = null;
 
+  function renderCitiesModalRows(cities) {
+    var html = '';
+    cities.forEach(function(city) {
+      var flag = city.country_code ? (ccToFlag(city.country_code) + ' ') : '';
+      var pop = city.population ? formatPop(city.population) : '';
+      html += '<div class="cities-modal-row">' +
+        '<span class="cities-modal-name">' + flag + city.city_name + '</span>' +
+        (pop ? '<span class="cities-modal-pop">\u4eba\u53e3 ' + pop + '</span>' : '') +
+        '<span class="cities-modal-dist">' + city.distance_km + ' km</span>' +
+        '</div>';
+    });
+    return html;
+  }
+
+  function loadCitiesIntoModal(hidx, force) {
+    var d = HERITAGE[hidx];
+    if(!d) return;
+    citiesModalBody.innerHTML = '<div style="color:#8b949e;text-align:center;padding:16px">\u8aad\u307f\u8fbc\u307f\u4e2d...</div>';
+    var req = force
+      ? fetch('/api/heritage-cities', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: d.n, lat: d.lat, lon: d.lon, force: true }) })
+      : fetch('/api/heritage-cities?name=' + encodeURIComponent(d.n));
+    req.then(function(r){ return r.json(); })
+      .then(function(data) {
+        if(!data.fetched || !data.cities || data.cities.length === 0) {
+          citiesModalBody.innerHTML = '<div style="color:#8b949e;text-align:center;padding:16px">\u90fd\u5e02\u30c7\u30fc\u30bf\u306a\u3057</div>';
+          return;
+        }
+        var stale = data.cities.some(function(c){ return !c.country_code; });
+        var html = renderCitiesModalRows(data.cities);
+        if(stale) {
+          html += '<div style="text-align:center;padding:8px 0 4px">' +
+            '<button id="cities-modal-refresh" style="background:#21262d;border:1px solid #30363d;color:#c9d1d9;border-radius:6px;padding:4px 14px;font-size:11px;cursor:pointer;">\ud83d\udd04 \u56fd\u65d7\u60c5\u5831\u3092\u66f4\u65b0</button>' +
+            '</div>';
+        }
+        citiesModalBody.innerHTML = html;
+        if(stale) {
+          var refreshBtn = document.getElementById('cities-modal-refresh');
+          if(refreshBtn) refreshBtn.addEventListener('click', function() { loadCitiesIntoModal(hidx, true); });
+        }
+      })
+      .catch(function() {
+        citiesModalBody.innerHTML = '<div style="color:#8b949e;text-align:center;padding:16px">\u53d6\u5f97\u30a8\u30e9\u30fc</div>';
+      });
+  }
+
   function showCitiesModal(hidx) {
     var d = HERITAGE[hidx];
     if(!d) return;
-    citiesModalTitle.textContent = d.f + ' ' + d.n + ' 近隣都市';
-    citiesModalBody.innerHTML = '<div style="color:#8b949e;text-align:center;padding:16px">読み込み中...</div>';
+    citiesModalTitle.textContent = d.f + ' ' + d.n + ' \u8fd1\u9130\u90fd\u5e02';
     citiesModalOverlay.classList.add('open');
-    fetch('/api/heritage-cities?name=' + encodeURIComponent(d.n))
-      .then(function(r){ return r.json(); })
-      .then(function(data) {
-        if(!data.fetched || !data.cities || data.cities.length === 0) {
-          citiesModalBody.innerHTML = '<div style="color:#8b949e;text-align:center;padding:16px">都市データなし</div>';
-          return;
-        }
-        var html = '';
-        data.cities.forEach(function(city) {
-          var flag = city.country_code ? ccToFlag(city.country_code) : '';
-          var pop = city.population ? formatPop(city.population) : '';
-          html += '<div class="cities-modal-row">' +
-            '<span class="cities-modal-flag">' + flag + '</span>' +
-            '<span class="cities-modal-name">' + city.city_name + '</span>' +
-            (pop ? '<span class="cities-modal-pop">人口 ' + pop + '</span>' : '') +
-            '<span class="cities-modal-dist">' + city.distance_km + ' km</span>' +
-            '</div>';
-        });
-        citiesModalBody.innerHTML = html;
-      })
-      .catch(function() {
-        citiesModalBody.innerHTML = '<div style="color:#8b949e;text-align:center;padding:16px">取得エラー</div>';
-      });
+    loadCitiesIntoModal(hidx, false);
   }
+
 
   function updateCityIcons() {
     if(typeof listItemEls === 'undefined') return;
@@ -1512,6 +1547,53 @@ void main() {
   citiesModalOverlay.addEventListener('click', function(e) {
     if(e.target === citiesModalOverlay) citiesModalOverlay.classList.remove('open');
   });
+
+  var cityStatsOverlay = document.getElementById('city-stats-overlay');
+  var cityStatsBody = document.getElementById('city-stats-body');
+  var cityStatsBadge = document.getElementById('city-stats-badge');
+  document.getElementById('city-stats-close').addEventListener('click', function() {
+    cityStatsOverlay.classList.remove('open');
+  });
+  cityStatsOverlay.addEventListener('click', function(e) {
+    if(e.target === cityStatsOverlay) cityStatsOverlay.classList.remove('open');
+  });
+
+  document.getElementById('btnCityStats').addEventListener('click', function() {
+    cityStatsBody.innerHTML = '<div style="color:#8b949e;text-align:center;padding:20px">読み込み中...</div>';
+    cityStatsBadge.textContent = '';
+    cityStatsOverlay.classList.add('open');
+    fetch('/api/heritage-country-stats')
+      .then(function(r){ return r.json(); })
+      .then(function(data) {
+        var rows = data.rows || [];
+        if(rows.length === 0) {
+          cityStatsBody.innerHTML = '<div style="color:#8b949e;text-align:center;padding:20px">データなし</div>';
+          return;
+        }
+        var total = 0;
+        rows.forEach(function(r){ total += r.heritage_count; });
+        cityStatsBadge.textContent = '計 ' + total + ' 件';
+        var max = rows[0].heritage_count;
+        var html = '';
+        rows.forEach(function(r) {
+          var flag = ccToFlag(r.country_code);
+          var barW = Math.round(r.heritage_count / max * 100);
+          html += '<div class="cities-modal-row" style="gap:10px">' +
+            '<span class="cities-modal-flag">' + flag + '</span>' +
+            '<span style="color:#8b949e;font-size:10px;min-width:28px">' + r.country_code + '</span>' +
+            '<div style="flex:1;background:#161b22;border-radius:4px;height:10px;overflow:hidden">' +
+              '<div style="background:#388bfd;height:100%;width:' + barW + '%"></div>' +
+            '</div>' +
+            '<span style="color:#c9d1d9;font-size:12px;font-weight:600;min-width:28px;text-align:right">' + r.heritage_count + '</span>' +
+            '</div>';
+        });
+        cityStatsBody.innerHTML = html;
+      })
+      .catch(function() {
+        cityStatsBody.innerHTML = '<div style="color:#8b949e;text-align:center;padding:20px">取得エラー</div>';
+      });
+  });
+
   var landingExitBtn = document.getElementById('landing-exit');
   if (landingExitBtn) landingExitBtn.addEventListener('click', stopLanding);
   if (landingSpinToggleEl) {
