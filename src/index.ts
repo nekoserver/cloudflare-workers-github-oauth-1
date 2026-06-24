@@ -4354,6 +4354,51 @@ app.post('/api/heritage-country-city-stats', authMiddleware, async (c) => {
   return c.json({ counts, uniqueTotal: uniqueRow?.total ?? 0 });
 });
 
+app.post('/api/heritage-country-unique-cities', authMiddleware, async (c) => {
+  const db = c.env.DB;
+  if (!db) return c.json({ cities: [] });
+  const body = await c.req.json<{ names: string[] }>().catch(() => null);
+  if (!body || !Array.isArray(body.names) || body.names.length === 0) {
+    return c.json({ cities: [] });
+  }
+  const names = body.names.slice(0, 200);
+  const placeholders = names.map(() => '?').join(',');
+  const rows = await db.prepare(
+    `SELECT city_name, ROUND(city_lat,3) AS lat, ROUND(city_lon,3) AS lon,
+            country_code, MAX(population) AS population,
+            COUNT(DISTINCT heritage_name) AS near_count
+     FROM heritage_cities
+     WHERE heritage_name IN (${placeholders})
+     GROUP BY city_name, ROUND(city_lat,3), ROUND(city_lon,3)
+     ORDER BY near_count DESC, population DESC`
+  ).bind(...names).all<{ city_name: string; lat: number; lon: number; country_code: string | null; population: number | null; near_count: number }>();
+  return c.json({ cities: rows.results });
+});
+
+app.post('/api/heritage-city-heritages', authMiddleware, async (c) => {
+  const db = c.env.DB;
+  if (!db) return c.json({ heritages: [] });
+  const body = await c.req.json<{ city_name: string; lat: number; lon: number; names: string[] }>().catch(() => null);
+  if (!body || !body.city_name || body.lat == null || body.lon == null || !Array.isArray(body.names) || body.names.length === 0) {
+    return c.json({ heritages: [] });
+  }
+  const names = body.names.slice(0, 200);
+  const placeholders = names.map(() => '?').join(',');
+  const lat3 = Math.round(body.lat * 1000) / 1000;
+  const lon3 = Math.round(body.lon * 1000) / 1000;
+  const rows = await db.prepare(
+    `SELECT heritage_name, MIN(distance_km) AS distance_km
+     FROM heritage_cities
+     WHERE city_name = ?
+       AND ROUND(city_lat,3) = ?
+       AND ROUND(city_lon,3) = ?
+       AND heritage_name IN (${placeholders})
+     GROUP BY heritage_name
+     ORDER BY distance_km`
+  ).bind(body.city_name, lat3, lon3, ...names).all<{ heritage_name: string; distance_km: number }>();
+  return c.json({ heritages: rows.results });
+});
+
 app.get('/webgl-lv-sphere', authMiddleware, async (c) => {
   const user = c.get('user');
   return c.html(getWebGLLVSpherePage(user.sub));

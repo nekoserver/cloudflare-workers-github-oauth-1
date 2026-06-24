@@ -166,6 +166,34 @@ canvas:active { cursor:grabbing; }
 .ch-item-meta { font-size:10px; color:#8b949e; flex-shrink:0; }
 .ch-item-year { font-size:10px; color:#8b949e; flex-shrink:0; min-width:36px; text-align:right; }
 .ch-item-citycount { font-size:11px; color:#58a6ff; flex-shrink:0; min-width:44px; text-align:right; font-weight:600; }
+.ch-item-total-btn { background:none; border:none; padding:0; cursor:pointer; color:#58a6ff; font-size:11px; font-weight:700; text-decoration:underline; text-decoration-style:dotted; }
+.ch-item-total-btn:hover { color:#79c0ff; }
+.cl-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,.85); z-index:400; align-items:flex-start; justify-content:center; padding-top:40px; }
+.cl-overlay.open { display:flex; }
+.cl-panel { background:#0d1117; border:1px solid #30363d; border-radius:10px; width:min(92vw,520px); max-height:80vh; display:flex; flex-direction:column; overflow:hidden; box-shadow:0 8px 48px rgba(0,0,0,.95); }
+.cl-head { padding:12px 16px; border-bottom:1px solid #21262d; display:flex; align-items:center; gap:8px; flex-shrink:0; }
+.cl-title { font-size:14px; font-weight:700; flex:1; }
+.cl-badge { background:#0c2d1a; color:#3fb950; font-size:11px; padding:2px 8px; border-radius:10px; font-weight:600; }
+.cl-close { background:none; border:none; color:#8b949e; font-size:18px; cursor:pointer; padding:2px 6px; line-height:1; }
+.cl-body { overflow-y:auto; padding:8px 12px 14px; }
+.cl-item { display:flex; align-items:center; gap:8px; padding:6px; border-bottom:1px solid #21262d; cursor:pointer; border-radius:4px; transition:background .12s; }
+.cl-item:last-child { border-bottom:none; }
+.cl-item:hover { background:rgba(56,139,253,.08); }
+.cl-item-name { flex:1; font-size:12px; color:#c9d1d9; }
+.cl-item-count { font-size:11px; color:#58a6ff; font-weight:600; flex-shrink:0; min-width:44px; text-align:right; }
+.ch2-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,.9); z-index:500; align-items:flex-start; justify-content:center; padding-top:40px; }
+.ch2-overlay.open { display:flex; }
+.ch2-panel { background:#0d1117; border:1px solid #30363d; border-radius:10px; width:min(92vw,540px); max-height:80vh; display:flex; flex-direction:column; overflow:hidden; box-shadow:0 8px 48px rgba(0,0,0,.98); }
+.ch2-head { padding:12px 16px; border-bottom:1px solid #21262d; display:flex; align-items:center; gap:8px; flex-shrink:0; }
+.ch2-title { font-size:14px; font-weight:700; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.ch2-close { background:none; border:none; color:#8b949e; font-size:18px; cursor:pointer; padding:2px 6px; line-height:1; }
+.ch2-body { overflow-y:auto; padding:8px 12px 14px; }
+.ch2-item { display:flex; align-items:center; gap:8px; padding:7px 6px; border-bottom:1px solid #21262d; border-radius:4px; cursor:pointer; transition:background .12s; }
+.ch2-item:last-child { border-bottom:none; }
+.ch2-item:hover { background:rgba(56,139,253,.08); }
+.ch2-item-emoji { font-size:16px; flex-shrink:0; width:24px; text-align:center; }
+.ch2-item-name { flex:1; font-size:12px; color:#c9d1d9; }
+.ch2-item-dist { font-size:11px; color:#58a6ff; font-weight:600; flex-shrink:0; min-width:56px; text-align:right; }
 </style>
 </head>
 <body>
@@ -370,6 +398,27 @@ void main() {
       <button class="ch-close" id="ch-close">✕</button>
     </div>
     <div class="ch-body" id="ch-body"></div>
+  </div>
+</div>
+
+<div id="cl-overlay" class="cl-overlay">
+  <div class="cl-panel">
+    <div class="cl-head">
+      <span class="cl-title" id="cl-title">都市一覧</span>
+      <span class="cl-badge" id="cl-badge"></span>
+      <button class="cl-close" id="cl-close">✕</button>
+    </div>
+    <div class="cl-body" id="cl-body"></div>
+  </div>
+</div>
+
+<div id="ch2-overlay" class="ch2-overlay">
+  <div class="ch2-panel">
+    <div class="ch2-head">
+      <span class="ch2-title" id="ch2-title"></span>
+      <button class="ch2-close" id="ch2-close">✕</button>
+    </div>
+    <div class="ch2-body" id="ch2-body"></div>
   </div>
 </div>
 
@@ -1641,6 +1690,24 @@ void main() {
   document.getElementById('ch-close').addEventListener('click', function() { chOverlay.classList.remove('open'); });
   chOverlay.addEventListener('click', function(e) { if(e.target === chOverlay) chOverlay.classList.remove('open'); });
 
+  var currentCountryNames = [];
+
+  function bindChBodyHandlers(matches) {
+    chBody.querySelectorAll('.ch-item:not(.ch-item-total)').forEach(function(el) {
+      el.addEventListener('click', function() {
+        chOverlay.classList.remove('open');
+        showMarkerTooltip(parseInt(el.getAttribute('data-idx')), 0, 0);
+      });
+    });
+    var totalBtn = chBody.querySelector('.ch-item-total-btn');
+    if (totalBtn) {
+      totalBtn.addEventListener('click', function(e) {
+        e.stopPropagation();
+        openCityListModal(currentCountryNames, chTitle.textContent || '');
+      });
+    }
+  }
+
   function renderCountryHeritageRows(matches, cityCounts, uniqueTotal) {
     var sorted = matches.slice().sort(function(a, b) { return b.y - a.y; });
     var html = '';
@@ -1655,11 +1722,14 @@ void main() {
         '<span class="ch-item-citycount" title="近隣都市数">' + countStr + '🏙️</span>' +
         '</div>';
     });
-    html += '<div class="ch-item ch-item-total" style="border-top:1px solid #30363d;margin-top:6px;padding-top:6px;cursor:default;pointer-events:none">' +
+    var totalInner = uniqueTotal > 0
+      ? '<button class="ch-item-total-btn">' + uniqueTotal + '🏙️</button>'
+      : '<span style="font-weight:700;color:#58a6ff">' + uniqueTotal + '🏙️</span>';
+    html += '<div class="ch-item ch-item-total" style="border-top:1px solid #30363d;margin-top:6px;padding-top:6px;cursor:default">' +
       '<span class="ch-item-emoji"></span>' +
       '<span class="ch-item-name" style="color:#8b949e;font-size:11px">合計（重複なし都市数）</span>' +
       '<span class="ch-item-year"></span>' +
-      '<span class="ch-item-citycount" style="font-weight:700;color:#58a6ff">' + uniqueTotal + '🏙️</span>' +
+      '<span class="ch-item-citycount">' + totalInner + '</span>' +
       '</div>';
     return html;
   }
@@ -1670,20 +1740,16 @@ void main() {
     var matches = HERITAGE.filter(function(d) { return d.f === flag; });
     chTitle.textContent = flag + ' ' + jpName + ' の世界遺産';
     chBadge.textContent = matches.length + ' 件';
+    currentCountryNames = matches.map(function(d) { return d.n; });
     if(matches.length === 0) {
       chBody.innerHTML = '<div style="color:#8b949e;text-align:center;padding:20px">該当なし</div>';
       chOverlay.classList.add('open');
       return;
     }
     chBody.innerHTML = renderCountryHeritageRows(matches, {}, 0);
-    chBody.querySelectorAll('.ch-item:not(.ch-item-total)').forEach(function(el) {
-      el.addEventListener('click', function() {
-        chOverlay.classList.remove('open');
-        showMarkerTooltip(parseInt(el.getAttribute('data-idx')), 0, 0);
-      });
-    });
+    bindChBodyHandlers(matches);
     chOverlay.classList.add('open');
-    var names = matches.map(function(d) { return d.n; });
+    var names = currentCountryNames;
     fetch('/api/heritage-country-city-stats', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -1691,13 +1757,100 @@ void main() {
     }).then(function(r) { return r.json(); }).then(function(data) {
       var html = renderCountryHeritageRows(matches, data.counts || {}, data.uniqueTotal || 0);
       chBody.innerHTML = html;
-      chBody.querySelectorAll('.ch-item:not(.ch-item-total)').forEach(function(el) {
+      bindChBodyHandlers(matches);
+    }).catch(function() {});
+  }
+
+  var clOverlay = document.getElementById('cl-overlay');
+  var clTitle = document.getElementById('cl-title');
+  var clBadge = document.getElementById('cl-badge');
+  var clBody = document.getElementById('cl-body');
+  document.getElementById('cl-close').addEventListener('click', function() { clOverlay.classList.remove('open'); });
+  clOverlay.addEventListener('click', function(e) { if(e.target === clOverlay) clOverlay.classList.remove('open'); });
+
+  var ch2Overlay = document.getElementById('ch2-overlay');
+  var ch2Title = document.getElementById('ch2-title');
+  var ch2Body = document.getElementById('ch2-body');
+  document.getElementById('ch2-close').addEventListener('click', function() { ch2Overlay.classList.remove('open'); });
+  ch2Overlay.addEventListener('click', function(e) { if(e.target === ch2Overlay) ch2Overlay.classList.remove('open'); });
+
+  function openCityListModal(names, countryLabel) {
+    clTitle.textContent = countryLabel + ' 都市一覧';
+    clBadge.textContent = '';
+    clBody.innerHTML = '<div style="color:#8b949e;text-align:center;padding:20px">読み込み中...</div>';
+    clOverlay.classList.add('open');
+    fetch('/api/heritage-country-unique-cities', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ names: names })
+    }).then(function(r) { return r.json(); }).then(function(data) {
+      var cities = data.cities || [];
+      clBadge.textContent = cities.length + ' 都市';
+      if(cities.length === 0) {
+        clBody.innerHTML = '<div style="color:#8b949e;text-align:center;padding:20px">データなし</div>';
+        return;
+      }
+      var html = '';
+      cities.forEach(function(city) {
+        var safeCity = city.city_name.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+        html += '<div class="cl-item" data-city="' + safeCity + '" data-lat="' + city.lat + '" data-lon="' + city.lon + '">' +
+          '<span class="cl-item-name">🏙️ ' + safeCity + '</span>' +
+          '<span class="cl-item-count">' + city.near_count + '遺産地</span>' +
+          '</div>';
+      });
+      clBody.innerHTML = html;
+      clBody.querySelectorAll('.cl-item').forEach(function(el) {
         el.addEventListener('click', function() {
+          var cityName = el.getAttribute('data-city');
+          var lat = parseFloat(el.getAttribute('data-lat'));
+          var lon = parseFloat(el.getAttribute('data-lon'));
+          openCityHeritageModal(cityName, lat, lon, names);
+        });
+      });
+    }).catch(function() {
+      clBody.innerHTML = '<div style="color:#8b949e;text-align:center;padding:20px">取得エラー</div>';
+    });
+  }
+
+  function openCityHeritageModal(cityName, lat, lon, names) {
+    ch2Title.textContent = '🏙️ ' + cityName + ' から近い順の世界遺産';
+    ch2Body.innerHTML = '<div style="color:#8b949e;text-align:center;padding:20px">読み込み中...</div>';
+    ch2Overlay.classList.add('open');
+    fetch('/api/heritage-city-heritages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ city_name: cityName, lat: lat, lon: lon, names: names })
+    }).then(function(r) { return r.json(); }).then(function(data) {
+      var heritages = data.heritages || [];
+      if(heritages.length === 0) {
+        ch2Body.innerHTML = '<div style="color:#8b949e;text-align:center;padding:20px">データなし</div>';
+        return;
+      }
+      var html = '';
+      heritages.forEach(function(h) {
+        var hd = HERITAGE.filter(function(d){ return d.n === h.heritage_name; })[0];
+        var emoji = hd ? hd.e : '🏛️';
+        var safeName = h.heritage_name.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+        var distStr = h.distance_km < 10 ? h.distance_km.toFixed(1) + 'km' : Math.round(h.distance_km) + 'km';
+        var idx = hd ? HERITAGE.indexOf(hd) : -1;
+        html += '<div class="ch2-item"' + (idx >= 0 ? ' data-idx="' + idx + '"' : '') + '>' +
+          '<span class="ch2-item-emoji">' + emoji + '</span>' +
+          '<span class="ch2-item-name">' + safeName + '</span>' +
+          '<span class="ch2-item-dist">' + distStr + '</span>' +
+          '</div>';
+      });
+      ch2Body.innerHTML = html;
+      ch2Body.querySelectorAll('.ch2-item[data-idx]').forEach(function(el) {
+        el.addEventListener('click', function() {
+          ch2Overlay.classList.remove('open');
+          clOverlay.classList.remove('open');
           chOverlay.classList.remove('open');
           showMarkerTooltip(parseInt(el.getAttribute('data-idx')), 0, 0);
         });
       });
-    }).catch(function() {});
+    }).catch(function() {
+      ch2Body.innerHTML = '<div style="color:#8b949e;text-align:center;padding:20px">取得エラー</div>';
+    });
   }
 
   var cityStatsOverlay = document.getElementById('city-stats-overlay');
