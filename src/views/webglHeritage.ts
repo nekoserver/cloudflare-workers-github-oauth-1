@@ -1859,7 +1859,9 @@ void main() {
             e.stopPropagation();
             var lat = parseFloat(el.getAttribute('data-lat'));
             var lon = parseFloat(el.getAttribute('data-lon'));
+            ch2Overlay.classList.remove('open');
             clOverlay.classList.remove('open');
+            chOverlay.classList.remove('open');
             flyTo(lat, lon);
           });
         }
