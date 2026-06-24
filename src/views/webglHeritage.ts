@@ -1,9 +1,12 @@
+import { CITY_TO_KANA } from './webglHeritageUtils';
+
 function escH(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
 export function getWebGLHeritagePage(username: string): string {
   const safeUser = escH(username);
+  const cityToKanaJson = JSON.stringify(CITY_TO_KANA);
   return `<!DOCTYPE html>
 <html lang="ja">
 <head>
@@ -182,6 +185,7 @@ canvas:active { cursor:grabbing; }
 .cl-item-flag { font-size:15px; flex-shrink:0; }
 .cl-item-name { flex:1; font-size:12px; color:#58a6ff; text-decoration:underline; text-underline-offset:2px; cursor:pointer; }
 .cl-item-name:hover { color:#79c0ff; }
+.cl-item-kana { font-size:11px; color:#8b949e; text-decoration:none; margin-left:4px; }
 .cl-item-count { font-size:11px; color:#8b949e; font-weight:600; flex-shrink:0; min-width:44px; text-align:right; }
 .ch2-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,.9); z-index:500; align-items:flex-start; justify-content:center; padding-top:40px; }
 .ch2-overlay.open { display:flex; }
@@ -1168,6 +1172,11 @@ void main() {
     return CC_TO_JP[cc.toUpperCase()] || cc;
   }
 
+  var CITY_TO_KANA = ${cityToKanaJson};
+  function cityToKana(name) {
+    return CITY_TO_KANA[name] || '';
+  }
+
   var citiesModalOverlay = null;
   var citiesModalTitle = null;
   var citiesModalBody = null;
@@ -1804,6 +1813,7 @@ void main() {
     chBody.querySelectorAll('.ch-item:not(.ch-item-total)').forEach(function(el) {
       el.addEventListener('click', function() {
         chOverlay.classList.remove('open');
+        cityStatsOverlay.classList.remove('open');
         showMarkerTooltip(parseInt(el.getAttribute('data-idx')), 0, 0);
       });
     });
@@ -2014,9 +2024,11 @@ void main() {
       cities.forEach(function(city) {
         var safeCity = city.city_name.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
         var flagEmoji = city.country_code ? ccToFlag(city.country_code) : '🏙️';
+        var kana = cityToKana(city.city_name);
+        var kanaHtml = kana ? ' <span class="cl-item-kana">' + kana + '</span>' : '';
         html += '<div class="cl-item" data-city="' + safeCity + '" data-lat="' + city.lat + '" data-lon="' + city.lon + '" data-cc="' + (city.country_code || '') + '">' +
           '<span class="cl-item-flag">' + flagEmoji + '</span>' +
-          '<span class="cl-item-name">' + safeCity + '</span>' +
+          '<span class="cl-item-name">' + safeCity + kanaHtml + '</span>' +
           '<span class="cl-item-count">' + city.near_count + '遺産地</span>' +
           '</div>';
       });
@@ -2077,9 +2089,6 @@ void main() {
       ch2Body.innerHTML = html;
       ch2Body.querySelectorAll('.ch2-item[data-idx]').forEach(function(el) {
         el.addEventListener('click', function() {
-          ch2Overlay.classList.remove('open');
-          clOverlay.classList.remove('open');
-          chOverlay.classList.remove('open');
           showMarkerTooltip(parseInt(el.getAttribute('data-idx')), 0, 0);
         });
       });
