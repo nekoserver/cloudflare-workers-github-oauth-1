@@ -4334,6 +4334,26 @@ app.get('/api/heritage-country-stats', authMiddleware, async (c) => {
   return c.json({ rows: rows.results });
 });
 
+app.post('/api/heritage-country-city-stats', authMiddleware, async (c) => {
+  const db = c.env.DB;
+  if (!db) return c.json({ counts: {}, uniqueTotal: 0 });
+  const body = await c.req.json<{ names: string[] }>().catch(() => null);
+  if (!body || !Array.isArray(body.names) || body.names.length === 0) {
+    return c.json({ counts: {}, uniqueTotal: 0 });
+  }
+  const names = body.names.slice(0, 200);
+  const placeholders = names.map(() => '?').join(',');
+  const fetched = await db.prepare(
+    `SELECT heritage_name, city_count FROM heritage_city_fetched WHERE heritage_name IN (${placeholders})`
+  ).bind(...names).all<{ heritage_name: string; city_count: number }>();
+  const counts: Record<string, number> = {};
+  for (const row of fetched.results) counts[row.heritage_name] = row.city_count;
+  const uniqueRow = await db.prepare(
+    `SELECT COUNT(DISTINCT city_name || '|' || CAST(ROUND(city_lat,3) AS TEXT) || '|' || CAST(ROUND(city_lon,3) AS TEXT)) AS total FROM heritage_cities WHERE heritage_name IN (${placeholders})`
+  ).bind(...names).first<{ total: number }>();
+  return c.json({ counts, uniqueTotal: uniqueRow?.total ?? 0 });
+});
+
 app.get('/webgl-lv-sphere', authMiddleware, async (c) => {
   const user = c.get('user');
   return c.html(getWebGLLVSpherePage(user.sub));

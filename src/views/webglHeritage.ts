@@ -164,6 +164,8 @@ canvas:active { cursor:grabbing; }
 .ch-item-emoji { font-size:18px; flex-shrink:0; width:28px; text-align:center; }
 .ch-item-name { flex:1; font-size:12px; color:#c9d1d9; }
 .ch-item-meta { font-size:10px; color:#8b949e; flex-shrink:0; }
+.ch-item-year { font-size:10px; color:#8b949e; flex-shrink:0; min-width:36px; text-align:right; }
+.ch-item-citycount { font-size:11px; color:#58a6ff; flex-shrink:0; min-width:44px; text-align:right; font-weight:600; }
 </style>
 </head>
 <body>
@@ -952,6 +954,63 @@ void main() {
     return String.fromCodePoint(a) + String.fromCodePoint(b);
   }
 
+  var CC_TO_JP = {
+    AF:'アフガニスタン',AL:'アルバニア',DZ:'アルジェリア',AD:'アンドラ',
+    AO:'アンゴラ',AG:'アンティグア・バーブーダ',AR:'アルゼンチン',AM:'アルメニア',
+    AU:'オーストラリア',AT:'オーストリア',AZ:'アゼルバイジャン',BS:'バハマ',
+    BH:'バーレーン',BD:'バングラデシュ',BB:'バルバドス',BY:'ベラルーシ',
+    BE:'ベルギー',BZ:'ベリーズ',BJ:'ベナン',BT:'ブータン',
+    BO:'ボリビア',BA:'ボスニア・ヘルツェゴビナ',BW:'ボツワナ',BR:'ブラジル',
+    BN:'ブルネイ',BG:'ブルガリア',BF:'ブルキナファソ',BI:'ブルンジ',
+    CV:'カーボベルデ',KH:'カンボジア',CM:'カメルーン',CA:'カナダ',
+    CF:'中央アフリカ',TD:'チャド',CL:'チリ',CN:'中国',
+    CO:'コロンビア',KM:'コモロ',CD:'コンゴ民主共和国',CG:'コンゴ共和国',
+    CR:'コスタリカ',CI:'コートジボワール',HR:'クロアチア',CU:'キューバ',
+    CY:'キプロス',CZ:'チェコ',DK:'デンマーク',DJ:'ジブチ',
+    DM:'ドミニカ',DO:'ドミニカ共和国',EC:'エクアドル',EG:'エジプト',
+    SV:'エルサルバドル',GQ:'赤道ギニア',ER:'エリトリア',EE:'エストニア',
+    SZ:'エスワティニ',ET:'エチオピア',FJ:'フィジー',FI:'フィンランド',
+    FR:'フランス',GA:'ガボン',GM:'ガンビア',GE:'ジョージア',
+    DE:'ドイツ',GH:'ガーナ',GR:'ギリシャ',GD:'グレナダ',
+    GT:'グアテマラ',GN:'ギニア',GW:'ギニアビサウ',GY:'ガイアナ',
+    HT:'ハイチ',HN:'ホンジュラス',HU:'ハンガリー',IS:'アイスランド',
+    IN:'インド',ID:'インドネシア',IR:'イラン',IQ:'イラク',
+    IE:'アイルランド',IL:'イスラエル',IT:'イタリア',JM:'ジャマイカ',
+    JP:'日本',JO:'ヨルダン',KZ:'カザフスタン',KE:'ケニア',
+    KI:'キリバス',KP:'北朝鮮',KR:'韓国',KW:'クウェート',
+    KG:'キルギス',LA:'ラオス',LV:'ラトビア',LB:'レバノン',
+    LS:'レソト',LR:'リベリア',LY:'リビア',LI:'リヒテンシュタイン',
+    LT:'リトアニア',LU:'ルクセンブルク',MG:'マダガスカル',MW:'マラウイ',
+    MY:'マレーシア',MV:'モルディブ',ML:'マリ',MT:'マルタ',
+    MH:'マーシャル諸島',MR:'モーリタニア',MU:'モーリシャス',MX:'メキシコ',
+    FM:'ミクロネシア',MD:'モルドバ',MC:'モナコ',MN:'モンゴル',
+    ME:'モンテネグロ',MA:'モロッコ',MZ:'モザンビーク',MM:'ミャンマー',
+    NA:'ナミビア',NR:'ナウル',NP:'ネパール',NL:'オランダ',
+    NZ:'ニュージーランド',NI:'ニカラグア',NE:'ニジェール',NG:'ナイジェリア',
+    MK:'北マケドニア',NO:'ノルウェー',OM:'オマーン',PK:'パキスタン',
+    PW:'パラオ',PA:'パナマ',PG:'パプアニューギニア',PY:'パラグアイ',
+    PE:'ペルー',PH:'フィリピン',PL:'ポーランド',PT:'ポルトガル',
+    QA:'カタール',RO:'ルーマニア',RU:'ロシア',RW:'ルワンダ',
+    KN:'セントクリストファー・ネイビス',LC:'セントルシア',VC:'セントビンセント・グレナディーン',
+    WS:'サモア',SM:'サンマリノ',ST:'サントメ・プリンシペ',SA:'サウジアラビア',
+    SN:'セネガル',RS:'セルビア',SC:'セーシェル',SL:'シエラレオネ',
+    SG:'シンガポール',SK:'スロバキア',SI:'スロベニア',SB:'ソロモン諸島',
+    SO:'ソマリア',ZA:'南アフリカ',SS:'南スーダン',ES:'スペイン',
+    LK:'スリランカ',SD:'スーダン',SR:'スリナム',SE:'スウェーデン',
+    CH:'スイス',SY:'シリア',TW:'台湾',TJ:'タジキスタン',
+    TZ:'タンザニア',TH:'タイ',TL:'東ティモール',TG:'トーゴ',
+    TO:'トンガ',TT:'トリニダード・トバゴ',TN:'チュニジア',TR:'トルコ',
+    TM:'トルクメニスタン',TV:'ツバル',UG:'ウガンダ',UA:'ウクライナ',
+    AE:'アラブ首長国連邦',GB:'イギリス',US:'アメリカ',UY:'ウルグアイ',
+    UZ:'ウズベキスタン',VU:'バヌアツ',VE:'ベネズエラ',VN:'ベトナム',
+    YE:'イエメン',ZM:'ザンビア',ZW:'ジンバブエ'
+  };
+
+  function ccToJp(cc) {
+    if(!cc) return cc;
+    return CC_TO_JP[cc.toUpperCase()] || cc;
+  }
+
   var citiesModalOverlay = null;
   var citiesModalTitle = null;
   var citiesModalBody = null;
@@ -1582,32 +1641,63 @@ void main() {
   document.getElementById('ch-close').addEventListener('click', function() { chOverlay.classList.remove('open'); });
   chOverlay.addEventListener('click', function(e) { if(e.target === chOverlay) chOverlay.classList.remove('open'); });
 
+  function renderCountryHeritageRows(matches, cityCounts, uniqueTotal) {
+    var sorted = matches.slice().sort(function(a, b) { return b.y - a.y; });
+    var html = '';
+    sorted.forEach(function(d) {
+      var idx = HERITAGE.indexOf(d);
+      var count = cityCounts[d.n];
+      var countStr = count != null ? String(count) : '-';
+      html += '<div class="ch-item" data-idx="' + idx + '">' +
+        '<span class="ch-item-emoji">' + d.e + '</span>' +
+        '<span class="ch-item-name">' + d.n + '</span>' +
+        '<span class="ch-item-year">' + d.y + '年</span>' +
+        '<span class="ch-item-citycount" title="近隣都市数">' + countStr + '🏙️</span>' +
+        '</div>';
+    });
+    html += '<div class="ch-item ch-item-total" style="border-top:1px solid #30363d;margin-top:6px;padding-top:6px;cursor:default;pointer-events:none">' +
+      '<span class="ch-item-emoji"></span>' +
+      '<span class="ch-item-name" style="color:#8b949e;font-size:11px">合計（重複なし都市数）</span>' +
+      '<span class="ch-item-year"></span>' +
+      '<span class="ch-item-citycount" style="font-weight:700;color:#58a6ff">' + uniqueTotal + '🏙️</span>' +
+      '</div>';
+    return html;
+  }
+
   function showCountryHeritagePanel(cc) {
     var flag = ccToFlag(cc);
+    var jpName = ccToJp(cc);
     var matches = HERITAGE.filter(function(d) { return d.f === flag; });
-    chTitle.textContent = flag + ' ' + cc + ' の世界遺産';
+    chTitle.textContent = flag + ' ' + jpName + ' の世界遺産';
     chBadge.textContent = matches.length + ' 件';
     if(matches.length === 0) {
       chBody.innerHTML = '<div style="color:#8b949e;text-align:center;padding:20px">該当なし</div>';
-    } else {
-      var html = '';
-      matches.forEach(function(d) {
-        var idx = HERITAGE.indexOf(d);
-        html += '<div class="ch-item" data-idx="' + idx + '">' +
-          '<span class="ch-item-emoji">' + d.e + '</span>' +
-          '<span class="ch-item-name">' + d.n + '</span>' +
-          '<span class="ch-item-meta">' + d.y + '年</span>' +
-          '</div>';
+      chOverlay.classList.add('open');
+      return;
+    }
+    chBody.innerHTML = renderCountryHeritageRows(matches, {}, 0);
+    chBody.querySelectorAll('.ch-item:not(.ch-item-total)').forEach(function(el) {
+      el.addEventListener('click', function() {
+        chOverlay.classList.remove('open');
+        showMarkerTooltip(parseInt(el.getAttribute('data-idx')), 0, 0);
       });
+    });
+    chOverlay.classList.add('open');
+    var names = matches.map(function(d) { return d.n; });
+    fetch('/api/heritage-country-city-stats', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ names: names })
+    }).then(function(r) { return r.json(); }).then(function(data) {
+      var html = renderCountryHeritageRows(matches, data.counts || {}, data.uniqueTotal || 0);
       chBody.innerHTML = html;
-      chBody.querySelectorAll('.ch-item').forEach(function(el) {
+      chBody.querySelectorAll('.ch-item:not(.ch-item-total)').forEach(function(el) {
         el.addEventListener('click', function() {
           chOverlay.classList.remove('open');
           showMarkerTooltip(parseInt(el.getAttribute('data-idx')), 0, 0);
         });
       });
-    }
-    chOverlay.classList.add('open');
+    }).catch(function() {});
   }
 
   var cityStatsOverlay = document.getElementById('city-stats-overlay');
