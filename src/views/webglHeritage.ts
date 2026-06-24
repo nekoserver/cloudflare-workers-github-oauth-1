@@ -148,6 +148,22 @@ canvas:active { cursor:grabbing; }
 .cities-modal-name { flex:1; color:#c9d1d9; }
 .cities-modal-pop { color:#8b949e; font-size:11px; flex-shrink:0; }
 .cities-modal-dist { color:#58a6ff; font-size:11px; font-weight:600; flex-shrink:0; min-width:48px; text-align:right; }
+.city-stats-row-btn { background:none; border:none; cursor:pointer; width:100%; text-align:left; padding:0; display:flex; align-items:center; gap:10px; border-radius:4px; transition:background .12s; }
+.city-stats-row-btn:hover { background:rgba(56,139,253,.08); }
+.ch-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,.8); z-index:300; align-items:flex-start; justify-content:center; padding-top:40px; }
+.ch-overlay.open { display:flex; }
+.ch-panel { background:#0d1117; border:1px solid #30363d; border-radius:10px; width:min(92vw,560px); max-height:80vh; display:flex; flex-direction:column; overflow:hidden; box-shadow:0 8px 48px rgba(0,0,0,.9); }
+.ch-head { padding:12px 16px; border-bottom:1px solid #21262d; display:flex; align-items:center; gap:8px; flex-shrink:0; }
+.ch-title { font-size:15px; font-weight:700; flex:1; }
+.ch-badge { background:#0c2d1a; color:#3fb950; font-size:11px; padding:2px 8px; border-radius:10px; font-weight:600; }
+.ch-close { background:none; border:none; color:#8b949e; font-size:18px; cursor:pointer; padding:2px 6px; line-height:1; }
+.ch-body { overflow-y:auto; padding:8px 12px 14px; }
+.ch-item { display:flex; align-items:center; gap:8px; padding:6px 6px; border-bottom:1px solid #21262d; cursor:pointer; border-radius:4px; transition:background .12s; }
+.ch-item:last-child { border-bottom:none; }
+.ch-item:hover { background:rgba(56,139,253,.08); }
+.ch-item-emoji { font-size:18px; flex-shrink:0; width:28px; text-align:center; }
+.ch-item-name { flex:1; font-size:12px; color:#c9d1d9; }
+.ch-item-meta { font-size:10px; color:#8b949e; flex-shrink:0; }
 </style>
 </head>
 <body>
@@ -341,6 +357,17 @@ void main() {
       <button class="cities-modal-close" id="city-stats-close">✕</button>
     </div>
     <div class="cities-modal-body" id="city-stats-body"></div>
+  </div>
+</div>
+
+<div id="ch-overlay" class="ch-overlay">
+  <div class="ch-panel">
+    <div class="ch-head">
+      <span class="ch-title" id="ch-title"></span>
+      <span class="ch-badge" id="ch-badge"></span>
+      <button class="ch-close" id="ch-close">✕</button>
+    </div>
+    <div class="ch-body" id="ch-body"></div>
   </div>
 </div>
 
@@ -1548,6 +1575,41 @@ void main() {
     if(e.target === citiesModalOverlay) citiesModalOverlay.classList.remove('open');
   });
 
+  var chOverlay = document.getElementById('ch-overlay');
+  var chTitle = document.getElementById('ch-title');
+  var chBadge = document.getElementById('ch-badge');
+  var chBody = document.getElementById('ch-body');
+  document.getElementById('ch-close').addEventListener('click', function() { chOverlay.classList.remove('open'); });
+  chOverlay.addEventListener('click', function(e) { if(e.target === chOverlay) chOverlay.classList.remove('open'); });
+
+  function showCountryHeritagePanel(cc) {
+    var flag = ccToFlag(cc);
+    var matches = HERITAGE.filter(function(d) { return d.f === flag; });
+    chTitle.textContent = flag + ' ' + cc + ' の世界遺産';
+    chBadge.textContent = matches.length + ' 件';
+    if(matches.length === 0) {
+      chBody.innerHTML = '<div style="color:#8b949e;text-align:center;padding:20px">該当なし</div>';
+    } else {
+      var html = '';
+      matches.forEach(function(d) {
+        var idx = HERITAGE.indexOf(d);
+        html += '<div class="ch-item" data-idx="' + idx + '">' +
+          '<span class="ch-item-emoji">' + d.e + '</span>' +
+          '<span class="ch-item-name">' + d.n + '</span>' +
+          '<span class="ch-item-meta">' + d.y + '年</span>' +
+          '</div>';
+      });
+      chBody.innerHTML = html;
+      chBody.querySelectorAll('.ch-item').forEach(function(el) {
+        el.addEventListener('click', function() {
+          chOverlay.classList.remove('open');
+          showMarkerTooltip(parseInt(el.getAttribute('data-idx')), 0, 0);
+        });
+      });
+    }
+    chOverlay.classList.add('open');
+  }
+
   var cityStatsOverlay = document.getElementById('city-stats-overlay');
   var cityStatsBody = document.getElementById('city-stats-body');
   var cityStatsBadge = document.getElementById('city-stats-badge');
@@ -1578,16 +1640,22 @@ void main() {
         rows.forEach(function(r) {
           var flag = ccToFlag(r.country_code);
           var barW = Math.round(r.heritage_count / max * 100);
-          html += '<div class="cities-modal-row" style="gap:10px">' +
-            '<span class="cities-modal-flag">' + flag + '</span>' +
-            '<span style="color:#8b949e;font-size:10px;min-width:28px">' + r.country_code + '</span>' +
-            '<div style="flex:1;background:#161b22;border-radius:4px;height:10px;overflow:hidden">' +
-              '<div style="background:#388bfd;height:100%;width:' + barW + '%"></div>' +
-            '</div>' +
-            '<span style="color:#c9d1d9;font-size:12px;font-weight:600;min-width:28px;text-align:right">' + r.heritage_count + '</span>' +
+          var cc = r.country_code;
+          html += '<div class="cities-modal-row" style="padding:3px 0">' +
+            '<button class="city-stats-row-btn" data-cc="' + cc + '">' +
+              '<span class="cities-modal-flag">' + flag + '</span>' +
+              '<span style="color:#8b949e;font-size:10px;min-width:28px">' + cc + '</span>' +
+              '<div style="flex:1;background:#161b22;border-radius:4px;height:10px;overflow:hidden">' +
+                '<div style="background:#388bfd;height:100%;width:' + barW + '%"></div>' +
+              '</div>' +
+              '<span style="color:#c9d1d9;font-size:12px;font-weight:600;min-width:28px;text-align:right">' + r.heritage_count + '</span>' +
+            '</button>' +
             '</div>';
         });
         cityStatsBody.innerHTML = html;
+        cityStatsBody.querySelectorAll('.city-stats-row-btn').forEach(function(btn) {
+          btn.addEventListener('click', function() { showCountryHeritagePanel(btn.getAttribute('data-cc')); });
+        });
       })
       .catch(function() {
         cityStatsBody.innerHTML = '<div style="color:#8b949e;text-align:center;padding:20px">取得エラー</div>';
