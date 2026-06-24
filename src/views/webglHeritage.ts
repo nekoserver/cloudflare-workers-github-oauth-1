@@ -1252,7 +1252,7 @@ void main() {
   var LANDING_ZOOM_TARGET = 1.12;
   var LANDING_ZOOM_RETURN = 3.5;
   var LANDING_ZOOM_IN_DUR = 1750;
-  var LANDING_ROT_DUR = 14000;
+  var LANDING_ROT_DUR = 4667;
   var LANDING_ZOOM_OUT_DUR = 2500;
   var landingOverlayEl = null;
   var landingTitleEl = null;
@@ -2196,7 +2196,6 @@ void main() {
       cityFlyBody.innerHTML = html;
       cityFlyBody.querySelectorAll('.city-fly-row[data-idx]').forEach(function(el) {
         el.addEventListener('click', function() {
-          cityFlyPanel.classList.remove('open');
           showMarkerTooltip(parseInt(el.getAttribute('data-idx')), 0, 0);
         });
       });

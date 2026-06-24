@@ -4303,11 +4303,10 @@ app.post('/api/heritage-cities', authMiddleware, async (c) => {
       return c.json({ fetched: true, cities: result.results });
     }
   } else {
-    await db.prepare('DELETE FROM heritage_cities WHERE heritage_name = ?').bind(name).run();
     await db.prepare('DELETE FROM heritage_city_fetched WHERE heritage_name = ?').bind(name).run();
   }
 
-  const cities = findNearbyCities(lat, lon, 500, 15);
+  const cities = findNearbyCities(lat, lon, 1000, 30);
 
   if (cities.length > 0) {
     const stmt = db.prepare('INSERT OR IGNORE INTO heritage_cities (heritage_name, city_name, city_lat, city_lon, population, distance_km, country_code) VALUES (?, ?, ?, ?, ?, ?, ?)');
