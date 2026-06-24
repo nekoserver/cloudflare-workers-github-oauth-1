@@ -48,6 +48,7 @@ td.pop{text-align:right;color:#8b949e;font-size:11px;min-width:64px}
 .mode-tab:first-child{border-radius:6px 0 0 6px}
 .mode-tab:last-child{border-radius:0 6px 6px 0;border-left:none}
 .mode-tab.active{background:#1f6feb;border-color:#1f6feb;color:#fff}
+#sel-country{max-width:160px}
 </style>
 </head>
 <body>
@@ -164,6 +165,26 @@ function cityLink(r) {
   return '<a href="' + url + '" style="color:inherit;text-decoration:none;border-bottom:1px dotted #444">' + r.city_name + '</a>';
 }
 
+function buildCountryStats(rows) {
+  var map = {};
+  rows.forEach(function(r) {
+    var cc = r.country_code || '__';
+    map[cc] = (map[cc] || 0) + 1;
+  });
+  return Object.keys(map).map(function(cc) {
+    return { cc: cc, count: map[cc] };
+  }).sort(function(a, b) { return b.count - a.count; });
+}
+
+function buildCityThHtml(ccStats) {
+  var opts = '<option value="">すべて</option>';
+  ccStats.forEach(function(s) {
+    var flag = ccToFlag(s.cc === '__' ? null : s.cc);
+    opts += '<option value="' + s.cc + '">' + s.count + ' ' + flag + '</option>';
+  });
+  return '都市 <select id="sel-country" style="font-size:11px;padding:3px 6px;margin-left:4px">' + opts + '</select>';
+}
+
 var allRows = [];
 var viewMode = 'all';
 
@@ -171,16 +192,44 @@ document.getElementById('tab-all').addEventListener('click', function() {
   viewMode = 'all';
   document.getElementById('tab-all').className = 'mode-tab active';
   document.getElementById('tab-country').className = 'mode-tab';
-  if (allRows.length) renderAll(allRows);
+  if (allRows.length) renderAll(filteredRows());
 });
 document.getElementById('tab-country').addEventListener('click', function() {
   viewMode = 'country';
   document.getElementById('tab-all').className = 'mode-tab';
   document.getElementById('tab-country').className = 'mode-tab active';
-  if (allRows.length) renderCountry(allRows);
+  if (allRows.length) renderCountry(filteredRows());
 });
 
 document.getElementById('btn-load').addEventListener('click', loadData);
+
+function getSelCountry() {
+  var el = document.getElementById('sel-country');
+  return el ? el.value : '';
+}
+
+function filteredRows() {
+  var cc = getSelCountry();
+  if (!cc) return allRows;
+  return allRows.filter(function(r) { return (r.country_code || '__') === cc; });
+}
+
+function onCountryChange() {
+  if (!allRows.length) return;
+  if (viewMode === 'country') renderCountry(filteredRows());
+  else renderAll(filteredRows());
+}
+
+function bindCountrySelect() {
+  var el = document.getElementById('sel-country');
+  if (el) el.addEventListener('change', onCountryChange);
+}
+
+function summaryHtml(rows, ccStats, dist) {
+  var countryCount = ccStats.length;
+  var badge = '<span class="dist-badge">' + dist + ' km</span>';
+  return '<strong>' + countryCount + 'ヶ国</strong> <strong>' + rows.length + '</strong>都市 · 距離上限 ' + badge;
+}
 
 function loadData() {
   var dist = document.getElementById('sel-dist').value;
@@ -200,8 +249,8 @@ function loadData() {
         document.getElementById('tbl-wrap').innerHTML = '<div class="spinner">データなし（都市データを先に取得してください）</div>';
         return;
       }
-      if (viewMode === 'country') renderCountry(allRows);
-      else renderAll(allRows);
+      if (viewMode === 'country') renderCountry(filteredRows());
+      else renderAll(filteredRows());
     })
     .catch(function() {
       btn.disabled = false;
@@ -210,24 +259,32 @@ function loadData() {
     });
 }
 
-function renderAll(rows) {
-  var dist = document.getElementById('sel-dist').value;
-  var maxCount = rows[0] ? rows[0].heritage_count : 1;
-  document.getElementById('summary').innerHTML =
-    '<strong>' + rows.length + '</strong> 都市 · 距離上限 <span class="dist-badge">' + dist + ' km</span>';
-  var html = '<table><thead><tr>' +
+function tableHead(ccStats) {
+  return '<table><thead><tr>' +
     '<th style="text-align:right">#</th>' +
     '<th></th>' +
-    '<th>都市</th>' +
+    '<th>' + buildCityThHtml(ccStats) + '</th>' +
     '<th>国</th>' +
     '<th>世界遺産数</th>' +
     '<th class="num">最近距離</th>' +
     '<th class="num">人口</th>' +
     '</tr></thead><tbody>';
+}
+
+function renderAll(rows) {
+  var dist = document.getElementById('sel-dist').value;
+  var ccStats = buildCountryStats(allRows);
+  document.getElementById('summary').innerHTML = summaryHtml(allRows, ccStats, dist);
+  var maxCount = allRows[0] ? allRows[0].heritage_count : 1;
+  var html = tableHead(ccStats);
   rows.forEach(function(r, i) {
     var rowClass = i === 0 ? ' class="top1"' : i === 1 ? ' class="top2"' : i === 2 ? ' class="top3"' : '';
     var barW = Math.round((r.heritage_count / maxCount) * 140);
-    html += '<tr' + rowClass + '>' +
+    html += '<tr' + rowClass +
+      ' data-city="' + r.city_name.replace(/"/g, '&quot;') + '"' +
+      ' data-lat="' + r.city_lat + '"' +
+      ' data-lon="' + r.city_lon + '"' +
+      ' data-cc="' + (r.country_code || '') + '">' +
       '<td class="rank">' + (i + 1) + '</td>' +
       '<td class="flag">' + ccToFlag(r.country_code) + '</td>' +
       '<td class="city">' + cityLink(r) + '</td>' +
@@ -242,10 +299,18 @@ function renderAll(rows) {
   });
   html += '</tbody></table>';
   document.getElementById('tbl-wrap').innerHTML = html;
+  var selCC = getSelCountry();
+  bindCountrySelect();
+  if (selCC) {
+    var el = document.getElementById('sel-country');
+    if (el) el.value = selCC;
+  }
 }
 
 function renderCountry(rows) {
   var dist = document.getElementById('sel-dist').value;
+  var ccStats = buildCountryStats(allRows);
+  document.getElementById('summary').innerHTML = summaryHtml(allRows, ccStats, dist);
   var byCountry = {};
   rows.forEach(function(r) {
     var cc = r.country_code || '__';
@@ -255,18 +320,8 @@ function renderCountry(rows) {
   var ccList = Object.keys(byCountry).sort(function(a, b) {
     return byCountry[b][0].heritage_count - byCountry[a][0].heritage_count;
   });
-  document.getElementById('summary').innerHTML =
-    '<strong>' + rows.length + '</strong> 都市 · <strong>' + ccList.length + '</strong> 国 · 距離上限 <span class="dist-badge">' + dist + ' km</span>';
-  var maxCount = rows[0] ? rows[0].heritage_count : 1;
-  var html = '<table><thead><tr>' +
-    '<th style="text-align:right">#</th>' +
-    '<th></th>' +
-    '<th>都市</th>' +
-    '<th>国</th>' +
-    '<th>世界遺産数</th>' +
-    '<th class="num">最近距離</th>' +
-    '<th class="num">人口</th>' +
-    '</tr></thead><tbody>';
+  var maxCount = allRows[0] ? allRows[0].heritage_count : 1;
+  var html = tableHead(ccStats);
   var globalRank = 0;
   ccList.forEach(function(cc) {
     var cities = byCountry[cc];
@@ -277,7 +332,11 @@ function renderCountry(rows) {
     cities.forEach(function(r) {
       globalRank++;
       var barW = Math.round((r.heritage_count / maxCount) * 140);
-      html += '<tr>' +
+      html += '<tr' +
+        ' data-city="' + r.city_name.replace(/"/g, '&quot;') + '"' +
+        ' data-lat="' + r.city_lat + '"' +
+        ' data-lon="' + r.city_lon + '"' +
+        ' data-cc="' + (r.country_code || '') + '">' +
         '<td class="rank">' + globalRank + '</td>' +
         '<td class="flag">' + ccToFlag(r.country_code) + '</td>' +
         '<td class="city">' + cityLink(r) + '</td>' +
@@ -293,6 +352,12 @@ function renderCountry(rows) {
   });
   html += '</tbody></table>';
   document.getElementById('tbl-wrap').innerHTML = html;
+  var selCC = getSelCountry();
+  bindCountrySelect();
+  if (selCC) {
+    var el = document.getElementById('sel-country');
+    if (el) el.value = selCC;
+  }
 }
 </script>
 </body>
