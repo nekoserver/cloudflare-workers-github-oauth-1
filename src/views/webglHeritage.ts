@@ -944,11 +944,10 @@ void main() {
         }
         var html = '';
         data.cities.forEach(function(city) {
-          var flag = city.country_code ? ccToFlag(city.country_code) : '';
+          var flag = city.country_code ? (ccToFlag(city.country_code) + ' ') : '';
           var pop = city.population ? formatPop(city.population) : '';
           html += '<div class="cities-modal-row">' +
-            '<span class="cities-modal-flag">' + flag + '</span>' +
-            '<span class="cities-modal-name">' + city.city_name + '</span>' +
+            '<span class="cities-modal-name">' + flag + city.city_name + '</span>' +
             (pop ? '<span class="cities-modal-pop">人口 ' + pop + '</span>' : '') +
             '<span class="cities-modal-dist">' + city.distance_km + ' km</span>' +
             '</div>';
