@@ -3317,6 +3317,23 @@ app.get('/api/aichat/shares/search', authMiddleware, async (c) => {
   return jsonUtf8({ results: rows.results ?? [] });
 });
 
+app.get('/api/aichat/check-heritage-questions', authMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  const heritage = (c.req.query('heritage') ?? '').trim();
+  if (!heritage) return jsonUtf8({ answered: {} });
+  const topics = ['交通手段', '見どころ', '最寄り空港', '鉄道でのアクセス'];
+  const questions = topics.map((t) => `「${heritage}」の「${t}」について説明してください`);
+  const placeholders = questions.map(() => '?').join(', ');
+  const rows = await c.env.DB.prepare(
+    `SELECT question FROM ai_chat_shares WHERE user_id = ? AND deleted_at IS NULL AND question IN (${placeholders})`
+  ).bind(user.sub, ...questions).all<{ question: string }>();
+  const answeredSet = new Set((rows.results ?? []).map((r) => r.question));
+  const answered: Record<string, boolean> = {};
+  topics.forEach((t, i) => { answered[t] = answeredSet.has(questions[i]); });
+  return jsonUtf8({ answered });
+});
+
 app.get('/api/aichat/shares/calendar', authMiddleware, async (c) => {
   const user = c.get('user');
   if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
