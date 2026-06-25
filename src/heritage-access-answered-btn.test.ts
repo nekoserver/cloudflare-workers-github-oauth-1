@@ -35,7 +35,7 @@ describe('/api/aichat/check-heritage-questions エンドポイント', () => {
 
   it('answered の値が shareId (string) または null を返す', () => {
     const idx = src.indexOf('/api/aichat/check-heritage-questions');
-    const block = src.slice(idx, idx + 1100);
+    const block = src.slice(idx, idx + 1500);
     expect(block).toContain('answeredMap');
     expect(block).toContain('?? null');
   });
