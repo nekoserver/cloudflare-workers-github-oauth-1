@@ -3474,18 +3474,30 @@ app.get('/api/aichat/shares/by-keyword', authMiddleware, async (c) => {
   const keyword = (c.req.query('keyword') ?? '').trim();
   if (!keyword) return jsonUtf8({ results: [] });
   const topic = (c.req.query('topic') ?? '').trim();
-  const topicFilter = topic ? ` AND s.question LIKE ?` : '';
-  const bindings: string[] = topic ? [user.sub, keyword, `%「${topic}」%`] : [user.sub, keyword];
-  const rows = await c.env.DB.prepare(
-    `SELECT DISTINCT s.id, s.user_hash, s.question, s.answer, s.model, s.created_at, s.access_count, s.question_hash
-     FROM aichat_search_log l
-     JOIN ai_chat_shares s ON s.id = l.share_id AND s.user_id = l.user_id
-     WHERE l.user_id = ? AND l.keyword = ? AND s.deleted_at IS NULL${topicFilter}
-     ORDER BY s.created_at DESC LIMIT 50`
-  ).bind(...bindings).all<{
-    id: string; user_hash: string; question: string; answer: string;
-    model: string; created_at: string; access_count: number; question_hash: string | null;
-  }>();
+  let rows;
+  if (topic) {
+    rows = await c.env.DB.prepare(
+      `SELECT DISTINCT id, user_hash, question, answer, model, created_at, access_count, question_hash
+       FROM ai_chat_shares
+       WHERE user_id = ? AND deleted_at IS NULL
+         AND question LIKE ? AND question LIKE ?
+       ORDER BY created_at DESC LIMIT 50`
+    ).bind(user.sub, `%「${keyword}」%`, `%「${topic}」%`).all<{
+      id: string; user_hash: string; question: string; answer: string;
+      model: string; created_at: string; access_count: number; question_hash: string | null;
+    }>();
+  } else {
+    rows = await c.env.DB.prepare(
+      `SELECT DISTINCT s.id, s.user_hash, s.question, s.answer, s.model, s.created_at, s.access_count, s.question_hash
+       FROM aichat_search_log l
+       JOIN ai_chat_shares s ON s.id = l.share_id AND s.user_id = l.user_id
+       WHERE l.user_id = ? AND l.keyword = ? AND s.deleted_at IS NULL
+       ORDER BY s.created_at DESC LIMIT 50`
+    ).bind(user.sub, keyword).all<{
+      id: string; user_hash: string; question: string; answer: string;
+      model: string; created_at: string; access_count: number; question_hash: string | null;
+    }>();
+  }
   return jsonUtf8({ keyword, results: rows.results ?? [] });
 });
 

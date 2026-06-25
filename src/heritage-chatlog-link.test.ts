@@ -123,13 +123,13 @@ describe('世界遺産チャットログリンク: バッジタップでモー�
     expect(block).toContain('&topic=');
   });
 
-  it('index.ts の by-keyword が topic クエリパラメータを受け取りフィルタする', () => {
+  it('index.ts の by-keyword が topic クエリパラメータを受け取り ai_chat_shares を直接クエリする', () => {
     const { readFileSync } = require('fs');
     const src = readFileSync(new URL('./index.ts', import.meta.url).pathname, 'utf-8');
     const idx = src.indexOf("app.get('/api/aichat/shares/by-keyword'");
-    const block = src.slice(idx, idx + 700);
+    const block = src.slice(idx, idx + 1200);
     expect(block).toContain("query('topic')");
-    expect(block).toContain('topicFilter');
+    expect(block).toContain('FROM ai_chat_shares');
     expect(block).toContain('LIKE ?');
   });
 });
