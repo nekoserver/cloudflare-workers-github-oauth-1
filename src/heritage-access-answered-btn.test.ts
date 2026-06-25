@@ -117,7 +117,7 @@ describe('heritageAccess ビュー — キャッシュ済みボタンのモー�
   });
 
   it('data-share-id がない場合は askAI（新規生成）を呼ぶ', () => {
-    expect(view).toContain('askAI(name, topic)');
+    expect(view).toContain('askAI(name, topic,');
   });
 });
 
