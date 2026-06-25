@@ -60,7 +60,8 @@ td.pop{text-align:right;color:#8b949e;font-size:11px;min-width:64px}
 .acc-emoji{font-size:14px;flex-shrink:0;width:20px;text-align:center}
 .acc-name{flex:1;color:#c9d1d9}
 .acc-name-wrap{display:flex;align-items:center;gap:4px;flex:1;min-width:0}
-.acc-topic-badge{display:inline-block;font-size:10px;padding:1px 5px;border-radius:10px;background:rgba(46,160,67,.18);color:#3fb950;border:1px solid rgba(63,185,80,.3);white-space:nowrap;flex-shrink:0}
+.acc-topic-badge{display:inline-block;font-size:10px;padding:1px 5px;border-radius:10px;background:rgba(46,160,67,.18);color:#3fb950;border:1px solid rgba(63,185,80,.3);white-space:nowrap;flex-shrink:0;cursor:pointer}
+.acc-topic-badge:hover{background:rgba(46,160,67,.35)}
 .acc-dist{color:#58a6ff;font-size:11px;font-weight:600;white-space:nowrap;min-width:56px;text-align:right;margin-left:auto}
 .acc-loading{color:#484f58;font-size:12px;padding:8px 0}
 .acc-toggle{font-size:10px;color:#484f58;margin-left:4px;flex-shrink:0}
@@ -318,12 +319,14 @@ hclOverlay.addEventListener('click', function(e) {
   if (e.target === hclOverlay) hclOverlay.classList.remove('open');
 });
 
-function openHeritageChatlogModal(heritageName) {
-  hclTitle.textContent = heritageName + ' — AIチャット過去ログ';
+function openHeritageChatlogModal(heritageName, topic) {
+  hclTitle.textContent = (topic ? heritageName + ' — ' + topic : heritageName) + ' — AIチャット過去ログ';
   hclBody.innerHTML = '<div class="hcl-empty">読み込み中...</div>';
   hclOverlay.style.zIndex = String(getNextZ());
   hclOverlay.classList.add('open');
-  fetch('/api/aichat/shares/by-keyword?keyword=' + encodeURIComponent(heritageName))
+  var byKwUrl = '/api/aichat/shares/by-keyword?keyword=' + encodeURIComponent(heritageName) +
+    (topic ? '&topic=' + encodeURIComponent(topic) : '');
+  fetch(byKwUrl)
     .then(function(r) { return r.json(); })
     .then(function(data) {
       var results = data.results || [];
@@ -369,7 +372,6 @@ function checkHeritageKeywords(heritages, inner) {
           btn.textContent = span.textContent;
           btn.addEventListener('click', function(e) {
             e.stopPropagation();
-            openHeritageChatlogModal(name);
           });
           var wrap = document.createElement('span');
           wrap.className = 'acc-name-wrap';
@@ -378,6 +380,12 @@ function checkHeritageKeywords(heritages, inner) {
             var badge = document.createElement('span');
             badge.className = 'acc-topic-badge';
             badge.textContent = topics[ti];
+            (function(badgeTopic) {
+              badge.addEventListener('click', function(e) {
+                e.stopPropagation();
+                openHeritageChatlogModal(name, badgeTopic);
+              });
+            })(topics[ti]);
             wrap.appendChild(badge);
           }
           span.parentNode.replaceChild(wrap, span);

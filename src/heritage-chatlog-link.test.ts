@@ -84,6 +84,56 @@ describe('世界遺産チャットログリンク: キャッシュ判定テー�
   });
 });
 
+describe('世界遺産チャットログリンク: バッジタップでモーダル起動', () => {
+  it('acc-topic-badge に cursor:pointer が設定されている', () => {
+    const html = buildPage();
+    const idx = html.indexOf('.acc-topic-badge');
+    expect(idx).toBeGreaterThan(-1);
+    const block = html.slice(idx, idx + 300);
+    expect(block).toContain('cursor:pointer');
+  });
+
+  it('バッジクリック時に openHeritageChatlogModal を badgeTopic 付きで呼んでいる', () => {
+    const html = buildPage();
+    const idx = html.indexOf('checkHeritageKeywords');
+    const block = html.slice(idx, idx + 1400);
+    expect(block).toContain('openHeritageChatlogModal(name, badgeTopic)');
+  });
+
+  it('acc-name-link クリックでは openHeritageChatlogModal を呼ばない', () => {
+    const html = buildPage();
+    const checkIdx = html.indexOf('function checkHeritageKeywords');
+    const checkEnd = html.indexOf('function openAiModal');
+    const block = html.slice(checkIdx, checkEnd);
+    expect(block).not.toContain('openHeritageChatlogModal(name)');
+  });
+
+  it('openHeritageChatlogModal が topic 引数を受け取りタイトルに反映する', () => {
+    const html = buildPage();
+    const idx = html.indexOf('function openHeritageChatlogModal');
+    const block = html.slice(idx, idx + 300);
+    expect(block).toContain('topic');
+    expect(block).toContain('heritageName + \' — \' + topic');
+  });
+
+  it('openHeritageChatlogModal が topic を API の &topic= パラメータとして渡す', () => {
+    const html = buildPage();
+    const idx = html.indexOf('function openHeritageChatlogModal');
+    const block = html.slice(idx, idx + 500);
+    expect(block).toContain('&topic=');
+  });
+
+  it('index.ts の by-keyword が topic クエリパラメータを受け取りフィルタする', () => {
+    const { readFileSync } = require('fs');
+    const src = readFileSync(new URL('./index.ts', import.meta.url).pathname, 'utf-8');
+    const idx = src.indexOf("app.get('/api/aichat/shares/by-keyword'");
+    const block = src.slice(idx, idx + 700);
+    expect(block).toContain("query('topic')");
+    expect(block).toContain('topicFilter');
+    expect(block).toContain('LIKE ?');
+  });
+});
+
 describe('世界遺産チャットログリンク: checkHeritageKeywords 呼び出しタイミング', () => {
   it('acc-row クリック時（別の世界遺産パネルを開いた時）に checkHeritageKeywords を呼んでいる', () => {
     const html = buildPage();
