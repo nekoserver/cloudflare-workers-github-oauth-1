@@ -1489,6 +1489,7 @@ export const COLUMN_FK_TARGETS: Record<string, Record<string, string>> = {
   ts_function_impact:     { repo_id: 'ts_repository', commit_hash: 'ts_commit_log' },
   ts_commit_quality:      { repo_id: 'ts_repository', commit_hash: 'ts_commit_log' },
   api_search_keyword_sections: { keyword_id: 'api_search_keywords' },
+  aichat_rate_limit: { user_id: 'user_sessions' },
 };
 
 /**
