@@ -96,10 +96,15 @@ td.pop{text-align:right;color:#8b949e;font-size:11px;min-width:64px}
 .kw-panel-empty{color:#484f58;font-size:12px;padding:16px 0;text-align:center}
 .hcl-modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.78);align-items:center;justify-content:center}
 .hcl-modal-overlay.open{display:flex}
-.hcl-modal{background:#0d1117;border:1px solid #30363d;border-radius:10px;width:min(92vw,640px);max-height:82vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 8px 40px rgba(0,0,0,.9)}
+.hcl-modal{background:#0d1117;border:1px solid #30363d;border-radius:10px;width:min(92vw,860px);max-height:82vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 8px 40px rgba(0,0,0,.9)}
 .hcl-modal-head{padding:12px 16px;border-bottom:1px solid #21262d;display:flex;align-items:center;gap:8px;flex-shrink:0}
+.hcl-modal-flag{font-size:18px;flex-shrink:0;line-height:1}
 .hcl-modal-title{font-size:13px;font-weight:700;flex:1;color:#e6edf3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .hcl-modal-close{background:none;border:none;color:#8b949e;font-size:18px;cursor:pointer;padding:2px 6px;line-height:1}
+.hcl-tabs{display:flex;gap:0;border-bottom:1px solid #30363d;flex-shrink:0;overflow-x:auto}
+.hcl-tab{background:none;border:none;border-bottom:2px solid transparent;color:#8b949e;font-size:11px;padding:7px 14px;cursor:pointer;white-space:nowrap;font-family:inherit;transition:color .15s,border-color .15s;display:flex;align-items:center;gap:5px}
+.hcl-tab:hover{color:#c9d1d9}
+.hcl-tab.active{color:#58a6ff;border-bottom-color:#58a6ff}
 .hcl-modal-body{overflow-y:auto;padding:12px 16px;display:flex;flex-direction:column;gap:10px}
 .hcl-entry{background:#161b22;border:1px solid #30363d;border-radius:8px;padding:12px 14px;display:flex;flex-direction:column;gap:6px}
 .hcl-entry-q{font-size:12px;color:#8b949e;line-height:1.5}
@@ -149,9 +154,11 @@ td.pop{text-align:right;color:#8b949e;font-size:11px;min-width:64px}
 <div id="heritage-chatlog-modal-overlay" class="hcl-modal-overlay">
   <div class="hcl-modal" id="heritage-chatlog-modal">
     <div class="hcl-modal-head">
+      <span class="hcl-modal-flag" id="heritage-chatlog-modal-flag"></span>
       <span class="hcl-modal-title" id="heritage-chatlog-modal-title">AIチャット過去ログ</span>
       <button class="hcl-modal-close" id="heritage-chatlog-close">✕</button>
     </div>
+    <div class="hcl-tabs" id="hcl-modal-tabs" style="display:none;"></div>
     <div class="hcl-modal-body" id="heritage-chatlog-modal-body"></div>
   </div>
 </div>
@@ -371,7 +378,10 @@ function openHeritageKwPanel(heritageName) {
 
 var hclOverlay = document.getElementById('heritage-chatlog-modal-overlay');
 var hclTitle = document.getElementById('heritage-chatlog-modal-title');
+var hclFlag = document.getElementById('heritage-chatlog-modal-flag');
+var hclTabs = document.getElementById('hcl-modal-tabs');
 var hclBody = document.getElementById('heritage-chatlog-modal-body');
+var heritageCountryFlags = {};
 document.getElementById('heritage-chatlog-close').addEventListener('click', function() {
   hclOverlay.classList.remove('open');
 });
@@ -379,8 +389,52 @@ hclOverlay.addEventListener('click', function(e) {
   if (e.target === hclOverlay) hclOverlay.classList.remove('open');
 });
 
+function hclShortModel(model) {
+  return model ? (model.split('/').pop() || model) : '(不明)';
+}
+
+function hclRenderTabs(resultsByModel, models, activeModel) {
+  if (models.length <= 1) {
+    hclTabs.style.display = 'none';
+    return;
+  }
+  hclTabs.style.display = 'flex';
+  hclTabs.innerHTML = models.map(function(m) {
+    var isActive = m === activeModel;
+    return '<button class="hcl-tab' + (isActive ? ' active' : '') + '" data-model="' + m.replace(/"/g, '&quot;') + '">' +
+      hclShortModel(m) +
+      '<span style="background:#30363d;color:#8b949e;border-radius:8px;font-size:10px;padding:0 5px;min-width:16px;text-align:center">' + resultsByModel[m].length + '</span>' +
+      '</button>';
+  }).join('');
+}
+
+function hclRenderBody(items) {
+  if (!items.length) {
+    hclBody.innerHTML = '<div class="hcl-empty">該当する過去ログが見つかりませんでした</div>';
+    return;
+  }
+  var html = '';
+  items.forEach(function(item) {
+    var date = item.created_at ? item.created_at.slice(0, 10) : '';
+    var q = item.question || '';
+    var a = item.answer || '';
+    var qEsc = q.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    var aEsc = a.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    html += '<div class="hcl-entry">' +
+      '<div class="hcl-entry-q">Q: ' + qEsc + '</div>' +
+      '<div class="hcl-entry-a">' + aEsc + '</div>' +
+      '<div class="hcl-entry-meta"><span>' + date + '</span></div>' +
+      '</div>';
+  });
+  hclBody.innerHTML = html;
+}
+
 function openHeritageChatlogModal(heritageName, topic) {
   hclTitle.textContent = (topic ? heritageName + ' — ' + topic : heritageName) + ' — AIチャット過去ログ';
+  var countryFlag = heritageCountryFlags[heritageName] || '';
+  hclFlag.textContent = countryFlag ? countryFlag + ' 🏛️' : '🏛️';
+  hclTabs.style.display = 'none';
+  hclTabs.innerHTML = '';
   hclBody.innerHTML = '<div class="hcl-empty">読み込み中...</div>';
   hclOverlay.style.zIndex = String(getNextZ());
   hclOverlay.classList.add('open');
@@ -394,21 +448,27 @@ function openHeritageChatlogModal(heritageName, topic) {
         hclBody.innerHTML = '<div class="hcl-empty">該当する過去ログが見つかりませんでした</div>';
         return;
       }
-      var html = '';
+      var resultsByModel = {};
+      var models = [];
       results.forEach(function(item) {
-        var date = item.created_at ? item.created_at.slice(0, 10) : '';
-        var model = item.model || '';
-        var q = item.question || '';
-        var a = item.answer || '';
-        var qEsc = q.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-        var aEsc = a.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-        html += '<div class="hcl-entry">' +
-          '<div class="hcl-entry-q">Q: ' + qEsc + '</div>' +
-          '<div class="hcl-entry-a">' + aEsc + '</div>' +
-          '<div class="hcl-entry-meta"><span>' + date + '</span><span>' + model + '</span></div>' +
-          '</div>';
+        var m = item.model || '';
+        if (!resultsByModel[m]) { resultsByModel[m] = []; models.push(m); }
+        resultsByModel[m].push(item);
       });
-      hclBody.innerHTML = html;
+      var activeModel = models[0];
+      hclRenderTabs(resultsByModel, models, activeModel);
+      hclRenderBody(resultsByModel[activeModel]);
+      hclTabs.addEventListener('click', function(e) {
+        var btn = e.target.closest('.hcl-tab');
+        if (!btn) return;
+        var m = btn.getAttribute('data-model');
+        if (!m || !resultsByModel[m]) return;
+        activeModel = m;
+        hclTabs.querySelectorAll('.hcl-tab').forEach(function(b) {
+          b.className = 'hcl-tab' + (b.getAttribute('data-model') === m ? ' active' : '');
+        });
+        hclRenderBody(resultsByModel[m]);
+      });
     })
     .catch(function() {
       hclBody.innerHTML = '<div class="hcl-empty">取得エラーが発生しました</div>';
@@ -661,6 +721,7 @@ function openAccordion(tr) {
       var flagSpan = h.country_flag
         ? '<span class="acc-country-flag">' + h.country_flag + '</span>'
         : '';
+      if (h.heritage_name) heritageCountryFlags[h.heritage_name] = h.country_flag || '';
       html += '<div class="acc-row" data-heritage="' + h.heritage_name.replace(/"/g,'&quot;') + '">' +
         flagSpan +
         '<span class="acc-emoji">🏛️</span>' +

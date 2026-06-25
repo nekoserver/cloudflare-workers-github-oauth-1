@@ -119,7 +119,7 @@ describe('世界遺産チャットログリンク: バッジタップでモー�
   it('openHeritageChatlogModal が topic を API の &topic= パラメータとして渡す', () => {
     const html = buildPage();
     const idx = html.indexOf('function openHeritageChatlogModal');
-    const block = html.slice(idx, idx + 500);
+    const block = html.slice(idx, idx + 900);
     expect(block).toContain('&topic=');
   });
 
@@ -306,9 +306,70 @@ describe('世界遺産チャットログリンク: ラベル処理済み行の�
 describe('世界遺産チャットログリンク: getNextZ', () => {
   it('heritage-chatlog-modal が getNextZ() で z-index を設定している', () => {
     const html = buildPage();
-    const idx = html.indexOf('openHeritageChatlogModal');
+    const idx = html.indexOf('function openHeritageChatlogModal');
     expect(idx).toBeGreaterThan(-1);
-    const fn = html.slice(idx, idx + 400);
+    const fn = html.slice(idx, idx + 700);
     expect(fn).toContain('getNextZ()');
+  });
+});
+
+describe('世界遺産チャットログリンク: タブ式モデル切り替え', () => {
+  it('hcl-modal-tabs 要素が HTML に存在する', () => {
+    const html = buildPage();
+    expect(html).toContain('id="hcl-modal-tabs"');
+  });
+
+  it('.hcl-tab CSS が定義されている', () => {
+    const html = buildPage();
+    expect(html).toContain('.hcl-tab');
+  });
+
+  it('.hcl-tab.active CSS が定義されている', () => {
+    const html = buildPage();
+    expect(html).toContain('.hcl-tab.active');
+  });
+
+  it('openHeritageChatlogModal がモデルごとにタブを生成する処理を含む', () => {
+    const html = buildPage();
+    const idx = html.indexOf('function openHeritageChatlogModal');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 2000);
+    expect(fn).toContain('hcl-tab');
+  });
+
+  it('hcl-modal の幅が 640px より広い', () => {
+    const html = buildPage();
+    const idx = html.indexOf('.hcl-modal{');
+    expect(idx).toBeGreaterThan(-1);
+    const block = html.slice(idx, idx + 200);
+    expect(block).not.toContain('640px');
+  });
+});
+
+describe('世界遺産チャットログリンク: タイトルの国旗・アイコン表示', () => {
+  it('heritage-chatlog-modal-flag 要素が HTML に存在する', () => {
+    const html = buildPage();
+    expect(html).toContain('id="heritage-chatlog-modal-flag"');
+  });
+
+  it('heritageCountryFlags グローバルマップが定義されている', () => {
+    const html = buildPage();
+    expect(html).toContain('heritageCountryFlags');
+  });
+
+  it('アコーディオン描画時に heritageCountryFlags へ国旗を登録している', () => {
+    const html = buildPage();
+    const idx = html.indexOf('heritageCountryFlags[h.heritage_name]');
+    expect(idx).toBeGreaterThan(-1);
+    const block = html.slice(idx, idx + 80);
+    expect(block).toContain('country_flag');
+  });
+
+  it('openHeritageChatlogModal が heritageCountryFlags から国旗を取得してヘッダーに表示する', () => {
+    const html = buildPage();
+    const idx = html.indexOf('function openHeritageChatlogModal');
+    const fn = html.slice(idx, idx + 800);
+    expect(fn).toContain('heritageCountryFlags');
+    expect(fn).toContain('hclFlag');
   });
 });
