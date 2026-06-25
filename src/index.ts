@@ -3323,6 +3323,7 @@ app.get('/api/aichat/check-heritage-questions', authMiddleware, async (c) => {
   if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
   const heritage = (c.req.query('heritage') ?? '').trim();
   if (!heritage) return jsonUtf8({ answered: {} });
+  const country_name = (c.req.query('country_name') ?? '').trim() || null;
   const topics = ['交通手段', '見どころ', '最寄り空港', '鉄道でのアクセス', '宿泊施設', 'スポーツ施設'];
   const questions = topics.map((t) => `「${heritage}」の「${t}」について説明してください`);
   const placeholders = questions.map(() => '?').join(', ');
@@ -3335,6 +3336,33 @@ app.get('/api/aichat/check-heritage-questions', authMiddleware, async (c) => {
   }
   const answered: Record<string, string | null> = {};
   topics.forEach((t, i) => { answered[t] = answeredMap.get(questions[i]) ?? null; });
+
+  try {
+    const masters = await c.env.DB.prepare(
+      `SELECT id, topic FROM heritage_ai_question_masters WHERE topic IN (${topics.map(() => '?').join(', ')})`
+    ).bind(...topics).all<{ id: number; topic: string }>();
+    const topicIdMap = new Map<string, number>();
+    for (const m of (masters.results ?? [])) topicIdMap.set(m.topic, m.id);
+
+    const existingRows = await c.env.DB.prepare(
+      `SELECT question_master_id FROM heritage_question_view_log WHERE user_id = ? AND heritage_name = ? AND deleted_at IS NULL`
+    ).bind(user.sub, heritage).all<{ question_master_id: number }>();
+    const existingIds = new Set((existingRows.results ?? []).map((r) => r.question_master_id));
+
+    const now = new Date().toISOString().replace('T', ' ').slice(0, 19);
+    for (let i = 0; i < topics.length; i++) {
+      const topic = topics[i];
+      const qmId = topicIdMap.get(topic);
+      const isCached = answeredMap.has(questions[i]);
+      if (qmId && isCached && !existingIds.has(qmId)) {
+        await c.env.DB.prepare(
+          `INSERT OR IGNORE INTO heritage_question_view_log (user_id, country_name, heritage_name, question_master_id, searched_at) VALUES (?, ?, ?, ?, ?)`
+        ).bind(user.sub, country_name, heritage, qmId, now).run();
+      }
+    }
+  } catch (_e) {
+    // heritage_ai_question_masters / heritage_question_view_log 未作成時はスキップ
+  }
 
   return jsonUtf8({ answered });
 });

@@ -63,6 +63,7 @@ describe('世界遺産チャットログリンク: JavaScript関数', () => {
   });
 });
 
+
 describe('世界遺産チャットログリンク: getNextZ', () => {
   it('heritage-chatlog-modal が getNextZ() で z-index を設定している', () => {
     const html = buildPage();
