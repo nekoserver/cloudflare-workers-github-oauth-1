@@ -3326,11 +3326,14 @@ app.get('/api/aichat/check-heritage-questions', authMiddleware, async (c) => {
   const questions = topics.map((t) => `「${heritage}」の「${t}」について説明してください`);
   const placeholders = questions.map(() => '?').join(', ');
   const rows = await c.env.DB.prepare(
-    `SELECT question FROM ai_chat_shares WHERE user_id = ? AND deleted_at IS NULL AND question IN (${placeholders})`
-  ).bind(user.sub, ...questions).all<{ question: string }>();
-  const answeredSet = new Set((rows.results ?? []).map((r) => r.question));
-  const answered: Record<string, boolean> = {};
-  topics.forEach((t, i) => { answered[t] = answeredSet.has(questions[i]); });
+    `SELECT id, question FROM ai_chat_shares WHERE user_id = ? AND deleted_at IS NULL AND question IN (${placeholders}) ORDER BY created_at DESC`
+  ).bind(user.sub, ...questions).all<{ id: string; question: string }>();
+  const answeredMap = new Map<string, string>();
+  for (const r of (rows.results ?? [])) {
+    if (!answeredMap.has(r.question)) answeredMap.set(r.question, r.id);
+  }
+  const answered: Record<string, string | null> = {};
+  topics.forEach((t, i) => { answered[t] = answeredMap.get(questions[i]) ?? null; });
   return jsonUtf8({ answered });
 });
 

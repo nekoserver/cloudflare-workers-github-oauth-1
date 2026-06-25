@@ -109,6 +109,7 @@ td.pop{text-align:right;color:#8b949e;font-size:11px;min-width:64px}
   <div class="ai-modal">
     <div class="ai-modal-head">
       <span class="ai-modal-title" id="ai-modal-title">AI回答</span>
+      <span id="ai-modal-cache-badge" style="display:none;background:#0e2a1a;border:1px solid #2ea043;border-radius:4px;color:#3fb950;font-size:10px;padding:1px 7px;flex-shrink:0">キャッシュ</span>
       <button class="ai-modal-close" id="ai-modal-close">✕</button>
     </div>
     <div class="ai-modal-body" id="ai-modal-body"></div>
@@ -263,6 +264,7 @@ function bindCountrySelect() {
 var aiModalOverlay = document.getElementById('ai-modal-overlay');
 var aiModalTitle = document.getElementById('ai-modal-title');
 var aiModalBody = document.getElementById('ai-modal-body');
+var aiModalCacheBadge = document.getElementById('ai-modal-cache-badge');
 document.getElementById('ai-modal-close').addEventListener('click', function() {
   aiModalOverlay.classList.remove('open');
 });
@@ -280,23 +282,43 @@ function getNextZ() {
   return max + 100;
 }
 
+function openAiModal(title, bodyText, isCached) {
+  aiModalTitle.textContent = title;
+  aiModalBody.textContent = bodyText;
+  aiModalCacheBadge.style.display = isCached ? '' : 'none';
+  aiModalOverlay.style.zIndex = getNextZ();
+  aiModalOverlay.classList.add('open');
+}
+
 var AI_TOPICS = ['交通手段', '見どころ', '最寄り空港', '鉄道でのアクセス'];
 
 function askAI(heritageName, topic) {
   var prompt = '「' + heritageName + '」の「' + topic + '」について説明してください';
-  aiModalTitle.textContent = heritageName + ' — ' + topic;
-  aiModalBody.textContent = '読み込み中...';
-  aiModalOverlay.style.zIndex = getNextZ();
-  aiModalOverlay.classList.add('open');
+  openAiModal(heritageName + ' — ' + topic, '読み込み中...', false);
   fetch('/api/aichat', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ message: prompt, source: 'api' })
   }).then(function(r) { return r.json(); }).then(function(data) {
     aiModalBody.textContent = data.response || data.error || '（応答なし）';
+    if (data.response && data.id) {
+      aiModalCacheBadge.style.display = 'none';
+    }
   }).catch(function() {
     aiModalBody.textContent = '通信エラーが発生しました。';
   });
+}
+
+function askAICached(heritageName, topic, shareId) {
+  openAiModal(heritageName + ' — ' + topic, '読み込み中...', true);
+  fetch('/api/aichat/shares/' + encodeURIComponent(shareId))
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      aiModalBody.textContent = data.answer || data.error || '（応答なし）';
+    })
+    .catch(function() {
+      aiModalBody.textContent = '通信エラーが発生しました。';
+    });
 }
 
 function buildAiPanel(heritageName) {
@@ -372,8 +394,14 @@ function openAccordion(tr) {
                 var answered = data.answered || {};
                 wrap.querySelectorAll('.acc-ai-btn').forEach(function(btn) {
                   var topic = btn.getAttribute('data-topic');
-                  if (topic && answered[topic]) btn.classList.add('answered');
-                  else btn.classList.remove('answered');
+                  var shareId = topic ? answered[topic] : null;
+                  if (shareId) {
+                    btn.classList.add('answered');
+                    btn.setAttribute('data-share-id', shareId);
+                  } else {
+                    btn.classList.remove('answered');
+                    btn.removeAttribute('data-share-id');
+                  }
                 });
               })
               .catch(function() {});
@@ -386,7 +414,12 @@ function openAccordion(tr) {
         e.stopPropagation();
         var topic = btn.getAttribute('data-topic');
         var name = btn.getAttribute('data-heritage');
-        askAI(name, topic);
+        var shareId = btn.getAttribute('data-share-id');
+        if (shareId) {
+          askAICached(name, topic, shareId);
+        } else {
+          askAI(name, topic);
+        }
       });
     });
   }).catch(function() {
