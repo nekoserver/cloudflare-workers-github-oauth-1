@@ -471,6 +471,50 @@ function buildAiPanel(heritageName) {
   return html;
 }
 
+function ensureTopicBadge(inner, heritageName, topic) {
+  var found = false;
+  inner.querySelectorAll('.acc-name-wrap').forEach(function(wrap) {
+    var nameBtn = wrap.querySelector('.acc-name-link[data-heritage]');
+    if (!nameBtn || nameBtn.getAttribute('data-heritage') !== heritageName) return;
+    found = true;
+    var exists = false;
+    wrap.querySelectorAll('.acc-topic-badge').forEach(function(b) {
+      if (b.textContent === topic) exists = true;
+    });
+    if (!exists) {
+      var badge = document.createElement('span');
+      badge.className = 'acc-topic-badge';
+      badge.textContent = topic;
+      badge.addEventListener('click', function(e) {
+        e.stopPropagation();
+        openHeritageChatlogModal(heritageName, topic);
+      });
+      wrap.appendChild(badge);
+    }
+  });
+  if (found) return;
+  inner.querySelectorAll('.acc-name[data-heritage]').forEach(function(span) {
+    if (span.getAttribute('data-heritage') !== heritageName) return;
+    var btn = document.createElement('button');
+    btn.className = 'acc-name-link';
+    btn.setAttribute('data-heritage', heritageName);
+    btn.textContent = span.textContent;
+    btn.addEventListener('click', function(e) { e.stopPropagation(); });
+    var wrap = document.createElement('span');
+    wrap.className = 'acc-name-wrap';
+    wrap.appendChild(btn);
+    var badge = document.createElement('span');
+    badge.className = 'acc-topic-badge';
+    badge.textContent = topic;
+    badge.addEventListener('click', function(e) {
+      e.stopPropagation();
+      openHeritageChatlogModal(heritageName, topic);
+    });
+    wrap.appendChild(badge);
+    span.parentNode.replaceChild(wrap, span);
+  });
+}
+
 function closeAllAccordions() {
   var rows = document.querySelectorAll('.accordion-row');
   for (var i = 0; i < rows.length; i++) rows[i].parentNode.removeChild(rows[i]);
@@ -529,7 +573,6 @@ function openAccordion(tr) {
         inner.querySelectorAll('.acc-ai-wrap').forEach(function(w) { w.style.display = 'none'; });
         if (!isOpen) {
           wrap.style.display = '';
-          checkHeritageKeywords(heritages, inner);
           var hName = rowEl.getAttribute('data-heritage') || '';
           if (hName) {
             var cityTr = accTr.previousElementSibling;
@@ -550,6 +593,7 @@ function openAccordion(tr) {
                     btn.removeAttribute('data-share-id');
                   }
                 });
+                checkHeritageKeywords(heritages, inner);
               })
               .catch(function() {});
           }
@@ -569,8 +613,8 @@ function openAccordion(tr) {
             if (newShareId) {
               btn.classList.add('answered');
               btn.setAttribute('data-share-id', newShareId);
+              ensureTopicBadge(inner, name, topic);
             }
-            checkHeritageKeywords(heritages, inner);
           });
         }
       });
