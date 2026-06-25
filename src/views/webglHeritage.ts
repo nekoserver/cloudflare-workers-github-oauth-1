@@ -364,6 +364,7 @@ void main() {
     <div class="landing-btn-row">
       <button class="landing-exit-btn" id="landing-exit">🚀 宇宙に戻る</button>
       <button class="landing-spin-btn" id="landing-spin-toggle">🔄 360°スイープ</button>
+      <button class="landing-spin-btn" id="landing-wait-btn" style="user-select:none;-webkit-user-select:none">⏸ 待機</button>
     </div>
     <div class="landing-city-list" id="landing-city-list"></div>
   </div>
@@ -1261,7 +1262,10 @@ void main() {
   var landingProgEl = null;
   var landingCityListEl = null;
   var landingSpinToggleEl = null;
+  var landingWaitBtnEl = null;
   var spin360Enabled = false;
+  var landingWaiting = false;
+  var landingLastFrameTime = 0;
   var landingCities = [];
   var cityMkEls = [];
   var cityMarkersDiv = null;
@@ -1991,6 +1995,25 @@ void main() {
   landingProgEl    = document.getElementById('landing-prog');
   landingCityListEl = document.getElementById('landing-city-list');
   landingSpinToggleEl = document.getElementById('landing-spin-toggle');
+  landingWaitBtnEl = document.getElementById('landing-wait-btn');
+  if (landingWaitBtnEl) {
+    function setWaiting(on) {
+      landingWaiting = on;
+      if (on) {
+        landingWaitBtnEl.classList.add('active');
+        landingWaitBtnEl.textContent = '⏸ 待機中';
+      } else {
+        landingWaitBtnEl.classList.remove('active');
+        landingWaitBtnEl.textContent = '⏸ 待機';
+      }
+    }
+    landingWaitBtnEl.addEventListener('mousedown', function(e) { e.preventDefault(); setWaiting(true); });
+    landingWaitBtnEl.addEventListener('mouseup', function() { setWaiting(false); });
+    landingWaitBtnEl.addEventListener('mouseleave', function() { setWaiting(false); });
+    landingWaitBtnEl.addEventListener('touchstart', function(e) { e.preventDefault(); setWaiting(true); }, { passive: false });
+    landingWaitBtnEl.addEventListener('touchend', function() { setWaiting(false); });
+    landingWaitBtnEl.addEventListener('touchcancel', function() { setWaiting(false); });
+  }
   cityMarkersDiv = document.getElementById('city-markers-div');
   citiesModalOverlay = document.getElementById('cities-modal-overlay');
   citiesModalTitle = document.getElementById('cities-modal-title');
@@ -2499,6 +2522,9 @@ void main() {
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
     if (landingMode && landingPhase > 0) {
+      if (landingWaiting && landingLastFrameTime > 0) {
+        landingPhaseStart += (now - landingLastFrameTime);
+      }
       if (landingPhase === 1) {
         var lp1 = Math.min((now - landingPhaseStart) / LANDING_ZOOM_IN_DUR, 1);
         var le1 = lp1 * lp1 * (3 - 2 * lp1);
@@ -2718,6 +2744,7 @@ void main() {
       'Globe: (' + (gcx - globeR) + ', ' + (gcy - globeR) + ') - (' + (gcx + globeR) + ', ' + (gcy + globeR) + ') r=' + globeR + '<br>' +
       'Zoom: ' + zoom.toFixed(2) + 'x  |  Visible: +/-' + visHalfDeg + 'deg';
 
+    landingLastFrameTime = now;
     frames++;
     var dt = now - lastFps;
     if (dt >= 600) {
