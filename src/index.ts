@@ -3368,11 +3368,27 @@ app.get('/api/aichat/check-heritage-questions', authMiddleware, async (c) => {
 });
 
 app.get('/api/aichat/heritage-keywords-check', authMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!c.env.DB) return jsonUtf8({ hits: {} }, 503);
   const raw = (c.req.query('keywords') ?? '').trim();
   if (!raw) return jsonUtf8({ hits: {} });
   const keywords = raw.split(',').map((k) => k.trim()).filter(Boolean).slice(0, 50);
+  if (!keywords.length) return jsonUtf8({ hits: {} });
   const hits: Record<string, string[]> = {};
   for (const kw of keywords) hits[kw] = [];
+  try {
+    const placeholders = keywords.map(() => '?').join(',');
+    const rows = await c.env.DB.prepare(
+      `SELECT l.heritage_name, m.topic FROM heritage_question_view_log l JOIN heritage_ai_question_masters m ON l.question_master_id = m.id WHERE l.user_id = ? AND l.heritage_name IN (${placeholders}) AND l.deleted_at IS NULL`
+    ).bind(user.sub, ...keywords).all<{ heritage_name: string; topic: string }>();
+    for (const r of (rows.results ?? [])) {
+      if (hits[r.heritage_name] && !hits[r.heritage_name].includes(r.topic)) {
+        hits[r.heritage_name].push(r.topic);
+      }
+    }
+  } catch (_e) {
+    for (const kw of keywords) hits[kw] = [];
+  }
   return jsonUtf8({ hits });
 });
 

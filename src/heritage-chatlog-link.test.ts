@@ -64,6 +64,26 @@ describe('世界遺産チャットログリンク: JavaScript関数', () => {
 });
 
 
+describe('世界遺産チャットログリンク: キャッシュ判定テーブル参照', () => {
+  it('heritage-keywords-check がトピック別に heritage_question_view_log を参照している', () => {
+    const { readFileSync } = require('fs');
+    const src = readFileSync(new URL('./index.ts', import.meta.url).pathname, 'utf-8');
+    const idx = src.indexOf('/api/aichat/heritage-keywords-check');
+    const block = src.slice(idx, idx + 900);
+    expect(block).toContain('heritage_question_view_log');
+    expect(block).toContain('heritage_name');
+    expect(block).toContain('topic');
+  });
+
+  it('heritage-keywords-check が aichat_search_log を参照していない', () => {
+    const { readFileSync } = require('fs');
+    const src = readFileSync(new URL('./index.ts', import.meta.url).pathname, 'utf-8');
+    const idx = src.indexOf('/api/aichat/heritage-keywords-check');
+    const block = src.slice(idx, idx + 900);
+    expect(block).not.toContain('aichat_search_log');
+  });
+});
+
 describe('世界遺産チャットログリンク: getNextZ', () => {
   it('heritage-chatlog-modal が getNextZ() で z-index を設定している', () => {
     const html = buildPage();
