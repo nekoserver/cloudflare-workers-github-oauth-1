@@ -3375,12 +3375,16 @@ app.get('/api/aichat/heritage-keywords-check', authMiddleware, async (c) => {
   const keywords = raw.split(',').map((k) => k.trim()).filter(Boolean).slice(0, 50);
   if (!keywords.length) return jsonUtf8({ hits: {} });
   const placeholders = keywords.map(() => '?').join(',');
-  const rows = await c.env.DB.prepare(
-    `SELECT DISTINCT keyword FROM aichat_search_log WHERE user_id = ? AND keyword IN (${placeholders}) AND deleted_at IS NULL`
-  ).bind(user.sub, ...keywords).all<{ keyword: string }>();
   const hits: Record<string, boolean> = {};
-  const hitSet = new Set((rows.results ?? []).map((r) => r.keyword));
-  for (const kw of keywords) hits[kw] = hitSet.has(kw);
+  try {
+    const rows = await c.env.DB.prepare(
+      `SELECT DISTINCT heritage_name FROM heritage_question_view_log WHERE user_id = ? AND heritage_name IN (${placeholders}) AND deleted_at IS NULL`
+    ).bind(user.sub, ...keywords).all<{ heritage_name: string }>();
+    const hitSet = new Set((rows.results ?? []).map((r) => r.heritage_name));
+    for (const kw of keywords) hits[kw] = hitSet.has(kw);
+  } catch (_e) {
+    for (const kw of keywords) hits[kw] = false;
+  }
   return jsonUtf8({ hits });
 });
 
