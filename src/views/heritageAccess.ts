@@ -79,8 +79,9 @@ td.pop{text-align:right;color:#8b949e;font-size:11px;min-width:64px}
 .ai-modal-title{font-size:13px;font-weight:700;flex:1;color:#e6edf3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .ai-modal-close{background:none;border:none;color:#8b949e;font-size:18px;cursor:pointer;padding:2px 6px;line-height:1}
 .ai-modal-body{overflow-y:auto;padding:16px;font-size:13px;line-height:1.7;color:#c9d1d9;white-space:pre-wrap;word-break:break-word}
-.acc-name-link{flex:1;color:#58a6ff;text-decoration:none;cursor:pointer;background:none;border:none;font:inherit;padding:0;text-align:left}
+.acc-name-link{color:#58a6ff;text-decoration:none;cursor:pointer;background:none;border:none;font:inherit;padding:0;text-align:left}
 .acc-name-link:hover{color:#79c0ff}
+.acc-kw-badge{display:inline-block;font-size:10px;padding:1px 6px;border-radius:10px;background:transparent;color:#a371f7;border:1px solid #a371f7;white-space:nowrap;flex-shrink:0;cursor:default}
 .hcl-modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.78);align-items:center;justify-content:center}
 .hcl-modal-overlay.open{display:flex}
 .hcl-modal{background:#0d1117;border:1px solid #30363d;border-radius:10px;width:min(92vw,640px);max-height:82vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 8px 40px rgba(0,0,0,.9)}
@@ -415,6 +416,44 @@ function checkHeritageKeywords(heritages, inner) {
           wrap.appendChild(newBadge);
         });
       });
+      return fetch('/api/aichat/heritage-search-keywords-check?keywords=' + encodeURIComponent(keywords.join(',')))
+        .then(function(r2) { return r2.json(); })
+        .then(function(kwData) {
+          var hasKw = kwData.hasKeywords || {};
+          keywords.forEach(function(name) {
+            if (!hasKw[name]) return;
+            var found = false;
+            inner.querySelectorAll('.acc-name-wrap').forEach(function(wrap) {
+              var nameBtn = wrap.querySelector('.acc-name-link[data-heritage]');
+              if (!nameBtn || nameBtn.getAttribute('data-heritage') !== name) return;
+              found = true;
+              if (!wrap.querySelector('.acc-kw-badge')) {
+                var kwBadge = document.createElement('span');
+                kwBadge.className = 'acc-kw-badge';
+                kwBadge.textContent = 'キーワード';
+                wrap.appendChild(kwBadge);
+              }
+            });
+            if (found) return;
+            inner.querySelectorAll('.acc-name[data-heritage]').forEach(function(span) {
+              if (span.getAttribute('data-heritage') !== name) return;
+              var btn = document.createElement('button');
+              btn.className = 'acc-name-link';
+              btn.setAttribute('data-heritage', name);
+              btn.textContent = span.textContent;
+              btn.addEventListener('click', function(e) { e.stopPropagation(); });
+              var wrap2 = document.createElement('span');
+              wrap2.className = 'acc-name-wrap';
+              wrap2.appendChild(btn);
+              var kwBadge = document.createElement('span');
+              kwBadge.className = 'acc-kw-badge';
+              kwBadge.textContent = 'キーワード';
+              wrap2.appendChild(kwBadge);
+              span.parentNode.replaceChild(wrap2, span);
+            });
+          });
+        })
+        .catch(function() {});
     })
     .catch(function() {});
 }
