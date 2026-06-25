@@ -76,6 +76,20 @@ td.pop{text-align:right;color:#8b949e;font-size:11px;min-width:64px}
 .ai-modal-title{font-size:13px;font-weight:700;flex:1;color:#e6edf3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .ai-modal-close{background:none;border:none;color:#8b949e;font-size:18px;cursor:pointer;padding:2px 6px;line-height:1}
 .ai-modal-body{overflow-y:auto;padding:16px;font-size:13px;line-height:1.7;color:#c9d1d9;white-space:pre-wrap;word-break:break-word}
+.acc-name-link{color:#58a6ff;text-decoration:underline;cursor:pointer;background:none;border:none;font:inherit;padding:0;text-align:left}
+.acc-name-link:hover{color:#79c0ff}
+.hcl-modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.78);align-items:center;justify-content:center}
+.hcl-modal-overlay.open{display:flex}
+.hcl-modal{background:#0d1117;border:1px solid #30363d;border-radius:10px;width:min(92vw,640px);max-height:82vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 8px 40px rgba(0,0,0,.9)}
+.hcl-modal-head{padding:12px 16px;border-bottom:1px solid #21262d;display:flex;align-items:center;gap:8px;flex-shrink:0}
+.hcl-modal-title{font-size:13px;font-weight:700;flex:1;color:#e6edf3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hcl-modal-close{background:none;border:none;color:#8b949e;font-size:18px;cursor:pointer;padding:2px 6px;line-height:1}
+.hcl-modal-body{overflow-y:auto;padding:12px 16px;display:flex;flex-direction:column;gap:10px}
+.hcl-entry{background:#161b22;border:1px solid #30363d;border-radius:8px;padding:12px 14px;display:flex;flex-direction:column;gap:6px}
+.hcl-entry-q{font-size:12px;color:#8b949e;line-height:1.5}
+.hcl-entry-a{font-size:12px;color:#c9d1d9;line-height:1.6;white-space:pre-wrap;word-break:break-word;max-height:160px;overflow-y:auto}
+.hcl-entry-meta{font-size:11px;color:#484f58;display:flex;gap:8px}
+.hcl-empty{color:#484f58;font-size:12px;padding:16px 0;text-align:center}
 </style>
 </head>
 <body>
@@ -114,6 +128,15 @@ td.pop{text-align:right;color:#8b949e;font-size:11px;min-width:64px}
       <button class="ai-modal-close" id="ai-modal-close">✕</button>
     </div>
     <div class="ai-modal-body" id="ai-modal-body"></div>
+  </div>
+</div>
+<div id="heritage-chatlog-modal-overlay" class="hcl-modal-overlay">
+  <div class="hcl-modal" id="heritage-chatlog-modal">
+    <div class="hcl-modal-head">
+      <span class="hcl-modal-title" id="heritage-chatlog-modal-title">AIチャット過去ログ</span>
+      <button class="hcl-modal-close" id="heritage-chatlog-close">✕</button>
+    </div>
+    <div class="hcl-modal-body" id="heritage-chatlog-modal-body"></div>
   </div>
 </div>
 <div class="summary" id="summary"></div>
@@ -283,6 +306,75 @@ function getNextZ() {
   return max + 100;
 }
 
+var hclOverlay = document.getElementById('heritage-chatlog-modal-overlay');
+var hclTitle = document.getElementById('heritage-chatlog-modal-title');
+var hclBody = document.getElementById('heritage-chatlog-modal-body');
+document.getElementById('heritage-chatlog-close').addEventListener('click', function() {
+  hclOverlay.classList.remove('open');
+});
+hclOverlay.addEventListener('click', function(e) {
+  if (e.target === hclOverlay) hclOverlay.classList.remove('open');
+});
+
+function openHeritageChatlogModal(heritageName) {
+  hclTitle.textContent = heritageName + ' — AIチャット過去ログ';
+  hclBody.innerHTML = '<div class="hcl-empty">読み込み中...</div>';
+  hclOverlay.style.zIndex = String(getNextZ());
+  hclOverlay.classList.add('open');
+  fetch('/api/aichat/shares/by-keyword?keyword=' + encodeURIComponent(heritageName))
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      var results = data.results || [];
+      if (!results.length) {
+        hclBody.innerHTML = '<div class="hcl-empty">該当する過去ログが見つかりませんでした</div>';
+        return;
+      }
+      var html = '';
+      results.forEach(function(item) {
+        var date = item.created_at ? item.created_at.slice(0, 10) : '';
+        var model = item.model || '';
+        var q = item.question || '';
+        var a = item.answer || '';
+        var qEsc = q.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+        var aEsc = a.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+        html += '<div class="hcl-entry">' +
+          '<div class="hcl-entry-q">Q: ' + qEsc + '</div>' +
+          '<div class="hcl-entry-a">' + aEsc + '</div>' +
+          '<div class="hcl-entry-meta"><span>' + date + '</span><span>' + model + '</span></div>' +
+          '</div>';
+      });
+      hclBody.innerHTML = html;
+    })
+    .catch(function() {
+      hclBody.innerHTML = '<div class="hcl-empty">取得エラーが発生しました</div>';
+    });
+}
+
+function checkHeritageKeywords(heritages, inner) {
+  if (!heritages.length) return;
+  var keywords = heritages.map(function(h) { return h.heritage_name; });
+  fetch('/api/aichat/heritage-keywords-check?keywords=' + encodeURIComponent(keywords.join(',')))
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      var hits = data.hits || {};
+      inner.querySelectorAll('.acc-name[data-heritage]').forEach(function(span) {
+        var name = span.getAttribute('data-heritage');
+        if (name && hits[name]) {
+          var btn = document.createElement('button');
+          btn.className = 'acc-name-link';
+          btn.setAttribute('data-heritage', name);
+          btn.textContent = span.textContent;
+          btn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            openHeritageChatlogModal(name);
+          });
+          span.parentNode.replaceChild(btn, span);
+        }
+      });
+    })
+    .catch(function() {});
+}
+
 function openAiModal(title, bodyText, isCached) {
   aiModalTitle.textContent = title;
   aiModalBody.textContent = bodyText;
@@ -373,7 +465,7 @@ function openAccordion(tr) {
       html += '<div class="acc-row" data-heritage="' + h.heritage_name.replace(/"/g,'&quot;') + '">' +
         flagSpan +
         '<span class="acc-emoji">🏛️</span>' +
-        '<span class="acc-name">' + safeName + '</span>' +
+        '<span class="acc-name" data-heritage="' + h.heritage_name.replace(/"/g,'&quot;') + '">' + safeName + '</span>' +
         '<span class="acc-dist">' + dist + ' km</span>' +
         '</div>' +
         '<div class="acc-ai-wrap" id="acc-ai-' + Math.random().toString(36).slice(2) + '" style="display:none">' +
@@ -382,6 +474,7 @@ function openAccordion(tr) {
     });
     html += '</div>';
     inner.innerHTML = html;
+    checkHeritageKeywords(heritages, inner);
     inner.querySelectorAll('.acc-row[data-heritage]').forEach(function(rowEl) {
       rowEl.style.cursor = 'pointer';
       rowEl.addEventListener('click', function() {
