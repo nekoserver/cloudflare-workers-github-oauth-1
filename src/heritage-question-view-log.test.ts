@@ -34,6 +34,12 @@ describe('heritage_question_view_log 書き込み — バックエンド', () =>
     const block = src.slice(idx, idx + 3500);
     expect(block).toContain('searched_at');
   });
+
+  it('キャッシュがある質問のみ記録する（isCached フラグで絞り込み）', () => {
+    const idx = src.indexOf('/api/aichat/check-heritage-questions');
+    const block = src.slice(idx, idx + 3500);
+    expect(block).toContain('isCached');
+  });
 });
 
 describe('heritage_question_view_log 書き込み — フロントエンド', () => {

@@ -3350,9 +3350,11 @@ app.get('/api/aichat/check-heritage-questions', authMiddleware, async (c) => {
     const existingIds = new Set((existingRows.results ?? []).map((r) => r.question_master_id));
 
     const now = new Date().toISOString().replace('T', ' ').slice(0, 19);
-    for (const topic of topics) {
+    for (let i = 0; i < topics.length; i++) {
+      const topic = topics[i];
       const qmId = topicIdMap.get(topic);
-      if (qmId && !existingIds.has(qmId)) {
+      const isCached = answeredMap.has(questions[i]);
+      if (qmId && isCached && !existingIds.has(qmId)) {
         await c.env.DB.prepare(
           `INSERT OR IGNORE INTO heritage_question_view_log (user_id, country_name, heritage_name, question_master_id, searched_at) VALUES (?, ?, ?, ?, ?)`
         ).bind(user.sub, country_name, heritage, qmId, now).run();
@@ -3373,12 +3375,16 @@ app.get('/api/aichat/heritage-keywords-check', authMiddleware, async (c) => {
   const keywords = raw.split(',').map((k) => k.trim()).filter(Boolean).slice(0, 50);
   if (!keywords.length) return jsonUtf8({ hits: {} });
   const placeholders = keywords.map(() => '?').join(',');
-  const rows = await c.env.DB.prepare(
-    `SELECT DISTINCT keyword FROM aichat_search_log WHERE user_id = ? AND keyword IN (${placeholders}) AND deleted_at IS NULL`
-  ).bind(user.sub, ...keywords).all<{ keyword: string }>();
   const hits: Record<string, boolean> = {};
-  const hitSet = new Set((rows.results ?? []).map((r) => r.keyword));
-  for (const kw of keywords) hits[kw] = hitSet.has(kw);
+  try {
+    const rows = await c.env.DB.prepare(
+      `SELECT DISTINCT heritage_name FROM heritage_question_view_log WHERE user_id = ? AND heritage_name IN (${placeholders}) AND deleted_at IS NULL`
+    ).bind(user.sub, ...keywords).all<{ heritage_name: string }>();
+    const hitSet = new Set((rows.results ?? []).map((r) => r.heritage_name));
+    for (const kw of keywords) hits[kw] = hitSet.has(kw);
+  } catch (_e) {
+    for (const kw of keywords) hits[kw] = false;
+  }
   return jsonUtf8({ hits });
 });
 
