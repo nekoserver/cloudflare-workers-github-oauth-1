@@ -1497,26 +1497,17 @@ void main() {
     var ld = HERITAGE[hidx];
     if(!ld) return;
     if(landingCityListEl) landingCityListEl.innerHTML = '<div class="landing-city-loading">🌆 周辺都市を検索中...</div>';
-    fetch('/api/heritage-cities?name=' + encodeURIComponent(ld.n))
+    fetch('/api/heritage-cities', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: ld.n, lat: ld.lat, lon: ld.lon })
+    })
       .then(function(r){ return r.json(); })
-      .then(function(data) {
-        if(data.fetched) {
-          landingCities = data.cities || [];
-          if(landingCities.length > 0) { hasCityDataSet[ld.n] = true; updateCityIcons(); }
-          buildCityMarkers(landingCities);
-          renderCityList(landingCities);
-        } else {
-          return fetch('/api/heritage-cities', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name: ld.n, lat: ld.lat, lon: ld.lon })
-          }).then(function(r){ return r.json(); }).then(function(d) {
-            landingCities = d.cities || [];
-            if(landingCities.length > 0) { hasCityDataSet[ld.n] = true; updateCityIcons(); }
-            buildCityMarkers(landingCities);
-            renderCityList(landingCities);
-          });
-        }
+      .then(function(d) {
+        landingCities = d.cities || [];
+        if(landingCities.length > 0) { hasCityDataSet[ld.n] = true; updateCityIcons(); }
+        buildCityMarkers(landingCities);
+        renderCityList(landingCities);
       })
       .catch(function() {
         if(landingCityListEl) landingCityListEl.innerHTML = '';
