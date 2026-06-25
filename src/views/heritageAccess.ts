@@ -486,7 +486,10 @@ function openAccordion(tr) {
           wrap.style.display = '';
           var hName = rowEl.getAttribute('data-heritage') || '';
           if (hName) {
-            fetch('/api/aichat/check-heritage-questions?heritage=' + encodeURIComponent(hName))
+            var cityTr = accTr.previousElementSibling;
+            var _cc = cityTr ? cityTr.getAttribute('data-cc') : '';
+            var _cName = _cc ? ccToJp(_cc) : '';
+            fetch('/api/aichat/check-heritage-questions?heritage=' + encodeURIComponent(hName) + '&country_name=' + encodeURIComponent(_cName))
               .then(function(r) { return r.json(); })
               .then(function(data) {
                 var answered = data.answered || {};
