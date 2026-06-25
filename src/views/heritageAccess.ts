@@ -56,6 +56,7 @@ td.pop{text-align:right;color:#8b949e;font-size:11px;min-width:64px}
 .acc-heritage-list{display:flex;flex-direction:column;gap:4px;max-height:320px;overflow-y:auto}
 .acc-row{display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid #21262d;font-size:12px}
 .acc-row:last-child{border-bottom:none}
+.acc-country-flag{font-size:14px;flex-shrink:0;width:20px;text-align:center}
 .acc-emoji{font-size:14px;flex-shrink:0;width:20px;text-align:center}
 .acc-name{flex:1;color:#c9d1d9}
 .acc-dist{color:#58a6ff;font-size:11px;font-weight:600;white-space:nowrap;min-width:56px;text-align:right}
@@ -290,7 +291,7 @@ function openAiModal(title, bodyText, isCached) {
   aiModalOverlay.classList.add('open');
 }
 
-var AI_TOPICS = ['交通手段', '見どころ', '最寄り空港', '鉄道でのアクセス'];
+var AI_TOPICS = ['交通手段', '見どころ', '最寄り空港', '鉄道でのアクセス', '宿泊施設', 'スポーツ施設'];
 
 function askAI(heritageName, topic) {
   var prompt = '「' + heritageName + '」の「' + topic + '」について説明してください';
@@ -366,7 +367,11 @@ function openAccordion(tr) {
     heritages.forEach(function(h) {
       var dist = h.distance_km < 10 ? h.distance_km.toFixed(1) : Math.round(h.distance_km);
       var safeName = h.heritage_name.replace(/&/g,'&amp;').replace(/</g,'&lt;');
+      var flagSpan = h.country_flag
+        ? '<span class="acc-country-flag">' + h.country_flag + '</span>'
+        : '';
       html += '<div class="acc-row" data-heritage="' + h.heritage_name.replace(/"/g,'&quot;') + '">' +
+        flagSpan +
         '<span class="acc-emoji">🏛️</span>' +
         '<span class="acc-name">' + safeName + '</span>' +
         '<span class="acc-dist">' + dist + ' km</span>' +

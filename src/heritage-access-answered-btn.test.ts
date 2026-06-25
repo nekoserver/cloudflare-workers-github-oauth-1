@@ -9,13 +9,15 @@ describe('/api/aichat/check-heritage-questions エンドポイント', () => {
     expect(src).toContain('/api/aichat/check-heritage-questions');
   });
 
-  it('4つのトピックすべてが定義されている', () => {
+  it('6つのトピックすべてが定義されている', () => {
     const idx = src.indexOf('/api/aichat/check-heritage-questions');
     const block = src.slice(idx, idx + 900);
     expect(block).toContain('交通手段');
     expect(block).toContain('見どころ');
     expect(block).toContain('最寄り空港');
     expect(block).toContain('鉄道でのアクセス');
+    expect(block).toContain('宿泊施設');
+    expect(block).toContain('スポーツ施設');
   });
 
   it('ai_chat_shares テーブルから id と question を取得している', () => {
@@ -126,5 +128,33 @@ describe('buildAiPanel — ボタン属性', () => {
 
   it('data-heritage 属性がボタンに付いている', () => {
     expect(view).toContain('data-heritage');
+  });
+});
+
+describe('heritageAccess ビュー — トピック追加・国旗表示', () => {
+  it('AI_TOPICS に宿泊施設が含まれている', () => {
+    expect(view).toContain('宿泊施設');
+  });
+
+  it('AI_TOPICS にスポーツ施設が含まれている', () => {
+    expect(view).toContain('スポーツ施設');
+  });
+
+  it('acc-country-flag クラスが定義されている（CSS）', () => {
+    expect(view).toContain('.acc-country-flag');
+  });
+
+  it('country_flag が存在する場合に国旗スパンを出力している', () => {
+    expect(view).toContain('acc-country-flag');
+    expect(view).toContain('h.country_flag');
+  });
+
+  it('city-all-heritages API が country_flag を返す（index.ts）', () => {
+    expect(src).toContain('country_flag');
+    expect(src).toContain('HERITAGE_FLAG_MAP');
+  });
+
+  it('HERITAGE_FLAG_MAP が heritageList からインポートされている', () => {
+    expect(src).toContain("from './data/heritageList'");
   });
 });
