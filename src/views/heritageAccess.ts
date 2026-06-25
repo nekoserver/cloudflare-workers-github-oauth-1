@@ -64,9 +64,10 @@ td.pop{text-align:right;color:#8b949e;font-size:11px;min-width:64px}
 .acc-ai-panel{margin-top:6px;padding:8px 0 4px;border-top:1px solid #21262d}
 .acc-ai-label{font-size:11px;color:#8b949e;margin-bottom:6px}
 .acc-ai-btns{display:flex;flex-wrap:wrap;gap:6px}
-.acc-ai-btn{background:#0d1117;border:1px solid #30363d;border-radius:6px;color:#c9d1d9;font-size:11px;padding:4px 10px;cursor:pointer;font-family:inherit;transition:border-color .15s,color .15s}
+.acc-ai-btn{background:#0d1117;border:1px solid #30363d;border-radius:6px;color:#c9d1d9;font-size:11px;padding:4px 10px;cursor:pointer;font-family:inherit;transition:border-color .15s,color .15s,background .15s}
 .acc-ai-btn:hover{border-color:#58a6ff;color:#58a6ff}
 .acc-ai-btn:disabled{color:#484f58;cursor:default;border-color:#21262d}
+.acc-ai-btn.answered{background:#0e2a1a;border-color:#2ea043;color:#3fb950}
 .ai-modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.78);align-items:center;justify-content:center}
 .ai-modal-overlay.open{display:flex}
 .ai-modal{background:#0d1117;border:1px solid #30363d;border-radius:10px;width:min(92vw,560px);max-height:80vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 8px 40px rgba(0,0,0,.9)}
@@ -361,7 +362,23 @@ function openAccordion(tr) {
         if (!wrap || !wrap.classList || !wrap.classList.contains('acc-ai-wrap')) return;
         var isOpen = wrap.style.display !== 'none';
         inner.querySelectorAll('.acc-ai-wrap').forEach(function(w) { w.style.display = 'none'; });
-        if (!isOpen) wrap.style.display = '';
+        if (!isOpen) {
+          wrap.style.display = '';
+          var hName = rowEl.getAttribute('data-heritage') || '';
+          if (hName) {
+            fetch('/api/aichat/check-heritage-questions?heritage=' + encodeURIComponent(hName))
+              .then(function(r) { return r.json(); })
+              .then(function(data) {
+                var answered = data.answered || {};
+                wrap.querySelectorAll('.acc-ai-btn').forEach(function(btn) {
+                  var topic = btn.getAttribute('data-topic');
+                  if (topic && answered[topic]) btn.classList.add('answered');
+                  else btn.classList.remove('answered');
+                });
+              })
+              .catch(function() {});
+          }
+        }
       });
     });
     inner.querySelectorAll('.acc-ai-btn').forEach(function(btn) {
