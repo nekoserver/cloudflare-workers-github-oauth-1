@@ -81,7 +81,19 @@ td.pop{text-align:right;color:#8b949e;font-size:11px;min-width:64px}
 .ai-modal-body{overflow-y:auto;padding:16px;font-size:13px;line-height:1.7;color:#c9d1d9;white-space:pre-wrap;word-break:break-word}
 .acc-name-link{color:#58a6ff;text-decoration:none;cursor:pointer;background:none;border:none;font:inherit;padding:0;text-align:left}
 .acc-name-link:hover{color:#79c0ff}
-.acc-kw-badge{display:inline-block;font-size:10px;padding:1px 6px;border-radius:10px;background:transparent;color:#a371f7;border:1px solid #a371f7;white-space:nowrap;flex-shrink:0;cursor:default}
+.acc-kw-badge{display:inline-block;font-size:10px;padding:1px 6px;border-radius:10px;background:transparent;color:#a371f7;border:1px solid #a371f7;white-space:nowrap;flex-shrink:0;cursor:pointer}
+.acc-kw-badge:hover{background:rgba(163,113,247,.15)}
+.kw-panel-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.78);align-items:center;justify-content:center}
+.kw-panel-overlay.open{display:flex}
+.kw-panel{background:#0d1117;border:1px solid #30363d;border-radius:10px;width:min(92vw,480px);max-height:80vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 8px 40px rgba(0,0,0,.9)}
+.kw-panel-head{padding:12px 16px;border-bottom:1px solid #21262d;display:flex;align-items:center;gap:8px;flex-shrink:0}
+.kw-panel-title{font-size:13px;font-weight:700;flex:1;color:#e6edf3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.kw-panel-close{background:none;border:none;color:#8b949e;font-size:18px;cursor:pointer;padding:2px 6px;line-height:1}
+.kw-panel-body{overflow-y:auto;padding:12px 16px;display:flex;flex-direction:column;gap:6px}
+.kw-panel-item{display:flex;align-items:center;gap:8px;padding:6px 10px;background:#161b22;border:1px solid #21262d;border-radius:6px;font-size:12px}
+.kw-panel-kw{flex:1;color:#c9d1d9}
+.kw-panel-cnt{color:#a371f7;font-weight:700;font-size:11px;white-space:nowrap}
+.kw-panel-empty{color:#484f58;font-size:12px;padding:16px 0;text-align:center}
 .hcl-modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.78);align-items:center;justify-content:center}
 .hcl-modal-overlay.open{display:flex}
 .hcl-modal{background:#0d1117;border:1px solid #30363d;border-radius:10px;width:min(92vw,640px);max-height:82vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 8px 40px rgba(0,0,0,.9)}
@@ -141,6 +153,15 @@ td.pop{text-align:right;color:#8b949e;font-size:11px;min-width:64px}
       <button class="hcl-modal-close" id="heritage-chatlog-close">✕</button>
     </div>
     <div class="hcl-modal-body" id="heritage-chatlog-modal-body"></div>
+  </div>
+</div>
+<div id="heritage-kw-panel-overlay" class="kw-panel-overlay">
+  <div class="kw-panel" id="heritage-kw-panel">
+    <div class="kw-panel-head">
+      <span class="kw-panel-title" id="heritage-kw-panel-title">キーワード</span>
+      <button class="kw-panel-close" id="heritage-kw-panel-close">✕</button>
+    </div>
+    <div class="kw-panel-body" id="heritage-kw-panel-body"></div>
   </div>
 </div>
 <div class="summary" id="summary"></div>
@@ -310,6 +331,44 @@ function getNextZ() {
   return max + 100;
 }
 
+var kwPanelOverlay = document.getElementById('heritage-kw-panel-overlay');
+var kwPanelTitle = document.getElementById('heritage-kw-panel-title');
+var kwPanelBody = document.getElementById('heritage-kw-panel-body');
+document.getElementById('heritage-kw-panel-close').addEventListener('click', function() {
+  kwPanelOverlay.classList.remove('open');
+});
+kwPanelOverlay.addEventListener('click', function(e) {
+  if (e.target === kwPanelOverlay) kwPanelOverlay.classList.remove('open');
+});
+
+function openHeritageKwPanel(heritageName) {
+  kwPanelTitle.textContent = heritageName + ' — キーワード';
+  kwPanelBody.innerHTML = '<div class="kw-panel-empty">読み込み中...</div>';
+  kwPanelOverlay.style.zIndex = String(getNextZ());
+  kwPanelOverlay.classList.add('open');
+  fetch('/api/aichat/heritage-search-keyword-counts?heritage=' + encodeURIComponent(heritageName))
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      var items = data.keywords || [];
+      if (!items.length) {
+        kwPanelBody.innerHTML = '<div class="kw-panel-empty">キーワードが見つかりませんでした</div>';
+        return;
+      }
+      var html = '';
+      items.forEach(function(item) {
+        var kwEsc = (item.keyword || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+        html += '<div class="kw-panel-item">' +
+          '<span class="kw-panel-kw">' + kwEsc + '</span>' +
+          '<span class="kw-panel-cnt">(' + item.count + ')</span>' +
+          '</div>';
+      });
+      kwPanelBody.innerHTML = html;
+    })
+    .catch(function() {
+      kwPanelBody.innerHTML = '<div class="kw-panel-empty">取得エラーが発生しました</div>';
+    });
+}
+
 var hclOverlay = document.getElementById('heritage-chatlog-modal-overlay');
 var hclTitle = document.getElementById('heritage-chatlog-modal-title');
 var hclBody = document.getElementById('heritage-chatlog-modal-body');
@@ -431,6 +490,12 @@ function checkHeritageKeywords(heritages, inner) {
                 var kwBadge = document.createElement('span');
                 kwBadge.className = 'acc-kw-badge';
                 kwBadge.textContent = 'キーワード';
+                (function(kwName) {
+                  kwBadge.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    openHeritageKwPanel(kwName);
+                  });
+                })(name);
                 wrap.appendChild(kwBadge);
               }
             });
@@ -448,6 +513,12 @@ function checkHeritageKeywords(heritages, inner) {
               var kwBadge = document.createElement('span');
               kwBadge.className = 'acc-kw-badge';
               kwBadge.textContent = 'キーワード';
+              (function(kwName) {
+                kwBadge.addEventListener('click', function(e) {
+                  e.stopPropagation();
+                  openHeritageKwPanel(kwName);
+                });
+              })(name);
               wrap2.appendChild(kwBadge);
               span.parentNode.replaceChild(wrap2, span);
             });

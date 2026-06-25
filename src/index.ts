@@ -3424,6 +3424,27 @@ app.get('/api/aichat/heritage-search-keywords-check', authMiddleware, async (c) 
   return jsonUtf8({ hasKeywords });
 });
 
+app.get('/api/aichat/heritage-search-keyword-counts', authMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!c.env.DB) return jsonUtf8({ keywords: [] }, 503);
+  const heritage = (c.req.query('heritage') ?? '').trim();
+  if (!heritage) return jsonUtf8({ keywords: [] });
+  try {
+    const rows = await c.env.DB.prepare(
+      `SELECT ash.keyword, COUNT(*) as count
+       FROM aichat_search_history ash
+       INNER JOIN ai_chat_shares acs ON acs.id = ash.share_id AND acs.user_id = ? AND acs.deleted_at IS NULL
+       WHERE ash.user_id = ? AND ash.deleted_at IS NULL
+         AND acs.question LIKE ? || '%'
+       GROUP BY ash.keyword
+       ORDER BY count DESC, ash.keyword ASC`
+    ).bind(user.sub, user.sub, '「' + heritage + '」').all<{ keyword: string; count: number }>();
+    return jsonUtf8({ keywords: rows.results ?? [] });
+  } catch {
+    return jsonUtf8({ keywords: [] });
+  }
+});
+
 app.get('/api/aichat/shares/calendar', authMiddleware, async (c) => {
   const user = c.get('user');
   if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
