@@ -3392,6 +3392,38 @@ app.get('/api/aichat/heritage-keywords-check', authMiddleware, async (c) => {
   return jsonUtf8({ hits });
 });
 
+app.get('/api/aichat/heritage-search-keywords-check', authMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!c.env.DB) return jsonUtf8({ hasKeywords: {} }, 503);
+  const raw = (c.req.query('keywords') ?? '').trim();
+  if (!raw) return jsonUtf8({ hasKeywords: {} });
+  const keywords = raw.split(',').map((k) => k.trim()).filter(Boolean).slice(0, 50);
+  if (!keywords.length) return jsonUtf8({ hasKeywords: {} });
+  const hasKeywords: Record<string, boolean> = {};
+  for (const kw of keywords) hasKeywords[kw] = false;
+  try {
+    const rows = await c.env.DB.prepare(
+      `SELECT DISTINCT acs.question
+       FROM ai_chat_shares acs
+       INNER JOIN aichat_search_history ash ON ash.share_id = acs.id AND ash.user_id = ? AND ash.deleted_at IS NULL
+       WHERE acs.user_id = ? AND acs.deleted_at IS NULL`
+    ).bind(user.sub, user.sub).all<{ question: string }>();
+    const kwSet = new Set(keywords);
+    for (const row of (rows.results ?? [])) {
+      const q = row.question || '';
+      const start = q.indexOf('「');
+      const end = q.indexOf('」', start + 1);
+      if (start === 0 && end > 1) {
+        const name = q.slice(1, end);
+        if (kwSet.has(name)) hasKeywords[name] = true;
+      }
+    }
+  } catch {
+    // aichat_search_history 未作成時はスキップ
+  }
+  return jsonUtf8({ hasKeywords });
+});
+
 app.get('/api/aichat/shares/calendar', authMiddleware, async (c) => {
   const user = c.get('user');
   if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);

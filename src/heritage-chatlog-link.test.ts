@@ -217,6 +217,92 @@ describe('世界遺産チャットログリンク: レースコンディショ�
   });
 });
 
+describe('世界遺産チャットログリンク: キーワードバッジ（紫中抜き）', () => {
+  it('.acc-kw-badge CSS クラスが定義されている', () => {
+    const html = buildPage();
+    expect(html).toContain('.acc-kw-badge');
+  });
+
+  it('.acc-kw-badge に紫色 (#a371f7) が設定されている', () => {
+    const html = buildPage();
+    const idx = html.indexOf('.acc-kw-badge');
+    const block = html.slice(idx, idx + 200);
+    expect(block).toContain('#a371f7');
+  });
+
+  it('.acc-kw-badge の background が transparent (中抜きデザイン)', () => {
+    const html = buildPage();
+    const idx = html.indexOf('.acc-kw-badge');
+    const block = html.slice(idx, idx + 200);
+    expect(block).toContain('background:transparent');
+  });
+
+  it('/api/aichat/heritage-search-keywords-check を呼んでいる', () => {
+    const html = buildPage();
+    expect(html).toContain('/api/aichat/heritage-search-keywords-check');
+  });
+
+  it('hasKeywords を参照してキーワードバッジを追加している', () => {
+    const html = buildPage();
+    expect(html).toContain('hasKeywords');
+    const idx = html.indexOf('heritage-search-keywords-check');
+    const block = html.slice(idx, idx + 1800);
+    expect(block).toContain('acc-kw-badge');
+    expect(block).toContain('キーワード');
+  });
+
+  it('既存の acc-name-wrap にもキーワードバッジを追加する処理がある', () => {
+    const html = buildPage();
+    const idx = html.indexOf('heritage-search-keywords-check');
+    const block = html.slice(idx, idx + 1200);
+    expect(block).toContain('acc-name-wrap');
+    expect(block).toContain('acc-kw-badge');
+    expect(block).toContain('querySelector(\'.acc-name-link[data-heritage]');
+  });
+
+  it('acc-name span のみの遺産にもキーワードバッジを追加するフォールバック処理がある', () => {
+    const html = buildPage();
+    const idx = html.indexOf('heritage-search-keywords-check');
+    const block = html.slice(idx, idx + 1500);
+    expect(block).toContain('.acc-name[data-heritage]');
+    expect(block).toContain('acc-kw-badge');
+  });
+
+  it('index.ts に /api/aichat/heritage-search-keywords-check エンドポイントが定義されている', () => {
+    const { readFileSync } = require('fs');
+    const src = readFileSync(new URL('./index.ts', import.meta.url).pathname, 'utf-8');
+    expect(src).toContain("app.get('/api/aichat/heritage-search-keywords-check'");
+  });
+
+  it('index.ts の heritage-search-keywords-check が aichat_search_history を参照している', () => {
+    const { readFileSync } = require('fs');
+    const src = readFileSync(new URL('./index.ts', import.meta.url).pathname, 'utf-8');
+    const idx = src.indexOf('heritage-search-keywords-check');
+    const block = src.slice(idx, idx + 800);
+    expect(block).toContain('aichat_search_history');
+    expect(block).toContain('ai_chat_shares');
+    expect(block).toContain('hasKeywords');
+  });
+});
+
+describe('世界遺産チャットログリンク: ラベル処理済み行の空白タップでAIパネル表示', () => {
+  it('.acc-name-link が flex:1 を持たない（空白タップがバブルするように）', () => {
+    const html = buildPage();
+    const idx = html.indexOf('.acc-name-link{');
+    expect(idx).toBeGreaterThan(-1);
+    const block = html.slice(idx, idx + 150);
+    expect(block).not.toContain('flex:1');
+  });
+
+  it('.acc-name-wrap が flex:1 を持つ（行全体をカバーする）', () => {
+    const html = buildPage();
+    const idx = html.indexOf('.acc-name-wrap{');
+    expect(idx).toBeGreaterThan(-1);
+    const block = html.slice(idx, idx + 100);
+    expect(block).toContain('flex:1');
+  });
+});
+
 describe('世界遺産チャットログリンク: getNextZ', () => {
   it('heritage-chatlog-modal が getNextZ() で z-index を設定している', () => {
     const html = buildPage();
