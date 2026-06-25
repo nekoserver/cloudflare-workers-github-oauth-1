@@ -11,36 +11,49 @@ describe('/api/aichat/check-heritage-questions エンドポイント', () => {
 
   it('4つのトピックすべてが定義されている', () => {
     const idx = src.indexOf('/api/aichat/check-heritage-questions');
-    const block = src.slice(idx, idx + 800);
+    const block = src.slice(idx, idx + 900);
     expect(block).toContain('交通手段');
     expect(block).toContain('見どころ');
     expect(block).toContain('最寄り空港');
     expect(block).toContain('鉄道でのアクセス');
   });
 
-  it('ai_chat_shares テーブルから question を検索している', () => {
+  it('ai_chat_shares テーブルから id と question を取得している', () => {
     const idx = src.indexOf('/api/aichat/check-heritage-questions');
-    const block = src.slice(idx, idx + 800);
+    const block = src.slice(idx, idx + 900);
     expect(block).toContain('ai_chat_shares');
-    expect(block).toContain('question');
+    expect(block).toContain('id, question');
   });
 
   it('answered マップを返している', () => {
     const idx = src.indexOf('/api/aichat/check-heritage-questions');
-    const block = src.slice(idx, idx + 800);
+    const block = src.slice(idx, idx + 900);
     expect(block).toContain('answered');
+  });
+
+  it('answered の値が shareId (string) または null を返す', () => {
+    const idx = src.indexOf('/api/aichat/check-heritage-questions');
+    const block = src.slice(idx, idx + 1100);
+    expect(block).toContain('answeredMap');
+    expect(block).toContain('?? null');
   });
 
   it('user_id でフィルタしている（他ユーザーの履歴を返さない）', () => {
     const idx = src.indexOf('/api/aichat/check-heritage-questions');
-    const block = src.slice(idx, idx + 800);
+    const block = src.slice(idx, idx + 900);
     expect(block).toContain('user_id');
   });
 
   it('deleted_at IS NULL で論理削除を除外している', () => {
     const idx = src.indexOf('/api/aichat/check-heritage-questions');
-    const block = src.slice(idx, idx + 800);
+    const block = src.slice(idx, idx + 900);
     expect(block).toContain('deleted_at IS NULL');
+  });
+
+  it('ORDER BY created_at DESC で最新の回答を優先している', () => {
+    const idx = src.indexOf('/api/aichat/check-heritage-questions');
+    const block = src.slice(idx, idx + 900);
+    expect(block).toContain('created_at DESC');
   });
 });
 
@@ -59,12 +72,50 @@ describe('heritageAccess ビュー — 回答済みボタン着色', () => {
     expect(view).toContain('check-heritage-questions');
   });
 
-  it('answered[topic] が true のとき classList.add("answered") している', () => {
-    expect(view).toContain('classList.add(\'answered\')');
+  it('shareId が取れた場合に data-share-id 属性を設定している', () => {
+    expect(view).toContain('data-share-id');
+    expect(view).toContain('setAttribute(\'data-share-id\'');
   });
 
-  it('answered[topic] が false のとき classList.remove("answered") している', () => {
-    expect(view).toContain('classList.remove(\'answered\')');
+  it('shareId がない場合に data-share-id 属性を除去している', () => {
+    expect(view).toContain('removeAttribute(\'data-share-id\')');
+  });
+});
+
+describe('heritageAccess ビュー — キャッシュ済みボタンのモーダル表示', () => {
+  it('askAICached 関数が定義されている', () => {
+    expect(view).toContain('function askAICached');
+  });
+
+  it('askAICached が /api/aichat/shares/ を呼んでいる', () => {
+    const idx = view.indexOf('function askAICached');
+    const block = view.slice(idx, idx + 400);
+    expect(block).toContain('/api/aichat/shares/');
+  });
+
+  it('askAICached が data.answer を表示している', () => {
+    const idx = view.indexOf('function askAICached');
+    const block = view.slice(idx, idx + 400);
+    expect(block).toContain('data.answer');
+  });
+
+  it('キャッシュバッジ要素が HTML に存在する', () => {
+    expect(view).toContain('ai-modal-cache-badge');
+  });
+
+  it('キャッシュ表示時はバッジを表示し、新規 AI 呼び出し時は非表示にする', () => {
+    expect(view).toContain('isCached');
+    const fnIdx = view.indexOf('function openAiModal');
+    const block = view.slice(fnIdx, fnIdx + 300);
+    expect(block).toContain('aiModalCacheBadge');
+  });
+
+  it('data-share-id がある場合は askAICached を呼ぶ', () => {
+    expect(view).toContain('askAICached(name, topic, shareId)');
+  });
+
+  it('data-share-id がない場合は askAI（新規生成）を呼ぶ', () => {
+    expect(view).toContain('askAI(name, topic)');
   });
 });
 
