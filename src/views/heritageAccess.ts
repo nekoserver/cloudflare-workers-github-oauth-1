@@ -397,7 +397,7 @@ function openAiModal(title, bodyText, isCached) {
 
 var AI_TOPICS = ['交通手段', '見どころ', '最寄り空港', '鉄道でのアクセス', '宿泊施設', 'スポーツ施設'];
 
-function askAI(heritageName, topic) {
+function askAI(heritageName, topic, onComplete) {
   var prompt = '「' + heritageName + '」の「' + topic + '」について説明してください';
   openAiModal(heritageName + ' — ' + topic, '読み込み中...', false);
   fetch('/api/aichat', {
@@ -409,6 +409,7 @@ function askAI(heritageName, topic) {
     if (data.response && data.id) {
       aiModalCacheBadge.style.display = 'none';
     }
+    if (onComplete) onComplete();
   }).catch(function() {
     aiModalBody.textContent = '通信エラーが発生しました。';
   });
@@ -531,7 +532,13 @@ function openAccordion(tr) {
         if (shareId) {
           askAICached(name, topic, shareId);
         } else {
-          askAI(name, topic);
+          askAI(name, topic, function() {
+            var heritages = [];
+            inner.querySelectorAll('.acc-row[data-heritage]').forEach(function(el) {
+              heritages.push({ heritage_name: el.getAttribute('data-heritage') });
+            });
+            checkHeritageKeywords(heritages, inner);
+          });
         }
       });
     });
