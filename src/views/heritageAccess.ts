@@ -356,9 +356,9 @@ function openHeritageChatlogModal(heritageName, topic) {
 }
 
 function checkHeritageKeywords(heritages, inner) {
-  if (!heritages.length) return;
+  if (!heritages.length) return Promise.resolve();
   var keywords = heritages.map(function(h) { return h.heritage_name; });
-  fetch('/api/aichat/heritage-keywords-check?keywords=' + encodeURIComponent(keywords.join(',')))
+  return fetch('/api/aichat/heritage-keywords-check?keywords=' + encodeURIComponent(keywords.join(',')))
     .then(function(r) { return r.json(); })
     .then(function(data) {
       var hits = data.hits || {};
@@ -441,7 +441,7 @@ function askAI(heritageName, topic, onComplete) {
     if (data.response && data.id) {
       aiModalCacheBadge.style.display = 'none';
     }
-    if (onComplete) onComplete(data.id || null);
+    if (onComplete) onComplete(data.shareId || data.id || null);
   }).catch(function() {
     aiModalBody.textContent = '通信エラーが発生しました。';
   });
@@ -563,7 +563,7 @@ function openAccordion(tr) {
     });
     html += '</div>';
     inner.innerHTML = html;
-    checkHeritageKeywords(heritages, inner);
+    var kwCheckPromise = checkHeritageKeywords(heritages, inner);
     inner.querySelectorAll('.acc-row[data-heritage]').forEach(function(rowEl) {
       rowEl.style.cursor = 'pointer';
       rowEl.addEventListener('click', function() {
@@ -578,13 +578,19 @@ function openAccordion(tr) {
             var cityTr = accTr.previousElementSibling;
             var _cc = cityTr ? cityTr.getAttribute('data-cc') : '';
             var _cName = _cc ? ccToJp(_cc) : '';
+            var localAnswered = {};
+            wrap.querySelectorAll('.acc-ai-btn.answered').forEach(function(b) {
+              var t = b.getAttribute('data-topic');
+              var sid = b.getAttribute('data-share-id');
+              if (t && sid) localAnswered[t] = sid;
+            });
             fetch('/api/aichat/check-heritage-questions?heritage=' + encodeURIComponent(hName) + '&country_name=' + encodeURIComponent(_cName))
               .then(function(r) { return r.json(); })
               .then(function(data) {
-                var answered = data.answered || {};
+                var serverAnswered = data.answered || {};
                 wrap.querySelectorAll('.acc-ai-btn').forEach(function(btn) {
                   var topic = btn.getAttribute('data-topic');
-                  var shareId = topic ? answered[topic] : null;
+                  var shareId = topic ? (localAnswered[topic] || serverAnswered[topic]) : null;
                   if (shareId) {
                     btn.classList.add('answered');
                     btn.setAttribute('data-share-id', shareId);
@@ -593,7 +599,9 @@ function openAccordion(tr) {
                     btn.removeAttribute('data-share-id');
                   }
                 });
-                checkHeritageKeywords(heritages, inner);
+                kwCheckPromise = kwCheckPromise.then(function() {
+                  return checkHeritageKeywords(heritages, inner);
+                });
               })
               .catch(function() {});
           }
