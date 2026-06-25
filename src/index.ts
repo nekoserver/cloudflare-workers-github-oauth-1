@@ -66,6 +66,7 @@ import { AICHAT_MODEL_MAX_TOKENS, getModelRunParams } from './utils/aichatModelC
 import { extractFunctionSource } from './utils/extractFunctionSource';
 import { listD1Databases, getD1Tables } from './utils/cloudflareApi';
 import { validateRevokeRequest } from './utils/revoke';
+import { HERITAGE_FLAG_MAP } from './data/heritageList';
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -3322,7 +3323,7 @@ app.get('/api/aichat/check-heritage-questions', authMiddleware, async (c) => {
   if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
   const heritage = (c.req.query('heritage') ?? '').trim();
   if (!heritage) return jsonUtf8({ answered: {} });
-  const topics = ['交通手段', '見どころ', '最寄り空港', '鉄道でのアクセス'];
+  const topics = ['交通手段', '見どころ', '最寄り空港', '鉄道でのアクセス', '宿泊施設', 'スポーツ施設'];
   const questions = topics.map((t) => `「${heritage}」の「${t}」について説明してください`);
   const placeholders = questions.map(() => '?').join(', ');
   const rows = await c.env.DB.prepare(
@@ -4438,7 +4439,11 @@ app.post('/api/city-all-heritages', authMiddleware, async (c) => {
      ORDER BY distance_km
      LIMIT 100`
   ).bind(body.city_name, lat3, lon3).all<{ heritage_name: string; distance_km: number }>();
-  return c.json({ heritages: rows.results });
+  const heritages = (rows.results ?? []).map((r) => ({
+    ...r,
+    country_flag: HERITAGE_FLAG_MAP[r.heritage_name] ?? '',
+  }));
+  return c.json({ heritages });
 });
 
 app.get('/api/heritage-access-ranking', authMiddleware, async (c) => {
