@@ -497,6 +497,7 @@ function openAccordion(tr) {
         inner.querySelectorAll('.acc-ai-wrap').forEach(function(w) { w.style.display = 'none'; });
         if (!isOpen) {
           wrap.style.display = '';
+          checkHeritageKeywords(heritages, inner);
           var hName = rowEl.getAttribute('data-heritage') || '';
           if (hName) {
             var cityTr = accTr.previousElementSibling;

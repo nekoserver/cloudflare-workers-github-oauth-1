@@ -84,6 +84,24 @@ describe('世界遺産チャットログリンク: キャッシュ判定テー�
   });
 });
 
+describe('世界遺産チャットログリンク: checkHeritageKeywords 呼び出しタイミング', () => {
+  it('acc-row クリック時（別の世界遺産パネルを開いた時）に checkHeritageKeywords を呼んでいる', () => {
+    const html = buildPage();
+    const rowClickIdx = html.indexOf("acc-row[data-heritage]");
+    expect(rowClickIdx).toBeGreaterThan(-1);
+    const block = html.slice(rowClickIdx, rowClickIdx + 800);
+    expect(block).toContain('checkHeritageKeywords(heritages, inner)');
+  });
+
+  it('AI応答完了後にも checkHeritageKeywords を呼んでいる（askAI の onComplete）', () => {
+    const html = buildPage();
+    const askAiIdx = html.indexOf('function askAI');
+    expect(askAiIdx).toBeGreaterThan(-1);
+    const block = html.slice(askAiIdx, askAiIdx + 400);
+    expect(block).toContain('onComplete');
+  });
+});
+
 describe('世界遺産チャットログリンク: getNextZ', () => {
   it('heritage-chatlog-modal が getNextZ() で z-index を設定している', () => {
     const html = buildPage();
