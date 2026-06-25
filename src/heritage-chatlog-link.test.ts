@@ -162,12 +162,14 @@ describe('世界遺産チャットログリンク: AI応答後のボタン色と
 });
 
 describe('世界遺産チャットログリンク: checkHeritageKeywords 呼び出しタイミング', () => {
-  it('acc-row クリック時（別の世界遺産パネルを開いた時）に checkHeritageKeywords を呼んでいる', () => {
+  it('acc-row クリック時の check-heritage-questions .then() 内で checkHeritageKeywords を呼んでいる（レースコンディション修正後）', () => {
     const html = buildPage();
-    const rowClickIdx = html.indexOf("acc-row[data-heritage]");
-    expect(rowClickIdx).toBeGreaterThan(-1);
-    const block = html.slice(rowClickIdx, rowClickIdx + 800);
-    expect(block).toContain('checkHeritageKeywords(heritages, inner)');
+    const fetchIdx = html.indexOf('check-heritage-questions?heritage=');
+    expect(fetchIdx).toBeGreaterThan(-1);
+    const afterFetch = html.slice(fetchIdx, fetchIdx + 1200);
+    const thenIdx = afterFetch.indexOf('.then(function(data)');
+    const thenBlock = afterFetch.slice(thenIdx, thenIdx + 900);
+    expect(thenBlock).toContain('checkHeritageKeywords(heritages, inner)');
   });
 
   it('AI応答完了後にも checkHeritageKeywords を呼んでいる（askAI の onComplete）', () => {

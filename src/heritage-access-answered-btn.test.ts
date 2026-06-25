@@ -155,6 +155,52 @@ describe('buildAiPanel — ボタン属性', () => {
   });
 });
 
+describe('checkHeritageKeywords と check-heritage-questions の競合条件修正', () => {
+  it('ensureTopicBadge 関数が定義されている', () => {
+    expect(view).toContain('function ensureTopicBadge(');
+  });
+
+  it('ensureTopicBadge が acc-name-wrap を探してバッジを追加する', () => {
+    const idx = view.indexOf('function ensureTopicBadge(');
+    const block = view.slice(idx, idx + 600);
+    expect(block).toContain('acc-name-wrap');
+    expect(block).toContain('acc-topic-badge');
+  });
+
+  it('ensureTopicBadge が acc-name[data-heritage] スパンも変換できる', () => {
+    const idx = view.indexOf('function ensureTopicBadge(');
+    const block = view.slice(idx, idx + 1800);
+    expect(block).toContain('acc-name-link');
+    expect(block).toContain('replaceChild');
+  });
+
+  it('check-heritage-questions の .then() 内で checkHeritageKeywords を呼んでいる（レースコンディション修正）', () => {
+    const fetchIdx = view.indexOf('check-heritage-questions?heritage=');
+    const afterFetch = view.slice(fetchIdx, fetchIdx + 1200);
+    const thenIdx = afterFetch.indexOf('.then(function(data)');
+    const thenBlock = afterFetch.slice(thenIdx, thenIdx + 900);
+    expect(thenBlock).toContain('checkHeritageKeywords(heritages, inner)');
+  });
+
+  it('check-heritage-questions fetch の前に checkHeritageKeywords を呼んでいない（レースコンディションなし）', () => {
+    const rowClickIdx = view.indexOf('rowEl.addEventListener(\'click\'');
+    const rowClickBlock = view.slice(rowClickIdx, rowClickIdx + 300);
+    expect(rowClickBlock).not.toContain('checkHeritageKeywords(heritages, inner)');
+  });
+
+  it('askAI コールバックで ensureTopicBadge を呼んでいる（バッジ即時更新）', () => {
+    const askAICallIdx = view.indexOf('askAI(name, topic, function(newShareId)');
+    const callbackBlock = view.slice(askAICallIdx, askAICallIdx + 300);
+    expect(callbackBlock).toContain('ensureTopicBadge(inner, name, topic)');
+  });
+
+  it('askAI コールバックで checkHeritageKeywords を呼んでいない（DB未更新タイミングでの誤呼び出し除去）', () => {
+    const askAICallIdx = view.indexOf('askAI(name, topic, function(newShareId)');
+    const callbackBlock = view.slice(askAICallIdx, askAICallIdx + 300);
+    expect(callbackBlock).not.toContain('checkHeritageKeywords(heritages, inner)');
+  });
+});
+
 describe('heritageAccess ビュー — トピック追加・国旗表示', () => {
   it('AI_TOPICS に宿泊施設が含まれている', () => {
     expect(view).toContain('宿泊施設');
