@@ -2548,7 +2548,7 @@ void main() {
           if (landingStatusEl) landingStatusEl.textContent = '地表を見渡し中';
         }
         if (landingProgEl) landingProgEl.style.width = Math.round(35 + lp2 * 40) + '%';
-        if (lp2 >= 1) {
+        if (lp2 >= 1 && !landingWaiting) {
           landingPhase = 3;
           landingPhaseStart = now;
           landingZoomOutFrom = zoom;
@@ -2560,7 +2560,7 @@ void main() {
         rotXv = landingRotXFrom + (0.3 - landingRotXFrom) * le3;
         if (landingStatusEl) landingStatusEl.textContent = '帰還中...';
         if (landingProgEl) landingProgEl.style.width = Math.round(75 + le3 * 25) + '%';
-        if (lp3 >= 1) { landingSpinAngle = 0; stopLanding(); }
+        if (lp3 >= 1 && !landingWaiting) { landingSpinAngle = 0; stopLanding(); }
       }
     } else if (flyTarget !== null) {
       var fp = Math.min((now - flyStart) / FLY_DUR, 1);
