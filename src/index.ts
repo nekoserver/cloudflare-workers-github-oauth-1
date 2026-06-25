@@ -3338,6 +3338,23 @@ app.get('/api/aichat/check-heritage-questions', authMiddleware, async (c) => {
   return jsonUtf8({ answered });
 });
 
+app.get('/api/aichat/heritage-keywords-check', authMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!c.env.DB) return jsonUtf8({ hits: {} }, 503);
+  const raw = (c.req.query('keywords') ?? '').trim();
+  if (!raw) return jsonUtf8({ hits: {} });
+  const keywords = raw.split(',').map((k) => k.trim()).filter(Boolean).slice(0, 50);
+  if (!keywords.length) return jsonUtf8({ hits: {} });
+  const placeholders = keywords.map(() => '?').join(',');
+  const rows = await c.env.DB.prepare(
+    `SELECT DISTINCT keyword FROM aichat_search_log WHERE user_id = ? AND keyword IN (${placeholders}) AND deleted_at IS NULL`
+  ).bind(user.sub, ...keywords).all<{ keyword: string }>();
+  const hits: Record<string, boolean> = {};
+  const hitSet = new Set((rows.results ?? []).map((r) => r.keyword));
+  for (const kw of keywords) hits[kw] = hitSet.has(kw);
+  return jsonUtf8({ hits });
+});
+
 app.get('/api/aichat/shares/calendar', authMiddleware, async (c) => {
   const user = c.get('user');
   if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
