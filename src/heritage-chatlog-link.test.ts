@@ -95,8 +95,8 @@ describe('世界遺産チャットログリンク: バッジタップでモー�
 
   it('バッジクリック時に openHeritageChatlogModal を badgeTopic 付きで呼んでいる', () => {
     const html = buildPage();
-    const idx = html.indexOf('checkHeritageKeywords');
-    const block = html.slice(idx, idx + 1400);
+    const idx = html.indexOf('function checkHeritageKeywords');
+    const block = html.slice(idx, idx + 2000);
     expect(block).toContain('openHeritageChatlogModal(name, badgeTopic)');
   });
 
@@ -135,11 +135,12 @@ describe('世界遺産チャットログリンク: バッジタップでモー�
 });
 
 describe('世界遺産チャットログリンク: AI応答後のボタン色とバッジ更新', () => {
-  it('askAI が onComplete に shareId を渡している', () => {
+  it('askAI が onComplete に data.shareId を渡している（data.id ではない）', () => {
     const html = buildPage();
     const idx = html.indexOf('function askAI');
     const block = html.slice(idx, idx + 700);
-    expect(block).toContain('onComplete(data.id || null)');
+    expect(block).toContain('data.shareId');
+    expect(block).not.toContain('onComplete(data.id || null)');
   });
 
   it('AI応答後に btn.classList.add(answered) を呼んでいる', () => {
@@ -162,14 +163,29 @@ describe('世界遺産チャットログリンク: AI応答後のボタン色と
 });
 
 describe('世界遺産チャットログリンク: checkHeritageKeywords 呼び出しタイミング', () => {
-  it('acc-row クリック時の check-heritage-questions .then() 内で checkHeritageKeywords を呼んでいる（レースコンディション修正後）', () => {
+  it('checkHeritageKeywords が Promise を返す（return fetch(...) の形式）', () => {
+    const html = buildPage();
+    const idx = html.indexOf('function checkHeritageKeywords');
+    expect(idx).toBeGreaterThan(-1);
+    const block = html.slice(idx, idx + 300);
+    expect(block).toContain('return Promise.resolve()');
+    expect(block).toContain('return fetch(');
+  });
+
+  it('kwCheckPromise に checkHeritageKeywords の結果を代入してシリアル化している', () => {
+    const html = buildPage();
+    expect(html).toContain('var kwCheckPromise = checkHeritageKeywords(heritages, inner)');
+  });
+
+  it('acc-row クリック後の check-heritage-questions .then() 内で kwCheckPromise.then を使ってシリアル化している', () => {
     const html = buildPage();
     const fetchIdx = html.indexOf('check-heritage-questions?heritage=');
     expect(fetchIdx).toBeGreaterThan(-1);
-    const afterFetch = html.slice(fetchIdx, fetchIdx + 1200);
+    const afterFetch = html.slice(fetchIdx, fetchIdx + 1400);
     const thenIdx = afterFetch.indexOf('.then(function(data)');
-    const thenBlock = afterFetch.slice(thenIdx, thenIdx + 900);
-    expect(thenBlock).toContain('checkHeritageKeywords(heritages, inner)');
+    const thenBlock = afterFetch.slice(thenIdx, thenIdx + 1000);
+    expect(thenBlock).toContain('kwCheckPromise = kwCheckPromise.then(function()');
+    expect(thenBlock).toContain('return checkHeritageKeywords(heritages, inner)');
   });
 
   it('AI応答完了後にも checkHeritageKeywords を呼んでいる（askAI の onComplete）', () => {
@@ -178,6 +194,26 @@ describe('世界遺産チャットログリンク: checkHeritageKeywords 呼び�
     expect(askAiIdx).toBeGreaterThan(-1);
     const block = html.slice(askAiIdx, askAiIdx + 400);
     expect(block).toContain('onComplete');
+  });
+});
+
+describe('世界遺産チャットログリンク: レースコンディション防止', () => {
+  it('acc-row クリック前に localAnswered でローカル応答済み状態を保存している', () => {
+    const html = buildPage();
+    const fetchIdx = html.indexOf('check-heritage-questions?heritage=');
+    expect(fetchIdx).toBeGreaterThan(-1);
+    const beforeFetch = html.slice(Math.max(0, fetchIdx - 400), fetchIdx);
+    expect(beforeFetch).toContain('var localAnswered = {}');
+    expect(beforeFetch).toContain('.acc-ai-btn.answered');
+  });
+
+  it('check-heritage-questions の応答と localAnswered をマージしてボタン状態を更新している', () => {
+    const html = buildPage();
+    const fetchIdx = html.indexOf('check-heritage-questions?heritage=');
+    const afterFetch = html.slice(fetchIdx, fetchIdx + 1400);
+    const thenBlock = afterFetch.slice(afterFetch.indexOf('.then(function(data)'), afterFetch.indexOf('.then(function(data)') + 900);
+    expect(thenBlock).toContain('serverAnswered');
+    expect(thenBlock).toContain('localAnswered[topic] || serverAnswered[topic]');
   });
 });
 
