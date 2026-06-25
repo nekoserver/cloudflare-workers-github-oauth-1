@@ -391,6 +391,30 @@ function checkHeritageKeywords(heritages, inner) {
           span.parentNode.replaceChild(wrap, span);
         }
       });
+      inner.querySelectorAll('.acc-name-wrap').forEach(function(wrap) {
+        var nameBtn = wrap.querySelector('.acc-name-link[data-heritage]');
+        if (!nameBtn) return;
+        var wName = nameBtn.getAttribute('data-heritage');
+        var wTopics = wName ? (hits[wName] || []) : [];
+        if (!wTopics.length) return;
+        var existingTopics = {};
+        wrap.querySelectorAll('.acc-topic-badge').forEach(function(b) {
+          existingTopics[b.textContent] = true;
+        });
+        wTopics.forEach(function(wTopic) {
+          if (existingTopics[wTopic]) return;
+          var newBadge = document.createElement('span');
+          newBadge.className = 'acc-topic-badge';
+          newBadge.textContent = wTopic;
+          (function(badgeTopic) {
+            newBadge.addEventListener('click', function(e) {
+              e.stopPropagation();
+              openHeritageChatlogModal(wName, badgeTopic);
+            });
+          })(wTopic);
+          wrap.appendChild(newBadge);
+        });
+      });
     })
     .catch(function() {});
 }
@@ -417,7 +441,7 @@ function askAI(heritageName, topic, onComplete) {
     if (data.response && data.id) {
       aiModalCacheBadge.style.display = 'none';
     }
-    if (onComplete) onComplete();
+    if (onComplete) onComplete(data.id || null);
   }).catch(function() {
     aiModalBody.textContent = '通信エラーが発生しました。';
   });
@@ -541,11 +565,11 @@ function openAccordion(tr) {
         if (shareId) {
           askAICached(name, topic, shareId);
         } else {
-          askAI(name, topic, function() {
-            var heritages = [];
-            inner.querySelectorAll('.acc-row[data-heritage]').forEach(function(el) {
-              heritages.push({ heritage_name: el.getAttribute('data-heritage') });
-            });
+          askAI(name, topic, function(newShareId) {
+            if (newShareId) {
+              btn.classList.add('answered');
+              btn.setAttribute('data-share-id', newShareId);
+            }
             checkHeritageKeywords(heritages, inner);
           });
         }

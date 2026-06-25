@@ -134,6 +134,33 @@ describe('世界遺産チャットログリンク: バッジタップでモー�
   });
 });
 
+describe('世界遺産チャットログリンク: AI応答後のボタン色とバッジ更新', () => {
+  it('askAI が onComplete に shareId を渡している', () => {
+    const html = buildPage();
+    const idx = html.indexOf('function askAI');
+    const block = html.slice(idx, idx + 700);
+    expect(block).toContain('onComplete(data.id || null)');
+  });
+
+  it('AI応答後に btn.classList.add(answered) を呼んでいる', () => {
+    const html = buildPage();
+    const idx = html.indexOf('askAI(name, topic, function(newShareId)');
+    expect(idx).toBeGreaterThan(-1);
+    const block = html.slice(idx, idx + 200);
+    expect(block).toContain("btn.classList.add('answered')");
+    expect(block).toContain("btn.setAttribute('data-share-id', newShareId)");
+  });
+
+  it('checkHeritageKeywords が acc-name-wrap 内の既存バッジを確認して新バッジを追加する', () => {
+    const html = buildPage();
+    const idx = html.indexOf('function checkHeritageKeywords');
+    const block = html.slice(idx, idx + 2000);
+    expect(block).toContain('acc-name-wrap');
+    expect(block).toContain('acc-name-link[data-heritage]');
+    expect(block).toContain('existingTopics');
+  });
+});
+
 describe('世界遺産チャットログリンク: checkHeritageKeywords 呼び出しタイミング', () => {
   it('acc-row クリック時（別の世界遺産パネルを開いた時）に checkHeritageKeywords を呼んでいる', () => {
     const html = buildPage();
