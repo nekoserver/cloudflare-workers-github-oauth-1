@@ -59,7 +59,9 @@ td.pop{text-align:right;color:#8b949e;font-size:11px;min-width:64px}
 .acc-country-flag{font-size:14px;flex-shrink:0;width:20px;text-align:center}
 .acc-emoji{font-size:14px;flex-shrink:0;width:20px;text-align:center}
 .acc-name{flex:1;color:#c9d1d9}
-.acc-dist{color:#58a6ff;font-size:11px;font-weight:600;white-space:nowrap;min-width:56px;text-align:right}
+.acc-name-wrap{display:flex;align-items:center;gap:4px;flex:1;min-width:0}
+.acc-topic-badge{display:inline-block;font-size:10px;padding:1px 5px;border-radius:10px;background:rgba(46,160,67,.18);color:#3fb950;border:1px solid rgba(63,185,80,.3);white-space:nowrap;flex-shrink:0}
+.acc-dist{color:#58a6ff;font-size:11px;font-weight:600;white-space:nowrap;min-width:56px;text-align:right;margin-left:auto}
 .acc-loading{color:#484f58;font-size:12px;padding:8px 0}
 .acc-toggle{font-size:10px;color:#484f58;margin-left:4px;flex-shrink:0}
 .acc-ai-panel{margin-top:6px;padding:8px 0 4px;border-top:1px solid #21262d}
@@ -76,7 +78,7 @@ td.pop{text-align:right;color:#8b949e;font-size:11px;min-width:64px}
 .ai-modal-title{font-size:13px;font-weight:700;flex:1;color:#e6edf3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .ai-modal-close{background:none;border:none;color:#8b949e;font-size:18px;cursor:pointer;padding:2px 6px;line-height:1}
 .ai-modal-body{overflow-y:auto;padding:16px;font-size:13px;line-height:1.7;color:#c9d1d9;white-space:pre-wrap;word-break:break-word}
-.acc-name-link{color:#58a6ff;text-decoration:underline;cursor:pointer;background:none;border:none;font:inherit;padding:0;text-align:left}
+.acc-name-link{flex:1;color:#58a6ff;text-decoration:none;cursor:pointer;background:none;border:none;font:inherit;padding:0;text-align:left}
 .acc-name-link:hover{color:#79c0ff}
 .hcl-modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.78);align-items:center;justify-content:center}
 .hcl-modal-overlay.open{display:flex}
@@ -359,7 +361,8 @@ function checkHeritageKeywords(heritages, inner) {
       var hits = data.hits || {};
       inner.querySelectorAll('.acc-name[data-heritage]').forEach(function(span) {
         var name = span.getAttribute('data-heritage');
-        if (name && hits[name]) {
+        var topics = name ? (hits[name] || []) : [];
+        if (name && topics.length) {
           var btn = document.createElement('button');
           btn.className = 'acc-name-link';
           btn.setAttribute('data-heritage', name);
@@ -368,7 +371,16 @@ function checkHeritageKeywords(heritages, inner) {
             e.stopPropagation();
             openHeritageChatlogModal(name);
           });
-          span.parentNode.replaceChild(btn, span);
+          var wrap = document.createElement('span');
+          wrap.className = 'acc-name-wrap';
+          wrap.appendChild(btn);
+          for (var ti = 0; ti < topics.length; ti++) {
+            var badge = document.createElement('span');
+            badge.className = 'acc-topic-badge';
+            badge.textContent = topics[ti];
+            wrap.appendChild(badge);
+          }
+          span.parentNode.replaceChild(wrap, span);
         }
       });
     })
