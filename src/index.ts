@@ -3350,9 +3350,11 @@ app.get('/api/aichat/check-heritage-questions', authMiddleware, async (c) => {
     const existingIds = new Set((existingRows.results ?? []).map((r) => r.question_master_id));
 
     const now = new Date().toISOString().replace('T', ' ').slice(0, 19);
-    for (const topic of topics) {
+    for (let i = 0; i < topics.length; i++) {
+      const topic = topics[i];
       const qmId = topicIdMap.get(topic);
-      if (qmId && !existingIds.has(qmId)) {
+      const isCached = answeredMap.has(questions[i]);
+      if (qmId && isCached && !existingIds.has(qmId)) {
         await c.env.DB.prepare(
           `INSERT OR IGNORE INTO heritage_question_view_log (user_id, country_name, heritage_name, question_master_id, searched_at) VALUES (?, ?, ?, ?, ?)`
         ).bind(user.sub, country_name, heritage, qmId, now).run();
