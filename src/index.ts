@@ -3374,10 +3374,10 @@ app.get('/api/aichat/heritage-keywords-check', authMiddleware, async (c) => {
   if (!raw) return jsonUtf8({ hits: {} });
   const keywords = raw.split(',').map((k) => k.trim()).filter(Boolean).slice(0, 50);
   if (!keywords.length) return jsonUtf8({ hits: {} });
-  const placeholders = keywords.map(() => '?').join(',');
   const hits: Record<string, string[]> = {};
   for (const kw of keywords) hits[kw] = [];
   try {
+    const placeholders = keywords.map(() => '?').join(',');
     const rows = await c.env.DB.prepare(
       `SELECT l.heritage_name, m.topic FROM heritage_question_view_log l JOIN heritage_ai_question_masters m ON l.question_master_id = m.id WHERE l.user_id = ? AND l.heritage_name IN (${placeholders}) AND l.deleted_at IS NULL`
     ).bind(user.sub, ...keywords).all<{ heritage_name: string; topic: string }>();
