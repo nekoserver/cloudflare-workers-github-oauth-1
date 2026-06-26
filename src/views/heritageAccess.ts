@@ -154,17 +154,13 @@ td.pop{text-align:right;color:#8b949e;font-size:11px;min-width:64px}
   <span class="ctrl-label">距離上限</span>
   <select id="sel-dist">
     <option value="300">300 km</option>
-    <option value="500" selected>500 km</option>
+    <option value="500">500 km</option>
     <option value="800">800 km</option>
     <option value="1000">1000 km</option>
-    <option value="1500">1500 km</option>
+    <option value="1500" selected>1500 km</option>
   </select>
-  <span class="ctrl-label">表示件数</span>
-  <select id="sel-limit">
-    <option value="50">50件</option>
-    <option value="100" selected>100件</option>
-    <option value="200">200件</option>
-    <option value="500">500件</option>
+  <select id="sel-limit" style="display:none">
+    <option value="500" selected>500件</option>
   </select>
   <div class="mode-tabs">
     <button class="mode-tab active" id="tab-all">全都市</button>
@@ -1067,6 +1063,9 @@ function renderEuropePanel() {
   });
   renderEuList();
 }
+function initAutoLoad() {
+  loadData();
+}
 function renderEuList() {
   var from = EU_CAPS[euFromIdx];
   var dists = [];
@@ -1086,6 +1085,8 @@ function renderEuList() {
   });
   document.getElementById("eu-dist-list").innerHTML = h;
 }
+
+initAutoLoad();
 
 function renderCountry(rows) {
   var dist = document.getElementById('sel-dist').value;
