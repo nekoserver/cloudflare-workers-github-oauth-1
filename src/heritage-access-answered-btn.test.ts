@@ -174,12 +174,12 @@ describe('checkHeritageKeywords と check-heritage-questions の競合条件修�
     expect(block).toContain('replaceChild');
   });
 
-  it('check-heritage-questions の .then() 内で checkHeritageKeywords を呼んでいる（レースコンディション修正）', () => {
+  it('check-heritage-questions の .then() 内で checkHeritageKeywords を呼ばない（都市タップ時に1回で十分）', () => {
     const fetchIdx = view.indexOf('check-heritage-questions?heritage=');
     const afterFetch = view.slice(fetchIdx, fetchIdx + 1200);
     const thenIdx = afterFetch.indexOf('.then(function(data)');
     const thenBlock = afterFetch.slice(thenIdx, thenIdx + 1300);
-    expect(thenBlock).toContain('checkHeritageKeywords(filtered, inner)');
+    expect(thenBlock).not.toContain('checkHeritageKeywords(filtered, inner)');
   });
 
   it('check-heritage-questions fetch の前に checkHeritageKeywords を呼んでいない（レースコンディションなし）', () => {

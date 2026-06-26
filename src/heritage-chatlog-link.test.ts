@@ -177,15 +177,15 @@ describe('世界遺産チャットログリンク: checkHeritageKeywords 呼び�
     expect(html).toContain('var kwCheckPromise = checkHeritageKeywords(filtered, inner)');
   });
 
-  it('acc-row クリック後の check-heritage-questions .then() 内で kwCheckPromise.then を使ってシリアル化している', () => {
+  it('acc-row クリック後の check-heritage-questions .then() 内では checkHeritageKeywords を呼ばない（都市タップ時に1回のみ実行済み）', () => {
     const html = buildPage();
     const fetchIdx = html.indexOf('check-heritage-questions?heritage=');
     expect(fetchIdx).toBeGreaterThan(-1);
     const afterFetch = html.slice(fetchIdx, fetchIdx + 1400);
     const thenIdx = afterFetch.indexOf('.then(function(data)');
     const thenBlock = afterFetch.slice(thenIdx, thenIdx + 1000);
-    expect(thenBlock).toContain('kwCheckPromise = kwCheckPromise.then(function()');
-    expect(thenBlock).toContain('return checkHeritageKeywords(filtered, inner)');
+    expect(thenBlock).not.toContain('kwCheckPromise = kwCheckPromise.then(function()');
+    expect(thenBlock).not.toContain('return checkHeritageKeywords(filtered, inner)');
   });
 
   it('AI応答完了後にも checkHeritageKeywords を呼んでいる（askAI の onComplete）', () => {

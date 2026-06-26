@@ -831,9 +831,6 @@ function openAccordion(tr) {
                     ensureTopicBadge(inner, hName, t);
                   }
                 });
-                kwCheckPromise = kwCheckPromise.then(function() {
-                  return checkHeritageKeywords(filtered, inner);
-                });
               })
               .catch(function() {});
           }
