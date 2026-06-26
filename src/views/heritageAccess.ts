@@ -331,8 +331,6 @@ document.getElementById('tab-country').addEventListener('click', function() {
   document.getElementById('tab-country').className = 'mode-tab active';
   if (allRows.length) renderCountry(filteredRows());
 });
-document.getElementById('sel-dist').addEventListener('change', loadData);
-
 function getSelCountry() {
   var el = document.getElementById('sel-country');
   return el ? el.value : '';
