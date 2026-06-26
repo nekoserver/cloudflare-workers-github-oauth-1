@@ -887,17 +887,27 @@ void main() {
     var tanA = Math.tan(a);
     var tanL = Math.tan(latR);
     var cosVal = Math.max(-1, Math.min(1, tanA * tanL));
-    var ty = Math.acos(cosVal) + lonR;
+    var ty = -Math.acos(cosVal) - lonR;
     var sinSq = 1 - cosVal * cosVal;
     var denom = Math.cos(a) * Math.sqrt(Math.max(0, sinSq));
     var tRx = denom < 1e-6 ? (latR >= 0 ? Math.PI / 2 : -Math.PI / 2) : Math.atan(tanL / denom);
     var dy = ty - rotYv;
     while (dy > Math.PI) dy -= 2 * Math.PI;
     while (dy < -Math.PI) dy += 2 * Math.PI;
+    momentumY = 0; momentumX = 0;
     flyFrom = {ry: rotYv, rx: rotXv};
     flyTarget = {ry: rotYv + dy, rx: tRx};
-    flyT = 0; flyDur = dur;
+    flyStart = performance.now();
+    flyDur = dur || 2000;
     flyCallback = cb || null;
+    autoRot = false;
+    btnAutoRot.textContent = '▶ 回転';
+    btnAutoRot.classList.add('active');
+    if (axisLocked) {
+      axisLocked = false;
+      btnAxisLock.classList.remove('active');
+      btnAxisLock.textContent = '＋ 軸垂直固定';
+    }
   }
 
   function selectFaultFromVol(v) {
@@ -918,7 +928,7 @@ void main() {
 
   var activeFilter = 'all';
   var selectedFaultId = null;
-  var flyTarget = null, flyFrom = null, flyT = 0, flyDur = 0, flyCallback = null;
+  var flyTarget = null, flyFrom = null, flyStart = 0, flyDur = 2000, flyCallback = null;
 
   function faultColor(type) {
     return TYPE_COLORS[type] || [1,1,1];
@@ -1381,12 +1391,11 @@ void main() {
     var dt = Math.min(ts - lastT, 50); lastT = ts;
 
     if (flyTarget && flyFrom) {
-      flyT = Math.min(flyT + dt, flyDur);
-      var fe = flyT / flyDur;
-      fe = fe < 0.5 ? 2*fe*fe : -1+(4-2*fe)*fe;
+      var fp = Math.min((ts - flyStart) / flyDur, 1);
+      var fe = fp * fp * (3 - 2 * fp);
       rotYv = flyFrom.ry + (flyTarget.ry - flyFrom.ry) * fe;
       rotXv = flyFrom.rx + (flyTarget.rx - flyFrom.rx) * fe;
-      if (flyT >= flyDur) { flyTarget = null; flyFrom = null; if (flyCallback) { var _cb = flyCallback; flyCallback = null; _cb(); } }
+      if (fp >= 1) { flyTarget = null; flyFrom = null; if (flyCallback) { var _cb = flyCallback; flyCallback = null; _cb(); } }
     } else {
       if (autoRot) rotYv += 0.003 * rotSpd;
       if (Math.abs(momentumY) > 0.0002) { rotYv += momentumY; momentumY *= MOMENTUM_DECAY; } else momentumY = 0;
