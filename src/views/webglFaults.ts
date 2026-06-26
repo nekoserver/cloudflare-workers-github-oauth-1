@@ -111,6 +111,30 @@ canvas:active { cursor:grabbing; }
 .gvtt-name { font-weight:600; color:#e6edf3; flex-shrink:0; }
 .gvtt-act { color:#8b949e; font-size:10px; overflow:hidden; text-overflow:ellipsis; }
 .gvtt-hot { color:#ff9500; }
+.airport-drawer { position:absolute; left:0; top:0; height:100%; width:290px; background:#0d1117; border-right:1px solid #30363d; z-index:20; display:flex; flex-direction:column; transform:translateX(-100%); transition:transform .25s ease; overflow:hidden; box-shadow:4px 0 20px rgba(0,0,0,0); }
+.airport-drawer.open { transform:translateX(0); box-shadow:4px 0 20px rgba(0,0,0,.5); }
+.apt-hdr { display:flex; align-items:center; padding:10px 12px 9px; border-bottom:1px solid #30363d; flex-shrink:0; background:#0d1117; }
+.apt-hdr-title { flex:1; font-size:13px; font-weight:700; color:#58a6ff; }
+.apt-close-btn { background:none; border:none; color:#8b949e; font-size:17px; cursor:pointer; padding:0 4px; line-height:1; }
+.apt-close-btn:hover { color:#e6edf3; }
+.apt-body { flex:1; overflow-y:auto; }
+.apt-body::-webkit-scrollbar { width:4px; }
+.apt-body::-webkit-scrollbar-track { background:#0d1117; }
+.apt-body::-webkit-scrollbar-thumb { background:#30363d; border-radius:2px; }
+.apt-region { border-bottom:1px solid #21262d; }
+.apt-region > summary { padding:8px 12px; cursor:pointer; font-size:11px; font-weight:700; color:#8b949e; list-style:none; display:flex; align-items:center; gap:6px; user-select:none; -webkit-user-select:none; }
+.apt-region > summary::-webkit-details-marker { display:none; }
+.apt-region[open] > summary { color:#58a6ff; background:rgba(88,166,255,.05); }
+.apt-reg-arrow { margin-left:auto; font-size:9px; transition:transform .15s; }
+.apt-region[open] .apt-reg-arrow { transform:rotate(180deg); }
+.apt-item { padding:7px 12px 8px; border-bottom:1px solid #161b22; }
+.apt-item:last-child { border-bottom:none; }
+.apt-top { display:flex; align-items:baseline; gap:7px; margin-bottom:2px; }
+.apt-iata { font-family:monospace; font-size:13px; font-weight:700; color:#f78166; flex-shrink:0; }
+.apt-name { font-size:11px; color:#e6edf3; font-weight:600; }
+.apt-city { font-size:10px; color:#8b949e; margin-bottom:3px; }
+.apt-routes { font-size:10px; color:#484f58; line-height:1.6; }
+.apt-routes-lbl { color:#58a6ff; font-weight:600; margin-right:3px; }
 </style>
 </head>
 <body>
@@ -204,6 +228,79 @@ void main() {
       <button class="canvas-ctrl-btn" id="btnRiftTour">🌋 地溝帯</button>
       <button class="canvas-ctrl-btn" id="btnCaribbeanTour">🌊 カリブ海周辺</button>
       <button class="canvas-ctrl-btn active" id="btnVolToggle">🌋 火山 表示中</button>
+      <button class="canvas-ctrl-btn" id="btnAirport">🛬 空路 🛫</button>
+    </div>
+    <div class="airport-drawer" id="airportDrawer">
+      <div class="apt-hdr">
+        <span class="apt-hdr-title">🛬 主要国際空港</span>
+        <button class="apt-close-btn" id="airportClose">✕</button>
+      </div>
+      <div class="apt-body">
+        <details class="apt-region" open>
+          <summary>🌏 東アジア <span class="apt-reg-arrow">▼</span></summary>
+          <div class="apt-item"><div class="apt-top"><span class="apt-iata">NRT</span><span class="apt-name">成田国際空港</span></div><div class="apt-city">🇯🇵 日本・千葉（東京）</div><div class="apt-routes"><span class="apt-routes-lbl">✈</span>LAX · JFK · LHR · CDG · FRA · SIN · HKG · ICN · PVG · SYD</div></div>
+          <div class="apt-item"><div class="apt-top"><span class="apt-iata">HND</span><span class="apt-name">羽田空港</span></div><div class="apt-city">🇯🇵 日本・東京</div><div class="apt-routes"><span class="apt-routes-lbl">✈</span>LAX · JFK · LHR · DXB · SIN · ICN · PVG · SYD · HNL</div></div>
+          <div class="apt-item"><div class="apt-top"><span class="apt-iata">KIX</span><span class="apt-name">関西国際空港</span></div><div class="apt-city">🇯🇵 日本・大阪</div><div class="apt-routes"><span class="apt-routes-lbl">✈</span>SIN · ICN · PVG · HKG · BKK · LAX · LHR</div></div>
+          <div class="apt-item"><div class="apt-top"><span class="apt-iata">ICN</span><span class="apt-name">仁川国際空港</span></div><div class="apt-city">🇰🇷 韓国・ソウル</div><div class="apt-routes"><span class="apt-routes-lbl">✈</span>NRT · HND · PVG · SIN · BKK · LAX · JFK · LHR · DXB</div></div>
+          <div class="apt-item"><div class="apt-top"><span class="apt-iata">PVG</span><span class="apt-name">上海浦東国際空港</span></div><div class="apt-city">🇨🇳 中国・上海</div><div class="apt-routes"><span class="apt-routes-lbl">✈</span>NRT · ICN · SIN · LHR · CDG · FRA · LAX · JFK</div></div>
+          <div class="apt-item"><div class="apt-top"><span class="apt-iata">PEK</span><span class="apt-name">北京首都国際空港</span></div><div class="apt-city">🇨🇳 中国・北京</div><div class="apt-routes"><span class="apt-routes-lbl">✈</span>NRT · ICN · SIN · LHR · CDG · FRA · JFK · LAX</div></div>
+          <div class="apt-item"><div class="apt-top"><span class="apt-iata">HKG</span><span class="apt-name">香港国際空港</span></div><div class="apt-city">🇭🇰 香港</div><div class="apt-routes"><span class="apt-routes-lbl">✈</span>NRT · SIN · BKK · LHR · CDG · LAX · JFK · DXB · SYD</div></div>
+        </details>
+        <details class="apt-region">
+          <summary>🌴 東南アジア・オセアニア <span class="apt-reg-arrow">▼</span></summary>
+          <div class="apt-item"><div class="apt-top"><span class="apt-iata">SIN</span><span class="apt-name">チャンギ空港</span></div><div class="apt-city">🇸🇬 シンガポール</div><div class="apt-routes"><span class="apt-routes-lbl">✈</span>NRT · HKG · BKK · DXB · LHR · SYD · LAX · JFK</div></div>
+          <div class="apt-item"><div class="apt-top"><span class="apt-iata">BKK</span><span class="apt-name">スワンナプーム国際空港</span></div><div class="apt-city">🇹🇭 タイ・バンコク</div><div class="apt-routes"><span class="apt-routes-lbl">✈</span>NRT · HKG · SIN · KUL · DXB · LHR · LAX</div></div>
+          <div class="apt-item"><div class="apt-top"><span class="apt-iata">KUL</span><span class="apt-name">クアラルンプール国際空港</span></div><div class="apt-city">🇲🇾 マレーシア</div><div class="apt-routes"><span class="apt-routes-lbl">✈</span>SIN · BKK · HKG · NRT · DXB · LHR · SYD</div></div>
+          <div class="apt-item"><div class="apt-top"><span class="apt-iata">CGK</span><span class="apt-name">スカルノ・ハッタ国際空港</span></div><div class="apt-city">🇮🇩 インドネシア・ジャカルタ</div><div class="apt-routes"><span class="apt-routes-lbl">✈</span>SIN · KUL · NRT · HKG · DXB · SYD</div></div>
+          <div class="apt-item"><div class="apt-top"><span class="apt-iata">SYD</span><span class="apt-name">シドニー国際空港</span></div><div class="apt-city">🇦🇺 オーストラリア</div><div class="apt-routes"><span class="apt-routes-lbl">✈</span>SIN · HKG · NRT · LAX · LHR · AKL · DXB</div></div>
+          <div class="apt-item"><div class="apt-top"><span class="apt-iata">MEL</span><span class="apt-name">メルボルン空港</span></div><div class="apt-city">🇦🇺 オーストラリア</div><div class="apt-routes"><span class="apt-routes-lbl">✈</span>SIN · HKG · NRT · LAX · LHR · SYD · DXB</div></div>
+          <div class="apt-item"><div class="apt-top"><span class="apt-iata">AKL</span><span class="apt-name">オークランド国際空港</span></div><div class="apt-city">🇳🇿 ニュージーランド</div><div class="apt-routes"><span class="apt-routes-lbl">✈</span>SYD · SIN · NRT · LAX · LHR · HKG</div></div>
+        </details>
+        <details class="apt-region">
+          <summary>🕌 南アジア・中東 <span class="apt-reg-arrow">▼</span></summary>
+          <div class="apt-item"><div class="apt-top"><span class="apt-iata">DEL</span><span class="apt-name">インディラ・ガンジー国際空港</span></div><div class="apt-city">🇮🇳 インド・ニューデリー</div><div class="apt-routes"><span class="apt-routes-lbl">✈</span>DXB · DOH · LHR · JFK · SIN · ICN · NRT</div></div>
+          <div class="apt-item"><div class="apt-top"><span class="apt-iata">BOM</span><span class="apt-name">チャトラパティ・シヴァージー国際空港</span></div><div class="apt-city">🇮🇳 インド・ムンバイ</div><div class="apt-routes"><span class="apt-routes-lbl">✈</span>DXB · DOH · LHR · JFK · SIN · ICN</div></div>
+          <div class="apt-item"><div class="apt-top"><span class="apt-iata">DXB</span><span class="apt-name">ドバイ国際空港</span></div><div class="apt-city">🇦🇪 UAE・ドバイ</div><div class="apt-routes"><span class="apt-routes-lbl">✈</span>SIN · LHR · CDG · FRA · JFK · LAX · BOM · DEL · NRT · SYD · JNB</div></div>
+          <div class="apt-item"><div class="apt-top"><span class="apt-iata">DOH</span><span class="apt-name">ハマド国際空港</span></div><div class="apt-city">🇶🇦 カタール・ドーハ</div><div class="apt-routes"><span class="apt-routes-lbl">✈</span>LHR · CDG · JFK · LAX · SIN · NRT · SYD · DEL</div></div>
+          <div class="apt-item"><div class="apt-top"><span class="apt-iata">IST</span><span class="apt-name">イスタンブール空港</span></div><div class="apt-city">🇹🇷 トルコ・イスタンブール</div><div class="apt-routes"><span class="apt-routes-lbl">✈</span>LHR · CDG · FRA · JFK · DXB · SIN · NRT · JNB</div></div>
+        </details>
+        <details class="apt-region">
+          <summary>🏰 ヨーロッパ <span class="apt-reg-arrow">▼</span></summary>
+          <div class="apt-item"><div class="apt-top"><span class="apt-iata">LHR</span><span class="apt-name">ロンドン・ヒースロー空港</span></div><div class="apt-city">🇬🇧 イギリス・ロンドン</div><div class="apt-routes"><span class="apt-routes-lbl">✈</span>JFK · LAX · DXB · SIN · HKG · NRT · CDG · FRA · JNB</div></div>
+          <div class="apt-item"><div class="apt-top"><span class="apt-iata">CDG</span><span class="apt-name">シャルル・ド・ゴール空港</span></div><div class="apt-city">🇫🇷 フランス・パリ</div><div class="apt-routes"><span class="apt-routes-lbl">✈</span>LHR · JFK · LAX · DXB · NRT · SIN · FRA · GRU</div></div>
+          <div class="apt-item"><div class="apt-top"><span class="apt-iata">FRA</span><span class="apt-name">フランクフルト空港</span></div><div class="apt-city">🇩🇪 ドイツ・フランクフルト</div><div class="apt-routes"><span class="apt-routes-lbl">✈</span>LHR · CDG · JFK · LAX · DXB · NRT · SIN · GRU</div></div>
+          <div class="apt-item"><div class="apt-top"><span class="apt-iata">AMS</span><span class="apt-name">スキポール空港</span></div><div class="apt-city">🇳🇱 オランダ・アムステルダム</div><div class="apt-routes"><span class="apt-routes-lbl">✈</span>LHR · CDG · JFK · LAX · NRT · SIN · DXB · JNB</div></div>
+          <div class="apt-item"><div class="apt-top"><span class="apt-iata">MAD</span><span class="apt-name">マドリード・バラハス空港</span></div><div class="apt-city">🇪🇸 スペイン・マドリード</div><div class="apt-routes"><span class="apt-routes-lbl">✈</span>LHR · CDG · JFK · LAX · GRU · BOG · SCL · EZE</div></div>
+          <div class="apt-item"><div class="apt-top"><span class="apt-iata">FCO</span><span class="apt-name">フィウミチーノ空港</span></div><div class="apt-city">🇮🇹 イタリア・ローマ</div><div class="apt-routes"><span class="apt-routes-lbl">✈</span>LHR · CDG · FRA · JFK · LAX · DXB · NRT</div></div>
+        </details>
+        <details class="apt-region">
+          <summary>🗽 北アメリカ <span class="apt-reg-arrow">▼</span></summary>
+          <div class="apt-item"><div class="apt-top"><span class="apt-iata">LAX</span><span class="apt-name">ロサンゼルス国際空港</span></div><div class="apt-city">🇺🇸 アメリカ・ロサンゼルス</div><div class="apt-routes"><span class="apt-routes-lbl">✈</span>NRT · SYD · SIN · LHR · CDG · JFK · ORD · MEX · HNL</div></div>
+          <div class="apt-item"><div class="apt-top"><span class="apt-iata">JFK</span><span class="apt-name">ジョン・F・ケネディ国際空港</span></div><div class="apt-city">🇺🇸 アメリカ・ニューヨーク</div><div class="apt-routes"><span class="apt-routes-lbl">✈</span>LHR · CDG · FRA · NRT · HKG · DXB · LAX · ORD · GRU</div></div>
+          <div class="apt-item"><div class="apt-top"><span class="apt-iata">ORD</span><span class="apt-name">シカゴ・オヘア国際空港</span></div><div class="apt-city">🇺🇸 アメリカ・シカゴ</div><div class="apt-routes"><span class="apt-routes-lbl">✈</span>JFK · LAX · LHR · CDG · NRT · FRA · MEX · GRU</div></div>
+          <div class="apt-item"><div class="apt-top"><span class="apt-iata">YYZ</span><span class="apt-name">トロント・ピアソン国際空港</span></div><div class="apt-city">🇨🇦 カナダ・トロント</div><div class="apt-routes"><span class="apt-routes-lbl">✈</span>JFK · LAX · LHR · CDG · NRT · MEX · DEL</div></div>
+          <div class="apt-item"><div class="apt-top"><span class="apt-iata">MEX</span><span class="apt-name">メキシコシティ国際空港</span></div><div class="apt-city">🇲🇽 メキシコ・メキシコシティ</div><div class="apt-routes"><span class="apt-routes-lbl">✈</span>LAX · JFK · ORD · GRU · BOG · MAD · MIA</div></div>
+          <div class="apt-item"><div class="apt-top"><span class="apt-iata">MIA</span><span class="apt-name">マイアミ国際空港</span></div><div class="apt-city">🇺🇸 アメリカ・マイアミ</div><div class="apt-routes"><span class="apt-routes-lbl">✈</span>JFK · LAX · GRU · BOG · LIM · CCS · MEX · LHR · MAD</div></div>
+        </details>
+        <details class="apt-region">
+          <summary>🌿 南アメリカ・カリブ海 <span class="apt-reg-arrow">▼</span></summary>
+          <div class="apt-item"><div class="apt-top"><span class="apt-iata">GRU</span><span class="apt-name">グアルーリョス国際空港</span></div><div class="apt-city">🇧🇷 ブラジル・サンパウロ</div><div class="apt-routes"><span class="apt-routes-lbl">✈</span>LAX · JFK · LHR · CDG · FRA · BOG · EZE · LIM · MAD</div></div>
+          <div class="apt-item"><div class="apt-top"><span class="apt-iata">EZE</span><span class="apt-name">エセイサ国際空港</span></div><div class="apt-city">🇦🇷 アルゼンチン・ブエノスアイレス</div><div class="apt-routes"><span class="apt-routes-lbl">✈</span>GRU · LIM · BOG · LHR · CDG · MAD · JFK · SCL</div></div>
+          <div class="apt-item"><div class="apt-top"><span class="apt-iata">BOG</span><span class="apt-name">エル・ドラード国際空港</span></div><div class="apt-city">🇨🇴 コロンビア・ボゴタ</div><div class="apt-routes"><span class="apt-routes-lbl">✈</span>MEX · JFK · LAX · MIA · GRU · LIM · MAD · LHR</div></div>
+          <div class="apt-item"><div class="apt-top"><span class="apt-iata">LIM</span><span class="apt-name">ホルヘ・チャベス国際空港</span></div><div class="apt-city">🇵🇪 ペルー・リマ</div><div class="apt-routes"><span class="apt-routes-lbl">✈</span>BOG · GRU · EZE · LAX · JFK · MIA · MAD</div></div>
+          <div class="apt-item"><div class="apt-top"><span class="apt-iata">SCL</span><span class="apt-name">アルトゥーロ・メリノ・ベニテス国際空港</span></div><div class="apt-city">🇨🇱 チリ・サンティアゴ</div><div class="apt-routes"><span class="apt-routes-lbl">✈</span>GRU · EZE · LIM · BOG · MAD · LAX · JFK · MIA</div></div>
+          <div class="apt-item"><div class="apt-top"><span class="apt-iata">CCS</span><span class="apt-name">シモン・ボリバル国際空港</span></div><div class="apt-city">🇻🇪 ベネズエラ・カラカス</div><div class="apt-routes"><span class="apt-routes-lbl">✈</span>MIA · BOG · GRU · MAD · LHR · MEX · PTY</div></div>
+          <div class="apt-item"><div class="apt-top"><span class="apt-iata">PTY</span><span class="apt-name">トクメン国際空港</span></div><div class="apt-city">🇵🇦 パナマ・パナマシティ</div><div class="apt-routes"><span class="apt-routes-lbl">✈</span>MIA · JFK · LAX · BOG · GRU · LIM · MAD · MEX</div></div>
+        </details>
+        <details class="apt-region">
+          <summary>🦁 アフリカ <span class="apt-reg-arrow">▼</span></summary>
+          <div class="apt-item"><div class="apt-top"><span class="apt-iata">JNB</span><span class="apt-name">O・R・タンボ国際空港</span></div><div class="apt-city">🇿🇦 南アフリカ・ヨハネスブルグ</div><div class="apt-routes"><span class="apt-routes-lbl">✈</span>LHR · CDG · DXB · SIN · NBO · LAX · IST · AMS</div></div>
+          <div class="apt-item"><div class="apt-top"><span class="apt-iata">NBO</span><span class="apt-name">ジョモ・ケニヤッタ国際空港</span></div><div class="apt-city">🇰🇪 ケニア・ナイロビ</div><div class="apt-routes"><span class="apt-routes-lbl">✈</span>LHR · DXB · JNB · CDG · BOM · IST · AMS</div></div>
+          <div class="apt-item"><div class="apt-top"><span class="apt-iata">CAI</span><span class="apt-name">カイロ国際空港</span></div><div class="apt-city">🇪🇬 エジプト・カイロ</div><div class="apt-routes"><span class="apt-routes-lbl">✈</span>LHR · CDG · DXB · IST · BOM · JNB · DOH</div></div>
+          <div class="apt-item"><div class="apt-top"><span class="apt-iata">LOS</span><span class="apt-name">ムルタラ・ムハンマド国際空港</span></div><div class="apt-city">🇳🇬 ナイジェリア・ラゴス</div><div class="apt-routes"><span class="apt-routes-lbl">✈</span>LHR · CDG · DXB · JNB · NBO · IST · JFK</div></div>
+          <div class="apt-item"><div class="apt-top"><span class="apt-iata">ADD</span><span class="apt-name">ボレ国際空港</span></div><div class="apt-city">🇪🇹 エチオピア・アディスアベバ</div><div class="apt-routes"><span class="apt-routes-lbl">✈</span>LHR · CDG · DXB · JNB · NBO · NRT · LAX · JFK</div></div>
+        </details>
+      </div>
     </div>
   </div>
   <div class="side">
@@ -996,6 +1093,19 @@ void main() {
   document.getElementById('btnAlpHim').addEventListener('click', function() { startTour('alp_him'); });
   document.getElementById('btnRiftTour').addEventListener('click', function() { startTour('rift'); });
   document.getElementById('btnCaribbeanTour').addEventListener('click', function() { startTour('caribbean'); });
+
+  (function() {
+    var drawer = document.getElementById('airportDrawer');
+    var btn = document.getElementById('btnAirport');
+    btn.addEventListener('click', function() {
+      var open = drawer.classList.toggle('open');
+      btn.classList.toggle('active', open);
+    });
+    document.getElementById('airportClose').addEventListener('click', function() {
+      drawer.classList.remove('open');
+      btn.classList.remove('active');
+    });
+  })();
 
   var axisLocked = false, autoRot = true;
   var btnAxisLock = document.getElementById('btnAxisLock');
