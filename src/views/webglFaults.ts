@@ -867,7 +867,7 @@ void main() {
     btnVolToggle.textContent = on ? '🌋 火山 表示中' : '🌋 火山 非表示';
     if (on) { btnVolToggle.classList.add('active'); volToggleCtrl.textContent = '表示'; volToggleCtrl.classList.add('on'); }
     else { btnVolToggle.classList.remove('active'); volToggleCtrl.textContent = '非表示'; volToggleCtrl.classList.remove('on'); }
-    if (!on) { VOLCANOES.forEach(function(v) { volDivMap[v.id].style.display = 'none'; }); }
+    if (!on) { VOLCANOES.forEach(function(v) { volDivMap[v.id].style.display = 'none'; }); hideVolTooltip(); autoVolId = null; }
   }
   btnVolToggle.addEventListener('click', function() { setVolcanoes(!showVolcanoes); });
   volToggleCtrl.addEventListener('click', function() { setVolcanoes(!showVolcanoes); });
