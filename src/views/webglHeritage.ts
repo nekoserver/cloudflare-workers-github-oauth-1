@@ -269,6 +269,7 @@ void main() {
   <span style="flex:1"></span>
   <a href="/webgl-sphere" class="pwa-hide">&#9917; W杯</a>
   <a href="/webgl-lv-sphere" class="pwa-hide">🔮 LV Sphere</a>
+  <a href="/webgl-faults" class="pwa-hide">🌐 活断層</a>
   <a href="/settings" class="pwa-hide">&#9881;</a>
   <span class="pwa-hide" style="color:#8b949e;font-size:11px">${safeUser}</span>
 </div>
