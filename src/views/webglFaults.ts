@@ -90,6 +90,16 @@ canvas:active { cursor:grabbing; }
 .detail-desc { font-size:12px; color:#c9d1d9; line-height:1.6; margin-top:10px; padding-top:10px; border-top:1px solid #21262d; }
 .spd-row { padding:8px 10px 6px; border-bottom:1px solid #21262d; flex-shrink:0; }
 .spd-label { font-size:10px; font-weight:700; color:#f78166; text-transform:uppercase; letter-spacing:.5px; margin-bottom:4px; }
+.vol-mk { position:absolute; transform:translate(-50%,-50%); line-height:1; font-size:14px; pointer-events:auto; cursor:pointer; user-select:none; -webkit-user-select:none; filter:drop-shadow(0 1px 3px rgba(0,0,0,0.9)); }
+.vol-mk.active { font-size:18px; }
+#vol-tooltip { position:fixed; background:rgba(13,17,23,0.97); border:1px solid #ff9500; border-radius:8px; padding:7px 12px; font-size:12px; color:#e6edf3; min-width:180px; max-width:260px; pointer-events:none; opacity:0; transition:opacity .15s; z-index:65; transform:translate(-50%,-110%); line-height:1.7; }
+#vol-tooltip.below { transform:translate(-50%, 14px); }
+.vol-tt-name { font-weight:700; font-size:13px; color:#ff9500; margin-bottom:2px; }
+.vol-tt-sub { font-size:11px; color:#8b949e; }
+.toggle-row { display:flex; align-items:center; gap:8px; }
+.toggle-label { font-size:11px; color:#8b949e; flex:1; }
+.toggle-btn { background:#161b22; border:1px solid #30363d; border-radius:12px; color:#8b949e; font-size:10px; padding:3px 10px; cursor:pointer; transition:all .15s; white-space:nowrap; }
+.toggle-btn.on { background:#2d1a0c; border-color:#ff9500; color:#ff9500; }
 </style>
 </head>
 <body>
@@ -180,6 +190,8 @@ void main() {
       <button class="canvas-ctrl-btn" id="btnRingFire">🔥 環太平洋帯</button>
       <button class="canvas-ctrl-btn" id="btnAlpHim">⛰️ アルプス・ヒマラヤ帯</button>
       <button class="canvas-ctrl-btn" id="btnRiftTour">🌋 地溝帯</button>
+      <button class="canvas-ctrl-btn" id="btnCaribbeanTour">🌊 カリブ海周辺</button>
+      <button class="canvas-ctrl-btn active" id="btnVolToggle">🌋 火山 表示中</button>
     </div>
   </div>
   <div class="side">
@@ -253,6 +265,14 @@ void main() {
           </div>
         </div>
         <hr class="ctrl-sep">
+        <div class="ctrl-row">
+          <div class="ctrl-label">レイヤー表示</div>
+          <div class="toggle-row">
+            <span class="toggle-label">🌋 活火山マーカー</span>
+            <button class="toggle-btn on" id="volToggleCtrl">表示</button>
+          </div>
+        </div>
+        <hr class="ctrl-sep">
         <div style="font-size:11px;color:#484f58;line-height:1.8">
           ドラッグ: 回転<br>
           ホイール: ズーム<br>
@@ -266,6 +286,7 @@ void main() {
 </div>
 
 <div id="mk-tooltip"></div>
+<div id="vol-tooltip"></div>
 
 <script>
 (function() {
@@ -621,8 +642,167 @@ void main() {
       desc:'アラスカ州内部を走る大規模な右横ずれ断層。2002年の地震では地表に最大8.8mのずれが生じた。北アメリカ大陸最高峰デナリ（旧マッキンリー山）のそばを通る。',
       center:[63,-148],
       pts:[[60,-148],[61,-145.5],[62.5,-143],[64,-141],[65,-138],[65.5,-136]]
+    },
+    {
+      id:'el_pilar', n:'エル・ピラル断層', t:'transform', region:'南アメリカ・カリブ海', country:'ベネズエラ', length:550,
+      maxMag:7.7, lastMajor:'2024年（カリアコ沖地震 M6.5）',
+      desc:'ベネズエラ北部沿岸を東西に走る右横ずれ断層。北アメリカプレートと南アメリカプレートの境界を形成し、カリアコ湾から西方のバルセロナ沖まで延びる。1997年のクマナ地震（M6.9）など歴史的に多くの地震を引き起こしており、マラカイボ沿岸の都市部への影響が懸念される。2024〜2025年にかけて活発な群発地震が観測された。',
+      center:[10.5,-63.5],
+      pts:[[10.2,-67],[10.4,-65.5],[10.6,-64],[10.6,-62.5],[10.5,-61.2],[10.4,-60]]
+    },
+    {
+      id:'bocono', n:'ボコノ断層', t:'transform', region:'南アメリカ', country:'ベネズエラ', length:500,
+      maxMag:7.5, lastMajor:'1812年（カラカス地震 M7.7 推定）',
+      desc:'ベネズエラ・アンデス山脈を縦断する左横ずれ断層。コロンビアとの国境付近からマラカイボ湖南方まで延びる。1812年のカラカス地震はこの断層活動によるもので、推定1万人以上が犠牲になった。',
+      center:[8.5,-70.5],
+      pts:[[7.2,-72.5],[7.8,-71.5],[8.5,-70.5],[9.5,-69.5],[10.2,-68.5],[10.5,-67.5]]
+    },
+    {
+      id:'south_caribbean', n:'南カリブ海沈み込み帯', t:'subduction', region:'カリブ海・南アメリカ', country:'コロンビア/ベネズエラ', length:1500,
+      maxMag:8.0, lastMajor:'2018年（ベネズエラ北部沖地震 M7.3）',
+      desc:'カリブ海プレートが南アメリカプレートの下に沈み込む複合的な境界帯。ベネズエラ北岸沖に平行に走り、沈み込みと横ずれの複合運動が生じる。2018年のM7.3地震はこの地域を震源とし、ベネズエラ北部全域で強い揺れが発生した。',
+      center:[11,-66],
+      pts:[[12,-74],[11.8,-71],[11.5,-68],[11.2,-65],[11,-62],[10.8,-60],[10.5,-57]]
+    },
+    {
+      id:'caribbean_north', n:'カリブ海北部プレート境界', t:'transform', region:'カリブ海', country:'キューバ/ハイチ/ドミニカ共和国/プエルトリコ', length:2200,
+      maxMag:8.1, lastMajor:'2010年（ハイチ地震 M7.0）',
+      desc:'北アメリカプレートとカリブ海プレートの境界。セプテントリオナル断層（ハイチ）・エンリキロ断層（ハイチ）・プエルトリコ海溝などからなる複合的な断層系。2010年のハイチ地震（M7.0）ではポルトープランスが壊滅的な被害を受け、31万人以上が死亡した。',
+      center:[18,-72],
+      pts:[[15,-89],[16,-86],[17,-83],[17.5,-80],[17.8,-77],[18,-74],[18.2,-72],[18.5,-70],[18.5,-68],[18.3,-66],[17.5,-64],[16.5,-62]]
+    },
+    {
+      id:'lesser_antilles', n:'小アンティル弧沈み込み帯', t:'subduction', region:'カリブ海東部', country:'マルティニーク/セントビンセント/モントセラト他', length:850,
+      maxMag:8.0, lastMajor:'1843年（M8.0 推定）',
+      desc:'北アメリカプレートとカリブ海プレートが接するカリブ海東縁の沈み込み帯。ペレー山（マルティニーク）・スフリエール・ヒルズ（モントセラト）・スフリエール（セントビンセント）などの活火山を形成している。',
+      center:[14.5,-61.5],
+      pts:[[16.5,-62],[15.5,-61.5],[14.5,-61],[13.5,-61.2],[12.5,-62],[11.5,-63],[10.5,-63.5]]
+    },
+    {
+      id:'motagua', n:'モタグア断層', t:'transform', region:'中央アメリカ', country:'グアテマラ', length:400,
+      maxMag:7.9, lastMajor:'1976年（グアテマラ地震 M7.5）',
+      desc:'グアテマラを東西に横断する北アメリカプレートとカリブ海プレートの境界断層。1976年の地震では約23,000人が死亡。カリブ・ココス・北アメリカの3プレートが接近する複雑な地域。',
+      center:[15.4,-90],
+      pts:[[15,-92],[15.2,-91],[15.4,-90],[15.5,-89],[15.7,-88],[16,-87]]
     }
   ];
+
+  var VOLCANOES = [
+    {id:'kilauea',n:'キラウエア',c:'アメリカ合衆国（ハワイ）',elev:1247,lastErupt:'2024年（現在も活動中）',lat:19.42,lon:-155.29},
+    {id:'mauna_loa',n:'マウナ・ロア',c:'アメリカ合衆国（ハワイ）',elev:4169,lastErupt:'2022年',lat:19.48,lon:-155.61},
+    {id:'sakurajima',n:'桜島',c:'日本',elev:1117,lastErupt:'2024年（頻繁に噴火）',lat:31.58,lon:130.66},
+    {id:'asosan',n:'阿蘇山',c:'日本',elev:1592,lastErupt:'2024年',lat:32.88,lon:131.10},
+    {id:'fujisan',n:'富士山',c:'日本',elev:3776,lastErupt:'1707年（最後の噴火）',lat:35.36,lon:138.73},
+    {id:'shinmoedake',n:'新燃岳（霧島）',c:'日本',elev:1421,lastErupt:'2018年',lat:31.93,lon:130.86},
+    {id:'nishino',n:'西之島',c:'日本',elev:160,lastErupt:'2023年',lat:27.25,lon:140.87},
+    {id:'etna',n:'エトナ山',c:'イタリア（シチリア）',elev:3357,lastErupt:'2024年（頻繁に噴火）',lat:37.75,lon:15.00},
+    {id:'vesuvius',n:'ヴェスヴィオ山',c:'イタリア',elev:1281,lastErupt:'1944年',lat:40.82,lon:14.43},
+    {id:'stromboli',n:'ストロンボリ島',c:'イタリア',elev:924,lastErupt:'2024年（ほぼ常時噴火）',lat:38.79,lon:15.21},
+    {id:'santorini',n:'サントリーニ（テラ）',c:'ギリシャ',elev:329,lastErupt:'1950年',lat:36.42,lon:25.40},
+    {id:'hekla',n:'ヘクラ山',c:'アイスランド',elev:1491,lastErupt:'2000年',lat:63.98,lon:-19.70},
+    {id:'eyjafjallajokull',n:'エイヤフィヤトラヨークトル',c:'アイスランド',elev:1666,lastErupt:'2010年（航空障害）',lat:63.63,lon:-19.62},
+    {id:'katla',n:'カトラ',c:'アイスランド',elev:1512,lastErupt:'1918年（次の大噴火が懸念）',lat:63.63,lon:-19.05},
+    {id:'grindavik',n:'スヴァルツェンギ火山系',c:'アイスランド（レイキャネス半島）',elev:160,lastErupt:'2024〜2025年（複数回噴火）',lat:63.87,lon:-22.43},
+    {id:'merapi',n:'メラピ山',c:'インドネシア（ジャワ）',elev:2930,lastErupt:'2024年',lat:-7.54,lon:110.44},
+    {id:'krakatau',n:'クラカタウ',c:'インドネシア',elev:813,lastErupt:'2022年',lat:-6.10,lon:105.42},
+    {id:'sinabung',n:'シナブン山',c:'インドネシア（スマトラ）',elev:2460,lastErupt:'2021年',lat:3.17,lon:98.39},
+    {id:'semeru',n:'スメル山',c:'インドネシア（ジャワ）',elev:3676,lastErupt:'2024年',lat:-8.11,lon:112.92},
+    {id:'agung',n:'アグン山',c:'インドネシア（バリ）',elev:3142,lastErupt:'2019年',lat:-8.34,lon:115.51},
+    {id:'pinatubo',n:'ピナトゥボ山',c:'フィリピン',elev:1486,lastErupt:'1991年（20世紀最大級）',lat:15.14,lon:120.35},
+    {id:'mayon',n:'マヨン山',c:'フィリピン',elev:2463,lastErupt:'2023年',lat:13.26,lon:123.69},
+    {id:'taal',n:'タール火山',c:'フィリピン',elev:311,lastErupt:'2020年',lat:14.01,lon:120.99},
+    {id:'klyuchevskaya',n:'クリュチェフスカヤ山',c:'ロシア（カムチャツカ）',elev:4750,lastErupt:'2024年',lat:56.06,lon:160.64},
+    {id:'shiveluch',n:'シヴェルチ山',c:'ロシア（カムチャツカ）',elev:3307,lastErupt:'2024年',lat:56.65,lon:161.36},
+    {id:'st_helens',n:'セント・ヘレンズ山',c:'アメリカ合衆国',elev:2549,lastErupt:'2008年',lat:46.20,lon:-122.19},
+    {id:'redoubt',n:'リダウト山',c:'アメリカ合衆国（アラスカ）',elev:3108,lastErupt:'2009年',lat:60.49,lon:-152.74},
+    {id:'popocatepetl',n:'ポポカテペトル山',c:'メキシコ',elev:5426,lastErupt:'2024年（活発に活動中）',lat:19.02,lon:-98.62},
+    {id:'colima',n:'コリマ火山',c:'メキシコ',elev:3850,lastErupt:'2022年',lat:19.51,lon:-103.62},
+    {id:'soufriere_hills',n:'スフリエール・ヒルズ',c:'モントセラト（英領）',elev:1050,lastErupt:'2010年',lat:16.72,lon:-62.18},
+    {id:'soufriere_sv',n:'ラ・スフリエール（セントビンセント）',c:'セントビンセント・グレナディーン',elev:1234,lastErupt:'2021年（大噴火・島民避難）',lat:13.34,lon:-61.18},
+    {id:'pelee',n:'プレー山',c:'マルティニーク（仏領）',elev:1394,lastErupt:'1932年（1902年に3万人死亡）',lat:14.81,lon:-61.17},
+    {id:'cotopaxi',n:'コトパクシ山',c:'エクアドル',elev:5897,lastErupt:'2023年',lat:-0.68,lon:-78.44},
+    {id:'tungurahua',n:'トゥングラウア山',c:'エクアドル',elev:5023,lastErupt:'2016年',lat:-1.47,lon:-78.44},
+    {id:'villarrica',n:'ビジャリカ山',c:'チリ',elev:2847,lastErupt:'2024年',lat:-39.42,lon:-71.94},
+    {id:'calbuco',n:'カルブコ山',c:'チリ',elev:2015,lastErupt:'2015年',lat:-41.33,lon:-72.61},
+    {id:'galeras',n:'ガレラス山',c:'コロンビア',elev:4276,lastErupt:'2014年',lat:1.22,lon:-77.37},
+    {id:'nyiragongo',n:'ニーラゴンゴ山',c:'コンゴ民主共和国',elev:3470,lastErupt:'2021年',lat:-1.52,lon:29.25},
+    {id:'ol_doinyo',n:'オル・ドイニョ・レンガイ',c:'タンザニア',elev:2962,lastErupt:'2023年',lat:-2.76,lon:35.90},
+    {id:'erta_ale',n:'エルタ・アレ',c:'エチオピア',elev:613,lastErupt:'2024年（常時活動）',lat:13.60,lon:40.67},
+    {id:'erebus',n:'エレバス山',c:'南極',elev:3794,lastErupt:'2024年（常時活動）',lat:-77.53,lon:167.17},
+    {id:'ruapehu',n:'ルアペフ山',c:'ニュージーランド',elev:2797,lastErupt:'2007年',lat:-39.28,lon:175.57},
+    {id:'whakaari',n:'ファカーリ（ホワイト島）',c:'ニュージーランド',elev:321,lastErupt:'2019年（死者16名）',lat:-37.52,lon:177.18},
+    {id:'ambae',n:'アンバエ（マナロ）',c:'バヌアツ',elev:1496,lastErupt:'2018年',lat:-15.39,lon:167.83},
+    {id:'yasur',n:'ヤスール山',c:'バヌアツ（タンナ島）',elev:361,lastErupt:'2024年（ほぼ常時噴火）',lat:-19.53,lon:169.44},
+    {id:'bagana',n:'バガナ山',c:'パプアニューギニア',elev:1855,lastErupt:'2024年',lat:-6.14,lon:155.20},
+    {id:'ulawun',n:'ウラウン山',c:'パプアニューギニア',elev:2334,lastErupt:'2024年',lat:-5.05,lon:151.33},
+    {id:'rainier',n:'レーニア山',c:'アメリカ合衆国',elev:4392,lastErupt:'1894年（潜在的脅威）',lat:46.85,lon:-121.73},
+    {id:'sabancaya',n:'サバンカヤ山',c:'ペルー',elev:5976,lastErupt:'2024年',lat:-15.78,lon:-71.86},
+    {id:'ubinas',n:'ウビナス山',c:'ペルー',elev:5672,lastErupt:'2024年',lat:-16.36,lon:-70.90},
+    {id:'sangay',n:'サンガイ山',c:'エクアドル',elev:5286,lastErupt:'2024年（活発）',lat:-2.00,lon:-78.34}
+  ];
+
+  VOLCANOES.forEach(function(v) {
+    v._p = latLonToXYZ(v.lat, v.lon, 1.005);
+  });
+
+  var showVolcanoes = true;
+  var volMarkersDiv = document.getElementById('markers');
+  var volDivMap = {};
+  var volTooltipEl = document.getElementById('vol-tooltip');
+
+  VOLCANOES.forEach(function(v) {
+    var el = document.createElement('div');
+    el.className = 'vol-mk';
+    el.textContent = '🌋';
+    el.style.display = 'none';
+    el.setAttribute('data-volid', v.id);
+    volMarkersDiv.appendChild(el);
+    volDivMap[v.id] = el;
+    el.addEventListener('mouseenter', function(e) {
+      showVolTooltip(e.clientX, e.clientY, v);
+    });
+    el.addEventListener('mouseleave', function() { hideVolTooltip(); });
+    el.addEventListener('click', function() {
+      selectFaultFromVol(v);
+    });
+  });
+
+  function showVolTooltip(x, y, v) {
+    volTooltipEl.innerHTML =
+      '<div class="vol-tt-name">🌋 ' + v.n + '</div>' +
+      '<div class="vol-tt-sub">' + v.c + ' / 標高 ' + v.elev.toLocaleString() + 'm</div>' +
+      '<div class="vol-tt-sub">最新噴火: ' + v.lastErupt + '</div>';
+    var rect = canvas.getBoundingClientRect();
+    var below = y < rect.top + rect.height * 0.3;
+    volTooltipEl.style.left = x + 'px';
+    volTooltipEl.style.top = y + 'px';
+    volTooltipEl.className = below ? 'below' : '';
+    volTooltipEl.style.opacity = '1';
+  }
+  function hideVolTooltip() { volTooltipEl.style.opacity = '0'; }
+
+  function selectFaultFromVol(v) {
+    var tRx = -v.lat * Math.PI / 180;
+    var rawDy = -(v.lon + 180) * Math.PI / 180 + Math.PI;
+    var dy = rawDy - (rotYv % (2 * Math.PI));
+    while (dy > Math.PI) dy -= 2 * Math.PI;
+    while (dy < -Math.PI) dy += 2 * Math.PI;
+    flyFrom = {ry: rotYv, rx: rotXv};
+    flyTarget = {ry: rotYv + dy, rx: tRx};
+    flyT = 0; flyDur = 1000;
+  }
+
+  var btnVolToggle = document.getElementById('btnVolToggle');
+  var volToggleCtrl = document.getElementById('volToggleCtrl');
+  function setVolcanoes(on) {
+    showVolcanoes = on;
+    btnVolToggle.textContent = on ? '🌋 火山 表示中' : '🌋 火山 非表示';
+    if (on) { btnVolToggle.classList.add('active'); volToggleCtrl.textContent = '表示'; volToggleCtrl.classList.add('on'); }
+    else { btnVolToggle.classList.remove('active'); volToggleCtrl.textContent = '非表示'; volToggleCtrl.classList.remove('on'); }
+    if (!on) { VOLCANOES.forEach(function(v) { volDivMap[v.id].style.display = 'none'; }); }
+  }
+  btnVolToggle.addEventListener('click', function() { setVolcanoes(!showVolcanoes); });
+  volToggleCtrl.addEventListener('click', function() { setVolcanoes(!showVolcanoes); });
 
   var activeFilter = 'all';
   var selectedFaultId = null;
@@ -735,7 +915,8 @@ void main() {
   var TOUR_GROUPS = {
     'ring_fire': ['japan_trench','nankai','ryukyu','kuril','aleutian','cascadia','peru_chile','tonga','mariana','sumatra','izu_ogasawara'],
     'alp_him': ['north_anatolian','dead_sea','main_himalayan','sumatra_fault','philippine'],
-    'rift': ['east_african_rift','afar_triangle','mid_atlantic','east_pacific_rise','mid_indian','sw_indian_ridge']
+    'rift': ['east_african_rift','afar_triangle','mid_atlantic','east_pacific_rise','mid_indian','sw_indian_ridge'],
+    'caribbean': ['el_pilar','bocono','south_caribbean','caribbean_north','lesser_antilles','motagua','san_andreas']
   };
   var tourGroup = null, tourIdx = 0, tourTimer = null;
 
@@ -755,6 +936,7 @@ void main() {
   document.getElementById('btnRingFire').addEventListener('click', function() { startTour('ring_fire'); });
   document.getElementById('btnAlpHim').addEventListener('click', function() { startTour('alp_him'); });
   document.getElementById('btnRiftTour').addEventListener('click', function() { startTour('rift'); });
+  document.getElementById('btnCaribbeanTour').addEventListener('click', function() { startTour('caribbean'); });
 
   var axisLocked = false, autoRot = true;
   var btnAxisLock = document.getElementById('btnAxisLock');
@@ -959,6 +1141,25 @@ void main() {
     gl.enableVertexAttribArray(aNorm);
     gl.enableVertexAttribArray(aUV);
 
+    if (showVolcanoes) {
+      VOLCANOES.forEach(function(v) {
+        var p = v._p;
+        var mz = model[2]*p[0] + model[6]*p[1] + model[10]*p[2];
+        var el = volDivMap[v.id];
+        if (mz < 0.02) { el.style.display = 'none'; return; }
+        var mcx = mvp[0]*p[0] + mvp[4]*p[1] + mvp[8]*p[2] + mvp[12];
+        var mcy = mvp[1]*p[0] + mvp[5]*p[1] + mvp[9]*p[2] + mvp[13];
+        var mcw = mvp[3]*p[0] + mvp[7]*p[1] + mvp[11]*p[2] + mvp[15];
+        if (mcw <= 0) { el.style.display = 'none'; return; }
+        var sx = (mcx/mcw + 1) * W / 2;
+        var sy = (-mcy/mcw + 1) * H / 2;
+        el.style.display = 'block';
+        el.style.left = sx + 'px';
+        el.style.top = sy + 'px';
+        el.style.opacity = Math.min(1, (mz - 0.02) * 10).toFixed(2);
+      });
+    }
+
     var visCount = 0;
     FAULTS.forEach(function(f) {
       if (activeFilter !== 'all' && f.t !== activeFilter) return;
@@ -967,7 +1168,8 @@ void main() {
       if (mz < 0.05) return;
       visCount++;
     });
-    hud.textContent = '活断層: ' + FAULTS.length + '  表示中: ' + visCount;
+    var volCount = showVolcanoes ? VOLCANOES.length : 0;
+    hud.textContent = '活断層: ' + FAULTS.length + '  活火山: ' + volCount + '  表示: ' + visCount;
   }
 
   renderFaultList();
