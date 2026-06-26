@@ -1580,9 +1580,27 @@ void main() {
       if (fp >= 1) { flyTarget = null; flyFrom = null; if (flyCallback) { var _cb = flyCallback; flyCallback = null; _cb(); } }
     } else {
       if (autoRot) rotYv += 0.003 * rotSpd;
+      var wasSpinning = Math.abs(momentumY) > 0.0002 || Math.abs(momentumX) > 0.0002;
       if (Math.abs(momentumY) > 0.0002) { rotYv += momentumY; momentumY *= MOMENTUM_DECAY; } else momentumY = 0;
       if (!axisLocked && Math.abs(momentumX) > 0.0002) { rotXv = clampElev(rotXv + momentumX); momentumX *= MOMENTUM_DECAY; } else momentumX = 0;
       if (axisLocked) rotXv = 0;
+      var nowSpinning = Math.abs(momentumY) > 0.0002 || Math.abs(momentumX) > 0.0002;
+      if (wasSpinning && !nowSpinning && !autoRot && showVolcanoes) {
+        var bvBestIdx = -1, bvBestMz = -1;
+        for (var bvi = 0; bvi < VOLCANOES.length; bvi++) {
+          var bvp = VOLCANOES[bvi]._p;
+          var bvmz = model[2]*bvp[0] + model[6]*bvp[1] + model[10]*bvp[2];
+          if (bvmz > 0.05 && bvmz > bvBestMz) { bvBestMz = bvmz; bvBestIdx = bvi; }
+        }
+        if (bvBestIdx >= 0) {
+          var bv = VOLCANOES[bvBestIdx];
+          var bvEl = volDivMap[bv.id];
+          if (bvEl && bvEl.style.display !== 'none') {
+            var bvr = bvEl.getBoundingClientRect();
+            showVolTooltip(bvr.left + bvr.width / 2, bvr.top + bvr.height / 2, bv);
+          }
+        }
+      }
     }
 
     persp(proj, 0.7, W / H, 0.1, 100);
@@ -1679,7 +1697,7 @@ void main() {
         if (acv.id !== autoVolId) {
           autoVolId = acv.id;
           volTooltipEl.innerHTML =
-            '<div class="vol-tt-name">🌋 ' + acv.n + '</div>' +
+            '<div class="vol-tt-name">' + getVolFlag(acv.c) + ' 🌋 ' + acv.n + '</div>' +
             '<div class="vol-tt-sub">' + acv.c + ' / 標高 ' + acv.elev.toLocaleString() + 'm</div>' +
             '<div class="vol-tt-sub">最新噴火: ' + acv.lastErupt + '</div>';
         }
