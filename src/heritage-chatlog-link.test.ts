@@ -225,14 +225,14 @@ describe('世界遺産チャットログリンク: 都市タップ時の全遺�
   it('index.ts に /api/aichat/check-heritage-questions-batch エンドポイントが定義されている', () => {
     const { readFileSync } = require('fs');
     const src = readFileSync(new URL('./index.ts', import.meta.url).pathname, 'utf-8');
-    expect(src).toContain("app.get('/api/aichat/check-heritage-questions-batch'");
+    expect(src).toContain("app.post('/api/aichat/check-heritage-questions-batch'");
   });
 
   it('index.ts の batch エンドポイントが ai_chat_shares を参照している', () => {
     const { readFileSync } = require('fs');
     const src = readFileSync(new URL('./index.ts', import.meta.url).pathname, 'utf-8');
     const idx = src.indexOf('check-heritage-questions-batch');
-    const block = src.slice(idx, idx + 1200);
+    const block = src.slice(idx, idx + 1800);
     expect(block).toContain('ai_chat_shares');
     expect(block).toContain('heritages');
     expect(block).toContain('answered');

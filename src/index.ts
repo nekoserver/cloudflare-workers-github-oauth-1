@@ -3368,12 +3368,18 @@ app.get('/api/aichat/check-heritage-questions', authMiddleware, async (c) => {
   return jsonUtf8({ answered });
 });
 
-app.get('/api/aichat/check-heritage-questions-batch', authMiddleware, async (c) => {
+app.post('/api/aichat/check-heritage-questions-batch', authMiddleware, async (c) => {
   const user = c.get('user');
   if (!c.env.DB) return jsonUtf8({ answered: {} }, 503);
-  const raw = (c.req.query('heritages') ?? '').trim();
-  if (!raw) return jsonUtf8({ answered: {} });
-  const heritages = raw.split(',').map((h) => h.trim()).filter(Boolean).slice(0, 100);
+  let heritages: string[] = [];
+  try {
+    const body = await c.req.json<{ heritages?: unknown }>();
+    if (Array.isArray(body.heritages)) {
+      heritages = (body.heritages as unknown[]).map((h) => String(h).trim()).filter(Boolean).slice(0, 100);
+    }
+  } catch {
+    return jsonUtf8({ answered: {} }, 400);
+  }
   if (!heritages.length) return jsonUtf8({ answered: {} });
   const topics = ['交通手段', '見どころ', '最寄り空港', '鉄道でのアクセス', '宿泊施設', 'スポーツ施設'];
   const allQuestions: string[] = [];
