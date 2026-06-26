@@ -68,11 +68,16 @@ describe('世界遺産チャットログリンク: キャッシュ判定テー�
   it('heritage-keywords-check がトピック別に heritage_question_view_log を参照している', () => {
     const { readFileSync } = require('fs');
     const src = readFileSync(new URL('./index.ts', import.meta.url).pathname, 'utf-8');
-    const idx = src.indexOf('/api/aichat/heritage-keywords-check');
-    const block = src.slice(idx, idx + 900);
-    expect(block).toContain('heritage_question_view_log');
-    expect(block).toContain('heritage_name');
-    expect(block).toContain('topic');
+    // SQL はバインド数チャンク分割のため lookupHeritageKeywordTopics ヘルパーへ集約されている
+    const helperIdx = src.indexOf('export async function lookupHeritageKeywordTopics');
+    expect(helperIdx).toBeGreaterThan(-1);
+    const helperBlock = src.slice(helperIdx, helperIdx + 1200);
+    expect(helperBlock).toContain('heritage_question_view_log');
+    expect(helperBlock).toContain('heritage_name');
+    expect(helperBlock).toContain('topic');
+    // エンドポイントは薄く、ヘルパーを呼び出している
+    const epIdx = src.indexOf("app.get('/api/aichat/heritage-keywords-check'");
+    expect(src.slice(epIdx, epIdx + 900)).toContain('lookupHeritageKeywordTopics');
   });
 
   it('heritage-keywords-check が aichat_search_log を参照していない', () => {
@@ -217,7 +222,7 @@ describe('世界遺産チャットログリンク: 都市タップ時の全遺�
     const html = buildPage();
     const batchIdx = html.indexOf('check-heritage-questions-batch');
     expect(batchIdx).toBeGreaterThan(-1);
-    const block = html.slice(batchIdx, batchIdx + 600);
+    const block = html.slice(batchIdx, batchIdx + 800);
     expect(block).toContain('allHeritageNames.forEach(function(name)');
     expect(block).toContain('ensureTopicBadge(inner, name, t)');
   });
@@ -231,11 +236,16 @@ describe('世界遺産チャットログリンク: 都市タップ時の全遺�
   it('index.ts の batch エンドポイントが ai_chat_shares を参照している', () => {
     const { readFileSync } = require('fs');
     const src = readFileSync(new URL('./index.ts', import.meta.url).pathname, 'utf-8');
-    const idx = src.indexOf('check-heritage-questions-batch');
-    const block = src.slice(idx, idx + 1800);
-    expect(block).toContain('ai_chat_shares');
+    // 質問キャッシュ判定の SQL は lookupHeritageQuestionAnswers ヘルパーへ集約されている
+    const helperIdx = src.indexOf('export async function lookupHeritageQuestionAnswers');
+    expect(helperIdx).toBeGreaterThan(-1);
+    expect(src.slice(helperIdx, helperIdx + 1800)).toContain('ai_chat_shares');
+    // エンドポイントは heritages を受け取り answered を返し、ヘルパーを呼ぶ
+    const idx = src.indexOf("app.post('/api/aichat/check-heritage-questions-batch'");
+    const block = src.slice(idx, idx + 900);
     expect(block).toContain('heritages');
     expect(block).toContain('answered');
+    expect(block).toContain('lookupHeritageQuestionAnswers');
   });
 });
 

@@ -781,6 +781,9 @@ function openAccordion(tr) {
       return fetch('/api/aichat/check-heritage-questions-batch', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ heritages: allHeritageNames }) })
         .then(function(r) { return r.json(); })
         .then(function(batchData) {
+          if (batchData && batchData.error) {
+            console.warn('[heritage] batch question check partial failure:', batchData.error);
+          }
           var allAnswered = batchData.answered || {};
           allHeritageNames.forEach(function(name) {
             var nameAnswered = allAnswered[name] || {};
