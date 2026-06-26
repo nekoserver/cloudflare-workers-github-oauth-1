@@ -111,6 +111,37 @@ td.pop{text-align:right;color:#8b949e;font-size:11px;min-width:64px}
 .hcl-entry-a{font-size:12px;color:#c9d1d9;line-height:1.6;white-space:pre-wrap;word-break:break-word;max-height:160px;overflow-y:auto}
 .hcl-entry-meta{font-size:11px;color:#484f58;display:flex;gap:8px}
 .hcl-empty{color:#484f58;font-size:12px;padding:16px 0;text-align:center}
+.cap-dist-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.78);align-items:center;justify-content:center}
+.cap-dist-overlay.open{display:flex}
+.cap-dist-modal{background:#0d1117;border:1px solid #30363d;border-radius:10px;width:min(96vw,860px);max-height:86vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 8px 40px rgba(0,0,0,.9)}
+.cap-dist-head{padding:12px 16px;border-bottom:1px solid #21262d;display:flex;align-items:center;gap:8px;flex-shrink:0}
+.cap-dist-title{font-size:14px;font-weight:700;flex:1;color:#e6edf3}
+.cap-dist-close{background:none;border:none;color:#8b949e;font-size:18px;cursor:pointer;padding:2px 6px;line-height:1}
+.cap-dist-tabs{display:flex;gap:0;border-bottom:1px solid #30363d;flex-shrink:0}
+.cap-dist-tab{background:none;border:none;border-bottom:2px solid transparent;color:#8b949e;font-size:12px;padding:8px 16px;cursor:pointer;font-family:inherit;transition:color .15s,border-color .15s}
+.cap-dist-tab.active{color:#58a6ff;border-bottom-color:#58a6ff}
+.cap-dist-body{overflow:auto;padding:16px;flex:1}
+.cap-matrix{border-collapse:collapse;font-size:11px;white-space:nowrap}
+.cap-matrix th{background:#161b22;padding:6px 8px;color:#8b949e;font-weight:600;position:sticky;top:0;z-index:1;border:1px solid #21262d}
+.cap-matrix th.row-h{position:sticky;left:0;z-index:2;background:#161b22}
+.cap-matrix td{padding:5px 8px;text-align:right;border:1px solid #21262d}
+.cap-matrix td.self{background:#1a1a1a;color:#484f58;text-align:center}
+.cap-matrix td.row-head{font-weight:600;color:#e6edf3;text-align:left;position:sticky;left:0;background:#161b22;border-right:2px solid #30363d;z-index:1}
+.dist-near{color:#3fb950}
+.dist-mid{color:#d4a017}
+.dist-far{color:#f85149}
+.eu-from-wrap{display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap}
+.eu-from-label{font-size:12px;color:#8b949e}
+.eu-from-select{background:#0d1117;border:1px solid #30363d;border-radius:6px;color:#c9d1d9;font-size:12px;padding:5px 8px;outline:none}
+.eu-dist-list{display:flex;flex-direction:column;gap:3px}
+.eu-dist-row{display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:5px;border:1px solid #21262d;font-size:12px}
+.eu-dist-row:hover{background:#161b22}
+.eu-dist-rank{color:#484f58;font-size:10px;width:24px;text-align:right;flex-shrink:0}
+.eu-dist-flag{font-size:14px;flex-shrink:0}
+.eu-dist-name{flex:1;color:#e6edf3}
+.eu-dist-bar-wrap{width:80px;flex-shrink:0}
+.eu-dist-bar{height:6px;border-radius:3px;background:#1f6feb;min-width:2px}
+.eu-dist-km{font-weight:700;min-width:72px;text-align:right;font-size:11px}
 </style>
 </head>
 <body>
@@ -140,6 +171,7 @@ td.pop{text-align:right;color:#8b949e;font-size:11px;min-width:64px}
     <button class="mode-tab" id="tab-country">国別グループ</button>
   </div>
   <button id="btn-load">読み込む</button>
+  <button id="btn-cap-dist" style="background:#21262d;border:1px solid #30363d;color:#8b949e;margin-left:4px">🌍 首都間距離</button>
 </div>
 <div id="ai-modal-overlay" class="ai-modal-overlay">
   <div class="ai-modal">
@@ -169,6 +201,19 @@ td.pop{text-align:right;color:#8b949e;font-size:11px;min-width:64px}
       <button class="kw-panel-close" id="heritage-kw-panel-close">✕</button>
     </div>
     <div class="kw-panel-body" id="heritage-kw-panel-body"></div>
+  </div>
+</div>
+<div id="cap-dist-overlay" class="cap-dist-overlay">
+  <div class="cap-dist-modal">
+    <div class="cap-dist-head">
+      <span class="cap-dist-title">🌍 首都間距離</span>
+      <button class="cap-dist-close" id="cap-dist-close">✕</button>
+    </div>
+    <div class="cap-dist-tabs">
+      <button class="cap-dist-tab active" id="cap-tab-g7">G7（7カ国）</button>
+      <button class="cap-dist-tab" id="cap-tab-europe">ヨーロッパ（45都市）</button>
+    </div>
+    <div class="cap-dist-body" id="cap-dist-body"></div>
   </div>
 </div>
 <div class="summary" id="summary"></div>
@@ -906,6 +951,141 @@ function renderAll(rows) {
     var el = document.getElementById('sel-country');
     if (el) el.value = selCC;
   }
+}
+
+var G7_CAPS = [
+  {n:"ワシントンD.C.",cc:"US",lat:38.8951,lon:-77.0369},
+  {n:"ロンドン",cc:"GB",lat:51.5074,lon:-0.1278},
+  {n:"パリ",cc:"FR",lat:48.8566,lon:2.3522},
+  {n:"ベルリン",cc:"DE",lat:52.5200,lon:13.4050},
+  {n:"ローマ",cc:"IT",lat:41.9028,lon:12.4964},
+  {n:"東京",cc:"JP",lat:35.6762,lon:139.6503},
+  {n:"オタワ",cc:"CA",lat:45.4215,lon:-75.6972}
+];
+var EU_CAPS = [
+  {n:"アムステルダム",cc:"NL",lat:52.3676,lon:4.9041},
+  {n:"アンカラ",cc:"TR",lat:39.9334,lon:32.8597},
+  {n:"アンドラ・ラ・ベリャ",cc:"AD",lat:42.5063,lon:1.5218},
+  {n:"アテネ",cc:"GR",lat:37.9838,lon:23.7275},
+  {n:"ベオグラード",cc:"RS",lat:44.7866,lon:20.4489},
+  {n:"ベルリン",cc:"DE",lat:52.5200,lon:13.4050},
+  {n:"ベルン",cc:"CH",lat:46.9481,lon:7.4474},
+  {n:"ブラチスラバ",cc:"SK",lat:48.1486,lon:17.1077},
+  {n:"ブリュッセル",cc:"BE",lat:50.8503,lon:4.3517},
+  {n:"ブカレスト",cc:"RO",lat:44.4268,lon:26.1025},
+  {n:"ブダペスト",cc:"HU",lat:47.4979,lon:19.0402},
+  {n:"キシナウ",cc:"MD",lat:47.0105,lon:28.8638},
+  {n:"コペンハーゲン",cc:"DK",lat:55.6761,lon:12.5683},
+  {n:"ダブリン",cc:"IE",lat:53.3498,lon:-6.2603},
+  {n:"ヘルシンキ",cc:"FI",lat:60.1699,lon:24.9384},
+  {n:"キーウ",cc:"UA",lat:50.4501,lon:30.5234},
+  {n:"リスボン",cc:"PT",lat:38.7223,lon:-9.1393},
+  {n:"リュブリャナ",cc:"SI",lat:46.0569,lon:14.5058},
+  {n:"ロンドン",cc:"GB",lat:51.5074,lon:-0.1278},
+  {n:"ルクセンブルク",cc:"LU",lat:49.6117,lon:6.1319},
+  {n:"マドリード",cc:"ES",lat:40.4168,lon:-3.7038},
+  {n:"ミンスク",cc:"BY",lat:53.9045,lon:27.5615},
+  {n:"モナコ",cc:"MC",lat:43.7384,lon:7.4246},
+  {n:"モスクワ",cc:"RU",lat:55.7558,lon:37.6173},
+  {n:"ニコシア",cc:"CY",lat:35.1856,lon:33.3823},
+  {n:"オスロ",cc:"NO",lat:59.9139,lon:10.7522},
+  {n:"パリ",cc:"FR",lat:48.8566,lon:2.3522},
+  {n:"ポドゴリツァ",cc:"ME",lat:42.4304,lon:19.2594},
+  {n:"プラハ",cc:"CZ",lat:50.0755,lon:14.4378},
+  {n:"プリシュティナ",cc:"XK",lat:42.6629,lon:21.1655},
+  {n:"レイキャビク",cc:"IS",lat:64.1355,lon:-21.8954},
+  {n:"リガ",cc:"LV",lat:56.9496,lon:24.1052},
+  {n:"ローマ",cc:"IT",lat:41.9028,lon:12.4964},
+  {n:"サラエボ",cc:"BA",lat:43.8519,lon:18.3866},
+  {n:"スコピエ",cc:"MK",lat:41.9965,lon:21.4314},
+  {n:"ソフィア",cc:"BG",lat:42.6977,lon:23.3219},
+  {n:"ストックホルム",cc:"SE",lat:59.3293,lon:18.0686},
+  {n:"タリン",cc:"EE",lat:59.4370,lon:24.7536},
+  {n:"ティラナ",cc:"AL",lat:41.3275,lon:19.8187},
+  {n:"ヴァレッタ",cc:"MT",lat:35.8997,lon:14.5147},
+  {n:"ファドゥーツ",cc:"LI",lat:47.1410,lon:9.5209},
+  {n:"ウィーン",cc:"AT",lat:48.2082,lon:16.3738},
+  {n:"ビリニュス",cc:"LT",lat:54.6872,lon:25.2797},
+  {n:"ワルシャワ",cc:"PL",lat:52.2297,lon:21.0122},
+  {n:"ザグレブ",cc:"HR",lat:45.8150,lon:15.9819}
+];
+function hvKm(lat1,lon1,lat2,lon2) {
+  var R = 6371, dLat = (lat2-lat1)*Math.PI/180, dLon = (lon2-lon1)*Math.PI/180;
+  var sl = Math.sin(dLat/2), sn = Math.sin(dLon/2);
+  var a = sl*sl + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*sn*sn;
+  return Math.round(R*2*Math.asin(Math.sqrt(a)));
+}
+function distCls(d) { return d < 800 ? "dist-near" : d < 3000 ? "dist-mid" : "dist-far"; }
+var capOverlay = document.getElementById("cap-dist-overlay");
+var capActiveTab = "g7";
+document.getElementById("btn-cap-dist").addEventListener("click", function() {
+  capOverlay.style.zIndex = String(getNextZ());
+  capOverlay.classList.add("open");
+  renderCapTab(capActiveTab);
+});
+document.getElementById("cap-dist-close").addEventListener("click", function() {
+  capOverlay.classList.remove("open");
+});
+capOverlay.addEventListener("click", function(e) {
+  if(e.target === capOverlay) capOverlay.classList.remove("open");
+});
+document.getElementById("cap-tab-g7").addEventListener("click", function() { renderCapTab("g7"); });
+document.getElementById("cap-tab-europe").addEventListener("click", function() { renderCapTab("europe"); });
+function renderCapTab(tab) {
+  capActiveTab = tab;
+  document.getElementById("cap-tab-g7").classList.toggle("active", tab === "g7");
+  document.getElementById("cap-tab-europe").classList.toggle("active", tab === "europe");
+  if(tab === "g7") renderG7Matrix();
+  else renderEuropePanel();
+}
+function renderG7Matrix() {
+  var h = "<div style=\"overflow-x:auto\"><table class=\"cap-matrix\"><thead><tr><th class=\"row-h\"></th>";
+  G7_CAPS.forEach(function(c) { h += "<th>" + (CC_FLAG[c.cc]||"") + " " + c.n + "</th>"; });
+  h += "</tr></thead><tbody>";
+  G7_CAPS.forEach(function(r) {
+    h += "<tr><td class=\"row-head\">" + (CC_FLAG[r.cc]||"") + " " + r.n + "</td>";
+    G7_CAPS.forEach(function(col) {
+      if(r === col) { h += "<td class=\"self\">-</td>"; }
+      else { var d = hvKm(r.lat,r.lon,col.lat,col.lon); h += "<td class=\"" + distCls(d) + "\">" + d.toLocaleString() + "</td>"; }
+    });
+    h += "</tr>";
+  });
+  h += "</tbody></table></div>";
+  h += "<p style=\"margin-top:10px;font-size:11px;color:#484f58\">大圏距離（km）。<span style=\"color:#3fb950\">緑</span>=800km未満、<span style=\"color:#d4a017\">黄</span>=3000km未満、<span style=\"color:#f85149\">赤</span>=3000km以上</p>";
+  document.getElementById("cap-dist-body").innerHTML = h;
+}
+var euFromIdx = 0;
+function renderEuropePanel() {
+  var selH = "<div class=\"eu-from-wrap\"><span class=\"eu-from-label\">起点都市:</span><select class=\"eu-from-select\" id=\"eu-from-sel\">";
+  EU_CAPS.forEach(function(c, i) {
+    selH += "<option value=\"" + i + "\"" + (i===euFromIdx?" selected":"") + ">" + (CC_FLAG[c.cc]||"") + " " + c.n + "</option>";
+  });
+  selH += "</select></div><div class=\"eu-dist-list\" id=\"eu-dist-list\"></div>";
+  document.getElementById("cap-dist-body").innerHTML = selH;
+  document.getElementById("eu-from-sel").addEventListener("change", function(e) {
+    euFromIdx = parseInt(e.target.value, 10);
+    renderEuList();
+  });
+  renderEuList();
+}
+function renderEuList() {
+  var from = EU_CAPS[euFromIdx];
+  var dists = [];
+  EU_CAPS.forEach(function(c, i) { if(i !== euFromIdx) dists.push({c:c, d:hvKm(from.lat,from.lon,c.lat,c.lon)}); });
+  dists.sort(function(a,b){ return a.d-b.d; });
+  var maxD = dists[dists.length-1].d;
+  var h = "";
+  dists.forEach(function(x, rank) {
+    var barW = Math.max(2, Math.round((x.d/maxD)*80));
+    h += "<div class=\"eu-dist-row\">" +
+      "<span class=\"eu-dist-rank\">" + (rank+1) + "</span>" +
+      "<span class=\"eu-dist-flag\">" + (CC_FLAG[x.c.cc]||"") + "</span>" +
+      "<span class=\"eu-dist-name\">" + x.c.n + "</span>" +
+      "<div class=\"eu-dist-bar-wrap\"><div class=\"eu-dist-bar\" style=\"width:" + barW + "px\"></div></div>" +
+      "<span class=\"eu-dist-km " + distCls(x.d) + "\">" + x.d.toLocaleString() + " km</span>" +
+      "</div>";
+  });
+  document.getElementById("eu-dist-list").innerHTML = h;
 }
 
 function renderCountry(rows) {
