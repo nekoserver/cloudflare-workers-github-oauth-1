@@ -100,6 +100,16 @@ canvas:active { cursor:grabbing; }
 .toggle-label { font-size:11px; color:#8b949e; flex:1; }
 .toggle-btn { background:#161b22; border:1px solid #30363d; border-radius:12px; color:#8b949e; font-size:10px; padding:3px 10px; cursor:pointer; transition:all .15s; white-space:nowrap; }
 .toggle-btn.on { background:#2d1a0c; border-color:#ff9500; color:#ff9500; }
+.globe-icon-wrap { position:relative; cursor:help; display:inline-flex; align-items:center; }
+#globe-vol-tooltip { position:fixed; background:rgba(13,17,23,0.97); border:1px solid #58a6ff; border-radius:8px; padding:8px 12px; font-size:11px; color:#e6edf3; min-width:220px; max-width:300px; max-height:320px; overflow-y:auto; pointer-events:none; opacity:0; transition:opacity .15s; z-index:100; line-height:1.7; white-space:nowrap; }
+#globe-vol-tooltip::-webkit-scrollbar { width:3px; }
+#globe-vol-tooltip::-webkit-scrollbar-track { background:transparent; }
+#globe-vol-tooltip::-webkit-scrollbar-thumb { background:#30363d; border-radius:2px; }
+.gvtt-title { font-weight:700; font-size:12px; color:#ff9500; margin-bottom:6px; border-bottom:1px solid #30363d; padding-bottom:4px; }
+.gvtt-row { display:flex; align-items:baseline; gap:6px; padding:1px 0; }
+.gvtt-name { font-weight:600; color:#e6edf3; flex-shrink:0; }
+.gvtt-act { color:#8b949e; font-size:10px; overflow:hidden; text-overflow:ellipsis; }
+.gvtt-hot { color:#ff9500; }
 </style>
 </head>
 <body>
@@ -169,8 +179,9 @@ void main() {
 }
 </script>
 
+<div id="globe-vol-tooltip"></div>
 <div class="topbar">
-  <h1>🌐 世界の活断層 地球儀</h1>
+  <h1><span class="globe-icon-wrap" id="globeIconWrap">🌐</span> 世界の活断層 地球儀</h1>
   <span class="badge">活断層</span>
   <span style="flex:1"></span>
   <a href="/webgl-heritage">🏛️ 世界遺産</a>
@@ -745,6 +756,39 @@ void main() {
     v._p = latLonToXYZ(v.lat, v.lon, 1.005);
   });
 
+  (function() {
+    var globeWrap = document.getElementById('globeIconWrap');
+    var gvtt = document.getElementById('globe-vol-tooltip');
+    var hotKeywords = ['2024', '2025', '常時', '現在も活動中', '活発', '頻繁'];
+    function isHot(v) {
+      for (var i = 0; i < hotKeywords.length; i++) {
+        if (v.lastErupt.indexOf(hotKeywords[i]) >= 0) return true;
+      }
+      return false;
+    }
+    var html = '<div class="gvtt-title">🌋 活火山一覧 (' + VOLCANOES.length + '件)</div>';
+    var hot = VOLCANOES.filter(isHot);
+    var rest = VOLCANOES.filter(function(v) { return !isHot(v); });
+    hot.forEach(function(v) {
+      html += '<div class="gvtt-row"><span class="gvtt-name gvtt-hot">🔥 ' + v.n + '</span><span class="gvtt-act">' + v.lastErupt + '</span></div>';
+    });
+    rest.forEach(function(v) {
+      html += '<div class="gvtt-row"><span class="gvtt-name">🌋 ' + v.n + '</span><span class="gvtt-act">' + v.lastErupt + '</span></div>';
+    });
+    gvtt.innerHTML = html;
+
+    globeWrap.addEventListener('mouseenter', function(e) {
+      var r = globeWrap.getBoundingClientRect();
+      gvtt.style.left = (r.left + r.width / 2) + 'px';
+      gvtt.style.top = (r.bottom + 8) + 'px';
+      gvtt.style.transform = 'translateX(-50%)';
+      gvtt.style.opacity = '1';
+    });
+    globeWrap.addEventListener('mouseleave', function() {
+      gvtt.style.opacity = '0';
+    });
+  })();
+
   var showVolcanoes = true;
   var volMarkersDiv = document.getElementById('markers');
   var volDivMap = {};
@@ -1094,7 +1138,7 @@ void main() {
     persp(proj, 0.7, W / H, 0.1, 100);
     trans(view, 0, 0, -zoom);
     rotY(ry, rotYv); rotZ(tz, axialTilt); rotX(rx, rotXv);
-    mul(tmp2, ry, tz);
+    mul(tmp2, tz, ry);
     mul(model, rx, tmp2);
     mul(tmp, view, model);
     mul(mvp, proj, tmp);
