@@ -3373,7 +3373,7 @@ app.get('/api/aichat/heritage-keywords-check', authMiddleware, async (c) => {
   if (!c.env.DB) return jsonUtf8({ hits: {} }, 503);
   const raw = (c.req.query('keywords') ?? '').trim();
   if (!raw) return jsonUtf8({ hits: {} });
-  const keywords = raw.split(',').map((k) => k.trim()).filter(Boolean).slice(0, 50);
+  const keywords = raw.split(',').map((k) => k.trim()).filter(Boolean).slice(0, 200);
   if (!keywords.length) return jsonUtf8({ hits: {} });
   const hits: Record<string, string[]> = {};
   for (const kw of keywords) hits[kw] = [];
@@ -3398,7 +3398,7 @@ app.get('/api/aichat/heritage-search-keywords-check', authMiddleware, async (c) 
   if (!c.env.DB) return jsonUtf8({ hasKeywords: {} }, 503);
   const raw = (c.req.query('keywords') ?? '').trim();
   if (!raw) return jsonUtf8({ hasKeywords: {} });
-  const keywords = raw.split(',').map((k) => k.trim()).filter(Boolean).slice(0, 50);
+  const keywords = raw.split(',').map((k) => k.trim()).filter(Boolean).slice(0, 200);
   if (!keywords.length) return jsonUtf8({ hasKeywords: {} });
   const hasKeywords: Record<string, boolean> = {};
   for (const kw of keywords) hasKeywords[kw] = false;

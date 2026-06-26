@@ -174,7 +174,7 @@ describe('世界遺産チャットログリンク: checkHeritageKeywords 呼び�
 
   it('kwCheckPromise に checkHeritageKeywords の結果を代入してシリアル化している', () => {
     const html = buildPage();
-    expect(html).toContain('var kwCheckPromise = checkHeritageKeywords(heritages, inner)');
+    expect(html).toContain('var kwCheckPromise = checkHeritageKeywords(filtered, inner)');
   });
 
   it('acc-row クリック後の check-heritage-questions .then() 内で kwCheckPromise.then を使ってシリアル化している', () => {
