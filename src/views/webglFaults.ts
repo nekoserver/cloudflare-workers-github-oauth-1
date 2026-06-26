@@ -1205,7 +1205,7 @@ void main() {
     });
     aptTooltipEl.addEventListener('pointerup', function() { aptTtDragging = false; });
 
-    function showAptTooltip(code) {
+    function showAptTooltip(code, fromCode) {
       var a = aptByCode[code];
       if (!a) return;
       var el = aptDivMap[code];
@@ -1218,9 +1218,9 @@ void main() {
         var flag = IATA_FLAG[rc] || '';
         routesHtml += '<span class="apt-tt-code" data-goto="' + rc + '">' + flag + ' ' + rc + '</span>';
       });
+      var routeLabel = fromCode ? ' <span style="font-size:11px;color:#8b949e;font-weight:400;">' + fromCode + '&#x1F6EC;' + code + '</span>' : ' <span style="font-size:11px;color:#8b949e;font-weight:400;font-family:monospace;">' + code + '</span>';
       aptTooltipEl.innerHTML =
-        '<div class="apt-tt-hdr"><div class="apt-tt-name" data-center="' + code + '">' + a.city.split(' ')[0] + ' ' + a.name + '</div><button class="apt-tt-close" id="aptTtClose">&#215;</button></div>' +
-        '<div style="font-size:10px;color:#8b949e;margin-bottom:4px;">&#9432; 名前をタップで地球儀を中心に移動</div>' +
+        '<div class="apt-tt-hdr"><div class="apt-tt-name" data-center="' + code + '">' + a.city.split(' ')[0] + ' ' + a.name + routeLabel + '</div><button class="apt-tt-close" id="aptTtClose">&#215;</button></div>' +
         '<div class="apt-tt-routes">' + routesHtml + '</div>';
       var closeBtn = document.getElementById('aptTtClose');
       if (closeBtn) closeBtn.addEventListener('click', hideAptTooltip);
@@ -1259,7 +1259,7 @@ void main() {
           var da = aptByCode[dest];
           if (!da) return;
           hideAptTooltip();
-          flyToLatLon(da.lat, da.lon, 1200, function() { showAptTooltip(dest); });
+          flyToLatLon(da.lat, da.lon, 1200, function() { showAptTooltip(dest, code); });
         });
       });
     }
