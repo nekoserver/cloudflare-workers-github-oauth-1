@@ -172,20 +172,20 @@ describe('世界遺産チャットログリンク: checkHeritageKeywords 呼び�
     expect(block).toContain('return fetch(');
   });
 
-  it('openAccordion は checkHeritageKeywords(filtered, inner) を直接呼ぶ（バッチは内部で処理）', () => {
+  it('kwCheckPromise に checkHeritageKeywords の結果を代入してシリアル化している', () => {
     const html = buildPage();
-    const fnIdx = html.indexOf('function openAccordion(');
-    const fnBlock = html.slice(fnIdx, fnIdx + 5000);
-    expect(fnBlock).toContain('checkHeritageKeywords(filtered, inner)');
+    expect(html).toContain('var kwCheckPromise = checkHeritageKeywords(filtered, inner)');
   });
 
-  it('acc-row クリックハンドラは check-heritage-questions をフェッチしない（都市タップ時のバッチで済み）', () => {
+  it('acc-row クリック後の check-heritage-questions .then() 内では checkHeritageKeywords を呼ばない（都市タップ時に1回のみ実行済み）', () => {
     const html = buildPage();
-    const rowClickIdx = html.indexOf("rowEl.addEventListener('click'");
-    expect(rowClickIdx).toBeGreaterThan(-1);
-    const rowClickBlock = html.slice(rowClickIdx, rowClickIdx + 600);
-    expect(rowClickBlock).not.toContain('check-heritage-questions');
-    expect(rowClickBlock).not.toContain('fetch(');
+    const fetchIdx = html.indexOf('check-heritage-questions?heritage=');
+    expect(fetchIdx).toBeGreaterThan(-1);
+    const afterFetch = html.slice(fetchIdx, fetchIdx + 1400);
+    const thenIdx = afterFetch.indexOf('.then(function(data)');
+    const thenBlock = afterFetch.slice(thenIdx, thenIdx + 1000);
+    expect(thenBlock).not.toContain('kwCheckPromise = kwCheckPromise.then(function()');
+    expect(thenBlock).not.toContain('return checkHeritageKeywords(filtered, inner)');
   });
 
   it('AI応答完了後にも checkHeritageKeywords を呼んでいる（askAI の onComplete）', () => {
@@ -203,34 +203,22 @@ describe('世界遺産チャットログリンク: 都市タップ時の全遺�
     expect(html).toContain('/api/aichat/check-heritage-questions-batch');
   });
 
-  it('check-heritage-questions-batch は applyQuestionBadges 内で呼ばれ checkHeritageKeywords とは分離している', () => {
+  it('check-heritage-questions-batch の呼び出しが inner.innerHTML = html の直後（kwCheckPromise 設定の後）にある', () => {
     const html = buildPage();
-    const kwFnIdx = html.indexOf('function checkHeritageKeywords(');
-    const applyFnIdx = html.indexOf('function applyQuestionBadges(');
-    expect(kwFnIdx).toBeGreaterThan(-1);
-    expect(applyFnIdx).toBeGreaterThan(-1);
-    const kwFnBlock = html.slice(kwFnIdx, applyFnIdx);
-    expect(kwFnBlock).not.toContain('check-heritage-questions-batch');
-    const applyFnBlock = html.slice(applyFnIdx, applyFnIdx + 2000);
-    expect(applyFnBlock).toContain('check-heritage-questions-batch');
+    const innerHtmlIdx = html.indexOf("inner.innerHTML = html");
+    expect(innerHtmlIdx).toBeGreaterThan(-1);
+    const batchIdx = html.indexOf('check-heritage-questions-batch', innerHtmlIdx);
+    expect(batchIdx).toBeGreaterThan(innerHtmlIdx);
+    const kwIdx = html.indexOf('var kwCheckPromise = checkHeritageKeywords', innerHtmlIdx);
+    expect(batchIdx).toBeGreaterThan(kwIdx);
   });
 
-  it('applyQuestionBadges はキーワード処理完了後(.then)に呼ばれる', () => {
-    const html = buildPage();
-    const accIdx = html.indexOf('function openAccordion(');
-    const accBlock = html.slice(accIdx, accIdx + 5000);
-    const kwCallIdx = accBlock.indexOf('checkHeritageKeywords(filtered, inner).then(');
-    const applyCallIdx = accBlock.indexOf('applyQuestionBadges(inner, heritageNames)');
-    expect(kwCallIdx).toBeGreaterThan(-1);
-    expect(applyCallIdx).toBeGreaterThan(kwCallIdx);
-  });
-
-  it('applyQuestionBadges の .then() 内で names.forEach と ensureTopicBadge を呼んでいる', () => {
+  it('バッチ応答の .then() 内で allHeritageNames.forEach と ensureTopicBadge を呼んでいる', () => {
     const html = buildPage();
     const batchIdx = html.indexOf('check-heritage-questions-batch');
     expect(batchIdx).toBeGreaterThan(-1);
-    const block = html.slice(batchIdx, batchIdx + 800);
-    expect(block).toContain('names.forEach(function(name)');
+    const block = html.slice(batchIdx, batchIdx + 600);
+    expect(block).toContain('allHeritageNames.forEach(function(name)');
     expect(block).toContain('ensureTopicBadge(inner, name, t)');
   });
 
@@ -251,39 +239,45 @@ describe('世界遺産チャットログリンク: 都市タップ時の全遺�
   });
 });
 
-describe('世界遺産チャットログリンク: バッチでボタン状態を更新', () => {
-  it('バッチ応答の .then() 内で AI_TOPICS.forEach を使って ensureTopicBadge を呼んでいる', () => {
+describe('世界遺産チャットログリンク: serverAnswered から直接バッジ生成', () => {
+  it('check-heritage-questions の .then() 内で AI_TOPICS.forEach を使って ensureTopicBadge を直接呼んでいる', () => {
     const html = buildPage();
-    const batchIdx = html.indexOf('check-heritage-questions-batch');
-    expect(batchIdx).toBeGreaterThan(-1);
-    const block = html.slice(batchIdx, batchIdx + 800);
-    expect(block).toContain('AI_TOPICS.forEach(function(t)');
-    expect(block).toContain('ensureTopicBadge(inner, name, t)');
+    const fetchIdx = html.indexOf('check-heritage-questions?heritage=');
+    expect(fetchIdx).toBeGreaterThan(-1);
+    const afterFetch = html.slice(fetchIdx, fetchIdx + 1800);
+    const thenIdx = afterFetch.indexOf('.then(function(data)');
+    const thenBlock = afterFetch.slice(thenIdx, thenIdx + 1200);
+    expect(thenBlock).toContain('AI_TOPICS.forEach(function(t)');
+    expect(thenBlock).toContain('ensureTopicBadge(inner, hName, t)');
   });
 
-  it('バッチ応答で answered ボタンに .answered クラスと data-share-id を設定する', () => {
+  it('serverAnswered または localAnswered のどちらかがあればバッジを生成する条件になっている', () => {
     const html = buildPage();
-    const batchIdx = html.indexOf('check-heritage-questions-batch');
-    const block = html.slice(batchIdx, batchIdx + 1500);
-    expect(block).toContain("classList.add('answered')");
-    expect(block).toContain("setAttribute('data-share-id'");
+    const fetchIdx = html.indexOf('check-heritage-questions?heritage=');
+    const afterFetch = html.slice(fetchIdx, fetchIdx + 1800);
+    const thenIdx = afterFetch.indexOf('.then(function(data)');
+    const thenBlock = afterFetch.slice(thenIdx, thenIdx + 1200);
+    expect(thenBlock).toContain('localAnswered[t] || serverAnswered[t]');
   });
 });
 
-describe('世界遺産チャットログリンク: レースコンディション防止（バッチ統合による排除）', () => {
-  it('acc-row クリックハンドラに fetch がなくレースコンディションが発生しない', () => {
+describe('世界遺産チャットログリンク: レースコンディション防止', () => {
+  it('acc-row クリック前に localAnswered でローカル応答済み状態を保存している', () => {
     const html = buildPage();
-    const rowClickIdx = html.indexOf("rowEl.addEventListener('click'");
-    expect(rowClickIdx).toBeGreaterThan(-1);
-    const rowClickBlock = html.slice(rowClickIdx, rowClickIdx + 600);
-    expect(rowClickBlock).not.toContain('fetch(');
+    const fetchIdx = html.indexOf('check-heritage-questions?heritage=');
+    expect(fetchIdx).toBeGreaterThan(-1);
+    const beforeFetch = html.slice(Math.max(0, fetchIdx - 400), fetchIdx);
+    expect(beforeFetch).toContain('var localAnswered = {}');
+    expect(beforeFetch).toContain('.acc-ai-btn.answered');
   });
 
-  it('check-heritage-questions (個別) フェッチが openAccordion 内に存在しない', () => {
+  it('check-heritage-questions の応答と localAnswered をマージしてボタン状態を更新している', () => {
     const html = buildPage();
-    const fnIdx = html.indexOf('function openAccordion(');
-    const fnBlock = html.slice(fnIdx, fnIdx + 5000);
-    expect(fnBlock).not.toContain('check-heritage-questions?heritage=');
+    const fetchIdx = html.indexOf('check-heritage-questions?heritage=');
+    const afterFetch = html.slice(fetchIdx, fetchIdx + 1400);
+    const thenBlock = afterFetch.slice(afterFetch.indexOf('.then(function(data)'), afterFetch.indexOf('.then(function(data)') + 900);
+    expect(thenBlock).toContain('serverAnswered');
+    expect(thenBlock).toContain('localAnswered[topic] || serverAnswered[topic]');
   });
 });
 

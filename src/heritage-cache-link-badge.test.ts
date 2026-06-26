@@ -21,32 +21,25 @@ describe('世界遺産名リンク — acc-name-link クリックでチャット
   });
 });
 
-describe('世界遺産名リンク — 質問バッジ処理はキーワード処理と分離し個別ループで適用', () => {
-  it('checkHeritageKeywords 内では check-heritage-questions-batch を実行しない（キーワード処理と衝突させない）', () => {
-    const fnIdx = view.indexOf('function checkHeritageKeywords(');
-    const fnEnd = view.indexOf('function applyQuestionBadges(');
-    const fnBlock = view.slice(fnIdx, fnEnd);
-    expect(fnBlock).not.toContain('check-heritage-questions-batch');
-  });
-
-  it('applyQuestionBadges 関数が定義され check-heritage-questions-batch を呼ぶ', () => {
-    const fnIdx = view.indexOf('function applyQuestionBadges(');
-    expect(fnIdx).toBeGreaterThan(-1);
-    const fnBlock = view.slice(fnIdx, fnIdx + 2000);
-    expect(fnBlock).toContain('check-heritage-questions-batch');
-  });
-
-  it('applyQuestionBadges は全世界遺産名のループ内で個別に質問バッジを適用する', () => {
-    const fnIdx = view.indexOf('function applyQuestionBadges(');
-    const fnBlock = view.slice(fnIdx, fnIdx + 2000);
-    expect(fnBlock).toContain('names.forEach');
-    expect(fnBlock).toContain('ensureTopicBadge(inner, name, t)');
-  });
-
-  it('openAccordion は checkHeritageKeywords 完了後に applyQuestionBadges を呼ぶ（衝突回避）', () => {
+describe('世界遺産名リンク — check-heritage-questions-batch は kwCheckPromise 完了後に実行', () => {
+  it('openAccordion 内で check-heritage-questions-batch fetch が checkHeritageKeywords の .then() の中にある', () => {
     const fnIdx = view.indexOf('function openAccordion(');
-    const fnBlock = view.slice(fnIdx, fnIdx + 5000);
-    expect(fnBlock).toContain('checkHeritageKeywords(filtered, inner).then(');
-    expect(fnBlock).toContain('applyQuestionBadges(inner, heritageNames)');
+    const fnBlock = view.slice(fnIdx, fnIdx + 4000);
+    const batchIdx = fnBlock.indexOf('check-heritage-questions-batch');
+    expect(batchIdx).toBeGreaterThan(-1);
+    const beforeBatch = fnBlock.slice(0, batchIdx);
+    // checkHeritageKeywords(...).then( が batch より前にある
+    const kwThenIdx = beforeBatch.lastIndexOf('checkHeritageKeywords(filtered, inner).then(');
+    expect(kwThenIdx).toBeGreaterThan(-1);
+  });
+
+  it('openAccordion 内で kwCheckPromise は checkHeritageKeywords(...).then() で初期化される', () => {
+    const fnIdx = view.indexOf('function openAccordion(');
+    const fnBlock = view.slice(fnIdx, fnIdx + 4000);
+    const kwPromiseIdx = fnBlock.indexOf('var kwCheckPromise');
+    expect(kwPromiseIdx).toBeGreaterThan(-1);
+    // kwCheckPromise の初期化に checkHeritageKeywords が含まれる
+    const initLine = fnBlock.slice(kwPromiseIdx, kwPromiseIdx + 120);
+    expect(initLine).toContain('checkHeritageKeywords(filtered, inner).then(');
   });
 });

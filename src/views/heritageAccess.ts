@@ -626,34 +626,6 @@ function checkHeritageKeywords(heritages, inner) {
     .catch(function() {});
 }
 
-function applyQuestionBadges(inner, names) {
-  if (!names || !names.length) return Promise.resolve();
-  return fetch('/api/aichat/check-heritage-questions-batch', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ heritages: names })
-  })
-    .then(function(r) { return r.json(); })
-    .then(function(batchData) {
-      var allAnswered = batchData.answered || {};
-      names.forEach(function(name) {
-        var nameAnswered = allAnswered[name] || {};
-        if (!nameAnswered) return;
-        AI_TOPICS.forEach(function(t) {
-          if (!nameAnswered[t]) return;
-          ensureTopicBadge(inner, name, t);
-          inner.querySelectorAll('.acc-ai-btn[data-heritage]').forEach(function(btn) {
-            if (btn.getAttribute('data-heritage') !== name) return;
-            if (btn.getAttribute('data-topic') !== t) return;
-            btn.classList.add('answered');
-            btn.setAttribute('data-share-id', nameAnswered[t]);
-          });
-        });
-      });
-    })
-    .catch(function() {});
-}
-
 function openAiModal(title, bodyText, isCached) {
   aiModalTitle.textContent = title;
   aiModalBody.textContent = bodyText;
@@ -804,9 +776,20 @@ function openAccordion(tr) {
     });
     html += '</div>';
     inner.innerHTML = html;
-    var heritageNames = filtered.map(function(h) { return h.heritage_name; });
-    checkHeritageKeywords(filtered, inner).then(function() {
-      applyQuestionBadges(inner, heritageNames);
+    var allHeritageNames = filtered.map(function(h) { return h.heritage_name; });
+    var kwCheckPromise = checkHeritageKeywords(filtered, inner).then(function() {
+      return fetch('/api/aichat/check-heritage-questions-batch', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ heritages: allHeritageNames }) })
+        .then(function(r) { return r.json(); })
+        .then(function(batchData) {
+          var allAnswered = batchData.answered || {};
+          allHeritageNames.forEach(function(name) {
+            var nameAnswered = allAnswered[name] || {};
+            AI_TOPICS.forEach(function(t) {
+              if (nameAnswered[t]) ensureTopicBadge(inner, name, t);
+            });
+          });
+        })
+        .catch(function() {});
     });
     inner.querySelectorAll('.acc-row[data-heritage]').forEach(function(rowEl) {
       rowEl.style.cursor = 'pointer';
@@ -817,6 +800,40 @@ function openAccordion(tr) {
         inner.querySelectorAll('.acc-ai-wrap').forEach(function(w) { w.style.display = 'none'; });
         if (!isOpen) {
           wrap.style.display = '';
+          var hName = rowEl.getAttribute('data-heritage') || '';
+          if (hName) {
+            var cityTr = accTr.previousElementSibling;
+            var _cc = cityTr ? cityTr.getAttribute('data-cc') : '';
+            var _cName = _cc ? ccToJp(_cc) : '';
+            var localAnswered = {};
+            wrap.querySelectorAll('.acc-ai-btn.answered').forEach(function(b) {
+              var t = b.getAttribute('data-topic');
+              var sid = b.getAttribute('data-share-id');
+              if (t && sid) localAnswered[t] = sid;
+            });
+            fetch('/api/aichat/check-heritage-questions?heritage=' + encodeURIComponent(hName) + '&country_name=' + encodeURIComponent(_cName))
+              .then(function(r) { return r.json(); })
+              .then(function(data) {
+                var serverAnswered = data.answered || {};
+                wrap.querySelectorAll('.acc-ai-btn').forEach(function(btn) {
+                  var topic = btn.getAttribute('data-topic');
+                  var shareId = topic ? (localAnswered[topic] || serverAnswered[topic]) : null;
+                  if (shareId) {
+                    btn.classList.add('answered');
+                    btn.setAttribute('data-share-id', shareId);
+                  } else {
+                    btn.classList.remove('answered');
+                    btn.removeAttribute('data-share-id');
+                  }
+                });
+                AI_TOPICS.forEach(function(t) {
+                  if (localAnswered[t] || serverAnswered[t]) {
+                    ensureTopicBadge(inner, hName, t);
+                  }
+                });
+              })
+              .catch(function() {});
+          }
         }
       });
     });
