@@ -35,9 +35,10 @@ describe('世界遺産チャットログリンク: CSS', () => {
 });
 
 describe('世界遺産チャットログリンク: JavaScript関数', () => {
-  it('checkHeritageKeywords 関数が定義されている', () => {
+  it('fetchHeritageKeywordData と applyKeywordData 関数が定義されている', () => {
     const html = buildPage();
-    expect(html).toContain('function checkHeritageKeywords');
+    expect(html).toContain('function fetchHeritageKeywordData');
+    expect(html).toContain('function applyKeywordData');
   });
 
   it('openHeritageChatlogModal 関数が定義されている', () => {
@@ -58,7 +59,7 @@ describe('世界遺産チャットログリンク: JavaScript関数', () => {
   it('acc-name-link クラスをアコーディオン内で付与している', () => {
     const html = buildPage();
     expect(html).toContain('acc-name-link');
-    const idx = html.indexOf('checkHeritageKeywords');
+    const idx = html.indexOf('applyKeywordData');
     expect(idx).toBeGreaterThan(-1);
   });
 });
@@ -100,15 +101,15 @@ describe('世界遺産チャットログリンク: バッジタップでモー�
 
   it('バッジクリック時に openHeritageChatlogModal を badgeTopic 付きで呼んでいる', () => {
     const html = buildPage();
-    const idx = html.indexOf('function checkHeritageKeywords');
+    const idx = html.indexOf('function applyKeywordData');
     const block = html.slice(idx, idx + 2000);
     expect(block).toContain('openHeritageChatlogModal(name, badgeTopic)');
   });
 
   it('acc-name-link クリックでは openHeritageChatlogModal を呼ばない', () => {
     const html = buildPage();
-    const checkIdx = html.indexOf('function checkHeritageKeywords');
-    const checkEnd = html.indexOf('function openAiModal');
+    const checkIdx = html.indexOf('function applyKeywordData');
+    const checkEnd = html.indexOf('function applyAnsweredData');
     const block = html.slice(checkIdx, checkEnd);
     expect(block).not.toContain('openHeritageChatlogModal(name)');
   });
@@ -157,9 +158,9 @@ describe('世界遺産チャットログリンク: AI応答後のボタン色と
     expect(block).toContain("btn.setAttribute('data-share-id', newShareId)");
   });
 
-  it('checkHeritageKeywords が acc-name-wrap 内の既存バッジを確認して新バッジを追加する', () => {
+  it('applyKeywordData が acc-name-wrap 内の既存バッジを確認して新バッジを追加する', () => {
     const html = buildPage();
-    const idx = html.indexOf('function checkHeritageKeywords');
+    const idx = html.indexOf('function applyKeywordData');
     const block = html.slice(idx, idx + 2000);
     expect(block).toContain('acc-name-wrap');
     expect(block).toContain('acc-name-link[data-heritage]');
@@ -167,19 +168,20 @@ describe('世界遺産チャットログリンク: AI応答後のボタン色と
   });
 });
 
-describe('世界遺産チャットログリンク: checkHeritageKeywords 呼び出しタイミング', () => {
-  it('checkHeritageKeywords が Promise を返す（return fetch(...) の形式）', () => {
+describe('世界遺産チャットログリンク: fetchHeritageKeywordData と並列実行', () => {
+  it('fetchHeritageKeywordData が Promise を返す（return fetch(...) の形式）', () => {
     const html = buildPage();
-    const idx = html.indexOf('function checkHeritageKeywords');
+    const idx = html.indexOf('function fetchHeritageKeywordData');
     expect(idx).toBeGreaterThan(-1);
     const block = html.slice(idx, idx + 300);
-    expect(block).toContain('return Promise.resolve()');
     expect(block).toContain('return fetch(');
   });
 
-  it('kwCheckPromise に checkHeritageKeywords の結果を代入してシリアル化している', () => {
+  it('キーワード取得とバッチ質問取得を Promise.all で並列実行している', () => {
     const html = buildPage();
-    expect(html).toContain('var kwCheckPromise = checkHeritageKeywords(filtered, inner)');
+    expect(html).toContain('Promise.all([');
+    expect(html).toContain('fetchHeritageKeywordData(allHeritageNames)');
+    expect(html).toContain('check-heritage-questions-batch');
   });
 
   it('acc-row クリック後の check-heritage-questions .then() 内では checkHeritageKeywords を呼ばない（都市タップ時に1回のみ実行済み）', () => {
@@ -218,12 +220,12 @@ describe('世界遺産チャットログリンク: 都市タップ時の全遺�
     expect(batchIdx).toBeGreaterThan(kwIdx);
   });
 
-  it('バッチ応答の .then() 内で allHeritageNames.forEach と ensureTopicBadge を呼んでいる', () => {
+  it('applyAnsweredData が allAnswered を走査して ensureTopicBadge を呼んでいる', () => {
     const html = buildPage();
-    const batchIdx = html.indexOf('check-heritage-questions-batch');
-    expect(batchIdx).toBeGreaterThan(-1);
-    const block = html.slice(batchIdx, batchIdx + 800);
-    expect(block).toContain('allHeritageNames.forEach(function(name)');
+    const idx = html.indexOf('function applyAnsweredData');
+    expect(idx).toBeGreaterThan(-1);
+    const block = html.slice(idx, idx + 400);
+    expect(block).toContain('Object.keys(allAnswered)');
     expect(block).toContain('ensureTopicBadge(inner, name, t)');
   });
 
@@ -319,16 +321,18 @@ describe('世界遺産チャットログリンク: キーワードバッジ（�
   it('hasKeywords を参照してキーワードバッジを追加している', () => {
     const html = buildPage();
     expect(html).toContain('hasKeywords');
-    const idx = html.indexOf('heritage-search-keywords-check');
-    const block = html.slice(idx, idx + 1800);
+    const idx = html.indexOf('function applyKeywordData');
+    const end = html.indexOf('function applyAnsweredData');
+    const block = html.slice(idx, end);
     expect(block).toContain('acc-kw-badge');
     expect(block).toContain('キーワード');
   });
 
   it('既存の acc-name-wrap にもキーワードバッジを追加する処理がある', () => {
     const html = buildPage();
-    const idx = html.indexOf('heritage-search-keywords-check');
-    const block = html.slice(idx, idx + 1200);
+    const idx = html.indexOf('function applyKeywordData');
+    const end = html.indexOf('function applyAnsweredData');
+    const block = html.slice(idx, end);
     expect(block).toContain('acc-name-wrap');
     expect(block).toContain('acc-kw-badge');
     expect(block).toContain('querySelector(\'.acc-name-link[data-heritage]');
@@ -336,8 +340,9 @@ describe('世界遺産チャットログリンク: キーワードバッジ（�
 
   it('acc-name span のみの遺産にもキーワードバッジを追加するフォールバック処理がある', () => {
     const html = buildPage();
-    const idx = html.indexOf('heritage-search-keywords-check');
-    const block = html.slice(idx, idx + 1500);
+    const idx = html.indexOf('function applyKeywordData');
+    const end = html.indexOf('function applyAnsweredData');
+    const block = html.slice(idx, end);
     expect(block).toContain('.acc-name[data-heritage]');
     expect(block).toContain('acc-kw-badge');
   });
