@@ -810,9 +810,10 @@ void main() {
     el.setAttribute('data-volid', v.id);
     volMarkersDiv.appendChild(el);
     volDivMap[v.id] = el;
-    el.addEventListener('mouseenter', function(e) {
+    el.addEventListener('mouseenter', function() {
       isHoveringVol = true;
-      showVolTooltip(e.clientX, e.clientY, v);
+      var r = el.getBoundingClientRect();
+      showVolTooltip(r.left + r.width / 2, r.top + r.height / 2, v);
     });
     el.addEventListener('mouseleave', function() {
       isHoveringVol = false;
@@ -1242,8 +1243,10 @@ void main() {
             '<div class="vol-tt-sub">' + acv.c + ' / 標高 ' + acv.elev.toLocaleString() + 'm</div>' +
             '<div class="vol-tt-sub">最新噴火: ' + acv.lastErupt + '</div>';
         }
-        var vcx = canvasRect.left + canvasRect.width / 2;
-        var vcy = canvasRect.top + canvasRect.height / 2;
+        var acvEl = volDivMap[acv.id];
+        var acvRect = acvEl.getBoundingClientRect();
+        var vcx = acvRect.left + acvRect.width / 2;
+        var vcy = acvRect.top + acvRect.height / 2;
         volTooltipEl.className = vcy < canvasRect.top + canvasRect.height * 0.3 ? 'below' : '';
         volTooltipEl.style.left = vcx + 'px';
         volTooltipEl.style.top = vcy + 'px';
