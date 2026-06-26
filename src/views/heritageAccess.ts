@@ -777,7 +777,7 @@ function openAccordion(tr) {
     inner.innerHTML = html;
     var kwCheckPromise = checkHeritageKeywords(filtered, inner);
     var allHeritageNames = filtered.map(function(h) { return h.heritage_name; });
-    fetch('/api/aichat/check-heritage-questions-batch?heritages=' + encodeURIComponent(allHeritageNames.join(',')))
+    fetch('/api/aichat/check-heritage-questions-batch', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ heritages: allHeritageNames }) })
       .then(function(r) { return r.json(); })
       .then(function(batchData) {
         var allAnswered = batchData.answered || {};
