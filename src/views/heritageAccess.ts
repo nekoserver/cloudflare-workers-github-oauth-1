@@ -56,6 +56,7 @@ td.pop{text-align:right;color:#8b949e;font-size:11px;min-width:64px}
 .acc-heritage-list{display:flex;flex-direction:column;gap:4px;max-height:320px;overflow-y:auto}
 .acc-row{display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid #21262d;font-size:12px}
 .acc-row:last-child{border-bottom:none}
+.acc-num{color:#484f58;font-size:10px;width:22px;text-align:right;flex-shrink:0}
 .acc-country-flag{font-size:14px;flex-shrink:0;width:20px;text-align:center}
 .acc-emoji{font-size:14px;flex-shrink:0;width:20px;text-align:center}
 .acc-name{flex:1;color:#c9d1d9}
@@ -157,7 +158,8 @@ td.pop{text-align:right;color:#8b949e;font-size:11px;min-width:64px}
     <option value="500">500 km</option>
     <option value="800">800 km</option>
     <option value="1000">1000 km</option>
-    <option value="1500" selected>1500 km</option>
+    <option value="1500">1500 km</option>
+    <option value="2000" selected>2000 km</option>
   </select>
   <select id="sel-limit" style="display:none">
     <option value="500" selected>500件</option>
@@ -747,12 +749,13 @@ function openAccordion(tr) {
     var heritages = data.heritages || [];
     var inner = accTr.querySelector('.accordion-inner');
     if (!inner) return;
-    if (heritages.length === 0) {
-      inner.innerHTML = '<div class="acc-loading">近隣の世界遺産データなし</div>';
+    var filtered = heritages.filter(function(h) { return h.distance_km <= 2000; });
+    if (filtered.length === 0) {
+      inner.innerHTML = '<div class="acc-loading">近隣の世界遺産データなし（2000km以内）</div>';
       return;
     }
     var html = '<div class="acc-heritage-list">';
-    heritages.forEach(function(h) {
+    filtered.forEach(function(h, idx) {
       var dist = h.distance_km < 10 ? h.distance_km.toFixed(1) : Math.round(h.distance_km);
       var safeName = h.heritage_name.replace(/&/g,'&amp;').replace(/</g,'&lt;');
       var flagSpan = h.country_flag
@@ -760,6 +763,7 @@ function openAccordion(tr) {
         : '';
       if (h.heritage_name) heritageCountryFlags[h.heritage_name] = h.country_flag || '';
       html += '<div class="acc-row" data-heritage="' + h.heritage_name.replace(/"/g,'&quot;') + '">' +
+        '<span class="acc-num">' + (idx + 1) + '</span>' +
         flagSpan +
         '<span class="acc-emoji">🏛️</span>' +
         '<span class="acc-name" data-heritage="' + h.heritage_name.replace(/"/g,'&quot;') + '">' + safeName + '</span>' +
@@ -771,7 +775,7 @@ function openAccordion(tr) {
     });
     html += '</div>';
     inner.innerHTML = html;
-    var kwCheckPromise = checkHeritageKeywords(heritages, inner);
+    var kwCheckPromise = checkHeritageKeywords(filtered, inner);
     inner.querySelectorAll('.acc-row[data-heritage]').forEach(function(rowEl) {
       rowEl.style.cursor = 'pointer';
       rowEl.addEventListener('click', function() {
