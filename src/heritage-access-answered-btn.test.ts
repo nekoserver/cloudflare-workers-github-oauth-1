@@ -179,7 +179,7 @@ describe('checkHeritageKeywords と check-heritage-questions の競合条件修�
     const afterFetch = view.slice(fetchIdx, fetchIdx + 1200);
     const thenIdx = afterFetch.indexOf('.then(function(data)');
     const thenBlock = afterFetch.slice(thenIdx, thenIdx + 900);
-    expect(thenBlock).toContain('checkHeritageKeywords(heritages, inner)');
+    expect(thenBlock).toContain('checkHeritageKeywords(filtered, inner)');
   });
 
   it('check-heritage-questions fetch の前に checkHeritageKeywords を呼んでいない（レースコンディションなし）', () => {
