@@ -3368,6 +3368,108 @@ app.get('/api/aichat/check-heritage-questions', authMiddleware, async (c) => {
   return jsonUtf8({ answered });
 });
 
+// D1 は 1 クエリあたりのバインドパラメータ数に上限（100）があり、IN(...) 句へ
+// 大量の値を渡すとクエリ全体が失敗する。この失敗は握りつぶされて「結果が空」に
+// 化けるため、都市タップでアコーディオンを開いた際に近隣世界遺産が多い都市ほど
+// 全件のキャッシュ判定が無言で機能しなくなる。値をチャンク分割して各クエリの
+// バインド数を確実に上限未満へ抑えることで再発を防ぐ。
+export const D1_MAX_BOUND_PARAMS = 90;
+
+export function chunkBindValues<T>(values: T[], maxPerChunk: number = D1_MAX_BOUND_PARAMS): T[][] {
+  const size = Math.max(1, Math.floor(maxPerChunk));
+  const chunks: T[][] = [];
+  for (let i = 0; i < values.length; i += size) {
+    chunks.push(values.slice(i, i + size));
+  }
+  return chunks;
+}
+
+interface D1Like {
+  prepare(sql: string): {
+    bind(...args: unknown[]): { all<T = Record<string, unknown>>(): Promise<{ results?: T[] }> };
+  };
+}
+
+// アコーディオン展開時、メニュー内すべての世界遺産名についてキャッシュ済み AI 回答
+// （ai_chat_shares）の有無を一括判定する。IN(...) のバインド数が D1 上限を超えない
+// よう質問文をチャンク分割して複数クエリで実行し、1チャンクでも失敗したら error を
+// 返して呼び出し元（API レスポンス）が異常を検知できるようにする（握りつぶし禁止）。
+export async function lookupHeritageQuestionAnswers(
+  db: D1Like,
+  userId: string,
+  heritages: string[],
+  topics: string[],
+  maxBoundParams: number = D1_MAX_BOUND_PARAMS,
+): Promise<{ answered: Record<string, Record<string, string | null>>; error?: string }> {
+  const answered: Record<string, Record<string, string | null>> = {};
+  for (const h of heritages) {
+    answered[h] = {};
+    for (const t of topics) answered[h][t] = null;
+  }
+  const questionMap = new Map<string, { heritage: string; topic: string }>();
+  const allQuestions: string[] = [];
+  for (const heritage of heritages) {
+    for (const topic of topics) {
+      const q = `「${heritage}」の「${topic}」について説明してください`;
+      allQuestions.push(q);
+      questionMap.set(q, { heritage, topic });
+    }
+  }
+  // user_id の 1 バインドを差し引いた数を IN(...) のチャンク上限にする。
+  const chunkSize = Math.max(1, maxBoundParams - 1);
+  const seen = new Set<string>();
+  let hadError = false;
+  for (const chunk of chunkBindValues(allQuestions, chunkSize)) {
+    try {
+      const placeholders = chunk.map(() => '?').join(', ');
+      const rows = await db
+        .prepare(`SELECT id, question FROM ai_chat_shares WHERE user_id = ? AND deleted_at IS NULL AND question IN (${placeholders}) ORDER BY created_at DESC`)
+        .bind(userId, ...chunk)
+        .all<{ id: string; question: string }>();
+      for (const r of (rows.results ?? [])) {
+        if (seen.has(r.question)) continue;
+        seen.add(r.question);
+        const info = questionMap.get(r.question);
+        if (info && answered[info.heritage]) answered[info.heritage][info.topic] = r.id;
+      }
+    } catch {
+      hadError = true;
+    }
+  }
+  return hadError ? { answered, error: 'partial_query_failure' } : { answered };
+}
+
+// 世界遺産名（キーワード）ごとに、閲覧ログ（heritage_question_view_log）由来の
+// トピック一覧を一括取得する。こちらも IN(...) のバインド数をチャンク分割する。
+export async function lookupHeritageKeywordTopics(
+  db: D1Like,
+  userId: string,
+  keywords: string[],
+  maxBoundParams: number = D1_MAX_BOUND_PARAMS,
+): Promise<{ hits: Record<string, string[]>; error?: string }> {
+  const hits: Record<string, string[]> = {};
+  for (const kw of keywords) hits[kw] = [];
+  const chunkSize = Math.max(1, maxBoundParams - 1);
+  let hadError = false;
+  for (const chunk of chunkBindValues(keywords, chunkSize)) {
+    try {
+      const placeholders = chunk.map(() => '?').join(',');
+      const rows = await db
+        .prepare(`SELECT l.heritage_name, m.topic FROM heritage_question_view_log l JOIN heritage_ai_question_masters m ON l.question_master_id = m.id WHERE l.user_id = ? AND l.heritage_name IN (${placeholders}) AND l.deleted_at IS NULL`)
+        .bind(userId, ...chunk)
+        .all<{ heritage_name: string; topic: string }>();
+      for (const r of (rows.results ?? [])) {
+        if (hits[r.heritage_name] && !hits[r.heritage_name].includes(r.topic)) {
+          hits[r.heritage_name].push(r.topic);
+        }
+      }
+    } catch {
+      hadError = true;
+    }
+  }
+  return hadError ? { hits, error: 'partial_query_failure' } : { hits };
+}
+
 app.post('/api/aichat/check-heritage-questions-batch', authMiddleware, async (c) => {
   const user = c.get('user');
   if (!c.env.DB) return jsonUtf8({ answered: {} }, 503);
@@ -3382,36 +3484,8 @@ app.post('/api/aichat/check-heritage-questions-batch', authMiddleware, async (c)
   }
   if (!heritages.length) return jsonUtf8({ answered: {} });
   const topics = ['交通手段', '見どころ', '最寄り空港', '鉄道でのアクセス', '宿泊施設', 'スポーツ施設'];
-  const allQuestions: string[] = [];
-  const questionMap = new Map<string, { heritage: string; topic: string }>();
-  for (const heritage of heritages) {
-    for (const topic of topics) {
-      const q = `「${heritage}」の「${topic}」について説明してください`;
-      allQuestions.push(q);
-      questionMap.set(q, { heritage, topic });
-    }
-  }
-  const answered: Record<string, Record<string, string | null>> = {};
-  for (const h of heritages) {
-    answered[h] = {};
-    for (const t of topics) answered[h][t] = null;
-  }
-  try {
-    const placeholders = allQuestions.map(() => '?').join(', ');
-    const rows = await c.env.DB.prepare(
-      `SELECT id, question FROM ai_chat_shares WHERE user_id = ? AND deleted_at IS NULL AND question IN (${placeholders}) ORDER BY created_at DESC`
-    ).bind(user.sub, ...allQuestions).all<{ id: string; question: string }>();
-    const seen = new Set<string>();
-    for (const r of (rows.results ?? [])) {
-      if (seen.has(r.question)) continue;
-      seen.add(r.question);
-      const info = questionMap.get(r.question);
-      if (info && answered[info.heritage]) answered[info.heritage][info.topic] = r.id;
-    }
-  } catch {
-    // ai_chat_shares 未作成時はスキップ
-  }
-  return jsonUtf8({ answered });
+  const result = await lookupHeritageQuestionAnswers(c.env.DB as unknown as D1Like, user.sub, heritages, topics);
+  return jsonUtf8(result.error ? { answered: result.answered, error: result.error } : { answered: result.answered });
 });
 
 app.get('/api/aichat/heritage-keywords-check', authMiddleware, async (c) => {
@@ -3421,22 +3495,8 @@ app.get('/api/aichat/heritage-keywords-check', authMiddleware, async (c) => {
   if (!raw) return jsonUtf8({ hits: {} });
   const keywords = raw.split(',').map((k) => k.trim()).filter(Boolean).slice(0, 200);
   if (!keywords.length) return jsonUtf8({ hits: {} });
-  const hits: Record<string, string[]> = {};
-  for (const kw of keywords) hits[kw] = [];
-  try {
-    const placeholders = keywords.map(() => '?').join(',');
-    const rows = await c.env.DB.prepare(
-      `SELECT l.heritage_name, m.topic FROM heritage_question_view_log l JOIN heritage_ai_question_masters m ON l.question_master_id = m.id WHERE l.user_id = ? AND l.heritage_name IN (${placeholders}) AND l.deleted_at IS NULL`
-    ).bind(user.sub, ...keywords).all<{ heritage_name: string; topic: string }>();
-    for (const r of (rows.results ?? [])) {
-      if (hits[r.heritage_name] && !hits[r.heritage_name].includes(r.topic)) {
-        hits[r.heritage_name].push(r.topic);
-      }
-    }
-  } catch (_e) {
-    for (const kw of keywords) hits[kw] = [];
-  }
-  return jsonUtf8({ hits });
+  const result = await lookupHeritageKeywordTopics(c.env.DB as unknown as D1Like, user.sub, keywords);
+  return jsonUtf8(result.error ? { hits: result.hits, error: result.error } : { hits: result.hits });
 });
 
 app.get('/api/aichat/heritage-search-keywords-check', authMiddleware, async (c) => {
