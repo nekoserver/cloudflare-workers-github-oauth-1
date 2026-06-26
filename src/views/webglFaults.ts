@@ -794,6 +794,14 @@ void main() {
   var volDivMap = {};
   var volTooltipEl = document.getElementById('vol-tooltip');
 
+  var canvasRect = {left:0, top:0, width:0, height:0};
+  function updateCanvasRect() { canvasRect = canvas.getBoundingClientRect(); }
+  window.addEventListener('resize', updateCanvasRect);
+  updateCanvasRect();
+
+  var isHoveringVol = false;
+  var autoVolId = null;
+
   VOLCANOES.forEach(function(v) {
     var el = document.createElement('div');
     el.className = 'vol-mk';
@@ -803,9 +811,13 @@ void main() {
     volMarkersDiv.appendChild(el);
     volDivMap[v.id] = el;
     el.addEventListener('mouseenter', function(e) {
+      isHoveringVol = true;
       showVolTooltip(e.clientX, e.clientY, v);
     });
-    el.addEventListener('mouseleave', function() { hideVolTooltip(); });
+    el.addEventListener('mouseleave', function() {
+      isHoveringVol = false;
+      if (!autoRot) hideVolTooltip();
+    });
     el.addEventListener('click', function() {
       selectFaultFromVol(v);
     });
@@ -816,8 +828,7 @@ void main() {
       '<div class="vol-tt-name">🌋 ' + v.n + '</div>' +
       '<div class="vol-tt-sub">' + v.c + ' / 標高 ' + v.elev.toLocaleString() + 'm</div>' +
       '<div class="vol-tt-sub">最新噴火: ' + v.lastErupt + '</div>';
-    var rect = canvas.getBoundingClientRect();
-    var below = y < rect.top + rect.height * 0.3;
+    var below = y < canvasRect.top + canvasRect.height * 0.3;
     volTooltipEl.style.left = x + 'px';
     volTooltipEl.style.top = y + 'px';
     volTooltipEl.className = below ? 'below' : '';
@@ -1214,6 +1225,34 @@ void main() {
     });
     var volCount = showVolcanoes ? VOLCANOES.length : 0;
     hud.textContent = '活断層: ' + FAULTS.length + '  活火山: ' + volCount + '  表示: ' + visCount;
+
+    if (autoRot && showVolcanoes && !isHoveringVol && !drag) {
+      var bestVolIdx = -1, bestVolMz = -1;
+      for (var vi = 0; vi < VOLCANOES.length; vi++) {
+        var vp = VOLCANOES[vi]._p;
+        var vmz = model[2]*vp[0] + model[6]*vp[1] + model[10]*vp[2];
+        if (vmz > 0.05 && vmz > bestVolMz) { bestVolMz = vmz; bestVolIdx = vi; }
+      }
+      if (bestVolIdx >= 0) {
+        var acv = VOLCANOES[bestVolIdx];
+        if (acv.id !== autoVolId) {
+          autoVolId = acv.id;
+          volTooltipEl.innerHTML =
+            '<div class="vol-tt-name">🌋 ' + acv.n + '</div>' +
+            '<div class="vol-tt-sub">' + acv.c + ' / 標高 ' + acv.elev.toLocaleString() + 'm</div>' +
+            '<div class="vol-tt-sub">最新噴火: ' + acv.lastErupt + '</div>';
+        }
+        var vcx = canvasRect.left + canvasRect.width / 2;
+        var vcy = canvasRect.top + canvasRect.height / 2;
+        volTooltipEl.className = vcy < canvasRect.top + canvasRect.height * 0.3 ? 'below' : '';
+        volTooltipEl.style.left = vcx + 'px';
+        volTooltipEl.style.top = vcy + 'px';
+        volTooltipEl.style.opacity = '1';
+      }
+    } else if (!autoRot && !isHoveringVol && autoVolId !== null) {
+      autoVolId = null;
+      hideVolTooltip();
+    }
   }
 
   renderFaultList();
