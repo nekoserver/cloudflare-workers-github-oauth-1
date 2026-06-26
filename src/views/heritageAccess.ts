@@ -811,6 +811,11 @@ function openAccordion(tr) {
                     btn.removeAttribute('data-share-id');
                   }
                 });
+                AI_TOPICS.forEach(function(t) {
+                  if (localAnswered[t] || serverAnswered[t]) {
+                    ensureTopicBadge(inner, hName, t);
+                  }
+                });
                 kwCheckPromise = kwCheckPromise.then(function() {
                   return checkHeritageKeywords(filtered, inner);
                 });

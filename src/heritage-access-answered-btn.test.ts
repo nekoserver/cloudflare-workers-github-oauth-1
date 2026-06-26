@@ -178,7 +178,7 @@ describe('checkHeritageKeywords と check-heritage-questions の競合条件修�
     const fetchIdx = view.indexOf('check-heritage-questions?heritage=');
     const afterFetch = view.slice(fetchIdx, fetchIdx + 1200);
     const thenIdx = afterFetch.indexOf('.then(function(data)');
-    const thenBlock = afterFetch.slice(thenIdx, thenIdx + 900);
+    const thenBlock = afterFetch.slice(thenIdx, thenIdx + 1300);
     expect(thenBlock).toContain('checkHeritageKeywords(filtered, inner)');
   });
 
