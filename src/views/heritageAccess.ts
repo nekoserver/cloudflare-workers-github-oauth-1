@@ -776,6 +776,19 @@ function openAccordion(tr) {
     html += '</div>';
     inner.innerHTML = html;
     var kwCheckPromise = checkHeritageKeywords(filtered, inner);
+    var allHeritageNames = filtered.map(function(h) { return h.heritage_name; });
+    fetch('/api/aichat/check-heritage-questions-batch?heritages=' + encodeURIComponent(allHeritageNames.join(',')))
+      .then(function(r) { return r.json(); })
+      .then(function(batchData) {
+        var allAnswered = batchData.answered || {};
+        allHeritageNames.forEach(function(name) {
+          var nameAnswered = allAnswered[name] || {};
+          AI_TOPICS.forEach(function(t) {
+            if (nameAnswered[t]) ensureTopicBadge(inner, name, t);
+          });
+        });
+      })
+      .catch(function() {});
     inner.querySelectorAll('.acc-row[data-heritage]').forEach(function(rowEl) {
       rowEl.style.cursor = 'pointer';
       rowEl.addEventListener('click', function() {
