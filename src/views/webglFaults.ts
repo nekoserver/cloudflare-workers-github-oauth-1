@@ -140,7 +140,7 @@ canvas:active { cursor:grabbing; }
 .apt-mk { position:absolute; transform:translate(-50%,-50%); font-size:14px; line-height:1; pointer-events:auto; cursor:pointer; user-select:none; -webkit-user-select:none; filter:drop-shadow(0 1px 3px rgba(0,0,0,0.9)); display:none; }
 #apt-tooltip { position:fixed; background:rgba(13,17,23,0.97); border:1px solid #58a6ff; border-radius:8px; padding:8px 13px; font-size:12px; color:#e6edf3; min-width:200px; max-width:290px; pointer-events:auto; opacity:0; transition:opacity .15s; z-index:70; line-height:1.8; cursor:move; user-select:none; -webkit-user-select:none; }
 .apt-tt-hdr { display:flex; align-items:flex-start; gap:6px; margin-bottom:5px; }
-.apt-tt-name { flex:1; font-weight:700; font-size:13px; color:#58a6ff; cursor:pointer; text-decoration:underline dotted; }
+.apt-tt-name { flex:1; font-weight:700; font-size:13px; color:#58a6ff; cursor:pointer; text-decoration:none; }
 .apt-tt-name:hover { color:#79c0ff; }
 .apt-tt-close { background:none; border:none; color:#8b949e; font-size:15px; cursor:pointer; padding:0; line-height:1; flex-shrink:0; }
 .apt-tt-close:hover { color:#e6edf3; }
@@ -1189,10 +1189,11 @@ void main() {
       });
     });
 
-    var aptTtDragging = false, aptTtDragOX = 0, aptTtDragOY = 0;
+    var aptTtDragging = false, aptTtDragOX = 0, aptTtDragOY = 0, aptTtDragMoved = false;
     aptTooltipEl.addEventListener('pointerdown', function(ev) {
-      if (ev.target.closest('button') || ev.target.closest('.apt-tt-code') || ev.target.closest('.apt-tt-name')) return;
+      if (ev.target.closest('button') || ev.target.closest('.apt-tt-code')) return;
       aptTtDragging = true;
+      aptTtDragMoved = false;
       aptTtDragOX = ev.clientX - parseFloat(aptTooltipEl.style.left || '0');
       aptTtDragOY = ev.clientY - parseFloat(aptTooltipEl.style.top || '0');
       aptTooltipEl.setPointerCapture(ev.pointerId);
@@ -1200,6 +1201,7 @@ void main() {
     });
     aptTooltipEl.addEventListener('pointermove', function(ev) {
       if (!aptTtDragging) return;
+      aptTtDragMoved = true;
       aptTooltipEl.style.left = (ev.clientX - aptTtDragOX) + 'px';
       aptTooltipEl.style.top = (ev.clientY - aptTtDragOY) + 'px';
     });
@@ -1227,6 +1229,7 @@ void main() {
       var nameEl = aptTooltipEl.querySelector('.apt-tt-name');
       if (nameEl) {
         nameEl.addEventListener('click', function() {
+          if (aptTtDragMoved) return;
           var centerCode = nameEl.getAttribute('data-center');
           var ca = aptByCode[centerCode];
           if (!ca) return;
