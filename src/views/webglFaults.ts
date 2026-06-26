@@ -135,6 +135,15 @@ canvas:active { cursor:grabbing; }
 .apt-city { font-size:10px; color:#8b949e; margin-bottom:3px; }
 .apt-routes { font-size:10px; color:#484f58; line-height:1.6; }
 .apt-routes-lbl { color:#58a6ff; font-weight:600; margin-right:3px; }
+.apt-item.clickable { cursor:pointer; transition:background .1s; }
+.apt-item.clickable:hover { background:#161b22; }
+.apt-mk { position:absolute; transform:translate(-50%,-50%); font-size:14px; line-height:1; pointer-events:auto; cursor:pointer; user-select:none; -webkit-user-select:none; filter:drop-shadow(0 1px 3px rgba(0,0,0,0.9)); display:none; }
+#apt-tooltip { position:fixed; background:rgba(13,17,23,0.97); border:1px solid #58a6ff; border-radius:8px; padding:8px 13px; font-size:12px; color:#e6edf3; min-width:200px; max-width:290px; pointer-events:auto; opacity:0; transition:opacity .15s; z-index:70; transform:translate(-50%,-110%); line-height:1.8; }
+#apt-tooltip.below { transform:translate(-50%, 14px); }
+.apt-tt-name { font-weight:700; font-size:13px; color:#58a6ff; margin-bottom:5px; }
+.apt-tt-routes { display:flex; flex-wrap:wrap; gap:4px; margin-top:4px; }
+.apt-tt-code { background:#161b22; border:1px solid #30363d; border-radius:4px; padding:2px 7px; font-size:11px; font-family:monospace; cursor:pointer; transition:background .1s,border-color .1s; white-space:nowrap; }
+.apt-tt-code:hover { background:#21262d; border-color:#58a6ff; color:#58a6ff; }
 </style>
 </head>
 <body>
@@ -205,6 +214,7 @@ void main() {
 </script>
 
 <div id="globe-vol-tooltip"></div>
+<div id="apt-tooltip"></div>
 <div class="topbar">
   <h1><span class="globe-icon-wrap" id="globeIconWrap">🌐</span> 世界の活断層 地球儀</h1>
   <span class="badge">活断層</span>
@@ -235,72 +245,7 @@ void main() {
         <span class="apt-hdr-title">🛬 主要国際空港</span>
         <button class="apt-close-btn" id="airportClose">✕</button>
       </div>
-      <div class="apt-body">
-        <details class="apt-region" open>
-          <summary>🌏 東アジア <span class="apt-reg-arrow">▼</span></summary>
-          <div class="apt-item"><div class="apt-top"><span class="apt-iata">NRT</span><span class="apt-name">成田国際空港</span></div><div class="apt-city">🇯🇵 日本・千葉（東京）</div><div class="apt-routes"><span class="apt-routes-lbl">✈</span>LAX · JFK · LHR · CDG · FRA · SIN · HKG · ICN · PVG · SYD</div></div>
-          <div class="apt-item"><div class="apt-top"><span class="apt-iata">HND</span><span class="apt-name">羽田空港</span></div><div class="apt-city">🇯🇵 日本・東京</div><div class="apt-routes"><span class="apt-routes-lbl">✈</span>LAX · JFK · LHR · DXB · SIN · ICN · PVG · SYD · HNL</div></div>
-          <div class="apt-item"><div class="apt-top"><span class="apt-iata">KIX</span><span class="apt-name">関西国際空港</span></div><div class="apt-city">🇯🇵 日本・大阪</div><div class="apt-routes"><span class="apt-routes-lbl">✈</span>SIN · ICN · PVG · HKG · BKK · LAX · LHR</div></div>
-          <div class="apt-item"><div class="apt-top"><span class="apt-iata">ICN</span><span class="apt-name">仁川国際空港</span></div><div class="apt-city">🇰🇷 韓国・ソウル</div><div class="apt-routes"><span class="apt-routes-lbl">✈</span>NRT · HND · PVG · SIN · BKK · LAX · JFK · LHR · DXB</div></div>
-          <div class="apt-item"><div class="apt-top"><span class="apt-iata">PVG</span><span class="apt-name">上海浦東国際空港</span></div><div class="apt-city">🇨🇳 中国・上海</div><div class="apt-routes"><span class="apt-routes-lbl">✈</span>NRT · ICN · SIN · LHR · CDG · FRA · LAX · JFK</div></div>
-          <div class="apt-item"><div class="apt-top"><span class="apt-iata">PEK</span><span class="apt-name">北京首都国際空港</span></div><div class="apt-city">🇨🇳 中国・北京</div><div class="apt-routes"><span class="apt-routes-lbl">✈</span>NRT · ICN · SIN · LHR · CDG · FRA · JFK · LAX</div></div>
-          <div class="apt-item"><div class="apt-top"><span class="apt-iata">HKG</span><span class="apt-name">香港国際空港</span></div><div class="apt-city">🇭🇰 香港</div><div class="apt-routes"><span class="apt-routes-lbl">✈</span>NRT · SIN · BKK · LHR · CDG · LAX · JFK · DXB · SYD</div></div>
-        </details>
-        <details class="apt-region">
-          <summary>🌴 東南アジア・オセアニア <span class="apt-reg-arrow">▼</span></summary>
-          <div class="apt-item"><div class="apt-top"><span class="apt-iata">SIN</span><span class="apt-name">チャンギ空港</span></div><div class="apt-city">🇸🇬 シンガポール</div><div class="apt-routes"><span class="apt-routes-lbl">✈</span>NRT · HKG · BKK · DXB · LHR · SYD · LAX · JFK</div></div>
-          <div class="apt-item"><div class="apt-top"><span class="apt-iata">BKK</span><span class="apt-name">スワンナプーム国際空港</span></div><div class="apt-city">🇹🇭 タイ・バンコク</div><div class="apt-routes"><span class="apt-routes-lbl">✈</span>NRT · HKG · SIN · KUL · DXB · LHR · LAX</div></div>
-          <div class="apt-item"><div class="apt-top"><span class="apt-iata">KUL</span><span class="apt-name">クアラルンプール国際空港</span></div><div class="apt-city">🇲🇾 マレーシア</div><div class="apt-routes"><span class="apt-routes-lbl">✈</span>SIN · BKK · HKG · NRT · DXB · LHR · SYD</div></div>
-          <div class="apt-item"><div class="apt-top"><span class="apt-iata">CGK</span><span class="apt-name">スカルノ・ハッタ国際空港</span></div><div class="apt-city">🇮🇩 インドネシア・ジャカルタ</div><div class="apt-routes"><span class="apt-routes-lbl">✈</span>SIN · KUL · NRT · HKG · DXB · SYD</div></div>
-          <div class="apt-item"><div class="apt-top"><span class="apt-iata">SYD</span><span class="apt-name">シドニー国際空港</span></div><div class="apt-city">🇦🇺 オーストラリア</div><div class="apt-routes"><span class="apt-routes-lbl">✈</span>SIN · HKG · NRT · LAX · LHR · AKL · DXB</div></div>
-          <div class="apt-item"><div class="apt-top"><span class="apt-iata">MEL</span><span class="apt-name">メルボルン空港</span></div><div class="apt-city">🇦🇺 オーストラリア</div><div class="apt-routes"><span class="apt-routes-lbl">✈</span>SIN · HKG · NRT · LAX · LHR · SYD · DXB</div></div>
-          <div class="apt-item"><div class="apt-top"><span class="apt-iata">AKL</span><span class="apt-name">オークランド国際空港</span></div><div class="apt-city">🇳🇿 ニュージーランド</div><div class="apt-routes"><span class="apt-routes-lbl">✈</span>SYD · SIN · NRT · LAX · LHR · HKG</div></div>
-        </details>
-        <details class="apt-region">
-          <summary>🕌 南アジア・中東 <span class="apt-reg-arrow">▼</span></summary>
-          <div class="apt-item"><div class="apt-top"><span class="apt-iata">DEL</span><span class="apt-name">インディラ・ガンジー国際空港</span></div><div class="apt-city">🇮🇳 インド・ニューデリー</div><div class="apt-routes"><span class="apt-routes-lbl">✈</span>DXB · DOH · LHR · JFK · SIN · ICN · NRT</div></div>
-          <div class="apt-item"><div class="apt-top"><span class="apt-iata">BOM</span><span class="apt-name">チャトラパティ・シヴァージー国際空港</span></div><div class="apt-city">🇮🇳 インド・ムンバイ</div><div class="apt-routes"><span class="apt-routes-lbl">✈</span>DXB · DOH · LHR · JFK · SIN · ICN</div></div>
-          <div class="apt-item"><div class="apt-top"><span class="apt-iata">DXB</span><span class="apt-name">ドバイ国際空港</span></div><div class="apt-city">🇦🇪 UAE・ドバイ</div><div class="apt-routes"><span class="apt-routes-lbl">✈</span>SIN · LHR · CDG · FRA · JFK · LAX · BOM · DEL · NRT · SYD · JNB</div></div>
-          <div class="apt-item"><div class="apt-top"><span class="apt-iata">DOH</span><span class="apt-name">ハマド国際空港</span></div><div class="apt-city">🇶🇦 カタール・ドーハ</div><div class="apt-routes"><span class="apt-routes-lbl">✈</span>LHR · CDG · JFK · LAX · SIN · NRT · SYD · DEL</div></div>
-          <div class="apt-item"><div class="apt-top"><span class="apt-iata">IST</span><span class="apt-name">イスタンブール空港</span></div><div class="apt-city">🇹🇷 トルコ・イスタンブール</div><div class="apt-routes"><span class="apt-routes-lbl">✈</span>LHR · CDG · FRA · JFK · DXB · SIN · NRT · JNB</div></div>
-        </details>
-        <details class="apt-region">
-          <summary>🏰 ヨーロッパ <span class="apt-reg-arrow">▼</span></summary>
-          <div class="apt-item"><div class="apt-top"><span class="apt-iata">LHR</span><span class="apt-name">ロンドン・ヒースロー空港</span></div><div class="apt-city">🇬🇧 イギリス・ロンドン</div><div class="apt-routes"><span class="apt-routes-lbl">✈</span>JFK · LAX · DXB · SIN · HKG · NRT · CDG · FRA · JNB</div></div>
-          <div class="apt-item"><div class="apt-top"><span class="apt-iata">CDG</span><span class="apt-name">シャルル・ド・ゴール空港</span></div><div class="apt-city">🇫🇷 フランス・パリ</div><div class="apt-routes"><span class="apt-routes-lbl">✈</span>LHR · JFK · LAX · DXB · NRT · SIN · FRA · GRU</div></div>
-          <div class="apt-item"><div class="apt-top"><span class="apt-iata">FRA</span><span class="apt-name">フランクフルト空港</span></div><div class="apt-city">🇩🇪 ドイツ・フランクフルト</div><div class="apt-routes"><span class="apt-routes-lbl">✈</span>LHR · CDG · JFK · LAX · DXB · NRT · SIN · GRU</div></div>
-          <div class="apt-item"><div class="apt-top"><span class="apt-iata">AMS</span><span class="apt-name">スキポール空港</span></div><div class="apt-city">🇳🇱 オランダ・アムステルダム</div><div class="apt-routes"><span class="apt-routes-lbl">✈</span>LHR · CDG · JFK · LAX · NRT · SIN · DXB · JNB</div></div>
-          <div class="apt-item"><div class="apt-top"><span class="apt-iata">MAD</span><span class="apt-name">マドリード・バラハス空港</span></div><div class="apt-city">🇪🇸 スペイン・マドリード</div><div class="apt-routes"><span class="apt-routes-lbl">✈</span>LHR · CDG · JFK · LAX · GRU · BOG · SCL · EZE</div></div>
-          <div class="apt-item"><div class="apt-top"><span class="apt-iata">FCO</span><span class="apt-name">フィウミチーノ空港</span></div><div class="apt-city">🇮🇹 イタリア・ローマ</div><div class="apt-routes"><span class="apt-routes-lbl">✈</span>LHR · CDG · FRA · JFK · LAX · DXB · NRT</div></div>
-        </details>
-        <details class="apt-region">
-          <summary>🗽 北アメリカ <span class="apt-reg-arrow">▼</span></summary>
-          <div class="apt-item"><div class="apt-top"><span class="apt-iata">LAX</span><span class="apt-name">ロサンゼルス国際空港</span></div><div class="apt-city">🇺🇸 アメリカ・ロサンゼルス</div><div class="apt-routes"><span class="apt-routes-lbl">✈</span>NRT · SYD · SIN · LHR · CDG · JFK · ORD · MEX · HNL</div></div>
-          <div class="apt-item"><div class="apt-top"><span class="apt-iata">JFK</span><span class="apt-name">ジョン・F・ケネディ国際空港</span></div><div class="apt-city">🇺🇸 アメリカ・ニューヨーク</div><div class="apt-routes"><span class="apt-routes-lbl">✈</span>LHR · CDG · FRA · NRT · HKG · DXB · LAX · ORD · GRU</div></div>
-          <div class="apt-item"><div class="apt-top"><span class="apt-iata">ORD</span><span class="apt-name">シカゴ・オヘア国際空港</span></div><div class="apt-city">🇺🇸 アメリカ・シカゴ</div><div class="apt-routes"><span class="apt-routes-lbl">✈</span>JFK · LAX · LHR · CDG · NRT · FRA · MEX · GRU</div></div>
-          <div class="apt-item"><div class="apt-top"><span class="apt-iata">YYZ</span><span class="apt-name">トロント・ピアソン国際空港</span></div><div class="apt-city">🇨🇦 カナダ・トロント</div><div class="apt-routes"><span class="apt-routes-lbl">✈</span>JFK · LAX · LHR · CDG · NRT · MEX · DEL</div></div>
-          <div class="apt-item"><div class="apt-top"><span class="apt-iata">MEX</span><span class="apt-name">メキシコシティ国際空港</span></div><div class="apt-city">🇲🇽 メキシコ・メキシコシティ</div><div class="apt-routes"><span class="apt-routes-lbl">✈</span>LAX · JFK · ORD · GRU · BOG · MAD · MIA</div></div>
-          <div class="apt-item"><div class="apt-top"><span class="apt-iata">MIA</span><span class="apt-name">マイアミ国際空港</span></div><div class="apt-city">🇺🇸 アメリカ・マイアミ</div><div class="apt-routes"><span class="apt-routes-lbl">✈</span>JFK · LAX · GRU · BOG · LIM · CCS · MEX · LHR · MAD</div></div>
-        </details>
-        <details class="apt-region">
-          <summary>🌿 南アメリカ・カリブ海 <span class="apt-reg-arrow">▼</span></summary>
-          <div class="apt-item"><div class="apt-top"><span class="apt-iata">GRU</span><span class="apt-name">グアルーリョス国際空港</span></div><div class="apt-city">🇧🇷 ブラジル・サンパウロ</div><div class="apt-routes"><span class="apt-routes-lbl">✈</span>LAX · JFK · LHR · CDG · FRA · BOG · EZE · LIM · MAD</div></div>
-          <div class="apt-item"><div class="apt-top"><span class="apt-iata">EZE</span><span class="apt-name">エセイサ国際空港</span></div><div class="apt-city">🇦🇷 アルゼンチン・ブエノスアイレス</div><div class="apt-routes"><span class="apt-routes-lbl">✈</span>GRU · LIM · BOG · LHR · CDG · MAD · JFK · SCL</div></div>
-          <div class="apt-item"><div class="apt-top"><span class="apt-iata">BOG</span><span class="apt-name">エル・ドラード国際空港</span></div><div class="apt-city">🇨🇴 コロンビア・ボゴタ</div><div class="apt-routes"><span class="apt-routes-lbl">✈</span>MEX · JFK · LAX · MIA · GRU · LIM · MAD · LHR</div></div>
-          <div class="apt-item"><div class="apt-top"><span class="apt-iata">LIM</span><span class="apt-name">ホルヘ・チャベス国際空港</span></div><div class="apt-city">🇵🇪 ペルー・リマ</div><div class="apt-routes"><span class="apt-routes-lbl">✈</span>BOG · GRU · EZE · LAX · JFK · MIA · MAD</div></div>
-          <div class="apt-item"><div class="apt-top"><span class="apt-iata">SCL</span><span class="apt-name">アルトゥーロ・メリノ・ベニテス国際空港</span></div><div class="apt-city">🇨🇱 チリ・サンティアゴ</div><div class="apt-routes"><span class="apt-routes-lbl">✈</span>GRU · EZE · LIM · BOG · MAD · LAX · JFK · MIA</div></div>
-          <div class="apt-item"><div class="apt-top"><span class="apt-iata">CCS</span><span class="apt-name">シモン・ボリバル国際空港</span></div><div class="apt-city">🇻🇪 ベネズエラ・カラカス</div><div class="apt-routes"><span class="apt-routes-lbl">✈</span>MIA · BOG · GRU · MAD · LHR · MEX · PTY</div></div>
-          <div class="apt-item"><div class="apt-top"><span class="apt-iata">PTY</span><span class="apt-name">トクメン国際空港</span></div><div class="apt-city">🇵🇦 パナマ・パナマシティ</div><div class="apt-routes"><span class="apt-routes-lbl">✈</span>MIA · JFK · LAX · BOG · GRU · LIM · MAD · MEX</div></div>
-        </details>
-        <details class="apt-region">
-          <summary>🦁 アフリカ <span class="apt-reg-arrow">▼</span></summary>
-          <div class="apt-item"><div class="apt-top"><span class="apt-iata">JNB</span><span class="apt-name">O・R・タンボ国際空港</span></div><div class="apt-city">🇿🇦 南アフリカ・ヨハネスブルグ</div><div class="apt-routes"><span class="apt-routes-lbl">✈</span>LHR · CDG · DXB · SIN · NBO · LAX · IST · AMS</div></div>
-          <div class="apt-item"><div class="apt-top"><span class="apt-iata">NBO</span><span class="apt-name">ジョモ・ケニヤッタ国際空港</span></div><div class="apt-city">🇰🇪 ケニア・ナイロビ</div><div class="apt-routes"><span class="apt-routes-lbl">✈</span>LHR · DXB · JNB · CDG · BOM · IST · AMS</div></div>
-          <div class="apt-item"><div class="apt-top"><span class="apt-iata">CAI</span><span class="apt-name">カイロ国際空港</span></div><div class="apt-city">🇪🇬 エジプト・カイロ</div><div class="apt-routes"><span class="apt-routes-lbl">✈</span>LHR · CDG · DXB · IST · BOM · JNB · DOH</div></div>
-          <div class="apt-item"><div class="apt-top"><span class="apt-iata">LOS</span><span class="apt-name">ムルタラ・ムハンマド国際空港</span></div><div class="apt-city">🇳🇬 ナイジェリア・ラゴス</div><div class="apt-routes"><span class="apt-routes-lbl">✈</span>LHR · CDG · DXB · JNB · NBO · IST · JFK</div></div>
-          <div class="apt-item"><div class="apt-top"><span class="apt-iata">ADD</span><span class="apt-name">ボレ国際空港</span></div><div class="apt-city">🇪🇹 エチオピア・アディスアベバ</div><div class="apt-routes"><span class="apt-routes-lbl">✈</span>LHR · CDG · DXB · JNB · NBO · NRT · LAX · JFK</div></div>
-        </details>
-      </div>
+      <div class="apt-body" id="aptBody"></div>
     </div>
   </div>
   <div class="side">
@@ -935,7 +880,7 @@ void main() {
   }
   function hideVolTooltip() { volTooltipEl.style.opacity = '0'; }
 
-  function flyToLatLon(lat, lon, dur) {
+  function flyToLatLon(lat, lon, dur, cb) {
     var latR = lat * Math.PI / 180;
     var lonR = lon * Math.PI / 180;
     var a = axialTilt;
@@ -952,6 +897,7 @@ void main() {
     flyFrom = {ry: rotYv, rx: rotXv};
     flyTarget = {ry: rotYv + dy, rx: tRx};
     flyT = 0; flyDur = dur;
+    flyCallback = cb || null;
   }
 
   function selectFaultFromVol(v) {
@@ -972,7 +918,7 @@ void main() {
 
   var activeFilter = 'all';
   var selectedFaultId = null;
-  var flyTarget = null, flyFrom = null, flyT = 0, flyDur = 0;
+  var flyTarget = null, flyFrom = null, flyT = 0, flyDur = 0, flyCallback = null;
 
   function faultColor(type) {
     return TYPE_COLORS[type] || [1,1,1];
@@ -1095,15 +1041,203 @@ void main() {
   document.getElementById('btnCaribbeanTour').addEventListener('click', function() { startTour('caribbean'); });
 
   (function() {
+    var IATA_FLAG = {
+      'NRT':'🇯🇵','HND':'🇯🇵','KIX':'🇯🇵','ICN':'🇰🇷','PVG':'🇨🇳','PEK':'🇨🇳','HKG':'🇭🇰',
+      'SIN':'🇸🇬','BKK':'🇹🇭','KUL':'🇲🇾','CGK':'🇮🇩','SYD':'🇦🇺','MEL':'🇦🇺','AKL':'🇳🇿',
+      'DEL':'🇮🇳','BOM':'🇮🇳','DXB':'🇦🇪','DOH':'🇶🇦','IST':'🇹🇷',
+      'LHR':'🇬🇧','CDG':'🇫🇷','FRA':'🇩🇪','AMS':'🇳🇱','MAD':'🇪🇸','FCO':'🇮🇹',
+      'LAX':'🇺🇸','JFK':'🇺🇸','ORD':'🇺🇸','MIA':'🇺🇸','HNL':'🇺🇸',
+      'YYZ':'🇨🇦','MEX':'🇲🇽',
+      'GRU':'🇧🇷','EZE':'🇦🇷','BOG':'🇨🇴','LIM':'🇵🇪','SCL':'🇨🇱','CCS':'🇻🇪','PTY':'🇵🇦',
+      'JNB':'🇿🇦','NBO':'🇰🇪','CAI':'🇪🇬','LOS':'🇳🇬','ADD':'🇪🇹'
+    };
+    var APT_REGIONS = [
+      { label:'🌏 東アジア', open:true, airports:[
+        {code:'NRT',name:'成田国際空港',city:'🇯🇵 日本・千葉',lat:35.77,lon:140.39,routes:['LAX','JFK','LHR','CDG','SIN','HKG','ICN','PVG','SYD']},
+        {code:'HND',name:'羽田空港',city:'🇯🇵 日本・東京',lat:35.55,lon:139.78,routes:['LAX','JFK','LHR','DXB','SIN','ICN','PVG','SYD','HNL']},
+        {code:'KIX',name:'関西国際空港',city:'🇯🇵 日本・大阪',lat:34.43,lon:135.24,routes:['SIN','ICN','PVG','HKG','BKK','LAX','LHR']},
+        {code:'ICN',name:'仁川国際空港',city:'🇰🇷 韓国・ソウル',lat:37.46,lon:126.44,routes:['NRT','HND','PVG','SIN','BKK','LAX','JFK','LHR','DXB']},
+        {code:'PVG',name:'上海浦東国際空港',city:'🇨🇳 中国・上海',lat:31.14,lon:121.81,routes:['NRT','ICN','SIN','LHR','CDG','FRA','LAX','JFK']},
+        {code:'PEK',name:'北京首都国際空港',city:'🇨🇳 中国・北京',lat:40.08,lon:116.58,routes:['NRT','ICN','SIN','LHR','CDG','FRA','JFK','LAX']},
+        {code:'HKG',name:'香港国際空港',city:'🇭🇰 香港',lat:22.31,lon:113.92,routes:['NRT','SIN','BKK','LHR','CDG','LAX','JFK','DXB','SYD']}
+      ]},
+      { label:'🌴 東南アジア・オセアニア', open:false, airports:[
+        {code:'SIN',name:'チャンギ空港',city:'🇸🇬 シンガポール',lat:1.35,lon:103.99,routes:['NRT','HKG','BKK','DXB','LHR','SYD','LAX','JFK']},
+        {code:'BKK',name:'スワンナプーム国際空港',city:'🇹🇭 タイ・バンコク',lat:13.69,lon:100.75,routes:['NRT','HKG','SIN','KUL','DXB','LHR','LAX']},
+        {code:'KUL',name:'クアラルンプール国際空港',city:'🇲🇾 マレーシア',lat:2.74,lon:101.70,routes:['SIN','BKK','HKG','NRT','DXB','LHR','SYD']},
+        {code:'CGK',name:'スカルノ・ハッタ国際空港',city:'🇮🇩 インドネシア・ジャカルタ',lat:-6.13,lon:106.65,routes:['SIN','KUL','NRT','HKG','DXB','SYD']},
+        {code:'SYD',name:'シドニー国際空港',city:'🇦🇺 オーストラリア・シドニー',lat:-33.94,lon:151.18,routes:['SIN','HKG','NRT','LAX','LHR','AKL','DXB']},
+        {code:'MEL',name:'メルボルン空港',city:'🇦🇺 オーストラリア・メルボルン',lat:-37.67,lon:144.84,routes:['SIN','HKG','NRT','LAX','LHR','SYD','DXB']},
+        {code:'AKL',name:'オークランド国際空港',city:'🇳🇿 ニュージーランド',lat:-37.01,lon:174.79,routes:['SYD','SIN','NRT','LAX','LHR','HKG']}
+      ]},
+      { label:'🕌 南アジア・中東', open:false, airports:[
+        {code:'DEL',name:'インディラ・ガンジー国際空港',city:'🇮🇳 インド・ニューデリー',lat:28.57,lon:77.12,routes:['DXB','DOH','LHR','JFK','SIN','ICN','NRT']},
+        {code:'BOM',name:'チャトラパティ・シヴァージー国際空港',city:'🇮🇳 インド・ムンバイ',lat:19.09,lon:72.87,routes:['DXB','DOH','LHR','JFK','SIN','ICN']},
+        {code:'DXB',name:'ドバイ国際空港',city:'🇦🇪 UAE・ドバイ',lat:25.25,lon:55.36,routes:['SIN','LHR','CDG','FRA','JFK','LAX','BOM','DEL','NRT','SYD','JNB']},
+        {code:'DOH',name:'ハマド国際空港',city:'🇶🇦 カタール・ドーハ',lat:25.27,lon:51.61,routes:['LHR','CDG','JFK','LAX','SIN','NRT','SYD','DEL']},
+        {code:'IST',name:'イスタンブール空港',city:'🇹🇷 トルコ・イスタンブール',lat:41.27,lon:28.75,routes:['LHR','CDG','FRA','JFK','DXB','SIN','NRT','JNB']}
+      ]},
+      { label:'🏰 ヨーロッパ', open:false, airports:[
+        {code:'LHR',name:'ロンドン・ヒースロー空港',city:'🇬🇧 イギリス・ロンドン',lat:51.48,lon:-0.46,routes:['JFK','LAX','DXB','SIN','HKG','NRT','CDG','FRA','JNB']},
+        {code:'CDG',name:'シャルル・ド・ゴール空港',city:'🇫🇷 フランス・パリ',lat:49.01,lon:2.55,routes:['LHR','JFK','LAX','DXB','NRT','SIN','FRA','GRU']},
+        {code:'FRA',name:'フランクフルト空港',city:'🇩🇪 ドイツ・フランクフルト',lat:50.04,lon:8.56,routes:['LHR','CDG','JFK','LAX','DXB','NRT','SIN','GRU']},
+        {code:'AMS',name:'スキポール空港',city:'🇳🇱 オランダ・アムステルダム',lat:52.31,lon:4.77,routes:['LHR','CDG','JFK','LAX','NRT','SIN','DXB','JNB']},
+        {code:'MAD',name:'マドリード・バラハス空港',city:'🇪🇸 スペイン・マドリード',lat:40.47,lon:-3.56,routes:['LHR','CDG','JFK','LAX','GRU','BOG','SCL','EZE']},
+        {code:'FCO',name:'フィウミチーノ空港',city:'🇮🇹 イタリア・ローマ',lat:41.80,lon:12.25,routes:['LHR','CDG','FRA','JFK','LAX','DXB','NRT']}
+      ]},
+      { label:'🗽 北アメリカ', open:false, airports:[
+        {code:'LAX',name:'ロサンゼルス国際空港',city:'🇺🇸 アメリカ・ロサンゼルス',lat:33.94,lon:-118.41,routes:['NRT','SYD','SIN','LHR','CDG','JFK','ORD','MEX','HNL']},
+        {code:'JFK',name:'ジョン・F・ケネディ国際空港',city:'🇺🇸 アメリカ・ニューヨーク',lat:40.64,lon:-73.78,routes:['LHR','CDG','FRA','NRT','HKG','DXB','LAX','ORD','GRU']},
+        {code:'ORD',name:'シカゴ・オヘア国際空港',city:'🇺🇸 アメリカ・シカゴ',lat:41.98,lon:-87.90,routes:['JFK','LAX','LHR','CDG','NRT','FRA','MEX','GRU']},
+        {code:'YYZ',name:'トロント・ピアソン国際空港',city:'🇨🇦 カナダ・トロント',lat:43.68,lon:-79.63,routes:['JFK','LAX','LHR','CDG','NRT','MEX','DEL']},
+        {code:'MEX',name:'メキシコシティ国際空港',city:'🇲🇽 メキシコ・メキシコシティ',lat:19.44,lon:-99.07,routes:['LAX','JFK','ORD','GRU','BOG','MAD','MIA']},
+        {code:'MIA',name:'マイアミ国際空港',city:'🇺🇸 アメリカ・マイアミ',lat:25.80,lon:-80.29,routes:['JFK','LAX','GRU','BOG','LIM','CCS','MEX','LHR','MAD']}
+      ]},
+      { label:'🌿 南アメリカ・カリブ海', open:false, airports:[
+        {code:'GRU',name:'グアルーリョス国際空港',city:'🇧🇷 ブラジル・サンパウロ',lat:-23.43,lon:-46.47,routes:['LAX','JFK','LHR','CDG','FRA','BOG','EZE','LIM','MAD']},
+        {code:'EZE',name:'エセイサ国際空港',city:'🇦🇷 アルゼンチン・ブエノスアイレス',lat:-34.82,lon:-58.54,routes:['GRU','LIM','BOG','LHR','CDG','MAD','JFK','SCL']},
+        {code:'BOG',name:'エル・ドラード国際空港',city:'🇨🇴 コロンビア・ボゴタ',lat:4.70,lon:-74.14,routes:['MEX','JFK','LAX','MIA','GRU','LIM','MAD','LHR']},
+        {code:'LIM',name:'ホルヘ・チャベス国際空港',city:'🇵🇪 ペルー・リマ',lat:-12.02,lon:-77.11,routes:['BOG','GRU','EZE','LAX','JFK','MIA','MAD']},
+        {code:'SCL',name:'アルトゥーロ・メリノ・ベニテス国際空港',city:'🇨🇱 チリ・サンティアゴ',lat:-33.39,lon:-70.79,routes:['GRU','EZE','LIM','BOG','MAD','LAX','JFK','MIA']},
+        {code:'CCS',name:'シモン・ボリバル国際空港',city:'🇻🇪 ベネズエラ・カラカス',lat:10.60,lon:-66.99,routes:['MIA','BOG','GRU','MAD','LHR','MEX','PTY']},
+        {code:'PTY',name:'トクメン国際空港',city:'🇵🇦 パナマ・パナマシティ',lat:9.07,lon:-79.38,routes:['MIA','JFK','LAX','BOG','GRU','LIM','MAD','MEX']}
+      ]},
+      { label:'🦁 アフリカ', open:false, airports:[
+        {code:'JNB',name:'O・R・タンボ国際空港',city:'🇿🇦 南アフリカ・ヨハネスブルグ',lat:-26.13,lon:28.24,routes:['LHR','CDG','DXB','SIN','NBO','LAX','IST','AMS']},
+        {code:'NBO',name:'ジョモ・ケニヤッタ国際空港',city:'🇰🇪 ケニア・ナイロビ',lat:-1.32,lon:36.93,routes:['LHR','DXB','JNB','CDG','BOM','IST','AMS']},
+        {code:'CAI',name:'カイロ国際空港',city:'🇪🇬 エジプト・カイロ',lat:30.12,lon:31.41,routes:['LHR','CDG','DXB','IST','BOM','JNB','DOH']},
+        {code:'LOS',name:'ムルタラ・ムハンマド国際空港',city:'🇳🇬 ナイジェリア・ラゴス',lat:6.58,lon:3.32,routes:['LHR','CDG','DXB','JNB','NBO','IST','JFK']},
+        {code:'ADD',name:'ボレ国際空港',city:'🇪🇹 エチオピア・アディスアベバ',lat:8.98,lon:38.80,routes:['LHR','CDG','DXB','JNB','NBO','NRT','LAX','JFK']}
+      ]}
+    ];
+
+    var aptByCode = {};
+    APT_REGIONS.forEach(function(rg) {
+      rg.airports.forEach(function(a) { aptByCode[a.code] = a; });
+    });
+
+    var aptTooltipEl = document.getElementById('apt-tooltip');
+    var aptMarkersDiv = document.getElementById('markers');
+    var aptDivMap = {};
+    var showAirports = false;
+
+    APT_REGIONS.forEach(function(rg) {
+      rg.airports.forEach(function(a) {
+        a._p = latLonToXYZ(a.lat, a.lon, 1.008);
+        var el = document.createElement('div');
+        el.className = 'apt-mk';
+        el.textContent = '✈';
+        el.setAttribute('data-code', a.code);
+        aptMarkersDiv.appendChild(el);
+        aptDivMap[a.code] = el;
+        el.addEventListener('click', function(ev) {
+          ev.stopPropagation();
+          showAptTooltip(a.code);
+        });
+      });
+    });
+
+    function showAptTooltip(code) {
+      var a = aptByCode[code];
+      if (!a) return;
+      var el = aptDivMap[code];
+      if (!el || el.style.display === 'none') return;
+      var r = el.getBoundingClientRect();
+      var cx = r.left + r.width / 2;
+      var cy = r.top + r.height / 2;
+      var routesHtml = '';
+      a.routes.forEach(function(rc) {
+        var flag = IATA_FLAG[rc] || '';
+        routesHtml += '<span class="apt-tt-code" data-goto="' + rc + '">' + flag + ' ' + rc + '</span>';
+      });
+      aptTooltipEl.innerHTML =
+        '<div class="apt-tt-name">' + a.city.split(' ')[0] + ' ' + a.name + '</div>' +
+        '<div class="apt-tt-routes">' + routesHtml + '</div>';
+      var below = cy < canvasRect.top + canvasRect.height * 0.3;
+      aptTooltipEl.className = below ? 'below' : '';
+      aptTooltipEl.style.left = cx + 'px';
+      aptTooltipEl.style.top = cy + 'px';
+      aptTooltipEl.style.opacity = '1';
+      aptTooltipEl.querySelectorAll('.apt-tt-code').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+          var dest = btn.getAttribute('data-goto');
+          var da = aptByCode[dest];
+          if (!da) return;
+          hideAptTooltip();
+          flyToLatLon(da.lat, da.lon, 1200, function() { showAptTooltip(dest); });
+        });
+      });
+    }
+    function hideAptTooltip() { aptTooltipEl.style.opacity = '0'; }
+
+    function buildAptPanel() {
+      var body = document.getElementById('aptBody');
+      var html = '';
+      APT_REGIONS.forEach(function(rg) {
+        html += '<details class="apt-region"' + (rg.open ? ' open' : '') + '>';
+        html += '<summary>' + rg.label + ' <span class="apt-reg-arrow">&#9660;</span></summary>';
+        rg.airports.forEach(function(a) {
+          html += '<div class="apt-item clickable" data-code="' + a.code + '">';
+          html += '<div class="apt-top"><span class="apt-iata">' + a.code + '</span><span class="apt-name">' + a.name + '</span></div>';
+          html += '<div class="apt-city">' + a.city + '</div>';
+          html += '<div class="apt-routes"><span class="apt-routes-lbl">&#9992;</span>' + a.routes.join(' &middot; ') + '</div>';
+          html += '</div>';
+        });
+        html += '</details>';
+      });
+      body.innerHTML = html;
+      body.querySelectorAll('.apt-item.clickable').forEach(function(item) {
+        item.addEventListener('click', function() {
+          var code = item.getAttribute('data-code');
+          var a = aptByCode[code];
+          if (!a) return;
+          hideAptTooltip();
+          flyToLatLon(a.lat, a.lon, 1200, function() { showAptTooltip(code); });
+        });
+      });
+    }
+
+    function setAirportMarkers(visible) {
+      showAirports = visible;
+      Object.keys(aptDivMap).forEach(function(k) {
+        if (!visible) aptDivMap[k].style.display = 'none';
+      });
+      if (!visible) hideAptTooltip();
+    }
+
+    window._aptRenderFrame = function(mvpMat, modelMat, W, H) {
+      if (!showAirports) return;
+      APT_REGIONS.forEach(function(rg) {
+        rg.airports.forEach(function(a) {
+          var p = a._p;
+          var mz = modelMat[2]*p[0] + modelMat[6]*p[1] + modelMat[10]*p[2];
+          var el = aptDivMap[a.code];
+          if (mz < 0.02) { el.style.display = 'none'; return; }
+          var mcx = mvpMat[0]*p[0] + mvpMat[4]*p[1] + mvpMat[8]*p[2] + mvpMat[12];
+          var mcy = mvpMat[1]*p[0] + mvpMat[5]*p[1] + mvpMat[9]*p[2] + mvpMat[13];
+          var mcw = mvpMat[3]*p[0] + mvpMat[7]*p[1] + mvpMat[11]*p[2] + mvpMat[15];
+          if (mcw <= 0) { el.style.display = 'none'; return; }
+          el.style.display = 'block';
+          el.style.left = ((mcx/mcw + 1) * W / 2) + 'px';
+          el.style.top = ((-mcy/mcw + 1) * H / 2) + 'px';
+          el.style.opacity = Math.min(1, (mz - 0.02) * 10).toFixed(2);
+        });
+      });
+    };
+
+    buildAptPanel();
+
     var drawer = document.getElementById('airportDrawer');
     var btn = document.getElementById('btnAirport');
     btn.addEventListener('click', function() {
       var open = drawer.classList.toggle('open');
       btn.classList.toggle('active', open);
+      setAirportMarkers(open);
     });
     document.getElementById('airportClose').addEventListener('click', function() {
       drawer.classList.remove('open');
       btn.classList.remove('active');
+      setAirportMarkers(false);
     });
   })();
 
@@ -1252,7 +1386,7 @@ void main() {
       fe = fe < 0.5 ? 2*fe*fe : -1+(4-2*fe)*fe;
       rotYv = flyFrom.ry + (flyTarget.ry - flyFrom.ry) * fe;
       rotXv = flyFrom.rx + (flyTarget.rx - flyFrom.rx) * fe;
-      if (flyT >= flyDur) { flyTarget = null; flyFrom = null; }
+      if (flyT >= flyDur) { flyTarget = null; flyFrom = null; if (flyCallback) { var _cb = flyCallback; flyCallback = null; _cb(); } }
     } else {
       if (autoRot) rotYv += 0.003 * rotSpd;
       if (Math.abs(momentumY) > 0.0002) { rotYv += momentumY; momentumY *= MOMENTUM_DECAY; } else momentumY = 0;
@@ -1309,6 +1443,8 @@ void main() {
 
     gl.enableVertexAttribArray(aNorm);
     gl.enableVertexAttribArray(aUV);
+
+    if (window._aptRenderFrame) window._aptRenderFrame(mvp, model, W, H);
 
     if (showVolcanoes) {
       VOLCANOES.forEach(function(v) {
