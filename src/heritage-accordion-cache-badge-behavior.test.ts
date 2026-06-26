@@ -211,3 +211,60 @@ describe('アコーディオン: 都市タップ時に全世界遺産へキャ�
     expect(badges.filter((b) => b === '見どころ').length).toBe(1);
   });
 });
+
+describe('アコーディオン: メモリキャッシュ（cityCache）', () => {
+  it('2回目の同一都市オープンでは city-all-heritages を呼ばない', async () => {
+    let heritageCallCount = 0;
+    const handler = (url: string) => {
+      if (url.indexOf('/api/heritage-access-ranking') !== -1) return { rows: [] };
+      if (url.indexOf('/api/city-all-heritages') !== -1) { heritageCallCount++; return THREE_HERITAGES; }
+      if (url.indexOf('/api/aichat/heritage-keywords-check') !== -1) return { hits: {} };
+      if (url.indexOf('/api/aichat/heritage-search-keywords-check') !== -1) return { hasKeywords: {} };
+      if (url.indexOf('/api/aichat/check-heritage-questions-batch') !== -1) return { answered: { H1: { '交通手段': 's1' } } };
+      return {};
+    };
+    const h = setupHarness(handler);
+
+    const tr1 = h.openCity();
+    await flush();
+    expect(heritageCallCount).toBe(1);
+    const inner1 = tr1.nextSibling && (tr1.nextSibling as any).querySelector('.accordion-inner');
+    expect(topicBadgesFor(inner1, 'H1')).toContain('交通手段');
+
+    // アコーディオンを閉じる
+    const accRow = tr1.nextSibling as any;
+    if (accRow) accRow.parentNode.removeChild(accRow);
+    tr1.classList.remove('row-open');
+
+    // 2回目オープン（キャッシュヒット）
+    const tr2 = h.openCity();
+    await flush();
+    expect(heritageCallCount).toBe(1); // 再フェッチなし
+    const inner2 = tr2.nextSibling && (tr2.nextSibling as any).querySelector('.accordion-inner');
+    expect(topicBadgesFor(inner2, 'H1')).toContain('交通手段');
+  });
+
+  it('キャッシュヒット時も answered の更新バッチは呼ばれる', async () => {
+    let batchCallCount = 0;
+    const handler = (url: string) => {
+      if (url.indexOf('/api/heritage-access-ranking') !== -1) return { rows: [] };
+      if (url.indexOf('/api/city-all-heritages') !== -1) return THREE_HERITAGES;
+      if (url.indexOf('/api/aichat/heritage-keywords-check') !== -1) return { hits: {} };
+      if (url.indexOf('/api/aichat/heritage-search-keywords-check') !== -1) return { hasKeywords: {} };
+      if (url.indexOf('/api/aichat/check-heritage-questions-batch') !== -1) { batchCallCount++; return { answered: {} }; }
+      return {};
+    };
+    const h = setupHarness(handler);
+
+    const tr1 = h.openCity();
+    await flush();
+    const acc1 = tr1.nextSibling as any;
+    if (acc1) acc1.parentNode.removeChild(acc1);
+    tr1.classList.remove('row-open');
+
+    const tr2 = h.openCity();
+    await flush();
+    // キャッシュミス時1回 + キャッシュヒット時バックグラウンド1回 = 計2回
+    expect(batchCallCount).toBe(2);
+  });
+});

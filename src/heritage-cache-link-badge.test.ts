@@ -4,8 +4,8 @@ import { readFileSync } from 'fs';
 const view = readFileSync(new URL('./views/heritageAccess.ts', import.meta.url).pathname, 'utf-8');
 
 describe('世界遺産名リンク — acc-name-link クリックでチャットログモーダルを開く', () => {
-  it('checkHeritageKeywords で生成する acc-name-link ボタンのクリックで openHeritageChatlogModal を呼ぶ', () => {
-    const fnIdx = view.indexOf('function checkHeritageKeywords(');
+  it('applyKeywordData で生成する acc-name-link ボタンのクリックで openHeritageChatlogModal を呼ぶ', () => {
+    const fnIdx = view.indexOf('function applyKeywordData(');
     const fnBlock = view.slice(fnIdx, fnIdx + 3000);
     const btnIdx = fnBlock.indexOf("btn.addEventListener('click'");
     const btnBlock = fnBlock.slice(btnIdx, btnIdx + 200);
@@ -21,25 +21,22 @@ describe('世界遺産名リンク — acc-name-link クリックでチャット
   });
 });
 
-describe('世界遺産名リンク — check-heritage-questions-batch は kwCheckPromise 完了後に実行', () => {
-  it('openAccordion 内で check-heritage-questions-batch fetch が checkHeritageKeywords の .then() の中にある', () => {
+describe('世界遺産名リンク — fetchHeritageKeywordData と check-heritage-questions-batch の並列実行', () => {
+  it('openAccordion 内で fetchHeritageKeywordData と check-heritage-questions-batch が Promise.all で並列実行される', () => {
     const fnIdx = view.indexOf('function openAccordion(');
     const fnBlock = view.slice(fnIdx, fnIdx + 4000);
-    const batchIdx = fnBlock.indexOf('check-heritage-questions-batch');
-    expect(batchIdx).toBeGreaterThan(-1);
-    const beforeBatch = fnBlock.slice(0, batchIdx);
-    // checkHeritageKeywords(...).then( が batch より前にある
-    const kwThenIdx = beforeBatch.lastIndexOf('checkHeritageKeywords(filtered, inner).then(');
-    expect(kwThenIdx).toBeGreaterThan(-1);
+    const promiseAllIdx = fnBlock.indexOf('Promise.all([');
+    expect(promiseAllIdx).toBeGreaterThan(-1);
+    const promiseBlock = fnBlock.slice(promiseAllIdx, promiseAllIdx + 600);
+    expect(promiseBlock).toContain('fetchHeritageKeywordData');
+    expect(promiseBlock).toContain('check-heritage-questions-batch');
   });
 
-  it('openAccordion 内で kwCheckPromise は checkHeritageKeywords(...).then() で初期化される', () => {
+  it('openAccordion 内で cityCache にデータをセットしている', () => {
     const fnIdx = view.indexOf('function openAccordion(');
     const fnBlock = view.slice(fnIdx, fnIdx + 4000);
-    const kwPromiseIdx = fnBlock.indexOf('var kwCheckPromise');
-    expect(kwPromiseIdx).toBeGreaterThan(-1);
-    // kwCheckPromise の初期化に checkHeritageKeywords が含まれる
-    const initLine = fnBlock.slice(kwPromiseIdx, kwPromiseIdx + 120);
-    expect(initLine).toContain('checkHeritageKeywords(filtered, inner).then(');
+    expect(fnBlock).toContain('cityCache[cityName]');
+    expect(fnBlock).toContain('heritages: filtered');
+    expect(fnBlock).toContain('hits: kwData.hits');
   });
 });

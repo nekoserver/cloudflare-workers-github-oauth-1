@@ -320,6 +320,7 @@ function buildCityThHtml(ccStats) {
 }
 
 var allRows = [];
+var cityCache = {};
 var viewMode = 'all';
 document.getElementById('tab-all').addEventListener('click', function() {
   viewMode = 'all';
@@ -514,116 +515,109 @@ function openHeritageChatlogModal(heritageName, topic) {
     });
 }
 
-function checkHeritageKeywords(heritages, inner) {
-  if (!heritages.length) return Promise.resolve();
-  var keywords = heritages.map(function(h) { return h.heritage_name; });
+function fetchHeritageKeywordData(keywords) {
   return fetch('/api/aichat/heritage-keywords-check?keywords=' + encodeURIComponent(keywords.join(',')))
     .then(function(r) { return r.json(); })
     .then(function(data) {
       var hits = data.hits || {};
-      inner.querySelectorAll('.acc-name[data-heritage]').forEach(function(span) {
-        var name = span.getAttribute('data-heritage');
-        var topics = name ? (hits[name] || []) : [];
-        if (name && topics.length) {
-          var btn = document.createElement('button');
-          btn.className = 'acc-name-link';
-          btn.setAttribute('data-heritage', name);
-          btn.textContent = span.textContent;
-          btn.addEventListener('click', function(e) { e.stopPropagation(); openHeritageChatlogModal(name, null); });
-          var wrap = document.createElement('span');
-          wrap.className = 'acc-name-wrap';
-          wrap.appendChild(btn);
-          for (var ti = 0; ti < topics.length; ti++) {
-            var badge = document.createElement('span');
-            badge.className = 'acc-topic-badge';
-            badge.textContent = topics[ti];
-            (function(badgeTopic) {
-              badge.addEventListener('click', function(e) {
-                e.stopPropagation();
-                openHeritageChatlogModal(name, badgeTopic);
-              });
-            })(topics[ti]);
-            wrap.appendChild(badge);
-          }
-          span.parentNode.replaceChild(wrap, span);
-        }
-      });
-      inner.querySelectorAll('.acc-name-wrap').forEach(function(wrap) {
-        var nameBtn = wrap.querySelector('.acc-name-link[data-heritage]');
-        if (!nameBtn) return;
-        var wName = nameBtn.getAttribute('data-heritage');
-        var wTopics = wName ? (hits[wName] || []) : [];
-        if (!wTopics.length) return;
-        var existingTopics = {};
-        wrap.querySelectorAll('.acc-topic-badge').forEach(function(b) {
-          existingTopics[b.textContent] = true;
-        });
-        wTopics.forEach(function(wTopic) {
-          if (existingTopics[wTopic]) return;
-          var newBadge = document.createElement('span');
-          newBadge.className = 'acc-topic-badge';
-          newBadge.textContent = wTopic;
-          (function(badgeTopic) {
-            newBadge.addEventListener('click', function(e) {
-              e.stopPropagation();
-              openHeritageChatlogModal(wName, badgeTopic);
-            });
-          })(wTopic);
-          wrap.appendChild(newBadge);
-        });
-      });
       return fetch('/api/aichat/heritage-search-keywords-check?keywords=' + encodeURIComponent(keywords.join(',')))
         .then(function(r2) { return r2.json(); })
-        .then(function(kwData) {
-          var hasKw = kwData.hasKeywords || {};
-          keywords.forEach(function(name) {
-            if (!hasKw[name]) return;
-            var found = false;
-            inner.querySelectorAll('.acc-name-wrap').forEach(function(wrap) {
-              var nameBtn = wrap.querySelector('.acc-name-link[data-heritage]');
-              if (!nameBtn || nameBtn.getAttribute('data-heritage') !== name) return;
-              found = true;
-              if (!wrap.querySelector('.acc-kw-badge')) {
-                var kwBadge = document.createElement('span');
-                kwBadge.className = 'acc-kw-badge';
-                kwBadge.textContent = 'キーワード';
-                (function(kwName) {
-                  kwBadge.addEventListener('click', function(e) {
-                    e.stopPropagation();
-                    openHeritageKwPanel(kwName);
-                  });
-                })(name);
-                wrap.appendChild(kwBadge);
-              }
-            });
-            if (found) return;
-            inner.querySelectorAll('.acc-name[data-heritage]').forEach(function(span) {
-              if (span.getAttribute('data-heritage') !== name) return;
-              var btn = document.createElement('button');
-              btn.className = 'acc-name-link';
-              btn.setAttribute('data-heritage', name);
-              btn.textContent = span.textContent;
-              btn.addEventListener('click', function(e) { e.stopPropagation(); });
-              var wrap2 = document.createElement('span');
-              wrap2.className = 'acc-name-wrap';
-              wrap2.appendChild(btn);
-              var kwBadge = document.createElement('span');
-              kwBadge.className = 'acc-kw-badge';
-              kwBadge.textContent = 'キーワード';
-              (function(kwName) {
-                kwBadge.addEventListener('click', function(e) {
-                  e.stopPropagation();
-                  openHeritageKwPanel(kwName);
-                });
-              })(name);
-              wrap2.appendChild(kwBadge);
-              span.parentNode.replaceChild(wrap2, span);
-            });
-          });
-        })
-        .catch(function() {});
+        .then(function(kwData) { return { hits: hits, hasKw: kwData.hasKeywords || {} }; })
+        .catch(function() { return { hits: hits, hasKw: {} }; });
     })
-    .catch(function() {});
+    .catch(function() { return { hits: {}, hasKw: {} }; });
+}
+
+function applyKeywordData(inner, hits, hasKw) {
+  inner.querySelectorAll('.acc-name[data-heritage]').forEach(function(span) {
+    var name = span.getAttribute('data-heritage');
+    var topics = name ? (hits[name] || []) : [];
+    if (!name || !topics.length) return;
+    var btn = document.createElement('button');
+    btn.className = 'acc-name-link';
+    btn.setAttribute('data-heritage', name);
+    btn.textContent = span.textContent;
+    btn.addEventListener('click', function(e) { e.stopPropagation(); openHeritageChatlogModal(name, null); });
+    var wrap = document.createElement('span');
+    wrap.className = 'acc-name-wrap';
+    wrap.appendChild(btn);
+    for (var ti = 0; ti < topics.length; ti++) {
+      (function(badgeTopic) {
+        var badge = document.createElement('span');
+        badge.className = 'acc-topic-badge';
+        badge.textContent = badgeTopic;
+        badge.addEventListener('click', function(e) { e.stopPropagation(); openHeritageChatlogModal(name, badgeTopic); });
+        wrap.appendChild(badge);
+      })(topics[ti]);
+    }
+    span.parentNode.replaceChild(wrap, span);
+  });
+  inner.querySelectorAll('.acc-name-wrap').forEach(function(wrap) {
+    var nameBtn = wrap.querySelector('.acc-name-link[data-heritage]');
+    if (!nameBtn) return;
+    var wName = nameBtn.getAttribute('data-heritage');
+    var wTopics = wName ? (hits[wName] || []) : [];
+    if (!wTopics.length) return;
+    var existingTopics = {};
+    wrap.querySelectorAll('.acc-topic-badge').forEach(function(b) { existingTopics[b.textContent] = true; });
+    wTopics.forEach(function(wTopic) {
+      if (existingTopics[wTopic]) return;
+      (function(badgeTopic) {
+        var newBadge = document.createElement('span');
+        newBadge.className = 'acc-topic-badge';
+        newBadge.textContent = badgeTopic;
+        newBadge.addEventListener('click', function(e) { e.stopPropagation(); openHeritageChatlogModal(wName, badgeTopic); });
+        wrap.appendChild(newBadge);
+      })(wTopic);
+    });
+  });
+  Object.keys(hasKw).forEach(function(name) {
+    if (!hasKw[name]) return;
+    var found = false;
+    inner.querySelectorAll('.acc-name-wrap').forEach(function(wrap) {
+      var nameBtn = wrap.querySelector('.acc-name-link[data-heritage]');
+      if (!nameBtn || nameBtn.getAttribute('data-heritage') !== name) return;
+      found = true;
+      if (!wrap.querySelector('.acc-kw-badge')) {
+        var kwBadge = document.createElement('span');
+        kwBadge.className = 'acc-kw-badge';
+        kwBadge.textContent = 'キーワード';
+        (function(kwName) {
+          kwBadge.addEventListener('click', function(e) { e.stopPropagation(); openHeritageKwPanel(kwName); });
+        })(name);
+        wrap.appendChild(kwBadge);
+      }
+    });
+    if (found) return;
+    inner.querySelectorAll('.acc-name[data-heritage]').forEach(function(span) {
+      if (span.getAttribute('data-heritage') !== name) return;
+      var btn = document.createElement('button');
+      btn.className = 'acc-name-link';
+      btn.setAttribute('data-heritage', name);
+      btn.textContent = span.textContent;
+      btn.addEventListener('click', function(e) { e.stopPropagation(); });
+      var wrap2 = document.createElement('span');
+      wrap2.className = 'acc-name-wrap';
+      wrap2.appendChild(btn);
+      var kwBadge = document.createElement('span');
+      kwBadge.className = 'acc-kw-badge';
+      kwBadge.textContent = 'キーワード';
+      (function(kwName) {
+        kwBadge.addEventListener('click', function(e) { e.stopPropagation(); openHeritageKwPanel(kwName); });
+      })(name);
+      wrap2.appendChild(kwBadge);
+      span.parentNode.replaceChild(wrap2, span);
+    });
+  });
+}
+
+function applyAnsweredData(inner, allAnswered) {
+  Object.keys(allAnswered).forEach(function(name) {
+    var nameAnswered = allAnswered[name] || {};
+    AI_TOPICS.forEach(function(t) {
+      if (nameAnswered[t]) ensureTopicBadge(inner, name, t);
+    });
+  });
 }
 
 function openAiModal(title, bodyText, isCached) {
@@ -732,6 +726,93 @@ function closeAllAccordions() {
   for (var j = 0; j < opens.length; j++) opens[j].classList.remove('row-open');
 }
 
+function renderHeritageInner(inner, accTr, heritages, hits, hasKw, answered) {
+  var html = '<div class="acc-heritage-list">';
+  heritages.forEach(function(h, idx) {
+    var dist = h.distance_km < 10 ? h.distance_km.toFixed(1) : Math.round(h.distance_km);
+    var safeName = h.heritage_name.replace(/&/g,'&amp;').replace(/</g,'&lt;');
+    var flagSpan = h.country_flag ? '<span class="acc-country-flag">' + h.country_flag + '</span>' : '';
+    if (h.heritage_name) heritageCountryFlags[h.heritage_name] = h.country_flag || '';
+    html += '<div class="acc-row" data-heritage="' + h.heritage_name.replace(/"/g,'&quot;') + '">' +
+      '<span class="acc-num">' + (idx + 1) + '</span>' +
+      flagSpan +
+      '<span class="acc-emoji">🏛️</span>' +
+      '<span class="acc-name" data-heritage="' + h.heritage_name.replace(/"/g,'&quot;') + '">' + safeName + '</span>' +
+      '<span class="acc-dist">' + dist + ' km</span>' +
+      '</div>' +
+      '<div class="acc-ai-wrap" id="acc-ai-' + Math.random().toString(36).slice(2) + '" style="display:none">' +
+      buildAiPanel(h.heritage_name) +
+      '</div>';
+  });
+  html += '</div>';
+  inner.innerHTML = html;
+  applyKeywordData(inner, hits, hasKw);
+  applyAnsweredData(inner, answered);
+  inner.querySelectorAll('.acc-row[data-heritage]').forEach(function(rowEl) {
+    rowEl.style.cursor = 'pointer';
+    rowEl.addEventListener('click', function() {
+      var wrap = rowEl.nextSibling;
+      if (!wrap || !wrap.classList || !wrap.classList.contains('acc-ai-wrap')) return;
+      var isOpen = wrap.style.display !== 'none';
+      inner.querySelectorAll('.acc-ai-wrap').forEach(function(w) { w.style.display = 'none'; });
+      if (!isOpen) {
+        wrap.style.display = '';
+        var hName = rowEl.getAttribute('data-heritage') || '';
+        if (hName) {
+          var cityTr = accTr.previousElementSibling;
+          var _cc = cityTr ? cityTr.getAttribute('data-cc') : '';
+          var _cName = _cc ? ccToJp(_cc) : '';
+          var localAnswered = {};
+          wrap.querySelectorAll('.acc-ai-btn.answered').forEach(function(b) {
+            var t = b.getAttribute('data-topic');
+            var sid = b.getAttribute('data-share-id');
+            if (t && sid) localAnswered[t] = sid;
+          });
+          fetch('/api/aichat/check-heritage-questions?heritage=' + encodeURIComponent(hName) + '&country_name=' + encodeURIComponent(_cName))
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+              var serverAnswered = data.answered || {};
+              wrap.querySelectorAll('.acc-ai-btn').forEach(function(btn) {
+                var topic = btn.getAttribute('data-topic');
+                var shareId = topic ? (localAnswered[topic] || serverAnswered[topic]) : null;
+                if (shareId) {
+                  btn.classList.add('answered');
+                  btn.setAttribute('data-share-id', shareId);
+                } else {
+                  btn.classList.remove('answered');
+                  btn.removeAttribute('data-share-id');
+                }
+              });
+              AI_TOPICS.forEach(function(t) {
+                if (localAnswered[t] || serverAnswered[t]) ensureTopicBadge(inner, hName, t);
+              });
+            })
+            .catch(function() {});
+        }
+      }
+    });
+  });
+  inner.querySelectorAll('.acc-ai-btn').forEach(function(btn) {
+    btn.addEventListener('click', function(e) {
+      e.stopPropagation();
+      var topic = btn.getAttribute('data-topic');
+      var name = btn.getAttribute('data-heritage');
+      var shareId = btn.getAttribute('data-share-id');
+      if (shareId) {
+        askAICached(name, topic, shareId);
+      } else {
+        askAI(name, topic, function(newShareId) {
+          if (newShareId) {
+            btn.classList.add('answered');
+            btn.setAttribute('data-share-id', newShareId);
+            ensureTopicBadge(inner, name, topic);
+          }
+        });
+      }
+    });
+  });
+}
+
 function openAccordion(tr) {
   var cityName = tr.getAttribute('data-city');
   var lat = parseFloat(tr.getAttribute('data-lat'));
@@ -742,6 +823,26 @@ function openAccordion(tr) {
   accTr.innerHTML = '<td colspan="' + colCount + '"><div class="accordion-inner"><div class="acc-loading">読み込み中...</div></div></td>';
   tr.parentNode.insertBefore(accTr, tr.nextSibling);
   tr.classList.add('row-open');
+
+  var cached = cityCache[cityName];
+  if (cached) {
+    var innerC = accTr.querySelector('.accordion-inner');
+    if (!innerC) return;
+    renderHeritageInner(innerC, accTr, cached.heritages, cached.hits, cached.hasKw, cached.answered);
+    fetch('/api/aichat/check-heritage-questions-batch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ heritages: cached.heritages.map(function(h) { return h.heritage_name; }) })
+    }).then(function(r) { return r.json(); })
+      .then(function(batchData) {
+        var allAnswered = batchData.answered || {};
+        cityCache[cityName].answered = allAnswered;
+        applyAnsweredData(innerC, allAnswered);
+      })
+      .catch(function() {});
+    return;
+  }
+
   fetch('/api/city-all-heritages', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -755,109 +856,22 @@ function openAccordion(tr) {
       inner.innerHTML = '<div class="acc-loading">近隣の世界遺産データなし（2000km以内）</div>';
       return;
     }
-    var html = '<div class="acc-heritage-list">';
-    filtered.forEach(function(h, idx) {
-      var dist = h.distance_km < 10 ? h.distance_km.toFixed(1) : Math.round(h.distance_km);
-      var safeName = h.heritage_name.replace(/&/g,'&amp;').replace(/</g,'&lt;');
-      var flagSpan = h.country_flag
-        ? '<span class="acc-country-flag">' + h.country_flag + '</span>'
-        : '';
-      if (h.heritage_name) heritageCountryFlags[h.heritage_name] = h.country_flag || '';
-      html += '<div class="acc-row" data-heritage="' + h.heritage_name.replace(/"/g,'&quot;') + '">' +
-        '<span class="acc-num">' + (idx + 1) + '</span>' +
-        flagSpan +
-        '<span class="acc-emoji">🏛️</span>' +
-        '<span class="acc-name" data-heritage="' + h.heritage_name.replace(/"/g,'&quot;') + '">' + safeName + '</span>' +
-        '<span class="acc-dist">' + dist + ' km</span>' +
-        '</div>' +
-        '<div class="acc-ai-wrap" id="acc-ai-' + Math.random().toString(36).slice(2) + '" style="display:none">' +
-        buildAiPanel(h.heritage_name) +
-        '</div>';
-    });
-    html += '</div>';
-    inner.innerHTML = html;
     var allHeritageNames = filtered.map(function(h) { return h.heritage_name; });
-    var kwCheckPromise = checkHeritageKeywords(filtered, inner).then(function() {
-      return fetch('/api/aichat/check-heritage-questions-batch', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ heritages: allHeritageNames }) })
-        .then(function(r) { return r.json(); })
-        .then(function(batchData) {
-          if (batchData && batchData.error) {
-            console.warn('[heritage] batch question check partial failure:', batchData.error);
-          }
-          var allAnswered = batchData.answered || {};
-          allHeritageNames.forEach(function(name) {
-            var nameAnswered = allAnswered[name] || {};
-            AI_TOPICS.forEach(function(t) {
-              if (nameAnswered[t]) ensureTopicBadge(inner, name, t);
-            });
-          });
-        })
-        .catch(function() {});
-    });
-    inner.querySelectorAll('.acc-row[data-heritage]').forEach(function(rowEl) {
-      rowEl.style.cursor = 'pointer';
-      rowEl.addEventListener('click', function() {
-        var wrap = rowEl.nextSibling;
-        if (!wrap || !wrap.classList || !wrap.classList.contains('acc-ai-wrap')) return;
-        var isOpen = wrap.style.display !== 'none';
-        inner.querySelectorAll('.acc-ai-wrap').forEach(function(w) { w.style.display = 'none'; });
-        if (!isOpen) {
-          wrap.style.display = '';
-          var hName = rowEl.getAttribute('data-heritage') || '';
-          if (hName) {
-            var cityTr = accTr.previousElementSibling;
-            var _cc = cityTr ? cityTr.getAttribute('data-cc') : '';
-            var _cName = _cc ? ccToJp(_cc) : '';
-            var localAnswered = {};
-            wrap.querySelectorAll('.acc-ai-btn.answered').forEach(function(b) {
-              var t = b.getAttribute('data-topic');
-              var sid = b.getAttribute('data-share-id');
-              if (t && sid) localAnswered[t] = sid;
-            });
-            fetch('/api/aichat/check-heritage-questions?heritage=' + encodeURIComponent(hName) + '&country_name=' + encodeURIComponent(_cName))
-              .then(function(r) { return r.json(); })
-              .then(function(data) {
-                var serverAnswered = data.answered || {};
-                wrap.querySelectorAll('.acc-ai-btn').forEach(function(btn) {
-                  var topic = btn.getAttribute('data-topic');
-                  var shareId = topic ? (localAnswered[topic] || serverAnswered[topic]) : null;
-                  if (shareId) {
-                    btn.classList.add('answered');
-                    btn.setAttribute('data-share-id', shareId);
-                  } else {
-                    btn.classList.remove('answered');
-                    btn.removeAttribute('data-share-id');
-                  }
-                });
-                AI_TOPICS.forEach(function(t) {
-                  if (localAnswered[t] || serverAnswered[t]) {
-                    ensureTopicBadge(inner, hName, t);
-                  }
-                });
-              })
-              .catch(function() {});
-          }
-        }
-      });
-    });
-    inner.querySelectorAll('.acc-ai-btn').forEach(function(btn) {
-      btn.addEventListener('click', function(e) {
-        e.stopPropagation();
-        var topic = btn.getAttribute('data-topic');
-        var name = btn.getAttribute('data-heritage');
-        var shareId = btn.getAttribute('data-share-id');
-        if (shareId) {
-          askAICached(name, topic, shareId);
-        } else {
-          askAI(name, topic, function(newShareId) {
-            if (newShareId) {
-              btn.classList.add('answered');
-              btn.setAttribute('data-share-id', newShareId);
-              ensureTopicBadge(inner, name, topic);
-            }
-          });
-        }
-      });
+    return Promise.all([
+      fetchHeritageKeywordData(allHeritageNames),
+      fetch('/api/aichat/check-heritage-questions-batch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ heritages: allHeritageNames })
+      }).then(function(r) { return r.json(); }).catch(function() { return { answered: {} }; })
+    ]).then(function(results) {
+      var kwData = results[0];
+      var batchData = results[1];
+      var answered = batchData.answered || {};
+      cityCache[cityName] = { heritages: filtered, hits: kwData.hits, hasKw: kwData.hasKw, answered: answered };
+      var innerNow = accTr.querySelector('.accordion-inner');
+      if (!innerNow) return;
+      renderHeritageInner(innerNow, accTr, filtered, kwData.hits, kwData.hasKw, answered);
     });
   }).catch(function() {
     var inner = accTr.querySelector('.accordion-inner');
