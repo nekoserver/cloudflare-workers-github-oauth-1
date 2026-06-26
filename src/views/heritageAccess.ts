@@ -171,7 +171,7 @@ td.pop{text-align:right;color:#8b949e;font-size:11px;min-width:64px}
     <button class="mode-tab" id="tab-country">国別グループ</button>
   </div>
   <button id="btn-load">読み込む</button>
-  <button id="btn-cap-dist" style="background:#21262d;border:1px solid #30363d;color:#8b949e;margin-left:4px">🌍 首都間距離</button>
+  <button id="btn-cap-dist" style="margin-left:8px;background:var(--btn-bg,#21262d);border:1px solid var(--border,#30363d);color:var(--fg,#e6edf3);padding:6px 12px;border-radius:6px;cursor:pointer;font-size:13px">🌍 首都間距離</button>
 </div>
 <div id="ai-modal-overlay" class="ai-modal-overlay">
   <div class="ai-modal">
@@ -324,7 +324,6 @@ function buildCityThHtml(ccStats) {
 
 var allRows = [];
 var viewMode = 'all';
-
 document.getElementById('tab-all').addEventListener('click', function() {
   viewMode = 'all';
   document.getElementById('tab-all').className = 'mode-tab active';
