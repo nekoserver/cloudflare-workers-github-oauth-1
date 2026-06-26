@@ -621,32 +621,35 @@ function checkHeritageKeywords(heritages, inner) {
             });
           });
         })
-        .then(function() {
-          return fetch('/api/aichat/check-heritage-questions-batch', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ heritages: keywords })
-          })
-            .then(function(r3) { return r3.json(); })
-            .then(function(batchData) {
-              var allAnswered = batchData.answered || {};
-              keywords.forEach(function(name) {
-                var nameAnswered = allAnswered[name] || {};
-                AI_TOPICS.forEach(function(t) {
-                  if (!nameAnswered[t]) return;
-                  ensureTopicBadge(inner, name, t);
-                  inner.querySelectorAll('.acc-ai-btn[data-heritage]').forEach(function(btn) {
-                    if (btn.getAttribute('data-heritage') !== name) return;
-                    if (btn.getAttribute('data-topic') !== t) return;
-                    btn.classList.add('answered');
-                    btn.setAttribute('data-share-id', nameAnswered[t]);
-                  });
-                });
-              });
-            })
-            .catch(function() {});
-        })
         .catch(function() {});
+    })
+    .catch(function() {});
+}
+
+function applyQuestionBadges(inner, names) {
+  if (!names || !names.length) return Promise.resolve();
+  return fetch('/api/aichat/check-heritage-questions-batch', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ heritages: names })
+  })
+    .then(function(r) { return r.json(); })
+    .then(function(batchData) {
+      var allAnswered = batchData.answered || {};
+      names.forEach(function(name) {
+        var nameAnswered = allAnswered[name] || {};
+        if (!nameAnswered) return;
+        AI_TOPICS.forEach(function(t) {
+          if (!nameAnswered[t]) return;
+          ensureTopicBadge(inner, name, t);
+          inner.querySelectorAll('.acc-ai-btn[data-heritage]').forEach(function(btn) {
+            if (btn.getAttribute('data-heritage') !== name) return;
+            if (btn.getAttribute('data-topic') !== t) return;
+            btn.classList.add('answered');
+            btn.setAttribute('data-share-id', nameAnswered[t]);
+          });
+        });
+      });
     })
     .catch(function() {});
 }
@@ -801,7 +804,10 @@ function openAccordion(tr) {
     });
     html += '</div>';
     inner.innerHTML = html;
-    checkHeritageKeywords(filtered, inner);
+    var heritageNames = filtered.map(function(h) { return h.heritage_name; });
+    checkHeritageKeywords(filtered, inner).then(function() {
+      applyQuestionBadges(inner, heritageNames);
+    });
     inner.querySelectorAll('.acc-row[data-heritage]').forEach(function(rowEl) {
       rowEl.style.cursor = 'pointer';
       rowEl.addEventListener('click', function() {
