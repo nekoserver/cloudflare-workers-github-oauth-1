@@ -197,6 +197,28 @@ describe('世界遺産チャットログリンク: checkHeritageKeywords 呼び�
   });
 });
 
+describe('世界遺産チャットログリンク: serverAnswered から直接バッジ生成', () => {
+  it('check-heritage-questions の .then() 内で AI_TOPICS.forEach を使って ensureTopicBadge を直接呼んでいる', () => {
+    const html = buildPage();
+    const fetchIdx = html.indexOf('check-heritage-questions?heritage=');
+    expect(fetchIdx).toBeGreaterThan(-1);
+    const afterFetch = html.slice(fetchIdx, fetchIdx + 1800);
+    const thenIdx = afterFetch.indexOf('.then(function(data)');
+    const thenBlock = afterFetch.slice(thenIdx, thenIdx + 1200);
+    expect(thenBlock).toContain('AI_TOPICS.forEach(function(t)');
+    expect(thenBlock).toContain('ensureTopicBadge(inner, hName, t)');
+  });
+
+  it('serverAnswered または localAnswered のどちらかがあればバッジを生成する条件になっている', () => {
+    const html = buildPage();
+    const fetchIdx = html.indexOf('check-heritage-questions?heritage=');
+    const afterFetch = html.slice(fetchIdx, fetchIdx + 1800);
+    const thenIdx = afterFetch.indexOf('.then(function(data)');
+    const thenBlock = afterFetch.slice(thenIdx, thenIdx + 1200);
+    expect(thenBlock).toContain('localAnswered[t] || serverAnswered[t]');
+  });
+});
+
 describe('世界遺産チャットログリンク: レースコンディション防止', () => {
   it('acc-row クリック前に localAnswered でローカル応答済み状態を保存している', () => {
     const html = buildPage();
