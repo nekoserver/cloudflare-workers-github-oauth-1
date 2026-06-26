@@ -16,6 +16,7 @@ export function getWebGLFaultsPage(username: string): string {
 body { background:#000; color:#e6edf3; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; font-size:13px; height:100vh; height:100dvh; display:flex; flex-direction:column; overflow:hidden; }
 .topbar { background:#0d1117; border-bottom:1px solid #30363d; padding:8px 18px; display:flex; align-items:center; gap:10px; flex-shrink:0; }
 .topbar a { color:#58a6ff; text-decoration:none; font-size:12px; }
+@media (display-mode: standalone) { .pwa-hide { display:none !important; } }
 h1 { font-size:14px; font-weight:700; }
 .badge { background:#2d1a0c; color:#f78166; font-size:10px; padding:2px 7px; border-radius:10px; font-weight:600; }
 .body { display:grid; grid-template-columns:1fr 280px; grid-template-rows:1fr; flex:1; min-height:0; }
@@ -184,10 +185,10 @@ void main() {
   <h1><span class="globe-icon-wrap" id="globeIconWrap">🌐</span> 世界の活断層 地球儀</h1>
   <span class="badge">活断層</span>
   <span style="flex:1"></span>
-  <a href="/webgl-heritage">🏛️ 世界遺産</a>
-  <a href="/webgl-solar">☀️ 太陽系</a>
-  <a href="/settings">&#9881;</a>
-  <span style="color:#8b949e;font-size:11px">${safeUser}</span>
+  <a class="pwa-hide" href="/webgl-heritage">🏛️ 世界遺産</a>
+  <a class="pwa-hide" href="/webgl-solar">☀️ 太陽系</a>
+  <a class="pwa-hide" href="/settings">&#9881;</a>
+  <span class="pwa-hide" style="color:#8b949e;font-size:11px">${safeUser}</span>
 </div>
 
 <div class="body">
