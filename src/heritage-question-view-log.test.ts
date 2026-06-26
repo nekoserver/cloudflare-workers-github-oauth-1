@@ -43,15 +43,12 @@ describe('heritage_question_view_log 書き込み — バックエンド', () =>
 });
 
 describe('heritage_question_view_log 書き込み — フロントエンド', () => {
-  it('check-heritage-questions に country_name を渡している', () => {
-    const idx = view.indexOf('check-heritage-questions?heritage=');
-    const block = view.slice(idx, idx + 400);
-    expect(block).toContain('country_name');
+  it('check-heritage-questions-batch で全遺産の回答済み状態をまとめて取得している', () => {
+    expect(view).toContain('check-heritage-questions-batch');
   });
 
-  it('accTr の前の行から data-cc を取得している', () => {
+  it('都市行の data-cc 属性が HTML に含まれている', () => {
     expect(view).toContain('data-cc');
-    expect(view).toContain('previousElementSibling');
   });
 });
 

@@ -21,25 +21,17 @@ describe('世界遺産名リンク — acc-name-link クリックでチャット
   });
 });
 
-describe('世界遺産名リンク — check-heritage-questions-batch は kwCheckPromise 完了後に実行', () => {
-  it('openAccordion 内で check-heritage-questions-batch fetch が checkHeritageKeywords の .then() の中にある', () => {
-    const fnIdx = view.indexOf('function openAccordion(');
-    const fnBlock = view.slice(fnIdx, fnIdx + 4000);
-    const batchIdx = fnBlock.indexOf('check-heritage-questions-batch');
-    expect(batchIdx).toBeGreaterThan(-1);
-    const beforeBatch = fnBlock.slice(0, batchIdx);
-    // checkHeritageKeywords(...).then( が batch より前にある
-    const kwThenIdx = beforeBatch.lastIndexOf('checkHeritageKeywords(filtered, inner).then(');
-    expect(kwThenIdx).toBeGreaterThan(-1);
+describe('世界遺産名リンク — check-heritage-questions-batch は checkHeritageKeywords 内で実行', () => {
+  it('checkHeritageKeywords 内で check-heritage-questions-batch fetch が呼ばれる', () => {
+    const fnIdx = view.indexOf('function checkHeritageKeywords(');
+    const fnBlock = view.slice(fnIdx, fnIdx + 8000);
+    expect(fnBlock).toContain('check-heritage-questions-batch');
   });
 
-  it('openAccordion 内で kwCheckPromise は checkHeritageKeywords(...).then() で初期化される', () => {
+  it('openAccordion は checkHeritageKeywords を直接呼ぶだけ（バッチは checkHeritageKeywords 内に統合済み）', () => {
     const fnIdx = view.indexOf('function openAccordion(');
-    const fnBlock = view.slice(fnIdx, fnIdx + 4000);
-    const kwPromiseIdx = fnBlock.indexOf('var kwCheckPromise');
-    expect(kwPromiseIdx).toBeGreaterThan(-1);
-    // kwCheckPromise の初期化に checkHeritageKeywords が含まれる
-    const initLine = fnBlock.slice(kwPromiseIdx, kwPromiseIdx + 120);
-    expect(initLine).toContain('checkHeritageKeywords(filtered, inner).then(');
+    const fnBlock = view.slice(fnIdx, fnIdx + 5000);
+    expect(fnBlock).toContain('checkHeritageKeywords(filtered, inner)');
+    expect(fnBlock).not.toContain('check-heritage-questions-batch');
   });
 });
