@@ -203,23 +203,34 @@ describe('世界遺産チャットログリンク: 都市タップ時の全遺�
     expect(html).toContain('/api/aichat/check-heritage-questions-batch');
   });
 
-  it('check-heritage-questions-batch は checkHeritageKeywords 内のキーワード処理完了後に呼ばれる', () => {
+  it('check-heritage-questions-batch は applyQuestionBadges 内で呼ばれ checkHeritageKeywords とは分離している', () => {
     const html = buildPage();
     const kwFnIdx = html.indexOf('function checkHeritageKeywords(');
+    const applyFnIdx = html.indexOf('function applyQuestionBadges(');
     expect(kwFnIdx).toBeGreaterThan(-1);
-    const kwFnBlock = html.slice(kwFnIdx, kwFnIdx + 10000);
-    const batchIdx = kwFnBlock.indexOf('check-heritage-questions-batch');
-    const searchKwIdx = kwFnBlock.indexOf('heritage-search-keywords-check');
-    expect(batchIdx).toBeGreaterThan(-1);
-    expect(batchIdx).toBeGreaterThan(searchKwIdx);
+    expect(applyFnIdx).toBeGreaterThan(-1);
+    const kwFnBlock = html.slice(kwFnIdx, applyFnIdx);
+    expect(kwFnBlock).not.toContain('check-heritage-questions-batch');
+    const applyFnBlock = html.slice(applyFnIdx, applyFnIdx + 2000);
+    expect(applyFnBlock).toContain('check-heritage-questions-batch');
   });
 
-  it('バッチ応答の .then() 内で keywords.forEach と ensureTopicBadge を呼んでいる', () => {
+  it('applyQuestionBadges はキーワード処理完了後(.then)に呼ばれる', () => {
+    const html = buildPage();
+    const accIdx = html.indexOf('function openAccordion(');
+    const accBlock = html.slice(accIdx, accIdx + 5000);
+    const kwCallIdx = accBlock.indexOf('checkHeritageKeywords(filtered, inner).then(');
+    const applyCallIdx = accBlock.indexOf('applyQuestionBadges(inner, heritageNames)');
+    expect(kwCallIdx).toBeGreaterThan(-1);
+    expect(applyCallIdx).toBeGreaterThan(kwCallIdx);
+  });
+
+  it('applyQuestionBadges の .then() 内で names.forEach と ensureTopicBadge を呼んでいる', () => {
     const html = buildPage();
     const batchIdx = html.indexOf('check-heritage-questions-batch');
     expect(batchIdx).toBeGreaterThan(-1);
     const block = html.slice(batchIdx, batchIdx + 800);
-    expect(block).toContain('keywords.forEach(function(name)');
+    expect(block).toContain('names.forEach(function(name)');
     expect(block).toContain('ensureTopicBadge(inner, name, t)');
   });
 

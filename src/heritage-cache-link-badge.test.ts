@@ -21,17 +21,32 @@ describe('世界遺産名リンク — acc-name-link クリックでチャット
   });
 });
 
-describe('世界遺産名リンク — check-heritage-questions-batch は checkHeritageKeywords 内で実行', () => {
-  it('checkHeritageKeywords 内で check-heritage-questions-batch fetch が呼ばれる', () => {
+describe('世界遺産名リンク — 質問バッジ処理はキーワード処理と分離し個別ループで適用', () => {
+  it('checkHeritageKeywords 内では check-heritage-questions-batch を実行しない（キーワード処理と衝突させない）', () => {
     const fnIdx = view.indexOf('function checkHeritageKeywords(');
-    const fnBlock = view.slice(fnIdx, fnIdx + 8000);
+    const fnEnd = view.indexOf('function applyQuestionBadges(');
+    const fnBlock = view.slice(fnIdx, fnEnd);
+    expect(fnBlock).not.toContain('check-heritage-questions-batch');
+  });
+
+  it('applyQuestionBadges 関数が定義され check-heritage-questions-batch を呼ぶ', () => {
+    const fnIdx = view.indexOf('function applyQuestionBadges(');
+    expect(fnIdx).toBeGreaterThan(-1);
+    const fnBlock = view.slice(fnIdx, fnIdx + 2000);
     expect(fnBlock).toContain('check-heritage-questions-batch');
   });
 
-  it('openAccordion は checkHeritageKeywords を直接呼ぶだけ（バッチは checkHeritageKeywords 内に統合済み）', () => {
+  it('applyQuestionBadges は全世界遺産名のループ内で個別に質問バッジを適用する', () => {
+    const fnIdx = view.indexOf('function applyQuestionBadges(');
+    const fnBlock = view.slice(fnIdx, fnIdx + 2000);
+    expect(fnBlock).toContain('names.forEach');
+    expect(fnBlock).toContain('ensureTopicBadge(inner, name, t)');
+  });
+
+  it('openAccordion は checkHeritageKeywords 完了後に applyQuestionBadges を呼ぶ（衝突回避）', () => {
     const fnIdx = view.indexOf('function openAccordion(');
     const fnBlock = view.slice(fnIdx, fnIdx + 5000);
-    expect(fnBlock).toContain('checkHeritageKeywords(filtered, inner)');
-    expect(fnBlock).not.toContain('check-heritage-questions-batch');
+    expect(fnBlock).toContain('checkHeritageKeywords(filtered, inner).then(');
+    expect(fnBlock).toContain('applyQuestionBadges(inner, heritageNames)');
   });
 });
