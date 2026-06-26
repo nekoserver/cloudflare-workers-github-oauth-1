@@ -331,6 +331,7 @@ document.getElementById('tab-country').addEventListener('click', function() {
   document.getElementById('tab-country').className = 'mode-tab active';
   if (allRows.length) renderCountry(filteredRows());
 });
+document.getElementById('sel-dist').addEventListener('change', loadData);
 function getSelCountry() {
   var el = document.getElementById('sel-country');
   return el ? el.value : '';
@@ -1023,28 +1024,28 @@ function renderCapTab(tab) {
   else renderEuropePanel();
 }
 function renderG7Matrix() {
-  var h = "<div style=\"overflow-x:auto\"><table class=\"cap-matrix\"><thead><tr><th class=\"row-h\"></th>";
-  G7_CAPS.forEach(function(c) { h += "<th>" + (CC_FLAG[c.cc]||"") + " " + c.n + "</th>"; });
-  h += "</tr></thead><tbody>";
+  var h = '<div style="overflow-x:auto"><table class="cap-matrix"><thead><tr><th class="row-h"></th>';
+  G7_CAPS.forEach(function(c) { h += '<th>' + (CC_FLAG[c.cc]||'') + ' ' + c.n + '</th>'; });
+  h += '</tr></thead><tbody>';
   G7_CAPS.forEach(function(r) {
-    h += "<tr><td class=\"row-head\">" + (CC_FLAG[r.cc]||"") + " " + r.n + "</td>";
+    h += '<tr><td class="row-head">' + (CC_FLAG[r.cc]||'') + ' ' + r.n + '</td>';
     G7_CAPS.forEach(function(col) {
-      if(r === col) { h += "<td class=\"self\">-</td>"; }
-      else { var d = hvKm(r.lat,r.lon,col.lat,col.lon); h += "<td class=\"" + distCls(d) + "\">" + d.toLocaleString() + "</td>"; }
+      if(r === col) { h += '<td class="self">-</td>'; }
+      else { var d = hvKm(r.lat,r.lon,col.lat,col.lon); h += '<td class="' + distCls(d) + '">' + d.toLocaleString() + '</td>'; }
     });
-    h += "</tr>";
+    h += '</tr>';
   });
-  h += "</tbody></table></div>";
-  h += "<p style=\"margin-top:10px;font-size:11px;color:#484f58\">大圏距離（km）。<span style=\"color:#3fb950\">緑</span>=800km未満、<span style=\"color:#d4a017\">黄</span>=3000km未満、<span style=\"color:#f85149\">赤</span>=3000km以上</p>";
+  h += '</tbody></table></div>';
+  h += '<p style="margin-top:10px;font-size:11px;color:#484f58">大圏距離（km）。<span style="color:#3fb950">緑</span>=800km未満、<span style="color:#d4a017">黄</span>=3000km未満、<span style="color:#f85149">赤</span>=3000km以上</p>';
   document.getElementById("cap-dist-body").innerHTML = h;
 }
 var euFromIdx = 0;
 function renderEuropePanel() {
-  var selH = "<div class=\"eu-from-wrap\"><span class=\"eu-from-label\">起点都市:</span><select class=\"eu-from-select\" id=\"eu-from-sel\">";
+  var selH = '<div class="eu-from-wrap"><span class="eu-from-label">起点都市:</span><select class="eu-from-select" id="eu-from-sel">';
   EU_CAPS.forEach(function(c, i) {
-    selH += "<option value=\"" + i + "\"" + (i===euFromIdx?" selected":"") + ">" + (CC_FLAG[c.cc]||"") + " " + c.n + "</option>";
+    selH += '<option value="' + i + '"' + (i===euFromIdx?' selected':'') + '>' + (CC_FLAG[c.cc]||'') + ' ' + c.n + '</option>';
   });
-  selH += "</select></div><div class=\"eu-dist-list\" id=\"eu-dist-list\"></div>";
+  selH += '</select></div><div class="eu-dist-list" id="eu-dist-list"></div>';
   document.getElementById("cap-dist-body").innerHTML = selH;
   document.getElementById("eu-from-sel").addEventListener("change", function(e) {
     euFromIdx = parseInt(e.target.value, 10);
@@ -1061,16 +1062,16 @@ function renderEuList() {
   EU_CAPS.forEach(function(c, i) { if(i !== euFromIdx) dists.push({c:c, d:hvKm(from.lat,from.lon,c.lat,c.lon)}); });
   dists.sort(function(a,b){ return a.d-b.d; });
   var maxD = dists[dists.length-1].d;
-  var h = "";
+  var h = '';
   dists.forEach(function(x, rank) {
     var barW = Math.max(2, Math.round((x.d/maxD)*80));
-    h += "<div class=\"eu-dist-row\">" +
-      "<span class=\"eu-dist-rank\">" + (rank+1) + "</span>" +
-      "<span class=\"eu-dist-flag\">" + (CC_FLAG[x.c.cc]||"") + "</span>" +
-      "<span class=\"eu-dist-name\">" + x.c.n + "</span>" +
-      "<div class=\"eu-dist-bar-wrap\"><div class=\"eu-dist-bar\" style=\"width:" + barW + "px\"></div></div>" +
-      "<span class=\"eu-dist-km " + distCls(x.d) + "\">" + x.d.toLocaleString() + " km</span>" +
-      "</div>";
+    h += '<div class="eu-dist-row">' +
+      '<span class="eu-dist-rank">' + (rank+1) + '</span>' +
+      '<span class="eu-dist-flag">' + (CC_FLAG[x.c.cc]||'') + '</span>' +
+      '<span class="eu-dist-name">' + x.c.n + '</span>' +
+      '<div class="eu-dist-bar-wrap"><div class="eu-dist-bar" style="width:' + barW + 'px"></div></div>' +
+      '<span class="eu-dist-km ' + distCls(x.d) + '">' + x.d.toLocaleString() + ' km</span>' +
+      '</div>';
   });
   document.getElementById("eu-dist-list").innerHTML = h;
 }
