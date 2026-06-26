@@ -94,8 +94,8 @@ describe('heritageAccess ビュー — 回答済みボタン着色', () => {
     expect(block).toMatch(/#[02][ea][0-9a-f]/i);
   });
 
-  it('パネル表示時に check-heritage-questions API を呼んでいる', () => {
-    expect(view).toContain('check-heritage-questions');
+  it('check-heritage-questions-batch API でボタン状態を更新している', () => {
+    expect(view).toContain('check-heritage-questions-batch');
   });
 
   it('shareId が取れた場合に data-share-id 属性を設定している', () => {
@@ -103,8 +103,10 @@ describe('heritageAccess ビュー — 回答済みボタン着色', () => {
     expect(view).toContain('setAttribute(\'data-share-id\'');
   });
 
-  it('shareId がない場合に data-share-id 属性を除去している', () => {
-    expect(view).toContain('removeAttribute(\'data-share-id\')');
+  it('バッチ処理で answered ボタンに classList.add を呼んでいる', () => {
+    const batchIdx = view.indexOf('check-heritage-questions-batch');
+    const block = view.slice(batchIdx, batchIdx + 1500);
+    expect(block).toContain("classList.add('answered')");
   });
 });
 
