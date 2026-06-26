@@ -837,15 +837,27 @@ void main() {
   }
   function hideVolTooltip() { volTooltipEl.style.opacity = '0'; }
 
-  function selectFaultFromVol(v) {
-    var tRx = -v.lat * Math.PI / 180;
-    var rawDy = -(v.lon + 180) * Math.PI / 180 + Math.PI;
-    var dy = rawDy - (rotYv % (2 * Math.PI));
+  function flyToLatLon(lat, lon, dur) {
+    var latR = lat * Math.PI / 180;
+    var lonR = lon * Math.PI / 180;
+    var a = axialTilt;
+    var tanA = Math.tan(a);
+    var tanL = Math.tan(latR);
+    var cosVal = Math.max(-1, Math.min(1, tanA * tanL));
+    var ty = Math.acos(cosVal) + lonR;
+    var sinSq = 1 - cosVal * cosVal;
+    var denom = Math.cos(a) * Math.sqrt(Math.max(0, sinSq));
+    var tRx = denom < 1e-6 ? (latR >= 0 ? Math.PI / 2 : -Math.PI / 2) : Math.atan(tanL / denom);
+    var dy = ty - rotYv;
     while (dy > Math.PI) dy -= 2 * Math.PI;
     while (dy < -Math.PI) dy += 2 * Math.PI;
     flyFrom = {ry: rotYv, rx: rotXv};
     flyTarget = {ry: rotYv + dy, rx: tRx};
-    flyT = 0; flyDur = 1000;
+    flyT = 0; flyDur = dur;
+  }
+
+  function selectFaultFromVol(v) {
+    flyToLatLon(v.lat, v.lon, 1000);
   }
 
   var btnVolToggle = document.getElementById('btnVolToggle');
@@ -945,17 +957,7 @@ void main() {
     tabDetail.classList.add('active'); tabList.classList.remove('active'); tabCtrl.classList.remove('active');
     panelDetail.classList.add('visible'); panelList.classList.remove('visible'); panelCtrl.classList.remove('visible');
     if (doFly && f) {
-      var tLat = f.center[0], tLon = f.center[1];
-      var tRx = -tLat * Math.PI / 180;
-      var rawDy = -(tLon + 180) * Math.PI / 180 + Math.PI;
-      var curNorm = rotYv % (2 * Math.PI);
-      var targetNorm = rawDy % (2 * Math.PI);
-      var dy = targetNorm - curNorm;
-      while (dy > Math.PI) dy -= 2 * Math.PI;
-      while (dy < -Math.PI) dy += 2 * Math.PI;
-      flyFrom = {ry: rotYv, rx: rotXv};
-      flyTarget = {ry: rotYv + dy, rx: tRx};
-      flyT = 0; flyDur = 1200;
+      flyToLatLon(f.center[0], f.center[1], 1200);
     }
   }
 
