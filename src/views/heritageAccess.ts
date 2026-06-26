@@ -529,9 +529,7 @@ function checkHeritageKeywords(heritages, inner) {
           btn.className = 'acc-name-link';
           btn.setAttribute('data-heritage', name);
           btn.textContent = span.textContent;
-          btn.addEventListener('click', function(e) {
-            e.stopPropagation();
-          });
+          btn.addEventListener('click', function(e) { e.stopPropagation(); openHeritageChatlogModal(name, null); });
           var wrap = document.createElement('span');
           wrap.className = 'acc-name-wrap';
           wrap.appendChild(btn);
@@ -708,7 +706,10 @@ function ensureTopicBadge(inner, heritageName, topic) {
     btn.className = 'acc-name-link';
     btn.setAttribute('data-heritage', heritageName);
     btn.textContent = span.textContent;
-    btn.addEventListener('click', function(e) { e.stopPropagation(); });
+    btn.addEventListener('click', function(e) {
+      e.stopPropagation();
+      openHeritageChatlogModal(heritageName, null);
+    });
     var wrap = document.createElement('span');
     wrap.className = 'acc-name-wrap';
     wrap.appendChild(btn);
@@ -777,18 +778,20 @@ function openAccordion(tr) {
     inner.innerHTML = html;
     var kwCheckPromise = checkHeritageKeywords(filtered, inner);
     var allHeritageNames = filtered.map(function(h) { return h.heritage_name; });
-    fetch('/api/aichat/check-heritage-questions-batch', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ heritages: allHeritageNames }) })
-      .then(function(r) { return r.json(); })
-      .then(function(batchData) {
-        var allAnswered = batchData.answered || {};
-        allHeritageNames.forEach(function(name) {
-          var nameAnswered = allAnswered[name] || {};
-          AI_TOPICS.forEach(function(t) {
-            if (nameAnswered[t]) ensureTopicBadge(inner, name, t);
+    kwCheckPromise.then(function() {
+      return fetch('/api/aichat/check-heritage-questions-batch', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ heritages: allHeritageNames }) })
+        .then(function(r) { return r.json(); })
+        .then(function(batchData) {
+          var allAnswered = batchData.answered || {};
+          allHeritageNames.forEach(function(name) {
+            var nameAnswered = allAnswered[name] || {};
+            AI_TOPICS.forEach(function(t) {
+              if (nameAnswered[t]) ensureTopicBadge(inner, name, t);
+            });
           });
-        });
-      })
-      .catch(function() {});
+        })
+        .catch(function() {});
+    });
     inner.querySelectorAll('.acc-row[data-heritage]').forEach(function(rowEl) {
       rowEl.style.cursor = 'pointer';
       rowEl.addEventListener('click', function() {
