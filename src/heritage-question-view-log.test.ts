@@ -44,7 +44,7 @@ describe('heritage_question_view_log 書き込み — バックエンド', () =>
 
 describe('heritage_question_view_log 書き込み — フロントエンド', () => {
   it('check-heritage-questions に country_name を渡している', () => {
-    const idx = view.indexOf('check-heritage-questions');
+    const idx = view.indexOf('check-heritage-questions?heritage=');
     const block = view.slice(idx, idx + 400);
     expect(block).toContain('country_name');
   });

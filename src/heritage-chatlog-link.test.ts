@@ -197,6 +197,48 @@ describe('世界遺産チャットログリンク: checkHeritageKeywords 呼び�
   });
 });
 
+describe('世界遺産チャットログリンク: 都市タップ時の全遺産バッチバッジ処理', () => {
+  it('check-heritage-questions-batch エンドポイントをアコーディオン展開時に呼んでいる', () => {
+    const html = buildPage();
+    expect(html).toContain('/api/aichat/check-heritage-questions-batch');
+  });
+
+  it('check-heritage-questions-batch の呼び出しが inner.innerHTML = html の直後（kwCheckPromise 設定の後）にある', () => {
+    const html = buildPage();
+    const innerHtmlIdx = html.indexOf("inner.innerHTML = html");
+    expect(innerHtmlIdx).toBeGreaterThan(-1);
+    const batchIdx = html.indexOf('check-heritage-questions-batch', innerHtmlIdx);
+    expect(batchIdx).toBeGreaterThan(innerHtmlIdx);
+    const kwIdx = html.indexOf('var kwCheckPromise = checkHeritageKeywords', innerHtmlIdx);
+    expect(batchIdx).toBeGreaterThan(kwIdx);
+  });
+
+  it('バッチ応答の .then() 内で allHeritageNames.forEach と ensureTopicBadge を呼んでいる', () => {
+    const html = buildPage();
+    const batchIdx = html.indexOf('check-heritage-questions-batch');
+    expect(batchIdx).toBeGreaterThan(-1);
+    const block = html.slice(batchIdx, batchIdx + 600);
+    expect(block).toContain('allHeritageNames.forEach(function(name)');
+    expect(block).toContain('ensureTopicBadge(inner, name, t)');
+  });
+
+  it('index.ts に /api/aichat/check-heritage-questions-batch エンドポイントが定義されている', () => {
+    const { readFileSync } = require('fs');
+    const src = readFileSync(new URL('./index.ts', import.meta.url).pathname, 'utf-8');
+    expect(src).toContain("app.get('/api/aichat/check-heritage-questions-batch'");
+  });
+
+  it('index.ts の batch エンドポイントが ai_chat_shares を参照している', () => {
+    const { readFileSync } = require('fs');
+    const src = readFileSync(new URL('./index.ts', import.meta.url).pathname, 'utf-8');
+    const idx = src.indexOf('check-heritage-questions-batch');
+    const block = src.slice(idx, idx + 1200);
+    expect(block).toContain('ai_chat_shares');
+    expect(block).toContain('heritages');
+    expect(block).toContain('answered');
+  });
+});
+
 describe('世界遺産チャットログリンク: serverAnswered から直接バッジ生成', () => {
   it('check-heritage-questions の .then() 内で AI_TOPICS.forEach を使って ensureTopicBadge を直接呼んでいる', () => {
     const html = buildPage();

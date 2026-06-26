@@ -3368,6 +3368,46 @@ app.get('/api/aichat/check-heritage-questions', authMiddleware, async (c) => {
   return jsonUtf8({ answered });
 });
 
+app.get('/api/aichat/check-heritage-questions-batch', authMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!c.env.DB) return jsonUtf8({ answered: {} }, 503);
+  const raw = (c.req.query('heritages') ?? '').trim();
+  if (!raw) return jsonUtf8({ answered: {} });
+  const heritages = raw.split(',').map((h) => h.trim()).filter(Boolean).slice(0, 100);
+  if (!heritages.length) return jsonUtf8({ answered: {} });
+  const topics = ['交通手段', '見どころ', '最寄り空港', '鉄道でのアクセス', '宿泊施設', 'スポーツ施設'];
+  const allQuestions: string[] = [];
+  const questionMap = new Map<string, { heritage: string; topic: string }>();
+  for (const heritage of heritages) {
+    for (const topic of topics) {
+      const q = `「${heritage}」の「${topic}」について説明してください`;
+      allQuestions.push(q);
+      questionMap.set(q, { heritage, topic });
+    }
+  }
+  const answered: Record<string, Record<string, string | null>> = {};
+  for (const h of heritages) {
+    answered[h] = {};
+    for (const t of topics) answered[h][t] = null;
+  }
+  try {
+    const placeholders = allQuestions.map(() => '?').join(', ');
+    const rows = await c.env.DB.prepare(
+      `SELECT id, question FROM ai_chat_shares WHERE user_id = ? AND deleted_at IS NULL AND question IN (${placeholders}) ORDER BY created_at DESC`
+    ).bind(user.sub, ...allQuestions).all<{ id: string; question: string }>();
+    const seen = new Set<string>();
+    for (const r of (rows.results ?? [])) {
+      if (seen.has(r.question)) continue;
+      seen.add(r.question);
+      const info = questionMap.get(r.question);
+      if (info && answered[info.heritage]) answered[info.heritage][info.topic] = r.id;
+    }
+  } catch {
+    // ai_chat_shares 未作成時はスキップ
+  }
+  return jsonUtf8({ answered });
+});
+
 app.get('/api/aichat/heritage-keywords-check', authMiddleware, async (c) => {
   const user = c.get('user');
   if (!c.env.DB) return jsonUtf8({ hits: {} }, 503);
