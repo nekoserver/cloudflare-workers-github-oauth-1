@@ -152,6 +152,8 @@ canvas:active { cursor:grabbing; }
 .apt-status-btn { background:none; border:1px solid #444; color:#8b949e; border-radius:50%; width:20px; height:20px; font-size:12px; cursor:pointer; flex-shrink:0; display:flex; align-items:center; justify-content:center; padding:0; transition:border-color .15s,color .15s; }
 .apt-status-btn:hover { border-color:#ffd700; color:#ffd700; }
 @keyframes aptFlash { 0%,100%{box-shadow:none;outline:2px solid transparent} 50%{box-shadow:0 0 0 2px #ffd700;outline:2px solid #ffd700} }
+@keyframes aptTtFlash { 0%,100%{outline:2px solid transparent;color:inherit} 50%{outline:2px solid #ffd700;color:#ffd700} }
+.apt-tt-flash { animation:aptTtFlash 0.5s ease 3; border-radius:3px; }
 .apt-item.apt-flash { animation:aptFlash 0.5s ease 3; }
 .fs-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.65); display:flex; align-items:center; justify-content:center; }
 .fs-modal { background:#161b22; border:1px solid #30363d; border-radius:10px; padding:16px; width:min(92vw,430px); max-height:72vh; overflow-y:auto; color:#e6edf3; box-shadow:0 8px 32px rgba(0,0,0,0.7); }
@@ -1220,9 +1222,11 @@ void main() {
         var flag = IATA_FLAG[rc] || '';
         routesHtml += '<span class="apt-tt-code" data-goto="' + rc + '">' + flag + ' ' + rc + '</span>';
       });
-      var routeLabel = fromCode ? ' <span style="font-size:11px;color:#8b949e;font-weight:400;">' + fromCode + '&#x1F6EC;' + code + '</span>' : ' <span style="font-size:11px;color:#8b949e;font-weight:400;font-family:monospace;">' + code + '</span>';
+      var routeLabel = fromCode
+        ? ' <span id="aptTtRouteLabel" style="font-size:11px;color:#8b949e;font-weight:400;font-family:monospace;">' + fromCode + ' &#x2192; ' + code + '</span>'
+        : ' <span style="font-size:11px;color:#8b949e;font-weight:400;font-family:monospace;">' + code + '</span>';
       aptTooltipEl.innerHTML =
-        '<div class="apt-tt-hdr"><div class="apt-tt-name" data-center="' + code + '">' + a.city.split(' ')[0] + ' ' + a.name + routeLabel + '</div><button class="apt-tt-close" id="aptTtClose">&#215;</button></div>' +
+        '<div class="apt-tt-hdr"><div class="apt-tt-name" data-center="' + code + '" id="aptTtNameEl">' + a.city.split(' ')[0] + ' ' + a.name + routeLabel + '</div><button class="apt-tt-close" id="aptTtClose">&#215;</button></div>' +
         '<div class="apt-tt-routes">' + routesHtml + '</div>';
       var closeBtn = document.getElementById('aptTtClose');
       if (closeBtn) closeBtn.addEventListener('click', hideAptTooltip);
@@ -1256,6 +1260,15 @@ void main() {
       aptTooltipEl.style.left = ttX + 'px';
       aptTooltipEl.style.top = ttY + 'px';
       aptTooltipEl.style.opacity = '1';
+      if (fromCode) {
+        var flashEl = document.getElementById('aptTtNameEl');
+        if (flashEl) {
+          flashEl.classList.remove('apt-tt-flash');
+          void flashEl.offsetWidth;
+          flashEl.classList.add('apt-tt-flash');
+          setTimeout(function() { if (flashEl) flashEl.classList.remove('apt-tt-flash'); }, 1600);
+        }
+      }
       aptTooltipEl.querySelectorAll('.apt-tt-code').forEach(function(btn) {
         btn.addEventListener('click', function() {
           var dest = btn.getAttribute('data-goto');
