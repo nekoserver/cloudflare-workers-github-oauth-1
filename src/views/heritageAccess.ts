@@ -166,7 +166,6 @@ td.pop{text-align:right;color:#8b949e;font-size:11px;min-width:64px}
     <button class="mode-tab active" id="tab-all">全都市</button>
     <button class="mode-tab" id="tab-country">国別グループ</button>
   </div>
-  <button id="btn-load">読み込む</button>
   <button id="btn-cap-dist" style="margin-left:8px;background:var(--btn-bg,#21262d);border:1px solid var(--border,#30363d);color:var(--fg,#e6edf3);padding:6px 12px;border-radius:6px;cursor:pointer;font-size:13px">🌍 首都間距離</button>
 </div>
 <div id="ai-modal-overlay" class="ai-modal-overlay">
@@ -214,7 +213,7 @@ td.pop{text-align:right;color:#8b949e;font-size:11px;min-width:64px}
 </div>
 <div class="summary" id="summary"></div>
 <div class="tbl-wrap" id="tbl-wrap">
-  <div class="spinner">条件を選択して「読み込む」を押してください</div>
+  <div class="spinner">読み込み中...</div>
 </div>
 
 <script>
@@ -332,8 +331,7 @@ document.getElementById('tab-country').addEventListener('click', function() {
   document.getElementById('tab-country').className = 'mode-tab active';
   if (allRows.length) renderCountry(filteredRows());
 });
-
-document.getElementById('btn-load').addEventListener('click', loadData);
+document.getElementById('sel-dist').addEventListener('change', loadData);
 
 function getSelCountry() {
   var el = document.getElementById('sel-country');
@@ -874,17 +872,12 @@ function summaryHtml(rows, ccStats, dist) {
 function loadData() {
   var dist = document.getElementById('sel-dist').value;
   var limit = document.getElementById('sel-limit').value;
-  var btn = document.getElementById('btn-load');
-  btn.disabled = true;
-  btn.textContent = '読み込み中...';
   document.getElementById('tbl-wrap').innerHTML = '<div class="spinner">読み込み中...</div>';
   document.getElementById('summary').textContent = '';
   fetch('/api/heritage-access-ranking?max_dist=' + dist + '&limit=' + limit)
     .then(function(r) { return r.json(); })
     .then(function(data) {
       allRows = data.rows || [];
-      btn.disabled = false;
-      btn.textContent = '読み込む';
       if (!allRows.length) {
         document.getElementById('tbl-wrap').innerHTML = '<div class="spinner">データなし（都市データを先に取得してください）</div>';
         return;
@@ -893,8 +886,6 @@ function loadData() {
       else renderAll(filteredRows());
     })
     .catch(function() {
-      btn.disabled = false;
-      btn.textContent = '読み込む';
       document.getElementById('tbl-wrap').innerHTML = '<div class="spinner">取得エラー</div>';
     });
 }
