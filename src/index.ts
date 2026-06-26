@@ -4523,6 +4523,61 @@ app.get('/webgl-faults', authMiddleware, async (c) => {
   return c.html(getWebGLFaultsPage(user.sub));
 });
 
+const IATA_TO_ICAO: Record<string, string> = {
+  NRT:'RJAA', HND:'RJTT', KIX:'RJBB', ICN:'RKSI', PVG:'ZSPD', PEK:'ZBAA', HKG:'VHHH',
+  SIN:'WSSS', BKK:'VTBS', KUL:'WMKK', CGK:'WIII', SYD:'YSSY', MEL:'YMML', AKL:'NZAA',
+  DEL:'VIDP', BOM:'VABB', DXB:'OMDB', DOH:'OTHH', IST:'LTFM',
+  LHR:'EGLL', CDG:'LFPG', FRA:'EDDF', AMS:'EHAM', MAD:'LEMD', FCO:'LIRF',
+  LAX:'KLAX', JFK:'KJFK', ORD:'KORD', YYZ:'CYYZ', MEX:'MMMX', MIA:'KMIA',
+  GRU:'SBGR', EZE:'SAEZ', BOG:'SKBO', LIM:'SPJC', SCL:'SCEL', CCS:'SVMI', PTY:'MPTO',
+  JNB:'FAOR', NBO:'HKJK', CAI:'HECA', LOS:'DNMM', ADD:'HAAB',
+};
+const ICAO_TO_IATA: Record<string, string> = Object.fromEntries(
+  Object.entries(IATA_TO_ICAO).map(([k, v]) => [v, k])
+);
+const flightStatusCache = new Map<string, { ts: number; data: unknown }>();
+
+app.get('/api/flight-status', authMiddleware, async (c) => {
+  const code = (c.req.query('code') || '').toUpperCase().trim();
+  if (!code || !IATA_TO_ICAO[code]) {
+    return c.json({ error: 'unknown airport code' }, 400);
+  }
+  const icao = IATA_TO_ICAO[code];
+  const cached = flightStatusCache.get(icao);
+  const now = Math.floor(Date.now() / 1000);
+  if (cached && now - (cached.ts as number) < 300) {
+    return c.json(cached.data);
+  }
+  const end = now;
+  const begin = end - 7200;
+  try {
+    const url = `https://opensky-network.org/api/flights/departure?airport=${icao}&begin=${begin}&end=${end}`;
+    const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
+    if (!res.ok) {
+      const result = { code, icao, flights: [], error: `OpenSky ${res.status}`, fetchedAt: now };
+      return c.json(result);
+    }
+    const raw = await res.json() as Array<{
+      icao24: string; callsign: string; firstSeen: number; lastSeen: number;
+      estDepartureAirport: string; estArrivalAirport: string | null;
+    }>;
+    const flights = (raw || [])
+      .map(f => ({
+        callsign: (f.callsign || '').trim(),
+        departed: f.firstSeen,
+        arrivalIcao: f.estArrivalAirport || null,
+        arrivalIata: f.estArrivalAirport ? (ICAO_TO_IATA[f.estArrivalAirport] || null) : null,
+      }))
+      .filter(f => f.callsign)
+      .sort((a, b) => b.departed - a.departed);
+    const result = { code, icao, flights, fetchedAt: now };
+    flightStatusCache.set(icao, { ts: now, data: result });
+    return c.json(result);
+  } catch (e) {
+    return c.json({ code, icao, flights: [], error: String(e), fetchedAt: now });
+  }
+});
+
 function haversineKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
   const R = 6371;
   const dLat = (lat2 - lat1) * Math.PI / 180;

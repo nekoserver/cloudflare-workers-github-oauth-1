@@ -147,6 +147,27 @@ canvas:active { cursor:grabbing; }
 .apt-tt-routes { display:flex; flex-wrap:wrap; gap:4px; margin-top:2px; }
 .apt-tt-code { background:#161b22; border:1px solid #30363d; border-radius:4px; padding:2px 7px; font-size:11px; font-family:monospace; cursor:pointer; transition:background .1s,border-color .1s; white-space:nowrap; }
 .apt-tt-code:hover { background:#21262d; border-color:#58a6ff; color:#58a6ff; }
+.apt-item-row { display:flex; align-items:center; gap:6px; }
+.apt-item-main { flex:1; min-width:0; }
+.apt-status-btn { background:none; border:1px solid #444; color:#8b949e; border-radius:50%; width:20px; height:20px; font-size:12px; cursor:pointer; flex-shrink:0; display:flex; align-items:center; justify-content:center; padding:0; transition:border-color .15s,color .15s; }
+.apt-status-btn:hover { border-color:#ffd700; color:#ffd700; }
+@keyframes aptFlash { 0%,100%{box-shadow:none;outline:2px solid transparent} 50%{box-shadow:0 0 0 2px #ffd700;outline:2px solid #ffd700} }
+.apt-item.apt-flash { animation:aptFlash 0.5s ease 3; }
+.fs-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.65); display:flex; align-items:center; justify-content:center; }
+.fs-modal { background:#161b22; border:1px solid #30363d; border-radius:10px; padding:16px; width:min(92vw,430px); max-height:72vh; overflow-y:auto; color:#e6edf3; box-shadow:0 8px 32px rgba(0,0,0,0.7); }
+.fs-modal-hdr { display:flex; align-items:center; gap:8px; margin-bottom:12px; }
+.fs-modal-title { flex:1; font-size:13px; font-weight:700; color:#58a6ff; }
+.fs-modal-close { background:none; border:none; color:#8b949e; font-size:18px; cursor:pointer; padding:0; line-height:1; }
+.fs-modal-close:hover { color:#e6edf3; }
+.fs-section-lbl { font-size:10px; color:#484f58; text-transform:uppercase; letter-spacing:.06em; margin-bottom:6px; }
+.fs-flight-row { display:flex; align-items:center; gap:6px; padding:5px 0; border-bottom:1px solid #21262d; font-size:12px; }
+.fs-flight-row:last-child { border-bottom:none; }
+.fs-callsign { font-family:monospace; color:#f0883e; min-width:82px; font-size:12px; }
+.fs-arrow { color:#444; font-size:11px; }
+.fs-dest { color:#79c0ff; font-size:12px; }
+.fs-time { color:#8b949e; margin-left:auto; font-size:11px; white-space:nowrap; }
+.fs-empty { text-align:center; color:#8b949e; padding:24px 0; font-size:12px; }
+.fs-note { font-size:10px; color:#484f58; margin-top:10px; padding-top:8px; border-top:1px solid #21262d; line-height:1.6; }
 </style>
 </head>
 <body>
@@ -1146,6 +1167,7 @@ void main() {
         el.addEventListener('click', function(ev) {
           ev.stopPropagation();
           showAptTooltip(a.code);
+          openAptDrawerAndHighlight(a.code);
         });
       });
     });
@@ -1193,9 +1215,14 @@ void main() {
         html += '<summary>' + rg.label + ' <span class="apt-reg-arrow">&#9660;</span></summary>';
         rg.airports.forEach(function(a) {
           html += '<div class="apt-item clickable" data-code="' + a.code + '">';
+          html += '<div class="apt-item-row">';
+          html += '<div class="apt-item-main">';
           html += '<div class="apt-top"><span class="apt-iata">' + a.code + '</span><span class="apt-name">' + a.name + '</span></div>';
           html += '<div class="apt-city">' + a.city + '</div>';
           html += '<div class="apt-routes"><span class="apt-routes-lbl">&#9992;</span>' + a.routes.join(' &middot; ') + '</div>';
+          html += '</div>';
+          html += '<button class="apt-status-btn" data-code="' + a.code + '" title="発着状況を確認">？</button>';
+          html += '</div>';
           html += '</div>';
         });
         html += '</details>';
@@ -1210,6 +1237,106 @@ void main() {
           flyToLatLon(a.lat, a.lon, 1200, function() { showAptTooltip(code); });
         });
       });
+      body.querySelectorAll('.apt-status-btn').forEach(function(btn) {
+        btn.addEventListener('click', function(ev) {
+          ev.stopPropagation();
+          var code = btn.getAttribute('data-code');
+          showFlightStatusModal(code);
+        });
+      });
+    }
+
+    function getNextZ() {
+      var els = document.querySelectorAll('[style*="z-index"]');
+      var max = 100;
+      for (var i = 0; i < els.length; i++) {
+        var z = parseInt(els[i].style.zIndex, 10);
+        if (!isNaN(z) && z > max) max = z;
+      }
+      return max + 100;
+    }
+
+    function openAptDrawerAndHighlight(code) {
+      var drawerEl = document.getElementById('airportDrawer');
+      var btnEl = document.getElementById('btnAirport');
+      if (!drawerEl.classList.contains('open')) {
+        drawerEl.classList.add('open');
+        btnEl.classList.add('active');
+        setAirportMarkers(true);
+      }
+      setTimeout(function() {
+        var item = document.querySelector('.apt-item[data-code="' + code + '"]');
+        if (!item) return;
+        var details = item.closest('details.apt-region');
+        if (details && !details.open) details.open = true;
+        setTimeout(function() {
+          item.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+          item.classList.remove('apt-flash');
+          void item.offsetWidth;
+          item.classList.add('apt-flash');
+          setTimeout(function() { item.classList.remove('apt-flash'); }, 1600);
+        }, 80);
+      }, 50);
+    }
+
+    function showFlightStatusModal(code) {
+      var a = aptByCode[code];
+      if (!a) return;
+      var z = getNextZ();
+      var overlay = document.createElement('div');
+      overlay.className = 'fs-overlay';
+      overlay.style.zIndex = String(z);
+      var modal = document.createElement('div');
+      modal.className = 'fs-modal';
+      modal.innerHTML =
+        '<div class="fs-modal-hdr">' +
+        '<div class="fs-modal-title">' + a.city.split(' ')[0] + ' ' + a.name + ' (' + code + ')</div>' +
+        '<button class="fs-modal-close" id="fsCloseBtn">&#215;</button>' +
+        '</div>' +
+        '<div class="fs-section-lbl">直近2時間の出発便（ADS-B実績）</div>' +
+        '<div id="fsBody"><div class="fs-empty">読み込み中...</div></div>';
+      overlay.appendChild(modal);
+      document.body.appendChild(overlay);
+      modal.addEventListener('click', function(ev) { ev.stopPropagation(); });
+      overlay.addEventListener('click', function() { document.body.removeChild(overlay); });
+      document.getElementById('fsCloseBtn').addEventListener('click', function() { document.body.removeChild(overlay); });
+      fetch('/api/flight-status?code=' + code)
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          var fsBody = document.getElementById('fsBody');
+          if (!fsBody) return;
+          var flights = data.flights || [];
+          if (data.error && !flights.length) {
+            fsBody.innerHTML = '<div class="fs-empty">データ取得できませんでした<br><small style="color:#484f58">' + data.error + '</small></div>';
+            return;
+          }
+          if (!flights.length) {
+            fsBody.innerHTML = '<div class="fs-empty">直近2時間の出発便データがありません</div>';
+          } else {
+            var h = '';
+            flights.slice(0, 30).forEach(function(f) {
+              var dep = f.departed ? new Date(f.departed * 1000).toLocaleTimeString('ja-JP', {hour:'2-digit', minute:'2-digit', timeZone:'UTC'}) + ' UTC' : '';
+              var dest = f.arrivalIata || f.arrivalIcao || '不明';
+              h += '<div class="fs-flight-row">';
+              h += '<span class="fs-callsign">' + f.callsign + '</span>';
+              h += '<span class="fs-arrow">&#8594;</span>';
+              h += '<span class="fs-dest">' + dest + '</span>';
+              h += '<span class="fs-time">' + dep + '</span>';
+              h += '</div>';
+            });
+            fsBody.innerHTML = h;
+          }
+          var ft = data.fetchedAt ? new Date(data.fetchedAt * 1000).toLocaleTimeString('ja-JP', {hour:'2-digit', minute:'2-digit', timeZone:'UTC'}) + ' UTC' : '';
+          var note = document.createElement('div');
+          note.className = 'fs-note';
+          note.textContent = '出典: OpenSky Network | 取得時刻: ' + ft + ' | 欠航情報は各航空会社・空港公式サイトをご確認ください';
+          var fsBodyEl = document.getElementById('fsBody');
+          if (fsBodyEl) fsBodyEl.appendChild(note);
+        })
+        .catch(function(e) {
+          var fsBody = document.getElementById('fsBody');
+          if (fsBody) fsBody.innerHTML = '<div class="fs-empty">通信エラー: ' + e.message + '</div>';
+        });
     }
 
     function setAirportMarkers(visible) {
