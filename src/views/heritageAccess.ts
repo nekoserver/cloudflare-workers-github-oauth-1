@@ -812,7 +812,7 @@ function openAccordion(tr) {
                   }
                 });
                 kwCheckPromise = kwCheckPromise.then(function() {
-                  return checkHeritageKeywords(heritages, inner);
+                  return checkHeritageKeywords(filtered, inner);
                 });
               })
               .catch(function() {});
@@ -846,7 +846,7 @@ function openAccordion(tr) {
 }
 
 function bindRowAccordion() {
-  var tbody = document.querySelector('tbody');
+  var tbody = document.querySelector('#tbl-wrap tbody');
   if (!tbody) return;
   tbody.addEventListener('click', function(e) {
     var target = e.target;

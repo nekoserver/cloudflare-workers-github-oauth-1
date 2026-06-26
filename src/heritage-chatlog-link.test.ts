@@ -185,7 +185,7 @@ describe('世界遺産チャットログリンク: checkHeritageKeywords 呼び�
     const thenIdx = afterFetch.indexOf('.then(function(data)');
     const thenBlock = afterFetch.slice(thenIdx, thenIdx + 1000);
     expect(thenBlock).toContain('kwCheckPromise = kwCheckPromise.then(function()');
-    expect(thenBlock).toContain('return checkHeritageKeywords(heritages, inner)');
+    expect(thenBlock).toContain('return checkHeritageKeywords(filtered, inner)');
   });
 
   it('AI応答完了後にも checkHeritageKeywords を呼んでいる（askAI の onComplete）', () => {
