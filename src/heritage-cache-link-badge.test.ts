@@ -22,25 +22,24 @@ describe('世界遺産名リンク — acc-name-link クリックでチャット
 });
 
 describe('世界遺産名リンク — check-heritage-questions-batch は kwCheckPromise 完了後に実行', () => {
-  it('openAccordion 内で check-heritage-questions-batch fetch が kwCheckPromise.then の中にある', () => {
+  it('openAccordion 内で check-heritage-questions-batch fetch が checkHeritageKeywords の .then() の中にある', () => {
     const fnIdx = view.indexOf('function openAccordion(');
     const fnBlock = view.slice(fnIdx, fnIdx + 4000);
     const batchIdx = fnBlock.indexOf('check-heritage-questions-batch');
     expect(batchIdx).toBeGreaterThan(-1);
     const beforeBatch = fnBlock.slice(0, batchIdx);
-    const lastKwPromiseThen = beforeBatch.lastIndexOf('kwCheckPromise.then');
-    expect(lastKwPromiseThen).toBeGreaterThan(-1);
-    const lastKwPromise = beforeBatch.lastIndexOf('kwCheckPromise');
-    expect(lastKwPromise).toEqual(lastKwPromiseThen);
+    // checkHeritageKeywords(...).then( が batch より前にある
+    const kwThenIdx = beforeBatch.lastIndexOf('checkHeritageKeywords(filtered, inner).then(');
+    expect(kwThenIdx).toBeGreaterThan(-1);
   });
 
-  it('openAccordion 内で check-heritage-questions-batch が kwCheckPromise 完了前に fetch されていない', () => {
+  it('openAccordion 内で kwCheckPromise は checkHeritageKeywords(...).then() で初期化される', () => {
     const fnIdx = view.indexOf('function openAccordion(');
     const fnBlock = view.slice(fnIdx, fnIdx + 4000);
-    const firstKwPromise = fnBlock.indexOf('var kwCheckPromise');
-    const firstBatch = fnBlock.indexOf('check-heritage-questions-batch');
-    const firstKwThen = fnBlock.indexOf('kwCheckPromise.then');
-    expect(firstKwThen).toBeLessThan(firstBatch);
-    expect(firstKwPromise).toBeLessThan(firstKwThen);
+    const kwPromiseIdx = fnBlock.indexOf('var kwCheckPromise');
+    expect(kwPromiseIdx).toBeGreaterThan(-1);
+    // kwCheckPromise の初期化に checkHeritageKeywords が含まれる
+    const initLine = fnBlock.slice(kwPromiseIdx, kwPromiseIdx + 120);
+    expect(initLine).toContain('checkHeritageKeywords(filtered, inner).then(');
   });
 });
