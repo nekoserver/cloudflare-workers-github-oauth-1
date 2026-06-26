@@ -823,6 +823,23 @@ void main() {
     v._p = latLonToXYZ(v.lat, v.lon, 1.005);
   });
 
+  var VOL_FLAG_MAP = [
+    ['日本', '🇯🇵'], ['アメリカ合衆国', '🇺🇸'], ['イタリア', '🇮🇹'], ['ギリシャ', '🇬🇷'],
+    ['アイスランド', '🇮🇸'], ['インドネシア', '🇮🇩'], ['フィリピン', '🇵🇭'],
+    ['ロシア', '🇷🇺'], ['メキシコ', '🇲🇽'], ['モントセラト', '🇲🇸'],
+    ['セントビンセント', '🇻🇨'], ['マルティニーク', '🇲🇶'], ['エクアドル', '🇪🇨'],
+    ['チリ', '🇨🇱'], ['コロンビア', '🇨🇴'], ['コンゴ民主共和国', '🇨🇩'],
+    ['タンザニア', '🇹🇿'], ['エチオピア', '🇪🇹'], ['南極', '🇦🇶'],
+    ['ニュージーランド', '🇳🇿'], ['バヌアツ', '🇻🇺'], ['パプアニューギニア', '🇵🇬'],
+    ['ペルー', '🇵🇪'], ['イギリス', '🇬🇧'], ['フランス', '🇫🇷']
+  ];
+  function getVolFlag(country) {
+    for (var i = 0; i < VOL_FLAG_MAP.length; i++) {
+      if (country.indexOf(VOL_FLAG_MAP[i][0]) >= 0) return VOL_FLAG_MAP[i][1];
+    }
+    return '';
+  }
+
   (function() {
     var globeWrap = document.getElementById('globeIconWrap');
     var gvtt = document.getElementById('globe-vol-tooltip');
@@ -837,10 +854,10 @@ void main() {
     var hot = VOLCANOES.filter(isHot);
     var rest = VOLCANOES.filter(function(v) { return !isHot(v); });
     hot.forEach(function(v) {
-      html += '<div class="gvtt-row"><span class="gvtt-name gvtt-hot">🔥 ' + v.n + '</span><span class="gvtt-act">' + v.lastErupt + '</span></div>';
+      html += '<div class="gvtt-row"><span class="gvtt-name gvtt-hot">' + getVolFlag(v.c) + ' 🔥 ' + v.n + '</span><span class="gvtt-act">' + v.lastErupt + '</span></div>';
     });
     rest.forEach(function(v) {
-      html += '<div class="gvtt-row"><span class="gvtt-name">🌋 ' + v.n + '</span><span class="gvtt-act">' + v.lastErupt + '</span></div>';
+      html += '<div class="gvtt-row"><span class="gvtt-name">' + getVolFlag(v.c) + ' 🌋 ' + v.n + '</span><span class="gvtt-act">' + v.lastErupt + '</span></div>';
     });
     gvtt.innerHTML = html;
 
@@ -893,7 +910,7 @@ void main() {
 
   function showVolTooltip(x, y, v) {
     volTooltipEl.innerHTML =
-      '<div class="vol-tt-name">🌋 ' + v.n + '</div>' +
+      '<div class="vol-tt-name">' + getVolFlag(v.c) + ' 🌋 ' + v.n + '</div>' +
       '<div class="vol-tt-sub">' + v.c + ' / 標高 ' + v.elev.toLocaleString() + 'm</div>' +
       '<div class="vol-tt-sub">最新噴火: ' + v.lastErupt + '</div>';
     var below = y < canvasRect.top + canvasRect.height * 0.3;
@@ -1279,9 +1296,22 @@ void main() {
       }, 50);
     }
 
+    var IATA_ICAO = {
+      NRT:'RJAA',HND:'RJTT',KIX:'RJBB',ICN:'RKSI',PVG:'ZSPD',PEK:'ZBAA',HKG:'VHHH',
+      SIN:'WSSS',BKK:'VTBS',KUL:'WMKK',CGK:'WIII',SYD:'YSSY',MEL:'YMML',AKL:'NZAA',
+      DEL:'VIDP',BOM:'VABB',DXB:'OMDB',DOH:'OTHH',IST:'LTFM',
+      LHR:'EGLL',CDG:'LFPG',FRA:'EDDF',AMS:'EHAM',MAD:'LEMD',FCO:'LIRF',
+      LAX:'KLAX',JFK:'KJFK',ORD:'KORD',YYZ:'CYYZ',MEX:'MMMX',MIA:'KMIA',
+      GRU:'SBGR',EZE:'SAEZ',BOG:'SKBO',LIM:'SPJC',SCL:'SCEL',CCS:'SVMI',PTY:'MPTO',
+      JNB:'FAOR',NBO:'HKJK',CAI:'HECA',LOS:'DNMM',ADD:'HAAB'
+    };
+    var ICAO_IATA = {};
+    Object.keys(IATA_ICAO).forEach(function(k) { ICAO_IATA[IATA_ICAO[k]] = k; });
+
     function showFlightStatusModal(code) {
       var a = aptByCode[code];
       if (!a) return;
+      var icao = IATA_ICAO[code];
       var z = getNextZ();
       var overlay = document.createElement('div');
       overlay.className = 'fs-overlay';
@@ -1298,44 +1328,65 @@ void main() {
       overlay.appendChild(modal);
       document.body.appendChild(overlay);
       modal.addEventListener('click', function(ev) { ev.stopPropagation(); });
-      overlay.addEventListener('click', function() { document.body.removeChild(overlay); });
-      document.getElementById('fsCloseBtn').addEventListener('click', function() { document.body.removeChild(overlay); });
-      fetch('/api/flight-status?code=' + code)
-        .then(function(r) { return r.json(); })
-        .then(function(data) {
+      overlay.addEventListener('click', function() {
+        if (document.body.contains(overlay)) document.body.removeChild(overlay);
+      });
+      document.getElementById('fsCloseBtn').addEventListener('click', function() {
+        if (document.body.contains(overlay)) document.body.removeChild(overlay);
+      });
+      if (!icao) {
+        document.getElementById('fsBody').innerHTML = '<div class="fs-empty">ICAO コード未登録</div>';
+        return;
+      }
+      var now = Math.floor(Date.now() / 1000);
+      var begin = now - 7200;
+      var url = 'https://opensky-network.org/api/flights/departure?airport=' + icao + '&begin=' + begin + '&end=' + now;
+      fetch(url)
+        .then(function(r) {
+          if (!r.ok) throw new Error('HTTP ' + r.status);
+          return r.json();
+        })
+        .then(function(raw) {
           var fsBody = document.getElementById('fsBody');
           if (!fsBody) return;
-          var flights = data.flights || [];
-          if (data.error && !flights.length) {
-            fsBody.innerHTML = '<div class="fs-empty">データ取得できませんでした<br><small style="color:#484f58">' + data.error + '</small></div>';
-            return;
-          }
+          var flights = (raw || [])
+            .map(function(f) {
+              return {
+                callsign: (f.callsign || '').trim(),
+                departed: f.firstSeen,
+                destIata: f.estArrivalAirport ? (ICAO_IATA[f.estArrivalAirport] || f.estArrivalAirport) : '不明'
+              };
+            })
+            .filter(function(f) { return f.callsign; })
+            .sort(function(a, b) { return b.departed - a.departed; });
           if (!flights.length) {
             fsBody.innerHTML = '<div class="fs-empty">直近2時間の出発便データがありません</div>';
           } else {
             var h = '';
-            flights.slice(0, 30).forEach(function(f) {
+            flights.slice(0, 40).forEach(function(f) {
               var dep = f.departed ? new Date(f.departed * 1000).toLocaleTimeString('ja-JP', {hour:'2-digit', minute:'2-digit', timeZone:'UTC'}) + ' UTC' : '';
-              var dest = f.arrivalIata || f.arrivalIcao || '不明';
               h += '<div class="fs-flight-row">';
               h += '<span class="fs-callsign">' + f.callsign + '</span>';
               h += '<span class="fs-arrow">&#8594;</span>';
-              h += '<span class="fs-dest">' + dest + '</span>';
+              h += '<span class="fs-dest">' + f.destIata + '</span>';
               h += '<span class="fs-time">' + dep + '</span>';
               h += '</div>';
             });
             fsBody.innerHTML = h;
           }
-          var ft = data.fetchedAt ? new Date(data.fetchedAt * 1000).toLocaleTimeString('ja-JP', {hour:'2-digit', minute:'2-digit', timeZone:'UTC'}) + ' UTC' : '';
           var note = document.createElement('div');
           note.className = 'fs-note';
-          note.textContent = '出典: OpenSky Network | 取得時刻: ' + ft + ' | 欠航情報は各航空会社・空港公式サイトをご確認ください';
-          var fsBodyEl = document.getElementById('fsBody');
-          if (fsBodyEl) fsBodyEl.appendChild(note);
+          note.textContent = '出典: OpenSky Network (ADS-B実績) | 欠航情報は各航空会社・空港公式サイトをご確認ください';
+          var el = document.getElementById('fsBody');
+          if (el) el.appendChild(note);
         })
         .catch(function(e) {
           var fsBody = document.getElementById('fsBody');
-          if (fsBody) fsBody.innerHTML = '<div class="fs-empty">通信エラー: ' + e.message + '</div>';
+          if (!fsBody) return;
+          fsBody.innerHTML =
+            '<div class="fs-empty">データ取得できませんでした<br><small style="color:#484f58">' + e.message + '</small><br>' +
+            '<br><a href="https://www.flightradar24.com/airport/' + code + '" target="_blank" style="color:#58a6ff">FlightRadar24 で確認</a>' +
+            ' &nbsp; <a href="https://www.flightaware.com/live/airport/' + icao + '" target="_blank" style="color:#58a6ff">FlightAware で確認</a></div>';
         });
     }
 
