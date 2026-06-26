@@ -34,6 +34,7 @@ import { getHeritageAccessPage } from './views/heritageAccess';
 import { getWebGLLVSpherePage } from './views/webglLVSphere';
 import { getWebGLCubePage } from './views/webglCube';
 import { getWebGLSolarPage } from './views/webglSolar';
+import { getWebGLFaultsPage } from './views/webglFaults';
 import { getUuidGenPage } from './views/uuidGen';
 import { getMLBSpherePage } from './views/mlbSphere';
 import { getWorldCupWdlPage } from './views/worldCupWdl';
@@ -4515,6 +4516,11 @@ app.get('/webgl-sphere', authMiddleware, async (c) => {
 app.get('/webgl-heritage', authMiddleware, async (c) => {
   const user = c.get('user');
   return c.html(getWebGLHeritagePage(user.sub));
+});
+
+app.get('/webgl-faults', authMiddleware, async (c) => {
+  const user = c.get('user');
+  return c.html(getWebGLFaultsPage(user.sub));
 });
 
 function haversineKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
