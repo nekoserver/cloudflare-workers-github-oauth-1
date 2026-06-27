@@ -4575,7 +4575,7 @@ export function getAiChatPage(user: {
     var dailyStatsTitleEl = document.getElementById('dailyStatsTitle');
     var dailyStatsCurrentMonth = new Date().toISOString().slice(0, 7);
 
-    function buildKwClassifyStatsHtml(kwAll, cats) {
+    function buildKwClassifyStatsHtml(kwAll, cats, groups) {
       var classified = 0, unclassified = 0;
       kwAll.forEach(function(kw) {
         if (kw.is_classified) classified++; else unclassified++;
@@ -4614,21 +4614,37 @@ export function getAiChatPage(user: {
       ratioHtml += '</div>';
       html += '<div style="display:flex;align-items:flex-start;gap:8px;">' + pieSvg + ratioHtml + '</div>';
 
-      var sorted = (cats || []).slice()
-        .filter(function(c) { return (c.kw_count || 0) > 0; })
+      var grpList = (groups || []).filter(function(g) { return (g.kw_count || 0) > 0; })
         .sort(function(a, b) { return (b.kw_count || 0) - (a.kw_count || 0); });
-      if (sorted.length > 0) {
-        var maxCnt = Math.max(1, sorted[0].kw_count || 0);
-        html += '<div style="font-size:10px;font-weight:600;color:var(--text-secondary);margin-top:12px;margin-bottom:4px;">分類カテゴリ別キーワード数</div>';
-        sorted.forEach(function(c) {
-          var cnt = c.kw_count || 0;
-          var pct = Math.round(cnt / maxCnt * 100);
+      if (grpList.length > 0) {
+        var maxGrp = Math.max(1, grpList[0].kw_count || 0);
+        html += '<div style="font-size:10px;font-weight:600;color:var(--text-secondary);margin-top:12px;margin-bottom:4px;">大分類別キーワード数</div>';
+        grpList.forEach(function(g) {
+          var cnt = g.kw_count || 0;
+          var pct = Math.round(cnt / maxGrp * 100);
           html += '<div style="display:flex;align-items:center;gap:5px;margin-bottom:3px;">';
-          html += '<span style="font-size:10px;color:var(--text-primary);width:64px;flex-shrink:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="' + escHtml(c.name) + '">' + escHtml(c.name) + '</span>';
-          html += '<span style="flex:1;height:8px;background:var(--bg-secondary);border-radius:4px;overflow:hidden;"><span style="display:block;height:100%;width:' + pct + '%;background:' + escHtml(c.color || '#6366f1') + ';border-radius:4px;"></span></span>';
+          html += '<span style="font-size:10px;color:var(--text-primary);width:64px;flex-shrink:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="' + escHtml(g.group_name) + '">' + escHtml(g.group_name) + '</span>';
+          html += '<span style="flex:1;height:8px;background:var(--bg-secondary);border-radius:4px;overflow:hidden;"><span style="display:block;height:100%;width:' + pct + '%;background:#7c3aed;border-radius:4px;"></span></span>';
           html += '<span style="font-size:10px;color:var(--text-muted);flex-shrink:0;">' + cnt + '</span>';
           html += '</div>';
         });
+      } else {
+        var sorted = (cats || []).slice()
+          .filter(function(c) { return (c.kw_count || 0) > 0; })
+          .sort(function(a, b) { return (b.kw_count || 0) - (a.kw_count || 0); });
+        if (sorted.length > 0) {
+          var maxCnt = Math.max(1, sorted[0].kw_count || 0);
+          html += '<div style="font-size:10px;font-weight:600;color:var(--text-secondary);margin-top:12px;margin-bottom:4px;">分類カテゴリ別キーワード数</div>';
+          sorted.forEach(function(c) {
+            var cnt = c.kw_count || 0;
+            var pct = Math.round(cnt / maxCnt * 100);
+            html += '<div style="display:flex;align-items:center;gap:5px;margin-bottom:3px;">';
+            html += '<span style="font-size:10px;color:var(--text-primary);width:64px;flex-shrink:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="' + escHtml(c.name) + '">' + escHtml(c.name) + '</span>';
+            html += '<span style="flex:1;height:8px;background:var(--bg-secondary);border-radius:4px;overflow:hidden;"><span style="display:block;height:100%;width:' + pct + '%;background:' + escHtml(c.color || '#6366f1') + ';border-radius:4px;"></span></span>';
+            html += '<span style="font-size:10px;color:var(--text-muted);flex-shrink:0;">' + cnt + '</span>';
+            html += '</div>';
+          });
+        }
       }
       return html;
     }
@@ -4641,12 +4657,14 @@ export function getAiChatPage(user: {
       Promise.allSettled([
         fetch('/api/aichat/daily-stats?month=' + encodeURIComponent(month), { credentials: 'same-origin' }).then(function(r) { return r.json(); }),
         fetch('/api/aichat/all-keywords', { credentials: 'same-origin' }).then(function(r) { return r.json(); }),
-        fetch('/api/aichat/keyword-categories-summary', { credentials: 'same-origin' }).then(function(r) { return r.json(); })
+        fetch('/api/aichat/keyword-categories-summary', { credentials: 'same-origin' }).then(function(r) { return r.json(); }),
+        fetch('/api/aichat/category-groups', { credentials: 'same-origin' }).then(function(r) { return r.json(); })
       ])
         .then(function(results) {
           var d = results[0].status === 'fulfilled' ? results[0].value : {};
           var kwAll = results[1].status === 'fulfilled' ? (results[1].value.keywords || []) : [];
           var catSummary = results[2].status === 'fulfilled' ? (results[2].value.categories || []) : [];
+          var catGroups = results[3].status === 'fulfilled' ? (results[3].value.groups || []) : [];
           var days = d.days || [];
           var models = d.models || [];
           var apiModelTotals = d.apiModelTotals || {};
@@ -4776,7 +4794,7 @@ export function getAiChatPage(user: {
           }
 
           // ===== 左パネル最下段: キーワード分類状況（総数・円グラフ・カテゴリ別棒グラフ） =====
-          leftHtml += buildKwClassifyStatsHtml(kwAll, catSummary);
+          leftHtml += buildKwClassifyStatsHtml(kwAll, catSummary, catGroups);
 
           // ===== 右パネル: 日次折れ線（累計KW）+ 棒グラフ =====
           var cumKwByDay = {}, cumSum = 0;
