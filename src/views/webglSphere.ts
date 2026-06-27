@@ -1134,15 +1134,15 @@ function getNextZ() {
   var CAL_3RD_BG = 'rgba(88,166,255,0.50)';
   var CAL_FIN_BG = 'rgba(88,166,255,0.90)';
   var CAL_DAYS = {
-    1:CAL_R32_BG,2:CAL_R32_BG,3:CAL_R32_BG,4:CAL_R32_BG,5:CAL_R32_BG,6:CAL_R32_BG,
-    8:CAL_R16_BG,9:CAL_R16_BG,10:CAL_R16_BG,11:CAL_R16_BG,12:CAL_R16_BG,
-    14:CAL_QF_BG,15:CAL_QF_BG,16:CAL_QF_BG,
-    19:CAL_SF_BG,20:CAL_SF_BG,
-    23:CAL_3RD_BG,
-    26:CAL_FIN_BG
+    1:CAL_R32_BG,2:CAL_R32_BG,3:CAL_R32_BG,
+    5:CAL_R16_BG,6:CAL_R16_BG,7:CAL_R16_BG,8:CAL_R16_BG,
+    11:CAL_QF_BG,12:CAL_QF_BG,
+    15:CAL_SF_BG,16:CAL_SF_BG,
+    18:CAL_3RD_BG,
+    19:CAL_FIN_BG
   };
-  var CAL_LABELS = {1:'R32',8:'R16',14:'QF',19:'SF',23:'3位',26:'決勝'};
-  var CAL_ICONS_JUL = {27:'🏆'};
+  var CAL_LABELS = {1:'R32',5:'R16',11:'QF',15:'SF',18:'3位',19:'決勝'};
+  var CAL_ICONS_JUL = {19:'🏆'};
 
   function buildCalendar() {
     var sec = document.getElementById('cal-section');
