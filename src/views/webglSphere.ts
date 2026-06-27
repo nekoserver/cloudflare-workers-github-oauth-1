@@ -115,6 +115,7 @@ input[type=range] { flex:1; accent-color:#58a6ff; }
 .drw-left { display:flex; flex-direction:column; gap:2px; flex:1; min-width:0; }
 .drw-flags { font-size:22px; letter-spacing:3px; }
 .drw-venue { font-size:9px; color:#8b949e; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.drw-r32-badge { display:inline-block; font-size:9px; font-weight:700; color:#0d1117; background:rgba(240,180,40,0.85); border-radius:3px; padding:0 4px; margin-bottom:1px; }
 .drw-meta { font-family:monospace; font-size:11px; color:#58a6ff; text-align:right; white-space:nowrap; flex-shrink:0; }
 .drw-row.drw-past { opacity:0.38; }
 .drw-row.drw-live { background:rgba(63,185,80,.08); border-left:3px solid #3fb950; }
@@ -1073,8 +1074,16 @@ function getNextZ() {
     {a:"🇨🇴",b:"🇵🇹",date:"2026-06-27",time:"23:30",venue:4},
     {a:"🇨🇩",b:"🇺🇿",date:"2026-06-27",time:"23:30",venue:5},
     {a:"🇩🇿",b:"🇦🇹",date:"2026-06-28",time:"02:00",venue:6},
-    {a:"🇯🇴",b:"🇦🇷",date:"2026-06-28",time:"02:00",venue:8}
+    {a:"🇯🇴",b:"🇦🇷",date:"2026-06-28",time:"02:00",venue:8},
+    {a:"🇿🇦",b:"🇨🇦",date:"2026-06-28",time:"19:00",venue:12},
+    {a:"🇳🇱",b:"🇲🇦",date:"2026-06-28",time:"22:00",venue:10},
+    {a:"🇧🇷",b:"🇯🇵",date:"2026-06-29",time:"19:00",venue:7},
+    {a:"🇩🇪",b:"🇵🇾",date:"2026-06-29",time:"22:00",venue:0},
+    {a:"🇨🇮",b:"🇳🇴",date:"2026-06-30",time:"19:00",venue:7},
+    {a:"🇫🇷",b:"🇸🇪",date:"2026-06-30",time:"22:00",venue:1},
+    {a:"🇲🇽",b:"❓",date:"2026-07-01",time:"02:00",venue:9}
   ];
+  var GS_MATCH_COUNT = 72;
   var stadiumMatches = {};
   for (var _vi = 0; _vi < 16; _vi++) stadiumMatches[_vi] = [];
   for (var _mi = 0; _mi < MATCHES.length; _mi++) stadiumMatches[MATCHES[_mi].venue].push(_mi);
@@ -1102,7 +1111,8 @@ function getNextZ() {
     '🇨🇻':'CPV','🇧🇪':'BEL','🇪🇬':'EGY','🇸🇦':'KSA','🇺🇾':'URU','🇮🇷':'IRN',
     '🇳🇿':'NZL','🇫🇷':'FRA','🇸🇳':'SEN','🇮🇶':'IRQ','🇳🇴':'NOR','🇦🇷':'ARG',
     '🇩🇿':'ALG','🇦🇹':'AUT','🇯🇴':'JOR','🇵🇹':'POR','🇨🇩':'COD','🇭🇷':'CRO',
-    '🇬🇭':'GHA','🇵🇦':'PAN','🇺🇿':'UZB','🇨🇴':'COL','🏴󠁧󠁢󠁳󠁣󠁴󠁿':'SCO','🏴󠁧󠁢󠁥󠁮󠁧󠁿':'ENG'
+    '🇬🇭':'GHA','🇵🇦':'PAN','🇺🇿':'UZB','🇨🇴':'COL','🏴󠁧󠁢󠁳󠁣󠁴󠁿':'SCO','🏴󠁧󠁢󠁥󠁮󠁧󠁿':'ENG',
+    '❓':'TBD'
   };
   function flagCode(f) { return FLAG_CODE[f] || ''; }
   function fc(f) { var c = flagCode(f); return c ? '<span class="tm-code">' + c + '</span>' : ''; }
@@ -1299,27 +1309,34 @@ function getNextZ() {
     var sec = document.getElementById('drw-cal');
     if (!sec) return;
     var juneDays = {};
-    MATCHES.forEach(function(m) {
-      if (m.date.startsWith('2026-06-')) juneDays[parseInt(m.date.slice(8), 10)] = true;
+    var juneR32Days = {};
+    MATCHES.forEach(function(m, idx) {
+      if (m.date.startsWith('2026-06-')) {
+        var d = parseInt(m.date.slice(8), 10);
+        if (idx >= GS_MATCH_COUNT) juneR32Days[d] = true;
+        else juneDays[d] = true;
+      }
     });
     var firstDow = new Date(2026, 5, 1).getDay();
     var todayStr = new Date().toISOString().slice(0, 10);
     var todayDay = todayStr.startsWith('2026-06-') ? parseInt(todayStr.slice(8), 10) : 0;
     var GS_BG = 'rgba(88,166,255,0.18)';
+    var R32_BG_JUN = 'rgba(240,180,40,0.30)';
     var wdays = ['日','月','火','水','木','金','土'];
     var html = '<div class="cal-month-hdr">6️⃣<div class="host-filter-btns"><button class="host-btn" data-ctry="USA">&#127482;&#127480;</button><button class="host-btn" data-ctry="CAN">&#127464;&#127462;</button><button class="host-btn" data-ctry="MEX">&#127474;&#127485;</button></div></div>';
     html += '<div class="cal-wrap drw-cal-wrap">';
-    html += '<div class="cal-title">🏃‍♂️‍➡️ グループステージ (72)</div>';
-    html += '<div class="cal-legend"><span class="cal-leg" style="background:' + GS_BG + '">グループステージ</span></div>';
+    html += '<div class="cal-title">🏃‍♂️‍➡️ グループステージ + R32</div>';
+    html += '<div class="cal-legend"><span class="cal-leg" style="background:' + GS_BG + '">グループステージ</span><span class="cal-leg" style="background:' + R32_BG_JUN + ';color:#0d1117">R32</span></div>';
     html += '<div class="cal-grid">';
     for (var wi = 0; wi < 7; wi++) { html += '<div class="cal-cell cal-hdr">' + wdays[wi] + '</div>'; }
     for (var ei = 0; ei < firstDow; ei++) { html += '<div class="cal-cell"></div>'; }
     for (var di = 1; di <= 30; di++) {
-      var isMatch = juneDays[di] || false;
+      var isR32Day = juneR32Days[di] || false;
+      var isMatch = juneDays[di] || isR32Day;
       var isToday = di === todayDay;
       var cls = 'cal-cell' + (isMatch ? ' cal-match' : '') + (isToday ? ' cal-today' : '');
-      var style = isMatch ? 'background:' + GS_BG : '';
-      var lbl = '';
+      var style = isR32Day ? 'background:' + R32_BG_JUN : (isMatch ? 'background:' + GS_BG : '');
+      var lbl = isR32Day ? '<div class="cal-rlabel">R32</div>' : '';
       var dStr = '2026-06-' + (di < 10 ? '0' + di : '' + di);
       var dateAttr = isMatch ? ' data-date="' + dStr + '"' : '';
       html += '<div class="' + cls + '"' + dateAttr + ' style="' + style + '">' + di + lbl + '</div>';
@@ -2167,14 +2184,15 @@ function getNextZ() {
     if (!drwBody) return;
     var nowMs = Date.now();
     var todayStr = new Date().toISOString().slice(0, 10);
-    var upcoming = MATCHES.filter(function(m) { return m.date >= todayStr; }).sort(function(x, y) { return (x.date + x.time) < (y.date + y.time) ? -1 : 1; });
-    var past = MATCHES.filter(function(m) { return m.date < todayStr; }).sort(function(x, y) { return (x.date + x.time) < (y.date + y.time) ? -1 : 1; });
+    var indexedMatches = MATCHES.map(function(m, i) { return {m:m, i:i}; });
+    var upcoming = indexedMatches.filter(function(x) { return x.m.date >= todayStr; }).sort(function(x, y) { return (x.m.date + x.m.time) < (y.m.date + y.m.time) ? -1 : 1; });
+    var past = indexedMatches.filter(function(x) { return x.m.date < todayStr; }).sort(function(x, y) { return (x.m.date + x.m.time) < (y.m.date + y.m.time) ? -1 : 1; });
     var allM = upcoming.concat(past);
     var dateMap = {};
     var dateOrder = [];
-    allM.forEach(function(m) {
-      if (!dateMap[m.date]) { dateMap[m.date] = []; dateOrder.push(m.date); }
-      dateMap[m.date].push(m);
+    allM.forEach(function(x) {
+      if (!dateMap[x.m.date]) { dateMap[x.m.date] = []; dateOrder.push(x.m.date); }
+      dateMap[x.m.date].push(x);
     });
     var html = "";
     dateOrder.forEach(function(date) {
@@ -2182,7 +2200,9 @@ function getNextZ() {
       html += '<div class="drw-section" data-date="' + date + '">';
       html += '<div class="drw-date"><span>' + label + '</span><span class="drw-chevron">&#9660;</span></div>';
       html += '<div class="drw-section-body">';
-      dateMap[date].forEach(function(m) {
+      dateMap[date].forEach(function(x) {
+        var m = x.m;
+        var isKnockout = x.i >= GS_MATCH_COUNT;
         var koMs = new Date(m.date + "T" + m.time + ":00Z").getTime();
         var isPast = koMs < nowMs - 110*60000;
         var isLive = !isPast && koMs <= nowMs + 110*60000 && koMs >= nowMs - 110*60000;
@@ -2193,8 +2213,9 @@ function getNextZ() {
         var vidx = matchVenueIdx.hasOwnProperty(mk) ? matchVenueIdx[mk] : -1;
         var sd = (vidx >= 0 && wc2026Stadiums[vidx]) ? wc2026Stadiums[vidx] : null;
         var venueHtml = sd ? '<span class="drw-venue">' + sd.ctry + '&#127967;' + sd.name + '</span>' : '';
+        var r32Badge = isKnockout ? '<span class="drw-r32-badge">R32</span>' : '';
         html += '<div class="' + cls + '" data-a="' + enc_a + '" data-b="' + enc_b + '" data-date="' + m.date + '" data-time="' + m.time + '" data-vidx="' + vidx + '">';
-        html += '<div class="drw-left"><span class="drw-flags">' + fc(m.a) + ' ' + m.a + '  ' + m.b + ' ' + fc(m.b) + '</span>' + venueHtml + '</div>';
+        html += '<div class="drw-left"><span class="drw-flags">' + fc(m.a) + ' ' + m.a + '  ' + m.b + ' ' + fc(m.b) + '</span>' + r32Badge + venueHtml + '</div>';
         html += '<span class="drw-meta">' + m.date.slice(5).replace("-","/") + '<br>' + m.time + ' UTC<br>' + toET(m.time) + '<br>' + toJST(m.time) + '</span></div>';
       });
       html += '</div></div>';
