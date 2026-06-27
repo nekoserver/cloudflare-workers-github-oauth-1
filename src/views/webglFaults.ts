@@ -145,8 +145,9 @@ canvas:active { cursor:grabbing; }
 .apt-tt-close { background:none; border:none; color:#8b949e; font-size:15px; cursor:pointer; padding:0; line-height:1; flex-shrink:0; }
 .apt-tt-close:hover { color:#e6edf3; }
 .apt-tt-routes { display:flex; flex-wrap:wrap; gap:4px; margin-top:2px; }
-.apt-tt-code { background:#161b22; border:1px solid #30363d; border-radius:4px; padding:2px 7px; font-size:11px; font-family:monospace; cursor:pointer; transition:background .1s,border-color .1s; white-space:nowrap; }
+.apt-tt-code { background:#161b22; border:1px solid #30363d; border-radius:4px; padding:2px 7px; font-size:11px; font-family:monospace; cursor:pointer; transition:background .1s,border-color .1s; white-space:nowrap; -webkit-tap-highlight-color:transparent; }
 .apt-tt-code:hover { background:#21262d; border-color:#58a6ff; color:#58a6ff; }
+.apt-tt-code:focus { outline:none; }
 .apt-item-row { display:flex; align-items:center; gap:6px; }
 .apt-item-main { flex:1; min-width:0; }
 .apt-status-btn { background:none; border:1px solid #444; color:#8b949e; border-radius:50%; width:20px; height:20px; font-size:12px; cursor:pointer; flex-shrink:0; display:flex; align-items:center; justify-content:center; padding:0; transition:border-color .15s,color .15s; }
@@ -245,10 +246,6 @@ void main() {
   <h1><span class="globe-icon-wrap" id="globeIconWrap">🌐</span> 世界の活断層 地球儀</h1>
   <span class="badge">活断層</span>
   <span style="flex:1"></span>
-  <a class="pwa-hide" href="/webgl-heritage">🏛️ 世界遺産</a>
-  <a class="pwa-hide" href="/webgl-solar">☀️ 太陽系</a>
-  <a class="pwa-hide" href="/settings">&#9881;</a>
-  <span class="pwa-hide" style="color:#8b949e;font-size:11px">${safeUser}</span>
 </div>
 
 <div class="body">
@@ -1259,7 +1256,9 @@ void main() {
       ttY = Math.max(4, Math.min(ttY, window.innerHeight - ttH - 4));
       aptTooltipEl.style.left = ttX + 'px';
       aptTooltipEl.style.top = ttY + 'px';
+      aptTooltipEl.style.pointerEvents = 'none';
       aptTooltipEl.style.opacity = '1';
+      requestAnimationFrame(function() { aptTooltipEl.style.pointerEvents = ''; });
       if (fromCode) {
         var flashEl = document.getElementById('aptTtNameEl');
         if (flashEl) {
