@@ -4634,7 +4634,7 @@ app.post('/api/heritage-cities', authMiddleware, async (c) => {
     await db.prepare('DELETE FROM heritage_city_fetched WHERE heritage_name = ?').bind(name).run();
   }
 
-  const cities = findNearbyCities(lat, lon, 1000, 30);
+  const cities = findNearbyCities(lat, lon, 1500, 45);
 
   if (cities.length > 0) {
     const stmt = db.prepare('INSERT OR IGNORE INTO heritage_cities (heritage_name, city_name, city_lat, city_lon, population, distance_km, country_code) VALUES (?, ?, ?, ?, ?, ?, ?)');
