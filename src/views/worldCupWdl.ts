@@ -87,100 +87,8 @@ tr:nth-child(even) td { background: var(--row-alt); }
   <h2>&#x1F3C6; ラウンド32 対戦表</h2>
   <div class="br-wrap">
     <table class="br-table">
-      <thead>
-        <tr>
-          <th>日付</th>
-          <th colspan="3">対戦</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr>
-          <td class="br-date-cell" rowspan="2">6/28</td>
-          <td class="br-team-cell"><div class="br-team-inner"><span class="br-flag">&#x1F1FF;&#x1F1E6;</span><span class="br-name">RSA</span></div></td>
-          <td class="br-vs-cell">vs</td>
-          <td class="br-team-cell"><div class="br-team-inner"><span class="br-flag">&#x1F1E8;&#x1F1E6;</span><span class="br-name">CAN</span></div></td>
-        </tr>
-        <tr>
-          <td class="br-team-cell"><div class="br-team-inner"><span class="br-flag">&#x1F1F3;&#x1F1F1;</span><span class="br-name">NED</span></div></td>
-          <td class="br-vs-cell">vs</td>
-          <td class="br-team-cell"><div class="br-team-inner"><span class="br-flag">&#x1F1F2;&#x1F1E6;</span><span class="br-name">MAR</span></div></td>
-        </tr>
-        <tr>
-          <td class="br-date-cell" rowspan="2">6/29</td>
-          <td class="br-team-cell"><div class="br-team-inner"><span class="br-flag">&#x1F1E7;&#x1F1F7;</span><span class="br-name">BRA</span></div></td>
-          <td class="br-vs-cell">vs</td>
-          <td class="br-team-cell"><div class="br-team-inner"><span class="br-flag">&#x1F1EF;&#x1F1F5;</span><span class="br-name">JPN</span></div></td>
-        </tr>
-        <tr>
-          <td class="br-team-cell"><div class="br-team-inner"><span class="br-flag">&#x1F1E9;&#x1F1EA;</span><span class="br-name">GER</span></div></td>
-          <td class="br-vs-cell">vs</td>
-          <td class="br-team-cell"><div class="br-team-inner"><span class="br-flag">&#x1F1F5;&#x1F1FE;</span><span class="br-name">PAR</span></div></td>
-        </tr>
-        <tr>
-          <td class="br-date-cell" rowspan="3">6/30</td>
-          <td class="br-team-cell"><div class="br-team-inner"><span class="br-flag">&#x1F1E8;&#x1F1EE;</span><span class="br-name">CIV</span></div></td>
-          <td class="br-vs-cell">vs</td>
-          <td class="br-team-cell"><div class="br-team-inner"><span class="br-flag">&#x1F1F3;&#x1F1F4;</span><span class="br-name">NOR</span></div></td>
-        </tr>
-        <tr>
-          <td class="br-team-cell"><div class="br-team-inner"><span class="br-flag">&#x1F1EB;&#x1F1F7;</span><span class="br-name">FRA</span></div></td>
-          <td class="br-vs-cell">vs</td>
-          <td class="br-team-cell"><div class="br-team-inner"><span class="br-flag">&#x1F1F8;&#x1F1EA;</span><span class="br-name">SWE</span></div></td>
-        </tr>
-        <tr>
-          <td class="br-team-cell"><div class="br-team-inner"><span class="br-flag">&#x1F3F4;&#xE0067;&#xE0062;&#xE0065;&#xE006E;&#xE0067;&#xE007F;</span><span class="br-name">ENG</span></div></td>
-          <td class="br-vs-cell">vs</td>
-          <td class="br-team-cell"><div class="br-tbd">未定</div></td>
-        </tr>
-        <tr>
-          <td class="br-date-cell" rowspan="3">7/1</td>
-          <td class="br-team-cell"><div class="br-team-inner"><span class="br-flag">&#x1F1F2;&#x1F1FD;</span><span class="br-name">MEX</span></div></td>
-          <td class="br-vs-cell">vs</td>
-          <td class="br-team-cell"><div class="br-tbd">未定</div></td>
-        </tr>
-        <tr>
-          <td class="br-team-cell"><div class="br-team-inner"><span class="br-flag">&#x1F1EA;&#x1F1EC;</span><span class="br-name">EGY</span></div></td>
-          <td class="br-vs-cell">vs</td>
-          <td class="br-team-cell"><div class="br-team-inner"><span class="br-flag">&#x1F1F0;&#x1F1F7;</span><span class="br-name">KOR</span></div></td>
-        </tr>
-        <tr>
-          <td class="br-team-cell"><div class="br-team-inner"><span class="br-flag">&#x1F1FA;&#x1F1F8;</span><span class="br-name">USA</span></div></td>
-          <td class="br-vs-cell">vs</td>
-          <td class="br-team-cell"><div class="br-team-inner"><span class="br-flag">&#x1F1E7;&#x1F1E6;</span><span class="br-name">BIH</span></div></td>
-        </tr>
-        <tr>
-          <td class="br-date-cell" rowspan="3">7/2</td>
-          <td class="br-team-cell"><div class="br-team-inner"><span class="br-flag">&#x1F1EA;&#x1F1F8;</span><span class="br-name">ESP</span></div></td>
-          <td class="br-vs-cell">vs</td>
-          <td class="br-team-cell"><div class="br-tbd">AUT / ALG</div></td>
-        </tr>
-        <tr>
-          <td class="br-team-cell"><div class="br-team-inner"><span class="br-flag">&#x1F1E8;&#x1F1ED;</span><span class="br-name">SUI</span></div></td>
-          <td class="br-vs-cell">vs</td>
-          <td class="br-team-cell"><div class="br-tbd">未定</div></td>
-        </tr>
-        <tr>
-          <td class="br-team-cell"><div class="br-team-inner"><span class="br-flag">&#x1F1F5;&#x1F1F9;</span><span class="br-name">POR</span></div></td>
-          <td class="br-vs-cell">vs</td>
-          <td class="br-team-cell"><div class="br-team-inner"><span class="br-flag">&#x1F1EC;&#x1F1ED;</span><span class="br-name">GHA</span></div></td>
-        </tr>
-        <tr>
-          <td class="br-date-cell" rowspan="3">7/3</td>
-          <td class="br-team-cell"><div class="br-team-inner"><span class="br-flag">&#x1F1E6;&#x1F1FA;</span><span class="br-name">AUS</span></div></td>
-          <td class="br-vs-cell">vs</td>
-          <td class="br-team-cell"><div class="br-team-inner"><span class="br-flag">&#x1F1E7;&#x1F1EA;</span><span class="br-name">BEL</span></div></td>
-        </tr>
-        <tr>
-          <td class="br-team-cell"><div class="br-team-inner"><span class="br-flag">&#x1F1E6;&#x1F1F7;</span><span class="br-name">ARG</span></div></td>
-          <td class="br-vs-cell">vs</td>
-          <td class="br-team-cell"><div class="br-team-inner"><span class="br-flag">&#x1F1E8;&#x1F1FB;</span><span class="br-name">CPV</span></div></td>
-        </tr>
-        <tr>
-          <td class="br-team-cell"><div class="br-team-inner"><span class="br-flag">&#x1F1E8;&#x1F1F4;</span><span class="br-name">COL</span></div></td>
-          <td class="br-vs-cell">vs</td>
-          <td class="br-team-cell"><div class="br-team-inner"><span class="br-flag">&#x1F1ED;&#x1F1F7;</span><span class="br-name">CRO</span></div></td>
-        </tr>
-      </tbody>
+      <thead><tr><th>日付</th><th colspan="3">対戦</th></tr></thead>
+      <tbody id="bracket"></tbody>
     </table>
   </div>
 </div>
@@ -238,6 +146,51 @@ function render(){
 }
 
 render();
+
+var BRACKET = [
+  {date:"6/28", a:{f:"🇿🇦",n:"RSA"}, b:{f:"🇨🇦",n:"CAN"}},
+  {date:"6/28", a:{f:"🇳🇱",n:"NED"}, b:{f:"🇲🇦",n:"MAR"}},
+  {date:"6/29", a:{f:"🇧🇷",n:"BRA"}, b:{f:"🇯🇵",n:"JPN"}},
+  {date:"6/29", a:{f:"🇩🇪",n:"GER"}, b:{f:"🇵🇾",n:"PAR"}},
+  {date:"6/30", a:{f:"🇨🇮",n:"CIV"}, b:{f:"🇳🇴",n:"NOR"}},
+  {date:"6/30", a:{f:"🇫🇷",n:"FRA"}, b:{f:"🇸🇪",n:"SWE"}},
+  {date:"6/30", a:{f:"🏴󠁧󠁢󠁥󠁮󠁧󠁿",n:"ENG"}, b:null, bl:"3位枠未定"},
+  {date:"7/1",  a:{f:"🇲🇽",n:"MEX"}, b:null, bl:"3位枠未定"},
+  {date:"7/1",  a:{f:"🇪🇬",n:"EGY"}, b:{f:"🇰🇷",n:"KOR"}},
+  {date:"7/1",  a:{f:"🇺🇸",n:"USA"}, b:{f:"🇧🇦",n:"BIH"}},
+  {date:"7/2",  a:{f:"🇪🇸",n:"ESP"}, b:null, bl:"J組2位"},
+  {date:"7/2",  a:{f:"🇨🇭",n:"SUI"}, b:null, bl:"3位枠未定"},
+  {date:"7/2",  a:{f:"🇵🇹",n:"POR"}, b:{f:"🇬🇭",n:"GHA"}},
+  {date:"7/3",  a:{f:"🇦🇺",n:"AUS"}, b:{f:"🇧🇪",n:"BEL"}},
+  {date:"7/3",  a:{f:"🇦🇷",n:"ARG"}, b:{f:"🇨🇻",n:"CPV"}},
+  {date:"7/3",  a:{f:"🇨🇴",n:"COL"}, b:{f:"🇭🇷",n:"CRO"}}
+];
+
+function teamCell(t,label){
+  if(t) return "<div class='br-team-inner'><span class='br-flag'>"+t.f+"</span><span class='br-name'>"+t.n+"</span></div>";
+  return "<div class='br-tbd'>"+(label||"未定")+"</div>";
+}
+
+function renderBracket(){
+  var spans={};
+  BRACKET.forEach(function(m){spans[m.date]=(spans[m.date]||0)+1;});
+  var shown={};
+  var h="";
+  BRACKET.forEach(function(m){
+    h+="<tr>";
+    if(!shown[m.date]){
+      h+="<td class='br-date-cell' rowspan='"+spans[m.date]+"'>"+m.date+"</td>";
+      shown[m.date]=true;
+    }
+    h+="<td class='br-team-cell'>"+teamCell(m.a)+"</td>";
+    h+="<td class='br-vs-cell'>vs</td>";
+    h+="<td class='br-team-cell'>"+teamCell(m.b,m.bl)+"</td>";
+    h+="</tr>";
+  });
+  document.getElementById("bracket").innerHTML=h;
+}
+
+renderBracket();
 </script>
 </body>
 </html>`;
