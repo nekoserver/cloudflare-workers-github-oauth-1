@@ -1,3 +1,5 @@
+import { DEFAULT_AICHAT_MODELS } from './aichat';
+
 export function getApisPage(): string {
   return `<!DOCTYPE html>
 <html lang="ja">
@@ -284,17 +286,8 @@ mark.hl-match{
 const APIS = [
   { group: 'AI チャット', endpoints: [
     { method:'POST', path:'/api/aichat', desc:'AI にメッセージを送信',
-      modelSelect:[
-        {value:'@cf/meta/llama-3.3-70b-instruct-fp8-fast',label:'llama-3.3-70b-instruct-fp8-fast'},
-        {value:'@cf/meta/llama-3.1-8b-instruct-fp8',label:'llama-3.1-8b'},
-        {value:'@cf/meta/llama-3.1-70b-instruct',label:'llama-3.1-70b'},
-        {value:'@cf/google/gemma-4-26b-a4b-it',label:'gemma-4-26b'},
-        {value:'@cf/google/gemma-3-12b-it',label:'gemma-3-12b'},
-        {value:'@cf/meta/llama-4-scout-17b-16e-instruct',label:'llama-4-scout-17b'},
-        {value:'@cf/zai-org/glm-5.2',label:'glm-5.2'},
-        {value:'@cf/ibm-granite/granite-4.0-h-micro',label:'granite-4.0-h-micro'}
-      ],
-      body:[{n:'message',req:true,s:'Cloudflare Workersについて教えてください'},{n:'model',s:'@cf/meta/llama-3.3-70b-instruct-fp8-fast'},{n:'systemPromptMode',s:'default'}],
+      modelSelect:${JSON.stringify(DEFAULT_AICHAT_MODELS)},
+      body:[{n:'message',req:true,s:'Cloudflare Workersについて教えてください'},{n:'model',s:${JSON.stringify(DEFAULT_AICHAT_MODELS[0]?.value ?? '')}},{n:'systemPromptMode',s:'default'}],
       res:{ok:true,shareId:'a1b2c3d4',answer:'Cloudflare Workers はエッジで動くサーバーレス実行環境です。',model:'@cf/google/gemma-4-26b-a4b-it',tokenUsage:{inputTokens:20,outputTokens:80}} },
     { method:'GET',  path:'/api/aichat/shares/search', desc:'AIチャット全文検索', query:[{n:'q',req:true,s:'cloudflare'}],
       res:{results:[{id:'a1b2c3d4',question:'Cloudflare Workersとは？',answer_preview:'エッジで動くサーバーレス実行環境です。',model:'@cf/google/gemma-4-26b-a4b-it',created_at:'2026-06-15T00:00:00.000Z'}],total:1} },
