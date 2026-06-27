@@ -57,6 +57,10 @@ canvas:active { cursor:grabbing; }
 .fault-item:hover { background:#161b22; }
 .fault-item.active { background:rgba(247,129,102,0.07); border-left-color:#f78166; }
 .fault-dot { width:10px; height:10px; border-radius:50%; flex-shrink:0; margin-top:3px; }
+.fault-mk { position:absolute; transform:translate(-50%,-50%); width:8px; height:8px; border-radius:50%; pointer-events:auto; cursor:pointer; border:1.5px solid rgba(255,255,255,0.5); box-shadow:0 0 4px rgba(0,0,0,0.8); transition:transform .1s; }
+.fault-mk:hover { transform:translate(-50%,-50%) scale(1.6); }
+@keyframes fault-flash { 0%,100%{outline:2px solid transparent} 50%{outline:2px solid #ffd700} }
+.fault-item.flash { animation:fault-flash 0.4s ease 3; }
 .fault-body { flex:1; min-width:0; }
 .fault-name { font-size:11px; font-weight:600; color:#e6edf3; margin-bottom:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .fault-meta { font-size:10px; color:#484f58; display:flex; align-items:center; gap:5px; }
@@ -267,6 +271,7 @@ void main() {
       <button class="canvas-ctrl-btn" id="btnRiftTour">🌋 地溝帯</button>
       <button class="canvas-ctrl-btn" id="btnCaribbeanTour">🌊 カリブ海周辺</button>
       <button class="canvas-ctrl-btn active" id="btnVolToggle">🌋 火山 表示中</button>
+      <button class="canvas-ctrl-btn" id="btnFaultDots">🔴 断層中心点</button>
       <button class="canvas-ctrl-btn" id="btnBoxZoom">🔲 エリアズーム</button>
       <button class="canvas-ctrl-btn" id="btnAirport">🛬 空路 🛫</button>
     </div>
@@ -921,7 +926,9 @@ void main() {
       isHoveringVol = false;
       if (!autoRot) hideVolTooltip();
     });
+    el.addEventListener('touchstart', function(e) { e.stopPropagation(); }, {passive:true});
     el.addEventListener('click', function(e) {
+      e.stopPropagation();
       var r = el.getBoundingClientRect();
       pinVolTooltip(v, r.left + r.width / 2, r.top - 8);
       selectFaultFromVol(v);
@@ -956,6 +963,8 @@ void main() {
     volTooltipEl.style.top = y + 'px';
     volTooltipEl.style.opacity = '1';
     volTooltipEl.className = 'pinned';
+    volTooltipEl.addEventListener('touchstart', function(e) { e.stopPropagation(); }, {passive:true, once:false});
+    volTooltipEl.addEventListener('mousedown', function(e) { e.stopPropagation(); });
     var closeBtn = document.getElementById('volTtClose');
     if (closeBtn) closeBtn.addEventListener('click', function(e) { e.stopPropagation(); volTtPinned = false; volTooltipEl.className = ''; volTooltipEl.style.opacity = '0'; });
     var hdr = volTooltipEl.querySelector('.vol-tt-hdr');
@@ -1034,6 +1043,55 @@ void main() {
   }
   btnVolToggle.addEventListener('click', function() { setVolcanoes(!showVolcanoes); });
   volToggleCtrl.addEventListener('click', function() { setVolcanoes(!showVolcanoes); });
+
+  var showFaultDots = false;
+  var faultDotDivMap = {};
+  var btnFaultDots = document.getElementById('btnFaultDots');
+  btnFaultDots.addEventListener('click', function() {
+    showFaultDots = !showFaultDots;
+    btnFaultDots.classList.toggle('active', showFaultDots);
+    btnFaultDots.textContent = showFaultDots ? '🔴 中心点 表示中' : '🔴 断層中心点';
+    if (!showFaultDots) { Object.keys(faultDotDivMap).forEach(function(id) { faultDotDivMap[id].style.display = 'none'; }); }
+  });
+
+  function initFaultDots() {
+    FAULTS.forEach(function(f) {
+      var el = document.createElement('div');
+      el.className = 'fault-mk';
+      var c = faultColor(f.t);
+      var col = 'rgb(' + Math.round(c[0]*255) + ',' + Math.round(c[1]*255) + ',' + Math.round(c[2]*255) + ')';
+      el.style.background = col;
+      el.style.display = 'none';
+      el.setAttribute('data-fid', f.id);
+      volMarkersDiv.appendChild(el);
+      faultDotDivMap[f.id] = el;
+      el.addEventListener('touchstart', function(e) { e.stopPropagation(); }, {passive:true});
+      el.addEventListener('click', function(e) {
+        e.stopPropagation();
+        flyToFaultCenter(f);
+      });
+    });
+  }
+
+  function flyToFaultCenter(f) {
+    flyToLatLon(f.center[0], f.center[1], 800, null);
+    var panelList = document.getElementById('panelList');
+    var tabList = document.getElementById('tabList');
+    if (!panelList.classList.contains('visible')) {
+      tabList.click();
+    }
+    setTimeout(function() {
+      var item = faultListEl.querySelector('[data-id="' + f.id + '"]');
+      if (!item) return;
+      item.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      item.classList.remove('flash');
+      void item.offsetWidth;
+      item.classList.add('flash');
+      setTimeout(function() { item.classList.remove('flash'); }, 1300);
+    }, 200);
+  }
+
+  initFaultDots();
 
   var activeFilter = 'all';
   var selectedFaultId = null;
@@ -1879,6 +1937,27 @@ void main() {
         el.style.left = sx + 'px';
         el.style.top = sy + 'px';
         el.style.opacity = Math.min(1, (mz - 0.02) * 10).toFixed(2);
+      });
+    }
+
+    if (showFaultDots) {
+      FAULTS.forEach(function(f) {
+        var el = faultDotDivMap[f.id];
+        if (!el) return;
+        if (activeFilter !== 'all' && f.t !== activeFilter) { el.style.display = 'none'; return; }
+        var cp = f._cp;
+        var mz = model[2]*cp[0] + model[6]*cp[1] + model[10]*cp[2];
+        if (mz < 0.05) { el.style.display = 'none'; return; }
+        var mcx = mvp[0]*cp[0] + mvp[4]*cp[1] + mvp[8]*cp[2] + mvp[12];
+        var mcy = mvp[1]*cp[0] + mvp[5]*cp[1] + mvp[9]*cp[2] + mvp[13];
+        var mcw = mvp[3]*cp[0] + mvp[7]*cp[1] + mvp[11]*cp[2] + mvp[15];
+        if (mcw <= 0) { el.style.display = 'none'; return; }
+        var sx = (mcx/mcw + 1) * W / 2;
+        var sy = (-mcy/mcw + 1) * H / 2;
+        el.style.display = 'block';
+        el.style.left = sx + 'px';
+        el.style.top = sy + 'px';
+        el.style.opacity = Math.min(1, (mz - 0.05) * 10).toFixed(2);
       });
     }
 
