@@ -1087,7 +1087,12 @@ function getNextZ() {
     [2,0],[3,0],[3,2]
   ];
 
-  var QUALIFIED_FLAGS = {'🇲🇽':1,'🇺🇸':1,'🇩🇪':1,'🇦🇷':1,'🇫🇷':1,'🇳🇴':1};
+  var QUALIFIED_FLAGS = {
+    '🇲🇽':1,'🇺🇸':1,'🇩🇪':1,'🇦🇷':1,'🇫🇷':1,'🇳🇴':1,
+    '🇨🇭':1,'🇧🇷':1,'🇳🇱':1,'🇪🇬':1,'🇪🇸':1,'🇨🇴':1,'🏴󠁧󠁢󠁥󠁮󠁧󠁿':1,
+    '🇿🇦':1,'🇨🇦':1,'🇲🇦':1,'🇵🇾':1,'🇨🇮':1,'🇯🇵':1,'🇧🇪':1,'🇨🇻':1,'🇵🇹':1,'🇬🇭':1,
+    '🇰🇷':1,'🇧🇦':1,'🇸🇪':1,'🇦🇺':1,'🇭🇷':1
+  };
 
   var FLAG_CODE = {
     '🇲🇽':'MEX','🇿🇦':'RSA','🇰🇷':'KOR','🇨🇿':'CZE','🇨🇦':'CAN','🇧🇦':'BIH',
@@ -1523,22 +1528,22 @@ function getNextZ() {
 
   var TNMT_ROUNDS = [
     { label: 'ラウンド32', key: 'r32', matches: [
-      {id:'r32-1', date:'7/1', a:null, b:null, slotA:'1A', slotB:'2C'},
-      {id:'r32-2', date:'7/1', a:null, b:null, slotA:'1B', slotB:'2D'},
-      {id:'r32-3', date:'7/2', a:null, b:null, slotA:'1C', slotB:'2A'},
-      {id:'r32-4', date:'7/2', a:null, b:null, slotA:'1D', slotB:'2B'},
-      {id:'r32-5', date:'7/3', a:null, b:null, slotA:'1E', slotB:'2G'},
-      {id:'r32-6', date:'7/3', a:null, b:null, slotA:'1F', slotB:'2H'},
-      {id:'r32-7', date:'7/4', a:null, b:null, slotA:'1G', slotB:'2E'},
-      {id:'r32-8', date:'7/4', a:null, b:null, slotA:'1H', slotB:'2F'},
-      {id:'r32-9', date:'7/5', a:null, b:null, slotA:'1I', slotB:'2K'},
-      {id:'r32-10', date:'7/5', a:null, b:null, slotA:'1J', slotB:'2L'},
-      {id:'r32-11', date:'7/6', a:null, b:null, slotA:'1K', slotB:'2I'},
-      {id:'r32-12', date:'7/6', a:null, b:null, slotA:'1L', slotB:'2J'},
-      {id:'r32-13', date:'7/1', a:null, b:null, slotA:'3位(ABCD)', slotB:'3位(EFGH)'},
-      {id:'r32-14', date:'7/2', a:null, b:null, slotA:'3位(IJKL)', slotB:'3位(ABEF)'},
-      {id:'r32-15', date:'7/3', a:null, b:null, slotA:'3位(CDIJ)', slotB:'3位(GHKL)'},
-      {id:'r32-16', date:'7/4', a:null, b:null, slotA:'3位(ABCD)', slotB:'3位(IJKL)'}
+      {id:'r32-1',  date:'6/28', a:'🇿🇦', b:'🇨🇦', slotA:'2A', slotB:'2B'},
+      {id:'r32-2',  date:'6/28', a:'🇳🇱', b:'🇲🇦', slotA:'1F', slotB:'2C'},
+      {id:'r32-3',  date:'6/29', a:'🇧🇷', b:'🇯🇵', slotA:'1C', slotB:'2F'},
+      {id:'r32-4',  date:'6/29', a:'🇩🇪', b:'🇵🇾', slotA:'1E', slotB:'2D'},
+      {id:'r32-5',  date:'6/30', a:'🇨🇮', b:'🇳🇴', slotA:'2E', slotB:'2I'},
+      {id:'r32-6',  date:'6/30', a:'🇫🇷', b:'🇸🇪', slotA:'1I', slotB:'3F'},
+      {id:'r32-7',  date:'6/30', a:'🏴󠁧󠁢󠁥󠁮󠁧󠁿', b:null, slotA:'1L', slotB:'3位未定'},
+      {id:'r32-8',  date:'7/1',  a:'🇲🇽', b:null, slotA:'1A', slotB:'3位未定'},
+      {id:'r32-9',  date:'7/1',  a:'🇪🇬', b:'🇰🇷', slotA:'1G', slotB:'3A'},
+      {id:'r32-10', date:'7/1',  a:'🇺🇸', b:'🇧🇦', slotA:'1D', slotB:'3B'},
+      {id:'r32-11', date:'7/2',  a:'🇪🇸', b:null, slotA:'1H', slotB:'2J未定'},
+      {id:'r32-12', date:'7/2',  a:'🇨🇭', b:null, slotA:'1B', slotB:'3位未定'},
+      {id:'r32-13', date:'7/2',  a:'🇵🇹', b:'🇬🇭', slotA:'2K', slotB:'2L'},
+      {id:'r32-14', date:'7/3',  a:'🇦🇺', b:'🇧🇪', slotA:'3D', slotB:'2G'},
+      {id:'r32-15', date:'7/3',  a:'🇦🇷', b:'🇨🇻', slotA:'1J', slotB:'2H'},
+      {id:'r32-16', date:'7/3',  a:'🇨🇴', b:'🇭🇷', slotA:'1K', slotB:'3L'}
     ]},
     { label: 'ベスト16', key: 'r16', matches: [
       {id:'r16-1', date:'7/8', a:null, b:null, slotA:'R32-M1勝者', slotB:'R32-M2勝者'},
