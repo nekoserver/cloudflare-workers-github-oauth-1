@@ -4177,6 +4177,9 @@ export function getAiChatPage(user: {
             applyKwGroupBadgeState();
           });
         });
+        if (dailyStatsModal && dailyStatsModal.classList.contains('open')) {
+          renderDailyStatsChart();
+        }
       });
     }
 
