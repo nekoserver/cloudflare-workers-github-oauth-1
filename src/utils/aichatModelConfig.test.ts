@@ -1,5 +1,85 @@
 import { describe, it, expect } from 'vitest';
-import { AICHAT_MODEL_MAX_TOKENS, AICHAT_MODEL_EXTRA_PARAMS, getModelRunParams } from './aichatModelConfig';
+import { AICHAT_MODEL_MAX_TOKENS, AICHAT_MODEL_EXTRA_PARAMS, getModelRunParams, AICHAT_COLOR_PALETTE, assignModelColors } from './aichatModelConfig';
+
+describe('AICHAT_COLOR_PALETTE', () => {
+  it('パレットに16色以上の色が定義されている', () => {
+    expect(AICHAT_COLOR_PALETTE.length).toBeGreaterThanOrEqual(16);
+  });
+
+  it('パレット内に重複した色がない', () => {
+    const unique = new Set(AICHAT_COLOR_PALETTE);
+    expect(unique.size).toBe(AICHAT_COLOR_PALETTE.length);
+  });
+
+  it('各色が # で始まる有効な16進数カラーコードである', () => {
+    for (const c of AICHAT_COLOR_PALETTE) {
+      expect(c).toMatch(/^#[0-9a-f]{6}$/i);
+    }
+  });
+});
+
+describe('assignModelColors', () => {
+  const MODELS = [
+    { value: 'model-a', label: 'Model A' },
+    { value: 'model-b', label: 'Model B' },
+    { value: 'model-c', label: 'Model C' },
+  ];
+
+  it('未割り当てモデルに色を付与する', () => {
+    const { merged, newAssignments } = assignModelColors({}, MODELS);
+    expect(Object.keys(merged).length).toBe(3);
+    expect(newAssignments.length).toBe(3);
+  });
+
+  it('既存の色を持つモデルはスキップされる', () => {
+    const existing = { 'model-a': '#ff0000' };
+    const { merged, newAssignments } = assignModelColors(existing, MODELS);
+    expect(merged['model-a']).toBe('#ff0000');
+    expect(newAssignments.length).toBe(2);
+    expect(newAssignments.find(a => a.model_id === 'model-a')).toBeUndefined();
+  });
+
+  it('割り当てる色は既存使用色と被らない', () => {
+    const usedColors = AICHAT_COLOR_PALETTE.slice(0, 3);
+    const existing: Record<string, string> = {};
+    usedColors.forEach((c, i) => { existing[`used-${i}`] = c; });
+    const { newAssignments } = assignModelColors(existing, MODELS);
+    const usedSet = new Set(usedColors);
+    for (const a of newAssignments) {
+      expect(usedSet.has(a.color)).toBe(false);
+    }
+  });
+
+  it('新規割り当て同士で色が重複しない', () => {
+    const { newAssignments } = assignModelColors({}, MODELS);
+    const colors = newAssignments.map(a => a.color);
+    const unique = new Set(colors);
+    expect(unique.size).toBe(colors.length);
+  });
+
+  it('newAssignments に model_id, color, label が含まれる', () => {
+    const { newAssignments } = assignModelColors({}, [MODELS[0]]);
+    expect(newAssignments[0].model_id).toBe('model-a');
+    expect(newAssignments[0].label).toBe('Model A');
+    expect(typeof newAssignments[0].color).toBe('string');
+  });
+
+  it('全モデルに既存色がある場合は newAssignments が空', () => {
+    const existing = { 'model-a': '#aaa', 'model-b': '#bbb', 'model-c': '#ccc' };
+    const { newAssignments } = assignModelColors(existing, MODELS);
+    expect(newAssignments.length).toBe(0);
+  });
+
+  it('パレットを使い切った場合もクラッシュせずフォールバックする', () => {
+    const manyModels = Array.from({ length: AICHAT_COLOR_PALETTE.length + 3 }, (_, i) => ({
+      value: `model-${i}`,
+      label: `Model ${i}`,
+    }));
+    expect(() => assignModelColors({}, manyModels)).not.toThrow();
+    const { newAssignments } = assignModelColors({}, manyModels);
+    expect(newAssignments.length).toBe(manyModels.length);
+  });
+});
 
 describe('AICHAT_MODEL_MAX_TOKENS', () => {
   it('Gemma-4 は 65536 トークンを返す（thinking モード対応のため大きめに確保）', () => {
