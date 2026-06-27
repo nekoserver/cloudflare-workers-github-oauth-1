@@ -4,7 +4,7 @@
 import { escapeHtml } from '../utils/html';
 import { getThemeCSS, getThemeInitScript, getThemeToggleCSS, getThemeToggleHTML, getThemeToggleScript } from '../utils/theme';
 
-const DEFAULT_AICHAT_MODELS: Array<{value: string; label: string}> = [
+export const DEFAULT_AICHAT_MODELS: Array<{value: string; label: string}> = [
   { value: '@cf/meta/llama-3.3-70b-instruct-fp8-fast', label: 'llama-3.3-70b-instruct-fp8-fast' },
   { value: '@cf/meta/llama-3.1-8b-instruct-fp8', label: 'llama-3.1-8b' },
   { value: '@cf/meta/llama-3.1-70b-instruct', label: 'llama-3.1-70b' },
@@ -2942,7 +2942,8 @@ export function getAiChatPage(user: {
           cachedModelMap[item.model] = idx;
         }
       });
-      Object.keys(MODEL_COLORS).forEach(function(m) {
+      MODEL_LIST.forEach(function(entry) {
+        var m = entry.value;
         var btn = document.createElement('button');
         var dotColor = MODEL_COLORS[m] || '';
         var isCurrent = m === historyModalCurrentModel;
