@@ -11,6 +11,7 @@ const DEFAULT_AICHAT_MODELS: Array<{value: string; label: string}> = [
   { value: '@cf/google/gemma-4-26b-a4b-it', label: 'gemma-4-26b' },
   { value: '@cf/google/gemma-3-12b-it', label: 'gemma-3-12b' },
   { value: '@cf/meta/llama-4-scout-17b-16e-instruct', label: 'llama-4-scout-17b' },
+  { value: '@cf/zai-org/glm-5.2', label: 'glm-5.2' },
 ];
 
 export function getAiChatPage(user: {
@@ -4482,7 +4483,8 @@ export function getAiChatPage(user: {
             '@cf/meta/llama-3.1-70b-instruct':          { in: 0.293, out: 2.253 },
             '@cf/google/gemma-4-26b-a4b-it':            { in: 0.100, out: 0.300 },
             '@cf/google/gemma-3-12b-it':                { in: 0.345, out: 0.556 },
-            '@cf/meta/llama-4-scout-17b-16e-instruct':  { in: 0.270, out: 0.850 }
+            '@cf/meta/llama-4-scout-17b-16e-instruct':  { in: 0.270, out: 0.850 },
+            '@cf/zai-org/glm-5.2':                      { in: null, out: null }
           };
           var html = '';
           html += '<div style="margin-bottom:12px;">';
@@ -4533,8 +4535,8 @@ export function getAiChatPage(user: {
             var inUse = modelSet[m] ? 'font-weight:600;' : 'opacity:0.55;';
             html += '<tr style="border-bottom:1px solid var(--border-color);' + inUse + '">';
             html += '<td style="padding:3px 6px;"><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:' + col + ';margin-right:5px;vertical-align:middle;flex-shrink:0;"></span>' + label + '</td>';
-            html += '<td style="padding:3px 6px;text-align:right;font-family:monospace;">$' + p.in.toFixed(3) + '</td>';
-            html += '<td style="padding:3px 6px;text-align:right;font-family:monospace;">$' + p.out.toFixed(3) + '</td>';
+            html += '<td style="padding:3px 6px;text-align:right;font-family:monospace;">' + (p.in != null ? '$' + p.in.toFixed(3) : '--') + '</td>';
+            html += '<td style="padding:3px 6px;text-align:right;font-family:monospace;">' + (p.out != null ? '$' + p.out.toFixed(3) : '--') + '</td>';
             html += '</tr>';
           });
           html += '</tbody></table>';
