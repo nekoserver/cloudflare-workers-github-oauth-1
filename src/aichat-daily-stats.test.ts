@@ -84,7 +84,7 @@ describe('日次統計グラフ: renderDailyStatsChart 関数', () => {
     const html = buildPage();
     const idx = html.indexOf('function renderDailyStatsChart');
     expect(idx).toBeGreaterThan(-1);
-    const fn = html.slice(idx, idx + 10000);
+    const fn = html.slice(idx, idx + 18000);
     expect(fn).toContain('polyline');
   });
 
@@ -92,7 +92,7 @@ describe('日次統計グラフ: renderDailyStatsChart 関数', () => {
     const html = buildPage();
     const idx = html.indexOf('function renderDailyStatsChart');
     expect(idx).toBeGreaterThan(-1);
-    const fn = html.slice(idx, idx + 10000);
+    const fn = html.slice(idx, idx + 18000);
     expect(fn).toContain('<rect ');
   });
 
@@ -208,6 +208,54 @@ describe('日次統計グラフ: backend API', () => {
     const snippet = src.slice(idx, idx + 2200);
     expect(snippet).toContain('kw_count');
   });
+
+  it('daily-stats レスポンスに apiModelTotals が含まれる', () => {
+    const src = readFileSync(join(__dirname, 'index.ts'), 'utf-8');
+    const idx = src.indexOf('/api/aichat/daily-stats');
+    expect(idx).toBeGreaterThan(-1);
+    const snippet = src.slice(idx, idx + 2800);
+    expect(snippet).toContain('apiModelTotals');
+  });
+
+  it("daily-stats が source='api' で絞り込む", () => {
+    const src = readFileSync(join(__dirname, 'index.ts'), 'utf-8');
+    const idx = src.indexOf('/api/aichat/daily-stats');
+    expect(idx).toBeGreaterThan(-1);
+    const snippet = src.slice(idx, idx + 2800);
+    expect(snippet).toContain("source='api'");
+  });
+});
+
+// ===========================================================
+// 左パネル: API経由 モデル別円グラフ
+// ===========================================================
+describe('日次統計グラフ: API経由モデル別円グラフ', () => {
+  it('apiModelTotals をレスポンスから取得する', () => {
+    const html = buildPage();
+    const idx = html.indexOf('function renderDailyStatsChart');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 16000);
+    expect(fn).toContain('apiModelTotals');
+  });
+
+  it('API経由 というラベルが左パネルに出力される', () => {
+    const html = buildPage();
+    const idx = html.indexOf('function renderDailyStatsChart');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 16000);
+    expect(fn).toContain('API経由');
+  });
+
+  it('apiModelTotals 用の SVG path（円グラフ）が生成される', () => {
+    const html = buildPage();
+    const idx = html.indexOf('function renderDailyStatsChart');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 18000);
+    const apiIdx = fn.indexOf('apiModelTotals');
+    expect(apiIdx).toBeGreaterThan(-1);
+    const afterApi = fn.slice(apiIdx, apiIdx + 6000);
+    expect(afterApi).toContain('<path ');
+  });
 });
 
 // ===========================================================
@@ -234,7 +282,7 @@ describe('日次統計グラフ: 折れ線は日ごと累計KW数', () => {
     const html = buildPage();
     const idx = html.indexOf('function renderDailyStatsChart');
     expect(idx).toBeGreaterThan(-1);
-    const fn = html.slice(idx, idx + 12000);
+    const fn = html.slice(idx, idx + 18000);
     const polylineIdx = fn.indexOf('polyline');
     expect(polylineIdx).toBeGreaterThan(-1);
     const aroundLine = fn.slice(Math.max(0, polylineIdx - 600), polylineIdx + 100);
@@ -299,7 +347,7 @@ describe('日次統計グラフ: 左パネル（総数・パイチャート・�
     const html = buildPage();
     const idx = html.indexOf('function renderDailyStatsChart');
     expect(idx).toBeGreaterThan(-1);
-    const fn = html.slice(idx, idx + 12000);
+    const fn = html.slice(idx, idx + 18000);
     expect(fn).toContain('grid-template-columns');
   });
 });

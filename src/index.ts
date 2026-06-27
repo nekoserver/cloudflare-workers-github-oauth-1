@@ -3573,7 +3573,7 @@ app.get('/api/aichat/daily-stats', authMiddleware, async (c) => {
   if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
   const month = ((c.req.query('month') ?? '').slice(0, 7)) || new Date().toISOString().slice(0, 7);
 
-  const [kwRows, qRows] = await Promise.all([
+  const [kwRows, qRows, apiModelRows] = await Promise.all([
     c.env.DB.prepare(
       `SELECT substr(searched_at,1,10) as date, COUNT(DISTINCT keyword) as kw_count
        FROM aichat_search_history
@@ -3586,6 +3586,12 @@ app.get('/api/aichat/daily-stats', authMiddleware, async (c) => {
        WHERE user_id=? AND deleted_at IS NULL AND created_at LIKE ?
        GROUP BY date, model ORDER BY date`
     ).bind(user.sub, `${month}%`).all<{ date: string; model: string; q_count: number }>(),
+    c.env.DB.prepare(
+      `SELECT model, COUNT(*) as q_count
+       FROM ai_chat_shares
+       WHERE user_id=? AND deleted_at IS NULL AND created_at LIKE ? AND source='api'
+       GROUP BY model ORDER BY q_count DESC`
+    ).bind(user.sub, `${month}%`).all<{ model: string; q_count: number }>(),
   ]);
 
   const kwMap: Record<string, number> = {};
@@ -3599,6 +3605,9 @@ app.get('/api/aichat/daily-stats', authMiddleware, async (c) => {
     modelSet.add(r.model);
   });
 
+  const apiModelTotals: Record<string, number> = {};
+  (apiModelRows.results ?? []).forEach(r => { apiModelTotals[r.model] = r.q_count; });
+
   const allDates = new Set<string>([...Object.keys(kwMap), ...Object.keys(qMap)]);
   const days = Array.from(allDates).sort().map(date => ({
     date,
@@ -3606,7 +3615,7 @@ app.get('/api/aichat/daily-stats', authMiddleware, async (c) => {
     models: qMap[date] ?? {},
   }));
 
-  return jsonUtf8({ month, days, models: Array.from(modelSet) });
+  return jsonUtf8({ month, days, models: Array.from(modelSet), apiModelTotals });
 });
 
 app.get('/api/aichat/shares/by-date', authMiddleware, async (c) => {
