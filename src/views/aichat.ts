@@ -4645,6 +4645,7 @@ export function getAiChatPage(user: {
           var catSummary = results[2].status === 'fulfilled' ? (results[2].value.categories || []) : [];
           var days = d.days || [];
           var models = d.models || [];
+          var apiModelTotals = d.apiModelTotals || {};
           if (days.length === 0) {
             dailyStatsBody.innerHTML = '<div class="search-log-empty">この月のデータがありません</div>';
             return;
@@ -4727,6 +4728,47 @@ export function getAiChatPage(user: {
             ratioHtml += '</div>';
 
             leftHtml += pieSvg + ratioHtml + '</div>';
+          }
+
+          // ===== 左パネル: API経由 モデル別円グラフ =====
+          var apiModels = Object.keys(apiModelTotals).filter(function(m) { return m.indexOf(EXCL) < 0 && apiModelTotals[m] > 0; });
+          apiModels.sort(function(a, b) { return apiModelTotals[b] - apiModelTotals[a]; });
+          var apiTotal = apiModels.reduce(function(s, m) { return s + (apiModelTotals[m] || 0); }, 0);
+
+          if (apiTotal > 0) {
+            leftHtml += '<div style="font-size:10px;font-weight:600;color:var(--text-secondary);margin-top:12px;margin-bottom:4px;">API経由 モデル別</div>';
+            leftHtml += '<div style="display:flex;align-items:flex-start;gap:8px;">';
+
+            var APR = 46, APCX = 50, APCY = 50, APSZ = 100;
+            var apiPieSvg = '<svg viewBox="0 0 ' + APSZ + ' ' + APSZ + '" width="' + APSZ + '" height="' + APSZ + '" style="flex-shrink:0;">';
+            var apiAng = -Math.PI / 2;
+            apiModels.forEach(function(m) {
+              var cnt = apiModelTotals[m] || 0;
+              if (cnt <= 0) return;
+              var slice = cnt / apiTotal * 2 * Math.PI;
+              var endAng = apiAng + slice;
+              var x1 = APCX + APR * Math.cos(apiAng), y1 = APCY + APR * Math.sin(apiAng);
+              var x2 = APCX + APR * Math.cos(endAng), y2 = APCY + APR * Math.sin(endAng);
+              var la = slice > Math.PI ? 1 : 0;
+              apiPieSvg += '<path d="M ' + APCX + ' ' + APCY + ' L ' + x1.toFixed(2) + ' ' + y1.toFixed(2) + ' A ' + APR + ' ' + APR + ' 0 ' + la + ' 1 ' + x2.toFixed(2) + ' ' + y2.toFixed(2) + ' Z" fill="' + escHtml(mCol(m)) + '" opacity="0.9" stroke="var(--card-bg)" stroke-width="0.5"/>';
+              apiAng = endAng;
+            });
+            apiPieSvg += '</svg>';
+
+            var apiRatioHtml = '<div style="flex:1;min-width:0;">';
+            apiModels.forEach(function(m) {
+              var cnt = apiModelTotals[m] || 0;
+              if (cnt <= 0) return;
+              var ratio = Math.round(cnt / apiTotal * 1000) / 10;
+              apiRatioHtml += '<div style="display:flex;align-items:center;gap:4px;margin-bottom:2px;">';
+              apiRatioHtml += '<span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:' + escHtml(mCol(m)) + ';flex-shrink:0;"></span>';
+              apiRatioHtml += '<span style="font-size:10px;color:var(--text-primary);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="' + escHtml(m) + '">' + escHtml(mShort(m)) + '</span>';
+              apiRatioHtml += '<span style="font-size:10px;color:var(--text-muted);flex-shrink:0;margin-left:2px;">' + cnt + '件 ' + ratio.toFixed(1) + '%' + '</span>';
+              apiRatioHtml += '</div>';
+            });
+            apiRatioHtml += '</div>';
+
+            leftHtml += apiPieSvg + apiRatioHtml + '</div>';
           }
 
           // ===== 左パネル最下段: キーワード分類状況（総数・円グラフ・カテゴリ別棒グラフ） =====
