@@ -186,13 +186,13 @@ input[type=range] { flex:1; accent-color:#58a6ff; }
 .tnmt-col-hdr { font-size:10px; font-weight:700; color:#58a6ff; text-transform:uppercase; letter-spacing:.5px; text-align:center; padding:5px 4px 8px; border-bottom:1px solid #21262d; margin-bottom:8px; white-space:nowrap; }
 .tnmt-col-final .tnmt-col-hdr { color:#f0b429; }
 .tnmt-spacer { flex:1; }
-.tnmt-match { background:#161b22; border:1px solid #30363d; border-radius:6px; padding:4px 8px; margin-bottom:5px; }
-.tnmt-match-date { font-size:9px; color:#e6edf3; font-family:monospace; margin-bottom:2px; text-align:right; }
-.tnmt-team { display:flex; align-items:center; gap:5px; padding:2px 2px; border-radius:3px; }
-.tnmt-team + .tnmt-team { border-top:1px solid #21262d; margin-top:2px; padding-top:3px; }
-.tnmt-team-flag { font-size:18px; line-height:1; }
-.tnmt-team-code { font-size:10px; font-weight:700; color:#8b949e; font-family:'SFMono-Regular',Consolas,monospace; }
-.tnmt-team-tbd { font-size:11px; color:#e6edf3; font-style:italic; }
+.tnmt-match { background:#161b22; border:1px solid #30363d; border-radius:5px; padding:3px 6px; margin-bottom:4px; }
+.tnmt-match-date { font-size:9px; color:#e6edf3; font-family:monospace; margin-bottom:1px; text-align:right; }
+.tnmt-team { display:flex; align-items:center; gap:4px; padding:1px 2px; border-radius:3px; }
+.tnmt-team + .tnmt-team { border-top:1px solid #21262d; margin-top:1px; padding-top:2px; }
+.tnmt-team-flag { font-size:14px; line-height:1; }
+.tnmt-team-code { font-size:9px; font-weight:700; color:#8b949e; font-family:'SFMono-Regular',Consolas,monospace; }
+.tnmt-team-tbd { font-size:9px; color:#e6edf3; font-style:italic; }
 .tnmt-winner { color:#f0b429; }
 .tnmt-winner .tnmt-team-code { color:#f0b429; }
 .tnmt-3rd { margin-top:16px; border-top:1px solid #30363d; padding-top:14px; }
