@@ -181,9 +181,9 @@ input[type=range] { flex:1; accent-color:#58a6ff; }
 .tnmt-close { background:none; border:none; color:#8b949e; font-size:22px; line-height:1; cursor:pointer; padding:0 4px; }
 .tnmt-close:hover { color:#e6edf3; }
 .tnmt-body { padding:16px; overflow-x:auto; }
-.tnmt-bracket { display:flex; gap:10px; min-width:820px; align-items:flex-start; }
+.tnmt-bracket { display:flex; gap:8px; min-width:680px; align-items:flex-start; }
 .tnmt-col { display:flex; flex-direction:column; flex:1; min-width:0; }
-.tnmt-col-hdr { font-size:10px; font-weight:700; color:#58a6ff; text-transform:uppercase; letter-spacing:.5px; text-align:center; padding:5px 4px 8px; border-bottom:1px solid #21262d; margin-bottom:8px; white-space:nowrap; }
+.tnmt-col-hdr { font-size:9px; font-weight:700; color:#58a6ff; text-transform:uppercase; letter-spacing:.5px; text-align:center; padding:4px 4px 6px; border-bottom:1px solid #21262d; margin-bottom:6px; white-space:nowrap; }
 .tnmt-col-final .tnmt-col-hdr { color:#f0b429; }
 .tnmt-spacer { flex:1; }
 .tnmt-match { background:#161b22; border:1px solid #30363d; border-radius:5px; padding:3px 6px; margin-bottom:4px; }
@@ -192,7 +192,7 @@ input[type=range] { flex:1; accent-color:#58a6ff; }
 .tnmt-team + .tnmt-team { border-top:1px solid #21262d; margin-top:1px; }
 .tnmt-team-flag { font-size:11px; line-height:1; }
 .tnmt-team-code { font-size:9px; font-weight:700; color:#8b949e; font-family:'SFMono-Regular',Consolas,monospace; }
-.tnmt-team-tbd { font-size:9px; color:#e6edf3; font-style:italic; }
+.tnmt-team-tbd { font-size:9px; color:#e6edf3; font-style:italic; white-space:nowrap; }
 .tnmt-winner { color:#f0b429; }
 .tnmt-winner .tnmt-team-code { color:#f0b429; }
 .tnmt-3rd { margin-top:16px; border-top:1px solid #30363d; padding-top:14px; }
@@ -1527,7 +1527,7 @@ function getNextZ() {
   }
 
   var TNMT_ROUNDS = [
-    { label: 'ラウンド32', key: 'r32', matches: [
+    { label: 'R32', key: 'r32', flex: '2.4', matches: [
       {id:'r32-1',  date:'6/28', a:'🇿🇦', b:'🇨🇦', slotA:'2A', slotB:'2B'},
       {id:'r32-2',  date:'6/28', a:'🇳🇱', b:'🇲🇦', slotA:'1F', slotB:'2C'},
       {id:'r32-3',  date:'6/29', a:'🇧🇷', b:'🇯🇵', slotA:'1C', slotB:'2F'},
@@ -1545,32 +1545,32 @@ function getNextZ() {
       {id:'r32-15', date:'7/3',  a:'🇦🇷', b:'🇨🇻', slotA:'1J', slotB:'2H'},
       {id:'r32-16', date:'7/3',  a:'🇨🇴', b:'🇭🇷', slotA:'1K', slotB:'3L'}
     ]},
-    { label: 'ベスト16', key: 'r16', matches: [
-      {id:'r16-1', date:'7/8', a:null, b:null, slotA:'R32-M1勝者', slotB:'R32-M2勝者'},
-      {id:'r16-2', date:'7/8', a:null, b:null, slotA:'R32-M3勝者', slotB:'R32-M4勝者'},
-      {id:'r16-3', date:'7/9', a:null, b:null, slotA:'R32-M5勝者', slotB:'R32-M6勝者'},
-      {id:'r16-4', date:'7/9', a:null, b:null, slotA:'R32-M7勝者', slotB:'R32-M8勝者'},
-      {id:'r16-5', date:'7/10', a:null, b:null, slotA:'R32-M9勝者', slotB:'R32-M10勝者'},
-      {id:'r16-6', date:'7/10', a:null, b:null, slotA:'R32-M11勝者', slotB:'R32-M12勝者'},
-      {id:'r16-7', date:'7/11', a:null, b:null, slotA:'R32-M13勝者', slotB:'R32-M14勝者'},
-      {id:'r16-8', date:'7/12', a:null, b:null, slotA:'R32-M15勝者', slotB:'R32-M16勝者'}
+    { label: 'R16', key: 'r16', flex: '1.8', matches: [
+      {id:'r16-1', date:'7/5', a:null, b:null, slotA:'M1勝', slotB:'M2勝'},
+      {id:'r16-2', date:'7/5', a:null, b:null, slotA:'M3勝', slotB:'M4勝'},
+      {id:'r16-3', date:'7/6', a:null, b:null, slotA:'M5勝', slotB:'M6勝'},
+      {id:'r16-4', date:'7/6', a:null, b:null, slotA:'M7勝', slotB:'M8勝'},
+      {id:'r16-5', date:'7/7', a:null, b:null, slotA:'M9勝', slotB:'M10勝'},
+      {id:'r16-6', date:'7/7', a:null, b:null, slotA:'M11勝', slotB:'M12勝'},
+      {id:'r16-7', date:'7/8', a:null, b:null, slotA:'M13勝', slotB:'M14勝'},
+      {id:'r16-8', date:'7/8', a:null, b:null, slotA:'M15勝', slotB:'M16勝'}
     ]},
-    { label: '準々決勝', key: 'qf', matches: [
-      {id:'qf-1', date:'7/14', a:null, b:null, slotA:'R16-M1勝者', slotB:'R16-M2勝者'},
-      {id:'qf-2', date:'7/14', a:null, b:null, slotA:'R16-M3勝者', slotB:'R16-M4勝者'},
-      {id:'qf-3', date:'7/15', a:null, b:null, slotA:'R16-M5勝者', slotB:'R16-M6勝者'},
-      {id:'qf-4', date:'7/16', a:null, b:null, slotA:'R16-M7勝者', slotB:'R16-M8勝者'}
+    { label: 'QF', key: 'qf', flex: '1.3', matches: [
+      {id:'qf-1', date:'7/11', a:null, b:null, slotA:'L1勝', slotB:'L2勝'},
+      {id:'qf-2', date:'7/11', a:null, b:null, slotA:'L3勝', slotB:'L4勝'},
+      {id:'qf-3', date:'7/12', a:null, b:null, slotA:'L5勝', slotB:'L6勝'},
+      {id:'qf-4', date:'7/12', a:null, b:null, slotA:'L7勝', slotB:'L8勝'}
     ]},
-    { label: '準決勝', key: 'sf', matches: [
-      {id:'sf-1', date:'7/19', a:null, b:null, slotA:'QF1勝者', slotB:'QF2勝者'},
-      {id:'sf-2', date:'7/20', a:null, b:null, slotA:'QF3勝者', slotB:'QF4勝者'}
+    { label: 'SF', key: 'sf', flex: '1.0', matches: [
+      {id:'sf-1', date:'7/15', a:null, b:null, slotA:'QF1勝', slotB:'QF2勝'},
+      {id:'sf-2', date:'7/16', a:null, b:null, slotA:'QF3勝', slotB:'QF4勝'}
     ]},
-    { label: '決勝', key: 'final', matches: [
-      {id:'final', date:'7/26', a:null, b:null, slotA:'SF1勝者', slotB:'SF2勝者'}
+    { label: '決勝', key: 'final', flex: '0.9', matches: [
+      {id:'final', date:'7/19', a:null, b:null, slotA:'SF1勝', slotB:'SF2勝'}
     ]}
   ];
 
-  var TNMT_3RD = {id:'3rd', date:'7/23', a:null, b:null, slotA:'SF1負', slotB:'SF2負'};
+  var TNMT_3RD = {id:'3rd', date:'7/18', a:null, b:null, slotA:'SF1負', slotB:'SF2負'};
 
   var DOW_JA = ['日','月','火','水','木','金','土'];
   function dateWithDow(ds) {
@@ -1605,7 +1605,7 @@ function getNextZ() {
     var bracketHtml = '<div class="tnmt-bracket">';
     TNMT_ROUNDS.forEach(function(rnd) {
       var isFinal = rnd.key === 'final';
-      bracketHtml += '<div class="tnmt-col' + (isFinal ? ' tnmt-col-final' : '') + '">';
+      bracketHtml += '<div class="tnmt-col' + (isFinal ? ' tnmt-col-final' : '') + '" style="flex:' + rnd.flex + '">';
       bracketHtml += '<div class="tnmt-col-hdr">' + rnd.label + '</div>';
       rnd.matches.forEach(function(m) { bracketHtml += matchCard(m); });
       bracketHtml += '</div>';
