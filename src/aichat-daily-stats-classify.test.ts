@@ -14,7 +14,7 @@ function buildPage(): string {
 function sliceBuildFn(html: string): string {
   const idx = html.indexOf('function buildKwClassifyStatsHtml');
   expect(idx).toBeGreaterThan(-1);
-  return html.slice(idx, idx + 4000);
+  return html.slice(idx, idx + 6000);
 }
 
 describe('日次統計モーダル: 分類状況セクションのデータ取得', () => {
