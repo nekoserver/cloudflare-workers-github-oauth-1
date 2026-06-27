@@ -1,4 +1,51 @@
+type BTeam = { f: string; n: string };
+type BMatch = { date: string; a: BTeam; b: BTeam | null; bl?: string };
+
+const BRACKET_DATA: BMatch[] = [
+  { date: "6/28", a: { f: "🇿🇦", n: "RSA" }, b: { f: "🇨🇦", n: "CAN" } },
+  { date: "6/28", a: { f: "🇳🇱", n: "NED" }, b: { f: "🇲🇦", n: "MAR" } },
+  { date: "6/29", a: { f: "🇧🇷", n: "BRA" }, b: { f: "🇯🇵", n: "JPN" } },
+  { date: "6/29", a: { f: "🇩🇪", n: "GER" }, b: { f: "🇵🇾", n: "PAR" } },
+  { date: "6/30", a: { f: "🇨🇮", n: "CIV" }, b: { f: "🇳🇴", n: "NOR" } },
+  { date: "6/30", a: { f: "🇫🇷", n: "FRA" }, b: { f: "🇸🇪", n: "SWE" } },
+  { date: "6/30", a: { f: "🏴󠁧󠁢󠁥󠁮󠁧󠁿", n: "ENG" }, b: null, bl: "3位枠未定" },
+  { date: "7/1",  a: { f: "🇲🇽", n: "MEX" }, b: null, bl: "3位枠未定" },
+  { date: "7/1",  a: { f: "🇪🇬", n: "EGY" }, b: { f: "🇰🇷", n: "KOR" } },
+  { date: "7/1",  a: { f: "🇺🇸", n: "USA" }, b: { f: "🇧🇦", n: "BIH" } },
+  { date: "7/2",  a: { f: "🇪🇸", n: "ESP" }, b: null, bl: "J組2位" },
+  { date: "7/2",  a: { f: "🇨🇭", n: "SUI" }, b: null, bl: "3位枠未定" },
+  { date: "7/2",  a: { f: "🇵🇹", n: "POR" }, b: { f: "🇬🇭", n: "GHA" } },
+  { date: "7/3",  a: { f: "🇦🇺", n: "AUS" }, b: { f: "🇧🇪", n: "BEL" } },
+  { date: "7/3",  a: { f: "🇦🇷", n: "ARG" }, b: { f: "🇨🇻", n: "CPV" } },
+  { date: "7/3",  a: { f: "🇨🇴", n: "COL" }, b: { f: "🇭🇷", n: "CRO" } },
+];
+
+function bTeamCell(t: BTeam | null, label?: string): string {
+  if (t) return `<div class="br-team-inner"><span class="br-flag">${t.f}</span><span class="br-name">${t.n}</span></div>`;
+  return `<div class="br-tbd">${label ?? "未定"}</div>`;
+}
+
+function buildBracketRows(): string {
+  const counts: Record<string, number> = {};
+  for (const m of BRACKET_DATA) counts[m.date] = (counts[m.date] ?? 0) + 1;
+  const shown: Record<string, boolean> = {};
+  let rows = "";
+  for (const m of BRACKET_DATA) {
+    rows += "<tr>";
+    if (!shown[m.date]) {
+      rows += `<td class="br-date-cell" rowspan="${counts[m.date]}">${m.date}</td>`;
+      shown[m.date] = true;
+    }
+    rows += `<td class="br-team-cell">${bTeamCell(m.a)}</td>`;
+    rows += `<td class="br-vs-cell">vs</td>`;
+    rows += `<td class="br-team-cell">${bTeamCell(m.b, m.bl)}</td>`;
+    rows += "</tr>";
+  }
+  return rows;
+}
+
 export function getWorldCupWdlPage(): string {
+  const bracketRows = buildBracketRows();
   return `<!DOCTYPE html>
 <html lang="ja">
 <head>
@@ -88,7 +135,7 @@ tr:nth-child(even) td { background: var(--row-alt); }
   <div class="br-wrap">
     <table class="br-table">
       <thead><tr><th>日付</th><th colspan="3">対戦</th></tr></thead>
-      <tbody id="bracket"></tbody>
+      <tbody>${bracketRows}</tbody>
     </table>
   </div>
 </div>
@@ -146,51 +193,6 @@ function render(){
 }
 
 render();
-
-var BRACKET = [
-  {date:"6/28", a:{f:"🇿🇦",n:"RSA"}, b:{f:"🇨🇦",n:"CAN"}},
-  {date:"6/28", a:{f:"🇳🇱",n:"NED"}, b:{f:"🇲🇦",n:"MAR"}},
-  {date:"6/29", a:{f:"🇧🇷",n:"BRA"}, b:{f:"🇯🇵",n:"JPN"}},
-  {date:"6/29", a:{f:"🇩🇪",n:"GER"}, b:{f:"🇵🇾",n:"PAR"}},
-  {date:"6/30", a:{f:"🇨🇮",n:"CIV"}, b:{f:"🇳🇴",n:"NOR"}},
-  {date:"6/30", a:{f:"🇫🇷",n:"FRA"}, b:{f:"🇸🇪",n:"SWE"}},
-  {date:"6/30", a:{f:"🏴󠁧󠁢󠁥󠁮󠁧󠁿",n:"ENG"}, b:null, bl:"3位枠未定"},
-  {date:"7/1",  a:{f:"🇲🇽",n:"MEX"}, b:null, bl:"3位枠未定"},
-  {date:"7/1",  a:{f:"🇪🇬",n:"EGY"}, b:{f:"🇰🇷",n:"KOR"}},
-  {date:"7/1",  a:{f:"🇺🇸",n:"USA"}, b:{f:"🇧🇦",n:"BIH"}},
-  {date:"7/2",  a:{f:"🇪🇸",n:"ESP"}, b:null, bl:"J組2位"},
-  {date:"7/2",  a:{f:"🇨🇭",n:"SUI"}, b:null, bl:"3位枠未定"},
-  {date:"7/2",  a:{f:"🇵🇹",n:"POR"}, b:{f:"🇬🇭",n:"GHA"}},
-  {date:"7/3",  a:{f:"🇦🇺",n:"AUS"}, b:{f:"🇧🇪",n:"BEL"}},
-  {date:"7/3",  a:{f:"🇦🇷",n:"ARG"}, b:{f:"🇨🇻",n:"CPV"}},
-  {date:"7/3",  a:{f:"🇨🇴",n:"COL"}, b:{f:"🇭🇷",n:"CRO"}}
-];
-
-function teamCell(t,label){
-  if(t) return "<div class='br-team-inner'><span class='br-flag'>"+t.f+"</span><span class='br-name'>"+t.n+"</span></div>";
-  return "<div class='br-tbd'>"+(label||"未定")+"</div>";
-}
-
-function renderBracket(){
-  var spans={};
-  BRACKET.forEach(function(m){spans[m.date]=(spans[m.date]||0)+1;});
-  var shown={};
-  var h="";
-  BRACKET.forEach(function(m){
-    h+="<tr>";
-    if(!shown[m.date]){
-      h+="<td class='br-date-cell' rowspan='"+spans[m.date]+"'>"+m.date+"</td>";
-      shown[m.date]=true;
-    }
-    h+="<td class='br-team-cell'>"+teamCell(m.a)+"</td>";
-    h+="<td class='br-vs-cell'>vs</td>";
-    h+="<td class='br-team-cell'>"+teamCell(m.b,m.bl)+"</td>";
-    h+="</tr>";
-  });
-  document.getElementById("bracket").innerHTML=h;
-}
-
-renderBracket();
 </script>
 </body>
 </html>`;
