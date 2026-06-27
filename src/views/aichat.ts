@@ -12,6 +12,7 @@ const DEFAULT_AICHAT_MODELS: Array<{value: string; label: string}> = [
   { value: '@cf/google/gemma-3-12b-it', label: 'gemma-3-12b' },
   { value: '@cf/meta/llama-4-scout-17b-16e-instruct', label: 'llama-4-scout-17b' },
   { value: '@cf/zai-org/glm-5.2', label: 'glm-5.2' },
+  { value: '@cf/ibm-granite/granite-4.0-h-micro', label: 'granite-4.0-h-micro' },
 ];
 
 export function getAiChatPage(user: {
