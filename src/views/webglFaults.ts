@@ -1503,7 +1503,7 @@ void main() {
     if (autoRot) { btnAutoRot.classList.remove('active'); } else { btnAutoRot.classList.add('active'); }
   });
 
-  var rotXv = 0.3, rotYv = 0.6, zoom = 3.2;
+  var rotXv = 0.3, rotYv = 0.6, zoom = 3.2, zoomTarget = 3.2;
   var drag = false, lx = 0, ly = 0, pinch0 = 0, touchMoved = false;
   var velY = 0, velX = 0, momentumY = 0, momentumX = 0;
   var MOMENTUM_DECAY = 0.94, SPIN_BOOST = 2.0;
@@ -1525,7 +1525,7 @@ void main() {
     if(!axisLocked){rotXv=clampElev(rotXv+dx); velX=velX*0.4+dx*0.6;}
     lx=e.clientX; ly=e.clientY;
   });
-  canvas.addEventListener('wheel', function(e) { e.preventDefault(); zoom=Math.max(1.4,Math.min(10,zoom+e.deltaY*0.01)); }, {passive:false});
+  canvas.addEventListener('wheel', function(e) { e.preventDefault(); zoomTarget=Math.max(1.4,Math.min(20,zoomTarget+e.deltaY*0.015)); }, {passive:false});
   canvas.addEventListener('dblclick', function() {
     autoRot=!autoRot;
     btnAutoRot.textContent=autoRot?'⏸ 自転停止':'▶ 回転';
@@ -1546,7 +1546,7 @@ void main() {
     }
     if(e.touches.length===2){
       var d=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);
-      zoom=Math.max(1.4,Math.min(10,zoom-(d-pinch0)*0.02));pinch0=d;
+      zoomTarget=Math.max(1.4,Math.min(20,zoomTarget-(d-pinch0)*0.02));pinch0=d;
     }
   }, {passive:false});
   canvas.addEventListener('touchend', function(e) {
@@ -1627,6 +1627,8 @@ void main() {
     var W = canvas.width, H = canvas.height;
     if (W <= 0 || H <= 0) return;
     var dt = Math.min(ts - lastT, 50); lastT = ts;
+
+    zoom += (zoomTarget - zoom) * Math.min(1, dt * 0.016);
 
     if (flyTarget && flyFrom) {
       var fp = Math.min((ts - flyStart) / flyDur, 1);
