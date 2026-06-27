@@ -13,7 +13,7 @@ import { authMiddleware, optionalAuthMiddleware } from './middleware/auth';
 import { getSessionExpiredPage } from './views/session-expired';
 import { getLoginPage } from './views/login';
 import { getWelcomePage } from './views/welcome';
-import { getAiChatPage } from './views/aichat';
+import { getAiChatPage, DEFAULT_AICHAT_MODELS } from './views/aichat';
 import { getAiChatSharePage, getAiChatShareNotFoundPage } from './views/aichat-share';
 import { getSettingsPage } from './views/settings';
 import { getRepositoriesPage } from './views/repositories';
@@ -63,7 +63,7 @@ import { withAiTimeout, AI_CLASSIFY_TIMEOUT_MS } from './utils/aiTimeout';
 import { computeConversationHash, computeQuestionHash } from './utils/conversationHash';
 import { buildAiMessages, ALLOWED_MODES, type SystemPromptMode } from './utils/buildAiMessages';
 import { stripThinkTags } from './utils/stripThinkTags';
-import { AICHAT_MODEL_MAX_TOKENS, getModelRunParams } from './utils/aichatModelConfig';
+import { AICHAT_MODEL_MAX_TOKENS, getModelRunParams, assignModelColors } from './utils/aichatModelConfig';
 import { extractFunctionSource } from './utils/extractFunctionSource';
 import { listD1Databases, getD1Tables } from './utils/cloudflareApi';
 import { validateRevokeRequest } from './utils/revoke';
@@ -925,6 +925,10 @@ CREATE TABLE IF NOT EXISTS heritage_city_fetched (
   fetched_at TEXT DEFAULT (datetime('now')),
   city_count INTEGER DEFAULT 0
 );`,
+
+  '0064': `INSERT OR IGNORE INTO aichat_model_colors (model_id, color, label) VALUES
+  ('@cf/zai-org/glm-5.2', '#f97316', 'glm-5.2'),
+  ('@cf/ibm-granite/granite-4.0-h-micro', '#06b6d4', 'granite-4.0-h-micro');`,
 
   'ts-catalog': `CREATE TABLE IF NOT EXISTS ts_repository (
   id            INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -3145,6 +3149,17 @@ app.get('/aichat', authMiddleware, async (c) => {
       }
     } catch {
       logger.warn('aichat_model_colors query failed, using empty map');
+    }
+
+    const { merged, newAssignments } = assignModelColors(modelColors, DEFAULT_AICHAT_MODELS);
+    modelColors = merged;
+    for (const a of newAssignments) {
+      c.executionCtx.waitUntil(
+        c.env.DB.prepare('INSERT OR IGNORE INTO aichat_model_colors (model_id, color, label) VALUES (?, ?, ?)')
+          .bind(a.model_id, a.color, a.label)
+          .run()
+          .catch(() => {})
+      );
     }
   }
   return c.html(getAiChatPage({
