@@ -50,16 +50,17 @@ tr:nth-child(even) td { background: var(--row-alt); }
 .empty { color: var(--border); font-size: 0.68rem; }
 .ko-section { margin-top: 18px; }
 .ko-section h2 { font-size: 1rem; margin-bottom: 8px; }
-.ko-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 6px; }
-.ko-card { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px; }
-.ko-card-title { font-size: 0.7rem; font-weight: 700; color: var(--text-muted); margin-bottom: 4px; }
-.ko-slot { display: flex; align-items: center; gap: 4px; font-size: 0.82rem; padding: 2px 0; }
-.ko-slot-label { font-size: 0.65rem; color: var(--text-muted); min-width: 14px; }
-.ko-flag { font-size: 1rem; line-height: 1; }
-.ko-name { font-weight: 600; font-size: 0.78rem; }
-.ko-pend { color: var(--text-muted); font-size: 0.75rem; font-style: italic; }
-.ko-confirmed { border-left: 3px solid light-dark(#27ae60,#2ecc71); }
-.ko-partial { border-left: 3px solid light-dark(#f39c12,#e6b800); }
+.br-wrap { overflow-x: auto; border-radius: 8px; box-shadow: 0 1px 4px rgba(0,0,0,0.15); }
+.br-table { border-collapse: collapse; font-size: 0.8rem; background: var(--surface); width: 100%; }
+.br-table th { padding: 5px 8px; text-align: center; border: 1px solid var(--border); background: var(--header-bg); color: var(--header-text); font-weight: 600; white-space: nowrap; }
+.br-table td { border: 1px solid var(--border); padding: 4px 6px; vertical-align: middle; }
+.br-date-cell { background: var(--grp-header-bg); color: var(--header-text); text-align: center; font-weight: 700; font-size: 0.75rem; white-space: nowrap; min-width: 38px; }
+.br-team-cell { white-space: nowrap; }
+.br-team-inner { display: flex; align-items: center; gap: 5px; padding: 3px 4px; border-radius: 4px; background: var(--meta-bg); border: 1px solid var(--border); min-width: 80px; }
+.br-flag { font-size: 1.1rem; line-height: 1; }
+.br-name { font-weight: 700; font-size: 0.8rem; }
+.br-tbd { display: flex; align-items: center; justify-content: center; padding: 3px 8px; border-radius: 4px; border: 1px dashed var(--border); color: var(--text-muted); font-size: 0.75rem; min-width: 80px; min-height: 28px; }
+.br-vs-cell { text-align: center; color: var(--text-muted); font-size: 0.7rem; font-weight: 600; padding: 4px 6px; white-space: nowrap; }
 </style>
 </head>
 <body>
@@ -83,68 +84,104 @@ tr:nth-child(even) td { background: var(--row-alt); }
 </div>
 
 <div class="ko-section">
-  <h2>&#x1F3C6; ノックアウトステージ 確定進出枠</h2>
-  <div class="ko-grid">
-    <div class="ko-card ko-confirmed">
-      <div class="ko-card-title">A組</div>
-      <div class="ko-slot"><span class="ko-slot-label">1.</span><span class="ko-flag">&#x1F1F2;&#x1F1FD;</span><span class="ko-name">MEX</span></div>
-      <div class="ko-slot"><span class="ko-slot-label">2.</span><span class="ko-flag">&#x1F1FF;&#x1F1E6;</span><span class="ko-name">RSA</span></div>
-    </div>
-    <div class="ko-card ko-partial">
-      <div class="ko-card-title">B組</div>
-      <div class="ko-slot"><span class="ko-slot-label">1.</span><span class="ko-flag">&#x1F1E8;&#x1F1ED;</span><span class="ko-name">SUI</span></div>
-      <div class="ko-slot"><span class="ko-slot-label">2.</span><span class="ko-pend">CAN / BIH（PK未定）</span></div>
-    </div>
-    <div class="ko-card ko-confirmed">
-      <div class="ko-card-title">C組</div>
-      <div class="ko-slot"><span class="ko-slot-label">1.</span><span class="ko-flag">&#x1F1E7;&#x1F1F7;</span><span class="ko-name">BRA</span></div>
-      <div class="ko-slot"><span class="ko-slot-label">2.</span><span class="ko-flag">&#x1F1F2;&#x1F1E6;</span><span class="ko-name">MAR</span></div>
-    </div>
-    <div class="ko-card ko-partial">
-      <div class="ko-card-title">D組</div>
-      <div class="ko-slot"><span class="ko-slot-label">1.</span><span class="ko-flag">&#x1F1FA;&#x1F1F8;</span><span class="ko-name">USA</span></div>
-      <div class="ko-slot"><span class="ko-slot-label">2.</span><span class="ko-pend">AUS / PAR（PK未定）</span></div>
-    </div>
-    <div class="ko-card ko-confirmed">
-      <div class="ko-card-title">E組</div>
-      <div class="ko-slot"><span class="ko-slot-label">1.</span><span class="ko-flag">&#x1F1E9;&#x1F1EA;</span><span class="ko-name">GER</span></div>
-      <div class="ko-slot"><span class="ko-slot-label">2.</span><span class="ko-flag">&#x1F1E8;&#x1F1EE;</span><span class="ko-name">CIV</span></div>
-    </div>
-    <div class="ko-card ko-confirmed">
-      <div class="ko-card-title">F組</div>
-      <div class="ko-slot"><span class="ko-slot-label">1.</span><span class="ko-flag">&#x1F1F3;&#x1F1F1;</span><span class="ko-name">NED</span></div>
-      <div class="ko-slot"><span class="ko-slot-label">2.</span><span class="ko-flag">&#x1F1EF;&#x1F1F5;</span><span class="ko-name">JPN</span></div>
-    </div>
-    <div class="ko-card ko-confirmed">
-      <div class="ko-card-title">G組</div>
-      <div class="ko-slot"><span class="ko-slot-label">1.</span><span class="ko-pend">EGY / BEL（順位未定）</span></div>
-      <div class="ko-slot"><span class="ko-flag">&#x1F1EA;&#x1F1EC;</span><span class="ko-name">EGY</span><span style="color:var(--text-muted);font-size:0.7rem;margin-left:2px">+</span><span class="ko-flag" style="margin-left:3px">&#x1F1E7;&#x1F1EA;</span><span class="ko-name">BEL</span></div>
-    </div>
-    <div class="ko-card ko-confirmed">
-      <div class="ko-card-title">H組</div>
-      <div class="ko-slot"><span class="ko-slot-label">1.</span><span class="ko-flag">&#x1F1EA;&#x1F1F8;</span><span class="ko-name">ESP</span></div>
-      <div class="ko-slot"><span class="ko-slot-label">2.</span><span class="ko-flag">&#x1F1E8;&#x1F1FB;</span><span class="ko-name">CPV</span></div>
-    </div>
-    <div class="ko-card ko-confirmed">
-      <div class="ko-card-title">I組</div>
-      <div class="ko-slot"><span class="ko-slot-label">1.</span><span class="ko-flag">&#x1F1EB;&#x1F1F7;</span><span class="ko-name">FRA</span></div>
-      <div class="ko-slot"><span class="ko-slot-label">2.</span><span class="ko-flag">&#x1F1F3;&#x1F1F4;</span><span class="ko-name">NOR</span></div>
-    </div>
-    <div class="ko-card ko-partial">
-      <div class="ko-card-title">J組</div>
-      <div class="ko-slot"><span class="ko-slot-label">1.</span><span class="ko-flag">&#x1F1E6;&#x1F1F7;</span><span class="ko-name">ARG</span></div>
-      <div class="ko-slot"><span class="ko-slot-label">2.</span><span class="ko-pend">第3節未了</span></div>
-    </div>
-    <div class="ko-card ko-confirmed">
-      <div class="ko-card-title">K組</div>
-      <div class="ko-slot"><span class="ko-slot-label">1.</span><span class="ko-flag">&#x1F1E8;&#x1F1F4;</span><span class="ko-name">COL</span></div>
-      <div class="ko-slot"><span class="ko-slot-label">2.</span><span class="ko-flag">&#x1F1F5;&#x1F1F9;</span><span class="ko-name">POR</span></div>
-    </div>
-    <div class="ko-card ko-confirmed">
-      <div class="ko-card-title">L組</div>
-      <div class="ko-slot"><span class="ko-slot-label">1.</span><span class="ko-pend">ENG / GHA（順位未定）</span></div>
-      <div class="ko-slot"><span class="ko-flag">&#x1F3F4;&#xE0067;&#xE0062;&#xE0065;&#xE006E;&#xE0067;&#xE007F;</span><span class="ko-name">ENG</span><span style="color:var(--text-muted);font-size:0.7rem;margin-left:2px">+</span><span class="ko-flag" style="margin-left:3px">&#x1F1EC;&#x1F1ED;</span><span class="ko-name">GHA</span></div>
-    </div>
+  <h2>&#x1F3C6; ラウンド32 対戦表</h2>
+  <div class="br-wrap">
+    <table class="br-table">
+      <thead>
+        <tr>
+          <th>日付</th>
+          <th colspan="3">対戦</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="br-date-cell" rowspan="2">6/28</td>
+          <td class="br-team-cell"><div class="br-team-inner"><span class="br-flag">&#x1F1FF;&#x1F1E6;</span><span class="br-name">RSA</span></div></td>
+          <td class="br-vs-cell">vs</td>
+          <td class="br-team-cell"><div class="br-team-inner"><span class="br-flag">&#x1F1E8;&#x1F1E6;</span><span class="br-name">CAN</span></div></td>
+        </tr>
+        <tr>
+          <td class="br-team-cell"><div class="br-team-inner"><span class="br-flag">&#x1F1F3;&#x1F1F1;</span><span class="br-name">NED</span></div></td>
+          <td class="br-vs-cell">vs</td>
+          <td class="br-team-cell"><div class="br-team-inner"><span class="br-flag">&#x1F1F2;&#x1F1E6;</span><span class="br-name">MAR</span></div></td>
+        </tr>
+        <tr>
+          <td class="br-date-cell" rowspan="2">6/29</td>
+          <td class="br-team-cell"><div class="br-team-inner"><span class="br-flag">&#x1F1E7;&#x1F1F7;</span><span class="br-name">BRA</span></div></td>
+          <td class="br-vs-cell">vs</td>
+          <td class="br-team-cell"><div class="br-team-inner"><span class="br-flag">&#x1F1EF;&#x1F1F5;</span><span class="br-name">JPN</span></div></td>
+        </tr>
+        <tr>
+          <td class="br-team-cell"><div class="br-team-inner"><span class="br-flag">&#x1F1E9;&#x1F1EA;</span><span class="br-name">GER</span></div></td>
+          <td class="br-vs-cell">vs</td>
+          <td class="br-team-cell"><div class="br-team-inner"><span class="br-flag">&#x1F1F5;&#x1F1FE;</span><span class="br-name">PAR</span></div></td>
+        </tr>
+        <tr>
+          <td class="br-date-cell" rowspan="3">6/30</td>
+          <td class="br-team-cell"><div class="br-team-inner"><span class="br-flag">&#x1F1E8;&#x1F1EE;</span><span class="br-name">CIV</span></div></td>
+          <td class="br-vs-cell">vs</td>
+          <td class="br-team-cell"><div class="br-team-inner"><span class="br-flag">&#x1F1F3;&#x1F1F4;</span><span class="br-name">NOR</span></div></td>
+        </tr>
+        <tr>
+          <td class="br-team-cell"><div class="br-team-inner"><span class="br-flag">&#x1F1EB;&#x1F1F7;</span><span class="br-name">FRA</span></div></td>
+          <td class="br-vs-cell">vs</td>
+          <td class="br-team-cell"><div class="br-team-inner"><span class="br-flag">&#x1F1F8;&#x1F1EA;</span><span class="br-name">SWE</span></div></td>
+        </tr>
+        <tr>
+          <td class="br-team-cell"><div class="br-team-inner"><span class="br-flag">&#x1F3F4;&#xE0067;&#xE0062;&#xE0065;&#xE006E;&#xE0067;&#xE007F;</span><span class="br-name">ENG</span></div></td>
+          <td class="br-vs-cell">vs</td>
+          <td class="br-team-cell"><div class="br-tbd">未定</div></td>
+        </tr>
+        <tr>
+          <td class="br-date-cell" rowspan="3">7/1</td>
+          <td class="br-team-cell"><div class="br-team-inner"><span class="br-flag">&#x1F1F2;&#x1F1FD;</span><span class="br-name">MEX</span></div></td>
+          <td class="br-vs-cell">vs</td>
+          <td class="br-team-cell"><div class="br-tbd">未定</div></td>
+        </tr>
+        <tr>
+          <td class="br-team-cell"><div class="br-team-inner"><span class="br-flag">&#x1F1EA;&#x1F1EC;</span><span class="br-name">EGY</span></div></td>
+          <td class="br-vs-cell">vs</td>
+          <td class="br-team-cell"><div class="br-team-inner"><span class="br-flag">&#x1F1F0;&#x1F1F7;</span><span class="br-name">KOR</span></div></td>
+        </tr>
+        <tr>
+          <td class="br-team-cell"><div class="br-team-inner"><span class="br-flag">&#x1F1FA;&#x1F1F8;</span><span class="br-name">USA</span></div></td>
+          <td class="br-vs-cell">vs</td>
+          <td class="br-team-cell"><div class="br-team-inner"><span class="br-flag">&#x1F1E7;&#x1F1E6;</span><span class="br-name">BIH</span></div></td>
+        </tr>
+        <tr>
+          <td class="br-date-cell" rowspan="3">7/2</td>
+          <td class="br-team-cell"><div class="br-team-inner"><span class="br-flag">&#x1F1EA;&#x1F1F8;</span><span class="br-name">ESP</span></div></td>
+          <td class="br-vs-cell">vs</td>
+          <td class="br-team-cell"><div class="br-tbd">AUT / ALG</div></td>
+        </tr>
+        <tr>
+          <td class="br-team-cell"><div class="br-team-inner"><span class="br-flag">&#x1F1E8;&#x1F1ED;</span><span class="br-name">SUI</span></div></td>
+          <td class="br-vs-cell">vs</td>
+          <td class="br-team-cell"><div class="br-tbd">未定</div></td>
+        </tr>
+        <tr>
+          <td class="br-team-cell"><div class="br-team-inner"><span class="br-flag">&#x1F1F5;&#x1F1F9;</span><span class="br-name">POR</span></div></td>
+          <td class="br-vs-cell">vs</td>
+          <td class="br-team-cell"><div class="br-team-inner"><span class="br-flag">&#x1F1EC;&#x1F1ED;</span><span class="br-name">GHA</span></div></td>
+        </tr>
+        <tr>
+          <td class="br-date-cell" rowspan="3">7/3</td>
+          <td class="br-team-cell"><div class="br-team-inner"><span class="br-flag">&#x1F1E6;&#x1F1FA;</span><span class="br-name">AUS</span></div></td>
+          <td class="br-vs-cell">vs</td>
+          <td class="br-team-cell"><div class="br-team-inner"><span class="br-flag">&#x1F1E7;&#x1F1EA;</span><span class="br-name">BEL</span></div></td>
+        </tr>
+        <tr>
+          <td class="br-team-cell"><div class="br-team-inner"><span class="br-flag">&#x1F1E6;&#x1F1F7;</span><span class="br-name">ARG</span></div></td>
+          <td class="br-vs-cell">vs</td>
+          <td class="br-team-cell"><div class="br-team-inner"><span class="br-flag">&#x1F1E8;&#x1F1FB;</span><span class="br-name">CPV</span></div></td>
+        </tr>
+        <tr>
+          <td class="br-team-cell"><div class="br-team-inner"><span class="br-flag">&#x1F1E8;&#x1F1F4;</span><span class="br-name">COL</span></div></td>
+          <td class="br-vs-cell">vs</td>
+          <td class="br-team-cell"><div class="br-team-inner"><span class="br-flag">&#x1F1ED;&#x1F1F7;</span><span class="br-name">CRO</span></div></td>
+        </tr>
+      </tbody>
+    </table>
   </div>
 </div>
 
