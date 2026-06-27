@@ -186,6 +186,7 @@ mark.hl-match{
 .param-table input{width:100%;padding:3px 7px;border:1px solid var(--border);border-radius:4px;background:var(--surface);color:var(--text);font-size:12px;}
 .req-badge{background:var(--delete-bg);color:var(--delete);font-size:10px;padding:1px 4px;border-radius:3px;font-weight:600;}
 .body-area{font-family:monospace;font-size:12px;width:100%;min-height:110px;padding:8px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);color:var(--text);resize:vertical;}
+.model-select{width:100%;padding:5px 8px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);color:var(--text);font-size:12px;cursor:pointer;}
 .send-btn{background:var(--link);color:#fff;border:none;border-radius:var(--radius);padding:6px 16px;font-size:13px;font-weight:600;cursor:pointer;}
 .send-btn:hover{opacity:.85;}
 .send-btn:disabled{opacity:.5;cursor:not-allowed;}
@@ -247,6 +248,10 @@ mark.hl-match{
         <div class="section-title">クエリパラメータ</div>
         <table class="param-table"><thead><tr><th>名前</th><th style="width:60px">必須</th><th>値</th></tr></thead><tbody id="query-params-body"></tbody></table>
       </div>
+      <div id="model-select-sec" style="display:none">
+        <div class="section-title">モデル選択</div>
+        <select id="model-select-dropdown" class="model-select" onchange="onModelSelectChange(this.value)"></select>
+      </div>
       <div id="body-sec" style="display:none">
         <div class="section-title">リクエストボディ (JSON)</div>
         <textarea class="body-area" id="body-area" spellcheck="false"></textarea>
@@ -278,7 +283,18 @@ mark.hl-match{
 <script>
 const APIS = [
   { group: 'AI チャット', endpoints: [
-    { method:'POST', path:'/api/aichat', desc:'AI にメッセージを送信', body:[{n:'message',req:true,s:'Cloudflare Workersについて教えてください'},{n:'model',s:'@cf/google/gemma-4-26b-a4b-it'},{n:'systemPromptMode',s:'default'}],
+    { method:'POST', path:'/api/aichat', desc:'AI にメッセージを送信',
+      modelSelect:[
+        {value:'@cf/meta/llama-3.3-70b-instruct-fp8-fast',label:'llama-3.3-70b-instruct-fp8-fast'},
+        {value:'@cf/meta/llama-3.1-8b-instruct-fp8',label:'llama-3.1-8b'},
+        {value:'@cf/meta/llama-3.1-70b-instruct',label:'llama-3.1-70b'},
+        {value:'@cf/google/gemma-4-26b-a4b-it',label:'gemma-4-26b'},
+        {value:'@cf/google/gemma-3-12b-it',label:'gemma-3-12b'},
+        {value:'@cf/meta/llama-4-scout-17b-16e-instruct',label:'llama-4-scout-17b'},
+        {value:'@cf/zai-org/glm-5.2',label:'glm-5.2'},
+        {value:'@cf/ibm-granite/granite-4.0-h-micro',label:'granite-4.0-h-micro'}
+      ],
+      body:[{n:'message',req:true,s:'Cloudflare Workersについて教えてください'},{n:'model',s:'@cf/meta/llama-3.3-70b-instruct-fp8-fast'},{n:'systemPromptMode',s:'default'}],
       res:{ok:true,shareId:'a1b2c3d4',answer:'Cloudflare Workers はエッジで動くサーバーレス実行環境です。',model:'@cf/google/gemma-4-26b-a4b-it',tokenUsage:{inputTokens:20,outputTokens:80}} },
     { method:'GET',  path:'/api/aichat/shares/search', desc:'AIチャット全文検索', query:[{n:'q',req:true,s:'cloudflare'}],
       res:{results:[{id:'a1b2c3d4',question:'Cloudflare Workersとは？',answer_preview:'エッジで動くサーバーレス実行環境です。',model:'@cf/google/gemma-4-26b-a4b-it',created_at:'2026-06-15T00:00:00.000Z'}],total:1} },
@@ -1205,6 +1221,20 @@ function selectEndpoint(ep, item) {
     bSec.style.display = '';
   } else { bSec.style.display = 'none'; }
 
+  // ── モデル選択 ──────────────────────────────────────
+  var msEl = document.getElementById('model-select-sec');
+  var msDd = document.getElementById('model-select-dropdown');
+  if (ep.modelSelect && ep.modelSelect.length) {
+    var curModel = '';
+    try { curModel = JSON.parse(bArea.value).model || ''; } catch(e) {}
+    msDd.innerHTML = ep.modelSelect.map(function(m) {
+      return '<option value="' + esc(m.value) + '"' + (m.value === curModel ? ' selected' : '') + '>' + esc(m.label) + '</option>';
+    }).join('');
+    msEl.style.display = '';
+  } else {
+    msEl.style.display = 'none';
+  }
+
   // ── リクエスト例 ──────────────────────────────────────
   var reqExSec = document.getElementById('req-example-sec');
   var reqNoteList = document.getElementById('req-note-list');
@@ -1276,6 +1306,49 @@ function renderResAnnotated(val, depth) {
     return '{' + String.fromCharCode(10) + lines.join(',' + String.fromCharCode(10)) + String.fromCharCode(10) + pad + '}';
   }
   return esc(String(val));
+}
+
+// ── モデル選択変更 ─────────────────────────────────────
+function onModelSelectChange(modelValue) {
+  var bArea = document.getElementById('body-area');
+  if (!bArea) return;
+  try {
+    var obj = JSON.parse(bArea.value);
+    obj.model = modelValue;
+    bArea.value = JSON.stringify(obj, null, 2);
+  } catch(e) {}
+  rebuildCurlFromBody();
+}
+
+function rebuildCurlFromBody() {
+  if (!currentEp) return;
+  var reqExCode = document.getElementById('req-example-code');
+  if (!reqExCode) return;
+  var curlLines = [];
+  var resolvedPath = currentEp.path;
+  (currentEp.path_params || []).forEach(function(p) {
+    var val = currentEp.pp && currentEp.pp[p] !== undefined ? String(currentEp.pp[p]) : ':' + p;
+    resolvedPath = resolvedPath.split(':' + p).join(encodeURIComponent(val));
+  });
+  var qParts = (currentEp.query || []).filter(function(p) { return p.s !== undefined; }).map(function(p) {
+    return encodeURIComponent(p.n) + '=' + encodeURIComponent(String(p.s));
+  });
+  if (qParts.length) resolvedPath += '?' + qParts.join('&');
+  var BSLNL = String.fromCharCode(32, 92, 10) + '  ';
+  var SQ = String.fromCharCode(39);
+  curlLines.push('curl -X ' + currentEp.method + ' ' + SQ + window.location.origin + resolvedPath + SQ);
+  curlLines.push('-H ' + SQ + 'Cookie: auth_token=<JWT_TOKEN>' + SQ);
+  if (currentEp.body && currentEp.body.length) {
+    var bArea = document.getElementById('body-area');
+    var bodyText = bArea ? bArea.value : '';
+    curlLines.push('-H ' + SQ + 'Content-Type: application/json' + SQ);
+    try {
+      curlLines.push('-d ' + SQ + JSON.stringify(JSON.parse(bodyText)) + SQ);
+    } catch(e) {
+      curlLines.push('-d ' + SQ + bodyText + SQ);
+    }
+  }
+  reqExCode.textContent = curlLines.join(BSLNL);
 }
 
 // ── send ─────────────────────────────────────────────
