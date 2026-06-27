@@ -188,9 +188,9 @@ input[type=range] { flex:1; accent-color:#58a6ff; }
 .tnmt-spacer { flex:1; }
 .tnmt-match { background:#161b22; border:1px solid #30363d; border-radius:5px; padding:3px 6px; margin-bottom:4px; }
 .tnmt-match-date { font-size:9px; color:#e6edf3; font-family:monospace; margin-bottom:1px; text-align:right; }
-.tnmt-team { display:flex; align-items:center; gap:4px; padding:1px 2px; border-radius:3px; }
-.tnmt-team + .tnmt-team { border-top:1px solid #21262d; margin-top:1px; padding-top:2px; }
-.tnmt-team-flag { font-size:14px; line-height:1; }
+.tnmt-team { display:flex; align-items:center; gap:4px; padding:0 2px; height:13px; overflow:hidden; border-radius:3px; }
+.tnmt-team + .tnmt-team { border-top:1px solid #21262d; margin-top:1px; }
+.tnmt-team-flag { font-size:11px; line-height:1; }
 .tnmt-team-code { font-size:9px; font-weight:700; color:#8b949e; font-family:'SFMono-Regular',Consolas,monospace; }
 .tnmt-team-tbd { font-size:9px; color:#e6edf3; font-style:italic; }
 .tnmt-winner { color:#f0b429; }
