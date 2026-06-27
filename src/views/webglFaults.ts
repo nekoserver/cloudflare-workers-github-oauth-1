@@ -93,10 +93,15 @@ canvas:active { cursor:grabbing; }
 .spd-label { font-size:10px; font-weight:700; color:#f78166; text-transform:uppercase; letter-spacing:.5px; margin-bottom:4px; }
 .vol-mk { position:absolute; transform:translate(-50%,-50%); line-height:1; font-size:14px; pointer-events:auto; cursor:pointer; user-select:none; -webkit-user-select:none; filter:drop-shadow(0 1px 3px rgba(0,0,0,0.9)); }
 .vol-mk.active { font-size:18px; }
-#vol-tooltip { position:fixed; background:rgba(13,17,23,0.97); border:1px solid #ff9500; border-radius:8px; padding:7px 12px; font-size:12px; color:#e6edf3; min-width:180px; max-width:260px; pointer-events:none; opacity:0; transition:opacity .15s; z-index:65; transform:translate(-50%,-110%); line-height:1.7; }
-#vol-tooltip.below { transform:translate(-50%, 14px); }
-.vol-tt-name { font-weight:700; font-size:13px; color:#ff9500; margin-bottom:2px; }
+#vol-tooltip { position:fixed; background:rgba(13,17,23,0.97); border:1px solid #ff9500; border-radius:8px; padding:0; font-size:12px; color:#e6edf3; min-width:180px; max-width:260px; pointer-events:none; opacity:0; transition:opacity .15s; z-index:65; transform:translate(-50%,-110%); line-height:1.7; }
+#vol-tooltip.pinned { pointer-events:auto; transform:none; transition:opacity .15s; }
+.vol-tt-hdr { display:flex; align-items:center; justify-content:space-between; cursor:move; padding:5px 10px 3px; border-bottom:1px solid #30363d; user-select:none; }
+.vol-tt-body { padding:4px 12px 8px; }
+.vol-tt-name { font-weight:700; font-size:13px; color:#ff9500; }
+.vol-tt-close { font-size:14px; color:#8b949e; cursor:pointer; line-height:1; padding:0 2px; flex-shrink:0; }
+.vol-tt-close:hover { color:#e6edf3; }
 .vol-tt-sub { font-size:11px; color:#8b949e; }
+#box-select-overlay { position:absolute; border:2px dashed rgba(100,200,255,0.85); background:rgba(100,200,255,0.06); pointer-events:none; display:none; z-index:60; }
 .toggle-row { display:flex; align-items:center; gap:8px; }
 .toggle-label { font-size:11px; color:#8b949e; flex:1; }
 .toggle-btn { background:#161b22; border:1px solid #30363d; border-radius:12px; color:#8b949e; font-size:10px; padding:3px 10px; cursor:pointer; transition:all .15s; white-space:nowrap; }
@@ -252,6 +257,7 @@ void main() {
   <div class="canvas-wrap">
     <canvas id="c"></canvas>
     <div id="markers"></div>
+    <div id="box-select-overlay"></div>
     <div class="hud" id="hud">テクスチャ読み込み中...</div>
     <div class="canvas-ctrl-btns">
       <button class="canvas-ctrl-btn" id="btnAxisLock">＋ 軸垂直固定</button>
@@ -261,6 +267,7 @@ void main() {
       <button class="canvas-ctrl-btn" id="btnRiftTour">🌋 地溝帯</button>
       <button class="canvas-ctrl-btn" id="btnCaribbeanTour">🌊 カリブ海周辺</button>
       <button class="canvas-ctrl-btn active" id="btnVolToggle">🌋 火山 表示中</button>
+      <button class="canvas-ctrl-btn" id="btnBoxZoom">🔲 エリアズーム</button>
       <button class="canvas-ctrl-btn" id="btnAirport">🛬 空路 🛫</button>
     </div>
     <div class="airport-drawer" id="airportDrawer">
@@ -914,23 +921,73 @@ void main() {
       isHoveringVol = false;
       if (!autoRot) hideVolTooltip();
     });
-    el.addEventListener('click', function() {
+    el.addEventListener('click', function(e) {
+      var r = el.getBoundingClientRect();
+      pinVolTooltip(v, r.left + r.width / 2, r.top - 8);
       selectFaultFromVol(v);
     });
   });
 
+  var volTtPinned = false;
+  var volTtDragging = false, volTtDx = 0, volTtDy = 0;
+
   function showVolTooltip(x, y, v) {
+    if (volTtPinned) return;
     volTooltipEl.innerHTML =
-      '<div class="vol-tt-name">' + getVolFlag(v.c) + ' 🌋 ' + v.n + '</div>' +
-      '<div class="vol-tt-sub">' + v.c + ' / 標高 ' + v.elev.toLocaleString() + 'm</div>' +
-      '<div class="vol-tt-sub">最新噴火: ' + v.lastErupt + '</div>';
+      '<div class="vol-tt-hdr"><span class="vol-tt-name">' + getVolFlag(v.c) + ' 🌋 ' + v.n + '</span><span class="vol-tt-close" id="volTtClose">✕</span></div>' +
+      '<div class="vol-tt-body"><div class="vol-tt-sub">' + v.c + ' / 標高 ' + (v.elev < 0 ? '海面下' + Math.abs(v.elev) : v.elev.toLocaleString()) + 'm</div>' +
+      '<div class="vol-tt-sub">最新噴火: ' + v.lastErupt + '</div></div>';
     var below = y < canvasRect.top + canvasRect.height * 0.3;
     volTooltipEl.style.left = x + 'px';
     volTooltipEl.style.top = y + 'px';
     volTooltipEl.className = below ? 'below' : '';
     volTooltipEl.style.opacity = '1';
+    var closeBtn = document.getElementById('volTtClose');
+    if (closeBtn) closeBtn.addEventListener('click', function(e) { e.stopPropagation(); volTtPinned = false; volTooltipEl.className = ''; volTooltipEl.style.opacity = '0'; });
   }
-  function hideVolTooltip() { volTooltipEl.style.opacity = '0'; }
+  function hideVolTooltip() { if (!volTtPinned) volTooltipEl.style.opacity = '0'; }
+  function pinVolTooltip(v, x, y) {
+    volTtPinned = true;
+    volTooltipEl.innerHTML =
+      '<div class="vol-tt-hdr"><span class="vol-tt-name">' + getVolFlag(v.c) + ' 🌋 ' + v.n + '</span><span class="vol-tt-close" id="volTtClose">✕</span></div>' +
+      '<div class="vol-tt-body"><div class="vol-tt-sub">' + v.c + ' / 標高 ' + (v.elev < 0 ? '海面下' + Math.abs(v.elev) : v.elev.toLocaleString()) + 'm</div>' +
+      '<div class="vol-tt-sub">最新噴火: ' + v.lastErupt + '</div></div>';
+    volTooltipEl.style.left = x + 'px';
+    volTooltipEl.style.top = y + 'px';
+    volTooltipEl.style.opacity = '1';
+    volTooltipEl.className = 'pinned';
+    var closeBtn = document.getElementById('volTtClose');
+    if (closeBtn) closeBtn.addEventListener('click', function(e) { e.stopPropagation(); volTtPinned = false; volTooltipEl.className = ''; volTooltipEl.style.opacity = '0'; });
+    var hdr = volTooltipEl.querySelector('.vol-tt-hdr');
+    if (hdr) {
+      hdr.addEventListener('mousedown', function(e) {
+        if (e.target === document.getElementById('volTtClose')) return;
+        volTtDragging = true;
+        volTtDx = e.clientX - parseInt(volTooltipEl.style.left || '0');
+        volTtDy = e.clientY - parseInt(volTooltipEl.style.top || '0');
+        e.preventDefault();
+      });
+      hdr.addEventListener('touchstart', function(e) {
+        if (e.target === document.getElementById('volTtClose')) return;
+        volTtDragging = true;
+        volTtDx = e.touches[0].clientX - parseInt(volTooltipEl.style.left || '0');
+        volTtDy = e.touches[0].clientY - parseInt(volTooltipEl.style.top || '0');
+        e.stopPropagation();
+      }, {passive:true});
+    }
+  }
+  window.addEventListener('mousemove', function(e) {
+    if (!volTtDragging) return;
+    volTooltipEl.style.left = (e.clientX - volTtDx) + 'px';
+    volTooltipEl.style.top = (e.clientY - volTtDy) + 'px';
+  });
+  window.addEventListener('mouseup', function() { volTtDragging = false; });
+  window.addEventListener('touchmove', function(e) {
+    if (!volTtDragging) return;
+    volTooltipEl.style.left = (e.touches[0].clientX - volTtDx) + 'px';
+    volTooltipEl.style.top = (e.touches[0].clientY - volTtDy) + 'px';
+  }, {passive:true});
+  window.addEventListener('touchend', function() { volTtDragging = false; });
 
   function flyToLatLon(lat, lon, dur, cb) {
     var latR = lat * Math.PI / 180;
@@ -1528,9 +1585,76 @@ void main() {
     momentumX = axisLocked ? 0 : (vx * SPIN_BOOST);
   }
 
-  canvas.addEventListener('mousedown', function(e) { drag=true; lx=e.clientX; ly=e.clientY; momentumY=0; momentumX=0; velY=0; velX=0; });
-  window.addEventListener('mouseup', function() { if(!drag)return; drag=false; applyMomentum(velY, velX); velY=0; velX=0; });
+  var boxZoomMode = false;
+  var boxZoomOverlay = document.getElementById('box-select-overlay');
+  var bx0 = 0, by0 = 0, bxCur = 0, byCur = 0, boxDragging = false;
+  var btnBoxZoom = document.getElementById('btnBoxZoom');
+  btnBoxZoom.addEventListener('click', function() {
+    boxZoomMode = !boxZoomMode;
+    btnBoxZoom.classList.toggle('active', boxZoomMode);
+    btnBoxZoom.textContent = boxZoomMode ? '🔲 選択中…' : '🔲 エリアズーム';
+    canvas.style.cursor = boxZoomMode ? 'crosshair' : '';
+  });
+
+  function updateBoxOverlay() {
+    var rect = canvas.getBoundingClientRect();
+    var x1 = Math.min(bx0, bxCur) - rect.left;
+    var y1 = Math.min(by0, byCur) - rect.top;
+    var x2 = Math.max(bx0, bxCur) - rect.left;
+    var y2 = Math.max(by0, byCur) - rect.top;
+    boxZoomOverlay.style.left = x1 + 'px';
+    boxZoomOverlay.style.top = y1 + 'px';
+    boxZoomOverlay.style.width = (x2 - x1) + 'px';
+    boxZoomOverlay.style.height = (y2 - y1) + 'px';
+    boxZoomOverlay.style.display = 'block';
+  }
+
+  function applyBoxZoom(ex, ey) {
+    var rect = canvas.getBoundingClientRect();
+    var cx_px = (bx0 + ex) / 2;
+    var cy_px = (by0 + ey) / 2;
+    var bw = Math.abs(ex - bx0);
+    var bh = Math.abs(ey - by0);
+    boxZoomOverlay.style.display = 'none';
+    if (bw < 10 || bh < 10) return;
+    var ndcX = (cx_px - rect.left) / rect.width * 2 - 1;
+    var ndcY = -((cy_px - rect.top) / rect.height * 2 - 1);
+    var tanHF = Math.tan(0.35);
+    var aspect = rect.width / rect.height;
+    var rdx = ndcX * tanHF * aspect;
+    var rdy = ndcY * tanHF;
+    var rdz = -1.0;
+    var rlen = Math.sqrt(rdx*rdx + rdy*rdy + rdz*rdz);
+    rdx /= rlen; rdy /= rlen; rdz /= rlen;
+    var mi = [model[0],model[4],model[8], model[1],model[5],model[9], model[2],model[6],model[10]];
+    function mulMat3Vec3(m, x, y, z) { return [m[0]*x+m[1]*y+m[2]*z, m[3]*x+m[4]*y+m[5]*z, m[6]*x+m[7]*y+m[8]*z]; }
+    var ro = mulMat3Vec3(mi, 0, 0, zoom);
+    var rd = mulMat3Vec3(mi, rdx, rdy, rdz);
+    var b = 2*(ro[0]*rd[0]+ro[1]*rd[1]+ro[2]*rd[2]);
+    var cval = ro[0]*ro[0]+ro[1]*ro[1]+ro[2]*ro[2] - 1;
+    var disc = b*b - 4*cval;
+    if (disc < 0) return;
+    var t = (-b - Math.sqrt(disc)) / 2;
+    var px = ro[0]+t*rd[0], py = ro[1]+t*rd[1], pz = ro[2]+t*rd[2];
+    var lat = Math.asin(Math.max(-1, Math.min(1, py))) * 180 / Math.PI;
+    var lon = Math.atan2(px, -pz) * 180 / Math.PI;
+    var fraction = Math.min(bw / rect.width, bh / rect.height);
+    var newZoom = Math.min(20, zoom / fraction * 0.9);
+    flyToLatLon(lat, lon, 800, function() { zoomTarget = newZoom; });
+  }
+
+  canvas.addEventListener('mousedown', function(e) {
+    if (volTtDragging) return;
+    if (boxZoomMode) { boxDragging=true; bx0=e.clientX; by0=e.clientY; bxCur=e.clientX; byCur=e.clientY; return; }
+    drag=true; lx=e.clientX; ly=e.clientY; momentumY=0; momentumX=0; velY=0; velX=0;
+  });
+  window.addEventListener('mouseup', function(e) {
+    if (boxDragging) { boxDragging=false; applyBoxZoom(e.clientX, e.clientY); return; }
+    if(!drag)return; drag=false; applyMomentum(velY, velX); velY=0; velX=0;
+  });
   window.addEventListener('mousemove', function(e) {
+    if (volTtDragging) return;
+    if (boxDragging) { bxCur=e.clientX; byCur=e.clientY; updateBoxOverlay(); return; }
     if(!drag)return;
     var dy=(e.clientX-lx)*0.008, dx=(e.clientY-ly)*0.008;
     rotYv+=dy; velY=velY*0.4+dy*0.6;
@@ -1545,11 +1669,15 @@ void main() {
   });
   canvas.addEventListener('touchstart', function(e) {
     e.preventDefault(); touchMoved=false; momentumY=0; momentumX=0; velY=0; velX=0;
-    if(e.touches.length===1){drag=true;lx=e.touches[0].clientX;ly=e.touches[0].clientY;}
+    if(e.touches.length===1){
+      if (boxZoomMode) { boxDragging=true; bx0=e.touches[0].clientX; by0=e.touches[0].clientY; bxCur=bx0; byCur=by0; return; }
+      drag=true;lx=e.touches[0].clientX;ly=e.touches[0].clientY;
+    }
     if(e.touches.length===2){pinch0=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);}
   }, {passive:false});
   canvas.addEventListener('touchmove', function(e) {
     e.preventDefault(); touchMoved=true;
+    if(e.touches.length===1&&boxDragging){ bxCur=e.touches[0].clientX; byCur=e.touches[0].clientY; updateBoxOverlay(); return; }
     if(e.touches.length===1&&drag){
       var dy=(e.touches[0].clientX-lx)*0.008, dx=(e.touches[0].clientY-ly)*0.008;
       rotYv+=dy; velY=velY*0.4+dy*0.6;
@@ -1562,6 +1690,11 @@ void main() {
     }
   }, {passive:false});
   canvas.addEventListener('touchend', function(e) {
+    if (boxDragging && e.changedTouches.length===1) {
+      boxDragging=false;
+      applyBoxZoom(e.changedTouches[0].clientX, e.changedTouches[0].clientY);
+      return;
+    }
     drag=false;
     applyMomentum(velY,velX); velY=0; velX=0;
     if(!touchMoved&&e.changedTouches.length===1){momentumY=0;momentumX=0;hideTooltip();}
