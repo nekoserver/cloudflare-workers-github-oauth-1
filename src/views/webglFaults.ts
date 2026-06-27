@@ -1626,7 +1626,10 @@ void main() {
     var rdz = -1.0;
     var rlen = Math.sqrt(rdx*rdx + rdy*rdy + rdz*rdz);
     rdx /= rlen; rdy /= rlen; rdz /= rlen;
-    var mi = [model[0],model[4],model[8], model[1],model[5],model[9], model[2],model[6],model[10]];
+    // model は column-major。回転行列の逆行列 = 転置 = 列と行を入れ替える
+    // model[i + j*4] = M[row=i, col=j] なので
+    // M^T の row-major表現: [M[0,0],M[0,1],M[0,2], M[1,0]...] = [model[0],model[1],model[2], model[4],model[5],model[6], ...]
+    var mi = [model[0],model[1],model[2], model[4],model[5],model[6], model[8],model[9],model[10]];
     function mulMat3Vec3(m, x, y, z) { return [m[0]*x+m[1]*y+m[2]*z, m[3]*x+m[4]*y+m[5]*z, m[6]*x+m[7]*y+m[8]*z]; }
     var ro = mulMat3Vec3(mi, 0, 0, zoom);
     var rd = mulMat3Vec3(mi, rdx, rdy, rdz);
@@ -1639,7 +1642,9 @@ void main() {
     var lat = Math.asin(Math.max(-1, Math.min(1, py))) * 180 / Math.PI;
     var lon = Math.atan2(px, -pz) * 180 / Math.PI;
     var fraction = Math.min(bw / rect.width, bh / rect.height);
-    var newZoom = Math.min(20, zoom / fraction * 0.9);
+    // zoom = カメラ距離。小さいほどズームイン。ボックスが画面のfractionを占めるなら
+    // ズーム後の距離 = 現在距離 * fraction（小さいボックス→より近づく）
+    var newZoom = Math.max(1.4, zoom * fraction);
     flyToLatLon(lat, lon, 800, function() { zoomTarget = newZoom; });
   }
 
