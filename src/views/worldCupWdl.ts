@@ -48,12 +48,24 @@ tr:nth-child(even) td { background: var(--row-alt); }
 .badge-draw { background: var(--draw-bg); border-color: var(--draw-border); }
 .badge-loss { background: var(--loss-bg); border-color: var(--loss-border); }
 .empty { color: var(--border); font-size: 0.68rem; }
+.ko-section { margin-top: 18px; }
+.ko-section h2 { font-size: 1rem; margin-bottom: 8px; }
+.ko-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 6px; }
+.ko-card { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px; }
+.ko-card-title { font-size: 0.7rem; font-weight: 700; color: var(--text-muted); margin-bottom: 4px; }
+.ko-slot { display: flex; align-items: center; gap: 4px; font-size: 0.82rem; padding: 2px 0; }
+.ko-slot-label { font-size: 0.65rem; color: var(--text-muted); min-width: 14px; }
+.ko-flag { font-size: 1rem; line-height: 1; }
+.ko-name { font-weight: 600; font-size: 0.78rem; }
+.ko-pend { color: var(--text-muted); font-size: 0.75rem; font-style: italic; }
+.ko-confirmed { border-left: 3px solid light-dark(#27ae60,#2ecc71); }
+.ko-partial { border-left: 3px solid light-dark(#f39c12,#e6b800); }
 </style>
 </head>
 <body>
 <div class="page-header">
   <h1>&#x26BD; W杯2026 WDL分布テーブル</h1>
-  <p class="subtitle">シード: 2026年6月18日（第1節終了後）</p>
+  <p class="subtitle">データ: 2026年6月27日現在（A〜I・K・L組は第3節終了後、J組は第2節終了後）</p>
 </div>
 <div class="table-wrap">
   <table>
@@ -70,22 +82,88 @@ tr:nth-child(even) td { background: var(--row-alt); }
   </table>
 </div>
 
+<div class="ko-section">
+  <h2>&#x1F3C6; ノックアウトステージ 確定進出枠</h2>
+  <div class="ko-grid">
+    <div class="ko-card ko-confirmed">
+      <div class="ko-card-title">A組</div>
+      <div class="ko-slot"><span class="ko-slot-label">1.</span><span class="ko-flag">&#x1F1F2;&#x1F1FD;</span><span class="ko-name">MEX</span></div>
+      <div class="ko-slot"><span class="ko-slot-label">2.</span><span class="ko-flag">&#x1F1FF;&#x1F1E6;</span><span class="ko-name">RSA</span></div>
+    </div>
+    <div class="ko-card ko-partial">
+      <div class="ko-card-title">B組</div>
+      <div class="ko-slot"><span class="ko-slot-label">1.</span><span class="ko-flag">&#x1F1E8;&#x1F1ED;</span><span class="ko-name">SUI</span></div>
+      <div class="ko-slot"><span class="ko-slot-label">2.</span><span class="ko-pend">CAN / BIH（PK未定）</span></div>
+    </div>
+    <div class="ko-card ko-confirmed">
+      <div class="ko-card-title">C組</div>
+      <div class="ko-slot"><span class="ko-slot-label">1.</span><span class="ko-flag">&#x1F1E7;&#x1F1F7;</span><span class="ko-name">BRA</span></div>
+      <div class="ko-slot"><span class="ko-slot-label">2.</span><span class="ko-flag">&#x1F1F2;&#x1F1E6;</span><span class="ko-name">MAR</span></div>
+    </div>
+    <div class="ko-card ko-partial">
+      <div class="ko-card-title">D組</div>
+      <div class="ko-slot"><span class="ko-slot-label">1.</span><span class="ko-flag">&#x1F1FA;&#x1F1F8;</span><span class="ko-name">USA</span></div>
+      <div class="ko-slot"><span class="ko-slot-label">2.</span><span class="ko-pend">AUS / PAR（PK未定）</span></div>
+    </div>
+    <div class="ko-card ko-confirmed">
+      <div class="ko-card-title">E組</div>
+      <div class="ko-slot"><span class="ko-slot-label">1.</span><span class="ko-flag">&#x1F1E9;&#x1F1EA;</span><span class="ko-name">GER</span></div>
+      <div class="ko-slot"><span class="ko-slot-label">2.</span><span class="ko-flag">&#x1F1E8;&#x1F1EE;</span><span class="ko-name">CIV</span></div>
+    </div>
+    <div class="ko-card ko-confirmed">
+      <div class="ko-card-title">F組</div>
+      <div class="ko-slot"><span class="ko-slot-label">1.</span><span class="ko-flag">&#x1F1F3;&#x1F1F1;</span><span class="ko-name">NED</span></div>
+      <div class="ko-slot"><span class="ko-slot-label">2.</span><span class="ko-flag">&#x1F1EF;&#x1F1F5;</span><span class="ko-name">JPN</span></div>
+    </div>
+    <div class="ko-card ko-confirmed">
+      <div class="ko-card-title">G組</div>
+      <div class="ko-slot"><span class="ko-slot-label">1.</span><span class="ko-pend">EGY / BEL（順位未定）</span></div>
+      <div class="ko-slot"><span class="ko-flag">&#x1F1EA;&#x1F1EC;</span><span class="ko-name">EGY</span><span style="color:var(--text-muted);font-size:0.7rem;margin-left:2px">+</span><span class="ko-flag" style="margin-left:3px">&#x1F1E7;&#x1F1EA;</span><span class="ko-name">BEL</span></div>
+    </div>
+    <div class="ko-card ko-confirmed">
+      <div class="ko-card-title">H組</div>
+      <div class="ko-slot"><span class="ko-slot-label">1.</span><span class="ko-flag">&#x1F1EA;&#x1F1F8;</span><span class="ko-name">ESP</span></div>
+      <div class="ko-slot"><span class="ko-slot-label">2.</span><span class="ko-flag">&#x1F1E8;&#x1F1FB;</span><span class="ko-name">CPV</span></div>
+    </div>
+    <div class="ko-card ko-confirmed">
+      <div class="ko-card-title">I組</div>
+      <div class="ko-slot"><span class="ko-slot-label">1.</span><span class="ko-flag">&#x1F1EB;&#x1F1F7;</span><span class="ko-name">FRA</span></div>
+      <div class="ko-slot"><span class="ko-slot-label">2.</span><span class="ko-flag">&#x1F1F3;&#x1F1F4;</span><span class="ko-name">NOR</span></div>
+    </div>
+    <div class="ko-card ko-partial">
+      <div class="ko-card-title">J組</div>
+      <div class="ko-slot"><span class="ko-slot-label">1.</span><span class="ko-flag">&#x1F1E6;&#x1F1F7;</span><span class="ko-name">ARG</span></div>
+      <div class="ko-slot"><span class="ko-slot-label">2.</span><span class="ko-pend">第3節未了</span></div>
+    </div>
+    <div class="ko-card ko-confirmed">
+      <div class="ko-card-title">K組</div>
+      <div class="ko-slot"><span class="ko-slot-label">1.</span><span class="ko-flag">&#x1F1E8;&#x1F1F4;</span><span class="ko-name">COL</span></div>
+      <div class="ko-slot"><span class="ko-slot-label">2.</span><span class="ko-flag">&#x1F1F5;&#x1F1F9;</span><span class="ko-name">POR</span></div>
+    </div>
+    <div class="ko-card ko-confirmed">
+      <div class="ko-card-title">L組</div>
+      <div class="ko-slot"><span class="ko-slot-label">1.</span><span class="ko-pend">ENG / GHA（順位未定）</span></div>
+      <div class="ko-slot"><span class="ko-flag">&#x1F3F4;&#xE0067;&#xE0062;&#xE0065;&#xE006E;&#xE0067;&#xE007F;</span><span class="ko-name">ENG</span><span style="color:var(--text-muted);font-size:0.7rem;margin-left:2px">+</span><span class="ko-flag" style="margin-left:3px">&#x1F1EC;&#x1F1ED;</span><span class="ko-name">GHA</span></div>
+    </div>
+  </div>
+</div>
+
 <script>
 var GS = ["A","B","C","D","E","F","G","H","I","J","K","L"];
 
 var data = {
-  "A":[{n:"MX",f:"🇲🇽",w:1,d:0,l:0},{n:"KOR",f:"🇰🇷",w:0,d:0,l:1},{n:"CZE",f:"🇨🇿",w:0,d:1,l:0},{n:"RSA",f:"🇿🇦",w:0,d:1,l:0}],
-  "B":[{n:"CAN",f:"🇨🇦",w:1,d:0,l:0},{n:"QAT",f:"🇶🇦",w:0,d:0,l:1},{n:"SUI",f:"🇨🇭",w:1,d:0,l:0},{n:"BIH",f:"🇧🇦",w:0,d:0,l:1}],
-  "C":[{n:"BRA",f:"🇧🇷",w:0,d:1,l:0},{n:"MAR",f:"🇲🇦",w:0,d:1,l:0},{n:"SCO",f:"🏴󠁧󠁢󠁳󠁣󠁴󠁿",w:1,d:0,l:0},{n:"HAI",f:"🇭🇹",w:0,d:0,l:1}],
-  "D":[{n:"USA",f:"🇺🇸",w:1,d:0,l:0},{n:"PAR",f:"🇵🇾",w:0,d:0,l:1},{n:"AUS",f:"🇦🇺",w:1,d:0,l:0},{n:"TUR",f:"🇹🇷",w:0,d:0,l:1}],
-  "E":[{n:"GER",f:"🇩🇪",w:1,d:0,l:0},{n:"CUW",f:"🇨🇼",w:0,d:0,l:1},{n:"CIV",f:"🇨🇮",w:1,d:0,l:0},{n:"ECU",f:"🇪🇨",w:0,d:0,l:1}],
-  "F":[{n:"NED",f:"🇳🇱",w:0,d:1,l:0},{n:"JPN",f:"🇯🇵",w:0,d:1,l:0},{n:"SWE",f:"🇸🇪",w:1,d:0,l:0},{n:"TUN",f:"🇹🇳",w:0,d:0,l:1}],
-  "G":[{n:"BEL",f:"🇧🇪",w:0,d:1,l:0},{n:"EGY",f:"🇪🇬",w:0,d:1,l:0},{n:"IRN",f:"🇮🇷",w:0,d:1,l:0},{n:"NZL",f:"🇳🇿",w:0,d:1,l:0}],
-  "H":[{n:"ESP",f:"🇪🇸",w:0,d:1,l:0},{n:"CPV",f:"🇨🇻",w:0,d:1,l:0},{n:"KSA",f:"🇸🇦",w:0,d:1,l:0},{n:"URU",f:"🇺🇾",w:0,d:1,l:0}],
-  "I":[{n:"FRA",f:"🇫🇷",w:1,d:0,l:0},{n:"SEN",f:"🇸🇳",w:0,d:0,l:1},{n:"IRQ",f:"🇮🇶",w:0,d:0,l:1},{n:"NOR",f:"🇳🇴",w:1,d:0,l:0}],
-  "J":[{n:"ARG",f:"🇦🇷",w:1,d:0,l:0},{n:"ALG",f:"🇩🇿",w:0,d:0,l:1},{n:"AUT",f:"🇦🇹",w:1,d:0,l:0},{n:"JOR",f:"🇯🇴",w:0,d:0,l:1}],
-  "K":[{n:"POR",f:"🇵🇹",w:0,d:1,l:0},{n:"COD",f:"🇨🇩",w:0,d:1,l:0},{n:"UZB",f:"🇺🇿",w:0,d:0,l:1},{n:"COL",f:"🇨🇴",w:1,d:0,l:0}],
-  "L":[{n:"ENG",f:"🏴󠁧󠁢󠁥󠁮󠁧󠁿",w:1,d:0,l:0},{n:"CRO",f:"🇭🇷",w:0,d:0,l:1},{n:"GHA",f:"🇬🇭",w:1,d:0,l:0},{n:"PAN",f:"🇵🇦",w:0,d:0,l:1}]
+  "A":[{n:"MX",f:"🇲🇽",w:3,d:0,l:0},{n:"RSA",f:"🇿🇦",w:1,d:1,l:1},{n:"KOR",f:"🇰🇷",w:1,d:0,l:2},{n:"CZE",f:"🇨🇿",w:0,d:1,l:2}],
+  "B":[{n:"SUI",f:"🇨🇭",w:2,d:1,l:0},{n:"CAN",f:"🇨🇦",w:1,d:1,l:1},{n:"BIH",f:"🇧🇦",w:1,d:1,l:1},{n:"QAT",f:"🇶🇦",w:0,d:1,l:2}],
+  "C":[{n:"BRA",f:"🇧🇷",w:2,d:1,l:0},{n:"MAR",f:"🇲🇦",w:2,d:1,l:0},{n:"SCO",f:"🏴󠁧󠁢󠁳󠁣󠁴󠁿",w:1,d:0,l:2},{n:"HAI",f:"🇭🇹",w:0,d:0,l:3}],
+  "D":[{n:"USA",f:"🇺🇸",w:2,d:0,l:1},{n:"PAR",f:"🇵🇾",w:1,d:1,l:1},{n:"AUS",f:"🇦🇺",w:1,d:1,l:1},{n:"TUR",f:"🇹🇷",w:1,d:0,l:2}],
+  "E":[{n:"GER",f:"🇩🇪",w:2,d:0,l:1},{n:"CIV",f:"🇨🇮",w:2,d:0,l:1},{n:"ECU",f:"🇪🇨",w:1,d:1,l:1},{n:"CUW",f:"🇨🇼",w:0,d:1,l:2}],
+  "F":[{n:"NED",f:"🇳🇱",w:2,d:1,l:0},{n:"JPN",f:"🇯🇵",w:1,d:2,l:0},{n:"SWE",f:"🇸🇪",w:1,d:1,l:1},{n:"TUN",f:"🇹🇳",w:0,d:0,l:3}],
+  "G":[{n:"EGY",f:"🇪🇬",w:1,d:2,l:0},{n:"BEL",f:"🇧🇪",w:1,d:2,l:0},{n:"IRN",f:"🇮🇷",w:0,d:3,l:0},{n:"NZL",f:"🇳🇿",w:0,d:1,l:2}],
+  "H":[{n:"ESP",f:"🇪🇸",w:2,d:1,l:0},{n:"CPV",f:"🇨🇻",w:0,d:3,l:0},{n:"URU",f:"🇺🇾",w:0,d:2,l:1},{n:"KSA",f:"🇸🇦",w:0,d:2,l:1}],
+  "I":[{n:"FRA",f:"🇫🇷",w:3,d:0,l:0},{n:"NOR",f:"🇳🇴",w:2,d:0,l:1},{n:"SEN",f:"🇸🇳",w:1,d:0,l:2},{n:"IRQ",f:"🇮🇶",w:0,d:0,l:3}],
+  "J":[{n:"ARG",f:"🇦🇷",w:2,d:0,l:0},{n:"AUT",f:"🇦🇹",w:1,d:0,l:1},{n:"ALG",f:"🇩🇿",w:1,d:0,l:1},{n:"JOR",f:"🇯🇴",w:0,d:0,l:2}],
+  "K":[{n:"COL",f:"🇨🇴",w:3,d:0,l:0},{n:"POR",f:"🇵🇹",w:1,d:1,l:1},{n:"UZB",f:"🇺🇿",w:1,d:0,l:2},{n:"COD",f:"🇨🇩",w:0,d:1,l:2}],
+  "L":[{n:"ENG",f:"🏴󠁧󠁢󠁥󠁮󠁧󠁿",w:2,d:1,l:0},{n:"GHA",f:"🇬🇭",w:2,d:1,l:0},{n:"CRO",f:"🇭🇷",w:1,d:0,l:2},{n:"PAN",f:"🇵🇦",w:0,d:0,l:3}]
 };
 
 function pts(w,d){return w*3+d;}
