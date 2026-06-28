@@ -1741,6 +1741,124 @@ void main() {
     boxZoomOverlay.style.display = 'block';
   }
 
+  var lastBoxBounds = null;
+  var areaMenuEl = null;
+  var areaTourRunning = false;
+  var areaTourTimer = null;
+  var areaTourIdx = 0;
+
+  function mulMat3Vec3(m, x, y, z) { return [m[0]*x+m[1]*y+m[2]*z, m[3]*x+m[4]*y+m[5]*z, m[6]*x+m[7]*y+m[8]*z]; }
+
+  function screenToLatLon(px_screen, py_screen, rect) {
+    var ndcX = (px_screen - rect.left) / rect.width * 2 - 1;
+    var ndcY = -((py_screen - rect.top) / rect.height * 2 - 1);
+    var tanHF = Math.tan(0.35);
+    var aspect = rect.width / rect.height;
+    var rdx = ndcX * tanHF * aspect;
+    var rdy = ndcY * tanHF;
+    var rdz = -1.0;
+    var rlen = Math.sqrt(rdx*rdx + rdy*rdy + rdz*rdz);
+    rdx /= rlen; rdy /= rlen; rdz /= rlen;
+    var mi = [model[0],model[1],model[2], model[4],model[5],model[6], model[8],model[9],model[10]];
+    var ro = mulMat3Vec3(mi, 0, 0, zoom);
+    var rd = mulMat3Vec3(mi, rdx, rdy, rdz);
+    var b2 = 2*(ro[0]*rd[0]+ro[1]*rd[1]+ro[2]*rd[2]);
+    var cval = ro[0]*ro[0]+ro[1]*ro[1]+ro[2]*ro[2] - 1;
+    var disc = b2*b2 - 4*cval;
+    if (disc < 0) return null;
+    var t = (-b2 - Math.sqrt(disc)) / 2;
+    var hx = ro[0]+t*rd[0], hy = ro[1]+t*rd[1], hz = ro[2]+t*rd[2];
+    return { lat: Math.asin(Math.max(-1, Math.min(1, hy))) * 180 / Math.PI, lon: Math.atan2(-hz, hx) * 180 / Math.PI };
+  }
+
+  function getVolsInBounds() {
+    if (!lastBoxBounds) return [];
+    var b = lastBoxBounds;
+    return VOLCANOES.filter(function(v) {
+      var lon = v.lon;
+      if (b.lonCross) {
+        return v.lat >= b.latMin && v.lat <= b.latMax && (lon >= b.lonMin || lon <= b.lonMax);
+      }
+      return v.lat >= b.latMin && v.lat <= b.latMax && lon >= b.lonMin && lon <= b.lonMax;
+    });
+  }
+
+  function showAreaMenu() {
+    if (!areaMenuEl) {
+      areaMenuEl = document.createElement('div');
+      areaMenuEl.style.cssText = 'position:absolute;right:10px;top:50%;transform:translateY(-50%);background:rgba(13,17,23,0.93);border:1px solid #30363d;border-radius:9px;padding:10px 12px;z-index:55;min-width:130px;box-shadow:0 4px 16px rgba(0,0,0,0.6);';
+      wrap.appendChild(areaMenuEl);
+    }
+    var vols = getVolsInBounds();
+    areaMenuEl.innerHTML =
+      '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:7px">' +
+      '<span style="font-size:11px;font-weight:700;color:#ff9500">&#x1F4CD; エリアメニュー</span>' +
+      '<span id="areaMenuClose" style="cursor:pointer;color:#8b949e;font-size:14px;padding:0 3px;line-height:1">&#x2715;</span>' +
+      '</div>' +
+      '<div style="font-size:10px;color:#8b949e;margin-bottom:9px">&#x1F30B; 活火山: ' + vols.length + '件</div>' +
+      '<button id="areaTourBtn" style="width:100%;background:#2d1a0c;border:1px solid #ff9500;border-radius:6px;color:#ff9500;font-size:11px;padding:6px 8px;cursor:pointer;opacity:' + (vols.length === 0 ? '0.4' : '1') + '" ' + (vols.length === 0 ? 'disabled' : '') + '>&#x1F30B; 巡回</button>' +
+      '<div id="areaTourProg" style="font-size:10px;color:#8b949e;text-align:center;margin-top:6px;min-height:14px"></div>';
+    areaMenuEl.style.display = 'block';
+    document.getElementById('areaMenuClose').addEventListener('click', function() {
+      stopAreaTour();
+      areaMenuEl.style.display = 'none';
+      lastBoxBounds = null;
+    });
+    document.getElementById('areaTourBtn').addEventListener('click', function() {
+      if (areaTourRunning) { stopAreaTour(); } else { startAreaTour(); }
+    });
+  }
+
+  function startAreaTour() {
+    var vols = getVolsInBounds();
+    if (vols.length === 0) return;
+    areaTourRunning = true;
+    areaTourIdx = 0;
+    setVolcanoes(true);
+    areaTourStep(vols);
+  }
+
+  function areaTourStep(vols) {
+    if (!areaTourRunning || areaTourIdx >= vols.length) { stopAreaTour(); return; }
+    var v = vols[areaTourIdx];
+    var prog = document.getElementById('areaTourProg');
+    if (prog) prog.textContent = (areaTourIdx + 1) + ' / ' + vols.length;
+    var btn = document.getElementById('areaTourBtn');
+    if (btn) btn.textContent = '&#x23F9; 停止 (' + (areaTourIdx + 1) + '/' + vols.length + ')';
+    flyToLatLon(v.lat, v.lon, 1200, function() {
+      if (!areaTourRunning) return;
+      var rect = canvas.getBoundingClientRect();
+      var cx = rect.left + rect.width / 2;
+      var cy = rect.top + rect.height * 0.38;
+      pinVolTooltip(v, cx, cy);
+      areaTourTimer = setTimeout(function() {
+        if (!areaTourRunning) return;
+        volTtPinned = false;
+        volTooltipEl.style.opacity = '0';
+        volTooltipEl.className = '';
+        areaTourIdx++;
+        areaTourStep(vols);
+      }, 5000);
+    });
+  }
+
+  function stopAreaTour() {
+    areaTourRunning = false;
+    if (areaTourTimer) { clearTimeout(areaTourTimer); areaTourTimer = null; }
+    volTtPinned = false;
+    volTooltipEl.style.opacity = '0';
+    volTooltipEl.className = '';
+    var btn = document.getElementById('areaTourBtn');
+    if (btn) {
+      var vols = getVolsInBounds();
+      btn.innerHTML = '&#x1F30B; 巡回';
+      btn.disabled = vols.length === 0;
+      btn.style.opacity = vols.length === 0 ? '0.4' : '1';
+    }
+    var prog = document.getElementById('areaTourProg');
+    if (prog) prog.textContent = '';
+  }
+
   function applyBoxZoom(ex, ey) {
     var rect = canvas.getBoundingClientRect();
     var cx_px = (bx0 + ex) / 2;
@@ -1749,35 +1867,25 @@ void main() {
     var bh = Math.abs(ey - by0);
     boxZoomOverlay.style.display = 'none';
     if (bw < 10 || bh < 10) return;
-    var ndcX = (cx_px - rect.left) / rect.width * 2 - 1;
-    var ndcY = -((cy_px - rect.top) / rect.height * 2 - 1);
-    var tanHF = Math.tan(0.35);
-    var aspect = rect.width / rect.height;
-    var rdx = ndcX * tanHF * aspect;
-    var rdy = ndcY * tanHF;
-    var rdz = -1.0;
-    var rlen = Math.sqrt(rdx*rdx + rdy*rdy + rdz*rdz);
-    rdx /= rlen; rdy /= rlen; rdz /= rlen;
-    // model は column-major。回転行列の逆行列 = 転置 = 列と行を入れ替える
-    // model[i + j*4] = M[row=i, col=j] なので
-    // M^T の row-major表現: [M[0,0],M[0,1],M[0,2], M[1,0]...] = [model[0],model[1],model[2], model[4],model[5],model[6], ...]
-    var mi = [model[0],model[1],model[2], model[4],model[5],model[6], model[8],model[9],model[10]];
-    function mulMat3Vec3(m, x, y, z) { return [m[0]*x+m[1]*y+m[2]*z, m[3]*x+m[4]*y+m[5]*z, m[6]*x+m[7]*y+m[8]*z]; }
-    var ro = mulMat3Vec3(mi, 0, 0, zoom);
-    var rd = mulMat3Vec3(mi, rdx, rdy, rdz);
-    var b = 2*(ro[0]*rd[0]+ro[1]*rd[1]+ro[2]*rd[2]);
-    var cval = ro[0]*ro[0]+ro[1]*ro[1]+ro[2]*ro[2] - 1;
-    var disc = b*b - 4*cval;
-    if (disc < 0) return;
-    var t = (-b - Math.sqrt(disc)) / 2;
-    var px = ro[0]+t*rd[0], py = ro[1]+t*rd[1], pz = ro[2]+t*rd[2];
-    var lat = Math.asin(Math.max(-1, Math.min(1, py))) * 180 / Math.PI;
-    var lon = Math.atan2(-pz, px) * 180 / Math.PI;
+    var ctr = screenToLatLon(cx_px, cy_px, rect);
+    if (!ctr) return;
+    var lat = ctr.lat, lon = ctr.lon;
+    var c0 = screenToLatLon(Math.min(bx0, ex), Math.min(by0, ey), rect);
+    var c1 = screenToLatLon(Math.max(bx0, ex), Math.max(by0, ey), rect);
+    if (c0 && c1) {
+      var lonA = c0.lon, lonB = c1.lon;
+      var lonCross = false;
+      if (lonA > lonB) { lonCross = true; }
+      lastBoxBounds = { latMin: Math.min(c0.lat, c1.lat), latMax: Math.max(c0.lat, c1.lat), lonMin: lonCross ? lonA : Math.min(lonA, lonB), lonMax: lonCross ? lonB : Math.max(lonA, lonB), lonCross: lonCross };
+    }
     var fraction = Math.min(bw / rect.width, bh / rect.height);
-    // zoom = カメラ距離。小さいほどズームイン。ボックスが画面のfractionを占めるなら
-    // ズーム後の距離 = 現在距離 * fraction（小さいボックス→より近づく）
     var newZoom = Math.max(1.4, zoom * fraction);
-    flyToLatLon(lat, lon, 800, function() { zoomTarget = newZoom; });
+    stopAreaTour();
+    if (areaMenuEl) areaMenuEl.style.display = 'none';
+    flyToLatLon(lat, lon, 800, function() {
+      zoomTarget = newZoom;
+      if (lastBoxBounds) showAreaMenu();
+    });
   }
 
   canvas.addEventListener('mousedown', function(e) {
