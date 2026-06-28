@@ -1,0 +1,597 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Tour de France 2026 — 日程一覧</title>
+<style>
+:root {
+  --bg:#0d1117; --surface:#161b22; --border:#30363d;
+  --text:#e6edf3; --muted:#8b949e; --accent:#e3b341;
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body { background:var(--bg); color:var(--text); font-family:'Segoe UI','Hiragino Sans',sans-serif; padding:0 0 40px; }
+header {
+  background:#161b22; border-bottom:1px solid var(--border);
+  padding:14px 20px; position:sticky; top:0; z-index:10;
+}
+header h1 { font-size:17px; font-weight:700; color:var(--accent); }
+header p  { font-size:11px; color:var(--muted); margin-top:3px; }
+
+.container { max-width:860px; margin:0 auto; padding:20px 16px; }
+
+.legend {
+  display:flex; gap:14px; flex-wrap:wrap; margin-bottom:18px;
+  font-size:11px; color:var(--muted);
+}
+.legend span { display:flex; align-items:center; gap:6px; }
+.lbadge { display:inline-block; padding:2px 8px; border-radius:4px; font-size:10px; font-weight:700; }
+
+.rest-day {
+  background:#1c2128; border:1px solid var(--border); border-radius:8px;
+  padding:12px 16px; margin-bottom:8px; display:flex; align-items:center; gap:12px;
+  font-size:13px; color:var(--muted);
+}
+.rest-day .date-col { min-width:80px; font-size:11px; }
+
+.stage-card {
+  background:#1c2128; border:1px solid var(--border); border-radius:8px;
+  padding:0; margin-bottom:8px; overflow:hidden;
+  transition:border-color .15s;
+}
+.stage-card:hover { border-color:var(--accent); }
+
+.stage-head {
+  display:grid; grid-template-columns:48px 90px 1fr auto; align-items:center; gap:12px;
+  padding:11px 16px; cursor:pointer;
+}
+.stage-num { font-size:18px; font-weight:700; color:var(--accent); text-align:center; }
+.date-col  { font-size:11px; color:var(--muted); line-height:1.5; }
+.route-col { }
+.route-col .from-to { font-size:13px; font-weight:600; }
+.route-col .sub     { font-size:11px; color:var(--muted); margin-top:2px; }
+.km-col    { text-align:right; font-size:13px; font-weight:700; color:var(--text); white-space:nowrap; }
+
+.type-badge {
+  display:inline-block; padding:2px 8px; border-radius:4px;
+  font-size:10px; font-weight:700; margin-left:6px;
+}
+.t-flat     { background:#1a2f1a; color:#3fb950; border:1px solid #3fb95044; }
+.t-hilly    { background:#2f2010; color:#ffa657; border:1px solid #ffa65744; }
+.t-mountain { background:#2f1010; color:#ff7b72; border:1px solid #ff7b7244; }
+.t-ttt      { background:#101a2f; color:#79c0ff; border:1px solid #79c0ff44; }
+.t-itt      { background:#101a2f; color:#79c0ff; border:1px solid #79c0ff44; }
+
+.stage-detail {
+  border-top:1px solid var(--border);
+  padding:12px 16px; font-size:12px; line-height:1.8; display:none;
+  background:#13181e;
+}
+.stage-detail.open { display:block; }
+.detail-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px 24px; }
+.detail-grid dt { color:var(--muted); font-size:11px; }
+.detail-grid dd { color:var(--text); }
+.climbs-list { margin-top:8px; color:#d2a8ff; font-size:11px; }
+.climbs-list::before { content:'⛰ '; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🚴 Tour de France 2026 — 全21ステージ日程一覧</h1>
+  <p>7月4日〜26日 &nbsp;|&nbsp; バルセロナ（スペイン）スタート → パリ（シャンゼリゼ）フィニッシュ &nbsp;|&nbsp; 総距離 約3,333km</p>
+</header>
+<div class="container">
+
+<div class="legend">
+  <span><span class="lbadge t-flat">平坦</span> フラットステージ</span>
+  <span><span class="lbadge t-hilly">丘陵</span> ヒリーステージ</span>
+  <span><span class="lbadge t-mountain">山岳</span> マウンテンステージ</span>
+  <span><span class="lbadge t-ttt">TTT</span> チームタイムトライアル</span>
+  <span><span class="lbadge t-itt">ITT</span> 個人タイムトライアル</span>
+  <span style="color:var(--muted)">🏔 = 山頂フィニッシュ &nbsp;|&nbsp; 時刻 = CEST（現地時間）&nbsp;|&nbsp; JST = CEST+7h</span>
+</div>
+
+<!-- S1 -->
+<div class="stage-card">
+  <div class="stage-head" onclick="toggle(this)">
+    <div class="stage-num">1</div>
+    <div class="date-col">7月4日（土）<br>バルセロナ</div>
+    <div class="route-col">
+      <div class="from-to">バルセロナ → バルセロナ <span class="type-badge t-ttt">TTT</span></div>
+      <div class="sub">カタルーニャ州都・地中海の港湾都市 — モンジュイック丘上サーキット</div>
+    </div>
+    <div class="km-col">19.7 km</div>
+  </div>
+  <div class="stage-detail">
+    <div class="detail-grid">
+      <div><dt>スタート（現地）</dt><dd>17:05 CEST（JST 翌00:05）</dd></div>
+      <div><dt>最終チーム出走</dt><dd>〜18:55 CEST（JST 翌01:55）</dd></div>
+      <div><dt>スタート都市</dt><dd>バルセロナ — スペイン第2の都市、ガウディ建築・サグラダ・ファミリアで世界的に知られるカタルーニャの文化首都</dd></div>
+      <div><dt>コース概要</dt><dd>個人タイムで記録する新形式TTT。モンジュイック丘を含むサーキット</dd></div>
+      <div><dt>注目ポイント</dt><dd>1971年以来のグランデパール・チームTT</dd></div>
+    </div>
+  </div>
+</div>
+
+<!-- S2 -->
+<div class="stage-card">
+  <div class="stage-head" onclick="toggle(this)">
+    <div class="stage-num">2</div>
+    <div class="date-col">7月5日（日）<br>カタルーニャ</div>
+    <div class="route-col">
+      <div class="from-to">タラゴナ → バルセロナ <span class="type-badge t-hilly">丘陵</span></div>
+      <div class="sub">ローマ時代の古都 → カタルーニャ州都・モンジュイック丘フィニッシュ</div>
+    </div>
+    <div class="km-col">169.2 km</div>
+  </div>
+  <div class="stage-detail">
+    <div class="detail-grid">
+      <div><dt>スタート（現地）</dt><dd>〜13:05 CEST（JST 20:05）</dd></div>
+      <div><dt>フィニッシュ予想</dt><dd>〜17:00 CEST（JST 翌00:00）</dd></div>
+      <div><dt>スタート都市</dt><dd>タラゴナ — ローマ帝国属州の首都タラコとして栄えた古都。円形劇場や城壁などの遺跡が世界遺産に登録されている</dd></div>
+      <div><dt>フィニッシュ</dt><dd>バルセロナ・モンジュイック丘（1992年五輪の舞台）上のサーキット</dd></div>
+      <div><dt>獲得標高</dt><dd>約2,500m</dd></div>
+      <div><dt>注目ポイント</dt><dd>モンジュイック終盤サーキットで差がつく丘陵ステージ</dd></div>
+    </div>
+    <div class="climbs-list">モンジュイック（フィニッシュ）</div>
+  </div>
+</div>
+
+<!-- S3 -->
+<div class="stage-card">
+  <div class="stage-head" onclick="toggle(this)">
+    <div class="stage-num">3</div>
+    <div class="date-col">7月6日（月）<br>スペイン→フランス</div>
+    <div class="route-col">
+      <div class="from-to">グラノリェルス → レ・サングル 🏔 <span class="type-badge t-mountain">山岳</span></div>
+      <div class="sub">バルセロナ郊外の工業都市 → ピレネー越えでフランス入り・山頂フィニッシュ</div>
+    </div>
+    <div class="km-col">196.2 km</div>
+  </div>
+  <div class="stage-detail">
+    <div class="detail-grid">
+      <div><dt>スタート（現地）</dt><dd>〜12:15 CEST（JST 19:15）</dd></div>
+      <div><dt>フィニッシュ予想</dt><dd>〜17:30 CEST（JST 翌00:30）</dd></div>
+      <div><dt>スタート都市</dt><dd>グラノリェルス — バルセロナ北方30kmに位置するバジェス地方の商業・繊維工業都市</dd></div>
+      <div><dt>フィニッシュ地点</dt><dd>レ・サングル — フランス・アリエージュ県の小村。標高約1,300mの牧草地帯に位置する山岳集落</dd></div>
+      <div><dt>獲得標高</dt><dd>約3,850m</dd></div>
+      <div><dt>国境越え</dt><dd>コル・デ・トセス（1,800m）付近でフランス入国</dd></div>
+    </div>
+    <div class="climbs-list">コル・デ・トセス（1,800m） › コル・デュ・カルヴェール › レ・サングル山頂</div>
+  </div>
+</div>
+
+<!-- S4 -->
+<div class="stage-card">
+  <div class="stage-head" onclick="toggle(this)">
+    <div class="stage-num">4</div>
+    <div class="date-col">7月7日（火）<br>オクシタニー</div>
+    <div class="route-col">
+      <div class="from-to">カルカソンヌ → フォワ <span class="type-badge t-hilly">丘陵</span></div>
+      <div class="sub">世界遺産の城塞都市 → カタリ派ゆかりの中世城塞町</div>
+    </div>
+    <div class="km-col">182.4 km</div>
+  </div>
+  <div class="stage-detail">
+    <div class="detail-grid">
+      <div><dt>スタート（現地）</dt><dd>〜13:05 CEST（JST 20:05）</dd></div>
+      <div><dt>フィニッシュ予想</dt><dd>〜17:30 CEST（JST 翌00:30）</dd></div>
+      <div><dt>スタート都市</dt><dd>カルカソンヌ — ユネスコ世界遺産の二重城壁を持つ中世城塞都市。南仏オクシタニー地方の観光拠点</dd></div>
+      <div><dt>フィニッシュ都市</dt><dd>フォワ — アリエージュ県の県都。岩山に建つ中世フォワ城がそびえ、12〜13世紀のカタリ派（アルビジョワ）の本拠地として知られる</dd></div>
+      <div><dt>コース概要</dt><dd>起伏のあるアリエージュ地方を抜けフォワへ。逃げ向きステージ</dd></div>
+    </div>
+  </div>
+</div>
+
+<!-- S5 -->
+<div class="stage-card">
+  <div class="stage-head" onclick="toggle(this)">
+    <div class="stage-num">5</div>
+    <div class="date-col">7月8日（水）<br>ガスコーニュ</div>
+    <div class="route-col">
+      <div class="from-to">ランヌメザン → ポー <span class="type-badge t-flat">平坦</span></div>
+      <div class="sub">ピレネー山麓の小都市 → ベアルン地方の歴史ある王都へ</div>
+    </div>
+    <div class="km-col">158.3 km</div>
+  </div>
+  <div class="stage-detail">
+    <div class="detail-grid">
+      <div><dt>スタート（現地）</dt><dd>〜13:30 CEST（JST 20:30）</dd></div>
+      <div><dt>フィニッシュ予想</dt><dd>〜17:00 CEST（JST 翌00:00）</dd></div>
+      <div><dt>スタート都市</dt><dd>ランヌメザン — ガスコーニュ地方のピレネー山麓に広がる高台の小都市。農業・工業が主産業</dd></div>
+      <div><dt>フィニッシュ都市</dt><dd>ポー — ベアルン地方の中心都市でアンリ4世生誕の地。断崖上のポー城からピレネー山脈が一望でき「ツールのお気に入りの街」として知られる</dd></div>
+      <div><dt>コース概要</dt><dd>ほぼ平坦。集団スプリント有力</dd></div>
+    </div>
+  </div>
+</div>
+
+<!-- S6 -->
+<div class="stage-card">
+  <div class="stage-head" onclick="toggle(this)">
+    <div class="stage-num">6</div>
+    <div class="date-col">7月9日（木）<br>ピレネー</div>
+    <div class="route-col">
+      <div class="from-to">ポー → ガヴァルニー＝ジェドル 🏔 <span class="type-badge t-mountain">山岳</span></div>
+      <div class="sub">ベアルン王都 → ユネスコ世界遺産の圏谷（カール）フィニッシュ</div>
+    </div>
+    <div class="km-col">186.4 km</div>
+  </div>
+  <div class="stage-detail">
+    <div class="detail-grid">
+      <div><dt>スタート（現地）</dt><dd>〜12:00 CEST（JST 19:00）</dd></div>
+      <div><dt>フィニッシュ予想</dt><dd>〜17:30 CEST（JST 翌00:30）</dd></div>
+      <div><dt>フィニッシュ地点</dt><dd>ガヴァルニー＝ジェドル — 氷河が削り出したユネスコ世界遺産の巨大な圏谷（カール）。落差423mの大瀑布が有名な山岳村。標高約1,350m</dd></div>
+      <div><dt>獲得標高</dt><dd>約4,600m</dd></div>
+      <div><dt>目玉</dt><dd>コル・デュ・トゥールマレー（2,115m）を通過</dd></div>
+    </div>
+    <div class="climbs-list">コル・ダスパン（1,489m） › コル・デュ・トゥールマレー（2,115m）🏔 › ガヴァルニー圏谷（山頂フィニッシュ）</div>
+  </div>
+</div>
+
+<!-- S7 -->
+<div class="stage-card">
+  <div class="stage-head" onclick="toggle(this)">
+    <div class="stage-num">7</div>
+    <div class="date-col">7月10日（金）<br>ガスコーニュ→ボルドー</div>
+    <div class="route-col">
+      <div class="from-to">アジェトモー → ボルドー <span class="type-badge t-flat">平坦</span></div>
+      <div class="sub">ガスコーニュの小都市 → 世界遺産のワイン交易港湾都市へ</div>
+    </div>
+    <div class="km-col">175.0 km</div>
+  </div>
+  <div class="stage-detail">
+    <div class="detail-grid">
+      <div><dt>スタート（現地）</dt><dd>〜13:30 CEST（JST 20:30）</dd></div>
+      <div><dt>フィニッシュ予想</dt><dd>〜17:00 CEST（JST 翌00:00）</dd></div>
+      <div><dt>スタート都市</dt><dd>アジェトモー — ランド県の農村地帯に位置するガスコーニュ地方の小都市。松林と牧草地が広がる</dd></div>
+      <div><dt>フィニッシュ都市</dt><dd>ボルドー — ガロンヌ川に面した港湾都市でフランス最大のワイン産地。「月の港」として世界遺産に登録された18世紀の優雅な都市景観を誇る</dd></div>
+      <div><dt>コース概要</dt><dd>ランド地方の平地を北上。集団スプリント</dd></div>
+    </div>
+  </div>
+</div>
+
+<!-- S8 -->
+<div class="stage-card">
+  <div class="stage-head" onclick="toggle(this)">
+    <div class="stage-num">8</div>
+    <div class="date-col">7月11日（土）<br>ドルドーニュ</div>
+    <div class="route-col">
+      <div class="from-to">ペリグー → ベルジュラック <span class="type-badge t-flat">平坦</span></div>
+      <div class="sub">トリュフとフォワグラの美食都市 → シラノ・ド・ベルジュラック生誕の地</div>
+    </div>
+    <div class="km-col">180.4 km</div>
+  </div>
+  <div class="stage-detail">
+    <div class="detail-grid">
+      <div><dt>スタート（現地）</dt><dd>〜13:30 CEST（JST 20:30）</dd></div>
+      <div><dt>フィニッシュ予想</dt><dd>〜17:00 CEST（JST 翌00:00）</dd></div>
+      <div><dt>スタート都市</dt><dd>ペリグー — ドルドーニュ県の県都。ペリゴール・ノワール地方の中心でトリュフ・フォワグラ・ウォルナット（クルミ）の美食産地。ビザンティン様式のサン＝フロン大聖堂で知られる</dd></div>
+      <div><dt>フィニッシュ都市</dt><dd>ベルジュラック — ドルドーニュ川沿いのワイン産地。劇作家の架空の英雄「シラノ・ド・ベルジュラック」の名で世界的に有名</dd></div>
+      <div><dt>コース概要</dt><dd>ドルドーニュ渓谷沿い。終盤やや起伏あり</dd></div>
+    </div>
+  </div>
+</div>
+
+<!-- S9 -->
+<div class="stage-card">
+  <div class="stage-head" onclick="toggle(this)">
+    <div class="stage-num">9</div>
+    <div class="date-col">7月12日（日）<br>コレーズ</div>
+    <div class="route-col">
+      <div class="from-to">マルモール → ユッセル <span class="type-badge t-hilly">丘陵</span></div>
+      <div class="sub">コレーズの渓谷町 → マッシフ・サントラルの高原都市へ</div>
+    </div>
+    <div class="km-col">185.5 km</div>
+  </div>
+  <div class="stage-detail">
+    <div class="detail-grid">
+      <div><dt>スタート（現地）</dt><dd>〜13:05 CEST（JST 20:05）</dd></div>
+      <div><dt>フィニッシュ予想</dt><dd>〜17:30 CEST（JST 翌00:30）</dd></div>
+      <div><dt>スタート都市</dt><dd>マルモール — コレーズ川とドルドーニュ川の合流点近くに位置する渓谷の町。中世の街並みと水力発電ダムで知られる</dd></div>
+      <div><dt>フィニッシュ都市</dt><dd>ユッセル — マッシフ・サントラル（フランス中央山塊）の標高高台に位置する農業・牧畜の小都市。コレーズ県の副都心</dd></div>
+      <div><dt>コース概要</dt><dd>コレーズの丘陵地帯。第2週前の選別ステージ</dd></div>
+    </div>
+  </div>
+</div>
+
+<!-- REST 1 -->
+<div class="rest-day">
+  <div class="date-col">7月13日（月）</div>
+  <div>🛌 第1休息日 — カンタル地方</div>
+</div>
+
+<!-- S10 -->
+<div class="stage-card">
+  <div class="stage-head" onclick="toggle(this)">
+    <div class="stage-num">10</div>
+    <div class="date-col">7月14日（火）<br>カンタル（革命記念日）</div>
+    <div class="route-col">
+      <div class="from-to">オーリヤック → ル・リオラン 🏔 <span class="type-badge t-mountain">山岳</span></div>
+      <div class="sub">カンタル県都・チーズの町 → 革命記念日の火山高地フィニッシュ</div>
+    </div>
+    <div class="km-col">166.6 km</div>
+  </div>
+  <div class="stage-detail">
+    <div class="detail-grid">
+      <div><dt>スタート（現地）</dt><dd>〜12:15 CEST（JST 19:15）</dd></div>
+      <div><dt>フィニッシュ予想</dt><dd>〜17:00 CEST（JST 翌00:00）</dd></div>
+      <div><dt>スタート都市</dt><dd>オーリヤック — カンタル県の県都。AOCチーズ「カンタル」の産地として知られ、火山性高原（プラトー・ド・ラ・マルジュリード）に囲まれた中世の城壁都市</dd></div>
+      <div><dt>フィニッシュ地点</dt><dd>ル・リオラン — カンタル火山群の中腹（標高約1,160m）に位置する小スキーリゾート村</dd></div>
+      <div><dt>獲得標高</dt><dd>約3,200m</dd></div>
+      <div><dt>注目</dt><dd>フランス革命記念日（7/14）の恒例山岳決戦</dd></div>
+    </div>
+    <div class="climbs-list">プラン・デュ・カンタル › ル・リオラン山頂フィニッシュ（1,160m）</div>
+  </div>
+</div>
+
+<!-- S11 -->
+<div class="stage-card">
+  <div class="stage-head" onclick="toggle(this)">
+    <div class="stage-num">11</div>
+    <div class="date-col">7月15日（水）<br>オーヴェルニュ</div>
+    <div class="route-col">
+      <div class="from-to">ヴィシー → ヌヴェール <span class="type-badge t-flat">平坦</span></div>
+      <div class="sub">ヨーロッパ屈指の温泉保養地 → ロワール川沿いの陶器の街へ</div>
+    </div>
+    <div class="km-col">161.3 km</div>
+  </div>
+  <div class="stage-detail">
+    <div class="detail-grid">
+      <div><dt>スタート（現地）</dt><dd>〜13:30 CEST（JST 20:30）</dd></div>
+      <div><dt>フィニッシュ予想</dt><dd>〜17:00 CEST（JST 翌00:00）</dd></div>
+      <div><dt>スタート都市</dt><dd>ヴィシー — アリエ川沿いに広がるヨーロッパ屈指の温泉保養地。ベル・エポック期の優雅な建築と温泉施設で知られる（第二次大戦中のヴィシー政権の所在地でもある）</dd></div>
+      <div><dt>フィニッシュ都市</dt><dd>ヌヴェール — ロワール川とニエーブル川の合流点に位置するニエーブル県の県都。ヌヴェール焼（ファイアンス陶器）の産地として名高い</dd></div>
+      <div><dt>コース概要</dt><dd>ほぼ平坦。スプリンターの巻き返し</dd></div>
+    </div>
+  </div>
+</div>
+
+<!-- S12 -->
+<div class="stage-card">
+  <div class="stage-head" onclick="toggle(this)">
+    <div class="stage-num">12</div>
+    <div class="date-col">7月16日（木）<br>ブルゴーニュ</div>
+    <div class="route-col">
+      <div class="from-to">マニークール → シャロン＝シュル＝ソーヌ <span class="type-badge t-flat">平坦</span></div>
+      <div class="sub">フランスF1グランプリの舞台 → ブルゴーニュワインの集散地へ</div>
+    </div>
+    <div class="km-col">179.1 km</div>
+  </div>
+  <div class="stage-detail">
+    <div class="detail-grid">
+      <div><dt>スタート（現地）</dt><dd>〜13:30 CEST（JST 20:30）</dd></div>
+      <div><dt>フィニッシュ予想</dt><dd>〜17:00 CEST（JST 翌00:00）</dd></div>
+      <div><dt>スタート地点</dt><dd>マニークール — フランスF1グランプリ（ニヴェルネ）の開催地として知られるモータースポーツサーキット。周囲は農村地帯</dd></div>
+      <div><dt>フィニッシュ都市</dt><dd>シャロン＝シュル＝ソーヌ — ソーヌ川沿いに開けたブルゴーニュ地方の商業都市。ワインの集散・流通拠点として古くから栄えた水運の要衝</dd></div>
+      <div><dt>コース概要</dt><dd>ほぼ平坦。集団スプリント有力</dd></div>
+    </div>
+  </div>
+</div>
+
+<!-- S13 -->
+<div class="stage-card">
+  <div class="stage-head" onclick="toggle(this)">
+    <div class="stage-num">13</div>
+    <div class="date-col">7月17日（金）<br>ジュラ→アルザス</div>
+    <div class="route-col">
+      <div class="from-to">ドール → ベルフォール <span class="type-badge t-hilly">丘陵</span></div>
+      <div class="sub">パスツール生誕の塩の交易都市 → 難攻不落の要塞都市へ（最長ステージ）</div>
+    </div>
+    <div class="km-col">205.8 km</div>
+  </div>
+  <div class="stage-detail">
+    <div class="detail-grid">
+      <div><dt>スタート（現地）</dt><dd>〜12:30 CEST（JST 19:30）</dd></div>
+      <div><dt>フィニッシュ予想</dt><dd>〜18:00 CEST（JST 翌01:00）</dd></div>
+      <div><dt>スタート都市</dt><dd>ドール — ジュラ県の古都で細菌学者ルイ・パスツールの生誕地。かつてはフランシュ＝コンテ地方の首都として塩の交易で栄えた</dd></div>
+      <div><dt>フィニッシュ都市</dt><dd>ベルフォール — テリトワール＝ド＝ベルフォールの唯一の都市で「ライオンの町」。普仏戦争でプロイセン軍の包囲に耐えた要塞都市。岩山に刻まれた巨大ライオン像が象徴</dd></div>
+      <div><dt>コース概要</dt><dd>全21ステージ中最長。ジュラ丘陵を越えてベルフォール要塞の街へ</dd></div>
+    </div>
+  </div>
+</div>
+
+<!-- S14 -->
+<div class="stage-card">
+  <div class="stage-head" onclick="toggle(this)">
+    <div class="stage-num">14</div>
+    <div class="date-col">7月18日（土）<br>ヴォージュ</div>
+    <div class="route-col">
+      <div class="from-to">ミュルーズ → マルクシュタイン・フェレラン 🏔 <span class="type-badge t-mountain">山岳</span></div>
+      <div class="sub">アルザスの工業都市 → ヴォージュ山地の尾根リゾートへ</div>
+    </div>
+    <div class="km-col">155.3 km</div>
+  </div>
+  <div class="stage-detail">
+    <div class="detail-grid">
+      <div><dt>スタート（現地）</dt><dd>〜12:15 CEST（JST 19:15）</dd></div>
+      <div><dt>フィニッシュ予想</dt><dd>〜17:00 CEST（JST 翌00:00）</dd></div>
+      <div><dt>スタート都市</dt><dd>ミュルーズ — アルザス最大級の工業都市。自動車・繊維・鉄道の産業博物館で知られ、ドイツ・スイスとの国境に近い多文化都市</dd></div>
+      <div><dt>フィニッシュ地点</dt><dd>マルクシュタイン・フェレラン — ヴォージュ山地の尾根（標高1,267m）に位置するスキーリゾート。晴天時はアルプス方面まで見渡せる絶景の山頂</dd></div>
+      <div><dt>コース概要</dt><dd>アルザス・ヴォージュ山地の尾根を走る山岳ステージ</dd></div>
+    </div>
+    <div class="climbs-list">グラン・バロン方面 › マルクシュタイン山頂フィニッシュ（1,267m）</div>
+  </div>
+</div>
+
+<!-- S15 -->
+<div class="stage-card">
+  <div class="stage-head" onclick="toggle(this)">
+    <div class="stage-num">15</div>
+    <div class="date-col">7月19日（日）<br>ジュラ→アルプス</div>
+    <div class="route-col">
+      <div class="from-to">シャンパニョール → プラトー・ド・ソレゾン 🏔 <span class="type-badge t-mountain">山岳</span></div>
+      <div class="sub">ジュラのチーズ産地 → ツール史上初登場の高原フィニッシュ</div>
+    </div>
+    <div class="km-col">183.9 km</div>
+  </div>
+  <div class="stage-detail">
+    <div class="detail-grid">
+      <div><dt>スタート（現地）</dt><dd>〜12:00 CEST（JST 19:00）</dd></div>
+      <div><dt>フィニッシュ予想</dt><dd>〜17:30 CEST（JST 翌00:30）</dd></div>
+      <div><dt>スタート都市</dt><dd>シャンパニョール — ジュラ県の高原都市。コンテチーズ・モルビエチーズの産地として知られ、時計製造の伝統工業も受け継ぐ高地の町</dd></div>
+      <div><dt>フィニッシュ地点</dt><dd>プラトー・ド・ソレゾン — サヴォワ県・アラヴィ山塊の高原（標高1,450m）。ツール・ド・フランス史上初登場の山頂フィニッシュ地点</dd></div>
+      <div><dt>獲得標高</dt><dd>約4,500m</dd></div>
+      <div><dt>注目</dt><dd>プラトー・ド・ソレゾンはツール史上初登場の山頂フィニッシュ</dd></div>
+    </div>
+    <div class="climbs-list">コル・ド・ラ・コロンビエール（1,613m） › プラトー・ド・ソレゾン山頂フィニッシュ（1,450m）</div>
+  </div>
+</div>
+
+<!-- REST 2 -->
+<div class="rest-day">
+  <div class="date-col">7月20日（月）</div>
+  <div>🛌 第2休息日 — エヴィアン＝レ＝バン周辺</div>
+</div>
+
+<!-- S16 -->
+<div class="stage-card">
+  <div class="stage-head" onclick="toggle(this)">
+    <div class="stage-num">16</div>
+    <div class="date-col">7月21日（火）<br>レマン湖畔</div>
+    <div class="route-col">
+      <div class="from-to">エヴィアン＝レ＝バン → トノン＝レ＝バン <span class="type-badge t-itt">ITT</span></div>
+      <div class="sub">世界的ミネラルウォーターの町 → レマン湖南岸のリゾート都市へ</div>
+    </div>
+    <div class="km-col">26.1 km</div>
+  </div>
+  <div class="stage-detail">
+    <div class="detail-grid">
+      <div><dt>第1走者スタート</dt><dd>12:30 CEST（JST 19:30）</dd></div>
+      <div><dt>GCリーダー予想</dt><dd>〜17:30 CEST（JST 翌00:30）</dd></div>
+      <div><dt>スタート都市</dt><dd>エヴィアン＝レ＝バン — レマン湖南岸の温泉・保養都市。世界的なミネラルウォーター「エヴィアン」の採水地として有名。G8サミットの開催地でもある</dd></div>
+      <div><dt>フィニッシュ都市</dt><dd>トノン＝レ＝バン — レマン湖に面したサヴォワ地方のリゾート都市。湖越しにスイス側のローザンヌを望む絶景で知られる</dd></div>
+      <div><dt>コース概要</dt><dd>湖沿いの平坦TT。本大会の個人TT唯一のステージ（26.1km）</dd></div>
+    </div>
+  </div>
+</div>
+
+<!-- S17 -->
+<div class="stage-card">
+  <div class="stage-head" onclick="toggle(this)">
+    <div class="stage-num">17</div>
+    <div class="date-col">7月22日（水）<br>サヴォワ→イゼール</div>
+    <div class="route-col">
+      <div class="from-to">シャンベリー → ヴォワロン <span class="type-badge t-flat">平坦</span></div>
+      <div class="sub">サヴォワの古都 → グルノーブル経由・イゼール渓谷の小都市へ</div>
+    </div>
+    <div class="km-col">174.7 km</div>
+  </div>
+  <div class="stage-detail">
+    <div class="detail-grid">
+      <div><dt>スタート（現地）</dt><dd>〜13:30 CEST（JST 20:30）</dd></div>
+      <div><dt>フィニッシュ予想</dt><dd>〜17:00 CEST（JST 翌00:00）</dd></div>
+      <div><dt>スタート都市</dt><dd>シャンベリー — サヴォワ県の県都。かつてサヴォイア公国の首都として栄えた中世の古都。聖骸布（トリノの聖骸布の旧蔵地）で知られる</dd></div>
+      <div><dt>フィニッシュ都市</dt><dd>ヴォワロン — イゼール県の小都市。グルノーブル北西郊に位置し、製薬・化学産業で知られる。サン＝テグジュペリゆかりの地域</dd></div>
+      <div><dt>コース概要</dt><dd>アルプス前の平坦。スプリンター最後のチャンス</dd></div>
+    </div>
+  </div>
+</div>
+
+<!-- S18 -->
+<div class="stage-card">
+  <div class="stage-head" onclick="toggle(this)">
+    <div class="stage-num">18</div>
+    <div class="date-col">7月23日（木）<br>イゼール→オート＝ザルプ</div>
+    <div class="route-col">
+      <div class="from-to">ヴォワロン → オルシエール＝メルレット 🏔 <span class="type-badge t-mountain">山岳</span></div>
+      <div class="sub">イゼールの小都市 → エクラン国立公園麓のスキーリゾート山頂</div>
+    </div>
+    <div class="km-col">185.2 km</div>
+  </div>
+  <div class="stage-detail">
+    <div class="detail-grid">
+      <div><dt>スタート（現地）</dt><dd>〜12:00 CEST（JST 19:00）</dd></div>
+      <div><dt>フィニッシュ予想</dt><dd>〜17:30 CEST（JST 翌00:30）</dd></div>
+      <div><dt>フィニッシュ地点</dt><dd>オルシエール＝メルレット — エクラン国立公園の玄関口・オート＝ザルプに位置するスキーリゾート（標高1,825m）。7.1km・平均6.7%の急登フィニッシュ</dd></div>
+      <div><dt>獲得標高</dt><dd>約4,800m</dd></div>
+    </div>
+    <div class="climbs-list">コル・デュ・ノワエ › オルシエール＝メルレット山頂フィニッシュ（1,825m）</div>
+  </div>
+</div>
+
+<!-- S19 -->
+<div class="stage-card">
+  <div class="stage-head" onclick="toggle(this)">
+    <div class="stage-num">19</div>
+    <div class="date-col">7月24日（金）<br>オート＝ザルプ</div>
+    <div class="route-col">
+      <div class="from-to">ガップ → アルプ・デュエズ 🏔 <span class="type-badge t-mountain">山岳</span></div>
+      <div class="sub">アルプスの玄関口・軍事都市 → 21ヘアピンの伝説の山頂へ</div>
+    </div>
+    <div class="km-col">127.9 km</div>
+  </div>
+  <div class="stage-detail">
+    <div class="detail-grid">
+      <div><dt>スタート（現地）</dt><dd>〜12:30 CEST（JST 19:30）</dd></div>
+      <div><dt>フィニッシュ予想</dt><dd>〜17:00 CEST（JST 翌00:00）</dd></div>
+      <div><dt>スタート都市</dt><dd>ガップ — オート＝ザルプ県の県都。ナポレオンがエルバ島から帰還した「百日天下」のルートが通る「ナポレオン街道」の拠点都市</dd></div>
+      <div><dt>フィニッシュ地点</dt><dd>アルプ・デュエズ — ツール最大の聖地。21のヘアピンカーブに歴代優勝者の名を刻む13.8km・平均8.1%の超難関クライム（標高1,860m）</dd></div>
+      <div><dt>獲得標高</dt><dd>約3,900m</dd></div>
+    </div>
+    <div class="climbs-list">コル・デュ・ガリビエ（2,642m）🏔 › アルプ・デュエズ21ヘアピン（1,860m）</div>
+  </div>
+</div>
+
+<!-- S20 -->
+<div class="stage-card">
+  <div class="stage-head" onclick="toggle(this)">
+    <div class="stage-num">20</div>
+    <div class="date-col">7月25日（土）<br>イゼール</div>
+    <div class="route-col">
+      <div class="from-to">ル・ブール＝ドワザン → アルプ・デュエズ（逆走） 🏔 <span class="type-badge t-mountain">山岳</span></div>
+      <div class="sub">ロメランシュ渓谷の小村 → 史上初・2日連続アルプ・デュエズ逆走コース</div>
+    </div>
+    <div class="km-col">170.9 km</div>
+  </div>
+  <div class="stage-detail">
+    <div class="detail-grid">
+      <div><dt>スタート（現地）</dt><dd>〜11:30 CEST（JST 18:30）</dd></div>
+      <div><dt>フィニッシュ予想</dt><dd>〜17:30 CEST（JST 翌00:30）</dd></div>
+      <div><dt>スタート地点</dt><dd>ル・ブール＝ドワザン — ロメランシュ渓谷の山間集落。エクラン国立公園の北側入口に位置する小村</dd></div>
+      <div><dt>フィニッシュ</dt><dd>アルプ・デュエズ逆走コース — 通常の21ヘアピンとは逆方向から登る未知のラインで2日連続フィニッシュ。史上初の試み</dd></div>
+      <div><dt>獲得標高</dt><dd>約4,500m</dd></div>
+    </div>
+    <div class="climbs-list">コル・ド・サレンヌ（1,999m） › アルプ・デュエズ逆走コース（1,860m）</div>
+  </div>
+</div>
+
+<!-- S21 -->
+<div class="stage-card">
+  <div class="stage-head" onclick="toggle(this)">
+    <div class="stage-num">21</div>
+    <div class="date-col">7月26日（日）<br>パリ</div>
+    <div class="route-col">
+      <div class="from-to">トワリー → パリ（シャンゼリゼ） <span class="type-badge t-flat">平坦</span></div>
+      <div class="sub">イル＝ド＝フランスの城塞町 → モンマルトル経由でシャンゼリゼへ凱旋</div>
+    </div>
+    <div class="km-col">133.0 km</div>
+  </div>
+  <div class="stage-detail">
+    <div class="detail-grid">
+      <div><dt>スタート（現地）</dt><dd>16:30 CEST（JST 23:30）</dd></div>
+      <div><dt>フィニッシュ予想</dt><dd>〜20:00 CEST（JST 翌03:00）</dd></div>
+      <div><dt>スタート地点</dt><dd>トワリー — エソンヌ県の小都市。パリ南方約40kmに位置し、伝統的に中世の城塞と王室の鷹狩り場として知られる</dd></div>
+      <div><dt>フィニッシュ</dt><dd>パリ・シャンゼリゼ — 凱旋門からコンコルド広場へ続く世界で最も有名な大通り。ツールの最終ステージ恒例の表彰式会場</dd></div>
+      <div><dt>コース概要</dt><dd>モンマルトルの石畳を3周回したのちシャンゼリゼへ。スプリンターの祭典</dd></div>
+    </div>
+    <div class="climbs-list">モンマルトル（石畳コース×3周） › シャンゼリゼ凱旋ゴール</div>
+  </div>
+</div>
+
+<p style="text-align:center;margin-top:24px;font-size:11px;color:#8b949e;">
+  時刻は現地時間 CEST（中央ヨーロッパ夏時間） &nbsp;|&nbsp; JST = CEST + 7時間<br>
+  フィニッシュ時刻は距離・ペースによる概算。Sources:
+  <a href="https://www.cyclingstage.com/tour-de-france-2026-route/" style="color:#58a6ff">CyclingStage</a> /
+  <a href="https://franceletour.com/tour-de-france-2026-route/" style="color:#58a6ff">FranceLeTour</a> /
+  <a href="https://velo.outsideonline.com/road/road-racing/tour-de-france/tour-de-france-2026-route-everything-need-to-know-race-stages-key-climbs/" style="color:#58a6ff">Velo</a>
+</p>
+</div>
+
+<script>
+function toggle(head) {
+  var detail = head.nextElementSibling;
+  detail.classList.toggle('open');
+}
+</script>
+</body>
+</html>
