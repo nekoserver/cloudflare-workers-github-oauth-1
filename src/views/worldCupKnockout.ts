@@ -118,6 +118,25 @@ body{background:#0d1117;color:#e6edf3;font-family:system-ui,-apple-system,sans-s
 .b3rd{margin-top:12px;border-top:1px solid #21262d;padding-top:10px}
 .b3rd-label{font-size:10px;font-weight:700;color:#8b949e;text-align:center;margin-bottom:6px}
 
+/* ===== 縦置きタブレット用カレンダー ===== */
+.ko-cal{display:none;padding:4px 4px 2px;border-bottom:1px solid #21262d;margin-bottom:6px}
+@media(min-width:601px) and (orientation:portrait){.ko-cal{display:block}}
+.ko-cal-month{font-size:0.65rem;font-weight:700;color:#58a6ff;text-transform:uppercase;letter-spacing:.05em;padding:2px 2px 1px;margin-top:4px}
+.ko-cal-month:first-child{margin-top:0}
+.cal-legend{display:flex;flex-wrap:wrap;gap:2px;margin-bottom:3px}
+.cal-leg{font-size:7px;font-weight:700;padding:1px 3px;border-radius:3px;color:#e6edf3}
+.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:2px}
+.cal-cell{font-size:8px;text-align:center;padding:2px 0 1px;border-radius:3px;color:#484f58;line-height:1.3}
+.cal-hdr-cell{font-weight:700;color:#30363d;font-size:7px;padding-bottom:2px}
+.cal-match{color:#e6edf3;cursor:pointer}
+.cal-match:hover{filter:brightness(1.2)}
+.cal-today{outline:1.5px solid #58a6ff;outline-offset:-1px}
+.cal-selected{outline:2px solid rgba(88,166,255,0.7);outline-offset:-1px}
+.cal-rlabel{font-size:6px;font-weight:700;color:rgba(255,255,255,0.75);line-height:1;margin-top:1px}
+/* ブラケットカード点滅 */
+@keyframes bm-flash{0%,100%{outline:none;background:#161b22}50%{outline:2px solid #f0b429;background:rgba(240,180,41,0.18)}}
+.bm-flash{animation:bm-flash 0.4s ease 6}
+
 @media(max-width:600px){
   body{overflow:auto}
   .layout{flex-direction:column;overflow:visible}
@@ -133,6 +152,7 @@ body{background:#0d1117;color:#e6edf3;font-family:system-ui,-apple-system,sans-s
 </div>
 <div class="layout">
   <div class="left">
+    <div class="ko-cal" id="ko-cal"></div>
     <div class="left-title">&#127939; R32 対戦カード</div>
     ${cards}
   </div>
@@ -158,7 +178,7 @@ function teamSlot(flag,slot){
   return '<div class="bt"><span class="bt-tbd">'+slot+'</span></div>';
 }
 function matchCard(m){
-  return '<div class="bm"><div class="bm-date">'+ddow(m.date)+'</div>'+teamSlot(m.a,m.slotA)+teamSlot(m.b,m.slotB)+'</div>';
+  return '<div class="bm" data-date="'+m.date+'"><div class="bm-date">'+ddow(m.date)+'</div>'+teamSlot(m.a,m.slotA)+teamSlot(m.b,m.slotB)+'</div>';
 }
 var ROUNDS=[
   {label:'R32',flex:'2.4',matches:[
@@ -219,6 +239,90 @@ function build(){
   b3.innerHTML='<div class="b3rd-label">3位決定戦 ('+ddow('7/23')+')</div>'+matchCard(MATCH3RD);
 }
 build();
+function flashBracketDate(dateStr){
+  var parts=dateStr.split('-');
+  var mo=parseInt(parts[1],10);
+  var dy=parseInt(parts[2],10);
+  var key=mo+'/'+dy;
+  var cards=document.querySelectorAll('.bm[data-date="'+key+'"]');
+  cards.forEach(function(c){
+    c.classList.remove('bm-flash');
+    void c.offsetWidth;
+    c.classList.add('bm-flash');
+    setTimeout(function(){c.classList.remove('bm-flash');},2600);
+  });
+  if(cards.length>0){cards[0].scrollIntoView({behavior:'smooth',block:'nearest'});}
+}
+function buildKoCal(){
+  var el=document.getElementById('ko-cal');
+  if(!el)return;
+  var todayStr=new Date().toISOString().slice(0,10);
+  var GS_BG='rgba(88,166,255,0.18)';
+  var R32_JUN='rgba(240,180,40,0.30)';
+  var R32='rgba(88,166,255,0.18)';
+  var R16='rgba(88,166,255,0.32)';
+  var QF='rgba(88,166,255,0.50)';
+  var SF='rgba(88,166,255,0.66)';
+  var C3='rgba(88,166,255,0.50)';
+  var FIN='rgba(88,166,255,0.90)';
+  var JUN_GS={11:1,12:1,13:1,14:1,15:1,16:1,17:1,18:1,19:1,20:1,21:1,22:1,23:1,24:1,25:1,26:1,27:1};
+  var JUN_R32={28:1,29:1,30:1};
+  var JUL_BG={1:R32,2:R32,3:R32,5:R16,6:R16,7:R16,8:R16,11:QF,12:QF,15:SF,16:SF,18:C3,19:FIN};
+  var JUL_LBL={1:'R32',5:'R16',11:'QF',15:'SF',18:'3位',19:'決勝'};
+  var wdays=['日','月','火','水','木','金','土'];
+  var html='';
+  html+='<div class="ko-cal-month">6️⃣ 6月</div>';
+  html+='<div class="cal-legend">';
+  html+='<span class="cal-leg" style="background:'+GS_BG+'">GS</span>';
+  html+='<span class="cal-leg" style="background:'+R32_JUN+';color:#0d1117">R32</span>';
+  html+='</div>';
+  html+='<div class="cal-grid">';
+  for(var wi=0;wi<7;wi++){html+='<div class="cal-cell cal-hdr-cell">'+wdays[wi]+'</div>';}
+  var jf=new Date(2026,5,1).getDay();
+  for(var ei=0;ei<jf;ei++){html+='<div class="cal-cell"></div>';}
+  var tjd=todayStr.startsWith('2026-06-')?parseInt(todayStr.slice(8),10):0;
+  for(var di=1;di<=30;di++){
+    var isR=!!JUN_R32[di];var isG=!!JUN_GS[di];var isM=isR||isG;var isTd=di===tjd;
+    var bg=isR?R32_JUN:(isG?GS_BG:'');
+    var cls='cal-cell'+(isM?' cal-match':'')+(isTd?' cal-today':'');
+    var sty=bg?'background:'+bg:'';
+    var lbl=isR?'<div class="cal-rlabel">R32</div>':'';
+    var dat=isM?' data-date="2026-06-'+(di<10?'0'+di:''+di)+'"':'';
+    html+='<div class="'+cls+'"'+dat+' style="'+sty+'">'+di+lbl+'</div>';
+  }
+  html+='</div>';
+  html+='<div class="ko-cal-month">7️⃣ 7月</div>';
+  html+='<div class="cal-legend">';
+  html+='<span class="cal-leg" style="background:'+R32+'">R32</span>';
+  html+='<span class="cal-leg" style="background:'+R16+'">R16</span>';
+  html+='<span class="cal-leg" style="background:'+QF+'">QF</span>';
+  html+='<span class="cal-leg" style="background:'+SF+'">SF</span>';
+  html+='<span class="cal-leg" style="background:'+FIN+';color:#0d1117">決勝</span>';
+  html+='</div>';
+  html+='<div class="cal-grid">';
+  for(var wi=0;wi<7;wi++){html+='<div class="cal-cell cal-hdr-cell">'+wdays[wi]+'</div>';}
+  var jlf=new Date(2026,6,1).getDay();
+  for(var ei=0;ei<jlf;ei++){html+='<div class="cal-cell"></div>';}
+  var tljd=todayStr.startsWith('2026-07-')?parseInt(todayStr.slice(8),10):0;
+  for(var di=1;di<=31;di++){
+    var bg=JUL_BG[di]||'';var isM=!!bg;var isTd=di===tljd;
+    var cls='cal-cell'+(isM?' cal-match':'')+(isTd?' cal-today':'');
+    var sty=bg?'background:'+bg:'';
+    var lbl=JUL_LBL[di]?'<div class="cal-rlabel">'+JUL_LBL[di]+'</div>':'';
+    var dat=isM?' data-date="2026-07-'+(di<10?'0'+di:''+di)+'"':'';
+    html+='<div class="'+cls+'"'+dat+' style="'+sty+'">'+di+lbl+'</div>';
+  }
+  html+='</div>';
+  el.innerHTML=html;
+  el.addEventListener('click',function(e){
+    var cell=e.target.closest('.cal-match');
+    if(!cell||!cell.dataset.date)return;
+    el.querySelectorAll('.cal-selected').forEach(function(x){x.classList.remove('cal-selected');});
+    cell.classList.add('cal-selected');
+    flashBracketDate(cell.dataset.date);
+  });
+}
+buildKoCal();
 (function(){function fix(){document.body.style.height=window.innerHeight+'px';}fix();window.addEventListener('resize',fix);})();
 </script>
 </body>
