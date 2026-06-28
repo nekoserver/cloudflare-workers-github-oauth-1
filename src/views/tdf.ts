@@ -123,12 +123,21 @@ body { background:var(--bg); color:var(--text); font-family:'Segoe UI','Hiragino
   background:none; border:none; font:inherit; padding:0;
 }
 .city-link:hover { color:#a5d6ff; }
+
+#carousel-btn {
+  margin-left:auto; flex-shrink:0;
+  padding:4px 10px; border-radius:5px; font-size:11px; font-weight:700;
+  cursor:pointer; border:1px solid var(--border); transition:background .15s, color .15s;
+}
+#carousel-btn.on  { background:#1a2f1a; color:#3fb950; border-color:#3fb950; }
+#carousel-btn.off { background:var(--surface2); color:var(--muted); }
 </style>
 </head>
 <body>
 <div id="hdr">
   <h1>🚴 Tour de France 2026</h1>
   <span class="sub">7月4日〜26日 &nbsp;|&nbsp; <button class="city-link" onclick="dropPin(41.3851,2.1734)">バルセロナ</button> → <button class="city-link" onclick="dropPin(48.8698,2.3078)">パリ</button> &nbsp;|&nbsp; 全21ステージ &nbsp;約3,333km</span>
+  <button id="carousel-btn" class="on" onclick="toggleCarousel()">巡回 ON</button>
 </div>
 <div id="main">
   <!-- left: route map -->
@@ -424,6 +433,37 @@ function dropPin(lat, lon) {
   pinLat = lat; pinLon = lon; pinActive = true;
 }
 
+// ---- goal flag (🏁) state ----
+var goalPinLat = 0, goalPinLon = 0, goalPinActive = false;
+
+// ---- carousel state ----
+var carouselMode = true;
+var carouselStageN = 0;
+
+function toggleCarousel() {
+  carouselMode = !carouselMode;
+  var btn = document.getElementById("carousel-btn");
+  if (carouselMode) {
+    btn.textContent = "巡回 ON";
+    btn.className = "on";
+    if (!restoreTimer) advanceCarousel();
+  } else {
+    btn.textContent = "巡回 OFF";
+    btn.className = "off";
+  }
+}
+
+function advanceCarousel() {
+  if (!carouselMode) return;
+  var nextN = (carouselStageN >= 21) ? 1 : carouselStageN + 1;
+  for (var i = 0; i < SCHED.length; i++) {
+    if (SCHED[i].type === "stage" && SCHED[i].n === nextN) {
+      showDetail(i);
+      break;
+    }
+  }
+}
+
 // ---- focus map on stage ----
 function focusStage(n) {
   var st = null;
@@ -432,7 +472,8 @@ function focusStage(n) {
 
   if(restoreTimer) { clearTimeout(restoreTimer); restoreTimer = null; }
 
-  pinLat = st.s[0]; pinLon = st.s[1]; pinActive = true;
+  carouselStageN = n;
+  goalPinLat = st.e[0]; goalPinLon = st.e[1]; goalPinActive = true;
 
   var via = st.via || [];
   var mid = Math.floor(via.length / 2);
@@ -454,13 +495,14 @@ function focusStage(n) {
 
   restoreTimer = setTimeout(function() {
     restoreTimer = null;
-    pinActive = false;
+    goalPinActive = false;
     var rz=zoom, rpx=panX, rpy=panY, rt=0, rdur=35;
     function rstep(){
       rt++;
       var p=rt/rdur; p=p<0.5?2*p*p:-1+(4-2*p)*p;
       zoom=rz+(savedZoom-rz)*p; panX=rpx+(savedPanX-rpx)*p; panY=rpy+(savedPanY-rpy)*p;
-      if(rt<rdur) requestAnimationFrame(rstep);
+      if(rt<rdur) { requestAnimationFrame(rstep); }
+      else if(carouselMode) { advanceCarousel(); }
     }
     requestAnimationFrame(rstep);
   }, 10000);
@@ -760,6 +802,16 @@ function draw() {
     ctx.restore();
   }
 
+  if(goalPinActive) {
+    var gs = toScreen(goalPinLat, goalPinLon);
+    ctx.save();
+    ctx.font = "24px serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "bottom";
+    ctx.fillText("🏁", gs.x, gs.y);
+    ctx.restore();
+  }
+
   requestAnimationFrame(draw);
 }
 
@@ -888,6 +940,7 @@ window.addEventListener("resize",function(){resize();});
 resize();
 savedZoom = zoom; savedPanX = panX; savedPanY = panY;
 draw();
+setTimeout(function() { if(carouselMode) advanceCarousel(); }, 800);
 </script>
 </body>
 </html>`;
