@@ -6,7 +6,7 @@ const KO_BRACKET: KOMatch[] = [
   // 6/28 UTC 19:00 = 翌4:00 JST (6/29)
   { date: "6/28", jst: "翌4:00",  a: { f: "🇿🇦", n: "RSA" }, b: { f: "🇨🇦", n: "CAN" } },
   // 6/28 UTC 22:00 = 7:00 JST (6/29) ← カード表示は6/29なので"翌"不要
-  { date: "6/29", jst: "7:00",    a: { f: "🇳🇱", n: "NED" }, b: { f: "🇲🇦", n: "MAR" } },
+  { date: "6/29", jst: "翌7:00",  a: { f: "🇳🇱", n: "NED" }, b: { f: "🇲🇦", n: "MAR" } },
   // 6/29 UTC 19:00 = 翌4:00 JST (6/30)
   { date: "6/29", jst: "翌4:00",  a: { f: "🇧🇷", n: "BRA" }, b: { f: "🇯🇵", n: "JPN" } },
   // 6/29 UTC 22:00 = 翌7:00 JST (6/30)
@@ -81,7 +81,7 @@ export function getWorldCupKnockoutPage(): string {
 <title>W杯2026 ノックアウト</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
-body{background:#0d1117;color:#e6edf3;font-family:system-ui,-apple-system,sans-serif;height:100vh;display:flex;flex-direction:column;overflow:hidden}
+body{background:#0d1117;color:#e6edf3;font-family:system-ui,-apple-system,sans-serif;height:100vh;height:100dvh;display:flex;flex-direction:column;overflow:hidden}
 .pg-hdr{padding:6px 12px;border-bottom:1px solid #21262d;flex-shrink:0;display:flex;align-items:center;gap:8px}
 .pg-title{font-size:0.9rem;font-weight:700;color:#f0b429}
 .pg-sub{font-size:0.68rem;color:#8b949e}
@@ -219,6 +219,7 @@ function build(){
   b3.innerHTML='<div class="b3rd-label">3位決定戦 ('+ddow('7/23')+')</div>'+matchCard(MATCH3RD);
 }
 build();
+(function(){function fix(){document.body.style.height=window.innerHeight+'px';}fix();window.addEventListener('resize',fix);})();
 </script>
 </body>
 </html>`;
