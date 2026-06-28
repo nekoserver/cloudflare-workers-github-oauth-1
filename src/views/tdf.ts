@@ -131,6 +131,22 @@ body { background:var(--bg); color:var(--text); font-family:'Segoe UI','Hiragino
 }
 #carousel-btn.on  { background:#1a2f1a; color:#3fb950; border-color:#3fb950; }
 #carousel-btn.off { background:var(--surface2); color:var(--muted); }
+
+#bike-track {
+  height:32px; flex-shrink:0; position:relative;
+  border-bottom:1px solid var(--border);
+  background:var(--surface);
+}
+#bike-track-line {
+  position:absolute; top:50%; left:12px; right:12px;
+  height:1px; background:var(--border); transform:translateY(-50%);
+}
+#bike-icon {
+  position:absolute; top:50%; transform:translate(-50%,-50%);
+  font-size:20px; line-height:1;
+  transition:left 0.5s cubic-bezier(0.4,0,0.2,1);
+  pointer-events:none; user-select:none;
+}
 </style>
 </head>
 <body>
@@ -166,6 +182,10 @@ body { background:var(--bg); color:var(--text); font-family:'Segoe UI','Hiragino
   <!-- right: schedule -->
   <div id="sched-panel">
     <div id="sched-list"></div>
+    <div id="bike-track">
+      <div id="bike-track-line"></div>
+      <span id="bike-icon">🚴‍♂️</span>
+    </div>
     <div id="sched-detail">
       <div id="sched-detail-inner"><div class="det-empty">← 行をタップして詳細表示</div></div>
     </div>
@@ -466,6 +486,16 @@ function toggleCarousel() {
   }
 }
 
+function updateBikePosition(n) {
+  var track = document.getElementById("bike-track");
+  var icon  = document.getElementById("bike-icon");
+  if (!track || !icon) return;
+  var pad = 12;
+  var w = track.clientWidth - pad * 2;
+  var x = pad + (21 - n) / 20 * w;
+  icon.style.left = x + "px";
+}
+
 function stopCarousel() {
   carouselMode = false;
   var btn = document.getElementById("carousel-btn");
@@ -497,6 +527,7 @@ function focusStage(n) {
   if(restoreTimer) { clearTimeout(restoreTimer); restoreTimer = null; }
 
   carouselStageN = n;
+  updateBikePosition(n);
   goalPinLat = st.e[0]; goalPinLon = st.e[1]; goalPinActive = true;
 
   var via = st.via || [];
