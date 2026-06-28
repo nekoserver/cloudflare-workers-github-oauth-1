@@ -355,11 +355,13 @@ function buildSchedList() {
       );
     } else {
       var sc = "sb-" + item.stype.toLowerCase();
+      var fn = '<button class="city-link" onclick="dropPinStage(' + item.n + ',true);event.stopPropagation()">' + item.from + '</button>';
+      var tn = '<button class="city-link" onclick="dropPinStage(' + item.n + ',false);event.stopPropagation()">' + item.to + '</button>';
       parts.push(
         '<div class="srow" onclick="showDetail(' + i + ')" id="srow-' + i + '">' +
         '<div class="srow-badge ' + sc + '">' + item.n + '</div>' +
         '<div class="srow-date">' + item.date + '</div>' +
-        '<div class="srow-route">' + item.from + ' → ' + item.to + '</div>' +
+        '<div class="srow-route">' + fn + ' → ' + tn + '</div>' +
         '<div class="srow-km">' + item.km + ' km</div>' +
         '</div>'
       );
@@ -422,6 +424,14 @@ buildSchedList();
 var pinLat = 0, pinLon = 0, pinActive = false;
 function dropPin(lat, lon) {
   pinLat = lat; pinLon = lon; pinActive = true;
+}
+function dropPinStage(n, isStart) {
+  for(var i=0; i<STAGES.length; i++) {
+    if(STAGES[i].n===n) {
+      var coord = isStart ? STAGES[i].s : STAGES[i].e;
+      dropPin(coord[0], coord[1]); return;
+    }
+  }
 }
 
 // ---- focus map on stage ----
