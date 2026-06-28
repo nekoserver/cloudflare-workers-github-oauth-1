@@ -614,7 +614,7 @@ function focusStage(n) {
   restoreTimer = setTimeout(function() {
     restoreTimer = null;
     goalPinActive = false;
-    var rz=zoom, rpx=panX, rpy=panY, rt=0, rdur=35;
+    var rz=zoom, rpx=panX, rpy=panY, rt=0, rdur=300;
     function rstep(){
       rt++;
       var p=rt/rdur; p=p<0.5?2*p*p:-1+(4-2*p)*p;
