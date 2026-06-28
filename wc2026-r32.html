@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>2026 FIFA W杯 ラウンド32 トーナメント表</title>
+<style>
+:root {
+  --bg: #0d1117;
+  --surface: #161b22;
+  --border: #30363d;
+  --text: #e6edf3;
+  --muted: #8b949e;
+  --accent: #58a6ff;
+  --win-bg: #1a2f1a;
+  --match-bg: #1c2128;
+  --connector: #388bfd55;
+  --yellow: #e3b341;
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body {
+  background:var(--bg); color:var(--text);
+  font-family:'Hiragino Sans','Yu Gothic',sans-serif;
+  min-height:100vh; padding:24px 16px 40px;
+}
+h1 {
+  text-align:center; font-size:18px; font-weight:700;
+  color:var(--accent); margin-bottom:6px; letter-spacing:.05em;
+}
+.subtitle {
+  text-align:center; font-size:12px; color:var(--muted); margin-bottom:24px;
+}
+.legend {
+  display:flex; gap:16px; justify-content:center; margin-bottom:20px;
+  font-size:11px; color:var(--muted); flex-wrap:wrap;
+}
+.legend span { display:flex; align-items:center; gap:5px; }
+.legend .dot { width:9px; height:9px; border-radius:50%; }
+
+/* bracket layout */
+.bracket {
+  display:grid;
+  grid-template-columns: 1fr 80px 1fr;
+  gap:0;
+  max-width:1100px;
+  margin:0 auto;
+}
+.side { display:flex; flex-direction:column; gap:0; }
+.side.right { align-items:flex-end; }
+
+.round-label {
+  text-align:center; font-size:11px; font-weight:700;
+  color:var(--accent); letter-spacing:.08em;
+  padding:4px 0 10px; text-transform:uppercase;
+}
+
+.match-wrap {
+  display:flex;
+  align-items:center;
+  position:relative;
+  margin-bottom:8px;
+}
+.side.left .match-wrap { flex-direction:row; }
+.side.right .match-wrap { flex-direction:row-reverse; }
+
+.match {
+  background:var(--match-bg);
+  border:1px solid var(--border);
+  border-radius:8px;
+  width:260px;
+  overflow:hidden;
+  flex-shrink:0;
+}
+.match-date {
+  background:#21262d;
+  font-size:10px; color:var(--muted);
+  padding:3px 9px;
+  border-bottom:1px solid var(--border);
+  display:flex; justify-content:space-between; align-items:center;
+}
+.match-date .slot { color:var(--yellow); font-size:9px; }
+.team {
+  display:flex; align-items:center; gap:8px;
+  padding:7px 9px;
+  font-size:13px;
+  border-bottom:1px solid #0d1117;
+  transition:background .15s;
+}
+.team:last-child { border-bottom:none; }
+.team.favorite { background:var(--win-bg); }
+.flag { font-size:18px; line-height:1; flex-shrink:0; }
+.team-name { font-weight:600; flex:1; }
+.rank { font-size:10px; color:var(--muted); flex-shrink:0; }
+.group-label { font-size:9px; color:var(--muted); }
+
+/* connector lines */
+.connector {
+  width:24px; flex-shrink:0;
+  display:flex; align-items:center; justify-content:center;
+}
+.connector svg { width:24px; height:60px; }
+
+/* center column: round of 16 brackets */
+.center-col {
+  display:flex; flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  gap:0;
+  padding-top:36px;
+}
+.next-badge {
+  background:#21262d;
+  border:1px solid var(--border);
+  border-radius:6px;
+  font-size:10px;
+  color:var(--muted);
+  padding:4px 10px;
+  text-align:center;
+  margin:4px 0;
+  white-space:nowrap;
+}
+.spacer { flex:1; }
+</style>
+</head>
+<body>
+<h1>🏆 2026 FIFA ワールドカップ — ラウンド32（決勝トーナメント1回戦）</h1>
+<div class="subtitle">6/27（A〜I・L組終了）更新　黄色ハイライト＝上位ランク（有力）</div>
+<div class="legend">
+  <span><span class="dot" style="background:#3fb950"></span>上位ランク（有力）</span>
+  <span><span class="dot" style="background:#388bfd"></span>試合日時（JST）</span>
+</div>
+
+<div class="bracket">
+
+  <!-- LEFT SIDE -->
+  <div class="side left">
+    <div class="round-label">ラウンド32（左ブロック）</div>
+
+    <!-- Match L1 -->
+    <div class="match-wrap">
+      <div class="match">
+        <div class="match-date"><span>6/30(火) 05:30</span><span class="slot">R32-L1</span></div>
+        <div class="team favorite">
+          <span class="flag">🇩🇪</span>
+          <span class="team-name">ドイツ <span class="rank">(10位)</span></span>
+          <span class="group-label">E組1位</span>
+        </div>
+        <div class="team">
+          <span class="flag">🇵🇾</span>
+          <span class="team-name">パラグアイ <span class="rank">(41位)</span></span>
+          <span class="group-label">3位(A/B/C/D/F)</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Match L2 -->
+    <div class="match-wrap">
+      <div class="match">
+        <div class="match-date"><span>7/1(水) 06:00</span><span class="slot">R32-L2</span></div>
+        <div class="team favorite">
+          <span class="flag">🇫🇷</span>
+          <span class="team-name">フランス <span class="rank">(3位)</span></span>
+          <span class="group-label">I組1位</span>
+        </div>
+        <div class="team">
+          <span class="flag">🇸🇪</span>
+          <span class="team-name">スウェーデン <span class="rank">(38位)</span></span>
+          <span class="group-label">3位(C/D/F/G/H)</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Match L3 -->
+    <div class="match-wrap">
+      <div class="match">
+        <div class="match-date"><span>6/29(月) 04:00</span><span class="slot">R32-L3</span></div>
+        <div class="team">
+          <span class="flag">🇿🇦</span>
+          <span class="team-name">南アフリカ <span class="rank">(60位)</span></span>
+          <span class="group-label">A組2位</span>
+        </div>
+        <div class="team favorite">
+          <span class="flag">🇨🇦</span>
+          <span class="team-name">カナダ <span class="rank">(30位)</span></span>
+          <span class="group-label">B組2位</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Match L4 -->
+    <div class="match-wrap">
+      <div class="match">
+        <div class="match-date"><span>6/30(火) 10:00</span><span class="slot">R32-L4</span></div>
+        <div class="team favorite">
+          <span class="flag">🇳🇱</span>
+          <span class="team-name">オランダ <span class="rank">(8位)</span></span>
+          <span class="group-label">F組1位</span>
+        </div>
+        <div class="team">
+          <span class="flag">🇲🇦</span>
+          <span class="team-name">モロッコ <span class="rank">(7位)</span></span>
+          <span class="group-label">C組2位</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Match L5 -->
+    <div class="match-wrap">
+      <div class="match">
+        <div class="match-date"><span>7/3(金) 08:00</span><span class="slot">R32-L5</span></div>
+        <div class="team favorite">
+          <span class="flag">🇵🇹</span>
+          <span class="team-name">ポルトガル <span class="rank">(5位)</span></span>
+          <span class="group-label">K組2位</span>
+        </div>
+        <div class="team">
+          <span class="flag">🇭🇷</span>
+          <span class="team-name">クロアチア <span class="rank">(11位)</span></span>
+          <span class="group-label">L組2位</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Match L6 -->
+    <div class="match-wrap">
+      <div class="match">
+        <div class="match-date"><span>7/3(金) 04:00</span><span class="slot">R32-L6</span></div>
+        <div class="team favorite">
+          <span class="flag">🇪🇸</span>
+          <span class="team-name">スペイン <span class="rank">(2位)</span></span>
+          <span class="group-label">H組1位</span>
+        </div>
+        <div class="team">
+          <span class="flag">🇦🇹</span>
+          <span class="team-name">オーストリア <span class="rank">(24位)</span></span>
+          <span class="group-label">J組2位</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Match L7 -->
+    <div class="match-wrap">
+      <div class="match">
+        <div class="match-date"><span>7/2(木) 09:00</span><span class="slot">R32-L7</span></div>
+        <div class="team favorite">
+          <span class="flag">🇺🇸</span>
+          <span class="team-name">アメリカ <span class="rank">(17位)</span></span>
+          <span class="group-label">D組1位</span>
+        </div>
+        <div class="team">
+          <span class="flag">🇧🇦</span>
+          <span class="team-name">ボスニア・ヘルツェゴビナ <span class="rank">(64位)</span></span>
+          <span class="group-label">3位(B/E/F/I/J)</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Match L8 -->
+    <div class="match-wrap">
+      <div class="match">
+        <div class="match-date"><span>7/2(木) 05:00</span><span class="slot">R32-L8</span></div>
+        <div class="team favorite">
+          <span class="flag">🇧🇪</span>
+          <span class="team-name">ベルギー <span class="rank">(9位)</span></span>
+          <span class="group-label">G組1位</span>
+        </div>
+        <div class="team">
+          <span class="flag">🇰🇷</span>
+          <span class="team-name">韓国 <span class="rank">(25位)</span></span>
+          <span class="group-label">3位(A/E/H/I/J)</span>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /left side -->
+
+  <!-- CENTER -->
+  <div class="center-col">
+    <div style="text-align:center;font-size:11px;font-weight:700;color:var(--yellow);margin-bottom:12px;">R16</div>
+    <div class="next-badge">勝者→<br>R16</div>
+    <div class="spacer" style="height:48px"></div>
+    <div class="next-badge">勝者→<br>R16</div>
+    <div class="spacer" style="height:48px"></div>
+    <div class="next-badge">勝者→<br>R16</div>
+    <div class="spacer" style="height:48px"></div>
+    <div class="next-badge">勝者→<br>R16</div>
+    <div class="spacer" style="height:48px"></div>
+    <div class="next-badge">勝者→<br>R16</div>
+    <div class="spacer" style="height:48px"></div>
+    <div class="next-badge">勝者→<br>R16</div>
+    <div class="spacer" style="height:48px"></div>
+    <div class="next-badge">勝者→<br>R16</div>
+    <div class="spacer" style="height:48px"></div>
+    <div class="next-badge">勝者→<br>R16</div>
+  </div>
+
+  <!-- RIGHT SIDE -->
+  <div class="side right">
+    <div class="round-label">ラウンド32（右ブロック）</div>
+
+    <!-- Match R1 -->
+    <div class="match-wrap">
+      <div class="match">
+        <div class="match-date"><span>6/30(火) 02:00</span><span class="slot">R32-R1</span></div>
+        <div class="team favorite">
+          <span class="flag">🇧🇷</span>
+          <span class="team-name">ブラジル <span class="rank">(6位)</span></span>
+          <span class="group-label">C組1位</span>
+        </div>
+        <div class="team">
+          <span class="flag">🇯🇵</span>
+          <span class="team-name">日本 <span class="rank">(18位)</span></span>
+          <span class="group-label">F組2位</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Match R2 -->
+    <div class="match-wrap">
+      <div class="match">
+        <div class="match-date"><span>7/1(水) 02:00</span><span class="slot">R32-R2</span></div>
+        <div class="team">
+          <span class="flag">🇨🇮</span>
+          <span class="team-name">コートジボワール <span class="rank">(33位)</span></span>
+          <span class="group-label">E組2位</span>
+        </div>
+        <div class="team favorite">
+          <span class="flag">🇳🇴</span>
+          <span class="team-name">ノルウェー <span class="rank">(31位)</span></span>
+          <span class="group-label">I組2位</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Match R3 -->
+    <div class="match-wrap">
+      <div class="match">
+        <div class="match-date"><span>7/1(水) 10:00</span><span class="slot">R32-R3</span></div>
+        <div class="team favorite">
+          <span class="flag">🇲🇽</span>
+          <span class="team-name">メキシコ <span class="rank">(14位)</span></span>
+          <span class="group-label">A組1位</span>
+        </div>
+        <div class="team">
+          <span class="flag">🇪🇨</span>
+          <span class="team-name">エクアドル <span class="rank">(23位)</span></span>
+          <span class="group-label">3位(C/E/F/H/I)</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Match R4 -->
+    <div class="match-wrap">
+      <div class="match">
+        <div class="match-date"><span>7/2(木) 01:00</span><span class="slot">R32-R4</span></div>
+        <div class="team favorite">
+          <span class="flag">🏴󠁧󠁢󠁥󠁮󠁧󠁿</span>
+          <span class="team-name">イングランド <span class="rank">(4位)</span></span>
+          <span class="group-label">L組1位</span>
+        </div>
+        <div class="team">
+          <span class="flag">🇸🇳</span>
+          <span class="team-name">セネガル <span class="rank">(15位)</span></span>
+          <span class="group-label">3位(E/H/I/J/K)</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Match R5 -->
+    <div class="match-wrap">
+      <div class="match">
+        <div class="match-date"><span>7/4(土) 07:00</span><span class="slot">R32-R5</span></div>
+        <div class="team favorite">
+          <span class="flag">🇦🇷</span>
+          <span class="team-name">アルゼンチン <span class="rank">(1位)</span></span>
+          <span class="group-label">J組1位</span>
+        </div>
+        <div class="team">
+          <span class="flag">🇨🇻</span>
+          <span class="team-name">カーボベルデ <span class="rank">(67位)</span></span>
+          <span class="group-label">H組2位</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Match R6 -->
+    <div class="match-wrap">
+      <div class="match">
+        <div class="match-date"><span>7/4(土) 03:00</span><span class="slot">R32-R6</span></div>
+        <div class="team favorite">
+          <span class="flag">🇦🇺</span>
+          <span class="team-name">オーストラリア <span class="rank">(27位)</span></span>
+          <span class="group-label">D組2位</span>
+        </div>
+        <div class="team">
+          <span class="flag">🇪🇬</span>
+          <span class="team-name">エジプト <span class="rank">(29位)</span></span>
+          <span class="group-label">G組2位</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Match R7 -->
+    <div class="match-wrap">
+      <div class="match">
+        <div class="match-date"><span>7/3(金) 12:00</span><span class="slot">R32-R7</span></div>
+        <div class="team favorite">
+          <span class="flag">🇨🇭</span>
+          <span class="team-name">スイス <span class="rank">(19位)</span></span>
+          <span class="group-label">B組1位</span>
+        </div>
+        <div class="team">
+          <span class="flag">🇮🇷</span>
+          <span class="team-name">イラン <span class="rank">(20位)</span></span>
+          <span class="group-label">3位(E/F/G/I/J)</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Match R8 -->
+    <div class="match-wrap">
+      <div class="match">
+        <div class="match-date"><span>7/4(土) 10:30</span><span class="slot">R32-R8</span></div>
+        <div class="team favorite">
+          <span class="flag">🇨🇴</span>
+          <span class="team-name">コロンビア <span class="rank">(13位)</span></span>
+          <span class="group-label">K組1位</span>
+        </div>
+        <div class="team">
+          <span class="flag">🇬🇭</span>
+          <span class="team-name">ガーナ <span class="rank">(73位)</span></span>
+          <span class="group-label">3位(D/E/I/J/L)</span>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /right side -->
+</div><!-- /bracket -->
+
+<div style="text-align:center;margin-top:28px;font-size:11px;color:#8b949e;">
+  ランク = FIFA世界ランキング（2026年6月時点） &nbsp;|&nbsp; 試合時間 = 日本時間（JST）<br>
+  黄色ハイライト = 上位ランク（有力）チーム
+</div>
+</body>
+</html>
