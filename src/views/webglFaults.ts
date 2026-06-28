@@ -97,8 +97,9 @@ canvas:active { cursor:grabbing; }
 .spd-label { font-size:10px; font-weight:700; color:#f78166; text-transform:uppercase; letter-spacing:.5px; margin-bottom:4px; }
 .vol-mk { position:absolute; transform:translate(-50%,-50%); line-height:1; font-size:14px; pointer-events:auto; cursor:pointer; user-select:none; -webkit-user-select:none; filter:drop-shadow(0 1px 3px rgba(0,0,0,0.9)); }
 .vol-mk.active { font-size:18px; }
-#vol-tooltip { position:fixed; background:rgba(13,17,23,0.97); border:1px solid #ff9500; border-radius:8px; padding:0; font-size:12px; color:#e6edf3; min-width:180px; max-width:260px; pointer-events:none; opacity:0; transition:opacity .15s; z-index:65; transform:translate(-50%,-110%); line-height:1.7; }
-#vol-tooltip.pinned { pointer-events:auto; transform:none; transition:opacity .15s; }
+#vol-tooltip { position:fixed; background:rgba(13,17,23,0.97); border:1px solid #ff9500; border-radius:8px; padding:0; font-size:12px; color:#e6edf3; min-width:200px; max-width:280px; pointer-events:none; opacity:0; transition:opacity .15s; z-index:65; transform:translate(-50%,-110%); line-height:1.7; }
+#vol-tooltip.pinned { pointer-events:auto; transform:none; transition:opacity .15s; cursor:grab; user-select:none; }
+#vol-tooltip.pinned:active { cursor:grabbing; }
 #fault-tooltip { position:fixed; background:rgba(13,17,23,0.97); border:1px solid #f78166; border-radius:8px; padding:0; font-size:12px; color:#e6edf3; min-width:200px; max-width:280px; pointer-events:none; opacity:0; transition:opacity .15s; z-index:65; transform:translate(-50%,-115%); line-height:1.7; }
 #fault-tooltip.pinned { pointer-events:auto; transform:none; }
 .fault-tt-hdr { display:flex; align-items:center; justify-content:space-between; cursor:move; padding:5px 10px 3px; border-bottom:1px solid #30363d; user-select:none; }
@@ -106,8 +107,8 @@ canvas:active { cursor:grabbing; }
 .fault-tt-close { font-size:14px; color:#8b949e; cursor:pointer; line-height:1; padding:0 2px; flex-shrink:0; }
 .fault-tt-close:hover { color:#e6edf3; }
 .fault-tt-body { padding:4px 12px 8px; }
-.vol-tt-hdr { display:flex; align-items:center; justify-content:space-between; cursor:move; padding:5px 10px 3px; border-bottom:1px solid #30363d; user-select:none; }
-.vol-tt-body { padding:4px 12px 8px; }
+.vol-tt-hdr { display:flex; align-items:center; justify-content:space-between; padding:9px 13px 8px; border-bottom:1px solid #30363d; }
+.vol-tt-body { padding:9px 13px 12px; }
 .vol-tt-name { font-weight:700; font-size:13px; color:#ff9500; }
 .vol-tt-close { font-size:14px; color:#8b949e; cursor:pointer; line-height:1; padding:0 2px; flex-shrink:0; }
 .vol-tt-close:hover { color:#e6edf3; }
@@ -931,53 +932,60 @@ void main() {
 
   var volTtPinned = false;
   var volTtDragging = false, volTtDx = 0, volTtDy = 0;
+  var _volTtMouseHandler = null, _volTtTouchHandler = null, _volTtTouchMoveHandler = null;
+
+  function volTtHtml(v) {
+    return '<div class="vol-tt-hdr"><span class="vol-tt-name">' + getVolFlag(v.c) + ' 🌋 ' + v.n + '</span><span class="vol-tt-close" id="volTtClose">&#215;</span></div>' +
+      '<div class="vol-tt-body"><div class="vol-tt-sub">' + v.c + ' / 標高 ' + (v.elev < 0 ? '海面下' + Math.abs(v.elev) : v.elev.toLocaleString()) + 'm</div>' +
+      '<div class="vol-tt-sub">最新噴火: ' + v.lastErupt + '</div></div>';
+  }
 
   function showVolTooltip(x, y, v) {
     if (volTtPinned) return;
-    volTooltipEl.innerHTML =
-      '<div class="vol-tt-hdr"><span class="vol-tt-name">' + getVolFlag(v.c) + ' 🌋 ' + v.n + '</span><span class="vol-tt-close" id="volTtClose">✕</span></div>' +
-      '<div class="vol-tt-body"><div class="vol-tt-sub">' + v.c + ' / 標高 ' + (v.elev < 0 ? '海面下' + Math.abs(v.elev) : v.elev.toLocaleString()) + 'm</div>' +
-      '<div class="vol-tt-sub">最新噴火: ' + v.lastErupt + '</div></div>';
+    volTooltipEl.innerHTML = volTtHtml(v);
     var below = y < canvasRect.top + canvasRect.height * 0.3;
     volTooltipEl.style.left = x + 'px';
     volTooltipEl.style.top = y + 'px';
     volTooltipEl.className = below ? 'below' : '';
     volTooltipEl.style.opacity = '1';
     var closeBtn = document.getElementById('volTtClose');
-    if (closeBtn) closeBtn.addEventListener('click', function(e) { e.stopPropagation(); volTtPinned = false; volTooltipEl.className = ''; volTooltipEl.style.opacity = '0'; });
+    if (closeBtn) closeBtn.onclick = function(e) { e.stopPropagation(); volTtPinned = false; volTooltipEl.className = ''; volTooltipEl.style.opacity = '0'; };
   }
   function hideVolTooltip() { if (!volTtPinned) volTooltipEl.style.opacity = '0'; }
   function pinVolTooltip(v, x, y) {
     volTtPinned = true;
-    volTooltipEl.innerHTML =
-      '<div class="vol-tt-hdr"><span class="vol-tt-name">' + getVolFlag(v.c) + ' 🌋 ' + v.n + '</span><span class="vol-tt-close" id="volTtClose">✕</span></div>' +
-      '<div class="vol-tt-body"><div class="vol-tt-sub">' + v.c + ' / 標高 ' + (v.elev < 0 ? '海面下' + Math.abs(v.elev) : v.elev.toLocaleString()) + 'm</div>' +
-      '<div class="vol-tt-sub">最新噴火: ' + v.lastErupt + '</div></div>';
-    volTooltipEl.style.left = x + 'px';
-    volTooltipEl.style.top = y + 'px';
+    volTooltipEl.innerHTML = volTtHtml(v);
+    var r = volTooltipEl.getBoundingClientRect();
+    var cx = Math.max(8, Math.min(x - r.width / 2, window.innerWidth - r.width - 8));
+    var cy = Math.max(8, y - r.height - 10);
+    volTooltipEl.style.left = cx + 'px';
+    volTooltipEl.style.top = cy + 'px';
     volTooltipEl.style.opacity = '1';
     volTooltipEl.className = 'pinned';
-    volTooltipEl.addEventListener('touchstart', function(e) { e.stopPropagation(); }, {passive:true, once:false});
-    volTooltipEl.addEventListener('mousedown', function(e) { e.stopPropagation(); });
     var closeBtn = document.getElementById('volTtClose');
-    if (closeBtn) closeBtn.addEventListener('click', function(e) { e.stopPropagation(); volTtPinned = false; volTooltipEl.className = ''; volTooltipEl.style.opacity = '0'; });
-    var hdr = volTooltipEl.querySelector('.vol-tt-hdr');
-    if (hdr) {
-      hdr.addEventListener('mousedown', function(e) {
-        if (e.target === document.getElementById('volTtClose')) return;
-        volTtDragging = true;
-        volTtDx = e.clientX - parseInt(volTooltipEl.style.left || '0');
-        volTtDy = e.clientY - parseInt(volTooltipEl.style.top || '0');
-        e.preventDefault();
-      });
-      hdr.addEventListener('touchstart', function(e) {
-        if (e.target === document.getElementById('volTtClose')) return;
-        volTtDragging = true;
-        volTtDx = e.touches[0].clientX - parseInt(volTooltipEl.style.left || '0');
-        volTtDy = e.touches[0].clientY - parseInt(volTooltipEl.style.top || '0');
-        e.stopPropagation();
-      }, {passive:true});
-    }
+    if (closeBtn) closeBtn.onclick = function(e) { e.stopPropagation(); volTtPinned = false; volTooltipEl.className = ''; volTooltipEl.style.opacity = '0'; };
+    if (_volTtMouseHandler) volTooltipEl.removeEventListener('mousedown', _volTtMouseHandler);
+    if (_volTtTouchHandler) volTooltipEl.removeEventListener('touchstart', _volTtTouchHandler);
+    _volTtMouseHandler = function(e) {
+      if (e.target && e.target.id === 'volTtClose') return;
+      var rc = volTooltipEl.getBoundingClientRect();
+      volTtDragging = true;
+      volTtDx = e.clientX - rc.left;
+      volTtDy = e.clientY - rc.top;
+      e.preventDefault();
+      e.stopPropagation();
+    };
+    _volTtTouchHandler = function(e) {
+      if (e.target && e.target.id === 'volTtClose') return;
+      var rc = volTooltipEl.getBoundingClientRect();
+      volTtDragging = true;
+      volTtDx = e.touches[0].clientX - rc.left;
+      volTtDy = e.touches[0].clientY - rc.top;
+      e.preventDefault();
+      e.stopPropagation();
+    };
+    volTooltipEl.addEventListener('mousedown', _volTtMouseHandler);
+    volTooltipEl.addEventListener('touchstart', _volTtTouchHandler, {passive:false});
   }
   window.addEventListener('mousemove', function(e) {
     if (!volTtDragging) return;
