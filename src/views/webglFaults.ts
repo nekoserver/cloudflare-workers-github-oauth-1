@@ -99,6 +99,13 @@ canvas:active { cursor:grabbing; }
 .vol-mk.active { font-size:18px; }
 #vol-tooltip { position:fixed; background:rgba(13,17,23,0.97); border:1px solid #ff9500; border-radius:8px; padding:0; font-size:12px; color:#e6edf3; min-width:180px; max-width:260px; pointer-events:none; opacity:0; transition:opacity .15s; z-index:65; transform:translate(-50%,-110%); line-height:1.7; }
 #vol-tooltip.pinned { pointer-events:auto; transform:none; transition:opacity .15s; }
+#fault-tooltip { position:fixed; background:rgba(13,17,23,0.97); border:1px solid #f78166; border-radius:8px; padding:0; font-size:12px; color:#e6edf3; min-width:200px; max-width:280px; pointer-events:none; opacity:0; transition:opacity .15s; z-index:65; transform:translate(-50%,-115%); line-height:1.7; }
+#fault-tooltip.pinned { pointer-events:auto; transform:none; }
+.fault-tt-hdr { display:flex; align-items:center; justify-content:space-between; cursor:move; padding:5px 10px 3px; border-bottom:1px solid #30363d; user-select:none; }
+.fault-tt-name { font-weight:700; font-size:13px; color:#f78166; flex:1; }
+.fault-tt-close { font-size:14px; color:#8b949e; cursor:pointer; line-height:1; padding:0 2px; flex-shrink:0; }
+.fault-tt-close:hover { color:#e6edf3; }
+.fault-tt-body { padding:4px 12px 8px; }
 .vol-tt-hdr { display:flex; align-items:center; justify-content:space-between; cursor:move; padding:5px 10px 3px; border-bottom:1px solid #30363d; user-select:none; }
 .vol-tt-body { padding:4px 12px 8px; }
 .vol-tt-name { font-weight:700; font-size:13px; color:#ff9500; }
@@ -286,7 +293,6 @@ void main() {
   <div class="side">
     <div class="panel-tabs">
       <button class="panel-tab active" id="tabList">▼ 断層リスト</button>
-      <button class="panel-tab" id="tabDetail">📋 詳細</button>
       <button class="panel-tab" id="tabCtrl">⚙ 設定</button>
     </div>
 
@@ -310,12 +316,6 @@ void main() {
         </div>
       </div>
       <div class="list-scroll" id="faultList"></div>
-    </div>
-
-    <div class="panel-body" id="panelDetail">
-      <div class="detail-panel" id="detailContent">
-        <div class="detail-empty">断層をクリックまたはリストから選択してください</div>
-      </div>
     </div>
 
     <div class="panel-body" id="panelCtrl">
@@ -376,6 +376,7 @@ void main() {
 
 <div id="mk-tooltip"></div>
 <div id="vol-tooltip"></div>
+<div id="fault-tooltip"></div>
 
 <script>
 (function() {
@@ -384,12 +385,9 @@ void main() {
   var hud = document.getElementById('hud');
   var markersDiv = document.getElementById('markers');
   var faultListEl = document.getElementById('faultList');
-  var detailContent = document.getElementById('detailContent');
   var tabList = document.getElementById('tabList');
-  var tabDetail = document.getElementById('tabDetail');
   var tabCtrl = document.getElementById('tabCtrl');
   var panelList = document.getElementById('panelList');
-  var panelDetail = document.getElementById('panelDetail');
   var panelCtrl = document.getElementById('panelCtrl');
   var rotSpdEl = document.getElementById('rotSpd');
   var rotSpdValEl = document.getElementById('rotSpdVal');
@@ -404,16 +402,12 @@ void main() {
   });
 
   tabList.addEventListener('click', function() {
-    tabList.classList.add('active'); tabDetail.classList.remove('active'); tabCtrl.classList.remove('active');
-    panelList.classList.add('visible'); panelDetail.classList.remove('visible'); panelCtrl.classList.remove('visible');
-  });
-  tabDetail.addEventListener('click', function() {
-    tabDetail.classList.add('active'); tabList.classList.remove('active'); tabCtrl.classList.remove('active');
-    panelDetail.classList.add('visible'); panelList.classList.remove('visible'); panelCtrl.classList.remove('visible');
+    tabList.classList.add('active'); tabCtrl.classList.remove('active');
+    panelList.classList.add('visible'); panelCtrl.classList.remove('visible');
   });
   tabCtrl.addEventListener('click', function() {
-    tabCtrl.classList.add('active'); tabList.classList.remove('active'); tabDetail.classList.remove('active');
-    panelCtrl.classList.add('visible'); panelList.classList.remove('visible'); panelDetail.classList.remove('visible');
+    tabCtrl.classList.add('active'); tabList.classList.remove('active');
+    panelCtrl.classList.add('visible'); panelList.classList.remove('visible');
   });
 
   var rotSpd = 1.0;
@@ -1066,20 +1060,23 @@ void main() {
       volMarkersDiv.appendChild(el);
       faultDotDivMap[f.id] = el;
       el.addEventListener('touchstart', function(e) { e.stopPropagation(); }, {passive:true});
+      el.addEventListener('mouseenter', function(e) {
+        var r = el.getBoundingClientRect();
+        showFaultTooltip(f, r.left + r.width/2, r.top);
+      });
+      el.addEventListener('mouseleave', hideFaultTooltip);
       el.addEventListener('click', function(e) {
         e.stopPropagation();
+        var r = el.getBoundingClientRect();
         flyToFaultCenter(f);
+        pinFaultTooltip(f, r.left + r.width/2, r.top);
       });
     });
   }
 
   function flyToFaultCenter(f) {
     flyToLatLon(f.center[0], f.center[1], 800, null);
-    var panelList = document.getElementById('panelList');
-    var tabList = document.getElementById('tabList');
-    if (!panelList.classList.contains('visible')) {
-      tabList.click();
-    }
+    if (!panelList.classList.contains('visible')) { tabList.click(); }
     setTimeout(function() {
       var item = faultListEl.querySelector('[data-id="' + f.id + '"]');
       if (!item) return;
@@ -1119,6 +1116,110 @@ void main() {
   }
   buildFaultVBOs();
 
+  function getFaultFlag(country) {
+    var map = [
+      ['日本', '🇯🇵'], ['アメリカ', '🇺🇸'], ['カナダ', '🇨🇦'], ['メキシコ', '🇲🇽'],
+      ['チリ', '🇨🇱'], ['ペルー', '🇵🇪'], ['コロンビア', '🇨🇴'], ['ベネズエラ', '🇻🇪'],
+      ['エクアドル', '🇪🇨'], ['アルゼンチン', '🇦🇷'], ['ブラジル', '🇧🇷'],
+      ['トルコ', '🇹🇷'], ['ギリシャ', '🇬🇷'], ['イタリア', '🇮🇹'],
+      ['イスラエル', '🇮🇱'], ['ヨルダン', '🇯🇴'], ['シリア', '🇸🇾'],
+      ['インド', '🇮🇳'], ['パキスタン', '🇵🇰'], ['アフガニスタン', '🇦🇫'],
+      ['中国', '🇨🇳'], ['台湾', '🇹🇼'], ['フィリピン', '🇵🇭'],
+      ['インドネシア', '🇮🇩'], ['マレーシア', '🇲🇾'], ['ミャンマー', '🇲🇲'],
+      ['ニュージーランド', '🇳🇿'], ['パプアニューギニア', '🇵🇬'],
+      ['ロシア', '🇷🇺'], ['カザフスタン', '🇰🇿'],
+      ['エチオピア', '🇪🇹'], ['ケニア', '🇰🇪'], ['タンザニア', '🇹🇿'],
+      ['モザンビーク', '🇲🇿'], ['ルワンダ', '🇷🇼'], ['ウガンダ', '🇺🇬'],
+      ['コンゴ', '🇨🇩'], ['エリトリア', '🇪🇷'], ['ジブチ', '🇩🇯'],
+      ['アイスランド', '🇮🇸'], ['ポルトガル', '🇵🇹'], ['スペイン', '🇪🇸'],
+      ['アゾレス', '🇵🇹'], ['キルギス', '🇰🇬'], ['タジキスタン', '🇹🇯'],
+      ['グアテマラ', '🇬🇹'], ['ホンジュラス', '🇭🇳'], ['エルサルバドル', '🇸🇻'],
+      ['ニカラグア', '🇳🇮'], ['コスタリカ', '🇨🇷'], ['パナマ', '🇵🇦'],
+      ['カリブ', '🌊'], ['大西洋', '🌊'], ['太平洋', '🌊'], ['インド洋', '🌊'],
+      ['南極', '🇦🇶'], ['多国', '🌐']
+    ];
+    for (var i = 0; i < map.length; i++) {
+      if (country.indexOf(map[i][0]) >= 0) return map[i][1] + ' ';
+    }
+    return '';
+  }
+
+  var faultTooltipEl = document.getElementById('fault-tooltip');
+  var faultTtPinned = false;
+  var faultTtDragging = false, faultTtDx = 0, faultTtDy = 0;
+
+  function showFaultTooltip(f, x, y) {
+    if (faultTtPinned) return;
+    var c = faultColor(f.t);
+    var dotClr = 'rgb(' + Math.round(c[0]*255) + ',' + Math.round(c[1]*255) + ',' + Math.round(c[2]*255) + ')';
+    faultTooltipEl.innerHTML =
+      '<div style="display:flex;align-items:center;gap:6px;padding:7px 12px 5px;border-bottom:1px solid #30363d">' +
+      '<div style="width:9px;height:9px;border-radius:50%;background:' + dotClr + ';flex-shrink:0"></div>' +
+      '<div style="font-weight:700;font-size:12px;color:#f78166">' + getFaultFlag(f.country) + f.n + '</div>' +
+      '</div>' +
+      '<div style="padding:5px 12px 8px;font-size:11px;line-height:1.8">' +
+      '<div><span style="color:#8b949e">タイプ: </span><span class="type-badge ' + f.t + '">' + (TYPE_NAMES[f.t] || f.t) + '</span></div>' +
+      '<div><span style="color:#8b949e">全長: </span>' + f.length.toLocaleString() + ' km</div>' +
+      '<div><span style="color:#8b949e">最大規模: </span>M' + f.maxMag.toFixed(1) + '</div>' +
+      '<div><span style="color:#8b949e">直近: </span>' + f.lastMajor + '</div>' +
+      '<div><span style="color:#8b949e">国・地域: </span>' + f.country + '</div>' +
+      '</div>';
+    faultTooltipEl.className = '';
+    faultTooltipEl.style.left = x + 'px';
+    faultTooltipEl.style.top = y + 'px';
+    faultTooltipEl.style.opacity = '1';
+  }
+
+  function hideFaultTooltip() {
+    if (!faultTtPinned) faultTooltipEl.style.opacity = '0';
+  }
+
+  function pinFaultTooltip(f, x, y) {
+    faultTtPinned = true;
+    var c = faultColor(f.t);
+    var dotClr = 'rgb(' + Math.round(c[0]*255) + ',' + Math.round(c[1]*255) + ',' + Math.round(c[2]*255) + ')';
+    faultTooltipEl.innerHTML =
+      '<div class="fault-tt-hdr">' +
+      '<div style="width:9px;height:9px;border-radius:50%;background:' + dotClr + ';flex-shrink:0;margin-right:6px"></div>' +
+      '<span class="fault-tt-name">' + getFaultFlag(f.country) + f.n + '</span>' +
+      '<span class="fault-tt-close" id="faultTtClose">&#x2715;</span>' +
+      '</div>' +
+      '<div class="fault-tt-body" style="font-size:11px;line-height:1.8">' +
+      '<div><span style="color:#8b949e">タイプ: </span><span class="type-badge ' + f.t + '">' + (TYPE_NAMES[f.t] || f.t) + '</span></div>' +
+      '<div><span style="color:#8b949e">全長: </span>' + f.length.toLocaleString() + ' km</div>' +
+      '<div><span style="color:#8b949e">最大規模: </span>M' + f.maxMag.toFixed(1) + '</div>' +
+      '<div><span style="color:#8b949e">直近: </span>' + f.lastMajor + '</div>' +
+      '<div><span style="color:#8b949e">国・地域: </span>' + f.country + '</div>' +
+      '<div style="color:#8b949e;margin-top:3px;font-size:10px">' + f.desc + '</div>' +
+      '</div>';
+    faultTooltipEl.className = 'pinned';
+    faultTooltipEl.style.left = x + 'px';
+    faultTooltipEl.style.top = y + 'px';
+    faultTooltipEl.style.opacity = '1';
+    faultTooltipEl.addEventListener('touchstart', function(e) { e.stopPropagation(); }, {passive:true});
+    faultTooltipEl.addEventListener('mousedown', function(e) { e.stopPropagation(); });
+    var hdr = faultTooltipEl.querySelector('.fault-tt-hdr');
+    hdr.addEventListener('mousedown', function(ev) {
+      faultTtDragging = true;
+      var r = faultTooltipEl.getBoundingClientRect();
+      faultTtDx = ev.clientX - r.left;
+      faultTtDy = ev.clientY - r.top;
+      ev.preventDefault();
+    });
+    document.addEventListener('mousemove', function(ev) {
+      if (!faultTtDragging) return;
+      faultTooltipEl.style.left = (ev.clientX - faultTtDx) + 'px';
+      faultTooltipEl.style.top = (ev.clientY - faultTtDy) + 'px';
+      faultTooltipEl.style.transform = 'none';
+    });
+    document.addEventListener('mouseup', function() { faultTtDragging = false; });
+    document.getElementById('faultTtClose').addEventListener('click', function() {
+      faultTtPinned = false;
+      faultTooltipEl.style.opacity = '0';
+      faultTooltipEl.className = '';
+    });
+  }
+
   function renderFaultList() {
     var filtered = FAULTS.filter(function(f) { return activeFilter === 'all' || f.t === activeFilter; });
     var html = '';
@@ -1129,7 +1230,7 @@ void main() {
       html += '<div class="fault-item' + isActive + '" data-id="' + f.id + '">';
       html += '<div class="fault-dot" style="background:' + dotClr + '"></div>';
       html += '<div class="fault-body">';
-      html += '<div class="fault-name">' + f.n + '</div>';
+      html += '<div class="fault-name">' + getFaultFlag(f.country) + f.n + '</div>';
       html += '<div class="fault-meta">';
       html += '<span class="type-badge ' + f.t + '">' + (TYPE_NAMES[f.t] || f.t) + '</span>';
       html += '<span>' + f.country + '</span>';
@@ -1146,37 +1247,10 @@ void main() {
     });
   }
 
-  function renderDetail(f) {
-    if (!f) {
-      detailContent.innerHTML = '<div class="detail-empty">断層をクリックまたはリストから選択してください</div>';
-      return;
-    }
-    var c = faultColor(f.t);
-    var dotClr = 'rgb(' + Math.round(c[0]*255) + ',' + Math.round(c[1]*255) + ',' + Math.round(c[2]*255) + ')';
-    var html = '';
-    html += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">';
-    html += '<div class="fault-dot" style="background:' + dotClr + ';width:14px;height:14px;"></div>';
-    html += '<div class="detail-name">' + f.n + '</div>';
-    html += '</div>';
-    html += '<div class="detail-sub">' + f.region + '</div>';
-    html += '<table class="detail-table">';
-    html += '<tr><td>タイプ</td><td><span class="type-badge ' + f.t + '">' + (TYPE_NAMES[f.t] || f.t) + '</span></td></tr>';
-    html += '<tr><td>全長</td><td>' + f.length.toLocaleString() + ' km</td></tr>';
-    html += '<tr><td>最大規模</td><td>M' + f.maxMag.toFixed(1) + '</td></tr>';
-    html += '<tr><td>直近の大地震</td><td>' + f.lastMajor + '</td></tr>';
-    html += '<tr><td>国・地域</td><td>' + f.country + '</td></tr>';
-    html += '</table>';
-    html += '<div class="detail-desc">' + f.desc + '</div>';
-    detailContent.innerHTML = html;
-  }
-
   function selectFault(id, doFly) {
     selectedFaultId = id;
     var f = FAULTS.find(function(x) { return x.id === id; });
     renderFaultList();
-    renderDetail(f);
-    tabDetail.classList.add('active'); tabList.classList.remove('active'); tabCtrl.classList.remove('active');
-    panelDetail.classList.add('visible'); panelList.classList.remove('visible'); panelCtrl.classList.remove('visible');
     if (doFly && f) {
       flyToLatLon(f.center[0], f.center[1], 1200);
     }
@@ -1698,7 +1772,7 @@ void main() {
     var t = (-b - Math.sqrt(disc)) / 2;
     var px = ro[0]+t*rd[0], py = ro[1]+t*rd[1], pz = ro[2]+t*rd[2];
     var lat = Math.asin(Math.max(-1, Math.min(1, py))) * 180 / Math.PI;
-    var lon = Math.atan2(px, -pz) * 180 / Math.PI;
+    var lon = Math.atan2(-pz, px) * 180 / Math.PI;
     var fraction = Math.min(bw / rect.width, bh / rect.height);
     // zoom = カメラ距離。小さいほどズームイン。ボックスが画面のfractionを占めるなら
     // ズーム後の距離 = 現在距離 * fraction（小さいボックス→より近づく）
@@ -1724,7 +1798,7 @@ void main() {
     if(!axisLocked){rotXv=clampElev(rotXv+dx); velX=velX*0.4+dx*0.6;}
     lx=e.clientX; ly=e.clientY;
   });
-  canvas.addEventListener('wheel', function(e) { e.preventDefault(); zoomTarget=Math.max(1.4,Math.min(20,zoomTarget+e.deltaY*0.015)); }, {passive:false});
+  canvas.addEventListener('wheel', function(e) { e.preventDefault(); zoomTarget=Math.max(1.4,Math.min(20,zoomTarget+e.deltaY*0.006)); }, {passive:false});
   canvas.addEventListener('dblclick', function() {
     autoRot=!autoRot;
     btnAutoRot.textContent=autoRot?'⏸ 自転停止':'▶ 回転';
@@ -1749,7 +1823,7 @@ void main() {
     }
     if(e.touches.length===2){
       var d=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);
-      zoomTarget=Math.max(1.4,Math.min(20,zoomTarget-(d-pinch0)*0.02));pinch0=d;
+      zoomTarget=Math.max(1.4,Math.min(20,zoomTarget-(d-pinch0)*0.008));pinch0=d;
     }
   }, {passive:false});
   canvas.addEventListener('touchend', function(e) {
