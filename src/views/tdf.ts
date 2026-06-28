@@ -435,27 +435,37 @@ function dropPinStage(n, isStart) {
 }
 
 // ---- focus map on stage ----
+var focusResetTimer = null;
+function animateTo(tz, tpx, tpy, onDone) {
+  var sz=zoom, spx=panX, spy=panY, t=0, dur=35;
+  function step(){
+    t++;
+    var p=t/dur; p=p<0.5?2*p*p:-1+(4-2*p)*p;
+    zoom=sz+(tz-sz)*p; panX=spx+(tpx-spx)*p; panY=spy+(tpy-spy)*p;
+    if(t<dur) requestAnimationFrame(step);
+    else if(onDone) onDone();
+  }
+  requestAnimationFrame(step);
+}
 function focusStage(n) {
   var st = null;
   for(var i=0; i<STAGES.length; i++) if(STAGES[i].n===n){st=STAGES[i];break;}
   if(!st) return;
   var via = st.via || [];
   var mid = Math.floor(via.length / 2);
-  var midLat = via.length > 0 ? (st.s[0]+st.e[0])/2 : (st.s[0]+st.e[0])/2;
-  var midLon = via.length > 0 ? (st.s[1]+st.e[1])/2 : (st.s[1]+st.e[1])/2;
+  var midLat = (st.s[0]+st.e[0])/2, midLon = (st.s[1]+st.e[1])/2;
   if(via.length > 0){ midLat=via[mid][0]; midLon=via[mid][1]; }
-  var targetZoom = 6.0;
+  var targetZoom = 12.0;
   var aspect = (LON_MAX - LON_MIN) / (LAT_MAX - LAT_MIN);
   var tpx = W/2 - ox - (midLon - LON_MIN)/(LON_MAX - LON_MIN)*scale*aspect*targetZoom;
   var tpy = H/2 - oy - (1-(midLat - LAT_MIN)/(LAT_MAX - LAT_MIN))*scale*targetZoom;
-  var sz=zoom, spx=panX, spy=panY, t=0, dur=35;
-  function step(){
-    t++;
-    var p=t/dur; p=p<0.5?2*p*p:-1+(4-2*p)*p;
-    zoom=sz+(targetZoom-sz)*p; panX=spx+(tpx-spx)*p; panY=spy+(tpy-spy)*p;
-    if(t<dur) requestAnimationFrame(step);
-  }
-  requestAnimationFrame(step);
+  var prevZoom=zoom, prevPanX=panX, prevPanY=panY;
+  if(focusResetTimer) { clearTimeout(focusResetTimer); focusResetTimer=null; }
+  animateTo(targetZoom, tpx, tpy, null);
+  focusResetTimer = setTimeout(function(){
+    animateTo(prevZoom, prevPanX, prevPanY, null);
+    focusResetTimer = null;
+  }, 10000);
 }
 
 // ---- route map ----
