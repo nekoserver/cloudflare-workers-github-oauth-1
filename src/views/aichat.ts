@@ -2120,19 +2120,19 @@ export function getAiChatPage(user: {
           tip.className = 'cal-cell-tip';
           tip.textContent = day + '日: ' + count + '件';
           cell.appendChild(tip);
-          (function(ds) {
-            cell.addEventListener('click', function(e) {
-              e.stopPropagation();
-              calSelectedDay = ds;
-              sidebarSearch.value = '';
-              sidebarClear.classList.remove('visible');
-              renderCalendar(calCurrentMonth);
-              doDateLoad(ds);
-            });
-          })(dateStr);
         } else {
           cell.title = day + '日';
         }
+        (function(ds) {
+          cell.addEventListener('click', function(e) {
+            e.stopPropagation();
+            calSelectedDay = ds;
+            sidebarSearch.value = '';
+            sidebarClear.classList.remove('visible');
+            renderCalendar(calCurrentMonth);
+            doDateLoad(ds);
+          });
+        })(dateStr);
         var label = document.createElement('span');
         label.style.cssText = 'position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:9px;color:var(--text-muted);';
         label.textContent = day;

@@ -3,21 +3,21 @@ type BMatch = { date: string; a: BTeam; b: BTeam | null; bl?: string };
 
 const BRACKET_DATA: BMatch[] = [
   { date: "6/28", a: { f: "🇿🇦", n: "RSA" }, b: { f: "🇨🇦", n: "CAN" } },
-  { date: "6/28", a: { f: "🇳🇱", n: "NED" }, b: { f: "🇲🇦", n: "MAR" } },
+  { date: "6/28", a: { f: "🇲🇽", n: "MEX" }, b: { f: "🇪🇨", n: "ECU" } },
   { date: "6/29", a: { f: "🇧🇷", n: "BRA" }, b: { f: "🇯🇵", n: "JPN" } },
   { date: "6/29", a: { f: "🇩🇪", n: "GER" }, b: { f: "🇵🇾", n: "PAR" } },
+  { date: "6/29", a: { f: "🇳🇱", n: "NED" }, b: { f: "🇲🇦", n: "MAR" } },
   { date: "6/30", a: { f: "🇨🇮", n: "CIV" }, b: { f: "🇳🇴", n: "NOR" } },
   { date: "6/30", a: { f: "🇫🇷", n: "FRA" }, b: { f: "🇸🇪", n: "SWE" } },
-  { date: "6/30", a: { f: "🏴󠁧󠁢󠁥󠁮󠁧󠁿", n: "ENG" }, b: null, bl: "3位枠未定" },
-  { date: "7/1",  a: { f: "🇲🇽", n: "MEX" }, b: null, bl: "3位枠未定" },
-  { date: "7/1",  a: { f: "🇪🇬", n: "EGY" }, b: { f: "🇰🇷", n: "KOR" } },
+  { date: "7/1",  a: { f: "🏴󠁧󠁢󠁥󠁮󠁧󠁿", n: "ENG" }, b: { f: "🇨🇩", n: "COD" } },
+  { date: "7/1",  a: { f: "🇧🇪", n: "BEL" }, b: { f: "🇸🇳", n: "SEN" } },
   { date: "7/1",  a: { f: "🇺🇸", n: "USA" }, b: { f: "🇧🇦", n: "BIH" } },
-  { date: "7/2",  a: { f: "🇪🇸", n: "ESP" }, b: null, bl: "J組2位" },
-  { date: "7/2",  a: { f: "🇨🇭", n: "SUI" }, b: null, bl: "3位枠未定" },
-  { date: "7/2",  a: { f: "🇵🇹", n: "POR" }, b: { f: "🇬🇭", n: "GHA" } },
-  { date: "7/3",  a: { f: "🇦🇺", n: "AUS" }, b: { f: "🇧🇪", n: "BEL" } },
+  { date: "7/2",  a: { f: "🇪🇸", n: "ESP" }, b: { f: "🇦🇹", n: "AUT" } },
+  { date: "7/2",  a: { f: "🇵🇹", n: "POR" }, b: { f: "🇭🇷", n: "CRO" } },
+  { date: "7/2",  a: { f: "🇨🇭", n: "SUI" }, b: { f: "🇩🇿", n: "ALG" } },
+  { date: "7/3",  a: { f: "🇦🇺", n: "AUS" }, b: { f: "🇪🇬", n: "EGY" } },
   { date: "7/3",  a: { f: "🇦🇷", n: "ARG" }, b: { f: "🇨🇻", n: "CPV" } },
-  { date: "7/3",  a: { f: "🇨🇴", n: "COL" }, b: { f: "🇭🇷", n: "CRO" } },
+  { date: "7/3",  a: { f: "🇨🇴", n: "COL" }, b: { f: "🇬🇭", n: "GHA" } },
 ];
 
 function bTeamCell(t: BTeam | null, label?: string): string {
@@ -113,7 +113,7 @@ tr:nth-child(even) td { background: var(--row-alt); }
 <body>
 <div class="page-header">
   <h1>&#x26BD; W杯2026 WDL分布テーブル</h1>
-  <p class="subtitle">データ: 2026年6月27日現在（A〜I・K・L組は第3節終了後、J組は第2節終了後）</p>
+  <p class="subtitle">データ: 2026年6月28日現在（全12組 第3節終了・ラウンド32進行中）</p>
 </div>
 <div class="table-wrap">
   <table>
@@ -153,8 +153,8 @@ var data = {
   "G":[{n:"EGY",f:"🇪🇬",w:1,d:2,l:0},{n:"BEL",f:"🇧🇪",w:1,d:2,l:0},{n:"IRN",f:"🇮🇷",w:0,d:3,l:0},{n:"NZL",f:"🇳🇿",w:0,d:1,l:2}],
   "H":[{n:"ESP",f:"🇪🇸",w:2,d:1,l:0},{n:"CPV",f:"🇨🇻",w:0,d:3,l:0},{n:"URU",f:"🇺🇾",w:0,d:2,l:1},{n:"KSA",f:"🇸🇦",w:0,d:2,l:1}],
   "I":[{n:"FRA",f:"🇫🇷",w:3,d:0,l:0},{n:"NOR",f:"🇳🇴",w:2,d:0,l:1},{n:"SEN",f:"🇸🇳",w:1,d:0,l:2},{n:"IRQ",f:"🇮🇶",w:0,d:0,l:3}],
-  "J":[{n:"ARG",f:"🇦🇷",w:2,d:0,l:0},{n:"AUT",f:"🇦🇹",w:1,d:0,l:1},{n:"ALG",f:"🇩🇿",w:1,d:0,l:1},{n:"JOR",f:"🇯🇴",w:0,d:0,l:2}],
-  "K":[{n:"COL",f:"🇨🇴",w:3,d:0,l:0},{n:"POR",f:"🇵🇹",w:1,d:1,l:1},{n:"UZB",f:"🇺🇿",w:1,d:0,l:2},{n:"COD",f:"🇨🇩",w:0,d:1,l:2}],
+  "J":[{n:"ARG",f:"🇦🇷",w:3,d:0,l:0},{n:"AUT",f:"🇦🇹",w:1,d:1,l:1},{n:"ALG",f:"🇩🇿",w:1,d:1,l:1},{n:"JOR",f:"🇯🇴",w:0,d:0,l:3}],
+  "K":[{n:"COL",f:"🇨🇴",w:2,d:1,l:0},{n:"POR",f:"🇵🇹",w:1,d:2,l:0},{n:"COD",f:"🇨🇩",w:1,d:1,l:1},{n:"UZB",f:"🇺🇿",w:0,d:0,l:3}],
   "L":[{n:"ENG",f:"🏴󠁧󠁢󠁥󠁮󠁧󠁿",w:2,d:1,l:0},{n:"GHA",f:"🇬🇭",w:2,d:1,l:0},{n:"CRO",f:"🇭🇷",w:1,d:0,l:2},{n:"PAN",f:"🇵🇦",w:0,d:0,l:3}]
 };
 
