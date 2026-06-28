@@ -28,9 +28,9 @@ body { background:var(--bg); color:var(--text); font-family:'Segoe UI','Hiragino
 #map-panel canvas { display:block; cursor:grab; }
 
 #legend {
-  position:absolute; bottom:12px; right:12px;
+  position:absolute; bottom:50px; right:12px;
   background:rgba(22,27,34,0.92); border:1px solid var(--border);
-  border-radius:8px; padding:10px 14px; font-size:11px; line-height:2;
+  border-radius:8px; padding:8px 12px; font-size:11px; line-height:1.8;
   backdrop-filter:blur(4px); z-index:10;
 }
 #legend h3 { font-size:11px; color:var(--muted); margin-bottom:4px; font-weight:400; }
@@ -51,16 +51,17 @@ body { background:var(--bg); color:var(--text); font-family:'Segoe UI','Hiragino
 
 #map-info {
   position:absolute; bottom:12px; left:12px;
-  font-size:11px; color:var(--muted);
+  font-size:10px; color:var(--muted);
   background:rgba(22,27,34,0.88); border:1px solid var(--border);
-  border-radius:6px; padding:6px 11px; backdrop-filter:blur(4px);
+  border-radius:6px; padding:5px 9px; backdrop-filter:blur(4px);
+  max-width:calc(100% - 24px);
 }
 
 #tdf-cal {
   position:absolute; top:12px; left:12px; z-index:10;
   background:rgba(13,17,23,0.88); border:1px solid var(--border);
   border-radius:8px; padding:8px 10px; backdrop-filter:blur(4px);
-  min-width:148px;
+  min-width:148px; max-height:calc(100% - 80px); overflow:hidden;
 }
 .tdf-cal-title { font-size:11px; font-weight:700; color:var(--accent); margin-bottom:5px; text-align:center; }
 .tdf-cal-grid { display:grid; grid-template-columns:repeat(7,1fr); gap:2px; }
@@ -629,16 +630,59 @@ showDetail = function(idx) {
 // drag handle → drag to map panel to pop out
 var handleDragging = false;
 var hdStartX, hdStartY;
+var ghostEl = null;
+
+function createGhost() {
+  if (ghostEl) return;
+  ghostEl = document.createElement("div");
+  ghostEl.style.cssText = "position:fixed;z-index:600;pointer-events:none;opacity:0.7;" +
+    "min-width:280px;background:var(--surface);border:2px solid var(--accent);" +
+    "border-radius:10px;padding:10px 14px;font-size:11px;color:var(--muted);" +
+    "box-shadow:0 8px 32px rgba(0,0,0,0.6);";
+  ghostEl.textContent = "📋 ここでドロップして分離";
+  document.body.appendChild(ghostEl);
+}
+
+function moveGhost(cx, cy) {
+  if (!ghostEl) return;
+  ghostEl.style.left = (cx + 10) + "px";
+  ghostEl.style.top  = (cy - 20) + "px";
+  var mapPanelEl = document.getElementById("map-panel");
+  var rect = mapPanelEl.getBoundingClientRect();
+  var inMap = cx >= rect.left && cx <= rect.right && cy >= rect.top && cy <= rect.bottom;
+  ghostEl.style.borderColor = inMap ? "var(--accent)" : "var(--border)";
+  ghostEl.style.color = inMap ? "var(--accent)" : "var(--muted)";
+}
+
+function removeGhost() {
+  if (ghostEl) { ghostEl.remove(); ghostEl = null; }
+}
+
+function startHandleDrag(clientX, clientY) {
+  handleDragging = true;
+  hdStartX = clientX;
+  hdStartY = clientY;
+  detailHandle.style.cursor = "grabbing";
+  createGhost();
+  moveGhost(clientX, clientY);
+}
 
 detailHandle.addEventListener("mousedown", function(e) {
-  handleDragging = true;
-  hdStartX = e.clientX;
-  hdStartY = e.clientY;
   e.preventDefault();
+  e.stopPropagation();
+  startHandleDrag(e.clientX, e.clientY);
 });
+
+detailHandle.addEventListener("touchstart", function(e) {
+  e.preventDefault();
+  if (e.touches.length === 1) {
+    startHandleDrag(e.touches[0].clientX, e.touches[0].clientY);
+  }
+}, {passive: false});
 
 window.addEventListener("mousemove", function(e) {
   if (!handleDragging) return;
+  moveGhost(e.clientX, e.clientY);
   var mapPanelEl = document.getElementById("map-panel");
   var rect = mapPanelEl.getBoundingClientRect();
   var inMap = e.clientX >= rect.left && e.clientX <= rect.right &&
@@ -646,22 +690,45 @@ window.addEventListener("mousemove", function(e) {
   detailHandle.style.background = inMap ? "rgba(227,179,65,0.15)" : "";
 });
 
-window.addEventListener("mouseup", function(e) {
+window.addEventListener("touchmove", function(e) {
+  if (!handleDragging) return;
+  if (e.touches.length === 1) {
+    moveGhost(e.touches[0].clientX, e.touches[0].clientY);
+    var mapPanelEl = document.getElementById("map-panel");
+    var rect = mapPanelEl.getBoundingClientRect();
+    var inMap = e.touches[0].clientX >= rect.left && e.touches[0].clientX <= rect.right &&
+                e.touches[0].clientY >= rect.top  && e.touches[0].clientY <= rect.bottom;
+    detailHandle.style.background = inMap ? "rgba(227,179,65,0.15)" : "";
+  }
+}, {passive: false});
+
+function finishHandleDrag(clientX, clientY) {
   if (!handleDragging) return;
   handleDragging = false;
   detailHandle.style.background = "";
+  detailHandle.style.cursor = "grab";
+  removeGhost();
   var mapPanelEl = document.getElementById("map-panel");
   var rect = mapPanelEl.getBoundingClientRect();
-  var inMap = e.clientX >= rect.left && e.clientX <= rect.right &&
-              e.clientY >= rect.top  && e.clientY <= rect.bottom;
+  var inMap = clientX >= rect.left && clientX <= rect.right &&
+              clientY >= rect.top  && clientY <= rect.bottom;
   if (inMap) {
     if (!isPopped) {
-      openFloatDetail(e.clientX, e.clientY);
+      openFloatDetail(clientX, clientY);
     }
-  } else if (isPopped && Math.abs(e.clientX - hdStartX) < 6 && Math.abs(e.clientY - hdStartY) < 6) {
+  } else if (isPopped && Math.abs(clientX - hdStartX) < 6 && Math.abs(clientY - hdStartY) < 6) {
     closeFloatDetail();
   }
-});
+}
+
+window.addEventListener("mouseup", function(e) { finishHandleDrag(e.clientX, e.clientY); });
+
+window.addEventListener("touchend", function(e) {
+  if (!handleDragging) return;
+  if (e.changedTouches.length === 1) {
+    finishHandleDrag(e.changedTouches[0].clientX, e.changedTouches[0].clientY);
+  }
+}, {passive: false});
 
 // dragging the floating window by its title bar
 var fDragging = false, fStartX, fStartY, fWinLeft, fWinTop;
