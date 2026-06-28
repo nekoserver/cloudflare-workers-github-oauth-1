@@ -730,20 +730,25 @@ window.addEventListener("touchend", function(e) {
   }
 }, {passive: false});
 
-// dragging the floating window by its title bar
-var fDragging = false, fStartX, fStartY, fWinLeft, fWinTop;
+// dragging the floating window by its title bar (pointercapture 方式)
 var fBar = document.getElementById("float-detail-bar");
+var fDragging = false, fStartX, fStartY, fWinLeft, fWinTop;
 
-fBar.addEventListener("mousedown", function(e) {
+fBar.addEventListener("pointerdown", function(e) {
+  if (e.button !== 0) return;
   fDragging = true;
   fStartX = e.clientX;
   fStartY = e.clientY;
-  fWinLeft = parseInt(floatWin.style.left) || floatWin.getBoundingClientRect().left;
-  fWinTop  = parseInt(floatWin.style.top)  || floatWin.getBoundingClientRect().top;
+  var rect = floatWin.getBoundingClientRect();
+  fWinLeft = rect.left;
+  fWinTop  = rect.top;
+  fBar.setPointerCapture(e.pointerId);
+  fBar.style.cursor = "grabbing";
   e.preventDefault();
+  e.stopPropagation();
 });
 
-window.addEventListener("mousemove", function(e) {
+fBar.addEventListener("pointermove", function(e) {
   if (!fDragging) return;
   var nx = fWinLeft + (e.clientX - fStartX);
   var ny = fWinTop  + (e.clientY - fStartY);
@@ -751,9 +756,22 @@ window.addEventListener("mousemove", function(e) {
   ny = Math.max(0, Math.min(ny, window.innerHeight - 40));
   floatWin.style.left = nx + "px";
   floatWin.style.top  = ny + "px";
+  e.preventDefault();
 });
 
-window.addEventListener("mouseup", function() { fDragging = false; });
+fBar.addEventListener("pointerup", function(e) {
+  if (!fDragging) return;
+  fDragging = false;
+  fBar.style.cursor = "grab";
+  fBar.releasePointerCapture(e.pointerId);
+  e.preventDefault();
+  e.stopPropagation();
+});
+
+fBar.addEventListener("pointercancel", function(e) {
+  fDragging = false;
+  fBar.style.cursor = "grab";
+});
 
 // ---- pin state ----
 var pinLat = 0, pinLon = 0, pinActive = false;
