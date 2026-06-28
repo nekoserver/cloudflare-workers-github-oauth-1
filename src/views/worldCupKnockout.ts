@@ -1,23 +1,40 @@
 type KOTeam = { f: string; n: string };
-type KOMatch = { date: string; a: KOTeam; b: KOTeam; result?: string };
+type KOMatch = { date: string; a: KOTeam; b: KOTeam; jst: string; result?: string };
 
+// jst: JST表示文字列。翌=翌日
 const KO_BRACKET: KOMatch[] = [
-  { date: "6/28", a: { f: "🇿🇦", n: "RSA" }, b: { f: "🇨🇦", n: "CAN" } },
-  { date: "6/29", a: { f: "🇧🇷", n: "BRA" }, b: { f: "🇯🇵", n: "JPN" } },
-  { date: "6/29", a: { f: "🇩🇪", n: "GER" }, b: { f: "🇵🇾", n: "PAR" } },
-  { date: "6/29", a: { f: "🇳🇱", n: "NED" }, b: { f: "🇲🇦", n: "MAR" } },
-  { date: "6/30", a: { f: "🇨🇮", n: "CIV" }, b: { f: "🇳🇴", n: "NOR" } },
-  { date: "6/30", a: { f: "🇫🇷", n: "FRA" }, b: { f: "🇸🇪", n: "SWE" } },
-  { date: "6/30", a: { f: "🇲🇽", n: "MEX" }, b: { f: "🇪🇨", n: "ECU" } },
-  { date: "7/1",  a: { f: "🏴󠁧󠁢󠁥󠁮󠁧󠁿", n: "ENG" }, b: { f: "🇨🇩", n: "COD" } },
-  { date: "7/1",  a: { f: "🇧🇪", n: "BEL" }, b: { f: "🇸🇳", n: "SEN" } },
-  { date: "7/1",  a: { f: "🇺🇸", n: "USA" }, b: { f: "🇧🇦", n: "BIH" } },
-  { date: "7/2",  a: { f: "🇪🇸", n: "ESP" }, b: { f: "🇦🇹", n: "AUT" } },
-  { date: "7/2",  a: { f: "🇵🇹", n: "POR" }, b: { f: "🇭🇷", n: "CRO" } },
-  { date: "7/2",  a: { f: "🇨🇭", n: "SUI" }, b: { f: "🇩🇿", n: "ALG" } },
-  { date: "7/3",  a: { f: "🇦🇺", n: "AUS" }, b: { f: "🇪🇬", n: "EGY" } },
-  { date: "7/3",  a: { f: "🇦🇷", n: "ARG" }, b: { f: "🇨🇻", n: "CPV" } },
-  { date: "7/3",  a: { f: "🇨🇴", n: "COL" }, b: { f: "🇬🇭", n: "GHA" } },
+  // 6/28 UTC 19:00 = 翌4:00 JST (6/29)
+  { date: "6/28", jst: "翌4:00",  a: { f: "🇿🇦", n: "RSA" }, b: { f: "🇨🇦", n: "CAN" } },
+  // 6/28 UTC 22:00 = 7:00 JST (6/29) ← カード表示は6/29なので"翌"不要
+  { date: "6/29", jst: "7:00",    a: { f: "🇳🇱", n: "NED" }, b: { f: "🇲🇦", n: "MAR" } },
+  // 6/29 UTC 19:00 = 翌4:00 JST (6/30)
+  { date: "6/29", jst: "翌4:00",  a: { f: "🇧🇷", n: "BRA" }, b: { f: "🇯🇵", n: "JPN" } },
+  // 6/29 UTC 22:00 = 翌7:00 JST (6/30)
+  { date: "6/29", jst: "翌7:00",  a: { f: "🇩🇪", n: "GER" }, b: { f: "🇵🇾", n: "PAR" } },
+  // 6/30 UTC 19:00 = 翌4:00 JST (7/1)
+  { date: "6/30", jst: "翌4:00",  a: { f: "🇨🇮", n: "CIV" }, b: { f: "🇳🇴", n: "NOR" } },
+  // 6/30 UTC 22:00 = 翌7:00 JST (7/1)
+  { date: "6/30", jst: "翌7:00",  a: { f: "🇫🇷", n: "FRA" }, b: { f: "🇸🇪", n: "SWE" } },
+  // 7/1 UTC 02:00 = 翌11:00 JST (7/1) ← 現地6/30深夜
+  { date: "6/30", jst: "翌11:00", a: { f: "🇲🇽", n: "MEX" }, b: { f: "🇪🇨", n: "ECU" } },
+  // 7/1 UTC 19:00 = 翌4:00 JST (7/2)
+  { date: "7/1",  jst: "翌4:00",  a: { f: "🏴󠁧󠁢󠁥󠁮󠁧󠁿", n: "ENG" }, b: { f: "🇨🇩", n: "COD" } },
+  // 7/1 UTC 22:00 = 翌7:00 JST (7/2)
+  { date: "7/1",  jst: "翌7:00",  a: { f: "🇧🇪", n: "BEL" }, b: { f: "🇸🇳", n: "SEN" } },
+  // 7/2 UTC 02:00 = 翌11:00 JST (7/2) ← 現地7/1深夜
+  { date: "7/1",  jst: "翌11:00", a: { f: "🇺🇸", n: "USA" }, b: { f: "🇧🇦", n: "BIH" } },
+  // 7/2 UTC 19:00 = 翌4:00 JST (7/3)
+  { date: "7/2",  jst: "翌4:00",  a: { f: "🇪🇸", n: "ESP" }, b: { f: "🇦🇹", n: "AUT" } },
+  // 7/2 UTC 22:00 = 翌7:00 JST (7/3)
+  { date: "7/2",  jst: "翌7:00",  a: { f: "🇵🇹", n: "POR" }, b: { f: "🇭🇷", n: "CRO" } },
+  // 7/3 UTC 02:00 = 翌11:00 JST (7/3) ← 現地7/2深夜
+  { date: "7/2",  jst: "翌11:00", a: { f: "🇨🇭", n: "SUI" }, b: { f: "🇩🇿", n: "ALG" } },
+  // 7/3 UTC 19:00 = 翌4:00 JST (7/4)
+  { date: "7/3",  jst: "翌4:00",  a: { f: "🇦🇺", n: "AUS" }, b: { f: "🇪🇬", n: "EGY" } },
+  // 7/3 UTC 22:00 = 翌7:00 JST (7/4)
+  { date: "7/3",  jst: "翌7:00",  a: { f: "🇦🇷", n: "ARG" }, b: { f: "🇨🇻", n: "CPV" } },
+  // 7/4 UTC 02:00 = 翌11:00 JST (7/4) ← 現地7/3深夜
+  { date: "7/3",  jst: "翌11:00", a: { f: "🇨🇴", n: "COL" }, b: { f: "🇬🇭", n: "GHA" } },
 ];
 
 function buildKOCards(): string {
@@ -26,14 +43,18 @@ function buildKOCards(): string {
     "7/1": "7/1(水)", "7/2": "7/2(木)", "7/3": "7/3(金)",
   };
   const groups: Record<string, KOMatch[]> = {};
+  const order: string[] = [];
   for (const m of KO_BRACKET) {
-    if (!groups[m.date]) groups[m.date] = [];
+    if (!groups[m.date]) { groups[m.date] = []; order.push(m.date); }
     groups[m.date].push(m);
   }
+  const seen = new Set<string>();
+  const dates = order.filter(d => { if (seen.has(d)) return false; seen.add(d); return true; });
+
   let html = "";
-  for (const date of Object.keys(groups).sort()) {
+  for (const date of dates) {
     html += `<div class="card-group">`;
-    html += `<div class="card-date">${dateLabel[date] ?? date}</div>`;
+    html += `<div class="card-date"><span>${dateLabel[date] ?? date}</span><span>JST</span></div>`;
     for (const m of groups[date]) {
       const mid = m.result
         ? `<div class="card-result">${m.result}</div>`
@@ -42,6 +63,7 @@ function buildKOCards(): string {
       html += `<div class="card-team"><span class="cf">${m.a.f}</span><span class="cn">${m.a.n}</span></div>`;
       html += mid;
       html += `<div class="card-team card-team-r"><span class="cn">${m.b.n}</span><span class="cf">${m.b.f}</span></div>`;
+      html += `<span class="card-time">${m.jst}</span>`;
       html += `</div>`;
     }
     html += `</div>`;
@@ -66,18 +88,19 @@ body{background:#0d1117;color:#e6edf3;font-family:system-ui,-apple-system,sans-s
 .layout{display:flex;flex:1;min-height:0;overflow:hidden}
 
 /* ===== 左パネル（R32対戦カード） ===== */
-.left{width:200px;flex-shrink:0;border-right:1px solid #21262d;overflow-y:auto;padding:6px}
+.left{width:210px;flex-shrink:0;border-right:1px solid #21262d;overflow-y:auto;padding:6px}
 .left-title{font-size:0.65rem;font-weight:700;color:#58a6ff;text-transform:uppercase;letter-spacing:.05em;padding:2px 4px;margin-bottom:4px}
 .card-group{margin-bottom:8px}
-.card-date{font-size:0.62rem;font-weight:700;color:#58a6ff;border-left:2px solid #58a6ff;padding:1px 5px;margin-bottom:3px}
-.match-card{display:flex;align-items:center;background:#161b22;border:1px solid #30363d;border-radius:5px;padding:3px 5px;margin-bottom:3px;gap:3px;font-size:0.66rem}
+.card-date{display:flex;justify-content:space-between;align-items:center;font-size:0.62rem;font-weight:700;color:#58a6ff;border-left:2px solid #58a6ff;padding:1px 5px;margin-bottom:3px}
+.match-card{display:flex;align-items:center;background:#161b22;border:1px solid #30363d;border-radius:5px;padding:3px 5px;margin-bottom:3px;gap:2px;font-size:0.66rem}
 .match-card:hover{background:#1c2128}
 .card-team{display:flex;align-items:center;gap:2px;flex:1;min-width:0}
 .card-team-r{flex-direction:row-reverse}
 .cf{font-size:0.9rem;line-height:1;flex-shrink:0}
 .cn{font-weight:700;font-size:0.64rem;white-space:nowrap}
-.card-vs{font-size:0.58rem;color:#8b949e;padding:0 2px;flex-shrink:0}
-.card-result{font-size:0.66rem;font-weight:800;color:#f0b429;padding:0 2px;flex-shrink:0}
+.card-vs{font-size:0.58rem;color:#8b949e;flex-shrink:0;padding:0}
+.card-result{font-size:0.66rem;font-weight:800;color:#f0b429;flex-shrink:0;padding:0}
+.card-time{font-size:0.58rem;color:#8b949e;font-family:monospace;white-space:nowrap;flex-shrink:0;margin-left:2px}
 
 /* ===== 右メイン（トーナメントブラケット） ===== */
 .right{flex:1;overflow:auto;padding:8px 10px}
@@ -140,9 +163,9 @@ function matchCard(m){
 var ROUNDS=[
   {label:'R32',flex:'2.4',matches:[
     {date:'6/28',a:'🇿🇦',b:'🇨🇦',slotA:'RSA',slotB:'CAN'},
+    {date:'6/29',a:'🇳🇱',b:'🇲🇦',slotA:'NED',slotB:'MAR'},
     {date:'6/29',a:'🇧🇷',b:'🇯🇵',slotA:'BRA',slotB:'JPN'},
     {date:'6/29',a:'🇩🇪',b:'🇵🇾',slotA:'GER',slotB:'PAR'},
-    {date:'6/29',a:'🇳🇱',b:'🇲🇦',slotA:'NED',slotB:'MAR'},
     {date:'6/30',a:'🇨🇮',b:'🇳🇴',slotA:'CIV',slotB:'NOR'},
     {date:'6/30',a:'🇫🇷',b:'🇸🇪',slotA:'FRA',slotB:'SWE'},
     {date:'6/30',a:'🇲🇽',b:'🇪🇨',slotA:'MEX',slotB:'ECU'},
