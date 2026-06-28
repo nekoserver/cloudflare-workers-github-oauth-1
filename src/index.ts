@@ -38,6 +38,7 @@ import { getWebGLFaultsPage } from './views/webglFaults';
 import { getUuidGenPage } from './views/uuidGen';
 import { getMLBSpherePage } from './views/mlbSphere';
 import { getWorldCupWdlPage } from './views/worldCupWdl';
+import { getTdfPage } from './views/tdf';
 import { getMatrixRainPage } from './views/matrixRain';
 import { getImageSpin3dPage } from './views/imageSpin3d';
 import { findNearbyCities } from './utils/worldCities';
@@ -4987,6 +4988,10 @@ app.get('/api/mlb-next-start', authMiddleware, async (c) => {
 
 app.get('/worldcup-wdl', authMiddleware, async (c) => {
   return c.html(getWorldCupWdlPage());
+});
+
+app.get('/tdf', authMiddleware, async (c) => {
+  return c.html(getTdfPage());
 });
 
 /**
