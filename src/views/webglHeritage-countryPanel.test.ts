@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { ccToJp, buildCountryHeritageCitiesHtml } from './webglHeritageUtils';
 import { getWebGLHeritagePage } from './webglHeritage';
+import { HERITAGE_LIST } from '../data/heritageList';
 
 describe('ccToJp', () => {
   it('既知の国コードをカタカナ名に変換する', () => {
@@ -59,6 +60,28 @@ describe('buildCountryHeritageCitiesHtml', () => {
   });
 });
 
+
+
+describe('HERITAGE_LIST Austria coverage', () => {
+  it('オーストリアの世界遺産12件を国別パネルに表示できるように保持する', () => {
+    const austriaSites = HERITAGE_LIST.filter((site) => site.f === '🇦🇹');
+    expect(austriaSites.map((site) => site.n)).toEqual(expect.arrayContaining([
+      'ザルツブルク市街の歴史地区',
+      'シェーンブルン宮殿と庭園群',
+      'ハルシュタット＝ダッハシュタイン／ザルツカンマーグートの文化的景観',
+      'ゼメリング鉄道',
+      'グラーツ市街—歴史地区とエッゲンベルク城',
+      'ヴァッハウ渓谷の文化的景観',
+      'フェルテー湖／ノイジードラー湖の文化的景観',
+      'ウィーン歴史地区',
+      'アルプス山脈周辺の先史時代の杭上住居群（オーストリア）',
+      'カルパティア山脈とヨーロッパ各地のブナ原生林（オーストリア）',
+      'ローマ帝国の国境線—ドナウのリメス（西部分）',
+      'ヨーロッパの大温泉保養都市群（バーデン・バイ・ウィーン）',
+    ]));
+    expect(austriaSites).toHaveLength(12);
+  });
+});
 
 describe('世界遺産地球儀 エリアズーム', () => {
   it('エリアズーム用のボタン・選択オーバーレイ・エリアメニュー処理を含む', () => {
