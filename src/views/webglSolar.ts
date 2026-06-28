@@ -62,6 +62,7 @@ input[type=range] { accent-color:#fdb813; width:120px; }
   <button class="btn" id="btnToday">🌟 今日の空</button>
   <button class="btn" id="btnPole">🧭 地軸固定</button>
   <button class="btn" id="btnSpin">🌀 自転</button>
+  <button class="btn" id="btnMeteors">☄️ 流星群</button>
   <button class="btn" id="btnGrid">グリッド</button>
   <button class="btn" id="btnShot">📷 スクショ</button>
 </div>
@@ -85,6 +86,7 @@ input[type=range] { accent-color:#fdb813; width:120px; }
   var btnPole = document.getElementById('btnPole');
   var btnSpin = document.getElementById('btnSpin');
   var btnGrid = document.getElementById('btnGrid');
+  var btnMeteors = document.getElementById('btnMeteors');
   var btnShot = document.getElementById('btnShot');
 
   var SOL_SV = Math.sin(35 * Math.PI / 180);
@@ -141,6 +143,24 @@ input[type=range] { accent-color:#fdb813; width:120px; }
     showGrid = !showGrid;
     btnGrid.classList.toggle('active', showGrid);
   });
+
+  var showMeteors = false;
+  var meteors = [];
+  var meteorSpawnTimer = 0;
+  var PERS_LON = 46 * Math.PI / 180;
+  var PERS_LAT = 58 * Math.PI / 180;
+
+  btnMeteors.addEventListener('click', function() {
+    showMeteors = !showMeteors;
+    btnMeteors.classList.toggle('active', showMeteors);
+    if (!showMeteors) meteors = [];
+  });
+
+  var _md = new Date();
+  if (_md.getMonth() === 7 && _md.getDate() >= 10 && _md.getDate() <= 14) {
+    showMeteors = true;
+    btnMeteors.classList.add('active');
+  }
 
   function setSkyMode(mode) {
     if (mode === 'today' && skyViewMode !== 'today') {
@@ -1261,6 +1281,68 @@ input[type=range] { accent-color:#fdb813; width:120px; }
     else hideTooltip();
   });
 
+  function drawMeteors(dt) {
+    if (!showMeteors || skyViewMode === '' || skyViewMode === 'solstice') return;
+    var persPos = projectSky(PERS_LON, PERS_LAT);
+    var persX = persPos ? persPos.x : W * 0.35;
+    var persY = persPos ? persPos.y : H * 0.22;
+    meteorSpawnTimer -= dt;
+    if (meteorSpawnTimer <= 0) {
+      meteorSpawnTimer = 0.07 + Math.random() * 0.12;
+      var ang = Math.random() * Math.PI * 2;
+      var spd = 180 + Math.random() * 220;
+      var lif = 0.35 + Math.random() * 0.4;
+      var dist = 15 + Math.random() * 60;
+      meteors.push({
+        x: persX + Math.cos(ang) * dist,
+        y: persY + Math.sin(ang) * dist,
+        vx: Math.cos(ang) * spd,
+        vy: Math.sin(ang) * spd,
+        life: lif, maxLife: lif,
+        len: 25 + Math.random() * 55
+      });
+    }
+    for (var mi = meteors.length - 1; mi >= 0; mi--) {
+      var m = meteors[mi];
+      m.x += m.vx * dt;
+      m.y += m.vy * dt;
+      m.life -= dt;
+      if (m.life <= 0 || m.x < -60 || m.x > W + 60 || m.y < -60 || m.y > H + 60) {
+        meteors.splice(mi, 1);
+        continue;
+      }
+      var alp = m.life / m.maxLife;
+      var spd2 = Math.sqrt(m.vx * m.vx + m.vy * m.vy);
+      var dx2 = m.vx / spd2, dy2 = m.vy / spd2;
+      var tailLen = m.len * alp;
+      var tx = m.x - dx2 * tailLen;
+      var ty = m.y - dy2 * tailLen;
+      var grad = ctx.createLinearGradient(tx, ty, m.x, m.y);
+      grad.addColorStop(0, 'rgba(200,230,255,0)');
+      grad.addColorStop(1, 'rgba(255,255,255,' + (alp * 0.9).toFixed(2) + ')');
+      ctx.save();
+      ctx.beginPath();
+      ctx.moveTo(tx, ty);
+      ctx.lineTo(m.x, m.y);
+      ctx.strokeStyle = grad;
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(m.x, m.y, 1.8, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(220,240,255,' + (alp * 0.95).toFixed(2) + ')';
+      ctx.fill();
+      ctx.restore();
+    }
+    if (persPos) {
+      ctx.font = '10px sans-serif';
+      ctx.fillStyle = 'rgba(180,220,255,0.65)';
+      ctx.fillText('ペルセウス座 (輻射点)', persPos.x + 9, persPos.y - 9);
+    }
+    ctx.font = '11px sans-serif';
+    ctx.fillStyle = 'rgba(180,220,255,0.8)';
+    ctx.fillText('☄️ ペルセウス座流星群  毎年8月中旬が極大', 10, H - 14);
+  }
+
   var lastTime = null;
   function frame(now) {
     requestAnimationFrame(frame);
@@ -1275,15 +1357,17 @@ input[type=range] { accent-color:#fdb813; width:120px; }
     planetScreenPos = [];
     starScreenPos = [];
 
-    if (skyViewMode === 'today') { drawTodaySky(); return; }
+    if (skyViewMode === 'today') { drawTodaySky(); drawMeteors(dt); return; }
     if (skyViewMode === 'pole') {
       viewAngle += dt * 0.003 * speed;
       drawPoleView();
+      drawMeteors(dt);
       return;
     }
     if (skyViewMode === 'spin') {
       viewAngle += dt * 0.009 * speed;
       drawSpinView();
+      drawMeteors(dt);
       return;
     }
     if (skyViewMode === 'solstice') {
@@ -1294,6 +1378,7 @@ input[type=range] { accent-color:#fdb813; width:120px; }
     }
     if (skyViewMode !== '') {
       drawSkyView();
+      drawMeteors(dt);
       return;
     }
 
