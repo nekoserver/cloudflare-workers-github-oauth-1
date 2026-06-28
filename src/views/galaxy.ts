@@ -59,171 +59,163 @@ input[type=range] { accent-color:#a78bfa; width:100px; }
   <button class="btn active" id="btnColors">カラー</button>
   <button class="btn" id="btnRegen">再生成</button>
 </div>
-<script type="importmap">
-{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.165.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.165.0/examples/jsm/"}}
-</script>
-<script type="module">
-import * as THREE from 'three';
-import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script>
+(function() {
+  var canvas = document.getElementById('c');
+  var hud = document.getElementById('hud');
 
-const canvas = document.getElementById('c');
-const hud = document.getElementById('hud');
+  var renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.setClearColor(0x000005);
 
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-renderer.setClearColor(0x000005);
+  var scene = new THREE.Scene();
+  var camera = new THREE.PerspectiveCamera(60, 1, 0.1, 100);
+  camera.position.set(0, 4, 8);
 
-const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(60, 1, 0.1, 100);
-camera.position.set(0, 4, 8);
+  var controls = new THREE.OrbitControls(camera, canvas);
+  controls.enableDamping = true;
+  controls.dampingFactor = 0.05;
+  controls.minDistance = 1;
+  controls.maxDistance = 30;
 
-const controls = new OrbitControls(camera, canvas);
-controls.enableDamping = true;
-controls.dampingFactor = 0.05;
-controls.minDistance = 1;
-controls.maxDistance = 30;
+  var geo = null;
+  var pts = null;
 
-let geometry = null;
-let points = null;
+  function buildGalaxy() {
+    var arms = parseInt(document.getElementById('armsRange').value);
+    var count = parseInt(document.getElementById('countRange').value);
+    var spread = parseFloat(document.getElementById('spreadRange').value);
+    var spinFactor = parseFloat(document.getElementById('spinRange').value);
+    var useColors = document.getElementById('btnColors').classList.contains('active');
 
-function buildGalaxy() {
-  const arms = parseInt(document.getElementById('armsRange').value);
-  const count = parseInt(document.getElementById('countRange').value);
-  const spread = parseFloat(document.getElementById('spreadRange').value);
-  const spinFactor = parseFloat(document.getElementById('spinRange').value);
-  const useColors = document.getElementById('btnColors').classList.contains('active');
-
-  if (points) {
-    scene.remove(points);
-    geometry.dispose();
-    points.material.dispose();
-  }
-
-  geometry = new THREE.BufferGeometry();
-  const positions = new Float32Array(count * 3);
-  const colors = new Float32Array(count * 3);
-
-  const innerColor = new THREE.Color('#ffd6a0');
-  const outerColor = new THREE.Color('#5a8aff');
-  const armColors = [
-    new THREE.Color('#ff6b9d'),
-    new THREE.Color('#a78bfa'),
-    new THREE.Color('#34d399'),
-    new THREE.Color('#60a5fa'),
-    new THREE.Color('#f59e0b'),
-    new THREE.Color('#f87171'),
-    new THREE.Color('#38bdf8'),
-    new THREE.Color('#c084fc'),
-  ];
-
-  for (let i = 0; i < count; i++) {
-    const r = Math.pow(Math.random(), 1.5) * 5;
-    const armIdx = i % arms;
-    const armAngle = (armIdx / arms) * Math.PI * 2;
-    const spin = r * spinFactor;
-    const branchAngle = armAngle + spin;
-    const rand = () => (Math.random() - 0.5) * spread * (1 - r / 6);
-    const rx = rand() * (1 + r * 0.1);
-    const ry = rand() * 0.3;
-    const rz = rand() * (1 + r * 0.1);
-
-    positions[i * 3]     = Math.cos(branchAngle) * r + rx;
-    positions[i * 3 + 1] = ry;
-    positions[i * 3 + 2] = Math.sin(branchAngle) * r + rz;
-
-    if (useColors) {
-      const mixColor = armColors[armIdx % armColors.length].clone();
-      const blended = innerColor.clone().lerp(mixColor, r / 5).lerp(outerColor, r / 7);
-      colors[i * 3]     = blended.r;
-      colors[i * 3 + 1] = blended.g;
-      colors[i * 3 + 2] = blended.b;
-    } else {
-      const t = r / 5;
-      const c = innerColor.clone().lerp(outerColor, t);
-      colors[i * 3]     = c.r;
-      colors[i * 3 + 1] = c.g;
-      colors[i * 3 + 2] = c.b;
+    if (pts) {
+      scene.remove(pts);
+      geo.dispose();
+      pts.material.dispose();
     }
+
+    geo = new THREE.BufferGeometry();
+    var positions = new Float32Array(count * 3);
+    var colors = new Float32Array(count * 3);
+
+    var innerColor = new THREE.Color('#ffd6a0');
+    var outerColor = new THREE.Color('#5a8aff');
+    var armColors = [
+      new THREE.Color('#ff6b9d'),
+      new THREE.Color('#a78bfa'),
+      new THREE.Color('#34d399'),
+      new THREE.Color('#60a5fa'),
+      new THREE.Color('#f59e0b'),
+      new THREE.Color('#f87171'),
+      new THREE.Color('#38bdf8'),
+      new THREE.Color('#c084fc')
+    ];
+
+    for (var i = 0; i < count; i++) {
+      var r = Math.pow(Math.random(), 1.5) * 5;
+      var armIdx = i % arms;
+      var armAngle = (armIdx / arms) * Math.PI * 2;
+      var spin = r * spinFactor;
+      var branchAngle = armAngle + spin;
+      var spreadScale = spread * (1 - r / 6);
+      var rx = (Math.random() - 0.5) * spreadScale * (1 + r * 0.1);
+      var ry = (Math.random() - 0.5) * spreadScale * 0.3;
+      var rz = (Math.random() - 0.5) * spreadScale * (1 + r * 0.1);
+
+      positions[i * 3]     = Math.cos(branchAngle) * r + rx;
+      positions[i * 3 + 1] = ry;
+      positions[i * 3 + 2] = Math.sin(branchAngle) * r + rz;
+
+      var col;
+      if (useColors) {
+        var mixColor = armColors[armIdx % armColors.length].clone();
+        col = innerColor.clone().lerp(mixColor, r / 5).lerp(outerColor, r / 7);
+      } else {
+        col = innerColor.clone().lerp(outerColor, r / 5);
+      }
+      colors[i * 3]     = col.r;
+      colors[i * 3 + 1] = col.g;
+      colors[i * 3 + 2] = col.b;
+    }
+
+    geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+    var mat = new THREE.PointsMaterial({
+      size: 0.025,
+      sizeAttenuation: true,
+      vertexColors: true,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending
+    });
+
+    pts = new THREE.Points(geo, mat);
+    scene.add(pts);
+    hud.textContent = '粒子: ' + count.toLocaleString() + ' | FPS: —';
   }
 
-  geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-  geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+  buildGalaxy();
 
-  const material = new THREE.PointsMaterial({
-    size: 0.025,
-    sizeAttenuation: true,
-    vertexColors: true,
-    depthWrite: false,
-    blending: THREE.AdditiveBlending,
+  var autoRotate = true;
+  var lastTime = performance.now();
+  var frameCount = 0;
+  var fps = 0;
+
+  function resize() {
+    var wrap = canvas.parentElement;
+    var w = wrap.clientWidth;
+    var h = wrap.clientHeight;
+    renderer.setSize(w, h, false);
+    camera.aspect = w / h;
+    camera.updateProjectionMatrix();
+  }
+  resize();
+  window.addEventListener('resize', resize);
+
+  function animate(now) {
+    requestAnimationFrame(animate);
+    frameCount++;
+    var dt = now - lastTime;
+    if (dt >= 1000) {
+      fps = Math.round(frameCount * 1000 / dt);
+      frameCount = 0;
+      lastTime = now;
+      var count = parseInt(document.getElementById('countRange').value);
+      hud.textContent = '粒子: ' + count.toLocaleString() + ' | FPS: ' + fps;
+    }
+    if (autoRotate && pts) {
+      pts.rotation.y += 0.0005;
+    }
+    controls.update();
+    renderer.render(scene, camera);
+  }
+  requestAnimationFrame(animate);
+
+  document.getElementById('btnRotate').addEventListener('click', function() {
+    autoRotate = !autoRotate;
+    this.classList.toggle('active', autoRotate);
   });
 
-  points = new THREE.Points(geometry, material);
-  scene.add(points);
-  hud.textContent = '粒子: ' + count.toLocaleString() + ' | FPS: —';
-}
-
-buildGalaxy();
-
-let autoRotate = true;
-let lastTime = performance.now();
-let frameCount = 0;
-let fps = 0;
-
-function resize() {
-  const w = canvas.parentElement.clientWidth;
-  const h = canvas.parentElement.clientHeight;
-  renderer.setSize(w, h, false);
-  camera.aspect = w / h;
-  camera.updateProjectionMatrix();
-}
-resize();
-window.addEventListener('resize', resize);
-
-function animate(now) {
-  requestAnimationFrame(animate);
-  frameCount++;
-  const dt = now - lastTime;
-  if (dt >= 1000) {
-    fps = Math.round(frameCount * 1000 / dt);
-    frameCount = 0;
-    lastTime = now;
-    const count = parseInt(document.getElementById('countRange').value);
-    hud.textContent = '粒子: ' + count.toLocaleString() + ' | FPS: ' + fps;
-  }
-  if (autoRotate && points) {
-    points.rotation.y += 0.0005;
-  }
-  controls.update();
-  renderer.render(scene, camera);
-}
-requestAnimationFrame(animate);
-
-document.getElementById('btnRotate').addEventListener('click', function() {
-  autoRotate = !autoRotate;
-  this.classList.toggle('active', autoRotate);
-});
-
-document.getElementById('btnColors').addEventListener('click', function() {
-  this.classList.toggle('active');
-  buildGalaxy();
-});
-
-document.getElementById('btnRegen').addEventListener('click', buildGalaxy);
-
-['armsRange','countRange','spreadRange','spinRange'].forEach(function(id) {
-  const el = document.getElementById(id);
-  const valId = id.replace('Range', 'Val');
-  const valEl = document.getElementById(valId);
-  el.addEventListener('input', function() {
-    const v = parseFloat(this.value);
-    if (id === 'armsRange' || id === 'countRange') {
-      valEl.textContent = Math.round(v).toString();
-    } else {
-      valEl.textContent = v.toFixed(2);
-    }
+  document.getElementById('btnColors').addEventListener('click', function() {
+    this.classList.toggle('active');
     buildGalaxy();
   });
-});
+
+  document.getElementById('btnRegen').addEventListener('click', buildGalaxy);
+
+  var sliders = ['armsRange', 'countRange', 'spreadRange', 'spinRange'];
+  sliders.forEach(function(id) {
+    var el = document.getElementById(id);
+    var valEl = document.getElementById(id.replace('Range', 'Val'));
+    el.addEventListener('input', function() {
+      var v = parseFloat(this.value);
+      valEl.textContent = (id === 'armsRange' || id === 'countRange') ? Math.round(v).toString() : v.toFixed(2);
+      buildGalaxy();
+    });
+  });
+})();
 </script>
 </body>
 </html>`;
