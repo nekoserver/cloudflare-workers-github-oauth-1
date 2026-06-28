@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { ccToJp, buildCountryHeritageCitiesHtml } from './webglHeritageUtils';
+import { getWebGLHeritagePage } from './webglHeritage';
 
 describe('ccToJp', () => {
   it('既知の国コードをカタカナ名に変換する', () => {
@@ -55,5 +56,18 @@ describe('buildCountryHeritageCitiesHtml', () => {
     const posHeritage = html.lastIndexOf('遺産');
     const posTotal = html.indexOf('合計');
     expect(posTotal).toBeGreaterThan(posHeritage);
+  });
+});
+
+
+describe('世界遺産地球儀 エリアズーム', () => {
+  it('エリアズーム用のボタン・選択オーバーレイ・エリアメニュー処理を含む', () => {
+    const html = getWebGLHeritagePage('tester');
+    expect(html).toContain('id="btnBoxZoom"');
+    expect(html).toContain('id="box-select-overlay"');
+    expect(html).toContain('function applyBoxZoom');
+    expect(html).toContain('function screenToLatLon');
+    expect(html).toContain('function getHeritagesInBounds');
+    expect(html).toContain('エリアメニュー');
   });
 });
