@@ -1,14 +1,14 @@
 type BTeam = { f: string; n: string };
-type BMatch = { date: string; a: BTeam; b: BTeam | null; bl?: string };
+type BMatch = { date: string; a: BTeam; b: BTeam; result?: string };
 
 const BRACKET_DATA: BMatch[] = [
   { date: "6/28", a: { f: "🇿🇦", n: "RSA" }, b: { f: "🇨🇦", n: "CAN" } },
-  { date: "6/28", a: { f: "🇲🇽", n: "MEX" }, b: { f: "🇪🇨", n: "ECU" } },
   { date: "6/29", a: { f: "🇧🇷", n: "BRA" }, b: { f: "🇯🇵", n: "JPN" } },
   { date: "6/29", a: { f: "🇩🇪", n: "GER" }, b: { f: "🇵🇾", n: "PAR" } },
   { date: "6/29", a: { f: "🇳🇱", n: "NED" }, b: { f: "🇲🇦", n: "MAR" } },
   { date: "6/30", a: { f: "🇨🇮", n: "CIV" }, b: { f: "🇳🇴", n: "NOR" } },
   { date: "6/30", a: { f: "🇫🇷", n: "FRA" }, b: { f: "🇸🇪", n: "SWE" } },
+  { date: "6/30", a: { f: "🇲🇽", n: "MEX" }, b: { f: "🇪🇨", n: "ECU" } },
   { date: "7/1",  a: { f: "🏴󠁧󠁢󠁥󠁮󠁧󠁿", n: "ENG" }, b: { f: "🇨🇩", n: "COD" } },
   { date: "7/1",  a: { f: "🇧🇪", n: "BEL" }, b: { f: "🇸🇳", n: "SEN" } },
   { date: "7/1",  a: { f: "🇺🇸", n: "USA" }, b: { f: "🇧🇦", n: "BIH" } },
@@ -20,32 +20,37 @@ const BRACKET_DATA: BMatch[] = [
   { date: "7/3",  a: { f: "🇨🇴", n: "COL" }, b: { f: "🇬🇭", n: "GHA" } },
 ];
 
-function bTeamCell(t: BTeam | null, label?: string): string {
-  if (t) return `<div class="br-team-inner"><span class="br-flag">${t.f}</span><span class="br-name">${t.n}</span></div>`;
-  return `<div class="br-tbd">${label ?? "未定"}</div>`;
-}
-
-function buildBracketRows(): string {
-  const counts: Record<string, number> = {};
-  for (const m of BRACKET_DATA) counts[m.date] = (counts[m.date] ?? 0) + 1;
-  const shown: Record<string, boolean> = {};
-  let rows = "";
+function buildMatchCards(): string {
+  const dateLabel: Record<string, string> = {
+    "6/28": "6月28日(日)", "6/29": "6月29日(月)", "6/30": "6月30日(火)",
+    "7/1": "7月1日(水)", "7/2": "7月2日(木)", "7/3": "7月3日(金)",
+  };
+  const groups: Record<string, BMatch[]> = {};
   for (const m of BRACKET_DATA) {
-    rows += "<tr>";
-    if (!shown[m.date]) {
-      rows += `<td class="br-date-cell" rowspan="${counts[m.date]}">${m.date}</td>`;
-      shown[m.date] = true;
-    }
-    rows += `<td class="br-team-cell">${bTeamCell(m.a)}</td>`;
-    rows += `<td class="br-vs-cell">vs</td>`;
-    rows += `<td class="br-team-cell">${bTeamCell(m.b, m.bl)}</td>`;
-    rows += "</tr>";
+    if (!groups[m.date]) groups[m.date] = [];
+    groups[m.date].push(m);
   }
-  return rows;
+  let html = "";
+  for (const date of Object.keys(groups).sort()) {
+    html += `<div class="card-date-group">`;
+    html += `<div class="card-date-label">${dateLabel[date] ?? date}</div>`;
+    for (const m of groups[date]) {
+      const resultHtml = m.result
+        ? `<div class="card-result">${m.result}</div>`
+        : `<div class="card-vs">vs</div>`;
+      html += `<div class="match-card">`;
+      html += `<div class="card-team"><span class="card-flag">${m.a.f}</span><span class="card-name">${m.a.n}</span></div>`;
+      html += resultHtml;
+      html += `<div class="card-team card-team-b"><span class="card-name">${m.b.n}</span><span class="card-flag">${m.b.f}</span></div>`;
+      html += `</div>`;
+    }
+    html += `</div>`;
+  }
+  return html;
 }
 
 export function getWorldCupWdlPage(): string {
-  const bracketRows = buildBracketRows();
+  const matchCards = buildMatchCards();
   return `<!DOCTYPE html>
 <html lang="ja">
 <head>
@@ -75,13 +80,50 @@ export function getWorldCupWdlPage(): string {
   --badge-bg: light-dark(#f0f0f0, #252535);
   --badge-border: light-dark(#ccc, #444466);
   --row-alt: light-dark(#f9fbfc, #151520);
+  --card-bg: light-dark(#ffffff, #1a1a2e);
+  --card-hover: light-dark(#f4f6ff, #1e1e38);
+  --accent: light-dark(#3a6fd8, #5b9af0);
 }
 * { box-sizing: border-box; margin: 0; padding: 0; }
-body { background: var(--bg); color: var(--text); font-family: system-ui, -apple-system, sans-serif; padding: 12px; min-height: 100vh; }
-.page-header { margin-bottom: 10px; }
-h1 { font-size: 1.2rem; margin-bottom: 2px; }
-.subtitle { color: var(--text-muted); font-size: 0.75rem; }
-.table-wrap { overflow-x: auto; border-radius: 8px; box-shadow: 0 1px 4px rgba(0,0,0,0.15); }
+body { background: var(--bg); color: var(--text); font-family: system-ui, -apple-system, sans-serif; min-height: 100vh; display: flex; flex-direction: column; }
+.page-header { padding: 10px 14px 8px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+h1 { font-size: 1.1rem; margin-bottom: 2px; }
+.subtitle { color: var(--text-muted); font-size: 0.72rem; }
+.main-layout { display: flex; flex: 1; min-height: 0; overflow: hidden; }
+
+/* ===== 左サイドパネル（ラウンド32 対戦カード） ===== */
+.left-panel {
+  width: 220px; flex-shrink: 0; overflow-y: auto;
+  border-right: 1px solid var(--border);
+  padding: 10px 8px;
+  background: var(--surface);
+}
+.left-panel-title { font-size: 0.72rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 8px; padding: 0 2px; }
+.card-date-group { margin-bottom: 10px; }
+.card-date-label {
+  font-size: 0.68rem; font-weight: 700; color: var(--accent);
+  padding: 2px 6px; margin-bottom: 4px;
+  border-left: 2px solid var(--accent);
+}
+.match-card {
+  display: flex; align-items: center; justify-content: space-between;
+  background: var(--card-bg); border: 1px solid var(--border);
+  border-radius: 6px; padding: 5px 6px; margin-bottom: 4px;
+  font-size: 0.72rem; gap: 4px;
+  transition: background 0.12s;
+}
+.match-card:hover { background: var(--card-hover); }
+.card-team { display: flex; align-items: center; gap: 3px; flex: 1; min-width: 0; }
+.card-team-b { flex-direction: row-reverse; }
+.card-flag { font-size: 1rem; line-height: 1; flex-shrink: 0; }
+.card-name { font-weight: 700; font-size: 0.7rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.card-vs { font-size: 0.62rem; font-weight: 700; color: var(--text-muted); padding: 0 3px; flex-shrink: 0; }
+.card-result { font-size: 0.72rem; font-weight: 800; color: var(--accent); padding: 0 3px; flex-shrink: 0; white-space: nowrap; }
+
+/* ===== 右メインエリア ===== */
+.right-main { flex: 1; overflow-y: auto; padding: 10px 12px; min-width: 0; }
+.section-title { font-size: 0.85rem; font-weight: 700; margin-bottom: 8px; }
+.table-wrap { overflow-x: auto; border-radius: 8px; box-shadow: 0 1px 4px rgba(0,0,0,0.15); margin-bottom: 6px; }
 table { border-collapse: collapse; font-size: 0.75rem; background: var(--surface); }
 th { padding: 6px 7px; text-align: center; border: 1px solid var(--border); white-space: nowrap; font-weight: 600; background: var(--header-bg); color: var(--header-text); }
 th.grp { background: var(--grp-header-bg); }
@@ -95,19 +137,16 @@ tr:nth-child(even) td { background: var(--row-alt); }
 .badge-draw { background: var(--draw-bg); border-color: var(--draw-border); }
 .badge-loss { background: var(--loss-bg); border-color: var(--loss-border); }
 .empty { color: var(--border); font-size: 0.68rem; }
-.ko-section { margin-top: 18px; }
-.ko-section h2 { font-size: 1rem; margin-bottom: 8px; }
-.br-wrap { overflow-x: auto; border-radius: 8px; box-shadow: 0 1px 4px rgba(0,0,0,0.15); }
-.br-table { border-collapse: collapse; font-size: 0.8rem; background: var(--surface); width: 100%; }
-.br-table th { padding: 5px 8px; text-align: center; border: 1px solid var(--border); background: var(--header-bg); color: var(--header-text); font-weight: 600; white-space: nowrap; }
-.br-table td { border: 1px solid var(--border); padding: 4px 6px; vertical-align: middle; }
-.br-date-cell { background: var(--grp-header-bg); color: var(--header-text); text-align: center; font-weight: 700; font-size: 0.75rem; white-space: nowrap; min-width: 38px; }
-.br-team-cell { white-space: nowrap; }
-.br-team-inner { display: flex; align-items: center; gap: 5px; padding: 3px 4px; border-radius: 4px; background: var(--meta-bg); border: 1px solid var(--border); min-width: 80px; }
-.br-flag { font-size: 1.1rem; line-height: 1; }
-.br-name { font-weight: 700; font-size: 0.8rem; }
-.br-tbd { display: flex; align-items: center; justify-content: center; padding: 3px 8px; border-radius: 4px; border: 1px dashed var(--border); color: var(--text-muted); font-size: 0.75rem; min-width: 80px; min-height: 28px; }
-.br-vs-cell { text-align: center; color: var(--text-muted); font-size: 0.7rem; font-weight: 600; padding: 4px 6px; white-space: nowrap; }
+
+/* ===== モバイル ===== */
+@media (max-width: 600px) {
+  .main-layout { flex-direction: column; overflow: visible; }
+  .left-panel { width: 100%; border-right: none; border-bottom: 1px solid var(--border); overflow-y: visible; padding: 10px 10px 6px; }
+  .left-panel .card-date-group { display: flex; flex-wrap: wrap; gap: 4px; align-items: flex-start; margin-bottom: 6px; }
+  .left-panel .card-date-label { width: 100%; margin-bottom: 0; }
+  .match-card { flex: 1 1 auto; min-width: 140px; max-width: calc(50% - 2px); }
+  .right-main { overflow-y: visible; }
+}
 </style>
 </head>
 <body>
@@ -115,28 +154,31 @@ tr:nth-child(even) td { background: var(--row-alt); }
   <h1>&#x26BD; W杯2026 WDL分布テーブル</h1>
   <p class="subtitle">データ: 2026年6月28日現在（全12組 第3節終了・ラウンド32進行中）</p>
 </div>
-<div class="table-wrap">
-  <table>
-    <thead>
-      <tr>
-        <th class="grp">A</th><th class="grp">B</th><th class="grp">C</th>
-        <th class="grp">D</th><th class="grp">E</th><th class="grp">F</th>
-        <th class="grp">G</th><th class="grp">H</th><th class="grp">I</th>
-        <th class="grp">J</th><th class="grp">K</th><th class="grp">L</th>
-        <th>W</th><th>D</th><th>L</th><th>勝点</th>
-      </tr>
-    </thead>
-    <tbody id="tbody"></tbody>
-  </table>
-</div>
 
-<div class="ko-section">
-  <h2>&#x1F3C6; ラウンド32 対戦表</h2>
-  <div class="br-wrap">
-    <table class="br-table">
-      <thead><tr><th>日付</th><th colspan="3">対戦</th></tr></thead>
-      <tbody>${bracketRows}</tbody>
-    </table>
+<div class="main-layout">
+  <!-- 左サイドパネル：ラウンド32 対戦カード -->
+  <div class="left-panel">
+    <div class="left-panel-title">&#x1F3C6; ラウンド32</div>
+    ${matchCards}
+  </div>
+
+  <!-- 右メイン：WDL分布テーブル -->
+  <div class="right-main">
+    <div class="section-title">&#x1F4CA; WDL分布テーブル（グループステージ）</div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th class="grp">A</th><th class="grp">B</th><th class="grp">C</th>
+            <th class="grp">D</th><th class="grp">E</th><th class="grp">F</th>
+            <th class="grp">G</th><th class="grp">H</th><th class="grp">I</th>
+            <th class="grp">J</th><th class="grp">K</th><th class="grp">L</th>
+            <th>W</th><th>D</th><th>L</th><th>勝点</th>
+          </tr>
+        </thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
   </div>
 </div>
 
