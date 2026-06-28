@@ -1698,7 +1698,7 @@ void main() {
     var t = (-b - Math.sqrt(disc)) / 2;
     var px = ro[0]+t*rd[0], py = ro[1]+t*rd[1], pz = ro[2]+t*rd[2];
     var lat = Math.asin(Math.max(-1, Math.min(1, py))) * 180 / Math.PI;
-    var lon = Math.atan2(px, -pz) * 180 / Math.PI;
+    var lon = Math.atan2(-pz, px) * 180 / Math.PI;
     var fraction = Math.min(bw / rect.width, bh / rect.height);
     // zoom = カメラ距離。小さいほどズームイン。ボックスが画面のfractionを占めるなら
     // ズーム後の距離 = 現在距離 * fraction（小さいボックス→より近づく）
