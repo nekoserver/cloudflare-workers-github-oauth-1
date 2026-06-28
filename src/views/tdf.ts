@@ -377,11 +377,24 @@ function buildSchedList() {
   list.innerHTML = parts.join("");
 }
 
+function scrollRowIntoView(el) {
+  var list = document.getElementById("sched-list");
+  var elTop = el.offsetTop;
+  var elBottom = elTop + el.offsetHeight;
+  var visTop = list.scrollTop;
+  var visBottom = visTop + list.clientHeight;
+  if (elBottom > visBottom) {
+    list.scrollTop += el.offsetHeight;
+  } else if (elTop < visTop) {
+    list.scrollTop -= el.offsetHeight;
+  }
+}
+
 function showDetail(idx) {
   var rowEls = document.querySelectorAll("#sched-list .srow, #sched-list .srow-rest");
   for(var i=0; i<rowEls.length; i++) rowEls[i].classList.remove("selected");
   var selEl = document.getElementById("srow-" + idx);
-  if(selEl) selEl.classList.add("selected");
+  if(selEl) { selEl.classList.add("selected"); scrollRowIntoView(selEl); }
 
   var item = SCHED[idx];
   var inner = document.getElementById("sched-detail-inner");
@@ -453,9 +466,20 @@ function toggleCarousel() {
   }
 }
 
+function stopCarousel() {
+  carouselMode = false;
+  var btn = document.getElementById("carousel-btn");
+  btn.textContent = "巡回 OFF";
+  btn.className = "off";
+}
+
 function advanceCarousel() {
   if (!carouselMode) return;
-  var nextN = (carouselStageN >= 21) ? 1 : carouselStageN + 1;
+  if (carouselStageN >= 21) {
+    stopCarousel();
+    return;
+  }
+  var nextN = carouselStageN + 1;
   for (var i = 0; i < SCHED.length; i++) {
     if (SCHED[i].type === "stage" && SCHED[i].n === nextN) {
       showDetail(i);
