@@ -429,10 +429,15 @@ function focusStage(n) {
   var st = null;
   for(var i=0; i<STAGES.length; i++) if(STAGES[i].n===n){st=STAGES[i];break;}
   if(!st) return;
+
+  if(restoreTimer) { clearTimeout(restoreTimer); restoreTimer = null; }
+
+  pinLat = st.s[0]; pinLon = st.s[1]; pinActive = true;
+
   var via = st.via || [];
   var mid = Math.floor(via.length / 2);
-  var midLat = via.length > 0 ? (st.s[0]+st.e[0])/2 : (st.s[0]+st.e[0])/2;
-  var midLon = via.length > 0 ? (st.s[1]+st.e[1])/2 : (st.s[1]+st.e[1])/2;
+  var midLat = (st.s[0]+st.e[0])/2;
+  var midLon = (st.s[1]+st.e[1])/2;
   if(via.length > 0){ midLat=via[mid][0]; midLon=via[mid][1]; }
   var targetZoom = 6.0;
   var aspect = (LON_MAX - LON_MIN) / (LAT_MAX - LAT_MIN);
@@ -446,6 +451,19 @@ function focusStage(n) {
     if(t<dur) requestAnimationFrame(step);
   }
   requestAnimationFrame(step);
+
+  restoreTimer = setTimeout(function() {
+    restoreTimer = null;
+    pinActive = false;
+    var rz=zoom, rpx=panX, rpy=panY, rt=0, rdur=35;
+    function rstep(){
+      rt++;
+      var p=rt/rdur; p=p<0.5?2*p*p:-1+(4-2*p)*p;
+      zoom=rz+(savedZoom-rz)*p; panX=rpx+(savedPanX-rpx)*p; panY=rpy+(savedPanY-rpy)*p;
+      if(rt<rdur) requestAnimationFrame(rstep);
+    }
+    requestAnimationFrame(rstep);
+  }, 10000);
 }
 
 // ---- route map ----
@@ -566,6 +584,8 @@ var ttClimbs = document.getElementById("tt-climbs");
 
 var W, H, scale, ox, oy;
 var panX = 0, panY = 0, zoom = 1;
+var savedZoom = 1, savedPanX = 0, savedPanY = 0;
+var restoreTimer = null;
 var dragging = false, dragStart, panStart;
 var hoveredStage = null;
 
@@ -866,6 +886,7 @@ canvas.addEventListener("touchend",function(e){
 window.addEventListener("resize",function(){resize();});
 
 resize();
+savedZoom = zoom; savedPanX = panX; savedPanY = panY;
 draw();
 </script>
 </body>
