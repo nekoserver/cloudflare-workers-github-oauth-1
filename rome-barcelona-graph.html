@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>Rome & Barcelona — 同心円都市グラフ</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body { background:#0d1117; color:#e6edf3; font-family:'Segoe UI',sans-serif; overflow:hidden; width:100vw; height:100vh; }
+canvas { display:block; cursor:grab; }
+#legend {
+  position:absolute; top:20px; left:20px;
+  background:rgba(22,27,34,0.88); border:1px solid #30363d;
+  border-radius:8px; padding:14px 18px; font-size:12px; line-height:1.9;
+  backdrop-filter:blur(4px);
+}
+#legend h2 { font-size:14px; font-weight:700; color:#e3b341; margin-bottom:8px; }
+.leg-row { display:flex; align-items:center; gap:8px; }
+.leg-dot { width:11px; height:11px; border-radius:50%; flex-shrink:0; }
+.leg-line { width:26px; height:2px; flex-shrink:0; }
+#info {
+  position:absolute; bottom:18px; right:18px;
+  background:rgba(22,27,34,0.88); border:1px solid #30363d;
+  border-radius:8px; padding:9px 13px; font-size:11px; color:#8b949e;
+  line-height:1.8; backdrop-filter:blur(4px);
+}
+#tooltip {
+  position:absolute; pointer-events:none;
+  background:rgba(13,17,23,0.96); border:1px solid #e3b34155;
+  border-radius:7px; padding:9px 13px; font-size:12px;
+  display:none; z-index:10; max-width:240px;
+}
+#tt-name { font-weight:700; color:#e6edf3; margin-bottom:3px; }
+#tt-dist { color:#8b949e; line-height:1.7; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="legend">
+  <h2>Rome &amp; Barcelona — 同心円都市グラフ</h2>
+  <div class="leg-row"><div class="leg-dot" style="background:#ff7b72;box-shadow:0 0 7px #ff7b72aa"></div><span>起点都市（ローマ / バルセロナ）</span></div>
+  <div class="leg-row"><div class="leg-dot" style="background:#e3b341;box-shadow:0 0 6px #e3b341aa"></div><span>ローマ500km圏のみ</span></div>
+  <div class="leg-row"><div class="leg-dot" style="background:#79c0ff;box-shadow:0 0 6px #79c0ffaa"></div><span>バルセロナ500km圏のみ</span></div>
+  <div class="leg-row"><div class="leg-dot" style="background:#d2a8ff;box-shadow:0 0 6px #d2a8ffaa"></div><span>1000km圏のみ</span></div>
+  <div class="leg-row"><div class="leg-dot" style="background:#3fb950;box-shadow:0 0 6px #3fb950aa"></div><span>両圏に含まれる都市</span></div>
+  <div style="margin-top:8px;border-top:1px solid #30363d;padding-top:8px;">
+    <div class="leg-row"><div class="leg-line" style="background:#e3b341"></div><span>ローマ圏エッジ（500km実線・1000km破線）</span></div>
+    <div class="leg-row"><div class="leg-line" style="background:#79c0ff"></div><span>バルセロナ圏エッジ（500km実線・1000km破線）</span></div>
+    <div class="leg-row"><div class="leg-line" style="background:#3fb950"></div><span>共通圏エッジ</span></div>
+  </div>
+</div>
+<div id="info">
+  マウスオーバー: 都市詳細 &nbsp;|&nbsp; ドラッグ: パン &nbsp;|&nbsp; ホイール: ズーム<br>
+  同心円 — ローマ: <span style="color:#e3b341">黄</span> &nbsp;/&nbsp; バルセロナ: <span style="color:#79c0ff">青</span>
+</div>
+<div id="tooltip"><div id="tt-name"></div><div id="tt-dist"></div></div>
+<script>
+var CITIES = [
+  { name:'Rome',       lat:41.9028,  lon:12.4964,  label:'ローマ' },
+  { name:'Barcelona',  lat:41.3851,  lon:2.1734,   label:'バルセロナ' },
+  { name:'Paris',      lat:48.8566,  lon:2.3522,   label:'パリ' },
+  { name:'Madrid',     lat:40.4168,  lon:-3.7038,  label:'マドリード' },
+  { name:'Lisbon',     lat:38.7223,  lon:-9.1393,  label:'リスボン' },
+  { name:'Valencia',   lat:39.4699,  lon:-0.3763,  label:'バレンシア' },
+  { name:'Seville',    lat:37.3891,  lon:-5.9845,  label:'セビリャ' },
+  { name:'Bilbao',     lat:43.2630,  lon:-2.9350,  label:'ビルバオ' },
+  { name:'Zaragoza',   lat:41.6488,  lon:-0.8891,  label:'サラゴサ' },
+  { name:'Lyon',       lat:45.7640,  lon:4.8357,   label:'リヨン' },
+  { name:'Marseille',  lat:43.2965,  lon:5.3698,   label:'マルセイユ' },
+  { name:'Toulouse',   lat:43.6047,  lon:1.4442,   label:'トゥールーズ' },
+  { name:'Nice',       lat:43.7102,  lon:7.2620,   label:'ニース' },
+  { name:'Bordeaux',   lat:44.8378,  lon:-0.5792,  label:'ボルドー' },
+  { name:'Milan',      lat:45.4642,  lon:9.1900,   label:'ミラノ' },
+  { name:'Turin',      lat:45.0703,  lon:7.6869,   label:'トリノ' },
+  { name:'Genoa',      lat:44.4056,  lon:8.9463,   label:'ジェノヴァ' },
+  { name:'Florence',   lat:43.7696,  lon:11.2558,  label:'フィレンツェ' },
+  { name:'Bologna',    lat:44.4949,  lon:11.3426,  label:'ボローニャ' },
+  { name:'Venice',     lat:45.4408,  lon:12.3155,  label:'ヴェネツィア' },
+  { name:'Naples',     lat:40.8518,  lon:14.2681,  label:'ナポリ' },
+  { name:'Palermo',    lat:38.1157,  lon:13.3615,  label:'パレルモ' },
+  { name:'Cagliari',   lat:39.2238,  lon:9.1217,   label:'カリャリ' },
+  { name:'Bari',       lat:41.1171,  lon:16.8719,  label:'バーリ' },
+  { name:'Catania',    lat:37.5079,  lon:15.0830,  label:'カターニア' },
+  { name:'Valletta',   lat:35.8997,  lon:14.5147,  label:'ヴァレッタ' },
+  { name:'Tunis',      lat:36.8190,  lon:10.1658,  label:'チュニス' },
+  { name:'Algiers',    lat:36.7372,  lon:3.0865,   label:'アルジェ' },
+  { name:'Casablanca', lat:33.5731,  lon:-7.5898,  label:'カサブランカ' },
+  { name:'Zurich',     lat:47.3769,  lon:8.5417,   label:'チューリッヒ' },
+  { name:'Geneva',     lat:46.2044,  lon:6.1432,   label:'ジュネーブ' },
+  { name:'Bern',       lat:46.9480,  lon:7.4474,   label:'ベルン' },
+  { name:'Ljubljana',  lat:46.0569,  lon:14.5058,  label:'リュブリャナ' },
+  { name:'Zagreb',     lat:45.8150,  lon:15.9819,  label:'ザグレブ' },
+  { name:'Sarajevo',   lat:43.8476,  lon:18.3564,  label:'サラエボ' },
+  { name:'Belgrade',   lat:44.8176,  lon:20.4633,  label:'ベオグラード' },
+  { name:'Tirana',     lat:41.3317,  lon:19.8319,  label:'ティラナ' },
+  { name:'Skopje',     lat:41.9973,  lon:21.4280,  label:'スコピエ' },
+  { name:'Athens',     lat:37.9838,  lon:23.7275,  label:'アテネ' },
+  { name:'Sofia',      lat:42.6977,  lon:23.3219,  label:'ソフィア' },
+  { name:'Bucharest',  lat:44.4268,  lon:26.1025,  label:'ブカレスト' },
+  { name:'Vienna',     lat:48.2082,  lon:16.3738,  label:'ウィーン' },
+  { name:'Budapest',   lat:47.4979,  lon:19.0402,  label:'ブダペスト' },
+  { name:'Bratislava', lat:48.1486,  lon:17.1077,  label:'ブラチスラヴァ' },
+  { name:'Munich',     lat:48.1351,  lon:11.5820,  label:'ミュンヘン' },
+  { name:'Frankfurt',  lat:50.1109,  lon:8.6821,   label:'フランクフルト' },
+  { name:'Nuremberg',  lat:49.4521,  lon:11.0767,  label:'ニュルンベルク' },
+  { name:'Strasbourg', lat:48.5734,  lon:7.7521,   label:'ストラスブール' },
+  { name:'Porto',      lat:41.1579,  lon:-8.6291,  label:'ポルト' },
+  { name:'Malaga',     lat:36.7213,  lon:-4.4214,  label:'マラガ' },
+  { name:'Palma',      lat:39.5696,  lon:2.6502,   label:'パルマ・デ・マヨルカ' },
+];
+
+var ROME      = CITIES[0];
+var BARCELONA = CITIES[1];
+var R1 = 500, R2 = 1000;
+
+function haversine(a, b) {
+  var R = 6371;
+  var dLat = (b.lat - a.lat) * Math.PI / 180;
+  var dLon = (b.lon - a.lon) * Math.PI / 180;
+  var x = Math.sin(dLat/2)*Math.sin(dLat/2) +
+    Math.cos(a.lat*Math.PI/180)*Math.cos(b.lat*Math.PI/180)*
+    Math.sin(dLon/2)*Math.sin(dLon/2);
+  return R * 2 * Math.asin(Math.sqrt(x));
+}
+
+CITIES.forEach(function(c) {
+  c.dRome      = haversine(ROME,      c);
+  c.dBarcelona = haversine(BARCELONA, c);
+  c.inR1 = c.dRome      <= R1;
+  c.inR2 = c.dRome      <= R2;
+  c.inC1 = c.dBarcelona <= R1;
+  c.inC2 = c.dBarcelona <= R2;
+});
+
+var LON_MIN = -12, LON_MAX = 30, LAT_MIN = 33, LAT_MAX = 52;
+function project(lat, lon) {
+  return {
+    x: (lon - LON_MIN) / (LON_MAX - LON_MIN),
+    y: 1 - (lat - LAT_MIN) / (LAT_MAX - LAT_MIN)
+  };
+}
+
+CITIES.forEach(function(c) {
+  var p = project(c.lat, c.lon);
+  c.nx = p.x; c.ny = p.y;
+});
+
+var canvas = document.getElementById('c');
+var ctx = canvas.getContext('2d');
+var tooltip = document.getElementById('tooltip');
+var ttName = document.getElementById('tt-name');
+var ttDist = document.getElementById('tt-dist');
+
+var W, H, scale, ox, oy;
+var panX = 0, panY = 0, zoom = 1;
+var dragging = false, dragStart, panStart;
+var hoveredCity = null;
+
+function resize() {
+  W = canvas.width  = window.innerWidth;
+  H = canvas.height = window.innerHeight;
+  var aspect = (LON_MAX - LON_MIN) / (LAT_MAX - LAT_MIN);
+  var pad = 100;
+  if ((W - pad*2) / aspect < H - pad*2) {
+    scale = (W - pad*2) / aspect;
+    ox = pad; oy = (H - scale) / 2;
+  } else {
+    scale = H - pad*2;
+    ox = (W - scale * aspect) / 2; oy = pad;
+  }
+}
+
+function toScreen(nx, ny) {
+  var aspect = (LON_MAX - LON_MIN) / (LAT_MAX - LAT_MIN);
+  return {
+    x: ox + nx * scale * aspect * zoom + panX,
+    y: oy + ny * scale * zoom + panY
+  };
+}
+
+function kmToScreenPx(city, km) {
+  var R = 6371;
+  var dLat = km / R * 180 / Math.PI;
+  var pC = project(city.lat, city.lon);
+  var pE = project(city.lat + dLat, city.lon);
+  return Math.abs((pE.y - pC.y) * scale * zoom);
+}
+
+function drawRing(city, km, color, dash) {
+  var sc = toScreen(city.nx, city.ny);
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(sc.x, sc.y, kmToScreenPx(city, km), 0, Math.PI*2);
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 1.5;
+  ctx.globalAlpha = 0.38;
+  ctx.setLineDash(dash);
+  ctx.stroke();
+  ctx.restore();
+}
+
+function drawEdge(a, b, color, alpha, dash) {
+  var sa = toScreen(a.nx, a.ny), sb = toScreen(b.nx, b.ny);
+  ctx.save();
+  ctx.beginPath();
+  ctx.moveTo(sa.x, sa.y); ctx.lineTo(sb.x, sb.y);
+  ctx.strokeStyle = color; ctx.lineWidth = 1;
+  ctx.globalAlpha = alpha;
+  if (dash) ctx.setLineDash(dash);
+  ctx.stroke();
+  ctx.restore();
+}
+
+function draw() {
+  ctx.clearRect(0, 0, W, H);
+  ctx.fillStyle = '#0d1117'; ctx.fillRect(0, 0, W, H);
+
+  ctx.save();
+  ctx.strokeStyle = '#161b22'; ctx.lineWidth = 1;
+  for (var gx = 0; gx < W; gx += 60) { ctx.beginPath(); ctx.moveTo(gx,0); ctx.lineTo(gx,H); ctx.stroke(); }
+  for (var gy = 0; gy < H; gy += 60) { ctx.beginPath(); ctx.moveTo(0,gy); ctx.lineTo(W,gy); ctx.stroke(); }
+  ctx.restore();
+
+  drawRing(ROME,      R1, '#e3b341', [7,5]);
+  drawRing(ROME,      R2, '#e3b341', [3,7]);
+  drawRing(BARCELONA, R1, '#79c0ff', [7,5]);
+  drawRing(BARCELONA, R2, '#79c0ff', [3,7]);
+
+  var visible = CITIES.filter(function(c) {
+    return c.name==='Rome'||c.name==='Barcelona'||c.inR2||c.inC2;
+  });
+
+  for (var i = 0; i < visible.length; i++) {
+    for (var j = i+1; j < visible.length; j++) {
+      var a = visible[i], b = visible[j];
+      var sa = toScreen(a.nx, a.ny), sb = toScreen(b.nx, b.ny);
+      if (Math.hypot(sa.x-sb.x, sa.y-sb.y) > 270 * zoom) continue;
+
+      var aR = a.inR2||a.name==='Rome',      bR = b.inR2||b.name==='Rome';
+      var aC = a.inC2||a.name==='Barcelona', bC = b.inC2||b.name==='Barcelona';
+      var r1 = (a.inR1||a.name==='Rome')      && (b.inR1||b.name==='Rome');
+      var c1 = (a.inC1||a.name==='Barcelona') && (b.inC1||b.name==='Barcelona');
+
+      if (aR&&bR && aC&&bC) {
+        drawEdge(a, b, '#3fb950', r1||c1 ? 0.5 : 0.22, null);
+      } else if (aR&&bR) {
+        drawEdge(a, b, '#e3b341', r1 ? 0.45 : 0.18, r1 ? null : [3,5]);
+      } else if (aC&&bC) {
+        drawEdge(a, b, '#79c0ff', c1 ? 0.45 : 0.18, c1 ? null : [3,5]);
+      }
+    }
+  }
+
+  visible.forEach(function(c) {
+    var sc = toScreen(c.nx, c.ny);
+    var isAnchor = c.name==='Rome'||c.name==='Barcelona';
+    var inBoth   = !isAnchor && (c.inR2||c.inR1) && (c.inC2||c.inC1);
+    var inR1only = !isAnchor && !inBoth && c.inR1;
+    var inC1only = !isAnchor && !inBoth && c.inC1;
+
+    var color, glow, r;
+    if (isAnchor)     { color='#ff7b72'; glow='#ff7b7288'; r=10; }
+    else if (inBoth)  { color='#3fb950'; glow='#3fb95066'; r=6;  }
+    else if (inR1only){ color='#e3b341'; glow='#e3b34166'; r=5;  }
+    else if (inC1only){ color='#79c0ff'; glow='#79c0ff66'; r=5;  }
+    else              { color='#d2a8ff'; glow='#d2a8ff55'; r=4;  }
+
+    var isHover = hoveredCity && hoveredCity.name===c.name;
+    if (isHover) r *= 1.5;
+
+    var g = ctx.createRadialGradient(sc.x, sc.y, 0, sc.x, sc.y, r*3);
+    g.addColorStop(0, glow); g.addColorStop(1, 'transparent');
+    ctx.save();
+    ctx.beginPath(); ctx.arc(sc.x, sc.y, r*3, 0, Math.PI*2);
+    ctx.fillStyle = g; ctx.fill();
+    ctx.restore();
+
+    ctx.beginPath(); ctx.arc(sc.x, sc.y, r, 0, Math.PI*2);
+    ctx.fillStyle = color; ctx.fill();
+
+    var fs = isAnchor ? 13 : (zoom > 1.2 ? 12 : 11);
+    ctx.font = (isAnchor?'700':'400') + ' ' + fs + 'px "Segoe UI",sans-serif';
+    ctx.fillStyle = isHover ? '#ffffff' : (isAnchor ? color : '#c9d1d9');
+    ctx.globalAlpha = isHover ? 1 : (isAnchor ? 1 : 0.82);
+    ctx.fillText(c.label, sc.x + r + 5, sc.y + 4);
+    ctx.globalAlpha = 1;
+  });
+
+  requestAnimationFrame(draw);
+}
+
+canvas.addEventListener('mousedown', function(e) {
+  dragging=true; dragStart={x:e.clientX,y:e.clientY}; panStart={x:panX,y:panY};
+  canvas.style.cursor='grabbing';
+});
+window.addEventListener('mousemove', function(e) {
+  if (dragging) { panX=panStart.x+(e.clientX-dragStart.x); panY=panStart.y+(e.clientY-dragStart.y); return; }
+  var rect=canvas.getBoundingClientRect();
+  var mx=e.clientX-rect.left, my=e.clientY-rect.top;
+  hoveredCity=null;
+  var vis=CITIES.filter(function(c){return c.name==='Rome'||c.name==='Barcelona'||c.inR2||c.inC2;});
+  for (var i=0;i<vis.length;i++) {
+    var sc=toScreen(vis[i].nx,vis[i].ny);
+    if (Math.hypot(sc.x-mx,sc.y-my)<16){hoveredCity=vis[i];break;}
+  }
+  if (hoveredCity) {
+    canvas.style.cursor='pointer';
+    var c=hoveredCity;
+    ttName.textContent=c.label+'（'+c.name+'）';
+    var lines=[];
+    if (c.name==='Rome'||c.name==='Barcelona') { lines.push('起点都市'); }
+    else {
+      if (c.inR2) lines.push('ローマから '+Math.round(c.dRome)+' km'+(c.inR1?'（500km圏）':'（1000km圏）'));
+      if (c.inC2) lines.push('バルセロナから '+Math.round(c.dBarcelona)+' km'+(c.inC1?'（500km圏）':'（1000km圏）'));
+    }
+    ttDist.innerHTML=lines.join('<br>');
+    tooltip.style.display='block';
+    tooltip.style.left=(e.clientX+16)+'px';
+    tooltip.style.top=(e.clientY-8)+'px';
+  } else {
+    canvas.style.cursor='grab';
+    tooltip.style.display='none';
+  }
+});
+window.addEventListener('mouseup',function(){dragging=false;canvas.style.cursor='grab';});
+canvas.addEventListener('wheel',function(e){
+  e.preventDefault();
+  var f=e.deltaY<0?1.12:0.89;
+  var rect=canvas.getBoundingClientRect();
+  var mx=e.clientX-rect.left, my=e.clientY-rect.top;
+  panX=mx+(panX-mx)*f; panY=my+(panY-my)*f;
+  zoom=Math.max(0.3,Math.min(zoom*f,8));
+},{passive:false});
+window.addEventListener('resize',resize);
+
+resize();
+draw();
+</script>
+</body>
+</html>
