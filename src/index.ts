@@ -41,6 +41,7 @@ import { getWorldCupWdlPage } from './views/worldCupWdl';
 import { getTdfPage } from './views/tdf';
 import { getMatrixRainPage } from './views/matrixRain';
 import { getImageSpin3dPage } from './views/imageSpin3d';
+import { getGalaxyPage } from './views/galaxy';
 import { findNearbyCities } from './utils/worldCities';
 import { getAuthFlowPage } from './views/authFlow';
 
@@ -4814,6 +4815,10 @@ app.get('/matrix', (c) => {
 
 app.get('/image3d', (c) => {
   return c.html(getImageSpin3dPage());
+});
+
+app.get('/galaxy', (c) => {
+  return c.html(getGalaxyPage());
 });
 
 app.get('/uuid', authMiddleware, async (c) => {
