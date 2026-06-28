@@ -78,7 +78,7 @@ export function getWorldCupKnockoutPage(): string {
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>W杯2026 ノックアウト</title>
+<title>W杯2026 ノックアウトステージ</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{background:#0d1117;color:#e6edf3;font-family:system-ui,-apple-system,sans-serif;height:100vh;height:100dvh;display:flex;flex-direction:column;overflow:hidden}
@@ -104,7 +104,7 @@ body{background:#0d1117;color:#e6edf3;font-family:system-ui,-apple-system,sans-s
 
 /* ===== 右メイン（トーナメントブラケット） ===== */
 .right{flex:1;overflow:auto;padding:8px 10px}
-.bracket{display:flex;gap:6px;min-width:640px;align-items:flex-start}
+.bracket{display:flex;gap:6px;min-width:0;width:100%;align-items:flex-start}
 .bc{display:flex;flex-direction:column;flex:1;min-width:0}
 .bc-hdr{font-size:8px;font-weight:700;color:#58a6ff;text-transform:uppercase;letter-spacing:.5px;text-align:center;padding:3px;border-bottom:1px solid #21262d;margin-bottom:4px;white-space:nowrap}
 .bc-final .bc-hdr{color:#f0b429}
@@ -147,7 +147,7 @@ body{background:#0d1117;color:#e6edf3;font-family:system-ui,-apple-system,sans-s
 </head>
 <body>
 <div class="pg-hdr">
-  <span class="pg-title">&#127942; W杯2026 ノックアウト</span>
+  <span class="pg-title">&#127942; W杯2026 ノックアウトステージ</span>
   <span class="pg-sub">R32〜決勝</span>
 </div>
 <div class="layout">
@@ -181,7 +181,7 @@ function matchCard(m){
   return '<div class="bm" data-date="'+m.date+'"><div class="bm-date">'+ddow(m.date)+'</div>'+teamSlot(m.a,m.slotA)+teamSlot(m.b,m.slotB)+'</div>';
 }
 var ROUNDS=[
-  {label:'R32',flex:'2.4',matches:[
+  {label:'R32',flex:'1',matches:[
     {date:'6/28',a:'🇿🇦',b:'🇨🇦',slotA:'RSA',slotB:'CAN'},
     {date:'6/29',a:'🇳🇱',b:'🇲🇦',slotA:'NED',slotB:'MAR'},
     {date:'6/29',a:'🇧🇷',b:'🇯🇵',slotA:'BRA',slotB:'JPN'},
@@ -199,7 +199,7 @@ var ROUNDS=[
     {date:'7/3', a:'🇦🇷',b:'🇨🇻',slotA:'ARG',slotB:'CPV'},
     {date:'7/3', a:'🇨🇴',b:'🇬🇭',slotA:'COL',slotB:'GHA'}
   ]},
-  {label:'R16',flex:'1.8',matches:[
+  {label:'R16',flex:'1',matches:[
     {date:'7/5', a:null,b:null,slotA:'M1勝',slotB:'M2勝'},
     {date:'7/5', a:null,b:null,slotA:'M3勝',slotB:'M4勝'},
     {date:'7/6', a:null,b:null,slotA:'M5勝',slotB:'M6勝'},
@@ -209,7 +209,7 @@ var ROUNDS=[
     {date:'7/8', a:null,b:null,slotA:'M13勝',slotB:'M14勝'},
     {date:'7/8', a:null,b:null,slotA:'M15勝',slotB:'M16勝'}
   ]},
-  {label:'QF',flex:'1.3',matches:[
+  {label:'QF',flex:'1',matches:[
     {date:'7/11',a:null,b:null,slotA:'L1勝',slotB:'L2勝'},
     {date:'7/11',a:null,b:null,slotA:'L3勝',slotB:'L4勝'},
     {date:'7/12',a:null,b:null,slotA:'L5勝',slotB:'L6勝'},
@@ -219,11 +219,11 @@ var ROUNDS=[
     {date:'7/15',a:null,b:null,slotA:'QF1勝',slotB:'QF2勝'},
     {date:'7/16',a:null,b:null,slotA:'QF3勝',slotB:'QF4勝'}
   ]},
-  {label:'決勝',flex:'0.9',matches:[
+  {label:'決勝',flex:'1',matches:[
     {date:'7/19',a:null,b:null,slotA:'SF1勝',slotB:'SF2勝'}
   ]}
 ];
-var MATCH3RD={date:'7/23',a:null,b:null,slotA:'SF1負',slotB:'SF2負'};
+var MATCH3RD={date:'7/18',a:null,b:null,slotA:'SF1負',slotB:'SF2負'};
 function build(){
   var br=document.getElementById('bracket');
   var html='';
@@ -236,7 +236,7 @@ function build(){
   });
   br.innerHTML=html;
   var b3=document.getElementById('b3rd');
-  b3.innerHTML='<div class="b3rd-label">3位決定戦 ('+ddow('7/23')+')</div>'+matchCard(MATCH3RD);
+  b3.innerHTML='<div class="b3rd-label">3位決定戦 ('+ddow('7/18')+')</div>'+matchCard(MATCH3RD);
 }
 build();
 function flashBracketDate(dateStr){
