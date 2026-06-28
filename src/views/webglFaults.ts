@@ -988,15 +988,25 @@ void main() {
     volTooltipEl.addEventListener('touchstart', _volTtTouchHandler, {passive:false});
   }
   window.addEventListener('mousemove', function(e) {
-    if (!volTtDragging) return;
-    volTooltipEl.style.left = (e.clientX - volTtDx) + 'px';
-    volTooltipEl.style.top = (e.clientY - volTtDy) + 'px';
+    if (volTtDragging) {
+      volTooltipEl.style.left = (e.clientX - volTtDx) + 'px';
+      volTooltipEl.style.top = (e.clientY - volTtDy) + 'px';
+    }
+    if (faultTtDragging) {
+      faultTooltipEl.style.left = (e.clientX - faultTtDx) + 'px';
+      faultTooltipEl.style.top = (e.clientY - faultTtDy) + 'px';
+    }
   });
-  window.addEventListener('mouseup', function() { volTtDragging = false; });
+  window.addEventListener('mouseup', function() { volTtDragging = false; faultTtDragging = false; });
   window.addEventListener('touchmove', function(e) {
-    if (!volTtDragging) return;
-    volTooltipEl.style.left = (e.touches[0].clientX - volTtDx) + 'px';
-    volTooltipEl.style.top = (e.touches[0].clientY - volTtDy) + 'px';
+    if (volTtDragging) {
+      volTooltipEl.style.left = (e.touches[0].clientX - volTtDx) + 'px';
+      volTooltipEl.style.top = (e.touches[0].clientY - volTtDy) + 'px';
+    }
+    if (faultTtDragging) {
+      faultTooltipEl.style.left = (e.touches[0].clientX - faultTtDx) + 'px';
+      faultTooltipEl.style.top = (e.touches[0].clientY - faultTtDy) + 'px';
+    }
   }, {passive:true});
   window.addEventListener('touchend', function() { volTtDragging = false; });
 
@@ -1155,6 +1165,7 @@ void main() {
   var faultTooltipEl = document.getElementById('fault-tooltip');
   var faultTtPinned = false;
   var faultTtDragging = false, faultTtDx = 0, faultTtDy = 0;
+  var _faultTtMouseHandler = null, _faultTtTouchHandler = null;
 
   function showFaultTooltip(f, x, y) {
     if (faultTtPinned) return;
@@ -1204,28 +1215,30 @@ void main() {
     faultTooltipEl.style.left = x + 'px';
     faultTooltipEl.style.top = y + 'px';
     faultTooltipEl.style.opacity = '1';
-    faultTooltipEl.addEventListener('touchstart', function(e) { e.stopPropagation(); }, {passive:true});
-    faultTooltipEl.addEventListener('mousedown', function(e) { e.stopPropagation(); });
-    var hdr = faultTooltipEl.querySelector('.fault-tt-hdr');
-    hdr.addEventListener('mousedown', function(ev) {
-      faultTtDragging = true;
+    var closeBtn = document.getElementById('faultTtClose');
+    if (closeBtn) closeBtn.onclick = function() { faultTtPinned = false; faultTooltipEl.style.opacity = '0'; faultTooltipEl.className = ''; };
+    if (_faultTtMouseHandler) faultTooltipEl.removeEventListener('mousedown', _faultTtMouseHandler);
+    if (_faultTtTouchHandler) faultTooltipEl.removeEventListener('touchstart', _faultTtTouchHandler);
+    _faultTtMouseHandler = function(ev) {
+      if (ev.target && ev.target.id === 'faultTtClose') return;
       var r = faultTooltipEl.getBoundingClientRect();
+      faultTtDragging = true;
       faultTtDx = ev.clientX - r.left;
       faultTtDy = ev.clientY - r.top;
       ev.preventDefault();
-    });
-    document.addEventListener('mousemove', function(ev) {
-      if (!faultTtDragging) return;
-      faultTooltipEl.style.left = (ev.clientX - faultTtDx) + 'px';
-      faultTooltipEl.style.top = (ev.clientY - faultTtDy) + 'px';
-      faultTooltipEl.style.transform = 'none';
-    });
-    document.addEventListener('mouseup', function() { faultTtDragging = false; });
-    document.getElementById('faultTtClose').addEventListener('click', function() {
-      faultTtPinned = false;
-      faultTooltipEl.style.opacity = '0';
-      faultTooltipEl.className = '';
-    });
+      ev.stopPropagation();
+    };
+    _faultTtTouchHandler = function(ev) {
+      if (ev.target && ev.target.id === 'faultTtClose') return;
+      var r = faultTooltipEl.getBoundingClientRect();
+      faultTtDragging = true;
+      faultTtDx = ev.touches[0].clientX - r.left;
+      faultTtDy = ev.touches[0].clientY - r.top;
+      ev.preventDefault();
+      ev.stopPropagation();
+    };
+    faultTooltipEl.addEventListener('mousedown', _faultTtMouseHandler);
+    faultTooltipEl.addEventListener('touchstart', _faultTtTouchHandler, {passive:false});
   }
 
   function renderFaultList() {
@@ -1260,7 +1273,15 @@ void main() {
     var f = FAULTS.find(function(x) { return x.id === id; });
     renderFaultList();
     if (doFly && f) {
-      flyToLatLon(f.center[0], f.center[1], 1200);
+      flyToLatLon(f.center[0], f.center[1], 1200, function() {
+        var rect = canvas.getBoundingClientRect();
+        var cx = rect.left + rect.width / 2;
+        var cy = rect.top + rect.height / 2;
+        var r = faultTooltipEl.getBoundingClientRect();
+        var tx = Math.max(8, Math.min(cx - r.width / 2, window.innerWidth - r.width - 8));
+        var ty = Math.max(8, cy - r.height - 20);
+        pinFaultTooltip(f, tx, ty);
+      });
     }
   }
 
