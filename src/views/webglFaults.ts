@@ -2197,7 +2197,7 @@ void main() {
     var volCount = showVolcanoes ? VOLCANOES.length : 0;
     hud.textContent = '活断層: ' + FAULTS.length + '  活火山: ' + volCount + '  表示: ' + visCount;
 
-    if (autoRot && showVolcanoes && !isHoveringVol && !drag) {
+    if (autoRot && showVolcanoes && !isHoveringVol && !drag && !volTtPinned) {
       var bestVolIdx = -1, bestVolMz = -1;
       for (var vi = 0; vi < VOLCANOES.length; vi++) {
         var vp = VOLCANOES[vi]._p;
@@ -2222,7 +2222,7 @@ void main() {
         volTooltipEl.style.top = vcy + 'px';
         volTooltipEl.style.opacity = '1';
       }
-    } else if (!autoRot && !isHoveringVol && autoVolId !== null) {
+    } else if (!autoRot && !isHoveringVol && autoVolId !== null && !volTtPinned) {
       autoVolId = null;
       hideVolTooltip();
     }
