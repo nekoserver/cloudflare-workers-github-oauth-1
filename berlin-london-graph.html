@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>Berlin & London — 同心円都市グラフ</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body { background:#0d1117; color:#e6edf3; font-family:'Segoe UI',sans-serif; overflow:hidden; width:100vw; height:100vh; }
+canvas { display:block; cursor:grab; }
+#legend {
+  position:absolute; top:20px; left:20px;
+  background:rgba(22,27,34,0.88); border:1px solid #30363d;
+  border-radius:8px; padding:14px 18px; font-size:12px; line-height:1.9;
+  backdrop-filter:blur(4px);
+}
+#legend h2 { font-size:14px; font-weight:700; color:#f0883e; margin-bottom:8px; }
+.leg-row { display:flex; align-items:center; gap:8px; }
+.leg-dot { width:11px; height:11px; border-radius:50%; flex-shrink:0; }
+.leg-line { width:26px; height:2px; flex-shrink:0; }
+#info {
+  position:absolute; bottom:18px; right:18px;
+  background:rgba(22,27,34,0.88); border:1px solid #30363d;
+  border-radius:8px; padding:9px 13px; font-size:11px; color:#8b949e;
+  line-height:1.8; backdrop-filter:blur(4px);
+}
+#tooltip {
+  position:absolute; pointer-events:none;
+  background:rgba(13,17,23,0.96); border:1px solid #f0883e55;
+  border-radius:7px; padding:9px 13px; font-size:12px;
+  display:none; z-index:10; max-width:240px;
+}
+#tt-name { font-weight:700; color:#e6edf3; margin-bottom:3px; }
+#tt-dist { color:#8b949e; line-height:1.7; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="legend">
+  <h2>Berlin &amp; London — 同心円都市グラフ</h2>
+  <div class="leg-row"><div class="leg-dot" style="background:#ff7b72;box-shadow:0 0 7px #ff7b72aa"></div><span>起点都市（ベルリン / ロンドン）</span></div>
+  <div class="leg-row"><div class="leg-dot" style="background:#f0883e;box-shadow:0 0 6px #f0883eaa"></div><span>500 km 圏内のみ</span></div>
+  <div class="leg-row"><div class="leg-dot" style="background:#79c0ff;box-shadow:0 0 6px #79c0ffaa"></div><span>1000 km 圏内のみ</span></div>
+  <div class="leg-row"><div class="leg-dot" style="background:#3fb950;box-shadow:0 0 6px #3fb950aa"></div><span>両圏に含まれる都市</span></div>
+  <div style="margin-top:8px;border-top:1px solid #30363d;padding-top:8px;">
+    <div class="leg-row"><div class="leg-line" style="background:#f0883e"></div><span>ベルリン圏エッジ（500km実線・1000km破線）</span></div>
+    <div class="leg-row"><div class="leg-line" style="background:#79c0ff"></div><span>ロンドン圏エッジ（500km実線・1000km破線）</span></div>
+    <div class="leg-row"><div class="leg-line" style="background:#3fb950"></div><span>共通圏エッジ</span></div>
+  </div>
+</div>
+<div id="info">
+  マウスオーバー: 都市詳細 &nbsp;|&nbsp; ドラッグ: パン &nbsp;|&nbsp; ホイール: ズーム<br>
+  同心円 — ベルリン: <span style="color:#f0883e">橙</span> &nbsp;/&nbsp; ロンドン: <span style="color:#79c0ff">青</span>
+</div>
+<div id="tooltip"><div id="tt-name"></div><div id="tt-dist"></div></div>
+<script>
+var CITIES = [
+  { name:'Berlin',     lat:52.5200,  lon:13.4050,  label:'ベルリン' },
+  { name:'London',     lat:51.5074,  lon:-0.1278,  label:'ロンドン' },
+  { name:'Paris',      lat:48.8566,  lon:2.3522,   label:'パリ' },
+  { name:'Amsterdam',  lat:52.3676,  lon:4.9041,   label:'アムステルダム' },
+  { name:'Brussels',   lat:50.8503,  lon:4.3517,   label:'ブリュッセル' },
+  { name:'Hamburg',    lat:53.5511,  lon:9.9937,   label:'ハンブルク' },
+  { name:'Copenhagen', lat:55.6761,  lon:12.5683,  label:'コペンハーゲン' },
+  { name:'Warsaw',     lat:52.2297,  lon:21.0122,  label:'ワルシャワ' },
+  { name:'Prague',     lat:50.0755,  lon:14.4378,  label:'プラハ' },
+  { name:'Vienna',     lat:48.2082,  lon:16.3738,  label:'ウィーン' },
+  { name:'Munich',     lat:48.1351,  lon:11.5820,  label:'ミュンヘン' },
+  { name:'Frankfurt',  lat:50.1109,  lon:8.6821,   label:'フランクフルト' },
+  { name:'Cologne',    lat:50.9333,  lon:6.9500,   label:'ケルン' },
+  { name:'Stuttgart',  lat:48.7758,  lon:9.1829,   label:'シュトゥットガルト' },
+  { name:'Leipzig',    lat:51.3397,  lon:12.3731,  label:'ライプツィヒ' },
+  { name:'Dresden',    lat:51.0509,  lon:13.7381,  label:'ドレスデン' },
+  { name:'Nuremberg',  lat:49.4521,  lon:11.0767,  label:'ニュルンベルク' },
+  { name:'Hannover',   lat:52.3759,  lon:9.7320,   label:'ハノーファー' },
+  { name:'Dusseldorf', lat:51.2217,  lon:6.7762,   label:'デュッセルドルフ' },
+  { name:'Bremen',     lat:53.0793,  lon:8.8017,   label:'ブレーメン' },
+  { name:'Wroclaw',    lat:51.1079,  lon:17.0385,  label:'ヴロツワフ' },
+  { name:'Poznan',     lat:52.4064,  lon:16.9252,  label:'ポズナン' },
+  { name:'Gdansk',     lat:54.3520,  lon:18.6466,  label:'グダニスク' },
+  { name:'Krakow',     lat:50.0647,  lon:19.9450,  label:'クラクフ' },
+  { name:'Bratislava', lat:48.1486,  lon:17.1077,  label:'ブラチスラヴァ' },
+  { name:'Budapest',   lat:47.4979,  lon:19.0402,  label:'ブダペスト' },
+  { name:'Zurich',     lat:47.3769,  lon:8.5417,   label:'チューリッヒ' },
+  { name:'Bern',       lat:46.9480,  lon:7.4474,   label:'ベルン' },
+  { name:'Basel',      lat:47.5596,  lon:7.5886,   label:'バーゼル' },
+  { name:'Brno',       lat:49.1951,  lon:16.6068,  label:'ブルノ' },
+  { name:'Riga',       lat:56.9460,  lon:24.1059,  label:'リガ' },
+  { name:'Vilnius',    lat:54.6872,  lon:25.2797,  label:'ヴィリニュス' },
+  { name:'Tallinn',    lat:59.4370,  lon:24.7536,  label:'タリン' },
+  { name:'Stockholm',  lat:59.3293,  lon:18.0686,  label:'ストックホルム' },
+  { name:'Oslo',       lat:59.9139,  lon:10.7522,  label:'オスロ' },
+  { name:'Gothenburg', lat:57.7089,  lon:11.9746,  label:'ヨーテボリ' },
+  { name:'Malmo',      lat:55.6050,  lon:13.0038,  label:'マルメ' },
+  { name:'Edinburgh',  lat:55.9533,  lon:-3.1883,  label:'エディンバラ' },
+  { name:'Manchester', lat:53.4808,  lon:-2.2426,  label:'マンチェスター' },
+  { name:'Birmingham', lat:52.4862,  lon:-1.8904,  label:'バーミンガム' },
+  { name:'Bristol',    lat:51.4545,  lon:-2.5879,  label:'ブリストル' },
+  { name:'Cardiff',    lat:51.4816,  lon:-3.1791,  label:'カーディフ' },
+  { name:'Dublin',     lat:53.3498,  lon:-6.2603,  label:'ダブリン' },
+  { name:'Lyon',       lat:45.7640,  lon:4.8357,   label:'リヨン' },
+  { name:'Milan',      lat:45.4642,  lon:9.1900,   label:'ミラノ' },
+  { name:'Minsk',      lat:53.9045,  lon:27.5615,  label:'ミンスク' },
+  { name:'Kaliningrad',lat:54.7104,  lon:20.5100,  label:'カリーニングラード' },
+  { name:'Szczecin',   lat:53.4285,  lon:14.5528,  label:'シュチェチン' },
+  { name:'Lublin',     lat:51.2465,  lon:22.5684,  label:'ルブリン' },
+  { name:'Ljubljana',  lat:46.0569,  lon:14.5058,  label:'リュブリャナ' },
+  { name:'Bordeaux',   lat:44.8378,  lon:-0.5792,  label:'ボルドー' },
+  { name:'Antwerp',    lat:51.2194,  lon:4.4025,   label:'アントウェルペン' },
+  { name:'Ghent',      lat:51.0543,  lon:3.7174,   label:'ヘント' },
+  { name:'Rotterdam',  lat:51.9244,  lon:4.4777,   label:'ロッテルダム' },
+  { name:'Utrecht',    lat:52.0907,  lon:5.1214,   label:'ユトレヒト' },
+  { name:'Luxembourg', lat:49.6116,  lon:6.1319,   label:'ルクセンブルク' },
+  { name:'Strasbourg', lat:48.5734,  lon:7.7521,   label:'ストラスブール' },
+];
+
+var BERLIN = CITIES[0];
+var LONDON = CITIES[1];
+var R1 = 500, R2 = 1000;
+
+function haversine(a, b) {
+  var R = 6371;
+  var dLat = (b.lat - a.lat) * Math.PI / 180;
+  var dLon = (b.lon - a.lon) * Math.PI / 180;
+  var x = Math.sin(dLat/2)*Math.sin(dLat/2) +
+    Math.cos(a.lat*Math.PI/180)*Math.cos(b.lat*Math.PI/180)*
+    Math.sin(dLon/2)*Math.sin(dLon/2);
+  return R * 2 * Math.asin(Math.sqrt(x));
+}
+
+CITIES.forEach(function(c) {
+  c.dBerlin = haversine(BERLIN, c);
+  c.dLondon = haversine(LONDON, c);
+  c.inB1 = c.dBerlin <= R1;
+  c.inB2 = c.dBerlin <= R2;
+  c.inL1 = c.dLondon <= R1;
+  c.inL2 = c.dLondon <= R2;
+});
+
+var LON_MIN = -10, LON_MAX = 30, LAT_MIN = 43, LAT_MAX = 62;
+function project(lat, lon) {
+  return {
+    x: (lon - LON_MIN) / (LON_MAX - LON_MIN),
+    y: 1 - (lat - LAT_MIN) / (LAT_MAX - LAT_MIN)
+  };
+}
+
+CITIES.forEach(function(c) {
+  var p = project(c.lat, c.lon);
+  c.nx = p.x; c.ny = p.y;
+});
+
+var canvas = document.getElementById('c');
+var ctx = canvas.getContext('2d');
+var tooltip = document.getElementById('tooltip');
+var ttName = document.getElementById('tt-name');
+var ttDist = document.getElementById('tt-dist');
+
+var W, H, scale, ox, oy;
+var panX = 0, panY = 0, zoom = 1;
+var dragging = false, dragStart, panStart;
+var hoveredCity = null;
+
+function resize() {
+  W = canvas.width  = window.innerWidth;
+  H = canvas.height = window.innerHeight;
+  var aspect = (LON_MAX - LON_MIN) / (LAT_MAX - LAT_MIN);
+  var pad = 100;
+  if ((W - pad*2) / aspect < H - pad*2) {
+    scale = (W - pad*2) / aspect;
+    ox = pad;
+    oy = (H - scale) / 2;
+  } else {
+    scale = H - pad*2;
+    ox = (W - scale * aspect) / 2;
+    oy = pad;
+  }
+}
+
+function toScreen(nx, ny) {
+  var aspect = (LON_MAX - LON_MIN) / (LAT_MAX - LAT_MIN);
+  return {
+    x: ox + nx * scale * aspect * zoom + panX,
+    y: oy + ny * scale * zoom + panY
+  };
+}
+
+function kmToScreenPx(city, km) {
+  var R = 6371;
+  var dLat = km / R * 180 / Math.PI;
+  var pC = project(city.lat, city.lon);
+  var pE = project(city.lat + dLat, city.lon);
+  return Math.abs((pE.y - pC.y) * scale * zoom);
+}
+
+function drawRing(city, km, color, dash) {
+  var sc = toScreen(city.nx, city.ny);
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(sc.x, sc.y, kmToScreenPx(city, km), 0, Math.PI*2);
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 1.5;
+  ctx.globalAlpha = 0.38;
+  ctx.setLineDash(dash);
+  ctx.stroke();
+  ctx.restore();
+}
+
+function drawEdge(a, b, color, alpha, dash) {
+  var sa = toScreen(a.nx, a.ny);
+  var sb = toScreen(b.nx, b.ny);
+  ctx.save();
+  ctx.beginPath();
+  ctx.moveTo(sa.x, sa.y);
+  ctx.lineTo(sb.x, sb.y);
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 1;
+  ctx.globalAlpha = alpha;
+  if (dash) ctx.setLineDash(dash);
+  ctx.stroke();
+  ctx.restore();
+}
+
+function draw() {
+  ctx.clearRect(0, 0, W, H);
+  ctx.fillStyle = '#0d1117';
+  ctx.fillRect(0, 0, W, H);
+
+  ctx.save();
+  ctx.strokeStyle = '#161b22';
+  ctx.lineWidth = 1;
+  for (var gx = 0; gx < W; gx += 60) { ctx.beginPath(); ctx.moveTo(gx,0); ctx.lineTo(gx,H); ctx.stroke(); }
+  for (var gy = 0; gy < H; gy += 60) { ctx.beginPath(); ctx.moveTo(0,gy); ctx.lineTo(W,gy); ctx.stroke(); }
+  ctx.restore();
+
+  drawRing(BERLIN, R1, '#f0883e', [7,5]);
+  drawRing(BERLIN, R2, '#f0883e', [3,7]);
+  drawRing(LONDON, R1, '#79c0ff', [7,5]);
+  drawRing(LONDON, R2, '#79c0ff', [3,7]);
+
+  var visible = CITIES.filter(function(c) {
+    return c.name==='Berlin'||c.name==='London'||c.inB2||c.inL2;
+  });
+
+  for (var i = 0; i < visible.length; i++) {
+    for (var j = i+1; j < visible.length; j++) {
+      var a = visible[i], b = visible[j];
+      var sa = toScreen(a.nx, a.ny);
+      var sb = toScreen(b.nx, b.ny);
+      if (Math.hypot(sa.x-sb.x, sa.y-sb.y) > 270 * zoom) continue;
+
+      var aB = a.inB2||a.name==='Berlin', bB = b.inB2||b.name==='Berlin';
+      var aL = a.inL2||a.name==='London', bL = b.inL2||b.name==='London';
+      var b1 = (a.inB1||a.name==='Berlin') && (b.inB1||b.name==='Berlin');
+      var l1 = (a.inL1||a.name==='London') && (b.inL1||b.name==='London');
+
+      if (aB&&bB && aL&&bL) {
+        drawEdge(a, b, '#3fb950', b1||l1 ? 0.5 : 0.22, null);
+      } else if (aB&&bB) {
+        drawEdge(a, b, '#f0883e', b1 ? 0.45 : 0.18, b1 ? null : [3,5]);
+      } else if (aL&&bL) {
+        drawEdge(a, b, '#79c0ff', l1 ? 0.45 : 0.18, l1 ? null : [3,5]);
+      }
+    }
+  }
+
+  visible.forEach(function(c) {
+    var sc = toScreen(c.nx, c.ny);
+    var isAnchor = c.name==='Berlin'||c.name==='London';
+    var inBoth = !isAnchor && (c.inB2||c.inB1) && (c.inL2||c.inL1);
+    var in1only = !isAnchor && !inBoth && (c.inB1||c.inL1);
+
+    var color, glow, r;
+    if (isAnchor)     { color='#ff7b72'; glow='#ff7b7288'; r=10; }
+    else if (inBoth)  { color='#3fb950'; glow='#3fb95066'; r=6;  }
+    else if (in1only) { color='#f0883e'; glow='#f0883e66'; r=5;
+      if (c.inL1 && !c.inB1) { color='#79c0ff'; glow='#79c0ff66'; }
+    } else {
+      color = c.inL2 && !c.inB2 ? '#79c0ff' : '#f0883e';
+      glow  = c.inL2 && !c.inB2 ? '#79c0ff55' : '#f0883e55';
+      r=4;
+    }
+
+    var isHover = hoveredCity && hoveredCity.name===c.name;
+    if (isHover) r *= 1.5;
+
+    var g = ctx.createRadialGradient(sc.x, sc.y, 0, sc.x, sc.y, r*3);
+    g.addColorStop(0, glow);
+    g.addColorStop(1, 'transparent');
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(sc.x, sc.y, r*3, 0, Math.PI*2);
+    ctx.fillStyle = g;
+    ctx.fill();
+    ctx.restore();
+
+    ctx.beginPath();
+    ctx.arc(sc.x, sc.y, r, 0, Math.PI*2);
+    ctx.fillStyle = color;
+    ctx.fill();
+
+    var fs = isAnchor ? 13 : (zoom > 1.2 ? 12 : 11);
+    ctx.font = (isAnchor?'700':'400') + ' ' + fs + 'px "Segoe UI",sans-serif';
+    ctx.fillStyle = isHover ? '#ffffff' : (isAnchor ? color : '#c9d1d9');
+    ctx.globalAlpha = isHover ? 1 : (isAnchor ? 1 : 0.82);
+    ctx.fillText(c.label, sc.x + r + 5, sc.y + 4);
+    ctx.globalAlpha = 1;
+  });
+
+  requestAnimationFrame(draw);
+}
+
+canvas.addEventListener('mousedown', function(e) {
+  dragging=true; dragStart={x:e.clientX,y:e.clientY}; panStart={x:panX,y:panY};
+  canvas.style.cursor='grabbing';
+});
+window.addEventListener('mousemove', function(e) {
+  if (dragging) { panX=panStart.x+(e.clientX-dragStart.x); panY=panStart.y+(e.clientY-dragStart.y); return; }
+  var rect=canvas.getBoundingClientRect();
+  var mx=e.clientX-rect.left, my=e.clientY-rect.top;
+  hoveredCity=null;
+  var vis=CITIES.filter(function(c){return c.name==='Berlin'||c.name==='London'||c.inB2||c.inL2;});
+  for (var i=0;i<vis.length;i++) {
+    var sc=toScreen(vis[i].nx,vis[i].ny);
+    if (Math.hypot(sc.x-mx,sc.y-my)<16){hoveredCity=vis[i];break;}
+  }
+  if (hoveredCity) {
+    canvas.style.cursor='pointer';
+    var c=hoveredCity;
+    ttName.textContent=c.label+'（'+c.name+'）';
+    var lines=[];
+    if (c.name==='Berlin'||c.name==='London') { lines.push('起点都市'); }
+    else {
+      if (c.inB2) lines.push('ベルリンから '+Math.round(c.dBerlin)+' km'+(c.inB1?'（500km圏）':'（1000km圏）'));
+      if (c.inL2) lines.push('ロンドンから '+Math.round(c.dLondon)+' km'+(c.inL1?'（500km圏）':'（1000km圏）'));
+    }
+    ttDist.innerHTML=lines.join('<br>');
+    tooltip.style.display='block';
+    tooltip.style.left=(e.clientX+16)+'px';
+    tooltip.style.top=(e.clientY-8)+'px';
+  } else {
+    canvas.style.cursor='grab';
+    tooltip.style.display='none';
+  }
+});
+window.addEventListener('mouseup',function(){dragging=false;canvas.style.cursor='grab';});
+canvas.addEventListener('wheel',function(e){
+  e.preventDefault();
+  var f=e.deltaY<0?1.12:0.89;
+  var rect=canvas.getBoundingClientRect();
+  var mx=e.clientX-rect.left,my=e.clientY-rect.top;
+  panX=mx+(panX-mx)*f; panY=my+(panY-my)*f;
+  zoom=Math.max(0.3,Math.min(zoom*f,8));
+},{passive:false});
+window.addEventListener('resize',resize);
+
+resize();
+draw();
+</script>
+</body>
+</html>
