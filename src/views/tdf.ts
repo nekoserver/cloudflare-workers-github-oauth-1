@@ -56,6 +56,21 @@ body { background:var(--bg); color:var(--text); font-family:'Segoe UI','Hiragino
   border-radius:6px; padding:6px 11px; backdrop-filter:blur(4px);
 }
 
+#tdf-cal {
+  position:absolute; top:12px; left:12px; z-index:10;
+  background:rgba(13,17,23,0.88); border:1px solid var(--border);
+  border-radius:8px; padding:8px 10px; backdrop-filter:blur(4px);
+  min-width:148px;
+}
+.tdf-cal-title { font-size:11px; font-weight:700; color:var(--accent); margin-bottom:5px; text-align:center; }
+.tdf-cal-grid { display:grid; grid-template-columns:repeat(7,1fr); gap:2px; }
+.tdf-cal-hdr { font-size:7px; font-weight:700; color:#30363d; text-align:center; padding-bottom:2px; }
+.tdf-cal-cell { font-size:9px; text-align:center; padding:2px 1px; border-radius:3px; color:#484f58; line-height:1.3; }
+.tdf-cal-match { cursor:pointer; }
+.tdf-cal-match:hover { filter:brightness(1.25); }
+@keyframes tdf-blink { 0%,100%{outline:none;box-shadow:none} 50%{outline:2px solid #e3b341;box-shadow:0 0 6px rgba(227,179,65,0.55)} }
+.tdf-blink { animation:tdf-blink 0.4s ease 6; }
+
 /* ---- right: schedule ---- */
 #sched-panel {
   width:360px; flex-shrink:0; display:flex; flex-direction:column;
@@ -158,6 +173,7 @@ body { background:var(--bg); color:var(--text); font-family:'Segoe UI','Hiragino
 <div id="main">
   <!-- left: route map -->
   <div id="map-panel">
+    <div id="tdf-cal"></div>
     <canvas id="c"></canvas>
     <div id="legend">
       <h3>ステージ種別</h3>
@@ -410,6 +426,51 @@ function scrollRowIntoView(el) {
   }
 }
 
+function stripDow(s) {
+  var p = s.indexOf('(');
+  return p >= 0 ? s.slice(0, p) : s;
+}
+
+function flashCalDate(dateStr) {
+  var raw = stripDow(dateStr);
+  var cells = document.querySelectorAll('.tdf-cal-match[data-date="' + raw + '"]');
+  cells.forEach(function(c) {
+    c.classList.remove('tdf-blink');
+    void c.offsetWidth;
+    c.classList.add('tdf-blink');
+    setTimeout(function() { c.classList.remove('tdf-blink'); }, 2600);
+  });
+}
+
+function buildTdfCal() {
+  var calEl = document.getElementById('tdf-cal');
+  if (!calEl) return;
+  var dateToType = {};
+  for (var i = 0; i < SCHED.length; i++) {
+    var item = SCHED[i];
+    var raw = stripDow(item.date);
+    dateToType[raw] = item.type === 'stage' ? item.stype.toLowerCase() : 'rest';
+  }
+  var CAL_BG = {flat:'#1a3020',hilly:'#2f2010',mountain:'#2f1010',ttt:'#101a2f',itt:'#101a2f',rest:'#1c2128'};
+  var CAL_FG = {flat:'#3fb950',hilly:'#ffa657',mountain:'#ff7b72',ttt:'#79c0ff',itt:'#79c0ff',rest:'#555d68'};
+  var wdays = ['日','月','火','水','木','金','土'];
+  var html = '<div class="tdf-cal-title">&#x1f6b4; 7月</div><div class="tdf-cal-grid">';
+  for (var wi = 0; wi < 7; wi++) { html += '<div class="tdf-cal-hdr">' + wdays[wi] + '</div>'; }
+  var firstDow = new Date(2026, 6, 1).getDay();
+  for (var ei = 0; ei < firstDow; ei++) { html += '<div class="tdf-cal-cell"></div>'; }
+  for (var di = 1; di <= 31; di++) {
+    var key = '7/' + di;
+    var dtype = dateToType[key] || '';
+    var bg = dtype ? (CAL_BG[dtype] || '') : '';
+    var fg = dtype ? (CAL_FG[dtype] || '#8b949e') : '#484f58';
+    var sty = bg ? 'background:' + bg + ';color:' + fg : 'color:#484f58';
+    var cls = 'tdf-cal-cell' + (dtype ? ' tdf-cal-match' : '');
+    html += '<div class="' + cls + '" data-date="' + key + '" style="' + sty + '">' + di + '</div>';
+  }
+  html += '</div>';
+  calEl.innerHTML = html;
+}
+
 function showDetail(idx) {
   var rowEls = document.querySelectorAll("#sched-list .srow, #sched-list .srow-rest");
   for(var i=0; i<rowEls.length; i++) rowEls[i].classList.remove("selected");
@@ -417,6 +478,7 @@ function showDetail(idx) {
   if(selEl) { selEl.classList.add("selected"); scrollRowIntoView(selEl); }
 
   var item = SCHED[idx];
+  if (item.date) flashCalDate(item.date);
   var inner = document.getElementById("sched-detail-inner");
   if(item.type === "rest") {
     inner.innerHTML = '<div class="det-rest">🛌&nbsp; ' + item.label + '</div>';
@@ -459,6 +521,7 @@ function showDetail(idx) {
 }
 
 buildSchedList();
+buildTdfCal();
 
 // ---- pin state ----
 var pinLat = 0, pinLon = 0, pinActive = false;
