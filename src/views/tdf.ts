@@ -28,12 +28,18 @@ body { background:var(--bg); color:var(--text); font-family:'Segoe UI','Hiragino
 #map-panel canvas { display:block; cursor:grab; }
 
 #legend {
-  position:absolute; bottom:50px; right:12px;
+  position:fixed; z-index:50;
   background:rgba(22,27,34,0.92); border:1px solid var(--border);
-  border-radius:8px; padding:8px 12px; font-size:11px; line-height:1.8;
-  backdrop-filter:blur(4px); z-index:10;
+  border-radius:8px; font-size:11px; line-height:1.8;
+  backdrop-filter:blur(4px); user-select:none;
 }
-#legend h3 { font-size:11px; color:var(--muted); margin-bottom:4px; font-weight:400; }
+#legend-bar {
+  display:flex; align-items:center; gap:7px;
+  padding:6px 10px 5px; cursor:grab; touch-action:none;
+  border-bottom:1px solid var(--border);
+}
+#legend-bar:active { cursor:grabbing; }
+#legend-content { padding:8px 12px; }
 .leg-row { display:flex; align-items:center; gap:7px; }
 .leg-line { width:22px; height:3px; border-radius:2px; flex-shrink:0; }
 .leg-dot  { width:9px; height:9px; border-radius:50%; flex-shrink:0; }
@@ -151,7 +157,7 @@ body { background:var(--bg); color:var(--text); font-family:'Segoe UI','Hiragino
   display:flex; align-items:center; gap:8px;
   padding:7px 10px; background:var(--surface2);
   border-bottom:1px solid var(--border); cursor:grab;
-  user-select:none;
+  user-select:none; touch-action:none;
 }
 #float-detail-bar:active { cursor:grabbing; }
 #float-detail-bar .fbar-icon { font-size:13px; }
@@ -226,14 +232,19 @@ body { background:var(--bg); color:var(--text); font-family:'Segoe UI','Hiragino
     <div id="tdf-cal"></div>
     <canvas id="c"></canvas>
     <div id="legend">
-      <h3>ステージ種別</h3>
-      <div class="leg-row"><div class="leg-line" style="background:#3fb950"></div><span>平坦</span></div>
-      <div class="leg-row"><div class="leg-line" style="background:#ffa657"></div><span>丘陵</span></div>
-      <div class="leg-row"><div class="leg-line" style="background:#ff7b72"></div><span>山岳</span></div>
-      <div class="leg-row"><div class="leg-line" style="background:#79c0ff;height:2px"></div><span>タイムトライアル</span></div>
-      <div style="margin-top:5px;border-top:1px solid #30363d;padding-top:5px;">
-      <div class="leg-row"><div class="leg-dot" style="background:#ff7b72;box-shadow:0 0 5px #ff7b72"></div><span>スタート/ゴール</span></div>
-      <div class="leg-row"><div class="leg-dot" style="background:#d2a8ff;width:7px;height:7px"></div><span>主要峠（HC/1級）</span></div>
+      <div id="legend-bar">
+        <span style="font-size:12px;color:var(--muted);pointer-events:none">⠿⠿</span>
+        <span style="font-size:11px;color:var(--muted);flex:1;pointer-events:none">ステージ種別</span>
+      </div>
+      <div id="legend-content">
+        <div class="leg-row"><div class="leg-line" style="background:#3fb950"></div><span>平坦</span></div>
+        <div class="leg-row"><div class="leg-line" style="background:#ffa657"></div><span>丘陵</span></div>
+        <div class="leg-row"><div class="leg-line" style="background:#ff7b72"></div><span>山岳</span></div>
+        <div class="leg-row"><div class="leg-line" style="background:#79c0ff;height:2px"></div><span>タイムトライアル</span></div>
+        <div style="margin-top:5px;border-top:1px solid #30363d;padding-top:5px;">
+        <div class="leg-row"><div class="leg-dot" style="background:#ff7b72;box-shadow:0 0 5px #ff7b72"></div><span>スタート/ゴール</span></div>
+        <div class="leg-row"><div class="leg-dot" style="background:#d2a8ff;width:7px;height:7px"></div><span>主要峠（HC/1級）</span></div>
+        </div>
       </div>
     </div>
     <div id="map-tooltip">
@@ -588,6 +599,49 @@ function showDetail(idx) {
 buildSchedList();
 buildTdfCal();
 
+// legend: fixed位置の初期化（マップパネル右上）
+var legendEl = document.getElementById("legend");
+var legendBar = document.getElementById("legend-bar");
+
+function initLegendPos() {
+  if (legendEl.dataset.userMoved) return;
+  var mapRect = document.getElementById("map-panel").getBoundingClientRect();
+  legendEl.style.left = Math.max(0, mapRect.right - legendEl.offsetWidth - 12) + "px";
+  legendEl.style.top  = (mapRect.top + 12) + "px";
+}
+
+// legend dragging (pointercapture方式)
+var legDragging = false, legStartX, legStartY, legLeft, legTop;
+legendBar.addEventListener("pointerdown", function(e) {
+  if (e.button !== 0) return;
+  legDragging = true;
+  legStartX = e.clientX; legStartY = e.clientY;
+  var rect = legendEl.getBoundingClientRect();
+  legLeft = rect.left; legTop = rect.top;
+  legendBar.setPointerCapture(e.pointerId);
+  legendBar.style.cursor = "grabbing";
+  legendEl.dataset.userMoved = "1";
+  e.preventDefault(); e.stopPropagation();
+});
+legendBar.addEventListener("pointermove", function(e) {
+  if (!legDragging) return;
+  var nx = Math.max(0, Math.min(legLeft + (e.clientX - legStartX), window.innerWidth - 80));
+  var ny = Math.max(0, Math.min(legTop  + (e.clientY - legStartY), window.innerHeight - 40));
+  legendEl.style.left = nx + "px";
+  legendEl.style.top  = ny + "px";
+  e.preventDefault();
+});
+legendBar.addEventListener("pointerup", function(e) {
+  if (!legDragging) return;
+  legDragging = false;
+  legendBar.style.cursor = "grab";
+  legendBar.releasePointerCapture(e.pointerId);
+  e.preventDefault(); e.stopPropagation();
+});
+legendBar.addEventListener("pointercancel", function() {
+  legDragging = false; legendBar.style.cursor = "grab";
+});
+
 // ---- floating detail window logic ----
 var floatWin = document.getElementById("float-detail");
 var floatBody = document.getElementById("float-detail-body");
@@ -736,6 +790,7 @@ var fDragging = false, fStartX, fStartY, fWinLeft, fWinTop;
 
 fBar.addEventListener("pointerdown", function(e) {
   if (e.button !== 0) return;
+  if (e.target && e.target.id === "float-detail-close") return;
   fDragging = true;
   fStartX = e.clientX;
   fStartY = e.clientY;
@@ -1303,11 +1358,12 @@ canvas.addEventListener("touchend",function(e){
   isTap=false;
 },{passive:false});
 
-window.addEventListener("resize",function(){resize();});
+window.addEventListener("resize",function(){resize();initLegendPos();});
 
 resize();
 savedZoom = zoom; savedPanX = panX; savedPanY = panY;
 draw();
+initLegendPos();
 setTimeout(function() { if(carouselMode) advanceCarousel(); }, 800);
 </script>
 </body>
