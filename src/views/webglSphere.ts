@@ -1081,7 +1081,16 @@ function getNextZ() {
     {a:"🇩🇪",b:"🇵🇾",date:"2026-06-29",time:"22:00",venue:0},
     {a:"🇨🇮",b:"🇳🇴",date:"2026-06-30",time:"19:00",venue:7},
     {a:"🇫🇷",b:"🇸🇪",date:"2026-06-30",time:"22:00",venue:1},
-    {a:"🇲🇽",b:"❓",date:"2026-07-01",time:"02:00",venue:9}
+    {a:"🇲🇽",b:"🇪🇨",date:"2026-07-01",time:"02:00",venue:9},
+    {a:"🏴󠁧󠁢󠁥󠁮󠁧󠁿",b:"🇨🇩",date:"2026-07-01",time:"19:00",venue:0},
+    {a:"🇧🇪",b:"🇸🇳",date:"2026-07-01",time:"22:00",venue:3},
+    {a:"🇺🇸",b:"🇧🇦",date:"2026-07-02",time:"02:00",venue:12},
+    {a:"🇪🇸",b:"🇦🇹",date:"2026-07-02",time:"19:00",venue:13},
+    {a:"🇵🇹",b:"🇭🇷",date:"2026-07-02",time:"22:00",venue:0},
+    {a:"🇨🇭",b:"🇩🇿",date:"2026-07-03",time:"02:00",venue:0},
+    {a:"🇦🇺",b:"🇪🇬",date:"2026-07-03",time:"19:00",venue:0},
+    {a:"🇦🇷",b:"🇨🇻",date:"2026-07-03",time:"22:00",venue:8},
+    {a:"🇨🇴",b:"🇬🇭",date:"2026-07-04",time:"02:00",venue:4}
   ];
   var GS_MATCH_COUNT = 72;
   var stadiumMatches = {};
@@ -1100,7 +1109,7 @@ function getNextZ() {
     '🇲🇽':1,'🇺🇸':1,'🇩🇪':1,'🇦🇷':1,'🇫🇷':1,'🇳🇴':1,
     '🇨🇭':1,'🇧🇷':1,'🇳🇱':1,'🇪🇬':1,'🇪🇸':1,'🇨🇴':1,'🏴󠁧󠁢󠁥󠁮󠁧󠁿':1,
     '🇿🇦':1,'🇨🇦':1,'🇲🇦':1,'🇵🇾':1,'🇨🇮':1,'🇯🇵':1,'🇧🇪':1,'🇨🇻':1,'🇵🇹':1,'🇬🇭':1,
-    '🇰🇷':1,'🇧🇦':1,'🇸🇪':1,'🇦🇺':1,'🇭🇷':1
+    '🇧🇦':1,'🇸🇪':1,'🇦🇺':1,'🇭🇷':1,'🇸🇳':1,'🇨🇩':1,'🇦🇹':1,'🇩🇿':1,'🇪🇨':1
   };
 
   var FLAG_CODE = {
@@ -1184,6 +1193,18 @@ function getNextZ() {
     }
     html += '</div></div>';
     sec.innerHTML = html;
+    sec.addEventListener('click', function(e) {
+      var cell = e.target.closest('.cal-match');
+      if (!cell || !cell.dataset.date) return;
+      var ds = cell.dataset.date;
+      sec.querySelectorAll('.cal-selected').forEach(function(el) { el.classList.remove('cal-selected'); });
+      cell.classList.add('cal-selected');
+      if (!drwBuilt) { buildDrawer(); drwBuilt = true; }
+      openDateSection(ds);
+      openDrawer();
+      selectedDate = ds;
+      updateActiveDateFlags(ds);
+    });
   }
 
   var TOP20_STADIUMS = [
@@ -1545,22 +1566,22 @@ function getNextZ() {
 
   var TNMT_ROUNDS = [
     { label: 'R32', key: 'r32', flex: '2.4', matches: [
-      {id:'r32-1',  date:'6/28', a:'🇿🇦', b:'🇨🇦', slotA:'2A', slotB:'2B'},
-      {id:'r32-2',  date:'6/28', a:'🇳🇱', b:'🇲🇦', slotA:'1F', slotB:'2C'},
-      {id:'r32-3',  date:'6/29', a:'🇧🇷', b:'🇯🇵', slotA:'1C', slotB:'2F'},
-      {id:'r32-4',  date:'6/29', a:'🇩🇪', b:'🇵🇾', slotA:'1E', slotB:'2D'},
-      {id:'r32-5',  date:'6/30', a:'🇨🇮', b:'🇳🇴', slotA:'2E', slotB:'2I'},
-      {id:'r32-6',  date:'6/30', a:'🇫🇷', b:'🇸🇪', slotA:'1I', slotB:'3F'},
-      {id:'r32-7',  date:'6/30', a:'🏴󠁧󠁢󠁥󠁮󠁧󠁿', b:null, slotA:'1L', slotB:'3位未定'},
-      {id:'r32-8',  date:'7/1',  a:'🇲🇽', b:null, slotA:'1A', slotB:'3位未定'},
-      {id:'r32-9',  date:'7/1',  a:'🇪🇬', b:'🇰🇷', slotA:'1G', slotB:'3A'},
-      {id:'r32-10', date:'7/1',  a:'🇺🇸', b:'🇧🇦', slotA:'1D', slotB:'3B'},
-      {id:'r32-11', date:'7/2',  a:'🇪🇸', b:null, slotA:'1H', slotB:'2J未定'},
-      {id:'r32-12', date:'7/2',  a:'🇨🇭', b:null, slotA:'1B', slotB:'3位未定'},
-      {id:'r32-13', date:'7/2',  a:'🇵🇹', b:'🇬🇭', slotA:'2K', slotB:'2L'},
-      {id:'r32-14', date:'7/3',  a:'🇦🇺', b:'🇧🇪', slotA:'3D', slotB:'2G'},
-      {id:'r32-15', date:'7/3',  a:'🇦🇷', b:'🇨🇻', slotA:'1J', slotB:'2H'},
-      {id:'r32-16', date:'7/3',  a:'🇨🇴', b:'🇭🇷', slotA:'1K', slotB:'3L'}
+      {id:'r32-1',  date:'6/28', a:'🇿🇦', b:'🇨🇦', slotA:'RSA', slotB:'CAN'},
+      {id:'r32-2',  date:'6/29', a:'🇧🇷', b:'🇯🇵', slotA:'BRA', slotB:'JPN'},
+      {id:'r32-3',  date:'6/29', a:'🇩🇪', b:'🇵🇾', slotA:'GER', slotB:'PAR'},
+      {id:'r32-4',  date:'6/29', a:'🇳🇱', b:'🇲🇦', slotA:'NED', slotB:'MAR'},
+      {id:'r32-5',  date:'6/30', a:'🇨🇮', b:'🇳🇴', slotA:'CIV', slotB:'NOR'},
+      {id:'r32-6',  date:'6/30', a:'🇫🇷', b:'🇸🇪', slotA:'FRA', slotB:'SWE'},
+      {id:'r32-7',  date:'6/30', a:'🇲🇽', b:'🇪🇨', slotA:'MEX', slotB:'ECU'},
+      {id:'r32-8',  date:'7/1',  a:'🏴󠁧󠁢󠁥󠁮󠁧󠁿', b:'🇨🇩', slotA:'ENG', slotB:'COD'},
+      {id:'r32-9',  date:'7/1',  a:'🇧🇪', b:'🇸🇳', slotA:'BEL', slotB:'SEN'},
+      {id:'r32-10', date:'7/1',  a:'🇺🇸', b:'🇧🇦', slotA:'USA', slotB:'BIH'},
+      {id:'r32-11', date:'7/2',  a:'🇪🇸', b:'🇦🇹', slotA:'ESP', slotB:'AUT'},
+      {id:'r32-12', date:'7/2',  a:'🇵🇹', b:'🇭🇷', slotA:'POR', slotB:'CRO'},
+      {id:'r32-13', date:'7/2',  a:'🇨🇭', b:'🇩🇿', slotA:'SUI', slotB:'ALG'},
+      {id:'r32-14', date:'7/3',  a:'🇦🇺', b:'🇪🇬', slotA:'AUS', slotB:'EGY'},
+      {id:'r32-15', date:'7/3',  a:'🇦🇷', b:'🇨🇻', slotA:'ARG', slotB:'CPV'},
+      {id:'r32-16', date:'7/3',  a:'🇨🇴', b:'🇬🇭', slotA:'COL', slotB:'GHA'}
     ]},
     { label: 'R16', key: 'r16', flex: '1.8', matches: [
       {id:'r16-1', date:'7/5', a:null, b:null, slotA:'M1勝', slotB:'M2勝'},
@@ -1600,14 +1621,6 @@ function getNextZ() {
   function buildTournamentModal() {
     var body = document.getElementById('tnmt-body');
     if (!body) return;
-    var groupsHtml = '<div class="tnmt-grp-list">';
-    GROUPS.forEach(function(grp) {
-      var flagsHtml = grp.f.map(function(f) {
-        return f + (QUALIFIED_FLAGS[f] ? '<span class="tnmt-qual-badge">✓</span>' : '');
-      }).join('');
-      groupsHtml += '<div class="tnmt-grp-item"><span class="tnmt-grp-badge">' + grp.g + '</span><span class="tnmt-grp-flags">' + flagsHtml + '</span></div>';
-    });
-    groupsHtml += '</div>';
     function teamSlot(flag, slot) {
       if (flag) {
         var code = flagCode(flag);
@@ -1630,7 +1643,7 @@ function getNextZ() {
     bracketHtml += '</div>';
     bracketHtml += '<div class="tnmt-3rd"><div class="tnmt-3rd-label">3位決定戦 (' + dateWithDow('7/23') + ')</div>' +
       matchCard(TNMT_3RD) + '</div>';
-    body.innerHTML = groupsHtml + bracketHtml;
+    body.innerHTML = bracketHtml;
   }
 
   var tnmtOverlay = document.getElementById('tnmt-overlay');
