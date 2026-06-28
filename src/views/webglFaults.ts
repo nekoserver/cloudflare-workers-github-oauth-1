@@ -1123,9 +1123,9 @@ void main() {
       ['エクアドル', '🇪🇨'], ['アルゼンチン', '🇦🇷'], ['ブラジル', '🇧🇷'],
       ['トルコ', '🇹🇷'], ['ギリシャ', '🇬🇷'], ['イタリア', '🇮🇹'],
       ['イスラエル', '🇮🇱'], ['ヨルダン', '🇯🇴'], ['シリア', '🇸🇾'],
-      ['インド', '🇮🇳'], ['パキスタン', '🇵🇰'], ['アフガニスタン', '🇦🇫'],
+      ['インドネシア', '🇮🇩'], ['インド', '🇮🇳'], ['パキスタン', '🇵🇰'], ['アフガニスタン', '🇦🇫'],
       ['中国', '🇨🇳'], ['台湾', '🇹🇼'], ['フィリピン', '🇵🇭'],
-      ['インドネシア', '🇮🇩'], ['マレーシア', '🇲🇾'], ['ミャンマー', '🇲🇲'],
+      ['マレーシア', '🇲🇾'], ['ミャンマー', '🇲🇲'],
       ['ニュージーランド', '🇳🇿'], ['パプアニューギニア', '🇵🇬'],
       ['ロシア', '🇷🇺'], ['カザフスタン', '🇰🇿'],
       ['エチオピア', '🇪🇹'], ['ケニア', '🇰🇪'], ['タンザニア', '🇹🇿'],
@@ -1819,7 +1819,7 @@ void main() {
   }
 
   function areaTourStep(vols) {
-    if (!areaTourRunning || areaTourIdx >= vols.length) { stopAreaTour(); return; }
+    if (!areaTourRunning || areaTourIdx >= vols.length) { stopAreaTour(true); return; }
     var v = vols[areaTourIdx];
     var prog = document.getElementById('areaTourProg');
     if (prog) prog.textContent = (areaTourIdx + 1) + ' / ' + vols.length;
@@ -1842,7 +1842,7 @@ void main() {
     });
   }
 
-  function stopAreaTour() {
+  function stopAreaTour(completed) {
     areaTourRunning = false;
     if (areaTourTimer) { clearTimeout(areaTourTimer); areaTourTimer = null; }
     volTtPinned = false;
@@ -1857,6 +1857,20 @@ void main() {
     }
     var prog = document.getElementById('areaTourProg');
     if (prog) prog.textContent = '';
+    if (completed) {
+      zoomTarget = 3.2;
+      lastBoxBounds = null;
+      if (areaMenuEl) areaMenuEl.style.display = 'none';
+      boxZoomMode = false;
+      btnBoxZoom.classList.remove('active');
+      btnBoxZoom.textContent = '🔲 エリアズーム';
+      canvas.style.cursor = '';
+      if (!autoRot) {
+        autoRot = true;
+        btnAutoRot.textContent = '⏸ 自転停止';
+        btnAutoRot.classList.remove('active');
+      }
+    }
   }
 
   function applyBoxZoom(ex, ey) {
