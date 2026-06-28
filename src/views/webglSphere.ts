@@ -1081,16 +1081,7 @@ function getNextZ() {
     {a:"🇩🇪",b:"🇵🇾",date:"2026-06-29",time:"22:00",venue:0},
     {a:"🇨🇮",b:"🇳🇴",date:"2026-06-30",time:"19:00",venue:7},
     {a:"🇫🇷",b:"🇸🇪",date:"2026-06-30",time:"22:00",venue:1},
-    {a:"🇲🇽",b:"🇪🇨",date:"2026-07-01",time:"02:00",venue:9},
-    {a:"🏴󠁧󠁢󠁥󠁮󠁧󠁿",b:"🇨🇩",date:"2026-07-01",time:"19:00",venue:5},
-    {a:"🇧🇪",b:"🇸🇳",date:"2026-07-01",time:"22:00",venue:3},
-    {a:"🇺🇸",b:"🇧🇦",date:"2026-07-02",time:"02:00",venue:12},
-    {a:"🇪🇸",b:"🇦🇹",date:"2026-07-02",time:"19:00",venue:13},
-    {a:"🇵🇹",b:"🇭🇷",date:"2026-07-02",time:"22:00",venue:2},
-    {a:"🇨🇭",b:"🇩🇿",date:"2026-07-03",time:"02:00",venue:6},
-    {a:"🇦🇺",b:"🇪🇬",date:"2026-07-03",time:"19:00",venue:14},
-    {a:"🇦🇷",b:"🇨🇻",date:"2026-07-03",time:"22:00",venue:8},
-    {a:"🇨🇴",b:"🇬🇭",date:"2026-07-04",time:"02:00",venue:4}
+    {a:"🇲🇽",b:"🇪🇨",date:"2026-07-01",time:"02:00",venue:9}
   ];
   var GS_MATCH_COUNT = 72;
   var stadiumMatches = {};
@@ -1196,14 +1187,9 @@ function getNextZ() {
     sec.addEventListener('click', function(e) {
       var cell = e.target.closest('.cal-match');
       if (!cell || !cell.dataset.date) return;
-      var ds = cell.dataset.date;
       sec.querySelectorAll('.cal-selected').forEach(function(el) { el.classList.remove('cal-selected'); });
       cell.classList.add('cal-selected');
-      if (!drwBuilt) { buildDrawer(); drwBuilt = true; }
-      openDateSection(ds);
-      openDrawer();
-      selectedDate = ds;
-      updateActiveDateFlags(ds);
+      openTournament();
     });
   }
 
