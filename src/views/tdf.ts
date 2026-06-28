@@ -551,12 +551,13 @@ function focusStage(n) {
   restoreTimer = setTimeout(function() {
     restoreTimer = null;
     goalPinActive = false;
-    var rz=zoom, rpx=panX, rpy=panY, rt=0, rdur=35;
-    function rstep(){
-      rt++;
-      var p=rt/rdur; p=p<0.5?2*p*p:-1+(4-2*p)*p;
+    var rz=zoom, rpx=panX, rpy=panY, rDur=4000;
+    var rStart = performance.now();
+    function rstep(now){
+      var p = Math.min((now - rStart) / rDur, 1);
+      p = 1 - (1-p)*(1-p)*(1-p);
       zoom=rz+(savedZoom-rz)*p; panX=rpx+(savedPanX-rpx)*p; panY=rpy+(savedPanY-rpy)*p;
-      if(rt<rdur) { requestAnimationFrame(rstep); }
+      if(p < 1) { requestAnimationFrame(rstep); }
       else if(carouselMode) { advanceCarousel(); }
     }
     requestAnimationFrame(rstep);
@@ -800,6 +801,17 @@ function draw() {
       ctx.font="700 8px 'Segoe UI',sans-serif";
       ctx.textAlign="center"; ctx.textBaseline="middle";
       ctx.fillText(st.n, mx, my);
+      ctx.restore();
+    }
+    if(zoom>2.5){
+      var alpha=Math.min((zoom-2.5)/1.0,1);
+      ctx.save();
+      ctx.globalAlpha=alpha;
+      ctx.font="700 11px 'Segoe UI',sans-serif";
+      ctx.fillStyle="#e3b341";
+      ctx.textAlign="center";
+      ctx.textBaseline="top";
+      ctx.fillText(st.km+"km", mx, my+13);
       ctx.restore();
     }
   });
