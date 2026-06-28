@@ -431,10 +431,11 @@ export function getAiChatPage(user: {
     .cal-cell {
       aspect-ratio: 1; border-radius: 3px;
       background: var(--border-color);
-      cursor: default; position: relative;
+      cursor: pointer; position: relative;
       transition: transform 0.1s;
     }
-    .cal-cell.empty { background: transparent; cursor: default; }
+    .cal-cell:hover { transform: scale(1.12); z-index: 1; }
+    .cal-cell.empty { background: transparent; cursor: default; pointer-events: none; }
     .cal-cell.has-data { cursor: pointer; }
     .cal-cell.has-data:hover { transform: scale(1.15); z-index: 1; }
     .cal-cell.selected-day { outline: 2px solid var(--accent-color, #667eea); outline-offset: 1px; }
@@ -2126,10 +2127,16 @@ export function getAiChatPage(user: {
         (function(ds) {
           cell.addEventListener('click', function(e) {
             e.stopPropagation();
+            if (!sidebarOpen) {
+              sidebarOpen = true;
+              sidebar.classList.add('open');
+              sidebarToggle.classList.add('active');
+            }
             calSelectedDay = ds;
             sidebarSearch.value = '';
             sidebarClear.classList.remove('visible');
             renderCalendar(calCurrentMonth);
+            sidebarResults.scrollTop = 0;
             doDateLoad(ds);
           });
         })(dateStr);
