@@ -116,8 +116,57 @@ body { background:var(--bg); color:var(--text); font-family:'Segoe UI','Hiragino
 .srow-rest-label { font-size:11px; color:var(--muted); }
 .srow-km { font-size:10px; font-weight:700; color:var(--accent); text-align:right; white-space:nowrap; }
 
-#sched-detail { flex:1; overflow-y:auto; }
+#sched-detail { flex:1; overflow-y:auto; position:relative; }
 #sched-detail-inner { padding:14px 12px; font-size:12px; line-height:1.8; }
+
+#detail-handle {
+  display:flex; align-items:center; justify-content:space-between;
+  padding:5px 10px 4px; cursor:grab; flex-shrink:0;
+  border-bottom:1px solid var(--border); background:var(--surface2);
+  user-select:none;
+}
+#detail-handle .handle-hint {
+  font-size:10px; color:var(--muted); pointer-events:none;
+}
+#detail-handle .handle-drag-icon {
+  font-size:13px; color:var(--muted); pointer-events:none;
+}
+#detail-handle:active { cursor:grabbing; }
+
+#detail-popped-msg {
+  display:none; padding:20px 0; text-align:center;
+  font-size:11px; color:var(--muted);
+}
+
+/* floating detail window */
+#float-detail {
+  display:none; position:fixed; z-index:500;
+  min-width:300px; max-width:380px; width:340px;
+  background:var(--surface); border:1px solid var(--border);
+  border-radius:10px; box-shadow:0 8px 32px rgba(0,0,0,0.6);
+  overflow:hidden; resize:both;
+}
+#float-detail-bar {
+  display:flex; align-items:center; gap:8px;
+  padding:7px 10px; background:var(--surface2);
+  border-bottom:1px solid var(--border); cursor:grab;
+  user-select:none;
+}
+#float-detail-bar:active { cursor:grabbing; }
+#float-detail-bar .fbar-icon { font-size:13px; }
+#float-detail-bar .fbar-title { font-size:11px; color:var(--muted); flex:1; }
+#float-detail-close {
+  width:18px; height:18px; border-radius:50%;
+  background:#ff5f57; border:none; cursor:pointer;
+  display:flex; align-items:center; justify-content:center;
+  font-size:10px; color:rgba(0,0,0,0.6); flex-shrink:0;
+}
+#float-detail-close:hover { filter:brightness(1.15); }
+#float-detail-body {
+  overflow-y:auto; max-height:60vh;
+  padding:14px 12px; font-size:12px; line-height:1.8;
+}
+#float-detail.drag-over-map { border-color:var(--accent); box-shadow:0 0 0 2px rgba(227,179,65,0.35); }
 
 .det-empty { color:var(--muted); font-size:11px; padding:20px 0; text-align:center; }
 .det-head { margin-bottom:10px; }
@@ -202,11 +251,26 @@ body { background:var(--bg); color:var(--text); font-family:'Segoe UI','Hiragino
       <div id="bike-track-line"></div>
       <span id="bike-icon">🚴‍♂️</span>
     </div>
+    <div id="detail-handle" title="左へドラッグで独立ウィンドウ">
+      <span class="handle-drag-icon">⠿⠿</span>
+      <span class="handle-hint">← ドラッグで分離</span>
+    </div>
     <div id="sched-detail">
       <div id="sched-detail-inner"><div class="det-empty">← 行をタップして詳細表示</div></div>
+      <div id="detail-popped-msg">🪟 ウィンドウで表示中</div>
     </div>
   </div>
 </div><!-- /main -->
+
+<!-- floating detail window -->
+<div id="float-detail">
+  <div id="float-detail-bar">
+    <span class="fbar-icon">🚴</span>
+    <span class="fbar-title" id="float-detail-title">ステージ詳細</span>
+    <button id="float-detail-close" title="閉じる" onclick="closeFloatDetail()">✕</button>
+  </div>
+  <div id="float-detail-body"></div>
+</div>
 
 <script>
 var SCHED = [
@@ -522,6 +586,107 @@ function showDetail(idx) {
 
 buildSchedList();
 buildTdfCal();
+
+// ---- floating detail window logic ----
+var floatWin = document.getElementById("float-detail");
+var floatBody = document.getElementById("float-detail-body");
+var floatTitle = document.getElementById("float-detail-title");
+var detailInner = document.getElementById("sched-detail-inner");
+var poppedMsg = document.getElementById("detail-popped-msg");
+var detailHandle = document.getElementById("detail-handle");
+var isPopped = false;
+
+function openFloatDetail(x, y) {
+  floatBody.innerHTML = detailInner.innerHTML;
+  floatWin.style.left = Math.min(x, window.innerWidth - 360) + "px";
+  floatWin.style.top  = Math.max(10, Math.min(y - 30, window.innerHeight - 200)) + "px";
+  floatWin.style.display = "block";
+  isPopped = true;
+  detailInner.style.visibility = "hidden";
+  poppedMsg.style.display = "block";
+  var stageEl = floatBody.querySelector(".det-stage-num");
+  floatTitle.textContent = stageEl ? "S" + stageEl.textContent.replace("S","") + " 詳細" : "ステージ詳細";
+}
+
+function closeFloatDetail() {
+  floatWin.style.display = "none";
+  isPopped = false;
+  detailInner.style.visibility = "visible";
+  poppedMsg.style.display = "none";
+}
+
+// sync inner→float when showDetail is called while popped
+var _origShowDetail = showDetail;
+showDetail = function(idx) {
+  _origShowDetail(idx);
+  if (isPopped) {
+    floatBody.innerHTML = detailInner.innerHTML;
+    var stageEl = floatBody.querySelector(".det-stage-num");
+    floatTitle.textContent = stageEl ? "S" + stageEl.textContent.replace("S","") + " 詳細" : "ステージ詳細";
+  }
+};
+
+// drag handle → drag to map panel to pop out
+var handleDragging = false;
+var hdStartX, hdStartY;
+
+detailHandle.addEventListener("mousedown", function(e) {
+  handleDragging = true;
+  hdStartX = e.clientX;
+  hdStartY = e.clientY;
+  e.preventDefault();
+});
+
+window.addEventListener("mousemove", function(e) {
+  if (!handleDragging) return;
+  var mapPanelEl = document.getElementById("map-panel");
+  var rect = mapPanelEl.getBoundingClientRect();
+  var inMap = e.clientX >= rect.left && e.clientX <= rect.right &&
+              e.clientY >= rect.top  && e.clientY <= rect.bottom;
+  detailHandle.style.background = inMap ? "rgba(227,179,65,0.15)" : "";
+});
+
+window.addEventListener("mouseup", function(e) {
+  if (!handleDragging) return;
+  handleDragging = false;
+  detailHandle.style.background = "";
+  var mapPanelEl = document.getElementById("map-panel");
+  var rect = mapPanelEl.getBoundingClientRect();
+  var inMap = e.clientX >= rect.left && e.clientX <= rect.right &&
+              e.clientY >= rect.top  && e.clientY <= rect.bottom;
+  if (inMap) {
+    if (!isPopped) {
+      openFloatDetail(e.clientX, e.clientY);
+    }
+  } else if (isPopped && Math.abs(e.clientX - hdStartX) < 6 && Math.abs(e.clientY - hdStartY) < 6) {
+    closeFloatDetail();
+  }
+});
+
+// dragging the floating window by its title bar
+var fDragging = false, fStartX, fStartY, fWinLeft, fWinTop;
+var fBar = document.getElementById("float-detail-bar");
+
+fBar.addEventListener("mousedown", function(e) {
+  fDragging = true;
+  fStartX = e.clientX;
+  fStartY = e.clientY;
+  fWinLeft = parseInt(floatWin.style.left) || floatWin.getBoundingClientRect().left;
+  fWinTop  = parseInt(floatWin.style.top)  || floatWin.getBoundingClientRect().top;
+  e.preventDefault();
+});
+
+window.addEventListener("mousemove", function(e) {
+  if (!fDragging) return;
+  var nx = fWinLeft + (e.clientX - fStartX);
+  var ny = fWinTop  + (e.clientY - fStartY);
+  nx = Math.max(0, Math.min(nx, window.innerWidth  - 80));
+  ny = Math.max(0, Math.min(ny, window.innerHeight - 40));
+  floatWin.style.left = nx + "px";
+  floatWin.style.top  = ny + "px";
+});
+
+window.addEventListener("mouseup", function() { fDragging = false; });
 
 // ---- pin state ----
 var pinLat = 0, pinLon = 0, pinActive = false;
