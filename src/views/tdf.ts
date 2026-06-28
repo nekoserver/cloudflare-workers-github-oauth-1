@@ -28,7 +28,7 @@ body { background:var(--bg); color:var(--text); font-family:'Segoe UI','Hiragino
 #map-panel canvas { display:block; cursor:grab; }
 
 #legend {
-  position:absolute; top:12px; right:12px;
+  position:absolute; bottom:12px; right:12px;
   background:rgba(22,27,34,0.92); border:1px solid var(--border);
   border-radius:8px; padding:10px 14px; font-size:11px; line-height:2;
   backdrop-filter:blur(4px); z-index:10;
@@ -913,6 +913,31 @@ function draw() {
   requestAnimationFrame(draw);
 }
 
+function showTooltipAt(st, cx, cy) {
+  ttStage.textContent='ステージ '+st.n+'  '+st.date;
+  ttRoute.textContent=st.from+'  →  '+st.to;
+  ttDetail.textContent=st.km+' km  |  '+TYPE_LABEL[st.type];
+  ttClimbs.textContent=st.climbs&&st.climbs.length?'⛰ '+st.climbs.join(' › '):'';
+  tooltip.style.display='block';
+  var tx=cx+16, ty=cy-10;
+  if(tx+270>W) tx=cx-280;
+  if(ty+80>H) ty=H-90;
+  if(ty<0) ty=8;
+  tooltip.style.left=tx+'px'; tooltip.style.top=ty+'px';
+}
+
+function findStageAt(mx, my) {
+  for(var i=0;i<STAGES.length;i++){
+    var st=STAGES[i];
+    var pts=[];
+    pts.push(toScreen(st.s[0],st.s[1]));
+    (st.via||[]).forEach(function(v){pts.push(toScreen(v[0],v[1]));});
+    pts.push(toScreen(st.e[0],st.e[1]));
+    if(ptNearPolyline(mx,my,pts)<14) return st;
+  }
+  return null;
+}
+
 canvas.addEventListener('mousemove', function(e) {
   if(dragging){
     panX=panStart.x+(e.clientX-dragStart.x);
@@ -920,27 +945,10 @@ canvas.addEventListener('mousemove', function(e) {
   }
   var rect=canvas.getBoundingClientRect();
   var mx=e.clientX-rect.left, my=e.clientY-rect.top;
-  hoveredStage=null;
-  for(var i=0;i<STAGES.length;i++){
-    var st=STAGES[i];
-    var pts=[];
-    pts.push(toScreen(st.s[0],st.s[1]));
-    (st.via||[]).forEach(function(v){pts.push(toScreen(v[0],v[1]));});
-    pts.push(toScreen(st.e[0],st.e[1]));
-    if(ptNearPolyline(mx,my,pts)<10){hoveredStage=st;break;}
-  }
+  hoveredStage=findStageAt(mx,my);
   if(hoveredStage){
     canvas.style.cursor='pointer';
-    var st=hoveredStage;
-    ttStage.textContent='ステージ '+st.n+'  '+st.date;
-    ttRoute.textContent=st.from+'  →  '+st.to;
-    ttDetail.textContent=st.km+' km  |  '+TYPE_LABEL[st.type];
-    ttClimbs.textContent=st.climbs&&st.climbs.length?'⛰ '+st.climbs.join(' › '):'';
-    tooltip.style.display='block';
-    var tx=e.clientX+16, ty=e.clientY-10;
-    if(tx+270>window.innerWidth) tx=e.clientX-280;
-    if(ty+80>H) ty=H-90;
-    tooltip.style.left=tx+'px'; tooltip.style.top=ty+'px';
+    showTooltipAt(hoveredStage, e.clientX-rect.left, e.clientY-rect.top);
   } else {
     canvas.style.cursor='grab';
     tooltip.style.display='none';
@@ -959,6 +967,72 @@ canvas.addEventListener('wheel',function(e){
   panX=mx+(panX-mx)*f; panY=my+(panY-my)*f;
   zoom=Math.max(0.4,Math.min(zoom*f,12));
 },{passive:false});
+
+// touch support
+var touchStartX, touchStartY, touchPinchDist=0, isTap=false;
+canvas.addEventListener('touchstart',function(e){
+  e.preventDefault();
+  if(e.touches.length===1){
+    var t=e.touches[0];
+    dragStart={x:t.clientX,y:t.clientY};
+    panStart={x:panX,y:panY};
+    touchStartX=t.clientX; touchStartY=t.clientY;
+    dragging=true; isTap=true;
+  } else if(e.touches.length===2){
+    isTap=false;
+    var dx=e.touches[0].clientX-e.touches[1].clientX;
+    var dy=e.touches[0].clientY-e.touches[1].clientY;
+    touchPinchDist=Math.hypot(dx,dy);
+    dragging=false;
+  }
+  tooltip.style.display='none';
+},{passive:false});
+
+canvas.addEventListener('touchmove',function(e){
+  e.preventDefault();
+  if(e.touches.length===1 && dragging){
+    var t=e.touches[0];
+    var dx=t.clientX-touchStartX, dy=t.clientY-touchStartY;
+    if(Math.hypot(dx,dy)>6) isTap=false;
+    panX=panStart.x+(t.clientX-dragStart.x);
+    panY=panStart.y+(t.clientY-dragStart.y);
+  } else if(e.touches.length===2){
+    isTap=false;
+    var dx=e.touches[0].clientX-e.touches[1].clientX;
+    var dy=e.touches[0].clientY-e.touches[1].clientY;
+    var dist=Math.hypot(dx,dy);
+    var f=dist/(touchPinchDist||dist);
+    var cx=(e.touches[0].clientX+e.touches[1].clientX)/2;
+    var cy=(e.touches[0].clientY+e.touches[1].clientY)/2;
+    var rect=canvas.getBoundingClientRect();
+    var mx=cx-rect.left, my=cy-rect.top;
+    panX=mx+(panX-mx)*f; panY=my+(panY-my)*f;
+    zoom=Math.max(0.4,Math.min(zoom*f,12));
+    touchPinchDist=dist;
+  }
+},{passive:false});
+
+canvas.addEventListener('touchend',function(e){
+  e.preventDefault();
+  dragging=false;
+  if(isTap && e.changedTouches.length===1){
+    var t=e.changedTouches[0];
+    var rect=canvas.getBoundingClientRect();
+    var mx=t.clientX-rect.left, my=t.clientY-rect.top;
+    var st=findStageAt(mx,my);
+    if(st){
+      if(hoveredStage && hoveredStage.n===st.n && tooltip.style.display==='block'){
+        tooltip.style.display='none'; hoveredStage=null;
+      } else {
+        hoveredStage=st; showTooltipAt(st,mx,my);
+      }
+    } else {
+      hoveredStage=null; tooltip.style.display='none';
+    }
+  }
+  isTap=false;
+},{passive:false});
+
 window.addEventListener('resize',function(){resize();});
 
 resize();
