@@ -71,6 +71,7 @@ canvas:active { cursor:grabbing; }
 .dbg-rect { position:absolute; pointer-events:none; box-sizing:border-box; }
 #dbg-globe-rect { border:1px dashed #3fb950; }
 #dbg-zoom-rect { border:1px dashed #58a6ff; }
+#box-select-overlay { position:absolute; border:2px dashed rgba(63,185,80,0.9); background:rgba(63,185,80,0.08); pointer-events:none; display:none; z-index:60; }
 #dbg-info { position:absolute; bottom:10px; left:10px; background:rgba(0,0,0,.75); border:1px solid #21262d; border-radius:5px; padding:5px 9px; font-size:10px; font-family:monospace; color:#8b949e; line-height:1.7; pointer-events:none; z-index:6; }
 .panel-tabs { display:flex; border-bottom:1px solid #21262d; flex-shrink:0; }
 .panel-tab { flex:1; padding:8px 4px; font-size:11px; font-weight:600; color:#484f58; background:none; border:none; border-bottom:2px solid transparent; cursor:pointer; transition:color .15s,border-color .15s; }
@@ -279,6 +280,7 @@ void main() {
   <div class="canvas-wrap">
     <canvas id="c"></canvas>
     <div id="markers"></div>
+    <div id="box-select-overlay"></div>
     <div class="hud" id="hud">テクスチャ読み込み中...</div>
     <div id="dbg-info"></div>
     <div class="dbg-rect" id="dbg-globe-rect"></div>
@@ -292,6 +294,7 @@ void main() {
       <button class="canvas-ctrl-btn" id="btnAfricaTour">🌍 アフリカ巡回</button>
       <button class="canvas-ctrl-btn" id="btnStats">📊 内訳</button>
       <button class="canvas-ctrl-btn" id="btnCityStats">🌇 都市統計</button>
+      <button class="canvas-ctrl-btn" id="btnBoxZoom">🔲 エリアズーム</button>
     </div>
   </div>
   <div class="side">
@@ -636,14 +639,101 @@ void main() {
     momentumX = axisLocked ? 0 : (vx * SPIN_BOOST);
   }
 
-  canvas.addEventListener('mousedown',  function(e){ drag=true; lx=e.clientX; ly=e.clientY; momentumY=0; momentumX=0; velY=0; velX=0; });
-  window.addEventListener('mouseup',    function(){ if(!drag)return; drag=false; applyMomentum(velY, velX); velY=0; velX=0; });
-  window.addEventListener('mousemove',  function(e){ if(!drag)return; var dy=(e.clientX-lx)*0.008; var dx=(e.clientY-ly)*0.008; rotYv+=dy; velY=velY*0.4+dy*0.6; if(!axisLocked){rotXv=clampElev(rotXv+dx); velX=velX*0.4+dx*0.6;} lx=e.clientX; ly=e.clientY; });
+  var boxZoomMode = false;
+  var boxZoomOverlay = document.getElementById('box-select-overlay');
+  var bx0 = 0, by0 = 0, bxCur = 0, byCur = 0, boxDragging = false;
+  var btnBoxZoom = document.getElementById('btnBoxZoom');
+  var lastBoxBounds = null, areaMenuEl = null, areaTourTimer = null, areaTourIdx = 0, areaTourRunning = false;
+
+  btnBoxZoom.addEventListener('click', function() {
+    boxZoomMode = !boxZoomMode;
+    btnBoxZoom.classList.toggle('active', boxZoomMode);
+    btnBoxZoom.textContent = boxZoomMode ? '🔲 選択中…' : '🔲 エリアズーム';
+    canvas.style.cursor = boxZoomMode ? 'crosshair' : '';
+  });
+
+  function updateBoxOverlay() {
+    var rect = canvas.getBoundingClientRect();
+    var x1 = Math.min(bx0, bxCur) - rect.left, y1 = Math.min(by0, byCur) - rect.top;
+    var x2 = Math.max(bx0, bxCur) - rect.left, y2 = Math.max(by0, byCur) - rect.top;
+    boxZoomOverlay.style.left = x1 + 'px'; boxZoomOverlay.style.top = y1 + 'px';
+    boxZoomOverlay.style.width = (x2 - x1) + 'px'; boxZoomOverlay.style.height = (y2 - y1) + 'px';
+    boxZoomOverlay.style.display = 'block';
+  }
+  function mulMat3Vec3(m, x, y, z) { return [m[0]*x+m[1]*y+m[2]*z, m[3]*x+m[4]*y+m[5]*z, m[6]*x+m[7]*y+m[8]*z]; }
+  function screenToLatLon(px, py, rect) {
+    var ndcX = (px - rect.left) / rect.width * 2 - 1;
+    var ndcY = -((py - rect.top) / rect.height * 2 - 1);
+    var tanHF = Math.tan(Math.PI / 8), aspect = rect.width / rect.height;
+    var rdx = ndcX * tanHF * aspect, rdy = ndcY * tanHF, rdz = -1;
+    var rlen = Math.sqrt(rdx*rdx + rdy*rdy + rdz*rdz); rdx/=rlen; rdy/=rlen; rdz/=rlen;
+    var mi = [model[0],model[1],model[2], model[4],model[5],model[6], model[8],model[9],model[10]];
+    var ro = mulMat3Vec3(mi, 0, 0, zoom), rd = mulMat3Vec3(mi, rdx, rdy, rdz);
+    var b2 = 2*(ro[0]*rd[0]+ro[1]*rd[1]+ro[2]*rd[2]);
+    var cval = ro[0]*ro[0]+ro[1]*ro[1]+ro[2]*ro[2] - 1;
+    var disc = b2*b2 - 4*cval;
+    if (disc < 0) return null;
+    var t = (-b2 - Math.sqrt(disc)) / 2;
+    var hx = ro[0]+t*rd[0], hy = ro[1]+t*rd[1], hz = ro[2]+t*rd[2];
+    return { lat: Math.asin(Math.max(-1, Math.min(1, hy))) * 180 / Math.PI, lon: Math.atan2(-hz, hx) * 180 / Math.PI };
+  }
+  function getHeritagesInBounds() {
+    if (!lastBoxBounds) return [];
+    var b = lastBoxBounds;
+    return HERITAGE.filter(function(d) { return d.lat >= b.latMin && d.lat <= b.latMax && (b.lonCross ? (d.lon >= b.lonMin || d.lon <= b.lonMax) : (d.lon >= b.lonMin && d.lon <= b.lonMax)); });
+  }
+  function stopAreaTour(completed) {
+    areaTourRunning = false;
+    if (areaTourTimer) { clearTimeout(areaTourTimer); areaTourTimer = null; }
+    if (completed) {
+      lastBoxBounds = null;
+      if (areaMenuEl) areaMenuEl.style.display = 'none';
+      boxZoomMode = false; btnBoxZoom.classList.remove('active'); btnBoxZoom.textContent = '🔲 エリアズーム'; canvas.style.cursor = '';
+    }
+  }
+  function showAreaMenu() {
+    if (!areaMenuEl) { areaMenuEl = document.createElement('div'); areaMenuEl.style.cssText = 'position:absolute;right:10px;top:50%;transform:translateY(-50%);background:rgba(13,17,23,0.94);border:1px solid #30363d;border-radius:9px;padding:10px 12px;z-index:55;min-width:145px;box-shadow:0 4px 16px rgba(0,0,0,0.6);'; wrap.appendChild(areaMenuEl); }
+    var sites = getHeritagesInBounds();
+    areaMenuEl.innerHTML = '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:7px"><span style="font-size:11px;font-weight:700;color:#3fb950">📍 エリアメニュー</span><span id="areaMenuClose" style="cursor:pointer;color:#8b949e;font-size:14px;padding:0 3px;line-height:1">✕</span></div><div style="font-size:10px;color:#8b949e;margin-bottom:9px">🏛️ 世界遺産: ' + sites.length + '件</div><button id="areaTourBtn" style="width:100%;background:#0c2d1a;border:1px solid #3fb950;border-radius:6px;color:#3fb950;font-size:11px;padding:6px 8px;cursor:pointer;opacity:' + (sites.length === 0 ? '0.4' : '1') + '" ' + (sites.length === 0 ? 'disabled' : '') + '>🏛️ 巡回</button><div id="areaTourProg" style="font-size:10px;color:#8b949e;text-align:center;margin-top:6px;min-height:14px"></div>';
+    areaMenuEl.style.display = 'block';
+    document.getElementById('areaMenuClose').addEventListener('click', function(){ stopAreaTour(true); });
+    document.getElementById('areaTourBtn').addEventListener('click', function(){ areaTourRunning ? stopAreaTour(false) : startAreaTour(); });
+  }
+  function startAreaTour() { var sites = getHeritagesInBounds(); if (sites.length === 0) return; areaTourRunning = true; areaTourIdx = 0; areaTourStep(sites); }
+  function areaTourStep(sites) {
+    if (!areaTourRunning || areaTourIdx >= sites.length) { stopAreaTour(true); return; }
+    var d = sites[areaTourIdx], prog = document.getElementById('areaTourProg'), btn = document.getElementById('areaTourBtn');
+    if (prog) prog.textContent = (areaTourIdx + 1) + ' / ' + sites.length;
+    if (btn) btn.textContent = '⏹ 停止 (' + (areaTourIdx + 1) + '/' + sites.length + ')';
+    flyTo(d.lat, d.lon); zoom = Math.min(4.2, Math.max(2.2, zoom)); showMarkerTooltip(HERITAGE.indexOf(d), 0, 0);
+    areaTourTimer = setTimeout(function(){ areaTourIdx++; areaTourStep(sites); }, 4200);
+  }
+  function applyBoxZoom(ex, ey) {
+    var rect = canvas.getBoundingClientRect();
+    var bw = Math.abs(ex - bx0), bh = Math.abs(ey - by0);
+    boxZoomOverlay.style.display = 'none';
+    if (bw < 10 || bh < 10) return;
+    var ctr = screenToLatLon((bx0 + ex) / 2, (by0 + ey) / 2, rect);
+    if (!ctr) return;
+    var c0 = screenToLatLon(Math.min(bx0, ex), Math.min(by0, ey), rect);
+    var c1 = screenToLatLon(Math.max(bx0, ex), Math.max(by0, ey), rect);
+    if (c0 && c1) { var lonCross = c0.lon > c1.lon; lastBoxBounds = { latMin: Math.min(c0.lat, c1.lat), latMax: Math.max(c0.lat, c1.lat), lonMin: lonCross ? c0.lon : Math.min(c0.lon, c1.lon), lonMax: lonCross ? c1.lon : Math.max(c0.lon, c1.lon), lonCross: lonCross }; }
+    stopAreaTour(false);
+    var fraction = Math.min(bw / rect.width, bh / rect.height);
+    flyTo(ctr.lat, ctr.lon);
+    zoom = Math.max(1.2, Math.min(10, zoom * Math.max(0.18, fraction)));
+    if (lastBoxBounds) showAreaMenu();
+  }
+
+  canvas.addEventListener('mousedown',  function(e){ if(boxZoomMode){ boxDragging=true; bx0=e.clientX; by0=e.clientY; bxCur=bx0; byCur=by0; return; } drag=true; lx=e.clientX; ly=e.clientY; momentumY=0; momentumX=0; velY=0; velX=0; });
+  window.addEventListener('mouseup',    function(e){ if(boxDragging){ boxDragging=false; applyBoxZoom(e.clientX, e.clientY); return; } if(!drag)return; drag=false; applyMomentum(velY, velX); velY=0; velX=0; });
+  window.addEventListener('mousemove',  function(e){ if(boxDragging){ bxCur=e.clientX; byCur=e.clientY; updateBoxOverlay(); return; } if(!drag)return; var dy=(e.clientX-lx)*0.008; var dx=(e.clientY-ly)*0.008; rotYv+=dy; velY=velY*0.4+dy*0.6; if(!axisLocked){rotXv=clampElev(rotXv+dx); velX=velX*0.4+dx*0.6;} lx=e.clientX; ly=e.clientY; });
   canvas.addEventListener('wheel',      function(e){ e.preventDefault(); zoom=Math.max(1.2,Math.min(10,zoom+e.deltaY*0.01)); },{passive:false});
   canvas.addEventListener('dblclick',   function(){ autoRot=!autoRot; btnAutoRot.textContent=autoRot?'⏸ 自転停止':'▶ 回転'; if(autoRot){btnAutoRot.classList.remove('active');}else{btnAutoRot.classList.add('active');} });
-  canvas.addEventListener('touchstart', function(e){ e.preventDefault(); touchMoved=false; momentumY=0; momentumX=0; velY=0; velX=0; if(e.touches.length===1){drag=true;lx=e.touches[0].clientX;ly=e.touches[0].clientY;} if(e.touches.length===2){pinch0=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);} },{passive:false});
-  canvas.addEventListener('touchmove',  function(e){ e.preventDefault(); touchMoved=true; if(e.touches.length===1&&drag){var dy=(e.touches[0].clientX-lx)*0.008; var dx=(e.touches[0].clientY-ly)*0.008; rotYv+=dy; velY=velY*0.4+dy*0.6; if(!axisLocked){rotXv=clampElev(rotXv+dx); velX=velX*0.4+dx*0.6;} lx=e.touches[0].clientX;ly=e.touches[0].clientY;} if(e.touches.length===2){var d=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);zoom=Math.max(1.2,Math.min(10,zoom-(d-pinch0)*0.02));pinch0=d;} },{passive:false});
+  canvas.addEventListener('touchstart', function(e){ e.preventDefault(); touchMoved=false; momentumY=0; momentumX=0; velY=0; velX=0; if(e.touches.length===1){ if(boxZoomMode){ boxDragging=true; bx0=e.touches[0].clientX; by0=e.touches[0].clientY; bxCur=bx0; byCur=by0; return; } drag=true;lx=e.touches[0].clientX;ly=e.touches[0].clientY;} if(e.touches.length===2){pinch0=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);} },{passive:false});
+  canvas.addEventListener('touchmove',  function(e){ e.preventDefault(); touchMoved=true; if(e.touches.length===1&&boxDragging){ bxCur=e.touches[0].clientX; byCur=e.touches[0].clientY; updateBoxOverlay(); return; } if(e.touches.length===1&&drag){var dy=(e.touches[0].clientX-lx)*0.008; var dx=(e.touches[0].clientY-ly)*0.008; rotYv+=dy; velY=velY*0.4+dy*0.6; if(!axisLocked){rotXv=clampElev(rotXv+dx); velX=velX*0.4+dx*0.6;} lx=e.touches[0].clientX;ly=e.touches[0].clientY;} if(e.touches.length===2){var d=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);zoom=Math.max(1.2,Math.min(10,zoom-(d-pinch0)*0.02));pinch0=d;} },{passive:false});
   canvas.addEventListener('touchend', function(e){
+    if (boxDragging && e.changedTouches.length === 1) { boxDragging=false; applyBoxZoom(e.changedTouches[0].clientX, e.changedTouches[0].clientY); return; }
     drag=false;
     applyMomentum(velY, velX); velY=0; velX=0;
     if (!touchMoved && e.changedTouches.length === 1) { momentumY=0; momentumX=0; hideTooltip(); }
