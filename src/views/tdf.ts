@@ -119,7 +119,7 @@ body { background:var(--bg); color:var(--text); font-family:'Segoe UI','Hiragino
 .det-climbs { margin-top:9px; color:#d2a8ff; font-size:11px; padding:7px 10px; background:#1a1428; border-radius:6px; }
 .det-rest { color:var(--muted); font-size:13px; padding:20px 0; text-align:center; }
 .city-link {
-  color:#79c0ff; text-decoration:underline dotted; cursor:pointer;
+  color:#79c0ff; text-decoration:none; cursor:pointer;
   background:none; border:none; font:inherit; padding:0;
 }
 .city-link:hover { color:#a5d6ff; }
@@ -128,7 +128,7 @@ body { background:var(--bg); color:var(--text); font-family:'Segoe UI','Hiragino
 <body>
 <div id="hdr">
   <h1>🚴 Tour de France 2026</h1>
-  <span class="sub">7月4日〜26日 &nbsp;|&nbsp; バルセロナ → パリ &nbsp;|&nbsp; 全21ステージ &nbsp;約3,333km</span>
+  <span class="sub">7月4日〜26日 &nbsp;|&nbsp; <button class="city-link" onclick="dropPin(41.3851,2.1734)">バルセロナ</button> → <button class="city-link" onclick="dropPin(48.8698,2.3078)">パリ</button> &nbsp;|&nbsp; 全21ステージ &nbsp;約3,333km</span>
 </div>
 <div id="main">
   <!-- left: route map -->
@@ -434,7 +434,7 @@ function focusStage(n) {
   var midLat = via.length > 0 ? (st.s[0]+st.e[0])/2 : (st.s[0]+st.e[0])/2;
   var midLon = via.length > 0 ? (st.s[1]+st.e[1])/2 : (st.s[1]+st.e[1])/2;
   if(via.length > 0){ midLat=via[mid][0]; midLon=via[mid][1]; }
-  var targetZoom = 3.0;
+  var targetZoom = 6.0;
   var aspect = (LON_MAX - LON_MIN) / (LAT_MAX - LAT_MIN);
   var tpx = W/2 - ox - (midLon - LON_MIN)/(LON_MAX - LON_MIN)*scale*aspect*targetZoom;
   var tpy = H/2 - oy - (1-(midLat - LAT_MIN)/(LAT_MAX - LAT_MIN))*scale*targetZoom;
