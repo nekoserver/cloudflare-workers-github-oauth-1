@@ -38,6 +38,7 @@ import { getWebGLFaultsPage } from './views/webglFaults';
 import { getUuidGenPage } from './views/uuidGen';
 import { getMLBSpherePage } from './views/mlbSphere';
 import { getWorldCupWdlPage } from './views/worldCupWdl';
+import { getWorldCupKnockoutPage } from './views/worldCupKnockout';
 import { getTdfPage } from './views/tdf';
 import { getMatrixRainPage } from './views/matrixRain';
 import { getImageSpin3dPage } from './views/imageSpin3d';
@@ -4993,6 +4994,10 @@ app.get('/api/mlb-next-start', authMiddleware, async (c) => {
 
 app.get('/worldcup-wdl', authMiddleware, async (c) => {
   return c.html(getWorldCupWdlPage());
+});
+
+app.get('/worldcup-knockout', authMiddleware, async (c) => {
+  return c.html(getWorldCupKnockoutPage());
 });
 
 app.get('/tdf', authMiddleware, async (c) => {
