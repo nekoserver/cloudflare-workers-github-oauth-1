@@ -100,19 +100,29 @@ describe('getWebGLHeritagePage F1サーキット機能（左サイドパネル�
     expect(block).toContain('stopF1Tour();');
   });
 
-  it('巡回ボタンで次の開催日のサーキットへ進み、パネル内の枠が3秒点滅する', () => {
+  it('巡回ボタンで次の開催日のサーキットへ進み、次の開催地の行のみが点滅する（全行点滅はしない）', () => {
     expect(html).toContain('function f1TourStep()');
     const idx = html.indexOf('function f1TourStep()');
-    const block = html.slice(idx, idx + 400);
+    const block = html.slice(idx, idx + 600);
     expect(block).toContain('var nextIdx = f1TourIdx + 1;');
-    expect(block).toContain('flashAllF1SideItems();');
+    expect(block).toContain('flashF1SideItem(nextIdx);');
+    expect(block).not.toContain('flashAllF1SideItems');
     expect(block).toContain('focusF1Circuit(nextIdx, true);');
-    expect(block).toMatch(/f1TourTimer = setTimeout\(f1TourStep, 3000\);/);
+    expect(block).toMatch(/f1TourTimer = setTimeout\(f1TourStep, FLY_DUR \+ 5000\);/);
 
-    const flashIdx = html.indexOf('function flashAllF1SideItems()');
+    const flashIdx = html.indexOf('function flashF1SideItem(idx)');
+    expect(flashIdx).toBeGreaterThan(-1);
     const flashBlock = html.slice(flashIdx, flashIdx + 400);
+    expect(flashBlock).toMatch(/f1SideBody\.querySelector\('\.f1-side-item\[data-idx="' \+ idx \+ '"\]'\)/);
     expect(flashBlock).toContain("el.classList.add('f1-flash');");
-    expect(flashBlock).toMatch(/setTimeout\(function\(\) \{ el\.classList\.remove\('f1-flash'\); \}, 3000\);/);
+    expect(flashBlock).toMatch(/setTimeout\(function\(\) \{ el\.classList\.remove\('f1-flash'\); \}, 1500\);/);
+  });
+
+  it('地球儀のフォーカスが次の開催地に到達してから5秒待機する（FLY_DUR＋5000ms）', () => {
+    expect(html).toContain('var FLY_DUR = 2500;');
+    const idx = html.indexOf('function f1TourStep()');
+    const block = html.slice(idx, idx + 600);
+    expect(block).toMatch(/f1TourTimer = setTimeout\(f1TourStep, FLY_DUR \+ 5000\);/);
   });
 
   it('次の開催予定がなくなると巡回は自動的に停止する', () => {
@@ -121,9 +131,41 @@ describe('getWebGLHeritagePage F1サーキット機能（左サイドパネル�
     expect(block).toMatch(/if \(nextIdx >= F1_SORTED\.length\) \{ stopF1Tour\(\); return; \}/);
   });
 
-  it('.f1-flash の点滅は outline のみが変化する中抜き枠アニメーションで、合計3秒（0.5s×6回）続く', () => {
+  it('.f1-flash の点滅は outline のみが変化する中抜き枠アニメーションで、3回（0.5s×3回=1.5秒）続く', () => {
     expect(html).toMatch(/@keyframes f1-flash \{ 0%,100%\{outline:2px solid transparent\} 50%\{outline:2px solid #ffd700\} \}/);
-    expect(html).toMatch(/\.f1-side-item\.f1-flash \{ animation:f1-flash 0\.5s ease-in-out 6; \}/);
+    expect(html).toMatch(/\.f1-side-item\.f1-flash \{ animation:f1-flash 0\.5s ease-in-out 3; \}/);
+  });
+
+  it('左サイドパネル最上部にカレンダーの要素がある', () => {
+    expect(html).toContain('id="f1-cal"');
+    // f1-cal は f1-side-head の直後、f1-side-body より前に配置される
+    const headIdx = html.indexOf('class="f1-side-head"');
+    const calIdx = html.indexOf('id="f1-cal"');
+    const bodyIdx = html.indexOf('id="f1-side-body"');
+    expect(calIdx).toBeGreaterThan(headIdx);
+    expect(calIdx).toBeLessThan(bodyIdx);
+  });
+
+  it('renderF1Calendar は年月のカレンダーを描画し、指定日を3回点滅させる', () => {
+    expect(html).toContain('function renderF1Calendar(year, month, blinkDay)');
+    const idx = html.indexOf('function renderF1Calendar');
+    const block = html.slice(idx, idx + 1200);
+    expect(block).toContain('f1-cal-target');
+    expect(block).toContain("cell.classList.add('f1-cal-flash');");
+    expect(block).toMatch(/setTimeout\(function\(\) \{ cell\.classList\.remove\('f1-cal-flash'\); \}, 1500\);/);
+  });
+
+  it('🏎️ボタン押下時、アクセスした年月のカレンダーを開き当日の日付を点滅させる', () => {
+    const idx = html.indexOf("document.getElementById('btnF1')");
+    const block = html.slice(idx, idx + 700);
+    expect(block).toMatch(/var today = new Date\(\);\s*renderF1Calendar\(today\.getFullYear\(\), today\.getMonth\(\) \+ 1, today\.getDate\(\)\);/);
+  });
+
+  it('巡回の各ステップで次の開催日のカレンダーに切り替わり、その日付も点滅する', () => {
+    const idx = html.indexOf('function f1TourStep()');
+    const block = html.slice(idx, idx + 600);
+    expect(block).toMatch(/var raceDate = new Date\(race\.date \+ 'T00:00:00'\);/);
+    expect(block).toMatch(/renderF1Calendar\(raceDate\.getFullYear\(\), raceDate\.getMonth\(\) \+ 1, raceDate\.getDate\(\)\);/);
   });
 
   it('サーキットタップで地球儀上に🏎️ピンとサーキット名・開催日ツールチップが表示される（既存機構を再利用）', () => {
