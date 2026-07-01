@@ -1,3 +1,6 @@
+import { HERITAGE_LIST } from '../data/heritageList';
+import { RAIL_LINES } from '../data/railLines';
+
 export function getHeritageAccessPage(userId: string): string {
   void userId;
   return `<!DOCTYPE html>
@@ -131,6 +134,29 @@ td.pop{text-align:right;color:#8b949e;font-size:11px;min-width:64px}
 .dist-near{color:#3fb950}
 .dist-mid{color:#d4a017}
 .dist-far{color:#f85149}
+.rail-hr-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.78);align-items:center;justify-content:center}
+.rail-hr-overlay.open{display:flex}
+.rail-hr-modal{background:#0d1117;border:1px solid #30363d;border-radius:10px;width:min(96vw,720px);max-height:86vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 8px 40px rgba(0,0,0,.9)}
+.rail-hr-head{padding:12px 16px;border-bottom:1px solid #21262d;display:flex;align-items:center;gap:8px;flex-shrink:0}
+.rail-hr-title{font-size:14px;font-weight:700;flex:1;color:#e6edf3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rail-hr-close{background:none;border:none;color:#8b949e;font-size:18px;cursor:pointer;padding:2px 6px;line-height:1}
+.rail-hr-body{overflow:auto;padding:12px 16px;flex:1}
+.rail-hr-row{display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid #21262d;cursor:pointer}
+.rail-hr-row:last-child{border-bottom:none}
+.rail-hr-row:hover{background:#161b22}
+.rail-hr-rank{color:#484f58;font-size:11px;width:24px;flex-shrink:0;text-align:right}
+.rail-hr-flag{font-size:16px;flex-shrink:0}
+.rail-hr-names{flex:1;min-width:0;overflow:hidden}
+.rail-hr-station{font-size:13px;font-weight:600;color:#e6edf3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rail-hr-line{font-size:11px;color:#8b949e;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rail-hr-count-wrap{display:flex;align-items:center;gap:6px;flex-shrink:0}
+.rail-hr-count{color:#3fb950;font-weight:700;font-size:13px;min-width:20px;text-align:right}
+.rail-hr-back{background:none;border:none;color:#58a6ff;font-size:12px;cursor:pointer;padding:2px 0;margin-bottom:8px}
+.rail-hr-detail-station{font-size:13px;font-weight:700;color:#e6edf3;margin-bottom:10px}
+.rail-hr-h-row{display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid #21262d;font-size:12px}
+.rail-hr-h-row:last-child{border-bottom:none}
+.rail-hr-h-name{flex:1;color:#c9d1d9}
+.rail-hr-h-dist{color:#58a6ff;font-size:11px;font-weight:600;flex-shrink:0}
 .eu-from-wrap{display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap}
 .eu-from-label{font-size:12px;color:#8b949e}
 .eu-from-select{background:#0d1117;border:1px solid #30363d;border-radius:6px;color:#c9d1d9;font-size:12px;padding:5px 8px;outline:none}
@@ -169,6 +195,7 @@ td.pop{text-align:right;color:#8b949e;font-size:11px;min-width:64px}
     <button class="mode-tab" id="tab-country">国別グループ</button>
   </div>
   <button id="btn-cap-dist" style="margin-left:8px;background:var(--btn-bg,#21262d);border:1px solid var(--border,#30363d);color:var(--fg,#e6edf3);padding:6px 12px;border-radius:6px;cursor:pointer;font-size:13px">🌍 首都間距離</button>
+  <button id="btn-rail-hr" style="margin-left:8px;background:var(--btn-bg,#21262d);border:1px solid var(--border,#30363d);color:var(--fg,#e6edf3);padding:6px 12px;border-radius:6px;cursor:pointer;font-size:13px">🚉 駅周辺の世界遺産</button>
 </div>
 <div id="ai-modal-overlay" class="ai-modal-overlay">
   <div class="ai-modal">
@@ -211,6 +238,15 @@ td.pop{text-align:right;color:#8b949e;font-size:11px;min-width:64px}
       <button class="cap-dist-tab" id="cap-tab-europe">ヨーロッパ（45都市）</button>
     </div>
     <div class="cap-dist-body" id="cap-dist-body"></div>
+  </div>
+</div>
+<div id="rail-hr-overlay" class="rail-hr-overlay">
+  <div class="rail-hr-modal">
+    <div class="rail-hr-head">
+      <span class="rail-hr-title" id="rail-hr-title">🚉 駅周辺100km以内の世界遺産数ランキング</span>
+      <button class="rail-hr-close" id="rail-hr-close">✕</button>
+    </div>
+    <div class="rail-hr-body" id="rail-hr-body"></div>
   </div>
 </div>
 <div class="summary" id="summary"></div>
@@ -1113,6 +1149,91 @@ function renderEuList() {
   });
   document.getElementById("eu-dist-list").innerHTML = h;
 }
+
+var RAIL_LINES = ${JSON.stringify(RAIL_LINES)};
+var HERITAGE_ALL = ${JSON.stringify(HERITAGE_LIST)};
+
+var railHrOverlay = document.getElementById('rail-hr-overlay');
+var railHrTitle = document.getElementById('rail-hr-title');
+var railHrBody = document.getElementById('rail-hr-body');
+document.getElementById('rail-hr-close').addEventListener('click', function() {
+  railHrOverlay.classList.remove('open');
+});
+railHrOverlay.addEventListener('click', function(e) {
+  if(e.target === railHrOverlay) railHrOverlay.classList.remove('open');
+});
+
+function buildRailStationRanking() {
+  var rows = [];
+  RAIL_LINES.forEach(function(line) {
+    line.stations.forEach(function(st) {
+      var count = 0;
+      HERITAGE_ALL.forEach(function(h) {
+        if (hvKm(st.lat, st.lon, h.lat, h.lon) <= 100) count++;
+      });
+      rows.push({ station: st.name, line: line.name, flag: line.flag, lat: st.lat, lon: st.lon, count: count });
+    });
+  });
+  rows.sort(function(a, b) { return b.count - a.count; });
+  return rows;
+}
+
+function renderRailHrRanking() {
+  railHrTitle.textContent = '🚉 駅周辺100km以内の世界遺産数ランキング';
+  var rows = buildRailStationRanking();
+  var maxCount = (rows.length && rows[0].count > 0) ? rows[0].count : 1;
+  var html = '';
+  rows.forEach(function(r, i) {
+    var barW = Math.round((r.count / maxCount) * 100);
+    html += '<div class="rail-hr-row" data-station="' + r.station.replace(/"/g,'&quot;') + '" data-lat="' + r.lat + '" data-lon="' + r.lon + '">' +
+      '<span class="rail-hr-rank">' + (i + 1) + '</span>' +
+      '<span class="rail-hr-flag">' + r.flag + '</span>' +
+      '<span class="rail-hr-names"><span class="rail-hr-station">' + r.station + '</span><span class="rail-hr-line">' + r.line + '</span></span>' +
+      '<div class="rail-hr-count-wrap"><div class="bar" style="width:' + barW + 'px"></div><span class="rail-hr-count">' + r.count + '</span></div>' +
+      '</div>';
+  });
+  railHrBody.innerHTML = html;
+  railHrBody.querySelectorAll('.rail-hr-row').forEach(function(el) {
+    el.addEventListener('click', function() {
+      var station = el.getAttribute('data-station');
+      var lat = parseFloat(el.getAttribute('data-lat'));
+      var lon = parseFloat(el.getAttribute('data-lon'));
+      renderRailHrDetail(station, lat, lon);
+    });
+  });
+}
+
+function renderRailHrDetail(station, lat, lon) {
+  railHrTitle.textContent = '🚉 ' + station + ' から100km以内の世界遺産';
+  var nearby = [];
+  HERITAGE_ALL.forEach(function(h) {
+    var d = hvKm(lat, lon, h.lat, h.lon);
+    if (d <= 100) nearby.push({ h: h, d: d });
+  });
+  nearby.sort(function(a, b) { return a.d - b.d; });
+  var html = '<button class="rail-hr-back" id="rail-hr-back-btn">← ランキングに戻る</button>' +
+    '<div class="rail-hr-detail-station">' + station + '</div>';
+  if (nearby.length === 0) {
+    html += '<div style="color:#8b949e;text-align:center;padding:16px">100km以内の世界遺産なし</div>';
+  } else {
+    nearby.forEach(function(x) {
+      html += '<div class="rail-hr-h-row">' +
+        '<span class="rail-hr-h-name">' + x.h.f + ' ' + x.h.n + '</span>' +
+        '<span class="rail-hr-h-dist">' + x.d + ' km</span>' +
+        '</div>';
+    });
+  }
+  railHrBody.innerHTML = html;
+  document.getElementById('rail-hr-back-btn').addEventListener('click', function() {
+    renderRailHrRanking();
+  });
+}
+
+document.getElementById('btn-rail-hr').addEventListener('click', function() {
+  railHrOverlay.style.zIndex = String(getNextZ());
+  railHrOverlay.classList.add('open');
+  renderRailHrRanking();
+});
 
 initAutoLoad();
 
