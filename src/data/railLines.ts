@@ -1,4 +1,4 @@
-export type RailStation = { name: string; lat: number; lon: number };
+export type RailStation = { name: string; lat: number; lon: number; flag?: string; country?: string };
 export type RailLine = { name: string; flag: string; country: string; stations: RailStation[] };
 
 export const RAIL_LINES: RailLine[] = [
@@ -16,11 +16,11 @@ export const RAIL_LINES: RailLine[] = [
     {name:'マルセイユ・サンシャルル駅', lat:43.303, lon:5.380}
   ]},
   { name:'ユーロスター(ロンドン～パリ)', flag:'🇬🇧', country:'イギリス・フランス', stations:[
-    {name:'ロンドン・セントパンクラス駅', lat:51.530, lon:-0.126},
-    {name:'アシュフォード国際駅', lat:51.140, lon:0.874},
-    {name:'カレー・フレテュン駅', lat:50.922, lon:1.826},
-    {name:'リール・ヨーロップ駅', lat:50.639, lon:3.075},
-    {name:'パリ北駅', lat:48.880, lon:2.355}
+    {name:'ロンドン・セントパンクラス駅', lat:51.530, lon:-0.126, flag:'🇬🇧', country:'イギリス'},
+    {name:'アシュフォード国際駅', lat:51.140, lon:0.874, flag:'🇬🇧', country:'イギリス'},
+    {name:'カレー・フレテュン駅', lat:50.922, lon:1.826, flag:'🇫🇷', country:'フランス'},
+    {name:'リール・ヨーロップ駅', lat:50.639, lon:3.075, flag:'🇫🇷', country:'フランス'},
+    {name:'パリ北駅', lat:48.880, lon:2.355, flag:'🇫🇷', country:'フランス'}
   ]},
   { name:'ICE(ハンブルク～ミュンヘン)', flag:'🇩🇪', country:'ドイツ', stations:[
     {name:'ハンブルク中央駅', lat:53.553, lon:10.007},

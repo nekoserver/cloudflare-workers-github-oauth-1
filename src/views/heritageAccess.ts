@@ -147,12 +147,11 @@ td.pop{text-align:right;color:#8b949e;font-size:11px;min-width:64px}
 .rail-hr-rank{color:#484f58;font-size:11px;width:24px;flex-shrink:0;text-align:right}
 .rail-hr-flag{font-size:16px;flex-shrink:0}
 .rail-hr-names{flex:1;min-width:0;overflow:hidden}
-.rail-hr-station{font-size:13px;font-weight:600;color:#e6edf3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.rail-hr-line{font-size:11px;color:#8b949e;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rail-hr-line-primary{font-size:13px;font-weight:600;color:#e6edf3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rail-hr-station-sub{font-size:11px;color:#8b949e;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .rail-hr-count-wrap{display:flex;align-items:center;gap:6px;flex-shrink:0}
 .rail-hr-count{color:#3fb950;font-weight:700;font-size:13px;min-width:20px;text-align:right}
-.rail-hr-back{background:none;border:none;color:#58a6ff;font-size:12px;cursor:pointer;padding:2px 0;margin-bottom:8px}
-.rail-hr-detail-station{font-size:13px;font-weight:700;color:#e6edf3;margin-bottom:10px}
+.rail-hr-acc{padding:2px 0 8px 32px}
 .rail-hr-h-row{display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid #21262d;font-size:12px}
 .rail-hr-h-row:last-child{border-bottom:none}
 .rail-hr-h-name{flex:1;color:#c9d1d9}
@@ -1171,11 +1170,37 @@ function buildRailStationRanking() {
       HERITAGE_ALL.forEach(function(h) {
         if (hvKm(st.lat, st.lon, h.lat, h.lon) <= 100) count++;
       });
-      rows.push({ station: st.name, line: line.name, flag: line.flag, lat: st.lat, lon: st.lon, count: count });
+      rows.push({
+        station: st.name,
+        line: line.name,
+        flag: st.flag || line.flag,
+        country: st.country || line.country,
+        lat: st.lat, lon: st.lon, count: count
+      });
     });
   });
   rows.sort(function(a, b) { return b.count - a.count; });
   return rows;
+}
+
+function buildRailHrNearbyHtml(lat, lon) {
+  var nearby = [];
+  HERITAGE_ALL.forEach(function(h) {
+    var d = hvKm(lat, lon, h.lat, h.lon);
+    if (d <= 100) nearby.push({ h: h, d: d });
+  });
+  nearby.sort(function(a, b) { return a.d - b.d; });
+  if (nearby.length === 0) {
+    return '<div style="color:#8b949e;text-align:center;padding:10px 0">100km以内の世界遺産なし</div>';
+  }
+  var html = '';
+  nearby.forEach(function(x) {
+    html += '<div class="rail-hr-h-row">' +
+      '<span class="rail-hr-h-name">' + x.h.f + ' ' + x.h.n + '</span>' +
+      '<span class="rail-hr-h-dist">' + x.d + ' km</span>' +
+      '</div>';
+  });
+  return html;
 }
 
 function renderRailHrRanking() {
@@ -1188,44 +1213,26 @@ function renderRailHrRanking() {
     html += '<div class="rail-hr-row" data-station="' + r.station.replace(/"/g,'&quot;') + '" data-lat="' + r.lat + '" data-lon="' + r.lon + '">' +
       '<span class="rail-hr-rank">' + (i + 1) + '</span>' +
       '<span class="rail-hr-flag">' + r.flag + '</span>' +
-      '<span class="rail-hr-names"><span class="rail-hr-station">' + r.station + '</span><span class="rail-hr-line">' + r.line + '</span></span>' +
+      '<span class="rail-hr-names"><span class="rail-hr-line-primary">' + r.line + '</span><span class="rail-hr-station-sub">' + r.station + '</span></span>' +
       '<div class="rail-hr-count-wrap"><div class="bar" style="width:' + barW + 'px"></div><span class="rail-hr-count">' + r.count + '</span></div>' +
       '</div>';
   });
   railHrBody.innerHTML = html;
   railHrBody.querySelectorAll('.rail-hr-row').forEach(function(el) {
     el.addEventListener('click', function() {
-      var station = el.getAttribute('data-station');
+      var next = el.nextSibling;
+      if (next && next.classList && next.classList.contains('rail-hr-acc')) {
+        next.parentNode.removeChild(next);
+        return;
+      }
+      railHrBody.querySelectorAll('.rail-hr-acc').forEach(function(acc) { acc.parentNode.removeChild(acc); });
       var lat = parseFloat(el.getAttribute('data-lat'));
       var lon = parseFloat(el.getAttribute('data-lon'));
-      renderRailHrDetail(station, lat, lon);
+      var acc = document.createElement('div');
+      acc.className = 'rail-hr-acc';
+      acc.innerHTML = buildRailHrNearbyHtml(lat, lon);
+      el.parentNode.insertBefore(acc, el.nextSibling);
     });
-  });
-}
-
-function renderRailHrDetail(station, lat, lon) {
-  railHrTitle.textContent = '🚉 ' + station + ' から100km以内の世界遺産';
-  var nearby = [];
-  HERITAGE_ALL.forEach(function(h) {
-    var d = hvKm(lat, lon, h.lat, h.lon);
-    if (d <= 100) nearby.push({ h: h, d: d });
-  });
-  nearby.sort(function(a, b) { return a.d - b.d; });
-  var html = '<button class="rail-hr-back" id="rail-hr-back-btn">← ランキングに戻る</button>' +
-    '<div class="rail-hr-detail-station">' + station + '</div>';
-  if (nearby.length === 0) {
-    html += '<div style="color:#8b949e;text-align:center;padding:16px">100km以内の世界遺産なし</div>';
-  } else {
-    nearby.forEach(function(x) {
-      html += '<div class="rail-hr-h-row">' +
-        '<span class="rail-hr-h-name">' + x.h.f + ' ' + x.h.n + '</span>' +
-        '<span class="rail-hr-h-dist">' + x.d + ' km</span>' +
-        '</div>';
-    });
-  }
-  railHrBody.innerHTML = html;
-  document.getElementById('rail-hr-back-btn').addEventListener('click', function() {
-    renderRailHrRanking();
   });
 }
 
