@@ -161,7 +161,15 @@ canvas:active { cursor:grabbing; }
 .f1-side-circuit { display:block; font-size:12px; font-weight:600; color:#e6edf3; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .f1-side-date { display:block; font-size:10px; color:#8b949e; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; margin-top:2px; }
 @keyframes f1-flash { 0%,100%{outline:2px solid transparent} 50%{outline:2px solid #ffd700} }
-.f1-side-item.f1-flash { animation:f1-flash 0.5s ease-in-out 6; }
+.f1-side-item.f1-flash { animation:f1-flash 0.5s ease-in-out 3; }
+.f1-cal { padding:10px 12px; border-bottom:1px solid #21262d; flex-shrink:0; }
+.f1-cal-head { font-size:12px; font-weight:700; color:#e6edf3; text-align:center; margin-bottom:6px; }
+.f1-cal-grid { display:grid; grid-template-columns:repeat(7,1fr); gap:2px; }
+.f1-cal-dow { font-size:9px; color:#8b949e; text-align:center; padding:2px 0; }
+.f1-cal-cell { font-size:10px; color:#c9d1d9; text-align:center; padding:3px 0; border-radius:4px; outline:2px solid transparent; }
+.f1-cal-empty { visibility:hidden; }
+.f1-cal-target { background:#0c2d1a; color:#3fb950; font-weight:700; }
+.f1-cal-cell.f1-cal-flash { animation:f1-flash 0.5s ease-in-out 3; }
 #f1-tour-btn { pointer-events:auto; margin-top:6px; background:#0c2d1a; border:1px solid #3fb950; border-radius:6px; color:#3fb950; font-size:11px; padding:4px 12px; cursor:pointer; font-family:inherit; display:block; width:100%; }
 #f1-tour-btn:hover { background:#0f3a22; }
 .city-mk { position:absolute; transform:translate(-50%,-50%); background:rgba(13,17,23,0.92); border:1px solid #388bfd; border-radius:10px; color:#c9d1d9; font-size:9px; padding:2px 6px; white-space:nowrap; pointer-events:none; opacity:0; transition:opacity .3s; display:flex; align-items:center; gap:3px; }
@@ -310,6 +318,7 @@ void main() {
       <span class="f1-side-title">🏎️ F1 サーキット</span>
       <button class="f1-side-close" id="f1-side-close">✕</button>
     </div>
+    <div class="f1-cal" id="f1-cal"></div>
     <div class="f1-side-body" id="f1-side-body"></div>
   </div>
   <div class="canvas-wrap">
@@ -979,13 +988,34 @@ void main() {
     if (activeEl) activeEl.scrollIntoView({ block: 'center', behavior: smooth ? 'smooth' : 'auto' });
   }
 
-  function flashAllF1SideItems() {
-    f1SideBody.querySelectorAll('.f1-side-item').forEach(function(el) {
-      el.classList.remove('f1-flash');
-      void el.offsetWidth;
-      el.classList.add('f1-flash');
-      setTimeout(function() { el.classList.remove('f1-flash'); }, 3000);
-    });
+  function flashF1SideItem(idx) {
+    var el = f1SideBody.querySelector('.f1-side-item[data-idx="' + idx + '"]');
+    if (!el) return;
+    el.classList.remove('f1-flash');
+    void el.offsetWidth;
+    el.classList.add('f1-flash');
+    setTimeout(function() { el.classList.remove('f1-flash'); }, 1500);
+  }
+
+  function renderF1Calendar(year, month, blinkDay) {
+    var first = new Date(year, month - 1, 1);
+    var startWeekday = first.getDay();
+    var daysInMonth = new Date(year, month, 0).getDate();
+    var html = '<div class="f1-cal-head">' + year + '年' + month + '月</div><div class="f1-cal-grid">';
+    ['日', '月', '火', '水', '木', '金', '土'].forEach(function(w) { html += '<div class="f1-cal-dow">' + w + '</div>'; });
+    for (var i = 0; i < startWeekday; i++) html += '<div class="f1-cal-cell f1-cal-empty"></div>';
+    for (var d = 1; d <= daysInMonth; d++) {
+      html += '<div class="f1-cal-cell' + (d === blinkDay ? ' f1-cal-target' : '') + '" data-day="' + d + '">' + d + '</div>';
+    }
+    html += '</div>';
+    f1CalEl.innerHTML = html;
+    if (blinkDay) {
+      var cell = f1CalEl.querySelector('.f1-cal-target');
+      if (cell) {
+        cell.classList.add('f1-cal-flash');
+        setTimeout(function() { cell.classList.remove('f1-cal-flash'); }, 1500);
+      }
+    }
   }
 
   function updateF1TourBtnText() {
@@ -997,9 +1027,12 @@ void main() {
     if (!f1TourRunning) return;
     var nextIdx = f1TourIdx + 1;
     if (nextIdx >= F1_SORTED.length) { stopF1Tour(); return; }
-    flashAllF1SideItems();
+    var race = F1_SORTED[nextIdx];
+    var raceDate = new Date(race.date + 'T00:00:00');
+    flashF1SideItem(nextIdx);
+    renderF1Calendar(raceDate.getFullYear(), raceDate.getMonth() + 1, raceDate.getDate());
     focusF1Circuit(nextIdx, true);
-    f1TourTimer = setTimeout(f1TourStep, 3000);
+    f1TourTimer = setTimeout(f1TourStep, FLY_DUR + 5000);
   }
 
   function startF1Tour() {
@@ -1886,6 +1919,7 @@ void main() {
   var f1CircuitPin3d = null;
   var f1Side = document.getElementById('f1-side');
   var f1SideBody = document.getElementById('f1-side-body');
+  var f1CalEl = document.getElementById('f1-cal');
   var f1TourIdx = -1;
   var f1TourRunning = false;
   var f1TourTimer = null;
@@ -2136,6 +2170,8 @@ void main() {
     renderF1SidePanel();
     stopF1Tour();
     focusF1Circuit(findUpcomingF1Idx(), true);
+    var today = new Date();
+    renderF1Calendar(today.getFullYear(), today.getMonth() + 1, today.getDate());
   });
 
   var cityStatsOverlay = document.getElementById('city-stats-overlay');
