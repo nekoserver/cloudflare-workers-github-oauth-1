@@ -30,7 +30,7 @@ describe('getWebGLHeritagePage 鉄道路線機能', () => {
   });
 
   it('RAIL_LINES にロシア・中国が含まれない', () => {
-    const railBlockMatch = html.match(/var RAIL_LINES = (\[[\s\S]*?\]);\s*\n\s*function typeColor/);
+    const railBlockMatch = html.match(/var RAIL_LINES = (\[[\s\S]*?\n  \]);/);
     expect(railBlockMatch).not.toBeNull();
     const railBlock = railBlockMatch![1];
     expect(railBlock).not.toContain('ロシア');
@@ -38,7 +38,7 @@ describe('getWebGLHeritagePage 鉄道路線機能', () => {
   });
 
   it('各路線は2駅以上の座標データを持つ', () => {
-    const railBlockMatch = html.match(/var RAIL_LINES = (\[[\s\S]*?\]);\s*\n\s*function typeColor/);
+    const railBlockMatch = html.match(/var RAIL_LINES = (\[[\s\S]*?\n  \]);/);
     const railBlock = railBlockMatch![1];
     const lineBlocks = Array.from(railBlock.matchAll(/stations:\[([\s\S]*?)\]\}/g));
     expect(lineBlocks.length).toBeGreaterThanOrEqual(8);
@@ -56,7 +56,7 @@ describe('getWebGLHeritagePage 鉄道路線機能', () => {
   });
 
   it('サウジアラビア・UAE・カタールの鉄道路線が始発駅から終着駅の座標つきで含まれる', () => {
-    const railBlockMatch = html.match(/var RAIL_LINES = (\[[\s\S]*?\]);\s*\n\s*function typeColor/);
+    const railBlockMatch = html.match(/var RAIL_LINES = (\[[\s\S]*?\n  \]);/);
     expect(railBlockMatch).not.toBeNull();
     const railBlock = railBlockMatch![1];
     expect(railBlock).toContain('サウジアラビア');
