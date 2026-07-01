@@ -299,8 +299,8 @@ input[type=range] { accent-color:#fdb813; width:120px; }
     skyStars.push({ lon: ssLon, lat: ssLat, r: pseudoRand() < 0.25 ? 2 : 1, twinkle: pseudoRand() < 0.18, phase: pseudoRand() * Math.PI * 2 });
   }
 
-  var starLon = [1.817, 1.53, 1.38, 1.22, 4.34, 4.99, 5.267, 5.853, 3.558, 3.565, 1.977, 1.428, 1.927, 2.271, 3.254, 3.349, 3.277, 3.208];
-  var starLat = [-0.691, -0.28, -0.54, -0.09, -0.09, 1.08, 0.511, 1.046, -0.036, 0.536, 0.116, 0.400, 0.176, 0.343, -1.101, -1.042, -0.997, -1.025];
+  var starLon = [1.817, 1.53, 1.38, 1.22, 4.34, 4.99, 5.267, 5.853, 3.558, 3.565, 1.977, 1.428, 1.927, 2.271, 3.254, 3.349, 3.277, 3.208, 0.9923];
+  var starLat = [-0.691, -0.28, -0.54, -0.09, -0.09, 1.08, 0.511, 1.046, -0.036, 0.536, 0.116, 0.400, 0.176, 0.343, -1.101, -1.042, -0.997, -1.025, 0.421];
 
   var bigDipper = [
     { lon: 2.360, lat: 0.868 },
@@ -425,7 +425,7 @@ input[type=range] { accent-color:#fdb813; width:120px; }
       var ns5 = namedStars[ni5];
       var np5 = projectSky(starLon[ni5], starLat[ni5]);
       if (!np5) continue;
-      if (ns5.isCluster) { drawCluster(np5.x, np5.y, ns5.color); } else { ctx.beginPath(); ctx.arc(np5.x, np5.y, 4, 0, Math.PI*2); ctx.fillStyle = ns5.color; ctx.fill(); }
+      if (ns5.isPleiades) { drawPleiadesCluster(np5.x, np5.y, ns5.color); } else if (ns5.isCluster) { drawCluster(np5.x, np5.y, ns5.color); } else { ctx.beginPath(); ctx.arc(np5.x, np5.y, 4, 0, Math.PI*2); ctx.fillStyle = ns5.color; ctx.fill(); }
       if (showStarLabels) { ctx.font = '10px sans-serif'; ctx.fillStyle = ns5.color; ctx.fillText(ns5.name, np5.x+8, np5.y+3); }
       starScreenPos.push({ x: np5.x, y: np5.y, item: ns5 });
     }
@@ -508,7 +508,7 @@ input[type=range] { accent-color:#fdb813; width:120px; }
       var ns6 = namedStars[ni6];
       var np6 = projectSky(starLon[ni6], starLat[ni6]);
       if (!np6) continue;
-      if (ns6.isCluster) { drawCluster(np6.x, np6.y, ns6.color); } else { ctx.beginPath(); ctx.arc(np6.x, np6.y, 5, 0, Math.PI*2); ctx.fillStyle = ns6.color; ctx.fill(); ctx.beginPath(); ctx.arc(np6.x, np6.y, 8, 0, Math.PI*2); ctx.strokeStyle = ns6.color+'44'; ctx.lineWidth = 2; ctx.stroke(); }
+      if (ns6.isPleiades) { drawPleiadesCluster(np6.x, np6.y, ns6.color); } else if (ns6.isCluster) { drawCluster(np6.x, np6.y, ns6.color); } else { ctx.beginPath(); ctx.arc(np6.x, np6.y, 5, 0, Math.PI*2); ctx.fillStyle = ns6.color; ctx.fill(); ctx.beginPath(); ctx.arc(np6.x, np6.y, 8, 0, Math.PI*2); ctx.strokeStyle = ns6.color+'44'; ctx.lineWidth = 2; ctx.stroke(); }
       if (showStarLabels) { ctx.font = '11px sans-serif'; ctx.fillStyle = ns6.color; ctx.fillText(ns6.name, np6.x+10, np6.y+4); }
       starScreenPos.push({ x: np6.x, y: np6.y, item: ns6 });
     }
@@ -572,7 +572,7 @@ input[type=range] { accent-color:#fdb813; width:120px; }
       var ns7 = namedStars[ni7];
       var np7 = projectSky(starLon[ni7], starLat[ni7]);
       if (!np7) continue;
-      if (ns7.isCluster) { drawCluster(np7.x, np7.y, ns7.color); } else { ctx.beginPath(); ctx.arc(np7.x, np7.y, 5, 0, Math.PI*2); ctx.fillStyle = ns7.color; ctx.fill(); ctx.beginPath(); ctx.arc(np7.x, np7.y, 8, 0, Math.PI*2); ctx.strokeStyle = ns7.color+'44'; ctx.lineWidth = 2; ctx.stroke(); }
+      if (ns7.isPleiades) { drawPleiadesCluster(np7.x, np7.y, ns7.color); } else if (ns7.isCluster) { drawCluster(np7.x, np7.y, ns7.color); } else { ctx.beginPath(); ctx.arc(np7.x, np7.y, 5, 0, Math.PI*2); ctx.fillStyle = ns7.color; ctx.fill(); ctx.beginPath(); ctx.arc(np7.x, np7.y, 8, 0, Math.PI*2); ctx.strokeStyle = ns7.color+'44'; ctx.lineWidth = 2; ctx.stroke(); }
       if (showStarLabels) { ctx.font = '11px sans-serif'; ctx.fillStyle = ns7.color; ctx.fillText(ns7.name, np7.x+10, np7.y+4); }
       starScreenPos.push({ x: np7.x, y: np7.y, item: ns7 });
     }
@@ -911,7 +911,7 @@ input[type=range] { accent-color:#fdb813; width:120px; }
       var ns3 = namedStars[ni3];
       var nPos = projectSky(starLon[ni3], starLat[ni3]);
       if (!nPos) continue;
-      if (ns3.isCluster) { drawCluster(nPos.x, nPos.y, ns3.color); } else { ctx.beginPath(); ctx.arc(nPos.x, nPos.y, 5, 0, Math.PI * 2); ctx.fillStyle = ns3.color; ctx.fill(); ctx.beginPath(); ctx.arc(nPos.x, nPos.y, 8, 0, Math.PI * 2); ctx.strokeStyle = ns3.color + '44'; ctx.lineWidth = 2; ctx.stroke(); }
+      if (ns3.isPleiades) { drawPleiadesCluster(nPos.x, nPos.y, ns3.color); } else if (ns3.isCluster) { drawCluster(nPos.x, nPos.y, ns3.color); } else { ctx.beginPath(); ctx.arc(nPos.x, nPos.y, 5, 0, Math.PI * 2); ctx.fillStyle = ns3.color; ctx.fill(); ctx.beginPath(); ctx.arc(nPos.x, nPos.y, 8, 0, Math.PI * 2); ctx.strokeStyle = ns3.color + '44'; ctx.lineWidth = 2; ctx.stroke(); }
       if (showStarLabels) {
         ctx.font = '11px sans-serif'; ctx.fillStyle = ns3.color;
         ctx.fillText(ns3.name, nPos.x + 10, nPos.y + 4);
@@ -1136,7 +1136,8 @@ input[type=range] { accent-color:#fdb813; width:120px; }
     { name: 'アクルックス', color: '#b0d4ff', ox: 470, oy: 640, fact: '南十字座α星・最輝星。2等星の青白色連星で、南天の指標として航海に使われました。距離は約321光年' },
     { name: 'ミモサ', color: '#9bc4ff', ox: 565, oy: 555, fact: '南十字座β星。南十字の右腕に位置する青白色巨星です。距離は約280光年' },
     { name: 'ガクルックス', color: '#ff7755', ox: 460, oy: 490, fact: '南十字座γ星・頂点の星。南十字の最北端に位置する赤色巨星。距離は約88光年' },
-    { name: 'デルタクルキス', color: '#aac8ff', ox: 360, oy: 565, fact: '南十字座δ星。南十字の左腕に位置する青色巨星です。距離は約364光年' }
+    { name: 'デルタクルキス', color: '#aac8ff', ox: 360, oy: 565, fact: '南十字座δ星。南十字の左腕に位置する青色巨星です。距離は約364光年' },
+    { name: 'プレアデス星団', color: '#99bbff', ox: -390, oy: -480, fact: 'おうし座の散開星団（M45・昴）。七姉妹とも呼ばれる。約445光年先にある約1000個の星の集団。肉眼で6〜7個の星が識別でき、日本では「すばる」として古来親しまれてきました', isCluster: true, isPleiades: true }
   ];
 
   var stars = [];
@@ -1188,6 +1189,27 @@ input[type=range] { accent-color:#fdb813; width:120px; }
     ctx.beginPath();
     ctx.arc(x, y, 12, 0, Math.PI * 2);
     ctx.strokeStyle = color + '33';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+  }
+
+  var pleiadesOffsets = [[0,0],[8,12],[-12,4],[-4,-10],[6,-8],[-8,-4],[10,8],[3,15],[-6,10],[12,-5],[-10,-8],[2,-14],[14,2],[-2,18]];
+  var pleiadesSizes =   [2.5,  2.0,  2.0,   1.8,    1.8,   1.8,   1.8,   1.3,   1.3,   1.3,   1.2,   1.2,   1.2,   1.2];
+  function drawPleiadesCluster(x, y, color) {
+    var nebGrad = ctx.createRadialGradient(x, y, 2, x, y, 22);
+    nebGrad.addColorStop(0, 'rgba(100,150,255,0.28)');
+    nebGrad.addColorStop(0.5, 'rgba(80,120,255,0.10)');
+    nebGrad.addColorStop(1, 'rgba(60,100,255,0)');
+    ctx.beginPath(); ctx.arc(x, y, 22, 0, Math.PI * 2);
+    ctx.fillStyle = nebGrad; ctx.fill();
+    for (var pi2 = 0; pi2 < pleiadesOffsets.length; pi2++) {
+      ctx.beginPath();
+      ctx.arc(x + pleiadesOffsets[pi2][0], y + pleiadesOffsets[pi2][1], pleiadesSizes[pi2] || 1.2, 0, Math.PI * 2);
+      ctx.fillStyle = color;
+      ctx.fill();
+    }
+    ctx.beginPath(); ctx.arc(x, y, 24, 0, Math.PI * 2);
+    ctx.strokeStyle = color + '22';
     ctx.lineWidth = 1;
     ctx.stroke();
   }
@@ -1410,7 +1432,9 @@ input[type=range] { accent-color:#fdb813; width:120px; }
       var nsx = cx + ns.ox * sc;
       var nsy = cy + ns.oy * sc;
       if (nsx < -20 || nsx > W + 20 || nsy < -20 || nsy > H + 20) continue;
-      if (ns.isCluster) {
+      if (ns.isPleiades) {
+        drawPleiadesCluster(nsx, nsy, ns.color);
+      } else if (ns.isCluster) {
         drawCluster(nsx, nsy, ns.color);
       } else {
         ctx.beginPath();
