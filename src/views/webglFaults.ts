@@ -104,7 +104,7 @@ canvas:active { cursor:grabbing; }
 #fault-tooltip.pinned { pointer-events:auto; transform:none; }
 .fault-tt-hdr { display:flex; align-items:center; justify-content:space-between; cursor:move; padding:5px 10px 3px; border-bottom:1px solid #30363d; user-select:none; }
 .fault-tt-name { font-weight:700; font-size:13px; color:#f78166; flex:1; }
-.fault-tt-close { font-size:14px; color:#8b949e; cursor:pointer; line-height:1; padding:0 2px; flex-shrink:0; }
+.fault-tt-close { font-size:14px; color:#8b949e; cursor:pointer; line-height:1; padding:10px; margin:-10px -8px -10px 0; flex-shrink:0; display:inline-flex; align-items:center; justify-content:center; }
 .fault-tt-close:hover { color:#e6edf3; }
 .fault-tt-body { padding:4px 12px 8px; }
 .vol-tt-hdr { display:flex; align-items:center; justify-content:space-between; padding:9px 13px 8px; border-bottom:1px solid #30363d; }
