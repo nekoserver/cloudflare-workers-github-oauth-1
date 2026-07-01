@@ -1936,17 +1936,17 @@ async function checkAiChatRateLimit(db: D1Database | undefined, userId: string):
   }
 }
 
-async function logWebhookEvent(
+export async function logWebhookEvent(
   db: D1Database | undefined,
   source: string,
   eventType: string | null,
   status: 'ok' | 'rejected' | 'error',
   payload: Record<string, unknown> | null,
   error?: string
-): Promise<void> {
-  if (!db) return;
+): Promise<number | null> {
+  if (!db) return null;
   try {
-    await db.prepare(
+    const result = await db.prepare(
       'INSERT INTO webhook_log (source, event_type, status, payload, error, received_at) VALUES (?, ?, ?, ?, ?, ?)'
     ).bind(
       source,
@@ -1956,9 +1956,33 @@ async function logWebhookEvent(
       error ?? null,
       new Date().toISOString()
     ).run();
+    return result.meta?.last_row_id ?? null;
   } catch (e) {
     logger.error('Failed to log webhook event', { source, error: e instanceof Error ? e.message : 'Unknown' });
+    return null;
   }
+}
+
+export function buildCfAuthSlackMessage(params: {
+  event: string;
+  user: string;
+  action: string;
+  tenantId: string;
+  webhookLogId: number | null;
+  payload: Record<string, unknown>;
+}): string {
+  const { event, user, action, tenantId, webhookLogId, payload } = params;
+  const lines = [
+    `cf-auth: ${event}${action ? ' / ' + action : ''}`,
+    `ユーザー: ${user}`,
+  ];
+  if (tenantId) lines.push(`テナント: ${tenantId}`);
+  if (webhookLogId !== null) lines.push(`記録ID: #${webhookLogId}`);
+  const extra = Object.entries(payload)
+    .filter(([k]) => !['event', 'action', 'user', 'login', 'email', 'tenant_id'].includes(k))
+    .map(([k, v]) => `${k}: ${typeof v === 'object' ? JSON.stringify(v) : String(v)}`);
+  if (extra.length > 0) lines.push(...extra.slice(0, 5));
+  return lines.join('\n');
 }
 
 async function recordApiAccess(db: D1Database | undefined, method: string, routePath: string, statusCode: number): Promise<void> {
@@ -9071,24 +9095,18 @@ app.post('/webhook/cf-auth', async (c) => {
     : typeof payload.email === 'string' ? payload.email
     : 'unknown';
   const action = typeof payload.action === 'string' ? payload.action : '';
+  const tenantId = typeof payload.tenant_id === 'string' ? payload.tenant_id : '';
 
-  logger.info('cf-auth webhook received', { event, user, action });
-  c.executionCtx?.waitUntil(logWebhookEvent(c.env.DB, 'cf-auth', event, 'ok', { user, action }));
+  logger.info('cf-auth webhook received', { event, user, action, tenantId });
+  const webhookLogId = await logWebhookEvent(c.env.DB, 'cf-auth', event, 'ok', { user, action, tenantId });
 
   const slackToken = c.env.SLACK_OAUTH_TOKEN;
   const slackChannel = c.env.SLACK_CHANNEL_ID;
   if (slackToken && slackChannel) {
-    const lines = [
-      `cf-auth: ${event}${action ? ' / ' + action : ''}`,
-      `ユーザー: ${user}`,
-    ];
-    const extra = Object.entries(payload)
-      .filter(([k]) => !['event', 'action', 'user', 'login', 'email'].includes(k))
-      .map(([k, v]) => `${k}: ${typeof v === 'object' ? JSON.stringify(v) : String(v)}`);
-    if (extra.length > 0) lines.push(...extra.slice(0, 5));
+    const text = buildCfAuthSlackMessage({ event, user, action, tenantId, webhookLogId, payload });
 
     try {
-      await postSlackMessage({ token: slackToken, channel: slackChannel, text: lines.join('\n') });
+      await postSlackMessage({ token: slackToken, channel: slackChannel, text });
     } catch (error) {
       logger.error('Slack notification failed for cf-auth webhook', {
         error: error instanceof Error ? error.message : 'Unknown error',
