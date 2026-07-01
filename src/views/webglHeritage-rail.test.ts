@@ -55,6 +55,66 @@ describe('getWebGLHeritagePage 鉄道路線機能', () => {
     expect(html).toMatch(/railModalOverlay\.classList\.remove\('open'\);\s*flyTo\(lat, lon\);\s*zoom = 1\.2;/);
   });
 
+  it('サウジアラビア・UAE・カタールの鉄道路線が始発駅から終着駅の座標つきで含まれる', () => {
+    const railBlockMatch = html.match(/var RAIL_LINES = (\[[\s\S]*?\]);\s*\n\s*function typeColor/);
+    expect(railBlockMatch).not.toBeNull();
+    const railBlock = railBlockMatch![1];
+    expect(railBlock).toContain('サウジアラビア');
+    expect(railBlock).toContain('メディナ駅');
+    expect(railBlock).toContain('マッカ駅');
+    expect(railBlock).toContain('アラブ首長国連邦');
+    expect(railBlock).toContain('アブダビ駅');
+    expect(railBlock).toContain('フジャイラ駅');
+    expect(railBlock).toContain('カタール');
+    expect(railBlock).toContain('アル・ワクラ駅');
+    expect(railBlock).toContain('ルサイル駅');
+
+    function haversineKm(la1: number, lo1: number, la2: number, lo2: number) {
+      const R = 6371;
+      const dLa = (la2 - la1) * Math.PI / 180;
+      const dLo = (lo2 - lo1) * Math.PI / 180;
+      const a = Math.sin(dLa / 2) * Math.sin(dLa / 2) +
+        Math.cos(la1 * Math.PI / 180) * Math.cos(la2 * Math.PI / 180) * Math.sin(dLo / 2) * Math.sin(dLo / 2);
+      return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    }
+    function lineTotalKm(stations: { lat: number; lon: number }[]) {
+      let total = 0;
+      for (let i = 1; i < stations.length; i++) {
+        total += haversineKm(stations[i - 1].lat, stations[i - 1].lon, stations[i].lat, stations[i].lon);
+      }
+      return total;
+    }
+    // ハラマイン高速鉄道: メディナ -> キング・アブドラ経済都市 -> ジッダ(空港) -> マッカ の実データで検証
+    const haramain = [
+      { lat: 24.468, lon: 39.621 },
+      { lat: 22.406, lon: 39.093 },
+      { lat: 21.694, lon: 39.157 },
+      { lat: 21.474, lon: 39.826 },
+    ];
+    expect(lineTotalKm(haramain)).toBeGreaterThan(300);
+    expect(lineTotalKm(haramain)).toBeLessThan(500);
+
+    // エティハド鉄道: アブダビ -> ドバイ -> シャルジャ -> フジャイラ の実データで検証
+    const etihad = [
+      { lat: 24.454, lon: 54.377 },
+      { lat: 25.205, lon: 55.271 },
+      { lat: 25.346, lon: 55.421 },
+      { lat: 25.129, lon: 56.327 },
+    ];
+    expect(lineTotalKm(etihad)).toBeGreaterThan(150);
+    expect(lineTotalKm(etihad)).toBeLessThan(350);
+
+    // ドーハメトロ・レッドライン: アル・ワクラ -> ハマド国際空港 -> ムシェリーブ -> ルサイル の実データで検証
+    const doha = [
+      { lat: 25.166, lon: 51.602 },
+      { lat: 25.261, lon: 51.614 },
+      { lat: 25.287, lon: 51.533 },
+      { lat: 25.399, lon: 51.493 },
+    ];
+    expect(lineTotalKm(doha)).toBeGreaterThan(15);
+    expect(lineTotalKm(doha)).toBeLessThan(60);
+  });
+
   it('区間距離は haversine 公式で始発から終着まで加算した値と一致する', () => {
     function haversineKm(la1: number, lo1: number, la2: number, lo2: number) {
       const R = 6371;
