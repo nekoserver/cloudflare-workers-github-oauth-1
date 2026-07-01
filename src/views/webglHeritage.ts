@@ -146,6 +146,10 @@ canvas:active { cursor:grabbing; }
 .rail-station-row { cursor:pointer; }
 .rail-station-row:hover { background:#161b22; }
 .rail-station-row:active { background:#1c2530; }
+.f1-circuit-row { cursor:pointer; }
+.f1-circuit-row:hover { background:#161b22; }
+.f1-circuit-row:active { background:#1c2530; }
+.f1-circuit-sub { display:block; color:#8b949e; font-size:10px; margin-top:2px; }
 .city-mk { position:absolute; transform:translate(-50%,-50%); background:rgba(13,17,23,0.92); border:1px solid #388bfd; border-radius:10px; color:#c9d1d9; font-size:9px; padding:2px 6px; white-space:nowrap; pointer-events:none; opacity:0; transition:opacity .3s; display:flex; align-items:center; gap:3px; }
 .city-mk-dot { width:5px; height:5px; border-radius:50%; background:#388bfd; flex-shrink:0; }
 .city-icon-btn { background:none; border:none; cursor:pointer; font-size:13px; line-height:1; padding:0 0 0 4px; opacity:.85; vertical-align:middle; }
@@ -306,6 +310,7 @@ void main() {
       <button class="canvas-ctrl-btn" id="btnCityStats">🌇 都市統計</button>
       <button class="canvas-ctrl-btn" id="btnBoxZoom">🔲 エリアズーム</button>
       <button class="canvas-ctrl-btn" id="btnRail">🚉 鉄道</button>
+      <button class="canvas-ctrl-btn" id="btnF1">🏎️ F1</button>
     </div>
   </div>
   <div class="side">
@@ -435,6 +440,16 @@ void main() {
       <button class="cities-modal-close" id="rail-modal-close">✕</button>
     </div>
     <div class="cities-modal-body" id="rail-modal-body"></div>
+  </div>
+</div>
+
+<div id="f1-modal-overlay" class="cities-modal-overlay">
+  <div class="cities-modal" style="width:min(94vw,560px)">
+    <div class="cities-modal-head">
+      <span class="cities-modal-title">🏎️ F1 サーキット</span>
+      <button class="cities-modal-close" id="f1-modal-close">✕</button>
+    </div>
+    <div class="cities-modal-body" id="f1-modal-body"></div>
   </div>
 </div>
 
@@ -852,6 +867,31 @@ void main() {
     ]}
   ];
 
+  var F1_CIRCUITS = [
+    { gp:'オーストラリアGP', circuit:'アルバートパーク・サーキット', flag:'🇦🇺', country:'オーストラリア', date:'2026-03-08', lat:-37.8497, lon:144.9680 },
+    { gp:'中国GP', circuit:'上海国際サーキット', flag:'🇨🇳', country:'中国', date:'2026-03-15', lat:31.3389, lon:121.2200 },
+    { gp:'日本GP', circuit:'鈴鹿サーキット', flag:'🇯🇵', country:'日本', date:'2026-03-29', lat:34.8431, lon:136.5410 },
+    { gp:'マイアミGP', circuit:'マイアミ・インターナショナル・オートドローム', flag:'🇺🇸', country:'アメリカ', date:'2026-05-03', lat:25.9581, lon:-80.2389 },
+    { gp:'カナダGP', circuit:'ジル・ヴィルヌーヴ・サーキット', flag:'🇨🇦', country:'カナダ', date:'2026-05-24', lat:45.5000, lon:-73.5228 },
+    { gp:'モナコGP', circuit:'モンテカルロ市街地サーキット', flag:'🇲🇨', country:'モナコ', date:'2026-06-07', lat:43.7347, lon:7.4206 },
+    { gp:'バルセロナ・カタルーニャGP', circuit:'カタルーニャ・サーキット', flag:'🇪🇸', country:'スペイン', date:'2026-06-14', lat:41.5700, lon:2.2611 },
+    { gp:'オーストリアGP', circuit:'レッドブル・リンク', flag:'🇦🇹', country:'オーストリア', date:'2026-06-28', lat:47.2197, lon:14.7647 },
+    { gp:'イギリスGP', circuit:'シルバーストン・サーキット', flag:'🇬🇧', country:'イギリス', date:'2026-07-05', lat:52.0786, lon:-1.0169 },
+    { gp:'ベルギーGP', circuit:'スパ・フランコルシャン・サーキット', flag:'🇧🇪', country:'ベルギー', date:'2026-07-19', lat:50.4372, lon:5.9714 },
+    { gp:'ハンガリーGP', circuit:'ハンガロリンク', flag:'🇭🇺', country:'ハンガリー', date:'2026-07-26', lat:47.5789, lon:19.2486 },
+    { gp:'オランダGP', circuit:'ザントフォールト・サーキット', flag:'🇳🇱', country:'オランダ', date:'2026-08-23', lat:52.3888, lon:4.5409 },
+    { gp:'イタリアGP', circuit:'モンツァ・サーキット', flag:'🇮🇹', country:'イタリア', date:'2026-09-06', lat:45.6156, lon:9.2811 },
+    { gp:'スペイン(マドリード)GP', circuit:'マドリング市街地サーキット', flag:'🇪🇸', country:'スペイン', date:'2026-09-13', lat:40.4650, lon:-3.6089 },
+    { gp:'アゼルバイジャンGP', circuit:'バクー市街地サーキット', flag:'🇦🇿', country:'アゼルバイジャン', date:'2026-09-27', lat:40.3725, lon:49.8533 },
+    { gp:'シンガポールGP', circuit:'マリーナベイ市街地サーキット', flag:'🇸🇬', country:'シンガポール', date:'2026-10-11', lat:1.2914, lon:103.8640 },
+    { gp:'アメリカGP', circuit:'サーキット・オブ・ジ・アメリカズ', flag:'🇺🇸', country:'アメリカ', date:'2026-10-25', lat:30.1328, lon:-97.6411 },
+    { gp:'メキシコGP', circuit:'エルマノス・ロドリゲス・サーキット', flag:'🇲🇽', country:'メキシコ', date:'2026-11-01', lat:19.4042, lon:-99.0907 },
+    { gp:'ブラジルGP', circuit:'インテルラゴス・サーキット', flag:'🇧🇷', country:'ブラジル', date:'2026-11-08', lat:-23.7036, lon:-46.6997 },
+    { gp:'ラスベガスGP', circuit:'ラスベガス・ストリップ・サーキット', flag:'🇺🇸', country:'アメリカ', date:'2026-11-21', lat:36.1147, lon:-115.1728 },
+    { gp:'カタールGP', circuit:'ロサイル・インターナショナル・サーキット', flag:'🇶🇦', country:'カタール', date:'2026-11-29', lat:25.4900, lon:51.4542 },
+    { gp:'アブダビGP', circuit:'ヤス・マリーナ・サーキット', flag:'🇦🇪', country:'アラブ首長国連邦', date:'2026-12-06', lat:24.4672, lon:54.6031 }
+  ];
+
   function typeColor(t) {
     return t === '文化遺産' ? '#e3a838' : (t === '自然遺産' ? '#3fb950' : '#a371f7');
   }
@@ -950,6 +990,23 @@ void main() {
           '</div>';
       });
       html += '</div></details>';
+    });
+    return html;
+  }
+
+  function formatF1Date(dateStr) {
+    var parts = dateStr.split('-');
+    return parts[0] + '/' + parseInt(parts[1], 10) + '/' + parseInt(parts[2], 10);
+  }
+
+  function renderF1ModalRows() {
+    var sorted = F1_CIRCUITS.slice().sort(function(a, b) { return a.date < b.date ? -1 : (a.date > b.date ? 1 : 0); });
+    var html = '';
+    sorted.forEach(function(race) {
+      html += '<div class="cities-modal-row f1-circuit-row" data-lat="' + race.lat + '" data-lon="' + race.lon + '">' +
+        '<span class="cities-modal-name">' + race.flag + ' ' + race.country + '<span class="f1-circuit-sub">' + race.gp + ' ／ ' + race.circuit + '</span></span>' +
+        '<span class="cities-modal-dist">' + formatF1Date(race.date) + '</span>' +
+        '</div>';
     });
     return html;
   }
@@ -2035,6 +2092,28 @@ void main() {
       });
     });
     railModalOverlay.classList.add('open');
+  });
+
+  var f1ModalOverlay = document.getElementById('f1-modal-overlay');
+  var f1ModalBody = document.getElementById('f1-modal-body');
+  document.getElementById('f1-modal-close').addEventListener('click', function() {
+    f1ModalOverlay.classList.remove('open');
+  });
+  f1ModalOverlay.addEventListener('click', function(e) {
+    if(e.target === f1ModalOverlay) f1ModalOverlay.classList.remove('open');
+  });
+  document.getElementById('btnF1').addEventListener('click', function() {
+    f1ModalBody.innerHTML = renderF1ModalRows();
+    f1ModalBody.querySelectorAll('.f1-circuit-row').forEach(function(el) {
+      el.addEventListener('click', function() {
+        var lat = parseFloat(el.getAttribute('data-lat'));
+        var lon = parseFloat(el.getAttribute('data-lon'));
+        f1ModalOverlay.classList.remove('open');
+        flyTo(lat, lon);
+        zoom = 1.2;
+      });
+    });
+    f1ModalOverlay.classList.add('open');
   });
 
   var cityStatsOverlay = document.getElementById('city-stats-overlay');

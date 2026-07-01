@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { HERITAGE_LIST } from './data/heritageList';
 
-describe('HERITAGE_LIST — サウジアラビア・UAE・カタール世界遺産', () => {
+describe('HERITAGE_LIST — サウジアラビア・UAE・カタール・バーレーン世界遺産', () => {
   it('サウジアラビアの世界遺産8件をすべて含む(UNESCO公式7件+既存登録済みの1件)', () => {
     const sites = HERITAGE_LIST.filter((site) => site.c === 'サウジアラビア');
     const names = sites.map((site) => site.n);
@@ -36,6 +36,18 @@ describe('HERITAGE_LIST — サウジアラビア・UAE・カタール世界遺�
     expect(sites).toHaveLength(1);
     expect(names).toEqual(expect.arrayContaining([
       'アル・ズバラ考古遺跡',
+    ]));
+  });
+
+  it('バーレーンの世界遺産3件をすべて含む(UNESCO公式全件)', () => {
+    const sites = HERITAGE_LIST.filter((site) => site.c === 'バーレーン');
+    const names = sites.map((site) => site.n);
+
+    expect(sites).toHaveLength(3);
+    expect(names).toEqual(expect.arrayContaining([
+      'バーレーン要塞（カラート・アル・バーレーン）',
+      '真珠採り：島の経済の証',
+      'ディルムン墳墓群',
     ]));
   });
 });
