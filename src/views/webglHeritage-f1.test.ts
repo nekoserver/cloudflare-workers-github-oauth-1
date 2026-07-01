@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { getWebGLHeritagePage } from './webglHeritage';
 
-describe('getWebGLHeritagePage F1サーキット機能', () => {
+describe('getWebGLHeritagePage F1サーキット機能（左サイドパネル）', () => {
   const html = getWebGLHeritagePage('tester');
 
   it('script タグ内の JS に構文エラーがない', () => {
@@ -15,12 +15,16 @@ describe('getWebGLHeritagePage F1サーキット機能', () => {
     expect(count).toBeGreaterThan(0);
   });
 
-  it('🏎️ F1ボタンとモーダルの要素が存在する', () => {
+  it('🏎️ F1ボタンと左サイドパネルの要素が存在する（旧モーダルは廃止）', () => {
     expect(html).toContain('id="btnF1"');
-    expect(html).toContain('id="f1-modal-overlay"');
-    expect(html).toContain('id="f1-modal-body"');
-    expect(html).toContain('id="f1-modal-close"');
-    expect(html).toContain('function renderF1ModalRows');
+    expect(html).toContain('id="f1-side"');
+    expect(html).toContain('class="f1-side"');
+    expect(html).toContain('id="f1-side-body"');
+    expect(html).toContain('id="f1-side-close"');
+    expect(html).toContain('id="f1-tour-btn"');
+    expect(html).toContain('function renderF1SidePanel');
+    expect(html).not.toContain('id="f1-modal-overlay"');
+    expect(html).not.toContain('function renderF1ModalRows');
   });
 
   const f1BlockMatch = html.match(/var F1_CIRCUITS = (\[[\s\S]*?\]);\s*\n\s*function typeColor/);
@@ -46,34 +50,99 @@ describe('getWebGLHeritagePage F1サーキット機能', () => {
     expect(uniqueDates.size).toBe(dates.length);
   });
 
-  it('モーダルは開催日の昇順にソートして表示する', () => {
-    const idx = html.indexOf('function renderF1ModalRows');
+  it('F1_SORTED は開催日の昇順にソートされる', () => {
+    expect(html).toMatch(/var F1_SORTED = F1_CIRCUITS\.slice\(\)\.sort\(function\(a, b\) \{ return a\.date < b\.date \? -1 : \(a\.date > b\.date \? 1 : 0\); \}\);/);
+  });
+
+  it('サイドパネルの各行は国旗→サーキット名→(開催日+開催国名)の順で表示する', () => {
+    const idx = html.indexOf('function renderF1SidePanel');
     const block = html.slice(idx, idx + 700);
-    expect(block).toMatch(/\.sort\(function\(a, b\) \{ return a\.date < b\.date \? -1 : \(a\.date > b\.date \? 1 : 0\); \}\)/);
+    expect(block).toMatch(/f1-side-flag[\s\S]*?race\.flag[\s\S]*?f1-side-circuit[\s\S]*?race\.circuit[\s\S]*?f1-side-date[\s\S]*?formatF1Date\(race\.date\)[\s\S]*?race\.country/);
+    expect(block).toContain("data-idx=\"' + i + '\"");
   });
 
-  it('各行に開催国名・開催日が表示される', () => {
-    const idx = html.indexOf('function renderF1ModalRows');
-    const block = html.slice(idx, idx + 700);
-    expect(block).toContain('race.country');
-    expect(block).toContain('formatF1Date(race.date)');
+  it('当日以降で最も早い開催日のサーキットを見つける findUpcomingF1Idx がある', () => {
+    expect(html).toContain('function findUpcomingF1Idx()');
+    expect(html).toMatch(/var todayStr = new Date\(\)\.toISOString\(\)\.slice\(0, 10\);/);
+    expect(html).toMatch(/if \(F1_SORTED\[i\]\.date >= todayStr\) return i;/);
   });
 
-  it('駅タップと同様に、行タップで地球儀を最大ズームで中心移動させる', () => {
-    expect(html).toContain('f1-circuit-row');
-    expect(html).toMatch(/f1ModalBody\.querySelectorAll\('\.f1-circuit-row'\)/);
-    expect(html).toMatch(/f1ModalOverlay\.classList\.remove\('open'\);\s*flyTo\(lat, lon\);\s*zoom = 1\.2;/);
+  it('focusF1Circuit は地球儀のフォーカス移動・ピン更新・サイドパネルのアクティブ切替とスクロールを行う', () => {
+    const idx = html.indexOf('function focusF1Circuit');
+    const block = html.slice(idx, idx + 900);
+    expect(block).toContain('flyTo(race.lat, race.lon);');
+    expect(block).toContain('zoom = 1.2;');
+    expect(block).toContain('f1CircuitPin3d = latLonTo3D(race.lat, race.lon);');
+    expect(block).toContain('f1CircuitPinName.textContent = race.flag + \' \' + race.circuit;');
+    expect(block).toContain('f1CircuitPinDate.textContent = formatF1Date(race.date);');
+    expect(block).toMatch(/classList\.toggle\('active', parseInt\(el\.getAttribute\('data-idx'\), 10\) === idx\)/);
+    expect(block).toContain('scrollIntoView(');
   });
 
-  it('サーキットタップで地球儀上に🏎️ピンとサーキット名・開催日ツールチップが表示される', () => {
+  it('🏎️ボタン押下時、サイドパネルを開いて当日以降で最も早いサーキットにフォーカスする', () => {
+    const idx = html.indexOf("document.getElementById('btnF1')");
+    const block = html.slice(idx, idx + 500);
+    expect(block).toContain("f1Side.classList.add('open');");
+    expect(block).toContain('renderF1SidePanel();');
+    expect(block).toContain('focusF1Circuit(findUpcomingF1Idx(), true);');
+  });
+
+  it('再度🏎️ボタンを押すとパネルが閉じ、巡回が停止する', () => {
+    const idx = html.indexOf("document.getElementById('btnF1')");
+    const block = html.slice(idx, idx + 500);
+    expect(block).toMatch(/if \(f1Side\.classList\.contains\('open'\)\) \{\s*f1Side\.classList\.remove\('open'\);\s*stopF1Tour\(\);/);
+  });
+
+  it('サイドパネルの✕ボタンでも閉じて巡回が停止する', () => {
+    const idx = html.indexOf("document.getElementById('f1-side-close')");
+    const block = html.slice(idx, idx + 200);
+    expect(block).toContain("f1Side.classList.remove('open');");
+    expect(block).toContain('stopF1Tour();');
+  });
+
+  it('巡回ボタンで次の開催日のサーキットへ進み、パネル内の枠が3秒点滅する', () => {
+    expect(html).toContain('function f1TourStep()');
+    const idx = html.indexOf('function f1TourStep()');
+    const block = html.slice(idx, idx + 400);
+    expect(block).toContain('var nextIdx = f1TourIdx + 1;');
+    expect(block).toContain('flashAllF1SideItems();');
+    expect(block).toContain('focusF1Circuit(nextIdx, true);');
+    expect(block).toMatch(/f1TourTimer = setTimeout\(f1TourStep, 3000\);/);
+
+    const flashIdx = html.indexOf('function flashAllF1SideItems()');
+    const flashBlock = html.slice(flashIdx, flashIdx + 400);
+    expect(flashBlock).toContain("el.classList.add('f1-flash');");
+    expect(flashBlock).toMatch(/setTimeout\(function\(\) \{ el\.classList\.remove\('f1-flash'\); \}, 3000\);/);
+  });
+
+  it('次の開催予定がなくなると巡回は自動的に停止する', () => {
+    const idx = html.indexOf('function f1TourStep()');
+    const block = html.slice(idx, idx + 300);
+    expect(block).toMatch(/if \(nextIdx >= F1_SORTED\.length\) \{ stopF1Tour\(\); return; \}/);
+  });
+
+  it('.f1-flash の点滅は outline のみが変化する中抜き枠アニメーションで、合計3秒（0.5s×6回）続く', () => {
+    expect(html).toMatch(/@keyframes f1-flash \{ 0%,100%\{outline:2px solid transparent\} 50%\{outline:2px solid #ffd700\} \}/);
+    expect(html).toMatch(/\.f1-side-item\.f1-flash \{ animation:f1-flash 0\.5s ease-in-out 6; \}/);
+  });
+
+  it('サーキットタップで地球儀上に🏎️ピンとサーキット名・開催日ツールチップが表示される（既存機構を再利用）', () => {
     expect(html).toContain('id="f1-circuit-pin"');
     expect(html).toContain('id="f1-circuit-pin-label"');
     expect(html).toContain('id="f1-circuit-pin-name"');
     expect(html).toContain('id="f1-circuit-pin-date"');
     expect(html).toContain('var f1CircuitPin3d = null;');
-    expect(html).toMatch(/data-circuit="\s*'\s*\+\s*race\.flag\s*\+\s*' '\s*\+\s*race\.circuit\s*\+\s*'"/);
-    expect(html).toMatch(/data-date="\s*'\s*\+\s*formatF1Date\(race\.date\)\s*\+\s*'"/);
-    expect(html).toMatch(/f1CircuitPin3d = latLonTo3D\(lat, lon\);\s*f1CircuitPinName\.textContent = circuitLabel;\s*f1CircuitPinDate\.textContent = dateLabel;/);
     expect(html).toMatch(/updateWorldPin\(f1CircuitPin3d, f1CircuitPin, f1CircuitPinLabel\);/);
+  });
+
+  it('巡回ボタンはツールチップ内（ピンラベル）に配置され、その下に表示される', () => {
+    const idx = html.indexOf('id="f1-circuit-pin-label"');
+    const block = html.slice(idx, idx + 600);
+    const nameIdx = block.indexOf('id="f1-circuit-pin-name"');
+    const dateIdx = block.indexOf('id="f1-circuit-pin-date"');
+    const btnIdx = block.indexOf('id="f1-tour-btn"');
+    expect(nameIdx).toBeGreaterThan(-1);
+    expect(dateIdx).toBeGreaterThan(nameIdx);
+    expect(btnIdx).toBeGreaterThan(dateIdx);
   });
 });
