@@ -129,6 +129,17 @@ describe('getWebGLHeritagePage 鉄道路線機能', () => {
     expect(html).toMatch(/zoom = 1\.2;\s*cacheStationCities\(name, lat, lon\);/);
   });
 
+  it('駅名タップで地球儀上に🚉ピンと路線名・駅名ツールチップが表示される', () => {
+    expect(html).toContain('id="rail-station-pin"');
+    expect(html).toContain('id="rail-station-pin-label"');
+    expect(html).toContain('id="rail-station-pin-line"');
+    expect(html).toContain('id="rail-station-pin-name"');
+    expect(html).toContain('var railStationPin3d = null;');
+    expect(html).toMatch(/data-line="\s*'\s*\+\s*line\.flag\s*\+\s*' '\s*\+\s*line\.name\s*\+\s*'"/);
+    expect(html).toMatch(/railStationPin3d = latLonTo3D\(lat, lon\);\s*railStationPinLine\.textContent = lineLabel;\s*railStationPinName\.textContent = name;/);
+    expect(html).toMatch(/updateWorldPin\(railStationPin3d, railStationPin, railStationPinLabel\);/);
+  });
+
   it('区間距離は haversine 公式で始発から終着まで加算した値と一致する', () => {
     function haversineKm(la1: number, lo1: number, la2: number, lo2: number) {
       const R = 6371;

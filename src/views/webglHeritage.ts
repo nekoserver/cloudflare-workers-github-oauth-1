@@ -496,6 +496,16 @@ void main() {
   <div id="city-fly-body" class="city-fly-body"></div>
 </div>
 <div id="city-fly-pin" style="display:none;position:fixed;font-size:22px;z-index:295;pointer-events:none;transform:translate(-50%,-100%);line-height:1">📍</div>
+<div id="f1-circuit-pin" style="display:none;position:fixed;font-size:22px;z-index:295;pointer-events:none;transform:translate(-50%,-100%);line-height:1">🏎️</div>
+<div id="f1-circuit-pin-label" style="display:none;position:fixed;z-index:296;pointer-events:none;background:rgba(13,17,23,0.92);border:1px solid #388bfd;border-radius:8px;color:#c9d1d9;padding:4px 9px;white-space:nowrap;text-align:center;line-height:1.4;transform:translate(-50%,calc(-100% - 30px))">
+  <div id="f1-circuit-pin-name" style="font-weight:700;font-size:12px"></div>
+  <div id="f1-circuit-pin-date" style="opacity:.75;font-size:10px"></div>
+</div>
+<div id="rail-station-pin" style="display:none;position:fixed;font-size:22px;z-index:295;pointer-events:none;transform:translate(-50%,-100%);line-height:1">🚉</div>
+<div id="rail-station-pin-label" style="display:none;position:fixed;z-index:296;pointer-events:none;background:rgba(13,17,23,0.92);border:1px solid #388bfd;border-radius:8px;color:#c9d1d9;padding:4px 9px;white-space:nowrap;text-align:center;line-height:1.4;transform:translate(-50%,calc(-100% - 30px))">
+  <div id="rail-station-pin-line" style="opacity:.75;font-size:10px"></div>
+  <div id="rail-station-pin-name" style="font-weight:700;font-size:12px"></div>
+</div>
 
 <script>
 (function() {
@@ -897,7 +907,7 @@ void main() {
       line.stations.forEach(function(st, si) {
         var segStr = si === 0 ? '起点' : ('+' + haversineKm(line.stations[si-1].lat, line.stations[si-1].lon, st.lat, st.lon).toFixed(1) + ' km');
         var cacheIcon = hasStationDataSet[st.name] ? '🚉 ' : '';
-        html += '<div class="cities-modal-row rail-station-row" data-name="' + st.name + '" data-lat="' + st.lat + '" data-lon="' + st.lon + '">' +
+        html += '<div class="cities-modal-row rail-station-row" data-name="' + st.name + '" data-line="' + line.flag + ' ' + line.name + '" data-lat="' + st.lat + '" data-lon="' + st.lon + '">' +
           '<span class="cities-modal-name">' + cacheIcon + st.name + '</span>' +
           '<span class="rail-station-coord">' + st.lat.toFixed(3) + ', ' + st.lon.toFixed(3) + '</span>' +
           '<span class="cities-modal-dist">' + segStr + '</span>' +
@@ -917,7 +927,7 @@ void main() {
     var sorted = F1_CIRCUITS.slice().sort(function(a, b) { return a.date < b.date ? -1 : (a.date > b.date ? 1 : 0); });
     var html = '';
     sorted.forEach(function(race) {
-      html += '<div class="cities-modal-row f1-circuit-row" data-lat="' + race.lat + '" data-lon="' + race.lon + '">' +
+      html += '<div class="cities-modal-row f1-circuit-row" data-circuit="' + race.flag + ' ' + race.circuit + '" data-date="' + formatF1Date(race.date) + '" data-lat="' + race.lat + '" data-lon="' + race.lon + '">' +
         '<span class="cities-modal-name">' + race.flag + ' ' + race.country + '<span class="f1-circuit-sub">' + race.gp + ' ／ ' + race.circuit + '</span></span>' +
         '<span class="cities-modal-dist">' + formatF1Date(race.date) + '</span>' +
         '</div>';
@@ -1789,6 +1799,16 @@ void main() {
   var cityFlyPin = document.getElementById('city-fly-pin');
   var cityFlyPos3d = null;
   var cityFlyJustOpened = false;
+  var f1CircuitPin = document.getElementById('f1-circuit-pin');
+  var f1CircuitPinLabel = document.getElementById('f1-circuit-pin-label');
+  var f1CircuitPinName = document.getElementById('f1-circuit-pin-name');
+  var f1CircuitPinDate = document.getElementById('f1-circuit-pin-date');
+  var f1CircuitPin3d = null;
+  var railStationPin = document.getElementById('rail-station-pin');
+  var railStationPinLabel = document.getElementById('rail-station-pin-label');
+  var railStationPinLine = document.getElementById('rail-station-pin-line');
+  var railStationPinName = document.getElementById('rail-station-pin-name');
+  var railStationPin3d = null;
   var cfDragging = false, cfDragOx = 0, cfDragOy = 0;
   cityFlyHead.addEventListener('mousedown', function(e) {
     if (e.target.tagName === 'BUTTON') return;
@@ -1997,12 +2017,16 @@ void main() {
     railModalBody.querySelectorAll('.rail-station-row').forEach(function(el) {
       el.addEventListener('click', function() {
         var name = el.getAttribute('data-name');
+        var lineLabel = el.getAttribute('data-line');
         var lat = parseFloat(el.getAttribute('data-lat'));
         var lon = parseFloat(el.getAttribute('data-lon'));
         railModalOverlay.classList.remove('open');
         flyTo(lat, lon);
         zoom = 1.2;
         cacheStationCities(name, lat, lon);
+        railStationPin3d = latLonTo3D(lat, lon);
+        railStationPinLine.textContent = lineLabel;
+        railStationPinName.textContent = name;
       });
     });
     railModalOverlay.classList.add('open');
@@ -2020,11 +2044,16 @@ void main() {
     f1ModalBody.innerHTML = renderF1ModalRows();
     f1ModalBody.querySelectorAll('.f1-circuit-row').forEach(function(el) {
       el.addEventListener('click', function() {
+        var circuitLabel = el.getAttribute('data-circuit');
+        var dateLabel = el.getAttribute('data-date');
         var lat = parseFloat(el.getAttribute('data-lat'));
         var lon = parseFloat(el.getAttribute('data-lon'));
         f1ModalOverlay.classList.remove('open');
         flyTo(lat, lon);
         zoom = 1.2;
+        f1CircuitPin3d = latLonTo3D(lat, lon);
+        f1CircuitPinName.textContent = circuitLabel;
+        f1CircuitPinDate.textContent = dateLabel;
       });
     });
     f1ModalOverlay.classList.add('open');
@@ -2393,6 +2422,27 @@ void main() {
       }
     }
 
+    function updateWorldPin(pos3d, pinEl, labelEl) {
+      if (!pos3d) return;
+      var mz = model[2]*pos3d[0] + model[6]*pos3d[1] + model[10]*pos3d[2];
+      if (mz > 0.05) {
+        var cx = mvp[0]*pos3d[0] + mvp[4]*pos3d[1] + mvp[8]*pos3d[2]  + mvp[12];
+        var cy = mvp[1]*pos3d[0] + mvp[5]*pos3d[1] + mvp[9]*pos3d[2]  + mvp[13];
+        var cw = mvp[3]*pos3d[0] + mvp[7]*pos3d[1] + mvp[11]*pos3d[2] + mvp[15];
+        if (cw > 0) {
+          var sx = canvasRect.left + (cx/cw+1)*0.5*W;
+          var sy = canvasRect.top + (1-cy/cw)*0.5*H;
+          pinEl.style.left = sx + 'px';
+          pinEl.style.top = sy + 'px';
+          pinEl.style.display = '';
+          if (labelEl) { labelEl.style.left = sx + 'px'; labelEl.style.top = sy + 'px'; labelEl.style.display = ''; }
+          return;
+        }
+      }
+      pinEl.style.display = 'none';
+      if (labelEl) labelEl.style.display = 'none';
+    }
+
     if (cityFlyPos3d) {
       var cfp = cityFlyPos3d;
       var cfmz = model[2]*cfp[0] + model[6]*cfp[1] + model[10]*cfp[2];
@@ -2424,6 +2474,9 @@ void main() {
         cityFlyPin.style.display = 'none';
       }
     }
+
+    updateWorldPin(f1CircuitPin3d, f1CircuitPin, f1CircuitPinLabel);
+    updateWorldPin(railStationPin3d, railStationPin, railStationPinLabel);
 
     // Update proximity list every 30 frames
     listUpdateTick++;
