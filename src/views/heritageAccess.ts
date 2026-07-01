@@ -851,7 +851,7 @@ function openAccordion(tr) {
     var heritages = data.heritages || [];
     var inner = accTr.querySelector('.accordion-inner');
     if (!inner) return;
-    var filtered = heritages.filter(function(h) { return h.distance_km <= 2000; }).slice(0, 20);
+    var filtered = heritages.filter(function(h) { return h.distance_km <= 2000; });
     if (filtered.length === 0) {
       inner.innerHTML = '<div class="acc-loading">近隣の世界遺産データなし（2000km以内）</div>';
       return;

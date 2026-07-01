@@ -269,7 +269,7 @@ describe('アコーディオン: メモリキャッシュ（cityCache）', () =>
   });
 });
 
-describe('アコーディオン: 表示行数の上限', () => {
+describe('アコーディオン: 表示行数（API側のLIMIT 100に委ねる、フロント側で追加制限しない）', () => {
   function manyHeritages(count: number) {
     return {
       heritages: Array.from({ length: count }, (_, i) => ({
@@ -280,28 +280,24 @@ describe('アコーディオン: 表示行数の上限', () => {
     };
   }
 
-  it('2000km以内に30件あっても、表示される行は20行までに制限される', async () => {
+  it('2000km以内に30件あれば、30行すべて表示される（20件などに切り詰めない）', async () => {
     const h = setupHarness(defaultHandler({ cityHeritages: manyHeritages(30) }));
     const tr = h.openCity();
     await flush();
     const inner = tr.nextSibling.querySelector('.accordion-inner');
     expect(inner).toBeTruthy();
-    expect(inner.querySelectorAll('.acc-row').length).toBe(20);
+    expect(inner.querySelectorAll('.acc-row').length).toBe(30);
   });
 
-  it('距離が近い順の上位20件が表示される（遠い側は切り捨てられる）', async () => {
-    const h = setupHarness(defaultHandler({ cityHeritages: manyHeritages(30) }));
+  it('API上限の100件あれば、100行すべて表示される', async () => {
+    const h = setupHarness(defaultHandler({ cityHeritages: manyHeritages(100) }));
     const tr = h.openCity();
     await flush();
     const inner = tr.nextSibling.querySelector('.accordion-inner');
-    const names = Array.from(inner.querySelectorAll('.acc-row[data-heritage]')).map((el: any) => el.getAttribute('data-heritage'));
-    expect(names).toContain('H1');
-    expect(names).toContain('H20');
-    expect(names).not.toContain('H21');
-    expect(names).not.toContain('H30');
+    expect(inner.querySelectorAll('.acc-row').length).toBe(100);
   });
 
-  it('該当件数が20件未満の場合はその件数のまま表示される', async () => {
+  it('該当件数が少ない場合はその件数のまま表示される', async () => {
     const h = setupHarness(defaultHandler({ cityHeritages: THREE_HERITAGES }));
     const tr = h.openCity();
     await flush();
