@@ -115,6 +115,16 @@ describe('getWebGLHeritagePage 鉄道路線機能', () => {
     expect(lineTotalKm(doha)).toBeLessThan(60);
   });
 
+  it('駅名の先頭に近隣都市キャッシュ済みなら🚉アイコンを表示し、タップでキャッシュを取得する', () => {
+    expect(html).toContain("var hasStationDataSet = {}");
+    expect(html).toContain("fetch('/api/rail-station-fetched-list')");
+    expect(html).toContain('function cacheStationCities(name, lat, lon)');
+    expect(html).toMatch(/var cacheIcon = hasStationDataSet\[st\.name\] \? '🚉 ' : '';/);
+    expect(html).toMatch(/data-name="\s*'\s*\+\s*st\.name\s*\+\s*'\s*"/);
+    expect(html).toMatch(/cities-modal-name">\s*'\s*\+\s*cacheIcon\s*\+\s*st\.name/);
+    expect(html).toMatch(/zoom = 1\.2;\s*cacheStationCities\(name, lat, lon\);/);
+  });
+
   it('区間距離は haversine 公式で始発から終着まで加算した値と一致する', () => {
     function haversineKm(la1: number, lo1: number, la2: number, lo2: number) {
       const R = 6371;

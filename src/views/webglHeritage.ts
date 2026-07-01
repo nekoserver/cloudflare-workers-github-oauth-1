@@ -897,10 +897,25 @@ void main() {
   var cityMkEls = [];
   var cityMarkersDiv = null;
   var hasCityDataSet = {};
+  var hasStationDataSet = {};
 
   fetch('/api/heritage-city-fetched-list').then(function(r){ return r.json(); }).then(function(d){
     if(d && d.names) { d.names.forEach(function(n){ hasCityDataSet[n] = true; }); updateCityIcons(); }
   }).catch(function(){});
+
+  fetch('/api/rail-station-fetched-list').then(function(r){ return r.json(); }).then(function(d){
+    if(d && d.names) { d.names.forEach(function(n){ hasStationDataSet[n] = true; }); }
+  }).catch(function(){});
+
+  function cacheStationCities(name, lat, lon) {
+    fetch('/api/rail-station-cities', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: name, lat: lat, lon: lon })
+    }).then(function(r){ return r.json(); }).then(function(d){
+      if(d && d.fetched && d.cities && d.cities.length > 0) { hasStationDataSet[name] = true; }
+    }).catch(function(){});
+  }
 
   function haversineKm(la1, lo1, la2, lo2) {
     var R = 6371;
@@ -927,8 +942,9 @@ void main() {
         '<div class="rail-line-stations">';
       line.stations.forEach(function(st, si) {
         var segStr = si === 0 ? '起点' : ('+' + haversineKm(line.stations[si-1].lat, line.stations[si-1].lon, st.lat, st.lon).toFixed(1) + ' km');
-        html += '<div class="cities-modal-row rail-station-row" data-lat="' + st.lat + '" data-lon="' + st.lon + '">' +
-          '<span class="cities-modal-name">' + st.name + '</span>' +
+        var cacheIcon = hasStationDataSet[st.name] ? '🚉 ' : '';
+        html += '<div class="cities-modal-row rail-station-row" data-name="' + st.name + '" data-lat="' + st.lat + '" data-lon="' + st.lon + '">' +
+          '<span class="cities-modal-name">' + cacheIcon + st.name + '</span>' +
           '<span class="rail-station-coord">' + st.lat.toFixed(3) + ', ' + st.lon.toFixed(3) + '</span>' +
           '<span class="cities-modal-dist">' + segStr + '</span>' +
           '</div>';
@@ -2009,11 +2025,13 @@ void main() {
     railModalBody.innerHTML = renderRailModalRows();
     railModalBody.querySelectorAll('.rail-station-row').forEach(function(el) {
       el.addEventListener('click', function() {
+        var name = el.getAttribute('data-name');
         var lat = parseFloat(el.getAttribute('data-lat'));
         var lon = parseFloat(el.getAttribute('data-lon'));
         railModalOverlay.classList.remove('open');
         flyTo(lat, lon);
         zoom = 1.2;
+        cacheStationCities(name, lat, lon);
       });
     });
     railModalOverlay.classList.add('open');

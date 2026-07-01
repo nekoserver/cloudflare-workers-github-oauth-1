@@ -154,6 +154,8 @@ const STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
   { name: 'uuid_history',             migration: '0062',   description: 'UUID生成履歴',                                        syncPolicy: 'auto' },
   { name: 'heritage_cities',          migration: '0063',   description: '世界遺産周辺都市キャッシュ',                              syncPolicy: 'auto' },
   { name: 'heritage_city_fetched',    migration: '0063',   description: '世界遺産都市検索済みフラグ',                              syncPolicy: 'auto' },
+  { name: 'rail_station_cities',      migration: '0067',   description: '鉄道駅周辺都市キャッシュ',                                syncPolicy: 'auto' },
+  { name: 'rail_station_fetched',     migration: '0067',   description: '鉄道駅都市検索済みフラグ',                                syncPolicy: 'auto' },
 ];
 
 const REQUIRED_STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
@@ -933,6 +935,25 @@ CREATE TABLE IF NOT EXISTS heritage_city_fetched (
   ('@cf/zai-org/glm-5.2', '#f97316', 'glm-5.2'),
   ('@cf/ibm-granite/granite-4.0-h-micro', '#06b6d4', 'granite-4.0-h-micro');`,
 
+  '0067': `CREATE TABLE IF NOT EXISTS rail_station_cities (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  station_name TEXT NOT NULL,
+  city_name TEXT NOT NULL,
+  city_lat REAL NOT NULL,
+  city_lon REAL NOT NULL,
+  population INTEGER,
+  distance_km REAL NOT NULL,
+  country_code TEXT,
+  fetched_at TEXT DEFAULT (datetime('now'))
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_rail_station_cities_unique ON rail_station_cities(station_name, city_name);
+CREATE INDEX IF NOT EXISTS idx_rail_station_cities_name ON rail_station_cities(station_name);
+CREATE TABLE IF NOT EXISTS rail_station_fetched (
+  station_name TEXT PRIMARY KEY,
+  fetched_at TEXT DEFAULT (datetime('now')),
+  city_count INTEGER DEFAULT 0
+);`,
+
   'ts-catalog': `CREATE TABLE IF NOT EXISTS ts_repository (
   id            INTEGER PRIMARY KEY AUTOINCREMENT,
   full_name     TEXT NOT NULL UNIQUE,
@@ -1254,6 +1275,8 @@ export const TABLE_COLUMN_KEYS: Record<string, ColumnKeyInfo> = {
   uuid_history: { id: 'pk', user_id: 'idx', uuid: 'idx', created_at: 'idx' },
   heritage_cities: { id: 'pk', heritage_name: 'idx', city_name: 'uk' },
   heritage_city_fetched: { heritage_name: 'pk' },
+  rail_station_cities: { id: 'pk', station_name: 'idx', city_name: 'uk' },
+  rail_station_fetched: { station_name: 'pk' },
 };
 
 export function getColumnKeyType(tableName: string, columnName: string): ColumnKeyType {
@@ -1324,6 +1347,8 @@ export const TABLE_GROUP_MAP: Record<string, string> = {
   uuid_history: 'system',
   heritage_cities: 'system',
   heritage_city_fetched: 'system',
+  rail_station_cities: 'system',
+  rail_station_fetched: 'system',
   keyword_category_groups: 'search',
   keyword_multi_labels: 'search',
   ts_repository:          'ts-catalog',
@@ -4657,6 +4682,52 @@ app.get('/api/heritage-city-fetched-list', authMiddleware, async (c) => {
   if (!db) return c.json({ names: [] });
   const rows = await db.prepare('SELECT heritage_name FROM heritage_city_fetched WHERE city_count > 0').all<{ heritage_name: string }>();
   return c.json({ names: rows.results.map(r => r.heritage_name) });
+});
+
+app.get('/api/rail-station-cities', authMiddleware, async (c) => {
+  const db = c.env.DB;
+  if (!db) return c.json({ error: 'DB unavailable' }, 503);
+  const name = c.req.query('name') || '';
+  if (!name) return c.json({ error: 'name required' }, 400);
+  const fetched = await db.prepare('SELECT city_count FROM rail_station_fetched WHERE station_name = ?').bind(name).first<{ city_count: number }>();
+  if (!fetched) return c.json({ fetched: false });
+  const result = await db.prepare(
+    'SELECT city_name, city_lat, city_lon, population, distance_km, country_code FROM rail_station_cities WHERE station_name = ? ORDER BY distance_km'
+  ).bind(name).all<{ city_name: string; city_lat: number; city_lon: number; population: number | null; distance_km: number; country_code: string | null }>();
+  return c.json({ fetched: true, cities: result.results });
+});
+
+app.post('/api/rail-station-cities', authMiddleware, async (c) => {
+  const db = c.env.DB;
+  if (!db) return c.json({ error: 'DB unavailable' }, 503);
+  const body = await c.req.json<{ name: string; lat: number; lon: number; force?: boolean }>().catch(() => null);
+  if (!body || !body.name || body.lat == null || body.lon == null) return c.json({ error: 'name, lat, lon required' }, 400);
+  const { name, lat, lon, force } = body;
+
+  if (force) {
+    await db.prepare('DELETE FROM rail_station_fetched WHERE station_name = ?').bind(name).run();
+  }
+
+  const cities = findNearbyCities(lat, lon, 1500, 45);
+
+  if (cities.length > 0) {
+    const stmt = db.prepare('INSERT OR IGNORE INTO rail_station_cities (station_name, city_name, city_lat, city_lon, population, distance_km, country_code) VALUES (?, ?, ?, ?, ?, ?, ?)');
+    await db.batch(cities.map(city => stmt.bind(name, city.city_name, city.city_lat, city.city_lon, city.population, city.distance_km, city.country_code)));
+  }
+
+  const allCities = await db.prepare(
+    'SELECT city_name, city_lat, city_lon, population, distance_km, country_code FROM rail_station_cities WHERE station_name = ? ORDER BY distance_km'
+  ).bind(name).all<{ city_name: string; city_lat: number; city_lon: number; population: number | null; distance_km: number; country_code: string | null }>();
+  await db.prepare('INSERT OR REPLACE INTO rail_station_fetched (station_name, city_count) VALUES (?, ?)').bind(name, allCities.results.length).run();
+
+  return c.json({ fetched: true, cities: allCities.results });
+});
+
+app.get('/api/rail-station-fetched-list', authMiddleware, async (c) => {
+  const db = c.env.DB;
+  if (!db) return c.json({ names: [] });
+  const rows = await db.prepare('SELECT station_name FROM rail_station_fetched WHERE city_count > 0').all<{ station_name: string }>();
+  return c.json({ names: rows.results.map(r => r.station_name) });
 });
 
 app.get('/api/heritage-country-stats', authMiddleware, async (c) => {
