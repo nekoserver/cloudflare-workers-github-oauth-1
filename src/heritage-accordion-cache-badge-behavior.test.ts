@@ -268,3 +268,44 @@ describe('アコーディオン: メモリキャッシュ（cityCache）', () =>
     expect(batchCallCount).toBe(2);
   });
 });
+
+describe('アコーディオン: 表示行数の上限', () => {
+  function manyHeritages(count: number) {
+    return {
+      heritages: Array.from({ length: count }, (_, i) => ({
+        heritage_name: 'H' + (i + 1),
+        distance_km: (i + 1) * 10,
+        country_flag: '🇫🇷',
+      })),
+    };
+  }
+
+  it('2000km以内に30件あっても、表示される行は20行までに制限される', async () => {
+    const h = setupHarness(defaultHandler({ cityHeritages: manyHeritages(30) }));
+    const tr = h.openCity();
+    await flush();
+    const inner = tr.nextSibling.querySelector('.accordion-inner');
+    expect(inner).toBeTruthy();
+    expect(inner.querySelectorAll('.acc-row').length).toBe(20);
+  });
+
+  it('距離が近い順の上位20件が表示される（遠い側は切り捨てられる）', async () => {
+    const h = setupHarness(defaultHandler({ cityHeritages: manyHeritages(30) }));
+    const tr = h.openCity();
+    await flush();
+    const inner = tr.nextSibling.querySelector('.accordion-inner');
+    const names = Array.from(inner.querySelectorAll('.acc-row[data-heritage]')).map((el: any) => el.getAttribute('data-heritage'));
+    expect(names).toContain('H1');
+    expect(names).toContain('H20');
+    expect(names).not.toContain('H21');
+    expect(names).not.toContain('H30');
+  });
+
+  it('該当件数が20件未満の場合はその件数のまま表示される', async () => {
+    const h = setupHarness(defaultHandler({ cityHeritages: THREE_HERITAGES }));
+    const tr = h.openCity();
+    await flush();
+    const inner = tr.nextSibling.querySelector('.accordion-inner');
+    expect(inner.querySelectorAll('.acc-row').length).toBe(3);
+  });
+});
