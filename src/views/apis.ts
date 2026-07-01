@@ -590,6 +590,12 @@ const APIS = [
       res:{stats:[{heritage_name:'富士山',city_count:5,unique_city_count:3}]} },
     { method:'POST', path:'/api/heritage-country-unique-cities', desc:'重複除去済みの近隣都市一覧取得', body:[{n:'names',req:true,s:['富士山','厳島神社']}],
       res:{cities:[{city_name:'富士宮市',heritage_name:'富士山',distance_km:15}]} },
+    { method:'GET',  path:'/api/rail-station-cities', desc:'鉄道駅の近隣都市一覧取得', query:[{n:'name',req:true,s:'東京駅'}],
+      res:{fetched:true,cities:[{city_name:'川崎市',distance_km:20,lat:35.5,lon:139.7}]} },
+    { method:'POST', path:'/api/rail-station-cities', desc:'鉄道駅の近隣都市を検索・保存', body:[{n:'name',req:true,s:'東京駅'},{n:'lat',req:true,s:35.681},{n:'lon',req:true,s:139.767},{n:'force',s:false}],
+      res:{fetched:true,cities:[{city_name:'川崎市',distance_km:20}]} },
+    { method:'GET',  path:'/api/rail-station-fetched-list', desc:'近隣都市取得済みの駅名一覧',
+      res:{names:['東京駅','新大阪駅']} },
   ]},
   { group: '検索キーワード管理', endpoints: [
     { method:'GET',    path:'/api/search-keywords', desc:'登録済み検索キーワード一覧',
