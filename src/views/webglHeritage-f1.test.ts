@@ -64,4 +64,16 @@ describe('getWebGLHeritagePage F1サーキット機能', () => {
     expect(html).toMatch(/f1ModalBody\.querySelectorAll\('\.f1-circuit-row'\)/);
     expect(html).toMatch(/f1ModalOverlay\.classList\.remove\('open'\);\s*flyTo\(lat, lon\);\s*zoom = 1\.2;/);
   });
+
+  it('サーキットタップで地球儀上に🏎️ピンとサーキット名・開催日ツールチップが表示される', () => {
+    expect(html).toContain('id="f1-circuit-pin"');
+    expect(html).toContain('id="f1-circuit-pin-label"');
+    expect(html).toContain('id="f1-circuit-pin-name"');
+    expect(html).toContain('id="f1-circuit-pin-date"');
+    expect(html).toContain('var f1CircuitPin3d = null;');
+    expect(html).toMatch(/data-circuit="\s*'\s*\+\s*race\.flag\s*\+\s*' '\s*\+\s*race\.circuit\s*\+\s*'"/);
+    expect(html).toMatch(/data-date="\s*'\s*\+\s*formatF1Date\(race\.date\)\s*\+\s*'"/);
+    expect(html).toMatch(/f1CircuitPin3d = latLonTo3D\(lat, lon\);\s*f1CircuitPinName\.textContent = circuitLabel;\s*f1CircuitPinDate\.textContent = dateLabel;/);
+    expect(html).toMatch(/updateWorldPin\(f1CircuitPin3d, f1CircuitPin, f1CircuitPinLabel\);/);
+  });
 });
