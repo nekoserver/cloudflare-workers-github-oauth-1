@@ -143,6 +143,9 @@ canvas:active { cursor:grabbing; }
 .rail-line-total { color:#58a6ff; font-size:11px; font-weight:600; margin-left:auto; flex-shrink:0; }
 .rail-line-stations { padding:4px 0 4px 8px; }
 .rail-station-coord { color:#8b949e; font-size:10px; font-family:monospace; flex-shrink:0; margin:0 8px; }
+.rail-station-row { cursor:pointer; }
+.rail-station-row:hover { background:#161b22; }
+.rail-station-row:active { background:#1c2530; }
 .city-mk { position:absolute; transform:translate(-50%,-50%); background:rgba(13,17,23,0.92); border:1px solid #388bfd; border-radius:10px; color:#c9d1d9; font-size:9px; padding:2px 6px; white-space:nowrap; pointer-events:none; opacity:0; transition:opacity .3s; display:flex; align-items:center; gap:3px; }
 .city-mk-dot { width:5px; height:5px; border-radius:50%; background:#388bfd; flex-shrink:0; }
 .city-icon-btn { background:none; border:none; cursor:pointer; font-size:13px; line-height:1; padding:0 0 0 4px; opacity:.85; vertical-align:middle; }
@@ -906,7 +909,7 @@ void main() {
         '<div class="rail-line-stations">';
       line.stations.forEach(function(st, si) {
         var segStr = si === 0 ? '起点' : ('+' + haversineKm(line.stations[si-1].lat, line.stations[si-1].lon, st.lat, st.lon).toFixed(1) + ' km');
-        html += '<div class="cities-modal-row">' +
+        html += '<div class="cities-modal-row rail-station-row" data-lat="' + st.lat + '" data-lon="' + st.lon + '">' +
           '<span class="cities-modal-name">' + st.name + '</span>' +
           '<span class="rail-station-coord">' + st.lat.toFixed(3) + ', ' + st.lon.toFixed(3) + '</span>' +
           '<span class="cities-modal-dist">' + segStr + '</span>' +
@@ -1986,6 +1989,15 @@ void main() {
   });
   document.getElementById('btnRail').addEventListener('click', function() {
     railModalBody.innerHTML = renderRailModalRows();
+    railModalBody.querySelectorAll('.rail-station-row').forEach(function(el) {
+      el.addEventListener('click', function() {
+        var lat = parseFloat(el.getAttribute('data-lat'));
+        var lon = parseFloat(el.getAttribute('data-lon'));
+        railModalOverlay.classList.remove('open');
+        flyTo(lat, lon);
+        zoom = 1.2;
+      });
+    });
     railModalOverlay.classList.add('open');
   });
 
