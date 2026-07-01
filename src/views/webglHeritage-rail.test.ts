@@ -1,6 +1,15 @@
 import { describe, it, expect } from 'vitest';
 import { getWebGLHeritagePage } from './webglHeritage';
 
+type RailStation = { name: string; lat: number; lon: number };
+type RailLine = { name: string; flag: string; country: string; stations: RailStation[] };
+
+function extractRailLines(html: string): RailLine[] {
+  const m = html.match(/var RAIL_LINES = (\[[\s\S]*?\]);/);
+  if (!m) throw new Error('RAIL_LINES が見つかりません');
+  return JSON.parse(m[1]);
+}
+
 describe('getWebGLHeritagePage 鉄道路線機能', () => {
   const html = getWebGLHeritagePage('tester');
 
@@ -30,21 +39,16 @@ describe('getWebGLHeritagePage 鉄道路線機能', () => {
   });
 
   it('RAIL_LINES にロシア・中国が含まれない', () => {
-    const railBlockMatch = html.match(/var RAIL_LINES = (\[[\s\S]*?\n  \]);/);
-    expect(railBlockMatch).not.toBeNull();
-    const railBlock = railBlockMatch![1];
-    expect(railBlock).not.toContain('ロシア');
-    expect(railBlock).not.toContain('中国');
+    const lines = extractRailLines(html);
+    expect(lines.some((l) => l.country.indexOf('ロシア') !== -1)).toBe(false);
+    expect(lines.some((l) => l.country.indexOf('中国') !== -1)).toBe(false);
   });
 
   it('各路線は2駅以上の座標データを持つ', () => {
-    const railBlockMatch = html.match(/var RAIL_LINES = (\[[\s\S]*?\n  \]);/);
-    const railBlock = railBlockMatch![1];
-    const lineBlocks = Array.from(railBlock.matchAll(/stations:\[([\s\S]*?)\]\}/g));
-    expect(lineBlocks.length).toBeGreaterThanOrEqual(8);
-    lineBlocks.forEach((lb) => {
-      const stationCount = Array.from(lb[1].matchAll(/name:'([^']+)'/g)).length;
-      expect(stationCount).toBeGreaterThanOrEqual(2);
+    const lines = extractRailLines(html);
+    expect(lines.length).toBeGreaterThanOrEqual(8);
+    lines.forEach((line) => {
+      expect(line.stations.length).toBeGreaterThanOrEqual(2);
     });
   });
 
@@ -56,18 +60,18 @@ describe('getWebGLHeritagePage 鉄道路線機能', () => {
   });
 
   it('サウジアラビア・UAE・カタールの鉄道路線が始発駅から終着駅の座標つきで含まれる', () => {
-    const railBlockMatch = html.match(/var RAIL_LINES = (\[[\s\S]*?\n  \]);/);
-    expect(railBlockMatch).not.toBeNull();
-    const railBlock = railBlockMatch![1];
-    expect(railBlock).toContain('サウジアラビア');
-    expect(railBlock).toContain('メディナ駅');
-    expect(railBlock).toContain('マッカ駅');
-    expect(railBlock).toContain('アラブ首長国連邦');
-    expect(railBlock).toContain('アブダビ駅');
-    expect(railBlock).toContain('フジャイラ駅');
-    expect(railBlock).toContain('カタール');
-    expect(railBlock).toContain('アル・ワクラ駅');
-    expect(railBlock).toContain('ルサイル駅');
+    const lines = extractRailLines(html);
+    const names = lines.map((l) => l.country);
+    const stationNames = lines.flatMap((l) => l.stations.map((s) => s.name));
+    expect(names).toContain('サウジアラビア');
+    expect(stationNames).toContain('メディナ駅');
+    expect(stationNames).toContain('マッカ駅');
+    expect(names).toContain('アラブ首長国連邦');
+    expect(stationNames).toContain('アブダビ駅');
+    expect(stationNames).toContain('フジャイラ駅');
+    expect(names).toContain('カタール');
+    expect(stationNames).toContain('アル・ワクラ駅');
+    expect(stationNames).toContain('ルサイル駅');
 
     function haversineKm(la1: number, lo1: number, la2: number, lo2: number) {
       const R = 6371;
