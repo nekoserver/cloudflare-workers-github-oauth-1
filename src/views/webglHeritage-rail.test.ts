@@ -48,6 +48,13 @@ describe('getWebGLHeritagePage 鉄道路線機能', () => {
     });
   });
 
+  it('駅の行に座標データ属性が付与され、タップで地球儀を最大ズームで中心移動させる', () => {
+    expect(html).toContain('rail-station-row');
+    expect(html).toMatch(/data-lat="\s*'\s*\+\s*st\.lat\s*\+\s*'\s*"\s+data-lon="\s*'\s*\+\s*st\.lon\s*\+\s*'\s*"/);
+    expect(html).toMatch(/querySelectorAll\('\.rail-station-row'\)/);
+    expect(html).toMatch(/railModalOverlay\.classList\.remove\('open'\);\s*flyTo\(lat, lon\);\s*zoom = 1\.2;/);
+  });
+
   it('区間距離は haversine 公式で始発から終着まで加算した値と一致する', () => {
     function haversineKm(la1: number, lo1: number, la2: number, lo2: number) {
       const R = 6371;
