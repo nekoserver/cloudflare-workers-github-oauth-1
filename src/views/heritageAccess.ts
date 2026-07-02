@@ -665,13 +665,20 @@ function openAiModal(title, bodyText, isCached) {
 
 var AI_TOPICS = ['交通手段', '見どころ', '最寄り空港', '鉄道でのアクセス', '宿泊施設', 'スポーツ施設'];
 
+var HERITAGE_MITOKORO_TOPIC = '見どころ';
+var HERITAGE_MITOKORO_MODEL = '@cf/google/gemma-4-26b-a4b-it';
+
 function askAI(heritageName, topic, onComplete) {
   var prompt = '「' + heritageName + '」の「' + topic + '」について説明してください';
   openAiModal(heritageName + ' — ' + topic, '読み込み中...', false);
+  var requestBody = { message: prompt, source: 'api' };
+  // 「見どころ」は世界遺産ツールチップの👀アイコン判定（gemma-4-26b-a4b-it固定）が
+  // 参照するキャッシュのため、必ず同じモデルで生成してキャッシュ判定と一致させる。
+  if (topic === HERITAGE_MITOKORO_TOPIC) requestBody.model = HERITAGE_MITOKORO_MODEL;
   fetch('/api/aichat', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ message: prompt, source: 'api' })
+    body: JSON.stringify(requestBody)
   }).then(function(r) { return r.json(); }).then(function(data) {
     aiModalBody.textContent = data.response || data.error || '（応答なし）';
     if (data.response && data.id) {
