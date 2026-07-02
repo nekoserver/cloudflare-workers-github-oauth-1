@@ -52,6 +52,7 @@ import { getGitHubAccessToken, getGitHubLatestCommit, getGitHubCommitCount, getG
 import { getCookieValue, getCookieValues } from './utils/cookie';
 import { verifyResendWebhookSignature } from './utils/resendWebhook';
 import { verifyGitHubWebhookSignature } from './utils/githubWebhook';
+import { extractCfAuthUsername } from './utils/cfAuthAccess';
 import { postSlackMessage, openSlackModal, respondToInteraction } from './utils/slack';
 import { fetchPrDiff, runSummaryPipeline, buildSlackMessage, buildSummaryModal, buildSummaryFallbackBlocks, classifySummaryResult, resolveAiModel, extractDesignDiff, sanitizeBoxDrawing, detectCommitAgentFromText, detectCommitAgentFromPrText, describeModelSwitch, WORKER_BASE_URL, DESIGN_SPEC_CHECKLIST, DEFAULT_AI_MODEL, FALLBACK_AI_MODEL, type SummaryModalRow } from './utils/aiSummary';
 import { getSessionDurationSeconds, renewSession, resolveSessionDuration } from './utils/session';
@@ -9137,14 +9138,23 @@ app.post('/webhook/cf-auth', async (c) => {
   }
 
   const event = typeof payload.event === 'string' ? payload.event : 'unknown';
-  const user = typeof payload.user === 'string' ? payload.user
-    : typeof payload.login === 'string' ? payload.login
-    : typeof payload.email === 'string' ? payload.email
-    : 'unknown';
+  const usernameFromPayload = extractCfAuthUsername(payload);
+  const user = usernameFromPayload ?? 'unknown';
   const action = typeof payload.action === 'string' ? payload.action : '';
 
   logger.info('cf-auth webhook received', { event, user, action });
   c.executionCtx?.waitUntil(logWebhookEvent(c.env.DB, 'cf-auth', event, 'ok', { user, action }));
+
+  // ユーザー名が特定できない場合はアクセス権限を判定できないためNG
+  if (!usernameFromPayload) {
+    logger.warn('cf-auth webhook payload missing username', { event, action });
+    return c.json({ result: 'NG', reason: 'username not found in payload' }, 400);
+  }
+
+  const userSession = await getUserSession(c.env.DB, usernameFromPayload);
+  const hasAccess = userSession !== null;
+
+  logger.info('cf-auth access check result', { user: usernameFromPayload, hasAccess });
 
   const slackToken = c.env.SLACK_OAUTH_TOKEN;
   const slackChannel = c.env.SLACK_CHANNEL_ID;
@@ -9152,9 +9162,10 @@ app.post('/webhook/cf-auth', async (c) => {
     const lines = [
       `cf-auth: ${event}${action ? ' / ' + action : ''}`,
       `ユーザー: ${user}`,
+      `アクセス権限判定: ${hasAccess ? 'OK' : 'NG'}`,
     ];
     const extra = Object.entries(payload)
-      .filter(([k]) => !['event', 'action', 'user', 'login', 'email'].includes(k))
+      .filter(([k]) => !['event', 'action', 'user', 'username', 'login', 'email'].includes(k))
       .map(([k, v]) => `${k}: ${typeof v === 'object' ? JSON.stringify(v) : String(v)}`);
     if (extra.length > 0) lines.push(...extra.slice(0, 5));
 
@@ -9167,7 +9178,7 @@ app.post('/webhook/cf-auth', async (c) => {
     }
   }
 
-  return c.json({ ok: true });
+  return c.json({ result: hasAccess ? 'OK' : 'NG', user: usernameFromPayload });
 });
 
 /**
