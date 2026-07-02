@@ -103,15 +103,13 @@ canvas:active { cursor:grabbing; }
 #fault-tooltip { position:fixed; background:rgba(13,17,23,0.97); border:1px solid #f78166; border-radius:8px; padding:0; font-size:12px; color:#e6edf3; min-width:200px; max-width:280px; pointer-events:none; opacity:0; transition:opacity .15s; z-index:65; transform:translate(-50%,-115%); line-height:1.7; }
 #fault-tooltip.pinned { pointer-events:auto; transform:none; }
 .fault-tt-hdr { display:flex; align-items:center; justify-content:space-between; cursor:move; padding:5px 10px 3px; border-bottom:1px solid #30363d; user-select:none; }
-.fault-tt-name { font-weight:700; font-size:13px; color:#f78166; flex:1; cursor:pointer; }
-.fault-tt-name:hover { text-decoration:underline; }
+.fault-tt-name { font-weight:700; font-size:13px; color:#58a6ff; flex:1; cursor:pointer; text-decoration:none; }
 .fault-tt-close { font-size:14px; color:#8b949e; cursor:pointer; line-height:1; padding:10px; margin:-10px -8px -10px 0; flex-shrink:0; display:inline-flex; align-items:center; justify-content:center; }
 .fault-tt-close:hover { color:#e6edf3; }
 .fault-tt-body { padding:4px 12px 8px; }
 .vol-tt-hdr { display:flex; align-items:center; justify-content:space-between; padding:9px 13px 8px; border-bottom:1px solid #30363d; }
 .vol-tt-body { padding:9px 13px 12px; }
-.vol-tt-name { font-weight:700; font-size:13px; color:#ff9500; cursor:pointer; }
-.vol-tt-name:hover { text-decoration:underline; }
+.vol-tt-name { font-weight:700; font-size:13px; color:#58a6ff; cursor:pointer; text-decoration:none; }
 .vol-tt-close { font-size:14px; color:#8b949e; cursor:pointer; line-height:1; padding:0 2px; flex-shrink:0; }
 .vol-tt-close:hover { color:#e6edf3; }
 .vol-tt-sub { font-size:11px; color:#8b949e; }
