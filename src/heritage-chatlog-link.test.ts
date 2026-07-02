@@ -144,7 +144,7 @@ describe('世界遺産チャットログリンク: AI応答後のボタン色と
   it('askAI が onComplete に data.shareId を渡している（data.id ではない）', () => {
     const html = buildPage();
     const idx = html.indexOf('function askAI');
-    const block = html.slice(idx, idx + 700);
+    const block = html.slice(idx, idx + 1000);
     expect(block).toContain('data.shareId');
     expect(block).not.toContain('onComplete(data.id || null)');
   });
