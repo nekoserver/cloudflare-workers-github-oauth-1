@@ -315,7 +315,7 @@ void main() {
 <div class="body">
   <div id="f1-side" class="f1-side">
     <div class="f1-side-head">
-      <span class="f1-side-title">🏎️ F1 サーキット</span>
+      <span class="f1-side-title">📅 F1 日程 2026 🏎️</span>
       <button class="f1-side-close" id="f1-side-close">✕</button>
     </div>
     <div class="f1-cal" id="f1-cal"></div>
@@ -998,6 +998,12 @@ void main() {
   }
 
   function renderF1Calendar(year, month, blinkDay) {
+    if (year !== f1CalYear || month !== f1CalMonth) {
+      f1CalYear = year;
+      f1CalMonth = month;
+      f1CalMarkedDays = [];
+    }
+    if (blinkDay && f1CalMarkedDays.indexOf(blinkDay) === -1) f1CalMarkedDays.push(blinkDay);
     var first = new Date(year, month - 1, 1);
     var startWeekday = first.getDay();
     var daysInMonth = new Date(year, month, 0).getDate();
@@ -1005,12 +1011,12 @@ void main() {
     ['日', '月', '火', '水', '木', '金', '土'].forEach(function(w) { html += '<div class="f1-cal-dow">' + w + '</div>'; });
     for (var i = 0; i < startWeekday; i++) html += '<div class="f1-cal-cell f1-cal-empty"></div>';
     for (var d = 1; d <= daysInMonth; d++) {
-      html += '<div class="f1-cal-cell' + (d === blinkDay ? ' f1-cal-target' : '') + '" data-day="' + d + '">' + d + '</div>';
+      html += '<div class="f1-cal-cell' + (f1CalMarkedDays.indexOf(d) !== -1 ? ' f1-cal-target' : '') + '" data-day="' + d + '">' + d + '</div>';
     }
     html += '</div>';
     f1CalEl.innerHTML = html;
     if (blinkDay) {
-      var cell = f1CalEl.querySelector('.f1-cal-target');
+      var cell = f1CalEl.querySelector('.f1-cal-cell[data-day="' + blinkDay + '"]');
       if (cell) {
         cell.classList.add('f1-cal-flash');
         setTimeout(function() { cell.classList.remove('f1-cal-flash'); }, 1500);
@@ -1920,6 +1926,9 @@ void main() {
   var f1Side = document.getElementById('f1-side');
   var f1SideBody = document.getElementById('f1-side-body');
   var f1CalEl = document.getElementById('f1-cal');
+  var f1CalYear = null;
+  var f1CalMonth = null;
+  var f1CalMarkedDays = [];
   var f1TourIdx = -1;
   var f1TourRunning = false;
   var f1TourTimer = null;

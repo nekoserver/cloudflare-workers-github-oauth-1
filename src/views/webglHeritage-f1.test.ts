@@ -149,10 +149,33 @@ describe('getWebGLHeritagePage F1サーキット機能（左サイドパネル�
   it('renderF1Calendar は年月のカレンダーを描画し、指定日を3回点滅させる', () => {
     expect(html).toContain('function renderF1Calendar(year, month, blinkDay)');
     const idx = html.indexOf('function renderF1Calendar');
-    const block = html.slice(idx, idx + 1200);
+    const block = html.slice(idx, idx + 1600);
     expect(block).toContain('f1-cal-target');
     expect(block).toContain("cell.classList.add('f1-cal-flash');");
     expect(block).toMatch(/setTimeout\(function\(\) \{ cell\.classList\.remove\('f1-cal-flash'\); \}, 1500\);/);
+  });
+
+  it('パネル最上部の見出しは「📅 F1 日程 2026 🏎️」である', () => {
+    expect(html).toContain('<span class="f1-side-title">📅 F1 日程 2026 🏎️</span>');
+  });
+
+  it('カレンダーの開催日の表示枠は同月内で次の開催地に移っても消えず、複数日が同時に残る（f1CalMarkedDays）', () => {
+    expect(html).toContain('var f1CalMarkedDays = [];');
+    const idx = html.indexOf('function renderF1Calendar');
+    const block = html.slice(idx, idx + 1600);
+    // 月が変わらない限り f1CalMarkedDays をリセットせず、blinkDay を追記していく
+    expect(block).toMatch(/if \(year !== f1CalYear \|\| month !== f1CalMonth\) \{\s*f1CalYear = year;\s*f1CalMonth = month;\s*f1CalMarkedDays = \[\];\s*\}/);
+    expect(block).toMatch(/if \(blinkDay && f1CalMarkedDays\.indexOf\(blinkDay\) === -1\) f1CalMarkedDays\.push\(blinkDay\);/);
+    // 描画時は f1CalMarkedDays に含まれる全ての日付枠を維持する（blinkDay だけでなく）
+    expect(block).toMatch(/f1CalMarkedDays\.indexOf\(d\) !== -1 \? ' f1-cal-target' : ''/);
+  });
+
+  it('月が変わった場合はカレンダーの表示枠がリセットされる（前月の枠を新しい月に持ち越さない）', () => {
+    const idx = html.indexOf('function renderF1Calendar');
+    const block = html.slice(idx, idx + 400);
+    expect(block).toContain('f1CalYear = year;');
+    expect(block).toContain('f1CalMonth = month;');
+    expect(block).toContain('f1CalMarkedDays = [];');
   });
 
   it('🏎️ボタン押下時、アクセスした年月のカレンダーを開き当日の日付を点滅させる', () => {
