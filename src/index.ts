@@ -74,6 +74,7 @@ import { validateRevokeRequest } from './utils/revoke';
 import { HERITAGE_FLAG_MAP, HERITAGE_LIST } from './data/heritageList';
 import { RAIL_LINES } from './data/railLines';
 import { findNearbyStationsAndHeritage } from './utils/railLineStations';
+import { questionStartsWithHeritageBracket } from './utils/heritageQuestionMatch';
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -3652,14 +3653,16 @@ app.get('/api/aichat/heritage-search-keywords-check', authMiddleware, async (c) 
        INNER JOIN aichat_search_history ash ON ash.share_id = acs.id AND ash.user_id = ? AND ash.deleted_at IS NULL
        WHERE acs.user_id = ? AND acs.deleted_at IS NULL`
     ).bind(user.sub, user.sub).all<{ question: string }>();
-    const kwSet = new Set(keywords);
+    let remaining = keywords.length;
     for (const row of (rows.results ?? [])) {
+      if (remaining <= 0) break;
       const q = row.question || '';
-      const start = q.indexOf('「');
-      const end = q.indexOf('」', start + 1);
-      if (start === 0 && end > 1) {
-        const name = q.slice(1, end);
-        if (kwSet.has(name)) hasKeywords[name] = true;
+      for (const name of keywords) {
+        if (hasKeywords[name]) continue;
+        if (questionStartsWithHeritageBracket(q, name)) {
+          hasKeywords[name] = true;
+          remaining--;
+        }
       }
     }
   } catch {
