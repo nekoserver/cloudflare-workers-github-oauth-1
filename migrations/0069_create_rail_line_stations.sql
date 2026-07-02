@@ -8,7 +8,11 @@ CREATE TABLE IF NOT EXISTS rail_line_stations (
   lat REAL NOT NULL,
   lon REAL NOT NULL,
   station_country TEXT NOT NULL,
-  station_flag TEXT NOT NULL
+  station_flag TEXT NOT NULL,
+  distance_from_origin_km REAL NOT NULL DEFAULT 0,
+  distance_to_prev_km REAL NOT NULL DEFAULT 0,
+  distance_to_next_km REAL NOT NULL DEFAULT 0,
+  distance_to_terminal_km REAL NOT NULL DEFAULT 0
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_rail_line_stations_line_order ON rail_line_stations(line_name, station_order);
