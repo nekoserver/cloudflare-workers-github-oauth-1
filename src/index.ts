@@ -157,6 +157,7 @@ const STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
   { name: 'heritage_city_fetched',    migration: '0063',   description: '世界遺産都市検索済みフラグ',                              syncPolicy: 'auto' },
   { name: 'rail_station_cities',      migration: '0067',   description: '鉄道駅周辺都市キャッシュ',                                syncPolicy: 'auto' },
   { name: 'rail_station_fetched',     migration: '0067',   description: '鉄道駅都市検索済みフラグ',                                syncPolicy: 'auto' },
+  { name: 'cf_auth_access_log',       migration: '0068',   description: 'cf-authウェブフックのアクセス権限判定ログ（OK/NG）',        syncPolicy: 'auto' },
 ];
 
 const REQUIRED_STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
@@ -901,6 +902,18 @@ CREATE INDEX IF NOT EXISTS idx_user_sessions_revoked_at ON user_sessions(revoked
 CREATE INDEX IF NOT EXISTS idx_webhook_log_source ON webhook_log(source);
 CREATE INDEX IF NOT EXISTS idx_webhook_log_received_at ON webhook_log(received_at);`,
 
+  '0068': `CREATE TABLE IF NOT EXISTS cf_auth_access_log (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  username TEXT NOT NULL,
+  event TEXT,
+  action TEXT,
+  result TEXT NOT NULL,
+  reason TEXT,
+  checked_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_cf_auth_access_log_username ON cf_auth_access_log(username);
+CREATE INDEX IF NOT EXISTS idx_cf_auth_access_log_checked_at ON cf_auth_access_log(checked_at);`,
+
   '0063': `ALTER TABLE ai_chat_shares ADD COLUMN source TEXT;`,
 
   '0062': `CREATE TABLE IF NOT EXISTS uuid_history (
@@ -1273,6 +1286,7 @@ export const TABLE_COLUMN_KEYS: Record<string, ColumnKeyInfo> = {
   api_search_keywords:        { id: 'pk', keyword: 'idx' },
   api_search_keyword_sections: { id: 'pk', keyword_id: 'fk+idx', section_name: '' },
   webhook_log: { id: 'pk', source: 'idx', received_at: 'idx' },
+  cf_auth_access_log: { id: 'pk', username: 'idx', result: 'idx', checked_at: 'idx' },
   uuid_history: { id: 'pk', user_id: 'idx', uuid: 'idx', created_at: 'idx' },
   heritage_cities: { id: 'pk', heritage_name: 'idx', city_name: 'uk' },
   heritage_city_fetched: { heritage_name: 'pk' },
@@ -1345,6 +1359,7 @@ export const TABLE_GROUP_MAP: Record<string, string> = {
   api_search_keywords: 'system',
   api_search_keyword_sections: 'system',
   webhook_log: 'system',
+  cf_auth_access_log: 'system',
   uuid_history: 'system',
   heritage_cities: 'system',
   heritage_city_fetched: 'system',
@@ -1984,6 +1999,31 @@ async function logWebhookEvent(
     ).run();
   } catch (e) {
     logger.error('Failed to log webhook event', { source, error: e instanceof Error ? e.message : 'Unknown' });
+  }
+}
+
+async function logCfAuthAccessResult(
+  db: D1Database | undefined,
+  username: string,
+  event: string | null,
+  action: string | null,
+  result: 'OK' | 'NG',
+  reason?: string
+): Promise<void> {
+  if (!db) return;
+  try {
+    await db.prepare(
+      'INSERT INTO cf_auth_access_log (username, event, action, result, reason, checked_at) VALUES (?, ?, ?, ?, ?, ?)'
+    ).bind(
+      username,
+      event,
+      action || null,
+      result,
+      reason ?? null,
+      new Date().toISOString()
+    ).run();
+  } catch (e) {
+    logger.error('Failed to log cf-auth access result', { username, error: e instanceof Error ? e.message : 'Unknown' });
   }
 }
 
@@ -9148,6 +9188,9 @@ app.post('/webhook/cf-auth', async (c) => {
   // ユーザー名が特定できない場合はアクセス権限を判定できないためNG
   if (!usernameFromPayload) {
     logger.warn('cf-auth webhook payload missing username', { event, action });
+    c.executionCtx?.waitUntil(
+      logCfAuthAccessResult(c.env.DB, user, event, action, 'NG', 'username not found in payload')
+    );
     return c.json({ result: 'NG', reason: 'username not found in payload' }, 400);
   }
 
@@ -9155,6 +9198,16 @@ app.post('/webhook/cf-auth', async (c) => {
   const hasAccess = userSession !== null;
 
   logger.info('cf-auth access check result', { user: usernameFromPayload, hasAccess });
+  c.executionCtx?.waitUntil(
+    logCfAuthAccessResult(
+      c.env.DB,
+      usernameFromPayload,
+      event,
+      action,
+      hasAccess ? 'OK' : 'NG',
+      hasAccess ? undefined : 'user_sessions に登録がありません'
+    )
+  );
 
   const slackToken = c.env.SLACK_OAUTH_TOKEN;
   const slackChannel = c.env.SLACK_CHANNEL_ID;
