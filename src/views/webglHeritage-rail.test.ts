@@ -60,6 +60,10 @@ describe('getWebGLHeritagePage 鉄道路線機能', () => {
     });
   });
 
+  it('サイドパネル内の駅座標表示はデフォルトで非表示になっている', () => {
+    expect(html).toMatch(/\.rail-station-coord\s*\{\s*display:none;/);
+  });
+
   it('駅の行に座標データ属性が付与され、タップで地球儀を最大ズームで中心移動させる', () => {
     expect(html).toContain('rail-station-row');
     expect(html).toMatch(/data-lat="\s*'\s*\+\s*st\.lat\s*\+\s*'\s*"\s+data-lon="\s*'\s*\+\s*st\.lon\s*\+\s*'\s*"/);
