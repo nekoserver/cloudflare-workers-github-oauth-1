@@ -523,7 +523,7 @@ void main() {
 <div id="f1-circuit-pin" style="display:none;position:fixed;font-size:22px;z-index:295;pointer-events:none;transform:translate(-50%,-100%);line-height:1">🏎️</div>
 <div id="f1-circuit-pin-label" style="display:none;position:fixed;z-index:296;pointer-events:none;background:rgba(13,17,23,0.92);border:1px solid #388bfd;border-radius:8px;color:#c9d1d9;padding:4px 9px;white-space:nowrap;text-align:center;line-height:1.4;transform:translate(-50%,calc(-100% - 30px))">
   <button id="f1-circuit-pin-close-btn" class="pin-label-close-btn" aria-label="閉じる">✕</button>
-  <div id="f1-circuit-pin-name" style="font-weight:700;font-size:12px"></div>
+  <div id="f1-circuit-pin-name" style="font-weight:700;font-size:12px;pointer-events:auto;cursor:pointer;text-decoration:underline;"></div>
   <div id="f1-circuit-pin-date" style="opacity:.75;font-size:10px"></div>
   <button id="f1-tour-btn">🏁 巡回</button>
 </div>
@@ -531,7 +531,7 @@ void main() {
 <div id="rail-station-pin-label" style="display:none;position:fixed;z-index:296;pointer-events:none;background:rgba(13,17,23,0.92);border:1px solid #388bfd;border-radius:8px;color:#c9d1d9;padding:4px 9px;white-space:nowrap;text-align:center;line-height:1.4;transform:translate(-50%,calc(-100% - 30px))">
   <button id="rail-station-pin-close-btn" class="pin-label-close-btn" aria-label="閉じる">✕</button>
   <div id="rail-station-pin-line" style="opacity:.75;font-size:10px"></div>
-  <div id="rail-station-pin-name" style="font-weight:700;font-size:12px"></div>
+  <div id="rail-station-pin-name" style="font-weight:700;font-size:12px;pointer-events:auto;cursor:pointer;text-decoration:underline;"></div>
   <div id="rail-station-pin-route"></div>
   <button id="rail-station-alight-btn">🚶 途中下車</button>
 </div>
@@ -977,6 +977,10 @@ void main() {
     railStationPin3d = latLonTo3D(station.lat, station.lon);
     railStationPinLine.textContent = line.flag + ' ' + line.name;
     railStationPinName.textContent = station.name;
+    railStationPinName.onclick = function(e) {
+      e.stopPropagation();
+      flyTo(station.lat, station.lon);
+    };
     railStationPinRoute.innerHTML =
       originName + '-' + station.name + ' (' + fromOrigin.toFixed(1) + 'km)<br>' +
       station.name + '-' + terminalName + ' (' + toTerminal.toFixed(1) + 'km)';
@@ -1092,6 +1096,10 @@ void main() {
     zoom = 1.2;
     f1CircuitPin3d = latLonTo3D(race.lat, race.lon);
     f1CircuitPinName.textContent = race.flag + ' ' + race.circuit;
+    f1CircuitPinName.onclick = function(e) {
+      e.stopPropagation();
+      flyTo(race.lat, race.lon);
+    };
     f1CircuitPinDate.textContent = formatF1Date(race.date);
     f1SideBody.querySelectorAll('.f1-side-item').forEach(function(el) {
       el.classList.toggle('active', parseInt(el.getAttribute('data-idx'), 10) === idx);
