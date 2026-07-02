@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { getWebGLHeritagePage } from './webglHeritage';
 
-describe('getWebGLHeritagePage エリアズーム機能（活断層ページ同等）', () => {
+describe('getWebGLHeritagePage エリアズーム機能（種別ごとの巡回に汎用化）', () => {
   const html = getWebGLHeritagePage('tester');
 
   it('script タグ内の JS に構文エラーがない', () => {
@@ -15,17 +15,74 @@ describe('getWebGLHeritagePage エリアズーム機能（活断層ページ同�
     expect(count).toBeGreaterThan(0);
   });
 
+  it('AREA_KINDS に世界遺産・駅・F1会場・活火山・活断層の5種別が定義されている', () => {
+    const kindsMatch = html.match(/var AREA_KINDS = \[[\s\S]*?\n  \];/);
+    expect(kindsMatch).not.toBeNull();
+    const block = kindsMatch![0];
+    expect(block).toContain("key: 'heritage'");
+    expect(block).toContain("key: 'station'");
+    expect(block).toContain("key: 'f1'");
+    expect(block).toContain("key: 'volcano'");
+    expect(block).toContain("key: 'fault'");
+    expect(block).toContain("label: '世界遺産'");
+    expect(block).toContain("label: '駅'");
+    expect(block).toContain("label: 'F1会場'");
+    expect(block).toContain("label: '活火山'");
+    expect(block).toContain("label: '活断層'");
+  });
+
+  it('種別ごとのエリア内絞り込み関数がすべて存在する', () => {
+    expect(html).toContain('function getHeritagesInBounds()');
+    expect(html).toContain('function getStationsInBounds()');
+    expect(html).toContain('function getF1InBounds()');
+    expect(html).toContain('function getVolcanoesInBounds()');
+    expect(html).toContain('function getFaultsInBounds()');
+  });
+
+  it('巡回ロジック（areaTourStep/startAreaTour/stopAreaTour）は種別ごとに複製されず、共通関数として1つだけ定義されている（外部関数化・汎用化）', () => {
+    const occurrences = (re: RegExp) => (html.match(re) || []).length;
+    expect(occurrences(/function areaTourStep\(/g)).toBe(1);
+    expect(occurrences(/function startAreaTour\(/g)).toBe(1);
+    expect(occurrences(/function stopAreaTour\(/g)).toBe(1);
+    // areaTourStep / startAreaTour は種別設定(kind)を引数として受け取る汎用関数である
+    expect(html).toContain('function startAreaTour(kind)');
+    expect(html).toContain('function areaTourStep(kind, items)');
+  });
+
+  it('VOLCANOES・FAULTS のデータが埋め込まれている', () => {
+    expect(html).toMatch(/var VOLCANOES = \[/);
+    expect(html).toContain('"id":"fujisan"');
+    expect(html).toMatch(/var FAULTS = \[/);
+    expect(html).toContain('"id":"san_andreas"');
+  });
+
+  it('エリアメニューのボタンはエリア内が2件未満の種別を表示しない', () => {
+    const renderMatch = html.match(/function renderAreaMenu\(\)[\s\S]*?\n  \}/);
+    expect(renderMatch).not.toBeNull();
+    expect(renderMatch![0]).toContain('if (e.items.length < 2) return');
+  });
+
+  it('エリアメニューのボタンは「アイコン 種別名(件数)」の形式で表示される', () => {
+    const renderMatch = html.match(/function renderAreaMenu\(\)[\s\S]*?\n  \}/);
+    expect(renderMatch).not.toBeNull();
+    expect(renderMatch![0]).toContain("e.kind.icon + ' ' + e.kind.label + '(' + e.items.length + ')'");
+  });
+
+  it('種別ボタンを押した直後にその種別だけを対象とした巡回が始まる', () => {
+    const renderMatch = html.match(/function renderAreaMenu\(\)[\s\S]*?\n  \}/);
+    expect(renderMatch).not.toBeNull();
+    // ボタンクリック時、他の種別を経由せず直接 startAreaTour(kind) が呼ばれる
+    expect(renderMatch![0]).toMatch(/startAreaTour\(kind\)/);
+  });
+
   it('areaTourStep がフライ完了後にツールチップを表示するネスト構造を持つ', () => {
-    // 活断層ページ同等: flyTo → setTimeout(FLY_DUR+100) → tooltip → setTimeout(5000) → hideTooltip → next
-    // 旧実装: flyTo後すぐに showMarkerTooltip して 4200ms 待機するだけ
+    // flyTo → setTimeout(FLY_DUR+100) → tooltip 表示 → setTimeout(5000) → hideTooltip → next
     expect(html).toContain('FLY_DUR + 100');
-    // hideTooltip が areaTourStep のコールバック内で呼ばれる
-    expect(html).toMatch(/areaTourStep[\s\S]{0,3000}hideTooltip/);
+    expect(html).toMatch(/function areaTourStep\(kind, items\)[\s\S]{0,3000}hideTooltip/);
   });
 
   it('stopAreaTour が完了時以外でも hideTooltip を呼ぶ', () => {
-    // stopAreaTour 関数内で completed の if ブロックより前に hideTooltip が現れること
-    const stopMatch = html.match(/function stopAreaTour[\s\S]*?(?=function startAreaTour)/);
+    const stopMatch = html.match(/function stopAreaTour\(completed\) \{[\s\S]*?\n  \}/);
     expect(stopMatch).not.toBeNull();
     const stopFn = stopMatch![0];
     const hidePos = stopFn.indexOf('hideTooltip');
@@ -36,25 +93,24 @@ describe('getWebGLHeritagePage エリアズーム機能（活断層ページ同�
   });
 
   it('stopAreaTour が完了時に autoRot を再開する', () => {
-    const stopMatch = html.match(/function stopAreaTour[\s\S]*?(?=function startAreaTour)/);
+    const stopMatch = html.match(/function stopAreaTour\(completed\) \{[\s\S]*?\n  \}/);
     expect(stopMatch).not.toBeNull();
-    const stopFn = stopMatch![0];
-    expect(stopFn).toContain('autoRot = true');
+    expect(stopMatch![0]).toContain('autoRot = true');
   });
 
-  it('stopAreaTour が areaTourBtn のテキストを巡回にリセットする', () => {
-    const stopMatch = html.match(/function stopAreaTour[\s\S]*?(?=function startAreaTour)/);
+  it('stopAreaTour は巡回状態を解除してエリアメニューを再描画する', () => {
+    const stopMatch = html.match(/function stopAreaTour\(completed\) \{[\s\S]*?\n  \}/);
     expect(stopMatch).not.toBeNull();
     const stopFn = stopMatch![0];
-    expect(stopFn).toContain('巡回');
+    expect(stopFn).toContain('areaTourRunning = false');
+    expect(stopFn).toContain('areaTourKind = null');
+    expect(stopFn).toContain('renderAreaMenu()');
   });
 
   it('areaTourStep 内でズームを強制変更しない（巡回中のズーム解除防止）', () => {
-    // applyBoxZoom が設定したズームを巡回中も維持するため、areaTourStep 内で zoom を上書きしない
-    const stepMatch = html.match(/function areaTourStep[\s\S]*?(?=function applyBoxZoom)/);
+    const stepMatch = html.match(/function areaTourStep\(kind, items\)[\s\S]*?(?=function applyBoxZoom)/);
     expect(stepMatch).not.toBeNull();
     const fn = stepMatch![0];
-    // areaTourStep 内に zoom = の直接代入がないこと
     expect(fn).not.toMatch(/zoom\s*=\s*Math\.(min|max)/);
   });
 
@@ -62,12 +118,10 @@ describe('getWebGLHeritagePage エリアズーム機能（活断層ページ同�
     const applyMatch = html.match(/function applyBoxZoom[\s\S]*?(?=\n  canvas\.addEventListener)/);
     expect(applyMatch).not.toBeNull();
     const fn = applyMatch![0];
-    // flyTo の後に setTimeout でズームを設定する（即時設定ではない）
     const flyPos = fn.indexOf('flyTo(');
     const setTimeoutPos = fn.indexOf('setTimeout', flyPos);
     expect(flyPos).toBeGreaterThan(-1);
     expect(setTimeoutPos).toBeGreaterThan(flyPos);
-    // showAreaMenu が setTimeout コールバック内にある
     const showMenuPos = fn.indexOf('showAreaMenu', setTimeoutPos);
     expect(showMenuPos).toBeGreaterThan(setTimeoutPos);
   });

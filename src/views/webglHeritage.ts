@@ -1,6 +1,8 @@
 import { CITY_TO_KANA } from './webglHeritageUtils';
 import { HERITAGE_LIST } from '../data/heritageList';
 import { RAIL_LINES } from '../data/railLines';
+import { VOLCANOES } from '../data/volcanoes';
+import { FAULTS } from '../data/faults';
 
 function escH(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -720,7 +722,7 @@ void main() {
   var boxZoomOverlay = document.getElementById('box-select-overlay');
   var bx0 = 0, by0 = 0, bxCur = 0, byCur = 0, boxDragging = false;
   var btnBoxZoom = document.getElementById('btnBoxZoom');
-  var lastBoxBounds = null, areaMenuEl = null, areaTourTimer = null, areaTourIdx = 0, areaTourRunning = false;
+  var lastBoxBounds = null, areaMenuEl = null, areaTourTimer = null, areaTourIdx = 0, areaTourRunning = false, areaTourKind = null;
 
   btnBoxZoom.addEventListener('click', function() {
     boxZoomMode = !boxZoomMode;
@@ -754,22 +756,124 @@ void main() {
     var hx = ro[0]+t*rd[0], hy = ro[1]+t*rd[1], hz = ro[2]+t*rd[2];
     return { lat: Math.asin(Math.max(-1, Math.min(1, hy))) * 180 / Math.PI, lon: Math.atan2(-hz, hx) * 180 / Math.PI };
   }
-  function getHeritagesInBounds() {
+
+  // エリア内絞り込み・巡回ロジックの汎用化: アイコン種別ごとに個別実装せず、
+  // AREA_KINDS の設定（データ取得・座標取得・ツールチップ描画）を areaTourStep 等の共通関数へ渡す方式にする。
+  function inAreaBounds(lat, lon, b) {
+    if (b.lonCross) return lat >= b.latMin && lat <= b.latMax && (lon >= b.lonMin || lon <= b.lonMax);
+    return lat >= b.latMin && lat <= b.latMax && lon >= b.lonMin && lon <= b.lonMax;
+  }
+  function filterInBounds(list, getLatLon) {
     if (!lastBoxBounds) return [];
     var b = lastBoxBounds;
-    return HERITAGE.filter(function(d) { return d.lat >= b.latMin && d.lat <= b.latMax && (b.lonCross ? (d.lon >= b.lonMin || d.lon <= b.lonMax) : (d.lon >= b.lonMin && d.lon <= b.lonMax)); });
+    return list.filter(function(item) { var p = getLatLon(item); return inAreaBounds(p[0], p[1], b); });
   }
+  function getHeritagesInBounds() { return filterInBounds(HERITAGE, function(d) { return [d.lat, d.lon]; }); }
+  function getStationsInBounds() {
+    if (!lastBoxBounds) return [];
+    var b = lastBoxBounds, result = [];
+    RAIL_LINES.forEach(function(line) {
+      line.stations.forEach(function(st) {
+        if (inAreaBounds(st.lat, st.lon, b)) result.push({ st: st, line: line });
+      });
+    });
+    return result;
+  }
+  function getF1InBounds() { return filterInBounds(F1_CIRCUITS, function(r) { return [r.lat, r.lon]; }); }
+  function getVolcanoesInBounds() { return filterInBounds(VOLCANOES, function(v) { return [v.lat, v.lon]; }); }
+  function getFaultsInBounds() { return filterInBounds(FAULTS, function(f) { return [f.lat, f.lon]; }); }
+
+  function showGenericAreaTooltip(html) {
+    tooltip.innerHTML = html;
+    var cx = canvasRect.left + canvasRect.width / 2;
+    var cy = canvasRect.top + canvasRect.height / 2;
+    positionTooltip(cx, cy);
+    tooltip.style.opacity = '1';
+  }
+
+  var AREA_KINDS = [
+    {
+      key: 'heritage', icon: '🏛️', label: '世界遺産', color: '#3fb950', bg: '#0c2d1a',
+      getItems: function() { return getHeritagesInBounds(); },
+      locate: function(d) { return [d.lat, d.lon]; },
+      showTooltip: function(d) { showMarkerTooltip(HERITAGE.indexOf(d), 0, 0); }
+    },
+    {
+      key: 'station', icon: '🚉', label: '駅', color: '#58a6ff', bg: '#0c2233',
+      getItems: function() { return getStationsInBounds(); },
+      locate: function(item) { return [item.st.lat, item.st.lon]; },
+      showTooltip: function(item) {
+        showGenericAreaTooltip('<div class="tt-name">🚉 ' + item.line.flag + ' ' + item.line.name + ' ' + item.st.name + '</div>');
+      }
+    },
+    {
+      key: 'f1', icon: '🏎️', label: 'F1会場', color: '#f0883e', bg: '#2d1c0c',
+      getItems: function() { return getF1InBounds(); },
+      locate: function(r) { return [r.lat, r.lon]; },
+      showTooltip: function(r) {
+        showGenericAreaTooltip('<div class="tt-name">🏎️ ' + r.flag + ' ' + r.circuit + '</div><div class="tt-sub">' + r.gp + '　' + r.date + '</div>');
+      }
+    },
+    {
+      key: 'volcano', icon: '🌋', label: '活火山', color: '#ff9500', bg: '#2d1a0c',
+      getItems: function() { return getVolcanoesInBounds(); },
+      locate: function(v) { return [v.lat, v.lon]; },
+      showTooltip: function(v) {
+        showGenericAreaTooltip('<div class="tt-name">🌋 ' + v.n + '</div><div class="tt-sub">' + v.c + '　標高' + v.elev + 'm　最終噴火: ' + v.lastErupt + '</div>');
+      }
+    },
+    {
+      key: 'fault', icon: '🌐', label: '活断層', color: '#f85149', bg: '#2d0c0c',
+      getItems: function() { return getFaultsInBounds(); },
+      locate: function(f) { return [f.lat, f.lon]; },
+      showTooltip: function(f) {
+        showGenericAreaTooltip('<div class="tt-name">🌐 ' + f.n + '</div><div class="tt-sub">' + f.region + '　' + f.country + '　M' + f.maxMag + '</div>');
+      }
+    }
+  ];
+
+  function findAreaKind(key) {
+    for (var i = 0; i < AREA_KINDS.length; i++) { if (AREA_KINDS[i].key === key) return AREA_KINDS[i]; }
+    return null;
+  }
+
+  function renderAreaMenu() {
+    if (!areaMenuEl) return;
+    var entries = AREA_KINDS.map(function(k) { return { kind: k, items: k.getItems() }; });
+    var hasAny = entries.some(function(e) { return e.items.length >= 2; });
+    var buttonsHtml = entries.map(function(e) {
+      if (e.items.length < 2) return '';
+      var isActive = areaTourRunning && areaTourKind === e.kind;
+      var disabled = areaTourRunning && !isActive;
+      var label = isActive
+        ? '⏹ 停止 (' + (areaTourIdx + 1) + '/' + e.items.length + ')'
+        : e.kind.icon + ' ' + e.kind.label + '(' + e.items.length + ')';
+      return '<button class="area-kind-btn" data-kind="' + e.kind.key + '" style="width:100%;background:' + e.kind.bg + ';border:1px solid ' + e.kind.color + ';border-radius:6px;color:' + e.kind.color + ';font-size:11px;padding:6px 8px;margin-top:6px;cursor:pointer;opacity:' + (disabled ? '0.4' : '1') + '" ' + (disabled ? 'disabled' : '') + '>' + label + '</button>';
+    }).join('');
+    areaMenuEl.innerHTML =
+      '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:7px"><span style="font-size:11px;font-weight:700;color:#3fb950">📍 エリアメニュー</span><span id="areaMenuClose" style="cursor:pointer;color:#8b949e;font-size:14px;padding:0 3px;line-height:1">✕</span></div>' +
+      (hasAny ? buttonsHtml : '<div style="font-size:10px;color:#8b949e">エリア内に2件以上のアイコンがありません</div>') +
+      '<div id="areaTourProg" style="font-size:10px;color:#8b949e;text-align:center;margin-top:6px;min-height:14px"></div>';
+    document.getElementById('areaMenuClose').addEventListener('click', function(){ stopAreaTour(true); });
+    var kindBtns = areaMenuEl.querySelectorAll('.area-kind-btn');
+    for (var bi = 0; bi < kindBtns.length; bi++) {
+      (function(btn) {
+        btn.addEventListener('click', function() {
+          var kind = findAreaKind(btn.getAttribute('data-kind'));
+          if (!kind) return;
+          if (areaTourRunning && areaTourKind === kind) { stopAreaTour(false); }
+          else if (!areaTourRunning) { startAreaTour(kind); }
+        });
+      })(kindBtns[bi]);
+    }
+  }
+
   function stopAreaTour(completed) {
     areaTourRunning = false;
     if (areaTourTimer) { clearTimeout(areaTourTimer); areaTourTimer = null; }
     hideTooltip();
-    var btn = document.getElementById('areaTourBtn');
-    if (btn) {
-      var sites = getHeritagesInBounds();
-      btn.innerHTML = '🏛️ 巡回';
-      btn.disabled = sites.length === 0;
-      btn.style.opacity = sites.length === 0 ? '0.4' : '1';
-    }
+    areaTourKind = null;
+    renderAreaMenu();
     var prog = document.getElementById('areaTourProg');
     if (prog) prog.textContent = '';
     if (completed) {
@@ -780,28 +884,33 @@ void main() {
     }
   }
   function showAreaMenu() {
-    if (!areaMenuEl) { areaMenuEl = document.createElement('div'); areaMenuEl.style.cssText = 'position:absolute;right:10px;top:50%;transform:translateY(-50%);background:rgba(13,17,23,0.94);border:1px solid #30363d;border-radius:9px;padding:10px 12px;z-index:55;min-width:145px;box-shadow:0 4px 16px rgba(0,0,0,0.6);'; wrap.appendChild(areaMenuEl); }
-    var sites = getHeritagesInBounds();
-    areaMenuEl.innerHTML = '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:7px"><span style="font-size:11px;font-weight:700;color:#3fb950">📍 エリアメニュー</span><span id="areaMenuClose" style="cursor:pointer;color:#8b949e;font-size:14px;padding:0 3px;line-height:1">✕</span></div><div style="font-size:10px;color:#8b949e;margin-bottom:9px">🏛️ 世界遺産: ' + sites.length + '件</div><button id="areaTourBtn" style="width:100%;background:#0c2d1a;border:1px solid #3fb950;border-radius:6px;color:#3fb950;font-size:11px;padding:6px 8px;cursor:pointer;opacity:' + (sites.length === 0 ? '0.4' : '1') + '" ' + (sites.length === 0 ? 'disabled' : '') + '>🏛️ 巡回</button><div id="areaTourProg" style="font-size:10px;color:#8b949e;text-align:center;margin-top:6px;min-height:14px"></div>';
+    if (!areaMenuEl) { areaMenuEl = document.createElement('div'); areaMenuEl.style.cssText = 'position:absolute;right:10px;top:50%;transform:translateY(-50%);background:rgba(13,17,23,0.94);border:1px solid #30363d;border-radius:9px;padding:10px 12px;z-index:55;min-width:150px;box-shadow:0 4px 16px rgba(0,0,0,0.6);'; wrap.appendChild(areaMenuEl); }
     areaMenuEl.style.display = 'block';
-    document.getElementById('areaMenuClose').addEventListener('click', function(){ stopAreaTour(true); });
-    document.getElementById('areaTourBtn').addEventListener('click', function(){ areaTourRunning ? stopAreaTour(false) : startAreaTour(); });
+    renderAreaMenu();
   }
-  function startAreaTour() { var sites = getHeritagesInBounds(); if (sites.length === 0) return; areaTourRunning = true; areaTourIdx = 0; areaTourStep(sites); }
-  function areaTourStep(sites) {
-    if (!areaTourRunning || areaTourIdx >= sites.length) { stopAreaTour(true); return; }
-    var d = sites[areaTourIdx], prog = document.getElementById('areaTourProg'), btn = document.getElementById('areaTourBtn');
-    if (prog) prog.textContent = (areaTourIdx + 1) + ' / ' + sites.length;
-    if (btn) btn.textContent = '⏹ 停止 (' + (areaTourIdx + 1) + '/' + sites.length + ')';
-    flyTo(d.lat, d.lon);
+  function startAreaTour(kind) {
+    var items = kind.getItems();
+    if (items.length === 0) return;
+    areaTourRunning = true;
+    areaTourKind = kind;
+    areaTourIdx = 0;
+    areaTourStep(kind, items);
+  }
+  function areaTourStep(kind, items) {
+    if (!areaTourRunning || areaTourIdx >= items.length) { stopAreaTour(true); return; }
+    var d = items[areaTourIdx], pos = kind.locate(d);
+    renderAreaMenu();
+    var prog = document.getElementById('areaTourProg');
+    if (prog) prog.textContent = (areaTourIdx + 1) + ' / ' + items.length;
+    flyTo(pos[0], pos[1]);
     areaTourTimer = setTimeout(function() {
       if (!areaTourRunning) return;
-      showMarkerTooltip(HERITAGE.indexOf(d), 0, 0);
+      kind.showTooltip(d);
       areaTourTimer = setTimeout(function() {
         if (!areaTourRunning) return;
         hideTooltip();
         areaTourIdx++;
-        areaTourStep(sites);
+        areaTourStep(kind, items);
       }, 5000);
     }, FLY_DUR + 100);
   }
@@ -868,6 +977,10 @@ void main() {
     { gp:'カタールGP', circuit:'ロサイル・インターナショナル・サーキット', flag:'🇶🇦', country:'カタール', date:'2026-11-29', lat:25.4900, lon:51.4542 },
     { gp:'アブダビGP', circuit:'ヤス・マリーナ・サーキット', flag:'🇦🇪', country:'アラブ首長国連邦', date:'2026-12-06', lat:24.4672, lon:54.6031 }
   ];
+
+  var VOLCANOES = ${JSON.stringify(VOLCANOES)};
+
+  var FAULTS = ${JSON.stringify(FAULTS.map(function(f) { return { id: f.id, n: f.n, t: f.t, region: f.region, country: f.country, maxMag: f.maxMag, lastMajor: f.lastMajor, lat: f.center[0], lon: f.center[1] }; }))};
 
   function typeColor(t) {
     return t === '文化遺産' ? '#e3a838' : (t === '自然遺産' ? '#3fb950' : '#a371f7');
