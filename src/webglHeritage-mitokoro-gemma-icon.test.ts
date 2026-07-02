@@ -23,12 +23,17 @@ describe('世界遺産ツールチップ: 見どころ×gemma-4-26b-a4b-it キ�
   it('キャッシュがある世界遺産のツールチップ名の行末に👀アイコンを表示する', () => {
     expect(html).toMatch(/var gemmaShareId = heritageMitokoroGemmaShareId\[d\.n\];/);
     expect(html).toMatch(/var gemmaIcon = gemmaShareId \? ' <span id="tt-mitokoro-gemma-btn"/);
-    expect(html).toMatch(/d\.n \+ cityIcon \+ gemmaIcon/);
+    expect(html).toMatch(/d\.n \+ cityIcon \+ gemmaIcon \+ llamaIcon/);
   });
 
-  it('👀アイコンをタップすると最上位レイヤーのモーダル(openHeritageMitokoroGemmaModal)を開く', () => {
-    expect(html).toContain('function openHeritageMitokoroGemmaModal(heritageName, shareId)');
-    expect(html).toMatch(/openHeritageMitokoroGemmaModal\(name, shareId\);/);
+  it('👀アイコンをタップすると最上位レイヤーのモーダル(openHeritageMitokoroCacheModal)を開く', () => {
+    expect(html).toContain('function openHeritageMitokoroCacheModal(icon, heritageName, shareId)');
+    expect(html).toMatch(/openHeritageMitokoroCacheModal\('👀', name, shareId\);/);
+  });
+
+  it('モーダルのタイトルにモデル名の括弧表記は含まれない（撤去済み）', () => {
+    expect(html).toContain("titleEl.textContent = icon + ' ' + heritageName + ' — 見どころ';");
+    expect(html).not.toContain('見どころ (gemma-4-26b-a4b-it)');
   });
 
   it('モーダルは getNextZ() で最上位の z-index を動的に算出する', () => {
@@ -39,5 +44,24 @@ describe('世界遺産ツールチップ: 見どころ×gemma-4-26b-a4b-it キ�
   it('モーダルは /api/aichat/shares/:id から回答本文を取得して表示する', () => {
     expect(html).toContain("fetch('/api/aichat/shares/' + encodeURIComponent(shareId))");
     expect(html).toMatch(/body\.textContent = data\.answer \|\| data\.error \|\| '（応答なし）';/);
+  });
+});
+
+describe('世界遺産ツールチップ: 見どころ×llama-3.3-70b-instruct-fp8-fast キャッシュの👁️アイコン', () => {
+  const html = getWebGLHeritagePage('tester');
+
+  it('ページ読み込み時に見どころ×llamaキャッシュを一括取得する', () => {
+    expect(html).toContain("fetch('/api/aichat/check-heritage-mitokoro-llama-batch'");
+    expect(html).toContain('heritageMitokoroLlamaShareId');
+  });
+
+  it('キャッシュがある世界遺産のツールチップ名の行末に👁️アイコンを表示する', () => {
+    expect(html).toMatch(/var llamaShareId = heritageMitokoroLlamaShareId\[d\.n\];/);
+    expect(html).toMatch(/var llamaIcon = llamaShareId \? ' <span id="tt-mitokoro-llama-btn"/);
+    expect(html).toContain('👁️');
+  });
+
+  it('👁️アイコンをタップするとllama用のモーダルを開く', () => {
+    expect(html).toMatch(/openHeritageMitokoroCacheModal\('👁️', name, shareId\);/);
   });
 });

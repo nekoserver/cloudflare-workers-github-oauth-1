@@ -892,6 +892,7 @@ void main() {
   var hasCityDataSet = {};
   var hasStationDataSet = {};
   var heritageMitokoroGemmaShareId = {};
+  var heritageMitokoroLlamaShareId = {};
 
   fetch('/api/heritage-city-fetched-list').then(function(r){ return r.json(); }).then(function(d){
     if(d && d.names) { d.names.forEach(function(n){ hasCityDataSet[n] = true; }); updateCityIcons(); }
@@ -907,6 +908,14 @@ void main() {
     body: JSON.stringify({ heritages: HERITAGE.map(function(d) { return d.n; }) })
   }).then(function(r) { return r.json(); }).then(function(d) {
     if (d && d.cached) heritageMitokoroGemmaShareId = d.cached;
+  }).catch(function(){});
+
+  fetch('/api/aichat/check-heritage-mitokoro-llama-batch', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ heritages: HERITAGE.map(function(d) { return d.n; }) })
+  }).then(function(r) { return r.json(); }).then(function(d) {
+    if (d && d.cached) heritageMitokoroLlamaShareId = d.cached;
   }).catch(function(){});
 
   function cacheStationCities(name, lat, lon) {
@@ -2509,8 +2518,10 @@ void main() {
     var col = typeColor(d.t);
     var cityIcon = hasCityDataSet[d.n] ? ' 🌆' : '';
     var gemmaShareId = heritageMitokoroGemmaShareId[d.n];
+    var llamaShareId = heritageMitokoroLlamaShareId[d.n];
     var gemmaIcon = gemmaShareId ? ' <span id="tt-mitokoro-gemma-btn" style="cursor:pointer;" title="見どころ(gemma-4-26b-a4b-it)の説明を表示">👀</span>' : '';
-    tooltip.innerHTML = '<div class="tt-name">' + d.e + ' ' + d.f + ' ' + d.n + cityIcon + gemmaIcon + '</div><div class="tt-sub"><span style="color:' + col + ';font-weight:600">' + d.t + '</span>  ' + d.c + '  ' + d.y + '年登録</div><div style="margin-top:7px;text-align:center;"><button id="tt-land-btn" style="background:#0c2d1a;border:1px solid #3fb950;border-radius:6px;color:#3fb950;font-size:11px;padding:4px 12px;cursor:pointer;font-family:inherit;">🚶 地表に降り立つ</button></div>';
+    var llamaIcon = llamaShareId ? ' <span id="tt-mitokoro-llama-btn" style="cursor:pointer;" title="見どころ(llama-3.3-70b-instruct-fp8-fast)の説明を表示">👁️</span>' : '';
+    tooltip.innerHTML = '<div class="tt-name">' + d.e + ' ' + d.f + ' ' + d.n + cityIcon + gemmaIcon + llamaIcon + '</div><div class="tt-sub"><span style="color:' + col + ';font-weight:600">' + d.t + '</span>  ' + d.c + '  ' + d.y + '年登録</div><div style="margin-top:7px;text-align:center;"><button id="tt-land-btn" style="background:#0c2d1a;border:1px solid #3fb950;border-radius:6px;color:#3fb950;font-size:11px;padding:4px 12px;cursor:pointer;font-family:inherit;">🚶 地表に降り立つ</button></div>';
     var landBtn = document.getElementById('tt-land-btn');
     if (landBtn) {
       (function(ci) {
@@ -2522,9 +2533,18 @@ void main() {
       (function(name, shareId) {
         mitokoroGemmaBtn.addEventListener('click', function(e) {
           e.stopPropagation();
-          openHeritageMitokoroGemmaModal(name, shareId);
+          openHeritageMitokoroCacheModal('👀', name, shareId);
         });
       })(d.n, gemmaShareId);
+    }
+    var mitokoroLlamaBtn = document.getElementById('tt-mitokoro-llama-btn');
+    if (mitokoroLlamaBtn) {
+      (function(name, shareId) {
+        mitokoroLlamaBtn.addEventListener('click', function(e) {
+          e.stopPropagation();
+          openHeritageMitokoroCacheModal('👁️', name, shareId);
+        });
+      })(d.n, llamaShareId);
     }
     if (vx === 0 && vy === 0) {
       var cx = canvasRect.left + canvasRect.width / 2;
@@ -2547,7 +2567,7 @@ void main() {
     return max + 100;
   }
 
-  function openHeritageMitokoroGemmaModal(heritageName, shareId) {
+  function openHeritageMitokoroCacheModal(icon, heritageName, shareId) {
     var overlay = document.createElement('div');
     overlay.setAttribute('data-overlay', '');
     overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:' + getNextZ() + ';display:flex;align-items:center;justify-content:center;padding:20px;';
@@ -2558,7 +2578,7 @@ void main() {
     var head = document.createElement('div');
     head.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid #21262d;flex-shrink:0;gap:10px;';
     var titleEl = document.createElement('span');
-    titleEl.textContent = '👀 ' + heritageName + ' — 見どころ (gemma-4-26b-a4b-it)';
+    titleEl.textContent = icon + ' ' + heritageName + ' — 見どころ';
     titleEl.style.cssText = 'font-weight:700;font-size:13px;color:#e6edf3;';
     var closeBtn = document.createElement('button');
     closeBtn.textContent = '✕';
