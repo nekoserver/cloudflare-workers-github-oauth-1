@@ -71,7 +71,9 @@ import { AICHAT_MODEL_MAX_TOKENS, getModelRunParams, assignModelColors } from '.
 import { extractFunctionSource } from './utils/extractFunctionSource';
 import { listD1Databases, getD1Tables } from './utils/cloudflareApi';
 import { validateRevokeRequest } from './utils/revoke';
-import { HERITAGE_FLAG_MAP } from './data/heritageList';
+import { HERITAGE_FLAG_MAP, HERITAGE_LIST } from './data/heritageList';
+import { RAIL_LINES } from './data/railLines';
+import { findNearbyStationsAndHeritage } from './utils/railLineStations';
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -158,7 +160,9 @@ const STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
   { name: 'rail_station_cities',      migration: '0067',   description: '鉄道駅周辺都市キャッシュ',                                syncPolicy: 'auto' },
   { name: 'rail_station_fetched',     migration: '0067',   description: '鉄道駅都市検索済みフラグ',                                syncPolicy: 'auto' },
   { name: 'cf_auth_access_log',       migration: '0068',   description: 'cf-authウェブフックのアクセス権限判定ログ（OK/NG）',        syncPolicy: 'auto' },
-  { name: 'rail_line_stations',       migration: '0069',   description: '世界の鉄道路線モーダルの全駅データ（座標・国・国旗・順序）',    syncPolicy: 'manual' },
+  { name: 'rail_line_stations',       migration: '0069',   description: '世界の鉄道路線サイドパネルの全駅データ（座標・国・国旗・順序）',    syncPolicy: 'manual' },
+  { name: 'rail_station_nearby_points', migration: '0070', description: '駅から100km圏内の駅・世界遺産の距離キャッシュ',              syncPolicy: 'auto' },
+  { name: 'rail_station_nearby_fetched', migration: '0070', description: '駅の近隣ポイント検索済みフラグ',                              syncPolicy: 'auto' },
 ];
 
 const REQUIRED_STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
@@ -935,6 +939,24 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_rail_line_stations_line_order ON rail_line
 CREATE INDEX IF NOT EXISTS idx_rail_line_stations_line_name ON rail_line_stations(line_name);
 CREATE INDEX IF NOT EXISTS idx_rail_line_stations_country ON rail_line_stations(station_country);`,
 
+  '0070': `CREATE TABLE IF NOT EXISTS rail_station_nearby_points (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  station_name TEXT NOT NULL,
+  point_type TEXT NOT NULL,
+  point_name TEXT NOT NULL,
+  point_lat REAL NOT NULL,
+  point_lon REAL NOT NULL,
+  distance_km REAL NOT NULL,
+  fetched_at TEXT DEFAULT (datetime('now'))
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_rail_station_nearby_points_unique ON rail_station_nearby_points(station_name, point_type, point_name);
+CREATE INDEX IF NOT EXISTS idx_rail_station_nearby_points_station ON rail_station_nearby_points(station_name);
+CREATE TABLE IF NOT EXISTS rail_station_nearby_fetched (
+  station_name TEXT PRIMARY KEY,
+  fetched_at TEXT DEFAULT (datetime('now')),
+  point_count INTEGER DEFAULT 0
+);`,
+
   '0063': `ALTER TABLE ai_chat_shares ADD COLUMN source TEXT;`,
 
   '0062': `CREATE TABLE IF NOT EXISTS uuid_history (
@@ -1314,6 +1336,8 @@ export const TABLE_COLUMN_KEYS: Record<string, ColumnKeyInfo> = {
   rail_station_cities: { id: 'pk', station_name: 'idx', city_name: 'uk' },
   rail_station_fetched: { station_name: 'pk' },
   rail_line_stations: { id: 'pk', line_name: 'idx', station_order: 'idx', station_country: 'idx' },
+  rail_station_nearby_points: { id: 'pk', station_name: 'idx', point_type: 'idx', point_name: 'idx' },
+  rail_station_nearby_fetched: { station_name: 'pk' },
 };
 
 export function getColumnKeyType(tableName: string, columnName: string): ColumnKeyType {
@@ -1388,6 +1412,8 @@ export const TABLE_GROUP_MAP: Record<string, string> = {
   rail_station_cities: 'system',
   rail_station_fetched: 'system',
   rail_line_stations: 'system',
+  rail_station_nearby_points: 'system',
+  rail_station_nearby_fetched: 'system',
   keyword_category_groups: 'search',
   keyword_multi_labels: 'search',
   ts_repository:          'ts-catalog',
@@ -4795,6 +4821,47 @@ app.get('/api/rail-station-fetched-list', authMiddleware, async (c) => {
   if (!db) return c.json({ names: [] });
   const rows = await db.prepare('SELECT station_name FROM rail_station_fetched WHERE city_count > 0').all<{ station_name: string }>();
   return c.json({ names: rows.results.map(r => r.station_name) });
+});
+
+const RAIL_STATION_NEARBY_RADIUS_KM = 100;
+
+app.get('/api/rail-station-nearby', authMiddleware, async (c) => {
+  const db = c.env.DB;
+  if (!db) return c.json({ error: 'DB unavailable' }, 503);
+  const name = c.req.query('name') || '';
+  if (!name) return c.json({ error: 'name required' }, 400);
+  const fetched = await db.prepare('SELECT point_count FROM rail_station_nearby_fetched WHERE station_name = ?').bind(name).first<{ point_count: number }>();
+  if (!fetched) return c.json({ fetched: false });
+  const result = await db.prepare(
+    'SELECT point_type, point_name, point_lat, point_lon, distance_km FROM rail_station_nearby_points WHERE station_name = ? ORDER BY distance_km'
+  ).bind(name).all<{ point_type: string; point_name: string; point_lat: number; point_lon: number; distance_km: number }>();
+  return c.json({ fetched: true, points: result.results });
+});
+
+app.post('/api/rail-station-nearby', authMiddleware, async (c) => {
+  const db = c.env.DB;
+  if (!db) return c.json({ error: 'DB unavailable' }, 503);
+  const body = await c.req.json<{ name: string; lat: number; lon: number; force?: boolean }>().catch(() => null);
+  if (!body || !body.name || body.lat == null || body.lon == null) return c.json({ error: 'name, lat, lon required' }, 400);
+  const { name, lat, lon, force } = body;
+
+  if (force) {
+    await db.prepare('DELETE FROM rail_station_nearby_fetched WHERE station_name = ?').bind(name).run();
+  }
+
+  const points = findNearbyStationsAndHeritage(RAIL_LINES, HERITAGE_LIST, lat, lon, RAIL_STATION_NEARBY_RADIUS_KM, name);
+
+  if (points.length > 0) {
+    const stmt = db.prepare('INSERT OR IGNORE INTO rail_station_nearby_points (station_name, point_type, point_name, point_lat, point_lon, distance_km) VALUES (?, ?, ?, ?, ?, ?)');
+    await db.batch(points.map(p => stmt.bind(name, p.pointType, p.pointName, p.lat, p.lon, p.distanceKm)));
+  }
+
+  const allPoints = await db.prepare(
+    'SELECT point_type, point_name, point_lat, point_lon, distance_km FROM rail_station_nearby_points WHERE station_name = ? ORDER BY distance_km'
+  ).bind(name).all<{ point_type: string; point_name: string; point_lat: number; point_lon: number; distance_km: number }>();
+  await db.prepare('INSERT OR REPLACE INTO rail_station_nearby_fetched (station_name, point_count) VALUES (?, ?)').bind(name, allPoints.results.length).run();
+
+  return c.json({ fetched: true, points: allPoints.results });
 });
 
 app.get('/api/heritage-country-stats', authMiddleware, async (c) => {

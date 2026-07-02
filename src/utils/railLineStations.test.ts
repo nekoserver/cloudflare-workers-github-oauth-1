@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { buildRailLineStationRows, haversineKm } from './railLineStations';
+import { buildRailLineStationRows, haversineKm, findNearbyStationsAndHeritage } from './railLineStations';
 import { RAIL_LINES } from '../data/railLines';
 import type { RailLine } from '../data/railLines';
+import type { HeritagePoint } from './railLineStations';
 
 describe('buildRailLineStationRows', () => {
   it('各路線の駅数の合計と同じ件数の行を生成する', () => {
@@ -130,5 +131,47 @@ describe('buildRailLineStationRows', () => {
     const km = haversineKm(35.681, 139.767, 34.734, 135.5);
     expect(km).toBeGreaterThan(390);
     expect(km).toBeLessThan(410);
+  });
+});
+
+describe('findNearbyStationsAndHeritage', () => {
+  const lineA: RailLine = {
+    name: '路線A', flag: '🏳️', country: 'テスト国', stations: [
+      { name: '起点駅', lat: 0, lon: 0 },
+      { name: '近傍駅', lat: 0, lon: 0.5 },
+      { name: '遠方駅', lat: 0, lon: 50 },
+    ],
+  };
+  const heritageNear: HeritagePoint = { n: '近傍遺産', f: '🏛️', lat: 0.3, lon: 0 };
+  const heritageFar: HeritagePoint = { n: '遠方遺産', f: '🏛️', lat: 50, lon: 50 };
+
+  it('半径内の駅と世界遺産のみを距離昇順で返す', () => {
+    const results = findNearbyStationsAndHeritage([lineA], [heritageNear, heritageFar], 0, 0, 100, '起点駅');
+    expect(results.map(r => r.pointName)).toEqual(['近傍遺産', '近傍駅']);
+    expect(results[0].distanceKm).toBeLessThan(results[1].distanceKm);
+  });
+
+  it('excludeStationName に一致する駅は自分自身として除外する', () => {
+    const results = findNearbyStationsAndHeritage([lineA], [], 0, 0, 100, '起点駅');
+    expect(results.some(r => r.pointName === '起点駅')).toBe(false);
+  });
+
+  it('半径外の駅・世界遺産は含めない', () => {
+    const results = findNearbyStationsAndHeritage([lineA], [heritageNear, heritageFar], 0, 0, 100, '起点駅');
+    expect(results.some(r => r.pointName === '遠方駅')).toBe(false);
+    expect(results.some(r => r.pointName === '遠方遺産')).toBe(false);
+  });
+
+  it('pointType が station/heritage で正しく区別される', () => {
+    const results = findNearbyStationsAndHeritage([lineA], [heritageNear], 0, 0, 100, '起点駅');
+    const station = results.find(r => r.pointName === '近傍駅');
+    const heritage = results.find(r => r.pointName === '近傍遺産');
+    expect(station?.pointType).toBe('station');
+    expect(heritage?.pointType).toBe('heritage');
+  });
+
+  it('該当する駅・世界遺産が無ければ空配列を返す', () => {
+    const results = findNearbyStationsAndHeritage([lineA], [], 0, 0, 1, '起点駅');
+    expect(results).toEqual([]);
   });
 });

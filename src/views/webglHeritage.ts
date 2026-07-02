@@ -147,6 +147,12 @@ canvas:active { cursor:grabbing; }
 .rail-station-row { cursor:pointer; }
 .rail-station-row:hover { background:#161b22; }
 .rail-station-row:active { background:#1c2530; }
+.rail-tour-btn { background:#161b22; border:1px solid #30363d; border-radius:6px; color:#8b949e; font-size:10px; padding:3px 8px; cursor:pointer; font-family:inherit; white-space:nowrap; margin-left:8px; }
+.rail-tour-btn:hover { border-color:#58a6ff; color:#58a6ff; }
+.rail-tour-btn.active { border-color:#3fb950; color:#3fb950; }
+.rail-station-row.rail-tour-active { background:#0c2d1a; }
+#rail-station-pin-route { font-size:10px; color:#8b949e; margin-top:2px; line-height:1.5; }
+#rail-station-alight-btn { display:none; margin-top:6px; background:#0c2d1a; border:1px solid #3fb950; border-radius:6px; color:#3fb950; font-size:11px; padding:4px 12px; cursor:pointer; font-family:inherit; pointer-events:auto; }
 .f1-side { display:none; position:absolute; left:0; top:0; bottom:0; width:min(85vw,280px); background:#0d1117; border-right:1px solid #30363d; z-index:90; flex-direction:column; box-shadow:4px 0 24px rgba(0,0,0,.7); }
 .f1-side.open { display:flex; }
 .f1-side-head { padding:12px 16px; border-bottom:1px solid #21262d; display:flex; align-items:center; gap:8px; flex-shrink:0; }
@@ -321,6 +327,13 @@ void main() {
     <div class="f1-cal" id="f1-cal"></div>
     <div class="f1-side-body" id="f1-side-body"></div>
   </div>
+  <div id="rail-side" class="f1-side">
+    <div class="f1-side-head">
+      <span class="f1-side-title">🚉 世界の鉄道路線</span>
+      <button class="f1-side-close" id="rail-side-close">✕</button>
+    </div>
+    <div class="f1-side-body" id="rail-side-body"></div>
+  </div>
   <div class="canvas-wrap">
     <canvas id="c"></canvas>
     <div id="markers"></div>
@@ -463,16 +476,6 @@ void main() {
   </div>
 </div>
 
-<div id="rail-modal-overlay" class="cities-modal-overlay">
-  <div class="cities-modal" style="width:min(94vw,560px)">
-    <div class="cities-modal-head">
-      <span class="cities-modal-title">🚉 世界の鉄道路線</span>
-      <button class="cities-modal-close" id="rail-modal-close">✕</button>
-    </div>
-    <div class="cities-modal-body" id="rail-modal-body"></div>
-  </div>
-</div>
-
 <div id="ch-overlay" class="ch-overlay">
   <div class="ch-panel">
     <div class="ch-head">
@@ -525,6 +528,8 @@ void main() {
 <div id="rail-station-pin-label" style="display:none;position:fixed;z-index:296;pointer-events:none;background:rgba(13,17,23,0.92);border:1px solid #388bfd;border-radius:8px;color:#c9d1d9;padding:4px 9px;white-space:nowrap;text-align:center;line-height:1.4;transform:translate(-50%,calc(-100% - 30px))">
   <div id="rail-station-pin-line" style="opacity:.75;font-size:10px"></div>
   <div id="rail-station-pin-name" style="font-weight:700;font-size:12px"></div>
+  <div id="rail-station-pin-route"></div>
+  <button id="rail-station-alight-btn">🚶 途中下車</button>
 </div>
 
 <script>
@@ -917,25 +922,119 @@ void main() {
     return total;
   }
 
-  function renderRailModalRows() {
+  function railLineCumulativeKm(line) {
+    var cum = [0];
+    for (var i = 1; i < line.stations.length; i++) {
+      cum.push(cum[i-1] + haversineKm(line.stations[i-1].lat, line.stations[i-1].lon, line.stations[i].lat, line.stations[i].lon));
+    }
+    return cum;
+  }
+
+  function renderRailSideBody() {
     var html = '';
     RAIL_LINES.forEach(function(line, li) {
       var total = railLineTotalKm(line);
-      html += '<details class="rail-line-details"' + (li === 0 ? ' open' : '') + '>' +
-        '<summary class="rail-line-summary">' + line.flag + ' ' + line.name + '<span class="rail-line-total">全長 ' + total.toFixed(1) + ' km</span></summary>' +
+      html += '<div class="rail-line-details">' +
+        '<div class="rail-line-summary">' + line.flag + ' ' + line.name +
+          '<span class="rail-line-total">全長 ' + total.toFixed(1) + ' km</span>' +
+          '<button class="rail-tour-btn" data-line-idx="' + li + '">🚉 巡回</button>' +
+        '</div>' +
         '<div class="rail-line-stations">';
       line.stations.forEach(function(st, si) {
         var segStr = si === 0 ? '起点' : ('+' + haversineKm(line.stations[si-1].lat, line.stations[si-1].lon, st.lat, st.lon).toFixed(1) + ' km');
         var cacheIcon = hasStationDataSet[st.name] ? '🚉 ' : '';
-        html += '<div class="cities-modal-row rail-station-row" data-name="' + st.name + '" data-line="' + line.flag + ' ' + line.name + '" data-lat="' + st.lat + '" data-lon="' + st.lon + '">' +
-          '<span class="cities-modal-name">' + cacheIcon + st.name + '</span>' +
+        html += '<div class="cities-modal-row rail-station-row" data-line-idx="' + li + '" data-station-idx="' + si + '" data-name="' + st.name + '" data-line="' + line.flag + ' ' + line.name + '" data-lat="' + st.lat + '" data-lon="' + st.lon + '">' +
+          '<span class="cities-modal-name">' + cacheIcon + (si + 1) + '. ' + st.name + '</span>' +
           '<span class="rail-station-coord">' + st.lat.toFixed(3) + ', ' + st.lon.toFixed(3) + '</span>' +
           '<span class="cities-modal-dist">' + segStr + '</span>' +
           '</div>';
       });
-      html += '</div></details>';
+      html += '</div></div>';
     });
     return html;
+  }
+
+  function showRailStationPin(line, station, stationIdx) {
+    var cum = railLineCumulativeKm(line);
+    var total = cum[cum.length - 1];
+    var originName = line.stations[0].name;
+    var terminalName = line.stations[line.stations.length - 1].name;
+    var fromOrigin = cum[stationIdx];
+    var toTerminal = total - cum[stationIdx];
+    railStationPin3d = latLonTo3D(station.lat, station.lon);
+    railStationPinLine.textContent = line.flag + ' ' + line.name;
+    railStationPinName.textContent = station.name;
+    railStationPinRoute.innerHTML =
+      originName + '-' + station.name + ' (' + fromOrigin.toFixed(1) + 'km)<br>' +
+      station.name + '-' + terminalName + ' (' + toTerminal.toFixed(1) + 'km)';
+    if (railStationAlightBtn) {
+      railStationAlightBtn.style.display = 'inline-block';
+      railStationAlightBtn.onclick = function(e) {
+        e.stopPropagation();
+        startStationLanding(station.name, line.flag + ' ' + line.name, station.lat, station.lon,
+          originName + '-' + station.name + ' (' + fromOrigin.toFixed(1) + 'km)',
+          station.name + '-' + terminalName + ' (' + toTerminal.toFixed(1) + 'km)');
+      };
+    }
+  }
+
+  function updateRailTourBtnText() {
+    railSideBody.querySelectorAll('.rail-tour-btn').forEach(function(btn) {
+      var idx = parseInt(btn.getAttribute('data-line-idx'), 10);
+      if (railTourRunning && idx === railTourLineIdx) {
+        btn.textContent = '⏹ 停止';
+        btn.classList.add('active');
+      } else {
+        btn.textContent = '🚉 巡回';
+        btn.classList.remove('active');
+      }
+    });
+  }
+
+  function highlightRailTourRow(lineIdx, stationIdx) {
+    railSideBody.querySelectorAll('.rail-station-row').forEach(function(el) {
+      var isActive = parseInt(el.getAttribute('data-line-idx'), 10) === lineIdx && parseInt(el.getAttribute('data-station-idx'), 10) === stationIdx;
+      el.classList.toggle('rail-tour-active', isActive);
+      if (isActive) el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    });
+  }
+
+  function railTourStep() {
+    if (!railTourRunning) return;
+    var line = RAIL_LINES[railTourLineIdx];
+    if (!line) { stopRailTour(); return; }
+    var nextIdx = railTourStationIdx + 1;
+    if (nextIdx >= line.stations.length) { stopRailTour(); return; }
+    railTourStationIdx = nextIdx;
+    var station = line.stations[nextIdx];
+    flyTo(station.lat, station.lon);
+    zoom = 1.2;
+    highlightRailTourRow(railTourLineIdx, nextIdx);
+    setTimeout(function() {
+      if (!railTourRunning || railTourLineIdx < 0) return;
+      railStationPin.style.display = 'block';
+      railStationPinLabel.style.display = 'block';
+      showRailStationPin(line, station, nextIdx);
+    }, FLY_DUR + 100);
+    railTourTimer = setTimeout(railTourStep, FLY_DUR + RAIL_TOUR_DWELL_MS);
+  }
+
+  function startRailTour(lineIdx) {
+    stopRailTour();
+    stopF1Tour();
+    railTourLineIdx = lineIdx;
+    railTourStationIdx = -1;
+    railTourRunning = true;
+    updateRailTourBtnText();
+    railTourStep();
+  }
+
+  function stopRailTour() {
+    railTourRunning = false;
+    railTourLineIdx = -1;
+    railTourStationIdx = -1;
+    if (railTourTimer) { clearTimeout(railTourTimer); railTourTimer = null; }
+    if (railSideBody) updateRailTourBtnText();
   }
 
   function formatF1Date(dateStr) {
@@ -1381,6 +1480,74 @@ void main() {
     autoRot = true;
     btnAutoRot.textContent = '⏸ 自転停止';
     btnAutoRot.classList.remove('active');
+    stopRailTour();
+  }
+
+  function renderNearbyPointsList(points) {
+    if (!landingStationListEl) return;
+    if (!points || points.length === 0) { landingStationListEl.innerHTML = ''; return; }
+    var html = '<div class="landing-station-hdr">🚉🏛️ 半径100km圏内の駅・世界遺産</div>';
+    points.forEach(function(p) {
+      var icon = p.point_type === 'heritage' ? '🏛️' : '🚉';
+      html += '<div class="landing-city-item"><span>' + icon + ' ' + p.point_name + '</span>' +
+        '<span class="landing-city-dist">' + p.distance_km.toFixed(1) + 'km</span></div>';
+    });
+    landingStationListEl.innerHTML = html;
+  }
+
+  function loadNearbyPoints(name, lat, lon) {
+    if (landingStationListEl) landingStationListEl.innerHTML = '<div class="landing-city-loading">🚉🏛️ 周辺の駅・世界遺産を検索中...</div>';
+    fetch('/api/rail-station-nearby', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: name, lat: lat, lon: lon })
+    }).then(function(r) { return r.json(); }).then(function(d) {
+      renderNearbyPointsList(d.points || []);
+    }).catch(function() {
+      if (landingStationListEl) landingStationListEl.innerHTML = '';
+    });
+  }
+
+  function loadLandingStationCities(name, lat, lon) {
+    if (landingCityListEl) landingCityListEl.innerHTML = '<div class="landing-city-loading">🌆 周辺都市を検索中...</div>';
+    fetch('/api/rail-station-cities', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: name, lat: lat, lon: lon })
+    }).then(function(r) { return r.json(); }).then(function(d) {
+      landingCities = d.cities || [];
+      if (landingCities.length > 0) { hasStationDataSet[name] = true; }
+      buildCityMarkers(landingCities);
+      renderCityList(landingCities);
+    }).catch(function() {
+      if (landingCityListEl) landingCityListEl.innerHTML = '';
+    });
+  }
+
+  function startStationLanding(stationName, lineLabel, lat, lon, routeLine1, routeLine2) {
+    if (landingMode) return;
+    flyTo(lat, lon);
+    stopAmericaTour(); stopEuropeTour(); stopAfricaTour(); stopJapanTour(); stopRailTour(); stopF1Tour();
+    setTimeout(function() {
+      flyTarget = null;
+      landingMode = true;
+      landingIdx = -1;
+      landingPhase = 1;
+      landingPhaseStart = performance.now();
+      landingZoomFrom = zoom;
+      landingRotXFrom = rotXv;
+      markersDiv.style.display = 'none';
+      tooltip.style.opacity = '0';
+      if (landingTitleEl) landingTitleEl.textContent = lineLabel + ' ' + stationName;
+      if (landingSubEl) landingSubEl.innerHTML = routeLine1 + '<br>' + routeLine2;
+      if (landingStatusEl) landingStatusEl.textContent = '途中下車中...';
+      if (landingProgEl) landingProgEl.style.width = '0%';
+      if (landingCityListEl) landingCityListEl.innerHTML = '';
+      if (landingStationListEl) landingStationListEl.innerHTML = '';
+      if (landingOverlayEl) landingOverlayEl.classList.add('active');
+      loadLandingStationCities(stationName, lat, lon);
+      loadNearbyPoints(stationName, lat, lon);
+    }, FLY_DUR + 100);
   }
 
   var sideHeader = document.querySelector('.side-header');
@@ -1936,7 +2103,16 @@ void main() {
   var railStationPinLabel = document.getElementById('rail-station-pin-label');
   var railStationPinLine = document.getElementById('rail-station-pin-line');
   var railStationPinName = document.getElementById('rail-station-pin-name');
+  var railStationPinRoute = document.getElementById('rail-station-pin-route');
+  var railStationAlightBtn = document.getElementById('rail-station-alight-btn');
   var railStationPin3d = null;
+  var railSide = document.getElementById('rail-side');
+  var railSideBody = document.getElementById('rail-side-body');
+  var railTourLineIdx = -1;
+  var railTourStationIdx = -1;
+  var railTourRunning = false;
+  var railTourTimer = null;
+  var RAIL_TOUR_DWELL_MS = 4500;
   var cfDragging = false, cfDragOx = 0, cfDragOy = 0;
   cityFlyHead.addEventListener('mousedown', function(e) {
     if (e.target.tagName === 'BUTTON') return;
@@ -2132,32 +2308,46 @@ void main() {
     });
   }
 
-  var railModalOverlay = document.getElementById('rail-modal-overlay');
-  var railModalBody = document.getElementById('rail-modal-body');
-  document.getElementById('rail-modal-close').addEventListener('click', function() {
-    railModalOverlay.classList.remove('open');
+  document.getElementById('rail-side-close').addEventListener('click', function() {
+    railSide.classList.remove('open');
+    stopRailTour();
   });
-  railModalOverlay.addEventListener('click', function(e) {
-    if(e.target === railModalOverlay) railModalOverlay.classList.remove('open');
-  });
-  document.getElementById('btnRail').addEventListener('click', function() {
-    railModalBody.innerHTML = renderRailModalRows();
-    railModalBody.querySelectorAll('.rail-station-row').forEach(function(el) {
+  function bindRailSideRows() {
+    railSideBody.querySelectorAll('.rail-station-row').forEach(function(el) {
       el.addEventListener('click', function() {
-        var name = el.getAttribute('data-name');
-        var lineLabel = el.getAttribute('data-line');
-        var lat = parseFloat(el.getAttribute('data-lat'));
-        var lon = parseFloat(el.getAttribute('data-lon'));
-        railModalOverlay.classList.remove('open');
-        flyTo(lat, lon);
+        stopRailTour();
+        var lineIdx = parseInt(el.getAttribute('data-line-idx'), 10);
+        var stationIdx = parseInt(el.getAttribute('data-station-idx'), 10);
+        var line = RAIL_LINES[lineIdx];
+        var station = line.stations[stationIdx];
+        flyTo(station.lat, station.lon);
         zoom = 1.2;
-        cacheStationCities(name, lat, lon);
-        railStationPin3d = latLonTo3D(lat, lon);
-        railStationPinLine.textContent = lineLabel;
-        railStationPinName.textContent = name;
+        cacheStationCities(station.name, station.lat, station.lon);
+        setTimeout(function() {
+          railStationPin.style.display = 'block';
+          railStationPinLabel.style.display = 'block';
+          showRailStationPin(line, station, stationIdx);
+        }, FLY_DUR + 100);
       });
     });
-    railModalOverlay.classList.add('open');
+    railSideBody.querySelectorAll('.rail-tour-btn').forEach(function(btn) {
+      btn.addEventListener('click', function(e) {
+        e.stopPropagation();
+        var lineIdx = parseInt(btn.getAttribute('data-line-idx'), 10);
+        if (railTourRunning && railTourLineIdx === lineIdx) stopRailTour();
+        else startRailTour(lineIdx);
+      });
+    });
+  }
+  document.getElementById('btnRail').addEventListener('click', function() {
+    if (railSide.classList.contains('open')) {
+      railSide.classList.remove('open');
+      stopRailTour();
+      return;
+    }
+    railSideBody.innerHTML = renderRailSideBody();
+    bindRailSideRows();
+    railSide.classList.add('open');
   });
 
   document.getElementById('f1-side-close').addEventListener('click', function() {

@@ -77,3 +77,57 @@ export function buildRailLineStationRows(lines: RailLine[]): RailLineStationRow[
   }
   return rows;
 }
+
+export interface HeritagePoint {
+  n: string;
+  f: string;
+  lat: number;
+  lon: number;
+}
+
+export interface NearbyPoint {
+  pointType: 'station' | 'heritage';
+  pointName: string;
+  lat: number;
+  lon: number;
+  distanceKm: number;
+}
+
+/**
+ * ある地点（駅）を中心に、半径radiusKm以内にある他の駅・世界遺産をまとめて距離昇順で返す。
+ * excludeStationName と同名の駅（自分自身）は候補から除外する。
+ * 同名の駅が複数路線に存在する場合は路線ごとに1件ずつ候補になる（重複排除はしない）。
+ */
+export function findNearbyStationsAndHeritage(
+  lines: RailLine[],
+  heritages: HeritagePoint[],
+  lat: number,
+  lon: number,
+  radiusKm: number,
+  excludeStationName: string
+): NearbyPoint[] {
+  const results: NearbyPoint[] = [];
+  const seenStationNames = new Set<string>();
+
+  for (const line of lines) {
+    for (const station of line.stations) {
+      if (station.name === excludeStationName) continue;
+      if (seenStationNames.has(station.name)) continue;
+      const distanceKm = haversineKm(lat, lon, station.lat, station.lon);
+      if (distanceKm <= radiusKm) {
+        results.push({ pointType: 'station', pointName: station.name, lat: station.lat, lon: station.lon, distanceKm });
+        seenStationNames.add(station.name);
+      }
+    }
+  }
+
+  for (const heritage of heritages) {
+    const distanceKm = haversineKm(lat, lon, heritage.lat, heritage.lon);
+    if (distanceKm <= radiusKm) {
+      results.push({ pointType: 'heritage', pointName: heritage.n, lat: heritage.lat, lon: heritage.lon, distanceKm });
+    }
+  }
+
+  results.sort((a, b) => a.distanceKm - b.distanceKm);
+  return results;
+}
