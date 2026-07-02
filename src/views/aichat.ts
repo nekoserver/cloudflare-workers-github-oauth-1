@@ -1062,7 +1062,10 @@ export function getAiChatPage(user: {
     <div class="history-modal" role="dialog" aria-modal="true" aria-labelledby="historyModalTitle">
       <div class="history-modal-head">
         <div class="history-modal-head-left">
-          <span class="history-modal-title" id="historyModalTitle">AIチャットの詳細プレビュー</span>
+          <span>
+            <button class="search-hist-btn" id="historyModalKwEditToggleBtn" style="padding:3px 6px;font-size:13px;vertical-align:middle;margin-right:4px;" title="キーワード分類モード: 未分類のキーワードをタップするとキーワード分類モーダルが開きます">📝</button>
+            <span class="history-modal-title" id="historyModalTitle">AIチャットの詳細プレビュー</span>
+          </span>
           <span class="history-modal-date"><button class="history-modal-date-link" id="historyModalDateLink"></button><span id="historyModalTime"></span></span>
         </div>
         <div class="history-modal-head-search">
@@ -2535,6 +2538,12 @@ export function getAiChatPage(user: {
         chip.innerHTML = label;
         chip.title = kw + (cnt != null ? ' (出現回数: ' + cnt + ')' : '') + (isClassified ? ' [分類済]' : ' [未分類]');
         chip.addEventListener('click', function() {
+          if (historyModalKwEditMode && !isClassified) {
+            openKwClassifyModal(kw, function() {
+              if (historyModalCurrentId) fetchShareKeywords(historyModalCurrentId, function() { renderKeywordChips(true); });
+            });
+            return;
+          }
           historyModalChipsPinned = true;
           historyModalActiveChipKeyword = kw;
           clearKeywordHighlights(historyModalChat);
@@ -2590,6 +2599,7 @@ export function getAiChatPage(user: {
     var historyModalSubqueryLinks = document.getElementById('historyModalSubqueryLinks');
     var historyModalAddSubqueryBtn = document.getElementById('historyModalAddSubqueryBtn');
     var historyModalHighlightToggleBtn = document.getElementById('historyModalHighlightToggleBtn');
+    var historyModalKwEditToggleBtn = document.getElementById('historyModalKwEditToggleBtn');
     var currentHistoryQuestion = '';
     var historyModalCurrentModel = '';
     var historyModalHighlightActive = true;
@@ -2598,6 +2608,16 @@ export function getAiChatPage(user: {
     var historyModalDBKeywordsApplied = false;
     var historyModalChipsPinned = false;
     var historyModalActiveChipKeyword = '';
+    var historyModalKwEditMode = false;
+
+    if (historyModalKwEditToggleBtn) {
+      historyModalKwEditToggleBtn.addEventListener('click', function() {
+        historyModalKwEditMode = !historyModalKwEditMode;
+        historyModalKwEditToggleBtn.style.opacity = historyModalKwEditMode ? '1' : '0.4';
+        historyModalKwEditToggleBtn.style.background = historyModalKwEditMode ? 'var(--accent-color,#667eea)' : '';
+        historyModalKwEditToggleBtn.style.color = historyModalKwEditMode ? '#fff' : '';
+      });
+    }
 
     function renderSubqueryLinks(items) {
       if (!items || items.length === 0) {
@@ -4221,7 +4241,7 @@ export function getAiChatPage(user: {
       renderKwClassifyList();
     }
 
-    function openKwClassifyModal(keyword) {
+    function openKwClassifyModal(keyword, onSaved) {
       var overlay = document.createElement('div');
       overlay.setAttribute('data-overlay', '');
       overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:' + getNextZ() + ';display:flex;align-items:flex-start;justify-content:center;padding-top:60px;';
@@ -4417,6 +4437,7 @@ export function getAiChatPage(user: {
             .then(function() {
               document.body.removeChild(overlay);
               renderKwClassifyList();
+              if (typeof onSaved === 'function') onSaved();
             })
             .catch(restoreDecideBtn);
         }
