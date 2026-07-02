@@ -3,6 +3,7 @@ import {
   chunkBindValues,
   lookupHeritageQuestionAnswers,
   lookupHeritageKeywordTopics,
+  lookupHeritageTopicModelCache,
   D1_MAX_BOUND_PARAMS,
 } from './index';
 
@@ -242,6 +243,68 @@ describe('lookupHeritageKeywordTopics: キーワードバッジ側も同じバ�
     const { hits, error } = await lookupHeritageKeywordTopics(db, 'user1', keywords);
     expect(error).toBe('partial_query_failure');
     expect(hits['K0']).toEqual(['宿泊施設']);
+  });
+});
+
+describe('lookupHeritageTopicModelCache: 見どころ×gemmaキャッシュ判定', () => {
+  const TOPIC = '見どころ';
+  const MODEL = '@cf/google/gemma-4-26b-a4b-it';
+
+  it('世界遺産100件でもどのクエリもバインド数が D1 上限(100)を超えない', async () => {
+    const heritages = Array.from({ length: 100 }, (_, i) => 'H' + i);
+    const { db, queries } = makeRecordingDb();
+    await lookupHeritageTopicModelCache(db, 'user1', heritages, TOPIC, MODEL);
+    expect(queries.length).toBeGreaterThan(1);
+    for (const q of queries) {
+      expect(q.params.length).toBeLessThanOrEqual(D1_HARD_LIMIT);
+    }
+  });
+
+  it('質問文とモデルが一致する行の share_id を該当世界遺産にセットする', async () => {
+    const heritages = ['タージ・マハル', '万里の長城'];
+    const target = heritageQuestion('タージ・マハル', TOPIC);
+    const { db } = makeRecordingDb({
+      rowsFor: (_sql, params) =>
+        params.includes(target) ? [{ id: 'share-abc', question: target }] : [],
+    });
+    const { cached, error } = await lookupHeritageTopicModelCache(db, 'user1', heritages, TOPIC, MODEL);
+    expect(error).toBeUndefined();
+    expect(cached['タージ・マハル']).toBe('share-abc');
+    expect(cached['万里の長城']).toBeNull();
+  });
+
+  it('先頭バインドは user_id、2番目は model（バインド構造の検証）', async () => {
+    const heritages = Array.from({ length: 30 }, (_, i) => 'H' + i);
+    const { db, queries } = makeRecordingDb();
+    await lookupHeritageTopicModelCache(db, 'user-xyz', heritages, TOPIC, MODEL);
+    for (const q of queries) {
+      expect(q.params[0]).toBe('user-xyz');
+      expect(q.params[1]).toBe(MODEL);
+    }
+  });
+
+  it('最終チャンクに入る世界遺産でもキャッシュが拾われる（欠落なし）', async () => {
+    const heritages = Array.from({ length: 100 }, (_, i) => 'H' + i);
+    const target = heritageQuestion('H99', TOPIC);
+    const { db } = makeRecordingDb({
+      rowsFor: (_sql, params) =>
+        params.includes(target) ? [{ id: 'share-99', question: target }] : [],
+    });
+    const { cached } = await lookupHeritageTopicModelCache(db, 'user1', heritages, TOPIC, MODEL);
+    expect(cached['H99']).toBe('share-99');
+    expect(cached['H0']).toBeNull();
+  });
+
+  it('一部チャンク失敗時も error を返しつつ成功分の cached は残る', async () => {
+    const heritages = Array.from({ length: 200 }, (_, i) => 'H' + i);
+    const target = heritageQuestion('H0', TOPIC);
+    const { db } = makeRecordingDb({
+      throwIf: (_sql, params) => params.includes(heritageQuestion('H199', TOPIC)),
+      rowsFor: (_sql, params) => (params.includes(target) ? [{ id: 'share-0', question: target }] : []),
+    });
+    const { cached, error } = await lookupHeritageTopicModelCache(db, 'user1', heritages, TOPIC, MODEL);
+    expect(error).toBe('partial_query_failure');
+    expect(cached['H0']).toBe('share-0');
   });
 });
 

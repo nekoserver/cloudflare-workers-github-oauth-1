@@ -891,6 +891,7 @@ void main() {
   var cityMarkersDiv = null;
   var hasCityDataSet = {};
   var hasStationDataSet = {};
+  var heritageMitokoroGemmaShareId = {};
 
   fetch('/api/heritage-city-fetched-list').then(function(r){ return r.json(); }).then(function(d){
     if(d && d.names) { d.names.forEach(function(n){ hasCityDataSet[n] = true; }); updateCityIcons(); }
@@ -898,6 +899,14 @@ void main() {
 
   fetch('/api/rail-station-fetched-list').then(function(r){ return r.json(); }).then(function(d){
     if(d && d.names) { d.names.forEach(function(n){ hasStationDataSet[n] = true; }); }
+  }).catch(function(){});
+
+  fetch('/api/aichat/check-heritage-mitokoro-gemma-batch', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ heritages: HERITAGE.map(function(d) { return d.n; }) })
+  }).then(function(r) { return r.json(); }).then(function(d) {
+    if (d && d.cached) heritageMitokoroGemmaShareId = d.cached;
   }).catch(function(){});
 
   function cacheStationCities(name, lat, lon) {
@@ -2491,12 +2500,23 @@ void main() {
     var d = HERITAGE[idx];
     var col = typeColor(d.t);
     var cityIcon = hasCityDataSet[d.n] ? ' 🌆' : '';
-    tooltip.innerHTML = '<div class="tt-name">' + d.e + ' ' + d.f + ' ' + d.n + cityIcon + '</div><div class="tt-sub"><span style="color:' + col + ';font-weight:600">' + d.t + '</span>  ' + d.c + '  ' + d.y + '年登録</div><div style="margin-top:7px;text-align:center;"><button id="tt-land-btn" style="background:#0c2d1a;border:1px solid #3fb950;border-radius:6px;color:#3fb950;font-size:11px;padding:4px 12px;cursor:pointer;font-family:inherit;">🚶 地表に降り立つ</button></div>';
+    var gemmaShareId = heritageMitokoroGemmaShareId[d.n];
+    var gemmaIcon = gemmaShareId ? ' <span id="tt-mitokoro-gemma-btn" style="cursor:pointer;" title="見どころ(gemma-4-26b-a4b-it)の説明を表示">👀</span>' : '';
+    tooltip.innerHTML = '<div class="tt-name">' + d.e + ' ' + d.f + ' ' + d.n + cityIcon + gemmaIcon + '</div><div class="tt-sub"><span style="color:' + col + ';font-weight:600">' + d.t + '</span>  ' + d.c + '  ' + d.y + '年登録</div><div style="margin-top:7px;text-align:center;"><button id="tt-land-btn" style="background:#0c2d1a;border:1px solid #3fb950;border-radius:6px;color:#3fb950;font-size:11px;padding:4px 12px;cursor:pointer;font-family:inherit;">🚶 地表に降り立つ</button></div>';
     var landBtn = document.getElementById('tt-land-btn');
     if (landBtn) {
       (function(ci) {
         landBtn.addEventListener('click', function(e) { e.stopPropagation(); startLanding(ci); });
       })(idx);
+    }
+    var mitokoroGemmaBtn = document.getElementById('tt-mitokoro-gemma-btn');
+    if (mitokoroGemmaBtn) {
+      (function(name, shareId) {
+        mitokoroGemmaBtn.addEventListener('click', function(e) {
+          e.stopPropagation();
+          openHeritageMitokoroGemmaModal(name, shareId);
+        });
+      })(d.n, gemmaShareId);
     }
     if (vx === 0 && vy === 0) {
       var cx = canvasRect.left + canvasRect.width / 2;
@@ -2508,6 +2528,56 @@ void main() {
     tooltip.style.opacity = '1';
     activeIdx = idx;
     flyTo(d.lat, d.lon);
+  }
+
+  function getNextZ() {
+    var max = 500;
+    document.querySelectorAll('div[data-overlay]').forEach(function(el) {
+      var z = parseInt(el.style.zIndex, 10) || 0;
+      if (z > max && z < 9000) max = z;
+    });
+    return max + 100;
+  }
+
+  function openHeritageMitokoroGemmaModal(heritageName, shareId) {
+    var overlay = document.createElement('div');
+    overlay.setAttribute('data-overlay', '');
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:' + getNextZ() + ';display:flex;align-items:center;justify-content:center;padding:20px;';
+
+    var box = document.createElement('div');
+    box.style.cssText = 'background:#0d1117;border:1px solid #388bfd;border-radius:12px;width:min(560px,94vw);max-height:80vh;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,0.5);';
+
+    var head = document.createElement('div');
+    head.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid #21262d;flex-shrink:0;gap:10px;';
+    var titleEl = document.createElement('span');
+    titleEl.textContent = '👀 ' + heritageName + ' — 見どころ (gemma-4-26b-a4b-it)';
+    titleEl.style.cssText = 'font-weight:700;font-size:13px;color:#e6edf3;';
+    var closeBtn = document.createElement('button');
+    closeBtn.textContent = '✕';
+    closeBtn.setAttribute('aria-label', '閉じる');
+    closeBtn.style.cssText = 'background:none;border:none;cursor:pointer;font-size:16px;color:#8b949e;padding:4px 8px;flex-shrink:0;';
+    closeBtn.addEventListener('click', function() { document.body.removeChild(overlay); });
+    head.appendChild(titleEl);
+    head.appendChild(closeBtn);
+    box.appendChild(head);
+
+    var body = document.createElement('div');
+    body.style.cssText = 'padding:16px 18px;overflow-y:auto;flex:1;font-size:13px;color:#c9d1d9;line-height:1.7;white-space:pre-wrap;';
+    body.textContent = '読み込み中...';
+    box.appendChild(body);
+
+    overlay.appendChild(box);
+    overlay.addEventListener('click', function(e) { if (e.target === overlay) document.body.removeChild(overlay); });
+    document.body.appendChild(overlay);
+
+    fetch('/api/aichat/shares/' + encodeURIComponent(shareId))
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        body.textContent = data.answer || data.error || '（応答なし）';
+      })
+      .catch(function() {
+        body.textContent = '通信エラーが発生しました。';
+      });
   }
 
   // Build marker DOM elements
