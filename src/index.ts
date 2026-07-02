@@ -3652,6 +3652,7 @@ export async function lookupHeritageTopicModelCache(
 
 const HERITAGE_TOOLTIP_GEMMA_TOPIC = '見どころ';
 const HERITAGE_TOOLTIP_GEMMA_MODEL = '@cf/google/gemma-4-26b-a4b-it';
+const HERITAGE_TOOLTIP_LLAMA_MODEL = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
 
 app.post('/api/aichat/check-heritage-mitokoro-gemma-batch', authMiddleware, async (c) => {
   const user = c.get('user');
@@ -3668,6 +3669,25 @@ app.post('/api/aichat/check-heritage-mitokoro-gemma-batch', authMiddleware, asyn
   if (!heritages.length) return jsonUtf8({ cached: {} });
   const result = await lookupHeritageTopicModelCache(
     c.env.DB as unknown as D1Like, user.sub, heritages, HERITAGE_TOOLTIP_GEMMA_TOPIC, HERITAGE_TOOLTIP_GEMMA_MODEL
+  );
+  return jsonUtf8(result.error ? { cached: result.cached, error: result.error } : { cached: result.cached });
+});
+
+app.post('/api/aichat/check-heritage-mitokoro-llama-batch', authMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!c.env.DB) return jsonUtf8({ cached: {} }, 503);
+  let heritages: string[] = [];
+  try {
+    const body = await c.req.json<{ heritages?: unknown }>();
+    if (Array.isArray(body.heritages)) {
+      heritages = (body.heritages as unknown[]).map((h) => String(h).trim()).filter(Boolean).slice(0, 800);
+    }
+  } catch {
+    return jsonUtf8({ cached: {} }, 400);
+  }
+  if (!heritages.length) return jsonUtf8({ cached: {} });
+  const result = await lookupHeritageTopicModelCache(
+    c.env.DB as unknown as D1Like, user.sub, heritages, HERITAGE_TOOLTIP_GEMMA_TOPIC, HERITAGE_TOOLTIP_LLAMA_MODEL
   );
   return jsonUtf8(result.error ? { cached: result.cached, error: result.error } : { cached: result.cached });
 });
