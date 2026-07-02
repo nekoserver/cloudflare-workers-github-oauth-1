@@ -796,7 +796,6 @@ void main() {
     flyTo(d.lat, d.lon);
     areaTourTimer = setTimeout(function() {
       if (!areaTourRunning) return;
-      zoom = Math.min(4.2, Math.max(2.2, zoom));
       showMarkerTooltip(HERITAGE.indexOf(d), 0, 0);
       areaTourTimer = setTimeout(function() {
         if (!areaTourRunning) return;

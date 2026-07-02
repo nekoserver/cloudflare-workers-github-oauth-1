@@ -49,6 +49,15 @@ describe('getWebGLHeritagePage エリアズーム機能（活断層ページ同�
     expect(stopFn).toContain('巡回');
   });
 
+  it('areaTourStep 内でズームを強制変更しない（巡回中のズーム解除防止）', () => {
+    // applyBoxZoom が設定したズームを巡回中も維持するため、areaTourStep 内で zoom を上書きしない
+    const stepMatch = html.match(/function areaTourStep[\s\S]*?(?=function applyBoxZoom)/);
+    expect(stepMatch).not.toBeNull();
+    const fn = stepMatch![0];
+    // areaTourStep 内に zoom = の直接代入がないこと
+    expect(fn).not.toMatch(/zoom\s*=\s*Math\.(min|max)/);
+  });
+
   it('applyBoxZoom がフライ後に setTimeout でズームとメニューを適用する', () => {
     const applyMatch = html.match(/function applyBoxZoom[\s\S]*?(?=\n  canvas\.addEventListener)/);
     expect(applyMatch).not.toBeNull();
