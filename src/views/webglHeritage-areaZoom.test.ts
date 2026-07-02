@@ -92,10 +92,18 @@ describe('getWebGLHeritagePage エリアズーム機能（種別ごとの巡回�
     expect(hidePos).toBeLessThan(completedPos);
   });
 
-  it('stopAreaTour が完了時に autoRot を再開する', () => {
+  it('stopAreaTour は巡回終了後も自転モードを勝手に再開しない', () => {
     const stopMatch = html.match(/function stopAreaTour\(completed\) \{[\s\S]*?\n  \}/);
     expect(stopMatch).not.toBeNull();
-    expect(stopMatch![0]).toContain('autoRot = true');
+    expect(stopMatch![0]).not.toContain('autoRot = true');
+  });
+
+  it('stopAreaTour は完了時にエリア選択枠(box-select-overlay)とエリア巡回サイドパネルを非表示にする', () => {
+    const stopMatch = html.match(/function stopAreaTour\(completed\) \{[\s\S]*?\n  \}/);
+    expect(stopMatch).not.toBeNull();
+    const stopFn = stopMatch![0];
+    expect(stopFn).toContain("boxZoomOverlay.style.display = 'none'");
+    expect(stopFn).toContain("areaTourSide.classList.remove('open')");
   });
 
   it('stopAreaTour は巡回状態を解除してエリアメニューを再描画する', () => {
@@ -112,6 +120,47 @@ describe('getWebGLHeritagePage エリアズーム機能（種別ごとの巡回�
     expect(stepMatch).not.toBeNull();
     const fn = stepMatch![0];
     expect(fn).not.toMatch(/zoom\s*=\s*Math\.(min|max)/);
+  });
+
+  it('applyBoxZoom は有効な選択範囲に対してエリア選択枠(box-select-overlay)を消さずに残す', () => {
+    const applyMatch = html.match(/function applyBoxZoom[\s\S]*?(?=\n  canvas\.addEventListener)/);
+    expect(applyMatch).not.toBeNull();
+    const fn = applyMatch![0];
+    // 早期returnのガード節でのみ非表示にし、有効な選択が完了した後の本体では非表示にしない
+    const guardHideCount = (fn.match(/\{ boxZoomOverlay\.style\.display = 'none'; return; \}/g) || []).length;
+    expect(guardHideCount).toBe(2);
+    expect(fn).toContain('updateBoxOverlay()');
+  });
+
+  it('area-tour-side パネルのDOM要素が存在する', () => {
+    expect(html).toContain('id="area-tour-side"');
+    expect(html).toContain('id="area-tour-side-title"');
+    expect(html).toContain('id="area-tour-side-body"');
+    expect(html).toContain('id="area-tour-side-close"');
+  });
+
+  it('AREA_KINDS の各種別に左サイドパネル表示用の itemLabel が定義されている', () => {
+    const kindsMatch = html.match(/var AREA_KINDS = \[[\s\S]*?\n  \];/);
+    expect(kindsMatch).not.toBeNull();
+    const occurrences = (kindsMatch![0].match(/itemLabel:/g) || []).length;
+    expect(occurrences).toBe(5);
+  });
+
+  it('startAreaTour は巡回開始時に左サイドパネルへ巡回先一覧を描画する', () => {
+    expect(html).toContain('function renderAreaTourSide(kind, items)');
+    const startMatch = html.match(/function startAreaTour\(kind\) \{[\s\S]*?\n  \}/);
+    expect(startMatch).not.toBeNull();
+    expect(startMatch![0]).toContain('renderAreaTourSide(kind, items)');
+  });
+
+  it('areaTourStep は巡回先へ移動するたびに左サイドパネルの該当行を点滅させる', () => {
+    expect(html).toContain('function flashAreaTourSideItem(idx)');
+    // f1-flash と同じキーフレーム(黄色い中抜き枠を3回点滅)を再利用する
+    expect(html).toMatch(/@keyframes f1-flash \{ 0%,100%\{outline:2px solid transparent\} 50%\{outline:2px solid #ffd700\} \}/);
+    expect(html).toMatch(/\.f1-side-item\.f1-flash \{ animation:f1-flash 0\.5s ease-in-out 3; \}/);
+    const stepMatch = html.match(/function areaTourStep\(kind, items\)[\s\S]*?(?=function applyBoxZoom)/);
+    expect(stepMatch).not.toBeNull();
+    expect(stepMatch![0]).toContain('flashAreaTourSideItem(areaTourIdx)');
   });
 
   it('applyBoxZoom がフライ後に setTimeout でズームとメニューを適用する', () => {
