@@ -22,10 +22,42 @@ export const RAIL_LINES: RailLine[] = [
     {name:'リール・ヨーロップ駅', lat:50.639, lon:3.075, flag:'🇫🇷', country:'フランス'},
     {name:'パリ北駅', lat:48.880, lon:2.355, flag:'🇫🇷', country:'フランス'}
   ]},
-  { name:'ICE(ハンブルク～ミュンヘン)', flag:'🇩🇪', country:'ドイツ', stations:[
+  { name:'ICE(ハンブルク～ハノーファー～フランクフルト)', flag:'🇩🇪', country:'ドイツ', stations:[
     {name:'ハンブルク中央駅', lat:53.553, lon:10.007},
+    {name:'ハノーファー中央駅', lat:52.378, lon:9.741},
+    {name:'フランクフルト中央駅', lat:50.107, lon:8.663}
+  ]},
+  { name:'ICE(ハノーファー～ニュルンベルク～ミュンヘン)', flag:'🇩🇪', country:'ドイツ', stations:[
+    {name:'ハノーファー中央駅', lat:52.378, lon:9.741},
+    {name:'ニュルンベルク中央駅', lat:49.446, lon:11.083},
+    {name:'ミュンヘン中央駅', lat:48.140, lon:11.558}
+  ]},
+  { name:'ICE(ドルトムント～ケルン～フランクフルト)', flag:'🇩🇪', country:'ドイツ', stations:[
+    {name:'ドルトムント中央駅', lat:51.518, lon:7.460},
+    {name:'ケルン中央駅', lat:50.943, lon:6.958},
+    {name:'フランクフルト中央駅', lat:50.107, lon:8.663}
+  ]},
+  { name:'ICE(ベルリン～ライプツィヒ～ドレスデン)', flag:'🇩🇪', country:'ドイツ', stations:[
+    {name:'ベルリン中央駅', lat:52.525, lon:13.369},
+    {name:'ライプツィヒ中央駅', lat:51.346, lon:12.382},
+    {name:'ドレスデン中央駅', lat:51.041, lon:13.732}
+  ]},
+  { name:'ICE(ライプツィヒ～フランクフルト)', flag:'🇩🇪', country:'ドイツ', stations:[
+    {name:'ライプツィヒ中央駅', lat:51.346, lon:12.382},
+    {name:'フランクフルト中央駅', lat:50.107, lon:8.663}
+  ]},
+  { name:'ICE(ライプツィヒ～ミュンヘン)', flag:'🇩🇪', country:'ドイツ', stations:[
+    {name:'ライプツィヒ中央駅', lat:51.346, lon:12.382},
+    {name:'ミュンヘン中央駅', lat:48.140, lon:11.558}
+  ]},
+  { name:'ICE(フランクフルト～ニュルンベルク～ミュンヘン)', flag:'🇩🇪', country:'ドイツ', stations:[
     {name:'フランクフルト中央駅', lat:50.107, lon:8.663},
-    {name:'マンハイム中央駅', lat:49.479, lon:8.469},
+    {name:'ニュルンベルク中央駅', lat:49.446, lon:11.083},
+    {name:'ミュンヘン中央駅', lat:48.140, lon:11.558}
+  ]},
+  { name:'ICE(フランクフルト～シュトゥットガルト～ミュンヘン)', flag:'🇩🇪', country:'ドイツ', stations:[
+    {name:'フランクフルト中央駅', lat:50.107, lon:8.663},
+    {name:'シュトゥットガルト中央駅', lat:48.784, lon:9.182},
     {name:'ミュンヘン中央駅', lat:48.140, lon:11.558}
   ]},
   { name:'フレッチャロッサ(ミラノ～ナポリ)', flag:'🇮🇹', country:'イタリア', stations:[
