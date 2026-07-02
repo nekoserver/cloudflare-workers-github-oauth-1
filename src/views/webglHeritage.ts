@@ -153,6 +153,8 @@ canvas:active { cursor:grabbing; }
 .rail-station-row.rail-tour-active { background:#0c2d1a; }
 #rail-station-pin-route { font-size:10px; color:#8b949e; margin-top:2px; line-height:1.5; }
 #rail-station-alight-btn { display:none; margin-top:6px; background:#0c2d1a; border:1px solid #3fb950; border-radius:6px; color:#3fb950; font-size:11px; padding:4px 12px; cursor:pointer; font-family:inherit; pointer-events:auto; }
+.pin-label-close-btn { position:absolute; top:-9px; right:-9px; width:26px; height:26px; border-radius:50%; background:#21262d; border:1px solid #388bfd; color:#c9d1d9; font-size:12px; line-height:1; cursor:pointer; pointer-events:auto; padding:0; display:flex; align-items:center; justify-content:center; }
+.pin-label-close-btn:hover { background:#30363d; color:#fff; }
 .f1-side { display:none; position:absolute; left:0; top:0; bottom:0; width:min(85vw,280px); background:#0d1117; border-right:1px solid #30363d; z-index:90; flex-direction:column; box-shadow:4px 0 24px rgba(0,0,0,.7); }
 .f1-side.open { display:flex; }
 .f1-side-head { padding:12px 16px; border-bottom:1px solid #21262d; display:flex; align-items:center; gap:8px; flex-shrink:0; }
@@ -520,12 +522,14 @@ void main() {
 <div id="city-fly-pin" style="display:none;position:fixed;font-size:22px;z-index:295;pointer-events:none;transform:translate(-50%,-100%);line-height:1">📍</div>
 <div id="f1-circuit-pin" style="display:none;position:fixed;font-size:22px;z-index:295;pointer-events:none;transform:translate(-50%,-100%);line-height:1">🏎️</div>
 <div id="f1-circuit-pin-label" style="display:none;position:fixed;z-index:296;pointer-events:none;background:rgba(13,17,23,0.92);border:1px solid #388bfd;border-radius:8px;color:#c9d1d9;padding:4px 9px;white-space:nowrap;text-align:center;line-height:1.4;transform:translate(-50%,calc(-100% - 30px))">
+  <button id="f1-circuit-pin-close-btn" class="pin-label-close-btn" aria-label="閉じる">✕</button>
   <div id="f1-circuit-pin-name" style="font-weight:700;font-size:12px"></div>
   <div id="f1-circuit-pin-date" style="opacity:.75;font-size:10px"></div>
   <button id="f1-tour-btn">🏁 巡回</button>
 </div>
 <div id="rail-station-pin" style="display:none;position:fixed;font-size:22px;z-index:295;pointer-events:none;transform:translate(-50%,-100%);line-height:1">🚉</div>
 <div id="rail-station-pin-label" style="display:none;position:fixed;z-index:296;pointer-events:none;background:rgba(13,17,23,0.92);border:1px solid #388bfd;border-radius:8px;color:#c9d1d9;padding:4px 9px;white-space:nowrap;text-align:center;line-height:1.4;transform:translate(-50%,calc(-100% - 30px))">
+  <button id="rail-station-pin-close-btn" class="pin-label-close-btn" aria-label="閉じる">✕</button>
   <div id="rail-station-pin-line" style="opacity:.75;font-size:10px"></div>
   <div id="rail-station-pin-name" style="font-weight:700;font-size:12px"></div>
   <div id="rail-station-pin-route"></div>
@@ -2359,6 +2363,20 @@ void main() {
     if (f1TourRunning) stopF1Tour();
     else startF1Tour();
   });
+  document.getElementById('f1-circuit-pin-close-btn').addEventListener('click', function(e) {
+    e.stopPropagation();
+    stopF1Tour();
+    f1CircuitPin3d = null;
+    f1CircuitPin.style.display = 'none';
+    f1CircuitPinLabel.style.display = 'none';
+  });
+  document.getElementById('rail-station-pin-close-btn').addEventListener('click', function(e) {
+    e.stopPropagation();
+    stopRailTour();
+    railStationPin3d = null;
+    railStationPin.style.display = 'none';
+    railStationPinLabel.style.display = 'none';
+  });
   document.getElementById('btnF1').addEventListener('click', function() {
     if (f1Side.classList.contains('open')) {
       f1Side.classList.remove('open');
@@ -2443,11 +2461,30 @@ void main() {
 
   function hideTooltip() { tooltip.style.opacity = '0'; activeIdx = -1; }
 
+  function avoidPinLabelOverlap() {
+    var otherMinTop = null;
+    [railStationPinLabel, f1CircuitPinLabel].forEach(function(el) {
+      if (!el || el.style.display === 'none') return;
+      var r = el.getBoundingClientRect();
+      if (r.width === 0 && r.height === 0) return;
+      if (otherMinTop === null || r.top < otherMinTop) otherMinTop = r.top;
+    });
+    if (otherMinTop === null) return;
+    var tRect = tooltip.getBoundingClientRect();
+    var GAP = 10;
+    if (tRect.bottom > otherMinTop) {
+      var shift = tRect.bottom - otherMinTop + GAP;
+      var currentTop = parseFloat(tooltip.style.top) || 0;
+      tooltip.style.top = (currentTop - shift) + 'px';
+    }
+  }
+
   function positionTooltip(vx, vy) {
     var isNearTop = vy < canvasRect.top + 80;
     tooltip.style.left = vx + 'px';
     tooltip.style.top  = vy + 'px';
     if (isNearTop) { tooltip.classList.add('below'); } else { tooltip.classList.remove('below'); }
+    avoidPinLabelOverlap();
   }
 
   function showMarkerTooltip(idx, vx, vy) {
