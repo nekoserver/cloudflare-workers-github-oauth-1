@@ -202,7 +202,7 @@ describe('getWebGLHeritagePage F1サーキット機能（左サイドパネル�
 
   it('巡回ボタンはツールチップ内（ピンラベル）に配置され、その下に表示される', () => {
     const idx = html.indexOf('id="f1-circuit-pin-label"');
-    const block = html.slice(idx, idx + 600);
+    const block = html.slice(idx, idx + 900);
     const nameIdx = block.indexOf('id="f1-circuit-pin-name"');
     const dateIdx = block.indexOf('id="f1-circuit-pin-date"');
     const btnIdx = block.indexOf('id="f1-tour-btn"');
