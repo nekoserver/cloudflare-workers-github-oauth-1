@@ -3608,6 +3608,70 @@ export async function lookupHeritageKeywordTopics(
   return hadError ? { hits, error: 'partial_query_failure' } : { hits };
 }
 
+/**
+ * 世界遺産名一覧に対して「〇〇」の「topic」についてXXXという質問文が
+ * 指定モデルでキャッシュ済みかどうかをまとめて調べ、share_id を返す。
+ */
+export async function lookupHeritageTopicModelCache(
+  db: D1Like,
+  userId: string,
+  heritages: string[],
+  topic: string,
+  model: string,
+  maxBoundParams: number = D1_MAX_BOUND_PARAMS,
+): Promise<{ cached: Record<string, string | null>; error?: string }> {
+  const cached: Record<string, string | null> = {};
+  for (const h of heritages) cached[h] = null;
+  const questionMap = new Map<string, string>();
+  const allQuestions: string[] = [];
+  for (const heritage of heritages) {
+    const q = `「${heritage}」の「${topic}」について説明してください`;
+    allQuestions.push(q);
+    questionMap.set(q, heritage);
+  }
+  // user_id・model の 2 バインドを差し引いた数を IN(...) のチャンク上限にする。
+  const chunkSize = Math.max(1, maxBoundParams - 2);
+  let hadError = false;
+  for (const chunk of chunkBindValues(allQuestions, chunkSize)) {
+    try {
+      const placeholders = chunk.map(() => '?').join(', ');
+      const rows = await db
+        .prepare(`SELECT id, question FROM ai_chat_shares WHERE user_id = ? AND deleted_at IS NULL AND model = ? AND question IN (${placeholders}) ORDER BY created_at DESC`)
+        .bind(userId, model, ...chunk)
+        .all<{ id: string; question: string }>();
+      for (const r of (rows.results ?? [])) {
+        const heritage = questionMap.get(r.question);
+        if (heritage && cached[heritage] == null) cached[heritage] = r.id;
+      }
+    } catch {
+      hadError = true;
+    }
+  }
+  return hadError ? { cached, error: 'partial_query_failure' } : { cached };
+}
+
+const HERITAGE_TOOLTIP_GEMMA_TOPIC = '見どころ';
+const HERITAGE_TOOLTIP_GEMMA_MODEL = '@cf/google/gemma-4-26b-a4b-it';
+
+app.post('/api/aichat/check-heritage-mitokoro-gemma-batch', authMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!c.env.DB) return jsonUtf8({ cached: {} }, 503);
+  let heritages: string[] = [];
+  try {
+    const body = await c.req.json<{ heritages?: unknown }>();
+    if (Array.isArray(body.heritages)) {
+      heritages = (body.heritages as unknown[]).map((h) => String(h).trim()).filter(Boolean).slice(0, 800);
+    }
+  } catch {
+    return jsonUtf8({ cached: {} }, 400);
+  }
+  if (!heritages.length) return jsonUtf8({ cached: {} });
+  const result = await lookupHeritageTopicModelCache(
+    c.env.DB as unknown as D1Like, user.sub, heritages, HERITAGE_TOOLTIP_GEMMA_TOPIC, HERITAGE_TOOLTIP_GEMMA_MODEL
+  );
+  return jsonUtf8(result.error ? { cached: result.cached, error: result.error } : { cached: result.cached });
+});
+
 app.post('/api/aichat/check-heritage-questions-batch', authMiddleware, async (c) => {
   const user = c.get('user');
   if (!c.env.DB) return jsonUtf8({ answered: {} }, 503);
