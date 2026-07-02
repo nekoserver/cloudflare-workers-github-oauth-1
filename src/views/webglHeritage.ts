@@ -762,10 +762,21 @@ void main() {
   function stopAreaTour(completed) {
     areaTourRunning = false;
     if (areaTourTimer) { clearTimeout(areaTourTimer); areaTourTimer = null; }
+    hideTooltip();
+    var btn = document.getElementById('areaTourBtn');
+    if (btn) {
+      var sites = getHeritagesInBounds();
+      btn.innerHTML = '🏛️ 巡回';
+      btn.disabled = sites.length === 0;
+      btn.style.opacity = sites.length === 0 ? '0.4' : '1';
+    }
+    var prog = document.getElementById('areaTourProg');
+    if (prog) prog.textContent = '';
     if (completed) {
       lastBoxBounds = null;
       if (areaMenuEl) areaMenuEl.style.display = 'none';
       boxZoomMode = false; btnBoxZoom.classList.remove('active'); btnBoxZoom.textContent = '🔲 エリアズーム'; canvas.style.cursor = '';
+      if (!autoRot) { autoRot = true; btnAutoRot.textContent = '⏸ 自転停止'; btnAutoRot.classList.remove('active'); }
     }
   }
   function showAreaMenu() {
@@ -782,8 +793,18 @@ void main() {
     var d = sites[areaTourIdx], prog = document.getElementById('areaTourProg'), btn = document.getElementById('areaTourBtn');
     if (prog) prog.textContent = (areaTourIdx + 1) + ' / ' + sites.length;
     if (btn) btn.textContent = '⏹ 停止 (' + (areaTourIdx + 1) + '/' + sites.length + ')';
-    flyTo(d.lat, d.lon); zoom = Math.min(4.2, Math.max(2.2, zoom)); showMarkerTooltip(HERITAGE.indexOf(d), 0, 0);
-    areaTourTimer = setTimeout(function(){ areaTourIdx++; areaTourStep(sites); }, 4200);
+    flyTo(d.lat, d.lon);
+    areaTourTimer = setTimeout(function() {
+      if (!areaTourRunning) return;
+      zoom = Math.min(4.2, Math.max(2.2, zoom));
+      showMarkerTooltip(HERITAGE.indexOf(d), 0, 0);
+      areaTourTimer = setTimeout(function() {
+        if (!areaTourRunning) return;
+        hideTooltip();
+        areaTourIdx++;
+        areaTourStep(sites);
+      }, 5000);
+    }, FLY_DUR + 100);
   }
   function applyBoxZoom(ex, ey) {
     var rect = canvas.getBoundingClientRect();
@@ -796,10 +817,14 @@ void main() {
     var c1 = screenToLatLon(Math.max(bx0, ex), Math.max(by0, ey), rect);
     if (c0 && c1) { var lonCross = c0.lon > c1.lon; lastBoxBounds = { latMin: Math.min(c0.lat, c1.lat), latMax: Math.max(c0.lat, c1.lat), lonMin: lonCross ? c0.lon : Math.min(c0.lon, c1.lon), lonMax: lonCross ? c1.lon : Math.max(c0.lon, c1.lon), lonCross: lonCross }; }
     stopAreaTour(false);
+    if (areaMenuEl) areaMenuEl.style.display = 'none';
     var fraction = Math.min(bw / rect.width, bh / rect.height);
+    var newZoom = Math.max(1.2, Math.min(10, zoom * Math.max(0.18, fraction)));
     flyTo(ctr.lat, ctr.lon);
-    zoom = Math.max(1.2, Math.min(10, zoom * Math.max(0.18, fraction)));
-    if (lastBoxBounds) showAreaMenu();
+    setTimeout(function() {
+      zoom = newZoom;
+      if (lastBoxBounds) showAreaMenu();
+    }, FLY_DUR + 100);
   }
 
   canvas.addEventListener('mousedown',  function(e){ if(boxZoomMode){ boxDragging=true; bx0=e.clientX; by0=e.clientY; bxCur=bx0; byCur=by0; return; } drag=true; lx=e.clientX; ly=e.clientY; momentumY=0; momentumX=0; velY=0; velX=0; });
