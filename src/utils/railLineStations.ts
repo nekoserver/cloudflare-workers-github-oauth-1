@@ -94,9 +94,26 @@ export interface NearbyPoint {
 }
 
 /**
+ * pointType + pointName が同じ候補を重複として除去する。
+ * 距離昇順でソート済みの配列に適用すれば、同名の候補は最も近い1件のみが残る。
+ */
+export function dedupeNearbyPoints(points: NearbyPoint[]): NearbyPoint[] {
+  const seen = new Set<string>();
+  const deduped: NearbyPoint[] = [];
+  for (const p of points) {
+    const key = p.pointType + '|' + p.pointName;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    deduped.push(p);
+  }
+  return deduped;
+}
+
+/**
  * ある地点（駅）を中心に、半径radiusKm以内にある他の駅・世界遺産をまとめて距離昇順で返す。
  * excludeStationName と同名の駅（自分自身）は候補から除外する。
- * 同名の駅が複数路線に存在する場合は路線ごとに1件ずつ候補になる（重複排除はしない）。
+ * 同名の駅・世界遺産が複数路線などから重複して見つかった場合は、最も近い1件のみを残す
+ * （dedupeNearbyPoints による重複排除）。
  */
 export function findNearbyStationsAndHeritage(
   lines: RailLine[],
@@ -107,16 +124,13 @@ export function findNearbyStationsAndHeritage(
   excludeStationName: string
 ): NearbyPoint[] {
   const results: NearbyPoint[] = [];
-  const seenStationNames = new Set<string>();
 
   for (const line of lines) {
     for (const station of line.stations) {
       if (station.name === excludeStationName) continue;
-      if (seenStationNames.has(station.name)) continue;
       const distanceKm = haversineKm(lat, lon, station.lat, station.lon);
       if (distanceKm <= radiusKm) {
         results.push({ pointType: 'station', pointName: station.name, lat: station.lat, lon: station.lon, distanceKm });
-        seenStationNames.add(station.name);
       }
     }
   }
@@ -129,5 +143,5 @@ export function findNearbyStationsAndHeritage(
   }
 
   results.sort((a, b) => a.distanceKm - b.distanceKm);
-  return results;
+  return dedupeNearbyPoints(results);
 }

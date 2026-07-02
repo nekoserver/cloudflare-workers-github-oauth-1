@@ -1686,11 +1686,23 @@ void main() {
     stopRailTour();
   }
 
+  function dedupeNearbyPointsForDisplay(points) {
+    var seen = {}, result = [];
+    points.forEach(function(p) {
+      var key = p.point_type + '|' + p.point_name;
+      if (seen[key]) return;
+      seen[key] = true;
+      result.push(p);
+    });
+    return result;
+  }
+
   function renderNearbyPointsList(points) {
     if (!landingStationListEl) return;
     if (!points || points.length === 0) { landingStationListEl.innerHTML = ''; return; }
+    var deduped = dedupeNearbyPointsForDisplay(points);
     var html = '<div class="landing-station-hdr">🚉🏛️ 半径100km圏内の駅・世界遺産</div>';
-    points.forEach(function(p) {
+    deduped.forEach(function(p) {
       var icon = p.point_type === 'heritage' ? '🏛️' : '🚉';
       html += '<div class="landing-city-item"><span>' + icon + ' ' + p.point_name + '</span>' +
         '<span class="landing-city-dist">' + p.distance_km.toFixed(1) + 'km</span></div>';

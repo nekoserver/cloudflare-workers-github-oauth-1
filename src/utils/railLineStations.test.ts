@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { buildRailLineStationRows, haversineKm, findNearbyStationsAndHeritage } from './railLineStations';
+import { buildRailLineStationRows, haversineKm, findNearbyStationsAndHeritage, dedupeNearbyPoints } from './railLineStations';
 import { RAIL_LINES } from '../data/railLines';
 import type { RailLine } from '../data/railLines';
-import type { HeritagePoint } from './railLineStations';
+import type { HeritagePoint, NearbyPoint } from './railLineStations';
 
 describe('buildRailLineStationRows', () => {
   it('各路線の駅数の合計と同じ件数の行を生成する', () => {
@@ -173,5 +173,49 @@ describe('findNearbyStationsAndHeritage', () => {
   it('該当する駅・世界遺産が無ければ空配列を返す', () => {
     const results = findNearbyStationsAndHeritage([lineA], [], 0, 0, 1, '起点駅');
     expect(results).toEqual([]);
+  });
+
+  it('同名の駅が複数路線に存在する場合は重複させず最も近い1件のみを返す（ツールチップの重複表示防止）', () => {
+    const lineB: RailLine = {
+      name: '路線B', flag: '🏳️', country: 'テスト国', stations: [
+        { name: '近傍駅', lat: 0, lon: 0.5 },
+      ],
+    };
+    const results = findNearbyStationsAndHeritage([lineA, lineB], [], 0, 0, 100, '起点駅');
+    const matches = results.filter(r => r.pointName === '近傍駅');
+    expect(matches.length).toBe(1);
+  });
+
+  it('同名の世界遺産が重複して見つかっても重複させず最も近い1件のみを返す', () => {
+    const heritageDup: HeritagePoint = { n: '近傍遺産', f: '🏛️', lat: 0.31, lon: 0 };
+    const results = findNearbyStationsAndHeritage([lineA], [heritageNear, heritageDup], 0, 0, 100, '起点駅');
+    const matches = results.filter(r => r.pointName === '近傍遺産');
+    expect(matches.length).toBe(1);
+  });
+});
+
+describe('dedupeNearbyPoints', () => {
+  it('pointType + pointName が同じ候補のうち最初の1件のみを残す', () => {
+    const points: NearbyPoint[] = [
+      { pointType: 'station', pointName: 'X駅', lat: 0, lon: 0, distanceKm: 5 },
+      { pointType: 'station', pointName: 'X駅', lat: 0, lon: 0.01, distanceKm: 8 },
+      { pointType: 'heritage', pointName: 'X駅', lat: 1, lon: 1, distanceKm: 10 },
+    ];
+    const result = dedupeNearbyPoints(points);
+    expect(result.length).toBe(2);
+    expect(result.filter(p => p.pointType === 'station').length).toBe(1);
+    expect(result.find(p => p.pointType === 'station')?.distanceKm).toBe(5);
+  });
+
+  it('重複がなければすべてそのまま返す', () => {
+    const points: NearbyPoint[] = [
+      { pointType: 'station', pointName: 'A駅', lat: 0, lon: 0, distanceKm: 1 },
+      { pointType: 'heritage', pointName: 'B遺産', lat: 1, lon: 1, distanceKm: 2 },
+    ];
+    expect(dedupeNearbyPoints(points)).toEqual(points);
+  });
+
+  it('空配列に対しては空配列を返す', () => {
+    expect(dedupeNearbyPoints([])).toEqual([]);
   });
 });
