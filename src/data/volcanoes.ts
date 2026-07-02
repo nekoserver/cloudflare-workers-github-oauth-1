@@ -1,0 +1,73 @@
+export interface VolcanoSite {
+  id: string;
+  n: string;
+  c: string;
+  elev: number;
+  lastErupt: string;
+  lat: number;
+  lon: number;
+}
+
+export const VOLCANOES: VolcanoSite[] = [
+  {id:'kilauea',n:'キラウエア',c:'アメリカ合衆国（ハワイ）',elev:1247,lastErupt:'2024年（現在も活動中）',lat:19.42,lon:-155.29},
+  {id:'mauna_loa',n:'マウナ・ロア',c:'アメリカ合衆国（ハワイ）',elev:4169,lastErupt:'2022年',lat:19.48,lon:-155.61},
+  {id:'hualalai',n:'フアラライ山',c:'アメリカ合衆国（ハワイ島）',elev:2521,lastErupt:'1801年（次の噴火が懸念）',lat:19.69,lon:-155.87},
+  {id:'mauna_kea',n:'マウナ・ケア',c:'アメリカ合衆国（ハワイ島）',elev:4205,lastErupt:'4500年前（長期休眠中）',lat:19.82,lon:-155.47},
+  {id:'haleakala',n:'ハレアカラ',c:'アメリカ合衆国（マウイ島）',elev:3055,lastErupt:'1790年頃',lat:20.71,lon:-156.25},
+  {id:'loihi',n:'ロイヒ海底火山',c:'アメリカ合衆国（ハワイ島南東、海底）',elev:-975,lastErupt:'1996年（海底噴火・現在も活動中）',lat:18.92,lon:-155.27},
+  {id:'sakurajima',n:'桜島',c:'日本',elev:1117,lastErupt:'2024年（頻繁に噴火）',lat:31.58,lon:130.66},
+  {id:'asosan',n:'阿蘇山',c:'日本',elev:1592,lastErupt:'2024年',lat:32.88,lon:131.10},
+  {id:'fujisan',n:'富士山',c:'日本',elev:3776,lastErupt:'1707年（最後の噴火）',lat:35.36,lon:138.73},
+  {id:'shinmoedake',n:'新燃岳（霧島）',c:'日本',elev:1421,lastErupt:'2018年',lat:31.93,lon:130.86},
+  {id:'nishino',n:'西之島',c:'日本',elev:160,lastErupt:'2023年',lat:27.25,lon:140.87},
+  {id:'etna',n:'エトナ山',c:'イタリア（シチリア）',elev:3357,lastErupt:'2024年（頻繁に噴火）',lat:37.75,lon:15.00},
+  {id:'vesuvius',n:'ヴェスヴィオ山',c:'イタリア',elev:1281,lastErupt:'1944年',lat:40.82,lon:14.43},
+  {id:'stromboli',n:'ストロンボリ島',c:'イタリア',elev:924,lastErupt:'2024年（ほぼ常時噴火）',lat:38.79,lon:15.21},
+  {id:'santorini',n:'サントリーニ（テラ）',c:'ギリシャ',elev:329,lastErupt:'1950年',lat:36.42,lon:25.40},
+  {id:'hekla',n:'ヘクラ山',c:'アイスランド',elev:1491,lastErupt:'2000年',lat:63.98,lon:-19.70},
+  {id:'eyjafjallajokull',n:'エイヤフィヤトラヨークトル',c:'アイスランド',elev:1666,lastErupt:'2010年（航空障害）',lat:63.63,lon:-19.62},
+  {id:'katla',n:'カトラ',c:'アイスランド',elev:1512,lastErupt:'1918年（次の大噴火が懸念）',lat:63.63,lon:-19.05},
+  {id:'grindavik',n:'スヴァルツェンギ火山系',c:'アイスランド（レイキャネス半島）',elev:160,lastErupt:'2024〜2025年（複数回噴火）',lat:63.87,lon:-22.43},
+  {id:'merapi',n:'メラピ山',c:'インドネシア（ジャワ）',elev:2930,lastErupt:'2024年',lat:-7.54,lon:110.44},
+  {id:'krakatau',n:'クラカタウ',c:'インドネシア',elev:813,lastErupt:'2022年',lat:-6.10,lon:105.42},
+  {id:'sinabung',n:'シナブン山',c:'インドネシア（スマトラ）',elev:2460,lastErupt:'2021年',lat:3.17,lon:98.39},
+  {id:'semeru',n:'スメル山',c:'インドネシア（ジャワ）',elev:3676,lastErupt:'2024年',lat:-8.11,lon:112.92},
+  {id:'agung',n:'アグン山',c:'インドネシア（バリ）',elev:3142,lastErupt:'2019年',lat:-8.34,lon:115.51},
+  {id:'pinatubo',n:'ピナトゥボ山',c:'フィリピン',elev:1486,lastErupt:'1991年（20世紀最大級）',lat:15.14,lon:120.35},
+  {id:'mayon',n:'マヨン山',c:'フィリピン',elev:2463,lastErupt:'2023年',lat:13.26,lon:123.69},
+  {id:'taal',n:'タール火山',c:'フィリピン',elev:311,lastErupt:'2020年',lat:14.01,lon:120.99},
+  {id:'klyuchevskaya',n:'クリュチェフスカヤ山',c:'ロシア（カムチャツカ）',elev:4750,lastErupt:'2024年',lat:56.06,lon:160.64},
+  {id:'shiveluch',n:'シヴェルチ山',c:'ロシア（カムチャツカ）',elev:3307,lastErupt:'2024年',lat:56.65,lon:161.36},
+  {id:'st_helens',n:'セント・ヘレンズ山',c:'アメリカ合衆国',elev:2549,lastErupt:'2008年',lat:46.20,lon:-122.19},
+  {id:'redoubt',n:'リダウト山',c:'アメリカ合衆国（アラスカ）',elev:3108,lastErupt:'2009年',lat:60.49,lon:-152.74},
+  {id:'popocatepetl',n:'ポポカテペトル山',c:'メキシコ',elev:5426,lastErupt:'2024年（活発に活動中）',lat:19.02,lon:-98.62},
+  {id:'colima',n:'コリマ火山',c:'メキシコ',elev:3850,lastErupt:'2022年',lat:19.51,lon:-103.62},
+  {id:'soufriere_hills',n:'スフリエール・ヒルズ',c:'モントセラト（英領）',elev:1050,lastErupt:'2010年',lat:16.72,lon:-62.18},
+  {id:'soufriere_sv',n:'ラ・スフリエール（セントビンセント）',c:'セントビンセント・グレナディーン',elev:1234,lastErupt:'2021年（大噴火・島民避難）',lat:13.34,lon:-61.18},
+  {id:'pelee',n:'プレー山',c:'マルティニーク（仏領）',elev:1394,lastErupt:'1932年（1902年に3万人死亡）',lat:14.81,lon:-61.17},
+  {id:'soufriere_guad',n:'ラ・スフリエール（グアドループ）',c:'グアドループ（仏領）',elev:1467,lastErupt:'1977年（噴気活動継続中）',lat:16.04,lon:-61.66},
+  {id:'kick_em_jenny',n:'キック・エム・ジェニー',c:'グレナダ北部（海底火山）',elev:-185,lastErupt:'2001年（海底噴火）',lat:12.30,lon:-61.64},
+  {id:'morne_diablotin',n:'モルヌ・ディアブロタン',c:'ドミニカ',elev:1447,lastErupt:'記録なし（地熱活動活発）',lat:15.51,lon:-61.42},
+  {id:'soufriere_stlucia',n:'スフリエール地熱地帯',c:'セントルシア',elev:773,lastErupt:'噴気活動継続中（最後の噴火は先史時代）',lat:13.83,lon:-61.05},
+  {id:'nevis_peak',n:'ネビス・ピーク',c:'セントクリストファー・ネービス',elev:985,lastErupt:'先史時代（休火山）',lat:17.15,lon:-62.58},
+  {id:'mount_liamuiga',n:'リアムイガ山（サルファー・ヒルズ）',c:'セントクリストファー・ネービス',elev:1156,lastErupt:'先史時代（噴気活動あり）',lat:17.37,lon:-62.80},
+  {id:'cotopaxi',n:'コトパクシ山',c:'エクアドル',elev:5897,lastErupt:'2023年',lat:-0.68,lon:-78.44},
+  {id:'tungurahua',n:'トゥングラウア山',c:'エクアドル',elev:5023,lastErupt:'2016年',lat:-1.47,lon:-78.44},
+  {id:'villarrica',n:'ビジャリカ山',c:'チリ',elev:2847,lastErupt:'2024年',lat:-39.42,lon:-71.94},
+  {id:'calbuco',n:'カルブコ山',c:'チリ',elev:2015,lastErupt:'2015年',lat:-41.33,lon:-72.61},
+  {id:'galeras',n:'ガレラス山',c:'コロンビア',elev:4276,lastErupt:'2014年',lat:1.22,lon:-77.37},
+  {id:'nyiragongo',n:'ニーラゴンゴ山',c:'コンゴ民主共和国',elev:3470,lastErupt:'2021年',lat:-1.52,lon:29.25},
+  {id:'ol_doinyo',n:'オル・ドイニョ・レンガイ',c:'タンザニア',elev:2962,lastErupt:'2023年',lat:-2.76,lon:35.90},
+  {id:'erta_ale',n:'エルタ・アレ',c:'エチオピア',elev:613,lastErupt:'2024年（常時活動）',lat:13.60,lon:40.67},
+  {id:'erebus',n:'エレバス山',c:'南極',elev:3794,lastErupt:'2024年（常時活動）',lat:-77.53,lon:167.17},
+  {id:'ruapehu',n:'ルアペフ山',c:'ニュージーランド',elev:2797,lastErupt:'2007年',lat:-39.28,lon:175.57},
+  {id:'whakaari',n:'ファカーリ（ホワイト島）',c:'ニュージーランド',elev:321,lastErupt:'2019年（死者16名）',lat:-37.52,lon:177.18},
+  {id:'ambae',n:'アンバエ（マナロ）',c:'バヌアツ',elev:1496,lastErupt:'2018年',lat:-15.39,lon:167.83},
+  {id:'yasur',n:'ヤスール山',c:'バヌアツ（タンナ島）',elev:361,lastErupt:'2024年（ほぼ常時噴火）',lat:-19.53,lon:169.44},
+  {id:'bagana',n:'バガナ山',c:'パプアニューギニア',elev:1855,lastErupt:'2024年',lat:-6.14,lon:155.20},
+  {id:'ulawun',n:'ウラウン山',c:'パプアニューギニア',elev:2334,lastErupt:'2024年',lat:-5.05,lon:151.33},
+  {id:'rainier',n:'レーニア山',c:'アメリカ合衆国',elev:4392,lastErupt:'1894年（潜在的脅威）',lat:46.85,lon:-121.73},
+  {id:'sabancaya',n:'サバンカヤ山',c:'ペルー',elev:5976,lastErupt:'2024年',lat:-15.78,lon:-71.86},
+  {id:'ubinas',n:'ウビナス山',c:'ペルー',elev:5672,lastErupt:'2024年',lat:-16.36,lon:-70.90},
+  {id:'sangay',n:'サンガイ山',c:'エクアドル',elev:5286,lastErupt:'2024年（活発）',lat:-2.00,lon:-78.34}
+];
