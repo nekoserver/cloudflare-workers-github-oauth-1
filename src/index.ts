@@ -158,6 +158,7 @@ const STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
   { name: 'rail_station_cities',      migration: '0067',   description: '鉄道駅周辺都市キャッシュ',                                syncPolicy: 'auto' },
   { name: 'rail_station_fetched',     migration: '0067',   description: '鉄道駅都市検索済みフラグ',                                syncPolicy: 'auto' },
   { name: 'cf_auth_access_log',       migration: '0068',   description: 'cf-authウェブフックのアクセス権限判定ログ（OK/NG）',        syncPolicy: 'auto' },
+  { name: 'rail_line_stations',       migration: '0069',   description: '世界の鉄道路線モーダルの全駅データ（座標・国・国旗・順序）',    syncPolicy: 'manual' },
 ];
 
 const REQUIRED_STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
@@ -914,6 +915,22 @@ CREATE INDEX IF NOT EXISTS idx_webhook_log_received_at ON webhook_log(received_a
 CREATE INDEX IF NOT EXISTS idx_cf_auth_access_log_username ON cf_auth_access_log(username);
 CREATE INDEX IF NOT EXISTS idx_cf_auth_access_log_checked_at ON cf_auth_access_log(checked_at);`,
 
+  '0069': `CREATE TABLE IF NOT EXISTS rail_line_stations (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  line_name TEXT NOT NULL,
+  line_flag TEXT NOT NULL,
+  line_country TEXT NOT NULL,
+  station_name TEXT NOT NULL,
+  station_order INTEGER NOT NULL,
+  lat REAL NOT NULL,
+  lon REAL NOT NULL,
+  station_country TEXT NOT NULL,
+  station_flag TEXT NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_rail_line_stations_line_order ON rail_line_stations(line_name, station_order);
+CREATE INDEX IF NOT EXISTS idx_rail_line_stations_line_name ON rail_line_stations(line_name);
+CREATE INDEX IF NOT EXISTS idx_rail_line_stations_country ON rail_line_stations(station_country);`,
+
   '0063': `ALTER TABLE ai_chat_shares ADD COLUMN source TEXT;`,
 
   '0062': `CREATE TABLE IF NOT EXISTS uuid_history (
@@ -1292,6 +1309,7 @@ export const TABLE_COLUMN_KEYS: Record<string, ColumnKeyInfo> = {
   heritage_city_fetched: { heritage_name: 'pk' },
   rail_station_cities: { id: 'pk', station_name: 'idx', city_name: 'uk' },
   rail_station_fetched: { station_name: 'pk' },
+  rail_line_stations: { id: 'pk', line_name: 'idx', station_order: 'idx', station_country: 'idx' },
 };
 
 export function getColumnKeyType(tableName: string, columnName: string): ColumnKeyType {
@@ -1365,6 +1383,7 @@ export const TABLE_GROUP_MAP: Record<string, string> = {
   heritage_city_fetched: 'system',
   rail_station_cities: 'system',
   rail_station_fetched: 'system',
+  rail_line_stations: 'system',
   keyword_category_groups: 'search',
   keyword_multi_labels: 'search',
   ts_repository:          'ts-catalog',
