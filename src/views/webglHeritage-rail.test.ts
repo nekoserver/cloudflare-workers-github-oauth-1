@@ -24,12 +24,20 @@ describe('getWebGLHeritagePage 鉄道路線機能', () => {
     expect(count).toBeGreaterThan(0);
   });
 
-  it('🚉 鉄道ボタンとモーダルの要素が存在する', () => {
+  it('🚉 鉄道ボタンと左サイドパネルの要素が存在する（モーダルは廃止）', () => {
     expect(html).toContain('id="btnRail"');
-    expect(html).toContain('id="rail-modal-overlay"');
-    expect(html).toContain('id="rail-modal-body"');
-    expect(html).toContain('id="rail-modal-close"');
-    expect(html).toContain('function renderRailModalRows');
+    expect(html).toContain('id="rail-side"');
+    expect(html).toContain('id="rail-side-body"');
+    expect(html).toContain('id="rail-side-close"');
+    expect(html).toContain('function renderRailSideBody');
+    expect(html).not.toContain('id="rail-modal-overlay"');
+    expect(html).not.toContain('id="rail-modal-body"');
+  });
+
+  it('各路線の右端に巡回ボタンが存在する', () => {
+    expect(html).toContain('rail-tour-btn');
+    expect(html).toMatch(/function startRailTour\(lineIdx\)/);
+    expect(html).toMatch(/function stopRailTour\(\)/);
   });
 
   it('地表に降り立つ機能に近隣駅リストの要素が存在する', () => {
@@ -56,7 +64,7 @@ describe('getWebGLHeritagePage 鉄道路線機能', () => {
     expect(html).toContain('rail-station-row');
     expect(html).toMatch(/data-lat="\s*'\s*\+\s*st\.lat\s*\+\s*'\s*"\s+data-lon="\s*'\s*\+\s*st\.lon\s*\+\s*'\s*"/);
     expect(html).toMatch(/querySelectorAll\('\.rail-station-row'\)/);
-    expect(html).toMatch(/railModalOverlay\.classList\.remove\('open'\);\s*flyTo\(lat, lon\);\s*zoom = 1\.2;/);
+    expect(html).toMatch(/flyTo\(station\.lat, station\.lon\);\s*zoom = 1\.2;/);
   });
 
   it('サウジアラビア・UAE・カタールの鉄道路線が始発駅から終着駅の座標つきで含まれる', () => {
@@ -125,19 +133,29 @@ describe('getWebGLHeritagePage 鉄道路線機能', () => {
     expect(html).toContain('function cacheStationCities(name, lat, lon)');
     expect(html).toMatch(/var cacheIcon = hasStationDataSet\[st\.name\] \? '🚉 ' : '';/);
     expect(html).toMatch(/data-name="\s*'\s*\+\s*st\.name\s*\+\s*'\s*"/);
-    expect(html).toMatch(/cities-modal-name">\s*'\s*\+\s*cacheIcon\s*\+\s*st\.name/);
-    expect(html).toMatch(/zoom = 1\.2;\s*cacheStationCities\(name, lat, lon\);/);
+    expect(html).toMatch(/cities-modal-name">\s*'\s*\+\s*cacheIcon\s*\+\s*\(si \+ 1\)\s*\+\s*'\.\s*'\s*\+\s*st\.name/);
+    expect(html).toMatch(/cacheStationCities\(station\.name, station\.lat, station\.lon\);/);
   });
 
-  it('駅名タップで地球儀上に🚉ピンと路線名・駅名ツールチップが表示される', () => {
+  it('駅名タップで地球儀上に🚉ピンと路線名・駅名・区間距離・途中下車ボタンが表示される', () => {
     expect(html).toContain('id="rail-station-pin"');
     expect(html).toContain('id="rail-station-pin-label"');
     expect(html).toContain('id="rail-station-pin-line"');
     expect(html).toContain('id="rail-station-pin-name"');
+    expect(html).toContain('id="rail-station-pin-route"');
+    expect(html).toContain('id="rail-station-alight-btn"');
     expect(html).toContain('var railStationPin3d = null;');
     expect(html).toMatch(/data-line="\s*'\s*\+\s*line\.flag\s*\+\s*' '\s*\+\s*line\.name\s*\+\s*'"/);
-    expect(html).toMatch(/railStationPin3d = latLonTo3D\(lat, lon\);\s*railStationPinLine\.textContent = lineLabel;\s*railStationPinName\.textContent = name;/);
+    expect(html).toMatch(/function showRailStationPin\(line, station, stationIdx\)/);
+    expect(html).toMatch(/function startStationLanding\(/);
     expect(html).toMatch(/updateWorldPin\(railStationPin3d, railStationPin, railStationPinLabel\);/);
+  });
+
+  it('途中下車すると駅から100km圏内の駅・世界遺産をAPI取得しツールチップに表示する', () => {
+    expect(html).toContain("fetch('/api/rail-station-nearby'");
+    expect(html).toContain('function renderNearbyPointsList(points)');
+    expect(html).toContain('function loadNearbyPoints(name, lat, lon)');
+    expect(html).toMatch(/半径100km圏内の駅・世界遺産/);
   });
 
   it('区間距離は haversine 公式で始発から終着まで加算した値と一致する', () => {
