@@ -1286,7 +1286,7 @@ export const TABLE_COLUMN_KEYS: Record<string, ColumnKeyInfo> = {
   api_search_keywords:        { id: 'pk', keyword: 'idx' },
   api_search_keyword_sections: { id: 'pk', keyword_id: 'fk+idx', section_name: '' },
   webhook_log: { id: 'pk', source: 'idx', received_at: 'idx' },
-  cf_auth_access_log: { id: 'pk', username: 'idx', result: 'idx', checked_at: 'idx' },
+  cf_auth_access_log: { id: 'pk', username: 'fk', result: 'idx', checked_at: 'idx' },
   uuid_history: { id: 'pk', user_id: 'idx', uuid: 'idx', created_at: 'idx' },
   heritage_cities: { id: 'pk', heritage_name: 'idx', city_name: 'uk' },
   heritage_city_fetched: { heritage_name: 'pk' },
@@ -1539,6 +1539,7 @@ export const COLUMN_FK_TARGETS: Record<string, Record<string, string>> = {
   ts_commit_quality:      { repo_id: 'ts_repository', commit_hash: 'ts_commit_log' },
   api_search_keyword_sections: { keyword_id: 'api_search_keywords' },
   aichat_rate_limit: { user_id: 'user_sessions' },
+  cf_auth_access_log: { username: 'user_sessions' },
 };
 
 /**
@@ -1570,6 +1571,8 @@ export const COLUMN_FK_TARGET_COLUMNS: Record<string, string> = {
   'email_mfa_challenges.user_id': 'user_id',
   // 異名FK: target_user_id も意味的には user_id
   'email_audit_anomalies.target_user_id': 'user_id',
+  // 異名FK: username も意味的には user_id
+  'cf_auth_access_log.username': 'user_id',
 
   // group_id 系 → repo_groups.id
   'repo_group_members.group_id': 'id',
