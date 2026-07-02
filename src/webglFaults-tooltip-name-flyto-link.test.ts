@@ -29,4 +29,11 @@ describe('活断層・活火山ツールチップの名前に地球儀中心ス�
     expect(html).toContain("ev.target.className === 'fault-tt-name'");
     expect(html).toContain("e.target.className === 'vol-tt-name'");
   });
+
+  it('活断層名・活火山名のリンクはアンダーラインなし・文字色は水色(#58a6ff)に統一されている', () => {
+    expect(html).toMatch(/\.fault-tt-name \{[^}]*color:#58a6ff;[^}]*text-decoration:none;/);
+    expect(html).toMatch(/\.vol-tt-name \{[^}]*color:#58a6ff;[^}]*text-decoration:none;/);
+    expect(html).not.toMatch(/\.fault-tt-name:hover \{[^}]*text-decoration:underline/);
+    expect(html).not.toMatch(/\.vol-tt-name:hover \{[^}]*text-decoration:underline/);
+  });
 });
