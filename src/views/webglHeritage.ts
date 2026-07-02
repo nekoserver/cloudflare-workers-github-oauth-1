@@ -143,7 +143,7 @@ canvas:active { cursor:grabbing; }
 .rail-line-summary { cursor:pointer; font-size:13px; font-weight:700; color:#e6edf3; display:flex; align-items:center; gap:8px; padding:4px 0; }
 .rail-line-total { color:#58a6ff; font-size:11px; font-weight:600; margin-left:auto; flex-shrink:0; }
 .rail-line-stations { padding:4px 0 4px 8px; }
-.rail-station-coord { color:#8b949e; font-size:10px; font-family:monospace; flex-shrink:0; margin:0 8px; }
+.rail-station-coord { display:none; color:#8b949e; font-size:10px; font-family:monospace; flex-shrink:0; margin:0 8px; }
 .rail-station-row { cursor:pointer; }
 .rail-station-row:hover { background:#161b22; }
 .rail-station-row:active { background:#1c2530; }
