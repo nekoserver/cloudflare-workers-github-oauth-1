@@ -311,4 +311,15 @@ describe('getWebGLHeritagePage エリアズーム機能（種別ごとの巡回�
     expect(fn).toContain('if (mz <= 0.05) return null;');
     expect(fn).toContain('if (cw <= 0) return null;');
   });
+
+  it('flashAreaTourSideItem はF1側パネル(focusF1Circuit)と同じ .active クラスを現在の巡回先の行にだけ付け、薄緑の背景と緑のアクセント枠を表示する', () => {
+    // .f1-side-item.active は F1側パネルと共通のCSSルールを再利用する(背景色・左アクセントとも同一)
+    expect(html).toMatch(/\.f1-side-item\.active \{ background:#0c2d1a; border-left-color:#3fb950; \}/);
+    const flashMatch = html.match(/function flashAreaTourSideItem\(idx\) \{[\s\S]*?\n  \}/);
+    expect(flashMatch).not.toBeNull();
+    const fn = flashMatch![0];
+    expect(fn).toContain("row.classList.toggle('active', parseInt(row.getAttribute('data-idx'), 10) === idx)");
+    // F1側の focusF1Circuit と同じく、全行をクエリしてから対象行だけ active を付与する(他の行からは外れる)
+    expect(fn).toContain("areaTourSideBody.querySelectorAll('.f1-side-item').forEach(function(row)");
+  });
 });

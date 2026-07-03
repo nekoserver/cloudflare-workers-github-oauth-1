@@ -894,6 +894,11 @@ void main() {
 
   function flashAreaTourSideItem(idx) {
     if (!areaTourSideBody) return;
+    // F1側パネル(focusF1Circuit)と同じ .active クラスを使い、現在の巡回先の行の背景色を
+    // 薄緑にして行頭に緑のアクセント枠を表示する(.f1-side-item.active を再利用)
+    areaTourSideBody.querySelectorAll('.f1-side-item').forEach(function(row) {
+      row.classList.toggle('active', parseInt(row.getAttribute('data-idx'), 10) === idx);
+    });
     var el = areaTourSideBody.querySelector('.f1-side-item[data-idx="' + idx + '"]');
     if (!el) return;
     el.scrollIntoView({ block: 'center', behavior: 'smooth' });
