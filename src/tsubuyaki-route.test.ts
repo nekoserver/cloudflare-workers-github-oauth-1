@@ -15,6 +15,12 @@ const postBlock = (() => {
   return src.slice(idx, end);
 })();
 
+const slashCommandBlock = (() => {
+  const idx = src.indexOf("app.post('/slack/commands'");
+  const end = src.indexOf('\n});', idx) + 4;
+  return src.slice(idx, end);
+})();
+
 describe('GET /tsubuyaki', () => {
   it('authMiddleware で保護されている', () => {
     expect(getBlock).toContain('authMiddleware');
@@ -53,5 +59,31 @@ describe('POST /api/tsubuyaki', () => {
   it('buildFreeTextSlackMessage に表示名(name優先・無ければsub)と本文を渡す', () => {
     expect(postBlock).toContain('const displayName = user.name || user.sub;');
     expect(postBlock).toContain('buildFreeTextSlackMessage(displayName, validated.text)');
+  });
+});
+
+describe('POST /slack/commands', () => {
+  it('command フィールドで /tsubuyaki にディスパッチする', () => {
+    expect(slashCommandBlock).toContain("command === '/tsubuyaki'");
+    expect(slashCommandBlock).toContain('handleTsubuyakiSlashCommand(');
+  });
+
+  it('署名・トークン・チャンネルを handleTsubuyakiSlashCommand に渡す', () => {
+    expect(slashCommandBlock).toContain('timestamp: c.req.header(');
+    expect(slashCommandBlock).toContain('signature: c.req.header(');
+    expect(slashCommandBlock).toContain('signingSecret: c.env.SLACK_SIGNING_SECRET');
+    expect(slashCommandBlock).toContain('slackToken: c.env.SLACK_OAUTH_TOKEN');
+    expect(slashCommandBlock).toContain('slackChannel: c.env.SLACK_CHANNEL_ID');
+    expect(slashCommandBlock).toContain('verifySignature: verifySlackSignature');
+    expect(slashCommandBlock).toContain('postMessage: postSlackMessage');
+  });
+
+  it('body が null（署名検証失敗）の場合は401を返す', () => {
+    expect(slashCommandBlock).toMatch(/if \(!result\.body\) \{\s*return c\.text\('', 401\);/);
+  });
+
+  it('未対応のコマンドにはephemeralで案内メッセージを返す(200)', () => {
+    expect(slashCommandBlock).toContain("response_type: 'ephemeral'");
+    expect(slashCommandBlock).toContain('未対応のコマンドです');
   });
 });

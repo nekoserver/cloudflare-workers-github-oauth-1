@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest';
-import { validateFreeText, buildFreeTextSlackMessage } from './freeTextSlackPost';
+import { describe, it, expect, vi } from 'vitest';
+import { validateFreeText, buildFreeTextSlackMessage, handleTsubuyakiSlashCommand } from './freeTextSlackPost';
 
 describe('validateFreeText', () => {
   it('通常の文字列を受け付ける', () => {
@@ -49,5 +49,88 @@ describe('buildFreeTextSlackMessage', () => {
     const msg = buildFreeTextSlackMessage('octocat', 'テスト投稿です');
     expect(msg).toContain('octocat');
     expect(msg).toContain('テスト投稿です');
+  });
+});
+
+describe('handleTsubuyakiSlashCommand', () => {
+  const baseDeps = () => ({
+    rawBody: 'command=%2Ftsubuyaki&text=hello&user_name=octocat',
+    timestamp: '1700000000',
+    signature: 'v0=dummy',
+    signingSecret: 'secret',
+    slackToken: 'xoxb-token',
+    slackChannel: 'C12345',
+    verifySignature: vi.fn().mockResolvedValue({ success: true }),
+    postMessage: vi.fn().mockResolvedValue({ ok: true }),
+  });
+
+  it('SLACK_SIGNING_SECRET が未設定なら署名検証を行わず200+エラーメッセージを返す', async () => {
+    const deps = baseDeps();
+    deps.signingSecret = undefined;
+    const result = await handleTsubuyakiSlashCommand(deps);
+    expect(result.status).toBe(200);
+    expect(result.body?.text).toContain('SLACK_SIGNING_SECRET');
+    expect(deps.verifySignature).not.toHaveBeenCalled();
+  });
+
+  it('署名検証に失敗した場合は401・本文なしを返す（偽装リクエストの拒否）', async () => {
+    const deps = baseDeps();
+    deps.verifySignature = vi.fn().mockResolvedValue({ success: false, reason: 'bad sig' });
+    const result = await handleTsubuyakiSlashCommand(deps);
+    expect(result.status).toBe(401);
+    expect(result.body).toBeNull();
+    expect(deps.postMessage).not.toHaveBeenCalled();
+  });
+
+  it('text が空の場合は投稿せずエラーメッセージを返す', async () => {
+    const deps = baseDeps();
+    deps.rawBody = 'command=%2Ftsubuyaki&text=&user_name=octocat';
+    const result = await handleTsubuyakiSlashCommand(deps);
+    expect(result.status).toBe(200);
+    expect(result.body?.text).toContain('❌');
+    expect(deps.postMessage).not.toHaveBeenCalled();
+  });
+
+  it('SLACK_OAUTH_TOKEN/SLACK_CHANNEL_ID が未設定なら投稿せずエラーメッセージを返す', async () => {
+    const deps = baseDeps();
+    deps.slackToken = undefined;
+    const result = await handleTsubuyakiSlashCommand(deps);
+    expect(result.status).toBe(200);
+    expect(result.body?.text).toContain('SLACK_OAUTH_TOKEN');
+    expect(deps.postMessage).not.toHaveBeenCalled();
+  });
+
+  it('postMessage が失敗した場合はエラー内容を含めて返す（握りつぶさない）', async () => {
+    const deps = baseDeps();
+    deps.postMessage = vi.fn().mockResolvedValue({ ok: false, error: 'channel_not_found' });
+    const result = await handleTsubuyakiSlashCommand(deps);
+    expect(result.status).toBe(200);
+    expect(result.body?.text).toContain('channel_not_found');
+  });
+
+  it('成功時はuser_nameを差出人としてpostMessageを呼び、成功メッセージを返す', async () => {
+    const deps = baseDeps();
+    const result = await handleTsubuyakiSlashCommand(deps);
+    expect(deps.postMessage).toHaveBeenCalledWith({
+      token: 'xoxb-token',
+      channel: 'C12345',
+      text: expect.stringContaining('octocat'),
+    });
+    expect(deps.postMessage).toHaveBeenCalledWith({
+      token: 'xoxb-token',
+      channel: 'C12345',
+      text: expect.stringContaining('hello'),
+    });
+    expect(result.status).toBe(200);
+    expect(result.body?.text).toContain('✅');
+  });
+
+  it('user_name が無い場合は unknown を差出人として使う', async () => {
+    const deps = baseDeps();
+    deps.rawBody = 'command=%2Ftsubuyaki&text=hello';
+    await handleTsubuyakiSlashCommand(deps);
+    expect(deps.postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ text: expect.stringContaining('unknown') })
+    );
   });
 });

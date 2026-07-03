@@ -46,7 +46,7 @@ import { getGalaxyPage } from './views/galaxy';
 import { findNearbyCities } from './utils/worldCities';
 import { getAuthFlowPage } from './views/authFlow';
 import { getTsubuyakiPage } from './views/tsubuyaki';
-import { validateFreeText, buildFreeTextSlackMessage } from './utils/freeTextSlackPost';
+import { validateFreeText, buildFreeTextSlackMessage, handleTsubuyakiSlashCommand } from './utils/freeTextSlackPost';
 
 import { computeColumnRelationStats, verifyColumnStats, type TableSchema, type Relation } from './utils/columnRelationStats';
 import { ensureDefaultWorkspace, getCurrentWorkspace, getUserWorkspaces, switchWorkspace } from './utils/workspace';
@@ -9374,6 +9374,36 @@ app.post('/slack/interactions', async (c) => {
     return c.text('', 401);
   }
   return c.text('', 200);
+});
+
+/**
+ * Slack スラッシュコマンドの受信エンドポイント。
+ * Slack App の Slash Commands 設定で Request URL をこのパスに向け、
+ * command フィールドで各コマンドにディスパッチする（今後コマンドが増えても1つのURLで済む）。
+ */
+app.post('/slack/commands', async (c) => {
+  const rawBody = await c.req.text();
+  const form = new URLSearchParams(rawBody);
+  const command = form.get('command');
+
+  if (command === '/tsubuyaki') {
+    const result = await handleTsubuyakiSlashCommand({
+      rawBody,
+      timestamp: c.req.header('X-Slack-Request-Timestamp'),
+      signature: c.req.header('X-Slack-Signature'),
+      signingSecret: c.env.SLACK_SIGNING_SECRET,
+      slackToken: c.env.SLACK_OAUTH_TOKEN,
+      slackChannel: c.env.SLACK_CHANNEL_ID,
+      verifySignature: verifySlackSignature,
+      postMessage: postSlackMessage,
+    });
+    if (!result.body) {
+      return c.text('', 401);
+    }
+    return c.json(result.body, 200);
+  }
+
+  return c.json({ response_type: 'ephemeral', text: `未対応のコマンドです: ${command ?? '(不明)'}` }, 200);
 });
 
 /**
