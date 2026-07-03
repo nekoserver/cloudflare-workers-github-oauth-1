@@ -44,7 +44,7 @@ export type TsubuyakiSlashCommandDeps = {
 };
 
 /**
- * Slack スラッシュコマンド `/tsubuyaki` を処理する。
+ * Slack スラッシュコマンド `/pts` を処理する。
  * 署名検証に失敗した場合のみ 401・本文なしを返す（Slack以外からの偽装リクエストを拒否するため）。
  * それ以外（設定不備・入力検証エラー・Slack API失敗・成功）はすべて200 + ephemeralメッセージで返す。
  */

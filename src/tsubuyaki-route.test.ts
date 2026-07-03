@@ -63,8 +63,8 @@ describe('POST /api/tsubuyaki', () => {
 });
 
 describe('POST /slack/commands', () => {
-  it('command フィールドで /tsubuyaki にディスパッチする', () => {
-    expect(slashCommandBlock).toContain("command === '/tsubuyaki'");
+  it('command フィールドで /pts にディスパッチする', () => {
+    expect(slashCommandBlock).toContain("command === '/pts'");
     expect(slashCommandBlock).toContain('handleTsubuyakiSlashCommand(');
   });
 
