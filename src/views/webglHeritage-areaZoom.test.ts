@@ -163,6 +163,59 @@ describe('getWebGLHeritagePage エリアズーム機能（種別ごとの巡回�
     expect(stepMatch![0]).toContain('flashAreaTourSideItem(areaTourIdx)');
   });
 
+  it('flashAreaTourSideItem は点滅対象の行をパネル内でスクロールして表示する（巡回先が多い場合に見えなくなる不具合の防止）', () => {
+    const flashMatch = html.match(/function flashAreaTourSideItem\(idx\) \{[\s\S]*?\n  \}/);
+    expect(flashMatch).not.toBeNull();
+    const fn = flashMatch![0];
+    const scrollPos = fn.indexOf('scrollIntoView');
+    const flashPos = fn.indexOf("classList.add('f1-flash')");
+    expect(scrollPos).toBeGreaterThan(-1);
+    expect(flashPos).toBeGreaterThan(-1);
+    expect(scrollPos).toBeLessThan(flashPos);
+  });
+
+  it('駅(station)種別の巡回では地球儀上に🚉ピンを表示する（既存の showRailStationPin を利用する）', () => {
+    const kindsMatch = html.match(/var AREA_KINDS = \[[\s\S]*?\n  \];/);
+    expect(kindsMatch).not.toBeNull();
+    const stationKindMatch = kindsMatch![0].match(/key: 'station'[\s\S]*?(?=\n    \{\s*\n      key: 'f1')/);
+    expect(stationKindMatch).not.toBeNull();
+    const block = stationKindMatch![0];
+    expect(block).toContain("railStationPin.style.display = 'block'");
+    expect(block).toContain("railStationPinLabel.style.display = 'block'");
+    expect(block).toContain('showRailStationPin(item.line, item.st, item.line.stations.indexOf(item.st))');
+  });
+
+  it('駅(station)種別は hideExtra でピンを非表示に戻す', () => {
+    const kindsMatch = html.match(/var AREA_KINDS = \[[\s\S]*?\n  \];/);
+    expect(kindsMatch).not.toBeNull();
+    const stationKindMatch = kindsMatch![0].match(/key: 'station'[\s\S]*?(?=\n    \{\s*\n      key: 'f1')/);
+    expect(stationKindMatch).not.toBeNull();
+    const block = stationKindMatch![0];
+    expect(block).toContain('hideExtra: function()');
+    expect(block).toContain("railStationPin.style.display = 'none'");
+    expect(block).toContain("railStationPinLabel.style.display = 'none'");
+  });
+
+  it('areaTourStep はツールチップを隠すタイミングで種別固有の hideExtra も呼ぶ', () => {
+    const stepMatch = html.match(/function areaTourStep\(kind, items\)[\s\S]*?(?=function applyBoxZoom)/);
+    expect(stepMatch).not.toBeNull();
+    const fn = stepMatch![0];
+    const hidePos = fn.indexOf('hideTooltip()');
+    const hideExtraPos = fn.indexOf('if (kind.hideExtra) kind.hideExtra()');
+    expect(hidePos).toBeGreaterThan(-1);
+    expect(hideExtraPos).toBeGreaterThan(hidePos);
+  });
+
+  it('stopAreaTour も現在の巡回種別の hideExtra を呼んでからリセットする', () => {
+    const stopMatch = html.match(/function stopAreaTour\(completed\) \{[\s\S]*?\n  \}/);
+    expect(stopMatch).not.toBeNull();
+    const stopFn = stopMatch![0];
+    const hideExtraPos = stopFn.indexOf('if (areaTourKind && areaTourKind.hideExtra) areaTourKind.hideExtra()');
+    const resetKindPos = stopFn.indexOf('areaTourKind = null');
+    expect(hideExtraPos).toBeGreaterThan(-1);
+    expect(resetKindPos).toBeGreaterThan(hideExtraPos);
+  });
+
   it('applyBoxZoom がフライ後に setTimeout でズームとメニューを適用する', () => {
     const applyMatch = html.match(/function applyBoxZoom[\s\S]*?(?=\n  canvas\.addEventListener)/);
     expect(applyMatch).not.toBeNull();

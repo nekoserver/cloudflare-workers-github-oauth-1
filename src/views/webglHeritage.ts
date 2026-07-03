@@ -812,7 +812,14 @@ void main() {
       locate: function(item) { return [item.st.lat, item.st.lon]; },
       itemLabel: function(item) { return item.line.flag + ' ' + item.st.name; },
       showTooltip: function(item) {
-        showGenericAreaTooltip('<div class="tt-name">🚉 ' + item.line.flag + ' ' + item.line.name + ' ' + item.st.name + '</div>');
+        railStationPin.style.display = 'block';
+        railStationPinLabel.style.display = 'block';
+        showRailStationPin(item.line, item.st, item.line.stations.indexOf(item.st));
+      },
+      hideExtra: function() {
+        railStationPin.style.display = 'none';
+        railStationPinLabel.style.display = 'none';
+        railStationPin3d = null;
       }
     },
     {
@@ -862,6 +869,7 @@ void main() {
     if (!areaTourSideBody) return;
     var el = areaTourSideBody.querySelector('.f1-side-item[data-idx="' + idx + '"]');
     if (!el) return;
+    el.scrollIntoView({ block: 'center', behavior: 'smooth' });
     el.classList.remove('f1-flash');
     void el.offsetWidth;
     el.classList.add('f1-flash');
@@ -903,6 +911,7 @@ void main() {
     areaTourRunning = false;
     if (areaTourTimer) { clearTimeout(areaTourTimer); areaTourTimer = null; }
     hideTooltip();
+    if (areaTourKind && areaTourKind.hideExtra) areaTourKind.hideExtra();
     areaTourKind = null;
     renderAreaMenu();
     var prog = document.getElementById('areaTourProg');
@@ -943,6 +952,7 @@ void main() {
       areaTourTimer = setTimeout(function() {
         if (!areaTourRunning) return;
         hideTooltip();
+        if (kind.hideExtra) kind.hideExtra();
         areaTourIdx++;
         areaTourStep(kind, items);
       }, 5000);
