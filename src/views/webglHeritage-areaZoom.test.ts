@@ -272,4 +272,43 @@ describe('getWebGLHeritagePage エリアズーム機能（種別ごとの巡回�
     const showMenuPos = fn.indexOf('showAreaMenu', setTimeoutPos);
     expect(showMenuPos).toBeGreaterThan(setTimeoutPos);
   });
+
+  it('applyBoxZoom は選択範囲の中心・左上・右下座標を lastBoxBounds に保存する', () => {
+    const applyMatch = html.match(/function applyBoxZoom[\s\S]*?(?=\n  canvas\.addEventListener)/);
+    expect(applyMatch).not.toBeNull();
+    const fn = applyMatch![0];
+    expect(fn).toContain('center: { lat: ctr.lat, lon: ctr.lon }');
+    expect(fn).toContain('corner0: { lat: c0.lat, lon: c0.lon }');
+    expect(fn).toContain('corner1: { lat: c1.lat, lon: c1.lon }');
+  });
+
+  it('areaTourStep は巡回が自然に終わっても completed=false でstopAreaTourを呼び、エリア選択枠を消さない', () => {
+    const stepMatch = html.match(/function areaTourStep\(kind, items\)[\s\S]*?(?=function applyBoxZoom)/);
+    expect(stepMatch).not.toBeNull();
+    expect(stepMatch![0]).toContain('stopAreaTour(false)');
+    expect(stepMatch![0]).not.toContain('stopAreaTour(true)');
+  });
+
+  it('毎フレーム、選択済みのエリア枠を保存済みの座標から再投影してズームや回転の変化に追従させる（updateBoxOverlayFromBounds）', () => {
+    expect(html).toContain('function updateBoxOverlayFromBounds()');
+    const fnMatch = html.match(/function updateBoxOverlayFromBounds\(\) \{[\s\S]*?\n    \}/);
+    expect(fnMatch).not.toBeNull();
+    const fn = fnMatch![0];
+    // ドラッグ中は生の画面座標(updateBoxOverlay)を優先し、再投影で上書きしない
+    expect(fn).toContain('if (boxDragging ||');
+    expect(fn).toContain('lastBoxBounds.corner0');
+    expect(fn).toContain('lastBoxBounds.corner1');
+    expect(fn).toContain('projectLatLonToScreen(lastBoxBounds.corner0.lat, lastBoxBounds.corner0.lon)');
+    expect(fn).toContain('projectLatLonToScreen(lastBoxBounds.corner1.lat, lastBoxBounds.corner1.lon)');
+    // 毎フレーム呼び出される(frame内で即時実行)
+    expect(html).toContain('updateBoxOverlayFromBounds();\n\n    if (cityFlyPos3d)');
+  });
+
+  it('projectLatLonToScreen は地球の裏側にある座標に対してはnullを返す（枠が誤った位置に描画されるのを防止）', () => {
+    const fnMatch = html.match(/function projectLatLonToScreen\(lat, lon\) \{[\s\S]*?\n    \}/);
+    expect(fnMatch).not.toBeNull();
+    const fn = fnMatch![0];
+    expect(fn).toContain('if (mz <= 0.05) return null;');
+    expect(fn).toContain('if (cw <= 0) return null;');
+  });
 });

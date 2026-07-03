@@ -966,7 +966,9 @@ void main() {
     areaTourStep(kind, items);
   }
   function areaTourStep(kind, items) {
-    if (!areaTourRunning || areaTourIdx >= items.length) { stopAreaTour(true); return; }
+    // 巡回が自然に終わった場合は completed=false 扱いにし、エリア選択枠・エリアメニューを
+    // 消さずに残す（巡回後の作業のため、明示的な✕クリック以外では枠を消さない）
+    if (!areaTourRunning || areaTourIdx >= items.length) { stopAreaTour(false); return; }
     var d = items[areaTourIdx], pos = kind.locate(d);
     renderAreaMenu();
     flashAreaTourSideItem(areaTourIdx);
@@ -995,7 +997,17 @@ void main() {
     updateBoxOverlay();
     var c0 = screenToLatLon(Math.min(bx0, ex), Math.min(by0, ey), rect);
     var c1 = screenToLatLon(Math.max(bx0, ex), Math.max(by0, ey), rect);
-    if (c0 && c1) { var lonCross = c0.lon > c1.lon; lastBoxBounds = { latMin: Math.min(c0.lat, c1.lat), latMax: Math.max(c0.lat, c1.lat), lonMin: lonCross ? c0.lon : Math.min(c0.lon, c1.lon), lonMax: lonCross ? c1.lon : Math.max(c0.lon, c1.lon), lonCross: lonCross }; }
+    if (c0 && c1) {
+      var lonCross = c0.lon > c1.lon;
+      lastBoxBounds = {
+        latMin: Math.min(c0.lat, c1.lat), latMax: Math.max(c0.lat, c1.lat),
+        lonMin: lonCross ? c0.lon : Math.min(c0.lon, c1.lon), lonMax: lonCross ? c1.lon : Math.max(c0.lon, c1.lon),
+        lonCross: lonCross,
+        center: { lat: ctr.lat, lon: ctr.lon },
+        corner0: { lat: c0.lat, lon: c0.lon },
+        corner1: { lat: c1.lat, lon: c1.lon }
+      };
+    }
     stopAreaTour(false);
     if (areaMenuEl) areaMenuEl.style.display = 'none';
     var fraction = Math.min(bw / rect.width, bh / rect.height);
@@ -3117,6 +3129,35 @@ void main() {
       pinEl.style.display = 'none';
       if (labelEl) labelEl.style.display = 'none';
     }
+
+    function projectLatLonToScreen(lat, lon) {
+      var p = latLonTo3D(lat, lon);
+      var mz = model[2]*p[0] + model[6]*p[1] + model[10]*p[2];
+      if (mz <= 0.05) return null;
+      var cx = mvp[0]*p[0] + mvp[4]*p[1] + mvp[8]*p[2]  + mvp[12];
+      var cy = mvp[1]*p[0] + mvp[5]*p[1] + mvp[9]*p[2]  + mvp[13];
+      var cw = mvp[3]*p[0] + mvp[7]*p[1] + mvp[11]*p[2] + mvp[15];
+      if (cw <= 0) return null;
+      return { x: canvasRect.left + (cx/cw+1)*0.5*W, y: canvasRect.top + (1-cy/cw)*0.5*H };
+    }
+
+    // ドラッグ中は生の画面座標で描く updateBoxOverlay() が優先される。ドラッグ完了後は
+    // 選択時の中心・左上・右下座標(lastBoxBounds.corner0/corner1)を毎フレーム再投影し、
+    // ズームやドラッグ回転で見え方が変わっても選択エリアの枠が正しい位置・大きさで
+    // 地球儀に追従し続けるようにする（枠自体は明示的な✕クリックまで消さない）。
+    function updateBoxOverlayFromBounds() {
+      if (boxDragging || !lastBoxBounds || !lastBoxBounds.corner0 || !lastBoxBounds.corner1) return;
+      var s0 = projectLatLonToScreen(lastBoxBounds.corner0.lat, lastBoxBounds.corner0.lon);
+      var s1 = projectLatLonToScreen(lastBoxBounds.corner1.lat, lastBoxBounds.corner1.lon);
+      if (!s0 || !s1) { boxZoomOverlay.style.display = 'none'; return; }
+      var left = Math.min(s0.x, s1.x) - canvasRect.left, top = Math.min(s0.y, s1.y) - canvasRect.top;
+      boxZoomOverlay.style.left = left + 'px';
+      boxZoomOverlay.style.top = top + 'px';
+      boxZoomOverlay.style.width = Math.abs(s1.x - s0.x) + 'px';
+      boxZoomOverlay.style.height = Math.abs(s1.y - s0.y) + 'px';
+      boxZoomOverlay.style.display = 'block';
+    }
+    updateBoxOverlayFromBounds();
 
     if (cityFlyPos3d) {
       var cfp = cityFlyPos3d;
