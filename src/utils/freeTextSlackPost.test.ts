@@ -54,7 +54,7 @@ describe('buildFreeTextSlackMessage', () => {
 
 describe('handleTsubuyakiSlashCommand', () => {
   const baseDeps = () => ({
-    rawBody: 'command=%2Ftsubuyaki&text=hello&user_name=octocat',
+    rawBody: 'command=%2Fpts&text=hello&user_name=octocat',
     timestamp: '1700000000',
     signature: 'v0=dummy',
     signingSecret: 'secret',
@@ -84,7 +84,7 @@ describe('handleTsubuyakiSlashCommand', () => {
 
   it('text が空の場合は投稿せずエラーメッセージを返す', async () => {
     const deps = baseDeps();
-    deps.rawBody = 'command=%2Ftsubuyaki&text=&user_name=octocat';
+    deps.rawBody = 'command=%2Fpts&text=&user_name=octocat';
     const result = await handleTsubuyakiSlashCommand(deps);
     expect(result.status).toBe(200);
     expect(result.body?.text).toContain('❌');
@@ -127,7 +127,7 @@ describe('handleTsubuyakiSlashCommand', () => {
 
   it('user_name が無い場合は unknown を差出人として使う', async () => {
     const deps = baseDeps();
-    deps.rawBody = 'command=%2Ftsubuyaki&text=hello';
+    deps.rawBody = 'command=%2Fpts&text=hello';
     await handleTsubuyakiSlashCommand(deps);
     expect(deps.postMessage).toHaveBeenCalledWith(
       expect.objectContaining({ text: expect.stringContaining('unknown') })

@@ -9386,7 +9386,7 @@ app.post('/slack/commands', async (c) => {
   const form = new URLSearchParams(rawBody);
   const command = form.get('command');
 
-  if (command === '/tsubuyaki') {
+  if (command === '/pts') {
     const result = await handleTsubuyakiSlashCommand({
       rawBody,
       timestamp: c.req.header('X-Slack-Request-Timestamp'),
