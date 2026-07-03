@@ -45,6 +45,8 @@ import { getImageSpin3dPage } from './views/imageSpin3d';
 import { getGalaxyPage } from './views/galaxy';
 import { findNearbyCities } from './utils/worldCities';
 import { getAuthFlowPage } from './views/authFlow';
+import { getTsubuyakiPage } from './views/tsubuyaki';
+import { validateFreeText, buildFreeTextSlackMessage } from './utils/freeTextSlackPost';
 
 import { computeColumnRelationStats, verifyColumnStats, type TableSchema, type Relation } from './utils/columnRelationStats';
 import { ensureDefaultWorkspace, getCurrentWorkspace, getUserWorkspaces, switchWorkspace } from './utils/workspace';
@@ -4748,6 +4750,34 @@ app.get('/webgl-sphere', authMiddleware, async (c) => {
 app.get('/webgl-heritage', authMiddleware, async (c) => {
   const user = c.get('user');
   return c.html(getWebGLHeritagePage(user.sub));
+});
+
+app.get('/tsubuyaki', authMiddleware, async (c) => {
+  const user = c.get('user');
+  return c.html(getTsubuyakiPage(user.sub));
+});
+
+app.post('/api/tsubuyaki', authMiddleware, async (c) => {
+  const user = c.get('user');
+  const body = await c.req.json<{ text?: string }>().catch(() => null);
+  const validated = validateFreeText(body?.text);
+  if (!validated.ok) {
+    return c.json({ ok: false, error: validated.error }, 400);
+  }
+
+  const slackToken = c.env.SLACK_OAUTH_TOKEN;
+  const slackChannel = c.env.SLACK_CHANNEL_ID;
+  if (!slackToken || !slackChannel) {
+    return c.json({ ok: false, error: 'Slack連携が設定されていません（SLACK_OAUTH_TOKEN / SLACK_CHANNEL_ID が未設定）' }, 503);
+  }
+
+  const displayName = user.name || user.sub;
+  const message = buildFreeTextSlackMessage(displayName, validated.text);
+  const result = await postSlackMessage({ token: slackToken, channel: slackChannel, text: message });
+  if (!result.ok) {
+    return c.json({ ok: false, error: result.error || 'Slackへの投稿に失敗しました' }, 502);
+  }
+  return c.json({ ok: true });
 });
 
 app.get('/webgl-faults', authMiddleware, async (c) => {
