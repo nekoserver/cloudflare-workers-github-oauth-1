@@ -73,7 +73,7 @@ import { listD1Databases, getD1Tables } from './utils/cloudflareApi';
 import { validateRevokeRequest } from './utils/revoke';
 import { HERITAGE_FLAG_MAP, HERITAGE_LIST } from './data/heritageList';
 import { RAIL_LINES } from './data/railLines';
-import { findNearbyStationsAndHeritage } from './utils/railLineStations';
+import { findNearbyStationsAndHeritage, dedupeNearbyPoints } from './utils/railLineStations';
 import { questionStartsWithHeritageBracket } from './utils/heritageQuestionMatch';
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
@@ -4912,6 +4912,13 @@ app.get('/api/rail-station-fetched-list', authMiddleware, async (c) => {
 
 const RAIL_STATION_NEARBY_RADIUS_KM = 100;
 
+type NearbyPointRow = { point_type: string; point_name: string; point_lat: number; point_lon: number; distance_km: number };
+
+function dedupeNearbyPointRows(rows: NearbyPointRow[]): NearbyPointRow[] {
+  const deduped = dedupeNearbyPoints(rows.map(r => ({ pointType: r.point_type as 'station' | 'heritage', pointName: r.point_name, lat: r.point_lat, lon: r.point_lon, distanceKm: r.distance_km })));
+  return deduped.map(p => ({ point_type: p.pointType, point_name: p.pointName, point_lat: p.lat, point_lon: p.lon, distance_km: p.distanceKm }));
+}
+
 app.get('/api/rail-station-nearby', authMiddleware, async (c) => {
   const db = c.env.DB;
   if (!db) return c.json({ error: 'DB unavailable' }, 503);
@@ -4922,7 +4929,8 @@ app.get('/api/rail-station-nearby', authMiddleware, async (c) => {
   const result = await db.prepare(
     'SELECT point_type, point_name, point_lat, point_lon, distance_km FROM rail_station_nearby_points WHERE station_name = ? ORDER BY distance_km'
   ).bind(name).all<{ point_type: string; point_name: string; point_lat: number; point_lon: number; distance_km: number }>();
-  return c.json({ fetched: true, points: result.results });
+  // ツールチップに重複データを表示しないよう、同じ point_type+point_name は最も近い1件のみ返す
+  return c.json({ fetched: true, points: dedupeNearbyPointRows(result.results) });
 });
 
 app.post('/api/rail-station-nearby', authMiddleware, async (c) => {
@@ -4938,17 +4946,26 @@ app.post('/api/rail-station-nearby', authMiddleware, async (c) => {
 
   const points = findNearbyStationsAndHeritage(RAIL_LINES, HERITAGE_LIST, lat, lon, RAIL_STATION_NEARBY_RADIUS_KM, name);
 
-  if (points.length > 0) {
+  // 既存データベースに同じ point_type+point_name のキャッシュが無いものだけを新規に書き込む
+  const existing = await db.prepare(
+    'SELECT point_type, point_name FROM rail_station_nearby_points WHERE station_name = ?'
+  ).bind(name).all<{ point_type: string; point_name: string }>();
+  const existingKeys = new Set(existing.results.map(r => r.point_type + '|' + r.point_name));
+  const newPoints = points.filter(p => !existingKeys.has(p.pointType + '|' + p.pointName));
+
+  if (newPoints.length > 0) {
     const stmt = db.prepare('INSERT OR IGNORE INTO rail_station_nearby_points (station_name, point_type, point_name, point_lat, point_lon, distance_km) VALUES (?, ?, ?, ?, ?, ?)');
-    await db.batch(points.map(p => stmt.bind(name, p.pointType, p.pointName, p.lat, p.lon, p.distanceKm)));
+    await db.batch(newPoints.map(p => stmt.bind(name, p.pointType, p.pointName, p.lat, p.lon, p.distanceKm)));
   }
 
   const allPoints = await db.prepare(
     'SELECT point_type, point_name, point_lat, point_lon, distance_km FROM rail_station_nearby_points WHERE station_name = ? ORDER BY distance_km'
   ).bind(name).all<{ point_type: string; point_name: string; point_lat: number; point_lon: number; distance_km: number }>();
-  await db.prepare('INSERT OR REPLACE INTO rail_station_nearby_fetched (station_name, point_count) VALUES (?, ?)').bind(name, allPoints.results.length).run();
+  // ツールチップに重複データを表示しないよう、返却前にも同じ point_type+point_name を1件に絞る
+  const dedupedPoints = dedupeNearbyPointRows(allPoints.results);
+  await db.prepare('INSERT OR REPLACE INTO rail_station_nearby_fetched (station_name, point_count) VALUES (?, ?)').bind(name, dedupedPoints.length).run();
 
-  return c.json({ fetched: true, points: allPoints.results });
+  return c.json({ fetched: true, points: dedupedPoints });
 });
 
 app.get('/api/heritage-country-stats', authMiddleware, async (c) => {

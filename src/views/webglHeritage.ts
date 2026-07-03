@@ -338,6 +338,13 @@ void main() {
     </div>
     <div class="f1-side-body" id="rail-side-body"></div>
   </div>
+  <div id="area-tour-side" class="f1-side">
+    <div class="f1-side-head">
+      <span class="f1-side-title" id="area-tour-side-title">📍 エリア巡回</span>
+      <button class="f1-side-close" id="area-tour-side-close">✕</button>
+    </div>
+    <div class="f1-side-body" id="area-tour-side-body"></div>
+  </div>
   <div class="canvas-wrap">
     <canvas id="c"></canvas>
     <div id="markers"></div>
@@ -796,20 +803,30 @@ void main() {
       key: 'heritage', icon: '🏛️', label: '世界遺産', color: '#3fb950', bg: '#0c2d1a',
       getItems: function() { return getHeritagesInBounds(); },
       locate: function(d) { return [d.lat, d.lon]; },
+      itemLabel: function(d) { return d.f + ' ' + d.n; },
       showTooltip: function(d) { showMarkerTooltip(HERITAGE.indexOf(d), 0, 0); }
     },
     {
       key: 'station', icon: '🚉', label: '駅', color: '#58a6ff', bg: '#0c2233',
       getItems: function() { return getStationsInBounds(); },
       locate: function(item) { return [item.st.lat, item.st.lon]; },
+      itemLabel: function(item) { return item.line.flag + ' ' + item.st.name; },
       showTooltip: function(item) {
-        showGenericAreaTooltip('<div class="tt-name">🚉 ' + item.line.flag + ' ' + item.line.name + ' ' + item.st.name + '</div>');
+        railStationPin.style.display = 'block';
+        railStationPinLabel.style.display = 'block';
+        showRailStationPin(item.line, item.st, item.line.stations.indexOf(item.st));
+      },
+      hideExtra: function() {
+        railStationPin.style.display = 'none';
+        railStationPinLabel.style.display = 'none';
+        railStationPin3d = null;
       }
     },
     {
       key: 'f1', icon: '🏎️', label: 'F1会場', color: '#f0883e', bg: '#2d1c0c',
       getItems: function() { return getF1InBounds(); },
       locate: function(r) { return [r.lat, r.lon]; },
+      itemLabel: function(r) { return r.flag + ' ' + r.circuit; },
       showTooltip: function(r) {
         showGenericAreaTooltip('<div class="tt-name">🏎️ ' + r.flag + ' ' + r.circuit + '</div><div class="tt-sub">' + r.gp + '　' + r.date + '</div>');
       }
@@ -818,6 +835,7 @@ void main() {
       key: 'volcano', icon: '🌋', label: '活火山', color: '#ff9500', bg: '#2d1a0c',
       getItems: function() { return getVolcanoesInBounds(); },
       locate: function(v) { return [v.lat, v.lon]; },
+      itemLabel: function(v) { return v.n; },
       showTooltip: function(v) {
         showGenericAreaTooltip('<div class="tt-name">🌋 ' + v.n + '</div><div class="tt-sub">' + v.c + '　標高' + v.elev + 'm　最終噴火: ' + v.lastErupt + '</div>');
       }
@@ -826,6 +844,7 @@ void main() {
       key: 'fault', icon: '🌐', label: '活断層', color: '#f85149', bg: '#2d0c0c',
       getItems: function() { return getFaultsInBounds(); },
       locate: function(f) { return [f.lat, f.lon]; },
+      itemLabel: function(f) { return f.n; },
       showTooltip: function(f) {
         showGenericAreaTooltip('<div class="tt-name">🌐 ' + f.n + '</div><div class="tt-sub">' + f.region + '　' + f.country + '　M' + f.maxMag + '</div>');
       }
@@ -835,6 +854,26 @@ void main() {
   function findAreaKind(key) {
     for (var i = 0; i < AREA_KINDS.length; i++) { if (AREA_KINDS[i].key === key) return AREA_KINDS[i]; }
     return null;
+  }
+
+  function renderAreaTourSide(kind, items) {
+    if (!areaTourSide) return;
+    areaTourSideTitle.textContent = kind.icon + ' ' + kind.label + ' 巡回先';
+    areaTourSideBody.innerHTML = items.map(function(item, i) {
+      return '<div class="f1-side-item" data-idx="' + i + '"><span class="f1-side-flag">' + kind.icon + '</span><span class="f1-side-info"><span class="f1-side-circuit">' + kind.itemLabel(item) + '</span></span></div>';
+    }).join('');
+    areaTourSide.classList.add('open');
+  }
+
+  function flashAreaTourSideItem(idx) {
+    if (!areaTourSideBody) return;
+    var el = areaTourSideBody.querySelector('.f1-side-item[data-idx="' + idx + '"]');
+    if (!el) return;
+    el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    el.classList.remove('f1-flash');
+    void el.offsetWidth;
+    el.classList.add('f1-flash');
+    setTimeout(function() { el.classList.remove('f1-flash'); }, 1500);
   }
 
   function renderAreaMenu() {
@@ -872,6 +911,7 @@ void main() {
     areaTourRunning = false;
     if (areaTourTimer) { clearTimeout(areaTourTimer); areaTourTimer = null; }
     hideTooltip();
+    if (areaTourKind && areaTourKind.hideExtra) areaTourKind.hideExtra();
     areaTourKind = null;
     renderAreaMenu();
     var prog = document.getElementById('areaTourProg');
@@ -879,8 +919,9 @@ void main() {
     if (completed) {
       lastBoxBounds = null;
       if (areaMenuEl) areaMenuEl.style.display = 'none';
+      if (areaTourSide) areaTourSide.classList.remove('open');
+      boxZoomOverlay.style.display = 'none';
       boxZoomMode = false; btnBoxZoom.classList.remove('active'); btnBoxZoom.textContent = '🔲 エリアズーム'; canvas.style.cursor = '';
-      if (!autoRot) { autoRot = true; btnAutoRot.textContent = '⏸ 自転停止'; btnAutoRot.classList.remove('active'); }
     }
   }
   function showAreaMenu() {
@@ -894,12 +935,14 @@ void main() {
     areaTourRunning = true;
     areaTourKind = kind;
     areaTourIdx = 0;
+    renderAreaTourSide(kind, items);
     areaTourStep(kind, items);
   }
   function areaTourStep(kind, items) {
     if (!areaTourRunning || areaTourIdx >= items.length) { stopAreaTour(true); return; }
     var d = items[areaTourIdx], pos = kind.locate(d);
     renderAreaMenu();
+    flashAreaTourSideItem(areaTourIdx);
     var prog = document.getElementById('areaTourProg');
     if (prog) prog.textContent = (areaTourIdx + 1) + ' / ' + items.length;
     flyTo(pos[0], pos[1]);
@@ -909,6 +952,7 @@ void main() {
       areaTourTimer = setTimeout(function() {
         if (!areaTourRunning) return;
         hideTooltip();
+        if (kind.hideExtra) kind.hideExtra();
         areaTourIdx++;
         areaTourStep(kind, items);
       }, 5000);
@@ -917,10 +961,11 @@ void main() {
   function applyBoxZoom(ex, ey) {
     var rect = canvas.getBoundingClientRect();
     var bw = Math.abs(ex - bx0), bh = Math.abs(ey - by0);
-    boxZoomOverlay.style.display = 'none';
-    if (bw < 10 || bh < 10) return;
+    if (bw < 10 || bh < 10) { boxZoomOverlay.style.display = 'none'; return; }
     var ctr = screenToLatLon((bx0 + ex) / 2, (by0 + ey) / 2, rect);
-    if (!ctr) return;
+    if (!ctr) { boxZoomOverlay.style.display = 'none'; return; }
+    bxCur = ex; byCur = ey;
+    updateBoxOverlay();
     var c0 = screenToLatLon(Math.min(bx0, ex), Math.min(by0, ey), rect);
     var c1 = screenToLatLon(Math.max(bx0, ex), Math.max(by0, ey), rect);
     if (c0 && c1) { var lonCross = c0.lon > c1.lon; lastBoxBounds = { latMin: Math.min(c0.lat, c1.lat), latMax: Math.max(c0.lat, c1.lat), lonMin: lonCross ? c0.lon : Math.min(c0.lon, c1.lon), lonMax: lonCross ? c1.lon : Math.max(c0.lon, c1.lon), lonCross: lonCross }; }
@@ -1651,11 +1696,23 @@ void main() {
     stopRailTour();
   }
 
+  function dedupeNearbyPointsForDisplay(points) {
+    var seen = {}, result = [];
+    points.forEach(function(p) {
+      var key = p.point_type + '|' + p.point_name;
+      if (seen[key]) return;
+      seen[key] = true;
+      result.push(p);
+    });
+    return result;
+  }
+
   function renderNearbyPointsList(points) {
     if (!landingStationListEl) return;
     if (!points || points.length === 0) { landingStationListEl.innerHTML = ''; return; }
+    var deduped = dedupeNearbyPointsForDisplay(points);
     var html = '<div class="landing-station-hdr">🚉🏛️ 半径100km圏内の駅・世界遺産</div>';
-    points.forEach(function(p) {
+    deduped.forEach(function(p) {
       var icon = p.point_type === 'heritage' ? '🏛️' : '🚉';
       html += '<div class="landing-city-item"><span>' + icon + ' ' + p.point_name + '</span>' +
         '<span class="landing-city-dist">' + p.distance_km.toFixed(1) + 'km</span></div>';
@@ -2276,6 +2333,10 @@ void main() {
   var railStationPin3d = null;
   var railSide = document.getElementById('rail-side');
   var railSideBody = document.getElementById('rail-side-body');
+  var areaTourSide = document.getElementById('area-tour-side');
+  var areaTourSideBody = document.getElementById('area-tour-side-body');
+  var areaTourSideTitle = document.getElementById('area-tour-side-title');
+  document.getElementById('area-tour-side-close').addEventListener('click', function() { areaTourSide.classList.remove('open'); });
   var railTourLineIdx = -1;
   var railTourStationIdx = -1;
   var railTourRunning = false;
