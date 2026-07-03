@@ -3,7 +3,7 @@
  * GitHub OAuthとJWT認証の実装
  */
 
-import { Hono } from 'hono';
+import { Hono, type Context } from 'hono';
 import { cors } from 'hono/cors';
 import { createJWT, JWTPayload } from './utils/jwt';
 // NOTE: レートリミットはCloudflare WAFのRate Limiting Rulesで設定することを推奨します
@@ -9492,33 +9492,18 @@ app.post('/webhook/cf-auth', async (c) => {
 });
 
 /**
- * Resend webhook受信用エンドポイント
- * イベントタイプを/lib/resend-webhook.shtml?event=xxxへGETで通知し、Resendへのレスポンスを返す
+ * Resend webhookのペイロード検証・重複排除・通知・ログ記録を行う共通処理。
+ * sourceIdがnull（/webhook/resend からの呼び出し）の場合はresend_webhook_sourcesに依存しない
+ * 単一アカウント運用として扱い、resend_webhook_log.source_idはNULLで記録される。
  */
-app.post('/webhook/resend/:sourceId', async (c) => {
-  const sourceId = c.req.param('sourceId');
+type AppContext = Context<{ Bindings: Bindings; Variables: Variables }>;
 
-  const db = c.env.DB;
-  if (!db) {
-    logger.error('Database is not available for Resend webhook source validation');
-    return c.json({ error: 'Webhook endpoint is not available' }, 500);
-  }
-
-  const sourceRow = await db.prepare(
-    `SELECT id, label, webhook_secret FROM resend_webhook_sources WHERE id = ?`
-  ).bind(sourceId).first<{ id: string; label: string; webhook_secret: string | null }>();
-
-  if (!sourceRow) {
-    logger.warn('Unknown Resend webhook source', { sourceId });
-    return c.json({ error: 'Unknown webhook source' }, 404);
-  }
-
-  const webhookSecret = sourceRow.webhook_secret ?? c.env.RESEND_WEBHOOK_SECRET;
-  if (!webhookSecret) {
-    logger.error('Resend webhook secret is not configured', { sourceId });
-    return c.json({ error: 'Webhook endpoint is not available' }, 500);
-  }
-
+async function handleResendWebhookCore(
+  c: AppContext,
+  sourceId: string | null,
+  webhookSecret: string
+) {
+  const logSourceLabel = sourceId ?? 'default';
   const rawBody = await c.req.text();
 
   const verification = await verifyResendWebhookSignature(rawBody, {
@@ -9530,17 +9515,17 @@ app.post('/webhook/resend/:sourceId', async (c) => {
   if (!verification.success) {
     logger.warn('Rejected Resend webhook', {
       reason: verification.reason,
-      sourceId,
+      sourceId: logSourceLabel,
       path: c.req.path,
       method: c.req.method,
     });
-    c.executionCtx?.waitUntil(logWebhookEvent(c.env.DB, `resend:${sourceId}`, null, 'rejected', null, verification.reason));
+    c.executionCtx?.waitUntil(logWebhookEvent(c.env.DB, `resend:${logSourceLabel}`, null, 'rejected', null, verification.reason));
     return c.json({ error: 'Unauthorized webhook' }, 401);
   }
 
   const resendEventId = c.req.header('svix-id')?.trim();
   if (resendEventId) {
-    const dedupKey = `${sourceId}:${resendEventId}`;
+    const dedupKey = `${logSourceLabel}:${resendEventId}`;
     const nowMs = Date.now();
     const dedupTtlSeconds = resolveResendDedupTtlSeconds(c.env.RESEND_WEBHOOK_DEDUP_TTL_SECONDS);
     const expiresAt = nowMs + dedupTtlSeconds * 1000;
@@ -9552,7 +9537,7 @@ app.post('/webhook/resend/:sourceId', async (c) => {
     }
 
     if (resendWebhookDedupCache.has(dedupKey)) {
-      logger.warn('Duplicate Resend webhook detected', { sourceId, resendEventId });
+      logger.warn('Duplicate Resend webhook detected', { sourceId: logSourceLabel, resendEventId });
       return c.json({ error: 'Duplicate webhook' }, 409);
     }
 
@@ -9574,7 +9559,7 @@ app.post('/webhook/resend/:sourceId', async (c) => {
     : 'unknown';
 
   logger.info('Resend webhook received', { eventType });
-  c.executionCtx?.waitUntil(logWebhookEvent(c.env.DB, `resend:${sourceId}`, eventType, 'ok', null));
+  c.executionCtx?.waitUntil(logWebhookEvent(c.env.DB, `resend:${logSourceLabel}`, eventType, 'ok', null));
 
   const webhookData = payload?.data ?? {};
   const resendEmailId = typeof webhookData.email_id === 'string' && webhookData.email_id.trim().length > 0
@@ -9691,30 +9676,39 @@ app.post('/webhook/resend/:sourceId', async (c) => {
   }
 
   const svixId = resendEventId ?? `noid_${Date.now()}`;
-  try {
-    await db.prepare(
-      `INSERT OR IGNORE INTO resend_webhook_log (source_id, svix_id, resend_email_id, event_type, email_from, email_to, bounce_type, error_detail, slack_result, slack_result_at, proxy_result, proxy_result_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-    ).bind(
-      sourceId,
-      svixId,
-      resendEmailId,
-      eventType,
-      emailFrom,
-      emailTo,
-      bounceType,
-      errorDetail,
-      slackResultText,
-      slackResultAt,
-      proxyResultText,
-      proxyResultAt
-    ).run();
-  } catch (dbError) {
-    logger.error('Failed to insert resend_webhook_log', {
-      error: dbError instanceof Error ? dbError.message : 'Unknown error',
-      sourceId,
+  const db = c.env.DB;
+  if (!db) {
+    logger.error('Database is not available for resend_webhook_log insert', {
+      sourceId: logSourceLabel,
       svixId,
       eventType,
     });
+  } else {
+    try {
+      await db.prepare(
+        `INSERT OR IGNORE INTO resend_webhook_log (source_id, svix_id, resend_email_id, event_type, email_from, email_to, bounce_type, error_detail, slack_result, slack_result_at, proxy_result, proxy_result_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      ).bind(
+        sourceId,
+        svixId,
+        resendEmailId,
+        eventType,
+        emailFrom,
+        emailTo,
+        bounceType,
+        errorDetail,
+        slackResultText,
+        slackResultAt,
+        proxyResultText,
+        proxyResultAt
+      ).run();
+    } catch (dbError) {
+      logger.error('Failed to insert resend_webhook_log', {
+        error: dbError instanceof Error ? dbError.message : 'Unknown error',
+        sourceId: logSourceLabel,
+        svixId,
+        eventType,
+      });
+    }
   }
 
   if (proxyFailed) {
@@ -9722,6 +9716,51 @@ app.post('/webhook/resend/:sourceId', async (c) => {
   }
 
   return c.json({ success: true, event: eventType }, 200);
+}
+
+/**
+ * Resend webhook受信用エンドポイント（複数ソース管理向け、D1のresend_webhook_sourcesでソースを識別）
+ * イベントタイプを/lib/resend-webhook.shtml?event=xxxへGETで通知し、Resendへのレスポンスを返す
+ */
+app.post('/webhook/resend/:sourceId', async (c) => {
+  const sourceId = c.req.param('sourceId');
+
+  const db = c.env.DB;
+  if (!db) {
+    logger.error('Database is not available for Resend webhook source validation');
+    return c.json({ error: 'Webhook endpoint is not available' }, 500);
+  }
+
+  const sourceRow = await db.prepare(
+    `SELECT id, label, webhook_secret FROM resend_webhook_sources WHERE id = ?`
+  ).bind(sourceId).first<{ id: string; label: string; webhook_secret: string | null }>();
+
+  if (!sourceRow) {
+    logger.warn('Unknown Resend webhook source', { sourceId });
+    return c.json({ error: 'Unknown webhook source' }, 404);
+  }
+
+  const webhookSecret = sourceRow.webhook_secret ?? c.env.RESEND_WEBHOOK_SECRET;
+  if (!webhookSecret) {
+    logger.error('Resend webhook secret is not configured', { sourceId });
+    return c.json({ error: 'Webhook endpoint is not available' }, 500);
+  }
+
+  return handleResendWebhookCore(c, sourceId, webhookSecret);
+});
+
+/**
+ * Resend webhook受信用エンドポイント（sourceId省略・単一アカウント向け）
+ * RESEND_WEBHOOK_SECRET環境変数のみで署名検証する。resend_webhook_log.source_idはNULLで記録される。
+ */
+app.post('/webhook/resend', async (c) => {
+  const webhookSecret = c.env.RESEND_WEBHOOK_SECRET;
+  if (!webhookSecret) {
+    logger.error('Resend webhook secret is not configured');
+    return c.json({ error: 'Webhook endpoint is not available' }, 500);
+  }
+
+  return handleResendWebhookCore(c, null, webhookSecret);
 });
 
 /**
