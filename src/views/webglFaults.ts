@@ -1890,10 +1890,16 @@ void main() {
     if (btn) btn.textContent = '&#x23F9; 停止 (' + (areaTourIdx + 1) + '/' + vols.length + ')';
     flyToLatLon(v.lat, v.lon, 1200, function() {
       if (!areaTourRunning) return;
-      var rect = canvas.getBoundingClientRect();
-      var cx = rect.left + rect.width / 2;
-      var cy = rect.top + rect.height * 0.38;
-      pinVolTooltip(v, cx, cy);
+      // フライ完了直後は volDivMap の位置がまだ前フレームの値のままなので、
+      // 1フレーム待って実際のマーカー座標(クリック時のpinVolTooltip呼び出しと同じ基準)
+      // を読んでからツールチップを表示する。固定の画面比率(rect.height*0.38等)で
+      // 位置を決めると、マーカーの実際の投影位置とツールチップがズレる。
+      requestAnimationFrame(function() {
+        if (!areaTourRunning) return;
+        var el = volDivMap[v.id];
+        var r = el.getBoundingClientRect();
+        pinVolTooltip(v, r.left + r.width / 2, r.top - 8);
+      });
       areaTourTimer = setTimeout(function() {
         if (!areaTourRunning) return;
         volTtPinned = false;
