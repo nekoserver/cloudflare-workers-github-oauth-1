@@ -172,6 +172,8 @@ canvas:active { cursor:grabbing; }
 .f1-side-date { display:block; font-size:10px; color:#8b949e; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; margin-top:2px; }
 @keyframes f1-flash { 0%,100%{outline:2px solid transparent} 50%{outline:2px solid #ffd700} }
 .f1-side-item.f1-flash { animation:f1-flash 0.5s ease-in-out 3; }
+@keyframes area-tour-flash { 0%,100%{outline:2px solid transparent} 40%{outline:2px solid #ffd700} 70%{outline:2px solid rgba(255,215,0,0.4)} }
+.f1-side-item.area-tour-flash { animation:area-tour-flash 0.65s ease-in-out 2; }
 .f1-cal { padding:10px 12px; border-bottom:1px solid #21262d; flex-shrink:0; }
 .f1-cal-head { font-size:12px; font-weight:700; color:#e6edf3; text-align:center; margin-bottom:6px; }
 .f1-cal-grid { display:grid; grid-template-columns:repeat(7,1fr); gap:2px; }
@@ -778,10 +780,11 @@ void main() {
   function getHeritagesInBounds() { return filterInBounds(HERITAGE, function(d) { return [d.lat, d.lon]; }); }
   function getStationsInBounds() {
     if (!lastBoxBounds) return [];
-    var b = lastBoxBounds, result = [];
+    var b = lastBoxBounds, result = [], seenNames = {};
     RAIL_LINES.forEach(function(line) {
       line.stations.forEach(function(st) {
-        if (inAreaBounds(st.lat, st.lon, b)) result.push({ st: st, line: line });
+        if (seenNames[st.name]) return;
+        if (inAreaBounds(st.lat, st.lon, b)) { result.push({ st: st, line: line }); seenNames[st.name] = true; }
       });
     });
     return result;
@@ -856,6 +859,27 @@ void main() {
     return null;
   }
 
+  function fitAreaTourSideWidth(kind, items) {
+    if (!areaTourSide) return;
+    if (items.length === 0) { areaTourSide.style.width = ''; return; }
+    var probe = document.createElement('div');
+    probe.style.cssText = 'position:fixed;left:-9999px;top:-9999px;visibility:hidden;';
+    probe.className = 'f1-side-body';
+    items.forEach(function(item) {
+      var row = document.createElement('div');
+      row.className = 'f1-side-item';
+      row.innerHTML = '<span class="f1-side-flag">' + kind.icon + '</span><span class="f1-side-info" style="overflow:visible"><span class="f1-side-circuit" style="white-space:nowrap;overflow:visible;display:inline-block">' + kind.itemLabel(item) + '</span></span>';
+      probe.appendChild(row);
+    });
+    document.body.appendChild(probe);
+    var rows = probe.querySelectorAll('.f1-side-item'), maxWidth = 0;
+    for (var i = 0; i < rows.length; i++) { maxWidth = Math.max(maxWidth, rows[i].getBoundingClientRect().width); }
+    document.body.removeChild(probe);
+    // 一番長い駅名(等)を基準にパネル幅を決めることで、行内の左右パディングが均等になるようにする
+    var width = Math.max(180, Math.min(window.innerWidth * 0.85, Math.ceil(maxWidth) + 2));
+    areaTourSide.style.width = width + 'px';
+  }
+
   function renderAreaTourSide(kind, items) {
     if (!areaTourSide) return;
     areaTourSideTitle.textContent = kind.icon + ' ' + kind.label + ' 巡回先';
@@ -863,17 +887,20 @@ void main() {
       return '<div class="f1-side-item" data-idx="' + i + '"><span class="f1-side-flag">' + kind.icon + '</span><span class="f1-side-info"><span class="f1-side-circuit">' + kind.itemLabel(item) + '</span></span></div>';
     }).join('');
     areaTourSide.classList.add('open');
+    fitAreaTourSideWidth(kind, items);
   }
+
+  var AREA_TOUR_FLASH_MS = 1300;
 
   function flashAreaTourSideItem(idx) {
     if (!areaTourSideBody) return;
     var el = areaTourSideBody.querySelector('.f1-side-item[data-idx="' + idx + '"]');
     if (!el) return;
     el.scrollIntoView({ block: 'center', behavior: 'smooth' });
-    el.classList.remove('f1-flash');
+    el.classList.remove('area-tour-flash');
     void el.offsetWidth;
-    el.classList.add('f1-flash');
-    setTimeout(function() { el.classList.remove('f1-flash'); }, 1500);
+    el.classList.add('area-tour-flash');
+    setTimeout(function() { el.classList.remove('area-tour-flash'); }, AREA_TOUR_FLASH_MS);
   }
 
   function renderAreaMenu() {

@@ -155,12 +155,57 @@ describe('getWebGLHeritagePage エリアズーム機能（種別ごとの巡回�
 
   it('areaTourStep は巡回先へ移動するたびに左サイドパネルの該当行を点滅させる', () => {
     expect(html).toContain('function flashAreaTourSideItem(idx)');
-    // f1-flash と同じキーフレーム(黄色い中抜き枠を3回点滅)を再利用する
-    expect(html).toMatch(/@keyframes f1-flash \{ 0%,100%\{outline:2px solid transparent\} 50%\{outline:2px solid #ffd700\} \}/);
-    expect(html).toMatch(/\.f1-side-item\.f1-flash \{ animation:f1-flash 0\.5s ease-in-out 3; \}/);
     const stepMatch = html.match(/function areaTourStep\(kind, items\)[\s\S]*?(?=function applyBoxZoom)/);
     expect(stepMatch).not.toBeNull();
     expect(stepMatch![0]).toContain('flashAreaTourSideItem(areaTourIdx)');
+  });
+
+  it('エリア巡回専用の点滅アニメーション(area-tour-flash)を持ち、F1側パネルのf1-flashとは独立して間隔・回数を調整できる', () => {
+    // F1側パネル(f1-side-item.f1-flash / f1-cal-cell.f1-cal-flash)には影響を与えない専用キーフレームを使う
+    expect(html).toMatch(/@keyframes area-tour-flash \{[^}]*outline:2px solid transparent[\s\S]*?\}/);
+    expect(html).toMatch(/\.f1-side-item\.area-tour-flash \{ animation:area-tour-flash [\d.]+s ease-in-out \d+; \}/);
+    expect(html).toContain('function flashAreaTourSideItem(idx)');
+    const flashMatch = html.match(/function flashAreaTourSideItem\(idx\) \{[\s\S]*?\n  \}/);
+    expect(flashMatch).not.toBeNull();
+    expect(flashMatch![0]).toContain("classList.add('area-tour-flash')");
+    expect(flashMatch![0]).not.toContain("classList.add('f1-flash')");
+  });
+
+  it('area-tour-flash の合計点滅時間(周期×回数)と、クラスを外すsetTimeoutの時間が一致する', () => {
+    const cssMatch = html.match(/\.f1-side-item\.area-tour-flash \{ animation:area-tour-flash ([\d.]+)s ease-in-out (\d+); \}/);
+    expect(cssMatch).not.toBeNull();
+    const cycleSeconds = parseFloat(cssMatch![1]);
+    const iterations = parseInt(cssMatch![2], 10);
+    const totalMs = Math.round(cycleSeconds * iterations * 1000);
+    expect(html).toContain('var AREA_TOUR_FLASH_MS = ' + totalMs + ';');
+    const flashMatch = html.match(/function flashAreaTourSideItem\(idx\) \{[\s\S]*?\n  \}/);
+    expect(flashMatch).not.toBeNull();
+    expect(flashMatch![0]).toContain('}, AREA_TOUR_FLASH_MS)');
+  });
+
+  it('getStationsInBounds は同名の駅（複数路線に存在する場合）を重複させず1件にまとめる', () => {
+    const fnMatch = html.match(/function getStationsInBounds\(\)[\s\S]*?\n  \}/);
+    expect(fnMatch).not.toBeNull();
+    const fn = fnMatch![0];
+    expect(fn).toContain('seenNames');
+    expect(fn).toMatch(/if \(seenNames\[st\.name\]\) return;/);
+  });
+
+  it('renderAreaTourSide は描画のたびに巡回先一覧の内容に応じてパネル幅を調整する', () => {
+    expect(html).toContain('function fitAreaTourSideWidth(kind, items)');
+    const renderMatch = html.match(/function renderAreaTourSide\(kind, items\) \{[\s\S]*?\n  \}/);
+    expect(renderMatch).not.toBeNull();
+    expect(renderMatch![0]).toContain('fitAreaTourSideWidth(kind, items)');
+  });
+
+  it('fitAreaTourSideWidth は一番長い項目のラベル幅を基準にパネル幅を決め、行の左右パディングが均等になるようにする', () => {
+    const fitMatch = html.match(/function fitAreaTourSideWidth\(kind, items\) \{[\s\S]*?\n  \}/);
+    expect(fitMatch).not.toBeNull();
+    const fn = fitMatch![0];
+    // f1-side-item をそのまま計測に使うことで、実際の行と同じ左右パディング(padding:8px 14px)を前提にできる
+    expect(fn).toContain("row.className = 'f1-side-item'");
+    expect(fn).toContain('getBoundingClientRect().width');
+    expect(fn).toContain("areaTourSide.style.width = width + 'px'");
   });
 
   it('flashAreaTourSideItem は点滅対象の行をパネル内でスクロールして表示する（巡回先が多い場合に見えなくなる不具合の防止）', () => {
@@ -168,7 +213,7 @@ describe('getWebGLHeritagePage エリアズーム機能（種別ごとの巡回�
     expect(flashMatch).not.toBeNull();
     const fn = flashMatch![0];
     const scrollPos = fn.indexOf('scrollIntoView');
-    const flashPos = fn.indexOf("classList.add('f1-flash')");
+    const flashPos = fn.indexOf("classList.add('area-tour-flash')");
     expect(scrollPos).toBeGreaterThan(-1);
     expect(flashPos).toBeGreaterThan(-1);
     expect(scrollPos).toBeLessThan(flashPos);
