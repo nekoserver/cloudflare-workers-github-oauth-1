@@ -232,3 +232,135 @@ describe('世界遺産アクセスランキング: AIチャット詳細プレビ
     expect(h.document.getElementById('hist-detail-keyword-chips').style.display).toBe('none');
   });
 });
+
+describe('世界遺産アクセスランキング: AIチャット詳細プレビューのキーワードハイライト機能（🔑ボタン）', () => {
+  it('🔑トグルボタン(hist-detail-kw-highlight-btn)がフッターに配置される', () => {
+    const h = setupHarness(defaultHandler({}));
+    const btn = h.document.getElementById('hist-detail-kw-highlight-btn');
+    expect(btn).toBeTruthy();
+    expect(btn.textContent).toBe('🔑');
+  });
+
+  it('キーワードがない場合は🔑ボタンが無効表示(opacity 0.2)のままになる', async () => {
+    const h = setupHarness(defaultHandler({ shareKeywords: { keywords: [] } }));
+    openDetailModal(h);
+    await waitDebounce();
+    h.document.querySelector('.hist-side-item').dispatchEvent(new h.window.Event('click', { bubbles: true }));
+    await flush();
+
+    const btn = h.document.getElementById('hist-detail-kw-highlight-btn');
+    expect(btn.style.opacity).toBe('0.2');
+    expect(btn.title).toBe('キーワードハイライトなし');
+  });
+
+  it('キーワード取得後は🔑ボタンが「クリックでハイライト表示」状態になる', async () => {
+    const h = setupHarness(
+      defaultHandler({ shareKeywords: { keywords: [{ keyword: '見どころ', count: 5, is_classified: false }] } })
+    );
+    openDetailModal(h);
+    await waitDebounce();
+    h.document.querySelector('.hist-side-item').dispatchEvent(new h.window.Event('click', { bubbles: true }));
+    await flush();
+
+    const btn = h.document.getElementById('hist-detail-kw-highlight-btn');
+    expect(btn.style.opacity).toBe('1');
+    expect(btn.title).toContain('クリックでキーワードをハイライト表示');
+  });
+
+  it('🔑を1回目クリックすると全キーワードが本文にハイライトされ、キーワードチップは隠れる', async () => {
+    const h = setupHarness(
+      defaultHandler({ shareKeywords: { keywords: [{ keyword: '霊廟', count: 2, is_classified: true }] } })
+    );
+    openDetailModal(h);
+    await waitDebounce();
+    h.document.querySelector('.hist-side-item').dispatchEvent(new h.window.Event('click', { bubbles: true }));
+    await flush();
+
+    h.document.getElementById('hist-detail-kw-highlight-btn').dispatchEvent(new h.window.Event('click', { bubbles: true }));
+
+    const marks = h.document.querySelectorAll('#hist-detail-chat .kw-highlight');
+    expect(marks.length).toBeGreaterThan(0);
+    expect(Array.from(marks).some((m: any) => m.textContent === '霊廟')).toBe(true);
+    expect(h.document.getElementById('hist-detail-keyword-chips').style.display).toBe('none');
+    const btn = h.document.getElementById('hist-detail-kw-highlight-btn');
+    expect(btn.style.opacity).toBe('1');
+    expect(btn.title).toContain('表示中');
+  });
+
+  it('🔑を2回目クリックするとハイライトが非表示になり、再度クリックすると復活する', async () => {
+    const h = setupHarness(
+      defaultHandler({ shareKeywords: { keywords: [{ keyword: '霊廟', count: 2, is_classified: true }] } })
+    );
+    openDetailModal(h);
+    await waitDebounce();
+    h.document.querySelector('.hist-side-item').dispatchEvent(new h.window.Event('click', { bubbles: true }));
+    await flush();
+
+    const btn = h.document.getElementById('hist-detail-kw-highlight-btn');
+    btn.dispatchEvent(new h.window.Event('click', { bubbles: true }));
+    expect(h.document.getElementById('hist-detail-chat').classList.contains('kwcls-hl-hidden')).toBe(false);
+
+    btn.dispatchEvent(new h.window.Event('click', { bubbles: true }));
+    expect(h.document.getElementById('hist-detail-chat').classList.contains('kwcls-hl-hidden')).toBe(true);
+    expect(btn.title).toContain('非表示');
+    // 非表示中はチップが再表示される（別キーワードを選び直せるように）
+    expect(h.document.getElementById('hist-detail-keyword-chips').style.display).toBe('flex');
+
+    btn.dispatchEvent(new h.window.Event('click', { bubbles: true }));
+    expect(h.document.getElementById('hist-detail-chat').classList.contains('kwcls-hl-hidden')).toBe(false);
+    expect(btn.title).toContain('表示中');
+  });
+
+  it('キーワードチップをクリックするとそのキーワードだけが本文にハイライトされ、チップがピン留めされる', async () => {
+    const h = setupHarness(
+      defaultHandler({
+        shareKeywords: {
+          keywords: [
+            { keyword: '見どころ', count: 5, is_classified: true },
+            { keyword: '霊廟', count: 2, is_classified: true },
+          ],
+        },
+      })
+    );
+    openDetailModal(h);
+    await waitDebounce();
+    h.document.querySelector('.hist-side-item').dispatchEvent(new h.window.Event('click', { bubbles: true }));
+    await flush();
+
+    const chip = Array.from(h.document.querySelectorAll('#hist-detail-keyword-chips .kwcls-chip')).find(
+      (c: any) => c.textContent.indexOf('霊廟') !== -1
+    ) as any;
+    expect(chip).toBeTruthy();
+    chip.dispatchEvent(new h.window.Event('click', { bubbles: true }));
+
+    const marks = h.document.querySelectorAll('#hist-detail-chat .kw-highlight');
+    expect(marks.length).toBeGreaterThan(0);
+    expect(Array.from(marks).every((m: any) => m.textContent === '霊廟')).toBe(true);
+    // ピン留めされているのでハイライト表示中でもチップは表示され続ける
+    expect(h.document.getElementById('hist-detail-keyword-chips').style.display).toBe('flex');
+    expect(chip.classList.contains('kwcls-chip-active')).toBe(true);
+  });
+
+  it('モーダルを閉じて再度別レコードを開くとハイライト状態(kwcls-hl-hidden)がリセットされる', async () => {
+    const h = setupHarness(
+      defaultHandler({ shareKeywords: { keywords: [{ keyword: '霊廟', count: 2, is_classified: true }] } })
+    );
+    openDetailModal(h);
+    await waitDebounce();
+    h.document.querySelector('.hist-side-item').dispatchEvent(new h.window.Event('click', { bubbles: true }));
+    await flush();
+
+    const btn = h.document.getElementById('hist-detail-kw-highlight-btn');
+    btn.dispatchEvent(new h.window.Event('click', { bubbles: true }));
+    btn.dispatchEvent(new h.window.Event('click', { bubbles: true }));
+    expect(h.document.getElementById('hist-detail-chat').classList.contains('kwcls-hl-hidden')).toBe(true);
+
+    h.document.getElementById('hist-detail-close').dispatchEvent(new h.window.Event('click', { bubbles: true }));
+    h.document.querySelector('.hist-side-item').dispatchEvent(new h.window.Event('click', { bubbles: true }));
+    await flush();
+
+    expect(h.document.getElementById('hist-detail-chat').classList.contains('kwcls-hl-hidden')).toBe(false);
+    expect(btn.style.opacity).toBe('1');
+    expect(btn.title).toContain('クリックでキーワードをハイライト表示');
+  });
+});

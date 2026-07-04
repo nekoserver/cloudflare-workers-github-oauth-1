@@ -5,9 +5,11 @@ import {
   renderKeywordClassifyPanelJs,
   renderKeywordChipsContainerHtml,
   renderKeywordEditToggleButtonHtml,
+  renderHighlightToggleButtonHtml,
 } from '../utils/keywordClassifyPanel';
 
 const HIST_DETAIL_KW_TOGGLE_BTN_ID = 'hist-detail-kw-edit-btn';
+const HIST_DETAIL_KW_HIGHLIGHT_BTN_ID = 'hist-detail-kw-highlight-btn';
 const HIST_DETAIL_KW_CHIPS_CONTAINER_ID = 'hist-detail-keyword-chips';
 
 export function getHeritageAccessPage(userId: string): string {
@@ -257,7 +259,10 @@ ${renderKeywordClassifyPanelCss()}
     <div class="hist-detail-chat" id="hist-detail-chat"></div>
     ${renderKeywordChipsContainerHtml(HIST_DETAIL_KW_CHIPS_CONTAINER_ID)}
     <div class="hist-detail-foot">
-      <span id="hist-detail-model"></span>
+      <span style="display:flex;align-items:center;gap:6px;">
+        ${renderHighlightToggleButtonHtml(HIST_DETAIL_KW_HIGHLIGHT_BTN_ID)}
+        <span id="hist-detail-model"></span>
+      </span>
       <span id="hist-detail-meta"></span>
     </div>
   </div>
@@ -531,6 +536,7 @@ histDetailOverlay.addEventListener('click', function(e) {
 
 ${renderKeywordClassifyPanelJs({
   toggleBtnId: HIST_DETAIL_KW_TOGGLE_BTN_ID,
+  highlightToggleBtnId: HIST_DETAIL_KW_HIGHLIGHT_BTN_ID,
   chipsContainerId: HIST_DETAIL_KW_CHIPS_CONTAINER_ID,
   chatElExpr: 'histDetailChat',
   instanceName: 'histDetailKwPanel',
