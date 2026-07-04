@@ -48,12 +48,16 @@ type SlackPostParams = {
   channel: string;
   text: string;
   blocks?: Record<string, unknown>[];
+  thread_ts?: string;
 };
 
-export async function postSlackMessage({ token, channel, text, blocks }: SlackPostParams): Promise<SlackPostResult> {
+export async function postSlackMessage({ token, channel, text, blocks, thread_ts }: SlackPostParams): Promise<SlackPostResult> {
   const body: Record<string, unknown> = { channel, text };
   if (blocks) {
     body.blocks = blocks;
+  }
+  if (thread_ts) {
+    body.thread_ts = thread_ts;
   }
   return fetchSlackApi('https://slack.com/api/chat.postMessage', token, body);
 }
