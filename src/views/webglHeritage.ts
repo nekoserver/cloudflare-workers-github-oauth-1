@@ -973,7 +973,7 @@ void main() {
     }
   }
   function showAreaMenu() {
-    if (!areaMenuEl) { areaMenuEl = document.createElement('div'); areaMenuEl.style.cssText = 'position:absolute;right:10px;top:50%;transform:translateY(-50%);background:rgba(13,17,23,0.94);border:1px solid #30363d;border-radius:9px;padding:10px 12px;z-index:55;min-width:150px;box-shadow:0 4px 16px rgba(0,0,0,0.6);'; wrap.appendChild(areaMenuEl); }
+    if (!areaMenuEl) { areaMenuEl = document.createElement('div'); areaMenuEl.style.cssText = 'position:absolute;right:10px;top:50%;transform:translateY(-50%);background:rgba(13,17,23,0.94);border:1px solid #30363d;border-radius:9px;padding:10px 12px;z-index:55;width:190px;box-shadow:0 4px 16px rgba(0,0,0,0.6);'; wrap.appendChild(areaMenuEl); }
     areaMenuEl.style.display = 'block';
     renderAreaMenu();
   }
