@@ -5,13 +5,13 @@ describe('generateSlackAiReply', () => {
   it('AIの応答テキストをresponseフィールドから取り出す', async () => {
     const aiRun = vi.fn().mockResolvedValue({ response: 'こんにちは' });
     const result = await generateSlackAiReply('hello', undefined, aiRun);
-    expect(result).toEqual({ ok: true, text: 'こんにちは', usedModel: '@cf/meta/llama-3.3-70b-instruct-fp8-fast' });
+    expect(result).toEqual({ ok: true, text: 'こんにちは', usedModel: '@cf/google/gemma-4-26b-a4b-it' });
   });
 
   it('configuredModelが指定されていればそれを使う', async () => {
     const aiRun = vi.fn().mockResolvedValue({ response: 'ok' });
-    await generateSlackAiReply('hello', '@cf/google/gemma-4-26b-a4b-it', aiRun);
-    expect(aiRun).toHaveBeenCalledWith('@cf/google/gemma-4-26b-a4b-it', expect.any(Object));
+    await generateSlackAiReply('hello', '@cf/meta/llama-3.1-70b-instruct', aiRun);
+    expect(aiRun).toHaveBeenCalledWith('@cf/meta/llama-3.1-70b-instruct', expect.any(Object));
   });
 
   it('モデル別の追加パラメータ(getModelRunParams)がマージされる', async () => {
@@ -25,15 +25,15 @@ describe('generateSlackAiReply', () => {
   it('choices[0].message.content からも応答テキストを取り出せる', async () => {
     const aiRun = vi.fn().mockResolvedValue({ choices: [{ message: { content: 'chat形式の応答' } }] });
     const result = await generateSlackAiReply('hello', undefined, aiRun);
-    expect(result).toEqual({ ok: true, text: 'chat形式の応答', usedModel: '@cf/meta/llama-3.3-70b-instruct-fp8-fast' });
+    expect(result).toEqual({ ok: true, text: 'chat形式の応答', usedModel: '@cf/google/gemma-4-26b-a4b-it' });
   });
 
   it('primaryModelが例外を投げた場合はFALLBACK_MODELに一度だけ再試行する', async () => {
     const aiRun = vi.fn()
       .mockRejectedValueOnce(new Error('primary down'))
       .mockResolvedValueOnce({ response: 'fallback応答' });
-    const result = await generateSlackAiReply('hello', '@cf/google/gemma-4-26b-a4b-it', aiRun);
-    expect(result).toEqual({ ok: true, text: 'fallback応答', usedModel: '@cf/meta/llama-3.3-70b-instruct-fp8-fast' });
+    const result = await generateSlackAiReply('hello', '@cf/meta/llama-3.1-70b-instruct', aiRun);
+    expect(result).toEqual({ ok: true, text: 'fallback応答', usedModel: '@cf/google/gemma-4-26b-a4b-it' });
     expect(aiRun).toHaveBeenCalledTimes(2);
   });
 
@@ -41,15 +41,15 @@ describe('generateSlackAiReply', () => {
     const aiRun = vi.fn()
       .mockResolvedValueOnce({ response: '' })
       .mockResolvedValueOnce({ response: 'fallback応答' });
-    const result = await generateSlackAiReply('hello', '@cf/google/gemma-4-26b-a4b-it', aiRun);
-    expect(result).toEqual({ ok: true, text: 'fallback応答', usedModel: '@cf/meta/llama-3.3-70b-instruct-fp8-fast' });
+    const result = await generateSlackAiReply('hello', '@cf/meta/llama-3.1-70b-instruct', aiRun);
+    expect(result).toEqual({ ok: true, text: 'fallback応答', usedModel: '@cf/google/gemma-4-26b-a4b-it' });
   });
 
   it('primaryとFALLBACKの両方が失敗した場合はok:falseとエラー内容を返す（握りつぶさない）', async () => {
     const aiRun = vi.fn()
       .mockRejectedValueOnce(new Error('primary down'))
       .mockRejectedValueOnce(new Error('fallback also down'));
-    const result = await generateSlackAiReply('hello', '@cf/google/gemma-4-26b-a4b-it', aiRun);
+    const result = await generateSlackAiReply('hello', '@cf/meta/llama-3.1-70b-instruct', aiRun);
     expect(result.ok).toBe(false);
     expect((result as { error: string }).error).toBe('fallback also down');
   });
