@@ -1396,14 +1396,14 @@ describe('ナビバー モデル選択ドロップダウン', () => {
     expect(snippet).toContain('selected');
   });
 
-  it('index.ts の /aichat GET fallbackModel が llama-3.3-70b-instruct-fp8-fast', () => {
+  it('index.ts の /aichat GET fallbackModel が gemma-4-26b-a4b-it', () => {
     const { readFileSync } = require('node:fs');
     const { resolve } = require('node:path');
     const src = readFileSync(resolve(__dirname, '..', 'index.ts'), 'utf-8');
     const idx = src.indexOf("app.get('/aichat'");
     expect(idx).toBeGreaterThan(-1);
     const fn = src.slice(idx, idx + 300);
-    expect(fn).toContain('llama-3.3-70b-instruct-fp8-fast');
+    expect(fn).toContain('@cf/google/gemma-4-26b-a4b-it');
   });
 });
 
