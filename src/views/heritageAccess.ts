@@ -83,6 +83,17 @@ td.pop{text-align:right;color:#8b949e;font-size:11px;min-width:64px}
 .ai-modal-title{font-size:13px;font-weight:700;flex:1;color:#e6edf3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .ai-modal-close{background:none;border:none;color:#8b949e;font-size:18px;cursor:pointer;padding:2px 6px;line-height:1}
 .ai-modal-body{overflow-y:auto;padding:16px;font-size:13px;line-height:1.7;color:#c9d1d9;white-space:pre-wrap;word-break:break-word}
+.hist-detail-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.78);align-items:center;justify-content:center}
+.hist-detail-overlay.open{display:flex}
+.hist-detail-modal{background:#0d1117;border:1px solid #30363d;border-radius:10px;width:min(92vw,640px);max-height:82vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 8px 40px rgba(0,0,0,.9)}
+.hist-detail-head{padding:12px 16px;border-bottom:1px solid #21262d;display:flex;align-items:center;gap:8px;flex-shrink:0}
+.hist-detail-title{font-size:13px;font-weight:700;flex:1;color:#e6edf3}
+.hist-detail-close{background:none;border:none;color:#8b949e;font-size:18px;cursor:pointer;padding:2px 6px;line-height:1}
+.hist-detail-chat{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:12px}
+.hist-detail-bubble{max-width:88%;padding:10px 14px;border-radius:14px;font-size:13px;line-height:1.6;white-space:pre-wrap;word-break:break-word}
+.hist-detail-bubble.user{align-self:flex-start;background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-bottom-left-radius:3px}
+.hist-detail-bubble.assistant{align-self:flex-end;background:#1f3a5c;color:#e6edf3;border-bottom-right-radius:3px}
+.hist-detail-foot{flex-shrink:0;padding:9px 16px;border-top:1px solid #21262d;display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:11px;color:#8b949e}
 .acc-name-link{color:#58a6ff;text-decoration:none;cursor:pointer;background:none;border:none;font:inherit;padding:0;text-align:left}
 .acc-name-link:hover{color:#79c0ff}
 .acc-kw-badge{display:inline-block;font-size:10px;padding:1px 6px;border-radius:10px;background:transparent;color:#a371f7;border:1px solid #a371f7;white-space:nowrap;flex-shrink:0;cursor:pointer}
@@ -224,6 +235,19 @@ td.pop{text-align:right;color:#8b949e;font-size:11px;min-width:64px}
       <button class="ai-modal-close" id="ai-modal-close">✕</button>
     </div>
     <div class="ai-modal-body" id="ai-modal-body"></div>
+  </div>
+</div>
+<div id="hist-detail-overlay" class="hist-detail-overlay">
+  <div class="hist-detail-modal">
+    <div class="hist-detail-head">
+      <span class="hist-detail-title" id="hist-detail-title">AIチャットの詳細プレビュー</span>
+      <button class="hist-detail-close" id="hist-detail-close">✕</button>
+    </div>
+    <div class="hist-detail-chat" id="hist-detail-chat"></div>
+    <div class="hist-detail-foot">
+      <span id="hist-detail-model"></span>
+      <span id="hist-detail-meta"></span>
+    </div>
   </div>
 </div>
 <div id="heritage-chatlog-modal-overlay" class="hcl-modal-overlay">
@@ -482,6 +506,34 @@ histSideToggle.addEventListener('click', function() {
   }
 });
 
+var histDetailOverlay = document.getElementById('hist-detail-overlay');
+var histDetailChat = document.getElementById('hist-detail-chat');
+var histDetailModel = document.getElementById('hist-detail-model');
+var histDetailMeta = document.getElementById('hist-detail-meta');
+document.getElementById('hist-detail-close').addEventListener('click', function() {
+  histDetailOverlay.classList.remove('open');
+});
+histDetailOverlay.addEventListener('click', function(e) {
+  if (e.target === histDetailOverlay) histDetailOverlay.classList.remove('open');
+});
+
+function showHistoryDetailModal(r) {
+  histDetailChat.innerHTML = '';
+  var qEl = document.createElement('div');
+  qEl.className = 'hist-detail-bubble user';
+  qEl.textContent = r.question;
+  var aEl = document.createElement('div');
+  aEl.className = 'hist-detail-bubble assistant';
+  aEl.textContent = r.answer;
+  histDetailChat.appendChild(qEl);
+  histDetailChat.appendChild(aEl);
+  histDetailModel.textContent = r.model ? r.model.split('/').pop() : '';
+  var dateStr = (r.created_at || '').slice(0, 16).replace('T', ' ');
+  histDetailMeta.textContent = dateStr + (r.access_count != null ? '　👁 ' + r.access_count : '');
+  histDetailOverlay.style.zIndex = String(getNextZ());
+  histDetailOverlay.classList.add('open');
+}
+
 function renderHistSideResults(results) {
   var html = '';
   results.forEach(function(r, i) {
@@ -498,7 +550,7 @@ function renderHistSideResults(results) {
     el.addEventListener('click', function() {
       var idx = parseInt(el.getAttribute('data-idx'), 10);
       var r = histSideCurrentResults[idx];
-      if (r) openAiModal(r.question, r.answer, true);
+      if (r) showHistoryDetailModal(r);
     });
   });
 }

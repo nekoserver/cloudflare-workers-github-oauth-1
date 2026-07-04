@@ -2362,13 +2362,25 @@ export function getAiChatPage(user: {
       }
     }
 
+    // コピーのためテキストを指でなぞって選択する操作も水平方向に50px以上
+    // 動くことが多く、区別せずにスワイプ判定すると指を離した瞬間に
+    // historyModalSwipeNavigate() が再描画してしまい選択中のハイライトが
+    // 消えてしまう。window.getSelection() が空でない（＝選択中）場合は
+    // スワイプとみなさないようにする。
+    function shouldTriggerHistoryModalSwipe(dx) {
+      if (Math.abs(dx) <= 50) return false;
+      var selectedText = window.getSelection ? window.getSelection().toString() : '';
+      if (selectedText) return false;
+      return true;
+    }
+
     historyModalChat.addEventListener('touchstart', function(e) {
       historySwipeTouchStartX = e.touches[0].clientX;
     }, { passive: true });
 
     historyModalChat.addEventListener('touchend', function(e) {
       var dx = e.changedTouches[0].clientX - historySwipeTouchStartX;
-      if (Math.abs(dx) > 50) historyModalSwipeNavigate(dx < 0 ? 1 : -1);
+      if (shouldTriggerHistoryModalSwipe(dx)) historyModalSwipeNavigate(dx < 0 ? 1 : -1);
     });
 
     document.addEventListener('keydown', function(e) {
