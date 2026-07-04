@@ -61,6 +61,7 @@ import { getSessionDurationSeconds, renewSession, resolveSessionDuration } from 
 import { buildCommitAgentLogEntry } from './utils/commitAgentLog';
 import { verifySlackSignature } from './utils/slackSignature';
 import { handleSlackInteraction } from './utils/slackInteraction';
+import { handleSlackEvent } from './utils/slackEvent';
 import { executeCreateRepo } from './utils/repoValidation';
 import { validateReturnTo } from './utils/returnTo';
 import * as logger from './utils/logger';
@@ -9372,6 +9373,34 @@ app.post('/slack/interactions', async (c) => {
 
   if (result.status === 401) {
     return c.text('', 401);
+  }
+  return c.text('', 200);
+});
+
+/**
+ * Slack Events API の受信エンドポイント。
+ * Event Subscriptions 設定の Request URL 登録時に送られる url_verification に
+ * challenge値を返して疎通確認する。それ以外のイベントは200で確認応答する。
+ */
+app.post('/slack/event', async (c) => {
+  const rawBody = await c.req.text();
+
+  const result = await handleSlackEvent({
+    rawBody,
+    timestamp: c.req.header('X-Slack-Request-Timestamp'),
+    signature: c.req.header('X-Slack-Signature'),
+    signingSecret: c.env.SLACK_SIGNING_SECRET,
+    verifySignature: verifySlackSignature,
+  });
+
+  if (result.status === 401) {
+    return c.text('', 401);
+  }
+  if (result.status === 400) {
+    return c.text('', 400);
+  }
+  if (result.body) {
+    return c.json(result.body, 200);
   }
   return c.text('', 200);
 });
