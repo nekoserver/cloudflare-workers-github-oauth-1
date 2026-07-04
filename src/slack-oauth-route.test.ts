@@ -49,6 +49,13 @@ describe('GET /auth/v1/callback', () => {
     expect(callbackBlock).toContain('exchangeSlackOAuthCode({');
   });
 
+  it('fetchImplは裸のfetch参照ではなくアロー関数で渡す（Cloudflare WorkersのIllegal invocation回避）', () => {
+    // `fetchImpl: fetch` は fetch を this バインドなしで呼び出すことになり、
+    // Cloudflare Workers ランタイムでは "Illegal invocation" 例外になる（実機で再現確認済み）
+    expect(callbackBlock).not.toMatch(/fetchImpl:\s*fetch\s*[,}]/);
+    expect(callbackBlock).toContain('fetchImpl: (url, init) => fetch(url, init),');
+  });
+
   it('交換失敗時は502でエラー内容を返す（握りつぶさない）', () => {
     expect(callbackBlock).toMatch(/if \(!exchangeResult\.ok\) \{[\s\S]*?return c\.json\(\{ error: `Slack連携に失敗しました: \$\{exchangeResult\.error\}` \}, 502,/);
   });
