@@ -7,7 +7,7 @@ assets = { directory = "./public" }
 [vars]
 ENVIRONMENT = "development"
 # GITHUB_CLIENT_ID は wrangler secret で管理する（[vars] に平文で書かない）
-AI_CHAT_MODEL = "@cf/google/gemma-4-26b-a4b-it"
+AI_CHAT_MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
 
 # 必要なシークレット（wrangler secret putで設定）:
 #   wrangler secret put GITHUB_CLIENT_ID
@@ -23,7 +23,11 @@ AI_CHAT_MODEL = "@cf/google/gemma-4-26b-a4b-it"
 #
 # オプション（[vars] または secret で設定可能）:
 #   AI_MODEL       # PR要約・キーワード分類用 Workers AIモデル名（未設定時: @cf/google/gemma-4-26b-a4b-it）
-#   AI_CHAT_MODEL  # AIチャットページ・Slack応答共通のモデル名（未設定時: @cf/google/gemma-4-26b-a4b-it）
+#   AI_CHAT_MODEL  # AIチャットページ・Slack応答共通のモデル名（未設定時: @cf/meta/llama-3.3-70b-instruct-fp8-fast）
+#     注意: gemma-4-26b-a4b-it はsystem messageが存在すると enable_thinking:false を無視して
+#     thinking mode を強制的に有効化し、<think>タグではなく <|channel>...</channel|> 形式で
+#     推論過程を応答に混入させる既知の制限がある（stripThinkTagsで除去できずSlack投稿が
+#     失敗する原因になった）。デフォルトに戻す場合は要注意
 
 # D1データベース設定（オプション）
 # セッション管理を有効にするには以下の手順を実行してください:

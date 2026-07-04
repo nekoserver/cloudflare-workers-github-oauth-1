@@ -8,7 +8,7 @@ export type SlackAiReplyResult =
   | { ok: true; text: string; usedModel: string }
   | { ok: false; error: string };
 
-const FALLBACK_MODEL = '@cf/google/gemma-4-26b-a4b-it';
+const FALLBACK_MODEL = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
 
 function extractAiText(result: unknown): string {
   const resultObj = (typeof result === 'object' && result !== null) ? result as Record<string, unknown> : {};
