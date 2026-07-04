@@ -171,10 +171,10 @@ describe('世界遺産アクセスランキング: サイドバー内検索窓',
     expect(h.document.getElementById('hist-side-status').textContent).toBe('');
   });
 
-  it('検索結果の質問をタップするとAIチャットの質問選択時と同様にAIモーダルへ質問・回答が表示される', async () => {
+  it('検索結果の質問をタップするとAIチャットの詳細プレビューモーダルへ質問・回答が表示される', async () => {
     const h = setupHarness(
       defaultHandler({
-        search: { results: [{ id: 's1', question: '「タージ・マハル」の「見どころ」について説明してください', answer: '白亜の霊廟です。', model: 'm', created_at: '2026-01-01T00:00:00.000Z', access_count: 0 }] },
+        search: { results: [{ id: 's1', question: '「タージ・マハル」の「見どころ」について説明してください', answer: '白亜の霊廟です。', model: '@cf/meta/llama-3.3-70b-instruct-fp8-fast', created_at: '2026-01-01T12:34:00.000Z', access_count: 7 }] },
       })
     );
     const search = h.document.getElementById('hist-side-search');
@@ -185,10 +185,47 @@ describe('世界遺産アクセスランキング: サイドバー内検索窓',
     const item = h.document.querySelector('.hist-side-item');
     item.dispatchEvent(new h.window.Event('click', { bubbles: true }));
 
-    const modalOverlay = h.document.getElementById('ai-modal-overlay');
+    const modalOverlay = h.document.getElementById('hist-detail-overlay');
     expect(modalOverlay.classList.contains('open')).toBe(true);
-    expect(h.document.getElementById('ai-modal-body').textContent).toBe('白亜の霊廟です。');
-    expect(h.document.getElementById('ai-modal-title').textContent).toContain('タージ・マハル');
+    expect(h.document.getElementById('hist-detail-title').textContent).toBe('AIチャットの詳細プレビュー');
+    const bubbles = h.document.querySelectorAll('.hist-detail-bubble');
+    expect(bubbles[0].textContent).toContain('タージ・マハル');
+    expect(bubbles[1].textContent).toBe('白亜の霊廟です。');
+    expect(h.document.getElementById('hist-detail-model').textContent).toBe('llama-3.3-70b-instruct-fp8-fast');
+    expect(h.document.getElementById('hist-detail-meta').textContent).toContain('7');
+  });
+
+  it('詳細プレビューモーダルは既存のAI回答モーダル(ai-modal-overlay)を開かない', async () => {
+    const h = setupHarness(
+      defaultHandler({
+        search: { results: [{ id: 's1', question: 'Q', answer: 'A', model: 'm', created_at: '2026-01-01T00:00:00.000Z', access_count: 0 }] },
+      })
+    );
+    const search = h.document.getElementById('hist-side-search');
+    search.value = 'Q';
+    search.dispatchEvent(new h.window.Event('input', { bubbles: true }));
+    await waitDebounce();
+
+    h.document.querySelector('.hist-side-item').dispatchEvent(new h.window.Event('click', { bubbles: true }));
+
+    expect(h.document.getElementById('ai-modal-overlay').classList.contains('open')).toBe(false);
+  });
+
+  it('×ボタンで詳細プレビューモーダルを閉じられる', async () => {
+    const h = setupHarness(
+      defaultHandler({
+        search: { results: [{ id: 's1', question: 'Q', answer: 'A', model: 'm', created_at: '2026-01-01T00:00:00.000Z', access_count: 0 }] },
+      })
+    );
+    const search = h.document.getElementById('hist-side-search');
+    search.value = 'Q';
+    search.dispatchEvent(new h.window.Event('input', { bubbles: true }));
+    await waitDebounce();
+    h.document.querySelector('.hist-side-item').dispatchEvent(new h.window.Event('click', { bubbles: true }));
+    expect(h.document.getElementById('hist-detail-overlay').classList.contains('open')).toBe(true);
+
+    h.document.getElementById('hist-detail-close').dispatchEvent(new h.window.Event('click', { bubbles: true }));
+    expect(h.document.getElementById('hist-detail-overlay').classList.contains('open')).toBe(false);
   });
 
   it('×ボタンをタップすると検索キーワード・結果・ステータスがリセットされる', async () => {
