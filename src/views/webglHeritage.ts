@@ -3,6 +3,7 @@ import { HERITAGE_LIST } from '../data/heritageList';
 import { RAIL_LINES } from '../data/railLines';
 import { VOLCANOES } from '../data/volcanoes';
 import { FAULTS } from '../data/faults';
+import { getMarkdownParserScript } from '../utils/markdownRenderer';
 
 function escH(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -264,6 +265,21 @@ canvas:active { cursor:grabbing; }
 .city-fly-row-flag { font-size:13px; flex-shrink:0; }
 .city-fly-row-name { flex:1; font-size:11px; color:#c9d1d9; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .city-fly-row-dist { font-size:10px; color:#58a6ff; flex-shrink:0; font-weight:600; }
+.mitokoro-md h1,.mitokoro-md h2,.mitokoro-md h3,.mitokoro-md h4,.mitokoro-md h5,.mitokoro-md h6 { color:#e6edf3; font-weight:700; margin:12px 0 6px; }
+.mitokoro-md h1 { font-size:1.3em; } .mitokoro-md h2 { font-size:1.18em; } .mitokoro-md h3 { font-size:1.08em; }
+.mitokoro-md p { margin:0 0 10px; }
+.mitokoro-md ul,.mitokoro-md ol { margin:0 0 10px; padding-left:1.6em; }
+.mitokoro-md li { margin:3px 0; }
+.mitokoro-md blockquote { border-left:3px solid #388bfd; padding:6px 12px; margin:0 0 10px; background:rgba(56,139,253,0.08); border-radius:0 6px 6px 0; color:#8b949e; }
+.mitokoro-md code { background:#161b22; padding:2px 5px; border-radius:4px; font-family:Monaco,Menlo,'Courier New',monospace; font-size:0.9em; }
+.mitokoro-md pre { background:#161b22; padding:10px; border-radius:6px; overflow-x:auto; margin:0 0 10px; }
+.mitokoro-md pre code { background:none; padding:0; }
+.mitokoro-md a { color:#58a6ff; text-decoration:none; }
+.mitokoro-md a:hover { text-decoration:underline; }
+.mitokoro-md hr { border:none; border-top:1px solid #21262d; margin:12px 0; }
+.mitokoro-md table { border-collapse:collapse; width:100%; margin:0 0 10px; font-size:0.95em; }
+.mitokoro-md th,.mitokoro-md td { border:1px solid #21262d; padding:5px 8px; text-align:left; }
+.mitokoro-md th { background:#161b22; }
 </style>
 </head>
 <body>
@@ -2810,6 +2826,8 @@ void main() {
     return max + 100;
   }
 
+  ${getMarkdownParserScript()}
+
   function openHeritageMitokoroCacheModal(icon, heritageName, shareId) {
     var overlay = document.createElement('div');
     overlay.setAttribute('data-overlay', '');
@@ -2833,7 +2851,8 @@ void main() {
     box.appendChild(head);
 
     var body = document.createElement('div');
-    body.style.cssText = 'padding:16px 18px;overflow-y:auto;flex:1;font-size:13px;color:#c9d1d9;line-height:1.7;white-space:pre-wrap;';
+    body.className = 'mitokoro-md';
+    body.style.cssText = 'padding:16px 18px;overflow-y:auto;flex:1;font-size:13px;color:#c9d1d9;line-height:1.7;';
     body.textContent = '読み込み中...';
     box.appendChild(body);
 
@@ -2844,7 +2863,11 @@ void main() {
     fetch('/api/aichat/shares/' + encodeURIComponent(shareId))
       .then(function(r) { return r.json(); })
       .then(function(data) {
-        body.textContent = data.answer || data.error || '（応答なし）';
+        if (data.answer) {
+          body.innerHTML = parseMd(data.answer);
+        } else {
+          body.textContent = data.error || '（応答なし）';
+        }
       })
       .catch(function() {
         body.textContent = '通信エラーが発生しました。';
