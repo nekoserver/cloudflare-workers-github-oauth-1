@@ -3,21 +3,34 @@ import { readFileSync } from 'fs';
 
 const view = readFileSync(new URL('./views/heritageAccess.ts', import.meta.url).pathname, 'utf-8');
 
-describe('世界遺産名リンク — acc-name-link クリックでチャットログモーダルを開く', () => {
-  it('applyKeywordData で生成する acc-name-link ボタンのクリックで openHeritageChatlogModal を呼ぶ', () => {
+describe('世界遺産名リンク — acc-name-link クリックでサイドバー検索窓に埋め込む', () => {
+  // 世界遺産名リンク(.acc-name-link)のクリックは、チャットログモーダルを直接開くのではなく
+  // ページ左のAIチャット履歴検索サイドバーを開いてその世界遺産名で検索するように変更した。
+  // トピックバッジ(.acc-topic-badge)は引き続き openHeritageChatlogModal を使う（変更なし）。
+  it('applyKeywordData で生成する acc-name-link ボタンのクリックで openHeritageInHistorySidebar を呼ぶ', () => {
     const fnIdx = view.indexOf('function applyKeywordData(');
     const fnBlock = view.slice(fnIdx, fnIdx + 3000);
     const btnIdx = fnBlock.indexOf("btn.addEventListener('click'");
     const btnBlock = fnBlock.slice(btnIdx, btnIdx + 200);
-    expect(btnBlock).toContain('openHeritageChatlogModal');
+    expect(btnBlock).toContain('openHeritageInHistorySidebar');
+    expect(btnBlock).not.toContain('openHeritageChatlogModal');
   });
 
-  it('ensureTopicBadge で生成する acc-name-link ボタンのクリックでも openHeritageChatlogModal を呼ぶ', () => {
+  it('ensureTopicBadge で生成する acc-name-link ボタンのクリックでも openHeritageInHistorySidebar を呼ぶ', () => {
     const fnIdx = view.indexOf('function ensureTopicBadge(');
     const fnBlock = view.slice(fnIdx, fnIdx + 2000);
     const btnIdx = fnBlock.indexOf("btn.addEventListener('click'");
     const btnBlock = fnBlock.slice(btnIdx, btnIdx + 200);
-    expect(btnBlock).toContain('openHeritageChatlogModal');
+    expect(btnBlock).toContain('openHeritageInHistorySidebar');
+    expect(btnBlock).not.toContain('openHeritageChatlogModal');
+  });
+
+  it('トピックバッジ(.acc-topic-badge)のクリックは引き続き openHeritageChatlogModal を呼ぶ（変更なし）', () => {
+    const fnIdx = view.indexOf('function applyKeywordData(');
+    const fnBlock = view.slice(fnIdx, fnIdx + 3000);
+    const badgeIdx = fnBlock.indexOf("badge.addEventListener('click'");
+    const badgeBlock = fnBlock.slice(badgeIdx, badgeIdx + 200);
+    expect(badgeBlock).toContain('openHeritageChatlogModal');
   });
 });
 

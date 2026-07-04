@@ -168,6 +168,27 @@ td.pop{text-align:right;color:#8b949e;font-size:11px;min-width:64px}
 .eu-dist-bar-wrap{width:80px;flex-shrink:0}
 .eu-dist-bar{height:6px;border-radius:3px;background:#1f6feb;min-width:2px}
 .eu-dist-km{font-weight:700;min-width:72px;text-align:right;font-size:11px}
+.summary-row{display:flex;align-items:center;gap:8px;padding:0 20px}
+.summary-row .summary{padding:10px 0}
+.hist-side-toggle-btn{background:#21262d;border:1px solid #30363d;color:#8b949e;border-radius:6px;width:26px;height:26px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:13px;flex-shrink:0;font-family:inherit}
+.hist-side-toggle-btn:hover{color:#c9d1d9;border-color:#58a6ff}
+.hist-side-toggle-btn.active{background:#1f6feb;border-color:#1f6feb;color:#fff}
+.ranking-body{position:relative;min-height:calc(100vh - 160px)}
+.hist-side{display:none;position:absolute;left:0;top:0;bottom:0;width:min(85vw,300px);background:#0d1117;border-right:1px solid #30363d;flex-direction:column;box-shadow:4px 0 24px rgba(0,0,0,.7)}
+.hist-side.open{display:flex}
+.hist-side-head{padding:10px 12px;border-bottom:1px solid #21262d;flex-shrink:0}
+.hist-side-search-wrap{position:relative}
+.hist-side-search{width:100%;padding:7px 28px 7px 9px;border-radius:6px;border:1px solid #30363d;background:#161b22;color:#c9d1d9;font-size:12px;font-family:inherit;outline:none}
+.hist-side-search:focus{border-color:#58a6ff}
+.hist-side-search-clear{position:absolute;right:7px;top:50%;transform:translateY(-50%);background:none;border:none;color:#8b949e;cursor:pointer;font-size:13px;display:none;padding:0 2px;line-height:1}
+.hist-side-search-clear.visible{display:block}
+.hist-side-status{font-size:11px;color:#8b949e;padding:6px 12px 4px;flex-shrink:0}
+.hist-side-results{flex:1;overflow-y:auto}
+.hist-side-item{padding:8px 12px;cursor:pointer;border-bottom:1px solid #21262d;border-left:3px solid transparent}
+.hist-side-item:hover{background:#161b22}
+.hist-side-num{font-size:10px;color:#484f58;font-weight:600}
+.hist-side-q{font-size:12px;color:#c9d1d9;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin:2px 0}
+.hist-side-meta{font-size:10px;color:#8b949e}
 </style>
 </head>
 <body>
@@ -248,9 +269,24 @@ td.pop{text-align:right;color:#8b949e;font-size:11px;min-width:64px}
     <div class="rail-hr-body" id="rail-hr-body"></div>
   </div>
 </div>
-<div class="summary" id="summary"></div>
-<div class="tbl-wrap" id="tbl-wrap">
-  <div class="spinner">読み込み中...</div>
+<div class="summary-row">
+  <button class="hist-side-toggle-btn" id="hist-side-toggle" title="AIチャット履歴を検索">📑</button>
+  <div class="summary" id="summary"></div>
+</div>
+<div class="ranking-body" id="ranking-body">
+  <div class="hist-side" id="hist-side">
+    <div class="hist-side-head">
+      <div class="hist-side-search-wrap">
+        <input class="hist-side-search" id="hist-side-search" type="search" placeholder="AIチャット履歴を検索..." autocomplete="off">
+        <button class="hist-side-search-clear" id="hist-side-clear">✕</button>
+      </div>
+    </div>
+    <div class="hist-side-status" id="hist-side-status"></div>
+    <div class="hist-side-results" id="hist-side-results"></div>
+  </div>
+  <div class="tbl-wrap" id="tbl-wrap">
+    <div class="spinner">読み込み中...</div>
+  </div>
 </div>
 
 <script>
@@ -413,6 +449,104 @@ function getNextZ() {
   return max + 100;
 }
 
+function escHtml(s) {
+  return (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+// ===== AIチャット履歴検索サイドバー =====
+var histSideToggle = document.getElementById('hist-side-toggle');
+var histSide = document.getElementById('hist-side');
+var histSideSearch = document.getElementById('hist-side-search');
+var histSideClear = document.getElementById('hist-side-clear');
+var histSideStatus = document.getElementById('hist-side-status');
+var histSideResults = document.getElementById('hist-side-results');
+var histSideTimer = null;
+var histSideCurrentResults = [];
+
+function openHistSide() {
+  histSide.style.zIndex = String(getNextZ());
+  histSide.classList.add('open');
+  histSideToggle.classList.add('active');
+}
+
+function closeHistSide() {
+  histSide.classList.remove('open');
+  histSideToggle.classList.remove('active');
+}
+
+histSideToggle.addEventListener('click', function() {
+  if (histSide.classList.contains('open')) {
+    closeHistSide();
+  } else {
+    openHistSide();
+    histSideSearch.focus();
+  }
+});
+
+function renderHistSideResults(results) {
+  var html = '';
+  results.forEach(function(r, i) {
+    var dateStr = (r.created_at || '').slice(0, 16).replace('T', ' ');
+    var modelShort = r.model ? r.model.split('/').pop() : '';
+    html += '<div class="hist-side-item" data-idx="' + i + '">' +
+      '<div class="hist-side-num">' + (i + 1) + '.</div>' +
+      '<div class="hist-side-q">' + escHtml(r.question) + '</div>' +
+      '<div class="hist-side-meta">' + (modelShort ? escHtml(modelShort) + '　' : '') + escHtml(dateStr) + '</div>' +
+      '</div>';
+  });
+  histSideResults.innerHTML = html;
+  histSideResults.querySelectorAll('.hist-side-item').forEach(function(el) {
+    el.addEventListener('click', function() {
+      var idx = parseInt(el.getAttribute('data-idx'), 10);
+      var r = histSideCurrentResults[idx];
+      if (r) openAiModal(r.question, r.answer, true);
+    });
+  });
+}
+
+function doHistSideSearch(q) {
+  fetch('/api/aichat/shares/search?q=' + encodeURIComponent(q), { credentials: 'same-origin' })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      histSideCurrentResults = data.results || [];
+      renderHistSideResults(histSideCurrentResults);
+      histSideStatus.textContent = histSideCurrentResults.length > 0 ? histSideCurrentResults.length + ' 件ヒット' : '一致なし';
+    })
+    .catch(function() { histSideStatus.textContent = '検索エラー'; });
+}
+
+histSideSearch.addEventListener('input', function() {
+  var q = histSideSearch.value.trim();
+  histSideClear.classList.toggle('visible', q.length > 0);
+  clearTimeout(histSideTimer);
+  if (!q) {
+    histSideStatus.textContent = '';
+    histSideResults.innerHTML = '';
+    histSideCurrentResults = [];
+    return;
+  }
+  histSideStatus.textContent = '検索中...';
+  histSideTimer = setTimeout(function() { doHistSideSearch(q); }, 350);
+});
+
+histSideClear.addEventListener('click', function() {
+  histSideSearch.value = '';
+  histSideClear.classList.remove('visible');
+  histSideStatus.textContent = '';
+  histSideResults.innerHTML = '';
+  histSideCurrentResults = [];
+  histSideSearch.focus();
+});
+
+function openHeritageInHistorySidebar(name) {
+  openHistSide();
+  histSideSearch.value = name;
+  histSideClear.classList.add('visible');
+  histSideStatus.textContent = '検索中...';
+  clearTimeout(histSideTimer);
+  doHistSideSearch(name);
+}
+
 var kwPanelOverlay = document.getElementById('heritage-kw-panel-overlay');
 var kwPanelTitle = document.getElementById('heritage-kw-panel-title');
 var kwPanelBody = document.getElementById('heritage-kw-panel-body');
@@ -572,7 +706,7 @@ function applyKeywordData(inner, hits, hasKw) {
     btn.className = 'acc-name-link';
     btn.setAttribute('data-heritage', name);
     btn.textContent = span.textContent;
-    btn.addEventListener('click', function(e) { e.stopPropagation(); openHeritageChatlogModal(name, null); });
+    btn.addEventListener('click', function(e) { e.stopPropagation(); openHeritageInHistorySidebar(name); });
     var wrap = document.createElement('span');
     wrap.className = 'acc-name-wrap';
     wrap.appendChild(btn);
@@ -630,7 +764,9 @@ function applyKeywordData(inner, hits, hasKw) {
       btn.className = 'acc-name-link';
       btn.setAttribute('data-heritage', name);
       btn.textContent = span.textContent;
-      btn.addEventListener('click', function(e) { e.stopPropagation(); });
+      (function(linkName) {
+        btn.addEventListener('click', function(e) { e.stopPropagation(); openHeritageInHistorySidebar(linkName); });
+      })(name);
       var wrap2 = document.createElement('span');
       wrap2.className = 'acc-name-wrap';
       wrap2.appendChild(btn);
@@ -744,7 +880,7 @@ function ensureTopicBadge(inner, heritageName, topic) {
     btn.textContent = span.textContent;
     btn.addEventListener('click', function(e) {
       e.stopPropagation();
-      openHeritageChatlogModal(heritageName, null);
+      openHeritageInHistorySidebar(heritageName);
     });
     var wrap = document.createElement('span');
     wrap.className = 'acc-name-wrap';
