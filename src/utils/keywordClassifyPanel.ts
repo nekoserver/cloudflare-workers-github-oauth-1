@@ -1,17 +1,19 @@
 /**
- * キーワード分類パネル（📝トグル + キーワードチップ + 新規カテゴリ登録モーダル）
+ * キーワード分類パネル（🔑ハイライト切替 + 📝分類モード + キーワードチップ + 新規カテゴリ登録モーダル）
  *
  * 「AIチャットで使用中のAIチャットの詳細プレビュー」(src/views/aichat.ts の
- * historyModal) にある、キーワードチップから未分類キーワードを新しいカテゴリへ
- * 登録できる機能を、他のAIチャット詳細プレビュー（例: 世界遺産アクセスランキング
- * 左サイドパネルの hist-detail モーダル）でも呼び出せるように関数化したもの。
+ * historyModal) にある、キーワードチップのハイライトON/OFF・未分類キーワードを
+ * 新しいカテゴリへ登録できる機能を、他のAIチャット詳細プレビュー（例: 世界遺産
+ * アクセスランキング左サイドパネルの hist-detail モーダル）でも呼び出せるように
+ * 関数化したもの。
  *
  * 使い方（ビューの HTML 生成関数内）:
  *   1. <style> 内に renderKeywordClassifyPanelCss() を埋め込む
  *   2. モーダルのヘッダー内に renderKeywordEditToggleButtonHtml(toggleBtnId) を、
+ *      フッター等に renderHighlightToggleButtonHtml(highlightToggleBtnId) を、
  *      チャット本文の直後に renderKeywordChipsContainerHtml(chipsContainerId) を埋め込む
  *   3. <script> 内（対象モーダルの chat 要素・escHtml・getNextZ を定義した後）に
- *      renderKeywordClassifyPanelJs({ toggleBtnId, chipsContainerId, chatElExpr, instanceName }) を埋め込む
+ *      renderKeywordClassifyPanelJs({ toggleBtnId, highlightToggleBtnId, chipsContainerId, chatElExpr, instanceName }) を埋め込む
  *   4. モーダルを開く処理で window[instanceName].reset() → window[instanceName].loadForShare(shareId) を呼ぶ
  *
  * renderKeywordClassifyPanelJs が生成するコードは escHtml / getNextZ という
@@ -21,6 +23,8 @@
 export interface KeywordClassifyPanelOptions {
   /** 📝トグルボタンの id */
   toggleBtnId: string;
+  /** 🔑ハイライトON/OFFトグルボタンの id */
+  highlightToggleBtnId: string;
   /** キーワードチップを描画するコンテナ要素の id */
   chipsContainerId: string;
   /** ハイライト対象のチャット表示要素を指す JS 式（例: 'histDetailChat'） */
@@ -37,7 +41,9 @@ export function renderKeywordClassifyPanelCss(): string {
     [data-theme="dark"] .kwcls-chip-unc { background:var(--kw-pal-unc-bg,rgba(255,255,255,0.1)); color:var(--kw-pal-unc-fg,var(--text-secondary,#9ca3af)); }
     .kwcls-chip-active { background:var(--kw-pal-act,#6366f1) !important; color:#fff !important; border-color:var(--kw-pal-act,#6366f1) !important; }
     .kwcls-edit-toggle-btn { background:#21262d; border:1px solid #30363d; color:#8b949e; border-radius:6px; padding:2px 7px; font-size:12px; cursor:pointer; opacity:0.4; margin-right:6px; vertical-align:middle; flex-shrink:0; }
+    .kwcls-highlight-toggle-btn { background:none; border:none; color:#8b949e; padding:3px 7px; font-size:14px; opacity:0.2; cursor:pointer; flex-shrink:0; }
     .kw-highlight { background:#fef08a; color:#1a1a1a; border-radius:2px; padding:0 1px; }
+    .kwcls-hl-hidden .kw-highlight { background:transparent; color:inherit; outline:none; }
   `;
 }
 
@@ -45,12 +51,16 @@ export function renderKeywordEditToggleButtonHtml(toggleBtnId: string): string {
   return `<button class="kwcls-edit-toggle-btn" id="${toggleBtnId}" type="button" title="キーワード分類モード: 未分類のキーワードをタップするとキーワード分類モーダルが開きます">📝</button>`;
 }
 
+export function renderHighlightToggleButtonHtml(highlightToggleBtnId: string): string {
+  return `<button class="kwcls-highlight-toggle-btn" id="${highlightToggleBtnId}" type="button" title="キーワードハイライトなし">🔑</button>`;
+}
+
 export function renderKeywordChipsContainerHtml(chipsContainerId: string): string {
   return `<div id="${chipsContainerId}" style="display:none;padding:6px 16px 4px;flex-wrap:wrap;gap:4px;border-top:1px solid #21262d;flex-shrink:0;"></div>`;
 }
 
 export function renderKeywordClassifyPanelJs(opts: KeywordClassifyPanelOptions): string {
-  const { toggleBtnId, chipsContainerId, chatElExpr, instanceName } = opts;
+  const { toggleBtnId, highlightToggleBtnId, chipsContainerId, chatElExpr, instanceName } = opts;
   return `
   (function() {
     var KW_CAT_COLORS = [
@@ -333,10 +343,14 @@ export function renderKeywordClassifyPanelJs(opts: KeywordClassifyPanelOptions):
 
     var kwPanelChipsEl = document.getElementById(${JSON.stringify(chipsContainerId)});
     var kwPanelToggleBtn = document.getElementById(${JSON.stringify(toggleBtnId)});
+    var kwHighlightToggleBtn = document.getElementById(${JSON.stringify(highlightToggleBtnId)});
     var kwPanelEditMode = false;
     var kwPanelKeywords = [];
     var kwPanelActiveKeyword = '';
     var kwPanelCurrentShareId = null;
+    var kwPanelChipsPinned = false;
+    var kwPanelHighlightActive = true;
+    var kwPanelDbApplied = false;
 
     if (kwPanelToggleBtn) {
       kwPanelToggleBtn.addEventListener('click', function() {
@@ -347,9 +361,18 @@ export function renderKeywordClassifyPanelJs(opts: KeywordClassifyPanelOptions):
       });
     }
 
-    function kwPanelRender() {
+    function kwPanelBuildAllKeywords() {
+      var all = [];
+      kwPanelKeywords.forEach(function(k) {
+        var kw = k && typeof k === 'object' ? k.keyword : k;
+        if (kw && all.indexOf(kw) === -1) all.push(kw);
+      });
+      return all;
+    }
+
+    function kwPanelRender(show) {
       if (!kwPanelChipsEl) return;
-      if (kwPanelKeywords.length === 0) {
+      if (!show || kwPanelKeywords.length === 0) {
         kwPanelChipsEl.style.display = 'none';
         kwPanelChipsEl.innerHTML = '';
         return;
@@ -373,28 +396,104 @@ export function renderKeywordClassifyPanelJs(opts: KeywordClassifyPanelOptions):
             });
             return;
           }
+          kwPanelChipsPinned = true;
           kwPanelActiveKeyword = kw;
           var chatEl = ${chatElExpr};
           if (chatEl) {
             kwPanelHighlightClear(chatEl);
             kwPanelHighlightApply(chatEl, kw);
+            chatEl.classList.remove('kwcls-hl-hidden');
+          }
+          kwPanelHighlightActive = true;
+          if (chatEl) {
+            var first = chatEl.querySelector('.kw-highlight');
+            if (first && first.scrollIntoView) first.scrollIntoView({ behavior: 'smooth', block: 'center' });
           }
           kwPanelChipsEl.querySelectorAll('.kwcls-chip').forEach(function(c) { c.classList.remove('kwcls-chip-active'); });
           chip.classList.add('kwcls-chip-active');
+          kwPanelUpdateHighlightToggleBtn();
         });
         kwPanelChipsEl.appendChild(chip);
       });
     }
 
-    function kwPanelLoadForShare(shareId) {
+    function kwPanelUpdateHighlightToggleBtn() {
+      var chatEl = ${chatElExpr};
+      var marks = chatEl ? chatEl.querySelectorAll('.kw-highlight') : [];
+      var highlightsVisible = marks && marks.length > 0 && kwPanelHighlightActive;
+      kwPanelRender(!highlightsVisible || kwPanelChipsPinned);
+      if (!kwHighlightToggleBtn) return;
+      if (!marks || marks.length === 0) {
+        if (kwPanelKeywords.length > 0) {
+          kwHighlightToggleBtn.style.opacity = '1';
+          kwHighlightToggleBtn.title = '🔑 クリックでキーワードをハイライト表示';
+        } else {
+          kwHighlightToggleBtn.style.opacity = '0.2';
+          kwHighlightToggleBtn.title = 'キーワードハイライトなし';
+        }
+        return;
+      }
+      if (kwPanelHighlightActive) {
+        kwHighlightToggleBtn.style.opacity = '1';
+        kwHighlightToggleBtn.title = '🔑 ハイライト表示中（クリックで非表示）';
+      } else {
+        kwHighlightToggleBtn.style.opacity = '0.35';
+        kwHighlightToggleBtn.title = '🔑 ハイライト非表示（クリックで表示）';
+      }
+    }
+
+    function kwPanelApplyAllDbKeywordHighlights() {
+      kwPanelHighlightActive = true;
+      var chatEl = ${chatElExpr};
+      if (chatEl) {
+        chatEl.classList.remove('kwcls-hl-hidden');
+        kwPanelHighlightClear(chatEl);
+        var allKws = kwPanelBuildAllKeywords();
+        if (allKws.length > 0) kwPanelHighlightApply(chatEl, allKws);
+      }
+      kwPanelDbApplied = true;
+      kwPanelUpdateHighlightToggleBtn();
+    }
+
+    if (kwHighlightToggleBtn) {
+      kwHighlightToggleBtn.addEventListener('click', function() {
+        if (kwPanelKeywords.length > 0 && !kwPanelDbApplied) {
+          kwPanelChipsPinned = false;
+          kwPanelApplyAllDbKeywordHighlights();
+          return;
+        }
+        if (!kwPanelDbApplied && kwPanelCurrentShareId) {
+          kwPanelLoadForShare(kwPanelCurrentShareId, kwPanelApplyAllDbKeywordHighlights);
+          return;
+        }
+        var chatEl = ${chatElExpr};
+        var marks = chatEl ? chatEl.querySelectorAll('.kw-highlight') : [];
+        if (!marks || marks.length === 0) return;
+        kwPanelHighlightActive = !kwPanelHighlightActive;
+        if (kwPanelHighlightActive) {
+          kwPanelChipsPinned = false;
+          if (chatEl) chatEl.classList.remove('kwcls-hl-hidden');
+        } else {
+          if (chatEl) chatEl.classList.add('kwcls-hl-hidden');
+        }
+        kwPanelUpdateHighlightToggleBtn();
+      });
+    }
+
+    function kwPanelLoadForShare(shareId, cb) {
       kwPanelCurrentShareId = shareId;
       fetch('/api/aichat/share-keywords?shareId=' + encodeURIComponent(String(shareId)), { credentials: 'same-origin' })
         .then(function(res) { return res.json(); })
         .then(function(d) {
           kwPanelKeywords = d.keywords || [];
-          kwPanelRender();
+          kwPanelUpdateHighlightToggleBtn();
+          if (typeof cb === 'function') cb();
         })
-        .catch(function() { kwPanelKeywords = []; kwPanelRender(); });
+        .catch(function() {
+          kwPanelKeywords = [];
+          kwPanelUpdateHighlightToggleBtn();
+          if (typeof cb === 'function') cb();
+        });
     }
 
     function kwPanelReset() {
@@ -402,12 +501,17 @@ export function renderKeywordClassifyPanelJs(opts: KeywordClassifyPanelOptions):
       kwPanelKeywords = [];
       kwPanelActiveKeyword = '';
       kwPanelEditMode = false;
+      kwPanelChipsPinned = false;
+      kwPanelHighlightActive = true;
+      kwPanelDbApplied = false;
       if (kwPanelToggleBtn) {
         kwPanelToggleBtn.style.opacity = '0.4';
         kwPanelToggleBtn.style.background = '';
         kwPanelToggleBtn.style.color = '';
       }
-      kwPanelRender();
+      var chatEl = ${chatElExpr};
+      if (chatEl) chatEl.classList.remove('kwcls-hl-hidden');
+      kwPanelUpdateHighlightToggleBtn();
     }
 
     window[${JSON.stringify(instanceName)}] = { loadForShare: kwPanelLoadForShare, reset: kwPanelReset };
