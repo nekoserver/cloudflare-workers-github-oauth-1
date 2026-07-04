@@ -1,5 +1,14 @@
 import { HERITAGE_LIST } from '../data/heritageList';
 import { RAIL_LINES } from '../data/railLines';
+import {
+  renderKeywordClassifyPanelCss,
+  renderKeywordClassifyPanelJs,
+  renderKeywordChipsContainerHtml,
+  renderKeywordEditToggleButtonHtml,
+} from '../utils/keywordClassifyPanel';
+
+const HIST_DETAIL_KW_TOGGLE_BTN_ID = 'hist-detail-kw-edit-btn';
+const HIST_DETAIL_KW_CHIPS_CONTAINER_ID = 'hist-detail-keyword-chips';
 
 export function getHeritageAccessPage(userId: string): string {
   void userId;
@@ -94,6 +103,7 @@ td.pop{text-align:right;color:#8b949e;font-size:11px;min-width:64px}
 .hist-detail-bubble.user{align-self:flex-start;background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-bottom-left-radius:3px}
 .hist-detail-bubble.assistant{align-self:flex-end;background:#1f3a5c;color:#e6edf3;border-bottom-right-radius:3px}
 .hist-detail-foot{flex-shrink:0;padding:9px 16px;border-top:1px solid #21262d;display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:11px;color:#8b949e}
+${renderKeywordClassifyPanelCss()}
 .acc-name-link{color:#58a6ff;text-decoration:none;cursor:pointer;background:none;border:none;font:inherit;padding:0;text-align:left}
 .acc-name-link:hover{color:#79c0ff}
 .acc-kw-badge{display:inline-block;font-size:10px;padding:1px 6px;border-radius:10px;background:transparent;color:#a371f7;border:1px solid #a371f7;white-space:nowrap;flex-shrink:0;cursor:pointer}
@@ -240,10 +250,12 @@ td.pop{text-align:right;color:#8b949e;font-size:11px;min-width:64px}
 <div id="hist-detail-overlay" class="hist-detail-overlay">
   <div class="hist-detail-modal">
     <div class="hist-detail-head">
+      ${renderKeywordEditToggleButtonHtml(HIST_DETAIL_KW_TOGGLE_BTN_ID)}
       <span class="hist-detail-title" id="hist-detail-title">AIチャットの詳細プレビュー</span>
       <button class="hist-detail-close" id="hist-detail-close">✕</button>
     </div>
     <div class="hist-detail-chat" id="hist-detail-chat"></div>
+    ${renderKeywordChipsContainerHtml(HIST_DETAIL_KW_CHIPS_CONTAINER_ID)}
     <div class="hist-detail-foot">
       <span id="hist-detail-model"></span>
       <span id="hist-detail-meta"></span>
@@ -517,6 +529,13 @@ histDetailOverlay.addEventListener('click', function(e) {
   if (e.target === histDetailOverlay) histDetailOverlay.classList.remove('open');
 });
 
+${renderKeywordClassifyPanelJs({
+  toggleBtnId: HIST_DETAIL_KW_TOGGLE_BTN_ID,
+  chipsContainerId: HIST_DETAIL_KW_CHIPS_CONTAINER_ID,
+  chatElExpr: 'histDetailChat',
+  instanceName: 'histDetailKwPanel',
+})}
+
 function showHistoryDetailModal(r) {
   histDetailChat.innerHTML = '';
   var qEl = document.createElement('div');
@@ -532,6 +551,8 @@ function showHistoryDetailModal(r) {
   histDetailMeta.textContent = dateStr + (r.access_count != null ? '　👁 ' + r.access_count : '');
   histDetailOverlay.style.zIndex = String(getNextZ());
   histDetailOverlay.classList.add('open');
+  histDetailKwPanel.reset();
+  if (r.id) histDetailKwPanel.loadForShare(r.id);
 }
 
 function renderHistSideResults(results) {
