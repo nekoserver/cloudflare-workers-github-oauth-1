@@ -26,6 +26,31 @@ describe('postSlackMessage', () => {
     expect(body.blocks).toBeUndefined();
   });
 
+  it('thread_ts を指定するとスレッド返信として送信できる', async () => {
+    const mockFetch = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ ok: true }), { status: 200 })
+    );
+    vi.stubGlobal('fetch', mockFetch);
+
+    const result = await postSlackMessage({ token: 'xoxb-test', channel: '#general', text: 'reply', thread_ts: '1700000000.000100' });
+    expect(result.ok).toBe(true);
+
+    const body = JSON.parse(mockFetch.mock.calls[0][1].body);
+    expect(body.thread_ts).toBe('1700000000.000100');
+  });
+
+  it('thread_ts を指定しない場合はリクエストボディに含まれない', async () => {
+    const mockFetch = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ ok: true }), { status: 200 })
+    );
+    vi.stubGlobal('fetch', mockFetch);
+
+    await postSlackMessage({ token: 'xoxb-test', channel: '#general', text: 'no thread' });
+
+    const body = JSON.parse(mockFetch.mock.calls[0][1].body);
+    expect(body.thread_ts).toBeUndefined();
+  });
+
   it('blocks を含めて送信できる', async () => {
     const mockFetch = vi.fn().mockResolvedValue(
       new Response(JSON.stringify({ ok: true }), { status: 200 })

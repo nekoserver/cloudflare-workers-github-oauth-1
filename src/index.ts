@@ -62,6 +62,8 @@ import { buildCommitAgentLogEntry } from './utils/commitAgentLog';
 import { verifySlackSignature } from './utils/slackSignature';
 import { handleSlackInteraction } from './utils/slackInteraction';
 import { handleSlackEvent } from './utils/slackEvent';
+import { handleSlackAppMention } from './utils/slackMentionReply';
+import { exchangeSlackOAuthCode } from './utils/slackOauth';
 import { executeCreateRepo } from './utils/repoValidation';
 import { validateReturnTo } from './utils/returnTo';
 import * as logger from './utils/logger';
@@ -167,6 +169,7 @@ const STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
   { name: 'rail_line_stations',       migration: '0069',   description: '世界の鉄道路線サイドパネルの全駅データ（座標・国・国旗・順序）',    syncPolicy: 'manual' },
   { name: 'rail_station_nearby_points', migration: '0070', description: '駅から100km圏内の駅・世界遺産の距離キャッシュ',              syncPolicy: 'auto' },
   { name: 'rail_station_nearby_fetched', migration: '0070', description: '駅の近隣ポイント検索済みフラグ',                              syncPolicy: 'auto' },
+  { name: 'slack_installations',        migration: '0071',   description: 'Slack OAuthワークスペースインストール情報（botトークン等）',   syncPolicy: 'manual' },
 ];
 
 const REQUIRED_STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
@@ -961,6 +964,20 @@ CREATE TABLE IF NOT EXISTS rail_station_nearby_fetched (
   point_count INTEGER DEFAULT 0
 );`,
 
+  '0071': `CREATE TABLE IF NOT EXISTS slack_installations (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  team_id TEXT NOT NULL UNIQUE,
+  team_name TEXT,
+  bot_user_id TEXT,
+  access_token TEXT NOT NULL,
+  scope TEXT,
+  authed_user_id TEXT,
+  installed_by_user TEXT,
+  installed_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_slack_installations_team_id ON slack_installations(team_id);`,
+
   '0063': `ALTER TABLE ai_chat_shares ADD COLUMN source TEXT;`,
 
   '0062': `CREATE TABLE IF NOT EXISTS uuid_history (
@@ -1342,6 +1359,7 @@ export const TABLE_COLUMN_KEYS: Record<string, ColumnKeyInfo> = {
   rail_line_stations: { id: 'pk', line_name: 'idx', station_order: 'idx', station_country: 'idx' },
   rail_station_nearby_points: { id: 'pk', station_name: 'idx', point_type: 'idx', point_name: 'idx' },
   rail_station_nearby_fetched: { station_name: 'pk' },
+  slack_installations: { id: 'pk', team_id: 'uk', installed_by_user: 'fk' },
 };
 
 export function getColumnKeyType(tableName: string, columnName: string): ColumnKeyType {
@@ -1392,7 +1410,7 @@ export const TABLE_GROUP_MAP: Record<string, string> = {
   ai_summary_log: 'ai', ai_summary_reviews: 'ai', commit_agent_log: 'ai',
   resend_webhook_sources: 'email', email_send_log: 'email', resend_webhook_log: 'email',
   email_suppression_list: 'email', email_mfa_challenges: 'email', email_audit_anomalies: 'email',
-  slack_interaction_log: 'config',
+  slack_interaction_log: 'config', slack_installations: 'config',
   installation_permissions: 'config', repo_color_settings: 'config', repo_groups: 'config',
   repo_group_members: 'config', group_oauth_apps: 'config', table_catalog: 'config', table_column_keys: 'config',
   ai_summary_link_access_log: 'ai',
@@ -1593,6 +1611,7 @@ export const COLUMN_FK_TARGETS: Record<string, Record<string, string>> = {
   api_search_keyword_sections: { keyword_id: 'api_search_keywords' },
   aichat_rate_limit: { user_id: 'user_sessions' },
   cf_auth_access_log: { username: 'user_sessions' },
+  slack_installations: { installed_by_user: 'user_sessions' },
 };
 
 /**
@@ -1626,6 +1645,8 @@ export const COLUMN_FK_TARGET_COLUMNS: Record<string, string> = {
   'email_audit_anomalies.target_user_id': 'user_id',
   // 異名FK: username も意味的には user_id
   'cf_auth_access_log.username': 'user_id',
+  // 異名FK: installed_by_user も意味的には user_id
+  'slack_installations.installed_by_user': 'user_id',
 
   // group_id 系 → repo_groups.id
   'repo_group_members.group_id': 'id',
@@ -3145,6 +3166,130 @@ app.get('/auth/github/reauthorize', authMiddleware, async (c) => {
   redirectHeaders.append('Set-Cookie', 'login_timestamp=; Path=/; Secure; SameSite=Lax; Max-Age=0');
   redirectHeaders.append('Set-Cookie', 'last_activity=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0');
 
+  return new Response(null, { status: 302, headers: redirectHeaders });
+});
+
+const SLACK_OAUTH_SCOPE = 'app_mentions:read,chat:write';
+
+/**
+ * Slack ワークスペースへのアプリインストール開始（Add to Slack）
+ * CSRF対策のためstateパラメータを生成しクッキーに保存する
+ */
+app.get('/auth/slack/install', authMiddleware, async (c) => {
+  const clientId = c.env.SLACK_CLIENT_ID;
+  if (!clientId) {
+    return jsonUtf8({ error: 'Slack OAuth is not configured' }, 500);
+  }
+
+  const url = new URL(c.req.url);
+  const redirectUri = `${url.protocol}//${url.host}/auth/v1/callback`;
+  const state = generateOAuthState();
+
+  const authUrl = new URL('https://slack.com/oauth/v2/authorize');
+  authUrl.searchParams.set('client_id', clientId);
+  authUrl.searchParams.set('scope', SLACK_OAUTH_SCOPE);
+  authUrl.searchParams.set('redirect_uri', redirectUri);
+  authUrl.searchParams.set('state', state);
+
+  const redirectHeaders = new Headers({ 'Location': authUrl.toString() });
+  redirectHeaders.append('Set-Cookie', `slack_oauth_state=${state}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=300`);
+
+  return new Response(null, { status: 302, headers: redirectHeaders });
+});
+
+/**
+ * Slack OAuth コールバック
+ * stateパラメータを検証してCSRF攻撃を防止し、認可コードをアクセストークンに交換して
+ * slack_installations に保存する（team_idごとにUPSERT、再インストール時はトークンを更新）
+ */
+app.get('/auth/v1/callback', authMiddleware, async (c) => {
+  const user = c.get('user');
+  const code = c.req.query('code');
+  const error = c.req.query('error');
+  const state = c.req.query('state');
+
+  if (error) {
+    logger.warn('Slack OAuth callback error', { error });
+    return jsonUtf8({ error: 'Slack OAuth 認証に失敗しました' }, 400);
+  }
+  if (!code) {
+    return jsonUtf8({ error: 'No code provided' }, 400);
+  }
+
+  const cookieHeader = c.req.header('Cookie');
+  const savedState = getCookieValue(cookieHeader, 'slack_oauth_state');
+  if (!state || !savedState || state !== savedState) {
+    logger.warn('Slack OAuth state mismatch - possible CSRF attempt', {
+      hasState: !!state,
+      hasSavedState: !!savedState,
+    });
+    return jsonUtf8({ error: 'Invalid state parameter. Please try installing again.' }, 400);
+  }
+
+  const clientId = c.env.SLACK_CLIENT_ID;
+  const clientSecret = c.env.SLACK_CLIENT_SECRET;
+  if (!clientId || !clientSecret) {
+    return jsonUtf8({ error: 'Slack OAuth is not configured' }, 500);
+  }
+
+  const url = new URL(c.req.url);
+  const redirectUri = `${url.protocol}//${url.host}/auth/v1/callback`;
+
+  const exchangeResult = await exchangeSlackOAuthCode({
+    code,
+    clientId,
+    clientSecret,
+    redirectUri,
+    fetchImpl: fetch,
+  });
+
+  const clearStateCookie = 'slack_oauth_state=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0';
+
+  if (!exchangeResult.ok) {
+    logger.error('Slack OAuth code exchange failed', { error: exchangeResult.error, userId: user.sub });
+    return c.json({ error: `Slack連携に失敗しました: ${exchangeResult.error}` }, 502, {
+      'Set-Cookie': clearStateCookie,
+    });
+  }
+
+  const db = c.env.DB;
+  if (!db) {
+    return c.json({ error: 'Database is not available' }, 500, { 'Set-Cookie': clearStateCookie });
+  }
+
+  try {
+    await db.prepare(
+      `INSERT INTO slack_installations (team_id, team_name, bot_user_id, access_token, scope, authed_user_id, installed_by_user, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))
+       ON CONFLICT(team_id) DO UPDATE SET
+         team_name = excluded.team_name,
+         bot_user_id = excluded.bot_user_id,
+         access_token = excluded.access_token,
+         scope = excluded.scope,
+         authed_user_id = excluded.authed_user_id,
+         installed_by_user = excluded.installed_by_user,
+         updated_at = excluded.updated_at`
+    ).bind(
+      exchangeResult.teamId,
+      exchangeResult.teamName,
+      exchangeResult.botUserId,
+      exchangeResult.accessToken,
+      exchangeResult.scope,
+      exchangeResult.authedUserId,
+      user.sub
+    ).run();
+  } catch (dbError) {
+    logger.error('Failed to save Slack installation', {
+      error: dbError instanceof Error ? dbError.message : 'Unknown error',
+      teamId: exchangeResult.teamId,
+    });
+    return c.json({ error: 'Slack連携情報の保存に失敗しました' }, 500, { 'Set-Cookie': clearStateCookie });
+  }
+
+  logger.info('Slack workspace installed', { teamId: exchangeResult.teamId, installedBy: user.sub });
+
+  const redirectHeaders = new Headers({ 'Location': '/settings?slack=connected' });
+  redirectHeaders.append('Set-Cookie', clearStateCookie);
   return new Response(null, { status: 302, headers: redirectHeaders });
 });
 
@@ -9402,6 +9547,49 @@ app.post('/slack/event', async (c) => {
   if (result.body) {
     return c.json(result.body, 200);
   }
+
+  const mentionEvent = result.eventCallback?.event;
+  if (mentionEvent && mentionEvent.type === 'app_mention' && !mentionEvent.bot_id && mentionEvent.channel) {
+    const env = c.env;
+    const channel = mentionEvent.channel;
+    const teamId = result.eventCallback?.team_id;
+    const db = env.DB;
+    c.executionCtx?.waitUntil((async () => {
+      // トークン解決順序: D1のslack_installations（OAuthで動的取得したbotトークン）優先 → 環境変数SLACK_OAUTH_TOKENにフォールバック
+      let slackToken = env.SLACK_OAUTH_TOKEN;
+      if (db && teamId) {
+        try {
+          const row = await db.prepare(
+            'SELECT access_token FROM slack_installations WHERE team_id = ?'
+          ).bind(teamId).first<{ access_token: string }>();
+          if (row?.access_token) {
+            slackToken = row.access_token;
+          }
+        } catch (dbError) {
+          logger.warn('Failed to look up Slack installation token, falling back to env', {
+            error: dbError instanceof Error ? dbError.message : 'Unknown error',
+            teamId,
+          });
+        }
+      }
+
+      const mentionResult = await handleSlackAppMention({
+        text: mentionEvent.text ?? '',
+        channel,
+        threadTs: mentionEvent.thread_ts ?? mentionEvent.ts ?? '',
+        slackToken,
+        configuredModel: env.AI_CHAT_MODEL,
+        aiRun: env.AI
+          ? (model, params) => env.AI!.run(model as Parameters<typeof env.AI.run>[0], params as Parameters<typeof env.AI.run>[1])
+          : () => Promise.reject(new Error('AI バインディングが未設定です')),
+        postMessage: postSlackMessage,
+      });
+      if (!mentionResult.posted) {
+        logger.error('Slack app_mention reply failed', { error: mentionResult.error, channel });
+      }
+    })());
+  }
+
   return c.text('', 200);
 });
 
