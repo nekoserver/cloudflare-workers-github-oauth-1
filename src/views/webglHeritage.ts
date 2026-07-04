@@ -1106,6 +1106,7 @@ void main() {
   var landingMode = false;
   var landingIdx = -1;
   var landingPhase = 0;
+  var preLandingAutoRot = autoRot;
   var landingPhaseStart = 0;
   var landingZoomFrom = 3.2;
   var landingRotStart = 0;
@@ -1717,6 +1718,7 @@ void main() {
     if (landingMode) return;
     landingIdx = hidx;
     var ld = HERITAGE[hidx];
+    preLandingAutoRot = autoRot;
     flyTo(ld.lat, ld.lon);
     stopAmericaTour(); stopEuropeTour(); stopAfricaTour(); stopJapanTour();
     setTimeout(function() {
@@ -1751,9 +1753,9 @@ void main() {
     if (landingStationListEl) landingStationListEl.innerHTML = '';
     zoom = LANDING_ZOOM_RETURN;
     rotXv = 0.3;
-    autoRot = true;
-    btnAutoRot.textContent = '⏸ 自転停止';
-    btnAutoRot.classList.remove('active');
+    autoRot = preLandingAutoRot;
+    btnAutoRot.textContent = autoRot ? '⏸ 自転停止' : '▶ 回転';
+    if (autoRot) { btnAutoRot.classList.remove('active'); } else { btnAutoRot.classList.add('active'); }
     stopRailTour();
   }
 
@@ -1812,6 +1814,7 @@ void main() {
 
   function startStationLanding(stationName, lineLabel, lat, lon, routeLine1, routeLine2) {
     if (landingMode) return;
+    preLandingAutoRot = autoRot;
     flyTo(lat, lon);
     stopAmericaTour(); stopEuropeTour(); stopAfricaTour(); stopJapanTour(); stopRailTour(); stopF1Tour();
     setTimeout(function() {
