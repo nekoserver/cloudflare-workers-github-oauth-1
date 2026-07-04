@@ -3581,6 +3581,44 @@ app.post('/api/aichat', authMiddleware, async (c) => {
   }
 });
 
+// SQLite(D1) の LIKE は非ASCII文字を正規化せずコードポイント単位の完全一致で
+// 比較するため、全角中黒「・」(U+30FB) と半角中黒「･」(U+FF65) のように
+// 見た目がほぼ同じでもコードポイントが異なる文字が入力側・保存側の
+// どちらか一方でも混在すると一致しなくなる（日本語IME・スマートフォンの
+// 日本語キーボードでは入力環境によってどちらの中黒になるかが変わる）。
+// 検索文字列中の中黒をLIKEの"_"（任意の1文字）ワイルドカードに置き換えることで
+// この表記ゆれを吸収する。ワイルドカード文字自体（%, _, \）はリテラル検索
+// できるよう先にエスケープしてから中黒だけを非エスケープの"_"に変換する。
+export function buildFuzzySearchLikePattern(q: string): string {
+  const escaped = q.replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_');
+  const fuzzy = escaped.replace(/[・･]/g, '_');
+  return `%${fuzzy}%`;
+}
+
+export async function searchAiChatShares(
+  db: D1Like,
+  userId: string,
+  q: string,
+): Promise<{ results: Array<{
+  id: string; user_hash: string; question: string; answer: string;
+  model: string; created_at: string; access_count: number; question_hash: string | null;
+}> }> {
+  const like = buildFuzzySearchLikePattern(q);
+  const rows = await db
+    .prepare(
+      `SELECT id, user_hash, question, answer, model, created_at, access_count, question_hash
+       FROM ai_chat_shares
+       WHERE user_id = ? AND deleted_at IS NULL AND (question LIKE ? ESCAPE '\\' OR answer LIKE ? ESCAPE '\\')
+       ORDER BY created_at DESC LIMIT 30`
+    )
+    .bind(userId, like, like)
+    .all<{
+      id: string; user_hash: string; question: string; answer: string;
+      model: string; created_at: string; access_count: number; question_hash: string | null;
+    }>();
+  return { results: rows.results ?? [] };
+}
+
 /**
  * AIチャット共有履歴の全文検索 API（認証が必要）
  */
@@ -3591,18 +3629,8 @@ app.get('/api/aichat/shares/search', authMiddleware, async (c) => {
   const q = (c.req.query('q') ?? '').trim();
   if (!q) return jsonUtf8({ results: [] });
 
-  const like = `%${q}%`;
-  const rows = await c.env.DB.prepare(
-    `SELECT id, user_hash, question, answer, model, created_at, access_count, question_hash
-     FROM ai_chat_shares
-     WHERE user_id = ? AND deleted_at IS NULL AND (question LIKE ? OR answer LIKE ?)
-     ORDER BY created_at DESC LIMIT 30`
-  ).bind(user.sub, like, like).all<{
-    id: string; user_hash: string; question: string; answer: string;
-    model: string; created_at: string; access_count: number; question_hash: string | null;
-  }>();
-
-  return jsonUtf8({ results: rows.results ?? [] });
+  const { results } = await searchAiChatShares(c.env.DB as unknown as D1Like, user.sub, q);
+  return jsonUtf8({ results });
 });
 
 app.get('/api/aichat/check-heritage-questions', authMiddleware, async (c) => {
