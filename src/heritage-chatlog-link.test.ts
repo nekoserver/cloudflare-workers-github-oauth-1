@@ -353,14 +353,24 @@ describe('世界遺産チャットログリンク: キーワードバッジ（�
     expect(src).toContain("app.get('/api/aichat/heritage-search-keywords-check'");
   });
 
-  it('index.ts の heritage-search-keywords-check が aichat_search_history を参照している', () => {
+  it('index.ts の heritage-search-keywords-check が抽出済み関数 lookupHeritageSearchKeywordHasFlags を使う', () => {
     const { readFileSync } = require('fs');
     const src = readFileSync(new URL('./index.ts', import.meta.url).pathname, 'utf-8');
     const idx = src.indexOf('heritage-search-keywords-check');
-    const block = src.slice(idx, idx + 800);
+    const block = src.slice(idx, idx + 500);
+    expect(block).toContain('lookupHeritageSearchKeywordHasFlags');
+    expect(block).toContain('hasKeywords');
+  });
+
+  it('lookupHeritageSearchKeywordHasFlags が aichat_search_history と ai_chat_shares を参照している', () => {
+    const { readFileSync } = require('fs');
+    const src = readFileSync(new URL('./index.ts', import.meta.url).pathname, 'utf-8');
+    const idx = src.indexOf('export async function lookupHeritageSearchKeywordHasFlags');
+    expect(idx).toBeGreaterThan(-1);
+    const block = src.slice(idx, idx + 1000);
     expect(block).toContain('aichat_search_history');
     expect(block).toContain('ai_chat_shares');
-    expect(block).toContain('hasKeywords');
+    expect(block).toContain('deleted_at IS NULL');
   });
 });
 
