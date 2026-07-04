@@ -990,6 +990,17 @@ void main() {
   var volTtDragging = false, volTtDx = 0, volTtDy = 0;
   var _volTtMouseHandler = null, _volTtTouchHandler = null, _volTtTouchMoveHandler = null;
 
+  /**
+   * ピン留め済みツールチップの上端に許容する最小Y座標を返す。
+   * 常時表示のキャンバス操作ボタン(.canvas-ctrl-btns)の直下より上に
+   * ツールチップが重なるとボタンがクリック不能になるため、その下端を下限にする。
+   */
+  function getPinnedTooltipMinTop() {
+    var ctrlBtns = document.querySelector('.canvas-ctrl-btns');
+    var ctrlBottom = ctrlBtns ? ctrlBtns.getBoundingClientRect().bottom : 0;
+    return Math.max(8, ctrlBottom + 8);
+  }
+
   function volTtHtml(v) {
     return '<div class="vol-tt-hdr"><span class="vol-tt-name">' + getVolFlag(v.c) + ' 🌋 ' + v.n + '</span><span class="vol-tt-close" id="volTtClose">&#215;</span></div>' +
       '<div class="vol-tt-body"><div class="vol-tt-sub">' + v.c + ' / 標高 ' + (v.elev < 0 ? '海面下' + Math.abs(v.elev) : v.elev.toLocaleString()) + 'm</div>' +
@@ -1013,7 +1024,7 @@ void main() {
     volTooltipEl.innerHTML = volTtHtml(v);
     var r = volTooltipEl.getBoundingClientRect();
     var cx = Math.max(8, Math.min(x - r.width / 2, window.innerWidth - r.width - 8));
-    var cy = Math.max(8, y - r.height - 10);
+    var cy = Math.max(getPinnedTooltipMinTop(), y - r.height - 10);
     volTooltipEl.style.left = cx + 'px';
     volTooltipEl.style.top = cy + 'px';
     volTooltipEl.style.opacity = '1';
@@ -1274,9 +1285,12 @@ void main() {
       '<div><span style="color:#8b949e">国・地域: </span>' + f.country + '</div>' +
       '<div style="color:#8b949e;margin-top:3px;font-size:10px">' + f.desc + '</div>' +
       '</div>';
+    var r = faultTooltipEl.getBoundingClientRect();
+    var cx = Math.max(8, Math.min(x - r.width / 2, window.innerWidth - r.width - 8));
+    var cy = Math.max(getPinnedTooltipMinTop(), y - r.height - 10);
     faultTooltipEl.className = 'pinned';
-    faultTooltipEl.style.left = x + 'px';
-    faultTooltipEl.style.top = y + 'px';
+    faultTooltipEl.style.left = cx + 'px';
+    faultTooltipEl.style.top = cy + 'px';
     faultTooltipEl.style.opacity = '1';
     var closeBtn = document.getElementById('faultTtClose');
     if (closeBtn) closeBtn.onclick = function() { faultTtPinned = false; faultTooltipEl.style.opacity = '0'; faultTooltipEl.className = ''; };
