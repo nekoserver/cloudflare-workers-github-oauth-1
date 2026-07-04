@@ -44,6 +44,15 @@ export const AICHAT_MODEL_MAX_TOKENS: Readonly<Record<string, number>> = {
   '@cf/google/gemma-4-26b-a4b-it': 65536,
 };
 
+/**
+ * 既知の制限: gemma-4-26b-a4b-it は system message が含まれると
+ * enable_thinking:false を無視して thinking mode を強制的に有効化し、
+ * <think>タグではなく <|channel>...</channel|> 形式で推論過程を応答に
+ * 混入させることがある（stripThinkTagsでは除去できない）。このためこのモデルを
+ * デフォルトモデルとして使うと、system messageを付与するsystemPromptMode='a'
+ * （既定値）でSlack応答等が壊れる場合がある。ユーザーが明示的に選択する分には
+ * 許容するが、デフォルトモデルには採用しないこと。
+ */
 export const AICHAT_MODEL_EXTRA_PARAMS: Readonly<Record<string, Record<string, unknown>>> = {
   '@cf/google/gemma-4-26b-a4b-it': {
     chat_template_kwargs: { enable_thinking: false },
