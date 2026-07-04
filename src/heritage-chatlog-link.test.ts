@@ -318,14 +318,14 @@ describe('世界遺産チャットログリンク: キーワードバッジ（�
     expect(html).toContain('/api/aichat/heritage-search-keywords-check');
   });
 
-  it('hasKeywords を参照してキーワードバッジを追加している', () => {
+  it('keywordCounts を参照してキーワードバッジに総数を表示する', () => {
     const html = buildPage();
-    expect(html).toContain('hasKeywords');
+    expect(html).toContain('keywordCounts');
     const idx = html.indexOf('function applyKeywordData');
     const end = html.indexOf('function applyAnsweredData');
     const block = html.slice(idx, end);
     expect(block).toContain('acc-kw-badge');
-    expect(block).toContain('キーワード');
+    expect(block).toMatch(/キーワード \(' \+ count \+ '\)|キーワード \(" \+ count \+ "\)/);
   });
 
   it('既存の acc-name-wrap にもキーワードバッジを追加する処理がある', () => {
@@ -353,21 +353,21 @@ describe('世界遺産チャットログリンク: キーワードバッジ（�
     expect(src).toContain("app.get('/api/aichat/heritage-search-keywords-check'");
   });
 
-  it('index.ts の heritage-search-keywords-check が抽出済み関数 lookupHeritageSearchKeywordHasFlags を使う', () => {
+  it('index.ts の heritage-search-keywords-check が抽出済み関数 lookupHeritageSearchKeywordCountsBatch を使う', () => {
     const { readFileSync } = require('fs');
     const src = readFileSync(new URL('./index.ts', import.meta.url).pathname, 'utf-8');
     const idx = src.indexOf('heritage-search-keywords-check');
     const block = src.slice(idx, idx + 500);
-    expect(block).toContain('lookupHeritageSearchKeywordHasFlags');
-    expect(block).toContain('hasKeywords');
+    expect(block).toContain('lookupHeritageSearchKeywordCountsBatch');
+    expect(block).toContain('keywordCounts');
   });
 
-  it('lookupHeritageSearchKeywordHasFlags が aichat_search_history と ai_chat_shares を参照している', () => {
+  it('lookupHeritageSearchKeywordCountsBatch が aichat_search_history と ai_chat_shares を参照している', () => {
     const { readFileSync } = require('fs');
     const src = readFileSync(new URL('./index.ts', import.meta.url).pathname, 'utf-8');
-    const idx = src.indexOf('export async function lookupHeritageSearchKeywordHasFlags');
+    const idx = src.indexOf('export async function lookupHeritageSearchKeywordCountsBatch');
     expect(idx).toBeGreaterThan(-1);
-    const block = src.slice(idx, idx + 1000);
+    const block = src.slice(idx, idx + 1200);
     expect(block).toContain('aichat_search_history');
     expect(block).toContain('ai_chat_shares');
     expect(block).toContain('deleted_at IS NULL');

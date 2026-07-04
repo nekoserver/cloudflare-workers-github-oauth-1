@@ -88,7 +88,7 @@ function defaultHandler(overrides: Record<string, any>): FetchHandler {
     if (url.indexOf('/api/heritage-access-ranking') !== -1) return { rows: [] };
     if (url.indexOf('/api/city-all-heritages') !== -1) return overrides.cityHeritages;
     if (url.indexOf('/api/aichat/heritage-keywords-check') !== -1) return overrides.keywordsCheck ?? { hits: {} };
-    if (url.indexOf('/api/aichat/heritage-search-keywords-check') !== -1) return overrides.searchKeywords ?? { hasKeywords: {} };
+    if (url.indexOf('/api/aichat/heritage-search-keywords-check') !== -1) return overrides.searchKeywords ?? { keywordCounts: {} };
     if (url.indexOf('/api/aichat/check-heritage-questions-batch') !== -1) return overrides.batch ?? { answered: {} };
     if (url.indexOf('/api/aichat/check-heritage-questions') !== -1) return overrides.single ?? { answered: {} };
     if (url.indexOf('/api/aichat/shares/search') !== -1) return overrides.search ?? { results: [] };
@@ -239,7 +239,7 @@ describe('世界遺産アクセスランキング: 世界遺産名リンクか�
       defaultHandler({
         cityHeritages: { heritages: [{ heritage_name: '万里の長城', distance_km: 10, country_flag: '🇨🇳' }] },
         keywordsCheck: { hits: {} },
-        searchKeywords: { hasKeywords: { '万里の長城': true } },
+        searchKeywords: { keywordCounts: { '万里の長城': 1 } },
         search: { results: [] },
       })
     );
@@ -282,5 +282,114 @@ describe('世界遺産アクセスランキング: 世界遺産名リンクか�
 
     expect(h.document.getElementById('hist-side').classList.contains('open')).toBe(false);
     expect(h.document.getElementById('heritage-chatlog-modal-overlay').classList.contains('open')).toBe(true);
+  });
+});
+
+describe('世界遺産アクセスランキング: 「キーワード」バッジの表記と、モーダル内キーワードのサイドバー連携', () => {
+  it('「キーワード」バッジには総数が「キーワード (◯)」の形式で表示される', async () => {
+    const h = setupHarness(
+      defaultHandler({
+        cityHeritages: { heritages: [{ heritage_name: 'タージ・マハル', distance_km: 10, country_flag: '🇮🇳' }] },
+        keywordsCheck: { hits: {} },
+        searchKeywords: { keywordCounts: { 'タージ・マハル': 3 } },
+      })
+    );
+    const tr = h.openCity();
+    await flush();
+    const inner = tr.nextSibling.querySelector('.accordion-inner');
+    const kwBadge = inner.querySelector('.acc-kw-badge');
+    expect(kwBadge).toBeTruthy();
+    expect(kwBadge.textContent).toBe('キーワード (3)');
+  });
+
+  it('総数が0のときはバッジが表示されない', async () => {
+    const h = setupHarness(
+      defaultHandler({
+        cityHeritages: { heritages: [{ heritage_name: 'タージ・マハル', distance_km: 10, country_flag: '🇮🇳' }] },
+        keywordsCheck: { hits: {} },
+        searchKeywords: { keywordCounts: { 'タージ・マハル': 0 } },
+      })
+    );
+    const tr = h.openCity();
+    await flush();
+    const inner = tr.nextSibling.querySelector('.accordion-inner');
+    expect(inner.querySelector('.acc-kw-badge')).toBeFalsy();
+  });
+
+  it('「キーワード」バッジをタップして開いたモーダル内の各キーワードは最小幅の角丸バッジで表示される', async () => {
+    const h = setupHarness(
+      defaultHandler({
+        cityHeritages: { heritages: [{ heritage_name: 'タージ・マハル', distance_km: 10, country_flag: '🇮🇳' }] },
+        keywordsCheck: { hits: {} },
+        searchKeywords: { keywordCounts: { 'タージ・マハル': 2 } },
+        search: { results: [] },
+      })
+    );
+    h.window.fetch = ((orig) => (url: string, opts?: unknown) => {
+      if (String(url).indexOf('/api/aichat/heritage-search-keyword-counts') !== -1) {
+        h.fetchCalls.push(String(url));
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve({ keywords: [{ keyword: 'インド 世界遺産', count: 5 }, { keyword: '霊廟', count: 2 }] }),
+        });
+      }
+      return orig(url, opts);
+    })(h.window.fetch);
+
+    const tr = h.openCity();
+    await flush();
+    const inner = tr.nextSibling.querySelector('.accordion-inner');
+    const kwBadge = inner.querySelector('.acc-kw-badge');
+    kwBadge.dispatchEvent(new h.window.Event('click', { bubbles: true }));
+    await flush();
+
+    const items = h.document.querySelectorAll('.kw-panel-item');
+    expect(items.length).toBe(2);
+    expect(items[0].textContent).toBe('インド 世界遺産 (5)');
+    // 幅固定ではなく最小幅（inline-blockでコンテンツ幅に収まる）であること
+    expect(h.window.getComputedStyle(items[0]).display).toBe('inline-block');
+  });
+
+  it('モーダル内のキーワードをタップするとモーダルが閉じ、左サイドパネルの検索窓にそのキーワードで検索結果が表示される', async () => {
+    const h = setupHarness(
+      defaultHandler({
+        cityHeritages: { heritages: [{ heritage_name: 'タージ・マハル', distance_km: 10, country_flag: '🇮🇳' }] },
+        keywordsCheck: { hits: {} },
+        searchKeywords: { keywordCounts: { 'タージ・マハル': 1 } },
+      })
+    );
+    h.window.fetch = ((orig) => (url: string, opts?: unknown) => {
+      const u = String(url);
+      if (u.indexOf('/api/aichat/heritage-search-keyword-counts') !== -1) {
+        h.fetchCalls.push(u);
+        return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ keywords: [{ keyword: 'インド 世界遺産', count: 5 }] }) });
+      }
+      if (u.indexOf('/api/aichat/shares/search') !== -1) {
+        h.fetchCalls.push(u);
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve({ results: [{ id: 's1', question: '「タージ・マハル」の「見どころ」について説明してください', answer: '白亜の霊廟です。', model: 'm', created_at: '2026-01-01T00:00:00.000Z', access_count: 0 }] }),
+        });
+      }
+      return orig(url, opts);
+    })(h.window.fetch);
+
+    const tr = h.openCity();
+    await flush();
+    const inner = tr.nextSibling.querySelector('.accordion-inner');
+    inner.querySelector('.acc-kw-badge').dispatchEvent(new h.window.Event('click', { bubbles: true }));
+    await flush();
+
+    const kwItem = h.document.querySelector('.kw-panel-item');
+    expect(kwItem).toBeTruthy();
+    kwItem.dispatchEvent(new h.window.Event('click', { bubbles: true }));
+    await waitDebounce();
+
+    expect(h.document.getElementById('heritage-kw-panel-overlay').classList.contains('open')).toBe(false);
+    expect(h.document.getElementById('hist-side').classList.contains('open')).toBe(true);
+    expect(h.document.getElementById('hist-side-search').value).toBe('インド 世界遺産');
+    expect(h.document.querySelectorAll('.hist-side-item').length).toBe(1);
   });
 });

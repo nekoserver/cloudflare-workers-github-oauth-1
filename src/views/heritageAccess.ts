@@ -93,10 +93,9 @@ td.pop{text-align:right;color:#8b949e;font-size:11px;min-width:64px}
 .kw-panel-head{padding:12px 16px;border-bottom:1px solid #21262d;display:flex;align-items:center;gap:8px;flex-shrink:0}
 .kw-panel-title{font-size:13px;font-weight:700;flex:1;color:#e6edf3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .kw-panel-close{background:none;border:none;color:#8b949e;font-size:18px;cursor:pointer;padding:2px 6px;line-height:1}
-.kw-panel-body{overflow-y:auto;padding:12px 16px;display:flex;flex-direction:column;gap:6px}
-.kw-panel-item{display:flex;align-items:center;gap:8px;padding:6px 10px;background:#161b22;border:1px solid #21262d;border-radius:6px;font-size:12px}
-.kw-panel-kw{flex:1;color:#c9d1d9}
-.kw-panel-cnt{color:#a371f7;font-weight:700;font-size:11px;white-space:nowrap}
+.kw-panel-body{overflow-y:auto;padding:12px 16px;line-height:1}
+.kw-panel-item{display:inline-block;cursor:pointer;background:#161b22;border:1px solid #21262d;border-radius:10px;font-size:11px;padding:3px 11px;margin:2px;white-space:nowrap;color:#c9d1d9}
+.kw-panel-item:hover{background:#21262d;border-color:#a371f7;color:#a371f7}
 .kw-panel-empty{color:#484f58;font-size:12px;padding:16px 0;text-align:center}
 .hcl-modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.78);align-items:center;justify-content:center}
 .hcl-modal-overlay.open{display:flex}
@@ -572,13 +571,17 @@ function openHeritageKwPanel(heritageName) {
       }
       var html = '';
       items.forEach(function(item) {
-        var kwEsc = (item.keyword || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-        html += '<div class="kw-panel-item">' +
-          '<span class="kw-panel-kw">' + kwEsc + '</span>' +
-          '<span class="kw-panel-cnt">(' + item.count + ')</span>' +
-          '</div>';
+        var kwEsc = escHtml(item.keyword || '');
+        html += '<span class="kw-panel-item" data-keyword="' + kwEsc + '">' + kwEsc + ' (' + item.count + ')</span>';
       });
       kwPanelBody.innerHTML = html;
+      kwPanelBody.querySelectorAll('.kw-panel-item').forEach(function(el) {
+        el.addEventListener('click', function() {
+          var kw = el.getAttribute('data-keyword');
+          kwPanelOverlay.classList.remove('open');
+          openHeritageInHistorySidebar(kw);
+        });
+      });
     })
     .catch(function() {
       kwPanelBody.innerHTML = '<div class="kw-panel-empty">取得エラーが発生しました</div>';
@@ -691,13 +694,13 @@ function fetchHeritageKeywordData(keywords) {
       var hits = data.hits || {};
       return fetch('/api/aichat/heritage-search-keywords-check?keywords=' + encodeURIComponent(keywords.join(',')))
         .then(function(r2) { return r2.json(); })
-        .then(function(kwData) { return { hits: hits, hasKw: kwData.hasKeywords || {} }; })
-        .catch(function() { return { hits: hits, hasKw: {} }; });
+        .then(function(kwData) { return { hits: hits, kwCounts: kwData.keywordCounts || {} }; })
+        .catch(function() { return { hits: hits, kwCounts: {} }; });
     })
-    .catch(function() { return { hits: {}, hasKw: {} }; });
+    .catch(function() { return { hits: {}, kwCounts: {} }; });
 }
 
-function applyKeywordData(inner, hits, hasKw) {
+function applyKeywordData(inner, hits, kwCounts) {
   inner.querySelectorAll('.acc-name[data-heritage]').forEach(function(span) {
     var name = span.getAttribute('data-heritage');
     var topics = name ? (hits[name] || []) : [];
@@ -740,17 +743,21 @@ function applyKeywordData(inner, hits, hasKw) {
       })(wTopic);
     });
   });
-  Object.keys(hasKw).forEach(function(name) {
-    if (!hasKw[name]) return;
+  Object.keys(kwCounts).forEach(function(name) {
+    var count = kwCounts[name];
+    if (!count) return;
     var found = false;
     inner.querySelectorAll('.acc-name-wrap').forEach(function(wrap) {
       var nameBtn = wrap.querySelector('.acc-name-link[data-heritage]');
       if (!nameBtn || nameBtn.getAttribute('data-heritage') !== name) return;
       found = true;
-      if (!wrap.querySelector('.acc-kw-badge')) {
+      var existingKwBadge = wrap.querySelector('.acc-kw-badge');
+      if (existingKwBadge) {
+        existingKwBadge.textContent = 'キーワード (' + count + ')';
+      } else {
         var kwBadge = document.createElement('span');
         kwBadge.className = 'acc-kw-badge';
-        kwBadge.textContent = 'キーワード';
+        kwBadge.textContent = 'キーワード (' + count + ')';
         (function(kwName) {
           kwBadge.addEventListener('click', function(e) { e.stopPropagation(); openHeritageKwPanel(kwName); });
         })(name);
@@ -772,7 +779,7 @@ function applyKeywordData(inner, hits, hasKw) {
       wrap2.appendChild(btn);
       var kwBadge = document.createElement('span');
       kwBadge.className = 'acc-kw-badge';
-      kwBadge.textContent = 'キーワード';
+      kwBadge.textContent = 'キーワード (' + count + ')';
       (function(kwName) {
         kwBadge.addEventListener('click', function(e) { e.stopPropagation(); openHeritageKwPanel(kwName); });
       })(name);
@@ -904,7 +911,7 @@ function closeAllAccordions() {
   for (var j = 0; j < opens.length; j++) opens[j].classList.remove('row-open');
 }
 
-function renderHeritageInner(inner, accTr, heritages, hits, hasKw, answered) {
+function renderHeritageInner(inner, accTr, heritages, hits, kwCounts, answered) {
   var html = '<div class="acc-heritage-list">';
   heritages.forEach(function(h, idx) {
     var dist = h.distance_km < 10 ? h.distance_km.toFixed(1) : Math.round(h.distance_km);
@@ -924,7 +931,7 @@ function renderHeritageInner(inner, accTr, heritages, hits, hasKw, answered) {
   });
   html += '</div>';
   inner.innerHTML = html;
-  applyKeywordData(inner, hits, hasKw);
+  applyKeywordData(inner, hits, kwCounts);
   applyAnsweredData(inner, answered);
   inner.querySelectorAll('.acc-row[data-heritage]').forEach(function(rowEl) {
     rowEl.style.cursor = 'pointer';
@@ -1006,7 +1013,7 @@ function openAccordion(tr) {
   if (cached) {
     var innerC = accTr.querySelector('.accordion-inner');
     if (!innerC) return;
-    renderHeritageInner(innerC, accTr, cached.heritages, cached.hits, cached.hasKw, cached.answered);
+    renderHeritageInner(innerC, accTr, cached.heritages, cached.hits, cached.kwCounts, cached.answered);
     fetch('/api/aichat/check-heritage-questions-batch', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -1046,10 +1053,10 @@ function openAccordion(tr) {
       var kwData = results[0];
       var batchData = results[1];
       var answered = batchData.answered || {};
-      cityCache[cityName] = { heritages: filtered, hits: kwData.hits, hasKw: kwData.hasKw, answered: answered };
+      cityCache[cityName] = { heritages: filtered, hits: kwData.hits, kwCounts: kwData.kwCounts, answered: answered };
       var innerNow = accTr.querySelector('.accordion-inner');
       if (!innerNow) return;
-      renderHeritageInner(innerNow, accTr, filtered, kwData.hits, kwData.hasKw, answered);
+      renderHeritageInner(innerNow, accTr, filtered, kwData.hits, kwData.kwCounts, answered);
     });
   }).catch(function() {
     var inner = accTr.querySelector('.accordion-inner');

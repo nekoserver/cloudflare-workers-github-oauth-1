@@ -114,7 +114,7 @@ function defaultHandler(overrides: Record<string, any>): FetchHandler {
     if (url.indexOf('/api/heritage-access-ranking') !== -1) return { rows: [] };
     if (url.indexOf('/api/city-all-heritages') !== -1) return overrides.cityHeritages;
     if (url.indexOf('/api/aichat/heritage-keywords-check') !== -1) return overrides.keywordsCheck ?? { hits: {} };
-    if (url.indexOf('/api/aichat/heritage-search-keywords-check') !== -1) return overrides.searchKeywords ?? { hasKeywords: {} };
+    if (url.indexOf('/api/aichat/heritage-search-keywords-check') !== -1) return overrides.searchKeywords ?? { keywordCounts: {} };
     if (url.indexOf('/api/aichat/check-heritage-questions-batch') !== -1) return overrides.batch ?? { answered: {} };
     if (url.indexOf('/api/aichat/check-heritage-questions') !== -1) return overrides.single ?? { answered: {} };
     return {};
@@ -136,7 +136,7 @@ describe('アコーディオン: 都市タップ時に全世界遺産へキャ�
         cityHeritages: THREE_HERITAGES,
         // キーワード処理は H1 のみヒット（DOM 変換が起きる遺産と起きない遺産を混在させる）
         keywordsCheck: { hits: { H1: ['見どころ'] } },
-        searchKeywords: { hasKeywords: { H2: true } },
+        searchKeywords: { keywordCounts: { H2: 1 } },
         // バッチ（ai_chat_shares 由来）では3遺産すべてに交通手段のキャッシュあり
         batch: { answered: { H1: { 交通手段: 's1' }, H2: { 交通手段: 's2' }, H3: { 交通手段: 's3' } } },
       })
@@ -157,7 +157,7 @@ describe('アコーディオン: 都市タップ時に全世界遺産へキャ�
       defaultHandler({
         cityHeritages: THREE_HERITAGES,
         keywordsCheck: { hits: {} },
-        searchKeywords: { hasKeywords: {} },
+        searchKeywords: { keywordCounts: {} },
         batch: { answered: { H1: { 見どころ: 'a' }, H2: { 見どころ: 'b' }, H3: { 見どころ: 'c' } } },
       })
     );
@@ -175,7 +175,7 @@ describe('アコーディオン: 都市タップ時に全世界遺産へキャ�
         cityHeritages: THREE_HERITAGES,
         keywordsCheck: { hits: {} },
         // H1 にキーワードバッジを付与
-        searchKeywords: { hasKeywords: { H1: true } },
+        searchKeywords: { keywordCounts: { H1: 1 } },
         // 同じ H1 にキャッシュ質問バッジ（交通手段）も付与
         batch: { answered: { H1: { 交通手段: 's1' }, H2: { 交通手段: 's2' } } },
       })
@@ -196,7 +196,7 @@ describe('アコーディオン: 都市タップ時に全世界遺産へキャ�
       defaultHandler({
         cityHeritages: { heritages: [{ heritage_name: 'H1', distance_km: 10, country_flag: '' }] },
         keywordsCheck: { hits: { H1: ['見どころ'] } },
-        searchKeywords: { hasKeywords: {} },
+        searchKeywords: { keywordCounts: {} },
         batch: { answered: { H1: { 見どころ: 'x', 交通手段: 'y', 宿泊施設: 'z' } } },
       })
     );
@@ -219,7 +219,7 @@ describe('アコーディオン: メモリキャッシュ（cityCache）', () =>
       if (url.indexOf('/api/heritage-access-ranking') !== -1) return { rows: [] };
       if (url.indexOf('/api/city-all-heritages') !== -1) { heritageCallCount++; return THREE_HERITAGES; }
       if (url.indexOf('/api/aichat/heritage-keywords-check') !== -1) return { hits: {} };
-      if (url.indexOf('/api/aichat/heritage-search-keywords-check') !== -1) return { hasKeywords: {} };
+      if (url.indexOf('/api/aichat/heritage-search-keywords-check') !== -1) return { keywordCounts: {} };
       if (url.indexOf('/api/aichat/check-heritage-questions-batch') !== -1) return { answered: { H1: { '交通手段': 's1' } } };
       return {};
     };
@@ -250,7 +250,7 @@ describe('アコーディオン: メモリキャッシュ（cityCache）', () =>
       if (url.indexOf('/api/heritage-access-ranking') !== -1) return { rows: [] };
       if (url.indexOf('/api/city-all-heritages') !== -1) return THREE_HERITAGES;
       if (url.indexOf('/api/aichat/heritage-keywords-check') !== -1) return { hits: {} };
-      if (url.indexOf('/api/aichat/heritage-search-keywords-check') !== -1) return { hasKeywords: {} };
+      if (url.indexOf('/api/aichat/heritage-search-keywords-check') !== -1) return { keywordCounts: {} };
       if (url.indexOf('/api/aichat/check-heritage-questions-batch') !== -1) { batchCallCount++; return { answered: {} }; }
       return {};
     };
