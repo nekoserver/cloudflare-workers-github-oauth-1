@@ -1,16 +1,16 @@
 import { describe, it, expect } from 'vitest';
 import { DatabaseSync } from 'node:sqlite';
-import { lookupHeritageSearchKeywordHasFlags, lookupHeritageSearchKeywordCounts } from './index';
+import { lookupHeritageSearchKeywordCountsBatch, lookupHeritageSearchKeywordCounts } from './index';
 
 // ===========================================================================
-// 「キーワード」バッジ（acc-kw-badge）の表示可否 lookupHeritageSearchKeywordHasFlags と
-// クリック後の内訳取得 lookupHeritageSearchKeywordCounts が、実SQLiteの
-// JOIN/WHERE 実行結果として本当に整合しているか（バッジが出るなら必ず件数が
-// 取得できるか）を実データで検証する。どちらも ai_chat_shares の
-// deleted_at IS NULL を同じ結合条件で要求しているため、AIチャット共有を
-// 削除した場合は両者とも一致して「バッジ非表示・件数ゼロ」になるべきで、
-// 見どころバッジ（heritage_question_view_log）のような不整合は起きない
-// ことをここで実証する。
+// 「キーワード」バッジ（acc-kw-badge、表記は「キーワード (◯)」）の◯に使う
+// 総数を返す lookupHeritageSearchKeywordCountsBatch と、クリック後の内訳取得
+// lookupHeritageSearchKeywordCounts が、実SQLiteのJOIN/WHERE実行結果として
+// 本当に整合しているか（バッジの◯の数だけモーダルにキーワードが並ぶか）を
+// 実データで検証する。どちらも ai_chat_shares の deleted_at IS NULL を
+// 同じ結合条件で要求しているため、AIチャット共有を削除した場合は両者とも
+// 一致して「バッジ非表示・件数ゼロ」になるべきで、見どころバッジ
+// （heritage_question_view_log）のような不整合は起きないことをここで実証する。
 // ===========================================================================
 
 interface D1Row {
@@ -72,27 +72,27 @@ function insertSearchHistory(db: DatabaseSync, keyword: string, shareId: string)
 }
 
 describe('キーワードバッジと件数取得の整合性（実SQLite）', () => {
-  it('回答が生きていればバッジ表示(hasKeywords)と件数取得(counts)が一致する', async () => {
+  it('回答が生きていれば総数(keywordCounts)と件数取得(counts)が一致する', async () => {
     const real = setupDb();
     insertShare(real, 'share-1', 'タージ・マハル', '見どころ', false);
     insertSearchHistory(real, 'インド 世界遺産', 'share-1');
     const wrapped = wrapD1(real);
 
-    const { hasKeywords } = await lookupHeritageSearchKeywordHasFlags(wrapped, 'user1', ['タージ・マハル']);
-    expect(hasKeywords['タージ・マハル']).toBe(true);
+    const { keywordCounts } = await lookupHeritageSearchKeywordCountsBatch(wrapped, 'user1', ['タージ・マハル']);
+    expect(keywordCounts['タージ・マハル']).toBe(1);
 
     const { keywords } = await lookupHeritageSearchKeywordCounts(wrapped, 'user1', 'タージ・マハル');
     expect(keywords).toEqual([{ keyword: 'インド 世界遺産', count: 1 }]);
   });
 
-  it('AIチャット共有を削除すると、バッジ非表示(false)と件数ゼロ([])が一致して連動する', async () => {
+  it('AIチャット共有を削除すると、総数ゼロと件数ゼロ([])が一致して連動する', async () => {
     const real = setupDb();
     insertShare(real, 'share-1', 'タージ・マハル', '見どころ', true);
     insertSearchHistory(real, 'インド 世界遺産', 'share-1');
     const wrapped = wrapD1(real);
 
-    const { hasKeywords } = await lookupHeritageSearchKeywordHasFlags(wrapped, 'user1', ['タージ・マハル']);
-    expect(hasKeywords['タージ・マハル']).toBe(false);
+    const { keywordCounts } = await lookupHeritageSearchKeywordCountsBatch(wrapped, 'user1', ['タージ・マハル']);
+    expect(keywordCounts['タージ・マハル']).toBe(0);
 
     const { keywords } = await lookupHeritageSearchKeywordCounts(wrapped, 'user1', 'タージ・マハル');
     expect(keywords).toEqual([]);
@@ -113,14 +113,42 @@ describe('キーワードバッジと件数取得の整合性（実SQLite）', (
     ]);
   });
 
+  it('総数(keywordCounts)は同一キーワードの重複検索を1件として数える（distinctキーワード数）', async () => {
+    const real = setupDb();
+    insertShare(real, 'share-1', '万里の長城', '交通手段', false);
+    insertSearchHistory(real, '中国 遺跡', 'share-1');
+    insertSearchHistory(real, '中国 遺跡', 'share-1');
+    insertSearchHistory(real, '長城 行き方', 'share-1');
+    const wrapped = wrapD1(real);
+
+    // 検索履歴は3件だが、distinctキーワードは「中国 遺跡」「長城 行き方」の2件
+    const { keywordCounts } = await lookupHeritageSearchKeywordCountsBatch(wrapped, 'user1', ['万里の長城']);
+    expect(keywordCounts['万里の長城']).toBe(2);
+  });
+
+  it('複数世界遺産をまとめて渡しても正しく振り分けられる', async () => {
+    const real = setupDb();
+    insertShare(real, 'share-1', 'タージ・マハル', '見どころ', false);
+    insertShare(real, 'share-2', '万里の長城', '交通手段', false);
+    insertSearchHistory(real, 'インド 世界遺産', 'share-1');
+    insertSearchHistory(real, '中国 遺跡', 'share-2');
+    insertSearchHistory(real, '長城 行き方', 'share-2');
+    const wrapped = wrapD1(real);
+
+    const { keywordCounts } = await lookupHeritageSearchKeywordCountsBatch(wrapped, 'user1', ['タージ・マハル', '万里の長城', '該当なし']);
+    expect(keywordCounts['タージ・マハル']).toBe(1);
+    expect(keywordCounts['万里の長城']).toBe(2);
+    expect(keywordCounts['該当なし']).toBe(0);
+  });
+
   it('他ユーザーのデータは混ざらない', async () => {
     const real = setupDb();
     insertShare(real, 'share-1', 'タージ・マハル', '見どころ', false);
     db_insertOtherUserShare(real);
     insertSearchHistory(real, 'インド 世界遺産', 'share-1');
     const wrapped = wrapD1(real);
-    const { hasKeywords } = await lookupHeritageSearchKeywordHasFlags(wrapped, 'user1', ['タージ・マハル']);
-    expect(hasKeywords['タージ・マハル']).toBe(true);
+    const { keywordCounts } = await lookupHeritageSearchKeywordCountsBatch(wrapped, 'user1', ['タージ・マハル']);
+    expect(keywordCounts['タージ・マハル']).toBe(1);
     const { keywords } = await lookupHeritageSearchKeywordCounts(wrapped, 'other-user', 'タージ・マハル');
     expect(keywords).toEqual([]);
   });
