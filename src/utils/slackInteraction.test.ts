@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { handleSlackInteraction, type InteractionDeps } from './slackInteraction';
+import { handleSlackInteraction, SLACK_AI_REPLY_CALLBACK_ID, type InteractionDeps } from './slackInteraction';
 import { DEFAULT_AI_MODEL } from './aiSummary';
 
 vi.mock('./slack', () => ({
@@ -245,6 +245,78 @@ describe('handleSlackInteraction', () => {
     expect(result.status).toBe(200);
     expect(result.steps).toContain('skip');
     expect(mockedOpenModal).not.toHaveBeenCalled();
+  });
+
+  // ---- message_action (メッセージショートカット) によるAI応答依頼 ----
+
+  function buildMessageActionPayload(overrides: Record<string, any> = {}): string {
+    const payload = {
+      type: 'message_action',
+      callback_id: SLACK_AI_REPLY_CALLBACK_ID,
+      team: { id: 'T123' },
+      channel: { id: 'C999' },
+      message: { text: '<@U_ADMIN> 今日の天気は？', ts: '1700000000.000100' },
+      ...overrides,
+    };
+    return `payload=${encodeURIComponent(JSON.stringify(payload))}`;
+  }
+
+  it('message_actionでcallback_idが一致する場合、aiReplyTaskを返す（実処理は呼び出し元でwaitUntilする）', async () => {
+    const deps = makeDeps({ rawBody: buildMessageActionPayload() });
+    const result = await handleSlackInteraction(deps);
+
+    expect(result.status).toBe(200);
+    expect(result.aiReplyTask).toEqual({
+      text: '<@U_ADMIN> 今日の天気は？',
+      channel: 'C999',
+      threadTs: '1700000000.000100',
+      teamId: 'T123',
+    });
+    expect(mockedOpenModal).not.toHaveBeenCalled();
+  });
+
+  it('message_actionでメッセージが既にスレッド内の場合、thread_tsを優先する（親スレッドに返信）', async () => {
+    const deps = makeDeps({
+      rawBody: buildMessageActionPayload({
+        message: { text: 'hi', ts: '1700000000.000200', thread_ts: '1700000000.000100' },
+      }),
+    });
+    const result = await handleSlackInteraction(deps);
+
+    expect(result.aiReplyTask?.threadTs).toBe('1700000000.000100');
+  });
+
+  it('message_actionでcallback_idが一致しない場合はskipし、aiReplyTaskを返さない', async () => {
+    const deps = makeDeps({
+      rawBody: buildMessageActionPayload({ callback_id: 'other_shortcut' }),
+    });
+    const result = await handleSlackInteraction(deps);
+
+    expect(result.status).toBe(200);
+    expect(result.steps).toContain('skip');
+    expect(result.aiReplyTask).toBeUndefined();
+  });
+
+  it('message_actionでmessage/channelが欠落している場合はerrorステップで終了し、aiReplyTaskを返さない', async () => {
+    const deps = makeDeps({
+      rawBody: buildMessageActionPayload({ channel: undefined }),
+    });
+    const result = await handleSlackInteraction(deps);
+
+    expect(result.status).toBe(200);
+    expect(result.steps).toContain('error');
+    expect(result.aiReplyTask).toBeUndefined();
+  });
+
+  it('message_actionも署名検証に失敗すれば401を返す', async () => {
+    const deps = makeDeps({
+      rawBody: buildMessageActionPayload(),
+      verifySignature: vi.fn().mockResolvedValue({ success: false, reason: 'bad sig' }),
+    });
+    const result = await handleSlackInteraction(deps);
+
+    expect(result.status).toBe(401);
+    expect(result.aiReplyTask).toBeUndefined();
   });
 
   // ---- Slack API制約テスト: openSlackModalに渡されるviewの構造検証 ----
