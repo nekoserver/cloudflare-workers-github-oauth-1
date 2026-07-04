@@ -1865,9 +1865,18 @@ void main() {
     if (AMERICAS_IDXS.length === 0) { stopAmericaTour(); return; }
     var idx = AMERICAS_IDXS[americaTourPos % AMERICAS_IDXS.length];
     americaTourPos++;
-    showMarkerTooltip(idx, 0, 0);
+    var d = HERITAGE[idx];
+    flyTo(d.lat, d.lon);
     highlightTourItem(idx);
-    americaTourTimer = setTimeout(nextAmericaSite, AMERICAS_INTERVAL);
+    // 地球儀の回転(FLY_DUR)が終わってマーカーが正面(可視)になってから
+    // ツールチップを出す。回転中に showMarkerTooltip() を呼ぶと、次の描画フレームで
+    // マーカーがまだオクルージョン判定(mz<=0.12)にかかり hideTooltip() が
+    // activeIdx を -1 にリセットしてしまい、回転完了後も二度と表示されなくなる。
+    americaTourTimer = setTimeout(function() {
+      if (!americaTourActive) return;
+      showMarkerTooltip(idx, 0, 0);
+      americaTourTimer = setTimeout(nextAmericaSite, AMERICAS_INTERVAL);
+    }, FLY_DUR + 100);
   }
 
   function startAmericaTour() {
@@ -1986,9 +1995,15 @@ void main() {
     if (EUROPE_IDXS.length === 0) { stopEuropeTour(); return; }
     var idx = EUROPE_IDXS[europeTourPos % EUROPE_IDXS.length];
     europeTourPos++;
-    showMarkerTooltip(idx, 0, 0);
+    var d = HERITAGE[idx];
+    flyTo(d.lat, d.lon);
     highlightTourItem(idx);
-    europeTourTimer = setTimeout(nextEuropeSite, TOUR_INTERVAL);
+    // 回転(FLY_DUR)完了後にツールチップを表示する（理由は nextAmericaSite のコメント参照）
+    europeTourTimer = setTimeout(function() {
+      if (!europeTourActive) return;
+      showMarkerTooltip(idx, 0, 0);
+      europeTourTimer = setTimeout(nextEuropeSite, TOUR_INTERVAL);
+    }, FLY_DUR + 100);
   }
 
   function startEuropeTour() {
@@ -2027,9 +2042,15 @@ void main() {
     if (AFRICA_IDXS.length === 0) { stopAfricaTour(); return; }
     var idx = AFRICA_IDXS[africaTourPos % AFRICA_IDXS.length];
     africaTourPos++;
-    showMarkerTooltip(idx, 0, 0);
+    var d = HERITAGE[idx];
+    flyTo(d.lat, d.lon);
     highlightTourItem(idx);
-    africaTourTimer = setTimeout(nextAfricaSite, TOUR_INTERVAL);
+    // 回転(FLY_DUR)完了後にツールチップを表示する（理由は nextAmericaSite のコメント参照）
+    africaTourTimer = setTimeout(function() {
+      if (!africaTourActive) return;
+      showMarkerTooltip(idx, 0, 0);
+      africaTourTimer = setTimeout(nextAfricaSite, TOUR_INTERVAL);
+    }, FLY_DUR + 100);
   }
 
   function startAfricaTour() {
@@ -2069,9 +2090,15 @@ void main() {
     if (JAPAN_TOUR_IDXS.length === 0) { stopJapanTour(); return; }
     var idx = JAPAN_TOUR_IDXS[japanTourPos % JAPAN_TOUR_IDXS.length];
     japanTourPos++;
-    showMarkerTooltip(idx, 0, 0);
+    var d = HERITAGE[idx];
+    flyTo(d.lat, d.lon);
     highlightTourItem(idx);
-    japanTourTimer = setTimeout(nextJapanSite, TOUR_INTERVAL);
+    // 回転(FLY_DUR)完了後にツールチップを表示する（理由は nextAmericaSite のコメント参照）
+    japanTourTimer = setTimeout(function() {
+      if (!japanTourActive) return;
+      showMarkerTooltip(idx, 0, 0);
+      japanTourTimer = setTimeout(nextJapanSite, TOUR_INTERVAL);
+    }, FLY_DUR + 100);
   }
 
   function startJapanTour() {
