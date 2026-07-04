@@ -7,7 +7,7 @@ assets = { directory = "./public" }
 [vars]
 ENVIRONMENT = "development"
 # GITHUB_CLIENT_ID は wrangler secret で管理する（[vars] に平文で書かない）
-AI_CHAT_MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
+AI_CHAT_MODEL = "@cf/google/gemma-4-26b-a4b-it"
 
 # 必要なシークレット（wrangler secret putで設定）:
 #   wrangler secret put GITHUB_CLIENT_ID
@@ -23,7 +23,7 @@ AI_CHAT_MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
 #
 # オプション（[vars] または secret で設定可能）:
 #   AI_MODEL       # PR要約・キーワード分類用 Workers AIモデル名（未設定時: @cf/google/gemma-4-26b-a4b-it）
-#   AI_CHAT_MODEL  # AIチャットページ用モデル名（未設定時: @cf/meta/llama-3.1-8b-instruct-fp8）
+#   AI_CHAT_MODEL  # AIチャットページ・Slack応答共通のモデル名（未設定時: @cf/google/gemma-4-26b-a4b-it）
 
 # D1データベース設定（オプション）
 # セッション管理を有効にするには以下の手順を実行してください:
