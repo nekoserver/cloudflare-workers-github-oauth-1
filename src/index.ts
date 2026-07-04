@@ -3240,7 +3240,7 @@ app.get('/auth/v1/callback', authMiddleware, async (c) => {
     clientId,
     clientSecret,
     redirectUri,
-    fetchImpl: fetch,
+    fetchImpl: (url, init) => fetch(url, init),
   });
 
   const clearStateCookie = 'slack_oauth_state=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0';
