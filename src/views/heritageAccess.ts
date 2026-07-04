@@ -997,10 +997,11 @@ function renderHeritageInner(inner, accTr, heritages, hits, kwCounts, answered) 
     var safeName = h.heritage_name.replace(/&/g,'&amp;').replace(/</g,'&lt;');
     var flagSpan = h.country_flag ? '<span class="acc-country-flag">' + h.country_flag + '</span>' : '';
     if (h.heritage_name) heritageCountryFlags[h.heritage_name] = h.country_flag || '';
+    var emoji = HERITAGE_EMOJI_BY_NAME[h.heritage_name] || '🏛️';
     html += '<div class="acc-row" data-heritage="' + h.heritage_name.replace(/"/g,'&quot;') + '">' +
       '<span class="acc-num">' + (idx + 1) + '</span>' +
       flagSpan +
-      '<span class="acc-emoji">🏛️</span>' +
+      '<span class="acc-emoji">' + emoji + '</span>' +
       '<span class="acc-name" data-heritage="' + h.heritage_name.replace(/"/g,'&quot;') + '">' + safeName + '</span>' +
       '<span class="acc-dist">' + dist + ' km</span>' +
       '</div>' +
@@ -1380,6 +1381,8 @@ function renderEuList() {
 
 var RAIL_LINES = ${JSON.stringify(RAIL_LINES)};
 var HERITAGE_ALL = ${JSON.stringify(HERITAGE_LIST)};
+var HERITAGE_EMOJI_BY_NAME = {};
+HERITAGE_ALL.forEach(function(h) { HERITAGE_EMOJI_BY_NAME[h.n] = h.e; });
 
 var railHrOverlay = document.getElementById('rail-hr-overlay');
 var railHrTitle = document.getElementById('rail-hr-title');
