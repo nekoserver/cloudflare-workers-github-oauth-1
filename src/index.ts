@@ -60,7 +60,7 @@ import { fetchPrDiff, runSummaryPipeline, buildSlackMessage, buildSummaryModal, 
 import { getSessionDurationSeconds, renewSession, resolveSessionDuration } from './utils/session';
 import { buildCommitAgentLogEntry } from './utils/commitAgentLog';
 import { verifySlackSignature } from './utils/slackSignature';
-import { handleSlackInteraction } from './utils/slackInteraction';
+import { handleSlackInteraction, type SlackAiReplyTask } from './utils/slackInteraction';
 import { handleSlackEvent } from './utils/slackEvent';
 import { handleSlackAppMention } from './utils/slackMentionReply';
 import { exchangeSlackOAuthCode } from './utils/slackOauth';
@@ -9487,6 +9487,50 @@ app.get('/api/repositories/search/keyword-multi-labels-all', authMiddleware, asy
  * Slack Interactivity エンドポイント
  * ボタンクリック等の対話イベントを受信し、モーダルを返す
  */
+/**
+ * Slackメンション/メッセージショートカットからのAI応答依頼を処理する共通処理。
+ * トークン解決順序: D1のslack_installations（OAuthで動的取得したbotトークン）優先
+ * → 環境変数SLACK_OAUTH_TOKENにフォールバック。
+ * /slack/event（app_mention）と /slack/interactions（message_action）の両方から呼ばれる。
+ */
+async function dispatchSlackAiReply(
+  env: Bindings,
+  task: SlackAiReplyTask
+): Promise<void> {
+  let slackToken = env.SLACK_OAUTH_TOKEN;
+  const db = env.DB;
+  if (db && task.teamId) {
+    try {
+      const row = await db.prepare(
+        'SELECT access_token FROM slack_installations WHERE team_id = ?'
+      ).bind(task.teamId).first<{ access_token: string }>();
+      if (row?.access_token) {
+        slackToken = row.access_token;
+      }
+    } catch (dbError) {
+      logger.warn('Failed to look up Slack installation token, falling back to env', {
+        error: dbError instanceof Error ? dbError.message : 'Unknown error',
+        teamId: task.teamId,
+      });
+    }
+  }
+
+  const mentionResult = await handleSlackAppMention({
+    text: task.text,
+    channel: task.channel,
+    threadTs: task.threadTs,
+    slackToken,
+    configuredModel: env.AI_CHAT_MODEL,
+    aiRun: env.AI
+      ? (model, params) => env.AI!.run(model as Parameters<typeof env.AI.run>[0], params as Parameters<typeof env.AI.run>[1])
+      : () => Promise.reject(new Error('AI バインディングが未設定です')),
+    postMessage: postSlackMessage,
+  });
+  if (!mentionResult.posted) {
+    logger.error('Slack AI reply failed', { error: mentionResult.error, channel: task.channel });
+  }
+}
+
 app.post('/slack/interactions', async (c) => {
   const db = c.env.DB;
   const logStep = async (step: string, detail?: string) => {
@@ -9519,6 +9563,11 @@ app.post('/slack/interactions', async (c) => {
   if (result.status === 401) {
     return c.text('', 401);
   }
+
+  if (result.aiReplyTask) {
+    c.executionCtx?.waitUntil(dispatchSlackAiReply(c.env, result.aiReplyTask));
+  }
+
   return c.text('', 200);
 });
 
@@ -9550,44 +9599,12 @@ app.post('/slack/event', async (c) => {
 
   const mentionEvent = result.eventCallback?.event;
   if (mentionEvent && mentionEvent.type === 'app_mention' && !mentionEvent.bot_id && mentionEvent.channel) {
-    const env = c.env;
-    const channel = mentionEvent.channel;
-    const teamId = result.eventCallback?.team_id;
-    const db = env.DB;
-    c.executionCtx?.waitUntil((async () => {
-      // トークン解決順序: D1のslack_installations（OAuthで動的取得したbotトークン）優先 → 環境変数SLACK_OAUTH_TOKENにフォールバック
-      let slackToken = env.SLACK_OAUTH_TOKEN;
-      if (db && teamId) {
-        try {
-          const row = await db.prepare(
-            'SELECT access_token FROM slack_installations WHERE team_id = ?'
-          ).bind(teamId).first<{ access_token: string }>();
-          if (row?.access_token) {
-            slackToken = row.access_token;
-          }
-        } catch (dbError) {
-          logger.warn('Failed to look up Slack installation token, falling back to env', {
-            error: dbError instanceof Error ? dbError.message : 'Unknown error',
-            teamId,
-          });
-        }
-      }
-
-      const mentionResult = await handleSlackAppMention({
-        text: mentionEvent.text ?? '',
-        channel,
-        threadTs: mentionEvent.thread_ts ?? mentionEvent.ts ?? '',
-        slackToken,
-        configuredModel: env.AI_CHAT_MODEL,
-        aiRun: env.AI
-          ? (model, params) => env.AI!.run(model as Parameters<typeof env.AI.run>[0], params as Parameters<typeof env.AI.run>[1])
-          : () => Promise.reject(new Error('AI バインディングが未設定です')),
-        postMessage: postSlackMessage,
-      });
-      if (!mentionResult.posted) {
-        logger.error('Slack app_mention reply failed', { error: mentionResult.error, channel });
-      }
-    })());
+    c.executionCtx?.waitUntil(dispatchSlackAiReply(c.env, {
+      text: mentionEvent.text ?? '',
+      channel: mentionEvent.channel,
+      threadTs: mentionEvent.thread_ts ?? mentionEvent.ts ?? '',
+      teamId: result.eventCallback?.team_id,
+    }));
   }
 
   return c.text('', 200);

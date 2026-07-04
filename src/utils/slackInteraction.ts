@@ -12,10 +12,24 @@ export type InteractionDeps = {
   verifySignature: (rawBody: string, timestamp: string | undefined, signature: string | undefined, secret: string) => Promise<{ success: boolean; reason?: string }>;
 };
 
+export type SlackAiReplyTask = {
+  text: string;
+  channel: string;
+  threadTs: string;
+  teamId?: string;
+};
+
 export type InteractionResult = {
   status: number;
   steps: string[];
+  aiReplyTask?: SlackAiReplyTask;
 };
+
+/**
+ * メッセージショートカット（message_action）でAI応答を依頼する際の Callback ID。
+ * Slack App の「Message Shortcuts」設定でこの文字列を Callback ID に指定すること。
+ */
+export const SLACK_AI_REPLY_CALLBACK_ID = 'ask_ai';
 
 export async function handleSlackInteraction(deps: InteractionDeps): Promise<InteractionResult> {
   const steps: string[] = [];
@@ -56,6 +70,26 @@ export async function handleSlackInteraction(deps: InteractionDeps): Promise<Int
   }
 
   await log('parsed', `type=${interactionPayload.type}, action_id=${interactionPayload.actions?.[0]?.action_id ?? 'none'}`);
+
+  if (interactionPayload.type === 'message_action') {
+    if (interactionPayload.callback_id !== SLACK_AI_REPLY_CALLBACK_ID) {
+      await log('skip', `callback_id=${interactionPayload.callback_id ?? 'none'}`);
+      return { status: 200, steps };
+    }
+
+    const text = interactionPayload.message?.text;
+    const channel = interactionPayload.channel?.id;
+    const threadTs = interactionPayload.message?.thread_ts ?? interactionPayload.message?.ts;
+    const teamId = interactionPayload.team?.id;
+
+    if (!text || !channel || !threadTs) {
+      await log('error', `missing message/channel/ts in message_action payload`);
+      return { status: 200, steps };
+    }
+
+    await log('message_action_matched', `channel=${channel}`);
+    return { status: 200, steps, aiReplyTask: { text, channel, threadTs, teamId } };
+  }
 
   if (interactionPayload.type !== 'block_actions') {
     await log('skip', `type=${interactionPayload.type}`);

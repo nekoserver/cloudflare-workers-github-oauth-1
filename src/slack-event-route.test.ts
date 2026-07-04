@@ -9,6 +9,12 @@ const eventBlock = (() => {
   return src.slice(idx, end);
 })();
 
+const dispatchBlock = (() => {
+  const idx = src.indexOf('async function dispatchSlackAiReply(');
+  const end = src.indexOf('\n}', idx) + 2;
+  return src.slice(idx, end);
+})();
+
 describe("POST /slack/event", () => {
   it('署名・タイムスタンプ・シークレットをhandleSlackEventに渡す', () => {
     expect(eventBlock).toContain('timestamp: c.req.header(');
@@ -33,10 +39,10 @@ describe("POST /slack/event", () => {
     expect(eventBlock).toContain("return c.text('', 200);");
   });
 
-  it('app_mentionイベント(bot自身の発言を除く)をhandleSlackAppMentionへディスパッチする', () => {
+  it('app_mentionイベント(bot自身の発言を除く)をdispatchSlackAiReplyへディスパッチする', () => {
     expect(eventBlock).toContain("mentionEvent.type === 'app_mention'");
     expect(eventBlock).toContain('!mentionEvent.bot_id');
-    expect(eventBlock).toContain('handleSlackAppMention({');
+    expect(eventBlock).toContain('dispatchSlackAiReply(c.env, {');
   });
 
   it('waitUntilでバックグラウンド実行し、Slackへの200応答をブロックしない', () => {
@@ -47,21 +53,31 @@ describe("POST /slack/event", () => {
     expect(eventBlock).toContain('threadTs: mentionEvent.thread_ts ?? mentionEvent.ts');
   });
 
-  it('AIバインディング未設定時はaiRunが分かりやすいエラーで拒否する', () => {
-    expect(eventBlock).toContain("Promise.reject(new Error('AI バインディングが未設定です'))");
+  it('team_idをdispatchSlackAiReplyに渡す（D1トークン解決のため）', () => {
+    expect(eventBlock).toContain('teamId: result.eventCallback?.team_id');
   });
+});
 
-  it('返信投稿に失敗した場合はエラーをログに記録する（握りつぶさない）', () => {
-    expect(eventBlock).toMatch(/if \(!mentionResult\.posted\) \{\s*logger\.error\('Slack app_mention reply failed'/);
-  });
-
+describe('dispatchSlackAiReply', () => {
   it('Slackトークンの解決はslack_installations(D1)を優先しSLACK_OAUTH_TOKENにフォールバックする', () => {
-    expect(eventBlock).toContain('let slackToken = env.SLACK_OAUTH_TOKEN;');
-    expect(eventBlock).toContain('SELECT access_token FROM slack_installations WHERE team_id = ?');
-    expect(eventBlock).toContain('slackToken = row.access_token;');
+    expect(dispatchBlock).toContain('let slackToken = env.SLACK_OAUTH_TOKEN;');
+    expect(dispatchBlock).toContain('SELECT access_token FROM slack_installations WHERE team_id = ?');
+    expect(dispatchBlock).toContain('slackToken = row.access_token;');
   });
 
   it('D1参照に失敗してもフォールバックして処理を継続する（握りつぶさずログに記録）', () => {
-    expect(eventBlock).toMatch(/catch \(dbError\) \{\s*logger\.warn\('Failed to look up Slack installation token, falling back to env'/);
+    expect(dispatchBlock).toMatch(/catch \(dbError\) \{\s*logger\.warn\('Failed to look up Slack installation token, falling back to env'/);
+  });
+
+  it('AIバインディング未設定時はaiRunが分かりやすいエラーで拒否する', () => {
+    expect(dispatchBlock).toContain("Promise.reject(new Error('AI バインディングが未設定です'))");
+  });
+
+  it('handleSlackAppMentionを呼び出す', () => {
+    expect(dispatchBlock).toContain('handleSlackAppMention({');
+  });
+
+  it('返信投稿に失敗した場合はエラーをログに記録する（握りつぶさない）', () => {
+    expect(dispatchBlock).toMatch(/if \(!mentionResult\.posted\) \{\s*logger\.error\('Slack AI reply failed'/);
   });
 });
