@@ -119,5 +119,20 @@ export const RAIL_LINES: RailLine[] = [
     {name:'ハマド国際空港駅', lat:25.261, lon:51.614},
     {name:'ムシェリーブ駅', lat:25.287, lon:51.533},
     {name:'ルサイル駅', lat:25.399, lon:51.493}
+  ]},
+  { name:'ベルニナ急行(クール～ティラーノ)', flag:'🇨🇭', country:'スイス・イタリア', stations:[
+    {name:'クール駅', lat:46.851, lon:9.530, flag:'🇨🇭', country:'スイス'},
+    {name:'トゥージス駅', lat:46.695, lon:9.437, flag:'🇨🇭', country:'スイス'},
+    {name:'ティーフェンカステル駅', lat:46.661, lon:9.578, flag:'🇨🇭', country:'スイス'},
+    {name:'フィリズール駅', lat:46.658, lon:9.679, flag:'🇨🇭', country:'スイス'},
+    {name:'ベルグン駅', lat:46.694, lon:9.748, flag:'🇨🇭', country:'スイス'},
+    {name:'サン・モリッツ駅', lat:46.498, lon:9.846, flag:'🇨🇭', country:'スイス'},
+    {name:'ポントレジーナ駅', lat:46.491, lon:9.905, flag:'🇨🇭', country:'スイス'},
+    {name:'ベルニナ・ディアヴォレッツァ駅', lat:46.437, lon:9.978, flag:'🇨🇭', country:'スイス'},
+    {name:'オスピツィオ・ベルニナ駅', lat:46.405, lon:10.019, flag:'🇨🇭', country:'スイス'},
+    {name:'アルプ・グリュム駅', lat:46.399, lon:10.033, flag:'🇨🇭', country:'スイス'},
+    {name:'ポスキアーヴォ駅', lat:46.325, lon:10.043, flag:'🇨🇭', country:'スイス'},
+    {name:'ル・プレーゼ駅', lat:46.297, lon:10.063, flag:'🇨🇭', country:'スイス'},
+    {name:'ティラーノ駅', lat:46.216, lon:10.167, flag:'🇮🇹', country:'イタリア'}
   ]}
 ];
