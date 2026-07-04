@@ -3727,6 +3727,14 @@ export async function lookupHeritageQuestionAnswers(
 
 // 世界遺産名（キーワード）ごとに、閲覧ログ（heritage_question_view_log）由来の
 // トピック一覧を一括取得する。こちらも IN(...) のバインド数をチャンク分割する。
+//
+// heritage_question_view_log は ai_chat_shares への参照を share_id では持たず
+// heritage_name + question_master_id（トピック）でしか結び付いていない上、
+// ai_chat_shares 側がソフトデリートされても連動して削除されない。そのため
+// EXISTS 句で「同じ質問文の ai_chat_shares が deleted_at IS NULL で現存するか」
+// を確認し、既に削除された回答のトピックバッジを表示しないようにする
+// （表示だけが残り、クリックしても /api/aichat/shares/by-keyword が
+// 何も見つけられない不整合を防ぐ）。
 export async function lookupHeritageKeywordTopics(
   db: D1Like,
   userId: string,
@@ -3741,7 +3749,16 @@ export async function lookupHeritageKeywordTopics(
     try {
       const placeholders = chunk.map(() => '?').join(',');
       const rows = await db
-        .prepare(`SELECT l.heritage_name, m.topic FROM heritage_question_view_log l JOIN heritage_ai_question_masters m ON l.question_master_id = m.id WHERE l.user_id = ? AND l.heritage_name IN (${placeholders}) AND l.deleted_at IS NULL`)
+        .prepare(
+          `SELECT l.heritage_name, m.topic FROM heritage_question_view_log l
+           JOIN heritage_ai_question_masters m ON l.question_master_id = m.id
+           WHERE l.user_id = ? AND l.heritage_name IN (${placeholders}) AND l.deleted_at IS NULL
+             AND EXISTS (
+               SELECT 1 FROM ai_chat_shares s
+               WHERE s.user_id = l.user_id AND s.deleted_at IS NULL
+                 AND s.question = '「' || l.heritage_name || '」の「' || m.topic || '」について説明してください'
+             )`
+        )
         .bind(userId, ...chunk)
         .all<{ heritage_name: string; topic: string }>();
       for (const r of (rows.results ?? [])) {
@@ -3754,6 +3771,72 @@ export async function lookupHeritageKeywordTopics(
     }
   }
   return hadError ? { hits, error: 'partial_query_failure' } : { hits };
+}
+
+// 「キーワード」バッジの表示可否をまとめて判定する。aichat_search_history
+// （検索キーワード選択履歴）に紐づく ai_chat_shares が現存する（deleted_at IS NULL）
+// 場合のみ true になるよう、常に ai_chat_shares 側との JOIN 越しに判定する
+// （lookupHeritageSearchKeywordCounts と同じ結合条件で揃えてあり、
+// 「バッジは出るのに件数取得が空になる」という不整合が起きない）。
+export async function lookupHeritageSearchKeywordHasFlags(
+  db: D1Like,
+  userId: string,
+  keywords: string[],
+): Promise<{ hasKeywords: Record<string, boolean> }> {
+  const hasKeywords: Record<string, boolean> = {};
+  for (const kw of keywords) hasKeywords[kw] = false;
+  try {
+    const rows = await db
+      .prepare(
+        `SELECT DISTINCT acs.question
+         FROM ai_chat_shares acs
+         INNER JOIN aichat_search_history ash ON ash.share_id = acs.id AND ash.user_id = ? AND ash.deleted_at IS NULL
+         WHERE acs.user_id = ? AND acs.deleted_at IS NULL`
+      )
+      .bind(userId, userId)
+      .all<{ question: string }>();
+    let remaining = keywords.length;
+    for (const row of (rows.results ?? [])) {
+      if (remaining <= 0) break;
+      const q = row.question || '';
+      for (const name of keywords) {
+        if (hasKeywords[name]) continue;
+        if (questionStartsWithHeritageBracket(q, name)) {
+          hasKeywords[name] = true;
+          remaining--;
+        }
+      }
+    }
+  } catch {
+    // aichat_search_history 未作成時はスキップ
+  }
+  return { hasKeywords };
+}
+
+// 「キーワード」バッジをクリックした際に表示する、世界遺産1件分のキーワード内訳。
+// lookupHeritageSearchKeywordHasFlags と同じ ai_chat_shares 結合条件を使う。
+export async function lookupHeritageSearchKeywordCounts(
+  db: D1Like,
+  userId: string,
+  heritage: string,
+): Promise<{ keywords: Array<{ keyword: string; count: number }> }> {
+  try {
+    const rows = await db
+      .prepare(
+        `SELECT ash.keyword, COUNT(*) as count
+         FROM aichat_search_history ash
+         INNER JOIN ai_chat_shares acs ON acs.id = ash.share_id AND acs.user_id = ? AND acs.deleted_at IS NULL
+         WHERE ash.user_id = ? AND ash.deleted_at IS NULL
+           AND acs.question LIKE ?
+         GROUP BY ash.keyword
+         ORDER BY count DESC, ash.keyword ASC`
+      )
+      .bind(userId, userId, '「' + heritage + '」%')
+      .all<{ keyword: string; count: number }>();
+    return { keywords: rows.results ?? [] };
+  } catch {
+    return { keywords: [] };
+  }
 }
 
 /**
@@ -3876,30 +3959,7 @@ app.get('/api/aichat/heritage-search-keywords-check', authMiddleware, async (c) 
   if (!raw) return jsonUtf8({ hasKeywords: {} });
   const keywords = raw.split(',').map((k) => k.trim()).filter(Boolean).slice(0, 200);
   if (!keywords.length) return jsonUtf8({ hasKeywords: {} });
-  const hasKeywords: Record<string, boolean> = {};
-  for (const kw of keywords) hasKeywords[kw] = false;
-  try {
-    const rows = await c.env.DB.prepare(
-      `SELECT DISTINCT acs.question
-       FROM ai_chat_shares acs
-       INNER JOIN aichat_search_history ash ON ash.share_id = acs.id AND ash.user_id = ? AND ash.deleted_at IS NULL
-       WHERE acs.user_id = ? AND acs.deleted_at IS NULL`
-    ).bind(user.sub, user.sub).all<{ question: string }>();
-    let remaining = keywords.length;
-    for (const row of (rows.results ?? [])) {
-      if (remaining <= 0) break;
-      const q = row.question || '';
-      for (const name of keywords) {
-        if (hasKeywords[name]) continue;
-        if (questionStartsWithHeritageBracket(q, name)) {
-          hasKeywords[name] = true;
-          remaining--;
-        }
-      }
-    }
-  } catch {
-    // aichat_search_history 未作成時はスキップ
-  }
+  const { hasKeywords } = await lookupHeritageSearchKeywordHasFlags(c.env.DB as unknown as D1Like, user.sub, keywords);
   return jsonUtf8({ hasKeywords });
 });
 
@@ -3908,20 +3968,8 @@ app.get('/api/aichat/heritage-search-keyword-counts', authMiddleware, async (c) 
   if (!c.env.DB) return jsonUtf8({ keywords: [] }, 503);
   const heritage = (c.req.query('heritage') ?? '').trim();
   if (!heritage) return jsonUtf8({ keywords: [] });
-  try {
-    const rows = await c.env.DB.prepare(
-      `SELECT ash.keyword, COUNT(*) as count
-       FROM aichat_search_history ash
-       INNER JOIN ai_chat_shares acs ON acs.id = ash.share_id AND acs.user_id = ? AND acs.deleted_at IS NULL
-       WHERE ash.user_id = ? AND ash.deleted_at IS NULL
-         AND acs.question LIKE ?
-       GROUP BY ash.keyword
-       ORDER BY count DESC, ash.keyword ASC`
-    ).bind(user.sub, user.sub, '「' + heritage + '」%').all<{ keyword: string; count: number }>();
-    return jsonUtf8({ keywords: rows.results ?? [] });
-  } catch {
-    return jsonUtf8({ keywords: [] });
-  }
+  const { keywords } = await lookupHeritageSearchKeywordCounts(c.env.DB as unknown as D1Like, user.sub, heritage);
+  return jsonUtf8({ keywords });
 });
 
 app.get('/api/aichat/shares/calendar', authMiddleware, async (c) => {
