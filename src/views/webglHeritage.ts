@@ -1198,8 +1198,9 @@ void main() {
     var html = '';
     RAIL_LINES.forEach(function(line, li) {
       var total = railLineTotalKm(line);
+      var displayName = line.name.replace('(', '<br>(');
       html += '<div class="rail-line-details">' +
-        '<div class="rail-line-summary">' + line.flag + ' ' + line.name +
+        '<div class="rail-line-summary">' + line.flag + ' ' + displayName +
           '<span class="rail-line-total">全長 ' + total.toFixed(1) + ' km</span>' +
           '<button class="rail-tour-btn" data-line-idx="' + li + '">🚉 巡回</button>' +
         '</div>' +
