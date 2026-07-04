@@ -41,9 +41,9 @@ describe('世界遺産ツールチップ: 見どころ×gemma-4-26b-a4b-it キ�
     expect(html).toMatch(/z-index:' \+ getNextZ\(\) \+/);
   });
 
-  it('モーダルは /api/aichat/shares/:id から回答本文を取得して表示する', () => {
+  it('モーダルは /api/aichat/shares/:id から回答本文を取得してMarkdownとして描画する', () => {
     expect(html).toContain("fetch('/api/aichat/shares/' + encodeURIComponent(shareId))");
-    expect(html).toMatch(/body\.textContent = data\.answer \|\| data\.error \|\| '（応答なし）';/);
+    expect(html).toMatch(/if \(data\.answer\) \{\s*body\.innerHTML = parseMd\(data\.answer\);\s*\} else \{\s*body\.textContent = data\.error \|\| '（応答なし）';/);
   });
 });
 
