@@ -388,7 +388,7 @@ export function renderKeywordClassifyPanelJs(opts: KeywordClassifyPanelOptions):
         var chip = document.createElement('span');
         chip.className = 'kwcls-chip ' + (isClassified ? 'kwcls-chip-cls' : 'kwcls-chip-unc') + (isActive ? ' kwcls-chip-active' : '');
         chip.innerHTML = escHtml(kw) + (cnt != null ? ' <span style="opacity:0.6">(' + cnt + ')</span>' : '');
-        chip.title = kw + (cnt != null ? ' (出現回数: ' + cnt + ')' : '') + (isClassified ? ' [分類済]' : ' [未分類]');
+        chip.title = kw + (cnt != null ? ' (全回答から抽出した数字(重要): ' + cnt + ')' : '') + (isClassified ? ' [分類済]' : ' [未分類]');
         chip.addEventListener('click', function() {
           if (kwPanelEditMode && !isClassified) {
             openKwClassifyModal(kw, function() {
