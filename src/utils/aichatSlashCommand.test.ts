@@ -1,5 +1,11 @@
-import { describe, it, expect } from 'vitest';
-import { formatJstDateTime, formatJstMonthCalendar, interpretAichatSlashCommand } from './aichatSlashCommand';
+import { describe, it, expect, vi } from 'vitest';
+import {
+  formatJstDateTime,
+  formatJstMonthCalendar,
+  formatCommitAgentLogEntry,
+  interpretAichatSlashCommand,
+  type CommitAgentLogRow,
+} from './aichatSlashCommand';
 
 describe('formatJstDateTime', () => {
   it('UTCの時刻をJST(UTC+9)に変換して返す', () => {
@@ -37,45 +43,114 @@ describe('formatJstMonthCalendar', () => {
   });
 });
 
-describe('interpretAichatSlashCommand', () => {
-  const now = new Date('2026-07-05T01:02:03Z');
-
-  it('/neko で始まらないメッセージは通常のAI問い合わせに委ねる（handled: false）', () => {
-    expect(interpretAichatSlashCommand('こんにちは', now)).toEqual({ handled: false });
-    expect(interpretAichatSlashCommand('/pts f1', now)).toEqual({ handled: false });
+describe('formatCommitAgentLogEntry', () => {
+  it('コミット情報をMarkdownのコードブロックで表示する', () => {
+    const row: CommitAgentLogRow = {
+      commit_sha: '777e1244514614755f2cc33039ed2650103d10a',
+      commit_message: 'fix: 何かを直した\n\n詳細説明の本文',
+      detected_agent_name: 'Claude Code',
+      created_at: '2026-04-05T07:19:19.047Z',
+    };
+    const result = formatCommitAgentLogEntry(row);
+    expect(result).toBe([
+      '```',
+      'sha: 777e1244514614755f2cc33039ed2650103d10a',
+      'message: fix: 何かを直した',
+      'agent: Claude Code',
+      'created_at: 2026-04-05T07:19:19.047Z',
+      '```',
+    ].join('\n'));
   });
 
-  it('/neko hms は現在時刻(JST)をそのまま返す（プレフィックスなし）', () => {
-    const result = interpretAichatSlashCommand('/neko hms', now);
+  it('detected_agent_name が null の場合は (未検出) と表示する', () => {
+    const row: CommitAgentLogRow = {
+      commit_sha: 'abc123',
+      commit_message: 'chore: update',
+      detected_agent_name: null,
+      created_at: '2026-04-05T07:19:19.047Z',
+    };
+    const result = formatCommitAgentLogEntry(row);
+    expect(result).toContain('agent: (未検出)');
+  });
+
+  it('行が無い場合はその旨を返す（握りつぶさない）', () => {
+    const result = formatCommitAgentLogEntry(null);
+    expect(result).toBe('commit_agent_log に記録がありません');
+  });
+
+  it('コミットメッセージの先頭行のみを表示する（複数行の本文は含めない）', () => {
+    const row: CommitAgentLogRow = {
+      commit_sha: 'abc123',
+      commit_message: '一行目\n二行目\n三行目',
+      detected_agent_name: null,
+      created_at: '2026-01-01T00:00:00.000Z',
+    };
+    const result = formatCommitAgentLogEntry(row);
+    expect(result).toContain('message: 一行目');
+    expect(result).not.toContain('二行目');
+  });
+});
+
+describe('interpretAichatSlashCommand', () => {
+  const now = new Date('2026-07-05T01:02:03Z');
+  const unusedDeps = { fetchLatestCommitAgentLog: vi.fn().mockRejectedValue(new Error('should not be called')) };
+
+  it('/neko で始まらないメッセージは通常のAI問い合わせに委ねる（handled: false）', async () => {
+    expect(await interpretAichatSlashCommand('こんにちは', now, unusedDeps)).toEqual({ handled: false });
+    expect(await interpretAichatSlashCommand('/pts f1', now, unusedDeps)).toEqual({ handled: false });
+  });
+
+  it('/neko hms は現在時刻(JST)をそのまま返す（プレフィックスなし）', async () => {
+    const result = await interpretAichatSlashCommand('/neko hms', now, unusedDeps);
     expect(result).toEqual({ handled: true, response: '2026-07-05 10:02:03' });
   });
 
-  it('大文字小文字を区別しない', () => {
-    const result = interpretAichatSlashCommand('/NEKO HMS', now);
+  it('大文字小文字を区別しない', async () => {
+    const result = await interpretAichatSlashCommand('/NEKO HMS', now, unusedDeps);
     expect(result.handled).toBe(true);
     expect((result as { response: string }).response).toBe('2026-07-05 10:02:03');
   });
 
-  it('前後の空白・連続空白を許容する', () => {
-    const result = interpretAichatSlashCommand('  /neko   hms  ', now);
+  it('前後の空白・連続空白を許容する', async () => {
+    const result = await interpretAichatSlashCommand('  /neko   hms  ', now, unusedDeps);
     expect(result).toEqual({ handled: true, response: '2026-07-05 10:02:03' });
   });
 
-  it('/neko cal は当月カレンダーをMarkdownテーブルで返す', () => {
-    const result = interpretAichatSlashCommand('/neko cal', now);
+  it('/neko cal は当月カレンダーをMarkdownテーブルで返す', async () => {
+    const result = await interpretAichatSlashCommand('/neko cal', now, unusedDeps);
     expect(result).toEqual({ handled: true, response: formatJstMonthCalendar(now) });
   });
 
-  it('未対応のサブコマンドはエラーメッセージを返す（握りつぶさない）', () => {
-    const result = interpretAichatSlashCommand('/neko unknown', now);
+  it('/neko clog は fetchLatestCommitAgentLog の結果をMarkdownコードブロックで返す', async () => {
+    const row: CommitAgentLogRow = {
+      commit_sha: '777e1244514614755f2cc33039ed2650103d10a',
+      commit_message: 'fix: something',
+      detected_agent_name: null,
+      created_at: '2026-04-05T07:19:19.047Z',
+    };
+    const deps = { fetchLatestCommitAgentLog: vi.fn().mockResolvedValue(row) };
+    const result = await interpretAichatSlashCommand('/neko clog', now, deps);
+    expect(deps.fetchLatestCommitAgentLog).toHaveBeenCalledTimes(1);
+    expect(result).toEqual({ handled: true, response: formatCommitAgentLogEntry(row) });
+  });
+
+  it('/neko clog でデータが無い場合はその旨を返す（握りつぶさない）', async () => {
+    const deps = { fetchLatestCommitAgentLog: vi.fn().mockResolvedValue(null) };
+    const result = await interpretAichatSlashCommand('/neko clog', now, deps);
+    expect(result).toEqual({ handled: true, response: 'commit_agent_log に記録がありません' });
+  });
+
+  it('未対応のサブコマンドはエラーメッセージを返す（握りつぶさない）', async () => {
+    const result = await interpretAichatSlashCommand('/neko unknown', now, unusedDeps);
     expect(result.handled).toBe(true);
     expect((result as { response: string }).response).toContain('unknown');
     expect((result as { response: string }).response).toContain('/neko hms');
     expect((result as { response: string }).response).toContain('/neko cal');
+    expect((result as { response: string }).response).toContain('/neko clog');
   });
 
-  it('サブコマンド無指定もエラーメッセージを返す', () => {
-    const result = interpretAichatSlashCommand('/neko', now);
+  it('サブコマンド無指定もエラーメッセージを返す', async () => {
+    const result = await interpretAichatSlashCommand('/neko', now, unusedDeps);
     expect(result.handled).toBe(true);
     expect((result as { response: string }).response).toContain('(なし)');
   });
