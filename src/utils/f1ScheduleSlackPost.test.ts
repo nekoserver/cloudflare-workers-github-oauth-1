@@ -50,12 +50,10 @@ describe('handleF1ScheduleSlashCommand', () => {
     timestamp: '1700000000',
     signature: 'v0=dummy',
     signingSecret: 'secret',
-    slackToken: 'xoxb-token',
-    slackChannel: 'C12345',
     circuits: CIRCUITS,
     now: new Date('2026-07-01T00:00:00Z'),
     verifySignature: vi.fn().mockResolvedValue({ success: true }),
-    postMessage: vi.fn().mockResolvedValue({ ok: true }),
+    sendNotification: vi.fn().mockResolvedValue({ ok: true }),
   });
 
   it('SLACK_SIGNING_SECRET が未設定なら署名検証を行わず200+エラーメッセージを返す', async () => {
@@ -73,32 +71,29 @@ describe('handleF1ScheduleSlashCommand', () => {
     const result = await handleF1ScheduleSlashCommand(deps);
     expect(result.status).toBe(401);
     expect(result.body).toBeNull();
-    expect(deps.postMessage).not.toHaveBeenCalled();
+    expect(deps.sendNotification).not.toHaveBeenCalled();
   });
 
-  it('SLACK_OAUTH_TOKEN/SLACK_CHANNEL_ID が未設定なら投稿せずエラーメッセージを返す', async () => {
+  it('通知先が未設定(sendNotificationがエラーを返す)の場合はその理由を含むエラーメッセージを返す', async () => {
     const deps = baseDeps();
-    deps.slackToken = undefined as unknown as string;
+    deps.sendNotification = vi.fn().mockResolvedValue({ ok: false, error: 'Slack連携が設定されていません（SLACK_OAUTH_TOKEN / SLACK_CHANNEL_ID が未設定）' });
     const result = await handleF1ScheduleSlashCommand(deps);
     expect(result.status).toBe(200);
     expect(result.body?.text).toContain('SLACK_OAUTH_TOKEN');
-    expect(deps.postMessage).not.toHaveBeenCalled();
   });
 
-  it('postMessage が失敗した場合はエラー内容を含めて返す（握りつぶさない）', async () => {
+  it('sendNotification が失敗した場合はエラー内容を含めて返す（握りつぶさない）', async () => {
     const deps = baseDeps();
-    deps.postMessage = vi.fn().mockResolvedValue({ ok: false, error: 'channel_not_found' });
+    deps.sendNotification = vi.fn().mockResolvedValue({ ok: false, error: 'channel_not_found' });
     const result = await handleF1ScheduleSlashCommand(deps);
     expect(result.status).toBe(200);
     expect(result.body?.text).toContain('channel_not_found');
   });
 
-  it('成功時はF1開催予定をpostMessageでチャンネルに投稿し、ephemeralで完了報告する', async () => {
+  it('成功時はF1開催予定をsendNotificationで送信し、ephemeralで完了報告する', async () => {
     const deps = baseDeps();
     const result = await handleF1ScheduleSlashCommand(deps);
-    expect(deps.postMessage).toHaveBeenCalledWith({
-      token: 'xoxb-token',
-      channel: 'C12345',
+    expect(deps.sendNotification).toHaveBeenCalledWith({
       text: expect.stringContaining('シルバーストン・サーキット'),
     });
     expect(result.status).toBe(200);

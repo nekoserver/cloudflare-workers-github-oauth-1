@@ -48,6 +48,7 @@ import { getAuthFlowPage } from './views/authFlow';
 import { getTsubuyakiPage } from './views/tsubuyaki';
 import { validateFreeText, buildFreeTextSlackMessage, handleTsubuyakiSlashCommand } from './utils/freeTextSlackPost';
 import { handleF1ScheduleSlashCommand } from './utils/f1ScheduleSlackPost';
+import { resolveNotifyConfig, isNotifyConfigured, sendNotification as dispatchNotification } from './utils/notifyDispatch';
 import { F1_CIRCUITS } from './data/f1Circuits';
 
 import { computeColumnRelationStats, verifyColumnStats, type TableSchema, type Relation } from './utils/columnRelationStats';
@@ -3100,15 +3101,12 @@ app.get('/auth/github/callback', async (c) => {
       timestamp: Date.now(),
     });
 
-    // ログイン失敗をSlackに通知
-    const slackToken = c.env.SLACK_OAUTH_TOKEN;
-    const slackChannel = c.env.SLACK_CHANNEL_ID;
-    if (slackToken && slackChannel) {
+    // ログイン失敗を通知（Slack/外部Workerの切替は NOTIFY_TARGET に従う）
+    const loginFailureNotifyConfig = resolveNotifyConfig(c.env);
+    if (isNotifyConfigured(loginFailureNotifyConfig)) {
       const ip = c.req.header('CF-Connecting-IP') ?? c.req.header('X-Forwarded-For') ?? 'unknown';
       const errMsg = error instanceof Error ? error.message : 'Unknown error';
-      postSlackMessage({
-        token: slackToken,
-        channel: slackChannel,
+      dispatchNotification(loginFailureNotifyConfig, {
         text: `[セキュリティ警告] ログイン失敗\nフェーズ: ${phase}\nエラー: ${errMsg}\nIP: ${ip}`,
       }).catch(() => { /* 通知失敗は無視 */ });
     }
@@ -4991,17 +4989,14 @@ app.post('/api/tsubuyaki', authMiddleware, async (c) => {
     return c.json({ ok: false, error: validated.error }, 400);
   }
 
-  const slackToken = c.env.SLACK_OAUTH_TOKEN;
-  const slackChannel = c.env.SLACK_CHANNEL_ID;
-  if (!slackToken || !slackChannel) {
-    return c.json({ ok: false, error: 'Slack連携が設定されていません（SLACK_OAUTH_TOKEN / SLACK_CHANNEL_ID が未設定）' }, 503);
-  }
-
   const displayName = user.name || user.sub;
   const message = buildFreeTextSlackMessage(displayName, validated.text);
-  const result = await postSlackMessage({ token: slackToken, channel: slackChannel, text: message });
+  const notifyConfig = resolveNotifyConfig(c.env);
+  const result = await dispatchNotification(notifyConfig, { text: message });
   if (!result.ok) {
-    return c.json({ ok: false, error: result.error || 'Slackへの投稿に失敗しました' }, 502);
+    // status未設定 = 送信先が未設定（503）、status設定あり = 送信を試みて失敗した（502）
+    const status = result.status === undefined ? 503 : 502;
+    return c.json({ ok: false, error: result.error || 'Slackへの投稿に失敗しました' }, status);
   }
   return c.json({ ok: true });
 });
@@ -7675,10 +7670,9 @@ app.post('/webhook/github', async (c) => {
       }
     }
 
-    // Slack 通知: GitHub App インストール変更
-    const slackToken = c.env.SLACK_OAUTH_TOKEN;
-    const slackChannel = c.env.SLACK_CHANNEL_ID;
-    if (slackToken && slackChannel) {
+    // 通知: GitHub App インストール変更（Slack/外部Workerの切替は NOTIFY_TARGET に従う）
+    const installNotifyConfig = resolveNotifyConfig(c.env);
+    if (isNotifyConfigured(installNotifyConfig)) {
       const sender = payload?.sender?.login ?? 'unknown';
       const appSlug = installation?.app_slug ?? 'unknown';
       const actionMessage: Record<string, string> = {
@@ -7699,7 +7693,7 @@ app.post('/webhook/github', async (c) => {
       ].join('\n');
 
       try {
-        await postSlackMessage({ token: slackToken, channel: slackChannel, text: slackText });
+        await dispatchNotification(installNotifyConfig, { text: slackText });
       } catch (error) {
         logger.error('Slack notification failed for GitHub webhook', {
           error: error instanceof Error ? error.message : 'Unknown error',
@@ -7751,19 +7745,17 @@ app.post('/webhook/github', async (c) => {
     if (prAction === 'opened' || prAction === 'synchronize') {
       const pr = prPayload?.pull_request;
       const repoFullName = prPayload?.repository?.full_name ?? 'unknown';
-      const slackToken = c.env.SLACK_OAUTH_TOKEN;
-      const slackChannel = c.env.SLACK_CHANNEL_ID;
+      const prNotifyConfig = resolveNotifyConfig(c.env);
       const ai = c.env.AI;
       const githubToken = c.env.GITHUB_TOKEN;
 
       if (!pr) {
         logger.warn('pull_request payload is missing pr object', { repoFullName });
-      } else if (!slackToken || !slackChannel) {
-        // Slack未設定でもAI要約・DBへの記録は継続する（Slack依存を減らすための常時書き込み方式）
-        logger.warn('Slack is not configured, skipping Slack notification only (AI summary and DB logging still proceed)', {
+      } else if (!isNotifyConfigured(prNotifyConfig)) {
+        // 通知先未設定でもAI要約・DBへの記録は継続する（Slack依存を減らすための常時書き込み方式）
+        logger.warn('Notification destination is not configured, skipping notification only (AI summary and DB logging still proceed)', {
           repoFullName,
-          slackTokenSet: !!slackToken,
-          slackChannelSet: !!slackChannel,
+          notifyTarget: prNotifyConfig.target,
         });
       }
       if (pr) {
@@ -7895,9 +7887,9 @@ app.post('/webhook/github', async (c) => {
         });
 
         let slackNotified = false;
-        if (slackToken && slackChannel) {
+        if (isNotifyConfigured(prNotifyConfig)) {
           try {
-            const slackResult = await postSlackMessage({ token: slackToken, channel: slackChannel, text: slackPayload.text, blocks: slackPayload.blocks });
+            const slackResult = await dispatchNotification(prNotifyConfig, { text: slackPayload.text, blocks: slackPayload.blocks });
             if (slackResult.ok) {
               slackNotified = true;
             } else {
@@ -9707,6 +9699,8 @@ app.post('/slack/commands', async (c) => {
 
   if (command === '/pts') {
     const text = (form.get('text') || '').trim();
+    const notifyConfig = resolveNotifyConfig(c.env);
+    const sendNotification = (message: { text: string }) => dispatchNotification(notifyConfig, message);
 
     if (text.toLowerCase() === 'f1') {
       const result = await handleF1ScheduleSlashCommand({
@@ -9714,12 +9708,10 @@ app.post('/slack/commands', async (c) => {
         timestamp: c.req.header('X-Slack-Request-Timestamp'),
         signature: c.req.header('X-Slack-Signature'),
         signingSecret: c.env.SLACK_SIGNING_SECRET,
-        slackToken: c.env.SLACK_OAUTH_TOKEN,
-        slackChannel: c.env.SLACK_CHANNEL_ID,
         circuits: F1_CIRCUITS,
         now: new Date(),
         verifySignature: verifySlackSignature,
-        postMessage: postSlackMessage,
+        sendNotification,
       });
       if (!result.body) {
         return c.text('', 401);
@@ -9732,10 +9724,8 @@ app.post('/slack/commands', async (c) => {
       timestamp: c.req.header('X-Slack-Request-Timestamp'),
       signature: c.req.header('X-Slack-Signature'),
       signingSecret: c.env.SLACK_SIGNING_SECRET,
-      slackToken: c.env.SLACK_OAUTH_TOKEN,
-      slackChannel: c.env.SLACK_CHANNEL_ID,
       verifySignature: verifySlackSignature,
-      postMessage: postSlackMessage,
+      sendNotification,
     });
     if (!result.body) {
       return c.text('', 401);
@@ -9806,9 +9796,8 @@ app.post('/webhook/cf-auth', async (c) => {
     )
   );
 
-  const slackToken = c.env.SLACK_OAUTH_TOKEN;
-  const slackChannel = c.env.SLACK_CHANNEL_ID;
-  if (slackToken && slackChannel) {
+  const cfAuthNotifyConfig = resolveNotifyConfig(c.env);
+  if (isNotifyConfigured(cfAuthNotifyConfig)) {
     const lines = [
       `cf-auth: ${event}${action ? ' / ' + action : ''}`,
       `ユーザー: ${user}`,
@@ -9820,7 +9809,7 @@ app.post('/webhook/cf-auth', async (c) => {
     if (extra.length > 0) lines.push(...extra.slice(0, 5));
 
     try {
-      await postSlackMessage({ token: slackToken, channel: slackChannel, text: lines.join('\n') });
+      await dispatchNotification(cfAuthNotifyConfig, { text: lines.join('\n') });
     } catch (error) {
       logger.error('Slack notification failed for cf-auth webhook', {
         error: error instanceof Error ? error.message : 'Unknown error',
@@ -9914,13 +9903,7 @@ async function handleResendWebhookCore(
   const bounceType = webhookData.bounce?.type ?? null;
   const errorDetail = webhookData.bounce?.message ?? webhookData.error?.message ?? null;
 
-  const slackConfig = {
-    signingSecret: c.env.SLACK_SIGNING_SECRET,
-    oauthToken: c.env.SLACK_OAUTH_TOKEN,
-    clientSecret: c.env.SLACK_CLIENT_SECRET,
-    clientId: c.env.SLACK_CLIENT_ID,
-    channelId: c.env.SLACK_CHANNEL_ID,
-  };
+  const resendNotifyConfig = resolveNotifyConfig(c.env);
 
   const deliveryStatus = eventType === 'email.delivered'
     ? '送信完了'
@@ -9930,17 +9913,13 @@ async function handleResendWebhookCore(
   let slackResultAt: string | null = null;
 
   if (deliveryStatus) {
-    const missingSlackVars = Object.entries(slackConfig)
-      .filter(([, value]) => !value || value.trim().length === 0)
-      .map(([key]) => key);
-
-    if (missingSlackVars.length > 0) {
+    if (!isNotifyConfigured(resendNotifyConfig)) {
       logger.error('Slack notification skipped due to missing configuration', {
-        missing: missingSlackVars,
+        notifyTarget: resendNotifyConfig.target,
       });
       slackResultText = 'skipped:missing_config';
       slackResultAt = new Date().toISOString();
-    } else if (slackConfig.oauthToken && slackConfig.channelId) {
+    } else {
       try {
         const from = typeof webhookData.from === 'string' && webhookData.from.trim().length > 0 ? webhookData.from : 'unknown';
         const toDisplay = emailTo ?? 'unknown';
@@ -9953,11 +9932,7 @@ async function handleResendWebhookCore(
           `件名: ${subject}`,
         ].join('\n');
 
-        const slackResult = await postSlackMessage({
-          token: slackConfig.oauthToken,
-          channel: slackConfig.channelId,
-          text: slackText,
-        });
+        const slackResult = await dispatchNotification(resendNotifyConfig, { text: slackText });
 
         slackResultAt = new Date().toISOString();
         if (!slackResult.ok) {
@@ -10717,12 +10692,9 @@ app.post('/api/admin/revoke-session', authMiddleware, async (c) => {
   if (result.meta.changes === 0) {
     return c.json({ error: 'セッションが見つからないか既にrevoke済みです' }, 404);
   }
-  const slackToken = c.env.SLACK_OAUTH_TOKEN;
-  const slackChannel = c.env.SLACK_CHANNEL_ID;
-  if (slackToken && slackChannel) {
-    postSlackMessage({
-      token: slackToken,
-      channel: slackChannel,
+  const revokeNotifyConfig = resolveNotifyConfig(c.env);
+  if (isNotifyConfigured(revokeNotifyConfig)) {
+    dispatchNotification(revokeNotifyConfig, {
       text: `[管理操作] セッション強制revoke\n対象ユーザー: ${targetUserId}\n操作者: ${actor.sub}\n理由: ${reason ?? '（未記入）'}`,
     }).catch(() => {});
   }

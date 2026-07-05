@@ -7,8 +7,9 @@ import { readFileSync } from 'fs';
 // (ai_summary_log / commit_agent_log / ai_summary_reviews) までまるごと
 // Slack設定の有無にゲートしていた。
 // Slack依存を減らすため、AI要約とDBへの記録は pr さえあれば常に行い、
-// Slackへの実際の投稿(postSlackMessage呼び出し)だけを
-// slackToken && slackChannel の条件にする「常時書き込み方式」に変更した。
+// 実際の通知送信(dispatchNotification呼び出し。NOTIFY_TARGETでSlack/外部Worker
+// を切替可能)だけを isNotifyConfigured(prNotifyConfig) の条件にする
+// 「常時書き込み方式」に変更した。
 // このテストはソーステキストの検証によりその構造を保証する。
 // ---------------------------------------------------------------------------
 
@@ -34,16 +35,17 @@ describe('POST /webhook/github: pull_request イベントのSlack非依存化', 
     expect(webhookBlock).toContain('if (pr) {');
   });
 
-  it('Slackへの実際の投稿(postSlackMessage)だけが slackToken && slackChannel でゲートされている', () => {
+  it('通知先はresolveNotifyConfigで解決し、実際の送信だけがisNotifyConfiguredでゲートされている（NOTIFY_TARGETで切替可能）', () => {
     const prSectionIdx = webhookBlock.indexOf("eventType === 'pull_request'");
-    const idx = webhookBlock.indexOf('if (slackToken && slackChannel) {', prSectionIdx);
+    expect(webhookBlock.indexOf('const prNotifyConfig = resolveNotifyConfig(c.env);', prSectionIdx)).toBeGreaterThan(-1);
+    const idx = webhookBlock.indexOf('if (isNotifyConfigured(prNotifyConfig)) {', prSectionIdx);
     expect(idx).toBeGreaterThan(-1);
     const block = webhookBlock.slice(idx, idx + 400);
-    expect(block).toContain('postSlackMessage(');
+    expect(block).toContain('dispatchNotification(prNotifyConfig, { text: slackPayload.text, blocks: slackPayload.blocks })');
   });
 
-  it('Slack投稿ブロックとDB書き込みブロックは同じ階層(if (pr) の直下)にあり、DB書き込みがSlackブロックの内側に入れ子になっていない', () => {
-    expect(webhookBlock).toContain('\n        if (slackToken && slackChannel) {\n');
+  it('通知送信ブロックとDB書き込みブロックは同じ階層(if (pr) の直下)にあり、DB書き込みが通知ブロックの内側に入れ子になっていない', () => {
+    expect(webhookBlock).toContain('\n        if (isNotifyConfigured(prNotifyConfig)) {\n');
     expect(webhookBlock).toContain('\n        if (db) {\n');
   });
 
@@ -53,13 +55,13 @@ describe('POST /webhook/github: pull_request イベントのSlack非依存化', 
     expect(webhookBlock).toContain('INSERT INTO ai_summary_reviews');
   });
 
-  it('Slack未設定時は「Slack通知のみスキップ」であることをログに残す（DBは継続する旨を明記）', () => {
-    expect(webhookBlock).toContain('skipping Slack notification only');
+  it('通知先未設定時は「通知のみスキップ」であることをログに残す（DBは継続する旨を明記）', () => {
+    expect(webhookBlock).toContain('skipping notification only');
   });
 
-  it('slack_notified はSlackへの投稿が実際に成功した場合のみ1になる（Slack未設定時は0のまま記録される）', () => {
+  it('slack_notified は通知の送信が実際に成功した場合のみ1になる（未設定時は0のまま記録される）', () => {
     const slackVarIdx = webhookBlock.indexOf('let slackNotified = false;');
-    const gateIdx = webhookBlock.indexOf('if (slackToken && slackChannel) {', slackVarIdx);
+    const gateIdx = webhookBlock.indexOf('if (isNotifyConfigured(prNotifyConfig)) {', slackVarIdx);
     const successIdx = webhookBlock.indexOf('slackNotified = true;', gateIdx);
     const insertIdx = webhookBlock.indexOf('INSERT INTO ai_summary_log', successIdx);
     expect(slackVarIdx).toBeGreaterThan(-1);

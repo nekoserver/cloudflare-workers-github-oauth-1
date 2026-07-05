@@ -32,21 +32,20 @@ export type TsubuyakiSlashCommandDeps = {
   timestamp: string | undefined;
   signature: string | undefined;
   signingSecret: string | undefined;
-  slackToken: string | undefined;
-  slackChannel: string | undefined;
   verifySignature: (
     rawBody: string,
     timestamp: string | undefined,
     signature: string | undefined,
     signingSecret: string
   ) => Promise<{ success: boolean; reason?: string }>;
-  postMessage: (params: { token: string; channel: string; text: string }) => Promise<{ ok: boolean; error?: string }>;
+  /** 送信先(Slack/外部Worker)はこの関数の内部実装(notifyDispatch)が NOTIFY_TARGET で切り替える */
+  sendNotification: (message: { text: string }) => Promise<{ ok: boolean; error?: string }>;
 };
 
 /**
  * Slack スラッシュコマンド `/pts` を処理する。
  * 署名検証に失敗した場合のみ 401・本文なしを返す（Slack以外からの偽装リクエストを拒否するため）。
- * それ以外（設定不備・入力検証エラー・Slack API失敗・成功）はすべて200 + ephemeralメッセージで返す。
+ * それ以外（設定不備・入力検証エラー・送信失敗・成功）はすべて200 + ephemeralメッセージで返す。
  */
 export async function handleTsubuyakiSlashCommand(deps: TsubuyakiSlashCommandDeps): Promise<SlashCommandResponse> {
   if (!deps.signingSecret) {
@@ -67,12 +66,8 @@ export async function handleTsubuyakiSlashCommand(deps: TsubuyakiSlashCommandDep
     return { status: 200, body: { response_type: 'ephemeral', text: `❌ ${validated.error}` } };
   }
 
-  if (!deps.slackToken || !deps.slackChannel) {
-    return { status: 200, body: { response_type: 'ephemeral', text: '❌ Slack連携が設定されていません（SLACK_OAUTH_TOKEN / SLACK_CHANNEL_ID が未設定）' } };
-  }
-
   const message = buildFreeTextSlackMessage(userName, validated.text);
-  const result = await deps.postMessage({ token: deps.slackToken, channel: deps.slackChannel, text: message });
+  const result = await deps.sendNotification({ text: message });
   if (!result.ok) {
     return { status: 200, body: { response_type: 'ephemeral', text: `❌ 投稿に失敗しました: ${result.error || '不明なエラー'}` } };
   }
