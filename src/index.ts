@@ -47,6 +47,8 @@ import { findNearbyCities } from './utils/worldCities';
 import { getAuthFlowPage } from './views/authFlow';
 import { getTsubuyakiPage } from './views/tsubuyaki';
 import { validateFreeText, buildFreeTextSlackMessage, handleTsubuyakiSlashCommand } from './utils/freeTextSlackPost';
+import { handleF1ScheduleSlashCommand } from './utils/f1ScheduleSlackPost';
+import { F1_CIRCUITS } from './data/f1Circuits';
 
 import { computeColumnRelationStats, verifyColumnStats, type TableSchema, type Relation } from './utils/columnRelationStats';
 import { ensureDefaultWorkspace, getCurrentWorkspace, getUserWorkspaces, switchWorkspace } from './utils/workspace';
@@ -9699,6 +9701,27 @@ app.post('/slack/commands', async (c) => {
   const command = form.get('command');
 
   if (command === '/pts') {
+    const text = (form.get('text') || '').trim();
+
+    if (text.toLowerCase() === 'f1') {
+      const result = await handleF1ScheduleSlashCommand({
+        rawBody,
+        timestamp: c.req.header('X-Slack-Request-Timestamp'),
+        signature: c.req.header('X-Slack-Signature'),
+        signingSecret: c.env.SLACK_SIGNING_SECRET,
+        slackToken: c.env.SLACK_OAUTH_TOKEN,
+        slackChannel: c.env.SLACK_CHANNEL_ID,
+        circuits: F1_CIRCUITS,
+        now: new Date(),
+        verifySignature: verifySlackSignature,
+        postMessage: postSlackMessage,
+      });
+      if (!result.body) {
+        return c.text('', 401);
+      }
+      return c.json(result.body, 200);
+    }
+
     const result = await handleTsubuyakiSlashCommand({
       rawBody,
       timestamp: c.req.header('X-Slack-Request-Timestamp'),

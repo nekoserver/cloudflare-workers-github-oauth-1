@@ -86,4 +86,28 @@ describe('POST /slack/commands', () => {
     expect(slashCommandBlock).toContain("response_type: 'ephemeral'");
     expect(slashCommandBlock).toContain('未対応のコマンドです');
   });
+
+  it('/pts f1 (text=f1) は handleF1ScheduleSlashCommand にディスパッチする', () => {
+    expect(slashCommandBlock).toContain("text.toLowerCase() === 'f1'");
+    expect(slashCommandBlock).toContain('handleF1ScheduleSlashCommand(');
+  });
+
+  it('F1コマンドの分岐は text判定より前に handleTsubuyakiSlashCommand を呼ばない', () => {
+    const f1Idx = slashCommandBlock.indexOf('handleF1ScheduleSlashCommand(');
+    const tsubuyakiIdx = slashCommandBlock.indexOf('handleTsubuyakiSlashCommand(');
+    expect(f1Idx).toBeGreaterThan(-1);
+    expect(tsubuyakiIdx).toBeGreaterThan(f1Idx);
+  });
+
+  it('F1コマンドにも署名・トークン・チャンネル・巡回データ・現在時刻を渡す', () => {
+    const f1Idx = slashCommandBlock.indexOf('handleF1ScheduleSlashCommand(');
+    const block = slashCommandBlock.slice(f1Idx, f1Idx + 500);
+    expect(block).toContain('signingSecret: c.env.SLACK_SIGNING_SECRET');
+    expect(block).toContain('slackToken: c.env.SLACK_OAUTH_TOKEN');
+    expect(block).toContain('slackChannel: c.env.SLACK_CHANNEL_ID');
+    expect(block).toContain('circuits: F1_CIRCUITS');
+    expect(block).toContain('now: new Date()');
+    expect(block).toContain('verifySignature: verifySlackSignature');
+    expect(block).toContain('postMessage: postSlackMessage');
+  });
 });
