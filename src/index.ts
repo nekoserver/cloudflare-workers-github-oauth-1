@@ -7766,248 +7766,224 @@ app.post('/webhook/github', async (c) => {
         });
       }
       if (pr) {
-        const db = c.env.DB;
-        const title = pr.title;
-        const description = pr.body ?? '';
-        const prUrl = pr.html_url;
-        const prNumber = pr.number;
-        const author = pr.user?.login ?? 'unknown';
-        const now = new Date();
-        const eventDate = now.toISOString().slice(0, 10); // YYYY-MM-DD
-        const requestId = crypto.randomUUID();
-        const aiModel = resolveAiModel(c.env.AI_MODEL);
+        try {
+          const db = c.env.DB;
+          const title = pr.title;
+          const description = pr.body ?? '';
+          const prUrl = pr.html_url;
+          const prNumber = pr.number;
+          const author = pr.user?.login ?? 'unknown';
+          const now = new Date();
+          const eventDate = now.toISOString().slice(0, 10); // YYYY-MM-DD
+          const requestId = crypto.randomUUID();
+          const aiModel = resolveAiModel(c.env.AI_MODEL);
 
-        // 本日の通算番号を取得
-        let dailySeq = 1;
-        if (db) {
-          try {
-            const countResult = await db.prepare(
-              'SELECT COUNT(*) as cnt FROM ai_summary_log WHERE event_date = ?'
-            ).bind(eventDate).first<{ cnt: number }>();
-            dailySeq = (countResult?.cnt ?? 0) + 1;
-          } catch (error) {
-            logger.warn('Failed to get daily AI summary count', {
-              error: error instanceof Error ? error.message : 'Unknown error',
-            });
-          }
-        }
-
-        // diff 取得（GITHUB_TOKEN がある場合のみ）
-        let trimmedDiff = '';
-        let diffLength = 0;
-        if (!githubToken) {
-          logger.warn('GITHUB_TOKEN is not configured, skipping PR diff fetch', { prUrl });
-        } else if (!pr.diff_url) {
-          logger.warn('PR diff_url is missing', { prUrl });
-        } else {
-          try {
-            const diffResult = await fetchPrDiff({ diffUrl: pr.diff_url, githubToken });
-            trimmedDiff = diffResult.trimmedDiff;
-            diffLength = diffResult.diffLength;
-            logger.info('Fetched PR diff', { prUrl, diffLength, trimmedLength: trimmedDiff.length });
-          } catch (error) {
-            logger.warn('Failed to fetch PR diff', {
-              error: error instanceof Error ? error.message : 'Unknown error',
-              prUrl,
-            });
-          }
-        }
-
-        // 最新コミットからエージェント情報を抽出
-        let commitAgentName: string | null = null;
-        let commitAgentVersion: string | null = null;
-        let commitAgentSignal: 'message' | 'author' | 'pr' | null = null;
-        let latestCommitSha: string | null = null;
-        let latestCommitMessage: string | null = null;
-        let latestCommitAuthorName: string | null = null;
-        let latestCommitAuthorEmail: string | null = null;
-        let commitAgentFetchError: unknown = null;
-        if (githubToken && pr.commits_url) {
-          try {
-            const latestCommit = await fetchLatestPrCommitInfo(pr.commits_url, githubToken);
-            if (latestCommit) {
-              latestCommitSha = latestCommit.sha || null;
-              latestCommitMessage = latestCommit.message;
-              latestCommitAuthorName = latestCommit.authorName;
-              latestCommitAuthorEmail = latestCommit.authorEmail;
-              const agent = detectCommitAgentFromText(latestCommit.message, latestCommit.authorName, latestCommit.authorEmail);
-              if (agent) {
-                commitAgentName = agent.agentName;
-                commitAgentVersion = agent.agentVersion;
-                commitAgentSignal = agent.signal;
-              }
+          // 本日の通算番号を取得
+          let dailySeq = 1;
+          if (db) {
+            try {
+              const countResult = await db.prepare(
+                'SELECT COUNT(*) as cnt FROM ai_summary_log WHERE event_date = ?'
+              ).bind(eventDate).first<{ cnt: number }>();
+              dailySeq = (countResult?.cnt ?? 0) + 1;
+            } catch (error) {
+              logger.warn('Failed to get daily AI summary count', {
+                error: error instanceof Error ? error.message : 'Unknown error',
+              });
             }
-          } catch (error) {
-            commitAgentFetchError = error;
-            logger.warn('Failed to fetch PR commits for agent detection', {
-              error: error instanceof Error ? error.message : 'Unknown error',
-              prUrl,
-            });
           }
-        }
-        if (!commitAgentName) {
-          const prDetected = detectCommitAgentFromPrText(title, description);
-          if (prDetected) {
-            commitAgentName = prDetected.agentName;
-            commitAgentVersion = prDetected.agentVersion;
-            commitAgentSignal = prDetected.signal;
-          }
-        }
 
-        // AI 要約
-        const pipelineResult = await runSummaryPipeline({
-          ai: ai as { run(model: string, input: { messages: { role: string; content: string }[] }): Promise<unknown> } | null,
-          model: aiModel,
-          fallbackModel: FALLBACK_AI_MODEL,
-          title,
-          description,
-          trimmedDiff,
-          designSpec: DESIGN_SPEC_CHECKLIST,
-        });
-        const rawSummary = pipelineResult.summary;
-        if (!pipelineResult.success) {
-          logger.warn('AI summary pipeline failed', { summary: rawSummary, prUrl, githubTokenSet: !!githubToken });
-        }
-
-        // AI出力から「初期設計との差異」セクションを分離
-        const extracted = extractDesignDiff(rawSummary);
-        const summary = extracted.summary;
-        const designDiff = extracted.designDiff;
-
-        // Slack 通知
-        const slackPayload = buildSlackMessage({
-          prAction,
-          prNumber,
-          title,
-          repoFullName,
-          author,
-          prUrl,
-          summary,
-          dailySeq,
-          requestId,
-          designDiff,
-          fallbackUsed: pipelineResult.fallbackUsed,
-          primaryModel: aiModel,
-          fallbackModel: FALLBACK_AI_MODEL,
-          summaryModel: pipelineResult.usedModel,
-          commitAgentName: commitAgentName ?? undefined,
-          commitAgentVersion,
-          commitAgentSignal,
-        });
-
-        let slackNotified = false;
-        if (isNotifyConfigured(prNotifyConfig)) {
-          try {
-            const slackResult = await dispatchNotification(prNotifyConfig, { text: slackPayload.text, blocks: slackPayload.blocks });
-            if (slackResult.ok) {
-              slackNotified = true;
-            } else {
-              logger.error('Slack notification failed for PR webhook', {
-                error: slackResult.error,
-                status: slackResult.status,
+          // diff 取得（GITHUB_TOKEN がある場合のみ）
+          let trimmedDiff = '';
+          let diffLength = 0;
+          if (!githubToken) {
+            logger.warn('GITHUB_TOKEN is not configured, skipping PR diff fetch', { prUrl });
+          } else if (!pr.diff_url) {
+            logger.warn('PR diff_url is missing', { prUrl });
+          } else {
+            try {
+              const diffResult = await fetchPrDiff({ diffUrl: pr.diff_url, githubToken });
+              trimmedDiff = diffResult.trimmedDiff;
+              diffLength = diffResult.diffLength;
+              logger.info('Fetched PR diff', { prUrl, diffLength, trimmedLength: trimmedDiff.length });
+            } catch (error) {
+              logger.warn('Failed to fetch PR diff', {
+                error: error instanceof Error ? error.message : 'Unknown error',
                 prUrl,
               });
             }
-          } catch (error) {
-            logger.error('Slack notification threw for PR webhook', {
-              error: error instanceof Error ? error.message : 'Unknown error',
-              prUrl,
-            });
           }
-        }
 
-        // D1 にログを書き込み
-        if (db) {
-          try {
-            await db.prepare(`
-              INSERT INTO ai_summary_log
-                (request_id, daily_seq, event_date, event_type, repo_full_name, pr_number, pr_action, pr_url, model, summary, diff_length, slack_notified, created_at, fallback_used, primary_model)
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            `).bind(
-              requestId,
-              dailySeq,
-              eventDate,
-              'pr_summary',
-              repoFullName,
-              prNumber,
-              prAction,
-              prUrl,
-              pipelineResult.usedModel,
-              summary !== '' ? summary : null,
-              diffLength,
-              slackNotified ? 1 : 0,
-              now.toISOString(),
-              pipelineResult.fallbackUsed ? 1 : 0,
-              aiModel,
-            ).run();
-
-            const commitAgentLogEntry = buildCommitAgentLogEntry({
-              requestId,
-              repoFullName,
-              prNumber,
-              commitSha: latestCommitSha,
-              commitMessage: latestCommitMessage,
-              commitAuthorName: latestCommitAuthorName,
-              commitAuthorEmail: latestCommitAuthorEmail,
-              detectedAgentName: commitAgentName,
-              detectedAgentVersion: commitAgentVersion,
-              detectedSignal: commitAgentSignal,
-              createdAtIso: now.toISOString(),
-            });
-
-            if (commitAgentLogEntry) {
-              try {
-                await db.prepare(`
-                  INSERT INTO commit_agent_log
-                    (request_id, repo_full_name, pr_number, commit_sha, commit_message, commit_author_name, commit_author_email, detected_agent_name, detected_agent_version, detected_signal, created_at)
-                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                `).bind(
-                  commitAgentLogEntry.requestId,
-                  commitAgentLogEntry.repoFullName,
-                  commitAgentLogEntry.prNumber,
-                  commitAgentLogEntry.commitSha,
-                  commitAgentLogEntry.commitMessage,
-                  commitAgentLogEntry.commitAuthorName,
-                  commitAgentLogEntry.commitAuthorEmail,
-                  commitAgentLogEntry.detectedAgentName,
-                  commitAgentLogEntry.detectedAgentVersion,
-                  commitAgentLogEntry.detectedSignal,
-                  commitAgentLogEntry.createdAtIso,
-                ).run();
-              } catch (agentLogError) {
-                logger.warn('Failed to insert commit_agent_log', {
-                  error: agentLogError instanceof Error ? agentLogError.message : 'Unknown error',
-                  requestId,
-                });
-              }
-            }
-            // 要約結果を自動診断してフィードバックを記録
-            const diagnosis = classifySummaryResult(summary !== '' ? summary : null);
+          // 最新コミットからエージェント情報を抽出
+          let commitAgentName: string | null = null;
+          let commitAgentVersion: string | null = null;
+          let commitAgentSignal: 'message' | 'author' | 'pr' | null = null;
+          let latestCommitSha: string | null = null;
+          let latestCommitMessage: string | null = null;
+          let latestCommitAuthorName: string | null = null;
+          let latestCommitAuthorEmail: string | null = null;
+          let commitAgentFetchError: unknown = null;
+          if (githubToken && pr.commits_url) {
             try {
-              await db.prepare(`
-                INSERT INTO ai_summary_reviews
-                  (summary_request_id, rating, reviewer_type, reviewer_name, review_model, comment, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-              `).bind(
-                requestId,
-                diagnosis.rating,
-                'system',
-                'auto-diagnosis',
-                aiModel,
-                diagnosis.comment,
-                now.toISOString(),
-              ).run();
-            } catch (feedbackError) {
-              logger.warn('Failed to insert auto-diagnosis feedback', {
-                error: feedbackError instanceof Error ? feedbackError.message : 'Unknown error',
-                requestId,
+              const latestCommit = await fetchLatestPrCommitInfo(pr.commits_url, githubToken);
+              if (latestCommit) {
+                latestCommitSha = latestCommit.sha || null;
+                latestCommitMessage = latestCommit.message;
+                latestCommitAuthorName = latestCommit.authorName;
+                latestCommitAuthorEmail = latestCommit.authorEmail;
+                const agent = detectCommitAgentFromText(latestCommit.message, latestCommit.authorName, latestCommit.authorEmail);
+                if (agent) {
+                  commitAgentName = agent.agentName;
+                  commitAgentVersion = agent.agentVersion;
+                  commitAgentSignal = agent.signal;
+                }
+              }
+            } catch (error) {
+              commitAgentFetchError = error;
+              logger.warn('Failed to fetch PR commits for agent detection', {
+                error: error instanceof Error ? error.message : 'Unknown error',
+                prUrl,
               });
             }
+          }
+          if (!commitAgentName) {
+            const prDetected = detectCommitAgentFromPrText(title, description);
+            if (prDetected) {
+              commitAgentName = prDetected.agentName;
+              commitAgentVersion = prDetected.agentVersion;
+              commitAgentSignal = prDetected.signal;
+            }
+          }
 
-            // GITHUB_TOKEN失効時などにcommit_agent_logへの記録が静かに止まる問題を防ぐため、
-            // コミット取得の失敗もai_summary_reviewsへ記録しD1から気づけるようにする
-            if (commitAgentFetchError !== null) {
-              const commitFetchDiagnosis = classifyCommitAgentFetchError(commitAgentFetchError);
+          // AI 要約
+          const pipelineResult = await runSummaryPipeline({
+            ai: ai as { run(model: string, input: { messages: { role: string; content: string }[] }): Promise<unknown> } | null,
+            model: aiModel,
+            fallbackModel: FALLBACK_AI_MODEL,
+            title,
+            description,
+            trimmedDiff,
+            designSpec: DESIGN_SPEC_CHECKLIST,
+          });
+          const rawSummary = pipelineResult.summary;
+          if (!pipelineResult.success) {
+            logger.warn('AI summary pipeline failed', { summary: rawSummary, prUrl, githubTokenSet: !!githubToken });
+          }
+
+          // AI出力から「初期設計との差異」セクションを分離
+          const extracted = extractDesignDiff(rawSummary);
+          const summary = extracted.summary;
+          const designDiff = extracted.designDiff;
+
+          // Slack 通知
+          const slackPayload = buildSlackMessage({
+            prAction,
+            prNumber,
+            title,
+            repoFullName,
+            author,
+            prUrl,
+            summary,
+            dailySeq,
+            requestId,
+            designDiff,
+            fallbackUsed: pipelineResult.fallbackUsed,
+            primaryModel: aiModel,
+            fallbackModel: FALLBACK_AI_MODEL,
+            summaryModel: pipelineResult.usedModel,
+            commitAgentName: commitAgentName ?? undefined,
+            commitAgentVersion,
+            commitAgentSignal,
+          });
+
+          let slackNotified = false;
+          if (isNotifyConfigured(prNotifyConfig)) {
+            try {
+              const slackResult = await dispatchNotification(prNotifyConfig, { text: slackPayload.text, blocks: slackPayload.blocks });
+              if (slackResult.ok) {
+                slackNotified = true;
+              } else {
+                logger.error('Slack notification failed for PR webhook', {
+                  error: slackResult.error,
+                  status: slackResult.status,
+                  prUrl,
+                });
+              }
+            } catch (error) {
+              logger.error('Slack notification threw for PR webhook', {
+                error: error instanceof Error ? error.message : 'Unknown error',
+                prUrl,
+              });
+            }
+          }
+
+          // D1 にログを書き込み
+          if (db) {
+            try {
+              await db.prepare(`
+                INSERT INTO ai_summary_log
+                  (request_id, daily_seq, event_date, event_type, repo_full_name, pr_number, pr_action, pr_url, model, summary, diff_length, slack_notified, created_at, fallback_used, primary_model)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+              `).bind(
+                requestId,
+                dailySeq,
+                eventDate,
+                'pr_summary',
+                repoFullName,
+                prNumber,
+                prAction,
+                prUrl,
+                pipelineResult.usedModel,
+                summary !== '' ? summary : null,
+                diffLength,
+                slackNotified ? 1 : 0,
+                now.toISOString(),
+                pipelineResult.fallbackUsed ? 1 : 0,
+                aiModel,
+              ).run();
+
+              const commitAgentLogEntry = buildCommitAgentLogEntry({
+                requestId,
+                repoFullName,
+                prNumber,
+                commitSha: latestCommitSha,
+                commitMessage: latestCommitMessage,
+                commitAuthorName: latestCommitAuthorName,
+                commitAuthorEmail: latestCommitAuthorEmail,
+                detectedAgentName: commitAgentName,
+                detectedAgentVersion: commitAgentVersion,
+                detectedSignal: commitAgentSignal,
+                createdAtIso: now.toISOString(),
+              });
+
+              if (commitAgentLogEntry) {
+                try {
+                  await db.prepare(`
+                    INSERT INTO commit_agent_log
+                      (request_id, repo_full_name, pr_number, commit_sha, commit_message, commit_author_name, commit_author_email, detected_agent_name, detected_agent_version, detected_signal, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                  `).bind(
+                    commitAgentLogEntry.requestId,
+                    commitAgentLogEntry.repoFullName,
+                    commitAgentLogEntry.prNumber,
+                    commitAgentLogEntry.commitSha,
+                    commitAgentLogEntry.commitMessage,
+                    commitAgentLogEntry.commitAuthorName,
+                    commitAgentLogEntry.commitAuthorEmail,
+                    commitAgentLogEntry.detectedAgentName,
+                    commitAgentLogEntry.detectedAgentVersion,
+                    commitAgentLogEntry.detectedSignal,
+                    commitAgentLogEntry.createdAtIso,
+                  ).run();
+                } catch (agentLogError) {
+                  logger.warn('Failed to insert commit_agent_log', {
+                    error: agentLogError instanceof Error ? agentLogError.message : 'Unknown error',
+                    requestId,
+                  });
+                }
+              }
+              // 要約結果を自動診断してフィードバックを記録
+              const diagnosis = classifySummaryResult(summary !== '' ? summary : null);
               try {
                 await db.prepare(`
                   INSERT INTO ai_summary_reviews
@@ -8015,26 +7991,59 @@ app.post('/webhook/github', async (c) => {
                   VALUES (?, ?, ?, ?, ?, ?, ?)
                 `).bind(
                   requestId,
-                  commitFetchDiagnosis.rating,
+                  diagnosis.rating,
                   'system',
                   'auto-diagnosis',
-                  null,
-                  commitFetchDiagnosis.comment,
+                  aiModel,
+                  diagnosis.comment,
                   now.toISOString(),
                 ).run();
-              } catch (commitFetchLogError) {
-                logger.warn('Failed to insert commit-agent fetch diagnosis', {
-                  error: commitFetchLogError instanceof Error ? commitFetchLogError.message : 'Unknown error',
+              } catch (feedbackError) {
+                logger.warn('Failed to insert auto-diagnosis feedback', {
+                  error: feedbackError instanceof Error ? feedbackError.message : 'Unknown error',
                   requestId,
                 });
               }
+
+              // GITHUB_TOKEN失効時などにcommit_agent_logへの記録が静かに止まる問題を防ぐため、
+              // コミット取得の失敗もai_summary_reviewsへ記録しD1から気づけるようにする
+              if (commitAgentFetchError !== null) {
+                const commitFetchDiagnosis = classifyCommitAgentFetchError(commitAgentFetchError);
+                try {
+                  await db.prepare(`
+                    INSERT INTO ai_summary_reviews
+                      (summary_request_id, rating, reviewer_type, reviewer_name, review_model, comment, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                  `).bind(
+                    requestId,
+                    commitFetchDiagnosis.rating,
+                    'system',
+                    'auto-diagnosis',
+                    null,
+                    commitFetchDiagnosis.comment,
+                    now.toISOString(),
+                  ).run();
+                } catch (commitFetchLogError) {
+                  logger.warn('Failed to insert commit-agent fetch diagnosis', {
+                    error: commitFetchLogError instanceof Error ? commitFetchLogError.message : 'Unknown error',
+                    requestId,
+                  });
+                }
+              }
+            } catch (error) {
+              logger.error('Failed to insert ai_summary_log', {
+                error: error instanceof Error ? error.message : 'Unknown error',
+                requestId,
+              });
             }
-          } catch (error) {
-            logger.error('Failed to insert ai_summary_log', {
-              error: error instanceof Error ? error.message : 'Unknown error',
-              requestId,
-            });
           }
+        } catch (unexpectedPrError) {
+          const unexpectedPrErrorMessage = unexpectedPrError instanceof Error ? unexpectedPrError.message : 'Unknown error';
+          logger.error('Unexpected error while processing pull_request webhook (opened/synchronize)', {
+            error: unexpectedPrErrorMessage,
+            prUrl: pr.html_url,
+          });
+          await logWebhookEvent(c.env.DB, 'github', eventType, 'error', { action, deliveryId, phase: 'pull_request_processing' }, unexpectedPrErrorMessage);
         }
       }
     }
