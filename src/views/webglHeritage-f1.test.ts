@@ -27,25 +27,27 @@ describe('getWebGLHeritagePage F1サーキット機能（左サイドパネル�
     expect(html).not.toContain('function renderF1ModalRows');
   });
 
-  const f1BlockMatch = html.match(/var F1_CIRCUITS = (\[[\s\S]*?\]);\s*\n\s*function typeColor/);
+  // F1_CIRCUITS は src/data/f1Circuits.ts から JSON.stringify で埋め込まれる
+  // （コンパクトなJSON形式の1行）ため、JSON.parse でそのまま読み取る。
+  const f1Match = html.match(/var F1_CIRCUITS = (\[.*?\]);/);
 
   it('F1_CIRCUITS がすべて座標・開催日付きで定義されている', () => {
-    expect(f1BlockMatch).not.toBeNull();
-    const block = f1BlockMatch![1];
-    const entries = Array.from(block.matchAll(/\{ gp:'([^']+)', circuit:'([^']+)', flag:'[^']+', country:'([^']+)', date:'(\d{4}-\d{2}-\d{2})', lat:(-?[\d.]+), lon:(-?[\d.]+) \}/g));
-    expect(entries.length).toBeGreaterThanOrEqual(20);
-    entries.forEach((e) => {
-      expect(e[1].length).toBeGreaterThan(0);
-      expect(e[2].length).toBeGreaterThan(0);
-      expect(e[3].length).toBeGreaterThan(0);
-      expect(Number.isFinite(parseFloat(e[5]))).toBe(true);
-      expect(Number.isFinite(parseFloat(e[6]))).toBe(true);
+    expect(f1Match).not.toBeNull();
+    const circuits = JSON.parse(f1Match![1]);
+    expect(circuits.length).toBeGreaterThanOrEqual(20);
+    circuits.forEach((c: { gp: string; circuit: string; country: string; date: string; lat: number; lon: number }) => {
+      expect(c.gp.length).toBeGreaterThan(0);
+      expect(c.circuit.length).toBeGreaterThan(0);
+      expect(c.country.length).toBeGreaterThan(0);
+      expect(c.date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+      expect(Number.isFinite(c.lat)).toBe(true);
+      expect(Number.isFinite(c.lon)).toBe(true);
     });
   });
 
   it('日程が重複しない（同日開催がない）こと', () => {
-    const block = f1BlockMatch![1];
-    const dates = Array.from(block.matchAll(/date:'(\d{4}-\d{2}-\d{2})'/g)).map((m) => m[1]);
+    const circuits = JSON.parse(f1Match![1]);
+    const dates = circuits.map((c: { date: string }) => c.date);
     const uniqueDates = new Set(dates);
     expect(uniqueDates.size).toBe(dates.length);
   });

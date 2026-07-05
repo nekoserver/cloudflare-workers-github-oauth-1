@@ -47,6 +47,8 @@ import { findNearbyCities } from './utils/worldCities';
 import { getAuthFlowPage } from './views/authFlow';
 import { getTsubuyakiPage } from './views/tsubuyaki';
 import { validateFreeText, buildFreeTextSlackMessage, handleTsubuyakiSlashCommand } from './utils/freeTextSlackPost';
+import { handleF1ScheduleSlashCommand } from './utils/f1ScheduleSlackPost';
+import { F1_CIRCUITS } from './data/f1Circuits';
 
 import { computeColumnRelationStats, verifyColumnStats, type TableSchema, type Relation } from './utils/columnRelationStats';
 import { ensureDefaultWorkspace, getCurrentWorkspace, getUserWorkspaces, switchWorkspace } from './utils/workspace';
@@ -7756,12 +7758,15 @@ app.post('/webhook/github', async (c) => {
 
       if (!pr) {
         logger.warn('pull_request payload is missing pr object', { repoFullName });
-      } else if (!slackToken) {
-        logger.warn('SLACK_OAUTH_TOKEN is not configured, skipping PR notification', { repoFullName });
-      } else if (!slackChannel) {
-        logger.warn('SLACK_CHANNEL_ID is not configured, skipping PR notification', { repoFullName });
+      } else if (!slackToken || !slackChannel) {
+        // Slack未設定でもAI要約・DBへの記録は継続する（Slack依存を減らすための常時書き込み方式）
+        logger.warn('Slack is not configured, skipping Slack notification only (AI summary and DB logging still proceed)', {
+          repoFullName,
+          slackTokenSet: !!slackToken,
+          slackChannelSet: !!slackChannel,
+        });
       }
-      if (pr && slackToken && slackChannel) {
+      if (pr) {
         const db = c.env.DB;
         const title = pr.title;
         const description = pr.body ?? '';
@@ -7890,22 +7895,24 @@ app.post('/webhook/github', async (c) => {
         });
 
         let slackNotified = false;
-        try {
-          const slackResult = await postSlackMessage({ token: slackToken, channel: slackChannel, text: slackPayload.text, blocks: slackPayload.blocks });
-          if (slackResult.ok) {
-            slackNotified = true;
-          } else {
-            logger.error('Slack notification failed for PR webhook', {
-              error: slackResult.error,
-              status: slackResult.status,
+        if (slackToken && slackChannel) {
+          try {
+            const slackResult = await postSlackMessage({ token: slackToken, channel: slackChannel, text: slackPayload.text, blocks: slackPayload.blocks });
+            if (slackResult.ok) {
+              slackNotified = true;
+            } else {
+              logger.error('Slack notification failed for PR webhook', {
+                error: slackResult.error,
+                status: slackResult.status,
+                prUrl,
+              });
+            }
+          } catch (error) {
+            logger.error('Slack notification threw for PR webhook', {
+              error: error instanceof Error ? error.message : 'Unknown error',
               prUrl,
             });
           }
-        } catch (error) {
-          logger.error('Slack notification threw for PR webhook', {
-            error: error instanceof Error ? error.message : 'Unknown error',
-            prUrl,
-          });
         }
 
         // D1 にログを書き込み
@@ -9699,6 +9706,27 @@ app.post('/slack/commands', async (c) => {
   const command = form.get('command');
 
   if (command === '/pts') {
+    const text = (form.get('text') || '').trim();
+
+    if (text.toLowerCase() === 'f1') {
+      const result = await handleF1ScheduleSlashCommand({
+        rawBody,
+        timestamp: c.req.header('X-Slack-Request-Timestamp'),
+        signature: c.req.header('X-Slack-Signature'),
+        signingSecret: c.env.SLACK_SIGNING_SECRET,
+        slackToken: c.env.SLACK_OAUTH_TOKEN,
+        slackChannel: c.env.SLACK_CHANNEL_ID,
+        circuits: F1_CIRCUITS,
+        now: new Date(),
+        verifySignature: verifySlackSignature,
+        postMessage: postSlackMessage,
+      });
+      if (!result.body) {
+        return c.text('', 401);
+      }
+      return c.json(result.body, 200);
+    }
+
     const result = await handleTsubuyakiSlashCommand({
       rawBody,
       timestamp: c.req.header('X-Slack-Request-Timestamp'),
