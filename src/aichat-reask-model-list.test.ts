@@ -68,4 +68,27 @@ describe('/apis ページ: /api/aichat の modelSelect が DEFAULT_AICHAT_MODELS
       expect(html).toContain(m.label);
     });
   });
+
+  it('/api/aichat の説明に /neko ローカルコマンドの挙動が明記されている', async () => {
+    const { getApisPage } = await import('./views/apis');
+    const html = getApisPage();
+    const idx = html.indexOf("path:'/api/aichat'");
+    expect(idx).toBeGreaterThan(-1);
+    const entry = html.slice(idx, idx + 400);
+    expect(entry).toContain('/neko hms');
+    expect(entry).toContain('/neko cal');
+    expect(entry).toContain('/neko clog');
+  });
+
+  it('/api/aichat のレスポンス例が実際のフィールド名(response/usedModel)と一致する（answer/ok/tokenUsageという存在しないフィールドを使わない）', async () => {
+    const { getApisPage } = await import('./views/apis');
+    const html = getApisPage();
+    const idx = html.indexOf("path:'/api/aichat'");
+    expect(idx).toBeGreaterThan(-1);
+    const entry = html.slice(idx, idx + 1600);
+    expect(entry).toContain('response:');
+    expect(entry).toContain('usedModel:');
+    expect(entry).not.toContain('tokenUsage');
+    expect(entry).not.toContain("answer:'Cloudflare");
+  });
 });

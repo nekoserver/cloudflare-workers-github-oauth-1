@@ -285,10 +285,10 @@ mark.hl-match{
 <script>
 const APIS = [
   { group: 'AI チャット', endpoints: [
-    { method:'POST', path:'/api/aichat', desc:'AI にメッセージを送信',
+    { method:'POST', path:'/api/aichat', desc:'AI にメッセージを送信（message が "/neko hms"・"/neko cal"・"/neko clog" の場合はAIを呼ばずローカルで応答する）',
       modelSelect:${JSON.stringify(DEFAULT_AICHAT_MODELS)},
-      body:[{n:'message',req:true,s:'Cloudflare Workersについて教えてください'},{n:'model',s:${JSON.stringify(DEFAULT_AICHAT_MODELS[0]?.value ?? '')}},{n:'systemPromptMode',s:'default'}],
-      res:{ok:true,shareId:'a1b2c3d4',answer:'Cloudflare Workers はエッジで動くサーバーレス実行環境です。',model:'@cf/google/gemma-4-26b-a4b-it',tokenUsage:{inputTokens:20,outputTokens:80}} },
+      body:[{n:'message',req:true,s:'Cloudflare Workersについて教えてください'},{n:'model',s:${JSON.stringify(DEFAULT_AICHAT_MODELS[0]?.value ?? '')}},{n:'systemPromptMode',s:'a'}],
+      res:{response:'Cloudflare Workers はエッジで動くサーバーレス実行環境です。',usedModel:'@cf/google/gemma-4-26b-a4b-it',systemPromptMode:'a',input_tokens:20,output_tokens:80,total_tokens:100,shareId:'a1b2c3d4',userHash:'e5f6a7b8'} },
     { method:'GET',  path:'/api/aichat/shares/search', desc:'AIチャット全文検索', query:[{n:'q',req:true,s:'cloudflare'}],
       res:{results:[{id:'a1b2c3d4',question:'Cloudflare Workersとは？',answer_preview:'エッジで動くサーバーレス実行環境です。',model:'@cf/google/gemma-4-26b-a4b-it',created_at:'2026-06-15T00:00:00.000Z'}],total:1} },
     { method:'GET',  path:'/api/aichat/shares/calendar', desc:'月別カレンダー', query:[{n:'month',s:'2026-06'}],
