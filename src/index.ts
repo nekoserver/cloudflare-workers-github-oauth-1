@@ -7758,12 +7758,15 @@ app.post('/webhook/github', async (c) => {
 
       if (!pr) {
         logger.warn('pull_request payload is missing pr object', { repoFullName });
-      } else if (!slackToken) {
-        logger.warn('SLACK_OAUTH_TOKEN is not configured, skipping PR notification', { repoFullName });
-      } else if (!slackChannel) {
-        logger.warn('SLACK_CHANNEL_ID is not configured, skipping PR notification', { repoFullName });
+      } else if (!slackToken || !slackChannel) {
+        // Slack未設定でもAI要約・DBへの記録は継続する（Slack依存を減らすための常時書き込み方式）
+        logger.warn('Slack is not configured, skipping Slack notification only (AI summary and DB logging still proceed)', {
+          repoFullName,
+          slackTokenSet: !!slackToken,
+          slackChannelSet: !!slackChannel,
+        });
       }
-      if (pr && slackToken && slackChannel) {
+      if (pr) {
         const db = c.env.DB;
         const title = pr.title;
         const description = pr.body ?? '';
@@ -7892,22 +7895,24 @@ app.post('/webhook/github', async (c) => {
         });
 
         let slackNotified = false;
-        try {
-          const slackResult = await postSlackMessage({ token: slackToken, channel: slackChannel, text: slackPayload.text, blocks: slackPayload.blocks });
-          if (slackResult.ok) {
-            slackNotified = true;
-          } else {
-            logger.error('Slack notification failed for PR webhook', {
-              error: slackResult.error,
-              status: slackResult.status,
+        if (slackToken && slackChannel) {
+          try {
+            const slackResult = await postSlackMessage({ token: slackToken, channel: slackChannel, text: slackPayload.text, blocks: slackPayload.blocks });
+            if (slackResult.ok) {
+              slackNotified = true;
+            } else {
+              logger.error('Slack notification failed for PR webhook', {
+                error: slackResult.error,
+                status: slackResult.status,
+                prUrl,
+              });
+            }
+          } catch (error) {
+            logger.error('Slack notification threw for PR webhook', {
+              error: error instanceof Error ? error.message : 'Unknown error',
               prUrl,
             });
           }
-        } catch (error) {
-          logger.error('Slack notification threw for PR webhook', {
-            error: error instanceof Error ? error.message : 'Unknown error',
-            prUrl,
-          });
         }
 
         // D1 にログを書き込み
