@@ -75,6 +75,7 @@ import { withAiTimeout, AI_CLASSIFY_TIMEOUT_MS } from './utils/aiTimeout';
 import { computeConversationHash, computeQuestionHash } from './utils/conversationHash';
 import { buildAiMessages, ALLOWED_MODES, type SystemPromptMode } from './utils/buildAiMessages';
 import { stripThinkTags } from './utils/stripThinkTags';
+import { interpretAichatSlashCommand } from './utils/aichatSlashCommand';
 import { AICHAT_MODEL_MAX_TOKENS, getModelRunParams, assignModelColors } from './utils/aichatModelConfig';
 import { extractFunctionSource } from './utils/extractFunctionSource';
 import { listD1Databases, getD1Tables } from './utils/cloudflareApi';
@@ -3457,9 +3458,6 @@ const AICHAT_ALLOWED_MODELS = new Set([
 
 app.post('/api/aichat', authMiddleware, async (c) => {
   const user = c.get('user');
-  if (!c.env.AI) {
-    return jsonUtf8({ error: 'AI バインディングが未設定です' }, 503);
-  }
   let body: { message?: string; model?: string; systemPromptMode?: string; source?: string };
   try {
     body = await c.req.json();
@@ -3470,6 +3468,17 @@ app.post('/api/aichat', authMiddleware, async (c) => {
   if (!message) {
     return jsonUtf8({ error: 'メッセージが空です' }, 400);
   }
+  const rawMode = (body.systemPromptMode ?? '').trim();
+  const systemPromptMode: SystemPromptMode = (ALLOWED_MODES.has(rawMode) ? rawMode : 'a') as SystemPromptMode;
+
+  const slashCommand = interpretAichatSlashCommand(message, new Date());
+  if (slashCommand.handled) {
+    return jsonUtf8({ response: slashCommand.response, usedModel: 'local/neko', systemPromptMode });
+  }
+
+  if (!c.env.AI) {
+    return jsonUtf8({ error: 'AI バインディングが未設定です' }, 503);
+  }
   if (await checkAiChatRateLimit(c.env.DB, user.sub)) {
     return jsonUtf8({ error: 'リクエストが多すぎます。しばらく待ってから再試行してください。' }, 429);
   }
@@ -3479,8 +3488,6 @@ app.post('/api/aichat', authMiddleware, async (c) => {
   const primaryModel = (requestedModel && AICHAT_ALLOWED_MODELS.has(requestedModel))
     ? requestedModel
     : (configuredModel || fallbackModel);
-  const rawMode = (body.systemPromptMode ?? '').trim();
-  const systemPromptMode: SystemPromptMode = (ALLOWED_MODES.has(rawMode) ? rawMode : 'a') as SystemPromptMode;
   const rawSource = (body.source ?? '').trim();
   const source = rawSource === 'textbox' ? 'textbox' : 'api';
 

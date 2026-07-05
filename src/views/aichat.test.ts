@@ -1375,8 +1375,22 @@ describe('ナビバー モデル選択ドロップダウン', () => {
     const src = readFileSync(resolve(__dirname, '..', 'index.ts'), 'utf-8');
     const idx = src.indexOf("app.post('/api/aichat'");
     expect(idx).toBeGreaterThan(-1);
-    const fn = src.slice(idx, idx + 800);
+    const fn = src.slice(idx, idx + 1500);
     expect(fn).toContain('body.model');
+  });
+
+  it('index.ts の /api/aichat が /neko スラッシュコマンドをAIバインディング未設定チェックより前に判定する', () => {
+    const { readFileSync } = require('node:fs');
+    const { resolve } = require('node:path');
+    const src = readFileSync(resolve(__dirname, '..', 'index.ts'), 'utf-8');
+    const idx = src.indexOf("app.post('/api/aichat'");
+    expect(idx).toBeGreaterThan(-1);
+    const fn = src.slice(idx, idx + 1500);
+    const slashCommandIdx = fn.indexOf('interpretAichatSlashCommand(');
+    const aiBindingCheckIdx = fn.indexOf('AI バインディングが未設定です');
+    expect(slashCommandIdx).toBeGreaterThan(-1);
+    expect(aiBindingCheckIdx).toBeGreaterThan(-1);
+    expect(slashCommandIdx).toBeLessThan(aiBindingCheckIdx);
   });
 
   it('モデルオプションのラベルテキストに llama-3.3-70b-instruct-fp8-fast のフルネームが表示される', () => {
