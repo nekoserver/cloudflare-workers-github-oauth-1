@@ -207,7 +207,100 @@ CREATE INDEX IF NOT EXISTS idx_alt_admin_queries_created_at ON alt_admin_queries
 
 ---
 
-## 7. 今後の実装ステップ（チェックリスト）
+## 7. スラッシュコマンド（`/pts`・`/neko hms` 等）由来の通知の扱い
+
+**対象**: `/slack/commands` エンドポイントが受け付けるスラッシュコマンド（現行の `/pts`、および将来追加が想定される `/neko hms` 等）が `sendNotification` 経由で発火する通知メッセージを、Altワーカーがどう区別・表示するか。
+
+### 7.1 現状の仕組み（本体Worker側）
+
+本体Workerのスラッシュコマンドは単一エンドポイント `/slack/commands` に集約されており、`command` フィールドで一次分岐、`text` フィールドでサブコマンドを分岐する（例: `/pts f1`）。Slackの署名検証・タイムスタンプ検証、および `response_type: ephemeral` の同期応答（Slackに200を返す部分）は**Slackプロトコル自体の要求**であり、`NOTIFY_TARGET=worker` に切り替えても本体Workerが引き続き処理する。Altワーカーはこの同期応答には一切関与しない。Altワーカーが受け取るのは、その同期応答と並行して `sendNotification`（内部的には `dispatchNotification`）経由で送られる「共有用の通知メッセージ」のみである。
+
+| command | サブコマンド(`text`) | ハンドラ関数 | 通知メッセージの例 |
+|---|---|---|---|
+| `/pts` | (指定なし・自由文) | `handleTsubuyakiSlashCommand` | `📮 *user* さんの投稿:\n本文` |
+| `/pts` | `f1` | `handleF1ScheduleSlashCommand` | `📅 *F1 開催予定*\n・日付　国旗 サーキット名（GP名）` |
+| `/neko`（未実装・将来想定） | `hms` | 未実装（新設想定: `handleNekoHmsSlashCommand`） | `🏠 *HMS ...*\n本文`（絵文字・文言は実装時に決定） |
+
+### 7.2 `/neko hms` 等を追加する場合の実装パターン（本体Worker側）
+
+新しいスラッシュコマンドを追加する場合も、既存の `f1ScheduleSlackPost.ts` と同じ構造を踏襲する。
+
+1. `command === '/neko'` の分岐を `/slack/commands` ハンドラに追加する
+2. `text.toLowerCase() === 'hms'` でサブコマンドを判定する
+3. メッセージ文字列を組み立てる**純粋関数**（例: `buildNekoHmsMessage()`）を切り出し、単体でテストする（CLAUDE.mdルール15: ロジック抽出→ユニットテスト→ハンドラ呼び出しの順で進める）
+4. 組み立てたメッセージを `deps.sendNotification({ text })` に渡す。送信先の切り替え（Slack/Altワーカー）はこの関数自体が意識する必要はなく、`notifyDispatch` が `NOTIFY_TARGET` に応じて自動的に振り分ける
+
+この構造を守る限り、新しいスラッシュコマンドは追加コード無しで自動的にAltワーカーへもリダイレクト可能になる。
+
+### 7.3 Altワーカー側での種別判定
+
+現行の `notifyDispatch` ペイロードには、どのコマンド／どの経路から発火したメッセージかを示す明示的なフィールド（`kind`等）が存在しない。そのため当面は、各ハンドラが統一して使っている「絵文字＋太字ラベルを先頭に置く」という表示規約を手がかりに分類する。
+
+| 先頭の絵文字ラベル | 種別 | 発生源 |
+|---|---|---|
+| `📮` | 自由投稿 | `/pts`（サブコマンドなし） |
+| `📅` | F1スケジュール | `/pts f1` |
+| `🏠`（想定） | HMS通知 | `/neko hms`（将来実装時） |
+
+Altワーカーの ingest 処理では、`text` の先頭行を（正規表現ではなく）`startsWith`/`indexOf` で判定し、`alt_notify_ingest_log` に `message_kind TEXT` カラムを追加して分類結果を保存する（CLAUDE.mdルール29: template literal内へのregexリテラル埋め込みで壊れた実例があるため、Altワーカー側でも文字列探索を基本方針とする）。
+
+```sql
+ALTER TABLE alt_notify_ingest_log ADD COLUMN message_kind TEXT;
+```
+
+将来的に本体Worker側の `notifyDispatch` ペイロードへ `kind` フィールドを追加する拡張も選択肢になるが、既存のSlack向けtext/blocksのみで完結する後方互換設計を崩さないため、まずはAltワーカー側のテキスト解析で対応する方針とする。
+
+---
+
+## 8. Resend送信通知webhookの代替処理具体例
+
+**対象**: `POST /webhook/resend`（および `sourceId` 付き複数アカウント版）がResendから受信したメール配信結果（配信成功・バウンス等）を契機に送る通知を、Altワーカーがどう再現・表示するかの具体例。3節で述べた「ingestは到達確認のトリガー、詳細情報はD1直読み」という原則を、Resend連携という具体的なケースに当てはめたもの。
+
+### 8.1 本体Worker側の現状の流れ
+
+1. Resendからのwebhookペイロードを署名検証・重複排除する（`svix_id` 単位）
+2. `deliveryStatus`（`email.delivered` 等）が確定したら `resendNotifyConfig = resolveNotifyConfig(c.env)` を作る
+3. `isNotifyConfigured(resendNotifyConfig)` が `false` の場合は実際には送信せず、`slackResultText = 'skipped:missing_config'` として記録する（CLAUDE.mdルール8「記録」義務。送信しなかった事実自体をログに残す）
+4. 設定済みの場合、`Resend: ${deliveryStatus}` / `from:` / `to:` / `subject:` 等の行からなる `slackText` を組み立て、`dispatchNotification(resendNotifyConfig, { text: slackText })` を呼ぶ
+5. 結果を `resend_webhook_log.slack_result` / `slack_result_at` に保存する。`NOTIFY_TARGET=worker` に切り替えた場合もカラム名は歴史的経緯でそのまま `slack_result` を流用するが、実体は「通知結果全般」を意味する（Altワーカー実装時に読み替えること）
+
+### 8.2 Altワーカー側の再現手順
+
+1. ingestで受信した `text`（`Resend: delivered\nfrom: ...\nto: ...\nsubject: ...` 形式）の先頭行が `Resend: ` であることを判定し、システムイベント種別 `email` に分類する（7.3節と同じ先頭文字列判定の方針）
+2. 詳細情報は `text` をパースして復元するのではなく、D1の `resend_webhook_log` を直接クエリして取得する
+3. 代表クエリ例:
+
+```sql
+SELECT
+  w.event_type,
+  w.email_from,
+  w.email_to,
+  w.bounce_type,
+  w.error_detail,
+  w.slack_result,
+  w.slack_result_at,
+  s.label AS source_label,
+  w.created_at
+FROM resend_webhook_log w
+LEFT JOIN resend_webhook_sources s ON s.id = w.source_id
+ORDER BY w.created_at DESC
+LIMIT 50;
+```
+
+4. 表示は4節の「システムイベント」サブフィードと同じMarkdownテーブル形式に合わせる:
+
+```markdown
+| 発生時刻 | 種別 | 内容 | 結果 |
+|---|---|---|---|
+| 2026-07-05 10:05 | email | delivered: user@example.com（subject: ご案内） | slack_result=ok |
+| 2026-07-05 10:08 | email | bounced: user2@example.com（reason: mailbox_full） | slack_result=skipped:missing_config |
+```
+
+5. `slack_result` が `skipped:missing_config` の行は「通知未達」として強調表示する（背景色などでNGを示す。3状態区別ルールと同様、正常・異常を混同しない）。これはCLAUDE.mdルール8の「通知」義務——ログに残すだけでなく異常に気づける仕組みを用意する——をAltワーカーの表示面でも満たすためであり、本体Worker側の `NOTIFY_TARGET`/`NOTIFY_WORKER_URL` 設定不備にAltワーカーの管理者が気づける状態を作る
+
+---
+
+## 9. 今後の実装ステップ（チェックリスト）
 
 **対象**: 本仕様を実装に移す際の作業順序の目安。本ドキュメント自体はコード変更を含まないため、以下は次セッション以降の実装タスク一覧として記録する。
 
