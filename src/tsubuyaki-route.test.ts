@@ -41,15 +41,14 @@ describe('POST /api/tsubuyaki', () => {
     expect(postBlock).toContain("return c.json({ ok: false, error: validated.error }, 400);");
   });
 
-  it('Slack連携が未設定の場合は503でエラー内容を返す（記録＝戻り値、通知＝UI表示）', () => {
-    expect(postBlock).toContain('SLACK_OAUTH_TOKEN');
-    expect(postBlock).toContain('SLACK_CHANNEL_ID');
-    expect(postBlock).toMatch(/if \(!slackToken \|\| !slackChannel\) \{\s*return c\.json\(\{ ok: false, error:/);
+  it('通知先(Slack/外部Worker)はresolveNotifyConfig/dispatchNotificationで解決する（NOTIFY_TARGETで切替可能）', () => {
+    expect(postBlock).toContain('const notifyConfig = resolveNotifyConfig(c.env);');
+    expect(postBlock).toContain('const result = await dispatchNotification(notifyConfig, { text: message });');
   });
 
-  it('postSlackMessage の失敗時は502でエラー内容を返す（握りつぶさない）', () => {
-    expect(postBlock).toContain('const result = await postSlackMessage(');
-    expect(postBlock).toMatch(/if \(!result\.ok\) \{\s*return c\.json\(\{ ok: false, error: result\.error/);
+  it('送信先が未設定の場合は503、送信を試みて失敗した場合は502でエラー内容を返す（握りつぶさない）', () => {
+    expect(postBlock).toMatch(/const status = result\.status === undefined \? 503 : 502;/);
+    expect(postBlock).toMatch(/if \(!result\.ok\) \{[\s\S]*?return c\.json\(\{ ok: false, error: result\.error[\s\S]*?\}, status\);/);
   });
 
   it('成功時は ok:true を返す', () => {
@@ -68,14 +67,13 @@ describe('POST /slack/commands', () => {
     expect(slashCommandBlock).toContain('handleTsubuyakiSlashCommand(');
   });
 
-  it('署名・トークン・チャンネルを handleTsubuyakiSlashCommand に渡す', () => {
+  it('署名情報と通知送信関数(sendNotification)を handleTsubuyakiSlashCommand に渡す', () => {
+    expect(slashCommandBlock).toContain('const notifyConfig = resolveNotifyConfig(c.env);');
     expect(slashCommandBlock).toContain('timestamp: c.req.header(');
     expect(slashCommandBlock).toContain('signature: c.req.header(');
     expect(slashCommandBlock).toContain('signingSecret: c.env.SLACK_SIGNING_SECRET');
-    expect(slashCommandBlock).toContain('slackToken: c.env.SLACK_OAUTH_TOKEN');
-    expect(slashCommandBlock).toContain('slackChannel: c.env.SLACK_CHANNEL_ID');
     expect(slashCommandBlock).toContain('verifySignature: verifySlackSignature');
-    expect(slashCommandBlock).toContain('postMessage: postSlackMessage');
+    expect(slashCommandBlock).toContain('sendNotification,');
   });
 
   it('body が null（署名検証失敗）の場合は401を返す', () => {
@@ -99,15 +97,20 @@ describe('POST /slack/commands', () => {
     expect(tsubuyakiIdx).toBeGreaterThan(f1Idx);
   });
 
-  it('F1コマンドにも署名・トークン・チャンネル・巡回データ・現在時刻を渡す', () => {
+  it('F1コマンドにも署名情報・巡回データ・現在時刻・通知送信関数を渡す', () => {
     const f1Idx = slashCommandBlock.indexOf('handleF1ScheduleSlashCommand(');
     const block = slashCommandBlock.slice(f1Idx, f1Idx + 500);
     expect(block).toContain('signingSecret: c.env.SLACK_SIGNING_SECRET');
-    expect(block).toContain('slackToken: c.env.SLACK_OAUTH_TOKEN');
-    expect(block).toContain('slackChannel: c.env.SLACK_CHANNEL_ID');
     expect(block).toContain('circuits: F1_CIRCUITS');
     expect(block).toContain('now: new Date()');
     expect(block).toContain('verifySignature: verifySlackSignature');
-    expect(block).toContain('postMessage: postSlackMessage');
+    expect(block).toContain('sendNotification,');
+  });
+
+  it('sendNotification は resolveNotifyConfig の結果を dispatchNotification に渡すクロージャである（Slack/外部Workerの切替の要）', () => {
+    const idx = slashCommandBlock.indexOf('const sendNotification = ');
+    expect(idx).toBeGreaterThan(-1);
+    const line = slashCommandBlock.slice(idx, idx + 150);
+    expect(line).toContain('dispatchNotification(notifyConfig, message)');
   });
 });

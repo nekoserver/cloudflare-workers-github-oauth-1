@@ -8,6 +8,9 @@ assets = { directory = "./public" }
 ENVIRONMENT = "development"
 # GITHUB_CLIENT_ID は wrangler secret で管理する（[vars] に平文で書かない）
 AI_CHAT_MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
+# 通知（GitHub Webhook通知・/pts等）の送信先スイッチ。"worker" にすると
+# 外部Workerへの送信に切り替わる。未設定・それ以外の値は従来どおり "slack"
+# NOTIFY_TARGET = "worker"
 
 # 必要なシークレット（wrangler secret putで設定）:
 #   wrangler secret put GITHUB_CLIENT_ID
@@ -28,6 +31,10 @@ AI_CHAT_MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
 #     thinking mode を強制的に有効化し、<think>タグではなく <|channel>...</channel|> 形式で
 #     推論過程を応答に混入させる既知の制限がある（stripThinkTagsで除去できずSlack投稿が
 #     失敗する原因になった）。デフォルトに戻す場合は要注意
+#
+# 通知先を外部Workerに切り替える場合（NOTIFY_TARGET="worker"）に必要:
+#   wrangler secret put NOTIFY_WORKER_URL     # 送信先WorkerのエンドポイントURL
+#   wrangler secret put NOTIFY_WORKER_SECRET  # Authorization: Bearer <secret> として送信（任意だが推奨）
 
 # D1データベース設定（オプション）
 # セッション管理を有効にするには以下の手順を実行してください:

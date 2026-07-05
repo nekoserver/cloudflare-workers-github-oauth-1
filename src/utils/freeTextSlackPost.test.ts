@@ -58,10 +58,8 @@ describe('handleTsubuyakiSlashCommand', () => {
     timestamp: '1700000000',
     signature: 'v0=dummy',
     signingSecret: 'secret',
-    slackToken: 'xoxb-token',
-    slackChannel: 'C12345',
     verifySignature: vi.fn().mockResolvedValue({ success: true }),
-    postMessage: vi.fn().mockResolvedValue({ ok: true }),
+    sendNotification: vi.fn().mockResolvedValue({ ok: true }),
   });
 
   it('SLACK_SIGNING_SECRET が未設定なら署名検証を行わず200+エラーメッセージを返す', async () => {
@@ -79,7 +77,7 @@ describe('handleTsubuyakiSlashCommand', () => {
     const result = await handleTsubuyakiSlashCommand(deps);
     expect(result.status).toBe(401);
     expect(result.body).toBeNull();
-    expect(deps.postMessage).not.toHaveBeenCalled();
+    expect(deps.sendNotification).not.toHaveBeenCalled();
   });
 
   it('text が空の場合は投稿せずエラーメッセージを返す', async () => {
@@ -88,39 +86,30 @@ describe('handleTsubuyakiSlashCommand', () => {
     const result = await handleTsubuyakiSlashCommand(deps);
     expect(result.status).toBe(200);
     expect(result.body?.text).toContain('❌');
-    expect(deps.postMessage).not.toHaveBeenCalled();
+    expect(deps.sendNotification).not.toHaveBeenCalled();
   });
 
-  it('SLACK_OAUTH_TOKEN/SLACK_CHANNEL_ID が未設定なら投稿せずエラーメッセージを返す', async () => {
+  it('通知先が未設定(sendNotificationがエラーを返す)の場合はその理由を含むエラーメッセージを返す', async () => {
     const deps = baseDeps();
-    deps.slackToken = undefined;
+    deps.sendNotification = vi.fn().mockResolvedValue({ ok: false, error: 'Slack連携が設定されていません（SLACK_OAUTH_TOKEN / SLACK_CHANNEL_ID が未設定）' });
     const result = await handleTsubuyakiSlashCommand(deps);
     expect(result.status).toBe(200);
     expect(result.body?.text).toContain('SLACK_OAUTH_TOKEN');
-    expect(deps.postMessage).not.toHaveBeenCalled();
   });
 
-  it('postMessage が失敗した場合はエラー内容を含めて返す（握りつぶさない）', async () => {
+  it('sendNotification が失敗した場合はエラー内容を含めて返す（握りつぶさない）', async () => {
     const deps = baseDeps();
-    deps.postMessage = vi.fn().mockResolvedValue({ ok: false, error: 'channel_not_found' });
+    deps.sendNotification = vi.fn().mockResolvedValue({ ok: false, error: 'channel_not_found' });
     const result = await handleTsubuyakiSlashCommand(deps);
     expect(result.status).toBe(200);
     expect(result.body?.text).toContain('channel_not_found');
   });
 
-  it('成功時はuser_nameを差出人としてpostMessageを呼び、成功メッセージを返す', async () => {
+  it('成功時はuser_nameを含む本文でsendNotificationを呼び、成功メッセージを返す', async () => {
     const deps = baseDeps();
     const result = await handleTsubuyakiSlashCommand(deps);
-    expect(deps.postMessage).toHaveBeenCalledWith({
-      token: 'xoxb-token',
-      channel: 'C12345',
-      text: expect.stringContaining('octocat'),
-    });
-    expect(deps.postMessage).toHaveBeenCalledWith({
-      token: 'xoxb-token',
-      channel: 'C12345',
-      text: expect.stringContaining('hello'),
-    });
+    expect(deps.sendNotification).toHaveBeenCalledWith({ text: expect.stringContaining('octocat') });
+    expect(deps.sendNotification).toHaveBeenCalledWith({ text: expect.stringContaining('hello') });
     expect(result.status).toBe(200);
     expect(result.body?.text).toContain('✅');
   });
@@ -129,7 +118,7 @@ describe('handleTsubuyakiSlashCommand', () => {
     const deps = baseDeps();
     deps.rawBody = 'command=%2Fpts&text=hello';
     await handleTsubuyakiSlashCommand(deps);
-    expect(deps.postMessage).toHaveBeenCalledWith(
+    expect(deps.sendNotification).toHaveBeenCalledWith(
       expect.objectContaining({ text: expect.stringContaining('unknown') })
     );
   });

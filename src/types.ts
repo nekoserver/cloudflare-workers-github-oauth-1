@@ -17,6 +17,12 @@ export type Bindings = {
   SLACK_CLIENT_SECRET?: string;
   SLACK_CLIENT_ID?: string;
   SLACK_CHANNEL_ID?: string;
+  /** 通知の送信先スイッチ。'worker' で外部Workerへ切替、未設定・それ以外は 'slack'（従来どおり） */
+  NOTIFY_TARGET?: string;
+  /** NOTIFY_TARGET=worker のときの送信先URL */
+  NOTIFY_WORKER_URL?: string;
+  /** NOTIFY_TARGET=worker のときのAuthorizationヘッダに使う共有シークレット（任意） */
+  NOTIFY_WORKER_SECRET?: string;
   SESSION_IDLE_TIMEOUT_SECONDS?: string;
   COMMIT_HISTORY_PAGE_SIZE?: string;
   RESEND_WEBHOOK_DEDUP_TTL_SECONDS?: string;
