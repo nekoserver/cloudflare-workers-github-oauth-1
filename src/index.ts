@@ -75,7 +75,7 @@ import { withAiTimeout, AI_CLASSIFY_TIMEOUT_MS } from './utils/aiTimeout';
 import { computeConversationHash, computeQuestionHash } from './utils/conversationHash';
 import { buildAiMessages, ALLOWED_MODES, type SystemPromptMode } from './utils/buildAiMessages';
 import { stripThinkTags } from './utils/stripThinkTags';
-import { interpretAichatSlashCommand } from './utils/aichatSlashCommand';
+import { interpretAichatSlashCommand, type CommitAgentLogRow } from './utils/aichatSlashCommand';
 import { AICHAT_MODEL_MAX_TOKENS, getModelRunParams, assignModelColors } from './utils/aichatModelConfig';
 import { extractFunctionSource } from './utils/extractFunctionSource';
 import { listD1Databases, getD1Tables } from './utils/cloudflareApi';
@@ -3471,7 +3471,15 @@ app.post('/api/aichat', authMiddleware, async (c) => {
   const rawMode = (body.systemPromptMode ?? '').trim();
   const systemPromptMode: SystemPromptMode = (ALLOWED_MODES.has(rawMode) ? rawMode : 'a') as SystemPromptMode;
 
-  const slashCommand = interpretAichatSlashCommand(message, new Date());
+  const slashCommand = await interpretAichatSlashCommand(message, new Date(), {
+    fetchLatestCommitAgentLog: async () => {
+      if (!c.env.DB) return null;
+      const row = await c.env.DB.prepare(
+        'SELECT commit_sha, commit_message, detected_agent_name, created_at FROM commit_agent_log ORDER BY id DESC LIMIT 1'
+      ).first<CommitAgentLogRow>();
+      return row ?? null;
+    },
+  });
   if (slashCommand.handled) {
     return jsonUtf8({ response: slashCommand.response, usedModel: 'local/neko', systemPromptMode });
   }

@@ -45,6 +45,35 @@ export function formatJstMonthCalendar(now: Date): string {
   return [`${year}年${month}月`, header, separator, ...rows].join('\n');
 }
 
+export type CommitAgentLogRow = {
+  commit_sha: string | null;
+  commit_message: string | null;
+  detected_agent_name: string | null;
+  created_at: string;
+};
+
+/**
+ * commit_agent_log の最新行をMarkdownのコードブロックで表示する。
+ * データが無い場合はその旨を返す（空文字やnullを返して握りつぶさない）。
+ */
+export function formatCommitAgentLogEntry(row: CommitAgentLogRow | null): string {
+  if (!row) {
+    return 'commit_agent_log に記録がありません';
+  }
+  const firstLine = (row.commit_message ?? '').split('\n')[0] || '(コミットメッセージなし)';
+  const lines = [
+    `sha: ${row.commit_sha ?? '(なし)'}`,
+    `message: ${firstLine}`,
+    `agent: ${row.detected_agent_name ?? '(未検出)'}`,
+    `created_at: ${row.created_at}`,
+  ];
+  return ['```', ...lines, '```'].join('\n');
+}
+
+export type AichatSlashCommandDeps = {
+  fetchLatestCommitAgentLog: () => Promise<CommitAgentLogRow | null>;
+};
+
 export type AichatSlashCommandResult =
   | { handled: true; response: string }
   | { handled: false };
@@ -54,7 +83,11 @@ export type AichatSlashCommandResult =
  * 該当すればAIモデルを呼ばずにローカルで完結する応答を返す。
  * `/neko` で始まらないメッセージは通常のAI問い合わせに委ねる（handled: false）。
  */
-export function interpretAichatSlashCommand(message: string, now: Date): AichatSlashCommandResult {
+export async function interpretAichatSlashCommand(
+  message: string,
+  now: Date,
+  deps: AichatSlashCommandDeps
+): Promise<AichatSlashCommandResult> {
   const trimmed = message.trim();
   if (!trimmed.toLowerCase().startsWith('/neko')) {
     return { handled: false };
@@ -71,8 +104,13 @@ export function interpretAichatSlashCommand(message: string, now: Date): AichatS
     return { handled: true, response: formatJstMonthCalendar(now) };
   }
 
+  if (subcommand === 'clog') {
+    const row = await deps.fetchLatestCommitAgentLog();
+    return { handled: true, response: formatCommitAgentLogEntry(row) };
+  }
+
   return {
     handled: true,
-    response: `❌ 未対応のサブコマンドです: ${subcommand || '(なし)'}\n利用可能なコマンド: /neko hms, /neko cal`,
+    response: `❌ 未対応のサブコマンドです: ${subcommand || '(なし)'}\n利用可能なコマンド: /neko hms, /neko cal, /neko clog`,
   };
 }

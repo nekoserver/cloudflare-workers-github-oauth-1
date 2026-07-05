@@ -1413,6 +1413,17 @@ describe('ナビバー モデル選択ドロップダウン', () => {
     expect(shareBtnIdx).toBeGreaterThan(guardIdx);
   });
 
+  it('index.ts の /api/aichat が fetchLatestCommitAgentLog で commit_agent_log の最新行を取得する（/neko clog用）', () => {
+    const { readFileSync } = require('node:fs');
+    const { resolve } = require('node:path');
+    const src = readFileSync(resolve(__dirname, '..', 'index.ts'), 'utf-8');
+    const idx = src.indexOf("app.post('/api/aichat'");
+    expect(idx).toBeGreaterThan(-1);
+    const fn = src.slice(idx, idx + 1500);
+    expect(fn).toContain('fetchLatestCommitAgentLog:');
+    expect(fn).toContain('SELECT commit_sha, commit_message, detected_agent_name, created_at FROM commit_agent_log ORDER BY id DESC LIMIT 1');
+  });
+
   it('renderAiResultInModal も /neko コマンドの応答時は共有リンク行(appendAiResponseRow)を表示しない', () => {
     const html = getAiChatPage(minimalUser, []);
     const idx = html.indexOf('function renderAiResultInModal(');
@@ -2013,7 +2024,7 @@ describe('AIチャット応答の自動保存（auto-save to ai_chat_shares）',
     const src = readFileSync(resolve(__dirname, '..', 'index.ts'), 'utf-8');
     const idx = src.indexOf("app.post('/api/aichat'");
     expect(idx).toBeGreaterThan(-1);
-    const fn = src.slice(idx, idx + 4500);
+    const fn = src.slice(idx, idx + 5000);
     expect(fn).toContain('shareId');
   });
 
@@ -2023,7 +2034,7 @@ describe('AIチャット応答の自動保存（auto-save to ai_chat_shares）',
     const src = readFileSync(resolve(__dirname, '..', 'index.ts'), 'utf-8');
     const idx = src.indexOf("app.post('/api/aichat'");
     expect(idx).toBeGreaterThan(-1);
-    const fn = src.slice(idx, idx + 4500);
+    const fn = src.slice(idx, idx + 5000);
     expect(fn).toContain('userHash');
   });
 
