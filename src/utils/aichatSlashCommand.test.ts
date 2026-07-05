@@ -23,20 +23,20 @@ describe('interpretAichatSlashCommand', () => {
     expect(interpretAichatSlashCommand('/pts f1', now)).toEqual({ handled: false });
   });
 
-  it('/neko hms は現在時刻(JST)を返す', () => {
+  it('/neko hms は現在時刻(JST)をそのまま返す（プレフィックスなし）', () => {
     const result = interpretAichatSlashCommand('/neko hms', now);
-    expect(result).toEqual({ handled: true, response: '🕐 現在時刻（JST）: 2026-07-05 10:02:03' });
+    expect(result).toEqual({ handled: true, response: '2026-07-05 10:02:03' });
   });
 
   it('大文字小文字を区別しない', () => {
     const result = interpretAichatSlashCommand('/NEKO HMS', now);
     expect(result.handled).toBe(true);
-    expect((result as { response: string }).response).toContain('2026-07-05 10:02:03');
+    expect((result as { response: string }).response).toBe('2026-07-05 10:02:03');
   });
 
   it('前後の空白・連続空白を許容する', () => {
     const result = interpretAichatSlashCommand('  /neko   hms  ', now);
-    expect(result).toEqual({ handled: true, response: '🕐 現在時刻（JST）: 2026-07-05 10:02:03' });
+    expect(result).toEqual({ handled: true, response: '2026-07-05 10:02:03' });
   });
 
   it('未対応のサブコマンドはエラーメッセージを返す（握りつぶさない）', () => {

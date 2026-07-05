@@ -1393,6 +1393,38 @@ describe('ナビバー モデル選択ドロップダウン', () => {
     expect(slashCommandIdx).toBeLessThan(aiBindingCheckIdx);
   });
 
+  it('/neko コマンドの応答時はモデルラベルを表示しない（isLocalCommand なら model に null を渡す）', () => {
+    const html = getAiChatPage(minimalUser, []);
+    const idx = html.indexOf("chatForm.addEventListener('submit'");
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 1600);
+    expect(fn).toContain("var isLocalCommand = usedModel === 'local/neko';");
+    expect(fn).toContain("appendBubble(responseText, 'assistant', isLocalCommand ? null : lastModel, data.fallbackUsed, respUsage);");
+  });
+
+  it('/neko コマンドの応答時は応答バブル下の共有リンク行を表示しない（appendShareBtn を呼ばない）', () => {
+    const html = getAiChatPage(minimalUser, []);
+    const idx = html.indexOf("chatForm.addEventListener('submit'");
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 1600);
+    const guardIdx = fn.indexOf('if (!isLocalCommand) {');
+    const shareBtnIdx = fn.indexOf('appendShareBtn(currentMsg,');
+    expect(guardIdx).toBeGreaterThan(-1);
+    expect(shareBtnIdx).toBeGreaterThan(guardIdx);
+  });
+
+  it('renderAiResultInModal も /neko コマンドの応答時は共有リンク行(appendAiResponseRow)を表示しない', () => {
+    const html = getAiChatPage(minimalUser, []);
+    const idx = html.indexOf('function renderAiResultInModal(');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 700);
+    expect(fn).toContain("var isLocalCommand = usedModel === 'local/neko';");
+    const guardIdx = fn.indexOf('if (!isLocalCommand) {');
+    const appendRowIdx = fn.indexOf('appendAiResponseRow(box,');
+    expect(guardIdx).toBeGreaterThan(-1);
+    expect(appendRowIdx).toBeGreaterThan(guardIdx);
+  });
+
   it('モデルオプションのラベルテキストに llama-3.3-70b-instruct-fp8-fast のフルネームが表示される', () => {
     const html = getAiChatPage(minimalUser, []);
     expect(html).toContain('>llama-3.3-70b-instruct-fp8-fast<');

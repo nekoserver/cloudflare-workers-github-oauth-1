@@ -3067,10 +3067,13 @@ export function getAiChatPage(user: {
     function renderAiResultInModal(box, question, selectedModel, data) {
       var responseText = data.response || '（応答なし）';
       var usedModel = data.usedModel || selectedModel;
+      var isLocalCommand = usedModel === 'local/neko';
       var isFallback = !!data.fallbackUsed || (data.usedModel != null && data.usedModel !== selectedModel);
       var ansBubble = buildAssistantBubble(responseText, selectedModel, isFallback, extractRespUsage(data));
       box.appendChild(ansBubble);
-      appendAiResponseRow(box, question, responseText, usedModel, data.shareId, data.userHash);
+      if (!isLocalCommand) {
+        appendAiResponseRow(box, question, responseText, usedModel, data.shareId, data.userHash);
+      }
     }
 
     function openReAskResponseModal(selectedModel, question) {
@@ -5219,9 +5222,12 @@ export function getAiChatPage(user: {
           } else {
             var responseText = data.response || '(応答なし)';
             var usedModel = data.usedModel || lastModel;
+            var isLocalCommand = usedModel === 'local/neko';
             var respUsage = extractRespUsage(data);
-            appendBubble(responseText, 'assistant', lastModel, data.fallbackUsed, respUsage);
-            appendShareBtn(currentMsg, responseText, usedModel, data.shareId, data.userHash);
+            appendBubble(responseText, 'assistant', isLocalCommand ? null : lastModel, data.fallbackUsed, respUsage);
+            if (!isLocalCommand) {
+              appendShareBtn(currentMsg, responseText, usedModel, data.shareId, data.userHash);
+            }
           }
         })
         .catch(function() { thinking.remove(); appendBubble('通信エラーが発生しました', 'error'); })
