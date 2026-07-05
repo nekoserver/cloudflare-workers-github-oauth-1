@@ -9,7 +9,7 @@ export const DEFAULT_AICHAT_MODELS: Array<{value: string; label: string}> = [
   { value: '@cf/meta/llama-3.1-8b-instruct-fp8', label: 'llama-3.1-8b' },
   { value: '@cf/meta/llama-3.1-70b-instruct', label: 'llama-3.1-70b' },
   { value: '@cf/google/gemma-4-26b-a4b-it', label: 'gemma-4-26b' },
-  { value: '@cf/nvidia/nemotron-3-120b-a12b', label: 'nemotron-3-120b' },
+  { value: '@cf/openai/gpt-oss-20b', label: 'gpt-oss-20b' },
   { value: '@cf/meta/llama-4-scout-17b-16e-instruct', label: 'llama-4-scout-17b' },
   { value: '@cf/zai-org/glm-5.2', label: 'glm-5.2' },
   { value: '@cf/ibm-granite/granite-4.0-h-micro', label: 'granite-4.0-h-micro' },
