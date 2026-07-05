@@ -31,7 +31,7 @@ export function interpretAichatSlashCommand(message: string, now: Date): AichatS
   const subcommand = (parts[1] ?? '').toLowerCase();
 
   if (subcommand === 'hms') {
-    return { handled: true, response: `🕐 現在時刻（JST）: ${formatJstDateTime(now)}` };
+    return { handled: true, response: formatJstDateTime(now) };
   }
 
   return {

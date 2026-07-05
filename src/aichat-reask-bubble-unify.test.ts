@@ -76,7 +76,7 @@ describe('応答バブル共通化: 呼び出し元', () => {
 
   it('チャット送信側も extractRespUsage を使う', () => {
     const html = buildPage();
-    const idx = html.indexOf("appendBubble(responseText, 'assistant', lastModel");
+    const idx = html.indexOf("appendBubble(responseText, 'assistant', isLocalCommand ? null : lastModel");
     expect(idx).toBeGreaterThan(-1);
     const snippet = html.slice(Math.max(0, idx - 400), idx);
     expect(snippet).toContain('extractRespUsage(');
