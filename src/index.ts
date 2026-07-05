@@ -5926,6 +5926,8 @@ app.get('/status', authMiddleware, async (c) => {
   const REQUIRED_COLUMNS: { migration: string; table: string; column: string; sql: string }[] = [
     { migration: '0059', table: 'user_sessions', column: 'revoked_at',           sql: 'ALTER TABLE user_sessions ADD COLUMN revoked_at TEXT;' },
     { migration: '0060', table: 'user_sessions', column: 'idle_timeout_seconds', sql: 'ALTER TABLE user_sessions ADD COLUMN idle_timeout_seconds INTEGER;' },
+    { migration: '0028', table: 'ai_summary_log', column: 'fallback_used',       sql: 'ALTER TABLE ai_summary_log ADD COLUMN fallback_used INTEGER DEFAULT 0;' },
+    { migration: '0028', table: 'ai_summary_log', column: 'primary_model',      sql: 'ALTER TABLE ai_summary_log ADD COLUMN primary_model TEXT;' },
   ];
 
   const data: CacheStatusData = {
