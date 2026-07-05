@@ -1,5 +1,10 @@
 const JST_OFFSET_MS = 9 * 60 * 60 * 1000;
 
+function getJstDateParts(now: Date): { year: number; month: number; day: number } {
+  const jst = new Date(now.getTime() + JST_OFFSET_MS);
+  return { year: jst.getUTCFullYear(), month: jst.getUTCMonth() + 1, day: jst.getUTCDate() };
+}
+
 export function formatJstDateTime(now: Date): string {
   const jst = new Date(now.getTime() + JST_OFFSET_MS);
   const pad = (n: number) => String(n).padStart(2, '0');
@@ -10,6 +15,34 @@ export function formatJstDateTime(now: Date): string {
   const mi = pad(jst.getUTCMinutes());
   const s = pad(jst.getUTCSeconds());
   return `${y}-${mo}-${d} ${h}:${mi}:${s}`;
+}
+
+/**
+ * JST(UTC+9)の当月カレンダーをMarkdownテーブルで組み立てる。今日のマスは太字にする。
+ * 罫線・ツリー文字は使わずMarkdownテーブルで表現する（CLAUDE.mdルール16）。
+ */
+export function formatJstMonthCalendar(now: Date): string {
+  const { year, month, day } = getJstDateParts(now);
+  const firstWeekday = new Date(Date.UTC(year, month - 1, 1)).getUTCDay();
+  const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate();
+
+  const header = '| 日 | 月 | 火 | 水 | 木 | 金 | 土 |';
+  const separator = '|---|---|---|---|---|---|---|';
+  const rows: string[] = [];
+  let cells: string[] = new Array(firstWeekday).fill('');
+  for (let d = 1; d <= daysInMonth; d++) {
+    cells.push(d === day ? `**${d}**` : String(d));
+    if (cells.length === 7) {
+      rows.push('| ' + cells.join(' | ') + ' |');
+      cells = [];
+    }
+  }
+  if (cells.length > 0) {
+    while (cells.length < 7) cells.push('');
+    rows.push('| ' + cells.join(' | ') + ' |');
+  }
+
+  return [`${year}年${month}月`, header, separator, ...rows].join('\n');
 }
 
 export type AichatSlashCommandResult =
@@ -34,8 +67,12 @@ export function interpretAichatSlashCommand(message: string, now: Date): AichatS
     return { handled: true, response: formatJstDateTime(now) };
   }
 
+  if (subcommand === 'cal') {
+    return { handled: true, response: formatJstMonthCalendar(now) };
+  }
+
   return {
     handled: true,
-    response: `❌ 未対応のサブコマンドです: ${subcommand || '(なし)'}\n利用可能なコマンド: /neko hms`,
+    response: `❌ 未対応のサブコマンドです: ${subcommand || '(なし)'}\n利用可能なコマンド: /neko hms, /neko cal`,
   };
 }
