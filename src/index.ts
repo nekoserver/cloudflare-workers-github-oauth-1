@@ -61,7 +61,7 @@ import { extractCfAuthUsername } from './utils/cfAuthAccess';
 import { postSlackMessage, openSlackModal, respondToInteraction } from './utils/slack';
 import { fetchPrDiff, runSummaryPipeline, buildSlackMessage, buildSummaryModal, buildSummaryFallbackBlocks, classifySummaryResult, resolveAiModel, extractDesignDiff, sanitizeBoxDrawing, detectCommitAgentFromText, detectCommitAgentFromPrText, describeModelSwitch, WORKER_BASE_URL, DESIGN_SPEC_CHECKLIST, DEFAULT_AI_MODEL, FALLBACK_AI_MODEL, type SummaryModalRow } from './utils/aiSummary';
 import { getSessionDurationSeconds, renewSession, resolveSessionDuration } from './utils/session';
-import { buildCommitAgentLogEntry } from './utils/commitAgentLog';
+import { buildCommitAgentLogEntry, classifyCommitAgentFetchError } from './utils/commitAgentLog';
 import { verifySlackSignature } from './utils/slackSignature';
 import { handleSlackInteraction, type SlackAiReplyTask } from './utils/slackInteraction';
 import { handleSlackEvent } from './utils/slackEvent';
@@ -7821,6 +7821,7 @@ app.post('/webhook/github', async (c) => {
         let latestCommitMessage: string | null = null;
         let latestCommitAuthorName: string | null = null;
         let latestCommitAuthorEmail: string | null = null;
+        let commitAgentFetchError: unknown = null;
         if (githubToken && pr.commits_url) {
           try {
             const latestCommit = await fetchLatestPrCommitInfo(pr.commits_url, githubToken);
@@ -7837,6 +7838,7 @@ app.post('/webhook/github', async (c) => {
               }
             }
           } catch (error) {
+            commitAgentFetchError = error;
             logger.warn('Failed to fetch PR commits for agent detection', {
               error: error instanceof Error ? error.message : 'Unknown error',
               prUrl,
@@ -8000,6 +8002,32 @@ app.post('/webhook/github', async (c) => {
                 error: feedbackError instanceof Error ? feedbackError.message : 'Unknown error',
                 requestId,
               });
+            }
+
+            // GITHUB_TOKEN失効時などにcommit_agent_logへの記録が静かに止まる問題を防ぐため、
+            // コミット取得の失敗もai_summary_reviewsへ記録しD1から気づけるようにする
+            if (commitAgentFetchError !== null) {
+              const commitFetchDiagnosis = classifyCommitAgentFetchError(commitAgentFetchError);
+              try {
+                await db.prepare(`
+                  INSERT INTO ai_summary_reviews
+                    (summary_request_id, rating, reviewer_type, reviewer_name, review_model, comment, created_at)
+                  VALUES (?, ?, ?, ?, ?, ?, ?)
+                `).bind(
+                  requestId,
+                  commitFetchDiagnosis.rating,
+                  'system',
+                  'auto-diagnosis',
+                  null,
+                  commitFetchDiagnosis.comment,
+                  now.toISOString(),
+                ).run();
+              } catch (commitFetchLogError) {
+                logger.warn('Failed to insert commit-agent fetch diagnosis', {
+                  error: commitFetchLogError instanceof Error ? commitFetchLogError.message : 'Unknown error',
+                  requestId,
+                });
+              }
             }
           } catch (error) {
             logger.error('Failed to insert ai_summary_log', {

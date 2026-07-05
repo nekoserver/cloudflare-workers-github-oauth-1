@@ -70,4 +70,25 @@ describe('POST /webhook/github: pull_request イベントのSlack非依存化', 
     expect(insertIdx).toBeGreaterThan(successIdx);
     expect(webhookBlock).toContain('slackNotified ? 1 : 0');
   });
+
+  it('PRコミット取得(fetchLatestPrCommitInfo)の失敗はcommitAgentFetchErrorに保持される（catchでlogger.warnのみに握りつぶさない）', () => {
+    const catchIdx = webhookBlock.indexOf("logger.warn('Failed to fetch PR commits for agent detection'");
+    expect(catchIdx).toBeGreaterThan(-1);
+    const before = webhookBlock.slice(Math.max(0, catchIdx - 200), catchIdx);
+    expect(before).toContain('commitAgentFetchError = error;');
+  });
+
+  it('commitAgentFetchErrorがある場合、ai_summary_logのINSERTより後にai_summary_reviewsへ診断コメントを記録する（FK違反を避けるため）', () => {
+    const aiSummaryLogInsertIdx = webhookBlock.indexOf('INSERT INTO ai_summary_log');
+    const commitFetchDiagnosisIdx = webhookBlock.indexOf('classifyCommitAgentFetchError(commitAgentFetchError)');
+    expect(aiSummaryLogInsertIdx).toBeGreaterThan(-1);
+    expect(commitFetchDiagnosisIdx).toBeGreaterThan(aiSummaryLogInsertIdx);
+    const block = webhookBlock.slice(commitFetchDiagnosisIdx, commitFetchDiagnosisIdx + 600);
+    expect(block).toContain('INSERT INTO ai_summary_reviews');
+    expect(block).toContain("'auto-diagnosis'");
+  });
+
+  it('commitAgentFetchErrorがnullの場合は診断INSERTを行わない（if (commitAgentFetchError !== null) でガードされている）', () => {
+    expect(webhookBlock).toContain('if (commitAgentFetchError !== null) {');
+  });
 });
