@@ -40,7 +40,7 @@ canvas:active { cursor:grabbing; }
 .hud { position:absolute; bottom:10px; left:10px; background:rgba(0,0,0,.7); border:1px solid #30363d; border-radius:6px; padding:6px 10px; font-size:11px; font-family:monospace; color:#58a6ff; line-height:1.9; pointer-events:none; }
 #markers { position:absolute; top:0; left:0; width:100%; height:100%; pointer-events:none; overflow:hidden; }
 .mk { position:absolute; transform:translate(-50%,-50%); line-height:1; font-size:16px; text-shadow:0 1px 3px #000,0 0 8px rgba(0,0,0,0.9); pointer-events:auto; cursor:pointer; user-select:none; -webkit-user-select:none; }
-#mk-tooltip { position:fixed; background:rgba(13,17,23,0.97); border:1px solid #3fb950; border-radius:8px; padding:7px 12px; font-size:12px; color:#e6edf3; white-space:normal; min-width:180px; pointer-events:auto; opacity:0; transition:opacity .15s; z-index:60; transform:translate(-50%,-110%); line-height:1.7; }
+#mk-tooltip { position:fixed; background:rgba(13,17,23,0.97); border:1px solid #3fb950; border-radius:8px; padding:7px 12px; font-size:12px; color:#e6edf3; white-space:normal; min-width:180px; pointer-events:auto; opacity:0; transition:opacity .15s; z-index:10000; transform:translate(-50%,-110%); line-height:1.7; }
 .tt-name { white-space:nowrap; font-weight:700; font-size:13px; }
 .tt-sub { white-space:nowrap; font-size:12px; margin-top:3px; }
 #mk-tooltip.below { transform:translate(-50%, 14px); }
@@ -174,6 +174,11 @@ canvas:active { cursor:grabbing; }
 .f1-side-date { display:block; font-size:10px; color:#8b949e; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; margin-top:2px; }
 @keyframes f1-flash { 0%,100%{outline:2px solid transparent} 50%{outline:2px solid #ffd700} }
 .f1-side-item.f1-flash { animation:f1-flash 0.5s ease-in-out 3; }
+#area-tour-side.collapsed { bottom:auto; max-height:calc(45px + (35px * 3)); overflow:hidden; }
+#area-tour-side.collapsed .f1-side-body { max-height:calc(35px * 3); overflow:hidden; flex:none; }
+#area-tour-side.collapsed .f1-side-item:nth-child(n+4) { display:none; }
+.area-tour-collapse { background:#161b22; border:1px solid #30363d; border-radius:6px; color:#8b949e; font-size:12px; cursor:pointer; padding:2px 7px; line-height:1.4; }
+.area-tour-collapse:hover { border-color:#3fb950; color:#3fb950; }
 @keyframes area-tour-flash { 0%,100%{outline:2px solid transparent} 40%{outline:2px solid #ffd700} 70%{outline:2px solid rgba(255,215,0,0.4)} }
 .f1-side-item.area-tour-flash { animation:area-tour-flash 0.65s ease-in-out 2; }
 .f1-cal { padding:10px 12px; border-bottom:1px solid #21262d; flex-shrink:0; }
@@ -360,6 +365,7 @@ void main() {
   <div id="area-tour-side" class="f1-side">
     <div class="f1-side-head">
       <span class="f1-side-title" id="area-tour-side-title">📍 エリア巡回</span>
+      <button class="area-tour-collapse" id="area-tour-side-collapse" aria-label="巡回サイドパネルを折りたたむ" title="折りたたむ">⌃</button>
       <button class="f1-side-close" id="area-tour-side-close">✕</button>
     </div>
     <div class="f1-side-body" id="area-tour-side-body"></div>
@@ -904,6 +910,7 @@ void main() {
       return '<div class="f1-side-item" data-idx="' + i + '"><span class="f1-side-flag">' + kind.icon + '</span><span class="f1-side-info"><span class="f1-side-circuit">' + kind.itemLabel(item) + '</span></span></div>';
     }).join('');
     areaTourSide.classList.add('open');
+    updateAreaTourCollapseButton();
     fitAreaTourSideWidth(kind, items);
   }
 
@@ -2405,6 +2412,21 @@ void main() {
   var areaTourSide = document.getElementById('area-tour-side');
   var areaTourSideBody = document.getElementById('area-tour-side-body');
   var areaTourSideTitle = document.getElementById('area-tour-side-title');
+  var areaTourSideCollapse = document.getElementById('area-tour-side-collapse');
+  function updateAreaTourCollapseButton() {
+    if (!areaTourSideCollapse || !areaTourSide) return;
+    var collapsed = areaTourSide.classList.contains('collapsed');
+    areaTourSideCollapse.textContent = collapsed ? '⌄' : '⌃';
+    areaTourSideCollapse.title = collapsed ? '展開する' : '折りたたむ';
+    areaTourSideCollapse.setAttribute('aria-label', collapsed ? '巡回サイドパネルを展開する' : '巡回サイドパネルを折りたたむ');
+  }
+  if (areaTourSideCollapse) {
+    areaTourSideCollapse.addEventListener('click', function(e) {
+      e.stopPropagation();
+      areaTourSide.classList.toggle('collapsed');
+      updateAreaTourCollapseButton();
+    });
+  }
   document.getElementById('area-tour-side-close').addEventListener('click', function() { areaTourSide.classList.remove('open'); });
   var railTourLineIdx = -1;
   var railTourStationIdx = -1;
