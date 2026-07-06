@@ -131,6 +131,50 @@ describe('getWebGLHeritagePage 鉄道路線機能', () => {
     expect(lineTotalKm(doha)).toBeLessThan(60);
   });
 
+  it('オーストリアのゼメリング鉄道とチェコ鉄道の始発から終着までの駅が含まれる', () => {
+    const lines = extractRailLines(html);
+    const semmering = lines.find((l) => l.name === 'ゼメリング鉄道(グログニッツ～ミュルツツーシュラーク)');
+    expect(semmering).toBeDefined();
+    expect(semmering!.flag).toBe('🇦🇹');
+    expect(semmering!.country).toBe('オーストリア');
+    expect(semmering!.stations.map((s) => s.name)).toEqual([
+      'グログニッツ駅',
+      'シュレグルミュール駅',
+      'パイアーバッハ＝ライヒェナウ駅',
+      'キューブ駅',
+      'アイヒベルク駅',
+      'クラム＝ショットヴィーン駅',
+      'ブライテンシュタイン駅',
+      'ヴォルフスベルクコーゲル駅',
+      'ゼメリング駅',
+      'シュタインハウス・アム・ゼメリング駅',
+      'シュピタル・アム・ゼメリング駅',
+      'ミュルツツーシュラーク駅',
+    ]);
+    expect(semmering!.stations[0]).toMatchObject({ lat: 47.675, lon: 15.936 });
+    expect(semmering!.stations.at(-1)).toMatchObject({ lat: 47.606, lon: 15.672 });
+
+    const czech = lines.find((l) => l.name === 'チェコ鉄道(プラハ～チェスキー・クルムロフ)');
+    expect(czech).toBeDefined();
+    expect(czech!.flag).toBe('🇨🇿');
+    expect(czech!.country).toBe('チェコ');
+    expect(czech!.stations.map((s) => s.name)).toEqual([
+      'プラハ本駅',
+      'プラハ・ヴルショヴィツェ駅',
+      'ベネショフ・ウ・プラヒ駅',
+      'オルブラモヴィツェ駅',
+      'ターボル駅',
+      'ヴェセリー・ナド・ルジニチー駅',
+      'チェスケー・ブジェヨヴィツェ駅',
+      'ボルショフ・ナド・ヴルタヴォウ駅',
+      'クシェムジェ駅',
+      'ズラター・コルナ駅',
+      'チェスキー・クルムロフ駅',
+    ]);
+    expect(czech!.stations[0]).toMatchObject({ lat: 50.083, lon: 14.436 });
+    expect(czech!.stations.at(-1)).toMatchObject({ lat: 48.817, lon: 14.317 });
+  });
+
   it('駅名の先頭に近隣都市キャッシュ済みなら🚉アイコンを表示し、タップでキャッシュを取得する', () => {
     expect(html).toContain("var hasStationDataSet = {}");
     expect(html).toContain("fetch('/api/rail-station-fetched-list')");
