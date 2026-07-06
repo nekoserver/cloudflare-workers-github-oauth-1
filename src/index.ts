@@ -10080,7 +10080,7 @@ async function handleResendWebhookCore(
     }
   }
 
-  if (proxyFailed) {
+  if (proxyFailed && eventType !== 'email.delivered') {
     return c.json({ error: 'Failed to notify proxy target' }, 502);
   }
 

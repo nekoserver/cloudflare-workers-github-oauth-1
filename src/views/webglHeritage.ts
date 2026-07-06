@@ -754,7 +754,7 @@ void main() {
   var boxZoomOverlay = document.getElementById('box-select-overlay');
   var bx0 = 0, by0 = 0, bxCur = 0, byCur = 0, boxDragging = false;
   var btnBoxZoom = document.getElementById('btnBoxZoom');
-  var lastBoxBounds = null, areaMenuEl = null, areaTourTimer = null, areaTourIdx = 0, areaTourRunning = false, areaTourKind = null;
+  var lastBoxBounds = null, areaMenuEl = null, areaTourTimer = null, areaTourIdx = 0, areaTourRunning = false, areaTourKind = null, areaTourCursorY = null;
 
   btnBoxZoom.addEventListener('click', function() {
     boxZoomMode = !boxZoomMode;
@@ -916,6 +916,28 @@ void main() {
 
   var AREA_TOUR_FLASH_MS = 1300;
 
+  function getAreaTourTargetY() {
+    if (!areaTourSideBody) return null;
+    var panelRect = areaTourSideBody.getBoundingClientRect();
+    if (!panelRect.height) return null;
+    var y = typeof areaTourCursorY === 'number' ? areaTourCursorY : (panelRect.top + panelRect.height * 0.35);
+    var minY = panelRect.top + 18;
+    var maxY = panelRect.bottom - 18;
+    return Math.max(minY, Math.min(maxY, y)) - panelRect.top;
+  }
+
+  function scrollAreaTourItemToCursor(idx) {
+    if (!areaTourSideBody) return;
+    var el = areaTourSideBody.querySelector('.f1-side-item[data-idx="' + idx + '"]');
+    if (!el) return;
+    var targetY = getAreaTourTargetY();
+    if (targetY === null) { el.scrollIntoView({ block: 'center', behavior: 'smooth' }); return; }
+    var maxScroll = Math.max(0, areaTourSideBody.scrollHeight - areaTourSideBody.clientHeight);
+    var rowCenter = el.offsetTop + el.offsetHeight / 2;
+    var nextScrollTop = Math.max(0, Math.min(maxScroll, rowCenter - targetY));
+    areaTourSideBody.scrollTo({ top: nextScrollTop, behavior: 'smooth' });
+  }
+
   function flashAreaTourSideItem(idx) {
     if (!areaTourSideBody) return;
     // F1側パネル(focusF1Circuit)と同じ .active クラスを使い、現在の巡回先の行の背景色を
@@ -925,7 +947,7 @@ void main() {
     });
     var el = areaTourSideBody.querySelector('.f1-side-item[data-idx="' + idx + '"]');
     if (!el) return;
-    el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    scrollAreaTourItemToCursor(idx);
     el.classList.remove('area-tour-flash');
     void el.offsetWidth;
     el.classList.add('area-tour-flash');
@@ -983,6 +1005,12 @@ void main() {
   function showAreaMenu() {
     if (!areaMenuEl) { areaMenuEl = document.createElement('div'); areaMenuEl.style.cssText = 'position:absolute;right:10px;top:50%;transform:translateY(-50%);background:rgba(13,17,23,0.94);border:1px solid #30363d;border-radius:9px;padding:10px 12px;z-index:55;width:190px;box-shadow:0 4px 16px rgba(0,0,0,0.6);'; wrap.appendChild(areaMenuEl); }
     areaMenuEl.style.display = 'block';
+    if (typeof areaTourCursorY === 'number') {
+      var wrapRect = wrap.getBoundingClientRect();
+      var menuTop = Math.max(10, Math.min(wrapRect.height - areaMenuEl.offsetHeight - 10, areaTourCursorY - wrapRect.top - areaMenuEl.offsetHeight));
+      areaMenuEl.style.top = menuTop + 'px';
+      areaMenuEl.style.transform = 'none';
+    }
     renderAreaMenu();
   }
   function startAreaTour(kind) {
@@ -1023,6 +1051,7 @@ void main() {
     var ctr = screenToLatLon((bx0 + ex) / 2, (by0 + ey) / 2, rect);
     if (!ctr) { boxZoomOverlay.style.display = 'none'; return; }
     bxCur = ex; byCur = ey;
+    areaTourCursorY = ey;
     updateBoxOverlay();
     var c0 = screenToLatLon(Math.min(bx0, ex), Math.min(by0, ey), rect);
     var c1 = screenToLatLon(Math.max(bx0, ex), Math.max(by0, ey), rect);
