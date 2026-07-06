@@ -791,6 +791,32 @@ void main() {
 
   // エリア内絞り込み・巡回ロジックの汎用化: アイコン種別ごとに個別実装せず、
   // AREA_KINDS の設定（データ取得・座標取得・ツールチップ描画）を areaTourStep 等の共通関数へ渡す方式にする。
+  function projectAreaPointToScreen(lat, lon) {
+    var p = latLonTo3D(lat, lon);
+    var mz = model[2]*p[0] + model[6]*p[1] + model[10]*p[2];
+    if (mz <= 0.05) return null;
+    var cx = mvp[0]*p[0] + mvp[4]*p[1] + mvp[8]*p[2]  + mvp[12];
+    var cy = mvp[1]*p[0] + mvp[5]*p[1] + mvp[9]*p[2]  + mvp[13];
+    var cw = mvp[3]*p[0] + mvp[7]*p[1] + mvp[11]*p[2] + mvp[15];
+    if (cw <= 0) return null;
+    return { x: canvasRect.left + (cx/cw+1)*0.5*canvas.width, y: canvasRect.top + (1-cy/cw)*0.5*canvas.height };
+  }
+  function getAreaScreenRect(b) {
+    if (!b || !b.corner0 || !b.corner1) return null;
+    var s0 = projectAreaPointToScreen(b.corner0.lat, b.corner0.lon);
+    var s1 = projectAreaPointToScreen(b.corner1.lat, b.corner1.lon);
+    if (!s0 || !s1) return null;
+    return {
+      left: Math.min(s0.x, s1.x), right: Math.max(s0.x, s1.x),
+      top: Math.min(s0.y, s1.y), bottom: Math.max(s0.y, s1.y)
+    };
+  }
+  function inAreaScreenBounds(lat, lon, b) {
+    var screenRect = getAreaScreenRect(b);
+    var screen = projectAreaPointToScreen(lat, lon);
+    if (!screenRect || !screen) return false;
+    return screen.x >= screenRect.left && screen.x <= screenRect.right && screen.y >= screenRect.top && screen.y <= screenRect.bottom;
+  }
   function inAreaBounds(lat, lon, b) {
     if (b.lonCross) return lat >= b.latMin && lat <= b.latMax && (lon >= b.lonMin || lon <= b.lonMax);
     return lat >= b.latMin && lat <= b.latMax && lon >= b.lonMin && lon <= b.lonMax;
@@ -798,7 +824,7 @@ void main() {
   function filterInBounds(list, getLatLon) {
     if (!lastBoxBounds) return [];
     var b = lastBoxBounds;
-    return list.filter(function(item) { var p = getLatLon(item); return inAreaBounds(p[0], p[1], b); });
+    return list.filter(function(item) { var p = getLatLon(item); return inAreaBounds(p[0], p[1], b) && inAreaScreenBounds(p[0], p[1], b); });
   }
   function getHeritagesInBounds() { return filterInBounds(HERITAGE, function(d) { return [d.lat, d.lon]; }); }
   function getStationsInBounds() {
@@ -807,7 +833,7 @@ void main() {
     RAIL_LINES.forEach(function(line) {
       line.stations.forEach(function(st) {
         if (seenNames[st.name]) return;
-        if (inAreaBounds(st.lat, st.lon, b)) { result.push({ st: st, line: line }); seenNames[st.name] = true; }
+        if (inAreaBounds(st.lat, st.lon, b) && inAreaScreenBounds(st.lat, st.lon, b)) { result.push({ st: st, line: line }); seenNames[st.name] = true; }
       });
     });
     return result;
