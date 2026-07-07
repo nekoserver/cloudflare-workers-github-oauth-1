@@ -1212,7 +1212,22 @@ input[type=range] { accent-color:#fdb813; width:120px; }
     { name: 'ミモサ', color: '#9bc4ff', ox: 565, oy: 555, fact: '南十字座β星。南十字の右腕に位置する青白色巨星です。距離は約280光年' },
     { name: 'ガクルックス', color: '#ff7755', ox: 460, oy: 490, fact: '南十字座γ星・頂点の星。南十字の最北端に位置する赤色巨星。距離は約88光年' },
     { name: 'デルタクルキス', color: '#aac8ff', ox: 360, oy: 565, fact: '南十字座δ星。南十字の左腕に位置する青色巨星です。距離は約364光年' },
-    { name: 'プレアデス星団', color: '#99bbff', ox: -390, oy: -480, fact: 'おうし座の散開星団（M45・昴）。七姉妹とも呼ばれる。約445光年先にある約1000個の星の集団。肉眼で6〜7個の星が識別でき、日本では「すばる」として古来親しまれてきました', isCluster: true, isPleiades: true }
+    { name: 'プレアデス星団', color: '#99bbff', ox: -390, oy: -480, fact: 'おうし座の散開星団（M45・昴）。七姉妹とも呼ばれる。約445光年先にある約1000個の星の集団。肉眼で6〜7個の星が識別でき、日本では「すばる」として古来親しまれてきました', isCluster: true, isPleiades: true },
+    { name: 'レグルス', color: '#c8dcff', ox: -760, oy: 30, fact: 'しし座α星。黄道に近い一等星で「小さな王」を意味する名を持ちます' },
+    { name: 'シェラタン', color: '#fff0cc', ox: -210, oy: -230, fact: 'おひつじ座β星。ハマルと並び、おひつじ座の頭部を形づくる星です' },
+    { name: 'ハマル', color: '#ffd28a', ox: -300, oy: -260, fact: 'おひつじ座α星。おひつじ座で最も明るいオレンジ色巨星です' },
+    { name: 'メサルティム', color: '#e8f0ff', ox: -150, oy: -180, fact: 'おひつじ座γ星。古くから知られる二重星で、おひつじ座の星座線を結びます' },
+    { name: 'アルレシャ', color: '#d8e8ff', ox: 150, oy: -330, fact: 'うお座α星。2匹の魚を結ぶ結び目にあたる二重星です' },
+    { name: 'フム・アル・サマカー', color: '#f0f4ff', ox: 270, oy: -430, fact: 'うお座β星。うお座の西側の魚をたどる目印の星です' },
+    { name: 'トルクラー', color: '#fff2d0', ox: 260, oy: -190, fact: 'うお座ο星。うお座のゆるやかな星座線上にある星です' },
+    { name: 'エルナト', color: '#d5e8ff', ox: -520, oy: -420, fact: 'おうし座β星。おうし座の角の先に輝く青白い星です' },
+    { name: 'ゼータ・タウリ', color: '#bcd8ff', ox: -700, oy: -250, fact: 'おうし座ζ星。おうし座のもう一方の角の先にあたる星です' }
+  ];
+
+  var constellationLines = [
+    { name: 'おうし座', color: 'rgba(255,170,90,0.48)', points: [[-390, -480], [-600, -320], [-520, -420], [-600, -320], [-700, -250]], label: [-610, -430] },
+    { name: 'おひつじ座', color: 'rgba(255,210,130,0.48)', points: [[-300, -260], [-210, -230], [-150, -180]], label: [-265, -205] },
+    { name: 'うお座', color: 'rgba(150,200,255,0.45)', points: [[150, -330], [270, -430], [150, -330], [260, -190], [60, -120], [-120, -90], [-210, -230]], label: [120, -250] }
   ];
 
   var stars = [];
@@ -1513,6 +1528,32 @@ input[type=range] { accent-color:#fdb813; width:120px; }
     }
 
     var sc = scale || 1;
+
+    if (showConstellations) {
+      for (var cli = 0; cli < constellationLines.length; cli++) {
+        var line = constellationLines[cli];
+        ctx.save();
+        ctx.strokeStyle = line.color;
+        ctx.lineWidth = 1.4;
+        ctx.setLineDash([6, 5]);
+        ctx.beginPath();
+        for (var cpi = 0; cpi < line.points.length; cpi++) {
+          var lp = line.points[cpi];
+          var lpx = cx + lp[0] * sc;
+          var lpy = cy + lp[1] * sc;
+          if (cpi === 0) ctx.moveTo(lpx, lpy);
+          else ctx.lineTo(lpx, lpy);
+        }
+        ctx.stroke();
+        ctx.setLineDash([]);
+        if (showStarLabels) {
+          ctx.font = '12px sans-serif';
+          ctx.fillStyle = line.color.replace(/0\.4[58]/, '0.85');
+          ctx.fillText(line.name, cx + line.label[0] * sc, cy + line.label[1] * sc);
+        }
+        ctx.restore();
+      }
+    }
 
     for (var ni = 0; ni < namedStars.length; ni++) {
       var ns = namedStars[ni];
