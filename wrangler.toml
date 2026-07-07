@@ -3,6 +3,12 @@ main = "src/index.ts"
 compatibility_date = "2024-11-17"
 assets = { directory = "./public" }
 
+# 本番で Cloudflare DNS 上のサブドメインを Workers Route として使う場合の例。
+# GitHub OAuth/App 側の callback/setup/webhook/homepage URL も同じホストへ統一する。
+# routes = [
+#   { pattern = "1.cfw1.nekomaneki.work/*", zone_name = "nekomaneki.work" }
+# ]
+
 # 環境変数（本番環境ではwrangler secretを使用）
 [vars]
 ENVIRONMENT = "development"
