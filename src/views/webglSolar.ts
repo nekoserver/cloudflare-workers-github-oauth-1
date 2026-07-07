@@ -194,8 +194,8 @@ input[type=range] { accent-color:#fdb813; width:120px; }
     if (mode !== 'today') weekReplayActive = false;
     if (mode === 'today' && skyViewMode !== 'today') {
       var jdNow = todayJD();
-      var sLonNow = sunLonReal(jdNow);
-      viewAngle = sLonNow * Math.PI / 180;
+      var sLonNow = sunLonReal(jdNow) * Math.PI / 180;
+      viewAngle = eclipticToEquatorial(sLonNow, 0).ra;
       viewElev = 0.18;
       fovH = Math.PI * 0.7;
     }
@@ -404,7 +404,7 @@ input[type=range] { accent-color:#fdb813; width:120px; }
       var started = false;
       for (var sii = 0; sii < scl.indices.length; sii++) {
         var sidx = scl.indices[sii];
-        var spp = projectSky(starLon[sidx], starLat[sidx]);
+        var spp = projectEclipticSky(starLon[sidx], starLat[sidx]);
         if (!spp) { started = false; continue; }
         if (!labelPos) labelPos = spp;
         if (!started) { ctx.moveTo(spp.x, spp.y); started = true; }
@@ -453,6 +453,27 @@ input[type=range] { accent-color:#fdb813; width:120px; }
     var lon = normD(L + 6.289*Math.sin(Mm) + 1.274*Math.sin(2*F-Mm));
     var lat = 5.128*Math.sin(F) + 0.2806*Math.sin(Mm+F);
     return { lon: lon*Math.PI/180, lat: lat*Math.PI/180 };
+  }
+
+
+  var earthObliquity = 23.43928 * Math.PI / 180;
+  function eclipticVector(lon, lat) {
+    var cb = Math.cos(lat), sb = Math.sin(lat);
+    var cl = Math.cos(lon), sl = Math.sin(lon);
+    var ce = Math.cos(earthObliquity), se = Math.sin(earthObliquity);
+    return {
+      x: cb * cl,
+      y: cb * sl * ce - sb * se,
+      z: cb * sl * se + sb * ce
+    };
+  }
+  function eclipticToEquatorial(lon, lat) {
+    var v = eclipticVector(lon, lat);
+    return { ra: Math.atan2(v.y, v.x), dec: Math.asin(Math.max(-1, Math.min(1, v.z))) };
+  }
+  function projectEclipticSky(lon, lat) {
+    var v = eclipticVector(lon, lat);
+    return project3D(v.x, v.y, v.z);
   }
 
   function drawGrid() {
@@ -534,7 +555,7 @@ input[type=range] { accent-color:#fdb813; width:120px; }
     starScreenPos = [];
     for (var ni5 = 0; ni5 < namedStars.length; ni5++) {
       var ns5 = namedStars[ni5];
-      var np5 = projectSky(starLon[ni5], starLat[ni5]);
+      var np5 = projectEclipticSky(starLon[ni5], starLat[ni5]);
       if (!np5) continue;
       if (ns5.isPleiades) { drawPleiadesCluster(np5.x, np5.y, ns5.color); } else if (ns5.isCluster) { drawCluster(np5.x, np5.y, ns5.color); } else { ctx.beginPath(); ctx.arc(np5.x, np5.y, 4, 0, Math.PI*2); ctx.fillStyle = ns5.color; ctx.fill(); }
       if (showStarLabels) { ctx.font = '10px sans-serif'; ctx.fillStyle = ns5.color; ctx.fillText(ns5.name, np5.x+8, np5.y+3); }
@@ -557,7 +578,7 @@ input[type=range] { accent-color:#fdb813; width:120px; }
       }
       ctx.setLineDash([]);
     }
-    var sunPos5 = projectSky(sLonR, 0);
+    var sunPos5 = projectEclipticSky(sLonR, 0);
     if (sunPos5) {
       drawGlow(sunPos5.x, sunPos5.y, 32, '#fdb813');
       var sg5 = ctx.createRadialGradient(sunPos5.x-6, sunPos5.y-6, 3, sunPos5.x, sunPos5.y, 30);
@@ -570,7 +591,7 @@ input[type=range] { accent-color:#fdb813; width:120px; }
       var rp = realPlanets[rpi];
       var rLon = geoLonDeg(rp.h.x, rp.h.y, ePos.x, ePos.y);
       var rLonR = rLon * Math.PI / 180;
-      var rpPos = projectSky(rLonR, 0);
+      var rpPos = projectEclipticSky(rLonR, 0);
       if (!rpPos) continue;
       var rElonga = Math.abs(normD(rLon - sLon));
       if (rElonga > 180) rElonga = 360 - rElonga;
@@ -580,7 +601,7 @@ input[type=range] { accent-color:#fdb813; width:120px; }
       if (showPlanetLabels) { ctx.font = '11px sans-serif'; ctx.fillStyle = '#c9d1d9'; ctx.fillText(rp.jaName, rpPos.x+10, rpPos.y+4); }
       planetScreenPos.push({ x: rpPos.x, y: rpPos.y, item: { name: rp.jaName, type: '惑星', fact: rp.fact } });
     }
-    var moonPosT = projectSky(mll.lon, mll.lat);
+    var moonPosT = projectEclipticSky(mll.lon, mll.lat);
     if (moonPosT) {
       var mPhaseT = ((mll.lon - sLonR) % (Math.PI*2) + Math.PI*2) % (Math.PI*2);
       drawMoonPhase(moonPosT.x, moonPosT.y, 16, mPhaseT / (Math.PI*2));
@@ -597,7 +618,7 @@ input[type=range] { accent-color:#fdb813; width:120px; }
     var mn2s = pad2(mn2);
     ctx.font = '12px sans-serif'; ctx.fillStyle = 'rgba(100,220,255,0.8)';
     var replayText = weekReplayActive ? '  今日から7日後まで再現中' : '';
-    ctx.fillText('🌟 今日の空  ' + yy2 + '/' + mm2 + '/' + dd2 + ' ' + pad2(hh2) + ':' + mn2s + replayText + '  ドラッグ:視点回転', 10, 28);
+    ctx.fillText('🌟 今日の空  ' + yy2 + '/' + mm2 + '/' + dd2 + ' ' + pad2(hh2) + ':' + mn2s + replayText + '  地軸傾き23.4°反映  ドラッグ:視点回転', 10, 28);
   }
 
   function drawPoleView() {
