@@ -861,6 +861,19 @@ void main() {
 
   // エリア内絞り込み・巡回ロジックの汎用化: アイコン種別ごとに個別実装せず、
   // AREA_KINDS の設定（データ取得・座標取得・ツールチップ描画）を areaTourStep 等の共通関数へ渡す方式にする。
+  function refreshAreaProjectionForCurrentZoom() {
+    // エリアズーム直後は次フレームの render() 前にメニューを再描画することがあるため、
+    // 現在の zoom/回転値を明示的に mvp に反映してから各カテゴリの枠内判定を行う。
+    var W = canvas.width || canvasRect.width || 1;
+    var H = canvas.height || canvasRect.height || 1;
+    persp(proj, Math.PI / 4, W / H, 0.1, 100);
+    trans(view, 0, 0, -zoom);
+    rotY(ry, rotYv); rotZ(tz, axialTilt); rotX(rx, rotXv);
+    mul(tmp2, tz, ry);
+    mul(model, rx, tmp2);
+    mul(tmp, view, model);
+    mul(mvp, proj, tmp);
+  }
   function projectAreaPointToScreen(lat, lon) {
     var p = latLonTo3D(lat, lon);
     var mz = model[2]*p[0] + model[6]*p[1] + model[10]*p[2];
@@ -891,14 +904,19 @@ void main() {
     if (b.lonCross) return lat >= b.latMin && lat <= b.latMax && (lon >= b.lonMin || lon <= b.lonMax);
     return lat >= b.latMin && lat <= b.latMax && lon >= b.lonMin && lon <= b.lonMax;
   }
+  function isPointInSelectedArea(lat, lon, b) {
+    return inAreaBounds(lat, lon, b) && inAreaScreenBounds(lat, lon, b);
+  }
   function filterInBounds(list, getLatLon) {
     if (!lastBoxBounds) return [];
+    refreshAreaProjectionForCurrentZoom();
     var b = lastBoxBounds;
     return list.filter(function(item) { var p = getLatLon(item); return inAreaBounds(p[0], p[1], b) && inAreaScreenBounds(p[0], p[1], b); });
   }
   function getHeritagesInBounds() { return filterInBounds(HERITAGE, function(d) { return [d.lat, d.lon]; }); }
   function getStationsInBounds() {
     if (!lastBoxBounds) return [];
+    refreshAreaProjectionForCurrentZoom();
     var b = lastBoxBounds, result = [], seenNames = {};
     RAIL_LINES.forEach(function(line) {
       line.stations.forEach(function(st) {
@@ -925,6 +943,7 @@ void main() {
       key: 'heritage', icon: '🏛️', label: '世界遺産', color: '#3fb950', bg: '#0c2d1a',
       getItems: function() { return getHeritagesInBounds(); },
       locate: function(d) { return [d.lat, d.lon]; },
+      itemIcon: function(d) { return d.e; },
       itemLabel: function(d) { return d.f + ' ' + d.n; },
       showTooltip: function(d) { showMarkerTooltip(HERITAGE.indexOf(d), 0, 0); }
     },
@@ -987,7 +1006,8 @@ void main() {
     items.forEach(function(item) {
       var row = document.createElement('div');
       row.className = 'f1-side-item';
-      row.innerHTML = '<span class="f1-side-flag">' + kind.icon + '</span><span class="f1-side-info" style="overflow:visible"><span class="f1-side-circuit" style="white-space:nowrap;overflow:visible;display:inline-block">' + kind.itemLabel(item) + '</span></span>';
+      var itemIcon = kind.itemIcon ? kind.itemIcon(item) : kind.icon;
+      row.innerHTML = '<span class="f1-side-flag">' + itemIcon + '</span><span class="f1-side-info" style="overflow:visible"><span class="f1-side-circuit" style="white-space:nowrap;overflow:visible;display:inline-block">' + kind.itemLabel(item) + '</span></span>';
       probe.appendChild(row);
     });
     document.body.appendChild(probe);
@@ -1003,7 +1023,8 @@ void main() {
     if (!areaTourSide) return;
     areaTourSideTitle.textContent = kind.icon + ' ' + kind.label + ' 巡回先';
     areaTourSideBody.innerHTML = items.map(function(item, i) {
-      return '<div class="f1-side-item" data-idx="' + i + '"><span class="f1-side-flag">' + kind.icon + '</span><span class="f1-side-info"><span class="f1-side-circuit">' + kind.itemLabel(item) + '</span></span></div>';
+      var itemIcon = kind.itemIcon ? kind.itemIcon(item) : kind.icon;
+      return '<div class="f1-side-item" data-idx="' + i + '"><span class="f1-side-flag">' + itemIcon + '</span><span class="f1-side-info"><span class="f1-side-circuit">' + kind.itemLabel(item) + '</span></span></div>';
     }).join('');
     areaTourSide.classList.add('open');
     updateAreaTourCollapseButton();
