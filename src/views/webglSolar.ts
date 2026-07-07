@@ -41,7 +41,8 @@ input[type=range] { accent-color:#fdb813; width:120px; }
 .cal-day { border:1px solid rgba(255,255,255,.08); border-radius:4px; padding:4px 0; color:#c9d1d9; background:rgba(255,255,255,.03); }
 .cal-day.empty { border-color:transparent; background:transparent; }
 .cal-day.today { border-color:#fdb813; color:#fdb813; background:rgba(253,184,19,.14); font-weight:700; }
-#btnWeekReplay { width:100%; margin-top:10px; }
+.calendar-actions { display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-top:10px; }
+.calendar-actions .btn { width:100%; padding-left:6px; padding-right:6px; }
 </style>
 </head>
 <body>
@@ -75,7 +76,10 @@ input[type=range] { accent-color:#fdb813; width:120px; }
     <div id="calendarPanel" role="dialog" aria-label="今月のカレンダー">
       <div class="cal-title" id="calTitle"></div>
       <div class="cal-grid" id="calGrid"></div>
-      <button class="btn" id="btnWeekReplay">今日から7日間</button>
+      <div class="calendar-actions">
+        <button class="btn" id="btnWeekReplay">今日から7日間</button>
+        <button class="btn" id="btnTwoWeekReplay">今日から2週間</button>
+      </div>
     </div>
   </div>
   <button class="btn" id="btnPole">🧭 地軸固定</button>
@@ -105,6 +109,7 @@ input[type=range] { accent-color:#fdb813; width:120px; }
   var calTitle = document.getElementById('calTitle');
   var calGrid = document.getElementById('calGrid');
   var btnWeekReplay = document.getElementById('btnWeekReplay');
+  var btnTwoWeekReplay = document.getElementById('btnTwoWeekReplay');
   var btnToday = document.getElementById('btnToday');
   var btnPole = document.getElementById('btnPole');
   var btnSpin = document.getElementById('btnSpin');
@@ -143,6 +148,7 @@ input[type=range] { accent-color:#fdb813; width:120px; }
   var weekReplayJD = 0;
   var weekReplayElapsed = 0;
   var weekReplayDuration = 18;
+  var weekReplayDays = 7;
 
   btnOrbits.addEventListener('click', function() {
     showOrbits = !showOrbits;
@@ -247,7 +253,8 @@ input[type=range] { accent-color:#fdb813; width:120px; }
     }
   }
 
-  function startWeekReplay() {
+  function startWeekReplay(days) {
+    weekReplayDays = days;
     weekReplayStartJD = todayJD();
     weekReplayJD = weekReplayStartJD;
     weekReplayElapsed = 0;
@@ -263,7 +270,8 @@ input[type=range] { accent-color:#fdb813; width:120px; }
     calendarPanel.classList.toggle('open', open);
     btnCalendar.setAttribute('aria-expanded', open ? 'true' : 'false');
   });
-  btnWeekReplay.addEventListener('click', startWeekReplay);
+  btnWeekReplay.addEventListener('click', function() { startWeekReplay(7); });
+  btnTwoWeekReplay.addEventListener('click', function() { startWeekReplay(14); });
   btnEarth.addEventListener('click', function() { setSkyMode('earth'); });
   btnMoon.addEventListener('click', function() { setSkyMode('moon'); });
   btnISS.addEventListener('click', function() { setSkyMode('iss'); });
@@ -448,10 +456,23 @@ input[type=range] { accent-color:#fdb813; width:120px; }
   function moonLonLat(jd) {
     var n = jd - 2451545.0;
     var L = normD(218.3165 + 13.1763966*n);
+    var D  = normD(297.8502 + 12.1907491*n) * Math.PI / 180;
     var Mm = normD(134.9634 + 13.0649929*n) * Math.PI / 180;
+    var Ms = normD(357.5291 + 0.9856003*n) * Math.PI / 180;
     var F  = normD( 93.2721 + 13.2293505*n) * Math.PI / 180;
-    var lon = normD(L + 6.289*Math.sin(Mm) + 1.274*Math.sin(2*F-Mm));
-    var lat = 5.128*Math.sin(F) + 0.2806*Math.sin(Mm+F);
+    // 月の黄経は太陽からの平均離角 D を主項に使う。
+    // ここを昇交点引数 F で代用すると、満月へ向かう位相なのに月が太陽手前を
+    // 横切るように描かれることがあるため、簡易章動項も含めて黄経と位相を整合させる。
+    var lon = normD(L
+      + 6.289*Math.sin(Mm)
+      + 1.274*Math.sin(2*D-Mm)
+      + 0.658*Math.sin(2*D)
+      + 0.214*Math.sin(2*Mm)
+      - 0.186*Math.sin(Ms));
+    var lat = 5.128*Math.sin(F)
+      + 0.2806*Math.sin(Mm+F)
+      + 0.2777*Math.sin(Mm-F)
+      + 0.1732*Math.sin(2*D-F);
     return { lon: lon*Math.PI/180, lat: lat*Math.PI/180 };
   }
 
@@ -620,7 +641,7 @@ input[type=range] { accent-color:#fdb813; width:120px; }
     var hh2 = nowD.getHours(), mn2 = nowD.getMinutes();
     var mn2s = pad2(mn2);
     ctx.font = '12px sans-serif'; ctx.fillStyle = 'rgba(100,220,255,0.8)';
-    var replayText = weekReplayActive ? '  今日から7日後まで再現中' : '';
+    var replayText = weekReplayActive ? '  今日から' + weekReplayDays + '日後まで再現中' : '';
     ctx.fillText('🌟 今日の空  ' + yy2 + '/' + mm2 + '/' + dd2 + ' ' + pad2(hh2) + ':' + mn2s + replayText + '  地軸傾き23.4°反映  ドラッグ:視点回転', 10, 28);
   }
 
@@ -1537,7 +1558,7 @@ input[type=range] { accent-color:#fdb813; width:120px; }
       if (weekReplayActive) {
         weekReplayElapsed += dt * speed;
         var progress = Math.min(1, weekReplayElapsed / weekReplayDuration);
-        weekReplayJD = weekReplayStartJD + progress * 7;
+        weekReplayJD = weekReplayStartJD + progress * weekReplayDays;
         if (progress >= 1) weekReplayActive = false;
         drawTodaySky(weekReplayJD);
       } else {
