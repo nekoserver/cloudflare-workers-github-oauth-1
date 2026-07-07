@@ -793,6 +793,7 @@ void main() {
   var proj=m4(),view=m4(),model=m4(),rx=m4(),ry=m4(),tz=m4(),tmp=m4(),tmp2=m4(),mvp=m4(),landSpin=m4();
   var landingSpinAngle = 0;
   var rotXv = 0.3, rotYv = 0.6, zoom = 3.2, autoRot = true;
+  var HERITAGE_MAX_ZOOM = 20;
   var drag = false, lx = 0, ly = 0, pinch0 = 0, touchMoved = false;
   var axisLocked = false;
 
@@ -824,7 +825,7 @@ void main() {
   var boxZoomOverlay = document.getElementById('box-select-overlay');
   var bx0 = 0, by0 = 0, bxCur = 0, byCur = 0, boxDragging = false;
   var btnBoxZoom = document.getElementById('btnBoxZoom');
-  var lastBoxBounds = null, areaMenuEl = null, areaTourTimer = null, areaTourIdx = 0, areaTourRunning = false, areaTourKind = null, areaTourCursorY = null;
+  var lastBoxBounds = null, areaMenuEl = null, areaTourTimer = null, areaTourIdx = 0, areaTourRunning = false, areaTourKind = null, areaTourCursorY = null, areaTourSideKind = null, areaTourSideItems = [];
 
   btnBoxZoom.addEventListener('click', function() {
     boxZoomMode = !boxZoomMode;
@@ -999,12 +1000,22 @@ void main() {
     areaTourSide.style.width = width + 'px';
   }
 
+  function renderAreaTourRows(kind, items, startIdx, limit) {
+    if (!areaTourSideBody) return;
+    var end = typeof limit === 'number' ? Math.min(items.length, startIdx + limit) : items.length;
+    var html = '';
+    for (var i = startIdx; i < end; i++) {
+      html += '<div class="f1-side-item" data-idx="' + i + '"><span class="f1-side-flag">' + kind.icon + '</span><span class="f1-side-info"><span class="f1-side-circuit">' + kind.itemLabel(items[i]) + '</span></span></div>';
+    }
+    areaTourSideBody.innerHTML = html;
+  }
+
   function renderAreaTourSide(kind, items) {
     if (!areaTourSide) return;
+    areaTourSideKind = kind;
+    areaTourSideItems = items;
     areaTourSideTitle.textContent = kind.icon + ' ' + kind.label + ' 巡回先';
-    areaTourSideBody.innerHTML = items.map(function(item, i) {
-      return '<div class="f1-side-item" data-idx="' + i + '"><span class="f1-side-flag">' + kind.icon + '</span><span class="f1-side-info"><span class="f1-side-circuit">' + kind.itemLabel(item) + '</span></span></div>';
-    }).join('');
+    renderAreaTourRows(kind, items, 0);
     areaTourSide.classList.add('open');
     updateAreaTourCollapseButton();
     fitAreaTourSideWidth(kind, items);
@@ -1022,10 +1033,24 @@ void main() {
     return Math.max(minY, Math.min(maxY, y)) - panelRect.top;
   }
 
+  function prepareAreaTourVisibleRows(idx) {
+    if (!areaTourSide || !areaTourSideKind || !areaTourSideItems.length) return;
+    if (areaTourSide.classList.contains('collapsed')) {
+      // 折りたたみ時は表示可能な3行内に点滅行を収める。4件目以降は
+      // データを1行ずつ上へ送って、常に最下段が点滅する疑似スクロールにする。
+      renderAreaTourRows(areaTourSideKind, areaTourSideItems, Math.max(0, idx - 2), 3);
+      areaTourSideBody.scrollTop = 0;
+    } else if (!areaTourSideBody.querySelector('.f1-side-item[data-idx="' + idx + '"]')) {
+      renderAreaTourRows(areaTourSideKind, areaTourSideItems, 0);
+    }
+  }
+
   function scrollAreaTourItemToCursor(idx) {
     if (!areaTourSideBody) return;
+    prepareAreaTourVisibleRows(idx);
     var el = areaTourSideBody.querySelector('.f1-side-item[data-idx="' + idx + '"]');
     if (!el) return;
+    if (areaTourSide && areaTourSide.classList.contains('collapsed')) return;
     var targetY = getAreaTourTargetY();
     if (targetY === null) { el.scrollIntoView({ block: 'center', behavior: 'smooth' }); return; }
     var maxScroll = Math.max(0, areaTourSideBody.scrollHeight - areaTourSideBody.clientHeight);
@@ -1036,6 +1061,7 @@ void main() {
 
   function flashAreaTourSideItem(idx) {
     if (!areaTourSideBody) return;
+    scrollAreaTourItemToCursor(idx);
     // F1側パネル(focusF1Circuit)と同じ .active クラスを使い、現在の巡回先の行の背景色を
     // 薄緑にして行頭に緑のアクセント枠を表示する(.f1-side-item.active を再利用)
     areaTourSideBody.querySelectorAll('.f1-side-item').forEach(function(row) {
@@ -1043,7 +1069,8 @@ void main() {
     });
     var el = areaTourSideBody.querySelector('.f1-side-item[data-idx="' + idx + '"]');
     if (!el) return;
-    scrollAreaTourItemToCursor(idx);
+    // scrollAreaTourItemToCursor 内では、展開時は scrollIntoView 相当の位置合わせ、
+    // 折りたたみ時は3行内に収まる疑似スクロールを行ってから点滅させる。
     el.classList.remove('area-tour-flash');
     void el.offsetWidth;
     el.classList.add('area-tour-flash');
@@ -1165,7 +1192,7 @@ void main() {
     stopAreaTour(false);
     if (areaMenuEl) areaMenuEl.style.display = 'none';
     var fraction = Math.min(bw / rect.width, bh / rect.height);
-    var newZoom = Math.max(1.2, Math.min(10, zoom * Math.max(0.18, fraction)));
+    var newZoom = Math.max(1.2, Math.min(HERITAGE_MAX_ZOOM, zoom * Math.max(0.18, fraction)));
     flyTo(ctr.lat, ctr.lon);
     setTimeout(function() {
       zoom = newZoom;
@@ -1176,10 +1203,10 @@ void main() {
   canvas.addEventListener('mousedown',  function(e){ if(boxZoomMode){ boxDragging=true; bx0=e.clientX; by0=e.clientY; bxCur=bx0; byCur=by0; return; } drag=true; lx=e.clientX; ly=e.clientY; momentumY=0; momentumX=0; velY=0; velX=0; });
   window.addEventListener('mouseup',    function(e){ if(boxDragging){ boxDragging=false; applyBoxZoom(e.clientX, e.clientY); return; } if(!drag)return; drag=false; applyMomentum(velY, velX); velY=0; velX=0; });
   window.addEventListener('mousemove',  function(e){ if(boxDragging){ bxCur=e.clientX; byCur=e.clientY; updateBoxOverlay(); return; } if(!drag)return; var dy=(e.clientX-lx)*0.008; var dx=(e.clientY-ly)*0.008; rotYv+=dy; velY=velY*0.4+dy*0.6; if(!axisLocked){rotXv=clampElev(rotXv+dx); velX=velX*0.4+dx*0.6;} lx=e.clientX; ly=e.clientY; });
-  canvas.addEventListener('wheel',      function(e){ e.preventDefault(); zoom=Math.max(1.2,Math.min(10,zoom+e.deltaY*0.01)); },{passive:false});
+  canvas.addEventListener('wheel',      function(e){ e.preventDefault(); zoom=Math.max(1.2,Math.min(HERITAGE_MAX_ZOOM,zoom+e.deltaY*0.006)); },{passive:false});
   canvas.addEventListener('dblclick',   function(){ autoRot=!autoRot; btnAutoRot.textContent=autoRot?'⏸ 自転停止':'▶ 回転'; if(autoRot){btnAutoRot.classList.remove('active');}else{btnAutoRot.classList.add('active');} });
   canvas.addEventListener('touchstart', function(e){ e.preventDefault(); touchMoved=false; momentumY=0; momentumX=0; velY=0; velX=0; if(e.touches.length===1){ if(boxZoomMode){ boxDragging=true; bx0=e.touches[0].clientX; by0=e.touches[0].clientY; bxCur=bx0; byCur=by0; return; } drag=true;lx=e.touches[0].clientX;ly=e.touches[0].clientY;} if(e.touches.length===2){pinch0=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);} },{passive:false});
-  canvas.addEventListener('touchmove',  function(e){ e.preventDefault(); touchMoved=true; if(e.touches.length===1&&boxDragging){ bxCur=e.touches[0].clientX; byCur=e.touches[0].clientY; updateBoxOverlay(); return; } if(e.touches.length===1&&drag){var dy=(e.touches[0].clientX-lx)*0.008; var dx=(e.touches[0].clientY-ly)*0.008; rotYv+=dy; velY=velY*0.4+dy*0.6; if(!axisLocked){rotXv=clampElev(rotXv+dx); velX=velX*0.4+dx*0.6;} lx=e.touches[0].clientX;ly=e.touches[0].clientY;} if(e.touches.length===2){var d=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);zoom=Math.max(1.2,Math.min(10,zoom-(d-pinch0)*0.02));pinch0=d;} },{passive:false});
+  canvas.addEventListener('touchmove',  function(e){ e.preventDefault(); touchMoved=true; if(e.touches.length===1&&boxDragging){ bxCur=e.touches[0].clientX; byCur=e.touches[0].clientY; updateBoxOverlay(); return; } if(e.touches.length===1&&drag){var dy=(e.touches[0].clientX-lx)*0.008; var dx=(e.touches[0].clientY-ly)*0.008; rotYv+=dy; velY=velY*0.4+dy*0.6; if(!axisLocked){rotXv=clampElev(rotXv+dx); velX=velX*0.4+dx*0.6;} lx=e.touches[0].clientX;ly=e.touches[0].clientY;} if(e.touches.length===2){var d=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);zoom=Math.max(1.2,Math.min(HERITAGE_MAX_ZOOM,zoom-(d-pinch0)*0.008));pinch0=d;} },{passive:false});
   canvas.addEventListener('touchend', function(e){
     if (boxDragging && e.changedTouches.length === 1) { boxDragging=false; applyBoxZoom(e.changedTouches[0].clientX, e.changedTouches[0].clientY); return; }
     drag=false;
@@ -2975,6 +3002,9 @@ void main() {
     areaTourSideCollapse.addEventListener('click', function(e) {
       e.stopPropagation();
       areaTourSide.classList.toggle('collapsed');
+      if (!areaTourSide.classList.contains('collapsed') && areaTourSideKind && areaTourSideItems.length) {
+        renderAreaTourRows(areaTourSideKind, areaTourSideItems, 0);
+      }
       updateAreaTourCollapseButton();
     });
   }

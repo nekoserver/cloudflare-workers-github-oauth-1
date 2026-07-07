@@ -31,6 +31,14 @@ describe('getWebGLHeritagePage エリアズーム機能（種別ごとの巡回�
     expect(block).toContain("label: '活断層'");
   });
 
+
+
+  it('最大ズームとホイール・ピンチ感度は活断層ページ相当のスクロール幅に合わせる', () => {
+    expect(html).toContain('var HERITAGE_MAX_ZOOM = 20;');
+    expect(html).toContain('Math.min(HERITAGE_MAX_ZOOM,zoom+e.deltaY*0.006)');
+    expect(html).toContain('Math.min(HERITAGE_MAX_ZOOM,zoom-(d-pinch0)*0.008)');
+  });
+
   it('種別ごとのエリア内絞り込み関数がすべて存在する', () => {
     expect(html).toContain('function getHeritagesInBounds()');
     expect(html).toContain('function getStationsInBounds()');
