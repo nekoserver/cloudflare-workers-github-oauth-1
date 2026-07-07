@@ -2267,7 +2267,7 @@ void main() {
       markersDiv.style.display = 'none';
       tooltip.style.opacity = '0';
       if (landingTitleEl) landingTitleEl.textContent = ld.e + ' ' + ld.f + ' ' + ld.n;
-      if (landingSubEl) landingSubEl.textContent = ld.t + '  ' + ld.c + '  ' + ld.y + '年登録';
+      if (landingSubEl) landingSubEl.textContent = ld.t + '  ' + ld.c + '  ' + formatRegistrationYearLabel(ld);
       if (landingStatusEl) landingStatusEl.textContent = '着陸中...';
       if (landingProgEl) landingProgEl.style.width = '0%';
       if (landingCityListEl) landingCityListEl.innerHTML = '';
@@ -3368,6 +3368,10 @@ void main() {
     }
   }
 
+  function formatRegistrationYearLabel(d) {
+    return d.y === '----' ? '----年' : d.y + '年登録';
+  }
+
   function positionTooltip(vx, vy) {
     var isNearTop = vy < canvasRect.top + 80;
     tooltip.style.transform = '';
@@ -3385,7 +3389,7 @@ void main() {
     var llamaShareId = heritageMitokoroLlamaShareId[d.n];
     var gemmaIcon = gemmaShareId ? ' <span id="tt-mitokoro-gemma-btn" style="cursor:pointer;" title="見どころ(gemma-4-26b-a4b-it)の説明を表示">👀</span>' : '';
     var llamaIcon = llamaShareId ? ' <span id="tt-mitokoro-llama-btn" style="cursor:pointer;" title="見どころ(llama-3.3-70b-instruct-fp8-fast)の説明を表示">👁️</span>' : '';
-    tooltip.innerHTML = '<div class="tt-name">' + d.e + ' ' + d.f + ' ' + d.n + cityIcon + gemmaIcon + llamaIcon + '</div><div class="tt-sub"><span style="color:' + col + ';font-weight:600">' + d.t + '</span>  ' + d.c + '  ' + d.y + '年登録</div><div style="margin-top:7px;text-align:center;"><button id="tt-land-btn" style="background:#0c2d1a;border:1px solid #3fb950;border-radius:6px;color:#3fb950;font-size:11px;padding:4px 12px;cursor:pointer;font-family:inherit;">🚶 地表に降り立つ</button></div>';
+    tooltip.innerHTML = '<div class="tt-name">' + d.e + ' ' + d.f + ' ' + d.n + cityIcon + gemmaIcon + llamaIcon + '</div><div class="tt-sub"><span style="color:' + col + ';font-weight:600">' + d.t + '</span>  ' + d.c + '  ' + formatRegistrationYearLabel(d) + '</div><div style="margin-top:7px;text-align:center;"><button id="tt-land-btn" style="background:#0c2d1a;border:1px solid #3fb950;border-radius:6px;color:#3fb950;font-size:11px;padding:4px 12px;cursor:pointer;font-family:inherit;">🚶 地表に降り立つ</button></div>';
     var landBtn = document.getElementById('tt-land-btn');
     if (landBtn) {
       (function(ci) {
@@ -3683,7 +3687,7 @@ void main() {
         activeIdx = nearestIdx2;
         var nd = HERITAGE[nearestIdx2];
         var nc = typeColor(nd.t);
-        tooltip.innerHTML = '<div class="tt-name">' + nd.e + ' ' + nd.f + ' ' + nd.n + '</div><div class="tt-sub"><span style="color:' + nc + ';font-weight:600">' + nd.t + '</span>  ' + nd.c + '  ' + nd.y + '年登録</div>';
+        tooltip.innerHTML = '<div class="tt-name">' + nd.e + ' ' + nd.f + ' ' + nd.n + '</div><div class="tt-sub"><span style="color:' + nc + ';font-weight:600">' + nd.t + '</span>  ' + nd.c + '  ' + formatRegistrationYearLabel(nd) + '</div>';
         tooltip.style.opacity = '1';
       }
     }
