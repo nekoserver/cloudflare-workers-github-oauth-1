@@ -2825,6 +2825,12 @@ app.get('/health', (c) => {
 // =====================================================
 
 const GITHUB_OAUTH_SCOPE = 'read:user user:email repo';
+const GITHUB_OAUTH_CALLBACK_PATH = '/github/callback';
+
+function buildGitHubOAuthRedirectUri(requestUrl: string): string {
+  const url = new URL(requestUrl);
+  return `${url.protocol}//${url.host}${GITHUB_OAUTH_CALLBACK_PATH}`;
+}
 
 /**
  * トップページ - GitHub OAuth ログインページ
@@ -2858,8 +2864,7 @@ app.get('/auth/github', async (c) => {
     return jsonUtf8({ error: 'GitHub OAuth is not configured' }, 500);
   }
 
-  const url = new URL(c.req.url);
-  const redirectUri = `${url.protocol}//${url.host}/auth/github/callback`;
+  const redirectUri = buildGitHubOAuthRedirectUri(c.req.url);
 
   // CSRF保護用のstateトークンを生成
   const state = generateOAuthState();
@@ -2902,7 +2907,7 @@ app.get('/auth/github', async (c) => {
  * GitHub OAuth コールバック
  * stateパラメータを検証してCSRF攻撃を防止
  */
-app.get('/auth/github/callback', async (c) => {
+async function handleGitHubOAuthCallback(c: AppContext) {
   let phase = 'start';
   let userIdForLog: string | null = null;
   try {
@@ -2965,8 +2970,7 @@ app.get('/auth/github/callback', async (c) => {
       return jsonUtf8({ error: 'JWT_SECRET is not configured' }, 500);
     }
 
-    const url = new URL(c.req.url);
-    const redirectUri = `${url.protocol}//${url.host}/auth/github/callback`;
+    const redirectUri = buildGitHubOAuthRedirectUri(c.req.url);
 
     // GitHubからアクセストークンを取得
     phase = 'exchange-token';
@@ -3114,6 +3118,13 @@ app.get('/auth/github/callback', async (c) => {
 
     return jsonUtf8({ error: 'Authentication failed' }, 500);
   }
+}
+
+app.get(GITHUB_OAUTH_CALLBACK_PATH, handleGitHubOAuthCallback);
+app.get('/auth/github/callback', (c) => {
+  const url = new URL(c.req.url);
+  url.pathname = GITHUB_OAUTH_CALLBACK_PATH;
+  return c.redirect(`${url.pathname}${url.search}`, 308);
 });
 
 /**
