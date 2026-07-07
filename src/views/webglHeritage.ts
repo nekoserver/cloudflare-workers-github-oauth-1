@@ -40,7 +40,7 @@ canvas:active { cursor:grabbing; }
 .hud { position:absolute; bottom:10px; left:10px; background:rgba(0,0,0,.7); border:1px solid #30363d; border-radius:6px; padding:6px 10px; font-size:11px; font-family:monospace; color:#58a6ff; line-height:1.9; pointer-events:none; }
 #markers { position:absolute; top:0; left:0; width:100%; height:100%; pointer-events:none; overflow:hidden; }
 .mk { position:absolute; transform:translate(-50%,-50%); line-height:1; font-size:16px; text-shadow:0 1px 3px #000,0 0 8px rgba(0,0,0,0.9); pointer-events:auto; cursor:pointer; user-select:none; -webkit-user-select:none; }
-#mk-tooltip { position:fixed; background:rgba(13,17,23,0.97); border:1px solid #3fb950; border-radius:8px; padding:7px 12px; font-size:12px; color:#e6edf3; white-space:normal; min-width:180px; pointer-events:auto; opacity:0; transition:opacity .15s; z-index:10000; transform:translate(-50%,-110%); line-height:1.7; }
+#mk-tooltip { position:fixed; background:rgba(13,17,23,0.97); border:1px solid #3fb950; border-radius:8px; padding:7px 12px; font-size:12px; color:#e6edf3; white-space:normal; min-width:180px; pointer-events:auto; opacity:0; transition:opacity .15s; z-index:10000; transform:translate(-50%,-110%); line-height:1.7; cursor:move; user-select:none; -webkit-user-select:none; touch-action:none; }
 .tt-name { white-space:nowrap; font-weight:700; font-size:13px; }
 .tt-sub { white-space:nowrap; font-size:12px; margin-top:3px; }
 #mk-tooltip.below { transform:translate(-50%, 14px); }
@@ -2793,6 +2793,27 @@ void main() {
 
   var tooltip = document.getElementById('mk-tooltip');
   var activeIdx = -1;
+  var ttDragging = false, ttDragOX = 0, ttDragOY = 0;
+  tooltip.addEventListener('pointerdown', function(ev) {
+    if (ev.target.closest('button') || ev.target.closest('a')) return;
+    var r = tooltip.getBoundingClientRect();
+    ttDragging = true;
+    ttDragOX = ev.clientX - r.left;
+    ttDragOY = ev.clientY - r.top;
+    tooltip.style.transform = 'none';
+    tooltip.classList.remove('below');
+    tooltip.style.left = r.left + 'px';
+    tooltip.style.top = r.top + 'px';
+    tooltip.setPointerCapture(ev.pointerId);
+    ev.preventDefault();
+  });
+  tooltip.addEventListener('pointermove', function(ev) {
+    if (!ttDragging) return;
+    tooltip.style.left = (ev.clientX - ttDragOX) + 'px';
+    tooltip.style.top = (ev.clientY - ttDragOY) + 'px';
+  });
+  tooltip.addEventListener('pointerup', function() { ttDragging = false; });
+  tooltip.addEventListener('pointercancel', function() { ttDragging = false; });
   var canvasRect = {left:0, top:0, width:0, height:0};
 
   function updateCanvasRect() { canvasRect = canvas.getBoundingClientRect(); }
@@ -3326,7 +3347,7 @@ void main() {
     });
   }
 
-  function hideTooltip() { tooltip.style.opacity = '0'; activeIdx = -1; }
+  function hideTooltip() { tooltip.style.opacity = '0'; activeIdx = -1; ttDragging = false; }
 
   function avoidPinLabelOverlap() {
     var otherMinTop = null;
@@ -3348,6 +3369,7 @@ void main() {
 
   function positionTooltip(vx, vy) {
     var isNearTop = vy < canvasRect.top + 80;
+    tooltip.style.transform = '';
     tooltip.style.left = vx + 'px';
     tooltip.style.top  = vy + 'px';
     if (isNearTop) { tooltip.classList.add('below'); } else { tooltip.classList.remove('below'); }
