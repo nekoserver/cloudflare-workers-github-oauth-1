@@ -42,4 +42,13 @@ describe('世界遺産ページ: F1/駅ツールチップの閉じるボタン�
     expect(html).toMatch(/otherMinTop === null \|\| r\.top < otherMinTop/);
     expect(html).toMatch(/if \(tRect\.bottom > otherMinTop\) \{/);
   });
+
+  it('世界遺産名ツールチップはポインター操作で自由にドラッグ移動できる', () => {
+    expect(html).toMatch(/#mk-tooltip\s*\{[^}]*cursor:move[^}]*touch-action:none/);
+    expect(html).toContain("var ttDragging = false, ttDragOX = 0, ttDragOY = 0;");
+    expect(html).toMatch(/tooltip\.addEventListener\('pointerdown',[\s\S]*?tooltip\.style\.transform = 'none';[\s\S]*?tooltip\.setPointerCapture\(ev\.pointerId\);/);
+    expect(html).toMatch(/tooltip\.addEventListener\('pointermove',[\s\S]*?tooltip\.style\.left = \(ev\.clientX - ttDragOX\) \+ 'px';[\s\S]*?tooltip\.style\.top = \(ev\.clientY - ttDragOY\) \+ 'px';/);
+    expect(html).toContain("tooltip.addEventListener('pointercancel', function() { ttDragging = false; });");
+  });
+
 });
