@@ -89,7 +89,7 @@ Cloudflare Workers の Git 連携（Workers Builds）でデプロイする場合
 - `GITHUB_CLIENT_ID`
 - `GITHUB_CLIENT_SECRET`
 
-D1 データベースを使用する場合は、先に下記「[3. D1 データベースの作成](#3-d1-データベースの作成)」を参照してください。
+D1 データベースを使用する場合は、先に下記「[4. D1 データベースの作成](#4-d1-データベースの作成)」を参照してください。
 デプロイ後に D1 を追加することも可能です。
 
 ### ビルドタイミング運用の推奨（main マージ時の競合回避）
@@ -150,11 +150,41 @@ npm install
 
 [GitHub Settings > Developer settings > OAuth Apps](https://github.com/settings/applications/new) で OAuth App を作成し、以下を設定：
 
-- **Authorization callback URL**: `https://<your-worker>.workers.dev/github/callback`
+- **Authorization callback URL**: `https://<your-public-host>/auth/github/callback`
 
-> **注意**: コールバック URL パスは `/github/callback` です。`/auth/github/callback` ではありません。
+> **注意**: この実装のコールバック URL パスは `/auth/github/callback` です。GitHub App の Install App コールバックも同じハンドラで `setup_action=install` を分岐処理します。
 
-### 3. D1 データベースの作成
+### 3. Cloudflare Workers Route / カスタムドメイン運用
+
+Cloudflare DNS 上のサブドメインを Workers Route でこの Worker に接続する場合は、GitHub 側に登録する公開 URL を **workers.dev ではなく、ユーザーが実際にアクセスする同一ホスト名** に統一してください。
+
+例: `https://1.cfw1.nekomaneki.work` で公開する場合
+
+| 設定先 | 推奨値 |
+|---|---|
+| Cloudflare Workers Route | `1.cfw1.nekomaneki.work/*` |
+| GitHub OAuth App / GitHub App callback URL | `https://1.cfw1.nekomaneki.work/auth/github/callback` |
+| GitHub App Homepage URL / Setup URL（使う場合） | `https://1.cfw1.nekomaneki.work/` |
+| GitHub App Webhook URL（この Worker で受ける場合） | `https://1.cfw1.nekomaneki.work/webhook/github` |
+
+この Worker は OAuth 開始時とコールバック時の `redirect_uri` をリクエストの `protocol` と `host` から組み立てます。つまり `https://1.cfw1.nekomaneki.work/auth/github` からログインを始めれば、GitHub に送る `redirect_uri` も `https://1.cfw1.nekomaneki.work/auth/github/callback` になります。
+
+`workers.dev` とカスタムサブドメインを混在させると、GitHub の認可画面や App install 後のコールバックで「別ドメインへ戻る」ように見える警告・不一致が起きやすくなります。回避策は次の順で検討してください。
+
+1. **推奨**: GitHub 側の callback / setup / webhook / homepage をすべて `https://1.cfw1.nekomaneki.work` に統一する。
+2. `https://cloudflare-workers-github-oauth-1.workers.dev` を直接ユーザーに案内しない。既存リンク・Slack 通知・README・GitHub App の各 URL をカスタムサブドメインへ置き換える。
+3. Cloudflare 側では DNS レコードを proxied にし、Workers Route の pattern を `1.cfw1.nekomaneki.work/*` にする。必要なら `wrangler.toml` の `routes` 例を有効化する。
+4. どうしても両方のホストを残す場合でも、OAuth 開始 URL と GitHub に登録する callback URL は同じホストに揃える。
+
+`wrangler.toml` に routes を固定する場合の例:
+
+```toml
+routes = [
+  { pattern = "1.cfw1.nekomaneki.work/*", zone_name = "nekomaneki.work" }
+]
+```
+
+### 4. D1 データベースの作成
 
 D1 はセッション管理に使用します。D1 なしでもデプロイ・動作しますが、ログイン履歴やタイムゾーン設定は保存されません。
 
@@ -171,7 +201,7 @@ database_name = "workers-github-oauth"
 database_id = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"  # ← ここを置き換え
 ```
 
-### 4. マイグレーションの実行
+### 5. マイグレーションの実行
 
 ```bash
 # ローカル開発用
@@ -181,7 +211,7 @@ npm run db:migrate:local
 npm run db:migrate:remote
 ```
 
-### 5. シークレットの設定
+### 6. シークレットの設定
 
 ```bash
 wrangler secret put JWT_SECRET
@@ -205,7 +235,7 @@ wrangler secret put SLACK_CHANNEL_ID
 wrangler secret put RESEND_WEBHOOK_SECRET
 ```
 
-### 6. ローカル開発
+### 7. ローカル開発
 
 `.dev.vars.example` をコピーして `.dev.vars` を作成し、値を設定：
 
@@ -217,7 +247,7 @@ cp .dev.vars.example .dev.vars
 npm run dev
 ```
 
-### 7. デプロイ
+### 8. デプロイ
 
 ```bash
 npm run deploy
@@ -240,7 +270,7 @@ npm run deploy
 2. GitHubログインボタンをクリック → /auth/github へリダイレクト
 3. state + PKCE (S256) を生成し Cookie に保存
 4. GitHub の認可ページへリダイレクト
-5. ユーザーが認可 → /github/callback にコードが届く
+5. ユーザーが認可 → /auth/github/callback にコードが届く
 6. state パラメータと PKCE verifier を検証（CSRF 防止）
 7. コードをアクセストークンに交換
 8. GitHub API でユーザー情報を取得
@@ -250,7 +280,7 @@ npm run deploy
 
 ### 重要: GitHub App Install フローのコールバック
 
-GitHub App の **「Install App」** フローでは、コールバックが `/github/callback?setup_action=install` として戻る。
+GitHub App の **「Install App」** フローでは、コールバックが `/auth/github/callback?setup_action=install` として戻る。
 これは通常の OAuth 認証フロー（state/PKCE パラメータ付き）とは**異なるワークフロー**であり、コールバックハンドラで分岐処理が必要。
 
 - `setup_action=install` が付いている場合、state パラメータは存在しないため state 検証をスキップする
