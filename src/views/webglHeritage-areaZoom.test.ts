@@ -132,6 +132,21 @@ describe('getWebGLHeritagePage エリアズーム機能（種別ごとの巡回�
     expect(fn).toContain('updateBoxOverlay()');
   });
 
+  it('エリア内判定は選択時点の画面矩形と投影行列を保存して使う（ズーム後の再投影ズレを防ぐ）', () => {
+    const applyMatch = html.match(/function applyBoxZoom[\s\S]*?(?=\n  canvas\.addEventListener)/);
+    expect(applyMatch).not.toBeNull();
+    const applyFn = applyMatch![0];
+    expect(applyFn).toContain('screenRect: {');
+    expect(applyFn).toContain('screenSnapshot: {');
+    expect(applyFn).toContain('model: Array.prototype.slice.call(model)');
+    expect(applyFn).toContain('mvp: Array.prototype.slice.call(mvp)');
+
+    const boundsMatch = html.match(/function inAreaScreenBounds\(lat, lon, b\) \{[\s\S]*?\n  \}/);
+    expect(boundsMatch).not.toBeNull();
+    expect(boundsMatch![0]).toContain('b && b.screenRect ? b.screenRect : getAreaScreenRect(b)');
+    expect(boundsMatch![0]).toContain('projectAreaPointToScreen(lat, lon, snapshot)');
+  });
+
   it('area-tour-side パネルのDOM要素が存在する', () => {
     expect(html).toContain('id="area-tour-side"');
     expect(html).toContain('id="area-tour-side-title"');

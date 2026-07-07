@@ -861,15 +861,20 @@ void main() {
 
   // エリア内絞り込み・巡回ロジックの汎用化: アイコン種別ごとに個別実装せず、
   // AREA_KINDS の設定（データ取得・座標取得・ツールチップ描画）を areaTourStep 等の共通関数へ渡す方式にする。
-  function projectAreaPointToScreen(lat, lon) {
+  function projectAreaPointToScreen(lat, lon, snapshot) {
     var p = latLonTo3D(lat, lon);
-    var mz = model[2]*p[0] + model[6]*p[1] + model[10]*p[2];
+    var mm = snapshot && snapshot.model ? snapshot.model : model;
+    var pm = snapshot && snapshot.mvp ? snapshot.mvp : mvp;
+    var cr = snapshot && snapshot.canvasRect ? snapshot.canvasRect : canvasRect;
+    var cw0 = snapshot && snapshot.canvasWidth ? snapshot.canvasWidth : canvas.width;
+    var ch0 = snapshot && snapshot.canvasHeight ? snapshot.canvasHeight : canvas.height;
+    var mz = mm[2]*p[0] + mm[6]*p[1] + mm[10]*p[2];
     if (mz <= 0.05) return null;
-    var cx = mvp[0]*p[0] + mvp[4]*p[1] + mvp[8]*p[2]  + mvp[12];
-    var cy = mvp[1]*p[0] + mvp[5]*p[1] + mvp[9]*p[2]  + mvp[13];
-    var cw = mvp[3]*p[0] + mvp[7]*p[1] + mvp[11]*p[2] + mvp[15];
+    var cx = pm[0]*p[0] + pm[4]*p[1] + pm[8]*p[2]  + pm[12];
+    var cy = pm[1]*p[0] + pm[5]*p[1] + pm[9]*p[2]  + pm[13];
+    var cw = pm[3]*p[0] + pm[7]*p[1] + pm[11]*p[2] + pm[15];
     if (cw <= 0) return null;
-    return { x: canvasRect.left + (cx/cw+1)*0.5*canvas.width, y: canvasRect.top + (1-cy/cw)*0.5*canvas.height };
+    return { x: cr.left + (cx/cw+1)*0.5*cw0, y: cr.top + (1-cy/cw)*0.5*ch0 };
   }
   function getAreaScreenRect(b) {
     if (!b || !b.corner0 || !b.corner1) return null;
@@ -882,8 +887,9 @@ void main() {
     };
   }
   function inAreaScreenBounds(lat, lon, b) {
-    var screenRect = getAreaScreenRect(b);
-    var screen = projectAreaPointToScreen(lat, lon);
+    var snapshot = b && b.screenSnapshot ? b.screenSnapshot : null;
+    var screenRect = b && b.screenRect ? b.screenRect : getAreaScreenRect(b);
+    var screen = projectAreaPointToScreen(lat, lon, snapshot);
     if (!screenRect || !screen) return false;
     return screen.x >= screenRect.left && screen.x <= screenRect.right && screen.y >= screenRect.top && screen.y <= screenRect.bottom;
   }
@@ -1043,6 +1049,7 @@ void main() {
     });
     var el = areaTourSideBody.querySelector('.f1-side-item[data-idx="' + idx + '"]');
     if (!el) return;
+    if (!areaTourSideBody.scrollTo) el.scrollIntoView({ block: 'center', behavior: 'smooth' });
     scrollAreaTourItemToCursor(idx);
     el.classList.remove('area-tour-flash');
     void el.offsetWidth;
@@ -1159,7 +1166,18 @@ void main() {
         lonCross: lonCross,
         center: { lat: ctr.lat, lon: ctr.lon },
         corner0: { lat: c0.lat, lon: c0.lon },
-        corner1: { lat: c1.lat, lon: c1.lon }
+        corner1: { lat: c1.lat, lon: c1.lon },
+        screenRect: {
+          left: Math.min(bx0, ex), right: Math.max(bx0, ex),
+          top: Math.min(by0, ey), bottom: Math.max(by0, ey)
+        },
+        screenSnapshot: {
+          model: Array.prototype.slice.call(model),
+          mvp: Array.prototype.slice.call(mvp),
+          canvasRect: { left: rect.left, top: rect.top, width: rect.width, height: rect.height },
+          canvasWidth: canvas.width,
+          canvasHeight: canvas.height
+        }
       };
     }
     stopAreaTour(false);
