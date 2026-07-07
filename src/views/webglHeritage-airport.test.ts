@@ -23,7 +23,27 @@ describe('getWebGLHeritagePage 空路機能', () => {
   it('空港名リンクとツールチップ内路線リンクから地球儀中心へ移動してツールチップを出す', () => {
     expect(html).toContain("body.querySelectorAll('.apt-item.clickable').forEach");
     expect(html).toContain("aptTooltipEl.querySelectorAll('.apt-tt-code').forEach");
+    expect(html).toContain('openAptDrawerAndHighlight(dest);');
     expect(html).toContain('showAptTooltip(dest, code);');
     expect(html).toContain('if (window._aptRenderFrame) window._aptRenderFrame(mvp, model, W, H);');
+  });
+
+  it('ロシア・中国の空港はパネル・ツールチップ・地球儀マーカー対象から除外する', () => {
+    expect(html).toContain('var HIDDEN_AIRPORT_CODES = { PVG:true, PEK:true, SVO:true };');
+    expect(html).not.toContain("code:'PVG'");
+    expect(html).not.toContain("code:'PEK'");
+    expect(html).not.toContain("code:'SVO'");
+    expect(html).not.toContain('上海浦東国際空港');
+    expect(html).not.toContain('北京首都国際空港');
+    expect(html).not.toContain('シェレメーチエヴォ国際空港');
+  });
+
+  it('ツールチップ内コードの存在強調とサイドパネルフォーカス、および閉じてもマーカー維持を実装する', () => {
+    expect(html).toContain('.apt-tt-code.available');
+    expect(html).toContain("var availableClass = aptByCode[rc] && aptDivMap[rc] ? ' available' : '';");
+    expect(html).toContain('openAptDrawerAndHighlight(dest);');
+    expect(html).toContain("item.classList.add('apt-flash');");
+    expect(html).toContain("if (open) setAirportMarkers(true);");
+    expect(html).toContain("document.getElementById('airportClose').addEventListener('click', function() {\n      drawer.classList.remove('open');\n    });");
   });
 });

@@ -306,6 +306,8 @@ canvas:active { cursor:grabbing; }
 .apt-tt-close:hover { color:#e6edf3; }
 .apt-tt-routes { display:flex; flex-wrap:wrap; gap:4px; margin-top:2px; }
 .apt-tt-code { background:#161b22; border:1px solid #30363d; border-radius:4px; padding:2px 7px; font-size:11px; font-family:monospace; cursor:pointer; transition:background .1s,border-color .1s; white-space:nowrap; -webkit-tap-highlight-color:transparent; }
+.apt-tt-code.available { border-color:rgba(255,223,112,.82); background:rgba(255,223,112,.10); }
+.apt-tt-code.available:hover { background:rgba(255,223,112,.18); border-color:#ffdf70; color:#ffdf70; }
 .apt-tt-code:hover { background:#21262d; border-color:#58a6ff; color:#58a6ff; }
 .apt-tt-code:focus { outline:none; }
 .apt-item-row { display:flex; align-items:center; gap:6px; }
@@ -1199,7 +1201,7 @@ void main() {
 
   function setupAirportRoutes() {
     var IATA_FLAG = {
-      'NRT':'🇯🇵','HND':'🇯🇵','KIX':'🇯🇵','ICN':'🇰🇷','PVG':'🇨🇳','PEK':'🇨🇳','HKG':'🇭🇰',
+      'NRT':'🇯🇵','HND':'🇯🇵','KIX':'🇯🇵','ICN':'🇰🇷','HKG':'🇭🇰',
       'SIN':'🇸🇬','BKK':'🇹🇭','KUL':'🇲🇾','CGK':'🇮🇩','SYD':'🇦🇺','MEL':'🇦🇺','AKL':'🇳🇿',
       'DEL':'🇮🇳','BOM':'🇮🇳','DXB':'🇦🇪','DOH':'🇶🇦','IST':'🇹🇷',
       'LHR':'🇬🇧','CDG':'🇫🇷','FRA':'🇩🇪','AMS':'🇳🇱','MAD':'🇪🇸','FCO':'🇮🇹',
@@ -1209,22 +1211,20 @@ void main() {
       'GIG':'🇧🇷','HAV':'🇨🇺',
       'JNB':'🇿🇦','NBO':'🇰🇪','CAI':'🇪🇬','LOS':'🇳🇬','ADD':'🇪🇹','CMN':'🇲🇦','ACC':'🇬🇭',
       'TPE':'🇹🇼','MNL':'🇵🇭','SGN':'🇻🇳','JED':'🇸🇦','TLV':'🇮🇱',
-      'ZRH':'🇨🇭','SVO':'🇷🇺','CPH':'🇩🇰','VIE':'🇦🇹'
+      'ZRH':'🇨🇭','CPH':'🇩🇰','VIE':'🇦🇹'
     };
     var APT_REGIONS = [
       { label:'🌏 東アジア', open:true, airports:[
-        {code:'NRT',name:'成田国際空港',city:'🇯🇵 日本・千葉',lat:35.77,lon:140.39,routes:['ICN','HKG','SIN','BKK','LAX','PVG','LHR','CDG','JFK','SYD','DXB','ORD','HND','KIX']},
-        {code:'HND',name:'羽田空港',city:'🇯🇵 日本・東京',lat:35.55,lon:139.78,routes:['ICN','PVG','HKG','LAX','SIN','LHR','BKK','CDG','JFK','SYD','DXB','ORD','DEL','KUL']},
-        {code:'KIX',name:'関西国際空港',city:'🇯🇵 日本・大阪',lat:34.43,lon:135.24,routes:['ICN','PVG','HKG','SIN','BKK','LAX','KUL','CDG','LHR','SYD','DXB','JFK']},
-        {code:'ICN',name:'仁川国際空港',city:'🇰🇷 韓国・ソウル',lat:37.46,lon:126.44,routes:['NRT','PVG','SIN','BKK','HKG','LAX','JFK','LHR','DXB','CDG','FRA','SYD','KUL','YYZ','ORD']},
-        {code:'PVG',name:'上海浦東国際空港',city:'🇨🇳 中国・上海',lat:31.14,lon:121.81,routes:['ICN','NRT','SIN','LHR','LAX','CDG','JFK','HKG','BKK','DXB','AMS','FRA','SYD','ORD']},
-        {code:'PEK',name:'北京首都国際空港',city:'🇨🇳 中国・北京',lat:40.08,lon:116.58,routes:['ICN','NRT','SIN','LHR','LAX','CDG','JFK','HKG','BKK','DXB','AMS','FRA','SYD','ORD']},
-        {code:'HKG',name:'香港国際空港',city:'🇭🇰 香港',lat:22.31,lon:113.92,routes:['SIN','NRT','BKK','LAX','LHR','DXB','JFK','CDG','SYD','ICN','PVG','KUL','AMS','FRA','IST','DEL','TPE']},
-        {code:'TPE',name:'台湾桃園国際空港',city:'🇹🇼 台湾・桃園',lat:25.08,lon:121.23,routes:['HKG','NRT','ICN','PVG','SIN','BKK','MNL','LAX','SFO']}
+        {code:'NRT',name:'成田国際空港',city:'🇯🇵 日本・千葉',lat:35.77,lon:140.39,routes:['ICN','HKG','SIN','BKK','LAX','LHR','CDG','JFK','SYD','DXB','ORD','HND','KIX']},
+        {code:'HND',name:'羽田空港',city:'🇯🇵 日本・東京',lat:35.55,lon:139.78,routes:['ICN','HKG','LAX','SIN','LHR','BKK','CDG','JFK','SYD','DXB','ORD','DEL','KUL']},
+        {code:'KIX',name:'関西国際空港',city:'🇯🇵 日本・大阪',lat:34.43,lon:135.24,routes:['ICN','HKG','SIN','BKK','LAX','KUL','CDG','LHR','SYD','DXB','JFK']},
+        {code:'ICN',name:'仁川国際空港',city:'🇰🇷 韓国・ソウル',lat:37.46,lon:126.44,routes:['NRT','SIN','BKK','HKG','LAX','JFK','LHR','DXB','CDG','FRA','SYD','KUL','YYZ','ORD']},
+        {code:'HKG',name:'香港国際空港',city:'🇭🇰 香港',lat:22.31,lon:113.92,routes:['SIN','NRT','BKK','LAX','LHR','DXB','JFK','CDG','SYD','ICN','KUL','AMS','FRA','IST','DEL','TPE']},
+        {code:'TPE',name:'台湾桃園国際空港',city:'🇹🇼 台湾・桃園',lat:25.08,lon:121.23,routes:['HKG','NRT','ICN','SIN','BKK','MNL','LAX','SFO']}
       ]},
       { label:'🌴 東南アジア・オセアニア', open:false, airports:[
         {code:'SIN',name:'チャンギ空港',city:'🇸🇬 シンガポール',lat:1.35,lon:103.99,routes:['KUL','BKK','HKG','NRT','DXB','SYD','LAX','LHR','ICN','CDG','AMS','DEL','MEL','JFK','FRA']},
-        {code:'BKK',name:'スワンナプーム国際空港',city:'🇹🇭 タイ・バンコク',lat:13.69,lon:100.75,routes:['SIN','HKG','KUL','NRT','DXB','ICN','LAX','LHR','CDG','PVG','AMS','SYD','DEL','JFK']},
+        {code:'BKK',name:'スワンナプーム国際空港',city:'🇹🇭 タイ・バンコク',lat:13.69,lon:100.75,routes:['SIN','HKG','KUL','NRT','DXB','ICN','LAX','LHR','CDG','AMS','SYD','DEL','JFK']},
         {code:'KUL',name:'クアラルンプール国際空港',city:'🇲🇾 マレーシア',lat:2.74,lon:101.70,routes:['SIN','BKK','HKG','NRT','DXB','SYD','ICN','LHR','CDG','AMS','DEL','MEL','JFK']},
         {code:'CGK',name:'スカルノ・ハッタ国際空港',city:'🇮🇩 インドネシア・ジャカルタ',lat:-6.13,lon:106.65,routes:['SIN','KUL','NRT','HKG','SYD','DXB','BKK','MEL','ICN','LHR','CDG']},
         {code:'SYD',name:'シドニー国際空港',city:'🇦🇺 オーストラリア・シドニー',lat:-33.94,lon:151.18,routes:['MEL','SIN','LAX','HKG','AKL','NRT','LHR','DXB','BKK','KUL','ICN','CDG','JFK','FRA']},
@@ -1238,24 +1238,23 @@ void main() {
         {code:'BOM',name:'チャトラパティ・シヴァージー国際空港',city:'🇮🇳 インド・ムンバイ',lat:19.09,lon:72.87,routes:['DXB','DEL','DOH','LHR','SIN','JFK','CDG','IST','FRA','AMS','ICN','NRT']},
         {code:'DXB',name:'ドバイ国際空港',city:'🇦🇪 UAE・ドバイ',lat:25.25,lon:55.36,routes:['LHR','SIN','BKK','KUL','CDG','JFK','LAX','NRT','SYD','DEL','BOM','IST','JNB','AMS','FRA','DOH','ICN','GRU','JED','TLV']},
         {code:'DOH',name:'ハマド国際空港',city:'🇶🇦 カタール・ドーハ',lat:25.27,lon:51.61,routes:['LHR','CDG','JFK','LAX','SIN','NRT','SYD','DEL','BOM','IST','FRA','AMS','DXB','JNB']},
-        {code:'IST',name:'イスタンブール空港',city:'🇹🇷 トルコ・イスタンブール',lat:41.27,lon:28.75,routes:['LHR','CDG','FRA','JFK','DXB','SIN','AMS','JNB','GRU','LAX','MAD','DEL','NRT','FCO','SVO','TLV']},
+        {code:'IST',name:'イスタンブール空港',city:'🇹🇷 トルコ・イスタンブール',lat:41.27,lon:28.75,routes:['LHR','CDG','FRA','JFK','DXB','SIN','AMS','JNB','GRU','LAX','MAD','DEL','NRT','FCO','TLV']},
         {code:'JED',name:'キング・アブドゥルアズィーズ国際空港',city:'🇸🇦 サウジアラビア・ジェッダ',lat:21.68,lon:39.16,routes:['DXB','DOH','IST','LHR','CDG','CAI']},
         {code:'TLV',name:'ベン・グリオン国際空港',city:'🇮🇱 イスラエル・テルアビブ',lat:32.01,lon:34.89,routes:['IST','LHR','CDG','FRA','JFK','DXB']}
       ]},
       { label:'🏰 ヨーロッパ', open:false, airports:[
         {code:'LHR',name:'ロンドン・ヒースロー空港',city:'🇬🇧 イギリス・ロンドン',lat:51.48,lon:-0.46,routes:['JFK','LAX','DXB','SIN','HKG','NRT','CDG','FRA','JNB','AMS','ICN','SYD','GRU','ORD','YYZ','DOH','IST','DEL','ZRH','VIE','CPH','ACC']},
-        {code:'CDG',name:'シャルル・ド・ゴール空港',city:'🇫🇷 フランス・パリ',lat:49.01,lon:2.55,routes:['LHR','JFK','LAX','DXB','NRT','SIN','FRA','GRU','AMS','JNB','IST','HKG','ICN','MAD','SYD','DOH','CMN','SVO']},
+        {code:'CDG',name:'シャルル・ド・ゴール空港',city:'🇫🇷 フランス・パリ',lat:49.01,lon:2.55,routes:['LHR','JFK','LAX','DXB','NRT','SIN','FRA','GRU','AMS','JNB','IST','HKG','ICN','MAD','SYD','DOH','CMN']},
         {code:'FRA',name:'フランクフルト空港',city:'🇩🇪 ドイツ・フランクフルト',lat:50.04,lon:8.56,routes:['LHR','CDG','JFK','LAX','DXB','NRT','SIN','GRU','AMS','JNB','IST','ICN','SYD','DOH','DEL','ZRH','VIE','TLV']},
         {code:'AMS',name:'スキポール空港',city:'🇳🇱 オランダ・アムステルダム',lat:52.31,lon:4.77,routes:['LHR','CDG','JFK','LAX','NRT','SIN','DXB','JNB','FRA','IST','ICN','SYD','GRU','DOH','DEL']},
         {code:'MAD',name:'マドリード・バラハス空港',city:'🇪🇸 スペイン・マドリード',lat:40.47,lon:-3.56,routes:['LHR','CDG','JFK','LAX','GRU','BOG','SCL','EZE','LIM','IST','FRA','MIA','FCO','CCS']},
         {code:'FCO',name:'フィウミチーノ空港',city:'🇮🇹 イタリア・ローマ',lat:41.80,lon:12.25,routes:['LHR','CDG','FRA','JFK','LAX','DXB','NRT','IST','AMS','DOH','GRU','MAD','JNB']},
         {code:'ZRH',name:'チューリッヒ空港',city:'🇨🇭 スイス・チューリッヒ',lat:47.46,lon:8.55,routes:['LHR','CDG','FRA','JFK','SIN','DXB','IST']},
-        {code:'SVO',name:'シェレメーチエヴォ国際空港',city:'🇷🇺 ロシア・モスクワ',lat:55.97,lon:37.42,routes:['IST','DXB','PEK','JFK','CDG']},
         {code:'CPH',name:'コペンハーゲン空港',city:'🇩🇰 デンマーク・コペンハーゲン',lat:55.62,lon:12.66,routes:['LHR','FRA','AMS','JFK','IST']},
         {code:'VIE',name:'ウィーン国際空港',city:'🇦🇹 オーストリア・ウィーン',lat:48.11,lon:16.57,routes:['LHR','FRA','IST','JFK','DXB']}
       ]},
       { label:'🗽 北アメリカ', open:false, airports:[
-        {code:'LAX',name:'ロサンゼルス国際空港',city:'🇺🇸 アメリカ・ロサンゼルス',lat:33.94,lon:-118.41,routes:['NRT','SYD','SIN','LHR','CDG','JFK','ORD','HKG','ICN','FRA','PVG','DXB','AKL','MEL','MEX','YYZ','SFO','HNL']},
+        {code:'LAX',name:'ロサンゼルス国際空港',city:'🇺🇸 アメリカ・ロサンゼルス',lat:33.94,lon:-118.41,routes:['NRT','SYD','SIN','LHR','CDG','JFK','ORD','HKG','ICN','FRA','DXB','AKL','MEL','MEX','YYZ','SFO','HNL']},
         {code:'JFK',name:'ジョン・F・ケネディ国際空港',city:'🇺🇸 アメリカ・ニューヨーク',lat:40.64,lon:-73.78,routes:['LHR','CDG','FRA','NRT','HKG','DXB','LAX','ORD','GRU','SIN','AMS','IST','DOH','ICN','SYD','YYZ','MIA','ATL','SFO']},
         {code:'ORD',name:'シカゴ・オヘア国際空港',city:'🇺🇸 アメリカ・シカゴ',lat:41.98,lon:-87.90,routes:['JFK','LAX','LHR','CDG','NRT','FRA','MEX','GRU','YYZ','DXB','ICN','MIA','ATL']},
         {code:'YYZ',name:'トロント・ピアソン国際空港',city:'🇨🇦 カナダ・トロント',lat:43.68,lon:-79.63,routes:['JFK','LAX','LHR','CDG','NRT','MEX','DEL','FRA','AMS','ORD','GRU','MIA','YVR']},
@@ -1288,9 +1287,14 @@ void main() {
       ]}
     ];
 
+    var HIDDEN_AIRPORT_CODES = { PVG:true, PEK:true, SVO:true };
     var aptByCode = {};
     APT_REGIONS.forEach(function(rg) {
-      rg.airports.forEach(function(a) { aptByCode[a.code] = a; });
+      rg.airports = rg.airports.filter(function(a) { return !HIDDEN_AIRPORT_CODES[a.code]; });
+      rg.airports.forEach(function(a) {
+        a.routes = a.routes.filter(function(rc) { return !HIDDEN_AIRPORT_CODES[rc]; });
+        aptByCode[a.code] = a;
+      });
     });
 
     var aptTooltipEl = document.getElementById('apt-tooltip');
@@ -1349,7 +1353,8 @@ void main() {
       var routesHtml = '';
       a.routes.forEach(function(rc) {
         var flag = IATA_FLAG[rc] || '';
-        routesHtml += '<span class="apt-tt-code" data-goto="' + rc + '">' + flag + ' ' + rc + '</span>';
+        var availableClass = aptByCode[rc] && aptDivMap[rc] ? ' available' : '';
+        routesHtml += '<span class="apt-tt-code' + availableClass + '" data-goto="' + rc + '">' + flag + ' ' + rc + '</span>';
       });
       var routeLabel = fromCode
         ? ' <span id="aptTtRouteLabel" style="font-size:11px;color:#8b949e;font-weight:400;font-family:monospace;">' + fromCode + ' &#x2192; ' + code + '</span>'
@@ -1405,7 +1410,7 @@ void main() {
           var dest = btn.getAttribute('data-goto');
           var da = aptByCode[dest];
           if (!da) return;
-          hideAptTooltip();
+          openAptDrawerAndHighlight(dest);
           flyToAirport(da.lat, da.lon, function() { showAptTooltip(dest, code); });
         });
       });
@@ -1485,10 +1490,10 @@ void main() {
     }
 
     var IATA_ICAO = {
-      NRT:'RJAA',HND:'RJTT',KIX:'RJBB',ICN:'RKSI',PVG:'ZSPD',PEK:'ZBAA',HKG:'VHHH',TPE:'RCTP',
+      NRT:'RJAA',HND:'RJTT',KIX:'RJBB',ICN:'RKSI',HKG:'VHHH',TPE:'RCTP',
       SIN:'WSSS',BKK:'VTBS',KUL:'WMKK',CGK:'WIII',SYD:'YSSY',MEL:'YMML',AKL:'NZAA',MNL:'RPLL',SGN:'VVTS',
       DEL:'VIDP',BOM:'VABB',DXB:'OMDB',DOH:'OTHH',IST:'LTFM',JED:'OEJN',TLV:'LLBG',
-      LHR:'EGLL',CDG:'LFPG',FRA:'EDDF',AMS:'EHAM',MAD:'LEMD',FCO:'LIRF',ZRH:'LSZH',SVO:'UUEE',CPH:'EKCH',VIE:'LOWW',
+      LHR:'EGLL',CDG:'LFPG',FRA:'EDDF',AMS:'EHAM',MAD:'LEMD',FCO:'LIRF',ZRH:'LSZH',CPH:'EKCH',VIE:'LOWW',
       LAX:'KLAX',JFK:'KJFK',ORD:'KORD',YYZ:'CYYZ',MEX:'MMMX',MIA:'KMIA',ATL:'KATL',SFO:'KSFO',YVR:'CYVR',HNL:'PHNL',
       GRU:'SBGR',EZE:'SAEZ',BOG:'SKBO',LIM:'SPJC',SCL:'SCEL',CCS:'SVMI',PTY:'MPTO',GIG:'SBGL',HAV:'MUHA',
       JNB:'FAOR',NBO:'HKJK',CAI:'HECA',LOS:'DNMM',ADD:'HAAB',CMN:'GMMN',ACC:'DGAA'
@@ -1612,12 +1617,10 @@ void main() {
     btn.addEventListener('click', function() {
       var open = drawer.classList.toggle('open');
       btn.classList.toggle('active', open);
-      setAirportMarkers(open);
+      if (open) setAirportMarkers(true);
     });
     document.getElementById('airportClose').addEventListener('click', function() {
       drawer.classList.remove('open');
-      btn.classList.remove('active');
-      setAirportMarkers(false);
     });
   }
 
