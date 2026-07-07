@@ -69,6 +69,7 @@ input[type=range] { accent-color:#fdb813; width:120px; }
   <button class="btn" id="btnMoon">🌑 月面着陸</button>
   <button class="btn" id="btnISS">🛸 ISS</button>
   <button class="btn" id="btnSolstice">🌞 夏至</button>
+  <button class="btn" id="btnToday">🌟 今日の空</button>
   <div class="calendar-wrap">
     <button class="btn" id="btnCalendar" aria-expanded="false" aria-controls="calendarPanel">📅</button>
     <div id="calendarPanel" role="dialog" aria-label="今月のカレンダー">
@@ -77,7 +78,6 @@ input[type=range] { accent-color:#fdb813; width:120px; }
       <button class="btn" id="btnWeekReplay">今日から7日間</button>
     </div>
   </div>
-  <button class="btn" id="btnToday">🌟 今日の空</button>
   <button class="btn" id="btnPole">🧭 地軸固定</button>
   <button class="btn" id="btnSpin">🌀 自転</button>
   <button class="btn" id="btnMeteors">☄️ 流星群</button>
@@ -368,8 +368,13 @@ input[type=range] { accent-color:#fdb813; width:120px; }
     skyStars.push({ lon: ssLon, lat: ssLat, r: pseudoRand() < 0.25 ? 2 : 1, twinkle: pseudoRand() < 0.18, phase: pseudoRand() * Math.PI * 2 });
   }
 
-  var starLon = [1.817, 1.53, 1.38, 1.22, 4.34, 4.99, 5.267, 5.853, 3.558, 3.565, 1.977, 1.428, 1.927, 2.271, 3.254, 3.349, 3.277, 3.208, 0.9923];
-  var starLat = [-0.691, -0.28, -0.54, -0.09, -0.09, 1.08, 0.511, 1.046, -0.036, 0.536, 0.116, 0.400, 0.176, 0.343, -1.101, -1.042, -0.997, -1.025, 0.421];
+  var starLon = [1.817, 1.53, 1.38, 1.22, 4.34, 4.99, 5.267, 5.853, 3.558, 3.565, 1.977, 1.428, 1.927, 2.271, 3.254, 3.349, 3.277, 3.208, 0.9923, 2.653, 0.503, 0.544, 0.498, 0.513, 0.404, 0.470, 1.421, 1.467];
+  var starLat = [-0.691, -0.28, -0.54, -0.09, -0.09, 1.08, 0.511, 1.046, -0.036, 0.536, 0.116, 0.400, 0.176, 0.343, -1.101, -1.042, -0.997, -1.025, 0.421, 0.209, 0.361, 0.410, 0.335, 0.049, 0.063, 0.155, 0.500, 0.372];
+  var skyConstellationLines = [
+    { name: 'おうし座', color: 'rgba(255,170,90,0.48)', indices: [18, 3, 26, 3, 27] },
+    { name: 'おひつじ座', color: 'rgba(255,210,130,0.48)', indices: [21, 20, 22] },
+    { name: 'うお座', color: 'rgba(150,200,255,0.45)', indices: [23, 24, 23, 25, 20] }
+  ];
 
   var bigDipper = [
     { lon: 2.360, lat: 0.868 },
@@ -384,6 +389,38 @@ input[type=range] { accent-color:#fdb813; width:120px; }
   var summerTriIdx = [5, 6, 7];
   var cruxLines = [[14,16],[17,15]];
   var iss = { name: 'ISS', jaName: 'ISS', type: '宇宙ステーション', orbitR: 14, radius: 2, period: 0.004, color: '#88ffcc', angle: 1.2, fact: '国際宇宙ステーション。高度約400kmを約90分で一周。常時6名が滞在しています' };
+
+
+  function drawSkyConstellationLines() {
+    if (!showConstellations) return;
+    ctx.save();
+    ctx.lineWidth = 1.2;
+    ctx.setLineDash([4, 4]);
+    for (var sci = 0; sci < skyConstellationLines.length; sci++) {
+      var scl = skyConstellationLines[sci];
+      var labelPos = null;
+      ctx.strokeStyle = scl.color;
+      ctx.beginPath();
+      var started = false;
+      for (var sii = 0; sii < scl.indices.length; sii++) {
+        var sidx = scl.indices[sii];
+        var spp = projectSky(starLon[sidx], starLat[sidx]);
+        if (!spp) { started = false; continue; }
+        if (!labelPos) labelPos = spp;
+        if (!started) { ctx.moveTo(spp.x, spp.y); started = true; }
+        else ctx.lineTo(spp.x, spp.y);
+      }
+      ctx.stroke();
+      if (showStarLabels && labelPos) {
+        ctx.setLineDash([]);
+        ctx.font = '10px sans-serif';
+        ctx.fillStyle = scl.color.replace(/0\.4[58]/, '0.78');
+        ctx.fillText(scl.name, labelPos.x + 12, labelPos.y - 12);
+        ctx.setLineDash([4, 4]);
+      }
+    }
+    ctx.restore();
+  }
 
   function todayJD() {
     var now = new Date();
@@ -503,6 +540,7 @@ input[type=range] { accent-color:#fdb813; width:120px; }
       if (showStarLabels) { ctx.font = '10px sans-serif'; ctx.fillStyle = ns5.color; ctx.fillText(ns5.name, np5.x+8, np5.y+3); }
       starScreenPos.push({ x: np5.x, y: np5.y, item: ns5 });
     }
+    drawSkyConstellationLines();
     if (showConstellations) {
       ctx.lineWidth = 1; ctx.setLineDash([4,4]); ctx.strokeStyle = 'rgba(180,220,255,0.35)';
       var stPtsT = [];
@@ -993,6 +1031,8 @@ input[type=range] { accent-color:#fdb813; width:120px; }
       }
       starScreenPos.push({ x: nPos.x, y: nPos.y, item: ns3 });
     }
+
+    drawSkyConstellationLines();
 
     if (showConstellations) {
       ctx.lineWidth = 1;
