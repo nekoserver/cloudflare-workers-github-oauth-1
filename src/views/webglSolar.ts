@@ -32,6 +32,16 @@ input[type=range] { accent-color:#fdb813; width:120px; }
 #tooltip .tt-name { font-size:14px; font-weight:700; color:#fdb813; }
 #tooltip .tt-type { font-size:11px; color:#8b949e; }
 #tooltip .tt-fact { font-size:12px; margin-top:4px; color:#c9d1d9; }
+.calendar-wrap { position:relative; }
+#calendarPanel { position:absolute; left:0; bottom:32px; width:248px; background:rgba(5,10,30,0.97); border:1px solid #fdb813; border-radius:10px; padding:10px; box-shadow:0 10px 28px rgba(0,0,0,.45); z-index:20; display:none; }
+#calendarPanel.open { display:block; }
+.cal-title { font-size:12px; font-weight:700; color:#fdb813; margin-bottom:8px; text-align:center; }
+.cal-grid { display:grid; grid-template-columns:repeat(7,1fr); gap:3px; font-size:10px; text-align:center; }
+.cal-head { color:#8b949e; padding:2px 0; }
+.cal-day { border:1px solid rgba(255,255,255,.08); border-radius:4px; padding:4px 0; color:#c9d1d9; background:rgba(255,255,255,.03); }
+.cal-day.empty { border-color:transparent; background:transparent; }
+.cal-day.today { border-color:#fdb813; color:#fdb813; background:rgba(253,184,19,.14); font-weight:700; }
+#btnWeekReplay { width:100%; margin-top:10px; }
 </style>
 </head>
 <body>
@@ -59,6 +69,14 @@ input[type=range] { accent-color:#fdb813; width:120px; }
   <button class="btn" id="btnMoon">🌑 月面着陸</button>
   <button class="btn" id="btnISS">🛸 ISS</button>
   <button class="btn" id="btnSolstice">🌞 夏至</button>
+  <div class="calendar-wrap">
+    <button class="btn" id="btnCalendar" aria-expanded="false" aria-controls="calendarPanel">📅</button>
+    <div id="calendarPanel" role="dialog" aria-label="今月のカレンダー">
+      <div class="cal-title" id="calTitle"></div>
+      <div class="cal-grid" id="calGrid"></div>
+      <button class="btn" id="btnWeekReplay">今日から7日間</button>
+    </div>
+  </div>
   <button class="btn" id="btnToday">🌟 今日の空</button>
   <button class="btn" id="btnPole">🧭 地軸固定</button>
   <button class="btn" id="btnSpin">🌀 自転</button>
@@ -82,6 +100,11 @@ input[type=range] { accent-color:#fdb813; width:120px; }
   var btnMoon = document.getElementById('btnMoon');
   var btnISS = document.getElementById('btnISS');
   var btnSolstice = document.getElementById('btnSolstice');
+  var btnCalendar = document.getElementById('btnCalendar');
+  var calendarPanel = document.getElementById('calendarPanel');
+  var calTitle = document.getElementById('calTitle');
+  var calGrid = document.getElementById('calGrid');
+  var btnWeekReplay = document.getElementById('btnWeekReplay');
   var btnToday = document.getElementById('btnToday');
   var btnPole = document.getElementById('btnPole');
   var btnSpin = document.getElementById('btnSpin');
@@ -115,6 +138,11 @@ input[type=range] { accent-color:#fdb813; width:120px; }
   var dragStartY = 0;
   var dragStartAngle = 0;
   var dragStartElev = 0;
+  var weekReplayActive = false;
+  var weekReplayStartJD = 0;
+  var weekReplayJD = 0;
+  var weekReplayElapsed = 0;
+  var weekReplayDuration = 18;
 
   btnOrbits.addEventListener('click', function() {
     showOrbits = !showOrbits;
@@ -163,6 +191,7 @@ input[type=range] { accent-color:#fdb813; width:120px; }
   }
 
   function setSkyMode(mode) {
+    if (mode !== 'today') weekReplayActive = false;
     if (mode === 'today' && skyViewMode !== 'today') {
       var jdNow = todayJD();
       var sLonNow = sunLonReal(jdNow);
@@ -195,6 +224,46 @@ input[type=range] { accent-color:#fdb813; width:120px; }
     btnSpin.classList.toggle('active', skyViewMode === 'spin');
     hideTooltip();
   }
+
+  function renderCalendar() {
+    var now = new Date();
+    var y = now.getFullYear();
+    var m = now.getMonth();
+    calTitle.textContent = y + '-' + String(m + 1).padStart(2, '0');
+    calGrid.innerHTML = '';
+    ['日','月','火','水','木','金','土'].forEach(function(d) {
+      var h = document.createElement('div'); h.className = 'cal-head'; h.textContent = d; calGrid.appendChild(h);
+    });
+    var first = new Date(y, m, 1);
+    var last = new Date(y, m + 1, 0).getDate();
+    for (var i = 0; i < first.getDay(); i++) {
+      var e = document.createElement('div'); e.className = 'cal-day empty'; calGrid.appendChild(e);
+    }
+    for (var day = 1; day <= last; day++) {
+      var cell = document.createElement('div');
+      cell.className = 'cal-day' + (day === now.getDate() ? ' today' : '');
+      cell.textContent = String(day);
+      calGrid.appendChild(cell);
+    }
+  }
+
+  function startWeekReplay() {
+    weekReplayStartJD = todayJD();
+    weekReplayJD = weekReplayStartJD;
+    weekReplayElapsed = 0;
+    weekReplayActive = true;
+    calendarPanel.classList.remove('open');
+    btnCalendar.setAttribute('aria-expanded', 'false');
+    if (skyViewMode !== 'today') setSkyMode('today');
+  }
+
+  btnCalendar.addEventListener('click', function() {
+    renderCalendar();
+    var open = !calendarPanel.classList.contains('open');
+    calendarPanel.classList.toggle('open', open);
+    btnCalendar.setAttribute('aria-expanded', open ? 'true' : 'false');
+  });
+  btnWeekReplay.addEventListener('click', startWeekReplay);
   btnEarth.addEventListener('click', function() { setSkyMode('earth'); });
   btnMoon.addEventListener('click', function() { setSkyMode('moon'); });
   btnISS.addEventListener('click', function() { setSkyMode('iss'); });
@@ -387,8 +456,13 @@ input[type=range] { accent-color:#fdb813; width:120px; }
     ctx.restore();
   }
 
-  function drawTodaySky() {
-    var jd = todayJD();
+  function jdToDate(jd) {
+    return new Date((jd - 2440587.5) * 86400000);
+  }
+  function pad2(n) { return n < 10 ? '0' + n : '' + n; }
+
+  function drawTodaySky(jdOverride) {
+    var jd = jdOverride || todayJD();
     var sLon = sunLonReal(jd);
     var sLonR = sLon * Math.PI / 180;
     var ePos = helioXY(100.46446, 0.985647, 0.016709, 1.000014, jd);
@@ -479,12 +553,13 @@ input[type=range] { accent-color:#fdb813; width:120px; }
       ctx.beginPath(); ctx.moveTo(0,horizonY); ctx.lineTo(W,horizonY);
       ctx.strokeStyle = 'rgba(80,160,80,0.4)'; ctx.lineWidth = 1; ctx.stroke();
     }
-    var nowD = new Date();
+    var nowD = jdOverride ? jdToDate(jd) : new Date();
     var yy2 = nowD.getFullYear(), mm2 = nowD.getMonth()+1, dd2 = nowD.getDate();
     var hh2 = nowD.getHours(), mn2 = nowD.getMinutes();
-    var mn2s = mn2 < 10 ? '0'+mn2 : ''+mn2;
+    var mn2s = pad2(mn2);
     ctx.font = '12px sans-serif'; ctx.fillStyle = 'rgba(100,220,255,0.8)';
-    ctx.fillText('🌟 今日の空  ' + yy2 + '/' + mm2 + '/' + dd2 + ' ' + hh2 + ':' + mn2s + '  ドラッグ:視点回転', 10, 28);
+    var replayText = weekReplayActive ? '  今日から7日後まで再現中' : '';
+    ctx.fillText('🌟 今日の空  ' + yy2 + '/' + mm2 + '/' + dd2 + ' ' + pad2(hh2) + ':' + mn2s + replayText + '  ドラッグ:視点回転', 10, 28);
   }
 
   function drawPoleView() {
@@ -1379,7 +1454,19 @@ input[type=range] { accent-color:#fdb813; width:120px; }
     planetScreenPos = [];
     starScreenPos = [];
 
-    if (skyViewMode === 'today') { drawTodaySky(); drawMeteors(dt); return; }
+    if (skyViewMode === 'today') {
+      if (weekReplayActive) {
+        weekReplayElapsed += dt * speed;
+        var progress = Math.min(1, weekReplayElapsed / weekReplayDuration);
+        weekReplayJD = weekReplayStartJD + progress * 7;
+        if (progress >= 1) weekReplayActive = false;
+        drawTodaySky(weekReplayJD);
+      } else {
+        drawTodaySky();
+      }
+      drawMeteors(dt);
+      return;
+    }
     if (skyViewMode === 'pole') {
       viewAngle += dt * 0.003 * speed;
       drawPoleView();
