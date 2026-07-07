@@ -3423,9 +3423,13 @@ void main() {
 
   function getNextZ() {
     var max = 500;
+    document.querySelectorAll('body *').forEach(function(el) {
+      var z = parseInt(window.getComputedStyle(el).zIndex, 10);
+      if (!isNaN(z)) max = Math.max(max, z);
+    });
     document.querySelectorAll('div[data-overlay]').forEach(function(el) {
-      var z = parseInt(el.style.zIndex, 10) || 0;
-      if (z > max && z < 9000) max = z;
+      var z = parseInt(el.style.zIndex, 10);
+      if (!isNaN(z)) max = Math.max(max, z);
     });
     return max + 100;
   }

@@ -36,9 +36,12 @@ describe('世界遺産ツールチップ: 見どころ×gemma-4-26b-a4b-it キ�
     expect(html).not.toContain('見どころ (gemma-4-26b-a4b-it)');
   });
 
-  it('モーダルは getNextZ() で最上位の z-index を動的に算出する', () => {
+  it('モーダルは getNextZ() で既存UIを含む最上位の z-index を動的に算出する', () => {
     expect(html).toContain('function getNextZ()');
     expect(html).toMatch(/z-index:' \+ getNextZ\(\) \+/);
+    expect(html).toContain("document.querySelectorAll('body *')");
+    expect(html).toContain('window.getComputedStyle(el).zIndex');
+    expect(html).toContain("document.querySelectorAll('div[data-overlay]')");
   });
 
   it('モーダルは /api/aichat/shares/:id から回答本文を取得してMarkdownとして描画する', () => {
