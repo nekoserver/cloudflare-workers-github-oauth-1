@@ -139,6 +139,35 @@ describe('getWebGLHeritagePage エリアズーム機能（種別ごとの巡回�
     expect(html).toContain('id="area-tour-side-close"');
   });
 
+  it('エリア内判定は全カテゴリで世界遺産と同じ inAreaPointBounds を使う', () => {
+    expect(html).toContain('function inAreaPointBounds(lat, lon, b)');
+    const filterMatch = html.match(new RegExp('function filterInBounds\\(list, getLatLon\\)[\\s\\S]*?\\n  \\}'));
+    expect(filterMatch).not.toBeNull();
+    expect(filterMatch![0]).toContain('return inAreaPointBounds(p[0], p[1], b)');
+    const stationMatch = html.match(new RegExp('function getStationsInBounds\\(\\)[\\s\\S]*?\\n  \\}'));
+    expect(stationMatch).not.toBeNull();
+    expect(stationMatch![0]).toContain('if (inAreaPointBounds(st.lat, st.lon, b))');
+  });
+
+  it('エリア選択時の画面矩形を保存し、巡回中の再投影ずれを避ける', () => {
+    const applyMatch = html.match(new RegExp('function applyBoxZoom[\\s\\S]*?(?=\\n  canvas\\.addEventListener)'));
+    expect(applyMatch).not.toBeNull();
+    expect(applyMatch![0]).toContain('screenRect: {');
+    const rectMatch = html.match(new RegExp('function getAreaScreenRect\\(b\\)[\\s\\S]*?\\n  \\}'));
+    expect(rectMatch).not.toBeNull();
+    expect(rectMatch![0]).toContain('if (b.screenRect) return b.screenRect');
+  });
+
+  it('世界遺産のエリア巡回サイドパネルは固定の🏛️ではなく各遺産のアイコンを使う', () => {
+    const kindsMatch = html.match(/var AREA_KINDS = \[[\s\S]*?\n  \];/);
+    expect(kindsMatch).not.toBeNull();
+    const heritageKindMatch = kindsMatch![0].match(/key: 'heritage'[\s\S]*?(?=\n    \{\s*\n      key: 'station')/);
+    expect(heritageKindMatch).not.toBeNull();
+    expect(heritageKindMatch![0]).toContain('itemIcon: function(d) { return d.e; }');
+    expect(html).toContain('function getAreaItemIcon(kind, item)');
+    expect(html).toContain("getAreaItemIcon(kind, item) + '</span>");
+  });
+
   it('AREA_KINDS の各種別に左サイドパネル表示用の itemLabel が定義されている', () => {
     const kindsMatch = html.match(/var AREA_KINDS = \[[\s\S]*?\n  \];/);
     expect(kindsMatch).not.toBeNull();
@@ -212,7 +241,7 @@ describe('getWebGLHeritagePage エリアズーム機能（種別ごとの巡回�
     const flashMatch = html.match(/function flashAreaTourSideItem\(idx\) \{[\s\S]*?\n  \}/);
     expect(flashMatch).not.toBeNull();
     const fn = flashMatch![0];
-    const scrollPos = fn.indexOf('scrollIntoView');
+    const scrollPos = fn.indexOf('scrollAreaTourItemToCursor');
     const flashPos = fn.indexOf("classList.add('area-tour-flash')");
     expect(scrollPos).toBeGreaterThan(-1);
     expect(flashPos).toBeGreaterThan(-1);
