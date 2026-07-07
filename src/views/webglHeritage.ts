@@ -1043,6 +1043,7 @@ void main() {
     });
     var el = areaTourSideBody.querySelector('.f1-side-item[data-idx="' + idx + '"]');
     if (!el) return;
+    // scrollAreaTourItemToCursor 内で必要に応じて scrollIntoView フォールバックを使う
     scrollAreaTourItemToCursor(idx);
     el.classList.remove('area-tour-flash');
     void el.offsetWidth;
@@ -1053,7 +1054,10 @@ void main() {
   function renderAreaMenu() {
     if (!areaMenuEl) return;
     var entries = AREA_KINDS.map(function(k) { return { kind: k, items: k.getItems() }; });
+    var volcanoEntry = entries.filter(function(e) { return e.kind.key === 'volcano'; })[0];
+    var volcanoCount = volcanoEntry ? volcanoEntry.items.length : 0;
     var hasAny = entries.some(function(e) { return e.items.length >= 2; });
+    var volcanoSummaryHtml = '<div style="font-size:10px;color:#ff9500;text-align:center;margin-bottom:6px">🌋 活火山 (' + volcanoCount + ')</div>';
     var buttonsHtml = entries.map(function(e) {
       if (e.items.length < 2) return '';
       var isActive = areaTourRunning && areaTourKind === e.kind;
@@ -1064,7 +1068,8 @@ void main() {
       return '<button class="area-kind-btn" data-kind="' + e.kind.key + '" style="width:100%;background:' + e.kind.bg + ';border:1px solid ' + e.kind.color + ';border-radius:6px;color:' + e.kind.color + ';font-size:11px;padding:6px 8px;margin-top:6px;cursor:pointer;opacity:' + (disabled ? '0.4' : '1') + '" ' + (disabled ? 'disabled' : '') + '>' + label + '</button>';
     }).join('');
     areaMenuEl.innerHTML =
-      '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:7px"><span style="font-size:11px;font-weight:700;color:#3fb950">📍 エリアメニュー</span><span id="areaMenuClose" style="cursor:pointer;color:#8b949e;font-size:14px;padding:0 3px;line-height:1">✕</span></div>' +
+      '<div style="display:flex;align-items:center;justify-content:center;position:relative;margin-bottom:7px"><span style="font-size:11px;font-weight:700;color:#3fb950;text-align:center">📍 エリアメニュー</span><span id="areaMenuClose" style="position:absolute;right:0;cursor:pointer;color:#8b949e;font-size:14px;padding:0 3px;line-height:1">✕</span></div>' +
+      volcanoSummaryHtml +
       (hasAny ? buttonsHtml : '<div style="font-size:10px;color:#8b949e">エリア内に2件以上のアイコンがありません</div>') +
       '<div id="areaTourProg" style="font-size:10px;color:#8b949e;text-align:center;margin-top:6px;min-height:14px"></div>';
     document.getElementById('areaMenuClose').addEventListener('click', function(){ stopAreaTour(true); });

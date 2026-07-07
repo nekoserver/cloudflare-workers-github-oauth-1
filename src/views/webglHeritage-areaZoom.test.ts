@@ -68,6 +68,18 @@ describe('getWebGLHeritagePage エリアズーム機能（種別ごとの巡回�
     expect(renderMatch![0]).toContain("e.kind.icon + ' ' + e.kind.label + '(' + e.items.length + ')'");
   });
 
+  it('エリアメニューにはエリア内の活火山総数を常時表示し、見出しを中央寄せにする', () => {
+    const renderMatch = html.match(/function renderAreaMenu\(\)[\s\S]*?\n  \}/);
+    expect(renderMatch).not.toBeNull();
+    const renderFn = renderMatch![0];
+    expect(renderFn).toContain("var volcanoEntry = entries.filter(function(e) { return e.kind.key === 'volcano'; })[0];");
+    expect(renderFn).toContain("var volcanoCount = volcanoEntry ? volcanoEntry.items.length : 0;");
+    expect(renderFn).toContain("🌋 活火山 (' + volcanoCount + ')");
+    expect(renderFn).toContain('justify-content:center');
+    expect(renderFn).toContain('text-align:center');
+    expect(renderFn).toContain('volcanoSummaryHtml +');
+  });
+
   it('種別ボタンを押した直後にその種別だけを対象とした巡回が始まる', () => {
     const renderMatch = html.match(/function renderAreaMenu\(\)[\s\S]*?\n  \}/);
     expect(renderMatch).not.toBeNull();
