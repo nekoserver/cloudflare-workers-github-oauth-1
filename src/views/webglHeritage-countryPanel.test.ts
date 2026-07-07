@@ -91,6 +91,8 @@ describe('世界遺産地球儀 エリアズーム', () => {
     expect(html).toContain('function applyBoxZoom');
     expect(html).toContain('function screenToLatLon');
     expect(html).toContain('function getHeritagesInBounds');
+    expect(html).toContain('zoomAtSelection: zoom');
+    expect(html).toContain('return list.filter(function(item) { var p = getLatLon(item); return inAreaScreenBounds(p[0], p[1], b); });');
     expect(html).toContain('エリアメニュー');
   });
 });

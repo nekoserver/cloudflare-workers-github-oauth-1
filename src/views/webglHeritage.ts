@@ -894,7 +894,11 @@ void main() {
   function filterInBounds(list, getLatLon) {
     if (!lastBoxBounds) return [];
     var b = lastBoxBounds;
-    return list.filter(function(item) { var p = getLatLon(item); return inAreaBounds(p[0], p[1], b) && inAreaScreenBounds(p[0], p[1], b); });
+    // エリアズーム後の枠内判定は、現在の MVP（=現在の zoom を含む投影行列）で
+    // 再投影した画面座標だけを基準にする。緯度経度の min/max は選択時点の
+    // 角を固定した概算で、最大ズーム付近では見た目の枠とずれて対象を誤って
+    // 除外するため、ズーム変更後の判定には使わない。
+    return list.filter(function(item) { var p = getLatLon(item); return inAreaScreenBounds(p[0], p[1], b); });
   }
   function getHeritagesInBounds() { return filterInBounds(HERITAGE, function(d) { return [d.lat, d.lon]; }); }
   function getStationsInBounds() {
@@ -903,7 +907,8 @@ void main() {
     RAIL_LINES.forEach(function(line) {
       line.stations.forEach(function(st) {
         if (seenNames[st.name]) return;
-        if (inAreaBounds(st.lat, st.lon, b) && inAreaScreenBounds(st.lat, st.lon, b)) { result.push({ st: st, line: line }); seenNames[st.name] = true; }
+        // 世界遺産などと同じく、現在の zoom を含む画面上の枠で判定する。
+        if (inAreaScreenBounds(st.lat, st.lon, b)) { result.push({ st: st, line: line }); seenNames[st.name] = true; }
       });
     });
     return result;
@@ -1159,7 +1164,8 @@ void main() {
         lonCross: lonCross,
         center: { lat: ctr.lat, lon: ctr.lon },
         corner0: { lat: c0.lat, lon: c0.lon },
-        corner1: { lat: c1.lat, lon: c1.lon }
+        corner1: { lat: c1.lat, lon: c1.lon },
+        zoomAtSelection: zoom
       };
     }
     stopAreaTour(false);
