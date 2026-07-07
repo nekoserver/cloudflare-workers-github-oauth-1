@@ -456,7 +456,10 @@ input[type=range] { accent-color:#fdb813; width:120px; }
   }
 
 
-  var earthObliquity = 23.43928 * Math.PI / 180;
+  // Canvas の右方向は天球上の西向きとして投影されるため、
+  // 黄道座標を赤道座標へ回す地軸傾きは画面投影系に合わせて符号を反転する。
+  // これにより「今日の空」で月が時間経過に対して右上から左下へ動く。
+  var earthObliquity = -23.43928 * Math.PI / 180;
   function eclipticVector(lon, lat) {
     var cb = Math.cos(lat), sb = Math.sin(lat);
     var cl = Math.cos(lon), sl = Math.sin(lon);
