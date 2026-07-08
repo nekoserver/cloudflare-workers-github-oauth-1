@@ -77,11 +77,11 @@ describe('getWebGLSolarPage', () => {
   }
 
   // 直線透視(ピンホール)投影は天球上の大円(経線・赤道)をすべて画面上の直線に
-  // 写すため、グリッドがドーム状に見えない。今日の空・地軸固定・自転の3モードは
+  // 写すため、グリッドがドーム状に見えない。天球を見上げる6モードすべてが
   // 平射(ステレオ)投影で大円が円弧に曲がることを検証する。
-  it('今日の空・地軸固定・自転モードでは大円がドーム状の曲線として投影される', () => {
+  it('天球を見上げる全モードで大円がドーム状の曲線として投影される', () => {
     const make = extractProject3D();
-    for (const mode of ['today', 'pole', 'spin']) {
+    for (const mode of ['today', 'pole', 'spin', 'earth', 'moon', 'iss']) {
       const project = make(mode);
       const center = project(Math.cos(0.5), 0, Math.sin(0.5));
       expect(center, mode + ': 視線中心').not.toBeNull();
@@ -96,9 +96,9 @@ describe('getWebGLSolarPage', () => {
     }
   });
 
-  it('地球目線・月面・ISSモードは従来どおりの直線透視投影を維持する', () => {
+  it('既定の太陽系ビュー(\'\')と夏至モードは project3D を経由しない直線透視のまま', () => {
     const make = extractProject3D();
-    for (const mode of ['earth', 'moon', 'iss']) {
+    for (const mode of ['', 'solstice']) {
       const project = make(mode);
       const p1 = project(Math.cos(-0.7), Math.sin(-0.7), 0);
       const p2 = project(1, 0, 0);
@@ -106,6 +106,61 @@ describe('getWebGLSolarPage', () => {
       expect(p1 && p2 && p3, mode + ': 赤道上の3点が投影可能').toBeTruthy();
       const cross = (p2!.x - p1!.x) * (p3!.y - p1!.y) - (p2!.y - p1!.y) * (p3!.x - p1!.x);
       expect(Math.abs(cross), mode + ': 大円は直線のまま').toBeLessThan(1e-3);
+    }
+  });
+
+  // 画面の左右端に近づくほど歪みが大きくなる不具合は、直線透視の拡大率が
+  // 1/cos(θ)(視線からの角度θ)で θ→90° に発散することが原因だった。
+  // 平射投影の拡大率は sec^2(θ/2) という有界な式に従うため、視線中心からの
+  // 画面上の半径 r は tan(θ/2) に比例するはずである。この比例関係が
+  // 複数の角度で一定であることを確認し、拡大率が発散しないことを保証する。
+  it('天球モードでは画面半径がtan(θ/2)に比例し、拡大率が視野角に対して発散しない', () => {
+    const make = extractProject3D();
+    const elev = 0.5;
+    const cosE = Math.cos(elev), sinE = Math.sin(elev);
+    // テストハーネスの fovH=0.6π(半視野角54°)の範囲内に収まる角度のみを使う
+    const angles = [10, 22, 34, 46].map((deg) => (deg * Math.PI) / 180);
+    for (const mode of ['today', 'pole', 'spin', 'earth', 'moon', 'iss']) {
+      const project = make(mode);
+      const ratios: number[] = [];
+      for (const th of angles) {
+        // v(θ) = cosθ*F + sinθ*R (F=視線前方, R=右方向)。F・R=0, |F|=|R|=1 なので
+        // v(θ)・F = cosθ となり、v(θ) は視線から角度θだけ離れた単位ベクトルになる。
+        const v = { x: Math.cos(th) * cosE, y: -Math.sin(th), z: Math.cos(th) * sinE };
+        const p = project(v.x, v.y, v.z);
+        expect(p, mode + ' θ=' + th).not.toBeNull();
+        const r = Math.hypot(p!.x - 500, p!.y - 400);
+        ratios.push(r / Math.tan(th / 2));
+      }
+      const base = ratios[0];
+      for (const ratio of ratios) {
+        expect(Math.abs(ratio - base) / base, mode + ': r/tan(θ/2) が一定').toBeLessThan(0.02);
+      }
+    }
+  });
+
+  it('今日の空モードは夏の大三角形・南十字の線を恒星ドットと同じprojectEclipticSkyで投影する', () => {
+    const m = html.match(/function drawTodaySky\([\s\S]*?\n  function drawPoleView/);
+    expect(m).not.toBeNull();
+    const body = m![0];
+    // 恒星ドット(namedStars)・skyConstellationLines は projectEclipticSky(黄道→赤道の
+    // 地軸傾き回転込み)で投影される。夏の大三角形・南十字の線だけ回転なしの
+    // projectSky を使うと、viewAngle が動くたびに実際の星の位置からずれて
+    // 独立して動いているように見える不具合になる。
+    expect(body).not.toContain('projectSky(starLon[summerTriIdx');
+    expect(body).toContain('projectEclipticSky(starLon[summerTriIdx');
+    expect(body).not.toContain('projectSky(starLon[cruxLines');
+    expect(body).toContain('projectEclipticSky(starLon[cruxLines');
+  });
+
+  it('地軸固定・自転モードは全描画要素が同一のprojectSkyで統一されている(混在させない)', () => {
+    for (const [start, end] of [
+      ['function drawPoleView', 'function drawSpinView'],
+      ['function drawSpinView', 'function drawSolsticeView'],
+    ] as const) {
+      const m = html.match(new RegExp(start.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '[\\s\\S]*?\\n  ' + end.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+      expect(m, start).not.toBeNull();
+      expect(m![0]).not.toContain('projectEclipticSky');
     }
   });
 

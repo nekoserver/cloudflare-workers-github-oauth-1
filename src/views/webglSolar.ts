@@ -599,16 +599,21 @@ input[type=range] { accent-color:#fdb813; width:120px; }
     drawSkyConstellationLines(projectEclipticSky);
     if (showConstellations) {
       ctx.lineWidth = 1; ctx.setLineDash([4,4]); ctx.strokeStyle = 'rgba(180,220,255,0.35)';
+      // このモードの恒星ドット(上のループ)・skyConstellationLines(599行目)は
+      // いずれも projectEclipticSky(黄道→赤道の地軸傾き回転込み)で投影される。
+      // ここだけ projectSky(回転なし)を使うと、夏の大三角形・南十字の線が
+      // 実際の星の位置(ドット)からずれ、viewAngle が動くたびに独立して
+      // 動いているように見える不具合になるため、同じ投影関数に揃える。
       var stPtsT = [];
-      for (var sti2 = 0; sti2 < summerTriIdx.length; sti2++) stPtsT.push(projectSky(starLon[summerTriIdx[sti2]], starLat[summerTriIdx[sti2]]));
+      for (var sti2 = 0; sti2 < summerTriIdx.length; sti2++) stPtsT.push(projectEclipticSky(starLon[summerTriIdx[sti2]], starLat[summerTriIdx[sti2]]));
       for (var stliT = 0; stliT < 3; stliT++) {
         var paT = stPtsT[stliT], pbT = stPtsT[(stliT+1)%3];
         if (paT && pbT) { ctx.beginPath(); ctx.moveTo(paT.x, paT.y); ctx.lineTo(pbT.x, pbT.y); ctx.stroke(); }
       }
       ctx.strokeStyle = 'rgba(180,255,220,0.35)';
       for (var cliT = 0; cliT < cruxLines.length; cliT++) {
-        var cpaT = projectSky(starLon[cruxLines[cliT][0]], starLat[cruxLines[cliT][0]]);
-        var cpbT = projectSky(starLon[cruxLines[cliT][1]], starLat[cruxLines[cliT][1]]);
+        var cpaT = projectEclipticSky(starLon[cruxLines[cliT][0]], starLat[cruxLines[cliT][0]]);
+        var cpbT = projectEclipticSky(starLon[cruxLines[cliT][1]], starLat[cruxLines[cliT][1]]);
         if (cpaT && cpbT) { ctx.beginPath(); ctx.moveTo(cpaT.x, cpaT.y); ctx.lineTo(cpbT.x, cpbT.y); ctx.stroke(); }
       }
       ctx.setLineDash([]);
@@ -969,10 +974,14 @@ input[type=range] { accent-color:#fdb813; width:120px; }
     var dotRt = dX * sy2 - dY * cy2;
     var dotUp = -dX * cy2 * sp2 - dY * sy2 * sp2 + dZ * cp2;
     var sx, sy3;
-    if (skyViewMode === 'today' || skyViewMode === 'pole' || skyViewMode === 'spin') {
-      // 直線透視(ピンホール)投影は大円(経線・赤道)をすべて画面上の直線に写すため
-      // グリッドがドーム状に見えない。天球グリッドを持つこの3モードでは
-      // 平射(ステレオ)投影 r = k*tan(θ/2) で投影し、大円も緯線も円弧として曲げる。
+    if (skyViewMode !== '' && skyViewMode !== 'solstice') {
+      // 直線透視(ピンホール)投影は視野角が広いほど周辺の拡大率が際限なく
+      // 増加し(θ→90°でdotFw→0に発散)、画面の左右端に近づくほど歪みが
+      // 大きくなる。天球を見上げる全モード(今日の空・地軸固定・自転・
+      // 地球目線・月面・ISS、いずれも fovH が最大 0.85π まで広がりうる)を
+      // 平射(ステレオ)投影 r = k*tan(θ/2) に統一し、拡大率の増加を
+      // sec^2(θ/2) 程度に抑えて周辺の歪みを緩和する。夏至モードはこの関数を
+      // 使わない別視点(3人称の公転図)のため対象外。
       if (dotFw <= -0.5) return null;
       var domeScale = (W / 2) / Math.tan(fovH / 4) / (1 + dotFw);
       sx = W / 2 + dotRt * domeScale;
@@ -1045,9 +1054,8 @@ input[type=range] { accent-color:#fdb813; width:120px; }
     else { camX = ep.x; camY = ep.y; }
 
     var sunLon = Math.atan2(-camY, -camX);
-    var focal = (W / 2) / Math.tan(fovH / 2);
-    var cp3 = Math.cos(viewElev), sp3 = Math.sin(viewElev);
-    var horizonY = H / 2 - (sp3 / cp3) * focal;
+    // 平射投影(project3D の dome 分岐)と同じ式系で水平線位置を近似する
+    var horizonY = H / 2 - Math.tan(viewElev / 2) * (W / 2) / Math.tan(fovH / 4);
 
     var skyTop = skyViewMode === 'moon' ? '#000008' : (skyViewMode === 'iss' ? '#000005' : '#000018');
     var skyHor  = skyViewMode === 'moon' ? '#000015' : (skyViewMode === 'iss' ? '#000018' : '#000c28');
