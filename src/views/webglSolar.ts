@@ -1183,8 +1183,14 @@ input[type=range] { accent-color:#fdb813; width:120px; }
     ctx.strokeStyle = 'rgba(100,180,255,0.5)'; ctx.lineWidth = 1.5; ctx.stroke();
 
     var axLen9 = earthR * 1.7;
-    var npOx = -Math.cos(th9) * SOL_TSIN;
-    var npOy = -Math.sin(th9) * SOL_TSIN;
+    // 地軸は宇宙空間に対して固定方向を保ち、公転角度th9には連動しない
+    // (実際の地軸はほぼ一定方向を向き続け、地球がその軸に対してどの位置に
+    // いるかで季節が決まる)。夏至(th9=0)で北極が最も太陽側へ傾くよう基準を
+    // 取ると、「地軸・地球→太陽方向」の内積は SOL_TSIN*cos(th9) で変化し、
+    // 秋分・春分(th9=±π/2)でちょうど0(真横)、冬至(th9=π)で最も
+    // 太陽と反対側へ傾く、という実際の季節変化と一致する。
+    var npOx = -SOL_TSIN;
+    var npOy = 0;
     var npOz = SOL_TCOS;
     var npSx = npOx * axLen9;
     var npSy = (npOy * SOL_SV - npOz * SOL_CV) * axLen9;
@@ -1199,7 +1205,10 @@ input[type=range] { accent-color:#fdb813; width:120px; }
     ctx.font = '9px sans-serif'; ctx.fillStyle = 'rgba(255,255,140,0.75)';
     ctx.fillText('23.4deg', npSx * 0.45 + 4, npSy * 0.45 - 3);
 
-    var e1Ox9 = Math.sin(th9), e1Oy9 = -Math.cos(th9);
+    // e1・e2 は地軸(npOx,npOy,npOz)に垂直な赤道面を張る固定の正規直交基底。
+    // 以前はth9に連動して回転していたため、地軸のバグと合わせて赤道面ごと
+    // 公転角度に張り付いて回転する誤りになっていた。
+    var e1Ox9 = 0, e1Oy9 = 1;
     ctx.beginPath();
     ctx.moveTo(-e1Ox9 * earthR, -e1Oy9 * earthR * SOL_SV);
     ctx.lineTo(e1Ox9 * earthR, e1Oy9 * earthR * SOL_SV);
@@ -1212,7 +1221,7 @@ input[type=range] { accent-color:#fdb813; width:120px; }
     ctx.font = '8px sans-serif'; ctx.fillStyle = '#ffd700';
     ctx.fillText('北回帰線', tropSx + 5, tropSy - 4);
 
-    var e2Ox9 = Math.cos(th9) * SOL_TCOS, e2Oy9 = Math.sin(th9) * SOL_TCOS, e2Oz9 = SOL_TSIN;
+    var e2Ox9 = -SOL_TCOS, e2Oy9 = 0, e2Oz9 = -SOL_TSIN;
     var mPhi9 = solsticeSpinT;
     var mOx9 = e1Ox9 * Math.cos(mPhi9) + e2Ox9 * Math.sin(mPhi9);
     var mOy9 = e1Oy9 * Math.cos(mPhi9) + e2Oy9 * Math.sin(mPhi9);
