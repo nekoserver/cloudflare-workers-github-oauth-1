@@ -493,6 +493,39 @@ describe('getWebGLSolarPage', () => {
     expect(html).toContain('drawMoonPhase(mPosSV.x, mPosSV.y, 16, phaseAng / (Math.PI * 2), mSunAngleSV);');
   });
 
+  // 夏至モード(drawSolsticeView)の地軸ベクトル(npOx,npOy,npOz)は宇宙空間に対して
+  // 固定方向を保つべきで、地球の公転角度th9に連動して回転してはならない。
+  // 地軸と「地球→太陽」方向の内積は、夏至(th9=0)で最大(北極が太陽側に傾く)、
+  // 秋分・春分(th9=±π/2)でゼロ(真横)、冬至(th9=π)で最小(太陽と反対)になる
+  // はずである。この内積が th9 によらず一定になっていないかを検証する。
+  function extractAxisTiltDot(th9: number) {
+    const m = html.match(/var npOx = [^\n]+;\s*\n\s*var npOy = [^\n]+;\s*\n\s*var npOz = [^\n]+;/);
+    expect(m).not.toBeNull();
+    const factory = new Function(
+      'th9', 'SOL_TSIN', 'SOL_TCOS',
+      m![0] + '\nreturn { npOx: npOx, npOy: npOy, npOz: npOz };'
+    );
+    const SOL_TSIN = Math.sin((23.4 * Math.PI) / 180);
+    const SOL_TCOS = Math.cos((23.4 * Math.PI) / 180);
+    const np = factory(th9, SOL_TSIN, SOL_TCOS) as { npOx: number; npOy: number; npOz: number };
+    // 地球→太陽の方向(XY平面内、Zは常に0)
+    const sunDir = { x: -Math.cos(th9), y: -Math.sin(th9), z: 0 };
+    return np.npOx * sunDir.x + np.npOy * sunDir.y + np.npOz * sunDir.z;
+  }
+
+  it('地軸の傾きは公転角度によらず宇宙空間に固定され、季節ごとに太陽との向きが正しく変化する', () => {
+    const dotSummer = extractAxisTiltDot(0);
+    const dotAutumn = extractAxisTiltDot(Math.PI / 2);
+    const dotWinter = extractAxisTiltDot(Math.PI);
+    const dotSpring = extractAxisTiltDot(-Math.PI / 2);
+    const sin234 = Math.sin((23.4 * Math.PI) / 180);
+
+    expect(dotSummer, '夏至: 北極が太陽側に傾く(内積が最大)').toBeCloseTo(sin234, 5);
+    expect(dotWinter, '冬至: 北極が太陽と反対に傾く(内積が最小)').toBeCloseTo(-sin234, 5);
+    expect(dotAutumn, '秋分: 真横を向く(内積がゼロ)').toBeCloseTo(0, 5);
+    expect(dotSpring, '春分: 真横を向く(内積がゼロ)').toBeCloseTo(0, 5);
+  });
+
   it('レグルスの黄道緯度(starLat)が実際の値(約+0.46度)に近い', () => {
     const lonMatch = html.match(/var starLon = \[([^\]]*)\];/);
     const latMatch = html.match(/var starLat = \[([^\]]*)\];/);
