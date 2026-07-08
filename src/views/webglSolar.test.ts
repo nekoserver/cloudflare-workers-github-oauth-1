@@ -139,6 +139,59 @@ describe('getWebGLSolarPage', () => {
     }
   });
 
+  it('「8月12(13)日」ボタンがカレンダーパネル内に存在する', () => {
+    expect(html).toContain('id="btnEclipseDate"');
+    expect(html).toContain('8月12(13)日');
+    expect(html).toContain("btnEclipseDate.addEventListener('click', showEclipseDateInCalendar);");
+  });
+
+  it('7日間・2週間・日食(アイスランド/スペイン)のボタンはカレンダーパネルを閉じない', () => {
+    const weekM = html.match(/function startWeekReplay\(days\) \{[\s\S]*?\n  \}/);
+    const eclipseM = html.match(/function startEclipse\(siteKey\) \{[\s\S]*?\n  \}/);
+    expect(weekM).not.toBeNull();
+    expect(eclipseM).not.toBeNull();
+    for (const body of [weekM![0], eclipseM![0]]) {
+      expect(body).not.toContain("classList.remove('open')");
+      expect(body).not.toContain("aria-expanded', 'false'");
+    }
+  });
+
+  it('今日の空(週間再現)・日食モードの再生中、フレームごとにカレンダーの黄色い枠をsyncCalendarToJDで同期する', () => {
+    const todayBranch = html.match(/if \(skyViewMode === 'today'\) \{[\s\S]*?\n    \}/);
+    const eclipseBranch = html.match(/if \(skyViewMode === 'eclipse'\) \{[\s\S]*?\n    \}/);
+    expect(todayBranch).not.toBeNull();
+    expect(eclipseBranch).not.toBeNull();
+    expect(todayBranch![0]).toContain('syncCalendarToJD(weekReplayJD, false)');
+    expect(eclipseBranch![0]).toContain('syncCalendarToJD(eJD, false)');
+  });
+
+  function extractSyncCalendarToJD() {
+    const m = html.match(/var lastCalendarDateKey = '';[\s\S]*?function syncCalendarToJD\(jd, force\) \{[\s\S]*?\n  \}/);
+    expect(m).not.toBeNull();
+    const renderCalls: unknown[] = [];
+    const fakeCalendarPanel = { classList: { contains: () => true } };
+    const fakeJdToDate = (jd: number) => new Date(2026, 0, Math.floor(jd));
+    const fakeRenderCalendar = (d: unknown) => { renderCalls.push(d); };
+    const factory = new Function(
+      'calendarPanel', 'jdToDate', 'renderCalendar',
+      m![0] + "\nreturn function(jd, force) { syncCalendarToJD(jd, force); return lastCalendarDateKey; };"
+    );
+    const sync = factory(fakeCalendarPanel, fakeJdToDate, fakeRenderCalendar) as (jd: number, force?: boolean) => string;
+    return { sync, renderCalls };
+  }
+
+  it('syncCalendarToJDは日付キーが変わらない限り再描画せず、forceで強制再描画できる', () => {
+    const { sync, renderCalls } = extractSyncCalendarToJD();
+    sync(1, false);
+    expect(renderCalls.length, '初回は日付が変わるので描画する').toBe(1);
+    sync(1, false);
+    expect(renderCalls.length, '同じ日付キーなら再描画しない').toBe(1);
+    sync(2, false);
+    expect(renderCalls.length, '日付キーが変われば再描画する').toBe(2);
+    sync(2, true);
+    expect(renderCalls.length, 'forceを渡せば同じ日付でも再描画する').toBe(3);
+  });
+
   it('今日の空モードは夏の大三角形・南十字の線を恒星ドットと同じprojectEclipticSkyで投影する', () => {
     const m = html.match(/function drawTodaySky\([\s\S]*?\n  function drawPoleView/);
     expect(m).not.toBeNull();

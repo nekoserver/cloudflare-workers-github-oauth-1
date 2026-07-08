@@ -44,6 +44,7 @@ input[type=range] { accent-color:#fdb813; width:120px; }
 .calendar-actions { display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-top:10px; }
 .calendar-actions .btn { width:100%; padding-left:6px; padding-right:6px; }
 .cal-eclipse-caption { font-size:10px; color:#8b949e; margin:10px 0 6px; text-align:center; }
+.cal-eclipse-date-btn { width:100%; margin-bottom:6px; }
 </style>
 </head>
 <body>
@@ -82,6 +83,7 @@ input[type=range] { accent-color:#fdb813; width:120px; }
         <button class="btn" id="btnTwoWeekReplay">今日から2週間</button>
       </div>
       <div class="cal-eclipse-caption">🌑 日食モード (2026/8/12)</div>
+      <button class="btn cal-eclipse-date-btn" id="btnEclipseDate">📅 8月12(13)日</button>
       <div class="calendar-actions">
         <button class="btn" id="btnEclipseIceland">🇮🇸 アイスランド</button>
         <button class="btn" id="btnEclipseSpain">🇪🇸 スペイン</button>
@@ -116,6 +118,7 @@ input[type=range] { accent-color:#fdb813; width:120px; }
   var calGrid = document.getElementById('calGrid');
   var btnWeekReplay = document.getElementById('btnWeekReplay');
   var btnTwoWeekReplay = document.getElementById('btnTwoWeekReplay');
+  var btnEclipseDate = document.getElementById('btnEclipseDate');
   var btnEclipseIceland = document.getElementById('btnEclipseIceland');
   var btnEclipseSpain = document.getElementById('btnEclipseSpain');
   var btnToday = document.getElementById('btnToday');
@@ -288,13 +291,15 @@ input[type=range] { accent-color:#fdb813; width:120px; }
     btnSpin.classList.remove('active');
     btnEclipseIceland.classList.toggle('active', siteKey === 'iceland');
     btnEclipseSpain.classList.toggle('active', siteKey === 'spain');
-    calendarPanel.classList.remove('open');
-    btnCalendar.setAttribute('aria-expanded', 'false');
     hideTooltip();
+    syncCalendarToJD(eclipseStartJD, true);
   }
 
-  function renderCalendar() {
-    var now = new Date();
+  // 引数を渡すと、実際の「今日」の代わりにその日付を月表示・黄色枠の基準にする。
+  // 今日の空(週間再現)・日食モードで月や金星が1日ごとに進むのに合わせて
+  // カレンダーパネルの黄色い枠も追従させるために使う(syncCalendarToJD参照)。
+  function renderCalendar(dateOverride) {
+    var now = dateOverride || new Date();
     var y = now.getFullYear();
     var m = now.getMonth();
     calTitle.textContent = y + '-' + String(m + 1).padStart(2, '0');
@@ -315,25 +320,52 @@ input[type=range] { accent-color:#fdb813; width:120px; }
     }
   }
 
+  // カレンダーパネルが開いている間、今表示中のシミュレーション日付が変わった
+  // フレームでだけ再描画する(黄色い枠を追従させつつ、無駄な再構築を避ける)。
+  var lastCalendarDateKey = '';
+  function currentSimulatedJD() {
+    if (skyViewMode === 'today' && weekReplayActive) return weekReplayJD;
+    if (skyViewMode === 'eclipse' && eclipseSite) {
+      var eP = Math.min(1, eclipseElapsed / ECLIPSE_REPLAY_DURATION);
+      return eclipseStartJD + eP * eclipseRangeDays;
+    }
+    return null;
+  }
+  function syncCalendarToJD(jd, force) {
+    if (!calendarPanel.classList.contains('open')) return;
+    var d = jd !== null ? jdToDate(jd) : new Date();
+    var key = d.getFullYear() + '-' + d.getMonth() + '-' + d.getDate();
+    if (!force && key === lastCalendarDateKey) return;
+    lastCalendarDateKey = key;
+    renderCalendar(d);
+  }
+
   function startWeekReplay(days) {
     weekReplayDays = days;
     weekReplayStartJD = todayJD();
     weekReplayJD = weekReplayStartJD;
     weekReplayElapsed = 0;
     weekReplayActive = true;
-    calendarPanel.classList.remove('open');
-    btnCalendar.setAttribute('aria-expanded', 'false');
     if (skyViewMode !== 'today') setSkyMode('today');
+    syncCalendarToJD(weekReplayJD, true);
+  }
+
+  function showEclipseDateInCalendar() {
+    // 皆既の代表時刻(UT正午)を閲覧者のローカル日付に変換して表示する。
+    // タイムゾーンによっては8/12ではなく8/13として表示されるため
+    // ボタンのラベルは「8月12(13)日」としている。
+    syncCalendarToJD(julianDate(2026, 8, 12, 12), true);
   }
 
   btnCalendar.addEventListener('click', function() {
-    renderCalendar();
     var open = !calendarPanel.classList.contains('open');
     calendarPanel.classList.toggle('open', open);
     btnCalendar.setAttribute('aria-expanded', open ? 'true' : 'false');
+    if (open) syncCalendarToJD(currentSimulatedJD(), true);
   });
   btnWeekReplay.addEventListener('click', function() { startWeekReplay(7); });
   btnTwoWeekReplay.addEventListener('click', function() { startWeekReplay(14); });
+  btnEclipseDate.addEventListener('click', showEclipseDateInCalendar);
   btnEclipseIceland.addEventListener('click', function() { startEclipse('iceland'); });
   btnEclipseSpain.addEventListener('click', function() { startEclipse('spain'); });
   btnEarth.addEventListener('click', function() { setSkyMode('earth'); });
@@ -1764,6 +1796,7 @@ input[type=range] { accent-color:#fdb813; width:120px; }
         weekReplayJD = weekReplayStartJD + progress * weekReplayDays;
         if (progress >= 1) weekReplayActive = false;
         drawTodaySky(weekReplayJD);
+        syncCalendarToJD(weekReplayJD, false);
       } else {
         drawTodaySky();
       }
@@ -1792,7 +1825,9 @@ input[type=range] { accent-color:#fdb813; width:120px; }
       if (eclipseSite) {
         eclipseElapsed += dt * speed;
         var eProgress = Math.min(1, eclipseElapsed / ECLIPSE_REPLAY_DURATION);
-        drawEclipseView(eclipseStartJD + eProgress * eclipseRangeDays, eclipseSite);
+        var eJD = eclipseStartJD + eProgress * eclipseRangeDays;
+        drawEclipseView(eJD, eclipseSite);
+        syncCalendarToJD(eJD, false);
       }
       return;
     }
