@@ -164,7 +164,25 @@ describe('getWebGLSolarPage', () => {
     expect(html).not.toContain('id="btnTwoWeekReplay">今日から2週間</button>');
     expect(html).toContain("btnTwoWeekReplay.addEventListener('click', function() { startReplayUntilDate(2026, 8, 13); });");
     expect(html).toContain('var endJD = julianDate(y, mo, d, 23.999);');
-    expect(html).toContain("weekReplayLabel = mo + '/' + d + 'まで';");
+    expect(html).toContain("startCalendarReplay(startJD, endJD, mo + '/' + d + 'まで');");
+  });
+
+  it('トップ俯瞰図では期間再現ボタンを押しても今日の空へ切り替えず、俯瞰図の時刻を進める', () => {
+    const replayM = html.match(/function startCalendarReplay\(startJD, endJD, label\) \{[\s\S]*?\n  \}/);
+    expect(replayM).not.toBeNull();
+    expect(replayM![0]).toContain("if (skyViewMode === '')");
+    expect(replayM![0]).toContain('selectedTopViewJD = weekReplayJD;');
+    expect(replayM![0]).toContain('ensureTodaySkyMode();');
+
+    const currentM = html.match(/function currentSimulatedJD\(\) \{[\s\S]*?\n  \}/);
+    expect(currentM).not.toBeNull();
+    expect(currentM![0]).toContain("if (skyViewMode === '' && weekReplayActive) return weekReplayJD;");
+
+    const frameM = html.match(/function frame\(now\) \{[\s\S]*?ctx.fillStyle = '#000010';/);
+    expect(frameM).not.toBeNull();
+    expect(frameM![0]).toContain('var topProgress = Math.min(1, weekReplayElapsed / weekReplayDuration);');
+    expect(frameM![0]).toContain('selectedTopViewJD = weekReplayJD;');
+    expect(frameM![0]).toContain('syncCalendarToJD(weekReplayJD, false);');
   });
 
   it('今日の空(週間再現)・日食モードの再生中、フレームごとにカレンダーの黄色い枠をsyncCalendarToJDで同期する', () => {
