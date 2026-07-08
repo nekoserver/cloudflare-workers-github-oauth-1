@@ -526,6 +526,16 @@ describe('getWebGLSolarPage', () => {
     expect(dotSpring, '春分: 真横を向く(内積がゼロ)').toBeCloseTo(0, 5);
   });
 
+  it('今日の空・地球目線/月面/ISSモードで月の陰影が地球観測者視点であることを明記している', () => {
+    const todayBody = html.match(/function drawTodaySky\([\s\S]*?\n  function drawPoleView/);
+    const skyViewBody = html.match(/function drawSkyView\(\)[\s\S]*$/);
+    expect(todayBody).not.toBeNull();
+    expect(skyViewBody).not.toBeNull();
+    const note = '※月の満ち欠け(陰影)は地球の地表に立つ観測者から見た見え方を表示しています';
+    expect(todayBody![0]).toContain(note);
+    expect(skyViewBody![0]).toContain(note);
+  });
+
   it('レグルスの黄道緯度(starLat)が実際の値(約+0.46度)に近い', () => {
     const lonMatch = html.match(/var starLon = \[([^\]]*)\];/);
     const latMatch = html.match(/var starLat = \[([^\]]*)\];/);
