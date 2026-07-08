@@ -43,6 +43,7 @@ input[type=range] { accent-color:#fdb813; width:120px; }
 .cal-day.today { border-color:#fdb813; color:#fdb813; background:rgba(253,184,19,.14); font-weight:700; }
 .calendar-actions { display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-top:10px; }
 .calendar-actions .btn { width:100%; padding-left:6px; padding-right:6px; }
+.cal-eclipse-caption { font-size:10px; color:#8b949e; margin:10px 0 6px; text-align:center; }
 </style>
 </head>
 <body>
@@ -80,6 +81,11 @@ input[type=range] { accent-color:#fdb813; width:120px; }
         <button class="btn" id="btnWeekReplay">今日から7日間</button>
         <button class="btn" id="btnTwoWeekReplay">今日から2週間</button>
       </div>
+      <div class="cal-eclipse-caption">🌑 日食モード (2026/8/12)</div>
+      <div class="calendar-actions">
+        <button class="btn" id="btnEclipseIceland">🇮🇸 アイスランド</button>
+        <button class="btn" id="btnEclipseSpain">🇪🇸 スペイン</button>
+      </div>
     </div>
   </div>
   <button class="btn" id="btnPole">🧭 地軸固定</button>
@@ -110,6 +116,8 @@ input[type=range] { accent-color:#fdb813; width:120px; }
   var calGrid = document.getElementById('calGrid');
   var btnWeekReplay = document.getElementById('btnWeekReplay');
   var btnTwoWeekReplay = document.getElementById('btnTwoWeekReplay');
+  var btnEclipseIceland = document.getElementById('btnEclipseIceland');
+  var btnEclipseSpain = document.getElementById('btnEclipseSpain');
   var btnToday = document.getElementById('btnToday');
   var btnPole = document.getElementById('btnPole');
   var btnSpin = document.getElementById('btnSpin');
@@ -152,6 +160,33 @@ input[type=range] { accent-color:#fdb813; width:120px; }
   var weekReplayElapsed = 0;
   var weekReplayDuration = 18;
   var weekReplayDays = 7;
+
+  // 2026年8月12日 皆既日食(Wikipedia "Solar eclipse of August 12, 2026"、timeanddate.com、
+  // adventures.is 調べ)。各地の第1〜第4接触をUT(協定世界時)の小数時で保持する。
+  // 太陽・月の位置式(sunLonReal/moonLonLat)は低精度近似(誤差1度弱)のため、
+  // 実際の皆既(角距離0.5度未満)を再現するには精度が足りない。そのためこのモードは
+  // 出典に基づく実際の接触時刻から欠け具合を直接補間する簡易アニメーションとする。
+  var eclipseSites = {
+    iceland: {
+      key: 'iceland', flag: '🇮🇸', name: 'アイスランド(レイキャビク)',
+      c1: 16 + 47 / 60, c2: 17 + 48 / 60 + 19 / 3600, c3: 17 + 49 / 60 + 18 / 3600, c4: 18 + 47 / 60,
+      tzOffsetH: 0, tzLabel: 'UTC+0',
+      magnitude: 1.02,
+      note: '1954年6月30日以来72年ぶり、アイスランドで見られる皆既日食(次回は2196年)'
+    },
+    spain: {
+      key: 'spain', flag: '🇪🇸', name: 'スペイン(サラゴサ)',
+      c1: 17 + 35 / 60, c2: 18 + 29 / 60, c3: 18 + 29 / 60 + 85 / 3600, c4: 19 + 23 / 60,
+      tzOffsetH: 2, tzLabel: 'CEST(UTC+2)',
+      magnitude: 1.02,
+      note: '日没の約1時間前に皆既となる。マドリードとバルセロナは皆既帯のわずかに外側'
+    }
+  };
+  var ECLIPSE_REPLAY_DURATION = 24;
+  var eclipseSite = null;
+  var eclipseStartJD = 0;
+  var eclipseRangeDays = 0;
+  var eclipseElapsed = 0;
 
   btnOrbits.addEventListener('click', function() {
     showOrbits = !showOrbits;
@@ -231,6 +266,30 @@ input[type=range] { accent-color:#fdb813; width:120px; }
     btnToday.classList.toggle('active', skyViewMode === 'today');
     btnPole.classList.toggle('active', skyViewMode === 'pole');
     btnSpin.classList.toggle('active', skyViewMode === 'spin');
+    btnEclipseIceland.classList.remove('active');
+    btnEclipseSpain.classList.remove('active');
+    hideTooltip();
+  }
+
+  function startEclipse(siteKey) {
+    var site = eclipseSites[siteKey];
+    eclipseSite = site;
+    eclipseStartJD = julianDate(2026, 8, 12, site.c1);
+    eclipseRangeDays = julianDate(2026, 8, 12, site.c4) - eclipseStartJD;
+    eclipseElapsed = 0;
+    weekReplayActive = false;
+    skyViewMode = 'eclipse';
+    btnEarth.classList.remove('active');
+    btnMoon.classList.remove('active');
+    btnISS.classList.remove('active');
+    btnSolstice.classList.remove('active');
+    btnToday.classList.remove('active');
+    btnPole.classList.remove('active');
+    btnSpin.classList.remove('active');
+    btnEclipseIceland.classList.toggle('active', siteKey === 'iceland');
+    btnEclipseSpain.classList.toggle('active', siteKey === 'spain');
+    calendarPanel.classList.remove('open');
+    btnCalendar.setAttribute('aria-expanded', 'false');
     hideTooltip();
   }
 
@@ -275,6 +334,8 @@ input[type=range] { accent-color:#fdb813; width:120px; }
   });
   btnWeekReplay.addEventListener('click', function() { startWeekReplay(7); });
   btnTwoWeekReplay.addEventListener('click', function() { startWeekReplay(14); });
+  btnEclipseIceland.addEventListener('click', function() { startEclipse('iceland'); });
+  btnEclipseSpain.addEventListener('click', function() { startEclipse('spain'); });
   btnEarth.addEventListener('click', function() { setSkyMode('earth'); });
   btnMoon.addEventListener('click', function() { setSkyMode('moon'); });
   btnISS.addEventListener('click', function() { setSkyMode('iss'); });
@@ -437,12 +498,14 @@ input[type=range] { accent-color:#fdb813; width:120px; }
     ctx.restore();
   }
 
-  function todayJD() {
-    var now = new Date();
-    var y = now.getUTCFullYear(), mo = now.getUTCMonth()+1, d = now.getUTCDate();
-    var h = now.getUTCHours() + now.getUTCMinutes()/60 + now.getUTCSeconds()/3600;
+  function julianDate(y, mo, d, h) {
     var aa = Math.floor((14-mo)/12), yy = y+4800-aa, mm = mo+12*aa-3;
     return d + Math.floor((153*mm+2)/5) + 365*yy + Math.floor(yy/4) - Math.floor(yy/100) + Math.floor(yy/400) - 32045.5 + h/24;
+  }
+  function todayJD() {
+    var now = new Date();
+    var h = now.getUTCHours() + now.getUTCMinutes()/60 + now.getUTCSeconds()/3600;
+    return julianDate(now.getUTCFullYear(), now.getUTCMonth()+1, now.getUTCDate(), h);
   }
   function normD(deg) { return ((deg % 360) + 360) % 360; }
   function sunLonReal(jd) {
@@ -965,6 +1028,115 @@ input[type=range] { accent-color:#fdb813; width:120px; }
       ctx.fillStyle = ili9 === 0 ? '#ffd700' : 'rgba(200,220,255,0.82)';
       ctx.fillText(infoL[ili9], 12, iy9 + ili9 * 16 + 4);
     }
+  }
+
+  // 出典に基づく第1〜第4接触の時刻から、太陽・月中心間の画面上の距離(sep)を
+  // 区分線形補間する純粋関数。第2〜第3接触間(皆既中)は中間時刻でsep=0になるよう
+  // 折り返す。drawEclipseView から分離してあるのは、この計算だけを canvas を
+  // 介さずに検証できるようにするため。
+  function eclipsePhaseAt(jd, site, maxSep, minSep) {
+    var c1JD = julianDate(2026, 8, 12, site.c1);
+    var c2JD = julianDate(2026, 8, 12, site.c2);
+    var c3JD = julianDate(2026, 8, 12, site.c3);
+    var c4JD = julianDate(2026, 8, 12, site.c4);
+
+    if (jd <= c1JD) return { sep: maxSep, inTotality: false, phaseLabel: '開始前' };
+    if (jd < c2JD) return { sep: maxSep - (maxSep - minSep) * (jd - c1JD) / (c2JD - c1JD), inTotality: false, phaseLabel: '部分食 進行中' };
+    if (jd <= c3JD) {
+      var mid = (c2JD + c3JD) / 2;
+      var half = (c3JD - c2JD) / 2 || 1e-9;
+      return { sep: minSep * Math.abs(jd - mid) / half, inTotality: true, phaseLabel: '🌑 皆既日食!' };
+    }
+    if (jd < c4JD) return { sep: minSep + (maxSep - minSep) * (jd - c3JD) / (c4JD - c3JD), inTotality: false, phaseLabel: '部分食 進行中' };
+    return { sep: maxSep, inTotality: false, phaseLabel: '終了' };
+  }
+
+  function drawEclipseView(jd, site) {
+    var cx = W / 2, cy = H / 2;
+    var c1JD = julianDate(2026, 8, 12, site.c1);
+    var c2JD = julianDate(2026, 8, 12, site.c2);
+    var c3JD = julianDate(2026, 8, 12, site.c3);
+    var c4JD = julianDate(2026, 8, 12, site.c4);
+
+    var sunPxR = Math.min(W, H) * 0.16;
+    var moonPxR = sunPxR * site.magnitude;
+    var maxSep = sunPxR + moonPxR;
+    var minSep = Math.abs(sunPxR - moonPxR);
+
+    var ph = eclipsePhaseAt(jd, site, maxSep, minSep);
+    var sep = ph.sep, inTotality = ph.inTotality, phaseLabel = ph.phaseLabel;
+
+    // 太陽に対する月の相対移動方向は出典データに含まれないため、見た目のための
+    // 固定値とする(実際の経路角ではない簡易表現)。
+    var dirAngle = -2.3;
+    var mx = cx + Math.cos(dirAngle) * sep;
+    var my = cy + Math.sin(dirAngle) * sep;
+
+    var darkness = inTotality ? 1 : Math.max(0, 1 - sep / maxSep) * 0.9;
+    var topColor = darkness > 0.05
+      ? 'rgb(' + Math.round(70 * (1 - darkness)) + ',' + Math.round(120 * (1 - darkness)) + ',' + Math.round(200 * (1 - darkness) + 10) + ')'
+      : '#4678c8';
+    var grad = ctx.createLinearGradient(0, 0, 0, H);
+    grad.addColorStop(0, topColor);
+    grad.addColorStop(1, darkness > 0.5 ? '#04040a' : '#0a1830');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, W, H);
+
+    if (darkness > 0.4) {
+      var starAlpha = (darkness - 0.4) / 0.6;
+      for (var si10 = 0; si10 < stars.length; si10++) {
+        var st10 = stars[si10];
+        var sx10 = cx + st10.x * 0.3, sy10 = cy + st10.y * 0.3;
+        if (sx10 < 0 || sx10 > W || sy10 < 0 || sy10 > H) continue;
+        ctx.beginPath(); ctx.arc(sx10, sy10, st10.r, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(255,255,255,' + (starAlpha * 0.8).toFixed(2) + ')'; ctx.fill();
+      }
+    }
+
+    drawGlow(cx, cy, sunPxR * 1.15, '#fdb813');
+    ctx.beginPath(); ctx.arc(cx, cy, sunPxR, 0, Math.PI * 2);
+    var sg10 = ctx.createRadialGradient(cx - sunPxR * 0.2, cy - sunPxR * 0.2, sunPxR * 0.1, cx, cy, sunPxR);
+    sg10.addColorStop(0, '#fff5a0'); sg10.addColorStop(0.5, '#fdb813'); sg10.addColorStop(1, '#f57c00');
+    ctx.fillStyle = sg10; ctx.fill();
+
+    if (inTotality) {
+      var corona = ctx.createRadialGradient(cx, cy, sunPxR * 0.97, cx, cy, sunPxR * 1.7);
+      corona.addColorStop(0, 'rgba(255,255,255,0.9)');
+      corona.addColorStop(0.5, 'rgba(230,240,255,0.35)');
+      corona.addColorStop(1, 'rgba(230,240,255,0)');
+      ctx.beginPath(); ctx.arc(cx, cy, sunPxR * 1.7, 0, Math.PI * 2);
+      ctx.fillStyle = corona; ctx.fill();
+    }
+
+    ctx.beginPath(); ctx.arc(mx, my, moonPxR, 0, Math.PI * 2);
+    ctx.fillStyle = '#050505'; ctx.fill();
+
+    var utcHour = (jd - julianDate(2026, 8, 12, 0)) * 24;
+    var localHour = (utcHour + site.tzOffsetH + 24) % 24;
+    var lh = Math.floor(localHour);
+    var lm = Math.floor((localHour - lh) * 60);
+    var ls = Math.floor((((localHour - lh) * 60) - lm) * 60);
+    var pad2e = function(n) { return n < 10 ? '0' + n : '' + n; };
+    var clockText = pad2e(lh) + ':' + pad2e(lm) + ':' + pad2e(ls) + ' ' + site.tzLabel;
+
+    ctx.font = 'bold 13px sans-serif'; ctx.fillStyle = '#fdb813';
+    ctx.fillText(site.flag + ' ' + site.name + '  2026/8/12  ' + clockText, 10, 26);
+    ctx.font = 'bold 14px sans-serif'; ctx.fillStyle = inTotality ? '#ffffff' : 'rgba(230,240,255,0.85)';
+    ctx.fillText(phaseLabel, 10, 48);
+    ctx.font = '11px sans-serif'; ctx.fillStyle = 'rgba(200,220,255,0.75)';
+    ctx.fillText('食分 約' + site.magnitude.toFixed(2) + '  ' + site.note, 10, H - 14);
+
+    var barX = 10, barY = H - 34, barW = W - 20, barH = 6;
+    ctx.fillStyle = 'rgba(255,255,255,0.15)';
+    ctx.fillRect(barX, barY, barW, barH);
+    var barProgress = Math.max(0, Math.min(1, (jd - c1JD) / (c4JD - c1JD)));
+    ctx.fillStyle = '#fdb813';
+    ctx.fillRect(barX, barY, barW * barProgress, barH);
+    var c2X = barX + barW * (c2JD - c1JD) / (c4JD - c1JD);
+    var c3X = barX + barW * (c3JD - c1JD) / (c4JD - c1JD);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(c2X - 1, barY - 2, 2, barH + 4);
+    ctx.fillRect(c3X - 1, barY - 2, 2, barH + 4);
   }
 
   function project3D(dX, dY, dZ) {
@@ -1614,6 +1786,14 @@ input[type=range] { accent-color:#fdb813; width:120px; }
       solsticeOrbAngle += dt * 0.22 * speed;
       solsticeSpinT += dt * 1.8 * speed;
       drawSolsticeView();
+      return;
+    }
+    if (skyViewMode === 'eclipse') {
+      if (eclipseSite) {
+        eclipseElapsed += dt * speed;
+        var eProgress = Math.min(1, eclipseElapsed / ECLIPSE_REPLAY_DURATION);
+        drawEclipseView(eclipseStartJD + eProgress * eclipseRangeDays, eclipseSite);
+      }
       return;
     }
     if (skyViewMode !== '') {

@@ -164,6 +164,95 @@ describe('getWebGLSolarPage', () => {
     }
   });
 
+  function extractEclipseHelpers() {
+    const jdM = html.match(/function julianDate\(y, mo, d, h\) \{[\s\S]*?\n  \}/);
+    const phaseM = html.match(/function eclipsePhaseAt\(jd, site, maxSep, minSep\) \{[\s\S]*?\n  \}/);
+    expect(jdM).not.toBeNull();
+    expect(phaseM).not.toBeNull();
+    const factory = new Function(jdM![0] + '\n' + phaseM![0] + '\nreturn { julianDate: julianDate, eclipsePhaseAt: eclipsePhaseAt };');
+    return factory() as {
+      julianDate: (y: number, mo: number, d: number, h: number) => number;
+      eclipsePhaseAt: (
+        jd: number,
+        site: { c1: number; c2: number; c3: number; c4: number },
+        maxSep: number,
+        minSep: number
+      ) => { sep: number; inTotality: boolean; phaseLabel: string };
+    };
+  }
+
+  function extractEclipseSites() {
+    const m = html.match(/var eclipseSites = \{[\s\S]*?\n  \};/);
+    expect(m).not.toBeNull();
+    const factory = new Function(m![0] + '\nreturn eclipseSites;');
+    return factory() as Record<
+      string,
+      { c1: number; c2: number; c3: number; c4: number; tzOffsetH: number; magnitude: number }
+    >;
+  }
+
+  it('日食モードのUI要素(アイスランド/スペインのボタン)が存在し、クリックで日食モードを開始する', () => {
+    expect(html).toContain('id="btnEclipseIceland"');
+    expect(html).toContain('id="btnEclipseSpain"');
+    expect(html).toContain("btnEclipseIceland.addEventListener('click', function() { startEclipse('iceland'); });");
+    expect(html).toContain("btnEclipseSpain.addEventListener('click', function() { startEclipse('spain'); });");
+  });
+
+  it('日食サイトの接触時刻が第1<第2<第3<第4の順で、8月中旬までに収まる', () => {
+    const { julianDate } = extractEclipseHelpers();
+    const sites = extractEclipseSites();
+    const midAugustJD = julianDate(2026, 8, 15, 0);
+    for (const key of ['iceland', 'spain']) {
+      const s = sites[key];
+      expect(s.c1, key + ': c1<c2').toBeLessThan(s.c2);
+      expect(s.c2, key + ': c2<c3').toBeLessThan(s.c3);
+      expect(s.c3, key + ': c3<c4').toBeLessThan(s.c4);
+      expect(julianDate(2026, 8, 12, s.c4), key + ': 8月中旬までに終了').toBeLessThan(midAugustJD);
+    }
+  });
+
+  // 出典: Wikipedia "Solar eclipse of August 12, 2026"、timeanddate.com、adventures.is
+  it('接触時刻が出典データ(レイキャビク17:48:19UT皆既開始・サラゴサ18:29CEST皆既開始等)と一致する', () => {
+    const sites = extractEclipseSites();
+    expect(sites.iceland.c1).toBeCloseTo(16 + 47 / 60, 4);
+    expect(sites.iceland.c2).toBeCloseTo(17 + 48 / 60 + 19 / 3600, 4);
+    expect(sites.iceland.c3).toBeCloseTo(17 + 49 / 60 + 18 / 3600, 4);
+    expect(sites.iceland.c4).toBeCloseTo(18 + 47 / 60, 4);
+    expect(sites.spain.c1).toBeCloseTo(17 + 35 / 60, 4);
+    expect(sites.spain.c2).toBeCloseTo(18 + 29 / 60, 4);
+    expect(sites.spain.c3).toBeCloseTo(18 + 29 / 60 + 85 / 3600, 4);
+  });
+
+  it('eclipsePhaseAt は第1接触前は最大分離、皆既中央でゼロ、第2/第3接触でリング分離になる', () => {
+    const { julianDate, eclipsePhaseAt } = extractEclipseHelpers();
+    const site = { c1: 10, c2: 11, c3: 11.1, c4: 12.5 };
+    const maxSep = 100, minSep = 6;
+    const c1JD = julianDate(2026, 8, 12, site.c1);
+    const c2JD = julianDate(2026, 8, 12, site.c2);
+    const c3JD = julianDate(2026, 8, 12, site.c3);
+    const c4JD = julianDate(2026, 8, 12, site.c4);
+
+    expect(eclipsePhaseAt(c1JD - 0.01, site, maxSep, minSep).sep).toBeCloseTo(maxSep, 5);
+    expect(eclipsePhaseAt(c1JD - 0.01, site, maxSep, minSep).inTotality).toBe(false);
+    expect(eclipsePhaseAt(c4JD + 0.01, site, maxSep, minSep).sep).toBeCloseTo(maxSep, 5);
+
+    expect(eclipsePhaseAt(c2JD, site, maxSep, minSep).sep).toBeCloseTo(minSep, 5);
+    expect(eclipsePhaseAt(c3JD, site, maxSep, minSep).sep).toBeCloseTo(minSep, 5);
+
+    const mid = (c2JD + c3JD) / 2;
+    const midPhase = eclipsePhaseAt(mid, site, maxSep, minSep);
+    expect(midPhase.inTotality).toBe(true);
+    expect(midPhase.sep).toBeCloseTo(0, 5);
+
+    // c1→c2 は単調減少、c3→c4 は単調増加であることを確認
+    const q1 = eclipsePhaseAt(c1JD + (c2JD - c1JD) * 0.25, site, maxSep, minSep).sep;
+    const q2 = eclipsePhaseAt(c1JD + (c2JD - c1JD) * 0.75, site, maxSep, minSep).sep;
+    expect(q2).toBeLessThan(q1);
+    const q3 = eclipsePhaseAt(c3JD + (c4JD - c3JD) * 0.25, site, maxSep, minSep).sep;
+    const q4 = eclipsePhaseAt(c3JD + (c4JD - c3JD) * 0.75, site, maxSep, minSep).sep;
+    expect(q4).toBeGreaterThan(q3);
+  });
+
   it('レグルスの黄道緯度(starLat)が実際の値(約+0.46度)に近い', () => {
     const lonMatch = html.match(/var starLon = \[([^\]]*)\];/);
     const latMatch = html.match(/var starLat = \[([^\]]*)\];/);
