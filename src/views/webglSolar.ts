@@ -33,12 +33,14 @@ input[type=range] { accent-color:#fdb813; width:120px; }
 #tooltip .tt-type { font-size:11px; color:#8b949e; }
 #tooltip .tt-fact { font-size:12px; margin-top:4px; color:#c9d1d9; }
 .calendar-wrap { position:relative; }
-#calendarPanel { position:absolute; left:0; bottom:32px; width:248px; background:rgba(5,10,30,0.97); border:1px solid #fdb813; border-radius:10px; padding:10px; box-shadow:0 10px 28px rgba(0,0,0,.45); z-index:20; display:none; }
+#calendarPanel { position:fixed; left:18px; bottom:58px; width:248px; background:rgba(5,10,30,0.97); border:1px solid #fdb813; border-radius:10px; padding:10px; box-shadow:0 10px 28px rgba(0,0,0,.45); z-index:20; display:none; user-select:none; touch-action:none; }
 #calendarPanel.open { display:block; }
-.cal-title { font-size:12px; font-weight:700; color:#fdb813; margin-bottom:8px; text-align:center; }
+.cal-title { font-size:12px; font-weight:700; color:#fdb813; margin-bottom:8px; text-align:center; cursor:grab; }
 .cal-grid { display:grid; grid-template-columns:repeat(7,1fr); gap:3px; font-size:10px; text-align:center; }
 .cal-head { color:#8b949e; padding:2px 0; }
 .cal-day { border:1px solid rgba(255,255,255,.08); border-radius:4px; padding:4px 0; color:#c9d1d9; background:rgba(255,255,255,.03); }
+.cal-day:not(.empty) { cursor:pointer; }
+.cal-day:not(.empty):hover { border-color:#58a6ff; color:#58a6ff; background:rgba(88,166,255,.12); }
 .cal-day.empty { border-color:transparent; background:transparent; }
 .cal-day.today { border-color:#fdb813; color:#fdb813; background:rgba(253,184,19,.14); font-weight:700; }
 .calendar-actions { display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-top:10px; }
@@ -164,6 +166,7 @@ input[type=range] { accent-color:#fdb813; width:120px; }
   var weekReplayDuration = 18;
   var weekReplayDays = 7;
   var weekReplayLabel = '今日から7日後まで';
+  var selectedSkyJD = null;
 
   // 2026年8月12日 皆既日食(Wikipedia "Solar eclipse of August 12, 2026"、timeanddate.com、
   // adventures.is 調べ)。各地の第1〜第4接触をUT(協定世界時)の小数時で保持する。
@@ -239,7 +242,7 @@ input[type=range] { accent-color:#fdb813; width:120px; }
   }
 
   function setSkyMode(mode) {
-    if (mode !== 'today') weekReplayActive = false;
+    if (mode !== 'today') { weekReplayActive = false; selectedSkyJD = null; }
     if (mode === 'today' && skyViewMode !== 'today') {
       var jdNow = todayJD();
       var sLonNow = sunLonReal(jdNow) * Math.PI / 180;
@@ -282,6 +285,7 @@ input[type=range] { accent-color:#fdb813; width:120px; }
     eclipseRangeDays = julianDate(2026, 8, 12, site.c4) - eclipseStartJD;
     eclipseElapsed = 0;
     weekReplayActive = false;
+    selectedSkyJD = null;
     skyViewMode = 'eclipse';
     btnEarth.classList.remove('active');
     btnMoon.classList.remove('active');
@@ -317,6 +321,7 @@ input[type=range] { accent-color:#fdb813; width:120px; }
       var cell = document.createElement('div');
       cell.className = 'cal-day' + (day === now.getDate() ? ' today' : '');
       cell.textContent = String(day);
+      cell.dataset.date = y + '-' + String(m + 1).padStart(2, '0') + '-' + String(day).padStart(2, '0');
       calGrid.appendChild(cell);
     }
   }
@@ -326,6 +331,7 @@ input[type=range] { accent-color:#fdb813; width:120px; }
   var lastCalendarDateKey = '';
   function currentSimulatedJD() {
     if (skyViewMode === 'today' && weekReplayActive) return weekReplayJD;
+    if (skyViewMode === 'today' && selectedSkyJD !== null) return selectedSkyJD;
     if (skyViewMode === 'eclipse' && eclipseSite) {
       var eP = Math.min(1, eclipseElapsed / ECLIPSE_REPLAY_DURATION);
       return eclipseStartJD + eP * eclipseRangeDays;
@@ -348,6 +354,7 @@ input[type=range] { accent-color:#fdb813; width:120px; }
     weekReplayJD = weekReplayStartJD;
     weekReplayElapsed = 0;
     weekReplayActive = true;
+    selectedSkyJD = null;
     if (skyViewMode !== 'today') setSkyMode('today');
     syncCalendarToJD(weekReplayJD, true);
   }
@@ -360,6 +367,7 @@ input[type=range] { accent-color:#fdb813; width:120px; }
     weekReplayJD = weekReplayStartJD;
     weekReplayElapsed = 0;
     weekReplayActive = true;
+    selectedSkyJD = null;
     if (skyViewMode !== 'today') setSkyMode('today');
     syncCalendarToJD(weekReplayJD, true);
   }
@@ -370,6 +378,84 @@ input[type=range] { accent-color:#fdb813; width:120px; }
     // ボタンのラベルは「8月12(13)日」としている。
     syncCalendarToJD(julianDate(2026, 8, 12, 12), true);
   }
+
+  function readCookie(name) {
+    var parts = document.cookie ? document.cookie.split('; ') : [];
+    for (var ci = 0; ci < parts.length; ci++) {
+      var eq = parts[ci].indexOf('=');
+      var k = eq >= 0 ? parts[ci].slice(0, eq) : parts[ci];
+      if (decodeURIComponent(k) === name) return decodeURIComponent(eq >= 0 ? parts[ci].slice(eq + 1) : '');
+    }
+    return '';
+  }
+  function writeCookie(name, value) {
+    document.cookie = encodeURIComponent(name) + '=' + encodeURIComponent(value) + '; Max-Age=31536000; Path=/; SameSite=Lax';
+  }
+  function clampCalendarPosition(x, y) {
+    var rect = calendarPanel.getBoundingClientRect();
+    var w = rect.width || 248;
+    var h = rect.height || 240;
+    return {
+      x: Math.max(0, Math.min(window.innerWidth - w, x)),
+      y: Math.max(0, Math.min(window.innerHeight - h, y))
+    };
+  }
+  function setCalendarPosition(x, y, persist) {
+    var pos = clampCalendarPosition(x, y);
+    calendarPanel.style.left = pos.x + 'px';
+    calendarPanel.style.top = pos.y + 'px';
+    calendarPanel.style.bottom = 'auto';
+    if (persist) writeCookie('solar_calendar_pos', Math.round(pos.x) + ',' + Math.round(pos.y));
+  }
+  function restoreCalendarPosition() {
+    var raw = readCookie('solar_calendar_pos');
+    if (!raw) return;
+    var parts = raw.split(',');
+    if (parts.length !== 2) return;
+    var x = parseFloat(parts[0]), y = parseFloat(parts[1]);
+    if (isFinite(x) && isFinite(y)) setCalendarPosition(x, y, false);
+  }
+  var calendarDrag = null;
+  function isCalendarInteractive(el) {
+    return !!(el && el.closest && el.closest('button, .cal-day:not(.empty)'));
+  }
+  calendarPanel.addEventListener('pointerdown', function(e) {
+    if (isCalendarInteractive(e.target)) return;
+    var r = calendarPanel.getBoundingClientRect();
+    calendarDrag = { dx: e.clientX - r.left, dy: e.clientY - r.top };
+    calendarPanel.setPointerCapture(e.pointerId);
+    calTitle.style.cursor = 'grabbing';
+    e.preventDefault();
+  });
+  calendarPanel.addEventListener('pointermove', function(e) {
+    if (!calendarDrag) return;
+    setCalendarPosition(e.clientX - calendarDrag.dx, e.clientY - calendarDrag.dy, false);
+    e.preventDefault();
+  });
+  function endCalendarDrag(e) {
+    if (!calendarDrag) return;
+    calendarDrag = null;
+    calTitle.style.cursor = 'grab';
+    var r = calendarPanel.getBoundingClientRect();
+    setCalendarPosition(r.left, r.top, true);
+    if (e && calendarPanel.hasPointerCapture && calendarPanel.hasPointerCapture(e.pointerId)) calendarPanel.releasePointerCapture(e.pointerId);
+  }
+  calendarPanel.addEventListener('pointerup', endCalendarDrag);
+  calendarPanel.addEventListener('pointercancel', endCalendarDrag);
+  window.addEventListener('resize', function() {
+    var r = calendarPanel.getBoundingClientRect();
+    setCalendarPosition(r.left, r.top, true);
+  });
+  calGrid.addEventListener('click', function(e) {
+    var cell = e.target && e.target.closest ? e.target.closest('.cal-day:not(.empty)') : null;
+    if (!cell || !cell.dataset.date) return;
+    var parts = cell.dataset.date.split('-').map(function(v) { return parseInt(v, 10); });
+    selectedSkyJD = julianDate(parts[0], parts[1], parts[2], 12);
+    weekReplayActive = false;
+    if (skyViewMode !== 'today') setSkyMode('today');
+    syncCalendarToJD(selectedSkyJD, true);
+  });
+  restoreCalendarPosition();
 
   btnCalendar.addEventListener('click', function() {
     var open = !calendarPanel.classList.contains('open');
@@ -1811,6 +1897,8 @@ input[type=range] { accent-color:#fdb813; width:120px; }
         if (progress >= 1) weekReplayActive = false;
         drawTodaySky(weekReplayJD);
         syncCalendarToJD(weekReplayJD, false);
+      } else if (selectedSkyJD !== null) {
+        drawTodaySky(selectedSkyJD);
       } else {
         drawTodaySky();
       }
