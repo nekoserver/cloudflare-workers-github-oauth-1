@@ -160,10 +160,16 @@ input[type=range] { accent-color:#fdb813; width:120px; }
   var fovH = Math.PI * 2 / 3;
   var SKY_FOV_MIN = Math.PI / 8;
   var SKY_FOV_MAX = Math.PI * 0.85;
-  var EARTH_DIAMETER_FIT_FOV_MAX = Math.PI;
+  var EARTH_DIAMETER_FIT_FOV_MIN = Math.PI;
+  var EARTH_DIAMETER_FIT_FOV_MAX = Math.PI * 1.4;
 
+  function earthDiameterFitFovMax() {
+    var shortSide = Math.max(1, Math.min(W || 0, H || 0));
+    var aspectFitFov = 4 * Math.atan(((W || shortSide) / shortSide) * 1.08);
+    return Math.max(EARTH_DIAMETER_FIT_FOV_MIN, Math.min(EARTH_DIAMETER_FIT_FOV_MAX, aspectFitFov));
+  }
   function maxSkyFovForMode() {
-    return (skyViewMode === 'today' || skyViewMode === 'spin') ? EARTH_DIAMETER_FIT_FOV_MAX : SKY_FOV_MAX;
+    return (skyViewMode === 'today' || skyViewMode === 'spin') ? earthDiameterFitFovMax() : SKY_FOV_MAX;
   }
   function clampSkyFov(nextFov) {
     return Math.max(SKY_FOV_MIN, Math.min(maxSkyFovForMode(), nextFov));
@@ -1446,11 +1452,13 @@ input[type=range] { accent-color:#fdb813; width:120px; }
       // 増加し(θ→90°でdotFw→0に発散)、画面の左右端に近づくほど歪みが
       // 大きくなる。天球を見上げる全モード(今日の空・地軸固定・自転・
       // 地球目線・月面・ISSは最大 0.85π、今日の空・自転は地球の
-      // 直径(地平線から反対側の地平線までの180°)が画面に入るπまで広がりうる)を
+      // 直径(地平線から反対側の地平線までの180°)が画面に余白込みで
+      // 入るよう、画面の短辺に合わせて最大1.4πまで広がりうる)を
       // 平射(ステレオ)投影 r = k*tan(θ/2) に統一し、拡大率の増加を
       // sec^2(θ/2) 程度に抑えて周辺の歪みを緩和する。夏至モードはこの関数を
       // 使わない別視点(3人称の公転図)のため対象外。
-      if (dotFw <= -0.5) return null;
+      var backCull = (skyViewMode === 'today' || skyViewMode === 'spin') ? -0.75 : -0.5;
+      if (dotFw <= backCull) return null;
       var domeScale = (W / 2) / Math.tan(fovH / 4) / (1 + dotFw);
       sx = W / 2 + dotRt * domeScale;
       sy3 = H / 2 - dotUp * domeScale;
