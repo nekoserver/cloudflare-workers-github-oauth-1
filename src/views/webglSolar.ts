@@ -1503,8 +1503,12 @@ input[type=range] { accent-color:#fdb813; width:120px; }
       ctx.arc(x, y, r, Math.PI / 2, 3 * Math.PI / 2);
       ctx.ellipse(x, y, Math.abs(c) * r, r, 0, 3 * Math.PI / 2, Math.PI / 2, c < 0);
     } else {
+      // else 分岐は if 分岐(満ちる方向)を左右反転した「欠ける方向」に対応するため、
+      // 端点(位相0.5=満月で暗部ゼロ、1.0=新月で全暗)を正しく閉じるには if 分岐と
+      // 同じ c<0 判定が必要。c>0 のままだと満月直後(位相0.5超)に暗部が全暗へ
+      // 反転し、新月直前(位相1.0手前)に逆に全明へ反転する符号違いのバグになる。
       ctx.arc(x, y, r, -Math.PI / 2, Math.PI / 2);
-      ctx.ellipse(x, y, Math.abs(c) * r, r, 0, Math.PI / 2, -Math.PI / 2, c > 0);
+      ctx.ellipse(x, y, Math.abs(c) * r, r, 0, Math.PI / 2, -Math.PI / 2, c < 0);
     }
     ctx.closePath();
     ctx.fillStyle = '#060614';
