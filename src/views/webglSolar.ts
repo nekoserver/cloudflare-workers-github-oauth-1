@@ -516,7 +516,7 @@ input[type=range] { accent-color:#fdb813; width:120px; }
     for (var gi = 0; gi < steps; gi++) {
       var glon = gi * Math.PI * 2 / steps;
       var prev = null;
-      for (var gj = -80; gj <= 80; gj += 5) {
+      for (var gj = -80; gj <= 80; gj += 2.5) {
         var glat = gj * Math.PI / 180;
         var gp = projectSky(glon, glat);
         if (gp && prev) { ctx.beginPath(); ctx.moveTo(prev.x, prev.y); ctx.lineTo(gp.x, gp.y); ctx.stroke(); }
@@ -530,7 +530,7 @@ input[type=range] { accent-color:#fdb813; width:120px; }
       var latDeg2 = latLines[li2];
       var glat2 = latDeg2 * Math.PI / 180;
       var prev2 = null;
-      var lonStep2 = Math.abs(latDeg2) >= 75 ? 2 : 5;
+      var lonStep2 = Math.abs(latDeg2) >= 75 ? 2 : 3;
       ctx.strokeStyle = Math.abs(latDeg2) >= 75 ? 'rgba(100,180,255,0.24)' : 'rgba(100,180,255,0.18)';
       for (var gk = 0; gk <= 360; gk += lonStep2) {
         var glon2 = gk * Math.PI / 180;
@@ -569,9 +569,8 @@ input[type=range] { accent-color:#fdb813; width:120px; }
     ];
     var mll = moonLonLat(jd);
 
-    var focal = (W / 2) / Math.tan(fovH / 2);
-    var cp3 = Math.cos(viewElev), sp3 = Math.sin(viewElev);
-    var horizonY = H / 2 - (sp3 / cp3) * focal;
+    // 平射投影(project3D の dome 分岐)と同じ式系で水平線位置を近似する
+    var horizonY = H / 2 - Math.tan(viewElev / 2) * (W / 2) / Math.tan(fovH / 4);
 
     var skyGrad = ctx.createLinearGradient(0, 0, 0, Math.max(0, horizonY));
     skyGrad.addColorStop(0, '#000018'); skyGrad.addColorStop(1, '#000c28');
@@ -658,9 +657,8 @@ input[type=range] { accent-color:#fdb813; width:120px; }
   }
 
   function drawPoleView() {
-    var focal = (W / 2) / Math.tan(fovH / 2);
-    var cp3 = Math.cos(viewElev), sp3 = Math.sin(viewElev);
-    var horizonY = H / 2 - (sp3 / cp3) * focal;
+    // 平射投影(project3D の dome 分岐)と同じ式系で水平線位置を近似する
+    var horizonY = H / 2 - Math.tan(viewElev / 2) * (W / 2) / Math.tan(fovH / 4);
 
     ctx.fillStyle = '#000010'; ctx.fillRect(0, 0, W, H);
 
@@ -968,12 +966,23 @@ input[type=range] { accent-color:#fdb813; width:120px; }
     var cy2 = Math.cos(viewAngle), sy2 = Math.sin(viewAngle);
     var cp2 = Math.cos(viewElev), sp2 = Math.sin(viewElev);
     var dotFw = dX * cy2 * cp2 + dY * sy2 * cp2 + dZ * sp2;
-    if (dotFw <= 0.01) return null;
     var dotRt = dX * sy2 - dY * cy2;
     var dotUp = -dX * cy2 * sp2 - dY * sy2 * sp2 + dZ * cp2;
-    var focal = (W / 2) / Math.tan(fovH / 2);
-    var sx = W / 2 + dotRt / dotFw * focal;
-    var sy3 = H / 2 - dotUp / dotFw * focal;
+    var sx, sy3;
+    if (skyViewMode === 'today' || skyViewMode === 'pole' || skyViewMode === 'spin') {
+      // 直線透視(ピンホール)投影は大円(経線・赤道)をすべて画面上の直線に写すため
+      // グリッドがドーム状に見えない。天球グリッドを持つこの3モードでは
+      // 平射(ステレオ)投影 r = k*tan(θ/2) で投影し、大円も緯線も円弧として曲げる。
+      if (dotFw <= -0.5) return null;
+      var domeScale = (W / 2) / Math.tan(fovH / 4) / (1 + dotFw);
+      sx = W / 2 + dotRt * domeScale;
+      sy3 = H / 2 - dotUp * domeScale;
+    } else {
+      if (dotFw <= 0.01) return null;
+      var focal = (W / 2) / Math.tan(fovH / 2);
+      sx = W / 2 + dotRt / dotFw * focal;
+      sy3 = H / 2 - dotUp / dotFw * focal;
+    }
     if (sx < -80 || sx > W + 80 || sy3 < -80 || sy3 > H + 80) return null;
     return { x: sx, y: sy3 };
   }

@@ -63,6 +63,52 @@ describe('getWebGLSolarPage', () => {
     }
   });
 
+  function extractProject3D() {
+    const m = html.match(/function project3D\(dX, dY, dZ\) \{[\s\S]*?\n  \}/);
+    expect(m).not.toBeNull();
+    const factory = new Function(
+      'viewAngle', 'viewElev', 'fovH', 'W', 'H', 'skyViewMode',
+      m![0] + '\nreturn project3D;'
+    );
+    return (mode: string) =>
+      factory(0, 0.5, Math.PI * 0.6, 1000, 800, mode) as (
+        x: number, y: number, z: number
+      ) => { x: number; y: number } | null;
+  }
+
+  // 直線透視(ピンホール)投影は天球上の大円(経線・赤道)をすべて画面上の直線に
+  // 写すため、グリッドがドーム状に見えない。今日の空・地軸固定・自転の3モードは
+  // 平射(ステレオ)投影で大円が円弧に曲がることを検証する。
+  it('今日の空・地軸固定・自転モードでは大円がドーム状の曲線として投影される', () => {
+    const make = extractProject3D();
+    for (const mode of ['today', 'pole', 'spin']) {
+      const project = make(mode);
+      const center = project(Math.cos(0.5), 0, Math.sin(0.5));
+      expect(center, mode + ': 視線中心').not.toBeNull();
+      expect(center!.x).toBeCloseTo(500, 3);
+      expect(center!.y).toBeCloseTo(400, 3);
+      const p1 = project(Math.cos(-0.7), Math.sin(-0.7), 0);
+      const p2 = project(1, 0, 0);
+      const p3 = project(Math.cos(0.7), Math.sin(0.7), 0);
+      expect(p1 && p2 && p3, mode + ': 赤道上の3点が投影可能').toBeTruthy();
+      const cross = (p2!.x - p1!.x) * (p3!.y - p1!.y) - (p2!.y - p1!.y) * (p3!.x - p1!.x);
+      expect(Math.abs(cross), mode + ': 大円がドーム状に曲がる').toBeGreaterThan(1000);
+    }
+  });
+
+  it('地球目線・月面・ISSモードは従来どおりの直線透視投影を維持する', () => {
+    const make = extractProject3D();
+    for (const mode of ['earth', 'moon', 'iss']) {
+      const project = make(mode);
+      const p1 = project(Math.cos(-0.7), Math.sin(-0.7), 0);
+      const p2 = project(1, 0, 0);
+      const p3 = project(Math.cos(0.7), Math.sin(0.7), 0);
+      expect(p1 && p2 && p3, mode + ': 赤道上の3点が投影可能').toBeTruthy();
+      const cross = (p2!.x - p1!.x) * (p3!.y - p1!.y) - (p2!.y - p1!.y) * (p3!.x - p1!.x);
+      expect(Math.abs(cross), mode + ': 大円は直線のまま').toBeLessThan(1e-3);
+    }
+  });
+
   it('レグルスの黄道緯度(starLat)が実際の値(約+0.46度)に近い', () => {
     const lonMatch = html.match(/var starLon = \[([^\]]*)\];/);
     const latMatch = html.match(/var starLat = \[([^\]]*)\];/);
