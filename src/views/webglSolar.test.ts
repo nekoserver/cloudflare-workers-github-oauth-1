@@ -306,10 +306,11 @@ describe('getWebGLSolarPage', () => {
     expect(q4).toBeGreaterThan(q3);
   });
 
-  // drawMoonPhase が生成する暗部パス(円弧+楕円弧)を点列に離散化し、
-  // レイキャスト法で内外判定することで、実際にどちら側が欠けて見えるかを検証する。
-  function extractDarkRegionAt(phaseNorm: number) {
-    const m = html.match(/function drawMoonPhase\(x, y, r, phaseNorm\) \{[\s\S]*?\n  \}/);
+  // drawMoonPhase が生成する暗部パス(円弧+楕円弧)を、ctx.translate/rotate を
+  // 反映した座標変換つきの点列に離散化し、レイキャスト法で内外判定することで、
+  // 実際にどちら側が欠けて見えるかを検証する。
+  function extractDarkRegionAt(phaseNorm: number, sunAngle: number) {
+    const m = html.match(/function drawMoonPhase\(x, y, r, phaseNorm, sunAngle\) \{[\s\S]*?\n  \}/);
     expect(m).not.toBeNull();
 
     function normAngle(a: number) {
@@ -330,18 +331,29 @@ describe('getWebGLSolarPage', () => {
       return pts;
     }
 
+    let tx = 0, ty = 0, rot = 0;
+    const stack: Array<{ tx: number; ty: number; rot: number }> = [];
+    function localToWorld([px, py]: [number, number]): [number, number] {
+      const cos = Math.cos(rot), sin = Math.sin(rot);
+      return [px * cos - py * sin + tx, px * sin + py * cos + ty];
+    }
+
     const filledPolygons: Array<{ style: unknown; points: [number, number][] }> = [];
     let currentPath: [number, number][] = [];
     const fakeCtx = {
-      save() {}, restore() {}, beginPath() { currentPath = []; }, closePath() {},
+      save() { stack.push({ tx, ty, rot }); },
+      restore() { const s = stack.pop(); if (s) { tx = s.tx; ty = s.ty; rot = s.rot; } },
+      beginPath() { currentPath = []; }, closePath() {},
+      translate(dx: number, dy: number) { [tx, ty] = localToWorld([dx, dy]); },
+      rotate(a: number) { rot += a; },
       fillStyle: undefined as unknown,
       strokeStyle: undefined as unknown,
       lineWidth: 0,
       arc(x: number, y: number, r: number, start: number, end: number, ccw?: boolean) {
-        currentPath = currentPath.concat(sampleArc(x, y, r, r, start, end, !!ccw));
+        currentPath = currentPath.concat(sampleArc(x, y, r, r, start, end, !!ccw).map(localToWorld));
       },
       ellipse(x: number, y: number, rx: number, ry: number, _rot: number, start: number, end: number, ccw?: boolean) {
-        currentPath = currentPath.concat(sampleArc(x, y, rx, ry, start, end, !!ccw));
+        currentPath = currentPath.concat(sampleArc(x, y, rx, ry, start, end, !!ccw).map(localToWorld));
       },
       fill() { filledPolygons.push({ style: this.fillStyle, points: currentPath }); },
       stroke() {},
@@ -349,7 +361,7 @@ describe('getWebGLSolarPage', () => {
 
     const factory = new Function('ctx', 'Math', m![0] + '\nreturn drawMoonPhase;');
     const drawMoonPhase = factory(fakeCtx, Math);
-    drawMoonPhase(0, 0, 1, phaseNorm);
+    drawMoonPhase(0, 0, 1, phaseNorm, sunAngle);
 
     const darkPoly = filledPolygons.find((p) => p.style === '#060614');
     expect(darkPoly, 'dark fill path for phaseNorm=' + phaseNorm).toBeDefined();
@@ -371,28 +383,40 @@ describe('getWebGLSolarPage', () => {
     };
   }
 
-  it('新月(0)は全体が暗く、満月(0.5付近)は全体が明るい', () => {
-    expect(extractDarkRegionAt(0.001)).toEqual({ left: true, right: true });
-    expect(extractDarkRegionAt(0.49)).toEqual({ left: false, right: false });
-    expect(extractDarkRegionAt(0.5)).toEqual({ left: false, right: false });
+  it('新月(0)は全体が暗く、満月(0.5付近)は全体が明るい(太陽の向きによらない)', () => {
+    expect(extractDarkRegionAt(0.001, 0)).toEqual({ left: true, right: true });
+    expect(extractDarkRegionAt(0.49, 0)).toEqual({ left: false, right: false });
+    expect(extractDarkRegionAt(0.5, 0)).toEqual({ left: false, right: false });
   });
 
   it('満月直後(0.5〜0.6)がいきなり全暗になる符号反転バグが再発しない', () => {
     // 実際に確認されていたバグ: 満月(0.49)の直後、0.5〜0.6の範囲で
     // 暗部が全体に反転してしまい、新月に向かって滑らかに欠けていかなかった。
     for (const p of [0.5, 0.52, 0.55, 0.58, 0.6]) {
-      const region = extractDarkRegionAt(p);
+      const region = extractDarkRegionAt(p, 0);
       expect(region, 'phaseNorm=' + p + 'で全暗になってはいけない').not.toEqual({ left: true, right: true });
     }
   });
 
-  it('上弦(0.25)は左が暗く、下弦(0.75)は右が暗い(満ち欠けが左右対称)', () => {
-    expect(extractDarkRegionAt(0.25)).toEqual({ left: true, right: false });
-    expect(extractDarkRegionAt(0.75)).toEqual({ left: false, right: true });
+  it('新月直前(1.0手前)は全体が暗い', () => {
+    expect(extractDarkRegionAt(0.999, 0)).toEqual({ left: true, right: true });
   });
 
-  it('新月直前(1.0手前)は全体が暗い', () => {
-    expect(extractDarkRegionAt(0.999)).toEqual({ left: true, right: true });
+  it('欠ける/満ちる側は太陽の実際の画面上の向き(sunAngle)に従い、暗部は常に太陽と反対側になる', () => {
+    // 太陽が月から見て右(sunAngle=0)にあれば、暗部は左(太陽と反対側)。
+    // 上弦(0.25)・下弦(0.75)どちらでも、waxing/waningの区別なく太陽の向きだけで決まる。
+    expect(extractDarkRegionAt(0.25, 0)).toEqual({ left: true, right: false });
+    expect(extractDarkRegionAt(0.75, 0)).toEqual({ left: true, right: false });
+    // 太陽が月から見て左(sunAngle=π)にあれば、暗部は右(太陽と反対側)。
+    expect(extractDarkRegionAt(0.25, Math.PI)).toEqual({ left: false, right: true });
+    expect(extractDarkRegionAt(0.75, Math.PI)).toEqual({ left: false, right: true });
+  });
+
+  it('drawMoonPhaseの呼び出し元はいずれも実際の太陽・月の画面座標からsunAngleを計算して渡す', () => {
+    expect(html).toMatch(/var mSunAngleT = sunPos5 \? Math\.atan2\(sunPos5\.y - moonPosT\.y, sunPos5\.x - moonPosT\.x\) : 0;/);
+    expect(html).toContain('drawMoonPhase(moonPosT.x, moonPosT.y, 16, mPhaseT / (Math.PI*2), mSunAngleT);');
+    expect(html).toMatch(/var mSunAngleSV = sunPos \? Math\.atan2\(sunPos\.y - mPosSV\.y, sunPos\.x - mPosSV\.x\) : 0;/);
+    expect(html).toContain('drawMoonPhase(mPosSV.x, mPosSV.y, 16, phaseAng / (Math.PI * 2), mSunAngleSV);');
   });
 
   it('レグルスの黄道緯度(starLat)が実際の値(約+0.46度)に近い', () => {

@@ -739,7 +739,8 @@ input[type=range] { accent-color:#fdb813; width:120px; }
     var moonPosT = projectEclipticSky(mll.lon, mll.lat);
     if (moonPosT) {
       var mPhaseT = ((mll.lon - sLonR) % (Math.PI*2) + Math.PI*2) % (Math.PI*2);
-      drawMoonPhase(moonPosT.x, moonPosT.y, 16, mPhaseT / (Math.PI*2));
+      var mSunAngleT = sunPos5 ? Math.atan2(sunPos5.y - moonPosT.y, sunPos5.x - moonPosT.x) : 0;
+      drawMoonPhase(moonPosT.x, moonPosT.y, 16, mPhaseT / (Math.PI*2), mSunAngleT);
       if (showPlanetLabels) { ctx.font = '11px sans-serif'; ctx.fillStyle = '#aaa'; ctx.fillText('月', moonPosT.x+20, moonPosT.y+4); }
       planetScreenPos.push({ x: moonPosT.x, y: moonPosT.y, item: { name: '月', type: '衛星', fact: '地球の天然衛星。29.5日で満ち欠けを繰り返します' } });
     }
@@ -1213,7 +1214,14 @@ input[type=range] { accent-color:#fdb813; width:120px; }
     return { x: Math.cos(ea) * ep.orbitR, y: ORBIT_Y_SIGN * Math.sin(ea) * ep.orbitR };
   }
 
-  function drawMoonPhase(x, y, r, phaseNorm) {
+  // sunAngle は「月から見て太陽がある向き」を画面座標のatan2角度(0=右,π/2=下,
+  // π=左,3π/2=上)で渡す。月は太陽に照らされているので、暗部は常に太陽と反対側
+  // (sunAngle+π方向)を中心にしなければならない。以前はこの向きを
+  // phaseNorm(満ち欠けのどちら半分か)だけで固定側(左/右)に決め打ちしていたため、
+  // 太陽の実際の画面位置と無関係に暗部の向きがずれるバグになっていた。
+  // ここでは太陽方向にあわせて座標系ごと回転させることで、位相(欠け具合)と
+  // 向き(どちら側が欠けるか)を分離し、常に太陽と反対側が欠けるようにする。
+  function drawMoonPhase(x, y, r, phaseNorm, sunAngle) {
     ctx.save();
     ctx.beginPath();
     ctx.arc(x, y, r, 0, Math.PI * 2);
@@ -1221,21 +1229,18 @@ input[type=range] { accent-color:#fdb813; width:120px; }
     ctx.fill();
     var theta = phaseNorm * Math.PI * 2;
     var c = Math.cos(theta);
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(sunAngle || 0);
     ctx.beginPath();
-    if (phaseNorm < 0.5) {
-      ctx.arc(x, y, r, Math.PI / 2, 3 * Math.PI / 2);
-      ctx.ellipse(x, y, Math.abs(c) * r, r, 0, 3 * Math.PI / 2, Math.PI / 2, c < 0);
-    } else {
-      // else 分岐は if 分岐(満ちる方向)を左右反転した「欠ける方向」に対応するため、
-      // 端点(位相0.5=満月で暗部ゼロ、1.0=新月で全暗)を正しく閉じるには if 分岐と
-      // 同じ c<0 判定が必要。c>0 のままだと満月直後(位相0.5超)に暗部が全暗へ
-      // 反転し、新月直前(位相1.0手前)に逆に全明へ反転する符号違いのバグになる。
-      ctx.arc(x, y, r, -Math.PI / 2, Math.PI / 2);
-      ctx.ellipse(x, y, Math.abs(c) * r, r, 0, Math.PI / 2, -Math.PI / 2, c < 0);
-    }
+    // ローカル座標系では +x 方向(角度0)が太陽の方向になるよう回転済みなので、
+    // 暗部の基準半円は常に太陽と反対側(角度 π/2 〜 3π/2、ローカル -x 側)に置く。
+    ctx.arc(0, 0, r, Math.PI / 2, 3 * Math.PI / 2);
+    ctx.ellipse(0, 0, Math.abs(c) * r, r, 0, 3 * Math.PI / 2, Math.PI / 2, c < 0);
     ctx.closePath();
     ctx.fillStyle = '#060614';
     ctx.fill();
+    ctx.restore();
     ctx.beginPath();
     ctx.arc(x, y, r, 0, Math.PI * 2);
     ctx.strokeStyle = 'rgba(200,200,200,0.25)';
@@ -1449,7 +1454,8 @@ input[type=range] { accent-color:#fdb813; width:120px; }
       var mPosSV = projectSky(mLonSV, 0.05);
       if (mPosSV) {
         var phaseAng = ((mLonSV - sunLon) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2);
-        drawMoonPhase(mPosSV.x, mPosSV.y, 16, phaseAng / (Math.PI * 2));
+        var mSunAngleSV = sunPos ? Math.atan2(sunPos.y - mPosSV.y, sunPos.x - mPosSV.x) : 0;
+        drawMoonPhase(mPosSV.x, mPosSV.y, 16, phaseAng / (Math.PI * 2), mSunAngleSV);
         if (showPlanetLabels) {
           ctx.font = '11px sans-serif'; ctx.fillStyle = '#aaa';
           ctx.fillText('月', mPosSV.x + 20, mPosSV.y + 4);
