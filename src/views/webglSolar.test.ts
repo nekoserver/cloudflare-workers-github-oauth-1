@@ -145,15 +145,26 @@ describe('getWebGLSolarPage', () => {
     expect(html).toContain("btnEclipseDate.addEventListener('click', showEclipseDateInCalendar);");
   });
 
-  it('7日間・2週間・日食(アイスランド/スペイン)のボタンはカレンダーパネルを閉じない', () => {
+  it('7日間・8/13まで・日食(アイスランド/スペイン)のボタンはカレンダーパネルを閉じない', () => {
     const weekM = html.match(/function startWeekReplay\(days\) \{[\s\S]*?\n  \}/);
+    const untilM = html.match(/function startReplayUntilDate\(y, mo, d\) \{[\s\S]*?\n  \}/);
     const eclipseM = html.match(/function startEclipse\(siteKey\) \{[\s\S]*?\n  \}/);
     expect(weekM).not.toBeNull();
+    expect(untilM).not.toBeNull();
     expect(eclipseM).not.toBeNull();
-    for (const body of [weekM![0], eclipseM![0]]) {
+    for (const body of [weekM![0], untilM![0], eclipseM![0]]) {
       expect(body).not.toContain("classList.remove('open')");
       expect(body).not.toContain("aria-expanded', 'false'");
     }
+  });
+
+
+  it('「今日から2週間」ボタンを「8/13まで」に変更し、8月13日末まで再現する', () => {
+    expect(html).toContain('id="btnTwoWeekReplay">8/13まで</button>');
+    expect(html).not.toContain('id="btnTwoWeekReplay">今日から2週間</button>');
+    expect(html).toContain("btnTwoWeekReplay.addEventListener('click', function() { startReplayUntilDate(2026, 8, 13); });");
+    expect(html).toContain('var endJD = julianDate(y, mo, d, 23.999);');
+    expect(html).toContain("weekReplayLabel = mo + '/' + d + 'まで';");
   });
 
   it('今日の空(週間再現)・日食モードの再生中、フレームごとにカレンダーの黄色い枠をsyncCalendarToJDで同期する', () => {
