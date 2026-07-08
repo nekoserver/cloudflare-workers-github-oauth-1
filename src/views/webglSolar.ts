@@ -80,7 +80,7 @@ input[type=range] { accent-color:#fdb813; width:120px; }
       <div class="cal-grid" id="calGrid"></div>
       <div class="calendar-actions">
         <button class="btn" id="btnWeekReplay">今日から7日間</button>
-        <button class="btn" id="btnTwoWeekReplay">今日から2週間</button>
+        <button class="btn" id="btnTwoWeekReplay">8/13まで</button>
       </div>
       <div class="cal-eclipse-caption">🌑 日食モード (2026/8/12)</div>
       <button class="btn cal-eclipse-date-btn" id="btnEclipseDate">📅 8月12(13)日</button>
@@ -163,6 +163,7 @@ input[type=range] { accent-color:#fdb813; width:120px; }
   var weekReplayElapsed = 0;
   var weekReplayDuration = 18;
   var weekReplayDays = 7;
+  var weekReplayLabel = '今日から7日後まで';
 
   // 2026年8月12日 皆既日食(Wikipedia "Solar eclipse of August 12, 2026"、timeanddate.com、
   // adventures.is 調べ)。各地の第1〜第4接触をUT(協定世界時)の小数時で保持する。
@@ -342,7 +343,20 @@ input[type=range] { accent-color:#fdb813; width:120px; }
 
   function startWeekReplay(days) {
     weekReplayDays = days;
+    weekReplayLabel = '今日から' + days + '日後まで';
     weekReplayStartJD = todayJD();
+    weekReplayJD = weekReplayStartJD;
+    weekReplayElapsed = 0;
+    weekReplayActive = true;
+    if (skyViewMode !== 'today') setSkyMode('today');
+    syncCalendarToJD(weekReplayJD, true);
+  }
+
+  function startReplayUntilDate(y, mo, d) {
+    weekReplayStartJD = todayJD();
+    var endJD = julianDate(y, mo, d, 23.999);
+    weekReplayDays = Math.max(0, endJD - weekReplayStartJD);
+    weekReplayLabel = mo + '/' + d + 'まで';
     weekReplayJD = weekReplayStartJD;
     weekReplayElapsed = 0;
     weekReplayActive = true;
@@ -364,7 +378,7 @@ input[type=range] { accent-color:#fdb813; width:120px; }
     if (open) syncCalendarToJD(currentSimulatedJD(), true);
   });
   btnWeekReplay.addEventListener('click', function() { startWeekReplay(7); });
-  btnTwoWeekReplay.addEventListener('click', function() { startWeekReplay(14); });
+  btnTwoWeekReplay.addEventListener('click', function() { startReplayUntilDate(2026, 8, 13); });
   btnEclipseDate.addEventListener('click', showEclipseDateInCalendar);
   btnEclipseIceland.addEventListener('click', function() { startEclipse('iceland'); });
   btnEclipseSpain.addEventListener('click', function() { startEclipse('spain'); });
@@ -752,7 +766,7 @@ input[type=range] { accent-color:#fdb813; width:120px; }
     var hh2 = nowD.getHours(), mn2 = nowD.getMinutes();
     var mn2s = pad2(mn2);
     ctx.font = '12px sans-serif'; ctx.fillStyle = 'rgba(100,220,255,0.8)';
-    var replayText = weekReplayActive ? '  今日から' + weekReplayDays + '日後まで再現中' : '';
+    var replayText = weekReplayActive ? '  ' + weekReplayLabel + '再現中' : '';
     ctx.fillText('🌟 今日の空  ' + yy2 + '/' + mm2 + '/' + dd2 + ' ' + pad2(hh2) + ':' + mn2s + replayText + '  地軸傾き23.4°反映  ドラッグ:視点回転', 10, 28);
   }
 
