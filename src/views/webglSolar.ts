@@ -399,6 +399,7 @@ input[type=range] { accent-color:#fdb813; width:120px; }
       return eclipseStartJD + eP * eclipseRangeDays;
     }
     if (skyViewMode === '' && weekReplayActive) return weekReplayJD;
+    if (skyViewMode === 'spin' && weekReplayActive) return weekReplayJD;
     if (skyViewMode === '' && selectedTopViewJD !== null) return selectedTopViewJD;
     return null;
   }
@@ -451,6 +452,8 @@ input[type=range] { accent-color:#fdb813; width:120px; }
     weekReplayActive = true;
     if (skyViewMode === '') {
       selectedTopViewJD = weekReplayJD;
+      selectedSkyJD = null;
+    } else if (skyViewMode === 'spin') {
       selectedSkyJD = null;
     } else {
       selectedSkyJD = null;
@@ -2112,6 +2115,13 @@ input[type=range] { accent-color:#fdb813; width:120px; }
       return;
     }
     if (skyViewMode === 'spin') {
+      if (weekReplayActive) {
+        weekReplayElapsed += dt * speed;
+        var spinProgress = Math.min(1, weekReplayElapsed / weekReplayDuration);
+        weekReplayJD = weekReplayStartJD + spinProgress * weekReplayDays;
+        if (spinProgress >= 1) weekReplayActive = false;
+        syncCalendarToJD(weekReplayJD, false);
+      }
       viewAngle += dt * 0.009 * speed;
       drawSpinView();
       drawMeteors(dt);
