@@ -290,7 +290,7 @@ describe('getWebGLSolarPage', () => {
     expect(html).toContain("btnEclipseSpain.addEventListener('click', function() { startEclipse('spain'); });");
   });
 
-  it('アイスランド/スペインの広角モードボタンが存在し、太陽残像のみを一定間隔で描画する', () => {
+  it('アイスランド/スペインの広角モードボタンが存在し、各太陽残像に時系列の月の影を重ねる', () => {
     expect(html).toContain('id="btnEclipseWideIceland"');
     expect(html).toContain('id="btnEclipseWideSpain"');
     expect(html).toContain("btnEclipseWideIceland.addEventListener('click', function() { startEclipseWide('iceland'); });");
@@ -299,11 +299,12 @@ describe('getWebGLSolarPage', () => {
     expect(html).toContain('var ECLIPSE_WIDE_AFTERIMAGE_COUNT = 9;');
     const wideM = html.match(/function drawEclipseWideView\(site\) \{[\s\S]*?\n  \}/);
     expect(wideM).not.toBeNull();
-    expect(wideM![0]).toContain('一定時間ごとの太陽の残像');
+    expect(wideM![0]).toContain('太陽残像(影付き)');
     expect(wideM![0]).toContain('formatEclipseLocalTime(c1JD, site)');
     expect(wideM![0]).toContain('formatEclipseLocalTime(c4JD, site)');
-    expect(wideM![0]).not.toContain('moonPxR');
-    expect(wideM![0]).not.toContain('ctx.arc(mx, my');
+    expect(wideM![0]).toContain('var ph = eclipsePhaseAt(jd, site, maxSep, minSep);');
+    expect(wideM![0]).toContain('var moonX = x + Math.cos(dirAngle) * ph.sep;');
+    expect(wideM![0]).toContain('ctx.arc(moonX, moonY, moonR, 0, Math.PI * 2);');
   });
 
   it('日食サイトの接触時刻が第1<第2<第3<第4の順で、8月中旬までに収まる', () => {
