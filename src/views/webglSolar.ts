@@ -952,6 +952,8 @@ input[type=range] { accent-color:#fdb813; width:120px; }
     ctx.font = '12px sans-serif'; ctx.fillStyle = 'rgba(100,220,255,0.8)';
     var replayText = weekReplayActive ? '  ' + weekReplayLabel + '再現中' : '';
     ctx.fillText('🌟 今日の空  ' + yy2 + '/' + mm2 + '/' + dd2 + ' ' + pad2(hh2) + ':' + mn2s + replayText + '  地軸傾き23.4°反映  ドラッグ:視点回転', 10, 28);
+    ctx.font = '10px sans-serif'; ctx.fillStyle = 'rgba(180,220,255,0.55)';
+    ctx.fillText('※月の満ち欠け(陰影)は地球の地表に立つ観測者から見た見え方を表示しています', 10, 46);
   }
 
   function drawPoleView() {
@@ -1789,6 +1791,8 @@ input[type=range] { accent-color:#fdb813; width:120px; }
                   '🌍 地球目線  ドラッグ:視点回転  ピンチ/スクロール:ズーム');
     ctx.font = '12px sans-serif'; ctx.fillStyle = 'rgba(100,180,255,0.65)';
     ctx.fillText(hudText, 10, 28);
+    ctx.font = '10px sans-serif'; ctx.fillStyle = 'rgba(180,220,255,0.55)';
+    ctx.fillText('※月の満ち欠け(陰影)は地球の地表に立つ観測者から見た見え方を表示しています', 10, 46);
   }
 
   var planets = [
