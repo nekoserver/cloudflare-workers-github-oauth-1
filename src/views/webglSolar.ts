@@ -936,7 +936,12 @@ input[type=range] { accent-color:#fdb813; width:120px; }
     var moonPosT = projectEclipticSky(mll.lon, mll.lat);
     if (moonPosT) {
       var mPhaseT = ((mll.lon - sLonR) % (Math.PI*2) + Math.PI*2) % (Math.PI*2);
-      drawMoonPhase(moonPosT.x, moonPosT.y, 16, mPhaseT / (Math.PI*2));
+      // 今日の空モードは、ユーザー視点で月が太陽の向こう側を横切る
+      // 見た目を優先するため、太陽と同じ方向で満月に最も近くなる位相へ
+      // 反転する。これにより右→左に太陽背後を抜けた直後は、月の左側から
+      // 欠けて新月へ向かう表示になる。
+      var todayPhaseT = ((mPhaseT + Math.PI) % (Math.PI*2)) / (Math.PI*2);
+      drawMoonPhase(moonPosT.x, moonPosT.y, 16, todayPhaseT);
       if (showPlanetLabels) { ctx.font = '11px sans-serif'; ctx.fillStyle = '#aaa'; ctx.fillText('月', moonPosT.x+20, moonPosT.y+4); }
       planetScreenPos.push({ x: moonPosT.x, y: moonPosT.y, item: { name: '月', type: '衛星', fact: '地球の天然衛星。29.5日で満ち欠けを繰り返します' } });
     }
