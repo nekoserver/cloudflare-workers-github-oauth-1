@@ -306,6 +306,95 @@ describe('getWebGLSolarPage', () => {
     expect(q4).toBeGreaterThan(q3);
   });
 
+  // drawMoonPhase が生成する暗部パス(円弧+楕円弧)を点列に離散化し、
+  // レイキャスト法で内外判定することで、実際にどちら側が欠けて見えるかを検証する。
+  function extractDarkRegionAt(phaseNorm: number) {
+    const m = html.match(/function drawMoonPhase\(x, y, r, phaseNorm\) \{[\s\S]*?\n  \}/);
+    expect(m).not.toBeNull();
+
+    function normAngle(a: number) {
+      while (a < 0) a += Math.PI * 2;
+      while (a >= Math.PI * 2) a -= Math.PI * 2;
+      return a;
+    }
+    function sampleArc(cx: number, cy: number, rx: number, ry: number, start: number, end: number, ccw: boolean) {
+      const pts: [number, number][] = [];
+      const s = normAngle(start), e = normAngle(end);
+      let delta = e - s;
+      if (!ccw) { if (delta <= 0) delta += Math.PI * 2; }
+      else { if (delta >= 0) delta -= Math.PI * 2; }
+      for (let i = 0; i <= 60; i++) {
+        const a = s + delta * (i / 60);
+        pts.push([cx + Math.cos(a) * rx, cy + Math.sin(a) * ry]);
+      }
+      return pts;
+    }
+
+    const filledPolygons: Array<{ style: unknown; points: [number, number][] }> = [];
+    let currentPath: [number, number][] = [];
+    const fakeCtx = {
+      save() {}, restore() {}, beginPath() { currentPath = []; }, closePath() {},
+      fillStyle: undefined as unknown,
+      strokeStyle: undefined as unknown,
+      lineWidth: 0,
+      arc(x: number, y: number, r: number, start: number, end: number, ccw?: boolean) {
+        currentPath = currentPath.concat(sampleArc(x, y, r, r, start, end, !!ccw));
+      },
+      ellipse(x: number, y: number, rx: number, ry: number, _rot: number, start: number, end: number, ccw?: boolean) {
+        currentPath = currentPath.concat(sampleArc(x, y, rx, ry, start, end, !!ccw));
+      },
+      fill() { filledPolygons.push({ style: this.fillStyle, points: currentPath }); },
+      stroke() {},
+    };
+
+    const factory = new Function('ctx', 'Math', m![0] + '\nreturn drawMoonPhase;');
+    const drawMoonPhase = factory(fakeCtx, Math);
+    drawMoonPhase(0, 0, 1, phaseNorm);
+
+    const darkPoly = filledPolygons.find((p) => p.style === '#060614');
+    expect(darkPoly, 'dark fill path for phaseNorm=' + phaseNorm).toBeDefined();
+
+    function pointInPolygon(pt: [number, number], poly: [number, number][]) {
+      const [x, y] = pt;
+      let inside = false;
+      for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+        const [xi, yi] = poly[i], [xj, yj] = poly[j];
+        const intersect = (yi > y) !== (yj > y) && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi;
+        if (intersect) inside = !inside;
+      }
+      return inside;
+    }
+    const poly = darkPoly!.points;
+    return {
+      left: pointInPolygon([-0.6, 0], poly),
+      right: pointInPolygon([0.6, 0], poly),
+    };
+  }
+
+  it('新月(0)は全体が暗く、満月(0.5付近)は全体が明るい', () => {
+    expect(extractDarkRegionAt(0.001)).toEqual({ left: true, right: true });
+    expect(extractDarkRegionAt(0.49)).toEqual({ left: false, right: false });
+    expect(extractDarkRegionAt(0.5)).toEqual({ left: false, right: false });
+  });
+
+  it('満月直後(0.5〜0.6)がいきなり全暗になる符号反転バグが再発しない', () => {
+    // 実際に確認されていたバグ: 満月(0.49)の直後、0.5〜0.6の範囲で
+    // 暗部が全体に反転してしまい、新月に向かって滑らかに欠けていかなかった。
+    for (const p of [0.5, 0.52, 0.55, 0.58, 0.6]) {
+      const region = extractDarkRegionAt(p);
+      expect(region, 'phaseNorm=' + p + 'で全暗になってはいけない').not.toEqual({ left: true, right: true });
+    }
+  });
+
+  it('上弦(0.25)は左が暗く、下弦(0.75)は右が暗い(満ち欠けが左右対称)', () => {
+    expect(extractDarkRegionAt(0.25)).toEqual({ left: true, right: false });
+    expect(extractDarkRegionAt(0.75)).toEqual({ left: false, right: true });
+  });
+
+  it('新月直前(1.0手前)は全体が暗い', () => {
+    expect(extractDarkRegionAt(0.999)).toEqual({ left: true, right: true });
+  });
+
   it('レグルスの黄道緯度(starLat)が実際の値(約+0.46度)に近い', () => {
     const lonMatch = html.match(/var starLon = \[([^\]]*)\];/);
     const latMatch = html.match(/var starLat = \[([^\]]*)\];/);
