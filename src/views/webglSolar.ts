@@ -173,6 +173,7 @@ input[type=range] { accent-color:#fdb813; width:120px; }
   var weekReplayDays = 7;
   var weekReplayLabel = '今日から7日後まで';
   var selectedSkyJD = null;
+  var selectedTopViewJD = null;
 
   // 2026年8月12日 皆既日食(Wikipedia "Solar eclipse of August 12, 2026"、timeanddate.com、
   // adventures.is 調べ)。各地の第1〜第4接触をUT(協定世界時)の小数時で保持する。
@@ -381,6 +382,7 @@ input[type=range] { accent-color:#fdb813; width:120px; }
       var eP = Math.min(1, eclipseElapsed / ECLIPSE_REPLAY_DURATION);
       return eclipseStartJD + eP * eclipseRangeDays;
     }
+    if (skyViewMode === '' && selectedTopViewJD !== null) return selectedTopViewJD;
     return null;
   }
   function syncCalendarToJD(jd, force) {
@@ -392,6 +394,37 @@ input[type=range] { accent-color:#fdb813; width:120px; }
     renderCalendar(d);
   }
 
+  function ensureTodaySkyMode() {
+    if (skyViewMode !== 'today') setSkyMode('today');
+  }
+
+  function applyTodaySkyCalendarDate(jd) {
+    selectedSkyJD = jd;
+    weekReplayActive = false;
+    ensureTodaySkyMode();
+    syncCalendarToJD(selectedSkyJD, true);
+  }
+
+  function applyTopViewCalendarDate(jd) {
+    selectedTopViewJD = jd;
+    weekReplayActive = false;
+    selectedSkyJD = null;
+    syncCalendarToJD(selectedTopViewJD, true);
+  }
+
+  function applyCalendarSelectedDate(y, mo, d) {
+    var jd = julianDate(y, mo, d, 12);
+    if (skyViewMode === 'today') {
+      applyTodaySkyCalendarDate(jd);
+      return;
+    }
+    if (skyViewMode === '') {
+      applyTopViewCalendarDate(jd);
+      return;
+    }
+    applyTodaySkyCalendarDate(jd);
+  }
+
   function startWeekReplay(days) {
     weekReplayDays = days;
     weekReplayLabel = '今日から' + days + '日後まで';
@@ -400,7 +433,7 @@ input[type=range] { accent-color:#fdb813; width:120px; }
     weekReplayElapsed = 0;
     weekReplayActive = true;
     selectedSkyJD = null;
-    if (skyViewMode !== 'today') setSkyMode('today');
+    ensureTodaySkyMode();
     syncCalendarToJD(weekReplayJD, true);
   }
 
@@ -413,7 +446,7 @@ input[type=range] { accent-color:#fdb813; width:120px; }
     weekReplayElapsed = 0;
     weekReplayActive = true;
     selectedSkyJD = null;
-    if (skyViewMode !== 'today') setSkyMode('today');
+    ensureTodaySkyMode();
     syncCalendarToJD(weekReplayJD, true);
   }
 
@@ -495,10 +528,7 @@ input[type=range] { accent-color:#fdb813; width:120px; }
     var cell = e.target && e.target.closest ? e.target.closest('.cal-day:not(.empty)') : null;
     if (!cell || !cell.dataset.date) return;
     var parts = cell.dataset.date.split('-').map(function(v) { return parseInt(v, 10); });
-    selectedSkyJD = julianDate(parts[0], parts[1], parts[2], 12);
-    weekReplayActive = false;
-    if (skyViewMode !== 'today') setSkyMode('today');
-    syncCalendarToJD(selectedSkyJD, true);
+    applyCalendarSelectedDate(parts[0], parts[1], parts[2]);
   });
   restoreCalendarPosition();
 
@@ -1971,6 +2001,11 @@ input[type=range] { accent-color:#fdb813; width:120px; }
     ctx.fillText('☄️ ペルセウス座流星群  毎年8月中旬が極大', 10, H - 14);
   }
 
+  function topViewTimeParameter() {
+    if (selectedTopViewJD === null) return t;
+    return (selectedTopViewJD - 2451545.0) / 365.25 * Math.PI * 2;
+  }
+
   var lastTime = null;
   function frame(now) {
     requestAnimationFrame(frame);
@@ -2064,6 +2099,7 @@ input[type=range] { accent-color:#fdb813; width:120px; }
     }
 
     var sc = scale || 1;
+    var topT = topViewTimeParameter();
 
     if (showConstellations) {
       for (var cli = 0; cli < constellationLines.length; cli++) {
@@ -2136,7 +2172,7 @@ input[type=range] { accent-color:#fdb813; width:120px; }
 
     for (var pi = 0; pi < planets.length; pi++) {
       var pl = planets[pi];
-      var ang = pl.angle + t / pl.period;
+      var ang = pl.angle + topT / pl.period;
       var orbitScaled = pl.orbitR * sc;
       var px = cx + orbitScaled * Math.cos(ang);
       var py = cy + ORBIT_Y_SIGN * orbitScaled * Math.sin(ang);
@@ -2189,7 +2225,7 @@ input[type=range] { accent-color:#fdb813; width:120px; }
       ctx.restore();
     }
 
-    var moonAng = moon.angle + t / moon.period;
+    var moonAng = moon.angle + topT / moon.period;
     var moonX = earthX + moonOrbitScaled * Math.cos(moonAng);
     var moonY = earthY + ORBIT_Y_SIGN * moonOrbitScaled * Math.sin(moonAng);
     var moonR = Math.max(2, moon.radius * sc * 1.4);
@@ -2203,7 +2239,7 @@ input[type=range] { accent-color:#fdb813; width:120px; }
     }
 
     var issOrbitScaled = iss.orbitR * sc;
-    var issAng3 = iss.angle + t / iss.period;
+    var issAng3 = iss.angle + topT / iss.period;
     var issX = earthX + issOrbitScaled * Math.cos(issAng3);
     var issY = earthY + ORBIT_Y_SIGN * issOrbitScaled * Math.sin(issAng3);
     var issAlp2 = 0.5 + 0.5 * Math.sin(t * 25);

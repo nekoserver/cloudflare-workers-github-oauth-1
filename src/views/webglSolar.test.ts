@@ -168,8 +168,11 @@ describe('getWebGLSolarPage', () => {
   });
 
   it('今日の空(週間再現)・日食モードの再生中、フレームごとにカレンダーの黄色い枠をsyncCalendarToJDで同期する', () => {
-    const todayBranch = html.match(/if \(skyViewMode === 'today'\) \{[\s\S]*?\n    \}/);
-    const eclipseBranch = html.match(/if \(skyViewMode === 'eclipse'\) \{[\s\S]*?\n    \}/);
+    const frameM = html.match(/function frame\(now\) \{[\s\S]*?\n  \}/);
+    expect(frameM).not.toBeNull();
+    const frameBody = frameM![0];
+    const todayBranch = frameBody.match(/if \(skyViewMode === 'today'\) \{[\s\S]*?\n    \}/);
+    const eclipseBranch = frameBody.match(/if \(skyViewMode === 'eclipse'\) \{[\s\S]*?\n    \}/);
     expect(todayBranch).not.toBeNull();
     expect(eclipseBranch).not.toBeNull();
     expect(todayBranch![0]).toContain('syncCalendarToJD(weekReplayJD, false)');
@@ -201,6 +204,31 @@ describe('getWebGLSolarPage', () => {
     expect(renderCalls.length, '日付キーが変われば再描画する').toBe(2);
     sync(2, true);
     expect(renderCalls.length, 'forceを渡せば同じ日付でも再描画する').toBe(3);
+  });
+
+
+  it('カレンダーの日付選択は今日の空モード用処理とトップ俯瞰図用処理を分岐する', () => {
+    const m = html.match(/function applyCalendarSelectedDate\(y, mo, d\) \{[\s\S]*?\n  \}/);
+    expect(m).not.toBeNull();
+    const body = m![0];
+    expect(body).toContain("if (skyViewMode === 'today')");
+    expect(body).toContain('applyTodaySkyCalendarDate(jd);');
+    expect(body).toContain("if (skyViewMode === '')");
+    expect(body).toContain('applyTopViewCalendarDate(jd);');
+  });
+
+  it('トップページ読み込み時の太陽系俯瞰図ではカレンダー選択で今日の空へ切り替えず、選択JDを保持する', () => {
+    const topM = html.match(/function applyTopViewCalendarDate\(jd\) \{[\s\S]*?\n  \}/);
+    expect(topM).not.toBeNull();
+    const topBody = topM![0];
+    expect(topBody).toContain('selectedTopViewJD = jd;');
+    expect(topBody).not.toContain("setSkyMode('today')");
+
+    const timeM = html.match(/function topViewTimeParameter\(\) \{[\s\S]*?\n  \}/);
+    expect(timeM).not.toBeNull();
+    expect(timeM![0]).toContain('selectedTopViewJD');
+    expect(html).toContain('var ang = pl.angle + topT / pl.period;');
+    expect(html).toContain('var moonAng = moon.angle + topT / moon.period;');
   });
 
   it('今日の空モードは夏の大三角形・南十字の線を恒星ドットと同じprojectEclipticSkyで投影する', () => {
