@@ -1361,10 +1361,10 @@ input[type=range] { accent-color:#fdb813; width:120px; }
 
     ctx.font = 'bold 13px sans-serif';
     ctx.fillStyle = '#fdb813';
-    ctx.fillText(site.flag + ' ' + site.name + ' 広角モード — 日食開始から終了までの太陽残像のみ', 10, 26);
+    ctx.fillText(site.flag + ' ' + site.name + ' 広角モード — 日食開始から終了までの太陽残像(影付き)', 10, 26);
     ctx.font = '11px sans-serif';
     ctx.fillStyle = 'rgba(230,240,255,0.8)';
-    ctx.fillText('開始 ' + formatEclipseLocalTime(c1JD, site) + '  →  終了 ' + formatEclipseLocalTime(c4JD, site) + ' / 一定間隔 ' + ECLIPSE_WIDE_AFTERIMAGE_COUNT + '点', 10, 46);
+    ctx.fillText('開始 ' + formatEclipseLocalTime(c1JD, site) + '  →  終了 ' + formatEclipseLocalTime(c4JD, site) + ' / 時系列 ' + ECLIPSE_WIDE_AFTERIMAGE_COUNT + '点', 10, 46);
 
     var horizonY = H * 0.78;
     ctx.strokeStyle = 'rgba(255,255,255,0.25)';
@@ -1374,27 +1374,50 @@ input[type=range] { accent-color:#fdb813; width:120px; }
     ctx.lineTo(W, horizonY);
     ctx.stroke();
 
+    var dirAngle = -2.3;
     for (var i = 0; i < ECLIPSE_WIDE_AFTERIMAGE_COUNT; i++) {
       var p = ECLIPSE_WIDE_AFTERIMAGE_COUNT === 1 ? 0 : i / (ECLIPSE_WIDE_AFTERIMAGE_COUNT - 1);
       var jd = c1JD + (c4JD - c1JD) * p;
       var x = W * (0.14 + 0.72 * p);
       var y = H * (site.key === 'spain' ? 0.32 + 0.34 * p : 0.36 + 0.12 * Math.sin(p * Math.PI));
       var r = Math.max(13, Math.min(W, H) * 0.035);
-      ctx.globalAlpha = 0.35 + 0.55 * p;
-      drawGlow(x, y, r * 1.7, '#fdb813');
+      var moonR = r * site.magnitude;
+      var maxSep = r + moonR;
+      var minSep = Math.abs(r - moonR);
+      var ph = eclipsePhaseAt(jd, site, maxSep, minSep);
+      var moonX = x + Math.cos(dirAngle) * ph.sep;
+      var moonY = y + Math.sin(dirAngle) * ph.sep;
+      var alpha = 0.38 + 0.52 * p;
+
+      ctx.globalAlpha = alpha;
+      drawGlow(x, y, r * (ph.inTotality ? 2.2 : 1.7), ph.inTotality ? '#e8f0ff' : '#fdb813');
       ctx.beginPath();
       ctx.arc(x, y, r, 0, Math.PI * 2);
-      ctx.fillStyle = '#fdb813';
+      var sgw = ctx.createRadialGradient(x - r * 0.2, y - r * 0.2, r * 0.1, x, y, r);
+      sgw.addColorStop(0, '#fff5a0'); sgw.addColorStop(0.55, '#fdb813'); sgw.addColorStop(1, '#f57c00');
+      ctx.fillStyle = sgw;
+      ctx.fill();
+      if (ph.inTotality) {
+        var corW = ctx.createRadialGradient(x, y, r * 0.95, x, y, r * 1.65);
+        corW.addColorStop(0, 'rgba(255,255,255,0.75)');
+        corW.addColorStop(0.55, 'rgba(230,240,255,0.28)');
+        corW.addColorStop(1, 'rgba(230,240,255,0)');
+        ctx.beginPath(); ctx.arc(x, y, r * 1.65, 0, Math.PI * 2);
+        ctx.fillStyle = corW; ctx.fill();
+      }
+      ctx.beginPath();
+      ctx.arc(moonX, moonY, moonR, 0, Math.PI * 2);
+      ctx.fillStyle = '#050505';
       ctx.fill();
       ctx.globalAlpha = 1;
       ctx.font = '10px sans-serif';
       ctx.fillStyle = 'rgba(255,255,255,0.86)';
-      ctx.fillText(formatEclipseLocalTime(jd, site), x - 26, y + r + 14);
+      ctx.fillText((i + 1) + '. ' + formatEclipseLocalTime(jd, site), x - 30, y + r + 14);
     }
 
     ctx.font = '10px sans-serif';
     ctx.fillStyle = 'rgba(200,220,255,0.7)';
-    ctx.fillText('※月・星・地上物は描かず、一定時間ごとの太陽の残像と時刻だけを記録します。', 10, H - 14);
+    ctx.fillText('※各残像は同じ時刻の月の影を重ね、開始→皆既→終了の欠け方を時系列で示します。', 10, H - 14);
   }
 
   function project3D(dX, dY, dZ) {
