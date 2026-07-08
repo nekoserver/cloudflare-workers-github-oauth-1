@@ -382,6 +382,7 @@ input[type=range] { accent-color:#fdb813; width:120px; }
       var eP = Math.min(1, eclipseElapsed / ECLIPSE_REPLAY_DURATION);
       return eclipseStartJD + eP * eclipseRangeDays;
     }
+    if (skyViewMode === '' && weekReplayActive) return weekReplayJD;
     if (skyViewMode === '' && selectedTopViewJD !== null) return selectedTopViewJD;
     return null;
   }
@@ -425,29 +426,32 @@ input[type=range] { accent-color:#fdb813; width:120px; }
     applyTodaySkyCalendarDate(jd);
   }
 
-  function startWeekReplay(days) {
-    weekReplayDays = days;
-    weekReplayLabel = '今日から' + days + '日後まで';
-    weekReplayStartJD = todayJD();
+  function startCalendarReplay(startJD, endJD, label) {
+    weekReplayStartJD = startJD;
+    weekReplayDays = Math.max(0, endJD - startJD);
+    weekReplayLabel = label;
     weekReplayJD = weekReplayStartJD;
     weekReplayElapsed = 0;
     weekReplayActive = true;
-    selectedSkyJD = null;
-    ensureTodaySkyMode();
+    if (skyViewMode === '') {
+      selectedTopViewJD = weekReplayJD;
+      selectedSkyJD = null;
+    } else {
+      selectedSkyJD = null;
+      ensureTodaySkyMode();
+    }
     syncCalendarToJD(weekReplayJD, true);
   }
 
+  function startWeekReplay(days) {
+    var startJD = todayJD();
+    startCalendarReplay(startJD, startJD + days, '今日から' + days + '日後まで');
+  }
+
   function startReplayUntilDate(y, mo, d) {
-    weekReplayStartJD = todayJD();
+    var startJD = todayJD();
     var endJD = julianDate(y, mo, d, 23.999);
-    weekReplayDays = Math.max(0, endJD - weekReplayStartJD);
-    weekReplayLabel = mo + '/' + d + 'まで';
-    weekReplayJD = weekReplayStartJD;
-    weekReplayElapsed = 0;
-    weekReplayActive = true;
-    selectedSkyJD = null;
-    ensureTodaySkyMode();
-    syncCalendarToJD(weekReplayJD, true);
+    startCalendarReplay(startJD, endJD, mo + '/' + d + 'まで');
   }
 
   function showEclipseDateInCalendar() {
@@ -2098,6 +2102,15 @@ input[type=range] { accent-color:#fdb813; width:120px; }
       drawSkyView();
       drawMeteors(dt);
       return;
+    }
+
+    if (weekReplayActive) {
+      weekReplayElapsed += dt * speed;
+      var topProgress = Math.min(1, weekReplayElapsed / weekReplayDuration);
+      weekReplayJD = weekReplayStartJD + topProgress * weekReplayDays;
+      selectedTopViewJD = weekReplayJD;
+      if (topProgress >= 1) weekReplayActive = false;
+      syncCalendarToJD(weekReplayJD, false);
     }
 
     ctx.fillStyle = '#000010';
