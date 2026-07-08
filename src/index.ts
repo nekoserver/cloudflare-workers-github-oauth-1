@@ -34,6 +34,7 @@ import { getHeritageAccessPage } from './views/heritageAccess';
 import { getWebGLLVSpherePage } from './views/webglLVSphere';
 import { getWebGLCubePage } from './views/webglCube';
 import { getWebGLSolarPage } from './views/webglSolar';
+import { getEclipseTiltLessonPage } from './views/eclipseTiltLesson';
 import { getWebGLFaultsPage } from './views/webglFaults';
 import { getUuidGenPage } from './views/uuidGen';
 import { getMLBSpherePage } from './views/mlbSphere';
@@ -5383,6 +5384,11 @@ app.get('/webgl-cube', authMiddleware, async (c) => {
 app.get('/webgl-solar', authMiddleware, async (c) => {
   const user = c.get('user');
   return c.html(getWebGLSolarPage(user.sub));
+});
+
+app.get('/eclipse-tilt-lesson', authMiddleware, async (c) => {
+  const user = c.get('user');
+  return c.html(getEclipseTiltLessonPage(user.sub));
 });
 
 app.get('/matrix', (c) => {
