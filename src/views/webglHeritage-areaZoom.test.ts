@@ -212,11 +212,17 @@ describe('getWebGLHeritagePage エリアズーム機能（種別ごとの巡回�
     const flashMatch = html.match(/function flashAreaTourSideItem\(idx\) \{[\s\S]*?\n  \}/);
     expect(flashMatch).not.toBeNull();
     const fn = flashMatch![0];
-    const scrollPos = fn.indexOf('scrollIntoView');
+    // カーソル位置基準のスクロール(scrollAreaTourItemToCursor)に置き換わっており、
+    // その内部で scrollIntoView をフォールバックとして使う実装になっている
+    const scrollPos = fn.indexOf('scrollAreaTourItemToCursor(idx)');
     const flashPos = fn.indexOf("classList.add('area-tour-flash')");
     expect(scrollPos).toBeGreaterThan(-1);
     expect(flashPos).toBeGreaterThan(-1);
     expect(scrollPos).toBeLessThan(flashPos);
+
+    const cursorScrollMatch = html.match(/function scrollAreaTourItemToCursor\(idx\) \{[\s\S]*?\n  \}/);
+    expect(cursorScrollMatch).not.toBeNull();
+    expect(cursorScrollMatch![0]).toContain('scrollIntoView');
   });
 
   it('駅(station)種別の巡回では地球儀上に🚉ピンを表示する（既存の showRailStationPin を利用する）', () => {

@@ -17,9 +17,9 @@ describe('モデルリスト更新: DeepSeek 削除・新モデル追加', () =>
     expect(html).not.toContain('deepseek-r1-distill-qwen-32b');
   });
 
-  it('gemma-3-12b が選択肢に含まれる', () => {
+  it('gpt-oss-20b が選択肢に含まれる', () => {
     const html = buildPage(LLAMA_MODEL);
-    expect(html).toContain('@cf/google/gemma-3-12b-it');
+    expect(html).toContain('@cf/openai/gpt-oss-20b');
   });
 
   it('llama-4-scout-17b が選択肢に含まれる', () => {
@@ -32,9 +32,9 @@ describe('モデルリスト更新: DeepSeek 削除・新モデル追加', () =>
     expect(html).not.toContain('@cf/zai-org/glm-4.7-flash');
   });
 
-  it('gemma-3-12b のラベルが含まれる', () => {
+  it('gpt-oss-20b のラベルが含まれる', () => {
     const html = buildPage(LLAMA_MODEL);
-    expect(html).toContain('>gemma-3-12b</option>');
+    expect(html).toContain('>gpt-oss-20b</option>');
   });
 
   it('llama-4-scout-17b のラベルが含まれる', () => {
