@@ -158,6 +158,16 @@ input[type=range] { accent-color:#fdb813; width:120px; }
   var viewAngle = 0;
   var viewElev = 0;
   var fovH = Math.PI * 2 / 3;
+  var SKY_FOV_MIN = Math.PI / 8;
+  var SKY_FOV_MAX = Math.PI * 0.85;
+  var EARTH_DIAMETER_FIT_FOV_MAX = Math.PI;
+
+  function maxSkyFovForMode() {
+    return (skyViewMode === 'today' || skyViewMode === 'spin') ? EARTH_DIAMETER_FIT_FOV_MAX : SKY_FOV_MAX;
+  }
+  function clampSkyFov(nextFov) {
+    return Math.max(SKY_FOV_MIN, Math.min(maxSkyFovForMode(), nextFov));
+  }
   var pinchStartDist = 0;
   var pinchStartFov = Math.PI * 2 / 3;
   var dragActive = false;
@@ -606,7 +616,7 @@ input[type=range] { accent-color:#fdb813; width:120px; }
     if (skyViewMode === 'solstice') {
       solsticeZoom = Math.max(0.3, Math.min(5.0, solsticeZoom * (1 - e.deltaY * 0.001)));
     } else {
-      fovH = Math.max(Math.PI / 8, Math.min(Math.PI * 0.85, fovH + e.deltaY * 0.0015));
+      fovH = clampSkyFov(fovH + e.deltaY * 0.0015);
     }
   }, { passive: false });
 
@@ -632,7 +642,7 @@ input[type=range] { accent-color:#fdb813; width:120px; }
         if (skyViewMode === 'solstice') {
           solsticeZoom = Math.max(0.3, Math.min(5.0, solsticeZoomStart * d / pinchStartDist));
         } else {
-          fovH = Math.max(Math.PI / 8, Math.min(Math.PI * 0.85, pinchStartFov * pinchStartDist / d));
+          fovH = clampSkyFov(pinchStartFov * pinchStartDist / d);
         }
       }
     } else if (e.touches.length === 1) {
@@ -1435,7 +1445,8 @@ input[type=range] { accent-color:#fdb813; width:120px; }
       // 直線透視(ピンホール)投影は視野角が広いほど周辺の拡大率が際限なく
       // 増加し(θ→90°でdotFw→0に発散)、画面の左右端に近づくほど歪みが
       // 大きくなる。天球を見上げる全モード(今日の空・地軸固定・自転・
-      // 地球目線・月面・ISS、いずれも fovH が最大 0.85π まで広がりうる)を
+      // 地球目線・月面・ISSは最大 0.85π、今日の空・自転は地球の
+      // 直径(地平線から反対側の地平線までの180°)が画面に入るπまで広がりうる)を
       // 平射(ステレオ)投影 r = k*tan(θ/2) に統一し、拡大率の増加を
       // sec^2(θ/2) 程度に抑えて周辺の歪みを緩和する。夏至モードはこの関数を
       // 使わない別視点(3人称の公転図)のため対象外。
