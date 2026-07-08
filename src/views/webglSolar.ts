@@ -520,22 +520,27 @@ input[type=range] { accent-color:#fdb813; width:120px; }
         prev = gp;
       }
     }
-    var latLines = [-60,-30,0,30,60];
+    var latLines = skyViewMode === 'spin' || skyViewMode === 'pole'
+      ? [-60,-30,0,30,60,75,80,85,88]
+      : [-60,-30,0,30,60];
     for (var li2 = 0; li2 < latLines.length; li2++) {
-      var glat2 = latLines[li2] * Math.PI / 180;
+      var latDeg2 = latLines[li2];
+      var glat2 = latDeg2 * Math.PI / 180;
       var prev2 = null;
-      for (var gk = 0; gk <= 360; gk += 5) {
+      var lonStep2 = Math.abs(latDeg2) >= 75 ? 2 : 5;
+      ctx.strokeStyle = Math.abs(latDeg2) >= 75 ? 'rgba(100,180,255,0.24)' : 'rgba(100,180,255,0.18)';
+      for (var gk = 0; gk <= 360; gk += lonStep2) {
         var glon2 = gk * Math.PI / 180;
         var gp2 = projectSky(glon2, glat2);
         if (gp2 && prev2) { ctx.beginPath(); ctx.moveTo(prev2.x, prev2.y); ctx.lineTo(gp2.x, gp2.y); ctx.stroke(); }
         prev2 = gp2;
       }
-      if (showStarLabels) {
+      if (showStarLabels && latDeg2 <= 75) {
         var labelPt = projectSky(viewAngle, glat2);
         if (labelPt) {
           ctx.font = '10px sans-serif';
           ctx.fillStyle = 'rgba(100,180,255,0.5)';
-          ctx.fillText((latLines[li2] >= 0 ? '+' : '') + latLines[li2] + '\xb0', labelPt.x + 4, labelPt.y);
+          ctx.fillText((latDeg2 >= 0 ? '+' : '') + latDeg2 + '\xb0', labelPt.x + 4, labelPt.y);
         }
       }
     }
