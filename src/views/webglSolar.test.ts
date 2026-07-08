@@ -145,20 +145,52 @@ describe('getWebGLSolarPage', () => {
     expect(html).toContain("btnEclipseDate.addEventListener('click', showEclipseDateInCalendar);");
   });
 
-  it('7日間・2週間・日食(アイスランド/スペイン)のボタンはカレンダーパネルを閉じない', () => {
+  it('7日間・8/13まで・日食(アイスランド/スペイン)のボタンはカレンダーパネルを閉じない', () => {
     const weekM = html.match(/function startWeekReplay\(days\) \{[\s\S]*?\n  \}/);
+    const untilM = html.match(/function startReplayUntilDate\(y, mo, d\) \{[\s\S]*?\n  \}/);
     const eclipseM = html.match(/function startEclipse\(siteKey\) \{[\s\S]*?\n  \}/);
     expect(weekM).not.toBeNull();
+    expect(untilM).not.toBeNull();
     expect(eclipseM).not.toBeNull();
-    for (const body of [weekM![0], eclipseM![0]]) {
+    for (const body of [weekM![0], untilM![0], eclipseM![0]]) {
       expect(body).not.toContain("classList.remove('open')");
       expect(body).not.toContain("aria-expanded', 'false'");
     }
   });
 
+
+  it('「今日から2週間」ボタンを「8/13まで」に変更し、8月13日末まで再現する', () => {
+    expect(html).toContain('id="btnTwoWeekReplay">8/13まで</button>');
+    expect(html).not.toContain('id="btnTwoWeekReplay">今日から2週間</button>');
+    expect(html).toContain("btnTwoWeekReplay.addEventListener('click', function() { startReplayUntilDate(2026, 8, 13); });");
+    expect(html).toContain('var endJD = julianDate(y, mo, d, 23.999);');
+    expect(html).toContain("startCalendarReplay(startJD, endJD, mo + '/' + d + 'まで');");
+  });
+
+  it('トップ俯瞰図では期間再現ボタンを押しても今日の空へ切り替えず、俯瞰図の時刻を進める', () => {
+    const replayM = html.match(/function startCalendarReplay\(startJD, endJD, label\) \{[\s\S]*?\n  \}/);
+    expect(replayM).not.toBeNull();
+    expect(replayM![0]).toContain("if (skyViewMode === '')");
+    expect(replayM![0]).toContain('selectedTopViewJD = weekReplayJD;');
+    expect(replayM![0]).toContain('ensureTodaySkyMode();');
+
+    const currentM = html.match(/function currentSimulatedJD\(\) \{[\s\S]*?\n  \}/);
+    expect(currentM).not.toBeNull();
+    expect(currentM![0]).toContain("if (skyViewMode === '' && weekReplayActive) return weekReplayJD;");
+
+    const frameM = html.match(/function frame\(now\) \{[\s\S]*?ctx.fillStyle = '#000010';/);
+    expect(frameM).not.toBeNull();
+    expect(frameM![0]).toContain('var topProgress = Math.min(1, weekReplayElapsed / weekReplayDuration);');
+    expect(frameM![0]).toContain('selectedTopViewJD = weekReplayJD;');
+    expect(frameM![0]).toContain('syncCalendarToJD(weekReplayJD, false);');
+  });
+
   it('今日の空(週間再現)・日食モードの再生中、フレームごとにカレンダーの黄色い枠をsyncCalendarToJDで同期する', () => {
-    const todayBranch = html.match(/if \(skyViewMode === 'today'\) \{[\s\S]*?\n    \}/);
-    const eclipseBranch = html.match(/if \(skyViewMode === 'eclipse'\) \{[\s\S]*?\n    \}/);
+    const frameM = html.match(/function frame\(now\) \{[\s\S]*?\n  \}/);
+    expect(frameM).not.toBeNull();
+    const frameBody = frameM![0];
+    const todayBranch = frameBody.match(/if \(skyViewMode === 'today'\) \{[\s\S]*?\n    \}/);
+    const eclipseBranch = frameBody.match(/if \(skyViewMode === 'eclipse'\) \{[\s\S]*?\n    \}/);
     expect(todayBranch).not.toBeNull();
     expect(eclipseBranch).not.toBeNull();
     expect(todayBranch![0]).toContain('syncCalendarToJD(weekReplayJD, false)');
@@ -190,6 +222,31 @@ describe('getWebGLSolarPage', () => {
     expect(renderCalls.length, '日付キーが変われば再描画する').toBe(2);
     sync(2, true);
     expect(renderCalls.length, 'forceを渡せば同じ日付でも再描画する').toBe(3);
+  });
+
+
+  it('カレンダーの日付選択は今日の空モード用処理とトップ俯瞰図用処理を分岐する', () => {
+    const m = html.match(/function applyCalendarSelectedDate\(y, mo, d\) \{[\s\S]*?\n  \}/);
+    expect(m).not.toBeNull();
+    const body = m![0];
+    expect(body).toContain("if (skyViewMode === 'today')");
+    expect(body).toContain('applyTodaySkyCalendarDate(jd);');
+    expect(body).toContain("if (skyViewMode === '')");
+    expect(body).toContain('applyTopViewCalendarDate(jd);');
+  });
+
+  it('トップページ読み込み時の太陽系俯瞰図ではカレンダー選択で今日の空へ切り替えず、選択JDを保持する', () => {
+    const topM = html.match(/function applyTopViewCalendarDate\(jd\) \{[\s\S]*?\n  \}/);
+    expect(topM).not.toBeNull();
+    const topBody = topM![0];
+    expect(topBody).toContain('selectedTopViewJD = jd;');
+    expect(topBody).not.toContain("setSkyMode('today')");
+
+    const timeM = html.match(/function topViewTimeParameter\(\) \{[\s\S]*?\n  \}/);
+    expect(timeM).not.toBeNull();
+    expect(timeM![0]).toContain('selectedTopViewJD');
+    expect(html).toContain('var ang = pl.angle + topT / pl.period;');
+    expect(html).toContain('var moonAng = moon.angle + topT / moon.period;');
   });
 
   it('今日の空モードは夏の大三角形・南十字の線を恒星ドットと同じprojectEclipticSkyで投影する', () => {
@@ -249,6 +306,23 @@ describe('getWebGLSolarPage', () => {
     expect(html).toContain('id="btnEclipseSpain"');
     expect(html).toContain("btnEclipseIceland.addEventListener('click', function() { startEclipse('iceland'); });");
     expect(html).toContain("btnEclipseSpain.addEventListener('click', function() { startEclipse('spain'); });");
+  });
+
+  it('アイスランド/スペインの広角モードボタンが存在し、各太陽残像に時系列の月の影を重ねる', () => {
+    expect(html).toContain('id="btnEclipseWideIceland"');
+    expect(html).toContain('id="btnEclipseWideSpain"');
+    expect(html).toContain("btnEclipseWideIceland.addEventListener('click', function() { startEclipseWide('iceland'); });");
+    expect(html).toContain("btnEclipseWideSpain.addEventListener('click', function() { startEclipseWide('spain'); });");
+    expect(html).toContain("skyViewMode = 'eclipseWide';");
+    expect(html).toContain('var ECLIPSE_WIDE_AFTERIMAGE_COUNT = 9;');
+    const wideM = html.match(/function drawEclipseWideView\(site\) \{[\s\S]*?\n  \}/);
+    expect(wideM).not.toBeNull();
+    expect(wideM![0]).toContain('太陽残像(影付き)');
+    expect(wideM![0]).toContain('formatEclipseLocalTime(c1JD, site)');
+    expect(wideM![0]).toContain('formatEclipseLocalTime(c4JD, site)');
+    expect(wideM![0]).toContain('var ph = eclipsePhaseAt(jd, site, maxSep, minSep);');
+    expect(wideM![0]).toContain('var moonX = x + Math.cos(dirAngle) * ph.sep;');
+    expect(wideM![0]).toContain('ctx.arc(moonX, moonY, moonR, 0, Math.PI * 2);');
   });
 
   it('日食サイトの接触時刻が第1<第2<第3<第4の順で、8月中旬までに収まる', () => {
