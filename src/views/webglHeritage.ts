@@ -861,20 +861,33 @@ void main() {
 
   // エリア内絞り込み・巡回ロジックの汎用化: アイコン種別ごとに個別実装せず、
   // AREA_KINDS の設定（データ取得・座標取得・ツールチップ描画）を areaTourStep 等の共通関数へ渡す方式にする。
-  function projectAreaPointToScreen(lat, lon) {
+  function copyAreaProjectionState(rect) {
+    var r = rect || canvas.getBoundingClientRect();
+    return {
+      model: Array.prototype.slice.call(model),
+      mvp: Array.prototype.slice.call(mvp),
+      rect: { left: r.left, top: r.top, width: r.width, height: r.height }
+    };
+  }
+  function projectAreaPointToScreen(lat, lon, state) {
     var p = latLonTo3D(lat, lon);
-    var mz = model[2]*p[0] + model[6]*p[1] + model[10]*p[2];
+    var modelMat = state && state.model ? state.model : model;
+    var mvpMat = state && state.mvp ? state.mvp : mvp;
+    var rect = state && state.rect ? state.rect : canvasRect;
+    var mz = modelMat[2]*p[0] + modelMat[6]*p[1] + modelMat[10]*p[2];
     if (mz <= 0.05) return null;
-    var cx = mvp[0]*p[0] + mvp[4]*p[1] + mvp[8]*p[2]  + mvp[12];
-    var cy = mvp[1]*p[0] + mvp[5]*p[1] + mvp[9]*p[2]  + mvp[13];
-    var cw = mvp[3]*p[0] + mvp[7]*p[1] + mvp[11]*p[2] + mvp[15];
+    var cx = mvpMat[0]*p[0] + mvpMat[4]*p[1] + mvpMat[8]*p[2]  + mvpMat[12];
+    var cy = mvpMat[1]*p[0] + mvpMat[5]*p[1] + mvpMat[9]*p[2]  + mvpMat[13];
+    var cw = mvpMat[3]*p[0] + mvpMat[7]*p[1] + mvpMat[11]*p[2] + mvpMat[15];
     if (cw <= 0) return null;
-    return { x: canvasRect.left + (cx/cw+1)*0.5*canvas.width, y: canvasRect.top + (1-cy/cw)*0.5*canvas.height };
+    return { x: rect.left + (cx/cw+1)*0.5*rect.width, y: rect.top + (1-cy/cw)*0.5*rect.height };
   }
   function getAreaScreenRect(b) {
     if (!b || !b.corner0 || !b.corner1) return null;
-    var s0 = projectAreaPointToScreen(b.corner0.lat, b.corner0.lon);
-    var s1 = projectAreaPointToScreen(b.corner1.lat, b.corner1.lon);
+    if (b.screenRect) return b.screenRect;
+    var state = b.screenState || null;
+    var s0 = projectAreaPointToScreen(b.corner0.lat, b.corner0.lon, state);
+    var s1 = projectAreaPointToScreen(b.corner1.lat, b.corner1.lon, state);
     if (!s0 || !s1) return null;
     return {
       left: Math.min(s0.x, s1.x), right: Math.max(s0.x, s1.x),
@@ -883,7 +896,7 @@ void main() {
   }
   function inAreaScreenBounds(lat, lon, b) {
     var screenRect = getAreaScreenRect(b);
-    var screen = projectAreaPointToScreen(lat, lon);
+    var screen = projectAreaPointToScreen(lat, lon, b.screenState || null);
     if (!screenRect || !screen) return false;
     return screen.x >= screenRect.left && screen.x <= screenRect.right && screen.y >= screenRect.top && screen.y <= screenRect.bottom;
   }
@@ -1149,8 +1162,10 @@ void main() {
     bxCur = ex; byCur = ey;
     areaTourCursorY = ey;
     updateBoxOverlay();
-    var c0 = screenToLatLon(Math.min(bx0, ex), Math.min(by0, ey), rect);
-    var c1 = screenToLatLon(Math.max(bx0, ex), Math.max(by0, ey), rect);
+    var boxLeft = Math.min(bx0, ex), boxRight = Math.max(bx0, ex), boxTop = Math.min(by0, ey), boxBottom = Math.max(by0, ey);
+    var screenState = copyAreaProjectionState(rect);
+    var c0 = screenToLatLon(boxLeft, boxTop, rect);
+    var c1 = screenToLatLon(boxRight, boxBottom, rect);
     if (c0 && c1) {
       var lonCross = c0.lon > c1.lon;
       lastBoxBounds = {
@@ -1159,7 +1174,9 @@ void main() {
         lonCross: lonCross,
         center: { lat: ctr.lat, lon: ctr.lon },
         corner0: { lat: c0.lat, lon: c0.lon },
-        corner1: { lat: c1.lat, lon: c1.lon }
+        corner1: { lat: c1.lat, lon: c1.lon },
+        screenRect: { left: boxLeft, right: boxRight, top: boxTop, bottom: boxBottom },
+        screenState: screenState
       };
     }
     stopAreaTour(false);
