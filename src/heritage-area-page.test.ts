@@ -12,10 +12,10 @@ describe('heritage-area page', () => {
     expect(html).toContain('keyword-drawer');
     expect(html).toContain('id="keyword-search"');
     expect(html).toContain('renderResultRows');
-    expect(html).toContain('エリア分け済み（優先表示）');
-    expect(html).toContain('ヒットはしたけどエリア分けされていない');
-    expect(html).toContain('エリア番号');
-    expect(html).toContain('世界遺産名（ほか駅名/空港名/活火山名）');
+    expect(html).toContain('検索露出ログ検索結果');
+    expect(html).toContain('AIチャット検索露出ログ');
+    expect(html).toContain('露出回数');
+    expect(html).toContain('AIチャット質問');
   });
 
   it('registers heritage-area route and API handlers', () => {
@@ -24,5 +24,7 @@ describe('heritage-area page', () => {
     expect(src).toContain("app.get('/api/heritage-area/travel-categories'");
     expect(src).toContain("app.get('/api/heritage-area/travel-categories/:id/keywords'");
     expect(src).toContain("app.post('/api/heritage-area/search'");
+    expect(src).toContain('FROM aichat_search_impressions i');
+    expect(src).toContain("'aichat_search_impressions' AS category");
   });
 });
