@@ -31,6 +31,7 @@ import { getWebGLDemoPage } from './views/webglDemo';
 import { getWebGLSpherePage } from './views/webglSphere';
 import { getWebGLHeritagePage } from './views/webglHeritage';
 import { getHeritageAccessPage } from './views/heritageAccess';
+import { getHeritageAreaPage } from './views/heritageArea';
 import { getWebGLLVSpherePage } from './views/webglLVSphere';
 import { getWebGLCubePage } from './views/webglCube';
 import { getWebGLSolarPage } from './views/webglSolar';
@@ -5181,6 +5182,85 @@ app.post('/api/heritage-area-boxes', authMiddleware, async (c) => {
   return c.json({ ok: true, areaSeq, itemCount: items.length });
 });
 
+app.get('/api/heritage-area/travel-categories', authMiddleware, async (c) => {
+  const user = c.get('user');
+  const db = c.env.DB;
+  if (!db) return c.json({ error: 'DB unavailable' }, 503);
+  try {
+    const group = await db.prepare(
+      `SELECT category_ids
+       FROM aichat_category_groups
+       WHERE user_id = ? AND lower(group_name) = lower(?) AND (is_deleted = 0 OR is_deleted IS NULL)
+       ORDER BY updated_at DESC
+       LIMIT 1`
+    ).bind(user.sub, 'Travel').first<{ category_ids: string }>();
+    if (!group) return c.json({ categories: [] });
+    let categoryIds: number[] = [];
+    try { categoryIds = JSON.parse(group.category_ids); } catch { categoryIds = []; }
+    categoryIds = categoryIds.map(Number).filter((id) => Number.isFinite(id));
+    if (!categoryIds.length) return c.json({ categories: [] });
+    const placeholders = categoryIds.map(() => '?').join(',');
+    const rows = await db.prepare(
+      `SELECT c.id, c.name, COALESCE(c.color, '#6366f1') AS color,
+              COUNT(DISTINCT m.keyword) AS kw_count
+       FROM aichat_keyword_categories c
+       LEFT JOIN aichat_keyword_category_map m ON m.user_id = c.user_id AND m.category_id = c.id
+       WHERE c.user_id = ? AND c.id IN (${placeholders})
+       GROUP BY c.id, c.name, c.color
+       ORDER BY kw_count DESC, c.name ASC`
+    ).bind(user.sub, ...categoryIds).all<{ id: number; name: string; color: string; kw_count: number }>();
+    return c.json({ categories: rows.results ?? [] });
+  } catch (err) {
+    return c.json({ error: 'Travelカテゴリの取得に失敗しました', detail: String((err as Error)?.message ?? err) }, 500);
+  }
+});
+
+app.get('/api/heritage-area/travel-categories/:id/keywords', authMiddleware, async (c) => {
+  const user = c.get('user');
+  const db = c.env.DB;
+  if (!db) return c.json({ error: 'DB unavailable' }, 503);
+  const categoryId = Number(c.req.param('id'));
+  if (!Number.isFinite(categoryId)) return c.json({ error: 'invalid category id' }, 400);
+  try {
+    const rows = await db.prepare(
+      `SELECT m.keyword, COALESCE(SUM(s.select_count), 0) AS count
+       FROM aichat_keyword_category_map m
+       LEFT JOIN aichat_search_log s ON s.user_id = m.user_id AND s.keyword = m.keyword AND s.deleted_at IS NULL
+       WHERE m.user_id = ? AND m.category_id = ?
+       GROUP BY m.keyword
+       ORDER BY count DESC, m.keyword ASC`
+    ).bind(user.sub, categoryId).all<{ keyword: string; count: number }>();
+    return c.json({ keywords: rows.results ?? [] });
+  } catch (err) {
+    return c.json({ error: 'キーワードの取得に失敗しました', detail: String((err as Error)?.message ?? err) }, 500);
+  }
+});
+
+app.post('/api/heritage-area/search', authMiddleware, async (c) => {
+  const db = c.env.DB;
+  if (!db) return c.json({ error: 'DB unavailable' }, 503);
+  const body = await c.req.json<{ keywords?: unknown }>().catch(() => null);
+  const keywords = (Array.isArray(body?.keywords) ? body!.keywords : [])
+    .map((kw) => String(kw).trim())
+    .filter(Boolean)
+    .slice(0, 20);
+  if (!keywords.length) return c.json({ items: [] });
+  const where = keywords.map(() => `item_name LIKE ? ESCAPE '\\'`).join(' OR ');
+  const params = keywords.map((kw) => `%${kw.replace(/[%_]/g, '\\$&')}%`);
+  try {
+    const rows = await db.prepare(
+      `SELECT area_seq, category, item_name
+       FROM heritage_area_items
+       WHERE (${where})
+       ORDER BY area_seq ASC, item_name ASC
+       LIMIT 500`
+    ).bind(...params).all<{ area_seq: number; category: string; item_name: string }>();
+    return c.json({ items: rows.results ?? [] });
+  } catch (err) {
+    return c.json({ error: 'エリア項目の検索に失敗しました', detail: String((err as Error)?.message ?? err) }, 500);
+  }
+});
+
 app.get('/api/heritage-cities', authMiddleware, async (c) => {
   const db = c.env.DB;
   if (!db) return c.json({ error: 'DB unavailable' }, 503);
@@ -5465,6 +5545,15 @@ app.get('/api/heritage-access-ranking', authMiddleware, async (c) => {
 app.get('/heritage-access', authMiddleware, async (c) => {
   const user = c.get('user');
   return c.html(getHeritageAccessPage(user.sub));
+});
+
+app.get('/heritage-area', authMiddleware, async (c) => {
+  const user = c.get('user');
+  const userSession = await getUserSession(c.env.DB, user.sub);
+  if (!userSession) {
+    return c.html(getSessionExpiredPage(), 403);
+  }
+  return c.html(getHeritageAreaPage());
 });
 
 app.get('/webgl-lv-sphere', authMiddleware, async (c) => {
