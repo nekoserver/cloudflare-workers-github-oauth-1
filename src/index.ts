@@ -5251,11 +5251,15 @@ app.post('/api/heritage-area/search', authMiddleware, async (c) => {
     .slice(0, 20);
   if (!keywords.length) return c.json({ items: [] });
   const topics = HERITAGE_AREA_SEARCH_TOPICS;
-  const keywordWhere = keywords.map(() => `(s.question LIKE ? ESCAPE '\\' OR s.answer LIKE ? ESCAPE '\\')`).join(' OR ');
+  // D1のLIKEパターンは(ワイルドカードの有無に関わらず)約50バイトを超えると
+  // "LIKE or GLOB pattern too complex" で失敗するため、任意長になり得る
+  // キーワードはLIKEではなくINSTR(長さ制限なし)で中黒(全角/半角)表記ゆれを
+  // 吸収して検索する。トピックは固定の短い文字列のみなのでLIKEのままで安全。
+  const keywordWhere = keywords.map(() => `(INSTR(REPLACE(s.question, '･', '・'), ?) > 0 OR INSTR(REPLACE(s.answer, '･', '・'), ?) > 0)`).join(' OR ');
   const topicWhere = topics.map(() => `s.question LIKE ? ESCAPE '\\'`).join(' OR ');
   const keywordParams = keywords.flatMap((kw) => {
-    const pattern = buildFuzzySearchLikePattern(kw);
-    return [pattern, pattern];
+    const normalized = kw.replace(/[・･]/g, '・');
+    return [normalized, normalized];
   });
   const topicParams = topics.map((topic) => buildFuzzySearchLikePattern(topic));
   try {

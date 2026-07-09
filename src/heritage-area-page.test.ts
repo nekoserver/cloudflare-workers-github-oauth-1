@@ -31,7 +31,7 @@ describe('heritage-area page', () => {
     expect(src).toContain('FROM aichat_search_impressions i');
     expect(src).toContain("'aichat_search_impressions' AS category");
     expect(src).toContain('const topics = HERITAGE_AREA_SEARCH_TOPICS');
-    expect(src).toContain("(s.question LIKE ? ESCAPE '\\\\' OR s.answer LIKE ? ESCAPE '\\\\')");
+    expect(src).toContain("(INSTR(REPLACE(s.question, '･', '・'), ?) > 0 OR INSTR(REPLACE(s.answer, '･', '・'), ?) > 0)");
     expect(src).toContain('const firstQuoteMatch = question.match(/「([^」]+)」/)');
     expect(src).toContain('itemByQuoteKey');
     expect(src).toContain('item_name: firstQuoteKey');
