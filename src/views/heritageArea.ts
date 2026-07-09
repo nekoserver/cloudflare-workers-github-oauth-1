@@ -1,0 +1,36 @@
+export function getHeritageAreaPage(): string {
+  return `<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Heritage Area Travel Keywords</title>
+<style>
+*{box-sizing:border-box}body{margin:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0f172a;color:#e2e8f0}.wrap{max-width:1180px;margin:0 auto;padding:24px}a{color:#93c5fd}.top{display:flex;gap:12px;align-items:center;justify-content:space-between;margin-bottom:18px}.card{background:#111827;border:1px solid #334155;border-radius:16px;padding:18px;box-shadow:0 12px 36px rgba(0,0,0,.25)}h1{font-size:24px;margin:0 0 6px}.muted{color:#94a3b8;font-size:13px}.section-title{font-size:15px;font-weight:700;margin:0 0 12px}.chips{display:flex;flex-wrap:wrap;gap:8px}.chip{border:1px solid #475569;background:#1e293b;color:#cbd5e1;border-radius:999px;padding:8px 12px;cursor:pointer;font-size:13px;transition:.15s}.chip:hover{border-color:#38bdf8;color:#fff}.chip.active{background:#2563eb;border-color:#60a5fa;color:#fff}.chip.kw.active{background:#16a34a;border-color:#86efac}.grid{display:grid;grid-template-columns:1fr;gap:16px}.keyword-panel{min-height:80px}.status{padding:12px;color:#94a3b8;font-size:13px}.selected{margin-top:10px;color:#bbf7d0;font-size:12px}.table-wrap{overflow:auto;max-height:520px;border:1px solid #334155;border-radius:12px}table{width:100%;border-collapse:collapse;background:#0b1220}th,td{padding:10px 12px;border-bottom:1px solid #1e293b;text-align:left;font-size:13px}th{position:sticky;top:0;background:#1e293b;color:#bfdbfe;z-index:1}tr:hover td{background:#111827}.badge{display:inline-block;font-size:11px;border-radius:999px;padding:2px 7px;background:#334155;color:#cbd5e1;margin-left:6px}.empty{text-align:center;color:#64748b;padding:28px}.err{color:#fecaca;background:#7f1d1d;border:1px solid #ef4444;border-radius:10px;padding:10px;margin-top:10px}@media (min-width:900px){.grid{grid-template-columns:360px 1fr}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top"><div><h1>Heritage Area</h1><div class="muted">AIチャット大分類カテゴリ「Travel」配下の中分類カテゴリから、関連エリア項目を検索します。</div></div><a href="/webgl-heritage">← 世界遺産地球儀</a></div>
+  <div class="grid">
+    <section class="card"><div class="section-title">Travel 中分類カテゴリ</div><div id="categories" class="chips"><span class="status">読み込み中…</span></div><div id="cat-error"></div></section>
+    <section class="card keyword-panel"><div class="section-title">キーワード（出現回数順・複数選択可）</div><div id="keywords" class="chips"><span class="status">左のカテゴリを選択してください。</span></div><div id="selected" class="selected"></div></section>
+  </div>
+  <section class="card" style="margin-top:16px"><div class="section-title">エリア検索結果</div><div id="result-meta" class="muted">キーワードを選択するとデータベースをスキャンします。</div><div class="table-wrap" style="margin-top:10px"><table><thead><tr><th style="width:140px">エリア番号</th><th>世界遺産名（ほか駅名/空港名/活火山名）</th></tr></thead><tbody id="results"><tr><td colspan="2" class="empty">検索条件がありません。</td></tr></tbody></table></div></section>
+</div>
+<script>
+const state={catId:null,keywords:[],selected:new Set()};
+const esc=s=>String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+async function getJson(url,opts){const r=await fetch(url,opts);const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||('HTTP '+r.status));return d;}
+function renderCategories(cats){const el=document.getElementById('categories');if(!cats.length){el.innerHTML='<span class="status">Travel に属する中分類カテゴリがありません。</span>';return;}el.innerHTML=cats.map(c=>'<button class="chip" data-cat="'+c.id+'">'+esc(c.name)+' ('+Number(c.kw_count||0)+')</button>').join('');el.querySelectorAll('[data-cat]').forEach(btn=>btn.onclick=()=>selectCategory(Number(btn.dataset.cat),btn.textContent));}
+async function selectCategory(id){state.catId=id;state.selected.clear();document.querySelectorAll('[data-cat]').forEach(b=>b.classList.toggle('active',Number(b.dataset.cat)===id));document.getElementById('keywords').innerHTML='<span class="status">キーワード読み込み中…</span>';renderSelected();renderEmpty('キーワードを選択してください。');try{const d=await getJson('/api/heritage-area/travel-categories/'+id+'/keywords');state.keywords=d.keywords||[];renderKeywords();}catch(e){document.getElementById('keywords').innerHTML='<div class="err">'+esc(e.message)+'</div>';}}
+function renderKeywords(){const el=document.getElementById('keywords');if(!state.keywords.length){el.innerHTML='<span class="status">このカテゴリのキーワードはありません。</span>';return;}el.innerHTML=state.keywords.map(k=>'<button class="chip kw" data-kw="'+esc(k.keyword)+'">'+esc(k.keyword)+' ('+Number(k.count||0)+')</button>').join('');el.querySelectorAll('[data-kw]').forEach(btn=>btn.onclick=()=>toggleKeyword(btn.dataset.kw,btn));}
+function toggleKeyword(kw,btn){if(state.selected.has(kw)){state.selected.delete(kw);btn.classList.remove('active');}else{state.selected.add(kw);btn.classList.add('active');}renderSelected();scan();}
+function renderSelected(){const arr=[...state.selected];document.getElementById('selected').textContent=arr.length?'選択中: '+arr.join(' / '):'';}
+function renderEmpty(msg){document.getElementById('results').innerHTML='<tr><td colspan="2" class="empty">'+esc(msg)+'</td></tr>';document.getElementById('result-meta').textContent=msg;}
+async function scan(){const kws=[...state.selected];if(!kws.length){renderEmpty('検索条件がありません。');return;}document.getElementById('result-meta').textContent='DBスキャン中…';try{const d=await getJson('/api/heritage-area/search',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({keywords:kws})});const rows=d.items||[];document.getElementById('result-meta').textContent=kws.length+'キーワード / '+rows.length+'件';document.getElementById('results').innerHTML=rows.length?rows.map(r=>'<tr><td>'+esc(r.area_seq)+'</td><td>'+esc(r.item_name)+'<span class="badge">'+esc(r.category)+'</span></td></tr>').join(''):'<tr><td colspan="2" class="empty">該当なし</td></tr>'; }catch(e){document.getElementById('results').innerHTML='<tr><td colspan="2"><div class="err">'+esc(e.message)+'</div></td></tr>';}}
+getJson('/api/heritage-area/travel-categories').then(d=>renderCategories(d.categories||[])).catch(e=>{document.getElementById('categories').innerHTML='<div class="err">'+esc(e.message)+'</div>';});
+</script>
+</body>
+</html>`;
+}
