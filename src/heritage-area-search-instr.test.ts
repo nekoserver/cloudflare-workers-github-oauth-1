@@ -100,3 +100,56 @@ describe('heritage-area検索: LIKEの代わりにINSTRで長いキーワード�
     expect(results[0].question).toContain('姫路城');
   });
 });
+
+// src/index.ts の areaLookup(引用キー→登録済みエリア照合)も、動的に組み立てる
+// LIKEパターン(`? LIKE '%' || i.item_name || '%'` / `i.item_name LIKE '%' || ? || '%'`)
+// が同じくD1の約50バイト制限に引っかかっていた。質問文から抽出される引用キーは
+// 長い世界遺産名になりやすく、実際に本番でこの経路のエラーが再現した。
+describe('heritage-area検索: areaLookup(引用キー→エリア照合)も長い引用キーでエラーにならない', () => {
+  function setupAreaDb(): DatabaseSync {
+    const db = new DatabaseSync(':memory:');
+    db.exec(`
+      CREATE TABLE heritage_area_boxes (
+        area_seq INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id TEXT NOT NULL,
+        box TEXT NOT NULL DEFAULT 'box'
+      );
+      CREATE TABLE heritage_area_items (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        area_seq INTEGER NOT NULL,
+        category TEXT NOT NULL,
+        item_name TEXT NOT NULL
+      );
+    `);
+    return db;
+  }
+
+  async function lookupArea(db: DatabaseSync, userId: string, quoteKey: string) {
+    const real = wrapD1(db);
+    const rows = await real.prepare(
+      `SELECT i.item_name AS key, i.area_seq, i.category, b.box
+       FROM heritage_area_items i
+       JOIN heritage_area_boxes b ON b.area_seq = i.area_seq AND b.user_id = ?
+       WHERE i.item_name = ?
+          OR INSTR(?, i.item_name) > 0
+          OR INSTR(i.item_name, ?) > 0`
+    ).bind(userId, quoteKey, quoteKey, quoteKey).all<{ key: string; area_seq: number; category: string; box: string }>();
+    return rows.results ?? [];
+  }
+
+  it('49文字(D1でLIKEなら確実に失敗する長さ)の引用キーでもエラーにならず登録済みエリアを見つける', async () => {
+    const db = setupAreaDb();
+    const longName = 'サンタ・マリア・デッレ・グラツィエ教会（レオナルドの最後の晩餐）';
+    db.prepare(`INSERT INTO heritage_area_boxes (area_seq, user_id, box) VALUES (1, 'user1', 'ミラノエリア')`).run();
+    db.prepare(`INSERT INTO heritage_area_items (area_seq, category, item_name) VALUES (1, 'heritage-access', ?)`).run(longName);
+    const results = await lookupArea(db, 'user1', longName);
+    expect(results).toHaveLength(1);
+    expect(results[0].box).toBe('ミラノエリア');
+  });
+
+  it('未登録の引用キーはエラーにならず空配列を返す(回帰確認)', async () => {
+    const db = setupAreaDb();
+    const results = await lookupArea(db, 'user1', '未登録の場所');
+    expect(results).toHaveLength(0);
+  });
+});

@@ -154,4 +154,16 @@ describe('searchAiChatShares — 実SQLiteでの中黒表記ゆれ吸収の検�
     const { results } = await searchAiChatShares(wrapD1(real), 'user1', 'タージ・マハル');
     expect(results).toHaveLength(0);
   });
+
+  // 根本原因: D1はLIKEパターンが(ワイルドカードの有無に関わらず)約50バイトを
+  // 超えると"LIKE or GLOB pattern too complex"で失敗する(wrangler devの実D1で
+  // 実機確認済み)。検索窓は自由入力でありユーザーが長い世界遺産名等を
+  // そのまま貼り付ける可能性があるため、LIKEをやめてINSTRに切り替えた。
+  it('49文字(D1でLIKEなら確実に失敗する長さ)の検索語でもエラーにならず正しくヒットする', async () => {
+    const real = setupDb();
+    const longQuery = 'サンタ・マリア・デッレ・グラツィエ教会（レオナルドの最後の晩餐）';
+    insertShare(real, 's1', `「${longQuery}」の「見どころ」について説明してください`);
+    const { results } = await searchAiChatShares(wrapD1(real), 'user1', longQuery);
+    expect(results).toHaveLength(1);
+  });
 });

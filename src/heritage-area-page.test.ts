@@ -38,7 +38,7 @@ describe('heritage-area page', () => {
     expect(src).toContain('const areaLookup = db.prepare');
     expect(src).toContain('for (const key of item.quote_keys)');
     expect(src).toContain('FROM heritage_area_items i');
-    expect(src).toContain("OR ? LIKE '%' || i.item_name || '%'");
+    expect(src).toContain('OR INSTR(?, i.item_name) > 0');
     expect(src).toContain('area_matches');
   });
 });
