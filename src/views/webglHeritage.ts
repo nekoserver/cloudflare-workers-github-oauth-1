@@ -92,6 +92,19 @@ canvas:active { cursor:grabbing; }
 .sval { font-family:monospace; font-size:11px; color:#3fb950; min-width:36px; }
 .ctrl-sep { border:none; border-top:1px solid #21262d; margin:0; }
 .legend { display:flex; flex-direction:column; gap:7px; }
+.canvas-legend { position:absolute; left:10px; bottom:58px; z-index:7; background:rgba(13,17,23,0.82); border:1px solid #30363d; border-radius:8px; padding:9px 11px; pointer-events:none; }
+.area-panel { padding:10px; overflow-y:auto; }
+.area-panel-actions { display:flex; gap:6px; margin-bottom:8px; }
+.area-panel-btn { flex:1; background:#161b22; border:1px solid #30363d; border-radius:6px; color:#c9d1d9; font-size:11px; padding:6px 8px; cursor:pointer; }
+.area-panel-btn:hover { border-color:#3fb950; color:#3fb950; }
+.area-list-status { font-size:11px; color:#8b949e; padding:8px 2px; line-height:1.6; }
+.saved-area-row { width:100%; text-align:left; background:#0d1117; border:1px solid #21262d; border-radius:7px; color:#e6edf3; padding:8px; margin-bottom:7px; cursor:pointer; }
+.saved-area-row:hover, .saved-area-row.active { border-color:#3fb950; background:#0c2d1a; }
+.saved-area-main { display:flex; gap:6px; align-items:center; font-size:12px; font-weight:700; }
+.saved-area-sub { font-size:10px; color:#8b949e; margin-top:4px; }
+.saved-area-items { border-top:1px solid #21262d; margin-top:10px; padding-top:8px; }
+.saved-area-item-kind { font-size:11px; color:#3fb950; font-weight:700; margin:8px 0 4px; }
+.saved-area-item { font-size:11px; color:#c9d1d9; line-height:1.45; padding:3px 0; }
 .legend-row { display:flex; align-items:center; gap:8px; font-size:12px; }
 .legend-dot { font-size:16px; }
 @media (display-mode: standalone) { .pwa-hide { display:none !important; } }
@@ -443,6 +456,13 @@ void main() {
     <div id="markers"></div>
     <div id="box-select-overlay"></div>
     <div class="hud" id="hud">テクスチャ読み込み中...</div>
+    <div class="canvas-legend" id="canvasLegend">
+      <div class="legend">
+        <div class="legend-row"><span class="legend-dot">🏛️</span><span style="color:#e3a838;font-weight:600">文化遺産</span></div>
+        <div class="legend-row"><span class="legend-dot">🌿</span><span style="color:#3fb950;font-weight:600">自然遺産</span></div>
+        <div class="legend-row"><span class="legend-dot">⭐</span><span style="color:#a371f7;font-weight:600">複合遺産</span></div>
+      </div>
+    </div>
     <div id="dbg-info"></div>
     <div class="dbg-rect" id="dbg-globe-rect"></div>
     <div class="dbg-rect" id="dbg-zoom-rect"></div>
@@ -464,7 +484,7 @@ void main() {
   <div class="side">
     <div class="panel-tabs">
       <button class="panel-tab active" id="tabList">▼ 近接リスト</button>
-      <button class="panel-tab" id="tabCtrl">⚙ コントロール</button>
+      <button class="panel-tab" id="tabArea">⬜︎ エリア 🚩</button>
     </div>
 
     <div class="panel-body visible" id="panelList">
@@ -492,31 +512,13 @@ void main() {
       </div>
     </div>
 
-    <div class="panel-body" id="panelCtrl">
-      <div class="ctrl-panel">
-        <div class="ctrl-row">
-          <div class="ctrl-label">スピンブースト</div>
-          <div class="slider-row">
-            <input type="range" id="spinBoost" min="1" max="4" step="0.1" value="2">
-            <span class="sval" id="spinBoostVal">2.0</span>
-          </div>
+    <div class="panel-body" id="panelArea">
+      <div class="area-panel">
+        <div class="area-panel-actions">
+          <button class="area-panel-btn" id="reloadSavedAreas">↻ 更新</button>
         </div>
-        <hr class="ctrl-sep">
-        <div class="ctrl-row">
-          <div class="ctrl-label">凡例</div>
-          <div class="legend">
-            <div class="legend-row"><span class="legend-dot">🏛️</span><span style="color:#e3a838;font-weight:600">文化遺産</span></div>
-            <div class="legend-row"><span class="legend-dot">🌿</span><span style="color:#3fb950;font-weight:600">自然遺産</span></div>
-            <div class="legend-row"><span class="legend-dot">⭐</span><span style="color:#a371f7;font-weight:600">複合遺産</span></div>
-          </div>
-        </div>
-        <hr class="ctrl-sep">
-        <div style="font-size:11px;color:#484f58;line-height:1.7">
-          ドラッグ: 回転<br>
-          ホイール: ズーム<br>
-          フリック: 慣性スピン → 最寄り遺産スナップ<br>
-          ダブルクリック: 自動回転 ON/OFF
-        </div>
+        <div id="savedAreaList" class="area-list-status">登録済みエリアを読み込み中...</div>
+        <div id="savedAreaItems" class="saved-area-items" style="display:none"></div>
       </div>
     </div>
   </div>
@@ -657,32 +659,30 @@ void main() {
   var tourPanelTitle = document.getElementById('tourPanelTitle');
   var tourPanelCount = document.getElementById('tourPanelCount');
   var tabList = document.getElementById('tabList');
-  var tabCtrl = document.getElementById('tabCtrl');
+  var tabArea = document.getElementById('tabArea');
   var panelList = document.getElementById('panelList');
-  var panelCtrl = document.getElementById('panelCtrl');
+  var panelArea = document.getElementById('panelArea');
+  var savedAreaList = document.getElementById('savedAreaList');
+  var savedAreaItems = document.getElementById('savedAreaItems');
+  var reloadSavedAreas = document.getElementById('reloadSavedAreas');
   var rotSpdEl = document.getElementById('rotSpd');
   var rotSpdValEl = document.getElementById('rotSpdVal');
-  var spinBoostEl = document.getElementById('spinBoost');
-  var spinBoostValEl = document.getElementById('spinBoostVal');
   var btnAmericaTour = document.getElementById('btnAmericaTour');
 
   var isListMode = true;
 
   tabList.addEventListener('click', function() {
     isListMode = true;
-    tabList.classList.add('active'); tabCtrl.classList.remove('active');
-    panelList.classList.add('visible'); panelCtrl.classList.remove('visible');
+    tabList.classList.add('active'); tabArea.classList.remove('active');
+    panelList.classList.add('visible'); panelArea.classList.remove('visible');
   });
-  tabCtrl.addEventListener('click', function() {
+  tabArea.addEventListener('click', function() {
     isListMode = false;
-    tabCtrl.classList.add('active'); tabList.classList.remove('active');
-    panelCtrl.classList.add('visible'); panelList.classList.remove('visible');
+    tabArea.classList.add('active'); tabList.classList.remove('active');
+    panelArea.classList.add('visible'); panelList.classList.remove('visible');
+    loadSavedAreaMenu();
   });
   rotSpdEl.addEventListener('input', function() { rotSpdValEl.textContent = parseFloat(rotSpdEl.value).toFixed(1); });
-  spinBoostEl.addEventListener('input', function() {
-    SPIN_BOOST = parseFloat(spinBoostEl.value);
-    spinBoostValEl.textContent = SPIN_BOOST.toFixed(1);
-  });
 
   function resize() {
     var r = wrap.getBoundingClientRect();
@@ -1001,6 +1001,96 @@ void main() {
       }
     }
   ];
+
+
+  var savedAreasCache = [];
+  var selectedSavedAreaSeq = null;
+  function escClientHtml(v) {
+    return String(v == null ? '' : v).replace(/[&<>"']/g, function(ch) { return ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' })[ch]; });
+  }
+  function areaCenterFromBox(area) {
+    var lat = (Number(area.topLeftLat) + Number(area.bottomRightLat)) / 2;
+    var lon0 = Number(area.topLeftLon), lon1 = Number(area.bottomRightLon);
+    var lon = (lon0 + lon1) / 2;
+    if (Math.abs(lon0 - lon1) > 180) { lon = ((lon0 + lon1 + 360) / 2 + 540) % 360 - 180; }
+    return { lat: lat, lon: lon };
+  }
+  function savedAreaBounds(area) {
+    var tl = { lat: Number(area.topLeftLat), lon: Number(area.topLeftLon) };
+    var br = { lat: Number(area.bottomRightLat), lon: Number(area.bottomRightLon) };
+    var lonCross = tl.lon > br.lon;
+    return {
+      latMin: Math.min(tl.lat, br.lat), latMax: Math.max(tl.lat, br.lat),
+      lonMin: lonCross ? tl.lon : Math.min(tl.lon, br.lon), lonMax: lonCross ? br.lon : Math.max(tl.lon, br.lon),
+      lonCross: lonCross, center: areaCenterFromBox(area), corner0: tl, corner1: br
+    };
+  }
+  function renderSavedAreaItems(area, entries) {
+    if (!savedAreaItems) return;
+    var html = '<div class="saved-area-main"><span>⬜︎ #' + escClientHtml(area.areaSeq) + '</span><span>' + escClientHtml(area.areaName || 'null') + '</span></div>';
+    entries.forEach(function(e) {
+      if (!e.items.length) return;
+      html += '<div class="saved-area-item-kind">' + e.kind.icon + ' ' + escClientHtml(e.kind.label) + ' (' + e.items.length + ')</div>';
+      e.items.forEach(function(item) { html += '<div class="saved-area-item">' + escClientHtml(areaTourItemIcon(e.kind, item)) + ' ' + escClientHtml(e.kind.itemLabel(item)) + '</div>'; });
+    });
+    if (!entries.some(function(e) { return e.items.length > 0; }) && area.items && area.items.length) {
+      html += '<div class="saved-area-item-kind">保存済み項目 (' + area.items.length + ')</div>';
+      area.items.forEach(function(item) { html += '<div class="saved-area-item">' + escClientHtml(item.category) + ': ' + escClientHtml(item.name) + '</div>'; });
+    }
+    savedAreaItems.innerHTML = html;
+    savedAreaItems.style.display = 'block';
+  }
+  function renderSavedAreaMenu(areas) {
+    if (!savedAreaList) return;
+    if (!areas.length) { savedAreaList.className = 'area-list-status'; savedAreaList.textContent = '登録済みエリアはありません'; return; }
+    savedAreaList.className = '';
+    savedAreaList.innerHTML = areas.map(function(area) {
+      return '<button class="saved-area-row' + (selectedSavedAreaSeq === area.areaSeq ? ' active' : '') + '" data-area-seq="' + escClientHtml(area.areaSeq) + '">' +
+        '<div class="saved-area-main"><span>エリア番号 ' + escClientHtml(area.areaSeq) + '</span></div>' +
+        '<div class="saved-area-sub">エリア名: ' + escClientHtml(area.areaName || 'null') + ' / ' + escClientHtml(area.box || 'box') + '</div>' +
+      '</button>';
+    }).join('');
+    savedAreaList.querySelectorAll('.saved-area-row').forEach(function(row) {
+      row.addEventListener('click', function() {
+        var seq = Number(row.getAttribute('data-area-seq'));
+        var area = savedAreasCache.find(function(a) { return Number(a.areaSeq) === seq; });
+        if (area) focusSavedArea(area);
+      });
+    });
+  }
+  function loadSavedAreaMenu() {
+    if (!savedAreaList) return;
+    savedAreaList.className = 'area-list-status';
+    savedAreaList.textContent = '登録済みエリアを読み込み中...';
+    fetch('/api/heritage-area-boxes')
+      .then(function(r) { return r.json().then(function(d) { return { ok: r.ok, data: d }; }); })
+      .then(function(res) {
+        if (!res.ok) throw new Error(res.data && res.data.error ? res.data.error : 'エリア一覧を取得できません');
+        savedAreasCache = res.data.areas || [];
+        renderSavedAreaMenu(savedAreasCache);
+      })
+      .catch(function(e) { savedAreaList.textContent = e.message; });
+  }
+  function focusSavedArea(area) {
+    selectedSavedAreaSeq = area.areaSeq;
+    renderSavedAreaMenu(savedAreasCache);
+    if ((area.box || 'box') !== 'box') return;
+    lastBoxBounds = savedAreaBounds(area);
+    stopAreaTour(false);
+    var ctr = lastBoxBounds.center;
+    flyTo(ctr.lat, ctr.lon);
+    var latSpan = Math.max(1, Math.abs(Number(area.topLeftLat) - Number(area.bottomRightLat)));
+    var lonSpan = Math.max(1, Math.abs(Number(area.topLeftLon) - Number(area.bottomRightLon)));
+    var span = Math.max(latSpan, lonSpan);
+    var newZoom = Math.max(1.8, Math.min(9, 9 - span / 25));
+    setTimeout(function() {
+      zoom = newZoom;
+      var entries = AREA_KINDS.map(function(k) { return { kind: k, items: k.getItems() }; });
+      renderSavedAreaItems(area, entries);
+      showAreaMenu();
+    }, FLY_DUR + 100);
+  }
+  if (reloadSavedAreas) reloadSavedAreas.addEventListener('click', loadSavedAreaMenu);
 
   function findAreaKind(key) {
     for (var i = 0; i < AREA_KINDS.length; i++) { if (AREA_KINDS[i].key === key) return AREA_KINDS[i]; }

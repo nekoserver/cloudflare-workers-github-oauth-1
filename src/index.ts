@@ -5185,6 +5185,40 @@ app.post('/api/heritage-area-boxes', authMiddleware, async (c) => {
   return c.json({ ok: true, areaSeq, itemCount: items.length });
 });
 
+
+app.get('/api/heritage-area-boxes', authMiddleware, async (c) => {
+  const user = c.get('user');
+  const db = c.env.DB;
+  if (!db) return c.json({ error: 'DB unavailable' }, 503);
+  const rows = await db.prepare(
+    `SELECT area_seq AS areaSeq, box, NULL AS areaName, top_left_lat AS topLeftLat, top_left_lon AS topLeftLon,
+            bottom_right_lat AS bottomRightLat, bottom_right_lon AS bottomRightLon, created_at AS createdAt
+       FROM heritage_area_boxes
+      WHERE user_id = ?
+      ORDER BY created_at DESC, area_seq DESC
+      LIMIT 100`
+  ).bind(user.sub).all();
+  const areas = (rows.results || []) as Array<Record<string, unknown>>;
+  if (areas.length === 0) return c.json({ ok: true, areas: [] });
+  const seqs = areas.map((area) => Number(area.areaSeq)).filter(Number.isFinite);
+  const placeholders = seqs.map(() => '?').join(',');
+  const itemRows = placeholders
+    ? await db.prepare(
+        `SELECT area_seq AS areaSeq, category, item_name AS name, lat, lon
+           FROM heritage_area_items
+          WHERE area_seq IN (${placeholders})
+          ORDER BY area_seq DESC, id ASC`
+      ).bind(...seqs).all()
+    : { results: [] };
+  const itemsByArea = new Map<number, Array<Record<string, unknown>>>();
+  for (const item of (itemRows.results || []) as Array<Record<string, unknown>>) {
+    const seq = Number(item.areaSeq);
+    if (!itemsByArea.has(seq)) itemsByArea.set(seq, []);
+    itemsByArea.get(seq)!.push(item);
+  }
+  return c.json({ ok: true, areas: areas.map((area) => ({ ...area, items: itemsByArea.get(Number(area.areaSeq)) || [] })) });
+});
+
 app.get('/api/heritage-area/travel-categories', authMiddleware, async (c) => {
   const user = c.get('user');
   const db = c.env.DB;
