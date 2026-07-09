@@ -32,6 +32,9 @@ describe('heritage-area page', () => {
     expect(src).toContain("const topics = ['見どころ', '最寄り空港', '最寄り駅', '宿泊施設']");
     expect(src).toContain("(s.question LIKE ? ESCAPE '\\\\' OR s.answer LIKE ? ESCAPE '\\\\')");
     expect(src).toContain('const firstQuoteMatch = question.match(/「([^」]+)」/)');
+    expect(src).toContain('itemByQuoteKey');
+    expect(src).toContain('item_name: firstQuoteKey');
+    expect(src).toContain('const allKeys = items.map((item) => item.item_name)');
     expect(src).toContain('FROM heritage_area_items i');
     expect(src).toContain('area_matches');
   });
