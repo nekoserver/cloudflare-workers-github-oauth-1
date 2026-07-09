@@ -5248,9 +5248,12 @@ app.post('/api/heritage-area/search', authMiddleware, async (c) => {
     .slice(0, 20);
   if (!keywords.length) return c.json({ items: [] });
   const topics = ['見どころ', '最寄り空港', '最寄り駅', '宿泊施設'];
-  const answerWhere = keywords.map(() => `s.answer LIKE ? ESCAPE '\\'`).join(' OR ');
+  const keywordWhere = keywords.map(() => `(s.question LIKE ? ESCAPE '\\' OR s.answer LIKE ? ESCAPE '\\')`).join(' OR ');
   const topicWhere = topics.map(() => `s.question LIKE ? ESCAPE '\\'`).join(' OR ');
-  const answerParams = keywords.map((kw) => buildFuzzySearchLikePattern(kw));
+  const keywordParams = keywords.flatMap((kw) => {
+    const pattern = buildFuzzySearchLikePattern(kw);
+    return [pattern, pattern];
+  });
   const topicParams = topics.map((topic) => buildFuzzySearchLikePattern(topic));
   try {
     const rows = await db.prepare(
@@ -5264,27 +5267,23 @@ app.post('/api/heritage-area/search', authMiddleware, async (c) => {
               MAX(i.searched_at) AS last_searched_at
        FROM aichat_search_impressions i
        JOIN ai_chat_shares s ON s.id = i.share_id AND s.user_id = i.user_id AND s.deleted_at IS NULL
-       WHERE i.user_id = ? AND i.deleted_at IS NULL AND (${answerWhere}) AND (${topicWhere})
+       WHERE i.user_id = ? AND i.deleted_at IS NULL AND (${keywordWhere}) AND (${topicWhere})
        GROUP BY i.share_id, s.question, s.answer
        ORDER BY impression_count DESC, last_searched_at DESC, s.question ASC
        LIMIT 500`
-    ).bind(user.sub, ...answerParams, ...topicParams).all<{
+    ).bind(user.sub, ...keywordParams, ...topicParams).all<{
       area_seq: null; category: string; item_name: string; answer: string | null; share_id: string;
       impression_count: number; max_result_count: number | null; last_searched_at: string;
     }>();
 
     const items = (rows.results ?? []).map((row) => {
+      const question = String(row.item_name ?? '');
       const answer = String(row.answer ?? '');
-      const matchedKeywords = keywords.filter((kw) => answer.toLowerCase().includes(kw.toLowerCase()));
-      const quoteKeys: string[] = [];
-      const seen = new Set<string>();
-      for (const match of String(row.item_name ?? '').matchAll(/「([^」]+)」/g)) {
-        const key = String(match[1] ?? '').trim();
-        if (key && !seen.has(key)) {
-          seen.add(key);
-          quoteKeys.push(key);
-        }
-      }
+      const searchableText = `${question} ${answer}`.toLowerCase();
+      const matchedKeywords = keywords.filter((kw) => searchableText.includes(kw.toLowerCase()));
+      const firstQuoteMatch = question.match(/「([^」]+)」/);
+      const firstQuoteKey = String(firstQuoteMatch?.[1] ?? '').trim();
+      const quoteKeys = firstQuoteKey ? [firstQuoteKey] : [];
       return { ...row, answer: undefined, matched_keywords: matchedKeywords.join(','), quote_keys: quoteKeys, area_matches: [] as { key: string; areas: string }[] };
     });
 

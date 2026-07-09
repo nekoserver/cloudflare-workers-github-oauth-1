@@ -30,8 +30,8 @@ describe('heritage-area page', () => {
     expect(src).toContain('FROM aichat_search_impressions i');
     expect(src).toContain("'aichat_search_impressions' AS category");
     expect(src).toContain("const topics = ['見どころ', '最寄り空港', '最寄り駅', '宿泊施設']");
-    expect(src).toContain('s.answer LIKE');
-    expect(src).toContain('matchAll(/「([^」]+)」/g)');
+    expect(src).toContain("(s.question LIKE ? ESCAPE '\\\\' OR s.answer LIKE ? ESCAPE '\\\\')");
+    expect(src).toContain('const firstQuoteMatch = question.match(/「([^」]+)」/)');
     expect(src).toContain('FROM heritage_area_items i');
     expect(src).toContain('area_matches');
   });
