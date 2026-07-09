@@ -20,4 +20,13 @@ describe('世界遺産ページ 保存済みエリアパネル', () => {
     expect(html).toContain("if ((area.box || 'box') !== 'box') return;");
     expect(html).toContain('renderSavedAreaItems(area, entries)');
   });
+
+  it('エリアタブのエリア番号から呼び出す保存済みエリアは毎回最大ズームへ切り替える', () => {
+    const focusMatch = html.match(/function focusSavedArea\(area\) \{[\s\S]*?\n  \}/);
+    expect(focusMatch).not.toBeNull();
+    const fn = focusMatch![0];
+    expect(fn).toContain('zoom = 1.2;');
+    expect(fn).not.toContain('var newZoom = Math.max(1.8, Math.min(9, 9 - span / 25));');
+  });
+
 });

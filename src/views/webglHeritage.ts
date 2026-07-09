@@ -1079,12 +1079,8 @@ void main() {
     stopAreaTour(false);
     var ctr = lastBoxBounds.center;
     flyTo(ctr.lat, ctr.lon);
-    var latSpan = Math.max(1, Math.abs(Number(area.topLeftLat) - Number(area.bottomRightLat)));
-    var lonSpan = Math.max(1, Math.abs(Number(area.topLeftLon) - Number(area.bottomRightLon)));
-    var span = Math.max(latSpan, lonSpan);
-    var newZoom = Math.max(1.8, Math.min(9, 9 - span / 25));
     setTimeout(function() {
-      zoom = newZoom;
+      zoom = 1.2;
       var entries = AREA_KINDS.map(function(k) { return { kind: k, items: k.getItems() }; });
       renderSavedAreaItems(area, entries);
       showAreaMenu();
