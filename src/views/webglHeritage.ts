@@ -825,6 +825,7 @@ void main() {
   var bx0 = 0, by0 = 0, bxCur = 0, byCur = 0, boxDragging = false;
   var btnBoxZoom = document.getElementById('btnBoxZoom');
   var lastBoxBounds = null, areaMenuEl = null, areaTourTimer = null, areaTourIdx = 0, areaTourRunning = false, areaTourKind = null, areaTourItems = null, areaTourCursorY = null;
+  var AREA_AIRPORTS = [];
 
   btnBoxZoom.addEventListener('click', function() {
     boxZoomMode = !boxZoomMode;
@@ -924,6 +925,7 @@ void main() {
   function getF1InBounds() { return filterInBounds(F1_CIRCUITS, function(r) { return [r.lat, r.lon]; }); }
   function getVolcanoesInBounds() { return filterInBounds(VOLCANOES, function(v) { return [v.lat, v.lon]; }); }
   function getFaultsInBounds() { return filterInBounds(FAULTS, function(f) { return [f.lat, f.lon]; }); }
+  function getAirportsInBounds() { return filterInBounds(AREA_AIRPORTS, function(a) { return [a.lat, a.lon]; }); }
 
   function showGenericAreaTooltip(html) {
     tooltip.innerHTML = html;
@@ -983,6 +985,15 @@ void main() {
       itemLabel: function(f) { return f.n; },
       showTooltip: function(f) {
         showGenericAreaTooltip('<div class="tt-name">🌐 ' + f.n + '</div><div class="tt-sub">' + f.region + '　' + f.country + '　M' + f.maxMag + '</div>');
+      }
+    },
+    {
+      key: 'airport', icon: '✈︎', label: '空港', color: '#79c0ff', bg: '#0c2233',
+      getItems: function() { return getAirportsInBounds(); },
+      locate: function(a) { return [a.lat, a.lon]; },
+      itemLabel: function(a) { return a.city + ' ' + a.name + ' (' + a.code + ')'; },
+      showTooltip: function(a) {
+        showGenericAreaTooltip('<div class="tt-name">✈︎ ' + a.name + ' <span style="font-size:11px;color:#8b949e">' + a.code + '</span></div><div class="tt-sub">' + a.city + '</div>');
       }
     }
   ];
@@ -1068,6 +1079,32 @@ void main() {
     setTimeout(function() { el.classList.remove('area-tour-flash'); }, AREA_TOUR_FLASH_MS);
   }
 
+  function buildAreaSavePayload(entries) {
+    if (!lastBoxBounds) return null;
+    var items = [];
+    entries.forEach(function(e) {
+      e.items.forEach(function(item) {
+        var pos = e.kind.locate(item);
+        items.push({ category: e.kind.key === 'heritage' ? 'heritage-access' : e.kind.key, name: e.kind.itemLabel(item), lat: pos[0], lon: pos[1] });
+      });
+    });
+    return { box: 'box', topLeft: lastBoxBounds.corner0, bottomRight: lastBoxBounds.corner1, items: items };
+  }
+  function saveCurrentArea(entries) {
+    var payload = buildAreaSavePayload(entries);
+    if (!payload) return;
+    var btn = document.getElementById('areaSaveBtn');
+    if (btn) { btn.textContent = '📝 保存中…'; btn.disabled = true; }
+    fetch('/api/heritage-area-boxes', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+      .then(function(r) { return r.json().then(function(d) { return { ok: r.ok, data: d }; }); })
+      .then(function(res) {
+        if (!res.ok) throw new Error(res.data && res.data.error ? res.data.error : '保存に失敗しました');
+        if (btn) btn.textContent = '📝 保存済み #' + res.data.areaSeq;
+      })
+      .catch(function(e) { if (btn) btn.textContent = '📝 保存失敗: ' + e.message; })
+      .then(function() { setTimeout(function() { if (btn) { btn.disabled = false; btn.textContent = '📝 エリア保存'; } }, 2400); });
+  }
+
   function renderAreaMenu() {
     if (!areaMenuEl) return;
     var entries = AREA_KINDS.map(function(k) { return { kind: k, items: k.getItems() }; });
@@ -1084,8 +1121,11 @@ void main() {
     areaMenuEl.innerHTML =
       '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:7px"><span style="font-size:11px;font-weight:700;color:#3fb950">📍 エリアメニュー</span><span id="areaMenuClose" style="cursor:pointer;color:#8b949e;font-size:14px;padding:0 3px;line-height:1">✕</span></div>' +
       (hasAny ? buttonsHtml : '<div style="font-size:10px;color:#8b949e">エリア内に2件以上のアイコンがありません</div>') +
-      '<div id="areaTourProg" style="font-size:10px;color:#8b949e;text-align:center;margin-top:6px;min-height:14px"></div>';
+      '<div id="areaTourProg" style="font-size:10px;color:#8b949e;text-align:center;margin-top:6px;min-height:14px"></div>' +
+      '<button id="areaSaveBtn" style="width:100%;background:#161b22;border:1px solid #8b949e;border-radius:6px;color:#c9d1d9;font-size:11px;padding:6px 8px;margin-top:8px;cursor:pointer">📝 エリア保存</button>';
     document.getElementById('areaMenuClose').addEventListener('click', function(){ stopAreaTour(true); });
+    var saveBtn = document.getElementById('areaSaveBtn');
+    if (saveBtn) saveBtn.addEventListener('click', function() { saveCurrentArea(entries); });
     var kindBtns = areaMenuEl.querySelectorAll('.area-kind-btn');
     for (var bi = 0; bi < kindBtns.length; bi++) {
       (function(btn) {
@@ -1316,6 +1356,7 @@ void main() {
     APT_REGIONS.forEach(function(rg) {
       rg.airports.forEach(function(a) { aptByCode[a.code] = a; });
     });
+    AREA_AIRPORTS = Object.keys(aptByCode).map(function(code) { return aptByCode[code]; });
 
     var aptTooltipEl = document.getElementById('apt-tooltip');
     var aptMarkersDiv = document.getElementById('markers');

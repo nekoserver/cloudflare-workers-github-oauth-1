@@ -174,6 +174,8 @@ const STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
   { name: 'rail_line_stations',       migration: '0069',   description: '世界の鉄道路線サイドパネルの全駅データ（座標・国・国旗・順序）',    syncPolicy: 'manual' },
   { name: 'rail_station_nearby_points', migration: '0070', description: '駅から100km圏内の駅・世界遺産の距離キャッシュ',              syncPolicy: 'auto' },
   { name: 'rail_station_nearby_fetched', migration: '0070', description: '駅の近隣ポイント検索済みフラグ',                              syncPolicy: 'auto' },
+  { name: 'heritage_area_boxes',        migration: '0072',   description: '世界遺産ページの保存済みエリア範囲（テーブルA相当）',          syncPolicy: 'auto' },
+  { name: 'heritage_area_items',        migration: '0073',   description: '保存済みエリア内の世界遺産・空港・駅・火山などの紐付け',      syncPolicy: 'auto' },
   { name: 'slack_installations',        migration: '0071',   description: 'Slack OAuthワークスペースインストール情報（botトークン等）',   syncPolicy: 'manual' },
 ];
 
@@ -5138,6 +5140,46 @@ function haversineKm(lat1: number, lon1: number, lat2: number, lon2: number): nu
   const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon / 2) ** 2;
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
+
+
+app.post('/api/heritage-area-boxes', authMiddleware, async (c) => {
+  const user = c.get('user');
+  const db = c.env.DB;
+  if (!db) return c.json({ error: 'DB unavailable' }, 503);
+  const body = await c.req.json<{
+    box?: string;
+    topLeft?: { lat?: number; lon?: number };
+    bottomRight?: { lat?: number; lon?: number };
+    items?: Array<{ category?: string; name?: string; lat?: number; lon?: number }>;
+  }>().catch(() => null);
+  if (!body || !body.topLeft || !body.bottomRight) return c.json({ error: 'topLeft and bottomRight required' }, 400);
+  const topLeftLat = Number(body.topLeft.lat);
+  const topLeftLon = Number(body.topLeft.lon);
+  const bottomRightLat = Number(body.bottomRight.lat);
+  const bottomRightLon = Number(body.bottomRight.lon);
+  if (![topLeftLat, topLeftLon, bottomRightLat, bottomRightLon].every(Number.isFinite)) {
+    return c.json({ error: 'invalid coordinates' }, 400);
+  }
+  const areaResult = await db.prepare(
+    'INSERT INTO heritage_area_boxes (user_id, box, top_left_lat, top_left_lon, bottom_right_lat, bottom_right_lon) VALUES (?, ?, ?, ?, ?, ?)'
+  ).bind(user.sub, body.box || 'box', topLeftLat, topLeftLon, bottomRightLat, bottomRightLon).run();
+  const areaSeq = areaResult.meta.last_row_id;
+  const allowedCategories = new Set(['heritage-access', 'airport', 'station', 'volcano', 'fault', 'f1', 'other']);
+  const rawItems = Array.isArray(body.items) ? body.items.slice(0, 500) : [];
+  const items = rawItems
+    .map((item) => ({
+      category: allowedCategories.has(item.category || '') ? item.category! : 'other',
+      name: String(item.name || '').slice(0, 300),
+      lat: item.lat == null ? null : Number(item.lat),
+      lon: item.lon == null ? null : Number(item.lon),
+    }))
+    .filter((item) => item.name.length > 0);
+  if (items.length > 0) {
+    const stmt = db.prepare('INSERT INTO heritage_area_items (area_seq, category, item_name, lat, lon) VALUES (?, ?, ?, ?, ?)');
+    await db.batch(items.map((item) => stmt.bind(areaSeq, item.category, item.name, Number.isFinite(item.lat) ? item.lat : null, Number.isFinite(item.lon) ? item.lon : null)));
+  }
+  return c.json({ ok: true, areaSeq, itemCount: items.length });
+});
 
 app.get('/api/heritage-cities', authMiddleware, async (c) => {
   const db = c.env.DB;

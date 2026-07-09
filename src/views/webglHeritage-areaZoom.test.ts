@@ -15,7 +15,7 @@ describe('getWebGLHeritagePage エリアズーム機能（種別ごとの巡回�
     expect(count).toBeGreaterThan(0);
   });
 
-  it('AREA_KINDS に世界遺産・駅・F1会場・活火山・活断層の5種別が定義されている', () => {
+  it('AREA_KINDS に世界遺産・駅・F1会場・活火山・活断層・空港の6種別が定義されている', () => {
     const kindsMatch = html.match(/var AREA_KINDS = \[[\s\S]*?\n  \];/);
     expect(kindsMatch).not.toBeNull();
     const block = kindsMatch![0];
@@ -24,11 +24,13 @@ describe('getWebGLHeritagePage エリアズーム機能（種別ごとの巡回�
     expect(block).toContain("key: 'f1'");
     expect(block).toContain("key: 'volcano'");
     expect(block).toContain("key: 'fault'");
+    expect(block).toContain("key: 'airport'");
     expect(block).toContain("label: '世界遺産'");
     expect(block).toContain("label: '駅'");
     expect(block).toContain("label: 'F1会場'");
     expect(block).toContain("label: '活火山'");
     expect(block).toContain("label: '活断層'");
+    expect(block).toContain("label: '空港'");
   });
 
   it('種別ごとのエリア内絞り込み関数がすべて存在する', () => {
@@ -37,6 +39,7 @@ describe('getWebGLHeritagePage エリアズーム機能（種別ごとの巡回�
     expect(html).toContain('function getF1InBounds()');
     expect(html).toContain('function getVolcanoesInBounds()');
     expect(html).toContain('function getFaultsInBounds()');
+    expect(html).toContain('function getAirportsInBounds()');
   });
 
   it('巡回ロジック（areaTourStep/startAreaTour/stopAreaTour）は種別ごとに複製されず、共通関数として1つだけ定義されている（外部関数化・汎用化）', () => {
@@ -143,7 +146,7 @@ describe('getWebGLHeritagePage エリアズーム機能（種別ごとの巡回�
     const kindsMatch = html.match(/var AREA_KINDS = \[[\s\S]*?\n  \];/);
     expect(kindsMatch).not.toBeNull();
     const occurrences = (kindsMatch![0].match(/itemLabel:/g) || []).length;
-    expect(occurrences).toBe(5);
+    expect(occurrences).toBe(6);
   });
 
   it('startAreaTour は巡回開始時に左サイドパネルへ巡回先一覧を描画する', () => {
