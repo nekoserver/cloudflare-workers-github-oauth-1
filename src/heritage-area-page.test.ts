@@ -9,6 +9,11 @@ describe('heritage-area page', () => {
     expect(html).toContain('/api/heritage-area/travel-categories');
     expect(html).toContain('/api/heritage-area/search');
     expect(html).toContain('複数選択可');
+    expect(html).toContain('keyword-drawer');
+    expect(html).toContain('id="keyword-search"');
+    expect(html).toContain('renderResultRows');
+    expect(html).toContain('エリア分け済み（優先表示）');
+    expect(html).toContain('ヒットはしたけどエリア分けされていない');
     expect(html).toContain('エリア番号');
     expect(html).toContain('世界遺産名（ほか駅名/空港名/活火山名）');
   });
