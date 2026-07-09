@@ -32,4 +32,20 @@ describe('世界遺産ページ エリアズーム選択後のエリアメニュ
     const idx = html.indexOf("class=\"area-kind-btn\"");
     expect(idx).toBeGreaterThan(-1);
   });
+
+  it('エリアメニューはヘッダーをドラッグして移動できる', () => {
+    expect(html).toContain('function enableAreaMenuDrag()');
+    expect(html).toContain('id="areaMenuDragHandle"');
+    expect(html).toContain("handle.addEventListener('pointerdown'");
+    expect(html).toContain("areaMenuEl.addEventListener('pointermove'");
+    expect(html).toContain('setPointerCapture');
+  });
+
+  it('エリアメニュー表示・ドラッグ・リサイズ時に画面内へ収める', () => {
+    expect(html).toContain('function clampAreaMenuPosition(left, top)');
+    expect(html).toContain('function keepAreaMenuInViewport()');
+    expect(html).toContain("window.addEventListener('resize', keepAreaMenuInViewport)");
+    expect(html).toContain('Math.max(pad, Math.min(maxLeft, left))');
+    expect(html).toContain('Math.max(pad, Math.min(maxTop, top))');
+  });
 });
