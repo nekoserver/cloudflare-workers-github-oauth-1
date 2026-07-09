@@ -3622,15 +3622,18 @@ export async function searchAiChatShares(
   id: string; user_hash: string; question: string; answer: string;
   model: string; created_at: string; access_count: number; question_hash: string | null;
 }> }> {
-  const like = buildFuzzySearchLikePattern(q);
+  // LIKEは(ワイルドカードの有無に関わらず)D1では約50バイト超のパターンで
+  // "LIKE or GLOB pattern too complex" になるため、任意長になり得る自由入力の
+  // 検索語はINSTR(長さ制限なし)を使い、中黒の表記ゆれはREPLACEで正規化する。
+  const normalized = q.replace(/[・･]/g, '・');
   const rows = await db
     .prepare(
       `SELECT id, user_hash, question, answer, model, created_at, access_count, question_hash
        FROM ai_chat_shares
-       WHERE user_id = ? AND deleted_at IS NULL AND (question LIKE ? ESCAPE '\\' OR answer LIKE ? ESCAPE '\\')
+       WHERE user_id = ? AND deleted_at IS NULL AND (INSTR(REPLACE(question, '･', '・'), ?) > 0 OR INSTR(REPLACE(answer, '･', '・'), ?) > 0)
        ORDER BY created_at DESC LIMIT 30`
     )
-    .bind(userId, like, like)
+    .bind(userId, normalized, normalized)
     .all<{
       id: string; user_hash: string; question: string; answer: string;
       model: string; created_at: string; access_count: number; question_hash: string | null;
@@ -5323,6 +5326,8 @@ app.post('/api/heritage-area/search', authMiddleware, async (c) => {
       .sort((a, b) => (Number(b.impression_count) - Number(a.impression_count)) || String(b.last_searched_at ?? '').localeCompare(String(a.last_searched_at ?? '')) || a.item_name.localeCompare(b.item_name))
       .slice(0, 500);
 
+    // ここも同じD1のLIKEパターン長制限(約50バイト)に引っかかるため、
+    // 動的に組み立てるLIKEパターンはINSTR(長さ制限なし)に置き換える。
     const areaLookup = db.prepare(
       `SELECT i.item_name AS key,
               i.area_seq,
@@ -5331,8 +5336,8 @@ app.post('/api/heritage-area/search', authMiddleware, async (c) => {
        FROM heritage_area_items i
        JOIN heritage_area_boxes b ON b.area_seq = i.area_seq AND b.user_id = ?
        WHERE i.item_name = ?
-          OR ? LIKE '%' || i.item_name || '%'
-          OR i.item_name LIKE '%' || ? || '%'
+          OR INSTR(?, i.item_name) > 0
+          OR INSTR(i.item_name, ?) > 0
        ORDER BY i.area_seq ASC, i.category ASC, i.item_name ASC
        LIMIT 50`
     );
