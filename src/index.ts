@@ -3889,6 +3889,50 @@ export async function lookupHeritageSearchKeywordCounts(
  * 世界遺産名一覧に対して「〇〇」の「topic」についてXXXという質問文が
  * 指定モデルでキャッシュ済みかどうかをまとめて調べ、share_id を返す。
  */
+
+export function countKeywordHitsInText(
+  text: string,
+  keywordCandidates: string[],
+): { keywords: string[]; hitCount: number } {
+  const seen = new Set<string>();
+  const keywords: string[] = [];
+  const body = text || '';
+  for (const raw of keywordCandidates) {
+    const keyword = String(raw || '').trim();
+    if (!keyword || seen.has(keyword)) continue;
+    seen.add(keyword);
+    if (body.includes(keyword)) keywords.push(keyword);
+  }
+  return { keywords, hitCount: keywords.length };
+}
+
+export async function lookupHeritageMitokoroKeywordHits(
+  db: D1Like,
+  userId: string,
+  heritage: string,
+  model: string,
+): Promise<{ keywords: string[]; hitCount: number }> {
+  try {
+    const question = `「${heritage}」の「${HERITAGE_TOOLTIP_GEMMA_TOPIC}」について説明してください`;
+    const rows = await db
+      .prepare(
+        `SELECT acs.answer, ash.keyword
+         FROM ai_chat_shares acs
+         INNER JOIN aichat_search_history ash ON ash.share_id = acs.id AND ash.user_id = ? AND ash.deleted_at IS NULL
+         WHERE acs.user_id = ? AND acs.deleted_at IS NULL
+           AND acs.model = ? AND acs.question = ?
+         ORDER BY acs.created_at DESC`
+      )
+      .bind(userId, userId, model, question)
+      .all<{ answer: string; keyword: string }>();
+    const results = rows.results ?? [];
+    const answer = results[0]?.answer || '';
+    return countKeywordHitsInText(answer, results.map((r) => r.keyword));
+  } catch {
+    return { keywords: [], hitCount: 0 };
+  }
+}
+
 export async function lookupHeritageTopicModelCache(
   db: D1Like,
   userId: string,
@@ -4016,6 +4060,16 @@ app.get('/api/aichat/heritage-search-keyword-counts', authMiddleware, async (c) 
   if (!heritage) return jsonUtf8({ keywords: [] });
   const { keywords } = await lookupHeritageSearchKeywordCounts(c.env.DB as unknown as D1Like, user.sub, heritage);
   return jsonUtf8({ keywords });
+});
+
+app.get('/api/aichat/heritage-mitokoro-keyword-hits', authMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!c.env.DB) return jsonUtf8({ keywords: [], hitCount: 0 }, 503);
+  const heritage = (c.req.query('heritage') ?? '').trim();
+  const model = (c.req.query('model') ?? '').trim();
+  if (!heritage || !model) return jsonUtf8({ keywords: [], hitCount: 0 });
+  const result = await lookupHeritageMitokoroKeywordHits(c.env.DB as unknown as D1Like, user.sub, heritage, model);
+  return jsonUtf8(result);
 });
 
 app.get('/api/aichat/shares/calendar', authMiddleware, async (c) => {
