@@ -824,7 +824,7 @@ void main() {
   var boxZoomOverlay = document.getElementById('box-select-overlay');
   var bx0 = 0, by0 = 0, bxCur = 0, byCur = 0, boxDragging = false;
   var btnBoxZoom = document.getElementById('btnBoxZoom');
-  var lastBoxBounds = null, areaMenuEl = null, areaTourTimer = null, areaTourIdx = 0, areaTourRunning = false, areaTourKind = null, areaTourCursorY = null;
+  var lastBoxBounds = null, areaMenuEl = null, areaTourTimer = null, areaTourIdx = 0, areaTourRunning = false, areaTourKind = null, areaTourItems = null, areaTourCursorY = null;
 
   btnBoxZoom.addEventListener('click', function() {
     boxZoomMode = !boxZoomMode;
@@ -938,7 +938,8 @@ void main() {
       key: 'heritage', icon: '🏛️', label: '世界遺産', color: '#3fb950', bg: '#0c2d1a',
       getItems: function() { return getHeritagesInBounds(); },
       locate: function(d) { return [d.lat, d.lon]; },
-      itemLabel: function(d) { return d.f + ' ' + d.n; },
+      itemIcon: function(d) { return d.e; },
+      itemLabel: function(d) { return d.f + ' ' + d.n + getHeritageAreaTourStatusIcons(d); },
       showTooltip: function(d) { showMarkerTooltip(HERITAGE.indexOf(d), 0, 0); }
     },
     {
@@ -991,6 +992,10 @@ void main() {
     return null;
   }
 
+  function areaTourItemIcon(kind, item) {
+    return kind.itemIcon ? kind.itemIcon(item) : kind.icon;
+  }
+
   function fitAreaTourSideWidth(kind, items) {
     if (!areaTourSide) return;
     if (items.length === 0) { areaTourSide.style.width = ''; return; }
@@ -1000,7 +1005,7 @@ void main() {
     items.forEach(function(item) {
       var row = document.createElement('div');
       row.className = 'f1-side-item';
-      row.innerHTML = '<span class="f1-side-flag">' + kind.icon + '</span><span class="f1-side-info" style="overflow:visible"><span class="f1-side-circuit" style="white-space:nowrap;overflow:visible;display:inline-block">' + kind.itemLabel(item) + '</span></span>';
+      row.innerHTML = '<span class="f1-side-flag">' + areaTourItemIcon(kind, item) + '</span><span class="f1-side-info" style="overflow:visible"><span class="f1-side-circuit" style="white-space:nowrap;overflow:visible;display:inline-block">' + kind.itemLabel(item) + '</span></span>';
       probe.appendChild(row);
     });
     document.body.appendChild(probe);
@@ -1016,7 +1021,7 @@ void main() {
     if (!areaTourSide) return;
     areaTourSideTitle.textContent = kind.icon + ' ' + kind.label + ' 巡回先';
     areaTourSideBody.innerHTML = items.map(function(item, i) {
-      return '<div class="f1-side-item" data-idx="' + i + '"><span class="f1-side-flag">' + kind.icon + '</span><span class="f1-side-info"><span class="f1-side-circuit">' + kind.itemLabel(item) + '</span></span></div>';
+      return '<div class="f1-side-item" data-idx="' + i + '"><span class="f1-side-flag">' + areaTourItemIcon(kind, item) + '</span><span class="f1-side-info"><span class="f1-side-circuit">' + kind.itemLabel(item) + '</span></span></div>';
     }).join('');
     areaTourSide.classList.add('open');
     updateAreaTourCollapseButton();
@@ -1100,6 +1105,7 @@ void main() {
     hideTooltip();
     if (areaTourKind && areaTourKind.hideExtra) areaTourKind.hideExtra();
     areaTourKind = null;
+    areaTourItems = null;
     renderAreaMenu();
     var prog = document.getElementById('areaTourProg');
     if (prog) prog.textContent = '';
@@ -1127,6 +1133,7 @@ void main() {
     if (items.length === 0) return;
     areaTourRunning = true;
     areaTourKind = kind;
+    areaTourItems = items;
     areaTourIdx = 0;
     renderAreaTourSide(kind, items);
     areaTourStep(kind, items);
@@ -1689,6 +1696,21 @@ void main() {
   var hasStationDataSet = {};
   var heritageMitokoroGemmaShareId = {};
   var heritageMitokoroLlamaShareId = {};
+  var heritageQuestionAnswered = {};
+
+  function getHeritageAreaTourStatusIcons(d) {
+    var icons = '';
+    if (heritageMitokoroGemmaShareId[d.n]) icons += ' 👀';
+    if (heritageMitokoroLlamaShareId[d.n]) icons += ' 👁️';
+    var answered = heritageQuestionAnswered[d.n] || {};
+    if (answered['最寄り空港']) icons += ' 🛬';
+    if (answered['鉄道でのアクセス']) icons += ' 🚉';
+    return icons;
+  }
+
+  function refreshAreaTourSideIfHeritage() {
+    if (areaTourKind && areaTourKind.key === 'heritage' && areaTourItems) renderAreaTourSide(areaTourKind, areaTourItems);
+  }
   var HERITAGE_MITOKORO_GEMMA_MODEL = '@cf/google/gemma-4-26b-a4b-it';
 
   fetch('/api/heritage-city-fetched-list').then(function(r){ return r.json(); }).then(function(d){
@@ -1704,7 +1726,7 @@ void main() {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ heritages: HERITAGE.map(function(d) { return d.n; }) })
   }).then(function(r) { return r.json(); }).then(function(d) {
-    if (d && d.cached) heritageMitokoroGemmaShareId = d.cached;
+    if (d && d.cached) { heritageMitokoroGemmaShareId = d.cached; refreshAreaTourSideIfHeritage(); }
   }).catch(function(){});
 
   fetch('/api/aichat/check-heritage-mitokoro-llama-batch', {
@@ -1712,8 +1734,32 @@ void main() {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ heritages: HERITAGE.map(function(d) { return d.n; }) })
   }).then(function(r) { return r.json(); }).then(function(d) {
-    if (d && d.cached) heritageMitokoroLlamaShareId = d.cached;
+    if (d && d.cached) { heritageMitokoroLlamaShareId = d.cached; refreshAreaTourSideIfHeritage(); }
   }).catch(function(){});
+
+
+
+  function loadHeritageQuestionStatusBatch() {
+    var names = HERITAGE.map(function(d) { return d.n; });
+    var offset = 0;
+    function next() {
+      var chunk = names.slice(offset, offset + 100);
+      if (!chunk.length) return;
+      offset += 100;
+      fetch('/api/aichat/check-heritage-questions-batch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ heritages: chunk })
+      }).then(function(r) { return r.json(); }).then(function(d) {
+        if (d && d.answered) {
+          Object.keys(d.answered).forEach(function(name) { heritageQuestionAnswered[name] = d.answered[name]; });
+          refreshAreaTourSideIfHeritage();
+        }
+      }).catch(function(){}).then(next);
+    }
+    next();
+  }
+  loadHeritageQuestionStatusBatch();
 
   function cacheStationCities(name, lat, lon) {
     fetch('/api/rail-station-cities', {
