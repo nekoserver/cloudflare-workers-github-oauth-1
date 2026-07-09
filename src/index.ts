@@ -5242,38 +5242,77 @@ app.post('/api/heritage-area/search', authMiddleware, async (c) => {
   const db = c.env.DB;
   if (!db) return c.json({ error: 'DB unavailable' }, 503);
   const body = await c.req.json<{ keywords?: unknown }>().catch(() => null);
-  const keywords = (Array.isArray(body?.keywords) ? body!.keywords : [])
+  const keywords = Array.from(new Set((Array.isArray(body?.keywords) ? body!.keywords : [])
     .map((kw) => String(kw).trim())
-    .filter(Boolean)
+    .filter(Boolean)))
     .slice(0, 20);
   if (!keywords.length) return c.json({ items: [] });
-  const where = keywords.map(() => `(l.keyword = ? OR s.question LIKE ? ESCAPE '\\' OR s.answer LIKE ? ESCAPE '\\')`).join(' OR ');
-  const params = keywords.flatMap((kw) => {
-    const like = buildFuzzySearchLikePattern(kw);
-    return [kw, like, like];
-  });
+  const topics = ['見どころ', '最寄り空港', '最寄り駅', '宿泊施設'];
+  const answerWhere = keywords.map(() => `s.answer LIKE ? ESCAPE '\\'`).join(' OR ');
+  const topicWhere = topics.map(() => `s.question LIKE ? ESCAPE '\\'`).join(' OR ');
+  const answerParams = keywords.map((kw) => buildFuzzySearchLikePattern(kw));
+  const topicParams = topics.map((topic) => buildFuzzySearchLikePattern(topic));
   try {
     const rows = await db.prepare(
       `SELECT NULL AS area_seq,
               'aichat_search_impressions' AS category,
               s.question AS item_name,
+              s.answer AS answer,
               i.share_id,
               COUNT(DISTINCT i.id) AS impression_count,
               MAX(i.result_count) AS max_result_count,
-              MAX(i.searched_at) AS last_searched_at,
-              GROUP_CONCAT(DISTINCT l.keyword) AS matched_keywords
+              MAX(i.searched_at) AS last_searched_at
        FROM aichat_search_impressions i
        JOIN ai_chat_shares s ON s.id = i.share_id AND s.user_id = i.user_id AND s.deleted_at IS NULL
-       LEFT JOIN aichat_search_log l ON l.user_id = i.user_id AND l.share_id = i.share_id AND l.deleted_at IS NULL
-       WHERE i.user_id = ? AND i.deleted_at IS NULL AND (${where})
-       GROUP BY i.share_id, s.question
+       WHERE i.user_id = ? AND i.deleted_at IS NULL AND (${answerWhere}) AND (${topicWhere})
+       GROUP BY i.share_id, s.question, s.answer
        ORDER BY impression_count DESC, last_searched_at DESC, s.question ASC
        LIMIT 500`
-    ).bind(user.sub, ...params).all<{
-      area_seq: null; category: string; item_name: string; share_id: string;
-      impression_count: number; max_result_count: number | null; last_searched_at: string; matched_keywords: string | null;
+    ).bind(user.sub, ...answerParams, ...topicParams).all<{
+      area_seq: null; category: string; item_name: string; answer: string | null; share_id: string;
+      impression_count: number; max_result_count: number | null; last_searched_at: string;
     }>();
-    return c.json({ items: rows.results ?? [] });
+
+    const items = (rows.results ?? []).map((row) => {
+      const answer = String(row.answer ?? '');
+      const matchedKeywords = keywords.filter((kw) => answer.toLowerCase().includes(kw.toLowerCase()));
+      const quoteKeys: string[] = [];
+      const seen = new Set<string>();
+      for (const match of String(row.item_name ?? '').matchAll(/「([^」]+)」/g)) {
+        const key = String(match[1] ?? '').trim();
+        if (key && !seen.has(key)) {
+          seen.add(key);
+          quoteKeys.push(key);
+        }
+      }
+      return { ...row, answer: undefined, matched_keywords: matchedKeywords.join(','), quote_keys: quoteKeys, area_matches: [] as { key: string; areas: string }[] };
+    });
+
+    const allKeys = Array.from(new Set(items.flatMap((item) => item.quote_keys))).slice(0, 500);
+    if (allKeys.length > 0) {
+      const placeholders = allKeys.map(() => '?').join(',');
+      const areaRows = await db.prepare(
+        `SELECT i.item_name AS key,
+                i.area_seq,
+                i.category,
+                b.box
+         FROM heritage_area_items i
+         JOIN heritage_area_boxes b ON b.area_seq = i.area_seq AND b.user_id = ?
+         WHERE i.item_name IN (${placeholders})
+         ORDER BY i.item_name ASC, i.area_seq ASC, i.category ASC`
+      ).bind(user.sub, ...allKeys).all<{ key: string; area_seq: number; category: string; box: string | null }>();
+      const areaMap = new Map<string, string[]>();
+      for (const row of areaRows.results ?? []) {
+        const label = `エリア#${row.area_seq}${row.category ? `/${row.category}` : ''}${row.box ? ` (${row.box})` : ''}`;
+        const arr = areaMap.get(row.key) ?? [];
+        if (!arr.includes(label)) arr.push(label);
+        areaMap.set(row.key, arr);
+      }
+      for (const item of items) {
+        item.area_matches = item.quote_keys.map((key) => ({ key, areas: (areaMap.get(key) ?? []).join(' / ') })).filter((match) => match.areas);
+      }
+    }
+    return c.json({ items });
   } catch (err) {
     return c.json({ error: '検索露出ログの検索に失敗しました', detail: String((err as Error)?.message ?? err) }, 500);
   }
