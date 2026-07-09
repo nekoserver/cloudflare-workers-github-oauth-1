@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { getHeritageAreaPage } from './views/heritageArea';
+import { HERITAGE_AREA_SEARCH_TOPICS } from './index';
 
 describe('heritage-area page', () => {
   it('renders Travel category buttons, multi-select keywords, and result table placeholders', () => {
@@ -29,7 +30,7 @@ describe('heritage-area page', () => {
     expect(src).toContain("app.post('/api/heritage-area/search'");
     expect(src).toContain('FROM aichat_search_impressions i');
     expect(src).toContain("'aichat_search_impressions' AS category");
-    expect(src).toContain("const topics = ['見どころ', '最寄り空港', '最寄り駅', '宿泊施設']");
+    expect(src).toContain('const topics = HERITAGE_AREA_SEARCH_TOPICS');
     expect(src).toContain("(s.question LIKE ? ESCAPE '\\\\' OR s.answer LIKE ? ESCAPE '\\\\')");
     expect(src).toContain('const firstQuoteMatch = question.match(/「([^」]+)」/)');
     expect(src).toContain('itemByQuoteKey');

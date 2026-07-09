@@ -5237,6 +5237,9 @@ app.get('/api/heritage-area/travel-categories/:id/keywords', authMiddleware, asy
   }
 });
 
+// 実際に生成される質問文のtopicと完全一致する文字列のみを書くこと（存在しない文字列は永遠に無マッチになる）
+export const HERITAGE_AREA_SEARCH_TOPICS = ['見どころ', '最寄り空港', '鉄道でのアクセス', '宿泊施設'];
+
 app.post('/api/heritage-area/search', authMiddleware, async (c) => {
   const user = c.get('user');
   const db = c.env.DB;
@@ -5247,7 +5250,7 @@ app.post('/api/heritage-area/search', authMiddleware, async (c) => {
     .filter(Boolean)))
     .slice(0, 20);
   if (!keywords.length) return c.json({ items: [] });
-  const topics = ['見どころ', '最寄り空港', '最寄り駅', '宿泊施設'];
+  const topics = HERITAGE_AREA_SEARCH_TOPICS;
   const keywordWhere = keywords.map(() => `(s.question LIKE ? ESCAPE '\\' OR s.answer LIKE ? ESCAPE '\\')`).join(' OR ');
   const topicWhere = topics.map(() => `s.question LIKE ? ESCAPE '\\'`).join(' OR ');
   const keywordParams = keywords.flatMap((kw) => {
