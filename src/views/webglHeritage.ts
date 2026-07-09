@@ -908,7 +908,10 @@ void main() {
   function filterInBounds(list, getLatLon) {
     if (!lastBoxBounds) return [];
     var b = lastBoxBounds;
-    return list.filter(function(item) { var p = getLatLon(item); return inAreaBounds(p[0], p[1], b) && inAreaScreenBounds(p[0], p[1], b); });
+    // エリアズームの選択枠は画面上の矩形なので、判定も選択時の投影状態でスクリーン座標に戻して行う。
+    // 近接ズームでは画面矩形が緯度経度の単純な min/max 矩形にならず、緯度経度矩形とのAND条件にすると
+    // 枠内に見えている地点が除外されるため、screenRect を唯一の包含判定として使う。
+    return list.filter(function(item) { var p = getLatLon(item); return inAreaScreenBounds(p[0], p[1], b); });
   }
   function getHeritagesInBounds() { return filterInBounds(HERITAGE, function(d) { return [d.lat, d.lon]; }); }
   function getStationsInBounds() {
@@ -917,7 +920,7 @@ void main() {
     RAIL_LINES.forEach(function(line) {
       line.stations.forEach(function(st) {
         if (seenNames[st.name]) return;
-        if (inAreaBounds(st.lat, st.lon, b) && inAreaScreenBounds(st.lat, st.lon, b)) { result.push({ st: st, line: line }); seenNames[st.name] = true; }
+        if (inAreaScreenBounds(st.lat, st.lon, b)) { result.push({ st: st, line: line }); seenNames[st.name] = true; }
       });
     });
     return result;
