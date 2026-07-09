@@ -114,6 +114,24 @@ canvas:active { cursor:grabbing; }
 .vol-tt-close:hover { color:#e6edf3; }
 .vol-tt-sub { font-size:11px; color:#8b949e; }
 #box-select-overlay { position:absolute; border:2px dashed rgba(100,200,255,0.85); background:rgba(100,200,255,0.06); pointer-events:none; display:none; z-index:60; }
+.area-tour-drawer { position:absolute; left:0; top:0; height:100%; width:260px; background:#0d1117; border-right:1px solid #30363d; z-index:45; display:flex; flex-direction:column; transform:translateX(-100%); transition:transform .25s ease; overflow:hidden; box-shadow:4px 0 20px rgba(0,0,0,0); }
+.area-tour-drawer.open { transform:translateX(0); box-shadow:4px 0 20px rgba(0,0,0,.5); }
+.area-tour-hdr { display:flex; align-items:center; gap:8px; padding:10px 12px 9px; border-bottom:1px solid #30363d; flex-shrink:0; background:#0d1117; }
+.area-tour-title { flex:1; font-size:13px; font-weight:700; color:#ff9500; min-width:0; }
+.area-tour-close { background:none; border:none; color:#8b949e; font-size:17px; cursor:pointer; padding:0 4px; line-height:1; }
+.area-tour-close:hover { color:#e6edf3; }
+.area-tour-body { flex:1; overflow-y:auto; overflow-x:hidden; padding:4px 0; }
+.area-tour-body::-webkit-scrollbar { width:4px; }
+.area-tour-body::-webkit-scrollbar-track { background:#0d1117; }
+.area-tour-body::-webkit-scrollbar-thumb { background:#30363d; border-radius:2px; }
+.area-tour-item { display:flex; align-items:flex-start; gap:8px; padding:8px 12px; border-bottom:1px solid #161b22; border-left:3px solid transparent; cursor:pointer; transition:background .1s,border-color .1s; }
+.area-tour-item:hover { background:#161b22; }
+.area-tour-item.active { background:#2d1a0c; border-left-color:#ff9500; }
+.area-tour-idx { color:#ff9500; font-family:monospace; font-size:10px; min-width:22px; }
+.area-tour-name { color:#e6edf3; font-size:11px; font-weight:600; line-height:1.35; }
+.area-tour-meta { color:#8b949e; font-size:10px; line-height:1.45; margin-top:2px; }
+@keyframes area-tour-flash { 0%,100%{outline:2px solid transparent} 50%{outline:2px solid #ffd700} }
+.area-tour-item.flash { animation:area-tour-flash 0.5s ease 3; }
 .toggle-row { display:flex; align-items:center; gap:8px; }
 .toggle-label { font-size:11px; color:#8b949e; flex:1; }
 .toggle-btn { background:#161b22; border:1px solid #30363d; border-radius:12px; color:#8b949e; font-size:10px; padding:3px 10px; cursor:pointer; transition:all .15s; white-space:nowrap; }
@@ -282,6 +300,13 @@ void main() {
       <button class="canvas-ctrl-btn" id="btnFaultDots">🔴 断層中心点</button>
       <button class="canvas-ctrl-btn" id="btnBoxZoom">🔲 エリアズーム</button>
       <button class="canvas-ctrl-btn" id="btnAirport">🛬 空路 🛫</button>
+    </div>
+    <div class="area-tour-drawer" id="areaTourDrawer">
+      <div class="area-tour-hdr">
+        <span class="area-tour-title" id="areaTourTitle">🌋 エリア内 活火山</span>
+        <button class="area-tour-close" id="areaTourClose">✕</button>
+      </div>
+      <div class="area-tour-body" id="areaTourBody"></div>
     </div>
     <div class="airport-drawer" id="airportDrawer">
       <div class="apt-hdr">
@@ -1018,7 +1043,9 @@ void main() {
     el.addEventListener('click', function(e) {
       e.stopPropagation();
       var r = el.getBoundingClientRect();
-      pinVolTooltip(v, r.left + r.width / 2, r.top - 8);
+      var x = r.left + r.width / 2;
+      var y = r.top - 8;
+      pinVolTooltip(v, x, y);
       selectFaultFromVol(v);
     });
   });
@@ -1916,6 +1943,11 @@ void main() {
   var areaTourRunning = false;
   var areaTourTimer = null;
   var areaTourIdx = 0;
+  var areaTourItems = [];
+  var areaTourDrawer = document.getElementById('areaTourDrawer');
+  var areaTourBody = document.getElementById('areaTourBody');
+  var areaTourTitle = document.getElementById('areaTourTitle');
+  document.getElementById('areaTourClose').addEventListener('click', function() { areaTourDrawer.classList.remove('open'); });
 
   function mulMat3Vec3(m, x, y, z) { return [m[0]*x+m[1]*y+m[2]*z, m[3]*x+m[4]*y+m[5]*z, m[6]*x+m[7]*y+m[8]*z]; }
 
@@ -1953,6 +1985,57 @@ void main() {
     });
   }
 
+  function renderAreaTourDrawer(vols) {
+    areaTourItems = vols.slice();
+    areaTourTitle.textContent = '🌋 エリア内 活火山 (' + vols.length + '件)';
+    areaTourBody.innerHTML = vols.map(function(v, i) {
+      return '<div class="area-tour-item" data-idx="' + i + '">' +
+        '<div class="area-tour-idx">#' + (i + 1) + '</div>' +
+        '<div style="min-width:0;flex:1"><div class="area-tour-name">' + getVolFlag(v.c) + ' ' + v.n + '</div>' +
+        '<div class="area-tour-meta">' + v.c + ' / 標高 ' + (v.elev < 0 ? '海面下' + Math.abs(v.elev) : v.elev.toLocaleString()) + 'm / 最新噴火: ' + v.lastErupt + '</div></div>' +
+        '</div>';
+    }).join('');
+    areaTourBody.querySelectorAll('.area-tour-item').forEach(function(row) {
+      row.addEventListener('click', function(e) {
+        e.stopPropagation();
+        var idx = parseInt(row.getAttribute('data-idx'), 10);
+        focusAreaTourVolcano(idx);
+      });
+    });
+    areaTourDrawer.classList.add('open');
+  }
+
+  function flashAreaTourVolcano(idx) {
+    areaTourBody.querySelectorAll('.area-tour-item').forEach(function(row) { row.classList.remove('active'); });
+    var row = areaTourBody.querySelector('.area-tour-item[data-idx="' + idx + '"]');
+    if (!row) return;
+    row.classList.add('active');
+    row.classList.remove('flash');
+    void row.offsetWidth;
+    row.classList.add('flash');
+    row.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    setTimeout(function() { row.classList.remove('flash'); }, 1500);
+  }
+
+  function pinVolTooltipAfterFly(v) {
+    requestAnimationFrame(function() {
+      var el = volDivMap[v.id];
+      if (!el) return;
+      var r = el.getBoundingClientRect();
+      pinVolTooltip(v, r.left + r.width / 2, r.top - 8);
+    });
+  }
+
+  function focusAreaTourVolcano(idx) {
+    var v = areaTourItems[idx];
+    if (!v) return;
+    if (areaTourRunning) stopAreaTour(false);
+    setVolcanoes(true);
+    areaTourDrawer.classList.add('open');
+    flashAreaTourVolcano(idx);
+    flyToLatLon(v.lat, v.lon, 1200, function() { pinVolTooltipAfterFly(v); });
+  }
+
   function showAreaMenu() {
     if (!areaMenuEl) {
       areaMenuEl = document.createElement('div');
@@ -1985,6 +2068,7 @@ void main() {
     areaTourRunning = true;
     areaTourIdx = 0;
     setVolcanoes(true);
+    renderAreaTourDrawer(vols);
     areaTourStep(vols);
   }
 
@@ -1993,6 +2077,7 @@ void main() {
     var v = vols[areaTourIdx];
     var prog = document.getElementById('areaTourProg');
     if (prog) prog.textContent = (areaTourIdx + 1) + ' / ' + vols.length;
+    flashAreaTourVolcano(areaTourIdx);
     var btn = document.getElementById('areaTourBtn');
     if (btn) btn.textContent = '&#x23F9; 停止 (' + (areaTourIdx + 1) + '/' + vols.length + ')';
     flyToLatLon(v.lat, v.lon, 1200, function() {
@@ -2037,6 +2122,7 @@ void main() {
       zoomTarget = 3.2;
       lastBoxBounds = null;
       if (areaMenuEl) areaMenuEl.style.display = 'none';
+      areaTourDrawer.classList.remove('open');
       boxZoomMode = false;
       btnBoxZoom.classList.remove('active');
       btnBoxZoom.textContent = '🔲 エリアズーム';
