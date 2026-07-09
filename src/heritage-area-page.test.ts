@@ -3,6 +3,24 @@ import { readFileSync } from 'node:fs';
 import { getHeritageAreaPage } from './views/heritageArea';
 import { HERITAGE_AREA_SEARCH_TOPICS } from './index';
 
+// heritageArea.ts に埋め込まれたscriptから、DOM(document)に依存しない純粋関数
+// (esc/areaNumbersOf/renderMatchedRows/renderUnmatchedRows)だけを抽出して実行し、
+// テーブル分割・エリア番号表示ロジックの実際の挙動を検証する。
+function extractPureFunctions(html: string): string {
+  const lines = html.split('\n');
+  const prefixes = ['const esc=', 'function areaNumbersOf(', 'function renderMatchedRows(', 'function renderUnmatchedRows('];
+  const found = prefixes.map((prefix) => lines.find((line) => line.startsWith(prefix)));
+  if (found.some((line) => !line)) {
+    throw new Error('必要な関数が生成HTMLから見つからない');
+  }
+  return found.join('\n');
+}
+
+function loadFns(html: string) {
+  const src = extractPureFunctions(html);
+  return new Function(`${src}\nreturn { areaNumbersOf, renderMatchedRows, renderUnmatchedRows };`)();
+}
+
 describe('heritage-area page', () => {
   it('renders Travel category buttons, multi-select keywords, and result table placeholders', () => {
     const html = getHeritageAreaPage();
@@ -12,14 +30,58 @@ describe('heritage-area page', () => {
     expect(html).toContain('複数選択可');
     expect(html).toContain('keyword-drawer');
     expect(html).toContain('id="keyword-search"');
-    expect(html).toContain('renderResultRows');
+    expect(html).toContain('renderMatchedRows');
+    expect(html).toContain('renderUnmatchedRows');
     expect(html).toContain('検索露出ログ検索結果');
     expect(html).toContain('AIチャット検索露出ログ');
     expect(html).toContain('露出回数');
     expect(html).toContain('AIチャット質問');
-    expect(html).toContain('引用キーの所属エリア');
+    expect(html).toContain('エリア未登録（露出回数順）');
     expect(html).toContain('class="spinner"');
-    expect(html).toContain('renderAreaMatches');
+  });
+
+  it('エリア登録済みテーブルは「エリア」列が先頭にあり、露出回数列を持たない', () => {
+    const html = getHeritageAreaPage();
+    const theadMatch = html.match(/<thead><tr><th[^>]*>エリア<\/th><th>AIチャット質問<\/th><\/tr><\/thead><tbody id="results-matched"/);
+    expect(theadMatch).not.toBeNull();
+  });
+
+  it('areaNumbersOf: エリア番号のみを「#」無しで抽出する', () => {
+    const html = getHeritageAreaPage();
+    const { areaNumbersOf } = loadFns(html);
+    expect(areaNumbersOf({ area_matches: [{ key: 'ウルビーノ歴史地区', areas: 'エリア#1/heritage-access (box)' }] })).toBe('1');
+    expect(areaNumbersOf({ area_matches: [] })).toBe('');
+    expect(areaNumbersOf({ area_matches: [{ key: 'x', areas: 'エリア#1/heritage-access (box) / エリア#2/other (box2)' }] })).toBe('1, 2');
+  });
+
+  it('renderMatchedRows: エリア番号のある行のみを、エリア番号列とAIチャット質問列だけで表示する', () => {
+    const html = getHeritageAreaPage();
+    const { renderMatchedRows } = loadFns(html);
+    const rows = [
+      { item_name: 'ウルビーノ歴史地区', impression_count: 338, area_matches: [{ key: 'ウルビーノ歴史地区', areas: 'エリア#1/heritage-access (box)' }] },
+      { item_name: 'ヴァルカモニカの岩絵', impression_count: 527, area_matches: [] },
+    ];
+    const html2 = renderMatchedRows(rows);
+    expect(html2).toContain('ウルビーノ歴史地区');
+    expect(html2).not.toContain('ヴァルカモニカの岩絵');
+    expect(html2).toContain('<td>1</td>');
+    expect(html2).not.toContain('338');
+  });
+
+  it('renderUnmatchedRows: エリア番号の無い行だけを露出回数の多い順で表示する', () => {
+    const html = getHeritageAreaPage();
+    const { renderUnmatchedRows } = loadFns(html);
+    const rows = [
+      { item_name: 'A', impression_count: 100, area_matches: [] },
+      { item_name: 'B', impression_count: 500, area_matches: [] },
+      { item_name: 'C', impression_count: 300, area_matches: [{ key: 'C', areas: 'エリア#1/heritage-access (box)' }] },
+    ];
+    const html2 = renderUnmatchedRows(rows);
+    const idxB = html2.indexOf('B');
+    const idxA = html2.indexOf('A');
+    expect(idxB).toBeGreaterThanOrEqual(0);
+    expect(idxA).toBeGreaterThan(idxB);
+    expect(html2).not.toContain('>C<');
   });
 
   it('registers heritage-area route and API handlers', () => {
