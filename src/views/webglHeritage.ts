@@ -825,6 +825,7 @@ void main() {
   var bx0 = 0, by0 = 0, bxCur = 0, byCur = 0, boxDragging = false;
   var btnBoxZoom = document.getElementById('btnBoxZoom');
   var lastBoxBounds = null, areaMenuEl = null, areaTourTimer = null, areaTourIdx = 0, areaTourRunning = false, areaTourKind = null, areaTourItems = null, areaTourCursorY = null;
+  var areaMenuDrag = null, areaMenuPosition = null, areaMenuDragEventsBound = false;
   var AREA_AIRPORTS = [];
 
   btnBoxZoom.addEventListener('click', function() {
@@ -1108,6 +1109,67 @@ void main() {
       .then(function() { setTimeout(function() { if (btn) { btn.disabled = false; btn.textContent = '📝 エリア保存'; } }, 2400); });
   }
 
+  function clampAreaMenuPosition(left, top) {
+    if (!areaMenuEl) return { left: left, top: top };
+    var wrapRect = wrap.getBoundingClientRect();
+    var menuW = areaMenuEl.offsetWidth || 190;
+    var menuH = areaMenuEl.offsetHeight || 140;
+    var pad = 10;
+    var maxLeft = Math.max(pad, wrapRect.width - menuW - pad);
+    var maxTop = Math.max(pad, wrapRect.height - menuH - pad);
+    return {
+      left: Math.max(pad, Math.min(maxLeft, left)),
+      top: Math.max(pad, Math.min(maxTop, top))
+    };
+  }
+
+  function setAreaMenuPosition(left, top) {
+    if (!areaMenuEl) return;
+    var pos = clampAreaMenuPosition(left, top);
+    areaMenuPosition = pos;
+    areaMenuEl.style.left = pos.left + 'px';
+    areaMenuEl.style.top = pos.top + 'px';
+    areaMenuEl.style.right = 'auto';
+    areaMenuEl.style.transform = 'none';
+  }
+
+  function keepAreaMenuInViewport() {
+    if (!areaMenuEl || areaMenuEl.style.display === 'none') return;
+    if (areaMenuPosition) setAreaMenuPosition(areaMenuPosition.left, areaMenuPosition.top);
+  }
+
+  function enableAreaMenuDrag() {
+    if (!areaMenuEl) return;
+    var handle = document.getElementById('areaMenuDragHandle');
+    if (!handle) return;
+    handle.addEventListener('pointerdown', function(ev) {
+      if (ev.target && ev.target.id === 'areaMenuClose') return;
+      var rect = areaMenuEl.getBoundingClientRect();
+      var wrapRect = wrap.getBoundingClientRect();
+      areaMenuDrag = { dx: ev.clientX - rect.left, dy: ev.clientY - rect.top };
+      setAreaMenuPosition(rect.left - wrapRect.left, rect.top - wrapRect.top);
+      areaMenuEl.setPointerCapture(ev.pointerId);
+      ev.preventDefault();
+    });
+    if (!areaMenuDragEventsBound) {
+      areaMenuDragEventsBound = true;
+      areaMenuEl.addEventListener('pointermove', function(ev) {
+        if (!areaMenuDrag) return;
+        var wrapRect = wrap.getBoundingClientRect();
+        setAreaMenuPosition(ev.clientX - wrapRect.left - areaMenuDrag.dx, ev.clientY - wrapRect.top - areaMenuDrag.dy);
+        ev.preventDefault();
+      });
+      areaMenuEl.addEventListener('pointerup', function(ev) {
+        if (!areaMenuDrag) return;
+        areaMenuDrag = null;
+        if (areaMenuEl.releasePointerCapture) areaMenuEl.releasePointerCapture(ev.pointerId);
+      });
+      areaMenuEl.addEventListener('pointercancel', function() { areaMenuDrag = null; });
+    }
+  }
+
+  window.addEventListener('resize', keepAreaMenuInViewport);
+
   function renderAreaMenu() {
     if (!areaMenuEl) return;
     var entries = AREA_KINDS.map(function(k) { return { kind: k, items: k.getItems() }; });
@@ -1122,11 +1184,12 @@ void main() {
       return '<button class="area-kind-btn" data-kind="' + e.kind.key + '" style="width:100%;background:' + e.kind.bg + ';border:1px solid ' + e.kind.color + ';border-radius:6px;color:' + e.kind.color + ';font-size:11px;padding:6px 8px;margin-top:6px;cursor:pointer;opacity:' + (disabled ? '0.4' : '1') + '" ' + (disabled ? 'disabled' : '') + '>' + label + '</button>';
     }).join('');
     areaMenuEl.innerHTML =
-      '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:7px"><span style="font-size:11px;font-weight:700;color:#3fb950">📍 エリアメニュー</span><span id="areaMenuClose" style="cursor:pointer;color:#8b949e;font-size:14px;padding:0 3px;line-height:1">✕</span></div>' +
+      '<div id="areaMenuDragHandle" style="display:flex;align-items:center;justify-content:space-between;margin:-4px -4px 7px -4px;padding:4px;cursor:move;touch-action:none;user-select:none"><span style="font-size:11px;font-weight:700;color:#3fb950">📍 エリアメニュー</span><span id="areaMenuClose" style="cursor:pointer;color:#8b949e;font-size:14px;padding:0 3px;line-height:1">✕</span></div>' +
       (hasAny ? buttonsHtml : '<div style="font-size:10px;color:#8b949e">エリア内に2件以上のアイコンがありません</div>') +
       '<div id="areaTourProg" style="font-size:10px;color:#8b949e;text-align:center;margin-top:6px;min-height:14px"></div>' +
       '<button id="areaSaveBtn" style="width:100%;background:#161b22;border:1px solid #8b949e;border-radius:6px;color:#c9d1d9;font-size:11px;padding:6px 8px;margin-top:8px;cursor:pointer">📝 エリア保存</button>';
     document.getElementById('areaMenuClose').addEventListener('click', function(){ stopAreaTour(true); });
+    enableAreaMenuDrag();
     var saveBtn = document.getElementById('areaSaveBtn');
     if (saveBtn) saveBtn.addEventListener('click', function() { saveCurrentArea(entries); });
     var kindBtns = areaMenuEl.querySelectorAll('.area-kind-btn');
@@ -1161,15 +1224,18 @@ void main() {
     }
   }
   function showAreaMenu() {
-    if (!areaMenuEl) { areaMenuEl = document.createElement('div'); areaMenuEl.style.cssText = 'position:absolute;right:10px;top:50%;transform:translateY(-50%);background:rgba(13,17,23,0.94);border:1px solid #30363d;border-radius:9px;padding:10px 12px;z-index:55;width:190px;box-shadow:0 4px 16px rgba(0,0,0,0.6);'; wrap.appendChild(areaMenuEl); }
+    if (!areaMenuEl) { areaMenuEl = document.createElement('div'); areaMenuEl.style.cssText = 'position:absolute;right:10px;top:50%;transform:translateY(-50%);background:rgba(13,17,23,0.94);border:1px solid #30363d;border-radius:9px;padding:10px 12px;z-index:55;width:190px;box-sizing:border-box;box-shadow:0 4px 16px rgba(0,0,0,0.6);'; wrap.appendChild(areaMenuEl); }
     areaMenuEl.style.display = 'block';
-    if (typeof areaTourCursorY === 'number') {
-      var wrapRect = wrap.getBoundingClientRect();
-      var menuTop = Math.max(10, Math.min(wrapRect.height - areaMenuEl.offsetHeight - 10, areaTourCursorY - wrapRect.top - areaMenuEl.offsetHeight));
-      areaMenuEl.style.top = menuTop + 'px';
-      areaMenuEl.style.transform = 'none';
-    }
     renderAreaMenu();
+    if (areaMenuPosition) {
+      keepAreaMenuInViewport();
+    } else {
+      var wrapRect = wrap.getBoundingClientRect();
+      var startLeft = wrapRect.width - (areaMenuEl.offsetWidth || 190) - 10;
+      var startTop = (wrapRect.height - (areaMenuEl.offsetHeight || 140)) / 2;
+      if (typeof areaTourCursorY === 'number') startTop = areaTourCursorY - wrapRect.top - (areaMenuEl.offsetHeight || 140);
+      setAreaMenuPosition(startLeft, startTop);
+    }
   }
   function startAreaTour(kind) {
     var items = kind.getItems();
