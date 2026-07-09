@@ -5223,9 +5223,10 @@ app.get('/api/heritage-area/travel-categories/:id/keywords', authMiddleware, asy
   if (!Number.isFinite(categoryId)) return c.json({ error: 'invalid category id' }, 400);
   try {
     const rows = await db.prepare(
-      `SELECT m.keyword, COALESCE(SUM(s.select_count), 0) AS count
+      `SELECT m.keyword, COUNT(DISTINCT i.id) AS count
        FROM aichat_keyword_category_map m
        LEFT JOIN aichat_search_log s ON s.user_id = m.user_id AND s.keyword = m.keyword AND s.deleted_at IS NULL
+       LEFT JOIN aichat_search_impressions i ON i.user_id = m.user_id AND i.share_id = s.share_id AND i.deleted_at IS NULL
        WHERE m.user_id = ? AND m.category_id = ?
        GROUP BY m.keyword
        ORDER BY count DESC, m.keyword ASC`
@@ -5237,6 +5238,7 @@ app.get('/api/heritage-area/travel-categories/:id/keywords', authMiddleware, asy
 });
 
 app.post('/api/heritage-area/search', authMiddleware, async (c) => {
+  const user = c.get('user');
   const db = c.env.DB;
   if (!db) return c.json({ error: 'DB unavailable' }, 503);
   const body = await c.req.json<{ keywords?: unknown }>().catch(() => null);
@@ -5245,19 +5247,35 @@ app.post('/api/heritage-area/search', authMiddleware, async (c) => {
     .filter(Boolean)
     .slice(0, 20);
   if (!keywords.length) return c.json({ items: [] });
-  const where = keywords.map(() => `item_name LIKE ? ESCAPE '\\'`).join(' OR ');
-  const params = keywords.map((kw) => `%${kw.replace(/[%_]/g, '\\$&')}%`);
+  const where = keywords.map(() => `(l.keyword = ? OR s.question LIKE ? ESCAPE '\\' OR s.answer LIKE ? ESCAPE '\\')`).join(' OR ');
+  const params = keywords.flatMap((kw) => {
+    const like = buildFuzzySearchLikePattern(kw);
+    return [kw, like, like];
+  });
   try {
     const rows = await db.prepare(
-      `SELECT area_seq, category, item_name
-       FROM heritage_area_items
-       WHERE (${where})
-       ORDER BY area_seq ASC, item_name ASC
+      `SELECT NULL AS area_seq,
+              'aichat_search_impressions' AS category,
+              s.question AS item_name,
+              i.share_id,
+              COUNT(DISTINCT i.id) AS impression_count,
+              MAX(i.result_count) AS max_result_count,
+              MAX(i.searched_at) AS last_searched_at,
+              GROUP_CONCAT(DISTINCT l.keyword) AS matched_keywords
+       FROM aichat_search_impressions i
+       JOIN ai_chat_shares s ON s.id = i.share_id AND s.user_id = i.user_id AND s.deleted_at IS NULL
+       LEFT JOIN aichat_search_log l ON l.user_id = i.user_id AND l.share_id = i.share_id AND l.deleted_at IS NULL
+       WHERE i.user_id = ? AND i.deleted_at IS NULL AND (${where})
+       GROUP BY i.share_id, s.question
+       ORDER BY impression_count DESC, last_searched_at DESC, s.question ASC
        LIMIT 500`
-    ).bind(...params).all<{ area_seq: number; category: string; item_name: string }>();
+    ).bind(user.sub, ...params).all<{
+      area_seq: null; category: string; item_name: string; share_id: string;
+      impression_count: number; max_result_count: number | null; last_searched_at: string; matched_keywords: string | null;
+    }>();
     return c.json({ items: rows.results ?? [] });
   } catch (err) {
-    return c.json({ error: 'エリア項目の検索に失敗しました', detail: String((err as Error)?.message ?? err) }, 500);
+    return c.json({ error: '検索露出ログの検索に失敗しました', detail: String((err as Error)?.message ?? err) }, 500);
   }
 });
 
