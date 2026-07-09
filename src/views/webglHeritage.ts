@@ -1689,6 +1689,7 @@ void main() {
   var hasStationDataSet = {};
   var heritageMitokoroGemmaShareId = {};
   var heritageMitokoroLlamaShareId = {};
+  var HERITAGE_MITOKORO_GEMMA_MODEL = '@cf/google/gemma-4-26b-a4b-it';
 
   fetch('/api/heritage-city-fetched-list').then(function(r){ return r.json(); }).then(function(d){
     if(d && d.names) { d.names.forEach(function(n){ hasCityDataSet[n] = true; }); updateCityIcons(); }
@@ -3471,12 +3472,15 @@ void main() {
     var titleEl = document.createElement('span');
     titleEl.textContent = icon + ' ' + heritageName + ' — 見どころ';
     titleEl.style.cssText = 'font-weight:700;font-size:13px;color:#e6edf3;';
+    var keywordToggle = document.createElement('button');
+    keywordToggle.style.cssText = 'display:none;background:#3b2f00;border:1px solid #d29922;border-radius:999px;color:#ffd33d;font-size:11px;padding:3px 9px;cursor:pointer;flex-shrink:0;';
     var closeBtn = document.createElement('button');
     closeBtn.textContent = '✕';
     closeBtn.setAttribute('aria-label', '閉じる');
     closeBtn.style.cssText = 'background:none;border:none;cursor:pointer;font-size:16px;color:#8b949e;padding:4px 8px;flex-shrink:0;';
     closeBtn.addEventListener('click', function() { document.body.removeChild(overlay); });
     head.appendChild(titleEl);
+    head.appendChild(keywordToggle);
     head.appendChild(closeBtn);
     box.appendChild(head);
 
@@ -3490,18 +3494,87 @@ void main() {
     overlay.addEventListener('click', function(e) { if (e.target === overlay) document.body.removeChild(overlay); });
     document.body.appendChild(overlay);
 
+    var answerText = '';
+    var hitKeywords = [];
+    var highlightEnabled = false;
+    function renderAnswer() {
+      body.innerHTML = renderMitokoroAnswerWithKeywordHighlights(answerText, hitKeywords, highlightEnabled);
+    }
+
     fetch('/api/aichat/shares/' + encodeURIComponent(shareId))
       .then(function(r) { return r.json(); })
       .then(function(data) {
         if (data.answer) {
-          body.innerHTML = parseMd(data.answer);
-        } else {
-          body.textContent = data.error || '（応答なし）';
+          answerText = data.answer;
+          renderAnswer();
+          return fetch('/api/aichat/heritage-mitokoro-keyword-hits?heritage=' + encodeURIComponent(heritageName) + '&model=' + encodeURIComponent(HERITAGE_MITOKORO_GEMMA_MODEL));
         }
+        body.textContent = data.error || '（応答なし）';
+        return null;
+      })
+      .then(function(r) { return r ? r.json() : null; })
+      .then(function(data) {
+        if (!data || !data.hitCount) return;
+        hitKeywords = data.keywords || [];
+        keywordToggle.textContent = '🔑(' + data.hitCount + ')';
+        keywordToggle.style.display = '';
+        keywordToggle.addEventListener('click', function(e) {
+          e.stopPropagation();
+          highlightEnabled = !highlightEnabled;
+          keywordToggle.style.background = highlightEnabled ? '#6b4e00' : '#3b2f00';
+          renderAnswer();
+        });
       })
       .catch(function() {
         body.textContent = '通信エラーが発生しました。';
       });
+  }
+
+  function renderMitokoroAnswerWithKeywordHighlights(answerText, keywords, enabled) {
+    var html = parseMd(answerText || '');
+    if (!enabled || !keywords || !keywords.length) return html;
+    var temp = document.createElement('div');
+    temp.innerHTML = html;
+    var sorted = keywords.slice().filter(Boolean).sort(function(a, b) { return b.length - a.length; });
+    function markTextNode(node) {
+      var text = node.nodeValue || '';
+      var frag = document.createDocumentFragment();
+      var pos = 0;
+      while (pos < text.length) {
+        var bestKw = null;
+        var bestIdx = -1;
+        sorted.forEach(function(kw) {
+          var idx = text.indexOf(kw, pos);
+          if (idx >= 0 && (bestIdx < 0 || idx < bestIdx || (idx === bestIdx && kw.length > (bestKw || '').length))) {
+            bestIdx = idx;
+            bestKw = kw;
+          }
+        });
+        if (!bestKw || bestIdx < 0) {
+          frag.appendChild(document.createTextNode(text.slice(pos)));
+          break;
+        }
+        if (bestIdx > pos) frag.appendChild(document.createTextNode(text.slice(pos, bestIdx)));
+        var span = document.createElement('span');
+        span.style.background = 'rgba(255, 245, 157, 0.45)';
+        span.style.color = '#fff8c5';
+        span.style.borderRadius = '3px';
+        span.style.padding = '0 2px';
+        span.textContent = text.slice(bestIdx, bestIdx + bestKw.length);
+        frag.appendChild(span);
+        pos = bestIdx + bestKw.length;
+      }
+      node.parentNode.replaceChild(frag, node);
+    }
+    function walk(node) {
+      var children = Array.prototype.slice.call(node.childNodes || []);
+      children.forEach(function(child) {
+        if (child.nodeType === 3) markTextNode(child);
+        else if (child.nodeType === 1) walk(child);
+      });
+    }
+    walk(temp);
+    return temp.innerHTML;
   }
 
   // Build marker DOM elements

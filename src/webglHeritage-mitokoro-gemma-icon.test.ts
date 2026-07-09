@@ -31,6 +31,16 @@ describe('世界遺産ツールチップ: 見どころ×gemma-4-26b-a4b-it キ�
     expect(html).toMatch(/openHeritageMitokoroCacheModal\('👀', name, shareId\);/);
   });
 
+
+
+  it('👀モーダルはgemma見どころレコード由来キーワードの本文ヒット数を🔑ボタンで表示しトグルできる', () => {
+    expect(html).toContain("fetch('/api/aichat/heritage-mitokoro-keyword-hits?heritage='");
+    expect(html).toContain("model=' + encodeURIComponent(HERITAGE_MITOKORO_GEMMA_MODEL)");
+    expect(html).toContain("keywordToggle.textContent = '🔑(' + data.hitCount + ')';");
+    expect(html).toContain('function renderMitokoroAnswerWithKeywordHighlights(answerText, keywords, enabled)');
+    expect(html).toContain("span.style.background = 'rgba(255, 245, 157, 0.45)';");
+  });
+
   it('モーダルのタイトルにモデル名の括弧表記は含まれない（撤去済み）', () => {
     expect(html).toContain("titleEl.textContent = icon + ' ' + heritageName + ' — 見どころ';");
     expect(html).not.toContain('見どころ (gemma-4-26b-a4b-it)');
@@ -46,7 +56,8 @@ describe('世界遺産ツールチップ: 見どころ×gemma-4-26b-a4b-it キ�
 
   it('モーダルは /api/aichat/shares/:id から回答本文を取得してMarkdownとして描画する', () => {
     expect(html).toContain("fetch('/api/aichat/shares/' + encodeURIComponent(shareId))");
-    expect(html).toMatch(/if \(data\.answer\) \{\s*body\.innerHTML = parseMd\(data\.answer\);\s*\} else \{\s*body\.textContent = data\.error \|\| '（応答なし）';/);
+    expect(html).toContain('answerText = data.answer;');
+    expect(html).toContain('renderAnswer();');
   });
 });
 
