@@ -5276,70 +5276,65 @@ app.post('/api/heritage-area/search', authMiddleware, async (c) => {
       impression_count: number; max_result_count: number | null; last_searched_at: string;
     }>();
 
-    const itemByQuoteKey = new Map<string, {
-      area_seq: null; category: string; item_name: string; share_id: string;
-      impression_count: number; max_result_count: number | null; last_searched_at: string;
-      matched_keywords: string; quote_keys: string[]; area_matches: { key: string; areas: string }[];
-    }>();
-    for (const row of rows.results ?? []) {
+    const sourceItems = (rows.results ?? []).map((row) => {
       const question = String(row.item_name ?? '');
-      const firstQuoteMatch = question.match(/「([^」]+)」/);
-      const firstQuoteKey = String(firstQuoteMatch?.[1] ?? '').trim();
-      if (!firstQuoteKey) continue;
       const answer = String(row.answer ?? '');
       const searchableText = `${question} ${answer}`.toLowerCase();
       const matchedKeywords = keywords.filter((kw) => searchableText.includes(kw.toLowerCase()));
-      const existing = itemByQuoteKey.get(firstQuoteKey);
-      if (existing) {
-        existing.impression_count += Number(row.impression_count ?? 0);
-        existing.max_result_count = Math.max(Number(existing.max_result_count ?? 0), Number(row.max_result_count ?? 0));
-        if (String(row.last_searched_at ?? '') > String(existing.last_searched_at ?? '')) existing.last_searched_at = row.last_searched_at;
-        const keywordSet = new Set(existing.matched_keywords.split(',').filter(Boolean));
-        matchedKeywords.forEach((kw) => keywordSet.add(kw));
-        existing.matched_keywords = Array.from(keywordSet).join(',');
-        continue;
-      }
-      itemByQuoteKey.set(firstQuoteKey, {
-        area_seq: null,
+      return {
+        area_seq: null as number | null,
         category: row.category,
-        item_name: firstQuoteKey,
+        item_name: question,
         share_id: row.share_id,
         impression_count: Number(row.impression_count ?? 0),
         max_result_count: row.max_result_count,
         last_searched_at: row.last_searched_at,
         matched_keywords: matchedKeywords.join(','),
-        quote_keys: [firstQuoteKey],
-        area_matches: [],
-      });
+        area_matches: [] as { key: string; areas: string }[],
+      };
+    });
+
+    const areaRows = await db.prepare(
+      `SELECT i.item_name AS key,
+              i.area_seq,
+              i.category,
+              b.box
+       FROM heritage_area_items i
+       JOIN heritage_area_boxes b ON b.area_seq = i.area_seq AND b.user_id = ?
+       WHERE i.item_name IS NOT NULL AND trim(i.item_name) <> ''
+       ORDER BY i.area_seq ASC, i.category ASC, i.item_name ASC`
+    ).bind(user.sub).all<{ key: string; area_seq: number; category: string; box: string | null }>();
+
+    const expandedItems: typeof sourceItems = [];
+    for (const item of sourceItems) {
+      const question = String(item.item_name ?? '').toLowerCase();
+      const matchedAreas = new Map<number, string[]>();
+      for (const areaRow of areaRows.results ?? []) {
+        const key = String(areaRow.key ?? '').trim();
+        if (!key) continue;
+        if (!question.includes(key.toLowerCase())) continue;
+        const labels = matchedAreas.get(areaRow.area_seq) ?? [];
+        const label = `エリア#${areaRow.area_seq}`;
+        if (!labels.includes(label)) labels.push(label);
+        matchedAreas.set(areaRow.area_seq, labels);
+      }
+      if (matchedAreas.size === 0) {
+        expandedItems.push(item);
+        continue;
+      }
+      for (const [areaSeq, labels] of matchedAreas) {
+        expandedItems.push({
+          ...item,
+          area_seq: areaSeq,
+          area_matches: [{ key: item.item_name, areas: labels.join(' / ') }],
+        });
+      }
     }
-    const items = Array.from(itemByQuoteKey.values())
-      .sort((a, b) => (Number(b.impression_count) - Number(a.impression_count)) || String(b.last_searched_at ?? '').localeCompare(String(a.last_searched_at ?? '')) || a.item_name.localeCompare(b.item_name))
+
+    const items = expandedItems
+      .sort((a, b) => (Number(b.impression_count) - Number(a.impression_count)) || String(b.last_searched_at ?? '').localeCompare(String(a.last_searched_at ?? '')) || a.item_name.localeCompare(b.item_name) || Number(a.area_seq ?? 0) - Number(b.area_seq ?? 0))
       .slice(0, 500);
 
-    const allKeys = items.map((item) => item.item_name).slice(0, 500);
-    if (allKeys.length > 0) {
-      const placeholders = allKeys.map(() => '?').join(',');
-      const areaRows = await db.prepare(
-        `SELECT i.item_name AS key,
-                i.area_seq,
-                i.category,
-                b.box
-         FROM heritage_area_items i
-         JOIN heritage_area_boxes b ON b.area_seq = i.area_seq AND b.user_id = ?
-         WHERE i.item_name IN (${placeholders})
-         ORDER BY i.item_name ASC, i.area_seq ASC, i.category ASC`
-      ).bind(user.sub, ...allKeys).all<{ key: string; area_seq: number; category: string; box: string | null }>();
-      const areaMap = new Map<string, string[]>();
-      for (const row of areaRows.results ?? []) {
-        const label = `エリア#${row.area_seq}${row.category ? `/${row.category}` : ''}${row.box ? ` (${row.box})` : ''}`;
-        const arr = areaMap.get(row.key) ?? [];
-        if (!arr.includes(label)) arr.push(label);
-        areaMap.set(row.key, arr);
-      }
-      for (const item of items) {
-        item.area_matches = item.quote_keys.map((key) => ({ key, areas: (areaMap.get(key) ?? []).join(' / ') })).filter((match) => match.areas);
-      }
-    }
     return c.json({ items });
   } catch (err) {
     return c.json({ error: '検索露出ログの検索に失敗しました', detail: String((err as Error)?.message ?? err) }, 500);

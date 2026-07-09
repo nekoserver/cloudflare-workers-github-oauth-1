@@ -31,10 +31,10 @@ describe('heritage-area page', () => {
     expect(src).toContain("'aichat_search_impressions' AS category");
     expect(src).toContain("const topics = ['見どころ', '最寄り空港', '最寄り駅', '宿泊施設']");
     expect(src).toContain("(s.question LIKE ? ESCAPE '\\\\' OR s.answer LIKE ? ESCAPE '\\\\')");
-    expect(src).toContain('const firstQuoteMatch = question.match(/「([^」]+)」/)');
-    expect(src).toContain('itemByQuoteKey');
-    expect(src).toContain('item_name: firstQuoteKey');
-    expect(src).toContain('const allKeys = items.map((item) => item.item_name)');
+    expect(src).toContain('const sourceItems = (rows.results ?? []).map((row) =>');
+    expect(src).toContain('const question = String(row.item_name ??');
+    expect(src).toContain('const expandedItems: typeof sourceItems = []');
+    expect(src).toContain('matchedAreas.set(areaRow.area_seq, labels)');
     expect(src).toContain('FROM heritage_area_items i');
     expect(src).toContain('area_matches');
   });
