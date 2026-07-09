@@ -912,7 +912,10 @@ void main() {
     // エリアズームの選択枠は画面上の矩形なので、判定も選択時の投影状態でスクリーン座標に戻して行う。
     // 近接ズームでは画面矩形が緯度経度の単純な min/max 矩形にならず、緯度経度矩形とのAND条件にすると
     // 枠内に見えている地点が除外されるため、screenRect を唯一の包含判定として使う。
-    return list.filter(function(item) { var p = getLatLon(item); return inAreaScreenBounds(p[0], p[1], b); });
+    var filtered = list.filter(function(item) { var p = getLatLon(item); return inAreaScreenBounds(p[0], p[1], b); });
+    // 巡回サイドパネル・エリアタブの一覧は緯度が高い(北にある)ものから順に表示する。
+    filtered.sort(function(a, b2) { return getLatLon(b2)[0] - getLatLon(a)[0]; });
+    return filtered;
   }
   function getHeritagesInBounds() { return filterInBounds(HERITAGE, function(d) { return [d.lat, d.lon]; }); }
   function getStationsInBounds() {
@@ -924,6 +927,8 @@ void main() {
         if (inAreaScreenBounds(st.lat, st.lon, b)) { result.push({ st: st, line: line }); seenNames[st.name] = true; }
       });
     });
+    // 巡回サイドパネル・エリアタブの一覧は緯度が高い(北にある)ものから順に表示する。
+    result.sort(function(a, b2) { return b2.st.lat - a.st.lat; });
     return result;
   }
   function getF1InBounds() { return filterInBounds(F1_CIRCUITS, function(r) { return [r.lat, r.lon]; }); }
@@ -1080,7 +1085,7 @@ void main() {
     var ctr = lastBoxBounds.center;
     flyTo(ctr.lat, ctr.lon);
     setTimeout(function() {
-      zoom = 10;
+      zoom = 1.2;
       var entries = AREA_KINDS.map(function(k) { return { kind: k, items: k.getItems() }; });
       renderSavedAreaItems(area, entries);
       showAreaMenu();
