@@ -174,7 +174,7 @@ canvas:active { cursor:grabbing; }
 #rail-station-alight-btn { display:none; margin-top:6px; background:#0c2d1a; border:1px solid #3fb950; border-radius:6px; color:#3fb950; font-size:11px; padding:4px 12px; cursor:pointer; font-family:inherit; pointer-events:auto; }
 .pin-label-close-btn { position:absolute; top:-9px; right:-9px; width:26px; height:26px; border-radius:50%; background:#21262d; border:1px solid #388bfd; color:#c9d1d9; font-size:12px; line-height:1; cursor:pointer; pointer-events:auto; padding:0; display:flex; align-items:center; justify-content:center; }
 .pin-label-close-btn:hover { background:#30363d; color:#fff; }
-.tt-land-btn { display:inline-block; margin-top:6px; background:#0c2d1a; border:1px solid #3fb950; border-radius:6px; color:#3fb950; font-size:11px; padding:4px 12px; cursor:pointer; font-family:inherit; pointer-events:auto; }
+.tt-land-btn { display:inline-block; background:#0c2d1a; border:1px solid #3fb950; border-radius:6px; color:#3fb950; font-size:11px; padding:4px 12px; cursor:pointer; font-family:inherit; pointer-events:auto; }
 .tt-land-btn:hover { background:#123a20; }
 .f1-side { display:none; position:absolute; left:0; top:0; bottom:0; width:min(85vw,280px); background:#0d1117; border-right:1px solid #30363d; z-index:90; flex-direction:column; box-shadow:4px 0 24px rgba(0,0,0,.7); }
 .f1-side.open { display:flex; }
@@ -1010,7 +1010,7 @@ void main() {
           '<button class="pin-label-close-btn tt-airport-close-btn" aria-label="閉じる">✕</button>' +
           '<div class="tt-name">✈︎ ' + a.name + ' <span style="font-size:11px;color:#8b949e">' + a.code + '</span></div>' +
           '<div class="tt-sub">' + a.city + '</div>' +
-          '<div><button class="tt-land-btn tt-airport-land-btn">⛳️🏌️‍♀️🏌️‍♂️</button></div>'
+          '<div style="margin-top:7px;text-align:center;"><button class="tt-land-btn tt-airport-land-btn">⛳️🏌️‍♀️🏌️‍♂️</button></div>'
         );
         var aptCloseBtn = tooltip.querySelector('.tt-airport-close-btn');
         if (aptCloseBtn) {
@@ -2700,18 +2700,18 @@ void main() {
   }
 
   function renderAirportNearbyHeritageList(heritage) {
-    if (!landingStationListEl) return;
-    if (!heritage || heritage.length === 0) { landingStationListEl.innerHTML = ''; return; }
+    if (!landingCityListEl) return;
+    if (!heritage || heritage.length === 0) { landingCityListEl.innerHTML = ''; return; }
     var html = '<div class="landing-station-hdr">⛳️🏛️ 半径300km圏内の世界遺産</div>';
     heritage.forEach(function(h) {
       html += '<div class="landing-city-item"><span>🏛️ ' + h.heritage_name + '</span>' +
         '<span class="landing-city-dist">' + h.distance_km.toFixed(1) + 'km</span></div>';
     });
-    landingStationListEl.innerHTML = html;
+    landingCityListEl.innerHTML = html;
   }
 
   function loadAirportNearbyHeritage(a) {
-    if (landingStationListEl) landingStationListEl.innerHTML = '<div class="landing-city-loading">⛳️🏛️ 周辺の世界遺産を検索中...</div>';
+    if (landingCityListEl) landingCityListEl.innerHTML = '<div class="landing-city-loading">⛳️🏛️ 周辺の世界遺産を検索中...</div>';
     fetch('/api/airport-nearby-heritage', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -2723,6 +2723,30 @@ void main() {
         hasAirportHeritageSet[a.name] = true;
         refreshAreaTourSideIfAirport();
       }
+    }).catch(function() {
+      if (landingCityListEl) landingCityListEl.innerHTML = '';
+    });
+  }
+
+  function renderAirportNearbyAirportsList(airports) {
+    if (!landingStationListEl) return;
+    if (!airports || airports.length === 0) { landingStationListEl.innerHTML = ''; return; }
+    var html = '<div class="landing-station-hdr">✈️ 半径1500km圏内の空港</div>';
+    airports.forEach(function(p) {
+      html += '<div class="landing-city-item"><span>✈️ ' + p.other_airport_name + '</span>' +
+        '<span class="landing-city-dist">' + p.distance_km.toFixed(1) + 'km</span></div>';
+    });
+    landingStationListEl.innerHTML = html;
+  }
+
+  function loadAirportNearbyAirports(a) {
+    if (landingStationListEl) landingStationListEl.innerHTML = '<div class="landing-city-loading">✈️ 周辺の空港を検索中...</div>';
+    fetch('/api/airport-nearby-airports', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: a.name, code: a.code, lat: a.lat, lon: a.lon })
+    }).then(function(r) { return r.json(); }).then(function(d) {
+      renderAirportNearbyAirportsList(d.airports || []);
     }).catch(function() {
       if (landingStationListEl) landingStationListEl.innerHTML = '';
     });
@@ -2751,6 +2775,7 @@ void main() {
       if (landingStationListEl) landingStationListEl.innerHTML = '';
       if (landingOverlayEl) landingOverlayEl.classList.add('active');
       loadAirportNearbyHeritage(a);
+      loadAirportNearbyAirports(a);
     }, FLY_DUR + 100);
   }
 

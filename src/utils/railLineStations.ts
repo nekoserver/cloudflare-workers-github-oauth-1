@@ -1,4 +1,5 @@
 import type { RailLine } from '../data/railLines';
+import type { Airport } from '../data/airports';
 
 export interface RailLineStationRow {
   lineName: string;
@@ -196,5 +197,50 @@ export function diffAirportNearbyHeritage(
   return nearby.filter(h => {
     const prevDistanceKm = existing.get(h.heritageName);
     return prevDistanceKm === undefined || prevDistanceKm !== h.distanceKm;
+  });
+}
+
+export interface AirportNearbyAirport {
+  otherAirportName: string;
+  otherAirportCode: string;
+  lat: number;
+  lon: number;
+  distanceKm: number;
+}
+
+/**
+ * 空港の座標を中心に、半径radiusKm以内にある他の空港を距離昇順で返す。
+ * excludeCode と同じ空港コード（自分自身）は候補から除外する。
+ */
+export function findNearbyAirports(
+  airports: Airport[],
+  lat: number,
+  lon: number,
+  radiusKm: number,
+  excludeCode: string
+): AirportNearbyAirport[] {
+  const results: AirportNearbyAirport[] = [];
+  for (const apt of airports) {
+    if (apt.code === excludeCode) continue;
+    const distanceKm = haversineKm(lat, lon, apt.lat, apt.lon);
+    if (distanceKm <= radiusKm) {
+      results.push({ otherAirportName: apt.name, otherAirportCode: apt.code, lat: apt.lat, lon: apt.lon, distanceKm });
+    }
+  }
+  results.sort((a, b) => a.distanceKm - b.distanceKm);
+  return results;
+}
+
+/**
+ * 空港の近隣空港候補のうち、DBに書き込むべき差分（新規の組、またはdistance_kmが
+ * 既存値と異なる組）だけを抽出する。空港＋世界遺産の場合と同じ判定ルールを適用する。
+ */
+export function diffAirportNearbyAirport(
+  nearby: AirportNearbyAirport[],
+  existing: Map<string, number>
+): AirportNearbyAirport[] {
+  return nearby.filter(a => {
+    const prevDistanceKm = existing.get(a.otherAirportName);
+    return prevDistanceKm === undefined || prevDistanceKm !== a.distanceKm;
   });
 }

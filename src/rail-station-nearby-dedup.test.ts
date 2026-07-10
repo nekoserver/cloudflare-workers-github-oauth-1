@@ -54,7 +54,7 @@ describe('dedupeNearbyPointRows ヘルパー', () => {
   });
 
   it('index.ts は railLineStations から dedupeNearbyPoints をインポートしている', () => {
-    expect(src).toContain("import { findNearbyStationsAndHeritage, dedupeNearbyPoints, findNearbyHeritageForAirport, diffAirportNearbyHeritage } from './utils/railLineStations'");
+    expect(src).toContain("import { findNearbyStationsAndHeritage, dedupeNearbyPoints, findNearbyHeritageForAirport, diffAirportNearbyHeritage, findNearbyAirports, diffAirportNearbyAirport } from './utils/railLineStations'");
   });
 });
 
