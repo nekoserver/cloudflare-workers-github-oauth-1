@@ -1,8 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { buildRailLineStationRows, haversineKm, findNearbyStationsAndHeritage, dedupeNearbyPoints, diffAirportNearbyHeritage } from './railLineStations';
+import { buildRailLineStationRows, haversineKm, findNearbyStationsAndHeritage, dedupeNearbyPoints, diffAirportNearbyHeritage, findNearbyAirports, diffAirportNearbyAirport } from './railLineStations';
 import { RAIL_LINES } from '../data/railLines';
 import type { RailLine } from '../data/railLines';
-import type { HeritagePoint, NearbyPoint, AirportNearbyHeritage } from './railLineStations';
+import type { Airport } from '../data/airports';
+import type { HeritagePoint, NearbyPoint, AirportNearbyHeritage, AirportNearbyAirport } from './railLineStations';
 
 describe('buildRailLineStationRows', () => {
   it('各路線の駅数の合計と同じ件数の行を生成する', () => {
@@ -223,6 +224,57 @@ describe('diffAirportNearbyHeritage', () => {
 
   it('候補が空配列なら差分も空配列', () => {
     expect(diffAirportNearbyHeritage([], new Map([['A遺産', 10]]))).toEqual([]);
+  });
+});
+
+describe('findNearbyAirports', () => {
+  const airports: Airport[] = [
+    { code: 'AAA', name: '起点空港', city: 'テスト', lat: 0, lon: 0 },
+    { code: 'BBB', name: '近傍空港', city: 'テスト', lat: 0, lon: 5 },
+    { code: 'CCC', name: '遠方空港', city: 'テスト', lat: 0, lon: 50 },
+  ];
+
+  it('半径内の空港のみを距離昇順で返す', () => {
+    const results = findNearbyAirports(airports, 0, 0, 1500, 'AAA');
+    expect(results.map(r => r.otherAirportName)).toEqual(['近傍空港']);
+  });
+
+  it('excludeCode に一致する空港は自分自身として除外する', () => {
+    const results = findNearbyAirports(airports, 0, 0, 100000, 'AAA');
+    expect(results.some(r => r.otherAirportCode === 'AAA')).toBe(false);
+  });
+
+  it('半径外の空港は含めない', () => {
+    const results = findNearbyAirports(airports, 0, 0, 1500, 'AAA');
+    expect(results.some(r => r.otherAirportCode === 'CCC')).toBe(false);
+  });
+
+  it('該当する空港が無ければ空配列を返す', () => {
+    expect(findNearbyAirports(airports, 0, 0, 1, 'AAA')).toEqual([]);
+  });
+});
+
+describe('diffAirportNearbyAirport', () => {
+  const near: AirportNearbyAirport = { otherAirportName: 'B空港', otherAirportCode: 'BBB', lat: 0, lon: 0, distanceKm: 10 };
+  const far: AirportNearbyAirport = { otherAirportName: 'C空港', otherAirportCode: 'CCC', lat: 1, lon: 1, distanceKm: 1200 };
+
+  it('DBに存在しない組は新規として差分に含める', () => {
+    expect(diffAirportNearbyAirport([near], new Map())).toEqual([near]);
+  });
+
+  it('DBに存在してもdistance_kmが変化していれば差分に含める', () => {
+    const existing = new Map([['B空港', 15]]);
+    expect(diffAirportNearbyAirport([near], existing)).toEqual([near]);
+  });
+
+  it('DBに存在しdistance_kmも一致していれば差分に含めない', () => {
+    const existing = new Map([['B空港', 10]]);
+    expect(diffAirportNearbyAirport([near], existing)).toEqual([]);
+  });
+
+  it('複数件のうち変化したものだけを差分として返す', () => {
+    const existing = new Map([['B空港', 10], ['C空港', 9999]]);
+    expect(diffAirportNearbyAirport([near, far], existing)).toEqual([far]);
   });
 });
 
