@@ -87,7 +87,7 @@ import { listD1Databases, getD1Tables } from './utils/cloudflareApi';
 import { validateRevokeRequest } from './utils/revoke';
 import { HERITAGE_FLAG_MAP, HERITAGE_LIST } from './data/heritageList';
 import { RAIL_LINES } from './data/railLines';
-import { findNearbyStationsAndHeritage, dedupeNearbyPoints, findNearbyHeritageForAirport } from './utils/railLineStations';
+import { findNearbyStationsAndHeritage, dedupeNearbyPoints, findNearbyHeritageForAirport, diffAirportNearbyHeritage } from './utils/railLineStations';
 import { questionStartsWithHeritageBracket } from './utils/heritageQuestionMatch';
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
@@ -5721,23 +5721,26 @@ app.post('/api/airport-nearby-heritage', authMiddleware, async (c) => {
 
   const nearby = findNearbyHeritageForAirport(HERITAGE_LIST, lat, lon, AIRPORT_NEARBY_HERITAGE_RADIUS_KM);
 
-  // すでに同じ airport_name + heritage_name の組み合わせがDBにあるものは記録対象から除外する
+  // 組がDBに存在するかどうかではなく、distance_kmが既存値と異なる（＝差分がある）組だけを書き込む
   const existing = await db.prepare(
-    'SELECT heritage_name FROM airport_nearby_heritage WHERE airport_name = ?'
-  ).bind(name).all<{ heritage_name: string }>();
-  const existingNames = new Set(existing.results.map(r => r.heritage_name));
-  const newHeritage = nearby.filter(h => !existingNames.has(h.heritageName));
+    'SELECT heritage_name, distance_km FROM airport_nearby_heritage WHERE airport_name = ?'
+  ).bind(name).all<{ heritage_name: string; distance_km: number }>();
+  const existingMap = new Map(existing.results.map(r => [r.heritage_name, r.distance_km]));
+  const diffHeritage = diffAirportNearbyHeritage(nearby, existingMap);
 
-  if (newHeritage.length > 0) {
-    const stmt = db.prepare('INSERT OR IGNORE INTO airport_nearby_heritage (airport_name, heritage_name, distance_km) VALUES (?, ?, ?)');
-    await db.batch(newHeritage.map(h => stmt.bind(name, h.heritageName, h.distanceKm)));
+  if (diffHeritage.length > 0) {
+    const stmt = db.prepare(
+      'INSERT INTO airport_nearby_heritage (airport_name, heritage_name, distance_km) VALUES (?, ?, ?) ' +
+      'ON CONFLICT(airport_name, heritage_name) DO UPDATE SET distance_km = excluded.distance_km'
+    );
+    await db.batch(diffHeritage.map(h => stmt.bind(name, h.heritageName, h.distanceKm)));
   }
 
   const all = await db.prepare(
     'SELECT heritage_name, distance_km FROM airport_nearby_heritage WHERE airport_name = ? ORDER BY distance_km'
   ).bind(name).all<{ heritage_name: string; distance_km: number }>();
 
-  return c.json({ heritage: all.results, recordedCount: newHeritage.length });
+  return c.json({ heritage: all.results, recordedCount: diffHeritage.length });
 });
 
 app.get('/api/airport-nearby-heritage-airports', authMiddleware, async (c) => {

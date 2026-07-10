@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { buildRailLineStationRows, haversineKm, findNearbyStationsAndHeritage, dedupeNearbyPoints } from './railLineStations';
+import { buildRailLineStationRows, haversineKm, findNearbyStationsAndHeritage, dedupeNearbyPoints, diffAirportNearbyHeritage } from './railLineStations';
 import { RAIL_LINES } from '../data/railLines';
 import type { RailLine } from '../data/railLines';
-import type { HeritagePoint, NearbyPoint } from './railLineStations';
+import type { HeritagePoint, NearbyPoint, AirportNearbyHeritage } from './railLineStations';
 
 describe('buildRailLineStationRows', () => {
   it('各路線の駅数の合計と同じ件数の行を生成する', () => {
@@ -191,6 +191,38 @@ describe('findNearbyStationsAndHeritage', () => {
     const results = findNearbyStationsAndHeritage([lineA], [heritageNear, heritageDup], 0, 0, 100, '起点駅');
     const matches = results.filter(r => r.pointName === '近傍遺産');
     expect(matches.length).toBe(1);
+  });
+});
+
+describe('diffAirportNearbyHeritage', () => {
+  const near: AirportNearbyHeritage = { heritageName: 'A遺産', lat: 0, lon: 0, distanceKm: 10 };
+  const far: AirportNearbyHeritage = { heritageName: 'B遺産', lat: 1, lon: 1, distanceKm: 200 };
+
+  it('DBに存在しない組は新規として差分に含める', () => {
+    const result = diffAirportNearbyHeritage([near], new Map());
+    expect(result).toEqual([near]);
+  });
+
+  it('DBに存在してもdistance_kmが変化していれば差分に含める（存在有無ではなく値の差分で判定する）', () => {
+    const existing = new Map([['A遺産', 15]]);
+    const result = diffAirportNearbyHeritage([near], existing);
+    expect(result).toEqual([near]);
+  });
+
+  it('DBに存在しdistance_kmも一致していれば差分に含めない（同一値の再書き込みをしない）', () => {
+    const existing = new Map([['A遺産', 10]]);
+    const result = diffAirportNearbyHeritage([near], existing);
+    expect(result).toEqual([]);
+  });
+
+  it('複数件のうち変化したものだけを差分として返す', () => {
+    const existing = new Map([['A遺産', 10], ['B遺産', 999]]);
+    const result = diffAirportNearbyHeritage([near, far], existing);
+    expect(result).toEqual([far]);
+  });
+
+  it('候補が空配列なら差分も空配列', () => {
+    expect(diffAirportNearbyHeritage([], new Map([['A遺産', 10]]))).toEqual([]);
   });
 });
 
