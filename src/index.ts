@@ -61,7 +61,7 @@ import { verifyResendWebhookSignature } from './utils/resendWebhook';
 import { verifyGitHubWebhookSignature } from './utils/githubWebhook';
 import { extractCfAuthUsername } from './utils/cfAuthAccess';
 import { postSlackMessage, openSlackModal, respondToInteraction } from './utils/slack';
-import { verifyEmailAbstract } from './utils/emailVerify';
+import { sendTestEmailResend } from './utils/emailVerify';
 import { fetchPrDiff, runSummaryPipeline, buildSlackMessage, buildSummaryModal, buildSummaryFallbackBlocks, classifySummaryResult, resolveAiModel, extractDesignDiff, sanitizeBoxDrawing, detectCommitAgentFromText, detectCommitAgentFromPrText, describeModelSwitch, WORKER_BASE_URL, DESIGN_SPEC_CHECKLIST, DEFAULT_AI_MODEL, FALLBACK_AI_MODEL, type SummaryModalRow } from './utils/aiSummary';
 import { getSessionDurationSeconds, renewSession, resolveSessionDuration } from './utils/session';
 import { buildCommitAgentLogEntry, classifyCommitAgentFetchError } from './utils/commitAgentLog';
@@ -3657,19 +3657,19 @@ app.get('/api/aichat/shares/search', authMiddleware, async (c) => {
 });
 
 /**
- * ログインユーザー自身のメールアドレスをAbstract APIで検証するテスト用エンドポイント。
- * ABSTRACT_EMAIL_API_KEY 未設定時はデフォルトOFF（動作確認用オプション機能）。
+ * ログインユーザー自身のメールアドレス宛にResendでテストメールを1通送るだけのエンドポイント。
+ * RESEND_API_KEY 未設定時はデフォルトOFF（動作確認用オプション機能）。
  */
 app.get('/api/email-verify-test', authMiddleware, async (c) => {
-  const apiKey = c.env.ABSTRACT_EMAIL_API_KEY;
-  if (!apiKey) return jsonUtf8({ enabled: false, message: 'メール検証機能は現在無効です(ABSTRACT_EMAIL_API_KEY未設定)' });
+  const apiKey = c.env.RESEND_API_KEY;
+  if (!apiKey) return jsonUtf8({ enabled: false, message: 'メール送信テスト機能は現在無効です(RESEND_API_KEY未設定)' });
 
   const user = c.get('user');
   if (!user.email) return jsonUtf8({ enabled: true, error: 'ログインユーザーにメールアドレスが設定されていません' }, 400);
 
-  const result = await verifyEmailAbstract(apiKey, user.email);
-  if (!result.ok) return jsonUtf8({ enabled: true, error: 'メール検証に失敗しました', detail: result.error }, 502);
-  return jsonUtf8({ enabled: true, result: result.data });
+  const result = await sendTestEmailResend(apiKey, user.email);
+  if (!result.ok) return jsonUtf8({ enabled: true, error: 'メール送信に失敗しました', detail: result.error }, 502);
+  return jsonUtf8({ enabled: true, sent: true, to: user.email });
 });
 
 app.get('/api/aichat/check-heritage-questions', authMiddleware, async (c) => {
