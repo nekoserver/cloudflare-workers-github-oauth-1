@@ -5797,6 +5797,15 @@ app.get('/api/airport-nearby-heritage-airports', authMiddleware, async (c) => {
   return c.json({ names: rows.results.map(r => r.airport_name) });
 });
 
+app.get('/api/airport-nearby-heritage-ranking', authMiddleware, async (c) => {
+  const db = c.env.DB;
+  if (!db) return c.json({ rows: [] });
+  const rows = await db.prepare(
+    'SELECT airport_name, heritage_name, distance_km FROM airport_nearby_heritage ORDER BY airport_name, distance_km'
+  ).all<{ airport_name: string; heritage_name: string; distance_km: number }>();
+  return c.json({ rows: rows.results });
+});
+
 app.get('/api/heritage-country-stats', authMiddleware, async (c) => {
   const db = c.env.DB;
   if (!db) return c.json({ rows: [] });
