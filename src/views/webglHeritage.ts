@@ -2717,6 +2717,10 @@ void main() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name: a.name, lat: a.lat, lon: a.lon })
     }).then(function(r) { return r.json(); }).then(function(d) {
+      if (d && d.error) {
+        if (landingCityListEl) landingCityListEl.innerHTML = '<div class="landing-city-loading" style="color:#f85149">⛳️🏛️ 世界遺産の取得に失敗: ' + escClientHtml(d.error) + '</div>';
+        return;
+      }
       var heritage = d.heritage || [];
       renderAirportNearbyHeritageList(heritage);
       if (heritage.length > 0 && !hasAirportHeritageSet[a.name]) {
@@ -2724,7 +2728,7 @@ void main() {
         refreshAreaTourSideIfAirport();
       }
     }).catch(function() {
-      if (landingCityListEl) landingCityListEl.innerHTML = '';
+      if (landingCityListEl) landingCityListEl.innerHTML = '<div class="landing-city-loading" style="color:#f85149">⛳️🏛️ 世界遺産の取得に失敗しました（通信エラー）</div>';
     });
   }
 
@@ -2746,9 +2750,13 @@ void main() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name: a.name, code: a.code, lat: a.lat, lon: a.lon })
     }).then(function(r) { return r.json(); }).then(function(d) {
+      if (d && d.error) {
+        if (landingStationListEl) landingStationListEl.innerHTML = '<div class="landing-city-loading" style="color:#f85149">✈️ 空港の取得に失敗: ' + escClientHtml(d.error) + '</div>';
+        return;
+      }
       renderAirportNearbyAirportsList(d.airports || []);
     }).catch(function() {
-      if (landingStationListEl) landingStationListEl.innerHTML = '';
+      if (landingStationListEl) landingStationListEl.innerHTML = '<div class="landing-city-loading" style="color:#f85149">✈️ 空港の取得に失敗しました（通信エラー）</div>';
     });
   }
 
