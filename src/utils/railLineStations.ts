@@ -147,6 +147,49 @@ export function findNearbyStationsAndHeritage(
   return dedupeNearbyPoints(results);
 }
 
+/**
+ * 「ある地点を中心に半径radiusKm以内にある候補を距離昇順で返す」という、駅・空港・世界遺産
+ * などジャンルを問わず共通する検索処理を抽出したもの。toLatLon で各候補の座標を取り出す
+ * meta情報だけを渡せば、候補配列の型を問わず利用できる。
+ */
+export function filterWithinRadius<T>(
+  items: T[],
+  lat: number,
+  lon: number,
+  radiusKm: number,
+  toLatLon: (item: T) => { lat: number; lon: number }
+): Array<{ item: T; distanceKm: number }> {
+  const results: Array<{ item: T; distanceKm: number }> = [];
+  for (const item of items) {
+    const pos = toLatLon(item);
+    const distanceKm = haversineKm(lat, lon, pos.lat, pos.lon);
+    if (distanceKm <= radiusKm) {
+      results.push({ item, distanceKm });
+    }
+  }
+  results.sort((a, b) => a.distanceKm - b.distanceKm);
+  return results;
+}
+
+/**
+ * 「候補のうちDBに書き込むべき差分（新規の組、またはdistance_kmが既存値と異なる組）だけを
+ * 抽出する」という、駅・空港などジャンルを問わず共通する書き込み判定処理を抽出したもの。
+ * 組がDBに存在するかどうかではなく、値そのものの差分の有無で書き込み対象を判定する。
+ * keyOf/distanceOf でキー・距離の取り出し方を meta情報として渡すことで、候補配列の型を
+ * 問わず利用できる。
+ */
+export function diffNearbyByDistance<T>(
+  nearby: T[],
+  existing: Map<string, number>,
+  keyOf: (item: T) => string,
+  distanceOf: (item: T) => number
+): T[] {
+  return nearby.filter(item => {
+    const prevDistanceKm = existing.get(keyOf(item));
+    return prevDistanceKm === undefined || prevDistanceKm !== distanceOf(item);
+  });
+}
+
 export interface AirportNearbyHeritage {
   heritageName: string;
   lat: number;
@@ -164,40 +207,27 @@ export function findNearbyHeritageForAirport(
   lon: number,
   radiusKm: number
 ): AirportNearbyHeritage[] {
-  const results: AirportNearbyHeritage[] = [];
-
-  for (const heritage of heritages) {
-    const distanceKm = haversineKm(lat, lon, heritage.lat, heritage.lon);
-    if (distanceKm <= radiusKm) {
-      results.push({ heritageName: heritage.n, lat: heritage.lat, lon: heritage.lon, distanceKm });
-    }
-  }
-
-  results.sort((a, b) => a.distanceKm - b.distanceKm);
+  const filtered = filterWithinRadius(heritages, lat, lon, radiusKm, h => ({ lat: h.lat, lon: h.lon }));
 
   const seen = new Set<string>();
   const deduped: AirportNearbyHeritage[] = [];
-  for (const r of results) {
-    if (seen.has(r.heritageName)) continue;
-    seen.add(r.heritageName);
-    deduped.push(r);
+  for (const { item, distanceKm } of filtered) {
+    if (seen.has(item.n)) continue;
+    seen.add(item.n);
+    deduped.push({ heritageName: item.n, lat: item.lat, lon: item.lon, distanceKm });
   }
   return deduped;
 }
 
 /**
- * 空港の近隣世界遺産候補のうち、DBに書き込むべき差分（新規の組、またはdistance_kmが
- * 既存値と異なる組）だけを抽出する。組がDBに存在するかどうかではなく、値そのものの
- * 差分の有無で書き込み対象を判定する。
+ * 空港の近隣世界遺産候補のうち、DBに書き込むべき差分だけを抽出する。
+ * diffNearbyByDistance に「heritageNameをキーにする」meta情報を渡した薄いラッパー。
  */
 export function diffAirportNearbyHeritage(
   nearby: AirportNearbyHeritage[],
   existing: Map<string, number>
 ): AirportNearbyHeritage[] {
-  return nearby.filter(h => {
-    const prevDistanceKm = existing.get(h.heritageName);
-    return prevDistanceKm === undefined || prevDistanceKm !== h.distanceKm;
-  });
+  return diffNearbyByDistance(nearby, existing, h => h.heritageName, h => h.distanceKm);
 }
 
 export interface AirportNearbyAirport {
@@ -219,28 +249,25 @@ export function findNearbyAirports(
   radiusKm: number,
   excludeCode: string
 ): AirportNearbyAirport[] {
-  const results: AirportNearbyAirport[] = [];
-  for (const apt of airports) {
-    if (apt.code === excludeCode) continue;
-    const distanceKm = haversineKm(lat, lon, apt.lat, apt.lon);
-    if (distanceKm <= radiusKm) {
-      results.push({ otherAirportName: apt.name, otherAirportCode: apt.code, lat: apt.lat, lon: apt.lon, distanceKm });
-    }
-  }
-  results.sort((a, b) => a.distanceKm - b.distanceKm);
-  return results;
+  const candidates = airports.filter(apt => apt.code !== excludeCode);
+  const filtered = filterWithinRadius(candidates, lat, lon, radiusKm, apt => ({ lat: apt.lat, lon: apt.lon }));
+  return filtered.map(({ item, distanceKm }) => ({
+    otherAirportName: item.name,
+    otherAirportCode: item.code,
+    lat: item.lat,
+    lon: item.lon,
+    distanceKm,
+  }));
 }
 
 /**
- * 空港の近隣空港候補のうち、DBに書き込むべき差分（新規の組、またはdistance_kmが
- * 既存値と異なる組）だけを抽出する。空港＋世界遺産の場合と同じ判定ルールを適用する。
+ * 空港の近隣空港候補のうち、DBに書き込むべき差分だけを抽出する。
+ * diffNearbyByDistance に「otherAirportNameをキーにする」meta情報を渡した薄いラッパー。
+ * 空港＋世界遺産の場合（diffAirportNearbyHeritage）と同じ判定ルールを適用する。
  */
 export function diffAirportNearbyAirport(
   nearby: AirportNearbyAirport[],
   existing: Map<string, number>
 ): AirportNearbyAirport[] {
-  return nearby.filter(a => {
-    const prevDistanceKm = existing.get(a.otherAirportName);
-    return prevDistanceKm === undefined || prevDistanceKm !== a.distanceKm;
-  });
+  return diffNearbyByDistance(nearby, existing, a => a.otherAirportName, a => a.distanceKm);
 }
