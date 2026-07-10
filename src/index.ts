@@ -61,7 +61,9 @@ import { verifyResendWebhookSignature } from './utils/resendWebhook';
 import { verifyGitHubWebhookSignature } from './utils/githubWebhook';
 import { extractCfAuthUsername } from './utils/cfAuthAccess';
 import { postSlackMessage, openSlackModal, respondToInteraction } from './utils/slack';
-import { sendTestEmailResend } from './utils/emailVerify';
+import { sendTestEmailResend, sendLoginConfirmEmail } from './utils/emailVerify';
+import { isPendingLoginExpired, shouldGateLoginOnEmailConfirmation, buildAuthRedirectHeaders, PENDING_LOGIN_TTL_MS, type PendingLoginRecord } from './utils/emailConfirm';
+import { escapeHtml } from './utils/html';
 import { fetchPrDiff, runSummaryPipeline, buildSlackMessage, buildSummaryModal, buildSummaryFallbackBlocks, classifySummaryResult, resolveAiModel, extractDesignDiff, sanitizeBoxDrawing, detectCommitAgentFromText, detectCommitAgentFromPrText, describeModelSwitch, WORKER_BASE_URL, DESIGN_SPEC_CHECKLIST, DEFAULT_AI_MODEL, FALLBACK_AI_MODEL, type SummaryModalRow } from './utils/aiSummary';
 import { getSessionDurationSeconds, renewSession, resolveSessionDuration } from './utils/session';
 import { buildCommitAgentLogEntry, classifyCommitAgentFetchError } from './utils/commitAgentLog';
@@ -180,6 +182,7 @@ const STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
   { name: 'heritage_area_items',        migration: '0073',   description: '保存済みエリア内の世界遺産・空港・駅・火山などの紐付け',      syncPolicy: 'auto' },
   { name: 'slack_installations',        migration: '0071',   description: 'Slack OAuthワークスペースインストール情報（botトークン等）',   syncPolicy: 'manual' },
   { name: 'notification_settings',      migration: '0075',   description: 'Slack通知ON/OFFのユーザーオプション設定（単一行）',            syncPolicy: 'auto' },
+  { name: 'email_confirm_tokens',       migration: '0076',   description: 'RESEND_API_KEY設定時のログイン確認メール保留トークン（クリックで発行完了）', syncPolicy: 'auto' },
 ];
 
 const REQUIRED_STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
@@ -1175,6 +1178,21 @@ CREATE INDEX IF NOT EXISTS idx_tfcr_file   ON ts_function_callers(repo_id, calle
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 INSERT OR IGNORE INTO notification_settings (id, slack_enabled) VALUES (1, 0);`,
+  '0076': `CREATE TABLE IF NOT EXISTS email_confirm_tokens (
+  token TEXT PRIMARY KEY,
+  github_login TEXT NOT NULL,
+  github_name TEXT,
+  github_id INTEGER NOT NULL,
+  email TEXT NOT NULL,
+  github_access_token TEXT NOT NULL,
+  granted_scopes TEXT NOT NULL,
+  timezone TEXT NOT NULL,
+  session_duration TEXT NOT NULL,
+  return_to TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  expires_at TEXT NOT NULL,
+  consumed_at TEXT
+);`,
 };
 
 async function ensureGroupTable(db: D1Database): Promise<void> {
@@ -1377,6 +1395,7 @@ export const TABLE_COLUMN_KEYS: Record<string, ColumnKeyInfo> = {
   rail_station_nearby_fetched: { station_name: 'pk' },
   slack_installations: { id: 'pk', team_id: 'uk', installed_by_user: 'fk' },
   notification_settings: { id: 'pk' },
+  email_confirm_tokens: { token: 'pk', github_login: 'idx', email: 'idx' },
 };
 
 export function getColumnKeyType(tableName: string, columnName: string): ColumnKeyType {
@@ -1427,6 +1446,7 @@ export const TABLE_GROUP_MAP: Record<string, string> = {
   ai_summary_log: 'ai', ai_summary_reviews: 'ai', commit_agent_log: 'ai',
   resend_webhook_sources: 'email', email_send_log: 'email', resend_webhook_log: 'email',
   email_suppression_list: 'email', email_mfa_challenges: 'email', email_audit_anomalies: 'email',
+  email_confirm_tokens: 'auth',
   slack_interaction_log: 'config', slack_installations: 'config', notification_settings: 'config',
   installation_permissions: 'config', repo_color_settings: 'config', repo_groups: 'config',
   repo_group_members: 'config', group_oauth_apps: 'config', table_catalog: 'config', table_column_keys: 'config',
@@ -2727,6 +2747,115 @@ async function getUserSession(db: D1Database | undefined, userId: string): Promi
   }
 }
 
+// メール確認待ちのログイン情報をD1に保存する
+export async function savePendingLogin(db: D1Database | undefined, record: PendingLoginRecord): Promise<boolean> {
+  if (!db) return false;
+  try {
+    await db.prepare(
+      `INSERT INTO email_confirm_tokens
+       (token, github_login, github_name, github_id, email, github_access_token, granted_scopes, timezone, session_duration, return_to, created_at, expires_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).bind(
+      record.token,
+      record.githubLogin,
+      record.githubName,
+      record.githubId,
+      record.email,
+      record.githubAccessToken,
+      record.grantedScopes,
+      record.timezone,
+      record.sessionDuration,
+      record.returnToPath,
+      record.createdAt,
+      record.expiresAt
+    ).run();
+    return true;
+  } catch (error) {
+    logger.error('Error saving pending login token', { error: error instanceof Error ? error.message : 'Unknown error' });
+    return false;
+  }
+}
+
+// メール確認トークンを消費（一度きり）してログイン保留情報を取り出す
+export async function consumePendingLogin(db: D1Database | undefined, token: string): Promise<PendingLoginRecord | null> {
+  if (!db) return null;
+  try {
+    const row = await db.prepare(
+      `SELECT token, github_login as githubLogin, github_name as githubName, github_id as githubId,
+              email, github_access_token as githubAccessToken, granted_scopes as grantedScopes,
+              timezone, session_duration as sessionDuration, return_to as returnToPath,
+              created_at as createdAt, expires_at as expiresAt, consumed_at as consumedAt
+       FROM email_confirm_tokens WHERE token = ?`
+    ).bind(token).first<PendingLoginRecord & { consumedAt: string | null }>();
+    if (!row || row.consumedAt) return null;
+    await db.prepare('UPDATE email_confirm_tokens SET consumed_at = ? WHERE token = ?').bind(new Date().toISOString(), token).run();
+    return row;
+  } catch (error) {
+    logger.error('Error consuming pending login token', { error: error instanceof Error ? error.message : 'Unknown error' });
+    return null;
+  }
+}
+
+// ログイン確定処理（D1保存・JWT発行・Cookieセット）。
+// 即時ログイン(/auth/github/callback)とメール確認後ログイン(/auth/email-confirm)の
+// 両方から共通利用する。
+async function finalizeGithubLogin(c: Context<{ Bindings: Bindings; Variables: Variables }>, params: {
+  githubLogin: string;
+  githubName: string;
+  email?: string;
+  githubId: number;
+  accessToken: string;
+  grantedScopes: string;
+  timezone: string;
+  sessionDuration: string;
+  returnToPath: string;
+  jwtSecret: string;
+}): Promise<Response> {
+  const sessionResult = await updateUserSession(c.env.DB, params.githubLogin, params.timezone, params.sessionDuration, params.accessToken, params.grantedScopes);
+  if (!sessionResult.saved) {
+    logger.warn('D1 session save failed, access_token is included in JWT as fallback', { userId: params.githubLogin });
+  }
+
+  if (c.env.DB) {
+    await ensureDefaultWorkspace(c.env.DB, params.githubLogin);
+  }
+
+  const sessionDurationSeconds = getSessionDurationSeconds(params.sessionDuration);
+  const idleTimeoutSeconds = resolveIdleTimeoutSeconds(c.env.SESSION_IDLE_TIMEOUT_SECONDS, sessionDurationSeconds, sessionDurationSeconds);
+
+  const token = await createJWT(
+    {
+      sub: params.githubLogin,
+      name: params.githubName || params.githubLogin,
+      email: params.email || undefined,
+      github_id: params.githubId,
+      github_access_token: params.accessToken,
+    },
+    params.jwtSecret,
+    sessionDurationSeconds
+  );
+
+  logger.info('GitHub OAuth authentication successful', {
+    userId: params.githubLogin,
+    sessionDuration: params.sessionDuration,
+  });
+
+  logger.recordMetric(c.env.ANALYTICS, 'auth_github_success', {
+    userId: params.githubLogin,
+    timestamp: Date.now(),
+  });
+
+  const redirectHeaders = buildAuthRedirectHeaders({
+    token,
+    sessionDurationSeconds,
+    idleTimeoutSeconds,
+    sessionDuration: params.sessionDuration,
+    returnToPath: params.returnToPath,
+  });
+
+  return new Response(null, { status: 302, headers: redirectHeaders });
+}
+
 // D1データベースのユーザー設定を更新
 async function updateUserSettings(
   db: D1Database | undefined,
@@ -3065,68 +3194,61 @@ app.get('/auth/github/callback', async (c) => {
       sessionDuration = sessionDurationFromDB ?? cookieVals['user_session_duration'] ?? '1h';
     }
 
-    // D1にログイン情報を保存（付与スコープも含む）
     phase = 'save-session';
-    const sessionResult = await updateUserSession(c.env.DB, userId, timezone, sessionDuration, accessToken, grantedScopes.join(' '));
-
-    // デフォルトチーム＋ワークスペースを自動プロビジョニング（初回ログイン時に作成）
-    if (c.env.DB) {
-      phase = 'ensure-workspace';
-      await ensureDefaultWorkspace(c.env.DB, userId);
-    }
-
-    const sessionDurationSeconds = getSessionDurationSeconds(sessionDuration);
-    const idleTimeoutSeconds = resolveIdleTimeoutSeconds(c.env.SESSION_IDLE_TIMEOUT_SECONDS, sessionDurationSeconds, sessionDurationSeconds);
-
-    // JWTにaccess_tokenを常に含める
-    // D1への書き込み直後はレプリカが追いついていない場合があり、
-    // そのままリダイレクト先でD1から読み直すとトークンが取れずリポジトリが表示されない問題を防ぐ
-    if (!sessionResult.saved) {
-      logger.warn('D1 session save failed, access_token is included in JWT as fallback', { userId });
-    }
-
-    phase = 'create-jwt';
-    const token = await createJWT(
-      {
-        sub: githubUser.login,
-        name: githubUser.name || githubUser.login,
-        email: email || undefined,
-        github_id: githubUser.id,
-        github_access_token: accessToken,
-      },
-      jwtSecret,
-      sessionDurationSeconds
-    );
-
-    logger.info('GitHub OAuth authentication successful', {
-      userId: githubUser.login,
-      sessionDuration,
-    });
-
-    logger.recordMetric(c.env.ANALYTICS, 'auth_github_success', {
-      userId: githubUser.login,
-      timestamp: Date.now(),
-    });
-
-    // 認証成功後、クッキーをセットしつつリダイレクト
-    // return_to クッキーがあればそちらへ、なければ /welcome へ
-    phase = 'set-cookies';
     const returnToCookie = getCookieValue(c.req.header('Cookie'), 'oauth_return_to');
     const returnToPath = validateReturnTo(returnToCookie ? decodeURIComponent(returnToCookie) : null) ?? '/welcome';
-    const redirectHeaders = new Headers({
-      'Location': returnToPath,
-    });
-    redirectHeaders.append('Set-Cookie', `auth_token=${token}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${sessionDurationSeconds}`);
-    redirectHeaders.append('Set-Cookie', `login_timestamp=${Date.now()}; Path=/; Secure; SameSite=Lax; Max-Age=${sessionDurationSeconds}`);
-    redirectHeaders.append('Set-Cookie', `last_activity=${Date.now()}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${idleTimeoutSeconds}`);
-    redirectHeaders.append('Set-Cookie', `user_session_duration=${sessionDuration}; Path=/; Secure; SameSite=Lax; Max-Age=31536000`);
-    redirectHeaders.append('Set-Cookie', `show_welcome_message=1; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=60`);
-    // 使用済みのOAuthクッキーを削除
-    redirectHeaders.append('Set-Cookie', `oauth_state=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0`);
-    redirectHeaders.append('Set-Cookie', `oauth_pkce=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0`);
-    redirectHeaders.append('Set-Cookie', `oauth_return_to=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0`);
+    const grantedScopesStr = grantedScopes.join(' ');
 
-    return new Response(null, { status: 302, headers: redirectHeaders });
+    // RESEND_API_KEY設定時は、JWT発行前にメール確認(Resend送信+クリック)を挟む。
+    // GitHub側のメールは既に検証済みだが、そのメールを実際に受信できる人物が
+    // ログインしていることをResend経由で確認してから初めてトークンを発行する。
+    if (shouldGateLoginOnEmailConfirmation(c.env.RESEND_API_KEY, email || undefined)) {
+      phase = 'send-confirm-email';
+      const confirmToken = crypto.randomUUID();
+      const now = new Date();
+      const expiresAt = new Date(now.getTime() + PENDING_LOGIN_TTL_MS);
+      const saved = await savePendingLogin(c.env.DB, {
+        token: confirmToken,
+        githubLogin: userId,
+        githubName: githubUser.name || userId,
+        githubId: githubUser.id,
+        email: email as string,
+        githubAccessToken: accessToken,
+        grantedScopes: grantedScopesStr,
+        timezone,
+        sessionDuration,
+        returnToPath,
+        createdAt: now.toISOString(),
+        expiresAt: expiresAt.toISOString(),
+      });
+
+      if (!saved) {
+        // トークン保存に失敗した場合(D1未接続等)はメール確認をスキップし、従来どおり即ログインを完了する
+        logger.warn('Pending login token save failed, skipping email confirmation gate', { userId });
+      } else {
+        const confirmUrl = `${url.protocol}//${url.host}/auth/email-confirm?token=${confirmToken}`;
+        const sendResult = await sendLoginConfirmEmail(c.env.RESEND_API_KEY as string, email as string, confirmUrl);
+        if (!sendResult.ok) {
+          logger.error('Failed to send login confirmation email', { userId, error: sendResult.error });
+          return jsonUtf8({ error: 'ログイン確認メールの送信に失敗しました。しばらくしてから再度お試しください。' }, 502);
+        }
+        return c.html(renderLoginConfirmPendingPage(email as string));
+      }
+    }
+
+    phase = 'finalize-login';
+    return await finalizeGithubLogin(c, {
+      githubLogin: userId,
+      githubName: githubUser.name || userId,
+      email: email || undefined,
+      githubId: githubUser.id,
+      accessToken,
+      grantedScopes: grantedScopesStr,
+      timezone,
+      sessionDuration,
+      returnToPath,
+      jwtSecret,
+    });
   } catch (error) {
     logger.error('GitHub OAuth callback error', {
       phase,
@@ -3153,6 +3275,60 @@ app.get('/auth/github/callback', async (c) => {
 
     return jsonUtf8({ error: 'Authentication failed' }, 500);
   }
+});
+
+function renderLoginConfirmPendingPage(email: string): string {
+  return `<!DOCTYPE html><html lang="ja"><head><meta charset="utf-8"><title>ログイン確認メール送信</title></head><body>
+<h1>確認メールを送信しました</h1>
+<p>${escapeHtml(email)} 宛にログイン確認メールを送信しました。メール内のリンクをクリックしてログインを完了してください。</p>
+<p>リンクの有効期限は30分です。</p>
+</body></html>`;
+}
+
+function renderLoginConfirmErrorPage(message: string): string {
+  return `<!DOCTYPE html><html lang="ja"><head><meta charset="utf-8"><title>ログイン確認エラー</title></head><body>
+<h1>ログインを完了できませんでした</h1>
+<p>${escapeHtml(message)}</p>
+<p><a href="/auth/github">もう一度ログインする</a></p>
+</body></html>`;
+}
+
+/**
+ * メール確認リンクのクリックを受け取り、保留中のログインを完了する。
+ * /auth/github/callback がメール確認をかけた場合の受け皿。
+ */
+app.get('/auth/email-confirm', async (c) => {
+  const confirmToken = c.req.query('token');
+  if (!confirmToken) {
+    return c.html(renderLoginConfirmErrorPage('確認トークンが指定されていません。'), 400);
+  }
+
+  const jwtSecret = c.env.JWT_SECRET;
+  if (!jwtSecret) {
+    return jsonUtf8({ error: 'JWT_SECRET is not configured' }, 500);
+  }
+
+  const record = await consumePendingLogin(c.env.DB, confirmToken);
+  if (!record) {
+    return c.html(renderLoginConfirmErrorPage('このリンクは無効か、既に使用されています。もう一度ログインをやり直してください。'), 400);
+  }
+
+  if (isPendingLoginExpired(record)) {
+    return c.html(renderLoginConfirmErrorPage('このリンクの有効期限が切れています。もう一度ログインをやり直してください。'), 400);
+  }
+
+  return await finalizeGithubLogin(c, {
+    githubLogin: record.githubLogin,
+    githubName: record.githubName,
+    email: record.email,
+    githubId: record.githubId,
+    accessToken: record.githubAccessToken,
+    grantedScopes: record.grantedScopes,
+    timezone: record.timezone,
+    sessionDuration: record.sessionDuration,
+    returnToPath: record.returnToPath,
+    jwtSecret,
+  });
 });
 
 /**
