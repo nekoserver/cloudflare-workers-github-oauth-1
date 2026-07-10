@@ -183,3 +183,18 @@ export function findNearbyHeritageForAirport(
   }
   return deduped;
 }
+
+/**
+ * 空港の近隣世界遺産候補のうち、DBに書き込むべき差分（新規の組、またはdistance_kmが
+ * 既存値と異なる組）だけを抽出する。組がDBに存在するかどうかではなく、値そのものの
+ * 差分の有無で書き込み対象を判定する。
+ */
+export function diffAirportNearbyHeritage(
+  nearby: AirportNearbyHeritage[],
+  existing: Map<string, number>
+): AirportNearbyHeritage[] {
+  return nearby.filter(h => {
+    const prevDistanceKm = existing.get(h.heritageName);
+    return prevDistanceKm === undefined || prevDistanceKm !== h.distanceKm;
+  });
+}
