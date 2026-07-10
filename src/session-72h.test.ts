@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
+import { buildAuthRedirectHeaders } from './utils/emailConfirm';
 
 const src = fs.readFileSync(path.join(__dirname, 'index.ts'), 'utf-8');
 
@@ -14,19 +15,39 @@ const src = fs.readFileSync(path.join(__dirname, 'index.ts'), 'utf-8');
 //   → getUserSession 失敗時にCookieの古い値でD1設定が上書きされる
 // ===========================================================
 
+// ログイン確定時のCookie組み立ては finalizeGithubLogin (index.ts) から
+// buildAuthRedirectHeaders (utils/emailConfirm.ts) へ切り出し済み。
+// /auth/github/callback (即時ログイン) と /auth/email-confirm (メール確認後ログイン) の
+// 両方がこの関数を共通利用するため、Cookie仕様はここで直接検証する。
 describe('OAuthコールバック: user_session_duration クッキーの設定', () => {
-  it("set-cookies フェーズで user_session_duration クッキーをセットする", () => {
-    const idx = src.indexOf("phase = 'set-cookies'");
-    expect(idx).toBeGreaterThan(-1);
-    const snippet = src.slice(idx, idx + 2000);
-    expect(snippet).toContain('user_session_duration');
+  it('finalizeGithubLoginがbuildAuthRedirectHeadersを利用してCookieを組み立てる', () => {
+    expect(src).toContain('buildAuthRedirectHeaders({');
+  });
+
+  it('user_session_duration クッキーをセットする', () => {
+    const headers = buildAuthRedirectHeaders({
+      token: 'jwt',
+      sessionDurationSeconds: 3600,
+      idleTimeoutSeconds: 900,
+      sessionDuration: '1h',
+      returnToPath: '/welcome',
+    });
+    const cookies = headers.getSetCookie ? headers.getSetCookie() : [];
+    expect(cookies.some(c => c.startsWith('user_session_duration='))).toBe(true);
   });
 
   it('user_session_duration クッキーに Max-Age=31536000 が設定されている', () => {
-    const idx = src.indexOf("phase = 'set-cookies'");
-    expect(idx).toBeGreaterThan(-1);
-    const snippet = src.slice(idx, idx + 2000);
-    const match = snippet.match(/user_session_duration[^\n`]+Max-Age=(\d+)/);
+    const headers = buildAuthRedirectHeaders({
+      token: 'jwt',
+      sessionDurationSeconds: 3600,
+      idleTimeoutSeconds: 900,
+      sessionDuration: '1h',
+      returnToPath: '/welcome',
+    });
+    const cookies = headers.getSetCookie ? headers.getSetCookie() : [];
+    const cookie = cookies.find(c => c.startsWith('user_session_duration='));
+    expect(cookie).toBeDefined();
+    const match = cookie!.match(/Max-Age=(\d+)/);
     expect(match).not.toBeNull();
     expect(Number(match![1])).toBe(31536000);
   });
