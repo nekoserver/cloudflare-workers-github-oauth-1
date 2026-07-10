@@ -174,6 +174,8 @@ canvas:active { cursor:grabbing; }
 #rail-station-alight-btn { display:none; margin-top:6px; background:#0c2d1a; border:1px solid #3fb950; border-radius:6px; color:#3fb950; font-size:11px; padding:4px 12px; cursor:pointer; font-family:inherit; pointer-events:auto; }
 .pin-label-close-btn { position:absolute; top:-9px; right:-9px; width:26px; height:26px; border-radius:50%; background:#21262d; border:1px solid #388bfd; color:#c9d1d9; font-size:12px; line-height:1; cursor:pointer; pointer-events:auto; padding:0; display:flex; align-items:center; justify-content:center; }
 .pin-label-close-btn:hover { background:#30363d; color:#fff; }
+.tt-land-btn { display:inline-block; margin-top:6px; background:#0c2d1a; border:1px solid #3fb950; border-radius:6px; color:#3fb950; font-size:11px; padding:4px 12px; cursor:pointer; font-family:inherit; pointer-events:auto; }
+.tt-land-btn:hover { background:#123a20; }
 .f1-side { display:none; position:absolute; left:0; top:0; bottom:0; width:min(85vw,280px); background:#0d1117; border-right:1px solid #30363d; z-index:90; flex-direction:column; box-shadow:4px 0 24px rgba(0,0,0,.7); }
 .f1-side.open { display:flex; }
 .f1-side-head { padding:12px 16px; border-bottom:1px solid #21262d; display:flex; align-items:center; gap:8px; flex-shrink:0; }
@@ -1002,35 +1004,38 @@ void main() {
       key: 'airport', icon: '✈︎', label: '空港', color: '#79c0ff', bg: '#0c2233',
       getItems: function() { return getAirportsInBounds(); },
       locate: function(a) { return [a.lat, a.lon]; },
-      itemLabel: function(a) { return a.city + ' ' + a.name + ' (' + a.code + ')'; },
+      itemLabel: function(a) { return (hasAirportHeritageSet[a.name] ? '⛳️ ' : '') + a.city + ' ' + a.name + ' (' + a.code + ')'; },
       showTooltip: function(a) {
         showGenericAreaTooltip(
           '<button class="pin-label-close-btn tt-airport-close-btn" aria-label="閉じる">✕</button>' +
           '<div class="tt-name">✈︎ ' + a.name + ' <span style="font-size:11px;color:#8b949e">' + a.code + '</span></div>' +
-          '<div class="tt-sub">' + a.city + '</div>'
+          '<div class="tt-sub">' + a.city + '</div>' +
+          '<div><button class="tt-land-btn tt-airport-land-btn">⛳️🏌️‍♀️🏌️‍♂️</button></div>'
         );
         var aptCloseBtn = tooltip.querySelector('.tt-airport-close-btn');
         if (aptCloseBtn) {
           aptCloseBtn.onclick = function(e) {
             e.stopPropagation();
-            closeAirportTooltipAndRecordHeritage(a);
+            closeAirportTooltip();
+          };
+        }
+        var aptLandBtn = tooltip.querySelector('.tt-airport-land-btn');
+        if (aptLandBtn) {
+          aptLandBtn.onclick = function(e) {
+            e.stopPropagation();
+            startAirportLanding(a);
           };
         }
       }
     }
   ];
 
-  function closeAirportTooltipAndRecordHeritage(a) {
+  function closeAirportTooltip() {
     tooltip.classList.add('tt-closing');
     setTimeout(function() {
       tooltip.classList.remove('tt-closing');
       hideTooltip();
     }, 220);
-    fetch('/api/airport-nearby-heritage', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: a.name, lat: a.lat, lon: a.lon })
-    }).catch(function() {});
   }
 
 
@@ -1940,6 +1945,7 @@ void main() {
   var cityMarkersDiv = null;
   var hasCityDataSet = {};
   var hasStationDataSet = {};
+  var hasAirportHeritageSet = {};
   var heritageMitokoroGemmaShareId = {};
   var heritageMitokoroLlamaShareId = {};
   var heritageQuestionAnswered = {};
@@ -1957,6 +1963,10 @@ void main() {
   function refreshAreaTourSideIfHeritage() {
     if (areaTourKind && areaTourKind.key === 'heritage' && areaTourItems) renderAreaTourSide(areaTourKind, areaTourItems);
   }
+
+  function refreshAreaTourSideIfAirport() {
+    if (areaTourKind && areaTourKind.key === 'airport' && areaTourItems) renderAreaTourSide(areaTourKind, areaTourItems);
+  }
   var HERITAGE_MITOKORO_GEMMA_MODEL = '@cf/google/gemma-4-26b-a4b-it';
 
   fetch('/api/heritage-city-fetched-list').then(function(r){ return r.json(); }).then(function(d){
@@ -1965,6 +1975,10 @@ void main() {
 
   fetch('/api/rail-station-fetched-list').then(function(r){ return r.json(); }).then(function(d){
     if(d && d.names) { d.names.forEach(function(n){ hasStationDataSet[n] = true; }); }
+  }).catch(function(){});
+
+  fetch('/api/airport-nearby-heritage-airports').then(function(r){ return r.json(); }).then(function(d){
+    if(d && d.names) { d.names.forEach(function(n){ hasAirportHeritageSet[n] = true; }); refreshAreaTourSideIfAirport(); }
   }).catch(function(){});
 
   fetch('/api/aichat/check-heritage-mitokoro-gemma-batch', {
@@ -2682,6 +2696,61 @@ void main() {
       if (landingOverlayEl) landingOverlayEl.classList.add('active');
       loadLandingStationCities(stationName, lat, lon);
       loadNearbyPoints(stationName, lat, lon);
+    }, FLY_DUR + 100);
+  }
+
+  function renderAirportNearbyHeritageList(heritage) {
+    if (!landingStationListEl) return;
+    if (!heritage || heritage.length === 0) { landingStationListEl.innerHTML = ''; return; }
+    var html = '<div class="landing-station-hdr">⛳️🏛️ 半径300km圏内の世界遺産</div>';
+    heritage.forEach(function(h) {
+      html += '<div class="landing-city-item"><span>🏛️ ' + h.heritage_name + '</span>' +
+        '<span class="landing-city-dist">' + h.distance_km.toFixed(1) + 'km</span></div>';
+    });
+    landingStationListEl.innerHTML = html;
+  }
+
+  function loadAirportNearbyHeritage(a) {
+    if (landingStationListEl) landingStationListEl.innerHTML = '<div class="landing-city-loading">⛳️🏛️ 周辺の世界遺産を検索中...</div>';
+    fetch('/api/airport-nearby-heritage', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: a.name, lat: a.lat, lon: a.lon })
+    }).then(function(r) { return r.json(); }).then(function(d) {
+      var heritage = d.heritage || [];
+      renderAirportNearbyHeritageList(heritage);
+      if (heritage.length > 0 && !hasAirportHeritageSet[a.name]) {
+        hasAirportHeritageSet[a.name] = true;
+        refreshAreaTourSideIfAirport();
+      }
+    }).catch(function() {
+      if (landingStationListEl) landingStationListEl.innerHTML = '';
+    });
+  }
+
+  function startAirportLanding(a) {
+    if (landingMode) return;
+    preLandingAutoRot = autoRot;
+    flyTo(a.lat, a.lon);
+    stopAmericaTour(); stopEuropeTour(); stopAfricaTour(); stopJapanTour(); stopRailTour(); stopF1Tour();
+    setTimeout(function() {
+      flyTarget = null;
+      landingMode = true;
+      landingIdx = -1;
+      landingPhase = 1;
+      landingPhaseStart = performance.now();
+      landingZoomFrom = zoom;
+      landingRotXFrom = rotXv;
+      markersDiv.style.display = 'none';
+      tooltip.style.opacity = '0';
+      if (landingTitleEl) landingTitleEl.textContent = '✈︎ ' + a.name + ' (' + a.code + ')';
+      if (landingSubEl) landingSubEl.textContent = a.city;
+      if (landingStatusEl) landingStatusEl.textContent = '着陸中...';
+      if (landingProgEl) landingProgEl.style.width = '0%';
+      if (landingCityListEl) landingCityListEl.innerHTML = '';
+      if (landingStationListEl) landingStationListEl.innerHTML = '';
+      if (landingOverlayEl) landingOverlayEl.classList.add('active');
+      loadAirportNearbyHeritage(a);
     }, FLY_DUR + 100);
   }
 
