@@ -50,6 +50,18 @@ describe('isNotifyConfigured', () => {
     expect(isNotifyConfigured({ target: 'worker' })).toBe(false);
     expect(isNotifyConfigured({ target: 'worker', workerUrl: 'https://example.com' })).toBe(true);
   });
+
+  it('target=slack かつ enabled=false(ユーザーオプションOFF)なら設定が揃っていても送らない', () => {
+    expect(isNotifyConfigured({ target: 'slack', slackToken: 't', slackChannel: 'c', enabled: false })).toBe(false);
+  });
+
+  it('target=worker はenabled=falseの影響を受けない(Slack専用オプションのため)', () => {
+    expect(isNotifyConfigured({ target: 'worker', workerUrl: 'https://example.com', enabled: false })).toBe(true);
+  });
+
+  it('enabledを指定しない場合は既存どおり動作する(後方互換)', () => {
+    expect(isNotifyConfigured({ target: 'slack', slackToken: 't', slackChannel: 'c' })).toBe(true);
+  });
 });
 
 describe('sendNotification', () => {

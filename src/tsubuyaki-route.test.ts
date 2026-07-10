@@ -42,7 +42,7 @@ describe('POST /api/tsubuyaki', () => {
   });
 
   it('通知先(Slack/外部Worker)はresolveNotifyConfig/dispatchNotificationで解決する（NOTIFY_TARGETで切替可能）', () => {
-    expect(postBlock).toContain('const notifyConfig = resolveNotifyConfig(c.env);');
+    expect(postBlock).toContain('const notifyConfig = await resolveNotifyConfigWithSetting(c.env);');
     expect(postBlock).toContain('const result = await dispatchNotification(notifyConfig, { text: message });');
   });
 
@@ -68,7 +68,7 @@ describe('POST /slack/commands', () => {
   });
 
   it('署名情報と通知送信関数(sendNotification)を handleTsubuyakiSlashCommand に渡す', () => {
-    expect(slashCommandBlock).toContain('const notifyConfig = resolveNotifyConfig(c.env);');
+    expect(slashCommandBlock).toContain('const notifyConfig = await resolveNotifyConfigWithSetting(c.env);');
     expect(slashCommandBlock).toContain('timestamp: c.req.header(');
     expect(slashCommandBlock).toContain('signature: c.req.header(');
     expect(slashCommandBlock).toContain('signingSecret: c.env.SLACK_SIGNING_SECRET');
