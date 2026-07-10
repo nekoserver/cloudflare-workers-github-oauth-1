@@ -34,6 +34,8 @@ export type Bindings = {
   AI_CHAT_MODEL?: string;
   CLOUDFLARE_API_TOKEN?: string;
   CLOUDFLARE_ACCOUNT_ID?: string;
+  /** 未設定時はメール検証機能自体を無効(デフォルトOFF)にする */
+  ABSTRACT_EMAIL_API_KEY?: string;
 };
 
 /** Hono コンテキスト変数 */
