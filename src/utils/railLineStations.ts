@@ -145,3 +145,41 @@ export function findNearbyStationsAndHeritage(
   results.sort((a, b) => a.distanceKm - b.distanceKm);
   return dedupeNearbyPoints(results);
 }
+
+export interface AirportNearbyHeritage {
+  heritageName: string;
+  lat: number;
+  lon: number;
+  distanceKm: number;
+}
+
+/**
+ * 空港の座標を中心に、半径radiusKm以内にある世界遺産を距離昇順で返す。
+ * 同名の世界遺産が複数見つかった場合は、最も近い1件のみを残す。
+ */
+export function findNearbyHeritageForAirport(
+  heritages: HeritagePoint[],
+  lat: number,
+  lon: number,
+  radiusKm: number
+): AirportNearbyHeritage[] {
+  const results: AirportNearbyHeritage[] = [];
+
+  for (const heritage of heritages) {
+    const distanceKm = haversineKm(lat, lon, heritage.lat, heritage.lon);
+    if (distanceKm <= radiusKm) {
+      results.push({ heritageName: heritage.n, lat: heritage.lat, lon: heritage.lon, distanceKm });
+    }
+  }
+
+  results.sort((a, b) => a.distanceKm - b.distanceKm);
+
+  const seen = new Set<string>();
+  const deduped: AirportNearbyHeritage[] = [];
+  for (const r of results) {
+    if (seen.has(r.heritageName)) continue;
+    seen.add(r.heritageName);
+    deduped.push(r);
+  }
+  return deduped;
+}
