@@ -40,10 +40,12 @@ canvas:active { cursor:grabbing; }
 .hud { position:absolute; bottom:10px; left:10px; background:rgba(0,0,0,.7); border:1px solid #30363d; border-radius:6px; padding:6px 10px; font-size:11px; font-family:monospace; color:#58a6ff; line-height:1.9; pointer-events:none; }
 #markers { position:absolute; top:0; left:0; width:100%; height:100%; pointer-events:none; overflow:hidden; }
 .mk { position:absolute; transform:translate(-50%,-50%); line-height:1; font-size:16px; text-shadow:0 1px 3px #000,0 0 8px rgba(0,0,0,0.9); pointer-events:auto; cursor:pointer; user-select:none; -webkit-user-select:none; }
-#mk-tooltip { position:fixed; background:rgba(13,17,23,0.97); border:1px solid #3fb950; border-radius:8px; padding:7px 12px; font-size:12px; color:#e6edf3; white-space:normal; min-width:180px; pointer-events:auto; opacity:0; transition:opacity .15s; z-index:10000; transform:translate(-50%,-110%); line-height:1.7; cursor:move; user-select:none; -webkit-user-select:none; touch-action:none; }
+#mk-tooltip { position:fixed; background:rgba(13,17,23,0.97); border:1px solid #3fb950; border-radius:8px; padding:7px 12px; font-size:12px; color:#e6edf3; white-space:normal; min-width:180px; pointer-events:auto; opacity:0; transition:opacity .15s, transform .2s; z-index:10000; transform:translate(-50%,-110%); line-height:1.7; cursor:move; user-select:none; -webkit-user-select:none; touch-action:none; }
 .tt-name { white-space:nowrap; font-weight:700; font-size:13px; }
 .tt-sub { white-space:nowrap; font-size:12px; margin-top:3px; }
 #mk-tooltip.below { transform:translate(-50%, 14px); }
+#mk-tooltip.tt-closing { opacity:0; transform:translate(-50%,-110%) scale(0.82); }
+#mk-tooltip.tt-closing.below { transform:translate(-50%, 14px) scale(0.82); }
 .side { background:#0d1117; border-left:1px solid #30363d; display:flex; flex-direction:column; overflow:hidden; }
 .side-header { padding:10px 10px 8px; border-bottom:1px solid #21262d; flex-shrink:0; }
 .side-title { font-size:10px; font-weight:700; color:#3fb950; text-transform:uppercase; letter-spacing:.5px; margin-bottom:6px; }
@@ -1002,10 +1004,34 @@ void main() {
       locate: function(a) { return [a.lat, a.lon]; },
       itemLabel: function(a) { return a.city + ' ' + a.name + ' (' + a.code + ')'; },
       showTooltip: function(a) {
-        showGenericAreaTooltip('<div class="tt-name">✈︎ ' + a.name + ' <span style="font-size:11px;color:#8b949e">' + a.code + '</span></div><div class="tt-sub">' + a.city + '</div>');
+        showGenericAreaTooltip(
+          '<button class="pin-label-close-btn tt-airport-close-btn" aria-label="閉じる">✕</button>' +
+          '<div class="tt-name">✈︎ ' + a.name + ' <span style="font-size:11px;color:#8b949e">' + a.code + '</span></div>' +
+          '<div class="tt-sub">' + a.city + '</div>'
+        );
+        var aptCloseBtn = tooltip.querySelector('.tt-airport-close-btn');
+        if (aptCloseBtn) {
+          aptCloseBtn.onclick = function(e) {
+            e.stopPropagation();
+            closeAirportTooltipAndRecordHeritage(a);
+          };
+        }
       }
     }
   ];
+
+  function closeAirportTooltipAndRecordHeritage(a) {
+    tooltip.classList.add('tt-closing');
+    setTimeout(function() {
+      tooltip.classList.remove('tt-closing');
+      hideTooltip();
+    }, 220);
+    fetch('/api/airport-nearby-heritage', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: a.name, lat: a.lat, lon: a.lon })
+    }).catch(function() {});
+  }
 
 
   var savedAreasCache = [];
