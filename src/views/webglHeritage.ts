@@ -1132,6 +1132,25 @@ void main() {
     areaTourSide.classList.add('open');
     updateAreaTourCollapseButton();
     fitAreaTourSideWidth(kind, items);
+    areaTourSideBody.querySelectorAll('.f1-side-item').forEach(function(row) {
+      row.addEventListener('click', function() {
+        focusAreaTourItem(kind, items, parseInt(row.getAttribute('data-idx'), 10));
+      });
+    });
+  }
+  // 巡回サイドパネルの項目をタップした際、自動巡回のタイマーを止めた上でその座標へ
+  // 地球儀の中心をスクロール(flyTo)し、到着後にその項目のツールチップを表示する。
+  function focusAreaTourItem(kind, items, idx) {
+    var d = items[idx];
+    if (!d) return;
+    if (areaTourTimer) { clearTimeout(areaTourTimer); areaTourTimer = null; }
+    areaTourRunning = false;
+    areaTourIdx = idx;
+    renderAreaMenu();
+    flashAreaTourSideItem(idx);
+    var pos = kind.locate(d);
+    flyTo(pos[0], pos[1]);
+    setTimeout(function() { kind.showTooltip(d); }, FLY_DUR + 100);
   }
 
   var AREA_TOUR_FLASH_MS = 1300;
