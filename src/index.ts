@@ -5733,9 +5733,18 @@ app.post('/api/airport-nearby-heritage', authMiddleware, async (c) => {
     await db.batch(newHeritage.map(h => stmt.bind(name, h.heritageName, h.distanceKm)));
   }
 
-  return c.json({
-    recorded: newHeritage.map(h => ({ heritage_name: h.heritageName, distance_km: h.distanceKm })),
-  });
+  const all = await db.prepare(
+    'SELECT heritage_name, distance_km FROM airport_nearby_heritage WHERE airport_name = ? ORDER BY distance_km'
+  ).bind(name).all<{ heritage_name: string; distance_km: number }>();
+
+  return c.json({ heritage: all.results, recordedCount: newHeritage.length });
+});
+
+app.get('/api/airport-nearby-heritage-airports', authMiddleware, async (c) => {
+  const db = c.env.DB;
+  if (!db) return c.json({ names: [] });
+  const rows = await db.prepare('SELECT DISTINCT airport_name FROM airport_nearby_heritage').all<{ airport_name: string }>();
+  return c.json({ names: rows.results.map(r => r.airport_name) });
 });
 
 app.get('/api/heritage-country-stats', authMiddleware, async (c) => {
