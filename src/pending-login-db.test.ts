@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { DatabaseSync } from 'node:sqlite';
-import { savePendingLogin, consumePendingLogin } from './index';
+import { savePendingLogin, consumePendingLogin } from './utils/emailConfirmGate';
 
 function wrapD1(db: DatabaseSync) {
   return {

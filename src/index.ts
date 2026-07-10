@@ -61,9 +61,9 @@ import { verifyResendWebhookSignature } from './utils/resendWebhook';
 import { verifyGitHubWebhookSignature } from './utils/githubWebhook';
 import { extractCfAuthUsername } from './utils/cfAuthAccess';
 import { postSlackMessage, openSlackModal, respondToInteraction } from './utils/slack';
-import { sendTestEmailResend, sendLoginConfirmEmail } from './utils/emailVerify';
-import { isPendingLoginExpired, shouldGateLoginOnEmailConfirmation, buildAuthRedirectHeaders, PENDING_LOGIN_TTL_MS, type PendingLoginRecord } from './utils/emailConfirm';
-import { escapeHtml } from './utils/html';
+import { sendTestEmailResend } from './utils/emailVerify';
+import { buildAuthRedirectHeaders } from './utils/emailConfirm';
+import { runEmailConfirmGate, resolveEmailConfirmToken, renderLoginConfirmErrorPage, isEmailConfirmLoginEnabled } from './utils/emailConfirmGate';
 import { fetchPrDiff, runSummaryPipeline, buildSlackMessage, buildSummaryModal, buildSummaryFallbackBlocks, classifySummaryResult, resolveAiModel, extractDesignDiff, sanitizeBoxDrawing, detectCommitAgentFromText, detectCommitAgentFromPrText, describeModelSwitch, WORKER_BASE_URL, DESIGN_SPEC_CHECKLIST, DEFAULT_AI_MODEL, FALLBACK_AI_MODEL, type SummaryModalRow } from './utils/aiSummary';
 import { getSessionDurationSeconds, renewSession, resolveSessionDuration } from './utils/session';
 import { buildCommitAgentLogEntry, classifyCommitAgentFetchError } from './utils/commitAgentLog';
@@ -1193,6 +1193,7 @@ INSERT OR IGNORE INTO notification_settings (id, slack_enabled) VALUES (1, 0);`,
   expires_at TEXT NOT NULL,
   consumed_at TEXT
 );`,
+  '0077': `ALTER TABLE notification_settings ADD COLUMN email_confirm_login_enabled INTEGER NOT NULL DEFAULT 0;`,
 };
 
 async function ensureGroupTable(db: D1Database): Promise<void> {
@@ -2747,55 +2748,6 @@ async function getUserSession(db: D1Database | undefined, userId: string): Promi
   }
 }
 
-// メール確認待ちのログイン情報をD1に保存する
-export async function savePendingLogin(db: D1Database | undefined, record: PendingLoginRecord): Promise<boolean> {
-  if (!db) return false;
-  try {
-    await db.prepare(
-      `INSERT INTO email_confirm_tokens
-       (token, github_login, github_name, github_id, email, github_access_token, granted_scopes, timezone, session_duration, return_to, created_at, expires_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-    ).bind(
-      record.token,
-      record.githubLogin,
-      record.githubName,
-      record.githubId,
-      record.email,
-      record.githubAccessToken,
-      record.grantedScopes,
-      record.timezone,
-      record.sessionDuration,
-      record.returnToPath,
-      record.createdAt,
-      record.expiresAt
-    ).run();
-    return true;
-  } catch (error) {
-    logger.error('Error saving pending login token', { error: error instanceof Error ? error.message : 'Unknown error' });
-    return false;
-  }
-}
-
-// メール確認トークンを消費（一度きり）してログイン保留情報を取り出す
-export async function consumePendingLogin(db: D1Database | undefined, token: string): Promise<PendingLoginRecord | null> {
-  if (!db) return null;
-  try {
-    const row = await db.prepare(
-      `SELECT token, github_login as githubLogin, github_name as githubName, github_id as githubId,
-              email, github_access_token as githubAccessToken, granted_scopes as grantedScopes,
-              timezone, session_duration as sessionDuration, return_to as returnToPath,
-              created_at as createdAt, expires_at as expiresAt, consumed_at as consumedAt
-       FROM email_confirm_tokens WHERE token = ?`
-    ).bind(token).first<PendingLoginRecord & { consumedAt: string | null }>();
-    if (!row || row.consumedAt) return null;
-    await db.prepare('UPDATE email_confirm_tokens SET consumed_at = ? WHERE token = ?').bind(new Date().toISOString(), token).run();
-    return row;
-  } catch (error) {
-    logger.error('Error consuming pending login token', { error: error instanceof Error ? error.message : 'Unknown error' });
-    return null;
-  }
-}
-
 // ログイン確定処理（D1保存・JWT発行・Cookieセット）。
 // 即時ログイン(/auth/github/callback)とメール確認後ログイン(/auth/email-confirm)の
 // 両方から共通利用する。
@@ -3199,41 +3151,29 @@ app.get('/auth/github/callback', async (c) => {
     const returnToPath = validateReturnTo(returnToCookie ? decodeURIComponent(returnToCookie) : null) ?? '/welcome';
     const grantedScopesStr = grantedScopes.join(' ');
 
-    // RESEND_API_KEY設定時は、JWT発行前にメール確認(Resend送信+クリック)を挟む。
-    // GitHub側のメールは既に検証済みだが、そのメールを実際に受信できる人物が
-    // ログインしていることをResend経由で確認してから初めてトークンを発行する。
-    if (shouldGateLoginOnEmailConfirmation(c.env.RESEND_API_KEY, email || undefined)) {
-      phase = 'send-confirm-email';
-      const confirmToken = crypto.randomUUID();
-      const now = new Date();
-      const expiresAt = new Date(now.getTime() + PENDING_LOGIN_TTL_MS);
-      const saved = await savePendingLogin(c.env.DB, {
-        token: confirmToken,
-        githubLogin: userId,
-        githubName: githubUser.name || userId,
-        githubId: githubUser.id,
-        email: email as string,
-        githubAccessToken: accessToken,
-        grantedScopes: grantedScopesStr,
-        timezone,
-        sessionDuration,
-        returnToPath,
-        createdAt: now.toISOString(),
-        expiresAt: expiresAt.toISOString(),
-      });
+    // ユーザーオプション(デフォルトOFF)がONかつRESEND_API_KEY設定時のみ、
+    // JWT発行前にメール確認(Resend送信+クリック)を挟む。EVP関連のロジックは
+    // すべて utils/emailConfirmGate.ts に集約されており、ここでは結果に従って
+    // 分岐するだけでよい。
+    phase = 'email-confirm-gate';
+    const gateResult = await runEmailConfirmGate(c.env.DB, c.env.RESEND_API_KEY, `${url.protocol}//${url.host}`, {
+      githubLogin: userId,
+      githubName: githubUser.name || userId,
+      githubId: githubUser.id,
+      email: email || undefined,
+      accessToken,
+      grantedScopes: grantedScopesStr,
+      timezone,
+      sessionDuration,
+      returnToPath,
+    });
 
-      if (!saved) {
-        // トークン保存に失敗した場合(D1未接続等)はメール確認をスキップし、従来どおり即ログインを完了する
-        logger.warn('Pending login token save failed, skipping email confirmation gate', { userId });
-      } else {
-        const confirmUrl = `${url.protocol}//${url.host}/auth/email-confirm?token=${confirmToken}`;
-        const sendResult = await sendLoginConfirmEmail(c.env.RESEND_API_KEY as string, email as string, confirmUrl);
-        if (!sendResult.ok) {
-          logger.error('Failed to send login confirmation email', { userId, error: sendResult.error });
-          return jsonUtf8({ error: 'ログイン確認メールの送信に失敗しました。しばらくしてから再度お試しください。' }, 502);
-        }
-        return c.html(renderLoginConfirmPendingPage(email as string));
+    if (gateResult.gated) {
+      if ('errorStatus' in gateResult) {
+        logger.error('Failed to send login confirmation email', { userId, error: gateResult.errorMessage });
+        return jsonUtf8({ error: gateResult.errorMessage }, gateResult.errorStatus);
       }
+      return c.html(gateResult.html);
     }
 
     phase = 'finalize-login';
@@ -3277,25 +3217,10 @@ app.get('/auth/github/callback', async (c) => {
   }
 });
 
-function renderLoginConfirmPendingPage(email: string): string {
-  return `<!DOCTYPE html><html lang="ja"><head><meta charset="utf-8"><title>ログイン確認メール送信</title></head><body>
-<h1>確認メールを送信しました</h1>
-<p>${escapeHtml(email)} 宛にログイン確認メールを送信しました。メール内のリンクをクリックしてログインを完了してください。</p>
-<p>リンクの有効期限は30分です。</p>
-</body></html>`;
-}
-
-function renderLoginConfirmErrorPage(message: string): string {
-  return `<!DOCTYPE html><html lang="ja"><head><meta charset="utf-8"><title>ログイン確認エラー</title></head><body>
-<h1>ログインを完了できませんでした</h1>
-<p>${escapeHtml(message)}</p>
-<p><a href="/auth/github">もう一度ログインする</a></p>
-</body></html>`;
-}
-
 /**
  * メール確認リンクのクリックを受け取り、保留中のログインを完了する。
  * /auth/github/callback がメール確認をかけた場合の受け皿。
+ * トークンの検証・消費ロジックは utils/emailConfirmGate.ts に集約されている。
  */
 app.get('/auth/email-confirm', async (c) => {
   const confirmToken = c.req.query('token');
@@ -3308,15 +3233,12 @@ app.get('/auth/email-confirm', async (c) => {
     return jsonUtf8({ error: 'JWT_SECRET is not configured' }, 500);
   }
 
-  const record = await consumePendingLogin(c.env.DB, confirmToken);
-  if (!record) {
-    return c.html(renderLoginConfirmErrorPage('このリンクは無効か、既に使用されています。もう一度ログインをやり直してください。'), 400);
+  const resolved = await resolveEmailConfirmToken(c.env.DB, confirmToken);
+  if (!resolved.ok) {
+    return c.html(renderLoginConfirmErrorPage(resolved.message), 400);
   }
 
-  if (isPendingLoginExpired(record)) {
-    return c.html(renderLoginConfirmErrorPage('このリンクの有効期限が切れています。もう一度ログインをやり直してください。'), 400);
-  }
-
+  const record = resolved.record;
   return await finalizeGithubLogin(c, {
     githubLogin: record.githubLogin,
     githubName: record.githubName,
@@ -6310,6 +6232,7 @@ app.get('/settings', authMiddleware, async (c) => {
   const sessionDuration = resolveSessionDuration(userSession?.sessionDuration, cookieVals['user_session_duration']);
   const recentCommitsCount = userSession?.recentCommitsCount ?? (parseInt(cookieVals['user_recent_commits_count'] ?? '', 10) || 20);
   const toastDuration = userSession?.toastDuration ?? (parseInt(cookieVals['user_toast_duration'] ?? '', 10) || 10);
+  const emailConfirmLoginEnabled = await isEmailConfirmLoginEnabled(c.env.DB);
 
   let grantedScopes: string[] | null = null;
   let scopesError: string | null = null;
@@ -6360,6 +6283,7 @@ app.get('/settings', authMiddleware, async (c) => {
     apisSidebarAccordion,
     apisDescMode,
     apisNavFlash,
+    emailConfirmLoginEnabled,
     githubScopes: GITHUB_OAUTH_SCOPE,
     githubGrantedScopes: grantedScopes,
     githubScopeError: scopesError,
@@ -11034,6 +10958,32 @@ app.get('/api/settings/slack-notify', async (c) => {
   }
   const enabled = await isSlackNotifyEnabled(c.env.DB);
   return c.json({ enabled });
+});
+
+/**
+ * OAuthログイン時のメール確認ゲート(EVP)ON/OFFユーザーオプション(デフォルトOFF)。
+ * ONにするとログインの都度Resend経由の確認メール+リンククリックが必須になるため、
+ * Resend側の障害等でメールが届かない場合にログイン不能になりうる。
+ * デフォルトOFFで、設定ページから明示的にONにした場合のみ有効になる。
+ */
+app.post('/api/settings/email-confirm-login', authMiddleware, async (c) => {
+  try {
+    if (!c.env.DB) return c.json({ error: 'DBが利用できません' }, 503);
+    const { enabled } = await c.req.json() as { enabled: unknown };
+    if (typeof enabled !== 'boolean') {
+      return c.json({ error: 'enabled はboolean値で指定してください' }, 400);
+    }
+    await c.env.DB.prepare(
+      `INSERT INTO notification_settings (id, email_confirm_login_enabled, updated_at) VALUES (1, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET email_confirm_login_enabled = excluded.email_confirm_login_enabled, updated_at = excluded.updated_at`
+    ).bind(enabled ? 1 : 0, new Date().toISOString()).run();
+    return c.json({ ok: true, enabled });
+  } catch (error) {
+    logger.error('Email confirm login gate setting update error', {
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    return c.json({ error: 'ログイン確認メールゲート設定の変更に失敗しました' }, 500);
+  }
 });
 
 /**

@@ -21,11 +21,14 @@ export function isPendingLoginExpired(record: Pick<PendingLoginRecord, 'expiresA
 
 /**
  * ログイン完了(JWT発行)の前にメール確認を挟むべきかを判定する。
- * RESEND_API_KEY 未設定、またはGitHub側からメールアドレスが取れない場合は
- * 確認手段が無いため従来どおり即ログインを完了する。
+ * enabled(ユーザーオプション、デフォルトOFF)がfalseの場合は常に即ログイン。
+ * enabled=trueでも RESEND_API_KEY 未設定、またはGitHub側からメールアドレスが
+ * 取れない場合は確認手段が無いため従来どおり即ログインを完了する。
+ * デフォルトOFFにしているのは、Resend側の障害等でメールが届かない場合に
+ * ログイン不能になる事態を避けるため。
  */
-export function shouldGateLoginOnEmailConfirmation(resendApiKey: string | undefined, email: string | undefined): boolean {
-  return !!resendApiKey && !!email;
+export function shouldGateLoginOnEmailConfirmation(enabled: boolean, resendApiKey: string | undefined, email: string | undefined): boolean {
+  return enabled && !!resendApiKey && !!email;
 }
 
 export interface AuthRedirectParams {

@@ -27,6 +27,7 @@ export function getSettingsPage(user: {
   apisSidebarAccordion?: string;
   apisDescMode?: string;
   apisNavFlash?: string;
+  emailConfirmLoginEnabled?: boolean;
   githubScopes?: string;
   githubGrantedScopes?: string[] | null;
   githubScopeError?: string | null;
@@ -51,6 +52,7 @@ export function getSettingsPage(user: {
   const rawNavFlash = user.apisNavFlash ?? '7';
   const currentApisNavFlashOn = rawNavFlash !== 'off';
   const currentApisNavFlashCount = (currentApisNavFlashOn && /^[0-9]+$/.test(rawNavFlash)) ? rawNavFlash : '7';
+  const currentEmailConfirmLoginEnabled = user.emailConfirmLoginEnabled === true;
   const requestedScopes = user.githubScopes ? user.githubScopes.split(/\s+/).filter(Boolean) : [];
   const grantedScopes = user.githubGrantedScopes ?? null;
   const scopeError = user.githubScopeError ? escapeHtml(user.githubScopeError) : null;
@@ -289,6 +291,17 @@ export function getSettingsPage(user: {
                 </select>
               </div>
               <input type="checkbox" class="setting-checkbox" id="idleTimeoutCheckbox" onchange="toggleIdleTimeoutEdit()">
+            </div>
+          </div>
+          <div class="info-item">
+            <span class="info-label">ログイン確認メール(EVP)を必須にする <span style="font-size:11px;color:var(--muted)">（デフォルトOFF。ONにするとログインの都度Resend経由の確認メール送信+リンククリックが必須になります。Resend側の障害等でメールが届かない場合ログインできなくなるリスクがあるためデフォルトOFFです）</span></span>
+            <div class="setting-control" style="justify-content: flex-end;">
+              <span class="theme-label" id="emailConfirmLoginLabel">${currentEmailConfirmLoginEnabled ? 'ON' : 'OFF'}</span>
+              <label class="theme-toggle-switch">
+                <input type="checkbox" id="emailConfirmLoginCheckbox" onchange="onEmailConfirmLoginChange()"
+                  ${currentEmailConfirmLoginEnabled ? 'checked' : ''}>
+                <span class="theme-toggle-slider"></span>
+              </label>
             </div>
           </div>
         </div>
@@ -1465,6 +1478,24 @@ export function getSettingsPage(user: {
       } catch(e) {
         alert('分類モード設定の変更に失敗しました');
         sel.value = 'uncategorized';
+      }
+    }
+
+    async function onEmailConfirmLoginChange() {
+      var cb = document.getElementById('emailConfirmLoginCheckbox');
+      var label = document.getElementById('emailConfirmLoginLabel');
+      var enabled = cb.checked;
+      label.textContent = enabled ? 'ON' : 'OFF';
+      try {
+        var res = await fetch('/api/settings/email-confirm-login', {
+          method: 'POST', headers: {'Content-Type':'application/json'}, credentials: 'include',
+          body: JSON.stringify({ enabled: enabled })
+        });
+        if (!res.ok) throw new Error('failed');
+      } catch(e) {
+        alert('ログイン確認メールゲート設定の変更に失敗しました');
+        cb.checked = !cb.checked;
+        label.textContent = cb.checked ? 'ON' : 'OFF';
       }
     }
 

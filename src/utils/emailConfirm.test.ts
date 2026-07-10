@@ -26,20 +26,24 @@ describe('isPendingLoginExpired', () => {
 });
 
 describe('shouldGateLoginOnEmailConfirmation', () => {
-  it('RESEND_API_KEYとemailが両方揃っている場合はtrue(確認メールを挟む)', () => {
-    expect(shouldGateLoginOnEmailConfirmation('re_xxx', 'a@example.com')).toBe(true);
+  it('enabled=true かつ RESEND_API_KEYとemailが両方揃っている場合はtrue(確認メールを挟む)', () => {
+    expect(shouldGateLoginOnEmailConfirmation(true, 're_xxx', 'a@example.com')).toBe(true);
   });
 
-  it('RESEND_API_KEYが未設定なら確認手段が無いためfalse(従来どおり即ログイン)', () => {
-    expect(shouldGateLoginOnEmailConfirmation(undefined, 'a@example.com')).toBe(false);
+  it('enabled=false(デフォルトOFF)なら他が揃っていてもfalse(即ログイン、ロックアウト防止)', () => {
+    expect(shouldGateLoginOnEmailConfirmation(false, 're_xxx', 'a@example.com')).toBe(false);
   });
 
-  it('GitHub側にemailが無い場合も送り先が無いためfalse(従来どおり即ログイン)', () => {
-    expect(shouldGateLoginOnEmailConfirmation('re_xxx', undefined)).toBe(false);
+  it('enabled=true でも RESEND_API_KEYが未設定なら確認手段が無いためfalse(従来どおり即ログイン)', () => {
+    expect(shouldGateLoginOnEmailConfirmation(true, undefined, 'a@example.com')).toBe(false);
   });
 
-  it('両方とも無い場合もfalse', () => {
-    expect(shouldGateLoginOnEmailConfirmation(undefined, undefined)).toBe(false);
+  it('enabled=true でも GitHub側にemailが無い場合も送り先が無いためfalse(従来どおり即ログイン)', () => {
+    expect(shouldGateLoginOnEmailConfirmation(true, 're_xxx', undefined)).toBe(false);
+  });
+
+  it('すべて無い場合もfalse', () => {
+    expect(shouldGateLoginOnEmailConfirmation(false, undefined, undefined)).toBe(false);
   });
 });
 
