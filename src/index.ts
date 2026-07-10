@@ -179,6 +179,7 @@ const STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
   { name: 'heritage_area_boxes',        migration: '0072',   description: '世界遺産ページの保存済みエリア範囲（テーブルA相当）',          syncPolicy: 'auto' },
   { name: 'heritage_area_items',        migration: '0073',   description: '保存済みエリア内の世界遺産・空港・駅・火山などの紐付け',      syncPolicy: 'auto' },
   { name: 'slack_installations',        migration: '0071',   description: 'Slack OAuthワークスペースインストール情報（botトークン等）',   syncPolicy: 'manual' },
+  { name: 'notification_settings',      migration: '0075',   description: 'Slack通知ON/OFFのユーザーオプション設定（単一行）',            syncPolicy: 'auto' },
 ];
 
 const REQUIRED_STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
@@ -1168,6 +1169,12 @@ CREATE TABLE IF NOT EXISTS ts_function_callers (
 );
 CREATE INDEX IF NOT EXISTS idx_tfcr_callee ON ts_function_callers(callee_id);
 CREATE INDEX IF NOT EXISTS idx_tfcr_file   ON ts_function_callers(repo_id, caller_file);`,
+  '0075': `CREATE TABLE IF NOT EXISTS notification_settings (
+  id INTEGER PRIMARY KEY CHECK (id = 1),
+  slack_enabled INTEGER NOT NULL DEFAULT 0,
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+INSERT OR IGNORE INTO notification_settings (id, slack_enabled) VALUES (1, 0);`,
 };
 
 async function ensureGroupTable(db: D1Database): Promise<void> {
@@ -1369,6 +1376,7 @@ export const TABLE_COLUMN_KEYS: Record<string, ColumnKeyInfo> = {
   rail_station_nearby_points: { id: 'pk', station_name: 'idx', point_type: 'idx', point_name: 'idx' },
   rail_station_nearby_fetched: { station_name: 'pk' },
   slack_installations: { id: 'pk', team_id: 'uk', installed_by_user: 'fk' },
+  notification_settings: { id: 'pk' },
 };
 
 export function getColumnKeyType(tableName: string, columnName: string): ColumnKeyType {
@@ -1419,7 +1427,7 @@ export const TABLE_GROUP_MAP: Record<string, string> = {
   ai_summary_log: 'ai', ai_summary_reviews: 'ai', commit_agent_log: 'ai',
   resend_webhook_sources: 'email', email_send_log: 'email', resend_webhook_log: 'email',
   email_suppression_list: 'email', email_mfa_challenges: 'email', email_audit_anomalies: 'email',
-  slack_interaction_log: 'config', slack_installations: 'config',
+  slack_interaction_log: 'config', slack_installations: 'config', notification_settings: 'config',
   installation_permissions: 'config', repo_color_settings: 'config', repo_groups: 'config',
   repo_group_members: 'config', group_oauth_apps: 'config', table_catalog: 'config', table_column_keys: 'config',
   ai_summary_link_access_log: 'ai',
@@ -2086,6 +2094,32 @@ async function logWebhookEvent(
   } catch (e) {
     logger.error('Failed to log webhook event', { source, error: e instanceof Error ? e.message : 'Unknown' });
   }
+}
+
+/**
+ * Slack通知のON/OFFユーザーオプション(デフォルトOFF)。notification_settingsテーブルが
+ * 無い/行が無い場合もデフォルトOFFとして扱う。
+ */
+export async function isSlackNotifyEnabled(db: D1Database | undefined): Promise<boolean> {
+  if (!db) return false;
+  try {
+    const row = await db.prepare(
+      'SELECT slack_enabled FROM notification_settings WHERE id = 1'
+    ).first<{ slack_enabled: number }>();
+    return !!row?.slack_enabled;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * resolveNotifyConfig に、D1で管理するSlack通知ON/OFFユーザーオプションを合成する。
+ * target='worker'のときはこのフラグを参照しない(isNotifyConfigured側の挙動と対応)。
+ */
+async function resolveNotifyConfigWithSetting(env: Bindings): Promise<ReturnType<typeof resolveNotifyConfig>> {
+  const config = resolveNotifyConfig(env);
+  config.enabled = await isSlackNotifyEnabled(env.DB);
+  return config;
 }
 
 async function logCfAuthAccessResult(
@@ -3108,7 +3142,7 @@ app.get('/auth/github/callback', async (c) => {
     });
 
     // ログイン失敗を通知（Slack/外部Workerの切替は NOTIFY_TARGET に従う）
-    const loginFailureNotifyConfig = resolveNotifyConfig(c.env);
+    const loginFailureNotifyConfig = await resolveNotifyConfigWithSetting(c.env);
     if (isNotifyConfigured(loginFailureNotifyConfig)) {
       const ip = c.req.header('CF-Connecting-IP') ?? c.req.header('X-Forwarded-For') ?? 'unknown';
       const errMsg = error instanceof Error ? error.message : 'Unknown error';
@@ -5084,7 +5118,7 @@ app.post('/api/tsubuyaki', authMiddleware, async (c) => {
 
   const displayName = user.name || user.sub;
   const message = buildFreeTextSlackMessage(displayName, validated.text);
-  const notifyConfig = resolveNotifyConfig(c.env);
+  const notifyConfig = await resolveNotifyConfigWithSetting(c.env);
   const result = await dispatchNotification(notifyConfig, { text: message });
   if (!result.ok) {
     // status未設定 = 送信先が未設定（503）、status設定あり = 送信を試みて失敗した（502）
@@ -8033,7 +8067,7 @@ app.post('/webhook/github', async (c) => {
     }
 
     // 通知: GitHub App インストール変更（Slack/外部Workerの切替は NOTIFY_TARGET に従う）
-    const installNotifyConfig = resolveNotifyConfig(c.env);
+    const installNotifyConfig = await resolveNotifyConfigWithSetting(c.env);
     if (isNotifyConfigured(installNotifyConfig)) {
       const sender = payload?.sender?.login ?? 'unknown';
       const appSlug = installation?.app_slug ?? 'unknown';
@@ -8107,7 +8141,7 @@ app.post('/webhook/github', async (c) => {
     if (prAction === 'opened' || prAction === 'synchronize') {
       const pr = prPayload?.pull_request;
       const repoFullName = prPayload?.repository?.full_name ?? 'unknown';
-      const prNotifyConfig = resolveNotifyConfig(c.env);
+      const prNotifyConfig = await resolveNotifyConfigWithSetting(c.env);
       const ai = c.env.AI;
       const githubToken = c.env.GITHUB_TOKEN;
 
@@ -10098,7 +10132,7 @@ app.post('/slack/commands', async (c) => {
 
   if (command === '/pts') {
     const text = (form.get('text') || '').trim();
-    const notifyConfig = resolveNotifyConfig(c.env);
+    const notifyConfig = await resolveNotifyConfigWithSetting(c.env);
     const sendNotification = (message: { text: string }) => dispatchNotification(notifyConfig, message);
 
     if (text.toLowerCase() === 'f1') {
@@ -10195,7 +10229,7 @@ app.post('/webhook/cf-auth', async (c) => {
     )
   );
 
-  const cfAuthNotifyConfig = resolveNotifyConfig(c.env);
+  const cfAuthNotifyConfig = await resolveNotifyConfigWithSetting(c.env);
   if (isNotifyConfigured(cfAuthNotifyConfig)) {
     const lines = [
       `cf-auth: ${event}${action ? ' / ' + action : ''}`,
@@ -10302,7 +10336,7 @@ async function handleResendWebhookCore(
   const bounceType = webhookData.bounce?.type ?? null;
   const errorDetail = webhookData.bounce?.message ?? webhookData.error?.message ?? null;
 
-  const resendNotifyConfig = resolveNotifyConfig(c.env);
+  const resendNotifyConfig = await resolveNotifyConfigWithSetting(c.env);
 
   const deliveryStatus = eventType === 'email.delivered'
     ? '送信完了'
@@ -10789,6 +10823,44 @@ app.post('/api/settings/idle-timeout', authMiddleware, async (c) => {
 });
 
 /**
+ * Slack通知ON/OFFのユーザーオプション設定(デフォルトOFF)を変更する。
+ */
+app.post('/api/settings/slack-notify', authMiddleware, async (c) => {
+  try {
+    if (!c.env.DB) return c.json({ error: 'DBが利用できません' }, 503);
+    const { enabled } = await c.req.json() as { enabled: unknown };
+    if (typeof enabled !== 'boolean') {
+      return c.json({ error: 'enabled はboolean値で指定してください' }, 400);
+    }
+    await c.env.DB.prepare(
+      `INSERT INTO notification_settings (id, slack_enabled, updated_at) VALUES (1, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET slack_enabled = excluded.slack_enabled, updated_at = excluded.updated_at`
+    ).bind(enabled ? 1 : 0, new Date().toISOString()).run();
+    return c.json({ ok: true, enabled });
+  } catch (error) {
+    logger.error('Slack notify setting update error', {
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    return c.json({ error: 'Slack通知設定の変更に失敗しました' }, 500);
+  }
+});
+
+/**
+ * Slack通知ON/OFFの現在値を返す。cf-authアプリ等の外部サービスから参照できるよう、
+ * ログインCookieではなくCF_AUTH_WEBHOOK_SECRETの共有シークレットで認証する。
+ */
+app.get('/api/settings/slack-notify', async (c) => {
+  const secret = c.env.CF_AUTH_WEBHOOK_SECRET;
+  const authHeader = c.req.header('Authorization') ?? '';
+  const bearer = authHeader.startsWith('Bearer ') ? authHeader.slice('Bearer '.length) : null;
+  if (!secret || !bearer || bearer !== secret) {
+    return c.json({ error: 'Unauthorized' }, 401);
+  }
+  const enabled = await isSlackNotifyEnabled(c.env.DB);
+  return c.json({ enabled });
+});
+
+/**
  * /status の月別コミットキャッシュ詳細ソート設定変更
  */
 app.post('/api/settings/status-commit-cache-sort-mode', authMiddleware, async (c) => {
@@ -11091,7 +11163,7 @@ app.post('/api/admin/revoke-session', authMiddleware, async (c) => {
   if (result.meta.changes === 0) {
     return c.json({ error: 'セッションが見つからないか既にrevoke済みです' }, 404);
   }
-  const revokeNotifyConfig = resolveNotifyConfig(c.env);
+  const revokeNotifyConfig = await resolveNotifyConfigWithSetting(c.env);
   if (isNotifyConfigured(revokeNotifyConfig)) {
     dispatchNotification(revokeNotifyConfig, {
       text: `[管理操作] セッション強制revoke\n対象ユーザー: ${targetUserId}\n操作者: ${actor.sub}\n理由: ${reason ?? '（未記入）'}`,

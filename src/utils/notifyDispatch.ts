@@ -22,6 +22,8 @@ export type NotifyConfig = {
   slackChannel?: string;
   workerUrl?: string;
   workerSecret?: string;
+  /** target='slack'のときだけ参照するユーザーオプション(デフォルトOFF)。falseならSlackへは送らない */
+  enabled?: boolean;
 };
 
 export type NotifyMessage = {
@@ -54,6 +56,7 @@ export function isNotifyConfigured(config: NotifyConfig): boolean {
   if (config.target === 'worker') {
     return !!config.workerUrl;
   }
+  if (config.enabled === false) return false;
   return !!config.slackToken && !!config.slackChannel;
 }
 

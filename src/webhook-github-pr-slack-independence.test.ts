@@ -37,7 +37,7 @@ describe('POST /webhook/github: pull_request イベントのSlack非依存化', 
 
   it('通知先はresolveNotifyConfigで解決し、実際の送信だけがisNotifyConfiguredでゲートされている（NOTIFY_TARGETで切替可能）', () => {
     const prSectionIdx = webhookBlock.indexOf("eventType === 'pull_request'");
-    expect(webhookBlock.indexOf('const prNotifyConfig = resolveNotifyConfig(c.env);', prSectionIdx)).toBeGreaterThan(-1);
+    expect(webhookBlock.indexOf('const prNotifyConfig = await resolveNotifyConfigWithSetting(c.env);', prSectionIdx)).toBeGreaterThan(-1);
     const idx = webhookBlock.indexOf('if (isNotifyConfigured(prNotifyConfig)) {', prSectionIdx);
     expect(idx).toBeGreaterThan(-1);
     const block = webhookBlock.slice(idx, idx + 400);
