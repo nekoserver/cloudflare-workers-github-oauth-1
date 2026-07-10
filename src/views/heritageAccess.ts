@@ -1531,6 +1531,10 @@ function renderAirportHrRanking() {
   airportHrTitle.textContent = '🛬 空港周辺300km以内の世界遺産数ランキング';
   airportHrBody.innerHTML = '<div style="color:#8b949e;text-align:center;padding:16px 0">読み込み中...</div>';
   fetch('/api/airport-nearby-heritage-ranking').then(function(r) { return r.json(); }).then(function(d) {
+    if (d && d.error) {
+      airportHrBody.innerHTML = '<div style="color:#f85149;text-align:center;padding:16px 0">取得に失敗: ' + escHtml(d.error) + '</div>';
+      return;
+    }
     airportHrRows = d.rows || [];
     var rows = buildAirportHrRanking(airportHrRows);
     if (rows.length === 0) {
