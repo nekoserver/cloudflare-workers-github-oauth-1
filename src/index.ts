@@ -61,6 +61,7 @@ import { verifyResendWebhookSignature } from './utils/resendWebhook';
 import { verifyGitHubWebhookSignature } from './utils/githubWebhook';
 import { extractCfAuthUsername } from './utils/cfAuthAccess';
 import { postSlackMessage, openSlackModal, respondToInteraction } from './utils/slack';
+import { verifyEmailAbstract } from './utils/emailVerify';
 import { fetchPrDiff, runSummaryPipeline, buildSlackMessage, buildSummaryModal, buildSummaryFallbackBlocks, classifySummaryResult, resolveAiModel, extractDesignDiff, sanitizeBoxDrawing, detectCommitAgentFromText, detectCommitAgentFromPrText, describeModelSwitch, WORKER_BASE_URL, DESIGN_SPEC_CHECKLIST, DEFAULT_AI_MODEL, FALLBACK_AI_MODEL, type SummaryModalRow } from './utils/aiSummary';
 import { getSessionDurationSeconds, renewSession, resolveSessionDuration } from './utils/session';
 import { buildCommitAgentLogEntry, classifyCommitAgentFetchError } from './utils/commitAgentLog';
@@ -3653,6 +3654,22 @@ app.get('/api/aichat/shares/search', authMiddleware, async (c) => {
 
   const { results } = await searchAiChatShares(c.env.DB as unknown as D1Like, user.sub, q);
   return jsonUtf8({ results });
+});
+
+/**
+ * ログインユーザー自身のメールアドレスをAbstract APIで検証するテスト用エンドポイント。
+ * ABSTRACT_EMAIL_API_KEY 未設定時はデフォルトOFF（動作確認用オプション機能）。
+ */
+app.get('/api/email-verify-test', authMiddleware, async (c) => {
+  const apiKey = c.env.ABSTRACT_EMAIL_API_KEY;
+  if (!apiKey) return jsonUtf8({ enabled: false, message: 'メール検証機能は現在無効です(ABSTRACT_EMAIL_API_KEY未設定)' });
+
+  const user = c.get('user');
+  if (!user.email) return jsonUtf8({ enabled: true, error: 'ログインユーザーにメールアドレスが設定されていません' }, 400);
+
+  const result = await verifyEmailAbstract(apiKey, user.email);
+  if (!result.ok) return jsonUtf8({ enabled: true, error: 'メール検証に失敗しました', detail: result.error }, 502);
+  return jsonUtf8({ enabled: true, result: result.data });
 });
 
 app.get('/api/aichat/check-heritage-questions', authMiddleware, async (c) => {
