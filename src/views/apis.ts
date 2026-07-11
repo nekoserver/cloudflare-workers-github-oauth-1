@@ -14,6 +14,7 @@ export function getApisPage(): string {
   --get:#1a7f37;--get-bg:#dafbe1;--post:#0969da;--post-bg:#ddf4ff;
   --put:#9a6700;--put-bg:#fff8c5;--delete:#cf222e;--delete-bg:#ffebe9;
   --patch:#6639ba;--patch-bg:#fbefff;--hl:#ddf4ff;
+  --query:#116329;--query-bg:#d3f2dd;
   --search-hl:#ffe066;--search-hl-text:#1f2328;
 }
 @media(prefers-color-scheme:dark){
@@ -21,7 +22,7 @@ export function getApisPage(): string {
   --link:#58a6ff;--hl:#0c2d6b;
   --get:#3fb950;--get-bg:#0f2b18;--post:#58a6ff;--post-bg:#0c2d6b;
   --put:#e3b341;--put-bg:#2d1f00;--delete:#f85149;--delete-bg:#300a0a;
-  --patch:#bc8cff;--patch-bg:#1d0f33;--search-hl:#6b5000;--search-hl-text:#e6edf3;}
+  --patch:#bc8cff;--patch-bg:#1d0f33;--query:#56d364;--query-bg:#0d2818;--search-hl:#6b5000;--search-hl-text:#e6edf3;}
 }
 *{box-sizing:border-box;margin:0;padding:0;}
 body{display:flex;flex-direction:column;height:100vh;height:100dvh;overflow:hidden;background:var(--bg);color:var(--text);font:13px/1.5 system-ui,sans-serif;}
@@ -136,6 +137,7 @@ body{display:flex;flex-direction:column;height:100vh;height:100dvh;overflow:hidd
 .badge-PUT{background:var(--put-bg);color:var(--put);}
 .badge-DELETE{background:var(--delete-bg);color:var(--delete);}
 .badge-PATCH{background:var(--patch-bg);color:var(--patch);}
+.badge-QUERY{background:var(--query-bg);color:var(--query);}
 .ep-path{
   font-size:11px;color:var(--text);flex:1;min-width:0;
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
@@ -590,6 +592,10 @@ const APIS = [
       res:{stats:[{heritage_name:'富士山',city_count:5,unique_city_count:3}]} },
     { method:'POST', path:'/api/heritage-country-unique-cities', desc:'重複除去済みの近隣都市一覧取得', body:[{n:'names',req:true,s:['富士山','厳島神社']}],
       res:{cities:[{city_name:'富士宮市',heritage_name:'富士山',distance_km:15}]} },
+    { method:'POST', path:'/api/heritage-area/search', desc:'世界遺産の検索露出ログ検索(キーワード最大20件)', body:[{n:'keywords',req:true,s:['姫路城']}],
+      res:{items:[{item_name:'姫路城',impression_count:3}],distance_origin:{name:'姫路城',flag:'🇯🇵',country:'日本',lat:34.84,lon:134.69}} },
+    { method:'QUERY', path:'/api/heritage-area/search', desc:'世界遺産の検索露出ログ検索(HTTP QUERY版・POSTと同一ハンドラ)', body:[{n:'keywords',req:true,s:['姫路城']}],
+      res:{items:[{item_name:'姫路城',impression_count:3}],distance_origin:{name:'姫路城',flag:'🇯🇵',country:'日本',lat:34.84,lon:134.69}} },
     { method:'GET',  path:'/api/rail-station-cities', desc:'鉄道駅の近隣都市一覧取得', query:[{n:'name',req:true,s:'東京駅'}],
       res:{fetched:true,cities:[{city_name:'川崎市',distance_km:20,lat:35.5,lon:139.7}]} },
     { method:'POST', path:'/api/rail-station-cities', desc:'鉄道駅の近隣都市を検索・保存', body:[{n:'name',req:true,s:'東京駅'},{n:'lat',req:true,s:35.681},{n:'lon',req:true,s:139.767},{n:'force',s:false}],
@@ -1382,7 +1388,7 @@ async function sendRequest() {
     if (qps.length) path += '?' + qps.join('&');
 
     const opts = { method: currentEp.method, headers: { 'Content-Type': 'application/json' } };
-    if (['POST','PUT','PATCH','DELETE'].includes(currentEp.method) && currentEp.body?.length) {
+    if (['POST','PUT','PATCH','DELETE','QUERY'].includes(currentEp.method) && currentEp.body?.length) {
       opts.body = document.getElementById('body-area').value;
     }
 
