@@ -6011,6 +6011,25 @@ app.get('/api/heritage-access-ranking', authMiddleware, async (c) => {
   return c.json({ rows: rows.results, max_dist: maxDist });
 });
 
+app.get('/api/heritage-access/nearby-cities', authMiddleware, async (c) => {
+  const db = c.env.DB;
+  if (!db) return c.json({ error: 'DB unavailable' }, 503);
+  const lat = Number(c.req.query('lat'));
+  const lon = Number(c.req.query('lon'));
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return c.json({ error: '緯度・経度が不正です' }, 400);
+  const RADIUS_KM = 500;
+  const rows = await db.prepare(
+    `SELECT city_name, country_code, ROUND(AVG(city_lat), 4) AS city_lat, ROUND(AVG(city_lon), 4) AS city_lon, MAX(population) AS population
+       FROM heritage_cities
+      GROUP BY city_name, country_code`
+  ).all<{ city_name: string; country_code: string | null; city_lat: number; city_lon: number; population: number | null }>();
+  const cities = (rows.results || [])
+    .map((r) => ({ ...r, distance_km: Math.round(haversineKm(lat, lon, r.city_lat, r.city_lon) * 10) / 10 }))
+    .filter((r) => r.distance_km <= RADIUS_KM)
+    .sort((a, b) => a.distance_km - b.distance_km);
+  return c.json({ cities, count: cities.length, radius_km: RADIUS_KM });
+});
+
 app.get('/heritage-access', authMiddleware, async (c) => {
   const user = c.get('user');
   return c.html(getHeritageAccessPage(user.sub));

@@ -240,6 +240,7 @@ ${renderKeywordClassifyPanelCss()}
   <button id="btn-cap-dist" style="margin-left:8px;background:var(--btn-bg,#21262d);border:1px solid var(--border,#30363d);color:var(--fg,#e6edf3);padding:6px 12px;border-radius:6px;cursor:pointer;font-size:13px">🌍 首都間距離</button>
   <button id="btn-rail-hr" style="margin-left:8px;background:var(--btn-bg,#21262d);border:1px solid var(--border,#30363d);color:var(--fg,#e6edf3);padding:6px 12px;border-radius:6px;cursor:pointer;font-size:13px">🚉 駅周辺の世界遺産</button>
   <button id="btn-airport-hr" style="margin-left:8px;background:var(--btn-bg,#21262d);border:1px solid var(--border,#30363d);color:var(--fg,#e6edf3);padding:6px 12px;border-radius:6px;cursor:pointer;font-size:13px">🛬 周辺の世界遺産</button>
+  <input type="text" id="city-dist-search" placeholder="世界遺産名 または 緯度,経度" style="margin-left:auto;background:var(--btn-bg,#21262d);border:1px solid var(--border,#30363d);color:var(--fg,#e6edf3);padding:6px 10px;border-radius:6px;font-size:13px;width:220px">
 </div>
 <div id="ai-modal-overlay" class="ai-modal-overlay">
   <div class="ai-modal">
@@ -318,6 +319,15 @@ ${renderKeywordClassifyPanelCss()}
       <button class="rail-hr-close" id="airport-hr-close">✕</button>
     </div>
     <div class="rail-hr-body" id="airport-hr-body"></div>
+  </div>
+</div>
+<div id="city-dist-overlay" class="rail-hr-overlay">
+  <div class="rail-hr-modal">
+    <div class="rail-hr-head">
+      <span class="rail-hr-title" id="city-dist-title">📍 半径500km以内の都市</span>
+      <button class="rail-hr-close" id="city-dist-close">✕</button>
+    </div>
+    <div class="rail-hr-body" id="city-dist-body"></div>
   </div>
 </div>
 <div class="summary-row">
@@ -1585,6 +1595,90 @@ document.getElementById('btn-airport-hr').addEventListener('click', function() {
   airportHrOverlay.style.zIndex = String(getNextZ());
   airportHrOverlay.classList.add('open');
   renderAirportHrRanking();
+});
+
+// ===== 距離上限行の検索窓: 世界遺産名/座標を起点とした半径500km以内の都市検索 =====
+var cityDistOverlay = document.getElementById('city-dist-overlay');
+var cityDistTitle = document.getElementById('city-dist-title');
+var cityDistBody = document.getElementById('city-dist-body');
+document.getElementById('city-dist-close').addEventListener('click', function() {
+  cityDistOverlay.classList.remove('open');
+});
+cityDistOverlay.addEventListener('click', function(e) {
+  if (e.target === cityDistOverlay) cityDistOverlay.classList.remove('open');
+});
+
+function normalizeCityDistQuery(value) {
+  return String(value || '').trim().replace(/[・･]/g, '・');
+}
+
+function parseCityDistCoord(trimmed) {
+  var commaIdx = trimmed.indexOf(',');
+  if (commaIdx === -1) commaIdx = trimmed.indexOf('、');
+  if (commaIdx === -1) return null;
+  var latStr = trimmed.slice(0, commaIdx).trim();
+  var lonStr = trimmed.slice(commaIdx + 1).trim();
+  if (!latStr || !lonStr) return null;
+  var lat = Number(latStr);
+  var lon = Number(lonStr);
+  if (!isFinite(lat) || !isFinite(lon)) return null;
+  if (lat < -90 || lat > 90 || lon < -180 || lon > 180) return null;
+  return { lat: lat, lon: lon };
+}
+
+function resolveCityDistPoint(query) {
+  var trimmed = String(query || '').trim();
+  var coord = parseCityDistCoord(trimmed);
+  if (coord) return { lat: coord.lat, lon: coord.lon, label: coord.lat + ', ' + coord.lon };
+  var normalized = normalizeCityDistQuery(trimmed);
+  var hit = HERITAGE_ALL.filter(function(h) { return normalizeCityDistQuery(h.n) === normalized; })[0];
+  if (hit) return { lat: hit.lat, lon: hit.lon, label: hit.f + ' ' + hit.n };
+  return null;
+}
+
+function renderCityDistResult(point) {
+  cityDistTitle.textContent = '📍 ' + point.label + ' から半径500km以内の都市';
+  cityDistBody.innerHTML = '<div style="color:#8b949e;text-align:center;padding:16px 0">読み込み中...</div>';
+  fetch('/api/heritage-access/nearby-cities?lat=' + encodeURIComponent(point.lat) + '&lon=' + encodeURIComponent(point.lon))
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      if (d && d.error) {
+        cityDistBody.innerHTML = '<div style="color:#f85149;text-align:center;padding:16px 0">取得に失敗: ' + escHtml(d.error) + '</div>';
+        return;
+      }
+      var cities = d.cities || [];
+      cityDistTitle.textContent = '📍 ' + point.label + ' から半径500km以内の都市 (' + cities.length + ')';
+      if (cities.length === 0) {
+        cityDistBody.innerHTML = '<div style="color:#8b949e;text-align:center;padding:16px 0">半径500km以内の都市データがありません</div>';
+        return;
+      }
+      var html = '';
+      cities.forEach(function(c) {
+        html += '<div class="rail-hr-h-row">' +
+          '<span class="rail-hr-h-name">' + ccToFlag(c.country_code) + ' ' + escHtml(c.city_name) + '</span>' +
+          '<span class="rail-hr-h-dist">' + c.distance_km.toFixed(1) + ' km</span>' +
+          '</div>';
+      });
+      cityDistBody.innerHTML = html;
+    })
+    .catch(function() {
+      cityDistBody.innerHTML = '<div style="color:#f85149;text-align:center;padding:16px 0">取得に失敗しました</div>';
+    });
+}
+
+var cityDistSearchInput = document.getElementById('city-dist-search');
+cityDistSearchInput.addEventListener('keydown', function(e) {
+  if (e.key !== 'Enter') return;
+  var query = cityDistSearchInput.value;
+  var point = resolveCityDistPoint(query);
+  cityDistOverlay.style.zIndex = String(getNextZ());
+  cityDistOverlay.classList.add('open');
+  if (!point) {
+    cityDistTitle.textContent = '📍 半径500km以内の都市';
+    cityDistBody.innerHTML = '<div style="color:#f85149;text-align:center;padding:16px 0">「' + escHtml(query) + '」が見つかりません(世界遺産名または「緯度,経度」で入力してください)</div>';
+    return;
+  }
+  renderCityDistResult(point);
 });
 
 initAutoLoad();
