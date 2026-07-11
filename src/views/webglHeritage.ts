@@ -1004,7 +1004,8 @@ void main() {
       key: 'airport', icon: '✈︎', label: '空港', color: '#79c0ff', bg: '#0c2233',
       getItems: function() { return getAirportsInBounds(); },
       locate: function(a) { return [a.lat, a.lon]; },
-      itemLabel: function(a) { return (hasAirportHeritageSet[a.name] ? '⛳️ ' : '') + a.city + ' ' + a.name + ' (' + a.code + ')'; },
+      itemIcon: function(a) { return a.city.split(' ')[0] + ' ✈︎'; },
+      itemLabel: function(a) { return (hasAirportHeritageSet[a.name] ? '⛳️ ' : '') + a.city.split(' ').slice(1).join(' ') + ' ' + a.name + ' (' + a.code + ')'; },
       showTooltip: function(a) {
         showGenericAreaTooltip(
           '<button class="pin-label-close-btn tt-airport-close-btn" aria-label="閉じる">✕</button>' +
@@ -1483,7 +1484,8 @@ void main() {
       'GIG':'🇧🇷','HAV':'🇨🇺',
       'JNB':'🇿🇦','NBO':'🇰🇪','CAI':'🇪🇬','LOS':'🇳🇬','ADD':'🇪🇹','CMN':'🇲🇦','ACC':'🇬🇭',
       'TPE':'🇹🇼','MNL':'🇵🇭','SGN':'🇻🇳','JED':'🇸🇦','TLV':'🇮🇱',
-      'ZRH':'🇨🇭','SVO':'🇷🇺','CPH':'🇩🇰','VIE':'🇦🇹'
+      'ZRH':'🇨🇭','SVO':'🇷🇺','CPH':'🇩🇰','VIE':'🇦🇹',
+      'INN':'🇦🇹','ERF':'🇩🇪','ORY':'🇫🇷','RUH':'🇸🇦','GDN':'🇵🇱','STR':'🇩🇪','GVA':'🇨🇭','SXB':'🇫🇷','LKCS':'🇨🇿','TRS':'🇮🇹','TRN':'🇮🇹','EPTO':'🇵🇱','NUE':'🇩🇪','NCE':'🇫🇷','HAM':'🇩🇪','BSL':'🇨🇭','PMI':'🇪🇸','BZG':'🇵🇱','FLR':'🇮🇹','BRQ':'🇨🇿','BRE':'🇩🇪','PRG':'🇨🇿','LKLN':'🇨🇿','BRN':'🇨🇭','BLX':'🇮🇹','HOF':'🇸🇦','POZ':'🇵🇱','MRS':'🇫🇷','MHG':'🇩🇪','MUC':'🇩🇪','MXP':'🇮🇹','LIN':'🇮🇹','ETZ':'🇫🇷','LEJ':'🇩🇪','RWN':'🇺🇦','LIS':'🇵🇹','LYS':'🇫🇷','LUG':'🇨🇭','EDNR':'🇩🇪','WAW':'🇵🇱','XCR':'🇫🇷','VCE':'🇮🇹','VRN':'🇮🇹'
     };
     var APT_REGIONS = [
       { label:'🌏 東アジア', open:true, airports:[
@@ -1514,7 +1516,9 @@ void main() {
         {code:'DOH',name:'ハマド国際空港',city:'🇶🇦 カタール・ドーハ',lat:25.27,lon:51.61,routes:['LHR','CDG','JFK','LAX','SIN','NRT','SYD','DEL','BOM','IST','FRA','AMS','DXB','JNB']},
         {code:'IST',name:'イスタンブール空港',city:'🇹🇷 トルコ・イスタンブール',lat:41.27,lon:28.75,routes:['LHR','CDG','FRA','JFK','DXB','SIN','AMS','JNB','GRU','LAX','MAD','DEL','NRT','FCO','SVO','TLV']},
         {code:'JED',name:'キング・アブドゥルアズィーズ国際空港',city:'🇸🇦 サウジアラビア・ジェッダ',lat:21.68,lon:39.16,routes:['DXB','DOH','IST','LHR','CDG','CAI']},
-        {code:'TLV',name:'ベン・グリオン国際空港',city:'🇮🇱 イスラエル・テルアビブ',lat:32.01,lon:34.89,routes:['IST','LHR','CDG','FRA','JFK','DXB']}
+        {code:'TLV',name:'ベン・グリオン国際空港',city:'🇮🇱 イスラエル・テルアビブ',lat:32.01,lon:34.89,routes:['IST','LHR','CDG','FRA','JFK','DXB']},
+        {code:'RUH',name:'キング・ハーリド国際空港',city:'🇸🇦 サウジアラビア・リヤド',lat:24.9576,lon:46.6988,routes:['DXB','DOH','IST','CAI','LHR']},
+        {code:'HOF',name:'ホファール国際空港',city:'🇸🇦 サウジアラビア・アルアハサー',lat:25.2853,lon:49.4852,routes:['RUH','DXB']}
       ]},
       { label:'🏰 ヨーロッパ', open:false, airports:[
         {code:'LHR',name:'ロンドン・ヒースロー空港',city:'🇬🇧 イギリス・ロンドン',lat:51.48,lon:-0.46,routes:['JFK','LAX','DXB','SIN','HKG','NRT','CDG','FRA','JNB','AMS','ICN','SYD','GRU','ORD','YYZ','DOH','IST','DEL','ZRH','VIE','CPH','ACC']},
@@ -1527,6 +1531,49 @@ void main() {
         {code:'SVO',name:'シェレメーチエヴォ国際空港',city:'🇷🇺 ロシア・モスクワ',lat:55.97,lon:37.42,routes:['IST','DXB','PEK','JFK','CDG']},
         {code:'CPH',name:'コペンハーゲン空港',city:'🇩🇰 デンマーク・コペンハーゲン',lat:55.62,lon:12.66,routes:['LHR','FRA','AMS','JFK','IST']},
         {code:'VIE',name:'ウィーン国際空港',city:'🇦🇹 オーストリア・ウィーン',lat:48.11,lon:16.57,routes:['LHR','FRA','IST','JFK','DXB']}
+      ]},
+      { label:'🏘️ ヨーロッパ（地方空港）', open:false, airports:[
+        {code:'INN',name:'インスブルック空港',city:'🇦🇹 オーストリア・インスブルック',lat:47.2602,lon:11.344,routes:['FRA','MUC','LHR']},
+        {code:'ERF',name:'エアフルト・ヴァイマル空港',city:'🇩🇪 ドイツ・エアフルト',lat:50.98,lon:10.9581,routes:['FRA','MUC']},
+        {code:'ORY',name:'オルリー空港',city:'🇫🇷 フランス・パリ',lat:48.7233,lon:2.3794,routes:['CDG','MAD','FCO','LIS']},
+        {code:'GDN',name:'グダニスク・レフ・ワレサ空港',city:'🇵🇱 ポーランド・グダニスク',lat:54.3776,lon:18.4662,routes:['WAW','FRA']},
+        {code:'STR',name:'シュトゥットガルト空港',city:'🇩🇪 ドイツ・シュトゥットガルト',lat:48.6899,lon:9.222,routes:['FRA','MUC','LHR']},
+        {code:'GVA',name:'ジュネーブ空港',city:'🇨🇭 スイス・ジュネーブ',lat:46.2381,lon:6.1089,routes:['ZRH','LHR','CDG','FRA']},
+        {code:'SXB',name:'ストラスブール空港',city:'🇫🇷 フランス・ストラスブール',lat:48.5383,lon:7.6282,routes:['CDG','FRA']},
+        {code:'LKCS',name:'チェスケー・ブジェヨヴィツェ空港',city:'🇨🇿 チェコ・チェスケー・ブジェヨヴィツェ',lat:48.9482,lon:14.4283,routes:['PRG']},
+        {code:'TRS',name:'トリエステ空港',city:'🇮🇹 イタリア・トリエステ',lat:45.8275,lon:13.4722,routes:['FCO','MXP']},
+        {code:'TRN',name:'トリノ空港',city:'🇮🇹 イタリア・トリノ',lat:45.2008,lon:7.6497,routes:['FCO','MXP','CDG']},
+        {code:'EPTO',name:'トルン空港',city:'🇵🇱 ポーランド・トルン',lat:53.0292,lon:18.5459,routes:['WAW']},
+        {code:'NUE',name:'ニュルンベルク空港',city:'🇩🇪 ドイツ・ニュルンベルク',lat:49.4987,lon:11.0669,routes:['FRA','MUC']},
+        {code:'NCE',name:'ニース・コート・ダジュール空港',city:'🇫🇷 フランス・ニース',lat:43.6584,lon:7.2159,routes:['CDG','ORY','LHR','FRA']},
+        {code:'HAM',name:'ハンブルク空港',city:'🇩🇪 ドイツ・ハンブルク',lat:53.6304,lon:9.9882,routes:['FRA','MUC','LHR']},
+        {code:'BSL',name:'バーゼル・ミュルーズ・フライブルク欧州空港',city:'🇨🇭 スイス/フランス・バーゼル',lat:47.5896,lon:7.5299,routes:['ZRH','CDG','FRA']},
+        {code:'PMI',name:'パルマ空港',city:'🇪🇸 スペイン・マヨルカ島',lat:39.5517,lon:2.7388,routes:['MAD','LHR','CDG','FRA']},
+        {code:'BZG',name:'ビドゴシュチュ・イグナツィ・ヤン・パデレフスキ空港',city:'🇵🇱 ポーランド・ビドゴシュチュ',lat:53.0968,lon:17.9777,routes:['WAW']},
+        {code:'FLR',name:'フィレンツェ空港',city:'🇮🇹 イタリア・フィレンツェ',lat:43.81,lon:11.2051,routes:['FCO','MXP']},
+        {code:'BRQ',name:'ブルノ・トゥライステ空港',city:'🇨🇿 チェコ・ブルノ',lat:49.1513,lon:16.6944,routes:['PRG','VIE']},
+        {code:'BRE',name:'ブレーメン空港',city:'🇩🇪 ドイツ・ブレーメン',lat:53.0475,lon:8.7867,routes:['FRA','MUC']},
+        {code:'PRG',name:'ヴァーツラフ・ハヴェル・プラハ国際空港',city:'🇨🇿 チェコ・プラハ',lat:50.1008,lon:14.26,routes:['LHR','CDG','FRA','VIE','IST','AMS']},
+        {code:'LKLN',name:'プルゼニ空港',city:'🇨🇿 チェコ・プルゼニ',lat:49.6752,lon:13.2746,routes:['PRG']},
+        {code:'BRN',name:'ベルン空港',city:'🇨🇭 スイス・ベルン',lat:46.9141,lon:7.4971,routes:['ZRH']},
+        {code:'BLX',name:'ベルーノ空港',city:'🇮🇹 イタリア・ベルーノ',lat:46.168,lon:12.248,routes:['FCO']},
+        {code:'POZ',name:'ポズナン・ヴァヴィスワ空港',city:'🇵🇱 ポーランド・ポズナン',lat:52.421,lon:16.8263,routes:['WAW','FRA']},
+        {code:'MRS',name:'マルセイユ・プロヴァンス空港',city:'🇫🇷 フランス・マルセイユ',lat:43.4393,lon:5.2214,routes:['CDG','ORY','LHR']},
+        {code:'MHG',name:'マンハイム・シティー空港',city:'🇩🇪 ドイツ・マンハイム',lat:49.4727,lon:8.5143,routes:['FRA']},
+        {code:'MUC',name:'ミュンヘン国際空港',city:'🇩🇪 ドイツ・ミュンヘン',lat:48.3538,lon:11.7861,routes:['FRA','LHR','CDG','JFK','IST','DXB']},
+        {code:'MXP',name:'ミラノ・マルペンサ空港',city:'🇮🇹 イタリア・ミラノ',lat:45.6306,lon:8.7281,routes:['FCO','LHR','CDG','FRA','JFK']},
+        {code:'LIN',name:'ミラノ・リナーテ空港',city:'🇮🇹 イタリア・ミラノ',lat:45.4451,lon:9.2767,routes:['FCO','CDG','FRA']},
+        {code:'ETZ',name:'メス・ナンシー・ロレーヌ空港',city:'🇫🇷 フランス・メス/ナンシー',lat:48.9821,lon:6.2513,routes:['CDG','ORY']},
+        {code:'LEJ',name:'ライプツィヒ・ハレ空港',city:'🇩🇪 ドイツ・ライプツィヒ',lat:51.4239,lon:12.2364,routes:['FRA','MUC']},
+        {code:'RWN',name:'リウネ空港',city:'🇺🇦 ウクライナ・リウネ',lat:50.6071,lon:26.1416,routes:['WAW']},
+        {code:'LIS',name:'リスボン・ポルテラ空港',city:'🇵🇹 ポルトガル・リスボン',lat:38.7813,lon:-9.1359,routes:['MAD','LHR','CDG','FRA','GRU']},
+        {code:'LYS',name:'リヨン・サン＝テグジュペリ空港',city:'🇫🇷 フランス・リヨン',lat:45.7256,lon:5.0811,routes:['CDG','ORY','LHR']},
+        {code:'LUG',name:'ルガーノ空港',city:'🇨🇭 スイス・ルガーノ',lat:46.0043,lon:8.9105,routes:['ZRH']},
+        {code:'EDNR',name:'レーゲンスブルク空港',city:'🇩🇪 ドイツ・レーゲンスブルク',lat:49.1419,lon:12.0819,routes:['MUC']},
+        {code:'WAW',name:'ワルシャワ・ショパン空港',city:'🇵🇱 ポーランド・ワルシャワ',lat:52.1657,lon:20.9671,routes:['LHR','CDG','FRA','IST','AMS']},
+        {code:'XCR',name:'ヴァトリー国際空港',city:'🇫🇷 フランス・シャロン＝アン＝シャンパーニュ',lat:48.7678,lon:4.2011,routes:['CDG']},
+        {code:'VCE',name:'ヴェネツィア・テッセラ空港',city:'🇮🇹 イタリア・ヴェネツィア',lat:45.5053,lon:12.3519,routes:['FCO','MXP','LHR','CDG','FRA']},
+        {code:'VRN',name:'ヴェローナ・ヴィラフランカ空港',city:'🇮🇹 イタリア・ヴェローナ',lat:45.3957,lon:10.8885,routes:['FCO','MXP']}
       ]},
       { label:'🗽 北アメリカ', open:false, airports:[
         {code:'LAX',name:'ロサンゼルス国際空港',city:'🇺🇸 アメリカ・ロサンゼルス',lat:33.94,lon:-118.41,routes:['NRT','SYD','SIN','LHR','CDG','JFK','ORD','HKG','ICN','FRA','PVG','DXB','AKL','MEL','MEX','YYZ','SFO','HNL']},
@@ -1766,7 +1813,8 @@ void main() {
       LHR:'EGLL',CDG:'LFPG',FRA:'EDDF',AMS:'EHAM',MAD:'LEMD',FCO:'LIRF',ZRH:'LSZH',SVO:'UUEE',CPH:'EKCH',VIE:'LOWW',
       LAX:'KLAX',JFK:'KJFK',ORD:'KORD',YYZ:'CYYZ',MEX:'MMMX',MIA:'KMIA',ATL:'KATL',SFO:'KSFO',YVR:'CYVR',HNL:'PHNL',
       GRU:'SBGR',EZE:'SAEZ',BOG:'SKBO',LIM:'SPJC',SCL:'SCEL',CCS:'SVMI',PTY:'MPTO',GIG:'SBGL',HAV:'MUHA',
-      JNB:'FAOR',NBO:'HKJK',CAI:'HECA',LOS:'DNMM',ADD:'HAAB',CMN:'GMMN',ACC:'DGAA'
+      JNB:'FAOR',NBO:'HKJK',CAI:'HECA',LOS:'DNMM',ADD:'HAAB',CMN:'GMMN',ACC:'DGAA',
+      INN:'LOWI',ERF:'EDDE',ORY:'LFPO',RUH:'OERK',GDN:'EPGD',STR:'EDDS',GVA:'LSGG',SXB:'LFST',LKCS:'LKCS',TRS:'LIPQ',TRN:'LIMF',EPTO:'EPTO',NUE:'EDDN',NCE:'LFMN',HAM:'EDDH',BSL:'LFSB',PMI:'LEPA',BZG:'EPBY',FLR:'LIRQ',BRQ:'LKTB',BRE:'EDDW',PRG:'LKPR',LKLN:'LKLN',BRN:'LSZB',BLX:'LIDB',HOF:'OEAH',POZ:'EPPO',MRS:'LFML',MHG:'EDFM',MUC:'EDDM',MXP:'LIMC',LIN:'LIML',ETZ:'LFJL',LEJ:'EDDP',RWN:'UKLR',LIS:'LPPT',LYS:'LFLL',LUG:'LSZA',EDNR:'EDNR',WAW:'EPWA',XCR:'LFOK',VCE:'LIPZ',VRN:'LIPX'
     };
     var ICAO_IATA = {};
     Object.keys(IATA_ICAO).forEach(function(k) { ICAO_IATA[IATA_ICAO[k]] = k; });
