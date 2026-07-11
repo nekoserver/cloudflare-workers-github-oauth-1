@@ -421,6 +421,11 @@ function cityLink(r) {
   return '<a href="' + url + '" style="color:inherit;text-decoration:none;border-bottom:1px dotted #444">' + r.city_name + '</a>';
 }
 
+function airportLink(code) {
+  var url = '/webgl-heritage?airport=' + encodeURIComponent(code);
+  return '<a href="' + url + '" onclick="event.stopPropagation()" style="color:inherit;text-decoration:none;border-bottom:1px dotted #444">(' + code + ')</a>';
+}
+
 function buildCountryStats(rows) {
   var map = {};
   rows.forEach(function(r) {
@@ -1546,10 +1551,13 @@ function renderAirportHrRanking() {
     rows.forEach(function(r, i) {
       var apt = AIRPORT_BY_NAME[r.airport] || {};
       var barW = Math.round((r.count / maxCount) * 100);
+      var cityParts = (apt.city || '').split(' ');
+      var flag = cityParts[0] || '';
+      var countryCity = cityParts.slice(1).join(' ');
       html += '<div class="rail-hr-row" data-airport="' + r.airport.replace(/"/g,'&quot;') + '">' +
         '<span class="rail-hr-rank">' + (i + 1) + '</span>' +
-        '<span class="rail-hr-flag">✈️</span>' +
-        '<span class="rail-hr-names"><span class="rail-hr-line-primary">' + r.airport + '</span><span class="rail-hr-station-sub">' + (apt.city || '') + '</span></span>' +
+        '<span class="rail-hr-flag">🛬</span>' +
+        '<span class="rail-hr-names"><span class="rail-hr-line-primary">' + flag + ' ' + (apt.code ? airportLink(apt.code) + ' ' : '') + r.airport + '</span><span class="rail-hr-station-sub">' + countryCity + '</span></span>' +
         '<div class="rail-hr-count-wrap"><div class="bar" style="width:' + barW + 'px"></div><span class="rail-hr-count">' + r.count + '</span></div>' +
         '</div>';
     });
