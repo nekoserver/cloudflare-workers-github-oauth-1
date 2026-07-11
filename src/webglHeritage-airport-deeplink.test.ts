@@ -53,4 +53,32 @@ describe('世界遺産ページ: ?airport=クエリパラメータによる空�
     expect(airportParamIdx).toBeGreaterThan(fnStart);
     expect(airportParamIdx).toBeLessThan(fnEnd);
   });
+
+  // 対象: flyToAirport内部の setTimeout(fn, FLY_DUR + 100) が使う FLY_DUR。
+  // FLY_DUR は setupAirportRoutes() の外側(スクリプト後方)で
+  // `var FLY_DUR = 2500;` と宣言されており、varのホイスティングにより
+  // 深リンク処理が setupAirportRoutes() 呼び出し中に同期実行されると
+  // FLY_DUR はまだ undefined で、setTimeout(fn, NaN) になり
+  // ほぼ即座に(カメラが飛ぶ前に)コールバックが発火してしまう。
+  // これを実ブラウザ(Playwright)のsetTimeout計測で検出したため、
+  // 深リンク処理全体を setTimeout(fn, 0) で1マクロタスク遅延させ、
+  // 同期スクリプト完了後(=FLY_DUR代入後)に実行されるようにした。
+  it('深リンク処理はsetTimeout(fn, 0)で1マクロタスク遅延させ、FLY_DUR代入前に実行されないようにする', () => {
+    const idx = html.indexOf("sp.get('airport')");
+    expect(idx).toBeGreaterThan(-1);
+    const before = html.slice(Math.max(0, idx - 150), idx);
+    expect(before).toContain('setTimeout(function() {');
+    const afterFlyToAirportIdx = html.indexOf('flyToAirport(apt.lat, apt.lon', idx);
+    expect(afterFlyToAirportIdx).toBeGreaterThan(idx);
+    const closing = html.slice(afterFlyToAirportIdx, afterFlyToAirportIdx + 200);
+    expect(closing).toMatch(/\}\s*,\s*0\s*\)\s*;/);
+  });
+
+  it('FLY_DURの宣言(var FLY_DUR = 2500;)より前にflyToAirportを同期呼び出ししていない(深リンクIIFEが直接呼ぶ形に戻すとNaN setTimeoutバグが再発する)', () => {
+    const idx = html.indexOf("sp.get('airport')");
+    expect(idx).toBeGreaterThan(-1);
+    const block = html.slice(idx, idx + 400);
+    // (function() { ... })(); という即時同期呼び出しの形になっていないこと
+    expect(block).not.toMatch(/^\s*[\s\S]*\}\)\(\);/);
+  });
 });

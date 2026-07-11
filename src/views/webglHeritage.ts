@@ -1943,7 +1943,7 @@ void main() {
       setAirportMarkers(false);
     });
 
-    (function() {
+    setTimeout(function() {
       var sp = new URLSearchParams(window.location.search);
       var airportCode = sp.get('airport');
       var apt = airportCode ? aptByCode[airportCode] : null;
@@ -1953,7 +1953,7 @@ void main() {
         zoom = 1.2;
         flyToAirport(apt.lat, apt.lon, function() { showAptTooltip(apt.code); });
       }
-    })();
+    }, 0);
   }
 
   setupAirportRoutes();
