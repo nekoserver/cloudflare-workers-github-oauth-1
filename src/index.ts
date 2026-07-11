@@ -87,7 +87,8 @@ import { listD1Databases, getD1Tables } from './utils/cloudflareApi';
 import { validateRevokeRequest } from './utils/revoke';
 import { HERITAGE_FLAG_MAP, HERITAGE_LIST } from './data/heritageList';
 import { RAIL_LINES } from './data/railLines';
-import { findNearbyStationsAndHeritage, dedupeNearbyPoints } from './utils/railLineStations';
+import { AIRPORT_LIST } from './data/airports';
+import { findNearbyStationsAndHeritage, dedupeNearbyPoints, findNearbyHeritageForAirport, diffAirportNearbyHeritage, findNearbyAirports, diffAirportNearbyAirport } from './utils/railLineStations';
 import { questionStartsWithHeritageBracket } from './utils/heritageQuestionMatch';
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
@@ -183,6 +184,8 @@ const STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
   { name: 'slack_installations',        migration: '0071',   description: 'Slack OAuthワークスペースインストール情報（botトークン等）',   syncPolicy: 'manual' },
   { name: 'notification_settings',      migration: '0075',   description: 'Slack通知ON/OFFのユーザーオプション設定（単一行）',            syncPolicy: 'auto' },
   { name: 'email_confirm_tokens',       migration: '0076',   description: 'RESEND_API_KEY設定時のログイン確認メール保留トークン（クリックで発行完了）', syncPolicy: 'auto' },
+  { name: 'airport_nearby_heritage',    migration: '0078',   description: '空港から300km圏内の世界遺産の距離記録（着陸ボタンで記録）', syncPolicy: 'auto' },
+  { name: 'airport_nearby_airport',     migration: '0079',   description: '空港から1500km圏内の他空港の距離記録（着陸ボタンで記録）', syncPolicy: 'auto' },
 ];
 
 const REQUIRED_STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
@@ -1194,6 +1197,26 @@ INSERT OR IGNORE INTO notification_settings (id, slack_enabled) VALUES (1, 0);`,
   consumed_at TEXT
 );`,
   '0077': `ALTER TABLE notification_settings ADD COLUMN email_confirm_login_enabled INTEGER NOT NULL DEFAULT 0;`,
+  '0078': `CREATE TABLE IF NOT EXISTS airport_nearby_heritage (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  airport_name TEXT NOT NULL,
+  heritage_name TEXT NOT NULL,
+  distance_km REAL NOT NULL,
+  recorded_at TEXT DEFAULT (datetime('now'))
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_airport_nearby_heritage_unique ON airport_nearby_heritage(airport_name, heritage_name);
+CREATE INDEX IF NOT EXISTS idx_airport_nearby_heritage_airport ON airport_nearby_heritage(airport_name);`,
+  '0079': `CREATE TABLE IF NOT EXISTS airport_nearby_airport (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  airport_name TEXT NOT NULL,
+  other_airport_name TEXT NOT NULL,
+  distance_km REAL NOT NULL,
+  recorded_at TEXT DEFAULT (datetime('now'))
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_airport_nearby_airport_unique ON airport_nearby_airport(airport_name, other_airport_name);
+CREATE INDEX IF NOT EXISTS idx_airport_nearby_airport_airport ON airport_nearby_airport(airport_name);`,
 };
 
 async function ensureGroupTable(db: D1Database): Promise<void> {
@@ -1397,6 +1420,8 @@ export const TABLE_COLUMN_KEYS: Record<string, ColumnKeyInfo> = {
   slack_installations: { id: 'pk', team_id: 'uk', installed_by_user: 'fk' },
   notification_settings: { id: 'pk' },
   email_confirm_tokens: { token: 'pk', github_login: 'idx', email: 'idx' },
+  airport_nearby_heritage: { id: 'pk', airport_name: 'idx', heritage_name: 'idx' },
+  airport_nearby_airport: { id: 'pk', airport_name: 'idx', other_airport_name: 'idx' },
 };
 
 export function getColumnKeyType(tableName: string, columnName: string): ColumnKeyType {
@@ -1474,6 +1499,8 @@ export const TABLE_GROUP_MAP: Record<string, string> = {
   rail_line_stations: 'system',
   rail_station_nearby_points: 'system',
   rail_station_nearby_fetched: 'system',
+  airport_nearby_heritage: 'system',
+  airport_nearby_airport: 'system',
   keyword_category_groups: 'search',
   keyword_multi_labels: 'search',
   ts_repository:          'ts-catalog',
@@ -5695,6 +5722,104 @@ app.post('/api/rail-station-nearby', authMiddleware, async (c) => {
   await db.prepare('INSERT OR REPLACE INTO rail_station_nearby_fetched (station_name, point_count) VALUES (?, ?)').bind(name, dedupedPoints.length).run();
 
   return c.json({ fetched: true, points: dedupedPoints });
+});
+
+const AIRPORT_NEARBY_HERITAGE_RADIUS_KM = 300;
+
+app.post('/api/airport-nearby-heritage', authMiddleware, async (c) => {
+  const db = c.env.DB;
+  if (!db) return c.json({ error: 'DB unavailable' }, 503);
+  const body = await c.req.json<{ name: string; lat: number; lon: number }>().catch(() => null);
+  if (!body || !body.name || body.lat == null || body.lon == null) return c.json({ error: 'name, lat, lon required' }, 400);
+  const { name, lat, lon } = body;
+
+  try {
+    const nearby = findNearbyHeritageForAirport(HERITAGE_LIST, lat, lon, AIRPORT_NEARBY_HERITAGE_RADIUS_KM);
+
+    // 組がDBに存在するかどうかではなく、distance_kmが既存値と異なる（＝差分がある）組だけを書き込む
+    const existing = await db.prepare(
+      'SELECT heritage_name, distance_km FROM airport_nearby_heritage WHERE airport_name = ?'
+    ).bind(name).all<{ heritage_name: string; distance_km: number }>();
+    const existingMap = new Map(existing.results.map(r => [r.heritage_name, r.distance_km]));
+    const diffHeritage = diffAirportNearbyHeritage(nearby, existingMap);
+
+    if (diffHeritage.length > 0) {
+      const stmt = db.prepare(
+        'INSERT INTO airport_nearby_heritage (airport_name, heritage_name, distance_km) VALUES (?, ?, ?) ' +
+        'ON CONFLICT(airport_name, heritage_name) DO UPDATE SET distance_km = excluded.distance_km'
+      );
+      await db.batch(diffHeritage.map(h => stmt.bind(name, h.heritageName, h.distanceKm)));
+    }
+
+    const all = await db.prepare(
+      'SELECT heritage_name, distance_km FROM airport_nearby_heritage WHERE airport_name = ? ORDER BY distance_km'
+    ).bind(name).all<{ heritage_name: string; distance_km: number }>();
+
+    return c.json({ heritage: all.results, recordedCount: diffHeritage.length });
+  } catch (err) {
+    return c.json({ error: '空港周辺世界遺産の取得・記録に失敗しました', detail: String((err as Error)?.message ?? err) }, 500);
+  }
+});
+
+const AIRPORT_NEARBY_AIRPORT_RADIUS_KM = 1500;
+
+app.post('/api/airport-nearby-airports', authMiddleware, async (c) => {
+  const db = c.env.DB;
+  if (!db) return c.json({ error: 'DB unavailable' }, 503);
+  const body = await c.req.json<{ name: string; code: string; lat: number; lon: number }>().catch(() => null);
+  if (!body || !body.name || !body.code || body.lat == null || body.lon == null) return c.json({ error: 'name, code, lat, lon required' }, 400);
+  const { name, code, lat, lon } = body;
+
+  try {
+    const nearby = findNearbyAirports(AIRPORT_LIST, lat, lon, AIRPORT_NEARBY_AIRPORT_RADIUS_KM, code);
+
+    // 組がDBに存在するかどうかではなく、distance_kmが既存値と異なる（＝差分がある）組だけを書き込む
+    const existing = await db.prepare(
+      'SELECT other_airport_name, distance_km FROM airport_nearby_airport WHERE airport_name = ?'
+    ).bind(name).all<{ other_airport_name: string; distance_km: number }>();
+    const existingMap = new Map(existing.results.map(r => [r.other_airport_name, r.distance_km]));
+    const diffAirports = diffAirportNearbyAirport(nearby, existingMap);
+
+    if (diffAirports.length > 0) {
+      const stmt = db.prepare(
+        'INSERT INTO airport_nearby_airport (airport_name, other_airport_name, distance_km) VALUES (?, ?, ?) ' +
+        'ON CONFLICT(airport_name, other_airport_name) DO UPDATE SET distance_km = excluded.distance_km'
+      );
+      await db.batch(diffAirports.map(a => stmt.bind(name, a.otherAirportName, a.distanceKm)));
+    }
+
+    const all = await db.prepare(
+      'SELECT other_airport_name, distance_km FROM airport_nearby_airport WHERE airport_name = ? ORDER BY distance_km'
+    ).bind(name).all<{ other_airport_name: string; distance_km: number }>();
+
+    return c.json({ airports: all.results, recordedCount: diffAirports.length });
+  } catch (err) {
+    return c.json({ error: '空港周辺の他空港の取得・記録に失敗しました', detail: String((err as Error)?.message ?? err) }, 500);
+  }
+});
+
+app.get('/api/airport-nearby-heritage-airports', authMiddleware, async (c) => {
+  const db = c.env.DB;
+  if (!db) return c.json({ names: [] });
+  try {
+    const rows = await db.prepare('SELECT DISTINCT airport_name FROM airport_nearby_heritage').all<{ airport_name: string }>();
+    return c.json({ names: rows.results.map(r => r.airport_name) });
+  } catch (err) {
+    return c.json({ error: '記録済み空港一覧の取得に失敗しました', detail: String((err as Error)?.message ?? err), names: [] }, 500);
+  }
+});
+
+app.get('/api/airport-nearby-heritage-ranking', authMiddleware, async (c) => {
+  const db = c.env.DB;
+  if (!db) return c.json({ rows: [] });
+  try {
+    const rows = await db.prepare(
+      'SELECT airport_name, heritage_name, distance_km FROM airport_nearby_heritage ORDER BY airport_name, distance_km'
+    ).all<{ airport_name: string; heritage_name: string; distance_km: number }>();
+    return c.json({ rows: rows.results });
+  } catch (err) {
+    return c.json({ error: '空港周辺世界遺産ランキングの取得に失敗しました', detail: String((err as Error)?.message ?? err), rows: [] }, 500);
+  }
 });
 
 app.get('/api/heritage-country-stats', authMiddleware, async (c) => {

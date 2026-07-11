@@ -1,8 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { buildRailLineStationRows, haversineKm, findNearbyStationsAndHeritage, dedupeNearbyPoints } from './railLineStations';
+import { buildRailLineStationRows, haversineKm, findNearbyStationsAndHeritage, dedupeNearbyPoints, diffAirportNearbyHeritage, findNearbyAirports, diffAirportNearbyAirport, filterWithinRadius, diffNearbyByDistance } from './railLineStations';
 import { RAIL_LINES } from '../data/railLines';
 import type { RailLine } from '../data/railLines';
-import type { HeritagePoint, NearbyPoint } from './railLineStations';
+import type { Airport } from '../data/airports';
+import type { HeritagePoint, NearbyPoint, AirportNearbyHeritage, AirportNearbyAirport } from './railLineStations';
 
 describe('buildRailLineStationRows', () => {
   it('各路線の駅数の合計と同じ件数の行を生成する', () => {
@@ -191,6 +192,144 @@ describe('findNearbyStationsAndHeritage', () => {
     const results = findNearbyStationsAndHeritage([lineA], [heritageNear, heritageDup], 0, 0, 100, '起点駅');
     const matches = results.filter(r => r.pointName === '近傍遺産');
     expect(matches.length).toBe(1);
+  });
+});
+
+describe('diffAirportNearbyHeritage', () => {
+  const near: AirportNearbyHeritage = { heritageName: 'A遺産', lat: 0, lon: 0, distanceKm: 10 };
+  const far: AirportNearbyHeritage = { heritageName: 'B遺産', lat: 1, lon: 1, distanceKm: 200 };
+
+  it('DBに存在しない組は新規として差分に含める', () => {
+    const result = diffAirportNearbyHeritage([near], new Map());
+    expect(result).toEqual([near]);
+  });
+
+  it('DBに存在してもdistance_kmが変化していれば差分に含める（存在有無ではなく値の差分で判定する）', () => {
+    const existing = new Map([['A遺産', 15]]);
+    const result = diffAirportNearbyHeritage([near], existing);
+    expect(result).toEqual([near]);
+  });
+
+  it('DBに存在しdistance_kmも一致していれば差分に含めない（同一値の再書き込みをしない）', () => {
+    const existing = new Map([['A遺産', 10]]);
+    const result = diffAirportNearbyHeritage([near], existing);
+    expect(result).toEqual([]);
+  });
+
+  it('複数件のうち変化したものだけを差分として返す', () => {
+    const existing = new Map([['A遺産', 10], ['B遺産', 999]]);
+    const result = diffAirportNearbyHeritage([near, far], existing);
+    expect(result).toEqual([far]);
+  });
+
+  it('候補が空配列なら差分も空配列', () => {
+    expect(diffAirportNearbyHeritage([], new Map([['A遺産', 10]]))).toEqual([]);
+  });
+});
+
+describe('filterWithinRadius（駅・空港などの「最寄りの候補を距離順に返す」共通処理の抽出）', () => {
+  const items = [
+    { id: 'near', lat: 0, lon: 1 },
+    { id: 'far', lat: 0, lon: 50 },
+  ];
+
+  it('半径内の候補だけを距離昇順で返す', () => {
+    const result = filterWithinRadius(items, 0, 0, 1000, i => ({ lat: i.lat, lon: i.lon }));
+    expect(result.map(r => r.item.id)).toEqual(['near']);
+    expect(result[0].distanceKm).toBeGreaterThan(0);
+  });
+
+  it('半径外の候補は含めない', () => {
+    const result = filterWithinRadius(items, 0, 0, 1000, i => ({ lat: i.lat, lon: i.lon }));
+    expect(result.some(r => r.item.id === 'far')).toBe(false);
+  });
+
+  it('距離が近い順にソートされる', () => {
+    const mixed = [
+      { id: 'B', lat: 0, lon: 10 },
+      { id: 'A', lat: 0, lon: 1 },
+    ];
+    const result = filterWithinRadius(mixed, 0, 0, 2000, i => ({ lat: i.lat, lon: i.lon }));
+    expect(result.map(r => r.item.id)).toEqual(['A', 'B']);
+  });
+
+  it('候補が空配列なら空配列を返す', () => {
+    expect(filterWithinRadius([], 0, 0, 1000, () => ({ lat: 0, lon: 0 }))).toEqual([]);
+  });
+});
+
+describe('diffNearbyByDistance（駅・空港などで共通の「値の差分だけ書き込む」判定処理の抽出）', () => {
+  const items = [
+    { key: 'A', distanceKm: 10 },
+    { key: 'B', distanceKm: 200 },
+  ];
+
+  it('DBに存在しない組は新規として差分に含める', () => {
+    const result = diffNearbyByDistance(items, new Map(), i => i.key, i => i.distanceKm);
+    expect(result).toEqual(items);
+  });
+
+  it('DBに存在してもdistance_kmが変化していれば差分に含める（存在有無ではなく値の差分で判定する）', () => {
+    const existing = new Map([['A', 15]]);
+    const result = diffNearbyByDistance(items, existing, i => i.key, i => i.distanceKm);
+    expect(result.map(r => r.key)).toEqual(['A', 'B']);
+  });
+
+  it('DBに存在しdistance_kmも一致していれば差分に含めない', () => {
+    const existing = new Map([['A', 10], ['B', 200]]);
+    const result = diffNearbyByDistance(items, existing, i => i.key, i => i.distanceKm);
+    expect(result).toEqual([]);
+  });
+});
+
+describe('findNearbyAirports', () => {
+  const airports: Airport[] = [
+    { code: 'AAA', name: '起点空港', city: 'テスト', lat: 0, lon: 0 },
+    { code: 'BBB', name: '近傍空港', city: 'テスト', lat: 0, lon: 5 },
+    { code: 'CCC', name: '遠方空港', city: 'テスト', lat: 0, lon: 50 },
+  ];
+
+  it('半径内の空港のみを距離昇順で返す', () => {
+    const results = findNearbyAirports(airports, 0, 0, 1500, 'AAA');
+    expect(results.map(r => r.otherAirportName)).toEqual(['近傍空港']);
+  });
+
+  it('excludeCode に一致する空港は自分自身として除外する', () => {
+    const results = findNearbyAirports(airports, 0, 0, 100000, 'AAA');
+    expect(results.some(r => r.otherAirportCode === 'AAA')).toBe(false);
+  });
+
+  it('半径外の空港は含めない', () => {
+    const results = findNearbyAirports(airports, 0, 0, 1500, 'AAA');
+    expect(results.some(r => r.otherAirportCode === 'CCC')).toBe(false);
+  });
+
+  it('該当する空港が無ければ空配列を返す', () => {
+    expect(findNearbyAirports(airports, 0, 0, 1, 'AAA')).toEqual([]);
+  });
+});
+
+describe('diffAirportNearbyAirport', () => {
+  const near: AirportNearbyAirport = { otherAirportName: 'B空港', otherAirportCode: 'BBB', lat: 0, lon: 0, distanceKm: 10 };
+  const far: AirportNearbyAirport = { otherAirportName: 'C空港', otherAirportCode: 'CCC', lat: 1, lon: 1, distanceKm: 1200 };
+
+  it('DBに存在しない組は新規として差分に含める', () => {
+    expect(diffAirportNearbyAirport([near], new Map())).toEqual([near]);
+  });
+
+  it('DBに存在してもdistance_kmが変化していれば差分に含める', () => {
+    const existing = new Map([['B空港', 15]]);
+    expect(diffAirportNearbyAirport([near], existing)).toEqual([near]);
+  });
+
+  it('DBに存在しdistance_kmも一致していれば差分に含めない', () => {
+    const existing = new Map([['B空港', 10]]);
+    expect(diffAirportNearbyAirport([near], existing)).toEqual([]);
+  });
+
+  it('複数件のうち変化したものだけを差分として返す', () => {
+    const existing = new Map([['B空港', 10], ['C空港', 9999]]);
+    expect(diffAirportNearbyAirport([near, far], existing)).toEqual([far]);
   });
 });
 

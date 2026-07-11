@@ -15,10 +15,10 @@ describe('世界遺産エリア巡回サイドパネル: 空港行のアイコ�
     expect(block).toContain("itemIcon: function(a) { return a.city.split(' ')[0] + ' ✈︎'; }");
   });
 
-  it('itemLabelは国旗が二重表示されないよう都市名以降のみを返す', () => {
+  it('itemLabelは国旗が二重表示されないよう都市名以降のみを返し、記録済み空港の⛳️マーカーは維持する', () => {
     const idx = html.indexOf("key: 'airport'");
     const endIdx = html.indexOf('\n    }', idx);
     const block = html.slice(idx, endIdx);
-    expect(block).toContain("itemLabel: function(a) { return a.city.split(' ').slice(1).join(' ') + ' ' + a.name + ' (' + a.code + ')'; }");
+    expect(block).toContain("itemLabel: function(a) { return (hasAirportHeritageSet[a.name] ? '⛳️ ' : '') + a.city.split(' ').slice(1).join(' ') + ' ' + a.name + ' (' + a.code + ')'; }");
   });
 });

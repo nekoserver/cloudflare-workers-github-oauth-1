@@ -1,5 +1,6 @@
 import { HERITAGE_LIST } from '../data/heritageList';
 import { RAIL_LINES } from '../data/railLines';
+import { AIRPORT_LIST } from '../data/airports';
 import {
   renderKeywordClassifyPanelCss,
   renderKeywordClassifyPanelJs,
@@ -238,6 +239,7 @@ ${renderKeywordClassifyPanelCss()}
   </div>
   <button id="btn-cap-dist" style="margin-left:8px;background:var(--btn-bg,#21262d);border:1px solid var(--border,#30363d);color:var(--fg,#e6edf3);padding:6px 12px;border-radius:6px;cursor:pointer;font-size:13px">🌍 首都間距離</button>
   <button id="btn-rail-hr" style="margin-left:8px;background:var(--btn-bg,#21262d);border:1px solid var(--border,#30363d);color:var(--fg,#e6edf3);padding:6px 12px;border-radius:6px;cursor:pointer;font-size:13px">🚉 駅周辺の世界遺産</button>
+  <button id="btn-airport-hr" style="margin-left:8px;background:var(--btn-bg,#21262d);border:1px solid var(--border,#30363d);color:var(--fg,#e6edf3);padding:6px 12px;border-radius:6px;cursor:pointer;font-size:13px">🛬 周辺の世界遺産</button>
 </div>
 <div id="ai-modal-overlay" class="ai-modal-overlay">
   <div class="ai-modal">
@@ -307,6 +309,15 @@ ${renderKeywordClassifyPanelCss()}
       <button class="rail-hr-close" id="rail-hr-close">✕</button>
     </div>
     <div class="rail-hr-body" id="rail-hr-body"></div>
+  </div>
+</div>
+<div id="airport-hr-overlay" class="rail-hr-overlay">
+  <div class="rail-hr-modal">
+    <div class="rail-hr-head">
+      <span class="rail-hr-title" id="airport-hr-title">🛬 空港周辺300km以内の世界遺産数ランキング</span>
+      <button class="rail-hr-close" id="airport-hr-close">✕</button>
+    </div>
+    <div class="rail-hr-body" id="airport-hr-body"></div>
   </div>
 </div>
 <div class="summary-row">
@@ -1472,6 +1483,100 @@ document.getElementById('btn-rail-hr').addEventListener('click', function() {
   railHrOverlay.style.zIndex = String(getNextZ());
   railHrOverlay.classList.add('open');
   renderRailHrRanking();
+});
+
+var AIRPORT_LIST_ALL = ${JSON.stringify(AIRPORT_LIST)};
+var AIRPORT_BY_NAME = {};
+AIRPORT_LIST_ALL.forEach(function(a) { AIRPORT_BY_NAME[a.name] = a; });
+
+var airportHrOverlay = document.getElementById('airport-hr-overlay');
+var airportHrTitle = document.getElementById('airport-hr-title');
+var airportHrBody = document.getElementById('airport-hr-body');
+var airportHrRows = null;
+document.getElementById('airport-hr-close').addEventListener('click', function() {
+  airportHrOverlay.classList.remove('open');
+});
+airportHrOverlay.addEventListener('click', function(e) {
+  if (e.target === airportHrOverlay) airportHrOverlay.classList.remove('open');
+});
+
+function buildAirportHrRanking(rows) {
+  var counts = {};
+  rows.forEach(function(r) {
+    counts[r.airport_name] = (counts[r.airport_name] || 0) + 1;
+  });
+  var result = Object.keys(counts).map(function(name) { return { airport: name, count: counts[name] }; });
+  result.sort(function(a, b) { return b.count - a.count; });
+  return result;
+}
+
+function buildAirportHrNearbyHtml(airportName) {
+  var nearby = (airportHrRows || []).filter(function(r) { return r.airport_name === airportName; });
+  nearby.sort(function(a, b) { return a.distance_km - b.distance_km; });
+  if (nearby.length === 0) {
+    return '<div style="color:#8b949e;text-align:center;padding:10px 0">300km以内の世界遺産の記録なし</div>';
+  }
+  var html = '';
+  nearby.forEach(function(x) {
+    var emoji = HERITAGE_EMOJI_BY_NAME[x.heritage_name] || '🏛️';
+    html += '<div class="rail-hr-h-row">' +
+      '<span class="rail-hr-h-name">' + emoji + ' ' + x.heritage_name + '</span>' +
+      '<span class="rail-hr-h-dist">' + x.distance_km.toFixed(1) + ' km</span>' +
+      '</div>';
+  });
+  return html;
+}
+
+function renderAirportHrRanking() {
+  airportHrTitle.textContent = '🛬 空港周辺300km以内の世界遺産数ランキング';
+  airportHrBody.innerHTML = '<div style="color:#8b949e;text-align:center;padding:16px 0">読み込み中...</div>';
+  fetch('/api/airport-nearby-heritage-ranking').then(function(r) { return r.json(); }).then(function(d) {
+    if (d && d.error) {
+      airportHrBody.innerHTML = '<div style="color:#f85149;text-align:center;padding:16px 0">取得に失敗: ' + escHtml(d.error) + '</div>';
+      return;
+    }
+    airportHrRows = d.rows || [];
+    var rows = buildAirportHrRanking(airportHrRows);
+    if (rows.length === 0) {
+      airportHrBody.innerHTML = '<div style="color:#8b949e;text-align:center;padding:16px 0">まだデータベースに記録された空港がありません（空港ツールチップの⛳️🏌️‍♀️🏌️‍♂️ボタンで記録できます）</div>';
+      return;
+    }
+    var maxCount = rows[0].count > 0 ? rows[0].count : 1;
+    var html = '';
+    rows.forEach(function(r, i) {
+      var apt = AIRPORT_BY_NAME[r.airport] || {};
+      var barW = Math.round((r.count / maxCount) * 100);
+      html += '<div class="rail-hr-row" data-airport="' + r.airport.replace(/"/g,'&quot;') + '">' +
+        '<span class="rail-hr-rank">' + (i + 1) + '</span>' +
+        '<span class="rail-hr-flag">✈️</span>' +
+        '<span class="rail-hr-names"><span class="rail-hr-line-primary">' + r.airport + '</span><span class="rail-hr-station-sub">' + (apt.city || '') + '</span></span>' +
+        '<div class="rail-hr-count-wrap"><div class="bar" style="width:' + barW + 'px"></div><span class="rail-hr-count">' + r.count + '</span></div>' +
+        '</div>';
+    });
+    airportHrBody.innerHTML = html;
+    airportHrBody.querySelectorAll('.rail-hr-row').forEach(function(el) {
+      el.addEventListener('click', function() {
+        var next = el.nextSibling;
+        if (next && next.classList && next.classList.contains('rail-hr-acc')) {
+          next.parentNode.removeChild(next);
+          return;
+        }
+        airportHrBody.querySelectorAll('.rail-hr-acc').forEach(function(acc) { acc.parentNode.removeChild(acc); });
+        var acc = document.createElement('div');
+        acc.className = 'rail-hr-acc';
+        acc.innerHTML = buildAirportHrNearbyHtml(el.getAttribute('data-airport'));
+        el.parentNode.insertBefore(acc, el.nextSibling);
+      });
+    });
+  }).catch(function() {
+    airportHrBody.innerHTML = '<div style="color:#f85149;text-align:center;padding:16px 0">取得に失敗しました</div>';
+  });
+}
+
+document.getElementById('btn-airport-hr').addEventListener('click', function() {
+  airportHrOverlay.style.zIndex = String(getNextZ());
+  airportHrOverlay.classList.add('open');
+  renderAirportHrRanking();
 });
 
 initAutoLoad();
