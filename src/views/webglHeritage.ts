@@ -1950,7 +1950,7 @@ void main() {
       if (apt) {
         setAirportMarkers(true);
         btn.classList.add('active');
-        zoom = 10;
+        zoom = 1.2;
         flyToAirport(apt.lat, apt.lon, function() { showAptTooltip(apt.code); });
       }
     })();
