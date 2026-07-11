@@ -23,25 +23,41 @@ describe('世界遺産ページ: ?airport=クエリパラメータによる空�
     expect(html).toContain('aptByCode[airportCode]');
   });
 
-  it('最大ズーム(zoomは値が小さいほど拡大なので下限の1.2)でその座標へflyToAirportし、到着後にshowAptTooltipを呼ぶ', () => {
+  it('最大ズーム(zoomは値が小さいほど拡大なので下限の1.2)で即座にその座標へ着地する', () => {
     const idx = html.indexOf("sp.get('airport')");
     expect(idx).toBeGreaterThan(-1);
-    const block = html.slice(idx, idx + 400);
+    const block = html.slice(idx, idx + 600);
     // zoomはカメラ距離(trans(view,0,0,-zoom))で、ホイール/ボックスズームは
     // Math.max(1.2, Math.min(10, ...))にクランプされる。1.2が最大ズームイン(拡大)、
     // 10が最大ズームアウト(縮小)なので、"最大ズーム"を狙うなら下限の1.2を使う。
     expect(block).toContain('zoom = 1.2');
     expect(block).not.toContain('zoom = 10');
-    expect(block).toContain('flyToAirport(apt.lat, apt.lon, function() { showAptTooltip(apt.code); });');
+  });
+
+  // 対象: 深リンク到着時のカメラ移動方式。深リンクは「初期表示」であり
+  // 出発地点が無いため、2.5秒(FLY_DUR)の飛行アニメーションは待ち時間でしかない。
+  // flyTo()で目標回転角(flyTarget)だけ計算し、即座にrotYv/rotXvへ代入して
+  // アニメーションを省略し、ページを開いた直後に空港が表示された状態にする。
+  it('深リンクでは飛行アニメーションを省略し、flyToの目標回転角を即座にrotYv/rotXvへ代入する(高速レスポンス)', () => {
+    const idx = html.indexOf("sp.get('airport')");
+    expect(idx).toBeGreaterThan(-1);
+    const block = html.slice(idx, idx + 600);
+    expect(block).toContain('flyTo(apt.lat, apt.lon)');
+    expect(block).toContain('rotYv = flyTarget.ry');
+    expect(block).toContain('rotXv = flyTarget.rx');
+    expect(block).toContain('flyTarget = null');
+    // 2.5秒待つflyToAirportを深リンクで使っていないこと
+    expect(block).not.toContain('flyToAirport(');
+    expect(block).toContain('showAptTooltip(apt.code)');
   });
 
   it('showAptTooltip呼び出し前にsetAirportMarkers(true)で空港マーカーを可視化する(未可視化だとshowAptTooltipが早期returnし何も表示されない)', () => {
     const idx = html.indexOf("sp.get('airport')");
     expect(idx).toBeGreaterThan(-1);
-    const block = html.slice(idx, idx + 400);
+    const block = html.slice(idx, idx + 600);
     expect(block).toContain('setAirportMarkers(true)');
-    // setAirportMarkers呼び出しがflyToAirport(=showAptTooltip呼び出し)より前に来ていること
-    expect(block.indexOf('setAirportMarkers(true)')).toBeLessThan(block.indexOf('flyToAirport('));
+    // setAirportMarkers呼び出しがshowAptTooltip呼び出しより前に来ていること
+    expect(block.indexOf('setAirportMarkers(true)')).toBeLessThan(block.indexOf('showAptTooltip('));
   });
 
   it('深リンク処理はsetupAirportRoutes()のスコープ内にある(aptByCode/flyToAirport/setAirportMarkers/showAptTooltipはこの関数のローカル変数のため、外側に置くとReferenceErrorで何も起きない)', () => {
@@ -54,31 +70,20 @@ describe('世界遺産ページ: ?airport=クエリパラメータによる空�
     expect(airportParamIdx).toBeLessThan(fnEnd);
   });
 
-  // 対象: flyToAirport内部の setTimeout(fn, FLY_DUR + 100) が使う FLY_DUR。
-  // FLY_DUR は setupAirportRoutes() の外側(スクリプト後方)で
-  // `var FLY_DUR = 2500;` と宣言されており、varのホイスティングにより
-  // 深リンク処理が setupAirportRoutes() 呼び出し中に同期実行されると
-  // FLY_DUR はまだ undefined で、setTimeout(fn, NaN) になり
-  // ほぼ即座に(カメラが飛ぶ前に)コールバックが発火してしまう。
-  // これを実ブラウザ(Playwright)のsetTimeout計測で検出したため、
-  // 深リンク処理全体を setTimeout(fn, 0) で1マクロタスク遅延させ、
-  // 同期スクリプト完了後(=FLY_DUR代入後)に実行されるようにした。
-  it('深リンク処理はsetTimeout(fn, 0)で1マクロタスク遅延させ、FLY_DUR代入前に実行されないようにする', () => {
+  // 対象: 深リンク処理の実行タイミング。flyTargetやrotYv等の外側スコープ変数は
+  // varのホイスティングにより、setupAirportRoutes()呼び出し中の同期実行だと
+  // 未代入(undefined)の可能性がある(過去にFLY_DURがundefinedのまま
+  // setTimeout(fn, NaN)となり即発火するバグを実ブラウザ計測で確認済み)。
+  // 深リンク処理全体をsetTimeout(fn, 0)で1マクロタスク遅延させ、
+  // 同期スクリプト完了後(全var代入後)に実行されるようにする。
+  it('深リンク処理はsetTimeout(fn, 0)で1マクロタスク遅延させ、外側スコープのvar代入前に実行されないようにする', () => {
     const idx = html.indexOf("sp.get('airport')");
     expect(idx).toBeGreaterThan(-1);
     const before = html.slice(Math.max(0, idx - 150), idx);
     expect(before).toContain('setTimeout(function() {');
-    const afterFlyToAirportIdx = html.indexOf('flyToAirport(apt.lat, apt.lon', idx);
-    expect(afterFlyToAirportIdx).toBeGreaterThan(idx);
-    const closing = html.slice(afterFlyToAirportIdx, afterFlyToAirportIdx + 200);
+    const tooltipIdx = html.indexOf('showAptTooltip(apt.code)', idx);
+    expect(tooltipIdx).toBeGreaterThan(idx);
+    const closing = html.slice(tooltipIdx, tooltipIdx + 300);
     expect(closing).toMatch(/\}\s*,\s*0\s*\)\s*;/);
-  });
-
-  it('FLY_DURの宣言(var FLY_DUR = 2500;)より前にflyToAirportを同期呼び出ししていない(深リンクIIFEが直接呼ぶ形に戻すとNaN setTimeoutバグが再発する)', () => {
-    const idx = html.indexOf("sp.get('airport')");
-    expect(idx).toBeGreaterThan(-1);
-    const block = html.slice(idx, idx + 400);
-    // (function() { ... })(); という即時同期呼び出しの形になっていないこと
-    expect(block).not.toMatch(/^\s*[\s\S]*\}\)\(\);/);
   });
 });
