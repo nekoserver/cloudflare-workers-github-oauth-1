@@ -1000,7 +1000,8 @@ void main() {
       key: 'airport', icon: '✈︎', label: '空港', color: '#79c0ff', bg: '#0c2233',
       getItems: function() { return getAirportsInBounds(); },
       locate: function(a) { return [a.lat, a.lon]; },
-      itemLabel: function(a) { return a.city + ' ' + a.name + ' (' + a.code + ')'; },
+      itemIcon: function(a) { return a.city.split(' ')[0] + ' ✈︎'; },
+      itemLabel: function(a) { return a.city.split(' ').slice(1).join(' ') + ' ' + a.name + ' (' + a.code + ')'; },
       showTooltip: function(a) {
         showGenericAreaTooltip('<div class="tt-name">✈︎ ' + a.name + ' <span style="font-size:11px;color:#8b949e">' + a.code + '</span></div><div class="tt-sub">' + a.city + '</div>');
       }
