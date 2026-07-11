@@ -8,7 +8,7 @@ import { HERITAGE_AREA_SEARCH_TOPICS } from './index';
 // テーブル分割・エリア番号表示ロジックの実際の挙動を検証する。
 function extractPureFunctions(html: string): string {
   const lines = html.split('\n');
-  const prefixes = ['const esc=', 'function areaNumbersOf(', 'function renderMatchedRows(', 'function renderUnmatchedRows('];
+  const prefixes = ['const esc=', 'function areaNumbersOf(', 'function distancePrefix(', 'function resultNameHtml(', 'function renderMatchedRows(', 'function renderUnmatchedRows('];
   const found = prefixes.map((prefix) => lines.find((line) => line.startsWith(prefix)));
   if (found.some((line) => !line)) {
     throw new Error('必要な関数が生成HTMLから見つからない');
@@ -38,6 +38,9 @@ describe('heritage-area page', () => {
     expect(html).toContain('AIチャット質問');
     expect(html).toContain('エリア未登録（露出回数順）');
     expect(html).toContain('class="spinner"');
+    expect(html).toContain('kw-flag');
+    expect(html).toContain('distance-prefix');
+    expect(html).toContain('heritage_point');
   });
 
   it('エリア登録済みテーブルは「エリア」列が先頭にあり、露出回数列を持たない', () => {
@@ -84,6 +87,18 @@ describe('heritage-area page', () => {
     expect(html2).not.toContain('>C<');
   });
 
+  it('renderUnmatchedRows: 距離がある行はkmを先頭に出して近い順で表示する', () => {
+    const html = getHeritageAreaPage();
+    const { renderUnmatchedRows } = loadFns(html);
+    const rows = [
+      { item_name: '遠い世界遺産', impression_count: 999, distance_km: 1200, area_matches: [] },
+      { item_name: '近い世界遺産', impression_count: 1, distance_km: 80, area_matches: [] },
+    ];
+    const html2 = renderUnmatchedRows(rows);
+    expect(html2).toContain('<span class="distance-prefix">80km</span>');
+    expect(html2.indexOf('近い世界遺産')).toBeLessThan(html2.indexOf('遠い世界遺産'));
+  });
+
   it('registers heritage-area route and API handlers', () => {
     const src = readFileSync('src/index.ts', 'utf8');
     expect(src).toContain("app.get('/heritage-area'");
@@ -102,5 +117,8 @@ describe('heritage-area page', () => {
     expect(src).toContain('FROM heritage_area_items i');
     expect(src).toContain('OR INSTR(?, i.item_name) > 0');
     expect(src).toContain('area_matches');
+    expect(src).toContain('findHeritageAreaPoint');
+    expect(src).toContain('distance_origin');
+    expect(src).toContain('distance_km');
   });
 });
