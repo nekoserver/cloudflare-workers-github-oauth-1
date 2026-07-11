@@ -1943,7 +1943,7 @@ void main() {
       setAirportMarkers(false);
     });
 
-    (function() {
+    setTimeout(function() {
       var sp = new URLSearchParams(window.location.search);
       var airportCode = sp.get('airport');
       var apt = airportCode ? aptByCode[airportCode] : null;
@@ -1951,9 +1951,18 @@ void main() {
         setAirportMarkers(true);
         btn.classList.add('active');
         zoom = 1.2;
-        flyToAirport(apt.lat, apt.lon, function() { showAptTooltip(apt.code); });
+        // 深リンクは初期表示のため出発地点が無く、FLY_DUR(2.5秒)の飛行
+        // アニメーションは待ち時間でしかない。flyToで目標回転角だけ計算し
+        // 即座に代入してアニメーションを省略する。ツールチップの300ms待ちは
+        // _aptRenderFrameがマーカーを初回描画するのを待つため
+        // (マーカー未描画だとshowAptTooltipが早期returnする)。
+        flyTo(apt.lat, apt.lon);
+        rotYv = flyTarget.ry;
+        rotXv = flyTarget.rx;
+        flyTarget = null;
+        setTimeout(function() { showAptTooltip(apt.code); }, 300);
       }
-    })();
+    }, 0);
   }
 
   setupAirportRoutes();
