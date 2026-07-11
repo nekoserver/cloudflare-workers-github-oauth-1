@@ -1004,8 +1004,8 @@ void main() {
       key: 'airport', icon: '✈︎', label: '空港', color: '#79c0ff', bg: '#0c2233',
       getItems: function() { return getAirportsInBounds(); },
       locate: function(a) { return [a.lat, a.lon]; },
-      itemIcon: function(a) { return a.city.split(' ')[0] + ' ✈︎'; },
-      itemLabel: function(a) { return (hasAirportHeritageSet[a.name] ? '⛳️ ' : '') + a.city.split(' ').slice(1).join(' ') + ' ' + a.name + ' (' + a.code + ')'; },
+      itemIcon: function(a) { return (hasAirportHeritageSet[a.name] ? '⛳️ ' : '') + '✈︎'; },
+      itemLabel: function(a) { return a.city + ' ' + a.name + ' (' + a.code + ')'; },
       showTooltip: function(a) {
         showGenericAreaTooltip(
           '<button class="pin-label-close-btn tt-airport-close-btn" aria-label="閉じる">✕</button>' +
@@ -4424,6 +4424,16 @@ void main() {
     var cc = sp.get('cc') || '';
     if (cityName && !isNaN(lat) && !isNaN(lon)) {
       openCityFlyPanel(cityName, cc, lat, lon);
+    }
+  })();
+
+  (function() {
+    var sp = new URLSearchParams(window.location.search);
+    var airportCode = sp.get('airport');
+    var apt = airportCode ? aptByCode[airportCode] : null;
+    if (apt) {
+      zoom = 10;
+      flyToAirport(apt.lat, apt.lon, function() { showAptTooltip(apt.code); });
     }
   })();
 })();
