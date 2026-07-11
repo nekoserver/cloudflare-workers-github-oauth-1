@@ -23,11 +23,15 @@ describe('世界遺産ページ: ?airport=クエリパラメータによる空�
     expect(html).toContain('aptByCode[airportCode]');
   });
 
-  it('最大ズーム(10)でその座標へflyToAirportし、到着後にshowAptTooltipを呼ぶ', () => {
+  it('最大ズーム(zoomは値が小さいほど拡大なので下限の1.2)でその座標へflyToAirportし、到着後にshowAptTooltipを呼ぶ', () => {
     const idx = html.indexOf("sp.get('airport')");
     expect(idx).toBeGreaterThan(-1);
     const block = html.slice(idx, idx + 400);
-    expect(block).toContain('zoom = 10');
+    // zoomはカメラ距離(trans(view,0,0,-zoom))で、ホイール/ボックスズームは
+    // Math.max(1.2, Math.min(10, ...))にクランプされる。1.2が最大ズームイン(拡大)、
+    // 10が最大ズームアウト(縮小)なので、"最大ズーム"を狙うなら下限の1.2を使う。
+    expect(block).toContain('zoom = 1.2');
+    expect(block).not.toContain('zoom = 10');
     expect(block).toContain('flyToAirport(apt.lat, apt.lon, function() { showAptTooltip(apt.code); });');
   });
 
