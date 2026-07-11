@@ -5395,6 +5395,17 @@ app.get('/api/heritage-area-boxes', authMiddleware, async (c) => {
   return c.json({ ok: true, areas: areas.map((area) => ({ ...area, items: itemsByArea.get(Number(area.areaSeq)) || [] })) });
 });
 
+function normalizeHeritageAreaName(value: string): string {
+  return String(value || '').trim().replace(/[・･]/g, '・');
+}
+
+function findHeritageAreaPoint(keyword: string): { name: string; flag: string; country: string; lat: number; lon: number } | null {
+  const normalized = normalizeHeritageAreaName(keyword);
+  const item = HERITAGE_LIST.find((h) => normalizeHeritageAreaName(h.n) === normalized);
+  if (!item || !Number.isFinite(item.lat) || !Number.isFinite(item.lon)) return null;
+  return { name: item.n, flag: item.f, country: item.c, lat: item.lat, lon: item.lon };
+}
+
 app.get('/api/heritage-area/travel-categories', authMiddleware, async (c) => {
   const user = c.get('user');
   const db = c.env.DB;
@@ -5444,7 +5455,11 @@ app.get('/api/heritage-area/travel-categories/:id/keywords', authMiddleware, asy
        GROUP BY m.keyword
        ORDER BY count DESC, m.keyword ASC`
     ).bind(user.sub, categoryId).all<{ keyword: string; count: number }>();
-    return c.json({ keywords: rows.results ?? [] });
+    const keywords = (rows.results ?? []).map((row) => {
+      const point = findHeritageAreaPoint(row.keyword);
+      return point ? { ...row, heritage_point: point } : row;
+    });
+    return c.json({ keywords });
   } catch (err) {
     return c.json({ error: 'キーワードの取得に失敗しました', detail: String((err as Error)?.message ?? err) }, 500);
   }
@@ -5463,6 +5478,8 @@ app.post('/api/heritage-area/search', authMiddleware, async (c) => {
     .filter(Boolean)))
     .slice(0, 20);
   if (!keywords.length) return c.json({ items: [] });
+  const selectedHeritagePoints = keywords.map(findHeritageAreaPoint).filter((p): p is NonNullable<ReturnType<typeof findHeritageAreaPoint>> => !!p);
+  const distanceOrigin = selectedHeritagePoints.length === 1 ? selectedHeritagePoints[0] : null;
   const topics = HERITAGE_AREA_SEARCH_TOPICS;
   // D1のLIKEパターンは(ワイルドカードの有無に関わらず)約50バイトを超えると
   // "LIKE or GLOB pattern too complex" で失敗するため、任意長になり得る
@@ -5500,6 +5517,7 @@ app.post('/api/heritage-area/search', authMiddleware, async (c) => {
       area_seq: null; category: string; item_name: string; share_id: string;
       impression_count: number; max_result_count: number | null; last_searched_at: string;
       matched_keywords: string; quote_keys: string[]; area_matches: { key: string; areas: string }[];
+      heritage_point: ReturnType<typeof findHeritageAreaPoint>; distance_km: number | null;
     }>();
     for (const row of rows.results ?? []) {
       const question = String(row.item_name ?? '');
@@ -5519,6 +5537,7 @@ app.post('/api/heritage-area/search', authMiddleware, async (c) => {
         existing.matched_keywords = Array.from(keywordSet).join(',');
         continue;
       }
+      const heritagePoint = findHeritageAreaPoint(firstQuoteKey);
       itemByQuoteKey.set(firstQuoteKey, {
         area_seq: null,
         category: row.category,
@@ -5530,10 +5549,19 @@ app.post('/api/heritage-area/search', authMiddleware, async (c) => {
         matched_keywords: matchedKeywords.join(','),
         quote_keys: [firstQuoteKey],
         area_matches: [],
+        heritage_point: heritagePoint,
+        distance_km: distanceOrigin && heritagePoint ? Math.round(haversineKm(distanceOrigin.lat, distanceOrigin.lon, heritagePoint.lat, heritagePoint.lon)) : null,
       });
     }
     const items = Array.from(itemByQuoteKey.values())
-      .sort((a, b) => (Number(b.impression_count) - Number(a.impression_count)) || String(b.last_searched_at ?? '').localeCompare(String(a.last_searched_at ?? '')) || a.item_name.localeCompare(b.item_name))
+      .sort((a, b) => {
+        if (distanceOrigin) {
+          const ad = a.distance_km == null ? Number.POSITIVE_INFINITY : Number(a.distance_km);
+          const bd = b.distance_km == null ? Number.POSITIVE_INFINITY : Number(b.distance_km);
+          if (ad !== bd) return ad - bd;
+        }
+        return (Number(b.impression_count) - Number(a.impression_count)) || String(b.last_searched_at ?? '').localeCompare(String(a.last_searched_at ?? '')) || a.item_name.localeCompare(b.item_name);
+      })
       .slice(0, 500);
 
     // ここも同じD1のLIKEパターン長制限(約50バイト)に引っかかるため、
@@ -5568,7 +5596,7 @@ app.post('/api/heritage-area/search', authMiddleware, async (c) => {
       }
       item.area_matches = quoteKeyMatches;
     }
-    return c.json({ items });
+    return c.json({ items, distance_origin: distanceOrigin });
   } catch (err) {
     return c.json({ error: '検索露出ログの検索に失敗しました', detail: String((err as Error)?.message ?? err) }, 500);
   }
