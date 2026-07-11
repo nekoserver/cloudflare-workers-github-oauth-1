@@ -4432,6 +4432,9 @@ void main() {
     var airportCode = sp.get('airport');
     var apt = airportCode ? aptByCode[airportCode] : null;
     if (apt) {
+      setAirportMarkers(true);
+      var aptBtnEl = document.getElementById('btnAirport');
+      if (aptBtnEl) aptBtnEl.classList.add('active');
       zoom = 10;
       flyToAirport(apt.lat, apt.lon, function() { showAptTooltip(apt.code); });
     }

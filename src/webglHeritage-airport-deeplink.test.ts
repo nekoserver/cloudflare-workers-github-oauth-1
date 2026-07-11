@@ -30,4 +30,13 @@ describe('世界遺産ページ: ?airport=クエリパラメータによる空�
     expect(block).toContain('zoom = 10');
     expect(block).toContain('flyToAirport(apt.lat, apt.lon, function() { showAptTooltip(apt.code); });');
   });
+
+  it('showAptTooltip呼び出し前にsetAirportMarkers(true)で空港マーカーを可視化する(未可視化だとshowAptTooltipが早期returnし何も表示されない)', () => {
+    const idx = html.indexOf("sp.get('airport')");
+    expect(idx).toBeGreaterThan(-1);
+    const block = html.slice(idx, idx + 400);
+    expect(block).toContain('setAirportMarkers(true)');
+    // setAirportMarkers呼び出しがflyToAirport(=showAptTooltip呼び出し)より前に来ていること
+    expect(block.indexOf('setAirportMarkers(true)')).toBeLessThan(block.indexOf('flyToAirport('));
+  });
 });
