@@ -1942,6 +1942,18 @@ void main() {
       btn.classList.remove('active');
       setAirportMarkers(false);
     });
+
+    (function() {
+      var sp = new URLSearchParams(window.location.search);
+      var airportCode = sp.get('airport');
+      var apt = airportCode ? aptByCode[airportCode] : null;
+      if (apt) {
+        setAirportMarkers(true);
+        btn.classList.add('active');
+        zoom = 10;
+        flyToAirport(apt.lat, apt.lon, function() { showAptTooltip(apt.code); });
+      }
+    })();
   }
 
   setupAirportRoutes();
@@ -4424,19 +4436,6 @@ void main() {
     var cc = sp.get('cc') || '';
     if (cityName && !isNaN(lat) && !isNaN(lon)) {
       openCityFlyPanel(cityName, cc, lat, lon);
-    }
-  })();
-
-  (function() {
-    var sp = new URLSearchParams(window.location.search);
-    var airportCode = sp.get('airport');
-    var apt = airportCode ? aptByCode[airportCode] : null;
-    if (apt) {
-      setAirportMarkers(true);
-      var aptBtnEl = document.getElementById('btnAirport');
-      if (aptBtnEl) aptBtnEl.classList.add('active');
-      zoom = 10;
-      flyToAirport(apt.lat, apt.lon, function() { showAptTooltip(apt.code); });
     }
   })();
 })();

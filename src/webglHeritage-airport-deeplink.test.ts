@@ -39,4 +39,14 @@ describe('世界遺産ページ: ?airport=クエリパラメータによる空�
     // setAirportMarkers呼び出しがflyToAirport(=showAptTooltip呼び出し)より前に来ていること
     expect(block.indexOf('setAirportMarkers(true)')).toBeLessThan(block.indexOf('flyToAirport('));
   });
+
+  it('深リンク処理はsetupAirportRoutes()のスコープ内にある(aptByCode/flyToAirport/setAirportMarkers/showAptTooltipはこの関数のローカル変数のため、外側に置くとReferenceErrorで何も起きない)', () => {
+    const fnStart = html.indexOf('function setupAirportRoutes()');
+    expect(fnStart).toBeGreaterThan(-1);
+    const fnEnd = html.indexOf('\n  setupAirportRoutes();', fnStart);
+    expect(fnEnd).toBeGreaterThan(fnStart);
+    const airportParamIdx = html.indexOf("sp.get('airport')", fnStart);
+    expect(airportParamIdx).toBeGreaterThan(fnStart);
+    expect(airportParamIdx).toBeLessThan(fnEnd);
+  });
 });

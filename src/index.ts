@@ -5395,15 +5395,28 @@ app.get('/api/heritage-area-boxes', authMiddleware, async (c) => {
   return c.json({ ok: true, areas: areas.map((area) => ({ ...area, items: itemsByArea.get(Number(area.areaSeq)) || [] })) });
 });
 
-function normalizeHeritageAreaName(value: string): string {
+export function normalizeHeritageAreaName(value: string): string {
   return String(value || '').trim().replace(/[・･]/g, '・');
 }
 
-function findHeritageAreaPoint(keyword: string): { name: string; flag: string; country: string; lat: number; lon: number } | null {
+/**
+ * 検索キーワードから座標付きの地点情報を引く。世界遺産(HERITAGE_LIST)に無ければ
+ * 空港(AIRPORT_LIST)もフォールバックで探す。AIチャットの検索キーワードには
+ * 「〇〇空港」のような空港名も大量に含まれるため、世界遺産のみを対象にすると
+ * 空港キーワードのボタンにだけ国旗が一切表示されない状態になる。
+ */
+export function findHeritageAreaPoint(keyword: string): { name: string; flag: string; country: string; lat: number; lon: number } | null {
   const normalized = normalizeHeritageAreaName(keyword);
   const item = HERITAGE_LIST.find((h) => normalizeHeritageAreaName(h.n) === normalized);
-  if (!item || !Number.isFinite(item.lat) || !Number.isFinite(item.lon)) return null;
-  return { name: item.n, flag: item.f, country: item.c, lat: item.lat, lon: item.lon };
+  if (item && Number.isFinite(item.lat) && Number.isFinite(item.lon)) {
+    return { name: item.n, flag: item.f, country: item.c, lat: item.lat, lon: item.lon };
+  }
+  const airport = AIRPORT_LIST.find((a) => normalizeHeritageAreaName(a.name) === normalized);
+  if (airport && Number.isFinite(airport.lat) && Number.isFinite(airport.lon)) {
+    const cityParts = (airport.city || '').split(' ');
+    return { name: airport.name, flag: cityParts[0] || '', country: cityParts.slice(1).join(' '), lat: airport.lat, lon: airport.lon };
+  }
+  return null;
 }
 
 app.get('/api/heritage-area/travel-categories', authMiddleware, async (c) => {
