@@ -5395,6 +5395,23 @@ app.get('/api/heritage-area-boxes', authMiddleware, async (c) => {
   return c.json({ ok: true, areas: areas.map((area) => ({ ...area, items: itemsByArea.get(Number(area.areaSeq)) || [] })) });
 });
 
+app.delete('/api/heritage-area-boxes/:areaSeq', authMiddleware, async (c) => {
+  const user = c.get('user');
+  const db = c.env.DB;
+  if (!db) return c.json({ error: 'DB unavailable' }, 503);
+  const areaSeq = Number(c.req.param('areaSeq'));
+  if (!Number.isInteger(areaSeq) || areaSeq <= 0) return c.json({ error: '無効なエリア番号です' }, 400);
+  const row = await db.prepare(
+    'SELECT area_seq FROM heritage_area_boxes WHERE area_seq = ? AND user_id = ?'
+  ).bind(areaSeq, user.sub).first<{ area_seq: number }>();
+  if (!row) return c.json({ error: '見つかりません' }, 404);
+  await db.batch([
+    db.prepare('DELETE FROM heritage_area_items WHERE area_seq = ?').bind(areaSeq),
+    db.prepare('DELETE FROM heritage_area_boxes WHERE area_seq = ? AND user_id = ?').bind(areaSeq, user.sub),
+  ]);
+  return c.json({ ok: true });
+});
+
 export function normalizeHeritageAreaName(value: string): string {
   return String(value || '').trim().replace(/[・･]/g, '・');
 }

@@ -100,7 +100,12 @@ canvas:active { cursor:grabbing; }
 .area-panel-btn { flex:1; background:#161b22; border:1px solid #30363d; border-radius:6px; color:#c9d1d9; font-size:11px; padding:6px 8px; cursor:pointer; }
 .area-panel-btn:hover { border-color:#3fb950; color:#3fb950; }
 .area-list-status { font-size:11px; color:#8b949e; padding:8px 2px; line-height:1.6; }
-.saved-area-row { width:100%; text-align:left; background:#0d1117; border:1px solid #21262d; border-radius:7px; color:#e6edf3; padding:8px; margin-bottom:7px; cursor:pointer; }
+.saved-area-row-wrap { position:relative; overflow:hidden; border-radius:7px; margin-bottom:7px; }
+.saved-area-row-wrap .saved-area-row { margin-bottom:0; position:relative; z-index:1; transition:transform 0.2s ease; will-change:transform; }
+.saved-area-delete-btn { position:absolute; right:0; top:0; bottom:0; width:72px; background:#e53e3e; color:#fff; border:none; font-size:12px; font-weight:700; cursor:pointer; z-index:0; display:flex; align-items:center; justify-content:center; opacity:0; }
+.saved-area-row-wrap.swipe-open .saved-area-delete-btn { opacity:1; }
+.saved-area-delete-btn:active { background:#c53030; }
+.saved-area-row { width:100%; text-align:left; background:#0d1117; border:1px solid #21262d; border-radius:7px; color:#e6edf3; padding:8px; cursor:pointer; }
 .saved-area-row:hover, .saved-area-row.active { border-color:#3fb950; background:#0c2d1a; }
 .saved-area-main { display:flex; gap:6px; align-items:center; font-size:12px; font-weight:700; }
 .saved-area-sub { font-size:10px; color:#8b949e; margin-top:4px; }
@@ -1077,22 +1082,104 @@ void main() {
     savedAreaItems.innerHTML = html;
     savedAreaItems.style.display = 'block';
   }
+  // ===== 保存済みエリアのスワイプ削除 =====
+  var savedAreaSwipeOpenWrap = null;
+  var savedAreaSwipeOpenInner = null;
+  function closeSavedAreaSwipeOpen() {
+    if (savedAreaSwipeOpenInner) {
+      savedAreaSwipeOpenInner.style.transition = 'transform 0.2s ease';
+      savedAreaSwipeOpenInner.style.transform = 'translateX(0)';
+    }
+    if (savedAreaSwipeOpenWrap) savedAreaSwipeOpenWrap.classList.remove('swipe-open');
+    savedAreaSwipeOpenWrap = null; savedAreaSwipeOpenInner = null;
+  }
+  function addSavedAreaSwipeBehavior(wrap, inner) {
+    var startX = 0, dragging = false, moved = false;
+    var THRESHOLD = 50, BTN_W = 72;
+    function isOpen() { return savedAreaSwipeOpenWrap === wrap; }
+    function onStart(x) { startX = x; dragging = true; moved = false; }
+    function onMove(x) {
+      if (!dragging) return;
+      var dx = x - startX;
+      if (Math.abs(dx) < 4) return;
+      moved = true;
+      var base = isOpen() ? -BTN_W : 0;
+      var tx = Math.max(-BTN_W, Math.min(0, base + dx));
+      inner.style.transition = 'none';
+      inner.style.transform = 'translateX(' + tx + 'px)';
+    }
+    function onEnd(x) {
+      if (!dragging) return;
+      dragging = false;
+      var dx = x - startX;
+      inner.style.transition = 'transform 0.2s ease';
+      if (!moved) return;
+      if (isOpen()) {
+        if (dx > BTN_W / 2) { closeSavedAreaSwipeOpen(); }
+        else { inner.style.transform = 'translateX(-' + BTN_W + 'px)'; }
+      } else {
+        if (-dx > THRESHOLD) {
+          if (savedAreaSwipeOpenWrap && savedAreaSwipeOpenWrap !== wrap) closeSavedAreaSwipeOpen();
+          inner.style.transform = 'translateX(-' + BTN_W + 'px)';
+          wrap.classList.add('swipe-open');
+          savedAreaSwipeOpenWrap = wrap; savedAreaSwipeOpenInner = inner;
+        } else {
+          inner.style.transform = 'translateX(0)';
+        }
+      }
+    }
+    wrap.addEventListener('touchstart', function(e) { onStart(e.touches[0].clientX); }, { passive: true });
+    wrap.addEventListener('touchmove', function(e) { onMove(e.touches[0].clientX); }, { passive: true });
+    wrap.addEventListener('touchend', function(e) { onEnd(e.changedTouches[0].clientX); });
+    var mouseDown = false;
+    inner.addEventListener('mousedown', function(e) { if (e.button !== 0) return; mouseDown = true; onStart(e.clientX); });
+    document.addEventListener('mousemove', function(e) { if (!mouseDown) return; onMove(e.clientX); });
+    document.addEventListener('mouseup', function(e) { if (!mouseDown) return; mouseDown = false; onEnd(e.clientX); });
+  }
+  function deleteSavedArea(areaSeq, wrap) {
+    fetch('/api/heritage-area-boxes/' + encodeURIComponent(areaSeq), { method: 'DELETE', credentials: 'same-origin' })
+      .then(function(res) { if (!res.ok) throw new Error('failed'); })
+      .then(function() {
+        savedAreasCache = savedAreasCache.filter(function(a) { return Number(a.areaSeq) !== Number(areaSeq); });
+        if (selectedSavedAreaSeq === areaSeq) selectedSavedAreaSeq = null;
+        if (savedAreaSwipeOpenWrap === wrap) { savedAreaSwipeOpenWrap = null; savedAreaSwipeOpenInner = null; }
+        renderSavedAreaMenu(savedAreasCache);
+      })
+      .catch(function() { savedAreaList.textContent = 'エリアの削除に失敗しました'; });
+  }
   function renderSavedAreaMenu(areas) {
     if (!savedAreaList) return;
+    closeSavedAreaSwipeOpen();
     if (!areas.length) { savedAreaList.className = 'area-list-status'; savedAreaList.textContent = '登録済みエリアはありません'; return; }
     savedAreaList.className = '';
     savedAreaList.innerHTML = areas.map(function(area) {
-      return '<button class="saved-area-row' + (selectedSavedAreaSeq === area.areaSeq ? ' active' : '') + '" data-area-seq="' + escClientHtml(area.areaSeq) + '">' +
-        '<div class="saved-area-main"><span>エリア番号 ' + escClientHtml(area.areaSeq) + '</span></div>' +
-        '<div class="saved-area-sub">エリア名: ' + escClientHtml(area.areaName || 'null') + ' / ' + escClientHtml(area.box || 'box') + '</div>' +
-      '</button>';
+      return '<div class="saved-area-row-wrap" data-area-seq="' + escClientHtml(area.areaSeq) + '">' +
+        '<button class="saved-area-delete-btn" data-area-seq="' + escClientHtml(area.areaSeq) + '">削除</button>' +
+        '<button class="saved-area-row' + (selectedSavedAreaSeq === area.areaSeq ? ' active' : '') + '" data-area-seq="' + escClientHtml(area.areaSeq) + '">' +
+          '<div class="saved-area-main"><span>エリア番号 ' + escClientHtml(area.areaSeq) + '</span></div>' +
+          '<div class="saved-area-sub">エリア名: ' + escClientHtml(area.areaName || 'null') + ' / ' + escClientHtml(area.box || 'box') + '</div>' +
+        '</button>' +
+      '</div>';
     }).join('');
-    savedAreaList.querySelectorAll('.saved-area-row').forEach(function(row) {
+    savedAreaList.querySelectorAll('.saved-area-row-wrap').forEach(function(wrap) {
+      var row = wrap.querySelector('.saved-area-row');
+      var delBtn = wrap.querySelector('.saved-area-delete-btn');
+      var clickMoved = false;
+      row.addEventListener('mousedown', function() { clickMoved = false; });
+      row.addEventListener('mousemove', function() { clickMoved = true; });
       row.addEventListener('click', function() {
+        if (clickMoved) return;
+        if (savedAreaSwipeOpenWrap === wrap) { closeSavedAreaSwipeOpen(); return; }
         var seq = Number(row.getAttribute('data-area-seq'));
         var area = savedAreasCache.find(function(a) { return Number(a.areaSeq) === seq; });
         if (area) focusSavedArea(area);
       });
+      delBtn.addEventListener('click', function(e) {
+        e.stopPropagation();
+        var seq = Number(delBtn.getAttribute('data-area-seq'));
+        deleteSavedArea(seq, wrap);
+      });
+      addSavedAreaSwipeBehavior(wrap, row);
     });
   }
   function loadSavedAreaMenu() {
