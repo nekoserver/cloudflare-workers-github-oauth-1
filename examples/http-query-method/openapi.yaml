@@ -1,0 +1,117 @@
+openapi: 3.2.0
+info:
+  title: HTTP QUERY method sample
+  version: 1.0.0
+  description: |
+    HTTP QUERY メソッド(IETF draft-ietf-httpbis-safe-method-w-body)を使った
+    検索APIのサンプル。QUERY は GET と同じ safe(副作用なし) / idempotent
+    (何度実行しても結果が変わらない) なセマンティクスを持ちながら、
+    URLに載せづらい複雑な検索条件をリクエストボディで送れる。
+
+    OpenAPI 3.2 では Path Item Object に `query` フィールドがネイティブに
+    追加され、`get`/`post` 等と同じ書き方で QUERY 専用の操作を定義できる。
+    3.2 未対応のツールでは `additionalOperations` 経由で定義することもできる
+    (下記「3.1向けの代替記法」参照)。
+servers:
+  - url: http://localhost:8787
+    description: ローカル開発サーバー
+paths:
+  /books:
+    query:
+      summary: 書籍を検索する
+      description: |
+        リクエストボディ(JSON)で検索条件を指定する。ボディを省略した場合は
+        全件を返す(GETと同様、副作用のない安全な読み取り操作)。
+      operationId: queryBooks
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BookQuery'
+            examples:
+              scifi1930s:
+                summary: 1930〜1960年のSF小説を出版年順で
+                value:
+                  genre: sci-fi
+                  minYear: 1930
+                  maxYear: 1970
+                  sort: year
+              all:
+                summary: 条件なし(全件取得)
+                value: {}
+      responses:
+        '200':
+          description: 検索結果
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BookQueryResult'
+        '400':
+          description: リクエストボディのJSON解析に失敗した
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+components:
+  schemas:
+    BookQuery:
+      type: object
+      additionalProperties: false
+      properties:
+        genre:
+          type: string
+          description: ジャンルの完全一致フィルタ
+          example: sci-fi
+        minYear:
+          type: integer
+          description: 出版年の下限(この年を含む)
+        maxYear:
+          type: integer
+          description: 出版年の上限(この年を含む)
+        sort:
+          type: string
+          enum: [year, title]
+          description: 並び替えキー(省略時はデータの登録順)
+    Book:
+      type: object
+      required: [id, title, genre, year]
+      properties:
+        id:
+          type: integer
+        title:
+          type: string
+        genre:
+          type: string
+        year:
+          type: integer
+    BookQueryResult:
+      type: object
+      required: [count, books]
+      properties:
+        count:
+          type: integer
+          description: booksの件数
+        books:
+          type: array
+          items:
+            $ref: '#/components/schemas/Book'
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+
+# --- 3.1向けの代替記法(参考) ---
+# OpenAPI 3.1 系のツール(query キーワード未対応)では、Path Item Object に
+# 書けるのは固定フィールド(get/put/post/delete/options/head/patch/trace)の
+# みなので、QUERY のような任意メソッドは additionalOperations で表現する:
+#
+# paths:
+#   /books:
+#     additionalOperations:
+#       QUERY:
+#         summary: 書籍を検索する
+#         requestBody: { ... }
+#         responses: { ... }
