@@ -8,7 +8,7 @@ import { HERITAGE_AREA_SEARCH_TOPICS } from './index';
 // テーブル分割・エリア番号表示ロジックの実際の挙動を検証する。
 function extractPureFunctions(html: string): string {
   const lines = html.split('\n');
-  const prefixes = ['const esc=', 'function areaNumbersOf(', 'function distancePrefix(', 'function resultNameHtml(', 'function renderMatchedRows(', 'function renderUnmatchedRows('];
+  const prefixes = ['const esc=', 'let gemmaCache=', 'function areaNumbersOf(', 'function distancePrefix(', 'function mitokoroIconsHtml(', 'function resultNameHtml(', 'function renderMatchedRows(', 'function renderUnmatchedRows('];
   const found = prefixes.map((prefix) => lines.find((line) => line.startsWith(prefix)));
   if (found.some((line) => !line)) {
     throw new Error('必要な関数が生成HTMLから見つからない');
