@@ -212,6 +212,15 @@ ${renderKeywordClassifyPanelCss()}
 .hist-side-num{font-size:10px;color:#484f58;font-weight:600}
 .hist-side-q{font-size:12px;color:#c9d1d9;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin:2px 0}
 .hist-side-meta{font-size:10px;color:#8b949e}
+.city-dist-menu-btn{background:var(--btn-bg,#21262d);border:1px solid var(--border,#30363d);color:var(--fg,#e6edf3);padding:6px 10px;border-radius:6px;cursor:pointer;font-size:13px;font-family:inherit}
+.city-dist-candidates{display:none;position:fixed;background:#161b22;border:1px solid #30363d;border-radius:6px;max-height:240px;overflow-y:auto;box-shadow:0 8px 24px rgba(0,0,0,.5)}
+.city-dist-candidates.open{display:block}
+.city-dist-candidate-row{padding:6px 10px;font-size:12px;color:#c9d1d9;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.city-dist-candidate-row:hover{background:#21262d}
+.city-dist-menu{display:none;position:fixed;background:#161b22;border:1px solid #30363d;border-radius:6px;min-width:170px;box-shadow:0 8px 24px rgba(0,0,0,.5)}
+.city-dist-menu.open{display:block}
+.city-dist-menu-item{padding:8px 12px;font-size:12px;color:#c9d1d9;cursor:pointer;white-space:nowrap;display:block;text-decoration:none;font-family:inherit;background:none;border:none;width:100%;text-align:left}
+.city-dist-menu-item:hover{background:#21262d}
 </style>
 </head>
 <body>
@@ -240,8 +249,11 @@ ${renderKeywordClassifyPanelCss()}
   <button id="btn-cap-dist" style="margin-left:8px;background:var(--btn-bg,#21262d);border:1px solid var(--border,#30363d);color:var(--fg,#e6edf3);padding:6px 12px;border-radius:6px;cursor:pointer;font-size:13px">🌍 首都間距離</button>
   <button id="btn-rail-hr" style="margin-left:8px;background:var(--btn-bg,#21262d);border:1px solid var(--border,#30363d);color:var(--fg,#e6edf3);padding:6px 12px;border-radius:6px;cursor:pointer;font-size:13px">🚉 駅周辺の世界遺産</button>
   <button id="btn-airport-hr" style="margin-left:8px;background:var(--btn-bg,#21262d);border:1px solid var(--border,#30363d);color:var(--fg,#e6edf3);padding:6px 12px;border-radius:6px;cursor:pointer;font-size:13px">🛬 周辺の世界遺産</button>
-  <input type="text" id="city-dist-search" placeholder="世界遺産名 または 緯度,経度" style="margin-left:auto;background:var(--btn-bg,#21262d);border:1px solid var(--border,#30363d);color:var(--fg,#e6edf3);padding:6px 10px;border-radius:6px;font-size:13px;width:220px">
+  <input type="text" id="city-dist-search" placeholder="世界遺産名 または 緯度,経度" autocomplete="off" style="margin-left:auto;background:var(--btn-bg,#21262d);border:1px solid var(--border,#30363d);color:var(--fg,#e6edf3);padding:6px 10px;border-radius:6px;font-size:13px;width:220px">
+  <button type="button" class="city-dist-menu-btn" id="city-dist-menu-btn" style="display:none">🌆🔍</button>
 </div>
+<div class="city-dist-candidates" id="city-dist-candidates"></div>
+<div class="city-dist-menu" id="city-dist-menu"></div>
 <div id="ai-modal-overlay" class="ai-modal-overlay">
   <div class="ai-modal">
     <div class="ai-modal-head">
@@ -1679,6 +1691,102 @@ cityDistSearchInput.addEventListener('keydown', function(e) {
     return;
   }
   renderCityDistResult(point);
+});
+
+var cityDistMenuBtn = document.getElementById('city-dist-menu-btn');
+var cityDistCandidates = document.getElementById('city-dist-candidates');
+var cityDistMenu = document.getElementById('city-dist-menu');
+
+function closeCityDistCandidates() {
+  cityDistCandidates.classList.remove('open');
+  cityDistCandidates.innerHTML = '';
+}
+
+function closeCityDistMenu() {
+  cityDistMenu.classList.remove('open');
+  cityDistMenu.innerHTML = '';
+}
+
+function positionCityDistPanel(panel, anchorEl, align) {
+  var r = anchorEl.getBoundingClientRect();
+  panel.style.top = (r.bottom + 4) + 'px';
+  if (align === 'right') {
+    panel.style.left = 'auto';
+    panel.style.right = (window.innerWidth - r.right) + 'px';
+  } else {
+    panel.style.left = r.left + 'px';
+    panel.style.right = 'auto';
+    panel.style.width = r.width + 'px';
+  }
+}
+
+function renderCityDistCandidates() {
+  var normalized = normalizeCityDistQuery(cityDistSearchInput.value);
+  if (!normalized) { closeCityDistCandidates(); return; }
+  var matches = HERITAGE_ALL.filter(function(h) {
+    return normalizeCityDistQuery(h.n).indexOf(normalized) !== -1;
+  }).slice(0, 20);
+  if (!matches.length) { closeCityDistCandidates(); return; }
+  cityDistCandidates.innerHTML = matches.map(function(h) {
+    return '<div class="city-dist-candidate-row" data-name="' + h.n.replace(/"/g, '&quot;') + '">' + h.f + ' ' + escHtml(h.n) + '</div>';
+  }).join('');
+  positionCityDistPanel(cityDistCandidates, cityDistSearchInput, 'left');
+  cityDistCandidates.style.zIndex = String(getNextZ());
+  cityDistCandidates.classList.add('open');
+  cityDistCandidates.querySelectorAll('.city-dist-candidate-row').forEach(function(row) {
+    row.addEventListener('click', function() {
+      cityDistSearchInput.value = row.getAttribute('data-name');
+      closeCityDistCandidates();
+      updateCityDistMenuBtn();
+      cityDistSearchInput.focus();
+    });
+  });
+}
+
+function updateCityDistMenuBtn() {
+  var normalized = normalizeCityDistQuery(cityDistSearchInput.value);
+  var hit = normalized ? HERITAGE_ALL.filter(function(h) { return normalizeCityDistQuery(h.n) === normalized; })[0] : null;
+  if (hit) {
+    cityDistMenuBtn.style.display = '';
+    cityDistMenuBtn.setAttribute('data-heritage-name', hit.n);
+  } else {
+    cityDistMenuBtn.style.display = 'none';
+    cityDistMenuBtn.removeAttribute('data-heritage-name');
+    closeCityDistMenu();
+  }
+}
+
+cityDistSearchInput.addEventListener('input', function() {
+  renderCityDistCandidates();
+  updateCityDistMenuBtn();
+});
+
+cityDistMenuBtn.addEventListener('click', function(e) {
+  e.stopPropagation();
+  var willOpen = !cityDistMenu.classList.contains('open');
+  closeCityDistMenu();
+  if (!willOpen) return;
+  var name = cityDistMenuBtn.getAttribute('data-heritage-name');
+  if (!name) return;
+  cityDistMenu.innerHTML =
+    '<button type="button" class="city-dist-menu-item" id="city-dist-menu-cities">🌆 周辺都市を見る</button>' +
+    '<a class="city-dist-menu-item" id="city-dist-menu-globe" href="/webgl-heritage?heritage=' + encodeURIComponent(name) + '">🌍 地球儀で見る</a>';
+  positionCityDistPanel(cityDistMenu, cityDistMenuBtn, 'right');
+  cityDistMenu.style.zIndex = String(getNextZ());
+  cityDistMenu.classList.add('open');
+  document.getElementById('city-dist-menu-cities').addEventListener('click', function() {
+    closeCityDistMenu();
+    var point = resolveCityDistPoint(name);
+    if (!point) return;
+    cityDistOverlay.style.zIndex = String(getNextZ());
+    cityDistOverlay.classList.add('open');
+    renderCityDistResult(point);
+  });
+});
+
+document.addEventListener('click', function(e) {
+  if (e.target !== cityDistSearchInput && !cityDistCandidates.contains(e.target)) closeCityDistCandidates();
+  if (e.target !== cityDistMenuBtn && !cityDistMenu.contains(e.target)) closeCityDistMenu();
 });
 
 initAutoLoad();
