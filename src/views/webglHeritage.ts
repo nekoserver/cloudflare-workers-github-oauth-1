@@ -4626,6 +4626,24 @@ void main() {
       openCityFlyPanel(cityName, cc, lat, lon);
     }
   })();
+
+  (function() {
+    var sp = new URLSearchParams(window.location.search);
+    var heritageName = sp.get('heritage');
+    if (!heritageName) return;
+    var hIdx = -1;
+    for (var i = 0; i < HERITAGE.length; i++) {
+      if (HERITAGE[i].n === heritageName) { hIdx = i; break; }
+    }
+    if (hIdx === -1) return;
+    var hd = HERITAGE[hIdx];
+    zoom = 1.2;
+    flyTo(hd.lat, hd.lon);
+    rotYv = flyTarget.ry;
+    rotXv = flyTarget.rx;
+    flyTarget = null;
+    setTimeout(function() { showMarkerTooltip(hIdx, 0, 0); }, 300);
+  })();
 })();
 </script>
 <script>
