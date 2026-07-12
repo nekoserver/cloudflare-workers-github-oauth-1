@@ -211,7 +211,7 @@ canvas:active { cursor:grabbing; }
 .f1-cal-empty { visibility:hidden; }
 .f1-cal-target { background:#0c2d1a; color:#3fb950; font-weight:700; }
 .f1-cal-cell.f1-cal-flash { animation:f1-flash 0.5s ease-in-out 3; }
-.f1-cal-cell.wh-cal-today { outline:2px solid #ffd700; }
+.f1-cal-cell.mh-cal-today { outline:2px solid #ffd700; }
 #f1-tour-btn { pointer-events:auto; margin-top:6px; background:#0c2d1a; border:1px solid #3fb950; border-radius:6px; color:#3fb950; font-size:11px; padding:4px 12px; cursor:pointer; font-family:inherit; display:block; width:100%; }
 #f1-tour-btn:hover { background:#0f3a22; }
 .city-mk { position:absolute; transform:translate(-50%,-50%); background:rgba(13,17,23,0.92); border:1px solid #388bfd; border-radius:10px; color:#c9d1d9; font-size:9px; padding:2px 6px; white-space:nowrap; pointer-events:none; opacity:0; transition:opacity .3s; display:flex; align-items:center; gap:3px; }
@@ -446,13 +446,13 @@ void main() {
     </div>
     <div class="f1-side-body" id="rail-side-body"></div>
   </div>
-  <div id="weekly-heritage-side" class="f1-side">
+  <div id="monthly-heritage-side" class="f1-side">
     <div class="f1-side-head">
-      <span class="f1-side-title">📅 今週の世界遺産</span>
-      <button class="f1-side-close" id="weekly-heritage-side-close">✕</button>
+      <span class="f1-side-title">📅 今月の世界遺産</span>
+      <button class="f1-side-close" id="monthly-heritage-side-close">✕</button>
     </div>
-    <div class="f1-cal" id="weekly-heritage-cal"></div>
-    <div class="f1-side-body" id="weekly-heritage-side-body"></div>
+    <div class="f1-cal" id="monthly-heritage-cal"></div>
+    <div class="f1-side-body" id="monthly-heritage-side-body"></div>
   </div>
   <div id="area-tour-side" class="f1-side">
     <div class="f1-side-head">
@@ -497,7 +497,7 @@ void main() {
       <button class="canvas-ctrl-btn" id="btnRail">🚉 鉄道</button>
       <button class="canvas-ctrl-btn" id="btnF1">🏎️ F1</button>
       <button class="canvas-ctrl-btn" id="btnAirport">🛫 空路</button>
-      <button class="canvas-ctrl-btn" id="btnWeeklyHeritage">📅今週の世界遺産</button>
+      <button class="canvas-ctrl-btn" id="btnMonthlyHeritage">📅今月の世界遺産</button>
     </div>
   </div>
   <div class="side">
@@ -2426,7 +2426,7 @@ void main() {
 
   function pad2(n) { return (n < 10 ? '0' : '') + n; }
 
-  function renderWeeklyHeritageCalendar(year, month, day) {
+  function renderMonthlyHeritageCalendar(year, month, day) {
     var first = new Date(year, month - 1, 1);
     var startWeekday = first.getDay();
     var daysInMonth = new Date(year, month, 0).getDate();
@@ -2437,37 +2437,48 @@ void main() {
       html += '<div class="f1-cal-cell" data-day="' + d + '">' + d + '</div>';
     }
     html += '</div>';
-    weeklyHeritageCalEl.innerHTML = html;
-    var cell = weeklyHeritageCalEl.querySelector('.f1-cal-cell[data-day="' + day + '"]');
+    monthlyHeritageCalEl.innerHTML = html;
+    var cell = monthlyHeritageCalEl.querySelector('.f1-cal-cell[data-day="' + day + '"]');
     if (cell) {
       cell.classList.add('f1-cal-flash');
       setTimeout(function() {
         cell.classList.remove('f1-cal-flash');
-        cell.classList.add('wh-cal-today');
+        cell.classList.add('mh-cal-today');
       }, 1500);
     }
   }
 
-  function findWeeklyHeritageMatches(baseDate) {
-    var target = new Date(baseDate.getFullYear(), baseDate.getMonth(), baseDate.getDate());
-    target.setDate(target.getDate() + 7);
-    var targetMd = pad2(target.getMonth() + 1) + '-' + pad2(target.getDate());
-    return HERITAGE.filter(function(h) { return h.md === targetMd; });
+  // mmdd('MM-DD')が基準日(baseDate)から見て次に到来するまでの日数を返す(当日なら0、
+  // 今年の日付が既に過ぎていれば来年の同じ月日までの日数)。
+  function daysUntilNextMd(mmdd, baseDate) {
+    var parts = mmdd.split('-');
+    var mm = parseInt(parts[0], 10), dd = parseInt(parts[1], 10);
+    var base = new Date(baseDate.getFullYear(), baseDate.getMonth(), baseDate.getDate());
+    var candidate = new Date(base.getFullYear(), mm - 1, dd);
+    if (candidate < base) candidate = new Date(base.getFullYear() + 1, mm - 1, dd);
+    return Math.round((candidate - base) / 86400000);
   }
 
-  function renderWeeklyHeritageList() {
-    var matches = findWeeklyHeritageMatches(new Date());
-    if (!matches.length) {
-      weeklyHeritageSideBody.innerHTML = '<div style="color:#8b949e;text-align:center;padding:20px;font-size:12px">7日後が制定日の世界遺産はありません</div>';
-      return;
-    }
-    weeklyHeritageSideBody.innerHTML = matches.map(function(item) {
+  // 今日以降30日以内が制定日(md)の世界遺産があればそれらだけを近い順に返し、
+  // 無ければmd判別済みの全世界遺産をアクセス日から一番近いMM-DD順に返す。
+  function findMonthlyHeritageMatches(baseDate) {
+    var withDays = HERITAGE.filter(function(h) { return !!h.md; }).map(function(h) {
+      return { item: h, days: daysUntilNextMd(h.md, baseDate) };
+    });
+    withDays.sort(function(a, b) { return a.days - b.days; });
+    var within30 = withDays.filter(function(x) { return x.days <= 30; });
+    return (within30.length ? within30 : withDays).map(function(x) { return x.item; });
+  }
+
+  function renderMonthlyHeritageList() {
+    var matches = findMonthlyHeritageMatches(new Date());
+    monthlyHeritageSideBody.innerHTML = matches.map(function(item) {
       var idx = HERITAGE.indexOf(item);
       var mdParts = item.md.split('-');
       var dateStr = item.y + '年' + parseInt(mdParts[0], 10) + '月' + parseInt(mdParts[1], 10) + '日制定';
       return '<div class="f1-side-item" data-idx="' + idx + '"><span class="f1-side-flag">' + item.e + '</span><span class="f1-side-info"><span class="f1-side-circuit">' + item.n + '</span><span class="f1-side-date">' + item.c + ' ・ ' + dateStr + '</span></span></div>';
     }).join('');
-    weeklyHeritageSideBody.querySelectorAll('.f1-side-item').forEach(function(row) {
+    monthlyHeritageSideBody.querySelectorAll('.f1-side-item').forEach(function(row) {
       row.addEventListener('click', function() {
         var idx = parseInt(row.getAttribute('data-idx'), 10);
         var d = HERITAGE[idx];
@@ -3604,9 +3615,9 @@ void main() {
   var f1TourIdx = -1;
   var f1TourRunning = false;
   var f1TourTimer = null;
-  var weeklyHeritageSide = document.getElementById('weekly-heritage-side');
-  var weeklyHeritageSideBody = document.getElementById('weekly-heritage-side-body');
-  var weeklyHeritageCalEl = document.getElementById('weekly-heritage-cal');
+  var monthlyHeritageSide = document.getElementById('monthly-heritage-side');
+  var monthlyHeritageSideBody = document.getElementById('monthly-heritage-side-body');
+  var monthlyHeritageCalEl = document.getElementById('monthly-heritage-cal');
   var railStationPin = document.getElementById('rail-station-pin');
   var railStationPinLabel = document.getElementById('rail-station-pin-label');
   var railStationPinLine = document.getElementById('rail-station-pin-line');
@@ -3915,18 +3926,18 @@ void main() {
     renderF1Calendar(today.getFullYear(), today.getMonth() + 1, today.getDate());
   });
 
-  document.getElementById('weekly-heritage-side-close').addEventListener('click', function() {
-    weeklyHeritageSide.classList.remove('open');
+  document.getElementById('monthly-heritage-side-close').addEventListener('click', function() {
+    monthlyHeritageSide.classList.remove('open');
   });
-  document.getElementById('btnWeeklyHeritage').addEventListener('click', function() {
-    if (weeklyHeritageSide.classList.contains('open')) {
-      weeklyHeritageSide.classList.remove('open');
+  document.getElementById('btnMonthlyHeritage').addEventListener('click', function() {
+    if (monthlyHeritageSide.classList.contains('open')) {
+      monthlyHeritageSide.classList.remove('open');
       return;
     }
-    weeklyHeritageSide.classList.add('open');
+    monthlyHeritageSide.classList.add('open');
     var today = new Date();
-    renderWeeklyHeritageCalendar(today.getFullYear(), today.getMonth() + 1, today.getDate());
-    renderWeeklyHeritageList();
+    renderMonthlyHeritageCalendar(today.getFullYear(), today.getMonth() + 1, today.getDate());
+    renderMonthlyHeritageList();
   });
 
   var cityStatsOverlay = document.getElementById('city-stats-overlay');
