@@ -5498,7 +5498,14 @@ app.get('/api/heritage-area/travel-categories/:id/keywords', authMiddleware, asy
 // 実際に生成される質問文のtopicと完全一致する文字列のみを書くこと（存在しない文字列は永遠に無マッチになる）
 export const HERITAGE_AREA_SEARCH_TOPICS = ['見どころ', '最寄り空港', '鉄道でのアクセス', '宿泊施設'];
 
-app.post('/api/heritage-area/search', authMiddleware, async (c) => {
+/**
+ * HTTP QUERY(draft-ietf-httpbis-safe-method-w-body)でも呼べるように、
+ * ハンドラをapp.post/app.onの両方から参照できる名前付き関数として切り出す。
+ * この検索は副作用のない読み取り専用操作で、キーワード配列(最大20件)という
+ * URLに載せづらい条件を渡すため、GETと同じ安全なセマンティクスを持つQUERYに
+ * 適した典型例。既存のPOST呼び出し元(heritageArea.ts)はそのまま動作する。
+ */
+async function heritageAreaSearchHandler(c: Context<{ Bindings: Bindings; Variables: Variables }>) {
   const user = c.get('user');
   const db = c.env.DB;
   if (!db) return c.json({ error: 'DB unavailable' }, 503);
@@ -5630,7 +5637,10 @@ app.post('/api/heritage-area/search', authMiddleware, async (c) => {
   } catch (err) {
     return c.json({ error: '検索露出ログの検索に失敗しました', detail: String((err as Error)?.message ?? err) }, 500);
   }
-});
+}
+
+app.post('/api/heritage-area/search', authMiddleware, heritageAreaSearchHandler);
+app.on('QUERY', '/api/heritage-area/search', authMiddleware, heritageAreaSearchHandler);
 
 app.get('/api/heritage-cities', authMiddleware, async (c) => {
   const db = c.env.DB;
