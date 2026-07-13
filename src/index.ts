@@ -186,6 +186,7 @@ const STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
   { name: 'email_confirm_tokens',       migration: '0076',   description: 'RESEND_API_KEY設定時のログイン確認メール保留トークン（クリックで発行完了）', syncPolicy: 'auto' },
   { name: 'airport_nearby_heritage',    migration: '0078',   description: '空港から300km圏内の世界遺産の距離記録（着陸ボタンで記録）', syncPolicy: 'auto' },
   { name: 'airport_nearby_airport',     migration: '0079',   description: '空港から1500km圏内の他空港の距離記録（着陸ボタンで記録）', syncPolicy: 'auto' },
+  { name: 'unresolved_airport_keywords', migration: '0080',  description: 'heritage-areaページで国旗・座標が判明しなかった空港名キーワードの記録', syncPolicy: 'auto' },
 ];
 
 const REQUIRED_STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
@@ -1217,6 +1218,13 @@ CREATE INDEX IF NOT EXISTS idx_airport_nearby_heritage_airport ON airport_nearby
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_airport_nearby_airport_unique ON airport_nearby_airport(airport_name, other_airport_name);
 CREATE INDEX IF NOT EXISTS idx_airport_nearby_airport_airport ON airport_nearby_airport(airport_name);`,
+  '0080': `CREATE TABLE IF NOT EXISTS unresolved_airport_keywords (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  airport_name TEXT NOT NULL,
+  recorded_at TEXT DEFAULT (datetime('now'))
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_unresolved_airport_keywords_unique ON unresolved_airport_keywords(airport_name);`,
 };
 
 async function ensureGroupTable(db: D1Database): Promise<void> {
@@ -1422,6 +1430,7 @@ export const TABLE_COLUMN_KEYS: Record<string, ColumnKeyInfo> = {
   email_confirm_tokens: { token: 'pk', github_login: 'idx', email: 'idx' },
   airport_nearby_heritage: { id: 'pk', airport_name: 'idx', heritage_name: 'idx' },
   airport_nearby_airport: { id: 'pk', airport_name: 'idx', other_airport_name: 'idx' },
+  unresolved_airport_keywords: { id: 'pk', airport_name: 'uk' },
 };
 
 export function getColumnKeyType(tableName: string, columnName: string): ColumnKeyType {
@@ -1501,6 +1510,7 @@ export const TABLE_GROUP_MAP: Record<string, string> = {
   rail_station_nearby_fetched: 'system',
   airport_nearby_heritage: 'system',
   airport_nearby_airport: 'system',
+  unresolved_airport_keywords: 'system',
   keyword_category_groups: 'search',
   keyword_multi_labels: 'search',
   ts_repository:          'ts-catalog',
@@ -5436,6 +5446,31 @@ export function findHeritageAreaPoint(keyword: string): { name: string; flag: st
   return null;
 }
 
+const HERITAGE_AREA_GENERIC_AIRPORT_KEYWORD_PATTERNS = [/^空港$/, /^国内空港$/, /^最寄り駅$/, /^国際空港$/];
+
+/**
+ * heritage-areaページのキーワード表示に現れる「空港」「国内空港」「最寄り駅」「国際空港」は
+ * 個別の空港名ではなく汎用的なカテゴリラベルのため、国旗・座標が判明しなくても
+ * unresolved_airport_keywords への記録対象から除外する。
+ */
+export function isGenericAirportCategoryKeyword(keyword: string): boolean {
+  return HERITAGE_AREA_GENERIC_AIRPORT_KEYWORD_PATTERNS.some((re) => re.test(keyword));
+}
+
+/**
+ * findHeritageAreaPointで国旗・座標が判明しなかった空港名候補を記録する。
+ * AIRPORT_LISTへ追加すべき空港を後から調査で洗い出すためのログ用途であり、
+ * 失敗してもキーワード表示自体には影響させないためエラーは握りつぶす。
+ */
+async function recordUnresolvedAirportKeywords(db: D1Database, names: string[]): Promise<void> {
+  if (!names.length) return;
+  try {
+    await db.batch(
+      names.map((name) => db.prepare('INSERT OR IGNORE INTO unresolved_airport_keywords (airport_name) VALUES (?)').bind(name))
+    );
+  } catch {}
+}
+
 app.get('/api/heritage-area/travel-categories', authMiddleware, async (c) => {
   const user = c.get('user');
   const db = c.env.DB;
@@ -5485,10 +5520,17 @@ app.get('/api/heritage-area/travel-categories/:id/keywords', authMiddleware, asy
        GROUP BY m.keyword
        ORDER BY count DESC, m.keyword ASC`
     ).bind(user.sub, categoryId).all<{ keyword: string; count: number }>();
+    const unresolvedAirportNames: string[] = [];
     const keywords = (rows.results ?? []).map((row) => {
       const point = findHeritageAreaPoint(row.keyword);
-      return point ? { ...row, heritage_point: point } : row;
+      if (point) return { ...row, heritage_point: point };
+      if (!isGenericAirportCategoryKeyword(row.keyword)) unresolvedAirportNames.push(row.keyword);
+      return row;
     });
+    if (unresolvedAirportNames.length) {
+      const ctx = c.executionCtx;
+      if (ctx?.waitUntil) ctx.waitUntil(recordUnresolvedAirportKeywords(db, unresolvedAirportNames));
+    }
     return c.json({ keywords });
   } catch (err) {
     return c.json({ error: 'キーワードの取得に失敗しました', detail: String((err as Error)?.message ?? err) }, 500);
