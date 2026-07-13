@@ -5687,6 +5687,62 @@ async function heritageAreaSearchHandler(c: Context<{ Bindings: Bindings; Variab
 app.post('/api/heritage-area/search', authMiddleware, heritageAreaSearchHandler);
 app.on('QUERY', '/api/heritage-area/search', authMiddleware, heritageAreaSearchHandler);
 
+/**
+ * heritage-areaページで「カテゴリ選択…」(未選択)の状態でも、検索結果テーブルの
+ * エリア番号列見出しの本数をデータベース上に実在する最大エリア番号に合わせて
+ * 描画できるようにするための最大area_seq取得エンドポイント。
+ */
+app.get('/api/heritage-area/max-area-seq', authMiddleware, async (c) => {
+  const user = c.get('user');
+  const db = c.env.DB;
+  if (!db) return c.json({ error: 'DB unavailable' }, 503);
+  const row = await db.prepare('SELECT MAX(area_seq) AS maxSeq FROM heritage_area_boxes WHERE user_id = ?').bind(user.sub).first<{ maxSeq: number | null }>();
+  return c.json({ max: Number(row?.maxSeq ?? 0) || 0 });
+});
+
+/**
+ * heritage-areaページで「カテゴリ選択…」(未選択)の状態のまま検索結果テーブルの
+ * エリア番号列見出しをタップした際に、キーワード検索を経由せず直接そのエリアに
+ * 保存済みの世界遺産・空港・駅などのアイテム名を一覧表示するためのエンドポイント。
+ * area_matchesは既存のareaNumbersOf(クライアント)がそのまま解釈できる
+ * 「エリア#N」形式の文字列で返す。
+ */
+app.get('/api/heritage-area/areas/:areaSeq/items', authMiddleware, async (c) => {
+  const user = c.get('user');
+  const db = c.env.DB;
+  if (!db) return c.json({ error: 'DB unavailable' }, 503);
+  const areaSeq = Number(c.req.param('areaSeq'));
+  if (!Number.isInteger(areaSeq) || areaSeq <= 0) return c.json({ error: '無効なエリア番号です' }, 400);
+  try {
+    const nameRows = await db.prepare(
+      `SELECT DISTINCT i.item_name AS item_name
+       FROM heritage_area_items i
+       JOIN heritage_area_boxes b ON b.area_seq = i.area_seq AND b.user_id = ?
+       WHERE i.area_seq = ?
+       ORDER BY i.item_name ASC
+       LIMIT 500`
+    ).bind(user.sub, areaSeq).all<{ item_name: string }>();
+    const names = (nameRows.results ?? []).map((r) => r.item_name);
+    if (!names.length) return c.json({ items: [] });
+    const areaLookup = db.prepare(
+      `SELECT i.area_seq AS area_seq
+       FROM heritage_area_items i
+       JOIN heritage_area_boxes b ON b.area_seq = i.area_seq AND b.user_id = ?
+       WHERE i.item_name = ?
+       ORDER BY i.area_seq ASC`
+    );
+    const items: Array<{ item_name: string; category: string; area_matches: { key: string; areas: string }[] }> = [];
+    for (const name of names) {
+      const areaRows = await areaLookup.bind(user.sub, name).all<{ area_seq: number }>();
+      const labels = Array.from(new Set((areaRows.results ?? []).map((r) => `エリア#${r.area_seq}`)));
+      items.push({ item_name: name, category: 'エリア一覧', area_matches: labels.length ? [{ key: name, areas: labels.join(' / ') }] : [] });
+    }
+    return c.json({ items });
+  } catch (err) {
+    return c.json({ error: 'エリア内アイテムの取得に失敗しました', detail: String((err as Error)?.message ?? err) }, 500);
+  }
+});
+
 app.get('/api/heritage-cities', authMiddleware, async (c) => {
   const db = c.env.DB;
   if (!db) return c.json({ error: 'DB unavailable' }, 503);
