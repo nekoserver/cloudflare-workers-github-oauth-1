@@ -5446,12 +5446,15 @@ export function findHeritageAreaPoint(keyword: string): { name: string; flag: st
   return null;
 }
 
-const HERITAGE_AREA_GENERIC_AIRPORT_KEYWORD_PATTERNS = [/^空港$/, /^国内空港$/, /^最寄り駅$/, /^国際空港$/];
+const HERITAGE_AREA_GENERIC_AIRPORT_KEYWORD_PATTERNS = [/^空港$/, /^国内空港$/, /^最寄り駅$/, /^国際空港$/, /^スイス国際空港協会$/];
 
 /**
  * heritage-areaページのキーワード表示に現れる「空港」「国内空港」「最寄り駅」「国際空港」は
  * 個別の空港名ではなく汎用的なカテゴリラベルのため、国旗・座標が判明しなくても
- * unresolved_airport_keywords への記録対象から除外する。
+ * unresolved_airport_keywords への記録対象から除外する。「スイス国際空港協会」は
+ * 調査の結果、実在する空港名ではなく組織名であると確認済みのため同様に除外する
+ * (キーワード一覧自体の表示からは除外しない。unresolved_airport_keywords記録の
+ * 要否判定にのみ使う)。
  */
 export function isGenericAirportCategoryKeyword(keyword: string): boolean {
   return HERITAGE_AREA_GENERIC_AIRPORT_KEYWORD_PATTERNS.some((re) => re.test(keyword));
