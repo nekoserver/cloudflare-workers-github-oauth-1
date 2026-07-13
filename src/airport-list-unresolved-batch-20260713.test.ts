@@ -69,7 +69,7 @@ describe('AIRPORT_LIST: unresolved_airport_keywords由来の64件の追加分', 
     expect(point!.lat).toBeCloseTo(44.53, 1);
   });
 
-  it('AIRPORT_LISTの総件数が今回の64件追加分だけ増えている(103+64=167)', () => {
-    expect(AIRPORT_LIST.length).toBe(167);
+  it('AIRPORT_LISTの総件数が今回の64件追加分だけ増えている(103+64=167、以降のセッションで追加された分は含まない)', () => {
+    expect(AIRPORT_LIST.length).toBeGreaterThanOrEqual(167);
   });
 });
