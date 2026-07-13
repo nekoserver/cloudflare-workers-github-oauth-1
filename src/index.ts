@@ -5432,7 +5432,7 @@ export function normalizeHeritageAreaName(value: string): string {
  * 「〇〇空港」のような空港名も大量に含まれるため、世界遺産のみを対象にすると
  * 空港キーワードのボタンにだけ国旗が一切表示されない状態になる。
  */
-export function findHeritageAreaPoint(keyword: string): { name: string; flag: string; country: string; lat: number; lon: number } | null {
+export function findHeritageAreaPoint(keyword: string): { name: string; flag: string; country: string; lat: number; lon: number; code?: string } | null {
   const normalized = normalizeHeritageAreaName(keyword);
   const item = HERITAGE_LIST.find((h) => normalizeHeritageAreaName(h.n) === normalized);
   if (item && Number.isFinite(item.lat) && Number.isFinite(item.lon)) {
@@ -5441,7 +5441,7 @@ export function findHeritageAreaPoint(keyword: string): { name: string; flag: st
   const airport = AIRPORT_LIST.find((a) => normalizeHeritageAreaName(a.name) === normalized);
   if (airport && Number.isFinite(airport.lat) && Number.isFinite(airport.lon)) {
     const cityParts = (airport.city || '').split(' ');
-    return { name: airport.name, flag: cityParts[0] || '', country: cityParts.slice(1).join(' '), lat: airport.lat, lon: airport.lon };
+    return { name: airport.name, flag: cityParts[0] || '', country: cityParts.slice(1).join(' '), lat: airport.lat, lon: airport.lon, code: airport.code };
   }
   return null;
 }
