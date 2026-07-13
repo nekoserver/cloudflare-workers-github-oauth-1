@@ -88,9 +88,20 @@ describe('heritage-areaページ: ツールバーのリセット + エリア番�
   });
 
   it('applyAreaTableWidthCapはstate.maxAreaNumが15を超える場合のみ#results-matched-wrapへmax-widthを設定する', () => {
-    const block = extractFn(html, 'function applyAreaTableWidthCap(', 400);
+    const block = extractFn(html, 'function applyAreaTableWidthCap(', 600);
     expect(block).toContain("getElementById('results-matched-wrap')");
     expect(block).toMatch(/state\.maxAreaNum\s*>\s*15/);
+  });
+
+  it('applyAreaTableWidthCapは15列を超える場合テーブル自体の幅も実列数ぶんの合計px値に固定して自然サイズより広げ、確実にスクロールさせる(width:autoはブラウザによってはコンテナ幅に収まってしまうため使わない)', () => {
+    const block = extractFn(html, 'function applyAreaTableWidthCap(', 600);
+    expect(block).toContain("querySelector('table')");
+    expect(block).toMatch(/table\.style\.width\s*=\s*capped\s*\?\s*\(220\+state\.maxAreaNum\*26\)\+'px'\s*:\s*'100%'/);
+  });
+
+  it('applyAreaTableWidthCapは15列を超える場合、AIチャット質問列(先頭th)の幅も220pxに固定し、15列がキャップ幅ぴったりに収まるようにする(超えないと可変幅で15列より少ない本数しか画面内に収まらないため)', () => {
+    const block = extractFn(html, 'function applyAreaTableWidthCap(', 600);
+    expect(block).toMatch(/nameTh\.style\.width\s*=\s*capped\s*\?\s*'220px'\s*:\s*''/);
   });
 
   it('renderAreaColumnHeadersはヘッダ描画後にapplyAreaTableWidthCapを呼ぶ', () => {
