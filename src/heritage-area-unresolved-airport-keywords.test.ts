@@ -5,16 +5,20 @@ import { isGenericAirportCategoryKeyword } from './index';
 const src = readFileSync(new URL('./index.ts', import.meta.url).pathname, 'utf-8');
 
 // 対象: heritage-areaページのキーワード表示処理(/api/heritage-area/travel-categories/:id/keywords)。
-// 各キーワードが「^空港$」「^国内空港$」「^最寄り駅$」「^国際空港$」のような汎用ラベルでは
-// なく、かつ findHeritageAreaPoint で国旗・座標が判明しない場合、その空港名を
-// unresolved_airport_keywords テーブルに記録し、将来AIRPORT_LISTへ追加する調査対象を
-// 洗い出せるようにする。
+// 各キーワードが「^空港$」「^国内空港$」「^最寄り駅$」「^国際空港$」「^スイス国際空港協会$」の
+// ような汎用ラベル・実在しない組織名では なく、かつ findHeritageAreaPoint で国旗・座標が
+// 判明しない場合、その空港名を unresolved_airport_keywords テーブルに記録し、将来
+// AIRPORT_LISTへ追加する調査対象を洗い出せるようにする。「スイス国際空港協会」は実際の
+// 空港名ではないと確認済みのため、記録対象からは除外しつつ、空港カテゴリのキーワード一覧
+// 自体からは除外しない(isGenericAirportCategoryKeywordはunresolved_airport_keywords記録の
+// 要否判定にのみ使われ、キーワード一覧の表示には影響しない)。
 describe('heritage-areaページ: 国旗・座標不明な空港名キーワードの記録', () => {
-  it('isGenericAirportCategoryKeywordは4つの汎用ラベルにのみ完全一致でtrueを返す', () => {
+  it('isGenericAirportCategoryKeywordは5つの汎用ラベル・非空港名にのみ完全一致でtrueを返す', () => {
     expect(isGenericAirportCategoryKeyword('空港')).toBe(true);
     expect(isGenericAirportCategoryKeyword('国内空港')).toBe(true);
     expect(isGenericAirportCategoryKeyword('最寄り駅')).toBe(true);
     expect(isGenericAirportCategoryKeyword('国際空港')).toBe(true);
+    expect(isGenericAirportCategoryKeyword('スイス国際空港協会')).toBe(true);
   });
 
   it('特定の空港名や部分一致するだけの文字列はfalseを返す(完全一致のみ対象)', () => {
@@ -22,6 +26,7 @@ describe('heritage-areaページ: 国旗・座標不明な空港名キーワー�
     expect(isGenericAirportCategoryKeyword('空港近く')).toBe(false);
     expect(isGenericAirportCategoryKeyword('謎の空港ABC')).toBe(false);
     expect(isGenericAirportCategoryKeyword('姫路城')).toBe(false);
+    expect(isGenericAirportCategoryKeyword('スイス国際空港協会について')).toBe(false);
   });
 
   it('unresolved_airport_keywords テーブル作成SQLがマイグレーション0080として登録されている', () => {
