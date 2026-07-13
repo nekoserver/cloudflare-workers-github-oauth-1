@@ -101,22 +101,23 @@ describe('heritage-areaページ: new_layout(ツールバー・国旗ドロッ�
     expect(block).toMatch(/esc\(f\.flag\)\s*\+\s*'\('\s*\+\s*f\.count\s*\+\s*'\)/);
   });
 
-  it('国旗ドロップダウン内の各項目は「国旗」「(空港コード)」「空港名」「(出現回数)」の順で表示する', () => {
-    const idx = html.indexOf('function renderFlagToolbar(');
-    const block = html.slice(idx, idx + 1600);
+  it('国旗ドロップダウン(モーダル)内の各項目は「国旗」「(空港コード)」「空港名」「(出現回数)」の順で表示する', () => {
+    const idx = html.indexOf('function openFlagKeywordsModal(');
+    expect(idx).toBeGreaterThan(-1);
+    const block = html.slice(idx, idx + 2200);
     expect(block).toContain('f.items.map(');
     expect(block).toContain("it.code?' ('+esc(it.code)+')':''");
     expect(block).toContain("esc(f.flag)+codePart+' '+esc(it.keyword)+' ('+Number(it.count||0)+')");
   });
 
-  it('国旗ドロップダウン内の各キーワードクリックでtoggleKeywordByNameを呼び、右パネルと選択状態を同期する', () => {
+  it('国旗ドロップダウン(モーダル)内の各キーワードクリックでtoggleKeywordByNameを呼び、右パネルと選択状態を同期する', () => {
     expect(html).toContain('function toggleKeywordByName(');
     const idx = html.indexOf('function toggleKeywordByName(');
     const block = html.slice(idx, idx + 400);
     expect(block).toContain('state.selected');
     expect(block).toContain('renderKeywords()');
-    const flagIdx = html.indexOf('function renderFlagToolbar(');
-    const flagBlock = html.slice(flagIdx, flagIdx + 1400);
+    const flagIdx = html.indexOf('function openFlagKeywordsModal(');
+    const flagBlock = html.slice(flagIdx, flagIdx + 2200);
     expect(flagBlock).toContain('toggleKeywordByName(');
   });
 
@@ -130,10 +131,10 @@ describe('heritage-areaページ: new_layout(ツールバー・国旗ドロッ�
     expect(block).toContain('renderFlagToolbar()');
   });
 
-  it('国旗ドロップダウンの開閉はgetNextZ()で最上位z-indexを動的算出する(CLAUDE.mdルール26準拠)', () => {
+  it('国旗ドロップダウン(モーダル)の開閉はgetNextZ()で最上位z-indexを動的算出する(CLAUDE.mdルール26準拠)', () => {
     expect(html).toContain('function getNextZ()');
-    const idx = html.indexOf('function renderFlagToolbar(');
-    const block = html.slice(idx, idx + 1400);
+    const idx = html.indexOf('function openFlagKeywordsModal(');
+    const block = html.slice(idx, idx + 400);
     expect(block).toContain('getNextZ()');
   });
 

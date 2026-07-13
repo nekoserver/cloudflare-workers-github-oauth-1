@@ -8,7 +8,7 @@ import { HERITAGE_AREA_SEARCH_TOPICS } from './index';
 // テーブル分割・エリア番号表示ロジックの実際の挙動を検証する。
 function extractPureFunctions(html: string): string {
   const lines = html.split('\n');
-  const prefixes = ['const esc=', 'let gemmaCache=', 'function areaNumbersOf(', 'function distancePrefix(', 'function mitokoroIconsHtml(', 'function resultNameHtml(', 'function renderMatchedRows(', 'function renderUnmatchedRows('];
+  const prefixes = ['const esc=', 'let gemmaCache=', 'const state=', 'function areaNumbersOf(', 'function distancePrefix(', 'function mitokoroIconsHtml(', 'function resultNameHtml(', 'function renderMatchedRows(', 'function renderUnmatchedRows('];
   const found = prefixes.map((prefix) => lines.find((line) => line.startsWith(prefix)));
   if (found.some((line) => !line)) {
     throw new Error('必要な関数が生成HTMLから見つからない');
@@ -43,9 +43,9 @@ describe('heritage-area page', () => {
     expect(html).toContain('heritage_point');
   });
 
-  it('エリア登録済みテーブルは「エリア」列が先頭にあり、露出回数列を持たない', () => {
+  it('エリア登録済みテーブルはAIチャット質問列が先頭にあり、右側に1〜20のエリア番号列を持つ(エリア列(単一セル)は廃止)', () => {
     const html = getHeritageAreaPage();
-    const theadMatch = html.match(/<thead><tr><th[^>]*>エリア<\/th><th>AIチャット質問<\/th><\/tr><\/thead><tbody id="results-matched"/);
+    const theadMatch = html.match(/<thead><tr><th>AIチャット質問<\/th>(?:<th[^>]*>\d+<\/th>){20}<\/tr><\/thead><tbody id="results-matched"/);
     expect(theadMatch).not.toBeNull();
   });
 
@@ -57,7 +57,7 @@ describe('heritage-area page', () => {
     expect(areaNumbersOf({ area_matches: [{ key: 'x', areas: 'エリア#1/heritage-access (box) / エリア#2/other (box2)' }] })).toBe('1, 2');
   });
 
-  it('renderMatchedRows: エリア番号のある行のみを、エリア番号列とAIチャット質問列だけで表示する', () => {
+  it('renderMatchedRows: エリア番号のある行のみを、AIチャット質問列+エリア番号1〜20列(✅)で表示する', () => {
     const html = getHeritageAreaPage();
     const { renderMatchedRows } = loadFns(html);
     const rows = [
@@ -67,7 +67,7 @@ describe('heritage-area page', () => {
     const html2 = renderMatchedRows(rows);
     expect(html2).toContain('ウルビーノ歴史地区');
     expect(html2).not.toContain('ヴァルカモニカの岩絵');
-    expect(html2).toContain('<td>1</td>');
+    expect((html2.match(/✅/g) || []).length).toBe(1);
     expect(html2).not.toContain('338');
   });
 
