@@ -7,7 +7,7 @@ import { getHeritageAreaPage } from './views/heritageArea';
 // 国旗・出現回数を表示しつつ、ツールバーのドロップダウン右側に国旗ごとの出現回数を
 // 多い順の「国旗(出現回数)」ドロップダウンとして並べ、各ドロップダウン内に該当キーワードを
 // 表示する。画面右上のトグルボタンでold_layout/new_layoutをいつでも切り替えられる。
-function extractComputeFlagCounts(html: string): (keywords: { keyword: string; heritage_point?: { flag?: string } }[]) => { flag: string; count: number; keywords: string[] }[] {
+function extractComputeFlagCounts(html: string): (keywords: { keyword: string; count?: number; heritage_point?: { flag?: string; code?: string } }[]) => { flag: string; count: number; items: { keyword: string; code?: string; count: number }[] }[] {
   const idx = html.indexOf('function computeFlagCounts(');
   expect(idx).toBeGreaterThan(-1);
   const endIdx = html.indexOf('\n', idx);
@@ -70,15 +70,19 @@ describe('heritage-areaページ: new_layout(ツールバー・国旗ドロッ�
   it('computeFlagCountsは国旗ごとに件数を集計し、多い順にソートする(純粋関数)', () => {
     const computeFlagCounts = extractComputeFlagCounts(html);
     const result = computeFlagCounts([
-      { keyword: 'A空港', heritage_point: { flag: '🇮🇹' } },
-      { keyword: 'B空港', heritage_point: { flag: '🇫🇷' } },
-      { keyword: 'C空港', heritage_point: { flag: '🇮🇹' } },
-      { keyword: 'D空港', heritage_point: { flag: '🇮🇹' } },
+      { keyword: 'A空港', count: 5, heritage_point: { flag: '🇮🇹', code: 'FCO' } },
+      { keyword: 'B空港', count: 9, heritage_point: { flag: '🇫🇷', code: 'CDG' } },
+      { keyword: 'C空港', count: 2, heritage_point: { flag: '🇮🇹', code: 'MXP' } },
+      { keyword: 'D空港', count: 1, heritage_point: { flag: '🇮🇹' } },
       { keyword: 'E空港' },
     ]);
     expect(result).toEqual([
-      { flag: '🇮🇹', count: 3, keywords: ['A空港', 'C空港', 'D空港'] },
-      { flag: '🇫🇷', count: 1, keywords: ['B空港'] },
+      { flag: '🇮🇹', count: 3, items: [
+        { keyword: 'A空港', code: 'FCO', count: 5 },
+        { keyword: 'C空港', code: 'MXP', count: 2 },
+        { keyword: 'D空港', code: undefined, count: 1 },
+      ] },
+      { flag: '🇫🇷', count: 1, items: [{ keyword: 'B空港', code: 'CDG', count: 9 }] },
     ]);
   });
 
@@ -91,10 +95,18 @@ describe('heritage-areaページ: new_layout(ツールバー・国旗ドロッ�
   it('renderFlagToolbarはcomputeFlagCountsの結果を「国旗(出現回数)」の形式でドロップダウンボタンとして描画する', () => {
     expect(html).toContain('function renderFlagToolbar(');
     const idx = html.indexOf('function renderFlagToolbar(');
-    const block = html.slice(idx, idx + 900);
+    const block = html.slice(idx, idx + 1000);
     expect(block).toContain('computeFlagCounts(');
     expect(block).toContain('flag-dd-btn');
     expect(block).toMatch(/esc\(f\.flag\)\s*\+\s*'\('\s*\+\s*f\.count\s*\+\s*'\)/);
+  });
+
+  it('国旗ドロップダウン内の各項目は「国旗」「(空港コード)」「空港名」「(出現回数)」の順で表示する', () => {
+    const idx = html.indexOf('function renderFlagToolbar(');
+    const block = html.slice(idx, idx + 1600);
+    expect(block).toContain('f.items.map(');
+    expect(block).toContain("it.code?' ('+esc(it.code)+')':''");
+    expect(block).toContain("esc(f.flag)+codePart+' '+esc(it.keyword)+' ('+Number(it.count||0)+')");
   });
 
   it('国旗ドロップダウン内の各キーワードクリックでtoggleKeywordByNameを呼び、右パネルと選択状態を同期する', () => {
@@ -123,5 +135,45 @@ describe('heritage-areaページ: new_layout(ツールバー・国旗ドロッ�
     const idx = html.indexOf('function renderFlagToolbar(');
     const block = html.slice(idx, idx + 1400);
     expect(block).toContain('getNextZ()');
+  });
+
+  it('画面右上に右サイドパネル(.keyword-drawer)の開閉ボタンがある(外部リンクではなくbutton)', () => {
+    expect(html).toContain('id="drawer-toggle-btn"');
+    const idx = html.indexOf('id="drawer-toggle-btn"');
+    const tagStart = html.lastIndexOf('<', idx);
+    const tag = html.slice(tagStart, tagStart + 20);
+    expect(tag.startsWith('<button')).toBe(true);
+  });
+
+  it('new_layout時、.keyword-drawerは初期状態でCSS上display:noneであり、drawer-openクラスが付くとdisplay:flexになる', () => {
+    expect(html).toMatch(/body\.layout-new\s+\.keyword-drawer\s*\{[^}]*display:\s*none/);
+    expect(html).toMatch(/body\.layout-new\.drawer-open\s+\.keyword-drawer\s*\{[^}]*display:\s*flex/);
+  });
+
+  it('old_layout時は開閉ボタン自体を表示しない(常時表示の.keyword-drawerには影響させないため)', () => {
+    expect(html).toMatch(/\.drawer-toggle-btn\s*\{[^}]*display:\s*none/);
+    expect(html).toMatch(/body\.layout-new\s+\.drawer-toggle-btn\s*\{[^}]*display:/);
+  });
+
+  it('setDrawerOpen関数がdrawer-openクラスとボタン文言を切り替える', () => {
+    expect(html).toContain('function setDrawerOpen(');
+    const idx = html.indexOf('function setDrawerOpen(');
+    const block = html.slice(idx, idx + 400);
+    expect(block).toContain("classList.toggle('drawer-open'");
+  });
+
+  it('new_layoutへの切替時(setLayoutMode)は必ずsetDrawerOpen(false)を呼び、サイドパネルを初期状態でOFFにする', () => {
+    const idx = html.indexOf('function setLayoutMode(');
+    expect(idx).toBeGreaterThan(-1);
+    const block = html.slice(idx, idx + 400);
+    expect(block).toContain('setDrawerOpen(false)');
+  });
+
+  it('開閉ボタン押下でsetDrawerOpenをトグル呼び出しする', () => {
+    const idx = html.indexOf("getElementById('drawer-toggle-btn').addEventListener");
+    expect(idx).toBeGreaterThan(-1);
+    const block = html.slice(idx, idx + 300);
+    expect(block).toContain('setDrawerOpen(');
+    expect(block).toContain("classList.contains('drawer-open')");
   });
 });

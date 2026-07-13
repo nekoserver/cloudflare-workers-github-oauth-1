@@ -27,6 +27,18 @@ describe('findHeritageAreaPoint — 世界遺産名 + 空港名の座標・国�
     expect(point!.country).toBe('ドイツ・ミュンヘン');
   });
 
+  it('空港名から引いた場合は空港コード(code)も返す(国旗ドロップダウン内の「(空港コード)」表示に使う)', () => {
+    const point = findHeritageAreaPoint('成田国際空港');
+    expect(point).not.toBeNull();
+    expect(point!.code).toBe('NRT');
+  });
+
+  it('世界遺産名から引いた場合はcodeを持たない(空港コードが存在しないため)', () => {
+    const point = findHeritageAreaPoint('姫路城');
+    expect(point).not.toBeNull();
+    expect(point!.code).toBeUndefined();
+  });
+
   it('中黒(全角・半角)の表記ゆれは正規化して同一視する', () => {
     const a = normalizeHeritageAreaName('サンクトペテルブルク･のような例');
     const b = normalizeHeritageAreaName('サンクトペテルブルク・のような例');
