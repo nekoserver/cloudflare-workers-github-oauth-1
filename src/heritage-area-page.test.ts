@@ -18,7 +18,7 @@ function extractPureFunctions(html: string): string {
 
 function loadFns(html: string) {
   const src = extractPureFunctions(html);
-  return new Function(`${src}\nreturn { areaNumbersOf, renderMatchedRows, renderUnmatchedRows };`)();
+  return new Function(`${src}\nreturn { state, areaNumbersOf, renderMatchedRows, renderUnmatchedRows };`)();
 }
 
 describe('heritage-area page', () => {
@@ -43,9 +43,9 @@ describe('heritage-area page', () => {
     expect(html).toContain('heritage_point');
   });
 
-  it('エリア登録済みテーブルはAIチャット質問列が先頭にあり、右側に1〜20のエリア番号列を持つ(エリア列(単一セル)は廃止)', () => {
+  it('エリア登録済みテーブルはAIチャット質問列のみの静的theadを持ち、エリア番号列はJSで実際の最大エリア番号ぶんだけ動的に追加する(エリア列(単一セル)は廃止)', () => {
     const html = getHeritageAreaPage();
-    const theadMatch = html.match(/<thead><tr><th>AIチャット質問<\/th>(?:<th[^>]*>\d+<\/th>){20}<\/tr><\/thead><tbody id="results-matched"/);
+    const theadMatch = html.match(/<thead><tr id="results-matched-head-row"><th>AIチャット質問<\/th><\/tr><\/thead><tbody id="results-matched"/);
     expect(theadMatch).not.toBeNull();
   });
 
@@ -57,9 +57,10 @@ describe('heritage-area page', () => {
     expect(areaNumbersOf({ area_matches: [{ key: 'x', areas: 'エリア#1/heritage-access (box) / エリア#2/other (box2)' }] })).toBe('1, 2');
   });
 
-  it('renderMatchedRows: エリア番号のある行のみを、AIチャット質問列+エリア番号1〜20列(✅)で表示する', () => {
+  it('renderMatchedRows: エリア番号のある行のみを、AIチャット質問列+エリア番号1〜state.maxAreaNum列(✅)で表示する', () => {
     const html = getHeritageAreaPage();
-    const { renderMatchedRows } = loadFns(html);
+    const { state, renderMatchedRows } = loadFns(html);
+    state.maxAreaNum = 2;
     const rows = [
       { item_name: 'ウルビーノ歴史地区', impression_count: 338, area_matches: [{ key: 'ウルビーノ歴史地区', areas: 'エリア#1/heritage-access (box)' }] },
       { item_name: 'ヴァルカモニカの岩絵', impression_count: 527, area_matches: [] },
@@ -120,5 +121,7 @@ describe('heritage-area page', () => {
     expect(src).toContain('findHeritageAreaPoint');
     expect(src).toContain('distance_origin');
     expect(src).toContain('distance_km');
+    expect(src).toContain("app.get('/api/heritage-area/max-area-seq'");
+    expect(src).toContain("app.get('/api/heritage-area/areas/:areaSeq/items'");
   });
 });
