@@ -145,9 +145,17 @@ describe('heritage-areaページ: new_layout(ツールバー・国旗ドロッ�
     expect(tag.startsWith('<button')).toBe(true);
   });
 
-  it('new_layout時、.keyword-drawerは初期状態でCSS上display:noneであり、drawer-openクラスが付くとdisplay:flexになる', () => {
-    expect(html).toMatch(/body\.layout-new\s+\.keyword-drawer\s*\{[^}]*display:\s*none/);
-    expect(html).toMatch(/body\.layout-new\.drawer-open\s+\.keyword-drawer\s*\{[^}]*display:\s*flex/);
+  it('new_layout時、.keyword-drawerは初期状態でopacity:0かつpointer-events:noneになり、drawer-openクラスが付くとopacity:1に戻る(transitionでフェード)', () => {
+    expect(html).toMatch(/body\.layout-new\s+\.keyword-drawer\s*\{[^}]*opacity:\s*0/);
+    expect(html).toMatch(/body\.layout-new\s+\.keyword-drawer\s*\{[^}]*pointer-events:\s*none/);
+    expect(html).toMatch(/body\.layout-new\.drawer-open\s+\.keyword-drawer\s*\{[^}]*opacity:\s*1/);
+    expect(html).toMatch(/\.keyword-drawer\s*\{[^}]*transition:[^}]*opacity/);
+  });
+
+  it('パネルOFF時は.wrapの右余白(空白エリア)も縮めて画面を広く使い、開くと元の余白に戻る(padding-rightをtransitionでフェード)', () => {
+    expect(html).toMatch(/\.wrap\s*\{[^}]*transition:[^}]*padding-right/);
+    expect(html).toMatch(/body\.layout-new\s+\.wrap\s*\{[^}]*padding-right:\s*24px/);
+    expect(html).toMatch(/body\.layout-new\.drawer-open\s+\.wrap\s*\{[^}]*padding-right:\s*360px/);
   });
 
   it('old_layout時は開閉ボタン自体を表示しない(常時表示の.keyword-drawerには影響させないため)', () => {
