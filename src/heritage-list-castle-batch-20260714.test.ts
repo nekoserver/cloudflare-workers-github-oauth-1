@@ -3,7 +3,7 @@ import { HERITAGE_LIST } from './data/heritageList';
 import { findHeritageAreaPoint } from './index';
 
 // 対象: unresolved_castle_keywords に記録されていた28件の「(カタカナ)城」候補のうち、
-// 実在を確認でき、既存のUNESCO世界遺産(複合名)エントリの一部と判明した20件を
+// 実在を確認でき、既存のUNESCO世界遺産(複合名)エントリの一部と判明した18件を
 // 既存エントリと同一座標のエイリアスとして、既存エントリに含まれない5件を
 // 新規世界遺産(未登録)として、それぞれHERITAGE_LISTへ追加した分の回帰テスト。
 // 「クエンカ城」はエクアドルの「クエンカ歴史地区」と紛らわしいため、
@@ -14,9 +14,13 @@ import { findHeritageAreaPoint } from './index';
 // 同じベリンツォーナに所在)により、ベリンツォーナの3城塞のうちの1つ(モンテベッロ城の
 // 表記ゆれ)と判明したため、既存の「ベリンツォーナの3城塞・城壁と防壁」と同一座標の
 // エイリアスとして追加する。
-// なお1件(モーゼルブルク城)は実在する特定の城として確認できなかったため
-// 追加を見送り、unresolved_castle_keywordsに残したまま未解決とする。
-describe('HERITAGE_LIST: unresolved_castle_keywords由来の城名(既存複合名エントリのエイリアス19件)', () => {
+// 「コンスタンティーヌ城」はアルジェリアのコンスタンティーヌ市と誤認して一度追加したが、
+// ユーザーから実際はフランス・カルカッソンヌにある城との訂正を受けたため削除し、
+// 誤った追加はしない(正しい実体の追加は別途調査するまで保留)。
+// 「アル・カリス城」もアフリカに関係しそうだがユーザーの指示により確定を保留し、追加しない。
+// なおモーゼルブルク城も含め、これら3件は実在する特定の城として確認できなかった/
+// 保留のため追加を見送り、unresolved_castle_keywordsに残したまま未解決とする。
+describe('HERITAGE_LIST: unresolved_castle_keywords由来の城名(既存複合名エントリのエイリアス18件)', () => {
   const byName = (n: string) => HERITAGE_LIST.find((h) => h.n === n);
 
   it('ヨーロッパの各城は対応する既存の複合名UNESCO登録と同一の国旗・登録年・座標を持つ', () => {
@@ -45,18 +49,10 @@ describe('HERITAGE_LIST: unresolved_castle_keywords由来の城名(既存複合�
     expect(byName('ヨーロッパのリンダーホーフ城')).toMatchObject(expected);
   });
 
-  it('アルジェリアの「アル・カリス城」は既存の「ベニ・ハンマッドの城塞」と同一座標のエイリアス(アフリカのためヨーロッパのを冠さない)', () => {
-    expect(byName('アルジェリアのアル・カリス城')).toMatchObject({ f: '🇩🇿', y: 1980, lat: 35.82, lon: 4.79 });
-    expect(byName('ヨーロッパのアル・カリス城')).toBeUndefined();
-  });
-
-  it('findHeritageAreaPointでエイリアス名から国旗・座標を解決できる(統合テスト、代表2件)', () => {
+  it('findHeritageAreaPointでエイリアス名から国旗・座標を解決できる(統合テスト、代表1件)', () => {
     const p1 = findHeritageAreaPoint('ヨーロッパのワヴェル城');
     expect(p1).not.toBeNull();
     expect(p1!.flag).toBe('🇵🇱');
-    const p2 = findHeritageAreaPoint('アルジェリアのアル・カリス城');
-    expect(p2).not.toBeNull();
-    expect(p2!.flag).toBe('🇩🇿');
   });
 });
 
@@ -71,17 +67,11 @@ describe('HERITAGE_LIST: unresolved_castle_keywords由来の新規(未登録扱�
     expect(byName('ヨーロッパのヴィルヘルムスブルク城')).toMatchObject({ f: '🇩🇪', y: '----' });
   });
 
-  it('アルジェリアの「コンスタンティーヌ城」はUNESCO未登録・アフリカのためヨーロッパのを冠さない', () => {
-    expect(byName('アルジェリアのコンスタンティーヌ城')).toMatchObject({ f: '🇩🇿', y: '----' });
-    expect(byName('ヨーロッパのコンスタンティーヌ城')).toBeUndefined();
-  });
-
   it('各新規エントリは有効な緯度経度(数値かつ範囲内)を持つ', () => {
     const names = [
       'ヨーロッパのエステ城',
       'ヨーロッパのサン・ジョルジョ城',
       'ヨーロッパのレーゲンベルク城',
-      'アルジェリアのコンスタンティーヌ城',
       'ヨーロッパのシャウエンブルク城',
       'ヨーロッパのヴィルヘルムスブルク城',
     ];
@@ -96,8 +86,16 @@ describe('HERITAGE_LIST: unresolved_castle_keywords由来の新規(未登録扱�
   });
 });
 
-describe('HERITAGE_LIST: 実在確認できなかった1件は追加を見送る', () => {
+describe('HERITAGE_LIST: 実在確認できなかった/保留とした3件は追加を見送る', () => {
   it('「モーゼルブルク城」はいずれの表記でもHERITAGE_LISTに追加されていない(調査で実在確認できなかったため)', () => {
     expect(HERITAGE_LIST.find((h) => h.n.includes('モーゼルブルク城'))).toBeUndefined();
+  });
+
+  it('「コンスタンティーヌ城」はいずれの表記でもHERITAGE_LISTに追加されていない(アルジェリアと誤認していたため削除。実際はフランス・カルカッソンヌ)', () => {
+    expect(HERITAGE_LIST.find((h) => h.n.includes('コンスタンティーヌ城'))).toBeUndefined();
+  });
+
+  it('「アル・カリス城」はいずれの表記でもHERITAGE_LISTに追加されていない(所属地域の確定をユーザーの指示により保留)', () => {
+    expect(HERITAGE_LIST.find((h) => h.n.includes('アル・カリス城'))).toBeUndefined();
   });
 });
