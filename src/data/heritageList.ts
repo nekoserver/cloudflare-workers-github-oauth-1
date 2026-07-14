@@ -791,6 +791,7 @@ export const HERITAGE_LIST: HeritageItem[] = [
   {e:'🏰',f:'🇨🇭',n:'ヨーロッパのレーゲンベルク城',c:'スイス',t:'文化遺産',y:'----',lat:47.48,lon:8.44},
   {e:'🏰',f:'🇩🇪',n:'ヨーロッパのシャウエンブルク城',c:'ドイツ',t:'文化遺産',y:'----',lat:52.20,lon:9.20},
   {e:'🏰',f:'🇩🇪',n:'ヨーロッパのヴィルヘルムスブルク城',c:'ドイツ',t:'文化遺産',y:'----',lat:50.72,lon:10.46},
+  {e:'🏰',f:'🇩🇪',n:'ヨーロッパのハイデルベルク城',c:'ドイツ',t:'文化遺産',y:'----',lat:49.41,lon:8.72},
 ];
 
 export const HERITAGE_FLAG_MAP: Record<string, string> = Object.fromEntries(

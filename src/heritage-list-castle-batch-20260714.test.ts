@@ -56,7 +56,7 @@ describe('HERITAGE_LIST: unresolved_castle_keywords由来の城名(既存複合�
   });
 });
 
-describe('HERITAGE_LIST: unresolved_castle_keywords由来の新規(未登録扱い含む)城5件', () => {
+describe('HERITAGE_LIST: unresolved_castle_keywords由来の新規(未登録扱い含む)城6件', () => {
   const byName = (n: string) => HERITAGE_LIST.find((h) => h.n === n);
 
   it('UNESCO未登録の城はy:"----"で登録され、国旗・座標が設定されている', () => {
@@ -65,6 +65,7 @@ describe('HERITAGE_LIST: unresolved_castle_keywords由来の新規(未登録扱�
     expect(byName('ヨーロッパのレーゲンベルク城')).toMatchObject({ f: '🇨🇭', y: '----' });
     expect(byName('ヨーロッパのシャウエンブルク城')).toMatchObject({ f: '🇩🇪', y: '----' });
     expect(byName('ヨーロッパのヴィルヘルムスブルク城')).toMatchObject({ f: '🇩🇪', y: '----' });
+    expect(byName('ヨーロッパのハイデルベルク城')).toMatchObject({ f: '🇩🇪', y: '----' });
   });
 
   it('各新規エントリは有効な緯度経度(数値かつ範囲内)を持つ', () => {
@@ -74,6 +75,7 @@ describe('HERITAGE_LIST: unresolved_castle_keywords由来の新規(未登録扱�
       'ヨーロッパのレーゲンベルク城',
       'ヨーロッパのシャウエンブルク城',
       'ヨーロッパのヴィルヘルムスブルク城',
+      'ヨーロッパのハイデルベルク城',
     ];
     names.forEach((n) => {
       const item = byName(n);
