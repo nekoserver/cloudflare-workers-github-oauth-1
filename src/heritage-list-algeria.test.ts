@@ -4,8 +4,10 @@ import { HERITAGE_LIST } from './data/heritageList';
 describe('世界遺産リスト: アルジェリア', () => {
   const algeria = HERITAGE_LIST.filter(h => h.c === 'アルジェリア');
 
-  it('アルジェリアの世界遺産は7件登録されている(UNESCO登録数と一致)', () => {
-    expect(algeria.length).toBe(7);
+  it('アルジェリアの実際のUNESCO登録サイト数は7件のまま(エイリアス名・未登録ランドマークは重複カウントしない)', () => {
+    const registered = algeria.filter((h) => h.y !== '----');
+    const distinctSites = new Set(registered.map((h) => `${h.y}|${h.lat}|${h.lon}`));
+    expect(distinctSites.size).toBe(7);
   });
 
   it('ベニ・ハンマッドの城塞が座標付きで登録されている', () => {
