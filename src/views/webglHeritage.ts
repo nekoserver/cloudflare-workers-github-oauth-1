@@ -1,6 +1,7 @@
 import { CITY_TO_KANA } from './webglHeritageUtils';
 import { HERITAGE_LIST } from '../data/heritageList';
 import { RAIL_LINES } from '../data/railLines';
+import { COUNTRY_BORDERS } from '../data/countryBorders';
 import { F1_CIRCUITS } from '../data/f1Circuits';
 import { VOLCANOES } from '../data/volcanoes';
 import { FAULTS } from '../data/faults';
@@ -240,6 +241,11 @@ canvas:active { cursor:grabbing; }
 .ch-title { font-size:15px; font-weight:700; flex:1; }
 .ch-badge { background:#0c2d1a; color:#3fb950; font-size:11px; padding:2px 8px; border-radius:10px; font-weight:600; }
 .ch-close { background:none; border:none; color:#8b949e; font-size:18px; cursor:pointer; padding:2px 6px; line-height:1; }
+.ch-border-toggle { display:flex; gap:2px; flex-shrink:0; }
+.ch-border-toggle.hidden { display:none; }
+.ch-border-btn { background:#1e293b; border:1px solid #475569; color:#cbd5e1; border-radius:6px; padding:3px 7px; font-size:10px; cursor:pointer; font-family:inherit; white-space:nowrap; }
+.ch-border-btn:hover { border-color:#38bdf8; color:#fff; }
+.ch-border-btn.active { background:#2563eb; border-color:#60a5fa; color:#fff; }
 .ch-body { overflow-y:auto; padding:8px 12px 14px; }
 .ch-item { display:flex; align-items:center; gap:8px; padding:6px 6px; border-bottom:1px solid #21262d; cursor:pointer; border-radius:4px; transition:background .12s; }
 .ch-item:last-child { border-bottom:none; }
@@ -401,6 +407,7 @@ void main() {
 <script id="fs" type="x-shader/x-fragment">
 precision mediump float;
 uniform sampler2D uTex;
+uniform sampler2D uMask;
 varying vec2 vUV;
 varying float vDiff;
 varying float vSpec;
@@ -415,6 +422,8 @@ void main() {
   col += vec3(0.5, 0.8, 1.0) * vSpec * isOcean * 0.7;
   col += vec3(0.25, 0.55, 1.0) * vRim * 0.5;
   col += vec3(0.1,  0.3,  0.9) * vRim * vRim * 0.25;
+  vec4 borderMask = texture2D(uMask, vUV);
+  col = mix(col, borderMask.rgb, borderMask.a);
   gl_FragColor = vec4(col, 1.0);
 }
 </script>
@@ -608,6 +617,11 @@ void main() {
     <div class="ch-head">
       <span class="ch-title" id="ch-title"></span>
       <span class="ch-badge" id="ch-badge"></span>
+      <div class="ch-border-toggle" id="ch-border-toggle">
+        <button class="ch-border-btn" type="button" data-border-mode="line">境界線</button>
+        <button class="ch-border-btn active" type="button" data-border-mode="both">線+塗り</button>
+        <button class="ch-border-btn" type="button" data-border-mode="fill">塗りつぶし</button>
+      </div>
       <button class="ch-close" id="ch-close">✕</button>
     </div>
     <div class="ch-body" id="ch-body"></div>
@@ -766,6 +780,8 @@ void main() {
   var uLight = gl.getUniformLocation(prog, 'uLight');
   var uTex   = gl.getUniformLocation(prog, 'uTex');
   gl.uniform1i(uTex, 0);
+  var uMask  = gl.getUniformLocation(prog, 'uMask');
+  gl.uniform1i(uMask, 1);
 
   function getSunDir() {
     var now = new Date();
@@ -794,6 +810,72 @@ void main() {
   };
   earthImg.onerror = function() { hud.textContent = 'テクスチャ読み込み失敗'; };
   earthImg.src = '/earth.jpg';
+
+  var texMask = gl.createTexture();
+  gl.activeTexture(gl.TEXTURE1);
+  gl.bindTexture(gl.TEXTURE_2D, texMask);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([0, 0, 0, 0]));
+
+  var maskCanvas = document.createElement('canvas');
+  maskCanvas.width = 1024; maskCanvas.height = 512;
+  var maskCtx = maskCanvas.getContext('2d');
+
+  // 国境線・塗りつぶしオーバーレイ用の緯度経度→テクスチャUV変換。
+  // 地球テクスチャ(earth.jpg)はグリニッジ子午線がU=0.5、対蹠(日付変更線)がU=0/1になる
+  // 正距円筒図法なので、latLonTo3Dが生成する球面UVと同じ式(モジュロなし版)で合わせる。
+  function equirectXY(lon, lat, w, h) { return [(lon + 180) / 360 * w, (90 - lat) / 180 * h]; }
+  // 日付変更線をまたぐ国(ロシア等)は、経度が-180/180の境界で不連続にジャンプするため
+  // そのままcanvasに描画すると地球儀を横切る帯状のノイズになる。経度を連続値に「アンラップ」
+  // した上で、-360/0/+360ずらした3枚を重ねて描くことで境界のどちら側でも正しく描画する。
+  function unwrapRingLons(ring) {
+    var out = [ring[0][0]];
+    for (var i = 1; i < ring.length; i++) {
+      var prev = out[i - 1], cur = ring[i][0];
+      var d = cur - prev;
+      if (d > 180) cur -= 360; else if (d < -180) cur += 360;
+      out.push(cur);
+    }
+    return out;
+  }
+
+  var borderCc = null, borderMode = 'both';
+  function drawCountryBorderMask(cc, mode) {
+    if (!maskCtx) return;
+    var W = maskCanvas.width, H = maskCanvas.height;
+    maskCtx.clearRect(0, 0, W, H);
+    var entry = cc ? COUNTRY_BORDERS_BY_CC[cc] : null;
+    if (entry && mode !== 'off') {
+      entry.polygons.forEach(function(poly) {
+        [-1, 0, 1].forEach(function(rep) {
+          maskCtx.beginPath();
+          poly.forEach(function(ring) {
+            var lons = unwrapRingLons(ring);
+            ring.forEach(function(pt, idx) {
+              var xy = equirectXY(lons[idx] + rep * 360, pt[1], W, H);
+              if (idx === 0) maskCtx.moveTo(xy[0], xy[1]); else maskCtx.lineTo(xy[0], xy[1]);
+            });
+            maskCtx.closePath();
+          });
+          if (mode === 'fill' || mode === 'both') {
+            maskCtx.fillStyle = 'rgba(255,90,90,0.42)';
+            maskCtx.fill('evenodd');
+          }
+          if (mode === 'line' || mode === 'both') {
+            maskCtx.lineWidth = 2.5;
+            maskCtx.strokeStyle = 'rgba(255,224,64,0.98)';
+            maskCtx.stroke();
+          }
+        });
+      });
+    }
+    gl.activeTexture(gl.TEXTURE1);
+    gl.bindTexture(gl.TEXTURE_2D, texMask);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, maskCanvas);
+  }
 
   function m4()      { return new Float32Array(16); }
   function ident(m)  { for(var i=0;i<16;i++) m[i]=0; m[0]=m[5]=m[10]=m[15]=1; return m; }
@@ -1562,6 +1644,10 @@ void main() {
   var HERITAGE = ${JSON.stringify(HERITAGE_LIST)};
 
   var RAIL_LINES = ${JSON.stringify(RAIL_LINES)};
+
+  var COUNTRY_BORDERS = ${JSON.stringify(COUNTRY_BORDERS)};
+  var COUNTRY_BORDERS_BY_CC = {};
+  COUNTRY_BORDERS.forEach(function(b) { COUNTRY_BORDERS_BY_CC[b.cc] = b; });
 
   var F1_CIRCUITS = ${JSON.stringify(F1_CIRCUITS)};
 
@@ -3505,8 +3591,21 @@ void main() {
   var chTitle = document.getElementById('ch-title');
   var chBadge = document.getElementById('ch-badge');
   var chBody = document.getElementById('ch-body');
-  document.getElementById('ch-close').addEventListener('click', function() { chOverlay.classList.remove('open'); });
-  chOverlay.addEventListener('click', function(e) { if(e.target === chOverlay) chOverlay.classList.remove('open'); });
+  var chBorderToggle = document.getElementById('ch-border-toggle');
+  function clearCountryBorderHighlight() {
+    borderCc = null;
+    chBorderToggle.classList.add('hidden');
+    drawCountryBorderMask(null, borderMode);
+  }
+  document.getElementById('ch-close').addEventListener('click', function() { chOverlay.classList.remove('open'); clearCountryBorderHighlight(); });
+  chOverlay.addEventListener('click', function(e) { if(e.target === chOverlay) { chOverlay.classList.remove('open'); clearCountryBorderHighlight(); } });
+  chBorderToggle.querySelectorAll('.ch-border-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      borderMode = btn.getAttribute('data-border-mode');
+      chBorderToggle.querySelectorAll('.ch-border-btn').forEach(function(b) { b.classList.toggle('active', b === btn); });
+      drawCountryBorderMask(borderCc, borderMode);
+    });
+  });
 
   var currentCountryNames = [];
 
@@ -3553,6 +3652,13 @@ void main() {
     return html;
   }
 
+  function updateCountryBorderHighlight(cc) {
+    var hasData = !!COUNTRY_BORDERS_BY_CC[cc];
+    chBorderToggle.classList.toggle('hidden', !hasData);
+    borderCc = hasData ? cc : null;
+    drawCountryBorderMask(borderCc, borderMode);
+  }
+
   function showCountryHeritagePanel(cc) {
     var flag = ccToFlag(cc);
     var jpName = ccToJp(cc);
@@ -3560,6 +3666,7 @@ void main() {
     chTitle.textContent = flag + ' ' + jpName + ' の世界遺産';
     chBadge.textContent = matches.length + ' 件';
     currentCountryNames = matches.map(function(d) { return d.n; });
+    updateCountryBorderHighlight(cc);
     if(matches.length === 0) {
       chBody.innerHTML = '<div style="color:#8b949e;text-align:center;padding:20px">該当なし</div>';
       chOverlay.classList.add('open');
