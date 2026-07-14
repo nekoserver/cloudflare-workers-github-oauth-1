@@ -865,7 +865,7 @@ void main() {
             maskCtx.fill('evenodd');
           }
           if (mode === 'line' || mode === 'both') {
-            maskCtx.lineWidth = 2.5;
+            maskCtx.lineWidth = 0.625;
             maskCtx.strokeStyle = 'rgba(255,224,64,0.98)';
             maskCtx.stroke();
           }

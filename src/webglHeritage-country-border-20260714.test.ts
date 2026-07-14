@@ -134,6 +134,12 @@ describe('世界遺産地球儀: 国境ハイライトUIの組み込み', () => 
     expect(html).toContain('function updateCountryBorderHighlight(');
   });
 
+  it('国境線の太さは0.625px(旧2.5pxの1/4)', () => {
+    const html = getWebGLHeritagePage('tester');
+    expect(html).toContain('maskCtx.lineWidth = 0.625;');
+    expect(html).not.toContain('maskCtx.lineWidth = 2.5;');
+  });
+
   it('国別パネルを閉じると国境ハイライトをクリアする(clearCountryBorderHighlight)', () => {
     const html = getWebGLHeritagePage('tester');
     expect(html).toContain('function clearCountryBorderHighlight()');
