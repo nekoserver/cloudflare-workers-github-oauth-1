@@ -10,7 +10,7 @@ import { getHeritageAreaPage } from './views/heritageArea';
 // /api/heritage-area/max-area-seqの取得結果を使って動的に描画する。
 function extractPureFunctions(html: string): string {
   const lines = html.split('\n');
-  const prefixes = ['const esc=', 'let gemmaCache=', 'const state=', 'function areaNumbersOf(', 'function distancePrefix(', 'function mitokoroIconsHtml(', 'function resultNameHtml(', 'function matchedColspan(', 'function renderMatchedRows(', 'function renderUnmatchedRows('];
+  const prefixes = ['const esc=', 'let gemmaCache=', 'const state=', 'function areaNumbersOf(', 'function distancePrefix(', 'function mitokoroIconsHtml(', 'function resultFlagHtml(', 'function resultNameHtml(', 'function matchedColspan(', 'function renderMatchedRows(', 'function renderUnmatchedRows('];
   const found = prefixes.map((prefix) => lines.find((line) => line.startsWith(prefix)));
   if (found.some((line) => !line)) {
     throw new Error('必要な関数が生成HTMLから見つからない');
