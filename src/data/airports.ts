@@ -36,6 +36,7 @@ export const AIRPORT_LIST: Airport[] = [
   { code: "FRA", name: "フランクフルト空港", city: "🇩🇪 ドイツ・フランクフルト", lat: 50.04, lon: 8.56 },
   { code: "AMS", name: "スキポール空港", city: "🇳🇱 オランダ・アムステルダム", lat: 52.31, lon: 4.77 },
   { code: "MAD", name: "マドリード・バラハス空港", city: "🇪🇸 スペイン・マドリード", lat: 40.47, lon: -3.56 },
+  { code: "MAD", name: "マドリード・バラハス国際空港", city: "🇪🇸 スペイン・マドリード", lat: 40.47, lon: -3.56 },
   { code: "FCO", name: "フィウミチーノ空港", city: "🇮🇹 イタリア・ローマ", lat: 41.8, lon: 12.25 },
   { code: "FCO", name: "ローマ・フィウミチーノ空港", city: "🇮🇹 イタリア・ローマ", lat: 41.8, lon: 12.25 },
   { code: "ZRH", name: "チューリッヒ空港", city: "🇨🇭 スイス・チューリッヒ", lat: 47.46, lon: 8.55 },
