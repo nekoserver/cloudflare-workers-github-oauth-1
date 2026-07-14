@@ -13,6 +13,7 @@ function extractPureFunctions(html: string): string {
     'let gemmaCache=',
     'function distancePrefix(',
     'function mitokoroIconsHtml(',
+    'function resultFlagHtml(',
     'function resultNameHtml(',
   ];
   const found = prefixes.map((prefix) => lines.find((line) => line.startsWith(prefix)));

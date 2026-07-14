@@ -5775,11 +5775,14 @@ app.get('/api/heritage-area/areas/:areaSeq/items', authMiddleware, async (c) => 
        WHERE i.item_name = ?
        ORDER BY i.area_seq ASC`
     );
-    const items: Array<{ item_name: string; category: string; area_matches: { key: string; areas: string }[] }> = [];
+    const items: Array<{
+      item_name: string; category: string; area_matches: { key: string; areas: string }[];
+      heritage_point: ReturnType<typeof findHeritageAreaPoint>;
+    }> = [];
     for (const name of names) {
       const areaRows = await areaLookup.bind(user.sub, name).all<{ area_seq: number }>();
       const labels = Array.from(new Set((areaRows.results ?? []).map((r) => `エリア#${r.area_seq}`)));
-      items.push({ item_name: name, category: 'エリア一覧', area_matches: labels.length ? [{ key: name, areas: labels.join(' / ') }] : [] });
+      items.push({ item_name: name, category: 'エリア一覧', area_matches: labels.length ? [{ key: name, areas: labels.join(' / ') }] : [], heritage_point: findHeritageAreaPoint(name) });
     }
     return c.json({ items });
   } catch (err) {
