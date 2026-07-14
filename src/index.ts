@@ -187,6 +187,7 @@ const STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
   { name: 'airport_nearby_heritage',    migration: '0078',   description: '空港から300km圏内の世界遺産の距離記録（着陸ボタンで記録）', syncPolicy: 'auto' },
   { name: 'airport_nearby_airport',     migration: '0079',   description: '空港から1500km圏内の他空港の距離記録（着陸ボタンで記録）', syncPolicy: 'auto' },
   { name: 'unresolved_airport_keywords', migration: '0080',  description: 'heritage-areaページで国旗・座標が判明しなかった空港名キーワードの記録', syncPolicy: 'auto' },
+  { name: 'unresolved_castle_keywords', migration: '0081',   description: 'heritage-areaページで国旗・座標が判明しなかった「(カタカナ)城」キーワードの記録', syncPolicy: 'auto' },
 ];
 
 const REQUIRED_STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
@@ -1225,6 +1226,13 @@ CREATE INDEX IF NOT EXISTS idx_airport_nearby_airport_airport ON airport_nearby_
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_unresolved_airport_keywords_unique ON unresolved_airport_keywords(airport_name);`,
+  '0081': `CREATE TABLE IF NOT EXISTS unresolved_castle_keywords (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  castle_name TEXT NOT NULL,
+  recorded_at TEXT DEFAULT (datetime('now'))
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_unresolved_castle_keywords_unique ON unresolved_castle_keywords(castle_name);`,
 };
 
 async function ensureGroupTable(db: D1Database): Promise<void> {
@@ -1431,6 +1439,7 @@ export const TABLE_COLUMN_KEYS: Record<string, ColumnKeyInfo> = {
   airport_nearby_heritage: { id: 'pk', airport_name: 'idx', heritage_name: 'idx' },
   airport_nearby_airport: { id: 'pk', airport_name: 'idx', other_airport_name: 'idx' },
   unresolved_airport_keywords: { id: 'pk', airport_name: 'uk' },
+  unresolved_castle_keywords: { id: 'pk', castle_name: 'uk' },
 };
 
 export function getColumnKeyType(tableName: string, columnName: string): ColumnKeyType {
@@ -1511,6 +1520,7 @@ export const TABLE_GROUP_MAP: Record<string, string> = {
   airport_nearby_heritage: 'system',
   airport_nearby_airport: 'system',
   unresolved_airport_keywords: 'system',
+  unresolved_castle_keywords: 'system',
   keyword_category_groups: 'search',
   keyword_multi_labels: 'search',
   ts_repository:          'ts-catalog',
@@ -5474,6 +5484,32 @@ async function recordUnresolvedAirportKeywords(db: D1Database, names: string[]):
   } catch {}
 }
 
+const HERITAGE_AREA_CASTLE_KATAKANA_KEYWORD_PATTERN = /^[ァ-ー]+城$/;
+
+/**
+ * キーワードが「(全角カタカナ1文字以上)城」の形(海外の城の日本語表記に多いパターン、
+ * 例:「ノイシュヴァンシュタイン城」)に一致するかどうかを判定する。該当するキーワードは
+ * 空港名候補ではないため unresolved_airport_keywords への記録対象からは除外し、
+ * 代わりに unresolved_castle_keywords へ記録する。
+ */
+export function isCastleNameKeywordPattern(keyword: string): boolean {
+  return HERITAGE_AREA_CASTLE_KATAKANA_KEYWORD_PATTERN.test(keyword);
+}
+
+/**
+ * findHeritageAreaPointで国旗・座標が判明しなかった「(カタカナ)城」名候補を記録する。
+ * HERITAGE_LISTへ追加すべき城を後から調査で洗い出すためのログ用途であり、
+ * 失敗してもキーワード表示自体には影響させないためエラーは握りつぶす。
+ */
+async function recordUnresolvedCastleKeywords(db: D1Database, names: string[]): Promise<void> {
+  if (!names.length) return;
+  try {
+    await db.batch(
+      names.map((name) => db.prepare('INSERT OR IGNORE INTO unresolved_castle_keywords (castle_name) VALUES (?)').bind(name))
+    );
+  } catch {}
+}
+
 app.get('/api/heritage-area/travel-categories', authMiddleware, async (c) => {
   const user = c.get('user');
   const db = c.env.DB;
@@ -5524,15 +5560,23 @@ app.get('/api/heritage-area/travel-categories/:id/keywords', authMiddleware, asy
        ORDER BY count DESC, m.keyword ASC`
     ).bind(user.sub, categoryId).all<{ keyword: string; count: number }>();
     const unresolvedAirportNames: string[] = [];
+    const unresolvedCastleNames: string[] = [];
     const keywords = (rows.results ?? []).map((row) => {
       const point = findHeritageAreaPoint(row.keyword);
       if (point) return { ...row, heritage_point: point };
-      if (!isGenericAirportCategoryKeyword(row.keyword)) unresolvedAirportNames.push(row.keyword);
+      if (isCastleNameKeywordPattern(row.keyword)) {
+        unresolvedCastleNames.push(row.keyword);
+      } else if (!isGenericAirportCategoryKeyword(row.keyword)) {
+        unresolvedAirportNames.push(row.keyword);
+      }
       return row;
     });
-    if (unresolvedAirportNames.length) {
+    if (unresolvedAirportNames.length || unresolvedCastleNames.length) {
       const ctx = c.executionCtx;
-      if (ctx?.waitUntil) ctx.waitUntil(recordUnresolvedAirportKeywords(db, unresolvedAirportNames));
+      if (ctx?.waitUntil) {
+        if (unresolvedAirportNames.length) ctx.waitUntil(recordUnresolvedAirportKeywords(db, unresolvedAirportNames));
+        if (unresolvedCastleNames.length) ctx.waitUntil(recordUnresolvedCastleKeywords(db, unresolvedCastleNames));
+      }
     }
     return c.json({ keywords });
   } catch (err) {
