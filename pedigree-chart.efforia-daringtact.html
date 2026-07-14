@@ -1,0 +1,521 @@
+<title>エフォーリア×デアリングタクト 5代血統表</title>
+<style>
+:root{
+  --bg:#0c1210;
+  --panel:#f3ead6;
+  --panel-line:#cabb96;
+  --ink:#201a12;
+  --ink-soft:#5c5136;
+  --sire:#9c6b2e;
+  --sire-soft:#e9d9bc;
+  --dam:#7a2233;
+  --dam-soft:#eeD7d9;
+  --shared:#3f5f47;
+  --shared-soft:#dbe6db;
+  --unknown-ink:#8d8264;
+  --canvas-shadow:rgba(20,14,6,.35);
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#0c1210;
+    --panel:#eee2c6;
+    --panel-line:#c3b28a;
+    --ink:#201a12;
+    --ink-soft:#5c5136;
+    --sire:#8a5d24;
+    --sire-soft:#e3d0ac;
+    --dam:#6e1f2e;
+    --dam-soft:#e6cdd0;
+    --shared:#37543f;
+    --shared-soft:#cfdccf;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0c1210;
+  --panel:#eee2c6;
+  --panel-line:#c3b28a;
+  --ink:#201a12;
+  --ink-soft:#5c5136;
+  --sire:#8a5d24;
+  --sire-soft:#e3d0ac;
+  --dam:#6e1f2e;
+  --dam-soft:#e6cdd0;
+  --shared:#37543f;
+  --shared-soft:#cfdccf;
+}
+:root[data-theme="light"]{
+  --bg:#f3efe4;
+  --panel:#fffdf7;
+  --panel-line:#d8cba4;
+  --ink:#201a12;
+  --ink-soft:#5c5136;
+  --sire:#9c6b2e;
+  --sire-soft:#f1e2c6;
+  --dam:#7a2233;
+  --dam-soft:#f4dcdf;
+  --shared:#3f5f47;
+  --shared-soft:#e2ebe2;
+  --canvas-shadow:rgba(90,70,30,.18);
+}
+
+*{box-sizing:border-box}
+html,body{margin:0;padding:0;background:var(--bg);color:var(--ink)}
+body{
+  font-family:"Zen Kaku Gothic New","Hiragino Kaku Gothic ProN","Yu Gothic",sans-serif;
+  min-height:100vh;
+  display:flex;
+  justify-content:center;
+  padding:clamp(20px,4vw,56px) 16px 64px;
+}
+.page{
+  width:100%;
+  max-width:1180px;
+  display:flex;
+  flex-direction:column;
+  gap:26px;
+}
+
+.masthead{
+  display:flex;
+  flex-direction:column;
+  gap:14px;
+}
+.eyebrow{
+  font-size:12px;
+  letter-spacing:.16em;
+  color:var(--ink-soft);
+  text-transform:uppercase;
+}
+h1{
+  font-family:"Shippori Mincho","Hiragino Mincho ProN","Yu Mincho",serif;
+  font-weight:700;
+  font-size:clamp(28px,4vw,44px);
+  line-height:1.25;
+  margin:0;
+  text-wrap:balance;
+  color:var(--ink);
+}
+h1 .x{
+  color:var(--ink-soft);
+  font-weight:400;
+  padding:0 .18em;
+}
+.lede{
+  font-size:15px;
+  line-height:1.8;
+  color:var(--ink-soft);
+  max-width:68ch;
+}
+
+.thesis{
+  display:grid;
+  grid-template-columns:repeat(3,1fr);
+  gap:1px;
+  background:var(--panel-line);
+  border:1px solid var(--panel-line);
+  border-radius:10px;
+  overflow:hidden;
+}
+.thesis > div{
+  background:var(--panel);
+  padding:16px 18px;
+  display:flex;
+  flex-direction:column;
+  gap:6px;
+}
+.thesis .k{
+  font-size:11px;
+  letter-spacing:.1em;
+  text-transform:uppercase;
+  color:var(--ink-soft);
+}
+.thesis .v{
+  font-size:20px;
+  font-weight:700;
+  font-variant-numeric:tabular-nums;
+}
+.thesis .v small{
+  font-size:13px;
+  font-weight:400;
+  color:var(--ink-soft);
+}
+
+.chart-frame{
+  background:var(--panel);
+  border:1px solid var(--panel-line);
+  border-radius:14px;
+  padding:18px 18px 8px;
+  box-shadow:0 18px 44px -22px var(--canvas-shadow);
+}
+.chart-frame .frame-head{
+  display:flex;
+  align-items:baseline;
+  justify-content:space-between;
+  gap:12px;
+  padding:2px 6px 14px;
+  border-bottom:1px solid var(--panel-line);
+  margin-bottom:10px;
+  flex-wrap:wrap;
+}
+.chart-frame .frame-head h2{
+  font-family:"Shippori Mincho","Hiragino Mincho ProN",serif;
+  font-size:16px;
+  font-weight:700;
+  margin:0;
+  letter-spacing:.02em;
+}
+.chart-frame .frame-head .cols{
+  font-size:11px;
+  color:var(--ink-soft);
+  letter-spacing:.06em;
+}
+.canvas-scroll{
+  overflow-x:auto;
+  overflow-y:hidden;
+  padding-bottom:10px;
+}
+canvas#pedigree{
+  display:block;
+}
+
+.legend{
+  display:flex;
+  flex-wrap:wrap;
+  gap:18px;
+  padding:14px 6px 4px;
+  font-size:12.5px;
+  color:var(--ink-soft);
+}
+.legend .item{display:flex;align-items:center;gap:7px}
+.legend .swatch{width:13px;height:13px;border-radius:3px;flex:none}
+.legend .swatch.sire{background:var(--sire-soft);border:1.5px solid var(--sire)}
+.legend .swatch.dam{background:var(--dam-soft);border:1.5px solid var(--dam)}
+.legend .swatch.shared{background:var(--shared-soft);border:1.5px solid var(--shared)}
+.legend .swatch.unknown{background:transparent;border:1.5px dashed var(--unknown-ink)}
+
+.notes{
+  display:grid;
+  grid-template-columns:1.3fr 1fr;
+  gap:22px;
+}
+@media (max-width:760px){
+  .notes{grid-template-columns:1fr}
+  .thesis{grid-template-columns:1fr}
+}
+.notes .block{
+  background:var(--panel);
+  border:1px solid var(--panel-line);
+  border-radius:10px;
+  padding:18px 20px;
+}
+.notes h3{
+  font-size:13px;
+  letter-spacing:.06em;
+  text-transform:uppercase;
+  color:var(--ink-soft);
+  margin:0 0 10px;
+  font-weight:700;
+}
+.notes p, .notes li{
+  font-size:13.5px;
+  line-height:1.75;
+  color:var(--ink);
+  margin:0 0 8px;
+}
+.notes ul{margin:0;padding-left:1.2em}
+.notes .src{font-size:11.5px;color:var(--ink-soft);line-height:1.8}
+
+.footer-note{
+  font-size:11.5px;
+  color:var(--ink-soft);
+  text-align:center;
+  padding-top:6px;
+}
+</style>
+
+<div class="page">
+  <div class="masthead">
+    <div class="eyebrow">5代血統表 &middot; 血統シミュレーション</div>
+    <h1>エフォーリア<span class="x">×</span>デアリングタクト</h1>
+    <p class="lede">父・母それぞれの持つ5世代分の血統をたどり、二頭を掛け合わせた仮想の産駒として1枚の血統表にまとめた。二頭は共に父にエピファネイアを持つ半兄妹であり、その血が2代目で二度重なる近親配合になる。</p>
+  </div>
+
+  <div class="thesis">
+    <div>
+      <div class="k">共通の父</div>
+      <div class="v">エピファネイア <small>2001&nbsp;→&nbsp;2代目に2×2</small></div>
+    </div>
+    <div>
+      <div class="k">最多クロス</div>
+      <div class="v">サンデーサイレンス <small>血統表内に4度出現</small></div>
+    </div>
+    <div>
+      <div class="k">追跡できた世代</div>
+      <div class="v">63頭中63頭判明 <small>5代すべて確認済み</small></div>
+    </div>
+  </div>
+
+  <div class="chart-frame">
+    <div class="frame-head">
+      <h2>血統表(0〜5代)</h2>
+      <div class="cols">産駒 → 父母 → 祖父母 → 曽祖父母 → 高祖父母 → 5代前</div>
+    </div>
+    <div class="canvas-scroll">
+      <canvas id="pedigree" width="1600" height="1180" aria-label="エフォーリアとデアリングタクトを配合した産駒の5代血統表"></canvas>
+    </div>
+  </div>
+
+  <div class="legend">
+    <div class="item"><span class="swatch sire"></span>父・エフォーリア系統</div>
+    <div class="item"><span class="swatch dam"></span>母・デアリングタクト系統</div>
+    <div class="item"><span class="swatch shared"></span>両系統に共通(エピファネイア以降の重複)</div>
+  </div>
+
+  <div class="notes">
+    <div class="block">
+      <h3>読み方の注記</h3>
+      <ul>
+        <li>エフォーリア・デアリングタクトは共に父がエピファネイアのため、2代目の父方・母方に同じ馬が並ぶ(2×2の近親配合)。表内では緑系の「共通」色で示した。</li>
+        <li>サンデーサイレンスはハーツクライの父として(3代目)、スペシャルウィークの父として(4代目、2系統重複により4箇所)の計4回出現する。</li>
+        <li>アイリッシュダンスの母はビューパーダンス、Krisの父母はSharpen Up・Doubly Sure、Katiesの父母はノノアルコ・Mortefontaineと確認できたため、5代63頭すべてを掲載した。</li>
+      </ul>
+    </div>
+    <div class="block">
+      <h3>主な参照元</h3>
+      <p class="src">netkeiba (db.netkeiba.com)・JBIS (jbis.or.jp)・日本語版ウィキペディアの各馬個体ページを突き合わせて作成。</p>
+    </div>
+  </div>
+
+  <div class="footer-note">実際に配合が組まれたものではなく、二頭の公開血統情報をもとに合成した仮想の血統表です。</div>
+</div>
+
+<script>
+(function(){
+  var DATA = buildTree();
+
+  function buildTree(){
+    // index i: sire = 2i+1, dam = 2i+2 (0-indexed)
+    var n = new Array(63);
+    function set(i,name,branch,unknown){ n[i] = {name:name, branch:branch, unknown:!!unknown}; }
+
+    set(0,'（配合産駒）\nエフォーリア×デアリングタクト','root');
+    set(1,'エフォーリア','sire');
+    set(2,'デアリングタクト','dam');
+
+    // Gen2
+    set(3,'エピファネイア','sire');       // Efforia's sire
+    set(4,'ケイティーズハート','sire');    // Efforia's dam
+    set(5,'エピファネイア','shared');      // Daring Tact's sire (same horse)
+    set(6,'デアリングバード','dam');       // Daring Tact's dam
+
+    // Gen3
+    set(7,'シンボリクリスエス','sire');    // Epiphaneia's sire (via Efforia)
+    set(8,'シーザリオ','sire');            // Epiphaneia's dam (via Efforia)
+    set(9,'ハーツクライ','sire');          // Katie's Heart's sire
+    set(10,'ケイティーズファースト','sire'); // Katie's Heart's dam
+    set(11,'シンボリクリスエス','shared'); // Epiphaneia's sire (via Daring Tact, repeat)
+    set(12,'シーザリオ','shared');         // Epiphaneia's dam (via Daring Tact, repeat)
+    set(13,'キングカメハメハ','dam');      // Daring Bird's sire
+    set(14,'デアリングハート','dam');      // Daring Bird's dam
+
+    // Gen4
+    set(15,'Kris S.','sire');             // Symboli Kris S's sire
+    set(16,'Tee Kay','sire');             // Symboli Kris S's dam
+    set(17,'スペシャルウィーク','sire');   // Cesario's sire
+    set(18,'キロフプリミエール','sire');   // Cesario's dam
+    set(19,'サンデーサイレンス','sire');   // Heart's Cry's sire
+    set(20,'アイリッシュダンス','sire');   // Heart's Cry's dam
+    set(21,'Kris','sire');                // Katie's First's sire
+    set(22,'Katies','sire');              // Katie's First's dam
+    set(23,'Kris S.','shared');           // repeat via Daring Tact
+    set(24,'Tee Kay','shared');           // repeat
+    set(25,'スペシャルウィーク','shared'); // repeat
+    set(26,'キロフプリミエール','shared'); // repeat
+    set(27,'Kingmambo','dam');            // King Kamehameha's sire
+    set(28,'Manfath','dam');              // King Kamehameha's dam
+    set(29,'サンデーサイレンス','dam');    // Daring Heart's sire
+    set(30,'Daring Danzig','dam');        // Daring Heart's dam
+
+    // Gen5
+    set(31,'Roberto','sire');             // Kris S. sire
+    set(32,'Sharp Queen','sire');         // Kris S. dam
+    set(33,'Gold Meridian','sire');       // Tee Kay sire
+    set(34,'Tri Argo','sire');            // Tee Kay dam
+    set(35,'サンデーサイレンス','sire');   // Special Week sire
+    set(36,'キャンペンガール','sire');     // Special Week dam
+    set(37,"Sadler's Wells",'sire');      // Kirov Premiere sire
+    set(38,'Querida','sire');             // Kirov Premiere dam
+    set(39,'Halo','sire');                // Sunday Silence sire
+    set(40,'Wishing Well','sire');        // Sunday Silence dam
+    set(41,'Tony Bin','sire');            // Irish Dance sire
+    set(42,'ビューパーダンス','sire');     // Irish Dance dam
+    set(43,'Sharpen Up','sire');          // Kris sire
+    set(44,'Doubly Sure','sire');         // Kris dam
+    set(45,'ノノアルコ','sire');           // Katies sire
+    set(46,'Mortefontaine','sire');       // Katies dam
+    set(47,'Roberto','shared');           // repeat
+    set(48,'Sharp Queen','shared');       // repeat
+    set(49,'Gold Meridian','shared');     // repeat
+    set(50,'Tri Argo','shared');          // repeat
+    set(51,'サンデーサイレンス','shared'); // repeat
+    set(52,'キャンペンガール','shared');   // repeat
+    set(53,"Sadler's Wells",'shared');    // repeat
+    set(54,'Querida','shared');           // repeat
+    set(55,'Mr. Prospector','dam');       // Kingmambo sire
+    set(56,'Miesque','dam');              // Kingmambo dam
+    set(57,'Last Tycoon','dam');          // Manfath sire
+    set(58,'Pilot Bird','dam');           // Manfath dam
+    set(59,'Halo','dam');                 // Sunday Silence sire (Daring Heart branch)
+    set(60,'Wishing Well','dam');         // Sunday Silence dam
+    set(61,'Danzig','dam');               // Daring Danzig sire
+    set(62,'Impetuous Gal','dam');        // Daring Danzig dam
+
+    return n;
+  }
+
+  function genOf(i){ return Math.floor(Math.log2(i+1)); }
+  function colorTokens(){
+    var s = getComputedStyle(document.documentElement);
+    function v(name){ return s.getPropertyValue(name).trim(); }
+    return {
+      panel: v('--panel'), panelLine: v('--panel-line'), ink: v('--ink'), inkSoft: v('--ink-soft'),
+      sire: v('--sire'), sireSoft: v('--sire-soft'),
+      dam: v('--dam'), damSoft: v('--dam-soft'),
+      shared: v('--shared'), sharedSoft: v('--shared-soft'),
+      unknownInk: v('--unknown-ink')
+    };
+  }
+
+  function draw(){
+    var canvas = document.getElementById('pedigree');
+    var cssW = 1600, cssH = 1180;
+    var dpr = Math.max(1, window.devicePixelRatio || 1);
+    canvas.width = cssW * dpr;
+    canvas.height = cssH * dpr;
+    canvas.style.width = cssW + 'px';
+    canvas.style.height = cssH + 'px';
+    var ctx = canvas.getContext('2d');
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+    ctx.clearRect(0,0,cssW,cssH);
+
+    var C = colorTokens();
+    var GENS = 6; // 0..5
+    var colW = cssW / GENS;
+    var boxPad = 6;
+
+    function boxColors(node){
+      if (node.branch === 'root') return { fill: C.panel, stroke: C.inkSoft, text: C.ink };
+      if (node.unknown) return { fill: 'transparent', stroke: C.unknownInk, text: C.unknownInk, dashed:true };
+      if (node.branch === 'sire') return { fill: C.sireSoft, stroke: C.sire, text: C.ink };
+      if (node.branch === 'dam') return { fill: C.damSoft, stroke: C.dam, text: C.ink };
+      return { fill: C.sharedSoft, stroke: C.shared, text: C.ink }; // shared
+    }
+
+    function centerOf(i){
+      var g = genOf(i);
+      var count = Math.pow(2, g);
+      var k = i - (count - 1);
+      var rowH = cssH / count;
+      var x = g * colW + colW/2;
+      var y = (k + 0.5) * rowH;
+      return { x: x, y: y, g: g, rowH: rowH };
+    }
+
+    // connectors first (under boxes)
+    ctx.lineWidth = 1.25;
+    ctx.strokeStyle = C.panelLine;
+    for (var i=1;i<63;i++){
+      var parent = Math.floor((i-1)/2);
+      var a = centerOf(parent);
+      var b = centerOf(i);
+      var boxHalfW = colW/2 - boxPad*2;
+      var startX = a.x + boxHalfW;
+      var endX = b.x - boxHalfW;
+      var midX = (startX + endX) / 2;
+      ctx.beginPath();
+      ctx.moveTo(startX, a.y);
+      ctx.lineTo(midX, a.y);
+      ctx.lineTo(midX, b.y);
+      ctx.lineTo(endX, b.y);
+      ctx.stroke();
+    }
+
+    // boxes + text
+    for (var idx=0; idx<63; idx++){
+      var node = DATA[idx];
+      var pos = centerOf(idx);
+      var g = pos.g;
+      var boxW = colW - boxPad*2;
+      var boxH = Math.min(pos.rowH - Math.max(3, 10-g), g===0?150:(g===1?86:(g===2?60:(g===3?40:(g===4?26:20)))));
+      var x = pos.x - boxW/2;
+      var y = pos.y - boxH/2;
+      var col = boxColors(node);
+      var radius = g===0?12:6;
+
+      ctx.save();
+      ctx.beginPath();
+      var r = radius;
+      ctx.moveTo(x+r,y);
+      ctx.arcTo(x+boxW,y,x+boxW,y+boxH,r);
+      ctx.arcTo(x+boxW,y+boxH,x,y+boxH,r);
+      ctx.arcTo(x,y+boxH,x,y,r);
+      ctx.arcTo(x,y,x+boxW,y,r);
+      ctx.closePath();
+      ctx.fillStyle = col.fill === 'transparent' ? (g===0?C.panel:'rgba(0,0,0,0)') : col.fill;
+      if (col.fill !== 'transparent') ctx.fill();
+      if (col.dashed) ctx.setLineDash([3,3]);
+      ctx.lineWidth = g===0?1.75:1.1;
+      ctx.strokeStyle = col.stroke;
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.restore();
+
+      // text
+      var fontSize = g===0?15:(g===1?14:(g===2?12.5:(g===3?11:(g===4?9.5:8.5))));
+      var fontFamily = g<=2 ? '"Shippori Mincho","Hiragino Mincho ProN",serif' : '"Zen Kaku Gothic New","Hiragino Kaku Gothic ProN",sans-serif';
+      ctx.fillStyle = col.text;
+      ctx.font = (g===0? '700 ':'600 ') + fontSize + 'px ' + fontFamily;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+
+      var lines = String(node.name).split('\n');
+      var lineH = fontSize + 3;
+      var totalH = lines.length * lineH;
+      var startY = pos.y - totalH/2 + lineH/2;
+      for (var li=0; li<lines.length; li++){
+        var text = lines[li];
+        var maxW = boxW - 8;
+        // shrink-to-fit
+        var fs = fontSize;
+        ctx.font = (g===0? '700 ':'600 ') + fs + 'px ' + fontFamily;
+        while (ctx.measureText(text).width > maxW && fs > 6){
+          fs -= 0.5;
+          ctx.font = (g===0? '700 ':'600 ') + fs + 'px ' + fontFamily;
+        }
+        ctx.fillText(text, pos.x, startY + li*lineH, maxW);
+      }
+    }
+
+    // generation labels
+    var labels = ['産駒','父母(1代)','祖父母(2代)','曽祖父母(3代)','高祖父母(4代)','5代前'];
+    ctx.font = '600 11px "Zen Kaku Gothic New",sans-serif';
+    ctx.fillStyle = C.inkSoft;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'alphabetic';
+    for (var gi=0; gi<GENS; gi++){
+      ctx.fillText(labels[gi], gi*colW + colW/2, 16);
+    }
+  }
+
+  draw();
+  window.addEventListener('resize', function(){ draw(); });
+
+  var mq = window.matchMedia('(prefers-color-scheme: dark)');
+  if (mq.addEventListener) mq.addEventListener('change', draw); else mq.addListener(draw);
+
+  var mo = new MutationObserver(function(muts){
+    for (var m of muts){ if (m.attributeName === 'data-theme'){ draw(); return; } }
+  });
+  mo.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+})();
+</script>
