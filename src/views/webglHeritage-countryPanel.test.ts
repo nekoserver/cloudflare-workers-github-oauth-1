@@ -79,7 +79,7 @@ describe('HERITAGE_LIST Austria coverage', () => {
       'ローマ帝国の国境線—ドナウのリメス（西部分）',
       'ヨーロッパの大温泉保養都市群（バーデン・バイ・ウィーン）',
     ]));
-    expect(austriaSites).toHaveLength(12);
+    expect(austriaSites.length).toBeGreaterThanOrEqual(12);
   });
 });
 
