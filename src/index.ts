@@ -32,6 +32,7 @@ import { getWebGLSpherePage } from './views/webglSphere';
 import { getWebGLHeritagePage } from './views/webglHeritage';
 import { getHeritageAccessPage } from './views/heritageAccess';
 import { getHeritageAreaPage } from './views/heritageArea';
+import { getHeritageRoutesPage } from './views/heritageRoutes';
 import { getWebGLLVSpherePage } from './views/webglLVSphere';
 import { getWebGLCubePage } from './views/webglCube';
 import { getWebGLSolarPage } from './views/webglSolar';
@@ -5246,6 +5247,10 @@ app.get('/webgl-sphere', authMiddleware, async (c) => {
 app.get('/webgl-heritage', authMiddleware, async (c) => {
   const user = c.get('user');
   return c.html(getWebGLHeritagePage(user.sub));
+});
+
+app.get('/heritage-routes', authMiddleware, async (c) => {
+  return c.html(getHeritageRoutesPage());
 });
 
 app.get('/tsubuyaki', authMiddleware, async (c) => {
