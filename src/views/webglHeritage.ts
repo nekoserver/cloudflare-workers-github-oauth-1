@@ -1590,6 +1590,68 @@ void main() {
       }, 5000);
     }, FLY_DUR + 100);
   }
+
+  /**
+   * heritage-journeyページ(世界遺産巡りマップ)の「巡回ルートを再現する」から
+   * sessionStorage経由で受け取った経路(出発地→経由地→到着地)を、最大ズーム(1.2)で
+   * 出発点から順に飛行(flyTo)しながら再現する。各地点到着後はツールチップの
+   * 表示時間を確保するため一定時間停止してから次の地点へ進む。
+   */
+  var journeyTourTimer = null, journeyTourRunning = false, journeyTourPoints = null, journeyTourIdx = 0;
+  var journeyTourProgEl = null;
+  var JOURNEY_TOUR_DWELL_MS = 5000;
+
+  function renderJourneyTourProg() {
+    if (!journeyTourProgEl) return;
+    journeyTourProgEl.querySelector('.jt-prog-text').textContent =
+      (journeyTourIdx + 1) + ' / ' + journeyTourPoints.length + '　' + escClientHtml(journeyTourPoints[journeyTourIdx].name);
+  }
+
+  function stopJourneyTour() {
+    journeyTourRunning = false;
+    if (journeyTourTimer) { clearTimeout(journeyTourTimer); journeyTourTimer = null; }
+    hideTooltip();
+    if (journeyTourProgEl) { journeyTourProgEl.remove(); journeyTourProgEl = null; }
+    journeyTourPoints = null;
+  }
+
+  function journeyTourStep() {
+    if (!journeyTourRunning || journeyTourIdx >= journeyTourPoints.length) { stopJourneyTour(); return; }
+    var p = journeyTourPoints[journeyTourIdx];
+    renderJourneyTourProg();
+    zoom = 1.2;
+    flyTo(p.lat, p.lon);
+    journeyTourTimer = setTimeout(function() {
+      if (!journeyTourRunning) return;
+      var hIdx = -1;
+      for (var i = 0; i < HERITAGE.length; i++) { if (HERITAGE[i].n === p.name) { hIdx = i; break; } }
+      if (hIdx !== -1) {
+        showMarkerTooltip(hIdx, 0, 0);
+      } else {
+        showGenericAreaTooltip('<div class="tt-name">📍 ' + escClientHtml(p.name) + '</div>');
+      }
+      journeyTourTimer = setTimeout(function() {
+        if (!journeyTourRunning) return;
+        hideTooltip();
+        journeyTourIdx++;
+        journeyTourStep();
+      }, JOURNEY_TOUR_DWELL_MS);
+    }, FLY_DUR + 100);
+  }
+
+  function startJourneyTour(points) {
+    if (!points || points.length < 1) return;
+    journeyTourRunning = true;
+    journeyTourPoints = points;
+    journeyTourIdx = 0;
+    journeyTourProgEl = document.createElement('div');
+    journeyTourProgEl.style.cssText = 'position:fixed;left:50%;bottom:18px;transform:translateX(-50%);background:rgba(13,17,23,0.94);border:1px solid #3fb950;border-radius:10px;padding:8px 14px;display:flex;align-items:center;gap:10px;font-size:12px;color:#e6edf3;box-shadow:0 4px 16px rgba(0,0,0,0.6);z-index:' + getNextZ() + ';';
+    journeyTourProgEl.innerHTML = '<span>🎬</span><span class="jt-prog-text"></span><button type="button" style="background:#7f1d1d;border:1px solid #ef4444;color:#fecaca;border-radius:6px;padding:3px 9px;font-size:11px;cursor:pointer;font-family:inherit;">✕ 停止</button>';
+    journeyTourProgEl.querySelector('button').addEventListener('click', stopJourneyTour);
+    document.body.appendChild(journeyTourProgEl);
+    journeyTourStep();
+  }
+
   function applyBoxZoom(ex, ey) {
     var rect = canvas.getBoundingClientRect();
     var bw = Math.abs(ex - bx0), bh = Math.abs(ey - by0);
@@ -4750,6 +4812,20 @@ void main() {
     rotXv = flyTarget.rx;
     flyTarget = null;
     setTimeout(function() { showMarkerTooltip(hIdx, 0, 0); }, 300);
+  })();
+
+  (function() {
+    var raw;
+    try { raw = sessionStorage.getItem('heritageJourneyTour'); } catch (e) { return; }
+    if (!raw) return;
+    try { sessionStorage.removeItem('heritageJourneyTour'); } catch (e2) {}
+    var parsed;
+    try { parsed = JSON.parse(raw); } catch (e3) { return; }
+    var points = parsed && parsed.points;
+    if (!points || !points.length) return;
+    var valid = points.filter(function(p) { return p && typeof p.lat === 'number' && typeof p.lon === 'number' && typeof p.name === 'string'; });
+    if (!valid.length) return;
+    startJourneyTour(valid);
   })();
 })();
 </script>
