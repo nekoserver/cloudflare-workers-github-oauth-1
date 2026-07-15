@@ -81,6 +81,10 @@ h1{font-size:22px;margin:0 0 4px}
 .dist-city-chip{background:#1e293b;border:1px solid #475569;color:#cbd5e1;border-radius:999px;padding:4px 10px;font-size:11px;cursor:pointer}
 .dist-city-chip:hover{border-color:#38bdf8;color:#fff}
 .slack-note{background:#0c2d1a;border:1px solid #14532d;border-radius:8px;padding:8px 12px;font-size:12px;color:#86efac;margin-top:10px}
+.duration-label{font-size:12px;font-weight:400;color:#5eead4}
+.visit-chip{display:inline-block;background:#1e293b;border:1px solid #475569;color:#cbd5e1;border-radius:999px;padding:2px 9px;font-size:11px;cursor:pointer;font-family:inherit;margin:2px 4px 2px 0}
+.visit-chip:hover{border-color:#38bdf8;color:#fff}
+.visit-chip.off{background:#374151;border-color:#374151;color:#9ca3af;text-decoration:line-through}
 </style>
 </head>
 <body>
@@ -134,7 +138,7 @@ h1{font-size:22px;margin:0 0 4px}
   </div>
 
   <div class="card">
-    <div class="section-title">宿泊地の推奨プラン</div>
+    <div class="section-title">宿泊地の推奨プラン <span id="day-plan-duration" class="duration-label"></span></div>
     <div id="day-plan"></div>
   </div>
 </div>
@@ -514,13 +518,27 @@ function renderRouteLine(ordered) {
   }).join('<span class="wp-arrow">→</span>');
 }
 
+function visitChipHtml(name) {
+  var on = state.selected[name] !== false;
+  return '<button type="button" class="visit-chip' + (on ? '' : ' off') + '" data-visit="' + esc(name) + '">' + esc(name) + '</button>';
+}
+
 function renderDayPlan(ordered, days, availableNights) {
   var el = document.getElementById('day-plan');
-  if (!days.length) { el.innerHTML = '<div class="empty-note">ルートがありません。</div>'; return; }
+  var durationEl = document.getElementById('day-plan-duration');
+  if (!days.length) {
+    el.innerHTML = '<div class="empty-note">ルートがありません。</div>';
+    if (durationEl) durationEl.textContent = '';
+    return;
+  }
+  var totalNights = days.reduce(function(s,d){return s+d.nights;}, 0);
+  if (durationEl) durationEl.textContent = '(' + totalNights + '泊' + (totalNights + 1) + '日)';
+
   var rows = days.map(function(d, i) {
     var nightsLabel = d.nights > 0 ? (d.nights + '泊') : '(到着)';
+    var visitsHtml = d.visits.length ? d.visits.map(visitChipHtml).join('') : '-';
     return '<tr><td>Day ' + (i+1) + '</td><td>' + esc(d.city) + (d.isHub ? ' <span style="color:#93c5fd">(拠点)</span>' : '') + '</td>' +
-      '<td>' + d.km.toFixed(0) + ' km</td><td>' + nightsLabel + '</td><td>' + esc(d.visits.join('、') || '-') + '</td></tr>';
+      '<td>' + d.km.toFixed(0) + ' km</td><td>' + nightsLabel + '</td><td>' + visitsHtml + '</td></tr>';
   }).join('');
   var html = '<table class="day-table"><thead><tr><th>日程</th><th>宿泊推奨地</th><th>その日の移動距離</th><th>宿泊数</th><th>訪問した経由地</th></tr></thead><tbody>' + rows + '</tbody></table>';
 
@@ -531,7 +549,6 @@ function renderDayPlan(ordered, days, availableNights) {
     }).join('');
   }
 
-  var totalNights = days.reduce(function(s,d){return s+d.nights;}, 0);
   if (availableNights != null && availableNights >= 0 && totalNights > availableNights) {
     var over = totalNights - availableNights;
     var ranked = rankRemovalCandidates(ordered);
@@ -543,6 +560,17 @@ function renderDayPlan(ordered, days, availableNights) {
   }
 
   el.innerHTML = html;
+  el.querySelectorAll('.visit-chip').forEach(function(chip) {
+    chip.addEventListener('click', function() {
+      var name = chip.getAttribute('data-visit');
+      var currentOn = state.selected[name] !== false;
+      var nextOn = !currentOn;
+      state.selected[name] = nextOn;
+      chip.classList.toggle('off', !nextOn);
+      renderCandidates();
+      recompute();
+    });
+  });
   var applyBtn = document.getElementById('apply-trim-btn');
   if (applyBtn) {
     applyBtn.addEventListener('click', function() {
