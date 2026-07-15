@@ -45,6 +45,29 @@ export function formatJstMonthCalendar(now: Date): string {
   return [`${year}年${month}月`, header, separator, ...rows].join('\n');
 }
 
+
+export function formatAiToolLimitInfo(now: Date): string {
+  const checkedAt = formatJstDateTime(now);
+  return [
+    '## Codex / Claude Code リミット確認',
+    `確認時刻(JST): ${checkedAt}`,
+    '',
+    '### Codex (ChatGPT)',
+    '- 5時間枠: ローカルメッセージとクラウドタスクで共有されます。',
+    '- 週次枠: プランにより追加の週次リミットが適用される場合があります。',
+    '- 実際の残量: Codex の使用量ページまたは画面上のリミット表示で確認してください。',
+    '- 公式情報: https://chatgpt.com/codex/pricing/ / https://help.openai.com/en/articles/11369540-using-codex-with-your-chatgpt-plan',
+    '',
+    '### Claude Code',
+    '- 5時間枠: Settings > Usage で5時間セッションの消費状況を確認できます。',
+    '- 週次枠: 同じ Usage 画面で週次使用量の進捗バーを確認できます。',
+    '- CLI: Claude Code では `/usage` で現在の使用状況を確認できます。',
+    '- 公式情報: https://support.claude.com/en/articles/9797557-usage-limit-best-practices',
+    '',
+    '※ この `/neko limit` は外部アカウントへログインせず、公開情報と確認先を表示します。あなたの実残量は各サービスのログイン済み画面で確認してください。',
+  ].join('\n');
+}
+
 export type CommitAgentLogRow = {
   commit_sha: string | null;
   commit_message: string | null;
@@ -109,8 +132,12 @@ export async function interpretAichatSlashCommand(
     return { handled: true, response: formatCommitAgentLogEntry(row) };
   }
 
+  if (subcommand === 'limit') {
+    return { handled: true, response: formatAiToolLimitInfo(now) };
+  }
+
   return {
     handled: true,
-    response: `❌ 未対応のサブコマンドです: ${subcommand || '(なし)'}\n利用可能なコマンド: /neko hms, /neko cal, /neko clog`,
+    response: `❌ 未対応のサブコマンドです: ${subcommand || '(なし)'}\n利用可能なコマンド: /neko hms, /neko cal, /neko clog, /neko limit`,
   };
 }
