@@ -278,11 +278,15 @@ canvas:active { cursor:grabbing; }
 .ch2-panel { background:#0d1117; border:1px solid #30363d; border-radius:10px; width:min(92vw,540px); max-height:80vh; display:flex; flex-direction:column; overflow:hidden; box-shadow:0 8px 48px rgba(0,0,0,.98); }
 .ch2-head { padding:12px 16px; border-bottom:1px solid #21262d; display:flex; align-items:center; gap:8px; flex-shrink:0; }
 .ch2-title { font-size:14px; font-weight:700; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.ch2-tour-btn { margin-left:auto; background:#0c2d1a; border:1px solid #3fb950; border-radius:6px; color:#3fb950; font-size:11px; padding:4px 10px; cursor:pointer; font-family:inherit; white-space:nowrap; flex-shrink:0; }
+.ch2-tour-btn:hover { background:#123a20; }
+.ch2-tour-btn.active { background:#3b1d1d; border-color:#f85149; color:#ff7b72; }
 .ch2-close { background:none; border:none; color:#8b949e; font-size:18px; cursor:pointer; padding:2px 6px; line-height:1; }
 .ch2-body { overflow-y:auto; padding:8px 12px 14px; }
 .ch2-item { display:flex; align-items:center; gap:8px; padding:7px 6px; border-bottom:1px solid #21262d; border-radius:4px; cursor:pointer; transition:background .12s; }
 .ch2-item:last-child { border-bottom:none; }
 .ch2-item:hover { background:rgba(56,139,253,.08); }
+.ch2-item.active { background:#0c2d1a; outline:1px solid #3fb950; }
 .ch2-item-emoji { font-size:16px; flex-shrink:0; width:24px; text-align:center; }
 .ch2-item-name { flex:1; font-size:12px; color:#c9d1d9; }
 .ch2-item-dist { font-size:11px; color:#58a6ff; font-weight:600; flex-shrink:0; min-width:56px; text-align:right; }
@@ -643,6 +647,7 @@ void main() {
   <div class="ch2-panel">
     <div class="ch2-head">
       <span class="ch2-title" id="ch2-title"></span>
+      <button class="ch2-tour-btn" id="ch2-tour-btn" type="button">巡回</button>
       <button class="ch2-close" id="ch2-close">✕</button>
     </div>
     <div class="ch2-body" id="ch2-body"></div>
@@ -3697,7 +3702,14 @@ void main() {
   var ch2Overlay = document.getElementById('ch2-overlay');
   var ch2Title = document.getElementById('ch2-title');
   var ch2Body = document.getElementById('ch2-body');
-  document.getElementById('ch2-close').addEventListener('click', function() { ch2Overlay.classList.remove('open'); });
+  var ch2TourBtn = document.getElementById('ch2-tour-btn');
+  var cityHeritageTourItems = [];
+  var cityHeritageTourIdx = -1;
+  var cityHeritageTourTimer = null;
+  var cityHeritageTourRunning = false;
+  var CITY_HERITAGE_TOUR_LIMIT = 100;
+  var CITY_HERITAGE_TOUR_DWELL_MS = 4200;
+  document.getElementById('ch2-close').addEventListener('click', function() { ch2Overlay.classList.remove('open'); stopCityHeritageTour(); });
 
   var cityFlyPanel = document.getElementById('city-fly-panel');
   var cityFlyFlag = document.getElementById('city-fly-flag');
@@ -3917,6 +3929,8 @@ void main() {
   }
 
   function openCityHeritageModal(cityName, lat, lon, names) {
+    stopCityHeritageTour();
+    cityHeritageTourItems = [];
     ch2Title.textContent = '🏙️ ' + cityName + ' から近い順の世界遺産';
     ch2Body.innerHTML = '<div style="color:#8b949e;text-align:center;padding:20px">読み込み中...</div>';
     ch2Overlay.classList.add('open');
@@ -3937,6 +3951,7 @@ void main() {
         var safeName = h.heritage_name.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
         var distStr = h.distance_km < 10 ? h.distance_km.toFixed(1) + 'km' : Math.round(h.distance_km) + 'km';
         var idx = hd ? HERITAGE.indexOf(hd) : -1;
+        if (idx >= 0 && cityHeritageTourItems.length < CITY_HERITAGE_TOUR_LIMIT) cityHeritageTourItems.push({ idx: idx, distance_km: h.distance_km });
         html += '<div class="ch2-item"' + (idx >= 0 ? ' data-idx="' + idx + '"' : '') + '>' +
           '<span class="ch2-item-emoji">' + emoji + '</span>' +
           '<span class="ch2-item-name">' + safeName + '</span>' +
@@ -3946,12 +3961,82 @@ void main() {
       ch2Body.innerHTML = html;
       ch2Body.querySelectorAll('.ch2-item[data-idx]').forEach(function(el) {
         el.addEventListener('click', function() {
+          stopCityHeritageTour();
           showMarkerTooltip(parseInt(el.getAttribute('data-idx')), 0, 0);
         });
       });
+      updateCityHeritageTourButton();
     }).catch(function() {
       ch2Body.innerHTML = '<div style="color:#8b949e;text-align:center;padding:20px">取得エラー</div>';
     });
+  }
+
+
+  function updateCityHeritageTourButton() {
+    if (!ch2TourBtn) return;
+    ch2TourBtn.disabled = cityHeritageTourItems.length === 0;
+    ch2TourBtn.classList.toggle('active', cityHeritageTourRunning);
+    ch2TourBtn.textContent = cityHeritageTourRunning ? '巡回中' : '巡回';
+    ch2TourBtn.title = cityHeritageTourItems.length ? '距離が近い順に最大100件を巡回します' : '巡回できる世界遺産がありません';
+  }
+
+  function stopCityHeritageTour() {
+    cityHeritageTourRunning = false;
+    if (cityHeritageTourTimer) { clearTimeout(cityHeritageTourTimer); cityHeritageTourTimer = null; }
+    updateCityHeritageTourButton();
+  }
+
+  function showCityHeritageTourStopButton() {
+    if (!cityHeritageTourRunning) return;
+    var existing = document.getElementById('tt-city-tour-stop-btn');
+    if (existing) return;
+    var row = document.createElement('div');
+    row.style.cssText = 'margin-top:7px;text-align:center;';
+    var btn = document.createElement('button');
+    btn.id = 'tt-city-tour-stop-btn';
+    btn.type = 'button';
+    btn.textContent = '停止';
+    btn.style.cssText = 'background:#3b1d1d;border:1px solid #f85149;border-radius:6px;color:#ff7b72;font-size:11px;padding:4px 14px;cursor:pointer;font-family:inherit;';
+    btn.addEventListener('click', function(e) { e.stopPropagation(); stopCityHeritageTour(); });
+    row.appendChild(btn);
+    tooltip.appendChild(row);
+  }
+
+  function stepCityHeritageTour() {
+    if (!cityHeritageTourRunning || !cityHeritageTourItems.length) return;
+    cityHeritageTourIdx = (cityHeritageTourIdx + 1) % cityHeritageTourItems.length;
+    var item = cityHeritageTourItems[cityHeritageTourIdx];
+    var row = ch2Body.querySelector('.ch2-item[data-idx="' + item.idx + '"]');
+    ch2Body.querySelectorAll('.ch2-item.active').forEach(function(el) { el.classList.remove('active'); });
+    if (row) { row.classList.add('active'); row.scrollIntoView({ block: 'center', behavior: 'smooth' }); }
+    var d = HERITAGE[item.idx];
+    zoom = 1.2;
+    flyTo(d.lat, d.lon);
+    setTimeout(function() {
+      if (!cityHeritageTourRunning) return;
+      zoom = 1.2;
+      showMarkerTooltip(item.idx, 0, 0);
+      showCityHeritageTourStopButton();
+      cityHeritageTourTimer = setTimeout(stepCityHeritageTour, CITY_HERITAGE_TOUR_DWELL_MS);
+    }, 450);
+  }
+
+  function startCityHeritageTour() {
+    if (!cityHeritageTourItems.length) return;
+    cityHeritageTourItems.sort(function(a, b) { return a.distance_km - b.distance_km; });
+    cityHeritageTourItems = cityHeritageTourItems.slice(0, CITY_HERITAGE_TOUR_LIMIT);
+    cityHeritageTourRunning = true;
+    cityHeritageTourIdx = -1;
+    updateCityHeritageTourButton();
+    stepCityHeritageTour();
+  }
+
+  if (ch2TourBtn) {
+    ch2TourBtn.addEventListener('click', function(e) {
+      e.stopPropagation();
+      if (cityHeritageTourRunning) stopCityHeritageTour(); else startCityHeritageTour();
+    });
+    updateCityHeritageTourButton();
   }
 
   document.getElementById('rail-side-close').addEventListener('click', function() {
@@ -4115,7 +4200,7 @@ void main() {
     });
   }
 
-  function hideTooltip() { tooltip.style.opacity = '0'; activeIdx = -1; ttDragging = false; }
+  function hideTooltip() { if (cityHeritageTourRunning) return; tooltip.style.opacity = '0'; activeIdx = -1; ttDragging = false; }
 
   function avoidPinLabelOverlap() {
     var otherMinTop = null;
