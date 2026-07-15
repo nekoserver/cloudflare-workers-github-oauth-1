@@ -23,7 +23,11 @@ function extractFn(html: string, name: string, argsPattern: string): string {
 function loadFns(html: string) {
   const earthR = html.match(/var EARTH_R = \d+;/);
   if (!earthR) throw new Error('EARTH_R が生成HTMLから見つからない');
+  const citiesMatch = html.match(/var CITIES = (\[.*?\]);/);
+  if (!citiesMatch) throw new Error('CITIES が生成HTMLから見つからない');
   const src = [
+    'var CITIES = ' + citiesMatch[1] + ';',
+    'var CITY_POINTS = CITIES.map(function(c) { return { name: c.label, lat: c.lat, lon: c.lon }; });',
     earthR[0],
     extractFn(html, 'haversineKm', '[^)]*'),
     extractFn(html, 'computeDetourKm', '[^)]*'),
@@ -34,8 +38,36 @@ function loadFns(html: string) {
     extractFn(html, 'detectHubClusters', '[^)]*'),
     extractFn(html, 'planOvernights', '[^)]*'),
     extractFn(html, 'rankRemovalCandidates', '[^)]*'),
+    extractFn(html, 'computePlanNights', '[^)]*'),
   ].join('\n');
-  return new Function(`${src}\nreturn { haversineKm, computeDetourKm, buildCandidates, cheapestInsertionOrder, computeStats, nearestCity, detectHubClusters, planOvernights, rankRemovalCandidates };`)();
+  return new Function(`${src}\nreturn { haversineKm, computeDetourKm, buildCandidates, cheapestInsertionOrder, computeStats, nearestCity, detectHubClusters, planOvernights, rankRemovalCandidates, computePlanNights };`)();
+}
+
+function extractDistributionFns(html: string) {
+  const citiesMatch = html.match(/var CITIES = (\[.*?\]);/);
+  const cityPointsLine = 'var CITY_POINTS = CITIES.map(function(c) { return { name: c.label, lat: c.lat, lon: c.lon }; });';
+  const heritageMatch = html.match(/var HERITAGE_POINTS = (\[.*?\]);/);
+  if (!citiesMatch || !heritageMatch) throw new Error('CITIES/HERITAGE_POINTS が生成HTMLから見つからない');
+  const nightsBucketsMatch = html.match(/var NIGHTS_BUCKETS = \[[\s\S]*?\n\];/);
+  if (!nightsBucketsMatch) throw new Error('NIGHTS_BUCKETS が生成HTMLから見つからない');
+  const src = [
+    'var CITIES = ' + citiesMatch[1] + ';',
+    cityPointsLine,
+    'var HERITAGE_POINTS = ' + heritageMatch[1] + ';',
+    html.match(/var EARTH_R = \d+;/)![0],
+    extractFn(html, 'haversineKm', '[^)]*'),
+    extractFn(html, 'computeDetourKm', '[^)]*'),
+    extractFn(html, 'buildCandidates', '[^)]*'),
+    extractFn(html, 'cheapestInsertionOrder', '[^)]*'),
+    extractFn(html, 'nearestCity', '[^)]*'),
+    extractFn(html, 'detectHubClusters', '[^)]*'),
+    extractFn(html, 'planOvernights', '[^)]*'),
+    extractFn(html, 'computePlanNights', '[^)]*'),
+    extractFn(html, 'computeDestinationNightsDistribution', '[^)]*'),
+    nightsBucketsMatch[0],
+    extractFn(html, 'bucketByNights', '[^)]*'),
+  ].join('\n');
+  return new Function(`${src}\nreturn { computeDestinationNightsDistribution, bucketByNights, CITIES };`)();
 }
 
 const PARIS = { name: 'パリ', lat: 48.8566, lon: 2.3522 };
@@ -253,6 +285,67 @@ describe('rankRemovalCandidates', () => {
   });
 });
 
+describe('computePlanNights', () => {
+  it('経由地が無く直行距離が1日の上限以内なら宿泊数は0(日帰り圏)', () => {
+    const html = getHeritageJourneyPage();
+    const { computePlanNights } = loadFns(html);
+    // パリ-リヨン(約392km)は1日の上限(500km)以内
+    const lyon = { name: 'リヨン', lat: 45.7640, lon: 4.8357 };
+    const nights = computePlanNights(PARIS, lyon, [], 45, 500);
+    expect(nights).toBe(0);
+  });
+
+  it('経由地が無くても直行距離が1日の上限を大きく超える場合は区間を分割して' +
+    '複数泊と算出する(区間分割しないと常に0泊になってしまう不具合の回帰テスト)', () => {
+    const html = getHeritageJourneyPage();
+    const { computePlanNights } = loadFns(html);
+    // パリ-ローマ直行(約1105km)を1日350km上限で分割すると ceil(1105/350)=4区間 → 3泊
+    const nights = computePlanNights(PARIS, ROME, [], 45, 350);
+    expect(nights).toBe(3);
+  });
+});
+
+describe('出発地別プラン分布(computeDestinationNightsDistribution / bucketByNights)', () => {
+  it('出発地自身は目的地の一覧に含まれない', () => {
+    const html = getHeritageJourneyPage();
+    const { computeDestinationNightsDistribution } = extractDistributionFns(html);
+    const start = { name: 'パリ', lat: 48.8566, lon: 2.3522 };
+    const distribution = computeDestinationNightsDistribution(start, 45, 350);
+    expect(distribution.find((d: any) => d.city === 'パリ')).toBeUndefined();
+  });
+
+  it('全都市数-1件ぶんの目的地について、それぞれ0以上の宿泊数を返す', () => {
+    const html = getHeritageJourneyPage();
+    const { computeDestinationNightsDistribution, CITIES } = extractDistributionFns(html);
+    const start = { name: 'パリ', lat: 48.8566, lon: 2.3522 };
+    const distribution = computeDestinationNightsDistribution(start, 45, 350);
+    expect(distribution.length).toBe(CITIES.length - 1);
+    distribution.forEach((d: any) => { expect(d.nights).toBeGreaterThanOrEqual(0); });
+  });
+
+  it('bucketByNightsは全目的地をいずれか1つのバケットに過不足なく分類する', () => {
+    const html = getHeritageJourneyPage();
+    const { computeDestinationNightsDistribution, bucketByNights } = extractDistributionFns(html);
+    const start = { name: 'パリ', lat: 48.8566, lon: 2.3522 };
+    const distribution = computeDestinationNightsDistribution(start, 45, 350);
+    const buckets = bucketByNights(distribution);
+    const totalBucketed = buckets.reduce((s: number, b: any) => s + b.cities.length, 0);
+    expect(totalBucketed).toBe(distribution.length);
+  });
+
+  it('近隣都市(リヨン等)は遠方都市より必要泊数が少ない傾向にある', () => {
+    const html = getHeritageJourneyPage();
+    const { computeDestinationNightsDistribution } = extractDistributionFns(html);
+    const start = { name: 'パリ', lat: 48.8566, lon: 2.3522 };
+    const distribution = computeDestinationNightsDistribution(start, 45, 350);
+    const lyon = distribution.find((d: any) => d.city === 'リヨン');
+    const athens = distribution.find((d: any) => d.city === 'アテネ');
+    expect(lyon).toBeTruthy();
+    expect(athens).toBeTruthy();
+    expect(lyon.nights).toBeLessThan(athens.nights);
+  });
+});
+
 describe('buildEmbeddedHeritagePoints', () => {
   it('ヨーロッパ域外(日本など)の世界遺産は含まれない', () => {
     const points = buildEmbeddedHeritagePoints();
@@ -276,9 +369,15 @@ describe('getHeritageJourneyPage', () => {
     expect(html).toContain('id="cand-list"');
     expect(html).toContain('id="summary-grid"');
     expect(html).toContain('id="day-plan"');
+    expect(html).toContain('id="nights-dist"');
+    expect(html).toContain('id="slack-note"');
     expect(html).toContain('function planOvernights(');
     expect(html).toContain('function detectHubClusters(');
     expect(html).toContain('function rankRemovalCandidates(');
+    expect(html).toContain('function computeDestinationNightsDistribution(');
+    expect(html).toContain('function bucketByNights(');
+    expect(html).toContain('function renderNightsDistribution(');
+    expect(html).toContain('function renderSlackNote(');
   });
 });
 

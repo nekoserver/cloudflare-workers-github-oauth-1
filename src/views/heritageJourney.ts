@@ -67,6 +67,16 @@ h1{font-size:22px;margin:0 0 4px}
 .trim-box ul{margin:6px 0 8px;padding-left:18px}
 .trim-box button{background:#7f1d1d;border:1px solid #ef4444;color:#fecaca;border-radius:6px;padding:5px 10px;cursor:pointer;font-size:11px}
 .empty-note{color:#64748b;font-size:12px;padding:8px 0}
+.dist-row{display:flex;align-items:center;gap:10px;padding:6px 4px;cursor:pointer;border-radius:6px}
+.dist-row:hover{background:#0b1220}
+.dist-label{width:110px;flex-shrink:0;font-size:12px;color:#cbd5e1}
+.dist-bar-track{flex:1;background:#0b1220;border-radius:5px;height:16px;overflow:hidden}
+.dist-bar{background:linear-gradient(90deg,#2563eb,#38bdf8);height:100%;border-radius:5px;min-width:2px;transition:width .2s}
+.dist-count{width:52px;flex-shrink:0;text-align:right;font-size:12px;color:#94a3b8;font-variant-numeric:tabular-nums}
+.dist-cities{padding:4px 4px 10px 120px;display:flex;flex-wrap:wrap;gap:6px}
+.dist-city-chip{background:#1e293b;border:1px solid #475569;color:#cbd5e1;border-radius:999px;padding:4px 10px;font-size:11px;cursor:pointer}
+.dist-city-chip:hover{border-color:#38bdf8;color:#fff}
+.slack-note{background:#0c2d1a;border:1px solid #14532d;border-radius:8px;padding:8px 12px;font-size:12px;color:#86efac;margin-top:10px}
 </style>
 </head>
 <body>
@@ -92,8 +102,15 @@ h1{font-size:22px;margin:0 0 4px}
   </div>
 
   <div class="card">
+    <div class="section-title">出発地から見た目的地別プラン分布</div>
+    <div class="muted" style="margin-bottom:10px">現在の出発地から各都市への既定プラン(迂回20km以内の世界遺産を全て含む)が、それぞれ何泊必要かを集計しています。バーをクリックすると該当する目的地の一覧が開き、選ぶとその目的地の詳細プランに切り替わります。</div>
+    <div id="nights-dist"></div>
+  </div>
+
+  <div class="card">
     <div class="section-title">距離ロス・時間ロス</div>
     <div class="summary-grid" id="summary-grid"></div>
+    <div id="slack-note"></div>
   </div>
 
   <div class="card">
@@ -228,6 +245,10 @@ function detectHubClusters(ordered, hubRadiusKm) {
  * 近い都市を拠点として連泊(日帰り観光)扱いにする。hubクラスタに到達した時点で
  * 必ずその日を区切る(距離上限に達していなくても)。距離だけで日を区切ると、
  * hubクラスタと無関係な手前の経由地がhub到着日の訪問地一覧に混入してしまうため。
+ * また、経由地が無い(または疎らな)直行区間だけでmaxDailyKmを超える場合、その1区間を
+ * 均等分割して複数の移動日に分ける。分割しないと「最終区間は常にnights:0」という
+ * 判定により、実際には数日かかる長距離直行ルートが常に0泊と算出されてしまう
+ * (実際に発生した不具合)。
  */
 function planOvernights(start, end, ordered, clusters, cities, maxDailyKm) {
   var clusterOf = {};
@@ -275,6 +296,28 @@ function planOvernights(start, end, ordered, clusters, cities, maxDailyKm) {
       continue;
     }
 
+    // 1区間(prev→node)だけでmaxDailyKmを超える場合、そのままだと1日に押し込められて
+    // しまい(直行ルートが常に「0泊」になる不具合が実際に起きた)、区間を均等分割して
+    // 複数の移動日に分ける。分割点は経路上の実在しない地点なので、最寄り都市を宿泊
+    // 推奨地として提示する。
+    if (km > maxDailyKm) {
+      if (dayVisits.length > 0 || dayKm > 0) {
+        days.push({ endPoint: prev.name, city: nearestCity(prev, cities).name, km: dayKm, visits: dayVisits.slice(), nights: 1, isHub: false });
+        dayKm = 0; dayVisits = [];
+      }
+      var segs = Math.ceil(km / maxDailyKm);
+      var segKm = km / segs;
+      for (var s = 1; s <= segs; s++) {
+        var t = s / segs;
+        var subPoint = { lat: prev.lat + (node.lat - prev.lat) * t, lon: prev.lon + (node.lon - prev.lon) * t };
+        var isFinalSeg = (s === segs);
+        var subVisits = (isFinalSeg && !isLast) ? [node.name] : [];
+        var subCity = nearestCity(subPoint, cities);
+        days.push({ endPoint: isFinalSeg ? node.name : subCity.name, city: subCity.name, km: segKm, visits: subVisits, nights: (isFinalSeg && isLast) ? 0 : 1, isHub: false });
+      }
+      continue;
+    }
+
     dayKm += km;
     if (!isLast) dayVisits.push(node.name);
     if (dayKm >= maxDailyKm || isLast) {
@@ -298,6 +341,47 @@ function rankRemovalCandidates(ordered) {
     var cost = haversineKm(prev.lat, prev.lon, p.lat, p.lon) + haversineKm(p.lat, p.lon, next.lat, next.lon) - haversineKm(prev.lat, prev.lon, next.lat, next.lon);
     return { name: p.name, cost: cost };
   }).sort(function(a, b) { return b.cost - a.cost; });
+}
+
+/**
+ * start→endの経路(選択済み地点)から、必要な宿泊数の合計だけを求める。
+ * 出発地別プラン分布(全目的地との比較)や、既定プランとの余裕比較で使う軽量版。
+ */
+function computePlanNights(start, end, selectedPoints, hubRadiusKm, maxDailyKm) {
+  var ordered = cheapestInsertionOrder(start, end, selectedPoints);
+  var clusters = detectHubClusters(ordered, hubRadiusKm);
+  var days = planOvernights(start, end, ordered, clusters, CITY_POINTS, maxDailyKm);
+  return days.reduce(function(s, d) { return s + d.nights; }, 0);
+}
+
+/**
+ * 指定した出発地startから、他の全都市を目的地とみなした場合の既定プラン
+ * (迂回20km以内の世界遺産を全て含む)の必要泊数を都市ごとに算出する。
+ * 迂回許容距離(opt-detour)には依存せず、常に20km以内の既定候補で計算する
+ * (この分布は「候補の広さ」ではなく「既定プランでの負担」を横比較するためのもの)。
+ */
+function computeDestinationNightsDistribution(start, hubRadiusKm, maxDailyKm) {
+  return CITIES.filter(function(c) { return c.label !== start.name; }).map(function(c) {
+    var end = { name: c.label, lat: c.lat, lon: c.lon };
+    var candidates = buildCandidates(start, end, HERITAGE_POINTS, 300).filter(function(x) { return x.detour <= 20; });
+    var nights = computePlanNights(start, end, candidates, hubRadiusKm, maxDailyKm);
+    return { city: c.label, cityName: c.name, nights: nights };
+  });
+}
+
+var NIGHTS_BUCKETS = [
+  { label: '日帰り圏(0泊)', min: 0, max: 0 },
+  { label: '1泊2日', min: 1, max: 1 },
+  { label: '2泊3日', min: 2, max: 2 },
+  { label: '3泊4日', min: 3, max: 3 },
+  { label: '4泊5日', min: 4, max: 4 },
+  { label: '5泊以上', min: 5, max: Infinity },
+];
+
+function bucketByNights(distribution) {
+  return NIGHTS_BUCKETS.map(function(b) {
+    return { label: b.label, cities: distribution.filter(function(d) { return d.nights >= b.min && d.nights <= b.max; }) };
+  });
 }
 
 var esc = function(s) { return String(s||'').replace(/[&<>"']/g, function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];}); };
@@ -361,6 +445,63 @@ function renderSummary(stats) {
     stat('追加移動時間', stats.extraHours.toFixed(1) + ' h', true) +
     stat('見学時間(合計)', stats.visitHours.toFixed(1) + ' h', true) +
     stat('時間ロス合計', stats.totalAddedHours.toFixed(1) + ' h', true);
+}
+
+function renderNightsDistribution() {
+  var se = currentStartEnd();
+  var hubRadiusKm = Number(document.getElementById('opt-hub').value) || 45;
+  var maxDailyKm = Number(document.getElementById('opt-daily').value) || 350;
+  var distribution = computeDestinationNightsDistribution(se.start, hubRadiusKm, maxDailyKm);
+  var buckets = bucketByNights(distribution);
+  var maxCount = 1;
+  buckets.forEach(function(b) { if (b.cities.length > maxCount) maxCount = b.cities.length; });
+  var el = document.getElementById('nights-dist');
+  el.innerHTML = buckets.map(function(b, i) {
+    var pct = (b.cities.length / maxCount * 100);
+    return '<div class="dist-row" data-bucket="' + i + '">' +
+      '<span class="dist-label">' + esc(b.label) + '</span>' +
+      '<div class="dist-bar-track"><div class="dist-bar" style="width:' + pct + '%"></div></div>' +
+      '<span class="dist-count">' + b.cities.length + '件</span>' +
+      '</div><div class="dist-cities" id="dist-cities-' + i + '" style="display:none"></div>';
+  }).join('');
+  el.querySelectorAll('.dist-row').forEach(function(row) {
+    row.addEventListener('click', function() {
+      var idx = Number(row.getAttribute('data-bucket'));
+      var citiesEl = document.getElementById('dist-cities-' + idx);
+      var willOpen = citiesEl.style.display === 'none';
+      el.querySelectorAll('.dist-cities').forEach(function(c) { c.style.display = 'none'; });
+      if (!willOpen) return;
+      citiesEl.style.display = 'flex';
+      var bucketCities = buckets[idx].cities.slice().sort(function(a, b2) { return a.nights - b2.nights; });
+      citiesEl.innerHTML = bucketCities.length
+        ? bucketCities.map(function(d) {
+            return '<button type="button" class="dist-city-chip" data-city="' + esc(d.cityName) + '">' + esc(d.city) + '(' + d.nights + '泊)</button>';
+          }).join('')
+        : '<span class="empty-note">該当する目的地はありません。</span>';
+      citiesEl.querySelectorAll('[data-city]').forEach(function(chip) {
+        chip.addEventListener('click', function() {
+          document.getElementById('end-city').value = chip.getAttribute('data-city');
+          state.selected = {};
+          renderCandidates();
+          recompute();
+          var summaryEl = document.getElementById('summary-grid');
+          if (summaryEl && summaryEl.scrollIntoView) summaryEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        });
+      });
+    });
+  });
+}
+
+function renderSlackNote(se, currentNights, hubRadiusKm, maxDailyKm) {
+  var el = document.getElementById('slack-note');
+  var defaultCandidates = buildCandidates(se.start, se.end, HERITAGE_POINTS, 300).filter(function(x) { return x.detour <= 20; });
+  var defaultNights = computePlanNights(se.start, se.end, defaultCandidates, hubRadiusKm, maxDailyKm);
+  if (currentNights < defaultNights) {
+    el.innerHTML = '<div class="slack-note">🕒 既定プラン(迂回20km以内をすべて選択)では ' + defaultNights + ' 泊でしたが、現在の選択では ' + currentNights + ' 泊です。'
+      + '行かない場所を選んだことで ' + (defaultNights - currentNights) + ' 泊分の時間的な余裕が生まれています。</div>';
+  } else {
+    el.innerHTML = '';
+  }
 }
 
 function renderRouteLine(ordered) {
@@ -430,6 +571,8 @@ function recompute() {
   var clusters = detectHubClusters(ordered, hubRadiusKm);
   var days = planOvernights(se.start, se.end, ordered, clusters, CITY_POINTS, maxDailyKm);
   renderDayPlan(ordered, days, availableNights);
+  var currentNights = days.reduce(function(s, d) { return s + d.nights; }, 0);
+  renderSlackNote(se, currentNights, hubRadiusKm, maxDailyKm);
   var countEl = document.getElementById('cand-count');
   if (countEl) countEl.textContent = candidates.length + ' 件中 ' + selected.length + ' 件選択中';
 }
@@ -456,18 +599,25 @@ document.getElementById('swap-btn').addEventListener('click', function() {
   var s = document.getElementById('start-city'), e = document.getElementById('end-city');
   var tmp = s.value; s.value = e.value; e.value = tmp;
   state.selected = {};
-  renderCandidates(); recompute();
+  renderCandidates(); recompute(); renderNightsDistribution();
 });
-['start-city','end-city'].forEach(function(id) {
-  document.getElementById(id).addEventListener('change', function() { state.selected = {}; renderCandidates(); recompute(); });
+document.getElementById('start-city').addEventListener('change', function() {
+  state.selected = {}; renderCandidates(); recompute(); renderNightsDistribution();
 });
-['opt-detour','opt-speed','opt-visit','opt-daily','opt-hub','opt-nights'].forEach(function(id) {
+document.getElementById('end-city').addEventListener('change', function() {
+  state.selected = {}; renderCandidates(); recompute();
+});
+['opt-detour','opt-speed','opt-visit','opt-nights'].forEach(function(id) {
   document.getElementById(id).addEventListener('input', function() { renderCandidates(); recompute(); });
+});
+['opt-daily','opt-hub'].forEach(function(id) {
+  document.getElementById(id).addEventListener('input', function() { renderCandidates(); recompute(); renderNightsDistribution(); });
 });
 
 populateCitySelects();
 renderCandidates();
 recompute();
+renderNightsDistribution();
 </script>
 </body>
 </html>`;
