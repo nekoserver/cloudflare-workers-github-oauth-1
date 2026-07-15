@@ -57,6 +57,10 @@ h1{font-size:22px;margin:0 0 4px}
 .cand-row .cname{flex:1}
 .cand-row .cdetour{color:#94a3b8;font-variant-numeric:tabular-nums}
 .route-line{padding:0;font-size:12px;line-height:2.1;margin-top:12px}
+.route-title-row{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+#replay-tour-btn{background:#1e293b;border:1px solid #475569;color:#cbd5e1;border-radius:8px;padding:6px 12px;font-size:12px;cursor:pointer;font-family:inherit;white-space:nowrap}
+#replay-tour-btn:hover{border-color:#38bdf8;color:#fff}
+#replay-tour-btn:disabled{opacity:.5;cursor:default}
 .wp-badge{display:inline-block;background:#1e293b;border:1px solid #334155;border-radius:999px;padding:2px 9px;white-space:nowrap}
 .wp-arrow{color:#64748b;margin:0 4px}
 .day-table{width:100%;border-collapse:collapse;font-size:12px;margin-top:6px}
@@ -125,7 +129,7 @@ h1{font-size:22px;margin:0 0 4px}
   </div>
 
   <div class="card">
-    <div class="section-title">ルート順序</div>
+    <div class="route-title-row"><div class="section-title" style="margin:0">ルート順序</div><button id="replay-tour-btn" type="button">🎬 巡回ルートを再現する</button></div>
     <div class="route-line" id="route-line"></div>
   </div>
 
@@ -565,6 +569,7 @@ function recompute() {
   var candidates = buildCandidates(se.start, se.end, HERITAGE_POINTS, maxDetour);
   var selected = candidates.filter(function(c) { return state.selected[c.name]; });
   var ordered = cheapestInsertionOrder(se.start, se.end, selected);
+  state.lastOrdered = ordered;
   var stats = computeStats(se.start, se.end, ordered, speedKmh, perSiteHours);
   renderSummary(stats);
   renderRouteLine(ordered);
@@ -594,6 +599,17 @@ document.getElementById('select-near-btn').addEventListener('click', function() 
   var maxDetour = Number(document.getElementById('opt-detour').value) || 150;
   buildCandidates(se.start, se.end, HERITAGE_POINTS, maxDetour).forEach(function(c) { state.selected[c.name] = c.detour <= 20; });
   renderCandidates(); recompute();
+});
+document.getElementById('replay-tour-btn').addEventListener('click', function() {
+  var ordered = state.lastOrdered || [];
+  if (ordered.length < 2) return;
+  var payload = { points: ordered.map(function(p) { return { name: p.name, lat: p.lat, lon: p.lon }; }) };
+  try {
+    sessionStorage.setItem('heritageJourneyTour', JSON.stringify(payload));
+  } catch (e) {
+    return;
+  }
+  window.location.href = '/webgl-heritage';
 });
 document.getElementById('swap-btn').addEventListener('click', function() {
   var s = document.getElementById('start-city'), e = document.getElementById('end-city');
