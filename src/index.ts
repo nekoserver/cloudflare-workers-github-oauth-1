@@ -2114,16 +2114,46 @@ export function extractAiUsage(raw: Record<string, unknown> | null | undefined):
 
 /** AI チャットの 1 分間あたり最大リクエスト数 */
 const AICHAT_RATE_LIMIT_PER_MIN = 10;
+/** AI チャットの 1 週間あたり最大リクエスト数 */
+const AICHAT_RATE_LIMIT_PER_WEEK = 200;
+
+function getAiChatWeekWindowKey(userId: string, now = new Date()): string {
+  const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  const day = d.getUTCDay() || 7;
+  d.setUTCDate(d.getUTCDate() - day + 1);
+  return `${userId}:week:${d.toISOString().slice(0, 10)}`;
+}
+
+async function getAiChatWeeklyLimitStatus(db: D1Database | undefined, userId: string): Promise<{
+  limit: number;
+  used: number;
+  remaining: number;
+  windowKey: string | null;
+}> {
+  const windowKey = getAiChatWeekWindowKey(userId);
+  if (!db) return { limit: AICHAT_RATE_LIMIT_PER_WEEK, used: 0, remaining: AICHAT_RATE_LIMIT_PER_WEEK, windowKey };
+  try {
+    const row = await db.prepare(
+      'SELECT request_count FROM aichat_rate_limit WHERE user_id = ? AND window_key = ?'
+    ).bind(userId, windowKey).first<{ request_count: number }>();
+    const used = Math.max(0, row?.request_count ?? 0);
+    return { limit: AICHAT_RATE_LIMIT_PER_WEEK, used, remaining: Math.max(0, AICHAT_RATE_LIMIT_PER_WEEK - used), windowKey };
+  } catch {
+    return { limit: AICHAT_RATE_LIMIT_PER_WEEK, used: 0, remaining: AICHAT_RATE_LIMIT_PER_WEEK, windowKey };
+  }
+}
 
 /**
  * D1 ベースのレートリミットチェック。
- * window_key = "userId:YYYYMMDDHHMI" (1 分ウィンドウ) で集計し、
+ * window_key = "userId:YYYYMMDDHHMI" (1 分ウィンドウ) と
+ * window_key = "userId:week:YYYY-MM-DD" (UTC 月曜始まりの 1 週間ウィンドウ) で集計し、
  * 上限を超えていれば true を返す。DB がない場合は制限しない。
  */
 async function checkAiChatRateLimit(db: D1Database | undefined, userId: string): Promise<boolean> {
   if (!db) return false;
   const now = new Date();
   const windowKey = `${userId}:${now.toISOString().slice(0, 16).replace(/[-:T]/g, '')}`;
+  const weekWindowKey = getAiChatWeekWindowKey(userId, now);
   try {
     const result = await db.prepare(
       `INSERT INTO aichat_rate_limit (user_id, window_key, request_count, updated_at)
@@ -2133,7 +2163,16 @@ async function checkAiChatRateLimit(db: D1Database | undefined, userId: string):
          updated_at = datetime('now')
        RETURNING request_count`
     ).bind(userId, windowKey).first<{ request_count: number }>();
-    return (result?.request_count ?? 1) > AICHAT_RATE_LIMIT_PER_MIN;
+    const weeklyResult = await db.prepare(
+      `INSERT INTO aichat_rate_limit (user_id, window_key, request_count, updated_at)
+       VALUES (?, ?, 1, datetime('now'))
+       ON CONFLICT(user_id, window_key) DO UPDATE SET
+         request_count = request_count + 1,
+         updated_at = datetime('now')
+       RETURNING request_count`
+    ).bind(userId, weekWindowKey).first<{ request_count: number }>();
+    return (result?.request_count ?? 1) > AICHAT_RATE_LIMIT_PER_MIN
+      || (weeklyResult?.request_count ?? 1) > AICHAT_RATE_LIMIT_PER_WEEK;
   } catch {
     return false;
   }
@@ -3639,6 +3678,12 @@ const AICHAT_ALLOWED_MODELS = new Set([
   '@cf/google/gemma-3-12b-it',
   '@cf/meta/llama-4-scout-17b-16e-instruct',
 ]);
+
+app.get('/api/aichat/rate-limit-status', authMiddleware, async (c) => {
+  const user = c.get('user');
+  const weekly = await getAiChatWeeklyLimitStatus(c.env.DB, user.sub);
+  return jsonUtf8({ weekly });
+});
 
 app.post('/api/aichat', authMiddleware, async (c) => {
   const user = c.get('user');

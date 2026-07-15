@@ -109,6 +109,11 @@ export function getAiChatPage(user: {
     }
     .navbar-lang-select:hover { color: var(--text-primary); }
     .navbar-lang-select option { background: var(--card-bg); color: var(--text-primary); }
+    .weekly-limit-badge {
+      font-size: 11px; color: var(--text-muted); border: 1px solid var(--border-color);
+      border-radius: 999px; padding: 2px 8px; white-space: nowrap; background: var(--bg-secondary);
+    }
+    .weekly-limit-badge.low { color: var(--danger-color, #e53e3e); border-color: var(--danger-color, #e53e3e); }
 
     .navbar-spacer { flex: 1; }
     .search-log-btn {
@@ -682,6 +687,7 @@ export function getAiChatPage(user: {
       <option value="b">🇯🇵 prefix</option>
       <option value="c">🌐 plain</option>
     </select>
+    <span id="weeklyLimitBadge" class="weekly-limit-badge" title="週次リミット残量">週: --</span>
     <div class="navbar-spacer"></div>
     <div class="user-menu">
       <button class="search-hist-btn" id="linkedQuestionsBtn" title="サブクエリを持つ質問一覧">📎 リンク質問</button>
@@ -5187,6 +5193,23 @@ export function getAiChatPage(user: {
 
     var langModeSelect = document.getElementById('langModeSelect');
 
+    function updateWeeklyLimitBadge() {
+      var badge = document.getElementById('weeklyLimitBadge');
+      if (!badge) return;
+      fetch('/api/aichat/rate-limit-status', { credentials: 'same-origin', cache: 'no-store' })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          var weekly = data && data.weekly ? data.weekly : {};
+          var remaining = Number(weekly.remaining);
+          var limit = Number(weekly.limit);
+          if (!Number.isFinite(remaining) || !Number.isFinite(limit)) return;
+          badge.textContent = '週: 残り ' + remaining + ' / ' + limit;
+          badge.classList.toggle('low', remaining <= Math.max(3, Math.floor(limit * 0.1)));
+        })
+        .catch(function() { badge.textContent = '週: --'; });
+    }
+    updateWeeklyLimitBadge();
+
     // ナビバー表示設定: langModeSelect と modelSelect のCookie制御
     (function() {
       var mLang = document.cookie.match('(^|;)\\s*aichat_show_lang_mode=([^;]*)');
@@ -5218,6 +5241,7 @@ export function getAiChatPage(user: {
           thinking.remove();
           if (data.error) {
             appendBubble('エラー: ' + data.error, 'error');
+            updateWeeklyLimitBadge();
           } else {
             var responseText = data.response || '(応答なし)';
             var usedModel = data.usedModel || lastModel;
@@ -5226,6 +5250,7 @@ export function getAiChatPage(user: {
             appendBubble(responseText, 'assistant', isLocalCommand ? null : lastModel, data.fallbackUsed, respUsage);
             if (!isLocalCommand) {
               appendShareBtn(currentMsg, responseText, usedModel, data.shareId, data.userHash);
+              updateWeeklyLimitBadge();
             }
           }
         })
