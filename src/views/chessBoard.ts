@@ -1,8 +1,10 @@
 import { CHESS_TSUME_17TE_TITLE, CHESS_TSUME_17TE_INITIAL, CHESS_TSUME_17TE_MOVES } from '../data/chessTsume17te';
+import { FAMOUS_CHESS_GAMES } from '../data/famousChessGames';
 
 export function getChessTsumePage(): string {
   const initialJson = JSON.stringify(CHESS_TSUME_17TE_INITIAL);
   const movesJson = JSON.stringify(CHESS_TSUME_17TE_MOVES);
+  const gamesJson = JSON.stringify(FAMOUS_CHESS_GAMES);
   const title = CHESS_TSUME_17TE_TITLE;
 
   return `<!DOCTYPE html>
@@ -42,9 +44,9 @@ body{background:#0d1117;color:#e6edf3;font-family:system-ui,-apple-system,sans-s
 .ctl-btn:disabled{opacity:0.4;cursor:default}
 .ply-indicator{font-size:0.75rem;color:#8b949e;font-family:monospace;align-self:center;padding:0 4px}
 
-.side{width:260px;max-width:92vw;display:flex;flex-direction:column;gap:8px}
+.side{width:280px;max-width:92vw;display:flex;flex-direction:column;gap:8px}
 .side-title{font-size:0.7rem;font-weight:700;color:#58a6ff;text-transform:uppercase;letter-spacing:.05em}
-.move-list{display:flex;flex-direction:column;gap:2px;max-height:420px;overflow-y:auto;background:#161b22;border:1px solid #21262d;border-radius:6px;padding:6px}
+.move-list{display:flex;flex-direction:column;gap:2px;max-height:300px;overflow-y:auto;background:#161b22;border:1px solid #21262d;border-radius:6px;padding:6px}
 .mv-row{display:flex;align-items:center;gap:4px}
 .mv-num{font-size:0.7rem;color:#6e7681;font-family:monospace;width:24px;flex-shrink:0;text-align:right}
 .mv-btn{background:transparent;border:1px solid transparent;color:#e6edf3;font-family:monospace;font-size:0.75rem;padding:2px 6px;border-radius:4px;cursor:pointer;flex:1;text-align:left}
@@ -52,6 +54,13 @@ body{background:#0d1117;color:#e6edf3;font-family:system-ui,-apple-system,sans-s
 .mv-btn.active{background:#1f6feb;color:#fff;font-weight:700}
 
 .keyhint{font-size:0.65rem;color:#6e7681;text-align:center}
+
+.kifu-box{display:flex;flex-direction:column;gap:6px;background:#161b22;border:1px solid #21262d;border-radius:6px;padding:8px}
+.kifu-select{background:#0d1117;color:#e6edf3;border:1px solid #30363d;border-radius:6px;padding:5px 6px;font-size:0.75rem;font-family:inherit}
+.kifu-textarea{background:#0d1117;color:#e6edf3;border:1px solid #30363d;border-radius:6px;padding:6px;font-size:0.72rem;font-family:monospace;resize:vertical;min-height:90px;line-height:1.5}
+.kifu-meta{font-size:0.65rem;color:#8b949e;line-height:1.5}
+.kifu-actions{display:flex;gap:6px}
+.kifu-error{font-size:0.7rem;color:#f85149;min-height:1.2em;white-space:pre-wrap}
 
 @media(max-width:600px){
   .layout{flex-direction:column;align-items:center}
@@ -81,11 +90,29 @@ body{background:#0d1117;color:#e6edf3;font-family:system-ui,-apple-system,sans-s
   <div class="side">
     <div class="side-title">&#128203; 棋譜(クリックでその局面へ)</div>
     <div class="move-list" id="move-list"></div>
+    <div class="kifu-box">
+      <div class="side-title">&#9999; 棋譜を読み込む</div>
+      <select class="kifu-select" id="kifu-select"></select>
+      <div class="kifu-meta" id="kifu-meta"></div>
+      <textarea class="kifu-textarea" id="kifu-input" spellcheck="false" placeholder="例: 1. e4 e5 2. Nf3 Nc6 ..."></textarea>
+      <div class="kifu-actions">
+        <button type="button" class="ctl-btn" id="btn-kifu-clear">クリア</button>
+        <button type="button" class="ctl-btn" id="btn-kifu-load">読み込んで再生</button>
+      </div>
+      <div class="kifu-error" id="kifu-error"></div>
+    </div>
   </div>
 </div>
 <script>
-var INITIAL = ${initialJson};
-var MOVES = ${movesJson};
+var TSUME_INITIAL = ${initialJson};
+var TSUME_MOVES = ${movesJson};
+var FAMOUS_GAMES = ${gamesJson};
+var STANDARD_START = {
+  a1:'wR', b1:'wN', c1:'wB', d1:'wQ', e1:'wK', f1:'wB', g1:'wN', h1:'wR',
+  a2:'wP', b2:'wP', c2:'wP', d2:'wP', e2:'wP', f2:'wP', g2:'wP', h2:'wP',
+  a7:'bP', b7:'bP', c7:'bP', d7:'bP', e7:'bP', f7:'bP', g7:'bP', h7:'bP',
+  a8:'bR', b8:'bN', c8:'bB', d8:'bQ', e8:'bK', f8:'bB', g8:'bN', h8:'bR'
+};
 var PLAY_INTERVAL_MS = 900;
 
 function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function(c) { return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
@@ -103,12 +130,23 @@ function squareCoords(square) {
   return { file: file, rank: rank };
 }
 
-function applyPly(position, move) {
+function fileOf(square) { return square.charCodeAt(0) - 97; }
+function rankOf(square) { return parseInt(square[1], 10) - 1; }
+function squareName(file, rank) { return String.fromCharCode(97 + file) + (rank + 1); }
+function inBounds(file, rank) { return file >= 0 && file < 8 && rank >= 0 && rank < 8; }
+
+function movePiece(position, from, to, promoteTo) {
   var next = {};
   for (var k in position) { if (Object.prototype.hasOwnProperty.call(position, k)) { next[k] = position[k]; } }
-  var piece = next[move.from];
-  delete next[move.from];
-  next[move.to] = piece;
+  var piece = promoteTo || next[from];
+  delete next[from];
+  next[to] = piece;
+  return next;
+}
+
+function applyPly(position, move) {
+  var next = movePiece(position, move.from, move.to, move.promote);
+  if (move.rookFrom && move.rookTo) { next = movePiece(next, move.rookFrom, move.rookTo); }
   return next;
 }
 
@@ -120,6 +158,171 @@ function buildPositions(initial, moves) {
     positions.push(cur);
   }
   return positions;
+}
+
+var KNIGHT_OFFSETS = [[1,2],[2,1],[2,-1],[1,-2],[-1,-2],[-2,-1],[-2,1],[-1,2]];
+var KING_OFFSETS = [[1,0],[1,1],[0,1],[-1,1],[-1,0],[-1,-1],[0,-1],[1,-1]];
+var BISHOP_DIRS = [[1,1],[1,-1],[-1,1],[-1,-1]];
+var ROOK_DIRS = [[1,0],[-1,0],[0,1],[0,-1]];
+var QUEEN_DIRS = BISHOP_DIRS.concat(ROOK_DIRS);
+
+function stepReachable(from, dest, offsets) {
+  var f0 = fileOf(from), r0 = rankOf(from);
+  var fd = fileOf(dest), rd = rankOf(dest);
+  for (var i = 0; i < offsets.length; i++) {
+    if (f0 + offsets[i][0] === fd && r0 + offsets[i][1] === rd) return true;
+  }
+  return false;
+}
+
+function slideReachable(position, from, dirs, dest) {
+  var f0 = fileOf(from), r0 = rankOf(from);
+  for (var d = 0; d < dirs.length; d++) {
+    var f = f0 + dirs[d][0], r = r0 + dirs[d][1];
+    while (inBounds(f, r)) {
+      var sq = squareName(f, r);
+      if (sq === dest) return true;
+      if (position[sq]) break;
+      f += dirs[d][0]; r += dirs[d][1];
+    }
+  }
+  return false;
+}
+
+function canReach(position, pieceType, from, dest) {
+  if (pieceType === 'N') return stepReachable(from, dest, KNIGHT_OFFSETS);
+  if (pieceType === 'K') return stepReachable(from, dest, KING_OFFSETS);
+  if (pieceType === 'B') return slideReachable(position, from, BISHOP_DIRS, dest);
+  if (pieceType === 'R') return slideReachable(position, from, ROOK_DIRS, dest);
+  if (pieceType === 'Q') return slideReachable(position, from, QUEEN_DIRS, dest);
+  return false;
+}
+
+function findKing(position, color) {
+  for (var sq in position) {
+    if (Object.prototype.hasOwnProperty.call(position, sq) && position[sq] === color + 'K') return sq;
+  }
+  return null;
+}
+
+function findPawnOrigin(position, color, dest, isCapture, originFileHint) {
+  var destFile = fileOf(dest), destRank = rankOf(dest);
+  if (isCapture) {
+    var originFile = originFileHint.charCodeAt(0) - 97;
+    var originRank = destRank + (color === 'w' ? -1 : 1);
+    var originSq = squareName(originFile, originRank);
+    if (position[originSq] === color + 'P') return originSq;
+    throw new Error('ポーンの捕獲元が見つからない(' + originSq + ')');
+  }
+  var oneBack = squareName(destFile, destRank + (color === 'w' ? -1 : 1));
+  if (position[oneBack] === color + 'P') return oneBack;
+  var twoBack = squareName(destFile, destRank + (color === 'w' ? -2 : 2));
+  var startRank = color === 'w' ? 1 : 6;
+  if (rankOf(twoBack) === startRank && position[twoBack] === color + 'P') return twoBack;
+  throw new Error('ポーンの起点が見つからない(宛先' + dest + ')');
+}
+
+function findPieceOrigin(position, color, pieceType, dest, disambigFile, disambigRank) {
+  var candidates = [];
+  for (var sq in position) {
+    if (!Object.prototype.hasOwnProperty.call(position, sq)) continue;
+    if (position[sq] !== color + pieceType) continue;
+    if (disambigFile !== null && fileOf(sq) !== disambigFile) continue;
+    if (disambigRank !== null && rankOf(sq) !== disambigRank) continue;
+    if (canReach(position, pieceType, sq, dest)) candidates.push(sq);
+  }
+  if (candidates.length === 1) return candidates[0];
+  if (candidates.length === 0) throw new Error('指せる' + pieceType + 'が見つからない(宛先' + dest + ')');
+  throw new Error('指し手が曖昧(候補' + candidates.length + '個・宛先' + dest + ')');
+}
+
+var SAN_RE = /^([KQRBN])?([a-h])?([1-8])?(x)?([a-h][1-8])(=[QRBN])?([+#])?$/;
+
+function stripAnnotation(tok) { return tok.replace(/[!?]+$/, ''); }
+
+function applySanMove(position, rawToken, color) {
+  var tok = stripAnnotation(rawToken);
+  var m = /^(O-O-O|0-0-0)([+#])?$/.exec(tok);
+  if (m) {
+    var rank0 = color === 'w' ? 0 : 7;
+    var kFrom0 = squareName(4, rank0), kTo0 = squareName(2, rank0);
+    var rFrom0 = squareName(0, rank0), rTo0 = squareName(3, rank0);
+    var next0 = movePiece(movePiece(position, kFrom0, kTo0), rFrom0, rTo0);
+    return { move: { from: kFrom0, to: kTo0, rookFrom: rFrom0, rookTo: rTo0, san: rawToken, check: m[2] === '+', mate: m[2] === '#' }, next: next0 };
+  }
+  m = /^(O-O|0-0)([+#])?$/.exec(tok);
+  if (m) {
+    var rank1 = color === 'w' ? 0 : 7;
+    var kFrom1 = squareName(4, rank1), kTo1 = squareName(6, rank1);
+    var rFrom1 = squareName(7, rank1), rTo1 = squareName(5, rank1);
+    var next1 = movePiece(movePiece(position, kFrom1, kTo1), rFrom1, rTo1);
+    return { move: { from: kFrom1, to: kTo1, rookFrom: rFrom1, rookTo: rTo1, san: rawToken, check: m[2] === '+', mate: m[2] === '#' }, next: next1 };
+  }
+
+  m = SAN_RE.exec(tok);
+  if (!m) throw new Error('解析できない手: "' + rawToken + '"');
+  var pieceLetter = m[1];
+  var dfileCh = m[2];
+  var drankCh = m[3];
+  var isCapture = !!m[4];
+  var dest = m[5];
+  var promo = m[6];
+  var chk = m[7];
+
+  var from;
+  if (!pieceLetter) {
+    from = findPawnOrigin(position, color, dest, isCapture, isCapture ? dfileCh : null);
+  } else if (pieceLetter === 'K') {
+    from = findKing(position, color);
+    if (!from) throw new Error('キングが盤上に見つからない');
+  } else {
+    var disambigFile = dfileCh ? (dfileCh.charCodeAt(0) - 97) : null;
+    var disambigRank = drankCh ? (parseInt(drankCh, 10) - 1) : null;
+    from = findPieceOrigin(position, color, pieceLetter, dest, disambigFile, disambigRank);
+  }
+
+  if (!position[from]) throw new Error('起点マスに駒が無い: ' + from + ' ("' + rawToken + '")');
+  var promoteTo = promo ? (color + promo.charAt(1)) : null;
+  var next = movePiece(position, from, dest, promoteTo);
+  return { move: { from: from, to: dest, san: rawToken, check: chk === '+', mate: chk === '#' }, next: next };
+}
+
+function parseGameText(text, startingPosition) {
+  var cleaned = String(text || '').replace(/\\{[^}]*\\}/g, ' ').replace(/\\([^)]*\\)/g, ' ');
+  var tokens = cleaned.split(/\\s+/).filter(function(t) { return t.length > 0; });
+  var moves = [];
+  var positions = [startingPosition];
+  var cur = startingPosition;
+  for (var i = 0; i < tokens.length; i++) {
+    var tok = tokens[i];
+    if (/^\\d+\\.+$/.test(tok)) continue;
+    if (/^(1-0|0-1|1\\/2-1\\/2|\\*)$/.test(tok)) continue;
+    var cleanedTok = tok.replace(/^\\d+\\.+/, '');
+    if (!cleanedTok) continue;
+    var color = (moves.length % 2 === 0) ? 'w' : 'b';
+    var result;
+    try {
+      result = applySanMove(cur, cleanedTok, color);
+    } catch (e) {
+      throw new Error((moves.length + 1) + '手目「' + tok + '」: ' + e.message);
+    }
+    moves.push(result.move);
+    cur = result.next;
+    positions.push(cur);
+  }
+  if (!moves.length) throw new Error('指し手が見つかりませんでした');
+  return { moves: moves, positions: positions };
+}
+
+function movesToText(moves) {
+  var lines = [];
+  for (var i = 0; i < moves.length; i += 2) {
+    var num = Math.floor(i / 2) + 1;
+    var line = num + '. ' + moves[i].san;
+    if (i + 1 < moves.length) { line += ' ' + moves[i + 1].san; }
+    lines.push(line);
+  }
+  return lines.join('\\n');
 }
 
 function renderBoard(position) {
@@ -160,7 +363,14 @@ function renderMoveList(moves, currentPly) {
   return html;
 }
 
-var state = { ply: 0, positions: buildPositions(INITIAL, MOVES), playTimer: null, playDir: 0 };
+var state = {
+  initial: TSUME_INITIAL,
+  moves: TSUME_MOVES,
+  ply: 0,
+  positions: buildPositions(TSUME_INITIAL, TSUME_MOVES),
+  playTimer: null,
+  playDir: 0
+};
 
 function updatePlayButtons() {
   document.getElementById('btn-play').classList.toggle('active', state.playDir === 1);
@@ -178,11 +388,11 @@ function wireMoveButtons() {
 
 function render() {
   document.getElementById('board').innerHTML = renderBoard(state.positions[state.ply]);
-  document.getElementById('move-list').innerHTML = renderMoveList(MOVES, state.ply);
-  document.getElementById('ply-indicator').textContent = state.ply + ' / ' + MOVES.length;
+  document.getElementById('move-list').innerHTML = renderMoveList(state.moves, state.ply);
+  document.getElementById('ply-indicator').textContent = state.ply + ' / ' + state.moves.length;
 
   var statusEl = document.getElementById('status');
-  var lastMove = state.ply > 0 ? MOVES[state.ply - 1] : null;
+  var lastMove = state.ply > 0 ? state.moves[state.ply - 1] : null;
   statusEl.classList.remove('is-check', 'is-mate');
   if (!lastMove) {
     statusEl.textContent = '開始局面(白番)';
@@ -198,15 +408,15 @@ function render() {
 
   document.getElementById('btn-first').disabled = state.ply <= 0;
   document.getElementById('btn-prev').disabled = state.ply <= 0;
-  document.getElementById('btn-next').disabled = state.ply >= MOVES.length;
-  document.getElementById('btn-last').disabled = state.ply >= MOVES.length;
+  document.getElementById('btn-next').disabled = state.ply >= state.moves.length;
+  document.getElementById('btn-last').disabled = state.ply >= state.moves.length;
 
   wireMoveButtons();
   updatePlayButtons();
 }
 
 function goTo(ply) {
-  state.ply = Math.max(0, Math.min(MOVES.length, ply));
+  state.ply = Math.max(0, Math.min(state.moves.length, ply));
   render();
 }
 
@@ -225,9 +435,9 @@ function startPlay(dir) {
   updatePlayButtons();
   state.playTimer = setInterval(function() {
     if (dir > 0) {
-      if (state.ply >= MOVES.length) { stopPlay(); return; }
+      if (state.ply >= state.moves.length) { stopPlay(); return; }
       stepNext();
-      if (state.ply >= MOVES.length) { stopPlay(); }
+      if (state.ply >= state.moves.length) { stopPlay(); }
     } else {
       if (state.ply <= 0) { stopPlay(); return; }
       stepPrev();
@@ -236,8 +446,78 @@ function startPlay(dir) {
   }, PLAY_INTERVAL_MS);
 }
 
+function loadGame(initialPosition, moves) {
+  stopPlay();
+  state.initial = initialPosition;
+  state.moves = moves;
+  state.positions = buildPositions(initialPosition, moves);
+  state.ply = 0;
+  render();
+}
+
+function loadFromKifuInput(autoPlay) {
+  var errEl = document.getElementById('kifu-error');
+  var text = document.getElementById('kifu-input').value;
+  var startingPosition = document.getElementById('kifu-select').value === 'tsume-17te' ? TSUME_INITIAL : STANDARD_START;
+  var parsed;
+  try {
+    parsed = parseGameText(text, startingPosition);
+  } catch (e) {
+    errEl.textContent = e.message;
+    return false;
+  }
+  errEl.textContent = '';
+  loadGame(startingPosition, parsed.moves);
+  if (autoPlay) { startPlay(1); }
+  return true;
+}
+
+function populateKifuSelect() {
+  var sel = document.getElementById('kifu-select');
+  var html = '<option value="tsume-17te">17手詰め(K+2R対裸玉)</option>';
+  FAMOUS_GAMES.forEach(function(g) {
+    html += '<option value="' + esc(g.id) + '">' + esc(g.title) + '(' + esc(g.players) + ', ' + esc(g.year) + ')</option>';
+  });
+  html += '<option value="custom">カスタム(棋譜を貼り付け)</option>';
+  sel.innerHTML = html;
+}
+
+function findFamousGame(id) {
+  for (var i = 0; i < FAMOUS_GAMES.length; i++) { if (FAMOUS_GAMES[i].id === id) return FAMOUS_GAMES[i]; }
+  return null;
+}
+
+function updateKifuMeta(game) {
+  var metaEl = document.getElementById('kifu-meta');
+  if (!game) { metaEl.textContent = ''; return; }
+  metaEl.textContent = (game.event ? game.event + ' / ' : '') + (game.note || '');
+}
+
+function onKifuSelectChange() {
+  var errEl = document.getElementById('kifu-error');
+  errEl.textContent = '';
+  var val = document.getElementById('kifu-select').value;
+  var inputEl = document.getElementById('kifu-input');
+  if (val === 'tsume-17te') {
+    inputEl.value = movesToText(TSUME_MOVES);
+    updateKifuMeta(null);
+    loadGame(TSUME_INITIAL, TSUME_MOVES);
+    startPlay(1);
+    return;
+  }
+  if (val === 'custom') {
+    updateKifuMeta(null);
+    return;
+  }
+  var game = findFamousGame(val);
+  if (!game) return;
+  inputEl.value = game.moveText;
+  updateKifuMeta(game);
+  loadFromKifuInput(true);
+}
+
 document.getElementById('btn-first').addEventListener('click', function() { stopPlay(); goTo(0); });
-document.getElementById('btn-last').addEventListener('click', function() { stopPlay(); goTo(MOVES.length); });
+document.getElementById('btn-last').addEventListener('click', function() { stopPlay(); goTo(state.moves.length); });
 document.getElementById('btn-prev').addEventListener('click', function() { stopPlay(); stepPrev(); });
 document.getElementById('btn-next').addEventListener('click', function() { stopPlay(); stepNext(); });
 document.getElementById('btn-play').addEventListener('click', function() {
@@ -251,6 +531,16 @@ document.addEventListener('keydown', function(e) {
   else if (e.key === 'ArrowLeft') { stopPlay(); stepPrev(); }
 });
 
+document.getElementById('btn-kifu-clear').addEventListener('click', function() {
+  document.getElementById('kifu-input').value = '';
+  document.getElementById('kifu-error').textContent = '';
+  document.getElementById('kifu-input').focus();
+});
+document.getElementById('btn-kifu-load').addEventListener('click', function() { loadFromKifuInput(true); });
+document.getElementById('kifu-select').addEventListener('change', onKifuSelectChange);
+
+populateKifuSelect();
+document.getElementById('kifu-input').value = movesToText(TSUME_MOVES);
 render();
 </script>
 </body>
