@@ -178,6 +178,7 @@ ${renderKeywordClassifyPanelCss()}
 .rail-hr-h-row{display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid #21262d;font-size:12px}
 .rail-hr-h-row:last-child{border-bottom:none}
 .rail-hr-h-name{flex:1;color:#c9d1d9}
+.rail-hr-h-flag,.rail-hr-h-icon{font-size:13px}
 .rail-hr-h-dist{color:#58a6ff;font-size:11px;font-weight:600;flex-shrink:0}
 .eu-from-wrap{display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap}
 .eu-from-label{font-size:12px;color:#8b949e}
@@ -1466,7 +1467,11 @@ function buildRailHrNearbyHtml(lat, lon) {
   var html = '';
   nearby.forEach(function(x) {
     html += '<div class="rail-hr-h-row">' +
-      '<span class="rail-hr-h-name">' + x.h.f + ' ' + x.h.n + '</span>' +
+      '<span class="rail-hr-h-name">' +
+      '<span class="rail-hr-h-flag">' + x.h.f + '</span> ' +
+      '<span class="rail-hr-h-icon">' + x.h.e + '</span> ' +
+      '<span class="rail-hr-h-site-name">' + x.h.n + '</span>' +
+      '</span>' +
       '<span class="rail-hr-h-dist">' + x.d + ' km</span>' +
       '</div>';
   });

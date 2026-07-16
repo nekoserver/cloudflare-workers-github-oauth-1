@@ -168,6 +168,38 @@ describe('🚉 モーダルの振る舞い', () => {
     dists.forEach((d) => expect(d).toBeLessThanOrEqual(100));
   });
 
+  it('アコーディオン内の各世界遺産行は、国旗の右側に地球儀(webgl-heritage)で使っているのと同じアイコン(HERITAGE_LISTのeフィールド)が表示される', () => {
+    const window = setupDom();
+    window.document.getElementById('btn-rail-hr').dispatchEvent(new window.Event('click'));
+    const firstRow = window.document.querySelector('.rail-hr-row');
+    firstRow.dispatchEvent(new window.Event('click'));
+
+    const acc = firstRow.nextSibling;
+    const hRows = Array.from(acc.querySelectorAll('.rail-hr-h-row')) as any[];
+    expect(hRows.length).toBeGreaterThan(0);
+
+    hRows.forEach((row: any) => {
+      const nameEl = row.querySelector('.rail-hr-h-name');
+      const flagEl = nameEl.querySelector('.rail-hr-h-flag');
+      const iconEl = nameEl.querySelector('.rail-hr-h-icon');
+      const siteNameEl = nameEl.querySelector('.rail-hr-h-site-name');
+      expect(flagEl).toBeTruthy();
+      expect(iconEl).toBeTruthy();
+      expect(siteNameEl).toBeTruthy();
+
+      // 国旗(flagEl)がアイコン(iconEl)より先(DOM順=表示上は左)に来る = アイコンは国旗の右側
+      expect(nameEl.children[0]).toBe(flagEl);
+      expect(nameEl.children[1]).toBe(iconEl);
+      expect(nameEl.children[2]).toBe(siteNameEl);
+
+      // アイコンはHERITAGE_LISTの該当エントリのeフィールド(=地球儀の表示に使うのと同じアイコン)と一致する
+      // (nameだけでは同名で国旗違いのエントリがあるため、flagも合わせて一意に特定する)
+      const site = HERITAGE_LIST.find((h) => h.n === siteNameEl.textContent && h.f === flagEl.textContent);
+      expect(site).toBeTruthy();
+      expect(iconEl.textContent).toBe(site!.e);
+    });
+  });
+
   it('開いているアコーディオンを再タップすると閉じる', () => {
     const window = setupDom();
     window.document.getElementById('btn-rail-hr').dispatchEvent(new window.Event('click'));
