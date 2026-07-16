@@ -235,6 +235,27 @@ describe('parseGameText: 棋譜テキスト全体の解析', () => {
     expect(final.d8).toBe('wR');
   });
 
+  it('不朽の名局(Immortal Game)を解析し、白23手・黒22手(合計45半手)で最終手Be7#が詰みになる', () => {
+    const html = getChessTsumePage();
+    const { parseGameText, STANDARD_START } = loadEngine(html);
+    const immortal = FAMOUS_CHESS_GAMES.find((g) => g.id === 'immortal-1851')!;
+    const { moves, positions } = parseGameText(immortal.moveText, STANDARD_START);
+
+    expect(moves.length).toBe(45);
+    expect(moves[moves.length - 1].san).toBe('Be7#');
+    expect(moves[moves.length - 1].mate).toBe(true);
+    // 詰みの最終局面: 白ビショップがe7、黒キングはd8、白ナイトがd5とg7に残る
+    const final = positions[positions.length - 1];
+    expect(final.e7).toBe('wB');
+    expect(final.d8).toBe('bK');
+    expect(final.d5).toBe('wN');
+    expect(final.g7).toBe('wN');
+    // クイーン・両ルークを捧げた側(白)にはクイーンもルークも残っていない
+    const whitePieces = Object.values(final).filter((p) => (p as string).startsWith('w'));
+    expect(whitePieces).not.toContain('wQ');
+    expect(whitePieces).not.toContain('wR');
+  });
+
   it('空文字列や指し手が無い入力はエラーになる', () => {
     const html = getChessTsumePage();
     const { parseGameText, STANDARD_START } = loadEngine(html);
