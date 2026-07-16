@@ -111,14 +111,14 @@ describe('世界遺産地球儀: COUNTRY_BORDERSデータ整合性', () => {
   });
 
   it('HERITAGE_LIST/AIRPORT_LISTに登場する国旗は全てCOUNTRY_BORDERSにデータが存在する' +
-    '(低解像度データセットに無かった5件の小国・特別行政区🇦🇬🇧🇭🇭🇰🇲🇺🇸🇬は補完データセットから追加済み)', () => {
+    '(低解像度データセットに無かった6件の小国・特別行政区🇦🇬🇧🇭🇭🇰🇲🇨🇲🇺🇸🇬は補完データセットから追加済み)', () => {
     const ccSet = new Set<string>();
     HERITAGE_LIST.forEach((h) => { const cc = flagToCc(h.f); if (cc) ccSet.add(cc); });
     AIRPORT_LIST.forEach((a) => { const cc = flagToCc(a.city.split(' ')[0]); if (cc) ccSet.add(cc); });
     const covered = new Set(COUNTRY_BORDERS.map((c) => c.cc));
     const missing = [...ccSet].filter((cc) => !covered.has(cc));
     expect(missing).toEqual([]);
-    ['AG', 'BH', 'HK', 'MU', 'SG'].forEach((cc) => { expect(covered.has(cc)).toBe(true); });
+    ['AG', 'BH', 'HK', 'MC', 'MU', 'SG'].forEach((cc) => { expect(covered.has(cc)).toBe(true); });
   });
 });
 
