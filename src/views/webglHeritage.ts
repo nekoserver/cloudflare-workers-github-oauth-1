@@ -495,6 +495,7 @@ void main() {
     <div class="dbg-rect" id="dbg-zoom-rect"></div>
     <div class="canvas-ctrl-btns">
       <button class="canvas-ctrl-btn" id="btnAxisLock">＋ 軸垂直固定</button>
+      <button class="canvas-ctrl-btn active" id="btnHeritageTooltip" title="世界遺産のツールチップの表示切替">💬 ツールチップ</button>
       <button class="canvas-ctrl-btn" id="btnAutoRot">⏸ 自転停止</button>
       <button class="canvas-ctrl-btn" id="btnJapanTour">🗾 日本巡回</button>
       <button class="canvas-ctrl-btn" id="btnAmericaTour">🌎 アメリカ巡回</button>
@@ -899,6 +900,8 @@ void main() {
 
   var btnAxisLock = document.getElementById('btnAxisLock');
   var btnAutoRot  = document.getElementById('btnAutoRot');
+  var btnHeritageTooltip = document.getElementById('btnHeritageTooltip');
+  var heritageTooltipVisible = true;
 
   btnAxisLock.addEventListener('click', function() {
     axisLocked = !axisLocked;
@@ -909,6 +912,11 @@ void main() {
     autoRot = !autoRot;
     btnAutoRot.textContent = autoRot ? '⏸ 自転停止' : '▶ 回転';
     if (autoRot) { btnAutoRot.classList.remove('active'); } else { btnAutoRot.classList.add('active'); }
+  });
+  btnHeritageTooltip.addEventListener('click', function() {
+    heritageTooltipVisible = !heritageTooltipVisible;
+    btnHeritageTooltip.classList.toggle('active', heritageTooltipVisible);
+    if (!heritageTooltipVisible && activeIdx !== -1) { tooltip.style.opacity = '0'; }
   });
 
   var velY = 0, velX = 0, momentumY = 0, momentumX = 0;
@@ -4212,6 +4220,12 @@ void main() {
 
   function showMarkerTooltip(idx, vx, vy) {
     var d = HERITAGE[idx];
+    if (!heritageTooltipVisible) {
+      tooltip.style.opacity = '0';
+      activeIdx = idx;
+      flyTo(d.lat, d.lon);
+      return;
+    }
     var col = typeColor(d.t);
     var cityIcon = hasCityDataSet[d.n] ? ' 🌆' : '';
     var gemmaShareId = heritageMitokoroGemmaShareId[d.n];
@@ -4576,7 +4590,7 @@ void main() {
     mul(tmp, view, model);
     mul(mvp, proj, tmp);
 
-    if (autoRot && isListMode && flyTarget === null) {
+    if (autoRot && isListMode && flyTarget === null && heritageTooltipVisible) {
       var nearestIdx2 = -1, nearestMz2 = -1;
       for (var si2 = 0; si2 < HERITAGE.length; si2++) {
         var sp2 = mkEls[si2] ? mkEls[si2].pos3d : null;
@@ -4618,8 +4632,12 @@ void main() {
           mk.el.style.top  = py + 'px';
           mk.el.style.opacity = '1';
           if (mi === activeIdx) {
-            positionTooltip(canvasRect.left + px, canvasRect.top + py);
-            tooltip.style.opacity = '1';
+            if (heritageTooltipVisible) {
+              positionTooltip(canvasRect.left + px, canvasRect.top + py);
+              tooltip.style.opacity = '1';
+            } else {
+              tooltip.style.opacity = '0';
+            }
           }
         } else {
           mk.el.style.opacity = '0';
