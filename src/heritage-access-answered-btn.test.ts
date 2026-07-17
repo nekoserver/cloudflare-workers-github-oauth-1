@@ -137,7 +137,7 @@ describe('heritageAccess ビュー — キャッシュ済みボタンのモー�
   });
 
   it('data-share-id がある場合は askAICached を呼ぶ', () => {
-    expect(view).toContain('askAICached(name, topic, shareId)');
+    expect(view).toContain('askAICached(name, topic, country, shareId)');
   });
 
   it('data-share-id がない場合は askAI（新規生成）を呼ぶ', () => {
@@ -189,13 +189,13 @@ describe('checkHeritageKeywords と check-heritage-questions の競合条件修�
   });
 
   it('askAI コールバックで ensureTopicBadge を呼んでいる（バッジ即時更新）', () => {
-    const askAICallIdx = view.indexOf('askAI(name, topic, function(newShareId)');
+    const askAICallIdx = view.indexOf('askAI(name, topic, country, function(newShareId)');
     const callbackBlock = view.slice(askAICallIdx, askAICallIdx + 300);
     expect(callbackBlock).toContain('ensureTopicBadge(inner, name, topic)');
   });
 
   it('askAI コールバックで checkHeritageKeywords を呼んでいない（DB未更新タイミングでの誤呼び出し除去）', () => {
-    const askAICallIdx = view.indexOf('askAI(name, topic, function(newShareId)');
+    const askAICallIdx = view.indexOf('askAI(name, topic, country, function(newShareId)');
     const callbackBlock = view.slice(askAICallIdx, askAICallIdx + 300);
     expect(callbackBlock).not.toContain('checkHeritageKeywords(heritages, inner)');
   });

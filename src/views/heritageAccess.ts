@@ -929,8 +929,21 @@ var AI_TOPICS = ['交通手段', '見どころ', '最寄り空港', '鉄道で�
 var HERITAGE_MITOKORO_TOPIC = '見どころ';
 var HERITAGE_MITOKORO_MODEL = '@cf/google/gemma-4-26b-a4b-it';
 
-function askAI(heritageName, topic, onComplete) {
-  var prompt = '「' + heritageName + '」の「' + topic + '」について説明してください';
+function stripCountryContextPrefix(text, countryName) {
+  if (!countryName) return text;
+  var prefix = '「' + countryName + '」にある';
+  var str = String(text || '');
+  if (str.indexOf(prefix) === 0) {
+    return str.slice(prefix.length).replace(/^[、,。\s]+/, '');
+  }
+  return str;
+}
+
+function askAI(heritageName, topic, countryName, onComplete) {
+  // 同名で国が異なる世界遺産(例: モンテ・サン・ジョルジョ)が存在するため、
+  // 誤回答(別の国の同名遺産についての回答)を避けるべく先頭に国名を付けて問い合わせる。
+  var prompt = (countryName ? '「' + countryName + '」にある' : '') +
+    '「' + heritageName + '」の「' + topic + '」について説明してください';
   openAiModal(heritageName + ' — ' + topic, '読み込み中...', false);
   var requestBody = { message: prompt, source: 'api' };
   // 「見どころ」は世界遺産ツールチップの👀アイコン判定（gemma-4-26b-a4b-it固定）が
@@ -941,7 +954,7 @@ function askAI(heritageName, topic, onComplete) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(requestBody)
   }).then(function(r) { return r.json(); }).then(function(data) {
-    aiModalBody.textContent = data.response || data.error || '（応答なし）';
+    aiModalBody.textContent = data.response ? stripCountryContextPrefix(data.response, countryName) : (data.error || '（応答なし）');
     if (data.response && data.id) {
       aiModalCacheBadge.style.display = 'none';
     }
@@ -951,25 +964,26 @@ function askAI(heritageName, topic, onComplete) {
   });
 }
 
-function askAICached(heritageName, topic, shareId) {
+function askAICached(heritageName, topic, countryName, shareId) {
   openAiModal(heritageName + ' — ' + topic, '読み込み中...', true);
   fetch('/api/aichat/shares/' + encodeURIComponent(shareId))
     .then(function(r) { return r.json(); })
     .then(function(data) {
-      aiModalBody.textContent = data.answer || data.error || '（応答なし）';
+      aiModalBody.textContent = data.answer ? stripCountryContextPrefix(data.answer, countryName) : (data.error || '（応答なし）');
     })
     .catch(function() {
       aiModalBody.textContent = '通信エラーが発生しました。';
     });
 }
 
-function buildAiPanel(heritageName) {
+function buildAiPanel(heritageName, countryName) {
   var html = '<div class="acc-ai-panel">' +
     '<div class="acc-ai-label">AIに何を質問しますか</div>' +
     '<div class="acc-ai-btns">';
   AI_TOPICS.forEach(function(topic) {
     html += '<button class="acc-ai-btn" data-topic="' + topic + '" data-heritage="' +
-      heritageName.replace(/"/g, '&quot;') + '">' + topic + '</button>';
+      heritageName.replace(/"/g, '&quot;') + '" data-country="' +
+      (countryName || '').replace(/"/g, '&quot;') + '">' + topic + '</button>';
   });
   html += '</div></div>';
   return html;
@@ -1030,6 +1044,9 @@ function closeAllAccordions() {
 }
 
 function renderHeritageInner(inner, accTr, heritages, hits, kwCounts, answered) {
+  var cityTr0 = accTr.previousElementSibling;
+  var cityCc0 = cityTr0 ? cityTr0.getAttribute('data-cc') : '';
+  var cityCountryName = cityCc0 ? ccToJp(cityCc0) : '';
   var html = '<div class="acc-heritage-list">';
   heritages.forEach(function(h, idx) {
     var dist = h.distance_km < 10 ? h.distance_km.toFixed(1) : Math.round(h.distance_km);
@@ -1045,7 +1062,7 @@ function renderHeritageInner(inner, accTr, heritages, hits, kwCounts, answered) 
       '<span class="acc-dist">' + dist + ' km</span>' +
       '</div>' +
       '<div class="acc-ai-wrap" id="acc-ai-' + Math.random().toString(36).slice(2) + '" style="display:none">' +
-      buildAiPanel(h.heritage_name) +
+      buildAiPanel(h.heritage_name, cityCountryName) +
       '</div>';
   });
   html += '</div>';
@@ -1063,9 +1080,7 @@ function renderHeritageInner(inner, accTr, heritages, hits, kwCounts, answered) 
         wrap.style.display = '';
         var hName = rowEl.getAttribute('data-heritage') || '';
         if (hName) {
-          var cityTr = accTr.previousElementSibling;
-          var _cc = cityTr ? cityTr.getAttribute('data-cc') : '';
-          var _cName = _cc ? ccToJp(_cc) : '';
+          var _cName = cityCountryName;
           var localAnswered = {};
           wrap.querySelectorAll('.acc-ai-btn.answered').forEach(function(b) {
             var t = b.getAttribute('data-topic');
@@ -1101,11 +1116,12 @@ function renderHeritageInner(inner, accTr, heritages, hits, kwCounts, answered) 
       e.stopPropagation();
       var topic = btn.getAttribute('data-topic');
       var name = btn.getAttribute('data-heritage');
+      var country = btn.getAttribute('data-country') || '';
       var shareId = btn.getAttribute('data-share-id');
       if (shareId) {
-        askAICached(name, topic, shareId);
+        askAICached(name, topic, country, shareId);
       } else {
-        askAI(name, topic, function(newShareId) {
+        askAI(name, topic, country, function(newShareId) {
           if (newShareId) {
             btn.classList.add('answered');
             btn.setAttribute('data-share-id', newShareId);
