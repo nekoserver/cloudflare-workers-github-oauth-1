@@ -39,14 +39,14 @@ describe('askAI: 「見どころ」トピックはgemma-4-26b-a4b-itを明示指
   });
 
   it('topic が見どころの場合のみ requestBody.model をセットする', () => {
-    const idx = html.indexOf('function askAI(heritageName, topic, onComplete)');
+    const idx = html.indexOf('function askAI(heritageName, topic, countryName, onComplete)');
     expect(idx).toBeGreaterThan(-1);
     const block = html.slice(idx, idx + 800);
     expect(block).toMatch(/if \(topic === HERITAGE_MITOKORO_TOPIC\) requestBody\.model = HERITAGE_MITOKORO_MODEL;/);
   });
 
   it('fetch(/api/aichat) の body に requestBody をそのまま渡している（見どころ以外はmodel未指定のまま）', () => {
-    const idx = html.indexOf('function askAI(heritageName, topic, onComplete)');
+    const idx = html.indexOf('function askAI(heritageName, topic, countryName, onComplete)');
     const block = html.slice(idx, idx + 800);
     expect(block).toContain('body: JSON.stringify(requestBody)');
     // 見どころ以外のトピックでは model プロパティを追加するコードパスを通らない

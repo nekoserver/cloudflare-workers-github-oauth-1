@@ -144,14 +144,14 @@ describe('世界遺産チャットログリンク: AI応答後のボタン色と
   it('askAI が onComplete に data.shareId を渡している（data.id ではない）', () => {
     const html = buildPage();
     const idx = html.indexOf('function askAI');
-    const block = html.slice(idx, idx + 1000);
+    const block = html.slice(idx, idx + 1100);
     expect(block).toContain('data.shareId');
     expect(block).not.toContain('onComplete(data.id || null)');
   });
 
   it('AI応答後に btn.classList.add(answered) を呼んでいる', () => {
     const html = buildPage();
-    const idx = html.indexOf('askAI(name, topic, function(newShareId)');
+    const idx = html.indexOf('askAI(name, topic, country, function(newShareId)');
     expect(idx).toBeGreaterThan(-1);
     const block = html.slice(idx, idx + 200);
     expect(block).toContain("btn.classList.add('answered')");
