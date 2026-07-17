@@ -319,7 +319,7 @@ ${renderKeywordClassifyPanelCss()}
 <div id="rail-hr-overlay" class="rail-hr-overlay">
   <div class="rail-hr-modal">
     <div class="rail-hr-head">
-      <span class="rail-hr-title" id="rail-hr-title">🚉 駅周辺100km以内の世界遺産数ランキング</span>
+      <span class="rail-hr-title" id="rail-hr-title">🚉 駅周辺200km以内の世界遺産数ランキング</span>
       <button class="rail-hr-close" id="rail-hr-close">✕</button>
     </div>
     <div class="rail-hr-body" id="rail-hr-body"></div>
@@ -1439,7 +1439,7 @@ function buildRailStationRanking() {
     line.stations.forEach(function(st) {
       var count = 0;
       HERITAGE_ALL.forEach(function(h) {
-        if (hvKm(st.lat, st.lon, h.lat, h.lon) <= 100) count++;
+        if (hvKm(st.lat, st.lon, h.lat, h.lon) <= 200) count++;
       });
       rows.push({
         station: st.name,
@@ -1458,11 +1458,11 @@ function buildRailHrNearbyHtml(lat, lon) {
   var nearby = [];
   HERITAGE_ALL.forEach(function(h) {
     var d = hvKm(lat, lon, h.lat, h.lon);
-    if (d <= 100) nearby.push({ h: h, d: d });
+    if (d <= 200) nearby.push({ h: h, d: d });
   });
   nearby.sort(function(a, b) { return a.d - b.d; });
   if (nearby.length === 0) {
-    return '<div style="color:#8b949e;text-align:center;padding:10px 0">100km以内の世界遺産なし</div>';
+    return '<div style="color:#8b949e;text-align:center;padding:10px 0">200km以内の世界遺産なし</div>';
   }
   var html = '';
   nearby.forEach(function(x) {
@@ -1479,7 +1479,7 @@ function buildRailHrNearbyHtml(lat, lon) {
 }
 
 function renderRailHrRanking() {
-  railHrTitle.textContent = '🚉 駅周辺100km以内の世界遺産数ランキング';
+  railHrTitle.textContent = '🚉 駅周辺200km以内の世界遺産数ランキング';
   var rows = buildRailStationRanking();
   var maxCount = (rows.length && rows[0].count > 0) ? rows[0].count : 1;
   var html = '';
