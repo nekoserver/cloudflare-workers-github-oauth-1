@@ -73,7 +73,7 @@ describe('ユーロスターは国境をまたぐため、駅ごとに所在国�
   });
 });
 
-describe('駅ごとの世界遺産カウント（100km以内・haversine）', () => {
+describe('駅ごとの世界遺産カウント（200km以内・haversine）', () => {
   function hvKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
     const R = 6371;
     const dLat = (lat2 - lat1) * Math.PI / 180;
@@ -83,11 +83,21 @@ describe('駅ごとの世界遺産カウント（100km以内・haversine）', ()
     return Math.round(R * 2 * Math.asin(Math.sqrt(a)));
   }
 
-  it('東京駅から100km以内には少なくとも1件以上の世界遺産データが存在しうる（0件でもエラーにならない）', () => {
+  it('東京駅から200km以内には少なくとも1件以上の世界遺産データが存在しうる（0件でもエラーにならない）', () => {
     const tokyo = RAIL_LINES.flatMap((l) => l.stations).find((s) => s.name === '東京駅')!;
     expect(tokyo).toBeTruthy();
-    const nearby = HERITAGE_LIST.filter((h) => hvKm(tokyo.lat, tokyo.lon, h.lat, h.lon) <= 100);
+    const nearby = HERITAGE_LIST.filter((h) => hvKm(tokyo.lat, tokyo.lon, h.lat, h.lon) <= 200);
     expect(Array.isArray(nearby)).toBe(true);
+  });
+
+  it('集計範囲(200km)はUIタイトル・集計ロジックの両方で一致している', () => {
+    const html = getHeritageAccessPage('tester');
+    expect(html).toContain('駅周辺200km以内の世界遺産数ランキング');
+    expect(html).not.toContain('駅周辺100km以内の世界遺産数ランキング');
+    const rankIdx = html.indexOf('function buildRailStationRanking');
+    expect(html.slice(rankIdx, rankIdx + 700)).toContain('<= 200');
+    const nearbyIdx = html.indexOf('function buildRailHrNearbyHtml');
+    expect(html.slice(nearbyIdx, nearbyIdx + 700)).toContain('<= 200');
   });
 });
 
@@ -145,7 +155,7 @@ describe('🚉 モーダルの振る舞い', () => {
     expect(namesEl.children[1]).toBe(station);
   });
 
-  it('駅名をタップすると、別モーダルに遷移せず同じランキング内にアコーディオンとして開き、100km以内の世界遺産名が距離の近い順に表示される', () => {
+  it('駅名をタップすると、別モーダルに遷移せず同じランキング内にアコーディオンとして開き、200km以内の世界遺産名が距離の近い順に表示される', () => {
     const window = setupDom();
     window.document.getElementById('btn-rail-hr').dispatchEvent(new window.Event('click'));
     const firstRow = window.document.querySelector('.rail-hr-row');
@@ -165,7 +175,7 @@ describe('🚉 モーダルの振る舞い', () => {
     for (let i = 1; i < dists.length; i++) {
       expect(dists[i]).toBeGreaterThanOrEqual(dists[i - 1]);
     }
-    dists.forEach((d) => expect(d).toBeLessThanOrEqual(100));
+    dists.forEach((d) => expect(d).toBeLessThanOrEqual(200));
   });
 
   it('アコーディオン内の各世界遺産行は、国旗の右側に地球儀(webgl-heritage)で使っているのと同じアイコン(HERITAGE_LISTのeフィールド)が表示される', () => {
