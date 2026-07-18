@@ -5452,6 +5452,34 @@ export function normalizeHeritageAreaName(value: string): string {
   return String(value || '').trim().replace(/[・･]/g, '・');
 }
 
+export type HeritageAreaBoxBounds = { latMin: number; latMax: number; lonMin: number; lonMax: number; lonCross: boolean };
+
+/**
+ * heritage_area_boxesに保存された対角2点(topLeft/bottomRight)から、
+ * 緯度経度の範囲判定用の矩形を組み立てる。エリア枠が経度180度線をまたぐ場合は
+ * lonCrossをtrueにし、経度は「lonMin以上」または「lonMax以下」のOR条件で判定する
+ * (webglHeritage.tsのinAreaBoundsと同じロジック)。
+ */
+export function heritageAreaBoxBounds(topLeftLat: number, topLeftLon: number, bottomRightLat: number, bottomRightLon: number): HeritageAreaBoxBounds {
+  const lonCross = topLeftLon > bottomRightLon;
+  return {
+    latMin: Math.min(topLeftLat, bottomRightLat),
+    latMax: Math.max(topLeftLat, bottomRightLat),
+    lonMin: lonCross ? topLeftLon : Math.min(topLeftLon, bottomRightLon),
+    lonMax: lonCross ? bottomRightLon : Math.max(topLeftLon, bottomRightLon),
+    lonCross,
+  };
+}
+
+/**
+ * 座標(lat, lon)がheritageAreaBoxBoundsの矩形範囲内に収まっているかどうかを判定する。
+ */
+export function isPointInHeritageAreaBoxBounds(lat: number, lon: number, bounds: HeritageAreaBoxBounds): boolean {
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return false;
+  if (bounds.lonCross) return lat >= bounds.latMin && lat <= bounds.latMax && (lon >= bounds.lonMin || lon <= bounds.lonMax);
+  return lat >= bounds.latMin && lat <= bounds.latMax && lon >= bounds.lonMin && lon <= bounds.lonMax;
+}
+
 /**
  * 検索キーワードから座標付きの地点情報を引く。世界遺産(HERITAGE_LIST)に無ければ
  * 空港(AIRPORT_LIST)、それにも無ければ鉄道駅(RAIL_LINES)もフォールバックで探す。
@@ -5758,6 +5786,20 @@ async function heritageAreaSearchHandler(c: Context<{ Bindings: Bindings; Variab
        ORDER BY i.area_seq ASC, i.category ASC, i.item_name ASC
        LIMIT 50`
     );
+    // エリア確定(保存)後にHERITAGE_LIST等へ追加された地点は heritage_area_items に
+    // 存在しないため、上記の名前ベースの紐付けだけでは検出できず、実際には範囲内
+    // にあるのにarea_matchesが空のまま(エリア確定時点の判定結果が固定表示される)
+    // 不具合があった。エリア枠(heritage_area_boxes)の矩形範囲と地点の座標を
+    // 都度再判定し、名前ベースではまだ紐付いていないエリアがあれば追加する。
+    const areaBoxRows = await db.prepare(
+      `SELECT area_seq AS areaSeq, top_left_lat AS topLeftLat, top_left_lon AS topLeftLon,
+              bottom_right_lat AS bottomRightLat, bottom_right_lon AS bottomRightLon
+         FROM heritage_area_boxes
+        WHERE user_id = ?`
+    ).bind(user.sub).all<{ areaSeq: number; topLeftLat: number; topLeftLon: number; bottomRightLat: number; bottomRightLon: number }>();
+    const areaBoxes = (areaBoxRows.results ?? [])
+      .filter((row) => [row.topLeftLat, row.topLeftLon, row.bottomRightLat, row.bottomRightLon].every(Number.isFinite))
+      .map((row) => ({ areaSeq: row.areaSeq, bounds: heritageAreaBoxBounds(row.topLeftLat, row.topLeftLon, row.bottomRightLat, row.bottomRightLon) }));
     for (const item of items) {
       const quoteKeyMatches: { key: string; areas: string }[] = [];
       for (const key of item.quote_keys) {
@@ -5767,9 +5809,20 @@ async function heritageAreaSearchHandler(c: Context<{ Bindings: Bindings; Variab
           key: string; area_seq: number; category: string; box: string | null;
         }>();
         const labels: string[] = [];
+        const matchedAreaSeqs = new Set<number>();
         for (const row of areaRows.results ?? []) {
+          matchedAreaSeqs.add(row.area_seq);
           const label = `エリア#${row.area_seq}${row.category ? `/${row.category}` : ''}${row.box ? ` (${row.box})` : ''}`;
           if (!labels.includes(label)) labels.push(label);
+        }
+        if (item.heritage_point) {
+          for (const box of areaBoxes) {
+            if (matchedAreaSeqs.has(box.areaSeq)) continue;
+            if (isPointInHeritageAreaBoxBounds(item.heritage_point.lat, item.heritage_point.lon, box.bounds)) {
+              matchedAreaSeqs.add(box.areaSeq);
+              labels.push(`エリア#${box.areaSeq}(座標範囲内・エリア確定後に追加)`);
+            }
+          }
         }
         if (labels.length) quoteKeyMatches.push({ key: normalizedKey, areas: labels.join(' / ') });
       }
