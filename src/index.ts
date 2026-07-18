@@ -190,6 +190,7 @@ const STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
   { name: 'airport_nearby_airport',     migration: '0079',   description: '空港から1500km圏内の他空港の距離記録（着陸ボタンで記録）', syncPolicy: 'auto' },
   { name: 'unresolved_airport_keywords', migration: '0080',  description: 'heritage-areaページで国旗・座標が判明しなかった空港名キーワードの記録', syncPolicy: 'auto' },
   { name: 'unresolved_castle_keywords', migration: '0081',   description: 'heritage-areaページで国旗・座標が判明しなかった「(カタカナ)城」キーワードの記録', syncPolicy: 'auto' },
+  { name: 'unresolved_station_keywords', migration: '0082',  description: 'heritage-areaページで国旗・座標が判明しなかった駅名キーワードの記録', syncPolicy: 'auto' },
 ];
 
 const REQUIRED_STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
@@ -1235,6 +1236,13 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_unresolved_airport_keywords_unique ON unre
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_unresolved_castle_keywords_unique ON unresolved_castle_keywords(castle_name);`,
+  '0082': `CREATE TABLE IF NOT EXISTS unresolved_station_keywords (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  station_name TEXT NOT NULL,
+  recorded_at TEXT DEFAULT (datetime('now'))
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_unresolved_station_keywords_unique ON unresolved_station_keywords(station_name);`,
 };
 
 async function ensureGroupTable(db: D1Database): Promise<void> {
@@ -1442,6 +1450,7 @@ export const TABLE_COLUMN_KEYS: Record<string, ColumnKeyInfo> = {
   airport_nearby_airport: { id: 'pk', airport_name: 'idx', other_airport_name: 'idx' },
   unresolved_airport_keywords: { id: 'pk', airport_name: 'uk' },
   unresolved_castle_keywords: { id: 'pk', castle_name: 'uk' },
+  unresolved_station_keywords: { id: 'pk', station_name: 'uk' },
 };
 
 export function getColumnKeyType(tableName: string, columnName: string): ColumnKeyType {
@@ -1523,6 +1532,7 @@ export const TABLE_GROUP_MAP: Record<string, string> = {
   airport_nearby_airport: 'system',
   unresolved_airport_keywords: 'system',
   unresolved_castle_keywords: 'system',
+  unresolved_station_keywords: 'system',
   keyword_category_groups: 'search',
   keyword_multi_labels: 'search',
   ts_repository:          'ts-catalog',
@@ -5444,9 +5454,10 @@ export function normalizeHeritageAreaName(value: string): string {
 
 /**
  * 検索キーワードから座標付きの地点情報を引く。世界遺産(HERITAGE_LIST)に無ければ
- * 空港(AIRPORT_LIST)もフォールバックで探す。AIチャットの検索キーワードには
- * 「〇〇空港」のような空港名も大量に含まれるため、世界遺産のみを対象にすると
- * 空港キーワードのボタンにだけ国旗が一切表示されない状態になる。
+ * 空港(AIRPORT_LIST)、それにも無ければ鉄道駅(RAIL_LINES)もフォールバックで探す。
+ * AIチャットの検索キーワードには「〇〇空港」「〇〇駅」のような名前も大量に
+ * 含まれるため、世界遺産のみを対象にするとそれらのボタンにだけ国旗が
+ * 一切表示されない状態になる。
  */
 export function findHeritageAreaPoint(keyword: string): { name: string; flag: string; country: string; lat: number; lon: number; code?: string } | null {
   const normalized = normalizeHeritageAreaName(keyword);
@@ -5458,6 +5469,12 @@ export function findHeritageAreaPoint(keyword: string): { name: string; flag: st
   if (airport && Number.isFinite(airport.lat) && Number.isFinite(airport.lon)) {
     const cityParts = (airport.city || '').split(' ');
     return { name: airport.name, flag: cityParts[0] || '', country: cityParts.slice(1).join(' '), lat: airport.lat, lon: airport.lon, code: airport.code };
+  }
+  for (const line of RAIL_LINES) {
+    const station = line.stations.find((s) => normalizeHeritageAreaName(s.name) === normalized);
+    if (station && Number.isFinite(station.lat) && Number.isFinite(station.lon)) {
+      return { name: station.name, flag: station.flag || line.flag, country: station.country || line.country, lat: station.lat, lon: station.lon };
+    }
   }
   return null;
 }
@@ -5516,6 +5533,32 @@ async function recordUnresolvedCastleKeywords(db: D1Database, names: string[]): 
   } catch {}
 }
 
+const HERITAGE_AREA_STATION_KEYWORD_PATTERN = /^.+駅$/;
+
+/**
+ * キーワードが「(任意の文字列)駅」の形(具体的な駅名、例:「姫路駅」「パリ・リヨン駅」の
+ * ような漢字・カタカナ双方の駅名表記を含む)に一致するかどうかを判定する。
+ * 「最寄り駅」はisGenericAirportCategoryKeywordで判定する汎用カテゴリラベルのため
+ * ここでは除外し、駅名候補と誤って記録されないようにする。
+ */
+export function isStationNameKeywordPattern(keyword: string): boolean {
+  return HERITAGE_AREA_STATION_KEYWORD_PATTERN.test(keyword) && !isGenericAirportCategoryKeyword(keyword);
+}
+
+/**
+ * findHeritageAreaPointで国旗・座標が判明しなかった駅名候補を記録する。
+ * RAIL_LINESへ追加すべき駅を後から調査で洗い出すためのログ用途であり、
+ * 失敗してもキーワード表示自体には影響させないためエラーは握りつぶす。
+ */
+async function recordUnresolvedStationKeywords(db: D1Database, names: string[]): Promise<void> {
+  if (!names.length) return;
+  try {
+    await db.batch(
+      names.map((name) => db.prepare('INSERT OR IGNORE INTO unresolved_station_keywords (station_name) VALUES (?)').bind(name))
+    );
+  } catch {}
+}
+
 app.get('/api/heritage-area/travel-categories', authMiddleware, async (c) => {
   const user = c.get('user');
   const db = c.env.DB;
@@ -5567,21 +5610,25 @@ app.get('/api/heritage-area/travel-categories/:id/keywords', authMiddleware, asy
     ).bind(user.sub, categoryId).all<{ keyword: string; count: number }>();
     const unresolvedAirportNames: string[] = [];
     const unresolvedCastleNames: string[] = [];
+    const unresolvedStationNames: string[] = [];
     const keywords = (rows.results ?? []).map((row) => {
       const point = findHeritageAreaPoint(row.keyword);
       if (point) return { ...row, heritage_point: point };
       if (isCastleNameKeywordPattern(row.keyword)) {
         unresolvedCastleNames.push(row.keyword);
+      } else if (isStationNameKeywordPattern(row.keyword)) {
+        unresolvedStationNames.push(row.keyword);
       } else if (!isGenericAirportCategoryKeyword(row.keyword)) {
         unresolvedAirportNames.push(row.keyword);
       }
       return row;
     });
-    if (unresolvedAirportNames.length || unresolvedCastleNames.length) {
+    if (unresolvedAirportNames.length || unresolvedCastleNames.length || unresolvedStationNames.length) {
       const ctx = c.executionCtx;
       if (ctx?.waitUntil) {
         if (unresolvedAirportNames.length) ctx.waitUntil(recordUnresolvedAirportKeywords(db, unresolvedAirportNames));
         if (unresolvedCastleNames.length) ctx.waitUntil(recordUnresolvedCastleKeywords(db, unresolvedCastleNames));
+        if (unresolvedStationNames.length) ctx.waitUntil(recordUnresolvedStationKeywords(db, unresolvedStationNames));
       }
     }
     return c.json({ keywords });

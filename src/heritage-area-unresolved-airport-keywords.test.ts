@@ -65,7 +65,7 @@ describe('heritage-areaページ: 国旗・座標不明な空港名キーワー�
   it('/api/heritage-area/travel-categories/:id/keywords ハンドラが各キーワードを判定しwaitUntilで記録する', () => {
     const idx = src.indexOf("app.get('/api/heritage-area/travel-categories/:id/keywords'");
     expect(idx).toBeGreaterThan(-1);
-    const block = src.slice(idx, idx + 1700);
+    const block = src.slice(idx, idx + 2100);
     expect(block).toContain('isGenericAirportCategoryKeyword(row.keyword)');
     expect(block).toContain('recordUnresolvedAirportKeywords');
     expect(block).toContain('waitUntil');
