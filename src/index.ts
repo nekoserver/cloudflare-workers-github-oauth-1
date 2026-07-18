@@ -190,6 +190,7 @@ const STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
   { name: 'airport_nearby_airport',     migration: '0079',   description: '空港から1500km圏内の他空港の距離記録（着陸ボタンで記録）', syncPolicy: 'auto' },
   { name: 'unresolved_airport_keywords', migration: '0080',  description: 'heritage-areaページで国旗・座標が判明しなかった空港名キーワードの記録', syncPolicy: 'auto' },
   { name: 'unresolved_castle_keywords', migration: '0081',   description: 'heritage-areaページで国旗・座標が判明しなかった「(カタカナ)城」キーワードの記録', syncPolicy: 'auto' },
+  { name: 'unresolved_station_keywords', migration: '0082',  description: 'heritage-areaページで国旗・座標が判明しなかった駅名キーワードの記録', syncPolicy: 'auto' },
 ];
 
 const REQUIRED_STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
@@ -1235,6 +1236,13 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_unresolved_airport_keywords_unique ON unre
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_unresolved_castle_keywords_unique ON unresolved_castle_keywords(castle_name);`,
+  '0082': `CREATE TABLE IF NOT EXISTS unresolved_station_keywords (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  station_name TEXT NOT NULL,
+  recorded_at TEXT DEFAULT (datetime('now'))
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_unresolved_station_keywords_unique ON unresolved_station_keywords(station_name);`,
 };
 
 async function ensureGroupTable(db: D1Database): Promise<void> {
@@ -1442,6 +1450,7 @@ export const TABLE_COLUMN_KEYS: Record<string, ColumnKeyInfo> = {
   airport_nearby_airport: { id: 'pk', airport_name: 'idx', other_airport_name: 'idx' },
   unresolved_airport_keywords: { id: 'pk', airport_name: 'uk' },
   unresolved_castle_keywords: { id: 'pk', castle_name: 'uk' },
+  unresolved_station_keywords: { id: 'pk', station_name: 'uk' },
 };
 
 export function getColumnKeyType(tableName: string, columnName: string): ColumnKeyType {
@@ -1523,6 +1532,7 @@ export const TABLE_GROUP_MAP: Record<string, string> = {
   airport_nearby_airport: 'system',
   unresolved_airport_keywords: 'system',
   unresolved_castle_keywords: 'system',
+  unresolved_station_keywords: 'system',
   keyword_category_groups: 'search',
   keyword_multi_labels: 'search',
   ts_repository:          'ts-catalog',
@@ -5442,11 +5452,40 @@ export function normalizeHeritageAreaName(value: string): string {
   return String(value || '').trim().replace(/[・･]/g, '・');
 }
 
+export type HeritageAreaBoxBounds = { latMin: number; latMax: number; lonMin: number; lonMax: number; lonCross: boolean };
+
+/**
+ * heritage_area_boxesに保存された対角2点(topLeft/bottomRight)から、
+ * 緯度経度の範囲判定用の矩形を組み立てる。エリア枠が経度180度線をまたぐ場合は
+ * lonCrossをtrueにし、経度は「lonMin以上」または「lonMax以下」のOR条件で判定する
+ * (webglHeritage.tsのinAreaBoundsと同じロジック)。
+ */
+export function heritageAreaBoxBounds(topLeftLat: number, topLeftLon: number, bottomRightLat: number, bottomRightLon: number): HeritageAreaBoxBounds {
+  const lonCross = topLeftLon > bottomRightLon;
+  return {
+    latMin: Math.min(topLeftLat, bottomRightLat),
+    latMax: Math.max(topLeftLat, bottomRightLat),
+    lonMin: lonCross ? topLeftLon : Math.min(topLeftLon, bottomRightLon),
+    lonMax: lonCross ? bottomRightLon : Math.max(topLeftLon, bottomRightLon),
+    lonCross,
+  };
+}
+
+/**
+ * 座標(lat, lon)がheritageAreaBoxBoundsの矩形範囲内に収まっているかどうかを判定する。
+ */
+export function isPointInHeritageAreaBoxBounds(lat: number, lon: number, bounds: HeritageAreaBoxBounds): boolean {
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return false;
+  if (bounds.lonCross) return lat >= bounds.latMin && lat <= bounds.latMax && (lon >= bounds.lonMin || lon <= bounds.lonMax);
+  return lat >= bounds.latMin && lat <= bounds.latMax && lon >= bounds.lonMin && lon <= bounds.lonMax;
+}
+
 /**
  * 検索キーワードから座標付きの地点情報を引く。世界遺産(HERITAGE_LIST)に無ければ
- * 空港(AIRPORT_LIST)もフォールバックで探す。AIチャットの検索キーワードには
- * 「〇〇空港」のような空港名も大量に含まれるため、世界遺産のみを対象にすると
- * 空港キーワードのボタンにだけ国旗が一切表示されない状態になる。
+ * 空港(AIRPORT_LIST)、それにも無ければ鉄道駅(RAIL_LINES)もフォールバックで探す。
+ * AIチャットの検索キーワードには「〇〇空港」「〇〇駅」のような名前も大量に
+ * 含まれるため、世界遺産のみを対象にするとそれらのボタンにだけ国旗が
+ * 一切表示されない状態になる。
  */
 export function findHeritageAreaPoint(keyword: string): { name: string; flag: string; country: string; lat: number; lon: number; code?: string } | null {
   const normalized = normalizeHeritageAreaName(keyword);
@@ -5458,6 +5497,12 @@ export function findHeritageAreaPoint(keyword: string): { name: string; flag: st
   if (airport && Number.isFinite(airport.lat) && Number.isFinite(airport.lon)) {
     const cityParts = (airport.city || '').split(' ');
     return { name: airport.name, flag: cityParts[0] || '', country: cityParts.slice(1).join(' '), lat: airport.lat, lon: airport.lon, code: airport.code };
+  }
+  for (const line of RAIL_LINES) {
+    const station = line.stations.find((s) => normalizeHeritageAreaName(s.name) === normalized);
+    if (station && Number.isFinite(station.lat) && Number.isFinite(station.lon)) {
+      return { name: station.name, flag: station.flag || line.flag, country: station.country || line.country, lat: station.lat, lon: station.lon };
+    }
   }
   return null;
 }
@@ -5516,6 +5561,32 @@ async function recordUnresolvedCastleKeywords(db: D1Database, names: string[]): 
   } catch {}
 }
 
+const HERITAGE_AREA_STATION_KEYWORD_PATTERN = /^.+駅$/;
+
+/**
+ * キーワードが「(任意の文字列)駅」の形(具体的な駅名、例:「姫路駅」「パリ・リヨン駅」の
+ * ような漢字・カタカナ双方の駅名表記を含む)に一致するかどうかを判定する。
+ * 「最寄り駅」はisGenericAirportCategoryKeywordで判定する汎用カテゴリラベルのため
+ * ここでは除外し、駅名候補と誤って記録されないようにする。
+ */
+export function isStationNameKeywordPattern(keyword: string): boolean {
+  return HERITAGE_AREA_STATION_KEYWORD_PATTERN.test(keyword) && !isGenericAirportCategoryKeyword(keyword);
+}
+
+/**
+ * findHeritageAreaPointで国旗・座標が判明しなかった駅名候補を記録する。
+ * RAIL_LINESへ追加すべき駅を後から調査で洗い出すためのログ用途であり、
+ * 失敗してもキーワード表示自体には影響させないためエラーは握りつぶす。
+ */
+async function recordUnresolvedStationKeywords(db: D1Database, names: string[]): Promise<void> {
+  if (!names.length) return;
+  try {
+    await db.batch(
+      names.map((name) => db.prepare('INSERT OR IGNORE INTO unresolved_station_keywords (station_name) VALUES (?)').bind(name))
+    );
+  } catch {}
+}
+
 app.get('/api/heritage-area/travel-categories', authMiddleware, async (c) => {
   const user = c.get('user');
   const db = c.env.DB;
@@ -5567,21 +5638,25 @@ app.get('/api/heritage-area/travel-categories/:id/keywords', authMiddleware, asy
     ).bind(user.sub, categoryId).all<{ keyword: string; count: number }>();
     const unresolvedAirportNames: string[] = [];
     const unresolvedCastleNames: string[] = [];
+    const unresolvedStationNames: string[] = [];
     const keywords = (rows.results ?? []).map((row) => {
       const point = findHeritageAreaPoint(row.keyword);
       if (point) return { ...row, heritage_point: point };
       if (isCastleNameKeywordPattern(row.keyword)) {
         unresolvedCastleNames.push(row.keyword);
+      } else if (isStationNameKeywordPattern(row.keyword)) {
+        unresolvedStationNames.push(row.keyword);
       } else if (!isGenericAirportCategoryKeyword(row.keyword)) {
         unresolvedAirportNames.push(row.keyword);
       }
       return row;
     });
-    if (unresolvedAirportNames.length || unresolvedCastleNames.length) {
+    if (unresolvedAirportNames.length || unresolvedCastleNames.length || unresolvedStationNames.length) {
       const ctx = c.executionCtx;
       if (ctx?.waitUntil) {
         if (unresolvedAirportNames.length) ctx.waitUntil(recordUnresolvedAirportKeywords(db, unresolvedAirportNames));
         if (unresolvedCastleNames.length) ctx.waitUntil(recordUnresolvedCastleKeywords(db, unresolvedCastleNames));
+        if (unresolvedStationNames.length) ctx.waitUntil(recordUnresolvedStationKeywords(db, unresolvedStationNames));
       }
     }
     return c.json({ keywords });
@@ -5711,6 +5786,20 @@ async function heritageAreaSearchHandler(c: Context<{ Bindings: Bindings; Variab
        ORDER BY i.area_seq ASC, i.category ASC, i.item_name ASC
        LIMIT 50`
     );
+    // エリア確定(保存)後にHERITAGE_LIST等へ追加された地点は heritage_area_items に
+    // 存在しないため、上記の名前ベースの紐付けだけでは検出できず、実際には範囲内
+    // にあるのにarea_matchesが空のまま(エリア確定時点の判定結果が固定表示される)
+    // 不具合があった。エリア枠(heritage_area_boxes)の矩形範囲と地点の座標を
+    // 都度再判定し、名前ベースではまだ紐付いていないエリアがあれば追加する。
+    const areaBoxRows = await db.prepare(
+      `SELECT area_seq AS areaSeq, top_left_lat AS topLeftLat, top_left_lon AS topLeftLon,
+              bottom_right_lat AS bottomRightLat, bottom_right_lon AS bottomRightLon
+         FROM heritage_area_boxes
+        WHERE user_id = ?`
+    ).bind(user.sub).all<{ areaSeq: number; topLeftLat: number; topLeftLon: number; bottomRightLat: number; bottomRightLon: number }>();
+    const areaBoxes = (areaBoxRows.results ?? [])
+      .filter((row) => [row.topLeftLat, row.topLeftLon, row.bottomRightLat, row.bottomRightLon].every(Number.isFinite))
+      .map((row) => ({ areaSeq: row.areaSeq, bounds: heritageAreaBoxBounds(row.topLeftLat, row.topLeftLon, row.bottomRightLat, row.bottomRightLon) }));
     for (const item of items) {
       const quoteKeyMatches: { key: string; areas: string }[] = [];
       for (const key of item.quote_keys) {
@@ -5720,9 +5809,20 @@ async function heritageAreaSearchHandler(c: Context<{ Bindings: Bindings; Variab
           key: string; area_seq: number; category: string; box: string | null;
         }>();
         const labels: string[] = [];
+        const matchedAreaSeqs = new Set<number>();
         for (const row of areaRows.results ?? []) {
+          matchedAreaSeqs.add(row.area_seq);
           const label = `エリア#${row.area_seq}${row.category ? `/${row.category}` : ''}${row.box ? ` (${row.box})` : ''}`;
           if (!labels.includes(label)) labels.push(label);
+        }
+        if (item.heritage_point) {
+          for (const box of areaBoxes) {
+            if (matchedAreaSeqs.has(box.areaSeq)) continue;
+            if (isPointInHeritageAreaBoxBounds(item.heritage_point.lat, item.heritage_point.lon, box.bounds)) {
+              matchedAreaSeqs.add(box.areaSeq);
+              labels.push(`エリア#${box.areaSeq}(座標範囲内・エリア確定後に追加)`);
+            }
+          }
         }
         if (labels.length) quoteKeyMatches.push({ key: normalizedKey, areas: labels.join(' / ') });
       }

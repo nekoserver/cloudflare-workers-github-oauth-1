@@ -64,7 +64,7 @@ describe('heritage-areaページ: 国旗・座標不明な「(カタカナ)城�
   it('/api/heritage-area/travel-categories/:id/keywords ハンドラが城パターンのキーワードを判定しwaitUntilで記録する', () => {
     const idx = src.indexOf("app.get('/api/heritage-area/travel-categories/:id/keywords'");
     expect(idx).toBeGreaterThan(-1);
-    const block = src.slice(idx, idx + 1900);
+    const block = src.slice(idx, idx + 2100);
     expect(block).toContain('isCastleNameKeywordPattern(row.keyword)');
     expect(block).toContain('recordUnresolvedCastleKeywords');
     expect(block).toContain('waitUntil');
@@ -72,7 +72,7 @@ describe('heritage-areaページ: 国旗・座標不明な「(カタカナ)城�
 
   it('城パターンに一致するキーワードはunresolved_airport_keywordsへの記録対象からは除外される(else ifで分岐)', () => {
     const idx = src.indexOf("app.get('/api/heritage-area/travel-categories/:id/keywords'");
-    const block = src.slice(idx, idx + 1900);
-    expect(block).toMatch(/if\s*\(isCastleNameKeywordPattern\(row\.keyword\)\)\s*\{[^}]*unresolvedCastleNames\.push[^}]*\}\s*else if\s*\(!isGenericAirportCategoryKeyword\(row\.keyword\)\)/);
+    const block = src.slice(idx, idx + 2100);
+    expect(block).toMatch(/if\s*\(isCastleNameKeywordPattern\(row\.keyword\)\)\s*\{[^}]*unresolvedCastleNames\.push[^}]*\}\s*else if\s*\(isStationNameKeywordPattern\(row\.keyword\)\)\s*\{[^}]*unresolvedStationNames\.push[^}]*\}\s*else if\s*\(!isGenericAirportCategoryKeyword\(row\.keyword\)\)/);
   });
 });
