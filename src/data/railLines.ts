@@ -168,5 +168,36 @@ export const RAIL_LINES: RailLine[] = [
     {name:'ポスキアーヴォ駅', lat:46.325, lon:10.043, flag:'🇨🇭', country:'スイス'},
     {name:'ル・プレーゼ駅', lat:46.297, lon:10.063, flag:'🇨🇭', country:'スイス'},
     {name:'ティラーノ駅', lat:46.216, lon:10.167, flag:'🇮🇹', country:'イタリア'}
+  ]},
+  { name:'ミュンヘン～ウィーン(ヴェストバーン/レイルジェット)', flag:'🇩🇪', country:'ドイツ・オーストリア', stations:[
+    {name:'ミュンヘン中央駅', lat:48.140, lon:11.558, flag:'🇩🇪', country:'ドイツ'},
+    {name:'ウィーン中央駅', lat:48.185, lon:16.376, flag:'🇦🇹', country:'オーストリア'}
+  ]},
+  { name:'ウィーン～ブダペスト(レイルジェット)', flag:'🇦🇹', country:'オーストリア・ハンガリー', stations:[
+    {name:'ウィーン中央駅', lat:48.185, lon:16.376, flag:'🇦🇹', country:'オーストリア'},
+    {name:'ブダペスト東駅', lat:47.500, lon:19.084, flag:'🇭🇺', country:'ハンガリー'}
+  ]},
+  { name:'ブダペスト～スボティツァ(セゲド経由)', flag:'🇭🇺', country:'ハンガリー・セルビア', stations:[
+    {name:'ブダペスト東駅', lat:47.500, lon:19.084, flag:'🇭🇺', country:'ハンガリー'},
+    {name:'セゲド駅', lat:46.253, lon:20.141, flag:'🇭🇺', country:'ハンガリー'},
+    {name:'スボティツァ駅', lat:46.100, lon:19.665, flag:'🇷🇸', country:'セルビア'}
+  ]},
+  { name:'スボティツァ～ベオグラード(ソコ高速線)', flag:'🇷🇸', country:'セルビア', stations:[
+    {name:'スボティツァ駅', lat:46.100, lon:19.665},
+    {name:'ノヴィ・サド駅', lat:45.267, lon:19.833},
+    {name:'ベオグラード中央駅', lat:44.800, lon:20.457}
+  ]},
+  { name:'ベオグラード～ニシュ', flag:'🇷🇸', country:'セルビア', stations:[
+    {name:'ベオグラード中央駅', lat:44.800, lon:20.457},
+    {name:'ニシュ駅', lat:43.320, lon:21.914}
+  ]},
+  { name:'ソフィア～クラタ(ギリシャ国境)', flag:'🇧🇬', country:'ブルガリア', stations:[
+    {name:'ソフィア中央駅', lat:42.702, lon:23.335},
+    {name:'クラタ駅', lat:41.348, lon:23.394}
+  ]},
+  { name:'テッサロニキ～アテネ(ラリサ経由)', flag:'🇬🇷', country:'ギリシャ', stations:[
+    {name:'テッサロニキ駅', lat:40.643, lon:22.933},
+    {name:'ラリサ駅', lat:39.639, lon:22.417},
+    {name:'アテネ・ラリシス駅', lat:37.992, lon:23.721}
   ]}
 ];
