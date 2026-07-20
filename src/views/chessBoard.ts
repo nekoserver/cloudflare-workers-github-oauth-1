@@ -1,10 +1,24 @@
 import { CHESS_TSUME_17TE_TITLE, CHESS_TSUME_17TE_INITIAL, CHESS_TSUME_17TE_MOVES } from '../data/chessTsume17te';
 import { FAMOUS_CHESS_GAMES } from '../data/famousChessGames';
+import {
+  CHESS_ENDGAME_2N_ID,
+  CHESS_ENDGAME_2N_TITLE,
+  CHESS_ENDGAME_2N_NOTE,
+  CHESS_ENDGAME_2N_INITIAL,
+  CHESS_ENDGAME_2N_MOVE_TEXT,
+} from '../data/chessEndgame2n';
 
 export function getChessTsumePage(): string {
   const initialJson = JSON.stringify(CHESS_TSUME_17TE_INITIAL);
   const movesJson = JSON.stringify(CHESS_TSUME_17TE_MOVES);
   const gamesJson = JSON.stringify(FAMOUS_CHESS_GAMES);
+  const endgameJson = JSON.stringify({
+    id: CHESS_ENDGAME_2N_ID,
+    title: CHESS_ENDGAME_2N_TITLE,
+    note: CHESS_ENDGAME_2N_NOTE,
+    initial: CHESS_ENDGAME_2N_INITIAL,
+    moveText: CHESS_ENDGAME_2N_MOVE_TEXT,
+  });
   const title = CHESS_TSUME_17TE_TITLE;
 
   return `<!DOCTYPE html>
@@ -107,6 +121,7 @@ body{background:#0d1117;color:#e6edf3;font-family:system-ui,-apple-system,sans-s
 var TSUME_INITIAL = ${initialJson};
 var TSUME_MOVES = ${movesJson};
 var FAMOUS_GAMES = ${gamesJson};
+var ENDGAME_2N = ${endgameJson};
 var STANDARD_START = {
   a1:'wR', b1:'wN', c1:'wB', d1:'wQ', e1:'wK', f1:'wB', g1:'wN', h1:'wR',
   a2:'wP', b2:'wP', c2:'wP', d2:'wP', e2:'wP', f2:'wP', g2:'wP', h2:'wP',
@@ -284,7 +299,11 @@ function applySanMove(position, rawToken, color) {
   if (!position[from]) throw new Error('起点マスに駒が無い: ' + from + ' ("' + rawToken + '")');
   var promoteTo = promo ? (color + promo.charAt(1)) : null;
   var next = movePiece(position, from, dest, promoteTo);
-  return { move: { from: from, to: dest, san: rawToken, check: chk === '+', mate: chk === '#' }, next: next };
+  // promoteをmoveに含めないと、loadGame→buildPositionsでの再生時に昇格が
+  // 適用されずポーンのまま盤上を動いてしまう(解析時のpositionsとズレる)
+  var move = { from: from, to: dest, san: rawToken, check: chk === '+', mate: chk === '#' };
+  if (promoteTo) { move.promote = promoteTo; }
+  return { move: move, next: next };
 }
 
 function parseGameText(text, startingPosition) {
@@ -458,7 +477,8 @@ function loadGame(initialPosition, moves) {
 function loadFromKifuInput(autoPlay) {
   var errEl = document.getElementById('kifu-error');
   var text = document.getElementById('kifu-input').value;
-  var startingPosition = document.getElementById('kifu-select').value === 'tsume-17te' ? TSUME_INITIAL : STANDARD_START;
+  var selVal = document.getElementById('kifu-select').value;
+  var startingPosition = selVal === 'tsume-17te' ? TSUME_INITIAL : (selVal === ENDGAME_2N.id ? ENDGAME_2N.initial : STANDARD_START);
   var parsed;
   try {
     parsed = parseGameText(text, startingPosition);
@@ -475,6 +495,7 @@ function loadFromKifuInput(autoPlay) {
 function populateKifuSelect() {
   var sel = document.getElementById('kifu-select');
   var html = '<option value="tsume-17te">17手詰め(K+2R対裸玉)</option>';
+  html += '<option value="' + esc(ENDGAME_2N.id) + '">' + esc(ENDGAME_2N.title) + '</option>';
   FAMOUS_GAMES.forEach(function(g) {
     html += '<option value="' + esc(g.id) + '">' + esc(g.title) + '(' + esc(g.players) + ', ' + esc(g.year) + ')</option>';
   });
@@ -503,6 +524,12 @@ function onKifuSelectChange() {
     updateKifuMeta(null);
     loadGame(TSUME_INITIAL, TSUME_MOVES);
     startPlay(1);
+    return;
+  }
+  if (val === ENDGAME_2N.id) {
+    inputEl.value = ENDGAME_2N.moveText;
+    updateKifuMeta({ note: ENDGAME_2N.note });
+    loadFromKifuInput(true);
     return;
   }
   if (val === 'custom') {

@@ -1,6 +1,15 @@
 export type ChessSquare = string;
 export type ChessPosition = Record<ChessSquare, string>;
-export type ChessMove = { from: ChessSquare; to: ChessSquare; san: string; check?: boolean; mate?: boolean };
+export type ChessMove = {
+  from: ChessSquare;
+  to: ChessSquare;
+  san: string;
+  check?: boolean;
+  mate?: boolean;
+  promote?: string;
+  rookFrom?: ChessSquare;
+  rookTo?: ChessSquare;
+};
 
 export const CHESS_TSUME_17TE_TITLE = 'チェス版17手詰め(K+2R対裸玉のはしご詰め)';
 
