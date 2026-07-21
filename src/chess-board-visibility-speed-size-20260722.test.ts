@@ -63,14 +63,15 @@ describe('再生速度: PLAY_INTERVAL_MSが緩和されsetIntervalに実際に�
     expect(Number(m![1])).toBeGreaterThan(900);
   });
 
-  it('setIntervalの呼び出しがPLAY_INTERVAL_MS変数を参照している(ハードコードされた別の値ではない)', () => {
+  it('setIntervalの呼び出しがstate.playIntervalMs変数を参照している(ハードコードされた別の値ではない。既定値はPLAY_INTERVAL_MSから初期化される)', () => {
     const html = getChessTsumePage();
     const idx = html.indexOf('function startPlay');
     expect(idx).toBeGreaterThan(-1);
     const block = html.slice(idx, idx + 900);
     expect(block).toContain('setInterval(');
-    expect(block).toContain('PLAY_INTERVAL_MS');
+    expect(block).toContain('state.playIntervalMs');
     expect(block).not.toMatch(/setInterval\([^,]+,\s*\d+\)/);
+    expect(html).toContain('playIntervalMs: PLAY_INTERVAL_MS');
   });
 });
 
