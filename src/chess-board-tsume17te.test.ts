@@ -415,12 +415,12 @@ describe('/chess-tsume-17te ページ: UI操作(戻る/進む/最初/最後/棋�
     (document.getElementById('btn-play') as HTMLButtonElement).click();
     expect(document.getElementById('btn-play')!.classList.contains('active')).toBe(true);
 
-    vi.advanceTimersByTime(900 * 17);
+    vi.advanceTimersByTime(1500 * 17);
     expect(document.getElementById('ply-indicator')!.textContent).toBe('17 / 17');
     expect(document.getElementById('btn-play')!.classList.contains('active')).toBe(false);
 
     const plyBefore = document.getElementById('ply-indicator')!.textContent;
-    vi.advanceTimersByTime(900 * 3);
+    vi.advanceTimersByTime(1500 * 3);
     expect(document.getElementById('ply-indicator')!.textContent).toBe(plyBefore);
   });
 
@@ -428,12 +428,12 @@ describe('/chess-tsume-17te ページ: UI操作(戻る/進む/最初/最後/棋�
     vi.useFakeTimers();
     loadIntoDom();
     (document.getElementById('btn-play') as HTMLButtonElement).click();
-    vi.advanceTimersByTime(900 * 2);
+    vi.advanceTimersByTime(1500 * 2);
     (document.getElementById('btn-prev') as HTMLButtonElement).click();
     expect(document.getElementById('btn-play')!.classList.contains('active')).toBe(false);
 
     const plyAfterStop = document.getElementById('ply-indicator')!.textContent;
-    vi.advanceTimersByTime(900 * 5);
+    vi.advanceTimersByTime(1500 * 5);
     expect(document.getElementById('ply-indicator')!.textContent).toBe(plyAfterStop);
   });
 
@@ -444,7 +444,7 @@ describe('/chess-tsume-17te ページ: UI操作(戻る/進む/最初/最後/棋�
     (document.getElementById('btn-play-rev') as HTMLButtonElement).click();
     expect(document.getElementById('btn-play-rev')!.classList.contains('active')).toBe(true);
 
-    vi.advanceTimersByTime(900 * 17);
+    vi.advanceTimersByTime(1500 * 17);
     expect(document.getElementById('ply-indicator')!.textContent).toBe('0 / 17');
     expect(document.getElementById('btn-play-rev')!.classList.contains('active')).toBe(false);
   });
@@ -497,10 +497,10 @@ describe('/chess-tsume-17te ページ: 棋譜入力欄(クリア/読み込んで
     expect(document.getElementById('ply-indicator')!.textContent).toBe('0 / 33');
     expect(document.getElementById('btn-play')!.classList.contains('active')).toBe(true);
 
-    vi.advanceTimersByTime(900 * 2);
+    vi.advanceTimersByTime(1500 * 2);
     expect(document.getElementById('ply-indicator')!.textContent).toBe('2 / 33');
 
-    vi.advanceTimersByTime(900 * 40);
+    vi.advanceTimersByTime(1500 * 40);
     expect(document.getElementById('ply-indicator')!.textContent).toBe('33 / 33');
     expect(document.getElementById('status')!.textContent).toContain('詰み');
   });
@@ -511,13 +511,13 @@ describe('/chess-tsume-17te ページ: 棋譜入力欄(クリア/読み込んで
     const select = document.getElementById('kifu-select') as unknown as HTMLSelectElement;
     select.value = 'opera-1858';
     select.dispatchEvent(new Event('change'));
-    vi.advanceTimersByTime(900 * 3);
+    vi.advanceTimersByTime(1500 * 3);
 
     select.value = 'tsume-17te';
     select.dispatchEvent(new Event('change'));
     const plyAfterSwitch = document.getElementById('ply-indicator')!.textContent;
 
-    vi.advanceTimersByTime(900);
+    vi.advanceTimersByTime(1500);
     // 切り替え後も再生が始まる(17手詰めの自動再生)ため1手進むのは正常、
     // ここでは「2つのタイマーが同時に動いて2手以上進む」異常が起きないことを確認する
     const afterOneTick = document.getElementById('ply-indicator')!.textContent;
@@ -541,7 +541,7 @@ describe('/chess-tsume-17te ページ: 棋譜入力欄(クリア/読み込んで
     expect(document.getElementById('ply-indicator')!.textContent).toBe('0 / 5');
     expect(document.getElementById('btn-play')!.classList.contains('active')).toBe(true);
 
-    vi.advanceTimersByTime(900 * 5);
+    vi.advanceTimersByTime(1500 * 5);
     expect(document.getElementById('ply-indicator')!.textContent).toBe('5 / 5');
   });
 
