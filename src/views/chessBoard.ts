@@ -40,8 +40,8 @@ body{background:#0d1117;color:#e6edf3;font-family:system-ui,-apple-system,sans-s
 .sq{position:relative;display:flex;align-items:center;justify-content:center}
 .sq-l{background:#3d4451}
 .sq-d{background:#1c2028}
-.sq-piece{font-size:clamp(20px,6vw,40px);line-height:1;user-select:none}
-.pc-w{color:#f2f2f2;text-shadow:0 0 1px #000,0 0 2px #000}
+.sq-piece{font-size:calc(clamp(20px,6vw,40px) * var(--piece-scale, 1));line-height:1;user-select:none}
+.pc-w{color:#fbfbfb;text-shadow:0 0 1px #000,0 0 2px #000,0 0 3px #000;-webkit-text-stroke:0.6px #000}
 .pc-b{color:#0a0a0a;text-shadow:0 0 1px #fff,0 0 2px #fff}
 .sq-rank,.sq-file{position:absolute;font-size:9px;color:#6e7681;pointer-events:none}
 .sq-rank{top:2px;left:3px}
@@ -57,6 +57,9 @@ body{background:#0d1117;color:#e6edf3;font-family:system-ui,-apple-system,sans-s
 .ctl-btn.active{background:#1f6feb;border-color:#58a6ff;color:#fff}
 .ctl-btn:disabled{opacity:0.4;cursor:default}
 .ply-indicator{font-size:0.75rem;color:#8b949e;font-family:monospace;align-self:center;padding:0 4px}
+
+.piece-size-ctl{display:flex;gap:6px;flex-wrap:wrap;justify-content:center;align-items:center}
+.piece-size-label{font-size:0.72rem;color:#8b949e}
 
 .side{width:280px;max-width:92vw;display:flex;flex-direction:column;gap:8px}
 .side-title{font-size:0.7rem;font-weight:700;color:#58a6ff;text-transform:uppercase;letter-spacing:.05em}
@@ -99,6 +102,13 @@ body{background:#0d1117;color:#e6edf3;font-family:system-ui,-apple-system,sans-s
       <button type="button" class="ctl-btn" id="btn-play" title="再生">再生 &#9654;</button>
       <button type="button" class="ctl-btn" id="btn-last" title="最後へ">最後 &#9197;</button>
     </div>
+    <div class="piece-size-ctl">
+      <span class="piece-size-label">駒サイズ:</span>
+      <button type="button" class="ctl-btn size-btn" data-scale="0.75">小</button>
+      <button type="button" class="ctl-btn size-btn active" data-scale="1">標準</button>
+      <button type="button" class="ctl-btn size-btn" data-scale="1.3">大</button>
+      <button type="button" class="ctl-btn size-btn" data-scale="1.6">特大</button>
+    </div>
     <div class="keyhint">&#8592;/&#8594; キーでも1手ずつ移動できます</div>
   </div>
   <div class="side">
@@ -128,12 +138,16 @@ var STANDARD_START = {
   a7:'bP', b7:'bP', c7:'bP', d7:'bP', e7:'bP', f7:'bP', g7:'bP', h7:'bP',
   a8:'bR', b8:'bN', c8:'bB', d8:'bQ', e8:'bK', f8:'bB', g8:'bN', h8:'bR'
 };
-var PLAY_INTERVAL_MS = 900;
+var PLAY_INTERVAL_MS = 1500;
 
 function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function(c) { return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
 
+// 白駒にも黒駒と同じ「塗りつぶし」書体のグリフ(U+265A-265F)を使う。
+// 白駒専用のU+2654-2659は「中抜き(アウトライン)」書体でフォントが描画するため、
+// 塗り面積がほとんど無くCSSで色を変えても視認性が上がらない。色の違いは
+// pc-w/pc-bのCSS(色+縁取り)だけで表現する。
 var PIECE_GLYPH = {
-  wK: '\\u2654', wQ: '\\u2655', wR: '\\u2656', wB: '\\u2657', wN: '\\u2658', wP: '\\u2659',
+  wK: '\\u265A', wQ: '\\u265B', wR: '\\u265C', wB: '\\u265D', wN: '\\u265E', wP: '\\u265F',
   bK: '\\u265A', bQ: '\\u265B', bR: '\\u265C', bB: '\\u265D', bN: '\\u265E', bP: '\\u265F'
 };
 
@@ -556,6 +570,13 @@ document.getElementById('btn-play-rev').addEventListener('click', function() {
 document.addEventListener('keydown', function(e) {
   if (e.key === 'ArrowRight') { stopPlay(); stepNext(); }
   else if (e.key === 'ArrowLeft') { stopPlay(); stepPrev(); }
+});
+
+document.querySelectorAll('.size-btn').forEach(function(btn) {
+  btn.addEventListener('click', function() {
+    document.documentElement.style.setProperty('--piece-scale', btn.getAttribute('data-scale'));
+    document.querySelectorAll('.size-btn').forEach(function(b) { b.classList.toggle('active', b === btn); });
+  });
 });
 
 document.getElementById('btn-kifu-clear').addEventListener('click', function() {
