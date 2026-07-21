@@ -14,6 +14,14 @@ import {
   CHESS_QXG7_SAC_INITIAL,
   CHESS_QXG7_SAC_MOVE_TEXT,
 } from '../data/chessQxg7Sac';
+import {
+  CHESS_QXG7_CANDIDATES_ID,
+  CHESS_QXG7_CANDIDATES_TITLE,
+  CHESS_QXG7_CANDIDATES_NOTE,
+  CHESS_QXG7_CANDIDATES_INITIAL,
+  CHESS_QXG7_CANDIDATES_MOVE_TEXT,
+  CHESS_QXG7_CANDIDATES_MARKS,
+} from '../data/chessQxg7Candidates';
 
 export function getChessTsumePage(): string {
   const initialJson = JSON.stringify(CHESS_TSUME_17TE_INITIAL);
@@ -32,6 +40,14 @@ export function getChessTsumePage(): string {
     note: CHESS_QXG7_SAC_NOTE,
     initial: CHESS_QXG7_SAC_INITIAL,
     moveText: CHESS_QXG7_SAC_MOVE_TEXT,
+  });
+  const qxg7CandidatesJson = JSON.stringify({
+    id: CHESS_QXG7_CANDIDATES_ID,
+    title: CHESS_QXG7_CANDIDATES_TITLE,
+    note: CHESS_QXG7_CANDIDATES_NOTE,
+    initial: CHESS_QXG7_CANDIDATES_INITIAL,
+    moveText: CHESS_QXG7_CANDIDATES_MOVE_TEXT,
+    marks: CHESS_QXG7_CANDIDATES_MARKS,
   });
   const title = CHESS_TSUME_17TE_TITLE;
 
@@ -65,7 +81,9 @@ body{background:#0d1117;color:#e6edf3;font-family:system-ui,-apple-system,sans-s
 .sq-hl-move{border-color:#3fb950;animation:sq-hl-blink 0.9s steps(1) infinite}
 .sq-hl-capture{border-color:#f85149;animation:sq-hl-blink 0.7s steps(1) infinite}
 .sq-hl-hanging{border-color:#f0b429;animation:sq-hl-blink 0.7s steps(1) infinite}
+.sq-hl-candidate{border-color:#3fb950;background:rgba(63,185,80,0.18);animation:sq-hl-blink 0.9s steps(1) infinite}
 @keyframes sq-hl-blink{0%,49%{opacity:1}50%,100%{opacity:0.15}}
+.sq-mark{position:absolute;top:1px;right:1px;font-size:15px;line-height:1;pointer-events:none;filter:drop-shadow(0 0 2px #000)}
 
 .status{font-size:0.8rem;color:#8b949e;min-height:1.2em;text-align:center}
 .status.is-check{color:#f0b429;font-weight:700}
@@ -176,6 +194,7 @@ var TSUME_MOVES = ${movesJson};
 var FAMOUS_GAMES = ${gamesJson};
 var ENDGAME_2N = ${endgameJson};
 var QXG7_SAC = ${qxg7Json};
+var QXG7_CANDIDATES = ${qxg7CandidatesJson};
 var STANDARD_START = {
   a1:'wR', b1:'wN', c1:'wB', d1:'wQ', e1:'wK', f1:'wB', g1:'wN', h1:'wR',
   a2:'wP', b2:'wP', c2:'wP', d2:'wP', e2:'wP', f2:'wP', g2:'wP', h2:'wP',
@@ -515,8 +534,9 @@ function movesToText(moves) {
   return lines.join('\\n');
 }
 
-function renderBoard(position, highlights) {
+function renderBoard(position, highlights, marks) {
   highlights = highlights || {};
+  marks = marks || {};
   var html = '';
   for (var row = 1; row <= 8; row++) {
     for (var col = 1; col <= 8; col++) {
@@ -537,6 +557,8 @@ function renderBoard(position, highlights) {
           html += '<span class="sq-hl sq-hl-' + kind + '" style="inset:' + (2 + idx * 4) + 'px" data-hl="' + kind + '"></span>';
         });
       }
+      var markEmoji = marks[square];
+      if (markEmoji) { html += '<span class="sq-mark">' + markEmoji + '</span>'; }
       html += '</div>';
     }
   }
@@ -568,7 +590,8 @@ var state = {
   playTimer: null,
   playDir: 0,
   playIntervalMs: PLAY_INTERVAL_MS,
-  viz: { mover: false, moves: false, captures: false, hanging: false }
+  viz: { mover: false, moves: false, captures: false, hanging: false },
+  marks: []
 };
 
 function updatePlayButtons() {
@@ -587,7 +610,17 @@ function wireMoveButtons() {
 
 function render() {
   var highlights = computeHighlights(state.positions[state.ply], state.moves, state.ply, state.viz);
-  document.getElementById('board').innerHTML = renderBoard(state.positions[state.ply], highlights);
+  var markMap = {};
+  // marksは「次の一手を検討する局面」、つまり棋譜の最終手数でのみ表示する。
+  // 途中の手数まで戻した際に、まだ指されていない先の候補手が見えてしまうのを防ぐ。
+  if (state.marks && state.marks.length && state.ply === state.moves.length) {
+    state.marks.forEach(function(m) {
+      if (!highlights[m.square]) { highlights[m.square] = []; }
+      if (highlights[m.square].indexOf('candidate') === -1) { highlights[m.square].push('candidate'); }
+      markMap[m.square] = m.emoji;
+    });
+  }
+  document.getElementById('board').innerHTML = renderBoard(state.positions[state.ply], highlights, markMap);
   document.getElementById('move-list').innerHTML = renderMoveList(state.moves, state.ply);
   document.getElementById('ply-indicator').textContent = state.ply + ' / ' + state.moves.length;
 
@@ -646,12 +679,13 @@ function startPlay(dir) {
   }, state.playIntervalMs);
 }
 
-function loadGame(initialPosition, moves) {
+function loadGame(initialPosition, moves, marks) {
   stopPlay();
   state.initial = initialPosition;
   state.moves = moves;
   state.positions = buildPositions(initialPosition, moves);
   state.ply = 0;
+  state.marks = marks || [];
   render();
 }
 
@@ -661,7 +695,9 @@ function loadFromKifuInput(autoPlay) {
   var selVal = document.getElementById('kifu-select').value;
   var startingPosition = selVal === 'tsume-17te' ? TSUME_INITIAL
     : (selVal === ENDGAME_2N.id ? ENDGAME_2N.initial
-    : (selVal === QXG7_SAC.id ? QXG7_SAC.initial : STANDARD_START));
+    : (selVal === QXG7_SAC.id ? QXG7_SAC.initial
+    : (selVal === QXG7_CANDIDATES.id ? QXG7_CANDIDATES.initial : STANDARD_START)));
+  var marks = selVal === QXG7_CANDIDATES.id ? QXG7_CANDIDATES.marks : [];
   var parsed;
   try {
     parsed = parseGameText(text, startingPosition);
@@ -670,7 +706,7 @@ function loadFromKifuInput(autoPlay) {
     return false;
   }
   errEl.textContent = '';
-  loadGame(startingPosition, parsed.moves);
+  loadGame(startingPosition, parsed.moves, marks);
   if (autoPlay) { startPlay(1); }
   return true;
 }
@@ -680,6 +716,7 @@ function populateKifuSelect() {
   var html = '<option value="tsume-17te">17手詰め(K+2R対裸玉)</option>';
   html += '<option value="' + esc(ENDGAME_2N.id) + '">' + esc(ENDGAME_2N.title) + '</option>';
   html += '<option value="' + esc(QXG7_SAC.id) + '">' + esc(QXG7_SAC.title) + '</option>';
+  html += '<option value="' + esc(QXG7_CANDIDATES.id) + '">' + esc(QXG7_CANDIDATES.title) + '</option>';
   FAMOUS_GAMES.forEach(function(g) {
     html += '<option value="' + esc(g.id) + '">' + esc(g.title) + '(' + esc(g.players) + ', ' + esc(g.year) + ')</option>';
   });
@@ -719,6 +756,12 @@ function onKifuSelectChange() {
   if (val === QXG7_SAC.id) {
     inputEl.value = QXG7_SAC.moveText;
     updateKifuMeta({ note: QXG7_SAC.note });
+    loadFromKifuInput(true);
+    return;
+  }
+  if (val === QXG7_CANDIDATES.id) {
+    inputEl.value = QXG7_CANDIDATES.moveText;
+    updateKifuMeta({ note: QXG7_CANDIDATES.note });
     loadFromKifuInput(true);
     return;
   }
