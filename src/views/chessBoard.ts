@@ -7,6 +7,13 @@ import {
   CHESS_ENDGAME_2N_INITIAL,
   CHESS_ENDGAME_2N_MOVE_TEXT,
 } from '../data/chessEndgame2n';
+import {
+  CHESS_QXG7_SAC_ID,
+  CHESS_QXG7_SAC_TITLE,
+  CHESS_QXG7_SAC_NOTE,
+  CHESS_QXG7_SAC_INITIAL,
+  CHESS_QXG7_SAC_MOVE_TEXT,
+} from '../data/chessQxg7Sac';
 
 export function getChessTsumePage(): string {
   const initialJson = JSON.stringify(CHESS_TSUME_17TE_INITIAL);
@@ -19,6 +26,13 @@ export function getChessTsumePage(): string {
     initial: CHESS_ENDGAME_2N_INITIAL,
     moveText: CHESS_ENDGAME_2N_MOVE_TEXT,
   });
+  const qxg7Json = JSON.stringify({
+    id: CHESS_QXG7_SAC_ID,
+    title: CHESS_QXG7_SAC_TITLE,
+    note: CHESS_QXG7_SAC_NOTE,
+    initial: CHESS_QXG7_SAC_INITIAL,
+    moveText: CHESS_QXG7_SAC_MOVE_TEXT,
+  });
   const title = CHESS_TSUME_17TE_TITLE;
 
   return `<!DOCTYPE html>
@@ -29,7 +43,7 @@ export function getChessTsumePage(): string {
 <title>${title}</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
-body{background:#0d1117;color:#e6edf3;font-family:system-ui,-apple-system,sans-serif;min-height:100vh;min-height:100dvh;display:flex;flex-direction:column}
+body{background:#0d1117;color:#e6edf3;font-family:system-ui,-apple-system,sans-serif;min-height:100vh;min-height:100dvh;display:flex;flex-direction:column;padding-bottom:44px}
 .pg-hdr{padding:8px 14px;border-bottom:1px solid #21262d;flex-shrink:0}
 .pg-title{font-size:0.95rem;font-weight:700;color:#f0b429}
 .pg-sub{font-size:0.68rem;color:#8b949e;margin-top:2px}
@@ -88,6 +102,12 @@ body{background:#0d1117;color:#e6edf3;font-family:system-ui,-apple-system,sans-s
 .kifu-actions{display:flex;gap:6px}
 .kifu-error{font-size:0.7rem;color:#f85149;min-height:1.2em;white-space:pre-wrap}
 
+.speed-footer{position:fixed;bottom:0;left:0;right:0;display:flex;gap:8px;align-items:center;justify-content:center;background:#161b22;border-top:1px solid #30363d;padding:7px 14px;z-index:50}
+.speed-label{font-size:0.72rem;color:#8b949e}
+.speed-icon{font-size:0.85rem}
+.speed-slider{width:min(240px,40vw)}
+.speed-value{font-size:0.72rem;color:#8b949e;font-family:monospace;min-width:56px;text-align:right}
+
 @media(max-width:600px){
   .layout{flex-direction:column;align-items:center}
 }
@@ -143,11 +163,19 @@ body{background:#0d1117;color:#e6edf3;font-family:system-ui,-apple-system,sans-s
     </div>
   </div>
 </div>
+<div class="speed-footer">
+  <span class="speed-label">再生速度</span>
+  <span class="speed-icon" title="速い">&#128007;</span>
+  <input type="range" class="speed-slider" id="speed-slider" min="300" max="3000" step="100" value="1500">
+  <span class="speed-icon" title="遅い">&#128034;</span>
+  <span class="speed-value" id="speed-value">1500ms</span>
+</div>
 <script>
 var TSUME_INITIAL = ${initialJson};
 var TSUME_MOVES = ${movesJson};
 var FAMOUS_GAMES = ${gamesJson};
 var ENDGAME_2N = ${endgameJson};
+var QXG7_SAC = ${qxg7Json};
 var STANDARD_START = {
   a1:'wR', b1:'wN', c1:'wB', d1:'wQ', e1:'wK', f1:'wB', g1:'wN', h1:'wR',
   a2:'wP', b2:'wP', c2:'wP', d2:'wP', e2:'wP', f2:'wP', g2:'wP', h2:'wP',
@@ -539,6 +567,7 @@ var state = {
   positions: buildPositions(TSUME_INITIAL, TSUME_MOVES),
   playTimer: null,
   playDir: 0,
+  playIntervalMs: PLAY_INTERVAL_MS,
   viz: { mover: false, moves: false, captures: false, hanging: false }
 };
 
@@ -614,7 +643,7 @@ function startPlay(dir) {
       stepPrev();
       if (state.ply <= 0) { stopPlay(); }
     }
-  }, PLAY_INTERVAL_MS);
+  }, state.playIntervalMs);
 }
 
 function loadGame(initialPosition, moves) {
@@ -630,7 +659,9 @@ function loadFromKifuInput(autoPlay) {
   var errEl = document.getElementById('kifu-error');
   var text = document.getElementById('kifu-input').value;
   var selVal = document.getElementById('kifu-select').value;
-  var startingPosition = selVal === 'tsume-17te' ? TSUME_INITIAL : (selVal === ENDGAME_2N.id ? ENDGAME_2N.initial : STANDARD_START);
+  var startingPosition = selVal === 'tsume-17te' ? TSUME_INITIAL
+    : (selVal === ENDGAME_2N.id ? ENDGAME_2N.initial
+    : (selVal === QXG7_SAC.id ? QXG7_SAC.initial : STANDARD_START));
   var parsed;
   try {
     parsed = parseGameText(text, startingPosition);
@@ -648,6 +679,7 @@ function populateKifuSelect() {
   var sel = document.getElementById('kifu-select');
   var html = '<option value="tsume-17te">17手詰め(K+2R対裸玉)</option>';
   html += '<option value="' + esc(ENDGAME_2N.id) + '">' + esc(ENDGAME_2N.title) + '</option>';
+  html += '<option value="' + esc(QXG7_SAC.id) + '">' + esc(QXG7_SAC.title) + '</option>';
   FAMOUS_GAMES.forEach(function(g) {
     html += '<option value="' + esc(g.id) + '">' + esc(g.title) + '(' + esc(g.players) + ', ' + esc(g.year) + ')</option>';
   });
@@ -681,6 +713,12 @@ function onKifuSelectChange() {
   if (val === ENDGAME_2N.id) {
     inputEl.value = ENDGAME_2N.moveText;
     updateKifuMeta({ note: ENDGAME_2N.note });
+    loadFromKifuInput(true);
+    return;
+  }
+  if (val === QXG7_SAC.id) {
+    inputEl.value = QXG7_SAC.moveText;
+    updateKifuMeta({ note: QXG7_SAC.note });
     loadFromKifuInput(true);
     return;
   }
@@ -724,6 +762,12 @@ document.querySelectorAll('.viz-btn').forEach(function(btn) {
     btn.classList.toggle('active', state.viz[key]);
     render();
   });
+});
+
+document.getElementById('speed-slider').addEventListener('input', function() {
+  state.playIntervalMs = parseInt(this.value, 10);
+  document.getElementById('speed-value').textContent = state.playIntervalMs + 'ms';
+  if (state.playDir !== 0) { startPlay(state.playDir); }
 });
 
 document.getElementById('btn-kifu-clear').addEventListener('click', function() {
