@@ -46,6 +46,12 @@ body{background:#0d1117;color:#e6edf3;font-family:system-ui,-apple-system,sans-s
 .sq-rank,.sq-file{position:absolute;font-size:9px;color:#6e7681;pointer-events:none}
 .sq-rank{top:2px;left:3px}
 .sq-file{bottom:1px;right:3px}
+.sq-hl{position:absolute;border-radius:4px;pointer-events:none;border-width:2.5px;border-style:dashed;box-sizing:border-box}
+.sq-hl-mover{border-color:#58a6ff;animation:sq-hl-blink 1.1s steps(1) infinite}
+.sq-hl-move{border-color:#3fb950;animation:sq-hl-blink 0.9s steps(1) infinite}
+.sq-hl-capture{border-color:#f85149;animation:sq-hl-blink 0.7s steps(1) infinite}
+.sq-hl-hanging{border-color:#f0b429;animation:sq-hl-blink 0.7s steps(1) infinite}
+@keyframes sq-hl-blink{0%,49%{opacity:1}50%,100%{opacity:0.15}}
 
 .status{font-size:0.8rem;color:#8b949e;min-height:1.2em;text-align:center}
 .status.is-check{color:#f0b429;font-weight:700}
@@ -60,6 +66,9 @@ body{background:#0d1117;color:#e6edf3;font-family:system-ui,-apple-system,sans-s
 
 .piece-size-ctl{display:flex;gap:6px;flex-wrap:wrap;justify-content:center;align-items:center}
 .piece-size-label{font-size:0.72rem;color:#8b949e}
+
+.viz-ctl{display:flex;gap:6px;flex-wrap:wrap;justify-content:center;align-items:center}
+.viz-label{font-size:0.72rem;color:#8b949e}
 
 .side{width:280px;max-width:92vw;display:flex;flex-direction:column;gap:8px}
 .side-title{font-size:0.7rem;font-weight:700;color:#58a6ff;text-transform:uppercase;letter-spacing:.05em}
@@ -108,6 +117,13 @@ body{background:#0d1117;color:#e6edf3;font-family:system-ui,-apple-system,sans-s
       <button type="button" class="ctl-btn size-btn active" data-scale="1">標準</button>
       <button type="button" class="ctl-btn size-btn" data-scale="1.3">大</button>
       <button type="button" class="ctl-btn size-btn" data-scale="1.6">特大</button>
+    </div>
+    <div class="viz-ctl">
+      <span class="viz-label">手の可視化:</span>
+      <button type="button" class="ctl-btn viz-btn" id="viz-mover" data-viz="mover" title="次に動く駒のマスをハイライトします">&#9679; 動く駒</button>
+      <button type="button" class="ctl-btn viz-btn" id="viz-moves" data-viz="moves" title="次に動く駒が移動できるマスを点滅枠で囲みます">&#8594; 移動先</button>
+      <button type="button" class="ctl-btn viz-btn" id="viz-captures" data-viz="captures" title="次に動く駒が取れる相手の駒を点滅枠で囲みます">&#9876; 取れる駒</button>
+      <button type="button" class="ctl-btn viz-btn" id="viz-hanging" data-viz="hanging" title="盤面全体で、手番側がこの手で取れる相手の駒すべてを点滅枠で囲みます">&#9888; 狙われている駒</button>
     </div>
     <div class="keyhint">&#8592;/&#8594; キーでも1手ずつ移動できます</div>
   </div>
@@ -234,6 +250,119 @@ function findKing(position, color) {
   return null;
 }
 
+// 手の可視化オプション用。スライド駒(B/R/Q)が到達できる全マスを、経路上の
+// 駒でブロックされる/敵駒なら含めて味方駒なら含めない、という規則で列挙する。
+function slideTargets(position, from, dirs, color) {
+  var result = [];
+  var f0 = fileOf(from), r0 = rankOf(from);
+  for (var d = 0; d < dirs.length; d++) {
+    var f = f0 + dirs[d][0], r = r0 + dirs[d][1];
+    while (inBounds(f, r)) {
+      var sq = squareName(f, r);
+      var occ = position[sq];
+      if (occ) {
+        if (occ.charAt(0) !== color) result.push(sq);
+        break;
+      }
+      result.push(sq);
+      f += dirs[d][0]; r += dirs[d][1];
+    }
+  }
+  return result;
+}
+
+// N/Kのようにジャンプ/1歩の駒が到達できる全マスを列挙する(味方駒があるマスは除外)。
+function stepTargets(position, from, offsets, color) {
+  var result = [];
+  var f0 = fileOf(from), r0 = rankOf(from);
+  for (var i = 0; i < offsets.length; i++) {
+    var f = f0 + offsets[i][0], r = r0 + offsets[i][1];
+    if (!inBounds(f, r)) continue;
+    var sq = squareName(f, r);
+    var occ = position[sq];
+    if (occ && occ.charAt(0) === color) continue;
+    result.push(sq);
+  }
+  return result;
+}
+
+// ポーンは前進(空きマスのみ・初期段なら2マス)と斜め捕獲(敵駒がある時のみ)で
+// 移動規則が非対称なため、他の駒とは別に専用の判定を行う(アンパッサンは未対応)。
+function pawnTargets(position, from, color) {
+  var moves = [], captures = [];
+  var f0 = fileOf(from), r0 = rankOf(from);
+  var dir = color === 'w' ? 1 : -1;
+  var startRank = color === 'w' ? 1 : 6;
+  if (inBounds(f0, r0 + dir)) {
+    var oneSq = squareName(f0, r0 + dir);
+    if (!position[oneSq]) {
+      moves.push(oneSq);
+      if (r0 === startRank) {
+        var twoSq = squareName(f0, r0 + dir * 2);
+        if (!position[twoSq]) moves.push(twoSq);
+      }
+    }
+  }
+  [-1, 1].forEach(function(df) {
+    var cf = f0 + df, cr = r0 + dir;
+    if (!inBounds(cf, cr)) return;
+    var csq = squareName(cf, cr);
+    var occ = position[csq];
+    if (occ && occ.charAt(0) !== color) captures.push(csq);
+  });
+  return { moves: moves, captures: captures };
+}
+
+// squareにある駒が指せる移動先を「駒が無いマス(moves)」と「敵駒を取れるマス
+// (captures)」に分けて返す。手の可視化オプション(候補手・取れる駒のハイライト)
+// の土台となる純粋関数。キングの安全(自玉が素抜きになる手の除外)や
+// キャスリング・アンパッサンは対象外の簡易版(疑似合法手)。
+function pieceTargets(position, square) {
+  var piece = position[square];
+  if (!piece) return { moves: [], captures: [] };
+  var color = piece.charAt(0), type = piece.charAt(1);
+  if (type === 'P') return pawnTargets(position, square, color);
+  var all;
+  if (type === 'N') all = stepTargets(position, square, KNIGHT_OFFSETS, color);
+  else if (type === 'K') all = stepTargets(position, square, KING_OFFSETS, color);
+  else if (type === 'B') all = slideTargets(position, square, BISHOP_DIRS, color);
+  else if (type === 'R') all = slideTargets(position, square, ROOK_DIRS, color);
+  else if (type === 'Q') all = slideTargets(position, square, QUEEN_DIRS, color);
+  else all = [];
+  var moves = [], captures = [];
+  all.forEach(function(sq) { if (position[sq]) { captures.push(sq); } else { moves.push(sq); } });
+  return { moves: moves, captures: captures };
+}
+
+// 現在の局面・手数・可視化オプションから、盤面に描くハイライトのマスと種類
+// (mover/move/capture/hanging)を計算する。1マスに複数種のハイライトが
+// 重なることもある(例: 次に動く駒の捕獲先が、盤面全体の「狙われている駒」
+// 判定にも同時に含まれる場合)ため、値は種類名の配列で持つ。
+function computeHighlights(position, moves, ply, viz) {
+  var highlights = {};
+  function add(sq, kind) {
+    if (!highlights[sq]) { highlights[sq] = []; }
+    if (highlights[sq].indexOf(kind) === -1) { highlights[sq].push(kind); }
+  }
+  var nextMove = moves[ply];
+  if (nextMove && (viz.mover || viz.moves || viz.captures)) {
+    var t = pieceTargets(position, nextMove.from);
+    if (viz.mover) { add(nextMove.from, 'mover'); }
+    if (viz.moves) { t.moves.forEach(function(sq) { add(sq, 'move'); }); }
+    if (viz.captures) { t.captures.forEach(function(sq) { add(sq, 'capture'); }); }
+  }
+  if (viz.hanging) {
+    var sideToMove = ply % 2 === 0 ? 'w' : 'b';
+    for (var sq in position) {
+      if (!Object.prototype.hasOwnProperty.call(position, sq)) continue;
+      if (position[sq].charAt(0) !== sideToMove) continue;
+      var tt = pieceTargets(position, sq);
+      tt.captures.forEach(function(csq) { add(csq, 'hanging'); });
+    }
+  }
+  return highlights;
+}
+
 function findPawnOrigin(position, color, dest, isCapture, originFileHint) {
   var destFile = fileOf(dest), destRank = rankOf(dest);
   if (isCapture) {
@@ -358,7 +487,8 @@ function movesToText(moves) {
   return lines.join('\\n');
 }
 
-function renderBoard(position) {
+function renderBoard(position, highlights) {
+  highlights = highlights || {};
   var html = '';
   for (var row = 1; row <= 8; row++) {
     for (var col = 1; col <= 8; col++) {
@@ -373,6 +503,12 @@ function renderBoard(position) {
       if (col === 1) { html += '<span class="sq-rank">' + (rank + 1) + '</span>'; }
       if (row === 8) { html += '<span class="sq-file">' + String.fromCharCode(97 + file) + '</span>'; }
       if (glyph) { html += '<span class="sq-piece ' + pieceClass + '" data-piece="' + piece + '">' + glyph + '</span>'; }
+      var kinds = highlights[square];
+      if (kinds) {
+        kinds.forEach(function(kind, idx) {
+          html += '<span class="sq-hl sq-hl-' + kind + '" style="inset:' + (2 + idx * 4) + 'px" data-hl="' + kind + '"></span>';
+        });
+      }
       html += '</div>';
     }
   }
@@ -402,7 +538,8 @@ var state = {
   ply: 0,
   positions: buildPositions(TSUME_INITIAL, TSUME_MOVES),
   playTimer: null,
-  playDir: 0
+  playDir: 0,
+  viz: { mover: false, moves: false, captures: false, hanging: false }
 };
 
 function updatePlayButtons() {
@@ -420,7 +557,8 @@ function wireMoveButtons() {
 }
 
 function render() {
-  document.getElementById('board').innerHTML = renderBoard(state.positions[state.ply]);
+  var highlights = computeHighlights(state.positions[state.ply], state.moves, state.ply, state.viz);
+  document.getElementById('board').innerHTML = renderBoard(state.positions[state.ply], highlights);
   document.getElementById('move-list').innerHTML = renderMoveList(state.moves, state.ply);
   document.getElementById('ply-indicator').textContent = state.ply + ' / ' + state.moves.length;
 
@@ -576,6 +714,15 @@ document.querySelectorAll('.size-btn').forEach(function(btn) {
   btn.addEventListener('click', function() {
     document.documentElement.style.setProperty('--piece-scale', btn.getAttribute('data-scale'));
     document.querySelectorAll('.size-btn').forEach(function(b) { b.classList.toggle('active', b === btn); });
+  });
+});
+
+document.querySelectorAll('.viz-btn').forEach(function(btn) {
+  btn.addEventListener('click', function() {
+    var key = btn.getAttribute('data-viz');
+    state.viz[key] = !state.viz[key];
+    btn.classList.toggle('active', state.viz[key]);
+    render();
   });
 });
 
