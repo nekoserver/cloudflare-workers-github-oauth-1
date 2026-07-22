@@ -4284,6 +4284,18 @@ void main() {
 
   ${getMarkdownParserScript()}
 
+  // heritage-accessページの「AIに何を質問しますか」パネルは、同名で国が異なる
+  // 世界遺産の誤回答を防ぐため、質問文の先頭に国名を「「国名」にある」の形で
+  // 補足してから問い合わせている(heritageAccess.tsのaskAI/askAICached参照)。
+  // この補足込みの回答がそのままDB(ai_chat_shares)へ保存されるため、
+  // ここ(見どころキャッシュの読み出し)でも同じ接頭辞が残ったまま表示されて
+  // しまう。heritage-accessページ側は国名を持っているため文字列一致で
+  // 削除できるが、こちらは国名を保持していないため正規表現で「「任意の文字列」
+  // にある」という形自体を検出して取り除く。
+  function stripHeritageCountryPrefix(text) {
+    return String(text || '').replace(/^「[^」]+」にある[、,。 　]*/, '');
+  }
+
   function openHeritageMitokoroCacheModal(icon, heritageName, shareId) {
     var overlay = document.createElement('div');
     overlay.setAttribute('data-overlay', '');
@@ -4330,7 +4342,7 @@ void main() {
       .then(function(r) { return r.json(); })
       .then(function(data) {
         if (data.answer) {
-          answerText = data.answer;
+          answerText = stripHeritageCountryPrefix(data.answer);
           renderAnswer();
           return fetch('/api/aichat/heritage-mitokoro-keyword-hits?heritage=' + encodeURIComponent(heritageName) + '&model=' + encodeURIComponent(HERITAGE_MITOKORO_GEMMA_MODEL));
         }

@@ -56,7 +56,7 @@ describe('世界遺産ツールチップ: 見どころ×gemma-4-26b-a4b-it キ�
 
   it('モーダルは /api/aichat/shares/:id から回答本文を取得してMarkdownとして描画する', () => {
     expect(html).toContain("fetch('/api/aichat/shares/' + encodeURIComponent(shareId))");
-    expect(html).toContain('answerText = data.answer;');
+    expect(html).toContain('answerText = stripHeritageCountryPrefix(data.answer);');
     expect(html).toContain('renderAnswer();');
   });
 });
