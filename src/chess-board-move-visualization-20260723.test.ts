@@ -211,9 +211,9 @@ describe('/chess-tsume-17te ページ: 可視化オプションUIの組み込み
   it('renderがcomputeHighlightsの結果をrenderBoardへ渡している', () => {
     const idx = html.indexOf('function render()');
     expect(idx).toBeGreaterThan(-1);
-    const block = html.slice(idx, idx + 300);
+    const block = html.slice(idx, idx + 700);
     expect(block).toContain('computeHighlights(state.positions[state.ply], state.moves, state.ply, state.viz)');
-    expect(block).toContain('renderBoard(state.positions[state.ply], highlights)');
+    expect(block).toContain('renderBoard(state.positions[state.ply], highlights, markMap)');
   });
 
   it('点滅アニメーション(sq-hl-blink)のCSSキーフレームが定義されている', () => {
