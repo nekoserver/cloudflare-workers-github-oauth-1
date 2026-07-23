@@ -247,9 +247,18 @@ export const RAIL_LINES: RailLine[] = [
     {name:'プリンチペ駅', lat:44.4056, lon:8.9222},
     {name:'イヴレーア駅', lat:45.4614, lon:7.8728}
   ]},
-  { name:'中央ヨーロッパ線(アムステルダム～プラハ～ウィーン)', flag:'🇳🇱', country:'オランダ・チェコ・オーストリア', stations:[
+  { name:'中央ヨーロッパ線(アムステルダム～ウィーン)', flag:'🇳🇱', country:'オランダ・ドイツ・スイス・チェコ・オーストリア', stations:[
     {name:'アムステルダム中央駅', lat:52.3676, lon:4.9041, flag:'🇳🇱', country:'オランダ'},
+    {name:'ハムエルン駅', lat:51.8548, lon:9.3555, flag:'🇩🇪', country:'ドイツ'},
+    {name:'ハイデルベルク中央駅', lat:49.4169, lon:8.6749, flag:'🇩🇪', country:'ドイツ'},
+    {name:'バーゼル中央駅', lat:47.5476, lon:7.5900, flag:'🇨🇭', country:'スイス'},
+    {name:'ルツェルン駅', lat:47.5501, lon:8.3093, flag:'🇨🇭', country:'スイス'},
+    {name:'チューリッヒ中央駅', lat:47.3780, lon:8.5386, flag:'🇨🇭', country:'スイス'},
     {name:'ナードラジー・ヴェレスラヴィン駅', lat:50.1253, lon:14.3976, flag:'🇨🇿', country:'チェコ'},
-    {name:'シェーンブルン駅', lat:48.1856, lon:16.3120, flag:'🇦🇹', country:'オーストリア'}
+    {name:'ウィーン中央駅', lat:48.185, lon:16.376, flag:'🇦🇹', country:'オーストリア'}
+  ]},
+  { name:'ウィーン地域線(シェーンブルン～ウィーン中央)', flag:'🇦🇹', country:'オーストリア', stations:[
+    {name:'シェーンブルン駅', lat:48.1856, lon:16.3120},
+    {name:'ウィーン中央駅', lat:48.185, lon:16.376}
   ]}
 ];

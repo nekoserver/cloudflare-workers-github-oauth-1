@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { RAIL_LINES } from './data/railLines';
 
-describe('RAIL_LINES — 未判定駅 39件を整理した新規路線群(2026-07-23)', () => {
+describe('RAIL_LINES — 未判定駅 39件を整理した新規路線群・全駅登録版(2026-07-23)', () => {
   it('チンクエテッレ鉄道(リオマッジョーレ～モンテロッソ): 5つの沿岸村駅が登録されている', () => {
     const line = RAIL_LINES.find((l) => l.name === 'チンクエテッレ鉄道(リオマッジョーレ～モンテロッソ)');
     expect(line).toBeDefined();
@@ -76,13 +76,29 @@ describe('RAIL_LINES — 未判定駅 39件を整理した新規路線群(2026-0
     expect(names).toContain('イヴレーア駅');
   });
 
-  it('中央ヨーロッパ線: アムステルダム・プラハ・ウィーン(シェーンブルン)駅が登録されている', () => {
-    const line = RAIL_LINES.find((l) => l.name === '中央ヨーロッパ線(アムステルダム～プラハ～ウィーン)');
+  it('中央ヨーロッパ線: アムステルダム～ウィーン間の8駅が登録されている', () => {
+    const line = RAIL_LINES.find((l) => l.name === '中央ヨーロッパ線(アムステルダム～ウィーン)');
     expect(line).toBeDefined();
+    expect(line!.stations).toHaveLength(8);
     const names = line!.stations.map((s) => s.name);
-    expect(names).toContain('アムステルダム中央駅');
-    expect(names).toContain('ナードラジー・ヴェレスラヴィン駅');
-    expect(names).toContain('シェーンブルン駅');
+    expect(names).toEqual([
+      'アムステルダム中央駅',
+      'ハムエルン駅',
+      'ハイデルベルク中央駅',
+      'バーゼル中央駅',
+      'ルツェルン駅',
+      'チューリッヒ中央駅',
+      'ナードラジー・ヴェレスラヴィン駅',
+      'ウィーン中央駅'
+    ]);
+  });
+
+  it('ウィーン地域線: シェーンブルン駅とウィーン中央駅が登録されている', () => {
+    const line = RAIL_LINES.find((l) => l.name === 'ウィーン地域線(シェーンブルン～ウィーン中央)');
+    expect(line).toBeDefined();
+    expect(line!.stations).toHaveLength(2);
+    const names = line!.stations.map((s) => s.name);
+    expect(names).toEqual(['シェーンブルン駅', 'ウィーン中央駅']);
   });
 
   it('各新規路線の駅の座標が有効な範囲内である', () => {
@@ -95,7 +111,8 @@ describe('RAIL_LINES — 未判定駅 39件を整理した新規路線群(2026-0
       'ドイツ・バイエルン線',
       'フランス・南部線',
       'イタリア・中部線',
-      '中央ヨーロッパ線'
+      '中央ヨーロッパ線',
+      'ウィーン地域線'
     ];
     const newLines = RAIL_LINES.filter((l) => newLineNames.some((name) => l.name.includes(name)));
     expect(newLines.length).toBe(newLineNames.length);
@@ -119,7 +136,8 @@ describe('RAIL_LINES — 未判定駅 39件を整理した新規路線群(2026-0
       'ドイツ・バイエルン線',
       'フランス・南部線',
       'イタリア・中部線',
-      '中央ヨーロッパ線'
+      '中央ヨーロッパ線',
+      'ウィーン地域線'
     ];
     const newLines = RAIL_LINES.filter((l) => newLineNames.some((name) => l.name.includes(name)));
     for (const line of newLines) {
