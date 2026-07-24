@@ -4148,6 +4148,18 @@ export async function lookupHeritageMitokoroKeywordHits(
   }
 }
 
+// heritage-accessページの「AIに何を質問しますか」パネルは、同名で国が異なる
+// 世界遺産の誤回答を防ぐため、質問文の先頭に「「国名」にある」を補足してから
+// 問い合わせている(askAI参照)。そのためDBに保存される question は
+// 「「国名」にある「遺産名」の「topic」について説明してください」という形になり、
+// 接頭辞なしの質問文とは完全一致しない。ツールチップの👀👁️アイコン判定処理では
+// この接頭辞の有無を問わず該当行を検出できるよう、質問文の末尾一致で行を取得した
+// 上で、取得した質問文から接頭辞を事前に取り除いてから通常の(接頭辞なし)質問文
+// マップとの突き合わせを行う。
+export function stripHeritageQuestionCountryPrefix(question: string): string {
+  return String(question || '').replace(/^「[^」]+」にある[、,。 　]*/, '');
+}
+
 export async function lookupHeritageTopicModelCache(
   db: D1Like,
   userId: string,
@@ -4165,18 +4177,19 @@ export async function lookupHeritageTopicModelCache(
     allQuestions.push(q);
     questionMap.set(q, heritage);
   }
-  // user_id・model の 2 バインドを差し引いた数を IN(...) のチャンク上限にする。
+  // user_id・model の 2 バインドを差し引いた数を末尾一致条件のチャンク上限にする。
   const chunkSize = Math.max(1, maxBoundParams - 2);
   let hadError = false;
   for (const chunk of chunkBindValues(allQuestions, chunkSize)) {
     try {
-      const placeholders = chunk.map(() => '?').join(', ');
+      const conditions = chunk.map(() => `question LIKE ('%' || ?)`).join(' OR ');
       const rows = await db
-        .prepare(`SELECT id, question FROM ai_chat_shares WHERE user_id = ? AND deleted_at IS NULL AND model = ? AND question IN (${placeholders}) ORDER BY created_at DESC`)
+        .prepare(`SELECT id, question FROM ai_chat_shares WHERE user_id = ? AND deleted_at IS NULL AND model = ? AND (${conditions}) ORDER BY created_at DESC`)
         .bind(userId, model, ...chunk)
         .all<{ id: string; question: string }>();
       for (const r of (rows.results ?? [])) {
-        const heritage = questionMap.get(r.question);
+        const strippedQuestion = stripHeritageQuestionCountryPrefix(r.question);
+        const heritage = questionMap.get(strippedQuestion);
         if (heritage && cached[heritage] == null) cached[heritage] = r.id;
       }
     } catch {
