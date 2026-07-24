@@ -2,6 +2,21 @@ import { AIRLINE_NETWORK } from '../data/airlineNetwork';
 import { AIRPORT_LIST } from '../data/airports';
 
 type DestAirportEntry = { code: string; name: string; flag: string };
+type CountryHubEntry = { key: string; country: string; flag: string; hubCode: string; hubName: string };
+
+function collectCountryHubs(): CountryHubEntry[] {
+  const seen: Record<string, boolean> = {};
+  const list: CountryHubEntry[] = [];
+  for (const c of AIRLINE_NETWORK) {
+    for (const airline of c.airlines) {
+      const key = c.country + '::' + airline.hubCode;
+      if (seen[key]) continue;
+      seen[key] = true;
+      list.push({ key, country: c.country, flag: c.flag, hubCode: airline.hubCode, hubName: airline.hubName });
+    }
+  }
+  return list;
+}
 
 function collectDestAirports(): DestAirportEntry[] {
   const seen: Record<string, boolean> = {};
@@ -35,7 +50,8 @@ function buildRows(): string {
     for (const airline of c.airlines) {
       for (const dest of airline.destinations) {
         const searchKey = [c.country, airline.name, airline.hubName, dest.name, dest.code].join(' ').toLowerCase();
-        html += `<tr data-country="${c.country}" data-search="${searchKey}" data-dest-code="${dest.code}">`;
+        const hubKey = `${c.country}::${airline.hubCode}`;
+        html += `<tr data-country="${c.country}" data-search="${searchKey}" data-dest-code="${dest.code}" data-hub-key="${hubKey}">`;
         html += `<td class="col-country">${c.flag} ${c.country}</td>`;
         html += `<td class="col-airline">${airline.name}<span class="iata">${airline.iata}</span></td>`;
         html += `<td class="col-hub">${airline.hubName}<span class="code">${airline.hubCode}</span></td>`;
@@ -51,11 +67,23 @@ function buildRows(): string {
 function buildDestCheckRows(destinations: DestAirportEntry[]): string {
   let html = '';
   for (const d of destinations) {
-    html += `<label class="dest-check-row">`;
+    html += `<label class="check-row">`;
     html += `<input type="checkbox" class="dest-check" value="${d.code}" checked>`;
-    html += `<span class="dest-flag">${d.flag}</span>`;
-    html += `<span class="dest-name">${d.name}</span>`;
+    html += `<span class="check-flag">${d.flag}</span>`;
+    html += `<span class="check-name">${d.name}</span>`;
     html += `<span class="code">${d.code}</span>`;
+    html += `</label>`;
+  }
+  return html;
+}
+
+function buildCountryHubCheckRows(countryHubs: CountryHubEntry[]): string {
+  let html = '';
+  for (const ch of countryHubs) {
+    html += `<label class="check-row">`;
+    html += `<input type="checkbox" class="country-hub-check" value="${ch.key}" checked>`;
+    html += `<span class="check-flag">${ch.flag}</span>`;
+    html += `<span class="check-name">${ch.country}<span class="hub-sub">${ch.hubName}<span class="code">${ch.hubCode}</span></span></span>`;
     html += `</label>`;
   }
   return html;
@@ -67,6 +95,9 @@ export function getAirlineNetworkPage(): string {
   const destAirports = collectDestAirports();
   const destCheckRows = buildDestCheckRows(destAirports);
   const destCodesJson = JSON.stringify(destAirports.map((d) => d.code));
+  const countryHubs = collectCountryHubs();
+  const countryHubCheckRows = buildCountryHubCheckRows(countryHubs);
+  const countryHubKeysJson = JSON.stringify(countryHubs.map((ch) => ch.key));
   const countryCount = AIRLINE_NETWORK.length;
   const airlineCount = AIRLINE_NETWORK.reduce((sum, c) => sum + c.airlines.length, 0);
   const routeCount = AIRLINE_NETWORK.reduce((sum, c) => sum + c.airlines.reduce((s2, a) => s2 + a.destinations.length, 0), 0);
@@ -170,14 +201,15 @@ tr:nth-child(even) td { background: var(--row-alt); }
 }
 .modal-close:hover { color: var(--text); }
 .modal-body { padding: 6px; overflow-y: auto; flex: 1; }
-.dest-check-row {
+.check-row {
   display: flex; align-items: center; gap: 8px; padding: 6px 8px;
   border-radius: 6px; cursor: pointer; font-size: 0.8rem; color: var(--text);
 }
-.dest-check-row:hover { background: var(--row-alt); }
-.dest-check-row input[type="checkbox"] { flex-shrink: 0; }
-.dest-flag { font-size: 1.05rem; flex-shrink: 0; }
-.dest-name { flex: 1; min-width: 0; }
+.check-row:hover { background: var(--row-alt); }
+.check-row input[type="checkbox"] { flex-shrink: 0; }
+.check-flag { font-size: 1.05rem; flex-shrink: 0; }
+.check-name { flex: 1; min-width: 0; }
+.hub-sub { display: block; font-size: 0.68rem; color: var(--text-muted); margin-top: 1px; }
 .modal-footer {
   padding: 10px 14px; border-top: 1px solid var(--border);
   display: flex; justify-content: flex-end; gap: 8px; flex-shrink: 0;
@@ -223,7 +255,7 @@ tr:nth-child(even) td { background: var(--row-alt); }
       <table>
         <thead>
           <tr>
-            <th>国</th>
+            <th>国<button type="button" id="country-filter-btn" class="th-filter-btn" title="表示する経由国・拠点空港を選択">&#x25BE;</button></th>
             <th>航空会社</th>
             <th>拠点空港</th>
             <th>乗り入れ空港<button type="button" id="dest-filter-btn" class="th-filter-btn" title="表示する乗り入れ空港を選択">&#x25BE;</button></th>
@@ -254,9 +286,26 @@ tr:nth-child(even) td { background: var(--row-alt); }
   </div>
 </div>
 
+<div class="modal-backdrop" id="country-filter-backdrop"></div>
+<div class="modal-box" id="country-filter-modal">
+  <div class="modal-header">
+    <span>&#x1F3F3;&#xFE0F; 経由国・拠点空港を選択</span>
+    <button type="button" id="country-filter-close" class="modal-close">&times;</button>
+  </div>
+  <div class="modal-body" id="country-filter-list">
+    ${countryHubCheckRows}
+  </div>
+  <div class="modal-footer">
+    <button type="button" id="country-filter-cancel" class="modal-btn">キャンセル</button>
+    <button type="button" id="country-filter-apply" class="modal-btn modal-btn-primary">適用</button>
+  </div>
+</div>
+
 <script>
 var DEST_COOKIE_NAME = 'airline_network_dest_airports';
 var ALL_DEST_CODES = ${destCodesJson};
+var COUNTRY_HUB_COOKIE_NAME = 'airline_network_country_hubs';
+var ALL_COUNTRY_HUB_KEYS = ${countryHubKeysJson};
 
 var currentCountry = '__all__';
 var countryBtns = document.querySelectorAll('.country-btn');
@@ -271,6 +320,13 @@ var destFilterClose = document.getElementById('dest-filter-close');
 var destFilterCancel = document.getElementById('dest-filter-cancel');
 var destFilterApply = document.getElementById('dest-filter-apply');
 var destCheckboxes = Array.prototype.slice.call(document.querySelectorAll('.dest-check'));
+var countryFilterBtn = document.getElementById('country-filter-btn');
+var countryFilterModal = document.getElementById('country-filter-modal');
+var countryFilterBackdrop = document.getElementById('country-filter-backdrop');
+var countryFilterClose = document.getElementById('country-filter-close');
+var countryFilterCancel = document.getElementById('country-filter-cancel');
+var countryFilterApply = document.getElementById('country-filter-apply');
+var countryHubCheckboxes = Array.prototype.slice.call(document.querySelectorAll('.country-hub-check'));
 
 function getCookieValue(name) {
   var parts = document.cookie.split(';');
@@ -293,7 +349,14 @@ function loadSelectedDestCodes() {
   return saved.split(',').filter(function (code) { return ALL_DEST_CODES.indexOf(code) !== -1; });
 }
 
+function loadSelectedCountryHubs() {
+  var saved = getCookieValue(COUNTRY_HUB_COOKIE_NAME);
+  if (saved === null || saved === '') return ALL_COUNTRY_HUB_KEYS.slice();
+  return saved.split(',').filter(function (key) { return ALL_COUNTRY_HUB_KEYS.indexOf(key) !== -1; });
+}
+
 var selectedDestCodes = loadSelectedDestCodes();
+var selectedCountryHubs = loadSelectedCountryHubs();
 
 function getNextZ() {
   var max = 100;
@@ -312,6 +375,37 @@ function updateDestFilterBtnLabel() {
   }
 }
 
+function updateCountryFilterBtnLabel() {
+  if (selectedCountryHubs.length === ALL_COUNTRY_HUB_KEYS.length) {
+    countryFilterBtn.textContent = '▾';
+  } else {
+    countryFilterBtn.textContent = '▾(' + selectedCountryHubs.length + '/' + ALL_COUNTRY_HUB_KEYS.length + ')';
+  }
+}
+
+function updateCountryPanelVisibility() {
+  var visibleCountries = {};
+  selectedCountryHubs.forEach(function (key) {
+    var country = key.split('::')[0];
+    visibleCountries[country] = true;
+  });
+  countryBtns.forEach(function (btn) {
+    var country = btn.getAttribute('data-country');
+    if (country === '__all__') return;
+    btn.style.display = visibleCountries[country] ? '' : 'none';
+  });
+  var activeBtn = null;
+  countryBtns.forEach(function (btn) {
+    if (btn.getAttribute('data-country') === currentCountry) activeBtn = btn;
+  });
+  if (currentCountry !== '__all__' && (!activeBtn || activeBtn.style.display === 'none')) {
+    currentCountry = '__all__';
+    countryBtns.forEach(function (b) {
+      b.classList.toggle('active', b.getAttribute('data-country') === '__all__');
+    });
+  }
+}
+
 function applyFilter() {
   var q = searchBox.value.trim().toLowerCase();
   var visibleCount = 0;
@@ -319,13 +413,15 @@ function applyFilter() {
     var matchesCountry = (currentCountry === '__all__') || (row.getAttribute('data-country') === currentCountry);
     var matchesSearch = !q || row.getAttribute('data-search').indexOf(q) !== -1;
     var matchesDest = selectedDestCodes.indexOf(row.getAttribute('data-dest-code')) !== -1;
-    var show = matchesCountry && matchesSearch && matchesDest;
+    var matchesCountryHub = selectedCountryHubs.indexOf(row.getAttribute('data-hub-key')) !== -1;
+    var show = matchesCountry && matchesSearch && matchesDest && matchesCountryHub;
     row.style.display = show ? '' : 'none';
     if (show) visibleCount++;
   });
   hitCountEl.textContent = visibleCount + ' 件表示中';
   noHitEl.style.display = visibleCount === 0 ? '' : 'none';
   updateDestFilterBtnLabel();
+  updateCountryFilterBtnLabel();
 }
 
 countryBtns.forEach(function (btn) {
@@ -337,7 +433,10 @@ countryBtns.forEach(function (btn) {
   });
 });
 
+updateCountryPanelVisibility();
+
 function openDestFilterModal() {
+  closeCountryFilterModal();
   destCheckboxes.forEach(function (cb) {
     cb.checked = selectedDestCodes.indexOf(cb.value) !== -1;
   });
@@ -362,6 +461,36 @@ destFilterApply.addEventListener('click', function () {
   selectedDestCodes = destCheckboxes.filter(function (cb) { return cb.checked; }).map(function (cb) { return cb.value; });
   setCookieValue(DEST_COOKIE_NAME, selectedDestCodes.join(','));
   closeDestFilterModal();
+  applyFilter();
+});
+
+function openCountryFilterModal() {
+  closeDestFilterModal();
+  countryHubCheckboxes.forEach(function (cb) {
+    cb.checked = selectedCountryHubs.indexOf(cb.value) !== -1;
+  });
+  var z = getNextZ();
+  countryFilterBackdrop.style.zIndex = String(z);
+  countryFilterModal.style.zIndex = String(z + 1);
+  countryFilterBackdrop.classList.add('open');
+  countryFilterModal.classList.add('open');
+}
+
+function closeCountryFilterModal() {
+  countryFilterBackdrop.classList.remove('open');
+  countryFilterModal.classList.remove('open');
+}
+
+countryFilterBtn.addEventListener('click', openCountryFilterModal);
+countryFilterClose.addEventListener('click', closeCountryFilterModal);
+countryFilterCancel.addEventListener('click', closeCountryFilterModal);
+countryFilterBackdrop.addEventListener('click', closeCountryFilterModal);
+
+countryFilterApply.addEventListener('click', function () {
+  selectedCountryHubs = countryHubCheckboxes.filter(function (cb) { return cb.checked; }).map(function (cb) { return cb.value; });
+  setCookieValue(COUNTRY_HUB_COOKIE_NAME, selectedCountryHubs.join(','));
+  closeCountryFilterModal();
+  updateCountryPanelVisibility();
   applyFilter();
 });
 

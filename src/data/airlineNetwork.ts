@@ -138,5 +138,18 @@ export const AIRLINE_NETWORK: CountryAirlines[] = [
       { code: 'LHR', name: 'ロンドン・ヒースロー空港', flightsPerWeek: 14 },
       { code: 'PEK', name: '北京首都国際空港', flightsPerWeek: 7 }
     ]}
+  ]},
+  { country: 'イタリア', flag: '🇮🇹', airlines: [
+    { name: 'ITA Airways', iata: 'AZ', hubCode: 'FCO', hubName: 'フィウミチーノ空港', destinations: [
+      { code: 'JFK', name: 'ジョン・F・ケネディ国際空港', flightsPerWeek: 14 },
+      { code: 'LAX', name: 'ロサンゼルス国際空港', flightsPerWeek: 7 },
+      { code: 'NRT', name: '成田国際空港', flightsPerWeek: 3 }
+    ]}
+  ]},
+  { country: 'スペイン', flag: '🇪🇸', airlines: [
+    { name: 'Iberia', iata: 'IB', hubCode: 'MAD', hubName: 'マドリード・バラハス空港', destinations: [
+      { code: 'JFK', name: 'ジョン・F・ケネディ国際空港', flightsPerWeek: 14 },
+      { code: 'LAX', name: 'ロサンゼルス国際空港', flightsPerWeek: 7 }
+    ]}
   ]}
 ];
