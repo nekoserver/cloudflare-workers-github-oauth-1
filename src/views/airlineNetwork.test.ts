@@ -15,6 +15,16 @@ function uniqueDestCodes(): string[] {
   return Array.from(seen);
 }
 
+function uniqueCountryHubKeys(): string[] {
+  const seen = new Set<string>();
+  for (const c of AIRLINE_NETWORK) {
+    for (const airline of c.airlines) {
+      seen.add(`${c.country}::${airline.hubCode}`);
+    }
+  }
+  return Array.from(seen);
+}
+
 describe('/airline-network ページ: 各国航空会社ネットワーク一覧', () => {
   const html = getAirlineNetworkPage();
 
@@ -134,5 +144,100 @@ describe('/airline-network ページ: 各国航空会社ネットワーク一覧
     expect(html).toContain("destFilterClose.addEventListener('click', closeDestFilterModal);");
     expect(html).toContain("destFilterCancel.addEventListener('click', closeDestFilterModal);");
     expect(html).toContain("destFilterBackdrop.addEventListener('click', closeDestFilterModal);");
+  });
+
+  it('イタリア・スペインの航空会社が追加されている', () => {
+    const italy = AIRLINE_NETWORK.find((c) => c.country === 'イタリア');
+    const spain = AIRLINE_NETWORK.find((c) => c.country === 'スペイン');
+    expect(italy).toBeDefined();
+    expect(spain).toBeDefined();
+    expect(italy!.airlines.length).toBeGreaterThan(0);
+    expect(spain!.airlines.length).toBeGreaterThan(0);
+    expect(html).toContain('ITA Airways');
+    expect(html).toContain('Iberia');
+    expect(html).toContain('data-country="イタリア"');
+    expect(html).toContain('data-country="スペイン"');
+  });
+
+  it('「国」th内にフィルタボタンが配置されている', () => {
+    const thMatch = html.match(/<th>国[\s\S]*?<\/th>/);
+    expect(thMatch).toBeTruthy();
+    expect(thMatch![0]).toContain('id="country-filter-btn"');
+    expect(thMatch![0]).toContain('class="th-filter-btn"');
+  });
+
+  it('各テーブル行に data-hub-key(経由国::拠点空港コード) 属性が設定されている', () => {
+    for (const key of uniqueCountryHubKeys()) {
+      expect(html).toContain(`data-hub-key="${key}"`);
+    }
+  });
+
+  it('国別モーダルに全経由国×拠点空港のチェックボックス(国旗/空港名/コード)がデフォルトONで並ぶ', () => {
+    const modalMatch = html.match(/<div class="modal-body" id="country-filter-list">[\s\S]*?<\/div>\s*<\/div>/);
+    expect(modalMatch).toBeTruthy();
+    const modalHtml = modalMatch![0];
+    for (const c of AIRLINE_NETWORK) {
+      for (const airline of c.airlines) {
+        const key = `${c.country}::${airline.hubCode}`;
+        expect(modalHtml).toContain(`value="${key}"`);
+        expect(modalHtml).toContain(c.flag);
+        expect(modalHtml).toContain(airline.hubName);
+        expect(modalHtml).toContain(airline.hubCode);
+      }
+    }
+    const checkboxBlocks = modalHtml.match(/<input type="checkbox" class="country-hub-check"[^>]*>/g) ?? [];
+    expect(checkboxBlocks.length).toBe(uniqueCountryHubKeys().length);
+    checkboxBlocks.forEach((block) => expect(block).toContain('checked'));
+  });
+
+  it('国別モーダルもgetNextZ()でz-indexを動的に算出し固定値を直書きしない', () => {
+    expect(html).toContain("countryFilterBackdrop.style.zIndex = String(z);");
+    expect(html).toContain("countryFilterModal.style.zIndex = String(z + 1);");
+    expect(html).not.toMatch(/#country-filter-modal\s*\{[^}]*z-index\s*:\s*\d/);
+  });
+
+  it('適用ボタンでチェックを外した経由国の空港のみ非表示になるフィルタが適用される', () => {
+    expect(html).toContain('matchesCountryHub');
+    expect(html).toContain("selectedCountryHubs.indexOf(row.getAttribute('data-hub-key')) !== -1");
+    expect(html).toContain("countryFilterApply.addEventListener('click'");
+  });
+
+  it('国別モーダルの選択状態もCookieへ保存・復元される', () => {
+    expect(html).toContain("var COUNTRY_HUB_COOKIE_NAME = 'airline_network_country_hubs';");
+    expect(html).toContain('setCookieValue(COUNTRY_HUB_COOKIE_NAME, selectedCountryHubs.join(\',\'));');
+    expect(html).toContain('function loadSelectedCountryHubs()');
+    expect(html).toContain('var selectedCountryHubs = loadSelectedCountryHubs();');
+    expect(html).toContain('getCookieValue(COUNTRY_HUB_COOKIE_NAME)');
+  });
+
+  it('チェックを外した国の左サイドパネルボタンが非表示になる(updateCountryPanelVisibility)', () => {
+    expect(html).toContain('function updateCountryPanelVisibility()');
+    expect(html).toContain("btn.style.display = visibleCountries[country] ? '' : 'none';");
+    expect(html).toContain('updateCountryPanelVisibility();');
+    // apply時にも呼ばれること
+    const applyIdx = html.indexOf("countryFilterApply.addEventListener('click'");
+    const applyBlock = html.slice(applyIdx, applyIdx + 400);
+    expect(applyBlock).toContain('updateCountryPanelVisibility();');
+  });
+
+  it('現在選択中の国が非表示になった場合はすべてにリセットする', () => {
+    expect(html).toContain("currentCountry = '__all__';");
+    expect(html).toContain("b.classList.toggle('active', b.getAttribute('data-country') === '__all__');");
+  });
+
+  it('国別モーダルもキャンセル・×・背景クリックで閉じられる', () => {
+    expect(html).toContain("countryFilterClose.addEventListener('click', closeCountryFilterModal);");
+    expect(html).toContain("countryFilterCancel.addEventListener('click', closeCountryFilterModal);");
+    expect(html).toContain("countryFilterBackdrop.addEventListener('click', closeCountryFilterModal);");
+  });
+
+  it('片方のモーダルを開くともう片方は閉じる', () => {
+    const openDestIdx = html.indexOf('function openDestFilterModal()');
+    const openDestBlock = html.slice(openDestIdx, openDestIdx + 200);
+    expect(openDestBlock).toContain('closeCountryFilterModal();');
+
+    const openCountryIdx = html.indexOf('function openCountryFilterModal()');
+    const openCountryBlock = html.slice(openCountryIdx, openCountryIdx + 200);
+    expect(openCountryBlock).toContain('closeDestFilterModal();');
   });
 });
