@@ -1,4 +1,25 @@
 import { AIRLINE_NETWORK } from '../data/airlineNetwork';
+import { AIRPORT_LIST } from '../data/airports';
+
+type DestAirportEntry = { code: string; name: string; flag: string };
+
+function collectDestAirports(): DestAirportEntry[] {
+  const seen: Record<string, boolean> = {};
+  const list: DestAirportEntry[] = [];
+  for (const c of AIRLINE_NETWORK) {
+    for (const airline of c.airlines) {
+      for (const dest of airline.destinations) {
+        if (seen[dest.code]) continue;
+        seen[dest.code] = true;
+        const apt = AIRPORT_LIST.find((a) => a.code === dest.code);
+        const flag = apt ? apt.city.split(' ')[0] : '';
+        list.push({ code: dest.code, name: dest.name, flag });
+      }
+    }
+  }
+  list.sort((a, b) => a.name.localeCompare(b.name, 'ja'));
+  return list;
+}
 
 function buildCountryButtons(): string {
   let html = `<button type="button" class="country-btn active" data-country="__all__">🌐 すべて</button>`;
@@ -14,7 +35,7 @@ function buildRows(): string {
     for (const airline of c.airlines) {
       for (const dest of airline.destinations) {
         const searchKey = [c.country, airline.name, airline.hubName, dest.name, dest.code].join(' ').toLowerCase();
-        html += `<tr data-country="${c.country}" data-search="${searchKey}">`;
+        html += `<tr data-country="${c.country}" data-search="${searchKey}" data-dest-code="${dest.code}">`;
         html += `<td class="col-country">${c.flag} ${c.country}</td>`;
         html += `<td class="col-airline">${airline.name}<span class="iata">${airline.iata}</span></td>`;
         html += `<td class="col-hub">${airline.hubName}<span class="code">${airline.hubCode}</span></td>`;
@@ -27,9 +48,25 @@ function buildRows(): string {
   return html;
 }
 
+function buildDestCheckRows(destinations: DestAirportEntry[]): string {
+  let html = '';
+  for (const d of destinations) {
+    html += `<label class="dest-check-row">`;
+    html += `<input type="checkbox" class="dest-check" value="${d.code}" checked>`;
+    html += `<span class="dest-flag">${d.flag}</span>`;
+    html += `<span class="dest-name">${d.name}</span>`;
+    html += `<span class="code">${d.code}</span>`;
+    html += `</label>`;
+  }
+  return html;
+}
+
 export function getAirlineNetworkPage(): string {
   const countryButtons = buildCountryButtons();
   const rows = buildRows();
+  const destAirports = collectDestAirports();
+  const destCheckRows = buildDestCheckRows(destAirports);
+  const destCodesJson = JSON.stringify(destAirports.map((d) => d.code));
   const countryCount = AIRLINE_NETWORK.length;
   const airlineCount = AIRLINE_NETWORK.reduce((sum, c) => sum + c.airlines.length, 0);
   const routeCount = AIRLINE_NETWORK.reduce((sum, c) => sum + c.airlines.reduce((s2, a) => s2 + a.destinations.length, 0), 0);
@@ -104,6 +141,54 @@ tr:nth-child(even) td { background: var(--row-alt); }
 .unit { font-weight: 400; color: var(--text-muted); font-size: 0.68rem; margin-left: 3px; }
 .no-hit { text-align: center; color: var(--text-muted); padding: 20px; font-size: 0.8rem; }
 
+.th-filter-btn {
+  background: none; border: none; color: inherit; cursor: pointer;
+  font-size: 0.8rem; margin-left: 5px; padding: 0 3px; vertical-align: middle;
+}
+.th-filter-btn:hover { color: var(--accent); }
+
+.modal-backdrop {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.5);
+  display: none;
+}
+.modal-backdrop.open { display: block; }
+.modal-box {
+  position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+  width: min(360px, 90vw); max-height: 72vh; display: none; flex-direction: column;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+}
+.modal-box.open { display: flex; }
+.modal-header {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 10px 14px; border-bottom: 1px solid var(--border);
+  font-weight: 700; font-size: 0.85rem; color: var(--text); flex-shrink: 0;
+}
+.modal-close {
+  background: none; border: none; color: var(--text-muted);
+  font-size: 1.15rem; cursor: pointer; line-height: 1; padding: 2px 6px;
+}
+.modal-close:hover { color: var(--text); }
+.modal-body { padding: 6px; overflow-y: auto; flex: 1; }
+.dest-check-row {
+  display: flex; align-items: center; gap: 8px; padding: 6px 8px;
+  border-radius: 6px; cursor: pointer; font-size: 0.8rem; color: var(--text);
+}
+.dest-check-row:hover { background: var(--row-alt); }
+.dest-check-row input[type="checkbox"] { flex-shrink: 0; }
+.dest-flag { font-size: 1.05rem; flex-shrink: 0; }
+.dest-name { flex: 1; min-width: 0; }
+.modal-footer {
+  padding: 10px 14px; border-top: 1px solid var(--border);
+  display: flex; justify-content: flex-end; gap: 8px; flex-shrink: 0;
+}
+.modal-btn {
+  border-radius: 6px; padding: 7px 16px; font-size: 0.8rem;
+  cursor: pointer; font-family: inherit; border: 1px solid var(--border);
+  background: var(--btn-bg); color: var(--text);
+}
+.modal-btn-primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+
 @media (max-width: 640px) {
   .main-layout { flex-direction: column; overflow: visible; }
   .left-panel { width: 100%; border-right: none; border-bottom: 1px solid var(--border); flex-direction: row; flex-wrap: wrap; overflow-y: visible; }
@@ -141,7 +226,7 @@ tr:nth-child(even) td { background: var(--row-alt); }
             <th>国</th>
             <th>航空会社</th>
             <th>拠点空港</th>
-            <th>乗り入れ空港</th>
+            <th>乗り入れ空港<button type="button" id="dest-filter-btn" class="th-filter-btn" title="表示する乗り入れ空港を選択">&#x25BE;</button></th>
             <th>便数(週)</th>
           </tr>
         </thead>
@@ -154,13 +239,78 @@ tr:nth-child(even) td { background: var(--row-alt); }
   </div>
 </div>
 
+<div class="modal-backdrop" id="dest-filter-backdrop"></div>
+<div class="modal-box" id="dest-filter-modal">
+  <div class="modal-header">
+    <span>&#x1F6EB; 乗り入れ空港を選択</span>
+    <button type="button" id="dest-filter-close" class="modal-close">&times;</button>
+  </div>
+  <div class="modal-body" id="dest-filter-list">
+    ${destCheckRows}
+  </div>
+  <div class="modal-footer">
+    <button type="button" id="dest-filter-cancel" class="modal-btn">キャンセル</button>
+    <button type="button" id="dest-filter-apply" class="modal-btn modal-btn-primary">適用</button>
+  </div>
+</div>
+
 <script>
+var DEST_COOKIE_NAME = 'airline_network_dest_airports';
+var ALL_DEST_CODES = ${destCodesJson};
+
 var currentCountry = '__all__';
 var countryBtns = document.querySelectorAll('.country-btn');
 var allRows = Array.prototype.slice.call(document.querySelectorAll('#route-tbody tr'));
 var searchBox = document.getElementById('search-box');
 var hitCountEl = document.getElementById('hit-count');
 var noHitEl = document.getElementById('no-hit');
+var destFilterBtn = document.getElementById('dest-filter-btn');
+var destFilterModal = document.getElementById('dest-filter-modal');
+var destFilterBackdrop = document.getElementById('dest-filter-backdrop');
+var destFilterClose = document.getElementById('dest-filter-close');
+var destFilterCancel = document.getElementById('dest-filter-cancel');
+var destFilterApply = document.getElementById('dest-filter-apply');
+var destCheckboxes = Array.prototype.slice.call(document.querySelectorAll('.dest-check'));
+
+function getCookieValue(name) {
+  var parts = document.cookie.split(';');
+  for (var i = 0; i < parts.length; i++) {
+    var p = parts[i].trim();
+    if (p.indexOf(name + '=') === 0) {
+      return decodeURIComponent(p.substring(name.length + 1));
+    }
+  }
+  return null;
+}
+
+function setCookieValue(name, value) {
+  document.cookie = name + '=' + encodeURIComponent(value) + '; Path=/; Secure; SameSite=Lax; Max-Age=31536000';
+}
+
+function loadSelectedDestCodes() {
+  var saved = getCookieValue(DEST_COOKIE_NAME);
+  if (saved === null || saved === '') return ALL_DEST_CODES.slice();
+  return saved.split(',').filter(function (code) { return ALL_DEST_CODES.indexOf(code) !== -1; });
+}
+
+var selectedDestCodes = loadSelectedDestCodes();
+
+function getNextZ() {
+  var max = 100;
+  document.querySelectorAll('body *').forEach(function (el) {
+    var z = parseInt(window.getComputedStyle(el).zIndex, 10);
+    if (!isNaN(z)) max = Math.max(max, z);
+  });
+  return max + 100;
+}
+
+function updateDestFilterBtnLabel() {
+  if (selectedDestCodes.length === ALL_DEST_CODES.length) {
+    destFilterBtn.textContent = '▾';
+  } else {
+    destFilterBtn.textContent = '▾(' + selectedDestCodes.length + '/' + ALL_DEST_CODES.length + ')';
+  }
+}
 
 function applyFilter() {
   var q = searchBox.value.trim().toLowerCase();
@@ -168,12 +318,14 @@ function applyFilter() {
   allRows.forEach(function (row) {
     var matchesCountry = (currentCountry === '__all__') || (row.getAttribute('data-country') === currentCountry);
     var matchesSearch = !q || row.getAttribute('data-search').indexOf(q) !== -1;
-    var show = matchesCountry && matchesSearch;
+    var matchesDest = selectedDestCodes.indexOf(row.getAttribute('data-dest-code')) !== -1;
+    var show = matchesCountry && matchesSearch && matchesDest;
     row.style.display = show ? '' : 'none';
     if (show) visibleCount++;
   });
   hitCountEl.textContent = visibleCount + ' 件表示中';
   noHitEl.style.display = visibleCount === 0 ? '' : 'none';
+  updateDestFilterBtnLabel();
 }
 
 countryBtns.forEach(function (btn) {
@@ -183,6 +335,34 @@ countryBtns.forEach(function (btn) {
     currentCountry = btn.getAttribute('data-country');
     applyFilter();
   });
+});
+
+function openDestFilterModal() {
+  destCheckboxes.forEach(function (cb) {
+    cb.checked = selectedDestCodes.indexOf(cb.value) !== -1;
+  });
+  var z = getNextZ();
+  destFilterBackdrop.style.zIndex = String(z);
+  destFilterModal.style.zIndex = String(z + 1);
+  destFilterBackdrop.classList.add('open');
+  destFilterModal.classList.add('open');
+}
+
+function closeDestFilterModal() {
+  destFilterBackdrop.classList.remove('open');
+  destFilterModal.classList.remove('open');
+}
+
+destFilterBtn.addEventListener('click', openDestFilterModal);
+destFilterClose.addEventListener('click', closeDestFilterModal);
+destFilterCancel.addEventListener('click', closeDestFilterModal);
+destFilterBackdrop.addEventListener('click', closeDestFilterModal);
+
+destFilterApply.addEventListener('click', function () {
+  selectedDestCodes = destCheckboxes.filter(function (cb) { return cb.checked; }).map(function (cb) { return cb.value; });
+  setCookieValue(DEST_COOKIE_NAME, selectedDestCodes.join(','));
+  closeDestFilterModal();
+  applyFilter();
 });
 
 searchBox.addEventListener('input', applyFilter);

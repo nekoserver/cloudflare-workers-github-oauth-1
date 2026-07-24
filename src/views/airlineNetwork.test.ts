@@ -1,6 +1,19 @@
 import { describe, expect, it } from 'vitest';
 import { getAirlineNetworkPage } from './airlineNetwork';
 import { AIRLINE_NETWORK } from '../data/airlineNetwork';
+import { AIRPORT_LIST } from '../data/airports';
+
+function uniqueDestCodes(): string[] {
+  const seen = new Set<string>();
+  for (const c of AIRLINE_NETWORK) {
+    for (const airline of c.airlines) {
+      for (const dest of airline.destinations) {
+        seen.add(dest.code);
+      }
+    }
+  }
+  return Array.from(seen);
+}
 
 describe('/airline-network ページ: 各国航空会社ネットワーク一覧', () => {
   const html = getAirlineNetworkPage();
@@ -57,5 +70,69 @@ describe('/airline-network ページ: 各国航空会社ネットワーク一覧
   it('該当0件の場合の空表示メッセージ要素が存在する', () => {
     expect(html).toContain('id="no-hit"');
     expect(html).toContain('該当する路線が見つかりません');
+  });
+
+  it('各テーブル行に data-dest-code 属性が設定されている', () => {
+    for (const code of uniqueDestCodes()) {
+      expect(html).toContain(`data-dest-code="${code}"`);
+    }
+  });
+
+  it('「乗り入れ空港」th内にフィルタボタンが配置されている', () => {
+    const thMatch = html.match(/<th>乗り入れ空港[\s\S]*?<\/th>/);
+    expect(thMatch).toBeTruthy();
+    expect(thMatch![0]).toContain('id="dest-filter-btn"');
+    expect(thMatch![0]).toContain('class="th-filter-btn"');
+  });
+
+  it('モーダルに全乗り入れ空港のチェックボックス(国旗/空港名/コード)がデフォルトONで並ぶ', () => {
+    const modalMatch = html.match(/<div class="modal-body" id="dest-filter-list">[\s\S]*?<\/div>/);
+    expect(modalMatch).toBeTruthy();
+    const modalHtml = modalMatch![0];
+    for (const code of uniqueDestCodes()) {
+      expect(modalHtml).toContain(`value="${code}"`);
+      const apt = AIRPORT_LIST.find((a) => a.code === code);
+      if (apt) {
+        const flag = apt.city.split(' ')[0];
+        expect(modalHtml).toContain(flag);
+      }
+    }
+    // デフォルトはすべてチェック済み
+    const checkboxBlocks = modalHtml.match(/<input type="checkbox" class="dest-check"[^>]*>/g) ?? [];
+    expect(checkboxBlocks.length).toBe(uniqueDestCodes().length);
+    checkboxBlocks.forEach((block) => expect(block).toContain('checked'));
+  });
+
+  it('モーダルが最上位レイヤーとして表示されるよう z-index を動的に算出する(getNextZ)', () => {
+    expect(html).toContain('function getNextZ()');
+    expect(html).toContain("document.querySelectorAll('body *')");
+    expect(html).toContain("destFilterBackdrop.style.zIndex = String(z);");
+    expect(html).toContain("destFilterModal.style.zIndex = String(z + 1);");
+    // 固定z-indexの直書きが無いことを確認
+    expect(html).not.toMatch(/#dest-filter-modal\s*\{[^}]*z-index\s*:\s*\d/);
+  });
+
+  it('適用ボタンでチェック済み空港のみを表示するフィルタが適用される', () => {
+    expect(html).toContain('matchesDest');
+    expect(html).toContain("selectedDestCodes.indexOf(row.getAttribute('data-dest-code')) !== -1");
+    expect(html).toContain("destFilterApply.addEventListener('click'");
+  });
+
+  it('適用時に選択状態がCookieへ保存される', () => {
+    expect(html).toContain("var DEST_COOKIE_NAME = 'airline_network_dest_airports';");
+    expect(html).toContain('setCookieValue(DEST_COOKIE_NAME, selectedDestCodes.join(\',\'));');
+    expect(html).toContain("Path=/; Secure; SameSite=Lax; Max-Age=31536000");
+  });
+
+  it('ページ読み込み時にCookieの保存値を読み込んで初期選択に反映する', () => {
+    expect(html).toContain('function loadSelectedDestCodes()');
+    expect(html).toContain('var selectedDestCodes = loadSelectedDestCodes();');
+    expect(html).toContain('getCookieValue(DEST_COOKIE_NAME)');
+  });
+
+  it('キャンセル・×ボタン・背景クリックでモーダルを閉じられる', () => {
+    expect(html).toContain("destFilterClose.addEventListener('click', closeDestFilterModal);");
+    expect(html).toContain("destFilterCancel.addEventListener('click', closeDestFilterModal);");
+    expect(html).toContain("destFilterBackdrop.addEventListener('click', closeDestFilterModal);");
   });
 });
