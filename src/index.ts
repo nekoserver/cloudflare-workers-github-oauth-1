@@ -43,6 +43,7 @@ import { getMLBSpherePage } from './views/mlbSphere';
 import { getWorldCupWdlPage } from './views/worldCupWdl';
 import { getWorldCupKnockoutPage } from './views/worldCupKnockout';
 import { getTdfPage } from './views/tdf';
+import { getAirlineNetworkPage } from './views/airlineNetwork';
 import { getChessTsumePage } from './views/chessBoard';
 import { getMatrixRainPage } from './views/matrixRain';
 import { getImageSpin3dPage } from './views/imageSpin3d';
@@ -6520,6 +6521,10 @@ app.get('/worldcup-knockout', authMiddleware, async (c) => {
 
 app.get('/tdf', authMiddleware, async (c) => {
   return c.html(getTdfPage());
+});
+
+app.get('/airline-network', authMiddleware, async (c) => {
+  return c.html(getAirlineNetworkPage());
 });
 
 app.get('/chess-tsume-17te', authMiddleware, async (c) => {
