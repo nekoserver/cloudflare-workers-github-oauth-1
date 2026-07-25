@@ -3872,13 +3872,15 @@ app.get('/api/aichat/check-heritage-questions', authMiddleware, async (c) => {
   const country_name = (c.req.query('country_name') ?? '').trim() || null;
   const topics = ['交通手段', '見どころ', '最寄り空港', '鉄道でのアクセス', '宿泊施設', 'スポーツ施設'];
   const questions = topics.map((t) => `「${heritage}」の「${t}」について説明してください`);
-  const placeholders = questions.map(() => '?').join(', ');
+  const conditions = buildHeritageQuestionSuffixConditions('question', questions.length);
   const rows = await c.env.DB.prepare(
-    `SELECT id, question FROM ai_chat_shares WHERE user_id = ? AND deleted_at IS NULL AND question IN (${placeholders}) ORDER BY created_at DESC`
+    `SELECT id, question FROM ai_chat_shares WHERE user_id = ? AND deleted_at IS NULL AND (${conditions}) ORDER BY created_at DESC`
   ).bind(user.sub, ...questions).all<{ id: string; question: string }>();
   const answeredMap = new Map<string, string>();
   for (const r of (rows.results ?? [])) {
-    if (!answeredMap.has(r.question)) answeredMap.set(r.question, r.id);
+    // 「「国名」にある」接頭辞を事前に取り除いてから接頭辞なし質問文と突き合わせる。
+    const strippedQuestion = stripHeritageQuestionCountryPrefix(r.question);
+    if (!answeredMap.has(strippedQuestion)) answeredMap.set(strippedQuestion, r.id);
   }
   const answered: Record<string, string | null> = {};
   topics.forEach((t, i) => { answered[t] = answeredMap.get(questions[i]) ?? null; });
@@ -3935,6 +3937,31 @@ interface D1Like {
   };
 }
 
+// heritage-accessページの「AIに何を質問しますか」パネルは、同名で国が異なる
+// 世界遺産（例: モンテ・サン・ジョルジョ）の誤回答を防ぐため、質問文の先頭に
+// 「「国名」にある」を補足してから問い合わせている（heritageAccess.ts の askAI 参照）。
+// その生プロンプトがそのまま ai_chat_shares.question へ保存されるため、DB上の
+// question は「「国名」にある「遺産名」の「topic」について説明してください」という
+// 形になり、接頭辞なしで組み立てた質問文とは完全一致しない。
+//
+// キャッシュ判定（👀👁️アイコン・トピックバッジ・🔑キーワードヒット数）は
+// 接頭辞の有無を問わず該当行を拾えなければならないため、
+//   1. SQL では「接頭辞なし質問文で終わる」末尾一致（LIKE '%' || ?）で候補行を取得し
+//   2. 取得した question から接頭辞を事前に取り除いてから、接頭辞なし質問文との
+//      完全一致で突き合わせる
+// という2段構えにする。SQLの末尾一致は粗いフィルタに過ぎず、最終的な同定は
+// stripHeritageQuestionCountryPrefix 後の完全一致が担うため、LIKE のワイルドカード
+// （%・_）が遺産名に含まれていても取りこぼしは起きない。
+export function stripHeritageQuestionCountryPrefix(question: string): string {
+  return String(question || '').replace(/^「[^」]+」にある[、,。 　]*/, '');
+}
+
+// 「接頭辞なし質問文で終わる行」を拾うSQL条件を組み立てる。
+// column を指定した各プレースホルダに対し `column LIKE ('%' || ?)` を OR で連結する。
+export function buildHeritageQuestionSuffixConditions(column: string, count: number): string {
+  return Array.from({ length: count }, () => `${column} LIKE ('%' || ?)`).join(' OR ');
+}
+
 // アコーディオン展開時、メニュー内すべての世界遺産名についてキャッシュ済み AI 回答
 // （ai_chat_shares）の有無を一括判定する。IN(...) のバインド数が D1 上限を超えない
 // よう質問文をチャンク分割して複数クエリで実行し、1チャンクでも失敗したら error を
@@ -3960,22 +3987,25 @@ export async function lookupHeritageQuestionAnswers(
       questionMap.set(q, { heritage, topic });
     }
   }
-  // user_id の 1 バインドを差し引いた数を IN(...) のチャンク上限にする。
+  // user_id の 1 バインドを差し引いた数を末尾一致条件のチャンク上限にする。
   const chunkSize = Math.max(1, maxBoundParams - 1);
   const seen = new Set<string>();
   let hadError = false;
   for (const chunk of chunkBindValues(allQuestions, chunkSize)) {
     try {
-      const placeholders = chunk.map(() => '?').join(', ');
+      const conditions = buildHeritageQuestionSuffixConditions('question', chunk.length);
       const rows = await db
-        .prepare(`SELECT id, question FROM ai_chat_shares WHERE user_id = ? AND deleted_at IS NULL AND question IN (${placeholders}) ORDER BY created_at DESC`)
+        .prepare(`SELECT id, question FROM ai_chat_shares WHERE user_id = ? AND deleted_at IS NULL AND (${conditions}) ORDER BY created_at DESC`)
         .bind(userId, ...chunk)
         .all<{ id: string; question: string }>();
       for (const r of (rows.results ?? [])) {
-        if (seen.has(r.question)) continue;
-        seen.add(r.question);
-        const info = questionMap.get(r.question);
-        if (info && answered[info.heritage]) answered[info.heritage][info.topic] = r.id;
+        // 「「国名」にある」接頭辞を事前に取り除いてから接頭辞なし質問文と突き合わせる。
+        const strippedQuestion = stripHeritageQuestionCountryPrefix(r.question);
+        if (seen.has(strippedQuestion)) continue;
+        const info = questionMap.get(strippedQuestion);
+        if (!info) continue;
+        seen.add(strippedQuestion);
+        if (answered[info.heritage]) answered[info.heritage][info.topic] = r.id;
       }
     } catch {
       hadError = true;
@@ -4015,7 +4045,7 @@ export async function lookupHeritageKeywordTopics(
              AND EXISTS (
                SELECT 1 FROM ai_chat_shares s
                WHERE s.user_id = l.user_id AND s.deleted_at IS NULL
-                 AND s.question = '「' || l.heritage_name || '」の「' || m.topic || '」について説明してください'
+                 AND s.question LIKE ('%「' || l.heritage_name || '」の「' || m.topic || '」について説明してください')
              )`
         )
         .bind(userId, ...chunk)
@@ -4135,7 +4165,7 @@ export async function lookupHeritageMitokoroKeywordHits(
          FROM ai_chat_shares acs
          INNER JOIN aichat_search_history ash ON ash.share_id = acs.id AND ash.user_id = ? AND ash.deleted_at IS NULL
          WHERE acs.user_id = ? AND acs.deleted_at IS NULL
-           AND acs.model = ? AND acs.question = ?
+           AND acs.model = ? AND acs.question LIKE ('%' || ?)
          ORDER BY acs.created_at DESC`
       )
       .bind(userId, userId, model, question)
@@ -4146,18 +4176,6 @@ export async function lookupHeritageMitokoroKeywordHits(
   } catch {
     return { keywords: [], hitCount: 0 };
   }
-}
-
-// heritage-accessページの「AIに何を質問しますか」パネルは、同名で国が異なる
-// 世界遺産の誤回答を防ぐため、質問文の先頭に「「国名」にある」を補足してから
-// 問い合わせている(askAI参照)。そのためDBに保存される question は
-// 「「国名」にある「遺産名」の「topic」について説明してください」という形になり、
-// 接頭辞なしの質問文とは完全一致しない。ツールチップの👀👁️アイコン判定処理では
-// この接頭辞の有無を問わず該当行を検出できるよう、質問文の末尾一致で行を取得した
-// 上で、取得した質問文から接頭辞を事前に取り除いてから通常の(接頭辞なし)質問文
-// マップとの突き合わせを行う。
-export function stripHeritageQuestionCountryPrefix(question: string): string {
-  return String(question || '').replace(/^「[^」]+」にある[、,。 　]*/, '');
 }
 
 export async function lookupHeritageTopicModelCache(
@@ -4182,7 +4200,7 @@ export async function lookupHeritageTopicModelCache(
   let hadError = false;
   for (const chunk of chunkBindValues(allQuestions, chunkSize)) {
     try {
-      const conditions = chunk.map(() => `question LIKE ('%' || ?)`).join(' OR ');
+      const conditions = buildHeritageQuestionSuffixConditions('question', chunk.length);
       const rows = await db
         .prepare(`SELECT id, question FROM ai_chat_shares WHERE user_id = ? AND deleted_at IS NULL AND model = ? AND (${conditions}) ORDER BY created_at DESC`)
         .bind(userId, model, ...chunk)
