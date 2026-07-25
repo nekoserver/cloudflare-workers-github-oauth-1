@@ -3871,19 +3871,20 @@ app.get('/api/aichat/check-heritage-questions', authMiddleware, async (c) => {
   if (!heritage) return jsonUtf8({ answered: {} });
   const country_name = (c.req.query('country_name') ?? '').trim() || null;
   const topics = ['交通手段', '見どころ', '最寄り空港', '鉄道でのアクセス', '宿泊施設', 'スポーツ施設'];
-  const questions = topics.map((t) => `「${heritage}」の「${t}」について説明してください`);
-  const conditions = buildHeritageQuestionSuffixConditions('question', questions.length);
+  // 遺産名の含有で候補行を取得し、トピックはJS側で同定する。LIKEは使わない
+  // （D1のパターン長制限で本番のみ失敗するため）。
   const rows = await c.env.DB.prepare(
-    `SELECT id, question FROM ai_chat_shares WHERE user_id = ? AND deleted_at IS NULL AND (${conditions}) ORDER BY created_at DESC`
-  ).bind(user.sub, ...questions).all<{ id: string; question: string }>();
+    `SELECT id, question FROM ai_chat_shares WHERE user_id = ? AND deleted_at IS NULL AND INSTR(REPLACE(question, '･', '・'), ?) > 0 ORDER BY created_at DESC`
+  ).bind(user.sub, heritageNameNeedle(heritage)).all<{ id: string; question: string }>();
   const answeredMap = new Map<string, string>();
   for (const r of (rows.results ?? [])) {
-    // 「「国名」にある」接頭辞を事前に取り除いてから接頭辞なし質問文と突き合わせる。
-    const strippedQuestion = stripHeritageQuestionCountryPrefix(r.question);
-    if (!answeredMap.has(strippedQuestion)) answeredMap.set(strippedQuestion, r.id);
+    // 接頭辞「「国名」にある」を完全に除去してから同定処理へ進む。
+    const stripped = stripHeritageQuestionCountryPrefix(r.question);
+    const hit = matchHeritageQuestionTarget(stripped, [heritage], topics);
+    if (hit && !answeredMap.has(hit.topic)) answeredMap.set(hit.topic, r.id);
   }
   const answered: Record<string, string | null> = {};
-  topics.forEach((t, i) => { answered[t] = answeredMap.get(questions[i]) ?? null; });
+  topics.forEach((t) => { answered[t] = answeredMap.get(t) ?? null; });
 
   try {
     const masters = await c.env.DB.prepare(
@@ -3901,7 +3902,7 @@ app.get('/api/aichat/check-heritage-questions', authMiddleware, async (c) => {
     for (let i = 0; i < topics.length; i++) {
       const topic = topics[i];
       const qmId = topicIdMap.get(topic);
-      const isCached = answeredMap.has(questions[i]);
+      const isCached = answeredMap.has(topic);
       if (qmId && isCached && !existingIds.has(qmId)) {
         await c.env.DB.prepare(
           `INSERT OR IGNORE INTO heritage_question_view_log (user_id, country_name, heritage_name, question_master_id, searched_at) VALUES (?, ?, ?, ?, ?)`
@@ -3953,13 +3954,60 @@ interface D1Like {
 // stripHeritageQuestionCountryPrefix 後の完全一致が担うため、LIKE のワイルドカード
 // （%・_）が遺産名に含まれていても取りこぼしは起きない。
 export function stripHeritageQuestionCountryPrefix(question: string): string {
-  return String(question || '').replace(/^「[^」]+」にある[、,。 　]*/, '');
+  // 「国名」にある が複数重なっても取りこぼさないよう、先頭から繰り返し除去する。
+  let out = String(question || '');
+  for (;;) {
+    const next = out.replace(/^\s*「[^」]+」に(?:ある|所在する)[、,。\s]*/, '');
+    if (next === out) return out;
+    out = next;
+  }
 }
 
-// 「接頭辞なし質問文で終わる行」を拾うSQL条件を組み立てる。
-// column を指定した各プレースホルダに対し `column LIKE ('%' || ?)` を OR で連結する。
-export function buildHeritageQuestionSuffixConditions(column: string, count: number): string {
-  return Array.from({ length: count }, () => `${column} LIKE ('%' || ?)`).join(' OR ');
+// D1(SQLite)は全角中黒「・」(U+30FB)と半角中黒「･」(U+FF65)をコードポイント単位で
+// 区別するため、日本語IME・スマートフォンのキーボードによる表記ゆれを吸収する。
+export function normalizeNakaguro(text: string): string {
+  return String(text || '').replace(/[・･]/g, '・');
+}
+
+// Cloudflare D1 は(ワイルドカードの有無に関わらず)LIKEパターンが約50バイトを
+// 超えると "LIKE or GLOB pattern too complex: SQLITE_ERROR" で失敗する
+// （実機 wrangler dev で確認済み。src/heritage-area-search-instr.test.ts 参照）。
+// 日本語の質問文は1文字3バイトのため「「遺産名」の「topic」について説明してください」
+// は容易に100バイトを超え、LIKEを使うと本番D1で必ずクエリごと失敗する。
+// その失敗は呼び出し元の catch で握りつぶされて「キャッシュ無し」に化けるため、
+// アイコン・バッジが永遠に表示されない。長さ制限のない INSTR で部分一致を行う。
+//
+// 遺産名は「名前」のように括弧で囲んだ形で照合することで、「城」が「姫路城」に
+// 誤ヒットするような境界の取り違えを防ぐ。
+export function buildHeritageNameInstrConditions(column: string, count: number): string {
+  return Array.from({ length: count }, () => `INSTR(REPLACE(${column}, '･', '・'), ?) > 0`).join(' OR ');
+}
+
+export function heritageNameNeedle(heritage: string): string {
+  return `「${normalizeNakaguro(heritage)}」`;
+}
+
+// 質問文（接頭辞除去済み）が、どの遺産・どのトピックのものかを同定する。
+// 候補が複数ある場合は最長一致を採用し、部分文字列関係にある名前の取り違えを防ぐ。
+export function matchHeritageQuestionTarget(
+  question: string,
+  heritages: string[],
+  topics: string[],
+): { heritage: string; topic: string } | null {
+  const normalized = normalizeNakaguro(question);
+  let heritage: string | null = null;
+  for (const h of heritages) {
+    if (!normalized.includes(heritageNameNeedle(h))) continue;
+    if (heritage === null || h.length > heritage.length) heritage = h;
+  }
+  if (heritage === null) return null;
+  let topic: string | null = null;
+  for (const t of topics) {
+    if (!normalized.includes(`「${t}」`)) continue;
+    if (topic === null || t.length > topic.length) topic = t;
+  }
+  if (topic === null) return null;
+  return { heritage, topic };
 }
 
 // アコーディオン展開時、メニュー内すべての世界遺産名についてキャッシュ済み AI 回答
@@ -3978,34 +4026,27 @@ export async function lookupHeritageQuestionAnswers(
     answered[h] = {};
     for (const t of topics) answered[h][t] = null;
   }
-  const questionMap = new Map<string, { heritage: string; topic: string }>();
-  const allQuestions: string[] = [];
-  for (const heritage of heritages) {
-    for (const topic of topics) {
-      const q = `「${heritage}」の「${topic}」について説明してください`;
-      allQuestions.push(q);
-      questionMap.set(q, { heritage, topic });
-    }
-  }
-  // user_id の 1 バインドを差し引いた数を末尾一致条件のチャンク上限にする。
+  // 遺産名の含有だけで候補行を取得し、トピックはJS側で「トピック」の含有から
+  // 同定する。LIKEは使わない（D1のパターン長制限で本番のみ失敗するため）。
+  // user_id の 1 バインドを差し引いた数をチャンク上限にする。
   const chunkSize = Math.max(1, maxBoundParams - 1);
-  const seen = new Set<string>();
   let hadError = false;
-  for (const chunk of chunkBindValues(allQuestions, chunkSize)) {
+  for (const chunk of chunkBindValues(heritages, chunkSize)) {
     try {
-      const conditions = buildHeritageQuestionSuffixConditions('question', chunk.length);
+      const conditions = buildHeritageNameInstrConditions('question', chunk.length);
       const rows = await db
         .prepare(`SELECT id, question FROM ai_chat_shares WHERE user_id = ? AND deleted_at IS NULL AND (${conditions}) ORDER BY created_at DESC`)
-        .bind(userId, ...chunk)
+        .bind(userId, ...chunk.map(heritageNameNeedle))
         .all<{ id: string; question: string }>();
       for (const r of (rows.results ?? [])) {
-        // 「「国名」にある」接頭辞を事前に取り除いてから接頭辞なし質問文と突き合わせる。
-        const strippedQuestion = stripHeritageQuestionCountryPrefix(r.question);
-        if (seen.has(strippedQuestion)) continue;
-        const info = questionMap.get(strippedQuestion);
-        if (!info) continue;
-        seen.add(strippedQuestion);
-        if (answered[info.heritage]) answered[info.heritage][info.topic] = r.id;
+        // 接頭辞「「国名」にある」を完全に除去してから同定処理へ進む。
+        const stripped = stripHeritageQuestionCountryPrefix(r.question);
+        const hit = matchHeritageQuestionTarget(stripped, chunk, topics);
+        if (!hit) continue;
+        // created_at DESC 順なので最初に見つかった(最新の)行を採用する。
+        if (answered[hit.heritage] && answered[hit.heritage][hit.topic] == null) {
+          answered[hit.heritage][hit.topic] = r.id;
+        }
       }
     } catch {
       hadError = true;
@@ -4045,7 +4086,8 @@ export async function lookupHeritageKeywordTopics(
              AND EXISTS (
                SELECT 1 FROM ai_chat_shares s
                WHERE s.user_id = l.user_id AND s.deleted_at IS NULL
-                 AND s.question LIKE ('%「' || l.heritage_name || '」の「' || m.topic || '」について説明してください')
+                 AND INSTR(REPLACE(s.question, '･', '・'), '「' || REPLACE(l.heritage_name, '･', '・') || '」') > 0
+                 AND INSTR(s.question, '「' || m.topic || '」') > 0
              )`
         )
         .bind(userId, ...chunk)
@@ -4158,17 +4200,20 @@ export async function lookupHeritageMitokoroKeywordHits(
   model: string,
 ): Promise<{ keywords: string[]; hitCount: number }> {
   try {
-    const question = `「${heritage}」の「${HERITAGE_TOOLTIP_GEMMA_TOPIC}」について説明してください`;
+    // 遺産名とトピックの含有で絞る。LIKEは使わない（D1のパターン長制限で
+    // 本番のみ失敗するため。buildHeritageNameInstrConditions のコメント参照）。
     const rows = await db
       .prepare(
         `SELECT acs.answer, ash.keyword
          FROM ai_chat_shares acs
          INNER JOIN aichat_search_history ash ON ash.share_id = acs.id AND ash.user_id = ? AND ash.deleted_at IS NULL
          WHERE acs.user_id = ? AND acs.deleted_at IS NULL
-           AND acs.model = ? AND acs.question LIKE ('%' || ?)
+           AND acs.model = ?
+           AND INSTR(REPLACE(acs.question, '･', '・'), ?) > 0
+           AND INSTR(acs.question, ?) > 0
          ORDER BY acs.created_at DESC`
       )
-      .bind(userId, userId, model, question)
+      .bind(userId, userId, model, heritageNameNeedle(heritage), `「${HERITAGE_TOOLTIP_GEMMA_TOPIC}」`)
       .all<{ answer: string; keyword: string }>();
     const results = rows.results ?? [];
     const answer = results[0]?.answer || '';
@@ -4188,27 +4233,25 @@ export async function lookupHeritageTopicModelCache(
 ): Promise<{ cached: Record<string, string | null>; error?: string }> {
   const cached: Record<string, string | null> = {};
   for (const h of heritages) cached[h] = null;
-  const questionMap = new Map<string, string>();
-  const allQuestions: string[] = [];
-  for (const heritage of heritages) {
-    const q = `「${heritage}」の「${topic}」について説明してください`;
-    allQuestions.push(q);
-    questionMap.set(q, heritage);
-  }
-  // user_id・model の 2 バインドを差し引いた数を末尾一致条件のチャンク上限にする。
-  const chunkSize = Math.max(1, maxBoundParams - 2);
+  // 「質問文にトピック(見どころ等)が含まれるか」×「質問文に遺産名が含まれるか」で
+  // 候補行を絞り、モデル列で👀(gemma)/👁️(llama)を分岐する。LIKEは使わない
+  // （D1のパターン長制限で本番のみ失敗するため。buildHeritageNameInstrConditions参照）。
+  const topicNeedle = `「${topic}」`;
+  // user_id・model・topic の 3 バインドを差し引いた数をチャンク上限にする。
+  const chunkSize = Math.max(1, maxBoundParams - 3);
   let hadError = false;
-  for (const chunk of chunkBindValues(allQuestions, chunkSize)) {
+  for (const chunk of chunkBindValues(heritages, chunkSize)) {
     try {
-      const conditions = buildHeritageQuestionSuffixConditions('question', chunk.length);
+      const conditions = buildHeritageNameInstrConditions('question', chunk.length);
       const rows = await db
-        .prepare(`SELECT id, question FROM ai_chat_shares WHERE user_id = ? AND deleted_at IS NULL AND model = ? AND (${conditions}) ORDER BY created_at DESC`)
-        .bind(userId, model, ...chunk)
+        .prepare(`SELECT id, question FROM ai_chat_shares WHERE user_id = ? AND deleted_at IS NULL AND model = ? AND INSTR(question, ?) > 0 AND (${conditions}) ORDER BY created_at DESC`)
+        .bind(userId, model, topicNeedle, ...chunk.map(heritageNameNeedle))
         .all<{ id: string; question: string }>();
       for (const r of (rows.results ?? [])) {
-        const strippedQuestion = stripHeritageQuestionCountryPrefix(r.question);
-        const heritage = questionMap.get(strippedQuestion);
-        if (heritage && cached[heritage] == null) cached[heritage] = r.id;
+        // 接頭辞「「国名」にある」を完全に除去してから同定処理へ進む。
+        const stripped = stripHeritageQuestionCountryPrefix(r.question);
+        const hit = matchHeritageQuestionTarget(stripped, chunk, [topic]);
+        if (hit && cached[hit.heritage] == null) cached[hit.heritage] = r.id;
       }
     } catch {
       hadError = true;

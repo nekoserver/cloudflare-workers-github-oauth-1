@@ -60,6 +60,13 @@ function heritageQuestion(name: string, topic: string): string {
   return `「${name}」の「${topic}」について説明してください`;
 }
 
+// 実装は「遺産名」をINSTRのニードルとしてバインドする（D1のLIKEパターン長制限を
+// 回避するため。src/heritage-cache-lookup-d1-like-limit-20260724.test.ts 参照）。
+// モックも本番と同じバインド内容で照合しないと、実装と乖離して回帰を見逃す。
+function needle(name: string): string {
+  return `「${name}」`;
+}
+
 describe('chunkBindValues: 純粋なチャンク分割', () => {
   it('要素数がチャンクサイズ以下なら1チャンク', () => {
     expect(chunkBindValues([1, 2, 3], 10)).toEqual([[1, 2, 3]]);
@@ -132,7 +139,7 @@ describe('lookupHeritageQuestionAnswers: 全遺産の回答が正しくマージ
     const target = heritageQuestion('H99', '見どころ'); // 最終チャンクに入る
     const { db } = makeRecordingDb({
       rowsFor: (_sql, params) =>
-        params.includes(target) ? [{ id: 'share-99', question: target }] : [],
+        params.includes(needle('H99')) ? [{ id: 'share-99', question: target }] : [],
     });
     const { answered, error } = await lookupHeritageQuestionAnswers(db, 'user1', heritages, TOPICS);
     expect(error).toBeUndefined();
@@ -144,15 +151,16 @@ describe('lookupHeritageQuestionAnswers: 全遺産の回答が正しくマージ
 
   it('複数遺産・複数トピックのキャッシュを横断して返す', async () => {
     const heritages = ['H1', 'H2', 'H3'];
-    const cache: Record<string, string> = {
-      [heritageQuestion('H1', '交通手段')]: 's1',
-      [heritageQuestion('H3', '宿泊施設')]: 's3',
+    // ニードル(「遺産名」)でバインドされるので、ニードルから返す行を決める。
+    const cache: Record<string, { id: string; question: string }> = {
+      [needle('H1')]: { id: 's1', question: heritageQuestion('H1', '交通手段') },
+      [needle('H3')]: { id: 's3', question: heritageQuestion('H3', '宿泊施設') },
     };
     const { db } = makeRecordingDb({
       rowsFor: (_sql, params) => {
         const out: Array<Record<string, unknown>> = [];
         for (const p of params) {
-          if (typeof p === 'string' && cache[p]) out.push({ id: cache[p], question: p });
+          if (typeof p === 'string' && cache[p]) out.push(cache[p]);
         }
         return out;
       },
@@ -177,9 +185,8 @@ describe('lookupHeritageQuestionAnswers: 全遺産の回答が正しくマージ
 describe('lookupHeritageQuestionAnswers: 失敗を握りつぶさない（CLAUDE.md ルール8）', () => {
   it('一部チャンクが失敗したら error=partial_query_failure を返す', async () => {
     const heritages = Array.from({ length: 100 }, (_, i) => 'H' + i);
-    const poison = heritageQuestion('H99', '交通手段');
     const { db } = makeRecordingDb({
-      throwIf: (_sql, params) => params.includes(poison),
+      throwIf: (_sql, params) => params.includes(needle('H99')),
     });
     const { error } = await lookupHeritageQuestionAnswers(db, 'user1', heritages, TOPICS);
     expect(error).toBe('partial_query_failure');
@@ -187,12 +194,11 @@ describe('lookupHeritageQuestionAnswers: 失敗を握りつぶさない（CLAUDE
 
   it('一部チャンクが失敗しても成功チャンクの回答は残る', async () => {
     const heritages = Array.from({ length: 100 }, (_, i) => 'H' + i);
-    const poison = heritageQuestion('H99', '交通手段'); // 最終チャンク側を毒する
     const okTarget = heritageQuestion('H0', '見どころ'); // 先頭チャンク
     const { db } = makeRecordingDb({
-      throwIf: (_sql, params) => params.includes(poison),
+      throwIf: (_sql, params) => params.includes(needle('H99')), // 最終チャンク側を毒する
       rowsFor: (_sql, params) =>
-        params.includes(okTarget) ? [{ id: 'ok-0', question: okTarget }] : [],
+        params.includes(needle('H0')) ? [{ id: 'ok-0', question: okTarget }] : [],
     });
     const { answered, error } = await lookupHeritageQuestionAnswers(db, 'user1', heritages, TOPICS);
     expect(error).toBe('partial_query_failure');
@@ -265,7 +271,7 @@ describe('lookupHeritageTopicModelCache: 見どころ×gemmaキャッシュ判�
     const target = heritageQuestion('タージ・マハル', TOPIC);
     const { db } = makeRecordingDb({
       rowsFor: (_sql, params) =>
-        params.includes(target) ? [{ id: 'share-abc', question: target }] : [],
+        params.includes(needle('タージ・マハル')) ? [{ id: 'share-abc', question: target }] : [],
     });
     const { cached, error } = await lookupHeritageTopicModelCache(db, 'user1', heritages, TOPIC, MODEL);
     expect(error).toBeUndefined();
@@ -288,7 +294,7 @@ describe('lookupHeritageTopicModelCache: 見どころ×gemmaキャッシュ判�
     const target = heritageQuestion('H99', TOPIC);
     const { db } = makeRecordingDb({
       rowsFor: (_sql, params) =>
-        params.includes(target) ? [{ id: 'share-99', question: target }] : [],
+        params.includes(needle('H99')) ? [{ id: 'share-99', question: target }] : [],
     });
     const { cached } = await lookupHeritageTopicModelCache(db, 'user1', heritages, TOPIC, MODEL);
     expect(cached['H99']).toBe('share-99');
@@ -299,8 +305,8 @@ describe('lookupHeritageTopicModelCache: 見どころ×gemmaキャッシュ判�
     const heritages = Array.from({ length: 200 }, (_, i) => 'H' + i);
     const target = heritageQuestion('H0', TOPIC);
     const { db } = makeRecordingDb({
-      throwIf: (_sql, params) => params.includes(heritageQuestion('H199', TOPIC)),
-      rowsFor: (_sql, params) => (params.includes(target) ? [{ id: 'share-0', question: target }] : []),
+      throwIf: (_sql, params) => params.includes(needle('H199')),
+      rowsFor: (_sql, params) => (params.includes(needle('H0')) ? [{ id: 'share-0', question: target }] : []),
     });
     const { cached, error } = await lookupHeritageTopicModelCache(db, 'user1', heritages, TOPIC, MODEL);
     expect(error).toBe('partial_query_failure');
