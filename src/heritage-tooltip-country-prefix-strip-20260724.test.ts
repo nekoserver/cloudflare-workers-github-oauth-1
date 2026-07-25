@@ -56,6 +56,12 @@ function prefixedQuestion(country: string, name: string, topic: string): string 
   return `「${country}」にある${bareQuestion(name, topic)}`;
 }
 
+// 実装は「遺産名」をINSTRのニードルとしてバインドする（D1のLIKEパターン長制限を
+// 回避するため）。モックも本番と同じバインド内容で照合する必要がある。
+function needle(name: string): string {
+  return `「${name}」`;
+}
+
 describe('stripHeritageQuestionCountryPrefix: 「「国名」にある」接頭辞の除去', () => {
   it('先頭の「「国名」にある」を取り除く', () => {
     expect(stripHeritageQuestionCountryPrefix('「イタリア」にある「モンテ・サン・ジョルジョ」の「見どころ」について説明してください'))
@@ -100,7 +106,7 @@ describe('lookupHeritageTopicModelCache: 国名接頭辞つき質問文でもツ
     const target = bareQuestion('タージ・マハル', TOPIC);
     const { db } = makeRecordingDb({
       rowsFor: (_sql, params) =>
-        params.includes(target) ? [{ id: 'share-abc', question: target }] : [],
+        params.includes(needle('タージ・マハル')) ? [{ id: 'share-abc', question: target }] : [],
     });
     const { cached, error } = await lookupHeritageTopicModelCache(db, 'user1', heritages, TOPIC, MODEL);
     expect(error).toBeUndefined();
@@ -141,12 +147,10 @@ describe('lookupHeritageTopicModelCache: 国名接頭辞つき質問文でもツ
 
   it('一部チャンクが失敗してもerrorを返しつつ成功分(接頭辞つき含む)は残る', async () => {
     const heritages = Array.from({ length: 200 }, (_, i) => 'H' + i);
-    const poison = bareQuestion('H199', TOPIC);
-    const okTarget = bareQuestion('H0', TOPIC);
     const stored = prefixedQuestion('日本', 'H0', TOPIC);
     const { db } = makeRecordingDb({
-      throwIf: (_sql, params) => params.includes(poison),
-      rowsFor: (_sql, params) => (params.includes(okTarget) ? [{ id: 'share-0', question: stored }] : []),
+      throwIf: (_sql, params) => params.includes(needle('H199')),
+      rowsFor: (_sql, params) => (params.includes(needle('H0')) ? [{ id: 'share-0', question: stored }] : []),
     });
     const { cached, error } = await lookupHeritageTopicModelCache(db, 'user1', heritages, TOPIC, MODEL);
     expect(error).toBe('partial_query_failure');
