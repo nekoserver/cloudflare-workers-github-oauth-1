@@ -669,6 +669,26 @@ export function getAiChatPage(user: {
     }
     .chat-send-btn:disabled { opacity: 0.5; cursor: not-allowed; }
     .chat-send-btn:not(:disabled):hover { opacity: 0.85; }
+    .chat-attach-btn {
+      width: 40px; height: 40px; flex-shrink: 0; border-radius: 8px; border: 1px solid var(--border-color);
+      background: var(--card-bg); color: var(--text-secondary); font-size: 20px; font-weight: 600; line-height: 1;
+      cursor: pointer; display: flex; align-items: center; justify-content: center; transition: background 0.15s, color 0.15s;
+    }
+    .chat-attach-btn:hover { background: var(--bg-secondary); color: var(--text-primary); }
+    .chat-attach-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .chat-image-preview-row { display: flex; align-items: center; gap: 8px; margin: 0 0 8px; }
+    .chat-image-preview-thumb { position: relative; display: inline-flex; }
+    .chat-image-preview-thumb img {
+      width: 56px; height: 56px; object-fit: cover; border-radius: 8px; border: 1px solid var(--border-color); display: block;
+    }
+    .chat-image-preview-remove {
+      position: absolute; top: -6px; right: -6px; width: 18px; height: 18px; border-radius: 50%;
+      background: var(--color-error, #cf222e); color: #fff; border: none; font-size: 11px; line-height: 1;
+      cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 0;
+    }
+    .chat-bubble-image {
+      max-width: 220px; max-height: 220px; border-radius: 8px; display: block; margin-bottom: 6px; object-fit: cover;
+    }
   </style>
 </head>
 <body>
@@ -797,7 +817,15 @@ export function getAiChatPage(user: {
     <div class="chat-wrapper">
       <div class="chat-log" id="chatLog"></div>
       <div class="chat-form-area">
+        <div class="chat-image-preview-row" id="chatImagePreviewRow" style="display:none;">
+          <div class="chat-image-preview-thumb">
+            <img id="chatImagePreviewImg" src="" alt="添付画像プレビュー">
+            <button type="button" class="chat-image-preview-remove" id="chatImagePreviewRemove" title="添付を取り消す">✕</button>
+          </div>
+        </div>
         <form class="chat-form" id="chatForm">
+          <button type="button" class="chat-attach-btn" id="chatAttachBtn" title="写真を送る">＋</button>
+          <input type="file" id="chatImageInput" accept="image/*" style="display:none;">
           <textarea class="chat-input" id="chatInput" placeholder="メッセージを入力... (Ctrl+Enter または Shift+Enter で送信)" rows="1"></textarea>
           <button type="submit" class="chat-send-btn" id="chatSendBtn">送信</button>
         </form>
@@ -4967,6 +4995,12 @@ export function getAiChatPage(user: {
     var chatForm = document.getElementById('chatForm');
     var chatInput = document.getElementById('chatInput');
     var chatSendBtn = document.getElementById('chatSendBtn');
+    var chatAttachBtn = document.getElementById('chatAttachBtn');
+    var chatImageInput = document.getElementById('chatImageInput');
+    var chatImagePreviewRow = document.getElementById('chatImagePreviewRow');
+    var chatImagePreviewImg = document.getElementById('chatImagePreviewImg');
+    var chatImagePreviewRemove = document.getElementById('chatImagePreviewRemove');
+    var pendingImageDataUrl = null;
 
     chatInput.addEventListener('input', function() {
       chatInput.style.height = 'auto';
@@ -4978,6 +5012,45 @@ export function getAiChatPage(user: {
         if (!chatSendBtn.disabled) chatForm.dispatchEvent(new Event('submit'));
       }
     });
+
+    // ===== 写真添付(＋ボタン) =====
+    var MAX_IMAGE_FILE_BYTES = 6 * 1024 * 1024;
+    var ALLOWED_IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'];
+    function validateAttachedImageFile(file) {
+      if (!file) return '画像が選択されていません';
+      if (ALLOWED_IMAGE_TYPES.indexOf(file.type) === -1) return '対応していない画像形式です(png/jpeg/webp/gifのみ)';
+      if (file.size > MAX_IMAGE_FILE_BYTES) return '画像サイズが大きすぎます(上限6MB)';
+      return null;
+    }
+    function clearAttachedImage() {
+      pendingImageDataUrl = null;
+      chatImageInput.value = '';
+      chatImagePreviewImg.src = '';
+      chatImagePreviewRow.style.display = 'none';
+    }
+    chatAttachBtn.addEventListener('click', function() { chatImageInput.click(); });
+    chatImageInput.addEventListener('change', function() {
+      var file = this.files && this.files[0];
+      if (!file) return;
+      var err = validateAttachedImageFile(file);
+      if (err) {
+        appendBubble(err, 'error');
+        chatImageInput.value = '';
+        return;
+      }
+      var reader = new FileReader();
+      reader.onload = function(e) {
+        pendingImageDataUrl = e.target.result;
+        chatImagePreviewImg.src = pendingImageDataUrl;
+        chatImagePreviewRow.style.display = 'flex';
+      };
+      reader.onerror = function() {
+        appendBubble('画像の読み込みに失敗しました', 'error');
+        chatImageInput.value = '';
+      };
+      reader.readAsDataURL(file);
+    });
+    chatImagePreviewRemove.addEventListener('click', function() { clearAttachedImage(); });
 
     function extractRespUsage(data) {
       return {
@@ -5023,7 +5096,7 @@ export function getAiChatPage(user: {
       return el;
     }
 
-    function appendBubble(text, role, model, isFallback, usage) {
+    function appendBubble(text, role, model, isFallback, usage, imageDataUrl) {
       var el;
       if (role === 'assistant') {
         el = buildAssistantBubble(text, model, isFallback, usage);
@@ -5042,7 +5115,17 @@ export function getAiChatPage(user: {
       } else {
         el = document.createElement('div');
         el.className = 'chat-bubble ' + role;
-        el.textContent = text;
+        if (imageDataUrl) {
+          var bubbleImg = document.createElement('img');
+          bubbleImg.className = 'chat-bubble-image';
+          bubbleImg.src = imageDataUrl;
+          el.appendChild(bubbleImg);
+        }
+        if (text) {
+          var textEl = document.createElement('div');
+          textEl.textContent = text;
+          el.appendChild(textEl);
+        }
       }
       chatLog.appendChild(el);
       chatLog.scrollTop = chatLog.scrollHeight;
@@ -5201,17 +5284,21 @@ export function getAiChatPage(user: {
     chatForm.addEventListener('submit', function(e) {
       e.preventDefault();
       var msg = chatInput.value.trim();
-      if (!msg) return;
-      appendBubble(msg, 'user');
+      var attachedImage = pendingImageDataUrl;
+      if (!msg && !attachedImage) return;
+      appendBubble(msg, 'user', null, null, null, attachedImage);
       chatInput.value = '';
       chatInput.style.height = 'auto';
+      clearAttachedImage();
       chatSendBtn.disabled = true;
       var currentMsg = msg;
       var thinking = appendBubble('考え中...', 'thinking');
+      var payload = { message: msg, model: lastModel, systemPromptMode: langModeSelect.value, source: 'textbox' };
+      if (attachedImage) payload.image = attachedImage;
       fetch('/api/aichat', {
         method: 'POST', credentials: 'same-origin',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: msg, model: lastModel, systemPromptMode: langModeSelect.value, source: 'textbox' })
+        body: JSON.stringify(payload)
       })
         .then(function(res) { return res.json(); })
         .then(function(data) {

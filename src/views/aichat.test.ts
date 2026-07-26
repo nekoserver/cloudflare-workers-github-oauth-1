@@ -1375,7 +1375,7 @@ describe('ナビバー モデル選択ドロップダウン', () => {
     const src = readFileSync(resolve(__dirname, '..', 'index.ts'), 'utf-8');
     const idx = src.indexOf("app.post('/api/aichat'");
     expect(idx).toBeGreaterThan(-1);
-    const fn = src.slice(idx, idx + 1500);
+    const fn = src.slice(idx, idx + 1900);
     expect(fn).toContain('body.model');
   });
 
@@ -2024,7 +2024,7 @@ describe('AIチャット応答の自動保存（auto-save to ai_chat_shares）',
     const src = readFileSync(resolve(__dirname, '..', 'index.ts'), 'utf-8');
     const idx = src.indexOf("app.post('/api/aichat'");
     expect(idx).toBeGreaterThan(-1);
-    const fn = src.slice(idx, idx + 5000);
+    const fn = src.slice(idx, idx + 5400);
     expect(fn).toContain('shareId');
   });
 

@@ -85,6 +85,7 @@ import { buildAiMessages, ALLOWED_MODES, type SystemPromptMode } from './utils/b
 import { stripThinkTags } from './utils/stripThinkTags';
 import { interpretAichatSlashCommand, type CommitAgentLogRow } from './utils/aichatSlashCommand';
 import { AICHAT_MODEL_MAX_TOKENS, getModelRunParams, assignModelColors } from './utils/aichatModelConfig';
+import { validateImageDataUrl, attachImageToLastUserMessage, resolveAichatModelsForRequest } from './utils/aichatImage';
 import { extractFunctionSource } from './utils/extractFunctionSource';
 import { listD1Databases, getD1Tables } from './utils/cloudflareApi';
 import { validateRevokeRequest } from './utils/revoke';
@@ -3655,15 +3656,22 @@ const AICHAT_ALLOWED_MODELS = new Set([
 
 app.post('/api/aichat', authMiddleware, async (c) => {
   const user = c.get('user');
-  let body: { message?: string; model?: string; systemPromptMode?: string; source?: string };
+  let body: { message?: string; model?: string; systemPromptMode?: string; source?: string; image?: string };
   try {
     body = await c.req.json();
   } catch {
     return jsonUtf8({ error: 'リクエスト形式が不正です' }, 400);
   }
-  const message = (body.message ?? '').trim();
-  if (!message) {
+  let message = (body.message ?? '').trim();
+  const image = (body.image ?? '').trim();
+  if (!message && !image) {
     return jsonUtf8({ error: 'メッセージが空です' }, 400);
+  }
+  if (image) {
+    const imageValidation = validateImageDataUrl(image);
+    if (!imageValidation.ok) {
+      return jsonUtf8({ error: imageValidation.reason }, 400);
+    }
   }
   const rawMode = (body.systemPromptMode ?? '').trim();
   const systemPromptMode: SystemPromptMode = (ALLOWED_MODES.has(rawMode) ? rawMode : 'a') as SystemPromptMode;
@@ -3687,19 +3695,28 @@ app.post('/api/aichat', authMiddleware, async (c) => {
   if (await checkAiChatRateLimit(c.env.DB, user.sub)) {
     return jsonUtf8({ error: 'リクエストが多すぎます。しばらく待ってから再試行してください。' }, 429);
   }
+  if (!message) {
+    message = '添付した画像について説明してください。';
+  }
   const requestedModel = (body.model ?? '').trim();
   const configuredModel = (c.env.AI_CHAT_MODEL ?? '').trim();
-  const fallbackModel = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
-  const primaryModel = (requestedModel && AICHAT_ALLOWED_MODELS.has(requestedModel))
-    ? requestedModel
-    : (configuredModel || fallbackModel);
+  const textFallbackModel = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
+  const { primaryModel, fallbackModel } = resolveAichatModelsForRequest({
+    requestedModel,
+    hasImage: !!image,
+    allowedModels: AICHAT_ALLOWED_MODELS,
+    configuredModel,
+    textFallbackModel,
+  });
   const rawSource = (body.source ?? '').trim();
   const source = rawSource === 'textbox' ? 'textbox' : 'api';
 
   type AiUsage = { input_tokens: number | null; output_tokens: number | null; total_tokens: number | null };
   const runAi = async (model: string): Promise<{ text: string; usage: AiUsage }> => {
     const maxTokens = AICHAT_MODEL_MAX_TOKENS[model] ?? 4096;
-    const baseParams = { messages: buildAiMessages(message, systemPromptMode), max_tokens: maxTokens };
+    const textMessages = buildAiMessages(message, systemPromptMode);
+    const messages = image ? attachImageToLastUserMessage(textMessages, image) : textMessages;
+    const baseParams = { messages, max_tokens: maxTokens };
     const runParams = getModelRunParams(model, baseParams);
     const result = await c.env.AI!.run(
       model as Parameters<typeof c.env.AI.run>[0],
