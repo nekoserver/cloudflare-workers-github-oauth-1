@@ -44,6 +44,12 @@ function loadShowMarkerTooltip(html: string, heritage: any[], visible: boolean) 
     openHeritageMitokoroCacheModal: () => {},
     flyTo: (lat: number, lon: number) => flyToCalls.push({ lat, lon }),
   };
+  // showMarkerTooltip は帯状シリアル資産(pts)の情報行を heritagePolylineInfoHtml で
+  // 差し込むため、その依存も実装から抽出して同じスコープに載せる。
+  const polylineSrc =
+    extractFn(html, 'heritagePolylineTotalKm', 'pts') + '\n' +
+    extractFn(html, 'heritagePolylineInfoHtml', 'd') + '\n' +
+    extractFn(html, 'haversineKm', 'la1, lo1, la2, lo2');
   const fn = new Function(
     'ctx',
     `
@@ -54,6 +60,7 @@ function loadShowMarkerTooltip(html: string, heritage: any[], visible: boolean) 
         positionTooltip = ctx.positionTooltip, startLanding = ctx.startLanding,
         openHeritageMitokoroCacheModal = ctx.openHeritageMitokoroCacheModal, flyTo = ctx.flyTo;
     var activeIdx = -1;
+    ${polylineSrc}
     ${src}
     return { showMarkerTooltip: showMarkerTooltip, getActiveIdx: function() { return activeIdx; } };
     `

@@ -853,6 +853,53 @@ void main() {
     return out;
   }
 
+  // 帯状・線状のシリアル資産(pts を持つ世界遺産)を、国境マスクと同じ
+  // 等距円筒図法キャンバスに折れ線として描く。活断層ページが LINE_STRIP で
+  // 断層線を引くのと同じ考え方だが、このページの地球儀はマスクテクスチャを
+  // 球面に合成する方式なのでキャンバスへの stroke で実現する。
+  // 国境ハイライトの有無に関わらず常に描くため、マスク再描画のたびに呼ぶ。
+  var HERITAGE_POLYLINES = [];
+
+  // pts の隣接点間距離を積算して帯の全長を返す。
+  function heritagePolylineTotalKm(pts) {
+    var total = 0;
+    for (var i = 1; i < pts.length; i++) {
+      total += haversineKm(pts[i-1][0], pts[i-1][1], pts[i][0], pts[i][1]);
+    }
+    return total;
+  }
+
+  // 帯状資産のツールチップに「構成資産数 / 全長」の1行を足す。
+  function heritagePolylineInfoHtml(d) {
+    if (!d.pts || d.pts.length < 2) return '';
+    var km = heritagePolylineTotalKm(d.pts);
+    return '<div class="tt-sub" style="color:#58a6ff">📏 ' + d.pts.length + '地点を結ぶ帯状資産  全長 約' + km.toFixed(0) + ' km</div>';
+  }
+
+  function drawHeritagePolylines(W, H) {
+    if (!HERITAGE_POLYLINES.length) return;
+    HERITAGE_POLYLINES.forEach(function(h) {
+      [-1, 0, 1].forEach(function(rep) {
+        maskCtx.beginPath();
+        h.pts.forEach(function(pt, idx) {
+          var xy = equirectXY(pt[1] + rep * 360, pt[0], W, H);
+          if (idx === 0) maskCtx.moveTo(xy[0], xy[1]); else maskCtx.lineTo(xy[0], xy[1]);
+        });
+        maskCtx.lineWidth = 1.4;
+        maskCtx.strokeStyle = 'rgba(88,166,255,0.95)';
+        maskCtx.stroke();
+        // 構成資産の位置が線上で分かるよう、各点に小さな結節点を打つ。
+        h.pts.forEach(function(pt) {
+          var xy = equirectXY(pt[1] + rep * 360, pt[0], W, H);
+          maskCtx.beginPath();
+          maskCtx.arc(xy[0], xy[1], 1.1, 0, Math.PI * 2);
+          maskCtx.fillStyle = 'rgba(255,224,64,0.98)';
+          maskCtx.fill();
+        });
+      });
+    });
+  }
+
   var borderCc = null, borderMode = 'both';
   function drawCountryBorderMask(cc, mode) {
     if (!maskCtx) return;
@@ -883,6 +930,7 @@ void main() {
         });
       });
     }
+    drawHeritagePolylines(W, H);
     gl.activeTexture(gl.TEXTURE1);
     gl.bindTexture(gl.TEXTURE_2D, texMask);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, maskCanvas);
@@ -1725,9 +1773,15 @@ void main() {
 
   var RAIL_LINES = ${JSON.stringify(RAIL_LINES)};
 
+  // pts を持つ帯状・線状のシリアル資産のみ抽出しておき、マスク再描画時に折れ線で描く。
+  HERITAGE_POLYLINES = HERITAGE.filter(function(h) { return h.pts && h.pts.length >= 2; });
+
   var COUNTRY_BORDERS = ${JSON.stringify(COUNTRY_BORDERS)};
   var COUNTRY_BORDERS_BY_CC = {};
   COUNTRY_BORDERS.forEach(function(b) { COUNTRY_BORDERS_BY_CC[b.cc] = b; });
+
+  // 国を選択していない初期状態でも折れ線が見えるよう、起動時に一度マスクを描く。
+  drawCountryBorderMask(null, borderMode);
 
   var F1_CIRCUITS = ${JSON.stringify(F1_CIRCUITS)};
 
@@ -4347,7 +4401,7 @@ void main() {
     var llamaShareId = heritageMitokoroLlamaShareId[d.n];
     var gemmaIcon = gemmaShareId ? ' <span id="tt-mitokoro-gemma-btn" style="cursor:pointer;" title="見どころ(gemma-4-26b-a4b-it)の説明を表示">👀</span>' : '';
     var llamaIcon = llamaShareId ? ' <span id="tt-mitokoro-llama-btn" style="cursor:pointer;" title="見どころ(llama-3.3-70b-instruct-fp8-fast)の説明を表示">👁️</span>' : '';
-    tooltip.innerHTML = '<div class="tt-name">' + d.e + ' ' + d.f + ' ' + d.n + cityIcon + gemmaIcon + llamaIcon + '</div><div class="tt-sub"><span style="color:' + col + ';font-weight:600">' + d.t + '</span>  ' + d.c + '  ' + formatRegistrationYearLabel(d) + '</div><div style="margin-top:7px;text-align:center;"><button id="tt-land-btn" style="background:#0c2d1a;border:1px solid #3fb950;border-radius:6px;color:#3fb950;font-size:11px;padding:4px 12px;cursor:pointer;font-family:inherit;">🚶 地表に降り立つ</button></div>';
+    tooltip.innerHTML = '<div class="tt-name">' + d.e + ' ' + d.f + ' ' + d.n + cityIcon + gemmaIcon + llamaIcon + '</div><div class="tt-sub"><span style="color:' + col + ';font-weight:600">' + d.t + '</span>  ' + d.c + '  ' + formatRegistrationYearLabel(d) + '</div>' + heritagePolylineInfoHtml(d) + '<div style="margin-top:7px;text-align:center;"><button id="tt-land-btn" style="background:#0c2d1a;border:1px solid #3fb950;border-radius:6px;color:#3fb950;font-size:11px;padding:4px 12px;cursor:pointer;font-family:inherit;">🚶 地表に降り立つ</button></div>';
     var landBtn = document.getElementById('tt-land-btn');
     if (landBtn) {
       (function(ci) {
@@ -4584,13 +4638,22 @@ void main() {
     });
     order.sort(function(a, b) { return b.mz - a.mz; });
 
+    // クエリ側だけを小文字化して比較対象を小文字化しないと、大文字ASCIIを含む
+    // 名称(「1944年ノルマンディーDデイ上陸作戦の海岸」「W・アルリ・パンジャリ複合
+    // 自然公園群」「D.F.ヴァウダ蒸気揚水機場」F1サーキット群など)が検索できない。
+    // 両辺を小文字化して大文字小文字を無視した部分一致で判定する。
     var q = searchText.toLowerCase();
     var visible = 0;
     var frag = document.createDocumentFragment();
     var hidden = [];
+    function matchesSearch(d) {
+      if (!q) return true;
+      return d.n.toLowerCase().indexOf(q) >= 0 ||
+             d.c.toLowerCase().indexOf(q) >= 0 ||
+             d.t.toLowerCase().indexOf(q) >= 0;
+    }
     order.forEach(function(item) {
-      var d = HERITAGE[item.i];
-      var show = !q || d.n.indexOf(q) >= 0 || d.c.indexOf(q) >= 0 || d.t.indexOf(q) >= 0;
+      var show = matchesSearch(HERITAGE[item.i]);
       if (show) { frag.appendChild(listItemEls[item.i]); visible++; }
       else { hidden.push(listItemEls[item.i]); }
     });
@@ -4599,9 +4662,7 @@ void main() {
 
     // Toggle visibility
     order.forEach(function(item) {
-      var d = HERITAGE[item.i];
-      var show = !q || d.n.indexOf(q) >= 0 || d.c.indexOf(q) >= 0 || d.t.indexOf(q) >= 0;
-      listItemEls[item.i].style.display = show ? '' : 'none';
+      listItemEls[item.i].style.display = matchesSearch(HERITAGE[item.i]) ? '' : 'none';
     });
 
     // Highlight active
