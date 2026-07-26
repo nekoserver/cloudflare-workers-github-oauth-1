@@ -225,6 +225,10 @@ canvas:active { cursor:grabbing; }
 .cities-modal-head { padding:12px 16px; border-bottom:1px solid #21262d; display:flex; align-items:center; gap:8px; flex-shrink:0; }
 .cities-modal-title { font-size:14px; font-weight:700; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .cities-modal-close { background:none; border:none; color:#8b949e; font-size:18px; cursor:pointer; padding:2px 6px; line-height:1; }
+.cities-modal-search { background:#0d1117; border:1px solid #30363d; border-radius:6px; color:#c9d1d9; font-size:11px; padding:4px 8px; width:150px; flex-shrink:0; font-family:inherit; }
+.cities-modal-search::placeholder { color:#6e7681; }
+.cities-modal-search:focus { outline:none; border-color:#388bfd; }
+@media (max-width:480px) { .cities-modal-search { width:104px; } }
 .cities-modal-body { overflow-y:auto; padding:10px 16px 14px; }
 .cities-modal-row { display:flex; align-items:center; gap:8px; padding:5px 0; border-bottom:1px solid #21262d; font-size:12px; }
 .cities-modal-row:last-child { border-bottom:none; }
@@ -611,6 +615,7 @@ void main() {
     <div class="cities-modal-head">
       <span class="cities-modal-title">🌇 近隣都市データ 国別集計</span>
       <span id="city-stats-badge" style="background:#0c2d1a;color:#3fb950;font-size:11px;padding:2px 8px;border-radius:10px;font-weight:600;"></span>
+      <input type="text" id="city-stats-search" class="cities-modal-search" placeholder="🔍 国旗・国名" autocomplete="off">
       <button class="cities-modal-close" id="city-stats-close">✕</button>
     </div>
     <div class="cities-modal-body" id="city-stats-body"></div>
@@ -4205,6 +4210,25 @@ void main() {
   var cityStatsOverlay = document.getElementById('city-stats-overlay');
   var cityStatsBody = document.getElementById('city-stats-body');
   var cityStatsBadge = document.getElementById('city-stats-badge');
+  var cityStatsSearch = document.getElementById('city-stats-search');
+
+  // 国旗・国名(日本語)・国コードのいずれかでの部分一致で行を絞り込む。
+  // 各行の data-search には「国旗 国コード 日本語国名」を小文字化して埋めてあるため、
+  // 正規表現を使わず indexOf の部分一致だけで判定できる。
+  function applyCityStatsFilter() {
+    var q = cityStatsSearch.value.trim().toLowerCase();
+    var visible = 0;
+    cityStatsBody.querySelectorAll('.city-stats-row').forEach(function(row) {
+      var key = row.getAttribute('data-search') || '';
+      var show = !q || key.indexOf(q) !== -1;
+      row.style.display = show ? '' : 'none';
+      if (show) visible++;
+    });
+    var noHit = document.getElementById('city-stats-no-hit');
+    if (noHit) noHit.style.display = (visible === 0) ? '' : 'none';
+  }
+  cityStatsSearch.addEventListener('input', applyCityStatsFilter);
+
   document.getElementById('city-stats-close').addEventListener('click', function() {
     cityStatsOverlay.classList.remove('open');
   });
@@ -4215,6 +4239,7 @@ void main() {
   document.getElementById('btnCityStats').addEventListener('click', function() {
     cityStatsBody.innerHTML = '<div style="color:#8b949e;text-align:center;padding:20px">読み込み中...</div>';
     cityStatsBadge.textContent = '';
+    cityStatsSearch.value = '';
     cityStatsOverlay.classList.add('open');
     fetch('/api/heritage-country-stats')
       .then(function(r){ return r.json(); })
@@ -4233,7 +4258,9 @@ void main() {
           var flag = ccToFlag(r.country_code);
           var barW = Math.round(r.heritage_count / max * 100);
           var cc = r.country_code;
-          html += '<div class="cities-modal-row" style="padding:3px 0">' +
+          var jp = ccToJp(cc);
+          var searchKey = escClientHtml((flag + ' ' + cc + ' ' + jp).toLowerCase());
+          html += '<div class="cities-modal-row city-stats-row" data-search="' + searchKey + '" title="' + escClientHtml(jp) + '" style="padding:3px 0">' +
             '<button class="city-stats-row-btn" data-cc="' + cc + '">' +
               '<span class="cities-modal-flag">' + flag + '</span>' +
               '<span style="color:#8b949e;font-size:10px;min-width:28px">' + cc + '</span>' +
@@ -4244,10 +4271,13 @@ void main() {
             '</button>' +
             '</div>';
         });
+        html += '<div id="city-stats-no-hit" style="display:none;color:#8b949e;text-align:center;padding:20px;font-size:12px">該当する国が見つかりません</div>';
         cityStatsBody.innerHTML = html;
         cityStatsBody.querySelectorAll('.city-stats-row-btn').forEach(function(btn) {
           btn.addEventListener('click', function() { showCountryHeritagePanel(btn.getAttribute('data-cc')); });
         });
+        // 再描画のたびに現在の検索語を適用し直す(モーダル再オープン時の取りこぼし防止)。
+        applyCityStatsFilter();
       })
       .catch(function() {
         cityStatsBody.innerHTML = '<div style="color:#8b949e;text-align:center;padding:20px">取得エラー</div>';
