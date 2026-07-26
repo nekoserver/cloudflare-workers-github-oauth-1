@@ -14,6 +14,12 @@ import { HERITAGE_LIST } from './data/heritageList';
 //     ピュイローラン・ケリビュス・テルムの8要塞からなるシリアル資産。
 //     カルカソンヌは1997年登録の別資産として既に登録済みで座標が重複するため、
 //     代表点は最も象徴的な構成資産ペイルペルテューズ城を採用した。
+//   - フランス: 「1944年ノルマンディーDデイ上陸作戦の海岸」
+//     ユタ・オマハ・ゴールド・ジュノー・ソードの5海岸に加え、ポワント・デュ・オック、
+//     ロング・シュル・メールの独軍砲台、アロマンシュ＝レ＝バンのマルベリー人工港跡、
+//     関連する軍人墓地・記念碑からなる約80kmの帯状シリアル資産。
+//     代表点は約80kmのほぼ中央に位置し構成資産(マルベリー人工港跡)でもある
+//     アロマンシュ＝レ＝バンを採用した。
 //
 // 故障シナリオ:
 //   (1) 2026年登録として登録されない（登録年の取り違え）
@@ -24,6 +30,7 @@ import { HERITAGE_LIST } from './data/heritageList';
 describe('HERITAGE_LIST — 2026年登録のイタリア・フランスの世界遺産', () => {
   const italy = HERITAGE_LIST.find((h) => h.n.includes('コンドミニオ劇場'));
   const france = HERITAGE_LIST.find((h) => h.n.includes('カペー王家要塞'));
+  const dday = HERITAGE_LIST.find((h) => h.n.includes('Dデイ'));
 
   it('イタリア: 中部イタリアのコンドミニオ劇場システムが2026年文化遺産として登録されている', () => {
     expect(italy).toBeDefined();
@@ -63,9 +70,36 @@ describe('HERITAGE_LIST — 2026年登録のイタリア・フランスの世界
     expect(france!.lon).toBeLessThan(10);
   });
 
-  it('両件に登録日(md=07-26)が設定されている', () => {
+  it('フランス: 1944年ノルマンディーDデイ上陸作戦の海岸が2026年文化遺産として登録されている', () => {
+    expect(dday).toBeDefined();
+    expect(dday!.n).toBe('1944年ノルマンディーDデイ上陸作戦の海岸');
+    expect(dday!.f).toBe('🇫🇷');
+    expect(dday!.c).toBe('フランス');
+    expect(dday!.t).toBe('文化遺産');
+    expect(dday!.y).toBe(2026);
+  });
+
+  it('フランス: Dデイの代表点がノルマンディー沿岸のアロマンシュ＝レ＝バン周辺である', () => {
+    expect(dday!.lat).toBeCloseTo(49.34, 1);
+    expect(dday!.lon).toBeCloseTo(-0.62, 1);
+    // ノルマンディーの上陸海岸帯は北緯49.2〜49.5度、西経0.2〜1.2度に収まる
+    expect(dday!.lat).toBeGreaterThan(49.2);
+    expect(dday!.lat).toBeLessThan(49.5);
+    expect(dday!.lon).toBeGreaterThan(-1.2);
+    expect(dday!.lon).toBeLessThan(-0.2);
+  });
+
+  it('3件すべてに登録日(md=07-26)が設定されている', () => {
     expect(italy!.md).toBe('07-26');
     expect(france!.md).toBe('07-26');
+    expect(dday!.md).toBe('07-26');
+  });
+
+  it('2026-07-26登録の3件が揃っている', () => {
+    const sameDay = HERITAGE_LIST.filter((h) => h.y === 2026 && h.md === '07-26');
+    expect(sameDay).toHaveLength(3);
+    expect(sameDay.filter((h) => h.f === '🇫🇷')).toHaveLength(2);
+    expect(sameDay.filter((h) => h.f === '🇮🇹')).toHaveLength(1);
   });
 
   it('1997年登録のカルカソンヌ歴史的城塞都市と重複していない(別資産として共存)', () => {
