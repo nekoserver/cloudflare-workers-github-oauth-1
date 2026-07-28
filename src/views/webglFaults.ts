@@ -32,7 +32,7 @@ canvas:active { cursor:grabbing; }
 .tt-name { font-weight:700; font-size:13px; margin-bottom:3px; }
 .tt-type { font-size:11px; margin-bottom:2px; }
 .tt-desc { font-size:11px; color:#8b949e; }
-.side { background:#0d1117; border-left:1px solid #30363d; display:flex; flex-direction:column; overflow:hidden; }
+.side { background:#0d1117; border-left:1px solid #30363d; display:flex; flex-direction:column; overflow:hidden; z-index:110; }
 .panel-tabs { display:flex; border-bottom:1px solid #21262d; flex-shrink:0; }
 .panel-tab { flex:1; padding:8px 4px; font-size:11px; font-weight:600; color:#484f58; background:none; border:none; border-bottom:2px solid transparent; cursor:pointer; transition:color .15s,border-color .15s; }
 .panel-tab:hover { color:#8b949e; }
@@ -114,7 +114,7 @@ canvas:active { cursor:grabbing; }
 .vol-tt-close:hover { color:#e6edf3; }
 .vol-tt-sub { font-size:11px; color:#8b949e; }
 #box-select-overlay { position:absolute; border:2px dashed rgba(100,200,255,0.85); background:rgba(100,200,255,0.06); pointer-events:none; display:none; z-index:60; }
-.area-tour-drawer { position:absolute; left:0; top:0; height:100%; width:260px; background:#0d1117; border-right:1px solid #30363d; z-index:45; display:flex; flex-direction:column; transform:translateX(-100%); transition:transform .25s ease; overflow:hidden; box-shadow:4px 0 20px rgba(0,0,0,0); }
+.area-tour-drawer { position:absolute; left:0; top:0; height:100%; width:260px; background:#0d1117; border-right:1px solid #30363d; z-index:110; display:flex; flex-direction:column; transform:translateX(-100%); transition:transform .25s ease; overflow:hidden; box-shadow:4px 0 20px rgba(0,0,0,0); }
 .area-tour-drawer.open { transform:translateX(0); box-shadow:4px 0 20px rgba(0,0,0,.5); }
 .area-tour-hdr { display:flex; align-items:center; gap:8px; padding:10px 12px 9px; border-bottom:1px solid #30363d; flex-shrink:0; background:#0d1117; }
 .area-tour-title { flex:1; font-size:13px; font-weight:700; color:#ff9500; min-width:0; }
@@ -146,7 +146,7 @@ canvas:active { cursor:grabbing; }
 .gvtt-name { font-weight:600; color:#e6edf3; flex-shrink:0; }
 .gvtt-act { color:#8b949e; font-size:10px; overflow:hidden; text-overflow:ellipsis; }
 .gvtt-hot { color:#ff9500; }
-.airport-drawer { position:absolute; left:0; top:0; height:100%; width:290px; background:#0d1117; border-right:1px solid #30363d; z-index:20; display:flex; flex-direction:column; transform:translateX(-100%); transition:transform .25s ease; overflow:hidden; box-shadow:4px 0 20px rgba(0,0,0,0); }
+.airport-drawer { position:absolute; left:0; top:0; height:100%; width:290px; background:#0d1117; border-right:1px solid #30363d; z-index:110; display:flex; flex-direction:column; transform:translateX(-100%); transition:transform .25s ease; overflow:hidden; box-shadow:4px 0 20px rgba(0,0,0,0); }
 .airport-drawer.open { transform:translateX(0); box-shadow:4px 0 20px rgba(0,0,0,.5); }
 .apt-hdr { display:flex; align-items:center; padding:10px 12px 9px; border-bottom:1px solid #30363d; flex-shrink:0; background:#0d1117; }
 .apt-hdr-title { flex:1; font-size:13px; font-weight:700; color:#58a6ff; }
@@ -173,7 +173,7 @@ canvas:active { cursor:grabbing; }
 .apt-item.clickable { cursor:pointer; transition:background .1s; }
 .apt-item.clickable:hover { background:#161b22; }
 .apt-mk { position:absolute; transform:translate(-50%,-50%); font-size:14px; line-height:1; pointer-events:auto; cursor:pointer; user-select:none; -webkit-user-select:none; filter:drop-shadow(0 1px 3px rgba(0,0,0,0.9)); display:none; }
-#apt-tooltip { position:fixed; background:rgba(13,17,23,0.97); border:1px solid #58a6ff; border-radius:8px; padding:8px 13px; font-size:12px; color:#e6edf3; min-width:200px; max-width:290px; pointer-events:auto; opacity:0; transition:opacity .15s; z-index:70; line-height:1.8; cursor:move; user-select:none; -webkit-user-select:none; }
+#apt-tooltip { position:fixed; background:rgba(13,17,23,0.97); border:1px solid #58a6ff; border-radius:8px; padding:8px 13px; font-size:12px; color:#e6edf3; min-width:200px; max-width:290px; pointer-events:auto; opacity:0; transition:opacity .15s; z-index:115; line-height:1.8; cursor:move; user-select:none; -webkit-user-select:none; }
 .apt-tt-hdr { display:flex; align-items:flex-start; gap:6px; margin-bottom:5px; }
 .apt-tt-name { flex:1; font-weight:700; font-size:13px; color:#58a6ff; cursor:pointer; text-decoration:none; }
 .apt-tt-name:hover { color:#79c0ff; }
@@ -2205,7 +2205,7 @@ void main() {
   function showAreaMenu() {
     if (!areaMenuEl) {
       areaMenuEl = document.createElement('div');
-      areaMenuEl.style.cssText = 'position:absolute;right:10px;top:50%;transform:translateY(-50%);background:rgba(13,17,23,0.93);border:1px solid #30363d;border-radius:9px;padding:10px 12px;z-index:55;min-width:130px;box-shadow:0 4px 16px rgba(0,0,0,0.6);';
+      areaMenuEl.style.cssText = 'position:absolute;right:10px;top:50%;transform:translateY(-50%);background:rgba(13,17,23,0.93);border:1px solid #30363d;border-radius:9px;padding:10px 12px;z-index:110;min-width:130px;box-shadow:0 4px 16px rgba(0,0,0,0.6);';
       wrap.appendChild(areaMenuEl);
     }
     var vols = getVolsInBounds();
