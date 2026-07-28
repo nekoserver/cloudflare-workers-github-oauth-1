@@ -70,7 +70,7 @@ canvas:active { cursor:grabbing; }
 .type-badge.divergent  { background:#0c1f2d; color:#58d5ff; }
 .type-badge.rift       { background:#2d2500; color:#e3b341; }
 .type-badge.thrust     { background:#1f0c2d; color:#d2a8ff; }
-.canvas-ctrl-btns { position:absolute; top:10px; right:10px; display:flex; flex-direction:row; gap:6px; z-index:5; flex-wrap:wrap; justify-content:flex-end; max-width:60%; }
+.canvas-ctrl-btns { position:absolute; top:10px; right:10px; display:flex; flex-direction:row; gap:6px; z-index:110; flex-wrap:wrap; justify-content:flex-end; max-width:60%; }
 .canvas-ctrl-btn { background:rgba(13,17,23,0.88); border:1px solid #30363d; border-radius:6px; color:#e6edf3; font-size:12px; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; padding:6px 12px; cursor:pointer; white-space:nowrap; transition:background .15s,border-color .15s,color .15s; }
 .canvas-ctrl-btn:hover { background:rgba(13,17,23,1); border-color:#f78166; }
 .canvas-ctrl-btn.active { background:#2d1a0c; border-color:#f78166; color:#f78166; }
@@ -2252,7 +2252,8 @@ void main() {
     if (volTtDragging) return;
     if (boxDragging) { bxCur=e.clientX; byCur=e.clientY; updateBoxOverlay(); return; }
     if(!drag)return;
-    var dy=(e.clientX-lx)*0.008, dx=(e.clientY-ly)*0.008;
+    var dragSens=0.008*(zoom/3.2);
+    var dy=(e.clientX-lx)*dragSens, dx=(e.clientY-ly)*dragSens;
     rotYv+=dy; velY=velY*0.4+dy*0.6;
     if(!axisLocked){rotXv=clampElev(rotXv+dx); velX=velX*0.4+dx*0.6;}
     lx=e.clientX; ly=e.clientY;
@@ -2275,7 +2276,8 @@ void main() {
     e.preventDefault(); touchMoved=true;
     if(e.touches.length===1&&boxDragging){ bxCur=e.touches[0].clientX; byCur=e.touches[0].clientY; updateBoxOverlay(); return; }
     if(e.touches.length===1&&drag){
-      var dy=(e.touches[0].clientX-lx)*0.008, dx=(e.touches[0].clientY-ly)*0.008;
+      var dragSens=0.008*(zoom/3.2);
+      var dy=(e.touches[0].clientX-lx)*dragSens, dx=(e.touches[0].clientY-ly)*dragSens;
       rotYv+=dy; velY=velY*0.4+dy*0.6;
       if(!axisLocked){rotXv=clampElev(rotXv+dx); velX=velX*0.4+dx*0.6;}
       lx=e.touches[0].clientX;ly=e.touches[0].clientY;
