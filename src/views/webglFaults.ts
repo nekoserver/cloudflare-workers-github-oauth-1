@@ -104,7 +104,7 @@ canvas:active { cursor:grabbing; }
 #fault-tooltip.pinned { pointer-events:auto; transform:none; }
 .fault-tt-hdr { display:flex; align-items:center; justify-content:space-between; cursor:move; padding:5px 10px 3px; border-bottom:1px solid #30363d; user-select:none; }
 .fault-tt-name { font-weight:700; font-size:13px; color:#58a6ff; flex:1; cursor:pointer; text-decoration:none; }
-.fault-tt-close { font-size:14px; color:#8b949e; cursor:pointer; line-height:1; padding:10px; margin:-10px -8px -10px 0; flex-shrink:0; display:inline-flex; align-items:center; justify-content:center; }
+.fault-tt-close { font-size:14px; color:#8b949e; cursor:pointer; line-height:1; padding:15px; margin:-6px -8px -6px 0; flex-shrink:0; display:inline-flex; align-items:center; justify-content:center; }
 .fault-tt-close:hover { color:#e6edf3; }
 .fault-tt-body { padding:4px 12px 8px; }
 .vol-tt-hdr { display:flex; align-items:center; justify-content:space-between; padding:9px 13px 8px; border-bottom:1px solid #30363d; }
@@ -2230,7 +2230,7 @@ void main() {
       lastBoxBounds = { latMin: Math.min(c0.lat, c1.lat), latMax: Math.max(c0.lat, c1.lat), lonMin: lonCross ? lonA : Math.min(lonA, lonB), lonMax: lonCross ? lonB : Math.max(lonA, lonB), lonCross: lonCross };
     }
     var fraction = Math.min(bw / rect.width, bh / rect.height);
-    var newZoom = Math.max(1.4, zoom * fraction);
+    var newZoom = Math.max(1.2, zoom * fraction);
     stopAreaTour();
     if (areaMenuEl) areaMenuEl.style.display = 'none';
     flyToLatLon(lat, lon, 800, function() {
@@ -2257,7 +2257,7 @@ void main() {
     if(!axisLocked){rotXv=clampElev(rotXv+dx); velX=velX*0.4+dx*0.6;}
     lx=e.clientX; ly=e.clientY;
   });
-  canvas.addEventListener('wheel', function(e) { e.preventDefault(); zoomTarget=Math.max(1.4,Math.min(20,zoomTarget+e.deltaY*0.006)); }, {passive:false});
+  canvas.addEventListener('wheel', function(e) { e.preventDefault(); zoomTarget=Math.max(1.2,Math.min(20,zoomTarget+e.deltaY*0.006)); }, {passive:false});
   canvas.addEventListener('dblclick', function() {
     autoRot=!autoRot;
     btnAutoRot.textContent=autoRot?'⏸ 自転停止':'▶ 回転';
@@ -2282,7 +2282,7 @@ void main() {
     }
     if(e.touches.length===2){
       var d=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);
-      zoomTarget=Math.max(1.4,Math.min(20,zoomTarget-(d-pinch0)*0.008));pinch0=d;
+      zoomTarget=Math.max(1.2,Math.min(20,zoomTarget-(d-pinch0)*0.008));pinch0=d;
     }
   }, {passive:false});
   canvas.addEventListener('touchend', function(e) {
