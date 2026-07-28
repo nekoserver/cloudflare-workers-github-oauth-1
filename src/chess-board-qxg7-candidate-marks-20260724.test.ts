@@ -119,7 +119,7 @@ describe('render(): marksは最終手数(次の一手を検討する局面)で�
   it('QXG7_CANDIDATESを選択し最後まで進めると、e3・f6にsq-markが表示される', () => {
     const html = getChessTsumePage();
     bootPage(html);
-    const select = document.getElementById('kifu-select') as HTMLSelectElement;
+    const select = document.getElementById('kifu-select') as unknown as HTMLSelectElement;
     select.value = CHESS_QXG7_CANDIDATES_ID;
     select.dispatchEvent(new Event('change'));
 
@@ -132,7 +132,7 @@ describe('render(): marksは最終手数(次の一手を検討する局面)で�
   it('同じプリセットでも最終手数より前(例: 1手目)ではまだmarksを表示しない', () => {
     const html = getChessTsumePage();
     bootPage(html);
-    const select = document.getElementById('kifu-select') as HTMLSelectElement;
+    const select = document.getElementById('kifu-select') as unknown as HTMLSelectElement;
     select.value = CHESS_QXG7_CANDIDATES_ID;
     select.dispatchEvent(new Event('change'));
 
@@ -146,7 +146,7 @@ describe('render(): marksは最終手数(次の一手を検討する局面)で�
   it('別のプリセット(17手詰め)に切り替えるとmarksが残らない', () => {
     const html = getChessTsumePage();
     bootPage(html);
-    const select = document.getElementById('kifu-select') as HTMLSelectElement;
+    const select = document.getElementById('kifu-select') as unknown as HTMLSelectElement;
     select.value = CHESS_QXG7_CANDIDATES_ID;
     select.dispatchEvent(new Event('change'));
     (document.getElementById('btn-last') as HTMLButtonElement).click();

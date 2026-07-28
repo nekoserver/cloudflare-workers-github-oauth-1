@@ -17,7 +17,6 @@ export const DEFAULT_AICHAT_MODELS: Array<{value: string; label: string}> = [
 export function getAiChatPage(user: {
   name?: string;
   username: string;
-  avatar?: string;
   aiChatModel: string;
   aiChatModelConfigured?: boolean;
   fallbackModel?: string;

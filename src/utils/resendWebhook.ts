@@ -76,7 +76,7 @@ async function computeSignatureBase64(secret: string, payload: string): Promise<
   const keyBytes = decodeWebhookSecret(secret);
   const key = await crypto.subtle.importKey(
     'raw',
-    keyBytes,
+    keyBytes as BufferSource,
     { name: 'HMAC', hash: 'SHA-256' },
     false,
     ['sign']

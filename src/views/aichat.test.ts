@@ -1106,7 +1106,7 @@ describe('AIチャット: サブクエリを持つ質問一覧', () => {
 
 describe('renderLinkedQuestions — 過去ログモーダル連携', () => {
   it('renderLinkedQuestions 内の質問セルに data-share-id が付与される', () => {
-    const html = getAiChatPage(minimalUser, []);
+    const html = getAiChatPage(minimalUser);
     const idx = html.indexOf('function renderLinkedQuestions(');
     expect(idx).toBeGreaterThan(-1);
     const fn = html.slice(idx, idx + 4000);
@@ -1114,7 +1114,7 @@ describe('renderLinkedQuestions — 過去ログモーダル連携', () => {
   });
 
   it('renderLinkedQuestions のクリックハンドラが openHistoryModalByShareId を呼ぶ', () => {
-    const html = getAiChatPage(minimalUser, []);
+    const html = getAiChatPage(minimalUser);
     const idx = html.indexOf('function renderLinkedQuestions(');
     expect(idx).toBeGreaterThan(-1);
     const fn = html.slice(idx, idx + 3500);
@@ -1124,22 +1124,22 @@ describe('renderLinkedQuestions — 過去ログモーダル連携', () => {
 
 describe('サイドバー サブクエリ保有質問のハイライト', () => {
   it('CSS に .sidebar-result-item.has-subquery スタイルが存在する', () => {
-    const html = getAiChatPage(minimalUser, []);
+    const html = getAiChatPage(minimalUser);
     expect(html).toContain('.sidebar-result-item.has-subquery');
   });
 
   it('sidebarSubqueries 変数が HTML に存在する', () => {
-    const html = getAiChatPage(minimalUser, []);
+    const html = getAiChatPage(minimalUser);
     expect(html).toContain('sidebarSubqueries');
   });
 
   it('fetchSidebarSubqueries 関数が HTML に存在する', () => {
-    const html = getAiChatPage(minimalUser, []);
+    const html = getAiChatPage(minimalUser);
     expect(html).toContain('function fetchSidebarSubqueries(');
   });
 
   it('fetchSidebarSubqueries が /api/aichat/share-subquery-links/all を fetch する', () => {
-    const html = getAiChatPage(minimalUser, []);
+    const html = getAiChatPage(minimalUser);
     const idx = html.indexOf('function fetchSidebarSubqueries(');
     expect(idx).toBeGreaterThan(-1);
     const fn = html.slice(idx, idx + 600);
@@ -1147,7 +1147,7 @@ describe('サイドバー サブクエリ保有質問のハイライト', () => 
   });
 
   it('renderSidebarResults が has-subquery クラスを付与するコードを含む', () => {
-    const html = getAiChatPage(minimalUser, []);
+    const html = getAiChatPage(minimalUser);
     const idx = html.indexOf('function renderSidebarResults(');
     expect(idx).toBeGreaterThan(-1);
     const fn = html.slice(idx, idx + 1200);
@@ -1155,7 +1155,7 @@ describe('サイドバー サブクエリ保有質問のハイライト', () => 
   });
 
   it('doSearch が fetchSidebarSubqueries を呼ぶ', () => {
-    const html = getAiChatPage(minimalUser, []);
+    const html = getAiChatPage(minimalUser);
     const idx = html.indexOf('function doSearch(');
     expect(idx).toBeGreaterThan(-1);
     const fn = html.slice(idx, idx + 600);
@@ -1163,7 +1163,7 @@ describe('サイドバー サブクエリ保有質問のハイライト', () => 
   });
 
   it('addSubquerySubmit 成功後に sidebarSubqueries をリセットする', () => {
-    const html = getAiChatPage(minimalUser, []);
+    const html = getAiChatPage(minimalUser);
     const idx = html.indexOf('addSubquerySubmit.addEventListener(');
     expect(idx).toBeGreaterThan(-1);
     const fn = html.slice(idx, idx + 800);
@@ -1173,7 +1173,7 @@ describe('サイドバー サブクエリ保有質問のハイライト', () => 
 
 describe('サイドバー開時の自動日付ロード', () => {
   it('sidebarToggle クリックハンドラが doDateLoad を呼ぶ', () => {
-    const html = getAiChatPage(minimalUser, []);
+    const html = getAiChatPage(minimalUser);
     const idx = html.indexOf("sidebarToggle.addEventListener('click'");
     expect(idx).toBeGreaterThan(-1);
     const fn = html.slice(idx, idx + 1000);
@@ -1181,7 +1181,7 @@ describe('サイドバー開時の自動日付ロード', () => {
   });
 
   it('sidebarToggle クリックハンドラが calSelectedDay に当日をセットする', () => {
-    const html = getAiChatPage(minimalUser, []);
+    const html = getAiChatPage(minimalUser);
     const idx = html.indexOf("sidebarToggle.addEventListener('click'");
     expect(idx).toBeGreaterThan(-1);
     const fn = html.slice(idx, idx + 1000);
@@ -1189,7 +1189,7 @@ describe('サイドバー開時の自動日付ロード', () => {
   });
 
   it('doDateLoad が fetchSidebarSubqueries を呼ぶ', () => {
-    const html = getAiChatPage(minimalUser, []);
+    const html = getAiChatPage(minimalUser);
     const idx = html.indexOf('function doDateLoad(');
     expect(idx).toBeGreaterThan(-1);
     const fn = html.slice(idx, idx + 400);
@@ -1197,7 +1197,7 @@ describe('サイドバー開時の自動日付ロード', () => {
   });
 
   it('renderCalendar が cal-today クラスを付与する', () => {
-    const html = getAiChatPage(minimalUser, []);
+    const html = getAiChatPage(minimalUser);
     const idx = html.indexOf('function renderCalendar(');
     expect(idx).toBeGreaterThan(-1);
     const fn = html.slice(idx, idx + 3200);
@@ -1205,19 +1205,19 @@ describe('サイドバー開時の自動日付ロード', () => {
   });
 
   it('CSS に .cal-today スタイルが存在する', () => {
-    const html = getAiChatPage(minimalUser, []);
+    const html = getAiChatPage(minimalUser);
     expect(html).toContain('.cal-today');
   });
 });
 
 describe('appendShareBtn — 別タブで開くボタン', () => {
   it('chat-share-open-btn クラスが HTML に存在する', () => {
-    const html = getAiChatPage(minimalUser, []);
+    const html = getAiChatPage(minimalUser);
     expect(html).toContain('chat-share-open-btn');
   });
 
   it('appendAiResponseRow が window.open を呼ぶコードを含む', () => {
-    const html = getAiChatPage(minimalUser, []);
+    const html = getAiChatPage(minimalUser);
     const idx = html.indexOf('function appendAiResponseRow(');
     expect(idx).toBeGreaterThan(-1);
     const fn = html.slice(idx, idx + 3000);
@@ -1225,7 +1225,7 @@ describe('appendShareBtn — 別タブで開くボタン', () => {
   });
 
   it('appendAiResponseRow の window.open に _blank が含まれる', () => {
-    const html = getAiChatPage(minimalUser, []);
+    const html = getAiChatPage(minimalUser);
     const idx = html.indexOf('function appendAiResponseRow(');
     expect(idx).toBeGreaterThan(-1);
     const fn = html.slice(idx, idx + 3000);
@@ -1233,7 +1233,7 @@ describe('appendShareBtn — 別タブで開くボタン', () => {
   });
 
   it('appendAiResponseRow 内でコピーと開くの両方が同じ shareUrl を使う（cachedUrl 共有）', () => {
-    const html = getAiChatPage(minimalUser, []);
+    const html = getAiChatPage(minimalUser);
     const idx = html.indexOf('function appendAiResponseRow(');
     expect(idx).toBeGreaterThan(-1);
     const fn = html.slice(idx, idx + 3000);
@@ -1243,7 +1243,7 @@ describe('appendShareBtn — 別タブで開くボタン', () => {
 
 describe('appendShareBtn — 追加質問ボタン', () => {
   it('appendAiResponseRow 内に追加質問ボタン（＋）が存在する', () => {
-    const html = getAiChatPage(minimalUser, []);
+    const html = getAiChatPage(minimalUser);
     const idx = html.indexOf('function appendAiResponseRow(');
     expect(idx).toBeGreaterThan(-1);
     const fn = html.slice(idx, idx + 3000);
@@ -1251,7 +1251,7 @@ describe('appendShareBtn — 追加質問ボタン', () => {
   });
 
   it('追加質問ボタンクリック時に currentHistoryQuestion をセットする', () => {
-    const html = getAiChatPage(minimalUser, []);
+    const html = getAiChatPage(minimalUser);
     const idx = html.indexOf('function appendAiResponseRow(');
     expect(idx).toBeGreaterThan(-1);
     const fn = html.slice(idx, idx + 3000);
@@ -1259,7 +1259,7 @@ describe('appendShareBtn — 追加質問ボタン', () => {
   });
 
   it('追加質問ボタンクリック時に openAddSubqueryModal を呼ぶ', () => {
-    const html = getAiChatPage(minimalUser, []);
+    const html = getAiChatPage(minimalUser);
     const idx = html.indexOf('function appendAiResponseRow(');
     expect(idx).toBeGreaterThan(-1);
     const fn = html.slice(idx, idx + 3000);
@@ -1267,7 +1267,7 @@ describe('appendShareBtn — 追加質問ボタン', () => {
   });
 
   it('追加質問ボタンが リンクをコピー ボタンの前（左）に配置される', () => {
-    const html = getAiChatPage(minimalUser, []);
+    const html = getAiChatPage(minimalUser);
     const idx = html.indexOf('function appendAiResponseRow(');
     expect(idx).toBeGreaterThan(-1);
     const fn = html.slice(idx, idx + 3000);
@@ -1281,7 +1281,7 @@ describe('appendShareBtn — 追加質問ボタン', () => {
 
 describe('回答バブル コピーボタン', () => {
   it('buildAssistantBubble 関数に bubble-copy-btn クラスのボタンが含まれる', () => {
-    const html = getAiChatPage(minimalUser, []);
+    const html = getAiChatPage(minimalUser);
     const idx = html.indexOf('function buildAssistantBubble(');
     expect(idx).toBeGreaterThan(-1);
     const fn = html.slice(idx, idx + 3000);
@@ -1289,7 +1289,7 @@ describe('回答バブル コピーボタン', () => {
   });
 
   it('コピーボタンに navigator.clipboard.writeText が紐づいている', () => {
-    const html = getAiChatPage(minimalUser, []);
+    const html = getAiChatPage(minimalUser);
     const idx = html.indexOf('function buildAssistantBubble(');
     expect(idx).toBeGreaterThan(-1);
     const fn = html.slice(idx, idx + 3000);
@@ -1297,12 +1297,12 @@ describe('回答バブル コピーボタン', () => {
   });
 
   it('.bubble-copy-btn の CSS スタイルが存在する', () => {
-    const html = getAiChatPage(minimalUser, []);
+    const html = getAiChatPage(minimalUser);
     expect(html).toContain('.bubble-copy-btn');
   });
 
   it('コピーボタンは opacity:0 を持たず常時表示である', () => {
-    const html = getAiChatPage(minimalUser, []);
+    const html = getAiChatPage(minimalUser);
     const idx = html.indexOf('.bubble-copy-btn');
     expect(idx).toBeGreaterThan(-1);
     const snippet = html.slice(idx, idx + 300);
@@ -1311,7 +1311,7 @@ describe('回答バブル コピーボタン', () => {
   });
 
   it('コピーボタンは bottom / left で左下に配置される', () => {
-    const html = getAiChatPage(minimalUser, []);
+    const html = getAiChatPage(minimalUser);
     const idx = html.indexOf('.bubble-copy-btn');
     expect(idx).toBeGreaterThan(-1);
     const snippet = html.slice(idx, idx + 200);
@@ -1322,27 +1322,27 @@ describe('回答バブル コピーボタン', () => {
 
 describe('ナビバー モデル選択ドロップダウン', () => {
   it('modelSelect セレクト要素が HTML に存在する', () => {
-    const html = getAiChatPage(minimalUser, []);
+    const html = getAiChatPage(minimalUser);
     expect(html).toContain('id="modelSelect"');
   });
 
   it('navbar-model-select クラスが HTML に存在する', () => {
-    const html = getAiChatPage(minimalUser, []);
+    const html = getAiChatPage(minimalUser);
     expect(html).toContain('navbar-model-select');
   });
 
   it('モデルリストに llama-3.3-70b が含まれる', () => {
-    const html = getAiChatPage(minimalUser, []);
+    const html = getAiChatPage(minimalUser);
     expect(html).toContain('llama-3.3-70b');
   });
 
   it('モデルリストに llama-3.1-8b が含まれる', () => {
-    const html = getAiChatPage(minimalUser, []);
+    const html = getAiChatPage(minimalUser);
     expect(html).toContain('llama-3.1-8b');
   });
 
   it('modelSelect change イベントで lastModel を更新する', () => {
-    const html = getAiChatPage(minimalUser, []);
+    const html = getAiChatPage(minimalUser);
     const idx = html.indexOf("modelSelect.addEventListener('change'");
     expect(idx).toBeGreaterThan(-1);
     const fn = html.slice(idx, idx + 200);
@@ -1350,7 +1350,7 @@ describe('ナビバー モデル選択ドロップダウン', () => {
   });
 
   it('chatForm submit が model フィールドを送信する', () => {
-    const html = getAiChatPage(minimalUser, []);
+    const html = getAiChatPage(minimalUser);
     const idx = html.indexOf("chatForm.addEventListener('submit'");
     expect(idx).toBeGreaterThan(-1);
     const fn = html.slice(idx, idx + 700);
@@ -1358,7 +1358,7 @@ describe('ナビバー モデル選択ドロップダウン', () => {
   });
 
   it('CSS に .navbar-model-select スタイルが存在する', () => {
-    const html = getAiChatPage(minimalUser, []);
+    const html = getAiChatPage(minimalUser);
     expect(html).toContain('.navbar-model-select');
   });
 
@@ -1394,7 +1394,7 @@ describe('ナビバー モデル選択ドロップダウン', () => {
   });
 
   it('/neko コマンドの応答時はモデルラベルを表示しない（isLocalCommand なら model に null を渡す）', () => {
-    const html = getAiChatPage(minimalUser, []);
+    const html = getAiChatPage(minimalUser);
     const idx = html.indexOf("chatForm.addEventListener('submit'");
     expect(idx).toBeGreaterThan(-1);
     const fn = html.slice(idx, idx + 1600);
@@ -1403,7 +1403,7 @@ describe('ナビバー モデル選択ドロップダウン', () => {
   });
 
   it('/neko コマンドの応答時は応答バブル下の共有リンク行を表示しない（appendShareBtn を呼ばない）', () => {
-    const html = getAiChatPage(minimalUser, []);
+    const html = getAiChatPage(minimalUser);
     const idx = html.indexOf("chatForm.addEventListener('submit'");
     expect(idx).toBeGreaterThan(-1);
     const fn = html.slice(idx, idx + 1600);
@@ -1425,7 +1425,7 @@ describe('ナビバー モデル選択ドロップダウン', () => {
   });
 
   it('renderAiResultInModal も /neko コマンドの応答時は共有リンク行(appendAiResponseRow)を表示しない', () => {
-    const html = getAiChatPage(minimalUser, []);
+    const html = getAiChatPage(minimalUser);
     const idx = html.indexOf('function renderAiResultInModal(');
     expect(idx).toBeGreaterThan(-1);
     const fn = html.slice(idx, idx + 700);
@@ -1437,7 +1437,7 @@ describe('ナビバー モデル選択ドロップダウン', () => {
   });
 
   it('モデルオプションのラベルテキストに llama-3.3-70b-instruct-fp8-fast のフルネームが表示される', () => {
-    const html = getAiChatPage(minimalUser, []);
+    const html = getAiChatPage(minimalUser);
     expect(html).toContain('>llama-3.3-70b-instruct-fp8-fast<');
   });
 
@@ -1446,7 +1446,7 @@ describe('ナビバー モデル選択ドロップダウン', () => {
       username: 'testuser',
       aiChatModel: '@cf/meta/llama-3.3-70b-instruct-fp8-fast',
     };
-    const html = getAiChatPage(userWithLlama, []);
+    const html = getAiChatPage(userWithLlama);
     const idx = html.indexOf('@cf/meta/llama-3.3-70b-instruct-fp8-fast');
     expect(idx).toBeGreaterThan(-1);
     const snippet = html.slice(idx - 30, idx + 60);
@@ -1466,7 +1466,7 @@ describe('ナビバー モデル選択ドロップダウン', () => {
 
 describe('サブクエリ一覧モーダル：#カラム削除・追加質問総数表示・多い順ソート', () => {
   it('renderSubqueriesList に # カラムが含まれない', () => {
-    const html = getAiChatPage(minimalUser, []);
+    const html = getAiChatPage(minimalUser);
     const idx = html.indexOf('function renderSubqueriesList(');
     expect(idx).toBeGreaterThan(-1);
     const fn = html.slice(idx, idx + 600);
@@ -1474,7 +1474,7 @@ describe('サブクエリ一覧モーダル：#カラム削除・追加質問総
   });
 
   it('renderSubqueriesList に link_count カラムが含まれる', () => {
-    const html = getAiChatPage(minimalUser, []);
+    const html = getAiChatPage(minimalUser);
     const idx = html.indexOf('function renderSubqueriesList(');
     expect(idx).toBeGreaterThan(-1);
     const fn = html.slice(idx, idx + 4200);
@@ -1514,7 +1514,7 @@ describe('サブクエリ一覧モーダル：#カラム削除・追加質問総
 
 describe('サブクエリ一覧モーダル：追加質問カラム左端・キーワードバッジ', () => {
   it('renderSubqueriesList のテーブルヘッダーで 追加質問数 が サブクエリ列 より前にある', () => {
-    const html = getAiChatPage(minimalUser, []);
+    const html = getAiChatPage(minimalUser);
     const idx = html.indexOf('function renderSubqueriesList(');
     expect(idx).toBeGreaterThan(-1);
     const fn = html.slice(idx, idx + 2600);
@@ -1526,7 +1526,7 @@ describe('サブクエリ一覧モーダル：追加質問カラム左端・キ�
   });
 
   it('renderSubqueriesList がキーワードバッジを描画する', () => {
-    const html = getAiChatPage(minimalUser, []);
+    const html = getAiChatPage(minimalUser);
     const idx = html.indexOf('function renderSubqueriesList(');
     expect(idx).toBeGreaterThan(-1);
     const fn = html.slice(idx, idx + 3200);
@@ -1534,7 +1534,7 @@ describe('サブクエリ一覧モーダル：追加質問カラム左端・キ�
   });
 
   it('renderSubqueriesList のキーワードバッジが "keyword (N)" 形式', () => {
-    const html = getAiChatPage(minimalUser, []);
+    const html = getAiChatPage(minimalUser);
     const idx = html.indexOf('function renderSubqueriesList(');
     expect(idx).toBeGreaterThan(-1);
     const fn = html.slice(idx, idx + 3900);
@@ -1542,7 +1542,7 @@ describe('サブクエリ一覧モーダル：追加質問カラム左端・キ�
   });
 
   it('renderSubqueriesList のキーワード td がサブクエリ td の後に html += される', () => {
-    const html = getAiChatPage(minimalUser, []);
+    const html = getAiChatPage(minimalUser);
     const idx = html.indexOf('function renderSubqueriesList(');
     expect(idx).toBeGreaterThan(-1);
     const fn = html.slice(idx, idx + 4500);
@@ -1576,7 +1576,7 @@ describe('サブクエリ一覧モーダル：追加質問カラム左端・キ�
 
 describe('サイドバー：モデル名削除・新着/キーワードトグル・キーワードフィルタ', () => {
   it('renderSidebarResults の result-meta にモデル名テキスト表示コードが含まれない', () => {
-    const html = getAiChatPage(minimalUser, []);
+    const html = getAiChatPage(minimalUser);
     const idx = html.indexOf('function renderSidebarResults(');
     expect(idx).toBeGreaterThan(-1);
     const fn = html.slice(idx, idx + 1400);
@@ -1588,32 +1588,32 @@ describe('サイドバー：モデル名削除・新着/キーワードトグル
   });
 
   it('sidebarModeToggle 要素が HTML に存在する', () => {
-    const html = getAiChatPage(minimalUser, []);
+    const html = getAiChatPage(minimalUser);
     expect(html).toContain('sidebarModeToggle');
   });
 
   it('新着ボタン（sidebarModeNew）が HTML に存在する', () => {
-    const html = getAiChatPage(minimalUser, []);
+    const html = getAiChatPage(minimalUser);
     expect(html).toContain('sidebarModeNew');
   });
 
   it('キーワードボタン（sidebarModeKw）が HTML に存在する', () => {
-    const html = getAiChatPage(minimalUser, []);
+    const html = getAiChatPage(minimalUser);
     expect(html).toContain('sidebarModeKw');
   });
 
   it('sidebarKwModal 要素が HTML に存在する', () => {
-    const html = getAiChatPage(minimalUser, []);
+    const html = getAiChatPage(minimalUser);
     expect(html).toContain('sidebarKwModal');
   });
 
   it('doKeywordLoad 関数が HTML に存在する', () => {
-    const html = getAiChatPage(minimalUser, []);
+    const html = getAiChatPage(minimalUser);
     expect(html).toContain('function doKeywordLoad(');
   });
 
   it('doKeywordLoad が /api/aichat/shares/by-keyword を fetch する', () => {
-    const html = getAiChatPage(minimalUser, []);
+    const html = getAiChatPage(minimalUser);
     const idx = html.indexOf('function doKeywordLoad(');
     expect(idx).toBeGreaterThan(-1);
     const fn = html.slice(idx, idx + 600);
@@ -1621,12 +1621,12 @@ describe('サイドバー：モデル名削除・新着/キーワードトグル
   });
 
   it('openSidebarKeywordModal 関数が HTML に存在する', () => {
-    const html = getAiChatPage(minimalUser, []);
+    const html = getAiChatPage(minimalUser);
     expect(html).toContain('function openSidebarKeywordModal(');
   });
 
   it('openSidebarKeywordModal が /api/aichat/keywords/monthly を fetch する', () => {
-    const html = getAiChatPage(minimalUser, []);
+    const html = getAiChatPage(minimalUser);
     const idx = html.indexOf('function openSidebarKeywordModal(');
     expect(idx).toBeGreaterThan(-1);
     const fn = html.slice(idx, idx + 600);
@@ -1650,7 +1650,7 @@ describe('サイドバー：モデル名削除・新着/キーワードトグル
 
 describe('キーワードモーダル位置修正 — サイドバー外 fixed 配置', () => {
   it('sidebar-kw-modal の CSS が position: fixed を含む', () => {
-    const html = getAiChatPage(minimalUser, []);
+    const html = getAiChatPage(minimalUser);
     const cssIdx = html.indexOf('.sidebar-kw-modal');
     expect(cssIdx).toBeGreaterThan(-1);
     const css = html.slice(cssIdx, cssIdx + 200);
@@ -1658,7 +1658,7 @@ describe('キーワードモーダル位置修正 — サイドバー外 fixed �
   });
 
   it('sidebar-kw-modal の CSS が left: 260px を含む', () => {
-    const html = getAiChatPage(minimalUser, []);
+    const html = getAiChatPage(minimalUser);
     const cssIdx = html.indexOf('.sidebar-kw-modal');
     expect(cssIdx).toBeGreaterThan(-1);
     const css = html.slice(cssIdx, cssIdx + 200);
@@ -1666,7 +1666,7 @@ describe('キーワードモーダル位置修正 — サイドバー外 fixed �
   });
 
   it('sidebar-kw-modal の CSS が top: 44px を含む', () => {
-    const html = getAiChatPage(minimalUser, []);
+    const html = getAiChatPage(minimalUser);
     const cssIdx = html.indexOf('.sidebar-kw-modal');
     expect(cssIdx).toBeGreaterThan(-1);
     const css = html.slice(cssIdx, cssIdx + 200);
@@ -1674,14 +1674,14 @@ describe('キーワードモーダル位置修正 — サイドバー外 fixed �
   });
 
   it('sidebarKwModal HTML 要素がサイドバー div の外側にある', () => {
-    const html = getAiChatPage(minimalUser, []);
+    const html = getAiChatPage(minimalUser);
     const sidebarCloseIdx = html.indexOf('</div>', html.indexOf('<div class="sidebar"'));
     const kwModalIdx = html.indexOf('id="sidebarKwModal"');
     expect(kwModalIdx).toBeGreaterThan(sidebarCloseIdx);
   });
 
   it('fetchSidebarSubqueries が Promise を返す（return で始まる）', () => {
-    const html = getAiChatPage(minimalUser, []);
+    const html = getAiChatPage(minimalUser);
     const idx = html.indexOf('function fetchSidebarSubqueries(');
     expect(idx).toBeGreaterThan(-1);
     const fn = html.slice(idx, idx + 500);
@@ -1691,7 +1691,7 @@ describe('キーワードモーダル位置修正 — サイドバー外 fixed �
 
 describe('doDateLoad — △/◯件 フォーマット', () => {
   it('doDateLoad のステータスが △/◯件 形式を含む', () => {
-    const html = getAiChatPage(minimalUser, []);
+    const html = getAiChatPage(minimalUser);
     const idx = html.indexOf('function doDateLoad(');
     expect(idx).toBeGreaterThan(-1);
     const fn = html.slice(idx, idx + 800);
@@ -1699,7 +1699,7 @@ describe('doDateLoad — △/◯件 フォーマット', () => {
   });
 
   it('doDateLoad が Promise.all を使用する', () => {
-    const html = getAiChatPage(minimalUser, []);
+    const html = getAiChatPage(minimalUser);
     const idx = html.indexOf('function doDateLoad(');
     expect(idx).toBeGreaterThan(-1);
     const fn = html.slice(idx, idx + 800);
@@ -1707,7 +1707,7 @@ describe('doDateLoad — △/◯件 フォーマット', () => {
   });
 
   it('doDateLoad のステータスが / 区切りを含む', () => {
-    const html = getAiChatPage(minimalUser, []);
+    const html = getAiChatPage(minimalUser);
     const idx = html.indexOf('function doDateLoad(');
     expect(idx).toBeGreaterThan(-1);
     const fn = html.slice(idx, idx + 800);
@@ -1717,37 +1717,37 @@ describe('doDateLoad — △/◯件 フォーマット', () => {
 
 describe('キーワードモーダル：ソートトグル・件数表示・検索窓自動補完', () => {
   it('sidebarKwCount 要素が HTML に存在する', () => {
-    const html = getAiChatPage(minimalUser, []);
+    const html = getAiChatPage(minimalUser);
     expect(html).toContain('sidebarKwCount');
   });
 
   it('sidebarKwSortCount ボタンが HTML に存在する', () => {
-    const html = getAiChatPage(minimalUser, []);
+    const html = getAiChatPage(minimalUser);
     expect(html).toContain('sidebarKwSortCount');
   });
 
   it('sidebarKwSortAlpha ボタンが HTML に存在する', () => {
-    const html = getAiChatPage(minimalUser, []);
+    const html = getAiChatPage(minimalUser);
     expect(html).toContain('sidebarKwSortAlpha');
   });
 
   it('renderKwList 関数が HTML に存在する', () => {
-    const html = getAiChatPage(minimalUser, []);
+    const html = getAiChatPage(minimalUser);
     expect(html).toContain('function renderKwList(');
   });
 
   it('kwSortOrder 変数が HTML に存在する', () => {
-    const html = getAiChatPage(minimalUser, []);
+    const html = getAiChatPage(minimalUser);
     expect(html).toContain('kwSortOrder');
   });
 
   it('kwListCache 変数が HTML に存在する', () => {
-    const html = getAiChatPage(minimalUser, []);
+    const html = getAiChatPage(minimalUser);
     expect(html).toContain('kwListCache');
   });
 
   it('renderKwList が localeCompare でアルファベット順ソートを行う', () => {
-    const html = getAiChatPage(minimalUser, []);
+    const html = getAiChatPage(minimalUser);
     const idx = html.indexOf('function renderKwList(');
     expect(idx).toBeGreaterThan(-1);
     const fn = html.slice(idx, idx + 600);
@@ -1755,7 +1755,7 @@ describe('キーワードモーダル：ソートトグル・件数表示・検�
   });
 
   it('キーワードクリック時に sidebarKwModal.classList.remove を呼ばない（モーダルを閉じない）', () => {
-    const html = getAiChatPage(minimalUser, []);
+    const html = getAiChatPage(minimalUser);
     const idx = html.indexOf('function renderKwList(');
     expect(idx).toBeGreaterThan(-1);
     const fn = html.slice(idx, idx + 800);
@@ -1763,7 +1763,7 @@ describe('キーワードモーダル：ソートトグル・件数表示・検�
   });
 
   it('キーワードクリック時に sidebarSearch.value を設定する', () => {
-    const html = getAiChatPage(minimalUser, []);
+    const html = getAiChatPage(minimalUser);
     const idx = html.indexOf('function renderKwList(');
     expect(idx).toBeGreaterThan(-1);
     const fn = html.slice(idx, idx + 2200);
@@ -1771,7 +1771,7 @@ describe('キーワードモーダル：ソートトグル・件数表示・検�
   });
 
   it('doKeywordLoad が kwSortOrder alpha の場合に localeCompare でソートする', () => {
-    const html = getAiChatPage(minimalUser, []);
+    const html = getAiChatPage(minimalUser);
     const idx = html.indexOf('function doKeywordLoad(');
     expect(idx).toBeGreaterThan(-1);
     const fn = html.slice(idx, idx + 600);
@@ -1780,7 +1780,7 @@ describe('キーワードモーダル：ソートトグル・件数表示・検�
   });
 
   it('openSidebarKeywordModal が sidebarKwCount にキーワード件数を設定する', () => {
-    const html = getAiChatPage(minimalUser, []);
+    const html = getAiChatPage(minimalUser);
     const idx = html.indexOf('function openSidebarKeywordModal(');
     expect(idx).toBeGreaterThan(-1);
     const fn = html.slice(idx, idx + 800);
@@ -1788,19 +1788,19 @@ describe('キーワードモーダル：ソートトグル・件数表示・検�
   });
 
   it('sidebarKwSortCount のクリックイベントが HTML に存在する', () => {
-    const html = getAiChatPage(minimalUser, []);
+    const html = getAiChatPage(minimalUser);
     expect(html).toContain("sidebarKwSortCount.addEventListener(");
   });
 
   it('sidebarKwSortAlpha のクリックイベントが HTML に存在する', () => {
-    const html = getAiChatPage(minimalUser, []);
+    const html = getAiChatPage(minimalUser);
     expect(html).toContain("sidebarKwSortAlpha.addEventListener(");
   });
 });
 
 describe('キーワードモーダルクリック時にサイドバーが閉じない', () => {
   it('document click ハンドラが sidebarKwModal.contains チェックを含む', () => {
-    const html = getAiChatPage(minimalUser, []);
+    const html = getAiChatPage(minimalUser);
     const idx = html.indexOf("sidebarOpen && isTapCloseEnabled()");
     expect(idx).toBeGreaterThan(-1);
     const fn = html.slice(idx, idx + 300);
@@ -1808,7 +1808,7 @@ describe('キーワードモーダルクリック時にサイドバーが閉じ�
   });
 
   it('document click ハンドラが sidebarKwModal 内クリックではサイドバーを閉じない条件を持つ', () => {
-    const html = getAiChatPage(minimalUser, []);
+    const html = getAiChatPage(minimalUser);
     const idx = html.indexOf("sidebarOpen && isTapCloseEnabled()");
     expect(idx).toBeGreaterThan(-1);
     const fn = html.slice(idx, idx + 300);
@@ -1818,7 +1818,7 @@ describe('キーワードモーダルクリック時にサイドバーが閉じ�
 
 describe('新着/キーワードトグル修正・キーワードモーダル外タップ閉じ', () => {
   it('document click ハンドラがキーワードモーダルを外タップで閉じるロジックを含む', () => {
-    const html = getAiChatPage(minimalUser, []);
+    const html = getAiChatPage(minimalUser);
     const idx = html.indexOf("sidebarKwModal.classList.contains('open')");
     expect(idx).toBeGreaterThan(-1);
     const fn = html.slice(idx, idx + 200);
@@ -1826,7 +1826,7 @@ describe('新着/キーワードトグル修正・キーワードモーダル外
   });
 
   it('document click ハンドラがキーワードモーダルの外クリック判定を含む', () => {
-    const html = getAiChatPage(minimalUser, []);
+    const html = getAiChatPage(minimalUser);
     const idx = html.indexOf("sidebarKwModal.classList.contains('open')");
     expect(idx).toBeGreaterThan(-1);
     const fn = html.slice(idx, idx + 200);
@@ -1834,7 +1834,7 @@ describe('新着/キーワードトグル修正・キーワードモーダル外
   });
 
   it('新着ボタンクリック時にキーワードモーダルを閉じる', () => {
-    const html = getAiChatPage(minimalUser, []);
+    const html = getAiChatPage(minimalUser);
     const idx = html.indexOf("sidebarModeNew.addEventListener(");
     expect(idx).toBeGreaterThan(-1);
     const fn = html.slice(idx, idx + 300);
@@ -1842,7 +1842,7 @@ describe('新着/キーワードトグル修正・キーワードモーダル外
   });
 
   it('新着ボタンクリック時に currentDateLabel が空でも today にフォールバックする', () => {
-    const html = getAiChatPage(minimalUser, []);
+    const html = getAiChatPage(minimalUser);
     const idx = html.indexOf("sidebarModeNew.addEventListener(");
     expect(idx).toBeGreaterThan(-1);
     const fn = html.slice(idx, idx + 300);
@@ -1850,7 +1850,7 @@ describe('新着/キーワードトグル修正・キーワードモーダル外
   });
 
   it('closeSidebar がキーワードモーダルも閉じる', () => {
-    const html = getAiChatPage(minimalUser, []);
+    const html = getAiChatPage(minimalUser);
     const idx = html.indexOf('function closeSidebar(');
     expect(idx).toBeGreaterThan(-1);
     const fn = html.slice(idx, idx + 200);
@@ -1858,7 +1858,7 @@ describe('新着/キーワードトグル修正・キーワードモーダル外
   });
 
   it('キーワードトグルボタンがモーダルのトグル動作をする（open時に閉じる）', () => {
-    const html = getAiChatPage(minimalUser, []);
+    const html = getAiChatPage(minimalUser);
     const idx = html.indexOf("sidebarModeKw.addEventListener(");
     expect(idx).toBeGreaterThan(-1);
     const fn = html.slice(idx, idx + 200);
@@ -1868,32 +1868,32 @@ describe('新着/キーワードトグル修正・キーワードモーダル外
 
 describe('サブクエリ一覧モーダル：キーワードバッジクリックで質問一覧モーダル表示', () => {
   it('sqKwQuestionsOverlay が HTML に存在する', () => {
-    const html = getAiChatPage(minimalUser, []);
+    const html = getAiChatPage(minimalUser);
     expect(html).toContain('id="sqKwQuestionsOverlay"');
   });
 
   it('sqKwQuestionsTitle が HTML に存在する', () => {
-    const html = getAiChatPage(minimalUser, []);
+    const html = getAiChatPage(minimalUser);
     expect(html).toContain('id="sqKwQuestionsTitle"');
   });
 
   it('sqKwQuestionsClose が HTML に存在する', () => {
-    const html = getAiChatPage(minimalUser, []);
+    const html = getAiChatPage(minimalUser);
     expect(html).toContain('id="sqKwQuestionsClose"');
   });
 
   it('sqKwQuestionsBody が HTML に存在する', () => {
-    const html = getAiChatPage(minimalUser, []);
+    const html = getAiChatPage(minimalUser);
     expect(html).toContain('id="sqKwQuestionsBody"');
   });
 
   it('openSqKwQuestions 関数が存在する', () => {
-    const html = getAiChatPage(minimalUser, []);
+    const html = getAiChatPage(minimalUser);
     expect(html).toContain('function openSqKwQuestions(');
   });
 
   it('subqueriesListBody の sq-kw-badge クリックでイベント委譲ハンドラが動く', () => {
-    const html = getAiChatPage(minimalUser, []);
+    const html = getAiChatPage(minimalUser);
     const idx = html.indexOf("subqueriesListBody.addEventListener('click'");
     expect(idx).toBeGreaterThan(-1);
     const fn = html.slice(idx, idx + 300);
@@ -1901,7 +1901,7 @@ describe('サブクエリ一覧モーダル：キーワードバッジクリッ�
   });
 
   it('openSqKwQuestions が /api/aichat/subquery-keyword-questions を fetch する', () => {
-    const html = getAiChatPage(minimalUser, []);
+    const html = getAiChatPage(minimalUser);
     const idx = html.indexOf('function openSqKwQuestions(');
     expect(idx).toBeGreaterThan(-1);
     const fn = html.slice(idx, idx + 600);
@@ -1909,7 +1909,7 @@ describe('サブクエリ一覧モーダル：キーワードバッジクリッ�
   });
 
   it('openSqKwQuestions が subquery_id と keyword をクエリパラメータで渡す', () => {
-    const html = getAiChatPage(minimalUser, []);
+    const html = getAiChatPage(minimalUser);
     const idx = html.indexOf('function openSqKwQuestions(');
     expect(idx).toBeGreaterThan(-1);
     const fn = html.slice(idx, idx + 600);
@@ -1967,7 +1967,7 @@ describe('サブクエリ一覧モーダル：キーワードバッジクリッ�
 
 describe('サブクエリ一覧：質問一覧モーダルから過去ログモーダルを開く', () => {
   it('renderSqKwQuestionsResult が tr に data-share-id を付与する', () => {
-    const html = getAiChatPage(minimalUser, []);
+    const html = getAiChatPage(minimalUser);
     const idx = html.indexOf('function renderSqKwQuestionsResult(');
     expect(idx).toBeGreaterThan(-1);
     const fn = html.slice(idx, idx + 900);
@@ -1975,7 +1975,7 @@ describe('サブクエリ一覧：質問一覧モーダルから過去ログモ�
   });
 
   it('renderSqKwQuestionsResult の tr が cursor:pointer を持つ', () => {
-    const html = getAiChatPage(minimalUser, []);
+    const html = getAiChatPage(minimalUser);
     const idx = html.indexOf('function renderSqKwQuestionsResult(');
     expect(idx).toBeGreaterThan(-1);
     const fn = html.slice(idx, idx + 1100);
@@ -1983,7 +1983,7 @@ describe('サブクエリ一覧：質問一覧モーダルから過去ログモ�
   });
 
   it('sqKwQuestionsBody の click ハンドラが openHistoryModalByShareId を呼ぶ', () => {
-    const html = getAiChatPage(minimalUser, []);
+    const html = getAiChatPage(minimalUser);
     const idx = html.indexOf("sqKwQuestionsBody.addEventListener('click'");
     expect(idx).toBeGreaterThan(-1);
     const fn = html.slice(idx, idx + 400);
@@ -1991,7 +1991,7 @@ describe('サブクエリ一覧：質問一覧モーダルから過去ログモ�
   });
 
   it('sqKwQuestionsBody の click ハンドラが openHistoryModalByShareId を呼ぶ', () => {
-    const html = getAiChatPage(minimalUser, []);
+    const html = getAiChatPage(minimalUser);
     const idx = html.indexOf("sqKwQuestionsBody.addEventListener('click'");
     expect(idx).toBeGreaterThan(-1);
     const fn = html.slice(idx, idx + 400);
@@ -1999,7 +1999,7 @@ describe('サブクエリ一覧：質問一覧モーダルから過去ログモ�
   });
 
   it('closeHistoryModal が historyModalBackdrop の zIndex をリセットする', () => {
-    const html = getAiChatPage(minimalUser, []);
+    const html = getAiChatPage(minimalUser);
     const idx = html.indexOf('function closeHistoryModal(');
     expect(idx).toBeGreaterThan(-1);
     const fn = html.slice(idx, idx + 200);
@@ -2039,7 +2039,7 @@ describe('AIチャット応答の自動保存（auto-save to ai_chat_shares）',
   });
 
   it('appendAiResponseRow が shareId と userHash を引数に受け取る', () => {
-    const html = getAiChatPage(minimalUser, []);
+    const html = getAiChatPage(minimalUser);
     const idx = html.indexOf('function appendAiResponseRow(');
     expect(idx).toBeGreaterThan(-1);
     const fn = html.slice(idx, idx + 100);
@@ -2048,7 +2048,7 @@ describe('AIチャット応答の自動保存（auto-save to ai_chat_shares）',
   });
 
   it('appendAiResponseRow の getShareUrl が shareId 提供時に /api/aichat/share を呼ばない', () => {
-    const html = getAiChatPage(minimalUser, []);
+    const html = getAiChatPage(minimalUser);
     const idx = html.indexOf('function appendAiResponseRow(');
     expect(idx).toBeGreaterThan(-1);
     const fn = html.slice(idx, idx + 3000);
@@ -2060,7 +2060,7 @@ describe('AIチャット応答の自動保存（auto-save to ai_chat_shares）',
   });
 
   it('chatForm submit が data.shareId を appendShareBtn に渡す', () => {
-    const html = getAiChatPage(minimalUser, []);
+    const html = getAiChatPage(minimalUser);
     const idx = html.indexOf("chatForm.addEventListener('submit'");
     expect(idx).toBeGreaterThan(-1);
     const fn = html.slice(idx, idx + 1600);
@@ -2068,7 +2068,7 @@ describe('AIチャット応答の自動保存（auto-save to ai_chat_shares）',
   });
 
   it('chatForm submit が data.userHash を appendShareBtn に渡す', () => {
-    const html = getAiChatPage(minimalUser, []);
+    const html = getAiChatPage(minimalUser);
     const idx = html.indexOf("chatForm.addEventListener('submit'");
     expect(idx).toBeGreaterThan(-1);
     const fn = html.slice(idx, idx + 1600);
