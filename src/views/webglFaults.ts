@@ -1216,6 +1216,7 @@ void main() {
     if (_volTtMouseHandler) volTooltipEl.removeEventListener('mousedown', _volTtMouseHandler);
     if (_volTtTouchHandler) volTooltipEl.removeEventListener('touchstart', _volTtTouchHandler);
     _volTtMouseHandler = function(e) {
+      if (boxZoomMode) return;
       if (e.target && (e.target.id === 'volTtClose' || e.target.className === 'vol-tt-name')) return;
       var rc = volTooltipEl.getBoundingClientRect();
       volTtDragging = true;
@@ -1225,6 +1226,7 @@ void main() {
       e.stopPropagation();
     };
     _volTtTouchHandler = function(e) {
+      if (boxZoomMode) return;
       if (e.target && (e.target.id === 'volTtClose' || e.target.className === 'vol-tt-name')) return;
       var rc = volTooltipEl.getBoundingClientRect();
       volTtDragging = true;
@@ -1479,6 +1481,7 @@ void main() {
     if (_faultTtMouseHandler) faultTooltipEl.removeEventListener('mousedown', _faultTtMouseHandler);
     if (_faultTtTouchHandler) faultTooltipEl.removeEventListener('touchstart', _faultTtTouchHandler);
     _faultTtMouseHandler = function(ev) {
+      if (boxZoomMode) return;
       if (ev.target && (ev.target.id === 'faultTtClose' || ev.target.className === 'fault-tt-name')) return;
       var r = faultTooltipEl.getBoundingClientRect();
       faultTtDragging = true;
@@ -1488,6 +1491,7 @@ void main() {
       ev.stopPropagation();
     };
     _faultTtTouchHandler = function(ev) {
+      if (boxZoomMode) return;
       if (ev.target && (ev.target.id === 'faultTtClose' || ev.target.className === 'fault-tt-name')) return;
       var r = faultTooltipEl.getBoundingClientRect();
       faultTtDragging = true;
@@ -2081,6 +2085,10 @@ void main() {
     btnBoxZoom.classList.toggle('active', boxZoomMode);
     btnBoxZoom.textContent = boxZoomMode ? '🔲 選択中…' : '🔲 エリアズーム';
     canvas.style.cursor = boxZoomMode ? 'crosshair' : '';
+    // エリア選択中はツールチップがドラッグ操作を奪ってしまわないよう、
+    // ポインタイベントを透過させてキャンバスの矩形選択に届くようにする。
+    faultTooltipEl.style.pointerEvents = boxZoomMode ? 'none' : '';
+    volTooltipEl.style.pointerEvents = boxZoomMode ? 'none' : '';
   });
 
   function updateBoxOverlay() {
@@ -2277,7 +2285,6 @@ void main() {
     var prog = document.getElementById('areaTourProg');
     if (prog) prog.textContent = '';
     if (completed) {
-      zoomTarget = 3.2;
       lastBoxBounds = null;
       if (areaMenuEl) areaMenuEl.style.display = 'none';
       areaTourDrawer.classList.remove('open');
@@ -2293,6 +2300,20 @@ void main() {
     }
   }
 
+  function computeLonRange(lons) {
+    if (lons.length === 0) return null;
+    var sorted = lons.slice().sort(function(a, b) { return a - b; });
+    var maxGap = -1, gapIdx = 0;
+    for (var i = 0; i < sorted.length; i++) {
+      var next = i === sorted.length - 1 ? sorted[0] + 360 : sorted[i + 1];
+      var gap = next - sorted[i];
+      if (gap > maxGap) { maxGap = gap; gapIdx = i; }
+    }
+    var lonMin = sorted[(gapIdx + 1) % sorted.length];
+    var lonMax = sorted[gapIdx];
+    return { lonMin: lonMin, lonMax: lonMax, lonCross: lonMin > lonMax };
+  }
+
   function applyBoxZoom(ex, ey) {
     var rect = canvas.getBoundingClientRect();
     var cx_px = (bx0 + ex) / 2;
@@ -2304,13 +2325,30 @@ void main() {
     var ctr = screenToLatLon(cx_px, cy_px, rect);
     if (!ctr) return;
     var lat = ctr.lat, lon = ctr.lon;
-    var c0 = screenToLatLon(Math.min(bx0, ex), Math.min(by0, ey), rect);
-    var c1 = screenToLatLon(Math.max(bx0, ex), Math.max(by0, ey), rect);
-    if (c0 && c1) {
-      var lonA = c0.lon, lonB = c1.lon;
-      var lonCross = false;
-      if (lonA > lonB) { lonCross = true; }
-      lastBoxBounds = { latMin: Math.min(c0.lat, c1.lat), latMax: Math.max(c0.lat, c1.lat), lonMin: lonCross ? lonA : Math.min(lonA, lonB), lonMax: lonCross ? lonB : Math.max(lonA, lonB), lonCross: lonCross };
+    // 対角2点だけでなく矩形の辺上を細かくサンプリングして緯度経度範囲を求める。
+    // 球面への透視投影は選択矩形の内部で非線形に歪み、特に最大ズーム時は
+    // カメラが球面のごく近くにあるため画面端に近いほど歪みが急激に大きくなる。
+    // 対角2点のみでは矩形内の緯度経度の真の範囲を捉えられず、選択したはずの
+    // 火山が検出されない/範囲外の火山が誤って含まれる原因になっていたため、
+    // 辺上の複数点から真の範囲を求めるようにした。
+    var minX = Math.min(bx0, ex), maxX = Math.max(bx0, ex);
+    var minY = Math.min(by0, ey), maxY = Math.max(by0, ey);
+    var EDGE_STEPS = 8;
+    var latMin = Infinity, latMax = -Infinity, lons = [];
+    for (var si = 0; si <= EDGE_STEPS; si++) {
+      var fx = minX + (maxX - minX) * si / EDGE_STEPS;
+      var fy = minY + (maxY - minY) * si / EDGE_STEPS;
+      [[fx, minY], [fx, maxY], [minX, fy], [maxX, fy]].forEach(function(p) {
+        var c = screenToLatLon(p[0], p[1], rect);
+        if (!c) return;
+        if (c.lat < latMin) latMin = c.lat;
+        if (c.lat > latMax) latMax = c.lat;
+        lons.push(c.lon);
+      });
+    }
+    var lonRange = computeLonRange(lons);
+    if (latMin <= latMax && lonRange) {
+      lastBoxBounds = { latMin: latMin, latMax: latMax, lonMin: lonRange.lonMin, lonMax: lonRange.lonMax, lonCross: lonRange.lonCross };
     }
     var fraction = Math.min(bw / rect.width, bh / rect.height);
     var newZoom = Math.max(1.2, zoom * fraction);
