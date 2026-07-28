@@ -481,6 +481,7 @@ describe('toClientCommit', () => {
       authorAvatarUrl: 'https://example.com/a.png',
       date: '2026-05-18T10:00:00Z',
       url: 'https://github.com/o/r/commit/abc123',
+      isMerge: false,
     });
     expect(result.authoredDate).toBe('2026-05-18T10:00:00Z');
     expect(result.htmlUrl).toBe('https://github.com/o/r/commit/abc123');
@@ -495,6 +496,7 @@ describe('toClientCommit', () => {
       authorAvatarUrl: '',
       date: '',
       url: '',
+      isMerge: false,
     });
     expect(result.authoredDate).toBe('');
     expect(result.htmlUrl).toBe('');
@@ -509,6 +511,7 @@ describe('toClientCommit', () => {
       authorAvatarUrl: 'avatar',
       date: '2026-01-01T00:00:00Z',
       url: 'u',
+      isMerge: false,
     });
     expect(result).toEqual({
       sha: 's',

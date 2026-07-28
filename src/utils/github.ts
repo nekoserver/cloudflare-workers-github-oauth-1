@@ -221,7 +221,7 @@ export async function getGitHubUserRepos(params: { username?: string; accessToke
   let nextUrl: string | null = buildBaseUrl().toString();
 
   while (nextUrl) {
-    const response = await fetch(nextUrl, { headers });
+    const response: Response = await fetch(nextUrl, { headers });
     if (!response.ok) {
       throw new Error(`Failed to fetch GitHub repositories: ${response.status}`);
     }
@@ -544,7 +544,7 @@ export async function getGitHubInstallationRepos(
   let nextUrl: string | null = `https://api.github.com/user/installations/${installationId}/repositories?per_page=100`;
 
   while (nextUrl) {
-    const response = await fetch(nextUrl, {
+    const response: Response = await fetch(nextUrl, {
       headers: githubApiHeaders(accessToken),
     });
 
@@ -758,7 +758,7 @@ export async function getGitHubCommitsForStats(params: {
   const allCommits: GitHubCommitHistoryEntry[] = [];
 
   while (nextUrl && allCommits.length < maxCommits) {
-    const response = await fetch(nextUrl, { headers });
+    const response: Response = await fetch(nextUrl, { headers });
     if (!response.ok) {
       return { commits: allCommits, status: response.status };
     }
@@ -954,7 +954,7 @@ export async function getGitHubRepoCommitsByMonth(params: {
   let nextUrl: string | null = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/commits?since=${since.toISOString()}&until=${until.toISOString()}&per_page=100`;
 
   while (nextUrl) {
-    const response = await fetch(nextUrl, { headers });
+    const response: Response = await fetch(nextUrl, { headers });
     if (!response.ok) {
       break;
     }
@@ -967,6 +967,7 @@ export async function getGitHubRepoCommitsByMonth(params: {
         author?: { name?: string; date?: string };
       };
       author?: { login?: string; avatar_url?: string };
+      parents?: unknown[];
     }[]>();
     for (const c of commits) {
       const dateStr = c.commit?.author?.date;
@@ -987,6 +988,7 @@ export async function getGitHubRepoCommitsByMonth(params: {
           authorAvatarUrl: c.author?.avatar_url ?? '',
           date: dateStr,
           url: c.html_url ?? '',
+          isMerge: Array.isArray(c.parents) && c.parents.length >= 2,
         });
       }
     }
@@ -1008,6 +1010,7 @@ export interface CommitDetail {
   authorAvatarUrl: string;
   date: string;
   url: string;
+  isMerge: boolean;
 }
 
 /** コミット履歴モーダルが期待するクライアント表示用の形 */
@@ -1065,7 +1068,7 @@ export async function getGitHubRepoCommitsByDate(params: {
   let nextUrl: string | null = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/commits?since=${since.toISOString()}&until=${until.toISOString()}&per_page=100`;
 
   while (nextUrl) {
-    const response = await fetch(nextUrl, { headers });
+    const response: Response = await fetch(nextUrl, { headers });
     if (!response.ok) {
       break;
     }
@@ -1078,6 +1081,7 @@ export async function getGitHubRepoCommitsByDate(params: {
         author?: { name?: string; date?: string };
       };
       author?: { login?: string; avatar_url?: string };
+      parents?: unknown[];
     }[]>();
 
     for (const c of data) {
@@ -1094,6 +1098,7 @@ export async function getGitHubRepoCommitsByDate(params: {
         authorAvatarUrl: c.author?.avatar_url ?? '',
         date: authorDate,
         url: c.html_url ?? '',
+        isMerge: Array.isArray(c.parents) && c.parents.length >= 2,
       });
     }
 
@@ -1133,7 +1138,7 @@ export async function getGitHubRepoRecentCommits(params: {
   let nextUrl: string | null = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/commits?per_page=${perPage}${pageParam}`;
 
   while (nextUrl && commits.length < limit) {
-    const response = await fetch(nextUrl, { headers });
+    const response: Response = await fetch(nextUrl, { headers });
     if (!response.ok) {
       break;
     }
@@ -1146,6 +1151,7 @@ export async function getGitHubRepoRecentCommits(params: {
         author?: { name?: string; date?: string };
       };
       author?: { login?: string; avatar_url?: string };
+      parents?: unknown[];
     }[]>();
 
     for (const c of data) {
@@ -1158,6 +1164,7 @@ export async function getGitHubRepoRecentCommits(params: {
         authorAvatarUrl: c.author?.avatar_url ?? '',
         date: c.commit?.author?.date ?? '',
         url: c.html_url ?? '',
+        isMerge: Array.isArray(c.parents) && c.parents.length >= 2,
       });
     }
 

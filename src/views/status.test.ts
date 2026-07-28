@@ -19,6 +19,8 @@ const minimalData: CacheStatusData = {
   tableGroupMap: {},
   unclassifiedAutoDetectedTables: [],
   groupLabels: {},
+  groupColors: {},
+  tableFkPairs: [],
   userContext: { teamName: null, teamId: null, workspaceName: null, workspaceId: null, role: null, allWorkspaces: [] },
   pendingColumnMigrations: [],
 };

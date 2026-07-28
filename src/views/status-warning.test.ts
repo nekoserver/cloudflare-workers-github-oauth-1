@@ -14,6 +14,8 @@ const data: CacheStatusData = {
   tableGroupMap: { commit_agent_log: 'ai' },
   unclassifiedAutoDetectedTables: [],
   groupLabels: { ai: 'AI Summary' },
+  groupColors: {},
+  tableFkPairs: [],
   userContext: { teamName: null, teamId: null, workspaceName: null, workspaceId: null, role: null, allWorkspaces: [] },
   pendingColumnMigrations: [],
 };

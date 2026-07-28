@@ -104,7 +104,11 @@ const STATUS_TABLE_PREVIEW_LIMIT = 20;
 
 type SyncPolicy = 'auto' | 'manual' | 'readonly';
 
-type StatusTableDefinition = {
+function normalizeSyncPolicy(value: string): SyncPolicy {
+  return value === 'auto' || value === 'manual' || value === 'readonly' ? value : 'manual';
+}
+
+export type StatusTableDefinition = {
   name: string;
   migration: string;
   description: string;
@@ -117,7 +121,7 @@ type StatusQueryExample = {
   note: string;
 };
 
-const STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
+export const STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
   { name: 'user_sessions', migration: '0001', description: 'ユーザーセッション・設定', syncPolicy: 'auto' },
   { name: 'installation_permissions', migration: '0004', description: 'GitHub App インストール権限キャッシュ', syncPolicy: 'readonly' },
   { name: 'commit_calendar_cache', migration: '0005', description: 'コミットカレンダーキャッシュ', syncPolicy: 'auto' },
@@ -183,6 +187,8 @@ const STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
   { name: 'rail_line_stations',       migration: '0069',   description: '世界の鉄道路線サイドパネルの全駅データ（座標・国・国旗・順序）',    syncPolicy: 'manual' },
   { name: 'rail_station_nearby_points', migration: '0070', description: '駅から100km圏内の駅・世界遺産の距離キャッシュ',              syncPolicy: 'auto' },
   { name: 'rail_station_nearby_fetched', migration: '0070', description: '駅の近隣ポイント検索済みフラグ',                              syncPolicy: 'auto' },
+  { name: 'heritage_ai_question_masters', migration: '0065', description: 'AI質問トピックのマスタ（交通手段・見どころ等）',              syncPolicy: 'manual' },
+  { name: 'heritage_question_view_log', migration: '0066',   description: '世界遺産ページのAI質問閲覧ログ（トピック別）',                syncPolicy: 'auto' },
   { name: 'heritage_area_boxes',        migration: '0072',   description: '世界遺産ページの保存済みエリア範囲（テーブルA相当）',          syncPolicy: 'auto' },
   { name: 'heritage_area_items',        migration: '0073',   description: '保存済みエリア内の世界遺産・空港・駅・火山などの紐付け',      syncPolicy: 'auto' },
   { name: 'slack_installations',        migration: '0071',   description: 'Slack OAuthワークスペースインストール情報（botトークン等）',   syncPolicy: 'manual' },
@@ -193,13 +199,14 @@ const STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
   { name: 'unresolved_airport_keywords', migration: '0080',  description: 'heritage-areaページで国旗・座標が判明しなかった空港名キーワードの記録', syncPolicy: 'auto' },
   { name: 'unresolved_castle_keywords', migration: '0081',   description: 'heritage-areaページで国旗・座標が判明しなかった「(カタカナ)城」キーワードの記録', syncPolicy: 'auto' },
   { name: 'unresolved_station_keywords', migration: '0082',  description: 'heritage-areaページで国旗・座標が判明しなかった駅名キーワードの記録', syncPolicy: 'auto' },
+  { name: 'harness_hook_log',            migration: '0083',  description: 'Claude CodeのPostToolUseフック発火ログ（チェック名・結果フラグ・詳細）', syncPolicy: 'auto' },
 ];
 
 const REQUIRED_STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
   { name: 'commit_agent_log', migration: '0025', description: 'コミットエージェント検出ログ', syncPolicy: 'auto' },
 ];
 
-const STATUS_MIGRATION_SQL: Record<string, string> = {
+export const STATUS_MIGRATION_SQL: Record<string, string> = {
   '0001': `-- ユーザーセッション情報テーブル
 CREATE TABLE IF NOT EXISTS user_sessions (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -987,6 +994,32 @@ CREATE TABLE IF NOT EXISTS rail_station_nearby_fetched (
   point_count INTEGER DEFAULT 0
 );`,
 
+  '0072': `CREATE TABLE IF NOT EXISTS heritage_area_boxes (
+  area_seq INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id TEXT NOT NULL,
+  box TEXT NOT NULL DEFAULT 'box',
+  top_left_lat REAL NOT NULL,
+  top_left_lon REAL NOT NULL,
+  bottom_right_lat REAL NOT NULL,
+  bottom_right_lon REAL NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_heritage_area_boxes_user_created
+  ON heritage_area_boxes(user_id, created_at DESC);`,
+  '0073': `CREATE TABLE IF NOT EXISTS heritage_area_items (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  area_seq INTEGER NOT NULL,
+  category TEXT NOT NULL,
+  item_name TEXT NOT NULL,
+  lat REAL,
+  lon REAL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  FOREIGN KEY (area_seq) REFERENCES heritage_area_boxes(area_seq) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_heritage_area_items_area_seq
+  ON heritage_area_items(area_seq);
+CREATE INDEX IF NOT EXISTS idx_heritage_area_items_category
+  ON heritage_area_items(category, item_name);`,
   '0071': `CREATE TABLE IF NOT EXISTS slack_installations (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   team_id TEXT NOT NULL UNIQUE,
@@ -1000,8 +1033,6 @@ CREATE TABLE IF NOT EXISTS rail_station_nearby_fetched (
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_slack_installations_team_id ON slack_installations(team_id);`,
-
-  '0063': `ALTER TABLE ai_chat_shares ADD COLUMN source TEXT;`,
 
   '0062': `CREATE TABLE IF NOT EXISTS uuid_history (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1036,6 +1067,28 @@ CREATE TABLE IF NOT EXISTS heritage_city_fetched (
   ('@cf/zai-org/glm-5.2', '#f97316', 'glm-5.2'),
   ('@cf/ibm-granite/granite-4.0-h-micro', '#06b6d4', 'granite-4.0-h-micro');`,
 
+  '0065': `CREATE TABLE IF NOT EXISTS heritage_ai_question_masters (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  topic TEXT NOT NULL UNIQUE,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+INSERT OR IGNORE INTO heritage_ai_question_masters (topic) VALUES
+  ('交通手段'),
+  ('見どころ'),
+  ('最寄り空港'),
+  ('鉄道でのアクセス'),
+  ('宿泊施設'),
+  ('スポーツ施設');`,
+  '0066': `CREATE TABLE IF NOT EXISTS heritage_question_view_log (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id TEXT NOT NULL,
+  country_name TEXT,
+  heritage_name TEXT NOT NULL,
+  question_master_id INTEGER NOT NULL REFERENCES heritage_ai_question_masters(id),
+  searched_at TEXT NOT NULL DEFAULT (datetime('now')),
+  deleted_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_hqvl_user_heritage_qm ON heritage_question_view_log(user_id, heritage_name, question_master_id);`,
   '0067': `CREATE TABLE IF NOT EXISTS rail_station_cities (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   station_name TEXT NOT NULL,
@@ -1245,6 +1298,19 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_unresolved_castle_keywords_unique ON unres
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_unresolved_station_keywords_unique ON unresolved_station_keywords(station_name);`,
+  '0083': `CREATE TABLE IF NOT EXISTS harness_hook_log (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  hook_event TEXT NOT NULL,
+  check_name TEXT NOT NULL,
+  tool_name TEXT,
+  file_path TEXT,
+  result TEXT NOT NULL,
+  detail TEXT,
+  session_id TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_harness_hook_log_created ON harness_hook_log(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_harness_hook_log_result ON harness_hook_log(result, created_at DESC);`,
 };
 
 async function ensureGroupTable(db: D1Database): Promise<void> {
@@ -1375,7 +1441,7 @@ export function mergeColumnsFromRows(
  * カラムのキー種別を返す。ER図の定義と一致させること。
  * 'pk' | 'fk' | 'pk+fk' | 'uk' | 'idx' | null
  */
-export type ColumnKeyType = 'pk' | 'fk' | 'pk+fk' | 'uk' | 'idx' | null;
+export type ColumnKeyType = 'pk' | 'fk' | 'pk+fk' | 'pk+idx' | 'fk+idx' | 'uk' | 'idx' | null;
 
 export interface ColumnKeyInfo {
   [columnName: string]: ColumnKeyType;
@@ -1434,7 +1500,7 @@ export const TABLE_COLUMN_KEYS: Record<string, ColumnKeyInfo> = {
   aichat_rate_limit:      { user_id: 'pk+fk', window_key: 'pk+idx' },
   api_endpoint_stats:         { endpoint: 'pk+idx', status_code: 'pk' },
   api_search_keywords:        { id: 'pk', keyword: 'idx' },
-  api_search_keyword_sections: { id: 'pk', keyword_id: 'fk+idx', section_name: '' },
+  api_search_keyword_sections: { id: 'pk', keyword_id: 'fk+idx' },
   webhook_log: { id: 'pk', source: 'idx', received_at: 'idx' },
   cf_auth_access_log: { id: 'pk', username: 'fk', result: 'idx', checked_at: 'idx' },
   uuid_history: { id: 'pk', user_id: 'idx', uuid: 'idx', created_at: 'idx' },
@@ -1453,6 +1519,11 @@ export const TABLE_COLUMN_KEYS: Record<string, ColumnKeyInfo> = {
   unresolved_airport_keywords: { id: 'pk', airport_name: 'uk' },
   unresolved_castle_keywords: { id: 'pk', castle_name: 'uk' },
   unresolved_station_keywords: { id: 'pk', station_name: 'uk' },
+  heritage_ai_question_masters: { id: 'pk', topic: 'uk' },
+  heritage_question_view_log: { id: 'pk', user_id: 'idx', heritage_name: 'idx', question_master_id: 'fk' },
+  heritage_area_boxes: { area_seq: 'pk', user_id: 'idx' },
+  heritage_area_items: { id: 'pk', area_seq: 'fk', category: 'idx' },
+  harness_hook_log: { id: 'pk', hook_event: 'idx', result: 'idx', created_at: 'idx' },
 };
 
 export function getColumnKeyType(tableName: string, columnName: string): ColumnKeyType {
@@ -1535,6 +1606,11 @@ export const TABLE_GROUP_MAP: Record<string, string> = {
   unresolved_airport_keywords: 'system',
   unresolved_castle_keywords: 'system',
   unresolved_station_keywords: 'system',
+  heritage_ai_question_masters: 'system',
+  heritage_question_view_log: 'system',
+  heritage_area_boxes: 'system',
+  heritage_area_items: 'system',
+  harness_hook_log: 'system',
   keyword_category_groups: 'search',
   keyword_multi_labels: 'search',
   ts_repository:          'ts-catalog',
@@ -1711,6 +1787,12 @@ export const COLUMN_FK_TARGETS: Record<string, Record<string, string>> = {
   aichat_rate_limit: { user_id: 'user_sessions' },
   cf_auth_access_log: { username: 'user_sessions' },
   slack_installations: { installed_by_user: 'user_sessions' },
+
+  // ========================================================================
+  // 世界遺産ページ AI質問ログ・保存済みエリア系
+  // ========================================================================
+  heritage_question_view_log: { question_master_id: 'heritage_ai_question_masters' },
+  heritage_area_items: { area_seq: 'heritage_area_boxes' },
 };
 
 /**
@@ -3634,7 +3716,6 @@ app.get('/aichat', authMiddleware, async (c) => {
   return c.html(getAiChatPage({
     name: user.name,
     username: user.sub,
-    avatar: user.avatar_url,
     aiChatModel,
     aiChatModelConfigured: !!configuredModel,
     fallbackModel,
@@ -4610,20 +4691,21 @@ app.post('/api/aichat/search-log/open-modal', authMiddleware, async (c) => {
 app.post('/api/aichat/search-log/approve', authMiddleware, async (c) => {
   const user = c.get('user');
   if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  const db = c.env.DB;
   const body = await c.req.json<{ keyword?: string; shareIds?: string[] }>();
   const keyword = (body.keyword ?? '').trim().slice(0, 200);
   const shareIds = Array.isArray(body.shareIds) ? body.shareIds.slice(0, 50) : [];
   if (!keyword || !shareIds.length) return jsonUtf8({ ok: true, count: 0 });
   const now = new Date().toISOString();
   const stmts = shareIds.map((shareId: string) =>
-    c.env.DB.prepare(
+    db.prepare(
       `INSERT INTO aichat_search_log (user_id, keyword, share_id, first_searched_at, last_searched_at, select_count)
        VALUES (?, ?, ?, ?, ?, 1)
        ON CONFLICT(user_id, keyword, share_id) DO NOTHING`
     ).bind(user.sub, keyword, shareId, now, now)
   );
   try {
-    await c.env.DB.batch(stmts);
+    await db.batch(stmts);
     return jsonUtf8({ ok: true, count: shareIds.length });
   } catch (e: any) {
     return jsonUtf8({ ok: false, error: String(e?.message ?? e) }, 500);
@@ -4700,17 +4782,18 @@ app.get('/api/aichat/search-impressions', authMiddleware, async (c) => {
 app.post('/api/aichat/search-impressions', authMiddleware, async (c) => {
   const user = c.get('user');
   if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  const db = c.env.DB;
   const body = await c.req.json<{ shareIds?: string[]; resultCount?: number }>();
   const shareIds = Array.isArray(body.shareIds) ? body.shareIds : [];
   const resultCount = typeof body.resultCount === 'number' ? body.resultCount : null;
   if (shareIds.length === 0) return jsonUtf8({ ok: true, inserted: 0 });
   const now = new Date().toISOString();
   const stmts = shareIds.map((shareId) =>
-    c.env.DB.prepare(
+    db.prepare(
       `INSERT INTO aichat_search_impressions (user_id, share_id, result_count, searched_at) VALUES (?, ?, ?, ?)`
     ).bind(user.sub, String(shareId).slice(0, 100), resultCount, now)
   );
-  await c.env.DB.batch(stmts);
+  await db.batch(stmts);
   return jsonUtf8({ ok: true, inserted: shareIds.length });
 });
 
@@ -6439,6 +6522,8 @@ app.get('/uuid', authMiddleware, async (c) => {
 
 app.post('/api/uuid/save', authMiddleware, async (c) => {
   const user = c.get('user');
+  if (!c.env.DB) return c.json({ error: 'DB未設定です' }, 503);
+  const db = c.env.DB;
   const body = await c.req.json<{ uuids: { uuid: string; version: string }[] }>().catch(() => null);
   if (!body || !Array.isArray(body.uuids) || body.uuids.length === 0) {
     return c.json({ error: 'uuids required' }, 400);
@@ -6448,26 +6533,28 @@ app.post('/api/uuid/save', authMiddleware, async (c) => {
   const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   const valid = items.filter(it => validVersions.has(it.version) && uuidRe.test(it.uuid));
   if (valid.length === 0) return c.json({ saved: 0 });
-  const stmt = c.env.DB.prepare(
+  const stmt = db.prepare(
     'INSERT OR IGNORE INTO uuid_history (user_id, uuid, version, created_at) VALUES (?, ?, ?, datetime(\'now\'))'
   );
   const batch = valid.map(it => stmt.bind(user.sub, it.uuid.toLowerCase(), it.version));
-  await c.env.DB.batch(batch);
+  await db.batch(batch);
   return c.json({ saved: valid.length });
 });
 
 app.get('/api/uuid/search', authMiddleware, async (c) => {
   const user = c.get('user');
+  if (!c.env.DB) return c.json({ error: 'DB未設定です' }, 503);
+  const db = c.env.DB;
   const q = (c.req.query('q') || '').trim();
   const limit = Math.min(100, parseInt(c.req.query('limit') || '50', 10) || 50);
   if (q.length === 0) {
-    const rows = await c.env.DB.prepare(
+    const rows = await db.prepare(
       'SELECT id, uuid, version, created_at FROM uuid_history WHERE user_id = ? ORDER BY created_at DESC LIMIT ?'
     ).bind(user.sub, limit).all();
     return c.json({ results: rows.results ?? [], query: q });
   }
   const pattern = '%' + q.replace(/%/g, '\\%').replace(/_/g, '\\_') + '%';
-  const rows = await c.env.DB.prepare(
+  const rows = await db.prepare(
     "SELECT id, uuid, version, created_at FROM uuid_history WHERE user_id = ? AND uuid LIKE ? ESCAPE '\\' ORDER BY created_at DESC LIMIT ?"
   ).bind(user.sub, pattern, limit).all();
   return c.json({ results: rows.results ?? [], query: q });
@@ -6475,12 +6562,14 @@ app.get('/api/uuid/search', authMiddleware, async (c) => {
 
 app.delete('/api/uuid/history', authMiddleware, async (c) => {
   const user = c.get('user');
+  if (!c.env.DB) return c.json({ error: 'DB未設定です' }, 503);
   await c.env.DB.prepare('DELETE FROM uuid_history WHERE user_id = ?').bind(user.sub).run();
   return c.json({ ok: true });
 });
 
 app.get('/api/uuid/count', authMiddleware, async (c) => {
   const user = c.get('user');
+  if (!c.env.DB) return c.json({ error: 'DB未設定です' }, 503);
   const row = await c.env.DB.prepare('SELECT COUNT(*) AS cnt FROM uuid_history WHERE user_id = ?').bind(user.sub).first<{ cnt: number }>();
   return c.json({ count: row?.cnt ?? 0 });
 });
@@ -6778,7 +6867,8 @@ app.get('/settings', authMiddleware, async (c) => {
   const statusTableAutoDetect = cookieVals['user_status_table_autodetect'] === 'off' ? 'off' : 'on';
   const statusShowAutoDetectedTables = cookieVals['user_status_show_autodetected_tables'] === 'on' ? 'on' : 'off';
   const statusIgnoreUnknownUnclassifiedWarning = cookieVals['user_status_ignore_unknown_unclassified_warning'] === 'off' ? 'off' : 'on';
-  const searchLabelMode = ['manual-modal', 'auto-classify'].includes(cookieVals['user_search_label_mode'] ?? '') ? cookieVals['user_search_label_mode'] : 'uncategorized';
+  const rawSearchLabelMode = cookieVals['user_search_label_mode'];
+  const searchLabelMode = rawSearchLabelMode && ['manual-modal', 'auto-classify'].includes(rawSearchLabelMode) ? rawSearchLabelMode : 'uncategorized';
   const apisSidebarOpen = cookieVals['user_apis_sidebar_open'] === 'on' ? 'on' : 'off';
   const apisSidebarAccordion = cookieVals['user_apis_sidebar_accordion'] === 'on' ? 'on' : 'off';
   const apisDescMode = cookieVals['user_apis_desc_mode'] === 'off' ? 'off' : 'on';
@@ -7067,7 +7157,7 @@ app.get('/status', authMiddleware, async (c) => {
     }
 
     // table_catalog を一次情報源としてテーブル一覧を取得（フォールバック: ハードコード定数）
-    let effectiveTableDefs: Array<{ name: string; migration: string; description: string; syncPolicy: string }>;
+    let effectiveTableDefs: Array<{ name: string; migration: string; description: string; syncPolicy: SyncPolicy }>;
     try {
       const catalogRows = await db.prepare(
         'SELECT table_name, migration, description, sync_policy FROM table_catalog ORDER BY display_order ASC, table_name ASC'
@@ -7076,7 +7166,7 @@ app.get('/status', authMiddleware, async (c) => {
         name: r.table_name,
         migration: r.migration,
         description: r.description,
-        syncPolicy: r.sync_policy,
+        syncPolicy: normalizeSyncPolicy(r.sync_policy),
       }));
       if (effectiveTableDefs.length === 0) throw new Error('empty catalog');
     } catch {

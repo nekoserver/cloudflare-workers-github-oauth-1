@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { validateFreeText, buildFreeTextSlackMessage, handleTsubuyakiSlashCommand } from './freeTextSlackPost';
+import { validateFreeText, buildFreeTextSlackMessage, handleTsubuyakiSlashCommand, type TsubuyakiSlashCommandDeps } from './freeTextSlackPost';
 
 describe('validateFreeText', () => {
   it('通常の文字列を受け付ける', () => {
@@ -53,7 +53,7 @@ describe('buildFreeTextSlackMessage', () => {
 });
 
 describe('handleTsubuyakiSlashCommand', () => {
-  const baseDeps = () => ({
+  const baseDeps = (): TsubuyakiSlashCommandDeps => ({
     rawBody: 'command=%2Fpts&text=hello&user_name=octocat',
     timestamp: '1700000000',
     signature: 'v0=dummy',

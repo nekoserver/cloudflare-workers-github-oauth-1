@@ -2841,6 +2841,8 @@ export function getCacheStatusPage(user: {
       if (keyType === 'pk') return ' <span style="' + s + 'background:#e53e3e">PK</span>';
       if (keyType === 'fk') return ' <span style="' + s + 'background:#ed8936">FK</span>';
       if (keyType === 'pk+fk') return ' <span style="' + s + 'background:#e53e3e">PK</span><span style="' + s + 'background:#ed8936;margin-left:2px">FK</span>';
+      if (keyType === 'pk+idx') return ' <span style="' + s + 'background:#e53e3e">PK</span><span style="' + s + 'background:#4299e1;margin-left:2px">IDX</span>';
+      if (keyType === 'fk+idx') return ' <span style="' + s + 'background:#ed8936">FK</span><span style="' + s + 'background:#4299e1;margin-left:2px">IDX</span>';
       if (keyType === 'uk') return ' <span style="' + s + 'background:#48bb78">UK</span>';
       if (keyType === 'idx') return ' <span style="' + s + 'background:#4299e1">IDX</span>';
       return '';
