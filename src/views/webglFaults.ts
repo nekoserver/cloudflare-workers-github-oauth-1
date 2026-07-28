@@ -2292,11 +2292,6 @@ void main() {
       btnBoxZoom.classList.remove('active');
       btnBoxZoom.textContent = '🔲 エリアズーム';
       canvas.style.cursor = '';
-      if (!autoRot) {
-        autoRot = true;
-        btnAutoRot.textContent = '⏸ 自転停止';
-        btnAutoRot.classList.remove('active');
-      }
     }
   }
 

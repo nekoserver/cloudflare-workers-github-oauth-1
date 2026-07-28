@@ -98,6 +98,34 @@ describe('活断層ページ: エリア巡回完了後にズームが勝手に�
   });
 });
 
+describe('活断層ページ: エリア巡回完了後に地球儀の中心(自転)が勝手に動き出さないこと', () => {
+  const html = getWebGLFaultsPage('tester');
+
+  it('flyToLatLon は巡回の各ステップで必ず autoRot を false にする(巡回中は自動回転と競合させない)', () => {
+    const idx = html.indexOf('function flyToLatLon(lat, lon, dur, cb) {');
+    expect(idx).toBeGreaterThan(-1);
+    const endIdx = html.indexOf('\n  function ', idx + 10);
+    const block = html.slice(idx, endIdx);
+    expect(block).toContain('autoRot = false;');
+  });
+
+  it('stopAreaTour(completed)分岐に autoRot を true へ戻す処理が残っていない(巡回完了直後にflyToLatLonでfalseにされているため、この処理は常に発火してしまい、ユーザーが巡回前に自転を止めていても勝手に自転が再開してしまっていた)', () => {
+    const idx = html.indexOf('function stopAreaTour(completed) {');
+    expect(idx).toBeGreaterThan(-1);
+    const endIdx = html.indexOf('\n  function applyBoxZoom', idx);
+    const block = html.slice(idx, endIdx);
+    expect(block).not.toContain('autoRot = true;');
+    expect(block).not.toContain("if (!autoRot) {");
+  });
+
+  it('autoRot を true にする代入は初期宣言(既定値)以外に存在しない(巡回完了以外の経路でも勝手に自転が再開しない)', () => {
+    const matches = html.match(/autoRot\s*=\s*true/g) || [];
+    // 唯一の許容箇所: `var axisLocked = false, autoRot = true;` という初期宣言
+    expect(matches.length).toBe(1);
+    expect(html).toContain('var axisLocked = false, autoRot = true;');
+  });
+});
+
 describe('活断層ページ: computeLonRange (経度の円環範囲計算)', () => {
   function loadComputeLonRange(html: string) {
     const src = extractFunctionSource(html, 'computeLonRange');
