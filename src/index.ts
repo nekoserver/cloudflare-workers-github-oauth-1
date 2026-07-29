@@ -39,6 +39,7 @@ import { getWebGLSolarPage } from './views/webglSolar';
 import { getEclipseTiltLessonPage } from './views/eclipseTiltLesson';
 import { getWebGLFaultsPage } from './views/webglFaults';
 import { getUuidGenPage } from './views/uuidGen';
+import { getBase64Page } from './views/base64';
 import { getHarnessLogPage, type HarnessHookLogRow, type HarnessLogResultCounts } from './views/harnessLog';
 import { getMLBSpherePage } from './views/mlbSphere';
 import { getWorldCupWdlPage } from './views/worldCupWdl';
@@ -6743,6 +6744,11 @@ app.get('/harness-log', authMiddleware, async (c) => {
 app.get('/uuid', authMiddleware, async (c) => {
   const user = c.get('user');
   return c.html(getUuidGenPage(user.sub));
+});
+
+app.get('/base64', authMiddleware, async (c) => {
+  const user = c.get('user');
+  return c.html(getBase64Page(user.sub));
 });
 
 app.post('/api/uuid/save', authMiddleware, async (c) => {
