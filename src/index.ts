@@ -201,6 +201,9 @@ export const STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
   { name: 'unresolved_castle_keywords', migration: '0081',   description: 'heritage-areaページで国旗・座標が判明しなかった「(カタカナ)城」キーワードの記録', syncPolicy: 'auto' },
   { name: 'unresolved_station_keywords', migration: '0082',  description: 'heritage-areaページで国旗・座標が判明しなかった駅名キーワードの記録', syncPolicy: 'auto' },
   { name: 'harness_hook_log',            migration: '0083',  description: 'Claude CodeのPostToolUseフック発火ログ（チェック名・結果フラグ・詳細）', syncPolicy: 'auto' },
+  { name: 'aichat_keyword_categories',    migration: '0084',  description: 'AIチャットキーワード分類のカテゴリマスタ（名前・色）', syncPolicy: 'auto' },
+  { name: 'aichat_keyword_category_map',  migration: '0085',  description: 'AIチャットキーワード↔カテゴリの紐付け', syncPolicy: 'auto' },
+  { name: 'aichat_category_audit_log',    migration: '0086',  description: 'AIチャット分類グループ・キーワード分類の作成/更新/削除の監査ログ', syncPolicy: 'auto' },
 ];
 
 const REQUIRED_STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
@@ -1312,6 +1315,35 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_unresolved_station_keywords_unique ON unre
 );
 CREATE INDEX IF NOT EXISTS idx_harness_hook_log_created ON harness_hook_log(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_harness_hook_log_result ON harness_hook_log(result, created_at DESC);`,
+  '0084': `CREATE TABLE IF NOT EXISTS aichat_keyword_categories (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  color TEXT NOT NULL DEFAULT '#6366f1',
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_aichat_keyword_categories_user_name ON aichat_keyword_categories(user_id, name);`,
+  '0085': `CREATE TABLE IF NOT EXISTS aichat_keyword_category_map (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id TEXT NOT NULL,
+  keyword TEXT NOT NULL,
+  category_id INTEGER NOT NULL REFERENCES aichat_keyword_categories(id),
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_aichat_keyword_category_map_unique ON aichat_keyword_category_map(user_id, keyword, category_id);
+CREATE INDEX IF NOT EXISTS idx_aichat_keyword_category_map_category ON aichat_keyword_category_map(category_id);`,
+  '0086': `CREATE TABLE IF NOT EXISTS aichat_category_audit_log (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id TEXT NOT NULL,
+  action TEXT NOT NULL,
+  entity_type TEXT NOT NULL,
+  entity_id TEXT,
+  entity_name TEXT,
+  detail TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_aichat_category_audit_log_user_created ON aichat_category_audit_log(user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_aichat_category_audit_log_entity ON aichat_category_audit_log(entity_type, entity_id);`,
 };
 
 async function ensureGroupTable(db: D1Database): Promise<void> {
@@ -1525,6 +1557,9 @@ export const TABLE_COLUMN_KEYS: Record<string, ColumnKeyInfo> = {
   heritage_area_boxes: { area_seq: 'pk', user_id: 'idx' },
   heritage_area_items: { id: 'pk', area_seq: 'fk', category: 'idx' },
   harness_hook_log: { id: 'pk', hook_event: 'idx', result: 'idx', created_at: 'idx' },
+  aichat_keyword_categories: { id: 'pk', user_id: 'uk', name: 'uk' },
+  aichat_keyword_category_map: { id: 'pk', user_id: 'uk', keyword: 'uk', category_id: 'fk+idx' },
+  aichat_category_audit_log: { id: 'pk', user_id: 'idx', entity_type: 'idx', entity_id: 'idx' },
 };
 
 export function getColumnKeyType(tableName: string, columnName: string): ColumnKeyType {
@@ -1612,6 +1647,9 @@ export const TABLE_GROUP_MAP: Record<string, string> = {
   heritage_area_boxes: 'system',
   heritage_area_items: 'system',
   harness_hook_log: 'system',
+  aichat_keyword_categories: 'ai',
+  aichat_keyword_category_map: 'ai',
+  aichat_category_audit_log: 'ai',
   keyword_category_groups: 'search',
   keyword_multi_labels: 'search',
   ts_repository:          'ts-catalog',
@@ -1788,6 +1826,13 @@ export const COLUMN_FK_TARGETS: Record<string, Record<string, string>> = {
   aichat_rate_limit: { user_id: 'user_sessions' },
   cf_auth_access_log: { username: 'user_sessions' },
   slack_installations: { installed_by_user: 'user_sessions' },
+
+  // ========================================================================
+  // AIチャット キーワード分類・監査ログ系
+  // ========================================================================
+  aichat_keyword_categories: { user_id: 'user_sessions' },
+  aichat_keyword_category_map: { user_id: 'user_sessions', category_id: 'aichat_keyword_categories' },
+  aichat_category_audit_log: { user_id: 'user_sessions' },
 
   // ========================================================================
   // 世界遺産ページ AI質問ログ・保存済みエリア系
@@ -2324,6 +2369,38 @@ async function recordApiAccess(db: D1Database | undefined, method: string, route
          last_called_at = datetime('now')`
     ).bind(endpoint, statusCode).run();
   } catch {}
+}
+
+async function recordAichatCategoryAudit(
+  db: D1Database | undefined,
+  payload: {
+    userId: string;
+    action: string;
+    entityType: string;
+    entityId?: string | number | null;
+    entityName?: string | null;
+    detail?: string | null;
+  },
+): Promise<void> {
+  if (!db) return;
+  try {
+    await db.prepare(
+      `INSERT INTO aichat_category_audit_log (user_id, action, entity_type, entity_id, entity_name, detail) VALUES (?, ?, ?, ?, ?, ?)`
+    ).bind(
+      payload.userId,
+      payload.action,
+      payload.entityType,
+      payload.entityId === undefined || payload.entityId === null ? null : String(payload.entityId),
+      payload.entityName ?? null,
+      payload.detail ?? null,
+    ).run();
+  } catch (error) {
+    logger.warn('Failed to record aichat_category_audit_log', {
+      action: payload.action,
+      entityType: payload.entityType,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+  }
 }
 
 interface ClassifyResult {
@@ -5153,6 +5230,14 @@ app.post('/api/aichat/category-groups', authMiddleware, async (c) => {
     await c.env.DB.prepare(
       `INSERT INTO aichat_category_groups (id, user_id, group_name, category_ids, created_at, updated_at) VALUES (?, ?, ?, ?, datetime('now'), datetime('now'))`
     ).bind(id, user.sub, groupName, idsJson).run();
+    await recordAichatCategoryAudit(c.env.DB, {
+      userId: user.sub,
+      action: 'category_group_created',
+      entityType: 'category_group',
+      entityId: id,
+      entityName: groupName,
+      detail: idsJson,
+    });
     return jsonUtf8({ ok: true, id, group_name: groupName });
   } catch (err) {
     const msg = err instanceof Error ? err.message : '';
@@ -5183,6 +5268,13 @@ app.post('/api/aichat/category-groups/:id/add-category', authMiddleware, async (
     await c.env.DB.prepare(
       `UPDATE aichat_category_groups SET category_ids = ?, updated_at = datetime('now') WHERE id = ? AND user_id = ?`
     ).bind(JSON.stringify(ids), groupId, user.sub).run();
+    await recordAichatCategoryAudit(c.env.DB, {
+      userId: user.sub,
+      action: 'category_added_to_group',
+      entityType: 'category_group',
+      entityId: groupId,
+      detail: JSON.stringify({ added_category_id: catId, category_ids: ids }),
+    });
     return jsonUtf8({ ok: true, category_ids: ids });
   } catch (err: any) {
     return jsonUtf8({ error: 'カテゴリの追加に失敗しました: ' + String(err?.message ?? err) }, 500);
@@ -5208,6 +5300,13 @@ app.post('/api/aichat/category-groups/:id/remove-category', authMiddleware, asyn
     await c.env.DB.prepare(
       `UPDATE aichat_category_groups SET category_ids = ?, updated_at = datetime('now') WHERE id = ? AND user_id = ?`
     ).bind(JSON.stringify(ids), groupId, user.sub).run();
+    await recordAichatCategoryAudit(c.env.DB, {
+      userId: user.sub,
+      action: 'category_removed_from_group',
+      entityType: 'category_group',
+      entityId: groupId,
+      detail: JSON.stringify({ removed_category_id: catId, category_ids: ids }),
+    });
     return jsonUtf8({ ok: true, category_ids: ids });
   } catch (err: any) {
     return jsonUtf8({ error: 'カテゴリの削除に失敗しました: ' + String(err?.message ?? err) }, 500);
@@ -5222,6 +5321,12 @@ app.delete('/api/aichat/category-groups/:id', authMiddleware, async (c) => {
     await c.env.DB.prepare(
       `UPDATE aichat_category_groups SET is_deleted = 1, deleted_at = datetime('now') WHERE id = ? AND user_id = ?`
     ).bind(groupId, user.sub).run();
+    await recordAichatCategoryAudit(c.env.DB, {
+      userId: user.sub,
+      action: 'category_group_deleted',
+      entityType: 'category_group',
+      entityId: groupId,
+    });
     return jsonUtf8({ ok: true });
   } catch (err) {
     return jsonUtf8({ error: 'グループの削除に失敗しました' }, 500);
@@ -5269,7 +5374,18 @@ app.post('/api/aichat/keyword-categories', authMiddleware, async (c) => {
   const row = await c.env.DB.prepare(
     `SELECT id, name, color FROM aichat_keyword_categories WHERE user_id = ? AND name = ?`
   ).bind(user.sub, name.slice(0, 100)).first<{ id: number; name: string; color: string }>();
-  return jsonUtf8({ ok: true, inserted: (result.meta?.changes ?? 0) > 0, category: row });
+  const wasInserted = (result.meta?.changes ?? 0) > 0;
+  if (wasInserted && row) {
+    await recordAichatCategoryAudit(c.env.DB, {
+      userId: user.sub,
+      action: 'keyword_category_created',
+      entityType: 'keyword_category',
+      entityId: row.id,
+      entityName: row.name,
+      detail: JSON.stringify({ color: row.color }),
+    });
+  }
+  return jsonUtf8({ ok: true, inserted: wasInserted, category: row });
 });
 
 /**
@@ -5289,6 +5405,15 @@ app.post('/api/aichat/keyword-category-map', authMiddleware, async (c) => {
       `INSERT OR IGNORE INTO aichat_keyword_category_map (user_id, keyword, category_id, created_at) VALUES (?, ?, ?, ?)`
     ).bind(user.sub, keyword.slice(0, 200), catId, now).run();
     inserted += result.meta?.changes ?? 0;
+  }
+  if (inserted > 0) {
+    await recordAichatCategoryAudit(c.env.DB, {
+      userId: user.sub,
+      action: 'keyword_classified',
+      entityType: 'keyword_category_map',
+      entityName: keyword.slice(0, 200),
+      detail: JSON.stringify({ category_ids: categoryIds, inserted }),
+    });
   }
   return jsonUtf8({ ok: true, inserted });
 });
