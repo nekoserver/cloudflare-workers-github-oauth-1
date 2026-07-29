@@ -118,27 +118,22 @@ describe('buildRequestBody', () => {
   });
 });
 
-describe('logResult: HARNESS_HOOK_SECRET未設定時は即フォールバックへ回る(無駄な401待ちをしない)', () => {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'harness-hook-fallback-'));
-  const fallbackPath = path.join(tmpDir, 'harness-hook-log-fallback.jsonl');
-  const origFallback = process.env.HARNESS_HOOK_SECRET;
-
-  afterEach(() => {
-    if (fs.existsSync(fallbackPath)) fs.unlinkSync(fallbackPath);
-    if (origFallback === undefined) delete process.env.HARNESS_HOOK_SECRET;
-    else process.env.HARNESS_HOOK_SECRET = origFallback;
-  });
-
-  it('secretがundefinedの場合、fetchを呼ばずにフォールバック保存する', async () => {
+describe('logResult: HARNESS_HOOK_SECRET未設定でも書き込みを試みる(当面シークレットレスで動作継続)', () => {
+  it('secretがundefinedでもfetchは呼ばれ、Authorizationヘッダは付与しない', async () => {
     let fetchCalled = false;
-    const fakeFetch = async () => { fetchCalled = true; return new Response('{}', { status: 200 }); };
-    // logResultは直接ファイルパスを受け取らないため、実際のFALLBACK_LOG_PATH(.claude/配下)に書かれる。
-    // ここではsecret未設定時にfetchが呼ばれないことだけを検証する。
+    let calledInit: { headers: Record<string, string> } | null = null;
+    const fakeFetch = async (_url: string, init: { headers: Record<string, string> }) => {
+      fetchCalled = true;
+      calledInit = init;
+      return new Response('{"ok":true}', { status: 200 });
+    };
     await logResult(
       { hookEvent: 'PostToolUse', checkName: 'migration_table_registry_check', result: 'ok' },
       { secret: undefined, fetchImpl: fakeFetch }
     );
-    expect(fetchCalled).toBe(false);
+    expect(fetchCalled).toBe(true);
+    expect(calledInit).not.toBeNull();
+    expect(calledInit!.headers.Authorization).toBeUndefined();
   });
 });
 
