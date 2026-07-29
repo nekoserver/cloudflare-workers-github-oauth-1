@@ -84,8 +84,9 @@ describe('活断層ページ: 地球儀ドラッグ回転感度のズーム比�
     expect(html).not.toContain('(e.touches[0].clientX-lx)*0.008');
   });
 
-  it('ホイールズームの係数(0.006)やピンチズームの係数(0.008、感度とは無関係の別処理)は変更されていない', () => {
-    expect(html).toContain('zoomTarget+e.deltaY*0.006');
+  it('ホイールズームは最大ズーム付近で移動幅が小さく、ピンチズームの係数は維持されている', () => {
+    expect(html).toContain('var wheelSens=0.006*Math.min(1,zoomTarget/3.2);');
+    expect(html).toContain('zoomTarget+e.deltaY*wheelSens');
     expect(html).toContain('zoomTarget-(d-pinch0)*0.008');
   });
 });
