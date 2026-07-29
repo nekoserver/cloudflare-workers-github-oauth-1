@@ -39,6 +39,7 @@ import { getWebGLSolarPage } from './views/webglSolar';
 import { getEclipseTiltLessonPage } from './views/eclipseTiltLesson';
 import { getWebGLFaultsPage } from './views/webglFaults';
 import { getUuidGenPage } from './views/uuidGen';
+import { getBase64Page } from './views/base64';
 import { getHarnessLogPage, type HarnessHookLogRow, type HarnessLogResultCounts } from './views/harnessLog';
 import { getMLBSpherePage } from './views/mlbSphere';
 import { getWorldCupWdlPage } from './views/worldCupWdl';
@@ -6641,6 +6642,55 @@ app.get('/galaxy', (c) => {
   return c.html(getGalaxyPage());
 });
 
+/**
+ * PostToolUseフック(scripts/check-migration-table-registry.js)からのharness_hook_log書き込み。
+ * wranglerのCLI(CLOUDFLARE_API_TOKEN必須)経由ではなく、デプロイ済みWorker自身のD1バインディングを
+ * 使うことで、CLOUDFLARE_API_TOKENが無いあらゆる環境(このリポジトリのClaude Codeセッション含む)
+ * からでも書き込めるようにする。HARNESS_HOOK_SECRETの共有シークレットで認証する。
+ */
+app.post('/internal/harness-hook-log', async (c) => {
+  const secret = c.env.HARNESS_HOOK_SECRET;
+  const authHeader = c.req.header('Authorization') ?? '';
+  const bearer = authHeader.startsWith('Bearer ') ? authHeader.slice('Bearer '.length) : null;
+  if (!secret || !bearer || bearer !== secret) {
+    return c.json({ error: 'Unauthorized' }, 401);
+  }
+  if (!c.env.DB) return c.json({ error: 'DB未設定です' }, 503);
+
+  let body: {
+    hookEvent?: string; checkName?: string; toolName?: string | null;
+    filePath?: string | null; result?: string; detail?: string | null; sessionId?: string | null;
+  };
+  try { body = await c.req.json(); } catch { return c.json({ error: 'Invalid JSON' }, 400); }
+
+  const hookEvent = typeof body.hookEvent === 'string' ? body.hookEvent.slice(0, 100) : '';
+  const checkName = typeof body.checkName === 'string' ? body.checkName.slice(0, 100) : '';
+  const result = typeof body.result === 'string' ? body.result.slice(0, 20) : '';
+  if (!hookEvent || !checkName || !result) {
+    return c.json({ error: 'hookEvent/checkName/result は必須です' }, 400);
+  }
+
+  try {
+    await c.env.DB.prepare(
+      `INSERT INTO harness_hook_log (hook_event, check_name, tool_name, file_path, result, detail, session_id) VALUES (?, ?, ?, ?, ?, ?, ?)`
+    ).bind(
+      hookEvent,
+      checkName,
+      typeof body.toolName === 'string' ? body.toolName.slice(0, 100) : null,
+      typeof body.filePath === 'string' ? body.filePath.slice(0, 500) : null,
+      result,
+      typeof body.detail === 'string' ? body.detail.slice(0, 2000) : null,
+      typeof body.sessionId === 'string' ? body.sessionId.slice(0, 100) : null,
+    ).run();
+    return c.json({ ok: true });
+  } catch (error) {
+    logger.warn('Failed to insert harness_hook_log via /internal/harness-hook-log', {
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    return c.json({ error: 'harness_hook_logへの書き込みに失敗しました' }, 500);
+  }
+});
+
 app.get('/harness-log', authMiddleware, async (c) => {
   const db = c.env.DB;
   if (!db) {
@@ -6694,6 +6744,11 @@ app.get('/harness-log', authMiddleware, async (c) => {
 app.get('/uuid', authMiddleware, async (c) => {
   const user = c.get('user');
   return c.html(getUuidGenPage(user.sub));
+});
+
+app.get('/base64', authMiddleware, async (c) => {
+  const user = c.get('user');
+  return c.html(getBase64Page(user.sub));
 });
 
 app.post('/api/uuid/save', authMiddleware, async (c) => {

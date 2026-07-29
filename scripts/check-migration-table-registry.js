@@ -9,19 +9,25 @@
  * 使い方(Claude CodeのPostToolUseフックから呼ばれる想定):
  *   echo '<hook payload json>' | node scripts/check-migration-table-registry.js
  *
+ * 結果はデプロイ済みWorker自身の POST /internal/harness-hook-log
+ * (D1バインディングを直接使うためCLOUDFLARE_API_TOKEN不要)へHTTPS POSTで記録する。
+ * 認証は環境変数 HARNESS_HOOK_SECRET の共有シークレット(Authorization: Bearer)。
+ * 未設定またはリクエスト失敗時は .claude/harness-hook-log-fallback.jsonl へ記録する。
+ *
  * 単体では何もしない(標準入力からのJSONが必須)。
  * 詳細は SPEC.cloudflare-workers-github-oauth-1.20260728.Harness.md を参照。
  */
 
 const fs = require('fs');
 const path = require('path');
-const { execFileSync } = require('child_process');
 
 const ROOT = path.resolve(__dirname, '..');
 const INDEX_TS_PATH = path.join(ROOT, 'src', 'index.ts');
 const FALLBACK_LOG_PATH = path.join(ROOT, '.claude', 'harness-hook-log-fallback.jsonl');
 const CHECK_NAME = 'migration_table_registry_check';
-const D1_DATABASE_NAME = 'workers-github-oauth';
+const WORKER_BASE_URL = 'https://cloudflare-workers-github-oauth-1.nekoflare.workers.dev';
+const HARNESS_HOOK_ENDPOINT = WORKER_BASE_URL + '/internal/harness-hook-log';
+const FETCH_TIMEOUT_MS = 8000;
 
 function extractCreateTableNames(sql) {
   const names = [];
@@ -61,27 +67,6 @@ function checkRegistries(tables, indexTsSrc) {
   return results;
 }
 
-function escSql(value) {
-  if (value === null || value === undefined) return 'NULL';
-  return "'" + String(value).replace(/'/g, "''") + "'";
-}
-
-function buildInsertSql(row) {
-  return (
-    'INSERT INTO harness_hook_log (hook_event, check_name, tool_name, file_path, result, detail, session_id) VALUES (' +
-    [
-      escSql(row.hookEvent),
-      escSql(row.checkName),
-      escSql(row.toolName),
-      escSql(row.filePath),
-      escSql(row.result),
-      escSql(row.detail),
-      escSql(row.sessionId),
-    ].join(', ') +
-    ');'
-  );
-}
-
 function appendFallbackLog(fallbackPath, row, error) {
   fs.mkdirSync(path.dirname(fallbackPath), { recursive: true });
   const line = JSON.stringify({ ...row, loggedAt: new Date().toISOString(), d1Error: error ? String(error.message || error) : null }) + '\n';
@@ -89,23 +74,64 @@ function appendFallbackLog(fallbackPath, row, error) {
   return line;
 }
 
-function logResult(row) {
-  const sql = buildInsertSql(row);
+function buildRequestBody(row) {
+  return {
+    hookEvent: row.hookEvent,
+    checkName: row.checkName,
+    toolName: row.toolName,
+    filePath: row.filePath,
+    result: row.result,
+    detail: row.detail,
+    sessionId: row.sessionId,
+  };
+}
+
+async function postToWorker(row, secret, fetchImpl) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
   try {
-    execFileSync('npx', ['wrangler', 'd1', 'execute', D1_DATABASE_NAME, '--remote', '--command', sql], {
-      cwd: ROOT,
-      stdio: 'pipe',
-      timeout: 8000,
+    const response = await fetchImpl(HARNESS_HOOK_ENDPOINT, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json; charset=utf-8',
+        Authorization: 'Bearer ' + secret,
+      },
+      body: JSON.stringify(buildRequestBody(row)),
+      signal: controller.signal,
     });
+    if (response.status < 200 || response.status >= 300) {
+      const detail = await response.text().catch(() => '');
+      throw new Error('HTTP ' + response.status + (detail ? ': ' + detail.slice(0, 300) : ''));
+    }
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function logResult(row, opts) {
+  const fetchImpl = (opts && opts.fetchImpl) || fetch;
+  const secret = (opts && opts.secret !== undefined) ? opts.secret : process.env.HARNESS_HOOK_SECRET;
+
+  if (!secret) {
+    appendFallbackLog(FALLBACK_LOG_PATH, row, new Error('HARNESS_HOOK_SECRET is not set in this environment'));
+    process.stderr.write(
+      '[' + CHECK_NAME + '] HARNESS_HOOK_SECRET が未設定のため .claude/harness-hook-log-fallback.jsonl にフォールバック保存しました。\n' +
+      '(wrangler secret put HARNESS_HOOK_SECRET でWorker側に設定し、同じ値をこの環境の環境変数 HARNESS_HOOK_SECRET にも設定してください)\n'
+    );
+    return;
+  }
+
+  try {
+    await postToWorker(row, secret, fetchImpl);
   } catch (e) {
     try {
       appendFallbackLog(FALLBACK_LOG_PATH, row, e);
     } catch (e2) {
-      process.stderr.write('[' + CHECK_NAME + '] D1書き込み・ローカルフォールバック保存の両方に失敗しました: ' + String(e2) + '\n');
+      process.stderr.write('[' + CHECK_NAME + '] Worker書き込み・ローカルフォールバック保存の両方に失敗しました: ' + String(e2) + '\n');
       return;
     }
     process.stderr.write(
-      '[' + CHECK_NAME + '] D1への記録に失敗したため .claude/harness-hook-log-fallback.jsonl にフォールバック保存しました\n'
+      '[' + CHECK_NAME + '] harness_hook_logへの書き込みに失敗したため .claude/harness-hook-log-fallback.jsonl にフォールバック保存しました: ' + String(e.message || e) + '\n'
     );
   }
 }
@@ -119,7 +145,7 @@ function readStdinJson() {
   }
 }
 
-function main() {
+async function main() {
   const payload = readStdinJson();
   const toolName = payload.tool_name || '';
   const filePath = (payload.tool_input && payload.tool_input.file_path) || '';
@@ -137,7 +163,7 @@ function main() {
 
   const tables = extractCreateTableNames(sql);
   if (tables.length === 0) {
-    logResult({ hookEvent: 'PostToolUse', checkName: CHECK_NAME, toolName, filePath, result: 'ok', detail: 'CREATE TABLEなし(ALTER等のため対象外)', sessionId });
+    await logResult({ hookEvent: 'PostToolUse', checkName: CHECK_NAME, toolName, filePath, result: 'ok', detail: 'CREATE TABLEなし(ALTER等のため対象外)', sessionId });
     return;
   }
 
@@ -145,14 +171,14 @@ function main() {
   try {
     indexTsSrc = fs.readFileSync(INDEX_TS_PATH, 'utf-8');
   } catch (e) {
-    logResult({ hookEvent: 'PostToolUse', checkName: CHECK_NAME, toolName, filePath, result: 'error', detail: 'src/index.ts の読み込みに失敗: ' + String(e.message || e), sessionId });
+    await logResult({ hookEvent: 'PostToolUse', checkName: CHECK_NAME, toolName, filePath, result: 'error', detail: 'src/index.ts の読み込みに失敗: ' + String(e.message || e), sessionId });
     return;
   }
 
   const missingResults = checkRegistries(tables, indexTsSrc);
 
   if (missingResults.length === 0) {
-    logResult({
+    await logResult({
       hookEvent: 'PostToolUse',
       checkName: CHECK_NAME,
       toolName,
@@ -165,7 +191,7 @@ function main() {
   }
 
   const detailLines = missingResults.map((r) => r.table + ': ' + r.missing.join('/') + ' 未登録').join('; ');
-  logResult({ hookEvent: 'PostToolUse', checkName: CHECK_NAME, toolName, filePath, result: 'ng', detail: detailLines, sessionId });
+  await logResult({ hookEvent: 'PostToolUse', checkName: CHECK_NAME, toolName, filePath, result: 'ng', detail: detailLines, sessionId });
 
   process.stderr.write(
     '[' + CHECK_NAME + '] ' + filePath + ' でCREATE TABLEされたテーブルの登録漏れを検知しました:\n' +
@@ -181,9 +207,11 @@ module.exports = {
   extractCreateTableNames,
   extractBlock,
   checkRegistries,
-  escSql,
-  buildInsertSql,
+  buildRequestBody,
+  postToWorker,
   appendFallbackLog,
+  logResult,
+  HARNESS_HOOK_ENDPOINT,
 };
 
 if (require.main === module) {
