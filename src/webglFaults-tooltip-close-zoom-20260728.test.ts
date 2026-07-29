@@ -55,7 +55,7 @@ describe('活断層ページ: 最大ズームレベルの引き上げ(1.4 → 1.
 
   it('ホイール・ピンチ・エリアズームの3箇所すべてで下限が1.2になっている', () => {
     expect(html).toContain('Math.max(1.2, zoom * fraction)');
-    expect(html).toContain('zoomTarget=Math.max(1.2,Math.min(20,zoomTarget+e.deltaY*0.006))');
+    expect(html).toContain('zoomTarget=Math.max(1.2,Math.min(20,zoomTarget+e.deltaY*wheelSens))');
     expect(html).toContain('zoomTarget=Math.max(1.2,Math.min(20,zoomTarget-(d-pinch0)*0.008))');
   });
 
@@ -66,7 +66,7 @@ describe('活断層ページ: 最大ズームレベルの引き上げ(1.4 → 1.
 
   it('最大ズームアウト側の上限(20)や初期ズーム(3.2)は変更されていない', () => {
     expect(html).toContain('rotXv = 0.3, rotYv = 0.6, zoom = 3.2, zoomTarget = 3.2');
-    expect(html).toContain('Math.min(20,zoomTarget+e.deltaY*0.006)');
+    expect(html).toContain('Math.min(20,zoomTarget+e.deltaY*wheelSens)');
     expect(html).toContain('Math.min(20,zoomTarget-(d-pinch0)*0.008)');
   });
 });

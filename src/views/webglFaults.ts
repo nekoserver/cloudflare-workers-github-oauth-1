@@ -2374,7 +2374,12 @@ void main() {
     if(!axisLocked){rotXv=clampElev(rotXv+dx); velX=velX*0.4+dx*0.6;}
     lx=e.clientX; ly=e.clientY;
   });
-  canvas.addEventListener('wheel', function(e) { e.preventDefault(); zoomTarget=Math.max(1.2,Math.min(20,zoomTarget+e.deltaY*0.006)); }, {passive:false});
+  canvas.addEventListener('wheel', function(e) {
+    e.preventDefault();
+    // 拡大時は1スクロールあたりの移動幅を抑え、最大ズーム付近でも微調整しやすくする。
+    var wheelSens=0.006*Math.min(1,zoomTarget/3.2);
+    zoomTarget=Math.max(1.2,Math.min(20,zoomTarget+e.deltaY*wheelSens));
+  }, {passive:false});
   canvas.addEventListener('dblclick', function() {
     autoRot=!autoRot;
     btnAutoRot.textContent=autoRot?'⏸ 自転停止':'▶ 回転';
