@@ -39,6 +39,7 @@ import { getWebGLSolarPage } from './views/webglSolar';
 import { getEclipseTiltLessonPage } from './views/eclipseTiltLesson';
 import { getWebGLFaultsPage } from './views/webglFaults';
 import { getUuidGenPage } from './views/uuidGen';
+import { getHarnessLogPage, type HarnessHookLogRow, type HarnessLogResultCounts } from './views/harnessLog';
 import { getMLBSpherePage } from './views/mlbSphere';
 import { getWorldCupWdlPage } from './views/worldCupWdl';
 import { getWorldCupKnockoutPage } from './views/worldCupKnockout';
@@ -6513,6 +6514,56 @@ app.get('/image3d', (c) => {
 
 app.get('/galaxy', (c) => {
   return c.html(getGalaxyPage());
+});
+
+app.get('/harness-log', authMiddleware, async (c) => {
+  const db = c.env.DB;
+  if (!db) {
+    return new Response('DB not available', { status: 500, headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
+  }
+
+  const selectedResult = ['ok', 'ng', 'error'].includes(c.req.query('result') ?? '') ? (c.req.query('result') as string) : 'all';
+
+  try {
+    const countsResult = await db.prepare(
+      `SELECT result, COUNT(*) AS cnt FROM harness_hook_log GROUP BY result`
+    ).all<{ result: string; cnt: number }>();
+    const counts: HarnessLogResultCounts = { ok: 0, ng: 0, error: 0 };
+    for (const row of countsResult.results ?? []) {
+      if (row.result === 'ok' || row.result === 'ng' || row.result === 'error') {
+        counts[row.result] = row.cnt;
+      }
+    }
+
+    const rowsResult = selectedResult === 'all'
+      ? await db.prepare(
+          `SELECT id, hook_event, check_name, tool_name, file_path, result, detail, session_id, created_at
+           FROM harness_hook_log ORDER BY created_at DESC LIMIT 200`
+        ).all<HarnessHookLogRow>()
+      : await db.prepare(
+          `SELECT id, hook_event, check_name, tool_name, file_path, result, detail, session_id, created_at
+           FROM harness_hook_log WHERE result = ? ORDER BY created_at DESC LIMIT 200`
+        ).bind(selectedResult).all<HarnessHookLogRow>();
+
+    const html = getHarnessLogPage({
+      rows: rowsResult.results ?? [],
+      counts,
+      selectedResult,
+      tableMissing: false,
+    });
+    return new Response(html, { status: 200, headers: { 'Content-Type': 'text/html; charset=utf-8' } });
+  } catch (error) {
+    logger.warn('Failed to render harness-log (table may not exist yet)', {
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    const html = getHarnessLogPage({
+      rows: [],
+      counts: { ok: 0, ng: 0, error: 0 },
+      selectedResult,
+      tableMissing: true,
+    });
+    return new Response(html, { status: 200, headers: { 'Content-Type': 'text/html; charset=utf-8' } });
+  }
 });
 
 app.get('/uuid', authMiddleware, async (c) => {

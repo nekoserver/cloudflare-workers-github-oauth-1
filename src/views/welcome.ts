@@ -293,6 +293,7 @@ export function getWelcomePage(user: {
           <a href="/aichat" class="dropdown-item">🤖 AI チャット</a>
           <a href="/repositories" class="dropdown-item">📦 リポジトリ</a>
           <a href="/function-changelog" class="dropdown-item">🔖 関数辞典</a>
+          <a href="/harness-log" class="dropdown-item">🪝 Harnessフックログ</a>
           <a href="/userinfo" class="dropdown-item">👤 ユーザー情報</a>
           <a href="/settings" class="dropdown-item">⚙️ 設定</a>
           <a href="/status" class="dropdown-item">📊 キャッシュ状況</a>
