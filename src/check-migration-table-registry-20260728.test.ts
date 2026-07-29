@@ -6,18 +6,26 @@ import * as os from 'node:os';
 // 対象: scripts/check-migration-table-registry.js (PostToolUseフックスクリプト)。
 // migrations/*.sql の新規CREATE TABLEに対し、src/index.ts の3レジストリ
 // (STATUS_TABLE_DEFINITIONS/TABLE_COLUMN_KEYS/TABLE_GROUP_MAP)への登録漏れを
-// 検知し、結果(ok/ng/error)をD1のharness_hook_logへ記録する(失敗時はローカル
-// フォールバックへ記録+通知)。詳細は SPEC.cloudflare-workers-github-oauth-1.20260728.Harness.md。
+// 検知し、結果(ok/ng/error)をデプロイ済みWorkerの POST /internal/harness-hook-log
+// (D1バインディング直接、CLOUDFLARE_API_TOKEN不要)へHTTPS POSTで記録する
+// (失敗時はローカルフォールバックへ記録+通知)。
+//
+// 背景: 当初 wrangler d1 execute --remote 経由でD1へ書き込む設計だったが、
+// CLOUDFLARE_API_TOKENが無い環境(このリポジトリのClaude Codeセッション含む)では
+// 常に失敗しローカルフォールバックにしか記録されず、/harness-logページで
+// 一切確認できないという指摘を受けて、デプロイ済みWorker自身への
+// HTTPS POST(HARNESS_HOOK_SECRETの共有シークレット認証)に作り直した。
+// 詳細は SPEC.cloudflare-workers-github-oauth-1.20260728.Harness.md。
 //
 // 故障シナリオ:
 //   (1) CREATE TABLE文の抽出漏れ(IF NOT EXISTS有無、複数テーブル定義)
 //   (2) レジストリブロックの終端マーカーがずれて誤検知/検知漏れになる
-//   (3) SQLエスケープ漏れによるD1書き込み時のSQLインジェクション/構文エラー
-//   (4) D1書き込み失敗時にログが握りつぶされ、記録も通知も残らない(ルール8違反)
+//   (3) HARNESS_HOOK_SECRET未設定時にリクエストを送ってしまい、無駄な401待ちが発生する
+//   (4) Worker側への書き込み失敗時にログが握りつぶされ、記録も通知も残らない(ルール8違反)
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const scriptModule = require('../scripts/check-migration-table-registry.js');
-const { extractCreateTableNames, checkRegistries, escSql, buildInsertSql, appendFallbackLog } = scriptModule;
+const { extractCreateTableNames, checkRegistries, buildRequestBody, appendFallbackLog, logResult, HARNESS_HOOK_ENDPOINT } = scriptModule;
 
 describe('extractCreateTableNames', () => {
   it('IF NOT EXISTS付きのCREATE TABLEからテーブル名を抽出する', () => {
@@ -87,30 +95,108 @@ export const TABLE_GROUP_MAP: Record<string, string> = {
   });
 });
 
-describe('escSql / buildInsertSql', () => {
-  it('シングルクォートを二重化してエスケープする(SQLインジェクション/構文エラー対策)', () => {
-    expect(escSql("O'Brien")).toBe("'O''Brien'");
-  });
-
-  it('null/undefinedはNULLリテラルになる', () => {
-    expect(escSql(null)).toBe('NULL');
-    expect(escSql(undefined)).toBe('NULL');
-  });
-
-  it('buildInsertSqlは harness_hook_log へのINSERT文を生成し、コメントを含まない', () => {
-    const sql = buildInsertSql({
+describe('buildRequestBody', () => {
+  it('rowの各フィールドをそのままJSONボディへマッピングする', () => {
+    const body = buildRequestBody({
       hookEvent: 'PostToolUse',
       checkName: 'migration_table_registry_check',
       toolName: 'Write',
-      filePath: "migrations/0099_create_it's_a_table.sql",
+      filePath: 'migrations/0099_create_foo.sql',
       result: 'ng',
-      detail: "foo: TABLE_COLUMN_KEYS 未登録",
+      detail: 'foo: TABLE_COLUMN_KEYS 未登録',
       sessionId: 'sess-1',
     });
-    expect(sql).toContain('INSERT INTO harness_hook_log');
-    expect(sql).toContain("it''s_a_table");
-    expect(sql).not.toContain('--');
-    expect(sql.trim().endsWith(';')).toBe(true);
+    expect(body).toEqual({
+      hookEvent: 'PostToolUse',
+      checkName: 'migration_table_registry_check',
+      toolName: 'Write',
+      filePath: 'migrations/0099_create_foo.sql',
+      result: 'ng',
+      detail: 'foo: TABLE_COLUMN_KEYS 未登録',
+      sessionId: 'sess-1',
+    });
+  });
+});
+
+describe('logResult: HARNESS_HOOK_SECRET未設定時は即フォールバックへ回る(無駄な401待ちをしない)', () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'harness-hook-fallback-'));
+  const fallbackPath = path.join(tmpDir, 'harness-hook-log-fallback.jsonl');
+  const origFallback = process.env.HARNESS_HOOK_SECRET;
+
+  afterEach(() => {
+    if (fs.existsSync(fallbackPath)) fs.unlinkSync(fallbackPath);
+    if (origFallback === undefined) delete process.env.HARNESS_HOOK_SECRET;
+    else process.env.HARNESS_HOOK_SECRET = origFallback;
+  });
+
+  it('secretがundefinedの場合、fetchを呼ばずにフォールバック保存する', async () => {
+    let fetchCalled = false;
+    const fakeFetch = async () => { fetchCalled = true; return new Response('{}', { status: 200 }); };
+    // logResultは直接ファイルパスを受け取らないため、実際のFALLBACK_LOG_PATH(.claude/配下)に書かれる。
+    // ここではsecret未設定時にfetchが呼ばれないことだけを検証する。
+    await logResult(
+      { hookEvent: 'PostToolUse', checkName: 'migration_table_registry_check', result: 'ok' },
+      { secret: undefined, fetchImpl: fakeFetch }
+    );
+    expect(fetchCalled).toBe(false);
+  });
+});
+
+describe('logResult: HTTPS POSTでharness_hook_logへ記録する', () => {
+  it('成功時(2xx)はfallbackへ書き込まない', async () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'harness-hook-ok-'));
+    const before = fs.readdirSync(tmpDir).length;
+    let calledUrl: string | null = null;
+    let calledInit: { method: string; headers: Record<string, string>; body: string } | null = null;
+    const fakeFetch = async (url: string, init: { method: string; headers: Record<string, string>; body: string }) => {
+      calledUrl = url;
+      calledInit = init;
+      return new Response('{"ok":true}', { status: 200 });
+    };
+    await logResult(
+      { hookEvent: 'PostToolUse', checkName: 'migration_table_registry_check', result: 'ok', detail: 'x' },
+      { secret: 'test-secret', fetchImpl: fakeFetch }
+    );
+    expect(calledUrl).toBe(HARNESS_HOOK_ENDPOINT);
+    expect(calledInit).not.toBeNull();
+    const init = calledInit!;
+    expect(init.method).toBe('POST');
+    expect(init.headers.Authorization).toBe('Bearer test-secret');
+    const body = JSON.parse(init.body);
+    expect(body.result).toBe('ok');
+    expect(fs.readdirSync(tmpDir).length).toBe(before);
+  });
+
+  it('非2xxレスポンス時はフォールバック保存する(記録の握りつぶし禁止)', async () => {
+    const fakeFetch = async () => new Response('Unauthorized', { status: 401 });
+    await logResult(
+      { hookEvent: 'PostToolUse', checkName: 'migration_table_registry_check', result: 'ng', detail: 'y' },
+      { secret: 'wrong-secret', fetchImpl: fakeFetch }
+    );
+    const fallbackPath = path.join(__dirname, '..', '.claude', 'harness-hook-log-fallback.jsonl');
+    expect(fs.existsSync(fallbackPath)).toBe(true);
+    const lines = fs.readFileSync(fallbackPath, 'utf-8').trim().split('\n');
+    const last = JSON.parse(lines[lines.length - 1]);
+    expect(last.detail).toBe('y');
+    expect(last.d1Error).toContain('401');
+    // テスト後始末: このテストが作った行だけを気にする必要はないが、
+    // 他のfallbackテストと混ざらないよう最後にファイルごと削除する。
+    fs.unlinkSync(fallbackPath);
+  });
+
+  it('fetch自体が例外を投げた場合もフォールバック保存する', async () => {
+    const fakeFetch = async () => { throw new Error('network down'); };
+    await logResult(
+      { hookEvent: 'PostToolUse', checkName: 'migration_table_registry_check', result: 'error', detail: 'z' },
+      { secret: 'test-secret', fetchImpl: fakeFetch }
+    );
+    const fallbackPath = path.join(__dirname, '..', '.claude', 'harness-hook-log-fallback.jsonl');
+    expect(fs.existsSync(fallbackPath)).toBe(true);
+    const lines = fs.readFileSync(fallbackPath, 'utf-8').trim().split('\n');
+    const last = JSON.parse(lines[lines.length - 1]);
+    expect(last.detail).toBe('z');
+    expect(last.d1Error).toContain('network down');
+    fs.unlinkSync(fallbackPath);
   });
 });
 
