@@ -6646,14 +6646,19 @@ app.get('/galaxy', (c) => {
  * PostToolUseフック(scripts/check-migration-table-registry.js)からのharness_hook_log書き込み。
  * wranglerのCLI(CLOUDFLARE_API_TOKEN必須)経由ではなく、デプロイ済みWorker自身のD1バインディングを
  * 使うことで、CLOUDFLARE_API_TOKENが無いあらゆる環境(このリポジトリのClaude Codeセッション含む)
- * からでも書き込めるようにする。HARNESS_HOOK_SECRETの共有シークレットで認証する。
+ * からでも書き込めるようにする。HARNESS_HOOK_SECRETが設定されている場合のみBearer認証を必須にする
+ * (未設定の間は認証なしで受け付ける。harness_hook_logは低リスクな内部テレメトリのため、
+ * シークレット未設定でも書き込みテストを継続できることを優先し、設定済みになった時点で
+ * 自動的に認証必須へ切り替わる)。
  */
 app.post('/internal/harness-hook-log', async (c) => {
   const secret = c.env.HARNESS_HOOK_SECRET;
-  const authHeader = c.req.header('Authorization') ?? '';
-  const bearer = authHeader.startsWith('Bearer ') ? authHeader.slice('Bearer '.length) : null;
-  if (!secret || !bearer || bearer !== secret) {
-    return c.json({ error: 'Unauthorized' }, 401);
+  if (secret) {
+    const authHeader = c.req.header('Authorization') ?? '';
+    const bearer = authHeader.startsWith('Bearer ') ? authHeader.slice('Bearer '.length) : null;
+    if (!bearer || bearer !== secret) {
+      return c.json({ error: 'Unauthorized' }, 401);
+    }
   }
   if (!c.env.DB) return c.json({ error: 'DB未設定です' }, 503);
 

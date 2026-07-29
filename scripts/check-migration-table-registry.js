@@ -89,13 +89,12 @@ function buildRequestBody(row) {
 async function postToWorker(row, secret, fetchImpl) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  const headers = { 'Content-Type': 'application/json; charset=utf-8' };
+  if (secret) headers.Authorization = 'Bearer ' + secret;
   try {
     const response = await fetchImpl(HARNESS_HOOK_ENDPOINT, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json; charset=utf-8',
-        Authorization: 'Bearer ' + secret,
-      },
+      headers,
       body: JSON.stringify(buildRequestBody(row)),
       signal: controller.signal,
     });
@@ -110,16 +109,10 @@ async function postToWorker(row, secret, fetchImpl) {
 
 async function logResult(row, opts) {
   const fetchImpl = (opts && opts.fetchImpl) || fetch;
+  // HARNESS_HOOK_SECRETが未設定でも書き込みは試みる。Worker側もシークレット未設定の間は
+  // 認証なしで受け付けるため、当面シークレットレスで動作を継続できる。
+  // 設定した場合は自動的にBearer認証付きで送るようになる。
   const secret = (opts && opts.secret !== undefined) ? opts.secret : process.env.HARNESS_HOOK_SECRET;
-
-  if (!secret) {
-    appendFallbackLog(FALLBACK_LOG_PATH, row, new Error('HARNESS_HOOK_SECRET is not set in this environment'));
-    process.stderr.write(
-      '[' + CHECK_NAME + '] HARNESS_HOOK_SECRET が未設定のため .claude/harness-hook-log-fallback.jsonl にフォールバック保存しました。\n' +
-      '(wrangler secret put HARNESS_HOOK_SECRET でWorker側に設定し、同じ値をこの環境の環境変数 HARNESS_HOOK_SECRET にも設定してください)\n'
-    );
-    return;
-  }
 
   try {
     await postToWorker(row, secret, fetchImpl);

@@ -155,3 +155,31 @@ describe('/harness-log ルートの配線', () => {
     expect(welcomeSrc).toContain('href="/harness-log"');
   });
 });
+
+describe('POST /internal/harness-hook-log: HARNESS_HOOK_SECRETが未設定の間は認証なしで受け付ける', () => {
+  const indexTsSrc = fs.readFileSync(path.resolve(__dirname, 'index.ts'), 'utf-8');
+
+  function getRouteBlock(): string {
+    const idx = indexTsSrc.indexOf("app.post('/internal/harness-hook-log'");
+    expect(idx).toBeGreaterThan(-1);
+    const endIdx = indexTsSrc.indexOf("\napp.get('/harness-log'", idx);
+    expect(endIdx).toBeGreaterThan(idx);
+    return indexTsSrc.slice(idx, endIdx);
+  }
+
+  it('secretが設定されている場合のみBearer認証チェックを行う(未設定なら認証をスキップする)', () => {
+    const block = getRouteBlock();
+    expect(block).toMatch(/if \(secret\) \{/);
+    expect(block).toContain("return c.json({ error: 'Unauthorized' }, 401);");
+  });
+
+  it('DB未設定時は503を返すガードがある', () => {
+    const block = getRouteBlock();
+    expect(block).toContain("if (!c.env.DB) return c.json({ error: 'DB未設定です' }, 503);");
+  });
+
+  it('hookEvent/checkName/resultが空の場合は400を返す', () => {
+    const block = getRouteBlock();
+    expect(block).toContain('hookEvent/checkName/result は必須です');
+  });
+});
