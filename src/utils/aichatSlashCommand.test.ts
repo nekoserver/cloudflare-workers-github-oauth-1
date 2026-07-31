@@ -3,6 +3,7 @@ import {
   formatJstDateTime,
   formatJstMonthCalendar,
   formatCommitAgentLogEntry,
+  formatAichatSlashCommandHelp,
   interpretAichatSlashCommand,
   type CommitAgentLogRow,
 } from './aichatSlashCommand';
@@ -91,6 +92,22 @@ describe('formatCommitAgentLogEntry', () => {
   });
 });
 
+describe('formatAichatSlashCommandHelp', () => {
+  it('全サブコマンドを含むヘルプを返す', () => {
+    const result = formatAichatSlashCommandHelp();
+    expect(result).toContain('/neko hms');
+    expect(result).toContain('/neko cal');
+    expect(result).toContain('/neko clog');
+    expect(result).toContain('/neko limit');
+    expect(result).toContain('/neko help');
+  });
+
+  it('罫線・ツリー文字を使わずMarkdownテーブルで表現する（CLAUDE.mdルール16）', () => {
+    const result = formatAichatSlashCommandHelp();
+    expect(result).not.toMatch(/[├└│─┼]/);
+  });
+});
+
 describe('interpretAichatSlashCommand', () => {
   const now = new Date('2026-07-05T01:02:03Z');
   const unusedDeps = { fetchLatestCommitAgentLog: vi.fn().mockRejectedValue(new Error('should not be called')) };
@@ -138,6 +155,11 @@ describe('interpretAichatSlashCommand', () => {
     const deps = { fetchLatestCommitAgentLog: vi.fn().mockResolvedValue(null) };
     const result = await interpretAichatSlashCommand('/neko clog', now, deps);
     expect(result).toEqual({ handled: true, response: 'commit_agent_log に記録がありません' });
+  });
+
+  it('/neko help は全サブコマンドのヘルプを返す', async () => {
+    const result = await interpretAichatSlashCommand('/neko help', now, unusedDeps);
+    expect(result).toEqual({ handled: true, response: formatAichatSlashCommandHelp() });
   });
 
   it('未対応のサブコマンドはエラーメッセージを返す（握りつぶさない）', async () => {
