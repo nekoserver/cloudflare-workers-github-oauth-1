@@ -307,6 +307,17 @@ export function getAiChatPage(user: {
     .sidebar-status { font-size: 10px; color: var(--text-muted); padding: 5px 12px 3px; flex-shrink: 0; }
     .sidebar-log-btn { background:none; border:none; cursor:pointer; font-size:14px; padding:0 4px; line-height:1; opacity:0.5; flex-shrink:0; }
     .sidebar-log-btn:hover { opacity:1; }
+    .canvas-search-btn { background:none; border:none; cursor:pointer; font-size:14px; padding:0 4px; line-height:1; opacity:0.6; flex-shrink:0; }
+    .canvas-search-btn:hover { opacity:1; }
+    .canvas-search-input-wrap { position:relative; padding:10px 16px; border-bottom:1px solid var(--border-color); flex-shrink:0; }
+    .canvas-search-input {
+      width:100%; box-sizing:border-box; padding:7px 10px; font-size:12px; border-radius:6px;
+      border:1px solid var(--border-color); background:var(--bg-secondary); color:var(--text-primary);
+    }
+    .canvas-search-input:focus { outline:none; border-color:var(--accent-color,#667eea); }
+    .canvas-search-status { font-size:10px; color:var(--text-muted); padding:0 16px 8px; flex-shrink:0; }
+    .canvas-search-canvas-wrap { flex:1; overflow-y:auto; padding:0 16px 16px; }
+    #canvasSearchCanvas { display:block; width:100%; }
     .result-model-label { font-size:9px; color:var(--text-muted); background:var(--bg-secondary); border:1px solid var(--border-color); border-radius:3px; padding:0 3px; margin-right:4px; vertical-align:middle; }
     .slm-entry { border:1px solid var(--border-color); border-radius:6px; padding:10px 12px; margin-bottom:8px; background:var(--card-bg); }
     .slm-entry-new { border:2px solid #e53e3e; background:transparent; }
@@ -741,6 +752,7 @@ export function getAiChatPage(user: {
       </div>
       <div class="sidebar-status-row">
         <div class="sidebar-status" id="sidebarStatus" style="flex:1;font-size:10px;color:var(--text-muted);"></div>
+        <button class="canvas-search-btn" id="canvasSearchBtn" title="質問・回答・キーワードをキャンバス表示" style="display:none;">⁂</button>
         <button class="sidebar-log-btn" id="searchLogRecordBtn" title="検索ログをモーダルに書き出す" style="display:none;">📋</button>
         <div class="sidebar-mode-toggle" id="sidebarModeToggle" style="display:none;">
           <button class="sidebar-mode-btn" id="sidebarModeNew">新着</button>
@@ -1023,6 +1035,22 @@ export function getAiChatPage(user: {
       </div>
       <div style="padding:10px 16px;border-top:1px solid var(--border-color);display:flex;justify-content:flex-end;gap:8px;">
         <button id="searchLogApproveBtn" style="display:none;padding:7px 18px;font-size:12px;border-radius:5px;border:none;background:#3b82f6;color:#fff;cursor:pointer;font-weight:600;">承認して登録</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="search-log-overlay" id="canvasSearchModal" aria-hidden="true">
+    <div class="search-log-modal" role="dialog" aria-modal="true" style="max-width:760px;">
+      <div class="search-log-head">
+        <span class="search-log-title" id="canvasSearchTitle">⁂ 質問・回答キャンバス</span>
+        <button class="search-log-close" id="canvasSearchClose" aria-label="閉じる">✕</button>
+      </div>
+      <div class="canvas-search-input-wrap">
+        <input class="canvas-search-input" id="canvasSearchInput" type="search" placeholder="キーワードで絞り込み..." autocomplete="off">
+      </div>
+      <div class="canvas-search-status" id="canvasSearchStatus"></div>
+      <div class="canvas-search-canvas-wrap">
+        <canvas id="canvasSearchCanvas" width="720" height="200"></canvas>
       </div>
     </div>
   </div>
@@ -1577,6 +1605,8 @@ export function getAiChatPage(user: {
       currentDateLabel = '';
       currentKeywordLabel = '';
       sidebarModeToggle.style.display = 'none';
+      canvasSearchBtn.style.display = 'none';
+      canvasSearchModal.classList.remove('open');
     }
 
     sidebarToggle.addEventListener('click', function(e) {
@@ -1613,7 +1643,7 @@ export function getAiChatPage(user: {
       if (sidebarKwModal.classList.contains('open') && !sidebarKwModal.contains(e.target) && e.target !== sidebarModeKw) {
         sidebarKwModal.classList.remove('open');
       }
-      if (sidebarOpen && isTapCloseEnabled() && !sidebar.contains(e.target) && !sidebarKwModal.contains(e.target) && e.target !== sidebarToggle) {
+      if (sidebarOpen && isTapCloseEnabled() && !sidebar.contains(e.target) && !sidebarKwModal.contains(e.target) && !canvasSearchModal.contains(e.target) && e.target !== sidebarToggle) {
         closeSidebar();
       }
     });
@@ -1715,6 +1745,7 @@ export function getAiChatPage(user: {
           currentKeywordLabel = keyword;
           renderSidebarResults();
           sidebarStatus.textContent = '🔍 ' + keyword + '　' + currentResults.length + ' 件';
+          canvasSearchBtn.style.display = currentResults.length > 0 ? 'inline-block' : 'none';
           updateSidebarModeUI();
         })
         .catch(function() { sidebarStatus.textContent = '読み込みエラー'; });
@@ -1726,7 +1757,7 @@ export function getAiChatPage(user: {
       clearTimeout(searchTimer);
       currentMode = 'search';
       currentDateLabel = '';
-      if (!q) { sidebarStatus.textContent = ''; sidebarResults.innerHTML = ''; currentResults = []; return; }
+      if (!q) { sidebarStatus.textContent = ''; sidebarResults.innerHTML = ''; currentResults = []; canvasSearchBtn.style.display = 'none'; return; }
       sidebarStatus.textContent = '検索中...';
       searchTimer = setTimeout(function() { doSearch(q); }, 350);
     });
@@ -1735,6 +1766,7 @@ export function getAiChatPage(user: {
       sidebarSearch.value = '';
       sidebarClear.classList.remove('visible');
       searchLogRecordBtn.style.display = 'none';
+      canvasSearchBtn.style.display = 'none';
       sidebarStatus.textContent = '';
       sidebarResults.innerHTML = '';
       currentResults = [];
@@ -1802,6 +1834,7 @@ export function getAiChatPage(user: {
           sidebarStatus.textContent = currentResults.length > 0 ? currentResults.length + ' 件ヒット' : '一致なし';
           updateSidebarModeUI();
           searchLogRecordBtn.style.display = currentResults.length > 0 ? 'inline-block' : 'none';
+          canvasSearchBtn.style.display = currentResults.length > 0 ? 'inline-block' : 'none';
           if (currentResults.length > 0) {
             var shareIds = currentResults.map(function(r) { return String(r.id); });
             var resultCount = currentResults.length;
@@ -1893,6 +1926,184 @@ export function getAiChatPage(user: {
       openSearchLogRecordModal(q, shareIds);
     });
 
+    // ===== 質問・回答・キーワードのキャンバス表示 =====
+    var canvasSearchBtn = document.getElementById('canvasSearchBtn');
+    var canvasSearchModal = document.getElementById('canvasSearchModal');
+    var canvasSearchClose = document.getElementById('canvasSearchClose');
+    var canvasSearchInput = document.getElementById('canvasSearchInput');
+    var canvasSearchStatus = document.getElementById('canvasSearchStatus');
+    var canvasSearchCanvas = document.getElementById('canvasSearchCanvas');
+    var canvasSearchCtx = canvasSearchCanvas ? canvasSearchCanvas.getContext('2d') : null;
+    var canvasSearchAllResults = [];
+    var canvasSearchKeyword = '';
+    var CANVAS_SEARCH_W = 700;
+    var CANVAS_SEARCH_PAD = 14;
+    var CANVAS_SEARCH_LINE_H = 18;
+
+    function openCanvasSearchModal() {
+      if (!currentResults.length) return;
+      canvasSearchAllResults = currentResults.slice();
+      canvasSearchKeyword = sidebarSearch.value.trim();
+      canvasSearchInput.value = '';
+      canvasSearchModal.style.zIndex = String(getNextZ());
+      canvasSearchModal.classList.add('open');
+      canvasSearchModal.setAttribute('aria-hidden', 'false');
+      renderCanvasSearch('');
+      setTimeout(function() { canvasSearchInput.focus(); }, 50);
+    }
+
+    function closeCanvasSearchModal() {
+      canvasSearchModal.classList.remove('open');
+      canvasSearchModal.setAttribute('aria-hidden', 'true');
+    }
+
+    canvasSearchBtn.addEventListener('click', function(e) {
+      e.stopPropagation();
+      openCanvasSearchModal();
+    });
+    canvasSearchClose.addEventListener('click', closeCanvasSearchModal);
+    canvasSearchModal.addEventListener('click', function(e) {
+      if (e.target === canvasSearchModal) closeCanvasSearchModal();
+    });
+    canvasSearchInput.addEventListener('input', function() {
+      renderCanvasSearch(canvasSearchInput.value);
+    });
+
+    function renderCanvasSearch(filterQ) {
+      var q = filterQ.trim();
+      var qLower = q.toLowerCase();
+      var list = canvasSearchAllResults.filter(function(r) {
+        if (!qLower) return true;
+        var hay = ((r.question || '') + ' ' + (r.answer || '')).toLowerCase();
+        return hay.indexOf(qLower) !== -1;
+      });
+      var labelKw = q || canvasSearchKeyword;
+      canvasSearchStatus.textContent = list.length + ' 件表示中' + (labelKw ? '（キーワード: ' + labelKw + '）' : '');
+      drawCanvasSearch(list, labelKw);
+    }
+
+    function wrapCanvasText(ctx, text, maxWidth) {
+      var chars = String(text).split('');
+      var lines = [];
+      var cur = '';
+      for (var i = 0; i < chars.length; i++) {
+        if (chars[i] === '\\n') { lines.push(cur); cur = ''; continue; }
+        var test = cur + chars[i];
+        if (cur && ctx.measureText(test).width > maxWidth) {
+          lines.push(cur);
+          cur = chars[i];
+        } else {
+          cur = test;
+        }
+      }
+      if (cur) lines.push(cur);
+      return lines;
+    }
+
+    function drawCanvasLineWithHighlight(ctx, line, x, y, word) {
+      if (!word) { ctx.fillText(line, x, y); return; }
+      var lower = line.toLowerCase();
+      var wlower = word.toLowerCase();
+      var idx = 0;
+      var cursorX = x;
+      var baseFill = ctx.fillStyle;
+      while (true) {
+        var pos = lower.indexOf(wlower, idx);
+        if (pos === -1) {
+          ctx.fillStyle = baseFill;
+          ctx.fillText(line.slice(idx), cursorX, y);
+          break;
+        }
+        var pre = line.slice(idx, pos);
+        if (pre) {
+          ctx.fillStyle = baseFill;
+          ctx.fillText(pre, cursorX, y);
+          cursorX += ctx.measureText(pre).width;
+        }
+        var match = line.slice(pos, pos + word.length);
+        var mw = ctx.measureText(match).width;
+        ctx.fillStyle = 'rgba(102,126,234,0.30)';
+        ctx.fillRect(cursorX, y - 13, mw, 17);
+        ctx.fillStyle = '#1a202c';
+        ctx.fillText(match, cursorX, y);
+        cursorX += mw;
+        idx = pos + word.length;
+      }
+      ctx.fillStyle = baseFill;
+    }
+
+    function drawCanvasSearch(list, keyword) {
+      if (!canvasSearchCtx) return;
+      var ctx = canvasSearchCtx;
+      var W = CANVAS_SEARCH_W;
+      var innerW = W - CANVAS_SEARCH_PAD * 2 - 16;
+      var items = [];
+
+      ctx.font = '700 13px sans-serif';
+      list.forEach(function(r) {
+        var qLines = wrapCanvasText(ctx, '質問: ' + (r.question || ''), innerW);
+        ctx.font = '12px sans-serif';
+        var answerText = String(r.answer || '').split('\\n').join(' ').split('\\t').join(' ');
+        if (answerText.length > 260) answerText = answerText.slice(0, 260) + '…';
+        var aLines = wrapCanvasText(ctx, '回答: ' + answerText, innerW);
+        var hasKw = keyword && (String(r.question || '') + String(r.answer || '')).toLowerCase().indexOf(keyword.toLowerCase()) !== -1;
+        var kwLine = keyword ? ('キーワード: ' + keyword + (hasKw ? '' : '（本文になし）')) : 'キーワード: -';
+        ctx.font = '700 13px sans-serif';
+        var itemH = CANVAS_SEARCH_PAD + qLines.length * CANVAS_SEARCH_LINE_H
+          + aLines.length * CANVAS_SEARCH_LINE_H + CANVAS_SEARCH_LINE_H + CANVAS_SEARCH_PAD;
+        items.push({ qLines: qLines, aLines: aLines, kwLine: kwLine, height: itemH, hasKw: hasKw });
+      });
+
+      var totalH = CANVAS_SEARCH_PAD;
+      items.forEach(function(it) { totalH += it.height + 10; });
+      totalH = Math.max(totalH, 80);
+
+      var dpr = window.devicePixelRatio || 1;
+      canvasSearchCanvas.width = W * dpr;
+      canvasSearchCanvas.height = totalH * dpr;
+      canvasSearchCanvas.style.height = totalH + 'px';
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+      ctx.fillStyle = '#f7f8fa';
+      ctx.fillRect(0, 0, W, totalH);
+
+      if (items.length === 0) {
+        ctx.fillStyle = '#94a3b8';
+        ctx.font = '13px sans-serif';
+        ctx.fillText('一致する質問・回答がありません', CANVAS_SEARCH_PAD, 30);
+        return;
+      }
+
+      var y = CANVAS_SEARCH_PAD;
+      items.forEach(function(it) {
+        ctx.fillStyle = '#ffffff';
+        ctx.strokeStyle = '#e2e8f0';
+        ctx.lineWidth = 1;
+        var cardTop = y;
+        ctx.fillRect(CANVAS_SEARCH_PAD - 6, cardTop, W - (CANVAS_SEARCH_PAD - 6) * 2, it.height);
+        ctx.strokeRect(CANVAS_SEARCH_PAD - 6, cardTop, W - (CANVAS_SEARCH_PAD - 6) * 2, it.height);
+
+        var ty = y + CANVAS_SEARCH_LINE_H - 4;
+        ctx.font = '700 13px sans-serif';
+        it.qLines.forEach(function(line) {
+          ctx.fillStyle = '#1a202c';
+          drawCanvasLineWithHighlight(ctx, line, CANVAS_SEARCH_PAD, ty, keyword);
+          ty += CANVAS_SEARCH_LINE_H;
+        });
+        ctx.font = '12px sans-serif';
+        it.aLines.forEach(function(line) {
+          ctx.fillStyle = '#4a5568';
+          drawCanvasLineWithHighlight(ctx, line, CANVAS_SEARCH_PAD, ty, keyword);
+          ty += CANVAS_SEARCH_LINE_H;
+        });
+        ctx.font = '700 11px sans-serif';
+        ctx.fillStyle = it.hasKw ? '#667eea' : '#a0aec0';
+        ctx.fillText(it.kwLine, CANVAS_SEARCH_PAD, ty);
+
+        y += it.height + 10;
+      });
+    }
+
     function doDateLoad(date) {
       sidebarStatus.textContent = '読み込み中...';
       Promise.all([
@@ -1909,6 +2120,7 @@ export function getAiChatPage(user: {
         renderSidebarResults();
         var sqCount = currentResults.filter(function(r) { return sq && sq.has(r.question); }).length;
         sidebarStatus.textContent = date + ' ' + sqCount + '/' + currentResults.length + ' 件';
+        canvasSearchBtn.style.display = currentResults.length > 0 ? 'inline-block' : 'none';
         updateSidebarModeUI();
       }).catch(function() { sidebarStatus.textContent = '読み込みエラー'; });
     }
@@ -2924,6 +3136,7 @@ export function getAiChatPage(user: {
         kwClassifyListModal: 820, sqKwQuestionsOverlay: 850, addSubqueryModal: 900, historyModalBackdrop: 750,
         tokenUsageModal: 820, dailyStatsModal: 820, modelDotDropdown: 700,
         kwColorPaletteModal: 900, kwCatGroupModal: 920, searchLogRecordModal: 880,
+        canvasSearchModal: 890,
       };
       Object.keys(staticZDefaults).forEach(function(id) {
         var el = document.getElementById(id);
