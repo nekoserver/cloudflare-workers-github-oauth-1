@@ -5390,6 +5390,46 @@ app.post('/api/aichat/keyword-categories', authMiddleware, async (c) => {
 });
 
 /**
+ * キーワード↔カテゴリ紐付けを送信された category_ids に完全一致させる。
+ * INSERT OR IGNORE の追加のみだと分類モーダルでカテゴリのチェックを外しても
+ * 既存マッピングが残り続け「修正しても更新されない」バグになるため、
+ * category_ids に含まれなくなった既存マッピングは削除してから不足分を追加する。
+ */
+export async function replaceKeywordCategoryMap(
+  db: D1Database,
+  userId: string,
+  keyword: string,
+  categoryIds: number[],
+  now: string,
+): Promise<{ inserted: number; deleted: number }> {
+  const existingRows = await db.prepare(
+    `SELECT category_id FROM aichat_keyword_category_map WHERE user_id = ? AND keyword = ?`
+  ).bind(userId, keyword).all<{ category_id: number }>();
+  const existingIds = new Set((existingRows.results ?? []).map((r) => r.category_id));
+  const nextIds = new Set(categoryIds);
+
+  let deleted = 0;
+  for (const id of existingIds) {
+    if (nextIds.has(id)) continue;
+    const result = await db.prepare(
+      `DELETE FROM aichat_keyword_category_map WHERE user_id = ? AND keyword = ? AND category_id = ?`
+    ).bind(userId, keyword, id).run();
+    deleted += result.meta?.changes ?? 0;
+  }
+
+  let inserted = 0;
+  for (const id of nextIds) {
+    if (existingIds.has(id)) continue;
+    const result = await db.prepare(
+      `INSERT OR IGNORE INTO aichat_keyword_category_map (user_id, keyword, category_id, created_at) VALUES (?, ?, ?, ?)`
+    ).bind(userId, keyword, id, now).run();
+    inserted += result.meta?.changes ?? 0;
+  }
+
+  return { inserted, deleted };
+}
+
+/**
  * キーワード分類: キーワード↔カテゴリ紐付け保存
  */
 app.post('/api/aichat/keyword-category-map', authMiddleware, async (c) => {
@@ -5400,23 +5440,17 @@ app.post('/api/aichat/keyword-category-map', authMiddleware, async (c) => {
   const categoryIds = Array.isArray(body.category_ids) ? body.category_ids.filter((id) => typeof id === 'number') : [];
   if (!keyword || categoryIds.length === 0) return jsonUtf8({ error: 'keyword と category_ids は必須です' }, 400);
   const now = new Date().toISOString();
-  let inserted = 0;
-  for (const catId of categoryIds) {
-    const result = await c.env.DB.prepare(
-      `INSERT OR IGNORE INTO aichat_keyword_category_map (user_id, keyword, category_id, created_at) VALUES (?, ?, ?, ?)`
-    ).bind(user.sub, keyword.slice(0, 200), catId, now).run();
-    inserted += result.meta?.changes ?? 0;
-  }
-  if (inserted > 0) {
+  const { inserted, deleted } = await replaceKeywordCategoryMap(c.env.DB, user.sub, keyword.slice(0, 200), categoryIds, now);
+  if (inserted > 0 || deleted > 0) {
     await recordAichatCategoryAudit(c.env.DB, {
       userId: user.sub,
       action: 'keyword_classified',
       entityType: 'keyword_category_map',
       entityName: keyword.slice(0, 200),
-      detail: JSON.stringify({ category_ids: categoryIds, inserted }),
+      detail: JSON.stringify({ category_ids: categoryIds, inserted, deleted }),
     });
   }
-  return jsonUtf8({ ok: true, inserted });
+  return jsonUtf8({ ok: true, inserted, deleted });
 });
 
 /**

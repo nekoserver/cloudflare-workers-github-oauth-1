@@ -109,13 +109,13 @@ describe('6つのCRUDエンドポイントへの監査ログ配線', () => {
     expect(block).toMatch(/if \(wasInserted && row\) \{/);
   });
 
-  it("POST /api/aichat/keyword-category-map は inserted>0 の場合のみ action='keyword_classified' を記録する", () => {
+  it("POST /api/aichat/keyword-category-map は inserted>0 または deleted>0 の場合のみ action='keyword_classified' を記録する", () => {
     const block = getEndpointBlock(
       "app.post('/api/aichat/keyword-category-map', authMiddleware",
       "app.post('/api/aichat/share-subquery-links'"
     );
     expect(block).toContain("action: 'keyword_classified'");
-    expect(block).toMatch(/if \(inserted > 0\) \{/);
+    expect(block).toMatch(/if \(inserted > 0 \|\| deleted > 0\) \{/);
   });
 });
 
