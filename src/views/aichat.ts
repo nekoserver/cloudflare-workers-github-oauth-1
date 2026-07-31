@@ -188,6 +188,24 @@ export function getAiChatPage(user: {
     }
     .impr-date-link:hover { opacity: 0.75; }
     .search-log-body { flex: 1; overflow-y: auto; padding: 12px 16px; }
+    .zt-tree-search-wrap { padding: 10px 16px; border-bottom: 1px solid var(--border-color); flex-shrink: 0; }
+    .zt-tree-search-input {
+      width: 100%; box-sizing: border-box; padding: 7px 10px; font-size: 12px; border-radius: 6px;
+      border: 1px solid var(--border-color); background: var(--bg-secondary); color: var(--text-primary);
+    }
+    .zt-tree-search-input:focus { outline: none; border-color: var(--accent-color, #667eea); }
+    .zt-tree-body { flex: 1; overflow-y: auto; padding: 10px 16px; font-family: monospace; font-size: 12px; line-height: 1.9; }
+    .zt-line { white-space: nowrap; }
+    .zt-group-line { font-weight: 700; color: var(--text-primary); margin-top: 6px; }
+    .zt-node { cursor: pointer; }
+    .zt-node:hover { background: var(--bg-secondary); }
+    .zt-kw-line { color: var(--text-secondary); }
+    .zt-toggle { display: inline-block; width: 14px; color: var(--text-muted); }
+    .zt-object { color: #63b3ed; }
+    .zt-relation { color: #f6ad55; }
+    .zt-subject { color: #68d391; }
+    .zt-count { color: var(--text-muted); margin-left: 4px; }
+    .zt-hl { background: rgba(246, 173, 85, 0.45); color: inherit; border-radius: 2px; }
     .search-log-table { width: 100%; border-collapse: collapse; font-size: 12px; }
     .search-log-table th {
       font-size: 10px; font-weight: 700; color: var(--text-muted); text-transform: uppercase;
@@ -721,6 +739,7 @@ export function getAiChatPage(user: {
       <button class="search-hist-btn" id="searchHistoryBtn" title="検索明細履歴">🗂 検索明細</button>
       <button class="search-log-btn" id="searchLogBtn" title="検索履歴">📋 検索履歴</button>
       <button class="search-hist-btn" id="kwClassifyBtn" title="キーワード分類">🔑分類</button>
+      <button class="search-hist-btn" id="ztTreeBtn" title="Zanzibar形式分類ツリー">ZT</button>
       ${getThemeToggleHTML()}
       <span class="user-name">${displayName}</span>
       <div class="user-menu-container">
@@ -1052,6 +1071,19 @@ export function getAiChatPage(user: {
       <div class="canvas-search-canvas-wrap">
         <canvas id="canvasSearchCanvas" width="720" height="200"></canvas>
       </div>
+    </div>
+  </div>
+
+  <div class="search-log-overlay" id="ztTreeModal" aria-hidden="true">
+    <div class="search-log-modal" role="dialog" aria-modal="true" style="max-width:640px;">
+      <div class="search-log-head">
+        <span class="search-log-title">🔗 Zanzibar分類ツリー</span>
+        <button class="search-log-close" id="ztTreeClose" aria-label="閉じる">✕</button>
+      </div>
+      <div class="zt-tree-search-wrap">
+        <input class="zt-tree-search-input" id="ztTreeSearchInput" type="search" placeholder="キーワード・カテゴリで検索..." autocomplete="off">
+      </div>
+      <div class="zt-tree-body" id="ztTreeBody"><div class="search-log-loading">読み込み中...</div></div>
     </div>
   </div>
 
@@ -3136,7 +3168,7 @@ export function getAiChatPage(user: {
         kwClassifyListModal: 820, sqKwQuestionsOverlay: 850, addSubqueryModal: 900, historyModalBackdrop: 750,
         tokenUsageModal: 820, dailyStatsModal: 820, modelDotDropdown: 700,
         kwColorPaletteModal: 900, kwCatGroupModal: 920, searchLogRecordModal: 880,
-        canvasSearchModal: 890,
+        canvasSearchModal: 890, ztTreeModal: 895,
       };
       Object.keys(staticZDefaults).forEach(function(id) {
         var el = document.getElementById(id);
@@ -4730,6 +4762,179 @@ export function getAiChatPage(user: {
     kwClassifyBtn.addEventListener('click', function(e) { e.stopPropagation(); openKwClassifyList(); });
     kwClassifyListClose.addEventListener('click', function() { kwClassifyListModal.classList.remove('open'); });
     kwClassifyListModal.addEventListener('click', function(e) { if (e.target === kwClassifyListModal) kwClassifyListModal.classList.remove('open'); });
+
+    // ===== Zanzibar形式分類ツリー（大分類 → 中分類/未分類 → キーワード） =====
+    var ztTreeBtn = document.getElementById('ztTreeBtn');
+    var ztTreeModal = document.getElementById('ztTreeModal');
+    var ztTreeClose = document.getElementById('ztTreeClose');
+    var ztTreeBody = document.getElementById('ztTreeBody');
+    var ztTreeSearchInput = document.getElementById('ztTreeSearchInput');
+    var ztTreeData = null;
+    var ztTreeOpenNodes = {};
+
+    function loadZtTreeData(cb) {
+      Promise.allSettled([
+        fetch('/api/aichat/all-keywords', { credentials: 'same-origin' }).then(function(r) { return r.json(); }),
+        fetch('/api/aichat/keyword-categories-summary', { credentials: 'same-origin' }).then(function(r) { return r.json(); }),
+        fetch('/api/aichat/category-groups', { credentials: 'same-origin' }).then(function(r) { return r.json(); })
+      ]).then(function(results) {
+        var kwData = results[0].status === 'fulfilled' ? results[0].value : {};
+        var catData = results[1].status === 'fulfilled' ? results[1].value : {};
+        var groupData = results[2].status === 'fulfilled' ? results[2].value : {};
+        var keywords = kwData.keywords || [];
+        var cats = catData.categories || [];
+        var groups = groupData.groups || [];
+
+        var catMap = {};
+        cats.forEach(function(c) { catMap[String(c.id)] = c; });
+
+        var catIdsInGroups = {};
+        groups.forEach(function(g) {
+          (g.category_ids || []).forEach(function(cid) { catIdsInGroups[String(cid)] = true; });
+        });
+
+        var catKeywords = {};
+        var unclassified = [];
+        keywords.forEach(function(kw) {
+          var ids = [];
+          if (kw.category_pairs) {
+            String(kw.category_pairs).split(',').forEach(function(pair) {
+              var sep = pair.indexOf(':');
+              if (sep > 0) ids.push(pair.slice(0, sep));
+            });
+          } else if (kw.category_id != null) {
+            ids.push(String(kw.category_id));
+          }
+          if (ids.length === 0) {
+            unclassified.push(kw.keyword);
+          } else {
+            ids.forEach(function(cid) {
+              if (!catKeywords[cid]) catKeywords[cid] = [];
+              catKeywords[cid].push(kw.keyword);
+            });
+          }
+        });
+
+        ztTreeData = {
+          groups: groups, cats: cats, catMap: catMap,
+          catIdsInGroups: catIdsInGroups, catKeywords: catKeywords, unclassified: unclassified
+        };
+        cb();
+      });
+    }
+
+    function ztHighlight(kw, q) {
+      if (!q) return escHtml(kw);
+      var idx = kw.toLowerCase().indexOf(q);
+      if (idx === -1) return escHtml(kw);
+      return escHtml(kw.slice(0, idx)) + '<mark class="zt-hl">' + escHtml(kw.slice(idx, idx + q.length)) + '</mark>' + escHtml(kw.slice(idx + q.length));
+    }
+
+    function ztRenderCatNode(cat, indentLevel, q) {
+      var cid = String(cat.id);
+      var kws = ztTreeData.catKeywords[cid] || [];
+      var nameHit = !q || cat.name.toLowerCase().indexOf(q) !== -1;
+      var kwHit = q && kws.some(function(kw) { return kw.toLowerCase().indexOf(q) !== -1; });
+      if (q && !nameHit && !kwHit) return '';
+      var isOpen = !!ztTreeOpenNodes[cid] || !!kwHit;
+      var indent = indentLevel * 16;
+      var html = '<div class="zt-line zt-node" data-node-id="' + escHtml(cid) + '" style="padding-left:' + indent + 'px;">'
+        + '<span class="zt-toggle">' + (isOpen ? '▾' : '▸') + '</span>'
+        + '<span class="zt-object">category</span><span class="zt-relation">#keyword</span>@<span class="zt-subject">' + escHtml(cat.name) + '</span>'
+        + '<span class="zt-count">(' + kws.length + ')</span>'
+        + '</div>';
+      if (isOpen) {
+        kws.forEach(function(kw) {
+          if (q && !nameHit && kw.toLowerCase().indexOf(q) === -1) return;
+          html += '<div class="zt-line zt-kw-line" style="padding-left:' + (indent + 20) + 'px;">'
+            + '<span class="zt-object">keyword</span><span class="zt-relation">#member</span>@<span class="zt-subject">' + ztHighlight(kw, q) + '</span>'
+            + '</div>';
+        });
+      }
+      return html;
+    }
+
+    function renderZtTree(filterQ) {
+      if (!ztTreeData) return;
+      var q = (filterQ || '').trim().toLowerCase();
+      var d = ztTreeData;
+      var html = '';
+
+      d.groups.forEach(function(g) {
+        var catIds = (g.category_ids || []).map(String);
+        var catsInGroup = catIds.map(function(cid) { return d.catMap[cid]; }).filter(Boolean);
+        var groupNameHit = !q || g.group_name.toLowerCase().indexOf(q) !== -1;
+        var anyChildVisible = catsInGroup.some(function(c) {
+          var kws = d.catKeywords[String(c.id)] || [];
+          return c.name.toLowerCase().indexOf(q) !== -1 || kws.some(function(kw) { return kw.toLowerCase().indexOf(q) !== -1; });
+        });
+        if (q && !groupNameHit && !anyChildVisible) return;
+        html += '<div class="zt-line zt-group-line"><span class="zt-object">category_group</span><span class="zt-relation">#category</span>@<span class="zt-subject">' + escHtml(g.group_name) + '</span></div>';
+        catsInGroup.forEach(function(cat) { html += ztRenderCatNode(cat, 1, q); });
+      });
+
+      var ungroupedCats = d.cats.filter(function(c) { return !d.catIdsInGroups[String(c.id)]; });
+      if (ungroupedCats.length > 0) {
+        var anyVisible = !q || ungroupedCats.some(function(c) {
+          var kws = d.catKeywords[String(c.id)] || [];
+          return c.name.toLowerCase().indexOf(q) !== -1 || kws.some(function(kw) { return kw.toLowerCase().indexOf(q) !== -1; });
+        });
+        if (anyVisible) {
+          html += '<div class="zt-line zt-group-line"><span class="zt-object">category_group</span><span class="zt-relation">#category</span>@<span class="zt-subject">未所属</span></div>';
+          ungroupedCats.forEach(function(cat) { html += ztRenderCatNode(cat, 1, q); });
+        }
+      }
+
+      var uncHit = d.unclassified.some(function(kw) { return kw.toLowerCase().indexOf(q) !== -1; });
+      if (!q || uncHit) {
+        var isOpen = !!ztTreeOpenNodes.unclassified || (!!q && uncHit);
+        html += '<div class="zt-line zt-group-line"><span class="zt-object">category_group</span><span class="zt-relation">#category</span>@<span class="zt-subject">未分類</span></div>';
+        html += '<div class="zt-line zt-node" data-node-id="unclassified" style="padding-left:16px;">'
+          + '<span class="zt-toggle">' + (isOpen ? '▾' : '▸') + '</span>'
+          + '<span class="zt-object">category</span><span class="zt-relation">#keyword</span>@<span class="zt-subject">未分類</span>'
+          + '<span class="zt-count">(' + d.unclassified.length + ')</span>'
+          + '</div>';
+        if (isOpen) {
+          d.unclassified.forEach(function(kw) {
+            if (q && kw.toLowerCase().indexOf(q) === -1) return;
+            html += '<div class="zt-line zt-kw-line" style="padding-left:36px;">'
+              + '<span class="zt-object">keyword</span><span class="zt-relation">#member</span>@<span class="zt-subject">' + ztHighlight(kw, q) + '</span>'
+              + '</div>';
+          });
+        }
+      }
+
+      if (!html) html = '<div class="search-log-empty">一致するカテゴリ・キーワードがありません</div>';
+      ztTreeBody.innerHTML = html;
+
+      ztTreeBody.querySelectorAll('.zt-node').forEach(function(el) {
+        el.addEventListener('click', function() {
+          var nid = el.dataset.nodeId;
+          ztTreeOpenNodes[nid] = !ztTreeOpenNodes[nid];
+          renderZtTree(ztTreeSearchInput.value);
+        });
+      });
+    }
+
+    function openZtTreeModal() {
+      ztTreeModal.style.zIndex = String(getNextZ());
+      ztTreeModal.classList.add('open');
+      ztTreeModal.setAttribute('aria-hidden', 'false');
+      ztTreeSearchInput.value = '';
+      ztTreeOpenNodes = {};
+      ztTreeBody.innerHTML = '<div class="search-log-loading">読み込み中...</div>';
+      loadZtTreeData(function() { renderZtTree(''); });
+    }
+
+    function closeZtTreeModal() {
+      ztTreeModal.classList.remove('open');
+      ztTreeModal.setAttribute('aria-hidden', 'true');
+    }
+
+    ztTreeBtn.addEventListener('click', function(e) { e.stopPropagation(); openZtTreeModal(); });
+    ztTreeClose.addEventListener('click', closeZtTreeModal);
+    ztTreeModal.addEventListener('click', function(e) { if (e.target === ztTreeModal) closeZtTreeModal(); });
+    ztTreeSearchInput.addEventListener('input', function() { renderZtTree(ztTreeSearchInput.value); });
 
     // ===== トークン使用量グラフ =====
     var tokenUsageBtn = document.getElementById('tokenUsageBtn');
