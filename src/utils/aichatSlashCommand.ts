@@ -68,6 +68,23 @@ export function formatAiToolLimitInfo(now: Date): string {
   ].join('\n');
 }
 
+/**
+ * `/neko help` 用に有効なサブコマンドと簡単な説明をMarkdownテーブルで返す。
+ * 罫線・ツリー文字は使わずMarkdownテーブルで表現する（CLAUDE.mdルール16）。
+ */
+export function formatAichatSlashCommandHelp(): string {
+  return [
+    '## /neko サブコマンド一覧',
+    '| コマンド | 説明 |',
+    '|---|---|',
+    '| /neko hms | 現在時刻(JST)を表示します |',
+    '| /neko cal | 当月カレンダーをMarkdownテーブルで表示します |',
+    '| /neko clog | 直近のコミットエージェントログを表示します |',
+    '| /neko limit | Codex / Claude Code のリミット確認先を表示します |',
+    '| /neko help | このサブコマンド一覧を表示します |',
+  ].join('\n');
+}
+
 export type CommitAgentLogRow = {
   commit_sha: string | null;
   commit_message: string | null;
@@ -136,8 +153,12 @@ export async function interpretAichatSlashCommand(
     return { handled: true, response: formatAiToolLimitInfo(now) };
   }
 
+  if (subcommand === 'help') {
+    return { handled: true, response: formatAichatSlashCommandHelp() };
+  }
+
   return {
     handled: true,
-    response: `❌ 未対応のサブコマンドです: ${subcommand || '(なし)'}\n利用可能なコマンド: /neko hms, /neko cal, /neko clog, /neko limit`,
+    response: `❌ 未対応のサブコマンドです: ${subcommand || '(なし)'}\n利用可能なコマンド: /neko hms, /neko cal, /neko clog, /neko limit, /neko help\n詳細は /neko help を実行してください`,
   };
 }
