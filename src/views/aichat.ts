@@ -4567,6 +4567,10 @@ export function getAiChatPage(user: {
       var body = document.createElement('div');
       body.style.cssText = 'padding:16px 18px;overflow-y:auto;flex:1;';
 
+      var suggestBadge = document.createElement('div');
+      suggestBadge.style.cssText = 'font-size:11px;color:var(--text-muted);margin-bottom:8px;min-height:16px;';
+      body.appendChild(suggestBadge);
+
       var catsSection = document.createElement('div');
       catsSection.style.cssText = 'margin-bottom:14px;min-height:24px;line-height:2;';
       body.appendChild(catsSection);
@@ -4681,6 +4685,21 @@ export function getAiChatPage(user: {
       }
 
       loadCategories();
+
+      fetch('/api/aichat/keyword-category-suggest', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({ keyword: keyword }),
+      })
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+          if (d && d.suggestion) {
+            var pct = Math.round(d.suggestion.similarity * 100);
+            suggestBadge.textContent = '🤖 推定: ' + d.suggestion.name + '（類似度' + pct + '%・参考情報であり自動では反映されません）';
+          }
+        })
+        .catch(function() {});
 
       catInput.addEventListener('input', function() {
         var val = catInput.value.trim();

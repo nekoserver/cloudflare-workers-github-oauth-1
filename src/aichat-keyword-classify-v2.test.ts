@@ -87,7 +87,7 @@ describe('キーワード分類拡張: 色選択スウォッチ', () => {
     const html = buildPage();
     const idx = html.indexOf('function openKwClassifyModal');
     expect(idx).toBeGreaterThan(-1);
-    const fn = html.slice(idx, idx + 2000);
+    const fn = html.slice(idx, idx + 2400);
     expect(fn).toContain('selectedColor');
   });
 
