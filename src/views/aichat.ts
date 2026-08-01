@@ -5129,6 +5129,10 @@ export function getAiChatPage(user: {
       fetch('/api/aichat/keyword-embeddings/similar?keyword=' + encodeURIComponent(keyword) + '&threshold=' + threshold, { credentials: 'same-origin' })
         .then(function(r) { return r.json(); })
         .then(function(d) {
+          if (d && d._warning) {
+            ztCacheSimilarBody.innerHTML = '<div style="color:#e53e3e;">類似検索でエラーが発生しました: ' + escHtml(d._warning) + '</div>';
+            return;
+          }
           var target = d && d.target;
           var groups = (d && d.groups) || [];
           if (groups.length === 0) {
