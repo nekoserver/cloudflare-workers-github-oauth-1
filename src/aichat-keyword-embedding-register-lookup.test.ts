@@ -136,7 +136,7 @@ describe('registerKeywordEmbeddings: bge-m3問い合わせデータの「登録�
 });
 
 describe('lookupKeywordEmbedding: Zanzibarツリー検索窓のキャッシュ有無判定', () => {
-  it('キャッシュがあれば keyword/model/dim/日時/プレビューを返す', async () => {
+  it('キャッシュがあれば keyword/model/dim/日時/プレビュー/分析結果を返す', async () => {
     const db = setupDb();
     const now = '2026-08-01T00:00:00.000Z';
     const vec = [0.1, 0.2, 0.3, 0.4];
@@ -153,6 +153,9 @@ describe('lookupKeywordEmbedding: Zanzibarツリー検索窓のキャッシュ�
     expect(info!.createdAt).toBe(now);
     expect(info!.updatedAt).toBe(now);
     info!.preview.forEach((v, i) => expect(v).toBeCloseTo(vec[i], 5));
+    expect(info!.analysis.dim).toBe(4);
+    expect(info!.analysis.min).toBeCloseTo(0.1, 5);
+    expect(info!.analysis.max).toBeCloseTo(0.4, 5);
   });
 
   it('プレビューは先頭12件までに切り詰める（レスポンス肥大化防止）', async () => {

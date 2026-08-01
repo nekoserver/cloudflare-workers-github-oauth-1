@@ -5487,6 +5487,50 @@ export function pickBestCategorySuggestion(
   return best;
 }
 
+export interface VectorAnalysis {
+  dim: number;
+  l2Norm: number;
+  mean: number;
+  std: number;
+  min: number;
+  max: number;
+  nearZeroRatio: number;
+}
+
+/**
+ * 埋め込みキャッシュモーダルの🔍分析ボタンが表示する基本統計量を計算する。
+ * 次元数・L2ノルム・平均・標準偏差・最小/最大値・ゼロに近い要素の割合を返す。
+ */
+export function analyzeVector(vector: number[]): VectorAnalysis {
+  const dim = vector.length;
+  if (dim === 0) {
+    return { dim: 0, l2Norm: 0, mean: 0, std: 0, min: 0, max: 0, nearZeroRatio: 0 };
+  }
+  let sum = 0;
+  let sumSq = 0;
+  let min = vector[0];
+  let max = vector[0];
+  let nearZero = 0;
+  for (const v of vector) {
+    sum += v;
+    sumSq += v * v;
+    if (v < min) min = v;
+    if (v > max) max = v;
+    if (Math.abs(v) < 0.01) nearZero++;
+  }
+  const mean = sum / dim;
+  const variance = Math.max(sumSq / dim - mean * mean, 0);
+  return {
+    dim,
+    l2Norm: Math.sqrt(sumSq),
+    mean,
+    std: Math.sqrt(variance),
+    min,
+    max,
+    nearZeroRatio: nearZero / dim,
+  };
+}
+
 /**
  * キーワード↔カテゴリ紐付けを送信された category_ids に完全一致させる。
  * INSERT OR IGNORE の追加のみだと分類モーダルでカテゴリのチェックを外しても
@@ -5631,12 +5675,14 @@ export interface KeywordEmbeddingInfo {
   createdAt: string;
   updatedAt: string;
   preview: number[];
+  analysis: VectorAnalysis;
 }
 
 /**
  * Zanzibarツリー検索窓の📖アイコン表示・キャッシュ内容表示に使う。
  * ベクトル全体(1024次元)をそのまま返すとレスポンスが肥大化するため、
- * 先頭12件のみをpreviewとして返す。
+ * 先頭12件のみをpreviewとして返す。基本統計量(analysis)はサーバー側で
+ * 全次元を使って計算してから返す（クライアントには全次元を送らない）。
  */
 export async function lookupKeywordEmbedding(
   db: D1Database,
@@ -5647,13 +5693,15 @@ export async function lookupKeywordEmbedding(
     `SELECT keyword, model, dim, vector, created_at, updated_at FROM aichat_keyword_embeddings WHERE user_id = ? AND keyword = ?`
   ).bind(userId, keyword).first<{ keyword: string; model: string; dim: number; vector: ArrayBuffer; created_at: string; updated_at: string }>();
   if (!row) return null;
+  const fullVector = blobToFloats(row.vector);
   return {
     keyword: row.keyword,
     model: row.model,
     dim: row.dim,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
-    preview: blobToFloats(row.vector).slice(0, 12),
+    preview: fullVector.slice(0, 12),
+    analysis: analyzeVector(fullVector),
   };
 }
 

@@ -5,6 +5,7 @@ import {
   cosineSimilarity,
   averageVector,
   pickBestCategorySuggestion,
+  analyzeVector,
 } from './index';
 
 // 対象: bge-m3埋め込みベクトルをD1のBLOBへ保存/復元する変換と、
@@ -101,5 +102,32 @@ describe('pickBestCategorySuggestion: 最良の分類候補を選ぶ', () => {
       [{ categoryId: 1, name: 'Empty', vector: [] }]
     );
     expect(result).toBeNull();
+  });
+});
+
+describe('analyzeVector: 埋め込みキャッシュモーダルの🔍分析ボタン', () => {
+  it('次元数・L2ノルム・平均・標準偏差・最小/最大値を計算する', () => {
+    const result = analyzeVector([1, 2, 3, 4]);
+    expect(result.dim).toBe(4);
+    expect(result.l2Norm).toBeCloseTo(Math.sqrt(1 + 4 + 9 + 16), 6);
+    expect(result.mean).toBeCloseTo(2.5, 6);
+    expect(result.std).toBeCloseTo(Math.sqrt(1.25), 6);
+    expect(result.min).toBe(1);
+    expect(result.max).toBe(4);
+  });
+
+  it('絶対値0.01未満の要素の割合をnearZeroRatioとして返す', () => {
+    const result = analyzeVector([0, 0.005, -0.005, 1, -1]);
+    expect(result.nearZeroRatio).toBeCloseTo(3 / 5, 6);
+  });
+
+  it('空配列が渡された場合は例外を投げず全て0のオブジェクトを返す（握りつぶさない）', () => {
+    const result = analyzeVector([]);
+    expect(result).toEqual({ dim: 0, l2Norm: 0, mean: 0, std: 0, min: 0, max: 0, nearZeroRatio: 0 });
+  });
+
+  it('全要素が同一値の場合は標準偏差0になる（浮動小数点誤差で負値のsqrtにならない）', () => {
+    const result = analyzeVector([3, 3, 3, 3]);
+    expect(result.std).toBe(0);
   });
 });
