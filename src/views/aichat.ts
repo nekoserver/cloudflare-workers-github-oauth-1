@@ -1112,7 +1112,10 @@ export function getAiChatPage(user: {
     <div class="search-log-modal" role="dialog" aria-modal="true" style="max-width:560px;">
       <div class="search-log-head">
         <span class="search-log-title">📖 埋め込みキャッシュ</span>
-        <button class="search-log-close" id="ztCacheClose" aria-label="閉じる">✕</button>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <button class="sync-repo-colors-btn" id="ztCacheAnalyzeBtn" type="button" style="font-size:11px;padding:4px 10px;">🔍 分析</button>
+          <button class="search-log-close" id="ztCacheClose" aria-label="閉じる">✕</button>
+        </div>
       </div>
       <div class="search-log-body" id="ztCacheBody" style="font-family:monospace;font-size:11.5px;line-height:1.6;white-space:pre-wrap;word-break:break-all;max-height:60vh;"></div>
     </div>
@@ -4833,6 +4836,8 @@ export function getAiChatPage(user: {
     var ztCacheModal = document.getElementById('ztCacheModal');
     var ztCacheClose = document.getElementById('ztCacheClose');
     var ztCacheBody = document.getElementById('ztCacheBody');
+    var ztCacheAnalyzeBtn = document.getElementById('ztCacheAnalyzeBtn');
+    var ztCacheAnalysisShown = false;
     var ztLastQuery = '';
     var ztLastMatchedKeywords = [];
     var ztCacheLookupTimer = null;
@@ -5059,9 +5064,33 @@ export function getAiChatPage(user: {
         });
     });
 
+    function formatZtCacheAnalysis(info) {
+      var a = info.analysis;
+      if (!a) return '分析データがありません';
+      return [
+        '',
+        '=== ベクタ分析 ===',
+        '次元数: ' + a.dim,
+        'L2ノルム: ' + a.l2Norm.toFixed(4),
+        '平均: ' + a.mean.toFixed(6),
+        '標準偏差: ' + a.std.toFixed(6),
+        '最小値: ' + a.min.toFixed(6),
+        '最大値: ' + a.max.toFixed(6),
+        'ゼロに近い要素の割合(|v|<0.01): ' + (a.nearZeroRatio * 100).toFixed(1) + '%'
+      ].join('\\n');
+    }
+
+    function renderZtCacheBody() {
+      if (!ztLastCacheInfo) return;
+      var base = JSON.stringify(ztLastCacheInfo, null, 2);
+      ztCacheBody.textContent = ztCacheAnalysisShown ? base + formatZtCacheAnalysis(ztLastCacheInfo) : base;
+      ztCacheAnalyzeBtn.textContent = ztCacheAnalysisShown ? '🔍 分析を隠す' : '🔍 分析';
+    }
+
     function openZtCacheModal() {
       if (!ztLastCacheInfo) return;
-      ztCacheBody.textContent = JSON.stringify(ztLastCacheInfo, null, 2);
+      ztCacheAnalysisShown = false;
+      renderZtCacheBody();
       ztCacheModal.style.zIndex = String(getNextZ());
       ztCacheModal.classList.add('open');
       ztCacheModal.setAttribute('aria-hidden', 'false');
@@ -5075,6 +5104,11 @@ export function getAiChatPage(user: {
     ztCacheBtn.addEventListener('click', function(e) { e.stopPropagation(); openZtCacheModal(); });
     ztCacheClose.addEventListener('click', closeZtCacheModal);
     ztCacheModal.addEventListener('click', function(e) { if (e.target === ztCacheModal) closeZtCacheModal(); });
+    ztCacheAnalyzeBtn.addEventListener('click', function(e) {
+      e.stopPropagation();
+      ztCacheAnalysisShown = !ztCacheAnalysisShown;
+      renderZtCacheBody();
+    });
 
     function scheduleZtCacheLookup(rawKeyword) {
       clearTimeout(ztCacheLookupTimer);
