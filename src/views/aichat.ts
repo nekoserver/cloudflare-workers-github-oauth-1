@@ -206,6 +206,8 @@ export function getAiChatPage(user: {
     .zt-subject { color: #68d391; }
     .zt-count { color: var(--text-muted); margin-left: 4px; }
     .zt-hl { background: rgba(246, 173, 85, 0.45); color: inherit; border-radius: 2px; }
+    .zt-bge-btn { background: none; border: none; cursor: pointer; font-size: 16px; padding: 2px 4px; flex-shrink: 0; }
+    .zt-bge-btn:hover { opacity: 0.7; }
     .search-log-table { width: 100%; border-collapse: collapse; font-size: 12px; }
     .search-log-table th {
       font-size: 10px; font-weight: 700; color: var(--text-muted); text-transform: uppercase;
@@ -1080,10 +1082,24 @@ export function getAiChatPage(user: {
         <span class="search-log-title">🔗 Zanzibar分類ツリー</span>
         <button class="search-log-close" id="ztTreeClose" aria-label="閉じる">✕</button>
       </div>
-      <div class="zt-tree-search-wrap">
-        <input class="zt-tree-search-input" id="ztTreeSearchInput" type="search" placeholder="キーワード・カテゴリで検索..." autocomplete="off">
+      <div class="zt-tree-search-wrap" style="display:flex;gap:6px;align-items:center;">
+        <input class="zt-tree-search-input" id="ztTreeSearchInput" type="search" placeholder="キーワード・カテゴリで検索..." autocomplete="off" style="flex:1;">
+        <button class="zt-bge-btn" id="ztBgeBtn" title="bge-m3問い合わせデータを表示" style="display:none;">🗒️</button>
       </div>
       <div class="zt-tree-body" id="ztTreeBody"><div class="search-log-loading">読み込み中...</div></div>
+    </div>
+  </div>
+
+  <div class="search-log-overlay" id="ztBgeModal" aria-hidden="true">
+    <div class="search-log-modal" role="dialog" aria-modal="true" style="max-width:600px;">
+      <div class="search-log-head">
+        <span class="search-log-title">🗒️ bge-m3 問い合わせデータ</span>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <button class="sync-repo-colors-btn" id="ztBgeCopyBtn" type="button" style="font-size:11px;padding:4px 10px;">📋 コピー</button>
+          <button class="search-log-close" id="ztBgeClose" aria-label="閉じる">✕</button>
+        </div>
+      </div>
+      <div class="search-log-body" id="ztBgeBody" style="font-family:monospace;font-size:11.5px;line-height:1.6;white-space:pre-wrap;word-break:break-all;max-height:60vh;"></div>
     </div>
   </div>
 
@@ -3168,7 +3184,7 @@ export function getAiChatPage(user: {
         kwClassifyListModal: 820, sqKwQuestionsOverlay: 850, addSubqueryModal: 900, historyModalBackdrop: 750,
         tokenUsageModal: 820, dailyStatsModal: 820, modelDotDropdown: 700,
         kwColorPaletteModal: 900, kwCatGroupModal: 920, searchLogRecordModal: 880,
-        canvasSearchModal: 890, ztTreeModal: 895,
+        canvasSearchModal: 890, ztTreeModal: 895, ztBgeModal: 905,
       };
       Object.keys(staticZDefaults).forEach(function(id) {
         var el = document.getElementById(id);
@@ -4771,6 +4787,14 @@ export function getAiChatPage(user: {
     var ztTreeSearchInput = document.getElementById('ztTreeSearchInput');
     var ztTreeData = null;
     var ztTreeOpenNodes = {};
+    var ztMatchCollector = [];
+    var ztBgeBtn = document.getElementById('ztBgeBtn');
+    var ztBgeModal = document.getElementById('ztBgeModal');
+    var ztBgeClose = document.getElementById('ztBgeClose');
+    var ztBgeBody = document.getElementById('ztBgeBody');
+    var ztBgeCopyBtn = document.getElementById('ztBgeCopyBtn');
+    var ztLastQuery = '';
+    var ztLastMatchedKeywords = [];
 
     function loadZtTreeData(cb) {
       Promise.allSettled([
@@ -4845,7 +4869,9 @@ export function getAiChatPage(user: {
         + '</div>';
       if (isOpen) {
         kws.forEach(function(kw) {
-          if (q && !nameHit && kw.toLowerCase().indexOf(q) === -1) return;
+          var kwHitSelf = q && kw.toLowerCase().indexOf(q) !== -1;
+          if (q && !nameHit && !kwHitSelf) return;
+          if (kwHitSelf) ztMatchCollector.push(kw);
           html += '<div class="zt-line zt-kw-line" style="padding-left:' + (indent + 20) + 'px;">'
             + '<span class="zt-object">keyword</span><span class="zt-relation">#member</span>@<span class="zt-subject">' + ztHighlight(kw, q) + '</span>'
             + '</div>';
@@ -4856,9 +4882,11 @@ export function getAiChatPage(user: {
 
     function renderZtTree(filterQ) {
       if (!ztTreeData) return;
-      var q = (filterQ || '').trim().toLowerCase();
+      var qRaw = (filterQ || '').trim();
+      var q = qRaw.toLowerCase();
       var d = ztTreeData;
       var html = '';
+      ztMatchCollector = [];
 
       d.groups.forEach(function(g) {
         var catIds = (g.category_ids || []).map(String);
@@ -4896,7 +4924,9 @@ export function getAiChatPage(user: {
           + '</div>';
         if (isOpen) {
           d.unclassified.forEach(function(kw) {
-            if (q && kw.toLowerCase().indexOf(q) === -1) return;
+            var kwHitSelf = q && kw.toLowerCase().indexOf(q) !== -1;
+            if (q && !kwHitSelf) return;
+            if (kwHitSelf) ztMatchCollector.push(kw);
             html += '<div class="zt-line zt-kw-line" style="padding-left:36px;">'
               + '<span class="zt-object">keyword</span><span class="zt-relation">#member</span>@<span class="zt-subject">' + ztHighlight(kw, q) + '</span>'
               + '</div>';
@@ -4914,7 +4944,46 @@ export function getAiChatPage(user: {
           renderZtTree(ztTreeSearchInput.value);
         });
       });
+
+      ztLastQuery = qRaw;
+      ztLastMatchedKeywords = [];
+      ztMatchCollector.forEach(function(kw) {
+        if (ztLastMatchedKeywords.indexOf(kw) === -1) ztLastMatchedKeywords.push(kw);
+      });
+      ztBgeBtn.style.display = (qRaw && ztLastMatchedKeywords.length > 0) ? 'inline-block' : 'none';
     }
+
+    function openZtBgeModal() {
+      var texts = ztLastQuery ? [ztLastQuery] : [];
+      ztLastMatchedKeywords.forEach(function(kw) {
+        if (texts.indexOf(kw) === -1) texts.push(kw);
+      });
+      texts = texts.slice(0, 50);
+      var payload = {
+        model: '@cf/baai/bge-m3',
+        input: { text: texts }
+      };
+      ztBgeBody.textContent = JSON.stringify(payload, null, 2);
+      ztBgeCopyBtn.textContent = '📋 コピー';
+      ztBgeModal.style.zIndex = String(getNextZ());
+      ztBgeModal.classList.add('open');
+      ztBgeModal.setAttribute('aria-hidden', 'false');
+    }
+
+    function closeZtBgeModal() {
+      ztBgeModal.classList.remove('open');
+      ztBgeModal.setAttribute('aria-hidden', 'true');
+    }
+
+    ztBgeBtn.addEventListener('click', function(e) { e.stopPropagation(); openZtBgeModal(); });
+    ztBgeClose.addEventListener('click', closeZtBgeModal);
+    ztBgeModal.addEventListener('click', function(e) { if (e.target === ztBgeModal) closeZtBgeModal(); });
+    ztBgeCopyBtn.addEventListener('click', function() {
+      navigator.clipboard.writeText(ztBgeBody.textContent).then(function() {
+        ztBgeCopyBtn.textContent = '✓ コピーしました';
+        setTimeout(function() { ztBgeCopyBtn.textContent = '📋 コピー'; }, 2000);
+      });
+    });
 
     function openZtTreeModal() {
       ztTreeModal.style.zIndex = String(getNextZ());
@@ -4922,6 +4991,7 @@ export function getAiChatPage(user: {
       ztTreeModal.setAttribute('aria-hidden', 'false');
       ztTreeSearchInput.value = '';
       ztTreeOpenNodes = {};
+      ztBgeBtn.style.display = 'none';
       ztTreeBody.innerHTML = '<div class="search-log-loading">読み込み中...</div>';
       loadZtTreeData(function() { renderZtTree(''); });
     }
