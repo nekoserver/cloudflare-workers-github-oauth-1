@@ -205,6 +205,8 @@ export const STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
   { name: 'aichat_keyword_categories',    migration: '0084',  description: 'AIチャットキーワード分類のカテゴリマスタ（名前・色）', syncPolicy: 'auto' },
   { name: 'aichat_keyword_category_map',  migration: '0085',  description: 'AIチャットキーワード↔カテゴリの紐付け', syncPolicy: 'auto' },
   { name: 'aichat_category_audit_log',    migration: '0086',  description: 'AIチャット分類グループ・キーワード分類の作成/更新/削除の監査ログ', syncPolicy: 'auto' },
+  { name: 'aichat_keyword_embeddings',    migration: '0087',  description: 'AIチャットキーワードのbge-m3埋め込みベクトルキャッシュ（キーワード単位で最新1件のみ保持）', syncPolicy: 'auto' },
+  { name: 'aichat_keyword_category_suggestions', migration: '0088', description: 'AIによるキーワード↔カテゴリ分類の推薦履歴（確定分類とは別テーブルで人間の最終判断を上書きしない）', syncPolicy: 'auto' },
 ];
 
 const REQUIRED_STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
@@ -1345,6 +1347,29 @@ CREATE INDEX IF NOT EXISTS idx_aichat_keyword_category_map_category ON aichat_ke
 );
 CREATE INDEX IF NOT EXISTS idx_aichat_category_audit_log_user_created ON aichat_category_audit_log(user_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_aichat_category_audit_log_entity ON aichat_category_audit_log(entity_type, entity_id);`,
+  '0087': `CREATE TABLE IF NOT EXISTS aichat_keyword_embeddings (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id TEXT NOT NULL,
+  keyword TEXT NOT NULL,
+  model TEXT NOT NULL,
+  dim INTEGER NOT NULL,
+  vector BLOB NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_aichat_keyword_embeddings_user_keyword ON aichat_keyword_embeddings(user_id, keyword);`,
+  '0088': `CREATE TABLE IF NOT EXISTS aichat_keyword_category_suggestions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id TEXT NOT NULL,
+  keyword TEXT NOT NULL,
+  suggested_category_id INTEGER NOT NULL REFERENCES aichat_keyword_categories(id),
+  similarity REAL NOT NULL,
+  model TEXT NOT NULL,
+  accepted INTEGER,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_aichat_keyword_category_suggestions_user_keyword ON aichat_keyword_category_suggestions(user_id, keyword, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_aichat_keyword_category_suggestions_category ON aichat_keyword_category_suggestions(suggested_category_id);`,
 };
 
 async function ensureGroupTable(db: D1Database): Promise<void> {
@@ -1561,6 +1586,8 @@ export const TABLE_COLUMN_KEYS: Record<string, ColumnKeyInfo> = {
   aichat_keyword_categories: { id: 'pk', user_id: 'uk', name: 'uk' },
   aichat_keyword_category_map: { id: 'pk', user_id: 'uk', keyword: 'uk', category_id: 'fk+idx' },
   aichat_category_audit_log: { id: 'pk', user_id: 'idx', entity_type: 'idx', entity_id: 'idx' },
+  aichat_keyword_embeddings: { id: 'pk', user_id: 'uk', keyword: 'uk' },
+  aichat_keyword_category_suggestions: { id: 'pk', user_id: 'idx', keyword: 'idx', suggested_category_id: 'fk+idx' },
 };
 
 export function getColumnKeyType(tableName: string, columnName: string): ColumnKeyType {
@@ -1651,6 +1678,8 @@ export const TABLE_GROUP_MAP: Record<string, string> = {
   aichat_keyword_categories: 'ai',
   aichat_keyword_category_map: 'ai',
   aichat_category_audit_log: 'ai',
+  aichat_keyword_embeddings: 'ai',
+  aichat_keyword_category_suggestions: 'ai',
   keyword_category_groups: 'search',
   keyword_multi_labels: 'search',
   ts_repository:          'ts-catalog',
@@ -1834,6 +1863,8 @@ export const COLUMN_FK_TARGETS: Record<string, Record<string, string>> = {
   aichat_keyword_categories: { user_id: 'user_sessions' },
   aichat_keyword_category_map: { user_id: 'user_sessions', category_id: 'aichat_keyword_categories' },
   aichat_category_audit_log: { user_id: 'user_sessions' },
+  aichat_keyword_embeddings: { user_id: 'user_sessions' },
+  aichat_keyword_category_suggestions: { user_id: 'user_sessions', suggested_category_id: 'aichat_keyword_categories' },
 
   // ========================================================================
   // 世界遺産ページ AI質問ログ・保存済みエリア系
@@ -5389,6 +5420,73 @@ app.post('/api/aichat/keyword-categories', authMiddleware, async (c) => {
   return jsonUtf8({ ok: true, inserted: wasInserted, category: row });
 });
 
+export const BGE_M3_MODEL = '@cf/baai/bge-m3';
+
+export function floatsToBlob(vec: number[]): ArrayBuffer {
+  return new Float32Array(vec).buffer;
+}
+
+export function blobToFloats(blob: ArrayBuffer): number[] {
+  return Array.from(new Float32Array(blob));
+}
+
+export function cosineSimilarity(a: number[], b: number[]): number {
+  if (a.length !== b.length || a.length === 0) return 0;
+  let dot = 0;
+  let na = 0;
+  let nb = 0;
+  for (let i = 0; i < a.length; i++) {
+    dot += a[i] * b[i];
+    na += a[i] * a[i];
+    nb += b[i] * b[i];
+  }
+  if (na === 0 || nb === 0) return 0;
+  return dot / (Math.sqrt(na) * Math.sqrt(nb));
+}
+
+export function averageVector(vectors: number[][]): number[] {
+  if (vectors.length === 0) return [];
+  const dim = vectors[0].length;
+  const sum = new Array(dim).fill(0);
+  for (const v of vectors) {
+    for (let i = 0; i < dim; i++) sum[i] += v[i];
+  }
+  return sum.map((s) => s / vectors.length);
+}
+
+export interface CategoryCentroid {
+  categoryId: number;
+  name: string;
+  vector: number[];
+}
+
+export interface CategorySuggestion {
+  categoryId: number;
+  name: string;
+  similarity: number;
+}
+
+/**
+ * キーワードのベクトルと各中分類の代表ベクトル(centroid)から最も類似度が
+ * 高い中分類を選ぶ。キーワードが1件も無くcentroidが空ベクトルの中分類は
+ * 誤って推薦しないよう除外する。あくまで「提案」であり、この結果が
+ * 確定分類(aichat_keyword_category_map)を書き換えることはない。
+ */
+export function pickBestCategorySuggestion(
+  keywordVector: number[],
+  centroids: CategoryCentroid[],
+): CategorySuggestion | null {
+  let best: CategorySuggestion | null = null;
+  for (const c of centroids) {
+    if (c.vector.length === 0) continue;
+    const similarity = cosineSimilarity(keywordVector, c.vector);
+    if (!best || similarity > best.similarity) {
+      best = { categoryId: c.categoryId, name: c.name, similarity };
+    }
+  }
+  return best;
+}
+
 /**
  * キーワード↔カテゴリ紐付けを送信された category_ids に完全一致させる。
  * INSERT OR IGNORE の追加のみだと分類モーダルでカテゴリのチェックを外しても
@@ -5451,6 +5549,95 @@ app.post('/api/aichat/keyword-category-map', authMiddleware, async (c) => {
     });
   }
   return jsonUtf8({ ok: true, inserted, deleted });
+});
+
+async function embedTextWithBgeM3(ai: Ai, text: string): Promise<number[]> {
+  const result = await ai.run(
+    BGE_M3_MODEL as Parameters<typeof ai.run>[0],
+    { text: [text] } as Parameters<typeof ai.run>[1],
+  );
+  const resultObj = (typeof result === 'object' && result !== null) ? result as Record<string, unknown> : {};
+  const data = Array.isArray(resultObj.data) ? resultObj.data as number[][] : [];
+  return Array.isArray(data[0]) ? data[0] : [];
+}
+
+/**
+ * キーワードの埋め込みベクトルをD1から読み出す。同じモデルでキャッシュ済み
+ * ならAIを呼ばずそれを返し、未キャッシュ・モデル不一致の場合のみbge-m3へ
+ * 問い合わせて aichat_keyword_embeddings を上書き保存する
+ * （前回合意した「ベクトル本体はモデル不一致時のみ強制上書き」の実装）。
+ */
+export async function getOrComputeKeywordEmbedding(
+  db: D1Database,
+  ai: Ai,
+  userId: string,
+  keyword: string,
+): Promise<number[]> {
+  const row = await db.prepare(
+    `SELECT vector, model FROM aichat_keyword_embeddings WHERE user_id = ? AND keyword = ?`
+  ).bind(userId, keyword).first<{ vector: ArrayBuffer; model: string }>();
+  if (row && row.model === BGE_M3_MODEL) {
+    return blobToFloats(row.vector);
+  }
+  const vector = await embedTextWithBgeM3(ai, keyword);
+  if (vector.length === 0) return [];
+  const now = new Date().toISOString();
+  await db.prepare(
+    `INSERT INTO aichat_keyword_embeddings (user_id, keyword, model, dim, vector, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(user_id, keyword) DO UPDATE SET
+       model = excluded.model, dim = excluded.dim, vector = excluded.vector, updated_at = excluded.updated_at`
+  ).bind(userId, keyword, BGE_M3_MODEL, vector.length, floatsToBlob(vector), now, now).run();
+  return vector;
+}
+
+/**
+ * 未分類キーワードに対し、既存の中分類の代表ベクトル(centroid)との
+ * コサイン類似度からAI分類を「提案」する。確定分類テーブル
+ * (aichat_keyword_category_map)には一切書き込まず、推薦内容は履歴として
+ * aichat_keyword_category_suggestions に積み上げるのみ。実際の分類確定は
+ * 常にユーザーが分類モーダルの「分類決定」を押した時だけ行われる。
+ */
+app.post('/api/aichat/keyword-category-suggest', authMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  if (!c.env.AI) return jsonUtf8({ suggestion: null, _warning: 'AIバインディングが未設定です' });
+  const body = await c.req.json<{ keyword?: string }>();
+  const keyword = (typeof body.keyword === 'string' ? body.keyword.trim() : '').slice(0, 200);
+  if (!keyword) return jsonUtf8({ error: 'keyword は必須です' }, 400);
+
+  const catsRows = await c.env.DB.prepare(
+    `SELECT id, name FROM aichat_keyword_categories WHERE user_id = ?`
+  ).bind(user.sub).all<{ id: number; name: string }>();
+  const categories = catsRows.results ?? [];
+  if (categories.length === 0) return jsonUtf8({ suggestion: null });
+
+  const keywordVector = await getOrComputeKeywordEmbedding(c.env.DB, c.env.AI, user.sub, keyword);
+  if (keywordVector.length === 0) return jsonUtf8({ suggestion: null, _warning: '埋め込み取得に失敗しました' });
+
+  const centroids: CategoryCentroid[] = [];
+  for (const cat of categories) {
+    const kwRows = await c.env.DB.prepare(
+      `SELECT DISTINCT keyword FROM aichat_keyword_category_map WHERE user_id = ? AND category_id = ? LIMIT 30`
+    ).bind(user.sub, cat.id).all<{ keyword: string }>();
+    const kws = (kwRows.results ?? []).map((r) => r.keyword).filter((k) => k !== keyword);
+    if (kws.length === 0) continue;
+    const vectors: number[][] = [];
+    for (const kw of kws) {
+      const v = await getOrComputeKeywordEmbedding(c.env.DB, c.env.AI, user.sub, kw);
+      if (v.length > 0) vectors.push(v);
+    }
+    if (vectors.length === 0) continue;
+    centroids.push({ categoryId: cat.id, name: cat.name, vector: averageVector(vectors) });
+  }
+
+  const best = pickBestCategorySuggestion(keywordVector, centroids);
+  if (best) {
+    await c.env.DB.prepare(
+      `INSERT INTO aichat_keyword_category_suggestions (user_id, keyword, suggested_category_id, similarity, model, created_at) VALUES (?, ?, ?, ?, ?, ?)`
+    ).bind(user.sub, keyword, best.categoryId, best.similarity, BGE_M3_MODEL, new Date().toISOString()).run();
+  }
+  return jsonUtf8({ suggestion: best });
 });
 
 /**
