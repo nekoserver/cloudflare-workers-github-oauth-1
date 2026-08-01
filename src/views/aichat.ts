@@ -1119,6 +1119,11 @@ export function getAiChatPage(user: {
       </div>
       <div class="search-log-body" id="ztCacheBody" style="font-family:monospace;font-size:11.5px;line-height:1.6;white-space:pre-wrap;word-break:break-all;max-height:30vh;"></div>
       <div id="ztCacheSimilarWrap" style="display:none;border-top:1px solid var(--border-color);padding:10px 16px;max-height:40vh;overflow-y:auto;">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+          <label for="ztCacheThresholdSlider" style="font-size:11px;color:var(--text-muted);white-space:nowrap;">類似度閾値</label>
+          <input type="range" id="ztCacheThresholdSlider" min="0.5" max="1" step="0.1" value="0.85" style="flex:1;">
+          <span id="ztCacheThresholdValue" style="font-size:11px;color:var(--text-secondary);width:38px;text-align:right;">85%</span>
+        </div>
         <div id="ztCacheSimilarBody" style="font-size:12px;"></div>
       </div>
     </div>
@@ -4842,6 +4847,8 @@ export function getAiChatPage(user: {
     var ztCacheAnalyzeBtn = document.getElementById('ztCacheAnalyzeBtn');
     var ztCacheSimilarWrap = document.getElementById('ztCacheSimilarWrap');
     var ztCacheSimilarBody = document.getElementById('ztCacheSimilarBody');
+    var ztCacheThresholdSlider = document.getElementById('ztCacheThresholdSlider');
+    var ztCacheThresholdValue = document.getElementById('ztCacheThresholdValue');
     var ztCacheAnalysisShown = false;
     var ZT_CACHE_METRIC_TOLERANCE = { l2Norm: 0.01, mean: 0.01, std: 0.01, min: 0.02, max: 0.02, nearZeroRatio: 0.05 };
     var ZT_CACHE_METRIC_LABELS = { dim: '次元数', l2Norm: 'L2ノルム', mean: '平均', std: '標準偏差', min: '最小値', max: '最大値', nearZeroRatio: 'ゼロ近傍割合' };
@@ -5118,7 +5125,8 @@ export function getAiChatPage(user: {
     function loadZtCacheSimilar(keyword) {
       ztCacheSimilarWrap.style.display = '';
       ztCacheSimilarBody.innerHTML = '<div class="search-log-loading">読み込み中...</div>';
-      fetch('/api/aichat/keyword-embeddings/similar?keyword=' + encodeURIComponent(keyword), { credentials: 'same-origin' })
+      var threshold = parseFloat(ztCacheThresholdSlider.value);
+      fetch('/api/aichat/keyword-embeddings/similar?keyword=' + encodeURIComponent(keyword) + '&threshold=' + threshold, { credentials: 'same-origin' })
         .then(function(r) { return r.json(); })
         .then(function(d) {
           var target = d && d.target;
@@ -5172,6 +5180,13 @@ export function getAiChatPage(user: {
       } else {
         ztCacheSimilarWrap.style.display = 'none';
       }
+    });
+    ztCacheThresholdSlider.addEventListener('input', function() {
+      ztCacheThresholdValue.textContent = Math.round(parseFloat(ztCacheThresholdSlider.value) * 100) + '%';
+    });
+    ztCacheThresholdSlider.addEventListener('change', function(e) {
+      e.stopPropagation();
+      if (ztCacheAnalysisShown && ztLastCacheInfo) loadZtCacheSimilar(ztLastCacheInfo.keyword);
     });
 
     function scheduleZtCacheLookup(rawKeyword) {

@@ -5542,6 +5542,17 @@ export interface SimilarKeywordMatch {
 }
 
 /**
+ * 埋め込みキャッシュモーダルの類似度閾値スライダーから渡される
+ * threshold クエリパラメータを解析する。数値として解釈できない場合は
+ * 例外を投げず fallback を返し、範囲外の値は0〜1にクランプする。
+ */
+export function parseSimilarityThreshold(raw: string | undefined, fallback: number): number {
+  const n = parseFloat(raw ?? '');
+  if (!Number.isFinite(n)) return fallback;
+  return Math.min(Math.max(n, 0), 1);
+}
+
+/**
  * 対象ベクトルとの類似度が閾値以上の候補のみを、類似度降順で最大limit件返す。
  */
 export function rankSimilarKeywords(
@@ -5575,17 +5586,19 @@ export interface SimilarKeywordGroup {
  * グルーピングして返す。複数の中分類に属するキーワードは両方のグループに
  * 列挙し、どの中分類にも属さない場合は「未分類」グループへ入れる。
  *
- * 閾値は0.9とやや高めに設定している。単語・短いキーワード単位の埋め込みは
- * 文単位の埋め込みに比べてコサイン類似度がベクトル空間の狭い領域に
- * 集まりやすく(異方性/anisotropy)、0.75程度の閾値では地理的に無関係な
- * 固有名詞同士(例: 「フランス」と「サンタ・マリア・ノヴェッラ駅」)まで
- * 「似ている」と誤って表示されてしまう実害が確認されたため引き上げた。
+ * 閾値は0.85としている。単語・短いキーワード単位の埋め込みは文単位の
+ * 埋め込みに比べてコサイン類似度がベクトル空間の狭い領域に集まりやすく
+ * (異方性/anisotropy)、0.75程度の閾値では地理的に無関係な固有名詞同士
+ * (例: 「フランス」と「サンタ・マリア・ノヴェッラ駅」)まで「似ている」と
+ * 誤って表示されてしまう実害が確認された一方、0.9まで上げると今度は
+ * 実際に近いキーワードもほぼヒットしなくなり機能として成立しなくなった
+ * ため、その中間の値としている。
  */
 export async function findSimilarKeywordsGroupedByCategory(
   db: D1Database,
   userId: string,
   keyword: string,
-  threshold = 0.9,
+  threshold = 0.85,
   limit = 20,
 ): Promise<{ target: VectorAnalysis | null; groups: SimilarKeywordGroup[] }> {
   const targetRow = await db.prepare(
@@ -5900,7 +5913,8 @@ app.get('/api/aichat/keyword-embeddings/similar', authMiddleware, async (c) => {
   if (!c.env.DB) return jsonUtf8({ target: null, groups: [] });
   const keyword = (c.req.query('keyword') ?? '').trim().slice(0, 200);
   if (!keyword) return jsonUtf8({ target: null, groups: [] });
-  const result = await findSimilarKeywordsGroupedByCategory(c.env.DB, user.sub, keyword);
+  const threshold = parseSimilarityThreshold(c.req.query('threshold'), 0.85);
+  const result = await findSimilarKeywordsGroupedByCategory(c.env.DB, user.sub, keyword, threshold);
   return jsonUtf8(result);
 });
 

@@ -3,6 +3,7 @@ import { DatabaseSync } from 'node:sqlite';
 import {
   rankSimilarKeywords,
   findSimilarKeywordsGroupedByCategory,
+  parseSimilarityThreshold,
   BGE_M3_MODEL,
 } from './index';
 
@@ -19,6 +20,26 @@ import {
 //       振り分け漏れ）
 //   (5) 対象キーワードがキャッシュされていない場合に例外を投げる
 //   (6) 他ユーザーのキーワードが候補に混ざる
+
+describe('parseSimilarityThreshold: 類似度閾値スライダーのクエリパラメータ解析', () => {
+  it('有効な数値文字列はそのままパースする', () => {
+    expect(parseSimilarityThreshold('0.7', 0.85)).toBeCloseTo(0.7, 6);
+  });
+
+  it('未指定(undefined)の場合はfallbackを返す', () => {
+    expect(parseSimilarityThreshold(undefined, 0.85)).toBe(0.85);
+  });
+
+  it('数値として解釈できない文字列はfallbackを返す（握りつぶさず安全側に倒す）', () => {
+    expect(parseSimilarityThreshold('abc', 0.85)).toBe(0.85);
+    expect(parseSimilarityThreshold('', 0.85)).toBe(0.85);
+  });
+
+  it('0未満は0に、1超は1にクランプする', () => {
+    expect(parseSimilarityThreshold('-0.5', 0.85)).toBe(0);
+    expect(parseSimilarityThreshold('1.5', 0.85)).toBe(1);
+  });
+});
 
 describe('rankSimilarKeywords: 類似度でのランキングと閾値フィルタ', () => {
   it('閾値以上の候補のみを類似度降順で返す', () => {
@@ -128,14 +149,16 @@ function insertEmbedding(db: DatabaseSync, userId: string, keyword: string, vec:
 }
 
 describe('findSimilarKeywordsGroupedByCategory: 分類カテゴリごとに似たキーワードを列挙する', () => {
-  it('デフォルト閾値は0.9（短いキーワード単位の埋め込みは異方性で類似度が高く出やすいため、無関係な固有名詞同士を誤ってヒットさせないよう高めに設定する）', async () => {
+  it('デフォルト閾値は0.85（短いキーワード単位の埋め込みは異方性で類似度が高く出やすいため無関係な固有名詞同士を誤ってヒットさせないよう高めにしつつ、上げすぎて実際に近いキーワードまでヒットしなくなることも避ける）', async () => {
     const db = setupDb();
     insertEmbedding(db, 'u1', 'フランス', [1, 0]);
-    insertEmbedding(db, 'u1', 'サンタ・マリア・ノヴェッラ駅', [0.85, Math.sqrt(1 - 0.85 * 0.85)]);
+    insertEmbedding(db, 'u1', 'サンタ・マリア・ノヴェッラ駅', [0.75, Math.sqrt(1 - 0.75 * 0.75)]);
+    insertEmbedding(db, 'u1', '仏国', [0.9, Math.sqrt(1 - 0.9 * 0.9)]);
 
     const result = await findSimilarKeywordsGroupedByCategory(wrapD1(db) as never, 'u1', 'フランス');
 
-    expect(result.groups).toEqual([]);
+    const keywords = result.groups.flatMap((g) => g.items.map((i) => i.keyword));
+    expect(keywords).toEqual(['仏国']);
   });
 
   it('似たキーワードを、それが属する中分類ごとにグルーピングして返す', async () => {
