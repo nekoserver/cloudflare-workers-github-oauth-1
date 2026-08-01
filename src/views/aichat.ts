@@ -1109,7 +1109,7 @@ export function getAiChatPage(user: {
   </div>
 
   <div class="search-log-overlay" id="ztCacheModal" aria-hidden="true">
-    <div class="search-log-modal" role="dialog" aria-modal="true" style="max-width:560px;">
+    <div class="search-log-modal" role="dialog" aria-modal="true" style="max-width:640px;">
       <div class="search-log-head">
         <span class="search-log-title">📖 埋め込みキャッシュ</span>
         <div style="display:flex;align-items:center;gap:8px;">
@@ -1117,7 +1117,10 @@ export function getAiChatPage(user: {
           <button class="search-log-close" id="ztCacheClose" aria-label="閉じる">✕</button>
         </div>
       </div>
-      <div class="search-log-body" id="ztCacheBody" style="font-family:monospace;font-size:11.5px;line-height:1.6;white-space:pre-wrap;word-break:break-all;max-height:60vh;"></div>
+      <div class="search-log-body" id="ztCacheBody" style="font-family:monospace;font-size:11.5px;line-height:1.6;white-space:pre-wrap;word-break:break-all;max-height:30vh;"></div>
+      <div id="ztCacheSimilarWrap" style="display:none;border-top:1px solid var(--border-color);padding:10px 16px;max-height:40vh;overflow-y:auto;">
+        <div id="ztCacheSimilarBody" style="font-size:12px;"></div>
+      </div>
     </div>
   </div>
 
@@ -4837,7 +4840,12 @@ export function getAiChatPage(user: {
     var ztCacheClose = document.getElementById('ztCacheClose');
     var ztCacheBody = document.getElementById('ztCacheBody');
     var ztCacheAnalyzeBtn = document.getElementById('ztCacheAnalyzeBtn');
+    var ztCacheSimilarWrap = document.getElementById('ztCacheSimilarWrap');
+    var ztCacheSimilarBody = document.getElementById('ztCacheSimilarBody');
     var ztCacheAnalysisShown = false;
+    var ZT_CACHE_METRIC_TOLERANCE = { l2Norm: 0.01, mean: 0.01, std: 0.01, min: 0.02, max: 0.02, nearZeroRatio: 0.05 };
+    var ZT_CACHE_METRIC_LABELS = { dim: '次元数', l2Norm: 'L2ノルム', mean: '平均', std: '標準偏差', min: '最小値', max: '最大値', nearZeroRatio: 'ゼロ近傍割合' };
+    var ZT_CACHE_METRIC_ORDER = ['dim', 'l2Norm', 'mean', 'std', 'min', 'max', 'nearZeroRatio'];
     var ztLastQuery = '';
     var ztLastMatchedKeywords = [];
     var ztCacheLookupTimer = null;
@@ -5087,9 +5095,58 @@ export function getAiChatPage(user: {
       ztCacheAnalyzeBtn.textContent = ztCacheAnalysisShown ? '🔍 分析を隠す' : '🔍 分析';
     }
 
+    function ztMetricIsClose(field, a, b) {
+      if (field === 'dim') return a === b;
+      var tol = ZT_CACHE_METRIC_TOLERANCE[field];
+      return typeof tol === 'number' && Math.abs(a - b) <= tol;
+    }
+
+    function ztFormatMetricValue(field, v) {
+      if (field === 'dim') return String(v);
+      if (field === 'nearZeroRatio') return (v * 100).toFixed(1) + '%';
+      return v.toFixed(4);
+    }
+
+    function renderZtCacheMetadataLine(analysis, targetAnalysis) {
+      return ZT_CACHE_METRIC_ORDER.map(function(f) {
+        var text = ZT_CACHE_METRIC_LABELS[f] + ':' + escHtml(ztFormatMetricValue(f, analysis[f]));
+        var close = targetAnalysis ? ztMetricIsClose(f, analysis[f], targetAnalysis[f]) : false;
+        return close ? '<span class="zt-hl">' + text + '</span>' : '<span>' + text + '</span>';
+      }).join('　');
+    }
+
+    function loadZtCacheSimilar(keyword) {
+      ztCacheSimilarWrap.style.display = '';
+      ztCacheSimilarBody.innerHTML = '<div class="search-log-loading">読み込み中...</div>';
+      fetch('/api/aichat/keyword-embeddings/similar?keyword=' + encodeURIComponent(keyword), { credentials: 'same-origin' })
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+          var target = d && d.target;
+          var groups = (d && d.groups) || [];
+          if (groups.length === 0) {
+            ztCacheSimilarBody.innerHTML = '<div style="color:var(--text-muted);">似ているキーワードは見つかりませんでした</div>';
+            return;
+          }
+          var html = '';
+          groups.forEach(function(g) {
+            html += '<div style="font-weight:700;margin-top:10px;margin-bottom:4px;">' + escHtml(g.categoryName) + '</div>';
+            g.items.forEach(function(item) {
+              html += '<div style="padding:5px 0;border-bottom:1px dashed var(--border-color);">'
+                + '<span style="font-weight:600;">' + escHtml(item.keyword) + '</span>'
+                + '<span style="color:var(--text-muted);margin-left:6px;font-size:11px;">類似度' + Math.round(item.similarity * 100) + '%</span>'
+                + '<div style="font-size:11px;color:var(--text-secondary);margin-top:2px;">' + renderZtCacheMetadataLine(item.analysis, target) + '</div>'
+                + '</div>';
+            });
+          });
+          ztCacheSimilarBody.innerHTML = html;
+        })
+        .catch(function() { ztCacheSimilarBody.innerHTML = '<div style="color:#e53e3e;">読み込みに失敗しました</div>'; });
+    }
+
     function openZtCacheModal() {
       if (!ztLastCacheInfo) return;
       ztCacheAnalysisShown = false;
+      ztCacheSimilarWrap.style.display = 'none';
       renderZtCacheBody();
       ztCacheModal.style.zIndex = String(getNextZ());
       ztCacheModal.classList.add('open');
@@ -5108,6 +5165,11 @@ export function getAiChatPage(user: {
       e.stopPropagation();
       ztCacheAnalysisShown = !ztCacheAnalysisShown;
       renderZtCacheBody();
+      if (ztCacheAnalysisShown && ztLastCacheInfo) {
+        loadZtCacheSimilar(ztLastCacheInfo.keyword);
+      } else {
+        ztCacheSimilarWrap.style.display = 'none';
+      }
     });
 
     function scheduleZtCacheLookup(rawKeyword) {
