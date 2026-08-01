@@ -1121,8 +1121,8 @@ export function getAiChatPage(user: {
       <div id="ztCacheSimilarWrap" style="display:none;border-top:1px solid var(--border-color);padding:10px 16px;max-height:40vh;overflow-y:auto;">
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
           <label for="ztCacheThresholdSlider" style="font-size:11px;color:var(--text-muted);white-space:nowrap;">類似度閾値</label>
-          <input type="range" id="ztCacheThresholdSlider" min="0.5" max="1" step="0.1" value="0.85" style="flex:1;">
-          <span id="ztCacheThresholdValue" style="font-size:11px;color:var(--text-secondary);width:38px;text-align:right;">85%</span>
+          <input type="range" id="ztCacheThresholdSlider" min="0.5" max="1" step="0.01" value="0.75" style="flex:1;">
+          <span id="ztCacheThresholdValue" style="font-size:11px;color:var(--text-secondary);width:38px;text-align:right;">75%</span>
         </div>
         <div id="ztCacheSimilarBody" style="font-size:12px;"></div>
       </div>
@@ -4849,6 +4849,34 @@ export function getAiChatPage(user: {
     var ztCacheSimilarBody = document.getElementById('ztCacheSimilarBody');
     var ztCacheThresholdSlider = document.getElementById('ztCacheThresholdSlider');
     var ztCacheThresholdValue = document.getElementById('ztCacheThresholdValue');
+    var ZT_SIM_THRESHOLD_COOKIE_NAME = 'aichat_zt_sim_threshold=';
+    var ZT_SIM_THRESHOLD_DEFAULT_PCT = 75;
+
+    function readZtSimThresholdCookiePct() {
+      var parts = document.cookie.split(';');
+      for (var i = 0; i < parts.length; i++) {
+        var part = parts[i];
+        while (part.length > 0 && part.charAt(0) === ' ') part = part.slice(1);
+        if (part.indexOf(ZT_SIM_THRESHOLD_COOKIE_NAME) === 0) {
+          var pct = parseInt(decodeURIComponent(part.slice(ZT_SIM_THRESHOLD_COOKIE_NAME.length)), 10);
+          if (isFinite(pct) && pct >= 50 && pct <= 100) return pct;
+          return null;
+        }
+      }
+      return null;
+    }
+
+    function writeZtSimThresholdCookiePct(pct) {
+      document.cookie = ZT_SIM_THRESHOLD_COOKIE_NAME + pct + '; Path=/; Secure; SameSite=Lax; Max-Age=31536000';
+    }
+
+    (function initZtSimThresholdSlider() {
+      var pct = readZtSimThresholdCookiePct();
+      if (pct == null) pct = ZT_SIM_THRESHOLD_DEFAULT_PCT;
+      ztCacheThresholdSlider.value = String(pct / 100);
+      ztCacheThresholdValue.textContent = pct + '%';
+    })();
+
     var ztCacheAnalysisShown = false;
     var ZT_CACHE_METRIC_TOLERANCE = { l2Norm: 0.01, mean: 0.01, std: 0.01, min: 0.02, max: 0.02, nearZeroRatio: 0.05 };
     var ZT_CACHE_METRIC_LABELS = { dim: '次元数', l2Norm: 'L2ノルム', mean: '平均', std: '標準偏差', min: '最小値', max: '最大値', nearZeroRatio: 'ゼロ近傍割合' };
@@ -5190,6 +5218,7 @@ export function getAiChatPage(user: {
     });
     ztCacheThresholdSlider.addEventListener('change', function(e) {
       e.stopPropagation();
+      writeZtSimThresholdCookiePct(Math.round(parseFloat(ztCacheThresholdSlider.value) * 100));
       if (ztCacheAnalysisShown && ztLastCacheInfo) loadZtCacheSimilar(ztLastCacheInfo.keyword);
     });
 
