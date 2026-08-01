@@ -5531,6 +5531,109 @@ export function analyzeVector(vector: number[]): VectorAnalysis {
   };
 }
 
+export interface SimilarKeywordCandidate {
+  keyword: string;
+  vector: number[];
+}
+
+export interface SimilarKeywordMatch {
+  keyword: string;
+  similarity: number;
+}
+
+/**
+ * 対象ベクトルとの類似度が閾値以上の候補のみを、類似度降順で最大limit件返す。
+ */
+export function rankSimilarKeywords(
+  targetVector: number[],
+  candidates: SimilarKeywordCandidate[],
+  threshold: number,
+  limit: number,
+): SimilarKeywordMatch[] {
+  return candidates
+    .map((c) => ({ keyword: c.keyword, similarity: cosineSimilarity(targetVector, c.vector) }))
+    .filter((m) => m.similarity >= threshold)
+    .sort((a, b) => b.similarity - a.similarity)
+    .slice(0, Math.max(0, limit));
+}
+
+export interface SimilarKeywordItem {
+  keyword: string;
+  similarity: number;
+  analysis: VectorAnalysis;
+}
+
+export interface SimilarKeywordGroup {
+  categoryId: number | null;
+  categoryName: string;
+  items: SimilarKeywordItem[];
+}
+
+/**
+ * 埋め込みキャッシュモーダルの🔍分析ボタンから呼ばれる。対象キーワードと
+ * コサイン類似度が近い登録済みキーワードを探し、それが属する中分類ごとに
+ * グルーピングして返す。複数の中分類に属するキーワードは両方のグループに
+ * 列挙し、どの中分類にも属さない場合は「未分類」グループへ入れる。
+ */
+export async function findSimilarKeywordsGroupedByCategory(
+  db: D1Database,
+  userId: string,
+  keyword: string,
+  threshold = 0.75,
+  limit = 20,
+): Promise<{ target: VectorAnalysis | null; groups: SimilarKeywordGroup[] }> {
+  const targetRow = await db.prepare(
+    `SELECT vector FROM aichat_keyword_embeddings WHERE user_id = ? AND keyword = ?`
+  ).bind(userId, keyword).first<{ vector: ArrayBuffer }>();
+  if (!targetRow) return { target: null, groups: [] };
+  const targetVector = blobToFloats(targetRow.vector);
+
+  const rows = await db.prepare(
+    `SELECT keyword, vector FROM aichat_keyword_embeddings WHERE user_id = ? AND keyword != ?`
+  ).bind(userId, keyword).all<{ keyword: string; vector: ArrayBuffer }>();
+  const candidates = (rows.results ?? []).map((r) => ({ keyword: r.keyword, vector: blobToFloats(r.vector) }));
+  const matches = rankSimilarKeywords(targetVector, candidates, threshold, limit);
+  const target = analyzeVector(targetVector);
+  if (matches.length === 0) return { target, groups: [] };
+
+  const matchKeywords = matches.map((m) => m.keyword);
+  const placeholders = matchKeywords.map(() => '?').join(',');
+  const catRows = await db.prepare(
+    `SELECT m.keyword AS keyword, c.id AS category_id, c.name AS category_name
+     FROM aichat_keyword_category_map m
+     JOIN aichat_keyword_categories c ON c.id = m.category_id AND c.user_id = m.user_id
+     WHERE m.user_id = ? AND m.keyword IN (${placeholders})`
+  ).bind(userId, ...matchKeywords).all<{ keyword: string; category_id: number; category_name: string }>();
+  const catByKeyword = new Map<string, { id: number; name: string }[]>();
+  for (const r of (catRows.results ?? [])) {
+    const list = catByKeyword.get(r.keyword) ?? [];
+    list.push({ id: r.category_id, name: r.category_name });
+    catByKeyword.set(r.keyword, list);
+  }
+
+  const vectorByKeyword = new Map(candidates.map((c) => [c.keyword, c.vector]));
+  const groupsMap = new Map<string, SimilarKeywordGroup>();
+  for (const m of matches) {
+    const vec = vectorByKeyword.get(m.keyword) ?? [];
+    const item: SimilarKeywordItem = { keyword: m.keyword, similarity: m.similarity, analysis: analyzeVector(vec) };
+    const cats = catByKeyword.get(m.keyword);
+    if (!cats || cats.length === 0) {
+      const groupKey = 'unclassified';
+      if (!groupsMap.has(groupKey)) groupsMap.set(groupKey, { categoryId: null, categoryName: '未分類', items: [] });
+      groupsMap.get(groupKey)!.items.push(item);
+    } else {
+      for (const cat of cats) {
+        const groupKey = String(cat.id);
+        if (!groupsMap.has(groupKey)) groupsMap.set(groupKey, { categoryId: cat.id, categoryName: cat.name, items: [] });
+        groupsMap.get(groupKey)!.items.push(item);
+      }
+    }
+  }
+
+  const groups = Array.from(groupsMap.values()).sort((a, b) => b.items.length - a.items.length);
+  return { target, groups };
+}
+
 /**
  * キーワード↔カテゴリ紐付けを送信された category_ids に完全一致させる。
  * INSERT OR IGNORE の追加のみだと分類モーダルでカテゴリのチェックを外しても
@@ -5780,6 +5883,19 @@ app.get('/api/aichat/keyword-embeddings/lookup', authMiddleware, async (c) => {
   if (!keyword) return jsonUtf8({ cached: false });
   const info = await lookupKeywordEmbedding(c.env.DB, user.sub, keyword);
   return jsonUtf8({ cached: !!info, embedding: info });
+});
+
+/**
+ * 埋め込みキャッシュモーダルの🔍分析ボタン: 対象キーワードと似ている
+ * 登録済みキーワードを、それが属する中分類ごとにグルーピングして返す。
+ */
+app.get('/api/aichat/keyword-embeddings/similar', authMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!c.env.DB) return jsonUtf8({ target: null, groups: [] });
+  const keyword = (c.req.query('keyword') ?? '').trim().slice(0, 200);
+  if (!keyword) return jsonUtf8({ target: null, groups: [] });
+  const result = await findSimilarKeywordsGroupedByCategory(c.env.DB, user.sub, keyword);
+  return jsonUtf8(result);
 });
 
 /**
