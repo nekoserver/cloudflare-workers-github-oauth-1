@@ -128,6 +128,16 @@ function insertEmbedding(db: DatabaseSync, userId: string, keyword: string, vec:
 }
 
 describe('findSimilarKeywordsGroupedByCategory: 分類カテゴリごとに似たキーワードを列挙する', () => {
+  it('デフォルト閾値は0.9（短いキーワード単位の埋め込みは異方性で類似度が高く出やすいため、無関係な固有名詞同士を誤ってヒットさせないよう高めに設定する）', async () => {
+    const db = setupDb();
+    insertEmbedding(db, 'u1', 'フランス', [1, 0]);
+    insertEmbedding(db, 'u1', 'サンタ・マリア・ノヴェッラ駅', [0.85, Math.sqrt(1 - 0.85 * 0.85)]);
+
+    const result = await findSimilarKeywordsGroupedByCategory(wrapD1(db) as never, 'u1', 'フランス');
+
+    expect(result.groups).toEqual([]);
+  });
+
   it('似たキーワードを、それが属する中分類ごとにグルーピングして返す', async () => {
     const db = setupDb();
     db.prepare(`INSERT INTO aichat_keyword_categories (id, user_id, name) VALUES (1, 'u1', 'Travel')`).run();

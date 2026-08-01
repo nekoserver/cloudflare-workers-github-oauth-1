@@ -5574,12 +5574,18 @@ export interface SimilarKeywordGroup {
  * コサイン類似度が近い登録済みキーワードを探し、それが属する中分類ごとに
  * グルーピングして返す。複数の中分類に属するキーワードは両方のグループに
  * 列挙し、どの中分類にも属さない場合は「未分類」グループへ入れる。
+ *
+ * 閾値は0.9とやや高めに設定している。単語・短いキーワード単位の埋め込みは
+ * 文単位の埋め込みに比べてコサイン類似度がベクトル空間の狭い領域に
+ * 集まりやすく(異方性/anisotropy)、0.75程度の閾値では地理的に無関係な
+ * 固有名詞同士(例: 「フランス」と「サンタ・マリア・ノヴェッラ駅」)まで
+ * 「似ている」と誤って表示されてしまう実害が確認されたため引き上げた。
  */
 export async function findSimilarKeywordsGroupedByCategory(
   db: D1Database,
   userId: string,
   keyword: string,
-  threshold = 0.75,
+  threshold = 0.9,
   limit = 20,
 ): Promise<{ target: VectorAnalysis | null; groups: SimilarKeywordGroup[] }> {
   const targetRow = await db.prepare(
