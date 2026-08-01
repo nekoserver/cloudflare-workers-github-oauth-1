@@ -1084,6 +1084,7 @@ export function getAiChatPage(user: {
       </div>
       <div class="zt-tree-search-wrap" style="display:flex;gap:6px;align-items:center;">
         <input class="zt-tree-search-input" id="ztTreeSearchInput" type="search" placeholder="キーワード・カテゴリで検索..." autocomplete="off" style="flex:1;">
+        <button class="zt-bge-btn" id="ztCacheBtn" title="埋め込みキャッシュを表示" style="display:none;">📖</button>
         <button class="zt-bge-btn" id="ztBgeBtn" title="bge-m3問い合わせデータを表示" style="display:none;">🗒️</button>
       </div>
       <div class="zt-tree-body" id="ztTreeBody"><div class="search-log-loading">読み込み中...</div></div>
@@ -1100,6 +1101,20 @@ export function getAiChatPage(user: {
         </div>
       </div>
       <div class="search-log-body" id="ztBgeBody" style="font-family:monospace;font-size:11.5px;line-height:1.6;white-space:pre-wrap;word-break:break-all;max-height:60vh;"></div>
+      <div style="padding:10px 16px;border-top:1px solid var(--border-color);display:flex;align-items:center;justify-content:space-between;gap:10px;">
+        <span id="ztBgeRegisterStatus" style="font-size:11px;color:var(--text-muted);"></span>
+        <button id="ztBgeRegisterBtn" type="button" style="padding:7px 18px;font-size:12px;border-radius:5px;border:none;background:#3b82f6;color:#fff;cursor:pointer;font-weight:600;white-space:nowrap;">登録する</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="search-log-overlay" id="ztCacheModal" aria-hidden="true">
+    <div class="search-log-modal" role="dialog" aria-modal="true" style="max-width:560px;">
+      <div class="search-log-head">
+        <span class="search-log-title">📖 埋め込みキャッシュ</span>
+        <button class="search-log-close" id="ztCacheClose" aria-label="閉じる">✕</button>
+      </div>
+      <div class="search-log-body" id="ztCacheBody" style="font-family:monospace;font-size:11.5px;line-height:1.6;white-space:pre-wrap;word-break:break-all;max-height:60vh;"></div>
     </div>
   </div>
 
@@ -3184,7 +3199,7 @@ export function getAiChatPage(user: {
         kwClassifyListModal: 820, sqKwQuestionsOverlay: 850, addSubqueryModal: 900, historyModalBackdrop: 750,
         tokenUsageModal: 820, dailyStatsModal: 820, modelDotDropdown: 700,
         kwColorPaletteModal: 900, kwCatGroupModal: 920, searchLogRecordModal: 880,
-        canvasSearchModal: 890, ztTreeModal: 895, ztBgeModal: 905,
+        canvasSearchModal: 890, ztTreeModal: 895, ztBgeModal: 905, ztCacheModal: 910,
       };
       Object.keys(staticZDefaults).forEach(function(id) {
         var el = document.getElementById(id);
@@ -4812,8 +4827,16 @@ export function getAiChatPage(user: {
     var ztBgeClose = document.getElementById('ztBgeClose');
     var ztBgeBody = document.getElementById('ztBgeBody');
     var ztBgeCopyBtn = document.getElementById('ztBgeCopyBtn');
+    var ztBgeRegisterBtn = document.getElementById('ztBgeRegisterBtn');
+    var ztBgeRegisterStatus = document.getElementById('ztBgeRegisterStatus');
+    var ztCacheBtn = document.getElementById('ztCacheBtn');
+    var ztCacheModal = document.getElementById('ztCacheModal');
+    var ztCacheClose = document.getElementById('ztCacheClose');
+    var ztCacheBody = document.getElementById('ztCacheBody');
     var ztLastQuery = '';
     var ztLastMatchedKeywords = [];
+    var ztCacheLookupTimer = null;
+    var ztLastCacheInfo = null;
 
     function loadZtTreeData(cb) {
       Promise.allSettled([
@@ -5004,6 +5027,80 @@ export function getAiChatPage(user: {
       });
     });
 
+    ztBgeRegisterBtn.addEventListener('click', function() {
+      var texts;
+      try {
+        texts = JSON.parse(ztBgeBody.textContent).input.text;
+      } catch (e) {
+        ztBgeRegisterStatus.textContent = '登録データの読み取りに失敗しました';
+        return;
+      }
+      if (!texts || texts.length === 0) return;
+      ztBgeRegisterBtn.disabled = true;
+      ztBgeRegisterStatus.textContent = '登録中...';
+      fetch('/api/aichat/keyword-embeddings/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({ texts: texts }),
+      })
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+          ztBgeRegisterBtn.disabled = false;
+          if (d && d.ok) {
+            ztBgeRegisterStatus.textContent = '✓ 登録完了（成功' + d.registered + '件・失敗' + d.failed + '件）';
+          } else {
+            ztBgeRegisterStatus.textContent = '登録に失敗しました: ' + (d && d.error ? d.error : '不明なエラー');
+          }
+        })
+        .catch(function() {
+          ztBgeRegisterBtn.disabled = false;
+          ztBgeRegisterStatus.textContent = '登録に失敗しました';
+        });
+    });
+
+    function openZtCacheModal() {
+      if (!ztLastCacheInfo) return;
+      ztCacheBody.textContent = JSON.stringify(ztLastCacheInfo, null, 2);
+      ztCacheModal.style.zIndex = String(getNextZ());
+      ztCacheModal.classList.add('open');
+      ztCacheModal.setAttribute('aria-hidden', 'false');
+    }
+
+    function closeZtCacheModal() {
+      ztCacheModal.classList.remove('open');
+      ztCacheModal.setAttribute('aria-hidden', 'true');
+    }
+
+    ztCacheBtn.addEventListener('click', function(e) { e.stopPropagation(); openZtCacheModal(); });
+    ztCacheClose.addEventListener('click', closeZtCacheModal);
+    ztCacheModal.addEventListener('click', function(e) { if (e.target === ztCacheModal) closeZtCacheModal(); });
+
+    function scheduleZtCacheLookup(rawKeyword) {
+      clearTimeout(ztCacheLookupTimer);
+      var keyword = (rawKeyword || '').trim();
+      if (!keyword) {
+        ztCacheBtn.style.display = 'none';
+        ztLastCacheInfo = null;
+        return;
+      }
+      ztCacheLookupTimer = setTimeout(function() {
+        fetch('/api/aichat/keyword-embeddings/lookup?keyword=' + encodeURIComponent(keyword), { credentials: 'same-origin' })
+          .then(function(r) { return r.json(); })
+          .then(function(d) {
+            if (ztTreeSearchInput.value.trim() !== keyword) return;
+            if (d && d.cached && d.embedding) {
+              ztLastCacheInfo = d.embedding;
+              ztCacheBtn.style.display = 'inline-block';
+            } else {
+              ztLastCacheInfo = null;
+              ztCacheBtn.style.display = 'none';
+            }
+          })
+          .catch(function() { ztCacheBtn.style.display = 'none'; ztLastCacheInfo = null; });
+      }, 350);
+    }
+
     function openZtTreeModal() {
       ztTreeModal.style.zIndex = String(getNextZ());
       ztTreeModal.classList.add('open');
@@ -5011,6 +5108,8 @@ export function getAiChatPage(user: {
       ztTreeSearchInput.value = '';
       ztTreeOpenNodes = {};
       ztBgeBtn.style.display = 'none';
+      ztCacheBtn.style.display = 'none';
+      ztLastCacheInfo = null;
       ztTreeBody.innerHTML = '<div class="search-log-loading">読み込み中...</div>';
       loadZtTreeData(function() { renderZtTree(''); });
     }
@@ -5023,7 +5122,10 @@ export function getAiChatPage(user: {
     ztTreeBtn.addEventListener('click', function(e) { e.stopPropagation(); openZtTreeModal(); });
     ztTreeClose.addEventListener('click', closeZtTreeModal);
     ztTreeModal.addEventListener('click', function(e) { if (e.target === ztTreeModal) closeZtTreeModal(); });
-    ztTreeSearchInput.addEventListener('input', function() { renderZtTree(ztTreeSearchInput.value); });
+    ztTreeSearchInput.addEventListener('input', function() {
+      renderZtTree(ztTreeSearchInput.value);
+      scheduleZtCacheLookup(ztTreeSearchInput.value);
+    });
 
     // ===== トークン使用量グラフ =====
     var tokenUsageBtn = document.getElementById('tokenUsageBtn');
