@@ -5591,6 +5591,72 @@ export async function getOrComputeKeywordEmbedding(
   return vector;
 }
 
+export interface RegisterEmbeddingResult {
+  keyword: string;
+  ok: boolean;
+  dim: number;
+}
+
+/**
+ * bge-m3問い合わせデータモーダルの「登録する」ボタンから呼ばれる。
+ * 渡された text 配列を重複排除・空文字除去したうえで、キーワードごとに
+ * getOrComputeKeywordEmbedding を呼ぶ（キャッシュ済みならAIを呼ばない）。
+ * 1件の失敗が他のキーワードの登録を止めないよう、失敗はresultsに記録して
+ * 処理を継続する（握りつぶさず戻り値で確認可能にする）。
+ */
+export async function registerKeywordEmbeddings(
+  db: D1Database,
+  ai: Ai,
+  userId: string,
+  texts: string[],
+): Promise<{ registered: number; failed: number; results: RegisterEmbeddingResult[] }> {
+  const seen = new Set<string>();
+  const results: RegisterEmbeddingResult[] = [];
+  for (const raw of texts) {
+    const text = (typeof raw === 'string' ? raw : '').trim().slice(0, 200);
+    if (!text || seen.has(text)) continue;
+    seen.add(text);
+    const vector = await getOrComputeKeywordEmbedding(db, ai, userId, text);
+    results.push({ keyword: text, ok: vector.length > 0, dim: vector.length });
+  }
+  const registered = results.filter((r) => r.ok).length;
+  const failed = results.filter((r) => !r.ok).length;
+  return { registered, failed, results };
+}
+
+export interface KeywordEmbeddingInfo {
+  keyword: string;
+  model: string;
+  dim: number;
+  createdAt: string;
+  updatedAt: string;
+  preview: number[];
+}
+
+/**
+ * Zanzibarツリー検索窓の📖アイコン表示・キャッシュ内容表示に使う。
+ * ベクトル全体(1024次元)をそのまま返すとレスポンスが肥大化するため、
+ * 先頭12件のみをpreviewとして返す。
+ */
+export async function lookupKeywordEmbedding(
+  db: D1Database,
+  userId: string,
+  keyword: string,
+): Promise<KeywordEmbeddingInfo | null> {
+  const row = await db.prepare(
+    `SELECT keyword, model, dim, vector, created_at, updated_at FROM aichat_keyword_embeddings WHERE user_id = ? AND keyword = ?`
+  ).bind(userId, keyword).first<{ keyword: string; model: string; dim: number; vector: ArrayBuffer; created_at: string; updated_at: string }>();
+  if (!row) return null;
+  return {
+    keyword: row.keyword,
+    model: row.model,
+    dim: row.dim,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    preview: blobToFloats(row.vector).slice(0, 12),
+  };
+}
+
 /**
  * 未分類キーワードに対し、既存の中分類の代表ベクトル(centroid)との
  * コサイン類似度からAI分類を「提案」する。確定分類テーブル
@@ -5638,6 +5704,34 @@ app.post('/api/aichat/keyword-category-suggest', authMiddleware, async (c) => {
     ).bind(user.sub, keyword, best.categoryId, best.similarity, BGE_M3_MODEL, new Date().toISOString()).run();
   }
   return jsonUtf8({ suggestion: best });
+});
+
+/**
+ * bge-m3問い合わせデータモーダルの「登録する」ボタン: 渡された text を
+ * 実際にbge-m3へ問い合わせ、aichat_keyword_embeddings へ保存する。
+ */
+app.post('/api/aichat/keyword-embeddings/register', authMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  if (!c.env.AI) return jsonUtf8({ error: 'AIバインディングが未設定です' }, 503);
+  const body = await c.req.json<{ texts?: string[] }>();
+  const texts = Array.isArray(body.texts) ? body.texts.filter((t) => typeof t === 'string') : [];
+  if (texts.length === 0) return jsonUtf8({ error: 'texts は必須です' }, 400);
+  const result = await registerKeywordEmbeddings(c.env.DB, c.env.AI, user.sub, texts.slice(0, 50));
+  return jsonUtf8({ ok: true, registered: result.registered, failed: result.failed, results: result.results });
+});
+
+/**
+ * Zanzibarツリー検索窓の📖アイコン: 入力中のキーワードが
+ * aichat_keyword_embeddings にキャッシュ済みかどうかを返す。
+ */
+app.get('/api/aichat/keyword-embeddings/lookup', authMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!c.env.DB) return jsonUtf8({ cached: false });
+  const keyword = (c.req.query('keyword') ?? '').trim().slice(0, 200);
+  if (!keyword) return jsonUtf8({ cached: false });
+  const info = await lookupKeywordEmbedding(c.env.DB, user.sub, keyword);
+  return jsonUtf8({ cached: !!info, embedding: info });
 });
 
 /**
