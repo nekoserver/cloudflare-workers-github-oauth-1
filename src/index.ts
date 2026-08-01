@@ -39,6 +39,7 @@ import { getWebGLSolarPage } from './views/webglSolar';
 import { getEclipseTiltLessonPage } from './views/eclipseTiltLesson';
 import { getWebGLFaultsPage } from './views/webglFaults';
 import { getUuidGenPage } from './views/uuidGen';
+import { getAnswerGraphPage } from './views/answerGraph';
 import { getBase64Page } from './views/base64';
 import { getHarnessLogPage, type HarnessHookLogRow, type HarnessLogResultCounts } from './views/harnessLog';
 import { getMLBSpherePage } from './views/mlbSphere';
@@ -4043,6 +4044,148 @@ export async function searchAiChatShares(
 }
 
 /**
+ * テキストに含まれる登録済みキーワードだけを返す（大文字小文字を無視）。
+ * /answer-graph の回答伝播グラフ構築で使う。
+ */
+export function extractContainedKeywords(text: string, keywords: string[]): string[] {
+  const lower = text.toLowerCase();
+  return keywords.filter((kw) => kw && lower.indexOf(kw.toLowerCase()) !== -1);
+}
+
+export interface AnswerGraphNode {
+  id: string;
+  type: 'answer' | 'keyword';
+  label: string;
+  depth: number;
+  parentId: string | null;
+}
+
+export interface AnswerGraphEdge {
+  from: string;
+  to: string;
+}
+
+export interface AnswerGraphResult {
+  nodes: AnswerGraphNode[];
+  edges: AnswerGraphEdge[];
+}
+
+const ANSWER_GRAPH_MAX_DEPTH = 6;
+const ANSWER_GRAPH_MAX_NODES = 150;
+const ANSWER_GRAPH_MAX_KEYWORDS_PER_LAYER = 12;
+const ANSWER_GRAPH_MAX_ANSWERS_PER_KEYWORD = 10;
+
+async function findSharesContainingKeyword(
+  db: D1Like,
+  userId: string,
+  keyword: string,
+  limit: number,
+): Promise<{ id: string; question: string; answer: string }[]> {
+  const rows = await db.prepare(
+    `SELECT id, question, answer FROM ai_chat_shares
+     WHERE user_id = ? AND deleted_at IS NULL AND (INSTR(question, ?) > 0 OR INSTR(answer, ?) > 0)
+     ORDER BY created_at DESC LIMIT ?`
+  ).bind(userId, keyword, keyword, limit).all<{ id: string; question: string; answer: string }>();
+  return rows.results ?? [];
+}
+
+/**
+ * /answer-graph が使う回答伝播グラフの構築。起点の回答に含まれるキーワードを
+ * 手がかりに関連する回答へ広げ、さらにその回答群から未処理のキーワードを
+ * 抽出して繰り返す(ユーザー指定のBFSアルゴリズム)。
+ *
+ * 故障シナリオ対応:
+ *   - 無限ループ防止のため maxDepth / maxNodes で必ず打ち切る
+ *   - 既に訪問済みの回答・処理済みのキーワードは再度ノード化しない
+ *   - 起点が存在しない/他ユーザーの回答の場合は null を返す(越境防止)
+ */
+export async function buildAnswerPropagationGraph(
+  db: D1Like,
+  userId: string,
+  seedShareId: string,
+  opts?: { maxDepth?: number; maxNodes?: number; maxKeywordsPerLayer?: number; maxAnswersPerKeyword?: number },
+): Promise<AnswerGraphResult | null> {
+  const maxDepth = opts?.maxDepth ?? ANSWER_GRAPH_MAX_DEPTH;
+  const maxNodes = opts?.maxNodes ?? ANSWER_GRAPH_MAX_NODES;
+  const maxKeywordsPerLayer = opts?.maxKeywordsPerLayer ?? ANSWER_GRAPH_MAX_KEYWORDS_PER_LAYER;
+  const maxAnswersPerKeyword = opts?.maxAnswersPerKeyword ?? ANSWER_GRAPH_MAX_ANSWERS_PER_KEYWORD;
+
+  const seedRows = await db.prepare(
+    `SELECT id, question, answer FROM ai_chat_shares WHERE id = ? AND user_id = ? AND deleted_at IS NULL`
+  ).bind(seedShareId, userId).all<{ id: string; question: string; answer: string }>();
+  const seed = (seedRows.results ?? [])[0];
+  if (!seed) return null;
+
+  const kwRows = await db.prepare(
+    `SELECT keyword FROM aichat_search_log WHERE user_id = ? GROUP BY keyword ORDER BY SUM(select_count) DESC LIMIT 300`
+  ).bind(userId).all<{ keyword: string }>();
+  const allKeywords = (kwRows.results ?? []).map((r) => r.keyword).filter(Boolean);
+
+  const nodes: AnswerGraphNode[] = [];
+  const edges: AnswerGraphEdge[] = [];
+  const visitedShareIds = new Set<string>([seed.id]);
+  const processedKeywords = new Set<string>();
+
+  const seedNodeId = 'a:' + seed.id;
+  nodes.push({ id: seedNodeId, type: 'answer', label: seed.question, depth: 0, parentId: null });
+
+  type AnswerRec = { nodeId: string; question: string; answer: string };
+  let currentAnswers: AnswerRec[] = [{ nodeId: seedNodeId, question: seed.question, answer: seed.answer }];
+  let depth = 0;
+
+  while (currentAnswers.length > 0 && depth < maxDepth && nodes.length < maxNodes) {
+    const newKeywordToParent = new Map<string, string>();
+    for (const a of currentAnswers) {
+      const text = a.question + ' ' + a.answer;
+      const found = extractContainedKeywords(text, allKeywords).filter((k) => !processedKeywords.has(k));
+      for (const kw of found) {
+        if (newKeywordToParent.size >= maxKeywordsPerLayer) break;
+        if (!newKeywordToParent.has(kw)) newKeywordToParent.set(kw, a.nodeId);
+      }
+      if (newKeywordToParent.size >= maxKeywordsPerLayer) break;
+    }
+    if (newKeywordToParent.size === 0) break;
+    depth++;
+    if (depth > maxDepth) break;
+
+    const keywordNodeIds = new Map<string, string>();
+    for (const [kw, parentNodeId] of newKeywordToParent) {
+      if (nodes.length >= maxNodes) break;
+      const kwNodeId = 'k:' + kw;
+      nodes.push({ id: kwNodeId, type: 'keyword', label: kw, depth, parentId: parentNodeId });
+      edges.push({ from: parentNodeId, to: kwNodeId });
+      keywordNodeIds.set(kw, kwNodeId);
+      processedKeywords.add(kw);
+    }
+
+    depth++;
+    if (depth > maxDepth) {
+      currentAnswers = [];
+      break;
+    }
+
+    const nextAnswers: AnswerRec[] = [];
+    for (const [kw, kwNodeId] of keywordNodeIds) {
+      if (nodes.length >= maxNodes) break;
+      const matches = await findSharesContainingKeyword(db, userId, kw, maxAnswersPerKeyword);
+      for (const m of matches) {
+        if (visitedShareIds.has(m.id)) continue;
+        if (nodes.length >= maxNodes) break;
+        visitedShareIds.add(m.id);
+        const aNodeId = 'a:' + m.id;
+        nodes.push({ id: aNodeId, type: 'answer', label: m.question, depth, parentId: kwNodeId });
+        edges.push({ from: kwNodeId, to: aNodeId });
+        nextAnswers.push({ nodeId: aNodeId, question: m.question, answer: m.answer });
+      }
+    }
+    nextAnswers.sort((x, y) => x.question.localeCompare(y.question, 'ja'));
+    currentAnswers = nextAnswers;
+  }
+
+  return { nodes, edges };
+}
+
+/**
  * AIチャット共有履歴の全文検索 API（認証が必要）
  */
 app.get('/api/aichat/shares/search', authMiddleware, async (c) => {
@@ -4054,6 +4197,21 @@ app.get('/api/aichat/shares/search', authMiddleware, async (c) => {
 
   const { results } = await searchAiChatShares(c.env.DB as unknown as D1Like, user.sub, q);
   return jsonUtf8({ results });
+});
+
+/**
+ * /answer-graph ページ: 起点の回答からキーワードを手がかりに関連する回答へ
+ * 広がっていく様子をBFSで構築して返す。
+ */
+app.post('/api/aichat/answer-propagation-graph', authMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  const body = await c.req.json<{ shareId?: string }>();
+  const shareId = typeof body.shareId === 'string' ? body.shareId.trim() : '';
+  if (!shareId) return jsonUtf8({ error: 'shareId は必須です' }, 400);
+  const result = await buildAnswerPropagationGraph(c.env.DB, user.sub, shareId);
+  if (!result) return jsonUtf8({ error: '指定された回答が見つかりません' }, 404);
+  return jsonUtf8(result);
 });
 
 /**
@@ -7254,6 +7412,11 @@ app.get('/harness-log', authMiddleware, async (c) => {
 app.get('/uuid', authMiddleware, async (c) => {
   const user = c.get('user');
   return c.html(getUuidGenPage(user.sub));
+});
+
+app.get('/answer-graph', authMiddleware, async (c) => {
+  const user = c.get('user');
+  return c.html(getAnswerGraphPage(user.sub));
 });
 
 app.get('/base64', authMiddleware, async (c) => {
