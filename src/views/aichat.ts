@@ -5127,9 +5127,11 @@ export function getAiChatPage(user: {
             ztCacheSimilarBody.innerHTML = '<div style="color:var(--text-muted);">似ているキーワードは見つかりませんでした</div>';
             return;
           }
-          var html = '';
-          groups.forEach(function(g) {
-            html += '<div style="font-weight:700;margin-top:10px;margin-bottom:4px;">' + escHtml(g.categoryName) + '</div>';
+          var html = '<div style="font-size:11px;color:var(--text-muted);margin-bottom:4px;">※分類カテゴリへの所属は関連性の証明ではありません。ヒット数が多いカテゴリ順に並べています。</div>';
+          groups.forEach(function(g, idx) {
+            html += '<div style="font-weight:700;margin-top:10px;margin-bottom:4px;">' + (idx + 1) + '. ' + escHtml(g.categoryName)
+              + '<span style="font-weight:400;color:var(--text-muted);font-size:11px;margin-left:6px;">(' + g.items.length + '件ヒット)</span>'
+              + '</div>';
             g.items.forEach(function(item) {
               html += '<div style="padding:5px 0;border-bottom:1px dashed var(--border-color);">'
                 + '<span style="font-weight:600;">' + escHtml(item.keyword) + '</span>'
