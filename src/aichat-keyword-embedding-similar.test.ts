@@ -1,4 +1,6 @@
 import { describe, it, expect } from 'vitest';
+import * as fs from 'fs';
+import * as path from 'path';
 import { DatabaseSync } from 'node:sqlite';
 import {
   rankSimilarKeywords,
@@ -6,6 +8,10 @@ import {
   parseSimilarityThreshold,
   BGE_M3_MODEL,
 } from './index';
+
+function sliceIndexTs(): string {
+  return fs.readFileSync(path.join(__dirname, 'index.ts'), 'utf-8');
+}
 
 // 対象: 埋め込みキャッシュモーダルの「🔍分析」ボタンを押したときに表示する
 // 「登録済みキーワードの中から似ているものを、分類カテゴリごとにグルーピングして
@@ -240,5 +246,41 @@ describe('findSimilarKeywordsGroupedByCategory: 分類カテゴリごとに似�
     const result = await findSimilarKeywordsGroupedByCategory(wrapD1(db) as never, 'u1', '駅', 0.8, 10);
     const allKeywords = result.groups.flatMap((g) => g.items.map((i) => i.keyword));
     expect(allKeywords).not.toContain('空港');
+  });
+});
+
+// バグ: 埋め込みキャッシュモーダルで「🔍分析」を押すと赤文字で
+// 「読み込みに失敗しました」と表示される。原因は
+// GET /api/aichat/keyword-embeddings/similar がDBエラー時に例外を
+// そのまま投げていたため、Honoのデフォルトエラーハンドラが返す
+// 非JSONレスポンスをフロントエンドの `r.json()` がパースできず、
+// fetchの.catch()に落ちて汎用エラーになっていたこと。
+// try/catchで例外を捕まえ、常に有効なJSON（_warningフィールド付き）を
+// 返すことで、実際のDBエラー内容がUI上で見えるようにする。
+describe('GET /api/aichat/keyword-embeddings/similar: DBエラー時も常に有効なJSONを返す', () => {
+  it('ルートハンドラが try/catch で例外を捕捉している', () => {
+    const src = sliceIndexTs();
+    const idx = src.indexOf("app.get('/api/aichat/keyword-embeddings/similar'");
+    expect(idx).toBeGreaterThan(-1);
+    const endIdx = src.indexOf('\n});', idx);
+    const block = src.slice(idx, endIdx);
+    expect(block).toContain('try {');
+    expect(block).toContain('} catch (err) {');
+  });
+
+  it('catch節でエラー内容を logger.warn に記録する（握りつぶさない）', () => {
+    const src = sliceIndexTs();
+    const idx = src.indexOf("app.get('/api/aichat/keyword-embeddings/similar'");
+    const endIdx = src.indexOf('\n});', idx);
+    const block = src.slice(idx, endIdx);
+    expect(block).toContain("logger.warn('keyword-embeddings/similar failed'");
+  });
+
+  it('catch節でも _warning 付きの有効なJSONレスポンスを返す（フロントエンドのr.json()が失敗しない）', () => {
+    const src = sliceIndexTs();
+    const idx = src.indexOf("app.get('/api/aichat/keyword-embeddings/similar'");
+    const endIdx = src.indexOf('\n});', idx);
+    const block = src.slice(idx, endIdx);
+    expect(block).toContain('_warning: message');
   });
 });

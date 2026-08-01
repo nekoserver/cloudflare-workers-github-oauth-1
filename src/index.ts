@@ -5914,8 +5914,14 @@ app.get('/api/aichat/keyword-embeddings/similar', authMiddleware, async (c) => {
   const keyword = (c.req.query('keyword') ?? '').trim().slice(0, 200);
   if (!keyword) return jsonUtf8({ target: null, groups: [] });
   const threshold = parseSimilarityThreshold(c.req.query('threshold'), 0.85);
-  const result = await findSimilarKeywordsGroupedByCategory(c.env.DB, user.sub, keyword, threshold);
-  return jsonUtf8(result);
+  try {
+    const result = await findSimilarKeywordsGroupedByCategory(c.env.DB, user.sub, keyword, threshold);
+    return jsonUtf8(result);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.warn('keyword-embeddings/similar failed', { keyword, threshold, error: message });
+    return jsonUtf8({ target: null, groups: [], _warning: message });
+  }
 });
 
 /**
