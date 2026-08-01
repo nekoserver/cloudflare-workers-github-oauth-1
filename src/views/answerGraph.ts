@@ -36,7 +36,7 @@ input[type=search]:focus { border-color:var(--accent); }
 #graphCanvas { display:block; cursor:pointer; }
 .side-panel { width:260px; flex-shrink:0; border:1px solid var(--border); border-radius:8px; padding:12px 14px; font-size:12px; min-height:120px; }
 .side-panel .empty-hint { color:var(--label); }
-.legend { display:flex; gap:14px; font-size:11px; color:var(--label); margin-top:10px; flex-wrap:wrap; }
+.legend { display:flex; width:100%; gap:14px; font-size:11px; color:var(--label); margin-bottom:14px; flex-wrap:wrap; }
 .legend-dot { display:inline-block; width:9px; height:9px; border-radius:50%; margin-right:4px; vertical-align:middle; }
 .node-type-label { font-size:11px; padding:2px 8px; border-radius:10px; display:inline-block; margin-bottom:6px; font-weight:600; }
 .node-type-answer { background:rgba(9,105,218,.15); color:var(--answer-color); }
@@ -64,17 +64,17 @@ input[type=search]:focus { border-color:var(--accent); }
 
   <div class="card">
     <div class="card-title">どんな質問と回答が広がっていくか</div>
+    <div class="legend">
+      <span><span class="legend-dot" style="background:var(--answer-color);"></span>回答（質問）</span>
+      <span><span class="legend-dot" style="background:var(--keyword-color);"></span>キーワード</span>
+      <span>中心 = 起点として選んだ回答。外側の輪ほど深い階層。</span>
+    </div>
     <div class="graph-status" id="graphStatus">起点を選ぶとここにグラフが表示されます</div>
     <div class="graph-layout">
       <div class="canvas-wrap">
         <canvas id="graphCanvas" width="800" height="600"></canvas>
       </div>
       <div class="side-panel" id="sidePanel"><span class="empty-hint">ノードをクリックすると詳細がここに表示されます</span></div>
-    </div>
-    <div class="legend">
-      <span><span class="legend-dot" style="background:var(--answer-color);"></span>回答（質問）</span>
-      <span><span class="legend-dot" style="background:var(--keyword-color);"></span>キーワード</span>
-      <span>中心 = 起点として選んだ回答。外側の輪ほど深い階層。</span>
     </div>
   </div>
 </main>
