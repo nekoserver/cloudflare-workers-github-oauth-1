@@ -31,10 +31,10 @@ input[type=search]:focus { border-color:var(--accent); }
 .search-result-item:hover { border-color:var(--accent); }
 .search-result-item.selected { border-color:var(--accent); background:rgba(31,111,235,.1); }
 .search-status { font-size:11px; color:var(--label); }
-.graph-layout { display:flex; gap:16px; align-items:flex-start; flex-wrap:wrap; }
-.canvas-wrap { flex:1; min-width:320px; overflow:auto; border:1px solid var(--border); border-radius:8px; background:var(--btn-bg); }
+.graph-layout { display:flex; flex-direction:column; gap:12px; }
+.canvas-wrap { width:100%; overflow:auto; border:1px solid var(--border); border-radius:8px; background:var(--btn-bg); }
 #graphCanvas { display:block; cursor:pointer; }
-.side-panel { width:260px; flex-shrink:0; border:1px solid var(--border); border-radius:8px; padding:12px 14px; font-size:12px; min-height:120px; }
+.side-panel { width:100%; border:1px solid var(--border); border-radius:8px; padding:12px 14px; font-size:12px; min-height:60px; }
 .side-panel .empty-hint { color:var(--label); }
 .legend { display:flex; width:100%; gap:14px; font-size:11px; color:var(--label); margin-bottom:14px; flex-wrap:wrap; }
 .legend-dot { display:inline-block; width:9px; height:9px; border-radius:50%; margin-right:4px; vertical-align:middle; }
@@ -71,10 +71,10 @@ input[type=search]:focus { border-color:var(--accent); }
     </div>
     <div class="graph-status" id="graphStatus">起点を選ぶとここにグラフが表示されます</div>
     <div class="graph-layout">
+      <div class="side-panel" id="sidePanel"><span class="empty-hint">ノードをクリックすると詳細がここに表示されます</span></div>
       <div class="canvas-wrap">
         <canvas id="graphCanvas" width="800" height="600"></canvas>
       </div>
-      <div class="side-panel" id="sidePanel"><span class="empty-hint">ノードをクリックすると詳細がここに表示されます</span></div>
     </div>
   </div>
 </main>
