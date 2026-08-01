@@ -205,6 +205,8 @@ export const STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
   { name: 'aichat_keyword_categories',    migration: '0084',  description: 'AIチャットキーワード分類のカテゴリマスタ（名前・色）', syncPolicy: 'auto' },
   { name: 'aichat_keyword_category_map',  migration: '0085',  description: 'AIチャットキーワード↔カテゴリの紐付け', syncPolicy: 'auto' },
   { name: 'aichat_category_audit_log',    migration: '0086',  description: 'AIチャット分類グループ・キーワード分類の作成/更新/削除の監査ログ', syncPolicy: 'auto' },
+  { name: 'aichat_keyword_embeddings',    migration: '0087',  description: 'AIチャットキーワードのbge-m3埋め込みベクトルキャッシュ（キーワード単位で最新1件のみ保持）', syncPolicy: 'auto' },
+  { name: 'aichat_keyword_category_suggestions', migration: '0088', description: 'AIによるキーワード↔カテゴリ分類の推薦履歴（確定分類とは別テーブルで人間の最終判断を上書きしない）', syncPolicy: 'auto' },
 ];
 
 const REQUIRED_STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
@@ -1345,6 +1347,29 @@ CREATE INDEX IF NOT EXISTS idx_aichat_keyword_category_map_category ON aichat_ke
 );
 CREATE INDEX IF NOT EXISTS idx_aichat_category_audit_log_user_created ON aichat_category_audit_log(user_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_aichat_category_audit_log_entity ON aichat_category_audit_log(entity_type, entity_id);`,
+  '0087': `CREATE TABLE IF NOT EXISTS aichat_keyword_embeddings (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id TEXT NOT NULL,
+  keyword TEXT NOT NULL,
+  model TEXT NOT NULL,
+  dim INTEGER NOT NULL,
+  vector BLOB NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_aichat_keyword_embeddings_user_keyword ON aichat_keyword_embeddings(user_id, keyword);`,
+  '0088': `CREATE TABLE IF NOT EXISTS aichat_keyword_category_suggestions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id TEXT NOT NULL,
+  keyword TEXT NOT NULL,
+  suggested_category_id INTEGER NOT NULL REFERENCES aichat_keyword_categories(id),
+  similarity REAL NOT NULL,
+  model TEXT NOT NULL,
+  accepted INTEGER,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_aichat_keyword_category_suggestions_user_keyword ON aichat_keyword_category_suggestions(user_id, keyword, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_aichat_keyword_category_suggestions_category ON aichat_keyword_category_suggestions(suggested_category_id);`,
 };
 
 async function ensureGroupTable(db: D1Database): Promise<void> {
@@ -1561,6 +1586,8 @@ export const TABLE_COLUMN_KEYS: Record<string, ColumnKeyInfo> = {
   aichat_keyword_categories: { id: 'pk', user_id: 'uk', name: 'uk' },
   aichat_keyword_category_map: { id: 'pk', user_id: 'uk', keyword: 'uk', category_id: 'fk+idx' },
   aichat_category_audit_log: { id: 'pk', user_id: 'idx', entity_type: 'idx', entity_id: 'idx' },
+  aichat_keyword_embeddings: { id: 'pk', user_id: 'uk', keyword: 'uk' },
+  aichat_keyword_category_suggestions: { id: 'pk', user_id: 'idx', keyword: 'idx', suggested_category_id: 'fk+idx' },
 };
 
 export function getColumnKeyType(tableName: string, columnName: string): ColumnKeyType {
@@ -1651,6 +1678,8 @@ export const TABLE_GROUP_MAP: Record<string, string> = {
   aichat_keyword_categories: 'ai',
   aichat_keyword_category_map: 'ai',
   aichat_category_audit_log: 'ai',
+  aichat_keyword_embeddings: 'ai',
+  aichat_keyword_category_suggestions: 'ai',
   keyword_category_groups: 'search',
   keyword_multi_labels: 'search',
   ts_repository:          'ts-catalog',
@@ -1834,6 +1863,8 @@ export const COLUMN_FK_TARGETS: Record<string, Record<string, string>> = {
   aichat_keyword_categories: { user_id: 'user_sessions' },
   aichat_keyword_category_map: { user_id: 'user_sessions', category_id: 'aichat_keyword_categories' },
   aichat_category_audit_log: { user_id: 'user_sessions' },
+  aichat_keyword_embeddings: { user_id: 'user_sessions' },
+  aichat_keyword_category_suggestions: { user_id: 'user_sessions', suggested_category_id: 'aichat_keyword_categories' },
 
   // ========================================================================
   // 世界遺産ページ AI質問ログ・保存済みエリア系
