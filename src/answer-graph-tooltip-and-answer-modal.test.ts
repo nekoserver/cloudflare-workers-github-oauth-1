@@ -20,6 +20,14 @@ import { getAnswerGraphPage } from './views/answerGraph';
 //       片方だけ機能が実装されている状態)
 //   (6) .question-line に下線が表示されてしまう(text-decoration:none指定漏れ)
 //   (7) parseMdをコピーする際にテンプレートリテラルのエスケープが壊れ、正規表現が正しく動かない
+//
+// 追加要件: 回答モーダルの見た目をAIチャットページの履歴モーダル(質問=userバブル・
+// 回答=assistantバブル、コードブロックを含むMarkdown描画)と同じスタイルに揃える。
+// 故障シナリオ:
+//   (8) 回答モーダルにchat-bubble構造(user/assistant)が使われておらず、
+//       AIチャット履歴モーダルと見た目が異なったまま
+//   (9) コードブロック(<pre><code>)用のCSS(.preview-area pre 等)が
+//       回答モーダルに定義されておらず、無装飾のまま表示されてしまう
 
 function buildPage(): string {
   return getAnswerGraphPage('testuser');
@@ -36,6 +44,34 @@ describe('/answer-graph ページのHTML構造', () => {
     expect(html).toContain('id="answerModalBackdrop"');
     expect(html).toContain('id="answerModalBody"');
     expect(html).toContain('id="answerModalClose"');
+  });
+});
+
+describe('/answer-graph ページ: 回答モーダルはAIチャット履歴モーダルと同じスタイル(chat-bubble/preview-area)を使う', () => {
+  const html = buildPage();
+
+  it('AIチャットページのchat-bubble/preview-areaと同名のCSSクラスを使ってバブルを組み立てる', () => {
+    expect(html).toContain('.answer-modal-body .chat-bubble.user');
+    expect(html).toContain('.answer-modal-body .chat-bubble.assistant');
+  });
+
+  it('コードブロック(pre/code)・見出し・テーブル等のMarkdown要素にCSSが定義されている(無装飾で表示されない)', () => {
+    expect(html).toContain('.preview-area pre {');
+    expect(html).toContain('.preview-area pre code {');
+    expect(html).toContain('.preview-area code {');
+    expect(html).toContain('.preview-area h1 {');
+    expect(html).toContain('.preview-area table {');
+  });
+
+  it('AIチャットページの履歴モーダルと同様、質問(user)は左寄せ・回答(assistant)は右寄せに配置する', () => {
+    const userIdx = html.indexOf('.answer-modal-body .chat-bubble.user {');
+    const assistantIdx = html.indexOf('.answer-modal-body .chat-bubble.assistant {');
+    expect(userIdx).toBeGreaterThan(-1);
+    expect(assistantIdx).toBeGreaterThan(-1);
+    const userRule = html.slice(userIdx, html.indexOf('}', userIdx));
+    const assistantRule = html.slice(assistantIdx, html.indexOf('}', assistantIdx));
+    expect(userRule).toContain('align-self:flex-start');
+    expect(assistantRule).toContain('align-self:flex-end');
   });
 });
 
@@ -106,13 +142,24 @@ describe('/answer-graph ページ: サイドパネル・ツールチップ共通
     expect(block).toContain('回答の取得に失敗しました');
   });
 
-  it('openAnswerModal は質問・回答の両方を parseMd (マークダウン) で描画する(素のescHtmlではない)', () => {
+  it('appendAnswerModalBubble はAIチャット履歴モーダルと同様、assistant(回答)のみparseMdでマークダウン描画しuserは素のtextContentにする', () => {
+    const html = buildPage();
+    const idx = html.indexOf('function appendAnswerModalBubble');
+    expect(idx).toBeGreaterThan(-1);
+    const block = html.slice(idx, idx + 500);
+    expect(block).toContain("el.className = 'chat-bubble assistant preview-area';");
+    expect(block).toContain('el.innerHTML = parseMd(text);');
+    expect(block).toContain("el.className = 'chat-bubble user';");
+    expect(block).toContain('el.textContent = text;');
+  });
+
+  it('openAnswerModal は質問をuserバブル、回答をassistantバブルとして追加する(AIチャット履歴モーダルと同じ構造)', () => {
     const html = buildPage();
     const idx = html.indexOf('function openAnswerModal');
     expect(idx).toBeGreaterThan(-1);
     const block = html.slice(idx, idx + 700);
-    expect(block).toContain('parseMd(d.question)');
-    expect(block).toContain('parseMd(d.answer)');
+    expect(block).toContain("appendAnswerModalBubble(d.question, 'user');");
+    expect(block).toContain("appendAnswerModalBubble(d.answer, 'assistant');");
   });
 });
 
@@ -165,16 +212,33 @@ describe('/answer-graph ページ: openAnswerModal/closeAnswerModal のDOM実動
     ) as { openAnswerModal: (id: string) => void; closeAnswerModal: () => void };
   }
 
-  it('成功時: 質問と回答がマークダウン描画され、backdropにopenクラスが付く', async () => {
+  it('成功時: 質問はuserバブル(素のテキスト)、回答はassistantバブル(マークダウン描画)として追加され、backdropにopenクラスが付く', async () => {
     const fetchMock = vi.fn(async () => ({
-      json: async () => ({ id: 's1', question: '**富士山**の高さは?', answer: '3776mです' }),
+      json: async () => ({ id: 's1', question: '**富士山**の高さは?', answer: '**3776m**です' }),
     })) as unknown as typeof fetch;
     const { openAnswerModal } = loadModalFns(buildPage(), fetchMock);
     openAnswerModal('s1');
     for (let i = 0; i < 5; i++) await Promise.resolve();
+    const body = document.getElementById('answerModalBody')!;
     expect(document.getElementById('answerModalBackdrop')!.classList.contains('open')).toBe(true);
-    expect(document.getElementById('answerModalBody')!.innerHTML).toContain('<strong>富士山</strong>');
-    expect(document.getElementById('answerModalBody')!.innerHTML).toContain('3776mです');
+    const userBubble = body.querySelector('.chat-bubble.user')!;
+    const assistantBubble = body.querySelector('.chat-bubble.assistant')!;
+    expect(userBubble.textContent).toBe('**富士山**の高さは?');
+    expect(userBubble.innerHTML).not.toContain('<strong>');
+    expect(assistantBubble.innerHTML).toContain('<strong>3776m</strong>');
+  });
+
+  it('回答内のコードブロックがpre>codeとして忠実に再現される(class="language-xxx"付き)', async () => {
+    const fetchMock = vi.fn(async () => ({
+      json: async () => ({ id: 's1', question: 'サンプルコードを教えて', answer: '```js\nconst x = 1;\n```' }),
+    })) as unknown as typeof fetch;
+    const { openAnswerModal } = loadModalFns(buildPage(), fetchMock);
+    openAnswerModal('s1');
+    for (let i = 0; i < 5; i++) await Promise.resolve();
+    const assistantBubble = document.getElementById('answerModalBody')!.querySelector('.chat-bubble.assistant')!;
+    const codeEl = assistantBubble.querySelector('pre > code.language-js');
+    expect(codeEl, 'コードブロックがpre>code.language-jsとして描画されていない').not.toBeNull();
+    expect(codeEl!.textContent).toBe('const x = 1;');
   });
 
   it('APIがエラーを返した場合、例外を投げずエラー文言を表示する', async () => {

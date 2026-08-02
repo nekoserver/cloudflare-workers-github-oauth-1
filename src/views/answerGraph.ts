@@ -49,14 +49,63 @@ input[type=search]:focus { border-color:var(--accent); }
 .node-tooltip .node-type-label { margin-bottom:4px; }
 .question-line { cursor:pointer; text-decoration:none; }
 .question-line:hover { color:var(--accent); }
-.answer-modal-backdrop { display:none; position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:1000; align-items:flex-start; justify-content:center; padding-top:60px; }
+.answer-modal-backdrop {
+  position:fixed; inset:0; z-index:1000; display:none;
+  align-items:center; justify-content:center; padding:28px 16px;
+  background:rgba(15,23,42,.48); backdrop-filter:blur(4px);
+}
 .answer-modal-backdrop.open { display:flex; }
-.answer-modal { background:var(--card); border:1px solid var(--border); border-radius:12px; width:min(640px,94vw); max-height:80vh; display:flex; flex-direction:column; box-shadow:0 8px 32px rgba(0,0,0,.3); }
-.answer-modal-head { display:flex; align-items:center; justify-content:space-between; padding:14px 18px; border-bottom:1px solid var(--border); flex-shrink:0; }
-.answer-modal-head strong { font-size:13px; }
-.answer-modal-head button { background:none; border:none; cursor:pointer; font-size:16px; color:var(--label); padding:0 4px; }
-.answer-modal-body { padding:16px 18px; overflow-y:auto; flex:1; font-size:13px; line-height:1.7; white-space:pre-wrap; word-break:break-word; }
-.answer-modal-body .q-block { color:var(--accent); font-weight:600; margin-bottom:10px; }
+.answer-modal {
+  width:min(720px,100%); max-height:min(86vh,760px);
+  background:var(--bg); border:1px solid var(--border);
+  border-radius:16px; box-shadow:0 24px 80px rgba(0,0,0,.28);
+  display:flex; flex-direction:column; overflow:hidden;
+}
+.answer-modal-head {
+  flex-shrink:0; display:flex; align-items:center; justify-content:space-between; gap:8px;
+  padding:10px 16px; background:var(--card); border-bottom:1px solid var(--border);
+}
+.answer-modal-head strong { font-size:14px; font-weight:700; color:var(--fg); }
+.answer-modal-head button {
+  width:30px; height:30px; border:none; border-radius:8px;
+  background:transparent; color:var(--label); cursor:pointer; font-size:18px; line-height:1;
+}
+.answer-modal-head button:hover { background:var(--btn-hover); color:var(--fg); }
+.answer-modal-body {
+  flex:1; min-height:0; overflow-y:auto; padding:18px 18px 20px;
+  display:flex; flex-direction:column; gap:14px;
+}
+.answer-modal-body .chat-bubble {
+  max-width:88%; padding:10px 14px; border-radius:12px;
+  font-size:14px; line-height:1.6; white-space:pre-wrap; word-break:break-word;
+}
+.answer-modal-body .chat-bubble.user {
+  align-self:flex-start; background:var(--accent); color:var(--accent-fg);
+  border-bottom-right-radius:12px; border-bottom-left-radius:3px;
+}
+.answer-modal-body .chat-bubble.assistant {
+  align-self:flex-end; background:var(--card); border:1px solid var(--border); color:var(--fg);
+  border-bottom-left-radius:12px; border-bottom-right-radius:3px; white-space:normal;
+}
+/* ======= Markdownプレビュー(AIチャットページの履歴モーダルと同じスタイル) ======= */
+.preview-area h1 { font-size:1.4em; font-weight:700; margin:12px 0 8px; padding-bottom:4px; border-bottom:1px solid var(--border); }
+.preview-area h2 { font-size:1.2em; font-weight:600; margin:10px 0 6px; padding-bottom:3px; border-bottom:1px solid var(--border); }
+.preview-area h3 { font-size:1.1em; font-weight:600; margin:8px 0 4px; }
+.preview-area h4, .preview-area h5, .preview-area h6 { font-size:1em; font-weight:600; margin:6px 0 4px; }
+.preview-area p { margin:0 0 10px; }
+.preview-area ul, .preview-area ol { margin:0 0 10px; padding-left:1.5em; }
+.preview-area li { margin:2px 0; }
+.preview-area code { background:var(--btn-bg); padding:1px 5px; border-radius:3px; font-size:.88em; font-family:ui-monospace,monospace; }
+.preview-area pre { background:var(--btn-bg); padding:10px 12px; border-radius:6px; overflow-x:auto; margin:0 0 10px; }
+.preview-area pre code { background:none; padding:0; font-size:.85em; }
+.preview-area blockquote { border-left:3px solid var(--border); margin:0 0 10px; padding:4px 0 4px 12px; color:var(--label); }
+.preview-area table { border-collapse:collapse; width:100%; margin:0 0 10px; font-size:12px; }
+.preview-area th, .preview-area td { border:1px solid var(--border); padding:4px 8px; }
+.preview-area th { background:var(--btn-bg); font-weight:600; }
+.preview-area hr { border:none; border-top:1px solid var(--border); margin:12px 0; }
+.preview-area a { color:var(--accent); }
+.preview-area img { max-width:100%; }
+.preview-area input[type="checkbox"] { margin-right:4px; }
 </style>
 </head>
 <body>
@@ -131,6 +180,18 @@ input[type=search]:focus { border-color:var(--accent); }
 
   ${getMarkdownParserScript()}
 
+  function appendAnswerModalBubble(text, role) {
+    var el = document.createElement('div');
+    if (role === 'assistant') {
+      el.className = 'chat-bubble assistant preview-area';
+      el.innerHTML = parseMd(text);
+    } else {
+      el.className = 'chat-bubble user';
+      el.textContent = text;
+    }
+    answerModalBody.appendChild(el);
+  }
+
   function openAnswerModal(shareId) {
     answerModalBody.textContent = '読み込み中...';
     answerModalBackdrop.classList.add('open');
@@ -138,7 +199,9 @@ input[type=search]:focus { border-color:var(--accent); }
       .then(function(r) { return r.json(); })
       .then(function(d) {
         if (!d || d.error) { answerModalBody.textContent = '回答の取得に失敗しました: ' + ((d && d.error) || '不明なエラー'); return; }
-        answerModalBody.innerHTML = '<div class="q-block">' + parseMd(d.question) + '</div><div>' + parseMd(d.answer) + '</div>';
+        answerModalBody.innerHTML = '';
+        appendAnswerModalBubble(d.question, 'user');
+        appendAnswerModalBubble(d.answer, 'assistant');
       })
       .catch(function() { answerModalBody.textContent = '回答の取得に失敗しました（通信エラー）'; });
   }
