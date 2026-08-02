@@ -4609,20 +4609,53 @@ export function getAiChatPage(user: {
       catsSection.style.cssText = 'margin-bottom:14px;min-height:24px;line-height:2;';
       body.appendChild(catsSection);
 
+      var colorEditorStatus = document.createElement('div');
+      colorEditorStatus.style.cssText = 'font-size:11px;margin-bottom:6px;min-height:14px;color:var(--text-muted);';
+      body.appendChild(colorEditorStatus);
+      var colorEditorPanel = document.createElement('div');
+      colorEditorPanel.style.cssText = 'display:none;flex-wrap:wrap;gap:5px;margin-bottom:10px;padding:8px;border:1px dashed var(--border-color);border-radius:6px;';
+      body.appendChild(colorEditorPanel);
+
+      function openColorEditor(catId, currentColor) {
+        colorEditorStatus.textContent = 'この分類の識別色を選択してください';
+        colorEditorPanel.innerHTML = '';
+        colorEditorPanel.style.display = 'flex';
+        KW_CAT_COLORS.forEach(function(col) {
+          var sw = document.createElement('span');
+          sw.style.cssText = 'display:inline-block;width:22px;height:22px;border-radius:50%;background:' + col + ';cursor:pointer;box-sizing:border-box;border:2.5px solid ' + (col === currentColor ? '#fff' : 'transparent') + ';box-shadow:0 0 0 1px rgba(0,0,0,0.15);';
+          sw.addEventListener('click', function() {
+            colorEditorStatus.textContent = '保存中…';
+            fetch('/api/aichat/keyword-categories/' + catId, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              credentials: 'same-origin',
+              body: JSON.stringify({ color: col }),
+            })
+              .then(function(r) {
+                return r.json().catch(function() { return {}; }).then(function(d) {
+                  if (!r.ok) throw new Error((d && d.error) || ('HTTP ' + r.status));
+                  return d;
+                });
+              })
+              .then(function() {
+                colorEditorStatus.textContent = '';
+                colorEditorPanel.style.display = 'none';
+                loadCategories();
+              })
+              .catch(function(err) {
+                colorEditorStatus.textContent = '色の変更を保存できませんでした: ' + (err && err.message ? err.message : '不明なエラー');
+              });
+          });
+          colorEditorPanel.appendChild(sw);
+        });
+      }
+
       var registerLabel = document.createElement('div');
       registerLabel.textContent = '新しいカテゴリを登録';
       registerLabel.style.cssText = 'font-size:11px;font-weight:600;color:var(--text-muted);letter-spacing:0.05em;margin-bottom:6px;';
       body.appendChild(registerLabel);
 
       var selectedColor = KW_CAT_COLORS[11];
-      var colorTouchedByUser = false;
-      var colorHint = document.createElement('div');
-      colorHint.textContent = '※選択中の分類カテゴリがある場合、ここで色を変えて「分類決定」を押すとそのカテゴリの識別色を変更できます';
-      colorHint.style.cssText = 'font-size:10px;color:var(--text-muted);margin-bottom:6px;';
-      body.appendChild(colorHint);
-      var colorErrorEl = document.createElement('div');
-      colorErrorEl.style.cssText = 'font-size:11px;color:#ef4444;margin-bottom:6px;min-height:14px;';
-      body.appendChild(colorErrorEl);
       var colorRow = document.createElement('div');
       colorRow.style.cssText = 'display:flex;flex-wrap:wrap;gap:5px;margin-bottom:8px;';
       KW_CAT_COLORS.forEach(function(col) {
@@ -4631,7 +4664,6 @@ export function getAiChatPage(user: {
         swatch.style.cssText = 'display:inline-block;width:22px;height:22px;border-radius:50%;background:' + col + ';cursor:pointer;box-sizing:border-box;border:2.5px solid ' + (col === selectedColor ? '#fff' : 'transparent') + ';box-shadow:0 0 0 1px rgba(0,0,0,0.15);transition:border-color 0.1s;';
         swatch.addEventListener('click', function() {
           selectedColor = col;
-          colorTouchedByUser = true;
           colorRow.querySelectorAll('span').forEach(function(s) {
             s.style.borderColor = s.dataset.color === selectedColor ? '#fff' : 'transparent';
           });
@@ -4683,16 +4715,31 @@ export function getAiChatPage(user: {
 
       function renderCatBadge(cat) {
         var badge = document.createElement('span');
-        badge.textContent = cat.name;
         var col = cat.color || '#6366f1';
         badge.style.cssText = 'display:inline-block;padding:3px 12px;margin:2px 4px;border-radius:6px;font-size:12px;cursor:pointer;border:2px solid ' + col + ';background:transparent;color:' + col + ';user-select:none;font-weight:600;';
         badge.dataset.catId = String(cat.id);
+        badge.dataset.catName = cat.name;
+
+        var nameSpan = document.createElement('span');
+        nameSpan.textContent = cat.name;
+        badge.appendChild(nameSpan);
+
+        var editDot = document.createElement('span');
+        editDot.textContent = ' 🎨';
+        editDot.title = 'この分類の識別色を変更';
+        editDot.style.cssText = 'cursor:pointer;';
+        editDot.addEventListener('click', function(e) {
+          e.stopPropagation();
+          openColorEditor(cat.id, col);
+        });
+        badge.appendChild(editDot);
+
         if (cat.is_mapped) {
           badge.style.background = col;
           badge.style.color = '#fff';
           selectedCatIds.push(cat.id);
         }
-        badge.addEventListener('click', function() {
+        nameSpan.addEventListener('click', function() {
           var id = cat.id;
           var sel = selectedCatIds.indexOf(id) >= 0;
           if (sel) {
@@ -4749,7 +4796,7 @@ export function getAiChatPage(user: {
         updateDecideBtn();
         if (!val) { addCatBtn.disabled = true; addCatBtn.style.opacity = '0.4'; return; }
         var exists = Array.from(catsSection.querySelectorAll('[data-cat-id]')).some(function(el) {
-          return el.textContent === val;
+          return el.dataset.catName === val;
         });
         if (exists) { addCatBtn.disabled = true; addCatBtn.style.opacity = '0.4'; return; }
         addCatBtn.disabled = false;
@@ -4806,37 +4853,15 @@ export function getAiChatPage(user: {
             .catch(restoreDecideBtn);
         }
 
-        function maybeUpdateCategoryColor(cb) {
-          if (!colorTouchedByUser || selectedCatIds.length !== 1) { cb(); return; }
-          colorErrorEl.textContent = '';
-          fetch('/api/aichat/keyword-categories/' + selectedCatIds[0], {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            credentials: 'same-origin',
-            body: JSON.stringify({ color: selectedColor }),
-          })
-            .then(function(r) {
-              return r.json().catch(function() { return {}; }).then(function(d) {
-                if (!r.ok) throw new Error((d && d.error) || ('HTTP ' + r.status));
-                return d;
-              });
-            })
-            .then(function() { cb(); })
-            .catch(function(err) {
-              colorErrorEl.textContent = '色の変更を保存できませんでした: ' + (err && err.message ? err.message : '不明なエラー');
-              restoreDecideBtn();
-            });
-        }
-
-        if (!pendingName) { maybeUpdateCategoryColor(function() { saveMapping(selectedCatIds); }); return; }
+        if (!pendingName) { saveMapping(selectedCatIds); return; }
 
         var existingEl = Array.from(catsSection.querySelectorAll('[data-cat-id]')).filter(function(el) {
-          return el.textContent === pendingName;
+          return el.dataset.catName === pendingName;
         })[0];
         if (existingEl) {
           var existingId = parseInt(existingEl.dataset.catId, 10);
           if (selectedCatIds.indexOf(existingId) < 0) selectedCatIds.push(existingId);
-          maybeUpdateCategoryColor(function() { saveMapping(selectedCatIds); });
+          saveMapping(selectedCatIds);
           return;
         }
 
