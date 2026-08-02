@@ -97,6 +97,24 @@ describe('フロントエンド: 分類決定モーダルで既存カテゴリ�
     expect(fn).toMatch(/if \(!colorTouchedByUser \|\| selectedCatIds\.length !== 1\) \{ cb\(\); return; \}/);
   });
 
+  it('PATCHが非2xx応答を返した場合はエラーとして扱い、成功時と同様に握りつぶさない', () => {
+    const fn = sliceDecideHandler(buildPage());
+    expect(fn).toContain('if (!r.ok) throw new Error');
+  });
+
+  it('色の保存に失敗した場合はモーダル内にエラー文言を表示し、ユーザーに気づける手段を確保する', () => {
+    const fn = sliceDecideHandler(buildPage());
+    expect(fn).toContain("colorErrorEl.textContent = '色の変更を保存できませんでした: '");
+  });
+
+  it('色の保存に失敗した場合は分類決定ボタンを再度押せる状態に戻す(そのまま失敗を握りつぶして先へ進まない)', () => {
+    const fn = sliceDecideHandler(buildPage());
+    const idx = fn.indexOf('.catch(function(err) {');
+    expect(idx).toBeGreaterThan(-1);
+    const block = fn.slice(idx, idx + 200);
+    expect(block).toContain('restoreDecideBtn();');
+  });
+
   it('新規カテゴリ未入力(pendingNameなし)の決定パスで maybeUpdateCategoryColor を経由してから saveMapping する', () => {
     const fn = sliceDecideHandler(buildPage());
     expect(fn).toMatch(/if \(!pendingName\) \{ maybeUpdateCategoryColor\(function\(\) \{ saveMapping\(selectedCatIds\); \}\); return; \}/);

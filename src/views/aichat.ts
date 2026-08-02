@@ -4620,6 +4620,9 @@ export function getAiChatPage(user: {
       colorHint.textContent = '※選択中の分類カテゴリがある場合、ここで色を変えて「分類決定」を押すとそのカテゴリの識別色を変更できます';
       colorHint.style.cssText = 'font-size:10px;color:var(--text-muted);margin-bottom:6px;';
       body.appendChild(colorHint);
+      var colorErrorEl = document.createElement('div');
+      colorErrorEl.style.cssText = 'font-size:11px;color:#ef4444;margin-bottom:6px;min-height:14px;';
+      body.appendChild(colorErrorEl);
       var colorRow = document.createElement('div');
       colorRow.style.cssText = 'display:flex;flex-wrap:wrap;gap:5px;margin-bottom:8px;';
       KW_CAT_COLORS.forEach(function(col) {
@@ -4805,14 +4808,24 @@ export function getAiChatPage(user: {
 
         function maybeUpdateCategoryColor(cb) {
           if (!colorTouchedByUser || selectedCatIds.length !== 1) { cb(); return; }
+          colorErrorEl.textContent = '';
           fetch('/api/aichat/keyword-categories/' + selectedCatIds[0], {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
             credentials: 'same-origin',
             body: JSON.stringify({ color: selectedColor }),
           })
+            .then(function(r) {
+              return r.json().catch(function() { return {}; }).then(function(d) {
+                if (!r.ok) throw new Error((d && d.error) || ('HTTP ' + r.status));
+                return d;
+              });
+            })
             .then(function() { cb(); })
-            .catch(function() { cb(); });
+            .catch(function(err) {
+              colorErrorEl.textContent = '色の変更を保存できませんでした: ' + (err && err.message ? err.message : '不明なエラー');
+              restoreDecideBtn();
+            });
         }
 
         if (!pendingName) { maybeUpdateCategoryColor(function() { saveMapping(selectedCatIds); }); return; }
