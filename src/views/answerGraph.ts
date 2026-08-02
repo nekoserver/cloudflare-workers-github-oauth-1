@@ -43,6 +43,18 @@ input[type=search]:focus { border-color:var(--accent); }
 .node-type-keyword { background:rgba(194,65,12,.15); color:var(--keyword-color); }
 .graph-status { font-size:12px; color:var(--label); margin-bottom:8px; }
 .graph-status.err { color:var(--danger); }
+.node-tooltip { position:absolute; z-index:500; max-width:260px; background:var(--card); border:1px solid var(--border); border-radius:8px; padding:10px 12px; font-size:12px; box-shadow:0 6px 20px rgba(0,0,0,.25); pointer-events:none; }
+.node-tooltip .node-type-label { margin-bottom:4px; }
+.side-panel .question-line { cursor:pointer; text-decoration:underline dotted; }
+.side-panel .question-line:hover { color:var(--accent); }
+.answer-modal-backdrop { display:none; position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:1000; align-items:flex-start; justify-content:center; padding-top:60px; }
+.answer-modal-backdrop.open { display:flex; }
+.answer-modal { background:var(--card); border:1px solid var(--border); border-radius:12px; width:min(640px,94vw); max-height:80vh; display:flex; flex-direction:column; box-shadow:0 8px 32px rgba(0,0,0,.3); }
+.answer-modal-head { display:flex; align-items:center; justify-content:space-between; padding:14px 18px; border-bottom:1px solid var(--border); flex-shrink:0; }
+.answer-modal-head strong { font-size:13px; }
+.answer-modal-head button { background:none; border:none; cursor:pointer; font-size:16px; color:var(--label); padding:0 4px; }
+.answer-modal-body { padding:16px 18px; overflow-y:auto; flex:1; font-size:13px; line-height:1.7; white-space:pre-wrap; word-break:break-word; }
+.answer-modal-body .q-block { color:var(--accent); font-weight:600; margin-bottom:10px; }
 </style>
 </head>
 <body>
@@ -79,6 +91,16 @@ input[type=search]:focus { border-color:var(--accent); }
     </div>
   </div>
 </main>
+<div class="node-tooltip" id="nodeTooltip" style="display:none;"></div>
+<div class="answer-modal-backdrop" id="answerModalBackdrop">
+  <div class="answer-modal">
+    <div class="answer-modal-head">
+      <strong>回答</strong>
+      <button type="button" id="answerModalClose">✕</button>
+    </div>
+    <div class="answer-modal-body" id="answerModalBody"></div>
+  </div>
+</div>
 <script>
 (function() {
   var seedSearchInput = document.getElementById('seedSearchInput');
@@ -89,6 +111,10 @@ input[type=search]:focus { border-color:var(--accent); }
   var ctx = canvas.getContext('2d');
   var sidePanel = document.getElementById('sidePanel');
   var categoryLegend = document.getElementById('categoryLegend');
+  var nodeTooltip = document.getElementById('nodeTooltip');
+  var answerModalBackdrop = document.getElementById('answerModalBackdrop');
+  var answerModalBody = document.getElementById('answerModalBody');
+  var answerModalClose = document.getElementById('answerModalClose');
 
   var searchTimer = null;
   var selectedShareId = null;
@@ -100,6 +126,55 @@ input[type=search]:focus { border-color:var(--accent); }
       .split('&').join('&amp;').split('<').join('&lt;').split('>').join('&gt;')
       .split('"').join('&quot;').split("'").join('&#39;');
   }
+
+  function openAnswerModal(shareId) {
+    answerModalBody.textContent = '読み込み中...';
+    answerModalBackdrop.classList.add('open');
+    fetch('/api/aichat/shares/' + encodeURIComponent(shareId), { credentials: 'same-origin' })
+      .then(function(r) { return r.json(); })
+      .then(function(d) {
+        if (!d || d.error) { answerModalBody.textContent = '回答の取得に失敗しました: ' + ((d && d.error) || '不明なエラー'); return; }
+        answerModalBody.innerHTML = '<div class="q-block">' + escHtml(d.question) + '</div><div>' + escHtml(d.answer) + '</div>';
+      })
+      .catch(function() { answerModalBody.textContent = '回答の取得に失敗しました（通信エラー）'; });
+  }
+
+  function closeAnswerModal() {
+    answerModalBackdrop.classList.remove('open');
+  }
+
+  answerModalClose.addEventListener('click', closeAnswerModal);
+  answerModalBackdrop.addEventListener('click', function(e) { if (e.target === answerModalBackdrop) closeAnswerModal(); });
+
+  function hideNodeTooltip() {
+    nodeTooltip.style.display = 'none';
+  }
+
+  function showNodeTooltip(node, pageX, pageY) {
+    var typeLabelClass = node.type === 'answer' ? 'node-type-answer' : 'node-type-keyword';
+    var typeLabelText = node.type === 'answer' ? '回答（質問）' : 'キーワード';
+    var categoryLine = node.dominantCategory
+      ? '<div style="margin-bottom:4px;"><span class="legend-dot" style="background:' + escHtml(node.color || '#888888') + ';"></span>分類: ' + escHtml(node.dominantCategory) + '</div>'
+      : '';
+    nodeTooltip.innerHTML = '<span class="node-type-label ' + typeLabelClass + '">' + typeLabelText + '</span>'
+      + '<div style="margin-bottom:4px;color:var(--label);">深さ: ' + node.depth + '</div>'
+      + categoryLine
+      + '<div style="word-break:break-word;">' + escHtml(node.label) + '</div>';
+    nodeTooltip.style.display = 'block';
+    var tipWidth = nodeTooltip.offsetWidth || 260;
+    var left = pageX + 12;
+    if (left + tipWidth > window.scrollX + document.documentElement.clientWidth) {
+      left = pageX - tipWidth - 12;
+    }
+    nodeTooltip.style.left = Math.max(4, left) + 'px';
+    nodeTooltip.style.top = (pageY + 12) + 'px';
+  }
+
+  document.addEventListener('click', function(e) {
+    if (e.target === canvas) return;
+    if (nodeTooltip.contains(e.target)) return;
+    hideNodeTooltip();
+  });
 
   function doSeedSearch(q) {
     seedSearchStatus.textContent = '検索中...';
@@ -286,10 +361,20 @@ input[type=search]:focus { border-color:var(--accent); }
     var categoryLine = hit.dominantCategory
       ? '<div style="margin-bottom:6px;"><span class="legend-dot" style="background:' + escHtml(hit.color || '#888888') + ';"></span>分類: ' + escHtml(hit.dominantCategory) + '</div>'
       : '';
+    var labelLine = hit.type === 'answer'
+      ? '<div class="question-line" style="word-break:break-word;" data-share-id="' + escHtml(hit.id.slice(2)) + '">' + escHtml(hit.label) + '</div>'
+      : '<div style="word-break:break-word;">' + escHtml(hit.label) + '</div>';
     sidePanel.innerHTML = '<span class="node-type-label ' + typeLabelClass + '">' + typeLabelText + '</span>'
       + '<div style="margin-bottom:6px;color:var(--label);">深さ: ' + hit.depth + '</div>'
       + categoryLine
-      + '<div style="word-break:break-word;">' + escHtml(hit.label) + '</div>';
+      + labelLine;
+    showNodeTooltip(hit, e.pageX, e.pageY);
+  });
+
+  sidePanel.addEventListener('click', function(e) {
+    var q = e.target.closest('.question-line');
+    if (!q) return;
+    openAnswerModal(q.getAttribute('data-share-id'));
   });
 
   drawGraph();
