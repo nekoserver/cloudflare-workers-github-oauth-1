@@ -4622,6 +4622,8 @@ export function getAiChatPage(user: {
         colorEditorPanel.style.display = 'flex';
         KW_CAT_COLORS.forEach(function(col) {
           var sw = document.createElement('span');
+          sw.className = 'kwcat-color-edit-swatch';
+          sw.dataset.color = col;
           sw.style.cssText = 'display:inline-block;width:22px;height:22px;border-radius:50%;background:' + col + ';cursor:pointer;box-sizing:border-box;border:2.5px solid ' + (col === currentColor ? '#fff' : 'transparent') + ';box-shadow:0 0 0 1px rgba(0,0,0,0.15);';
           sw.addEventListener('click', function() {
             colorEditorStatus.textContent = '保存中…';
@@ -4693,6 +4695,7 @@ export function getAiChatPage(user: {
       cancelBtn.style.cssText = 'padding:7px 16px;border-radius:6px;border:1px solid var(--border-color);background:transparent;color:var(--text-muted);font-size:13px;cursor:pointer;';
       cancelBtn.addEventListener('click', function() { document.body.removeChild(overlay); });
       var decideBtn = document.createElement('button');
+      decideBtn.className = 'kwcat-decide-btn';
       decideBtn.textContent = '分類決定';
       decideBtn.disabled = true;
       decideBtn.style.cssText = 'padding:7px 16px;border-radius:6px;border:none;background:var(--accent-color,#667eea);color:#fff;font-size:13px;cursor:pointer;opacity:0.4;';
@@ -4725,6 +4728,7 @@ export function getAiChatPage(user: {
         badge.appendChild(nameSpan);
 
         var editDot = document.createElement('span');
+        editDot.className = 'kwcat-color-edit-dot';
         editDot.textContent = ' 🎨';
         editDot.title = 'この分類の識別色を変更';
         editDot.style.cssText = 'cursor:pointer;';
