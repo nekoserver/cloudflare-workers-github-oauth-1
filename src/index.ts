@@ -7852,7 +7852,18 @@ app.get('/uuid', authMiddleware, async (c) => {
 
 app.get('/answer-graph', authMiddleware, async (c) => {
   const user = c.get('user');
-  return c.html(getAnswerGraphPage(user.sub));
+  let modelColors: Record<string, string> = {};
+  if (c.env.DB) {
+    try {
+      const rows = await c.env.DB.prepare('SELECT model_id, color FROM aichat_model_colors').all<{ model_id: string; color: string }>();
+      for (const row of rows.results ?? []) {
+        modelColors[row.model_id] = row.color;
+      }
+    } catch {
+      logger.warn('aichat_model_colors query failed, using empty map');
+    }
+  }
+  return c.html(getAnswerGraphPage(user.sub, modelColors));
 });
 
 app.get('/base64', authMiddleware, async (c) => {
