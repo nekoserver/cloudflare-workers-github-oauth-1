@@ -5830,24 +5830,11 @@ export async function enrichGraphWithCategoryColors(
   graph: AnswerGraphResult,
 ): Promise<AnswerGraphResult> {
   const centroids = await computeCategoryCentroids(db, ai, userId);
-  if (centroids.length === 0) return graph;
 
-  const kwRows = await db.prepare(
-    `SELECT keyword FROM aichat_search_log WHERE user_id = ? GROUP BY keyword ORDER BY SUM(select_count) DESC LIMIT 300`
-  ).bind(userId).all<{ keyword: string }>();
-  const allKeywords = (kwRows.results ?? []).map((r) => r.keyword).filter(Boolean);
-
-  const answerNodes = graph.nodes.filter((n) => n.type === 'answer');
-  const answerTextById = new Map<string, string>();
-  for (const chunk of chunkBindValues(answerNodes.map((n) => n.id.slice(2)), D1_MAX_BOUND_PARAMS - 1)) {
-    if (chunk.length === 0) continue;
-    const placeholders = chunk.map(() => '?').join(',');
-    const rows = await db.prepare(
-      `SELECT id, question, answer FROM ai_chat_shares WHERE user_id = ? AND id IN (${placeholders})`
-    ).bind(userId, ...chunk).all<{ id: string; question: string; answer: string }>();
-    for (const r of (rows.results ?? [])) answerTextById.set(r.id, r.question + ' ' + r.answer);
-  }
-
+  // キーワードノードの色付けは確定分類(aichat_keyword_category_map)の
+  // 直接参照だけで完結し、centroids(ベクトル計算)には依存しない。
+  // centroidsが空でも(=回答ノードの色付けができない場合でも)キーワード
+  // ノードの色付けは独立して行う。
   const keywordNodes = graph.nodes.filter((n) => n.type === 'keyword');
   const keywordCategoryMap = new Map<string, { name: string; color: string }[]>();
   for (const chunk of chunkBindValues(keywordNodes.map((n) => n.label), D1_MAX_BOUND_PARAMS - 1)) {
@@ -5866,6 +5853,27 @@ export async function enrichGraphWithCategoryColors(
     }
   }
 
+  if (centroids.length === 0 && keywordCategoryMap.size === 0) return graph;
+
+  let allKeywords: string[] = [];
+  const answerTextById = new Map<string, string>();
+  if (centroids.length > 0) {
+    const kwRows = await db.prepare(
+      `SELECT keyword FROM aichat_search_log WHERE user_id = ? GROUP BY keyword ORDER BY SUM(select_count) DESC LIMIT 300`
+    ).bind(userId).all<{ keyword: string }>();
+    allKeywords = (kwRows.results ?? []).map((r) => r.keyword).filter(Boolean);
+
+    const answerNodes = graph.nodes.filter((n) => n.type === 'answer');
+    for (const chunk of chunkBindValues(answerNodes.map((n) => n.id.slice(2)), D1_MAX_BOUND_PARAMS - 1)) {
+      if (chunk.length === 0) continue;
+      const placeholders = chunk.map(() => '?').join(',');
+      const rows = await db.prepare(
+        `SELECT id, question, answer FROM ai_chat_shares WHERE user_id = ? AND id IN (${placeholders})`
+      ).bind(userId, ...chunk).all<{ id: string; question: string; answer: string }>();
+      for (const r of (rows.results ?? [])) answerTextById.set(r.id, r.question + ' ' + r.answer);
+    }
+  }
+
   const enrichedNodes: AnswerGraphNode[] = [];
   for (const node of graph.nodes) {
     if (node.type === 'keyword') {
@@ -5874,6 +5882,7 @@ export async function enrichGraphWithCategoryColors(
       const pseudoScores: AnswerCategoryScore[] = cats.map((c) => ({ categoryId: 0, name: c.name, color: c.color, score: 1 }));
       enrichedNodes.push({ ...node, color: blendCategoryColors(pseudoScores, '#888888'), dominantCategory: cats.map((c) => c.name).join('/') });
     } else {
+      if (centroids.length === 0) { enrichedNodes.push(node); continue; }
       const shareId = node.id.slice(2);
       const text = answerTextById.get(shareId) ?? node.label;
       const scores = await getOrComputeAnswerCategoryScores(db, ai, userId, shareId, text, centroids, allKeywords);

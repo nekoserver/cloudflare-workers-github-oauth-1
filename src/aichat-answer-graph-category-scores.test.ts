@@ -235,6 +235,27 @@ describe('enrichGraphWithCategoryColors: グラフノードへの色付け', () 
     expect(answerNode.dominantCategory).toBe('Travel');
   });
 
+  it('回帰: 埋め込み計算が全て失敗しcentroidsが空になっても、キーワードノードの色付けは独立して行われる', async () => {
+    const db = setupDb();
+    insertCategory(db, 1, 'u1', 'Travel', '#3b82f6');
+    insertMap(db, 'u1', '駅', 1);
+    insertKeyword(db, 'u1', '駅');
+    insertShare(db, 's1', 'u1', '駅について', '駅の話です');
+    insertShare(db, 's2', 'u1', '駅の近く', '駅周辺の話です');
+    // 埋め込み計算が全て失敗する状況を再現(bge-m3が空データを返す)
+    const ai = { run: vi.fn(async () => ({ data: [] })) };
+
+    const graph = await buildAnswerPropagationGraph(wrapD1(db) as never, 'u1', 's1');
+    const enriched = await enrichGraphWithCategoryColors(wrapD1(db) as never, ai as never, 'u1', graph!);
+
+    const kwNode = enriched.nodes.find((n) => n.type === 'keyword')!;
+    expect(kwNode.color).toBe('#3b82f6');
+    expect(kwNode.dominantCategory).toBe('Travel');
+
+    const answerNode = enriched.nodes.find((n) => n.id === 'a:s2')!;
+    expect(answerNode.color).toBeUndefined();
+  });
+
   it('中分類が1件も無ければ色を付けずグラフをそのまま返す', async () => {
     const db = setupDb();
     insertKeyword(db, 'u1', '駅');
