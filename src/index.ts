@@ -5608,6 +5608,38 @@ app.post('/api/aichat/keyword-categories', authMiddleware, async (c) => {
   return jsonUtf8({ ok: true, inserted: wasInserted, category: row });
 });
 
+/**
+ * キーワード分類カテゴリの色を変更する
+ * 分類決定モーダルで既存カテゴリの識別色を変更したときに使用する
+ */
+app.patch('/api/aichat/keyword-categories/:id', authMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  const id = parseInt(c.req.param('id'), 10);
+  if (!Number.isFinite(id)) return jsonUtf8({ error: '不正なIDです' }, 400);
+  const body = await c.req.json<{ color?: string }>();
+  const color = typeof body.color === 'string' ? body.color.trim() : '';
+  if (!/^#[0-9a-fA-F]{6}$/.test(color)) return jsonUtf8({ error: 'color は #RRGGBB 形式で指定してください' }, 400);
+  const existing = await c.env.DB.prepare(
+    `SELECT id, name, color FROM aichat_keyword_categories WHERE id = ? AND user_id = ?`
+  ).bind(id, user.sub).first<{ id: number; name: string; color: string }>();
+  if (!existing) return jsonUtf8({ error: 'カテゴリが見つかりません' }, 404);
+  await c.env.DB.prepare(
+    `UPDATE aichat_keyword_categories SET color = ? WHERE id = ? AND user_id = ?`
+  ).bind(color, id, user.sub).run();
+  if (existing.color !== color) {
+    await recordAichatCategoryAudit(c.env.DB, {
+      userId: user.sub,
+      action: 'keyword_category_color_updated',
+      entityType: 'keyword_category',
+      entityId: id,
+      entityName: existing.name,
+      detail: JSON.stringify({ before: existing.color, after: color }),
+    });
+  }
+  return jsonUtf8({ ok: true, category: { id, name: existing.name, color } });
+});
+
 export const BGE_M3_MODEL = '@cf/baai/bge-m3';
 
 export function floatsToBlob(vec: number[]): ArrayBuffer {
