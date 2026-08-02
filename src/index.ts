@@ -4236,10 +4236,12 @@ app.post('/api/aichat/answer-propagation-graph', authMiddleware, async (c) => {
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       logger.warn('answer-propagation-graph: category color enrichment failed', { shareId, error: message });
-      return jsonUtf8(result);
+      // ここでの失敗理由はサーバーログにしか残らずユーザー側から確認できないため、
+      // レスポンス自体にも含めてフロントエンドで直接表示できるようにする。
+      return jsonUtf8({ ...result, _colorWarning: message });
     }
   }
-  return jsonUtf8(result);
+  return jsonUtf8({ ...result, _colorWarning: 'AIバインディングが未設定のため色分けは無効です' });
 });
 
 /**
@@ -5829,7 +5831,19 @@ export async function enrichGraphWithCategoryColors(
   userId: string,
   graph: AnswerGraphResult,
 ): Promise<AnswerGraphResult> {
-  const centroids = await computeCategoryCentroids(db, ai, userId);
+  // computeCategoryCentroids が例外を投げても(埋め込み計算の失敗・DB異常等)、
+  // それとは独立して動くはずのキーワードノードの色付けまで巻き添えで
+  // 失敗させないよう、ここでcatchして「centroidsなし」として扱う。
+  let centroids: CategoryCentroidColored[] = [];
+  try {
+    centroids = await computeCategoryCentroids(db, ai, userId);
+  } catch (err) {
+    logger.warn('enrichGraphWithCategoryColors: computeCategoryCentroids failed (falling back to keyword-only coloring)', {
+      userId,
+      error: err instanceof Error ? err.message : String(err),
+    });
+    centroids = [];
+  }
 
   // キーワードノードの色付けは確定分類(aichat_keyword_category_map)の
   // 直接参照だけで完結し、centroids(ベクトル計算)には依存しない。

@@ -59,6 +59,26 @@ function wrapD1(db: DatabaseSync) {
   };
 }
 
+function wrapD1ThrowingOn(db: DatabaseSync, sqlSubstring: string) {
+  const base = wrapD1(db);
+  return {
+    prepare(sql: string) {
+      if (sql.indexOf(sqlSubstring) !== -1) {
+        return {
+          bind() {
+            return {
+              async first() { throw new Error('simulated DB failure: ' + sqlSubstring); },
+              async all() { throw new Error('simulated DB failure: ' + sqlSubstring); },
+              async run() { throw new Error('simulated DB failure: ' + sqlSubstring); },
+            };
+          },
+        };
+      }
+      return base.prepare(sql);
+    },
+  };
+}
+
 function setupDb(): DatabaseSync {
   const db = new DatabaseSync(':memory:');
   db.exec(`
@@ -254,6 +274,24 @@ describe('enrichGraphWithCategoryColors: グラフノードへの色付け', () 
 
     const answerNode = enriched.nodes.find((n) => n.id === 'a:s2')!;
     expect(answerNode.color).toBeUndefined();
+  });
+
+  it('回帰: computeCategoryCentroidsが例外を投げても(DB異常等)、キーワードノードの色付けは独立して行われる', async () => {
+    const db = setupDb();
+    insertCategory(db, 1, 'u1', 'Travel', '#3b82f6');
+    insertMap(db, 'u1', '駅', 1);
+    insertKeyword(db, 'u1', '駅');
+    insertShare(db, 's1', 'u1', '駅について', '駅の話です');
+    const ai = makeMockAi({ '駅': [1, 0] });
+
+    const graph = await buildAnswerPropagationGraph(wrapD1(db) as never, 'u1', 's1');
+    // computeCategoryCentroids の最初のクエリ(中分類一覧取得)だけを失敗させる
+    const throwingDb = wrapD1ThrowingOn(db, 'SELECT id, name, color FROM aichat_keyword_categories');
+    const enriched = await enrichGraphWithCategoryColors(throwingDb as never, ai as never, 'u1', graph!);
+
+    const kwNode = enriched.nodes.find((n) => n.type === 'keyword')!;
+    expect(kwNode.color).toBe('#3b82f6');
+    expect(kwNode.dominantCategory).toBe('Travel');
   });
 
   it('中分類が1件も無ければ色を付けずグラフをそのまま返す', async () => {

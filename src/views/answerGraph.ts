@@ -153,7 +153,14 @@ input[type=search]:focus { border-color:var(--accent); }
           return;
         }
         currentGraph = d;
-        graphStatus.textContent = 'ノード ' + d.nodes.length + ' 件 / エッジ ' + d.edges.length + ' 件';
+        var statusText = 'ノード ' + d.nodes.length + ' 件 / エッジ ' + d.edges.length + ' 件';
+        if (d._colorWarning) {
+          statusText += '　※色分け無効: ' + d._colorWarning;
+          graphStatus.className = 'graph-status err';
+        } else {
+          graphStatus.className = 'graph-status';
+        }
+        graphStatus.textContent = statusText;
         drawGraph();
       })
       .catch(function() {
