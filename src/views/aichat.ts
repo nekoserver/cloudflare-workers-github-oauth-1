@@ -4615,6 +4615,11 @@ export function getAiChatPage(user: {
       body.appendChild(registerLabel);
 
       var selectedColor = KW_CAT_COLORS[11];
+      var colorTouchedByUser = false;
+      var colorHint = document.createElement('div');
+      colorHint.textContent = '※選択中の分類カテゴリがある場合、ここで色を変えて「分類決定」を押すとそのカテゴリの識別色を変更できます';
+      colorHint.style.cssText = 'font-size:10px;color:var(--text-muted);margin-bottom:6px;';
+      body.appendChild(colorHint);
       var colorRow = document.createElement('div');
       colorRow.style.cssText = 'display:flex;flex-wrap:wrap;gap:5px;margin-bottom:8px;';
       KW_CAT_COLORS.forEach(function(col) {
@@ -4623,6 +4628,7 @@ export function getAiChatPage(user: {
         swatch.style.cssText = 'display:inline-block;width:22px;height:22px;border-radius:50%;background:' + col + ';cursor:pointer;box-sizing:border-box;border:2.5px solid ' + (col === selectedColor ? '#fff' : 'transparent') + ';box-shadow:0 0 0 1px rgba(0,0,0,0.15);transition:border-color 0.1s;';
         swatch.addEventListener('click', function() {
           selectedColor = col;
+          colorTouchedByUser = true;
           colorRow.querySelectorAll('span').forEach(function(s) {
             s.style.borderColor = s.dataset.color === selectedColor ? '#fff' : 'transparent';
           });
@@ -4797,7 +4803,19 @@ export function getAiChatPage(user: {
             .catch(restoreDecideBtn);
         }
 
-        if (!pendingName) { saveMapping(selectedCatIds); return; }
+        function maybeUpdateCategoryColor(cb) {
+          if (!colorTouchedByUser || selectedCatIds.length !== 1) { cb(); return; }
+          fetch('/api/aichat/keyword-categories/' + selectedCatIds[0], {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'same-origin',
+            body: JSON.stringify({ color: selectedColor }),
+          })
+            .then(function() { cb(); })
+            .catch(function() { cb(); });
+        }
+
+        if (!pendingName) { maybeUpdateCategoryColor(function() { saveMapping(selectedCatIds); }); return; }
 
         var existingEl = Array.from(catsSection.querySelectorAll('[data-cat-id]')).filter(function(el) {
           return el.textContent === pendingName;
@@ -4805,7 +4823,7 @@ export function getAiChatPage(user: {
         if (existingEl) {
           var existingId = parseInt(existingEl.dataset.catId, 10);
           if (selectedCatIds.indexOf(existingId) < 0) selectedCatIds.push(existingId);
-          saveMapping(selectedCatIds);
+          maybeUpdateCategoryColor(function() { saveMapping(selectedCatIds); });
           return;
         }
 

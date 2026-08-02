@@ -14,7 +14,7 @@ function buildPage(): string {
 function sliceDecideHandler(html: string): string {
   const idx = html.indexOf('decideBtn.addEventListener');
   expect(idx).toBeGreaterThan(-1);
-  return html.slice(idx, idx + 2500);
+  return html.slice(idx, idx + 3200);
 }
 
 // ===========================================================
