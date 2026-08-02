@@ -1,8 +1,8 @@
 import { describe, it, expect, vi } from 'vitest';
 import { DatabaseSync } from 'node:sqlite';
 import {
-  computeCategoryCentroids,
-  getOrComputeAnswerCategoryScores,
+  buildCategoryCentroidsFromMap,
+  getOrComputeKeywordEmbeddingsBatch,
   enrichGraphWithCategoryColors,
   buildAnswerPropagationGraph,
   BGE_M3_MODEL,
@@ -12,13 +12,18 @@ import {
 // カテゴリ類似度のブレンドで色分けするオーケストレーション層。
 //
 // 故障シナリオ:
-//   (1) 回答ごとのスコア計算を毎回AIに問い合わせてしまう(キャッシュが効かない)
+//   (1) キーワード1件ごとにD1読み取り+AI呼び出し+D1書き込みを行うと、
+//       Workers単一invocationのAPIリクエスト数上限("Too many API requests
+//       by single Worker invocation")を超えてしまう
+//       → getOrComputeKeywordEmbeddingsBatchでバッチ化して検証する
 //   (2) キーワードが1つもcentroid計算に使えない中分類を候補に含めてしまう
 //   (3) 中分類の数が変わった(新しいカテゴリが増えた)のに古いキャッシュを
 //       そのまま返してしまい、新カテゴリが色分けに反映されない
 //   (4) キーワードノードは中分類に直接紐付いているのに、わざわざAIで
 //       再計算してしまう(不要なコスト)
 //   (5) 他ユーザーのカテゴリ・キーワードが混入する
+//   (6) 回答ノードの色付けが失敗しても、キーワードノードの色付けは
+//       独立して行われる
 
 function wrapD1(db: DatabaseSync) {
   return {
@@ -127,107 +132,104 @@ function insertMap(db: DatabaseSync, userId: string, keyword: string, categoryId
   db.prepare(`INSERT INTO aichat_keyword_category_map (user_id, keyword, category_id) VALUES (?, ?, ?)`).run(userId, keyword, categoryId);
 }
 
+// 実際のbge-m3同様、1回の呼び出しで複数テキストをまとめて埋め込む(バッチ)ことを想定したモック
 function makeMockAi(vectorByText: Record<string, number[]>) {
   return {
     run: vi.fn(async (_model: unknown, params: { text: string[] }) => {
-      const t = params.text[0];
-      return { data: [vectorByText[t] ?? [0, 0]] };
+      return { data: params.text.map((t) => vectorByText[t] ?? [0, 0]) };
     }),
   };
 }
 
-describe('computeCategoryCentroids: 中分類ごとの代表ベクトル', () => {
-  it('カテゴリに紐づくキーワードの埋め込みを平均してcentroidを作る', async () => {
+describe('getOrComputeKeywordEmbeddingsBatch: キーワード埋め込みのバッチ取得', () => {
+  it('未キャッシュのキーワードをまとめて1回のAI呼び出しで取得する(N回呼ばない)', async () => {
     const db = setupDb();
-    insertCategory(db, 1, 'u1', 'Travel', '#3b82f6');
-    insertMap(db, 'u1', '駅', 1);
-    insertMap(db, 'u1', '空港', 1);
-    const ai = makeMockAi({ '駅': [1, 0], '空港': [0, 1] });
+    const ai = makeMockAi({ '駅': [1, 0], '空港': [0, 1], '新幹線': [0.5, 0.5] });
 
-    const centroids = await computeCategoryCentroids(wrapD1(db) as never, ai as never, 'u1');
+    const map = await getOrComputeKeywordEmbeddingsBatch(wrapD1(db) as never, ai as never, 'u1', ['駅', '空港', '新幹線']);
 
+    expect(map.get('駅')).toEqual([1, 0]);
+    expect(map.get('空港')).toEqual([0, 1]);
+    expect(map.get('新幹線')).toEqual([0.5, 0.5]);
+    expect(ai.run).toHaveBeenCalledTimes(1);
+  });
+
+  it('既にキャッシュ済みのキーワードはAIを呼ばずキャッシュ値を返す', async () => {
+    const db = setupDb();
+    const now = new Date().toISOString();
+    db.prepare(
+      `INSERT INTO aichat_keyword_embeddings (user_id, keyword, model, dim, vector, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`
+    ).run('u1', '駅', BGE_M3_MODEL, 2, new Uint8Array(new Float32Array([9, 9]).buffer), now, now);
+    const ai = makeMockAi({});
+
+    const map = await getOrComputeKeywordEmbeddingsBatch(wrapD1(db) as never, ai as never, 'u1', ['駅']);
+
+    expect(map.get('駅')).toEqual([9, 9]);
+    expect(ai.run).not.toHaveBeenCalled();
+  });
+
+  it('重複キーワードは1件として扱う', async () => {
+    const db = setupDb();
+    const ai = makeMockAi({ '駅': [1, 0] });
+
+    const map = await getOrComputeKeywordEmbeddingsBatch(wrapD1(db) as never, ai as never, 'u1', ['駅', '駅', '駅']);
+
+    expect(map.size).toBe(1);
+    const calledTexts = (ai.run.mock.calls[0][1] as { text: string[] }).text;
+    expect(calledTexts).toEqual(['駅']);
+  });
+
+  it('新規計算したキーワードはDBへ保存され、次回はAIを呼ばない', async () => {
+    const db = setupDb();
+    const ai = makeMockAi({ '駅': [1, 0] });
+
+    await getOrComputeKeywordEmbeddingsBatch(wrapD1(db) as never, ai as never, 'u1', ['駅']);
+    ai.run.mockClear();
+    const map = await getOrComputeKeywordEmbeddingsBatch(wrapD1(db) as never, ai as never, 'u1', ['駅']);
+
+    expect(map.get('駅')).toEqual([1, 0]);
+    expect(ai.run).not.toHaveBeenCalled();
+  });
+
+  it('空配列を渡したらAIもDBも呼ばず空のMapを返す', async () => {
+    const db = setupDb();
+    const ai = makeMockAi({});
+    const map = await getOrComputeKeywordEmbeddingsBatch(wrapD1(db) as never, ai as never, 'u1', []);
+    expect(map.size).toBe(0);
+    expect(ai.run).not.toHaveBeenCalled();
+  });
+});
+
+describe('buildCategoryCentroidsFromMap: 中分類の代表ベクトルを純粋計算で組み立てる', () => {
+  it('カテゴリに紐づくキーワードの埋め込みを平均してcentroidを作る', () => {
+    const embeddingMap = new Map([['駅', [1, 0]], ['空港', [0, 1]]]);
+    const centroids = buildCategoryCentroidsFromMap(
+      [{ id: 1, name: 'Travel', color: '#3b82f6' }],
+      new Map([[1, ['駅', '空港']]]),
+      embeddingMap,
+    );
     expect(centroids).toHaveLength(1);
     expect(centroids[0].name).toBe('Travel');
     expect(centroids[0].vector).toEqual([0.5, 0.5]);
   });
 
-  it('キーワードが1件も無い中分類は候補から除外する', async () => {
-    const db = setupDb();
-    insertCategory(db, 1, 'u1', 'Empty', '#000000');
-    const ai = makeMockAi({});
-
-    const centroids = await computeCategoryCentroids(wrapD1(db) as never, ai as never, 'u1');
-
-    expect(centroids).toEqual([]);
-  });
-
-  it('他ユーザーのカテゴリ・キーワードは混入しない', async () => {
-    const db = setupDb();
-    insertCategory(db, 1, 'u2', 'OtherUserCat', '#000000');
-    insertMap(db, 'u2', '無関係', 1);
-    const ai = makeMockAi({ '無関係': [1, 1] });
-
-    const centroids = await computeCategoryCentroids(wrapD1(db) as never, ai as never, 'u1');
-
-    expect(centroids).toEqual([]);
-  });
-});
-
-describe('getOrComputeAnswerCategoryScores: 回答ごとのカテゴリスコア(キャッシュ付き)', () => {
-  it('回答文に含まれるキーワードからスコアを計算しキャッシュへ保存する', async () => {
-    const db = setupDb();
-    insertCategory(db, 1, 'u1', 'Travel', '#3b82f6');
-    const ai = makeMockAi({ '駅': [1, 0] });
-    const centroids = [{ categoryId: 1, name: 'Travel', color: '#3b82f6', vector: [1, 0] }];
-
-    const scores = await getOrComputeAnswerCategoryScores(
-      wrapD1(db) as never, ai as never, 'u1', 's1', '駅について教えて', centroids, ['駅']
+  it('キーワードが1件も無い中分類は候補から除外する', () => {
+    const centroids = buildCategoryCentroidsFromMap(
+      [{ id: 1, name: 'Empty', color: '#000000' }],
+      new Map(),
+      new Map(),
     );
-
-    expect(scores).toHaveLength(1);
-    expect(scores[0].score).toBeCloseTo(1, 6);
-    const row = db.prepare('SELECT score, model FROM aichat_answer_category_scores WHERE user_id = ? AND share_id = ?').get('u1', 's1') as { score: number; model: string };
-    expect(row.score).toBeCloseTo(1, 6);
-    expect(row.model).toBe(BGE_M3_MODEL);
+    expect(centroids).toEqual([]);
   });
 
-  it('同一カテゴリ数でキャッシュ済みなら再計算せずキャッシュを返す', async () => {
-    const db = setupDb();
-    insertCategory(db, 1, 'u1', 'Travel', '#3b82f6');
-    const ai = makeMockAi({ '駅': [1, 0] });
-    const centroids = [{ categoryId: 1, name: 'Travel', color: '#3b82f6', vector: [1, 0] }];
-
-    await getOrComputeAnswerCategoryScores(wrapD1(db) as never, ai as never, 'u1', 's1', '駅について', centroids, ['駅']);
-    ai.run.mockClear();
-    const scores = await getOrComputeAnswerCategoryScores(wrapD1(db) as never, ai as never, 'u1', 's1', '駅について', centroids, ['駅']);
-
-    expect(scores).toHaveLength(1);
-    expect(ai.run).not.toHaveBeenCalled();
-  });
-
-  it('中分類の数が変わっていたら(新カテゴリ追加等)キャッシュを使わず再計算する', async () => {
-    const db = setupDb();
-    insertCategory(db, 1, 'u1', 'Travel', '#3b82f6');
-    insertCategory(db, 2, 'u1', 'Coding', '#22c55e');
-    const ai = makeMockAi({ '駅': [1, 0] });
-    const centroids1 = [{ categoryId: 1, name: 'Travel', color: '#3b82f6', vector: [1, 0] }];
-    await getOrComputeAnswerCategoryScores(wrapD1(db) as never, ai as never, 'u1', 's1', '駅について', centroids1, ['駅']);
-
-    const centroids2 = [
-      { categoryId: 1, name: 'Travel', color: '#3b82f6', vector: [1, 0] },
-      { categoryId: 2, name: 'Coding', color: '#22c55e', vector: [0, 1] },
-    ];
-    const scores = await getOrComputeAnswerCategoryScores(wrapD1(db) as never, ai as never, 'u1', 's1', '駅について', centroids2, ['駅']);
-
-    expect(scores).toHaveLength(2);
-  });
-
-  it('回答文に登録済みキーワードが含まれなければ空配列を返す(AIを呼ばない)', async () => {
-    const db = setupDb();
-    const ai = makeMockAi({});
-    const scores = await getOrComputeAnswerCategoryScores(wrapD1(db) as never, ai as never, 'u1', 's1', '無関係な文章', [], ['駅']);
-    expect(scores).toEqual([]);
-    expect(ai.run).not.toHaveBeenCalled();
+  it('埋め込みが見つからないキーワードは無視する', () => {
+    const embeddingMap = new Map([['駅', [1, 0]]]);
+    const centroids = buildCategoryCentroidsFromMap(
+      [{ id: 1, name: 'Travel', color: '#3b82f6' }],
+      new Map([[1, ['駅', '未キャッシュキーワード']]]),
+      embeddingMap,
+    );
+    expect(centroids[0].vector).toEqual([1, 0]);
   });
 });
 
@@ -276,7 +278,7 @@ describe('enrichGraphWithCategoryColors: グラフノードへの色付け', () 
     expect(answerNode.color).toBeUndefined();
   });
 
-  it('回帰: computeCategoryCentroidsが例外を投げても(DB異常等)、キーワードノードの色付けは独立して行われる', async () => {
+  it('回帰: 回答ノードの色付け処理が例外を投げても(DB異常等)、キーワードノードの色付けは独立して行われる', async () => {
     const db = setupDb();
     insertCategory(db, 1, 'u1', 'Travel', '#3b82f6');
     insertMap(db, 'u1', '駅', 1);
@@ -285,7 +287,7 @@ describe('enrichGraphWithCategoryColors: グラフノードへの色付け', () 
     const ai = makeMockAi({ '駅': [1, 0] });
 
     const graph = await buildAnswerPropagationGraph(wrapD1(db) as never, 'u1', 's1');
-    // computeCategoryCentroids の最初のクエリ(中分類一覧取得)だけを失敗させる
+    // computeAnswerNodeColors の最初のクエリ(中分類一覧取得)だけを失敗させる
     const throwingDb = wrapD1ThrowingOn(db, 'SELECT id, name, color FROM aichat_keyword_categories');
     const enriched = await enrichGraphWithCategoryColors(throwingDb as never, ai as never, 'u1', graph!);
 
@@ -304,5 +306,23 @@ describe('enrichGraphWithCategoryColors: グラフノードへの色付け', () 
     const enriched = await enrichGraphWithCategoryColors(wrapD1(db) as never, ai as never, 'u1', graph!);
 
     expect(enriched).toEqual(graph);
+  });
+
+  it('大量のノードでもAI呼び出し・DB書き込みがバッチ化され、ノード数に比例して増えない', async () => {
+    const db = setupDb();
+    insertCategory(db, 1, 'u1', 'Travel', '#3b82f6');
+    insertMap(db, 'u1', '駅', 1);
+    insertKeyword(db, 'u1', '駅');
+    insertShare(db, 's0', 'u1', '起点', '駅の話です');
+    for (let i = 1; i <= 15; i++) {
+      insertShare(db, 's' + i, 'u1', '駅の話その' + i, '駅について語ります' + i);
+    }
+    const ai = makeMockAi({ '駅': [1, 0] });
+
+    const graph = await buildAnswerPropagationGraph(wrapD1(db) as never, 'u1', 's0', { maxNodes: 30 });
+    await enrichGraphWithCategoryColors(wrapD1(db) as never, ai as never, 'u1', graph!);
+
+    // キーワードは「駅」の1種類しか無いため、AI呼び出しは1回で済むはず
+    expect(ai.run).toHaveBeenCalledTimes(1);
   });
 });
