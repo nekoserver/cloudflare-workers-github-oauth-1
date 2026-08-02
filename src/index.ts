@@ -208,6 +208,7 @@ export const STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
   { name: 'aichat_category_audit_log',    migration: '0086',  description: 'AIチャット分類グループ・キーワード分類の作成/更新/削除の監査ログ', syncPolicy: 'auto' },
   { name: 'aichat_keyword_embeddings',    migration: '0087',  description: 'AIチャットキーワードのbge-m3埋め込みベクトルキャッシュ（キーワード単位で最新1件のみ保持）', syncPolicy: 'auto' },
   { name: 'aichat_keyword_category_suggestions', migration: '0088', description: 'AIによるキーワード↔カテゴリ分類の推薦履歴（確定分類とは別テーブルで人間の最終判断を上書きしない）', syncPolicy: 'auto' },
+  { name: 'aichat_answer_category_scores', migration: '0089', description: '回答伝播グラフ(/answer-graph)のノード色分け用: 回答ごとの中分類カテゴリ類似度スコアのキャッシュ', syncPolicy: 'auto' },
 ];
 
 const REQUIRED_STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
@@ -1371,6 +1372,17 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_aichat_keyword_embeddings_user_keyword ON 
 );
 CREATE INDEX IF NOT EXISTS idx_aichat_keyword_category_suggestions_user_keyword ON aichat_keyword_category_suggestions(user_id, keyword, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_aichat_keyword_category_suggestions_category ON aichat_keyword_category_suggestions(suggested_category_id);`,
+  '0089': `CREATE TABLE IF NOT EXISTS aichat_answer_category_scores (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  share_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  category_id INTEGER NOT NULL REFERENCES aichat_keyword_categories(id),
+  score REAL NOT NULL,
+  model TEXT NOT NULL,
+  computed_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_aichat_answer_category_scores_unique ON aichat_answer_category_scores(user_id, share_id, category_id);
+CREATE INDEX IF NOT EXISTS idx_aichat_answer_category_scores_share ON aichat_answer_category_scores(share_id);`,
 };
 
 async function ensureGroupTable(db: D1Database): Promise<void> {
@@ -1589,6 +1601,7 @@ export const TABLE_COLUMN_KEYS: Record<string, ColumnKeyInfo> = {
   aichat_category_audit_log: { id: 'pk', user_id: 'idx', entity_type: 'idx', entity_id: 'idx' },
   aichat_keyword_embeddings: { id: 'pk', user_id: 'uk', keyword: 'uk' },
   aichat_keyword_category_suggestions: { id: 'pk', user_id: 'idx', keyword: 'idx', suggested_category_id: 'fk+idx' },
+  aichat_answer_category_scores: { id: 'pk', user_id: 'uk', share_id: 'uk', category_id: 'fk+idx' },
 };
 
 export function getColumnKeyType(tableName: string, columnName: string): ColumnKeyType {
@@ -1681,6 +1694,7 @@ export const TABLE_GROUP_MAP: Record<string, string> = {
   aichat_category_audit_log: 'ai',
   aichat_keyword_embeddings: 'ai',
   aichat_keyword_category_suggestions: 'ai',
+  aichat_answer_category_scores: 'ai',
   keyword_category_groups: 'search',
   keyword_multi_labels: 'search',
   ts_repository:          'ts-catalog',
@@ -1866,6 +1880,7 @@ export const COLUMN_FK_TARGETS: Record<string, Record<string, string>> = {
   aichat_category_audit_log: { user_id: 'user_sessions' },
   aichat_keyword_embeddings: { user_id: 'user_sessions' },
   aichat_keyword_category_suggestions: { user_id: 'user_sessions', suggested_category_id: 'aichat_keyword_categories' },
+  aichat_answer_category_scores: { user_id: 'user_sessions', category_id: 'aichat_keyword_categories' },
 
   // ========================================================================
   // 世界遺産ページ AI質問ログ・保存済みエリア系
@@ -4058,6 +4073,8 @@ export interface AnswerGraphNode {
   label: string;
   depth: number;
   parentId: string | null;
+  color?: string | null;
+  dominantCategory?: string | null;
 }
 
 export interface AnswerGraphEdge {
@@ -4211,6 +4228,17 @@ app.post('/api/aichat/answer-propagation-graph', authMiddleware, async (c) => {
   if (!shareId) return jsonUtf8({ error: 'shareId は必須です' }, 400);
   const result = await buildAnswerPropagationGraph(c.env.DB, user.sub, shareId);
   if (!result) return jsonUtf8({ error: '指定された回答が見つかりません' }, 404);
+
+  if (c.env.AI) {
+    try {
+      const colored = await enrichGraphWithCategoryColors(c.env.DB, c.env.AI, user.sub, result);
+      return jsonUtf8(colored);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      logger.warn('answer-propagation-graph: category color enrichment failed', { shareId, error: message });
+      return jsonUtf8(result);
+    }
+  }
   return jsonUtf8(result);
 });
 
@@ -5643,6 +5671,218 @@ export function pickBestCategorySuggestion(
     }
   }
   return best;
+}
+
+export interface CategoryCentroidColored {
+  categoryId: number;
+  name: string;
+  color: string;
+  vector: number[];
+}
+
+export interface AnswerCategoryScore {
+  categoryId: number;
+  name: string;
+  color: string;
+  score: number;
+}
+
+/**
+ * /answer-graph のノード色分け用。pickBestCategorySuggestionと違い最良1件に
+ * 絞らず、全中分類とのコサイン類似度をそのまま返す。「旅行寄り」「コーディング
+ * 寄り」のような連続的な傾向を色でブレンド表示するために使う。
+ */
+export function scoreAnswerAgainstCategories(
+  answerVector: number[],
+  centroids: CategoryCentroidColored[],
+): AnswerCategoryScore[] {
+  return centroids
+    .filter((c) => c.vector.length > 0)
+    .map((c) => ({ categoryId: c.categoryId, name: c.name, color: c.color, score: cosineSimilarity(answerVector, c.vector) }));
+}
+
+function hexToRgb(hex: string): { r: number; g: number; b: number } | null {
+  const m = /^#([0-9a-fA-F]{6})$/.exec(hex);
+  if (!m) return null;
+  const num = parseInt(m[1], 16);
+  return { r: (num >> 16) & 255, g: (num >> 8) & 255, b: num & 255 };
+}
+
+function rgbToHex(r: number, g: number, b: number): string {
+  const clamp = (v: number) => Math.max(0, Math.min(255, Math.round(v)));
+  return '#' + [clamp(r), clamp(g), clamp(b)].map((v) => v.toString(16).padStart(2, '0')).join('');
+}
+
+/**
+ * カテゴリごとのスコアを重みとして色をブレンドする。負または0のスコアは
+ * 無視し、正のスコアが1件も無ければ neutralColor を返す。不正な色コードは
+ * neutralColor のRGBにフォールバックする(クラッシュさせない)。
+ */
+export function blendCategoryColors(scores: AnswerCategoryScore[], neutralColor: string): string {
+  const positive = scores.filter((s) => s.score > 0);
+  if (positive.length === 0) return neutralColor;
+  const total = positive.reduce((sum, s) => sum + s.score, 0);
+  if (total <= 0) return neutralColor;
+  const neutralRgb = hexToRgb(neutralColor) ?? { r: 136, g: 136, b: 136 };
+  let r = 0, g = 0, b = 0;
+  for (const s of positive) {
+    const rgb = hexToRgb(s.color) ?? neutralRgb;
+    const w = s.score / total;
+    r += rgb.r * w;
+    g += rgb.g * w;
+    b += rgb.b * w;
+  }
+  return rgbToHex(r, g, b);
+}
+
+/**
+ * 中分類ごとの代表ベクトル(centroid)を、その中分類に紐づくキーワードの
+ * 埋め込み(キャッシュ済みなら再利用)の平均として計算する。
+ * /answer-graph のノード色分けで、グラフ全体につき1回だけ計算して使い回す想定。
+ */
+export async function computeCategoryCentroids(
+  db: D1Database,
+  ai: Ai,
+  userId: string,
+): Promise<CategoryCentroidColored[]> {
+  const catsRows = await db.prepare(
+    `SELECT id, name, color FROM aichat_keyword_categories WHERE user_id = ?`
+  ).bind(userId).all<{ id: number; name: string; color: string }>();
+  const categories = catsRows.results ?? [];
+  const centroids: CategoryCentroidColored[] = [];
+  for (const cat of categories) {
+    const kwRows = await db.prepare(
+      `SELECT DISTINCT keyword FROM aichat_keyword_category_map WHERE user_id = ? AND category_id = ? LIMIT 30`
+    ).bind(userId, cat.id).all<{ keyword: string }>();
+    const kws = (kwRows.results ?? []).map((r) => r.keyword);
+    if (kws.length === 0) continue;
+    const vectors: number[][] = [];
+    for (const kw of kws) {
+      const v = await getOrComputeKeywordEmbedding(db, ai, userId, kw);
+      if (v.length > 0) vectors.push(v);
+    }
+    if (vectors.length === 0) continue;
+    centroids.push({ categoryId: cat.id, name: cat.name, color: cat.color || '#6366f1', vector: averageVector(vectors) });
+  }
+  return centroids;
+}
+
+/**
+ * 回答(質問+回答文)ごとの中分類スコアをキャッシュ付きで計算する。
+ * centroidsの件数が前回キャッシュ時と変わっていたら(新規カテゴリ追加等)
+ * キャッシュを使わず再計算する。回答文に登録済みキーワードが1つも
+ * 含まれない場合はAIを呼ばず空配列を返す。
+ */
+export async function getOrComputeAnswerCategoryScores(
+  db: D1Database,
+  ai: Ai,
+  userId: string,
+  shareId: string,
+  answerText: string,
+  centroids: CategoryCentroidColored[],
+  allKeywords: string[],
+): Promise<AnswerCategoryScore[]> {
+  const cachedRows = await db.prepare(
+    `SELECT s.category_id AS categoryId, s.score AS score, s.model AS model, c.name AS name, c.color AS color
+     FROM aichat_answer_category_scores s
+     JOIN aichat_keyword_categories c ON c.id = s.category_id AND c.user_id = s.user_id
+     WHERE s.user_id = ? AND s.share_id = ?`
+  ).bind(userId, shareId).all<{ categoryId: number; score: number; model: string; name: string; color: string }>();
+  const cached = cachedRows.results ?? [];
+  if (cached.length > 0 && cached.length === centroids.length && cached.every((r) => r.model === BGE_M3_MODEL)) {
+    return cached.map((r) => ({ categoryId: r.categoryId, name: r.name, color: r.color, score: r.score }));
+  }
+
+  const containedKeywords = extractContainedKeywords(answerText, allKeywords);
+  if (containedKeywords.length === 0) return [];
+
+  const vectors: number[][] = [];
+  for (const kw of containedKeywords) {
+    const v = await getOrComputeKeywordEmbedding(db, ai, userId, kw);
+    if (v.length > 0) vectors.push(v);
+  }
+  if (vectors.length === 0) return [];
+  const answerVector = averageVector(vectors);
+  const scores = scoreAnswerAgainstCategories(answerVector, centroids);
+
+  const now = new Date().toISOString();
+  for (const s of scores) {
+    await db.prepare(
+      `INSERT INTO aichat_answer_category_scores (share_id, user_id, category_id, score, model, computed_at)
+       VALUES (?, ?, ?, ?, ?, ?)
+       ON CONFLICT(user_id, share_id, category_id) DO UPDATE SET score = excluded.score, model = excluded.model, computed_at = excluded.computed_at`
+    ).bind(shareId, userId, s.categoryId, s.score, BGE_M3_MODEL, now).run();
+  }
+  return scores;
+}
+
+/**
+ * /answer-graph のグラフ結果へ、ノードごとの色(color)と代表カテゴリ名
+ * (dominantCategory)を付与する。キーワードノードは既存の確定分類
+ * (aichat_keyword_category_map)から直接色を得るため、AIの再計算は
+ * 行わない(コスト削減)。回答ノードのみベクトル類似度でスコアを計算する。
+ * 中分類が1件も登録されていない場合は色付けをスキップし元のグラフを返す。
+ */
+export async function enrichGraphWithCategoryColors(
+  db: D1Database,
+  ai: Ai,
+  userId: string,
+  graph: AnswerGraphResult,
+): Promise<AnswerGraphResult> {
+  const centroids = await computeCategoryCentroids(db, ai, userId);
+  if (centroids.length === 0) return graph;
+
+  const kwRows = await db.prepare(
+    `SELECT keyword FROM aichat_search_log WHERE user_id = ? GROUP BY keyword ORDER BY SUM(select_count) DESC LIMIT 300`
+  ).bind(userId).all<{ keyword: string }>();
+  const allKeywords = (kwRows.results ?? []).map((r) => r.keyword).filter(Boolean);
+
+  const answerNodes = graph.nodes.filter((n) => n.type === 'answer');
+  const answerTextById = new Map<string, string>();
+  for (const chunk of chunkBindValues(answerNodes.map((n) => n.id.slice(2)), D1_MAX_BOUND_PARAMS - 1)) {
+    if (chunk.length === 0) continue;
+    const placeholders = chunk.map(() => '?').join(',');
+    const rows = await db.prepare(
+      `SELECT id, question, answer FROM ai_chat_shares WHERE user_id = ? AND id IN (${placeholders})`
+    ).bind(userId, ...chunk).all<{ id: string; question: string; answer: string }>();
+    for (const r of (rows.results ?? [])) answerTextById.set(r.id, r.question + ' ' + r.answer);
+  }
+
+  const keywordNodes = graph.nodes.filter((n) => n.type === 'keyword');
+  const keywordCategoryMap = new Map<string, { name: string; color: string }[]>();
+  for (const chunk of chunkBindValues(keywordNodes.map((n) => n.label), D1_MAX_BOUND_PARAMS - 1)) {
+    if (chunk.length === 0) continue;
+    const placeholders = chunk.map(() => '?').join(',');
+    const catRows = await db.prepare(
+      `SELECT m.keyword AS keyword, c.name AS name, c.color AS color
+       FROM aichat_keyword_category_map m
+       JOIN aichat_keyword_categories c ON c.id = m.category_id AND c.user_id = m.user_id
+       WHERE m.user_id = ? AND m.keyword IN (${placeholders})`
+    ).bind(userId, ...chunk).all<{ keyword: string; name: string; color: string }>();
+    for (const r of (catRows.results ?? [])) {
+      const list = keywordCategoryMap.get(r.keyword) ?? [];
+      list.push({ name: r.name, color: r.color });
+      keywordCategoryMap.set(r.keyword, list);
+    }
+  }
+
+  const enrichedNodes: AnswerGraphNode[] = [];
+  for (const node of graph.nodes) {
+    if (node.type === 'keyword') {
+      const cats = keywordCategoryMap.get(node.label) ?? [];
+      if (cats.length === 0) { enrichedNodes.push(node); continue; }
+      const pseudoScores: AnswerCategoryScore[] = cats.map((c) => ({ categoryId: 0, name: c.name, color: c.color, score: 1 }));
+      enrichedNodes.push({ ...node, color: blendCategoryColors(pseudoScores, '#888888'), dominantCategory: cats.map((c) => c.name).join('/') });
+    } else {
+      const shareId = node.id.slice(2);
+      const text = answerTextById.get(shareId) ?? node.label;
+      const scores = await getOrComputeAnswerCategoryScores(db, ai, userId, shareId, text, centroids, allKeywords);
+      if (scores.length === 0) { enrichedNodes.push(node); continue; }
+      const best = scores.slice().sort((a, b) => b.score - a.score)[0];
+      enrichedNodes.push({ ...node, color: blendCategoryColors(scores, '#888888'), dominantCategory: best.score > 0 ? best.name : null });
+    }
+  }
+  return { nodes: enrichedNodes, edges: graph.edges };
 }
 
 export interface VectorAnalysis {
