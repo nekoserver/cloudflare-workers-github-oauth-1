@@ -58,6 +58,22 @@ describe('getMarkdownParserScript', () => {
     expect(parseMd('![alt](https://example.com/a.png)')).toContain('<img src="https://example.com/a.png" alt="alt">');
   });
 
+  // 対象: AIチャットページ(aichat.ts)がこのユーティリティへ統合される前、独自に
+  // 保持していたLaTeXコマンド記号変換機能(mdInlineのlatexMap)。統合の際に機能を
+  // 落とさないよう、inline()のesc()呼び出しの直後に同等のロジックを追加した。
+  it('LaTeX記法($\\cmd$)を対応するUnicode記号に変換する', () => {
+    const parseMd = loadParseMd();
+    expect(parseMd('$\\rightarrow$')).toContain('→');
+    expect(parseMd('$\\alpha$ と $\\beta$')).toContain('α');
+    expect(parseMd('$\\alpha$ と $\\beta$')).toContain('β');
+    expect(parseMd('$\\geq$')).toContain('≥');
+  });
+
+  it('latexMapに定義のないコマンドは元の$\\cmd$表記のまま残す', () => {
+    const parseMd = loadParseMd();
+    expect(parseMd('$\\notacommand$')).toContain('$\\notacommand$');
+  });
+
   // ---- セキュリティ: AI生成テキスト等の非信頼な入力をinnerHTMLで描画する用途を想定 ----
 
   it('セキュリティ: 生の<script>タグはエスケープされ実行可能なHTMLにならない', () => {

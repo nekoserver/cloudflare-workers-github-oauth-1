@@ -3,6 +3,7 @@
  */
 import { escapeHtml } from '../utils/html';
 import { getThemeCSS, getThemeInitScript, getThemeToggleCSS, getThemeToggleHTML, getThemeToggleScript } from '../utils/theme';
+import { getMarkdownParserScript } from '../utils/markdownRenderer';
 
 export const DEFAULT_AICHAT_MODELS: Array<{value: string; label: string}> = [
   { value: '@cf/meta/llama-3.3-70b-instruct-fp8-fast', label: 'llama-3.3-70b-instruct-fp8-fast' },
@@ -2470,122 +2471,7 @@ export function getAiChatPage(user: {
     }
 
     // ===== Markdownパーサー =====
-    function mdEsc(s) {
-      return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-    }
-    function mdInline(text) {
-      var latexMap = {
-        rightarrow:'→',to:'→',longrightarrow:'⟶',leftarrow:'←',longleftarrow:'⟵',
-        Rightarrow:'⇒',Leftarrow:'⇐',leftrightarrow:'↔',Leftrightarrow:'⟺',
-        uparrow:'↑',downarrow:'↓',nearrow:'↗',searrow:'↘',
-        times:'×',div:'÷',pm:'±',mp:'∓',cdot:'·',
-        geq:'≥',leq:'≤',neq:'≠',approx:'≈',equiv:'≡',
-        infty:'∞',ldots:'…',cdots:'⋯',
-        sum:'∑',prod:'∏',int:'∫',partial:'∂',nabla:'∇',sqrt:'√',
-        in:'∈',notin:'∉',subset:'⊂',supset:'⊃',cup:'∪',cap:'∩',emptyset:'∅',
-        forall:'∀',exists:'∃',
-        alpha:'α',beta:'β',gamma:'γ',delta:'δ',epsilon:'ε',zeta:'ζ',
-        eta:'η',theta:'θ',iota:'ι',kappa:'κ',lambda:'λ',mu:'μ',
-        nu:'ν',xi:'ξ',pi:'π',rho:'ρ',sigma:'σ',tau:'τ',
-        upsilon:'υ',phi:'φ',chi:'χ',psi:'ψ',omega:'ω',
-        Alpha:'Α',Beta:'Β',Gamma:'Γ',Delta:'Δ',Theta:'Θ',Lambda:'Λ',
-        Pi:'Π',Sigma:'Σ',Phi:'Φ',Omega:'Ω',
-      };
-      text = text.replace(/\$\\\\([a-zA-Z]+)\$/g, function(_, cmd) {
-        return latexMap[cmd] !== undefined ? latexMap[cmd] : ('$\\\\' + cmd + '$');
-      });
-      text = text.replace(/!\\[([^\\]]*)\\]\\(([^)]+)\\)/g, '<img src="$2" alt="$1">');
-      text = text.replace(/\\[([^\\]]*)\\]\\(([^)]+)\\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
-      text = text.replace(/\\*\\*\\*(.+?)\\*\\*\\*/g, '<strong><em>$1</em></strong>');
-      text = text.replace(/\\*\\*(.+?)\\*\\*/g, '<strong>$1</strong>');
-      text = text.replace(/__(.+?)__/g, '<strong>$1</strong>');
-      text = text.replace(/\\*(.+?)\\*/g, '<em>$1</em>');
-      text = text.replace(/~~(.+?)~~/g, '<del>$1</del>');
-      text = text.replace(/\\n/g, '<br>');
-      return text;
-    }
-    function mdSplitRow(line) {
-      return line.replace(/^\\|\\s*/, '').replace(/\\s*\\|$/, '').split(/\\s*\\|\\s*/);
-    }
-    function mdParseList(lines, start, tag) {
-      var items = [];
-      var i = start;
-      var pat = tag === 'ul' ? /^\\s*[-*+]\\s(.*)/ : /^\\s*\\d+\\.\\s(.*)/;
-      while (i < lines.length) {
-        var m = lines[i].match(pat);
-        if (!m) break;
-        var txt = m[1];
-        var task = txt.match(/^\\[([ xX])\\]\\s(.*)/);
-        if (task) {
-          items.push('<li><input type="checkbox"' + (task[1] !== ' ' ? ' checked' : '') + ' disabled> ' + mdInline(task[2]) + '</li>');
-        } else {
-          items.push('<li>' + mdInline(txt) + '</li>');
-        }
-        i++;
-      }
-      return '<' + tag + '>' + items.join('') + '</' + tag + '>';
-    }
-    function parseMd(src) {
-      src = src.replace(/\\r\\n?/g, '\\n');
-      var codeBlocks = [];
-      src = src.replace(/\`\`\`(\\w*)\\n([\\s\\S]*?)\`\`\`/g, function(_, lang, code) {
-        var idx = codeBlocks.length;
-        codeBlocks.push('<pre><code' + (lang ? ' class="language-' + lang + '"' : '') + '>' + mdEsc(code.replace(/\\n$/, '')) + '</code></pre>');
-        return '\\x00CB' + idx + '\\x00';
-      });
-      var inlineCodes = [];
-      src = src.replace(/\`([^\`]+)\`/g, function(_, code) {
-        var idx = inlineCodes.length;
-        inlineCodes.push('<code>' + mdEsc(code) + '</code>');
-        return '\\x00IC' + idx + '\\x00';
-      });
-      var lines = src.split('\\n');
-      var html = '';
-      var i = 0;
-      while (i < lines.length) {
-        var line = lines[i];
-        if (line.trim() === '') { i++; continue; }
-        var cbM = line.match(/^\\x00CB(\\d+)\\x00$/);
-        if (cbM) { html += codeBlocks[parseInt(cbM[1])]; i++; continue; }
-        var hM = line.match(/^(#{1,6})\\s+(.+)$/);
-        if (hM) { var lv = hM[1].length; html += '<h' + lv + '>' + mdInline(hM[2]) + '</h' + lv + '>'; i++; continue; }
-        if (/^(\\*{3,}|-{3,}|_{3,})\\s*$/.test(line)) { html += '<hr>'; i++; continue; }
-        if (i + 1 < lines.length && /^\\|/.test(line) && /^[\\|\\s:-]+$/.test(lines[i + 1])) {
-          var tbl = '<table><thead><tr>';
-          mdSplitRow(line).forEach(function(h) { tbl += '<th>' + mdInline(h.trim()) + '</th>'; });
-          tbl += '</tr></thead><tbody>';
-          i += 2;
-          while (i < lines.length && /^\\|/.test(lines[i])) {
-            tbl += '<tr>';
-            mdSplitRow(lines[i]).forEach(function(c) { tbl += '<td>' + mdInline(c.trim()) + '</td>'; });
-            tbl += '</tr>'; i++;
-          }
-          tbl += '</tbody></table>'; html += tbl; continue;
-        }
-        if (/^>\\s?/.test(line)) {
-          var bq = [];
-          while (i < lines.length && /^>\\s?/.test(lines[i])) { bq.push(lines[i].replace(/^>\\s?/, '')); i++; }
-          html += '<blockquote>' + parseMd(bq.join('\\n')) + '</blockquote>'; continue;
-        }
-        if (/^\\s*[-*+]\\s/.test(line)) {
-          html += mdParseList(lines, i, 'ul');
-          while (i < lines.length && /^\\s*[-*+]\\s/.test(lines[i])) i++;
-          continue;
-        }
-        if (/^\\s*\\d+\\.\\s/.test(line)) {
-          html += mdParseList(lines, i, 'ol');
-          while (i < lines.length && /^\\s*\\d+\\.\\s/.test(lines[i])) i++;
-          continue;
-        }
-        var pLines = [];
-        while (i < lines.length && lines[i].trim() !== '' && !/^#{1,6}\\s/.test(lines[i]) && !/^(\\*{3,}|-{3,}|_{3,})\\s*$/.test(lines[i]) && !/^>\\s?/.test(lines[i]) && !/^\\|/.test(lines[i]) && !/^\\x00CB/.test(lines[i])) {
-          pLines.push(lines[i]); i++;
-        }
-        if (pLines.length) html += '<p>' + mdInline(pLines.join('\\n')) + '</p>';
-      }
-      html = html.replace(/\\x00IC(\\d+)\\x00/g, function(_, idx) { return inlineCodes[parseInt(idx)]; });
-      return html;
-    }
+    ${getMarkdownParserScript()}
 
     // ===== 詳細パネル =====
     var resultsPanel = document.getElementById('resultsPanel');

@@ -116,9 +116,9 @@ describe('/answer-graph ページ: サイドパネル・ツールチップ共通
   });
 });
 
-describe('/answer-graph ページ: parseMd (マークダウン描画、aichat.tsからの移植)', () => {
+describe('/answer-graph ページ: parseMd (マークダウン描画、共有ユーティリティmarkdownRenderer.tsを利用)', () => {
   function loadParseMd(html: string) {
-    const idx = html.indexOf('function mdEsc');
+    const idx = html.indexOf('function parseMd');
     const endIdx = html.indexOf('function openAnswerModal');
     expect(idx).toBeGreaterThan(-1);
     expect(endIdx).toBeGreaterThan(idx);
@@ -150,7 +150,7 @@ describe('/answer-graph ページ: openAnswerModal/closeAnswerModal のDOM実動
       <div class="answer-modal-backdrop" id="answerModalBackdrop"></div>
       <div id="answerModalBody"></div>
     `;
-    const mdStartIdx = html.indexOf('function mdEsc');
+    const mdStartIdx = html.indexOf('function parseMd');
     const closeEndIdx = html.indexOf('\n  }', html.indexOf('function closeAnswerModal')) + 4;
     const src = html.slice(mdStartIdx, closeEndIdx);
     const fn = new Function(

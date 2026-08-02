@@ -135,6 +135,26 @@ export function getMarkdownParserScript(): string {
 
     function inline(text) {
       text = esc(text);
+      var latexMap = {
+        rightarrow:'→',to:'→',longrightarrow:'⟶',leftarrow:'←',longleftarrow:'⟵',
+        Rightarrow:'⇒',Leftarrow:'⇐',leftrightarrow:'↔',Leftrightarrow:'⟺',
+        uparrow:'↑',downarrow:'↓',nearrow:'↗',searrow:'↘',
+        times:'×',div:'÷',pm:'±',mp:'∓',cdot:'·',
+        geq:'≥',leq:'≤',neq:'≠',approx:'≈',equiv:'≡',
+        infty:'∞',ldots:'…',cdots:'⋯',
+        sum:'∑',prod:'∏',int:'∫',partial:'∂',nabla:'∇',sqrt:'√',
+        in:'∈',notin:'∉',subset:'⊂',supset:'⊃',cup:'∪',cap:'∩',emptyset:'∅',
+        forall:'∀',exists:'∃',
+        alpha:'α',beta:'β',gamma:'γ',delta:'δ',epsilon:'ε',zeta:'ζ',
+        eta:'η',theta:'θ',iota:'ι',kappa:'κ',lambda:'λ',mu:'μ',
+        nu:'ν',xi:'ξ',pi:'π',rho:'ρ',sigma:'σ',tau:'τ',
+        upsilon:'υ',phi:'φ',chi:'χ',psi:'ψ',omega:'ω',
+        Alpha:'Α',Beta:'Β',Gamma:'Γ',Delta:'Δ',Theta:'Θ',Lambda:'Λ',
+        Pi:'Π',Sigma:'Σ',Phi:'Φ',Omega:'Ω',
+      };
+      text = text.replace(/\\$\\\\([a-zA-Z]+)\\$/g, function(_, cmd) {
+        return latexMap[cmd] !== undefined ? latexMap[cmd] : ('$\\\\' + cmd + '$');
+      });
       text = text.replace(/!\\[([^\\]]*)\\]\\(([^)]+)\\)/g, function(_, alt, url) {
         return isSafeMdUrl(url) ? '<img src="' + url + '" alt="' + alt + '">' : esc(_);
       });
