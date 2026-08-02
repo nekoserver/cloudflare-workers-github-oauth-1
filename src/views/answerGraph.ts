@@ -43,10 +43,10 @@ input[type=search]:focus { border-color:var(--accent); }
 .node-type-keyword { background:rgba(194,65,12,.15); color:var(--keyword-color); }
 .graph-status { font-size:12px; color:var(--label); margin-bottom:8px; }
 .graph-status.err { color:var(--danger); }
-.node-tooltip { position:absolute; z-index:500; max-width:260px; background:var(--card); border:1px solid var(--border); border-radius:8px; padding:10px 12px; font-size:12px; box-shadow:0 6px 20px rgba(0,0,0,.25); pointer-events:none; }
+.node-tooltip { position:absolute; z-index:500; max-width:260px; background:var(--card); border:1px solid var(--border); border-radius:8px; padding:10px 12px; font-size:12px; box-shadow:0 6px 20px rgba(0,0,0,.25); }
 .node-tooltip .node-type-label { margin-bottom:4px; }
-.side-panel .question-line { cursor:pointer; text-decoration:underline dotted; }
-.side-panel .question-line:hover { color:var(--accent); }
+.question-line { cursor:pointer; text-decoration:none; }
+.question-line:hover { color:var(--accent); }
 .answer-modal-backdrop { display:none; position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:1000; align-items:flex-start; justify-content:center; padding-top:60px; }
 .answer-modal-backdrop.open { display:flex; }
 .answer-modal { background:var(--card); border:1px solid var(--border); border-radius:12px; width:min(640px,94vw); max-height:80vh; display:flex; flex-direction:column; box-shadow:0 8px 32px rgba(0,0,0,.3); }
@@ -127,6 +127,123 @@ input[type=search]:focus { border-color:var(--accent); }
       .split('"').join('&quot;').split("'").join('&#39;');
   }
 
+  function mdEsc(s) {
+    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+  function mdInline(text) {
+    var latexMap = {
+      rightarrow:'→',to:'→',longrightarrow:'⟶',leftarrow:'←',longleftarrow:'⟵',
+      Rightarrow:'⇒',Leftarrow:'⇐',leftrightarrow:'↔',Leftrightarrow:'⟺',
+      uparrow:'↑',downarrow:'↓',nearrow:'↗',searrow:'↘',
+      times:'×',div:'÷',pm:'±',mp:'∓',cdot:'·',
+      geq:'≥',leq:'≤',neq:'≠',approx:'≈',equiv:'≡',
+      infty:'∞',ldots:'…',cdots:'⋯',
+      sum:'∑',prod:'∏',int:'∫',partial:'∂',nabla:'∇',sqrt:'√',
+      in:'∈',notin:'∉',subset:'⊂',supset:'⊃',cup:'∪',cap:'∩',emptyset:'∅',
+      forall:'∀',exists:'∃',
+      alpha:'α',beta:'β',gamma:'γ',delta:'δ',epsilon:'ε',zeta:'ζ',
+      eta:'η',theta:'θ',iota:'ι',kappa:'κ',lambda:'λ',mu:'μ',
+      nu:'ν',xi:'ξ',pi:'π',rho:'ρ',sigma:'σ',tau:'τ',
+      upsilon:'υ',phi:'φ',chi:'χ',psi:'ψ',omega:'ω',
+      Alpha:'Α',Beta:'Β',Gamma:'Γ',Delta:'Δ',Theta:'Θ',Lambda:'Λ',
+      Pi:'Π',Sigma:'Σ',Phi:'Φ',Omega:'Ω',
+    };
+    text = text.replace(/\$\\\\([a-zA-Z]+)\$/g, function(_, cmd) {
+      return latexMap[cmd] !== undefined ? latexMap[cmd] : ('$\\\\' + cmd + '$');
+    });
+    text = text.replace(/!\\[([^\\]]*)\\]\\(([^)]+)\\)/g, '<img src="$2" alt="$1">');
+    text = text.replace(/\\[([^\\]]*)\\]\\(([^)]+)\\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
+    text = text.replace(/\\*\\*\\*(.+?)\\*\\*\\*/g, '<strong><em>$1</em></strong>');
+    text = text.replace(/\\*\\*(.+?)\\*\\*/g, '<strong>$1</strong>');
+    text = text.replace(/__(.+?)__/g, '<strong>$1</strong>');
+    text = text.replace(/\\*(.+?)\\*/g, '<em>$1</em>');
+    text = text.replace(/~~(.+?)~~/g, '<del>$1</del>');
+    text = text.replace(/\\n/g, '<br>');
+    return text;
+  }
+  function mdSplitRow(line) {
+    return line.replace(/^\\|\\s*/, '').replace(/\\s*\\|$/, '').split(/\\s*\\|\\s*/);
+  }
+  function mdParseList(lines, start, tag) {
+    var items = [];
+    var i = start;
+    var pat = tag === 'ul' ? /^\\s*[-*+]\\s(.*)/ : /^\\s*\\d+\\.\\s(.*)/;
+    while (i < lines.length) {
+      var m = lines[i].match(pat);
+      if (!m) break;
+      var txt = m[1];
+      var task = txt.match(/^\\[([ xX])\\]\\s(.*)/);
+      if (task) {
+        items.push('<li><input type="checkbox"' + (task[1] !== ' ' ? ' checked' : '') + ' disabled> ' + mdInline(task[2]) + '</li>');
+      } else {
+        items.push('<li>' + mdInline(txt) + '</li>');
+      }
+      i++;
+    }
+    return '<' + tag + '>' + items.join('') + '</' + tag + '>';
+  }
+  function parseMd(src) {
+    src = src.replace(/\\r\\n?/g, '\\n');
+    var codeBlocks = [];
+    src = src.replace(/\`\`\`(\\w*)\\n([\\s\\S]*?)\`\`\`/g, function(_, lang, code) {
+      var idx = codeBlocks.length;
+      codeBlocks.push('<pre><code' + (lang ? ' class="language-' + lang + '"' : '') + '>' + mdEsc(code.replace(/\\n$/, '')) + '</code></pre>');
+      return '\\x00CB' + idx + '\\x00';
+    });
+    var inlineCodes = [];
+    src = src.replace(/\`([^\`]+)\`/g, function(_, code) {
+      var idx = inlineCodes.length;
+      inlineCodes.push('<code>' + mdEsc(code) + '</code>');
+      return '\\x00IC' + idx + '\\x00';
+    });
+    var lines = src.split('\\n');
+    var html = '';
+    var i = 0;
+    while (i < lines.length) {
+      var line = lines[i];
+      if (line.trim() === '') { i++; continue; }
+      var cbM = line.match(/^\\x00CB(\\d+)\\x00$/);
+      if (cbM) { html += codeBlocks[parseInt(cbM[1])]; i++; continue; }
+      var hM = line.match(/^(#{1,6})\\s+(.+)$/);
+      if (hM) { var lv = hM[1].length; html += '<h' + lv + '>' + mdInline(hM[2]) + '</h' + lv + '>'; i++; continue; }
+      if (/^(\\*{3,}|-{3,}|_{3,})\\s*$/.test(line)) { html += '<hr>'; i++; continue; }
+      if (i + 1 < lines.length && /^\\|/.test(line) && /^[\\|\\s:-]+$/.test(lines[i + 1])) {
+        var tbl = '<table><thead><tr>';
+        mdSplitRow(line).forEach(function(h) { tbl += '<th>' + mdInline(h.trim()) + '</th>'; });
+        tbl += '</tr></thead><tbody>';
+        i += 2;
+        while (i < lines.length && /^\\|/.test(lines[i])) {
+          tbl += '<tr>';
+          mdSplitRow(lines[i]).forEach(function(c) { tbl += '<td>' + mdInline(c.trim()) + '</td>'; });
+          tbl += '</tr>'; i++;
+        }
+        tbl += '</tbody></table>'; html += tbl; continue;
+      }
+      if (/^>\\s?/.test(line)) {
+        var bq = [];
+        while (i < lines.length && /^>\\s?/.test(lines[i])) { bq.push(lines[i].replace(/^>\\s?/, '')); i++; }
+        html += '<blockquote>' + parseMd(bq.join('\\n')) + '</blockquote>'; continue;
+      }
+      if (/^\\s*[-*+]\\s/.test(line)) {
+        html += mdParseList(lines, i, 'ul');
+        while (i < lines.length && /^\\s*[-*+]\\s/.test(lines[i])) i++;
+        continue;
+      }
+      if (/^\\s*\\d+\\.\\s/.test(line)) {
+        html += mdParseList(lines, i, 'ol');
+        while (i < lines.length && /^\\s*\\d+\\.\\s/.test(lines[i])) i++;
+        continue;
+      }
+      var pLines = [];
+      while (i < lines.length && lines[i].trim() !== '' && !/^#{1,6}\\s/.test(lines[i]) && !/^(\\*{3,}|-{3,}|_{3,})\\s*$/.test(lines[i]) && !/^>\\s?/.test(lines[i]) && !/^\\|/.test(lines[i]) && !/^\\x00CB/.test(lines[i])) {
+        pLines.push(lines[i]); i++;
+      }
+      if (pLines.length) html += '<p>' + mdInline(pLines.join('\\n')) + '</p>';
+    }
+    html = html.replace(/\\x00IC(\\d+)\\x00/g, function(_, idx) { return inlineCodes[parseInt(idx)]; });
+    return html;
+  }
+
   function openAnswerModal(shareId) {
     answerModalBody.textContent = '読み込み中...';
     answerModalBackdrop.classList.add('open');
@@ -134,7 +251,7 @@ input[type=search]:focus { border-color:var(--accent); }
       .then(function(r) { return r.json(); })
       .then(function(d) {
         if (!d || d.error) { answerModalBody.textContent = '回答の取得に失敗しました: ' + ((d && d.error) || '不明なエラー'); return; }
-        answerModalBody.innerHTML = '<div class="q-block">' + escHtml(d.question) + '</div><div>' + escHtml(d.answer) + '</div>';
+        answerModalBody.innerHTML = '<div class="q-block">' + parseMd(d.question) + '</div><div>' + parseMd(d.answer) + '</div>';
       })
       .catch(function() { answerModalBody.textContent = '回答の取得に失敗しました（通信エラー）'; });
   }
@@ -150,6 +267,12 @@ input[type=search]:focus { border-color:var(--accent); }
     nodeTooltip.style.display = 'none';
   }
 
+  function buildNodeLabelLine(node) {
+    return node.type === 'answer'
+      ? '<div class="question-line" style="word-break:break-word;" data-share-id="' + escHtml(node.id.slice(2)) + '">' + escHtml(node.label) + '</div>'
+      : '<div style="word-break:break-word;">' + escHtml(node.label) + '</div>';
+  }
+
   function showNodeTooltip(node, pageX, pageY) {
     var typeLabelClass = node.type === 'answer' ? 'node-type-answer' : 'node-type-keyword';
     var typeLabelText = node.type === 'answer' ? '回答（質問）' : 'キーワード';
@@ -159,7 +282,7 @@ input[type=search]:focus { border-color:var(--accent); }
     nodeTooltip.innerHTML = '<span class="node-type-label ' + typeLabelClass + '">' + typeLabelText + '</span>'
       + '<div style="margin-bottom:4px;color:var(--label);">深さ: ' + node.depth + '</div>'
       + categoryLine
-      + '<div style="word-break:break-word;">' + escHtml(node.label) + '</div>';
+      + buildNodeLabelLine(node);
     nodeTooltip.style.display = 'block';
     var tipWidth = nodeTooltip.offsetWidth || 260;
     var left = pageX + 12;
@@ -171,6 +294,8 @@ input[type=search]:focus { border-color:var(--accent); }
   }
 
   document.addEventListener('click', function(e) {
+    var q = e.target.closest('.question-line');
+    if (q) { openAnswerModal(q.getAttribute('data-share-id')); return; }
     if (e.target === canvas) return;
     if (nodeTooltip.contains(e.target)) return;
     hideNodeTooltip();
@@ -361,20 +486,11 @@ input[type=search]:focus { border-color:var(--accent); }
     var categoryLine = hit.dominantCategory
       ? '<div style="margin-bottom:6px;"><span class="legend-dot" style="background:' + escHtml(hit.color || '#888888') + ';"></span>分類: ' + escHtml(hit.dominantCategory) + '</div>'
       : '';
-    var labelLine = hit.type === 'answer'
-      ? '<div class="question-line" style="word-break:break-word;" data-share-id="' + escHtml(hit.id.slice(2)) + '">' + escHtml(hit.label) + '</div>'
-      : '<div style="word-break:break-word;">' + escHtml(hit.label) + '</div>';
     sidePanel.innerHTML = '<span class="node-type-label ' + typeLabelClass + '">' + typeLabelText + '</span>'
       + '<div style="margin-bottom:6px;color:var(--label);">深さ: ' + hit.depth + '</div>'
       + categoryLine
-      + labelLine;
+      + buildNodeLabelLine(hit);
     showNodeTooltip(hit, e.pageX, e.pageY);
-  });
-
-  sidePanel.addEventListener('click', function(e) {
-    var q = e.target.closest('.question-line');
-    if (!q) return;
-    openAnswerModal(q.getAttribute('data-share-id'));
   });
 
   drawGraph();
