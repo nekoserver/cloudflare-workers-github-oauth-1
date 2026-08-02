@@ -69,6 +69,7 @@ input[type=search]:focus { border-color:var(--accent); }
       <span><span class="legend-dot" style="background:var(--keyword-color);"></span>キーワード</span>
       <span>中心 = 起点として選んだ回答。外側の輪ほど深い階層。</span>
     </div>
+    <div class="legend" id="categoryLegend"></div>
     <div class="graph-status" id="graphStatus">起点を選ぶとここにグラフが表示されます</div>
     <div class="graph-layout">
       <div class="side-panel" id="sidePanel"><span class="empty-hint">ノードをクリックすると詳細がここに表示されます</span></div>
@@ -87,6 +88,7 @@ input[type=search]:focus { border-color:var(--accent); }
   var canvas = document.getElementById('graphCanvas');
   var ctx = canvas.getContext('2d');
   var sidePanel = document.getElementById('sidePanel');
+  var categoryLegend = document.getElementById('categoryLegend');
 
   var searchTimer = null;
   var selectedShareId = null;
@@ -160,8 +162,28 @@ input[type=search]:focus { border-color:var(--accent); }
       });
   }
 
+  function renderCategoryLegend() {
+    if (!currentGraph) { categoryLegend.innerHTML = ''; return; }
+    var seen = {};
+    var items = [];
+    currentGraph.nodes.forEach(function(n) {
+      if (!n.dominantCategory || !n.color) return;
+      var key = n.dominantCategory + '|' + n.color;
+      if (seen[key]) return;
+      seen[key] = true;
+      items.push({ label: n.dominantCategory, color: n.color });
+    });
+    if (items.length === 0) { categoryLegend.innerHTML = ''; return; }
+    var html = '<span>分類の色（類似度によるブレンド）:</span>';
+    items.forEach(function(it) {
+      html += '<span><span class="legend-dot" style="background:' + escHtml(it.color) + ';"></span>' + escHtml(it.label) + '</span>';
+    });
+    categoryLegend.innerHTML = html;
+  }
+
   function drawGraph() {
     nodePositions = [];
+    renderCategoryLegend();
     if (!currentGraph || currentGraph.nodes.length === 0) {
       canvas.width = 800; canvas.height = 400;
       ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -216,10 +238,16 @@ input[type=search]:focus { border-color:var(--accent); }
       var p = posById[id];
       var isAnswer = p.node.type === 'answer';
       var r = isAnswer ? (p.node.depth === 0 ? 10 : 7) : 6;
+      var fallbackColor = isAnswer ? answerColor : keywordColor;
       ctx.beginPath();
       ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
-      ctx.fillStyle = isAnswer ? answerColor : keywordColor;
+      ctx.fillStyle = p.node.color || fallbackColor;
       ctx.fill();
+      if (p.node.color) {
+        ctx.lineWidth = 1.5;
+        ctx.strokeStyle = fallbackColor;
+        ctx.stroke();
+      }
       nodePositions.push({ x: p.x, y: p.y, r: r + 4, node: p.node });
     });
   }
@@ -248,8 +276,12 @@ input[type=search]:focus { border-color:var(--accent); }
     if (!hit) return;
     var typeLabelClass = hit.type === 'answer' ? 'node-type-answer' : 'node-type-keyword';
     var typeLabelText = hit.type === 'answer' ? '回答（質問）' : 'キーワード';
+    var categoryLine = hit.dominantCategory
+      ? '<div style="margin-bottom:6px;"><span class="legend-dot" style="background:' + escHtml(hit.color || '#888888') + ';"></span>分類: ' + escHtml(hit.dominantCategory) + '</div>'
+      : '';
     sidePanel.innerHTML = '<span class="node-type-label ' + typeLabelClass + '">' + typeLabelText + '</span>'
       + '<div style="margin-bottom:6px;color:var(--label);">深さ: ' + hit.depth + '</div>'
+      + categoryLine
       + '<div style="word-break:break-word;">' + escHtml(hit.label) + '</div>';
   });
 
