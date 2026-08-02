@@ -4386,6 +4386,14 @@ export function getAiChatPage(user: {
           el.style.setProperty('--kwcat-bg', c + '33');
         } else {
           el.className = base + (catIds.length > 0 ? ' kw-kw-classified' : '');
+          if (catIds.length > 0) {
+            var catColors2 = {};
+            try { catColors2 = JSON.parse(el.dataset.catColors || '{}'); } catch(e) {}
+            var ownColor = catColors2[catIds[0]] || el.dataset.catColor || '#7c3aed';
+            el.style.setProperty('--kw-pal-cls', ownColor);
+          } else {
+            el.style.removeProperty('--kw-pal-cls');
+          }
         }
       });
       kwClassifyListBody.querySelectorAll('.kw-cat-summary-badge').forEach(function(catEl) {
