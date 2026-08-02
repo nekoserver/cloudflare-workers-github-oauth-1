@@ -5399,6 +5399,15 @@ export function getAiChatPage(user: {
     var dailyStatsTitleEl = document.getElementById('dailyStatsTitle');
     var dailyStatsCurrentMonth = new Date().toISOString().slice(0, 7);
 
+    var GROUP_COLOR_FALLBACK_PALETTE = ['#f59e0b', '#ec4899', '#a855f7', '#f97316', '#14b8a6', '#eab308'];
+    function getDailyStatsGroupColor(name, index) {
+      var n = String(name || '');
+      if (n.indexOf('Travel') !== -1 || n.indexOf('旅行') !== -1) return '#38bdf8';
+      if (n.indexOf('Coding') !== -1 || n.indexOf('コーディング') !== -1 || n.indexOf('コード') !== -1) return '#86efac';
+      if (n.indexOf('MyApps') !== -1 || n.indexOf('My Apps') !== -1) return '#16a34a';
+      return GROUP_COLOR_FALLBACK_PALETTE[index % GROUP_COLOR_FALLBACK_PALETTE.length];
+    }
+
     function buildKwClassifyStatsHtml(kwAll, cats, groups) {
       var classified = 0, unclassified = 0;
       kwAll.forEach(function(kw) {
@@ -5443,12 +5452,13 @@ export function getAiChatPage(user: {
       if (grpList.length > 0) {
         var maxGrp = Math.max(1, grpList[0].kw_count || 0);
         html += '<div style="font-size:10px;font-weight:600;color:var(--text-secondary);margin-top:12px;margin-bottom:4px;">大分類別キーワード数</div>';
-        grpList.forEach(function(g) {
+        grpList.forEach(function(g, gi) {
           var cnt = g.kw_count || 0;
           var pct = Math.round(cnt / maxGrp * 100);
+          var grpColor = getDailyStatsGroupColor(g.group_name, gi);
           html += '<div style="display:flex;align-items:center;gap:5px;margin-bottom:3px;">';
           html += '<span style="font-size:10px;color:var(--text-primary);width:64px;flex-shrink:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="' + escHtml(g.group_name) + '">' + escHtml(g.group_name) + '</span>';
-          html += '<span style="flex:1;height:8px;background:var(--bg-secondary);border-radius:4px;overflow:hidden;"><span style="display:block;height:100%;width:' + pct + '%;background:#7c3aed;border-radius:4px;"></span></span>';
+          html += '<span style="flex:1;height:8px;background:var(--bg-secondary);border-radius:4px;overflow:hidden;"><span style="display:block;height:100%;width:' + pct + '%;background:' + grpColor + ';border-radius:4px;"></span></span>';
           html += '<span style="font-size:10px;color:var(--text-muted);flex-shrink:0;">' + cnt + '</span>';
           html += '</div>';
         });
