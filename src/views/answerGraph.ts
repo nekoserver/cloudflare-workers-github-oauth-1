@@ -4,8 +4,9 @@ function escAG(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
-export function getAnswerGraphPage(username: string): string {
+export function getAnswerGraphPage(username: string, modelColors: Record<string, string> = {}): string {
   const safeUser = escAG(username);
+  const modelColorsJson = JSON.stringify(modelColors);
   return `<!DOCTYPE html>
 <html lang="ja">
 <head>
@@ -62,12 +63,16 @@ input[type=search]:focus { border-color:var(--accent); }
   display:flex; flex-direction:column; overflow:hidden;
 }
 .answer-modal-head {
-  flex-shrink:0; display:flex; align-items:center; justify-content:space-between; gap:8px;
+  flex-shrink:0; display:flex; align-items:flex-start; justify-content:space-between; gap:8px;
   padding:10px 16px; background:var(--card); border-bottom:1px solid var(--border);
 }
-.answer-modal-head strong { font-size:14px; font-weight:700; color:var(--fg); }
+.answer-modal-head-left { display:flex; flex-direction:column; gap:3px; min-width:0; flex:1; }
+.answer-modal-question-row { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.answer-modal-title { font-size:11px; font-weight:700; color:var(--label); text-transform:uppercase; letter-spacing:.03em; }
+.answer-modal-date { font-size:11px; color:var(--label); }
+.answer-modal-question { font-size:14px; font-weight:600; color:var(--fg); word-break:break-word; }
 .answer-modal-head button {
-  width:30px; height:30px; border:none; border-radius:8px;
+  width:30px; height:30px; border:none; border-radius:8px; flex-shrink:0;
   background:transparent; color:var(--label); cursor:pointer; font-size:18px; line-height:1;
 }
 .answer-modal-head button:hover { background:var(--btn-hover); color:var(--fg); }
@@ -75,13 +80,20 @@ input[type=search]:focus { border-color:var(--accent); }
   flex:1; min-height:0; overflow-y:auto; padding:18px 18px 20px;
   display:flex; flex-direction:column; gap:14px;
 }
+.highlights-hidden .kw-highlight { background:transparent; color:inherit; }
+.answer-modal-foot {
+  flex-shrink:0; padding:9px 16px; border-top:1px solid var(--border);
+  background:var(--card); display:flex; align-items:center; gap:12px;
+  font-size:11px; color:var(--label); flex-wrap:wrap;
+}
+.answer-modal-highlight-btn { background:none; border:none; cursor:pointer; font-size:14px; padding:2px 4px; opacity:.2; }
+.answer-modal-model-dot { display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:4px; vertical-align:middle; }
+.answer-modal-link { font-size:11px; color:var(--accent); text-decoration:none; white-space:nowrap; margin-left:auto; }
+.answer-modal-link:hover { text-decoration:underline; }
+.kw-highlight { background:#fef08a; color:#1a1a1a; border-radius:2px; padding:0 1px; }
 .answer-modal-body .chat-bubble {
   max-width:88%; padding:10px 14px; border-radius:12px;
   font-size:14px; line-height:1.6; white-space:pre-wrap; word-break:break-word;
-}
-.answer-modal-body .chat-bubble.user {
-  align-self:flex-start; background:var(--accent); color:var(--accent-fg);
-  border-bottom-right-radius:12px; border-bottom-left-radius:3px;
 }
 .answer-modal-body .chat-bubble.assistant {
   align-self:flex-end; background:var(--card); border:1px solid var(--border); color:var(--fg);
@@ -143,13 +155,25 @@ input[type=search]:focus { border-color:var(--accent); }
   </div>
 </main>
 <div class="node-tooltip" id="nodeTooltip" style="display:none;"></div>
-<div class="answer-modal-backdrop" id="answerModalBackdrop">
-  <div class="answer-modal">
+<div class="answer-modal-backdrop" id="answerModalBackdrop" aria-hidden="true">
+  <div class="answer-modal" role="dialog" aria-modal="true" aria-labelledby="answerModalTitle">
     <div class="answer-modal-head">
-      <strong>回答</strong>
-      <button type="button" id="answerModalClose">✕</button>
+      <div class="answer-modal-head-left">
+        <div class="answer-modal-question-row">
+          <span class="answer-modal-title" id="answerModalTitle">質問文</span>
+          <span class="answer-modal-date"><span id="answerModalDate"></span><span id="answerModalTime"></span></span>
+        </div>
+        <div class="answer-modal-question" id="answerModalQuestion"></div>
+      </div>
+      <button type="button" id="answerModalClose" aria-label="閉じる">✕</button>
     </div>
     <div class="answer-modal-body" id="answerModalBody"></div>
+    <div class="answer-modal-foot">
+      <button type="button" class="answer-modal-highlight-btn" id="answerModalHighlightToggleBtn" title="キーワードハイライトなし">🔑</button>
+      <span id="answerModalMeta"></span>
+      <span id="answerModalTokens"></span>
+      <a class="answer-modal-link" id="answerModalShareLink" href="#" target="_blank" rel="noopener noreferrer">🔗 共有ページを開く</a>
+    </div>
   </div>
 </div>
 <script>
@@ -166,11 +190,21 @@ input[type=search]:focus { border-color:var(--accent); }
   var answerModalBackdrop = document.getElementById('answerModalBackdrop');
   var answerModalBody = document.getElementById('answerModalBody');
   var answerModalClose = document.getElementById('answerModalClose');
+  var answerModalQuestion = document.getElementById('answerModalQuestion');
+  var answerModalDate = document.getElementById('answerModalDate');
+  var answerModalTime = document.getElementById('answerModalTime');
+  var answerModalMeta = document.getElementById('answerModalMeta');
+  var answerModalTokens = document.getElementById('answerModalTokens');
+  var answerModalShareLink = document.getElementById('answerModalShareLink');
+  var answerModalHighlightToggleBtn = document.getElementById('answerModalHighlightToggleBtn');
+  var MODEL_COLORS = ${modelColorsJson};
 
   var searchTimer = null;
   var selectedShareId = null;
   var nodePositions = [];
   var currentGraph = null;
+  var answerModalKeywordsFromDB = [];
+  var answerModalHighlightActive = true;
 
   function escHtml(s) {
     return String(s == null ? '' : s)
@@ -178,30 +212,133 @@ input[type=search]:focus { border-color:var(--accent); }
       .split('"').join('&quot;').split("'").join('&#39;');
   }
 
+  function shortModelName(model) {
+    return model ? (model.split('/').pop() || model) : '';
+  }
+
+  function applyKeywordHighlight(el, keywords) {
+    var kwList = Array.isArray(keywords) ? keywords.filter(Boolean) : [keywords];
+    if (kwList.length === 0) return;
+    var escaped = kwList.map(function(k) { return k.replace(/[.*+?^$\{}()|[\]\\]/g, '\\$&'); });
+    var re = new RegExp(escaped.join('|'), 'gi');
+    var walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, null);
+    var nodes = [];
+    var n;
+    while ((n = walker.nextNode())) nodes.push(n);
+    nodes.forEach(function(tn) {
+      if (!re.test(tn.nodeValue)) { re.lastIndex = 0; return; }
+      re.lastIndex = 0;
+      var frag = document.createDocumentFragment();
+      var last = 0, m;
+      while ((m = re.exec(tn.nodeValue)) !== null) {
+        if (m.index > last) frag.appendChild(document.createTextNode(tn.nodeValue.slice(last, m.index)));
+        var mark = document.createElement('mark');
+        mark.className = 'kw-highlight';
+        mark.textContent = m[0];
+        frag.appendChild(mark);
+        last = re.lastIndex;
+      }
+      if (last < tn.nodeValue.length) frag.appendChild(document.createTextNode(tn.nodeValue.slice(last)));
+      tn.parentNode.replaceChild(frag, tn);
+    });
+  }
+
+  function clearKeywordHighlights(container) {
+    var marks = container.querySelectorAll('.kw-highlight');
+    marks.forEach(function(mark) {
+      if (mark.parentNode) {
+        mark.parentNode.replaceChild(document.createTextNode(mark.textContent), mark);
+      }
+    });
+    if (container.normalize) container.normalize();
+  }
+
+  function updateAnswerModalHighlightBtn() {
+    if (answerModalKeywordsFromDB.length === 0) {
+      answerModalHighlightToggleBtn.style.opacity = '0.2';
+      answerModalHighlightToggleBtn.title = 'キーワードハイライトなし';
+      return;
+    }
+    if (answerModalHighlightActive) {
+      answerModalHighlightToggleBtn.style.opacity = '1';
+      answerModalHighlightToggleBtn.title = '🔑 ハイライト表示中（クリックで非表示）';
+    } else {
+      answerModalHighlightToggleBtn.style.opacity = '0.35';
+      answerModalHighlightToggleBtn.title = '🔑 ハイライト非表示（クリックで表示）';
+    }
+  }
+
+  answerModalHighlightToggleBtn.addEventListener('click', function() {
+    if (answerModalKeywordsFromDB.length === 0) return;
+    answerModalHighlightActive = !answerModalHighlightActive;
+    if (answerModalHighlightActive) {
+      answerModalQuestion.classList.remove('highlights-hidden');
+      answerModalBody.classList.remove('highlights-hidden');
+    } else {
+      answerModalQuestion.classList.add('highlights-hidden');
+      answerModalBody.classList.add('highlights-hidden');
+    }
+    updateAnswerModalHighlightBtn();
+  });
+
+  function loadAnswerModalKeywords(shareId) {
+    fetch('/api/aichat/share-keywords?shareId=' + encodeURIComponent(shareId), { credentials: 'same-origin' })
+      .then(function(r) { return r.json(); })
+      .then(function(d) {
+        answerModalKeywordsFromDB = (d.keywords || []).map(function(k) { return k.keyword; });
+        clearKeywordHighlights(answerModalQuestion);
+        clearKeywordHighlights(answerModalBody);
+        if (answerModalKeywordsFromDB.length > 0 && answerModalHighlightActive) {
+          applyKeywordHighlight(answerModalQuestion, answerModalKeywordsFromDB);
+          applyKeywordHighlight(answerModalBody, answerModalKeywordsFromDB);
+        }
+        updateAnswerModalHighlightBtn();
+      })
+      .catch(function() {});
+  }
+
   ${getMarkdownParserScript()}
 
-  function appendAnswerModalBubble(text, role) {
+  function appendAnswerModalBubble(text) {
     var el = document.createElement('div');
-    if (role === 'assistant') {
-      el.className = 'chat-bubble assistant preview-area';
-      el.innerHTML = parseMd(text);
-    } else {
-      el.className = 'chat-bubble user';
-      el.textContent = text;
-    }
+    el.className = 'chat-bubble assistant preview-area';
+    el.innerHTML = parseMd(text);
     answerModalBody.appendChild(el);
   }
 
   function openAnswerModal(shareId) {
+    answerModalQuestion.textContent = '';
+    answerModalQuestion.classList.remove('highlights-hidden');
+    answerModalDate.textContent = '';
+    answerModalTime.textContent = '';
+    answerModalMeta.textContent = '';
+    answerModalTokens.textContent = '';
+    answerModalShareLink.href = '#';
+    answerModalKeywordsFromDB = [];
+    answerModalHighlightActive = true;
+    answerModalBody.classList.remove('highlights-hidden');
     answerModalBody.textContent = '読み込み中...';
     answerModalBackdrop.classList.add('open');
     fetch('/api/aichat/shares/' + encodeURIComponent(shareId), { credentials: 'same-origin' })
       .then(function(r) { return r.json(); })
       .then(function(d) {
         if (!d || d.error) { answerModalBody.textContent = '回答の取得に失敗しました: ' + ((d && d.error) || '不明なエラー'); return; }
+        answerModalQuestion.textContent = d.question;
+        if (d.created_at) {
+          answerModalDate.textContent = String(d.created_at).slice(0, 10);
+          answerModalTime.textContent = ' ' + String(d.created_at).slice(11, 16);
+        }
+        var dotColor = MODEL_COLORS[d.model] || '';
+        var dotHtml = dotColor ? '<span class="answer-modal-model-dot" style="background:' + dotColor + ';"></span>' : '';
+        answerModalMeta.innerHTML = dotHtml + escHtml(shortModelName(d.model)) + '　👁 ' + (d.access_count || 0);
+        var tokenParts = [];
+        if (d.input_tokens != null) tokenParts.push('in:' + d.input_tokens);
+        if (d.output_tokens != null) tokenParts.push('out:' + d.output_tokens);
+        answerModalTokens.textContent = tokenParts.length > 0 ? '📊 ' + tokenParts.join(' / ') : '';
+        if (d.user_hash) answerModalShareLink.href = '/s/' + d.user_hash + '/' + d.id;
         answerModalBody.innerHTML = '';
-        appendAnswerModalBubble(d.question, 'user');
-        appendAnswerModalBubble(d.answer, 'assistant');
+        appendAnswerModalBubble(d.answer);
+        loadAnswerModalKeywords(shareId);
       })
       .catch(function() { answerModalBody.textContent = '回答の取得に失敗しました（通信エラー）'; });
   }
@@ -212,6 +349,9 @@ input[type=search]:focus { border-color:var(--accent); }
 
   answerModalClose.addEventListener('click', closeAnswerModal);
   answerModalBackdrop.addEventListener('click', function(e) { if (e.target === answerModalBackdrop) closeAnswerModal(); });
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape' && answerModalBackdrop.classList.contains('open')) closeAnswerModal();
+  });
 
   function hideNodeTooltip() {
     nodeTooltip.style.display = 'none';
