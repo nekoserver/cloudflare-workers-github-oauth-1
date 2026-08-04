@@ -113,6 +113,17 @@ async function setupZtUi() {
         json: () => Promise.resolve({ keywords: [{ keyword: 'a' }, { keyword: 'b' }, { keyword: 'c' }] }),
       });
     }
+    if (u.includes('/api/aichat/shares/by-keyword')) {
+      return Promise.resolve({
+        status: 200,
+        json: () => Promise.resolve({
+          keyword: 'Hono',
+          results: [
+            { id: 's1', user_hash: 'uh1', question: 'Honoの使い方は？', answer: '...', model: '@cf/meta/llama-3.3-70b-instruct-fp8-fast', created_at: '2026-01-02T10:00:00Z' },
+          ],
+        }),
+      });
+    }
     return Promise.resolve({ status: 200, text: () => Promise.resolve('{}'), json: () => Promise.resolve({}) });
   });
   vi.stubGlobal('fetch', fetchMock);
@@ -128,6 +139,10 @@ async function setupZtUi() {
     ztOverviewBody: document.getElementById('ztOverviewBody')!,
     ztOverviewChartToggle: document.getElementById('ztOverviewChartToggle')!,
     ztOverviewChartSection: document.getElementById('ztOverviewChartSection')!,
+    ztKeywordSharesModal: document.getElementById('ztKeywordSharesModal')!,
+    ztKeywordSharesClose: document.getElementById('ztKeywordSharesClose')!,
+    ztKeywordSharesBody: document.getElementById('ztKeywordSharesBody')!,
+    ztKeywordSharesTitle: document.getElementById('ztKeywordSharesTitle')!,
     ztBgeBtn: document.getElementById('ztBgeBtn')!,
     ztBgeModal: document.getElementById('ztBgeModal')!,
     ztBgeBody: document.getElementById('ztBgeBody')!,
@@ -280,6 +295,61 @@ describe('ZTモーダルのDOM実動作(jsdom)', () => {
     expect(ztOverviewBody.textContent).toContain('空港');
     expect(ztOverviewBody.textContent).toContain('駅');
     expect(ztOverviewBody.textContent).toContain('テスト');
+  });
+
+  it('表のth(ヘッダ行)にposition:stickyが指定され、スクロールしても上部に固定される', async () => {
+    const { ztOverviewBtn, ztOverviewBody } = await setupZtUi();
+
+    ztOverviewBtn.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    const ths = ztOverviewBody.querySelectorAll('th');
+    expect(ths.length).toBeGreaterThan(0);
+    ths.forEach((th) => {
+      expect(th.getAttribute('style') || '').toContain('position:sticky');
+      expect(th.getAttribute('style') || '').toContain('top:0');
+    });
+  });
+
+  it('表内の各キーワードはリンクになっており、タップすると最上位レイヤーのモーダルで関連する会話一覧が表示される', async () => {
+    const { ztOverviewBtn, ztOverviewBody, ztOverviewModal, ztKeywordSharesModal, ztKeywordSharesBody, ztKeywordSharesTitle, fetchMock } = await setupZtUi();
+
+    ztOverviewBtn.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    const link = ztOverviewBody.querySelector('.zt-overview-kw-link[data-keyword="Hono"]') as HTMLElement;
+    expect(link).toBeTruthy();
+
+    link.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    expect(ztKeywordSharesModal.classList.contains('open')).toBe(true);
+    expect(ztKeywordSharesTitle.textContent).toContain('Hono');
+
+    const byKeywordCall = fetchMock.mock.calls.find((c) => String(c[0]).includes('/api/aichat/shares/by-keyword'));
+    expect(byKeywordCall).toBeTruthy();
+    expect(String(byKeywordCall![0])).toContain('keyword=Hono');
+
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(ztKeywordSharesBody.textContent).toContain('Honoの使い方は？');
+    expect(ztKeywordSharesBody.innerHTML).toContain('/s/uh1/s1');
+
+    // 別タブに移動するのではなく、ztOverviewModalの上に重なるモーダルとして表示される(getNextZ()で動的算出)
+    expect(ztOverviewModal.classList.contains('open')).toBe(true);
+    const zOverview = parseInt(ztOverviewModal.style.zIndex, 10);
+    const zShares = parseInt(ztKeywordSharesModal.style.zIndex, 10);
+    expect(zShares).toBeGreaterThan(zOverview);
+  });
+
+  it('ztKeywordSharesCloseを押すとztKeywordSharesModalが閉じる', async () => {
+    const { ztOverviewBtn, ztOverviewBody, ztKeywordSharesModal, ztKeywordSharesClose } = await setupZtUi();
+
+    ztOverviewBtn.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    const link = ztOverviewBody.querySelector('.zt-overview-kw-link') as HTMLElement;
+    link.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    expect(ztKeywordSharesModal.classList.contains('open')).toBe(true);
+
+    ztKeywordSharesClose.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    expect(ztKeywordSharesModal.classList.contains('open')).toBe(false);
   });
 
   it('📖アイコンで開いたモーダルのz-indexはgetNextZ()で実行時に動的算出される(固定値を書かない)', async () => {
