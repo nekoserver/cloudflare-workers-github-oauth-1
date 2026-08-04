@@ -1106,6 +1106,7 @@ export function getAiChatPage(user: {
       <div class="search-log-head">
         <span class="search-log-title">📖 ベクタ化済みデータ一覧</span>
         <div style="display:flex;align-items:center;gap:4px;">
+          <input type="search" id="ztOverviewKeywordSearchInput" placeholder="キーワードで検索..." autocomplete="off" style="font-size:11px;padding:3px 6px;border:1px solid var(--border-color);border-radius:6px;background:var(--bg-secondary);color:var(--text-primary);width:120px;">
           <button class="search-log-close" id="ztOverviewChartToggle" aria-label="円グラフ表示切替" title="埋め込みモデル別 登録済みキーワード率の円グラフ表示切替">📊</button>
           <button class="search-log-close" id="ztOverviewClose" aria-label="閉じる">✕</button>
         </div>
@@ -5309,6 +5310,7 @@ export function getAiChatPage(user: {
 
     var ztOverviewLastItems = [];
     var ztOverviewCurrentFilter = 'all';
+    var ztOverviewCurrentSearch = '';
 
     function getZtOverviewModelCounts(items) {
       return {
@@ -5318,10 +5320,13 @@ export function getAiChatPage(user: {
       };
     }
 
-    function filterZtOverviewItems(items, filter) {
-      if (filter === 'plamo') return items.filter(function(it) { return !!it.plamoModel; });
-      if (filter === 'gemma') return items.filter(function(it) { return !!it.gemmaModel; });
-      return items;
+    function filterZtOverviewItems(items, filter, search) {
+      var out = items;
+      if (filter === 'plamo') out = out.filter(function(it) { return !!it.plamoModel; });
+      else if (filter === 'gemma') out = out.filter(function(it) { return !!it.gemmaModel; });
+      var q = (search || '').trim().toLowerCase();
+      if (q) out = out.filter(function(it) { return String(it.keyword || '').toLowerCase().indexOf(q) >= 0; });
+      return out;
     }
 
     function buildZtOverviewModelFilterHtml(counts, current) {
@@ -5338,16 +5343,17 @@ export function getAiChatPage(user: {
       return '<select id="ztOverviewModelFilter" style="font-size:11px;padding:2px 4px;font-weight:normal;">' + optsHtml + '</select>';
     }
 
-    function renderZtOverviewList(items, filter) {
+    function renderZtOverviewList(items, filter, search) {
       ztOverviewLastItems = items || [];
       ztOverviewCurrentFilter = filter || 'all';
+      ztOverviewCurrentSearch = search || '';
       if (ztOverviewLastItems.length === 0) {
         ztOverviewBody.innerHTML = '<div class="search-log-empty">ベクタ化済みのキーワードはありません</div>';
         return;
       }
       var counts = getZtOverviewModelCounts(ztOverviewLastItems);
       var filterSelectHtml = buildZtOverviewModelFilterHtml(counts, ztOverviewCurrentFilter);
-      var filtered = filterZtOverviewItems(ztOverviewLastItems, ztOverviewCurrentFilter);
+      var filtered = filterZtOverviewItems(ztOverviewLastItems, ztOverviewCurrentFilter, ztOverviewCurrentSearch);
       var ZT_TH_STICKY = 'position:sticky;top:0;z-index:2;background:var(--card-bg);';
       var html = '<table style="width:100%;border-collapse:collapse;">'
         + '<thead><tr>'
@@ -5383,8 +5389,14 @@ export function getAiChatPage(user: {
 
     ztOverviewBody.addEventListener('change', function(e) {
       if (e.target && e.target.id === 'ztOverviewModelFilter') {
-        renderZtOverviewList(ztOverviewLastItems, e.target.value);
+        renderZtOverviewList(ztOverviewLastItems, e.target.value, ztOverviewCurrentSearch);
       }
+    });
+
+    var ztOverviewKeywordSearchInput = document.getElementById('ztOverviewKeywordSearchInput');
+    ztOverviewKeywordSearchInput.addEventListener('click', function(e) { e.stopPropagation(); });
+    ztOverviewKeywordSearchInput.addEventListener('input', function(e) {
+      renderZtOverviewList(ztOverviewLastItems, ztOverviewCurrentFilter, e.target.value);
     });
 
     // 「別タブで開く」(共有ページへの外部公開URL)はデフォルトOFF。設定ページに
@@ -5401,14 +5413,15 @@ export function getAiChatPage(user: {
         .then(function(r) { return r.json(); })
         .then(function(d) {
           var results = d.results || [];
+          ztKeywordSharesTitle.textContent = '🔎 「' + keyword + '」の関連する会話 (' + results.length + ')';
           if (results.length === 0) {
             ztKeywordSharesBody.innerHTML = '<div class="search-log-empty">関連する会話が見つかりません</div>';
             return;
           }
           var html = '';
-          results.forEach(function(r) {
+          results.forEach(function(r, i) {
             html += '<div style="padding:8px 0;border-bottom:1px solid var(--border-color);">'
-              + '<div class="zt-keyword-share-q" data-share-id="' + escHtml(String(r.id)) + '" data-keyword="' + escHtml(keyword) + '" style="font-size:12px;color:var(--text-primary);margin-bottom:2px;cursor:pointer;text-decoration:underline dotted;">' + escHtml(r.question) + '</div>'
+              + '<div class="zt-keyword-share-q" data-share-id="' + escHtml(String(r.id)) + '" data-keyword="' + escHtml(keyword) + '" style="font-size:12px;color:var(--text-primary);margin-bottom:2px;cursor:pointer;text-decoration:underline dotted;">' + (i + 1) + '. ' + escHtml(r.question) + '</div>'
               + '<div style="font-size:10px;color:var(--text-muted);display:flex;align-items:center;gap:8px;flex-wrap:wrap;">'
               + (r.model ? '<span>' + escHtml(String(r.model).split('/').pop()) + '</span>' : '')
               + '<span>' + escHtml(String(r.created_at || '').slice(0, 16).replace('T', ' ')) + '</span>'
@@ -5462,6 +5475,7 @@ export function getAiChatPage(user: {
     function openZtOverviewModal() {
       ztOverviewBody.innerHTML = '<div class="search-log-loading">読み込み中...</div>';
       ztOverviewChartSection.innerHTML = '';
+      ztOverviewKeywordSearchInput.value = '';
       updateZtOverviewChartToggleUi();
       ztOverviewModal.style.zIndex = String(getNextZ());
       ztOverviewModal.classList.add('open');
@@ -5484,7 +5498,7 @@ export function getAiChatPage(user: {
           ztOverviewBody.innerHTML = '<div class="search-log-empty">取得に失敗しました: HTTP ' + statusTxt + ' / ' + escHtml(String(bodyTxt).slice(0, 120)) + '</div>';
           return;
         }
-        renderZtOverviewList(d.items, 'all');
+        renderZtOverviewList(d.items, 'all', '');
         var kwAll = results[1].status === 'fulfilled' ? ((results[1].value && results[1].value.keywords) || []) : [];
         ztOverviewChartSection.innerHTML = buildEmbeddingModelRatioSectionHtml(kwAll.length, d.items || []);
       }).catch(function(err) {
