@@ -5564,6 +5564,48 @@ export function getAiChatPage(user: {
       return html;
     }
 
+    function buildEmbeddingModelRatioSectionHtml(totalKw, embItems) {
+      if (!totalKw || totalKw <= 0) return '';
+      var models = [
+        { key: 'bge', label: 'bge-m3', color: '#6366f1', count: embItems.length },
+        { key: 'plamo', label: 'plamo-embedding-1b', color: '#22c55e', count: embItems.filter(function(it) { return !!it.plamoModel; }).length },
+        { key: 'gemma', label: 'embeddinggemma-300m', color: '#f59e0b', count: embItems.filter(function(it) { return !!it.gemmaModel; }).length }
+      ];
+      var UNREG_COLOR = '#94a3b8';
+      var html = '<div style="font-size:10px;font-weight:600;color:var(--text-secondary);margin-top:14px;margin-bottom:6px;">埋め込みモデル別 登録済みキーワード率</div>';
+      html += '<div style="display:flex;gap:16px;flex-wrap:wrap;">';
+      models.forEach(function(m) {
+        var registered = Math.min(m.count, totalKw);
+        var unregistered = Math.max(0, totalKw - registered);
+        var ratio = Math.round(registered / totalKw * 1000) / 10;
+        var PR = 32, PCX = 36, PCY = 36, PSZ = 72;
+        var pieSvg = '<svg viewBox="0 0 ' + PSZ + ' ' + PSZ + '" width="' + PSZ + '" height="' + PSZ + '">';
+        if (registered === 0 || unregistered === 0) {
+          pieSvg += '<circle cx="' + PCX + '" cy="' + PCY + '" r="' + PR + '" fill="' + (registered > 0 ? m.color : UNREG_COLOR) + '" opacity="0.9" stroke="var(--card-bg)" stroke-width="0.5"/>';
+        } else {
+          var ang = -Math.PI / 2;
+          [[registered, m.color], [unregistered, UNREG_COLOR]].forEach(function(pair) {
+            var cnt = pair[0];
+            var slice = cnt / totalKw * 2 * Math.PI;
+            var endAng = ang + slice;
+            var x1 = PCX + PR * Math.cos(ang), y1 = PCY + PR * Math.sin(ang);
+            var x2 = PCX + PR * Math.cos(endAng), y2 = PCY + PR * Math.sin(endAng);
+            var la = slice > Math.PI ? 1 : 0;
+            pieSvg += '<path d="M ' + PCX + ' ' + PCY + ' L ' + x1.toFixed(2) + ' ' + y1.toFixed(2) + ' A ' + PR + ' ' + PR + ' 0 ' + la + ' 1 ' + x2.toFixed(2) + ' ' + y2.toFixed(2) + ' Z" fill="' + pair[1] + '" opacity="0.9" stroke="var(--card-bg)" stroke-width="0.5"/>';
+            ang = endAng;
+          });
+        }
+        pieSvg += '</svg>';
+        html += '<div style="text-align:center;">'
+          + '<div style="font-size:10px;color:var(--text-primary);margin-bottom:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:96px;" title="' + escHtml(m.label) + '">' + escHtml(m.label) + '</div>'
+          + pieSvg
+          + '<div style="font-size:10px;color:var(--text-muted);margin-top:2px;">' + registered + ' / ' + totalKw + ' (' + ratio.toFixed(1) + '%)</div>'
+          + '</div>';
+      });
+      html += '</div>';
+      return html;
+    }
+
     function renderDailyStatsChart() {
       var month = dailyStatsCurrentMonth;
       var parts = month.split('-');
@@ -5573,13 +5615,15 @@ export function getAiChatPage(user: {
         fetch('/api/aichat/daily-stats?month=' + encodeURIComponent(month), { credentials: 'same-origin' }).then(function(r) { return r.json(); }),
         fetch('/api/aichat/all-keywords', { credentials: 'same-origin' }).then(function(r) { return r.json(); }),
         fetch('/api/aichat/keyword-categories-summary', { credentials: 'same-origin' }).then(function(r) { return r.json(); }),
-        fetch('/api/aichat/category-groups', { credentials: 'same-origin' }).then(function(r) { return r.json(); })
+        fetch('/api/aichat/category-groups', { credentials: 'same-origin' }).then(function(r) { return r.json(); }),
+        fetch('/api/aichat/keyword-embeddings/list', { credentials: 'same-origin' }).then(function(r) { return r.json(); })
       ])
         .then(function(results) {
           var d = results[0].status === 'fulfilled' ? results[0].value : {};
           var kwAll = results[1].status === 'fulfilled' ? (results[1].value.keywords || []) : [];
           var catSummary = results[2].status === 'fulfilled' ? (results[2].value.categories || []) : [];
           var catGroups = results[3].status === 'fulfilled' ? (results[3].value.groups || []) : [];
+          var embItems = results[4].status === 'fulfilled' ? (results[4].value.items || []) : [];
           var days = d.days || [];
           var models = d.models || [];
           var apiModelTotals = d.apiModelTotals || {};
@@ -5799,10 +5843,12 @@ export function getAiChatPage(user: {
           svg += '<line x1="' + ML + '" y1="' + midY + '" x2="' + (W - MR) + '" y2="' + midY + '" stroke="var(--border-color)" stroke-width="0.5"/>';
           svg += '</svg>';
 
+          var embSectionHtml = buildEmbeddingModelRatioSectionHtml(kwAll.length, embItems);
+
           dailyStatsBody.innerHTML = '<div style="display:grid;grid-template-columns:160px 1fr;gap:14px;align-items:start;">' +
             '<div>' + leftHtml + '</div>' +
             '<div>' + svg + '</div>' +
-            '</div>';
+            '</div>' + embSectionHtml;
         })
         .catch(function() { dailyStatsBody.innerHTML = '<div style="color:var(--text-muted);padding:20px 0;">取得に失敗しました</div>'; });
     }
