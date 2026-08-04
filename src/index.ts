@@ -4067,6 +4067,28 @@ export function extractContainedKeywords(text: string, keywords: string[]): stri
   return keywords.filter((kw) => kw && lower.indexOf(kw.toLowerCase()) !== -1);
 }
 
+/**
+ * /answer-graph の起点検索結果それぞれに、その回答本文に含まれる登録済み
+ * キーワードの総数(keywordCount)を付与する。件数はextractContainedKeywords
+ * と同じ「回答本文のみ」を対象にした判定に揃え、回答伝播グラフの最前列
+ * キーワード群の定義と矛盾しないようにする。
+ */
+export async function enrichSearchResultsWithKeywordCounts<T extends { answer: string }>(
+  db: D1Like,
+  userId: string,
+  results: T[],
+): Promise<(T & { keywordCount: number })[]> {
+  if (results.length === 0) return [];
+  const kwRows = await db.prepare(
+    `SELECT keyword FROM aichat_search_log WHERE user_id = ? GROUP BY keyword ORDER BY SUM(select_count) DESC LIMIT 300`
+  ).bind(userId).all<{ keyword: string }>();
+  const allKeywords = (kwRows.results ?? []).map((r) => r.keyword).filter(Boolean);
+  return results.map((r) => ({
+    ...r,
+    keywordCount: extractContainedKeywords(r.answer, allKeywords).length,
+  }));
+}
+
 export interface AnswerGraphNode {
   id: string;
   type: 'answer' | 'keyword';
@@ -4213,7 +4235,8 @@ app.get('/api/aichat/shares/search', authMiddleware, async (c) => {
   if (!q) return jsonUtf8({ results: [] });
 
   const { results } = await searchAiChatShares(c.env.DB as unknown as D1Like, user.sub, q);
-  return jsonUtf8({ results });
+  const enriched = await enrichSearchResultsWithKeywordCounts(c.env.DB as unknown as D1Like, user.sub, results);
+  return jsonUtf8({ results: enriched });
 });
 
 /**

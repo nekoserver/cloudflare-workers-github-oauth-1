@@ -89,10 +89,21 @@ main { flex:1; max-width:1100px; width:100%; margin:0 auto; padding:24px 16px; d
 .search-row { display:flex; gap:8px; margin-bottom:10px; }
 input[type=search] { flex:1; background:var(--btn-bg); border:1px solid var(--btn-border); border-radius:6px; color:var(--fg); font-size:13px; padding:8px 12px; outline:none; }
 input[type=search]:focus { border-color:var(--accent); }
-.search-results { display:flex; flex-direction:column; gap:4px; max-height:220px; overflow-y:auto; }
-.search-result-item { padding:8px 10px; border:1px solid var(--border); border-radius:6px; cursor:pointer; font-size:12px; background:var(--btn-bg); }
-.search-result-item:hover { border-color:var(--accent); }
-.search-result-item.selected { border-color:var(--accent); background:rgba(31,111,235,.1); }
+.search-results-wrap { max-height:260px; overflow-y:auto; border:1px solid var(--border); border-radius:6px; }
+.search-results-table { width:100%; border-collapse:collapse; font-size:12px; }
+.search-results-table thead th {
+  position:sticky; top:0; background:var(--btn-bg); color:var(--label); text-align:left;
+  padding:6px 10px; border-bottom:1px solid var(--border); font-weight:600; white-space:nowrap;
+}
+.search-results-table th.sortable-th { cursor:pointer; user-select:none; }
+.search-results-table th.sortable-th:hover { color:var(--fg); }
+.search-results-table td { padding:6px 10px; border-bottom:1px solid var(--border); color:var(--fg); }
+.search-results-table td.search-result-count { text-align:right; color:var(--label); white-space:nowrap; }
+.search-results-table td.search-result-date { color:var(--label); white-space:nowrap; }
+.search-results-table td.search-result-question { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:1px; }
+.search-results-table tbody tr { cursor:pointer; }
+.search-results-table tbody tr:hover { background:var(--btn-hover); }
+.search-results-table tbody tr.selected { background:rgba(31,111,235,.1); }
 .search-status { font-size:11px; color:var(--label); }
 .graph-layout { display:flex; flex-direction:column; gap:12px; }
 .canvas-wrap { width:100%; overflow:auto; border:1px solid var(--border); border-radius:8px; background:var(--btn-bg); }
@@ -194,7 +205,18 @@ input[type=search]:focus { border-color:var(--accent); }
       <input type="search" id="seedSearchInput" placeholder="質問・回答のキーワードで検索..." autocomplete="off">
     </div>
     <div class="search-status" id="seedSearchStatus"></div>
-    <div class="search-results" id="seedSearchResults"></div>
+    <div class="search-results-wrap">
+      <table class="search-results-table">
+        <thead>
+          <tr>
+            <th id="searchKeywordCountTh" class="sortable-th" tabindex="0" role="button" aria-label="キーワード総数で並べ替え">キーワード数</th>
+            <th>質問日時</th>
+            <th>質問</th>
+          </tr>
+        </thead>
+        <tbody id="seedSearchResults"></tbody>
+      </table>
+    </div>
   </div>
 
   <div class="card">
@@ -260,6 +282,7 @@ input[type=search]:focus { border-color:var(--accent); }
   var seedSearchInput = document.getElementById('seedSearchInput');
   var seedSearchStatus = document.getElementById('seedSearchStatus');
   var seedSearchResults = document.getElementById('seedSearchResults');
+  var searchKeywordCountTh = document.getElementById('searchKeywordCountTh');
   var graphStatus = document.getElementById('graphStatus');
   var canvas = document.getElementById('graphCanvas');
   var ctx = canvas.getContext('2d');
@@ -290,6 +313,8 @@ input[type=search]:focus { border-color:var(--accent); }
   var canvasWrap = document.querySelector('.canvas-wrap');
 
   var searchTimer = null;
+  var searchResultsRaw = [];
+  var searchSortMode = 'date';
   var selectedShareId = null;
   var nodePositions = [];
   var currentGraph = null;
@@ -492,6 +517,70 @@ input[type=search]:focus { border-color:var(--accent); }
     hideNodeTooltip();
   });
 
+  function sortSearchResults(results, mode) {
+    var arr = (results || []).slice();
+    if (mode === 'count-desc') {
+      arr.sort(function(a, b) { return (b.keywordCount || 0) - (a.keywordCount || 0); });
+    } else if (mode === 'count-asc') {
+      arr.sort(function(a, b) { return (a.keywordCount || 0) - (b.keywordCount || 0); });
+    } else {
+      arr.sort(function(a, b) { return new Date(b.created_at).getTime() - new Date(a.created_at).getTime(); });
+    }
+    return arr;
+  }
+
+  function formatSearchResultDateTime(iso) {
+    var d = new Date(iso);
+    if (isNaN(d.getTime())) return iso || '';
+    var pad = function(n) { return (n < 10 ? '0' : '') + n; };
+    return d.getFullYear() + '/' + pad(d.getMonth() + 1) + '/' + pad(d.getDate()) + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes());
+  }
+
+  function updateSearchSortIndicator() {
+    var label = searchSortMode === 'count-desc' ? 'キーワード数 ▼' : searchSortMode === 'count-asc' ? 'キーワード数 ▲' : 'キーワード数';
+    searchKeywordCountTh.textContent = label;
+  }
+
+  function renderSearchResultsTable() {
+    var sorted = sortSearchResults(searchResultsRaw, searchSortMode);
+    seedSearchResults.innerHTML = '';
+    sorted.forEach(function(r) {
+      var row = document.createElement('tr');
+      row.className = 'search-result-row' + (r.id === selectedShareId ? ' selected' : '');
+      var countTd = document.createElement('td');
+      countTd.className = 'search-result-count';
+      countTd.textContent = String(r.keywordCount || 0);
+      var dateTd = document.createElement('td');
+      dateTd.className = 'search-result-date';
+      dateTd.textContent = formatSearchResultDateTime(r.created_at);
+      var qTd = document.createElement('td');
+      qTd.className = 'search-result-question';
+      qTd.textContent = r.question;
+      qTd.title = r.question;
+      row.appendChild(countTd);
+      row.appendChild(dateTd);
+      row.appendChild(qTd);
+      row.addEventListener('click', function() {
+        selectedShareId = r.id;
+        seedSearchResults.querySelectorAll('.search-result-row').forEach(function(el) { el.classList.remove('selected'); });
+        row.classList.add('selected');
+        loadGraph(r.id);
+      });
+      seedSearchResults.appendChild(row);
+    });
+    updateSearchSortIndicator();
+  }
+
+  function cycleSearchSortMode() {
+    searchSortMode = searchSortMode === 'date' ? 'count-desc' : searchSortMode === 'count-desc' ? 'count-asc' : 'date';
+    renderSearchResultsTable();
+  }
+
+  searchKeywordCountTh.addEventListener('click', cycleSearchSortMode);
+  searchKeywordCountTh.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); cycleSearchSortMode(); }
+  });
+
   function doSeedSearch(q) {
     seedSearchStatus.textContent = '検索中...';
     fetch('/api/aichat/shares/search?q=' + encodeURIComponent(q), { credentials: 'same-origin' })
@@ -499,20 +588,9 @@ input[type=search]:focus { border-color:var(--accent); }
       .then(function(d) {
         var results = (d && d.results) || [];
         seedSearchStatus.textContent = results.length + ' 件ヒット';
-        seedSearchResults.innerHTML = '';
-        results.forEach(function(r) {
-          var item = document.createElement('div');
-          item.className = 'search-result-item' + (r.id === selectedShareId ? ' selected' : '');
-          item.textContent = r.question;
-          item.title = r.question;
-          item.addEventListener('click', function() {
-            selectedShareId = r.id;
-            seedSearchResults.querySelectorAll('.search-result-item').forEach(function(el) { el.classList.remove('selected'); });
-            item.classList.add('selected');
-            loadGraph(r.id);
-          });
-          seedSearchResults.appendChild(item);
-        });
+        searchResultsRaw = results;
+        searchSortMode = 'date';
+        renderSearchResultsTable();
       })
       .catch(function() { seedSearchStatus.textContent = '検索エラー'; });
   }
@@ -520,7 +598,7 @@ input[type=search]:focus { border-color:var(--accent); }
   seedSearchInput.addEventListener('input', function() {
     var q = seedSearchInput.value.trim();
     clearTimeout(searchTimer);
-    if (!q) { seedSearchStatus.textContent = ''; seedSearchResults.innerHTML = ''; return; }
+    if (!q) { seedSearchStatus.textContent = ''; searchResultsRaw = []; renderSearchResultsTable(); return; }
     searchTimer = setTimeout(function() { doSeedSearch(q); }, 350);
   });
 
