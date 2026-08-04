@@ -43,6 +43,28 @@ describe('ZTモーダルのHTML構造: 📖アイコン・一覧モーダル・�
     expect(html).toContain('id="ztOverviewBody"');
   });
 
+  it('ztOverviewChartToggle(📊)ボタンがタイトルとztOverviewCloseの間にある', () => {
+    const html = buildPage();
+    const modalIdx = html.indexOf('id="ztOverviewModal"');
+    const bodyIdx = html.indexOf('id="ztOverviewBody"', modalIdx);
+    const head = html.slice(modalIdx, bodyIdx);
+    expect(head).toContain('id="ztOverviewChartToggle"');
+    const toggleIdx = head.indexOf('id="ztOverviewChartToggle"');
+    const closeIdx = head.indexOf('id="ztOverviewClose"');
+    expect(toggleIdx).toBeGreaterThan(-1);
+    expect(closeIdx).toBeGreaterThan(toggleIdx);
+  });
+
+  it('ztOverviewChartSectionがタイトル(head)とztOverviewBody(表)の間にある', () => {
+    const html = buildPage();
+    const modalIdx = html.indexOf('id="ztOverviewModal"');
+    const headEndIdx = html.indexOf('</div>', html.indexOf('search-log-head', modalIdx));
+    const bodyIdx = html.indexOf('id="ztOverviewBody"', modalIdx);
+    const chartSectionIdx = html.indexOf('id="ztOverviewChartSection"', modalIdx);
+    expect(chartSectionIdx).toBeGreaterThan(headEndIdx);
+    expect(chartSectionIdx).toBeLessThan(bodyIdx);
+  });
+
   it('ztOverviewModalがstaticZDefaultsに登録されている(z-index管理の原則)', () => {
     const html = buildPage();
     const idx = html.indexOf('staticZDefaults');
@@ -84,6 +106,12 @@ async function setupZtUi() {
     if (u.includes('/api/aichat/keyword-embeddings/register')) {
       return Promise.resolve({ json: () => Promise.resolve({ ok: true, registered: 1, failed: 0, results: [] }) });
     }
+    if (u.includes('/api/aichat/all-keywords')) {
+      return Promise.resolve({
+        status: 200,
+        json: () => Promise.resolve({ keywords: [{ keyword: 'a' }, { keyword: 'b' }, { keyword: 'c' }] }),
+      });
+    }
     return Promise.resolve({ status: 200, text: () => Promise.resolve('{}'), json: () => Promise.resolve({}) });
   });
   vi.stubGlobal('fetch', fetchMock);
@@ -97,6 +125,8 @@ async function setupZtUi() {
     ztOverviewBtn: document.getElementById('ztOverviewBtn')!,
     ztOverviewModal: document.getElementById('ztOverviewModal')!,
     ztOverviewBody: document.getElementById('ztOverviewBody')!,
+    ztOverviewChartToggle: document.getElementById('ztOverviewChartToggle')!,
+    ztOverviewChartSection: document.getElementById('ztOverviewChartSection')!,
     ztBgeBtn: document.getElementById('ztBgeBtn')!,
     ztBgeModal: document.getElementById('ztBgeModal')!,
     ztBgeBody: document.getElementById('ztBgeBody')!,
@@ -107,7 +137,10 @@ async function setupZtUi() {
 }
 
 describe('ZTモーダルのDOM実動作(jsdom)', () => {
-  afterEach(() => { vi.unstubAllGlobals(); });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    document.cookie = 'aichat_zt_overview_chart_visible=; Path=/; Max-Age=0';
+  });
 
   it('📖アイコンを押すと最上位レイヤーにベクタ化済みデータ一覧が開き、既存データとモデルが列挙される', async () => {
     const { ztOverviewBtn, ztOverviewModal, ztOverviewBody } = await setupZtUi();
@@ -128,6 +161,46 @@ describe('ZTモーダルのDOM実動作(jsdom)', () => {
     expect(ztOverviewBody.textContent).toContain('ZTモーダル手動登録');
     expect(ztOverviewBody.textContent).toContain('自動(answer-graph色分け)');
     expect(ztOverviewBody.textContent).toContain('空港');
+  });
+
+  it('📖アイコンを押すと埋め込みモデル別の登録済みキーワード率円グラフがタイトルと表の間に表示される(cookie未設定時はデフォルトON)', async () => {
+    const { ztOverviewBtn, ztOverviewChartSection } = await setupZtUi();
+
+    ztOverviewBtn.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    expect(ztOverviewChartSection.style.display).not.toBe('none');
+    expect(ztOverviewChartSection.textContent).toContain('登録済みキーワード率');
+    expect(ztOverviewChartSection.textContent).toContain('bge-m3');
+    expect(ztOverviewChartSection.textContent).toContain('plamo-embedding-1b');
+    expect(ztOverviewChartSection.textContent).toContain('embeddinggemma-300m');
+    expect(ztOverviewChartSection.innerHTML).toContain('<path ');
+  });
+
+  it('📊ボタンを押すと円グラフ表示がOFFになり、cookieにoffが保存される。もう一度押すとONに戻りcookieもonになる', async () => {
+    const { ztOverviewBtn, ztOverviewChartToggle, ztOverviewChartSection } = await setupZtUi();
+
+    ztOverviewBtn.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(ztOverviewChartSection.style.display).not.toBe('none');
+
+    ztOverviewChartToggle.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    expect(ztOverviewChartSection.style.display).toBe('none');
+    expect(document.cookie).toContain('aichat_zt_overview_chart_visible=off');
+
+    ztOverviewChartToggle.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    expect(ztOverviewChartSection.style.display).not.toBe('none');
+    expect(document.cookie).toContain('aichat_zt_overview_chart_visible=on');
+  });
+
+  it('cookieにoffが保存されている状態でモーダルを開くと円グラフは非表示のまま', async () => {
+    document.cookie = 'aichat_zt_overview_chart_visible=off; Path=/';
+    const { ztOverviewBtn, ztOverviewChartSection } = await setupZtUi();
+
+    ztOverviewBtn.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    expect(ztOverviewChartSection.style.display).toBe('none');
   });
 
   it('📖アイコンで開いたモーダルのz-indexはgetNextZ()で実行時に動的算出される(固定値を書かない)', async () => {
