@@ -1388,6 +1388,10 @@ ALTER TABLE aichat_keyword_embeddings ADD COLUMN plamo_dim INTEGER;
 ALTER TABLE aichat_keyword_embeddings ADD COLUMN plamo_updated_at TEXT;`,
   '0091': `ALTER TABLE aichat_keyword_embeddings ADD COLUMN plamo_model TEXT;`,
   '0092': `ALTER TABLE aichat_keyword_embeddings ADD COLUMN source TEXT;`,
+  '0093': `ALTER TABLE aichat_keyword_embeddings ADD COLUMN gemma_vector BLOB;
+ALTER TABLE aichat_keyword_embeddings ADD COLUMN gemma_dim INTEGER;
+ALTER TABLE aichat_keyword_embeddings ADD COLUMN gemma_model TEXT;
+ALTER TABLE aichat_keyword_embeddings ADD COLUMN gemma_updated_at TEXT;`,
 };
 
 async function ensureGroupTable(db: D1Database): Promise<void> {
@@ -5721,7 +5725,21 @@ app.patch('/api/aichat/keyword-categories/:id', authMiddleware, async (c) => {
 
 export const BGE_M3_MODEL = '@cf/baai/bge-m3';
 export const PLAMO_EMBEDDING_MODEL = '@cf/pfnet/plamo-embedding-1b';
-export const KEYWORD_EMBEDDING_MODELS = [BGE_M3_MODEL, PLAMO_EMBEDDING_MODEL];
+export const GEMMA_EMBEDDING_MODEL = '@cf/google/embeddinggemma-300m';
+export const KEYWORD_EMBEDDING_MODELS = [BGE_M3_MODEL, PLAMO_EMBEDDING_MODEL, GEMMA_EMBEDDING_MODEL];
+
+/**
+ * bge-m3以外のモデル(plamo-embedding-1b, embeddinggemma-300m)は、それぞれ
+ * 専用の追加カラム(<prefix>_vector/<prefix>_dim/<prefix>_model/<prefix>_updated_at)
+ * に書き込む。プレフィックスはresolveKeywordEmbeddingModelで検証済みの
+ * モデル名だけをキーにした固定マップから引くため、SQL文字列への直接埋め込みでも
+ * インジェクションの余地はない(未知のモデル名はこのマップに存在せずbge-m3経路に
+ * フォールバックされる)。
+ */
+const SECONDARY_MODEL_COLUMN_PREFIX: Record<string, string> = {
+  [PLAMO_EMBEDDING_MODEL]: 'plamo',
+  [GEMMA_EMBEDDING_MODEL]: 'gemma',
+};
 
 /**
  * bge-m3問い合わせデータモーダルのドロップダウンで選んだモデル名を解決する。
@@ -6490,25 +6508,27 @@ export async function getOrComputeKeywordEmbeddingForModel(
   if (resolvedModel === BGE_M3_MODEL) {
     return getOrComputeKeywordEmbedding(db, ai, userId, keyword, 'zt_manual');
   }
+  const prefix = SECONDARY_MODEL_COLUMN_PREFIX[resolvedModel];
   const row = await db.prepare(
-    `SELECT plamo_vector, plamo_dim, plamo_model FROM aichat_keyword_embeddings WHERE user_id = ? AND keyword = ?`
-  ).bind(userId, keyword).first<{ plamo_vector: ArrayBuffer | null; plamo_dim: number | null; plamo_model: string | null }>();
+    `SELECT ${prefix}_vector AS sec_vector, ${prefix}_dim AS sec_dim, ${prefix}_model AS sec_model
+     FROM aichat_keyword_embeddings WHERE user_id = ? AND keyword = ?`
+  ).bind(userId, keyword).first<{ sec_vector: ArrayBuffer | null; sec_dim: number | null; sec_model: string | null }>();
   // 主系列(bge-m3)の行を確保し、sourceを'zt_manual'に揃える（既にあれば
   // getOrComputeKeywordEmbedding内でAIを呼ばずsource列だけ更新される）。
-  // plamoキャッシュ命中で早期returnする場合もこの呼び出しは必ず通す必要がある。
-  // そうしないと「plamoは既にキャッシュ済みだが他機能の自動ベクタ化由来の
-  // sourceのまま」というケースで、ZTモーダルから明示登録した事実が
-  // source列に反映されない不具合になる。
+  // 追加カラム側がキャッシュ命中で早期returnする場合もこの呼び出しは必ず
+  // 通す必要がある。そうしないと「追加カラム側は既にキャッシュ済みだが
+  // 他機能の自動ベクタ化由来のsourceのまま」というケースで、ZTモーダルから
+  // 明示登録した事実がsource列に反映されない不具合になる。
   await getOrComputeKeywordEmbedding(db, ai, userId, keyword, 'zt_manual');
-  if (row && row.plamo_vector && row.plamo_dim && row.plamo_model === resolvedModel) {
-    return blobToFloats(row.plamo_vector);
+  if (row && row.sec_vector && row.sec_dim && row.sec_model === resolvedModel) {
+    return blobToFloats(row.sec_vector);
   }
   const vector = await embedTextWithModel(ai, resolvedModel, keyword);
   if (vector.length === 0) return [];
   const now = new Date().toISOString();
   await db.prepare(
     `UPDATE aichat_keyword_embeddings
-     SET plamo_vector = ?, plamo_dim = ?, plamo_model = ?, plamo_updated_at = ?
+     SET ${prefix}_vector = ?, ${prefix}_dim = ?, ${prefix}_model = ?, ${prefix}_updated_at = ?
      WHERE user_id = ? AND keyword = ?`
   ).bind(floatsToBlob(vector), vector.length, resolvedModel, now, userId, keyword).run();
   return vector;
@@ -6596,6 +6616,9 @@ export interface KeywordEmbeddingOverviewItem {
   plamoModel: string | null;
   plamoDim: number | null;
   plamoUpdatedAt: string | null;
+  gemmaModel: string | null;
+  gemmaDim: number | null;
+  gemmaUpdatedAt: string | null;
 }
 
 /**
@@ -6620,11 +6643,13 @@ export async function listKeywordEmbeddingsOverview(
   userId: string,
 ): Promise<KeywordEmbeddingOverviewItem[]> {
   const rows = await db.prepare(
-    `SELECT keyword, model, dim, updated_at, source, plamo_dim, plamo_model, plamo_updated_at
+    `SELECT keyword, model, dim, updated_at, source, plamo_dim, plamo_model, plamo_updated_at,
+            gemma_dim, gemma_model, gemma_updated_at
      FROM aichat_keyword_embeddings WHERE user_id = ? ORDER BY updated_at DESC LIMIT 500`
   ).bind(userId).all<{
     keyword: string; model: string | null; dim: number; updated_at: string; source: string | null;
     plamo_dim: number | null; plamo_model: string | null; plamo_updated_at: string | null;
+    gemma_dim: number | null; gemma_model: string | null; gemma_updated_at: string | null;
   }>();
   return (rows.results ?? []).map((r) => ({
     keyword: r.keyword,
@@ -6635,6 +6660,9 @@ export async function listKeywordEmbeddingsOverview(
     plamoModel: r.plamo_dim != null ? (r.plamo_model || PLAMO_EMBEDDING_MODEL) : null,
     plamoDim: r.plamo_dim,
     plamoUpdatedAt: r.plamo_updated_at,
+    gemmaModel: r.gemma_dim != null ? (r.gemma_model || GEMMA_EMBEDDING_MODEL) : null,
+    gemmaDim: r.gemma_dim,
+    gemmaUpdatedAt: r.gemma_updated_at,
   }));
 }
 

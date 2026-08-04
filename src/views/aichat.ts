@@ -1114,7 +1114,7 @@ export function getAiChatPage(user: {
   <div class="search-log-overlay" id="ztBgeModal" aria-hidden="true">
     <div class="search-log-modal" role="dialog" aria-modal="true" style="max-width:600px;">
       <div class="search-log-head">
-        <span class="search-log-title">🗒️ <select id="ztBgeModelSelect" class="zt-bge-model-select"><option value="@cf/baai/bge-m3">bge-m3</option><option value="@cf/pfnet/plamo-embedding-1b">plamo-embedding-1b</option></select> 問い合わせデータ</span>
+        <span class="search-log-title">🗒️ <select id="ztBgeModelSelect" class="zt-bge-model-select"><option value="@cf/baai/bge-m3">bge-m3</option><option value="@cf/pfnet/plamo-embedding-1b">plamo-embedding-1b</option><option value="@cf/google/embeddinggemma-300m">embeddinggemma-300m</option></select> 問い合わせデータ</span>
         <div style="display:flex;align-items:center;gap:8px;">
           <button class="sync-repo-colors-btn" id="ztBgeCopyBtn" type="button" style="font-size:11px;padding:4px 10px;">📋 コピー</button>
           <button class="search-log-close" id="ztBgeClose" aria-label="閉じる">✕</button>
@@ -5307,6 +5307,12 @@ export function getAiChatPage(user: {
           html += '<tr><td style="padding:4px 8px;border-bottom:1px solid var(--border-color);"></td>'
             + '<td style="padding:4px 8px;border-bottom:1px solid var(--border-color);color:var(--text-muted);">' + escHtml(it.plamoModel) + '</td>'
             + '<td style="text-align:right;padding:4px 8px;border-bottom:1px solid var(--border-color);color:var(--text-muted);">' + it.plamoDim + '</td>'
+            + '<td style="padding:4px 8px;border-bottom:1px solid var(--border-color);"></td></tr>';
+        }
+        if (it.gemmaModel) {
+          html += '<tr><td style="padding:4px 8px;border-bottom:1px solid var(--border-color);"></td>'
+            + '<td style="padding:4px 8px;border-bottom:1px solid var(--border-color);color:var(--text-muted);">' + escHtml(it.gemmaModel) + '</td>'
+            + '<td style="text-align:right;padding:4px 8px;border-bottom:1px solid var(--border-color);color:var(--text-muted);">' + it.gemmaDim + '</td>'
             + '<td style="padding:4px 8px;border-bottom:1px solid var(--border-color);"></td></tr>';
         }
       });

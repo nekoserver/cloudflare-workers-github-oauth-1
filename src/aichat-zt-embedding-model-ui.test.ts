@@ -50,13 +50,14 @@ describe('ZTモーダルのHTML構造: 📖アイコン・一覧モーダル・�
     expect(html.slice(idx, idx + 500)).toContain('ztOverviewModal');
   });
 
-  it('ztBgeModelSelectがbge-m3とplamo-embedding-1bの両方をoptionに持つ', () => {
+  it('ztBgeModelSelectがbge-m3・plamo-embedding-1b・embeddinggemma-300mをoptionに持つ', () => {
     const html = buildPage();
     const idx = html.indexOf('id="ztBgeModelSelect"');
     expect(idx).toBeGreaterThan(-1);
     const selectHtml = html.slice(idx, html.indexOf('</select>', idx));
     expect(selectHtml).toContain('value="@cf/baai/bge-m3"');
     expect(selectHtml).toContain('value="@cf/pfnet/plamo-embedding-1b"');
+    expect(selectHtml).toContain('value="@cf/google/embeddinggemma-300m"');
   });
 });
 
@@ -71,6 +72,7 @@ async function setupZtUi() {
         items: [
           { keyword: 'Hono', model: '@cf/baai/bge-m3', dim: 1024, updatedAt: '2026-01-01', source: 'zt_manual', plamoModel: null, plamoDim: null },
           { keyword: '空港', model: '', dim: 1024, updatedAt: '2026-01-01', source: 'answer_graph_color', plamoModel: '@cf/pfnet/plamo-embedding-1b', plamoDim: 2048 },
+          { keyword: '駅', model: '@cf/baai/bge-m3', dim: 1024, updatedAt: '2026-01-01', source: 'zt_manual', gemmaModel: '@cf/google/embeddinggemma-300m', gemmaDim: 768 },
         ],
       };
       return Promise.resolve({
@@ -120,6 +122,8 @@ describe('ZTモーダルのDOM実動作(jsdom)', () => {
     expect(ztOverviewBody.textContent).toContain('bge-m3');
     // plamoの情報も併記される
     expect(ztOverviewBody.textContent).toContain('@cf/pfnet/plamo-embedding-1b');
+    // gemmaの情報も併記される
+    expect(ztOverviewBody.textContent).toContain('@cf/google/embeddinggemma-300m');
     // sourceに応じたラベルが表示され、自動生成データも隠さず一覧に出る
     expect(ztOverviewBody.textContent).toContain('ZTモーダル手動登録');
     expect(ztOverviewBody.textContent).toContain('自動(answer-graph色分け)');
