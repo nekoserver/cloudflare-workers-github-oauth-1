@@ -230,11 +230,16 @@ describe('/answer-graph ページ: サイドパネル・ツールチップ共通
     expect(block).toContain('node.id.slice(2)');
   });
 
-  it('canvas click ハンドラは buildNodeLabelLine を使い回している(サイドパネルとツールチップで重複実装しない)', () => {
+  it('canvas click ハンドラは selectGraphNode 経由で buildNodeLabelLine を使い回している(サイドパネルとツールチップで重複実装しない)', () => {
     const html = buildPage();
-    const idx = html.indexOf("canvas.addEventListener('click'");
-    const block = html.slice(idx, idx + 1200);
-    expect(block).toContain('buildNodeLabelLine(hit)');
+    const idx = html.indexOf('function selectGraphNode');
+    expect(idx).toBeGreaterThan(-1);
+    const selectBlock = html.slice(idx, idx + 700);
+    expect(selectBlock).toContain('buildNodeLabelLine(node)');
+
+    const clickIdx = html.indexOf("canvas.addEventListener('click'");
+    const clickBlock = html.slice(clickIdx, clickIdx + 1200);
+    expect(clickBlock).toContain('selectGraphNode(hit)');
   });
 
   it('document への単一のクリック委譲ハンドラが .question-line を検知して openAnswerModal を呼ぶ(サイドパネル/ツールチップ両対応)', () => {
