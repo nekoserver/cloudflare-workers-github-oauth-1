@@ -18,6 +18,10 @@ import { extractContainedKeywords, buildAnswerPropagationGraph } from './index';
 //   (3) 一度処理したキーワードが別の階層で再度キーワードノードとして重複追加される
 //   (4) ループが収束条件を持たず無限に回り続ける(maxDepth/maxNodesで打ち切れるか)
 //   (5) 他ユーザーの回答やキーワードが混入する
+//   (6) 質問文にしか含まれず回答本文には含まれないキーワードまでノード化されてしまう
+//       (このJSDocが謳う「起点の回答に含まれるキーワード」という設計と矛盾する。
+//       /answer-graph の一人称モードで最前列に表示される「その質問に対する回答の
+//       中に含まれるキーワード群」が、実際には質問文由来のキーワードで汚染される)
 
 describe('extractContainedKeywords: テキストに含まれる登録済みキーワードの抽出', () => {
   it('テキストに含まれるキーワードだけを返す(大文字小文字を区別しない)', () => {
@@ -119,6 +123,22 @@ describe('buildAnswerPropagationGraph: 回答伝播グラフの構築', () => {
     expect(s2Node.depth).toBe(2);
     expect(result!.edges).toContainEqual({ from: 'a:s1', to: 'k:駅' });
     expect(result!.edges).toContainEqual({ from: 'k:駅', to: 'a:s2' });
+  });
+
+  it('質問文にしか含まれないキーワードは抽出対象にならない(回答本文に含まれるキーワードのみを手がかりにする)', async () => {
+    const db = setupDb();
+    insertKeyword(db, 'u1', '新幹線');
+    insertKeyword(db, 'u1', '商業施設');
+    insertShare(db, 's1', 'u1', '新幹線について教えて', '駅周辺の商業施設について説明します');
+    insertShare(db, 's2', 'u1', '別の新幹線の話', '新幹線は速いです');
+
+    const result = await buildAnswerPropagationGraph(wrapD1(db) as never, 'u1', 's1');
+
+    const ids = result!.nodes.map((n) => n.id);
+    // 「新幹線」はs1の質問文にしか現れず回答本文には無いため対象外
+    expect(ids).not.toContain('k:新幹線');
+    // 「商業施設」はs1の回答本文に含まれるため対象になる
+    expect(ids).toContain('k:商業施設');
   });
 
   it('既に訪問済みの回答は再度ノードとして追加されない', async () => {
