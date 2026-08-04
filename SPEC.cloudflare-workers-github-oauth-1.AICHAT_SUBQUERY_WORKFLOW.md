@@ -177,6 +177,32 @@ CREATE TABLE IF NOT EXISTS aichat_share_subquery_links (
 | 12 | [`05e18ef`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/05e18ef) | 露出ログモーダルの左端カラムをキーワード数に変更・最終検索カラムをトグル化 | #450（open） |
 | 13 | [`346ef16`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/346ef16) | aichat_subqueries / aichat_share_subquery_links テーブルとUIを追加 | 未PR |
 
+### 2026-06-03 以降の追記（`SPEC.cloudflare-workers-github-oauth-1.20260804.AICHAT_OVERVIEW.md` 7章より詳細版）
+
+| # | コミットハッシュ | 件名 | 日付 |
+|---|---|---|---|
+| 14 | [`8567c0f`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/8567c0f) | 応答ごとの「＋ 追加質問を登録する」ボタンをインライン追加 | 2026-06-03 |
+| 15 | [`c7cad56`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/c7cad56) | サイドバーのサブクエリ保有質問を薄青色でハイライト | 2026-06-03 |
+| 16 | [`6aac9fc`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/6aac9fc) | サブクエリを持つ質問一覧ビュー（📎 リンク質問ボタン）を追加 | 2026-06-03 |
+| 17 | [`44c93f0`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/44c93f0) | 露出ログモーダルでサブクエリ持ち質問行を薄水色にしサブクエリ詳細モーダルを表示 | 2026-06-03 |
+| 18 | [`30d2e3d`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/30d2e3d) | リンク質問モーダルの質問タップで過去ログモーダルを開く | 2026-06-03 |
+| 19 | [`180b5c6`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/180b5c6) | サブクエリ一覧モーダルの表示を改善（#カラム削除・追加質問総数・多い順ソート） | 2026-06-04 |
+| 20 | [`2fdbcea`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/2fdbcea) | サブクエリ質問一覧モーダル：質問クリックで過去ログを最上位モーダルで表示 | 2026-06-04 |
+| 21 | [`46f1928`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/46f1928) | サブクエリ一覧：キーワードバッジクリックで質問一覧モーダルを表示 | 2026-06-04 |
+| 22 | [`f1edc8a`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/f1edc8a) | サブクエリ一覧モーダル: 追加質問数カラム左端化・キーワードバッジ表示 | 2026-06-04 |
+| 23 | [`6c0a972`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/6c0a972) | サブクエリ質問一覧のカラー表示をリンク行単位に変更し異モデル比較モーダルを追加 | 2026-06-05 |
+| 24 | [`246d85f`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/246d85f) | addSubqueryModal が正しいレイヤーに表示されない問題を修正 | 2026-06-06 |
+| 25 | [`7f04a78`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/7f04a78) | サブクエリ一覧のサブクエリセルをタップして選択→質問一覧モーダルを表示する機能を追加 | 2026-06-06 |
+| 26 | [`fb7abeb`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/fb7abeb) | 追加質問リンク: 各行の先頭にモデル色丸を表示 | 2026-06-07 |
+| 27 | [`ab73fd7`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/ab73fd7) | 分類済みキーワードバッジを中抜き紫スタイルで表示 | 2026-06-07 |
+| 28 | [`523e2c8`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/523e2c8) | バッジのサイズ・形をサブクエリ一覧バッジに統一 | 2026-06-08 |
+| 29 | [`8eb6589`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/8eb6589) | 「＋新規追加」ボタンをヘッダに移動 | 2026-06-09 |
+| 30 | [`40624d0`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/40624d0) | ヘッダにソートトグルボタンを追加 | 2026-06-09 |
+| 31 | [`7ec0518`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/7ec0518) | 分類カテゴリ・大分類フィルタをthヘッダ上に移植 | 2026-06-09 |
+| 32 | [`22e85f6`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/22e85f6) | 分類カテゴリ選択時のキーワードハイライトを修正 | 2026-06-09 |
+| 33 | [`a278869`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/a278869) | 配色カスタマイズのパレット色をキーワードハイライトに適用 | 2026-06-09 |
+| 34 | [`94cfa7f`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/94cfa7f) | 複数カテゴリ所属キーワードが2つ目以降のカテゴリ選択でヒットしない問題を修正 | 2026-06-10 |
+
 ---
 
 ## 7. index.ts 登録必須項目
