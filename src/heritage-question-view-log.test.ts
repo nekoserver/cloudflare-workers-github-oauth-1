@@ -49,9 +49,12 @@ describe('heritage_question_view_log 書き込み — フロントエンド', ()
     expect(block).toContain('country_name');
   });
 
-  it('accTr の前の行から data-cc を取得している', () => {
-    expect(view).toContain('data-cc');
-    expect(view).toContain('previousElementSibling');
+  it('都市の前の行(data-cc)ではなく、各世界遺産自身の国名(h.country_name)を使っている', () => {
+    // 都市の近隣世界遺産には、都市の所在国とは異なる国の遺産も距離だけで
+    // 含まれ得るため、都市のdata-cc(accTr.previousElementSibling経由)ではなく
+    // 世界遺産自身の国(APIが返すh.country_name、行頭国旗が表す国)を使う。
+    expect(view).toContain('h.country_name');
+    expect(view).not.toContain('previousElementSibling');
   });
 });
 

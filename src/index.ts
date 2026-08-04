@@ -92,7 +92,7 @@ import { validateImageDataUrl, attachImageToLastUserMessage, resolveAichatModels
 import { extractFunctionSource } from './utils/extractFunctionSource';
 import { listD1Databases, getD1Tables } from './utils/cloudflareApi';
 import { validateRevokeRequest } from './utils/revoke';
-import { HERITAGE_FLAG_MAP, HERITAGE_LIST } from './data/heritageList';
+import { HERITAGE_FLAG_MAP, HERITAGE_COUNTRY_MAP, HERITAGE_LIST } from './data/heritageList';
 import { RAIL_LINES } from './data/railLines';
 import { AIRPORT_LIST } from './data/airports';
 import { findNearbyStationsAndHeritage, dedupeNearbyPoints, findNearbyHeritageForAirport, diffAirportNearbyHeritage, findNearbyAirports, diffAirportNearbyAirport } from './utils/railLineStations';
@@ -7955,6 +7955,7 @@ app.post('/api/city-all-heritages', authMiddleware, async (c) => {
   const heritages = (rows.results ?? []).map((r) => ({
     ...r,
     country_flag: HERITAGE_FLAG_MAP[r.heritage_name] ?? '',
+    country_name: HERITAGE_COUNTRY_MAP[r.heritage_name] ?? '',
   }));
   return c.json({ heritages });
 });

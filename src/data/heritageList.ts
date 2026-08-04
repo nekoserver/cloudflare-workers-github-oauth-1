@@ -913,3 +913,11 @@ export const HERITAGE_LIST: HeritageItem[] = [
 export const HERITAGE_FLAG_MAP: Record<string, string> = Object.fromEntries(
   HERITAGE_LIST.map((h) => [h.n, h.f])
 );
+
+// 世界遺産名 → 国名(行頭の国旗が表す国)。heritage-accessページの「見どころ」
+// AI質問補完で、都市が属する国ではなく世界遺産自体が属する国を使うために使う
+// (1つの都市の近隣世界遺産には、都市の所在国とは異なる国の遺産も距離的に
+// 含まれ得るため)。
+export const HERITAGE_COUNTRY_MAP: Record<string, string> = Object.fromEntries(
+  HERITAGE_LIST.map((h) => [h.n, h.c])
+);
