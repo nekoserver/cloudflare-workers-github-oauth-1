@@ -1383,6 +1383,9 @@ CREATE INDEX IF NOT EXISTS idx_aichat_keyword_category_suggestions_category ON a
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_aichat_answer_category_scores_unique ON aichat_answer_category_scores(user_id, share_id, category_id);
 CREATE INDEX IF NOT EXISTS idx_aichat_answer_category_scores_share ON aichat_answer_category_scores(share_id);`,
+  '0090': `ALTER TABLE aichat_keyword_embeddings ADD COLUMN plamo_vector BLOB;
+ALTER TABLE aichat_keyword_embeddings ADD COLUMN plamo_dim INTEGER;
+ALTER TABLE aichat_keyword_embeddings ADD COLUMN plamo_updated_at TEXT;`,
 };
 
 async function ensureGroupTable(db: D1Database): Promise<void> {
@@ -5715,6 +5718,18 @@ app.patch('/api/aichat/keyword-categories/:id', authMiddleware, async (c) => {
 });
 
 export const BGE_M3_MODEL = '@cf/baai/bge-m3';
+export const PLAMO_EMBEDDING_MODEL = '@cf/pfnet/plamo-embedding-1b';
+export const KEYWORD_EMBEDDING_MODELS = [BGE_M3_MODEL, PLAMO_EMBEDDING_MODEL];
+
+/**
+ * bge-m3問い合わせデータモーダルのドロップダウンで選んだモデル名を解決する。
+ * 未対応のモデル名・null/undefinedはbge-m3にフォールバックする
+ * （aichat_keyword_embeddings.model がnullの既存行の表示補完とも揃える）。
+ */
+export function resolveKeywordEmbeddingModel(model: string | null | undefined): string {
+  if (model && (KEYWORD_EMBEDDING_MODELS as string[]).includes(model)) return model;
+  return BGE_M3_MODEL;
+}
 
 export function floatsToBlob(vec: number[]): ArrayBuffer {
   return new Float32Array(vec).buffer;
@@ -6385,9 +6400,9 @@ app.post('/api/aichat/keyword-category-map', authMiddleware, async (c) => {
   return jsonUtf8({ ok: true, inserted, deleted });
 });
 
-async function embedTextWithBgeM3(ai: Ai, text: string): Promise<number[]> {
+async function embedTextWithModel(ai: Ai, model: string, text: string): Promise<number[]> {
   const result = await ai.run(
-    BGE_M3_MODEL as Parameters<typeof ai.run>[0],
+    model as Parameters<typeof ai.run>[0],
     { text: [text] } as Parameters<typeof ai.run>[1],
   );
   const resultObj = (typeof result === 'object' && result !== null) ? result as Record<string, unknown> : {};
@@ -6413,7 +6428,7 @@ export async function getOrComputeKeywordEmbedding(
   if (row && row.model === BGE_M3_MODEL) {
     return blobToFloats(row.vector);
   }
-  const vector = await embedTextWithBgeM3(ai, keyword);
+  const vector = await embedTextWithModel(ai, BGE_M3_MODEL, keyword);
   if (vector.length === 0) return [];
   const now = new Date().toISOString();
   await db.prepare(
@@ -6422,6 +6437,46 @@ export async function getOrComputeKeywordEmbedding(
      ON CONFLICT(user_id, keyword) DO UPDATE SET
        model = excluded.model, dim = excluded.dim, vector = excluded.vector, updated_at = excluded.updated_at`
   ).bind(userId, keyword, BGE_M3_MODEL, vector.length, floatsToBlob(vector), now, now).run();
+  return vector;
+}
+
+/**
+ * bge-m3問い合わせデータモーダルのドロップダウンで選んだモデルに応じて、
+ * 実際に問い合わせるAIモデルを動的に切り替える。
+ *   - bge-m3: 従来通り model/dim/vector 列（主系列）を使う
+ *   - plamo-embedding-1b: plamo_vector/plamo_dim/plamo_updated_at 列
+ *     （追加カラム）に書き足す。主系列(model/dim/vector)はNOT NULL制約が
+ *     あるため、行が未作成の場合は先にbge-m3側を確保してから追加カラムを
+ *     埋める（bge-m3側のデータを上書き・破壊しない）。
+ */
+export async function getOrComputeKeywordEmbeddingForModel(
+  db: D1Database,
+  ai: Ai,
+  userId: string,
+  keyword: string,
+  model: string | null | undefined,
+): Promise<number[]> {
+  const resolvedModel = resolveKeywordEmbeddingModel(model);
+  if (resolvedModel === BGE_M3_MODEL) {
+    return getOrComputeKeywordEmbedding(db, ai, userId, keyword);
+  }
+  const row = await db.prepare(
+    `SELECT plamo_vector, plamo_dim FROM aichat_keyword_embeddings WHERE user_id = ? AND keyword = ?`
+  ).bind(userId, keyword).first<{ plamo_vector: ArrayBuffer | null; plamo_dim: number | null }>();
+  if (row && row.plamo_vector && row.plamo_dim) {
+    return blobToFloats(row.plamo_vector);
+  }
+  // 主系列(bge-m3)の行を確保する（NOT NULL制約を満たすため）。既にあれば
+  // getOrComputeKeywordEmbedding内でAIを呼ばずキャッシュを返すだけになる。
+  await getOrComputeKeywordEmbedding(db, ai, userId, keyword);
+  const vector = await embedTextWithModel(ai, resolvedModel, keyword);
+  if (vector.length === 0) return [];
+  const now = new Date().toISOString();
+  await db.prepare(
+    `UPDATE aichat_keyword_embeddings
+     SET plamo_vector = ?, plamo_dim = ?, plamo_updated_at = ?
+     WHERE user_id = ? AND keyword = ?`
+  ).bind(floatsToBlob(vector), vector.length, now, userId, keyword).run();
   return vector;
 }
 
@@ -6434,23 +6489,26 @@ export interface RegisterEmbeddingResult {
 /**
  * bge-m3問い合わせデータモーダルの「登録する」ボタンから呼ばれる。
  * 渡された text 配列を重複排除・空文字除去したうえで、キーワードごとに
- * getOrComputeKeywordEmbedding を呼ぶ（キャッシュ済みならAIを呼ばない）。
- * 1件の失敗が他のキーワードの登録を止めないよう、失敗はresultsに記録して
- * 処理を継続する（握りつぶさず戻り値で確認可能にする）。
+ * getOrComputeKeywordEmbeddingForModel を呼ぶ（キャッシュ済みならAIを呼ばない）。
+ * model省略時はbge-m3（従来通り）。1件の失敗が他のキーワードの登録を
+ * 止めないよう、失敗はresultsに記録して処理を継続する
+ * （握りつぶさず戻り値で確認可能にする）。
  */
 export async function registerKeywordEmbeddings(
   db: D1Database,
   ai: Ai,
   userId: string,
   texts: string[],
+  model?: string | null,
 ): Promise<{ registered: number; failed: number; results: RegisterEmbeddingResult[] }> {
+  const resolvedModel = resolveKeywordEmbeddingModel(model);
   const seen = new Set<string>();
   const results: RegisterEmbeddingResult[] = [];
   for (const raw of texts) {
     const text = (typeof raw === 'string' ? raw : '').trim().slice(0, 200);
     if (!text || seen.has(text)) continue;
     seen.add(text);
-    const vector = await getOrComputeKeywordEmbedding(db, ai, userId, text);
+    const vector = await getOrComputeKeywordEmbeddingForModel(db, ai, userId, text, resolvedModel);
     results.push({ keyword: text, ok: vector.length > 0, dim: vector.length });
   }
   const registered = results.filter((r) => r.ok).length;
@@ -6493,6 +6551,44 @@ export async function lookupKeywordEmbedding(
     preview: fullVector.slice(0, 12),
     analysis: analyzeVector(fullVector),
   };
+}
+
+export interface KeywordEmbeddingOverviewItem {
+  keyword: string;
+  model: string;
+  dim: number;
+  updatedAt: string;
+  plamoModel: string | null;
+  plamoDim: number | null;
+  plamoUpdatedAt: string | null;
+}
+
+/**
+ * ZTモーダルヘッダの📖アイコンから開く一覧。既存のベクタ化済みキーワードと、
+ * それぞれのベクタ化に使った埋め込みモデルを列挙する。modelがnull（未設定の
+ * 既存行）はbge-m3で補完する。plamo_dimが設定されている行のみplamoModelに
+ * PLAMO_EMBEDDING_MODELを入れる（bge-m3しか登録していない行には出さない）。
+ */
+export async function listKeywordEmbeddingsOverview(
+  db: D1Database,
+  userId: string,
+): Promise<KeywordEmbeddingOverviewItem[]> {
+  const rows = await db.prepare(
+    `SELECT keyword, model, dim, updated_at, plamo_dim, plamo_updated_at
+     FROM aichat_keyword_embeddings WHERE user_id = ? ORDER BY updated_at DESC LIMIT 500`
+  ).bind(userId).all<{
+    keyword: string; model: string | null; dim: number; updated_at: string;
+    plamo_dim: number | null; plamo_updated_at: string | null;
+  }>();
+  return (rows.results ?? []).map((r) => ({
+    keyword: r.keyword,
+    model: r.model || BGE_M3_MODEL,
+    dim: r.dim,
+    updatedAt: r.updated_at,
+    plamoModel: r.plamo_dim != null ? PLAMO_EMBEDDING_MODEL : null,
+    plamoDim: r.plamo_dim,
+    plamoUpdatedAt: r.plamo_updated_at,
+  }));
 }
 
 /**
@@ -6545,18 +6641,21 @@ app.post('/api/aichat/keyword-category-suggest', authMiddleware, async (c) => {
 });
 
 /**
- * bge-m3問い合わせデータモーダルの「登録する」ボタン: 渡された text を
- * 実際にbge-m3へ問い合わせ、aichat_keyword_embeddings へ保存する。
+ * 問い合わせデータモーダルの「登録する」ボタン: 渡された text を
+ * モーダルのドロップダウンで選ばれたモデル(bge-m3 / plamo-embedding-1b、
+ * 省略・未対応値はbge-m3)へ実際に問い合わせ、aichat_keyword_embeddings
+ * へ保存する。
  */
 app.post('/api/aichat/keyword-embeddings/register', authMiddleware, async (c) => {
   const user = c.get('user');
   if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
   if (!c.env.AI) return jsonUtf8({ error: 'AIバインディングが未設定です' }, 503);
-  const body = await c.req.json<{ texts?: string[] }>();
+  const body = await c.req.json<{ texts?: string[]; model?: string }>();
   const texts = Array.isArray(body.texts) ? body.texts.filter((t) => typeof t === 'string') : [];
   if (texts.length === 0) return jsonUtf8({ error: 'texts は必須です' }, 400);
-  const result = await registerKeywordEmbeddings(c.env.DB, c.env.AI, user.sub, texts.slice(0, 50));
-  return jsonUtf8({ ok: true, registered: result.registered, failed: result.failed, results: result.results });
+  const model = resolveKeywordEmbeddingModel(body.model);
+  const result = await registerKeywordEmbeddings(c.env.DB, c.env.AI, user.sub, texts.slice(0, 50), model);
+  return jsonUtf8({ ok: true, model, registered: result.registered, failed: result.failed, results: result.results });
 });
 
 /**
@@ -6570,6 +6669,17 @@ app.get('/api/aichat/keyword-embeddings/lookup', authMiddleware, async (c) => {
   if (!keyword) return jsonUtf8({ cached: false });
   const info = await lookupKeywordEmbedding(c.env.DB, user.sub, keyword);
   return jsonUtf8({ cached: !!info, embedding: info });
+});
+
+/**
+ * ZTモーダルヘッダの📖アイコン: 既存のベクタ化済みキーワードと、
+ * それぞれのベクタ化に使った埋め込みモデルを列挙する。
+ */
+app.get('/api/aichat/keyword-embeddings/list', authMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!c.env.DB) return jsonUtf8({ items: [] });
+  const items = await listKeywordEmbeddingsOverview(c.env.DB, user.sub);
+  return jsonUtf8({ items });
 });
 
 /**

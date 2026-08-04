@@ -102,6 +102,12 @@ export function getAiChatPage(user: {
     }
     .navbar-model-select:hover { color: var(--text-primary); }
     .navbar-model-select option { background: var(--card-bg); color: var(--text-primary); }
+    .zt-bge-model-select {
+      font-size: 13px; font-weight: 700; color: var(--text-primary);
+      background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 4px;
+      padding: 2px 6px; cursor: pointer; vertical-align: middle;
+    }
+    .zt-bge-model-select option { background: var(--card-bg); color: var(--text-primary); }
     .navbar-lang-select {
       font-size: 11px; font-weight: 400; color: var(--text-muted);
       background: transparent; border: 1px solid var(--border-color); border-radius: 5px;
@@ -1081,21 +1087,34 @@ export function getAiChatPage(user: {
     <div class="search-log-modal" role="dialog" aria-modal="true" style="max-width:640px;">
       <div class="search-log-head">
         <span class="search-log-title">🔗 Zanzibar分類ツリー</span>
-        <button class="search-log-close" id="ztTreeClose" aria-label="閉じる">✕</button>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <button class="sync-repo-colors-btn" id="ztOverviewBtn" type="button" style="font-size:11px;padding:4px 10px;" title="ベクタ化済みデータ一覧を表示">📖</button>
+          <button class="search-log-close" id="ztTreeClose" aria-label="閉じる">✕</button>
+        </div>
       </div>
       <div class="zt-tree-search-wrap" style="display:flex;gap:6px;align-items:center;">
         <input class="zt-tree-search-input" id="ztTreeSearchInput" type="search" placeholder="キーワード・カテゴリで検索..." autocomplete="off" style="flex:1;">
         <button class="zt-bge-btn" id="ztCacheBtn" title="埋め込みキャッシュを表示" style="display:none;">📖</button>
-        <button class="zt-bge-btn" id="ztBgeBtn" title="bge-m3問い合わせデータを表示" style="display:none;">🗒️</button>
+        <button class="zt-bge-btn" id="ztBgeBtn" title="問い合わせデータを表示" style="display:none;">🗒️</button>
       </div>
       <div class="zt-tree-body" id="ztTreeBody"><div class="search-log-loading">読み込み中...</div></div>
+    </div>
+  </div>
+
+  <div class="search-log-overlay" id="ztOverviewModal" aria-hidden="true">
+    <div class="search-log-modal" role="dialog" aria-modal="true" style="max-width:640px;">
+      <div class="search-log-head">
+        <span class="search-log-title">📖 ベクタ化済みデータ一覧</span>
+        <button class="search-log-close" id="ztOverviewClose" aria-label="閉じる">✕</button>
+      </div>
+      <div class="search-log-body" id="ztOverviewBody" style="font-size:12px;max-height:60vh;overflow-y:auto;"><div class="search-log-loading">読み込み中...</div></div>
     </div>
   </div>
 
   <div class="search-log-overlay" id="ztBgeModal" aria-hidden="true">
     <div class="search-log-modal" role="dialog" aria-modal="true" style="max-width:600px;">
       <div class="search-log-head">
-        <span class="search-log-title">🗒️ bge-m3 問い合わせデータ</span>
+        <span class="search-log-title">🗒️ <select id="ztBgeModelSelect" class="zt-bge-model-select"><option value="@cf/baai/bge-m3">bge-m3</option><option value="@cf/pfnet/plamo-embedding-1b">plamo-embedding-1b</option></select> 問い合わせデータ</span>
         <div style="display:flex;align-items:center;gap:8px;">
           <button class="sync-repo-colors-btn" id="ztBgeCopyBtn" type="button" style="font-size:11px;padding:4px 10px;">📋 コピー</button>
           <button class="search-log-close" id="ztBgeClose" aria-label="閉じる">✕</button>
@@ -3096,7 +3115,7 @@ export function getAiChatPage(user: {
         kwClassifyListModal: 820, sqKwQuestionsOverlay: 850, addSubqueryModal: 900, historyModalBackdrop: 750,
         tokenUsageModal: 820, dailyStatsModal: 820, modelDotDropdown: 700,
         kwColorPaletteModal: 900, kwCatGroupModal: 920, searchLogRecordModal: 880,
-        canvasSearchModal: 890, ztTreeModal: 895, ztBgeModal: 905, ztCacheModal: 910,
+        canvasSearchModal: 890, ztTreeModal: 895, ztBgeModal: 905, ztCacheModal: 910, ztOverviewModal: 915,
       };
       Object.keys(staticZDefaults).forEach(function(id) {
         var el = document.getElementById(id);
@@ -4792,9 +4811,14 @@ export function getAiChatPage(user: {
     var ztTreeData = null;
     var ztTreeOpenNodes = {};
     var ztMatchCollector = [];
+    var ztOverviewBtn = document.getElementById('ztOverviewBtn');
+    var ztOverviewModal = document.getElementById('ztOverviewModal');
+    var ztOverviewClose = document.getElementById('ztOverviewClose');
+    var ztOverviewBody = document.getElementById('ztOverviewBody');
     var ztBgeBtn = document.getElementById('ztBgeBtn');
     var ztBgeModal = document.getElementById('ztBgeModal');
     var ztBgeClose = document.getElementById('ztBgeClose');
+    var ztBgeModelSelect = document.getElementById('ztBgeModelSelect');
     var ztBgeBody = document.getElementById('ztBgeBody');
     var ztBgeCopyBtn = document.getElementById('ztBgeCopyBtn');
     var ztBgeRegisterBtn = document.getElementById('ztBgeRegisterBtn');
@@ -5002,17 +5026,26 @@ export function getAiChatPage(user: {
       ztBgeBtn.style.display = (qRaw && ztLastMatchedKeywords.length > 0) ? 'inline-block' : 'none';
     }
 
-    function openZtBgeModal() {
+    function computeZtBgeTexts() {
       var texts = ztLastQuery ? [ztLastQuery] : [];
       ztLastMatchedKeywords.forEach(function(kw) {
         if (texts.indexOf(kw) === -1) texts.push(kw);
       });
-      texts = texts.slice(0, 50);
+      return texts.slice(0, 50);
+    }
+
+    // モデルのドロップダウン選択に応じて、プレビューされる問い合わせ内容
+    // (実際に「登録する」で送られるモデル名)を動的に切り替える。
+    function renderZtBgePayload() {
       var payload = {
-        model: '@cf/baai/bge-m3',
-        input: { text: texts }
+        model: ztBgeModelSelect.value,
+        input: { text: computeZtBgeTexts() }
       };
       ztBgeBody.textContent = JSON.stringify(payload, null, 2);
+    }
+
+    function openZtBgeModal() {
+      renderZtBgePayload();
       ztBgeCopyBtn.textContent = '📋 コピー';
       ztBgeModal.style.zIndex = String(getNextZ());
       ztBgeModal.classList.add('open');
@@ -5027,6 +5060,11 @@ export function getAiChatPage(user: {
     ztBgeBtn.addEventListener('click', function(e) { e.stopPropagation(); openZtBgeModal(); });
     ztBgeClose.addEventListener('click', closeZtBgeModal);
     ztBgeModal.addEventListener('click', function(e) { if (e.target === ztBgeModal) closeZtBgeModal(); });
+    ztBgeModelSelect.addEventListener('click', function(e) { e.stopPropagation(); });
+    ztBgeModelSelect.addEventListener('change', function(e) {
+      e.stopPropagation();
+      renderZtBgePayload();
+    });
     ztBgeCopyBtn.addEventListener('click', function() {
       navigator.clipboard.writeText(ztBgeBody.textContent).then(function() {
         ztBgeCopyBtn.textContent = '✓ コピーしました';
@@ -5036,8 +5074,11 @@ export function getAiChatPage(user: {
 
     ztBgeRegisterBtn.addEventListener('click', function() {
       var texts;
+      var model;
       try {
-        texts = JSON.parse(ztBgeBody.textContent).input.text;
+        var parsed = JSON.parse(ztBgeBody.textContent);
+        texts = parsed.input.text;
+        model = parsed.model;
       } catch (e) {
         ztBgeRegisterStatus.textContent = '登録データの読み取りに失敗しました';
         return;
@@ -5049,7 +5090,7 @@ export function getAiChatPage(user: {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'same-origin',
-        body: JSON.stringify({ texts: texts }),
+        body: JSON.stringify({ texts: texts, model: model }),
       })
         .then(function(r) { return r.json(); })
         .then(function(d) {
@@ -5231,6 +5272,52 @@ export function getAiChatPage(user: {
       renderZtTree(ztTreeSearchInput.value);
       scheduleZtCacheLookup(ztTreeSearchInput.value);
     });
+
+    // ===== ZTモーダルヘッダの📖: ベクタ化済みデータ一覧 =====
+    function renderZtOverviewList(items) {
+      if (!items || items.length === 0) {
+        ztOverviewBody.innerHTML = '<div class="search-log-empty">ベクタ化済みのキーワードはありません</div>';
+        return;
+      }
+      var html = '<table style="width:100%;border-collapse:collapse;">'
+        + '<thead><tr>'
+        + '<th style="text-align:left;padding:4px 8px;border-bottom:1px solid var(--border-color);color:var(--text-secondary);">キーワード</th>'
+        + '<th style="text-align:left;padding:4px 8px;border-bottom:1px solid var(--border-color);color:var(--text-secondary);">埋め込みモデル</th>'
+        + '<th style="text-align:right;padding:4px 8px;border-bottom:1px solid var(--border-color);color:var(--text-secondary);">次元数</th>'
+        + '</tr></thead><tbody>';
+      items.forEach(function(it) {
+        html += '<tr><td style="padding:4px 8px;border-bottom:1px solid var(--border-color);color:var(--text-primary);">' + escHtml(it.keyword) + '</td>'
+          + '<td style="padding:4px 8px;border-bottom:1px solid var(--border-color);color:var(--text-primary);">' + escHtml(it.model || 'bge-m3') + '</td>'
+          + '<td style="text-align:right;padding:4px 8px;border-bottom:1px solid var(--border-color);color:var(--text-primary);">' + it.dim + '</td></tr>';
+        if (it.plamoModel) {
+          html += '<tr><td style="padding:4px 8px;border-bottom:1px solid var(--border-color);"></td>'
+            + '<td style="padding:4px 8px;border-bottom:1px solid var(--border-color);color:var(--text-muted);">' + escHtml(it.plamoModel) + '</td>'
+            + '<td style="text-align:right;padding:4px 8px;border-bottom:1px solid var(--border-color);color:var(--text-muted);">' + it.plamoDim + '</td></tr>';
+        }
+      });
+      html += '</tbody></table>';
+      ztOverviewBody.innerHTML = html;
+    }
+
+    function openZtOverviewModal() {
+      ztOverviewBody.innerHTML = '<div class="search-log-loading">読み込み中...</div>';
+      ztOverviewModal.style.zIndex = String(getNextZ());
+      ztOverviewModal.classList.add('open');
+      ztOverviewModal.setAttribute('aria-hidden', 'false');
+      fetch('/api/aichat/keyword-embeddings/list', { credentials: 'same-origin' })
+        .then(function(r) { return r.json(); })
+        .then(function(d) { renderZtOverviewList(d && d.items); })
+        .catch(function() { ztOverviewBody.innerHTML = '<div class="search-log-empty">取得に失敗しました</div>'; });
+    }
+
+    function closeZtOverviewModal() {
+      ztOverviewModal.classList.remove('open');
+      ztOverviewModal.setAttribute('aria-hidden', 'true');
+    }
+
+    ztOverviewBtn.addEventListener('click', function(e) { e.stopPropagation(); openZtOverviewModal(); });
+    ztOverviewClose.addEventListener('click', closeZtOverviewModal);
+    ztOverviewModal.addEventListener('click', function(e) { if (e.target === ztOverviewModal) closeZtOverviewModal(); });
 
     // ===== トークン使用量グラフ =====
     var tokenUsageBtn = document.getElementById('tokenUsageBtn');
