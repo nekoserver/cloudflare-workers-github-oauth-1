@@ -55,6 +55,17 @@ describe('ZTモーダルのHTML構造: 📖アイコン・一覧モーダル・�
     expect(closeIdx).toBeGreaterThan(toggleIdx);
   });
 
+  it('ztOverviewKeywordSearchInput(検索窓)が📊ボタンの左側に存在する', () => {
+    const html = buildPage();
+    const modalIdx = html.indexOf('id="ztOverviewModal"');
+    const bodyIdx = html.indexOf('id="ztOverviewBody"', modalIdx);
+    const head = html.slice(modalIdx, bodyIdx);
+    const searchIdx = head.indexOf('id="ztOverviewKeywordSearchInput"');
+    const toggleIdx = head.indexOf('id="ztOverviewChartToggle"');
+    expect(searchIdx).toBeGreaterThan(-1);
+    expect(toggleIdx).toBeGreaterThan(searchIdx);
+  });
+
   it('ztOverviewChartSectionがタイトル(head)とztOverviewBody(表)の間にある', () => {
     const html = buildPage();
     const modalIdx = html.indexOf('id="ztOverviewModal"');
@@ -148,6 +159,7 @@ async function setupZtUi() {
     ztOverviewBody: document.getElementById('ztOverviewBody')!,
     ztOverviewChartToggle: document.getElementById('ztOverviewChartToggle')!,
     ztOverviewChartSection: document.getElementById('ztOverviewChartSection')!,
+    ztOverviewKeywordSearchInput: document.getElementById('ztOverviewKeywordSearchInput') as unknown as HTMLInputElement,
     ztKeywordSharesModal: document.getElementById('ztKeywordSharesModal')!,
     ztKeywordSharesClose: document.getElementById('ztKeywordSharesClose')!,
     ztKeywordSharesBody: document.getElementById('ztKeywordSharesBody')!,
@@ -306,6 +318,55 @@ describe('ZTモーダルのDOM実動作(jsdom)', () => {
     expect(ztOverviewBody.textContent).toContain('テスト');
   });
 
+  it('検索窓にキーワードを入力すると、表がそのキーワードを含む行だけに絞り込まれる', async () => {
+    const { ztOverviewBtn, ztOverviewBody, ztOverviewKeywordSearchInput } = await setupZtUi();
+
+    ztOverviewBtn.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    ztOverviewKeywordSearchInput.value = '空港';
+    ztOverviewKeywordSearchInput.dispatchEvent(new Event('input', { bubbles: true }));
+
+    expect(ztOverviewBody.textContent).toContain('空港');
+    expect(ztOverviewBody.textContent).not.toContain('Hono');
+    expect(ztOverviewBody.textContent).not.toContain('テスト');
+  });
+
+  it('検索窓とモデル絞り込みドロップダウンは併用でき、両方の条件を満たす行だけ表示される', async () => {
+    const { ztOverviewBtn, ztOverviewBody, ztOverviewKeywordSearchInput } = await setupZtUi();
+
+    ztOverviewBtn.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    var select = document.getElementById('ztOverviewModelFilter') as unknown as HTMLSelectElement;
+    select.value = 'gemma';
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+
+    ztOverviewKeywordSearchInput.value = 'テスト';
+    ztOverviewKeywordSearchInput.dispatchEvent(new Event('input', { bubbles: true }));
+
+    expect(ztOverviewBody.textContent).toContain('テスト');
+    expect(ztOverviewBody.textContent).not.toContain('駅');
+    expect(ztOverviewBody.textContent).not.toContain('Hono');
+  });
+
+  it('検索窓は空文字に戻すと全キーワードが再び表示される', async () => {
+    const { ztOverviewBtn, ztOverviewBody, ztOverviewKeywordSearchInput } = await setupZtUi();
+
+    ztOverviewBtn.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    ztOverviewKeywordSearchInput.value = '空港';
+    ztOverviewKeywordSearchInput.dispatchEvent(new Event('input', { bubbles: true }));
+    ztOverviewKeywordSearchInput.value = '';
+    ztOverviewKeywordSearchInput.dispatchEvent(new Event('input', { bubbles: true }));
+
+    expect(ztOverviewBody.textContent).toContain('Hono');
+    expect(ztOverviewBody.textContent).toContain('空港');
+    expect(ztOverviewBody.textContent).toContain('駅');
+    expect(ztOverviewBody.textContent).toContain('テスト');
+  });
+
   it('表のth(ヘッダ行)にposition:stickyが指定され、スクロールしても上部に固定される', async () => {
     const { ztOverviewBtn, ztOverviewBody } = await setupZtUi();
 
@@ -339,6 +400,10 @@ describe('ZTモーダルのDOM実動作(jsdom)', () => {
 
     await new Promise((resolve) => setTimeout(resolve, 10));
     expect(ztKeywordSharesBody.textContent).toContain('Honoの使い方は？');
+    // タイトルの「の関連する会話」の右側に検索結果件数が"(件数)"形式で表示される
+    expect(ztKeywordSharesTitle.textContent).toContain('の関連する会話 (1)');
+    // 各質問文の行頭に通し番号が付与される
+    expect(ztKeywordSharesBody.textContent).toContain('1. Honoの使い方は？');
 
     // 別タブに移動するのではなく、ztOverviewModalの上に重なるモーダルとして表示される(getNextZ()で動的算出)
     expect(ztOverviewModal.classList.contains('open')).toBe(true);
