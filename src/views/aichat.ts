@@ -1105,8 +1105,12 @@ export function getAiChatPage(user: {
     <div class="search-log-modal" role="dialog" aria-modal="true" style="max-width:640px;">
       <div class="search-log-head">
         <span class="search-log-title">📖 ベクタ化済みデータ一覧</span>
-        <button class="search-log-close" id="ztOverviewClose" aria-label="閉じる">✕</button>
+        <div style="display:flex;align-items:center;gap:4px;">
+          <button class="search-log-close" id="ztOverviewChartToggle" aria-label="円グラフ表示切替" title="埋め込みモデル別 登録済みキーワード率の円グラフ表示切替">📊</button>
+          <button class="search-log-close" id="ztOverviewClose" aria-label="閉じる">✕</button>
+        </div>
       </div>
+      <div id="ztOverviewChartSection" style="padding:10px 14px 0;"></div>
       <div class="search-log-body" id="ztOverviewBody" style="font-size:12px;max-height:60vh;overflow-y:auto;"><div class="search-log-loading">読み込み中...</div></div>
     </div>
   </div>
@@ -4815,6 +4819,8 @@ export function getAiChatPage(user: {
     var ztOverviewModal = document.getElementById('ztOverviewModal');
     var ztOverviewClose = document.getElementById('ztOverviewClose');
     var ztOverviewBody = document.getElementById('ztOverviewBody');
+    var ztOverviewChartToggle = document.getElementById('ztOverviewChartToggle');
+    var ztOverviewChartSection = document.getElementById('ztOverviewChartSection');
     var ztBgeBtn = document.getElementById('ztBgeBtn');
     var ztBgeModal = document.getElementById('ztBgeModal');
     var ztBgeClose = document.getElementById('ztBgeClose');
@@ -5320,29 +5326,51 @@ export function getAiChatPage(user: {
       ztOverviewBody.innerHTML = html;
     }
 
+    var ZT_OVERVIEW_CHART_COOKIE = 'aichat_zt_overview_chart_visible';
+    function getZtOverviewChartVisible() {
+      var m = document.cookie.match(/(?:^|;\s*)aichat_zt_overview_chart_visible=([^;]*)/);
+      return m ? m[1] === 'on' : true;
+    }
+    function setZtOverviewChartVisible(val) {
+      document.cookie = ZT_OVERVIEW_CHART_COOKIE + '=' + (val ? 'on' : 'off') + '; Path=/; Secure; SameSite=Lax; Max-Age=31536000';
+    }
+    function updateZtOverviewChartToggleUi() {
+      var visible = getZtOverviewChartVisible();
+      ztOverviewChartSection.style.display = visible ? '' : 'none';
+      ztOverviewChartToggle.style.opacity = visible ? '1' : '0.4';
+    }
+
     function openZtOverviewModal() {
       ztOverviewBody.innerHTML = '<div class="search-log-loading">読み込み中...</div>';
+      ztOverviewChartSection.innerHTML = '';
+      updateZtOverviewChartToggleUi();
       ztOverviewModal.style.zIndex = String(getNextZ());
       ztOverviewModal.classList.add('open');
       ztOverviewModal.setAttribute('aria-hidden', 'false');
-      fetch('/api/aichat/keyword-embeddings/list', { credentials: 'same-origin' })
-        .then(function(r) { return r.text().then(function(t) { return { status: r.status, text: t }; }); })
-        .then(function(res) {
-          var d = null;
-          try { d = JSON.parse(res.text); } catch (e) { d = null; }
-          if (d && d.error) {
-            ztOverviewBody.innerHTML = '<div class="search-log-empty">取得に失敗しました: ' + escHtml(d.error) + '</div>';
-            return;
-          }
-          if (!d) {
-            ztOverviewBody.innerHTML = '<div class="search-log-empty">取得に失敗しました: HTTP ' + res.status + ' / ' + escHtml(String(res.text).slice(0, 120)) + '</div>';
-            return;
-          }
-          renderZtOverviewList(d.items);
-        })
-        .catch(function(err) {
-          ztOverviewBody.innerHTML = '<div class="search-log-empty">取得に失敗しました（通信エラー: ' + escHtml((err && err.message) || '不明') + '）</div>';
-        });
+      Promise.allSettled([
+        fetch('/api/aichat/keyword-embeddings/list', { credentials: 'same-origin' })
+          .then(function(r) { return r.text().then(function(t) { return { status: r.status, text: t }; }); }),
+        fetch('/api/aichat/all-keywords', { credentials: 'same-origin' }).then(function(r) { return r.json(); })
+      ]).then(function(results) {
+        var listRes = results[0].status === 'fulfilled' ? results[0].value : null;
+        var d = null;
+        if (listRes) { try { d = JSON.parse(listRes.text); } catch (e) { d = null; } }
+        if (d && d.error) {
+          ztOverviewBody.innerHTML = '<div class="search-log-empty">取得に失敗しました: ' + escHtml(d.error) + '</div>';
+          return;
+        }
+        if (!d) {
+          var statusTxt = listRes ? listRes.status : '?';
+          var bodyTxt = listRes ? listRes.text : '';
+          ztOverviewBody.innerHTML = '<div class="search-log-empty">取得に失敗しました: HTTP ' + statusTxt + ' / ' + escHtml(String(bodyTxt).slice(0, 120)) + '</div>';
+          return;
+        }
+        renderZtOverviewList(d.items);
+        var kwAll = results[1].status === 'fulfilled' ? ((results[1].value && results[1].value.keywords) || []) : [];
+        ztOverviewChartSection.innerHTML = buildEmbeddingModelRatioSectionHtml(kwAll.length, d.items || []);
+      }).catch(function(err) {
+        ztOverviewBody.innerHTML = '<div class="search-log-empty">取得に失敗しました（通信エラー: ' + escHtml((err && err.message) || '不明') + '）</div>';
+      });
     }
 
     function closeZtOverviewModal() {
@@ -5352,6 +5380,11 @@ export function getAiChatPage(user: {
 
     ztOverviewBtn.addEventListener('click', function(e) { e.stopPropagation(); openZtOverviewModal(); });
     ztOverviewClose.addEventListener('click', closeZtOverviewModal);
+    ztOverviewChartToggle.addEventListener('click', function(e) {
+      e.stopPropagation();
+      setZtOverviewChartVisible(!getZtOverviewChartVisible());
+      updateZtOverviewChartToggleUi();
+    });
     ztOverviewModal.addEventListener('click', function(e) { if (e.target === ztOverviewModal) closeZtOverviewModal(); });
 
     // ===== トークン使用量グラフ =====
