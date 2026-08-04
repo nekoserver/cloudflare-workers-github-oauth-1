@@ -87,7 +87,8 @@ function setupDb(): DatabaseSync {
       plamo_vector BLOB,
       plamo_dim INTEGER,
       plamo_model TEXT,
-      plamo_updated_at TEXT
+      plamo_updated_at TEXT,
+      source TEXT
     );
     CREATE UNIQUE INDEX idx_aichat_keyword_embeddings_user_keyword ON aichat_keyword_embeddings(user_id, keyword);
   `);
@@ -131,10 +132,12 @@ describe('getOrComputeKeywordEmbeddingForModel: モデル切り替えによる�
     const vector = await getOrComputeKeywordEmbeddingForModel(wrapD1(db) as never, ai as never, 'u1', '駅', BGE_M3_MODEL);
 
     expect(vector).toEqual([1, 2]);
-    const row = db.prepare(`SELECT model, dim, plamo_dim FROM aichat_keyword_embeddings WHERE user_id='u1' AND keyword='駅'`).get() as { model: string; dim: number; plamo_dim: number | null };
+    const row = db.prepare(`SELECT model, dim, plamo_dim, source FROM aichat_keyword_embeddings WHERE user_id='u1' AND keyword='駅'`).get() as { model: string; dim: number; plamo_dim: number | null; source: string };
     expect(row.model).toBe(BGE_M3_MODEL);
     expect(row.dim).toBe(2);
     expect(row.plamo_dim).toBeNull();
+    // ZTモーダル経由の登録であることを一覧側が判定できるよう'zt_manual'を記録する
+    expect(row.source).toBe('zt_manual');
   });
 
   it('plamo-embedding-1bを指定するとplamo_vector/plamo_dim列に書き込み、既存のbge-m3列は破壊しない', async () => {
@@ -237,7 +240,7 @@ describe('listKeywordEmbeddingsOverview: 📖アイコンで開くベクタ化�
     const db = setupDb();
     const now = new Date().toISOString();
     db.prepare(
-      `INSERT INTO aichat_keyword_embeddings (user_id, keyword, model, dim, vector, created_at, updated_at) VALUES (?, ?, '', ?, ?, ?, ?)`
+      `INSERT INTO aichat_keyword_embeddings (user_id, keyword, model, dim, vector, created_at, updated_at, source) VALUES (?, ?, '', ?, ?, ?, ?, 'zt_manual')`
     ).run('u1', '駅', 2, new Uint8Array(new Float32Array([1, 2]).buffer), now, now);
 
     const items = await listKeywordEmbeddingsOverview(wrapD1(db) as never, 'u1');
@@ -251,7 +254,7 @@ describe('listKeywordEmbeddingsOverview: 📖アイコンで開くベクタ化�
     const db = setupDb();
     const now = new Date().toISOString();
     db.prepare(
-      `INSERT INTO aichat_keyword_embeddings (user_id, keyword, model, dim, vector, created_at, updated_at, plamo_dim, plamo_model, plamo_updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO aichat_keyword_embeddings (user_id, keyword, model, dim, vector, created_at, updated_at, plamo_dim, plamo_model, plamo_updated_at, source) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'zt_manual')`
     ).run('u1', '駅', BGE_M3_MODEL, 2, new Uint8Array(new Float32Array([1, 2]).buffer), now, now, 3, PLAMO_EMBEDDING_MODEL, now);
 
     const items = await listKeywordEmbeddingsOverview(wrapD1(db) as never, 'u1');
@@ -264,7 +267,7 @@ describe('listKeywordEmbeddingsOverview: 📖アイコンで開くベクタ化�
     const db = setupDb();
     const now = new Date().toISOString();
     db.prepare(
-      `INSERT INTO aichat_keyword_embeddings (user_id, keyword, model, dim, vector, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO aichat_keyword_embeddings (user_id, keyword, model, dim, vector, created_at, updated_at, source) VALUES (?, ?, ?, ?, ?, ?, ?, 'zt_manual')`
     ).run('u1', '駅', BGE_M3_MODEL, 2, new Uint8Array(new Float32Array([1, 2]).buffer), now, now);
 
     const items = await listKeywordEmbeddingsOverview(wrapD1(db) as never, 'u1');
@@ -277,7 +280,7 @@ describe('listKeywordEmbeddingsOverview: 📖アイコンで開くベクタ化�
     const db = setupDb();
     const now = new Date().toISOString();
     db.prepare(
-      `INSERT INTO aichat_keyword_embeddings (user_id, keyword, model, dim, vector, created_at, updated_at, plamo_dim, plamo_updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO aichat_keyword_embeddings (user_id, keyword, model, dim, vector, created_at, updated_at, plamo_dim, plamo_updated_at, source) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'zt_manual')`
     ).run('u1', '駅', BGE_M3_MODEL, 2, new Uint8Array(new Float32Array([1, 2]).buffer), now, now, 3, now);
 
     const items = await listKeywordEmbeddingsOverview(wrapD1(db) as never, 'u1');
@@ -289,8 +292,38 @@ describe('listKeywordEmbeddingsOverview: 📖アイコンで開くベクタ化�
     const db = setupDb();
     const now = new Date().toISOString();
     db.prepare(
-      `INSERT INTO aichat_keyword_embeddings (user_id, keyword, model, dim, vector, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO aichat_keyword_embeddings (user_id, keyword, model, dim, vector, created_at, updated_at, source) VALUES (?, ?, ?, ?, ?, ?, ?, 'zt_manual')`
     ).run('u2', '駅', BGE_M3_MODEL, 2, new Uint8Array(new Float32Array([1, 2]).buffer), now, now);
+
+    const items = await listKeywordEmbeddingsOverview(wrapD1(db) as never, 'u1');
+
+    expect(items).toEqual([]);
+  });
+
+  it('answer-graphの色分けやキーワード分類のAI推薦など、ZTモーダル以外が自動的にベクタ化した行(source!=zt_manual)は一覧に出ない', async () => {
+    const db = setupDb();
+    const now = new Date().toISOString();
+    db.prepare(
+      `INSERT INTO aichat_keyword_embeddings (user_id, keyword, model, dim, vector, created_at, updated_at, source) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run('u1', '実装', BGE_M3_MODEL, 2, new Uint8Array(new Float32Array([1, 2]).buffer), now, now, 'answer_graph_color');
+    db.prepare(
+      `INSERT INTO aichat_keyword_embeddings (user_id, keyword, model, dim, vector, created_at, updated_at, source) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run('u1', '例外', BGE_M3_MODEL, 2, new Uint8Array(new Float32Array([3, 4]).buffer), now, now, 'category_suggest');
+    db.prepare(
+      `INSERT INTO aichat_keyword_embeddings (user_id, keyword, model, dim, vector, created_at, updated_at, source) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run('u1', 'Hono', BGE_M3_MODEL, 2, new Uint8Array(new Float32Array([5, 6]).buffer), now, now, 'zt_manual');
+
+    const items = await listKeywordEmbeddingsOverview(wrapD1(db) as never, 'u1');
+
+    expect(items.map((it) => it.keyword)).toEqual(['Hono']);
+  });
+
+  it('この機能の移行前(source未設定)の行も一覧に出ない(由来を後から判定できないため)', async () => {
+    const db = setupDb();
+    const now = new Date().toISOString();
+    db.prepare(
+      `INSERT INTO aichat_keyword_embeddings (user_id, keyword, model, dim, vector, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`
+    ).run('u1', '旧データ', BGE_M3_MODEL, 2, new Uint8Array(new Float32Array([1, 2]).buffer), now, now);
 
     const items = await listKeywordEmbeddingsOverview(wrapD1(db) as never, 'u1');
 

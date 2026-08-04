@@ -1387,6 +1387,7 @@ CREATE INDEX IF NOT EXISTS idx_aichat_answer_category_scores_share ON aichat_ans
 ALTER TABLE aichat_keyword_embeddings ADD COLUMN plamo_dim INTEGER;
 ALTER TABLE aichat_keyword_embeddings ADD COLUMN plamo_updated_at TEXT;`,
   '0091': `ALTER TABLE aichat_keyword_embeddings ADD COLUMN plamo_model TEXT;`,
+  '0092': `ALTER TABLE aichat_keyword_embeddings ADD COLUMN source TEXT;`,
 };
 
 async function ensureGroupTable(db: D1Database): Promise<void> {
@@ -5906,6 +5907,7 @@ export async function getOrComputeKeywordEmbeddingsBatch(
   ai: Ai,
   userId: string,
   keywords: string[],
+  source: string = 'auto',
 ): Promise<Map<string, number[]>> {
   const uniqueKeywords = Array.from(new Set(keywords.filter(Boolean)));
   const result = new Map<string, number[]>();
@@ -5944,16 +5946,16 @@ export async function getOrComputeKeywordEmbeddingsBatch(
     const rowsPerChunk = Math.max(1, Math.floor((D1_MAX_BOUND_PARAMS - 1) / colsPerRow));
     for (let i = 0; i < newEntries.length; i += rowsPerChunk) {
       const chunk = newEntries.slice(i, i + rowsPerChunk);
-      const valuesSql = chunk.map(() => '(?, ?, ?, ?, ?, ?, ?)').join(', ');
+      const valuesSql = chunk.map(() => '(?, ?, ?, ?, ?, ?, ?, ?)').join(', ');
       const args: unknown[] = [];
       for (const e of chunk) {
-        args.push(userId, e.keyword, BGE_M3_MODEL, e.vector.length, floatsToBlob(e.vector), now, now);
+        args.push(userId, e.keyword, BGE_M3_MODEL, e.vector.length, floatsToBlob(e.vector), source, now, now);
       }
       await db.prepare(
-        `INSERT INTO aichat_keyword_embeddings (user_id, keyword, model, dim, vector, created_at, updated_at)
+        `INSERT INTO aichat_keyword_embeddings (user_id, keyword, model, dim, vector, source, created_at, updated_at)
          VALUES ${valuesSql}
          ON CONFLICT(user_id, keyword) DO UPDATE SET
-           model = excluded.model, dim = excluded.dim, vector = excluded.vector, updated_at = excluded.updated_at`
+           model = excluded.model, dim = excluded.dim, vector = excluded.vector, source = excluded.source, updated_at = excluded.updated_at`
       ).bind(...args).run();
     }
   }
@@ -6064,7 +6066,7 @@ async function computeAnswerNodeColors(
     contained.forEach((k) => neededKeywords.add(k));
   }
 
-  const embeddingMap = await getOrComputeKeywordEmbeddingsBatch(db, ai, userId, Array.from(neededKeywords));
+  const embeddingMap = await getOrComputeKeywordEmbeddingsBatch(db, ai, userId, Array.from(neededKeywords), 'answer_graph_color');
 
   const centroids = buildCategoryCentroidsFromMap(categories, keywordsByCategory, embeddingMap);
   if (centroids.length === 0) return result;
@@ -6416,12 +6418,22 @@ async function embedTextWithModel(ai: Ai, model: string, text: string): Promise<
  * ならAIを呼ばずそれを返し、未キャッシュ・モデル不一致の場合のみbge-m3へ
  * 問い合わせて aichat_keyword_embeddings を上書き保存する
  * （前回合意した「ベクトル本体はモデル不一致時のみ強制上書き」の実装）。
+ *
+ * sourceは「このベクトル化がどの機能によって行われたか」の記録。
+ * ZTモーダルの「登録する」ボタン(明示的な手動登録)からは'zt_manual'を渡す。
+ * それ以外(answer-graphの色分け・キーワード分類のAI推薦等、ユーザーが
+ * 明示的にベクタ化を指示したわけではない内部的なキャッシュ利用)は既定値
+ * 'auto'のまま、または呼び出し元機能名を渡す。📖ベクタ化済みデータ一覧
+ * (listKeywordEmbeddingsOverview)はsource='zt_manual'の行のみを表示し、
+ * 「ZTモーダルからしか受け付けない」という一覧上の見た目を保証する
+ * （内部キャッシュとしての自動ベクタ化そのものは引き続き動作する）。
  */
 export async function getOrComputeKeywordEmbedding(
   db: D1Database,
   ai: Ai,
   userId: string,
   keyword: string,
+  source: string = 'auto',
 ): Promise<number[]> {
   const row = await db.prepare(
     `SELECT vector, model FROM aichat_keyword_embeddings WHERE user_id = ? AND keyword = ?`
@@ -6433,11 +6445,11 @@ export async function getOrComputeKeywordEmbedding(
   if (vector.length === 0) return [];
   const now = new Date().toISOString();
   await db.prepare(
-    `INSERT INTO aichat_keyword_embeddings (user_id, keyword, model, dim, vector, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?)
+    `INSERT INTO aichat_keyword_embeddings (user_id, keyword, model, dim, vector, source, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(user_id, keyword) DO UPDATE SET
-       model = excluded.model, dim = excluded.dim, vector = excluded.vector, updated_at = excluded.updated_at`
-  ).bind(userId, keyword, BGE_M3_MODEL, vector.length, floatsToBlob(vector), now, now).run();
+       model = excluded.model, dim = excluded.dim, vector = excluded.vector, source = excluded.source, updated_at = excluded.updated_at`
+  ).bind(userId, keyword, BGE_M3_MODEL, vector.length, floatsToBlob(vector), source, now, now).run();
   return vector;
 }
 
@@ -6468,7 +6480,7 @@ export async function getOrComputeKeywordEmbeddingForModel(
 ): Promise<number[]> {
   const resolvedModel = resolveKeywordEmbeddingModel(model);
   if (resolvedModel === BGE_M3_MODEL) {
-    return getOrComputeKeywordEmbedding(db, ai, userId, keyword);
+    return getOrComputeKeywordEmbedding(db, ai, userId, keyword, 'zt_manual');
   }
   const row = await db.prepare(
     `SELECT plamo_vector, plamo_dim, plamo_model FROM aichat_keyword_embeddings WHERE user_id = ? AND keyword = ?`
@@ -6478,7 +6490,8 @@ export async function getOrComputeKeywordEmbeddingForModel(
   }
   // 主系列(bge-m3)の行を確保する（NOT NULL制約を満たすため）。既にあれば
   // getOrComputeKeywordEmbedding内でAIを呼ばずキャッシュを返すだけになる。
-  await getOrComputeKeywordEmbedding(db, ai, userId, keyword);
+  // ZTモーダル経由の登録なのでsource='zt_manual'を明示する。
+  await getOrComputeKeywordEmbedding(db, ai, userId, keyword, 'zt_manual');
   const vector = await embedTextWithModel(ai, resolvedModel, keyword);
   if (vector.length === 0) return [];
   const now = new Date().toISOString();
@@ -6574,13 +6587,20 @@ export interface KeywordEmbeddingOverviewItem {
 }
 
 /**
- * ZTモーダルヘッダの📖アイコンから開く一覧。既存のベクタ化済みキーワードと、
- * それぞれのベクタ化に使った埋め込みモデルを列挙する。modelがnull（未設定の
- * 既存行）はbge-m3で補完する。plamo系は実際に格納されているplamo_modelを
- * そのまま表示する（「dimがあるからplamo」という推測はしない。将来別モデルが
- * この列を使った場合でも、記録されているモデル名を偽らないため）。
- * plamo_modelが欠損しているのにplamo_dimだけ入っている異常データに備え、
- * その場合のみ防御的にPLAMO_EMBEDDING_MODELへフォールバックする。
+ * ZTモーダルヘッダの📖アイコンから開く一覧。answer-graphの色分けやキーワード
+ * 分類のAI推薦など、ユーザーが明示的に指示したわけではない内部キャッシュ
+ * 利用(source!='zt_manual')も同じテーブルに書き込まれるため、それらは
+ * 一覧から除外し、ZTモーダルの「登録する」ボタンで明示的に登録した行
+ * (source='zt_manual')のみを列挙する。この移行より前に登録された行は
+ * sourceが未設定(NULL)のため、次回そのキーワードが更新されるまで一覧には
+ * 出てこない（過去データの由来を後から確実に判定する手段が無いため）。
+ *
+ * modelがnull（未設定の既存行）はbge-m3で補完する。plamo系は実際に
+ * 格納されているplamo_modelをそのまま表示する（「dimがあるからplamo」と
+ * いう推測はしない。将来別モデルがこの列を使った場合でも、記録されている
+ * モデル名を偽らないため）。plamo_modelが欠損しているのにplamo_dimだけ
+ * 入っている異常データに備え、その場合のみ防御的にPLAMO_EMBEDDING_MODELへ
+ * フォールバックする。
  */
 export async function listKeywordEmbeddingsOverview(
   db: D1Database,
@@ -6588,7 +6608,7 @@ export async function listKeywordEmbeddingsOverview(
 ): Promise<KeywordEmbeddingOverviewItem[]> {
   const rows = await db.prepare(
     `SELECT keyword, model, dim, updated_at, plamo_dim, plamo_model, plamo_updated_at
-     FROM aichat_keyword_embeddings WHERE user_id = ? ORDER BY updated_at DESC LIMIT 500`
+     FROM aichat_keyword_embeddings WHERE user_id = ? AND source = 'zt_manual' ORDER BY updated_at DESC LIMIT 500`
   ).bind(userId).all<{
     keyword: string; model: string | null; dim: number; updated_at: string;
     plamo_dim: number | null; plamo_model: string | null; plamo_updated_at: string | null;
@@ -6625,7 +6645,7 @@ app.post('/api/aichat/keyword-category-suggest', authMiddleware, async (c) => {
   const categories = catsRows.results ?? [];
   if (categories.length === 0) return jsonUtf8({ suggestion: null });
 
-  const keywordVector = await getOrComputeKeywordEmbedding(c.env.DB, c.env.AI, user.sub, keyword);
+  const keywordVector = await getOrComputeKeywordEmbedding(c.env.DB, c.env.AI, user.sub, keyword, 'category_suggest');
   if (keywordVector.length === 0) return jsonUtf8({ suggestion: null, _warning: '埋め込み取得に失敗しました' });
 
   const centroids: CategoryCentroid[] = [];
@@ -6637,7 +6657,7 @@ app.post('/api/aichat/keyword-category-suggest', authMiddleware, async (c) => {
     if (kws.length === 0) continue;
     const vectors: number[][] = [];
     for (const kw of kws) {
-      const v = await getOrComputeKeywordEmbedding(c.env.DB, c.env.AI, user.sub, kw);
+      const v = await getOrComputeKeywordEmbedding(c.env.DB, c.env.AI, user.sub, kw, 'category_suggest');
       if (v.length > 0) vectors.push(v);
     }
     if (vectors.length === 0) continue;

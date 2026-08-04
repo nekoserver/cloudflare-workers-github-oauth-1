@@ -12,6 +12,8 @@ import { getOrComputeKeywordEmbedding, BGE_M3_MODEL } from './index';
 //   (3) 新規キーワードでAI呼び出しが失敗した際に例外を伝播させず、
 //       握りつぶして空配列などにフォールバックできない
 //   (4) 他ユーザー・他キーワードのキャッシュを誤って参照/上書きする
+//   (5) sourceを渡さなかった場合の既定値が不定になる、またはsourceが
+//       実際に書き込まれず「どの機能がベクタ化したか」を後から判定できない
 
 function wrapD1(db: DatabaseSync) {
   return {
@@ -63,7 +65,8 @@ function setupDb(): DatabaseSync {
       dim INTEGER NOT NULL,
       vector BLOB NOT NULL,
       created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL
+      updated_at TEXT NOT NULL,
+      source TEXT
     );
     CREATE UNIQUE INDEX idx_aichat_keyword_embeddings_user_keyword ON aichat_keyword_embeddings(user_id, keyword);
   `);
@@ -140,5 +143,18 @@ describe('getOrComputeKeywordEmbedding: bge-m3埋め込みのキャッシュ', (
     expect(vector).toEqual([]);
     const row = db.prepare('SELECT * FROM aichat_keyword_embeddings WHERE user_id = ? AND keyword = ?').get('u1', '駅');
     expect(row).toBeUndefined();
+  });
+
+  it('sourceを省略すると既定値"auto"が記録され、明示的に渡すとその値が記録される', async () => {
+    const db = setupDb();
+    const ai1 = makeMockAi([1, 1]);
+    await getOrComputeKeywordEmbedding(wrapD1(db) as never, ai1 as never, 'u1', '駅');
+    const rowDefault = db.prepare('SELECT source FROM aichat_keyword_embeddings WHERE user_id = ? AND keyword = ?').get('u1', '駅') as { source: string };
+    expect(rowDefault.source).toBe('auto');
+
+    const ai2 = makeMockAi([2, 2]);
+    await getOrComputeKeywordEmbedding(wrapD1(db) as never, ai2 as never, 'u1', '空港', 'category_suggest');
+    const rowExplicit = db.prepare('SELECT source FROM aichat_keyword_embeddings WHERE user_id = ? AND keyword = ?').get('u1', '空港') as { source: string };
+    expect(rowExplicit.source).toBe('category_suggest');
   });
 });
