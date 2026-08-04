@@ -352,6 +352,58 @@ describe('日次統計グラフ: 左パネル（総数・パイチャート・�
   });
 });
 
+// ===========================================================
+// 埋め込みモデル別 登録済みキーワード率の円グラフ
+// ===========================================================
+describe('日次統計モーダル: 埋め込みモデル別 登録済みキーワード率', () => {
+  it('/api/aichat/keyword-embeddings/list を fetch する', () => {
+    const html = buildPage();
+    const idx = html.indexOf('function renderDailyStatsChart');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 2500);
+    expect(fn).toContain('/api/aichat/keyword-embeddings/list');
+  });
+
+  it('buildEmbeddingModelRatioSectionHtml 関数が存在する', () => {
+    const html = buildPage();
+    expect(html).toContain('function buildEmbeddingModelRatioSectionHtml');
+  });
+
+  it('bge-m3・plamo-embedding-1b・embeddinggemma-300mの3モデル分のラベルを含む', () => {
+    const html = buildPage();
+    const idx = html.indexOf('function buildEmbeddingModelRatioSectionHtml');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 3000);
+    expect(fn).toContain('bge-m3');
+    expect(fn).toContain('plamo-embedding-1b');
+    expect(fn).toContain('embeddinggemma-300m');
+  });
+
+  it('登録済みキーワード率というラベルが表示される', () => {
+    const html = buildPage();
+    const idx = html.indexOf('function buildEmbeddingModelRatioSectionHtml');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 3000);
+    expect(fn).toContain('登録済みキーワード率');
+  });
+
+  it('SVG path でモデルごとの円グラフを描画する', () => {
+    const html = buildPage();
+    const idx = html.indexOf('function buildEmbeddingModelRatioSectionHtml');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 3000);
+    expect(fn).toContain('<path ');
+  });
+
+  it('renderDailyStatsChart内でbuildEmbeddingModelRatioSectionHtmlを呼び出す', () => {
+    const html = buildPage();
+    const idx = html.indexOf('function renderDailyStatsChart');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 19000);
+    expect(fn).toContain('buildEmbeddingModelRatioSectionHtml(');
+  });
+});
+
 describe('日次統計モーダル: y軸目盛り数字の文字サイズ', () => {
   it('KW軸（キーワード総数）の目盛り数字が font-size 14 で描画される', () => {
     const html = buildPage();
