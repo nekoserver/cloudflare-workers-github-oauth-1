@@ -5292,19 +5292,58 @@ export function getAiChatPage(user: {
       return ZT_OVERVIEW_SOURCE_LABELS[source] || escHtml(source);
     }
 
-    function renderZtOverviewList(items) {
-      if (!items || items.length === 0) {
+    var ztOverviewLastItems = [];
+    var ztOverviewCurrentFilter = 'all';
+
+    function getZtOverviewModelCounts(items) {
+      return {
+        bge: items.length,
+        plamo: items.filter(function(it) { return !!it.plamoModel; }).length,
+        gemma: items.filter(function(it) { return !!it.gemmaModel; }).length
+      };
+    }
+
+    function filterZtOverviewItems(items, filter) {
+      if (filter === 'plamo') return items.filter(function(it) { return !!it.plamoModel; });
+      if (filter === 'gemma') return items.filter(function(it) { return !!it.gemmaModel; });
+      return items;
+    }
+
+    function buildZtOverviewModelFilterHtml(counts, current) {
+      var entries = [
+        { value: 'bge', label: 'bge-m3', count: counts.bge },
+        { value: 'plamo', label: 'plamo-embedding-1b', count: counts.plamo },
+        { value: 'gemma', label: 'embeddinggemma-300m', count: counts.gemma }
+      ];
+      entries.sort(function(a, b) { return b.count - a.count; });
+      var optsHtml = '<option value="all"' + (current === 'all' ? ' selected' : '') + '>すべて</option>';
+      entries.forEach(function(e) {
+        optsHtml += '<option value="' + e.value + '"' + (current === e.value ? ' selected' : '') + '>' + escHtml(e.label) + '(' + e.count + ')</option>';
+      });
+      return '<select id="ztOverviewModelFilter" style="font-size:11px;padding:2px 4px;font-weight:normal;">' + optsHtml + '</select>';
+    }
+
+    function renderZtOverviewList(items, filter) {
+      ztOverviewLastItems = items || [];
+      ztOverviewCurrentFilter = filter || 'all';
+      if (ztOverviewLastItems.length === 0) {
         ztOverviewBody.innerHTML = '<div class="search-log-empty">ベクタ化済みのキーワードはありません</div>';
         return;
       }
+      var counts = getZtOverviewModelCounts(ztOverviewLastItems);
+      var filterSelectHtml = buildZtOverviewModelFilterHtml(counts, ztOverviewCurrentFilter);
+      var filtered = filterZtOverviewItems(ztOverviewLastItems, ztOverviewCurrentFilter);
       var html = '<table style="width:100%;border-collapse:collapse;">'
         + '<thead><tr>'
         + '<th style="text-align:left;padding:4px 8px;border-bottom:1px solid var(--border-color);color:var(--text-secondary);">キーワード</th>'
-        + '<th style="text-align:left;padding:4px 8px;border-bottom:1px solid var(--border-color);color:var(--text-secondary);">埋め込みモデル</th>'
+        + '<th style="text-align:left;padding:4px 8px;border-bottom:1px solid var(--border-color);color:var(--text-secondary);"><div style="display:flex;align-items:center;justify-content:space-between;gap:6px;"><span>埋め込みモデル</span>' + filterSelectHtml + '</div></th>'
         + '<th style="text-align:right;padding:4px 8px;border-bottom:1px solid var(--border-color);color:var(--text-secondary);">次元数</th>'
         + '<th style="text-align:left;padding:4px 8px;border-bottom:1px solid var(--border-color);color:var(--text-secondary);">登録元</th>'
         + '</tr></thead><tbody>';
-      items.forEach(function(it) {
+      if (filtered.length === 0) {
+        html += '<tr><td colspan="4" style="padding:12px 8px;text-align:center;color:var(--text-muted);">該当するキーワードがありません</td></tr>';
+      }
+      filtered.forEach(function(it) {
         html += '<tr><td style="padding:4px 8px;border-bottom:1px solid var(--border-color);color:var(--text-primary);">' + escHtml(it.keyword) + '</td>'
           + '<td style="padding:4px 8px;border-bottom:1px solid var(--border-color);color:var(--text-primary);">' + escHtml(it.model || 'bge-m3') + '</td>'
           + '<td style="text-align:right;padding:4px 8px;border-bottom:1px solid var(--border-color);color:var(--text-primary);">' + it.dim + '</td>'
@@ -5325,6 +5364,12 @@ export function getAiChatPage(user: {
       html += '</tbody></table>';
       ztOverviewBody.innerHTML = html;
     }
+
+    ztOverviewBody.addEventListener('change', function(e) {
+      if (e.target && e.target.id === 'ztOverviewModelFilter') {
+        renderZtOverviewList(ztOverviewLastItems, e.target.value);
+      }
+    });
 
     var ZT_OVERVIEW_CHART_COOKIE = 'aichat_zt_overview_chart_visible';
     function getZtOverviewChartVisible() {
@@ -5365,7 +5410,7 @@ export function getAiChatPage(user: {
           ztOverviewBody.innerHTML = '<div class="search-log-empty">取得に失敗しました: HTTP ' + statusTxt + ' / ' + escHtml(String(bodyTxt).slice(0, 120)) + '</div>';
           return;
         }
-        renderZtOverviewList(d.items);
+        renderZtOverviewList(d.items, 'all');
         var kwAll = results[1].status === 'fulfilled' ? ((results[1].value && results[1].value.keywords) || []) : [];
         ztOverviewChartSection.innerHTML = buildEmbeddingModelRatioSectionHtml(kwAll.length, d.items || []);
       }).catch(function(err) {
