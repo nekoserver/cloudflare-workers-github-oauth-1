@@ -27,6 +27,12 @@ import { getAnswerGraphPage } from './views/answerGraph';
 //   (11) フォーカス中のキーワードが画面中央からずれた位置に表示される
 //   (12) 左スワイプ/←ボタンで、フォーカスの右隣のキーワードではなく無関係な
 //        方向のキーワードにフォーカスが移ってしまう(方向の取り違え)
+//   (13) フィルムストリップのチップ間に固定px等の余白が入り、「隣接キーワード間は
+//        1pxの余白のみ」という仕様にならない
+//   (14) フォーカス中のキーワードを含まない回答がリストに混ざる、または
+//        含む回答が漏れる(エッジの向き(from/to)の一方しか見ていない等)
+//   (15) 回答リストの各行に分類色のドットが表示されない、またはドットが
+//        行頭ではなく行末など違う位置にある
 
 function buildPage(): string {
   return getAnswerGraphPage('testuser', {});
@@ -39,11 +45,13 @@ function loadPureFns() {
   expect(idx).toBeGreaterThan(-1);
   expect(endIdx).toBeGreaterThan(idx);
   const src = html.slice(idx, endIdx);
-  const fn = new Function(`${src}\nreturn { computeRadialLayout: computeRadialLayout, computeFirstPersonSlots: computeFirstPersonSlots, computeNearestKeywordSlots: computeNearestKeywordSlots, normalizeDeg360: normalizeDeg360, normalizeDegSigned: normalizeDegSigned };`);
+  const fn = new Function(`${src}\nreturn { computeRadialLayout: computeRadialLayout, computeFirstPersonSlots: computeFirstPersonSlots, computeNearestKeywordSlots: computeNearestKeywordSlots, computeFilmstripOffsets: computeFilmstripOffsets, computeAnswersForKeyword: computeAnswersForKeyword, normalizeDeg360: normalizeDeg360, normalizeDegSigned: normalizeDegSigned };`);
   return fn() as {
     computeRadialLayout: (nodes: unknown[], ringSpacing: number) => { size: number; cx: number; cy: number; posById: Record<string, { x: number; y: number; node: unknown }> };
     computeFirstPersonSlots: (posById: Record<string, { x: number; y: number; node: unknown }>, cx: number, cy: number, headingDeg: number, fovDeg: number, horizonPercent?: number, groundPercent?: number) => Array<{ id: string; bearingDeg: number; relativeDeg: number; distance: number; screenX: number; scale: number; topPercent: number }>;
     computeNearestKeywordSlots: (posById: Record<string, { x: number; y: number; node: unknown }>, cx: number, cy: number) => Array<{ id: string; bearingDeg: number; node: { id: string; label: string; depth: number } }>;
+    computeFilmstripOffsets: (widths: number[], focusIdx: number, gapPx?: number) => number[];
+    computeAnswersForKeyword: (keywordId: string, posById: Record<string, { x: number; y: number; node: unknown }>, edges: Array<{ from: string; to: string }>) => Array<{ id: string; label: string }>;
     normalizeDeg360: (deg: number) => number;
     normalizeDegSigned: (deg: number) => number;
   };
@@ -260,6 +268,76 @@ describe('computeNearestKeywordSlots: 最上段フィルムストリップ用の
   });
 });
 
+describe('computeFilmstripOffsets: フィルムストリップのチップ間を1pxの余白のみで詰める', () => {
+  it('フォーカス中のチップのoffsetは常に0(中央)である', () => {
+    const { computeFilmstripOffsets } = loadPureFns();
+    const offsets = computeFilmstripOffsets([40, 60, 30], 1, 1);
+    expect(offsets[1]).toBe(0);
+  });
+
+  it('隣接するチップ間はgapPx(既定1px)だけ離れ、チップ幅の半分ずつを挟んだ距離になる', () => {
+    const { computeFilmstripOffsets } = loadPureFns();
+    const widths = [40, 60, 30];
+    const offsets = computeFilmstripOffsets(widths, 1, 1);
+    // 右隣(idx=2): 60/2 + 1 + 30/2 = 46
+    expect(offsets[2]).toBeCloseTo(46, 5);
+    // 左隣(idx=0): -(60/2 + 1 + 40/2) = -51
+    expect(offsets[0]).toBeCloseTo(-51, 5);
+  });
+
+  it('gapPxを省略すると1pxが使われる', () => {
+    const { computeFilmstripOffsets } = loadPureFns();
+    const withDefault = computeFilmstripOffsets([40, 60], 0);
+    const withExplicit = computeFilmstripOffsets([40, 60], 0, 1);
+    expect(withDefault).toEqual(withExplicit);
+  });
+
+  it('チップが1件も無い場合は空配列を返す', () => {
+    const { computeFilmstripOffsets } = loadPureFns();
+    expect(computeFilmstripOffsets([], 0, 1)).toEqual([]);
+  });
+});
+
+describe('computeAnswersForKeyword: フォーカス中のキーワードを含む回答群の抽出', () => {
+  const keywordGraphNodes = [
+    { id: 'a:seed', type: 'answer', label: 'seed', depth: 0 },
+    { id: 'k:east', type: 'keyword', label: 'east-kw', depth: 1 },
+    { id: 'a:child1', type: 'answer', label: 'child1', depth: 2 },
+    { id: 'a:child2', type: 'answer', label: 'child2', depth: 2 },
+  ];
+  const keywordGraphEdges = [
+    { from: 'a:seed', to: 'k:east' },
+    { from: 'k:east', to: 'a:child1' },
+    { from: 'k:east', to: 'a:child2' },
+  ];
+
+  it('キーワードを生んだ親の回答(from)と、キーワードから見つかった子の回答(to)の両方を含める', () => {
+    const { computeRadialLayout, computeAnswersForKeyword } = loadPureFns();
+    const layout = computeRadialLayout(keywordGraphNodes, 80);
+    const answers = computeAnswersForKeyword('k:east', layout.posById, keywordGraphEdges);
+    const ids = answers.map((a) => a.id);
+    expect(ids).toContain('a:seed');
+    expect(ids).toContain('a:child1');
+    expect(ids).toContain('a:child2');
+    expect(ids.length).toBe(3);
+  });
+
+  it('無関係なキーワードのidを渡すと空配列になる', () => {
+    const { computeRadialLayout, computeAnswersForKeyword } = loadPureFns();
+    const layout = computeRadialLayout(keywordGraphNodes, 80);
+    const answers = computeAnswersForKeyword('k:unrelated', layout.posById, keywordGraphEdges);
+    expect(answers).toEqual([]);
+  });
+
+  it('同じ回答が重複して含まれない', () => {
+    const { computeRadialLayout, computeAnswersForKeyword } = loadPureFns();
+    const layout = computeRadialLayout(keywordGraphNodes, 80);
+    const dupEdges = [...keywordGraphEdges, { from: 'k:east', to: 'a:child1' }];
+    const answers = computeAnswersForKeyword('k:east', layout.posById, dupEdges);
+    expect(answers.filter((a) => a.id === 'a:child1').length).toBe(1);
+  });
+});
+
 describe('一人称モードのDOM実動作(jsdom): トグル・回転・選択', () => {
   it('fpToggleBtnクリックでfp-viewが表示されcanvas-wrapが非表示になる(俯瞰⇔一人称の排他表示)', () => {
     const html = buildPage();
@@ -302,13 +380,21 @@ async function setupActivatedFirstPersonMode() {
     { id: 'k:east', type: 'keyword', label: 'east-kw', depth: 1 },
     { id: 'k:south', type: 'keyword', label: 'south-kw', depth: 1 },
     { id: 'k:west', type: 'keyword', label: 'west-kw', depth: 1 },
+    { id: 'a:child-of-east', type: 'answer', label: 'child-of-east', depth: 2, color: '#ff0000' },
+  ];
+  const graphEdges = [
+    { from: 'a:seed', to: 'k:north' },
+    { from: 'a:seed', to: 'k:east' },
+    { from: 'a:seed', to: 'k:south' },
+    { from: 'a:seed', to: 'k:west' },
+    { from: 'k:east', to: 'a:child-of-east' },
   ];
   const fetchMock = vi.fn((url: string) => {
     if (String(url).includes('/api/aichat/shares/search')) {
       return Promise.resolve({ json: () => Promise.resolve({ results: [{ id: 'share1', question: 'q1' }] }) });
     }
     if (String(url).includes('/api/aichat/answer-propagation-graph')) {
-      return Promise.resolve({ json: () => Promise.resolve({ nodes: graphNodes, edges: [] }) });
+      return Promise.resolve({ json: () => Promise.resolve({ nodes: graphNodes, edges: graphEdges }) });
     }
     return Promise.resolve({ json: () => Promise.resolve({}) });
   });
@@ -334,6 +420,7 @@ async function setupActivatedFirstPersonMode() {
     fpLeftBtn: document.getElementById('fpLeftBtn')!,
     fpRightBtn: document.getElementById('fpRightBtn')!,
     fpFilmstrip: document.getElementById('fpFilmstrip')!,
+    fpAnswerList: document.getElementById('fpAnswerList')!,
   };
 }
 
@@ -372,5 +459,38 @@ describe('一人称モードのDOM実動作(jsdom): フィルムストリップ�
 
     const afterFocused = fpFilmstrip.querySelector('.fp-film-chip-focused') as HTMLElement;
     expect(afterFocused.textContent).toBe(expectedPrevLabel);
+  });
+});
+
+describe('一人称モードのDOM実動作(jsdom): フィルムストリップ直下の回答リスト', () => {
+  afterEach(() => { vi.unstubAllGlobals(); });
+
+  it('フォーカス中のキーワードを含む回答が、分類色のドットを行頭に置いて縦に列挙される', async () => {
+    const { fpAnswerList } = await setupActivatedFirstPersonMode();
+    // デフォルトのheading(0度)では k:east(bearing 0度)がフォーカスされる
+    const rows = Array.from(fpAnswerList.querySelectorAll('.fp-answer-row')) as HTMLElement[];
+    const labels = rows.map((r) => r.querySelector('.fp-answer-row-label')!.textContent);
+    expect(labels).toContain('seed');
+    expect(labels).toContain('child-of-east');
+
+    rows.forEach((row) => {
+      expect(row.firstElementChild!.className).toBe('fp-answer-row-dot');
+    });
+    const childRow = rows.find((r) => r.querySelector('.fp-answer-row-label')!.textContent === 'child-of-east')!;
+    const dot = childRow.querySelector('.fp-answer-row-dot') as HTMLElement;
+    expect(dot.style.background).toBe('rgb(255, 0, 0)');
+  });
+
+  it('フォーカスが移動すると回答リストもそのキーワードのものに切り替わる', async () => {
+    const { fpLeftBtn, fpAnswerList, fpFilmstrip } = await setupActivatedFirstPersonMode();
+    const beforeFocused = fpFilmstrip.querySelector('.fp-film-chip-focused')!.textContent;
+    expect(beforeFocused).toBe('east-kw');
+    const beforeLabels = Array.from(fpAnswerList.querySelectorAll('.fp-answer-row-label')).map((el) => el.textContent);
+    expect(beforeLabels).toContain('child-of-east');
+
+    fpLeftBtn.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+    const afterLabels = Array.from(fpAnswerList.querySelectorAll('.fp-answer-row-label')).map((el) => el.textContent);
+    expect(afterLabels).not.toContain('child-of-east');
   });
 });

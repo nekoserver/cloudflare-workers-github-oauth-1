@@ -72,6 +72,12 @@ main { flex:1; max-width:1100px; width:100%; margin:0 auto; padding:24px 16px; d
   color:var(--fg); white-space:nowrap; max-width:140px; overflow:hidden; text-overflow:ellipsis;
 }
 .fp-node.fp-node-centered .fp-node-label { border-color:var(--accent); color:var(--accent); font-weight:600; }
+.fp-answer-list { display:flex; flex-direction:column; gap:4px; max-height:160px; overflow-y:auto; padding:2px; }
+.fp-answer-row { display:flex; align-items:center; gap:8px; padding:6px 8px; border-radius:6px; cursor:pointer; font-size:12px; color:var(--fg); }
+.fp-answer-row:hover { background:var(--btn-hover); }
+.fp-answer-row-dot { width:9px; height:9px; border-radius:50%; flex:0 0 auto; }
+.fp-answer-row-label { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.fp-answer-list-empty { font-size:11px; color:var(--label); padding:4px 2px; }
 .fp-controls { display:flex; align-items:center; justify-content:center; gap:16px; }
 .fp-btn {
   width:52px; height:52px; border-radius:50%; border:1px solid var(--btn-border); background:var(--btn-bg);
@@ -216,6 +222,7 @@ input[type=search]:focus { border-color:var(--accent); }
           <div class="fp-crosshair"></div>
           <div class="fp-nodes" id="fpNodes"></div>
         </div>
+        <div class="fp-answer-list" id="fpAnswerList"></div>
         <div class="fp-controls">
           <button type="button" class="fp-btn" id="fpLeftBtn" aria-label="左を見る">←</button>
           <button type="button" class="fp-btn fp-btn-forward" id="fpForwardBtn" aria-label="選択して読む">↑</button>
@@ -276,6 +283,7 @@ input[type=search]:focus { border-color:var(--accent); }
   var fpSky = document.getElementById('fpSky');
   var fpNodes = document.getElementById('fpNodes');
   var fpFilmstrip = document.getElementById('fpFilmstrip');
+  var fpAnswerList = document.getElementById('fpAnswerList');
   var fpLeftBtn = document.getElementById('fpLeftBtn');
   var fpRightBtn = document.getElementById('fpRightBtn');
   var fpForwardBtn = document.getElementById('fpForwardBtn');
@@ -533,7 +541,7 @@ input[type=search]:focus { border-color:var(--accent); }
           graphStatus.className = 'graph-status err';
           currentGraph = null;
           drawGraph();
-          if (fpActive) { fpHeadingDeg = 0; renderFirstPersonHere(); refreshFirstPersonFocus(); renderFirstPersonView(); renderFilmstrip(); }
+          if (fpActive) { fpHeadingDeg = 0; renderFirstPersonHere(); refreshFirstPersonFocus(); renderFirstPersonView(); renderFilmstrip(); renderFpAnswerList(); }
           return;
         }
         currentGraph = d;
@@ -546,7 +554,7 @@ input[type=search]:focus { border-color:var(--accent); }
         }
         graphStatus.textContent = statusText;
         drawGraph();
-        if (fpActive) { fpHeadingDeg = 0; renderFirstPersonHere(); refreshFirstPersonFocus(); renderFirstPersonView(); renderFilmstrip(); }
+        if (fpActive) { fpHeadingDeg = 0; renderFirstPersonHere(); refreshFirstPersonFocus(); renderFirstPersonView(); renderFilmstrip(); renderFpAnswerList(); }
       })
       .catch(function() {
         graphStatus.textContent = 'グラフの取得に失敗しました（通信エラー）';
@@ -669,6 +677,40 @@ input[type=search]:focus { border-color:var(--accent); }
     });
     slots.sort(function(a, b) { return a.bearingDeg - b.bearingDeg; });
     return slots;
+  }
+
+  function computeFilmstripOffsets(widths, focusIdx, gapPx) {
+    if (gapPx === undefined) gapPx = 1;
+    var offsets = new Array(widths.length);
+    if (!widths.length) return offsets;
+    offsets[focusIdx] = 0;
+    var cursor = 0;
+    for (var i = focusIdx + 1; i < widths.length; i++) {
+      cursor += widths[i - 1] / 2 + gapPx + widths[i] / 2;
+      offsets[i] = cursor;
+    }
+    cursor = 0;
+    for (var i = focusIdx - 1; i >= 0; i--) {
+      cursor -= widths[i + 1] / 2 + gapPx + widths[i] / 2;
+      offsets[i] = cursor;
+    }
+    return offsets;
+  }
+
+  function computeAnswersForKeyword(keywordId, posById, edges) {
+    var results = [];
+    var seen = {};
+    (edges || []).forEach(function(e) {
+      var otherId = null;
+      if (e.from === keywordId) otherId = e.to;
+      else if (e.to === keywordId) otherId = e.from;
+      if (!otherId || seen[otherId]) return;
+      var p = posById[otherId];
+      if (!p || p.node.type !== 'answer') return;
+      seen[otherId] = true;
+      results.push(p.node);
+    });
+    return results;
   }
 
   function drawGraph() {
@@ -809,20 +851,57 @@ input[type=search]:focus { border-color:var(--accent); }
     });
   }
 
-  var FP_FILM_CHIP_GAP_PX = 96;
+  var FP_FILM_CHIP_GAP_PX = 1;
 
   function renderFilmstrip() {
     fpFilmstrip.innerHTML = '';
-    fpNearKeywords.forEach(function(slot, idx) {
+    var chips = fpNearKeywords.map(function(slot, idx) {
       var chip = document.createElement('div');
       chip.className = 'fp-film-chip' + (idx === fpFocusIdx ? ' fp-film-chip-focused' : '');
       chip.textContent = slot.node.label;
-      chip.style.left = 'calc(50% + ' + ((idx - fpFocusIdx) * FP_FILM_CHIP_GAP_PX) + 'px)';
       chip.addEventListener('click', function(e) {
         e.stopPropagation();
         focusNearKeyword(idx);
       });
       fpFilmstrip.appendChild(chip);
+      return chip;
+    });
+    var widths = chips.map(function(chip) { return chip.offsetWidth; });
+    var offsets = computeFilmstripOffsets(widths, fpFocusIdx, FP_FILM_CHIP_GAP_PX);
+    chips.forEach(function(chip, idx) {
+      chip.style.left = 'calc(50% + ' + offsets[idx] + 'px)';
+    });
+  }
+
+  function renderFpAnswerList() {
+    fpAnswerList.innerHTML = '';
+    if (!fpNearKeywords.length || !lastLayout || !currentGraph) return;
+    var keyword = fpNearKeywords[fpFocusIdx];
+    var answers = computeAnswersForKeyword(keyword.id, lastLayout.posById, currentGraph.edges);
+    if (!answers.length) {
+      var empty = document.createElement('div');
+      empty.className = 'fp-answer-list-empty';
+      empty.textContent = 'このキーワードを含む回答はありません';
+      fpAnswerList.appendChild(empty);
+      return;
+    }
+    var answerColor = getCssVar('--answer-color') || '#0969da';
+    answers.forEach(function(node) {
+      var row = document.createElement('div');
+      row.className = 'fp-answer-row';
+      var dot = document.createElement('span');
+      dot.className = 'fp-answer-row-dot';
+      dot.style.background = node.color || answerColor;
+      var label = document.createElement('span');
+      label.className = 'fp-answer-row-label';
+      label.textContent = node.label;
+      row.appendChild(dot);
+      row.appendChild(label);
+      row.addEventListener('click', function() {
+        selectGraphNode(node);
+        openAnswerModal(node.id.slice(2));
+      });
+      fpAnswerList.appendChild(row);
     });
   }
 
@@ -845,6 +924,7 @@ input[type=search]:focus { border-color:var(--accent); }
     fpHeadingDeg = fpNearKeywords[fpFocusIdx].bearingDeg;
     renderFirstPersonView();
     renderFilmstrip();
+    renderFpAnswerList();
   }
 
   function stepFirstPersonFocus(direction) {
@@ -880,6 +960,7 @@ input[type=search]:focus { border-color:var(--accent); }
       refreshFirstPersonFocus();
       renderFirstPersonView();
       renderFilmstrip();
+      renderFpAnswerList();
     }
   }
 
