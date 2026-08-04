@@ -1044,9 +1044,6 @@ function closeAllAccordions() {
 }
 
 function renderHeritageInner(inner, accTr, heritages, hits, kwCounts, answered) {
-  var cityTr0 = accTr.previousElementSibling;
-  var cityCc0 = cityTr0 ? cityTr0.getAttribute('data-cc') : '';
-  var cityCountryName = cityCc0 ? ccToJp(cityCc0) : '';
   var html = '<div class="acc-heritage-list">';
   heritages.forEach(function(h, idx) {
     var dist = h.distance_km < 10 ? h.distance_km.toFixed(1) : Math.round(h.distance_km);
@@ -1054,6 +1051,11 @@ function renderHeritageInner(inner, accTr, heritages, hits, kwCounts, answered) 
     var flagSpan = h.country_flag ? '<span class="acc-country-flag">' + h.country_flag + '</span>' : '';
     if (h.heritage_name) heritageCountryFlags[h.heritage_name] = h.country_flag || '';
     var emoji = HERITAGE_EMOJI_BY_NAME[h.heritage_name] || '🏛️';
+    // AIへの質問補完に使う国名は、都市の所在国ではなく世界遺産自身の国
+    // (行頭の国旗が表す国=h.country_name)を使う。1つの都市の近隣世界遺産には
+    // 距離だけで拾われた他国の遺産も含まれ得るため、都市の国で補完すると
+    // 「○○(都市の国)にある××(実際は別の国の遺産)」という誤りを含む文になる。
+    var heritageCountryName = h.country_name || '';
     html += '<div class="acc-row" data-heritage="' + h.heritage_name.replace(/"/g,'&quot;') + '">' +
       '<span class="acc-num">' + (idx + 1) + '</span>' +
       flagSpan +
@@ -1062,7 +1064,7 @@ function renderHeritageInner(inner, accTr, heritages, hits, kwCounts, answered) 
       '<span class="acc-dist">' + dist + ' km</span>' +
       '</div>' +
       '<div class="acc-ai-wrap" id="acc-ai-' + Math.random().toString(36).slice(2) + '" style="display:none">' +
-      buildAiPanel(h.heritage_name, cityCountryName) +
+      buildAiPanel(h.heritage_name, heritageCountryName) +
       '</div>';
   });
   html += '</div>';
@@ -1080,7 +1082,8 @@ function renderHeritageInner(inner, accTr, heritages, hits, kwCounts, answered) 
         wrap.style.display = '';
         var hName = rowEl.getAttribute('data-heritage') || '';
         if (hName) {
-          var _cName = cityCountryName;
+          var firstBtn = wrap.querySelector('.acc-ai-btn[data-country]');
+          var _cName = firstBtn ? (firstBtn.getAttribute('data-country') || '') : '';
           var localAnswered = {};
           wrap.querySelectorAll('.acc-ai-btn.answered').forEach(function(b) {
             var t = b.getAttribute('data-topic');

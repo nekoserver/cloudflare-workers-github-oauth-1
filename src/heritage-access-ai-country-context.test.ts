@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { JSDOM } from 'jsdom';
 import { getHeritageAccessPage } from './views/heritageAccess';
 
 // 対象: heritageAccess.ts の「AIに何を質問しますか」パネル(askAI/askAICached)。
@@ -54,12 +55,16 @@ describe('askAI / askAICached: 関数シグネチャに国名(countryName)を追
     expect(block).toContain('askAI(name, topic, country, function(newShareId)');
   });
 
-  it('renderHeritageInner がアコーディオンの都市国コード(data-cc)から国名を算出し、各行のAIパネルへ渡す', () => {
+  it('renderHeritageInner は都市の国コード(data-cc)ではなく、各世界遺産自身の国名(h.country_name)をAIパネルへ渡す', () => {
+    // 1つの都市の近隣世界遺産一覧には、距離だけで拾われた他国の遺産も
+    // 含まれ得るため、都市の所在国ではなく世界遺産自身の行頭国旗が表す国
+    // (h.country_name)を使わないと「○○(都市の国)にある××(実際は別の国の
+    // 遺産)」という誤りを含む問い合わせ文になってしまう。
     const idx = html.indexOf('function renderHeritageInner(');
-    const block = html.slice(idx, idx + 1400);
-    expect(block).toContain("accTr.previousElementSibling");
-    expect(block).toContain('ccToJp(');
-    expect(block).toContain('buildAiPanel(h.heritage_name,');
+    const block = html.slice(idx, idx + 1800);
+    expect(block).toContain('h.country_name');
+    expect(block).toContain('buildAiPanel(h.heritage_name, heritageCountryName)');
+    expect(block).not.toContain('accTr.previousElementSibling');
   });
 });
 
@@ -128,5 +133,73 @@ describe('askAI/askAICached: 応答表示前にストリップ処理を適用す
     const idx = html.indexOf('function askAICached(heritageName, topic, countryName, shareId)');
     const block = html.slice(idx, idx + 500);
     expect(block).toContain('stripCountryContextPrefix(');
+  });
+});
+
+describe('DOM回帰テスト: 都市の所在国と異なる国の世界遺産が近隣に含まれる場合、AI質問補完は世界遺産自身の国を使う', () => {
+  function extractMainScript(html: string): string {
+    const re = /<script>([\s\S]*?)<\/script>/g;
+    let m: RegExpExecArray | null;
+    let best = '';
+    while ((m = re.exec(html)) !== null) {
+      if (m[1].indexOf('function openAccordion(') !== -1) {
+        best = m[1];
+        break;
+      }
+    }
+    if (!best) throw new Error('openAccordion を含む <script> が見つかりません');
+    return best;
+  }
+
+  async function flush(times = 20): Promise<void> {
+    for (let i = 0; i < times; i++) {
+      await new Promise((r) => setTimeout(r, 0));
+    }
+  }
+
+  it('フランスの都市アコーディオンにイタリアの世界遺産(距離だけで含まれる)が含まれる場合、その遺産のAIボタンのdata-countryは「イタリア」になる(「フランス」にはならない)', async () => {
+    const html = getHeritageAccessPage('tester');
+    const script = extractMainScript(html);
+    const dom = new JSDOM(html, { runScripts: 'outside-only', url: 'https://example.com/' });
+    const window: any = dom.window;
+
+    window.fetch = (url: string) => {
+      const u = String(url);
+      if (u.indexOf('/api/city-all-heritages') !== -1) {
+        return Promise.resolve({
+          ok: true, status: 200,
+          json: () => Promise.resolve({
+            heritages: [
+              // ヴェネツィアはイタリアの世界遺産だが、フランスの都市から
+              // 距離だけで近隣として拾われている、という状況を再現する
+              { heritage_name: 'ヴェネツィアとその潟', distance_km: 300, country_flag: '🇮🇹', country_name: 'イタリア' },
+            ],
+          }),
+        });
+      }
+      return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({}) });
+    };
+
+    window.eval(script);
+
+    const document = window.document;
+    const table = document.createElement('table');
+    const tbody = document.createElement('tbody');
+    const tr = document.createElement('tr');
+    tr.setAttribute('data-city', 'Paris');
+    tr.setAttribute('data-lat', '48.85');
+    tr.setAttribute('data-lon', '2.35');
+    tr.setAttribute('data-cc', 'FR');
+    tr.innerHTML = '<td>1</td><td>2</td><td>3</td>';
+    tbody.appendChild(tr);
+    table.appendChild(tbody);
+    document.body.appendChild(table);
+    window.openAccordion(tr);
+    await flush();
+
+    const btn = document.querySelector('.acc-ai-btn[data-heritage="ヴェネツィアとその潟"]');
+    expect(btn).toBeTruthy();
+    expect(btn.getAttribute('data-country')).toBe('イタリア');
+    expect(btn.getAttribute('data-country')).not.toBe('フランス');
   });
 });
