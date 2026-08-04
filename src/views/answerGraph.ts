@@ -26,6 +26,48 @@ body { background:var(--bg,#0d1117); color:var(--fg,#e6edf3); font-family:-apple
 main { flex:1; max-width:1100px; width:100%; margin:0 auto; padding:24px 16px; display:flex; flex-direction:column; gap:16px; }
 .card { background:var(--card); border:1px solid var(--border); border-radius:10px; padding:18px 20px; }
 .card-title { font-size:13px; font-weight:600; color:var(--label); margin-bottom:14px; text-transform:uppercase; letter-spacing:.04em; }
+.card-title-row { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:14px; }
+.card-title-row .card-title { margin-bottom:0; }
+.mode-toggle-btn { background:var(--btn-bg); border:1px solid var(--btn-border); color:var(--fg); border-radius:6px; padding:6px 12px; font-size:12px; cursor:pointer; white-space:nowrap; }
+.mode-toggle-btn:hover { background:var(--btn-hover); }
+.mode-toggle-btn.active { background:var(--accent); color:var(--accent-fg); border-color:var(--accent); }
+.fp-view { width:100%; display:flex; flex-direction:column; gap:8px; user-select:none; }
+.fp-here { font-size:12px; color:var(--label); }
+.fp-here strong { color:var(--fg); cursor:pointer; text-decoration:none; }
+.fp-here strong:hover { color:var(--accent); }
+.fp-sky {
+  position:relative; width:100%; aspect-ratio:21/9; border-radius:10px; overflow:hidden;
+  background:linear-gradient(to bottom, var(--btn-bg) 0%, var(--btn-bg) 48%, var(--border) 48%, var(--border) 52%, var(--card) 52%, var(--card) 100%);
+  touch-action:pan-y; cursor:grab;
+}
+.fp-sky:active { cursor:grabbing; }
+.fp-horizon { position:absolute; left:0; right:0; top:50%; height:1px; background:var(--label); opacity:.5; }
+.fp-crosshair {
+  position:absolute; left:50%; top:50%; width:22px; height:22px; margin:-11px 0 0 -11px;
+  border:1.5px solid var(--label); border-radius:50%; opacity:.55; pointer-events:none;
+}
+.fp-crosshair::before, .fp-crosshair::after { content:''; position:absolute; background:var(--label); opacity:.55; }
+.fp-crosshair::before { left:50%; top:-5px; width:1px; height:6px; margin-left:-.5px; }
+.fp-crosshair::after { left:-5px; top:50%; width:6px; height:1px; margin-top:-.5px; }
+.fp-nodes { position:absolute; inset:0; }
+.fp-node {
+  position:absolute; top:50%; transform:translate(-50%,-50%); display:flex; flex-direction:column; align-items:center;
+  gap:3px; cursor:pointer; transition:left .12s linear;
+}
+.fp-node-dot { width:16px; height:16px; border-radius:50%; box-shadow:0 0 0 2px var(--card); }
+.fp-node-label {
+  font-size:11px; padding:2px 7px; border-radius:10px; background:var(--card); border:1px solid var(--border);
+  color:var(--fg); white-space:nowrap; max-width:140px; overflow:hidden; text-overflow:ellipsis;
+}
+.fp-node.fp-node-centered .fp-node-label { border-color:var(--accent); color:var(--accent); font-weight:600; }
+.fp-controls { display:flex; align-items:center; justify-content:center; gap:16px; }
+.fp-btn {
+  width:52px; height:52px; border-radius:50%; border:1px solid var(--btn-border); background:var(--btn-bg);
+  color:var(--fg); font-size:20px; cursor:pointer;
+}
+.fp-btn:hover { background:var(--btn-hover); }
+.fp-btn-forward { background:var(--accent); color:var(--accent-fg); border-color:var(--accent); }
+.fp-hint { font-size:11px; color:var(--label); text-align:center; }
 .search-row { display:flex; gap:8px; margin-bottom:10px; }
 input[type=search] { flex:1; background:var(--btn-bg); border:1px solid var(--btn-border); border-radius:6px; color:var(--fg); font-size:13px; padding:8px 12px; outline:none; }
 input[type=search]:focus { border-color:var(--accent); }
@@ -138,7 +180,10 @@ input[type=search]:focus { border-color:var(--accent); }
   </div>
 
   <div class="card">
-    <div class="card-title">どんな質問と回答が広がっていくか</div>
+    <div class="card-title-row">
+      <div class="card-title">どんな質問と回答が広がっていくか</div>
+      <button type="button" class="mode-toggle-btn" id="fpToggleBtn">🧑‍🚶 一人称モード</button>
+    </div>
     <div class="legend">
       <span><span class="legend-dot" style="background:var(--answer-color);"></span>回答（質問）</span>
       <span><span class="legend-dot" style="background:var(--keyword-color);"></span>キーワード</span>
@@ -150,6 +195,20 @@ input[type=search]:focus { border-color:var(--accent); }
       <div class="side-panel" id="sidePanel"><span class="empty-hint">ノードをクリックすると詳細がここに表示されます</span></div>
       <div class="canvas-wrap">
         <canvas id="graphCanvas" width="800" height="600"></canvas>
+      </div>
+      <div class="fp-view" id="fpView" style="display:none;">
+        <div class="fp-here" id="fpHere"></div>
+        <div class="fp-sky" id="fpSky">
+          <div class="fp-horizon"></div>
+          <div class="fp-crosshair"></div>
+          <div class="fp-nodes" id="fpNodes"></div>
+        </div>
+        <div class="fp-controls">
+          <button type="button" class="fp-btn" id="fpLeftBtn" aria-label="左を見る">←</button>
+          <button type="button" class="fp-btn fp-btn-forward" id="fpForwardBtn" aria-label="選択して読む">↑</button>
+          <button type="button" class="fp-btn" id="fpRightBtn" aria-label="右を見る">→</button>
+        </div>
+        <div class="fp-hint">左右にスワイプ、または ←→ ボタンで見渡せます。↑ で中央のノードを選択します</div>
       </div>
     </div>
   </div>
@@ -198,13 +257,27 @@ input[type=search]:focus { border-color:var(--accent); }
   var answerModalShareLink = document.getElementById('answerModalShareLink');
   var answerModalHighlightToggleBtn = document.getElementById('answerModalHighlightToggleBtn');
   var MODEL_COLORS = ${modelColorsJson};
+  var fpToggleBtn = document.getElementById('fpToggleBtn');
+  var fpView = document.getElementById('fpView');
+  var fpHere = document.getElementById('fpHere');
+  var fpSky = document.getElementById('fpSky');
+  var fpNodes = document.getElementById('fpNodes');
+  var fpLeftBtn = document.getElementById('fpLeftBtn');
+  var fpRightBtn = document.getElementById('fpRightBtn');
+  var fpForwardBtn = document.getElementById('fpForwardBtn');
+  var canvasWrap = document.querySelector('.canvas-wrap');
 
   var searchTimer = null;
   var selectedShareId = null;
   var nodePositions = [];
   var currentGraph = null;
+  var lastLayout = null;
   var answerModalKeywordsFromDB = [];
   var answerModalHighlightActive = true;
+  var fpActive = false;
+  var fpHeadingDeg = 0;
+  var fpDragStartX = null;
+  var fpDragStartHeading = 0;
 
   function escHtml(s) {
     return String(s == null ? '' : s)
@@ -440,6 +513,7 @@ input[type=search]:focus { border-color:var(--accent); }
           graphStatus.className = 'graph-status err';
           currentGraph = null;
           drawGraph();
+          if (fpActive) { fpHeadingDeg = 0; renderFirstPersonHere(); renderFirstPersonView(); }
           return;
         }
         currentGraph = d;
@@ -452,6 +526,7 @@ input[type=search]:focus { border-color:var(--accent); }
         }
         graphStatus.textContent = statusText;
         drawGraph();
+        if (fpActive) { fpHeadingDeg = 0; renderFirstPersonHere(); renderFirstPersonView(); }
       })
       .catch(function() {
         graphStatus.textContent = 'グラフの取得に失敗しました（通信エラー）';
@@ -478,22 +553,10 @@ input[type=search]:focus { border-color:var(--accent); }
     categoryLegend.innerHTML = html;
   }
 
-  function drawGraph() {
-    nodePositions = [];
-    renderCategoryLegend();
-    if (!currentGraph || currentGraph.nodes.length === 0) {
-      canvas.width = 800; canvas.height = 400;
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      return;
-    }
-    var nodes = currentGraph.nodes;
-    var edges = currentGraph.edges;
+  function computeRadialLayout(nodes, ringSpacing) {
     var maxDepth = 0;
     nodes.forEach(function(n) { if (n.depth > maxDepth) maxDepth = n.depth; });
-    var ringSpacing = 80;
     var size = Math.max(500, (maxDepth + 1) * ringSpacing * 2 + 80);
-    canvas.width = size;
-    canvas.height = size;
     var cx = size / 2, cy = size / 2;
 
     var byDepth = {};
@@ -514,6 +577,70 @@ input[type=search]:focus { border-color:var(--accent); }
         posById[n.id] = { x: x, y: y, node: n };
       });
     });
+
+    return { size: size, cx: cx, cy: cy, posById: posById };
+  }
+
+  function normalizeDeg360(deg) {
+    var d = deg % 360;
+    if (d < 0) d += 360;
+    return d;
+  }
+
+  function normalizeDegSigned(deg) {
+    var d = normalizeDeg360(deg);
+    return d > 180 ? d - 360 : d;
+  }
+
+  function computeFirstPersonSlots(posById, cx, cy, headingDeg, fovDeg) {
+    var entries = [];
+    var maxDistance = 1;
+    Object.keys(posById).forEach(function(id) {
+      var p = posById[id];
+      if (p.node.depth === 0) return;
+      var dx = p.x - cx, dy = p.y - cy;
+      var distance = Math.sqrt(dx * dx + dy * dy);
+      if (distance > maxDistance) maxDistance = distance;
+      var bearingDeg = normalizeDeg360(Math.atan2(dy, dx) * 180 / Math.PI);
+      entries.push({ id: id, node: p.node, bearingDeg: bearingDeg, distance: distance });
+    });
+    var halfFov = fovDeg / 2;
+    var visible = [];
+    entries.forEach(function(entry) {
+      var relativeDeg = normalizeDegSigned(entry.bearingDeg - headingDeg);
+      if (Math.abs(relativeDeg) > halfFov) return;
+      var scale = Math.max(0.35, 1 - (entry.distance / maxDistance) * 0.65);
+      visible.push({
+        id: entry.id,
+        node: entry.node,
+        bearingDeg: entry.bearingDeg,
+        relativeDeg: relativeDeg,
+        distance: entry.distance,
+        screenX: 0.5 + (relativeDeg / halfFov) * 0.5,
+        scale: scale,
+      });
+    });
+    visible.sort(function(a, b) { return b.distance - a.distance; });
+    return visible;
+  }
+
+  function drawGraph() {
+    nodePositions = [];
+    renderCategoryLegend();
+    if (!currentGraph || currentGraph.nodes.length === 0) {
+      canvas.width = 800; canvas.height = 400;
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      lastLayout = null;
+      return;
+    }
+    var nodes = currentGraph.nodes;
+    var edges = currentGraph.edges;
+    var ringSpacing = 80;
+    var layout = computeRadialLayout(nodes, ringSpacing);
+    lastLayout = layout;
+    var size = layout.size, cx = layout.cx, cy = layout.cy, posById = layout.posById;
+    canvas.width = size;
+    canvas.height = size;
 
     ctx.clearRect(0, 0, size, size);
 
@@ -558,6 +685,18 @@ input[type=search]:focus { border-color:var(--accent); }
     return c || '#888';
   }
 
+  function selectGraphNode(node) {
+    var typeLabelClass = node.type === 'answer' ? 'node-type-answer' : 'node-type-keyword';
+    var typeLabelText = node.type === 'answer' ? '回答（質問）' : 'キーワード';
+    var categoryLine = node.dominantCategory
+      ? '<div style="margin-bottom:6px;"><span class="legend-dot" style="background:' + escHtml(node.color || '#888888') + ';"></span>分類: ' + escHtml(node.dominantCategory) + '</div>'
+      : '';
+    sidePanel.innerHTML = '<span class="node-type-label ' + typeLabelClass + '">' + typeLabelText + '</span>'
+      + '<div style="margin-bottom:6px;color:var(--label);">深さ: ' + node.depth + '</div>'
+      + categoryLine
+      + buildNodeLabelLine(node);
+  }
+
   canvas.addEventListener('click', function(e) {
     var rect = canvas.getBoundingClientRect();
     var scaleX = canvas.width / rect.width;
@@ -571,16 +710,131 @@ input[type=search]:focus { border-color:var(--accent); }
       if (Math.sqrt(dx * dx + dy * dy) <= p.r) { hit = p.node; break; }
     }
     if (!hit) return;
-    var typeLabelClass = hit.type === 'answer' ? 'node-type-answer' : 'node-type-keyword';
-    var typeLabelText = hit.type === 'answer' ? '回答（質問）' : 'キーワード';
-    var categoryLine = hit.dominantCategory
-      ? '<div style="margin-bottom:6px;"><span class="legend-dot" style="background:' + escHtml(hit.color || '#888888') + ';"></span>分類: ' + escHtml(hit.dominantCategory) + '</div>'
-      : '';
-    sidePanel.innerHTML = '<span class="node-type-label ' + typeLabelClass + '">' + typeLabelText + '</span>'
-      + '<div style="margin-bottom:6px;color:var(--label);">深さ: ' + hit.depth + '</div>'
-      + categoryLine
-      + buildNodeLabelLine(hit);
+    selectGraphNode(hit);
     showNodeTooltip(hit, e.pageX, e.pageY);
+  });
+
+  // ===== 一人称モード（ストリートビュー風パノラマ） =====
+  var FP_FOV_DEG = 100;
+
+  function renderFirstPersonHere() {
+    if (!currentGraph) { fpHere.innerHTML = ''; return; }
+    var seed = currentGraph.nodes.filter(function(n) { return n.depth === 0; })[0];
+    if (!seed) { fpHere.innerHTML = ''; return; }
+    fpHere.innerHTML = '📍 現在地: <strong class="question-line" data-share-id="' + escHtml(seed.id.slice(2)) + '">' + escHtml(seed.label) + '</strong>';
+  }
+
+  function renderFirstPersonView() {
+    if (!fpActive || !lastLayout) { fpNodes.innerHTML = ''; return; }
+    var slots = computeFirstPersonSlots(lastLayout.posById, lastLayout.cx, lastLayout.cy, fpHeadingDeg, FP_FOV_DEG);
+    var answerColor = getCssVar('--answer-color') || '#0969da';
+    var keywordColor = getCssVar('--keyword-color') || '#c2410c';
+    fpNodes.innerHTML = '';
+    slots.forEach(function(slot) {
+      var isAnswer = slot.node.type === 'answer';
+      var fallbackColor = isAnswer ? answerColor : keywordColor;
+      var color = slot.node.color || fallbackColor;
+      var centered = Math.abs(slot.relativeDeg) <= 6;
+      var el = document.createElement('div');
+      el.className = 'fp-node' + (centered ? ' fp-node-centered' : '');
+      el.style.left = (slot.screenX * 100) + '%';
+      el.style.zIndex = String(Math.round((1 - slot.distance / 1e6) * 100) + 100);
+      el.style.opacity = String(0.4 + slot.scale * 0.6);
+      var dot = document.createElement('div');
+      dot.className = 'fp-node-dot';
+      dot.style.background = color;
+      dot.style.width = dot.style.height = (16 * slot.scale + 8) + 'px';
+      var label = document.createElement('div');
+      label.className = 'fp-node-label';
+      label.textContent = slot.node.label;
+      label.style.fontSize = (11 * Math.max(slot.scale, 0.7)) + 'px';
+      el.appendChild(dot);
+      el.appendChild(label);
+      el.addEventListener('click', function(e) {
+        e.stopPropagation();
+        selectGraphNode(slot.node);
+        if (slot.node.type === 'answer') openAnswerModal(slot.node.id.slice(2));
+      });
+      fpNodes.appendChild(el);
+    });
+  }
+
+  function rotateFirstPerson(deltaDeg) {
+    fpHeadingDeg = normalizeDeg360(fpHeadingDeg + deltaDeg);
+    renderFirstPersonView();
+  }
+
+  function forwardFirstPerson() {
+    if (!fpActive || !lastLayout) return;
+    var slots = computeFirstPersonSlots(lastLayout.posById, lastLayout.cx, lastLayout.cy, fpHeadingDeg, FP_FOV_DEG);
+    if (slots.length === 0) return;
+    var nearestCentered = null;
+    slots.forEach(function(slot) {
+      if (nearestCentered === null || Math.abs(slot.relativeDeg) < Math.abs(nearestCentered.relativeDeg)) {
+        nearestCentered = slot;
+      }
+    });
+    if (!nearestCentered) return;
+    selectGraphNode(nearestCentered.node);
+    if (nearestCentered.node.type === 'answer') openAnswerModal(nearestCentered.node.id.slice(2));
+  }
+
+  function setFirstPersonActive(active) {
+    fpActive = active;
+    fpToggleBtn.classList.toggle('active', active);
+    fpToggleBtn.textContent = active ? '🗺️ 俯瞰モードに戻る' : '🧑‍🚶 一人称モード';
+    fpView.style.display = active ? 'flex' : 'none';
+    canvasWrap.style.display = active ? 'none' : '';
+    sidePanel.style.display = active ? 'none' : '';
+    if (active) {
+      fpHeadingDeg = 0;
+      renderFirstPersonHere();
+      renderFirstPersonView();
+    }
+  }
+
+  fpToggleBtn.addEventListener('click', function() { setFirstPersonActive(!fpActive); });
+  fpLeftBtn.addEventListener('click', function() { rotateFirstPerson(-20); });
+  fpRightBtn.addEventListener('click', function() { rotateFirstPerson(20); });
+  fpForwardBtn.addEventListener('click', forwardFirstPerson);
+
+  fpHere.addEventListener('click', function(e) {
+    var q = e.target.closest('.question-line');
+    if (q) openAnswerModal(q.getAttribute('data-share-id'));
+  });
+
+  fpSky.addEventListener('touchstart', function(e) {
+    if (e.touches.length !== 1) return;
+    fpDragStartX = e.touches[0].clientX;
+    fpDragStartHeading = fpHeadingDeg;
+  }, { passive: true });
+  fpSky.addEventListener('touchmove', function(e) {
+    if (fpDragStartX === null || e.touches.length !== 1) return;
+    var deltaX = e.touches[0].clientX - fpDragStartX;
+    var deltaDeg = (deltaX / fpSky.clientWidth) * FP_FOV_DEG;
+    fpHeadingDeg = normalizeDeg360(fpDragStartHeading - deltaDeg);
+    renderFirstPersonView();
+  }, { passive: true });
+  fpSky.addEventListener('touchend', function() { fpDragStartX = null; });
+
+  fpSky.addEventListener('mousedown', function(e) {
+    fpDragStartX = e.clientX;
+    fpDragStartHeading = fpHeadingDeg;
+  });
+  document.addEventListener('mousemove', function(e) {
+    if (fpDragStartX === null) return;
+    var deltaX = e.clientX - fpDragStartX;
+    var deltaDeg = (deltaX / fpSky.clientWidth) * FP_FOV_DEG;
+    fpHeadingDeg = normalizeDeg360(fpDragStartHeading - deltaDeg);
+    renderFirstPersonView();
+  });
+  document.addEventListener('mouseup', function() { fpDragStartX = null; });
+
+  document.addEventListener('keydown', function(e) {
+    if (!fpActive) return;
+    if (e.key === 'ArrowLeft') { rotateFirstPerson(-20); }
+    else if (e.key === 'ArrowRight') { rotateFirstPerson(20); }
+    else if (e.key === 'ArrowUp') { forwardFirstPerson(); }
   });
 
   drawGraph();
