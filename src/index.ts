@@ -4153,7 +4153,7 @@ export async function buildAnswerPropagationGraph(
   while (currentAnswers.length > 0 && depth < maxDepth && nodes.length < maxNodes) {
     const newKeywordToParent = new Map<string, string>();
     for (const a of currentAnswers) {
-      const text = a.question + ' ' + a.answer;
+      const text = a.answer;
       const found = extractContainedKeywords(text, allKeywords).filter((k) => !processedKeywords.has(k));
       for (const kw of found) {
         if (newKeywordToParent.size >= maxKeywordsPerLayer) break;
