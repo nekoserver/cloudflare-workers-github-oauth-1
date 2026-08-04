@@ -22,6 +22,9 @@ import { extractContainedKeywords, buildAnswerPropagationGraph } from './index';
 //       (このJSDocが謳う「起点の回答に含まれるキーワード」という設計と矛盾する。
 //       /answer-graph の一人称モードで最前列に表示される「その質問に対する回答の
 //       中に含まれるキーワード群」が、実際には質問文由来のキーワードで汚染される)
+//   (7) 起点(第1層)のキーワードが maxKeywordsPerLayer で打ち切られ、検索結果の
+//       keywordCount(回答本文に含まれる全キーワード数)と一人称モード最前列の
+//       キーワード群が一致しなくなる。第1層は起点回答の全キーワードを含めること
 
 describe('extractContainedKeywords: テキストに含まれる登録済みキーワードの抽出', () => {
   it('テキストに含まれるキーワードだけを返す(大文字小文字を区別しない)', () => {
@@ -139,6 +142,40 @@ describe('buildAnswerPropagationGraph: 回答伝播グラフの構築', () => {
     expect(ids).not.toContain('k:新幹線');
     // 「商業施設」はs1の回答本文に含まれるため対象になる
     expect(ids).toContain('k:商業施設');
+  });
+
+  it('起点(第1層)のキーワードはmaxKeywordsPerLayerで打ち切られず、起点回答に含まれる全キーワードがノード化される', async () => {
+    const db = setupDb();
+    const kws: string[] = [];
+    for (let i = 1; i <= 14; i++) {
+      const kw = 'キーワード' + String(i).padStart(2, '0');
+      kws.push(kw);
+      insertKeyword(db, 'u1', kw);
+    }
+    insertShare(db, 's1', 'u1', '起点の質問', '回答本文: ' + kws.join('、'));
+
+    const result = await buildAnswerPropagationGraph(wrapD1(db) as never, 'u1', 's1', { maxKeywordsPerLayer: 12 });
+
+    const depth1Keywords = result!.nodes.filter((n) => n.type === 'keyword' && n.depth === 1).map((n) => n.label);
+    expect(depth1Keywords.sort()).toEqual(kws.slice().sort());
+  });
+
+  it('第2層以降のキーワードはこれまで通りmaxKeywordsPerLayerで打ち切られる', async () => {
+    const db = setupDb();
+    insertKeyword(db, 'u1', '起点語');
+    const deepKws: string[] = [];
+    for (let i = 1; i <= 5; i++) {
+      const kw = '深い語' + i;
+      deepKws.push(kw);
+      insertKeyword(db, 'u1', kw);
+    }
+    insertShare(db, 's1', 'u1', '起点の質問', '起点語 についての回答');
+    insertShare(db, 's2', 'u1', '関連質問', '起点語 と ' + deepKws.join(' と ') + ' の話');
+
+    const result = await buildAnswerPropagationGraph(wrapD1(db) as never, 'u1', 's1', { maxKeywordsPerLayer: 2 });
+
+    const depth3Keywords = result!.nodes.filter((n) => n.type === 'keyword' && n.depth === 3);
+    expect(depth3Keywords.length).toBeLessThanOrEqual(2);
   });
 
   it('既に訪問済みの回答は再度ノードとして追加されない', async () => {

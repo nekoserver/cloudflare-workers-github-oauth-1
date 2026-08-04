@@ -14,6 +14,8 @@ import { getAnswerGraphPage } from './views/answerGraph';
 //   (3) ソート後に「キーワード数」列だけ並び替わり、質問日時・質問文列が
 //       元の行と対応しなくなる(行単位でのソートになっていない)
 //   (4) キーワード総数・質問日時が行の先頭に表示されない
+//   (5) 左2カラム(キーワード数・質問日時)が内容以上の横幅を取り、質問文の
+//       表示幅を圧迫する(width:1% + nowrap のshrink-to-fitが外れている)
 
 function buildPage(): string {
   return getAnswerGraphPage('testuser', {});
@@ -113,6 +115,23 @@ async function setupSearchResultsTable() {
     seedSearchResults: document.getElementById('seedSearchResults')!,
   };
 }
+
+describe('検索結果テーブルのCSS: 左2カラムのshrink-to-fit', () => {
+  it('キーワード数・質問日時のtd/thはwidth:1%とnowrapで内容幅まで切り詰められている', () => {
+    const html = buildPage();
+    const countRuleIdx = html.indexOf('td.search-result-count');
+    const countRule = html.slice(countRuleIdx, html.indexOf('}', countRuleIdx));
+    expect(countRule).toContain('width:1%');
+    expect(countRule).toContain('white-space:nowrap');
+
+    const dateRuleIdx = html.indexOf('td.search-result-date');
+    const dateRule = html.slice(dateRuleIdx, html.indexOf('}', dateRuleIdx));
+    expect(dateRule).toContain('width:1%');
+    expect(dateRule).toContain('white-space:nowrap');
+
+    expect(html).toContain('.search-results-table th:nth-child(1), .search-results-table th:nth-child(2) { width:1%; }');
+  });
+});
 
 describe('一人称モード以前: 起点検索結果テーブルのDOM実動作(jsdom)', () => {
   afterEach(() => { vi.unstubAllGlobals(); });

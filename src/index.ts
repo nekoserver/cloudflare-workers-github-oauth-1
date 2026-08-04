@@ -4173,15 +4173,19 @@ export async function buildAnswerPropagationGraph(
   let depth = 0;
 
   while (currentAnswers.length > 0 && depth < maxDepth && nodes.length < maxNodes) {
+    // 第1層(起点回答の直下)は「その回答に含まれるキーワード群」そのものを表す
+    // 必要があるため maxKeywordsPerLayer で打ち切らない(検索結果のkeywordCountや
+    // 一人称モード最前列との一致を保証する)。第2層以降は爆発防止のため打ち切る。
+    const layerKeywordCap = depth === 0 ? Number.POSITIVE_INFINITY : maxKeywordsPerLayer;
     const newKeywordToParent = new Map<string, string>();
     for (const a of currentAnswers) {
       const text = a.answer;
       const found = extractContainedKeywords(text, allKeywords).filter((k) => !processedKeywords.has(k));
       for (const kw of found) {
-        if (newKeywordToParent.size >= maxKeywordsPerLayer) break;
+        if (newKeywordToParent.size >= layerKeywordCap) break;
         if (!newKeywordToParent.has(kw)) newKeywordToParent.set(kw, a.nodeId);
       }
-      if (newKeywordToParent.size >= maxKeywordsPerLayer) break;
+      if (newKeywordToParent.size >= layerKeywordCap) break;
     }
     if (newKeywordToParent.size === 0) break;
     depth++;
