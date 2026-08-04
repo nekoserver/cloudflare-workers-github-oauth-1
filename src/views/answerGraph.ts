@@ -86,6 +86,12 @@ main { flex:1; max-width:1100px; width:100%; margin:0 auto; padding:24px 16px; d
 .fp-btn:hover { background:var(--btn-hover); }
 .fp-btn-forward { background:var(--accent); color:var(--accent-fg); border-color:var(--accent); }
 .fp-hint { font-size:11px; color:var(--label); text-align:center; }
+.cat-quick-nav { margin-bottom:10px; }
+.cat-quick-groups { display:flex; flex-wrap:wrap; align-items:center; gap:10px 14px; margin-bottom:8px; }
+.cat-quick-group-label { display:inline-flex; align-items:center; gap:4px; font-size:12px; cursor:pointer; color:var(--fg); white-space:nowrap; }
+.cat-quick-group-label input[type=radio] { cursor:pointer; margin:0; }
+.cat-quick-cats { display:flex; flex-wrap:wrap; gap:8px; }
+.cat-quick-cat-select { background:var(--btn-bg); border:1px solid var(--btn-border); border-radius:6px; color:var(--fg); font-size:12px; padding:5px 8px; cursor:pointer; max-width:220px; }
 .search-row { display:flex; gap:8px; margin-bottom:10px; }
 input[type=search] { flex:1; background:var(--btn-bg); border:1px solid var(--btn-border); border-radius:6px; color:var(--fg); font-size:13px; padding:8px 12px; outline:none; }
 input[type=search]:focus { border-color:var(--accent); }
@@ -202,6 +208,10 @@ input[type=search]:focus { border-color:var(--accent); }
 <main>
   <div class="card">
     <div class="card-title">起点にする回答を検索</div>
+    <div class="cat-quick-nav">
+      <div class="cat-quick-groups" id="catQuickGroups"></div>
+      <div class="cat-quick-cats" id="catQuickCats"></div>
+    </div>
     <div class="search-row">
       <input type="search" id="seedSearchInput" placeholder="質問・回答のキーワードで検索..." autocomplete="off">
     </div>
@@ -284,6 +294,8 @@ input[type=search]:focus { border-color:var(--accent); }
   var seedSearchStatus = document.getElementById('seedSearchStatus');
   var seedSearchResults = document.getElementById('seedSearchResults');
   var searchKeywordCountTh = document.getElementById('searchKeywordCountTh');
+  var catQuickGroups = document.getElementById('catQuickGroups');
+  var catQuickCats = document.getElementById('catQuickCats');
   var graphStatus = document.getElementById('graphStatus');
   var canvas = document.getElementById('graphCanvas');
   var ctx = canvas.getContext('2d');
@@ -603,6 +615,80 @@ input[type=search]:focus { border-color:var(--accent); }
     searchTimer = setTimeout(function() { doSeedSearch(q); }, 350);
   });
 
+  // ===== 大分類/中分類からのキーワードすばやい絞り込み =====
+  var catQuickData = null;
+
+  function renderCatQuickCats(group) {
+    catQuickCats.innerHTML = '';
+    if (!catQuickData || !group) return;
+    var catIds = (group.category_ids || []).map(String);
+    var cats = catIds.map(function(cid) { return catQuickData.catMap[cid]; }).filter(Boolean);
+    cats = sortByKwCountDesc(cats);
+    cats.forEach(function(cat) {
+      var select = document.createElement('select');
+      select.className = 'cat-quick-cat-select';
+      var placeholderOpt = document.createElement('option');
+      placeholderOpt.value = '';
+      placeholderOpt.textContent = cat.name + ' (' + (cat.kw_count || 0) + ')';
+      select.appendChild(placeholderOpt);
+      var kws = catQuickData.keywordsByCat[String(cat.id)] || [];
+      kws.forEach(function(kw) {
+        var opt = document.createElement('option');
+        opt.value = kw.keyword;
+        opt.textContent = kw.keyword + ' (' + kw.cnt + ')';
+        select.appendChild(opt);
+      });
+      select.addEventListener('change', function() {
+        if (!select.value) return;
+        var chosen = select.value;
+        seedSearchInput.value = chosen;
+        seedSearchStatus.textContent = '検索中...';
+        doSeedSearch(chosen);
+        select.value = '';
+      });
+      catQuickCats.appendChild(select);
+    });
+  }
+
+  function renderCatQuickGroups() {
+    catQuickGroups.innerHTML = '';
+    if (!catQuickData) return;
+    var groups = sortByKwCountDesc(catQuickData.groups);
+    groups.forEach(function(g) {
+      var label = document.createElement('label');
+      label.className = 'cat-quick-group-label';
+      var radio = document.createElement('input');
+      radio.type = 'radio';
+      radio.name = 'catQuickGroupRadio';
+      radio.value = g.id;
+      radio.addEventListener('change', function() { renderCatQuickCats(g); });
+      label.appendChild(radio);
+      var span = document.createElement('span');
+      span.textContent = '(' + (g.kw_count || 0) + ') ' + g.group_name;
+      label.appendChild(span);
+      catQuickGroups.appendChild(label);
+    });
+  }
+
+  function loadCatQuickNav() {
+    Promise.allSettled([
+      fetch('/api/aichat/category-groups', { credentials: 'same-origin' }).then(function(r) { return r.json(); }),
+      fetch('/api/aichat/keyword-categories-summary', { credentials: 'same-origin' }).then(function(r) { return r.json(); }),
+      fetch('/api/aichat/all-keywords', { credentials: 'same-origin' }).then(function(r) { return r.json(); })
+    ]).then(function(results) {
+      var groupData = results[0].status === 'fulfilled' ? results[0].value : {};
+      var catData = results[1].status === 'fulfilled' ? results[1].value : {};
+      var kwData = results[2].status === 'fulfilled' ? results[2].value : {};
+      var groups = groupData.groups || [];
+      var cats = catData.categories || [];
+      var keywords = kwData.keywords || [];
+      var catMap = {};
+      cats.forEach(function(cat) { catMap[String(cat.id)] = cat; });
+      catQuickData = { groups: groups, catMap: catMap, keywordsByCat: computeKeywordsByCategory(keywords) };
+      renderCatQuickGroups();
+    });
+  }
+
   // レスポンスがJSONでない場合(サーバーの未捕捉500等)でも原因を画面に出せるよう、
   // HTTPステータスと本文先頭を含めたエラーメッセージへ変換する純粋関数。
   function parseGraphResponse(status, text) {
@@ -804,6 +890,33 @@ input[type=search]:focus { border-color:var(--accent); }
       results.push(p.node);
     });
     return results;
+  }
+
+  function computeKeywordsByCategory(keywords) {
+    var byCat = {};
+    (keywords || []).forEach(function(kw) {
+      var ids = [];
+      if (kw.category_pairs) {
+        String(kw.category_pairs).split(',').forEach(function(pair) {
+          var sep = pair.indexOf(':');
+          if (sep > 0) ids.push(pair.slice(0, sep));
+        });
+      } else if (kw.category_id != null) {
+        ids.push(String(kw.category_id));
+      }
+      ids.forEach(function(cid) {
+        if (!byCat[cid]) byCat[cid] = [];
+        byCat[cid].push({ keyword: kw.keyword, cnt: kw.cnt });
+      });
+    });
+    Object.keys(byCat).forEach(function(cid) {
+      byCat[cid].sort(function(a, b) { return b.cnt - a.cnt; });
+    });
+    return byCat;
+  }
+
+  function sortByKwCountDesc(items) {
+    return (items || []).slice().sort(function(a, b) { return (b.kw_count || 0) - (a.kw_count || 0); });
   }
 
   function drawGraph() {
@@ -1121,6 +1234,7 @@ input[type=search]:focus { border-color:var(--accent); }
     else if (e.key === 'ArrowUp') { forwardFirstPerson(); }
   });
 
+  loadCatQuickNav();
   drawGraph();
 })();
 </script>
