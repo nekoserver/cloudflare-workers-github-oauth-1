@@ -6,6 +6,7 @@ import {
   enrichGraphWithCategoryColors,
   buildAnswerPropagationGraph,
   BGE_M3_MODEL,
+  PLAMO_EMBEDDING_MODEL,
 } from './index';
 
 // 対象: /answer-graph のノードを「旅行寄り」「コーディング寄り」のような
@@ -197,6 +198,32 @@ describe('getOrComputeKeywordEmbeddingsBatch: キーワード埋め込みのバ�
     const map = await getOrComputeKeywordEmbeddingsBatch(wrapD1(db) as never, ai as never, 'u1', []);
     expect(map.size).toBe(0);
     expect(ai.run).not.toHaveBeenCalled();
+  });
+
+  it('modelを指定すると主系列(model列)にそのモデル名で保存され、そのモデルでのみキャッシュヒットする', async () => {
+    const db = setupDb();
+    const ai = makeMockAi({ '駅': [1, 2, 3] });
+
+    const map = await getOrComputeKeywordEmbeddingsBatch(wrapD1(db) as never, ai as never, 'u1', ['駅'], 'auto', PLAMO_EMBEDDING_MODEL);
+
+    expect(map.get('駅')).toEqual([1, 2, 3]);
+    const row = db.prepare(`SELECT model, dim FROM aichat_keyword_embeddings WHERE user_id='u1' AND keyword='駅'`).get() as { model: string; dim: number };
+    expect(row.model).toBe(PLAMO_EMBEDDING_MODEL);
+    expect(row.dim).toBe(3);
+  });
+
+  it('既存行が別モデル(bge-m3)の場合、要求モデル(plamo)と一致しないためキャッシュを使わず再計算する', async () => {
+    const db = setupDb();
+    const now = new Date().toISOString();
+    db.prepare(
+      `INSERT INTO aichat_keyword_embeddings (user_id, keyword, model, dim, vector, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`
+    ).run('u1', '駅', BGE_M3_MODEL, 2, new Uint8Array(new Float32Array([9, 9]).buffer), now, now);
+    const ai = makeMockAi({ '駅': [1, 2, 3] });
+
+    const map = await getOrComputeKeywordEmbeddingsBatch(wrapD1(db) as never, ai as never, 'u1', ['駅'], 'auto', PLAMO_EMBEDDING_MODEL);
+
+    expect(map.get('駅')).toEqual([1, 2, 3]);
+    expect(ai.run).toHaveBeenCalledTimes(1);
   });
 });
 

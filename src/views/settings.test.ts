@@ -8,6 +8,51 @@ const minimalUser = {
   expiresAtTimestamp: 1234567890,
 };
 
+describe('設定ページ: キーワードの自動ベクタ化設定', () => {
+  it('aichatAutoVectorizeEnabledCheckboxが存在し、Cookie未設定時はデフォルトでON(checked)', () => {
+    const html = getSettingsPage(minimalUser);
+    const idx = html.indexOf('id="aichatAutoVectorizeEnabledCheckbox"');
+    expect(idx).toBeGreaterThan(-1);
+    const snippet = html.slice(idx, idx + 200);
+    expect(snippet).toContain('checked');
+  });
+
+  it('aichatAutoVectorizeModelSelectが存在し、Cookie未設定時はplamo-embedding-1bがselected', () => {
+    const html = getSettingsPage(minimalUser);
+    const idx = html.indexOf('id="aichatAutoVectorizeModelSelect"');
+    expect(idx).toBeGreaterThan(-1);
+    const selectHtml = html.slice(idx, html.indexOf('</select>', idx));
+    expect(selectHtml).toContain('value="@cf/baai/bge-m3"');
+    expect(selectHtml).toContain('value="@cf/pfnet/plamo-embedding-1b"');
+    expect(selectHtml).toContain('value="@cf/google/embeddinggemma-300m"');
+    const plamoOptIdx = selectHtml.indexOf('value="@cf/pfnet/plamo-embedding-1b"');
+    const plamoOptSnippet = selectHtml.slice(plamoOptIdx, plamoOptIdx + 60);
+    expect(plamoOptSnippet).toContain('selected');
+  });
+
+  it('aichatAutoVectorizeEnabled="off"を渡すとcheckboxがOFF(未チェック)になる', () => {
+    const html = getSettingsPage({ ...minimalUser, aichatAutoVectorizeEnabled: 'off' });
+    const idx = html.indexOf('id="aichatAutoVectorizeEnabledCheckbox"');
+    const snippet = html.slice(idx, idx + 200);
+    expect(snippet).not.toContain('checked');
+  });
+
+  it('aichatAutoVectorizeModel="@cf/baai/bge-m3"を渡すとbge-m3がselectedになる', () => {
+    const html = getSettingsPage({ ...minimalUser, aichatAutoVectorizeModel: '@cf/baai/bge-m3' });
+    const idx = html.indexOf('id="aichatAutoVectorizeModelSelect"');
+    const selectHtml = html.slice(idx, html.indexOf('</select>', idx));
+    const bgeOptIdx = selectHtml.indexOf('value="@cf/baai/bge-m3"');
+    const bgeOptSnippet = selectHtml.slice(bgeOptIdx, bgeOptIdx + 40);
+    expect(bgeOptSnippet).toContain('selected');
+  });
+
+  it('onAichatAutoVectorizeEnabledChange / onAichatAutoVectorizeModelChange 関数が存在する', () => {
+    const html = getSettingsPage(minimalUser);
+    expect(html).toContain('function onAichatAutoVectorizeEnabledChange()');
+    expect(html).toContain('function onAichatAutoVectorizeModelChange()');
+  });
+});
+
 describe('設定ページ: ZT一覧「関連する会話」の外部リンク表示設定(当面変更不可)', () => {
   it('ztKeywordSharesExternalLinkItem が存在し、disabledクラスが付与されている(操作不可の見た目)', () => {
     const html = getSettingsPage(minimalUser);

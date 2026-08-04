@@ -27,6 +27,8 @@ export function getSettingsPage(user: {
   apisSidebarAccordion?: string;
   apisDescMode?: string;
   apisNavFlash?: string;
+  aichatAutoVectorizeEnabled?: string;
+  aichatAutoVectorizeModel?: string;
   emailConfirmLoginEnabled?: boolean;
   githubScopes?: string;
   githubGrantedScopes?: string[] | null;
@@ -52,6 +54,11 @@ export function getSettingsPage(user: {
   const rawNavFlash = user.apisNavFlash ?? '7';
   const currentApisNavFlashOn = rawNavFlash !== 'off';
   const currentApisNavFlashCount = (currentApisNavFlashOn && /^[0-9]+$/.test(rawNavFlash)) ? rawNavFlash : '7';
+  const AICHAT_AUTO_VECTORIZE_MODELS = ['@cf/baai/bge-m3', '@cf/pfnet/plamo-embedding-1b', '@cf/google/embeddinggemma-300m'];
+  const currentAichatAutoVectorizeEnabled = user.aichatAutoVectorizeEnabled === 'off' ? 'off' : 'on';
+  const currentAichatAutoVectorizeModel = AICHAT_AUTO_VECTORIZE_MODELS.includes(user.aichatAutoVectorizeModel ?? '')
+    ? (user.aichatAutoVectorizeModel as string)
+    : '@cf/pfnet/plamo-embedding-1b';
   const currentEmailConfirmLoginEnabled = user.emailConfirmLoginEnabled === true;
   const requestedScopes = user.githubScopes ? user.githubScopes.split(/\s+/).filter(Boolean) : [];
   const grantedScopes = user.githubGrantedScopes ?? null;
@@ -633,6 +640,27 @@ export function getSettingsPage(user: {
                 <option value="uncategorized" ${currentSearchLabelMode === 'uncategorized' ? 'selected' : ''}>未分類のまま（分類しない）</option>
                 <option value="manual-modal" ${currentSearchLabelMode === 'manual-modal' ? 'selected' : ''}>新規キーワード追加時にラベル選択モーダルを表示</option>
                 <option value="auto-classify" ${currentSearchLabelMode === 'auto-classify' ? 'selected' : ''}>AIが自動分類する（Workers AI）</option>
+              </select>
+            </div>
+          </div>
+          <div class="info-item">
+            <span class="info-label">キーワードの自動ベクタ化（answer-graph色分け・AI分類提案などで使用）</span>
+            <div class="setting-control" style="justify-content: flex-end;">
+              <span class="theme-label" id="aichatAutoVectorizeEnabledLabel">${currentAichatAutoVectorizeEnabled === 'on' ? 'ON' : 'OFF'}</span>
+              <label class="theme-toggle-switch">
+                <input type="checkbox" id="aichatAutoVectorizeEnabledCheckbox" onchange="onAichatAutoVectorizeEnabledChange()"
+                  ${currentAichatAutoVectorizeEnabled === 'on' ? 'checked' : ''}>
+                <span class="theme-toggle-slider"></span>
+              </label>
+            </div>
+          </div>
+          <div class="info-item">
+            <span class="info-label">キーワードを自動ベクタ化する際に使う埋め込みモデル</span>
+            <div class="setting-control">
+              <select class="timezone-select" id="aichatAutoVectorizeModelSelect" onchange="onAichatAutoVectorizeModelChange()">
+                <option value="@cf/baai/bge-m3" ${currentAichatAutoVectorizeModel === '@cf/baai/bge-m3' ? 'selected' : ''}>bge-m3</option>
+                <option value="@cf/pfnet/plamo-embedding-1b" ${currentAichatAutoVectorizeModel === '@cf/pfnet/plamo-embedding-1b' ? 'selected' : ''}>plamo-embedding-1b（デフォルト）</option>
+                <option value="@cf/google/embeddinggemma-300m" ${currentAichatAutoVectorizeModel === '@cf/google/embeddinggemma-300m' ? 'selected' : ''}>embeddinggemma-300m</option>
               </select>
             </div>
           </div>
@@ -1484,6 +1512,43 @@ export function getSettingsPage(user: {
       } catch(e) {
         alert('分類モード設定の変更に失敗しました');
         sel.value = 'uncategorized';
+      }
+    }
+
+    async function onAichatAutoVectorizeEnabledChange() {
+      var cb = document.getElementById('aichatAutoVectorizeEnabledCheckbox');
+      var label = document.getElementById('aichatAutoVectorizeEnabledLabel');
+      var enabled = cb.checked;
+      var mode = enabled ? 'on' : 'off';
+      label.textContent = enabled ? 'ON' : 'OFF';
+      try {
+        var res = await fetch('/api/settings/aichat-auto-vectorize-enabled', {
+          method: 'POST', headers: {'Content-Type':'application/json'}, credentials: 'include',
+          body: JSON.stringify({ mode })
+        });
+        if (!res.ok) throw new Error('failed');
+      } catch(e) {
+        alert('キーワードの自動ベクタ化設定の変更に失敗しました');
+        cb.checked = !cb.checked;
+        label.textContent = cb.checked ? 'ON' : 'OFF';
+      }
+    }
+
+    async function onAichatAutoVectorizeModelChange() {
+      var sel = document.getElementById('aichatAutoVectorizeModelSelect');
+      if (!sel) return;
+      var model = sel.value;
+      var prev = sel.getAttribute('data-prev') || '@cf/pfnet/plamo-embedding-1b';
+      try {
+        var res = await fetch('/api/settings/aichat-auto-vectorize-model', {
+          method: 'POST', headers: {'Content-Type':'application/json'}, credentials: 'include',
+          body: JSON.stringify({ model })
+        });
+        if (!res.ok) throw new Error('failed');
+        sel.setAttribute('data-prev', model);
+      } catch(e) {
+        alert('自動ベクタ化に使う埋め込みモデルの変更に失敗しました');
+        sel.value = prev;
       }
     }
 
