@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { getAnswerGraphPage } from './views/answerGraph';
 
 // 対象: /answer-graph ページ(src/views/answerGraph.ts)に新設した「一人称モード」。
@@ -24,6 +24,9 @@ import { getAnswerGraphPage } from './views/answerGraph';
 //       選択する体験にならない
 //   (10) 最上段のフィルムストリップに「いちばん手前」ではない(depth違いの)
 //        キーワードが混ざる、またはフォーカス中のチップが薄緑色で塗られない
+//   (11) フォーカス中のキーワードが画面中央からずれた位置に表示される
+//   (12) 左スワイプ/←ボタンで、フォーカスの右隣のキーワードではなく無関係な
+//        方向のキーワードにフォーカスが移ってしまう(方向の取り違え)
 
 function buildPage(): string {
   return getAnswerGraphPage('testuser', {});
@@ -282,5 +285,92 @@ describe('一人称モードのDOM実動作(jsdom): トグル・回転・選択'
     fpToggleBtn.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     expect(fpView.style.display).toBe('none');
     expect(canvasWrap.style.display).toBe('');
+  });
+});
+
+async function setupActivatedFirstPersonMode() {
+  const html = buildPage();
+  document.body.innerHTML = html.slice(html.indexOf('<body>') + 6, html.indexOf('<script>'));
+  const proto = (window as unknown as { HTMLCanvasElement: { prototype: { getContext: unknown } } }).HTMLCanvasElement.prototype;
+  proto.getContext = () => ({
+    clearRect: () => {}, beginPath: () => {}, arc: () => {}, fill: () => {}, stroke: () => {}, moveTo: () => {}, lineTo: () => {},
+  });
+
+  const graphNodes = [
+    { id: 'a:seed', type: 'answer', label: 'seed', depth: 0 },
+    { id: 'k:north', type: 'keyword', label: 'north-kw', depth: 1 },
+    { id: 'k:east', type: 'keyword', label: 'east-kw', depth: 1 },
+    { id: 'k:south', type: 'keyword', label: 'south-kw', depth: 1 },
+    { id: 'k:west', type: 'keyword', label: 'west-kw', depth: 1 },
+  ];
+  const fetchMock = vi.fn((url: string) => {
+    if (String(url).includes('/api/aichat/shares/search')) {
+      return Promise.resolve({ json: () => Promise.resolve({ results: [{ id: 'share1', question: 'q1' }] }) });
+    }
+    if (String(url).includes('/api/aichat/answer-propagation-graph')) {
+      return Promise.resolve({ json: () => Promise.resolve({ nodes: graphNodes, edges: [] }) });
+    }
+    return Promise.resolve({ json: () => Promise.resolve({}) });
+  });
+  vi.stubGlobal('fetch', fetchMock);
+
+  const scriptSrc = html.slice(html.indexOf('<script>') + 8, html.indexOf('</script>'));
+  // eslint-disable-next-line no-new-func
+  new Function(scriptSrc)();
+
+  const seedSearchInput = document.getElementById('seedSearchInput') as HTMLInputElement;
+  seedSearchInput.value = 'q';
+  seedSearchInput.dispatchEvent(new Event('input', { bubbles: true }));
+  await new Promise((resolve) => setTimeout(resolve, 400));
+
+  const resultItem = document.querySelector('.search-result-item') as HTMLElement;
+  resultItem.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+  await new Promise((resolve) => setTimeout(resolve, 10));
+
+  const fpToggleBtn = document.getElementById('fpToggleBtn')!;
+  fpToggleBtn.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+  return {
+    fpLeftBtn: document.getElementById('fpLeftBtn')!,
+    fpRightBtn: document.getElementById('fpRightBtn')!,
+    fpFilmstrip: document.getElementById('fpFilmstrip')!,
+  };
+}
+
+describe('一人称モードのDOM実動作(jsdom): フィルムストリップの中央固定とスワイプ/ボタンの方向', () => {
+  afterEach(() => { vi.unstubAllGlobals(); });
+
+  it('フォーカス中のキーワードのチップは常に画面中央(left: calc(50% + 0px))に配置される', async () => {
+    const { fpFilmstrip } = await setupActivatedFirstPersonMode();
+    const focused = fpFilmstrip.querySelector('.fp-film-chip-focused') as HTMLElement;
+    expect(focused).not.toBeNull();
+    expect(focused.style.left.replace(/\s/g, '')).toBe('calc(50%+0px)');
+  });
+
+  it('←ボタン押下でフォーカスの右隣のキーワードに新たにフォーカスが移り、そのチップが中央(薄緑色)になる', async () => {
+    const { fpLeftBtn, fpFilmstrip } = await setupActivatedFirstPersonMode();
+    const beforeFocused = fpFilmstrip.querySelector('.fp-film-chip-focused') as HTMLElement;
+    const chipsBefore = Array.from(fpFilmstrip.querySelectorAll('.fp-film-chip')) as HTMLElement[];
+    const beforeIdx = chipsBefore.indexOf(beforeFocused);
+    const expectedNextLabel = chipsBefore[(beforeIdx + 1) % chipsBefore.length].textContent;
+
+    fpLeftBtn.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+    const afterFocused = fpFilmstrip.querySelector('.fp-film-chip-focused') as HTMLElement;
+    expect(afterFocused.textContent).toBe(expectedNextLabel);
+    expect(afterFocused.style.left.replace(/\s/g, '')).toBe('calc(50%+0px)');
+  });
+
+  it('→ボタン押下でフォーカスの左隣のキーワードに新たにフォーカスが移る(←ボタンとは逆方向)', async () => {
+    const { fpRightBtn, fpFilmstrip } = await setupActivatedFirstPersonMode();
+    const beforeFocused = fpFilmstrip.querySelector('.fp-film-chip-focused') as HTMLElement;
+    const chipsBefore = Array.from(fpFilmstrip.querySelectorAll('.fp-film-chip')) as HTMLElement[];
+    const beforeIdx = chipsBefore.indexOf(beforeFocused);
+    const expectedPrevLabel = chipsBefore[(beforeIdx - 1 + chipsBefore.length) % chipsBefore.length].textContent;
+
+    fpRightBtn.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+    const afterFocused = fpFilmstrip.querySelector('.fp-film-chip-focused') as HTMLElement;
+    expect(afterFocused.textContent).toBe(expectedPrevLabel);
   });
 });
