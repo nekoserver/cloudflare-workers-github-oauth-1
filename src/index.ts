@@ -6581,19 +6581,21 @@ export interface KeywordEmbeddingOverviewItem {
   model: string;
   dim: number;
   updatedAt: string;
+  source: string;
   plamoModel: string | null;
   plamoDim: number | null;
   plamoUpdatedAt: string | null;
 }
 
 /**
- * ZTモーダルヘッダの📖アイコンから開く一覧。answer-graphの色分けやキーワード
- * 分類のAI推薦など、ユーザーが明示的に指示したわけではない内部キャッシュ
- * 利用(source!='zt_manual')も同じテーブルに書き込まれるため、それらは
- * 一覧から除外し、ZTモーダルの「登録する」ボタンで明示的に登録した行
- * (source='zt_manual')のみを列挙する。この移行より前に登録された行は
- * sourceが未設定(NULL)のため、次回そのキーワードが更新されるまで一覧には
- * 出てこない（過去データの由来を後から確実に判定する手段が無いため）。
+ * ZTモーダルヘッダの📖アイコンから開く一覧。既存のベクタ化済みキーワードを
+ * すべて列挙する。answer-graphの色分けやキーワード分類のAI推薦など、ユーザーが
+ * 明示的に指示したわけではない内部キャッシュ利用も同じテーブルに書き込まれる
+ * ため、以前は source='zt_manual' の行だけに絞り込んでいたが、この移行より前に
+ * 登録された行(sourceが未設定=NULL)まで一覧から消えてしまい、実際に登録した
+ * データが見えなくなる regression になっていた。データを隠すのではなく、
+ * source(どの機能が書き込んだか。未設定はunknownとして返す)をそのまま返し、
+ * どの経路のデータかをクライアント側で表示できるようにする。
  *
  * modelがnull（未設定の既存行）はbge-m3で補完する。plamo系は実際に
  * 格納されているplamo_modelをそのまま表示する（「dimがあるからplamo」と
@@ -6607,10 +6609,10 @@ export async function listKeywordEmbeddingsOverview(
   userId: string,
 ): Promise<KeywordEmbeddingOverviewItem[]> {
   const rows = await db.prepare(
-    `SELECT keyword, model, dim, updated_at, plamo_dim, plamo_model, plamo_updated_at
-     FROM aichat_keyword_embeddings WHERE user_id = ? AND source = 'zt_manual' ORDER BY updated_at DESC LIMIT 500`
+    `SELECT keyword, model, dim, updated_at, source, plamo_dim, plamo_model, plamo_updated_at
+     FROM aichat_keyword_embeddings WHERE user_id = ? ORDER BY updated_at DESC LIMIT 500`
   ).bind(userId).all<{
-    keyword: string; model: string | null; dim: number; updated_at: string;
+    keyword: string; model: string | null; dim: number; updated_at: string; source: string | null;
     plamo_dim: number | null; plamo_model: string | null; plamo_updated_at: string | null;
   }>();
   return (rows.results ?? []).map((r) => ({
@@ -6618,6 +6620,7 @@ export async function listKeywordEmbeddingsOverview(
     model: r.model || BGE_M3_MODEL,
     dim: r.dim,
     updatedAt: r.updated_at,
+    source: r.source || 'unknown',
     plamoModel: r.plamo_dim != null ? (r.plamo_model || PLAMO_EMBEDDING_MODEL) : null,
     plamoDim: r.plamo_dim,
     plamoUpdatedAt: r.plamo_updated_at,

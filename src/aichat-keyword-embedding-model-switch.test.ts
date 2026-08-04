@@ -32,6 +32,12 @@ import {
 //       食い違っている(例: 将来別の第3モデルがこの列を使った後で
 //       plamo-embedding-1bが要求された)のに、dim/vectorが入っているというだけで
 //       キャッシュ命中とみなして古い・別モデルのベクトルを返してしまう
+//   (8) 一覧をsource='zt_manual'だけに絞り込むと、この列の追加より前に
+//       登録されていた(source未設定の)実データや、answer-graphの色分け・
+//       AI分類提案が自動的にベクタ化したデータまで一覧から消えてしまい、
+//       「あるはずのデータが表示されない」regressionになる。一覧はデータを
+//       隠さず、sourceの値をそのまま返してクライアント側で判別できることを
+//       保証する
 
 function wrapD1(db: DatabaseSync) {
   return {
@@ -300,7 +306,7 @@ describe('listKeywordEmbeddingsOverview: 📖アイコンで開くベクタ化�
     expect(items).toEqual([]);
   });
 
-  it('answer-graphの色分けやキーワード分類のAI推薦など、ZTモーダル以外が自動的にベクタ化した行(source!=zt_manual)は一覧に出ない', async () => {
+  it('answer-graphの色分けやキーワード分類のAI推薦など、ZTモーダル以外が自動的にベクタ化した行も一覧に含まれ、sourceでどの経路か判別できる(データを隠さない)', async () => {
     const db = setupDb();
     const now = new Date().toISOString();
     db.prepare(
@@ -315,10 +321,11 @@ describe('listKeywordEmbeddingsOverview: 📖アイコンで開くベクタ化�
 
     const items = await listKeywordEmbeddingsOverview(wrapD1(db) as never, 'u1');
 
-    expect(items.map((it) => it.keyword)).toEqual(['Hono']);
+    const bySource = Object.fromEntries(items.map((it) => [it.keyword, it.source]));
+    expect(bySource).toEqual({ '実装': 'answer_graph_color', '例外': 'category_suggest', 'Hono': 'zt_manual' });
   });
 
-  it('この機能の移行前(source未設定)の行も一覧に出ない(由来を後から判定できないため)', async () => {
+  it('この機能の移行前(source未設定)の行も一覧から消えず、source="unknown"として返る(実際に登録したデータを隠さない)', async () => {
     const db = setupDb();
     const now = new Date().toISOString();
     db.prepare(
@@ -327,6 +334,8 @@ describe('listKeywordEmbeddingsOverview: 📖アイコンで開くベクタ化�
 
     const items = await listKeywordEmbeddingsOverview(wrapD1(db) as never, 'u1');
 
-    expect(items).toEqual([]);
+    expect(items).toHaveLength(1);
+    expect(items[0].keyword).toBe('旧データ');
+    expect(items[0].source).toBe('unknown');
   });
 });

@@ -5274,6 +5274,18 @@ export function getAiChatPage(user: {
     });
 
     // ===== ZTモーダルヘッダの📖: ベクタ化済みデータ一覧 =====
+    var ZT_OVERVIEW_SOURCE_LABELS = {
+      zt_manual: 'ZTモーダル手動登録',
+      answer_graph_color: '自動(answer-graph色分け)',
+      category_suggest: '自動(AI分類提案)',
+      auto: '自動',
+      unknown: '不明(旧データ)',
+    };
+
+    function formatZtOverviewSource(source) {
+      return ZT_OVERVIEW_SOURCE_LABELS[source] || escHtml(source);
+    }
+
     function renderZtOverviewList(items) {
       if (!items || items.length === 0) {
         ztOverviewBody.innerHTML = '<div class="search-log-empty">ベクタ化済みのキーワードはありません</div>';
@@ -5284,15 +5296,18 @@ export function getAiChatPage(user: {
         + '<th style="text-align:left;padding:4px 8px;border-bottom:1px solid var(--border-color);color:var(--text-secondary);">キーワード</th>'
         + '<th style="text-align:left;padding:4px 8px;border-bottom:1px solid var(--border-color);color:var(--text-secondary);">埋め込みモデル</th>'
         + '<th style="text-align:right;padding:4px 8px;border-bottom:1px solid var(--border-color);color:var(--text-secondary);">次元数</th>'
+        + '<th style="text-align:left;padding:4px 8px;border-bottom:1px solid var(--border-color);color:var(--text-secondary);">登録元</th>'
         + '</tr></thead><tbody>';
       items.forEach(function(it) {
         html += '<tr><td style="padding:4px 8px;border-bottom:1px solid var(--border-color);color:var(--text-primary);">' + escHtml(it.keyword) + '</td>'
           + '<td style="padding:4px 8px;border-bottom:1px solid var(--border-color);color:var(--text-primary);">' + escHtml(it.model || 'bge-m3') + '</td>'
-          + '<td style="text-align:right;padding:4px 8px;border-bottom:1px solid var(--border-color);color:var(--text-primary);">' + it.dim + '</td></tr>';
+          + '<td style="text-align:right;padding:4px 8px;border-bottom:1px solid var(--border-color);color:var(--text-primary);">' + it.dim + '</td>'
+          + '<td style="padding:4px 8px;border-bottom:1px solid var(--border-color);color:var(--text-muted);">' + formatZtOverviewSource(it.source) + '</td></tr>';
         if (it.plamoModel) {
           html += '<tr><td style="padding:4px 8px;border-bottom:1px solid var(--border-color);"></td>'
             + '<td style="padding:4px 8px;border-bottom:1px solid var(--border-color);color:var(--text-muted);">' + escHtml(it.plamoModel) + '</td>'
-            + '<td style="text-align:right;padding:4px 8px;border-bottom:1px solid var(--border-color);color:var(--text-muted);">' + it.plamoDim + '</td></tr>';
+            + '<td style="text-align:right;padding:4px 8px;border-bottom:1px solid var(--border-color);color:var(--text-muted);">' + it.plamoDim + '</td>'
+            + '<td style="padding:4px 8px;border-bottom:1px solid var(--border-color);"></td></tr>';
         }
       });
       html += '</tbody></table>';
