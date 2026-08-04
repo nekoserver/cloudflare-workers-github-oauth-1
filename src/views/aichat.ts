@@ -5387,6 +5387,10 @@ export function getAiChatPage(user: {
       }
     });
 
+    // 「別タブで開く」(共有ページへの外部公開URL)はデフォルトOFF。設定ページに
+    // 項目は用意してあるが、当面は選択/変更不可(固定値)として扱う。
+    var ZT_KEYWORD_SHARES_EXTERNAL_LINK_ENABLED = false;
+
     function openZtKeywordSharesModal(keyword) {
       ztKeywordSharesTitle.textContent = '🔎 「' + keyword + '」の関連する会話';
       ztKeywordSharesBody.innerHTML = '<div class="search-log-loading">読み込み中...</div>';
@@ -5404,11 +5408,11 @@ export function getAiChatPage(user: {
           var html = '';
           results.forEach(function(r) {
             html += '<div style="padding:8px 0;border-bottom:1px solid var(--border-color);">'
-              + '<div style="font-size:12px;color:var(--text-primary);margin-bottom:2px;">' + escHtml(r.question) + '</div>'
+              + '<div class="zt-keyword-share-q" data-share-id="' + escHtml(String(r.id)) + '" data-keyword="' + escHtml(keyword) + '" style="font-size:12px;color:var(--text-primary);margin-bottom:2px;cursor:pointer;text-decoration:underline dotted;">' + escHtml(r.question) + '</div>'
               + '<div style="font-size:10px;color:var(--text-muted);display:flex;align-items:center;gap:8px;flex-wrap:wrap;">'
               + (r.model ? '<span>' + escHtml(String(r.model).split('/').pop()) + '</span>' : '')
               + '<span>' + escHtml(String(r.created_at || '').slice(0, 16).replace('T', ' ')) + '</span>'
-              + '<a href="/s/' + escHtml(r.user_hash) + '/' + escHtml(r.id) + '" target="_blank" style="color:var(--accent-color,#667eea);text-decoration:none;">🔗 別タブで開く</a>'
+              + (ZT_KEYWORD_SHARES_EXTERNAL_LINK_ENABLED ? '<a href="/s/' + escHtml(r.user_hash) + '/' + escHtml(r.id) + '" target="_blank" style="color:var(--accent-color,#667eea);text-decoration:none;">🔗 別タブで開く</a>' : '')
               + '</div></div>';
           });
           ztKeywordSharesBody.innerHTML = html;
@@ -5417,6 +5421,13 @@ export function getAiChatPage(user: {
           ztKeywordSharesBody.innerHTML = '<div class="search-log-empty">取得に失敗しました</div>';
         });
     }
+
+    ztKeywordSharesBody.addEventListener('click', function(e) {
+      var q = e.target && e.target.closest ? e.target.closest('.zt-keyword-share-q') : null;
+      if (q) {
+        openHistoryModalByShareId(q.getAttribute('data-share-id'), JSON.stringify([q.getAttribute('data-keyword')]));
+      }
+    });
 
     function closeZtKeywordSharesModal() {
       ztKeywordSharesModal.classList.remove('open');
