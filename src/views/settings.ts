@@ -611,6 +611,12 @@ export function getSettingsPage(user: {
               </label>
             </div>
           </div>
+          <div class="info-item disabled" id="ztKeywordSharesExternalLinkItem">
+            <span class="info-label">ZTモーダル「関連する会話」内の「🔗 別タブで開く」リンク（外部公開URL）</span>
+            <div class="setting-control" style="justify-content: flex-end;">
+              <span class="theme-label">OFF（既定・現在は変更不可）</span>
+            </div>
+          </div>
           <div class="info-item">
             <span class="info-label">AIチャットの過去ログのプレビューをどこで行うか</span>
             <div class="setting-control">

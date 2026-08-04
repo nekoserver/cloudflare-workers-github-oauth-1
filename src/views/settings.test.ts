@@ -8,6 +8,35 @@ const minimalUser = {
   expiresAtTimestamp: 1234567890,
 };
 
+describe('設定ページ: ZT一覧「関連する会話」の外部リンク表示設定(当面変更不可)', () => {
+  it('ztKeywordSharesExternalLinkItem が存在し、disabledクラスが付与されている(操作不可の見た目)', () => {
+    const html = getSettingsPage(minimalUser);
+    const idx = html.indexOf('id="ztKeywordSharesExternalLinkItem"');
+    expect(idx).toBeGreaterThan(-1);
+    const tagStart = html.lastIndexOf('<div', idx);
+    const tagEnd = html.indexOf('>', idx);
+    const tag = html.slice(tagStart, tagEnd);
+    expect(tag).toContain('info-item disabled');
+  });
+
+  it('OFF(既定)であることが表示されている', () => {
+    const html = getSettingsPage(minimalUser);
+    const idx = html.indexOf('id="ztKeywordSharesExternalLinkItem"');
+    expect(idx).toBeGreaterThan(-1);
+    const snippet = html.slice(idx, idx + 400);
+    expect(snippet).toContain('OFF');
+  });
+
+  it('操作可能なcheckbox/selectを持たない(現時点で変更不可)', () => {
+    const html = getSettingsPage(minimalUser);
+    const idx = html.indexOf('id="ztKeywordSharesExternalLinkItem"');
+    const endIdx = html.indexOf('</div>\n          </div>', idx);
+    const snippet = html.slice(idx, endIdx > idx ? endIdx : idx + 400);
+    expect(snippet).not.toContain('<input');
+    expect(snippet).not.toContain('<select');
+  });
+});
+
 describe('設定ページ: カテゴリグループOFF時に全バッジをOFFにする設定', () => {
   it('cgGroupOffClearsBadgesCheckbox が存在する', () => {
     const html = getSettingsPage(minimalUser);

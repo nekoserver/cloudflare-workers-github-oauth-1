@@ -124,6 +124,15 @@ async function setupZtUi() {
         }),
       });
     }
+    if (u.includes('/api/aichat/shares/s1')) {
+      return Promise.resolve({
+        status: 200,
+        json: () => Promise.resolve({
+          id: 's1', user_hash: 'uh1', question: 'Honoの使い方は？', answer: 'Honoはこう使います',
+          model: '@cf/meta/llama-3.3-70b-instruct-fp8-fast', created_at: '2026-01-02T10:00:00Z', access_count: 1,
+        }),
+      });
+    }
     return Promise.resolve({ status: 200, text: () => Promise.resolve('{}'), json: () => Promise.resolve({}) });
   });
   vi.stubGlobal('fetch', fetchMock);
@@ -330,13 +339,52 @@ describe('ZTモーダルのDOM実動作(jsdom)', () => {
 
     await new Promise((resolve) => setTimeout(resolve, 10));
     expect(ztKeywordSharesBody.textContent).toContain('Honoの使い方は？');
-    expect(ztKeywordSharesBody.innerHTML).toContain('/s/uh1/s1');
 
     // 別タブに移動するのではなく、ztOverviewModalの上に重なるモーダルとして表示される(getNextZ()で動的算出)
     expect(ztOverviewModal.classList.contains('open')).toBe(true);
     const zOverview = parseInt(ztOverviewModal.style.zIndex, 10);
     const zShares = parseInt(ztKeywordSharesModal.style.zIndex, 10);
     expect(zShares).toBeGreaterThan(zOverview);
+  });
+
+  it('「関連する会話」モーダルの「🔗 別タブで開く」リンクはデフォルトでOFF(表示されない)', async () => {
+    const { ztOverviewBtn, ztOverviewBody, ztKeywordSharesBody } = await setupZtUi();
+
+    ztOverviewBtn.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    const link = ztOverviewBody.querySelector('.zt-overview-kw-link[data-keyword="Hono"]') as HTMLElement;
+    link.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    expect(ztKeywordSharesBody.textContent).not.toContain('別タブで開く');
+    expect(ztKeywordSharesBody.innerHTML).not.toContain('/s/uh1/s1');
+  });
+
+  it('「関連する会話」モーダル内の質問文をタップすると、左サイドパネルの質問タップ時と同じ質問/回答バブルモーダルがキーワードハイライト付きで表示される', async () => {
+    const { ztOverviewBtn, ztOverviewBody, ztKeywordSharesBody, fetchMock } = await setupZtUi();
+
+    ztOverviewBtn.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    const link = ztOverviewBody.querySelector('.zt-overview-kw-link[data-keyword="Hono"]') as HTMLElement;
+    link.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    const qEl = ztKeywordSharesBody.querySelector('.zt-keyword-share-q') as HTMLElement;
+    expect(qEl).toBeTruthy();
+    expect(qEl.getAttribute('data-share-id')).toBe('s1');
+    expect(qEl.getAttribute('data-keyword')).toBe('Hono');
+
+    qEl.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    const shareCall = fetchMock.mock.calls.find((c) => String(c[0]).includes('/api/aichat/shares/s1'));
+    expect(shareCall).toBeTruthy();
+
+    const historyModalBackdrop = document.getElementById('historyModalBackdrop')!;
+    const historyModalChat = document.getElementById('historyModalChat')!;
+    expect(historyModalBackdrop.classList.contains('open')).toBe(true);
+    expect(historyModalChat.textContent).toContain('Honoの使い方は？');
+    expect(historyModalChat.querySelector('mark.kw-highlight')).toBeTruthy();
   });
 
   it('ztKeywordSharesCloseを押すとztKeywordSharesModalが閉じる', async () => {
