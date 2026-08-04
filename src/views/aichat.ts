@@ -4284,6 +4284,11 @@ export function getAiChatPage(user: {
       });
       kwClassifyListBody.querySelectorAll('.kw-cat-summary-badge').forEach(function(catEl) {
         var catId = catEl.dataset.catId;
+        var catColor = catEl.dataset.catColor || '#6366f1';
+        catEl.style.borderColor = catColor;
+        catEl.style.color = catColor;
+        catEl.style.setProperty('--kw-pal-cat', catColor);
+        catEl.style.setProperty('--kw-pal-cat-bg', catColor + '22');
         if (selectedCats[catId]) {
           catEl.classList.add('kw-cat-badge-active');
         } else {
