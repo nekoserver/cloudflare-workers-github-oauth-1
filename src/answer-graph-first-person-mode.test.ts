@@ -409,7 +409,7 @@ async function setupActivatedFirstPersonMode() {
   seedSearchInput.dispatchEvent(new Event('input', { bubbles: true }));
   await new Promise((resolve) => setTimeout(resolve, 400));
 
-  const resultItem = document.querySelector('.search-result-item') as HTMLElement;
+  const resultItem = document.querySelector('.search-result-row') as HTMLElement;
   resultItem.dispatchEvent(new MouseEvent('click', { bubbles: true }));
   await new Promise((resolve) => setTimeout(resolve, 10));
 
