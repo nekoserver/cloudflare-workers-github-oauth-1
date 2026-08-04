@@ -6493,13 +6493,16 @@ export async function getOrComputeKeywordEmbeddingForModel(
   const row = await db.prepare(
     `SELECT plamo_vector, plamo_dim, plamo_model FROM aichat_keyword_embeddings WHERE user_id = ? AND keyword = ?`
   ).bind(userId, keyword).first<{ plamo_vector: ArrayBuffer | null; plamo_dim: number | null; plamo_model: string | null }>();
+  // 主系列(bge-m3)の行を確保し、sourceを'zt_manual'に揃える（既にあれば
+  // getOrComputeKeywordEmbedding内でAIを呼ばずsource列だけ更新される）。
+  // plamoキャッシュ命中で早期returnする場合もこの呼び出しは必ず通す必要がある。
+  // そうしないと「plamoは既にキャッシュ済みだが他機能の自動ベクタ化由来の
+  // sourceのまま」というケースで、ZTモーダルから明示登録した事実が
+  // source列に反映されない不具合になる。
+  await getOrComputeKeywordEmbedding(db, ai, userId, keyword, 'zt_manual');
   if (row && row.plamo_vector && row.plamo_dim && row.plamo_model === resolvedModel) {
     return blobToFloats(row.plamo_vector);
   }
-  // 主系列(bge-m3)の行を確保する（NOT NULL制約を満たすため）。既にあれば
-  // getOrComputeKeywordEmbedding内でAIを呼ばずキャッシュを返すだけになる。
-  // ZTモーダル経由の登録なのでsource='zt_manual'を明示する。
-  await getOrComputeKeywordEmbedding(db, ai, userId, keyword, 'zt_manual');
   const vector = await embedTextWithModel(ai, resolvedModel, keyword);
   if (vector.length === 0) return [];
   const now = new Date().toISOString();

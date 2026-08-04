@@ -195,6 +195,22 @@ describe('getOrComputeKeywordEmbeddingForModel: モデル切り替えによる�
     expect(ai.run).not.toHaveBeenCalled();
   });
 
+  it('plamoが既にキャッシュ済み(かつ要求モデルと一致)でも、ZTモーダルからの明示登録ならsource列を"zt_manual"に更新する', async () => {
+    const db = setupDb();
+    const now = new Date().toISOString();
+    db.prepare(
+      `INSERT INTO aichat_keyword_embeddings (user_id, keyword, model, dim, vector, created_at, updated_at, plamo_vector, plamo_dim, plamo_model, plamo_updated_at, source) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run('u1', '駅', BGE_M3_MODEL, 2, new Uint8Array(new Float32Array([1, 2]).buffer), now, now, new Uint8Array(new Float32Array([9, 9, 9]).buffer), 3, PLAMO_EMBEDDING_MODEL, now, 'answer_graph_color');
+    const ai = makeMockAi({});
+
+    const vector = await getOrComputeKeywordEmbeddingForModel(wrapD1(db) as never, ai as never, 'u1', '駅', PLAMO_EMBEDDING_MODEL);
+
+    expect(vector).toEqual([9, 9, 9]);
+    expect(ai.run).not.toHaveBeenCalled();
+    const row = db.prepare(`SELECT source FROM aichat_keyword_embeddings WHERE user_id='u1' AND keyword='駅'`).get() as { source: string };
+    expect(row.source).toBe('zt_manual');
+  });
+
   it('plamo追加カラムに記録済みのモデルが要求モデルと食い違う場合はキャッシュを使わず再問い合わせして上書きする', async () => {
     const db = setupDb();
     const now = new Date().toISOString();
