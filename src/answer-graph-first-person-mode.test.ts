@@ -17,6 +17,9 @@ import { getAnswerGraphPage } from './views/answerGraph';
 //   (5) 一人称モードON/OFFの切替でcanvas俯瞰ビューとの表示が両方残る、または
 //       どちらも表示されなくなる
 //   (6) スワイプ量とパノラマ回転量の対応が計算されず、指の動きに応じて視界が回らない
+//   (7) 地平線が目線と同じ高さ(50%)のままで奥行きが感じられない
+//   (8) 同じ目線の高さにあるノードが距離に関わらず同じ高さに表示され、
+//       手前/奥の遠近感が出ない
 
 function buildPage(): string {
   return getAnswerGraphPage('testuser', {});
@@ -32,7 +35,7 @@ function loadPureFns() {
   const fn = new Function(`${src}\nreturn { computeRadialLayout: computeRadialLayout, computeFirstPersonSlots: computeFirstPersonSlots, normalizeDeg360: normalizeDeg360, normalizeDegSigned: normalizeDegSigned };`);
   return fn() as {
     computeRadialLayout: (nodes: unknown[], ringSpacing: number) => { size: number; cx: number; cy: number; posById: Record<string, { x: number; y: number; node: unknown }> };
-    computeFirstPersonSlots: (posById: Record<string, { x: number; y: number; node: unknown }>, cx: number, cy: number, headingDeg: number, fovDeg: number) => Array<{ id: string; bearingDeg: number; relativeDeg: number; distance: number; screenX: number; scale: number }>;
+    computeFirstPersonSlots: (posById: Record<string, { x: number; y: number; node: unknown }>, cx: number, cy: number, headingDeg: number, fovDeg: number, horizonPercent?: number, groundPercent?: number) => Array<{ id: string; bearingDeg: number; relativeDeg: number; distance: number; screenX: number; scale: number; topPercent: number }>;
     normalizeDeg360: (deg: number) => number;
     normalizeDegSigned: (deg: number) => number;
   };
@@ -64,6 +67,24 @@ describe('/answer-graph ページのHTML構造: 一人称モード用の要素�
     const tagStart = html.lastIndexOf('<div', idx);
     const tag = html.slice(tagStart, idx + 50);
     expect(tag).toContain('display:none');
+  });
+
+  it('地平線(.fp-horizon)・視界の的(.fp-crosshair)は目線(50%)より上の高さ(38%)に配置される', () => {
+    const horizonRuleIdx = html.indexOf('.fp-horizon');
+    const horizonRule = html.slice(horizonRuleIdx, html.indexOf('}', horizonRuleIdx));
+    expect(horizonRule).toContain('top:38%');
+    expect(horizonRule).not.toContain('top:50%');
+
+    const crosshairRuleIdx = html.indexOf('.fp-crosshair');
+    const crosshairRule = html.slice(crosshairRuleIdx, html.indexOf('}', crosshairRuleIdx));
+    expect(crosshairRule).toContain('top:38%');
+  });
+
+  it('.fp-nodeのCSSは高さ(top)を固定値でハードコードしていない(JSで距離に応じて動的設定するため)', () => {
+    const ruleIdx = html.indexOf('.fp-node {');
+    const rule = html.slice(ruleIdx, html.indexOf('}', ruleIdx));
+    expect(rule).not.toContain('top:50%');
+    expect(rule).not.toMatch(/top:\d/);
   });
 });
 
@@ -138,6 +159,30 @@ describe('computeFirstPersonSlots: 中心(視点)に立った360度パノラマ�
     if (far) {
       expect(far.scale).toBeLessThanOrEqual(near.scale);
     }
+  });
+
+  it('距離に応じて高さ(topPercent)が変化する: 最も近いノードは地面(groundPercent)寄り、最も遠いノードは地平線(horizonPercent)寄りになる', () => {
+    const { computeRadialLayout, computeFirstPersonSlots } = loadPureFns();
+    const nodes = [
+      { id: 'a:seed', type: 'answer', label: 'seed', depth: 0 },
+      { id: 'k:near', type: 'keyword', label: 'near', depth: 1 },
+      { id: 'k:far', type: 'keyword', label: 'far', depth: 2 },
+    ];
+    const layout = computeRadialLayout(nodes, 80);
+    const slots = computeFirstPersonSlots(layout.posById, layout.cx, layout.cy, 0, 360);
+    const near = slots.find((s) => s.id === 'k:near')!;
+    const far = slots.find((s) => s.id === 'k:far')!;
+    expect(far.topPercent).toBeCloseTo(38, 3);
+    expect(near.topPercent).toBeGreaterThan(far.topPercent);
+    expect(near.topPercent).toBeLessThanOrEqual(90);
+  });
+
+  it('horizonPercent/groundPercentを省略すると既定値(38/90)が使われる', () => {
+    const { computeRadialLayout, computeFirstPersonSlots } = loadPureFns();
+    const layout = computeRadialLayout(sampleNodes, 80);
+    const withDefaults = computeFirstPersonSlots(layout.posById, layout.cx, layout.cy, 0, 360);
+    const withExplicit = computeFirstPersonSlots(layout.posById, layout.cx, layout.cy, 0, 360, 38, 90);
+    expect(withDefaults.map((s) => s.topPercent)).toEqual(withExplicit.map((s) => s.topPercent));
   });
 });
 

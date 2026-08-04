@@ -37,13 +37,13 @@ main { flex:1; max-width:1100px; width:100%; margin:0 auto; padding:24px 16px; d
 .fp-here strong:hover { color:var(--accent); }
 .fp-sky {
   position:relative; width:100%; aspect-ratio:21/9; border-radius:10px; overflow:hidden;
-  background:linear-gradient(to bottom, var(--btn-bg) 0%, var(--btn-bg) 48%, var(--border) 48%, var(--border) 52%, var(--card) 52%, var(--card) 100%);
+  background:linear-gradient(to bottom, var(--btn-bg) 0%, var(--btn-bg) 37%, var(--border) 37%, var(--border) 39%, var(--card) 39%, var(--card) 100%);
   touch-action:pan-y; cursor:grab;
 }
 .fp-sky:active { cursor:grabbing; }
-.fp-horizon { position:absolute; left:0; right:0; top:50%; height:1px; background:var(--label); opacity:.5; }
+.fp-horizon { position:absolute; left:0; right:0; top:38%; height:1px; background:var(--label); opacity:.5; }
 .fp-crosshair {
-  position:absolute; left:50%; top:50%; width:22px; height:22px; margin:-11px 0 0 -11px;
+  position:absolute; left:50%; top:38%; width:22px; height:22px; margin:-11px 0 0 -11px;
   border:1.5px solid var(--label); border-radius:50%; opacity:.55; pointer-events:none;
 }
 .fp-crosshair::before, .fp-crosshair::after { content:''; position:absolute; background:var(--label); opacity:.55; }
@@ -51,8 +51,8 @@ main { flex:1; max-width:1100px; width:100%; margin:0 auto; padding:24px 16px; d
 .fp-crosshair::after { left:-5px; top:50%; width:6px; height:1px; margin-top:-.5px; }
 .fp-nodes { position:absolute; inset:0; }
 .fp-node {
-  position:absolute; top:50%; transform:translate(-50%,-50%); display:flex; flex-direction:column; align-items:center;
-  gap:3px; cursor:pointer; transition:left .12s linear;
+  position:absolute; transform:translate(-50%,-50%); display:flex; flex-direction:column; align-items:center;
+  gap:3px; cursor:pointer; transition:left .12s linear, top .12s linear;
 }
 .fp-node-dot { width:16px; height:16px; border-radius:50%; box-shadow:0 0 0 2px var(--card); }
 .fp-node-label {
@@ -592,7 +592,9 @@ input[type=search]:focus { border-color:var(--accent); }
     return d > 180 ? d - 360 : d;
   }
 
-  function computeFirstPersonSlots(posById, cx, cy, headingDeg, fovDeg) {
+  function computeFirstPersonSlots(posById, cx, cy, headingDeg, fovDeg, horizonPercent, groundPercent) {
+    if (horizonPercent === undefined) horizonPercent = 38;
+    if (groundPercent === undefined) groundPercent = 90;
     var entries = [];
     var maxDistance = 1;
     Object.keys(posById).forEach(function(id) {
@@ -609,7 +611,11 @@ input[type=search]:focus { border-color:var(--accent); }
     entries.forEach(function(entry) {
       var relativeDeg = normalizeDegSigned(entry.bearingDeg - headingDeg);
       if (Math.abs(relativeDeg) > halfFov) return;
-      var scale = Math.max(0.35, 1 - (entry.distance / maxDistance) * 0.65);
+      var distanceRatio = Math.min(1, entry.distance / maxDistance);
+      var scale = Math.max(0.35, 1 - distanceRatio * 0.65);
+      // 同じ目線の高さ(=距離0)のノードほど地平線から遠い手前(画面下)に、
+      // 遠いノードほど地平線に近づく(奥行きの錯覚を作る)
+      var topPercent = horizonPercent + (1 - distanceRatio) * (groundPercent - horizonPercent);
       visible.push({
         id: entry.id,
         node: entry.node,
@@ -617,6 +623,7 @@ input[type=search]:focus { border-color:var(--accent); }
         relativeDeg: relativeDeg,
         distance: entry.distance,
         screenX: 0.5 + (relativeDeg / halfFov) * 0.5,
+        topPercent: topPercent,
         scale: scale,
       });
     });
@@ -716,6 +723,8 @@ input[type=search]:focus { border-color:var(--accent); }
 
   // ===== 一人称モード（ストリートビュー風パノラマ） =====
   var FP_FOV_DEG = 100;
+  var FP_HORIZON_PERCENT = 38;
+  var FP_GROUND_PERCENT = 90;
 
   function renderFirstPersonHere() {
     if (!currentGraph) { fpHere.innerHTML = ''; return; }
@@ -726,7 +735,7 @@ input[type=search]:focus { border-color:var(--accent); }
 
   function renderFirstPersonView() {
     if (!fpActive || !lastLayout) { fpNodes.innerHTML = ''; return; }
-    var slots = computeFirstPersonSlots(lastLayout.posById, lastLayout.cx, lastLayout.cy, fpHeadingDeg, FP_FOV_DEG);
+    var slots = computeFirstPersonSlots(lastLayout.posById, lastLayout.cx, lastLayout.cy, fpHeadingDeg, FP_FOV_DEG, FP_HORIZON_PERCENT, FP_GROUND_PERCENT);
     var answerColor = getCssVar('--answer-color') || '#0969da';
     var keywordColor = getCssVar('--keyword-color') || '#c2410c';
     fpNodes.innerHTML = '';
@@ -738,6 +747,7 @@ input[type=search]:focus { border-color:var(--accent); }
       var el = document.createElement('div');
       el.className = 'fp-node' + (centered ? ' fp-node-centered' : '');
       el.style.left = (slot.screenX * 100) + '%';
+      el.style.top = slot.topPercent + '%';
       el.style.zIndex = String(Math.round((1 - slot.distance / 1e6) * 100) + 100);
       el.style.opacity = String(0.4 + slot.scale * 0.6);
       var dot = document.createElement('div');
