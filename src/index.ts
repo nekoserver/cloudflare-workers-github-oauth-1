@@ -6698,8 +6698,17 @@ app.post('/api/aichat/keyword-embeddings/register', authMiddleware, async (c) =>
   const texts = Array.isArray(body.texts) ? body.texts.filter((t) => typeof t === 'string') : [];
   if (texts.length === 0) return jsonUtf8({ error: 'texts は必須です' }, 400);
   const model = resolveKeywordEmbeddingModel(body.model);
-  const result = await registerKeywordEmbeddings(c.env.DB, c.env.AI, user.sub, texts.slice(0, 50), model);
-  return jsonUtf8({ ok: true, model, registered: result.registered, failed: result.failed, results: result.results });
+  // D1のスキーマ不整合(マイグレーション未適用でカラムが無い等)がHonoの
+  // 汎用500ハンドラに丸め込まれ「サーバーエラーが発生しました」としか
+  // 表示されず原因が追えなかった実例があるため、実際のエラー内容を返す。
+  try {
+    const result = await registerKeywordEmbeddings(c.env.DB, c.env.AI, user.sub, texts.slice(0, 50), model);
+    return jsonUtf8({ ok: true, model, registered: result.registered, failed: result.failed, results: result.results });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('keyword-embeddings/register failed', { userId: user.sub, model, error: message });
+    return jsonUtf8({ error: '登録処理でサーバーエラーが発生しました: ' + message }, 500);
+  }
 });
 
 /**
@@ -6722,8 +6731,14 @@ app.get('/api/aichat/keyword-embeddings/lookup', authMiddleware, async (c) => {
 app.get('/api/aichat/keyword-embeddings/list', authMiddleware, async (c) => {
   const user = c.get('user');
   if (!c.env.DB) return jsonUtf8({ items: [] });
-  const items = await listKeywordEmbeddingsOverview(c.env.DB, user.sub);
-  return jsonUtf8({ items });
+  try {
+    const items = await listKeywordEmbeddingsOverview(c.env.DB, user.sub);
+    return jsonUtf8({ items });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('keyword-embeddings/list failed', { userId: user.sub, error: message });
+    return jsonUtf8({ items: [], error: '一覧取得でサーバーエラーが発生しました: ' + message }, 500);
+  }
 });
 
 /**

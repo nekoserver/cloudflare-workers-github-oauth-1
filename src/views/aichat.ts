@@ -5320,9 +5320,23 @@ export function getAiChatPage(user: {
       ztOverviewModal.classList.add('open');
       ztOverviewModal.setAttribute('aria-hidden', 'false');
       fetch('/api/aichat/keyword-embeddings/list', { credentials: 'same-origin' })
-        .then(function(r) { return r.json(); })
-        .then(function(d) { renderZtOverviewList(d && d.items); })
-        .catch(function() { ztOverviewBody.innerHTML = '<div class="search-log-empty">取得に失敗しました</div>'; });
+        .then(function(r) { return r.text().then(function(t) { return { status: r.status, text: t }; }); })
+        .then(function(res) {
+          var d = null;
+          try { d = JSON.parse(res.text); } catch (e) { d = null; }
+          if (d && d.error) {
+            ztOverviewBody.innerHTML = '<div class="search-log-empty">取得に失敗しました: ' + escHtml(d.error) + '</div>';
+            return;
+          }
+          if (!d) {
+            ztOverviewBody.innerHTML = '<div class="search-log-empty">取得に失敗しました: HTTP ' + res.status + ' / ' + escHtml(String(res.text).slice(0, 120)) + '</div>';
+            return;
+          }
+          renderZtOverviewList(d.items);
+        })
+        .catch(function(err) {
+          ztOverviewBody.innerHTML = '<div class="search-log-empty">取得に失敗しました（通信エラー: ' + escHtml((err && err.message) || '不明') + '）</div>';
+        });
     }
 
     function closeZtOverviewModal() {

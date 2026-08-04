@@ -67,19 +67,22 @@ async function setupZtUi() {
   const fetchMock = vi.fn((url: string) => {
     const u = String(url);
     if (u.includes('/api/aichat/keyword-embeddings/list')) {
+      const body = {
+        items: [
+          { keyword: 'Hono', model: '@cf/baai/bge-m3', dim: 1024, updatedAt: '2026-01-01', source: 'zt_manual', plamoModel: null, plamoDim: null },
+          { keyword: '空港', model: '', dim: 1024, updatedAt: '2026-01-01', source: 'answer_graph_color', plamoModel: '@cf/pfnet/plamo-embedding-1b', plamoDim: 2048 },
+        ],
+      };
       return Promise.resolve({
-        json: () => Promise.resolve({
-          items: [
-            { keyword: 'Hono', model: '@cf/baai/bge-m3', dim: 1024, updatedAt: '2026-01-01', source: 'zt_manual', plamoModel: null, plamoDim: null },
-            { keyword: '空港', model: '', dim: 1024, updatedAt: '2026-01-01', source: 'answer_graph_color', plamoModel: '@cf/pfnet/plamo-embedding-1b', plamoDim: 2048 },
-          ],
-        }),
+        status: 200,
+        text: () => Promise.resolve(JSON.stringify(body)),
+        json: () => Promise.resolve(body),
       });
     }
     if (u.includes('/api/aichat/keyword-embeddings/register')) {
       return Promise.resolve({ json: () => Promise.resolve({ ok: true, registered: 1, failed: 0, results: [] }) });
     }
-    return Promise.resolve({ json: () => Promise.resolve({}) });
+    return Promise.resolve({ status: 200, text: () => Promise.resolve('{}'), json: () => Promise.resolve({}) });
   });
   vi.stubGlobal('fetch', fetchMock);
   vi.stubGlobal('navigator', { clipboard: { writeText: () => Promise.resolve() } });
