@@ -1115,6 +1115,16 @@ export function getAiChatPage(user: {
     </div>
   </div>
 
+  <div class="search-log-overlay" id="ztKeywordSharesModal" aria-hidden="true">
+    <div class="search-log-modal" role="dialog" aria-modal="true" style="max-width:600px;">
+      <div class="search-log-head">
+        <span class="search-log-title" id="ztKeywordSharesTitle">🔎 関連する会話</span>
+        <button class="search-log-close" id="ztKeywordSharesClose" aria-label="閉じる">✕</button>
+      </div>
+      <div class="search-log-body" id="ztKeywordSharesBody" style="font-size:12px;max-height:60vh;overflow-y:auto;"><div class="search-log-loading">読み込み中...</div></div>
+    </div>
+  </div>
+
   <div class="search-log-overlay" id="ztBgeModal" aria-hidden="true">
     <div class="search-log-modal" role="dialog" aria-modal="true" style="max-width:600px;">
       <div class="search-log-head">
@@ -3120,6 +3130,7 @@ export function getAiChatPage(user: {
         tokenUsageModal: 820, dailyStatsModal: 820, modelDotDropdown: 700,
         kwColorPaletteModal: 900, kwCatGroupModal: 920, searchLogRecordModal: 880,
         canvasSearchModal: 890, ztTreeModal: 895, ztBgeModal: 905, ztCacheModal: 910, ztOverviewModal: 915,
+        ztKeywordSharesModal: 920,
       };
       Object.keys(staticZDefaults).forEach(function(id) {
         var el = document.getElementById(id);
@@ -4821,6 +4832,10 @@ export function getAiChatPage(user: {
     var ztOverviewBody = document.getElementById('ztOverviewBody');
     var ztOverviewChartToggle = document.getElementById('ztOverviewChartToggle');
     var ztOverviewChartSection = document.getElementById('ztOverviewChartSection');
+    var ztKeywordSharesModal = document.getElementById('ztKeywordSharesModal');
+    var ztKeywordSharesClose = document.getElementById('ztKeywordSharesClose');
+    var ztKeywordSharesBody = document.getElementById('ztKeywordSharesBody');
+    var ztKeywordSharesTitle = document.getElementById('ztKeywordSharesTitle');
     var ztBgeBtn = document.getElementById('ztBgeBtn');
     var ztBgeModal = document.getElementById('ztBgeModal');
     var ztBgeClose = document.getElementById('ztBgeClose');
@@ -5333,18 +5348,19 @@ export function getAiChatPage(user: {
       var counts = getZtOverviewModelCounts(ztOverviewLastItems);
       var filterSelectHtml = buildZtOverviewModelFilterHtml(counts, ztOverviewCurrentFilter);
       var filtered = filterZtOverviewItems(ztOverviewLastItems, ztOverviewCurrentFilter);
+      var ZT_TH_STICKY = 'position:sticky;top:0;z-index:2;background:var(--card-bg);';
       var html = '<table style="width:100%;border-collapse:collapse;">'
         + '<thead><tr>'
-        + '<th style="text-align:left;padding:4px 8px;border-bottom:1px solid var(--border-color);color:var(--text-secondary);">キーワード</th>'
-        + '<th style="text-align:left;padding:4px 8px;border-bottom:1px solid var(--border-color);color:var(--text-secondary);"><div style="display:flex;align-items:center;justify-content:space-between;gap:6px;"><span>埋め込みモデル</span>' + filterSelectHtml + '</div></th>'
-        + '<th style="text-align:right;padding:4px 8px;border-bottom:1px solid var(--border-color);color:var(--text-secondary);">次元数</th>'
-        + '<th style="text-align:left;padding:4px 8px;border-bottom:1px solid var(--border-color);color:var(--text-secondary);">登録元</th>'
+        + '<th style="text-align:left;padding:4px 8px;border-bottom:1px solid var(--border-color);color:var(--text-secondary);' + ZT_TH_STICKY + '">キーワード</th>'
+        + '<th style="text-align:left;padding:4px 8px;border-bottom:1px solid var(--border-color);color:var(--text-secondary);' + ZT_TH_STICKY + '"><div style="display:flex;align-items:center;justify-content:space-between;gap:6px;"><span>埋め込みモデル</span>' + filterSelectHtml + '</div></th>'
+        + '<th style="text-align:right;padding:4px 8px;border-bottom:1px solid var(--border-color);color:var(--text-secondary);' + ZT_TH_STICKY + '">次元数</th>'
+        + '<th style="text-align:left;padding:4px 8px;border-bottom:1px solid var(--border-color);color:var(--text-secondary);' + ZT_TH_STICKY + '">登録元</th>'
         + '</tr></thead><tbody>';
       if (filtered.length === 0) {
         html += '<tr><td colspan="4" style="padding:12px 8px;text-align:center;color:var(--text-muted);">該当するキーワードがありません</td></tr>';
       }
       filtered.forEach(function(it) {
-        html += '<tr><td style="padding:4px 8px;border-bottom:1px solid var(--border-color);color:var(--text-primary);">' + escHtml(it.keyword) + '</td>'
+        html += '<tr><td style="padding:4px 8px;border-bottom:1px solid var(--border-color);color:var(--text-primary);"><a href="javascript:void(0)" class="zt-overview-kw-link" data-keyword="' + escHtml(it.keyword) + '" style="color:inherit;text-decoration:underline dotted;cursor:pointer;">' + escHtml(it.keyword) + '</a></td>'
           + '<td style="padding:4px 8px;border-bottom:1px solid var(--border-color);color:var(--text-primary);">' + escHtml(it.model || 'bge-m3') + '</td>'
           + '<td style="text-align:right;padding:4px 8px;border-bottom:1px solid var(--border-color);color:var(--text-primary);">' + it.dim + '</td>'
           + '<td style="padding:4px 8px;border-bottom:1px solid var(--border-color);color:var(--text-muted);">' + formatZtOverviewSource(it.source) + '</td></tr>';
@@ -5370,6 +5386,53 @@ export function getAiChatPage(user: {
         renderZtOverviewList(ztOverviewLastItems, e.target.value);
       }
     });
+
+    function openZtKeywordSharesModal(keyword) {
+      ztKeywordSharesTitle.textContent = '🔎 「' + keyword + '」の関連する会話';
+      ztKeywordSharesBody.innerHTML = '<div class="search-log-loading">読み込み中...</div>';
+      ztKeywordSharesModal.style.zIndex = String(getNextZ());
+      ztKeywordSharesModal.classList.add('open');
+      ztKeywordSharesModal.setAttribute('aria-hidden', 'false');
+      fetch('/api/aichat/shares/by-keyword?keyword=' + encodeURIComponent(keyword), { credentials: 'same-origin' })
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+          var results = d.results || [];
+          if (results.length === 0) {
+            ztKeywordSharesBody.innerHTML = '<div class="search-log-empty">関連する会話が見つかりません</div>';
+            return;
+          }
+          var html = '';
+          results.forEach(function(r) {
+            html += '<div style="padding:8px 0;border-bottom:1px solid var(--border-color);">'
+              + '<div style="font-size:12px;color:var(--text-primary);margin-bottom:2px;">' + escHtml(r.question) + '</div>'
+              + '<div style="font-size:10px;color:var(--text-muted);display:flex;align-items:center;gap:8px;flex-wrap:wrap;">'
+              + (r.model ? '<span>' + escHtml(String(r.model).split('/').pop()) + '</span>' : '')
+              + '<span>' + escHtml(String(r.created_at || '').slice(0, 16).replace('T', ' ')) + '</span>'
+              + '<a href="/s/' + escHtml(r.user_hash) + '/' + escHtml(r.id) + '" target="_blank" style="color:var(--accent-color,#667eea);text-decoration:none;">🔗 別タブで開く</a>'
+              + '</div></div>';
+          });
+          ztKeywordSharesBody.innerHTML = html;
+        })
+        .catch(function() {
+          ztKeywordSharesBody.innerHTML = '<div class="search-log-empty">取得に失敗しました</div>';
+        });
+    }
+
+    function closeZtKeywordSharesModal() {
+      ztKeywordSharesModal.classList.remove('open');
+      ztKeywordSharesModal.setAttribute('aria-hidden', 'true');
+    }
+
+    ztOverviewBody.addEventListener('click', function(e) {
+      var link = e.target && e.target.closest ? e.target.closest('.zt-overview-kw-link') : null;
+      if (link) {
+        e.preventDefault();
+        openZtKeywordSharesModal(link.getAttribute('data-keyword'));
+      }
+    });
+
+    ztKeywordSharesClose.addEventListener('click', closeZtKeywordSharesModal);
+    ztKeywordSharesModal.addEventListener('click', function(e) { if (e.target === ztKeywordSharesModal) closeZtKeywordSharesModal(); });
 
     var ZT_OVERVIEW_CHART_COOKIE = 'aichat_zt_overview_chart_visible';
     function getZtOverviewChartVisible() {
