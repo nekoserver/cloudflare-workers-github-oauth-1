@@ -394,7 +394,7 @@ async function setupActivatedFirstPersonMode() {
       return Promise.resolve({ json: () => Promise.resolve({ results: [{ id: 'share1', question: 'q1' }] }) });
     }
     if (String(url).includes('/api/aichat/answer-propagation-graph')) {
-      return Promise.resolve({ json: () => Promise.resolve({ nodes: graphNodes, edges: graphEdges }) });
+      return Promise.resolve({ status: 200, text: () => Promise.resolve(JSON.stringify({ nodes: graphNodes, edges: graphEdges })) });
     }
     return Promise.resolve({ json: () => Promise.resolve({}) });
   });

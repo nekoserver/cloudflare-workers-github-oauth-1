@@ -603,6 +603,17 @@ input[type=search]:focus { border-color:var(--accent); }
     searchTimer = setTimeout(function() { doSeedSearch(q); }, 350);
   });
 
+  // レスポンスがJSONでない場合(サーバーの未捕捉500等)でも原因を画面に出せるよう、
+  // HTTPステータスと本文先頭を含めたエラーメッセージへ変換する純粋関数。
+  function parseGraphResponse(status, text) {
+    var d = null;
+    try { d = JSON.parse(text); } catch (e) { d = null; }
+    if (d && !d.error) return { data: d, error: null };
+    if (d && d.error) return { data: null, error: String(d.error) };
+    var snippet = String(text == null ? '' : text).slice(0, 120);
+    return { data: null, error: 'HTTP ' + status + (snippet ? ' / ' + snippet : '') };
+  }
+
   function loadGraph(shareId) {
     graphStatus.textContent = '読み込み中...';
     graphStatus.className = 'graph-status';
@@ -613,16 +624,19 @@ input[type=search]:focus { border-color:var(--accent); }
       credentials: 'same-origin',
       body: JSON.stringify({ shareId: shareId }),
     })
-      .then(function(r) { return r.json(); })
-      .then(function(d) {
-        if (!d || d.error) {
-          graphStatus.textContent = 'グラフの取得に失敗しました: ' + ((d && d.error) || '不明なエラー');
+      .then(function(r) {
+        return r.text().then(function(t) { return parseGraphResponse(r.status, t); });
+      })
+      .then(function(parsed) {
+        if (parsed.error !== null) {
+          graphStatus.textContent = 'グラフの取得に失敗しました: ' + parsed.error;
           graphStatus.className = 'graph-status err';
           currentGraph = null;
           drawGraph();
           if (fpActive) { fpHeadingDeg = 0; renderFirstPersonHere(); refreshFirstPersonFocus(); renderFirstPersonView(); renderFilmstrip(); renderFpAnswerList(); }
           return;
         }
+        var d = parsed.data;
         currentGraph = d;
         var statusText = 'ノード ' + d.nodes.length + ' 件 / エッジ ' + d.edges.length + ' 件';
         if (d._colorWarning) {
@@ -635,8 +649,8 @@ input[type=search]:focus { border-color:var(--accent); }
         drawGraph();
         if (fpActive) { fpHeadingDeg = 0; renderFirstPersonHere(); refreshFirstPersonFocus(); renderFirstPersonView(); renderFilmstrip(); renderFpAnswerList(); }
       })
-      .catch(function() {
-        graphStatus.textContent = 'グラフの取得に失敗しました（通信エラー）';
+      .catch(function(err) {
+        graphStatus.textContent = 'グラフの取得に失敗しました（通信エラー: ' + ((err && err.message) || '不明') + '）';
         graphStatus.className = 'graph-status err';
       });
   }

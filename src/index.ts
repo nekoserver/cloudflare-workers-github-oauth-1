@@ -4289,7 +4289,18 @@ app.post('/api/aichat/answer-propagation-graph', authMiddleware, async (c) => {
   const body = await c.req.json<{ shareId?: string }>();
   const shareId = typeof body.shareId === 'string' ? body.shareId.trim() : '';
   if (!shareId) return jsonUtf8({ error: 'shareId は必須です' }, 400);
-  const result = await buildAnswerPropagationGraph(c.env.DB, user.sub, shareId);
+
+  // グラフ構築で例外が起きるとHono既定の500(プレーンテキスト)になり、
+  // クライアントは一律「通信エラー」としか表示できず原因が追えない。
+  // 必ずJSONでエラー内容を返し、画面にそのまま表示できるようにする。
+  let result: AnswerGraphResult | null;
+  try {
+    result = await buildAnswerPropagationGraph(c.env.DB, user.sub, shareId);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('answer-propagation-graph: graph build failed', { shareId, error: message });
+    return jsonUtf8({ error: 'グラフ構築でサーバーエラーが発生しました: ' + message }, 500);
+  }
   if (!result) return jsonUtf8({ error: '指定された回答が見つかりません' }, 404);
 
   if (c.env.AI) {
