@@ -65,7 +65,8 @@ function setupDb(): DatabaseSync {
       dim INTEGER NOT NULL,
       vector BLOB NOT NULL,
       created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL
+      updated_at TEXT NOT NULL,
+      source TEXT
     );
     CREATE UNIQUE INDEX idx_aichat_keyword_embeddings_user_keyword ON aichat_keyword_embeddings(user_id, keyword);
   `);

@@ -104,7 +104,7 @@ function setupDb(): DatabaseSync {
     );
     CREATE TABLE aichat_keyword_embeddings (
       id INTEGER PRIMARY KEY AUTOINCREMENT, user_id TEXT NOT NULL, keyword TEXT NOT NULL, model TEXT NOT NULL,
-      dim INTEGER NOT NULL, vector BLOB NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+      dim INTEGER NOT NULL, vector BLOB NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, source TEXT
     );
     CREATE UNIQUE INDEX idx_embeddings_user_keyword ON aichat_keyword_embeddings(user_id, keyword);
     CREATE TABLE aichat_answer_category_scores (
