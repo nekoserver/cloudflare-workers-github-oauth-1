@@ -95,6 +95,7 @@ async function setupZtUi() {
           { keyword: 'Hono', model: '@cf/baai/bge-m3', dim: 1024, updatedAt: '2026-01-01', source: 'zt_manual', plamoModel: null, plamoDim: null },
           { keyword: '空港', model: '', dim: 1024, updatedAt: '2026-01-01', source: 'answer_graph_color', plamoModel: '@cf/pfnet/plamo-embedding-1b', plamoDim: 2048 },
           { keyword: '駅', model: '@cf/baai/bge-m3', dim: 1024, updatedAt: '2026-01-01', source: 'zt_manual', gemmaModel: '@cf/google/embeddinggemma-300m', gemmaDim: 768 },
+          { keyword: 'テスト', model: '@cf/baai/bge-m3', dim: 1024, updatedAt: '2026-01-01', source: 'zt_manual', gemmaModel: '@cf/google/embeddinggemma-300m', gemmaDim: 768 },
         ],
       };
       return Promise.resolve({
@@ -201,6 +202,84 @@ describe('ZTモーダルのDOM実動作(jsdom)', () => {
     await new Promise((resolve) => setTimeout(resolve, 10));
 
     expect(ztOverviewChartSection.style.display).toBe('none');
+  });
+
+  it('埋め込みモデルヘッダの右側にztOverviewModelFilterドロップダウンが表示され、「すべて」が最上位、以降はベクタ化済みキーワード総数の多い順に並ぶ', async () => {
+    const { ztOverviewBtn, ztOverviewBody } = await setupZtUi();
+
+    ztOverviewBtn.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    const select = document.getElementById('ztOverviewModelFilter') as unknown as HTMLSelectElement;
+    expect(select).toBeTruthy();
+    // ヘッダ(埋め込みモデル)の右側にあること
+    const thIdx = ztOverviewBody.innerHTML.indexOf('埋め込みモデル');
+    const selectIdx = ztOverviewBody.innerHTML.indexOf('id="ztOverviewModelFilter"');
+    expect(selectIdx).toBeGreaterThan(thIdx);
+
+    const options = Array.from(select.options).map((o) => ({ value: o.value, label: o.textContent }));
+    // items: bge-m3=4件(全件), embeddinggemma-300m=2件(駅,テスト), plamo-embedding-1b=1件(空港)
+    expect(options[0]).toEqual({ value: 'all', label: 'すべて' });
+    expect(options[1].value).toBe('bge');
+    expect(options[1].label).toContain('bge-m3');
+    expect(options[1].label).toContain('4');
+    expect(options[2].value).toBe('gemma');
+    expect(options[2].label).toContain('embeddinggemma-300m');
+    expect(options[2].label).toContain('2');
+    expect(options[3].value).toBe('plamo');
+    expect(options[3].label).toContain('plamo-embedding-1b');
+    expect(options[3].label).toContain('1');
+  });
+
+  it('ドロップダウンでplamo-embedding-1bを選ぶと、plamoが登録されているキーワードだけに表が絞り込まれる', async () => {
+    const { ztOverviewBtn, ztOverviewBody } = await setupZtUi();
+
+    ztOverviewBtn.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    const select = document.getElementById('ztOverviewModelFilter') as unknown as HTMLSelectElement;
+    select.value = 'plamo';
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+
+    expect(ztOverviewBody.textContent).toContain('空港');
+    expect(ztOverviewBody.textContent).not.toContain('Hono');
+    expect(ztOverviewBody.textContent).not.toContain('駅');
+    expect(ztOverviewBody.textContent).not.toContain('テスト');
+  });
+
+  it('ドロップダウンでembeddinggemma-300mを選ぶと、gemmaが登録されているキーワードだけに表が絞り込まれる', async () => {
+    const { ztOverviewBtn, ztOverviewBody } = await setupZtUi();
+
+    ztOverviewBtn.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    const select = document.getElementById('ztOverviewModelFilter') as unknown as HTMLSelectElement;
+    select.value = 'gemma';
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+
+    expect(ztOverviewBody.textContent).toContain('駅');
+    expect(ztOverviewBody.textContent).toContain('テスト');
+    expect(ztOverviewBody.textContent).not.toContain('Hono');
+    expect(ztOverviewBody.textContent).not.toContain('空港');
+  });
+
+  it('ドロップダウンで「すべて」に戻すと全キーワードが再び表示される', async () => {
+    const { ztOverviewBtn, ztOverviewBody } = await setupZtUi();
+
+    ztOverviewBtn.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    const select = document.getElementById('ztOverviewModelFilter') as unknown as HTMLSelectElement;
+    select.value = 'plamo';
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+    const selectAfter = document.getElementById('ztOverviewModelFilter') as unknown as HTMLSelectElement;
+    selectAfter.value = 'all';
+    selectAfter.dispatchEvent(new Event('change', { bubbles: true }));
+
+    expect(ztOverviewBody.textContent).toContain('Hono');
+    expect(ztOverviewBody.textContent).toContain('空港');
+    expect(ztOverviewBody.textContent).toContain('駅');
+    expect(ztOverviewBody.textContent).toContain('テスト');
   });
 
   it('📖アイコンで開いたモーダルのz-indexはgetNextZ()で実行時に動的算出される(固定値を書かない)', async () => {
