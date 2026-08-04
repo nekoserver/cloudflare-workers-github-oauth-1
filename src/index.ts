@@ -6419,14 +6419,17 @@ async function embedTextWithModel(ai: Ai, model: string, text: string): Promise<
  * 問い合わせて aichat_keyword_embeddings を上書き保存する
  * （前回合意した「ベクトル本体はモデル不一致時のみ強制上書き」の実装）。
  *
- * sourceは「このベクトル化がどの機能によって行われたか」の記録。
- * ZTモーダルの「登録する」ボタン(明示的な手動登録)からは'zt_manual'を渡す。
- * それ以外(answer-graphの色分け・キーワード分類のAI推薦等、ユーザーが
- * 明示的にベクタ化を指示したわけではない内部的なキャッシュ利用)は既定値
- * 'auto'のまま、または呼び出し元機能名を渡す。📖ベクタ化済みデータ一覧
- * (listKeywordEmbeddingsOverview)はsource='zt_manual'の行のみを表示し、
- * 「ZTモーダルからしか受け付けない」という一覧上の見た目を保証する
- * （内部キャッシュとしての自動ベクタ化そのものは引き続き動作する）。
+ * sourceは「このベクトル化がどの機能によって行われたか」の記録
+ * (📖ベクタ化済みデータ一覧の登録元ラベルに使う)。ZTモーダルの
+ * 「登録する」ボタン(明示的な手動登録)からは'zt_manual'を渡す。それ以外
+ * (answer-graphの色分け・キーワード分類のAI推薦等)は呼び出し元機能名、
+ * 未指定時は既定値'auto'を渡す。
+ *
+ * ベクトル本体がキャッシュヒットしてAIを呼ばない場合でも、渡されたsourceが
+ * 既存の値と異なるならsource列だけは更新する。そうしないと「以前は自動で
+ * ベクタ化されていたキーワードを、いまZTモーダルから明示的に登録し直した」
+ * という事実がDBに反映されず、一覧上「明示登録した」と分からなくなる
+ * （実際に起きた不具合: 登録ボタンを押しても一覧に反映されない）。
  */
 export async function getOrComputeKeywordEmbedding(
   db: D1Database,
@@ -6436,9 +6439,14 @@ export async function getOrComputeKeywordEmbedding(
   source: string = 'auto',
 ): Promise<number[]> {
   const row = await db.prepare(
-    `SELECT vector, model FROM aichat_keyword_embeddings WHERE user_id = ? AND keyword = ?`
-  ).bind(userId, keyword).first<{ vector: ArrayBuffer; model: string }>();
+    `SELECT vector, model, source FROM aichat_keyword_embeddings WHERE user_id = ? AND keyword = ?`
+  ).bind(userId, keyword).first<{ vector: ArrayBuffer; model: string; source: string | null }>();
   if (row && row.model === BGE_M3_MODEL) {
+    if (row.source !== source) {
+      await db.prepare(
+        `UPDATE aichat_keyword_embeddings SET source = ?, updated_at = ? WHERE user_id = ? AND keyword = ?`
+      ).bind(source, new Date().toISOString(), userId, keyword).run();
+    }
     return blobToFloats(row.vector);
   }
   const vector = await embedTextWithModel(ai, BGE_M3_MODEL, keyword);
