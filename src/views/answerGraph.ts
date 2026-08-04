@@ -16,8 +16,8 @@ export function getAnswerGraphPage(username: string, modelColors: Record<string,
 <style>
 * { box-sizing:border-box; margin:0; padding:0; }
 body { background:var(--bg,#0d1117); color:var(--fg,#e6edf3); font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; font-size:14px; min-height:100vh; display:flex; flex-direction:column; }
-@media (prefers-color-scheme:light) { :root { --bg:#f6f8fa; --fg:#24292f; --card:#fff; --border:#d0d7de; --label:#57606a; --btn-bg:#f3f4f6; --btn-border:#d0d7de; --btn-hover:#e9ecef; --accent:#0969da; --accent-fg:#fff; --answer-color:#0969da; --keyword-color:#c2410c; --danger:#cf222e; } }
-@media (prefers-color-scheme:dark) { :root { --bg:#0d1117; --fg:#e6edf3; --card:#161b22; --border:#30363d; --label:#8b949e; --btn-bg:#21262d; --btn-border:#30363d; --btn-hover:#30363d; --accent:#1f6feb; --accent-fg:#fff; --answer-color:#63b3ed; --keyword-color:#f6ad55; --danger:#f85149; } }
+@media (prefers-color-scheme:light) { :root { --bg:#f6f8fa; --fg:#24292f; --card:#fff; --border:#d0d7de; --label:#57606a; --btn-bg:#f3f4f6; --btn-border:#d0d7de; --btn-hover:#e9ecef; --accent:#0969da; --accent-fg:#fff; --answer-color:#0969da; --keyword-color:#c2410c; --danger:#cf222e; --fp-focus-bg:#d1f5d3; --fp-focus-border:#2f9e52; --fp-focus-fg:#0b3d17; } }
+@media (prefers-color-scheme:dark) { :root { --bg:#0d1117; --fg:#e6edf3; --card:#161b22; --border:#30363d; --label:#8b949e; --btn-bg:#21262d; --btn-border:#30363d; --btn-hover:#30363d; --accent:#1f6feb; --accent-fg:#fff; --answer-color:#63b3ed; --keyword-color:#f6ad55; --danger:#f85149; --fp-focus-bg:#1c4c2e; --fp-focus-border:#4caf6a; --fp-focus-fg:#86efac; } }
 .topbar { background:var(--card); border-bottom:1px solid var(--border); padding:10px 20px; display:flex; align-items:center; gap:12px; flex-shrink:0; }
 .topbar h1 { font-size:16px; font-weight:700; flex:1; }
 .topbar a { color:var(--accent); text-decoration:none; font-size:12px; }
@@ -49,6 +49,16 @@ main { flex:1; max-width:1100px; width:100%; margin:0 auto; padding:24px 16px; d
 .fp-crosshair::before, .fp-crosshair::after { content:''; position:absolute; background:var(--label); opacity:.55; }
 .fp-crosshair::before { left:50%; top:-5px; width:1px; height:6px; margin-left:-.5px; }
 .fp-crosshair::after { left:-5px; top:50%; width:6px; height:1px; margin-top:-.5px; }
+.fp-filmstrip {
+  position:absolute; left:0; right:0; top:0; z-index:20; display:flex; gap:6px; padding:8px 10px;
+  overflow-x:auto; background:linear-gradient(to bottom, rgba(0,0,0,.18), rgba(0,0,0,0));
+}
+.fp-film-chip {
+  flex:0 0 auto; font-size:11px; padding:4px 10px; border-radius:6px; border:1.5px solid var(--label);
+  background:transparent; color:var(--fg); white-space:nowrap; cursor:pointer;
+}
+.fp-film-chip:hover { border-color:var(--accent); }
+.fp-film-chip.fp-film-chip-focused { background:var(--fp-focus-bg); border-color:var(--fp-focus-border); color:var(--fp-focus-fg); font-weight:600; }
 .fp-nodes { position:absolute; inset:0; }
 .fp-node {
   position:absolute; transform:translate(-50%,-50%); display:flex; flex-direction:column; align-items:center;
@@ -199,6 +209,7 @@ input[type=search]:focus { border-color:var(--accent); }
       <div class="fp-view" id="fpView" style="display:none;">
         <div class="fp-here" id="fpHere"></div>
         <div class="fp-sky" id="fpSky">
+          <div class="fp-filmstrip" id="fpFilmstrip"></div>
           <div class="fp-horizon"></div>
           <div class="fp-crosshair"></div>
           <div class="fp-nodes" id="fpNodes"></div>
@@ -208,7 +219,7 @@ input[type=search]:focus { border-color:var(--accent); }
           <button type="button" class="fp-btn fp-btn-forward" id="fpForwardBtn" aria-label="選択して読む">↑</button>
           <button type="button" class="fp-btn" id="fpRightBtn" aria-label="右を見る">→</button>
         </div>
-        <div class="fp-hint">左右にスワイプ、または ←→ ボタンで見渡せます。↑ で中央のノードを選択します</div>
+        <div class="fp-hint">左右にスワイプ、または ←→ ボタンで最も手前のキーワードを一つずつ選べます。↑ で選択中のキーワードを開きます</div>
       </div>
     </div>
   </div>
@@ -262,6 +273,7 @@ input[type=search]:focus { border-color:var(--accent); }
   var fpHere = document.getElementById('fpHere');
   var fpSky = document.getElementById('fpSky');
   var fpNodes = document.getElementById('fpNodes');
+  var fpFilmstrip = document.getElementById('fpFilmstrip');
   var fpLeftBtn = document.getElementById('fpLeftBtn');
   var fpRightBtn = document.getElementById('fpRightBtn');
   var fpForwardBtn = document.getElementById('fpForwardBtn');
@@ -278,6 +290,12 @@ input[type=search]:focus { border-color:var(--accent); }
   var fpHeadingDeg = 0;
   var fpDragStartX = null;
   var fpDragStartHeading = 0;
+  var fpDragAccumX = 0;
+  var fpNearKeywords = [];
+  var fpFocusIdx = 0;
+  var fpWheelAccumX = 0;
+  var fpWheelTimer = null;
+  var FP_SWIPE_STEP_PX = 40;
 
   function escHtml(s) {
     return String(s == null ? '' : s)
@@ -513,7 +531,7 @@ input[type=search]:focus { border-color:var(--accent); }
           graphStatus.className = 'graph-status err';
           currentGraph = null;
           drawGraph();
-          if (fpActive) { fpHeadingDeg = 0; renderFirstPersonHere(); renderFirstPersonView(); }
+          if (fpActive) { fpHeadingDeg = 0; renderFirstPersonHere(); refreshFirstPersonFocus(); renderFirstPersonView(); renderFilmstrip(); }
           return;
         }
         currentGraph = d;
@@ -526,7 +544,7 @@ input[type=search]:focus { border-color:var(--accent); }
         }
         graphStatus.textContent = statusText;
         drawGraph();
-        if (fpActive) { fpHeadingDeg = 0; renderFirstPersonHere(); renderFirstPersonView(); }
+        if (fpActive) { fpHeadingDeg = 0; renderFirstPersonHere(); refreshFirstPersonFocus(); renderFirstPersonView(); renderFilmstrip(); }
       })
       .catch(function() {
         graphStatus.textContent = 'グラフの取得に失敗しました（通信エラー）';
@@ -629,6 +647,26 @@ input[type=search]:focus { border-color:var(--accent); }
     });
     visible.sort(function(a, b) { return b.distance - a.distance; });
     return visible;
+  }
+
+  function computeNearestKeywordSlots(posById, cx, cy) {
+    var minDepth = null;
+    Object.keys(posById).forEach(function(id) {
+      var node = posById[id].node;
+      if (node.type !== 'keyword') return;
+      if (minDepth === null || node.depth < minDepth) minDepth = node.depth;
+    });
+    var slots = [];
+    if (minDepth === null) return slots;
+    Object.keys(posById).forEach(function(id) {
+      var p = posById[id];
+      if (p.node.type !== 'keyword' || p.node.depth !== minDepth) return;
+      var dx = p.x - cx, dy = p.y - cy;
+      var bearingDeg = normalizeDeg360(Math.atan2(dy, dx) * 180 / Math.PI);
+      slots.push({ id: id, node: p.node, bearingDeg: bearingDeg });
+    });
+    slots.sort(function(a, b) { return a.bearingDeg - b.bearingDeg; });
+    return slots;
   }
 
   function drawGraph() {
@@ -769,9 +807,44 @@ input[type=search]:focus { border-color:var(--accent); }
     });
   }
 
-  function rotateFirstPerson(deltaDeg) {
-    fpHeadingDeg = normalizeDeg360(fpHeadingDeg + deltaDeg);
+  function renderFilmstrip() {
+    fpFilmstrip.innerHTML = '';
+    fpNearKeywords.forEach(function(slot, idx) {
+      var chip = document.createElement('div');
+      chip.className = 'fp-film-chip' + (idx === fpFocusIdx ? ' fp-film-chip-focused' : '');
+      chip.textContent = slot.node.label;
+      chip.addEventListener('click', function(e) {
+        e.stopPropagation();
+        focusNearKeyword(idx);
+      });
+      fpFilmstrip.appendChild(chip);
+    });
+  }
+
+  function refreshFirstPersonFocus() {
+    if (!lastLayout) { fpNearKeywords = []; fpFocusIdx = 0; return; }
+    fpNearKeywords = computeNearestKeywordSlots(lastLayout.posById, lastLayout.cx, lastLayout.cy);
+    if (!fpNearKeywords.length) { fpFocusIdx = 0; return; }
+    var bestIdx = 0;
+    var bestDiff = Infinity;
+    fpNearKeywords.forEach(function(slot, idx) {
+      var diff = Math.abs(normalizeDegSigned(slot.bearingDeg - fpHeadingDeg));
+      if (diff < bestDiff) { bestDiff = diff; bestIdx = idx; }
+    });
+    fpFocusIdx = bestIdx;
+  }
+
+  function focusNearKeyword(idx) {
+    if (!fpNearKeywords.length) return;
+    fpFocusIdx = ((idx % fpNearKeywords.length) + fpNearKeywords.length) % fpNearKeywords.length;
+    fpHeadingDeg = fpNearKeywords[fpFocusIdx].bearingDeg;
     renderFirstPersonView();
+    renderFilmstrip();
+  }
+
+  function stepFirstPersonFocus(direction) {
+    if (!fpNearKeywords.length) return;
+    focusNearKeyword(fpFocusIdx + direction);
   }
 
   function forwardFirstPerson() {
@@ -799,13 +872,15 @@ input[type=search]:focus { border-color:var(--accent); }
     if (active) {
       fpHeadingDeg = 0;
       renderFirstPersonHere();
+      refreshFirstPersonFocus();
       renderFirstPersonView();
+      renderFilmstrip();
     }
   }
 
   fpToggleBtn.addEventListener('click', function() { setFirstPersonActive(!fpActive); });
-  fpLeftBtn.addEventListener('click', function() { rotateFirstPerson(-20); });
-  fpRightBtn.addEventListener('click', function() { rotateFirstPerson(20); });
+  fpLeftBtn.addEventListener('click', function() { stepFirstPersonFocus(-1); });
+  fpRightBtn.addEventListener('click', function() { stepFirstPersonFocus(1); });
   fpForwardBtn.addEventListener('click', forwardFirstPerson);
 
   fpHere.addEventListener('click', function(e) {
@@ -816,34 +891,54 @@ input[type=search]:focus { border-color:var(--accent); }
   fpSky.addEventListener('touchstart', function(e) {
     if (e.touches.length !== 1) return;
     fpDragStartX = e.touches[0].clientX;
-    fpDragStartHeading = fpHeadingDeg;
+    fpDragAccumX = 0;
   }, { passive: true });
   fpSky.addEventListener('touchmove', function(e) {
     if (fpDragStartX === null || e.touches.length !== 1) return;
-    var deltaX = e.touches[0].clientX - fpDragStartX;
-    var deltaDeg = (deltaX / fpSky.clientWidth) * FP_FOV_DEG;
-    fpHeadingDeg = normalizeDeg360(fpDragStartHeading - deltaDeg);
-    renderFirstPersonView();
+    var x = e.touches[0].clientX;
+    fpDragAccumX += x - fpDragStartX;
+    fpDragStartX = x;
+    while (Math.abs(fpDragAccumX) >= FP_SWIPE_STEP_PX) {
+      stepFirstPersonFocus(fpDragAccumX < 0 ? 1 : -1);
+      fpDragAccumX += fpDragAccumX < 0 ? FP_SWIPE_STEP_PX : -FP_SWIPE_STEP_PX;
+    }
   }, { passive: true });
-  fpSky.addEventListener('touchend', function() { fpDragStartX = null; });
+  fpSky.addEventListener('touchend', function() { fpDragStartX = null; fpDragAccumX = 0; });
 
   fpSky.addEventListener('mousedown', function(e) {
     fpDragStartX = e.clientX;
-    fpDragStartHeading = fpHeadingDeg;
+    fpDragAccumX = 0;
   });
   document.addEventListener('mousemove', function(e) {
     if (fpDragStartX === null) return;
-    var deltaX = e.clientX - fpDragStartX;
-    var deltaDeg = (deltaX / fpSky.clientWidth) * FP_FOV_DEG;
-    fpHeadingDeg = normalizeDeg360(fpDragStartHeading - deltaDeg);
-    renderFirstPersonView();
+    var x = e.clientX;
+    fpDragAccumX += x - fpDragStartX;
+    fpDragStartX = x;
+    while (Math.abs(fpDragAccumX) >= FP_SWIPE_STEP_PX) {
+      stepFirstPersonFocus(fpDragAccumX < 0 ? 1 : -1);
+      fpDragAccumX += fpDragAccumX < 0 ? FP_SWIPE_STEP_PX : -FP_SWIPE_STEP_PX;
+    }
   });
-  document.addEventListener('mouseup', function() { fpDragStartX = null; });
+  document.addEventListener('mouseup', function() { fpDragStartX = null; fpDragAccumX = 0; });
+
+  fpSky.addEventListener('wheel', function(e) {
+    if (!fpActive) return;
+    var deltaX = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : 0;
+    if (!deltaX) return;
+    e.preventDefault();
+    fpWheelAccumX += deltaX;
+    while (Math.abs(fpWheelAccumX) >= FP_SWIPE_STEP_PX) {
+      stepFirstPersonFocus(fpWheelAccumX < 0 ? -1 : 1);
+      fpWheelAccumX += fpWheelAccumX < 0 ? FP_SWIPE_STEP_PX : -FP_SWIPE_STEP_PX;
+    }
+    if (fpWheelTimer) clearTimeout(fpWheelTimer);
+    fpWheelTimer = setTimeout(function() { fpWheelAccumX = 0; }, 300);
+  }, { passive: false });
 
   document.addEventListener('keydown', function(e) {
     if (!fpActive) return;
-    if (e.key === 'ArrowLeft') { rotateFirstPerson(-20); }
-    else if (e.key === 'ArrowRight') { rotateFirstPerson(20); }
+    if (e.key === 'ArrowLeft') { stepFirstPersonFocus(-1); }
+    else if (e.key === 'ArrowRight') { stepFirstPersonFocus(1); }
     else if (e.key === 'ArrowUp') { forwardFirstPerson(); }
   });
 

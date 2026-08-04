@@ -20,6 +20,10 @@ import { getAnswerGraphPage } from './views/answerGraph';
 //   (7) 地平線が目線と同じ高さ(50%)のままで奥行きが感じられない
 //   (8) 同じ目線の高さにあるノードが距離に関わらず同じ高さに表示され、
 //       手前/奥の遠近感が出ない
+//   (9) 左右スワイプ/スクロールの粒度が連続回転のままで、キーワードを一つずつ
+//       選択する体験にならない
+//   (10) 最上段のフィルムストリップに「いちばん手前」ではない(depth違いの)
+//        キーワードが混ざる、またはフォーカス中のチップが薄緑色で塗られない
 
 function buildPage(): string {
   return getAnswerGraphPage('testuser', {});
@@ -32,10 +36,11 @@ function loadPureFns() {
   expect(idx).toBeGreaterThan(-1);
   expect(endIdx).toBeGreaterThan(idx);
   const src = html.slice(idx, endIdx);
-  const fn = new Function(`${src}\nreturn { computeRadialLayout: computeRadialLayout, computeFirstPersonSlots: computeFirstPersonSlots, normalizeDeg360: normalizeDeg360, normalizeDegSigned: normalizeDegSigned };`);
+  const fn = new Function(`${src}\nreturn { computeRadialLayout: computeRadialLayout, computeFirstPersonSlots: computeFirstPersonSlots, computeNearestKeywordSlots: computeNearestKeywordSlots, normalizeDeg360: normalizeDeg360, normalizeDegSigned: normalizeDegSigned };`);
   return fn() as {
     computeRadialLayout: (nodes: unknown[], ringSpacing: number) => { size: number; cx: number; cy: number; posById: Record<string, { x: number; y: number; node: unknown }> };
     computeFirstPersonSlots: (posById: Record<string, { x: number; y: number; node: unknown }>, cx: number, cy: number, headingDeg: number, fovDeg: number, horizonPercent?: number, groundPercent?: number) => Array<{ id: string; bearingDeg: number; relativeDeg: number; distance: number; screenX: number; scale: number; topPercent: number }>;
+    computeNearestKeywordSlots: (posById: Record<string, { x: number; y: number; node: unknown }>, cx: number, cy: number) => Array<{ id: string; bearingDeg: number; node: { id: string; label: string; depth: number } }>;
     normalizeDeg360: (deg: number) => number;
     normalizeDegSigned: (deg: number) => number;
   };
@@ -60,6 +65,31 @@ describe('/answer-graph ページのHTML構造: 一人称モード用の要素�
     expect(html).toContain('id="fpLeftBtn"');
     expect(html).toContain('id="fpRightBtn"');
     expect(html).toContain('id="fpForwardBtn"');
+  });
+
+  it('フィルムストリップ(id="fpFilmstrip")が.fp-sky内に存在する', () => {
+    expect(html).toContain('id="fpFilmstrip"');
+    const skyIdx = html.indexOf('id="fpSky"');
+    const filmstripIdx = html.indexOf('id="fpFilmstrip"');
+    const skyCloseIdx = html.indexOf('</div>', html.indexOf('id="fpNodes"'));
+    expect(filmstripIdx).toBeGreaterThan(skyIdx);
+    expect(filmstripIdx).toBeLessThan(skyCloseIdx);
+  });
+
+  it('フォーカス中チップ(.fp-film-chip-focused)は薄緑系のCSS変数(--fp-focus-bg等)で塗られ、固定色をハードコードしない', () => {
+    const ruleIdx = html.indexOf('.fp-film-chip.fp-film-chip-focused');
+    const rule = html.slice(ruleIdx, html.indexOf('}', ruleIdx));
+    expect(rule).toContain('var(--fp-focus-bg)');
+    expect(rule).toContain('var(--fp-focus-border)');
+    expect(rule).not.toMatch(/background:\s*#/);
+  });
+
+  it('--fp-focus-bg等はライト/ダーク両方の@mediaブロックで定義されている', () => {
+    const lightBlock = html.slice(html.indexOf('prefers-color-scheme:light'), html.indexOf('prefers-color-scheme:dark'));
+    const darkBlockIdx = html.indexOf('prefers-color-scheme:dark');
+    const darkBlock = html.slice(darkBlockIdx, html.indexOf('}', darkBlockIdx) + 1);
+    expect(lightBlock).toContain('--fp-focus-bg');
+    expect(darkBlock).toContain('--fp-focus-bg');
   });
 
   it('一人称モードビューは既定で非表示(display:none)である', () => {
@@ -183,6 +213,47 @@ describe('computeFirstPersonSlots: 中心(視点)に立った360度パノラマ�
     const withDefaults = computeFirstPersonSlots(layout.posById, layout.cx, layout.cy, 0, 360);
     const withExplicit = computeFirstPersonSlots(layout.posById, layout.cx, layout.cy, 0, 360, 38, 90);
     expect(withDefaults.map((s) => s.topPercent)).toEqual(withExplicit.map((s) => s.topPercent));
+  });
+});
+
+describe('computeNearestKeywordSlots: 最上段フィルムストリップ用の「いちばん手前」キーワード抽出', () => {
+  it('最小depthのキーワードのみを抽出し、より深い(遠い)キーワードは含めない', () => {
+    const { computeRadialLayout, computeNearestKeywordSlots } = loadPureFns();
+    const nodes = [
+      ...sampleNodes,
+      { id: 'k:far-east', type: 'keyword', label: 'far-east', depth: 2 },
+    ];
+    const layout = computeRadialLayout(nodes, 80);
+    const slots = computeNearestKeywordSlots(layout.posById, layout.cx, layout.cy);
+    const ids = slots.map((s) => s.id);
+    expect(ids).toContain('k:north');
+    expect(ids).toContain('k:east');
+    expect(ids).toContain('k:south');
+    expect(ids).toContain('k:west');
+    expect(ids).not.toContain('k:far-east');
+  });
+
+  it('回答(answer)ノードは含めず、キーワードのみを対象にする', () => {
+    const { computeRadialLayout, computeNearestKeywordSlots } = loadPureFns();
+    const layout = computeRadialLayout(sampleNodes, 80);
+    const slots = computeNearestKeywordSlots(layout.posById, layout.cx, layout.cy);
+    expect(slots.some((s) => s.id === 'a:seed')).toBe(false);
+  });
+
+  it('方位角(bearingDeg)の昇順に並び、左右に一つずつ移動できる順序になっている', () => {
+    const { computeRadialLayout, computeNearestKeywordSlots } = loadPureFns();
+    const layout = computeRadialLayout(sampleNodes, 80);
+    const slots = computeNearestKeywordSlots(layout.posById, layout.cx, layout.cy);
+    for (let i = 1; i < slots.length; i++) {
+      expect(slots[i].bearingDeg).toBeGreaterThanOrEqual(slots[i - 1].bearingDeg);
+    }
+  });
+
+  it('キーワードが存在しない場合は空配列を返す', () => {
+    const { computeRadialLayout, computeNearestKeywordSlots } = loadPureFns();
+    const layout = computeRadialLayout([{ id: 'a:seed', type: 'answer', label: 'seed', depth: 0 }], 80);
+    const slots = computeNearestKeywordSlots(layout.posById, layout.cx, layout.cy);
+    expect(slots).toEqual([]);
   });
 });
 
