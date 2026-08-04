@@ -4312,9 +4312,13 @@ app.post('/api/aichat/answer-propagation-graph', authMiddleware, async (c) => {
   }
   if (!result) return jsonUtf8({ error: '指定された回答が見つかりません' }, 404);
 
+  const autoVectorize = resolveAutoVectorizeSettings(c.req.header('Cookie'));
+  if (!autoVectorize.enabled) {
+    return jsonUtf8({ ...result, _colorWarning: 'キーワードの自動ベクタ化がOFFのため色分けは無効です' });
+  }
   if (c.env.AI) {
     try {
-      const colored = await enrichGraphWithCategoryColors(c.env.DB, c.env.AI, user.sub, result);
+      const colored = await enrichGraphWithCategoryColors(c.env.DB, c.env.AI, user.sub, result, autoVectorize.model);
       return jsonUtf8(colored);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -5728,6 +5732,26 @@ export const PLAMO_EMBEDDING_MODEL = '@cf/pfnet/plamo-embedding-1b';
 export const GEMMA_EMBEDDING_MODEL = '@cf/google/embeddinggemma-300m';
 export const KEYWORD_EMBEDDING_MODELS = [BGE_M3_MODEL, PLAMO_EMBEDDING_MODEL, GEMMA_EMBEDDING_MODEL];
 
+export const AUTO_VECTORIZE_ENABLED_COOKIE = 'aichat_auto_vectorize_enabled';
+export const AUTO_VECTORIZE_MODEL_COOKIE = 'aichat_auto_vectorize_model';
+
+/**
+ * answer-graphの色分け・キーワード分類提案など、ユーザーが明示的に
+ * ボタンを押したわけではない箇所で自動的に行われるキーワードのベクタ化
+ * (自動ベクタ化)の設定をCookieから解決する。
+ * 「キーワードの自動ベクタ化」はデフォルトON、使用モデルはデフォルトで
+ * plamo-embedding-1b(未設定/不正値はplamo-embedding-1bにフォールバックする。
+ * bge-m3にフォールバックするresolveKeywordEmbeddingModelとは既定値が異なるため
+ * 専用の解決関数とする)。
+ */
+export function resolveAutoVectorizeSettings(cookieHeader: string | undefined | null): { enabled: boolean; model: string } {
+  const vals = getCookieValues(cookieHeader ?? undefined, [AUTO_VECTORIZE_ENABLED_COOKIE, AUTO_VECTORIZE_MODEL_COOKIE]);
+  const enabled = vals[AUTO_VECTORIZE_ENABLED_COOKIE] !== 'off';
+  const rawModel = vals[AUTO_VECTORIZE_MODEL_COOKIE];
+  const model = rawModel && (KEYWORD_EMBEDDING_MODELS as string[]).includes(rawModel) ? rawModel : PLAMO_EMBEDDING_MODEL;
+  return { enabled, model };
+}
+
 /**
  * bge-m3以外のモデル(plamo-embedding-1b, embeddinggemma-300m)は、それぞれ
  * 専用の追加カラム(<prefix>_vector/<prefix>_dim/<prefix>_model/<prefix>_updated_at)
@@ -5901,10 +5925,10 @@ export function buildCategoryCentroidsFromMap(
 
 const KEYWORD_EMBEDDING_AI_BATCH_SIZE = 20;
 
-async function embedTextsWithBgeM3Batch(ai: Ai, texts: string[]): Promise<number[][]> {
+async function embedTextsWithModelBatch(ai: Ai, model: string, texts: string[]): Promise<number[][]> {
   if (texts.length === 0) return [];
   const result = await ai.run(
-    BGE_M3_MODEL as Parameters<typeof ai.run>[0],
+    model as Parameters<typeof ai.run>[0],
     { text: texts } as Parameters<typeof ai.run>[1],
   );
   const resultObj = (typeof result === 'object' && result !== null) ? result as Record<string, unknown> : {};
@@ -5919,6 +5943,11 @@ async function embedTextsWithBgeM3Batch(ai: Ai, texts: string[]): Promise<number
  * 呼ぶ(N回のD1読み取り+N回のAI呼び出し+N回のD1書き込み)のではなく、
  * キャッシュ読み取り・AI埋め込み・書き込みのそれぞれをバッチ化して
  * D1_MAX_BOUND_PARAMSに収まる単位でまとめて実行する。
+ *
+ * modelは主系列(model/dim/vector)に書き込むモデルを指定する
+ * (省略時はbge-m3、既定の自動ベクタ化設定はplamo-embedding-1b)。
+ * キャッシュヒット判定もこのmodelと一致する行のみを対象にする
+ * (異なるモデルで書き込まれた行を誤って再利用しない)。
  */
 export async function getOrComputeKeywordEmbeddingsBatch(
   db: D1Database,
@@ -5926,6 +5955,7 @@ export async function getOrComputeKeywordEmbeddingsBatch(
   userId: string,
   keywords: string[],
   source: string = 'auto',
+  model: string = BGE_M3_MODEL,
 ): Promise<Map<string, number[]>> {
   const uniqueKeywords = Array.from(new Set(keywords.filter(Boolean)));
   const result = new Map<string, number[]>();
@@ -5938,7 +5968,7 @@ export async function getOrComputeKeywordEmbeddingsBatch(
       `SELECT keyword, vector, model FROM aichat_keyword_embeddings WHERE user_id = ? AND keyword IN (${placeholders})`
     ).bind(userId, ...chunk).all<{ keyword: string; vector: ArrayBuffer; model: string }>();
     for (const r of (rows.results ?? [])) {
-      if (r.model === BGE_M3_MODEL) result.set(r.keyword, blobToFloats(r.vector));
+      if (r.model === model) result.set(r.keyword, blobToFloats(r.vector));
     }
   }
 
@@ -5948,7 +5978,7 @@ export async function getOrComputeKeywordEmbeddingsBatch(
   const newEntries: { keyword: string; vector: number[] }[] = [];
   for (let i = 0; i < missing.length; i += KEYWORD_EMBEDDING_AI_BATCH_SIZE) {
     const batchKws = missing.slice(i, i + KEYWORD_EMBEDDING_AI_BATCH_SIZE);
-    const vectors = await embedTextsWithBgeM3Batch(ai, batchKws);
+    const vectors = await embedTextsWithModelBatch(ai, model, batchKws);
     batchKws.forEach((kw, idx) => {
       const v = vectors[idx] ?? [];
       if (v.length > 0) {
@@ -5967,7 +5997,7 @@ export async function getOrComputeKeywordEmbeddingsBatch(
       const valuesSql = chunk.map(() => '(?, ?, ?, ?, ?, ?, ?, ?)').join(', ');
       const args: unknown[] = [];
       for (const e of chunk) {
-        args.push(userId, e.keyword, BGE_M3_MODEL, e.vector.length, floatsToBlob(e.vector), source, now, now);
+        args.push(userId, e.keyword, model, e.vector.length, floatsToBlob(e.vector), source, now, now);
       }
       await db.prepare(
         `INSERT INTO aichat_keyword_embeddings (user_id, keyword, model, dim, vector, source, created_at, updated_at)
@@ -6006,6 +6036,7 @@ async function saveAnswerCategoryScoresBatch(
   db: D1Database,
   userId: string,
   entries: { shareId: string; categoryId: number; score: number }[],
+  model: string = BGE_M3_MODEL,
 ): Promise<void> {
   if (entries.length === 0) return;
   const now = new Date().toISOString();
@@ -6015,7 +6046,7 @@ async function saveAnswerCategoryScoresBatch(
     const chunk = entries.slice(i, i + rowsPerChunk);
     const valuesSql = chunk.map(() => '(?, ?, ?, ?, ?, ?)').join(', ');
     const args: unknown[] = [];
-    for (const e of chunk) args.push(e.shareId, userId, e.categoryId, e.score, BGE_M3_MODEL, now);
+    for (const e of chunk) args.push(e.shareId, userId, e.categoryId, e.score, model, now);
     await db.prepare(
       `INSERT INTO aichat_answer_category_scores (share_id, user_id, category_id, score, model, computed_at)
        VALUES ${valuesSql}
@@ -6034,6 +6065,7 @@ async function computeAnswerNodeColors(
   ai: Ai,
   userId: string,
   answerNodes: AnswerGraphNode[],
+  model: string = BGE_M3_MODEL,
 ): Promise<Map<string, { color: string; dominantCategory: string | null }>> {
   const result = new Map<string, { color: string; dominantCategory: string | null }>();
   if (answerNodes.length === 0) return result;
@@ -6084,7 +6116,7 @@ async function computeAnswerNodeColors(
     contained.forEach((k) => neededKeywords.add(k));
   }
 
-  const embeddingMap = await getOrComputeKeywordEmbeddingsBatch(db, ai, userId, Array.from(neededKeywords), 'answer_graph_color');
+  const embeddingMap = await getOrComputeKeywordEmbeddingsBatch(db, ai, userId, Array.from(neededKeywords), 'answer_graph_color', model);
 
   const centroids = buildCategoryCentroidsFromMap(categories, keywordsByCategory, embeddingMap);
   if (centroids.length === 0) return result;
@@ -6097,7 +6129,7 @@ async function computeAnswerNodeColors(
     const shareId = node.id.slice(2);
     const cached = cachedByShare.get(shareId) ?? [];
     let scores: AnswerCategoryScore[];
-    if (cached.length > 0 && cached.length === centroids.length && cached.every((r) => r.model === BGE_M3_MODEL)) {
+    if (cached.length > 0 && cached.length === centroids.length && cached.every((r) => r.model === model)) {
       scores = cached.map((r) => {
         const cat = categoryById.get(r.categoryId);
         return { categoryId: r.categoryId, name: cat ? cat.name : '', color: cat ? cat.color : '#888888', score: r.score };
@@ -6117,7 +6149,7 @@ async function computeAnswerNodeColors(
     result.set(node.id, { color: blendCategoryColors(scores, '#888888'), dominantCategory: best.score > 0 ? best.name : null });
   }
 
-  await saveAnswerCategoryScoresBatch(db, userId, toSave);
+  await saveAnswerCategoryScoresBatch(db, userId, toSave, model);
 
   return result;
 }
@@ -6134,6 +6166,7 @@ export async function enrichGraphWithCategoryColors(
   ai: Ai,
   userId: string,
   graph: AnswerGraphResult,
+  model: string = BGE_M3_MODEL,
 ): Promise<AnswerGraphResult> {
   // キーワードノードの色付けは確定分類(aichat_keyword_category_map)の
   // 直接参照だけで完結し、回答ノードのベクトル計算には依存しない。
@@ -6166,7 +6199,7 @@ export async function enrichGraphWithCategoryColors(
   const answerNodes = graph.nodes.filter((n) => n.type === 'answer');
   let answerColorById = new Map<string, { color: string; dominantCategory: string | null }>();
   try {
-    answerColorById = await computeAnswerNodeColors(db, ai, userId, answerNodes);
+    answerColorById = await computeAnswerNodeColors(db, ai, userId, answerNodes, model);
   } catch (err) {
     logger.warn('enrichGraphWithCategoryColors: answer node scoring failed (falling back to keyword-only coloring)', {
       userId,
@@ -6448,6 +6481,10 @@ async function embedTextWithModel(ai: Ai, model: string, text: string): Promise<
  * ベクタ化されていたキーワードを、いまZTモーダルから明示的に登録し直した」
  * という事実がDBに反映されず、一覧上「明示登録した」と分からなくなる
  * （実際に起きた不具合: 登録ボタンを押しても一覧に反映されない）。
+ *
+ * modelは主系列(model/dim/vector)に書き込むモデル(省略時bge-m3)。
+ * answer-graph色分け・キーワード分類提案などの自動ベクタ化系呼び出しは
+ * resolveAutoVectorizeSettingsで解決した値(既定plamo-embedding-1b)を渡す。
  */
 export async function getOrComputeKeywordEmbedding(
   db: D1Database,
@@ -6455,11 +6492,12 @@ export async function getOrComputeKeywordEmbedding(
   userId: string,
   keyword: string,
   source: string = 'auto',
+  model: string = BGE_M3_MODEL,
 ): Promise<number[]> {
   const row = await db.prepare(
     `SELECT vector, model, source FROM aichat_keyword_embeddings WHERE user_id = ? AND keyword = ?`
   ).bind(userId, keyword).first<{ vector: ArrayBuffer; model: string; source: string | null }>();
-  if (row && row.model === BGE_M3_MODEL) {
+  if (row && row.model === model) {
     if (row.source !== source) {
       await db.prepare(
         `UPDATE aichat_keyword_embeddings SET source = ?, updated_at = ? WHERE user_id = ? AND keyword = ?`
@@ -6467,7 +6505,7 @@ export async function getOrComputeKeywordEmbedding(
     }
     return blobToFloats(row.vector);
   }
-  const vector = await embedTextWithModel(ai, BGE_M3_MODEL, keyword);
+  const vector = await embedTextWithModel(ai, model, keyword);
   if (vector.length === 0) return [];
   const now = new Date().toISOString();
   await db.prepare(
@@ -6475,7 +6513,7 @@ export async function getOrComputeKeywordEmbedding(
      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(user_id, keyword) DO UPDATE SET
        model = excluded.model, dim = excluded.dim, vector = excluded.vector, source = excluded.source, updated_at = excluded.updated_at`
-  ).bind(userId, keyword, BGE_M3_MODEL, vector.length, floatsToBlob(vector), source, now, now).run();
+  ).bind(userId, keyword, model, vector.length, floatsToBlob(vector), source, now, now).run();
   return vector;
 }
 
@@ -6677,6 +6715,8 @@ app.post('/api/aichat/keyword-category-suggest', authMiddleware, async (c) => {
   const user = c.get('user');
   if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
   if (!c.env.AI) return jsonUtf8({ suggestion: null, _warning: 'AIバインディングが未設定です' });
+  const autoVectorize = resolveAutoVectorizeSettings(c.req.header('Cookie'));
+  if (!autoVectorize.enabled) return jsonUtf8({ suggestion: null, _warning: 'キーワードの自動ベクタ化がOFFです' });
   const body = await c.req.json<{ keyword?: string }>();
   const keyword = (typeof body.keyword === 'string' ? body.keyword.trim() : '').slice(0, 200);
   if (!keyword) return jsonUtf8({ error: 'keyword は必須です' }, 400);
@@ -6687,7 +6727,7 @@ app.post('/api/aichat/keyword-category-suggest', authMiddleware, async (c) => {
   const categories = catsRows.results ?? [];
   if (categories.length === 0) return jsonUtf8({ suggestion: null });
 
-  const keywordVector = await getOrComputeKeywordEmbedding(c.env.DB, c.env.AI, user.sub, keyword, 'category_suggest');
+  const keywordVector = await getOrComputeKeywordEmbedding(c.env.DB, c.env.AI, user.sub, keyword, 'category_suggest', autoVectorize.model);
   if (keywordVector.length === 0) return jsonUtf8({ suggestion: null, _warning: '埋め込み取得に失敗しました' });
 
   const centroids: CategoryCentroid[] = [];
@@ -6699,7 +6739,7 @@ app.post('/api/aichat/keyword-category-suggest', authMiddleware, async (c) => {
     if (kws.length === 0) continue;
     const vectors: number[][] = [];
     for (const kw of kws) {
-      const v = await getOrComputeKeywordEmbedding(c.env.DB, c.env.AI, user.sub, kw, 'category_suggest');
+      const v = await getOrComputeKeywordEmbedding(c.env.DB, c.env.AI, user.sub, kw, 'category_suggest', autoVectorize.model);
       if (v.length > 0) vectors.push(v);
     }
     if (vectors.length === 0) continue;
@@ -6710,7 +6750,7 @@ app.post('/api/aichat/keyword-category-suggest', authMiddleware, async (c) => {
   if (best) {
     await c.env.DB.prepare(
       `INSERT INTO aichat_keyword_category_suggestions (user_id, keyword, suggested_category_id, similarity, model, created_at) VALUES (?, ?, ?, ?, ?, ?)`
-    ).bind(user.sub, keyword, best.categoryId, best.similarity, BGE_M3_MODEL, new Date().toISOString()).run();
+    ).bind(user.sub, keyword, best.categoryId, best.similarity, autoVectorize.model, new Date().toISOString()).run();
   }
   return jsonUtf8({ suggestion: best });
 });
@@ -8498,6 +8538,7 @@ app.get('/settings', authMiddleware, async (c) => {
   const apisSidebarAccordion = cookieVals['user_apis_sidebar_accordion'] === 'on' ? 'on' : 'off';
   const apisDescMode = cookieVals['user_apis_desc_mode'] === 'off' ? 'off' : 'on';
   const apisNavFlash = cookieVals['user_apis_nav_flash'] ?? '7';
+  const autoVectorizeSettings = resolveAutoVectorizeSettings(cookieHeader);
 
   let issuedAt: string;
   let expiresAt: string;
@@ -8564,6 +8605,8 @@ app.get('/settings', authMiddleware, async (c) => {
     apisSidebarAccordion,
     apisDescMode,
     apisNavFlash,
+    aichatAutoVectorizeEnabled: autoVectorizeSettings.enabled ? 'on' : 'off',
+    aichatAutoVectorizeModel: autoVectorizeSettings.model,
     emailConfirmLoginEnabled,
     githubScopes: GITHUB_OAUTH_SCOPE,
     githubGrantedScopes: grantedScopes,
@@ -13410,6 +13453,32 @@ app.post('/api/settings/search-label-mode', authMiddleware, async (c) => {
     return c.json({ message: '新規キーワード分類モードを変更しました', mode }, 200);
   } catch {
     return c.json({ error: '新規キーワード分類モードの変更に失敗しました' }, 500);
+  }
+});
+
+app.post('/api/settings/aichat-auto-vectorize-enabled', authMiddleware, async (c) => {
+  try {
+    const { mode } = await c.req.json();
+    if (mode !== 'on' && mode !== 'off') {
+      return c.json({ error: '無効な設定値です' }, 400);
+    }
+    c.header('Set-Cookie', `${AUTO_VECTORIZE_ENABLED_COOKIE}=${mode}; Path=/; Secure; SameSite=Lax; Max-Age=31536000`);
+    return c.json({ message: 'キーワードの自動ベクタ化設定を変更しました', mode }, 200);
+  } catch {
+    return c.json({ error: 'キーワードの自動ベクタ化設定の変更に失敗しました' }, 500);
+  }
+});
+
+app.post('/api/settings/aichat-auto-vectorize-model', authMiddleware, async (c) => {
+  try {
+    const { model } = await c.req.json();
+    if (typeof model !== 'string' || !(KEYWORD_EMBEDDING_MODELS as string[]).includes(model)) {
+      return c.json({ error: '無効なモデルです' }, 400);
+    }
+    c.header('Set-Cookie', `${AUTO_VECTORIZE_MODEL_COOKIE}=${model}; Path=/; Secure; SameSite=Lax; Max-Age=31536000`);
+    return c.json({ message: '自動ベクタ化に使う埋め込みモデルを変更しました', model }, 200);
+  } catch {
+    return c.json({ error: '自動ベクタ化に使う埋め込みモデルの変更に失敗しました' }, 500);
   }
 });
 
