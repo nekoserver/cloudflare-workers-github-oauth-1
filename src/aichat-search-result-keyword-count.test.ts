@@ -3,14 +3,18 @@ import { DatabaseSync } from 'node:sqlite';
 import { enrichSearchResultsWithKeywordCounts } from './index';
 
 // 対象: /answer-graph の起点検索(`/api/aichat/shares/search`)で返す各行に、
-// その回答本文に含まれる登録済みキーワードの総数(keywordCount)を付与する
-// enrichSearchResultsWithKeywordCounts。
+// その共有(回答)に aichat_search_log の share_id で紐づくキーワードの総数
+// (keywordCount)を付与する enrichSearchResultsWithKeywordCounts。
+//
+// キーワードの出所は回答伝播グラフの第1層(findKeywordsForShares)と同じ
+// share_id 紐づけであり、一人称モード最前列のキーワード数と一致する。
 //
 // 故障シナリオ:
-//   (1) 質問文にしか含まれず回答本文には無いキーワードまで件数に数えてしまう
-//       (回答伝播グラフのキーワード抽出を回答本文のみに揃えた修正と矛盾する)
+//   (1) 別の共有に紐づくキーワードまで件数に数えてしまう(検索履歴全体への
+//       部分一致方式に逆戻りし、グラフ最前列のキーワード群と食い違う)
 //   (2) 検索結果が0件のときにDBへ無駄な問い合わせをする、またはエラーになる
 //   (3) 元のフィールド(id・question・created_at等)がkeywordCount付与後に失われる
+//   (4) 同じキーワードが複数回記録されている共有で重複カウントされる
 
 interface D1Row {
   [key: string]: unknown;
@@ -40,6 +44,7 @@ function setupDb(): DatabaseSync {
     CREATE TABLE aichat_search_log (
       user_id TEXT NOT NULL,
       keyword TEXT NOT NULL,
+      share_id TEXT NOT NULL,
       select_count INTEGER NOT NULL DEFAULT 1,
       last_searched_at TEXT NOT NULL
     );
@@ -47,32 +52,53 @@ function setupDb(): DatabaseSync {
   return db;
 }
 
-function insertKeyword(db: DatabaseSync, userId: string, keyword: string, count = 1) {
+function insertKeyword(db: DatabaseSync, userId: string, keyword: string, shareId: string, count = 1) {
   db.prepare(
-    `INSERT INTO aichat_search_log (user_id, keyword, select_count, last_searched_at) VALUES (?, ?, ?, ?)`
-  ).run(userId, keyword, count, '2026-01-01T00:00:00.000Z');
+    `INSERT INTO aichat_search_log (user_id, keyword, share_id, select_count, last_searched_at) VALUES (?, ?, ?, ?, ?)`
+  ).run(userId, keyword, shareId, count, '2026-01-01T00:00:00.000Z');
 }
 
 describe('enrichSearchResultsWithKeywordCounts: 検索結果へのキーワード総数付与', () => {
-  it('回答本文に含まれる登録済みキーワードの件数を付与する(質問文にしか無いキーワードは数えない)', async () => {
+  it('その共有に紐づくキーワードだけを数える(別の共有に紐づくキーワードは数えない)', async () => {
     const db = setupDb();
-    insertKeyword(db, 'u1', '駅');
-    insertKeyword(db, 'u1', '新幹線');
-    insertKeyword(db, 'u1', '飛行機');
+    insertKeyword(db, 'u1', 'Hono', 's1');
+    insertKeyword(db, 'u1', 'エラーレスポンス', 's1');
+    insertKeyword(db, 'u1', '実装', 's-other');
+    insertKeyword(db, 'u1', '設計', 's-other');
     const results = [
-      { id: 's1', question: '新幹線の駅について教えて', answer: '駅の周辺には商業施設があります' },
+      { id: 's1', question: 'Honoのエラー処理について', answer: 'Honoの実装では例外の設計が重要です' },
     ];
 
     const enriched = await enrichSearchResultsWithKeywordCounts(wrapD1(db) as never, 'u1', results);
 
-    // 「駅」は回答本文に含まれるので数える。「新幹線」は質問文にしか無いので数えない。
-    // 「飛行機」はどちらにも無い。
+    expect(enriched[0].keywordCount).toBe(2);
+  });
+
+  it('他ユーザーの同じshare_idのキーワードは数えない', async () => {
+    const db = setupDb();
+    insertKeyword(db, 'u1', 'Hono', 's1');
+    insertKeyword(db, 'u2', 'よそのキーワード', 's1');
+    const results = [{ id: 's1', question: 'Q', answer: 'A' }];
+
+    const enriched = await enrichSearchResultsWithKeywordCounts(wrapD1(db) as never, 'u1', results);
+
+    expect(enriched[0].keywordCount).toBe(1);
+  });
+
+  it('同じキーワードが複数回記録されていても重複カウントしない', async () => {
+    const db = setupDb();
+    insertKeyword(db, 'u1', 'Hono', 's1', 3);
+    insertKeyword(db, 'u1', 'Hono', 's1', 5);
+    const results = [{ id: 's1', question: 'Q', answer: 'A' }];
+
+    const enriched = await enrichSearchResultsWithKeywordCounts(wrapD1(db) as never, 'u1', results);
+
     expect(enriched[0].keywordCount).toBe(1);
   });
 
   it('元の行のフィールド(id・question等)はkeywordCount付与後も保持される', async () => {
     const db = setupDb();
-    insertKeyword(db, 'u1', '駅');
+    insertKeyword(db, 'u1', '駅', 's1');
     const results = [
       { id: 's1', question: 'Q', answer: '駅の話です', created_at: '2026-01-01T00:00:00.000Z' },
     ];
@@ -98,7 +124,7 @@ describe('enrichSearchResultsWithKeywordCounts: 検索結果へのキーワー�
     expect(queried).toBe(false);
   });
 
-  it('登録済みキーワードが1つも無い場合は全行keywordCount=0になる', async () => {
+  it('キーワードが1件も紐づいていない共有はkeywordCount=0になる', async () => {
     const db = setupDb();
     const results = [{ id: 's1', question: 'Q', answer: '何かの回答' }];
 

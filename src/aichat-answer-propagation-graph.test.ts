@@ -2,15 +2,17 @@ import { describe, it, expect } from 'vitest';
 import { DatabaseSync } from 'node:sqlite';
 import { extractContainedKeywords, buildAnswerPropagationGraph } from './index';
 
-// 対象: 新ページ /answer-graph が使う「起点の回答から、含まれるキーワードを
-// 手がかりに関連する回答へ次々と広がっていく様子」をBFSで構築するロジック。
+// 対象: 新ページ /answer-graph が使う「起点の回答から、その回答に紐づく
+// キーワードを手がかりに関連する回答へ次々と広がっていく様子」をBFSで
+// 構築するロジック。
 //
-// アルゴリズム(ユーザー指定):
-//   1. 起点の回答に含まれる全キーワードそれぞれについてループし、
-//      そのキーワードを含む回答を(既に処理済みの回答を除いて)すべて抽出する。
-//      各キーワードはループの終了間際に「処理済み」としてpushする。
-//   2. 得られた回答群をソート・重複除去し、その回答ループの中で
-//      まだ処理していないキーワードを抽出し、1に戻って繰り返す。
+// キーワードの出所(重要):
+//   各回答のキーワードは aichat_search_log の share_id で当該回答(共有)に
+//   紐づけて記録されている(回答モーダルのキーワード一覧 /api/aichat/share-keywords
+//   と同じ出所)。グラフの各層のキーワードはこの share_id 紐づけから取得する。
+//   「検索履歴全体の人気キーワードを回答本文に部分一致でぶつける」方式は、
+//   実装・例外・設計のような汎用語がどの回答にもマッチしてしまい、
+//   「その回答のキーワード群」と一致しない結果を生むため使用しない。
 //
 // 故障シナリオ:
 //   (1) 起点の回答が存在しない/他ユーザーの回答を指定した場合に例外を投げる
@@ -18,13 +20,10 @@ import { extractContainedKeywords, buildAnswerPropagationGraph } from './index';
 //   (3) 一度処理したキーワードが別の階層で再度キーワードノードとして重複追加される
 //   (4) ループが収束条件を持たず無限に回り続ける(maxDepth/maxNodesで打ち切れるか)
 //   (5) 他ユーザーの回答やキーワードが混入する
-//   (6) 質問文にしか含まれず回答本文には含まれないキーワードまでノード化されてしまう
-//       (このJSDocが謳う「起点の回答に含まれるキーワード」という設計と矛盾する。
-//       /answer-graph の一人称モードで最前列に表示される「その質問に対する回答の
-//       中に含まれるキーワード群」が、実際には質問文由来のキーワードで汚染される)
-//   (7) 起点(第1層)のキーワードが maxKeywordsPerLayer で打ち切られ、検索結果の
-//       keywordCount(回答本文に含まれる全キーワード数)と一人称モード最前列の
-//       キーワード群が一致しなくなる。第1層は起点回答の全キーワードを含めること
+//   (6) 起点(第1層)のキーワードが maxKeywordsPerLayer で打ち切られ、検索結果の
+//       keywordCount と一人称モード最前列のキーワード群が一致しなくなる
+//   (7) 検索履歴全体の汎用キーワード(実装・例外・設計等)が、当該回答に
+//       紐づいていないのに回答本文への部分一致だけで第1層に混入する
 
 describe('extractContainedKeywords: テキストに含まれる登録済みキーワードの抽出', () => {
   it('テキストに含まれるキーワードだけを返す(大文字小文字を区別しない)', () => {
@@ -73,6 +72,7 @@ function setupDb(): DatabaseSync {
     CREATE TABLE aichat_search_log (
       user_id TEXT NOT NULL,
       keyword TEXT NOT NULL,
+      share_id TEXT NOT NULL,
       select_count INTEGER NOT NULL DEFAULT 1,
       last_searched_at TEXT NOT NULL
     );
@@ -86,10 +86,10 @@ function insertShare(db: DatabaseSync, id: string, userId: string, question: str
   ).run(id, userId, question, answer, createdAt);
 }
 
-function insertKeyword(db: DatabaseSync, userId: string, keyword: string, count = 1) {
+function insertKeyword(db: DatabaseSync, userId: string, keyword: string, shareId: string, count = 1) {
   db.prepare(
-    `INSERT INTO aichat_search_log (user_id, keyword, select_count, last_searched_at) VALUES (?, ?, ?, ?)`
-  ).run(userId, keyword, count, '2026-01-01T00:00:00.000Z');
+    `INSERT INTO aichat_search_log (user_id, keyword, share_id, select_count, last_searched_at) VALUES (?, ?, ?, ?, ?)`
+  ).run(userId, keyword, shareId, count, '2026-01-01T00:00:00.000Z');
 }
 
 describe('buildAnswerPropagationGraph: 回答伝播グラフの構築', () => {
@@ -106,11 +106,11 @@ describe('buildAnswerPropagationGraph: 回答伝播グラフの構築', () => {
     expect(result).toBeNull();
   });
 
-  it('起点の回答に含まれるキーワードから、それを含む別の回答へ2段階で広がる', async () => {
+  it('起点の回答に紐づくキーワードから、それを含む別の回答へ2段階で広がる', async () => {
     const db = setupDb();
-    insertKeyword(db, 'u1', '駅');
     insertShare(db, 's1', 'u1', '東京駅の見どころは？', '駅周辺には商業施設があります');
     insertShare(db, 's2', 'u1', '大阪の駅は便利？', '駅ナカが充実しています');
+    insertKeyword(db, 'u1', '駅', 's1');
 
     const result = await buildAnswerPropagationGraph(wrapD1(db) as never, 'u1', 's1');
 
@@ -128,31 +128,33 @@ describe('buildAnswerPropagationGraph: 回答伝播グラフの構築', () => {
     expect(result!.edges).toContainEqual({ from: 'k:駅', to: 'a:s2' });
   });
 
-  it('質問文にしか含まれないキーワードは抽出対象にならない(回答本文に含まれるキーワードのみを手がかりにする)', async () => {
+  it('起点に紐づいていない検索履歴上の汎用キーワードは、回答本文に部分一致しても第1層に混入しない', async () => {
     const db = setupDb();
-    insertKeyword(db, 'u1', '新幹線');
-    insertKeyword(db, 'u1', '商業施設');
-    insertShare(db, 's1', 'u1', '新幹線について教えて', '駅周辺の商業施設について説明します');
-    insertShare(db, 's2', 'u1', '別の新幹線の話', '新幹線は速いです');
+    insertShare(db, 's1', 'u1', 'Honoのエラー処理について', 'Honoの実装では例外の設計が重要です');
+    insertShare(db, 's-other', 'u1', '別の質問', '別の回答');
+    // 「実装」「例外」「設計」は別の共有(s-other)に紐づく履歴キーワードで、
+    // s1の回答本文には文字列としては含まれる(旧実装だと混入していた)
+    insertKeyword(db, 'u1', '実装', 's-other', 50);
+    insertKeyword(db, 'u1', '例外', 's-other', 40);
+    insertKeyword(db, 'u1', '設計', 's-other', 30);
+    // s1に紐づくキーワードはこれだけ
+    insertKeyword(db, 'u1', 'Hono', 's1');
 
     const result = await buildAnswerPropagationGraph(wrapD1(db) as never, 'u1', 's1');
 
-    const ids = result!.nodes.map((n) => n.id);
-    // 「新幹線」はs1の質問文にしか現れず回答本文には無いため対象外
-    expect(ids).not.toContain('k:新幹線');
-    // 「商業施設」はs1の回答本文に含まれるため対象になる
-    expect(ids).toContain('k:商業施設');
+    const depth1Keywords = result!.nodes.filter((n) => n.type === 'keyword' && n.depth === 1).map((n) => n.label);
+    expect(depth1Keywords).toEqual(['Hono']);
   });
 
-  it('起点(第1層)のキーワードはmaxKeywordsPerLayerで打ち切られず、起点回答に含まれる全キーワードがノード化される', async () => {
+  it('起点(第1層)のキーワードはmaxKeywordsPerLayerで打ち切られず、起点に紐づく全キーワードがノード化される', async () => {
     const db = setupDb();
+    insertShare(db, 's1', 'u1', '起点の質問', '起点の回答本文');
     const kws: string[] = [];
     for (let i = 1; i <= 14; i++) {
       const kw = 'キーワード' + String(i).padStart(2, '0');
       kws.push(kw);
-      insertKeyword(db, 'u1', kw);
+      insertKeyword(db, 'u1', kw, 's1');
     }
-    insertShare(db, 's1', 'u1', '起点の質問', '回答本文: ' + kws.join('、'));
 
     const result = await buildAnswerPropagationGraph(wrapD1(db) as never, 'u1', 's1', { maxKeywordsPerLayer: 12 });
 
@@ -162,15 +164,12 @@ describe('buildAnswerPropagationGraph: 回答伝播グラフの構築', () => {
 
   it('第2層以降のキーワードはこれまで通りmaxKeywordsPerLayerで打ち切られる', async () => {
     const db = setupDb();
-    insertKeyword(db, 'u1', '起点語');
-    const deepKws: string[] = [];
-    for (let i = 1; i <= 5; i++) {
-      const kw = '深い語' + i;
-      deepKws.push(kw);
-      insertKeyword(db, 'u1', kw);
-    }
     insertShare(db, 's1', 'u1', '起点の質問', '起点語 についての回答');
-    insertShare(db, 's2', 'u1', '関連質問', '起点語 と ' + deepKws.join(' と ') + ' の話');
+    insertShare(db, 's2', 'u1', '関連質問', '起点語 を含む別の回答');
+    insertKeyword(db, 'u1', '起点語', 's1');
+    for (let i = 1; i <= 5; i++) {
+      insertKeyword(db, 'u1', '深い語' + i, 's2');
+    }
 
     const result = await buildAnswerPropagationGraph(wrapD1(db) as never, 'u1', 's1', { maxKeywordsPerLayer: 2 });
 
@@ -180,10 +179,10 @@ describe('buildAnswerPropagationGraph: 回答伝播グラフの構築', () => {
 
   it('既に訪問済みの回答は再度ノードとして追加されない', async () => {
     const db = setupDb();
-    insertKeyword(db, 'u1', '駅');
-    insertKeyword(db, 'u1', '新幹線');
     insertShare(db, 's1', 'u1', '駅と新幹線について', '駅から新幹線に乗ります');
     insertShare(db, 's2', 'u1', '新幹線の駅は？', '駅と新幹線は隣接しています');
+    insertKeyword(db, 'u1', '駅', 's1');
+    insertKeyword(db, 'u1', '新幹線', 's1');
 
     const result = await buildAnswerPropagationGraph(wrapD1(db) as never, 'u1', 's1');
 
@@ -193,10 +192,12 @@ describe('buildAnswerPropagationGraph: 回答伝播グラフの構築', () => {
 
   it('一度処理したキーワードは別の階層で再度キーワードノードとして追加されない', async () => {
     const db = setupDb();
-    insertKeyword(db, 'u1', '駅');
     insertShare(db, 's1', 'u1', '駅について', '駅の話です');
     insertShare(db, 's2', 'u1', '駅の近く', '駅周辺にはお店があります');
     insertShare(db, 's3', 'u1', 'また駅の話', '駅はいいですね');
+    insertKeyword(db, 'u1', '駅', 's1');
+    insertKeyword(db, 'u1', '駅', 's2');
+    insertKeyword(db, 'u1', '駅', 's3');
 
     const result = await buildAnswerPropagationGraph(wrapD1(db) as never, 'u1', 's1');
 
@@ -206,22 +207,25 @@ describe('buildAnswerPropagationGraph: 回答伝播グラフの構築', () => {
 
   it('他ユーザーの回答・キーワードは結果に混入しない', async () => {
     const db = setupDb();
-    insertKeyword(db, 'u1', '駅');
     insertShare(db, 's1', 'u1', '駅について', '駅の話です');
     insertShare(db, 's2', 'u2', '別ユーザーの駅の話', '駅は便利です');
+    insertKeyword(db, 'u1', '駅', 's1');
+    insertKeyword(db, 'u2', '新幹線', 's1');
 
     const result = await buildAnswerPropagationGraph(wrapD1(db) as never, 'u1', 's1');
 
     const ids = result!.nodes.map((n) => n.id);
     expect(ids).not.toContain('a:s2');
+    expect(ids).not.toContain('k:新幹線');
   });
 
   it('maxNodesで打ち切ることでノード数が無限に増えない', async () => {
     const db = setupDb();
-    insertKeyword(db, 'u1', '駅');
     insertShare(db, 's0', 'u1', '起点', '駅の話です');
+    insertKeyword(db, 'u1', '駅', 's0');
     for (let i = 1; i <= 20; i++) {
       insertShare(db, 's' + i, 'u1', '駅の話その' + i, '駅について語ります' + i);
+      insertKeyword(db, 'u1', '駅の話', 's' + i);
     }
 
     const result = await buildAnswerPropagationGraph(wrapD1(db) as never, 'u1', 's0', { maxNodes: 6 });
@@ -231,12 +235,11 @@ describe('buildAnswerPropagationGraph: 回答伝播グラフの構築', () => {
 
   it('maxDepthで階層の深さを打ち切れる', async () => {
     const db = setupDb();
-    insertKeyword(db, 'u1', '駅');
-    insertKeyword(db, 'u1', '新幹線');
-    insertKeyword(db, 'u1', '飛行機');
     insertShare(db, 's1', 'u1', '駅の話', '駅から新幹線に乗ります');
     insertShare(db, 's2', 'u1', '新幹線の話', '新幹線は飛行機より安いことがあります');
-    insertShare(db, 's3', 'u1', '飛行機の話', '飛行機は速いです');
+    insertKeyword(db, 'u1', '駅', 's1');
+    insertKeyword(db, 'u1', '新幹線', 's1');
+    insertKeyword(db, 'u1', '飛行機', 's2');
 
     const result = await buildAnswerPropagationGraph(wrapD1(db) as never, 'u1', 's1', { maxDepth: 1 });
 

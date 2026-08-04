@@ -4068,24 +4068,31 @@ export function extractContainedKeywords(text: string, keywords: string[]): stri
 }
 
 /**
- * /answer-graph の起点検索結果それぞれに、その回答本文に含まれる登録済み
- * キーワードの総数(keywordCount)を付与する。件数はextractContainedKeywords
- * と同じ「回答本文のみ」を対象にした判定に揃え、回答伝播グラフの最前列
- * キーワード群の定義と矛盾しないようにする。
+ * /answer-graph の起点検索結果それぞれに、その共有(回答)に aichat_search_log の
+ * share_id で紐づくキーワードの総数(keywordCount)を付与する。回答伝播グラフの
+ * 第1層キーワード群(findKeywordsForShares)と同じ出所・同じ定義に揃え、
+ * 一人称モード最前列のキーワード数と一致することを保証する。
  */
-export async function enrichSearchResultsWithKeywordCounts<T extends { answer: string }>(
+export async function enrichSearchResultsWithKeywordCounts<T extends { id: string }>(
   db: D1Like,
   userId: string,
   results: T[],
 ): Promise<(T & { keywordCount: number })[]> {
   if (results.length === 0) return [];
-  const kwRows = await db.prepare(
-    `SELECT keyword FROM aichat_search_log WHERE user_id = ? GROUP BY keyword ORDER BY SUM(select_count) DESC LIMIT 300`
-  ).bind(userId).all<{ keyword: string }>();
-  const allKeywords = (kwRows.results ?? []).map((r) => r.keyword).filter(Boolean);
+  const countByShare = new Map<string, number>();
+  for (const chunk of chunkBindValues(results.map((r) => r.id), D1_MAX_BOUND_PARAMS - 1)) {
+    if (chunk.length === 0) continue;
+    const placeholders = chunk.map(() => '?').join(',');
+    const rows = await db.prepare(
+      `SELECT share_id, COUNT(DISTINCT keyword) AS cnt FROM aichat_search_log
+       WHERE user_id = ? AND share_id IN (${placeholders})
+       GROUP BY share_id`
+    ).bind(userId, ...chunk).all<{ share_id: string; cnt: number }>();
+    for (const r of (rows.results ?? [])) countByShare.set(r.share_id, r.cnt);
+  }
   return results.map((r) => ({
     ...r,
-    keywordCount: extractContainedKeywords(r.answer, allKeywords).length,
+    keywordCount: countByShare.get(r.id) ?? 0,
   }));
 }
 
@@ -4113,6 +4120,38 @@ const ANSWER_GRAPH_MAX_DEPTH = 6;
 const ANSWER_GRAPH_MAX_NODES = 150;
 const ANSWER_GRAPH_MAX_KEYWORDS_PER_LAYER = 12;
 const ANSWER_GRAPH_MAX_ANSWERS_PER_KEYWORD = 10;
+
+/**
+ * 各共有(回答)に aichat_search_log の share_id で紐づくキーワードを取得する。
+ * /api/aichat/share-keywords(回答モーダルのキーワード一覧)と同じ出所であり、
+ * 回答伝播グラフの各層のキーワードはこの紐づけを唯一の情報源とする。
+ * 検索履歴全体の人気キーワードを回答本文へ部分一致でぶつける方式は、
+ * 実装・例外・設計のような汎用語がどの回答にもマッチしてしまうため使わない。
+ */
+async function findKeywordsForShares(
+  db: D1Like,
+  userId: string,
+  shareIds: string[],
+): Promise<Map<string, string[]>> {
+  const byShare = new Map<string, string[]>();
+  for (const chunk of chunkBindValues(shareIds, D1_MAX_BOUND_PARAMS - 1)) {
+    if (chunk.length === 0) continue;
+    const placeholders = chunk.map(() => '?').join(',');
+    const rows = await db.prepare(
+      `SELECT share_id, keyword FROM aichat_search_log
+       WHERE user_id = ? AND share_id IN (${placeholders})
+       GROUP BY share_id, keyword
+       ORDER BY SUM(select_count) DESC`
+    ).bind(userId, ...chunk).all<{ share_id: string; keyword: string }>();
+    for (const r of (rows.results ?? [])) {
+      if (!r.keyword) continue;
+      const list = byShare.get(r.share_id) ?? [];
+      list.push(r.keyword);
+      byShare.set(r.share_id, list);
+    }
+  }
+  return byShare;
+}
 
 async function findSharesContainingKeyword(
   db: D1Like,
@@ -4155,11 +4194,6 @@ export async function buildAnswerPropagationGraph(
   const seed = (seedRows.results ?? [])[0];
   if (!seed) return null;
 
-  const kwRows = await db.prepare(
-    `SELECT keyword FROM aichat_search_log WHERE user_id = ? GROUP BY keyword ORDER BY SUM(select_count) DESC LIMIT 300`
-  ).bind(userId).all<{ keyword: string }>();
-  const allKeywords = (kwRows.results ?? []).map((r) => r.keyword).filter(Boolean);
-
   const nodes: AnswerGraphNode[] = [];
   const edges: AnswerGraphEdge[] = [];
   const visitedShareIds = new Set<string>([seed.id]);
@@ -4173,14 +4207,16 @@ export async function buildAnswerPropagationGraph(
   let depth = 0;
 
   while (currentAnswers.length > 0 && depth < maxDepth && nodes.length < maxNodes) {
-    // 第1層(起点回答の直下)は「その回答に含まれるキーワード群」そのものを表す
-    // 必要があるため maxKeywordsPerLayer で打ち切らない(検索結果のkeywordCountや
-    // 一人称モード最前列との一致を保証する)。第2層以降は爆発防止のため打ち切る。
+    // 各回答のキーワードは aichat_search_log の share_id 紐づけ(回答モーダルの
+    // キーワード一覧と同じ出所)から取得する。検索履歴全体の人気キーワードを
+    // 回答本文へ部分一致でぶつけると汎用語が混入するため行わない。
+    // 第1層(起点回答の直下)は「その回答のキーワード群」そのものを表す必要が
+    // あるため maxKeywordsPerLayer で打ち切らない。第2層以降は爆発防止のため打ち切る。
     const layerKeywordCap = depth === 0 ? Number.POSITIVE_INFINITY : maxKeywordsPerLayer;
+    const keywordsByShare = await findKeywordsForShares(db, userId, currentAnswers.map((a) => a.nodeId.slice(2)));
     const newKeywordToParent = new Map<string, string>();
     for (const a of currentAnswers) {
-      const text = a.answer;
-      const found = extractContainedKeywords(text, allKeywords).filter((k) => !processedKeywords.has(k));
+      const found = (keywordsByShare.get(a.nodeId.slice(2)) ?? []).filter((k) => !processedKeywords.has(k));
       for (const kw of found) {
         if (newKeywordToParent.size >= layerKeywordCap) break;
         if (!newKeywordToParent.has(kw)) newKeywordToParent.set(kw, a.nodeId);
