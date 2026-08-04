@@ -15,6 +15,9 @@ import { getAiChatPage } from './views/aichat';
 //   (2) ドロップダウンでplamoを選んでもプレビュー内容がbge-m3のまま変わらない
 //   (3) 「登録する」実行時に選択中のモデルがサーバーへ送られない
 //   (4) 一覧のmodelが空/未設定の行が「bge-m3」で補完されずに空欄になる
+//   (5) 一覧が特定のsource(ZTモーダル手動登録)だけに絞り込まれ、実際に
+//       登録済みのデータやanswer-graph色分け等で自動生成されたデータが
+//       一覧から見えなくなる(「あるはずのデータが表示されない」regression)
 
 function buildPage(): string {
   return getAiChatPage({
@@ -67,8 +70,8 @@ async function setupZtUi() {
       return Promise.resolve({
         json: () => Promise.resolve({
           items: [
-            { keyword: 'Hono', model: '@cf/baai/bge-m3', dim: 1024, updatedAt: '2026-01-01', plamoModel: null, plamoDim: null },
-            { keyword: '空港', model: '', dim: 1024, updatedAt: '2026-01-01', plamoModel: '@cf/pfnet/plamo-embedding-1b', plamoDim: 2048 },
+            { keyword: 'Hono', model: '@cf/baai/bge-m3', dim: 1024, updatedAt: '2026-01-01', source: 'zt_manual', plamoModel: null, plamoDim: null },
+            { keyword: '空港', model: '', dim: 1024, updatedAt: '2026-01-01', source: 'answer_graph_color', plamoModel: '@cf/pfnet/plamo-embedding-1b', plamoDim: 2048 },
           ],
         }),
       });
@@ -114,6 +117,10 @@ describe('ZTモーダルのDOM実動作(jsdom)', () => {
     expect(ztOverviewBody.textContent).toContain('bge-m3');
     // plamoの情報も併記される
     expect(ztOverviewBody.textContent).toContain('@cf/pfnet/plamo-embedding-1b');
+    // sourceに応じたラベルが表示され、自動生成データも隠さず一覧に出る
+    expect(ztOverviewBody.textContent).toContain('ZTモーダル手動登録');
+    expect(ztOverviewBody.textContent).toContain('自動(answer-graph色分け)');
+    expect(ztOverviewBody.textContent).toContain('空港');
   });
 
   it('📖アイコンで開いたモーダルのz-indexはgetNextZ()で実行時に動的算出される(固定値を書かない)', async () => {
