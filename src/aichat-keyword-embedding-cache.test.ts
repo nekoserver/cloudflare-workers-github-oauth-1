@@ -14,6 +14,10 @@ import { getOrComputeKeywordEmbedding, BGE_M3_MODEL } from './index';
 //   (4) 他ユーザー・他キーワードのキャッシュを誤って参照/上書きする
 //   (5) sourceを渡さなかった場合の既定値が不定になる、またはsourceが
 //       実際に書き込まれず「どの機能がベクタ化したか」を後から判定できない
+//   (6) 既にキャッシュ済み(かつては別の機能が自動で書き込んだ)のキーワードを
+//       ZTモーダルの「登録する」ボタンで明示的に再登録しても、キャッシュ
+//       ヒットにより早期returnしてしまいsource列が更新されず、
+//       「たった今明示的に登録した」という事実がDBに反映されない
 
 function wrapD1(db: DatabaseSync) {
   return {
@@ -101,6 +105,22 @@ describe('getOrComputeKeywordEmbedding: bge-m3埋め込みのキャッシュ', (
 
     expect(vector).toEqual([9, 9, 9]);
     expect(ai.run).not.toHaveBeenCalled();
+  });
+
+  it('既にキャッシュ済みでも、呼び出し側が渡したsourceが既存の値と異なればsource列だけ更新する(AIは呼ばない)', async () => {
+    const db = setupDb();
+    const now = new Date().toISOString();
+    db.prepare(
+      `INSERT INTO aichat_keyword_embeddings (user_id, keyword, model, dim, vector, created_at, updated_at, source) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run('u1', '駅', BGE_M3_MODEL, 2, new Uint8Array(new Float32Array([1, 2]).buffer), now, now, 'answer_graph_color');
+    const ai = makeMockAi([9, 9]);
+
+    const vector = await getOrComputeKeywordEmbedding(wrapD1(db) as never, ai as never, 'u1', '駅', 'zt_manual');
+
+    expect(vector).toEqual([1, 2]);
+    expect(ai.run).not.toHaveBeenCalled();
+    const row = db.prepare('SELECT source FROM aichat_keyword_embeddings WHERE user_id = ? AND keyword = ?').get('u1', '駅') as { source: string };
+    expect(row.source).toBe('zt_manual');
   });
 
   it('モデルが変わっていた場合は強制的に再計算し、既存行を上書きする（重複行を作らない）', async () => {
