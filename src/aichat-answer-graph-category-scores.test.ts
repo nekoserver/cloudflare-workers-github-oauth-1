@@ -92,7 +92,7 @@ function setupDb(): DatabaseSync {
       created_at TEXT NOT NULL, deleted_at TEXT
     );
     CREATE TABLE aichat_search_log (
-      user_id TEXT NOT NULL, keyword TEXT NOT NULL, select_count INTEGER NOT NULL DEFAULT 1, last_searched_at TEXT NOT NULL
+      user_id TEXT NOT NULL, keyword TEXT NOT NULL, share_id TEXT NOT NULL, select_count INTEGER NOT NULL DEFAULT 1, last_searched_at TEXT NOT NULL
     );
     CREATE TABLE aichat_keyword_categories (
       id INTEGER PRIMARY KEY AUTOINCREMENT, user_id TEXT NOT NULL, name TEXT NOT NULL, color TEXT NOT NULL DEFAULT '#6366f1',
@@ -121,9 +121,9 @@ function insertShare(db: DatabaseSync, id: string, userId: string, question: str
   db.prepare(`INSERT INTO ai_chat_shares (id, user_id, question, answer, created_at) VALUES (?, ?, ?, ?, ?)`)
     .run(id, userId, question, answer, '2026-01-01T00:00:00.000Z');
 }
-function insertKeyword(db: DatabaseSync, userId: string, keyword: string) {
-  db.prepare(`INSERT INTO aichat_search_log (user_id, keyword, select_count, last_searched_at) VALUES (?, ?, 1, ?)`)
-    .run(userId, keyword, '2026-01-01T00:00:00.000Z');
+function insertKeyword(db: DatabaseSync, userId: string, keyword: string, shareId = 's1') {
+  db.prepare(`INSERT INTO aichat_search_log (user_id, keyword, share_id, select_count, last_searched_at) VALUES (?, ?, ?, 1, ?)`)
+    .run(userId, keyword, shareId, '2026-01-01T00:00:00.000Z');
 }
 function insertCategory(db: DatabaseSync, id: number, userId: string, name: string, color: string) {
   db.prepare(`INSERT INTO aichat_keyword_categories (id, user_id, name, color) VALUES (?, ?, ?, ?)`).run(id, userId, name, color);
