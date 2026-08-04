@@ -7,6 +7,7 @@ import {
   getOrComputeKeywordEmbeddingForModel,
   BGE_M3_MODEL,
   PLAMO_EMBEDDING_MODEL,
+  GEMMA_EMBEDDING_MODEL,
 } from './index';
 
 // 対象:
@@ -94,6 +95,10 @@ function setupDb(): DatabaseSync {
       plamo_dim INTEGER,
       plamo_model TEXT,
       plamo_updated_at TEXT,
+      gemma_vector BLOB,
+      gemma_dim INTEGER,
+      gemma_model TEXT,
+      gemma_updated_at TEXT,
       source TEXT
     );
     CREATE UNIQUE INDEX idx_aichat_keyword_embeddings_user_keyword ON aichat_keyword_embeddings(user_id, keyword);
@@ -121,6 +126,10 @@ describe('resolveKeywordEmbeddingModel: サポート対象モデルの解決', (
 
   it('plamo-embedding-1bはそのまま返す', () => {
     expect(resolveKeywordEmbeddingModel(PLAMO_EMBEDDING_MODEL)).toBe(PLAMO_EMBEDDING_MODEL);
+  });
+
+  it('embeddinggemma-300mはそのまま返す', () => {
+    expect(resolveKeywordEmbeddingModel(GEMMA_EMBEDDING_MODEL)).toBe(GEMMA_EMBEDDING_MODEL);
   });
 
   it('null/undefined/未対応の文字列はbge-m3にフォールバックする', () => {
@@ -195,6 +204,22 @@ describe('getOrComputeKeywordEmbeddingForModel: モデル切り替えによる�
     expect(ai.run).not.toHaveBeenCalled();
   });
 
+  it('plamoが既にキャッシュ済み(かつ要求モデルと一致)でも、ZTモーダルからの明示登録ならsource列を"zt_manual"に更新する', async () => {
+    const db = setupDb();
+    const now = new Date().toISOString();
+    db.prepare(
+      `INSERT INTO aichat_keyword_embeddings (user_id, keyword, model, dim, vector, created_at, updated_at, plamo_vector, plamo_dim, plamo_model, plamo_updated_at, source) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run('u1', '駅', BGE_M3_MODEL, 2, new Uint8Array(new Float32Array([1, 2]).buffer), now, now, new Uint8Array(new Float32Array([9, 9, 9]).buffer), 3, PLAMO_EMBEDDING_MODEL, now, 'answer_graph_color');
+    const ai = makeMockAi({});
+
+    const vector = await getOrComputeKeywordEmbeddingForModel(wrapD1(db) as never, ai as never, 'u1', '駅', PLAMO_EMBEDDING_MODEL);
+
+    expect(vector).toEqual([9, 9, 9]);
+    expect(ai.run).not.toHaveBeenCalled();
+    const row = db.prepare(`SELECT source FROM aichat_keyword_embeddings WHERE user_id='u1' AND keyword='駅'`).get() as { source: string };
+    expect(row.source).toBe('zt_manual');
+  });
+
   it('plamo追加カラムに記録済みのモデルが要求モデルと食い違う場合はキャッシュを使わず再問い合わせして上書きする', async () => {
     const db = setupDb();
     const now = new Date().toISOString();
@@ -211,6 +236,54 @@ describe('getOrComputeKeywordEmbeddingForModel: モデル切り替えによる�
     const row = db.prepare(`SELECT plamo_model, plamo_dim FROM aichat_keyword_embeddings WHERE user_id='u1' AND keyword='駅'`).get() as { plamo_model: string; plamo_dim: number };
     expect(row.plamo_model).toBe(PLAMO_EMBEDDING_MODEL);
     expect(row.plamo_dim).toBe(4);
+  });
+});
+
+describe('getOrComputeKeywordEmbeddingForModel: embeddinggemma-300mへの切り替え', () => {
+  it('embeddinggemma-300mを指定するとgemma_vector/gemma_dim列に書き込み、既存のbge-m3・plamo列は破壊しない', async () => {
+    const db = setupDb();
+    const ai = makeMockAi({
+      [BGE_M3_MODEL]: { '駅': [1, 2] },
+      [GEMMA_EMBEDDING_MODEL]: { '駅': [3, 3, 3] },
+    });
+
+    await getOrComputeKeywordEmbeddingForModel(wrapD1(db) as never, ai as never, 'u1', '駅', BGE_M3_MODEL);
+    const vector = await getOrComputeKeywordEmbeddingForModel(wrapD1(db) as never, ai as never, 'u1', '駅', GEMMA_EMBEDDING_MODEL);
+
+    expect(vector).toEqual([3, 3, 3]);
+    const row = db.prepare(`SELECT model, dim, gemma_dim, gemma_model FROM aichat_keyword_embeddings WHERE user_id='u1' AND keyword='駅'`).get() as { model: string; dim: number; gemma_dim: number; gemma_model: string };
+    expect(row.model).toBe(BGE_M3_MODEL);
+    expect(row.dim).toBe(2);
+    expect(row.gemma_dim).toBe(3);
+    expect(row.gemma_model).toBe(GEMMA_EMBEDDING_MODEL);
+  });
+
+  it('gemmaの結果が要求モデルと一致するキャッシュならAIを呼ばない', async () => {
+    const db = setupDb();
+    const now = new Date().toISOString();
+    db.prepare(
+      `INSERT INTO aichat_keyword_embeddings (user_id, keyword, model, dim, vector, created_at, updated_at, gemma_vector, gemma_dim, gemma_model, gemma_updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run('u1', '駅', BGE_M3_MODEL, 2, new Uint8Array(new Float32Array([1, 2]).buffer), now, now, new Uint8Array(new Float32Array([9, 9]).buffer), 2, GEMMA_EMBEDDING_MODEL, now);
+    const ai = makeMockAi({});
+
+    const vector = await getOrComputeKeywordEmbeddingForModel(wrapD1(db) as never, ai as never, 'u1', '駅', GEMMA_EMBEDDING_MODEL);
+
+    expect(vector).toEqual([9, 9]);
+    expect(ai.run).not.toHaveBeenCalled();
+  });
+
+  it('gemmaが既にキャッシュ済み(かつ要求モデルと一致)でも、ZTモーダルからの明示登録ならsource列を"zt_manual"に更新する', async () => {
+    const db = setupDb();
+    const now = new Date().toISOString();
+    db.prepare(
+      `INSERT INTO aichat_keyword_embeddings (user_id, keyword, model, dim, vector, created_at, updated_at, gemma_vector, gemma_dim, gemma_model, gemma_updated_at, source) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run('u1', '駅', BGE_M3_MODEL, 2, new Uint8Array(new Float32Array([1, 2]).buffer), now, now, new Uint8Array(new Float32Array([9, 9]).buffer), 2, GEMMA_EMBEDDING_MODEL, now, 'category_suggest');
+    const ai = makeMockAi({});
+
+    await getOrComputeKeywordEmbeddingForModel(wrapD1(db) as never, ai as never, 'u1', '駅', GEMMA_EMBEDDING_MODEL);
+
+    const row = db.prepare(`SELECT source FROM aichat_keyword_embeddings WHERE user_id='u1' AND keyword='駅'`).get() as { source: string };
+    expect(row.source).toBe('zt_manual');
   });
 });
 
@@ -292,6 +365,19 @@ describe('listKeywordEmbeddingsOverview: 📖アイコンで開くベクタ化�
     const items = await listKeywordEmbeddingsOverview(wrapD1(db) as never, 'u1');
 
     expect(items[0].plamoModel).toBe(PLAMO_EMBEDDING_MODEL);
+  });
+
+  it('gemma_modelが記録されている行はそのモデル名をそのままgemmaModelとして返す', async () => {
+    const db = setupDb();
+    const now = new Date().toISOString();
+    db.prepare(
+      `INSERT INTO aichat_keyword_embeddings (user_id, keyword, model, dim, vector, created_at, updated_at, gemma_dim, gemma_model, gemma_updated_at, source) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'zt_manual')`
+    ).run('u1', '駅', BGE_M3_MODEL, 2, new Uint8Array(new Float32Array([1, 2]).buffer), now, now, 2, GEMMA_EMBEDDING_MODEL, now);
+
+    const items = await listKeywordEmbeddingsOverview(wrapD1(db) as never, 'u1');
+
+    expect(items[0].gemmaModel).toBe(GEMMA_EMBEDDING_MODEL);
+    expect(items[0].gemmaDim).toBe(2);
   });
 
   it('他ユーザーのデータは一覧に含まれない', async () => {
