@@ -28,6 +28,10 @@ import {
 //   (5) 一覧取得でmodelがnullの行が「bge-m3」に補完されない
 //   (6) 一覧にplamoの列が正しく含まれない(あるいはbge-m3しか登録していない
 //       行にまでplamo情報が出てしまう)
+//   (7) plamo追加カラムに記録されているモデルが、いま要求されたモデルと
+//       食い違っている(例: 将来別の第3モデルがこの列を使った後で
+//       plamo-embedding-1bが要求された)のに、dim/vectorが入っているというだけで
+//       キャッシュ命中とみなして古い・別モデルのベクトルを返してしまう
 
 function wrapD1(db: DatabaseSync) {
   return {
@@ -82,6 +86,7 @@ function setupDb(): DatabaseSync {
       updated_at TEXT NOT NULL,
       plamo_vector BLOB,
       plamo_dim INTEGER,
+      plamo_model TEXT,
       plamo_updated_at TEXT
     );
     CREATE UNIQUE INDEX idx_aichat_keyword_embeddings_user_keyword ON aichat_keyword_embeddings(user_id, keyword);
@@ -144,10 +149,11 @@ describe('getOrComputeKeywordEmbeddingForModel: モデル切り替えによる�
     const vector = await getOrComputeKeywordEmbeddingForModel(wrapD1(db) as never, ai as never, 'u1', '駅', PLAMO_EMBEDDING_MODEL);
 
     expect(vector).toEqual([9, 8, 7]);
-    const row = db.prepare(`SELECT model, dim, plamo_dim FROM aichat_keyword_embeddings WHERE user_id='u1' AND keyword='駅'`).get() as { model: string; dim: number; plamo_dim: number };
+    const row = db.prepare(`SELECT model, dim, plamo_dim, plamo_model FROM aichat_keyword_embeddings WHERE user_id='u1' AND keyword='駅'`).get() as { model: string; dim: number; plamo_dim: number; plamo_model: string };
     expect(row.model).toBe(BGE_M3_MODEL);
     expect(row.dim).toBe(2);
     expect(row.plamo_dim).toBe(3);
+    expect(row.plamo_model).toBe(PLAMO_EMBEDDING_MODEL);
   });
 
   it('plamoで新規キーワードを登録する場合、bge-m3側の行も自動的に作成される(NOT NULL制約を満たす)', async () => {
@@ -166,18 +172,36 @@ describe('getOrComputeKeywordEmbeddingForModel: モデル切り替えによる�
     expect(row.plamo_dim).toBe(3);
   });
 
-  it('plamoの結果が既にキャッシュされていればAIを呼ばない', async () => {
+  it('plamoの結果が要求モデルと一致するキャッシュならAIを呼ばない', async () => {
     const db = setupDb();
     const now = new Date().toISOString();
     db.prepare(
-      `INSERT INTO aichat_keyword_embeddings (user_id, keyword, model, dim, vector, created_at, updated_at, plamo_vector, plamo_dim, plamo_updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-    ).run('u1', '駅', BGE_M3_MODEL, 2, new Uint8Array(new Float32Array([1, 2]).buffer), now, now, new Uint8Array(new Float32Array([9, 9, 9]).buffer), 3, now);
+      `INSERT INTO aichat_keyword_embeddings (user_id, keyword, model, dim, vector, created_at, updated_at, plamo_vector, plamo_dim, plamo_model, plamo_updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run('u1', '駅', BGE_M3_MODEL, 2, new Uint8Array(new Float32Array([1, 2]).buffer), now, now, new Uint8Array(new Float32Array([9, 9, 9]).buffer), 3, PLAMO_EMBEDDING_MODEL, now);
     const ai = makeMockAi({});
 
     const vector = await getOrComputeKeywordEmbeddingForModel(wrapD1(db) as never, ai as never, 'u1', '駅', PLAMO_EMBEDDING_MODEL);
 
     expect(vector).toEqual([9, 9, 9]);
     expect(ai.run).not.toHaveBeenCalled();
+  });
+
+  it('plamo追加カラムに記録済みのモデルが要求モデルと食い違う場合はキャッシュを使わず再問い合わせして上書きする', async () => {
+    const db = setupDb();
+    const now = new Date().toISOString();
+    // plamo追加カラムに別モデル("旧モデル")の結果が入っている状態を再現する
+    db.prepare(
+      `INSERT INTO aichat_keyword_embeddings (user_id, keyword, model, dim, vector, created_at, updated_at, plamo_vector, plamo_dim, plamo_model, plamo_updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run('u1', '駅', BGE_M3_MODEL, 2, new Uint8Array(new Float32Array([1, 2]).buffer), now, now, new Uint8Array(new Float32Array([1, 1, 1]).buffer), 3, '@cf/other/old-model', now);
+    const ai = makeMockAi({ [PLAMO_EMBEDDING_MODEL]: { '駅': [4, 4, 4, 4] } });
+
+    const vector = await getOrComputeKeywordEmbeddingForModel(wrapD1(db) as never, ai as never, 'u1', '駅', PLAMO_EMBEDDING_MODEL);
+
+    expect(vector).toEqual([4, 4, 4, 4]);
+    expect(ai.run).toHaveBeenCalledTimes(1);
+    const row = db.prepare(`SELECT plamo_model, plamo_dim FROM aichat_keyword_embeddings WHERE user_id='u1' AND keyword='駅'`).get() as { plamo_model: string; plamo_dim: number };
+    expect(row.plamo_model).toBe(PLAMO_EMBEDDING_MODEL);
+    expect(row.plamo_dim).toBe(4);
   });
 });
 
@@ -223,12 +247,12 @@ describe('listKeywordEmbeddingsOverview: 📖アイコンで開くベクタ化�
     expect(items[0].plamoModel).toBeNull();
   });
 
-  it('plamo_dimがある行はplamoModelにPLAMO_EMBEDDING_MODELが入る', async () => {
+  it('plamo_modelが記録されている行はそのモデル名をそのままplamoModelとして返す(推測しない)', async () => {
     const db = setupDb();
     const now = new Date().toISOString();
     db.prepare(
-      `INSERT INTO aichat_keyword_embeddings (user_id, keyword, model, dim, vector, created_at, updated_at, plamo_dim, plamo_updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
-    ).run('u1', '駅', BGE_M3_MODEL, 2, new Uint8Array(new Float32Array([1, 2]).buffer), now, now, 3, now);
+      `INSERT INTO aichat_keyword_embeddings (user_id, keyword, model, dim, vector, created_at, updated_at, plamo_dim, plamo_model, plamo_updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run('u1', '駅', BGE_M3_MODEL, 2, new Uint8Array(new Float32Array([1, 2]).buffer), now, now, 3, PLAMO_EMBEDDING_MODEL, now);
 
     const items = await listKeywordEmbeddingsOverview(wrapD1(db) as never, 'u1');
 
@@ -247,6 +271,18 @@ describe('listKeywordEmbeddingsOverview: 📖アイコンで開くベクタ化�
 
     expect(items[0].plamoModel).toBeNull();
     expect(items[0].plamoDim).toBeNull();
+  });
+
+  it('plamo_dimはあるがplamo_modelが未設定(欠損データ)の行はplamo-embedding-1bへ防御的にフォールバックする', async () => {
+    const db = setupDb();
+    const now = new Date().toISOString();
+    db.prepare(
+      `INSERT INTO aichat_keyword_embeddings (user_id, keyword, model, dim, vector, created_at, updated_at, plamo_dim, plamo_updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run('u1', '駅', BGE_M3_MODEL, 2, new Uint8Array(new Float32Array([1, 2]).buffer), now, now, 3, now);
+
+    const items = await listKeywordEmbeddingsOverview(wrapD1(db) as never, 'u1');
+
+    expect(items[0].plamoModel).toBe(PLAMO_EMBEDDING_MODEL);
   });
 
   it('他ユーザーのデータは一覧に含まれない', async () => {

@@ -1386,6 +1386,7 @@ CREATE INDEX IF NOT EXISTS idx_aichat_answer_category_scores_share ON aichat_ans
   '0090': `ALTER TABLE aichat_keyword_embeddings ADD COLUMN plamo_vector BLOB;
 ALTER TABLE aichat_keyword_embeddings ADD COLUMN plamo_dim INTEGER;
 ALTER TABLE aichat_keyword_embeddings ADD COLUMN plamo_updated_at TEXT;`,
+  '0091': `ALTER TABLE aichat_keyword_embeddings ADD COLUMN plamo_model TEXT;`,
 };
 
 async function ensureGroupTable(db: D1Database): Promise<void> {
@@ -6444,10 +6445,19 @@ export async function getOrComputeKeywordEmbedding(
  * bge-m3問い合わせデータモーダルのドロップダウンで選んだモデルに応じて、
  * 実際に問い合わせるAIモデルを動的に切り替える。
  *   - bge-m3: 従来通り model/dim/vector 列（主系列）を使う
- *   - plamo-embedding-1b: plamo_vector/plamo_dim/plamo_updated_at 列
- *     （追加カラム）に書き足す。主系列(model/dim/vector)はNOT NULL制約が
+ *   - plamo-embedding-1b: plamo_vector/plamo_dim/plamo_model/plamo_updated_at
+ *     列（追加カラム）に書き足す。主系列(model/dim/vector)はNOT NULL制約が
  *     あるため、行が未作成の場合は先にbge-m3側を確保してから追加カラムを
  *     埋める（bge-m3側のデータを上書き・破壊しない）。
+ *
+ * 「差分が発生した場合どちらのモデルで補完すべきか」という問いへの回答:
+ * 主系列(bge-m3)側で既に採用している方針
+ * 「同じモデルでキャッシュ済みならAIを呼ばずそれを返し、未キャッシュ・
+ * モデル不一致の場合のみ問い合わせて上書き保存する」を追加カラム側にも
+ * 揃える。つまりplamo_model(実際に格納されているモデル名)と今回要求された
+ * resolvedModelを比較し、一致しなければキャッシュを信用せず「今呼び出し側が
+ * 指定したモデル」で再取得・上書きする。dim/vectorが入っているというだけで
+ * キャッシュ命中とみなさない（別モデルの結果を誤って返す事故を防ぐ）。
  */
 export async function getOrComputeKeywordEmbeddingForModel(
   db: D1Database,
@@ -6461,9 +6471,9 @@ export async function getOrComputeKeywordEmbeddingForModel(
     return getOrComputeKeywordEmbedding(db, ai, userId, keyword);
   }
   const row = await db.prepare(
-    `SELECT plamo_vector, plamo_dim FROM aichat_keyword_embeddings WHERE user_id = ? AND keyword = ?`
-  ).bind(userId, keyword).first<{ plamo_vector: ArrayBuffer | null; plamo_dim: number | null }>();
-  if (row && row.plamo_vector && row.plamo_dim) {
+    `SELECT plamo_vector, plamo_dim, plamo_model FROM aichat_keyword_embeddings WHERE user_id = ? AND keyword = ?`
+  ).bind(userId, keyword).first<{ plamo_vector: ArrayBuffer | null; plamo_dim: number | null; plamo_model: string | null }>();
+  if (row && row.plamo_vector && row.plamo_dim && row.plamo_model === resolvedModel) {
     return blobToFloats(row.plamo_vector);
   }
   // 主系列(bge-m3)の行を確保する（NOT NULL制約を満たすため）。既にあれば
@@ -6474,9 +6484,9 @@ export async function getOrComputeKeywordEmbeddingForModel(
   const now = new Date().toISOString();
   await db.prepare(
     `UPDATE aichat_keyword_embeddings
-     SET plamo_vector = ?, plamo_dim = ?, plamo_updated_at = ?
+     SET plamo_vector = ?, plamo_dim = ?, plamo_model = ?, plamo_updated_at = ?
      WHERE user_id = ? AND keyword = ?`
-  ).bind(floatsToBlob(vector), vector.length, now, userId, keyword).run();
+  ).bind(floatsToBlob(vector), vector.length, resolvedModel, now, userId, keyword).run();
   return vector;
 }
 
@@ -6566,26 +6576,29 @@ export interface KeywordEmbeddingOverviewItem {
 /**
  * ZTモーダルヘッダの📖アイコンから開く一覧。既存のベクタ化済みキーワードと、
  * それぞれのベクタ化に使った埋め込みモデルを列挙する。modelがnull（未設定の
- * 既存行）はbge-m3で補完する。plamo_dimが設定されている行のみplamoModelに
- * PLAMO_EMBEDDING_MODELを入れる（bge-m3しか登録していない行には出さない）。
+ * 既存行）はbge-m3で補完する。plamo系は実際に格納されているplamo_modelを
+ * そのまま表示する（「dimがあるからplamo」という推測はしない。将来別モデルが
+ * この列を使った場合でも、記録されているモデル名を偽らないため）。
+ * plamo_modelが欠損しているのにplamo_dimだけ入っている異常データに備え、
+ * その場合のみ防御的にPLAMO_EMBEDDING_MODELへフォールバックする。
  */
 export async function listKeywordEmbeddingsOverview(
   db: D1Database,
   userId: string,
 ): Promise<KeywordEmbeddingOverviewItem[]> {
   const rows = await db.prepare(
-    `SELECT keyword, model, dim, updated_at, plamo_dim, plamo_updated_at
+    `SELECT keyword, model, dim, updated_at, plamo_dim, plamo_model, plamo_updated_at
      FROM aichat_keyword_embeddings WHERE user_id = ? ORDER BY updated_at DESC LIMIT 500`
   ).bind(userId).all<{
     keyword: string; model: string | null; dim: number; updated_at: string;
-    plamo_dim: number | null; plamo_updated_at: string | null;
+    plamo_dim: number | null; plamo_model: string | null; plamo_updated_at: string | null;
   }>();
   return (rows.results ?? []).map((r) => ({
     keyword: r.keyword,
     model: r.model || BGE_M3_MODEL,
     dim: r.dim,
     updatedAt: r.updated_at,
-    plamoModel: r.plamo_dim != null ? PLAMO_EMBEDDING_MODEL : null,
+    plamoModel: r.plamo_dim != null ? (r.plamo_model || PLAMO_EMBEDDING_MODEL) : null,
     plamoDim: r.plamo_dim,
     plamoUpdatedAt: r.plamo_updated_at,
   }));
