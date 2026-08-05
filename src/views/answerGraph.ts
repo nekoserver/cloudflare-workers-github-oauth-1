@@ -85,6 +85,8 @@ main { flex:1; max-width:1100px; width:100%; margin:0 auto; padding:24px 16px; d
 }
 .fp-btn:hover { background:var(--btn-hover); }
 .fp-btn-forward { background:var(--accent); color:var(--accent-fg); border-color:var(--accent); }
+.fp-controls-vertical { display:flex; flex-direction:column; gap:8px; align-items:center; }
+.fp-btn-backward { width:40px; height:40px; font-size:16px; }
 .fp-hint { font-size:11px; color:var(--label); text-align:center; }
 .cat-quick-nav { margin-bottom:10px; }
 .cat-quick-groups { display:flex; flex-wrap:wrap; align-items:center; gap:10px 14px; margin-bottom:8px; }
@@ -276,10 +278,13 @@ input[type=search]:focus { border-color:var(--accent); }
         <div class="fp-answer-list" id="fpAnswerList"></div>
         <div class="fp-controls">
           <button type="button" class="fp-btn" id="fpLeftBtn" aria-label="左を見る">←</button>
-          <button type="button" class="fp-btn fp-btn-forward" id="fpForwardBtn" aria-label="選択して読む">↑</button>
+          <div class="fp-controls-vertical">
+            <button type="button" class="fp-btn fp-btn-forward" id="fpForwardBtn" aria-label="一層外へ進む">↑</button>
+            <button type="button" class="fp-btn fp-btn-backward" id="fpBackwardBtn" aria-label="一層内へ戻る">↓</button>
+          </div>
           <button type="button" class="fp-btn" id="fpRightBtn" aria-label="右を見る">→</button>
         </div>
-        <div class="fp-hint">左右にスワイプ、または ←→ ボタンで最も手前のキーワードを一つずつ選べます。↑ で選択中のキーワードを開きます</div>
+        <div class="fp-hint">左右にスワイプ、または ←→ ボタンで最も手前のキーワードを一つずつ選べます。↑ で一層外のキーワードへ、↓ で一層内のキーワードへ視点を進めます</div>
       </div>
     </div>
   </div>
@@ -344,6 +349,7 @@ input[type=search]:focus { border-color:var(--accent); }
   var fpLeftBtn = document.getElementById('fpLeftBtn');
   var fpRightBtn = document.getElementById('fpRightBtn');
   var fpForwardBtn = document.getElementById('fpForwardBtn');
+  var fpBackwardBtn = document.getElementById('fpBackwardBtn');
   var canvasWrap = document.querySelector('.canvas-wrap');
 
   var searchTimer = null;
@@ -353,6 +359,8 @@ input[type=search]:focus { border-color:var(--accent); }
   var nodePositions = [];
   var currentGraph = null;
   var lastLayout = null;
+  var selectedNodeId = null;
+  var currentKeywordNodeId = null;
   var answerModalKeywordsFromDB = [];
   var answerModalHighlightActive = true;
   var fpActive = false;
@@ -983,33 +991,37 @@ input[type=search]:focus { border-color:var(--accent); }
   }
 
   // フォーカス中のキーワード(focusedKeyword)から、そのキーワードを含む回答
-  // (depth+1)を経由して繋がる次のキーワード層(depth+2)だけを抽出する。
-  // 一人称モードの↑ボタン(forwardFirstPerson)用。単純にdepth番号だけで
+  // (depth+direction)を経由して繋がる隣接キーワード層(depth+2*direction)
+  // だけを抽出する。direction=+1で一層外(↑/forwardFirstPerson)、
+  // direction=-1で一層内(↓/backwardFirstPerson)。単純にdepth番号だけで
   // フィルタすると、フォーカス中のキーワードとは無関係な別の枝にたまたま
   // 同じdepthのキーワードが存在した場合にそちらへ「テレポート」してしまう
   // ため、必ずグラフの辺(edges)を辿って実際に繋がっている先だけを返す。
-  function computeNextKeywordRing(posById, cx, cy, edges, focusedKeyword) {
+  function computeAdjacentKeywordRing(posById, cx, cy, edges, focusedKeyword, direction) {
     var focusedDepth = focusedKeyword.depth;
+    var midDepth = focusedDepth + direction;
+    var targetDepth = focusedDepth + direction * 2;
+    if (midDepth < 0 || targetDepth < 0) return [];
     var midAnswerIds = {};
     (edges || []).forEach(function(e) {
       var otherId = e.from === focusedKeyword.id ? e.to : (e.to === focusedKeyword.id ? e.from : null);
       if (!otherId) return;
       var p = posById[otherId];
-      if (p && p.node.type === 'answer' && p.node.depth === focusedDepth + 1) midAnswerIds[otherId] = true;
+      if (p && p.node.type === 'answer' && p.node.depth === midDepth) midAnswerIds[otherId] = true;
     });
-    var nextKeywordIds = {};
+    var targetKeywordIds = {};
     (edges || []).forEach(function(e) {
       if (midAnswerIds[e.from]) {
         var p1 = posById[e.to];
-        if (p1 && p1.node.type === 'keyword' && p1.node.depth === focusedDepth + 2) nextKeywordIds[e.to] = true;
+        if (p1 && p1.node.type === 'keyword' && p1.node.depth === targetDepth) targetKeywordIds[e.to] = true;
       }
       if (midAnswerIds[e.to]) {
         var p2 = posById[e.from];
-        if (p2 && p2.node.type === 'keyword' && p2.node.depth === focusedDepth + 2) nextKeywordIds[e.from] = true;
+        if (p2 && p2.node.type === 'keyword' && p2.node.depth === targetDepth) targetKeywordIds[e.from] = true;
       }
     });
     var slots = [];
-    Object.keys(nextKeywordIds).forEach(function(id) {
+    Object.keys(targetKeywordIds).forEach(function(id) {
       var p = posById[id];
       var dx = p.x - cx, dy = p.y - cy;
       var bearingDeg = normalizeDeg360(Math.atan2(dy, dx) * 180 / Math.PI);
@@ -1078,18 +1090,44 @@ input[type=search]:focus { border-color:var(--accent); }
       ctx.stroke();
     });
 
+    // 現在選択中の質問ノード(selectedNodeId)から、その回答文内に含まれる
+    // (=辺で直接繋がっている)各キーワードノードまでを強調線で結ぶ。
+    var selected = selectedNodeId ? posById[selectedNodeId] : null;
+    if (selected && selected.node.type === 'answer') {
+      var highlightColor = getCssVar('--accent') || '#0969da';
+      ctx.strokeStyle = highlightColor;
+      ctx.lineWidth = 2.5;
+      edges.forEach(function(e) {
+        var otherId = e.from === selectedNodeId ? e.to : (e.to === selectedNodeId ? e.from : null);
+        if (!otherId) return;
+        var other = posById[otherId];
+        if (!other || other.node.type !== 'keyword') return;
+        ctx.beginPath();
+        ctx.moveTo(selected.x, selected.y);
+        ctx.lineTo(other.x, other.y);
+        ctx.stroke();
+      });
+    }
+
     var answerColor = getCssVar('--answer-color') || '#0969da';
     var keywordColor = getCssVar('--keyword-color') || '#c2410c';
+    var currentBg = getCssVar('--fp-focus-bg') || '#d1f5d3';
+    var currentBorder = getCssVar('--fp-focus-border') || '#2f9e52';
     Object.keys(posById).forEach(function(id) {
       var p = posById[id];
       var isAnswer = p.node.type === 'answer';
+      var isCurrentKeyword = !isAnswer && id === currentKeywordNodeId;
       var r = isAnswer ? (p.node.depth === 0 ? 10 : 7) : 6;
       var fallbackColor = isAnswer ? answerColor : keywordColor;
       ctx.beginPath();
       ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
-      ctx.fillStyle = p.node.color || fallbackColor;
+      ctx.fillStyle = isCurrentKeyword ? currentBg : (p.node.color || fallbackColor);
       ctx.fill();
-      if (p.node.color) {
+      if (isCurrentKeyword) {
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = currentBorder;
+        ctx.stroke();
+      } else if (p.node.color) {
         ctx.lineWidth = 1.5;
         ctx.strokeStyle = fallbackColor;
         ctx.stroke();
@@ -1117,6 +1155,8 @@ input[type=search]:focus { border-color:var(--accent); }
       + '<div style="margin-bottom:6px;color:var(--label);">深さ: ' + node.depth + '</div>'
       + categoryLine
       + buildNodeLabelLine(node);
+    selectedNodeId = node.id;
+    if (!fpActive) drawGraph();
   }
 
   canvas.addEventListener('click', function(e) {
@@ -1238,10 +1278,17 @@ input[type=search]:focus { border-color:var(--accent); }
     });
   }
 
+  // fpNearKeywords[fpFocusIdx]が指す「今いるキーワードノード」をcurrentKeywordNodeIdへ
+  // 反映する。俯瞰グラフビュー(drawGraph)がこれを見て薄緑色で塗る。
+  function syncCurrentKeywordNode() {
+    var focused = fpNearKeywords[fpFocusIdx];
+    currentKeywordNodeId = focused ? focused.node.id : null;
+  }
+
   function refreshFirstPersonFocus() {
-    if (!lastLayout) { fpNearKeywords = []; fpFocusIdx = 0; return; }
+    if (!lastLayout) { fpNearKeywords = []; fpFocusIdx = 0; syncCurrentKeywordNode(); return; }
     fpNearKeywords = computeNearestKeywordSlots(lastLayout.posById, lastLayout.cx, lastLayout.cy);
-    if (!fpNearKeywords.length) { fpFocusIdx = 0; return; }
+    if (!fpNearKeywords.length) { fpFocusIdx = 0; syncCurrentKeywordNode(); return; }
     var bestIdx = 0;
     var bestDiff = Infinity;
     fpNearKeywords.forEach(function(slot, idx) {
@@ -1249,12 +1296,14 @@ input[type=search]:focus { border-color:var(--accent); }
       if (diff < bestDiff) { bestDiff = diff; bestIdx = idx; }
     });
     fpFocusIdx = bestIdx;
+    syncCurrentKeywordNode();
   }
 
   function focusNearKeyword(idx) {
     if (!fpNearKeywords.length) return;
     fpFocusIdx = ((idx % fpNearKeywords.length) + fpNearKeywords.length) % fpNearKeywords.length;
     fpHeadingDeg = fpNearKeywords[fpFocusIdx].bearingDeg;
+    syncCurrentKeywordNode();
     renderFirstPersonView();
     renderFilmstrip();
     renderFpAnswerList();
@@ -1265,15 +1314,15 @@ input[type=search]:focus { border-color:var(--accent); }
     focusNearKeyword(fpFocusIdx + direction);
   }
 
-  // フォーカス中のキーワード(fpNearKeywords[fpFocusIdx])から一層外側の
-  // キーワード層(depth+2。間の回答層depth+1は素通りする)へ視点を進める。
-  // 一層外のキーワードが無ければそこが行き止まり(壁)であり、現状のノードを
-  // 選択するだけで視点は動かさない。
-  function forwardFirstPerson() {
+  // フォーカス中のキーワード(fpNearKeywords[fpFocusIdx])から隣接するキーワード層
+  // (間の回答層は素通りする)へ視点を進める。direction=+1で一層外(↑)、
+  // direction=-1で一層内(↓)。その先にキーワード層が無ければそこが行き止まり
+  // (壁)であり、現状のノードを選択するだけで視点は動かさない。
+  function moveFirstPersonRing(direction) {
     if (!fpActive || !lastLayout || !fpNearKeywords.length) return;
     var focused = fpNearKeywords[fpFocusIdx];
     if (!focused || !currentGraph) return;
-    var nextSlots = computeNextKeywordRing(lastLayout.posById, lastLayout.cx, lastLayout.cy, currentGraph.edges, focused.node);
+    var nextSlots = computeAdjacentKeywordRing(lastLayout.posById, lastLayout.cx, lastLayout.cy, currentGraph.edges, focused.node, direction);
     if (nextSlots.length === 0) {
       selectGraphNode(focused.node);
       return;
@@ -1286,10 +1335,14 @@ input[type=search]:focus { border-color:var(--accent); }
     });
     fpFocusIdx = bestIdx;
     fpHeadingDeg = fpNearKeywords[fpFocusIdx].bearingDeg;
+    syncCurrentKeywordNode();
     renderFirstPersonView();
     renderFilmstrip();
     renderFpAnswerList();
   }
+
+  function forwardFirstPerson() { moveFirstPersonRing(1); }
+  function backwardFirstPerson() { moveFirstPersonRing(-1); }
 
   function setFirstPersonActive(active) {
     fpActive = active;
@@ -1305,6 +1358,10 @@ input[type=search]:focus { border-color:var(--accent); }
       renderFirstPersonView();
       renderFilmstrip();
       renderFpAnswerList();
+    } else {
+      // 俯瞰ビューに戻ったとき、一人称モードで進んだ「今いるキーワードノード」の
+      // 薄緑色ハイライトを反映するため再描画する。
+      drawGraph();
     }
   }
 
@@ -1312,6 +1369,7 @@ input[type=search]:focus { border-color:var(--accent); }
   fpLeftBtn.addEventListener('click', function() { stepFirstPersonFocus(1); });
   fpRightBtn.addEventListener('click', function() { stepFirstPersonFocus(-1); });
   fpForwardBtn.addEventListener('click', forwardFirstPerson);
+  fpBackwardBtn.addEventListener('click', backwardFirstPerson);
 
   fpHere.addEventListener('click', function(e) {
     var q = e.target.closest('.question-line');
@@ -1370,6 +1428,7 @@ input[type=search]:focus { border-color:var(--accent); }
     if (e.key === 'ArrowLeft') { stepFirstPersonFocus(1); }
     else if (e.key === 'ArrowRight') { stepFirstPersonFocus(-1); }
     else if (e.key === 'ArrowUp') { forwardFirstPerson(); }
+    else if (e.key === 'ArrowDown') { backwardFirstPerson(); }
   });
 
   loadCatQuickNav();
