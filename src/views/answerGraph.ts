@@ -59,8 +59,8 @@ main { flex:1; max-width:1100px; width:100%; margin:0 auto; padding:24px 16px; d
   background:transparent; color:var(--fg); white-space:nowrap; cursor:pointer;
   transition:left .18s ease;
 }
-.fp-film-chip:hover { border-color:var(--accent); }
-.fp-film-chip.fp-film-chip-focused { background:var(--fp-focus-bg); border-color:var(--fp-focus-border); color:var(--fp-focus-fg); font-weight:600; }
+.fp-film-chip:hover { filter:brightness(1.15); }
+.fp-film-chip.fp-film-chip-focused { background:color-mix(in srgb, var(--fp-film-color, var(--label)) 25%, transparent); border-width:2px; font-weight:600; }
 .fp-nodes { position:absolute; inset:0; }
 .fp-node {
   position:absolute; transform:translate(-50%,-50%); display:flex; flex-direction:column; align-items:center;
@@ -1261,10 +1261,14 @@ input[type=search]:focus { border-color:var(--accent); }
 
   function renderFilmstrip() {
     fpFilmstrip.innerHTML = '';
+    var keywordColor = getCssVar('--keyword-color') || '#c2410c';
     var chips = fpNearKeywords.map(function(slot, idx) {
+      var color = slot.node.color || keywordColor;
       var chip = document.createElement('div');
       chip.className = 'fp-film-chip' + (idx === fpFocusIdx ? ' fp-film-chip-focused' : '');
       chip.textContent = slot.node.label;
+      chip.style.borderColor = color;
+      chip.style.setProperty('--fp-film-color', color);
       chip.addEventListener('click', function(e) {
         e.stopPropagation();
         focusNearKeyword(idx);
