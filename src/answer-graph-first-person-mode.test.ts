@@ -45,11 +45,11 @@ function loadPureFns() {
   expect(idx).toBeGreaterThan(-1);
   expect(endIdx).toBeGreaterThan(idx);
   const src = html.slice(idx, endIdx);
-  const fn = new Function(`${src}\nreturn { computeRadialLayout: computeRadialLayout, computeFirstPersonSlots: computeFirstPersonSlots, computeNearestKeywordSlots: computeNearestKeywordSlots, computeFilmstripOffsets: computeFilmstripOffsets, computeAnswersForKeyword: computeAnswersForKeyword, normalizeDeg360: normalizeDeg360, normalizeDegSigned: normalizeDegSigned };`);
+  const fn = new Function(`${src}\nreturn { computeRadialLayout: computeRadialLayout, computeFirstPersonSlots: computeFirstPersonSlots, computeAnswerKeywordSlots: computeAnswerKeywordSlots, computeFilmstripOffsets: computeFilmstripOffsets, computeAnswersForKeyword: computeAnswersForKeyword, normalizeDeg360: normalizeDeg360, normalizeDegSigned: normalizeDegSigned };`);
   return fn() as {
     computeRadialLayout: (nodes: unknown[], ringSpacing: number) => { size: number; cx: number; cy: number; posById: Record<string, { x: number; y: number; node: unknown }> };
     computeFirstPersonSlots: (posById: Record<string, { x: number; y: number; node: unknown }>, cx: number, cy: number, headingDeg: number, fovDeg: number, horizonPercent?: number, groundPercent?: number) => Array<{ id: string; bearingDeg: number; relativeDeg: number; distance: number; screenX: number; scale: number; topPercent: number }>;
-    computeNearestKeywordSlots: (posById: Record<string, { x: number; y: number; node: unknown }>, cx: number, cy: number) => Array<{ id: string; bearingDeg: number; node: { id: string; label: string; depth: number } }>;
+    computeAnswerKeywordSlots: (posById: Record<string, { x: number; y: number; node: unknown }>, cx: number, cy: number, edges: Array<{ from: string; to: string }>, answerNode: { id: string; depth: number }) => Array<{ id: string; bearingDeg: number; node: { id: string; label: string; depth: number } }>;
     computeFilmstripOffsets: (widths: number[], focusIdx: number, gapPx?: number) => number[];
     computeAnswersForKeyword: (keywordId: string, posById: Record<string, { x: number; y: number; node: unknown }>, edges: Array<{ from: string; to: string }>) => Array<{ id: string; label: string }>;
     normalizeDeg360: (deg: number) => number;
@@ -227,43 +227,58 @@ describe('computeFirstPersonSlots: 中心(視点)に立った360度パノラマ�
   });
 });
 
-describe('computeNearestKeywordSlots: 最上段フィルムストリップ用の「いちばん手前」キーワード抽出', () => {
-  it('最小depthのキーワードのみを抽出し、より深い(遠い)キーワードは含めない', () => {
-    const { computeRadialLayout, computeNearestKeywordSlots } = loadPureFns();
+describe('computeAnswerKeywordSlots: 「今立っている回答文ノード」の目の前に展開されるキーワード抽出', () => {
+  const sampleEdges = [
+    { from: 'a:seed', to: 'k:north' },
+    { from: 'a:seed', to: 'k:east' },
+    { from: 'a:seed', to: 'k:south' },
+    { from: 'a:seed', to: 'k:west' },
+  ];
+
+  it('answerNodeに辺で直結するキーワードのみを抽出する(depthをまたいで別の回答に属するキーワードは含めない)', () => {
+    const { computeRadialLayout, computeAnswerKeywordSlots } = loadPureFns();
     const nodes = [
       ...sampleNodes,
-      { id: 'k:far-east', type: 'keyword', label: 'far-east', depth: 2 },
+      { id: 'a:other', type: 'answer', label: 'other', depth: 2 },
+      { id: 'k:unrelated', type: 'keyword', label: 'unrelated', depth: 3 },
     ];
+    const edges = [...sampleEdges, { from: 'a:other', to: 'k:unrelated' }];
     const layout = computeRadialLayout(nodes, 80);
-    const slots = computeNearestKeywordSlots(layout.posById, layout.cx, layout.cy);
+    const seed = layout.posById['a:seed'].node;
+    const slots = computeAnswerKeywordSlots(layout.posById, layout.cx, layout.cy, edges, seed);
     const ids = slots.map((s) => s.id);
     expect(ids).toContain('k:north');
     expect(ids).toContain('k:east');
     expect(ids).toContain('k:south');
     expect(ids).toContain('k:west');
-    expect(ids).not.toContain('k:far-east');
+    expect(ids).not.toContain('k:unrelated');
   });
 
   it('回答(answer)ノードは含めず、キーワードのみを対象にする', () => {
-    const { computeRadialLayout, computeNearestKeywordSlots } = loadPureFns();
-    const layout = computeRadialLayout(sampleNodes, 80);
-    const slots = computeNearestKeywordSlots(layout.posById, layout.cx, layout.cy);
-    expect(slots.some((s) => s.id === 'a:seed')).toBe(false);
+    const { computeRadialLayout, computeAnswerKeywordSlots } = loadPureFns();
+    const nodes = [...sampleNodes, { id: 'a:child', type: 'answer', label: 'child', depth: 2 }];
+    const edges = [...sampleEdges, { from: 'k:east', to: 'a:child' }];
+    const layout = computeRadialLayout(nodes, 80);
+    const seed = layout.posById['a:seed'].node;
+    const slots = computeAnswerKeywordSlots(layout.posById, layout.cx, layout.cy, edges, seed);
+    expect(slots.some((s) => s.id === 'a:child')).toBe(false);
   });
 
   it('方位角(bearingDeg)の昇順に並び、左右に一つずつ移動できる順序になっている', () => {
-    const { computeRadialLayout, computeNearestKeywordSlots } = loadPureFns();
+    const { computeRadialLayout, computeAnswerKeywordSlots } = loadPureFns();
     const layout = computeRadialLayout(sampleNodes, 80);
-    const slots = computeNearestKeywordSlots(layout.posById, layout.cx, layout.cy);
+    const seed = layout.posById['a:seed'].node;
+    const slots = computeAnswerKeywordSlots(layout.posById, layout.cx, layout.cy, sampleEdges, seed);
     for (let i = 1; i < slots.length; i++) {
       expect(slots[i].bearingDeg).toBeGreaterThanOrEqual(slots[i - 1].bearingDeg);
     }
   });
 
-  it('キーワードが存在しない場合は空配列を返す', () => {
-    const { computeRadialLayout, computeNearestKeywordSlots } = loadPureFns();
+  it('辺で繋がるキーワードが存在しない場合は空配列を返す', () => {
+    const { computeRadialLayout, computeAnswerKeywordSlots } = loadPureFns();
     const layout = computeRadialLayout([{ id: 'a:seed', type: 'answer', label: 'seed', depth: 0 }], 80);
-    const slots = computeNearestKeywordSlots(layout.posById, layout.cx, layout.cy);
+    const seed = layout.posById['a:seed'].node;
+    const slots = computeAnswerKeywordSlots(layout.posById, layout.cx, layout.cy, [], seed);
     expect(slots).toEqual([]);
   });
 });
@@ -465,12 +480,13 @@ describe('一人称モードのDOM実動作(jsdom): フィルムストリップ�
 describe('一人称モードのDOM実動作(jsdom): フィルムストリップ直下の回答リスト', () => {
   afterEach(() => { vi.unstubAllGlobals(); });
 
-  it('フォーカス中のキーワードを含む回答が、分類色のドットを行頭に置いて縦に列挙される', async () => {
+  it('フォーカス中のキーワードを含む回答(今立っている回答自身は除く)が、分類色のドットを行頭に置いて縦に列挙される', async () => {
     const { fpAnswerList } = await setupActivatedFirstPersonMode();
-    // デフォルトのheading(0度)では k:east(bearing 0度)がフォーカスされる
+    // デフォルトのheading(0度)では k:east(bearing 0度)がフォーカスされる。
+    // 今立っている回答(seed)自身は「先に進める候補」ではないため一覧から除かれる。
     const rows = Array.from(fpAnswerList.querySelectorAll('.fp-answer-row')) as HTMLElement[];
     const labels = rows.map((r) => r.querySelector('.fp-answer-row-label')!.textContent);
-    expect(labels).toContain('seed');
+    expect(labels).not.toContain('seed');
     expect(labels).toContain('child-of-east');
 
     rows.forEach((row) => {

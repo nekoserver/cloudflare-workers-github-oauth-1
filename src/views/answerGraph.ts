@@ -279,12 +279,12 @@ input[type=search]:focus { border-color:var(--accent); }
         <div class="fp-controls">
           <button type="button" class="fp-btn" id="fpLeftBtn" aria-label="左を見る">←</button>
           <div class="fp-controls-vertical">
-            <button type="button" class="fp-btn fp-btn-forward" id="fpForwardBtn" aria-label="一層外へ進む">↑</button>
-            <button type="button" class="fp-btn fp-btn-backward" id="fpBackwardBtn" aria-label="一層内へ戻る">↓</button>
+            <button type="button" class="fp-btn fp-btn-forward" id="fpForwardBtn" aria-label="選んだキーワードの先の回答へ進む">↑</button>
+            <button type="button" class="fp-btn fp-btn-backward" id="fpBackwardBtn" aria-label="ひとつ前の回答へ戻る">↓</button>
           </div>
           <button type="button" class="fp-btn" id="fpRightBtn" aria-label="右を見る">→</button>
         </div>
-        <div class="fp-hint">左右にスワイプ、または ←→ ボタンで最も手前のキーワードを一つずつ選べます。↑ で一層外のキーワードへ、↓ で一層内のキーワードへ視点を進めます</div>
+        <div class="fp-hint">今立っている回答文に含まれるキーワードが目の前に並びます。左右にスワイプ、または ←→ ボタンでキーワードを選び、↑ でその先の回答へ、↓ でひとつ前の回答へ進みます</div>
       </div>
     </div>
   </div>
@@ -360,7 +360,7 @@ input[type=search]:focus { border-color:var(--accent); }
   var currentGraph = null;
   var lastLayout = null;
   var selectedNodeId = null;
-  var currentKeywordNodeId = null;
+  var currentAnswerNode = null;
   var answerModalKeywordsFromDB = [];
   var answerModalHighlightActive = true;
   var fpActive = false;
@@ -809,12 +809,14 @@ input[type=search]:focus { border-color:var(--accent); }
         return r.text().then(function(t) { return parseGraphResponse(r.status, t); });
       })
       .then(function(parsed) {
+        currentAnswerNode = null;
+        selectedNodeId = null;
         if (parsed.error !== null) {
           graphStatus.textContent = 'グラフの取得に失敗しました: ' + parsed.error;
           graphStatus.className = 'graph-status err';
           currentGraph = null;
           drawGraph();
-          if (fpActive) { fpHeadingDeg = 0; renderFirstPersonHere(); refreshFirstPersonFocus(); renderFirstPersonView(); renderFilmstrip(); renderFpAnswerList(); }
+          if (fpActive) { fpHeadingDeg = 0; refreshFirstPersonFocus(); renderFirstPersonHere(); renderFirstPersonView(); renderFilmstrip(); renderFpAnswerList(); }
           return;
         }
         var d = parsed.data;
@@ -828,7 +830,7 @@ input[type=search]:focus { border-color:var(--accent); }
         }
         graphStatus.textContent = statusText;
         drawGraph();
-        if (fpActive) { fpHeadingDeg = 0; renderFirstPersonHere(); refreshFirstPersonFocus(); renderFirstPersonView(); renderFilmstrip(); renderFpAnswerList(); }
+        if (fpActive) { fpHeadingDeg = 0; refreshFirstPersonFocus(); renderFirstPersonHere(); renderFirstPersonView(); renderFilmstrip(); renderFpAnswerList(); }
       })
       .catch(function(err) {
         graphStatus.textContent = 'グラフの取得に失敗しました（通信エラー: ' + ((err && err.message) || '不明') + '）';
@@ -936,24 +938,51 @@ input[type=search]:focus { border-color:var(--accent); }
     return visible;
   }
 
-  function computeNearestKeywordSlots(posById, cx, cy) {
-    var minDepth = null;
-    Object.keys(posById).forEach(function(id) {
-      var node = posById[id].node;
-      if (node.type !== 'keyword') return;
-      if (minDepth === null || node.depth < minDepth) minDepth = node.depth;
+  // 一人称モードでは常に「回答文ノードの上」に立ち、その回答文に含まれる
+  // (=辺で直接繋がっている)キーワード群が目の前(フィルムストリップ)に
+  // 展開される、というテイにする。answerNodeに直結するキーワードノードだけを
+  // 方位順に並べて返す。
+  function computeAnswerKeywordSlots(posById, cx, cy, edges, answerNode) {
+    var keywordIds = {};
+    (edges || []).forEach(function(e) {
+      var otherId = e.from === answerNode.id ? e.to : (e.to === answerNode.id ? e.from : null);
+      if (!otherId) return;
+      var p = posById[otherId];
+      if (p && p.node.type === 'keyword') keywordIds[otherId] = true;
     });
     var slots = [];
-    if (minDepth === null) return slots;
-    Object.keys(posById).forEach(function(id) {
+    Object.keys(keywordIds).forEach(function(id) {
       var p = posById[id];
-      if (p.node.type !== 'keyword' || p.node.depth !== minDepth) return;
       var dx = p.x - cx, dy = p.y - cy;
       var bearingDeg = normalizeDeg360(Math.atan2(dy, dx) * 180 / Math.PI);
       slots.push({ id: id, node: p.node, bearingDeg: bearingDeg });
     });
     slots.sort(function(a, b) { return a.bearingDeg - b.bearingDeg; });
     return slots;
+  }
+
+  // 回答文ノードに含まれる(=直結する)キーワード数。ノードの円の直径を
+  // 「多くのキーが拾えるオアシス」ほど大きく見せるために使う。
+  function countAnswerKeywordDegree(posById, edges, answerId) {
+    var seen = {};
+    var count = 0;
+    (edges || []).forEach(function(e) {
+      var otherId = e.from === answerId ? e.to : (e.to === answerId ? e.from : null);
+      if (!otherId || seen[otherId]) return;
+      var p = posById[otherId];
+      if (p && p.node.type === 'keyword') { seen[otherId] = true; count++; }
+    });
+    return count;
+  }
+
+  // 回答文ノードの円の半径。含まれるキーワード数が多いほど大きく(オアシス)、
+  // 少ないほど小さく(砂漠)。さらに奥(depthが大きい)ほど遠近感で小さくする。
+  function computeAnswerNodeRadius(keywordCount, depth) {
+    var BASE_R = 6, MAX_EXTRA = 10, KW_STEP = 1.5;
+    var baseR = BASE_R + Math.min(MAX_EXTRA, (keywordCount || 0) * KW_STEP);
+    var DEPTH_FALLOFF = 0.08, MIN_SCALE = 0.4;
+    var depthScale = Math.max(MIN_SCALE, 1 - (depth || 0) * DEPTH_FALLOFF);
+    return baseR * depthScale;
   }
 
   function computeFilmstripOffsets(widths, focusIdx, gapPx) {
@@ -990,45 +1019,41 @@ input[type=search]:focus { border-color:var(--accent); }
     return results;
   }
 
-  // フォーカス中のキーワード(focusedKeyword)から、そのキーワードを含む回答
-  // (depth+direction)を経由して繋がる隣接キーワード層(depth+2*direction)
-  // だけを抽出する。direction=+1で一層外(↑/forwardFirstPerson)、
-  // direction=-1で一層内(↓/backwardFirstPerson)。単純にdepth番号だけで
-  // フィルタすると、フォーカス中のキーワードとは無関係な別の枝にたまたま
-  // 同じdepthのキーワードが存在した場合にそちらへ「テレポート」してしまう
-  // ため、必ずグラフの辺(edges)を辿って実際に繋がっている先だけを返す。
-  function computeAdjacentKeywordRing(posById, cx, cy, edges, focusedKeyword, direction) {
-    var focusedDepth = focusedKeyword.depth;
-    var midDepth = focusedDepth + direction;
-    var targetDepth = focusedDepth + direction * 2;
-    if (midDepth < 0 || targetDepth < 0) return [];
-    var midAnswerIds = {};
+  // フォーカス中のキーワード(keywordId)を含む回答のうち、今立っている
+  // 回答文ノード(currentAnswerNode)より奥(depthが大きい)にあるものだけを
+  // 「先に進める候補」として返す。単純に「今立っているノード以外」で
+  // 絞り込むと、そのキーワードを生んだ親の回答へ逆戻りしてしまい
+  // (↓ボタンの役目と競合し、行き止まり判定も壊れる)、↑ボタンが常に
+  // 前進する保証が無くなるため、depthで方向を固定する。
+  function computeForwardAnswerCandidates(keywordId, posById, edges, currentAnswerNode) {
+    return computeAnswersForKeyword(keywordId, posById, edges)
+      .filter(function(n) { return n.depth > currentAnswerNode.depth; });
+  }
+
+  // answerNodeを見つけ出した「入口」のキーワード(depth-1)を経由して、
+  // その親にあたる回答文ノード(depth-2)を1件だけ辿る。BFSで構築した
+  // グラフは各ノードにつき経路が1本の木構造のため、親は必ず高々1件に
+  // 定まる(rootに近づきすぎて親が無ければnullを返す=それ以上戻れない壁)。
+  function findParentAnswer(posById, edges, answerNode) {
+    if (!answerNode || answerNode.depth < 2) return null;
+    var parentKeywordId = null;
     (edges || []).forEach(function(e) {
-      var otherId = e.from === focusedKeyword.id ? e.to : (e.to === focusedKeyword.id ? e.from : null);
+      if (parentKeywordId) return;
+      var otherId = e.from === answerNode.id ? e.to : (e.to === answerNode.id ? e.from : null);
       if (!otherId) return;
       var p = posById[otherId];
-      if (p && p.node.type === 'answer' && p.node.depth === midDepth) midAnswerIds[otherId] = true;
+      if (p && p.node.type === 'keyword' && p.node.depth === answerNode.depth - 1) parentKeywordId = otherId;
     });
-    var targetKeywordIds = {};
+    if (!parentKeywordId) return null;
+    var parentAnswerId = null;
     (edges || []).forEach(function(e) {
-      if (midAnswerIds[e.from]) {
-        var p1 = posById[e.to];
-        if (p1 && p1.node.type === 'keyword' && p1.node.depth === targetDepth) targetKeywordIds[e.to] = true;
-      }
-      if (midAnswerIds[e.to]) {
-        var p2 = posById[e.from];
-        if (p2 && p2.node.type === 'keyword' && p2.node.depth === targetDepth) targetKeywordIds[e.from] = true;
-      }
+      if (parentAnswerId) return;
+      var otherId = e.from === parentKeywordId ? e.to : (e.to === parentKeywordId ? e.from : null);
+      if (!otherId) return;
+      var p = posById[otherId];
+      if (p && p.node.type === 'answer' && p.node.depth === answerNode.depth - 2) parentAnswerId = otherId;
     });
-    var slots = [];
-    Object.keys(targetKeywordIds).forEach(function(id) {
-      var p = posById[id];
-      var dx = p.x - cx, dy = p.y - cy;
-      var bearingDeg = normalizeDeg360(Math.atan2(dy, dx) * 180 / Math.PI);
-      slots.push({ id: id, node: p.node, bearingDeg: bearingDeg });
-    });
-    slots.sort(function(a, b) { return a.bearingDeg - b.bearingDeg; });
-    return slots;
+    return parentAnswerId ? posById[parentAnswerId].node : null;
   }
 
   function computeKeywordsByCategory(keywords) {
@@ -1090,40 +1115,50 @@ input[type=search]:focus { border-color:var(--accent); }
       ctx.stroke();
     });
 
-    // 現在選択中の質問ノード(selectedNodeId)から、その回答文内に含まれる
-    // (=辺で直接繋がっている)各キーワードノードまでを強調線で結ぶ。
-    var selected = selectedNodeId ? posById[selectedNodeId] : null;
-    if (selected && selected.node.type === 'answer') {
-      var highlightColor = getCssVar('--accent') || '#0969da';
+    // 現在選択中の質問ノード(selectedNodeId)、および一人称モードで
+    // 「今立っている」回答文ノード(currentAnswerNode)から、その回答文内に
+    // 含まれる(=辺で直接繋がっている)各キーワードノードまでを強調線で結ぶ。
+    // 両者が同じノードを指す場合は二重に描画しない。
+    var highlightSourceIds = {};
+    if (selectedNodeId && posById[selectedNodeId] && posById[selectedNodeId].node.type === 'answer') {
+      highlightSourceIds[selectedNodeId] = true;
+    }
+    if (currentAnswerNode && posById[currentAnswerNode.id]) {
+      highlightSourceIds[currentAnswerNode.id] = true;
+    }
+    var highlightColor = getCssVar('--accent') || '#0969da';
+    Object.keys(highlightSourceIds).forEach(function(srcId) {
+      var src = posById[srcId];
       ctx.strokeStyle = highlightColor;
       ctx.lineWidth = 2.5;
       edges.forEach(function(e) {
-        var otherId = e.from === selectedNodeId ? e.to : (e.to === selectedNodeId ? e.from : null);
+        var otherId = e.from === srcId ? e.to : (e.to === srcId ? e.from : null);
         if (!otherId) return;
         var other = posById[otherId];
         if (!other || other.node.type !== 'keyword') return;
         ctx.beginPath();
-        ctx.moveTo(selected.x, selected.y);
+        ctx.moveTo(src.x, src.y);
         ctx.lineTo(other.x, other.y);
         ctx.stroke();
       });
-    }
+    });
 
     var answerColor = getCssVar('--answer-color') || '#0969da';
     var keywordColor = getCssVar('--keyword-color') || '#c2410c';
     var currentBg = getCssVar('--fp-focus-bg') || '#d1f5d3';
     var currentBorder = getCssVar('--fp-focus-border') || '#2f9e52';
+    var currentAnswerId = currentAnswerNode ? currentAnswerNode.id : null;
     Object.keys(posById).forEach(function(id) {
       var p = posById[id];
       var isAnswer = p.node.type === 'answer';
-      var isCurrentKeyword = !isAnswer && id === currentKeywordNodeId;
-      var r = isAnswer ? (p.node.depth === 0 ? 10 : 7) : 6;
+      var isCurrentAnswer = isAnswer && id === currentAnswerId;
+      var r = isAnswer ? computeAnswerNodeRadius(countAnswerKeywordDegree(posById, edges, id), p.node.depth) : 6;
       var fallbackColor = isAnswer ? answerColor : keywordColor;
       ctx.beginPath();
       ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
-      ctx.fillStyle = isCurrentKeyword ? currentBg : (p.node.color || fallbackColor);
+      ctx.fillStyle = isCurrentAnswer ? currentBg : (p.node.color || fallbackColor);
       ctx.fill();
-      if (isCurrentKeyword) {
+      if (isCurrentAnswer) {
         ctx.lineWidth = 2;
         ctx.strokeStyle = currentBorder;
         ctx.stroke();
@@ -1182,10 +1217,8 @@ input[type=search]:focus { border-color:var(--accent); }
   var FP_GROUND_PERCENT = 90;
 
   function renderFirstPersonHere() {
-    if (!currentGraph) { fpHere.innerHTML = ''; return; }
-    var seed = currentGraph.nodes.filter(function(n) { return n.depth === 0; })[0];
-    if (!seed) { fpHere.innerHTML = ''; return; }
-    fpHere.innerHTML = '📍 現在地: <strong class="question-line" data-share-id="' + escHtml(seed.id.slice(2)) + '">' + escHtml(seed.label) + '</strong>';
+    if (!currentAnswerNode) { fpHere.innerHTML = ''; return; }
+    fpHere.innerHTML = '📍 現在地: <strong class="question-line" data-share-id="' + escHtml(currentAnswerNode.id.slice(2)) + '">' + escHtml(currentAnswerNode.label) + '</strong>';
   }
 
   function renderFirstPersonView() {
@@ -1246,15 +1279,18 @@ input[type=search]:focus { border-color:var(--accent); }
     });
   }
 
+  // フォーカス中のキーワードを含む、今立っている回答文ノード以外の回答
+  // (=そのキーワードを辿って進める先の候補)を一覧表示する。クリックすると
+  // その回答文ノードへ実際に移動しつつ内容を読める(モーダルを開く)。
   function renderFpAnswerList() {
     fpAnswerList.innerHTML = '';
-    if (!fpNearKeywords.length || !lastLayout || !currentGraph) return;
+    if (!fpNearKeywords.length || !lastLayout || !currentGraph || !currentAnswerNode) return;
     var keyword = fpNearKeywords[fpFocusIdx];
-    var answers = computeAnswersForKeyword(keyword.id, lastLayout.posById, currentGraph.edges);
+    var answers = computeForwardAnswerCandidates(keyword.id, lastLayout.posById, currentGraph.edges, currentAnswerNode);
     if (!answers.length) {
       var empty = document.createElement('div');
       empty.className = 'fp-answer-list-empty';
-      empty.textContent = 'このキーワードを含む回答はありません';
+      empty.textContent = 'このキーワードの先に進める回答はありません';
       fpAnswerList.appendChild(empty);
       return;
     }
@@ -1271,39 +1307,52 @@ input[type=search]:focus { border-color:var(--accent); }
       row.appendChild(dot);
       row.appendChild(label);
       row.addEventListener('click', function() {
-        selectGraphNode(node);
+        moveToAnswerNode(node);
         openAnswerModal(node.id.slice(2));
       });
       fpAnswerList.appendChild(row);
     });
   }
 
-  // fpNearKeywords[fpFocusIdx]が指す「今いるキーワードノード」をcurrentKeywordNodeIdへ
-  // 反映する。俯瞰グラフビュー(drawGraph)がこれを見て薄緑色で塗る。
-  function syncCurrentKeywordNode() {
-    var focused = fpNearKeywords[fpFocusIdx];
-    currentKeywordNodeId = focused ? focused.node.id : null;
-  }
-
-  function refreshFirstPersonFocus() {
-    if (!lastLayout) { fpNearKeywords = []; fpFocusIdx = 0; syncCurrentKeywordNode(); return; }
-    fpNearKeywords = computeNearestKeywordSlots(lastLayout.posById, lastLayout.cx, lastLayout.cy);
-    if (!fpNearKeywords.length) { fpFocusIdx = 0; syncCurrentKeywordNode(); return; }
-    var bestIdx = 0;
-    var bestDiff = Infinity;
+  // answerNodeの上に立った状態にする。その回答文に含まれるキーワード群を
+  // fpNearKeywords(=目の前に展開される一覧)として再計算する。
+  function enterAnswerNode(answerNode) {
+    currentAnswerNode = answerNode;
+    if (!lastLayout || !answerNode) { fpNearKeywords = []; fpFocusIdx = 0; return; }
+    fpNearKeywords = computeAnswerKeywordSlots(lastLayout.posById, lastLayout.cx, lastLayout.cy, currentGraph ? currentGraph.edges : [], answerNode);
+    if (!fpNearKeywords.length) { fpFocusIdx = 0; return; }
+    var bestIdx = 0, bestDiff = Infinity;
     fpNearKeywords.forEach(function(slot, idx) {
       var diff = Math.abs(normalizeDegSigned(slot.bearingDeg - fpHeadingDeg));
       if (diff < bestDiff) { bestDiff = diff; bestIdx = idx; }
     });
     fpFocusIdx = bestIdx;
-    syncCurrentKeywordNode();
+  }
+
+  function moveToAnswerNode(answerNode) {
+    enterAnswerNode(answerNode);
+    renderFirstPersonHere();
+    renderFirstPersonView();
+    renderFilmstrip();
+    renderFpAnswerList();
+  }
+
+  // 一人称モードに入る/グラフを読み込み直した直後の初期化。既に立っている
+  // 回答文ノード(currentAnswerNode)があればそこを維持し、無ければ起点
+  // (depth 0)から始める。
+  function refreshFirstPersonFocus() {
+    if (!lastLayout) { fpNearKeywords = []; fpFocusIdx = 0; currentAnswerNode = null; return; }
+    if (!currentAnswerNode) {
+      var seedId = Object.keys(lastLayout.posById).filter(function(id) { return lastLayout.posById[id].node.depth === 0; })[0];
+      currentAnswerNode = seedId ? lastLayout.posById[seedId].node : null;
+    }
+    enterAnswerNode(currentAnswerNode);
   }
 
   function focusNearKeyword(idx) {
     if (!fpNearKeywords.length) return;
     fpFocusIdx = ((idx % fpNearKeywords.length) + fpNearKeywords.length) % fpNearKeywords.length;
     fpHeadingDeg = fpNearKeywords[fpFocusIdx].bearingDeg;
-    syncCurrentKeywordNode();
     renderFirstPersonView();
     renderFilmstrip();
     renderFpAnswerList();
@@ -1314,35 +1363,35 @@ input[type=search]:focus { border-color:var(--accent); }
     focusNearKeyword(fpFocusIdx + direction);
   }
 
-  // フォーカス中のキーワード(fpNearKeywords[fpFocusIdx])から隣接するキーワード層
-  // (間の回答層は素通りする)へ視点を進める。direction=+1で一層外(↑)、
-  // direction=-1で一層内(↓)。その先にキーワード層が無ければそこが行き止まり
-  // (壁)であり、現状のノードを選択するだけで視点は動かさない。
-  function moveFirstPersonRing(direction) {
-    if (!fpActive || !lastLayout || !fpNearKeywords.length) return;
+  // フォーカス中のキーワード(fpNearKeywords[fpFocusIdx])を含む、今立っている
+  // 回答文ノードとは別の回答文ノードへ進む(=そのキーワードの先にある回答を読みに行く)。
+  // 候補が複数あれば最初の1件へ進む(他の候補はfpAnswerListから個別に選べる)。
+  // 候補が無ければそこが行き止まり(壁)であり、現状のキーワードを選択する
+  // だけで視点は動かさない。
+  function forwardFirstPerson() {
+    if (!fpActive || !lastLayout || !fpNearKeywords.length || !currentAnswerNode || !currentGraph) return;
     var focused = fpNearKeywords[fpFocusIdx];
-    if (!focused || !currentGraph) return;
-    var nextSlots = computeAdjacentKeywordRing(lastLayout.posById, lastLayout.cx, lastLayout.cy, currentGraph.edges, focused.node, direction);
-    if (nextSlots.length === 0) {
+    if (!focused) return;
+    var candidates = computeForwardAnswerCandidates(focused.id, lastLayout.posById, currentGraph.edges, currentAnswerNode);
+    if (candidates.length === 0) {
       selectGraphNode(focused.node);
       return;
     }
-    fpNearKeywords = nextSlots;
-    var bestIdx = 0, bestDiff = Infinity;
-    nextSlots.forEach(function(slot, idx) {
-      var diff = Math.abs(normalizeDegSigned(slot.bearingDeg - fpHeadingDeg));
-      if (diff < bestDiff) { bestDiff = diff; bestIdx = idx; }
-    });
-    fpFocusIdx = bestIdx;
-    fpHeadingDeg = fpNearKeywords[fpFocusIdx].bearingDeg;
-    syncCurrentKeywordNode();
-    renderFirstPersonView();
-    renderFilmstrip();
-    renderFpAnswerList();
+    moveToAnswerNode(candidates[0]);
   }
 
-  function forwardFirstPerson() { moveFirstPersonRing(1); }
-  function backwardFirstPerson() { moveFirstPersonRing(-1); }
+  // 今立っている回答文ノードを見つけ出した入口のキーワードを経由して、
+  // その親にあたる回答文ノードへ戻る。親が無ければ(起点付近まで戻っていれば)
+  // それ以上戻れない壁であり、視点は動かさない。
+  function backwardFirstPerson() {
+    if (!fpActive || !lastLayout || !currentAnswerNode) return;
+    var parent = findParentAnswer(lastLayout.posById, currentGraph ? currentGraph.edges : [], currentAnswerNode);
+    if (!parent) {
+      selectGraphNode(currentAnswerNode);
+      return;
+    }
+    moveToAnswerNode(parent);
+  }
 
   function setFirstPersonActive(active) {
     fpActive = active;
@@ -1353,13 +1402,13 @@ input[type=search]:focus { border-color:var(--accent); }
     sidePanel.style.display = active ? 'none' : '';
     if (active) {
       fpHeadingDeg = 0;
-      renderFirstPersonHere();
       refreshFirstPersonFocus();
+      renderFirstPersonHere();
       renderFirstPersonView();
       renderFilmstrip();
       renderFpAnswerList();
     } else {
-      // 俯瞰ビューに戻ったとき、一人称モードで進んだ「今いるキーワードノード」の
+      // 俯瞰ビューに戻ったとき、一人称モードで立っている回答文ノードの
       // 薄緑色ハイライトを反映するため再描画する。
       drawGraph();
     }
