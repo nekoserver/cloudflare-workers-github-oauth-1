@@ -221,6 +221,24 @@ describe('カテゴリ絞り込みUIのDOM実動作(jsdom)', () => {
     expect(searchCalls.some((c) => String(c[0]).includes(encodeURIComponent('Hono')))).toBe(true);
   });
 
+  it('中分類ドロップダウンの枠色は/api/aichat/keyword-categories-summaryのcolorを使う(AIチャットページの🔑分類モーダルと同じ色)', async () => {
+    const { catQuickGroups, catQuickCats } = await setupCatQuickNav();
+    const radios = Array.from(catQuickGroups.querySelectorAll('input[type=radio]')) as HTMLInputElement[];
+    const techRadio = radios.find((r) => r.value === 'g1')!;
+    techRadio.checked = true;
+    techRadio.dispatchEvent(new Event('change', { bubbles: true }));
+
+    const selects = Array.from(catQuickCats.querySelectorAll('select.cat-quick-cat-select')) as unknown as HTMLSelectElement[];
+    // フレームワーク: color '#111111', インフラ: color '#222222'(setupCatQuickNavのcategories参照)
+    expect(selects[0].style.borderColor).toBe('rgb(17, 17, 17)');
+    expect(selects[1].style.borderColor).toBe('rgb(34, 34, 34)');
+
+    const html = buildPage();
+    const ruleIdx = html.indexOf('.cat-quick-cat-select {');
+    const rule = html.slice(ruleIdx, html.indexOf('}', ruleIdx));
+    expect(rule).toContain('background:transparent');
+  });
+
   it('大分類を選び直すと前の中分類ドロップダウンは残らない', async () => {
     const { catQuickGroups, catQuickCats } = await setupCatQuickNav();
     const radios = Array.from(catQuickGroups.querySelectorAll('input[type=radio]')) as HTMLInputElement[];
