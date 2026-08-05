@@ -391,7 +391,7 @@ async function setupActivatedFirstPersonMode() {
   ];
   const fetchMock = vi.fn((url: string) => {
     if (String(url).includes('/api/aichat/shares/search')) {
-      return Promise.resolve({ json: () => Promise.resolve({ results: [{ id: 'share1', question: 'q1' }] }) });
+      return Promise.resolve({ json: () => Promise.resolve({ results: [{ id: 'share1', question: 'q1', keywordCount: 1 }] }) });
     }
     if (String(url).includes('/api/aichat/answer-propagation-graph')) {
       return Promise.resolve({ status: 200, text: () => Promise.resolve(JSON.stringify({ nodes: graphNodes, edges: graphEdges })) });
