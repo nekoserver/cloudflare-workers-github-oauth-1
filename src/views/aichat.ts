@@ -5483,7 +5483,8 @@ export function getAiChatPage(user: {
       Promise.allSettled([
         fetch('/api/aichat/keyword-embeddings/list', { credentials: 'same-origin' })
           .then(function(r) { return r.text().then(function(t) { return { status: r.status, text: t }; }); }),
-        fetch('/api/aichat/all-keywords', { credentials: 'same-origin' }).then(function(r) { return r.json(); })
+        fetch('/api/aichat/all-keywords', { credentials: 'same-origin' }).then(function(r) { return r.json(); }),
+        fetch('/api/aichat/keyword-embeddings/model-counts', { credentials: 'same-origin' }).then(function(r) { return r.json(); })
       ]).then(function(results) {
         var listRes = results[0].status === 'fulfilled' ? results[0].value : null;
         var d = null;
@@ -5500,7 +5501,8 @@ export function getAiChatPage(user: {
         }
         renderZtOverviewList(d.items, 'all', '');
         var kwAll = results[1].status === 'fulfilled' ? ((results[1].value && results[1].value.keywords) || []) : [];
-        ztOverviewChartSection.innerHTML = buildEmbeddingModelRatioSectionHtml(kwAll.length, d.items || []);
+        var modelCounts = results[2].status === 'fulfilled' ? results[2].value : {};
+        ztOverviewChartSection.innerHTML = buildEmbeddingModelRatioSectionHtml(kwAll.length, modelCounts);
       }).catch(function(err) {
         ztOverviewBody.innerHTML = '<div class="search-log-empty">取得に失敗しました（通信エラー: ' + escHtml((err && err.message) || '不明') + '）</div>';
       });
@@ -5730,12 +5732,13 @@ export function getAiChatPage(user: {
       return html;
     }
 
-    function buildEmbeddingModelRatioSectionHtml(totalKw, embItems) {
+    function buildEmbeddingModelRatioSectionHtml(totalKw, counts) {
       if (!totalKw || totalKw <= 0) return '';
+      counts = counts || {};
       var models = [
-        { key: 'bge', label: 'bge-m3', color: '#6366f1', count: embItems.length },
-        { key: 'plamo', label: 'plamo-embedding-1b', color: '#22c55e', count: embItems.filter(function(it) { return !!it.plamoModel; }).length },
-        { key: 'gemma', label: 'embeddinggemma-300m', color: '#f59e0b', count: embItems.filter(function(it) { return !!it.gemmaModel; }).length }
+        { key: 'bge', label: 'bge-m3', color: '#6366f1', count: counts.bge || 0 },
+        { key: 'plamo', label: 'plamo-embedding-1b', color: '#22c55e', count: counts.plamo || 0 },
+        { key: 'gemma', label: 'embeddinggemma-300m', color: '#f59e0b', count: counts.gemma || 0 }
       ];
       var UNREG_COLOR = '#94a3b8';
       var html = '<div style="font-size:10px;font-weight:600;color:var(--text-secondary);margin-top:14px;margin-bottom:6px;">埋め込みモデル別 登録済みキーワード率</div>';
@@ -5782,14 +5785,14 @@ export function getAiChatPage(user: {
         fetch('/api/aichat/all-keywords', { credentials: 'same-origin' }).then(function(r) { return r.json(); }),
         fetch('/api/aichat/keyword-categories-summary', { credentials: 'same-origin' }).then(function(r) { return r.json(); }),
         fetch('/api/aichat/category-groups', { credentials: 'same-origin' }).then(function(r) { return r.json(); }),
-        fetch('/api/aichat/keyword-embeddings/list', { credentials: 'same-origin' }).then(function(r) { return r.json(); })
+        fetch('/api/aichat/keyword-embeddings/model-counts', { credentials: 'same-origin' }).then(function(r) { return r.json(); })
       ])
         .then(function(results) {
           var d = results[0].status === 'fulfilled' ? results[0].value : {};
           var kwAll = results[1].status === 'fulfilled' ? (results[1].value.keywords || []) : [];
           var catSummary = results[2].status === 'fulfilled' ? (results[2].value.categories || []) : [];
           var catGroups = results[3].status === 'fulfilled' ? (results[3].value.groups || []) : [];
-          var embItems = results[4].status === 'fulfilled' ? (results[4].value.items || []) : [];
+          var embModelCounts = results[4].status === 'fulfilled' ? results[4].value : {};
           var days = d.days || [];
           var models = d.models || [];
           var apiModelTotals = d.apiModelTotals || {};
@@ -6009,7 +6012,7 @@ export function getAiChatPage(user: {
           svg += '<line x1="' + ML + '" y1="' + midY + '" x2="' + (W - MR) + '" y2="' + midY + '" stroke="var(--border-color)" stroke-width="0.5"/>';
           svg += '</svg>';
 
-          var embSectionHtml = buildEmbeddingModelRatioSectionHtml(kwAll.length, embItems);
+          var embSectionHtml = buildEmbeddingModelRatioSectionHtml(kwAll.length, embModelCounts);
 
           dailyStatsBody.innerHTML = '<div style="display:grid;grid-template-columns:160px 1fr;gap:14px;align-items:start;">' +
             '<div>' + leftHtml + '</div>' +

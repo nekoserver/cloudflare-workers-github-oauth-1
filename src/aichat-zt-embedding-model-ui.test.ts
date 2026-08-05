@@ -115,6 +115,10 @@ async function setupZtUi() {
         json: () => Promise.resolve(body),
       });
     }
+    if (u.includes('/api/aichat/keyword-embeddings/model-counts')) {
+      // 一覧(items)の内訳と揃える: bge=4件、plamo=1件('空港')、gemma=2件('駅'・'テスト')
+      return Promise.resolve({ status: 200, json: () => Promise.resolve({ bge: 4, plamo: 1, gemma: 2 }) });
+    }
     if (u.includes('/api/aichat/keyword-embeddings/register')) {
       return Promise.resolve({ json: () => Promise.resolve({ ok: true, registered: 1, failed: 0, results: [] }) });
     }

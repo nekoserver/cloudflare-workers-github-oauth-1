@@ -92,3 +92,21 @@ describe('/api/aichat/keyword-embeddings/list: SQLエラー時の応答', () => 
     expect(data.error).toContain('no such column: plamo_model');
   });
 });
+
+describe('/api/aichat/keyword-embeddings/model-counts: SQLエラー時の応答', () => {
+  it('DBが例外を投げた場合、汎用500ではなく実際のエラーメッセージを含んだJSONを返す', async () => {
+    const db = makeThrowingDb('no such column: gemma_dim');
+    const auth = await makeAuthHeader();
+
+    const res = await app.request('/api/aichat/keyword-embeddings/model-counts', {
+      headers: { Authorization: auth },
+    }, makeEnv(db, undefined));
+
+    expect(res.status).toBe(500);
+    const data = await res.json() as { bge: number; plamo: number; gemma: number; error?: string };
+    expect(data).toMatchObject({ bge: 0, plamo: 0, gemma: 0 });
+    expect(data.error).toBeTruthy();
+    expect(data.error).not.toBe('サーバーエラーが発生しました');
+    expect(data.error).toContain('no such column: gemma_dim');
+  });
+});
