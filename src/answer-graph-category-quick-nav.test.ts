@@ -238,3 +238,59 @@ describe('カテゴリ絞り込みUIのDOM実動作(jsdom)', () => {
     expect(selects[0].options[0].textContent).toBe('料理 (20)');
   });
 });
+
+// 対象: 大分類ラジオボタンの各ラベルを中抜き(背景なし)の丸枠バッジで囲み、
+// 枠の色をAIチャットページ(src/views/aichat.ts の getDailyStatsGroupColor)と
+// 同じ大分類→色の対応で塗り分ける表示。
+//
+// 故障シナリオ:
+//   (1) 枠の色がAIチャットページの日次統計と異なる対応になり、同じ大分類なのに
+//       ページによって色が変わって見える
+//   (2) 「Travel」「Coding」等の固定名判定に一致しない大分類が全て同じ色になり
+//       区別できない(フォールバックパレットがindexで回っていない)
+//   (3) ラベルが塗りつぶし背景になり「中抜き」の見た目にならない
+describe('大分類ラジオラベルの丸枠配色(AIチャットページの大分類カテゴリ色との統一)', () => {
+  afterEach(() => { vi.unstubAllGlobals(); });
+
+  it('各ラベルは中抜き(background指定なし)の丸枠(border-radius:999px)で囲まれる', async () => {
+    const { catQuickGroups } = await setupCatQuickNav();
+    const labels = Array.from(catQuickGroups.querySelectorAll('.cat-quick-group-label')) as HTMLElement[];
+    expect(labels.length).toBe(2);
+    labels.forEach((label) => {
+      expect(label.style.background).toBe('');
+      expect(label.style.borderColor).not.toBe('');
+    });
+  });
+
+  it('固定名に一致しない大分類名はフォールバックパレットからindex順に色が割り当てられる', async () => {
+    const { catQuickGroups } = await setupCatQuickNav();
+    // setupCatQuickNavのgroupsは「生活グループ」(kw_count最大→index0)「技術グループ」(index1)の順で描画される
+    const labels = Array.from(catQuickGroups.querySelectorAll('.cat-quick-group-label')) as HTMLElement[];
+    expect(labels[0].style.borderColor).toBe('rgb(245, 158, 11)'); // #f59e0b (index0)
+    expect(labels[1].style.borderColor).toBe('rgb(236, 72, 153)'); // #ec4899 (index1)
+  });
+
+  it('大分類名に「旅行」を含む場合は固定色#38bdf8が使われる', async () => {
+    const html = buildPage();
+    document.body.innerHTML = html.slice(html.indexOf('<body>') + 6, html.indexOf('<script>'));
+    const proto = (window as unknown as { HTMLCanvasElement: { prototype: { getContext: unknown } } }).HTMLCanvasElement.prototype;
+    proto.getContext = () => ({
+      clearRect: () => {}, beginPath: () => {}, arc: () => {}, fill: () => {}, stroke: () => {}, moveTo: () => {}, lineTo: () => {},
+    });
+    const fetchMock = vi.fn((url: string) => {
+      const u = String(url);
+      if (u.includes('/api/aichat/category-groups')) {
+        return Promise.resolve({ json: () => Promise.resolve({ groups: [{ id: 'g1', group_name: '旅行グループ', category_ids: [], kw_count: 1 }] }) });
+      }
+      return Promise.resolve({ json: () => Promise.resolve({}) });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const scriptSrc = html.slice(html.indexOf('<script>') + 8, html.indexOf('</script>'));
+    // eslint-disable-next-line no-new-func
+    new Function(scriptSrc)();
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    const label = document.querySelector('.cat-quick-group-label') as HTMLElement;
+    expect(label.style.borderColor).toBe('rgb(56, 189, 248)'); // #38bdf8
+  });
+});
