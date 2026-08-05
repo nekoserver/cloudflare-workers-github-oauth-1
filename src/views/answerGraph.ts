@@ -111,6 +111,13 @@ input[type=search]:focus { border-color:var(--accent); }
 .search-results-table tbody tr { cursor:pointer; }
 .search-results-table tbody tr:hover { background:var(--btn-hover); }
 .search-results-table tbody tr.selected { background:rgba(31,111,235,.1); }
+.search-results-table tbody tr.zero-keyword-row { background:color-mix(in srgb, var(--danger) 15%, transparent); }
+.search-results-table tbody tr.zero-keyword-row:hover { background:color-mix(in srgb, var(--danger) 25%, transparent); }
+.seed-zero-tooltip {
+  position:fixed; z-index:9999; max-width:260px; padding:8px 10px; border-radius:6px;
+  background:var(--card); border:1px solid var(--danger); color:var(--fg); font-size:12px;
+  line-height:1.5; box-shadow:0 4px 12px rgba(0,0,0,.2); pointer-events:none;
+}
 .search-status { font-size:11px; color:var(--label); }
 .graph-layout { display:flex; flex-direction:column; gap:12px; }
 .canvas-wrap { width:100%; overflow:auto; border:1px solid var(--border); border-radius:8px; background:var(--btn-bg); }
@@ -220,7 +227,7 @@ input[type=search]:focus { border-color:var(--accent); }
       <table class="search-results-table">
         <thead>
           <tr>
-            <th id="searchKeywordCountTh" class="sortable-th" tabindex="0" role="button" aria-label="キーワード総数で並べ替え">キーワード数</th>
+            <th id="searchKeywordCountTh" class="sortable-th" tabindex="0" role="button" aria-label="キーワード総数で並べ替え" title="キーワード数">🔑</th>
             <th>質問日時</th>
             <th>質問</th>
           </tr>
@@ -528,7 +535,33 @@ input[type=search]:focus { border-color:var(--accent); }
     if (e.target === canvas) return;
     if (nodeTooltip.contains(e.target)) return;
     hideNodeTooltip();
+    if (!e.target.closest('.zero-keyword-row')) hideSeedZeroTooltip();
   });
+
+  var ZERO_KEYWORD_TOOLTIP_MS = 7000;
+  var seedZeroTooltipEl = null;
+  var seedZeroTooltipTimer = null;
+
+  function hideSeedZeroTooltip() {
+    if (seedZeroTooltipTimer) { clearTimeout(seedZeroTooltipTimer); seedZeroTooltipTimer = null; }
+    if (seedZeroTooltipEl) { seedZeroTooltipEl.remove(); seedZeroTooltipEl = null; }
+  }
+
+  function showSeedZeroTooltip(x, y) {
+    hideSeedZeroTooltip();
+    var el = document.createElement('div');
+    el.className = 'seed-zero-tooltip';
+    el.textContent = 'この質問の回答結果から1つでもいいのでキーワードを切り出して登録しないとノードの描画が行えません';
+    document.body.appendChild(el);
+    var left = x + 12;
+    var top = y + 12;
+    var maxLeft = window.scrollX + document.documentElement.clientWidth - el.offsetWidth - 8;
+    if (left > maxLeft) left = Math.max(4, maxLeft);
+    el.style.left = left + 'px';
+    el.style.top = top + 'px';
+    seedZeroTooltipEl = el;
+    seedZeroTooltipTimer = setTimeout(hideSeedZeroTooltip, ZERO_KEYWORD_TOOLTIP_MS);
+  }
 
   function sortSearchResults(results, mode) {
     var arr = (results || []).slice();
@@ -550,7 +583,7 @@ input[type=search]:focus { border-color:var(--accent); }
   }
 
   function updateSearchSortIndicator() {
-    var label = searchSortMode === 'count-desc' ? 'キーワード数 ▼' : searchSortMode === 'count-asc' ? 'キーワード数 ▲' : 'キーワード数';
+    var label = searchSortMode === 'count-desc' ? '🔑 ▼' : searchSortMode === 'count-asc' ? '🔑 ▲' : '🔑';
     searchKeywordCountTh.textContent = label;
   }
 
@@ -558,8 +591,9 @@ input[type=search]:focus { border-color:var(--accent); }
     var sorted = sortSearchResults(searchResultsRaw, searchSortMode);
     seedSearchResults.innerHTML = '';
     sorted.forEach(function(r) {
+      var isZeroKeyword = !(r.keywordCount || 0);
       var row = document.createElement('tr');
-      row.className = 'search-result-row' + (r.id === selectedShareId ? ' selected' : '');
+      row.className = 'search-result-row' + (isZeroKeyword ? ' zero-keyword-row' : '') + (r.id === selectedShareId ? ' selected' : '');
       var countTd = document.createElement('td');
       countTd.className = 'search-result-count';
       countTd.textContent = String(r.keywordCount || 0);
@@ -569,11 +603,14 @@ input[type=search]:focus { border-color:var(--accent); }
       var qTd = document.createElement('td');
       qTd.className = 'search-result-question';
       qTd.textContent = r.question;
-      qTd.title = r.question;
+      qTd.title = isZeroKeyword
+        ? 'この質問の回答結果から1つでもいいのでキーワードを切り出して登録しないとノードの描画が行えません'
+        : r.question;
       row.appendChild(countTd);
       row.appendChild(dateTd);
       row.appendChild(qTd);
-      row.addEventListener('click', function() {
+      row.addEventListener('click', function(e) {
+        if (isZeroKeyword) { showSeedZeroTooltip(e.clientX, e.clientY); return; }
         selectedShareId = r.id;
         seedSearchResults.querySelectorAll('.search-result-row').forEach(function(el) { el.classList.remove('selected'); });
         row.classList.add('selected');
