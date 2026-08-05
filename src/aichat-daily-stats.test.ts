@@ -356,12 +356,12 @@ describe('日次統計グラフ: 左パネル（総数・パイチャート・�
 // 埋め込みモデル別 登録済みキーワード率の円グラフ
 // ===========================================================
 describe('日次統計モーダル: 埋め込みモデル別 登録済みキーワード率', () => {
-  it('/api/aichat/keyword-embeddings/list を fetch する', () => {
+  it('/api/aichat/keyword-embeddings/model-counts を fetch する(件数取得に一覧APIのLIMIT付きリストは使わない)', () => {
     const html = buildPage();
     const idx = html.indexOf('function renderDailyStatsChart');
     expect(idx).toBeGreaterThan(-1);
     const fn = html.slice(idx, idx + 2500);
-    expect(fn).toContain('/api/aichat/keyword-embeddings/list');
+    expect(fn).toContain('/api/aichat/keyword-embeddings/model-counts');
   });
 
   it('buildEmbeddingModelRatioSectionHtml 関数が存在する', () => {

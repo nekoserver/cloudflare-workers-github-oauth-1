@@ -6704,6 +6704,41 @@ export async function listKeywordEmbeddingsOverview(
   }));
 }
 
+export interface KeywordEmbeddingModelCounts {
+  bge: number;
+  plamo: number;
+  gemma: number;
+}
+
+/**
+ * 埋め込みモデル別 登録済みキーワード率の円グラフ(ZTモーダルの📖一覧・
+ * 📈日次統計モーダル)が参照する、ユーザーの全登録件数。
+ *
+ * listKeywordEmbeddingsOverview は一覧表示用に `ORDER BY updated_at DESC
+ * LIMIT 500` で取得しており、この結果配列の長さ・フィルタ件数をそのまま
+ * 円グラフの分母/分子に使うと、登録件数が500件を超えた状態で新規登録を
+ * 行うたびに「新しく更新された行が上位500件に入り、更新されていない古い
+ * 行(plamo/gemmaサブ系列を持つものを含む)が枠外に押し出される」ため、
+ * 実際には増えているはずの登録件数が見かけ上減って表示される不具合になる。
+ * 円グラフには LIMIT を付けない集計専用クエリの結果を使う。
+ */
+export async function getKeywordEmbeddingModelCounts(
+  db: D1Database,
+  userId: string,
+): Promise<KeywordEmbeddingModelCounts> {
+  const row = await db.prepare(
+    `SELECT COUNT(*) AS bge,
+            SUM(CASE WHEN plamo_dim IS NOT NULL THEN 1 ELSE 0 END) AS plamo,
+            SUM(CASE WHEN gemma_dim IS NOT NULL THEN 1 ELSE 0 END) AS gemma
+     FROM aichat_keyword_embeddings WHERE user_id = ?`
+  ).bind(userId).first<{ bge: number; plamo: number | null; gemma: number | null }>();
+  return {
+    bge: row?.bge ?? 0,
+    plamo: row?.plamo ?? 0,
+    gemma: row?.gemma ?? 0,
+  };
+}
+
 /**
  * 未分類キーワードに対し、既存の中分類の代表ベクトル(centroid)との
  * コサイン類似度からAI分類を「提案」する。確定分類テーブル
@@ -6809,6 +6844,24 @@ app.get('/api/aichat/keyword-embeddings/list', authMiddleware, async (c) => {
     const message = err instanceof Error ? err.message : String(err);
     logger.error('keyword-embeddings/list failed', { userId: user.sub, error: message });
     return jsonUtf8({ items: [], error: '一覧取得でサーバーエラーが発生しました: ' + message }, 500);
+  }
+});
+
+/**
+ * 埋め込みモデル別 登録済みキーワード率の円グラフ用。keyword-embeddings/list は
+ * 一覧表示用にLIMIT 500を掛けているため件数の分子・分母には使えない
+ * (getKeywordEmbeddingModelCountsのコメント参照)。LIMIT無しの集計結果を返す。
+ */
+app.get('/api/aichat/keyword-embeddings/model-counts', authMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!c.env.DB) return jsonUtf8({ bge: 0, plamo: 0, gemma: 0 });
+  try {
+    const counts = await getKeywordEmbeddingModelCounts(c.env.DB, user.sub);
+    return jsonUtf8(counts);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('keyword-embeddings/model-counts failed', { userId: user.sub, error: message });
+    return jsonUtf8({ bge: 0, plamo: 0, gemma: 0, error: '集計取得でサーバーエラーが発生しました: ' + message }, 500);
   }
 });
 
