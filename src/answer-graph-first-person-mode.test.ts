@@ -87,20 +87,11 @@ describe('/answer-graph ページのHTML構造: 一人称モード用の要素�
     expect(filmstripIdx).toBeLessThan(skyCloseIdx);
   });
 
-  it('フォーカス中チップ(.fp-film-chip-focused)は薄緑系のCSS変数(--fp-focus-bg等)で塗られ、固定色をハードコードしない', () => {
+  it('フォーカス中チップ(.fp-film-chip-focused)はキーワードに割り当てられた色(--fp-film-color)で塗られ、固定色をハードコードしない', () => {
     const ruleIdx = html.indexOf('.fp-film-chip.fp-film-chip-focused');
     const rule = html.slice(ruleIdx, html.indexOf('}', ruleIdx));
-    expect(rule).toContain('var(--fp-focus-bg)');
-    expect(rule).toContain('var(--fp-focus-border)');
+    expect(rule).toContain('var(--fp-film-color');
     expect(rule).not.toMatch(/background:\s*#/);
-  });
-
-  it('--fp-focus-bg等はライト/ダーク両方の@mediaブロックで定義されている', () => {
-    const lightBlock = html.slice(html.indexOf('prefers-color-scheme:light'), html.indexOf('prefers-color-scheme:dark'));
-    const darkBlockIdx = html.indexOf('prefers-color-scheme:dark');
-    const darkBlock = html.slice(darkBlockIdx, html.indexOf('}', darkBlockIdx) + 1);
-    expect(lightBlock).toContain('--fp-focus-bg');
-    expect(darkBlock).toContain('--fp-focus-bg');
   });
 
   it('一人称モードビューは既定で非表示(display:none)である', () => {
