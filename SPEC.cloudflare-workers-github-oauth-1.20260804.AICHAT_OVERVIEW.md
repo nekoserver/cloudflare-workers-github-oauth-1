@@ -340,6 +340,19 @@
 | [`124014b`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/124014b) | 2026-08-01 | 類似度閾値をスライダーで0.1刻み調整できるようにし初期値を0.85→0.85維持で確定 |
 | [`dd3952b`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/dd3952b) | 2026-08-01 | 埋め込みキャッシュモーダルのスライダーをCookie記憶付き1%刻み・初期値75%に変更 |
 
+### 13-1. ZTボタン経由「関連する会話」検索と左サイドパネル検索の精度差（既知の暫定仕様）
+
+**対象**: ZTツリーのキーワードクリックで開く「🔎 関連する会話」モーダル（`openZtKeywordSharesModal`、`src/views/aichat.ts:5406`）が呼ぶ `/api/aichat/shares/by-keyword`（`src/index.ts:4932`）と、左サイドパネルの検索窓が呼ぶ `/api/aichat/shares/search`（`src/index.ts:4279`、実体は `searchAiChatShares`、`src/index.ts:4043`）。
+
+**現状の仕様**:
+- 左サイドパネル検索（`searchAiChatShares`）は `question` と `answer` の**両方**を `INSTR` で部分一致検索している（`src/index.ts:4059`）。
+- ZTボタン経由の `by-keyword` は、`topic` 未指定時は `aichat_search_log`（過去にそのキーワードで検索してクリックされた質問の行動ログ）との完全一致キーワード紐付けのみで、`answer` 本文は検索対象に含まれていない。`topic` 指定時も `question` のみへの `LIKE` 部分一致で、`answer` は見ていない（`src/index.ts:4944`）。
+- そのため、回答文にしか出現しない語をZTツリーのキーワードから辿った場合、左サイドパネル検索ではヒットする質問がZTボタン経由の「関連する会話」には出てこないことがある。
+
+**経緯**: ZTボタン（Zanzibarツリー）はキーワードの意味分類・類似キーワード提示（bge-m3埋め込みのコサイン類似度）を主目的として先に実装され、「関連する会話」一覧はその副次的な導線として開発順序的にまず簡易な実装（検索ログの完全一致 / 質問文のみのLIKE）で用意されたものであり、質問・回答の両方を検索対象とする左サイドパネル検索とは実装方針が異なる。
+
+**今後の方針**: この検索範囲の差は既知の暫定仕様であり、ZTボタン経由の「関連する会話」検索を将来的に `answer` 本文まで対象を広げ、左サイドパネル検索（`searchAiChatShares`）と同等の精度・カバレッジに揃える可能性がある。
+
 ---
 
 ## 14. `/answer-graph`（回答伝播グラフ）新規ページ
