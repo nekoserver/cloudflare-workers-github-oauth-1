@@ -982,6 +982,43 @@ input[type=search]:focus { border-color:var(--accent); }
     return results;
   }
 
+  // フォーカス中のキーワード(focusedKeyword)から、そのキーワードを含む回答
+  // (depth+1)を経由して繋がる次のキーワード層(depth+2)だけを抽出する。
+  // 一人称モードの↑ボタン(forwardFirstPerson)用。単純にdepth番号だけで
+  // フィルタすると、フォーカス中のキーワードとは無関係な別の枝にたまたま
+  // 同じdepthのキーワードが存在した場合にそちらへ「テレポート」してしまう
+  // ため、必ずグラフの辺(edges)を辿って実際に繋がっている先だけを返す。
+  function computeNextKeywordRing(posById, cx, cy, edges, focusedKeyword) {
+    var focusedDepth = focusedKeyword.depth;
+    var midAnswerIds = {};
+    (edges || []).forEach(function(e) {
+      var otherId = e.from === focusedKeyword.id ? e.to : (e.to === focusedKeyword.id ? e.from : null);
+      if (!otherId) return;
+      var p = posById[otherId];
+      if (p && p.node.type === 'answer' && p.node.depth === focusedDepth + 1) midAnswerIds[otherId] = true;
+    });
+    var nextKeywordIds = {};
+    (edges || []).forEach(function(e) {
+      if (midAnswerIds[e.from]) {
+        var p1 = posById[e.to];
+        if (p1 && p1.node.type === 'keyword' && p1.node.depth === focusedDepth + 2) nextKeywordIds[e.to] = true;
+      }
+      if (midAnswerIds[e.to]) {
+        var p2 = posById[e.from];
+        if (p2 && p2.node.type === 'keyword' && p2.node.depth === focusedDepth + 2) nextKeywordIds[e.from] = true;
+      }
+    });
+    var slots = [];
+    Object.keys(nextKeywordIds).forEach(function(id) {
+      var p = posById[id];
+      var dx = p.x - cx, dy = p.y - cy;
+      var bearingDeg = normalizeDeg360(Math.atan2(dy, dx) * 180 / Math.PI);
+      slots.push({ id: id, node: p.node, bearingDeg: bearingDeg });
+    });
+    slots.sort(function(a, b) { return a.bearingDeg - b.bearingDeg; });
+    return slots;
+  }
+
   function computeKeywordsByCategory(keywords) {
     var byCat = {};
     (keywords || []).forEach(function(kw) {
@@ -1228,19 +1265,30 @@ input[type=search]:focus { border-color:var(--accent); }
     focusNearKeyword(fpFocusIdx + direction);
   }
 
+  // フォーカス中のキーワード(fpNearKeywords[fpFocusIdx])から一層外側の
+  // キーワード層(depth+2。間の回答層depth+1は素通りする)へ視点を進める。
+  // 一層外のキーワードが無ければそこが行き止まり(壁)であり、現状のノードを
+  // 選択するだけで視点は動かさない。
   function forwardFirstPerson() {
-    if (!fpActive || !lastLayout) return;
-    var slots = computeFirstPersonSlots(lastLayout.posById, lastLayout.cx, lastLayout.cy, fpHeadingDeg, FP_FOV_DEG);
-    if (slots.length === 0) return;
-    var nearestCentered = null;
-    slots.forEach(function(slot) {
-      if (nearestCentered === null || Math.abs(slot.relativeDeg) < Math.abs(nearestCentered.relativeDeg)) {
-        nearestCentered = slot;
-      }
+    if (!fpActive || !lastLayout || !fpNearKeywords.length) return;
+    var focused = fpNearKeywords[fpFocusIdx];
+    if (!focused || !currentGraph) return;
+    var nextSlots = computeNextKeywordRing(lastLayout.posById, lastLayout.cx, lastLayout.cy, currentGraph.edges, focused.node);
+    if (nextSlots.length === 0) {
+      selectGraphNode(focused.node);
+      return;
+    }
+    fpNearKeywords = nextSlots;
+    var bestIdx = 0, bestDiff = Infinity;
+    nextSlots.forEach(function(slot, idx) {
+      var diff = Math.abs(normalizeDegSigned(slot.bearingDeg - fpHeadingDeg));
+      if (diff < bestDiff) { bestDiff = diff; bestIdx = idx; }
     });
-    if (!nearestCentered) return;
-    selectGraphNode(nearestCentered.node);
-    if (nearestCentered.node.type === 'answer') openAnswerModal(nearestCentered.node.id.slice(2));
+    fpFocusIdx = bestIdx;
+    fpHeadingDeg = fpNearKeywords[fpFocusIdx].bearingDeg;
+    renderFirstPersonView();
+    renderFilmstrip();
+    renderFpAnswerList();
   }
 
   function setFirstPersonActive(active) {
