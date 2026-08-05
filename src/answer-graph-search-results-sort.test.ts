@@ -60,6 +60,12 @@ describe('sortSearchResults: 検索結果の並べ替え', () => {
     expect(sorted.map((r) => r.id)).toEqual(['s3', 's1', 's2']);
   });
 
+  it("mode='date-asc'では質問日時の古い順(昇順)に並ぶ", () => {
+    const { sortSearchResults } = loadPureFns();
+    const sorted = sortSearchResults(sampleResults, 'date-asc');
+    expect(sorted.map((r) => r.id)).toEqual(['s1', 's3', 's2']);
+  });
+
   it('元の配列を破壊しない', () => {
     const { sortSearchResults } = loadPureFns();
     const original = sampleResults.map((r) => r.id);
@@ -112,6 +118,7 @@ async function setupSearchResultsTable() {
 
   return {
     searchKeywordCountTh: document.getElementById('searchKeywordCountTh')!,
+    searchDateTh: document.getElementById('searchDateTh')!,
     seedSearchResults: document.getElementById('seedSearchResults')!,
   };
 }
@@ -185,5 +192,25 @@ describe('一人称モード以前: 起点検索結果テーブルのDOM実動�
     const seedSearchResults = document.getElementById('seedSearchResults')!;
     const questions = Array.from(seedSearchResults.querySelectorAll('.search-result-question')).map((el) => el.textContent);
     expect(questions).toEqual(['質問2', '質問3', '質問1']);
+  });
+
+  it('「質問日時」thをクリックすると新しい順/古い順にトグルし、他の列も行ごと一緒に並べ替わる', async () => {
+    const { searchDateTh, seedSearchResults } = await setupSearchResultsTable();
+
+    searchDateTh.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    let questions = Array.from(seedSearchResults.querySelectorAll('.search-result-question')).map((el) => el.textContent);
+    let counts = Array.from(seedSearchResults.querySelectorAll('.search-result-count')).map((el) => el.textContent);
+    expect(questions).toEqual(['質問1', '質問3', '質問2']);
+    expect(counts).toEqual(['2', '0', '5']);
+
+    searchDateTh.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    questions = Array.from(seedSearchResults.querySelectorAll('.search-result-question')).map((el) => el.textContent);
+    expect(questions).toEqual(['質問2', '質問3', '質問1']);
+  });
+
+  it('「質問日時」thをクリックしても「キーワード数」列のソート状態には影響しない(キーワード数thの表示は🔑のまま)', async () => {
+    const { searchKeywordCountTh, searchDateTh } = await setupSearchResultsTable();
+    searchDateTh.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    expect(searchKeywordCountTh.textContent).toBe('🔑');
   });
 });

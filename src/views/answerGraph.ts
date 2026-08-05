@@ -95,7 +95,7 @@ main { flex:1; max-width:1100px; width:100%; margin:0 auto; padding:24px 16px; d
 .cat-quick-group-label.checked { background:color-mix(in srgb, var(--cat-quick-color, var(--border)) 15%, transparent); }
 .cat-quick-group-label input[type=radio] { cursor:pointer; margin:0; accent-color:var(--cat-quick-color, var(--accent)); }
 .cat-quick-cats { display:flex; flex-wrap:wrap; gap:8px; }
-.cat-quick-cat-select { background:var(--btn-bg); border:1px solid var(--btn-border); border-radius:6px; color:var(--fg); font-size:12px; padding:5px 8px; cursor:pointer; max-width:220px; }
+.cat-quick-cat-select { background:transparent; border:2px solid var(--btn-border); border-radius:6px; color:var(--fg); font-size:12px; padding:5px 8px; cursor:pointer; max-width:220px; }
 .search-row { display:flex; gap:8px; margin-bottom:10px; }
 input[type=search] { flex:1; background:var(--btn-bg); border:1px solid var(--btn-border); border-radius:6px; color:var(--fg); font-size:13px; padding:8px 12px; outline:none; }
 input[type=search]:focus { border-color:var(--accent); }
@@ -135,6 +135,13 @@ input[type=search]:focus { border-color:var(--accent); }
 .node-type-keyword { background:rgba(194,65,12,.15); color:var(--keyword-color); }
 .graph-status { font-size:12px; color:var(--label); margin-bottom:8px; }
 .graph-status.err { color:var(--danger); }
+.seed-loading-spinner {
+  display:none; position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); z-index:9999;
+  width:44px; height:44px; border-radius:50%; border:4px solid var(--border); border-top-color:var(--accent);
+  animation:seed-loading-spin .8s linear infinite; pointer-events:none;
+}
+.seed-loading-spinner.active { display:block; }
+@keyframes seed-loading-spin { to { transform:translate(-50%,-50%) rotate(360deg); } }
 .node-tooltip { position:absolute; z-index:500; max-width:260px; background:var(--card); border:1px solid var(--border); border-radius:8px; padding:10px 12px; font-size:12px; box-shadow:0 6px 20px rgba(0,0,0,.25); }
 .node-tooltip .node-type-label { margin-bottom:4px; }
 .question-line { cursor:pointer; text-decoration:none; }
@@ -232,7 +239,7 @@ input[type=search]:focus { border-color:var(--accent); }
         <thead>
           <tr>
             <th id="searchKeywordCountTh" class="sortable-th" tabindex="0" role="button" aria-label="キーワード総数で並べ替え" title="キーワード数">🔑</th>
-            <th>質問日時</th>
+            <th id="searchDateTh" class="sortable-th" tabindex="0" role="button" aria-label="質問日時で並べ替え">質問日時</th>
             <th>質問</th>
           </tr>
         </thead>
@@ -278,6 +285,7 @@ input[type=search]:focus { border-color:var(--accent); }
   </div>
 </main>
 <div class="node-tooltip" id="nodeTooltip" style="display:none;"></div>
+<div class="seed-loading-spinner" id="seedLoadingSpinner" role="status" aria-label="読み込み中"></div>
 <div class="answer-modal-backdrop" id="answerModalBackdrop" aria-hidden="true">
   <div class="answer-modal" role="dialog" aria-modal="true" aria-labelledby="answerModalTitle">
     <div class="answer-modal-head">
@@ -305,6 +313,8 @@ input[type=search]:focus { border-color:var(--accent); }
   var seedSearchStatus = document.getElementById('seedSearchStatus');
   var seedSearchResults = document.getElementById('seedSearchResults');
   var searchKeywordCountTh = document.getElementById('searchKeywordCountTh');
+  var searchDateTh = document.getElementById('searchDateTh');
+  var seedLoadingSpinner = document.getElementById('seedLoadingSpinner');
   var catQuickGroups = document.getElementById('catQuickGroups');
   var catQuickCats = document.getElementById('catQuickCats');
   var graphStatus = document.getElementById('graphStatus');
@@ -573,6 +583,8 @@ input[type=search]:focus { border-color:var(--accent); }
       arr.sort(function(a, b) { return (b.keywordCount || 0) - (a.keywordCount || 0); });
     } else if (mode === 'count-asc') {
       arr.sort(function(a, b) { return (a.keywordCount || 0) - (b.keywordCount || 0); });
+    } else if (mode === 'date-asc') {
+      arr.sort(function(a, b) { return new Date(a.created_at).getTime() - new Date(b.created_at).getTime(); });
     } else {
       arr.sort(function(a, b) { return new Date(b.created_at).getTime() - new Date(a.created_at).getTime(); });
     }
@@ -587,8 +599,11 @@ input[type=search]:focus { border-color:var(--accent); }
   }
 
   function updateSearchSortIndicator() {
-    var label = searchSortMode === 'count-desc' ? '🔑 ▼' : searchSortMode === 'count-asc' ? '🔑 ▲' : '🔑';
-    searchKeywordCountTh.textContent = label;
+    var countLabel = searchSortMode === 'count-desc' ? '🔑 ▼' : searchSortMode === 'count-asc' ? '🔑 ▲' : '🔑';
+    searchKeywordCountTh.textContent = countLabel;
+    var isDateMode = searchSortMode === 'date' || searchSortMode === 'date-asc';
+    var dateLabel = !isDateMode ? '質問日時' : (searchSortMode === 'date-asc' ? '質問日時 ▲' : '質問日時 ▼');
+    searchDateTh.textContent = dateLabel;
   }
 
   function renderSearchResultsTable() {
@@ -630,9 +645,19 @@ input[type=search]:focus { border-color:var(--accent); }
     renderSearchResultsTable();
   }
 
+  function cycleDateSortMode() {
+    searchSortMode = searchSortMode === 'date-asc' ? 'date' : 'date-asc';
+    renderSearchResultsTable();
+  }
+
   searchKeywordCountTh.addEventListener('click', cycleSearchSortMode);
   searchKeywordCountTh.addEventListener('keydown', function(e) {
     if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); cycleSearchSortMode(); }
+  });
+
+  searchDateTh.addEventListener('click', cycleDateSortMode);
+  searchDateTh.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); cycleDateSortMode(); }
   });
 
   function doSeedSearch(q) {
@@ -668,6 +693,7 @@ input[type=search]:focus { border-color:var(--accent); }
     cats.forEach(function(cat) {
       var select = document.createElement('select');
       select.className = 'cat-quick-cat-select';
+      select.style.borderColor = cat.color || '#6366f1';
       var placeholderOpt = document.createElement('option');
       placeholderOpt.value = '';
       placeholderOpt.textContent = cat.name + ' (' + (cat.kw_count || 0) + ')';
@@ -764,6 +790,7 @@ input[type=search]:focus { border-color:var(--accent); }
     graphStatus.textContent = '読み込み中...';
     graphStatus.className = 'graph-status';
     sidePanel.innerHTML = '<span class="empty-hint">ノードをクリックすると詳細がここに表示されます</span>';
+    seedLoadingSpinner.classList.add('active');
     fetch('/api/aichat/answer-propagation-graph', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -798,6 +825,9 @@ input[type=search]:focus { border-color:var(--accent); }
       .catch(function(err) {
         graphStatus.textContent = 'グラフの取得に失敗しました（通信エラー: ' + ((err && err.message) || '不明') + '）';
         graphStatus.className = 'graph-status err';
+      })
+      .then(function() {
+        seedLoadingSpinner.classList.remove('active');
       });
   }
 
