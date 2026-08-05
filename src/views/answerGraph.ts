@@ -88,8 +88,12 @@ main { flex:1; max-width:1100px; width:100%; margin:0 auto; padding:24px 16px; d
 .fp-hint { font-size:11px; color:var(--label); text-align:center; }
 .cat-quick-nav { margin-bottom:10px; }
 .cat-quick-groups { display:flex; flex-wrap:wrap; align-items:center; gap:10px 14px; margin-bottom:8px; }
-.cat-quick-group-label { display:inline-flex; align-items:center; gap:4px; font-size:12px; cursor:pointer; color:var(--fg); white-space:nowrap; }
-.cat-quick-group-label input[type=radio] { cursor:pointer; margin:0; }
+.cat-quick-group-label {
+  display:inline-flex; align-items:center; gap:5px; font-size:12px; cursor:pointer; color:var(--fg);
+  white-space:nowrap; padding:4px 12px; border-radius:999px; border:2px solid var(--border); background:transparent;
+}
+.cat-quick-group-label.checked { background:color-mix(in srgb, var(--cat-quick-color, var(--border)) 15%, transparent); }
+.cat-quick-group-label input[type=radio] { cursor:pointer; margin:0; accent-color:var(--cat-quick-color, var(--accent)); }
 .cat-quick-cats { display:flex; flex-wrap:wrap; gap:8px; }
 .cat-quick-cat-select { background:var(--btn-bg); border:1px solid var(--btn-border); border-radius:6px; color:var(--fg); font-size:12px; padding:5px 8px; cursor:pointer; max-width:220px; }
 .search-row { display:flex; gap:8px; margin-bottom:10px; }
@@ -687,18 +691,37 @@ input[type=search]:focus { border-color:var(--accent); }
     });
   }
 
+  // AIチャットページ(src/views/aichat.ts の getDailyStatsGroupColor)と同じ
+  // 大分類カテゴリ→色の対応を用いる。テンプレートリテラルが別ファイルに
+  // 分かれているため関数を共有できず、判定ロジックを複製している。
+  var CAT_QUICK_GROUP_COLOR_FALLBACK_PALETTE = ['#f59e0b', '#ec4899', '#a855f7', '#f97316', '#14b8a6', '#eab308'];
+  function getCatQuickGroupColor(name, index) {
+    var n = String(name || '');
+    if (n.indexOf('Travel') !== -1 || n.indexOf('旅行') !== -1) return '#38bdf8';
+    if (n.indexOf('Coding') !== -1 || n.indexOf('コーディング') !== -1 || n.indexOf('コード') !== -1) return '#86efac';
+    if (n.indexOf('MyApps') !== -1 || n.indexOf('My Apps') !== -1) return '#16a34a';
+    return CAT_QUICK_GROUP_COLOR_FALLBACK_PALETTE[index % CAT_QUICK_GROUP_COLOR_FALLBACK_PALETTE.length];
+  }
+
   function renderCatQuickGroups() {
     catQuickGroups.innerHTML = '';
     if (!catQuickData) return;
     var groups = sortByKwCountDesc(catQuickData.groups);
-    groups.forEach(function(g) {
+    groups.forEach(function(g, gi) {
+      var color = getCatQuickGroupColor(g.group_name, gi);
       var label = document.createElement('label');
       label.className = 'cat-quick-group-label';
+      label.style.setProperty('--cat-quick-color', color);
+      label.style.borderColor = color;
       var radio = document.createElement('input');
       radio.type = 'radio';
       radio.name = 'catQuickGroupRadio';
       radio.value = g.id;
-      radio.addEventListener('change', function() { renderCatQuickCats(g); });
+      radio.addEventListener('change', function() {
+        catQuickGroups.querySelectorAll('.cat-quick-group-label').forEach(function(el) { el.classList.remove('checked'); });
+        label.classList.add('checked');
+        renderCatQuickCats(g);
+      });
       label.appendChild(radio);
       var span = document.createElement('span');
       span.textContent = '(' + (g.kw_count || 0) + ') ' + g.group_name;
