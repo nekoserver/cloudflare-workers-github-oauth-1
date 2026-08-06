@@ -91,6 +91,19 @@ main { flex:1; max-width:1100px; width:100%; margin:0 auto; padding:24px 16px; d
 .fp-btn-backward { width:40px; height:40px; font-size:16px; }
 .fp-hint { font-size:11px; color:var(--label); text-align:center; }
 .cat-quick-nav { margin-bottom:10px; }
+.bridge-sample { margin-bottom:14px; border:1px dashed var(--border); border-radius:8px; background:color-mix(in srgb, var(--accent) 5%, transparent); }
+.bridge-sample summary { padding:9px 11px; cursor:pointer; font-size:12px; font-weight:600; color:var(--fg); }
+.bridge-sample-body { padding:0 11px 11px; display:flex; flex-direction:column; gap:8px; }
+.bridge-sample-intro { color:var(--label); font-size:11px; line-height:1.55; }
+.bridge-sample-route { display:grid; grid-template-columns:1fr auto 1fr; gap:8px; align-items:stretch; }
+.bridge-sample-endpoint, .bridge-sample-step { border:1px solid var(--border); border-radius:7px; padding:8px 10px; background:var(--card); }
+.bridge-sample-endpoint strong, .bridge-sample-step strong { display:block; margin-bottom:3px; font-size:11px; color:var(--accent); }
+.bridge-sample-endpoint p, .bridge-sample-step p { font-size:11px; line-height:1.45; }
+.bridge-sample-arrow { align-self:center; color:var(--label); }
+.bridge-sample-steps { display:grid; grid-template-columns:repeat(3,1fr); gap:7px; }
+.bridge-sample-search { margin-top:6px; border:1px solid var(--btn-border); border-radius:999px; padding:3px 8px; background:var(--btn-bg); color:var(--fg); cursor:pointer; font-size:10px; }
+.bridge-sample-search:hover { border-color:var(--accent); background:var(--btn-hover); }
+@media (max-width:700px) { .bridge-sample-route, .bridge-sample-steps { grid-template-columns:1fr; } .bridge-sample-arrow { transform:rotate(90deg); justify-self:center; } }
 .cat-quick-groups { display:flex; flex-wrap:wrap; align-items:center; gap:10px 14px; margin-bottom:8px; }
 .cat-quick-group-label {
   display:inline-flex; align-items:center; gap:5px; font-size:12px; cursor:pointer; color:var(--fg);
@@ -301,6 +314,22 @@ input[type=search]:focus { border-color:var(--accent); }
 <main>
   <div class="card">
     <div class="card-title">起点にする回答を検索</div>
+    <details class="bridge-sample" id="bridgeQuestionSample">
+      <summary>🧩 サンプル: 起点と終点を「補足知識を得る質問」でつなぐ</summary>
+      <div class="bridge-sample-body">
+        <p class="bridge-sample-intro">AIが先に置いた2つの質問/回答を、結論を直接言わせる質問ではなく、間に不足している前提・仕組み・判断基準を答えさせる質問でつなぐ例です。各ボタンは、その補足回答が既存の回答グラフにあるかを検索します。</p>
+        <div class="bridge-sample-route">
+          <div class="bridge-sample-endpoint"><strong>起点 Q/A</strong><p>Q: OAuthでは、なぜパスワードを外部アプリへ渡さずに済む？<br>A: 認可サーバーが、限定された権限のアクセストークンを発行するため。</p></div>
+          <span class="bridge-sample-arrow" aria-hidden="true">→</span>
+          <div class="bridge-sample-endpoint"><strong>終点 Q/A</strong><p>Q: GitHub OAuthのコールバックで state を検証するのはなぜ？<br>A: 認可を始めたブラウザと戻ってきたリクエストを結び、ログインCSRFを防ぐため。</p></div>
+        </div>
+        <div class="bridge-sample-steps">
+          <div class="bridge-sample-step"><strong>補足質問 1: 前提</strong><p>OAuthの認可コードフローでは、ブラウザ・アプリ・認可サーバーの間で何が受け渡される？</p><button type="button" class="bridge-sample-search" data-search-keyword="認可コードフロー">「認可コードフロー」を探索</button></div>
+          <div class="bridge-sample-step"><strong>補足質問 2: 脅威</strong><p>攻撃者が自分の認可レスポンスを被害者のブラウザに処理させると、何が起きる？</p><button type="button" class="bridge-sample-search" data-search-keyword="ログインCSRF">「ログインCSRF」を探索</button></div>
+          <div class="bridge-sample-step"><strong>補足質問 3: 接続原理</strong><p>ランダムな state は、認可開始時とコールバック時をどのように対応付ける？</p><button type="button" class="bridge-sample-search" data-search-keyword="state検証">「state検証」を探索</button></div>
+        </div>
+      </div>
+    </details>
     <div class="cat-quick-nav">
       <div class="cat-quick-groups" id="catQuickGroups"></div>
       <div class="cat-quick-cats" id="catQuickCats"></div>
@@ -414,6 +443,7 @@ input[type=search]:focus { border-color:var(--accent); }
   var selectionTrailBar = document.getElementById('selectionTrailBar');
   var catQuickGroups = document.getElementById('catQuickGroups');
   var catQuickCats = document.getElementById('catQuickCats');
+  var bridgeQuestionSample = document.getElementById('bridgeQuestionSample');
   var graphStatus = document.getElementById('graphStatus');
   var canvas = document.getElementById('graphCanvas');
   var ctx = canvas.getContext('2d');
@@ -1113,6 +1143,18 @@ input[type=search]:focus { border-color:var(--accent); }
     resetSelectionTrail();
     if (!q) { seedSearchStatus.textContent = ''; searchResultsRaw = []; renderSearchResultsTable(); return; }
     searchTimer = setTimeout(function() { doSeedSearch(q); }, 350);
+  });
+
+  // サンプルの補足質問は通常のキーワード選択と同じ探索ループへ合流させる。
+  bridgeQuestionSample.addEventListener('click', function(e) {
+    var button = e.target.closest && e.target.closest('[data-search-keyword]');
+    if (!button) return;
+    var keyword = button.getAttribute('data-search-keyword');
+    if (!keyword) return;
+    seedSearchInput.value = keyword;
+    resetSelectionTrail();
+    pushTrailKeyword(keyword);
+    doSeedSearch(keyword);
   });
 
   // ===== 大分類/中分類からのキーワードすばやい絞り込み =====

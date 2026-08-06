@@ -43,6 +43,7 @@
 | 🧭絞り込みモーダル | `computeNarrowingKeywordCandidates` / `renderNarrowModal` | 検索結果全体から次に選べるキーワードを出現回数順に提案する、ステップ5の別入口 |
 | ノード半径 | `computeAnswerNodeRadius` / `computeKeywordNodeRadius` | 俯瞰ビューでキーワードが多い回答(オアシス)・よく使われるキーワードを大きく描く |
 | パン屑リスト(選択履歴の足跡) | `computeTrailAfterJump` / `renderSelectionTrail` 等(詳細は4.1) | ステップ1〜6の選択のたびに足跡を`#selectionTrailBar`へ積み、巻き戻しを可能にする |
+| 橋渡し質問サンプル | `#bridgeQuestionSample` | AIが用意した起点/終点Q&Aの間で「前提・脅威・接続原理」を答えさせる補足質問の作り方を示す。探索ボタンは通常のキーワード検索へ合流する |
 
 ## 3. データフローの前提
 
