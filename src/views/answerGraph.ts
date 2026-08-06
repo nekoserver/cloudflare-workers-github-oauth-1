@@ -166,6 +166,24 @@ input[type=search]:focus { border-color:var(--accent); }
   background:var(--btn-bg); color:var(--fg); cursor:pointer;
 }
 .answer-keyword-chip:hover { background:var(--btn-hover); border-color:var(--accent); }
+.trail-bar {
+  display:none; flex-wrap:wrap; align-items:center; gap:4px;
+  margin-bottom:8px; font-size:12px;
+}
+.trail-bar.visible { display:flex; }
+.trail-chip {
+  padding:3px 9px; border-radius:999px; border:1px solid var(--btn-border);
+  background:var(--btn-bg); color:var(--fg); cursor:pointer; font-size:12px;
+}
+.trail-chip:hover { background:var(--btn-hover); border-color:var(--accent); }
+.trail-chip.trail-chip-seed { border-radius:6px; font-weight:600; }
+.trail-chip.trail-chip-current { cursor:default; background:var(--accent); color:#fff; border-color:var(--accent); }
+.trail-sep { color:var(--label); }
+.trail-clear-btn {
+  margin-left:4px; padding:2px 8px; border-radius:6px; border:1px solid var(--btn-border);
+  background:transparent; color:var(--label); cursor:pointer; font-size:11px;
+}
+.trail-clear-btn:hover { background:var(--btn-hover); color:var(--fg); }
 .narrow-modal-backdrop {
   position:fixed; inset:0; z-index:1100; display:none;
   align-items:center; justify-content:center; padding:28px 16px;
@@ -278,6 +296,7 @@ input[type=search]:focus { border-color:var(--accent); }
       <div class="cat-quick-groups" id="catQuickGroups"></div>
       <div class="cat-quick-cats" id="catQuickCats"></div>
     </div>
+    <div class="trail-bar" id="selectionTrailBar"></div>
     <div class="search-row">
       <input type="search" id="seedSearchInput" placeholder="質問・回答のキーワードで検索..." autocomplete="off">
     </div>
@@ -383,6 +402,7 @@ input[type=search]:focus { border-color:var(--accent); }
   var narrowModalClose = document.getElementById('narrowModalClose');
   var narrowModalBody = document.getElementById('narrowModalBody');
   var answerKeywordsBar = document.getElementById('answerKeywordsBar');
+  var selectionTrailBar = document.getElementById('selectionTrailBar');
   var catQuickGroups = document.getElementById('catQuickGroups');
   var catQuickCats = document.getElementById('catQuickCats');
   var graphStatus = document.getElementById('graphStatus');
@@ -420,6 +440,11 @@ input[type=search]:focus { border-color:var(--accent); }
   var searchResultsRaw = [];
   var searchSortMode = 'date';
   var selectedShareId = null;
+  // パン屑リスト(選択履歴の足跡)。中分類キーワード選択・回答文キーワード
+  // バー・🧭絞り込みモーダルからのキーワード選択(2.→6.のループ)と、
+  // 検索結果行の選択(起点確定・以後のフォーカス移動)を記録する。
+  // 各要素: { type: 'keyword' | 'seed', label: string, id?: string(seedのみ) }
+  var selectionTrail = [];
   var nodePositions = [];
   var currentGraph = null;
   var lastLayout = null;
@@ -738,6 +763,7 @@ input[type=search]:focus { border-color:var(--accent); }
         selectedShareId = r.id;
         seedSearchResults.querySelectorAll('.search-result-row').forEach(function(el) { el.classList.remove('selected'); });
         row.classList.add('selected');
+        pushTrailSeed(r.id, r.question);
         loadGraph(r.id);
       });
       seedSearchResults.appendChild(row);
@@ -764,6 +790,71 @@ input[type=search]:focus { border-color:var(--accent); }
   searchDateTh.addEventListener('keydown', function(e) {
     if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); cycleDateSortMode(); }
   });
+
+  // パン屑リスト: index番目の足跡までに巻き戻した配列を返す(それ以降は破棄)。
+  function computeTrailAfterJump(trail, index) {
+    return (trail || []).slice(0, index + 1);
+  }
+
+  function renderSelectionTrail() {
+    selectionTrailBar.innerHTML = '';
+    if (!selectionTrail.length) { selectionTrailBar.classList.remove('visible'); return; }
+    selectionTrailBar.classList.add('visible');
+    selectionTrail.forEach(function(entry, i) {
+      if (i > 0) {
+        var sep = document.createElement('span');
+        sep.className = 'trail-sep';
+        sep.textContent = '›';
+        selectionTrailBar.appendChild(sep);
+      }
+      var isCurrent = i === selectionTrail.length - 1;
+      var chip = document.createElement('button');
+      chip.type = 'button';
+      chip.className = 'trail-chip' + (entry.type === 'seed' ? ' trail-chip-seed' : '') + (isCurrent ? ' trail-chip-current' : '');
+      chip.textContent = (entry.type === 'seed' ? '📄 ' : '') + entry.label;
+      chip.disabled = isCurrent;
+      chip.addEventListener('click', function() { jumpToTrailIndex(i); });
+      selectionTrailBar.appendChild(chip);
+    });
+    var clearBtn = document.createElement('button');
+    clearBtn.type = 'button';
+    clearBtn.className = 'trail-clear-btn';
+    clearBtn.textContent = '✕ クリア';
+    clearBtn.addEventListener('click', resetSelectionTrail);
+    selectionTrailBar.appendChild(clearBtn);
+  }
+
+  function pushTrailKeyword(keyword) {
+    selectionTrail.push({ type: 'keyword', label: keyword });
+    renderSelectionTrail();
+  }
+
+  function pushTrailSeed(shareId, question) {
+    selectionTrail.push({ type: 'seed', label: question, id: shareId });
+    renderSelectionTrail();
+  }
+
+  function resetSelectionTrail() {
+    selectionTrail = [];
+    renderSelectionTrail();
+  }
+
+  // パン屑の足跡(index)をタップして巻き戻し、その時点の状態を再現する。
+  // 巻き戻し自体は新たな足跡を積まない(doSeedSearch/loadGraphの呼び出しは
+  // 検索・グラフ再構築のみを行い、足跡の記録は選択時点でのみ行う)。
+  function jumpToTrailIndex(index) {
+    selectionTrail = computeTrailAfterJump(selectionTrail, index);
+    var entry = selectionTrail[selectionTrail.length - 1];
+    renderSelectionTrail();
+    if (!entry) return;
+    if (entry.type === 'seed') {
+      selectedShareId = entry.id;
+      loadGraph(entry.id);
+    } else {
+      seedSearchInput.value = entry.label;
+      doSeedSearch(entry.label);
+    }
+  }
 
   function doSeedSearch(q) {
     seedSearchStatus.textContent = '検索中...';
@@ -809,6 +900,7 @@ input[type=search]:focus { border-color:var(--accent); }
       chip.addEventListener('click', function() {
         seedSearchInput.value = slot.node.label;
         seedSearchStatus.textContent = '検索中...';
+        pushTrailKeyword(slot.node.label);
         doSeedSearch(slot.node.label);
       });
       answerKeywordsBar.appendChild(chip);
@@ -839,6 +931,7 @@ input[type=search]:focus { border-color:var(--accent); }
       chip.textContent = c.keyword + ' (' + c.count + ')';
       chip.addEventListener('click', function() {
         seedSearchInput.value = c.keyword;
+        pushTrailKeyword(c.keyword);
         doSeedSearch(c.keyword);
       });
       narrowModalBody.appendChild(chip);
@@ -866,6 +959,8 @@ input[type=search]:focus { border-color:var(--accent); }
   seedSearchInput.addEventListener('input', function() {
     var q = seedSearchInput.value.trim();
     clearTimeout(searchTimer);
+    // 手入力検索はループ外の操作のため、パン屑の足跡をリセットする
+    resetSelectionTrail();
     if (!q) { seedSearchStatus.textContent = ''; searchResultsRaw = []; renderSearchResultsTable(); return; }
     searchTimer = setTimeout(function() { doSeedSearch(q); }, 350);
   });
@@ -899,6 +994,8 @@ input[type=search]:focus { border-color:var(--accent); }
         var chosen = select.value;
         seedSearchInput.value = chosen;
         seedSearchStatus.textContent = '検索中...';
+        resetSelectionTrail();
+        pushTrailKeyword(chosen);
         doSeedSearch(chosen);
         select.value = '';
       });
