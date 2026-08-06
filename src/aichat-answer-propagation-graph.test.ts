@@ -92,6 +92,72 @@ function insertKeyword(db: DatabaseSync, userId: string, keyword: string, shareI
   ).run(userId, keyword, shareId, count, '2026-01-01T00:00:00.000Z');
 }
 
+function wrapD1CountingInstrQueries(db: DatabaseSync, counter: { count: number }) {
+  return {
+    prepare(sql: string) {
+      const stmt = db.prepare(sql);
+      if (sql.includes('INSTR(question')) counter.count++;
+      return {
+        bind(...args: unknown[]) {
+          return {
+            async all<T>(): Promise<{ results?: T[] }> {
+              const rows = stmt.all(...(args as never[])) as unknown as T[];
+              return { results: rows };
+            },
+          };
+        },
+      };
+    },
+  };
+}
+
+describe('findSharesContainingKeyword(s): DBへの負荷(クエリ発行回数)', () => {
+  // 対象: 各層のキーワードごとにai_chat_sharesを部分一致(INSTR)でフルスキャン
+  // する既存実装は、キーワード数に比例してD1へのクエリ発行回数が増える
+  // N+1問題を抱えていた。ユーザー報告(質問に紐づくキーワードが多いケースで
+  // DB負荷が高くグラフ取得が503になる)を受け、同一層のキーワードはまとめて
+  // 1回(またはバインド上限に収まる少数回)のクエリで処理されるようにする。
+  //
+  // 故障シナリオ:
+  //   (1) キーワード数が増えるとINSTR検索クエリの発行回数も比例して増え続ける
+  //       (バッチ化されていない)
+  //   (2) バッチ化した結果、キーワードごとの取得件数上限(maxAnswersPerKeyword)
+  //       が効かなくなる、または取得内容が個別クエリ時と食い違う
+
+  it('第2層以降のキーワードが多数あっても、INSTR検索のクエリ発行回数はキーワード数に比例して増えない', async () => {
+    const db = setupDb();
+    insertShare(db, 's1', 'u1', '起点の質問', '起点語 についての回答');
+    insertShare(db, 's2', 'u1', '関連質問', '起点語 を含む別の回答');
+    insertKeyword(db, 'u1', '起点語', 's1');
+    const kwCount = 20;
+    for (let i = 1; i <= kwCount; i++) {
+      insertKeyword(db, 'u1', '深い語' + String(i).padStart(2, '0'), 's2');
+    }
+
+    const counter = { count: 0 };
+    const wrapped = wrapD1CountingInstrQueries(db, counter);
+    await buildAnswerPropagationGraph(wrapped as never, 'u1', 's1', { maxKeywordsPerLayer: kwCount });
+
+    // キーワード数(20件)より明らかに少ない回数(バインド上限に収まる
+    // チャンク単位)でなければバッチ化されていない
+    expect(counter.count).toBeLessThan(kwCount);
+  });
+
+  it('バッチ化してもキーワードごとのmaxAnswersPerKeywordの上限は維持される', async () => {
+    const db = setupDb();
+    insertShare(db, 's1', 'u1', '起点の質問', '共通語 についての回答');
+    insertKeyword(db, 'u1', '共通語', 's1');
+    for (let i = 1; i <= 5; i++) {
+      insertShare(db, 'm' + i, 'u1', '共通語を含む回答' + i, '共通語 を含みます' + i, '2026-01-0' + i + 'T00:00:00.000Z');
+    }
+
+    const result = await buildAnswerPropagationGraph(wrapD1(db) as never, 'u1', 's1', { maxAnswersPerKeyword: 2 });
+
+    const depth2Answers = result!.nodes.filter((n) => n.type === 'answer' && n.depth === 2);
+    expect(depth2Answers.length).toBeLessThanOrEqual(2);
+  });
+});
+
 describe('buildAnswerPropagationGraph: 回答伝播グラフの構築', () => {
   it('起点の回答が存在しない場合は null を返す', async () => {
     const db = setupDb();
