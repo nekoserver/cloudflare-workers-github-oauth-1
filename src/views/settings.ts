@@ -30,6 +30,7 @@ export function getSettingsPage(user: {
   aichatAutoVectorizeEnabled?: string;
   aichatAutoVectorizeModel?: string;
   answerGraphHideEmptyRows?: string;
+  answerGraphTrailSessionStorage?: string;
   emailConfirmLoginEnabled?: boolean;
   githubScopes?: string;
   githubGrantedScopes?: string[] | null;
@@ -61,6 +62,7 @@ export function getSettingsPage(user: {
     ? (user.aichatAutoVectorizeModel as string)
     : '@cf/pfnet/plamo-embedding-1b';
   const currentAnswerGraphHideEmptyRows = user.answerGraphHideEmptyRows === 'off' ? 'off' : 'on';
+  const currentAnswerGraphTrailSessionStorage = user.answerGraphTrailSessionStorage === 'on' ? 'on' : 'off';
   const currentEmailConfirmLoginEnabled = user.emailConfirmLoginEnabled === true;
   const requestedScopes = user.githubScopes ? user.githubScopes.split(/\s+/).filter(Boolean) : [];
   const grantedScopes = user.githubGrantedScopes ?? null;
@@ -673,6 +675,17 @@ export function getSettingsPage(user: {
               <label class="theme-toggle-switch">
                 <input type="checkbox" id="answerGraphHideEmptyRowsCheckbox" onchange="onAnswerGraphHideEmptyRowsChange()"
                   ${currentAnswerGraphHideEmptyRows === 'on' ? 'checked' : ''}>
+                <span class="theme-toggle-slider"></span>
+              </label>
+            </div>
+          </div>
+          <div class="info-item">
+            <span class="info-label">answer-graph: パン屑リスト(選択履歴の足跡)をブラウザのsessionStorageに保存し、リロード後も復元する(足跡には検索履歴・回答内容に由来する情報が含まれます。デフォルトOFF、同意の上でONにしてください)</span>
+            <div class="setting-control" style="justify-content: flex-end;">
+              <span class="theme-label" id="answerGraphTrailSessionStorageLabel">${currentAnswerGraphTrailSessionStorage === 'on' ? 'ON' : 'OFF'}</span>
+              <label class="theme-toggle-switch">
+                <input type="checkbox" id="answerGraphTrailSessionStorageCheckbox" onchange="onAnswerGraphTrailSessionStorageChange()"
+                  ${currentAnswerGraphTrailSessionStorage === 'on' ? 'checked' : ''}>
                 <span class="theme-toggle-slider"></span>
               </label>
             </div>
@@ -1561,6 +1574,25 @@ export function getSettingsPage(user: {
         if (!res.ok) throw new Error('failed');
       } catch(e) {
         alert('answer-graphの空行非表示設定の変更に失敗しました');
+        cb.checked = !cb.checked;
+        label.textContent = cb.checked ? 'ON' : 'OFF';
+      }
+    }
+
+    async function onAnswerGraphTrailSessionStorageChange() {
+      var cb = document.getElementById('answerGraphTrailSessionStorageCheckbox');
+      var label = document.getElementById('answerGraphTrailSessionStorageLabel');
+      var enabled = cb.checked;
+      var mode = enabled ? 'on' : 'off';
+      label.textContent = enabled ? 'ON' : 'OFF';
+      try {
+        var res = await fetch('/api/settings/answer-graph-trail-session-storage', {
+          method: 'POST', headers: {'Content-Type':'application/json'}, credentials: 'include',
+          body: JSON.stringify({ mode })
+        });
+        if (!res.ok) throw new Error('failed');
+      } catch(e) {
+        alert('answer-graphのパン屑リストのsessionStorage保存設定の変更に失敗しました');
         cb.checked = !cb.checked;
         label.textContent = cb.checked ? 'ON' : 'OFF';
       }

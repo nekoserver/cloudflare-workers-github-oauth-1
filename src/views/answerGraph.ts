@@ -4,10 +4,11 @@ function escAG(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
-export function getAnswerGraphPage(username: string, modelColors: Record<string, string> = {}, hideEmptyRowsDefault: boolean = true): string {
+export function getAnswerGraphPage(username: string, modelColors: Record<string, string> = {}, hideEmptyRowsDefault: boolean = true, trailSessionStorageDefault: boolean = false): string {
   const safeUser = escAG(username);
   const modelColorsJson = JSON.stringify(modelColors);
   const hideEmptyRowsDefaultJs = hideEmptyRowsDefault ? 'true' : 'false';
+  const trailSessionStorageDefaultJs = trailSessionStorageDefault ? 'true' : 'false';
   return `<!DOCTYPE html>
 <html lang="ja">
 <head>
@@ -423,6 +424,7 @@ input[type=search]:focus { border-color:var(--accent); }
   var answerModalHighlightToggleBtn = document.getElementById('answerModalHighlightToggleBtn');
   var MODEL_COLORS = ${modelColorsJson};
   var hideEmptyRowsSetting = ${hideEmptyRowsDefaultJs};
+  var trailSessionStorageSetting = ${trailSessionStorageDefaultJs};
   var fpToggleBtn = document.getElementById('fpToggleBtn');
   var fpView = document.getElementById('fpView');
   var fpHere = document.getElementById('fpHere');
@@ -796,7 +798,36 @@ input[type=search]:focus { border-color:var(--accent); }
     return (trail || []).slice(0, index + 1);
   }
 
+  // パン屑リストのsessionStorage保存キー。足跡には検索履歴・回答内容に
+  // 由来する情報が含まれるため、設定ページで明示的に同意(ON)した場合のみ
+  // 書き込む。同意していない場合は保存しないだけでなく、既に残っている
+  // 過去データがあれば消す(同意の取り消しを尊重する)。
+  var TRAIL_SESSION_STORAGE_KEY = 'answerGraphSelectionTrail';
+
+  function persistSelectionTrail() {
+    if (!trailSessionStorageSetting) {
+      try { sessionStorage.removeItem(TRAIL_SESSION_STORAGE_KEY); } catch (e) {}
+      return;
+    }
+    try { sessionStorage.setItem(TRAIL_SESSION_STORAGE_KEY, JSON.stringify(selectionTrail)); } catch (e) {}
+  }
+
+  function restoreSelectionTrail() {
+    if (!trailSessionStorageSetting) {
+      try { sessionStorage.removeItem(TRAIL_SESSION_STORAGE_KEY); } catch (e) {}
+      return;
+    }
+    try {
+      var raw = sessionStorage.getItem(TRAIL_SESSION_STORAGE_KEY);
+      if (!raw) return;
+      var parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) selectionTrail = parsed;
+    } catch (e) {}
+    renderSelectionTrail();
+  }
+
   function renderSelectionTrail() {
+    persistSelectionTrail();
     selectionTrailBar.innerHTML = '';
     if (!selectionTrail.length) { selectionTrailBar.classList.remove('visible'); return; }
     selectionTrailBar.classList.add('visible');
@@ -1846,6 +1877,7 @@ input[type=search]:focus { border-color:var(--accent); }
   });
 
   loadCatQuickNav();
+  restoreSelectionTrail();
   drawGraph();
 })();
 </script>
