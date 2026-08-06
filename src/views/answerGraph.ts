@@ -149,6 +149,39 @@ input[type=search]:focus { border-color:var(--accent); }
 .node-tooltip .node-type-label { margin-bottom:4px; }
 .question-line { cursor:pointer; text-decoration:none; }
 .question-line:hover { color:var(--accent); }
+.narrow-keywords-btn {
+  margin-top:6px; padding:6px 12px; font-size:12px; border-radius:6px; border:1px solid var(--btn-border);
+  background:var(--btn-bg); color:var(--fg); cursor:pointer;
+}
+.narrow-keywords-btn:hover { background:var(--btn-hover); }
+.narrow-modal-backdrop {
+  position:fixed; inset:0; z-index:1100; display:none;
+  align-items:center; justify-content:center; padding:28px 16px;
+  background:rgba(15,23,42,.48); backdrop-filter:blur(4px);
+}
+.narrow-modal-backdrop.open { display:flex; }
+.narrow-modal {
+  width:min(480px,100%); max-height:min(70vh,600px);
+  background:var(--bg); border:1px solid var(--border); border-radius:16px;
+  box-shadow:0 24px 80px rgba(0,0,0,.28); display:flex; flex-direction:column; overflow:hidden;
+}
+.narrow-modal-head {
+  flex-shrink:0; display:flex; align-items:center; justify-content:space-between; gap:8px;
+  padding:10px 16px; background:var(--card); border-bottom:1px solid var(--border);
+  font-size:13px; font-weight:700; color:var(--fg);
+}
+.narrow-modal-head button {
+  width:30px; height:30px; border:none; border-radius:8px; flex-shrink:0;
+  background:transparent; color:var(--label); cursor:pointer; font-size:18px; line-height:1;
+}
+.narrow-modal-head button:hover { background:var(--btn-hover); }
+.narrow-modal-body { padding:14px 16px; overflow-y:auto; display:flex; flex-wrap:wrap; gap:8px; align-content:flex-start; }
+.narrow-modal-empty { font-size:12px; color:var(--label); }
+.narrow-modal-chip {
+  padding:6px 12px; font-size:12px; border-radius:999px; border:1px solid var(--btn-border);
+  background:transparent; color:var(--fg); cursor:pointer;
+}
+.narrow-modal-chip:hover { background:var(--btn-hover); border-color:var(--accent); }
 .answer-modal-backdrop {
   position:fixed; inset:0; z-index:1000; display:none;
   align-items:center; justify-content:center; padding:28px 16px;
@@ -237,6 +270,7 @@ input[type=search]:focus { border-color:var(--accent); }
       <input type="search" id="seedSearchInput" placeholder="質問・回答のキーワードで検索..." autocomplete="off">
     </div>
     <div class="search-status" id="seedSearchStatus"></div>
+    <button type="button" class="narrow-keywords-btn" id="narrowKeywordsBtn" title="ロード中のグラフ内で、経路が判明している質問の回答文に含まれるキーワードを出現回数順に提案します">🧭 キーワードで絞り込む</button>
     <div class="search-results-wrap">
       <table class="search-results-table">
         <thead>
@@ -314,6 +348,15 @@ input[type=search]:focus { border-color:var(--accent); }
     </div>
   </div>
 </div>
+<div class="narrow-modal-backdrop" id="narrowModalBackdrop" aria-hidden="true">
+  <div class="narrow-modal" role="dialog" aria-modal="true" aria-labelledby="narrowModalTitle">
+    <div class="narrow-modal-head">
+      <span id="narrowModalTitle">🧭 次に絞り込めるキーワード</span>
+      <button type="button" id="narrowModalClose" aria-label="閉じる">✕</button>
+    </div>
+    <div class="narrow-modal-body" id="narrowModalBody"></div>
+  </div>
+</div>
 <script>
 (function() {
   var seedSearchInput = document.getElementById('seedSearchInput');
@@ -322,6 +365,10 @@ input[type=search]:focus { border-color:var(--accent); }
   var searchKeywordCountTh = document.getElementById('searchKeywordCountTh');
   var searchDateTh = document.getElementById('searchDateTh');
   var seedLoadingSpinner = document.getElementById('seedLoadingSpinner');
+  var narrowKeywordsBtn = document.getElementById('narrowKeywordsBtn');
+  var narrowModalBackdrop = document.getElementById('narrowModalBackdrop');
+  var narrowModalClose = document.getElementById('narrowModalClose');
+  var narrowModalBody = document.getElementById('narrowModalBody');
   var catQuickGroups = document.getElementById('catQuickGroups');
   var catQuickCats = document.getElementById('catQuickCats');
   var graphStatus = document.getElementById('graphStatus');
@@ -699,9 +746,60 @@ input[type=search]:focus { border-color:var(--accent); }
         searchResultsRaw = results;
         searchSortMode = 'date';
         renderSearchResultsTable();
+        // 絞り込みモーダルを開いたままキーワードを選んだ場合、検索結果の
+        // 更新に合わせてモーダルの候補キーワードも再計算する(1.→3.の繰り返し)。
+        if (narrowModalBackdrop.classList.contains('open')) renderNarrowModal();
       })
       .catch(function() { seedSearchStatus.textContent = '検索エラー'; });
   }
+
+  function renderNarrowModal() {
+    narrowModalBody.innerHTML = '';
+    if (!lastLayout || !currentGraph) {
+      var noGraph = document.createElement('div');
+      noGraph.className = 'narrow-modal-empty';
+      noGraph.textContent = 'まず起点となる質問を選んでグラフを読み込んでください';
+      narrowModalBody.appendChild(noGraph);
+      return;
+    }
+    var candidates = computeNarrowingKeywordCandidates(searchResultsRaw, lastLayout.posById, lastLayout.cx, lastLayout.cy, currentGraph.edges, keywordCountMap);
+    if (!candidates.length) {
+      var empty = document.createElement('div');
+      empty.className = 'narrow-modal-empty';
+      empty.textContent = '絞り込みに使えるキーワードがありません';
+      narrowModalBody.appendChild(empty);
+      return;
+    }
+    candidates.forEach(function(c) {
+      var chip = document.createElement('button');
+      chip.type = 'button';
+      chip.className = 'narrow-modal-chip';
+      chip.textContent = c.keyword + ' (' + c.count + ')';
+      chip.addEventListener('click', function() {
+        seedSearchInput.value = c.keyword;
+        doSeedSearch(c.keyword);
+      });
+      narrowModalBody.appendChild(chip);
+    });
+  }
+
+  function openNarrowModal() {
+    renderNarrowModal();
+    narrowModalBackdrop.classList.add('open');
+    narrowModalBackdrop.setAttribute('aria-hidden', 'false');
+  }
+
+  function closeNarrowModal() {
+    narrowModalBackdrop.classList.remove('open');
+    narrowModalBackdrop.setAttribute('aria-hidden', 'true');
+  }
+
+  narrowKeywordsBtn.addEventListener('click', openNarrowModal);
+  narrowModalClose.addEventListener('click', closeNarrowModal);
+  narrowModalBackdrop.addEventListener('click', function(e) { if (e.target === narrowModalBackdrop) closeNarrowModal(); });
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape' && narrowModalBackdrop.classList.contains('open')) closeNarrowModal();
+  });
 
   seedSearchInput.addEventListener('input', function() {
     var q = seedSearchInput.value.trim();
@@ -989,6 +1087,33 @@ input[type=search]:focus { border-color:var(--accent); }
     });
     slots.sort(function(a, b) { return a.bearingDeg - b.bearingDeg; });
     return slots;
+  }
+
+  // 検索結果(rows)から絞り込みキーワード候補を求める。
+  //   1. 経路が「ー」(=ロード済みグラフにまだ含まれない)行は除外する
+  //   2. 残った各行(質問)の回答文に含まれるキーワードをすべて集めて重複削除する
+  //   3. 各キーワードのAIチャットページでの出現回数(keywordCountMap)を取得し、
+  //      出現回数の多い順に並べて返す
+  function computeNarrowingKeywordCandidates(rows, posById, cx, cy, edges, keywordCountMap) {
+    var keywordSet = {};
+    (rows || []).forEach(function(r) {
+      var entry = posById['a:' + r.id];
+      if (!entry) return;
+      var answerNode = entry.node;
+      if (!answerNode) return;
+      var targetDepth = answerNode.depth >= 1 ? answerNode.depth - 1 : answerNode.depth + 1;
+      (edges || []).forEach(function(e) {
+        var otherId = e.from === answerNode.id ? e.to : (e.to === answerNode.id ? e.from : null);
+        if (!otherId) return;
+        var p = posById[otherId];
+        if (p && p.node.type === 'keyword' && p.node.depth === targetDepth) keywordSet[p.node.label] = true;
+      });
+    });
+    var candidates = Object.keys(keywordSet).map(function(label) {
+      return { keyword: label, count: (keywordCountMap && keywordCountMap[label]) || 0 };
+    });
+    candidates.sort(function(a, b) { return b.count - a.count; });
+    return candidates;
   }
 
   // 回答文ノードに含まれる(=直結する)キーワード数。ノードの円の直径を
