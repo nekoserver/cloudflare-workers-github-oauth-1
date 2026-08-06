@@ -3,14 +3,19 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { getAnswerGraphPage } from './views/answerGraph';
 
 // 対象: /answer-graph ページ(src/views/answerGraph.ts)の起点検索結果テーブル。
-// 各行の先頭にキーワード総数と質問日時を表示し、既定では質問日時の新しい順に
-// 並べる。「キーワード数」th をタップすると多い順/少ない順/初期値(日時順)の
-// 3状態で並べ替わり、他のカラム(日時・質問文)も行単位で一緒に並べ替わる。
+// 各行の先頭にキーワード総数と質問日時を表示し、作表後(検索完了後)は
+// キーワード数の多い順に並べる。「キーワード数」th をタップすると多い順/
+// 少ない順/日時順の3状態で並べ替わり、他のカラム(日時・質問文)も行単位で
+// 一緒に並べ替わる。
+//
+// キーワード数0・経路「ー」の行を非表示にする設定(answerGraphHideEmptyRows)
+// はこのテストの対象外のため、buildPageでは明示的に無効化し、ソート挙動
+// そのものだけを検証する。
 //
 // 故障シナリオ:
-//   (1) 既定の並び順が質問日時の新しい順になっていない
+//   (1) 作表後の既定の並び順がキーワード数の多い順になっていない
 //   (2) th クリックで並べ替えても行が入れ替わらない、または一方向にしか
-//       ソートできない(多い順→少ない順→初期値の3状態を巡回しない)
+//       ソートできない(多い順/少ない順/日時順を巡回しない)
 //   (3) ソート後に「キーワード数」列だけ並び替わり、質問日時・質問文列が
 //       元の行と対応しなくなる(行単位でのソートになっていない)
 //   (4) キーワード総数・質問日時が行の先頭に表示されない
@@ -18,7 +23,7 @@ import { getAnswerGraphPage } from './views/answerGraph';
 //       表示幅を圧迫する(width:1% + nowrap のshrink-to-fitが外れている)
 
 function buildPage(): string {
-  return getAnswerGraphPage('testuser', {});
+  return getAnswerGraphPage('testuser', {}, false);
 }
 
 function loadPureFns() {
@@ -153,35 +158,36 @@ describe('一人称モード以前: 起点検索結果テーブルのDOM実動�
     expect(cells[3].className).toBe('search-result-question');
   });
 
-  it('既定では質問日時の新しい順に並ぶ', async () => {
+  it('作表後(検索完了後)はキーワード数の多い順に並ぶ', async () => {
     const { seedSearchResults } = await setupSearchResultsTable();
     const questions = Array.from(seedSearchResults.querySelectorAll('.search-result-question')).map((el) => el.textContent);
-    expect(questions).toEqual(['質問2', '質問3', '質問1']);
+    expect(questions).toEqual(['質問2', '質問1', '質問3']);
   });
 
-  it('「キーワード数」thをクリックすると多い順→少ない順→初期値(日時順)の順に巡回し、他の列も行ごと一緒に並べ替わる', async () => {
+  it('「キーワード数」thをクリックすると少ない順→日時順→多い順の順に巡回し、他の列も行ごと一緒に並べ替わる', async () => {
     const { searchKeywordCountTh, seedSearchResults } = await setupSearchResultsTable();
 
+    // 作表直後は既にキーワード数の多い順(count-desc)のため、1クリック目は少ない順になる
     searchKeywordCountTh.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     let rows = Array.from(seedSearchResults.querySelectorAll('tr'));
     let counts = rows.map((r) => r.querySelector('.search-result-count')!.textContent);
     let questions = rows.map((r) => r.querySelector('.search-result-question')!.textContent);
-    expect(counts).toEqual(['5', '2', '0']);
-    expect(questions).toEqual(['質問2', '質問1', '質問3']);
+    expect(counts).toEqual(['0', '2', '5']);
+    expect(questions).toEqual(['質問3', '質問1', '質問2']);
 
     searchKeywordCountTh.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     rows = Array.from(seedSearchResults.querySelectorAll('tr'));
     counts = rows.map((r) => r.querySelector('.search-result-count')!.textContent);
     questions = rows.map((r) => r.querySelector('.search-result-question')!.textContent);
-    expect(counts).toEqual(['0', '2', '5']);
-    expect(questions).toEqual(['質問3', '質問1', '質問2']);
+    expect(counts).toEqual(['5', '0', '2']);
+    expect(questions).toEqual(['質問2', '質問3', '質問1']);
 
     searchKeywordCountTh.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     questions = Array.from(seedSearchResults.querySelectorAll('.search-result-question')).map((el) => el.textContent);
-    expect(questions).toEqual(['質問2', '質問3', '質問1']);
+    expect(questions).toEqual(['質問2', '質問1', '質問3']);
   });
 
-  it('新しい検索を行うと並び順が初期値(日時順)にリセットされる', async () => {
+  it('新しい検索を行うと並び順がキーワード数の多い順にリセットされる', async () => {
     const { searchKeywordCountTh } = await setupSearchResultsTable();
     searchKeywordCountTh.dispatchEvent(new MouseEvent('click', { bubbles: true }));
 
@@ -192,7 +198,7 @@ describe('一人称モード以前: 起点検索結果テーブルのDOM実動�
 
     const seedSearchResults = document.getElementById('seedSearchResults')!;
     const questions = Array.from(seedSearchResults.querySelectorAll('.search-result-question')).map((el) => el.textContent);
-    expect(questions).toEqual(['質問2', '質問3', '質問1']);
+    expect(questions).toEqual(['質問2', '質問1', '質問3']);
   });
 
   it('「質問日時」thをクリックすると新しい順/古い順にトグルし、他の列も行ごと一緒に並べ替わる', async () => {

@@ -19,9 +19,13 @@ import { getAnswerGraphPage } from './views/answerGraph';
 //       グラフに含まれていない場合にエラーで落ちる、または誤った経路が
 //       表示される
 //   (5) 検索結果テーブルの列の並び順(🔑→質問日時→経路→質問)が崩れる
+//
+// キーワード数0・経路「ー」の行を非表示にする設定(answerGraphHideEmptyRows)
+// はこのテストの対象外のため、buildPageでは明示的に無効化し、経路列の
+// 表示内容そのものだけを検証する。
 
 function buildPage(): string {
-  return getAnswerGraphPage('testuser', {});
+  return getAnswerGraphPage('testuser', {}, false);
 }
 
 function loadPureFns() {
