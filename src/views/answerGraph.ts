@@ -157,11 +157,19 @@ input[type=search]:focus { border-color:var(--accent); }
 }
 .narrow-keywords-btn:hover { background:var(--btn-hover); }
 .answer-keywords-bar {
-  display:none; flex-wrap:wrap; gap:6px; align-items:center;
+  display:none; flex-direction:column; gap:8px;
   margin-top:8px; padding:8px 10px; border:1px solid var(--border); border-radius:8px;
   background:var(--card);
 }
 .answer-keywords-bar-label { font-size:11px; color:var(--label); margin-right:2px; }
+.answer-keywords-cat-filter { display:flex; flex-wrap:wrap; align-items:center; gap:8px 10px; }
+.answer-keywords-cat-filter-item {
+  display:inline-flex; align-items:center; gap:5px; font-size:11px; cursor:pointer; color:var(--fg);
+  white-space:nowrap; padding:3px 10px; border-radius:999px; border:2px solid var(--border); background:transparent;
+}
+.answer-keywords-cat-filter-item.checked { background:color-mix(in srgb, var(--cat-filter-color, var(--border)) 15%, transparent); }
+.answer-keywords-cat-filter-item input[type=checkbox] { cursor:pointer; margin:0; accent-color:var(--cat-filter-color, var(--accent)); }
+.answer-keywords-chips { display:flex; flex-wrap:wrap; gap:6px; align-items:center; }
 .answer-keyword-chip {
   padding:5px 10px; font-size:12px; border-radius:999px; border:1px solid var(--btn-border);
   background:var(--btn-bg); color:var(--fg); cursor:pointer;
@@ -453,6 +461,12 @@ input[type=search]:focus { border-color:var(--accent); }
   var selectedNodeId = null;
   var currentAnswerNode = null;
   var keywordCountMap = {};
+  // キーワード → 中分類カテゴリID(複数属する場合は先頭の1件のみ、色分け表示用)
+  var keywordCategoryMap = {};
+  // 「この回答文のキーワード:」バーで、中分類カテゴリごとの表示/非表示
+  // (カテゴリID → true/false)。バー再描画のたびにリセットされ、デフォルトは
+  // 全カテゴリtrue(表示)。
+  var answerKeywordsCategoryFilter = {};
   var answerModalKeywordsFromDB = [];
   var answerModalHighlightActive = true;
   var fpActive = false;
@@ -927,9 +941,36 @@ input[type=search]:focus { border-color:var(--accent); }
       .catch(function() { seedSearchStatus.textContent = '検索エラー'; });
   }
 
-  // 起点質問を選んだ直後、表の真上にその回答文内にあるキーワードを列挙し
-  // 選択可能にする。選ぶと中分類カテゴリの<select>を選んだ直後と同じ処理
-  // (doSeedSearch)に渡し、再度起点行を選べば同じ流れが繰り返される。
+  // 出現回数(AIチャットページでのkeywordCountMap)の多い順に並べ替える。
+  // 同数の場合は元の順序を保つ(安定ソート)。
+  function sortKeywordSlotsByCountDesc(slots, countMap) {
+    return (slots || [])
+      .map(function(slot, i) { return { slot: slot, i: i }; })
+      .sort(function(a, b) {
+        var ca = (countMap && countMap[a.slot.node.label]) || 0;
+        var cb = (countMap && countMap[b.slot.node.label]) || 0;
+        if (cb !== ca) return cb - ca;
+        return a.i - b.i;
+      })
+      .map(function(x) { return x.slot; });
+  }
+
+  // 中分類カテゴリのフィルタ(catId→true/false)に従って表示するキーワードを
+  // 絞り込む。カテゴリが不明なキーワードは常に表示する。
+  function computeVisibleKeywordSlots(slots, categoryMap, categoryFilter) {
+    return (slots || []).filter(function(slot) {
+      var catId = categoryMap && categoryMap[slot.node.label];
+      if (!catId) return true;
+      return (categoryFilter && categoryFilter[catId]) !== false;
+    });
+  }
+
+  // 起点質問を選んだ直後、表の真上にその回答文内にあるキーワードを
+  // 出現回数の多い順・左詰めで列挙し、選択可能にする。各キーワードは
+  // 属する中分類カテゴリの色で枠を色分けし、カテゴリごとのチェックボックス
+  // (デフォルト全てON)で表示/非表示を切り替えられる。選ぶと中分類カテゴリの
+  // <select>を選んだ直後と同じ処理(doSeedSearch)に渡し、再度起点行を選べば
+  // 同じ流れが繰り返される。
   function renderAnswerKeywordsBar(shareId) {
     answerKeywordsBar.innerHTML = '';
     if (!lastLayout || !currentGraph || !shareId) { answerKeywordsBar.style.display = 'none'; return; }
@@ -939,15 +980,71 @@ input[type=search]:focus { border-color:var(--accent); }
     var slots = computeAnswerKeywordSlots(lastLayout.posById, lastLayout.cx, lastLayout.cy, currentGraph.edges, answerNode)
       .filter(function(slot) { return slot.node.depth === answerNode.depth + 1; });
     if (!slots.length) { answerKeywordsBar.style.display = 'none'; return; }
+    slots = sortKeywordSlotsByCountDesc(slots, keywordCountMap);
+
+    // 表示中のキーワードが属する中分類カテゴリを収集し、フィルタの初期状態
+    // (全てON)を用意する。バーを再描画するたびにリセットする。
+    answerKeywordsCategoryFilter = {};
+    var categoriesPresent = [];
+    var seenCatIds = {};
+    slots.forEach(function(slot) {
+      var catId = keywordCategoryMap[slot.node.label];
+      if (!catId || seenCatIds[catId]) return;
+      seenCatIds[catId] = true;
+      answerKeywordsCategoryFilter[catId] = true;
+      var cat = catQuickData && catQuickData.catMap[catId];
+      categoriesPresent.push({ id: catId, name: cat ? cat.name : catId, color: cat ? cat.color : null });
+    });
+
     answerKeywordsBar.style.display = 'flex';
     var label = document.createElement('span');
     label.className = 'answer-keywords-bar-label';
     label.textContent = 'この回答文のキーワード:';
     answerKeywordsBar.appendChild(label);
-    slots.forEach(function(slot) {
+
+    var chipsWrap = document.createElement('div');
+    chipsWrap.className = 'answer-keywords-chips';
+
+    if (categoriesPresent.length) {
+      var filterRow = document.createElement('div');
+      filterRow.className = 'answer-keywords-cat-filter';
+      categoriesPresent.forEach(function(cat) {
+        var item = document.createElement('label');
+        item.className = 'answer-keywords-cat-filter-item checked';
+        if (cat.color) item.style.setProperty('--cat-filter-color', cat.color);
+        var checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.checked = true;
+        checkbox.addEventListener('change', function() {
+          answerKeywordsCategoryFilter[cat.id] = checkbox.checked;
+          item.classList.toggle('checked', checkbox.checked);
+          renderAnswerKeywordChips(chipsWrap, slots);
+        });
+        item.appendChild(checkbox);
+        var nameSpan = document.createElement('span');
+        nameSpan.textContent = cat.name;
+        item.appendChild(nameSpan);
+        filterRow.appendChild(item);
+      });
+      answerKeywordsBar.appendChild(filterRow);
+    }
+
+    answerKeywordsBar.appendChild(chipsWrap);
+    renderAnswerKeywordChips(chipsWrap, slots);
+  }
+
+  // 中分類カテゴリのフィルタ状態(answerKeywordsCategoryFilter)を反映して
+  // キーワードチップを描画する。チェックボックスのon/offのたびに呼ばれる。
+  function renderAnswerKeywordChips(chipsWrap, slots) {
+    chipsWrap.innerHTML = '';
+    var visible = computeVisibleKeywordSlots(slots, keywordCategoryMap, answerKeywordsCategoryFilter);
+    visible.forEach(function(slot) {
       var chip = document.createElement('button');
       chip.type = 'button';
       chip.className = 'answer-keyword-chip';
+      var catId = keywordCategoryMap[slot.node.label];
+      var cat = catId && catQuickData && catQuickData.catMap[catId];
+      if (cat && cat.color) chip.style.borderColor = cat.color;
       var cnt = (keywordCountMap && keywordCountMap[slot.node.label]) || 0;
       chip.textContent = slot.node.label + ' (' + cnt + ')';
       chip.addEventListener('click', function() {
@@ -956,7 +1053,7 @@ input[type=search]:focus { border-color:var(--accent); }
         pushTrailKeyword(slot.node.label);
         doSeedSearch(slot.node.label);
       });
-      answerKeywordsBar.appendChild(chip);
+      chipsWrap.appendChild(chip);
     });
   }
 
@@ -1117,7 +1214,11 @@ input[type=search]:focus { border-color:var(--accent); }
       // なら再描画して反映する。
       keywordCountMap = {};
       keywords.forEach(function(kw) { keywordCountMap[kw.keyword] = kw.cnt || 0; });
+      keywordCategoryMap = computeKeywordPrimaryCategoryMap(keywords);
       if (currentGraph) drawGraph();
+      // 「この回答文のキーワード:」バーは中分類カテゴリの色分けにこの取得結果
+      // (keywordCategoryMap/catQuickData)を使うため、既に表示済みなら再描画する。
+      if (answerKeywordsBar.style.display === 'flex') renderAnswerKeywordsBar(selectedShareId);
     });
   }
 
@@ -1491,6 +1592,28 @@ input[type=search]:focus { border-color:var(--accent); }
       byCat[cid].sort(function(a, b) { return b.cnt - a.cnt; });
     });
     return byCat;
+  }
+
+  // /api/aichat/all-keywords の各要素(category_pairs または category_id を
+  // 持つ)から、キーワード→中分類カテゴリIDの対応表(1キーワードにつき1件、
+  // 複数のカテゴリに属する場合は先頭の1件)を作る。
+  // 「この回答文のキーワード:」バーのチップの枠色分けに使う。
+  function computeKeywordPrimaryCategoryMap(keywords) {
+    var map = {};
+    (keywords || []).forEach(function(kw) {
+      if (map[kw.keyword]) return;
+      var ids = [];
+      if (kw.category_pairs) {
+        String(kw.category_pairs).split(',').forEach(function(pair) {
+          var sep = pair.indexOf(':');
+          if (sep > 0) ids.push(pair.slice(0, sep));
+        });
+      } else if (kw.category_id != null) {
+        ids.push(String(kw.category_id));
+      }
+      if (ids.length) map[kw.keyword] = ids[0];
+    });
+    return map;
   }
 
   function sortByKwCountDesc(items) {
