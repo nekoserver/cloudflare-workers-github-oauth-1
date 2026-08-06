@@ -112,6 +112,22 @@
   サーバー側へは一切送信されない(D1永続化とは別物。D1永続化は4.3の
   拡張案として引き続き検討対象)
 
+**足跡の「見た目」だけでなく「実際の選択状況」まで再現する(`replaySelectionTrail`)**:
+人間が選んだ結果とその先の意思決定を補うのがこの機能の目的であるため、
+`restoreSelectionTrail()`は足跡配列を`selectionTrail`へ反映するだけでは
+不十分であり、**記録順に各ステップを再実行**して、検索結果・ロード済み
+グラフ・回答文キーワードバーといった実際の画面状態まで復元する。
+
+- `replaySelectionTrail(trail)`が、足跡を先頭から`Promise`チェーンで
+  1件ずつ`seed`なら`loadGraph(id)`、`keyword`なら`doSeedSearch(label)`を
+  呼び直す。各ステップは前のステップの完了(fetchの解決・`currentGraph`/
+  `searchResultsRaw`の更新)を待ってから次に進む(でなければキーワードの
+  足跡が参照するグラフがまだ無い状態で表が描画され、経路列が壊れる)
+- `loadGraph`/`doSeedSearch`はいずれも(通常の呼び出しと共通のまま)
+  fetchのPromiseチェーンを`return`するよう変更し、`replaySelectionTrail`が
+  完了を待てるようにした
+- 巻き戻し(`jumpToTrailIndex`)と同様、リプレイ自体は新たな足跡を積まない
+
 ### 4.3 さらなる拡張案(優先度順)
 
 1. **足跡のD1永続化(タブを閉じても残す・複数端末で共有)** — 4.2の
