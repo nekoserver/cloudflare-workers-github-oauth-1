@@ -29,6 +29,7 @@ export function getSettingsPage(user: {
   apisNavFlash?: string;
   aichatAutoVectorizeEnabled?: string;
   aichatAutoVectorizeModel?: string;
+  answerGraphHideEmptyRows?: string;
   emailConfirmLoginEnabled?: boolean;
   githubScopes?: string;
   githubGrantedScopes?: string[] | null;
@@ -59,6 +60,7 @@ export function getSettingsPage(user: {
   const currentAichatAutoVectorizeModel = AICHAT_AUTO_VECTORIZE_MODELS.includes(user.aichatAutoVectorizeModel ?? '')
     ? (user.aichatAutoVectorizeModel as string)
     : '@cf/pfnet/plamo-embedding-1b';
+  const currentAnswerGraphHideEmptyRows = user.answerGraphHideEmptyRows === 'off' ? 'off' : 'on';
   const currentEmailConfirmLoginEnabled = user.emailConfirmLoginEnabled === true;
   const requestedScopes = user.githubScopes ? user.githubScopes.split(/\s+/).filter(Boolean) : [];
   const grantedScopes = user.githubGrantedScopes ?? null;
@@ -662,6 +664,17 @@ export function getSettingsPage(user: {
                 <option value="@cf/pfnet/plamo-embedding-1b" ${currentAichatAutoVectorizeModel === '@cf/pfnet/plamo-embedding-1b' ? 'selected' : ''}>plamo-embedding-1b（デフォルト）</option>
                 <option value="@cf/google/embeddinggemma-300m" ${currentAichatAutoVectorizeModel === '@cf/google/embeddinggemma-300m' ? 'selected' : ''}>embeddinggemma-300m</option>
               </select>
+            </div>
+          </div>
+          <div class="info-item">
+            <span class="info-label">answer-graph: 「この回答文のキーワード:」からキーワードを選んで再検索したとき、キーワード数0・経路「ー」の行を表示しない</span>
+            <div class="setting-control" style="justify-content: flex-end;">
+              <span class="theme-label" id="answerGraphHideEmptyRowsLabel">${currentAnswerGraphHideEmptyRows === 'on' ? 'ON' : 'OFF'}</span>
+              <label class="theme-toggle-switch">
+                <input type="checkbox" id="answerGraphHideEmptyRowsCheckbox" onchange="onAnswerGraphHideEmptyRowsChange()"
+                  ${currentAnswerGraphHideEmptyRows === 'on' ? 'checked' : ''}>
+                <span class="theme-toggle-slider"></span>
+              </label>
             </div>
           </div>
           <div class="info-item">
@@ -1529,6 +1542,25 @@ export function getSettingsPage(user: {
         if (!res.ok) throw new Error('failed');
       } catch(e) {
         alert('キーワードの自動ベクタ化設定の変更に失敗しました');
+        cb.checked = !cb.checked;
+        label.textContent = cb.checked ? 'ON' : 'OFF';
+      }
+    }
+
+    async function onAnswerGraphHideEmptyRowsChange() {
+      var cb = document.getElementById('answerGraphHideEmptyRowsCheckbox');
+      var label = document.getElementById('answerGraphHideEmptyRowsLabel');
+      var enabled = cb.checked;
+      var mode = enabled ? 'on' : 'off';
+      label.textContent = enabled ? 'ON' : 'OFF';
+      try {
+        var res = await fetch('/api/settings/answer-graph-hide-empty-rows', {
+          method: 'POST', headers: {'Content-Type':'application/json'}, credentials: 'include',
+          body: JSON.stringify({ mode })
+        });
+        if (!res.ok) throw new Error('failed');
+      } catch(e) {
+        alert('answer-graphの空行非表示設定の変更に失敗しました');
         cb.checked = !cb.checked;
         label.textContent = cb.checked ? 'ON' : 'OFF';
       }

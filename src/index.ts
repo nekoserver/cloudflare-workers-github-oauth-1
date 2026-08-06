@@ -5780,6 +5780,18 @@ export function resolveAutoVectorizeSettings(cookieHeader: string | undefined | 
   return { enabled, model };
 }
 
+export const ANSWER_GRAPH_HIDE_EMPTY_ROWS_COOKIE = 'answer_graph_hide_empty_rows';
+
+/**
+ * /answer-graph の起点検索結果テーブルで「キーワード数0」の行・経路が
+ * 「ー」の行を表示しないようにする設定をCookieから解決する。デフォルトは
+ * 有効(表示しない)。
+ */
+export function resolveAnswerGraphHideEmptyRows(cookieHeader: string | undefined | null): boolean {
+  const vals = getCookieValues(cookieHeader ?? undefined, [ANSWER_GRAPH_HIDE_EMPTY_ROWS_COOKIE]);
+  return vals[ANSWER_GRAPH_HIDE_EMPTY_ROWS_COOKIE] !== 'off';
+}
+
 /**
  * bge-m3以外のモデル(plamo-embedding-1b, embeddinggemma-300m)は、それぞれ
  * 専用の追加カラム(<prefix>_vector/<prefix>_dim/<prefix>_model/<prefix>_updated_at)
@@ -8259,7 +8271,8 @@ app.get('/answer-graph', authMiddleware, async (c) => {
       logger.warn('aichat_model_colors query failed, using empty map');
     }
   }
-  return c.html(getAnswerGraphPage(user.sub, modelColors));
+  const hideEmptyRows = resolveAnswerGraphHideEmptyRows(c.req.header('Cookie'));
+  return c.html(getAnswerGraphPage(user.sub, modelColors, hideEmptyRows));
 });
 
 app.get('/base64', authMiddleware, async (c) => {
@@ -8621,6 +8634,7 @@ app.get('/settings', authMiddleware, async (c) => {
   const apisDescMode = cookieVals['user_apis_desc_mode'] === 'off' ? 'off' : 'on';
   const apisNavFlash = cookieVals['user_apis_nav_flash'] ?? '7';
   const autoVectorizeSettings = resolveAutoVectorizeSettings(cookieHeader);
+  const answerGraphHideEmptyRows = resolveAnswerGraphHideEmptyRows(cookieHeader);
 
   let issuedAt: string;
   let expiresAt: string;
@@ -8689,6 +8703,7 @@ app.get('/settings', authMiddleware, async (c) => {
     apisNavFlash,
     aichatAutoVectorizeEnabled: autoVectorizeSettings.enabled ? 'on' : 'off',
     aichatAutoVectorizeModel: autoVectorizeSettings.model,
+    answerGraphHideEmptyRows: answerGraphHideEmptyRows ? 'on' : 'off',
     emailConfirmLoginEnabled,
     githubScopes: GITHUB_OAUTH_SCOPE,
     githubGrantedScopes: grantedScopes,
@@ -13548,6 +13563,19 @@ app.post('/api/settings/aichat-auto-vectorize-enabled', authMiddleware, async (c
     return c.json({ message: 'キーワードの自動ベクタ化設定を変更しました', mode }, 200);
   } catch {
     return c.json({ error: 'キーワードの自動ベクタ化設定の変更に失敗しました' }, 500);
+  }
+});
+
+app.post('/api/settings/answer-graph-hide-empty-rows', authMiddleware, async (c) => {
+  try {
+    const { mode } = await c.req.json();
+    if (mode !== 'on' && mode !== 'off') {
+      return c.json({ error: '無効な設定値です' }, 400);
+    }
+    c.header('Set-Cookie', `${ANSWER_GRAPH_HIDE_EMPTY_ROWS_COOKIE}=${mode}; Path=/; Secure; SameSite=Lax; Max-Age=31536000`);
+    return c.json({ message: 'answer-graphの空行非表示設定を変更しました', mode }, 200);
+  } catch {
+    return c.json({ error: 'answer-graphの空行非表示設定の変更に失敗しました' }, 500);
   }
 });
 
