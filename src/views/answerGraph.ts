@@ -361,6 +361,7 @@ input[type=search]:focus { border-color:var(--accent); }
   var lastLayout = null;
   var selectedNodeId = null;
   var currentAnswerNode = null;
+  var keywordCountMap = {};
   var answerModalKeywordsFromDB = [];
   var answerModalHighlightActive = true;
   var fpActive = false;
@@ -780,6 +781,13 @@ input[type=search]:focus { border-color:var(--accent); }
       cats.forEach(function(cat) { catMap[String(cat.id)] = cat; });
       catQuickData = { groups: groups, catMap: catMap, keywordsByCat: computeKeywordsByCategory(keywords) };
       renderCatQuickGroups();
+      // AIチャットページでの各キーワードの出現回数(select_countの合計)。
+      // 俯瞰グラフビューのキーワードノードの円の大きさに使う。この取得は
+      // グラフ本体の読み込みと非同期で並行するため、既にグラフが表示済み
+      // なら再描画して反映する。
+      keywordCountMap = {};
+      keywords.forEach(function(kw) { keywordCountMap[kw.keyword] = kw.cnt || 0; });
+      if (currentGraph) drawGraph();
     });
   }
 
@@ -985,6 +993,13 @@ input[type=search]:focus { border-color:var(--accent); }
     return baseR * depthScale;
   }
 
+  // キーワードノードの円の半径。AIチャットページでのそのキーワードの
+  // 出現回数(select_countの合計、keywordCountMap)に比例して大きくする。
+  function computeKeywordNodeRadius(occurrenceCount) {
+    var BASE_R = 4, MAX_EXTRA = 10, STEP = 1;
+    return BASE_R + Math.min(MAX_EXTRA, (occurrenceCount || 0) * STEP);
+  }
+
   function computeFilmstripOffsets(widths, focusIdx, gapPx) {
     if (gapPx === undefined) gapPx = 1;
     var offsets = new Array(widths.length);
@@ -1152,7 +1167,9 @@ input[type=search]:focus { border-color:var(--accent); }
       var p = posById[id];
       var isAnswer = p.node.type === 'answer';
       var isCurrentAnswer = isAnswer && id === currentAnswerId;
-      var r = isAnswer ? computeAnswerNodeRadius(countAnswerKeywordDegree(posById, edges, id), p.node.depth) : 6;
+      var r = isAnswer
+        ? computeAnswerNodeRadius(countAnswerKeywordDegree(posById, edges, id), p.node.depth)
+        : computeKeywordNodeRadius(keywordCountMap[p.node.label]);
       var fallbackColor = isAnswer ? answerColor : keywordColor;
       ctx.beginPath();
       ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
