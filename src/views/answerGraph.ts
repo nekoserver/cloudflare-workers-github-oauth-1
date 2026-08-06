@@ -812,6 +812,25 @@ input[type=search]:focus { border-color:var(--accent); }
     try { sessionStorage.setItem(TRAIL_SESSION_STORAGE_KEY, JSON.stringify(selectionTrail)); } catch (e) {}
   }
 
+  // 足跡配列を先頭から順に「実行」し直し、検索結果・グラフといった実際の
+  // 選択状況を再現する。各ステップはfetchを伴うため、前のステップの完了
+  // (currentGraph/searchResultsRawの更新)を待ってから次へ進む必要がある
+  // (でなければ、キーワードの足跡が参照するグラフがまだ無い状態で
+  // renderSearchResultsTableが呼ばれ、経路列が正しく出ない)。
+  // 巻き戻し(jumpToTrailIndex)と同様、リプレイ自体は新たな足跡を積まない。
+  function replaySelectionTrail(trail) {
+    return (trail || []).reduce(function(promise, entry) {
+      return promise.then(function() {
+        if (entry.type === 'seed') {
+          selectedShareId = entry.id;
+          return loadGraph(entry.id);
+        }
+        seedSearchInput.value = entry.label;
+        return doSeedSearch(entry.label);
+      });
+    }, Promise.resolve());
+  }
+
   function restoreSelectionTrail() {
     if (!trailSessionStorageSetting) {
       try { sessionStorage.removeItem(TRAIL_SESSION_STORAGE_KEY); } catch (e) {}
@@ -824,6 +843,7 @@ input[type=search]:focus { border-color:var(--accent); }
       if (Array.isArray(parsed)) selectionTrail = parsed;
     } catch (e) {}
     renderSelectionTrail();
+    replaySelectionTrail(selectionTrail);
   }
 
   function renderSelectionTrail() {
@@ -887,9 +907,11 @@ input[type=search]:focus { border-color:var(--accent); }
     }
   }
 
+  // fetchのPromiseチェーンを返す。パン屑リストの復元(replaySelectionTrail)が
+  // 各ステップの完了を待ってから次のステップへ進むために必要。
   function doSeedSearch(q) {
     seedSearchStatus.textContent = '検索中...';
-    fetch('/api/aichat/shares/search?q=' + encodeURIComponent(q), { credentials: 'same-origin' })
+    return fetch('/api/aichat/shares/search?q=' + encodeURIComponent(q), { credentials: 'same-origin' })
       .then(function(r) { return r.json(); })
       .then(function(d) {
         var results = (d && d.results) || [];
@@ -1110,12 +1132,14 @@ input[type=search]:focus { border-color:var(--accent); }
     return { data: null, error: 'HTTP ' + status + (snippet ? ' / ' + snippet : '') };
   }
 
+  // fetchのPromiseチェーンを返す。パン屑リストの復元(replaySelectionTrail)が
+  // 各ステップの完了を待ってから次のステップへ進むために必要。
   function loadGraph(shareId) {
     graphStatus.textContent = '読み込み中...';
     graphStatus.className = 'graph-status';
     sidePanel.innerHTML = '<span class="empty-hint">ノードをクリックすると詳細がここに表示されます</span>';
     seedLoadingSpinner.classList.add('active');
-    fetch('/api/aichat/answer-propagation-graph', {
+    return fetch('/api/aichat/answer-propagation-graph', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'same-origin',

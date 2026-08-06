@@ -4,9 +4,17 @@ import { getAnswerGraphPage } from './views/answerGraph';
 
 // 対象: /answer-graph ページのパン屑リスト(選択履歴の足跡)を、設定で
 // 明示的に同意した場合のみブラウザのsessionStorageへ保存し、リロード後も
-// 復元する機能(SPEC.cloudflare-workers-github-oauth-1.ANSWER-GRAPH.md 4.1)。
+// 「人間が選んだ結果とその先の意思決定」を実際に再現する機能
+// (SPEC.cloudflare-workers-github-oauth-1.ANSWER-GRAPH.md 4.1/4.2)。
 // 足跡には検索履歴・回答内容に由来する情報が含まれるため、デフォルトでは
 // 一切書き込んではならない。
+//
+// 単に足跡チップの見た目だけを復元しても、その先の意思決定(どの回答を
+// 起点にしていたか・どんな検索結果/キーワード候補が見えていたか)を
+// 補えなければ意味が無いため、replaySelectionTrail は足跡の各ステップを
+// 記録順に再実行し、グラフ取得(loadGraph)・再検索(doSeedSearch)を経て
+// 実際の選択状況(currentGraph・検索結果テーブル・回答文キーワードバー)
+// まで再現する。
 //
 // 故障シナリオ:
 //   (1) 設定がOFF(デフォルト)なのに足跡がsessionStorageへ書き込まれて
@@ -15,6 +23,13 @@ import { getAnswerGraphPage } from './views/answerGraph';
 //       (=スクリプト再実行後)に復元されない
 //   (3) 設定をOFFにしても、過去に書き込まれたデータがsessionStorageに
 //       残ったままになる(同意の取り消しが尊重されない)
+//   (4) 足跡チップの見た目だけが復元され、グラフ取得・検索結果・
+//       キーワードバーといった実際の選択状況が再現されない(復元が
+//       「そこに至った経緯の一覧」でしかなく、意思決定の材料を
+//       補えていない)
+//   (5) 足跡が複数ステップ(キーワード選択→起点確定→キーワード選択…)の
+//       場合に、記録順ではなく最後の1件だけが実行されてしまい、途中の
+//       状態(直前の検索結果件数など)の整合性が崩れる
 
 const TRAIL_KEY = 'answerGraphSelectionTrail';
 
@@ -76,49 +91,6 @@ async function setupTrailStorageRestoreOnly(trailSessionStorageDefault?: boolean
   await new Promise((resolve) => setTimeout(resolve, 10));
 }
 
-describe('sessionStorageからの復元は「見た目の足跡チップ」のみで、グラフ・検索結果などの実際の選択状況は再現しない(現状の制約の確認)', () => {
-  afterEach(() => {
-    vi.unstubAllGlobals();
-    sessionStorage.clear();
-  });
-
-  it('起点(seed)の足跡が復元されても、グラフ取得APIは呼ばれない(グラフは再読み込みされない)', async () => {
-    sessionStorage.setItem(TRAIL_KEY, JSON.stringify([{ type: 'seed', label: '質問1(起点)', id: 'seed' }]));
-    const html = buildPage(true);
-    const fetchMock = vi.fn(() => Promise.resolve({ json: () => Promise.resolve({}) }));
-    stubFetchWithMock(html, fetchMock);
-
-    const scriptSrc = html.slice(html.indexOf('<script>') + 8, html.indexOf('</script>'));
-    // eslint-disable-next-line no-new-func
-    new Function(scriptSrc)();
-    await new Promise((resolve) => setTimeout(resolve, 10));
-
-    // 足跡チップ自体は復元されて表示される
-    const selectionTrailBar = document.getElementById('selectionTrailBar')!;
-    expect(selectionTrailBar.classList.contains('visible')).toBe(true);
-
-    // しかしグラフ取得(answer-propagation-graph)は一度も呼ばれていない
-    const graphCalls = fetchMock.mock.calls.filter((c) => String(c[0]).includes('/api/aichat/answer-propagation-graph'));
-    expect(graphCalls.length).toBe(0);
-  });
-
-  it('起点(seed)の足跡が復元されても、検索結果テーブル・回答文キーワードバーは空のまま', async () => {
-    sessionStorage.setItem(TRAIL_KEY, JSON.stringify([{ type: 'seed', label: '質問1(起点)', id: 'seed' }]));
-    const html = buildPage(true);
-    stubFetchWithMock(html, vi.fn(() => Promise.resolve({ json: () => Promise.resolve({}) })));
-
-    const scriptSrc = html.slice(html.indexOf('<script>') + 8, html.indexOf('</script>'));
-    // eslint-disable-next-line no-new-func
-    new Function(scriptSrc)();
-    await new Promise((resolve) => setTimeout(resolve, 10));
-
-    const seedSearchResults = document.getElementById('seedSearchResults')!;
-    const answerKeywordsBar = document.getElementById('answerKeywordsBar')!;
-    expect(seedSearchResults.children.length).toBe(0);
-    expect(answerKeywordsBar.style.display).not.toBe('flex');
-  });
-});
-
 function stubFetchWithMock(html: string, fetchMock: ReturnType<typeof vi.fn>) {
   document.body.innerHTML = html.slice(html.indexOf('<body>') + 6, html.indexOf('<script>'));
   const proto = (window as unknown as { HTMLCanvasElement: { prototype: { getContext: unknown } } }).HTMLCanvasElement.prototype;
@@ -127,6 +99,95 @@ function stubFetchWithMock(html: string, fetchMock: ReturnType<typeof vi.fn>) {
   });
   vi.stubGlobal('fetch', fetchMock);
 }
+
+describe('sessionStorageからの復元は足跡チップだけでなく、実際の選択状況(グラフ・検索結果)まで再現する', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    sessionStorage.clear();
+  });
+
+  // a:seed -(k:a)-> a:mid
+  const graphNodes = [
+    { id: 'a:seed', type: 'answer', label: 'seed', depth: 0 },
+    { id: 'k:a', type: 'keyword', label: 'kw-a', depth: 1 },
+    { id: 'a:mid', type: 'answer', label: 'mid', depth: 2 },
+  ];
+  const graphEdges = [
+    { from: 'a:seed', to: 'k:a' },
+    { from: 'k:a', to: 'a:mid' },
+  ];
+
+  it('起点(seed)の足跡が復元されると、グラフ取得APIがその起点のshareIdで呼ばれ、グラフが再読み込みされる', async () => {
+    sessionStorage.setItem(TRAIL_KEY, JSON.stringify([{ type: 'seed', label: '質問1(起点)', id: 'seed' }]));
+    const html = buildPage(true);
+    const fetchMock = vi.fn((url: string, init?: { body?: string }) => {
+      if (String(url).includes('/api/aichat/answer-propagation-graph')) {
+        return Promise.resolve({ status: 200, text: () => Promise.resolve(JSON.stringify({ nodes: graphNodes, edges: graphEdges })) });
+      }
+      return Promise.resolve({ json: () => Promise.resolve({}) });
+    });
+    stubFetchWithMock(html, fetchMock);
+
+    const scriptSrc = html.slice(html.indexOf('<script>') + 8, html.indexOf('</script>'));
+    // eslint-disable-next-line no-new-func
+    new Function(scriptSrc)();
+    await new Promise((resolve) => setTimeout(resolve, 30));
+
+    const graphCalls = fetchMock.mock.calls.filter((c) => String(c[0]).includes('/api/aichat/answer-propagation-graph'));
+    expect(graphCalls.length).toBe(1);
+    expect(JSON.parse((graphCalls[0][1] as { body: string }).body)).toEqual({ shareId: 'seed' });
+
+    // グラフが実際に再構築されたことを、回答文キーワードバー(グラフ依存の
+    // 表示)が正しく描画されていることで確認する
+    const answerKeywordsBar = document.getElementById('answerKeywordsBar')!;
+    expect(answerKeywordsBar.style.display).toBe('flex');
+    expect(answerKeywordsBar.textContent).toContain('kw-a');
+  });
+
+  it('キーワード→起点確定の複数ステップの足跡が、記録順に再実行されて最終状態(検索結果・グラフ)が再現される', async () => {
+    sessionStorage.setItem(TRAIL_KEY, JSON.stringify([
+      { type: 'keyword', label: 'kw-a' },
+      { type: 'seed', label: '質問2(mid)', id: 'mid' },
+    ]));
+    const html = buildPage(true);
+    let searchCallCount = 0;
+    const fetchMock = vi.fn((url: string, init?: { body?: string }) => {
+      const u = String(url);
+      if (u.includes('/api/aichat/shares/search')) {
+        searchCallCount++;
+        expect(u).toContain(encodeURIComponent('kw-a'));
+        return Promise.resolve({ json: () => Promise.resolve({ results: [
+          { id: 'mid', question: '質問2(mid)', created_at: '2026-01-02T00:00:00.000Z', keywordCount: 1 },
+        ] }) });
+      }
+      if (u.includes('/api/aichat/answer-propagation-graph')) {
+        expect(JSON.parse((init!.body as string))).toEqual({ shareId: 'mid' });
+        return Promise.resolve({ status: 200, text: () => Promise.resolve(JSON.stringify({ nodes: graphNodes, edges: graphEdges })) });
+      }
+      return Promise.resolve({ json: () => Promise.resolve({}) });
+    });
+    stubFetchWithMock(html, fetchMock);
+
+    const scriptSrc = html.slice(html.indexOf('<script>') + 8, html.indexOf('</script>'));
+    // eslint-disable-next-line no-new-func
+    new Function(scriptSrc)();
+    await new Promise((resolve) => setTimeout(resolve, 30));
+
+    // 検索(kw-aの再検索)→グラフ取得(mid起点)の順に実行されたことを確認
+    expect(searchCallCount).toBe(1);
+    const graphCalls = fetchMock.mock.calls.filter((c) => String(c[0]).includes('/api/aichat/answer-propagation-graph'));
+    expect(graphCalls.length).toBe(1);
+
+    // 検索窓にも最後に選んだキーワードが反映される
+    const seedSearchInput = document.getElementById('seedSearchInput') as HTMLInputElement;
+    expect(seedSearchInput.value).toBe('kw-a');
+
+    // 最終的にグラフが読み込まれ、起点(mid)行がselected状態になる
+    const seedSearchResults = document.getElementById('seedSearchResults')!;
+    const selectedRow = seedSearchResults.querySelector('.search-result-row.selected');
+    expect(selectedRow).not.toBeNull();
+  });
+});
 
 describe('パン屑リストのsessionStorage保存(同意ベース・デフォルトOFF)', () => {
   afterEach(() => {
