@@ -113,7 +113,7 @@ input[type=search]:focus { border-color:var(--accent); }
 .search-results-table td { padding:6px 10px; border-bottom:1px solid var(--border); color:var(--fg); }
 .search-results-table td.search-result-count { text-align:right; color:var(--label); white-space:nowrap; width:1%; padding:6px 6px; }
 .search-results-table td.search-result-date { color:var(--label); white-space:nowrap; width:1%; padding:6px 6px; }
-.search-results-table td.search-result-path { color:var(--label); font-size:11px; max-width:220px; }
+.search-results-table td.search-result-path { color:var(--label); font-size:10px; line-height:1.4; width:110px; max-width:110px; word-break:break-all; }
 .search-results-table td.search-result-question { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:1px; }
 .search-results-table tbody tr { cursor:pointer; }
 .search-results-table tbody tr:hover { background:var(--btn-hover); }
