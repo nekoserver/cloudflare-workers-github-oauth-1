@@ -113,6 +113,7 @@ input[type=search]:focus { border-color:var(--accent); }
 .search-results-table td { padding:6px 10px; border-bottom:1px solid var(--border); color:var(--fg); }
 .search-results-table td.search-result-count { text-align:right; color:var(--label); white-space:nowrap; width:1%; padding:6px 6px; }
 .search-results-table td.search-result-date { color:var(--label); white-space:nowrap; width:1%; padding:6px 6px; }
+.search-results-table td.search-result-path { color:var(--label); font-size:11px; max-width:220px; }
 .search-results-table td.search-result-question { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:1px; }
 .search-results-table tbody tr { cursor:pointer; }
 .search-results-table tbody tr:hover { background:var(--btn-hover); }
@@ -242,6 +243,7 @@ input[type=search]:focus { border-color:var(--accent); }
           <tr>
             <th id="searchKeywordCountTh" class="sortable-th" tabindex="0" role="button" aria-label="キーワード総数で並べ替え" title="キーワード数">🔑</th>
             <th id="searchDateTh" class="sortable-th" tabindex="0" role="button" aria-label="質問日時で並べ替え">質問日時</th>
+            <th title="現在ロード中のグラフ内で、起点から何段階目のどのキーワードを選べば到達するか">経路</th>
             <th>質問</th>
           </tr>
         </thead>
@@ -615,6 +617,20 @@ input[type=search]:focus { border-color:var(--accent); }
     searchDateTh.textContent = dateLabel;
   }
 
+  // 検索結果の行(shareId)が、現在ロード済みのグラフ(currentGraph)に
+  // ノードとして含まれていれば、起点から何段階のキーワードを選べば
+  // 到達するかを「1. kwA/kwB → 2. kwC」の形式で返す。グラフ未ロード、
+  // またはその行がまだグラフに含まれていない場合はダッシュを返す。
+  function formatSearchResultPath(shareId) {
+    if (!lastLayout || !currentGraph) return '—';
+    var entry = lastLayout.posById['a:' + shareId];
+    if (!entry) return '—';
+    if (entry.node.depth === 0) return '起点';
+    var stages = computeAnswerPathStages(lastLayout.posById, currentGraph.edges, entry.node);
+    if (stages.length === 0) return '—';
+    return stages.map(function(stage, i) { return (i + 1) + '. ' + stage.keywords.join('/'); }).join(' → ');
+  }
+
   function renderSearchResultsTable() {
     var sorted = sortSearchResults(searchResultsRaw, searchSortMode);
     seedSearchResults.innerHTML = '';
@@ -628,6 +644,9 @@ input[type=search]:focus { border-color:var(--accent); }
       var dateTd = document.createElement('td');
       dateTd.className = 'search-result-date';
       dateTd.textContent = formatSearchResultDateTime(r.created_at);
+      var pathTd = document.createElement('td');
+      pathTd.className = 'search-result-path';
+      pathTd.textContent = formatSearchResultPath(r.id);
       var qTd = document.createElement('td');
       qTd.className = 'search-result-question';
       qTd.textContent = r.question;
@@ -636,6 +655,7 @@ input[type=search]:focus { border-color:var(--accent); }
         : r.question;
       row.appendChild(countTd);
       row.appendChild(dateTd);
+      row.appendChild(pathTd);
       row.appendChild(qTd);
       row.addEventListener('click', function(e) {
         if (isZeroKeyword) { showSeedZeroTooltip(e.clientX, e.clientY); return; }
@@ -824,6 +844,7 @@ input[type=search]:focus { border-color:var(--accent); }
           graphStatus.className = 'graph-status err';
           currentGraph = null;
           drawGraph();
+          renderSearchResultsTable();
           if (fpActive) { fpHeadingDeg = 0; refreshFirstPersonFocus(); renderFirstPersonHere(); renderFirstPersonView(); renderFilmstrip(); renderFpAnswerList(); }
           return;
         }
@@ -838,6 +859,7 @@ input[type=search]:focus { border-color:var(--accent); }
         }
         graphStatus.textContent = statusText;
         drawGraph();
+        renderSearchResultsTable();
         if (fpActive) { fpHeadingDeg = 0; refreshFirstPersonFocus(); renderFirstPersonHere(); renderFirstPersonView(); renderFilmstrip(); renderFpAnswerList(); }
       })
       .catch(function(err) {
@@ -1069,6 +1091,42 @@ input[type=search]:focus { border-color:var(--accent); }
       if (p && p.node.type === 'answer' && p.node.depth === answerNode.depth - 2) parentAnswerId = otherId;
     });
     return parentAnswerId ? posById[parentAnswerId].node : null;
+  }
+
+  // 起点(depth 0)からanswerNodeまで、実際にロード済みのグラフ(edges)を
+  // 辿って何段階のキーワード選択を経て到達するかを、段階(キーワード層の
+  // depth)ごとに分けて返す。各段階には、そのキーワード層でその回答へ
+  // 実際に繋がっている全キーワード(複数あり得る)を含める。次の段階へは
+  // そのうち先頭のキーワードの親を辿る(木構造のため経路は一意に定まるが、
+  // 同じ回答が同じ段階で複数のキーワードから見つかっている場合はそれを
+  // 選択肢として列挙する)。起点からの経路が無い(まだロードされていない
+  // グラフに属さない)場合は空配列を返す。
+  function computeAnswerPathStages(posById, edges, answerNode) {
+    var stages = [];
+    var current = answerNode;
+    while (current && current.depth >= 2) {
+      var midDepth = current.depth - 1;
+      var keywordIds = {};
+      (edges || []).forEach(function(e) {
+        var otherId = e.from === current.id ? e.to : (e.to === current.id ? e.from : null);
+        if (!otherId) return;
+        var p = posById[otherId];
+        if (p && p.node.type === 'keyword' && p.node.depth === midDepth) keywordIds[otherId] = true;
+      });
+      var keywordEntries = Object.keys(keywordIds).map(function(id) { return posById[id].node; });
+      if (keywordEntries.length === 0) break;
+      stages.unshift({ depth: midDepth, keywords: keywordEntries.map(function(n) { return n.label; }) });
+      var parentAnswerId = null;
+      (edges || []).forEach(function(e) {
+        if (parentAnswerId) return;
+        var otherId = e.from === keywordEntries[0].id ? e.to : (e.to === keywordEntries[0].id ? e.from : null);
+        if (!otherId) return;
+        var p = posById[otherId];
+        if (p && p.node.type === 'answer' && p.node.depth === current.depth - 2) parentAnswerId = otherId;
+      });
+      current = parentAnswerId ? posById[parentAnswerId].node : null;
+    }
+    return stages;
   }
 
   function computeKeywordsByCategory(keywords) {

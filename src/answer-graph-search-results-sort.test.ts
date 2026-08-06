@@ -143,13 +143,14 @@ describe('検索結果テーブルのCSS: 左2カラムのshrink-to-fit', () => 
 describe('一人称モード以前: 起点検索結果テーブルのDOM実動作(jsdom)', () => {
   afterEach(() => { vi.unstubAllGlobals(); });
 
-  it('各行の先頭にキーワード総数、続いて質問日時、その後に質問文が表示される', async () => {
+  it('各行の先頭にキーワード総数、続いて質問日時、経路、その後に質問文が表示される', async () => {
     const { seedSearchResults } = await setupSearchResultsTable();
     const firstRow = seedSearchResults.querySelector('tr') as HTMLElement;
     const cells = Array.from(firstRow.children) as HTMLElement[];
     expect(cells[0].className).toBe('search-result-count');
     expect(cells[1].className).toBe('search-result-date');
-    expect(cells[2].className).toBe('search-result-question');
+    expect(cells[2].className).toBe('search-result-path');
+    expect(cells[3].className).toBe('search-result-question');
   });
 
   it('既定では質問日時の新しい順に並ぶ', async () => {
