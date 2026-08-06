@@ -418,10 +418,6 @@ input[type=search]:focus { border-color:var(--accent); }
 
   var searchTimer = null;
   var searchResultsRaw = [];
-  // 「この回答文のキーワード:」バーのチップから再検索した場合にtrueになり、
-  // 「キーワード数0」の行・経路が「ー」の行を表の描画から除外する
-  // (設定ページのanswerGraphHideEmptyRows設定がONの場合のみ)。
-  var searchFilterEmptyRows = false;
   var searchSortMode = 'date';
   var selectedShareId = null;
   var nodePositions = [];
@@ -699,19 +695,23 @@ input[type=search]:focus { border-color:var(--accent); }
 
   // 「キーワード数0」の行・経路が「ー」の行を非表示にするかどうかを判定する。
   // filterEmptyRowsがfalseなら常に表示する(非表示にしない)。
-  function shouldHideSearchResultRow(r, pathText, filterEmptyRows) {
+  // グラフ未ロード(hasGraph=false)時は経路が全行「ー」になってしまうため、
+  // 経路による判定は行わずキーワード数0の判定のみ行う。
+  function shouldHideSearchResultRow(r, pathText, filterEmptyRows, hasGraph) {
     if (!filterEmptyRows) return false;
     var isZeroKeyword = !((r && r.keywordCount) || 0);
-    return isZeroKeyword || pathText === '—';
+    if (isZeroKeyword) return true;
+    return !!hasGraph && pathText === '—';
   }
 
   function renderSearchResultsTable() {
     var sorted = sortSearchResults(searchResultsRaw, searchSortMode);
     seedSearchResults.innerHTML = '';
+    var hasGraph = !!(lastLayout && currentGraph);
     sorted.forEach(function(r) {
       var isZeroKeyword = !(r.keywordCount || 0);
       var pathText = formatSearchResultPath(r.id);
-      if (shouldHideSearchResultRow(r, pathText, searchFilterEmptyRows)) return;
+      if (shouldHideSearchResultRow(r, pathText, hideEmptyRowsSetting, hasGraph)) return;
       var row = document.createElement('tr');
       row.className = 'search-result-row' + (isZeroKeyword ? ' zero-keyword-row' : '') + (r.id === selectedShareId ? ' selected' : '');
       var countTd = document.createElement('td');
@@ -765,8 +765,7 @@ input[type=search]:focus { border-color:var(--accent); }
     if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); cycleDateSortMode(); }
   });
 
-  function doSeedSearch(q, filterEmptyRows) {
-    searchFilterEmptyRows = !!filterEmptyRows;
+  function doSeedSearch(q) {
     seedSearchStatus.textContent = '検索中...';
     fetch('/api/aichat/shares/search?q=' + encodeURIComponent(q), { credentials: 'same-origin' })
       .then(function(r) { return r.json(); })
@@ -774,7 +773,8 @@ input[type=search]:focus { border-color:var(--accent); }
         var results = (d && d.results) || [];
         seedSearchStatus.textContent = results.length + ' 件ヒット';
         searchResultsRaw = results;
-        searchSortMode = 'date';
+        // 作表後はキーワード数の多い順に並べる
+        searchSortMode = 'count-desc';
         renderSearchResultsTable();
         // 絞り込みモーダルを開いたままキーワードを選んだ場合、検索結果の
         // 更新に合わせてモーダルの候補キーワードも再計算する(1.→3.の繰り返し)。
@@ -809,7 +809,7 @@ input[type=search]:focus { border-color:var(--accent); }
       chip.addEventListener('click', function() {
         seedSearchInput.value = slot.node.label;
         seedSearchStatus.textContent = '検索中...';
-        doSeedSearch(slot.node.label, hideEmptyRowsSetting);
+        doSeedSearch(slot.node.label);
       });
       answerKeywordsBar.appendChild(chip);
     });

@@ -15,9 +15,13 @@ import { getAnswerGraphPage } from './views/answerGraph';
 //   (3) キーワード数が1件以上ある通常行が、実装ミスでゼロ件行と誤判定され
 //       クリックしてもloadGraphが呼ばれなくなる(既存機能の破壊)
 //   (4) ツールチップが7秒経っても消えない、または即座に消えて読めない
+//
+// キーワード数0の行を非表示にする設定(answerGraphHideEmptyRows)はこの
+// テストの対象外(このテストはキーワード数0件行そのものの表示/挙動を
+// 検証する)のため、buildPageでは明示的に無効化する。
 
 function buildPage(): string {
-  return getAnswerGraphPage('testuser', {});
+  return getAnswerGraphPage('testuser', {}, false);
 }
 
 async function setupWithSearchResults(results: Array<{ id: string; question: string; created_at: string; keywordCount: number }>) {

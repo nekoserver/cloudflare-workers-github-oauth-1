@@ -15,9 +15,13 @@ import { getAnswerGraphPage } from './views/answerGraph';
 //       表示されたままになる(エラー時だけ消し忘れる)
 //   (4) キーワード数0件行(ツールチップ表示のみでloadGraphを呼ばない行)を
 //       タップしてもインジケータが誤って表示されてしまう
+//
+// キーワード数0の行を非表示にする設定(answerGraphHideEmptyRows)はこの
+// テストの対象外(このテストはキーワード数0件行タップ時の挙動を検証する)
+// のため、buildPageでは明示的に無効化する。
 
 function buildPage(): string {
-  return getAnswerGraphPage('testuser', {});
+  return getAnswerGraphPage('testuser', {}, false);
 }
 
 async function setupWithDeferredGraphFetch(results: Array<{ id: string; question: string; created_at: string; keywordCount: number }>) {
