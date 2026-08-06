@@ -4162,18 +4162,45 @@ async function findKeywordsForShares(
   return byShare;
 }
 
-async function findSharesContainingKeyword(
+/**
+ * 複数キーワードをまとめて1回(バインド上限に収まる単位でチャンク分割)の
+ * クエリでai_chat_sharesを検索する。同じ層のキーワード数だけ個別に
+ * INSTR検索クエリを発行するとD1への負荷がキーワード数に比例して増え、
+ * グラフ取得が503(Worker/D1側の負荷超過)になる原因になっていたため、
+ * キーワード1件ごとのクエリ発行(N+1)を避ける。
+ */
+async function findSharesContainingKeywords(
   db: D1Like,
   userId: string,
-  keyword: string,
-  limit: number,
-): Promise<{ id: string; question: string; answer: string }[]> {
-  const rows = await db.prepare(
-    `SELECT id, question, answer FROM ai_chat_shares
-     WHERE user_id = ? AND deleted_at IS NULL AND (INSTR(question, ?) > 0 OR INSTR(answer, ?) > 0)
-     ORDER BY created_at DESC LIMIT ?`
-  ).bind(userId, keyword, keyword, limit).all<{ id: string; question: string; answer: string }>();
-  return rows.results ?? [];
+  keywords: string[],
+  limitPerKeyword: number,
+): Promise<Map<string, { id: string; question: string; answer: string }[]>> {
+  const byKeyword = new Map<string, { id: string; question: string; answer: string }[]>();
+  if (keywords.length === 0) return byKeyword;
+  // 1キーワードにつきquestion用・answer用の2バインド値を使うため、
+  // D1のバインド上限(userId分の1を除く)に収まる単位で分割する。
+  const maxKeywordsPerChunk = Math.max(1, Math.floor((D1_MAX_BOUND_PARAMS - 1) / 2));
+  for (const chunk of chunkBindValues(keywords, maxKeywordsPerChunk)) {
+    if (chunk.length === 0) continue;
+    const clause = chunk.map(() => '(INSTR(question, ?) > 0 OR INSTR(answer, ?) > 0)').join(' OR ');
+    const binds: unknown[] = [userId];
+    for (const kw of chunk) binds.push(kw, kw);
+    const rows = await db.prepare(
+      `SELECT id, question, answer FROM ai_chat_shares
+       WHERE user_id = ? AND deleted_at IS NULL AND (${clause})
+       ORDER BY created_at DESC`
+    ).bind(...binds).all<{ id: string; question: string; answer: string }>();
+    for (const row of (rows.results ?? [])) {
+      for (const kw of chunk) {
+        if (row.question.includes(kw) || row.answer.includes(kw)) {
+          const list = byKeyword.get(kw) ?? [];
+          if (list.length < limitPerKeyword) list.push(row);
+          byKeyword.set(kw, list);
+        }
+      }
+    }
+  }
+  return byKeyword;
 }
 
 /**
@@ -4253,9 +4280,10 @@ export async function buildAnswerPropagationGraph(
     }
 
     const nextAnswers: AnswerRec[] = [];
+    const matchesByKeyword = await findSharesContainingKeywords(db, userId, [...keywordNodeIds.keys()], maxAnswersPerKeyword);
     for (const [kw, kwNodeId] of keywordNodeIds) {
       if (nodes.length >= maxNodes) break;
-      const matches = await findSharesContainingKeyword(db, userId, kw, maxAnswersPerKeyword);
+      const matches = matchesByKeyword.get(kw) ?? [];
       for (const m of matches) {
         if (visitedShareIds.has(m.id)) continue;
         if (nodes.length >= maxNodes) break;
