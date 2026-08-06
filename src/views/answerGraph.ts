@@ -154,6 +154,17 @@ input[type=search]:focus { border-color:var(--accent); }
   background:var(--btn-bg); color:var(--fg); cursor:pointer;
 }
 .narrow-keywords-btn:hover { background:var(--btn-hover); }
+.answer-keywords-bar {
+  display:none; flex-wrap:wrap; gap:6px; align-items:center;
+  margin-top:8px; padding:8px 10px; border:1px solid var(--border); border-radius:8px;
+  background:var(--card);
+}
+.answer-keywords-bar-label { font-size:11px; color:var(--label); margin-right:2px; }
+.answer-keyword-chip {
+  padding:5px 10px; font-size:12px; border-radius:999px; border:1px solid var(--btn-border);
+  background:var(--btn-bg); color:var(--fg); cursor:pointer;
+}
+.answer-keyword-chip:hover { background:var(--btn-hover); border-color:var(--accent); }
 .narrow-modal-backdrop {
   position:fixed; inset:0; z-index:1100; display:none;
   align-items:center; justify-content:center; padding:28px 16px;
@@ -271,6 +282,7 @@ input[type=search]:focus { border-color:var(--accent); }
     </div>
     <div class="search-status" id="seedSearchStatus"></div>
     <button type="button" class="narrow-keywords-btn" id="narrowKeywordsBtn" title="ロード中のグラフ内で、経路が判明している質問の回答文に含まれるキーワードを出現回数順に提案します">🧭 キーワードで絞り込む</button>
+    <div class="answer-keywords-bar" id="answerKeywordsBar"></div>
     <div class="search-results-wrap">
       <table class="search-results-table">
         <thead>
@@ -369,6 +381,7 @@ input[type=search]:focus { border-color:var(--accent); }
   var narrowModalBackdrop = document.getElementById('narrowModalBackdrop');
   var narrowModalClose = document.getElementById('narrowModalClose');
   var narrowModalBody = document.getElementById('narrowModalBody');
+  var answerKeywordsBar = document.getElementById('answerKeywordsBar');
   var catQuickGroups = document.getElementById('catQuickGroups');
   var catQuickCats = document.getElementById('catQuickCats');
   var graphStatus = document.getElementById('graphStatus');
@@ -753,6 +766,38 @@ input[type=search]:focus { border-color:var(--accent); }
       .catch(function() { seedSearchStatus.textContent = '検索エラー'; });
   }
 
+  // 起点質問を選んだ直後、表の真上にその回答文内にあるキーワードを列挙し
+  // 選択可能にする。選ぶと中分類カテゴリの<select>を選んだ直後と同じ処理
+  // (doSeedSearch)に渡し、再度起点行を選べば同じ流れが繰り返される。
+  function renderAnswerKeywordsBar(shareId) {
+    answerKeywordsBar.innerHTML = '';
+    if (!lastLayout || !currentGraph || !shareId) { answerKeywordsBar.style.display = 'none'; return; }
+    var entry = lastLayout.posById['a:' + shareId];
+    if (!entry) { answerKeywordsBar.style.display = 'none'; return; }
+    var answerNode = entry.node;
+    var slots = computeAnswerKeywordSlots(lastLayout.posById, lastLayout.cx, lastLayout.cy, currentGraph.edges, answerNode)
+      .filter(function(slot) { return slot.node.depth === answerNode.depth + 1; });
+    if (!slots.length) { answerKeywordsBar.style.display = 'none'; return; }
+    answerKeywordsBar.style.display = 'flex';
+    var label = document.createElement('span');
+    label.className = 'answer-keywords-bar-label';
+    label.textContent = 'この回答文のキーワード:';
+    answerKeywordsBar.appendChild(label);
+    slots.forEach(function(slot) {
+      var chip = document.createElement('button');
+      chip.type = 'button';
+      chip.className = 'answer-keyword-chip';
+      var cnt = (keywordCountMap && keywordCountMap[slot.node.label]) || 0;
+      chip.textContent = slot.node.label + ' (' + cnt + ')';
+      chip.addEventListener('click', function() {
+        seedSearchInput.value = slot.node.label;
+        seedSearchStatus.textContent = '検索中...';
+        doSeedSearch(slot.node.label);
+      });
+      answerKeywordsBar.appendChild(chip);
+    });
+  }
+
   function renderNarrowModal() {
     narrowModalBody.innerHTML = '';
     if (!lastLayout || !currentGraph) {
@@ -943,6 +988,7 @@ input[type=search]:focus { border-color:var(--accent); }
           currentGraph = null;
           drawGraph();
           renderSearchResultsTable();
+          renderAnswerKeywordsBar(shareId);
           if (fpActive) { fpHeadingDeg = 0; refreshFirstPersonFocus(); renderFirstPersonHere(); renderFirstPersonView(); renderFilmstrip(); renderFpAnswerList(); }
           return;
         }
@@ -958,6 +1004,7 @@ input[type=search]:focus { border-color:var(--accent); }
         graphStatus.textContent = statusText;
         drawGraph();
         renderSearchResultsTable();
+        renderAnswerKeywordsBar(shareId);
         if (fpActive) { fpHeadingDeg = 0; refreshFirstPersonFocus(); renderFirstPersonHere(); renderFirstPersonView(); renderFilmstrip(); renderFpAnswerList(); }
       })
       .catch(function(err) {
