@@ -42,6 +42,7 @@
 | 作表後の並び順 | `doSeedSearch`で`count-desc` | キーワード数の多い行(=次の展開が豊富な行)を上に出す |
 | 🧭絞り込みモーダル | `computeNarrowingKeywordCandidates` / `renderNarrowModal` | 検索結果全体から次に選べるキーワードを出現回数順に提案する、ステップ5の別入口 |
 | ノード半径 | `computeAnswerNodeRadius` / `computeKeywordNodeRadius` | 俯瞰ビューでキーワードが多い回答(オアシス)・よく使われるキーワードを大きく描く |
+| パン屑リスト(選択履歴の足跡) | `computeTrailAfterJump` / `renderSelectionTrail` 等(詳細は4.1) | ステップ1〜6の選択のたびに足跡を`#selectionTrailBar`へ積み、巻き戻しを可能にする |
 
 ## 3. データフローの前提
 
@@ -54,40 +55,70 @@
   単位でバッチ化されている(N+1回避。詳細は
   [`NOTICE.cloudflare-workers-github-oauth-1.20260806.md`](NOTICE.cloudflare-workers-github-oauth-1.20260806.md))
 
-## 4. 拡張提案
+## 4. パン屑リスト(選択履歴の足跡)
 
-### 4.1 パン屑リスト(選択履歴の足跡) — 提案の本命
+**対象**: `#selectionTrailBar`(検索欄の真上)、`selectionTrail`配列、
+`computeTrailAfterJump`/`pushTrailKeyword`/`pushTrailSeed`/`jumpToTrailIndex`/
+`resetSelectionTrail`(`src/views/answerGraph.ts`)。ステップ1→5→5'→5''…と
+キーワードを選びながら進む過程で、どの経路を辿って今の検索結果に至ったかを
+画面上に足跡として残す。**実装済み**(4.1)。
 
-**対象**: ステップ1→5→5'→5''…とキーワードを選びながら進む過程 — どの経路を
-辿って今の検索結果に至ったかを画面上に足跡として残す。
+### 4.1 表示・操作仕様
 
-- 表示イメージ(検索欄の上に横並びのチップ列):
+- 表示イメージ(検索欄の上に横並びのチップ列。`›`区切り):
 
   ```text
-  旅行 > 東京駅 > 新幹線 > 駅弁
+  📄 旅行の質問 › 東京駅 › 新幹線 › 駅弁
   ```
 
-- 仕様案:
-  - ステップ1(中分類からの選択)とステップ5(キーワードバー/絞り込みモーダルからの
-    選択)のたびに、選んだキーワードを配列 `selectionTrail` に追記する
-  - 各足跡はタップ可能にし、タップするとその時点まで履歴を巻き戻して再検索する
-    (それ以降の足跡は削除)
-  - 起点確定(ステップ3)も足跡に含め、キーワードと区別できる見た目にする
-    (例: キーワード=丸チップ、質問=角丸四角)
-  - 手入力検索が行われたら足跡はリセットする(ループ外の操作のため)
-  - 保存はまずページ内のメモリのみ(リロードで消える)とし、必要になったら
-    `sessionStorage`への退避を検討する
-- 実装の勘所: 既存の`doSeedSearch`呼び出し箇所(中分類`<select>`・キーワードバー・
-  絞り込みモーダル)は全て「選んだキーワード」を知っているので、
-  `pushTrail(keyword, source)`を1行差し込むだけで記録は揃う。描画は
-  `renderTrail()`として独立させ、テスト可能な純粋関数
-  (`computeTrailAfterJump(trail, index)`等)に巻き戻しロジックを切り出す
+- 足跡が積まれるタイミング:
+  - 検索結果行の選択(起点確定・以後のフォーカス移動) → `pushTrailSeed(shareId, question)`。
+    見た目はキーワードと区別するため `📄` 付きの角丸四角(`.trail-chip-seed`)
+  - 中分類カテゴリの`<select>`選択、「この回答文のキーワード:」バーのチップ、
+    🧭絞り込みモーダルのチップ → いずれも `pushTrailKeyword(keyword)`。
+    中分類`<select>`はループの起点(ステップ1)を表すため、選択前に
+    `resetSelectionTrail()`してから積む
+- 各足跡はタップ可能。タップすると`jumpToTrailIndex(index)`でその時点まで
+  巻き戻し(`computeTrailAfterJump`、それ以降の足跡は破棄)、キーワードなら
+  `doSeedSearch`で再検索、起点(質問)なら`loadGraph`でグラフを再読み込みする。
+  巻き戻し自体は新たな足跡を積まない
+- 末尾(現在地)のチップは`disabled`でクリック不可
+- 手入力検索(`seedSearchInput`の`input`イベント)が行われたら足跡は
+  `resetSelectionTrail()`でリセットされる(ループ外の操作のため)
+- `✕ クリア`ボタンでいつでも足跡をリセットできる
 
-### 4.2 その他の拡張案(優先度順)
+### 4.2 保存(sessionStorage) — 同意ベース・デフォルトOFF
 
-1. **足跡からのやり直し履歴の永続化** — `selectionTrail`をD1(例:
-   `answer_graph_trail_log`)に記録すれば、「よく辿る経路」の分析や、次回訪問時の
-   「前回の続きから」ボタンに発展できる。まずはメモリ実装で使用感を確かめてから
+足跡には検索履歴・回答内容に由来する情報(質問文・キーワード)が含まれるため、
+**ユーザーが設定ページで明示的に同意(ON)しない限り一切保存しない**。
+
+- 設定: `/settings`の「answer-graph: パン屑リスト(選択履歴の足跡)を
+  ブラウザのsessionStorageに保存し、リロード後も復元する」トグル
+  (デフォルトOFF)。Cookie `answer_graph_trail_session_storage`(`on`の場合のみ有効。
+  他のanswer-graph設定`answer_graph_hide_empty_rows`とは逆に、デフォルトが
+  無効側であることに注意)
+  - 解決関数: `resolveAnswerGraphTrailSessionStorage(cookieHeader)`(`src/index.ts`)
+  - 変更エンドポイント: `POST /api/settings/answer-graph-trail-session-storage`
+- クライアント側: `getAnswerGraphPage`の`trailSessionStorageDefault`引数で
+  初期値を埋め込み、`trailSessionStorageSetting`というJS変数として保持する
+  - 保存: `renderSelectionTrail()`のたびに`persistSelectionTrail()`を呼び、
+    設定がONなら`sessionStorage.setItem('answerGraphSelectionTrail', ...)`、
+    OFFなら`sessionStorage.removeItem(...)`(同意していない場合は保存しない
+    だけでなく、過去に残っていたデータも消す=同意の取り消しを尊重する)
+  - 復元: ページ初期化時(`restoreSelectionTrail()`)に、設定がONなら
+    `sessionStorage`から読み込んで`selectionTrail`へ反映。設定がOFFなら
+    (前回ONだった名残りがあり得るため)ここでも`removeItem`する
+- `sessionStorage`はタブを閉じるまでの保持であり、他ページ・他タブ・
+  サーバー側へは一切送信されない(D1永続化とは別物。D1永続化は4.3の
+  拡張案として引き続き検討対象)
+
+### 4.3 さらなる拡張案(優先度順)
+
+1. **足跡のD1永続化(タブを閉じても残す・複数端末で共有)** — 4.2の
+   sessionStorageは「同じタブ内でのリロード」までしか耐えられない。
+   D1(例: `answer_graph_trail_log`)に記録すれば、「よく辿る経路」の分析や、
+   次回訪問時の「前回の続きから」ボタンに発展できる。sessionStorage版と
+   同様に**デフォルトOFF・設定ページでの明示同意が必須**とすること
 2. **キーワードバーと🧭モーダルの統合** — ステップ4のキーワードバー(現在地の
    回答文のキーワード)と🧭絞り込みモーダル(検索結果全体からの候補)は役割が近い。
    バー側に「もっと見る→モーダル」の導線を付けると、ループの入口が1つに整理される

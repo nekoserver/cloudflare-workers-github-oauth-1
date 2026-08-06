@@ -5792,6 +5792,21 @@ export function resolveAnswerGraphHideEmptyRows(cookieHeader: string | undefined
   return vals[ANSWER_GRAPH_HIDE_EMPTY_ROWS_COOKIE] !== 'off';
 }
 
+export const ANSWER_GRAPH_TRAIL_SESSION_STORAGE_COOKIE = 'answer_graph_trail_session_storage';
+
+/**
+ * /answer-graphのパン屑リスト(選択履歴の足跡)を、ブラウザのsessionStorage
+ * (タブを閉じるまで保持・リロードでも復元される)へ保存するかどうかを
+ * Cookieから解決する。足跡には検索履歴・回答内容に由来する情報が含まれる
+ * ため、ユーザーが設定ページで明示的に同意しない限り保存してはならない。
+ * 他のanswer-graph設定(例: resolveAnswerGraphHideEmptyRows)とは逆に、
+ * デフォルトは無効(保存しない)。
+ */
+export function resolveAnswerGraphTrailSessionStorage(cookieHeader: string | undefined | null): boolean {
+  const vals = getCookieValues(cookieHeader ?? undefined, [ANSWER_GRAPH_TRAIL_SESSION_STORAGE_COOKIE]);
+  return vals[ANSWER_GRAPH_TRAIL_SESSION_STORAGE_COOKIE] === 'on';
+}
+
 /**
  * bge-m3以外のモデル(plamo-embedding-1b, embeddinggemma-300m)は、それぞれ
  * 専用の追加カラム(<prefix>_vector/<prefix>_dim/<prefix>_model/<prefix>_updated_at)
@@ -8272,7 +8287,8 @@ app.get('/answer-graph', authMiddleware, async (c) => {
     }
   }
   const hideEmptyRows = resolveAnswerGraphHideEmptyRows(c.req.header('Cookie'));
-  return c.html(getAnswerGraphPage(user.sub, modelColors, hideEmptyRows));
+  const trailSessionStorage = resolveAnswerGraphTrailSessionStorage(c.req.header('Cookie'));
+  return c.html(getAnswerGraphPage(user.sub, modelColors, hideEmptyRows, trailSessionStorage));
 });
 
 app.get('/base64', authMiddleware, async (c) => {
@@ -8635,6 +8651,7 @@ app.get('/settings', authMiddleware, async (c) => {
   const apisNavFlash = cookieVals['user_apis_nav_flash'] ?? '7';
   const autoVectorizeSettings = resolveAutoVectorizeSettings(cookieHeader);
   const answerGraphHideEmptyRows = resolveAnswerGraphHideEmptyRows(cookieHeader);
+  const answerGraphTrailSessionStorage = resolveAnswerGraphTrailSessionStorage(cookieHeader);
 
   let issuedAt: string;
   let expiresAt: string;
@@ -8704,6 +8721,7 @@ app.get('/settings', authMiddleware, async (c) => {
     aichatAutoVectorizeEnabled: autoVectorizeSettings.enabled ? 'on' : 'off',
     aichatAutoVectorizeModel: autoVectorizeSettings.model,
     answerGraphHideEmptyRows: answerGraphHideEmptyRows ? 'on' : 'off',
+    answerGraphTrailSessionStorage: answerGraphTrailSessionStorage ? 'on' : 'off',
     emailConfirmLoginEnabled,
     githubScopes: GITHUB_OAUTH_SCOPE,
     githubGrantedScopes: grantedScopes,
@@ -13576,6 +13594,19 @@ app.post('/api/settings/answer-graph-hide-empty-rows', authMiddleware, async (c)
     return c.json({ message: 'answer-graphの空行非表示設定を変更しました', mode }, 200);
   } catch {
     return c.json({ error: 'answer-graphの空行非表示設定の変更に失敗しました' }, 500);
+  }
+});
+
+app.post('/api/settings/answer-graph-trail-session-storage', authMiddleware, async (c) => {
+  try {
+    const { mode } = await c.req.json();
+    if (mode !== 'on' && mode !== 'off') {
+      return c.json({ error: '無効な設定値です' }, 400);
+    }
+    c.header('Set-Cookie', `${ANSWER_GRAPH_TRAIL_SESSION_STORAGE_COOKIE}=${mode}; Path=/; Secure; SameSite=Lax; Max-Age=31536000`);
+    return c.json({ message: 'answer-graphのパン屑リストのsessionStorage保存設定を変更しました', mode }, 200);
+  } catch {
+    return c.json({ error: 'answer-graphのパン屑リストのsessionStorage保存設定の変更に失敗しました' }, 500);
   }
 });
 
