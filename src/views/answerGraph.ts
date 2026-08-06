@@ -4,9 +4,10 @@ function escAG(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
-export function getAnswerGraphPage(username: string, modelColors: Record<string, string> = {}): string {
+export function getAnswerGraphPage(username: string, modelColors: Record<string, string> = {}, hideEmptyRowsDefault: boolean = true): string {
   const safeUser = escAG(username);
   const modelColorsJson = JSON.stringify(modelColors);
+  const hideEmptyRowsDefaultJs = hideEmptyRowsDefault ? 'true' : 'false';
   return `<!DOCTYPE html>
 <html lang="ja">
 <head>
@@ -401,6 +402,7 @@ input[type=search]:focus { border-color:var(--accent); }
   var answerModalShareLink = document.getElementById('answerModalShareLink');
   var answerModalHighlightToggleBtn = document.getElementById('answerModalHighlightToggleBtn');
   var MODEL_COLORS = ${modelColorsJson};
+  var hideEmptyRowsSetting = ${hideEmptyRowsDefaultJs};
   var fpToggleBtn = document.getElementById('fpToggleBtn');
   var fpView = document.getElementById('fpView');
   var fpHere = document.getElementById('fpHere');
@@ -416,6 +418,10 @@ input[type=search]:focus { border-color:var(--accent); }
 
   var searchTimer = null;
   var searchResultsRaw = [];
+  // 「この回答文のキーワード:」バーのチップから再検索した場合にtrueになり、
+  // 「キーワード数0」の行・経路が「ー」の行を表の描画から除外する
+  // (設定ページのanswerGraphHideEmptyRows設定がONの場合のみ)。
+  var searchFilterEmptyRows = false;
   var searchSortMode = 'date';
   var selectedShareId = null;
   var nodePositions = [];
@@ -691,11 +697,21 @@ input[type=search]:focus { border-color:var(--accent); }
     return stages.map(function(stage, i) { return (i + 1) + '. ' + stage.keywords.join('/'); }).join(' → ');
   }
 
+  // 「キーワード数0」の行・経路が「ー」の行を非表示にするかどうかを判定する。
+  // filterEmptyRowsがfalseなら常に表示する(非表示にしない)。
+  function shouldHideSearchResultRow(r, pathText, filterEmptyRows) {
+    if (!filterEmptyRows) return false;
+    var isZeroKeyword = !((r && r.keywordCount) || 0);
+    return isZeroKeyword || pathText === '—';
+  }
+
   function renderSearchResultsTable() {
     var sorted = sortSearchResults(searchResultsRaw, searchSortMode);
     seedSearchResults.innerHTML = '';
     sorted.forEach(function(r) {
       var isZeroKeyword = !(r.keywordCount || 0);
+      var pathText = formatSearchResultPath(r.id);
+      if (shouldHideSearchResultRow(r, pathText, searchFilterEmptyRows)) return;
       var row = document.createElement('tr');
       row.className = 'search-result-row' + (isZeroKeyword ? ' zero-keyword-row' : '') + (r.id === selectedShareId ? ' selected' : '');
       var countTd = document.createElement('td');
@@ -706,7 +722,7 @@ input[type=search]:focus { border-color:var(--accent); }
       dateTd.textContent = formatSearchResultDateTime(r.created_at);
       var pathTd = document.createElement('td');
       pathTd.className = 'search-result-path';
-      pathTd.textContent = formatSearchResultPath(r.id);
+      pathTd.textContent = pathText;
       var qTd = document.createElement('td');
       qTd.className = 'search-result-question';
       qTd.textContent = r.question;
@@ -749,7 +765,8 @@ input[type=search]:focus { border-color:var(--accent); }
     if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); cycleDateSortMode(); }
   });
 
-  function doSeedSearch(q) {
+  function doSeedSearch(q, filterEmptyRows) {
+    searchFilterEmptyRows = !!filterEmptyRows;
     seedSearchStatus.textContent = '検索中...';
     fetch('/api/aichat/shares/search?q=' + encodeURIComponent(q), { credentials: 'same-origin' })
       .then(function(r) { return r.json(); })
@@ -792,7 +809,7 @@ input[type=search]:focus { border-color:var(--accent); }
       chip.addEventListener('click', function() {
         seedSearchInput.value = slot.node.label;
         seedSearchStatus.textContent = '検索中...';
-        doSeedSearch(slot.node.label);
+        doSeedSearch(slot.node.label, hideEmptyRowsSetting);
       });
       answerKeywordsBar.appendChild(chip);
     });
