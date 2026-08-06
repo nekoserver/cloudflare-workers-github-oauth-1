@@ -76,6 +76,58 @@ async function setupTrailStorageRestoreOnly(trailSessionStorageDefault?: boolean
   await new Promise((resolve) => setTimeout(resolve, 10));
 }
 
+describe('sessionStorageからの復元は「見た目の足跡チップ」のみで、グラフ・検索結果などの実際の選択状況は再現しない(現状の制約の確認)', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    sessionStorage.clear();
+  });
+
+  it('起点(seed)の足跡が復元されても、グラフ取得APIは呼ばれない(グラフは再読み込みされない)', async () => {
+    sessionStorage.setItem(TRAIL_KEY, JSON.stringify([{ type: 'seed', label: '質問1(起点)', id: 'seed' }]));
+    const html = buildPage(true);
+    const fetchMock = vi.fn(() => Promise.resolve({ json: () => Promise.resolve({}) }));
+    stubFetchWithMock(html, fetchMock);
+
+    const scriptSrc = html.slice(html.indexOf('<script>') + 8, html.indexOf('</script>'));
+    // eslint-disable-next-line no-new-func
+    new Function(scriptSrc)();
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    // 足跡チップ自体は復元されて表示される
+    const selectionTrailBar = document.getElementById('selectionTrailBar')!;
+    expect(selectionTrailBar.classList.contains('visible')).toBe(true);
+
+    // しかしグラフ取得(answer-propagation-graph)は一度も呼ばれていない
+    const graphCalls = fetchMock.mock.calls.filter((c) => String(c[0]).includes('/api/aichat/answer-propagation-graph'));
+    expect(graphCalls.length).toBe(0);
+  });
+
+  it('起点(seed)の足跡が復元されても、検索結果テーブル・回答文キーワードバーは空のまま', async () => {
+    sessionStorage.setItem(TRAIL_KEY, JSON.stringify([{ type: 'seed', label: '質問1(起点)', id: 'seed' }]));
+    const html = buildPage(true);
+    stubFetchWithMock(html, vi.fn(() => Promise.resolve({ json: () => Promise.resolve({}) })));
+
+    const scriptSrc = html.slice(html.indexOf('<script>') + 8, html.indexOf('</script>'));
+    // eslint-disable-next-line no-new-func
+    new Function(scriptSrc)();
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    const seedSearchResults = document.getElementById('seedSearchResults')!;
+    const answerKeywordsBar = document.getElementById('answerKeywordsBar')!;
+    expect(seedSearchResults.children.length).toBe(0);
+    expect(answerKeywordsBar.style.display).not.toBe('flex');
+  });
+});
+
+function stubFetchWithMock(html: string, fetchMock: ReturnType<typeof vi.fn>) {
+  document.body.innerHTML = html.slice(html.indexOf('<body>') + 6, html.indexOf('<script>'));
+  const proto = (window as unknown as { HTMLCanvasElement: { prototype: { getContext: unknown } } }).HTMLCanvasElement.prototype;
+  proto.getContext = () => ({
+    clearRect: () => {}, beginPath: () => {}, arc: () => {}, fill: () => {}, stroke: () => {}, moveTo: () => {}, lineTo: () => {},
+  });
+  vi.stubGlobal('fetch', fetchMock);
+}
+
 describe('パン屑リストのsessionStorage保存(同意ベース・デフォルトOFF)', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
