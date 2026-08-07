@@ -7,7 +7,15 @@
 export function convertMarkdownToSlackMrkdwn(markdown: string): string {
   if (!markdown) return markdown;
 
-  let text = markdown
+  // max_tokens上限で応答が途中で打ち切られる等の理由でフェンス(```)が
+  // 奇数個(閉じられないまま)になっている場合、コードブロック抽出の正規表現が
+  // マッチせず```がそのまま平文として残ってしまい、Slack側でも閉じられない
+  // コードブロックとして扱われて以降の表示が崩れる。奇数個の場合は末尾に
+  // 閉じ用の```を補って必ず偶数個(開閉が揃った状態)にする。
+  const fenceCount = (markdown.match(/```/g) ?? []).length;
+  const normalizedMarkdown = fenceCount % 2 === 1 ? `${markdown}\n\`\`\`` : markdown;
+
+  let text = normalizedMarkdown
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;');
