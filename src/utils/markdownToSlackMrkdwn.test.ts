@@ -74,6 +74,21 @@ describe('convertMarkdownToSlackMrkdwn', () => {
     expect(convertMarkdownToSlackMrkdwn('')).toBe('');
   });
 
+  it('フェンス(```)が閉じられていない(応答が途中で打ち切られた等)場合は末尾に閉じ用の```を補う', () => {
+    const md = '以下のコードです。\n```js\nfunction foo() {\n  return 1;';
+    const result = convertMarkdownToSlackMrkdwn(md);
+    const fenceCount = (result.match(/```/g) ?? []).length;
+    expect(fenceCount % 2).toBe(0);
+    expect(result).toContain('```js\nfunction foo() {\n  return 1;\n```');
+  });
+
+  it('フェンスが正しく閉じられている場合は余分な```を追加しない', () => {
+    const md = '```js\nconsole.log(1)\n```';
+    const result = convertMarkdownToSlackMrkdwn(md);
+    const fenceCount = (result.match(/```/g) ?? []).length;
+    expect(fenceCount).toBe(2);
+  });
+
   it('複合的なMarkdown文書を一通り変換できる', () => {
     const md = [
       '## 結論',
