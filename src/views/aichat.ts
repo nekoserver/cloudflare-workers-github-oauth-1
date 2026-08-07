@@ -2569,7 +2569,7 @@ export function getAiChatPage(user: {
         historyModalShareLink.href = '/s/' + data.user_hash + '/' + data.id;
         renderHistoryModalTokens(data);
         if (assistBubble) {
-          assistBubble.innerHTML = parseMd(data.answer);
+          assistBubble.innerHTML = parseMd(truncateForHistoryPreview(data.answer));
           if (historyModalHighlightActive && historyModalCurrentKeyword) {
             applyKeywordHighlight(assistBubble, historyModalCurrentKeyword);
           }
@@ -2666,11 +2666,21 @@ export function getAiChatPage(user: {
       return r.created_at.slice(0, 16).replace('T', ' ') + '　' + shortModelName(r.model) + '　👁 ' + (r.access_count || 0);
     }
 
+    // Slack応答等、モデルによっては極端に長い(数万〜数十万文字規模)応答が
+    // 保存される場合があり、そのままMarkdownパーサー・キーワードハイライト処理に
+    // 渡すと処理時間が長くなりページがフリーズしたように見える原因になる。
+    // 履歴表示(検索結果からのプレビュー)ではこの上限を超える分は切り詰める。
+    var HISTORY_PREVIEW_MAX_CHARS = 20000;
+    function truncateForHistoryPreview(text) {
+      if (typeof text !== 'string' || text.length <= HISTORY_PREVIEW_MAX_CHARS) return text;
+      return text.slice(0, HISTORY_PREVIEW_MAX_CHARS) + '\\n\\n…(長すぎるため以下省略。共有リンクから全文を確認できます)';
+    }
+
     function appendHistoryModalBubble(text, role) {
       var el = document.createElement('div');
       if (role === 'assistant') {
         el.className = 'chat-bubble assistant preview-area';
-        el.innerHTML = parseMd(text);
+        el.innerHTML = parseMd(truncateForHistoryPreview(text));
       } else {
         el.className = 'chat-bubble user';
         el.textContent = text;
@@ -2830,7 +2840,7 @@ export function getAiChatPage(user: {
     function showResultsPanel(r, keyword) {
       closeHistoryModal();
       resultsPanelQ.textContent = r.question;
-      resultsPanelA.innerHTML = parseMd(r.answer);
+      resultsPanelA.innerHTML = parseMd(truncateForHistoryPreview(r.answer));
       if (keyword) {
         applyKeywordHighlight(resultsPanelQ, keyword);
         applyKeywordHighlight(resultsPanelA, keyword);
