@@ -42,6 +42,21 @@ export function stripBotMentions(text: string): string {
 }
 
 /**
+ * AI応答をSlackのコードブロック(```)内に収まる形式に整形する。
+ * 応答本文に既に ``` が含まれていると外側のコードブロックがそこで閉じて
+ * しまい表示が崩れるため、内部の ``` はゼロ幅スペースを挟んで無効化する。
+ * エラーメッセージ(ok:false)はコードブロック化しない(絵文字付きの
+ * 通常テキストのまま返す)。
+ */
+export function formatSlackAiReplyText(aiResult: { ok: true; text: string } | { ok: false; error: string }): string {
+  if (!aiResult.ok) {
+    return `❌ AI応答の取得に失敗しました: ${aiResult.error}`;
+  }
+  const safeText = aiResult.text.replace(/```/g, '`' + String.fromCharCode(0x200b) + '``');
+  return '```\n' + safeText + '\n```';
+}
+
+/**
  * Slackの app_mention イベントを処理する。
  * メンション本文をAIチャットに渡して応答を取得し、同じスレッドに返信する。
  * AI応答取得に失敗した場合もエラー内容をSlackへ返信する（記録＝戻り値、通知＝Slack返信）。
@@ -63,7 +78,7 @@ export async function handleSlackAppMention(deps: SlackMentionReplyDeps): Promis
   }
 
   const aiResult = await generateSlackAiReply(cleanedText, deps.configuredModel, deps.aiRun);
-  const replyText = aiResult.ok ? aiResult.text : `❌ AI応答の取得に失敗しました: ${aiResult.error}`;
+  const replyText = formatSlackAiReplyText(aiResult);
 
   const result = await deps.postMessage({
     token: deps.slackToken,
