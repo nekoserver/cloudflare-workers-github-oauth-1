@@ -1,4 +1,5 @@
 import { generateSlackAiReply, type AiRunFn, type AiUsage } from './slackAiReply';
+import { convertMarkdownToSlackMrkdwn } from './markdownToSlackMrkdwn';
 
 export type SlackPostMessageFn = (params: {
   token: string;
@@ -42,18 +43,17 @@ export function stripBotMentions(text: string): string {
 }
 
 /**
- * AI応答をSlackのコードブロック(```)内に収まる形式に整形する。
- * 応答本文に既に ``` が含まれていると外側のコードブロックがそこで閉じて
- * しまい表示が崩れるため、内部の ``` はゼロ幅スペースを挟んで無効化する。
- * エラーメッセージ(ok:false)はコードブロック化しない(絵文字付きの
- * 通常テキストのまま返す)。
+ * AI応答をSlackのメッセージ記法(mrkdwn)に整形する。AIが生成したMarkdownを
+ * convertMarkdownToSlackMrkdwnでmrkdwnへ変換して返す(見出し・太字・箇条書き等が
+ * Slack上でも読みやすく表示される)。フェンスコードブロック/インラインコードは
+ * 変換内部で退避されるため、応答本文にそのまま含まれていても壊れない。
+ * エラーメッセージ(ok:false)は変換せず、絵文字付きの通常テキストのまま返す。
  */
 export function formatSlackAiReplyText(aiResult: { ok: true; text: string } | { ok: false; error: string }): string {
   if (!aiResult.ok) {
     return `❌ AI応答の取得に失敗しました: ${aiResult.error}`;
   }
-  const safeText = aiResult.text.replace(/```/g, '`' + String.fromCharCode(0x200b) + '``');
-  return '```\n' + safeText + '\n```';
+  return convertMarkdownToSlackMrkdwn(aiResult.text);
 }
 
 /**

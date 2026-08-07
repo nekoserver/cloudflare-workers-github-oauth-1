@@ -77,7 +77,8 @@ import { verifySlackSignature } from './utils/slackSignature';
 import { handleSlackInteraction, type SlackAiReplyTask } from './utils/slackInteraction';
 import { handleSlackEvent } from './utils/slackEvent';
 import { handleSlackAppMention } from './utils/slackMentionReply';
-import type { AiUsage } from './utils/slackAiReply';
+import { SLACK_AI_MODEL, type AiUsage } from './utils/slackAiReply';
+import { buildAichatSourceTotals } from './utils/aichatSourceStats';
 import { exchangeSlackOAuthCode } from './utils/slackOauth';
 import { executeCreateRepo } from './utils/repoValidation';
 import { validateReturnTo } from './utils/returnTo';
@@ -4913,7 +4914,7 @@ app.get('/api/aichat/daily-stats', authMiddleware, async (c) => {
   if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
   const month = ((c.req.query('month') ?? '').slice(0, 7)) || new Date().toISOString().slice(0, 7);
 
-  const [kwRows, qRows, apiModelRows] = await Promise.all([
+  const [kwRows, qRows, apiModelRows, sourceRows] = await Promise.all([
     c.env.DB.prepare(
       `SELECT substr(searched_at,1,10) as date, COUNT(DISTINCT keyword) as kw_count
        FROM aichat_search_history
@@ -4932,6 +4933,12 @@ app.get('/api/aichat/daily-stats', authMiddleware, async (c) => {
        WHERE user_id=? AND deleted_at IS NULL AND created_at LIKE ? AND source='api'
        GROUP BY model ORDER BY q_count DESC`
     ).bind(user.sub, `${month}%`).all<{ model: string; q_count: number }>(),
+    c.env.DB.prepare(
+      `SELECT source, COUNT(*) as q_count
+       FROM ai_chat_shares
+       WHERE user_id=? AND deleted_at IS NULL AND created_at LIKE ?
+       GROUP BY source ORDER BY q_count DESC`
+    ).bind(user.sub, `${month}%`).all<{ source: string | null; q_count: number }>(),
   ]);
 
   const kwMap: Record<string, number> = {};
@@ -4948,6 +4955,8 @@ app.get('/api/aichat/daily-stats', authMiddleware, async (c) => {
   const apiModelTotals: Record<string, number> = {};
   (apiModelRows.results ?? []).forEach(r => { apiModelTotals[r.model] = r.q_count; });
 
+  const sourceTotals = buildAichatSourceTotals(sourceRows.results ?? []);
+
   const allDates = new Set<string>([...Object.keys(kwMap), ...Object.keys(qMap)]);
   const days = Array.from(allDates).sort().map(date => ({
     date,
@@ -4955,7 +4964,7 @@ app.get('/api/aichat/daily-stats', authMiddleware, async (c) => {
     models: qMap[date] ?? {},
   }));
 
-  return jsonUtf8({ month, days, models: Array.from(modelSet), apiModelTotals });
+  return jsonUtf8({ month, days, models: Array.from(modelSet), apiModelTotals, sourceTotals });
 });
 
 app.get('/api/aichat/shares/by-date', authMiddleware, async (c) => {
@@ -12792,7 +12801,7 @@ async function dispatchSlackAiReply(
     channel: task.channel,
     threadTs: task.threadTs,
     slackToken,
-    configuredModel: env.AI_CHAT_MODEL,
+    configuredModel: SLACK_AI_MODEL,
     aiRun: env.AI
       ? (model, params) => env.AI!.run(model as Parameters<typeof env.AI.run>[0], params as Parameters<typeof env.AI.run>[1])
       : () => Promise.reject(new Error('AI バインディングが未設定です')),

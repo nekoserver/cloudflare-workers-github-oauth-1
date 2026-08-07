@@ -1,4 +1,3 @@
-import { buildAiMessages, type SystemPromptMode } from './buildAiMessages';
 import { stripThinkTags } from './stripThinkTags';
 import { AICHAT_MODEL_MAX_TOKENS, getModelRunParams } from './aichatModelConfig';
 import { extractAiUsage } from './aiUsage';
@@ -15,7 +14,24 @@ export type SlackAiReplyResult =
   | { ok: true; text: string; usedModel: string; usage: AiUsage }
   | { ok: false; error: string };
 
+/**
+ * Slack @メンションAI応答の既定モデル。gemma-4-26b-a4b-itはsystem messageが
+ * 含まれるとthinking modeを強制するバグがあるため(aichatModelConfig.ts参照)、
+ * system roleを使わずuser roleのみでメッセージを組み立てる(buildSlackAiMessages)。
+ */
+export const SLACK_AI_MODEL = '@cf/google/gemma-4-26b-a4b-it';
 const FALLBACK_MODEL = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
+
+const SLACK_RESPONSE_INSTRUCTION =
+  '日本語で、Markdown記法(見出し・箇条書き・強調など)を使って分かりやすく回答してください。\n\n';
+
+/**
+ * Slack応答用のメッセージを組み立てる。system roleを使うとgemma-4-26b-a4b-itが
+ * thinking modeを強制してしまうため、指示文をuserメッセージ本文の先頭に埋め込む。
+ */
+export function buildSlackAiMessages(message: string): Array<{ role: string; content: string }> {
+  return [{ role: 'user', content: SLACK_RESPONSE_INSTRUCTION + message }];
+}
 
 function extractAiText(result: unknown): string {
   const resultObj = (typeof result === 'object' && result !== null) ? result as Record<string, unknown> : {};
@@ -36,17 +52,16 @@ function extractAiText(result: unknown): string {
 export async function generateSlackAiReply(
   message: string,
   configuredModel: string | undefined,
-  aiRun: AiRunFn,
-  systemPromptMode: SystemPromptMode = 'a'
+  aiRun: AiRunFn
 ): Promise<SlackAiReplyResult> {
-  const primaryModel = (configuredModel ?? '').trim() || FALLBACK_MODEL;
+  const primaryModel = (configuredModel ?? '').trim() || SLACK_AI_MODEL;
   const modelsToTry = primaryModel === FALLBACK_MODEL ? [primaryModel] : [primaryModel, FALLBACK_MODEL];
 
   let lastError = 'AI応答の取得に失敗しました';
   for (const model of modelsToTry) {
     try {
       const maxTokens = AICHAT_MODEL_MAX_TOKENS[model] ?? 4096;
-      const baseParams = { messages: buildAiMessages(message, systemPromptMode), max_tokens: maxTokens };
+      const baseParams = { messages: buildSlackAiMessages(message), max_tokens: maxTokens };
       const runParams = getModelRunParams(model, baseParams);
       const result = await aiRun(model, runParams);
       const cleaned = stripThinkTags(extractAiText(result));

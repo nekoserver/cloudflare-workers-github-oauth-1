@@ -197,7 +197,7 @@ describe('日次統計グラフ: backend API', () => {
     const src = readFileSync(join(__dirname, 'index.ts'), 'utf-8');
     const idx = src.indexOf('/api/aichat/daily-stats');
     expect(idx).toBeGreaterThan(-1);
-    const snippet = src.slice(idx, idx + 2200);
+    const snippet = src.slice(idx, idx + 3200);
     expect(snippet).toContain('models');
   });
 
@@ -205,7 +205,7 @@ describe('日次統計グラフ: backend API', () => {
     const src = readFileSync(join(__dirname, 'index.ts'), 'utf-8');
     const idx = src.indexOf('/api/aichat/daily-stats');
     expect(idx).toBeGreaterThan(-1);
-    const snippet = src.slice(idx, idx + 2200);
+    const snippet = src.slice(idx, idx + 3200);
     expect(snippet).toContain('kw_count');
   });
 
@@ -213,7 +213,7 @@ describe('日次統計グラフ: backend API', () => {
     const src = readFileSync(join(__dirname, 'index.ts'), 'utf-8');
     const idx = src.indexOf('/api/aichat/daily-stats');
     expect(idx).toBeGreaterThan(-1);
-    const snippet = src.slice(idx, idx + 2800);
+    const snippet = src.slice(idx, idx + 3200);
     expect(snippet).toContain('apiModelTotals');
   });
 
@@ -221,7 +221,7 @@ describe('日次統計グラフ: backend API', () => {
     const src = readFileSync(join(__dirname, 'index.ts'), 'utf-8');
     const idx = src.indexOf('/api/aichat/daily-stats');
     expect(idx).toBeGreaterThan(-1);
-    const snippet = src.slice(idx, idx + 2800);
+    const snippet = src.slice(idx, idx + 3200);
     expect(snippet).toContain("source='api'");
   });
 });
@@ -259,6 +259,77 @@ describe('日次統計グラフ: API経由モデル別円グラフ', () => {
 });
 
 // ===========================================================
+// 左パネル: リクエスト元別円グラフ(Slack/AIチャット入力窓/回答伝播ページ)
+// ===========================================================
+describe('日次統計グラフ: リクエスト元別円グラフ', () => {
+  it('sourceTotals をレスポンスから取得する', () => {
+    const html = buildPage();
+    const idx = html.indexOf('function renderDailyStatsChart');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 20000);
+    expect(fn).toContain('sourceTotals');
+  });
+
+  it('Slack・AIチャット入力窓・回答伝播ページの3ラベルが左パネルに出力される', () => {
+    const html = buildPage();
+    const idx = html.indexOf('function renderDailyStatsChart');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 20000);
+    expect(fn).toContain('Slack');
+    expect(fn).toContain('AIチャット入力窓');
+    expect(fn).toContain('回答伝播ページ');
+  });
+
+  it('リクエスト元別 というラベルが左パネルに出力される', () => {
+    const html = buildPage();
+    const idx = html.indexOf('function renderDailyStatsChart');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 20000);
+    expect(fn).toContain('リクエスト元別');
+  });
+
+  it('sourceTotals 用の SVG path（円グラフ）が生成される', () => {
+    const html = buildPage();
+    const idx = html.indexOf('function renderDailyStatsChart');
+    expect(idx).toBeGreaterThan(-1);
+    const fn = html.slice(idx, idx + 21000);
+    const sourceIdx = fn.indexOf('sourceTotals');
+    expect(sourceIdx).toBeGreaterThan(-1);
+    const afterSource = fn.slice(sourceIdx, sourceIdx + 3000);
+    expect(afterSource).toContain('<path ');
+  });
+});
+
+// ===========================================================
+// backend: /api/aichat/daily-stats エンドポイント sourceTotals
+// ===========================================================
+describe('日次統計グラフ: backend API sourceTotals', () => {
+  it('daily-stats レスポンスに sourceTotals が含まれる', () => {
+    const src = readFileSync(join(__dirname, 'index.ts'), 'utf-8');
+    const idx = src.indexOf('/api/aichat/daily-stats');
+    expect(idx).toBeGreaterThan(-1);
+    const snippet = src.slice(idx, idx + 3200);
+    expect(snippet).toContain('sourceTotals');
+  });
+
+  it('daily-stats が source列でGROUP BYして集計する', () => {
+    const src = readFileSync(join(__dirname, 'index.ts'), 'utf-8');
+    const idx = src.indexOf('/api/aichat/daily-stats');
+    expect(idx).toBeGreaterThan(-1);
+    const snippet = src.slice(idx, idx + 3200);
+    expect(snippet).toContain('GROUP BY source');
+  });
+
+  it('buildAichatSourceTotalsを呼び出してsourceTotalsを作る', () => {
+    const src = readFileSync(join(__dirname, 'index.ts'), 'utf-8');
+    const idx = src.indexOf('/api/aichat/daily-stats');
+    expect(idx).toBeGreaterThan(-1);
+    const snippet = src.slice(idx, idx + 3200);
+    expect(snippet).toContain('buildAichatSourceTotals(');
+  });
+});
+
+// ===========================================================
 // 折れ線チャート: 日ごと累計
 // ===========================================================
 describe('日次統計グラフ: 折れ線は日ごと累計KW数', () => {
@@ -266,7 +337,7 @@ describe('日次統計グラフ: 折れ線は日ごと累計KW数', () => {
     const html = buildPage();
     const idx = html.indexOf('function renderDailyStatsChart');
     expect(idx).toBeGreaterThan(-1);
-    const fn = html.slice(idx, idx + 12000);
+    const fn = html.slice(idx, idx + 14000);
     expect(fn).toContain('cumKwByDay');
   });
 
@@ -274,7 +345,7 @@ describe('日次統計グラフ: 折れ線は日ごと累計KW数', () => {
     const html = buildPage();
     const idx = html.indexOf('function renderDailyStatsChart');
     expect(idx).toBeGreaterThan(-1);
-    const fn = html.slice(idx, idx + 12000);
+    const fn = html.slice(idx, idx + 14000);
     expect(fn).toContain('cumSum');
   });
 
