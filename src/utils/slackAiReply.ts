@@ -22,6 +22,17 @@ export type SlackAiReplyResult =
 export const SLACK_AI_MODEL = '@cf/google/gemma-4-26b-a4b-it';
 const FALLBACK_MODEL = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
 
+/**
+ * Slack応答のmax_tokens上限。AICHAT_MODEL_MAX_TOKENSはAIチャットページでの
+ * 対話的な利用を想定した値(gemma-4-26b-a4b-itは65536)だが、Slackへの返信は
+ * 短い会話メッセージであるべきで、この上限をそのまま使うと極端に長い(数十万文字規模の)
+ * 応答が生成され得る。そのような巨大な応答はai_chat_sharesに保存された後、
+ * AIチャットページの検索結果からその履歴を開いた際にクライアント側のMarkdown
+ * パーサー・キーワードハイライト処理が長時間かかりページがフリーズする原因になるため、
+ * Slack応答はより小さい上限に丸める。
+ */
+const SLACK_MAX_TOKENS = 4096;
+
 const SLACK_RESPONSE_INSTRUCTION =
   '日本語で、Markdown記法(見出し・箇条書き・強調など)を使って分かりやすく回答してください。\n\n';
 
@@ -60,7 +71,7 @@ export async function generateSlackAiReply(
   let lastError = 'AI応答の取得に失敗しました';
   for (const model of modelsToTry) {
     try {
-      const maxTokens = AICHAT_MODEL_MAX_TOKENS[model] ?? 4096;
+      const maxTokens = Math.min(AICHAT_MODEL_MAX_TOKENS[model] ?? 4096, SLACK_MAX_TOKENS);
       const baseParams = { messages: buildSlackAiMessages(message), max_tokens: maxTokens };
       const runParams = getModelRunParams(model, baseParams);
       const result = await aiRun(model, runParams);

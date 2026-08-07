@@ -39,7 +39,21 @@ describe('generateSlackAiReply', () => {
     await generateSlackAiReply('hello', '@cf/google/gemma-4-26b-a4b-it', aiRun);
     const [, params] = aiRun.mock.calls[0];
     expect(params.chat_template_kwargs).toEqual({ enable_thinking: false });
-    expect(params.max_tokens).toBe(65536);
+  });
+
+  it('gemma-4-26b-a4b-itのAICHAT_MODEL_MAX_TOKENS(65536)をそのまま使わず、Slack向けの小さい上限に丸める(巨大な応答がAIチャット履歴表示をフリーズさせるのを防ぐため)', async () => {
+    const aiRun = vi.fn().mockResolvedValue({ response: 'ok' });
+    await generateSlackAiReply('hello', '@cf/google/gemma-4-26b-a4b-it', aiRun);
+    const [, params] = aiRun.mock.calls[0];
+    expect(params.max_tokens).toBeLessThan(65536);
+    expect(params.max_tokens).toBe(4096);
+  });
+
+  it('AICHAT_MODEL_MAX_TOKENSに定義の無いモデルはデフォルト(4096)とSLACK_MAX_TOKENSの小さい方を使う', async () => {
+    const aiRun = vi.fn().mockResolvedValue({ response: 'ok' });
+    await generateSlackAiReply('hello', '@cf/meta/llama-3.1-70b-instruct', aiRun);
+    const [, params] = aiRun.mock.calls[0];
+    expect(params.max_tokens).toBe(4096);
   });
 
   it('choices[0].message.content からも応答テキストを取り出せる', async () => {
