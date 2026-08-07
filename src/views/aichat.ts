@@ -5921,6 +5921,49 @@ export function getAiChatPage(user: {
             leftHtml += apiPieSvg + apiRatioHtml + '</div>';
           }
 
+          // ===== 左パネル: リクエスト元別円グラフ(Slack/AIチャット入力窓/回答伝播ページ) =====
+          var SOURCE_LABELS = { slack: 'Slack', textbox: 'AIチャット入力窓', api: '回答伝播ページ' };
+          var SOURCE_COLORS = { slack: '#611f69', textbox: '#0ea5e9', api: '#f59e0b' };
+          var sourceTotals = d.sourceTotals || {};
+          var sourceKeys = ['slack', 'textbox', 'api'].filter(function(k) { return (sourceTotals[k] || 0) > 0; });
+          var sourceTotal = sourceKeys.reduce(function(s, k) { return s + (sourceTotals[k] || 0); }, 0);
+
+          if (sourceTotal > 0) {
+            leftHtml += '<div style="font-size:10px;font-weight:600;color:var(--text-secondary);margin-top:12px;margin-bottom:4px;">リクエスト元別</div>';
+            leftHtml += '<div style="display:flex;align-items:flex-start;gap:8px;">';
+
+            var SPR = 46, SPCX = 50, SPCY = 50, SPSZ = 100;
+            var sourcePieSvg = '<svg viewBox="0 0 ' + SPSZ + ' ' + SPSZ + '" width="' + SPSZ + '" height="' + SPSZ + '" style="flex-shrink:0;">';
+            var sourceAng = -Math.PI / 2;
+            sourceKeys.forEach(function(k) {
+              var cnt = sourceTotals[k] || 0;
+              if (cnt <= 0) return;
+              var slice = cnt / sourceTotal * 2 * Math.PI;
+              var endAng = sourceAng + slice;
+              var x1 = SPCX + SPR * Math.cos(sourceAng), y1 = SPCY + SPR * Math.sin(sourceAng);
+              var x2 = SPCX + SPR * Math.cos(endAng), y2 = SPCY + SPR * Math.sin(endAng);
+              var la = slice > Math.PI ? 1 : 0;
+              sourcePieSvg += '<path d="M ' + SPCX + ' ' + SPCY + ' L ' + x1.toFixed(2) + ' ' + y1.toFixed(2) + ' A ' + SPR + ' ' + SPR + ' 0 ' + la + ' 1 ' + x2.toFixed(2) + ' ' + y2.toFixed(2) + ' Z" fill="' + SOURCE_COLORS[k] + '" opacity="0.9" stroke="var(--card-bg)" stroke-width="0.5"/>';
+              sourceAng = endAng;
+            });
+            sourcePieSvg += '</svg>';
+
+            var sourceRatioHtml = '<div style="flex:1;min-width:0;">';
+            sourceKeys.forEach(function(k) {
+              var cnt = sourceTotals[k] || 0;
+              if (cnt <= 0) return;
+              var ratio = Math.round(cnt / sourceTotal * 1000) / 10;
+              sourceRatioHtml += '<div style="display:flex;align-items:center;gap:4px;margin-bottom:2px;">';
+              sourceRatioHtml += '<span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:' + SOURCE_COLORS[k] + ';flex-shrink:0;"></span>';
+              sourceRatioHtml += '<span style="font-size:10px;color:var(--text-primary);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="' + escHtml(SOURCE_LABELS[k]) + '">' + escHtml(SOURCE_LABELS[k]) + '</span>';
+              sourceRatioHtml += '<span style="font-size:10px;color:var(--text-muted);flex-shrink:0;margin-left:2px;">' + cnt + '件 ' + ratio.toFixed(1) + '%' + '</span>';
+              sourceRatioHtml += '</div>';
+            });
+            sourceRatioHtml += '</div>';
+
+            leftHtml += sourcePieSvg + sourceRatioHtml + '</div>';
+          }
+
           // ===== 左パネル最下段: キーワード分類状況（総数・円グラフ・カテゴリ別棒グラフ） =====
           leftHtml += buildKwClassifyStatsHtml(kwAll, catSummary, catGroups);
 

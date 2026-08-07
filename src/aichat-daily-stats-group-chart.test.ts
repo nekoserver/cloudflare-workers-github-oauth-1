@@ -20,7 +20,7 @@ function sliceBuildFn(html: string): string {
 function sliceRenderFn(html: string): string {
   const idx = html.indexOf('function renderDailyStatsChart');
   expect(idx).toBeGreaterThan(-1);
-  return html.slice(idx, idx + 10000);
+  return html.slice(idx, idx + 20000);
 }
 
 describe('日次統計モーダル: 大分類グループ別棒グラフ', () => {
