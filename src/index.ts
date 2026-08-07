@@ -209,6 +209,7 @@ export const STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
   { name: 'aichat_keyword_embeddings',    migration: '0087',  description: 'AIチャットキーワードのbge-m3埋め込みベクトルキャッシュ（キーワード単位で最新1件のみ保持）', syncPolicy: 'auto' },
   { name: 'aichat_keyword_category_suggestions', migration: '0088', description: 'AIによるキーワード↔カテゴリ分類の推薦履歴（確定分類とは別テーブルで人間の最終判断を上書きしない）', syncPolicy: 'auto' },
   { name: 'aichat_answer_category_scores', migration: '0089', description: '回答伝播グラフ(/answer-graph)のノード色分け用: 回答ごとの中分類カテゴリ類似度スコアのキャッシュ', syncPolicy: 'auto' },
+  { name: 'aichat_answer_vectors', migration: '0094', description: '回答文(ai_chat_shares)のplamo-embedding-1bベクトルキャッシュ。answer-graphの回答モーダル「この回答文をベクタ化する」ボタンで生成', syncPolicy: 'auto' },
 ];
 
 const REQUIRED_STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
@@ -1392,6 +1393,17 @@ ALTER TABLE aichat_keyword_embeddings ADD COLUMN plamo_updated_at TEXT;`,
 ALTER TABLE aichat_keyword_embeddings ADD COLUMN gemma_dim INTEGER;
 ALTER TABLE aichat_keyword_embeddings ADD COLUMN gemma_model TEXT;
 ALTER TABLE aichat_keyword_embeddings ADD COLUMN gemma_updated_at TEXT;`,
+  '0094': `CREATE TABLE IF NOT EXISTS aichat_answer_vectors (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  share_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  model TEXT NOT NULL,
+  dim INTEGER NOT NULL,
+  vector BLOB NOT NULL,
+  computed_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_aichat_answer_vectors_unique ON aichat_answer_vectors(user_id, share_id, model);
+CREATE INDEX IF NOT EXISTS idx_aichat_answer_vectors_share ON aichat_answer_vectors(share_id);`,
 };
 
 async function ensureGroupTable(db: D1Database): Promise<void> {
@@ -1611,6 +1623,7 @@ export const TABLE_COLUMN_KEYS: Record<string, ColumnKeyInfo> = {
   aichat_keyword_embeddings: { id: 'pk', user_id: 'uk', keyword: 'uk' },
   aichat_keyword_category_suggestions: { id: 'pk', user_id: 'idx', keyword: 'idx', suggested_category_id: 'fk+idx' },
   aichat_answer_category_scores: { id: 'pk', user_id: 'uk', share_id: 'uk', category_id: 'fk+idx' },
+  aichat_answer_vectors: { id: 'pk', user_id: 'uk', share_id: 'uk', model: 'uk' },
 };
 
 export function getColumnKeyType(tableName: string, columnName: string): ColumnKeyType {
@@ -1704,6 +1717,7 @@ export const TABLE_GROUP_MAP: Record<string, string> = {
   aichat_keyword_embeddings: 'ai',
   aichat_keyword_category_suggestions: 'ai',
   aichat_answer_category_scores: 'ai',
+  aichat_answer_vectors: 'ai',
   keyword_category_groups: 'search',
   keyword_multi_labels: 'search',
   ts_repository:          'ts-catalog',
@@ -1890,6 +1904,7 @@ export const COLUMN_FK_TARGETS: Record<string, Record<string, string>> = {
   aichat_keyword_embeddings: { user_id: 'user_sessions' },
   aichat_keyword_category_suggestions: { user_id: 'user_sessions', suggested_category_id: 'aichat_keyword_categories' },
   aichat_answer_category_scores: { user_id: 'user_sessions', category_id: 'aichat_keyword_categories' },
+  aichat_answer_vectors: { user_id: 'user_sessions' },
 
   // ========================================================================
   // 世界遺産ページ AI質問ログ・保存済みエリア系
@@ -6573,6 +6588,98 @@ export async function getOrComputeKeywordEmbedding(
 }
 
 /**
+ * answer-graphの回答モーダル「この回答文をベクタ化する」ボタン用。
+ * 回答文(ai_chat_shares.answer)をplamo-embedding-1bでベクタ化し、
+ * aichat_answer_vectorsにキャッシュする。同一モデルでキャッシュ済みなら
+ * AIを呼ばずそれを返す(getOrComputeKeywordEmbeddingと同じ方針)。
+ */
+export async function getOrComputeAnswerEmbedding(
+  db: D1Database,
+  ai: Ai,
+  userId: string,
+  shareId: string,
+  answerText: string,
+  model: string = PLAMO_EMBEDDING_MODEL,
+): Promise<number[]> {
+  const row = await db.prepare(
+    `SELECT vector FROM aichat_answer_vectors WHERE user_id = ? AND share_id = ? AND model = ?`
+  ).bind(userId, shareId, model).first<{ vector: ArrayBuffer }>();
+  if (row) return blobToFloats(row.vector);
+  const vector = await embedTextWithModel(ai, model, answerText);
+  if (vector.length === 0) return [];
+  const now = new Date().toISOString();
+  await db.prepare(
+    `INSERT INTO aichat_answer_vectors (share_id, user_id, model, dim, vector, computed_at)
+     VALUES (?, ?, ?, ?, ?, ?)
+     ON CONFLICT(user_id, share_id, model) DO UPDATE SET
+       dim = excluded.dim, vector = excluded.vector, computed_at = excluded.computed_at`
+  ).bind(shareId, userId, model, vector.length, floatsToBlob(vector), now).run();
+  return vector;
+}
+
+/**
+ * 回答文(ai_chat_shares.answer)をキャッシュ済みかどうかをaichat_answer_vectors
+ * から判定する。answer-graphの回答モーダルで「ベクタ化する」ボタンの
+ * 表示/非表示切り替えに使う。
+ */
+export async function isAnswerVectorized(
+  db: D1Database,
+  userId: string,
+  shareId: string,
+  model: string = PLAMO_EMBEDDING_MODEL,
+): Promise<boolean> {
+  const row = await db.prepare(
+    `SELECT 1 as found FROM aichat_answer_vectors WHERE user_id = ? AND share_id = ? AND model = ?`
+  ).bind(userId, shareId, model).first<{ found: number }>();
+  return !!row;
+}
+
+export const ANSWER_PREREQUISITE_TERMS_MODEL = '@cf/google/gemma-4-26b-a4b-it';
+
+/**
+ * gemma-4-26b-a4b-itの応答テキストから「予備知識として抽出された用語」の
+ * 一覧を作る純粋関数。1行1語を基本としつつ、モデルが箇条書き記号
+ * (- ・ * 数字.)や読点区切りで返してきても拾えるようにし、前後の空白と
+ * 重複を取り除く。
+ */
+export function parsePrerequisiteTermsResponse(raw: string): string[] {
+  const cleaned = stripThinkTags(raw || '');
+  const seen = new Set<string>();
+  const terms: string[] = [];
+  for (const line of cleaned.split(/[\n、,]/)) {
+    const term = line.replace(/^[\s\-*・0-9.、)）]+/, '').trim();
+    if (!term || seen.has(term)) continue;
+    seen.add(term);
+    terms.push(term);
+  }
+  return terms;
+}
+
+/**
+ * 回答文を理解するのに必要な予備知識(用語・概念)をgemma-4-26b-a4b-itに
+ * 単語単位で抽出させる。gemma-4-26b-a4b-itはsystem messageが含まれると
+ * enable_thinking:falseを無視して思考過程を応答に混入させる既知の制限が
+ * あるため(AICHAT_MODEL_EXTRA_PARAMS参照)、system messageは使わずuser
+ * メッセージ1件に指示と回答文をまとめて渡す。
+ */
+export async function extractPrerequisiteTerms(ai: Ai, answerText: string): Promise<string[]> {
+  const prompt = '次の文章を理解するのに必要な用語や概念を単語単位で抽出してください。前置きや説明文は不要です。1行に1つ、単語のみを出力してください。\n\n' + answerText;
+  const baseParams = { messages: [{ role: 'user', content: prompt }], max_tokens: 1024 };
+  const runParams = getModelRunParams(ANSWER_PREREQUISITE_TERMS_MODEL, baseParams);
+  const result = await ai.run(
+    ANSWER_PREREQUISITE_TERMS_MODEL as Parameters<typeof ai.run>[0],
+    runParams as Parameters<typeof ai.run>[1],
+  );
+  const resultObj = (typeof result === 'object' && result !== null) ? result as Record<string, unknown> : {};
+  const rawResponse = 'response' in resultObj ? String(resultObj['response'] ?? '') : '';
+  const choices = Array.isArray(resultObj['choices']) ? resultObj['choices'] as Array<Record<string, unknown>> : [];
+  const choiceMsg = choices.length > 0 ? (choices[0]['message'] as Record<string, unknown> | undefined) ?? {} : {};
+  const rawChoices = String(choiceMsg['content'] ?? '');
+  const raw = rawResponse || rawChoices;
+  return parsePrerequisiteTermsResponse(raw);
+}
+
+/**
  * bge-m3問い合わせデータモーダルのドロップダウンで選んだモデルに応じて、
  * 実際に問い合わせるAIモデルを動的に切り替える。
  *   - bge-m3: 従来通り model/dim/vector 列（主系列）を使う
@@ -6976,7 +7083,8 @@ app.get('/api/aichat/shares/:id', authMiddleware, async (c) => {
     input_tokens: number | null; output_tokens: number | null; total_tokens: number | null;
   }>();
   if (!row) return jsonUtf8({ error: 'Not found' }, 404);
-  return jsonUtf8(row);
+  const vectorized = await isAnswerVectorized(c.env.DB, user.sub, id);
+  return jsonUtf8({ ...row, vectorized });
 });
 
 app.delete('/api/aichat/shares/:id', authMiddleware, async (c) => {
@@ -6995,6 +7103,63 @@ app.delete('/api/aichat/shares/:id', authMiddleware, async (c) => {
   ).bind(new Date().toISOString(), id).run();
 
   return jsonUtf8({ ok: true });
+});
+
+/**
+ * answer-graphの回答モーダル「この回答文をベクタ化する」ボタン用API。
+ * 回答文をplamo-embedding-1bでベクタ化してaichat_answer_vectorsに保存し、
+ * さらにgemma-4-26b-a4b-itに「この文章を理解するのに必要な予備知識」を
+ * 単語単位で抽出させて返す。予備知識抽出の失敗はベクタ化そのものの失敗とは
+ * 独立して扱い、_keywordsWarningに理由を入れて返す(ベクタ化自体は成功のまま)。
+ */
+app.post('/api/aichat/vectorize-answer', authMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  if (!c.env.AI) return jsonUtf8({ error: 'AIバインディングが未設定です' }, 503);
+
+  let body: { shareId?: string };
+  try {
+    body = await c.req.json();
+  } catch {
+    return jsonUtf8({ error: 'リクエスト形式が不正です' }, 400);
+  }
+  const shareId = (body.shareId ?? '').trim();
+  if (!shareId) return jsonUtf8({ error: 'shareId は必須です' }, 400);
+
+  const share = await c.env.DB.prepare(
+    `SELECT id, answer FROM ai_chat_shares WHERE id = ? AND user_id = ? AND deleted_at IS NULL`
+  ).bind(shareId, user.sub).first<{ id: string; answer: string }>();
+  if (!share) return jsonUtf8({ error: '指定された回答が見つかりません' }, 404);
+
+  let vector: number[];
+  try {
+    vector = await getOrComputeAnswerEmbedding(c.env.DB, c.env.AI, user.sub, shareId, share.answer);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('vectorize-answer: embedding failed', { shareId, error: message });
+    return jsonUtf8({ error: 'ベクタ化に失敗しました: ' + message }, 500);
+  }
+  if (vector.length === 0) {
+    return jsonUtf8({ error: 'ベクタ化に失敗しました(埋め込みモデルから結果が返りませんでした)' }, 500);
+  }
+
+  let keywords: string[] = [];
+  let keywordsWarning: string | null = null;
+  try {
+    keywords = await extractPrerequisiteTerms(c.env.AI, share.answer);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.warn('vectorize-answer: prerequisite term extraction failed', { shareId, error: message });
+    keywordsWarning = '予備知識キーワードの抽出に失敗しました: ' + message;
+  }
+
+  return jsonUtf8({
+    vectorized: true,
+    model: PLAMO_EMBEDDING_MODEL,
+    dim: vector.length,
+    keywords,
+    _keywordsWarning: keywordsWarning,
+  });
 });
 
 /**
