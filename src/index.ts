@@ -77,7 +77,7 @@ import { verifySlackSignature } from './utils/slackSignature';
 import { handleSlackInteraction, type SlackAiReplyTask } from './utils/slackInteraction';
 import { handleSlackEvent } from './utils/slackEvent';
 import { handleSlackAppMention } from './utils/slackMentionReply';
-import type { AiUsage } from './utils/slackAiReply';
+import { SLACK_AI_MODEL, type AiUsage } from './utils/slackAiReply';
 import { exchangeSlackOAuthCode } from './utils/slackOauth';
 import { executeCreateRepo } from './utils/repoValidation';
 import { validateReturnTo } from './utils/returnTo';
@@ -12792,7 +12792,7 @@ async function dispatchSlackAiReply(
     channel: task.channel,
     threadTs: task.threadTs,
     slackToken,
-    configuredModel: env.AI_CHAT_MODEL,
+    configuredModel: SLACK_AI_MODEL,
     aiRun: env.AI
       ? (model, params) => env.AI!.run(model as Parameters<typeof env.AI.run>[0], params as Parameters<typeof env.AI.run>[1])
       : () => Promise.reject(new Error('AI バインディングが未設定です')),
