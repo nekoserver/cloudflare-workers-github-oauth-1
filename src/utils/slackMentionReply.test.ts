@@ -1,5 +1,24 @@
 import { describe, it, expect, vi } from 'vitest';
-import { handleSlackAppMention, stripBotMentions, type SlackMentionReplyDeps } from './slackMentionReply';
+import { handleSlackAppMention, stripBotMentions, formatSlackAiReplyText, type SlackMentionReplyDeps } from './slackMentionReply';
+
+describe('formatSlackAiReplyText', () => {
+  it('AI応答成功時はコードブロック(```)で囲んで返す', () => {
+    expect(formatSlackAiReplyText({ ok: true, text: '晴れです' })).toBe('```\n晴れです\n```');
+  });
+
+  it('応答本文に```が含まれていても外側のコードブロックが壊れないようゼロ幅スペースで無効化する', () => {
+    const formatted = formatSlackAiReplyText({ ok: true, text: '```js\nconsole.log(1)\n```' });
+    expect(formatted.startsWith('```\n')).toBe(true);
+    expect(formatted.endsWith('\n```')).toBe(true);
+    // 中身に含まれる```は無効化され、外側の閉じタグとしては機能しない
+    const inner = formatted.slice(4, -4);
+    expect(inner.includes('```')).toBe(false);
+  });
+
+  it('AI応答失敗時はコードブロック化せず、絵文字付きのエラーメッセージのまま返す', () => {
+    expect(formatSlackAiReplyText({ ok: false, error: 'timeout' })).toBe('❌ AI応答の取得に失敗しました: timeout');
+  });
+});
 
 describe('stripBotMentions', () => {
   it('先頭のメンショントークンを取り除く', () => {
@@ -52,14 +71,14 @@ describe('handleSlackAppMention', () => {
     });
   });
 
-  it('成功時はAIの応答テキストを同じスレッドに返信する', async () => {
+  it('成功時はAIの応答テキストをコードブロックで囲んで同じスレッドに返信する', async () => {
     const deps = baseDeps();
     const result = await handleSlackAppMention(deps);
     expect(result).toEqual({ posted: true });
     expect(deps.postMessage).toHaveBeenCalledWith({
       token: 'xoxb-test',
       channel: 'C999',
-      text: '晴れです',
+      text: '```\n晴れです\n```',
       thread_ts: '1700000000.000100',
     });
   });
@@ -80,5 +99,43 @@ describe('handleSlackAppMention', () => {
     deps.postMessage = vi.fn().mockResolvedValue({ ok: false, error: 'channel_not_found' });
     const result = await handleSlackAppMention(deps);
     expect(result).toEqual({ posted: false, error: 'channel_not_found' });
+  });
+
+  it('AI応答・投稿ともに成功した場合、saveShareへ質問・回答・モデル・usageを渡す(AIチャットページから参照できるようにするため)', async () => {
+    const deps = baseDeps();
+    deps.aiRun = vi.fn().mockResolvedValue({ response: '晴れです', usage: { input_tokens: 5, output_tokens: 3, total_tokens: 8 } });
+    const saveShare = vi.fn().mockResolvedValue(undefined);
+    deps.saveShare = saveShare;
+    const result = await handleSlackAppMention(deps);
+    expect(result).toEqual({ posted: true });
+    expect(saveShare).toHaveBeenCalledWith({
+      question: '今日の天気は？',
+      answer: '晴れです',
+      model: '@cf/meta/llama-3.3-70b-instruct-fp8-fast',
+      usage: { input_tokens: 5, output_tokens: 3, total_tokens: 8 },
+    });
+  });
+
+  it('AI応答取得に失敗した場合はsaveShareを呼ばない(保存する回答が無いため)', async () => {
+    const deps = baseDeps();
+    deps.aiRun = vi.fn().mockRejectedValue(new Error('AI unavailable'));
+    const saveShare = vi.fn().mockResolvedValue(undefined);
+    deps.saveShare = saveShare;
+    await handleSlackAppMention(deps);
+    expect(saveShare).not.toHaveBeenCalled();
+  });
+
+  it('saveShareが例外を投げてもSlackへの返信結果には影響しない(付随機能のため握りつぶす)', async () => {
+    const deps = baseDeps();
+    deps.saveShare = vi.fn().mockRejectedValue(new Error('DB down'));
+    const result = await handleSlackAppMention(deps);
+    expect(result).toEqual({ posted: true });
+  });
+
+  it('saveShareを渡さなくても従来通り動作する(任意のフックのため)', async () => {
+    const deps = baseDeps();
+    expect(deps.saveShare).toBeUndefined();
+    const result = await handleSlackAppMention(deps);
+    expect(result).toEqual({ posted: true });
   });
 });

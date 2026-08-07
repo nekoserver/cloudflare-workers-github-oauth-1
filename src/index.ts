@@ -77,6 +77,7 @@ import { verifySlackSignature } from './utils/slackSignature';
 import { handleSlackInteraction, type SlackAiReplyTask } from './utils/slackInteraction';
 import { handleSlackEvent } from './utils/slackEvent';
 import { handleSlackAppMention } from './utils/slackMentionReply';
+import type { AiUsage } from './utils/slackAiReply';
 import { exchangeSlackOAuthCode } from './utils/slackOauth';
 import { executeCreateRepo } from './utils/repoValidation';
 import { validateReturnTo } from './utils/returnTo';
@@ -88,6 +89,7 @@ import { buildAiMessages, ALLOWED_MODES, type SystemPromptMode } from './utils/b
 import { stripThinkTags } from './utils/stripThinkTags';
 import { interpretAichatSlashCommand, type CommitAgentLogRow } from './utils/aichatSlashCommand';
 import { AICHAT_MODEL_MAX_TOKENS, getModelRunParams, assignModelColors } from './utils/aichatModelConfig';
+import { extractAiUsage } from './utils/aiUsage';
 import { validateImageDataUrl, attachImageToLastUserMessage, resolveAichatModelsForRequest } from './utils/aichatImage';
 import { extractFunctionSource } from './utils/extractFunctionSource';
 import { listD1Databases, getD1Tables } from './utils/cloudflareApi';
@@ -2313,18 +2315,7 @@ export function resolveKeywordDisplayLabels(
   return [singleLabel || 'uncategorized'];
 }
 
-export function extractAiUsage(raw: Record<string, unknown> | null | undefined): {
-  input_tokens: number | null;
-  output_tokens: number | null;
-  total_tokens: number | null;
-} {
-  const u = (typeof raw === 'object' && raw !== null) ? raw : {};
-  const num = (v: unknown): number | null => (typeof v === 'number' ? v : null);
-  const it = num(u['input_tokens']) ?? num(u['prompt_tokens']);
-  const ot = num(u['output_tokens']) ?? num(u['completion_tokens']);
-  const tt = num(u['total_tokens']) ?? (it !== null && ot !== null ? it + ot : null);
-  return { input_tokens: it, output_tokens: ot, total_tokens: tt };
-}
+export { extractAiUsage };
 
 /** AI チャットの 1 分間あたり最大リクエスト数 */
 const AICHAT_RATE_LIMIT_PER_MIN = 10;
@@ -3209,6 +3200,21 @@ app.use('/*', async (c, next) => {
 // /api/* へのリクエストをすべてエンドポイント別に集計する（成否含む）
 // 新規APIルートを追加しても自動的に記録される
 app.use('/api/*', async (c, next) => {
+  await next();
+  try {
+    const ctx = c.executionCtx;
+    if (ctx?.waitUntil && c.env.DB) {
+      ctx.waitUntil(recordApiAccess(c.env.DB, c.req.method, c.req.routePath, c.res.status));
+    }
+  } catch {}
+});
+
+// /slack/* へのリクエストも/api/*と同様にエンドポイント別に集計する。
+// routePathが/api/配下と異なるため、api_endpoint_stats上でも
+// "POST /slack/event" 等の別枠のエンドポイントとして自動的に区別される
+// （Slack経由のAI応答・スラッシュコマンド呼び出し回数を、Web(/api/aichat)からの
+// 呼び出しと混ぜずに把握できるようにするため）。
+app.use('/slack/*', async (c, next) => {
   await next();
   try {
     const ctx = c.executionCtx;
@@ -12707,6 +12713,58 @@ app.get('/api/repositories/search/keyword-multi-labels-all', authMiddleware, asy
  * → 環境変数SLACK_OAUTH_TOKENにフォールバック。
  * /slack/event（app_mention）と /slack/interactions（message_action）の両方から呼ばれる。
  */
+/**
+ * Slackの@メンション経由で得られたAI応答を、AIチャットページ(/aichat)から
+ * 参照できるようai_chat_sharesへ保存する。Webのログイン認証を経由しない
+ * (誰が投げたSlackメッセージかを本アプリのuser_idに直接紐づけられない)ため、
+ * そのSlackワークスペースを最初にインストールしたユーザー
+ * (slack_installations.installed_by_user)の持ち物として保存する。
+ * 紐づくユーザーが見つからない場合は保存をスキップする(記録はlogger.warn、
+ * 通知はSlack応答自体には影響させない付随機能のため、ここでは例外を投げない)。
+ */
+export async function saveSlackAiShare(
+  db: D1Database,
+  teamId: string | undefined,
+  params: { question: string; answer: string; model: string; usage: AiUsage },
+): Promise<void> {
+  if (!teamId) {
+    logger.warn('Slack AI reply save skipped: teamId is missing');
+    return;
+  }
+  try {
+    const owner = await db.prepare(
+      'SELECT installed_by_user FROM slack_installations WHERE team_id = ?'
+    ).bind(teamId).first<{ installed_by_user: string | null }>();
+    const userId = owner?.installed_by_user;
+    if (!userId) {
+      logger.warn('Slack AI reply save skipped: no installed_by_user for team', { teamId });
+      return;
+    }
+
+    const usernameBytes = new TextEncoder().encode(userId);
+    const hashBuf = await crypto.subtle.digest('SHA-256', usernameBytes);
+    const userHash = Array.from(new Uint8Array(hashBuf).slice(0, 4))
+      .map((b) => b.toString(16).padStart(2, '0')).join('');
+    const tokenBytes = new Uint8Array(8);
+    crypto.getRandomValues(tokenBytes);
+    const shareId = Array.from(tokenBytes).map((b) => b.toString(16).padStart(2, '0')).join('');
+    const now = new Date().toISOString();
+    const conversationHash = await computeConversationHash(userId, params.question, params.answer, params.model, now);
+    const questionHash = await computeQuestionHash(userId, params.question);
+    await db.prepare(
+      'INSERT INTO ai_chat_shares (id, user_id, user_hash, question, answer, model, created_at, conversation_hash, question_hash, input_tokens, output_tokens, total_tokens, source) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+    ).bind(
+      shareId, userId, userHash, params.question, params.answer, params.model, now,
+      conversationHash, questionHash, params.usage.input_tokens, params.usage.output_tokens, params.usage.total_tokens, 'slack',
+    ).run();
+  } catch (err) {
+    logger.warn('Slack AI reply save failed', {
+      error: err instanceof Error ? err.message : 'Unknown error',
+      teamId,
+    });
+  }
+}
+
 async function dispatchSlackAiReply(
   env: Bindings,
   task: SlackAiReplyTask
@@ -12739,6 +12797,7 @@ async function dispatchSlackAiReply(
       ? (model, params) => env.AI!.run(model as Parameters<typeof env.AI.run>[0], params as Parameters<typeof env.AI.run>[1])
       : () => Promise.reject(new Error('AI バインディングが未設定です')),
     postMessage: postSlackMessage,
+    saveShare: db ? (params) => saveSlackAiShare(db, task.teamId, params) : undefined,
   });
   if (!mentionResult.posted) {
     logger.error('Slack AI reply failed', { error: mentionResult.error, channel: task.channel });

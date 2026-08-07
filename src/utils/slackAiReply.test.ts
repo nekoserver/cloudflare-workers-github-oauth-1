@@ -5,7 +5,7 @@ describe('generateSlackAiReply', () => {
   it('AIの応答テキストをresponseフィールドから取り出す', async () => {
     const aiRun = vi.fn().mockResolvedValue({ response: 'こんにちは' });
     const result = await generateSlackAiReply('hello', undefined, aiRun);
-    expect(result).toEqual({ ok: true, text: 'こんにちは', usedModel: '@cf/meta/llama-3.3-70b-instruct-fp8-fast' });
+    expect(result).toEqual({ ok: true, text: 'こんにちは', usedModel: '@cf/meta/llama-3.3-70b-instruct-fp8-fast', usage: { input_tokens: null, output_tokens: null, total_tokens: null } });
   });
 
   it('configuredModelが指定されていればそれを使う', async () => {
@@ -25,7 +25,7 @@ describe('generateSlackAiReply', () => {
   it('choices[0].message.content からも応答テキストを取り出せる', async () => {
     const aiRun = vi.fn().mockResolvedValue({ choices: [{ message: { content: 'chat形式の応答' } }] });
     const result = await generateSlackAiReply('hello', undefined, aiRun);
-    expect(result).toEqual({ ok: true, text: 'chat形式の応答', usedModel: '@cf/meta/llama-3.3-70b-instruct-fp8-fast' });
+    expect(result).toEqual({ ok: true, text: 'chat形式の応答', usedModel: '@cf/meta/llama-3.3-70b-instruct-fp8-fast', usage: { input_tokens: null, output_tokens: null, total_tokens: null } });
   });
 
   it('primaryModelが例外を投げた場合はFALLBACK_MODELに一度だけ再試行する', async () => {
@@ -33,7 +33,7 @@ describe('generateSlackAiReply', () => {
       .mockRejectedValueOnce(new Error('primary down'))
       .mockResolvedValueOnce({ response: 'fallback応答' });
     const result = await generateSlackAiReply('hello', '@cf/meta/llama-3.1-70b-instruct', aiRun);
-    expect(result).toEqual({ ok: true, text: 'fallback応答', usedModel: '@cf/meta/llama-3.3-70b-instruct-fp8-fast' });
+    expect(result).toEqual({ ok: true, text: 'fallback応答', usedModel: '@cf/meta/llama-3.3-70b-instruct-fp8-fast', usage: { input_tokens: null, output_tokens: null, total_tokens: null } });
     expect(aiRun).toHaveBeenCalledTimes(2);
   });
 
@@ -42,7 +42,7 @@ describe('generateSlackAiReply', () => {
       .mockResolvedValueOnce({ response: '' })
       .mockResolvedValueOnce({ response: 'fallback応答' });
     const result = await generateSlackAiReply('hello', '@cf/meta/llama-3.1-70b-instruct', aiRun);
-    expect(result).toEqual({ ok: true, text: 'fallback応答', usedModel: '@cf/meta/llama-3.3-70b-instruct-fp8-fast' });
+    expect(result).toEqual({ ok: true, text: 'fallback応答', usedModel: '@cf/meta/llama-3.3-70b-instruct-fp8-fast', usage: { input_tokens: null, output_tokens: null, total_tokens: null } });
   });
 
   it('primaryとFALLBACKの両方が失敗した場合はok:falseとエラー内容を返す（握りつぶさない）', async () => {
@@ -59,5 +59,18 @@ describe('generateSlackAiReply', () => {
     const result = await generateSlackAiReply('hello', undefined, aiRun);
     expect(result.ok).toBe(false);
     expect(aiRun).toHaveBeenCalledTimes(1);
+  });
+
+  it('AI応答のusageフィールドからトークン数を取り出す(ai_chat_sharesへの保存に使う)', async () => {
+    const aiRun = vi.fn().mockResolvedValue({ response: 'ok', usage: { input_tokens: 12, output_tokens: 34, total_tokens: 46 } });
+    const result = await generateSlackAiReply('hello', undefined, aiRun);
+    expect(result.ok).toBe(true);
+    expect((result as { usage: unknown }).usage).toEqual({ input_tokens: 12, output_tokens: 34, total_tokens: 46 });
+  });
+
+  it('usageフィールドが無い場合は全てnullを返す', async () => {
+    const aiRun = vi.fn().mockResolvedValue({ response: 'ok' });
+    const result = await generateSlackAiReply('hello', undefined, aiRun);
+    expect((result as { usage: unknown }).usage).toEqual({ input_tokens: null, output_tokens: null, total_tokens: null });
   });
 });
