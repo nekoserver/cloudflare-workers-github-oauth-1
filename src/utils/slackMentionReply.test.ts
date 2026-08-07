@@ -81,4 +81,42 @@ describe('handleSlackAppMention', () => {
     const result = await handleSlackAppMention(deps);
     expect(result).toEqual({ posted: false, error: 'channel_not_found' });
   });
+
+  it('AI応答・投稿ともに成功した場合、saveShareへ質問・回答・モデル・usageを渡す(AIチャットページから参照できるようにするため)', async () => {
+    const deps = baseDeps();
+    deps.aiRun = vi.fn().mockResolvedValue({ response: '晴れです', usage: { input_tokens: 5, output_tokens: 3, total_tokens: 8 } });
+    const saveShare = vi.fn().mockResolvedValue(undefined);
+    deps.saveShare = saveShare;
+    const result = await handleSlackAppMention(deps);
+    expect(result).toEqual({ posted: true });
+    expect(saveShare).toHaveBeenCalledWith({
+      question: '今日の天気は？',
+      answer: '晴れです',
+      model: '@cf/meta/llama-3.3-70b-instruct-fp8-fast',
+      usage: { input_tokens: 5, output_tokens: 3, total_tokens: 8 },
+    });
+  });
+
+  it('AI応答取得に失敗した場合はsaveShareを呼ばない(保存する回答が無いため)', async () => {
+    const deps = baseDeps();
+    deps.aiRun = vi.fn().mockRejectedValue(new Error('AI unavailable'));
+    const saveShare = vi.fn().mockResolvedValue(undefined);
+    deps.saveShare = saveShare;
+    await handleSlackAppMention(deps);
+    expect(saveShare).not.toHaveBeenCalled();
+  });
+
+  it('saveShareが例外を投げてもSlackへの返信結果には影響しない(付随機能のため握りつぶす)', async () => {
+    const deps = baseDeps();
+    deps.saveShare = vi.fn().mockRejectedValue(new Error('DB down'));
+    const result = await handleSlackAppMention(deps);
+    expect(result).toEqual({ posted: true });
+  });
+
+  it('saveShareを渡さなくても従来通り動作する(任意のフックのため)', async () => {
+    const deps = baseDeps();
+    expect(deps.saveShare).toBeUndefined();
+    const result = await handleSlackAppMention(deps);
+    expect(result).toEqual({ posted: true });
+  });
 });

@@ -1,4 +1,4 @@
-import { generateSlackAiReply, type AiRunFn } from './slackAiReply';
+import { generateSlackAiReply, type AiRunFn, type AiUsage } from './slackAiReply';
 
 export type SlackPostMessageFn = (params: {
   token: string;
@@ -6,6 +6,13 @@ export type SlackPostMessageFn = (params: {
   text: string;
   thread_ts?: string;
 }) => Promise<{ ok: boolean; error?: string }>;
+
+export type SlackSaveShareFn = (params: {
+  question: string;
+  answer: string;
+  model: string;
+  usage: AiUsage;
+}) => Promise<void>;
 
 export type SlackMentionReplyDeps = {
   text: string;
@@ -15,6 +22,12 @@ export type SlackMentionReplyDeps = {
   configuredModel: string | undefined;
   aiRun: AiRunFn;
   postMessage: SlackPostMessageFn;
+  /**
+   * AI応答に成功した場合、AIチャットページ(/aichat)から参照できるよう
+   * ai_chat_sharesへ保存するための任意フック。保存の成否はSlackへの
+   * 返信結果に影響させない(失敗してもSlack応答自体は成功として扱う)。
+   */
+  saveShare?: SlackSaveShareFn;
 };
 
 export type SlackMentionReplyResult =
@@ -62,5 +75,16 @@ export async function handleSlackAppMention(deps: SlackMentionReplyDeps): Promis
   if (!result.ok) {
     return { posted: false, error: result.error ?? 'Unknown error' };
   }
+
+  if (aiResult.ok && deps.saveShare) {
+    try {
+      await deps.saveShare({ question: cleanedText, answer: aiResult.text, model: aiResult.usedModel, usage: aiResult.usage });
+    } catch {
+      // 保存はAIチャットページで参照可能にするための付随機能のため、
+      // 失敗してもSlackへの返信自体は成功として扱う(呼び出し側のsaveShare実装が
+      // 詳細をログに記録する)。
+    }
+  }
+
   return { posted: true };
 }

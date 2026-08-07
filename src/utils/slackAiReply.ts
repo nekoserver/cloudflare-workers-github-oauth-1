@@ -1,11 +1,18 @@
 import { buildAiMessages, type SystemPromptMode } from './buildAiMessages';
 import { stripThinkTags } from './stripThinkTags';
 import { AICHAT_MODEL_MAX_TOKENS, getModelRunParams } from './aichatModelConfig';
+import { extractAiUsage } from './aiUsage';
 
 export type AiRunFn = (model: string, params: Record<string, unknown>) => Promise<unknown>;
 
+export type AiUsage = {
+  input_tokens: number | null;
+  output_tokens: number | null;
+  total_tokens: number | null;
+};
+
 export type SlackAiReplyResult =
-  | { ok: true; text: string; usedModel: string }
+  | { ok: true; text: string; usedModel: string; usage: AiUsage }
   | { ok: false; error: string };
 
 const FALLBACK_MODEL = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
@@ -47,7 +54,11 @@ export async function generateSlackAiReply(
         lastError = `AI returned empty response [model=${model}]`;
         continue;
       }
-      return { ok: true, text: cleaned, usedModel: model };
+      const resultObj = (typeof result === 'object' && result !== null) ? result as Record<string, unknown> : {};
+      const usageObj = (typeof resultObj['usage'] === 'object' && resultObj['usage'] !== null)
+        ? resultObj['usage'] as Record<string, unknown>
+        : {};
+      return { ok: true, text: cleaned, usedModel: model, usage: extractAiUsage(usageObj) };
     } catch (error) {
       lastError = error instanceof Error ? error.message : 'Unknown error';
     }
