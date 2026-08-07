@@ -118,7 +118,7 @@ describe('/answer-graph ページ: AIチャット詳細プレビューモーダ�
   it('openAnswerModal がモデル色ドット・モデル名・閲覧数(answerModalMeta)を組み立てる', () => {
     const html = buildPage();
     const idx = html.indexOf('function openAnswerModal');
-    const block = html.slice(idx, idx + 1500);
+    const block = html.slice(idx, idx + 2200);
     expect(block).toContain('MODEL_COLORS[d.model]');
     expect(block).toContain('shortModelName(d.model)');
     expect(block).toContain('answerModalMeta.innerHTML');
@@ -300,6 +300,7 @@ describe('/answer-graph ページ: openAnswerModal/closeAnswerModal のDOM実動
         <span id="answerModalTokens"></span>
         <a id="answerModalShareLink" href="#"></a>
         <button id="answerModalHighlightToggleBtn"></button>
+        <button id="answerModalVectorizeBtn"></button>
       </div>
       <div id="answerModalBody"></div>
     `;
@@ -310,6 +311,7 @@ describe('/answer-graph ページ: openAnswerModal/closeAnswerModal のDOM実動
       'document', 'fetch', 'MODEL_COLORS',
       'answerModalBody', 'answerModalBackdrop', 'answerModalQuestion', 'answerModalDate', 'answerModalTime',
       'answerModalMeta', 'answerModalTokens', 'answerModalShareLink', 'answerModalHighlightToggleBtn',
+      'answerModalVectorizeBtn',
       `${src}\nreturn { openAnswerModal: openAnswerModal, closeAnswerModal: closeAnswerModal };`
     );
     return fn(
@@ -325,6 +327,7 @@ describe('/answer-graph ページ: openAnswerModal/closeAnswerModal のDOM実動
       document.getElementById('answerModalTokens'),
       document.getElementById('answerModalShareLink'),
       document.getElementById('answerModalHighlightToggleBtn'),
+      document.getElementById('answerModalVectorizeBtn'),
     ) as { openAnswerModal: (id: string) => void; closeAnswerModal: () => void };
   }
 

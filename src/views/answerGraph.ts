@@ -258,6 +258,40 @@ input[type=search]:focus { border-color:var(--accent); }
   font-size:11px; color:var(--label); flex-wrap:wrap;
 }
 .answer-modal-highlight-btn { background:none; border:none; cursor:pointer; font-size:14px; padding:2px 4px; opacity:.2; }
+.answer-modal-vectorize-btn {
+  font-size:11px; padding:4px 10px; border-radius:6px; border:1px solid var(--btn-border);
+  background:var(--btn-bg); color:var(--fg); cursor:pointer;
+}
+.answer-modal-vectorize-btn:hover { background:var(--btn-hover); border-color:var(--accent); }
+.answer-modal-vectorize-btn:disabled { opacity:.5; cursor:default; }
+.prereq-modal-backdrop {
+  position:fixed; inset:0; z-index:1200; display:none;
+  align-items:center; justify-content:center; padding:28px 16px;
+  background:rgba(15,23,42,.48); backdrop-filter:blur(4px);
+}
+.prereq-modal-backdrop.open { display:flex; }
+.prereq-modal {
+  width:min(480px,100%); max-height:min(70vh,600px);
+  background:var(--bg); border:1px solid var(--border); border-radius:16px;
+  box-shadow:0 24px 80px rgba(0,0,0,.28); display:flex; flex-direction:column; overflow:hidden;
+}
+.prereq-modal-head {
+  flex-shrink:0; display:flex; align-items:center; justify-content:space-between; gap:8px;
+  padding:10px 16px; background:var(--card); border-bottom:1px solid var(--border);
+  font-size:13px; font-weight:700; color:var(--fg);
+}
+.prereq-modal-head button {
+  width:30px; height:30px; border:none; border-radius:8px; flex-shrink:0;
+  background:transparent; color:var(--label); cursor:pointer; font-size:18px; line-height:1;
+}
+.prereq-modal-head button:hover { background:var(--btn-hover); }
+.prereq-modal-body { padding:14px 16px; overflow-y:auto; display:flex; flex-wrap:wrap; gap:8px; align-content:flex-start; }
+.prereq-modal-empty { font-size:12px; color:var(--label); }
+.prereq-modal-warning { font-size:11px; color:var(--danger); width:100%; }
+.prereq-modal-chip {
+  padding:6px 12px; font-size:12px; border-radius:999px; border:1px solid var(--btn-border);
+  background:transparent; color:var(--fg);
+}
 .answer-modal-model-dot { display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:4px; vertical-align:middle; }
 .answer-modal-link { font-size:11px; color:var(--accent); text-decoration:none; white-space:nowrap; margin-left:auto; }
 .answer-modal-link:hover { text-decoration:underline; }
@@ -383,10 +417,20 @@ input[type=search]:focus { border-color:var(--accent); }
     <div class="answer-modal-body" id="answerModalBody"></div>
     <div class="answer-modal-foot">
       <button type="button" class="answer-modal-highlight-btn" id="answerModalHighlightToggleBtn" title="キーワードハイライトなし">🔑</button>
+      <button type="button" class="answer-modal-vectorize-btn" id="answerModalVectorizeBtn" style="display:none;">この回答文をベクタ化する</button>
       <span id="answerModalMeta"></span>
       <span id="answerModalTokens"></span>
       <a class="answer-modal-link" id="answerModalShareLink" href="#" target="_blank" rel="noopener noreferrer">🔗 共有ページを開く</a>
     </div>
+  </div>
+</div>
+<div class="prereq-modal-backdrop" id="prereqModalBackdrop" aria-hidden="true">
+  <div class="prereq-modal" role="dialog" aria-modal="true" aria-labelledby="prereqModalTitle">
+    <div class="prereq-modal-head">
+      <span id="prereqModalTitle">🧠 この回答文を理解するのに必要な予備知識</span>
+      <button type="button" id="prereqModalClose" aria-label="閉じる">✕</button>
+    </div>
+    <div class="prereq-modal-body" id="prereqModalBody"></div>
   </div>
 </div>
 <div class="narrow-modal-backdrop" id="narrowModalBackdrop" aria-hidden="true">
@@ -430,6 +474,10 @@ input[type=search]:focus { border-color:var(--accent); }
   var answerModalTokens = document.getElementById('answerModalTokens');
   var answerModalShareLink = document.getElementById('answerModalShareLink');
   var answerModalHighlightToggleBtn = document.getElementById('answerModalHighlightToggleBtn');
+  var answerModalVectorizeBtn = document.getElementById('answerModalVectorizeBtn');
+  var prereqModalBackdrop = document.getElementById('prereqModalBackdrop');
+  var prereqModalBody = document.getElementById('prereqModalBody');
+  var prereqModalClose = document.getElementById('prereqModalClose');
   var MODEL_COLORS = ${modelColorsJson};
   var hideEmptyRowsSetting = ${hideEmptyRowsDefaultJs};
   var trailSessionStorageSetting = ${trailSessionStorageDefaultJs};
@@ -580,7 +628,10 @@ input[type=search]:focus { border-color:var(--accent); }
     answerModalBody.appendChild(el);
   }
 
+  var currentAnswerModalShareId = null;
+
   function openAnswerModal(shareId) {
+    currentAnswerModalShareId = shareId;
     answerModalQuestion.textContent = '';
     answerModalQuestion.classList.remove('highlights-hidden');
     answerModalDate.textContent = '';
@@ -592,6 +643,9 @@ input[type=search]:focus { border-color:var(--accent); }
     answerModalHighlightActive = true;
     answerModalBody.classList.remove('highlights-hidden');
     answerModalBody.textContent = '読み込み中...';
+    answerModalVectorizeBtn.style.display = 'none';
+    answerModalVectorizeBtn.disabled = false;
+    answerModalVectorizeBtn.textContent = 'この回答文をベクタ化する';
     answerModalBackdrop.classList.add('open');
     fetch('/api/aichat/shares/' + encodeURIComponent(shareId), { credentials: 'same-origin' })
       .then(function(r) { return r.json(); })
@@ -613,6 +667,7 @@ input[type=search]:focus { border-color:var(--accent); }
         answerModalBody.innerHTML = '';
         appendAnswerModalBubble(d.answer);
         loadAnswerModalKeywords(shareId);
+        answerModalVectorizeBtn.style.display = d.vectorized ? 'none' : '';
       })
       .catch(function() { answerModalBody.textContent = '回答の取得に失敗しました（通信エラー）'; });
   }
@@ -625,6 +680,78 @@ input[type=search]:focus { border-color:var(--accent); }
   answerModalBackdrop.addEventListener('click', function(e) { if (e.target === answerModalBackdrop) closeAnswerModal(); });
   document.addEventListener('keydown', function(e) {
     if (e.key === 'Escape' && answerModalBackdrop.classList.contains('open')) closeAnswerModal();
+  });
+
+  // 「この回答文を理解するのに必要な予備知識」モーダル(最上位レイヤー、
+  // 回答モーダルよりさらに前面)。ベクタ化ボタンから抽出されたキーワードを
+  // ここに列挙する。
+  function renderPrereqModal(keywords, warning) {
+    prereqModalBody.innerHTML = '';
+    if (warning) {
+      var warn = document.createElement('div');
+      warn.className = 'prereq-modal-warning';
+      warn.textContent = warning;
+      prereqModalBody.appendChild(warn);
+    }
+    if (!keywords || !keywords.length) {
+      var empty = document.createElement('div');
+      empty.className = 'prereq-modal-empty';
+      empty.textContent = warning ? '' : '追加の予備知識は見つかりませんでした';
+      if (empty.textContent) prereqModalBody.appendChild(empty);
+      return;
+    }
+    keywords.forEach(function(kw) {
+      var chip = document.createElement('span');
+      chip.className = 'prereq-modal-chip';
+      chip.textContent = kw;
+      prereqModalBody.appendChild(chip);
+    });
+  }
+
+  function openPrereqModal(keywords, warning) {
+    renderPrereqModal(keywords, warning);
+    prereqModalBackdrop.classList.add('open');
+    prereqModalBackdrop.setAttribute('aria-hidden', 'false');
+  }
+
+  function closePrereqModal() {
+    prereqModalBackdrop.classList.remove('open');
+    prereqModalBackdrop.setAttribute('aria-hidden', 'true');
+  }
+
+  prereqModalClose.addEventListener('click', closePrereqModal);
+  prereqModalBackdrop.addEventListener('click', function(e) { if (e.target === prereqModalBackdrop) closePrereqModal(); });
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape' && prereqModalBackdrop.classList.contains('open')) closePrereqModal();
+  });
+
+  answerModalVectorizeBtn.addEventListener('click', function() {
+    var shareId = currentAnswerModalShareId;
+    if (!shareId) return;
+    answerModalVectorizeBtn.disabled = true;
+    answerModalVectorizeBtn.textContent = 'ベクタ化中...';
+    fetch('/api/aichat/vectorize-answer', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'same-origin',
+      body: JSON.stringify({ shareId: shareId }),
+    })
+      .then(function(r) { return r.json().then(function(d) { return { status: r.status, data: d }; }); })
+      .then(function(res) {
+        if (res.status !== 200 || !res.data || res.data.error) {
+          answerModalVectorizeBtn.disabled = false;
+          answerModalVectorizeBtn.textContent = 'この回答文をベクタ化する';
+          alert('ベクタ化に失敗しました: ' + ((res.data && res.data.error) || '不明なエラー'));
+          return;
+        }
+        answerModalVectorizeBtn.style.display = 'none';
+        openPrereqModal(res.data.keywords, res.data._keywordsWarning);
+      })
+      .catch(function() {
+        answerModalVectorizeBtn.disabled = false;
+        answerModalVectorizeBtn.textContent = 'この回答文をベクタ化する';
+        alert('ベクタ化に失敗しました（通信エラー）');
+      });
   });
 
   function hideNodeTooltip() {
