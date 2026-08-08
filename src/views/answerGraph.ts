@@ -895,6 +895,10 @@ input[type=search]:focus { border-color:var(--accent); }
   // 未登録キーワードをループしながら1件ずつ登録する。カウンタが進むたびに
   // 現在処理中のバッジへ外枠(中抜き)の強調表示を移動させ、進行状況を可視化する。
   function runBulkRegister() {
+    // ボタン連打や多重呼び出しでループが二重に走らないようにする
+    // (disabled中のボタンはブラウザがclickイベント自体を発火しないが、
+    // 念のため関数側でも同じガードを持たせる)。
+    if (prereqBulkRegisterBtn.disabled) return;
     var items = prereqUnregisteredItems;
     if (!items.length) return;
     prereqBulkRegisterBtn.disabled = true;
