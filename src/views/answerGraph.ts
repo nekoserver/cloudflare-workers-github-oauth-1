@@ -264,6 +264,10 @@ input[type=search]:focus { border-color:var(--accent); }
 }
 .answer-modal-vectorize-btn:hover { background:var(--btn-hover); border-color:var(--accent); }
 .answer-modal-vectorize-btn:disabled { opacity:.5; cursor:default; }
+.answer-modal-vectorized-badge {
+  font-size:11px; padding:4px 10px; border-radius:999px; border:1px solid #86efac;
+  background:transparent; color:#16a34a; white-space:nowrap;
+}
 .prereq-modal-backdrop {
   position:fixed; inset:0; z-index:1200; display:none;
   align-items:center; justify-content:center; padding:28px 16px;
@@ -440,6 +444,9 @@ input[type=search]:focus { border-color:var(--accent); }
     <div class="answer-modal-foot">
       <button type="button" class="answer-modal-highlight-btn" id="answerModalHighlightToggleBtn" title="キーワードハイライトなし">🔑</button>
       <button type="button" class="answer-modal-vectorize-btn" id="answerModalVectorizeBtn" style="display:none;">この回答文をベクタ化する</button>
+      <span class="answer-modal-vectorized-badge" id="answerModalVectorizedBadge" style="display:none;">ベクタ化済み</span>
+      <button type="button" class="answer-modal-vectorize-btn" id="answerModalKeywordListBtn" style="display:none;">キーワード一覧</button>
+      <button type="button" class="answer-modal-vectorize-btn" id="answerModalKeywordExtractBtn" style="display:none;">キーワード抽出</button>
       <span id="answerModalMeta"></span>
       <span id="answerModalTokens"></span>
       <a class="answer-modal-link" id="answerModalShareLink" href="#" target="_blank" rel="noopener noreferrer">🔗 共有ページを開く</a>
@@ -506,6 +513,9 @@ input[type=search]:focus { border-color:var(--accent); }
   var answerModalShareLink = document.getElementById('answerModalShareLink');
   var answerModalHighlightToggleBtn = document.getElementById('answerModalHighlightToggleBtn');
   var answerModalVectorizeBtn = document.getElementById('answerModalVectorizeBtn');
+  var answerModalVectorizedBadge = document.getElementById('answerModalVectorizedBadge');
+  var answerModalKeywordListBtn = document.getElementById('answerModalKeywordListBtn');
+  var answerModalKeywordExtractBtn = document.getElementById('answerModalKeywordExtractBtn');
   var prereqModalBackdrop = document.getElementById('prereqModalBackdrop');
   var prereqModalBody = document.getElementById('prereqModalBody');
   var prereqModalClose = document.getElementById('prereqModalClose');
@@ -680,6 +690,11 @@ input[type=search]:focus { border-color:var(--accent); }
     answerModalVectorizeBtn.style.display = 'none';
     answerModalVectorizeBtn.disabled = false;
     answerModalVectorizeBtn.textContent = 'この回答文をベクタ化する';
+    answerModalVectorizedBadge.style.display = 'none';
+    answerModalKeywordListBtn.style.display = 'none';
+    answerModalKeywordExtractBtn.style.display = 'none';
+    answerModalKeywordExtractBtn.disabled = false;
+    answerModalKeywordExtractBtn.textContent = 'キーワード抽出';
     answerModalBackdrop.classList.add('open');
     fetch('/api/aichat/shares/' + encodeURIComponent(shareId), { credentials: 'same-origin' })
       .then(function(r) { return r.json(); })
@@ -701,7 +716,17 @@ input[type=search]:focus { border-color:var(--accent); }
         answerModalBody.innerHTML = '';
         appendAnswerModalBubble(d.answer);
         loadAnswerModalKeywords(shareId);
-        answerModalVectorizeBtn.style.display = d.vectorized ? 'none' : '';
+        if (d.vectorized) {
+          answerModalVectorizeBtn.style.display = 'none';
+          answerModalVectorizedBadge.style.display = '';
+          answerModalKeywordListBtn.style.display = d.keywordsRegistered ? '' : 'none';
+          answerModalKeywordExtractBtn.style.display = d.keywordsRegistered ? 'none' : '';
+        } else {
+          answerModalVectorizeBtn.style.display = '';
+          answerModalVectorizedBadge.style.display = 'none';
+          answerModalKeywordListBtn.style.display = 'none';
+          answerModalKeywordExtractBtn.style.display = 'none';
+        }
       })
       .catch(function() { answerModalBody.textContent = '回答の取得に失敗しました（通信エラー）'; });
   }
@@ -815,11 +840,15 @@ input[type=search]:focus { border-color:var(--accent); }
     if (e.key === 'Escape' && prereqModalBackdrop.classList.contains('open')) closePrereqModal();
   });
 
-  answerModalVectorizeBtn.addEventListener('click', function() {
+  // 「この回答文をベクタ化する」ボタンと、ベクタ化済みだが予備知識キーワードが
+  // まだ回答文に紐付けて登録されていない場合の「キーワード抽出」ボタンは、
+  // どちらも/api/aichat/vectorize-answerを叩く同じ処理を行う(既にベクタ化
+  // 済みの回答文はサーバー側でAI再呼び出しをスキップしキャッシュを使う)。
+  function runVectorizeAnswer(btn, idleText) {
     var shareId = currentAnswerModalShareId;
     if (!shareId) return;
-    answerModalVectorizeBtn.disabled = true;
-    answerModalVectorizeBtn.textContent = 'ベクタ化中...';
+    btn.disabled = true;
+    btn.textContent = 'ベクタ化中...';
     fetch('/api/aichat/vectorize-answer', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -829,19 +858,42 @@ input[type=search]:focus { border-color:var(--accent); }
       .then(function(r) { return r.json().then(function(d) { return { status: r.status, data: d }; }); })
       .then(function(res) {
         if (res.status !== 200 || !res.data || res.data.error) {
-          answerModalVectorizeBtn.disabled = false;
-          answerModalVectorizeBtn.textContent = 'この回答文をベクタ化する';
+          btn.disabled = false;
+          btn.textContent = idleText;
           alert('ベクタ化に失敗しました: ' + ((res.data && res.data.error) || '不明なエラー'));
           return;
         }
-        answerModalVectorizeBtn.style.display = 'none';
+        btn.style.display = 'none';
         openPrereqModal(res.data.keywords, res.data._keywordsWarning, res.data.keywordVectorization);
       })
       .catch(function() {
-        answerModalVectorizeBtn.disabled = false;
-        answerModalVectorizeBtn.textContent = 'この回答文をベクタ化する';
+        btn.disabled = false;
+        btn.textContent = idleText;
         alert('ベクタ化に失敗しました（通信エラー）');
       });
+  }
+
+  answerModalVectorizeBtn.addEventListener('click', function() {
+    runVectorizeAnswer(answerModalVectorizeBtn, 'この回答文をベクタ化する');
+  });
+
+  answerModalKeywordExtractBtn.addEventListener('click', function() {
+    runVectorizeAnswer(answerModalKeywordExtractBtn, 'キーワード抽出');
+  });
+
+  // 「キーワード一覧」ボタン: 既に回答文に紐付けて登録済みの予備知識
+  // キーワードを一覧表示するだけで、ベクタ化ループ演出・結果モーダルは
+  // 出さない(新規登録が発生しないため)。
+  answerModalKeywordListBtn.addEventListener('click', function() {
+    var shareId = currentAnswerModalShareId;
+    if (!shareId) return;
+    fetch('/api/aichat/answer-keywords?shareId=' + encodeURIComponent(shareId), { credentials: 'same-origin' })
+      .then(function(r) { return r.json(); })
+      .then(function(d) {
+        if (!d || d.error) { alert('キーワード一覧の取得に失敗しました: ' + ((d && d.error) || '不明なエラー')); return; }
+        openPrereqModal(d.keywords, null, null);
+      })
+      .catch(function() { alert('キーワード一覧の取得に失敗しました（通信エラー）'); });
   });
 
   function hideNodeTooltip() {
