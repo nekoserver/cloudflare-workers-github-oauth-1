@@ -518,3 +518,263 @@ describe('回答モーダル(DOM実動作): ベクタ化済みバッジとキー
     document.cookie = 'kw_pal_unc=; max-age=0';
   });
 });
+
+// 対象: 「キーワード一覧」モーダルの「一括登録」ボタン。未登録キーワード
+// (出現回数0件)を1件でも含む場合にモーダル最下段に表示され、押すと
+// 「検索窓にキーワードを入力→📋ボタン→検索ログ:モーダルでの承認して登録」
+// の一連の手続きを未登録キーワードすべてについて自動で行う。
+//
+// 故障シナリオ:
+//   (1) 未登録キーワードが1件もない場合でもボタンが表示されてしまう
+//   (2) ボタンを押しても検索(shares/search)→open-modal→approveの
+//       3ステップが正しい順・正しい引数で呼ばれない
+//   (3) 1件のキーワード処理が失敗すると残りのキーワードの登録が
+//       止まってしまう(1件の失敗で全体を巻き込むべきではない)
+//   (4) ループが進んでも中抜き強調表示(kw-badge-registering)が
+//       現在処理中のバッジへ移動しない、または前のバッジに残ったままになる
+describe('回答モーダル(DOM実動作): 「キーワード一覧」モーダルの「一括登録」ボタン', () => {
+  afterEach(() => { vi.unstubAllGlobals(); });
+
+  async function setupBulkRegisterTest() {
+    const html = buildPage();
+    document.body.innerHTML = html.slice(html.indexOf('<body>') + 6, html.indexOf('<script>'));
+    const proto = (window as unknown as { HTMLCanvasElement: { prototype: { getContext: unknown } } }).HTMLCanvasElement.prototype;
+    proto.getContext = () => ({
+      clearRect: () => {}, beginPath: () => {}, arc: () => {}, fill: () => {}, stroke: () => {}, moveTo: () => {}, lineTo: () => {},
+    });
+    const shareResponse = {
+      id: 's1', question: '質問文', answer: '回答文', model: 'model-a',
+      created_at: '2026-08-02T09:30:00.000Z', access_count: 3, user_hash: 'hash123',
+      input_tokens: 10, output_tokens: 20, vectorized: true, keywordsRegistered: true,
+    };
+    const calls: Array<{ kind: string; url: string; body: unknown }> = [];
+    const fetchMock = vi.fn((url: string, init?: { body?: string }) => {
+      const u = String(url);
+      const body = init && init.body ? JSON.parse(init.body) : null;
+      if (u.includes('/api/aichat/answer-keywords')) {
+        calls.push({ kind: 'answer-keywords', url: u, body });
+        return Promise.resolve({ json: () => Promise.resolve({
+          shareId: 's1', keywords: ['新幹線', '乗車券'],
+          keywordOccurrences: [
+            { keyword: '新幹線', count: 0, classified: false, categoryColor: null },
+            { keyword: '乗車券', count: 0, classified: false, categoryColor: null },
+          ],
+        }) });
+      }
+      if (u.includes('/api/aichat/shares/search')) {
+        calls.push({ kind: 'search', url: u, body });
+        const q = decodeURIComponent(u.split('q=')[1] || '');
+        if (q === '乗車券') return Promise.resolve({ json: () => Promise.resolve({ results: [] }) });
+        return Promise.resolve({ json: () => Promise.resolve({ results: [{ id: 'sA' }, { id: 'sB' }] }) });
+      }
+      if (u.includes('/api/aichat/search-log/open-modal')) {
+        calls.push({ kind: 'open-modal', url: u, body });
+        return Promise.resolve({ json: () => Promise.resolve({
+          entries: [
+            { shareId: 'sA', model: 'm', question: 'q', isNew: true },
+            { shareId: 'sB', model: 'm', question: 'q', isNew: false },
+          ],
+        }) });
+      }
+      if (u.includes('/api/aichat/search-log/approve')) {
+        calls.push({ kind: 'approve', url: u, body });
+        return Promise.resolve({ json: () => Promise.resolve({ ok: true, count: 1 }) });
+      }
+      if (u.includes('share-keywords')) {
+        return Promise.resolve({ json: () => Promise.resolve({ keywords: [] }) });
+      }
+      if (u.includes('/api/aichat/shares/')) {
+        return Promise.resolve({ json: () => Promise.resolve(shareResponse) });
+      }
+      return Promise.resolve({ json: () => Promise.resolve({}) });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    vi.stubGlobal('alert', vi.fn());
+
+    const scriptSrc = html.slice(html.indexOf('<script>') + 8, html.indexOf('</script>'));
+    // eslint-disable-next-line no-new-func
+    new Function(scriptSrc)();
+
+    return { calls };
+  }
+
+  async function openKeywordListModal() {
+    openAnswerModalViaClick('s1');
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    const btn = document.getElementById('answerModalKeywordListBtn') as HTMLButtonElement;
+    btn.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+
+  it('未登録キーワードが1件もない場合は「一括登録」ボタンを表示しない', async () => {
+    const html = buildPage();
+    document.body.innerHTML = html.slice(html.indexOf('<body>') + 6, html.indexOf('<script>'));
+    const proto = (window as unknown as { HTMLCanvasElement: { prototype: { getContext: unknown } } }).HTMLCanvasElement.prototype;
+    proto.getContext = () => ({
+      clearRect: () => {}, beginPath: () => {}, arc: () => {}, fill: () => {}, stroke: () => {}, moveTo: () => {}, lineTo: () => {},
+    });
+    const fetchMock = vi.fn((url: string) => {
+      const u = String(url);
+      if (u.includes('/api/aichat/answer-keywords')) {
+        return Promise.resolve({ json: () => Promise.resolve({
+          shareId: 's1', keywords: ['新幹線'],
+          keywordOccurrences: [{ keyword: '新幹線', count: 3, classified: true, categoryColor: '#3b82f6' }],
+        }) });
+      }
+      if (u.includes('share-keywords')) return Promise.resolve({ json: () => Promise.resolve({ keywords: [] }) });
+      if (u.includes('/api/aichat/shares/')) return Promise.resolve({ json: () => Promise.resolve({ id: 's1', question: 'Q', answer: 'A', vectorized: true, keywordsRegistered: true }) });
+      return Promise.resolve({ json: () => Promise.resolve({}) });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    vi.stubGlobal('alert', vi.fn());
+    const scriptSrc = html.slice(html.indexOf('<script>') + 8, html.indexOf('</script>'));
+    // eslint-disable-next-line no-new-func
+    new Function(scriptSrc)();
+
+    await openKeywordListModal();
+
+    expect((document.getElementById('prereqModalFoot') as HTMLElement).style.display).toBe('none');
+  });
+
+  it('未登録キーワードが1件でもあれば「一括登録」ボタンを表示する', async () => {
+    await setupBulkRegisterTest();
+    await openKeywordListModal();
+
+    expect((document.getElementById('prereqModalFoot') as HTMLElement).style.display).not.toBe('none');
+  });
+
+  it('「一括登録」を押すと未登録キーワードごとに検索→open-modal→approveの順で呼ばれ、approveには未登録(isNew)のshareIdのみを渡す', async () => {
+    const { calls } = await setupBulkRegisterTest();
+    await openKeywordListModal();
+
+    const btn = document.getElementById('prereqBulkRegisterBtn') as HTMLButtonElement;
+    btn.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await new Promise((resolve) => setTimeout(resolve, 30));
+
+    const shinkansenCalls = calls.filter((c) => c.body && (c.body as { keyword?: string }).keyword === '新幹線');
+    expect(shinkansenCalls.map((c) => c.kind)).toEqual(['open-modal', 'approve']);
+    const approveCall = shinkansenCalls.find((c) => c.kind === 'approve')!;
+    expect(approveCall.body).toEqual({ keyword: '新幹線', shareIds: ['sA'] });
+
+    // ヒットする回答が無いキーワード(乗車券)はopen-modal/approveまで進まない
+    const norimonoCalls = calls.filter((c) => c.body && (c.body as { keyword?: string }).keyword === '乗車券');
+    expect(norimonoCalls).toEqual([]);
+
+    expect(btn.disabled).toBe(true);
+    expect(btn.textContent).toBe('登録完了');
+  });
+
+  it('1件のキーワード登録に失敗しても残りのキーワードの処理を続ける', async () => {
+    const html = buildPage();
+    document.body.innerHTML = html.slice(html.indexOf('<body>') + 6, html.indexOf('<script>'));
+    const proto = (window as unknown as { HTMLCanvasElement: { prototype: { getContext: unknown } } }).HTMLCanvasElement.prototype;
+    proto.getContext = () => ({
+      clearRect: () => {}, beginPath: () => {}, arc: () => {}, fill: () => {}, stroke: () => {}, moveTo: () => {}, lineTo: () => {},
+    });
+    const approveCalls: unknown[] = [];
+    const fetchMock = vi.fn((url: string, init?: { body?: string }) => {
+      const u = String(url);
+      const body = init && init.body ? JSON.parse(init.body) : null;
+      if (u.includes('/api/aichat/answer-keywords')) {
+        return Promise.resolve({ json: () => Promise.resolve({
+          shareId: 's1', keywords: ['新幹線', '乗車券'],
+          keywordOccurrences: [
+            { keyword: '新幹線', count: 0, classified: false, categoryColor: null },
+            { keyword: '乗車券', count: 0, classified: false, categoryColor: null },
+          ],
+        }) });
+      }
+      if (u.includes('/api/aichat/shares/search')) {
+        if (u.includes('q=%E6%96%B0%E5%B9%B9%E7%B7%9A')) return Promise.reject(new Error('network error'));
+        return Promise.resolve({ json: () => Promise.resolve({ results: [{ id: 'sA' }] }) });
+      }
+      if (u.includes('/api/aichat/search-log/open-modal')) {
+        return Promise.resolve({ json: () => Promise.resolve({ entries: [{ shareId: 'sA', model: 'm', question: 'q', isNew: true }] }) });
+      }
+      if (u.includes('/api/aichat/search-log/approve')) {
+        approveCalls.push(body);
+        return Promise.resolve({ json: () => Promise.resolve({ ok: true, count: 1 }) });
+      }
+      if (u.includes('share-keywords')) return Promise.resolve({ json: () => Promise.resolve({ keywords: [] }) });
+      if (u.includes('/api/aichat/shares/')) return Promise.resolve({ json: () => Promise.resolve({ id: 's1', question: 'Q', answer: 'A', vectorized: true, keywordsRegistered: true }) });
+      return Promise.resolve({ json: () => Promise.resolve({}) });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    vi.stubGlobal('alert', vi.fn());
+    const scriptSrc = html.slice(html.indexOf('<script>') + 8, html.indexOf('</script>'));
+    // eslint-disable-next-line no-new-func
+    new Function(scriptSrc)();
+
+    await openKeywordListModal();
+    const btn = document.getElementById('prereqBulkRegisterBtn') as HTMLButtonElement;
+    btn.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await new Promise((resolve) => setTimeout(resolve, 30));
+
+    // 新幹線の検索(shares/search)が失敗しても、乗車券のapproveは実行される
+    expect(approveCalls).toEqual([{ keyword: '乗車券', shareIds: ['sA'] }]);
+    expect(btn.textContent).toBe('登録完了');
+  });
+
+  it('ループが進むたびに現在処理中のバッジへkw-badge-registeringクラスが移動する(前のバッジからは外れる)', async () => {
+    // 両方のキーワードの検索(shares/search)を明示的に制御されたPromiseで
+    // 止め、各ステップの途中経過(どのバッジが強調表示されているか)を
+    // 確実に観測できるようにする。
+    let resolveFirstSearch: ((v: unknown) => void) | null = null;
+    let resolveSecondSearch: ((v: unknown) => void) | null = null;
+    const html = buildPage();
+    document.body.innerHTML = html.slice(html.indexOf('<body>') + 6, html.indexOf('<script>'));
+    const proto = (window as unknown as { HTMLCanvasElement: { prototype: { getContext: unknown } } }).HTMLCanvasElement.prototype;
+    proto.getContext = () => ({
+      clearRect: () => {}, beginPath: () => {}, arc: () => {}, fill: () => {}, stroke: () => {}, moveTo: () => {}, lineTo: () => {},
+    });
+    const fetchMock = vi.fn((url: string) => {
+      const u = String(url);
+      if (u.includes('/api/aichat/answer-keywords')) {
+        return Promise.resolve({ json: () => Promise.resolve({
+          shareId: 's1', keywords: ['新幹線', '乗車券'],
+          keywordOccurrences: [
+            { keyword: '新幹線', count: 0, classified: false, categoryColor: null },
+            { keyword: '乗車券', count: 0, classified: false, categoryColor: null },
+          ],
+        }) });
+      }
+      if (u.includes('/api/aichat/shares/search')) {
+        if (u.includes('q=%E6%96%B0%E5%B9%B9%E7%B7%9A')) {
+          return new Promise((resolve) => { resolveFirstSearch = resolve; })
+            .then(() => ({ json: () => Promise.resolve({ results: [] }) }));
+        }
+        return new Promise((resolve) => { resolveSecondSearch = resolve; })
+          .then(() => ({ json: () => Promise.resolve({ results: [] }) }));
+      }
+      if (u.includes('share-keywords')) return Promise.resolve({ json: () => Promise.resolve({ keywords: [] }) });
+      if (u.includes('/api/aichat/shares/')) return Promise.resolve({ json: () => Promise.resolve({ id: 's1', question: 'Q', answer: 'A', vectorized: true, keywordsRegistered: true }) });
+      return Promise.resolve({ json: () => Promise.resolve({}) });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    vi.stubGlobal('alert', vi.fn());
+    const scriptSrc = html.slice(html.indexOf('<script>') + 8, html.indexOf('</script>'));
+    // eslint-disable-next-line no-new-func
+    new Function(scriptSrc)();
+
+    await openKeywordListModal();
+    const badges = Array.from(document.querySelectorAll('.prereq-kw-badge')) as HTMLElement[];
+    const btn = document.getElementById('prereqBulkRegisterBtn') as HTMLButtonElement;
+    btn.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    // 1件目(新幹線)を処理中: 1件目だけ強調表示されている
+    expect(badges[0].classList.contains('kw-badge-registering')).toBe(true);
+    expect(badges[1].classList.contains('kw-badge-registering')).toBe(false);
+
+    resolveFirstSearch!(undefined);
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    // 2件目(乗車券)に移動: 1件目からは外れ、2件目に付く
+    expect(badges[0].classList.contains('kw-badge-registering')).toBe(false);
+    expect(badges[1].classList.contains('kw-badge-registering')).toBe(true);
+
+    resolveSecondSearch!(undefined);
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(badges[1].classList.contains('kw-badge-registering')).toBe(false);
+  });
+});

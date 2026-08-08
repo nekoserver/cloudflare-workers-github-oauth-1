@@ -304,7 +304,21 @@ input[type=search]:focus { border-color:var(--accent); }
   display:inline-block; background:var(--card); color:var(--label);
   border:1px solid var(--btn-border); border-radius:10px; font-size:11px;
   padding:1px 6px; margin:1px; white-space:nowrap; line-height:1.6; box-sizing:border-box;
+  transition:border-color .15s ease, border-width .15s ease;
 }
+.prereq-kw-badge.kw-badge-registering {
+  border-width:2px; border-color:var(--accent); background:transparent;
+}
+.prereq-modal-foot {
+  flex-shrink:0; padding:9px 16px; border-top:1px solid var(--border);
+  background:var(--card); display:flex; justify-content:center;
+}
+.prereq-bulk-register-btn {
+  font-size:12px; padding:6px 20px; border-radius:6px; border:1px solid var(--btn-border);
+  background:var(--btn-bg); color:var(--fg); cursor:pointer;
+}
+.prereq-bulk-register-btn:hover { background:var(--btn-hover); border-color:var(--accent); }
+.prereq-bulk-register-btn:disabled { opacity:.5; cursor:default; }
 .prereq-result-modal-backdrop {
   position:fixed; inset:0; z-index:1300; display:none;
   align-items:center; justify-content:center; padding:28px 16px;
@@ -466,6 +480,9 @@ input[type=search]:focus { border-color:var(--accent); }
       <button type="button" id="prereqModalClose" aria-label="閉じる">✕</button>
     </div>
     <div class="prereq-modal-body" id="prereqModalBody"></div>
+    <div class="prereq-modal-foot" id="prereqModalFoot" style="display:none;">
+      <button type="button" class="prereq-bulk-register-btn" id="prereqBulkRegisterBtn">一括登録</button>
+    </div>
   </div>
 </div>
 <div class="prereq-result-modal-backdrop" id="prereqResultModalBackdrop" aria-hidden="true">
@@ -525,6 +542,8 @@ input[type=search]:focus { border-color:var(--accent); }
   var prereqModalBackdrop = document.getElementById('prereqModalBackdrop');
   var prereqModalBody = document.getElementById('prereqModalBody');
   var prereqModalClose = document.getElementById('prereqModalClose');
+  var prereqModalFoot = document.getElementById('prereqModalFoot');
+  var prereqBulkRegisterBtn = document.getElementById('prereqBulkRegisterBtn');
   var prereqResultModalBackdrop = document.getElementById('prereqResultModalBackdrop');
   var prereqResultModalBody = document.getElementById('prereqResultModalBody');
   var prereqResultModalOkBtn = document.getElementById('prereqResultModalOkBtn');
@@ -806,6 +825,7 @@ input[type=search]:focus { border-color:var(--accent); }
     var uncColor = getUncClassifiedColor();
     var list = document.createElement('div');
     list.className = 'prereq-kw-badge-list';
+    var unregistered = [];
     keywordOccurrences.forEach(function(item) {
       var badge = document.createElement('span');
       badge.className = 'prereq-kw-badge';
@@ -814,17 +834,90 @@ input[type=search]:focus { border-color:var(--accent); }
         var color = item.classified ? (item.categoryColor || '#6366f1') : uncColor;
         badge.style.borderColor = color;
         badge.style.color = color;
+      } else {
+        unregistered.push({ keyword: item.keyword, badge: badge });
       }
       list.appendChild(badge);
     });
     prereqModalBody.appendChild(list);
+    return unregistered;
   }
 
+  // 未登録キーワード(出現回数0件)を1件でも含む場合だけ、モーダル最下段に
+  // 「一括登録」ボタンを出す。
+  var prereqUnregisteredItems = [];
   function openPrereqKeywordListModal(keywordOccurrences) {
-    renderPrereqKeywordOccurrenceList(keywordOccurrences);
+    prereqUnregisteredItems = renderPrereqKeywordOccurrenceList(keywordOccurrences) || [];
+    prereqBulkRegisterBtn.disabled = false;
+    prereqBulkRegisterBtn.textContent = '一括登録';
+    prereqModalFoot.style.display = prereqUnregisteredItems.length > 0 ? '' : 'none';
     prereqModalBackdrop.classList.add('open');
     prereqModalBackdrop.setAttribute('aria-hidden', 'false');
   }
+
+  // 未登録キーワード1件について、サイドパネル検索窓へのキーワード入力→
+  // 📋ボタン→「検索ログ: 」モーダルでの「承認して登録」までの一連の手続きを
+  // (すべて承認するものとして)自動で行う。
+  //   1. GET /api/aichat/shares/search?q=keyword でそのキーワードにヒットする
+  //      回答一覧(shareIds)を取得(=検索窓にキーワードを入力した状態)
+  //   2. POST /api/aichat/search-log/open-modal でヒットしたshareIdごとの
+  //      未登録/登録済みを判定(=📋ボタンで「検索ログ: 」モーダルを開いた状態)
+  //   3. 未登録(isNew)のshareIdだけをPOST /api/aichat/search-log/approve へ
+  //      渡して登録する(=「承認して登録」を押した状態)
+  function registerKeywordViaSearchLogFlow(keyword) {
+    return fetch('/api/aichat/shares/search?q=' + encodeURIComponent(keyword), { credentials: 'same-origin' })
+      .then(function(r) { return r.json(); })
+      .then(function(d) {
+        var shareIds = (d && d.results ? d.results : []).map(function(r) { return String(r.id); });
+        if (!shareIds.length) return;
+        return fetch('/api/aichat/search-log/open-modal', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'same-origin',
+          body: JSON.stringify({ keyword: keyword, shareIds: shareIds }),
+        })
+          .then(function(r) { return r.json(); })
+          .then(function(d2) {
+            var newIds = (d2 && d2.entries ? d2.entries : [])
+              .filter(function(e) { return e.isNew; })
+              .map(function(e) { return e.shareId; });
+            if (!newIds.length) return;
+            return fetch('/api/aichat/search-log/approve', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              credentials: 'same-origin',
+              body: JSON.stringify({ keyword: keyword, shareIds: newIds }),
+            });
+          });
+      });
+  }
+
+  // 未登録キーワードをループしながら1件ずつ登録する。カウンタが進むたびに
+  // 現在処理中のバッジへ外枠(中抜き)の強調表示を移動させ、進行状況を可視化する。
+  function runBulkRegister() {
+    var items = prereqUnregisteredItems;
+    if (!items.length) return;
+    prereqBulkRegisterBtn.disabled = true;
+    prereqBulkRegisterBtn.textContent = '登録中...';
+    var i = 0;
+    function step() {
+      if (i > 0) items[i - 1].badge.classList.remove('kw-badge-registering');
+      if (i >= items.length) {
+        prereqBulkRegisterBtn.textContent = '登録完了';
+        return;
+      }
+      items[i].badge.classList.add('kw-badge-registering');
+      registerKeywordViaSearchLogFlow(items[i].keyword)
+        .catch(function() {})
+        .then(function() {
+          i++;
+          step();
+        });
+    }
+    step();
+  }
+
+  prereqBulkRegisterBtn.addEventListener('click', runBulkRegister);
 
   // 各キーワードをshare_idに紐付けてベクタ化するサーバー側ループの進行を、
   // モーダル上のチップを1件ずつ外枠(中抜き)強調表示することで可視化する。
@@ -875,6 +968,8 @@ input[type=search]:focus { border-color:var(--accent); }
   prereqResultModalOkBtn.addEventListener('click', closePrereqResultModal);
 
   function openPrereqModal(keywords, warning, keywordVectorization) {
+    prereqUnregisteredItems = [];
+    prereqModalFoot.style.display = 'none';
     var chips = renderPrereqModal(keywords, warning);
     if (keywordVectorization && keywordVectorization.length > 0 && chips.length > 0) {
       animateKeywordVectorizationProgress(chips, function() {
