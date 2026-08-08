@@ -12,6 +12,8 @@ import {
   listAnswerKeywordVectors,
   getKeywordOccurrenceCounts,
   buildKeywordOccurrenceList,
+  getKeywordCategoryColors,
+  mergeKeywordOccurrenceWithCategory,
   PLAMO_EMBEDDING_MODEL,
   ANSWER_PREREQUISITE_TERMS_MODEL,
 } from './index';
@@ -110,8 +112,31 @@ function setupDb(): DatabaseSync {
       select_count INTEGER NOT NULL DEFAULT 1
     );
     CREATE UNIQUE INDEX idx_aichat_search_log_unique ON aichat_search_log(user_id, keyword, share_id);
+    CREATE TABLE aichat_keyword_categories (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      color TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE TABLE aichat_keyword_category_map (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id TEXT NOT NULL,
+      keyword TEXT NOT NULL,
+      category_id INTEGER NOT NULL REFERENCES aichat_keyword_categories(id),
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
   `);
   return db;
+}
+
+function insertCategory(db: DatabaseSync, userId: string, name: string, color: string): number {
+  db.prepare(`INSERT INTO aichat_keyword_categories (user_id, name, color) VALUES (?, ?, ?)`).run(userId, name, color);
+  return Number((db.prepare(`SELECT id FROM aichat_keyword_categories WHERE user_id = ? AND name = ?`).get(userId, name) as { id: number }).id);
+}
+
+function insertCategoryMap(db: DatabaseSync, userId: string, keyword: string, categoryId: number) {
+  db.prepare(`INSERT INTO aichat_keyword_category_map (user_id, keyword, category_id) VALUES (?, ?, ?)`).run(userId, keyword, categoryId);
 }
 
 function insertSearchLog(db: DatabaseSync, userId: string, keyword: string, shareId: string, selectCount: number) {
@@ -514,5 +539,78 @@ describe('buildKeywordOccurrenceList: 出現回数の多い順に並べたリス
 
   it('空配列を渡すと空配列を返す', () => {
     expect(buildKeywordOccurrenceList([], {})).toEqual([]);
+  });
+});
+
+// 対象: 「キーワード一覧」ボタンのバッジ外枠色を決めるためのカテゴリ分類
+// 情報の取得(getKeywordCategoryColors)と、出現回数リストへのマージ
+// (mergeKeywordOccurrenceWithCategory)。
+//
+// 故障シナリオ:
+//   (1) 他ユーザーの分類を自分のキーワードの分類として混入させる
+//   (2) 分類されていないキーワードにclassified:trueが付いてしまう
+//   (3) 1キーワードが複数カテゴリに属する場合に例外になる、または
+//       複数件分の色情報が返って呼び出し側の型を壊す
+//   (4) マージ時に出現回数の並び順(多い順)が崩れる
+
+describe('getKeywordCategoryColors: キーワードごとの分類カテゴリ色を取得', () => {
+  it('分類済みのキーワードにはカテゴリid・色を返す', async () => {
+    const db = setupDb();
+    const catId = insertCategory(db, 'u1', '交通', '#3b82f6');
+    insertCategoryMap(db, 'u1', '東京駅', catId);
+    const result = await getKeywordCategoryColors(wrapD1(db) as never, 'u1', ['東京駅']);
+    expect(result['東京駅']).toEqual({ categoryId: catId, color: '#3b82f6' });
+  });
+
+  it('未分類のキーワードは結果に含まれない', async () => {
+    const db = setupDb();
+    const result = await getKeywordCategoryColors(wrapD1(db) as never, 'u1', ['東京駅']);
+    expect(result['東京駅']).toBeUndefined();
+  });
+
+  it('他ユーザーの分類は自分の結果に混入しない', async () => {
+    const db = setupDb();
+    const catId = insertCategory(db, 'u2', '交通', '#3b82f6');
+    insertCategoryMap(db, 'u2', '東京駅', catId);
+    const result = await getKeywordCategoryColors(wrapD1(db) as never, 'u1', ['東京駅']);
+    expect(result['東京駅']).toBeUndefined();
+  });
+
+  it('1キーワードが複数カテゴリに属していても代表1件のみを返す(例外にならない)', async () => {
+    const db = setupDb();
+    const cat1 = insertCategory(db, 'u1', '交通', '#3b82f6');
+    const cat2 = insertCategory(db, 'u1', '観光', '#22c55e');
+    insertCategoryMap(db, 'u1', '東京駅', cat1);
+    insertCategoryMap(db, 'u1', '東京駅', cat2);
+    const result = await getKeywordCategoryColors(wrapD1(db) as never, 'u1', ['東京駅']);
+    expect([cat1, cat2]).toContain(result['東京駅'].categoryId);
+  });
+
+  it('キーワードが空配列の場合は空オブジェクトを返す', async () => {
+    const db = setupDb();
+    expect(await getKeywordCategoryColors(wrapD1(db) as never, 'u1', [])).toEqual({});
+  });
+});
+
+describe('mergeKeywordOccurrenceWithCategory: 出現回数リストへの分類情報マージ', () => {
+  it('分類済みキーワードにclassified:trueとcategoryColorを付与する', () => {
+    const merged = mergeKeywordOccurrenceWithCategory(
+      [{ keyword: '東京駅', count: 3 }],
+      { '東京駅': { categoryId: 1, color: '#3b82f6' } },
+    );
+    expect(merged).toEqual([{ keyword: '東京駅', count: 3, classified: true, categoryColor: '#3b82f6' }]);
+  });
+
+  it('未分類キーワードにはclassified:falseとcategoryColor:nullを付与する', () => {
+    const merged = mergeKeywordOccurrenceWithCategory([{ keyword: '新幹線', count: 1 }], {});
+    expect(merged).toEqual([{ keyword: '新幹線', count: 1, classified: false, categoryColor: null }]);
+  });
+
+  it('出現回数の並び順(入力順)を保持する', () => {
+    const merged = mergeKeywordOccurrenceWithCategory(
+      [{ keyword: 'B', count: 5 }, { keyword: 'A', count: 2 }],
+      {},
+    );
+    expect(merged.map((m) => m.keyword)).toEqual(['B', 'A']);
   });
 });

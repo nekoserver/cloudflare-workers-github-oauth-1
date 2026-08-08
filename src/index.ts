@@ -6793,6 +6793,57 @@ export function buildKeywordOccurrenceList(
   return list;
 }
 
+export type KeywordCategoryInfo = { categoryId: number; color: string };
+
+/**
+ * キーワード群それぞれについて、確定分類(aichat_keyword_category_map)から
+ * 紐づくカテゴリのid・色を取得する。1キーワードが複数カテゴリに属する
+ * 場合は代表として最初に見つかった1件のみを返す(バッジの枠線色は
+ * 1色で表現するため)。バインド上限に収まる単位でチャンク分割する。
+ */
+export async function getKeywordCategoryColors(
+  db: D1Database,
+  userId: string,
+  keywords: string[],
+): Promise<Record<string, KeywordCategoryInfo>> {
+  const result: Record<string, KeywordCategoryInfo> = {};
+  if (keywords.length === 0) return result;
+  for (const chunk of chunkBindValues(keywords, D1_MAX_BOUND_PARAMS - 1)) {
+    if (chunk.length === 0) continue;
+    const placeholders = chunk.map(() => '?').join(',');
+    const rows = await db.prepare(
+      `SELECT m.keyword AS keyword, c.id AS category_id, c.color AS color
+       FROM aichat_keyword_category_map m
+       JOIN aichat_keyword_categories c ON c.id = m.category_id AND c.user_id = m.user_id
+       WHERE m.user_id = ? AND m.keyword IN (${placeholders})`
+    ).bind(userId, ...chunk).all<{ keyword: string; category_id: number; color: string | null }>();
+    for (const r of (rows.results ?? [])) {
+      if (!(r.keyword in result)) {
+        result[r.keyword] = { categoryId: r.category_id, color: r.color || '#6366f1' };
+      }
+    }
+  }
+  return result;
+}
+
+export type KeywordOccurrenceWithCategory = KeywordOccurrence & { classified: boolean; categoryColor: string | null };
+
+/**
+ * 出現回数リスト(buildKeywordOccurrenceListの結果)にカテゴリ分類情報を
+ * マージする。出現回数の並び順はそのまま保つ。answer-graphの
+ * 「キーワード一覧」ボタンで、バッジの枠線色(分類色/未分類色)を
+ * 決めるために使う。
+ */
+export function mergeKeywordOccurrenceWithCategory(
+  occurrences: KeywordOccurrence[],
+  categoryInfo: Record<string, KeywordCategoryInfo>,
+): KeywordOccurrenceWithCategory[] {
+  return occurrences.map((o) => {
+    const info = categoryInfo[o.keyword];
+    return { keyword: o.keyword, count: o.count, classified: !!info, categoryColor: info ? info.color : null };
+  });
+}
+
 export type AnswerKeywordVectorizationResult = { keyword: string; alreadyRegistered: boolean; error?: string };
 
 /**
@@ -7292,7 +7343,9 @@ app.get('/api/aichat/answer-keywords', authMiddleware, async (c) => {
   if (!shareId) return jsonUtf8({ error: 'shareId は必須です' }, 400);
   const keywords = await listAnswerKeywordVectors(c.env.DB, user.sub, shareId);
   const counts = await getKeywordOccurrenceCounts(c.env.DB, user.sub, keywords);
-  const keywordOccurrences = buildKeywordOccurrenceList(keywords, counts);
+  const occurrenceList = buildKeywordOccurrenceList(keywords, counts);
+  const categoryInfo = await getKeywordCategoryColors(c.env.DB, user.sub, keywords);
+  const keywordOccurrences = mergeKeywordOccurrenceWithCategory(occurrenceList, categoryInfo);
   return jsonUtf8({ shareId, keywords, keywordOccurrences });
 });
 

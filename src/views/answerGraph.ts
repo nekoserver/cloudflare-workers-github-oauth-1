@@ -299,11 +299,12 @@ input[type=search]:focus { border-color:var(--accent); }
 .prereq-modal-chip.chip-vectorizing {
   border-width:2px; border-color:var(--accent); background:transparent;
 }
-.prereq-keyword-occurrence-list { width:100%; display:flex; flex-direction:column; }
-.prereq-keyword-occurrence-row {
-  text-align:left; font-size:12px; color:var(--fg); padding:5px 2px; border-bottom:1px solid var(--border);
+.prereq-kw-badge-list { width:100%; line-height:1; }
+.prereq-kw-badge {
+  display:inline-block; background:var(--card); color:var(--label);
+  border:1px solid var(--btn-border); border-radius:10px; font-size:11px;
+  padding:1px 6px; margin:1px; white-space:nowrap; line-height:1.6; box-sizing:border-box;
 }
-.prereq-keyword-occurrence-row:last-child { border-bottom:none; }
 .prereq-result-modal-backdrop {
   position:fixed; inset:0; z-index:1300; display:none;
   align-items:center; justify-content:center; padding:28px 16px;
@@ -779,6 +780,20 @@ input[type=search]:focus { border-color:var(--accent); }
   // ループしてAIチャットのキーワードテーブル内での出現回数を調べ、ループが
   // 終わってから出現回数の多い順に並べ替え済み)を「キーワード (出現回数)」の
   // 形で1行ずつ左詰めで表示する。ベクタ化ループ演出・結果モーダルは出さない。
+  // 未分類キーワードの枠線色は、AIチャットページの🔑分類モーダルで
+  // カスタマイズ保存されるcookie(kw_pal_unc)を共有して読む。未設定時は
+  // AIチャットページの円グラフ等で使われているデフォルトの未分類色に揃える。
+  var PREREQ_UNC_COLOR_DEFAULT = '#94a3b8';
+  function getUncClassifiedColor() {
+    var m = document.cookie.match(/(?:^|; )kw_pal_unc=([^;]*)/);
+    return m && m[1] ? decodeURIComponent(m[1]) : PREREQ_UNC_COLOR_DEFAULT;
+  }
+
+  // AIチャットページの🔑分類モーダル(.sq-kw-badge)と同じ丸バッジスタイルで
+  // 「キーワード (出現回数)」を表示する。出現回数0件(未登録)は「(件数)」を
+  // 付けない。出現回数が1件以上ある場合のみ、分類済みならそのカテゴリ色、
+  // 未分類なら未分類色で外枠(中抜き)を塗る。出現回数0件のバッジは既定の
+  // 枠線のまま(色指定なし)。
   function renderPrereqKeywordOccurrenceList(keywordOccurrences) {
     prereqModalBody.innerHTML = '';
     if (!keywordOccurrences || !keywordOccurrences.length) {
@@ -788,13 +803,19 @@ input[type=search]:focus { border-color:var(--accent); }
       prereqModalBody.appendChild(empty);
       return;
     }
+    var uncColor = getUncClassifiedColor();
     var list = document.createElement('div');
-    list.className = 'prereq-keyword-occurrence-list';
+    list.className = 'prereq-kw-badge-list';
     keywordOccurrences.forEach(function(item) {
-      var row = document.createElement('div');
-      row.className = 'prereq-keyword-occurrence-row';
-      row.textContent = item.keyword + ' (' + item.count + ')';
-      list.appendChild(row);
+      var badge = document.createElement('span');
+      badge.className = 'prereq-kw-badge';
+      badge.textContent = item.count > 0 ? (item.keyword + ' (' + item.count + ')') : item.keyword;
+      if (item.count > 0) {
+        var color = item.classified ? (item.categoryColor || '#6366f1') : uncColor;
+        badge.style.borderColor = color;
+        badge.style.color = color;
+      }
+      list.appendChild(badge);
     });
     prereqModalBody.appendChild(list);
   }

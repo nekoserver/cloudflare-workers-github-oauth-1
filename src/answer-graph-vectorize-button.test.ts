@@ -395,7 +395,11 @@ describe('回答モーダル(DOM実動作): ベクタ化済みバッジとキー
         answerKeywordsCalls.push(u);
         return Promise.resolve({ json: () => Promise.resolve({
           shareId: 's1', keywords: ['東京駅', '新幹線'],
-          keywordOccurrences: [{ keyword: '新幹線', count: 5 }, { keyword: '東京駅', count: 2 }],
+          keywordOccurrences: [
+            { keyword: '新幹線', count: 5, classified: true, categoryColor: '#3b82f6' },
+            { keyword: '東京駅', count: 2, classified: false, categoryColor: null },
+            { keyword: '乗車券', count: 0, classified: false, categoryColor: null },
+          ],
         }) });
       }
       if (u.includes('/api/aichat/vectorize-answer')) {
@@ -471,7 +475,7 @@ describe('回答モーダル(DOM実動作): ベクタ化済みバッジとキー
     expect(btn.style.display).toBe('none');
   });
 
-  it('「キーワード一覧」ボタンを押すと/api/aichat/answer-keywordsから出現回数付きのキーワード一覧を取得し、出現回数の多い順に「キーワード (出現回数)」の形で左詰め表示する(ループ演出・結果モーダルは出さない)', async () => {
+  it('「キーワード一覧」ボタンを押すと/api/aichat/answer-keywordsから出現回数付きのキーワード一覧を取得し、丸バッジで「キーワード (出現回数)」を表示する(0件は(0)を付けない・ループ演出/結果モーダルは出さない)', async () => {
     const { answerKeywordsCalls } = await setupBadgeTest({ vectorized: true, keywordsRegistered: true });
     openAnswerModalViaClick('s1');
     await new Promise((resolve) => setTimeout(resolve, 10));
@@ -484,8 +488,33 @@ describe('回答モーダル(DOM実動作): ベクタ化済みバッジとキー
     expect(answerKeywordsCalls[0]).toContain('shareId=s1');
     const prereqBackdrop = document.getElementById('prereqModalBackdrop')!;
     expect(prereqBackdrop.classList.contains('open')).toBe(true);
-    const rows = Array.from(prereqBackdrop.querySelectorAll('.prereq-keyword-occurrence-row')).map((el) => el.textContent);
-    expect(rows).toEqual(['新幹線 (5)', '東京駅 (2)']);
+    const badges = Array.from(prereqBackdrop.querySelectorAll('.prereq-kw-badge')) as HTMLElement[];
+    expect(badges.map((el) => el.textContent)).toEqual(['新幹線 (5)', '東京駅 (2)', '乗車券']);
+
+    // 分類済み(新幹線)はカテゴリ色で外枠を塗る
+    expect(badges[0].style.borderColor).toBe('rgb(59, 130, 246)');
+    // 未分類だが登録あり(東京駅)は未分類色(デフォルト#94a3b8)で外枠を塗る
+    expect(badges[1].style.borderColor).toBe('rgb(148, 163, 184)');
+    // 出現回数0件(乗車券)は色指定なし(デフォルトの枠線のまま)
+    expect(badges[2].style.borderColor).toBe('');
+
     expect(document.getElementById('prereqResultModalBackdrop')!.classList.contains('open')).toBe(false);
+  });
+
+  it('未分類キーワードの外枠色はcookie(kw_pal_unc)でカスタマイズされていればそれを使う(AIチャットページの🔑分類モーダルと配色を共有)', async () => {
+    document.cookie = 'kw_pal_unc=' + encodeURIComponent('#ff0000');
+    await setupBadgeTest({ vectorized: true, keywordsRegistered: true });
+    openAnswerModalViaClick('s1');
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    const btn = document.getElementById('answerModalKeywordListBtn') as HTMLButtonElement;
+    btn.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    const badges = Array.from(document.querySelectorAll('.prereq-kw-badge')) as HTMLElement[];
+    expect(badges[1].textContent).toBe('東京駅 (2)');
+    expect(badges[1].style.borderColor).toBe('rgb(255, 0, 0)');
+
+    document.cookie = 'kw_pal_unc=; max-age=0';
   });
 });
