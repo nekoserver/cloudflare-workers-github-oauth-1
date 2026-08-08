@@ -45,7 +45,7 @@ describe('キーワード分類: 分類決定後のカテゴリ選択状態保�
     const html = buildPage();
     const idx = html.indexOf('function applyKwBadgeColors');
     expect(idx).toBeGreaterThan(-1);
-    const fn = html.slice(idx, idx + 2200);
+    const fn = html.slice(idx, idx + 2800);
     expect(fn).toContain('kw-cat-summary-badge');
     expect(fn).toContain('kw-cat-badge-active');
   });

@@ -146,6 +146,7 @@ export function getAiChatPage(user: {
     .kw-kw-classified { border:1.5px solid var(--kw-pal-cls,#7c3aed); color:var(--kw-pal-cls,#7c3aed); background:transparent; }
     .kw-cat-badge-active { border-color:var(--kw-pal-cat,#3b82f6) !important; background:var(--kw-pal-cat-bg,#dbeafe) !important; color:var(--kw-pal-cat,#1d4ed8) !important; }
     [data-theme="dark"] .kw-cat-badge-active { border-color:var(--kw-pal-cat,#60a5fa) !important; background:var(--kw-pal-cat-bg,rgba(59,130,246,0.25)) !important; color:var(--kw-pal-cat,#93c5fd) !important; }
+    .kw-cat-badge-dimmed { opacity:.55; }
     .kw-group-badge-active { border-color:#3b82f6 !important; background:#3b82f6 !important; color:#fff !important; }
     .kw-color-swatch { display:inline-block;width:18px;height:18px;border-radius:3px;margin:1px;cursor:pointer;border:2px solid transparent;box-sizing:border-box;vertical-align:middle; }
     .kw-color-swatch:hover { opacity:0.8; }
@@ -4282,6 +4283,7 @@ export function getAiChatPage(user: {
 
     var selectedCats = {};
     var selectedGroupId = null;
+    var KW_CAT_DIM_COLOR = '#64748b';
     var kwAddToCatId = null;
     var kwAddToCatName = '';
     var kwRemoveFromCatId = null;
@@ -4330,10 +4332,16 @@ export function getAiChatPage(user: {
       kwClassifyListBody.querySelectorAll('.kw-cat-summary-badge').forEach(function(catEl) {
         var catId = catEl.dataset.catId;
         var catColor = catEl.dataset.catColor || '#6366f1';
-        catEl.style.borderColor = catColor;
-        catEl.style.color = catColor;
-        catEl.style.setProperty('--kw-pal-cat', catColor);
-        catEl.style.setProperty('--kw-pal-cat-bg', catColor + '22');
+        // 大分類カテゴリを選択中は、その大分類に属さない中分類カテゴリの
+        // 色を一時的に暗い色へ差し替え、属する中分類カテゴリ(元の色のまま)
+        // と一目で区別できるようにする。
+        var isDimmed = !!selectedGroupId && !selectedCats[catId];
+        var displayColor = isDimmed ? KW_CAT_DIM_COLOR : catColor;
+        catEl.style.borderColor = displayColor;
+        catEl.style.color = displayColor;
+        catEl.style.setProperty('--kw-pal-cat', displayColor);
+        catEl.style.setProperty('--kw-pal-cat-bg', displayColor + '22');
+        catEl.classList.toggle('kw-cat-badge-dimmed', isDimmed);
         if (selectedCats[catId]) {
           catEl.classList.add('kw-cat-badge-active');
         } else {
