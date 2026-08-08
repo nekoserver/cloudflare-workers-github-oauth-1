@@ -153,6 +153,75 @@ describe('回答モーダル(DOM実動作): 「この回答文をベクタ化す
     expect(Number(prereqZMatch![1])).toBeGreaterThan(Number(answerZMatch![1]));
   });
 
+  it('keywordVectorizationを受け取ると、チップに1件ずつchip-vectorizingクラスが付いて進む(中抜き強調のループ演出)', async () => {
+    vi.useFakeTimers();
+    const html = buildPage();
+    document.body.innerHTML = html.slice(html.indexOf('<body>') + 6, html.indexOf('<script>'));
+    const proto = (window as unknown as { HTMLCanvasElement: { prototype: { getContext: unknown } } }).HTMLCanvasElement.prototype;
+    proto.getContext = () => ({
+      clearRect: () => {}, beginPath: () => {}, arc: () => {}, fill: () => {}, stroke: () => {}, moveTo: () => {}, lineTo: () => {},
+    });
+    const fetchMock = vi.fn((url: string) => {
+      const u = String(url);
+      if (u.includes('/api/aichat/vectorize-answer')) {
+        return Promise.resolve({
+          status: 200,
+          json: () => Promise.resolve({
+            vectorized: true, model: '@cf/pfnet/plamo-embedding-1b', dim: 3,
+            keywords: ['東京駅', '新幹線', '乗車券'],
+            keywordVectorization: [
+              { keyword: '東京駅', alreadyRegistered: true },
+              { keyword: '新幹線', alreadyRegistered: false },
+              { keyword: '乗車券', alreadyRegistered: false },
+            ],
+            _keywordsWarning: null,
+          }),
+        });
+      }
+      if (u.includes('share-keywords')) {
+        return Promise.resolve({ json: () => Promise.resolve({ keywords: [] }) });
+      }
+      if (u.includes('/api/aichat/shares/')) {
+        return Promise.resolve({ json: () => Promise.resolve({ id: 's1', question: 'Q', answer: 'A', vectorized: false }) });
+      }
+      return Promise.resolve({ json: () => Promise.resolve({}) });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    vi.stubGlobal('alert', vi.fn());
+
+    const scriptSrc = html.slice(html.indexOf('<script>') + 8, html.indexOf('</script>'));
+    // eslint-disable-next-line no-new-func
+    new Function(scriptSrc)();
+
+    openAnswerModalViaClick('s1');
+    await vi.advanceTimersByTimeAsync(10);
+
+    const btn = document.getElementById('answerModalVectorizeBtn') as HTMLButtonElement;
+    btn.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await vi.advanceTimersByTimeAsync(10);
+
+    const chips = Array.from(document.querySelectorAll('.prereq-modal-chip'));
+    expect(chips).toHaveLength(3);
+
+    // 1件目がハイライトされた直後の状態
+    expect(chips[0].classList.contains('chip-vectorizing')).toBe(true);
+    expect(chips[1].classList.contains('chip-vectorizing')).toBe(false);
+    expect(chips[2].classList.contains('chip-vectorizing')).toBe(false);
+
+    // ループが進むと1件目は外れ、2件目がハイライトされる
+    await vi.advanceTimersByTimeAsync(220);
+    expect(chips[0].classList.contains('chip-vectorizing')).toBe(false);
+    expect(chips[1].classList.contains('chip-vectorizing')).toBe(true);
+    expect(chips[2].classList.contains('chip-vectorizing')).toBe(false);
+
+    // 最後まで進めるとどのチップにもクラスが残らない
+    await vi.advanceTimersByTimeAsync(220);
+    await vi.advanceTimersByTimeAsync(220);
+    chips.forEach((chip) => expect(chip.classList.contains('chip-vectorizing')).toBe(false));
+
+    vi.useRealTimers();
+  });
+
   it('APIがエラーを返した場合、ボタンは再度押せる状態に戻る', async () => {
     const html = buildPage();
     document.body.innerHTML = html.slice(html.indexOf('<body>') + 6, html.indexOf('<script>'));

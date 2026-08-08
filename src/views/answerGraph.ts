@@ -290,7 +290,10 @@ input[type=search]:focus { border-color:var(--accent); }
 .prereq-modal-warning { font-size:11px; color:var(--danger); width:100%; }
 .prereq-modal-chip {
   padding:6px 12px; font-size:12px; border-radius:999px; border:1px solid var(--btn-border);
-  background:transparent; color:var(--fg);
+  background:transparent; color:var(--fg); transition:border-color .15s ease, border-width .15s ease;
+}
+.prereq-modal-chip.chip-vectorizing {
+  border-width:2px; border-color:var(--accent); background:transparent;
 }
 .answer-modal-model-dot { display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:4px; vertical-align:middle; }
 .answer-modal-link { font-size:11px; color:var(--accent); text-decoration:none; white-space:nowrap; margin-left:auto; }
@@ -687,6 +690,7 @@ input[type=search]:focus { border-color:var(--accent); }
   // ここに列挙する。
   function renderPrereqModal(keywords, warning) {
     prereqModalBody.innerHTML = '';
+    var chips = [];
     if (warning) {
       var warn = document.createElement('div');
       warn.className = 'prereq-modal-warning';
@@ -698,18 +702,40 @@ input[type=search]:focus { border-color:var(--accent); }
       empty.className = 'prereq-modal-empty';
       empty.textContent = warning ? '' : '追加の予備知識は見つかりませんでした';
       if (empty.textContent) prereqModalBody.appendChild(empty);
-      return;
+      return chips;
     }
     keywords.forEach(function(kw) {
       var chip = document.createElement('span');
       chip.className = 'prereq-modal-chip';
       chip.textContent = kw;
       prereqModalBody.appendChild(chip);
+      chips.push(chip);
     });
+    return chips;
   }
 
-  function openPrereqModal(keywords, warning) {
-    renderPrereqModal(keywords, warning);
+  // 各キーワードをshare_idに紐付けてベクタ化するサーバー側ループの進行を、
+  // モーダル上のチップを1件ずつ外枠(中抜き)強調表示することで可視化する。
+  // サーバー側は既にループを終えた状態で結果が返るため、演出としては
+  // 受け取った順序をそのままなぞる形でチップを1つずつハイライトする。
+  var PREREQ_VECTORIZE_STEP_MS = 220;
+  function animateKeywordVectorizationProgress(chips) {
+    var i = 0;
+    function step() {
+      if (i > 0) chips[i - 1].classList.remove('chip-vectorizing');
+      if (i >= chips.length) return;
+      chips[i].classList.add('chip-vectorizing');
+      i++;
+      setTimeout(step, PREREQ_VECTORIZE_STEP_MS);
+    }
+    step();
+  }
+
+  function openPrereqModal(keywords, warning, keywordVectorization) {
+    var chips = renderPrereqModal(keywords, warning);
+    if (keywordVectorization && keywordVectorization.length > 0 && chips.length > 0) {
+      animateKeywordVectorizationProgress(chips);
+    }
     prereqModalBackdrop.classList.add('open');
     prereqModalBackdrop.setAttribute('aria-hidden', 'false');
   }
@@ -745,7 +771,7 @@ input[type=search]:focus { border-color:var(--accent); }
           return;
         }
         answerModalVectorizeBtn.style.display = 'none';
-        openPrereqModal(res.data.keywords, res.data._keywordsWarning);
+        openPrereqModal(res.data.keywords, res.data._keywordsWarning, res.data.keywordVectorization);
       })
       .catch(function() {
         answerModalVectorizeBtn.disabled = false;
