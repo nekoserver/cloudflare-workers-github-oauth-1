@@ -117,6 +117,7 @@ input[type=search]:focus { border-color:var(--accent); }
 .search-results-table td.search-result-date { color:var(--label); white-space:nowrap; width:1%; padding:6px 6px; }
 .search-results-table td.search-result-path { color:var(--label); font-size:10px; line-height:1.4; width:110px; max-width:110px; word-break:break-all; }
 .search-results-table td.search-result-question { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:1px; }
+.search-results-table td.search-result-question.vectorized-question { background:color-mix(in srgb, var(--fp-focus-border) 22%, transparent); }
 .search-results-table tbody tr { cursor:pointer; }
 .search-results-table tbody tr:hover { background:var(--btn-hover); }
 .search-results-table tbody tr.selected { background:rgba(31,111,235,.1); }
@@ -1189,11 +1190,11 @@ input[type=search]:focus { border-color:var(--accent); }
       pathTd.className = 'search-result-path';
       pathTd.textContent = pathText;
       var qTd = document.createElement('td');
-      qTd.className = 'search-result-question';
+      qTd.className = 'search-result-question' + (r.vectorized ? ' vectorized-question' : '');
       qTd.textContent = r.question;
-      qTd.title = isZeroKeyword
+      qTd.title = (isZeroKeyword
         ? 'この質問の回答結果から1つでもいいのでキーワードを切り出して登録しないとノードの描画が行えません'
-        : r.question;
+        : r.question) + (r.vectorized ? '\\n(回答文はベクタ化済み)' : '');
       row.appendChild(countTd);
       row.appendChild(dateTd);
       row.appendChild(pathTd);
