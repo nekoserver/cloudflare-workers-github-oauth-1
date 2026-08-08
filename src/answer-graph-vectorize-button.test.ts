@@ -354,3 +354,135 @@ describe('回答モーダル(DOM実動作): 「この回答文をベクタ化す
     expect(btn.style.display).not.toBe('none');
   });
 });
+
+// 対象: ベクタ化済み(vectorized:true)の回答モーダルで、「この回答文を
+// ベクタ化する」ボタンの代わりに表示する「ベクタ化済み」バッジと、
+// キーワードの登録状況(keywordsRegistered)に応じて出し分ける
+// 「キーワード一覧」/「キーワード抽出」ボタン。
+//
+// 故障シナリオ:
+//   (1) ベクタ化済みなのに従来の「この回答文をベクタ化する」ボタンが
+//       表示されたままになる
+//   (2) keywordsRegistered:trueなのに「キーワード抽出」ボタンが出てしまう
+//       (二重にAIを呼んでしまう導線になる)
+//   (3) keywordsRegistered:falseなのに「キーワード一覧」ボタンが出てしまう
+//       (空の一覧しか出せないボタンになる)
+//   (4) 「キーワード抽出」ボタンを押しても/api/aichat/vectorize-answerが
+//       呼ばれない
+//   (5) 「キーワード一覧」ボタンを押しても登録済みキーワードが表示されない、
+//       またはベクタ化ループ演出・結果モーダルが誤って出てしまう
+describe('回答モーダル(DOM実動作): ベクタ化済みバッジとキーワード一覧/抽出ボタンの出し分け', () => {
+  afterEach(() => { vi.unstubAllGlobals(); });
+
+  async function setupBadgeTest(shareResponseOverrides: Record<string, unknown>) {
+    const html = buildPage();
+    document.body.innerHTML = html.slice(html.indexOf('<body>') + 6, html.indexOf('<script>'));
+    const proto = (window as unknown as { HTMLCanvasElement: { prototype: { getContext: unknown } } }).HTMLCanvasElement.prototype;
+    proto.getContext = () => ({
+      clearRect: () => {}, beginPath: () => {}, arc: () => {}, fill: () => {}, stroke: () => {}, moveTo: () => {}, lineTo: () => {},
+    });
+    const shareResponse = {
+      id: 's1', question: '質問文', answer: '回答文', model: 'model-a',
+      created_at: '2026-08-02T09:30:00.000Z', access_count: 3, user_hash: 'hash123',
+      input_tokens: 10, output_tokens: 20,
+      ...shareResponseOverrides,
+    };
+    const answerKeywordsCalls: string[] = [];
+    const vectorizeCalls: Array<{ body: unknown }> = [];
+    const fetchMock = vi.fn((url: string, init?: { body?: string }) => {
+      const u = String(url);
+      if (u.includes('/api/aichat/answer-keywords')) {
+        answerKeywordsCalls.push(u);
+        return Promise.resolve({ json: () => Promise.resolve({ shareId: 's1', keywords: ['東京駅', '新幹線'] }) });
+      }
+      if (u.includes('/api/aichat/vectorize-answer')) {
+        vectorizeCalls.push({ body: init && init.body ? JSON.parse(init.body) : null });
+        return Promise.resolve({
+          status: 200,
+          json: () => Promise.resolve({ vectorized: true, model: '@cf/pfnet/plamo-embedding-1b', dim: 3, keywords: ['乗車券'], keywordVectorization: [{ keyword: '乗車券', alreadyRegistered: false }], _keywordsWarning: null }),
+        });
+      }
+      if (u.includes('share-keywords')) {
+        return Promise.resolve({ json: () => Promise.resolve({ keywords: [] }) });
+      }
+      if (u.includes('/api/aichat/shares/')) {
+        return Promise.resolve({ json: () => Promise.resolve(shareResponse) });
+      }
+      return Promise.resolve({ json: () => Promise.resolve({}) });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    vi.stubGlobal('alert', vi.fn());
+
+    const scriptSrc = html.slice(html.indexOf('<script>') + 8, html.indexOf('</script>'));
+    // eslint-disable-next-line no-new-func
+    new Function(scriptSrc)();
+
+    return { answerKeywordsCalls, vectorizeCalls };
+  }
+
+  it('未ベクタ化(vectorized:false)の場合はバッジ・キーワード一覧・キーワード抽出ボタンはすべて非表示', async () => {
+    await setupBadgeTest({ vectorized: false });
+    openAnswerModalViaClick('s1');
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    expect((document.getElementById('answerModalVectorizedBadge') as HTMLElement).style.display).toBe('none');
+    expect((document.getElementById('answerModalKeywordListBtn') as HTMLElement).style.display).toBe('none');
+    expect((document.getElementById('answerModalKeywordExtractBtn') as HTMLElement).style.display).toBe('none');
+    expect((document.getElementById('answerModalVectorizeBtn') as HTMLElement).style.display).not.toBe('none');
+  });
+
+  it('ベクタ化済み・キーワード未登録(keywordsRegistered:false)の場合はバッジ+「キーワード抽出」ボタンを表示する', async () => {
+    await setupBadgeTest({ vectorized: true, keywordsRegistered: false });
+    openAnswerModalViaClick('s1');
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    expect((document.getElementById('answerModalVectorizeBtn') as HTMLElement).style.display).toBe('none');
+    expect((document.getElementById('answerModalVectorizedBadge') as HTMLElement).style.display).not.toBe('none');
+    expect((document.getElementById('answerModalKeywordExtractBtn') as HTMLElement).style.display).not.toBe('none');
+    expect((document.getElementById('answerModalKeywordListBtn') as HTMLElement).style.display).toBe('none');
+  });
+
+  it('ベクタ化済み・キーワード登録済み(keywordsRegistered:true)の場合はバッジ+「キーワード一覧」ボタンを表示する', async () => {
+    await setupBadgeTest({ vectorized: true, keywordsRegistered: true });
+    openAnswerModalViaClick('s1');
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    expect((document.getElementById('answerModalVectorizeBtn') as HTMLElement).style.display).toBe('none');
+    expect((document.getElementById('answerModalVectorizedBadge') as HTMLElement).style.display).not.toBe('none');
+    expect((document.getElementById('answerModalKeywordListBtn') as HTMLElement).style.display).not.toBe('none');
+    expect((document.getElementById('answerModalKeywordExtractBtn') as HTMLElement).style.display).toBe('none');
+  });
+
+  it('「キーワード抽出」ボタンを押すと/api/aichat/vectorize-answerが現在のshareIdでPOSTされ、予備知識モーダルが開く', async () => {
+    const { vectorizeCalls } = await setupBadgeTest({ vectorized: true, keywordsRegistered: false });
+    openAnswerModalViaClick('s1');
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    const btn = document.getElementById('answerModalKeywordExtractBtn') as HTMLButtonElement;
+    btn.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    expect(vectorizeCalls).toHaveLength(1);
+    expect(vectorizeCalls[0].body).toEqual({ shareId: 's1' });
+    expect(document.getElementById('prereqModalBackdrop')!.classList.contains('open')).toBe(true);
+    expect(btn.style.display).toBe('none');
+  });
+
+  it('「キーワード一覧」ボタンを押すと/api/aichat/answer-keywordsから登録済みキーワードを取得して予備知識モーダルに表示する(ループ演出・結果モーダルは出さない)', async () => {
+    const { answerKeywordsCalls } = await setupBadgeTest({ vectorized: true, keywordsRegistered: true });
+    openAnswerModalViaClick('s1');
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    const btn = document.getElementById('answerModalKeywordListBtn') as HTMLButtonElement;
+    btn.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    expect(answerKeywordsCalls).toHaveLength(1);
+    expect(answerKeywordsCalls[0]).toContain('shareId=s1');
+    const prereqBackdrop = document.getElementById('prereqModalBackdrop')!;
+    expect(prereqBackdrop.classList.contains('open')).toBe(true);
+    const chips = Array.from(prereqBackdrop.querySelectorAll('.prereq-modal-chip')).map((el) => el.textContent);
+    expect(chips).toEqual(['東京駅', '新幹線']);
+    expect(document.getElementById('prereqResultModalBackdrop')!.classList.contains('open')).toBe(false);
+  });
+});

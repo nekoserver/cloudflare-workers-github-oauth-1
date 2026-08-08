@@ -108,7 +108,7 @@ describe('/answer-graph ページ: 質問をヘッダーに固定表示し、回
     const html = buildPage();
     const idx = html.indexOf('function openAnswerModal');
     expect(idx).toBeGreaterThan(-1);
-    const block = html.slice(idx, idx + 2200);
+    const block = html.slice(idx, idx + 2600);
     expect(block).toContain('answerModalQuestion.textContent = d.question;');
     expect(block).toContain('appendAnswerModalBubble(d.answer);');
   });
@@ -118,7 +118,7 @@ describe('/answer-graph ページ: AIチャット詳細プレビューモーダ�
   it('openAnswerModal がモデル色ドット・モデル名・閲覧数(answerModalMeta)を組み立てる', () => {
     const html = buildPage();
     const idx = html.indexOf('function openAnswerModal');
-    const block = html.slice(idx, idx + 2200);
+    const block = html.slice(idx, idx + 2600);
     expect(block).toContain('MODEL_COLORS[d.model]');
     expect(block).toContain('shortModelName(d.model)');
     expect(block).toContain('answerModalMeta.innerHTML');
@@ -127,7 +127,7 @@ describe('/answer-graph ページ: AIチャット詳細プレビューモーダ�
   it('openAnswerModal がトークン数(in/out)をanswerModalTokensへ設定する', () => {
     const html = buildPage();
     const idx = html.indexOf('function openAnswerModal');
-    const block = html.slice(idx, idx + 2200);
+    const block = html.slice(idx, idx + 2600);
     expect(block).toContain("tokenParts.push('in:' + d.input_tokens);");
     expect(block).toContain("tokenParts.push('out:' + d.output_tokens);");
   });
@@ -135,7 +135,7 @@ describe('/answer-graph ページ: AIチャット詳細プレビューモーダ�
   it('openAnswerModal が共有ページリンク(/s/user_hash/id)をanswerModalShareLinkへ設定する', () => {
     const html = buildPage();
     const idx = html.indexOf('function openAnswerModal');
-    const block = html.slice(idx, idx + 2200);
+    const block = html.slice(idx, idx + 2600);
     expect(block).toContain("answerModalShareLink.href = '/s/' + d.user_hash + '/' + d.id;");
   });
 
@@ -301,6 +301,9 @@ describe('/answer-graph ページ: openAnswerModal/closeAnswerModal のDOM実動
         <a id="answerModalShareLink" href="#"></a>
         <button id="answerModalHighlightToggleBtn"></button>
         <button id="answerModalVectorizeBtn"></button>
+        <span id="answerModalVectorizedBadge"></span>
+        <button id="answerModalKeywordListBtn"></button>
+        <button id="answerModalKeywordExtractBtn"></button>
       </div>
       <div id="answerModalBody"></div>
     `;
@@ -311,7 +314,7 @@ describe('/answer-graph ページ: openAnswerModal/closeAnswerModal のDOM実動
       'document', 'fetch', 'MODEL_COLORS',
       'answerModalBody', 'answerModalBackdrop', 'answerModalQuestion', 'answerModalDate', 'answerModalTime',
       'answerModalMeta', 'answerModalTokens', 'answerModalShareLink', 'answerModalHighlightToggleBtn',
-      'answerModalVectorizeBtn',
+      'answerModalVectorizeBtn', 'answerModalVectorizedBadge', 'answerModalKeywordListBtn', 'answerModalKeywordExtractBtn',
       `${src}\nreturn { openAnswerModal: openAnswerModal, closeAnswerModal: closeAnswerModal };`
     );
     return fn(
@@ -328,6 +331,9 @@ describe('/answer-graph ページ: openAnswerModal/closeAnswerModal のDOM実動
       document.getElementById('answerModalShareLink'),
       document.getElementById('answerModalHighlightToggleBtn'),
       document.getElementById('answerModalVectorizeBtn'),
+      document.getElementById('answerModalVectorizedBadge'),
+      document.getElementById('answerModalKeywordListBtn'),
+      document.getElementById('answerModalKeywordExtractBtn'),
     ) as { openAnswerModal: (id: string) => void; closeAnswerModal: () => void };
   }
 

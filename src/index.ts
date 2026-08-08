@@ -6714,6 +6714,38 @@ export async function getOrComputeAnswerKeywordEmbedding(
   return vector;
 }
 
+/**
+ * 回答文(share_id)に紐付けて予備知識キーワードが1件でも
+ * aichat_answer_keyword_vectorsに登録済みかどうかを判定する。answer-graphの
+ * 回答モーダルで「キーワード一覧」ボタンと「キーワード抽出」ボタンの
+ * どちらを表示するかの切り替えに使う。
+ */
+export async function hasAnswerKeywordVectors(
+  db: D1Database,
+  userId: string,
+  shareId: string,
+): Promise<boolean> {
+  const row = await db.prepare(
+    `SELECT 1 as found FROM aichat_answer_keyword_vectors WHERE user_id = ? AND share_id = ? LIMIT 1`
+  ).bind(userId, shareId).first<{ found: number }>();
+  return !!row;
+}
+
+/**
+ * 回答文(share_id)に紐付けて登録済みの予備知識キーワード一覧(重複なし)を
+ * 取得する。answer-graphの回答モーダル「キーワード一覧」ボタン用。
+ */
+export async function listAnswerKeywordVectors(
+  db: D1Database,
+  userId: string,
+  shareId: string,
+): Promise<string[]> {
+  const rows = await db.prepare(
+    `SELECT DISTINCT keyword FROM aichat_answer_keyword_vectors WHERE user_id = ? AND share_id = ? ORDER BY keyword`
+  ).bind(userId, shareId).all<{ keyword: string }>();
+  return (rows.results ?? []).map((r) => r.keyword);
+}
+
 export type AnswerKeywordVectorizationResult = { keyword: string; alreadyRegistered: boolean; error?: string };
 
 /**
@@ -7198,7 +7230,21 @@ app.get('/api/aichat/shares/:id', authMiddleware, async (c) => {
   }>();
   if (!row) return jsonUtf8({ error: 'Not found' }, 404);
   const vectorized = await isAnswerVectorized(c.env.DB, user.sub, id);
-  return jsonUtf8({ ...row, vectorized });
+  const keywordsRegistered = vectorized ? await hasAnswerKeywordVectors(c.env.DB, user.sub, id) : false;
+  return jsonUtf8({ ...row, vectorized, keywordsRegistered });
+});
+
+/**
+ * 回答文(share_id)に紐付けて登録済みの予備知識キーワード一覧を返す。
+ * answer-graphの回答モーダルの「キーワード一覧」ボタン用（認証が必要）。
+ */
+app.get('/api/aichat/answer-keywords', authMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  const shareId = (c.req.query('shareId') ?? '').trim();
+  if (!shareId) return jsonUtf8({ error: 'shareId は必須です' }, 400);
+  const keywords = await listAnswerKeywordVectors(c.env.DB, user.sub, shareId);
+  return jsonUtf8({ shareId, keywords });
 });
 
 app.delete('/api/aichat/shares/:id', authMiddleware, async (c) => {

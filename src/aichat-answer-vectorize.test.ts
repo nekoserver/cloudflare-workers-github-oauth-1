@@ -8,6 +8,8 @@ import {
   isAnswerKeywordVectorized,
   getOrComputeAnswerKeywordEmbedding,
   vectorizeAnswerKeywords,
+  hasAnswerKeywordVectors,
+  listAnswerKeywordVectors,
   PLAMO_EMBEDDING_MODEL,
   ANSWER_PREREQUISITE_TERMS_MODEL,
 } from './index';
@@ -364,5 +366,69 @@ describe('vectorizeAnswerKeywords: 抽出キーワード群をshare_idに紐付�
     const results = await vectorizeAnswerKeywords(wrapD1(db) as never, ai as never, 'u1', 's1', []);
     expect(results).toEqual([]);
     expect(ai.run).not.toHaveBeenCalled();
+  });
+});
+
+// 対象: answer-graphの回答モーダルで「この回答文をベクタ化する」ボタンの
+// 代わりに表示する「ベクタ化済み」バッジ+「キーワード一覧」/「キーワード抽出」
+// ボタンの切り替えに使う判定・一覧取得(hasAnswerKeywordVectors /
+// listAnswerKeywordVectors)。
+//
+// 故障シナリオ:
+//   (1) 回答文は既にベクタ化済みだがキーワードは1件も紐付いていない場合、
+//       誤って「キーワード一覧」(空の一覧)を出してしまう
+//   (2) 他ユーザー・他回答文のキーワード登録を自分の判定/一覧に混入させる
+//   (3) 一覧に同じキーワードが重複して並ぶ
+
+describe('hasAnswerKeywordVectors: 回答文にキーワードが1件でも登録済みか判定', () => {
+  it('1件も登録されていない場合はfalseを返す', async () => {
+    const db = setupDb();
+    expect(await hasAnswerKeywordVectors(wrapD1(db) as never, 'u1', 's1')).toBe(false);
+  });
+
+  it('1件でも登録されていればtrueを返す', async () => {
+    const db = setupDb();
+    const ai = makeMockAi([1, 2]);
+    await getOrComputeAnswerKeywordEmbedding(wrapD1(db) as never, ai as never, 'u1', 's1', '東京駅');
+    expect(await hasAnswerKeywordVectors(wrapD1(db) as never, 'u1', 's1')).toBe(true);
+  });
+
+  it('別の回答文(share_id違い)の登録は自分の判定に混入しない', async () => {
+    const db = setupDb();
+    const ai = makeMockAi([1, 2]);
+    await getOrComputeAnswerKeywordEmbedding(wrapD1(db) as never, ai as never, 'u1', 's2', '東京駅');
+    expect(await hasAnswerKeywordVectors(wrapD1(db) as never, 'u1', 's1')).toBe(false);
+  });
+
+  it('他ユーザーの登録は自分の判定に混入しない', async () => {
+    const db = setupDb();
+    const ai = makeMockAi([1, 2]);
+    await getOrComputeAnswerKeywordEmbedding(wrapD1(db) as never, ai as never, 'u2', 's1', '東京駅');
+    expect(await hasAnswerKeywordVectors(wrapD1(db) as never, 'u1', 's1')).toBe(false);
+  });
+});
+
+describe('listAnswerKeywordVectors: 回答文に登録済みのキーワード一覧を取得', () => {
+  it('登録されているキーワードを重複なく返す', async () => {
+    const db = setupDb();
+    const ai = makeMockAi([1, 2]);
+    await getOrComputeAnswerKeywordEmbedding(wrapD1(db) as never, ai as never, 'u1', 's1', '東京駅');
+    await getOrComputeAnswerKeywordEmbedding(wrapD1(db) as never, ai as never, 'u1', 's1', '新幹線');
+    await getOrComputeAnswerKeywordEmbedding(wrapD1(db) as never, ai as never, 'u1', 's1', '東京駅');
+    const keywords = await listAnswerKeywordVectors(wrapD1(db) as never, 'u1', 's1');
+    expect(keywords.sort()).toEqual(['新幹線', '東京駅']);
+  });
+
+  it('未登録の場合は空配列を返す', async () => {
+    const db = setupDb();
+    expect(await listAnswerKeywordVectors(wrapD1(db) as never, 'u1', 's1')).toEqual([]);
+  });
+
+  it('別の回答文(share_id違い)のキーワードは一覧に含めない', async () => {
+    const db = setupDb();
+    const ai = makeMockAi([1, 2]);
+    await getOrComputeAnswerKeywordEmbedding(wrapD1(db) as never, ai as never, 'u1', 's1', '東京駅');
+    await getOrComputeAnswerKeywordEmbedding(wrapD1(db) as never, ai as never, 'u1', 's2', '新幹線');
+    expect(await listAnswerKeywordVectors(wrapD1(db) as never, 'u1', 's1')).toEqual(['東京駅']);
   });
 });
