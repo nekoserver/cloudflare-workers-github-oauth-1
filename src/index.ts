@@ -213,6 +213,7 @@ export const STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
   { name: 'aichat_keyword_category_suggestions', migration: '0088', description: 'AIによるキーワード↔カテゴリ分類の推薦履歴（確定分類とは別テーブルで人間の最終判断を上書きしない）', syncPolicy: 'auto' },
   { name: 'aichat_answer_category_scores', migration: '0089', description: '回答伝播グラフ(/answer-graph)のノード色分け用: 回答ごとの中分類カテゴリ類似度スコアのキャッシュ', syncPolicy: 'auto' },
   { name: 'aichat_answer_vectors', migration: '0094', description: '回答文(ai_chat_shares)のplamo-embedding-1bベクトルキャッシュ。answer-graphの回答モーダル「この回答文をベクタ化する」ボタンで生成', syncPolicy: 'auto' },
+  { name: 'aichat_answer_keyword_vectors', migration: '0095', description: '回答文からgemma-4-26b-a4b-itで抽出した予備知識キーワードのplamo-embedding-1bベクトルキャッシュ(回答文IDごと)。answer-graphの回答モーダル「この回答文をベクタ化する」ボタンで生成', syncPolicy: 'auto' },
 ];
 
 const REQUIRED_STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
@@ -1407,6 +1408,18 @@ ALTER TABLE aichat_keyword_embeddings ADD COLUMN gemma_updated_at TEXT;`,
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_aichat_answer_vectors_unique ON aichat_answer_vectors(user_id, share_id, model);
 CREATE INDEX IF NOT EXISTS idx_aichat_answer_vectors_share ON aichat_answer_vectors(share_id);`,
+  '0095': `CREATE TABLE IF NOT EXISTS aichat_answer_keyword_vectors (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  share_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  keyword TEXT NOT NULL,
+  model TEXT NOT NULL,
+  dim INTEGER NOT NULL,
+  vector BLOB NOT NULL,
+  computed_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_aichat_answer_keyword_vectors_unique ON aichat_answer_keyword_vectors(user_id, share_id, keyword, model);
+CREATE INDEX IF NOT EXISTS idx_aichat_answer_keyword_vectors_share ON aichat_answer_keyword_vectors(share_id);`,
 };
 
 async function ensureGroupTable(db: D1Database): Promise<void> {
@@ -1627,6 +1640,7 @@ export const TABLE_COLUMN_KEYS: Record<string, ColumnKeyInfo> = {
   aichat_keyword_category_suggestions: { id: 'pk', user_id: 'idx', keyword: 'idx', suggested_category_id: 'fk+idx' },
   aichat_answer_category_scores: { id: 'pk', user_id: 'uk', share_id: 'uk', category_id: 'fk+idx' },
   aichat_answer_vectors: { id: 'pk', user_id: 'uk', share_id: 'uk', model: 'uk' },
+  aichat_answer_keyword_vectors: { id: 'pk', user_id: 'uk', share_id: 'uk', keyword: 'uk', model: 'uk' },
 };
 
 export function getColumnKeyType(tableName: string, columnName: string): ColumnKeyType {
@@ -1721,6 +1735,7 @@ export const TABLE_GROUP_MAP: Record<string, string> = {
   aichat_keyword_category_suggestions: 'ai',
   aichat_answer_category_scores: 'ai',
   aichat_answer_vectors: 'ai',
+  aichat_answer_keyword_vectors: 'ai',
   keyword_category_groups: 'search',
   keyword_multi_labels: 'search',
   ts_repository:          'ts-catalog',
@@ -1908,6 +1923,7 @@ export const COLUMN_FK_TARGETS: Record<string, Record<string, string>> = {
   aichat_keyword_category_suggestions: { user_id: 'user_sessions', suggested_category_id: 'aichat_keyword_categories' },
   aichat_answer_category_scores: { user_id: 'user_sessions', category_id: 'aichat_keyword_categories' },
   aichat_answer_vectors: { user_id: 'user_sessions' },
+  aichat_answer_keyword_vectors: { user_id: 'user_sessions' },
 
   // ========================================================================
   // 世界遺産ページ AI質問ログ・保存済みエリア系
@@ -6649,6 +6665,89 @@ export async function isAnswerVectorized(
   return !!row;
 }
 
+/**
+ * 回答文から抽出した予備知識キーワード1件が、その回答文(share_id)に
+ * 紐付けてaichat_answer_keyword_vectorsに既にベクタ化・登録済みかどうかを
+ * 判定する。同じキーワードでも回答文が異なれば別レコードとして扱う
+ * (aichat_keyword_embeddingsのユーザー単位キャッシュとは別の紐付け単位)。
+ */
+export async function isAnswerKeywordVectorized(
+  db: D1Database,
+  userId: string,
+  shareId: string,
+  keyword: string,
+  model: string = PLAMO_EMBEDDING_MODEL,
+): Promise<boolean> {
+  const row = await db.prepare(
+    `SELECT 1 as found FROM aichat_answer_keyword_vectors WHERE user_id = ? AND share_id = ? AND keyword = ? AND model = ?`
+  ).bind(userId, shareId, keyword, model).first<{ found: number }>();
+  return !!row;
+}
+
+/**
+ * 予備知識キーワード1件を回答文ID(share_id)と紐付けてベクタ化し、
+ * aichat_answer_keyword_vectorsにキャッシュする。同一(user_id, share_id,
+ * keyword, model)で既に登録済みならAIを呼ばずそのベクトルを返す
+ * (getOrComputeAnswerEmbeddingと同じキャッシュ方針)。
+ */
+export async function getOrComputeAnswerKeywordEmbedding(
+  db: D1Database,
+  ai: Ai,
+  userId: string,
+  shareId: string,
+  keyword: string,
+  model: string = PLAMO_EMBEDDING_MODEL,
+): Promise<number[]> {
+  const row = await db.prepare(
+    `SELECT vector FROM aichat_answer_keyword_vectors WHERE user_id = ? AND share_id = ? AND keyword = ? AND model = ?`
+  ).bind(userId, shareId, keyword, model).first<{ vector: ArrayBuffer }>();
+  if (row) return blobToFloats(row.vector);
+  const vector = await embedTextWithModel(ai, model, keyword);
+  if (vector.length === 0) return [];
+  const now = new Date().toISOString();
+  await db.prepare(
+    `INSERT INTO aichat_answer_keyword_vectors (share_id, user_id, keyword, model, dim, vector, computed_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(user_id, share_id, keyword, model) DO UPDATE SET
+       dim = excluded.dim, vector = excluded.vector, computed_at = excluded.computed_at`
+  ).bind(shareId, userId, keyword, model, vector.length, floatsToBlob(vector), now).run();
+  return vector;
+}
+
+export type AnswerKeywordVectorizationResult = { keyword: string; alreadyRegistered: boolean; error?: string };
+
+/**
+ * extractPrerequisiteTermsで抽出したキーワード群を1件ずつループし、
+ * 各キーワードが既にその回答文(shareId)に紐付けてaichat_answer_keyword_vectors に
+ * ベクタ化・登録済みかを判定する。未登録のものだけ新規にベクタ化して追記する。
+ * 1件ずつ順番に処理した結果(登録済みだったか/新規登録したか)を、
+ * 抽出順を保ったまま返す(フロントエンドがこの順序でループ演出を行うため)。
+ */
+export async function vectorizeAnswerKeywords(
+  db: D1Database,
+  ai: Ai,
+  userId: string,
+  shareId: string,
+  keywords: string[],
+  model: string = PLAMO_EMBEDDING_MODEL,
+): Promise<AnswerKeywordVectorizationResult[]> {
+  const results: AnswerKeywordVectorizationResult[] = [];
+  for (const keyword of keywords) {
+    try {
+      const alreadyRegistered = await isAnswerKeywordVectorized(db, userId, shareId, keyword, model);
+      if (!alreadyRegistered) {
+        await getOrComputeAnswerKeywordEmbedding(db, ai, userId, shareId, keyword, model);
+      }
+      results.push({ keyword, alreadyRegistered });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      logger.warn('vectorize-answer: keyword embedding failed', { shareId, keyword, error: message });
+      results.push({ keyword, alreadyRegistered: false, error: message });
+    }
+  }
+  return results;
+}
+
 export const ANSWER_PREREQUISITE_TERMS_MODEL = '@cf/google/gemma-4-26b-a4b-it';
 
 /**
@@ -7168,11 +7267,16 @@ app.post('/api/aichat/vectorize-answer', authMiddleware, async (c) => {
     keywordsWarning = '予備知識キーワードの抽出に失敗しました: ' + message;
   }
 
+  const keywordVectorization = keywords.length > 0
+    ? await vectorizeAnswerKeywords(c.env.DB, c.env.AI, user.sub, shareId, keywords)
+    : [];
+
   return jsonUtf8({
     vectorized: true,
     model: PLAMO_EMBEDDING_MODEL,
     dim: vector.length,
     keywords,
+    keywordVectorization,
     _keywordsWarning: keywordsWarning,
   });
 });
