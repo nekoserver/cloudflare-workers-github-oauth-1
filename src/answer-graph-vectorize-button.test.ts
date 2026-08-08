@@ -222,6 +222,100 @@ describe('回答モーダル(DOM実動作): 「この回答文をベクタ化す
     vi.useRealTimers();
   });
 
+  async function setupResultModalTest() {
+    const html = buildPage();
+    document.body.innerHTML = html.slice(html.indexOf('<body>') + 6, html.indexOf('<script>'));
+    const proto = (window as unknown as { HTMLCanvasElement: { prototype: { getContext: unknown } } }).HTMLCanvasElement.prototype;
+    proto.getContext = () => ({
+      clearRect: () => {}, beginPath: () => {}, arc: () => {}, fill: () => {}, stroke: () => {}, moveTo: () => {}, lineTo: () => {},
+    });
+    const fetchMock = vi.fn((url: string) => {
+      const u = String(url);
+      if (u.includes('/api/aichat/vectorize-answer')) {
+        return Promise.resolve({
+          status: 200,
+          json: () => Promise.resolve({
+            vectorized: true, model: '@cf/pfnet/plamo-embedding-1b', dim: 3,
+            keywords: ['東京駅', '新幹線', '乗車券', '改札'],
+            keywordVectorization: [
+              { keyword: '東京駅', alreadyRegistered: true },
+              { keyword: '新幹線', alreadyRegistered: false },
+              { keyword: '乗車券', alreadyRegistered: false },
+              { keyword: '改札', alreadyRegistered: false, error: 'AI down' },
+            ],
+            _keywordsWarning: null,
+          }),
+        });
+      }
+      if (u.includes('share-keywords')) {
+        return Promise.resolve({ json: () => Promise.resolve({ keywords: [] }) });
+      }
+      if (u.includes('/api/aichat/shares/')) {
+        return Promise.resolve({ json: () => Promise.resolve({ id: 's1', question: 'Q', answer: 'A', vectorized: false }) });
+      }
+      return Promise.resolve({ json: () => Promise.resolve({}) });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    vi.stubGlobal('alert', vi.fn());
+
+    const scriptSrc = html.slice(html.indexOf('<script>') + 8, html.indexOf('</script>'));
+    // eslint-disable-next-line no-new-func
+    new Function(scriptSrc)();
+
+    openAnswerModalViaClick('s1');
+    await vi.advanceTimersByTimeAsync(10);
+    const btn = document.getElementById('answerModalVectorizeBtn') as HTMLButtonElement;
+    btn.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await vi.advanceTimersByTimeAsync(10);
+    // チップのハイライトループ(4件 × 220ms)を最後まで進める
+    await vi.advanceTimersByTimeAsync(220 * 4);
+  }
+
+  it('ループが終わると最上位レイヤーに結果モーダルが開き、新規追加/スキップ/総ベクタ化件数を表示する(エラー分は集計から除く)', async () => {
+    vi.useFakeTimers();
+    await setupResultModalTest();
+
+    const resultBackdrop = document.getElementById('prereqResultModalBackdrop')!;
+    expect(resultBackdrop.classList.contains('open')).toBe(true);
+    const body = document.getElementById('prereqResultModalBody')!.textContent || '';
+    expect(body).toContain('新規追加キーワード : 2件');
+    expect(body).toContain('スキップ : 1件');
+    expect(body).toContain('総ベクタ化キーワード : 3件');
+
+    vi.useRealTimers();
+  });
+
+  it('「了解」ボタンを押すと結果モーダルが閉じる', async () => {
+    vi.useFakeTimers();
+    await setupResultModalTest();
+
+    const okBtn = document.getElementById('prereqResultModalOkBtn') as HTMLButtonElement;
+    okBtn.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+    const resultBackdrop = document.getElementById('prereqResultModalBackdrop')!;
+    expect(resultBackdrop.classList.contains('open')).toBe(false);
+
+    vi.useRealTimers();
+  });
+
+  it('「了解」を押さなくても10秒経つと結果モーダルが自動的に閉じる', async () => {
+    vi.useFakeTimers();
+    await setupResultModalTest();
+
+    const resultBackdrop = document.getElementById('prereqResultModalBackdrop')!;
+    expect(resultBackdrop.classList.contains('open')).toBe(true);
+
+    // 10秒未満ではまだ閉じない(チップのハイライトループ分の誤差を許容し余裕を持たせる)
+    await vi.advanceTimersByTimeAsync(9000);
+    expect(resultBackdrop.classList.contains('open')).toBe(true);
+
+    // 10秒経過後は自動的に閉じている
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(resultBackdrop.classList.contains('open')).toBe(false);
+
+    vi.useRealTimers();
+  });
+
   it('APIがエラーを返した場合、ボタンは再度押せる状態に戻る', async () => {
     const html = buildPage();
     document.body.innerHTML = html.slice(html.indexOf('<body>') + 6, html.indexOf('<script>'));
