@@ -664,6 +664,24 @@ describe('回答モーダル(DOM実動作): 「キーワード一覧」モーダ
     expect(btn.textContent).toBe('登録完了');
   });
 
+  it('処理中にボタンを連打しても二重にループが走らない(approveへ同じキーワードが複数回渡らない)', async () => {
+    const { calls } = await setupBulkRegisterTest();
+    await openKeywordListModal();
+
+    const btn = document.getElementById('prereqBulkRegisterBtn') as HTMLButtonElement;
+    // 実行中に同じボタンへ立て続けにclickイベントを送っても、
+    // disabled化とrunBulkRegister内のガードにより二重実行されない
+    btn.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    btn.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    btn.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await new Promise((resolve) => setTimeout(resolve, 30));
+
+    const shinkansenApproveCalls = calls.filter(
+      (c) => c.kind === 'approve' && c.body && (c.body as { keyword?: string }).keyword === '新幹線'
+    );
+    expect(shinkansenApproveCalls).toHaveLength(1);
+  });
+
   it('1件のキーワード登録に失敗しても残りのキーワードの処理を続ける', async () => {
     const html = buildPage();
     document.body.innerHTML = html.slice(html.indexOf('<body>') + 6, html.indexOf('<script>'));
