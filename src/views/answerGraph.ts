@@ -299,6 +299,11 @@ input[type=search]:focus { border-color:var(--accent); }
 .prereq-modal-chip.chip-vectorizing {
   border-width:2px; border-color:var(--accent); background:transparent;
 }
+.prereq-keyword-occurrence-list { width:100%; display:flex; flex-direction:column; }
+.prereq-keyword-occurrence-row {
+  text-align:left; font-size:12px; color:var(--fg); padding:5px 2px; border-bottom:1px solid var(--border);
+}
+.prereq-keyword-occurrence-row:last-child { border-bottom:none; }
 .prereq-result-modal-backdrop {
   position:fixed; inset:0; z-index:1300; display:none;
   align-items:center; justify-content:center; padding:28px 16px;
@@ -770,6 +775,36 @@ input[type=search]:focus { border-color:var(--accent); }
     return chips;
   }
 
+  // 「キーワード一覧」ボタン用。keywordOccurrences(サーバー側で各キーワードを
+  // ループしてAIチャットのキーワードテーブル内での出現回数を調べ、ループが
+  // 終わってから出現回数の多い順に並べ替え済み)を「キーワード (出現回数)」の
+  // 形で1行ずつ左詰めで表示する。ベクタ化ループ演出・結果モーダルは出さない。
+  function renderPrereqKeywordOccurrenceList(keywordOccurrences) {
+    prereqModalBody.innerHTML = '';
+    if (!keywordOccurrences || !keywordOccurrences.length) {
+      var empty = document.createElement('div');
+      empty.className = 'prereq-modal-empty';
+      empty.textContent = '登録済みの予備知識キーワードが見つかりませんでした';
+      prereqModalBody.appendChild(empty);
+      return;
+    }
+    var list = document.createElement('div');
+    list.className = 'prereq-keyword-occurrence-list';
+    keywordOccurrences.forEach(function(item) {
+      var row = document.createElement('div');
+      row.className = 'prereq-keyword-occurrence-row';
+      row.textContent = item.keyword + ' (' + item.count + ')';
+      list.appendChild(row);
+    });
+    prereqModalBody.appendChild(list);
+  }
+
+  function openPrereqKeywordListModal(keywordOccurrences) {
+    renderPrereqKeywordOccurrenceList(keywordOccurrences);
+    prereqModalBackdrop.classList.add('open');
+    prereqModalBackdrop.setAttribute('aria-hidden', 'false');
+  }
+
   // 各キーワードをshare_idに紐付けてベクタ化するサーバー側ループの進行を、
   // モーダル上のチップを1件ずつ外枠(中抜き)強調表示することで可視化する。
   // サーバー側は既にループを終えた状態で結果が返るため、演出としては
@@ -891,7 +926,7 @@ input[type=search]:focus { border-color:var(--accent); }
       .then(function(r) { return r.json(); })
       .then(function(d) {
         if (!d || d.error) { alert('キーワード一覧の取得に失敗しました: ' + ((d && d.error) || '不明なエラー')); return; }
-        openPrereqModal(d.keywords, null, null);
+        openPrereqKeywordListModal(d.keywordOccurrences);
       })
       .catch(function() { alert('キーワード一覧の取得に失敗しました（通信エラー）'); });
   });

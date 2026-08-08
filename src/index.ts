@@ -6746,6 +6746,53 @@ export async function listAnswerKeywordVectors(
   return (rows.results ?? []).map((r) => r.keyword);
 }
 
+/**
+ * キーワード群それぞれについて、AIチャットのキーワードテーブル
+ * (aichat_search_log。回答文への紐付け選択ログの集計値select_countの合計)
+ * 内で何回出現しているかをまとめて取得する。バインド上限に収まる単位で
+ * チャンク分割し、キーワード数に比例したクエリ発行(N+1)を避ける
+ * (NOTICE.cloudflare-workers-github-oauth-1.20260806.md参照)。
+ */
+export async function getKeywordOccurrenceCounts(
+  db: D1Database,
+  userId: string,
+  keywords: string[],
+): Promise<Record<string, number>> {
+  const counts: Record<string, number> = {};
+  if (keywords.length === 0) return counts;
+  for (const chunk of chunkBindValues(keywords, D1_MAX_BOUND_PARAMS - 1)) {
+    if (chunk.length === 0) continue;
+    const placeholders = chunk.map(() => '?').join(',');
+    const rows = await db.prepare(
+      `SELECT keyword, SUM(select_count) AS cnt FROM aichat_search_log
+       WHERE user_id = ? AND keyword IN (${placeholders})
+       GROUP BY keyword`
+    ).bind(userId, ...chunk).all<{ keyword: string; cnt: number }>();
+    for (const r of (rows.results ?? [])) counts[r.keyword] = r.cnt;
+  }
+  return counts;
+}
+
+export type KeywordOccurrence = { keyword: string; count: number };
+
+/**
+ * キーワード1件ずつをループしてAIチャットのキーワードテーブル内での
+ * 出現回数を「キーワード (出現回数)」のペアとして組み立て、ループが終わって
+ * から出現回数の多い順に並べ替える(answer-graphの「キーワード一覧」
+ * ボタン用)。未出現(ログに一度も現れていない)キーワードは0件として含める。
+ */
+export function buildKeywordOccurrenceList(
+  keywords: string[],
+  counts: Record<string, number>,
+): KeywordOccurrence[] {
+  const list: KeywordOccurrence[] = [];
+  for (const keyword of keywords) {
+    list.push({ keyword, count: counts[keyword] ?? 0 });
+  }
+  list.sort((a, b) => b.count - a.count);
+  return list;
+}
+
 export type AnswerKeywordVectorizationResult = { keyword: string; alreadyRegistered: boolean; error?: string };
 
 /**
@@ -7244,7 +7291,9 @@ app.get('/api/aichat/answer-keywords', authMiddleware, async (c) => {
   const shareId = (c.req.query('shareId') ?? '').trim();
   if (!shareId) return jsonUtf8({ error: 'shareId は必須です' }, 400);
   const keywords = await listAnswerKeywordVectors(c.env.DB, user.sub, shareId);
-  return jsonUtf8({ shareId, keywords });
+  const counts = await getKeywordOccurrenceCounts(c.env.DB, user.sub, keywords);
+  const keywordOccurrences = buildKeywordOccurrenceList(keywords, counts);
+  return jsonUtf8({ shareId, keywords, keywordOccurrences });
 });
 
 app.delete('/api/aichat/shares/:id', authMiddleware, async (c) => {
