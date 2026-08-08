@@ -380,12 +380,12 @@ export function getAuthFlowPage(): string {
   <text x="110" y="37" text-anchor="middle" class="label-muted">「既にrevoke済みか見つかりません」</text>
 </g>
 
-<!-- [WARN-ADM] Slack通知: admin revoke -->
+<!-- [WARN-ADM] 通知: admin revoke (条件付き・Slack固定ではない) -->
 <g transform="translate(420,1698)">
   <rect x="0" y="0" width="360" height="60" rx="8" fill="var(--purple-bg)" stroke="var(--purple-border)" stroke-width="1.5"/>
-  <text x="180" y="18" text-anchor="middle" font-weight="600" fill="var(--purple)">Slack通知</text>
-  <text x="180" y="34" text-anchor="middle" class="label-muted">[管理操作] セッション強制revoke</text>
-  <text x="180" y="50" text-anchor="middle" class="label-muted">対象ユーザー・操作者・理由を通知</text>
+  <text x="180" y="16" text-anchor="middle" font-weight="600" fill="var(--purple)">通知（設定がONの場合のみ・既定OFF）</text>
+  <text x="180" y="31" text-anchor="middle" class="label-muted">[管理操作] セッション強制revoke。対象ユーザー・操作者・理由</text>
+  <text x="180" y="46" text-anchor="middle" class="label-muted">NOTIFY_TARGET設定でSlack/外部Workerに切替可。fire-and-forget</text>
 </g>
 
 <!-- [OK-ADM] 200 -->
