@@ -14,6 +14,7 @@ import {
   buildKeywordOccurrenceList,
   getKeywordCategoryColors,
   mergeKeywordOccurrenceWithCategory,
+  enrichSearchResultsWithVectorizedFlag,
   PLAMO_EMBEDDING_MODEL,
   ANSWER_PREREQUISITE_TERMS_MODEL,
 } from './index';
@@ -589,6 +590,61 @@ describe('getKeywordCategoryColors: キーワードごとの分類カテゴリ�
   it('キーワードが空配列の場合は空オブジェクトを返す', async () => {
     const db = setupDb();
     expect(await getKeywordCategoryColors(wrapD1(db) as never, 'u1', [])).toEqual({});
+  });
+});
+
+// 対象: answer-graphページの起点検索結果テーブルで、各質問行に対応する回答文が
+// 既にベクタ化済み(aichat_answer_vectors)かどうかを付与するenrichSearchResultsWithVectorizedFlag。
+// 質問の背景色を薄緑色に塗り分けるために使う。
+//
+// 故障シナリオ:
+//   (1) 他ユーザー・他モデルのベクタ化を自分の判定に混入させる
+//   (2) チャンク分割(D1バインド上限)をまたぐと一部の結果が判定漏れする
+//   (3) 空配列を渡すと例外になる、または不要なクエリが発行される
+
+describe('enrichSearchResultsWithVectorizedFlag: 検索結果へのベクタ化済みフラグ付与', () => {
+  it('未ベクタ化の結果はvectorized:falseを付与する', async () => {
+    const db = setupDb();
+    const results = await enrichSearchResultsWithVectorizedFlag(wrapD1(db) as never, 'u1', [{ id: 's1' }]);
+    expect(results).toEqual([{ id: 's1', vectorized: false }]);
+  });
+
+  it('ベクタ化済みの結果はvectorized:trueを付与する', async () => {
+    const db = setupDb();
+    const ai = makeMockAi([1, 2]);
+    await getOrComputeAnswerEmbedding(wrapD1(db) as never, ai as never, 'u1', 's1', 'A');
+    const results = await enrichSearchResultsWithVectorizedFlag(wrapD1(db) as never, 'u1', [{ id: 's1' }, { id: 's2' }]);
+    expect(results).toEqual([
+      { id: 's1', vectorized: true },
+      { id: 's2', vectorized: false },
+    ]);
+  });
+
+  it('他ユーザーのベクタ化は自分の判定に混入しない', async () => {
+    const db = setupDb();
+    const ai = makeMockAi([1, 2]);
+    await getOrComputeAnswerEmbedding(wrapD1(db) as never, ai as never, 'u2', 's1', 'A');
+    const results = await enrichSearchResultsWithVectorizedFlag(wrapD1(db) as never, 'u1', [{ id: 's1' }]);
+    expect(results).toEqual([{ id: 's1', vectorized: false }]);
+  });
+
+  it('D1バインド上限(90件)をまたぐ件数でも全件を正しく判定する', async () => {
+    const db = setupDb();
+    const ai = makeMockAi([1, 2]);
+    const ids = Array.from({ length: 150 }, (_, i) => `s${i}`);
+    for (const id of ['s0', 's149']) {
+      await getOrComputeAnswerEmbedding(wrapD1(db) as never, ai as never, 'u1', id, id);
+    }
+    const results = await enrichSearchResultsWithVectorizedFlag(wrapD1(db) as never, 'u1', ids.map((id) => ({ id })));
+    expect(results).toHaveLength(150);
+    expect(results.find((r) => r.id === 's0')?.vectorized).toBe(true);
+    expect(results.find((r) => r.id === 's149')?.vectorized).toBe(true);
+    expect(results.find((r) => r.id === 's75')?.vectorized).toBe(false);
+  });
+
+  it('空配列の場合は空配列を返す', async () => {
+    const db = setupDb();
+    expect(await enrichSearchResultsWithVectorizedFlag(wrapD1(db) as never, 'u1', [])).toEqual([]);
   });
 });
 

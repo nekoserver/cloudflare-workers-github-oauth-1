@@ -4143,6 +4143,34 @@ export async function enrichSearchResultsWithKeywordCounts<T extends { id: strin
   }));
 }
 
+/**
+ * answer-graphページの起点検索結果テーブルで、各質問行に対応する回答文が
+ * 既にベクタ化済み(aichat_answer_vectors)かどうかを付与する。行の背景色を
+ * 塗り分けるために使う(バインド上限に収まる単位でチャンク分割しN+1を回避)。
+ */
+export async function enrichSearchResultsWithVectorizedFlag<T extends { id: string }>(
+  db: D1Like,
+  userId: string,
+  results: T[],
+  model: string = PLAMO_EMBEDDING_MODEL,
+): Promise<(T & { vectorized: boolean })[]> {
+  if (results.length === 0) return [];
+  const vectorizedIds = new Set<string>();
+  for (const chunk of chunkBindValues(results.map((r) => r.id), D1_MAX_BOUND_PARAMS - 2)) {
+    if (chunk.length === 0) continue;
+    const placeholders = chunk.map(() => '?').join(',');
+    const rows = await db.prepare(
+      `SELECT DISTINCT share_id FROM aichat_answer_vectors
+       WHERE user_id = ? AND model = ? AND share_id IN (${placeholders})`
+    ).bind(userId, model, ...chunk).all<{ share_id: string }>();
+    for (const r of (rows.results ?? [])) vectorizedIds.add(r.share_id);
+  }
+  return results.map((r) => ({
+    ...r,
+    vectorized: vectorizedIds.has(r.id),
+  }));
+}
+
 export interface AnswerGraphNode {
   id: string;
   type: 'answer' | 'keyword';
@@ -4350,7 +4378,8 @@ app.get('/api/aichat/shares/search', authMiddleware, async (c) => {
   if (!q) return jsonUtf8({ results: [] });
 
   const { results } = await searchAiChatShares(c.env.DB as unknown as D1Like, user.sub, q);
-  const enriched = await enrichSearchResultsWithKeywordCounts(c.env.DB as unknown as D1Like, user.sub, results);
+  const withKeywordCounts = await enrichSearchResultsWithKeywordCounts(c.env.DB as unknown as D1Like, user.sub, results);
+  const enriched = await enrichSearchResultsWithVectorizedFlag(c.env.DB as unknown as D1Like, user.sub, withKeywordCounts);
   return jsonUtf8({ results: enriched });
 });
 
