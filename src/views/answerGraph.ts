@@ -295,6 +295,25 @@ input[type=search]:focus { border-color:var(--accent); }
 .prereq-modal-chip.chip-vectorizing {
   border-width:2px; border-color:var(--accent); background:transparent;
 }
+.prereq-result-modal-backdrop {
+  position:fixed; inset:0; z-index:1300; display:none;
+  align-items:center; justify-content:center; padding:28px 16px;
+  background:rgba(15,23,42,.55); backdrop-filter:blur(4px);
+}
+.prereq-result-modal-backdrop.open { display:flex; }
+.prereq-result-modal {
+  width:min(320px,100%); background:var(--bg); border:1px solid var(--border);
+  border-radius:16px; box-shadow:0 24px 80px rgba(0,0,0,.32);
+  display:flex; flex-direction:column; overflow:hidden; padding:18px 20px;
+}
+.prereq-result-modal-title { font-size:13px; font-weight:700; color:var(--fg); margin-bottom:10px; }
+.prereq-result-modal-body { font-size:12px; color:var(--fg); line-height:1.9; }
+.prereq-result-modal-foot { display:flex; justify-content:center; margin-top:16px; }
+.prereq-result-modal-ok-btn {
+  font-size:12px; padding:6px 28px; border-radius:6px; border:1px solid var(--btn-border);
+  background:var(--btn-bg); color:var(--fg); cursor:pointer;
+}
+.prereq-result-modal-ok-btn:hover { background:var(--btn-hover); border-color:var(--accent); }
 .answer-modal-model-dot { display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:4px; vertical-align:middle; }
 .answer-modal-link { font-size:11px; color:var(--accent); text-decoration:none; white-space:nowrap; margin-left:auto; }
 .answer-modal-link:hover { text-decoration:underline; }
@@ -436,6 +455,15 @@ input[type=search]:focus { border-color:var(--accent); }
     <div class="prereq-modal-body" id="prereqModalBody"></div>
   </div>
 </div>
+<div class="prereq-result-modal-backdrop" id="prereqResultModalBackdrop" aria-hidden="true">
+  <div class="prereq-result-modal" role="dialog" aria-modal="true" aria-labelledby="prereqResultModalTitle">
+    <div class="prereq-result-modal-title" id="prereqResultModalTitle">ベクタ化結果</div>
+    <div class="prereq-result-modal-body" id="prereqResultModalBody"></div>
+    <div class="prereq-result-modal-foot">
+      <button type="button" class="prereq-result-modal-ok-btn" id="prereqResultModalOkBtn">了解</button>
+    </div>
+  </div>
+</div>
 <div class="narrow-modal-backdrop" id="narrowModalBackdrop" aria-hidden="true">
   <div class="narrow-modal" role="dialog" aria-modal="true" aria-labelledby="narrowModalTitle">
     <div class="narrow-modal-head">
@@ -481,6 +509,9 @@ input[type=search]:focus { border-color:var(--accent); }
   var prereqModalBackdrop = document.getElementById('prereqModalBackdrop');
   var prereqModalBody = document.getElementById('prereqModalBody');
   var prereqModalClose = document.getElementById('prereqModalClose');
+  var prereqResultModalBackdrop = document.getElementById('prereqResultModalBackdrop');
+  var prereqResultModalBody = document.getElementById('prereqResultModalBody');
+  var prereqResultModalOkBtn = document.getElementById('prereqResultModalOkBtn');
   var MODEL_COLORS = ${modelColorsJson};
   var hideEmptyRowsSetting = ${hideEmptyRowsDefaultJs};
   var trailSessionStorageSetting = ${trailSessionStorageDefaultJs};
@@ -719,11 +750,11 @@ input[type=search]:focus { border-color:var(--accent); }
   // サーバー側は既にループを終えた状態で結果が返るため、演出としては
   // 受け取った順序をそのままなぞる形でチップを1つずつハイライトする。
   var PREREQ_VECTORIZE_STEP_MS = 220;
-  function animateKeywordVectorizationProgress(chips) {
+  function animateKeywordVectorizationProgress(chips, onDone) {
     var i = 0;
     function step() {
       if (i > 0) chips[i - 1].classList.remove('chip-vectorizing');
-      if (i >= chips.length) return;
+      if (i >= chips.length) { if (onDone) onDone(); return; }
       chips[i].classList.add('chip-vectorizing');
       i++;
       setTimeout(step, PREREQ_VECTORIZE_STEP_MS);
@@ -731,10 +762,43 @@ input[type=search]:focus { border-color:var(--accent); }
     step();
   }
 
+  // ベクタ化ループが一通り終わった後、最上位レイヤーに新規追加/スキップ/
+  // 総ベクタ化件数を表示する結果モーダル。「了解」ボタンを押すか、
+  // 10秒経っても押されない場合は自動で閉じる。
+  var PREREQ_RESULT_AUTO_CLOSE_MS = 10000;
+  var prereqResultAutoCloseTimer = null;
+
+  function closePrereqResultModal() {
+    prereqResultModalBackdrop.classList.remove('open');
+    prereqResultModalBackdrop.setAttribute('aria-hidden', 'true');
+    if (prereqResultAutoCloseTimer) { clearTimeout(prereqResultAutoCloseTimer); prereqResultAutoCloseTimer = null; }
+  }
+
+  function showPrereqResultModal(keywordVectorization) {
+    var newCount = 0, skipCount = 0;
+    (keywordVectorization || []).forEach(function(r) {
+      if (r.error) return;
+      if (r.alreadyRegistered) skipCount++; else newCount++;
+    });
+    var totalCount = newCount + skipCount;
+    prereqResultModalBody.innerHTML =
+      '<div>新規追加キーワード : ' + newCount + '件</div>'
+      + '<div>スキップ : ' + skipCount + '件</div>'
+      + '<div>総ベクタ化キーワード : ' + totalCount + '件</div>';
+    prereqResultModalBackdrop.classList.add('open');
+    prereqResultModalBackdrop.setAttribute('aria-hidden', 'false');
+    if (prereqResultAutoCloseTimer) clearTimeout(prereqResultAutoCloseTimer);
+    prereqResultAutoCloseTimer = setTimeout(closePrereqResultModal, PREREQ_RESULT_AUTO_CLOSE_MS);
+  }
+
+  prereqResultModalOkBtn.addEventListener('click', closePrereqResultModal);
+
   function openPrereqModal(keywords, warning, keywordVectorization) {
     var chips = renderPrereqModal(keywords, warning);
     if (keywordVectorization && keywordVectorization.length > 0 && chips.length > 0) {
-      animateKeywordVectorizationProgress(chips);
+      animateKeywordVectorizationProgress(chips, function() {
+        showPrereqResultModal(keywordVectorization);
+      });
     }
     prereqModalBackdrop.classList.add('open');
     prereqModalBackdrop.setAttribute('aria-hidden', 'false');
