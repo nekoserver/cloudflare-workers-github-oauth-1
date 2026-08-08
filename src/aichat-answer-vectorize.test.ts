@@ -10,6 +10,8 @@ import {
   vectorizeAnswerKeywords,
   hasAnswerKeywordVectors,
   listAnswerKeywordVectors,
+  getKeywordOccurrenceCounts,
+  buildKeywordOccurrenceList,
   PLAMO_EMBEDDING_MODEL,
   ANSWER_PREREQUISITE_TERMS_MODEL,
 } from './index';
@@ -98,8 +100,24 @@ function setupDb(): DatabaseSync {
       computed_at TEXT NOT NULL
     );
     CREATE UNIQUE INDEX idx_aichat_answer_keyword_vectors_unique ON aichat_answer_keyword_vectors(user_id, share_id, keyword, model);
+    CREATE TABLE aichat_search_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id TEXT NOT NULL,
+      keyword TEXT NOT NULL,
+      share_id TEXT NOT NULL,
+      first_searched_at TEXT NOT NULL,
+      last_searched_at TEXT NOT NULL,
+      select_count INTEGER NOT NULL DEFAULT 1
+    );
+    CREATE UNIQUE INDEX idx_aichat_search_log_unique ON aichat_search_log(user_id, keyword, share_id);
   `);
   return db;
+}
+
+function insertSearchLog(db: DatabaseSync, userId: string, keyword: string, shareId: string, selectCount: number) {
+  db.prepare(
+    `INSERT INTO aichat_search_log (user_id, keyword, share_id, first_searched_at, last_searched_at, select_count) VALUES (?, ?, ?, '2026-01-01', '2026-01-01', ?)`
+  ).run(userId, keyword, shareId, selectCount);
 }
 
 function makeMockAi(vector: number[]) {
@@ -430,5 +448,71 @@ describe('listAnswerKeywordVectors: 回答文に登録済みのキーワード�
     await getOrComputeAnswerKeywordEmbedding(wrapD1(db) as never, ai as never, 'u1', 's1', '東京駅');
     await getOrComputeAnswerKeywordEmbedding(wrapD1(db) as never, ai as never, 'u1', 's2', '新幹線');
     expect(await listAnswerKeywordVectors(wrapD1(db) as never, 'u1', 's1')).toEqual(['東京駅']);
+  });
+});
+
+// 対象: answer-graphの回答モーダル「キーワード一覧」ボタンで、各キーワードが
+// AIチャットのキーワードテーブル(aichat_search_log)内で何回出現するかを
+// 調べ(getKeywordOccurrenceCounts)、ループ終了後に出現回数の多い順へ
+// 並べ替えたリストを作る(buildKeywordOccurrenceList)処理。
+//
+// 故障シナリオ:
+//   (1) 同じキーワードが複数の回答文(share_id違い)に紐づいている場合、
+//       select_countを合算せず1件分しかカウントしない
+//   (2) 他ユーザーのログを自分の出現回数に混入させる
+//   (3) 一度もログに現れていないキーワードで例外になる、またはundefinedのまま
+//       ソートが崩れる(0件として扱われるべき)
+//   (4) 出現回数が同じでない限り、多い順に並んでいない
+
+describe('getKeywordOccurrenceCounts: キーワードごとのAIチャットキーワードテーブル内出現回数', () => {
+  it('複数の回答文(share_id違い)にまたがるselect_countを合算する', async () => {
+    const db = setupDb();
+    insertSearchLog(db, 'u1', '東京駅', 's1', 2);
+    insertSearchLog(db, 'u1', '東京駅', 's2', 3);
+    const counts = await getKeywordOccurrenceCounts(wrapD1(db) as never, 'u1', ['東京駅']);
+    expect(counts['東京駅']).toBe(5);
+  });
+
+  it('他ユーザーのログは自分の出現回数に含めない', async () => {
+    const db = setupDb();
+    insertSearchLog(db, 'u2', '東京駅', 's1', 10);
+    const counts = await getKeywordOccurrenceCounts(wrapD1(db) as never, 'u1', ['東京駅']);
+    expect(counts['東京駅']).toBeUndefined();
+  });
+
+  it('複数キーワードをまとめて1回のクエリ相当で取得する', async () => {
+    const db = setupDb();
+    insertSearchLog(db, 'u1', '東京駅', 's1', 4);
+    insertSearchLog(db, 'u1', '新幹線', 's1', 1);
+    const counts = await getKeywordOccurrenceCounts(wrapD1(db) as never, 'u1', ['東京駅', '新幹線', '乗車券']);
+    expect(counts).toEqual({ '東京駅': 4, '新幹線': 1 });
+  });
+
+  it('キーワードが空配列の場合は空オブジェクトを返す', async () => {
+    const db = setupDb();
+    expect(await getKeywordOccurrenceCounts(wrapD1(db) as never, 'u1', [])).toEqual({});
+  });
+});
+
+describe('buildKeywordOccurrenceList: 出現回数の多い順に並べたリストを作る', () => {
+  it('出現回数の多い順に並べ替える', () => {
+    const list = buildKeywordOccurrenceList(['東京駅', '新幹線', '乗車券'], { '東京駅': 2, '新幹線': 5, '乗車券': 3 });
+    expect(list).toEqual([
+      { keyword: '新幹線', count: 5 },
+      { keyword: '乗車券', count: 3 },
+      { keyword: '東京駅', count: 2 },
+    ]);
+  });
+
+  it('出現回数が0件(ログに一度も現れていない)キーワードも0件として含める', () => {
+    const list = buildKeywordOccurrenceList(['東京駅', '新幹線'], { '新幹線': 1 });
+    expect(list).toEqual([
+      { keyword: '新幹線', count: 1 },
+      { keyword: '東京駅', count: 0 },
+    ]);
+  });
+
+  it('空配列を渡すと空配列を返す', () => {
+    expect(buildKeywordOccurrenceList([], {})).toEqual([]);
   });
 });

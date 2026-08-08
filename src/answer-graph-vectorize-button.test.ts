@@ -393,7 +393,10 @@ describe('回答モーダル(DOM実動作): ベクタ化済みバッジとキー
       const u = String(url);
       if (u.includes('/api/aichat/answer-keywords')) {
         answerKeywordsCalls.push(u);
-        return Promise.resolve({ json: () => Promise.resolve({ shareId: 's1', keywords: ['東京駅', '新幹線'] }) });
+        return Promise.resolve({ json: () => Promise.resolve({
+          shareId: 's1', keywords: ['東京駅', '新幹線'],
+          keywordOccurrences: [{ keyword: '新幹線', count: 5 }, { keyword: '東京駅', count: 2 }],
+        }) });
       }
       if (u.includes('/api/aichat/vectorize-answer')) {
         vectorizeCalls.push({ body: init && init.body ? JSON.parse(init.body) : null });
@@ -468,7 +471,7 @@ describe('回答モーダル(DOM実動作): ベクタ化済みバッジとキー
     expect(btn.style.display).toBe('none');
   });
 
-  it('「キーワード一覧」ボタンを押すと/api/aichat/answer-keywordsから登録済みキーワードを取得して予備知識モーダルに表示する(ループ演出・結果モーダルは出さない)', async () => {
+  it('「キーワード一覧」ボタンを押すと/api/aichat/answer-keywordsから出現回数付きのキーワード一覧を取得し、出現回数の多い順に「キーワード (出現回数)」の形で左詰め表示する(ループ演出・結果モーダルは出さない)', async () => {
     const { answerKeywordsCalls } = await setupBadgeTest({ vectorized: true, keywordsRegistered: true });
     openAnswerModalViaClick('s1');
     await new Promise((resolve) => setTimeout(resolve, 10));
@@ -481,8 +484,8 @@ describe('回答モーダル(DOM実動作): ベクタ化済みバッジとキー
     expect(answerKeywordsCalls[0]).toContain('shareId=s1');
     const prereqBackdrop = document.getElementById('prereqModalBackdrop')!;
     expect(prereqBackdrop.classList.contains('open')).toBe(true);
-    const chips = Array.from(prereqBackdrop.querySelectorAll('.prereq-modal-chip')).map((el) => el.textContent);
-    expect(chips).toEqual(['東京駅', '新幹線']);
+    const rows = Array.from(prereqBackdrop.querySelectorAll('.prereq-keyword-occurrence-row')).map((el) => el.textContent);
+    expect(rows).toEqual(['新幹線 (5)', '東京駅 (2)']);
     expect(document.getElementById('prereqResultModalBackdrop')!.classList.contains('open')).toBe(false);
   });
 });
