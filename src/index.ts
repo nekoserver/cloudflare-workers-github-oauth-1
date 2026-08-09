@@ -3943,11 +3943,11 @@ app.post('/api/aichat', authMiddleware, async (c) => {
       ).first<CommitAgentLogRow>();
       return row ?? null;
     },
-    searchSharesWithKeywordCounts: async (keyword) => {
-      if (!c.env.DB) return [];
+    countSharesMatchingKeyword: async (keyword) => {
+      if (!c.env.DB) return 0;
       const db = c.env.DB as unknown as D1Like;
       const { results } = await searchAiChatShares(db, user.sub, keyword);
-      return enrichSearchResultsWithKeywordCounts(db, user.sub, results);
+      return results.length;
     },
   });
   if (slashCommand.handled) {

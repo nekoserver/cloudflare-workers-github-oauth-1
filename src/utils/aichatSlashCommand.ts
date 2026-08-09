@@ -81,7 +81,7 @@ export function formatAichatSlashCommandHelp(): string {
     '| /neko cal | 当月カレンダーをMarkdownテーブルで表示します |',
     '| /neko clog | 直近のコミットエージェントログを表示します |',
     '| /neko limit | Codex / Claude Code のリミット確認先を表示します |',
-    '| /neko search <キーワード> | 質問文・回答文にキーワードを含む共有を、回答文のキーワード数が多い順に表示します |',
+    '| /neko search <キーワード> | 質問文・回答文にキーワードを含む過去ログのヒット件数を表示します |',
     '| /neko help | このサブコマンド一覧を表示します |',
   ].join('\n');
 }
@@ -111,34 +111,48 @@ export function formatCommitAgentLogEntry(row: CommitAgentLogRow | null): string
   return ['```', ...lines, '```'].join('\n');
 }
 
-export type AichatSearchResultRow = {
-  id: string;
-  user_hash: string;
-  question: string;
-  keywordCount: number;
-};
-
 /**
- * `/neko search <キーワード>` の検索結果を、回答文に含まれるキーワード数
- * (keywordCount)の多い順にMarkdownの箇条書きで表示する。同数の場合は
- * 渡された順序(検索元は質問日時の新しい順)を保つ(安定ソート)。
+ * `/neko search <キーワード>` の検索結果を、質問文・回答文にキーワードを
+ * 含む過去ログのヒット件数のみで表示する(一覧は表示しない)。
  */
-export function formatAichatSearchResults(keyword: string, results: AichatSearchResultRow[]): string {
+export function formatAichatSearchResults(keyword: string, hitCount: number): string {
   if (!keyword) {
     return '❌ キーワードを指定してください: /neko search <キーワード>';
   }
-  if (results.length === 0) {
-    return `「${keyword}」を質問文・回答文に含む共有は見つかりませんでした`;
-  }
-  const sorted = results.slice().sort((a, b) => b.keywordCount - a.keywordCount);
-  const lines = sorted.map((r) => `- [${r.question}](/s/${r.user_hash}/${r.id})（キーワード数: ${r.keywordCount}）`);
-  return [`## /neko search 「${keyword}」の検索結果（回答文のキーワード数が多い順）`, ...lines].join('\n');
+  return `「${keyword}」を質問文・回答文に含む過去ログ: ${hitCount}件`;
 }
 
 export type AichatSlashCommandDeps = {
   fetchLatestCommitAgentLog: () => Promise<CommitAgentLogRow | null>;
-  searchSharesWithKeywordCounts?: (keyword: string) => Promise<AichatSearchResultRow[]>;
+  countSharesMatchingKeyword?: (keyword: string) => Promise<number>;
 };
+
+export const AICHAT_SEARCH_TIMEOUT_MS = 8000;
+
+type RaceOutcome<T> =
+  | { status: 'ok'; value: T }
+  | { status: 'timeout' }
+  | { status: 'error'; message: string };
+
+/**
+ * DB問い合わせ(countSharesMatchingKeyword)がデータ量等の理由で長時間
+ * 応答しない場合に、応答バブルが「考え中...」のまま無期限に固まって見える
+ * (ユーザーからは「AIに問い合わせに行ったままハングアップする」ように見える)
+ * ことを防ぐため、一定時間で必ず打ち切って結果を返す。DB呼び出し自体の
+ * 例外も同様に捕捉し、握りつぶさずエラーとして返す(CLAUDE.mdルール8)。
+ */
+async function raceWithTimeout<T>(promise: Promise<T>, ms: number): Promise<RaceOutcome<T>> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeoutPromise = new Promise<RaceOutcome<T>>((resolve) => {
+    timer = setTimeout(() => resolve({ status: 'timeout' }), ms);
+  });
+  const settled = promise
+    .then((value): RaceOutcome<T> => ({ status: 'ok', value }))
+    .catch((err): RaceOutcome<T> => ({ status: 'error', message: err instanceof Error ? err.message : String(err) }));
+  const result = await Promise.race([settled, timeoutPromise]);
+  if (timer !== undefined) clearTimeout(timer);
+  return result;
+}
 
 export type AichatSlashCommandResult =
   | { handled: true; response: string }
@@ -181,11 +195,20 @@ export async function interpretAichatSlashCommand(
 
   if (subcommand === 'search') {
     const keyword = parts.slice(2).join(' ').trim();
-    if (!keyword || !deps.searchSharesWithKeywordCounts) {
-      return { handled: true, response: formatAichatSearchResults(keyword, []) };
+    if (!keyword || !deps.countSharesMatchingKeyword) {
+      return { handled: true, response: formatAichatSearchResults(keyword, 0) };
     }
-    const results = await deps.searchSharesWithKeywordCounts(keyword);
-    return { handled: true, response: formatAichatSearchResults(keyword, results) };
+    const outcome = await raceWithTimeout(deps.countSharesMatchingKeyword(keyword), AICHAT_SEARCH_TIMEOUT_MS);
+    if (outcome.status === 'timeout') {
+      return {
+        handled: true,
+        response: `❌ /neko search がタイムアウトしました(${AICHAT_SEARCH_TIMEOUT_MS / 1000}秒以内に応答がありませんでした)。データ量が多い可能性があります。時間をおいて再度お試しください。`,
+      };
+    }
+    if (outcome.status === 'error') {
+      return { handled: true, response: `❌ /neko search でエラーが発生しました: ${outcome.message}` };
+    }
+    return { handled: true, response: formatAichatSearchResults(keyword, outcome.value) };
   }
 
   if (subcommand === 'help') {
