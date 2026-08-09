@@ -3944,21 +3944,38 @@ app.post('/api/aichat', authMiddleware, async (c) => {
       return row ?? null;
     },
     searchShares: async (keyword) => {
-      if (!c.env.DB) return { hitCount: 0, latestQuestions: [] };
+      if (!c.env.DB) return { hitCount: 0, results: [] };
       const db = c.env.DB as unknown as D1Like;
       const { results } = await searchAiChatShares(db, user.sub, keyword);
-      return { hitCount: results.length, latestQuestions: results.slice(0, 5).map((r) => r.question) };
+      return { hitCount: results.length, results: results.map((r) => ({ id: r.id, question: r.question })) };
     },
-    countVectorizedAnswers: async () => {
-      if (!c.env.DB) return 0;
-      const row = await c.env.DB.prepare(
+    vectorizedAnswers: async () => {
+      if (!c.env.DB) return { count: 0, totalCount: 0, results: [] };
+      const countRow = await c.env.DB.prepare(
         'SELECT COUNT(DISTINCT share_id) AS cnt FROM aichat_answer_vectors WHERE user_id = ?'
       ).bind(user.sub).first<{ cnt: number }>();
-      return row?.cnt ?? 0;
+      const totalRow = await c.env.DB.prepare(
+        'SELECT COUNT(*) AS cnt FROM ai_chat_shares WHERE user_id = ? AND deleted_at IS NULL'
+      ).bind(user.sub).first<{ cnt: number }>();
+      const rows = await c.env.DB.prepare(
+        `SELECT s.id AS id, s.question AS question, MAX(v.computed_at) AS computed_at
+         FROM aichat_answer_vectors v
+         JOIN ai_chat_shares s ON s.id = v.share_id
+         WHERE v.user_id = ?
+         GROUP BY s.id, s.question
+         ORDER BY computed_at DESC
+         LIMIT 30`
+      ).bind(user.sub).all<{ id: string; question: string }>();
+      return { count: countRow?.cnt ?? 0, totalCount: totalRow?.cnt ?? 0, results: rows.results ?? [] };
     },
   });
   if (slashCommand.handled) {
-    return jsonUtf8({ response: slashCommand.response, usedModel: 'local/neko', systemPromptMode });
+    return jsonUtf8({
+      response: slashCommand.response,
+      usedModel: 'local/neko',
+      systemPromptMode,
+      nekoResults: slashCommand.resultsForModal ?? null,
+    });
   }
 
   if (!c.env.AI) {

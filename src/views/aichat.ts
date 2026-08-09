@@ -661,6 +661,9 @@ export function getAiChatPage(user: {
     }
     .bubble-copy-btn:hover { background: var(--bg-secondary); }
     .bubble-copy-btn.copied { color: var(--success-color, #48bb78); border-color: var(--success-color, #48bb78); }
+    .neko-results-link-row { margin-top: 8px; }
+    .neko-results-link { font-size: 12px; color: var(--accent-color, #667eea); text-decoration: none; }
+    .neko-results-link:hover { text-decoration: underline; }
     .chat-bubble.error {
       align-self: flex-start; background: rgba(207,34,46,0.08); border: 1px solid rgba(207,34,46,0.3); color: #cf222e;
     }
@@ -908,6 +911,16 @@ export function getAiChatPage(user: {
       <div class="search-log-body" id="searchImpressionsBody">
         <div class="search-log-loading">読み込み中...</div>
       </div>
+    </div>
+  </div>
+
+  <div class="search-log-overlay" id="nekoResultsModal" aria-hidden="true">
+    <div class="search-log-modal" role="dialog" aria-modal="true">
+      <div class="search-log-head">
+        <span class="search-log-title" id="nekoResultsModalTitle">/neko 結果一覧（最大30件）</span>
+        <button class="search-log-close" id="nekoResultsModalClose" aria-label="閉じる">✕</button>
+      </div>
+      <div class="search-log-body" id="nekoResultsModalBody"></div>
     </div>
   </div>
 
@@ -1408,6 +1421,58 @@ export function getAiChatPage(user: {
         .then(function(data) { if (data && data.question) showHistoryModal(data, keywords); })
         .catch(function() {});
     }
+
+    // ===== /neko search・/neko vcount のヒット結果一覧モーダル =====
+    // チャット画面を応答で埋め尽くさないための暫定措置として、一覧はチャット
+    // 本文には出さず、応答バブル内のリンクからこの最上位レイヤーのモーダルで
+    // 最大30件まで表形式に表示する。行の質問文リンクからは、それぞれの回答が
+    // 書き込まれたAIチャットの詳細プレビュー(historyModal)を(このモーダルより
+    // さらに手前に)呼び出せる。
+    var nekoResultsModal = document.getElementById('nekoResultsModal');
+    var nekoResultsModalTitle = document.getElementById('nekoResultsModalTitle');
+    var nekoResultsModalClose = document.getElementById('nekoResultsModalClose');
+    var nekoResultsModalBody = document.getElementById('nekoResultsModalBody');
+
+    function renderNekoResultsTable(items) {
+      if (!items || items.length === 0) {
+        nekoResultsModalBody.innerHTML = '<div class="search-log-empty">記録がありません</div>';
+        return;
+      }
+      var html = '<table class="search-log-table"><thead><tr><th>No.</th><th>質問文</th></tr></thead><tbody>';
+      items.forEach(function(item, idx) {
+        var q = item.question || '';
+        var qShort = q.length > 60 ? q.slice(0, 60) + '…' : (q || '(削除済み)');
+        html += '<tr><td class="search-log-date">' + (idx + 1) + '</td>' +
+          '<td class="search-log-q kw-q-link" data-share-id="' + escHtml(item.id) + '" title="' + escHtml(q) + '">' +
+          '<span class="impr-q-text">' + escHtml(qShort) + '</span></td></tr>';
+      });
+      html += '</tbody></table>';
+      nekoResultsModalBody.innerHTML = html;
+    }
+
+    function openNekoResultsModal(items, title) {
+      nekoResultsModalTitle.textContent = title || '/neko 結果一覧（最大30件）';
+      renderNekoResultsTable(items);
+      nekoResultsModal.style.zIndex = String(getNextZ());
+      nekoResultsModal.classList.add('open');
+      nekoResultsModal.setAttribute('aria-hidden', 'false');
+    }
+
+    function closeNekoResultsModal() {
+      nekoResultsModal.classList.remove('open');
+      nekoResultsModal.setAttribute('aria-hidden', 'true');
+    }
+
+    nekoResultsModalClose.addEventListener('click', closeNekoResultsModal);
+    nekoResultsModal.addEventListener('click', function(e) { if (e.target === nekoResultsModal) closeNekoResultsModal(); });
+    document.addEventListener('keydown', function(e) {
+      if (e.key === 'Escape' && nekoResultsModal.classList.contains('open')) closeNekoResultsModal();
+    });
+    nekoResultsModalBody.addEventListener('click', function(e) {
+      var td = e.target.closest('td[data-share-id]');
+      if (!td) return;
+      openHistoryModalByShareId(td.getAttribute('data-share-id'), '[]');
+    });
 
     searchImpressionsBody.addEventListener('click', function(e) {
       var dateBtn = e.target.closest('button.impr-date-link');
@@ -3137,7 +3202,7 @@ export function getAiChatPage(user: {
         if (z > max && z < 9000) max = z;
       });
       var staticZDefaults = {
-        linkedQuestionsOverlay: 700, impressionsSubqueryModal: 800,
+        linkedQuestionsOverlay: 700, nekoResultsModal: 700, impressionsSubqueryModal: 800,
         kwClassifyListModal: 820, sqKwQuestionsOverlay: 850, addSubqueryModal: 900, historyModalBackdrop: 750,
         tokenUsageModal: 820, dailyStatsModal: 820, modelDotDropdown: 700,
         kwColorPaletteModal: 900, kwCatGroupModal: 920, searchLogRecordModal: 880,
@@ -3314,7 +3379,7 @@ export function getAiChatPage(user: {
       var usedModel = data.usedModel || selectedModel;
       var isLocalCommand = usedModel === 'local/neko';
       var isFallback = !!data.fallbackUsed || (data.usedModel != null && data.usedModel !== selectedModel);
-      var ansBubble = buildAssistantBubble(responseText, selectedModel, isFallback, extractRespUsage(data), isLocalCommand);
+      var ansBubble = buildAssistantBubble(responseText, selectedModel, isFallback, extractRespUsage(data), isLocalCommand, data.nekoResults);
       box.appendChild(ansBubble);
       if (!isLocalCommand) {
         appendAiResponseRow(box, question, responseText, usedModel, data.shareId, data.userHash);
@@ -6181,10 +6246,25 @@ export function getAiChatPage(user: {
       };
     }
 
-    function buildAssistantBubble(text, model, isFallback, usage, isLocalCommand) {
+    function buildAssistantBubble(text, model, isFallback, usage, isLocalCommand, nekoResults) {
       var el = document.createElement('div');
       el.className = 'chat-bubble assistant preview-area';
       el.innerHTML = parseMd(text);
+      if (isLocalCommand && nekoResults && nekoResults.length > 0) {
+        var resultsRow = document.createElement('div');
+        resultsRow.className = 'neko-results-link-row';
+        var resultsLink = document.createElement('a');
+        resultsLink.href = '#';
+        resultsLink.className = 'neko-results-link';
+        resultsLink.textContent = '📋 ヒット結果一覧を表示（' + nekoResults.length + '件）';
+        resultsLink.addEventListener('click', function(e) {
+          e.preventDefault();
+          e.stopPropagation();
+          openNekoResultsModal(nekoResults);
+        });
+        resultsRow.appendChild(resultsLink);
+        el.appendChild(resultsRow);
+      }
       if (!isLocalCommand) {
         var copyBtn = document.createElement('button');
         copyBtn.className = 'bubble-copy-btn';
@@ -6219,10 +6299,10 @@ export function getAiChatPage(user: {
       return el;
     }
 
-    function appendBubble(text, role, model, isFallback, usage, imageDataUrl, isLocalCommand) {
+    function appendBubble(text, role, model, isFallback, usage, imageDataUrl, isLocalCommand, nekoResults) {
       var el;
       if (role === 'assistant') {
-        el = buildAssistantBubble(text, model, isFallback, usage, isLocalCommand);
+        el = buildAssistantBubble(text, model, isFallback, usage, isLocalCommand, nekoResults);
         if (model) {
           var wrap = document.createElement('div');
           wrap.className = 'chat-bubble-wrap';
@@ -6433,7 +6513,7 @@ export function getAiChatPage(user: {
             var usedModel = data.usedModel || lastModel;
             var isLocalCommand = usedModel === 'local/neko';
             var respUsage = extractRespUsage(data);
-            appendBubble(responseText, 'assistant', isLocalCommand ? null : lastModel, data.fallbackUsed, respUsage, undefined, isLocalCommand);
+            appendBubble(responseText, 'assistant', isLocalCommand ? null : lastModel, data.fallbackUsed, respUsage, undefined, isLocalCommand, data.nekoResults);
             if (!isLocalCommand) {
               appendShareBtn(currentMsg, responseText, usedModel, data.shareId, data.userHash);
             }

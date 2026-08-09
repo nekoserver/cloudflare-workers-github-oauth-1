@@ -81,8 +81,8 @@ export function formatAichatSlashCommandHelp(): string {
     '| /neko cal | 当月カレンダーをMarkdownテーブルで表示します |',
     '| /neko clog | 直近のコミットエージェントログを表示します |',
     '| /neko limit | Codex / Claude Code のリミット確認先を表示します |',
-    '| /neko search <キーワード> | 質問文・回答文にキーワードを含む過去ログのヒット件数と、最新5件の質問文を表示します |',
-    '| /neko vcount | ベクタ化済みの回答文の件数を表示します |',
+    '| /neko search <キーワード> | 質問文・回答文にキーワードを含む過去ログのヒット件数を表示します(結果一覧は最大30件までモーダルで確認できます) |',
+    '| /neko vcount | ベクタ化済みの回答文の件数と全回答文に占める割合を表示します(結果一覧は最大30件までモーダルで確認できます) |',
     '| /neko help | このサブコマンド一覧を表示します |',
   ].join('\n');
 }
@@ -112,41 +112,59 @@ export function formatCommitAgentLogEntry(row: CommitAgentLogRow | null): string
   return ['```', ...lines, '```'].join('\n');
 }
 
+// チャット画面を長い一覧で埋め尽くさないための暫定措置として、検索結果
+// 一覧はチャット本文に直接書き出さず、最上位レイヤーのモーダルで最大30件
+// まで確認できるようにする(応答バブルにはヒット件数とモーダルを開く
+// リンクだけを表示する)。
+export type AichatResultItem = {
+  id: string;
+  question: string;
+};
+
 export type AichatSearchOutcome = {
   hitCount: number;
-  latestQuestions: string[];
+  results: AichatResultItem[];
 };
 
 /**
  * `/neko search <キーワード>` の検索結果を、質問文・回答文にキーワードを
- * 含む過去ログのヒット件数と、その中から最新5件の質問文のみ(回答文は
- * 含めない)で表示する。latestQuestionsは呼び出し側で既に日時の新しい順に
- * 並んでいる前提で、そのままの順序で列挙する。
+ * 含む過去ログのヒット件数のみで表示する(一覧はチャット本文には出さない。
+ * 一覧を開くリンクはinterpretAichatSlashCommandの戻り値resultsForModalを
+ * 使ってUI側で埋め込む)。
  */
 export function formatAichatSearchResults(keyword: string, outcome: AichatSearchOutcome): string {
   if (!keyword) {
     return '❌ キーワードを指定してください: /neko search <キーワード>';
   }
-  const lines = [`「${keyword}」を質問文・回答文に含む過去ログ: ${outcome.hitCount}件`];
-  if (outcome.latestQuestions.length > 0) {
-    lines.push('最新5件の質問:');
-    outcome.latestQuestions.forEach((q) => lines.push(`- ${q}`));
-  }
-  return lines.join('\n');
+  return `「${keyword}」を質問文・回答文に含む過去ログ: ${outcome.hitCount}件`;
 }
+
+export type AichatVectorizedAnswersOutcome = {
+  count: number;
+  totalCount: number;
+  results: AichatResultItem[];
+};
 
 /**
  * `/neko vcount` で表示する、ベクタ化済み(aichat_answer_vectors)の
- * 回答文の件数(user_idごと、share_id単位で重複なし)。
+ * 回答文の件数(user_idごと、share_id単位で重複なし)を、行末に
+ * 「/総回答数　(〇%)」の形で全回答文に占める割合を添えて表示する
+ * (一覧はチャット本文には出さない。/neko searchと同様、一覧を開く
+ * リンクはresultsForModalを使ってUI側で埋め込む)。総回答数が0件の
+ * 場合は0除算を避け、割合の表示自体を省略する。
  */
-export function formatVectorizedAnswerCount(count: number): string {
-  return `ベクタ化済みの回答文: ${count}件`;
+export function formatVectorizedAnswerCount(count: number, totalCount: number): string {
+  if (totalCount <= 0) {
+    return `ベクタ化済みの回答文: ${count}件`;
+  }
+  const percent = Math.round((count / totalCount) * 100);
+  return `ベクタ化済みの回答文: ${count}件 / ${totalCount}件　(${percent}%)`;
 }
 
 export type AichatSlashCommandDeps = {
   fetchLatestCommitAgentLog: () => Promise<CommitAgentLogRow | null>;
   searchShares?: (keyword: string) => Promise<AichatSearchOutcome>;
-  countVectorizedAnswers?: () => Promise<number>;
+  vectorizedAnswers?: () => Promise<AichatVectorizedAnswersOutcome>;
 };
 
 export const AICHAT_SEARCH_TIMEOUT_MS = 8000;
@@ -157,7 +175,7 @@ type RaceOutcome<T> =
   | { status: 'error'; message: string };
 
 /**
- * DB問い合わせ(searchShares/countVectorizedAnswers等)が
+ * DB問い合わせ(searchShares/vectorizedAnswers等)が
  * データ量等の理由で長時間応答しない場合に、応答バブルが「考え中...」の
  * まま無期限に固まって見える(ユーザーからは「AIに問い合わせに行ったまま
  * ハングアップする」ように見える)ことを防ぐため、一定時間で必ず打ち切って
@@ -178,7 +196,7 @@ async function raceWithTimeout<T>(promise: Promise<T>, ms: number): Promise<Race
 }
 
 export type AichatSlashCommandResult =
-  | { handled: true; response: string }
+  | { handled: true; response: string; resultsForModal?: AichatResultItem[] }
   | { handled: false };
 
 /**
@@ -219,7 +237,7 @@ export async function interpretAichatSlashCommand(
   if (subcommand === 'search') {
     const keyword = parts.slice(2).join(' ').trim();
     if (!keyword || !deps.searchShares) {
-      return { handled: true, response: formatAichatSearchResults(keyword, { hitCount: 0, latestQuestions: [] }) };
+      return { handled: true, response: formatAichatSearchResults(keyword, { hitCount: 0, results: [] }) };
     }
     const outcome = await raceWithTimeout(deps.searchShares(keyword), AICHAT_SEARCH_TIMEOUT_MS);
     if (outcome.status === 'timeout') {
@@ -231,14 +249,18 @@ export async function interpretAichatSlashCommand(
     if (outcome.status === 'error') {
       return { handled: true, response: `❌ /neko search でエラーが発生しました: ${outcome.message}` };
     }
-    return { handled: true, response: formatAichatSearchResults(keyword, outcome.value) };
+    return {
+      handled: true,
+      response: formatAichatSearchResults(keyword, outcome.value),
+      resultsForModal: outcome.value.results.length > 0 ? outcome.value.results : undefined,
+    };
   }
 
   if (subcommand === 'vcount') {
-    if (!deps.countVectorizedAnswers) {
-      return { handled: true, response: formatVectorizedAnswerCount(0) };
+    if (!deps.vectorizedAnswers) {
+      return { handled: true, response: formatVectorizedAnswerCount(0, 0) };
     }
-    const outcome = await raceWithTimeout(deps.countVectorizedAnswers(), AICHAT_SEARCH_TIMEOUT_MS);
+    const outcome = await raceWithTimeout(deps.vectorizedAnswers(), AICHAT_SEARCH_TIMEOUT_MS);
     if (outcome.status === 'timeout') {
       return {
         handled: true,
@@ -248,7 +270,11 @@ export async function interpretAichatSlashCommand(
     if (outcome.status === 'error') {
       return { handled: true, response: `❌ /neko vcount でエラーが発生しました: ${outcome.message}` };
     }
-    return { handled: true, response: formatVectorizedAnswerCount(outcome.value) };
+    return {
+      handled: true,
+      response: formatVectorizedAnswerCount(outcome.value.count, outcome.value.totalCount),
+      resultsForModal: outcome.value.results.length > 0 ? outcome.value.results : undefined,
+    };
   }
 
   if (subcommand === 'help') {
