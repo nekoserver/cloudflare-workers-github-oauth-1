@@ -1,95 +1,58 @@
-import { describe, expect, it, vi } from 'vitest';
-import { formatAichatSearchResults, interpretAichatSlashCommand, type AichatSearchResultRow } from './utils/aichatSlashCommand';
+import { describe, expect, it, vi, afterEach } from 'vitest';
+import {
+  formatAichatSearchResults,
+  interpretAichatSlashCommand,
+  AICHAT_SEARCH_TIMEOUT_MS,
+} from './utils/aichatSlashCommand';
 
 // 対象: AIチャットの入力窓 `/neko search <キーワード>` サブコマンド。
-// 質問文・回答文にキーワードを含む共有(searchAiChatShares相当)を、
-// 回答文に含まれる登録済みキーワード数(keywordCount、
-// enrichSearchResultsWithKeywordCounts相当)の多い順に並べ替えて
-// 応答バブル内にMarkdownで表示する。
+// 質問文・回答文にキーワードを含む過去ログ(searchAiChatShares相当)の
+// ヒット件数のみを応答バブル内に表示する(一覧は表示しない)。
 //
 // 故障シナリオ:
-//   (1) キーワード数の多い順に並び替えられず、検索元の順序(日時順)の
-//       ままになってしまう
-//   (2) キーワード未指定の場合に例外になる、またはAI呼び出しへ委ねられてしまう
-//   (3) 検索結果が0件の場合に空文字やundefinedを返して握りつぶす
-//   (4) 同数のキーワード数の場合に順序が不安定(元の順序を保たない)
+//   (1) キーワード未指定の場合に例外になる、またはAI呼び出しへ委ねられてしまう
+//   (2) ヒット0件の場合に空文字やundefinedを返して握りつぶす
+//   (3) ヒット件数ではなく一覧を返してしまう(仕様変更後の後退)
 
 describe('formatAichatSearchResults', () => {
-  it('キーワード数(keywordCount)の多い順に並び替えて箇条書きで表示する', () => {
-    const results: AichatSearchResultRow[] = [
-      { id: 's1', user_hash: 'h1', question: '東京駅について', keywordCount: 1 },
-      { id: 's2', user_hash: 'h2', question: '新幹線について', keywordCount: 5 },
-      { id: 's3', user_hash: 'h3', question: '乗車券について', keywordCount: 3 },
-    ];
-    const text = formatAichatSearchResults('駅', results);
-    const order = ['新幹線について', '乗車券について', '東京駅について'];
-    let lastIdx = -1;
-    order.forEach((q) => {
-      const idx = text.indexOf(q);
-      expect(idx).toBeGreaterThan(lastIdx);
-      lastIdx = idx;
-    });
+  it('ヒット件数のみを表示する', () => {
+    expect(formatAichatSearchResults('駅', 3)).toBe('「駅」を質問文・回答文に含む過去ログ: 3件');
   });
 
-  it('各行にキーワード数と/s/へのMarkdownリンクを含める', () => {
-    const results: AichatSearchResultRow[] = [
-      { id: 's1', user_hash: 'h1', question: '東京駅について', keywordCount: 2 },
-    ];
-    const text = formatAichatSearchResults('駅', results);
-    expect(text).toContain('[東京駅について](/s/h1/s1)');
-    expect(text).toContain('キーワード数: 2');
-  });
-
-  it('検索結果が0件の場合はその旨を返す(握りつぶさない)', () => {
-    const text = formatAichatSearchResults('見つからないキーワード', []);
+  it('ヒット0件の場合も0件と表示する(握りつぶさない)', () => {
+    const text = formatAichatSearchResults('見つからないキーワード', 0);
     expect(text).toContain('見つからないキーワード');
-    expect(text).toContain('見つかりませんでした');
+    expect(text).toContain('0件');
   });
 
   it('キーワード未指定の場合は使い方を案内する', () => {
-    const text = formatAichatSearchResults('', []);
+    const text = formatAichatSearchResults('', 0);
     expect(text).toContain('/neko search');
   });
 
-  it('同数のキーワード数の場合は渡された順序を保つ(安定ソート)', () => {
-    const results: AichatSearchResultRow[] = [
-      { id: 's1', user_hash: 'h1', question: '先に渡した方', keywordCount: 2 },
-      { id: 's2', user_hash: 'h2', question: '後に渡した方', keywordCount: 2 },
-    ];
-    const text = formatAichatSearchResults('駅', results);
-    expect(text.indexOf('先に渡した方')).toBeLessThan(text.indexOf('後に渡した方'));
-  });
-
   it('罫線・ツリー文字を使わない(CLAUDE.mdルール16)', () => {
-    const results: AichatSearchResultRow[] = [
-      { id: 's1', user_hash: 'h1', question: '東京駅について', keywordCount: 2 },
-    ];
-    expect(formatAichatSearchResults('駅', results)).not.toMatch(/[├└│─┼]/);
+    expect(formatAichatSearchResults('駅', 2)).not.toMatch(/[├└│─┼]/);
   });
 });
 
 describe('interpretAichatSlashCommand: /neko search', () => {
   const now = new Date('2026-07-15T00:00:00.000Z');
 
-  it('/neko search <キーワード> はdepsのsearchSharesWithKeywordCountsへキーワードを渡し、結果を整形して返す', async () => {
-    const results: AichatSearchResultRow[] = [
-      { id: 's1', user_hash: 'h1', question: '東京駅について', keywordCount: 1 },
-      { id: 's2', user_hash: 'h2', question: '新幹線について', keywordCount: 5 },
-    ];
-    const searchFn = vi.fn().mockResolvedValue(results);
+  it('/neko search <キーワード> はdepsのcountSharesMatchingKeywordへキーワードを渡し、ヒット件数を整形して返す', async () => {
+    const searchFn = vi.fn().mockResolvedValue(5);
     const result = await interpretAichatSlashCommand('/neko search 駅', now, {
       fetchLatestCommitAgentLog: async () => null,
-      searchSharesWithKeywordCounts: searchFn,
+      countSharesMatchingKeyword: searchFn,
     });
     expect(searchFn).toHaveBeenCalledWith('駅');
-    expect(result).toEqual({ handled: true, response: formatAichatSearchResults('駅', results) });
+    expect(result).toEqual({ handled: true, response: formatAichatSearchResults('駅', 5) });
   });
 
   it('キーワードに空白を含む場合は"search"以降をすべて連結してキーワードとして渡す', async () => {
-    const searchFn = vi.fn().mockResolvedValue([]);
+    const searchFn = vi.fn().mockResolvedValue(0);
     await interpretAichatSlashCommand('/neko search 東京 駅', now, {
       fetchLatestCommitAgentLog: async () => null,
-      searchSharesWithKeywordCounts: searchFn,
+      countSharesMatchingKeyword: searchFn,
     });
     expect(searchFn).toHaveBeenCalledWith('東京 駅');
   });
@@ -98,10 +61,10 @@ describe('interpretAichatSlashCommand: /neko search', () => {
     const searchFn = vi.fn().mockRejectedValue(new Error('should not be called'));
     const result = await interpretAichatSlashCommand('/neko search', now, {
       fetchLatestCommitAgentLog: async () => null,
-      searchSharesWithKeywordCounts: searchFn,
+      countSharesMatchingKeyword: searchFn,
     });
     expect(searchFn).not.toHaveBeenCalled();
-    expect(result).toEqual({ handled: true, response: formatAichatSearchResults('', []) });
+    expect(result).toEqual({ handled: true, response: formatAichatSearchResults('', 0) });
   });
 
   it('未対応コマンドのヘルプ・/neko helpに /neko search を含める', async () => {
@@ -115,5 +78,71 @@ describe('interpretAichatSlashCommand: /neko search', () => {
     expect(help.handled).toBe(true);
     if (!help.handled) throw new Error('not handled');
     expect(help.response).toContain('/neko search');
+    expect(help.response).toContain('ヒット件数');
+  });
+});
+
+// 対象: countSharesMatchingKeyword(DB問い合わせ)がデータ量等の理由で
+// 長時間応答しない場合に、応答バブルが「考え中...」のまま無期限に固まって
+// 見える(ユーザーからは「AIに問い合わせに行ったままハングアップする」ように
+// 見える)ことを防ぐためのタイムアウト処理。
+//
+// 故障シナリオ:
+//   (1) DB問い合わせが応答しない場合に永久に待ち続けてしまう(ハング)
+//   (2) DB問い合わせが例外を投げた場合に、エラーメッセージを返さず
+//       握りつぶしてしまう(CLAUDE.mdルール8: 記録・通知の義務)
+//   (3) タイムアウト発生後もタイマーが残り続ける、または元のPromiseの
+//       解決/拒否時に未捕捉の例外(unhandled rejection)が発生する
+
+describe('interpretAichatSlashCommand: /neko search のタイムアウト・エラー処理', () => {
+  const now = new Date('2026-07-15T00:00:00.000Z');
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it(`countSharesMatchingKeywordが${AICHAT_SEARCH_TIMEOUT_MS / 1000}秒以内に応答しない場合はタイムアウトの案内を返す(ハングしない)`, async () => {
+    vi.useFakeTimers();
+    const neverResolves = new Promise<number>(() => {});
+    const searchFn = vi.fn().mockReturnValue(neverResolves);
+
+    const resultPromise = interpretAichatSlashCommand('/neko search 駅', now, {
+      fetchLatestCommitAgentLog: async () => null,
+      countSharesMatchingKeyword: searchFn,
+    });
+    await vi.advanceTimersByTimeAsync(AICHAT_SEARCH_TIMEOUT_MS);
+    const result = await resultPromise;
+
+    expect(result.handled).toBe(true);
+    if (!result.handled) throw new Error('not handled');
+    expect(result.response).toContain('タイムアウト');
+    expect(result.response).toContain('/neko search');
+  });
+
+  it('タイムアウト時間より前に応答すれば、通常どおりヒット件数を返す', async () => {
+    vi.useFakeTimers();
+    const searchFn = vi.fn().mockResolvedValue(1);
+
+    const resultPromise = interpretAichatSlashCommand('/neko search 駅', now, {
+      fetchLatestCommitAgentLog: async () => null,
+      countSharesMatchingKeyword: searchFn,
+    });
+    await vi.advanceTimersByTimeAsync(10);
+    const result = await resultPromise;
+
+    expect(result).toEqual({ handled: true, response: formatAichatSearchResults('駅', 1) });
+  });
+
+  it('countSharesMatchingKeywordが例外を投げた場合は握りつぶさずエラーメッセージを返す', async () => {
+    const searchFn = vi.fn().mockRejectedValue(new Error('D1 query failed'));
+    const result = await interpretAichatSlashCommand('/neko search 駅', now, {
+      fetchLatestCommitAgentLog: async () => null,
+      countSharesMatchingKeyword: searchFn,
+    });
+
+    expect(result.handled).toBe(true);
+    if (!result.handled) throw new Error('not handled');
+    expect(result.response).toContain('エラー');
+    expect(result.response).toContain('D1 query failed');
   });
 });
