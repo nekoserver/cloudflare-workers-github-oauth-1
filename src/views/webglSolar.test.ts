@@ -729,6 +729,35 @@ describe('getWebGLSolarPage', () => {
     expect(skyM![1]).toContain("name: 'ペルセウス座'");
   });
 
+  it('今日の空モードでもペルセウス座を含む全星座線を恒星と同じprojectEclipticSkyで描画する', () => {
+    // 今日の空(drawTodaySky)は drawSkyConstellationLines(projectEclipticSky) を呼ぶことで
+    // skyConstellationLines(ペルセウス座を含む)を恒星ドットと同じ投影で描画する。
+    // この呼び出しが消える、または projectSky に変わると、星座線トグルを入れても
+    // ペルセウス座が表示されない・恒星とずれて表示される退行になる。
+    const m = html.match(/function drawTodaySky\([\s\S]*?\n  function drawPoleView/);
+    expect(m).not.toBeNull();
+    expect(m![0]).toContain('drawSkyConstellationLines(projectEclipticSky);');
+    expect(m![0]).not.toContain('drawSkyConstellationLines(projectSky);');
+  });
+
+  it('今日の空モードの投影(backCull=-0.75)でペルセウス座方向を向けば主要7星を投影できる', () => {
+    const make = extractProject3D();
+    const project = make('today');
+    const { lons, lats } = extractRadArrays();
+    const centerLon = 1.06;
+    const centerLat = 0.45;
+    for (const idx of [28, 29, 30, 31, 32, 33, 34]) {
+      const lon = lons[idx] - centerLon;
+      const lat = lats[idx] - centerLat + 0.5;
+      const p = project(
+        Math.cos(lat) * Math.cos(lon),
+        Math.cos(lat) * Math.sin(lon),
+        Math.sin(lat)
+      );
+      expect(p, 'ペルセウス座 idx=' + idx + ' が投影可能').not.toBeNull();
+    }
+  });
+
   it('地軸固定モードでペルセウス座方向を向いたとき主要7星がすべて画面内に投影できる', () => {
     const make = extractProject3D();
     const project = make('pole');
