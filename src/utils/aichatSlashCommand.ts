@@ -81,7 +81,7 @@ export function formatAichatSlashCommandHelp(): string {
     '| /neko cal | 当月カレンダーをMarkdownテーブルで表示します |',
     '| /neko clog | 直近のコミットエージェントログを表示します |',
     '| /neko limit | Codex / Claude Code のリミット確認先を表示します |',
-    '| /neko search <キーワード> | 質問文・回答文にキーワードを含む過去ログのヒット件数を表示します |',
+    '| /neko search <キーワード> | 質問文・回答文にキーワードを含む過去ログのヒット件数と、最新5件の質問文を表示します |',
     '| /neko vcount | ベクタ化済みの回答文の件数を表示します |',
     '| /neko help | このサブコマンド一覧を表示します |',
   ].join('\n');
@@ -112,15 +112,27 @@ export function formatCommitAgentLogEntry(row: CommitAgentLogRow | null): string
   return ['```', ...lines, '```'].join('\n');
 }
 
+export type AichatSearchOutcome = {
+  hitCount: number;
+  latestQuestions: string[];
+};
+
 /**
  * `/neko search <キーワード>` の検索結果を、質問文・回答文にキーワードを
- * 含む過去ログのヒット件数のみで表示する(一覧は表示しない)。
+ * 含む過去ログのヒット件数と、その中から最新5件の質問文のみ(回答文は
+ * 含めない)で表示する。latestQuestionsは呼び出し側で既に日時の新しい順に
+ * 並んでいる前提で、そのままの順序で列挙する。
  */
-export function formatAichatSearchResults(keyword: string, hitCount: number): string {
+export function formatAichatSearchResults(keyword: string, outcome: AichatSearchOutcome): string {
   if (!keyword) {
     return '❌ キーワードを指定してください: /neko search <キーワード>';
   }
-  return `「${keyword}」を質問文・回答文に含む過去ログ: ${hitCount}件`;
+  const lines = [`「${keyword}」を質問文・回答文に含む過去ログ: ${outcome.hitCount}件`];
+  if (outcome.latestQuestions.length > 0) {
+    lines.push('最新5件の質問:');
+    outcome.latestQuestions.forEach((q) => lines.push(`- ${q}`));
+  }
+  return lines.join('\n');
 }
 
 /**
@@ -133,7 +145,7 @@ export function formatVectorizedAnswerCount(count: number): string {
 
 export type AichatSlashCommandDeps = {
   fetchLatestCommitAgentLog: () => Promise<CommitAgentLogRow | null>;
-  countSharesMatchingKeyword?: (keyword: string) => Promise<number>;
+  searchShares?: (keyword: string) => Promise<AichatSearchOutcome>;
   countVectorizedAnswers?: () => Promise<number>;
 };
 
@@ -145,7 +157,7 @@ type RaceOutcome<T> =
   | { status: 'error'; message: string };
 
 /**
- * DB問い合わせ(countSharesMatchingKeyword/countVectorizedAnswers等)が
+ * DB問い合わせ(searchShares/countVectorizedAnswers等)が
  * データ量等の理由で長時間応答しない場合に、応答バブルが「考え中...」の
  * まま無期限に固まって見える(ユーザーからは「AIに問い合わせに行ったまま
  * ハングアップする」ように見える)ことを防ぐため、一定時間で必ず打ち切って
@@ -206,10 +218,10 @@ export async function interpretAichatSlashCommand(
 
   if (subcommand === 'search') {
     const keyword = parts.slice(2).join(' ').trim();
-    if (!keyword || !deps.countSharesMatchingKeyword) {
-      return { handled: true, response: formatAichatSearchResults(keyword, 0) };
+    if (!keyword || !deps.searchShares) {
+      return { handled: true, response: formatAichatSearchResults(keyword, { hitCount: 0, latestQuestions: [] }) };
     }
-    const outcome = await raceWithTimeout(deps.countSharesMatchingKeyword(keyword), AICHAT_SEARCH_TIMEOUT_MS);
+    const outcome = await raceWithTimeout(deps.searchShares(keyword), AICHAT_SEARCH_TIMEOUT_MS);
     if (outcome.status === 'timeout') {
       return {
         handled: true,
