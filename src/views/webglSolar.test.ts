@@ -710,6 +710,45 @@ describe('getWebGLSolarPage', () => {
     expect(dEta).toBeLessThan(0.12);
   });
 
+  it('地軸固定・自転モードでもペルセウス座を含む全星座線をdrawSkyConstellationLinesで描画する', () => {
+    // 地軸固定(drawPoleView)・自転(drawSpinView)は drawSkyConstellationLines(projectSky) を
+    // 呼ぶことで skyConstellationLines(ペルセウス座を含む)を描画する。この呼び出しが
+    // 消えると星座線トグルを入れてもペルセウス座が表示されなくなる。
+    for (const [start, end] of [
+      ['function drawPoleView', 'function drawSpinView'],
+      ['function drawSpinView', 'function drawSolsticeView'],
+    ] as const) {
+      const m = html.match(new RegExp(start + '[\\s\\S]*?\\n  ' + end));
+      expect(m, start).not.toBeNull();
+      expect(m![0], start + ' が星座線を描画する').toContain('drawSkyConstellationLines(projectSky);');
+    }
+    // ペルセウス座の線がsummerTri等のようにモードごとの個別実装ではなく
+    // skyConstellationLines 側にあることを確認(登録漏れ検知)
+    const skyM = html.match(/var skyConstellationLines = \[([\s\S]*?)\n  \];/);
+    expect(skyM).not.toBeNull();
+    expect(skyM![1]).toContain("name: 'ペルセウス座'");
+  });
+
+  it('地軸固定モードでペルセウス座方向を向いたとき主要7星がすべて画面内に投影できる', () => {
+    const make = extractProject3D();
+    const project = make('pole');
+    // extractProject3D は viewAngle=0 固定のため、ペルセウス座(λ約56〜66度)の
+    // 星を視線中心付近へ持ってくる回転を座標側に適用して検証する
+    const { lons, lats } = extractRadArrays();
+    const centerLon = 1.06;
+    const centerLat = 0.45;
+    for (const idx of [28, 29, 30, 31, 32, 33, 34]) {
+      const lon = lons[idx] - centerLon;
+      const lat = lats[idx] - centerLat + 0.5;
+      const p = project(
+        Math.cos(lat) * Math.cos(lon),
+        Math.cos(lat) * Math.sin(lon),
+        Math.sin(lat)
+      );
+      expect(p, 'ペルセウス座 idx=' + idx + ' が投影可能').not.toBeNull();
+    }
+  });
+
   it('レグルスの黄道緯度(starLat)が実際の値(約+0.46度)に近い', () => {
     const lonMatch = html.match(/var starLon = \[([^\]]*)\];/);
     const latMatch = html.match(/var starLat = \[([^\]]*)\];/);
