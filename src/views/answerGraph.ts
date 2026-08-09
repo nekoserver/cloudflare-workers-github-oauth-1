@@ -778,6 +778,17 @@ input[type=search]:focus { border-color:var(--accent); }
     return Object.prototype.hasOwnProperty.call(keywordCountMap, keyword);
   }
 
+  // 登録済み(出現回数が0でない)かつ分類済み(中分類カテゴリの色が
+  // 割り当て済み)の場合だけ、そのカテゴリ色を返す。それ以外(未登録・
+  // 出現回数0・未分類)はnullを返し、呼び出し側で既定の強調色を使わせる。
+  function getRegisteredClassifiedColor(keyword) {
+    if (!(keywordCountMap[keyword] > 0)) return null;
+    var catId = keywordCategoryMap[keyword];
+    if (!catId) return null;
+    var cat = catQuickData && catQuickData.catMap[catId];
+    return (cat && cat.color) ? cat.color : null;
+  }
+
   // 「この回答文を理解するのに必要な予備知識」モーダル(最上位レイヤー、
   // 回答モーダルよりさらに前面)。ベクタ化ボタンから抽出されたキーワードを
   // ここに列挙する。各キーワードが未登録(isKeywordRegisteredInBarCacheがfalse)
@@ -943,13 +954,17 @@ input[type=search]:focus { border-color:var(--accent); }
   // モーダル上のチップを1件ずつ外枠(中抜き)強調表示することで可視化する。
   // サーバー側は既にループを終えた状態で結果が返るため、演出としては
   // 受け取った順序をそのままなぞる形でチップを1つずつハイライトする。
+  // 登録済み(出現回数≠0)かつ分類済み(色が割り当て済み)のキーワードは、
+  // 既定の強調色の代わりにそのキーワードのカテゴリ色で中抜き枠を塗る。
   var PREREQ_VECTORIZE_STEP_MS = 220;
   function animateKeywordVectorizationProgress(chips, onDone) {
     var i = 0;
     function step() {
-      if (i > 0) chips[i - 1].classList.remove('chip-vectorizing');
+      if (i > 0) { chips[i - 1].classList.remove('chip-vectorizing'); chips[i - 1].style.borderColor = ''; }
       if (i >= chips.length) { if (onDone) onDone(); return; }
+      var color = getRegisteredClassifiedColor(chips[i].textContent);
       chips[i].classList.add('chip-vectorizing');
+      chips[i].style.borderColor = color || '';
       i++;
       setTimeout(step, PREREQ_VECTORIZE_STEP_MS);
     }
