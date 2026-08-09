@@ -82,6 +82,7 @@ export function formatAichatSlashCommandHelp(): string {
     '| /neko clog | 直近のコミットエージェントログを表示します |',
     '| /neko limit | Codex / Claude Code のリミット確認先を表示します |',
     '| /neko search <キーワード> | 質問文・回答文にキーワードを含む過去ログのヒット件数を表示します |',
+    '| /neko vcount | ベクタ化済みの回答文の件数を表示します |',
     '| /neko help | このサブコマンド一覧を表示します |',
   ].join('\n');
 }
@@ -122,9 +123,18 @@ export function formatAichatSearchResults(keyword: string, hitCount: number): st
   return `「${keyword}」を質問文・回答文に含む過去ログ: ${hitCount}件`;
 }
 
+/**
+ * `/neko vcount` で表示する、ベクタ化済み(aichat_answer_vectors)の
+ * 回答文の件数(user_idごと、share_id単位で重複なし)。
+ */
+export function formatVectorizedAnswerCount(count: number): string {
+  return `ベクタ化済みの回答文: ${count}件`;
+}
+
 export type AichatSlashCommandDeps = {
   fetchLatestCommitAgentLog: () => Promise<CommitAgentLogRow | null>;
   countSharesMatchingKeyword?: (keyword: string) => Promise<number>;
+  countVectorizedAnswers?: () => Promise<number>;
 };
 
 export const AICHAT_SEARCH_TIMEOUT_MS = 8000;
@@ -135,11 +145,12 @@ type RaceOutcome<T> =
   | { status: 'error'; message: string };
 
 /**
- * DB問い合わせ(countSharesMatchingKeyword)がデータ量等の理由で長時間
- * 応答しない場合に、応答バブルが「考え中...」のまま無期限に固まって見える
- * (ユーザーからは「AIに問い合わせに行ったままハングアップする」ように見える)
- * ことを防ぐため、一定時間で必ず打ち切って結果を返す。DB呼び出し自体の
- * 例外も同様に捕捉し、握りつぶさずエラーとして返す(CLAUDE.mdルール8)。
+ * DB問い合わせ(countSharesMatchingKeyword/countVectorizedAnswers等)が
+ * データ量等の理由で長時間応答しない場合に、応答バブルが「考え中...」の
+ * まま無期限に固まって見える(ユーザーからは「AIに問い合わせに行ったまま
+ * ハングアップする」ように見える)ことを防ぐため、一定時間で必ず打ち切って
+ * 結果を返す。DB呼び出し自体の例外も同様に捕捉し、握りつぶさずエラーとして
+ * 返す(CLAUDE.mdルール8)。
  */
 async function raceWithTimeout<T>(promise: Promise<T>, ms: number): Promise<RaceOutcome<T>> {
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -211,12 +222,29 @@ export async function interpretAichatSlashCommand(
     return { handled: true, response: formatAichatSearchResults(keyword, outcome.value) };
   }
 
+  if (subcommand === 'vcount') {
+    if (!deps.countVectorizedAnswers) {
+      return { handled: true, response: formatVectorizedAnswerCount(0) };
+    }
+    const outcome = await raceWithTimeout(deps.countVectorizedAnswers(), AICHAT_SEARCH_TIMEOUT_MS);
+    if (outcome.status === 'timeout') {
+      return {
+        handled: true,
+        response: `❌ /neko vcount がタイムアウトしました(${AICHAT_SEARCH_TIMEOUT_MS / 1000}秒以内に応答がありませんでした)。データ量が多い可能性があります。時間をおいて再度お試しください。`,
+      };
+    }
+    if (outcome.status === 'error') {
+      return { handled: true, response: `❌ /neko vcount でエラーが発生しました: ${outcome.message}` };
+    }
+    return { handled: true, response: formatVectorizedAnswerCount(outcome.value) };
+  }
+
   if (subcommand === 'help') {
     return { handled: true, response: formatAichatSlashCommandHelp() };
   }
 
   return {
     handled: true,
-    response: `❌ 未対応のサブコマンドです: ${subcommand || '(なし)'}\n利用可能なコマンド: /neko hms, /neko cal, /neko clog, /neko limit, /neko search, /neko help\n詳細は /neko help を実行してください`,
+    response: `❌ 未対応のサブコマンドです: ${subcommand || '(なし)'}\n利用可能なコマンド: /neko hms, /neko cal, /neko clog, /neko limit, /neko search, /neko vcount, /neko help\n詳細は /neko help を実行してください`,
   };
 }

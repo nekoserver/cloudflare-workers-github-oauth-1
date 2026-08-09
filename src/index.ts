@@ -3949,6 +3949,13 @@ app.post('/api/aichat', authMiddleware, async (c) => {
       const { results } = await searchAiChatShares(db, user.sub, keyword);
       return results.length;
     },
+    countVectorizedAnswers: async () => {
+      if (!c.env.DB) return 0;
+      const row = await c.env.DB.prepare(
+        'SELECT COUNT(DISTINCT share_id) AS cnt FROM aichat_answer_vectors WHERE user_id = ?'
+      ).bind(user.sub).first<{ cnt: number }>();
+      return row?.cnt ?? 0;
+    },
   });
   if (slashCommand.handled) {
     return jsonUtf8({ response: slashCommand.response, usedModel: 'local/neko', systemPromptMode });

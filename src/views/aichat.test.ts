@@ -1435,6 +1435,17 @@ describe('ナビバー モデル選択ドロップダウン', () => {
     expect(fn).toContain('searchAiChatShares(');
   });
 
+  it('index.ts の /api/aichat が countVectorizedAnswers を渡す（/neko vcount用、aichat_answer_vectorsの件数を返す）', () => {
+    const { readFileSync } = require('node:fs');
+    const { resolve } = require('node:path');
+    const src = readFileSync(resolve(__dirname, '..', 'index.ts'), 'utf-8');
+    const idx = src.indexOf("app.post('/api/aichat'");
+    expect(idx).toBeGreaterThan(-1);
+    const fn = src.slice(idx, idx + 1800);
+    expect(fn).toContain('countVectorizedAnswers:');
+    expect(fn).toContain('SELECT COUNT(DISTINCT share_id) AS cnt FROM aichat_answer_vectors WHERE user_id = ?');
+  });
+
   it('renderAiResultInModal も /neko コマンドの応答時は共有リンク行(appendAiResponseRow)を表示しない', () => {
     const html = getAiChatPage(minimalUser);
     const idx = html.indexOf('function renderAiResultInModal(');
@@ -2025,7 +2036,7 @@ describe('AIチャット応答の自動保存（auto-save to ai_chat_shares）',
     const src = readFileSync(resolve(__dirname, '..', 'index.ts'), 'utf-8');
     const idx = src.indexOf("app.post('/api/aichat'");
     expect(idx).toBeGreaterThan(-1);
-    const fn = src.slice(idx, idx + 5900);
+    const fn = src.slice(idx, idx + 6300);
     expect(fn).toContain('INSERT INTO ai_chat_shares');
   });
 
@@ -2035,7 +2046,7 @@ describe('AIチャット応答の自動保存（auto-save to ai_chat_shares）',
     const src = readFileSync(resolve(__dirname, '..', 'index.ts'), 'utf-8');
     const idx = src.indexOf("app.post('/api/aichat'");
     expect(idx).toBeGreaterThan(-1);
-    const fn = src.slice(idx, idx + 5800);
+    const fn = src.slice(idx, idx + 6200);
     expect(fn).toContain('shareId');
   });
 
@@ -2045,7 +2056,7 @@ describe('AIチャット応答の自動保存（auto-save to ai_chat_shares）',
     const src = readFileSync(resolve(__dirname, '..', 'index.ts'), 'utf-8');
     const idx = src.indexOf("app.post('/api/aichat'");
     expect(idx).toBeGreaterThan(-1);
-    const fn = src.slice(idx, idx + 5400);
+    const fn = src.slice(idx, idx + 5800);
     expect(fn).toContain('userHash');
   });
 
