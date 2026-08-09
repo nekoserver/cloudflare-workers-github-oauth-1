@@ -637,6 +637,147 @@ describe('getWebGLSolarPage', () => {
     expect(helioM![0]).not.toContain('2*ecc*Math.sin(L)');
   });
 
+  // ペルセウス座流星群の輻射点(RA 3h04m ≈ 46度, Dec +58度)を黄道座標に変換すると
+  // λ ≈ 61.8度, β ≈ +38.8度になる。このページの天球座標系は黄道座標(λ, β)が
+  // 前提のため、赤道座標の値(46度/58度)をそのまま入れると輻射点が実際の位置から
+  // 経度約16度・緯度約19度ずれる。
+  it('ペルセウス座流星群の輻射点が黄道座標(λ約62度, β約39度)で登録されている', () => {
+    const lonM = html.match(/var PERS_LON = ([\d.]+) \* Math\.PI \/ 180;/);
+    const latM = html.match(/var PERS_LAT = ([\d.]+) \* Math\.PI \/ 180;/);
+    expect(lonM).not.toBeNull();
+    expect(latM).not.toBeNull();
+    expect(Math.abs(parseFloat(lonM![1]) - 61.8), '黄道経度λ').toBeLessThan(2);
+    expect(Math.abs(parseFloat(latM![1]) - 38.8), '黄道緯度β').toBeLessThan(2);
+  });
+
+  it('今日の空モードでは輻射点を恒星と同じprojectEclipticSkyで投影する', () => {
+    const m = html.match(/function drawMeteors\(dt\) \{[\s\S]*?\n  \}/);
+    expect(m).not.toBeNull();
+    // 今日の空モードの恒星は projectEclipticSky(地軸傾き回転込み)で投影される。
+    // 輻射点だけ projectSky を使うと恒星に対して位置がずれる。
+    expect(m![0]).toContain("skyViewMode === 'today' ? projectEclipticSky : projectSky");
+    expect(m![0]).not.toContain('var persPos = projectSky(PERS_LON, PERS_LAT);');
+  });
+
+  // ペルセウス座の主要7星の黄道座標(J2000)。赤道座標(RA/Dec)から
+  // λ = atan2(sinα cosε + tanδ sinε, cosα), sinβ = sinδ cosε − cosδ sinε sinα で変換。
+  it('ペルセウス座の主要7星が黄道座標(J2000)で登録されている', () => {
+    const { lons, lats } = extractRadArrays();
+    const expected: Array<{ idx: number; name: string; lon: number; lat: number }> = [
+      { idx: 28, name: 'ミルファク(α)',   lon: 1.0835, lat: 0.5261 },
+      { idx: 29, name: 'アルゴル(β)',     lon: 0.9804, lat: 0.3917 },
+      { idx: 30, name: 'ガンマ・ペルセイ', lon: 1.0476, lat: 0.6027 },
+      { idx: 31, name: 'デルタ・ペルセイ', lon: 1.1308, lat: 0.4767 },
+      { idx: 32, name: 'イプシロン・ペルセイ', lon: 1.1464, lat: 0.3339 },
+      { idx: 33, name: 'ゼータ・ペルセイ', lon: 1.1015, lat: 0.1978 },
+      { idx: 34, name: 'エータ・ペルセイ', lon: 1.0245, lat: 0.6543 },
+    ];
+    for (const e of expected) {
+      expect(Math.abs(lons[e.idx] - e.lon), `${e.name} の黄道経度`).toBeLessThan(0.02);
+      expect(Math.abs(lats[e.idx] - e.lat), `${e.name} の黄道緯度`).toBeLessThan(0.02);
+    }
+  });
+
+  it('ペルセウス座の星座線が天球モードとトップ俯瞰図の両方に登録されている', () => {
+    const skyM = html.match(/var skyConstellationLines = \[([\s\S]*?)\n  \];/);
+    expect(skyM).not.toBeNull();
+    const persLine = skyM![1].match(/name: 'ペルセウス座'[^\n]*indices: \[([^\]]*)\]/);
+    expect(persLine, '天球モードのペルセウス座星座線').not.toBeNull();
+    const idxs = persLine![1].split(',').map((s) => parseInt(s.trim(), 10));
+    // α(28)・β(29)を含む主要星を結ぶ
+    expect(idxs).toContain(28);
+    expect(idxs).toContain(29);
+    const { lons } = extractRadArrays();
+    for (const idx of idxs) {
+      expect(idx).toBeGreaterThanOrEqual(0);
+      expect(idx).toBeLessThan(lons.length);
+    }
+    const topM = html.match(/var constellationLines = \[([\s\S]*?)\n  \];/);
+    expect(topM).not.toBeNull();
+    expect(topM![1], 'トップ俯瞰図のペルセウス座星座線').toContain("name: 'ペルセウス座'");
+  });
+
+  it('ミルファクとアルゴルが namedStars に登録され、輻射点がペルセウス座の近くにある', () => {
+    expect(html).toContain("name: 'ミルファク'");
+    expect(html).toContain("name: 'アルゴル'");
+    // 輻射点(λ61.8度, β38.8度)はγ星(λ60.0度, β34.5度)・η星(λ58.7度, β37.5度)の近傍
+    const { lons, lats } = extractRadArrays();
+    const radLon = (61.8 * Math.PI) / 180;
+    const radLat = (38.8 * Math.PI) / 180;
+    const dGamma = Math.hypot(lons[30] - radLon, lats[30] - radLat);
+    const dEta = Math.hypot(lons[34] - radLon, lats[34] - radLat);
+    expect(dGamma).toBeLessThan(0.12);
+    expect(dEta).toBeLessThan(0.12);
+  });
+
+  it('地軸固定・自転モードでもペルセウス座を含む全星座線をdrawSkyConstellationLinesで描画する', () => {
+    // 地軸固定(drawPoleView)・自転(drawSpinView)は drawSkyConstellationLines(projectSky) を
+    // 呼ぶことで skyConstellationLines(ペルセウス座を含む)を描画する。この呼び出しが
+    // 消えると星座線トグルを入れてもペルセウス座が表示されなくなる。
+    for (const [start, end] of [
+      ['function drawPoleView', 'function drawSpinView'],
+      ['function drawSpinView', 'function drawSolsticeView'],
+    ] as const) {
+      const m = html.match(new RegExp(start + '[\\s\\S]*?\\n  ' + end));
+      expect(m, start).not.toBeNull();
+      expect(m![0], start + ' が星座線を描画する').toContain('drawSkyConstellationLines(projectSky);');
+    }
+    // ペルセウス座の線がsummerTri等のようにモードごとの個別実装ではなく
+    // skyConstellationLines 側にあることを確認(登録漏れ検知)
+    const skyM = html.match(/var skyConstellationLines = \[([\s\S]*?)\n  \];/);
+    expect(skyM).not.toBeNull();
+    expect(skyM![1]).toContain("name: 'ペルセウス座'");
+  });
+
+  it('今日の空モードでもペルセウス座を含む全星座線を恒星と同じprojectEclipticSkyで描画する', () => {
+    // 今日の空(drawTodaySky)は drawSkyConstellationLines(projectEclipticSky) を呼ぶことで
+    // skyConstellationLines(ペルセウス座を含む)を恒星ドットと同じ投影で描画する。
+    // この呼び出しが消える、または projectSky に変わると、星座線トグルを入れても
+    // ペルセウス座が表示されない・恒星とずれて表示される退行になる。
+    const m = html.match(/function drawTodaySky\([\s\S]*?\n  function drawPoleView/);
+    expect(m).not.toBeNull();
+    expect(m![0]).toContain('drawSkyConstellationLines(projectEclipticSky);');
+    expect(m![0]).not.toContain('drawSkyConstellationLines(projectSky);');
+  });
+
+  it('今日の空モードの投影(backCull=-0.75)でペルセウス座方向を向けば主要7星を投影できる', () => {
+    const make = extractProject3D();
+    const project = make('today');
+    const { lons, lats } = extractRadArrays();
+    const centerLon = 1.06;
+    const centerLat = 0.45;
+    for (const idx of [28, 29, 30, 31, 32, 33, 34]) {
+      const lon = lons[idx] - centerLon;
+      const lat = lats[idx] - centerLat + 0.5;
+      const p = project(
+        Math.cos(lat) * Math.cos(lon),
+        Math.cos(lat) * Math.sin(lon),
+        Math.sin(lat)
+      );
+      expect(p, 'ペルセウス座 idx=' + idx + ' が投影可能').not.toBeNull();
+    }
+  });
+
+  it('地軸固定モードでペルセウス座方向を向いたとき主要7星がすべて画面内に投影できる', () => {
+    const make = extractProject3D();
+    const project = make('pole');
+    // extractProject3D は viewAngle=0 固定のため、ペルセウス座(λ約56〜66度)の
+    // 星を視線中心付近へ持ってくる回転を座標側に適用して検証する
+    const { lons, lats } = extractRadArrays();
+    const centerLon = 1.06;
+    const centerLat = 0.45;
+    for (const idx of [28, 29, 30, 31, 32, 33, 34]) {
+      const lon = lons[idx] - centerLon;
+      const lat = lats[idx] - centerLat + 0.5;
+      const p = project(
+        Math.cos(lat) * Math.cos(lon),
+        Math.cos(lat) * Math.sin(lon),
+        Math.sin(lat)
+      );
+      expect(p, 'ペルセウス座 idx=' + idx + ' が投影可能').not.toBeNull();
+    }
+  });
+
   it('レグルスの黄道緯度(starLat)が実際の値(約+0.46度)に近い', () => {
     const lonMatch = html.match(/var starLon = \[([^\]]*)\];/);
     const latMatch = html.match(/var starLat = \[([^\]]*)\];/);
