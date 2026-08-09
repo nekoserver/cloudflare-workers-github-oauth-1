@@ -1375,7 +1375,7 @@ describe('ナビバー モデル選択ドロップダウン', () => {
     const src = readFileSync(resolve(__dirname, '..', 'index.ts'), 'utf-8');
     const idx = src.indexOf("app.post('/api/aichat'");
     expect(idx).toBeGreaterThan(-1);
-    const fn = src.slice(idx, idx + 1900);
+    const fn = src.slice(idx, idx + 2300);
     expect(fn).toContain('body.model');
   });
 
@@ -1385,7 +1385,7 @@ describe('ナビバー モデル選択ドロップダウン', () => {
     const src = readFileSync(resolve(__dirname, '..', 'index.ts'), 'utf-8');
     const idx = src.indexOf("app.post('/api/aichat'");
     expect(idx).toBeGreaterThan(-1);
-    const fn = src.slice(idx, idx + 1500);
+    const fn = src.slice(idx, idx + 2300);
     const slashCommandIdx = fn.indexOf('interpretAichatSlashCommand(');
     const aiBindingCheckIdx = fn.indexOf('AI バインディングが未設定です');
     expect(slashCommandIdx).toBeGreaterThan(-1);
@@ -1422,6 +1422,18 @@ describe('ナビバー モデル選択ドロップダウン', () => {
     const fn = src.slice(idx, idx + 1500);
     expect(fn).toContain('fetchLatestCommitAgentLog:');
     expect(fn).toContain('SELECT commit_sha, commit_message, detected_agent_name, created_at FROM commit_agent_log ORDER BY id DESC LIMIT 1');
+  });
+
+  it('index.ts の /api/aichat が searchSharesWithKeywordCounts を渡す（/neko search用、質問文・回答文の検索+キーワード数付与）', () => {
+    const { readFileSync } = require('node:fs');
+    const { resolve } = require('node:path');
+    const src = readFileSync(resolve(__dirname, '..', 'index.ts'), 'utf-8');
+    const idx = src.indexOf("app.post('/api/aichat'");
+    expect(idx).toBeGreaterThan(-1);
+    const fn = src.slice(idx, idx + 1500);
+    expect(fn).toContain('searchSharesWithKeywordCounts:');
+    expect(fn).toContain('searchAiChatShares(');
+    expect(fn).toContain('enrichSearchResultsWithKeywordCounts(');
   });
 
   it('renderAiResultInModal も /neko コマンドの応答時は共有リンク行(appendAiResponseRow)を表示しない', () => {
@@ -2014,7 +2026,7 @@ describe('AIチャット応答の自動保存（auto-save to ai_chat_shares）',
     const src = readFileSync(resolve(__dirname, '..', 'index.ts'), 'utf-8');
     const idx = src.indexOf("app.post('/api/aichat'");
     expect(idx).toBeGreaterThan(-1);
-    const fn = src.slice(idx, idx + 5500);
+    const fn = src.slice(idx, idx + 5900);
     expect(fn).toContain('INSERT INTO ai_chat_shares');
   });
 
@@ -2024,7 +2036,7 @@ describe('AIチャット応答の自動保存（auto-save to ai_chat_shares）',
     const src = readFileSync(resolve(__dirname, '..', 'index.ts'), 'utf-8');
     const idx = src.indexOf("app.post('/api/aichat'");
     expect(idx).toBeGreaterThan(-1);
-    const fn = src.slice(idx, idx + 5400);
+    const fn = src.slice(idx, idx + 5800);
     expect(fn).toContain('shareId');
   });
 
@@ -2034,7 +2046,7 @@ describe('AIチャット応答の自動保存（auto-save to ai_chat_shares）',
     const src = readFileSync(resolve(__dirname, '..', 'index.ts'), 'utf-8');
     const idx = src.indexOf("app.post('/api/aichat'");
     expect(idx).toBeGreaterThan(-1);
-    const fn = src.slice(idx, idx + 5000);
+    const fn = src.slice(idx, idx + 5400);
     expect(fn).toContain('userHash');
   });
 
