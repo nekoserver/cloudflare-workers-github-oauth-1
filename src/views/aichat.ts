@@ -3314,7 +3314,7 @@ export function getAiChatPage(user: {
       var usedModel = data.usedModel || selectedModel;
       var isLocalCommand = usedModel === 'local/neko';
       var isFallback = !!data.fallbackUsed || (data.usedModel != null && data.usedModel !== selectedModel);
-      var ansBubble = buildAssistantBubble(responseText, selectedModel, isFallback, extractRespUsage(data));
+      var ansBubble = buildAssistantBubble(responseText, selectedModel, isFallback, extractRespUsage(data), isLocalCommand);
       box.appendChild(ansBubble);
       if (!isLocalCommand) {
         appendAiResponseRow(box, question, responseText, usedModel, data.shareId, data.userHash);
@@ -6181,23 +6181,25 @@ export function getAiChatPage(user: {
       };
     }
 
-    function buildAssistantBubble(text, model, isFallback, usage) {
+    function buildAssistantBubble(text, model, isFallback, usage, isLocalCommand) {
       var el = document.createElement('div');
       el.className = 'chat-bubble assistant preview-area';
       el.innerHTML = parseMd(text);
-      var copyBtn = document.createElement('button');
-      copyBtn.className = 'bubble-copy-btn';
-      copyBtn.title = '回答をコピー';
-      copyBtn.textContent = '📋';
-      copyBtn.onclick = function(e) {
-        e.stopPropagation();
-        navigator.clipboard.writeText(text).then(function() {
-          copyBtn.textContent = '✓';
-          copyBtn.classList.add('copied');
-          setTimeout(function() { copyBtn.textContent = '📋'; copyBtn.classList.remove('copied'); }, 2000);
-        }).catch(function() {});
-      };
-      el.appendChild(copyBtn);
+      if (!isLocalCommand) {
+        var copyBtn = document.createElement('button');
+        copyBtn.className = 'bubble-copy-btn';
+        copyBtn.title = '回答をコピー';
+        copyBtn.textContent = '📋';
+        copyBtn.onclick = function(e) {
+          e.stopPropagation();
+          navigator.clipboard.writeText(text).then(function() {
+            copyBtn.textContent = '✓';
+            copyBtn.classList.add('copied');
+            setTimeout(function() { copyBtn.textContent = '📋'; copyBtn.classList.remove('copied'); }, 2000);
+          }).catch(function() {});
+        };
+        el.appendChild(copyBtn);
+      }
       if (isFallback) {
         var notice = document.createElement('div');
         notice.className = 'bubble-fallback-notice';
@@ -6217,10 +6219,10 @@ export function getAiChatPage(user: {
       return el;
     }
 
-    function appendBubble(text, role, model, isFallback, usage, imageDataUrl) {
+    function appendBubble(text, role, model, isFallback, usage, imageDataUrl, isLocalCommand) {
       var el;
       if (role === 'assistant') {
-        el = buildAssistantBubble(text, model, isFallback, usage);
+        el = buildAssistantBubble(text, model, isFallback, usage, isLocalCommand);
         if (model) {
           var wrap = document.createElement('div');
           wrap.className = 'chat-bubble-wrap';
@@ -6431,7 +6433,7 @@ export function getAiChatPage(user: {
             var usedModel = data.usedModel || lastModel;
             var isLocalCommand = usedModel === 'local/neko';
             var respUsage = extractRespUsage(data);
-            appendBubble(responseText, 'assistant', isLocalCommand ? null : lastModel, data.fallbackUsed, respUsage);
+            appendBubble(responseText, 'assistant', isLocalCommand ? null : lastModel, data.fallbackUsed, respUsage, undefined, isLocalCommand);
             if (!isLocalCommand) {
               appendShareBtn(currentMsg, responseText, usedModel, data.shareId, data.userHash);
             }
