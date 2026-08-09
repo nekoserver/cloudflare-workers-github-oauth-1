@@ -81,6 +81,7 @@ export function formatAichatSlashCommandHelp(): string {
     '| /neko cal | 当月カレンダーをMarkdownテーブルで表示します |',
     '| /neko clog | 直近のコミットエージェントログを表示します |',
     '| /neko limit | Codex / Claude Code のリミット確認先を表示します |',
+    '| /neko search <キーワード> | 質問文・回答文にキーワードを含む共有を、回答文のキーワード数が多い順に表示します |',
     '| /neko help | このサブコマンド一覧を表示します |',
   ].join('\n');
 }
@@ -110,8 +111,33 @@ export function formatCommitAgentLogEntry(row: CommitAgentLogRow | null): string
   return ['```', ...lines, '```'].join('\n');
 }
 
+export type AichatSearchResultRow = {
+  id: string;
+  user_hash: string;
+  question: string;
+  keywordCount: number;
+};
+
+/**
+ * `/neko search <キーワード>` の検索結果を、回答文に含まれるキーワード数
+ * (keywordCount)の多い順にMarkdownの箇条書きで表示する。同数の場合は
+ * 渡された順序(検索元は質問日時の新しい順)を保つ(安定ソート)。
+ */
+export function formatAichatSearchResults(keyword: string, results: AichatSearchResultRow[]): string {
+  if (!keyword) {
+    return '❌ キーワードを指定してください: /neko search <キーワード>';
+  }
+  if (results.length === 0) {
+    return `「${keyword}」を質問文・回答文に含む共有は見つかりませんでした`;
+  }
+  const sorted = results.slice().sort((a, b) => b.keywordCount - a.keywordCount);
+  const lines = sorted.map((r) => `- [${r.question}](/s/${r.user_hash}/${r.id})（キーワード数: ${r.keywordCount}）`);
+  return [`## /neko search 「${keyword}」の検索結果（回答文のキーワード数が多い順）`, ...lines].join('\n');
+}
+
 export type AichatSlashCommandDeps = {
   fetchLatestCommitAgentLog: () => Promise<CommitAgentLogRow | null>;
+  searchSharesWithKeywordCounts?: (keyword: string) => Promise<AichatSearchResultRow[]>;
 };
 
 export type AichatSlashCommandResult =
@@ -153,12 +179,21 @@ export async function interpretAichatSlashCommand(
     return { handled: true, response: formatAiToolLimitInfo(now) };
   }
 
+  if (subcommand === 'search') {
+    const keyword = parts.slice(2).join(' ').trim();
+    if (!keyword || !deps.searchSharesWithKeywordCounts) {
+      return { handled: true, response: formatAichatSearchResults(keyword, []) };
+    }
+    const results = await deps.searchSharesWithKeywordCounts(keyword);
+    return { handled: true, response: formatAichatSearchResults(keyword, results) };
+  }
+
   if (subcommand === 'help') {
     return { handled: true, response: formatAichatSlashCommandHelp() };
   }
 
   return {
     handled: true,
-    response: `❌ 未対応のサブコマンドです: ${subcommand || '(なし)'}\n利用可能なコマンド: /neko hms, /neko cal, /neko clog, /neko limit, /neko help\n詳細は /neko help を実行してください`,
+    response: `❌ 未対応のサブコマンドです: ${subcommand || '(なし)'}\n利用可能なコマンド: /neko hms, /neko cal, /neko clog, /neko limit, /neko search, /neko help\n詳細は /neko help を実行してください`,
   };
 }
