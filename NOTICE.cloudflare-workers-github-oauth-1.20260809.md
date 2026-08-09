@@ -17,8 +17,24 @@
   実行後は `total=2380` になる。git の 2882 との差 502 は**PR #418 以前の歴史的な
   登録漏れ**であり、埋めるには D1 の全行ダンプと突き合わせが必要(未実施)。
 - 教訓: seq_num は「git上の絶対位置」ではなく「登録順の連番」として運用されている。
-  追記時は必ず `MAX(seq_num)` と直近数行の commit_hash を取得し、git 履歴上の位置と
-  突き合わせてから連番を振ること。
+  **seq_num を SQL に決め打ちで書き込んではならない**。決め打ちは実行時点のD1の
+  状態とずれた瞬間に不整合を生む(今回の乖離も、`INSERT OR IGNORE` で重複スキップ
+  された行が番号だけ消費する飛びも、これが原因)。追記SQLは必ず次の動的採番
+  パターンで書くこと:
+
+  ```sql
+  WITH base AS (SELECT COALESCE(MAX(seq_num), 0) AS n FROM repo_commit_index WHERE repo_name = '<repo>'),
+  nc(ord, commit_hash, pr, msg) AS (VALUES (1, '<hash>', NULL, '<subject>'))
+  INSERT OR IGNORE INTO repo_commit_index (commit_hash, seq_num, github_pr_number, commit_message, repo_name)
+  SELECT nc.commit_hash, base.n + ROW_NUMBER() OVER (ORDER BY nc.ord), nc.pr, nc.msg, '<repo>'
+  FROM nc, base
+  WHERE nc.commit_hash NOT IN (SELECT commit_hash FROM repo_commit_index WHERE repo_name = '<repo>');
+  ```
+
+  実行時に `MAX(seq_num)` から連番を振り、登録済みハッシュを `WHERE` で除外して
+  から採番するため、決め打ちによる乖離も番号飛びも構造的に発生せず、再実行しても
+  冪等になる(sqlite3 でシミュレーション検証済み)。複数文に分割しても各文が
+  `MAX(seq_num)` を取り直すので連番が続く。
 
 ## Claude Code on the Web のクローンは shallow(履歴切り詰め)
 
