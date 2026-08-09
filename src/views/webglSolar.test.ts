@@ -637,6 +637,28 @@ describe('getWebGLSolarPage', () => {
     expect(helioM![0]).not.toContain('2*ecc*Math.sin(L)');
   });
 
+  // ペルセウス座流星群の輻射点(RA 3h04m ≈ 46度, Dec +58度)を黄道座標に変換すると
+  // λ ≈ 61.8度, β ≈ +38.8度になる。このページの天球座標系は黄道座標(λ, β)が
+  // 前提のため、赤道座標の値(46度/58度)をそのまま入れると輻射点が実際の位置から
+  // 経度約16度・緯度約19度ずれる。
+  it('ペルセウス座流星群の輻射点が黄道座標(λ約62度, β約39度)で登録されている', () => {
+    const lonM = html.match(/var PERS_LON = ([\d.]+) \* Math\.PI \/ 180;/);
+    const latM = html.match(/var PERS_LAT = ([\d.]+) \* Math\.PI \/ 180;/);
+    expect(lonM).not.toBeNull();
+    expect(latM).not.toBeNull();
+    expect(Math.abs(parseFloat(lonM![1]) - 61.8), '黄道経度λ').toBeLessThan(2);
+    expect(Math.abs(parseFloat(latM![1]) - 38.8), '黄道緯度β').toBeLessThan(2);
+  });
+
+  it('今日の空モードでは輻射点を恒星と同じprojectEclipticSkyで投影する', () => {
+    const m = html.match(/function drawMeteors\(dt\) \{[\s\S]*?\n  \}/);
+    expect(m).not.toBeNull();
+    // 今日の空モードの恒星は projectEclipticSky(地軸傾き回転込み)で投影される。
+    // 輻射点だけ projectSky を使うと恒星に対して位置がずれる。
+    expect(m![0]).toContain("skyViewMode === 'today' ? projectEclipticSky : projectSky");
+    expect(m![0]).not.toContain('var persPos = projectSky(PERS_LON, PERS_LAT);');
+  });
+
   it('レグルスの黄道緯度(starLat)が実際の値(約+0.46度)に近い', () => {
     const lonMatch = html.match(/var starLon = \[([^\]]*)\];/);
     const latMatch = html.match(/var starLat = \[([^\]]*)\];/);

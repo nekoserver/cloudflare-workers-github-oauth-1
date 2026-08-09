@@ -250,8 +250,10 @@ input[type=range] { accent-color:#fdb813; width:120px; }
   var showMeteors = false;
   var meteors = [];
   var meteorSpawnTimer = 0;
-  var PERS_LON = 46 * Math.PI / 180;
-  var PERS_LAT = 58 * Math.PI / 180;
+  // ペルセウス座流星群の輻射点。天球座標系は黄道座標(λ, β)が前提のため、
+  // 赤道座標(RA 3h04m ≈ 46度, Dec +58度)を黄道座標へ変換した値を使う。
+  var PERS_LON = 61.8 * Math.PI / 180;
+  var PERS_LAT = 38.8 * Math.PI / 180;
 
   btnMeteors.addEventListener('click', function() {
     showMeteors = !showMeteors;
@@ -2019,7 +2021,10 @@ input[type=range] { accent-color:#fdb813; width:120px; }
 
   function drawMeteors(dt) {
     if (!showMeteors || skyViewMode === '' || skyViewMode === 'solstice') return;
-    var persPos = projectSky(PERS_LON, PERS_LAT);
+    // 今日の空モードの恒星は projectEclipticSky で投影されるため、輻射点も
+    // 同じ投影関数に揃える(projectSky のままだと恒星に対して位置がずれる)。
+    var persProj = skyViewMode === 'today' ? projectEclipticSky : projectSky;
+    var persPos = persProj(PERS_LON, PERS_LAT);
     var persX = persPos ? persPos.x : W * 0.35;
     var persY = persPos ? persPos.y : H * 0.22;
     meteorSpawnTimer -= dt;
