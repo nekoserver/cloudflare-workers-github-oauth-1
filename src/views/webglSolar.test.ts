@@ -659,6 +659,57 @@ describe('getWebGLSolarPage', () => {
     expect(m![0]).not.toContain('var persPos = projectSky(PERS_LON, PERS_LAT);');
   });
 
+  // ペルセウス座の主要7星の黄道座標(J2000)。赤道座標(RA/Dec)から
+  // λ = atan2(sinα cosε + tanδ sinε, cosα), sinβ = sinδ cosε − cosδ sinε sinα で変換。
+  it('ペルセウス座の主要7星が黄道座標(J2000)で登録されている', () => {
+    const { lons, lats } = extractRadArrays();
+    const expected: Array<{ idx: number; name: string; lon: number; lat: number }> = [
+      { idx: 28, name: 'ミルファク(α)',   lon: 1.0835, lat: 0.5261 },
+      { idx: 29, name: 'アルゴル(β)',     lon: 0.9804, lat: 0.3917 },
+      { idx: 30, name: 'ガンマ・ペルセイ', lon: 1.0476, lat: 0.6027 },
+      { idx: 31, name: 'デルタ・ペルセイ', lon: 1.1308, lat: 0.4767 },
+      { idx: 32, name: 'イプシロン・ペルセイ', lon: 1.1464, lat: 0.3339 },
+      { idx: 33, name: 'ゼータ・ペルセイ', lon: 1.1015, lat: 0.1978 },
+      { idx: 34, name: 'エータ・ペルセイ', lon: 1.0245, lat: 0.6543 },
+    ];
+    for (const e of expected) {
+      expect(Math.abs(lons[e.idx] - e.lon), `${e.name} の黄道経度`).toBeLessThan(0.02);
+      expect(Math.abs(lats[e.idx] - e.lat), `${e.name} の黄道緯度`).toBeLessThan(0.02);
+    }
+  });
+
+  it('ペルセウス座の星座線が天球モードとトップ俯瞰図の両方に登録されている', () => {
+    const skyM = html.match(/var skyConstellationLines = \[([\s\S]*?)\n  \];/);
+    expect(skyM).not.toBeNull();
+    const persLine = skyM![1].match(/name: 'ペルセウス座'[^\n]*indices: \[([^\]]*)\]/);
+    expect(persLine, '天球モードのペルセウス座星座線').not.toBeNull();
+    const idxs = persLine![1].split(',').map((s) => parseInt(s.trim(), 10));
+    // α(28)・β(29)を含む主要星を結ぶ
+    expect(idxs).toContain(28);
+    expect(idxs).toContain(29);
+    const { lons } = extractRadArrays();
+    for (const idx of idxs) {
+      expect(idx).toBeGreaterThanOrEqual(0);
+      expect(idx).toBeLessThan(lons.length);
+    }
+    const topM = html.match(/var constellationLines = \[([\s\S]*?)\n  \];/);
+    expect(topM).not.toBeNull();
+    expect(topM![1], 'トップ俯瞰図のペルセウス座星座線').toContain("name: 'ペルセウス座'");
+  });
+
+  it('ミルファクとアルゴルが namedStars に登録され、輻射点がペルセウス座の近くにある', () => {
+    expect(html).toContain("name: 'ミルファク'");
+    expect(html).toContain("name: 'アルゴル'");
+    // 輻射点(λ61.8度, β38.8度)はγ星(λ60.0度, β34.5度)・η星(λ58.7度, β37.5度)の近傍
+    const { lons, lats } = extractRadArrays();
+    const radLon = (61.8 * Math.PI) / 180;
+    const radLat = (38.8 * Math.PI) / 180;
+    const dGamma = Math.hypot(lons[30] - radLon, lats[30] - radLat);
+    const dEta = Math.hypot(lons[34] - radLon, lats[34] - radLat);
+    expect(dGamma).toBeLessThan(0.12);
+    expect(dEta).toBeLessThan(0.12);
+  });
+
   it('レグルスの黄道緯度(starLat)が実際の値(約+0.46度)に近い', () => {
     const lonMatch = html.match(/var starLon = \[([^\]]*)\];/);
     const latMatch = html.match(/var starLat = \[([^\]]*)\];/);
