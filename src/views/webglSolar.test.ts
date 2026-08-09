@@ -778,6 +778,192 @@ describe('getWebGLSolarPage', () => {
     }
   });
 
+  // 星座線ボタンを「星座設定」モーダルへ置き換え、ペルセウス座・おうし座・うお座・
+  // おひつじ座・ぎょしゃ座の各星座について、星の名前と星座線を独立してON/OFFできる
+  // ようにした機能の回帰テスト。
+  //
+  // 故障シナリオ:
+  // (1) 旧btnConstの参照が残っていて構文エラー・未定義参照になる
+  // (2) モーダルが最上位レイヤーで開かず、固定z-indexで裏に隠れる(既存モーダルとの重なり)
+  // (3) 5星座のトグルが同じ変数を共有し、独立してコントロールできない
+  // (4) ぎょしゃ座がデータに追加されただけでモーダル側と結線されておらず操作不能
+  // (5) 星座線トグルOFF時に恒星ドット自体は消えるべきではないのに消えてしまう、
+  //     または逆に星座名トグルと星座線トグルが混線する
+  // (6) 夏の大三角・北斗七星・南十字(モーダル対象外の旧showConstellations)を
+  //     操作する手段が失われる
+
+  it('旧「星座線」ボタン(btnConst)が撤去され、モーダル呼び出しボタンに置き換わっている', () => {
+    expect(html).not.toContain('id="btnConst"');
+    expect(html).not.toContain(">星座線</button>");
+    expect(html).toContain('id="btnConstModal"');
+    expect(html).toContain('aria-controls="constellationModal"');
+  });
+
+  it('星座設定モーダルが最上位レイヤー用にgetNextZ()で動的z-indexを設定してから開く', () => {
+    const openM = html.match(/function openConstellationModal\(\) \{[\s\S]*?\n  \}/);
+    expect(openM).not.toBeNull();
+    expect(openM![0]).toContain('getNextZ()');
+    expect(openM![0]).toContain("constellationModal.classList.add('open')");
+    // 固定z-indexの直書き(例: z-index:1100)がないこと
+    expect(openM![0]).not.toMatch(/zIndex\s*=\s*['"]?\d/);
+
+    const getNextZM = html.match(/function getNextZ\(\) \{[\s\S]*?\n  \}/);
+    expect(getNextZM).not.toBeNull();
+    expect(getNextZM![0]).toContain('querySelectorAll');
+  });
+
+  it('モーダルは閉じるボタン・背景クリック・Escapeキーのいずれでも閉じる', () => {
+    expect(html).toContain("btnConstModalClose.addEventListener('click', closeConstellationModal);");
+    expect(html).toMatch(/constellationModal\.addEventListener\('click', function\(e\) \{\s*if \(e\.target === constellationModal\) closeConstellationModal\(\);/);
+    expect(html).toMatch(/if \(e\.key === 'Escape' && constellationModal\.classList\.contains\('open'\)\) closeConstellationModal\(\);/);
+  });
+
+  it('CONST_GROUPSがペルセウス座・おうし座・うお座・おひつじ座・ぎょしゃ座の5星座を独立したキーで持つ', () => {
+    const m = html.match(/var CONST_GROUPS = \[([\s\S]*?)\n  \];/);
+    expect(m).not.toBeNull();
+    for (const [key, name] of [
+      ['perseus', 'ペルセウス座'],
+      ['taurus', 'おうし座'],
+      ['pisces', 'うお座'],
+      ['aries', 'おひつじ座'],
+      ['auriga', 'ぎょしゃ座'],
+    ]) {
+      expect(m![1], key).toContain("key: '" + key + "'");
+      expect(m![1], name).toContain("name: '" + name + "'");
+    }
+  });
+
+  it('constStateは5星座それぞれに独立したnames/linesフィールドを持ち、初期値は名前ON・線OFF', () => {
+    const m = html.match(/var constState = \{[\s\S]*?\n  \};/);
+    expect(m).not.toBeNull();
+    for (const key of ['perseus', 'taurus', 'pisces', 'aries', 'auriga']) {
+      const re = new RegExp(key + ':\\s*\\{\\s*names:\\s*true,\\s*lines:\\s*false\\s*\\}');
+      expect(m![0], key + ' の初期状態').toMatch(re);
+    }
+  });
+
+  function extractStarLabelVisible() {
+    const groupsM = html.match(/var CONST_GROUPS = \[([\s\S]*?)\n  \];/);
+    const stateM = html.match(/var constState = \{[\s\S]*?\n  \};/);
+    const mapM = html.match(/var starIdxToConstKey = \{\};[\s\S]*?\n  \}/);
+    const fnM = html.match(/function starLabelVisible\(idx\) \{[\s\S]*?\n  \}/);
+    expect(groupsM).not.toBeNull();
+    expect(stateM).not.toBeNull();
+    expect(mapM).not.toBeNull();
+    expect(fnM).not.toBeNull();
+    const factory = new Function(
+      'showStarLabels',
+      groupsM![0] + '\n' + stateM![0] + '\n' + mapM![0] + '\n' + fnM![0] +
+      '\nreturn { starLabelVisible: starLabelVisible, constState: constState, CONST_GROUPS: CONST_GROUPS };'
+    );
+    return factory;
+  }
+
+  it('starLabelVisibleは5星座に属する星をconstStateで、それ以外をshowStarLabelsで判定する', () => {
+    const factory = extractStarLabelVisible();
+    const withGlobalOn = factory(true);
+    // idx28はミルファク(ペルセウス座)。ペルセウス座のnamesをOFFにすると
+    // showStarLabels(全体)がONでも非表示になるべき(独立制御の証明)。
+    withGlobalOn.constState.perseus.names = false;
+    expect(withGlobalOn.starLabelVisible(28), 'ペルセウス座OFF・global ONでも非表示').toBe(false);
+
+    const withGlobalOff = factory(false);
+    // idx11はカペラ(ぎょしゃ座)。ぎょしゃ座のnamesをONにすると
+    // showStarLabels(全体)がOFFでも表示されるべき(独立制御の証明)。
+    withGlobalOff.constState.auriga.names = true;
+    expect(withGlobalOff.starLabelVisible(11), 'ぎょしゃ座ON・global OFFでも表示').toBe(true);
+
+    // 5星座に属さない星(idx0=シリウス)はglobalのshowStarLabelsにそのまま従う
+    const withGlobalOff2 = factory(false);
+    expect(withGlobalOff2.starLabelVisible(0), '無関係の恒星はglobal OFFに従う').toBe(false);
+    const withGlobalOn2 = factory(true);
+    expect(withGlobalOn2.starLabelVisible(0), '無関係の恒星はglobal ONに従う').toBe(true);
+  });
+
+  it('drawSkyConstellationLinesは星座ごとにconstState[key].linesを見て個別に描画し、グローバルなshowConstellationsには依存しない', () => {
+    const m = html.match(/function drawSkyConstellationLines\(projector\) \{[\s\S]*?\n  \}/);
+    expect(m).not.toBeNull();
+    expect(m![0]).not.toContain('if (!showConstellations) return;');
+    expect(m![0]).toContain('var sclState = constState[scl.key];');
+    expect(m![0]).toContain('if (!sclState || !sclState.lines) continue;');
+  });
+
+  it('トップ俯瞰図のconstellationLines描画も星座ごとにconstState[key].linesで個別判定する', () => {
+    const frameM = html.match(/function frame\(now\) \{[\s\S]*?\n  \}/);
+    expect(frameM).not.toBeNull();
+    const loopM = frameM![0].match(/for \(var cli = 0; cli < constellationLines\.length; cli\+\+\) \{[\s\S]*?\n    \}/);
+    expect(loopM).not.toBeNull();
+    expect(loopM![0]).toContain('var lineState = constState[line.key];');
+    expect(loopM![0]).toContain('if (!lineState || !lineState.lines) continue;');
+  });
+
+  it('ぎょしゃ座の星座線がskyConstellationLines・constellationLinesの両方にkey付きで登録され、インデックスが範囲内にある', () => {
+    const { lons } = extractRadArrays();
+    const skyM = html.match(/var skyConstellationLines = \[([\s\S]*?)\n  \];/);
+    expect(skyM).not.toBeNull();
+    const aurigaLine = skyM![1].match(/key: 'auriga'[^\n]*indices: \[([^\]]*)\]/);
+    expect(aurigaLine, '天球モードのぎょしゃ座星座線').not.toBeNull();
+    const idxs = aurigaLine![1].split(',').map((s) => parseInt(s.trim(), 10));
+    expect(idxs).toContain(11); // カペラ
+    for (const idx of idxs) {
+      expect(idx).toBeGreaterThanOrEqual(0);
+      expect(idx).toBeLessThan(lons.length);
+    }
+    const topM = html.match(/var constellationLines = \[([\s\S]*?)\n  \];/);
+    expect(topM).not.toBeNull();
+    expect(topM![1]).toContain("key: 'auriga'");
+    expect(topM![1]).toContain("name: 'ぎょしゃ座'");
+  });
+
+  it('ぎょしゃ座の新規3星(メンカリナン・シータ/イオタ・アウリガエ)が黄道座標(J2000)で登録されている', () => {
+    const { lons, lats } = extractRadArrays();
+    // 赤道座標(RA/Dec, J2000)から変換した期待値
+    const expected: Array<{ idx: number; name: string; lon: number; lat: number }> = [
+      { idx: 35, name: 'メンカリナン', lon: 1.5692, lat: 0.3754 },
+      { idx: 36, name: 'シータ・アウリガエ', lon: 1.5698, lat: 0.2404 },
+      { idx: 37, name: 'イオタ・アウリガエ', lon: 1.3376, lat: 0.1825 },
+    ];
+    for (const e of expected) {
+      expect(Math.abs(lons[e.idx] - e.lon), `${e.name} の黄道経度`).toBeLessThan(0.02);
+      expect(Math.abs(lats[e.idx] - e.lat), `${e.name} の黄道緯度`).toBeLessThan(0.02);
+    }
+    expect(html).toContain("name: 'メンカリナン'");
+    expect(html).toContain("name: 'シータ・アウリガエ'");
+    expect(html).toContain("name: 'イオタ・アウリガエ'");
+  });
+
+  it('カペラ(idx11)は既存のぎょしゃ座の一等星としてCONST_GROUPS.aurigaに含まれる', () => {
+    const m = html.match(/var CONST_GROUPS = \[([\s\S]*?)\n  \];/);
+    expect(m).not.toBeNull();
+    const aurigaGroup = m![1].match(/key: 'auriga'[^\n]*starIndices: \[([^\]]*)\]/);
+    expect(aurigaGroup).not.toBeNull();
+    const idxs = aurigaGroup![1].split(',').map((s) => parseInt(s.trim(), 10));
+    expect(idxs).toEqual([11, 35, 36, 37]);
+    expect(html).toContain("name: 'カペラ'");
+  });
+
+  it('モーダルの表本体はCONST_GROUPS由来の5行+その他行をJSで組み立て、静的HTMLに個別行を手書きしていない', () => {
+    // rule29対策: 5星座分をtemplate literal内に手書きすると escape/typo の
+    // リスクが上がるため、CONST_GROUPS からループ生成する実装になっていることを確認
+    expect(html).toContain('<tbody id="constTableBody"></tbody>');
+    expect(html).not.toMatch(/<tr[^>]*>\s*<td>ペルセウス座<\/td>/);
+    const buildM = html.match(/function buildConstellationModalRows\(\) \{[\s\S]*?\n  \}/);
+    expect(buildM).not.toBeNull();
+    expect(buildM![0]).toContain('CONST_GROUPS.length');
+    expect(buildM![0]).toContain("makeConstRow('other', 'その他(夏の大三角・北斗七星・南十字)', false)");
+  });
+
+  it('モーダルの「その他」行は既存のshowConstellations(夏の大三角・北斗七星・南十字)をそのままトグルする', () => {
+    const rowM = html.match(/function makeConstRow\(key, label, hasNames\) \{[\s\S]*?\n  \}/);
+    expect(rowM).not.toBeNull();
+    expect(rowM![0]).toContain("if (key === 'other') {");
+    expect(rowM![0]).toContain('showConstellations = !showConstellations;');
+    // 夏の大三角・北斗七星・南十字を描く既存ブロックは変わらずshowConstellationsを読む
+    const poleM = html.match(/function drawPoleView\(\)[\s\S]*?\n  function drawSpinView/);
+    expect(poleM).not.toBeNull();
+    expect(poleM![0]).toContain('if (showConstellations) {');
+  });
+
   it('レグルスの黄道緯度(starLat)が実際の値(約+0.46度)に近い', () => {
     const lonMatch = html.match(/var starLon = \[([^\]]*)\];/);
     const latMatch = html.match(/var starLat = \[([^\]]*)\];/);
