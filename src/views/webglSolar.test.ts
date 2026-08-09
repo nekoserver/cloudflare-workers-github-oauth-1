@@ -547,6 +547,96 @@ describe('getWebGLSolarPage', () => {
     expect(skyViewBody![0]).toContain(note);
   });
 
+  // 2026年8月12日の6惑星整列(水星・木星・火星・天王星・土星・海王星が
+  // 明け方の空に並ぶ)を「今日の空」モードが再現できることを検証する。
+  // 故障シナリオ: (1) helioXY の中心差が平均近点角 M=L-ϖ ではなく平均黄経 L を
+  // 使うと、幾何黄経が最大 2e rad ずれ(火星約10.7度、土星約6.4度)、土星が
+  // 海王星から離れて描かれ実際の並びと矛盾する。(2) realPlanets に天王星・
+  // 海王星がないと6惑星のうち2つが描画されない。
+  function extractPlanetLongitudes(jd: number) {
+    const normM = html.match(/function normD\(deg\) [^\n]*/);
+    const sunM = html.match(/function sunLonReal\(jd\) \{[\s\S]*?\n  \}/);
+    const helioM = html.match(/function helioXY\([^)]*\) \{[\s\S]*?\n  \}/);
+    const geoM = html.match(/function geoLonDeg\(px, py, ex, ey\) \{[\s\S]*?\n  \}/);
+    expect(normM).not.toBeNull();
+    expect(sunM).not.toBeNull();
+    expect(helioM).not.toBeNull();
+    expect(geoM).not.toBeNull();
+
+    const todayM = html.match(/var ePos = helioXY\([^\n]*\);\s*\n\s*var realPlanets = \[[\s\S]*?\n    \];/);
+    expect(todayM, '今日の空の realPlanets 定義').not.toBeNull();
+
+    const factory = new Function(
+      'jd',
+      normM![0] + '\n' + sunM![0] + '\n' + helioM![0] + '\n' + geoM![0] + '\n' +
+      todayM![0] + '\n' +
+      'var out = { sun: sunLonReal(jd) };\n' +
+      'for (var i = 0; i < realPlanets.length; i++) {\n' +
+      '  out[realPlanets[i].jaName] = geoLonDeg(realPlanets[i].h.x, realPlanets[i].h.y, ePos.x, ePos.y);\n' +
+      '}\n' +
+      'return out;'
+    );
+    return factory(jd) as Record<string, number>;
+  }
+
+  function westElongation(sunLon: number, lon: number) {
+    return ((sunLon - lon) % 360 + 360) % 360;
+  }
+
+  it('今日の空の realPlanets に天王星・海王星が含まれ、6惑星整列を描画できる', () => {
+    const todayM = html.match(/var realPlanets = \[[\s\S]*?\n    \];/);
+    expect(todayM).not.toBeNull();
+    for (const name of ['水星', '火星', '木星', '土星', '天王星', '海王星']) {
+      expect(todayM![0], name + ' が realPlanets に存在する').toContain("jaName: '" + name + "'");
+    }
+  });
+
+  it('2026/8/12 の各惑星の地心黄経が実際の6惑星整列の並びと一致する', () => {
+    // JD 2026-08-12 05:00UT ごろ(明け方)
+    const { julianDate } = extractEclipseHelpers();
+    const jd = julianDate(2026, 8, 12, 5);
+    const lons = extractPlanetLongitudes(jd);
+
+    // 太陽はしし座(約140度)
+    expect(lons.sun).toBeGreaterThan(136);
+    expect(lons.sun).toBeLessThan(143);
+
+    // 海王星はおひつじ座境界(約0〜5度)、土星はそのすぐ東(約20度以内)に並ぶ。
+    // 中心差を平均黄経で計算する旧実装では土星が約22.5度となり、この並びが崩れる。
+    const nep = lons['海王星'] > 180 ? lons['海王星'] - 360 : lons['海王星'];
+    expect(nep).toBeGreaterThan(-5);
+    expect(nep).toBeLessThan(8);
+    expect(lons['土星']).toBeGreaterThan(0);
+    expect(lons['土星']).toBeLessThan(20);
+    expect(Math.abs(lons['土星'] - nep), '土星と海王星が近接して並ぶ').toBeLessThan(15);
+
+    // 天王星はおうし座〜ふたご座境界(約58〜74度)
+    expect(lons['天王星']).toBeGreaterThan(58);
+    expect(lons['天王星']).toBeLessThan(74);
+
+    // 火星は太陽の西約35〜65度(天王星と水星の間)
+    const marsElong = westElongation(lons.sun, lons['火星']);
+    expect(marsElong).toBeGreaterThan(35);
+    expect(marsElong).toBeLessThan(65);
+
+    // 水星は西方最大離角(8/3 約19度W)の直後で、太陽の西10〜28度
+    const mercElong = westElongation(lons.sun, lons['水星']);
+    expect(mercElong).toBeGreaterThan(10);
+    expect(mercElong).toBeLessThan(28);
+
+    // 木星は合(8月中旬)の直前後で太陽から15度以内
+    let jupElong = Math.abs(lons.sun - lons['木星']) % 360;
+    if (jupElong > 180) jupElong = 360 - jupElong;
+    expect(jupElong).toBeLessThan(15);
+  });
+
+  it('helioXY の中心差は近日点黄経を基準にした平均近点角 M=L-ϖ を使う', () => {
+    const helioM = html.match(/function helioXY\(([^)]*)\) \{[\s\S]*?\n  \}/);
+    expect(helioM).not.toBeNull();
+    expect(helioM![1], '引数に近日点黄経 periLon を持つ').toContain('periLon');
+    expect(helioM![0]).not.toContain('2*ecc*Math.sin(L)');
+  });
+
   it('レグルスの黄道緯度(starLat)が実際の値(約+0.46度)に近い', () => {
     const lonMatch = html.match(/var starLon = \[([^\]]*)\];/);
     const latMatch = html.match(/var starLat = \[([^\]]*)\];/);

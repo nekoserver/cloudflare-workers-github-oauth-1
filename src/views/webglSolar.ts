@@ -746,10 +746,14 @@ input[type=range] { accent-color:#fdb813; width:120px; }
     var M = normD(357.52911 + 0.9856003*n) * Math.PI / 180;
     return normD(L + 1.914602*Math.sin(M) + 0.019993*Math.sin(2*M));
   }
-  function helioXY(L0, dL, ecc, sma, jd) {
+  // 中心差(equation of center)は平均近点角 M = L - ϖ(近日点黄経 periLon 基準)で
+  // 計算しなければならない。平均黄経 L をそのまま sin に入れると幾何黄経が
+  // 最大 2e rad(火星約10.7度、土星約6.4度)ずれ、惑星の並びが実際と食い違う。
+  function helioXY(L0, dL, ecc, sma, periLon, jd) {
     var n = jd - 2451545.0;
     var L = normD(L0 + dL*n) * Math.PI / 180;
-    var lon = L + 2*ecc*Math.sin(L);
+    var M = L - periLon * Math.PI / 180;
+    var lon = L + 2*ecc*Math.sin(M);
     return { x: sma*Math.cos(lon), y: sma*Math.sin(lon) };
   }
   function geoLonDeg(px, py, ex, ey) {
@@ -854,13 +858,15 @@ input[type=range] { accent-color:#fdb813; width:120px; }
     var jd = jdOverride || todayJD();
     var sLon = sunLonReal(jd);
     var sLonR = sLon * Math.PI / 180;
-    var ePos = helioXY(100.46446, 0.985647, 0.016709, 1.000014, jd);
+    var ePos = helioXY(100.46446, 0.985647, 0.016709, 1.000014, 102.937348, jd);
     var realPlanets = [
-      { jaName: '金星', h: helioXY(181.979801, 1.602136, 0.006773, 0.723330, jd), color: '#fffce0', fact: '地球から最も明るく見える惑星。最大光度は-4.6等' },
-      { jaName: '火星', h: helioXY(355.433275, 0.524039, 0.093405, 1.523688, jd), color: '#c1440e', fact: '赤い惑星。太陽系最大の火山オリンポス山があります' },
-      { jaName: '木星', h: helioXY( 34.351469, 0.083086, 0.048498, 5.202534, jd), color: '#c88b3a', fact: '太陽系最大の惑星。大赤斑という嵐が300年以上続いています' },
-      { jaName: '土星', h: helioXY( 50.077444, 0.033460, 0.055546, 9.537070, jd), color: '#e4d191', fact: '美しいリングを持つ惑星', hasRings: true },
-      { jaName: '水星', h: helioXY(252.250906, 4.092335, 0.205636, 0.387098, jd), color: '#b5b5b5', fact: '太陽系最小の惑星。最大離角は約28度' }
+      { jaName: '金星', h: helioXY(181.979801, 1.602136, 0.006773, 0.723330, 131.563707, jd), color: '#fffce0', fact: '地球から最も明るく見える惑星。最大光度は-4.6等' },
+      { jaName: '火星', h: helioXY(355.433275, 0.524039, 0.093405, 1.523688, 336.060234, jd), color: '#c1440e', fact: '赤い惑星。太陽系最大の火山オリンポス山があります' },
+      { jaName: '木星', h: helioXY( 34.351469, 0.083086, 0.048498, 5.202534, 14.331309, jd), color: '#c88b3a', fact: '太陽系最大の惑星。大赤斑という嵐が300年以上続いています' },
+      { jaName: '土星', h: helioXY( 50.077444, 0.033460, 0.055546, 9.537070, 93.056787, jd), color: '#e4d191', fact: '美しいリングを持つ惑星', hasRings: true },
+      { jaName: '水星', h: helioXY(252.250906, 4.092335, 0.205636, 0.387098, 77.456119, jd), color: '#b5b5b5', fact: '太陽系最小の惑星。最大離角は約28度' },
+      { jaName: '天王星', h: helioXY(314.055005, 0.011731, 0.046295, 19.218446, 173.005159, jd), color: '#7de8e8', fact: '自転軸が約98度傾いており、横倒しになって公転しています' },
+      { jaName: '海王星', h: helioXY(304.348665, 0.005982, 0.008988, 30.110387, 48.123691, jd), color: '#4b70dd', fact: '太陽系最強の風速を持つ惑星。風速は2100km/hに達します' }
     ];
     var mll = moonLonLat(jd);
 
