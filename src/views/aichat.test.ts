@@ -1324,7 +1324,7 @@ describe('回答バブル コピーボタン', () => {
     const idx = html.indexOf('function buildAssistantBubble(');
     expect(idx).toBeGreaterThan(-1);
     const fn = html.slice(idx, idx + 3000);
-    expect(fn).toContain('function buildAssistantBubble(text, model, isFallback, usage, isLocalCommand)');
+    expect(fn).toContain('function buildAssistantBubble(text, model, isFallback, usage, isLocalCommand, nekoResults)');
     const guardIdx = fn.indexOf('if (!isLocalCommand) {');
     const copyBtnIdx = fn.indexOf('bubble-copy-btn');
     expect(guardIdx).toBeGreaterThan(-1);
@@ -1337,12 +1337,12 @@ describe('回答バブル コピーボタン', () => {
     const modalIdx = html.indexOf('function renderAiResultInModal(');
     expect(modalIdx).toBeGreaterThan(-1);
     const modalFn = html.slice(modalIdx, modalIdx + 700);
-    expect(modalFn).toContain('buildAssistantBubble(responseText, selectedModel, isFallback, extractRespUsage(data), isLocalCommand)');
+    expect(modalFn).toContain('buildAssistantBubble(responseText, selectedModel, isFallback, extractRespUsage(data), isLocalCommand, data.nekoResults)');
 
     const submitIdx = html.indexOf("chatForm.addEventListener('submit'");
     expect(submitIdx).toBeGreaterThan(-1);
     const submitFn = html.slice(submitIdx, submitIdx + 1600);
-    expect(submitFn).toContain("appendBubble(responseText, 'assistant', isLocalCommand ? null : lastModel, data.fallbackUsed, respUsage, undefined, isLocalCommand);");
+    expect(submitFn).toContain("appendBubble(responseText, 'assistant', isLocalCommand ? null : lastModel, data.fallbackUsed, respUsage, undefined, isLocalCommand, data.nekoResults);");
   });
 });
 
@@ -1401,7 +1401,7 @@ describe('ナビバー モデル選択ドロップダウン', () => {
     const src = readFileSync(resolve(__dirname, '..', 'index.ts'), 'utf-8');
     const idx = src.indexOf("app.post('/api/aichat'");
     expect(idx).toBeGreaterThan(-1);
-    const fn = src.slice(idx, idx + 2300);
+    const fn = src.slice(idx, idx + 3200);
     expect(fn).toContain('body.model');
   });
 
@@ -1411,7 +1411,7 @@ describe('ナビバー モデル選択ドロップダウン', () => {
     const src = readFileSync(resolve(__dirname, '..', 'index.ts'), 'utf-8');
     const idx = src.indexOf("app.post('/api/aichat'");
     expect(idx).toBeGreaterThan(-1);
-    const fn = src.slice(idx, idx + 2300);
+    const fn = src.slice(idx, idx + 3200);
     const slashCommandIdx = fn.indexOf('interpretAichatSlashCommand(');
     const aiBindingCheckIdx = fn.indexOf('AI バインディングが未設定です');
     expect(slashCommandIdx).toBeGreaterThan(-1);
@@ -1425,7 +1425,7 @@ describe('ナビバー モデル選択ドロップダウン', () => {
     expect(idx).toBeGreaterThan(-1);
     const fn = html.slice(idx, idx + 1600);
     expect(fn).toContain("var isLocalCommand = usedModel === 'local/neko';");
-    expect(fn).toContain("appendBubble(responseText, 'assistant', isLocalCommand ? null : lastModel, data.fallbackUsed, respUsage, undefined, isLocalCommand);");
+    expect(fn).toContain("appendBubble(responseText, 'assistant', isLocalCommand ? null : lastModel, data.fallbackUsed, respUsage, undefined, isLocalCommand, data.nekoResults);");
   });
 
   it('/neko コマンドの応答時は応答バブル下の共有リンク行を表示しない（appendShareBtn を呼ばない）', () => {
@@ -1450,27 +1450,29 @@ describe('ナビバー モデル選択ドロップダウン', () => {
     expect(fn).toContain('SELECT commit_sha, commit_message, detected_agent_name, created_at FROM commit_agent_log ORDER BY id DESC LIMIT 1');
   });
 
-  it('index.ts の /api/aichat が searchShares を渡す（/neko search用、質問文・回答文のヒット件数+最新5件の質問文を返す）', () => {
+  it('index.ts の /api/aichat が searchShares を渡す（/neko search用、質問文・回答文のヒット件数+最大30件の質問文一覧を返す）', () => {
     const { readFileSync } = require('node:fs');
     const { resolve } = require('node:path');
     const src = readFileSync(resolve(__dirname, '..', 'index.ts'), 'utf-8');
     const idx = src.indexOf("app.post('/api/aichat'");
     expect(idx).toBeGreaterThan(-1);
-    const fn = src.slice(idx, idx + 1600);
+    const fn = src.slice(idx, idx + 1700);
     expect(fn).toContain('searchShares:');
     expect(fn).toContain('searchAiChatShares(');
-    expect(fn).toContain('results.slice(0, 5)');
+    expect(fn).toContain('hitCount: results.length');
   });
 
-  it('index.ts の /api/aichat が countVectorizedAnswers を渡す（/neko vcount用、aichat_answer_vectorsの件数を返す）', () => {
+  it('index.ts の /api/aichat が vectorizedAnswers を渡す（/neko vcount用、aichat_answer_vectorsの件数・総回答数・最大30件の一覧を返す）', () => {
     const { readFileSync } = require('node:fs');
     const { resolve } = require('node:path');
     const src = readFileSync(resolve(__dirname, '..', 'index.ts'), 'utf-8');
     const idx = src.indexOf("app.post('/api/aichat'");
     expect(idx).toBeGreaterThan(-1);
-    const fn = src.slice(idx, idx + 1800);
-    expect(fn).toContain('countVectorizedAnswers:');
+    const fn = src.slice(idx, idx + 2500);
+    expect(fn).toContain('vectorizedAnswers:');
     expect(fn).toContain('SELECT COUNT(DISTINCT share_id) AS cnt FROM aichat_answer_vectors WHERE user_id = ?');
+    expect(fn).toContain('SELECT COUNT(*) AS cnt FROM ai_chat_shares WHERE user_id = ? AND deleted_at IS NULL');
+    expect(fn).toContain('JOIN ai_chat_shares s ON s.id = v.share_id');
   });
 
   it('renderAiResultInModal も /neko コマンドの応答時は共有リンク行(appendAiResponseRow)を表示しない', () => {
@@ -2063,7 +2065,7 @@ describe('AIチャット応答の自動保存（auto-save to ai_chat_shares）',
     const src = readFileSync(resolve(__dirname, '..', 'index.ts'), 'utf-8');
     const idx = src.indexOf("app.post('/api/aichat'");
     expect(idx).toBeGreaterThan(-1);
-    const fn = src.slice(idx, idx + 6300);
+    const fn = src.slice(idx, idx + 7300);
     expect(fn).toContain('INSERT INTO ai_chat_shares');
   });
 
@@ -2073,7 +2075,7 @@ describe('AIチャット応答の自動保存（auto-save to ai_chat_shares）',
     const src = readFileSync(resolve(__dirname, '..', 'index.ts'), 'utf-8');
     const idx = src.indexOf("app.post('/api/aichat'");
     expect(idx).toBeGreaterThan(-1);
-    const fn = src.slice(idx, idx + 6200);
+    const fn = src.slice(idx, idx + 7200);
     expect(fn).toContain('shareId');
   });
 
@@ -2083,7 +2085,7 @@ describe('AIチャット応答の自動保存（auto-save to ai_chat_shares）',
     const src = readFileSync(resolve(__dirname, '..', 'index.ts'), 'utf-8');
     const idx = src.indexOf("app.post('/api/aichat'");
     expect(idx).toBeGreaterThan(-1);
-    const fn = src.slice(idx, idx + 5800);
+    const fn = src.slice(idx, idx + 6800);
     expect(fn).toContain('userHash');
   });
 
