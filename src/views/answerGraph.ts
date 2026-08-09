@@ -300,8 +300,6 @@ input[type=search]:focus { border-color:var(--accent); }
 .prereq-modal-chip.chip-vectorizing {
   border-width:2px; border-color:var(--accent); background:transparent;
 }
-.prereq-modal-chip.chip-unregistered { border-color:var(--danger); color:var(--danger); }
-.prereq-modal-chip.chip-unregistered.kw-badge-registering { border-color:var(--accent); color:var(--fg); }
 .prereq-kw-badge-list { width:100%; line-height:1; }
 .prereq-kw-badge {
   display:inline-block; background:var(--card); color:var(--label);
@@ -769,15 +767,6 @@ input[type=search]:focus { border-color:var(--accent); }
     if (e.key === 'Escape' && answerModalBackdrop.classList.contains('open')) closeAnswerModal();
   });
 
-  // 抽出されたキーワードがデータベースに登録済みかどうかを、DBへ問い合わせず
-  // 「この回答文のキーワード:」バーのバッジ処理時に作成済みのキャッシュ
-  // (keywordCountMap、/api/aichat/all-keywordsの取得結果)に対する
-  // 完全一致の存在判定だけで決める。マップにキーが存在しなければ
-  // (一度もaichat_search_logに現れていないため)未登録として扱う。
-  function isKeywordRegisteredInBarCache(keyword) {
-    return Object.prototype.hasOwnProperty.call(keywordCountMap, keyword);
-  }
-
   // 登録済み(出現回数が0でない)かつ分類済み(中分類カテゴリの色が
   // 割り当て済み)の場合だけ、そのカテゴリ色を返す。それ以外(未登録・
   // 出現回数0・未分類)はnullを返し、呼び出し側で既定の強調色を使わせる。
@@ -791,12 +780,10 @@ input[type=search]:focus { border-color:var(--accent); }
 
   // 「この回答文を理解するのに必要な予備知識」モーダル(最上位レイヤー、
   // 回答モーダルよりさらに前面)。ベクタ化ボタンから抽出されたキーワードを
-  // ここに列挙する。各キーワードが未登録(isKeywordRegisteredInBarCacheがfalse)
-  // の場合はチップを未登録スタイルにし、一括登録の対象として返す。
+  // ここに列挙する。
   function renderPrereqModal(keywords, warning) {
     prereqModalBody.innerHTML = '';
     var chips = [];
-    var unregistered = [];
     if (warning) {
       var warn = document.createElement('div');
       warn.className = 'prereq-modal-warning';
@@ -808,18 +795,16 @@ input[type=search]:focus { border-color:var(--accent); }
       empty.className = 'prereq-modal-empty';
       empty.textContent = warning ? '' : '追加の予備知識は見つかりませんでした';
       if (empty.textContent) prereqModalBody.appendChild(empty);
-      return { chips: chips, unregistered: unregistered };
+      return chips;
     }
     keywords.forEach(function(kw) {
       var chip = document.createElement('span');
-      var registered = isKeywordRegisteredInBarCache(kw);
-      chip.className = 'prereq-modal-chip' + (registered ? '' : ' chip-unregistered');
+      chip.className = 'prereq-modal-chip';
       chip.textContent = kw;
       prereqModalBody.appendChild(chip);
       chips.push(chip);
-      if (!registered) unregistered.push({ keyword: kw, badge: chip });
     });
-    return { chips: chips, unregistered: unregistered };
+    return chips;
   }
 
   // 「キーワード一覧」ボタン用。keywordOccurrences(サーバー側で各キーワードを
@@ -1003,10 +988,9 @@ input[type=search]:focus { border-color:var(--accent); }
   prereqResultModalOkBtn.addEventListener('click', closePrereqResultModal);
 
   function openPrereqModal(keywords, warning, keywordVectorization) {
-    var rendered = renderPrereqModal(keywords, warning);
-    var chips = rendered.chips;
-    prereqUnregisteredItems = rendered.unregistered;
-    prereqModalFoot.style.display = prereqUnregisteredItems.length > 0 ? '' : 'none';
+    prereqUnregisteredItems = [];
+    prereqModalFoot.style.display = 'none';
+    var chips = renderPrereqModal(keywords, warning);
     if (keywordVectorization && keywordVectorization.length > 0 && chips.length > 0) {
       animateKeywordVectorizationProgress(chips, function() {
         showPrereqResultModal(keywordVectorization);
