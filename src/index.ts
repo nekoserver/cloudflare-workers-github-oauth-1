@@ -27,6 +27,7 @@ import { getKwDrilldownPage } from './views/kw-drilldown';
 import { getCfDashboardPage } from './views/cf-dashboard';
 import { getApisPage } from './views/apis';
 import { getHtmlRewriterDemoPage } from './views/htmlrewriterDemo';
+import { getFetchTextStreamDemoPage } from './views/fetchTextStreamDemo';
 import { getWebGLDemoPage } from './views/webglDemo';
 import { getWebGLSpherePage } from './views/webglSphere';
 import { getWebGLHeritagePage } from './views/webglHeritage';
@@ -3254,6 +3255,10 @@ app.get('/health', (c) => {
     timestamp: new Date().toISOString(),
     environment: c.env.ENVIRONMENT,
   });
+});
+
+app.get('/fetch-text-stream-demo', (c) => {
+  return c.html(getFetchTextStreamDemoPage());
 });
 
 // =====================================================
