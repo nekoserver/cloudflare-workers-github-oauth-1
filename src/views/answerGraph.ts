@@ -1037,12 +1037,41 @@ input[type=search]:focus { border-color:var(--accent); }
     runVectorizeAnswer(answerModalKeywordExtractBtn, 'キーワード抽出');
   });
 
+  // 「キーワード一覧」ボタン用。グラフが既に読み込み済みで、この回答文が
+  // ノードとして含まれる場合は「この回答文のキーワード:」バー(answerKeywordsBar)
+  // と同じキャッシュ(keywordCountMap/keywordCategoryMap/catQuickData)から
+  // 出現回数・分類色を組み立てる(DB再問い合わせをしない)。
+  // キャッシュが使えない場合(グラフ未読み込み・ノード未検出)のみ、
+  // 従来通り/api/aichat/answer-keywordsへフォールバックする。
+  function buildKeywordOccurrencesFromKeywordBarCache(shareId) {
+    if (!lastLayout || !currentGraph) return null;
+    var entry = lastLayout.posById['a:' + shareId];
+    if (!entry) return null;
+    var slots = computeAnswerKeywordSlots(lastLayout.posById, lastLayout.cx, lastLayout.cy, currentGraph.edges, entry.node);
+    if (!slots.length) return null;
+    var items = slots.map(function(slot) {
+      var keyword = slot.node.label;
+      var catId = keywordCategoryMap[keyword];
+      var cat = catId && catQuickData ? catQuickData.catMap[catId] : null;
+      return {
+        keyword: keyword,
+        count: keywordCountMap[keyword] || 0,
+        classified: !!catId,
+        categoryColor: catId ? (cat ? cat.color : null) : null,
+      };
+    });
+    items.sort(function(a, b) { return b.count - a.count; });
+    return items;
+  }
+
   // 「キーワード一覧」ボタン: 既に回答文に紐付けて登録済みの予備知識
   // キーワードを一覧表示するだけで、ベクタ化ループ演出・結果モーダルは
   // 出さない(新規登録が発生しないため)。
   answerModalKeywordListBtn.addEventListener('click', function() {
     var shareId = currentAnswerModalShareId;
     if (!shareId) return;
+    var cached = buildKeywordOccurrencesFromKeywordBarCache(shareId);
+    if (cached) { openPrereqKeywordListModal(cached); return; }
     fetch('/api/aichat/answer-keywords?shareId=' + encodeURIComponent(shareId), { credentials: 'same-origin' })
       .then(function(r) { return r.json(); })
       .then(function(d) {
