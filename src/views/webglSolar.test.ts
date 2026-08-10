@@ -1456,6 +1456,69 @@ describe('getWebGLSolarPage', () => {
     expect(loaded.lepus).toEqual({ names: false, lines: true });
   });
 
+  // 地軸固定モード(pole)は自転モード(spin)と同じく天球全体を見渡す用途なのに、
+  // ズーム上限が固定の0.85π(153°)のままで、今日の空・自転モードだけが
+  // 画面短辺に合わせた最大1.4πまで広がる非対称な実装になっていた。
+  // 故障シナリオ: (1) maxSkyFovForModeにpoleを追加し忘れるとズーム上限が
+  // 変わらない (2) 上限だけ広げてproject3DのbackCullを緩和し忘れると、
+  // 広角時に画面周辺の星が早期にカリングされ消える/ちらつく
+  function extractZoomLimits() {
+    const constM = html.match(/var SKY_FOV_MIN[\s\S]*?var EARTH_DIAMETER_FIT_FOV_MAX = [^\n]+;/);
+    const fitM = html.match(/function earthDiameterFitFovMax\(\) \{[\s\S]*?\n  \}/);
+    const maxM = html.match(/function maxSkyFovForMode\(\) \{[\s\S]*?\n  \}/);
+    expect(constM).not.toBeNull();
+    expect(fitM).not.toBeNull();
+    expect(maxM).not.toBeNull();
+    const factory = new Function(
+      'skyViewMode', 'W', 'H',
+      constM![0] + '\n' + fitM![0] + '\n' + maxM![0] + '\nreturn maxSkyFovForMode();'
+    );
+    return (mode: string, w = 1000, h = 800) => factory(mode, w, h) as number;
+  }
+
+  it('地軸固定モードのズーム上限は自転モードと同じく画面比に応じて最大1.4πまで広がる(旧: 固定0.85πだった)', () => {
+    const maxFov = extractZoomLimits();
+    const poleMax = maxFov('pole');
+    const spinMax = maxFov('spin');
+    const earthMax = maxFov('earth');
+    expect(poleMax, '地軸固定モードの上限が自転モードと一致する').toBeCloseTo(spinMax, 6);
+    expect(poleMax, '固定0.85πより広い').toBeGreaterThan(Math.PI * 0.85 + 1e-6);
+    expect(earthMax, '地球目線モードは対象外のまま0.85π').toBeCloseTo(Math.PI * 0.85, 6);
+  });
+
+  it('project3DのbackCullは地軸固定モードでも自転・今日の空と同じ-0.75(緩和側)を使う', () => {
+    // ズーム上限を広角(最大1.4π)まで拡大しても、project3DのbackCullが
+    // -0.5のままだと広角時に画面周辺の星が早期にカリングされ消える/
+    // ちらつく退行になるため、'pole'も-0.75グループに含まれることを
+    // 構造的に検証する(境界値の screen 座標は domeScale が非常に大きくなり
+    // 画面外クリップと区別できないため、black-box な投影結果ではなく
+    // backCull の分岐条件そのものを検証する)。
+    const m = html.match(/var backCull = \([^;]+\) \? -0\.75 : -0\.5;/);
+    expect(m).not.toBeNull();
+    expect(m![0]).toContain("skyViewMode === 'today'");
+    expect(m![0]).toContain("skyViewMode === 'spin'");
+    expect(m![0]).toContain("skyViewMode === 'pole'");
+  });
+
+  // 故障シナリオ: iPadのブラウザ版(PWAではなくSafariのタブ内)で画面下の
+  // 操作ボタン列(ctrl-bar)が非表示になり操作不能になる不具合が報告された。
+  // body の高さを 100dvh(動的ビューポート高さ)にしていたが、Safari は
+  // ページ初期表示時にアドレスバー/タブバーが表示された状態の可視領域を
+  // dvh に反映しないことがあり(スクロールで初めて再計算される既知の挙動)、
+  // その結果 body の実際の高さが可視領域より大きくなる。body は
+  // overflow:hidden でスクロール手段がないため、はみ出した最下部の
+  // ctrl-bar がそのまま操作不能な状態で隠れてしまう。
+  // 対策として、ブラウザUIが最大限展開された状態でも収まることが保証される
+  // 100svh(small viewport height)を使う。PWA(display:standalone、
+  // ブラウザUIなし)ではsvh・dvh・vhはほぼ一致するため見た目に影響しない。
+  it('bodyの高さはブラウザのツールバー分を差し引いた100svhを使い、100dvhには依存しない(iPadのSafariでボタン列が隠れる不具合の再発防止)', () => {
+    const bodyRuleM = html.match(/body \{[^}]*\}/);
+    expect(bodyRuleM).not.toBeNull();
+    expect(bodyRuleM![0]).toContain('height:100vh;');
+    expect(bodyRuleM![0]).toContain('height:100svh;');
+    expect(bodyRuleM![0]).not.toContain('height:100dvh;');
+  });
+
   it('レグルスの黄道緯度(starLat)が実際の値(約+0.46度)に近い', () => {
     const lonMatch = html.match(/var starLon = \[([^\]]*)\];/);
     const latMatch = html.match(/var starLat = \[([^\]]*)\];/);

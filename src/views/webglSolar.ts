@@ -13,7 +13,7 @@ export function getWebGLSolarPage(username: string): string {
 <title>🪐 太陽系</title>
 <style>
 * { box-sizing:border-box; margin:0; padding:0; }
-body { background:#000010; color:#e6edf3; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; font-size:13px; height:100vh; height:100dvh; display:flex; flex-direction:column; overflow:hidden; }
+body { background:#000010; color:#e6edf3; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; font-size:13px; height:100vh; height:100svh; display:flex; flex-direction:column; overflow:hidden; }
 .topbar { background:rgba(0,0,20,0.95); border-bottom:1px solid #1e2a40; padding:8px 18px; display:flex; align-items:center; gap:10px; flex-shrink:0; }
 .topbar a { color:#58a6ff; text-decoration:none; font-size:12px; }
 .topbar a:hover { text-decoration:underline; }
@@ -195,7 +195,7 @@ input[type=range] { accent-color:#fdb813; width:120px; }
     return Math.max(EARTH_DIAMETER_FIT_FOV_MIN, Math.min(EARTH_DIAMETER_FIT_FOV_MAX, aspectFitFov));
   }
   function maxSkyFovForMode() {
-    return (skyViewMode === 'today' || skyViewMode === 'spin') ? earthDiameterFitFovMax() : SKY_FOV_MAX;
+    return (skyViewMode === 'today' || skyViewMode === 'spin' || skyViewMode === 'pole') ? earthDiameterFitFovMax() : SKY_FOV_MAX;
   }
   function clampSkyFov(nextFov) {
     return Math.max(SKY_FOV_MIN, Math.min(maxSkyFovForMode(), nextFov));
@@ -1681,13 +1681,16 @@ input[type=range] { accent-color:#fdb813; width:120px; }
       // 直線透視(ピンホール)投影は視野角が広いほど周辺の拡大率が際限なく
       // 増加し(θ→90°でdotFw→0に発散)、画面の左右端に近づくほど歪みが
       // 大きくなる。天球を見上げる全モード(今日の空・地軸固定・自転・
-      // 地球目線・月面・ISSは最大 0.85π、今日の空・自転は地球の
-      // 直径(地平線から反対側の地平線までの180°)が画面に余白込みで
+      // 地球目線・月面・ISSは最大 0.85π、今日の空・自転・地軸固定は
+      // 地球の直径(地平線から反対側の地平線までの180°)が画面に余白込みで
       // 入るよう、画面の短辺に合わせて最大1.4πまで広がりうる)を
       // 平射(ステレオ)投影 r = k*tan(θ/2) に統一し、拡大率の増加を
       // sec^2(θ/2) 程度に抑えて周辺の歪みを緩和する。夏至モードはこの関数を
       // 使わない別視点(3人称の公転図)のため対象外。
-      var backCull = (skyViewMode === 'today' || skyViewMode === 'spin') ? -0.75 : -0.5;
+      // backCullはmaxSkyFovForModeで広角(最大1.4π)を許可するモードと
+      // 揃える。上限だけ広げてbackCullを緩和しないと、広角時に画面周辺の
+      // 星が本来の-0.75カリング範囲より早く(-0.5で)消えてちらつく。
+      var backCull = (skyViewMode === 'today' || skyViewMode === 'spin' || skyViewMode === 'pole') ? -0.75 : -0.5;
       if (dotFw <= backCull) return null;
       var domeScale = (W / 2) / Math.tan(fovH / 4) / (1 + dotFw);
       sx = W / 2 + dotRt * domeScale;
