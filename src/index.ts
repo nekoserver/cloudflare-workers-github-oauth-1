@@ -1443,6 +1443,7 @@ CREATE INDEX IF NOT EXISTS idx_aichat_answer_keyword_vectors_share ON aichat_ans
 );
 CREATE INDEX IF NOT EXISTS idx_moondream_analyze_log_user_created ON moondream_analyze_log(user_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_moondream_analyze_log_status ON moondream_analyze_log(status);`,
+  '0097': `ALTER TABLE moondream_analyze_log ADD COLUMN image_data_url TEXT;`,
 };
 
 async function ensureGroupTable(db: D1Database): Promise<void> {
@@ -2486,13 +2487,14 @@ async function recordMoondreamAnalyzeLog(
     promptLength: number;
     imageBytes: number;
     errorMessage?: string | null;
+    imageDataUrl?: string | null;
   },
 ): Promise<void> {
   if (!db) return;
   try {
     await db.prepare(
-      `INSERT INTO moondream_analyze_log (user_id, status, model, prompt_length, image_bytes, error_message)
-       VALUES (?, ?, ?, ?, ?, ?)`
+      `INSERT INTO moondream_analyze_log (user_id, status, model, prompt_length, image_bytes, error_message, image_data_url)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`
     ).bind(
       payload.userId,
       payload.status,
@@ -2500,6 +2502,7 @@ async function recordMoondreamAnalyzeLog(
       payload.promptLength,
       payload.imageBytes,
       payload.errorMessage ?? null,
+      payload.imageDataUrl ?? null,
     ).run();
   } catch {}
 }
@@ -8707,7 +8710,7 @@ app.get('/moondream-analyze-log', authMiddleware, async (c) => {
   let rows: MoondreamAnalyzeLogRow[] = [];
   if (c.env.DB) {
     const result = await c.env.DB.prepare(
-      `SELECT id, status, model, prompt_length, image_bytes, error_message, created_at
+      `SELECT id, status, model, prompt_length, image_bytes, error_message, created_at, image_data_url
        FROM moondream_analyze_log
        WHERE user_id = ?
        ORDER BY created_at DESC, id DESC
@@ -8764,13 +8767,14 @@ app.post('/api/moondream-analyze', authMiddleware, async (c) => {
       c.executionCtx?.waitUntil(recordMoondreamAnalyzeLog(c.env.DB, {
         userId: user.sub, status: 'error', model: MOONDREAM_MODEL,
         promptLength: runParams.prompt.length, imageBytes: imageBytes.length,
-        errorMessage: `空の応答(resultKeys=${resultKeys})`,
+        errorMessage: `空の応答(resultKeys=${resultKeys})`, imageDataUrl: image,
       }));
       return jsonUtf8({ error: '分析結果を取得できませんでした' }, 502);
     }
     c.executionCtx?.waitUntil(recordMoondreamAnalyzeLog(c.env.DB, {
       userId: user.sub, status: 'ok', model: MOONDREAM_MODEL,
       promptLength: runParams.prompt.length, imageBytes: imageBytes.length,
+      imageDataUrl: image,
     }));
     return jsonUtf8({ analysis, usedModel: MOONDREAM_MODEL });
   } catch (err) {
@@ -8779,7 +8783,7 @@ app.post('/api/moondream-analyze', authMiddleware, async (c) => {
     c.executionCtx?.waitUntil(recordMoondreamAnalyzeLog(c.env.DB, {
       userId: user.sub, status: 'error', model: MOONDREAM_MODEL,
       promptLength: runParams.prompt.length, imageBytes: imageBytes.length,
-      errorMessage,
+      errorMessage, imageDataUrl: image,
     }));
     return jsonUtf8({ error: '画像分析に失敗しました' }, 502);
   }

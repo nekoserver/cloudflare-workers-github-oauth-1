@@ -17,8 +17,8 @@ describe('buildMoondreamAnalyzeLogRowsHtml', () => {
 
   it('status=okの行はstatus-okバッジ、status=errorの行はstatus-errorバッジになる', () => {
     const html = buildMoondreamAnalyzeLogRowsHtml([
-      { id: 1, status: 'ok', model: 'm', prompt_length: 3, image_bytes: 100, error_message: null, created_at: '2026-08-10' },
-      { id: 2, status: 'error', model: 'm', prompt_length: 3, image_bytes: 100, error_message: 'boom', created_at: '2026-08-10' },
+      { id: 1, status: 'ok', model: 'm', prompt_length: 3, image_bytes: 100, error_message: null, created_at: '2026-08-10', image_data_url: null },
+      { id: 2, status: 'error', model: 'm', prompt_length: 3, image_bytes: 100, error_message: 'boom', created_at: '2026-08-10', image_data_url: null },
     ]);
     expect(html).toContain('status-ok">OK</span>');
     expect(html).toContain('status-error">ERROR</span>');
@@ -26,7 +26,7 @@ describe('buildMoondreamAnalyzeLogRowsHtml', () => {
 
   it('error_messageのHTML特殊文字はエスケープされる', () => {
     const html = buildMoondreamAnalyzeLogRowsHtml([
-      { id: 1, status: 'error', model: 'm', prompt_length: 3, image_bytes: 100, error_message: '<script>alert(1)</script>', created_at: '2026-08-10' },
+      { id: 1, status: 'error', model: 'm', prompt_length: 3, image_bytes: 100, error_message: '<script>alert(1)</script>', created_at: '2026-08-10', image_data_url: null },
     ]);
     expect(html).not.toContain('<script>alert(1)</script>');
     expect(html).toContain('&lt;script&gt;');
@@ -34,9 +34,25 @@ describe('buildMoondreamAnalyzeLogRowsHtml', () => {
 
   it('error_messageがnullのときはハイフンを表示する', () => {
     const html = buildMoondreamAnalyzeLogRowsHtml([
-      { id: 1, status: 'ok', model: 'm', prompt_length: 3, image_bytes: 100, error_message: null, created_at: '2026-08-10' },
+      { id: 1, status: 'ok', model: 'm', prompt_length: 3, image_bytes: 100, error_message: null, created_at: '2026-08-10', image_data_url: null },
     ]);
     expect(html).toContain('<td class="error-cell">-</td>');
+  });
+
+  it('image_data_urlがあれば画像を復元できるサムネイルリンク(ダウンロード付き)を表示する', () => {
+    const dataUrl = 'data:image/png;base64,AAAA';
+    const html = buildMoondreamAnalyzeLogRowsHtml([
+      { id: 5, status: 'ok', model: 'm', prompt_length: 3, image_bytes: 100, error_message: null, created_at: '2026-08-10', image_data_url: dataUrl },
+    ]);
+    expect(html).toContain(`<a href="${dataUrl}" download="moondream-log-5.png" target="_blank" rel="noopener">`);
+    expect(html).toContain(`<img class="thumb" src="${dataUrl}" alt="添付画像">`);
+  });
+
+  it('image_data_urlがnullのときは画像セルがハイフンになる(元画像を保存していない場合)', () => {
+    const html = buildMoondreamAnalyzeLogRowsHtml([
+      { id: 1, status: 'ok', model: 'm', prompt_length: 3, image_bytes: 100, error_message: null, created_at: '2026-08-10', image_data_url: null },
+    ]);
+    expect(html).not.toContain('class="thumb"');
   });
 });
 
