@@ -2043,15 +2043,21 @@ input[type=range] { accent-color:#fdb813; width:120px; }
     ctx.fillText('※月の満ち欠け(陰影)は地球の地表に立つ観測者から見た見え方を表示しています', 10, 46);
   }
 
+  // angle は各惑星の J2000 平均黄経(L0)をラジアンにした値(今日の空の
+  // helioXY呼び出しと同じL0を使用)。カレンダーで日付を選ぶと
+  // topViewTimeParameter()がその日までの経過日数を角度換算してtopTに渡し、
+  // ang = angle + topT/period で位置を計算するため、angleを実際のL0に
+  // 揃えないと「今日の空」(実際の軌道要素で計算)と俯瞰図で同じ日付でも
+  // 惑星配置が大きく食い違う。
   var planets = [
-    { name: '水星', jaName: '水星', type: '岩石惑星', orbitR: 80, radius: 4, period: 0.24, color: '#b5b5b5', angle: 0, fact: '太陽系最小の惑星。表面温度は-180°Cから430°Cと激しく変動します' },
-    { name: '金星', jaName: '金星', type: '岩石惑星', orbitR: 120, radius: 8, period: 0.62, color: '#e8cda0', angle: 1.0, fact: '地球から最も明るく見える惑星。厚い大気で温室効果が強烈です' },
-    { name: '地球', jaName: '地球', type: '岩石惑星', orbitR: 170, radius: 9, period: 1.0, color: '#4fa3e0', angle: 2.0, fact: '生命が存在する唯一確認されている惑星。表面の71%が海です', hasMoon: true },
-    { name: '火星', jaName: '火星', type: '岩石惑星', orbitR: 230, radius: 6, period: 1.88, color: '#c1440e', angle: 3.5, fact: '赤い惑星。太陽系最大の火山「オリンポス山」があります' },
-    { name: '木星', jaName: '木星', type: 'ガス惑星', orbitR: 320, radius: 20, period: 11.86, color: '#c88b3a', angle: 0.5, fact: '太陽系最大の惑星。大赤斑という巨大嵐が300年以上続いています' },
-    { name: '土星', jaName: '土星', type: 'ガス惑星', orbitR: 420, radius: 16, period: 29.46, color: '#e4d191', angle: 4.0, fact: '美しいリングを持つ惑星。平均密度が水より低く、海に浮かびます', hasRings: true },
-    { name: '天王星', jaName: '天王星', type: '氷巨星', orbitR: 510, radius: 11, period: 84.0, color: '#7de8e8', angle: 1.5, fact: '自転軸が約98度傾いており、横倒しになって公転しています' },
-    { name: '海王星', jaName: '海王星', type: '氷巨星', orbitR: 590, radius: 10, period: 165.0, color: '#4b70dd', angle: 2.8, fact: '太陽系最強の風速を持つ惑星。風速は2100km/hに達します' }
+    { name: '水星', jaName: '水星', type: '岩石惑星', orbitR: 80, radius: 4, period: 0.24, color: '#b5b5b5', angle: 4.4026, fact: '太陽系最小の惑星。表面温度は-180°Cから430°Cと激しく変動します' },
+    { name: '金星', jaName: '金星', type: '岩石惑星', orbitR: 120, radius: 8, period: 0.62, color: '#e8cda0', angle: 3.1761, fact: '地球から最も明るく見える惑星。厚い大気で温室効果が強烈です' },
+    { name: '地球', jaName: '地球', type: '岩石惑星', orbitR: 170, radius: 9, period: 1.0, color: '#4fa3e0', angle: 1.7534, fact: '生命が存在する唯一確認されている惑星。表面の71%が海です', hasMoon: true },
+    { name: '火星', jaName: '火星', type: '岩石惑星', orbitR: 230, radius: 6, period: 1.88, color: '#c1440e', angle: 6.2035, fact: '赤い惑星。太陽系最大の火山「オリンポス山」があります' },
+    { name: '木星', jaName: '木星', type: 'ガス惑星', orbitR: 320, radius: 20, period: 11.86, color: '#c88b3a', angle: 0.5995, fact: '太陽系最大の惑星。大赤斑という巨大嵐が300年以上続いています' },
+    { name: '土星', jaName: '土星', type: 'ガス惑星', orbitR: 420, radius: 16, period: 29.46, color: '#e4d191', angle: 0.8740, fact: '美しいリングを持つ惑星。平均密度が水より低く、海に浮かびます', hasRings: true },
+    { name: '天王星', jaName: '天王星', type: '氷巨星', orbitR: 510, radius: 11, period: 84.0, color: '#7de8e8', angle: 5.4813, fact: '自転軸が約98度傾いており、横倒しになって公転しています' },
+    { name: '海王星', jaName: '海王星', type: '氷巨星', orbitR: 590, radius: 10, period: 165.0, color: '#4b70dd', angle: 5.3119, fact: '太陽系最強の風速を持つ惑星。風速は2100km/hに達します' }
   ];
 
   var moon = { name: '月', type: '衛星', orbitR: 22, radius: 3, period: 0.075, color: '#cccccc', angle: 0, fact: '地球の唯一の天然衛星。地球の潮汐に影響を与えています' };

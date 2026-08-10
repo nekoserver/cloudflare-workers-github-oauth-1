@@ -1532,6 +1532,37 @@ describe('getWebGLSolarPage', () => {
     expect(m![0]).toContain('ポラリス');
   });
 
+  // トップ俯瞰図(既定表示のplanets配列)は、カレンダーで日付を選ぶと
+  // topViewTimeParameter()経由でその日の位置を表示するが、angleフィールドが
+  // 実際のJ2000平均黄経ではなく見た目重視の適当な値だったため、「今日の空」
+  // (実際の軌道要素を使うhelioXY)と同じ日付を選んでも配置が大きく食い違って
+  // いた。angleは実際のL0(平均黄経)をラジアンにした値と一致すべきで、
+  // 今日の空のhelioXY呼び出しに使われているL0値と同じであることを検証する。
+  it('トップ俯瞰図のplanets[].angleは実際のJ2000平均黄経(今日の空のL0と同じ値)を使う', () => {
+    const todayM = html.match(/var ePos = helioXY\(([^)]*)\);\s*\n\s*var realPlanets = \[([\s\S]*?)\n    \];/);
+    expect(todayM).not.toBeNull();
+    const earthL0 = parseFloat(todayM![1].split(',')[0].trim());
+    const l0ByName: Record<string, number> = { 地球: earthL0 };
+    const rows = todayM![2].matchAll(/jaName: '([^']+)', h: helioXY\(([^)]*)\)/g);
+    for (const row of rows) {
+      l0ByName[row[1]] = parseFloat(row[2].split(',')[0].trim());
+    }
+    expect(Object.keys(l0ByName).length, 'realPlanetsからL0を抽出').toBeGreaterThanOrEqual(6);
+
+    const planetsM = html.match(/var planets = \[([\s\S]*?)\n  \];/);
+    expect(planetsM).not.toBeNull();
+    const planetRows = [...planetsM![1].matchAll(/jaName: '([^']+)'[^\n]*angle: ([-\d.]+)/g)];
+    expect(planetRows.length).toBe(8);
+    for (const [, name, angleStr] of planetRows) {
+      const expectedL0 = l0ByName[name];
+      expect(expectedL0, name + ' の期待L0(今日の空のrealPlanets/ePosから)').not.toBeUndefined();
+      const expectedRad = (expectedL0 * Math.PI) / 180;
+      const actualRad = parseFloat(angleStr);
+      const diff = Math.abs(((actualRad - expectedRad + Math.PI) % (2 * Math.PI) + 2 * Math.PI) % (2 * Math.PI) - Math.PI);
+      expect(diff, name + ': angle=' + actualRad + ' vs 期待=' + expectedRad.toFixed(4)).toBeLessThan(0.01);
+    }
+  });
+
   it('レグルスの黄道緯度(starLat)が実際の値(約+0.46度)に近い', () => {
     const lonMatch = html.match(/var starLon = \[([^\]]*)\];/);
     const latMatch = html.match(/var starLat = \[([^\]]*)\];/);
