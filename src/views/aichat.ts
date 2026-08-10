@@ -730,6 +730,12 @@ export function getAiChatPage(user: {
     .chat-bubble-image {
       max-width: 220px; max-height: 220px; border-radius: 8px; display: block; margin-bottom: 6px; object-fit: cover;
     }
+    .moondream-analysis {
+      margin-top: 10px; background: var(--card-bg); border: 1px solid var(--border-color);
+      border-radius: 6px; padding: 8px 10px;
+    }
+    .moondream-analysis-label { font-size: 11px; font-weight: 600; color: var(--accent-color); margin-bottom: 4px; }
+    .moondream-analysis-body { font-size: 12px; color: var(--text-secondary); white-space: pre-wrap; line-height: 1.6; }
   </style>
 </head>
 <body>
@@ -6484,6 +6490,25 @@ export function getAiChatPage(user: {
       if (!showModel) modelSelect.style.display = 'none';
     })();
 
+    // 画像添付時、Moondream(画像分析VLM)の分析結果を応答バブル内に追記する。
+    // /api/aichat と /api/moondream-analyze は並行に呼び、どちらが先に
+    // 終わっても取りこぼさないよう、バブル生成と分析結果の到着を
+    // それぞれ独立に待ち合わせる(assistantBubbleEl/moondreamAnalysisText)。
+    function appendMoondreamAnalysis(bubbleEl, analysisText) {
+      var panel = document.createElement('div');
+      panel.className = 'moondream-analysis';
+      var label = document.createElement('div');
+      label.className = 'moondream-analysis-label';
+      label.textContent = '🖼️ 画像分析(Moondream)';
+      var body = document.createElement('div');
+      body.className = 'moondream-analysis-body';
+      body.textContent = analysisText;
+      panel.appendChild(label);
+      panel.appendChild(body);
+      bubbleEl.appendChild(panel);
+      chatLog.scrollTop = chatLog.scrollHeight;
+    }
+
     chatForm.addEventListener('submit', function(e) {
       e.preventDefault();
       var msg = chatInput.value.trim();
@@ -6498,6 +6523,30 @@ export function getAiChatPage(user: {
       var thinking = appendBubble('考え中...', 'thinking');
       var payload = { message: msg, model: lastModel, systemPromptMode: langModeSelect.value, source: 'textbox' };
       if (attachedImage) payload.image = attachedImage;
+
+      var assistantBubbleEl = null;
+      var moondreamAnalysisText = null;
+      function tryAppendMoondream() {
+        if (assistantBubbleEl && moondreamAnalysisText) {
+          appendMoondreamAnalysis(assistantBubbleEl, moondreamAnalysisText);
+        }
+      }
+      if (attachedImage) {
+        fetch('/api/moondream-analyze', {
+          method: 'POST', credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ image: attachedImage, prompt: currentMsg })
+        })
+          .then(function(res) { return res.json(); })
+          .then(function(data) {
+            if (data && data.analysis) {
+              moondreamAnalysisText = data.analysis;
+              tryAppendMoondream();
+            }
+          })
+          .catch(function() {});
+      }
+
       fetch('/api/aichat', {
         method: 'POST', credentials: 'same-origin',
         headers: { 'Content-Type': 'application/json' },
@@ -6513,7 +6562,8 @@ export function getAiChatPage(user: {
             var usedModel = data.usedModel || lastModel;
             var isLocalCommand = usedModel === 'local/neko';
             var respUsage = extractRespUsage(data);
-            appendBubble(responseText, 'assistant', isLocalCommand ? null : lastModel, data.fallbackUsed, respUsage, undefined, isLocalCommand, data.nekoResults);
+            assistantBubbleEl = appendBubble(responseText, 'assistant', isLocalCommand ? null : lastModel, data.fallbackUsed, respUsage, undefined, isLocalCommand, data.nekoResults);
+            tryAppendMoondream();
             if (!isLocalCommand) {
               appendShareBtn(currentMsg, responseText, usedModel, data.shareId, data.userHash);
             }

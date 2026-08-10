@@ -1519,6 +1519,125 @@ describe('getWebGLSolarPage', () => {
     expect(bodyRuleM![0]).not.toContain('height:100dvh;');
   });
 
+  // 今日の空モード(drawTodaySky)にはポラリスが描画されていなかった。地軸固定・
+  // 自転モードは既にポラリスを描画しているが、それらは projectSky(緯度経度を
+  // そのまま赤道座標として扱う簡易表現)に対する実際の赤道座標(RA/Dec)で
+  // ハードコードされている。今日の空は projectEclipticSky(黄道→赤道の
+  // 地軸傾き回転込み)を使うため、同じ値をそのまま流用すると位置がずれる。
+  // 黄道座標へ変換した値を新たに使う必要がある。
+  it('今日の空モードにポラリスが黄道座標(J2000)で描画される', () => {
+    const m = html.match(/function drawTodaySky\([\s\S]*?\n  function drawPoleView/);
+    expect(m).not.toBeNull();
+    expect(m![0], 'ポラリスの描画').toMatch(/projectEclipticSky\(1\.5458, 1\.1537\)/);
+    expect(m![0]).toContain('ポラリス');
+  });
+
+  // トップ俯瞰図(既定表示のplanets配列)は、カレンダーで日付を選ぶと
+  // topViewTimeParameter()経由でその日の位置を表示するが、angleフィールドが
+  // 実際のJ2000平均黄経ではなく見た目重視の適当な値だったため、「今日の空」
+  // (実際の軌道要素を使うhelioXY)と同じ日付を選んでも配置が大きく食い違って
+  // いた。angleは実際のL0(平均黄経)をラジアンにした値と一致すべきで、
+  // 今日の空のhelioXY呼び出しに使われているL0値と同じであることを検証する。
+  it('トップ俯瞰図のplanets[].angleは実際のJ2000平均黄経(今日の空のL0と同じ値)を使う', () => {
+    const todayM = html.match(/var ePos = helioXY\(([^)]*)\);\s*\n\s*var realPlanets = \[([\s\S]*?)\n    \];/);
+    expect(todayM).not.toBeNull();
+    const earthL0 = parseFloat(todayM![1].split(',')[0].trim());
+    const l0ByName: Record<string, number> = { 地球: earthL0 };
+    const rows = todayM![2].matchAll(/jaName: '([^']+)', h: helioXY\(([^)]*)\)/g);
+    for (const row of rows) {
+      l0ByName[row[1]] = parseFloat(row[2].split(',')[0].trim());
+    }
+    expect(Object.keys(l0ByName).length, 'realPlanetsからL0を抽出').toBeGreaterThanOrEqual(6);
+
+    const planetsM = html.match(/var planets = \[([\s\S]*?)\n  \];/);
+    expect(planetsM).not.toBeNull();
+    const planetRows = [...planetsM![1].matchAll(/jaName: '([^']+)'[^\n]*angle: ([-\d.]+)/g)];
+    expect(planetRows.length).toBe(8);
+    for (const [, name, angleStr] of planetRows) {
+      const expectedL0 = l0ByName[name];
+      expect(expectedL0, name + ' の期待L0(今日の空のrealPlanets/ePosから)').not.toBeUndefined();
+      const expectedRad = (expectedL0 * Math.PI) / 180;
+      const actualRad = parseFloat(angleStr);
+      const diff = Math.abs(((actualRad - expectedRad + Math.PI) % (2 * Math.PI) + 2 * Math.PI) % (2 * Math.PI) - Math.PI);
+      expect(diff, name + ': angle=' + actualRad + ' vs 期待=' + expectedRad.toFixed(4)).toBeLessThan(0.01);
+    }
+  });
+
+  // 第三者の天文計算サイト(ssgeo)が公開する「地球:月-各天体」の幾何学的
+  // アスペクト角(0°/45°/135°)とその正確な発生時刻を、このページの低精度
+  // 近似式(moonLonLat・helioXY・sunLonReal)で計算した値と突き合わせる。
+  // 独立した情報源との一致を確認することで、月・惑星の計算式が実際の
+  // 天文現象と整合していることを検証する。
+  function extractGeoLon() {
+    const normM = html.match(/function normD\(deg\) [^\n]*/);
+    const sunM = html.match(/function sunLonReal\(jd\) \{[\s\S]*?\n  \}/);
+    const helioM = html.match(/function helioXY\([^)]*\) \{[\s\S]*?\n  \}/);
+    const geoM = html.match(/function geoLonDeg\(px, py, ex, ey\) \{[\s\S]*?\n  \}/);
+    const moonM = html.match(/function moonLonLat\(jd\) \{[\s\S]*?\n  \}/);
+    expect(normM).not.toBeNull();
+    expect(sunM).not.toBeNull();
+    expect(helioM).not.toBeNull();
+    expect(geoM).not.toBeNull();
+    expect(moonM).not.toBeNull();
+
+    const todayM = html.match(/var ePos = helioXY\(([^)]*)\);\s*\n\s*var realPlanets = \[([\s\S]*?)\n    \];/);
+    expect(todayM).not.toBeNull();
+    const elemsByName: Record<string, string> = {};
+    for (const row of todayM![2].matchAll(/jaName: '([^']+)', h: helioXY\(([^)]*)\)/g)) {
+      elemsByName[row[1]] = row[2];
+    }
+
+    const factory = new Function(
+      'jd', 'name',
+      normM![0] + '\n' + sunM![0] + '\n' + helioM![0] + '\n' + geoM![0] + '\n' + moonM![0] +
+      '\nvar ePos = helioXY(' + todayM![1] + ');' +
+      '\nvar elemsByName = ' + JSON.stringify(elemsByName) + ';' +
+      `
+      var mll = moonLonLat(jd);
+      // moonLonLatはラジアンを返すが、sunLonReal/geoLonDegは度を返す仕様のため、
+      // ここで度に変換して揃える。
+      var out = { moonLon: mll.lon * 180 / Math.PI, moonLat: mll.lat, sunLon: sunLonReal(jd) };
+      out.targetLon = name === null ? out.sunLon : (function() {
+        var argStr = elemsByName[name];
+        // 抽出元の文字列は末尾に実引数 "jd" をそのまま含む(元コードの
+        // helioXY(...,jd)呼び出し)ため、数値5個だけを取り出して実際のjdを渡す。
+        var args = argStr.split(',').slice(0, 5).map(function(s) { return parseFloat(s.trim()); });
+        args.push(jd);
+        var h = helioXY.apply(null, args);
+        return geoLonDeg(h.x, h.y, ePos.x, ePos.y);
+      })();
+      return out;
+      `
+    );
+    return (jd: number, name: string | null) => factory(jd, name) as { moonLon: number; sunLon: number; targetLon: number };
+  }
+
+  function angleDiff(a: number, b: number) {
+    const d = Math.abs(((a - b) % 360 + 360) % 360);
+    return d > 180 ? 360 - d : d;
+  }
+
+  it('第三者サイト(ssgeo)公開の「地球:月-土星/金星/太陽/海王星/火星/木星」アスペクト角(0°/45°/135°)と一致する', () => {
+    const { julianDate } = extractEclipseHelpers();
+    const geoLon = extractGeoLon();
+    const cases: Array<[string, number, number, number, number, string | null, number]> = [
+      ['月-土星', 2026, 8, 13, 9 + 26 / 60 + 10 / 3600, '土星', 135],
+      ['月-金星', 2026, 8, 12, 19 + 9 / 60 + 4 / 3600, '金星', 45],
+      ['月-太陽', 2026, 8, 12, 17 + 37 / 60 + 13 / 3600, null, 0],
+      ['月-海王星', 2026, 8, 12, 16 + 1 / 60 + 20 / 3600, '海王星', 135],
+      ['月-火星', 2026, 8, 12, 10 + 27 / 60 + 44 / 3600, '火星', 45],
+      ['月-木星', 2026, 8, 12, 0 + 1 / 60 + 48 / 3600, '木星', 0],
+    ];
+    for (const [label, y, mo, d, h, name, expected] of cases) {
+      const jd = julianDate(y, mo, d, h);
+      const { moonLon, targetLon } = geoLon(jd, name);
+      const diff = angleDiff(moonLon, targetLon);
+      // このページの月・惑星位置式はいずれも「誤差1度弱」の低精度近似
+      // (コード内コメントに明記済み)。第三者サイトとの一致もその精度内に収まる。
+      expect(Math.abs(diff - expected), label + ': 計算値' + diff.toFixed(2) + '度 vs 期待' + expected + '度').toBeLessThan(1.2);
+    }
+  });
+
   it('レグルスの黄道緯度(starLat)が実際の値(約+0.46度)に近い', () => {
     const lonMatch = html.match(/var starLon = \[([^\]]*)\];/);
     const latMatch = html.match(/var starLat = \[([^\]]*)\];/);

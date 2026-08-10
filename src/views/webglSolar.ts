@@ -1085,6 +1085,18 @@ input[type=range] { accent-color:#fdb813; width:120px; }
       if (starLabelVisible(ni5)) { ctx.font = '10px sans-serif'; ctx.fillStyle = ns5.color; ctx.fillText(ns5.name, np5.x+8, np5.y+3); }
       starScreenPos.push({ x: np5.x, y: np5.y, item: ns5 });
     }
+    // ポラリス(北極星)。実際の赤道座標(RA 2h31m49s, Dec +89度16分)を
+    // 黄道座標(J2000, λ≈88.57度, β≈66.10度)へ変換した値を使う。地軸固定・
+    // 自転モードは projectSky に対する赤道座標をそのまま使うが、今日の空は
+    // projectEclipticSky(黄道→赤道の地軸傾き回転込み)を使うため、
+    // ここだけ黄道座標での登録が必要。
+    var polarisT = projectEclipticSky(1.5458, 1.1537);
+    if (polarisT) {
+      ctx.beginPath(); ctx.arc(polarisT.x, polarisT.y, 4, 0, Math.PI*2); ctx.fillStyle = '#e8f0ff'; ctx.fill();
+      ctx.beginPath(); ctx.arc(polarisT.x, polarisT.y, 7, 0, Math.PI*2); ctx.strokeStyle = 'rgba(100,200,255,0.6)'; ctx.lineWidth = 1.5; ctx.stroke();
+      if (showStarLabels) { ctx.font = '10px sans-serif'; ctx.fillStyle = '#e8f0ff'; ctx.fillText('ポラリス(北極星)', polarisT.x+9, polarisT.y+3); }
+      starScreenPos.push({ x: polarisT.x, y: polarisT.y, item: { name: 'ポラリス(北極星)', type: '恒星', fact: 'こぐま座α星。地球の地軸がほぼ真っ直ぐ指す方向にあり、ほとんど動かないため航海や測量の目印にされてきました' } });
+    }
     drawSkyConstellationLines(projectEclipticSky);
     if (showConstellations) {
       ctx.lineWidth = 1; ctx.setLineDash([4,4]); ctx.strokeStyle = 'rgba(180,220,255,0.35)';
@@ -2031,15 +2043,21 @@ input[type=range] { accent-color:#fdb813; width:120px; }
     ctx.fillText('※月の満ち欠け(陰影)は地球の地表に立つ観測者から見た見え方を表示しています', 10, 46);
   }
 
+  // angle は各惑星の J2000 平均黄経(L0)をラジアンにした値(今日の空の
+  // helioXY呼び出しと同じL0を使用)。カレンダーで日付を選ぶと
+  // topViewTimeParameter()がその日までの経過日数を角度換算してtopTに渡し、
+  // ang = angle + topT/period で位置を計算するため、angleを実際のL0に
+  // 揃えないと「今日の空」(実際の軌道要素で計算)と俯瞰図で同じ日付でも
+  // 惑星配置が大きく食い違う。
   var planets = [
-    { name: '水星', jaName: '水星', type: '岩石惑星', orbitR: 80, radius: 4, period: 0.24, color: '#b5b5b5', angle: 0, fact: '太陽系最小の惑星。表面温度は-180°Cから430°Cと激しく変動します' },
-    { name: '金星', jaName: '金星', type: '岩石惑星', orbitR: 120, radius: 8, period: 0.62, color: '#e8cda0', angle: 1.0, fact: '地球から最も明るく見える惑星。厚い大気で温室効果が強烈です' },
-    { name: '地球', jaName: '地球', type: '岩石惑星', orbitR: 170, radius: 9, period: 1.0, color: '#4fa3e0', angle: 2.0, fact: '生命が存在する唯一確認されている惑星。表面の71%が海です', hasMoon: true },
-    { name: '火星', jaName: '火星', type: '岩石惑星', orbitR: 230, radius: 6, period: 1.88, color: '#c1440e', angle: 3.5, fact: '赤い惑星。太陽系最大の火山「オリンポス山」があります' },
-    { name: '木星', jaName: '木星', type: 'ガス惑星', orbitR: 320, radius: 20, period: 11.86, color: '#c88b3a', angle: 0.5, fact: '太陽系最大の惑星。大赤斑という巨大嵐が300年以上続いています' },
-    { name: '土星', jaName: '土星', type: 'ガス惑星', orbitR: 420, radius: 16, period: 29.46, color: '#e4d191', angle: 4.0, fact: '美しいリングを持つ惑星。平均密度が水より低く、海に浮かびます', hasRings: true },
-    { name: '天王星', jaName: '天王星', type: '氷巨星', orbitR: 510, radius: 11, period: 84.0, color: '#7de8e8', angle: 1.5, fact: '自転軸が約98度傾いており、横倒しになって公転しています' },
-    { name: '海王星', jaName: '海王星', type: '氷巨星', orbitR: 590, radius: 10, period: 165.0, color: '#4b70dd', angle: 2.8, fact: '太陽系最強の風速を持つ惑星。風速は2100km/hに達します' }
+    { name: '水星', jaName: '水星', type: '岩石惑星', orbitR: 80, radius: 4, period: 0.24, color: '#b5b5b5', angle: 4.4026, fact: '太陽系最小の惑星。表面温度は-180°Cから430°Cと激しく変動します' },
+    { name: '金星', jaName: '金星', type: '岩石惑星', orbitR: 120, radius: 8, period: 0.62, color: '#e8cda0', angle: 3.1761, fact: '地球から最も明るく見える惑星。厚い大気で温室効果が強烈です' },
+    { name: '地球', jaName: '地球', type: '岩石惑星', orbitR: 170, radius: 9, period: 1.0, color: '#4fa3e0', angle: 1.7534, fact: '生命が存在する唯一確認されている惑星。表面の71%が海です', hasMoon: true },
+    { name: '火星', jaName: '火星', type: '岩石惑星', orbitR: 230, radius: 6, period: 1.88, color: '#c1440e', angle: 6.2035, fact: '赤い惑星。太陽系最大の火山「オリンポス山」があります' },
+    { name: '木星', jaName: '木星', type: 'ガス惑星', orbitR: 320, radius: 20, period: 11.86, color: '#c88b3a', angle: 0.5995, fact: '太陽系最大の惑星。大赤斑という巨大嵐が300年以上続いています' },
+    { name: '土星', jaName: '土星', type: 'ガス惑星', orbitR: 420, radius: 16, period: 29.46, color: '#e4d191', angle: 0.8740, fact: '美しいリングを持つ惑星。平均密度が水より低く、海に浮かびます', hasRings: true },
+    { name: '天王星', jaName: '天王星', type: '氷巨星', orbitR: 510, radius: 11, period: 84.0, color: '#7de8e8', angle: 5.4813, fact: '自転軸が約98度傾いており、横倒しになって公転しています' },
+    { name: '海王星', jaName: '海王星', type: '氷巨星', orbitR: 590, radius: 10, period: 165.0, color: '#4b70dd', angle: 5.3119, fact: '太陽系最強の風速を持つ惑星。風速は2100km/hに達します' }
   ];
 
   var moon = { name: '月', type: '衛星', orbitR: 22, radius: 3, period: 0.075, color: '#cccccc', angle: 0, fact: '地球の唯一の天然衛星。地球の潮汐に影響を与えています' };

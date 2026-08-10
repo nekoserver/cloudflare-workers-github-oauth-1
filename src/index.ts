@@ -37,6 +37,7 @@ import { getHeritageJourneyPage } from './views/heritageJourney';
 import { getWebGLLVSpherePage } from './views/webglLVSphere';
 import { getWebGLCubePage } from './views/webglCube';
 import { getWebGLSolarPage } from './views/webglSolar';
+import { getMoondreamVlmPage } from './views/moondreamVlm';
 import { getEclipseTiltLessonPage } from './views/eclipseTiltLesson';
 import { getWebGLFaultsPage } from './views/webglFaults';
 import { getUuidGenPage } from './views/uuidGen';
@@ -93,6 +94,13 @@ import { interpretAichatSlashCommand, type CommitAgentLogRow } from './utils/aic
 import { AICHAT_MODEL_MAX_TOKENS, getModelRunParams, assignModelColors } from './utils/aichatModelConfig';
 import { extractAiUsage } from './utils/aiUsage';
 import { validateImageDataUrl, attachImageToLastUserMessage, resolveAichatModelsForRequest } from './utils/aichatImage';
+import {
+  MOONDREAM_MODEL,
+  validateMoondreamImageDataUrl,
+  dataUrlToImageBytes,
+  buildMoondreamRunParams,
+  parseMoondreamResponse,
+} from './utils/moondreamAnalyze';
 import { extractFunctionSource } from './utils/extractFunctionSource';
 import { listD1Databases, getD1Tables } from './utils/cloudflareApi';
 import { validateRevokeRequest } from './utils/revoke';
@@ -8641,6 +8649,62 @@ app.get('/webgl-cube', authMiddleware, async (c) => {
 app.get('/webgl-solar', authMiddleware, async (c) => {
   const user = c.get('user');
   return c.html(getWebGLSolarPage(user.sub));
+});
+
+app.get('/moondream-vlm', authMiddleware, async (c) => {
+  const user = c.get('user');
+  return c.html(getMoondreamVlmPage(user.sub));
+});
+
+// /moondream-vlm ページとAIチャットの画像添付機能の両方から呼ばれる内部用API。
+// Workers AI の画像分析VLM(@cf/moondream/moondream3.1-9B-A2B)へ画像とプロンプトを渡し、
+// 分析結果のテキストを返す。
+app.post('/api/moondream-analyze', authMiddleware, async (c) => {
+  const user = c.get('user');
+  let body: { image?: string; prompt?: string };
+  try {
+    body = await c.req.json();
+  } catch {
+    return jsonUtf8({ error: 'リクエスト形式が不正です' }, 400);
+  }
+  const image = (body.image ?? '').trim();
+  if (!image) {
+    return jsonUtf8({ error: '画像が指定されていません' }, 400);
+  }
+  const imageValidation = validateMoondreamImageDataUrl(image);
+  if (!imageValidation.ok) {
+    return jsonUtf8({ error: imageValidation.reason }, 400);
+  }
+  if (!c.env.AI) {
+    return jsonUtf8({ error: 'AI バインディングが未設定です' }, 503);
+  }
+  if (await checkAiChatRateLimit(c.env.DB, user.sub)) {
+    return jsonUtf8({ error: 'リクエストが多すぎます。しばらく待ってから再試行してください。' }, 429);
+  }
+
+  let imageBytes: number[];
+  try {
+    imageBytes = dataUrlToImageBytes(image);
+  } catch {
+    return jsonUtf8({ error: '画像データのデコードに失敗しました' }, 400);
+  }
+  const runParams = buildMoondreamRunParams(imageBytes, body.prompt);
+
+  try {
+    const result = await c.env.AI.run(
+      MOONDREAM_MODEL as Parameters<typeof c.env.AI.run>[0],
+      runParams as Parameters<typeof c.env.AI.run>[1]
+    );
+    const analysis = parseMoondreamResponse(result);
+    if (!analysis) {
+      logger.warn('[moondream-analyze] 空の応答', { resultKeys: typeof result === 'object' && result !== null ? Object.keys(result as object).join(',') : 'non-object' });
+      return jsonUtf8({ error: '分析結果を取得できませんでした' }, 502);
+    }
+    return jsonUtf8({ analysis, usedModel: MOONDREAM_MODEL });
+  } catch (err) {
+    logger.error('[moondream-analyze] 呼び出し失敗', { error: err instanceof Error ? err.message : String(err) });
+    return jsonUtf8({ error: '画像分析に失敗しました' }, 502);
+  }
 });
 
 app.get('/eclipse-tilt-lesson', authMiddleware, async (c) => {
