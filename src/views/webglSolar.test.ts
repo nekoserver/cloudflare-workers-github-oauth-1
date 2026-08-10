@@ -964,6 +964,498 @@ describe('getWebGLSolarPage', () => {
     expect(poleM![0]).toContain('if (showConstellations) {');
   });
 
+  // オリオン座の追加と、星座設定モーダルの全トグル状態をCookieへ保存/復元する
+  // 機能の回帰テスト。
+  //
+  // 故障シナリオ:
+  // (1) オリオン座がCONST_GROUPSに追加されただけでモーダル・星座線データと
+  //     結線されておらず操作不能、または既存のベテルギウス/リゲルと二重登録される
+  // (2) Cookie保存を「線」ボタンだけ、または「名前」ボタンだけに実装し、
+  //     もう片方のトグルが永続化されない
+  // (3) Cookie読み込みをbuildConstellationModalRows()より後に呼び、
+  //     初期表示のボタンのactiveクラスが保存状態を反映しない
+  // (4) Cookieの中身が壊れている/古い形式のときJSON.parseが例外を投げてページが白紙になる
+  // (5) 「その他」行(showConstellations)がCookie往復の対象から漏れる
+
+  it('CONST_GROUPSにオリオン座が独立キーで登録され、既存のベテルギウス/リゲルを再利用しつつ新規5星が追加されている', () => {
+    const m = html.match(/var CONST_GROUPS = \[([\s\S]*?)\n  \];/);
+    expect(m).not.toBeNull();
+    expect(m![1]).toContain("key: 'orion'");
+    expect(m![1]).toContain("name: 'オリオン座'");
+    const orionGroup = m![1].match(/key: 'orion'[^\n]*starIndices: \[([^\]]*)\]/);
+    expect(orionGroup).not.toBeNull();
+    const idxs = orionGroup![1].split(',').map((s) => parseInt(s.trim(), 10));
+    expect(idxs).toEqual([1, 2, 38, 39, 40, 41, 42]);
+    expect(html).toContain("name: 'ベラトリックス'");
+    expect(html).toContain("name: 'ミンタカ'");
+    expect(html).toContain("name: 'アルニラム'");
+    expect(html).toContain("name: 'アルニタク'");
+    expect(html).toContain("name: 'サイフ'");
+  });
+
+  it('オリオン座の星座線がskyConstellationLines・constellationLinesの両方にkey付きで登録され、インデックスが範囲内にある', () => {
+    const { lons } = extractRadArrays();
+    const skyM = html.match(/var skyConstellationLines = \[([\s\S]*?)\n  \];/);
+    expect(skyM).not.toBeNull();
+    const orionLine = skyM![1].match(/key: 'orion'[^\n]*indices: \[([^\]]*)\]/);
+    expect(orionLine, '天球モードのオリオン座星座線').not.toBeNull();
+    const idxs = orionLine![1].split(',').map((s) => parseInt(s.trim(), 10));
+    expect(idxs).toContain(1); // ベテルギウス
+    expect(idxs).toContain(2); // リゲル
+    for (const idx of idxs) {
+      expect(idx).toBeGreaterThanOrEqual(0);
+      expect(idx).toBeLessThan(lons.length);
+    }
+    const topM = html.match(/var constellationLines = \[([\s\S]*?)\n  \];/);
+    expect(topM).not.toBeNull();
+    expect(topM![1]).toContain("key: 'orion'");
+    expect(topM![1]).toContain("name: 'オリオン座'");
+  });
+
+  it('オリオン座の新規5星(ベラトリックス・ミンタカ・アルニラム・アルニタク・サイフ)が黄道座標(J2000)で登録されている', () => {
+    const { lons, lats } = extractRadArrays();
+    const expected: Array<{ idx: number; name: string; lon: number; lat: number }> = [
+      { idx: 38, name: 'ベラトリックス', lon: 1.4128, lat: -0.2935 },
+      { idx: 39, name: 'ミンタカ', lon: 1.4375, lat: -0.4111 },
+      { idx: 40, name: 'アルニラム', lon: 1.4567, lat: -0.4277 },
+      { idx: 41, name: 'アルニタク', lon: 1.4780, lat: -0.4415 },
+      { idx: 42, name: 'サイフ', lon: 1.5079, lat: -0.5772 },
+    ];
+    for (const e of expected) {
+      expect(Math.abs(lons[e.idx] - e.lon), `${e.name} の黄道経度`).toBeLessThan(0.02);
+      expect(Math.abs(lats[e.idx] - e.lat), `${e.name} の黄道緯度`).toBeLessThan(0.02);
+    }
+  });
+
+  it('constStateにオリオン座の初期状態(名前ON・線OFF)が存在する', () => {
+    const m = html.match(/var constState = \{[\s\S]*?\n  \};/);
+    expect(m).not.toBeNull();
+    expect(m![0]).toMatch(/orion:\s*\{\s*names:\s*true,\s*lines:\s*false\s*\}/);
+  });
+
+  it('loadConstStateCookieはCookieのJSONから各星座のnames/linesと「その他」のshowConstellationsを復元する', () => {
+    const groupsM = html.match(/var CONST_GROUPS = \[([\s\S]*?)\n  \];/);
+    const stateM = html.match(/var constState = \{[\s\S]*?\n  \};/);
+    const cookieConstM = html.match(/var CONST_STATE_COOKIE = '[^']*';/);
+    const loadM = html.match(/function loadConstStateCookie\(\) \{[\s\S]*?\n  \}/);
+    expect(groupsM).not.toBeNull();
+    expect(stateM).not.toBeNull();
+    expect(cookieConstM).not.toBeNull();
+    expect(loadM).not.toBeNull();
+
+    const savedState = {
+      perseus: { names: false, lines: true },
+      taurus: { names: true, lines: false },
+      pisces: { names: true, lines: false },
+      aries: { names: true, lines: false },
+      auriga: { names: true, lines: false },
+      orion: { names: false, lines: true },
+      other: { lines: true },
+    };
+    const factory = new Function(
+      'readCookie', 'showConstellations',
+      groupsM![0] + '\n' + stateM![0] + '\n' + cookieConstM![0] + '\n' + loadM![0] +
+      '\nloadConstStateCookie();' +
+      '\nreturn { constState: constState, showConstellations: showConstellations };'
+    );
+    const result = factory(() => JSON.stringify(savedState), false);
+    expect(result.constState.perseus).toEqual({ names: false, lines: true });
+    expect(result.constState.orion).toEqual({ names: false, lines: true });
+    expect(result.showConstellations, '「その他」行の状態も復元される').toBe(true);
+  });
+
+  it('loadConstStateCookieは壊れたJSON/空文字を渡されても例外を投げず、既定値のまま何もしない', () => {
+    const groupsM = html.match(/var CONST_GROUPS = \[([\s\S]*?)\n  \];/);
+    const stateM = html.match(/var constState = \{[\s\S]*?\n  \};/);
+    const cookieConstM = html.match(/var CONST_STATE_COOKIE = '[^']*';/);
+    const loadM = html.match(/function loadConstStateCookie\(\) \{[\s\S]*?\n  \}/);
+    for (const raw of ['', '{not valid json', 'null', '"just a string"', '42']) {
+      const factory = new Function(
+        'readCookie', 'showConstellations',
+        groupsM![0] + '\n' + stateM![0] + '\n' + cookieConstM![0] + '\n' + loadM![0] +
+        '\nreturn function() { loadConstStateCookie(); return { constState: constState, showConstellations: showConstellations }; };'
+      );
+      const run = factory(() => raw, false);
+      expect(() => run(), 'raw=' + JSON.stringify(raw)).not.toThrow();
+      const result = run();
+      expect(result.constState.orion, 'raw=' + JSON.stringify(raw)).toEqual({ names: true, lines: false });
+    }
+  });
+
+  it('saveConstStateCookieは全星座のnames/linesと「その他」のlinesをJSONにしてwriteCookieへ渡す', () => {
+    const groupsM = html.match(/var CONST_GROUPS = \[([\s\S]*?)\n  \];/);
+    const saveM = html.match(/function saveConstStateCookie\(\) \{[\s\S]*?\n  \}/);
+    const cookieConstM = html.match(/var CONST_STATE_COOKIE = '[^']*';/);
+    expect(groupsM).not.toBeNull();
+    expect(saveM).not.toBeNull();
+
+    const constState = {
+      perseus: { names: true, lines: false },
+      taurus: { names: false, lines: true },
+      pisces: { names: true, lines: false },
+      aries: { names: true, lines: false },
+      auriga: { names: true, lines: false },
+      orion: { names: true, lines: true },
+      cassiopeia: { names: true, lines: false },
+      gemini: { names: true, lines: false },
+      bootes: { names: true, lines: false },
+      canisMinor: { names: true, lines: false },
+      monoceros: { names: true, lines: false },
+      lepus: { names: true, lines: false },
+    };
+    let savedName: string | null = null;
+    let savedValue: string | null = null;
+    const factory = new Function(
+      'constState', 'showConstellations', 'writeCookie',
+      groupsM![0] + '\n' + cookieConstM![0] + '\n' + saveM![0] + '\nsaveConstStateCookie();'
+    );
+    factory(constState, true, (name: string, value: string) => { savedName = name; savedValue = value; });
+    expect(savedName).toBe('solar_const_state');
+    const parsed = JSON.parse(savedValue!);
+    expect(parsed.taurus).toEqual({ names: false, lines: true });
+    expect(parsed.orion).toEqual({ names: true, lines: true });
+    expect(parsed.other).toEqual({ lines: true });
+  });
+
+  it('loadConstStateCookieはbuildConstellationModalRows()より前に呼ばれ、モーダル初期表示のactiveクラスに保存状態を反映する', () => {
+    const idxLoad = html.indexOf('loadConstStateCookie();');
+    const idxBuild = html.indexOf('buildConstellationModalRows();');
+    expect(idxLoad, 'loadConstStateCookie呼び出し').toBeGreaterThan(-1);
+    expect(idxBuild, 'buildConstellationModalRows呼び出し').toBeGreaterThan(-1);
+    expect(idxLoad, 'Cookie読み込みはモーダル行構築より前').toBeLessThan(idxBuild);
+
+    const rowM = html.match(/function makeConstRow\(key, label, hasNames\) \{[\s\S]*?\n  \}/);
+    expect(rowM).not.toBeNull();
+    expect(rowM![0]).toContain("nameBtn.className = 'btn const-toggle' + (constState[key].names ? ' active' : '');");
+    expect(rowM![0]).toContain("lineBtn.className = 'btn const-toggle' + ((key === 'other' ? showConstellations : constState[key].lines) ? ' active' : '');");
+  });
+
+  it('名前・線どちらのトグルボタンをクリックしてもsaveConstStateCookie()が呼ばれる', () => {
+    const rowM = html.match(/function makeConstRow\(key, label, hasNames\) \{[\s\S]*?\n  \}/);
+    expect(rowM).not.toBeNull();
+    const nameClickM = rowM![0].match(/nameBtn\.addEventListener\('click', function\(\) \{[\s\S]*?\n      \}\);/);
+    const lineClickM = rowM![0].match(/lineBtn\.addEventListener\('click', function\(\) \{[\s\S]*?\n    \}\);/);
+    expect(nameClickM, '名前ボタンのクリックハンドラ').not.toBeNull();
+    expect(lineClickM, '線ボタンのクリックハンドラ').not.toBeNull();
+    expect(nameClickM![0]).toContain('saveConstStateCookie();');
+    expect(lineClickM![0]).toContain('saveConstStateCookie();');
+  });
+
+  it('CONST_GROUPS・constStateにカシオペア座が独立キーで登録されている', () => {
+    const groupsM = html.match(/var CONST_GROUPS = \[([\s\S]*?)\n  \];/);
+    const stateM = html.match(/var constState = \{[\s\S]*?\n  \};/);
+    expect(groupsM).not.toBeNull();
+    expect(stateM).not.toBeNull();
+    expect(groupsM![1]).toContain("key: 'cassiopeia'");
+    expect(groupsM![1]).toContain("name: 'カシオペア座'");
+    const group = groupsM![1].match(/key: 'cassiopeia'[^\n]*starIndices: \[([^\]]*)\]/);
+    expect(group).not.toBeNull();
+    expect(group![1].split(',').map((s) => parseInt(s.trim(), 10))).toEqual([43, 44, 45, 46, 47]);
+    expect(stateM![0]).toMatch(/cassiopeia:\s*\{\s*names:\s*true,\s*lines:\s*false\s*\}/);
+  });
+
+  it('カシオペア座の星座線がskyConstellationLines・constellationLinesの両方にkey付きで登録され、インデックスが範囲内にある', () => {
+    const { lons } = extractRadArrays();
+    const skyM = html.match(/var skyConstellationLines = \[([\s\S]*?)\n  \];/);
+    expect(skyM).not.toBeNull();
+    const line = skyM![1].match(/key: 'cassiopeia'[^\n]*indices: \[([^\]]*)\]/);
+    expect(line, '天球モードのカシオペア座星座線').not.toBeNull();
+    const idxs = line![1].split(',').map((s) => parseInt(s.trim(), 10));
+    expect(idxs).toEqual([43, 44, 45, 46, 47]);
+    for (const idx of idxs) {
+      expect(idx).toBeGreaterThanOrEqual(0);
+      expect(idx).toBeLessThan(lons.length);
+    }
+    const topM = html.match(/var constellationLines = \[([\s\S]*?)\n  \];/);
+    expect(topM).not.toBeNull();
+    expect(topM![1]).toContain("key: 'cassiopeia'");
+    expect(topM![1]).toContain("name: 'カシオペア座'");
+  });
+
+  it('カシオペア座の5星(カフ・シェダル・ツィー・ルクバー・セギン)が黄道座標(J2000)で登録されている', () => {
+    const { lons, lats } = extractRadArrays();
+    const expected: Array<{ idx: number; name: string; lon: number; lat: number }> = [
+      { idx: 43, name: 'カフ', lon: 0.6129, lat: 0.8939 },
+      { idx: 44, name: 'シェダル', lon: 0.6594, lat: 0.8137 },
+      { idx: 45, name: 'ツィー', lon: 0.7667, lat: 0.8520 },
+      { idx: 46, name: 'ルクバー', lon: 0.8365, lat: 0.8099 },
+      { idx: 47, name: 'セギン', lon: 0.9558, lat: 0.8299 },
+    ];
+    for (const e of expected) {
+      expect(Math.abs(lons[e.idx] - e.lon), `${e.name} の黄道経度`).toBeLessThan(0.02);
+      expect(Math.abs(lats[e.idx] - e.lat), `${e.name} の黄道緯度`).toBeLessThan(0.02);
+    }
+    expect(html).toContain("name: 'カフ'");
+    expect(html).toContain("name: 'シェダル'");
+    expect(html).toContain("name: 'ツィー'");
+    expect(html).toContain("name: 'ルクバー'");
+    expect(html).toContain("name: 'セギン'");
+  });
+
+  it('カシオペア座もCookie保存/復元(loadConstStateCookie/saveConstStateCookie)の対象になる', () => {
+    const groupsM = html.match(/var CONST_GROUPS = \[([\s\S]*?)\n  \];/);
+    const stateM = html.match(/var constState = \{[\s\S]*?\n  \};/);
+    const cookieConstM = html.match(/var CONST_STATE_COOKIE = '[^']*';/);
+    const loadM = html.match(/function loadConstStateCookie\(\) \{[\s\S]*?\n  \}/);
+    const saveM = html.match(/function saveConstStateCookie\(\) \{[\s\S]*?\n  \}/);
+    expect(groupsM).not.toBeNull();
+    expect(stateM).not.toBeNull();
+
+    const savedState = { cassiopeia: { names: false, lines: true } };
+    const loadFactory = new Function(
+      'readCookie', 'showConstellations',
+      groupsM![0] + '\n' + stateM![0] + '\n' + cookieConstM![0] + '\n' + loadM![0] +
+      '\nloadConstStateCookie();\nreturn constState;'
+    );
+    const loaded = loadFactory(() => JSON.stringify(savedState), false);
+    expect(loaded.cassiopeia).toEqual({ names: false, lines: true });
+
+    let savedValue: string | null = null;
+    const saveFactory = new Function(
+      'constState', 'showConstellations', 'writeCookie',
+      groupsM![0] + '\n' + cookieConstM![0] + '\n' + saveM![0] + '\nsaveConstStateCookie();'
+    );
+    const stateForSave = {
+      perseus: { names: true, lines: false }, taurus: { names: true, lines: false },
+      pisces: { names: true, lines: false }, aries: { names: true, lines: false },
+      auriga: { names: true, lines: false }, orion: { names: true, lines: false },
+      cassiopeia: { names: false, lines: true },
+      gemini: { names: true, lines: false }, bootes: { names: true, lines: false },
+      canisMinor: { names: true, lines: false },
+      monoceros: { names: true, lines: false }, lepus: { names: true, lines: false },
+    };
+    saveFactory(stateForSave, false, (_n: string, v: string) => { savedValue = v; });
+    expect(JSON.parse(savedValue!).cassiopeia).toEqual({ names: false, lines: true });
+  });
+
+  it('CONST_GROUPS・constStateにふたご座・うしかい座が独立キーで登録され、既存のカストル/ポルックス/アークトゥルスを再利用する', () => {
+    const groupsM = html.match(/var CONST_GROUPS = \[([\s\S]*?)\n  \];/);
+    const stateM = html.match(/var constState = \{[\s\S]*?\n  \};/);
+    expect(groupsM).not.toBeNull();
+    expect(stateM).not.toBeNull();
+
+    const geminiGroup = groupsM![1].match(/key: 'gemini'[^\n]*starIndices: \[([^\]]*)\]/);
+    expect(geminiGroup, 'ふたご座グループ').not.toBeNull();
+    expect(geminiGroup![1].split(',').map((s) => parseInt(s.trim(), 10))).toEqual([10, 12, 48, 49, 50, 51]);
+
+    const bootesGroup = groupsM![1].match(/key: 'bootes'[^\n]*starIndices: \[([^\]]*)\]/);
+    expect(bootesGroup, 'うしかい座グループ').not.toBeNull();
+    expect(bootesGroup![1].split(',').map((s) => parseInt(s.trim(), 10))).toEqual([9, 52, 53, 54, 55]);
+
+    expect(stateM![0]).toMatch(/gemini:\s*\{\s*names:\s*true,\s*lines:\s*false\s*\}/);
+    expect(stateM![0]).toMatch(/bootes:\s*\{\s*names:\s*true,\s*lines:\s*false\s*\}/);
+    expect(html).toContain("name: 'アルヘナ'");
+    expect(html).toContain("name: 'ワサト'");
+    expect(html).toContain("name: 'メブスタ'");
+    expect(html).toContain("name: 'テジャト'");
+    expect(html).toContain("name: 'イザール'");
+    expect(html).toContain("name: 'ムフリド'");
+    expect(html).toContain("name: 'セギヌス'");
+    expect(html).toContain("name: 'ネックァル'");
+  });
+
+  it('ふたご座・うしかい座の星座線がskyConstellationLines・constellationLinesの両方にkey付きで登録され、インデックスが範囲内にある', () => {
+    const { lons } = extractRadArrays();
+    const skyM = html.match(/var skyConstellationLines = \[([\s\S]*?)\n  \];/);
+    expect(skyM).not.toBeNull();
+
+    const geminiLine = skyM![1].match(/key: 'gemini'[^\n]*indices: \[([^\]]*)\]/);
+    expect(geminiLine, '天球モードのふたご座星座線').not.toBeNull();
+    const geminiIdxs = geminiLine![1].split(',').map((s) => parseInt(s.trim(), 10));
+    expect(geminiIdxs).toContain(10); // ポルックス
+    expect(geminiIdxs).toContain(12); // カストル
+
+    const bootesLine = skyM![1].match(/key: 'bootes'[^\n]*indices: \[([^\]]*)\]/);
+    expect(bootesLine, '天球モードのうしかい座星座線').not.toBeNull();
+    const bootesIdxs = bootesLine![1].split(',').map((s) => parseInt(s.trim(), 10));
+    expect(bootesIdxs).toContain(9); // アークトゥルス
+
+    for (const idx of [...geminiIdxs, ...bootesIdxs]) {
+      expect(idx).toBeGreaterThanOrEqual(0);
+      expect(idx).toBeLessThan(lons.length);
+    }
+
+    const topM = html.match(/var constellationLines = \[([\s\S]*?)\n  \];/);
+    expect(topM).not.toBeNull();
+    expect(topM![1]).toContain("key: 'gemini'");
+    expect(topM![1]).toContain("name: 'ふたご座'");
+    expect(topM![1]).toContain("key: 'bootes'");
+    expect(topM![1]).toContain("name: 'うしかい座'");
+  });
+
+  it('ふたご座・うしかい座の新規星が黄道座標(J2000)で登録されている', () => {
+    const { lons, lats } = extractRadArrays();
+    const expected: Array<{ idx: number; name: string; lon: number; lat: number }> = [
+      { idx: 48, name: 'アルヘナ', lon: 1.7297, lat: -0.1177 },
+      { idx: 49, name: 'ワサト', lon: 1.8940, lat: -0.0031 },
+      { idx: 50, name: 'メブスタ', lon: 1.7443, lat: 0.0361 },
+      { idx: 51, name: 'テジャト', lon: 1.6633, lat: -0.0143 },
+      { idx: 52, name: 'イザール', lon: 3.6321, lat: 0.7090 },
+      { idx: 53, name: 'ムフリド', lon: 3.4791, lat: 0.4900 },
+      { idx: 54, name: 'セギヌス', lon: 3.4499, lat: 0.8648 },
+      { idx: 55, name: 'ネックァル', lon: 3.5648, lat: 0.9451 },
+    ];
+    for (const e of expected) {
+      expect(Math.abs(lons[e.idx] - e.lon), `${e.name} の黄道経度`).toBeLessThan(0.02);
+      expect(Math.abs(lats[e.idx] - e.lat), `${e.name} の黄道緯度`).toBeLessThan(0.02);
+    }
+  });
+
+  it('ふたご座・うしかい座もCookie保存/復元の対象になる', () => {
+    const groupsM = html.match(/var CONST_GROUPS = \[([\s\S]*?)\n  \];/);
+    const stateM = html.match(/var constState = \{[\s\S]*?\n  \};/);
+    const cookieConstM = html.match(/var CONST_STATE_COOKIE = '[^']*';/);
+    const loadM = html.match(/function loadConstStateCookie\(\) \{[\s\S]*?\n  \}/);
+    expect(groupsM).not.toBeNull();
+    expect(stateM).not.toBeNull();
+
+    const savedState = { gemini: { names: false, lines: true }, bootes: { names: false, lines: true } };
+    const loadFactory = new Function(
+      'readCookie', 'showConstellations',
+      groupsM![0] + '\n' + stateM![0] + '\n' + cookieConstM![0] + '\n' + loadM![0] +
+      '\nloadConstStateCookie();\nreturn constState;'
+    );
+    const loaded = loadFactory(() => JSON.stringify(savedState), false);
+    expect(loaded.gemini).toEqual({ names: false, lines: true });
+    expect(loaded.bootes).toEqual({ names: false, lines: true });
+  });
+
+  it('CONST_GROUPSにこいぬ座が独立キーで登録され、星座線・新規2星(プロキオン・ゴメイサ)が黄道座標で登録されている', () => {
+    const { lons, lats } = extractRadArrays();
+    const groupsM = html.match(/var CONST_GROUPS = \[([\s\S]*?)\n  \];/);
+    const stateM = html.match(/var constState = \{[\s\S]*?\n  \};/);
+    expect(groupsM).not.toBeNull();
+    expect(stateM).not.toBeNull();
+
+    const group = groupsM![1].match(/key: 'canisMinor'[^\n]*starIndices: \[([^\]]*)\]/);
+    expect(group).not.toBeNull();
+    expect(group![1].split(',').map((s) => parseInt(s.trim(), 10))).toEqual([56, 57]);
+    expect(stateM![0]).toMatch(/canisMinor:\s*\{\s*names:\s*true,\s*lines:\s*false\s*\}/);
+
+    const skyM = html.match(/var skyConstellationLines = \[([\s\S]*?)\n  \];/);
+    expect(skyM).not.toBeNull();
+    const line = skyM![1].match(/key: 'canisMinor'[^\n]*indices: \[([^\]]*)\]/);
+    expect(line, '天球モードのこいぬ座星座線').not.toBeNull();
+    const idxs = line![1].split(',').map((s) => parseInt(s.trim(), 10));
+    expect(idxs).toEqual([56, 57]);
+    for (const idx of idxs) {
+      expect(idx).toBeGreaterThanOrEqual(0);
+      expect(idx).toBeLessThan(lons.length);
+    }
+    const topM = html.match(/var constellationLines = \[([\s\S]*?)\n  \];/);
+    expect(topM).not.toBeNull();
+    expect(topM![1]).toContain("key: 'canisMinor'");
+    expect(topM![1]).toContain("name: 'こいぬ座'");
+
+    const expected: Array<{ idx: number; name: string; lon: number; lat: number }> = [
+      { idx: 56, name: 'プロキオン', lon: 2.0208, lat: -0.2796 },
+      { idx: 57, name: 'ゴメイサ', lon: 1.9581, lat: -0.2354 },
+    ];
+    for (const e of expected) {
+      expect(Math.abs(lons[e.idx] - e.lon), `${e.name} の黄道経度`).toBeLessThan(0.02);
+      expect(Math.abs(lats[e.idx] - e.lat), `${e.name} の黄道緯度`).toBeLessThan(0.02);
+    }
+    expect(html).toContain("name: 'プロキオン'");
+    expect(html).toContain("name: 'ゴメイサ'");
+  });
+
+  // 冬の大三角(ベテルギウス・シリウス・プロキオン)は夏の大三角・北斗七星・南十字と
+  // 同じく複数星座にまたがるasterismのため、専用トグルは設けず既存の
+  // showConstellations(「その他」行、Cookie持続化も既存のまま)に相乗りさせる設計。
+  it('冬の大三角(winterTriIdx)がベテルギウス・シリウス・プロキオンの3点で、showConstellations配下の全描画箇所に存在する', () => {
+    const idxM = html.match(/var winterTriIdx = \[([^\]]*)\];/);
+    expect(idxM).not.toBeNull();
+    expect(idxM![1].split(',').map((s) => parseInt(s.trim(), 10))).toEqual([1, 0, 56]);
+
+    for (const fnName of ['drawTodaySky', 'drawPoleView', 'drawSpinView', 'drawSkyView']) {
+      const re = new RegExp('function ' + fnName + '\\([\\s\\S]*?\\n  function ');
+      const m = html.match(re) || html.match(new RegExp('function ' + fnName + '\\([\\s\\S]*$'));
+      expect(m, fnName).not.toBeNull();
+      expect(m![0], fnName + ' が冬の大三角を描画する').toContain('winterTriIdx');
+    }
+    const frameM = html.match(/function frame\(now\) \{[\s\S]*?\n  \}/);
+    expect(frameM).not.toBeNull();
+    expect(frameM![0]).toContain('winterTriIdx[wtiO]');
+  });
+
+  it('CONST_GROUPSにいっかくじゅう座・うさぎ座が独立キーで登録され、星座線・新規星が黄道座標で登録されている', () => {
+    const { lons, lats } = extractRadArrays();
+    const groupsM = html.match(/var CONST_GROUPS = \[([\s\S]*?)\n  \];/);
+    const stateM = html.match(/var constState = \{[\s\S]*?\n  \};/);
+    expect(groupsM).not.toBeNull();
+    expect(stateM).not.toBeNull();
+
+    const monGroup = groupsM![1].match(/key: 'monoceros'[^\n]*starIndices: \[([^\]]*)\]/);
+    expect(monGroup, 'いっかくじゅう座グループ').not.toBeNull();
+    expect(monGroup![1].split(',').map((s) => parseInt(s.trim(), 10))).toEqual([58, 59, 60, 61, 62]);
+
+    const lepGroup = groupsM![1].match(/key: 'lepus'[^\n]*starIndices: \[([^\]]*)\]/);
+    expect(lepGroup, 'うさぎ座グループ').not.toBeNull();
+    expect(lepGroup![1].split(',').map((s) => parseInt(s.trim(), 10))).toEqual([63, 64, 65, 66, 67]);
+
+    expect(stateM![0]).toMatch(/monoceros:\s*\{\s*names:\s*true,\s*lines:\s*false\s*\}/);
+    expect(stateM![0]).toMatch(/lepus:\s*\{\s*names:\s*true,\s*lines:\s*false\s*\}/);
+
+    const skyM = html.match(/var skyConstellationLines = \[([\s\S]*?)\n  \];/);
+    expect(skyM).not.toBeNull();
+    const monLine = skyM![1].match(/key: 'monoceros'[^\n]*indices: \[([^\]]*)\]/);
+    const lepLine = skyM![1].match(/key: 'lepus'[^\n]*indices: \[([^\]]*)\]/);
+    expect(monLine, '天球モードのいっかくじゅう座星座線').not.toBeNull();
+    expect(lepLine, '天球モードのうさぎ座星座線').not.toBeNull();
+    const allIdxs = [
+      ...monLine![1].split(',').map((s) => parseInt(s.trim(), 10)),
+      ...lepLine![1].split(',').map((s) => parseInt(s.trim(), 10)),
+    ];
+    for (const idx of allIdxs) {
+      expect(idx).toBeGreaterThanOrEqual(0);
+      expect(idx).toBeLessThan(lons.length);
+    }
+
+    const topM = html.match(/var constellationLines = \[([\s\S]*?)\n  \];/);
+    expect(topM).not.toBeNull();
+    expect(topM![1]).toContain("key: 'monoceros'");
+    expect(topM![1]).toContain("name: 'いっかくじゅう座'");
+    expect(topM![1]).toContain("key: 'lepus'");
+    expect(topM![1]).toContain("name: 'うさぎ座'");
+
+    const expected: Array<{ idx: number; name: string; lon: number; lat: number }> = [
+      { idx: 58, name: 'アルファ・モノケロティス', lon: 2.0818, lat: -0.5315 },
+      { idx: 59, name: 'ベータ・モノケロティス', lon: 1.7154, lat: -0.5282 },
+      { idx: 60, name: 'ガンマ・モノケロティス', lon: 1.6450, lat: -0.5177 },
+      { idx: 61, name: 'デルタ・モノケロティス', lon: 1.9118, lat: -0.3966 },
+      { idx: 62, name: 'ゼータ・モノケロティス', lon: 2.1841, lat: -0.3941 },
+      { idx: 63, name: 'アルネブ', lon: 1.4204, lat: -0.7166 },
+      { idx: 64, name: 'ニハル', lon: 1.3905, lat: -0.7665 },
+      { idx: 65, name: 'ガンマ・レポリス', lon: 1.4808, lat: -0.7997 },
+      { idx: 66, name: 'デルタ・レポリス', lon: 1.5213, lat: -0.7731 },
+      { idx: 67, name: 'ミュー・レポリス', lon: 1.3160, lat: -0.6816 },
+    ];
+    for (const e of expected) {
+      expect(Math.abs(lons[e.idx] - e.lon), `${e.name} の黄道経度`).toBeLessThan(0.02);
+      expect(Math.abs(lats[e.idx] - e.lat), `${e.name} の黄道緯度`).toBeLessThan(0.02);
+      expect(html).toContain("name: '" + e.name + "'");
+    }
+  });
+
+  it('いっかくじゅう座・うさぎ座もCookie保存/復元の対象になる', () => {
+    const groupsM = html.match(/var CONST_GROUPS = \[([\s\S]*?)\n  \];/);
+    const stateM = html.match(/var constState = \{[\s\S]*?\n  \};/);
+    const cookieConstM = html.match(/var CONST_STATE_COOKIE = '[^']*';/);
+    const loadM = html.match(/function loadConstStateCookie\(\) \{[\s\S]*?\n  \}/);
+    expect(groupsM).not.toBeNull();
+    expect(stateM).not.toBeNull();
+
+    const savedState = { monoceros: { names: false, lines: true }, lepus: { names: false, lines: true } };
+    const loadFactory = new Function(
+      'readCookie', 'showConstellations',
+      groupsM![0] + '\n' + stateM![0] + '\n' + cookieConstM![0] + '\n' + loadM![0] +
+      '\nloadConstStateCookie();\nreturn constState;'
+    );
+    const loaded = loadFactory(() => JSON.stringify(savedState), false);
+    expect(loaded.monoceros).toEqual({ names: false, lines: true });
+    expect(loaded.lepus).toEqual({ names: false, lines: true });
+  });
+
   it('レグルスの黄道緯度(starLat)が実際の値(約+0.46度)に近い', () => {
     const lonMatch = html.match(/var starLon = \[([^\]]*)\];/);
     const latMatch = html.match(/var starLat = \[([^\]]*)\];/);
