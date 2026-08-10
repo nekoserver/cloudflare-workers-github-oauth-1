@@ -1519,6 +1519,19 @@ describe('getWebGLSolarPage', () => {
     expect(bodyRuleM![0]).not.toContain('height:100dvh;');
   });
 
+  // 今日の空モード(drawTodaySky)にはポラリスが描画されていなかった。地軸固定・
+  // 自転モードは既にポラリスを描画しているが、それらは projectSky(緯度経度を
+  // そのまま赤道座標として扱う簡易表現)に対する実際の赤道座標(RA/Dec)で
+  // ハードコードされている。今日の空は projectEclipticSky(黄道→赤道の
+  // 地軸傾き回転込み)を使うため、同じ値をそのまま流用すると位置がずれる。
+  // 黄道座標へ変換した値を新たに使う必要がある。
+  it('今日の空モードにポラリスが黄道座標(J2000)で描画される', () => {
+    const m = html.match(/function drawTodaySky\([\s\S]*?\n  function drawPoleView/);
+    expect(m).not.toBeNull();
+    expect(m![0], 'ポラリスの描画').toMatch(/projectEclipticSky\(1\.5458, 1\.1537\)/);
+    expect(m![0]).toContain('ポラリス');
+  });
+
   it('レグルスの黄道緯度(starLat)が実際の値(約+0.46度)に近い', () => {
     const lonMatch = html.match(/var starLon = \[([^\]]*)\];/);
     const latMatch = html.match(/var starLat = \[([^\]]*)\];/);

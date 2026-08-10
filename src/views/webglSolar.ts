@@ -1085,6 +1085,18 @@ input[type=range] { accent-color:#fdb813; width:120px; }
       if (starLabelVisible(ni5)) { ctx.font = '10px sans-serif'; ctx.fillStyle = ns5.color; ctx.fillText(ns5.name, np5.x+8, np5.y+3); }
       starScreenPos.push({ x: np5.x, y: np5.y, item: ns5 });
     }
+    // ポラリス(北極星)。実際の赤道座標(RA 2h31m49s, Dec +89度16分)を
+    // 黄道座標(J2000, λ≈88.57度, β≈66.10度)へ変換した値を使う。地軸固定・
+    // 自転モードは projectSky に対する赤道座標をそのまま使うが、今日の空は
+    // projectEclipticSky(黄道→赤道の地軸傾き回転込み)を使うため、
+    // ここだけ黄道座標での登録が必要。
+    var polarisT = projectEclipticSky(1.5458, 1.1537);
+    if (polarisT) {
+      ctx.beginPath(); ctx.arc(polarisT.x, polarisT.y, 4, 0, Math.PI*2); ctx.fillStyle = '#e8f0ff'; ctx.fill();
+      ctx.beginPath(); ctx.arc(polarisT.x, polarisT.y, 7, 0, Math.PI*2); ctx.strokeStyle = 'rgba(100,200,255,0.6)'; ctx.lineWidth = 1.5; ctx.stroke();
+      if (showStarLabels) { ctx.font = '10px sans-serif'; ctx.fillStyle = '#e8f0ff'; ctx.fillText('ポラリス(北極星)', polarisT.x+9, polarisT.y+3); }
+      starScreenPos.push({ x: polarisT.x, y: polarisT.y, item: { name: 'ポラリス(北極星)', type: '恒星', fact: 'こぐま座α星。地球の地軸がほぼ真っ直ぐ指す方向にあり、ほとんど動かないため航海や測量の目印にされてきました' } });
+    }
     drawSkyConstellationLines(projectEclipticSky);
     if (showConstellations) {
       ctx.lineWidth = 1; ctx.setLineDash([4,4]); ctx.strokeStyle = 'rgba(180,220,255,0.35)';
