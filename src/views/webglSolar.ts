@@ -726,14 +726,21 @@ input[type=range] { accent-color:#fdb813; width:120px; }
   // starLon/starLat は J2000 の黄道座標(λ, β)をラジアンで格納する。
   // 自転モード(projectSky)・今日の空モード(projectEclipticSky)の両方が黄道座標を
   // 前提とするため、赤道座標(RA/Dec)をそのまま入れると星座が最大約23°歪む。
-  var starLon = [1.817, 1.53, 1.38, 1.22, 4.34, 4.99, 5.267, 5.853, 3.558, 3.565, 1.977, 1.428, 1.927, 2.2227, 3.254, 3.349, 3.277, 3.208, 1.0471, 2.6146, 0.5929, 0.6573, 0.5792, 0.5128, 6.0840, 0.4842, 1.4412, 1.4798, 1.0835, 0.9804, 1.0476, 1.1308, 1.1464, 1.1015, 1.0245, 1.5692, 1.5698, 1.3376];
-  var starLat = [-0.691, -0.28, -0.54, -0.09, -0.09, 1.08, 0.511, 1.046, -0.036, 0.536, 0.116, 0.400, 0.176, 0.0223, -1.101, -1.042, -0.997, -1.025, 0.0707, 0.00798, 0.1481, 0.1739, 0.1250, -0.1581, 0.1580, -0.0283, 0.0940, -0.0383, 0.5261, 0.3917, 0.6027, 0.4767, 0.3339, 0.1978, 0.6543, 0.3754, 0.2404, 0.1825];
+  var starLon = [1.817, 1.53, 1.38, 1.22, 4.34, 4.99, 5.267, 5.853, 3.558, 3.565, 1.977, 1.428, 1.927, 2.2227, 3.254, 3.349, 3.277, 3.208, 1.0471, 2.6146, 0.5929, 0.6573, 0.5792, 0.5128, 6.0840, 0.4842, 1.4412, 1.4798, 1.0835, 0.9804, 1.0476, 1.1308, 1.1464, 1.1015, 1.0245, 1.5692, 1.5698, 1.3376, 1.4128, 1.4375, 1.4567, 1.4780, 1.5079, 0.6129, 0.6594, 0.7667, 0.8365, 0.9558, 1.7297, 1.8940, 1.7443, 1.6633, 3.6321, 3.4791, 3.4499, 3.5648, 2.0208, 1.9581, 2.0818, 1.7154, 1.6450, 1.9118, 2.1841, 1.4204, 1.3905, 1.4808, 1.5213, 1.3160];
+  var starLat = [-0.691, -0.28, -0.54, -0.09, -0.09, 1.08, 0.511, 1.046, -0.036, 0.536, 0.116, 0.400, 0.176, 0.0223, -1.101, -1.042, -0.997, -1.025, 0.0707, 0.00798, 0.1481, 0.1739, 0.1250, -0.1581, 0.1580, -0.0283, 0.0940, -0.0383, 0.5261, 0.3917, 0.6027, 0.4767, 0.3339, 0.1978, 0.6543, 0.3754, 0.2404, 0.1825, -0.2935, -0.4111, -0.4277, -0.4415, -0.5772, 0.8939, 0.8137, 0.8520, 0.8099, 0.8299, -0.1177, -0.0031, 0.0361, -0.0143, 0.7090, 0.4900, 0.8648, 0.9451, -0.2796, -0.2354, -0.5315, -0.5282, -0.5177, -0.3966, -0.3941, -0.7166, -0.7665, -0.7997, -0.7731, -0.6816];
   var skyConstellationLines = [
     { key: 'taurus', name: 'おうし座', color: 'rgba(255,170,90,0.48)', indices: [18, 3, 26, 3, 27] },
     { key: 'aries', name: 'おひつじ座', color: 'rgba(255,210,130,0.48)', indices: [21, 20, 22] },
     { key: 'pisces', name: 'うお座', color: 'rgba(150,200,255,0.45)', indices: [23, 24, 23, 25, 20] },
     { key: 'perseus', name: 'ペルセウス座', color: 'rgba(200,180,255,0.45)', indices: [34, 30, 28, 29, 28, 31, 32, 33] },
-    { key: 'auriga', name: 'ぎょしゃ座', color: 'rgba(255,220,120,0.48)', indices: [11, 35, 36, 37, 11] }
+    { key: 'auriga', name: 'ぎょしゃ座', color: 'rgba(255,220,120,0.48)', indices: [11, 35, 36, 37, 11] },
+    { key: 'orion', name: 'オリオン座', color: 'rgba(255,150,150,0.48)', indices: [1, 38, 39, 40, 41, 42, 2, 1] },
+    { key: 'cassiopeia', name: 'カシオペア座', color: 'rgba(150,255,220,0.48)', indices: [43, 44, 45, 46, 47] },
+    { key: 'gemini', name: 'ふたご座', color: 'rgba(180,220,255,0.48)', indices: [12, 10, 49, 48, 49, 50, 51, 12] },
+    { key: 'bootes', name: 'うしかい座', color: 'rgba(255,200,150,0.48)', indices: [55, 54, 53, 9, 52, 55] },
+    { key: 'canisMinor', name: 'こいぬ座', color: 'rgba(255,235,180,0.48)', indices: [56, 57] },
+    { key: 'monoceros', name: 'いっかくじゅう座', color: 'rgba(220,220,220,0.42)', indices: [60, 59, 61, 58, 62] },
+    { key: 'lepus', name: 'うさぎ座', color: 'rgba(220,190,255,0.45)', indices: [67, 64, 63, 66, 65, 64] }
   ];
 
   // 星座設定モーダルで名前・星座線を個別にトグルできる5星座と、
@@ -743,15 +750,58 @@ input[type=range] { accent-color:#fdb813; width:120px; }
     { key: 'taurus', name: 'おうし座', starIndices: [3, 18, 26, 27] },
     { key: 'pisces', name: 'うお座', starIndices: [23, 24, 25] },
     { key: 'aries', name: 'おひつじ座', starIndices: [20, 21, 22] },
-    { key: 'auriga', name: 'ぎょしゃ座', starIndices: [11, 35, 36, 37] }
+    { key: 'auriga', name: 'ぎょしゃ座', starIndices: [11, 35, 36, 37] },
+    { key: 'orion', name: 'オリオン座', starIndices: [1, 2, 38, 39, 40, 41, 42] },
+    { key: 'cassiopeia', name: 'カシオペア座', starIndices: [43, 44, 45, 46, 47] },
+    { key: 'gemini', name: 'ふたご座', starIndices: [10, 12, 48, 49, 50, 51] },
+    { key: 'bootes', name: 'うしかい座', starIndices: [9, 52, 53, 54, 55] },
+    { key: 'canisMinor', name: 'こいぬ座', starIndices: [56, 57] },
+    { key: 'monoceros', name: 'いっかくじゅう座', starIndices: [58, 59, 60, 61, 62] },
+    { key: 'lepus', name: 'うさぎ座', starIndices: [63, 64, 65, 66, 67] }
   ];
   var constState = {
     perseus: { names: true, lines: false },
     taurus: { names: true, lines: false },
     pisces: { names: true, lines: false },
     aries: { names: true, lines: false },
-    auriga: { names: true, lines: false }
+    auriga: { names: true, lines: false },
+    orion: { names: true, lines: false },
+    cassiopeia: { names: true, lines: false },
+    gemini: { names: true, lines: false },
+    bootes: { names: true, lines: false },
+    canisMinor: { names: true, lines: false },
+    monoceros: { names: true, lines: false },
+    lepus: { names: true, lines: false }
   };
+  // 星座設定モーダルの各トグル状態(星座ごとのnames/lines、およびその他行の
+  // showConstellations)をCookieに保存し、ページ読み込みのたびに復元する。
+  var CONST_STATE_COOKIE = 'solar_const_state';
+  function loadConstStateCookie() {
+    var raw = readCookie(CONST_STATE_COOKIE);
+    if (!raw) return;
+    var parsed;
+    try { parsed = JSON.parse(raw); } catch (e) { return; }
+    if (!parsed || typeof parsed !== 'object') return;
+    for (var lcI = 0; lcI < CONST_GROUPS.length; lcI++) {
+      var lcKey = CONST_GROUPS[lcI].key;
+      var saved = parsed[lcKey];
+      if (saved && typeof saved === 'object') {
+        if (typeof saved.names === 'boolean') constState[lcKey].names = saved.names;
+        if (typeof saved.lines === 'boolean') constState[lcKey].lines = saved.lines;
+      }
+    }
+    if (parsed.other && typeof parsed.other.lines === 'boolean') showConstellations = parsed.other.lines;
+  }
+  function saveConstStateCookie() {
+    var out = {};
+    for (var scI = 0; scI < CONST_GROUPS.length; scI++) {
+      var scKey = CONST_GROUPS[scI].key;
+      out[scKey] = { names: constState[scKey].names, lines: constState[scKey].lines };
+    }
+    out.other = { lines: showConstellations };
+    writeCookie(CONST_STATE_COOKIE, JSON.stringify(out));
+  }
+  loadConstStateCookie();
   var starIdxToConstKey = {};
   for (var cgI = 0; cgI < CONST_GROUPS.length; cgI++) {
     var cg = CONST_GROUPS[cgI];
@@ -775,11 +825,12 @@ input[type=range] { accent-color:#fdb813; width:120px; }
     if (hasNames) {
       var nameBtn = document.createElement('button');
       nameBtn.type = 'button';
-      nameBtn.className = 'btn const-toggle active';
+      nameBtn.className = 'btn const-toggle' + (constState[key].names ? ' active' : '');
       nameBtn.textContent = '名前';
       nameBtn.addEventListener('click', function() {
         constState[key].names = !constState[key].names;
         nameBtn.classList.toggle('active', constState[key].names);
+        saveConstStateCookie();
       });
       tdNames.appendChild(nameBtn);
     }
@@ -788,7 +839,7 @@ input[type=range] { accent-color:#fdb813; width:120px; }
     var tdLines = document.createElement('td');
     var lineBtn = document.createElement('button');
     lineBtn.type = 'button';
-    lineBtn.className = 'btn const-toggle';
+    lineBtn.className = 'btn const-toggle' + ((key === 'other' ? showConstellations : constState[key].lines) ? ' active' : '');
     lineBtn.textContent = '線';
     lineBtn.addEventListener('click', function() {
       if (key === 'other') {
@@ -798,6 +849,7 @@ input[type=range] { accent-color:#fdb813; width:120px; }
         constState[key].lines = !constState[key].lines;
         lineBtn.classList.toggle('active', constState[key].lines);
       }
+      saveConstStateCookie();
     });
     tdLines.appendChild(lineBtn);
     tr.appendChild(tdLines);
@@ -826,6 +878,10 @@ input[type=range] { accent-color:#fdb813; width:120px; }
   var bigDipperLines = [[0,1],[1,2],[2,3],[3,0],[3,4],[4,5],[5,6]];
   var summerTriIdx = [5, 6, 7];
   var cruxLines = [[14,16],[17,15]];
+  // 冬の大三角(ベテルギウス・シリウス・プロキオン)。夏の大三角と同じく
+  // 複数の星座(オリオン座・おおいぬ座・こいぬ座)にまたがるasterismのため、
+  // showConstellations(「その他」トグル)配下で描画する。
+  var winterTriIdx = [1, 0, 56];
   var iss = { name: 'ISS', jaName: 'ISS', type: '宇宙ステーション', orbitR: 14, radius: 2, period: 0.004, color: '#88ffcc', angle: 1.2, fact: '国際宇宙ステーション。高度約400kmを約90分で一周。常時6名が滞在しています' };
 
 
@@ -1043,6 +1099,13 @@ input[type=range] { accent-color:#fdb813; width:120px; }
         var paT = stPtsT[stliT], pbT = stPtsT[(stliT+1)%3];
         if (paT && pbT) { ctx.beginPath(); ctx.moveTo(paT.x, paT.y); ctx.lineTo(pbT.x, pbT.y); ctx.stroke(); }
       }
+      ctx.strokeStyle = 'rgba(255,200,150,0.35)';
+      var wtPtsT = [];
+      for (var wti2 = 0; wti2 < winterTriIdx.length; wti2++) wtPtsT.push(projectEclipticSky(starLon[winterTriIdx[wti2]], starLat[winterTriIdx[wti2]]));
+      for (var wtliT = 0; wtliT < 3; wtliT++) {
+        var wpaT = wtPtsT[wtliT], wpbT = wtPtsT[(wtliT+1)%3];
+        if (wpaT && wpbT) { ctx.beginPath(); ctx.moveTo(wpaT.x, wpaT.y); ctx.lineTo(wpbT.x, wpbT.y); ctx.stroke(); }
+      }
       ctx.strokeStyle = 'rgba(180,255,220,0.35)';
       for (var cliT = 0; cliT < cruxLines.length; cliT++) {
         var cpaT = projectEclipticSky(starLon[cruxLines[cliT][0]], starLat[cruxLines[cliT][0]]);
@@ -1130,6 +1193,13 @@ input[type=range] { accent-color:#fdb813; width:120px; }
         var paP = stPtsP[stliP], pbP = stPtsP[(stliP+1)%3];
         if (paP && pbP) { ctx.beginPath(); ctx.moveTo(paP.x, paP.y); ctx.lineTo(pbP.x, pbP.y); ctx.stroke(); }
       }
+      ctx.strokeStyle = 'rgba(255,200,150,0.4)';
+      var wtPtsP = [];
+      for (var wtiP = 0; wtiP < winterTriIdx.length; wtiP++) wtPtsP.push(projectSky(starLon[winterTriIdx[wtiP]], starLat[winterTriIdx[wtiP]]));
+      for (var wtliP = 0; wtliP < 3; wtliP++) {
+        var wpaP = wtPtsP[wtliP], wpbP = wtPtsP[(wtliP+1)%3];
+        if (wpaP && wpbP) { ctx.beginPath(); ctx.moveTo(wpaP.x, wpaP.y); ctx.lineTo(wpbP.x, wpbP.y); ctx.stroke(); }
+      }
       ctx.strokeStyle = 'rgba(255,220,150,0.4)';
       for (var bliP = 0; bliP < bigDipperLines.length; bliP++) {
         var bpaP = projectSky(bigDipper[bigDipperLines[bliP][0]].lon, bigDipper[bigDipperLines[bliP][0]].lat);
@@ -1194,6 +1264,13 @@ input[type=range] { accent-color:#fdb813; width:120px; }
       for (var stliS = 0; stliS < 3; stliS++) {
         var paS = stPtsS[stliS], pbS = stPtsS[(stliS+1)%3];
         if (paS && pbS) { ctx.beginPath(); ctx.moveTo(paS.x, paS.y); ctx.lineTo(pbS.x, pbS.y); ctx.stroke(); }
+      }
+      ctx.strokeStyle = 'rgba(255,200,150,0.4)';
+      var wtPtsS = [];
+      for (var wtiS = 0; wtiS < winterTriIdx.length; wtiS++) wtPtsS.push(projectSky(starLon[winterTriIdx[wtiS]], starLat[winterTriIdx[wtiS]]));
+      for (var wtliS = 0; wtliS < 3; wtliS++) {
+        var wpaS = wtPtsS[wtliS], wpbS = wtPtsS[(wtliS+1)%3];
+        if (wpaS && wpbS) { ctx.beginPath(); ctx.moveTo(wpaS.x, wpaS.y); ctx.lineTo(wpbS.x, wpbS.y); ctx.stroke(); }
       }
       ctx.strokeStyle = 'rgba(255,220,150,0.4)';
       for (var bliS = 0; bliS < bigDipperLines.length; bliS++) {
@@ -1764,6 +1841,21 @@ input[type=range] { accent-color:#fdb813; width:120px; }
         ctx.font = '10px sans-serif'; ctx.fillStyle = 'rgba(180,220,255,0.7)';
         ctx.fillText('夏の大三角', stPts[0].x + 12, stPts[0].y - 14);
       }
+      ctx.strokeStyle = 'rgba(255,200,150,0.4)';
+      ctx.setLineDash([4, 4]);
+      var wtPts = [];
+      for (var wti = 0; wti < winterTriIdx.length; wti++) {
+        wtPts.push(projectSky(starLon[winterTriIdx[wti]], starLat[winterTriIdx[wti]]));
+      }
+      for (var wtli = 0; wtli < 3; wtli++) {
+        var wpa = wtPts[wtli], wpb = wtPts[(wtli + 1) % 3];
+        if (wpa && wpb) { ctx.beginPath(); ctx.moveTo(wpa.x, wpa.y); ctx.lineTo(wpb.x, wpb.y); ctx.stroke(); }
+      }
+      if (wtPts[0] && showStarLabels) {
+        ctx.setLineDash([]);
+        ctx.font = '10px sans-serif'; ctx.fillStyle = 'rgba(255,200,150,0.7)';
+        ctx.fillText('冬の大三角', wtPts[0].x + 12, wtPts[0].y - 14);
+      }
       ctx.strokeStyle = 'rgba(255,220,150,0.4)';
       ctx.setLineDash([4, 4]);
       for (var bli2 = 0; bli2 < bigDipperLines.length; bli2++) {
@@ -1987,7 +2079,37 @@ input[type=range] { accent-color:#fdb813; width:120px; }
     { name: 'エータ・ペルセイ', color: '#ffd8b0', ox: -280, oy: -670, fact: 'ペルセウス座η星。ペルセウス座の頭部側に位置するオレンジ色の超巨星です' },
     { name: 'メンカリナン', color: '#fff5da', ox: 410, oy: -320, fact: 'ぎょしゃ座β星。カペラに次ぐ明るさの分光連星です' },
     { name: 'シータ・アウリガエ', color: '#d8e4ff', ox: 370, oy: -280, fact: 'ぎょしゃ座θ星。五角形の南側の頂点にあたる青白色の星です' },
-    { name: 'イオタ・アウリガエ', color: '#ffd9a0', ox: 430, oy: -250, fact: 'ぎょしゃ座ι星。五角形の南西の頂点にあたるオレンジ色の巨星です' }
+    { name: 'イオタ・アウリガエ', color: '#ffd9a0', ox: 430, oy: -250, fact: 'ぎょしゃ座ι星。五角形の南西の頂点にあたるオレンジ色の巨星です' },
+    { name: 'ベラトリックス', color: '#cfe0ff', ox: 600, oy: -140, fact: 'オリオン座γ星。ベテルギウスと対になる右肩の青白色巨星です' },
+    { name: 'ミンタカ', color: '#d8e8ff', ox: 630, oy: -20, fact: 'オリオン座δ星。オリオン座の三ツ星のうち最も西側にある星です' },
+    { name: 'アルニラム', color: '#e0e8ff', ox: 650, oy: 40, fact: 'オリオン座ε星。三ツ星の中央に位置する青色超巨星です' },
+    { name: 'アルニタク', color: '#d0e0ff', ox: 670, oy: 100, fact: 'オリオン座ζ星。三ツ星のうち最も東側にある三重連星です' },
+    { name: 'サイフ', color: '#cfe0ff', ox: 720, oy: 220, fact: 'オリオン座κ星。リゲルと対になる左足の青白色超巨星です' },
+    { name: 'カフ', color: '#fff2e0', ox: -560, oy: 720, fact: 'カシオペア座β星。W字形の西端にあたる準巨星です' },
+    { name: 'シェダル', color: '#ffe8c8', ox: -480, oy: 750, fact: 'カシオペア座α星。カシオペア座で最も明るいオレンジ色の巨星です' },
+    { name: 'ツィー', color: '#d8e4ff', ox: -400, oy: 700, fact: 'カシオペア座γ星。不規則に増光することがある特異な青色巨星(Be星)です' },
+    { name: 'ルクバー', color: '#e8f0ff', ox: -320, oy: 730, fact: 'カシオペア座δ星。W字形の中央東寄りに位置する食変光星です' },
+    { name: 'セギン', color: '#cfe0ff', ox: -240, oy: 680, fact: 'カシオペア座ε星。W字形の東端にあたる青白色の星です' },
+    { name: 'アルヘナ', color: '#e0e8ff', ox: -350, oy: 420, fact: 'ふたご座γ星。ポルックス側の脚の先にあたる青白色の星です' },
+    { name: 'ワサト', color: '#f0f4ff', ox: -400, oy: 380, fact: 'ふたご座δ星。カストルとポルックスの胴体をつなぐ位置にある星です' },
+    { name: 'メブスタ', color: '#e8f0ff', ox: -330, oy: 460, fact: 'ふたご座ε星。カストル側の脚を構成する黄色超巨星です' },
+    { name: 'テジャト', color: '#ffe0c0', ox: -300, oy: 520, fact: 'ふたご座μ星。カストル側の脚の先にあたる赤色巨星です' },
+    { name: 'イザール', color: '#e8ecff', ox: -750, oy: -220, fact: 'うしかい座ε星。凧形の東側の頂点にあたる二重星です' },
+    { name: 'ムフリド', color: '#fff0d8', ox: -630, oy: -130, fact: 'うしかい座η星。アークトゥルスのすぐ西に位置する星です' },
+    { name: 'セギヌス', color: '#e0e8ff', ox: -720, oy: -280, fact: 'うしかい座γ星。凧形の西側の頂点にあたる星です' },
+    { name: 'ネックァル', color: '#fff5da', ox: -680, oy: -340, fact: 'うしかい座β星。凧形の最北端にあたる巨星です' },
+    { name: 'プロキオン', color: '#fff5da', ox: -550, oy: 280, fact: 'こいぬ座α星。冬の大三角を構成する一等星のひとつです' },
+    { name: 'ゴメイサ', color: '#d8e4ff', ox: -500, oy: 250, fact: 'こいぬ座β星。プロキオンとともにこいぬ座を形づくる青白色の星です' },
+    { name: 'アルファ・モノケロティス', color: '#d8d8d8', ox: 680, oy: 440, fact: 'いっかくじゅう座α星。淡い星々からなる「一角獣座」の代表星です' },
+    { name: 'ベータ・モノケロティス', color: '#e0e0e0', ox: 600, oy: 350, fact: 'いっかくじゅう座β星。3つの星からなる美しい三重星です' },
+    { name: 'ガンマ・モノケロティス', color: '#e8e8e8', ox: 550, oy: 380, fact: 'いっかくじゅう座γ星。オリオン座に近い位置にある橙色巨星です' },
+    { name: 'デルタ・モノケロティス', color: '#d0d0d0', ox: 650, oy: 400, fact: 'いっかくじゅう座δ星。淡いながらも一角獣座の形を支える星です' },
+    { name: 'ゼータ・モノケロティス', color: '#dcdcdc', ox: 720, oy: 470, fact: 'いっかくじゅう座ζ星。一角獣座の南東側に位置する黄色超巨星です' },
+    { name: 'アルネブ', color: '#e0d0ff', ox: 620, oy: 520, fact: 'うさぎ座α星。オリオン座の足元、うさぎ座で最も明るい星です' },
+    { name: 'ニハル', color: '#d8c8ff', ox: 580, oy: 560, fact: 'うさぎ座β星。うさぎの胴体にあたる黄色巨星です' },
+    { name: 'ガンマ・レポリス', color: '#ecdcff', ox: 640, oy: 600, fact: 'うさぎ座γ星。うさぎ座の足にあたる近距離連星です' },
+    { name: 'デルタ・レポリス', color: '#e4d4ff', ox: 680, oy: 570, fact: 'うさぎ座δ星。うさぎ座の後脚を形づくる星です' },
+    { name: 'ミュー・レポリス', color: '#f0e4ff', ox: 540, oy: 520, fact: 'うさぎ座μ星。うさぎの耳にあたる水銀・マンガン星です' }
   ];
 
   var constellationLines = [
@@ -1995,7 +2117,14 @@ input[type=range] { accent-color:#fdb813; width:120px; }
     { key: 'aries', name: 'おひつじ座', color: 'rgba(255,210,130,0.48)', points: [[-300, -260], [-210, -230], [-150, -180]], label: [-265, -205] },
     { key: 'pisces', name: 'うお座', color: 'rgba(150,200,255,0.45)', points: [[150, -330], [270, -430], [150, -330], [260, -190], [60, -120], [-120, -90], [-210, -230]], label: [120, -250] },
     { key: 'perseus', name: 'ペルセウス座', color: 'rgba(200,180,255,0.45)', points: [[-280, -670], [-230, -650], [-180, -620], [-200, -540], [-180, -620], [-120, -590], [-90, -520], [-130, -470]], label: [-340, -600] },
-    { key: 'auriga', name: 'ぎょしゃ座', color: 'rgba(255,220,120,0.48)', points: [[460, -370], [410, -320], [370, -280], [430, -250], [460, -370]], label: [500, -380] }
+    { key: 'auriga', name: 'ぎょしゃ座', color: 'rgba(255,220,120,0.48)', points: [[460, -370], [410, -320], [370, -280], [430, -250], [460, -370]], label: [500, -380] },
+    { key: 'orion', name: 'オリオン座', color: 'rgba(255,150,150,0.48)', points: [[650, -180], [600, -140], [630, -20], [650, 40], [670, 100], [720, 220], [700, 280], [650, -180]], label: [560, -60] },
+    { key: 'cassiopeia', name: 'カシオペア座', color: 'rgba(150,255,220,0.48)', points: [[-560, 720], [-480, 750], [-400, 700], [-320, 730], [-240, 680]], label: [-420, 780] },
+    { key: 'gemini', name: 'ふたご座', color: 'rgba(180,220,255,0.48)', points: [[-420, 280], [-480, 320], [-400, 380], [-350, 420], [-400, 380], [-330, 460], [-300, 520], [-420, 280]], label: [-460, 240] },
+    { key: 'bootes', name: 'うしかい座', color: 'rgba(255,200,150,0.48)', points: [[-680, -340], [-720, -280], [-630, -130], [-680, -150], [-750, -220], [-680, -340]], label: [-800, -300] },
+    { key: 'canisMinor', name: 'こいぬ座', color: 'rgba(255,235,180,0.48)', points: [[-550, 280], [-500, 250]], label: [-540, 230] },
+    { key: 'monoceros', name: 'いっかくじゅう座', color: 'rgba(220,220,220,0.42)', points: [[550, 380], [600, 350], [650, 400], [680, 440], [720, 470]], label: [560, 330] },
+    { key: 'lepus', name: 'うさぎ座', color: 'rgba(220,190,255,0.45)', points: [[540, 520], [580, 560], [620, 520], [680, 570], [640, 600], [580, 560]], label: [560, 630] }
   ];
 
   var stars = [];
@@ -2514,6 +2643,14 @@ input[type=range] { accent-color:#fdb813; width:120px; }
         ctx.beginPath();
         ctx.moveTo(cx + caO.ox * sc2, cy + caO.oy * sc2);
         ctx.lineTo(cx + cbO.ox * sc2, cy + cbO.oy * sc2);
+        ctx.stroke();
+      }
+      ctx.strokeStyle = 'rgba(255,200,150,0.3)';
+      for (var wtiO = 0; wtiO < 3; wtiO++) {
+        var wtaO = namedStars[winterTriIdx[wtiO]], wtbO = namedStars[winterTriIdx[(wtiO + 1) % 3]];
+        ctx.beginPath();
+        ctx.moveTo(cx + wtaO.ox * sc2, cy + wtaO.oy * sc2);
+        ctx.lineTo(cx + wtbO.ox * sc2, cy + wtbO.oy * sc2);
         ctx.stroke();
       }
       ctx.setLineDash([]);
