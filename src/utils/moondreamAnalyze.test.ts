@@ -26,10 +26,11 @@ describe('moondreamAnalyze', () => {
     expect(validateMoondreamImageDataUrl('not-a-data-url').ok).toBe(false);
   });
 
-  it('dataUrlToImageBytesはbase64部分を正しいバイト配列に変換する', () => {
+  it('dataUrlToImageBytesはbase64部分を正しいUint8Arrayに変換する', () => {
     // "AB" -> base64 "QUI="
     const bytes = dataUrlToImageBytes('data:image/png;base64,QUI=');
-    expect(bytes).toEqual([65, 66]);
+    expect(bytes).toBeInstanceOf(Uint8Array);
+    expect(Array.from(bytes)).toEqual([65, 66]);
   });
 
   it('dataUrlToImageBytesは不正な形式に対して例外を投げる(呼び出し元でtry/catchする設計)', () => {
@@ -38,7 +39,7 @@ describe('moondreamAnalyze', () => {
   });
 
   it('buildMoondreamRunParamsはmax_tokensを含み、プロンプト未指定・空文字ならデフォルトプロンプトを使う', () => {
-    const bytes = [1, 2, 3];
+    const bytes = new Uint8Array([1, 2, 3]);
     expect(buildMoondreamRunParams(bytes)).toEqual({
       image: bytes,
       prompt: MOONDREAM_DEFAULT_PROMPT,
@@ -54,6 +55,17 @@ describe('moondreamAnalyze', () => {
       prompt: 'この猫の種類は?',
       max_tokens: MOONDREAM_MAX_TOKENS,
     });
+  });
+
+  it('buildMoondreamRunParamsのimageはUint8Array(真の二進バイナリ型)のまま渡る(プレーンなnumber[]に変換しない)', () => {
+    // 実運用で "Type mismatch of '/image', 'string' not in 'array','binary'" が
+    // 発生し続けた原因は、数十万要素のプレーンnumber[]がWorkers AI側で
+    // 'binary'型と認識されなかったためとみられる。回帰防止のため、
+    // buildMoondreamRunParamsの出力が常にUint8Arrayであることを保証する。
+    const bytes = dataUrlToImageBytes('data:image/png;base64,QUI=');
+    const params = buildMoondreamRunParams(bytes);
+    expect(params.image).toBeInstanceOf(Uint8Array);
+    expect(Array.isArray(params.image)).toBe(false);
   });
 
   it('parseMoondreamResponseはresponse/description/text/answerの順に候補キーを試す', () => {

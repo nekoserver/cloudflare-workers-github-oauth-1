@@ -44,7 +44,7 @@ describe('AIチャットページ: 履歴プレビューの巨大テキスト対
     const html = buildPage();
     const idx = html.indexOf('function showResultsPanel');
     expect(idx).toBeGreaterThan(-1);
-    const fn = html.slice(idx, idx + 400);
+    const fn = html.slice(idx, idx + 700);
     expect(fn).toContain('parseMd(truncateForHistoryPreview(r.answer))');
   });
 

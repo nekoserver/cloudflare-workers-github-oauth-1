@@ -28,14 +28,20 @@ export function validateMoondreamImageDataUrl(input: string): ImageValidationRes
  * data URL(data:image/png;base64,....)のbase64部分をバイト配列に変換する。
  * validateMoondreamImageDataUrl() で ok:true を確認した入力を渡すこと。
  * 不正な形式の場合は例外を投げる(呼び出し元でtry/catchする設計)。
+ *
+ * Uint8Array(真の二進バイナリ型)で返す。当初はプレーンなnumber[]を渡していたが、
+ * 実運用で "5006: Error: Type mismatch of '/image', 'string' not in 'array','binary'"
+ * が発生し続けた。数十万要素のプレーン配列はWorkers AIバインディングの転送経路上で
+ * 'binary'型として認識されず、意図しない文字列化を招いていたとみられるため、
+ * 明確に'binary'型と判定されるUint8Arrayへ変更した。
  */
-export function dataUrlToImageBytes(dataUrl: string): number[] {
+export function dataUrlToImageBytes(dataUrl: string): Uint8Array {
   const match = DATA_URL_RE.exec(dataUrl);
   if (!match) {
     throw new Error('画像データの形式が不正です');
   }
   const binary = atob(match[1]);
-  const bytes = new Array<number>(binary.length);
+  const bytes = new Uint8Array(binary.length);
   for (let i = 0; i < binary.length; i++) {
     bytes[i] = binary.charCodeAt(i);
   }
@@ -43,12 +49,12 @@ export function dataUrlToImageBytes(dataUrl: string): number[] {
 }
 
 export type MoondreamRunParams = {
-  image: number[];
+  image: Uint8Array;
   prompt: string;
   max_tokens: number;
 };
 
-export function buildMoondreamRunParams(imageBytes: number[], prompt?: string): MoondreamRunParams {
+export function buildMoondreamRunParams(imageBytes: Uint8Array, prompt?: string): MoondreamRunParams {
   return {
     image: imageBytes,
     prompt: prompt && prompt.trim() ? prompt.trim() : MOONDREAM_DEFAULT_PROMPT,

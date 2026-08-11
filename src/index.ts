@@ -1444,6 +1444,7 @@ CREATE INDEX IF NOT EXISTS idx_aichat_answer_keyword_vectors_share ON aichat_ans
 CREATE INDEX IF NOT EXISTS idx_moondream_analyze_log_user_created ON moondream_analyze_log(user_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_moondream_analyze_log_status ON moondream_analyze_log(status);`,
   '0097': `ALTER TABLE moondream_analyze_log ADD COLUMN image_data_url TEXT;`,
+  '0098': `ALTER TABLE ai_chat_shares ADD COLUMN image_data_url TEXT;`,
 };
 
 async function ensureGroupTable(db: D1Database): Promise<void> {
@@ -4112,8 +4113,8 @@ app.post('/api/aichat', authMiddleware, async (c) => {
       const conversationHash = await computeConversationHash(user.sub, message, response, usedModel, now);
       const questionHash = await computeQuestionHash(user.sub, message);
       await c.env.DB.prepare(
-        'INSERT INTO ai_chat_shares (id, user_id, user_hash, question, answer, model, created_at, conversation_hash, question_hash, input_tokens, output_tokens, total_tokens, source) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
-      ).bind(shareId, user.sub, userHash, message, response, usedModel, now, conversationHash, questionHash, usage.input_tokens, usage.output_tokens, usage.total_tokens, source).run();
+        'INSERT INTO ai_chat_shares (id, user_id, user_hash, question, answer, model, created_at, conversation_hash, question_hash, input_tokens, output_tokens, total_tokens, source, image_data_url) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+      ).bind(shareId, user.sub, userHash, message, response, usedModel, now, conversationHash, questionHash, usage.input_tokens, usage.output_tokens, usage.total_tokens, source, image || null).run();
       return { shareId, userHash, conversationHash, questionHash };
     } catch (saveErr) {
       logger.warn('AI chat auto-save failed', {
@@ -4175,6 +4176,7 @@ export async function searchAiChatShares(
 ): Promise<{ results: Array<{
   id: string; user_hash: string; question: string; answer: string;
   model: string; created_at: string; access_count: number; question_hash: string | null;
+  image_data_url: string | null;
 }> }> {
   // LIKEは(ワイルドカードの有無に関わらず)D1では約50バイト超のパターンで
   // "LIKE or GLOB pattern too complex" になるため、任意長になり得る自由入力の
@@ -4182,7 +4184,7 @@ export async function searchAiChatShares(
   const normalized = q.replace(/[・･]/g, '・');
   const rows = await db
     .prepare(
-      `SELECT id, user_hash, question, answer, model, created_at, access_count, question_hash
+      `SELECT id, user_hash, question, answer, model, created_at, access_count, question_hash, image_data_url
        FROM ai_chat_shares
        WHERE user_id = ? AND deleted_at IS NULL AND (INSTR(REPLACE(question, '･', '・'), ?) > 0 OR INSTR(REPLACE(answer, '･', '・'), ?) > 0)
        ORDER BY created_at DESC LIMIT 30`
@@ -4191,6 +4193,7 @@ export async function searchAiChatShares(
     .all<{
       id: string; user_hash: string; question: string; answer: string;
       model: string; created_at: string; access_count: number; question_hash: string | null;
+      image_data_url: string | null;
     }>();
   return { results: rows.results ?? [] };
 }
@@ -5110,13 +5113,14 @@ app.get('/api/aichat/shares/by-date', authMiddleware, async (c) => {
   if (!date) return jsonUtf8({ results: [] });
 
   const rows = await c.env.DB.prepare(
-    `SELECT id, user_hash, question, answer, model, created_at, access_count, question_hash
+    `SELECT id, user_hash, question, answer, model, created_at, access_count, question_hash, image_data_url
      FROM ai_chat_shares
      WHERE user_id = ? AND deleted_at IS NULL AND created_at LIKE ?
      ORDER BY created_at DESC LIMIT 50`
   ).bind(user.sub, `${date}%`).all<{
     id: string; user_hash: string; question: string; answer: string;
     model: string; created_at: string; access_count: number; question_hash: string | null;
+    image_data_url: string | null;
   }>();
 
   return jsonUtf8({ date, results: rows.results ?? [] });
@@ -5131,7 +5135,7 @@ app.get('/api/aichat/shares/by-keyword', authMiddleware, async (c) => {
   let rows;
   if (topic) {
     rows = await c.env.DB.prepare(
-      `SELECT DISTINCT id, user_hash, question, answer, model, created_at, access_count, question_hash
+      `SELECT DISTINCT id, user_hash, question, answer, model, created_at, access_count, question_hash, image_data_url
        FROM ai_chat_shares
        WHERE user_id = ? AND deleted_at IS NULL
          AND question LIKE ? AND question LIKE ?
@@ -5139,10 +5143,11 @@ app.get('/api/aichat/shares/by-keyword', authMiddleware, async (c) => {
     ).bind(user.sub, `%「${keyword}」%`, `%「${topic}」%`).all<{
       id: string; user_hash: string; question: string; answer: string;
       model: string; created_at: string; access_count: number; question_hash: string | null;
+      image_data_url: string | null;
     }>();
   } else {
     rows = await c.env.DB.prepare(
-      `SELECT DISTINCT s.id, s.user_hash, s.question, s.answer, s.model, s.created_at, s.access_count, s.question_hash
+      `SELECT DISTINCT s.id, s.user_hash, s.question, s.answer, s.model, s.created_at, s.access_count, s.question_hash, s.image_data_url
        FROM aichat_search_log l
        JOIN ai_chat_shares s ON s.id = l.share_id AND s.user_id = l.user_id
        WHERE l.user_id = ? AND l.keyword = ? AND s.deleted_at IS NULL
@@ -5150,6 +5155,7 @@ app.get('/api/aichat/shares/by-keyword', authMiddleware, async (c) => {
     ).bind(user.sub, keyword).all<{
       id: string; user_hash: string; question: string; answer: string;
       model: string; created_at: string; access_count: number; question_hash: string | null;
+      image_data_url: string | null;
     }>();
   }
   return jsonUtf8({ keyword, results: rows.results ?? [] });
@@ -7438,12 +7444,13 @@ app.get('/api/aichat/shares/:id', authMiddleware, async (c) => {
   const id = c.req.param('id');
   const row = await c.env.DB.prepare(
     `SELECT id, user_hash, question, answer, model, created_at, access_count, question_hash,
-            input_tokens, output_tokens, total_tokens
+            input_tokens, output_tokens, total_tokens, image_data_url
      FROM ai_chat_shares WHERE id = ? AND user_id = ? AND deleted_at IS NULL`
   ).bind(id, user.sub).first<{
     id: string; user_hash: string; question: string; answer: string;
     model: string; created_at: string; access_count: number; question_hash: string | null;
     input_tokens: number | null; output_tokens: number | null; total_tokens: number | null;
+    image_data_url: string | null;
   }>();
   if (!row) return jsonUtf8({ error: 'Not found' }, 404);
   const vectorized = await isAnswerVectorized(c.env.DB, user.sub, id);
@@ -8747,7 +8754,7 @@ app.post('/api/moondream-analyze', authMiddleware, async (c) => {
     return jsonUtf8({ error: 'リクエストが多すぎます。しばらく待ってから再試行してください。' }, 429);
   }
 
-  let imageBytes: number[];
+  let imageBytes: Uint8Array;
   try {
     imageBytes = dataUrlToImageBytes(image);
   } catch {

@@ -16,7 +16,7 @@ describe('AIチャット詳細パネル: Markdownプレビュー', () => {
     const html = getAiChatPage(minimalUser);
     const idx = html.indexOf('function showResultsPanel(');
     expect(idx).toBeGreaterThan(-1);
-    const fnBody = html.slice(idx, idx + 400);
+    const fnBody = html.slice(idx, idx + 700);
     expect(fnBody).toContain('resultsPanelA.innerHTML');
     expect(fnBody).not.toContain('resultsPanelA.textContent');
   });
@@ -25,7 +25,7 @@ describe('AIチャット詳細パネル: Markdownプレビュー', () => {
     const html = getAiChatPage(minimalUser);
     const idx = html.indexOf('function showResultsPanel(');
     expect(idx).toBeGreaterThan(-1);
-    const fnBody = html.slice(idx, idx + 400);
+    const fnBody = html.slice(idx, idx + 700);
     expect(fnBody).toContain('parseMd(');
   });
 
@@ -248,7 +248,7 @@ describe('AIチャットサイドバー: 検索キーワードハイライト', 
     const html = getAiChatPage(minimalUser);
     const idx = html.indexOf('function showResultsPanel(');
     expect(idx).toBeGreaterThan(-1);
-    const fnBody = html.slice(idx, idx + 400);
+    const fnBody = html.slice(idx, idx + 700);
     expect(fnBody).toContain('keyword');
     expect(fnBody).toContain('applyKeywordHighlight');
   });
