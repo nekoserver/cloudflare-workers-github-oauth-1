@@ -300,6 +300,8 @@ input[type=search]:focus { border-color:var(--accent); }
 .prereq-modal-chip.chip-vectorizing {
   border-width:2px; border-color:var(--accent); background:transparent;
 }
+.prereq-modal-chip.chip-unregistered { border-color:var(--danger); color:var(--danger); }
+.prereq-modal-chip.chip-unregistered.kw-badge-registering { border-color:var(--accent); color:var(--fg); }
 .prereq-kw-badge-list { width:100%; line-height:1; }
 .prereq-kw-badge {
   display:inline-block; background:var(--card); color:var(--label);
@@ -778,12 +780,27 @@ input[type=search]:focus { border-color:var(--accent); }
     return (cat && cat.color) ? cat.color : null;
   }
 
+  // 抽出されたキーワードがデータベースに登録済みかどうかを、DBへ問い合わせず
+  // 「この回答文のキーワード:」バーのバッジ処理時に作成済みのキャッシュ
+  // (keywordCountMap、/api/aichat/all-keywordsの取得結果)で判定する。
+  // 出現回数(count)が1件以上あるかどうかで判定すること(キーが存在するだけ
+  // では判定しない)。/api/aichat/all-keywordsはaichat_keyword_categories等に
+  // 登録済みだが出現回数0件のキーワードも含めて返すため、キーの存在だけを
+  // 見ると「一度もaichat_search_logに現れていない=本来は未登録」のキーワードを
+  // 誤って登録済み扱いしてしまう(getRegisteredClassifiedColor/
+  // buildKeywordOccurrencesFromKeywordBarCacheと判定基準がずれてしまうバグの原因)。
+  function isKeywordRegisteredInBarCache(keyword) {
+    return keywordCountMap[keyword] > 0;
+  }
+
   // 「この回答文を理解するのに必要な予備知識」モーダル(最上位レイヤー、
   // 回答モーダルよりさらに前面)。ベクタ化ボタンから抽出されたキーワードを
-  // ここに列挙する。
+  // ここに列挙する。各キーワードが未登録(isKeywordRegisteredInBarCacheがfalse)
+  // の場合はチップを未登録スタイルにし、一括登録の対象として返す。
   function renderPrereqModal(keywords, warning) {
     prereqModalBody.innerHTML = '';
     var chips = [];
+    var unregistered = [];
     if (warning) {
       var warn = document.createElement('div');
       warn.className = 'prereq-modal-warning';
@@ -795,16 +812,18 @@ input[type=search]:focus { border-color:var(--accent); }
       empty.className = 'prereq-modal-empty';
       empty.textContent = warning ? '' : '追加の予備知識は見つかりませんでした';
       if (empty.textContent) prereqModalBody.appendChild(empty);
-      return chips;
+      return { chips: chips, unregistered: unregistered };
     }
     keywords.forEach(function(kw) {
       var chip = document.createElement('span');
-      chip.className = 'prereq-modal-chip';
+      var registered = isKeywordRegisteredInBarCache(kw);
+      chip.className = 'prereq-modal-chip' + (registered ? '' : ' chip-unregistered');
       chip.textContent = kw;
       prereqModalBody.appendChild(chip);
       chips.push(chip);
+      if (!registered) unregistered.push({ keyword: kw, badge: chip });
     });
-    return chips;
+    return { chips: chips, unregistered: unregistered };
   }
 
   // 「キーワード一覧」ボタン用。keywordOccurrences(サーバー側で各キーワードを
@@ -924,6 +943,12 @@ input[type=search]:focus { border-color:var(--accent); }
       }
       items[i].badge.classList.add('kw-badge-registering');
       registerKeywordViaSearchLogFlow(items[i].keyword)
+        .then(function() {
+          // 登録済み扱いへキャッシュを更新する(同一セッション内で予備知識
+          // モーダルを開き直しても未登録のまま表示され続けることを防ぐ)。
+          keywordCountMap[items[i].keyword] = (keywordCountMap[items[i].keyword] || 0) + 1;
+          items[i].badge.classList.remove('chip-unregistered');
+        })
         .catch(function() {})
         .then(function() {
           i++;
@@ -988,9 +1013,12 @@ input[type=search]:focus { border-color:var(--accent); }
   prereqResultModalOkBtn.addEventListener('click', closePrereqResultModal);
 
   function openPrereqModal(keywords, warning, keywordVectorization) {
-    prereqUnregisteredItems = [];
-    prereqModalFoot.style.display = 'none';
-    var chips = renderPrereqModal(keywords, warning);
+    var rendered = renderPrereqModal(keywords, warning);
+    var chips = rendered.chips;
+    prereqUnregisteredItems = rendered.unregistered;
+    prereqModalFoot.style.display = prereqUnregisteredItems.length > 0 ? '' : 'none';
+    prereqBulkRegisterBtn.disabled = false;
+    prereqBulkRegisterBtn.textContent = '一括登録';
     if (keywordVectorization && keywordVectorization.length > 0 && chips.length > 0) {
       animateKeywordVectorizationProgress(chips, function() {
         showPrereqResultModal(keywordVectorization);
