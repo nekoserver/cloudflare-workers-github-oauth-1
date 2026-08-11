@@ -288,9 +288,14 @@ describe('getWebGLSolarPage', () => {
   function extractEclipseHelpers() {
     const jdM = html.match(/function julianDate\(y, mo, d, h\) \{[\s\S]*?\n  \}/);
     const phaseM = html.match(/function eclipsePhaseAt\(jd, site, maxSep, minSep\) \{[\s\S]*?\n  \}/);
+    const posM = html.match(/function eclipseBodyPositions\(jd, c2JD, c3JD, sep, dirAngle, cx, cy\) \{[\s\S]*?\n  \}/);
     expect(jdM).not.toBeNull();
     expect(phaseM).not.toBeNull();
-    const factory = new Function(jdM![0] + '\n' + phaseM![0] + '\nreturn { julianDate: julianDate, eclipsePhaseAt: eclipsePhaseAt };');
+    expect(posM).not.toBeNull();
+    const factory = new Function(
+      jdM![0] + '\n' + phaseM![0] + '\n' + posM![0]
+      + '\nreturn { julianDate: julianDate, eclipsePhaseAt: eclipsePhaseAt, eclipseBodyPositions: eclipseBodyPositions };'
+    );
     return factory() as {
       julianDate: (y: number, mo: number, d: number, h: number) => number;
       eclipsePhaseAt: (
@@ -299,6 +304,9 @@ describe('getWebGLSolarPage', () => {
         maxSep: number,
         minSep: number
       ) => { sep: number; inTotality: boolean; phaseLabel: string };
+      eclipseBodyPositions: (
+        jd: number, c2JD: number, c3JD: number, sep: number, dirAngle: number, cx: number, cy: number
+      ) => { sunX: number; sunY: number; moonX: number; moonY: number };
     };
   }
 
@@ -389,6 +397,96 @@ describe('getWebGLSolarPage', () => {
     const q3 = eclipsePhaseAt(c3JD + (c4JD - c3JD) * 0.25, site, maxSep, minSep).sep;
     const q4 = eclipsePhaseAt(c3JD + (c4JD - c3JD) * 0.75, site, maxSep, minSep).sep;
     expect(q4).toBeGreaterThan(q3);
+  });
+
+  // 対象: drawEclipseView(狭角の日食モード)で、月が太陽に重なった後に
+  // 「同じ経路を逆戻りして元の位置(画面左上寄り)へ戻る」ように見えていた
+  // 不具合の修正。皆既の中間時刻(sep=0になる瞬間)より前は太陽を画面中心に
+  // 固定して月が近づき、中間時刻を過ぎたら月をその位置(画面中心)に固定し、
+  // 代わりに太陽が同じ方向へ離れていくように見せる。
+  it('eclipseBodyPositions: 皆既中間より前は太陽が中心に固定され月が近づく', () => {
+    const { julianDate, eclipseBodyPositions } = extractEclipseHelpers();
+    const site = { c1: 10, c2: 11, c3: 11.1, c4: 12.5 };
+    const c2JD = julianDate(2026, 8, 12, site.c2);
+    const c3JD = julianDate(2026, 8, 12, site.c3);
+    const c1JD = julianDate(2026, 8, 12, site.c1);
+    const cx = 400, cy = 300, dirAngle = -2.3;
+
+    const preJD = c1JD + (c2JD - c1JD) * 0.5;
+    const sep = 40;
+    const pos = eclipseBodyPositions(preJD, c2JD, c3JD, sep, dirAngle, cx, cy);
+    expect(pos.sunX).toBeCloseTo(cx, 6);
+    expect(pos.sunY).toBeCloseTo(cy, 6);
+    expect(pos.moonX).toBeCloseTo(cx + Math.cos(dirAngle) * sep, 6);
+    expect(pos.moonY).toBeCloseTo(cy + Math.sin(dirAngle) * sep, 6);
+  });
+
+  it('eclipseBodyPositions: 皆既中間ちょうどでは太陽・月ともに中心(sep=0で一致)', () => {
+    const { julianDate, eclipseBodyPositions } = extractEclipseHelpers();
+    const site = { c2: 11, c3: 11.1 };
+    const c2JD = julianDate(2026, 8, 12, site.c2);
+    const c3JD = julianDate(2026, 8, 12, site.c3);
+    const mid = (c2JD + c3JD) / 2;
+    const cx = 400, cy = 300;
+
+    const pos = eclipseBodyPositions(mid, c2JD, c3JD, 0, -2.3, cx, cy);
+    expect(pos.sunX).toBeCloseTo(cx, 6);
+    expect(pos.sunY).toBeCloseTo(cy, 6);
+    expect(pos.moonX).toBeCloseTo(cx, 6);
+    expect(pos.moonY).toBeCloseTo(cy, 6);
+  });
+
+  it('eclipseBodyPositions: 皆既中間より後は月が中心に固定され、太陽が離れていく(元の位置へ戻らない)', () => {
+    const { julianDate, eclipseBodyPositions } = extractEclipseHelpers();
+    const site = { c2: 11, c3: 11.1, c4: 12.5 };
+    const c2JD = julianDate(2026, 8, 12, site.c2);
+    const c3JD = julianDate(2026, 8, 12, site.c3);
+    const c4JD = julianDate(2026, 8, 12, site.c4);
+    const cx = 400, cy = 300, dirAngle = -2.3;
+
+    const postJD = c3JD + (c4JD - c3JD) * 0.5;
+    const sep = 40;
+    const pos = eclipseBodyPositions(postJD, c2JD, c3JD, sep, dirAngle, cx, cy);
+    // 月は画面中心に固定されたまま(接近フェーズで月が到達した位置と同じ)
+    expect(pos.moonX).toBeCloseTo(cx, 6);
+    expect(pos.moonY).toBeCloseTo(cy, 6);
+    // 太陽は接近フェーズで月が来た方向(cos*sep, sin*sep)とは逆方向(-cos*sep, -sin*sep)、
+    // つまり反対側へ離れていく。同じ方向(月が最初に来た側=左上寄り)へは戻らない。
+    expect(pos.sunX).toBeCloseTo(cx - Math.cos(dirAngle) * sep, 6);
+    expect(pos.sunY).toBeCloseTo(cy - Math.sin(dirAngle) * sep, 6);
+    expect(pos.sunX).not.toBeCloseTo(cx + Math.cos(dirAngle) * sep, 1);
+  });
+
+  it('eclipseBodyPositions: 離脱が進むほど太陽と月の距離(sep)は単調に開いていく(戻る動きがない)', () => {
+    const { julianDate, eclipseBodyPositions } = extractEclipseHelpers();
+    const site = { c2: 11, c3: 11.1, c4: 12.5 };
+    const c2JD = julianDate(2026, 8, 12, site.c2);
+    const c3JD = julianDate(2026, 8, 12, site.c3);
+    const c4JD = julianDate(2026, 8, 12, site.c4);
+    const cx = 400, cy = 300, dirAngle = -2.3;
+
+    function distance(jd: number, sep: number) {
+      const pos = eclipseBodyPositions(jd, c2JD, c3JD, sep, dirAngle, cx, cy);
+      return Math.hypot(pos.sunX - pos.moonX, pos.sunY - pos.moonY);
+    }
+    const d1 = distance(c3JD + (c4JD - c3JD) * 0.2, 10);
+    const d2 = distance(c3JD + (c4JD - c3JD) * 0.5, 40);
+    const d3 = distance(c3JD + (c4JD - c3JD) * 0.8, 80);
+    expect(d1).toBeCloseTo(10, 6);
+    expect(d2).toBeCloseTo(40, 6);
+    expect(d3).toBeCloseTo(80, 6);
+    expect(d2).toBeGreaterThan(d1);
+    expect(d3).toBeGreaterThan(d2);
+  });
+
+  it('drawEclipseView は太陽・月の座標計算をeclipseBodyPositionsに委譲し、太陽の描画にsx/syを使う(cx/cy固定描画に戻さない)', () => {
+    const drawM = html.match(/function drawEclipseView\(jd, site\) \{[\s\S]*?\n  \}/);
+    expect(drawM).not.toBeNull();
+    const body = drawM![0];
+    expect(body).toContain('eclipseBodyPositions(jd, c2JD, c3JD, sep, dirAngle, cx, cy)');
+    expect(body).toContain('drawGlow(sx, sy, sunPxR * 1.15');
+    expect(body).toContain('ctx.arc(sx, sy, sunPxR, 0, Math.PI * 2)');
+    expect(body).toContain('ctx.arc(mx, my, moonPxR, 0, Math.PI * 2)');
   });
 
   // drawMoonPhase が生成する暗部パス(円弧+楕円弧)を、ctx.translate/rotate を

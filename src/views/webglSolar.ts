@@ -1522,6 +1522,29 @@ input[type=range] { accent-color:#fdb813; width:120px; }
     return { sep: maxSep, inTotality: false, phaseLabel: '終了' };
   }
 
+  // 太陽と月それぞれの画面上の座標を、皆既の中間時刻(sepが0になる瞬間)を
+  // 境に切り替えて計算する純粋関数。中間時刻より前は太陽を中心に固定し、
+  // 月が近づいてくるように見せる(接近フェーズ)。中間時刻を過ぎたら、月を
+  // その位置(=画面中心)に固定し、代わりに太陽が同じ方向へ離れていくように
+  // 見せる(離脱フェーズ)。こうすることで、月が太陽に重なった瞬間に
+  // 「そのまま同じ経路を逆戻りして元の位置へ戻る」ように見えていた不具合
+  // (接近・離脱の両方で常に月だけを動かしていたため)を解消し、月は重なった
+  // 場所で静止したまま太陽だけが動いて見えるようにする。
+  // drawEclipseView から分離してあるのは、canvas を介さずに検証できるようにするため。
+  function eclipseBodyPositions(jd, c2JD, c3JD, sep, dirAngle, cx, cy) {
+    var midJD = (c2JD + c3JD) / 2;
+    if (jd <= midJD) {
+      return {
+        sunX: cx, sunY: cy,
+        moonX: cx + Math.cos(dirAngle) * sep, moonY: cy + Math.sin(dirAngle) * sep,
+      };
+    }
+    return {
+      sunX: cx - Math.cos(dirAngle) * sep, sunY: cy - Math.sin(dirAngle) * sep,
+      moonX: cx, moonY: cy,
+    };
+  }
+
   function drawEclipseView(jd, site) {
     var cx = W / 2, cy = H / 2;
     var c1JD = julianDate(2026, 8, 12, site.c1);
@@ -1540,8 +1563,9 @@ input[type=range] { accent-color:#fdb813; width:120px; }
     // 太陽に対する月の相対移動方向は出典データに含まれないため、見た目のための
     // 固定値とする(実際の経路角ではない簡易表現)。
     var dirAngle = -2.3;
-    var mx = cx + Math.cos(dirAngle) * sep;
-    var my = cy + Math.sin(dirAngle) * sep;
+    var bodyPos10 = eclipseBodyPositions(jd, c2JD, c3JD, sep, dirAngle, cx, cy);
+    var sx = bodyPos10.sunX, sy = bodyPos10.sunY;
+    var mx = bodyPos10.moonX, my = bodyPos10.moonY;
 
     var darkness = inTotality ? 1 : Math.max(0, 1 - sep / maxSep) * 0.9;
     var topColor = darkness > 0.05
@@ -1564,18 +1588,18 @@ input[type=range] { accent-color:#fdb813; width:120px; }
       }
     }
 
-    drawGlow(cx, cy, sunPxR * 1.15, '#fdb813');
-    ctx.beginPath(); ctx.arc(cx, cy, sunPxR, 0, Math.PI * 2);
-    var sg10 = ctx.createRadialGradient(cx - sunPxR * 0.2, cy - sunPxR * 0.2, sunPxR * 0.1, cx, cy, sunPxR);
+    drawGlow(sx, sy, sunPxR * 1.15, '#fdb813');
+    ctx.beginPath(); ctx.arc(sx, sy, sunPxR, 0, Math.PI * 2);
+    var sg10 = ctx.createRadialGradient(sx - sunPxR * 0.2, sy - sunPxR * 0.2, sunPxR * 0.1, sx, sy, sunPxR);
     sg10.addColorStop(0, '#fff5a0'); sg10.addColorStop(0.5, '#fdb813'); sg10.addColorStop(1, '#f57c00');
     ctx.fillStyle = sg10; ctx.fill();
 
     if (inTotality) {
-      var corona = ctx.createRadialGradient(cx, cy, sunPxR * 0.97, cx, cy, sunPxR * 1.7);
+      var corona = ctx.createRadialGradient(sx, sy, sunPxR * 0.97, sx, sy, sunPxR * 1.7);
       corona.addColorStop(0, 'rgba(255,255,255,0.9)');
       corona.addColorStop(0.5, 'rgba(230,240,255,0.35)');
       corona.addColorStop(1, 'rgba(230,240,255,0)');
-      ctx.beginPath(); ctx.arc(cx, cy, sunPxR * 1.7, 0, Math.PI * 2);
+      ctx.beginPath(); ctx.arc(sx, sy, sunPxR * 1.7, 0, Math.PI * 2);
       ctx.fillStyle = corona; ctx.fill();
     }
 
