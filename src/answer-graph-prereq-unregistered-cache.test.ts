@@ -32,6 +32,13 @@ import { getAnswerGraphPage } from './views/answerGraph';
 //       発生してしまう
 //   (6) 一括登録が完了してもkeywordCountMapが更新されず、同一セッション内で
 //       モーダルを開き直すと未登録のまま表示され続ける
+//   (7) 「一括登録ボタンが出現しない」という現象が、(a)未登録キーワードが
+//       実際に0件だから非表示になっている(正常)のか、(b)判定結果・判定
+//       過程に問題があって未登録キーワードがあるのに非表示になっている
+//       (異常)のか区別がつかない → チップの.chip-unregistered個数(判定結果)
+//       と一括登録ボタン行の表示/非表示(表示処理の結果)を同じテストの中で
+//       突き合わせ、両者が常に一致する(0件⇔非表示、1件以上⇔表示)ことを
+//       複数パターン(全件登録済み/一部未登録/全件未登録)で機械的に保証する
 
 function buildPage(): string {
   return getAnswerGraphPage('testuser', {}, false);
@@ -174,5 +181,60 @@ describe('予備知識モーダル(DOM実動作): チップの未登録判定は
 
     expect(shinkansenChip.classList.contains('chip-unregistered')).toBe(false);
     expect(bulkBtn.textContent).toBe('登録完了');
+  });
+});
+
+// 「一括登録ボタンが出ない」という現象の原因切り分け専用テスト。
+// チップの判定結果(.chip-unregistered の個数)と、一括登録ボタン行の
+// 表示/非表示という「判定結果を受けた表示処理の結果」を同じテストの中で
+// 突き合わせることで、以下を機械的に区別できるようにする。
+//   - 未登録0件 かつ ボタン行が非表示 → 正常(表示しないのが正しい)
+//   - 未登録1件以上 なのに ボタン行が非表示 → 異常(表示処理側の不具合)
+//   - 未登録0件 なのに ボタン行が表示 → 異常(判定側の不具合、余計な登録対象)
+describe('予備知識モーダル: 「一括登録ボタンが出現しない」の原因切り分け(判定結果とボタン表示の整合性)', () => {
+  afterEach(() => { vi.unstubAllGlobals(); });
+
+  function countUnregisteredChips(): number {
+    return document.querySelectorAll('.prereq-modal-chip.chip-unregistered').length;
+  }
+  function isBulkRegisterRowVisible(): boolean {
+    return document.getElementById('prereqModalFoot')!.style.display !== 'none';
+  }
+
+  it('抽出キーワードが全件登録済み(count>0)の場合: 未登録チップは0件になり、一括登録ボタン行は正しく非表示になる(正常系)', async () => {
+    // '東京駅'はモックのall-keywordsでcnt:5(登録済み)。抽出結果をこの1語だけにする。
+    await setupPrereqUnregisteredCacheTest({ keywords: ['東京駅'] });
+    expect(countUnregisteredChips()).toBe(0);
+    expect(isBulkRegisterRowVisible()).toBe(false);
+  });
+
+  it('抽出キーワードの一部が未登録の場合: 未登録チップ数と一括登録ボタン行の表示が一致する(1件以上⇔表示)', async () => {
+    // デフォルトの抽出結果は['東京駅'(登録済み), '新幹線'(未登録), '乗車券'(cnt:0で未登録)]。
+    await setupPrereqUnregisteredCacheTest();
+    const unregisteredCount = countUnregisteredChips();
+    expect(unregisteredCount).toBe(2);
+    expect(isBulkRegisterRowVisible()).toBe(true);
+  });
+
+  it('抽出キーワードが全件未登録の場合: 未登録チップ数が抽出件数と一致し、一括登録ボタン行が表示される', async () => {
+    await setupPrereqUnregisteredCacheTest({ keywords: ['未知語A', '未知語B', '未知語C'] });
+    expect(countUnregisteredChips()).toBe(3);
+    expect(isBulkRegisterRowVisible()).toBe(true);
+  });
+
+  it('未登録チップが1件でも存在すれば、必ず一括登録ボタン行が表示される(判定結果と表示処理の不整合がないことの一般化チェック)', async () => {
+    const scenarios = [
+      { keywords: ['東京駅'] },
+      { keywords: ['東京駅', '新幹線'] },
+      { keywords: ['新幹線', '乗車券'] },
+      { keywords: ['未知語A'] },
+    ];
+    for (const scenario of scenarios) {
+      document.body.innerHTML = '';
+      await setupPrereqUnregisteredCacheTest(scenario);
+      const unregisteredCount = countUnregisteredChips();
+      const visible = isBulkRegisterRowVisible();
+      expect(visible, `keywords=${JSON.stringify(scenario.keywords)}: 未登録${unregisteredCount}件のときボタン行はvisible=${unregisteredCount > 0}であるべき`).toBe(unregisteredCount > 0);
+    }
   });
 });
