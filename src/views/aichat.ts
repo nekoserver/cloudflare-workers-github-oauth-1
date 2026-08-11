@@ -2748,14 +2748,24 @@ export function getAiChatPage(user: {
       return text.slice(0, HISTORY_PREVIEW_MAX_CHARS) + '\\n\\n…(長すぎるため以下省略。共有リンクから全文を確認できます)';
     }
 
-    function appendHistoryModalBubble(text, role) {
+    function appendHistoryModalBubble(text, role, imageDataUrl) {
       var el = document.createElement('div');
       if (role === 'assistant') {
         el.className = 'chat-bubble assistant preview-area';
         el.innerHTML = parseMd(truncateForHistoryPreview(text));
       } else {
         el.className = 'chat-bubble user';
-        el.textContent = text;
+        if (imageDataUrl) {
+          var bubbleImg = document.createElement('img');
+          bubbleImg.className = 'chat-bubble-image';
+          bubbleImg.src = imageDataUrl;
+          el.appendChild(bubbleImg);
+        }
+        if (text) {
+          var textEl = document.createElement('div');
+          textEl.textContent = text;
+          el.appendChild(textEl);
+        }
       }
       historyModalChat.appendChild(el);
     }
@@ -2996,7 +3006,7 @@ export function getAiChatPage(user: {
       historyModalDBKeywordsApplied = false;
       historyModalChat.classList.remove('highlights-hidden');
       historyModalChat.innerHTML = '';
-      appendHistoryModalBubble(r.question, 'user');
+      appendHistoryModalBubble(r.question, 'user', r.image_data_url);
       appendHistoryModalBubble(r.answer, 'assistant');
       if (keyword) applyKeywordHighlight(historyModalChat, keyword);
       updateHighlightToggleBtn();

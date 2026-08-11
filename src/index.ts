@@ -1444,6 +1444,7 @@ CREATE INDEX IF NOT EXISTS idx_aichat_answer_keyword_vectors_share ON aichat_ans
 CREATE INDEX IF NOT EXISTS idx_moondream_analyze_log_user_created ON moondream_analyze_log(user_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_moondream_analyze_log_status ON moondream_analyze_log(status);`,
   '0097': `ALTER TABLE moondream_analyze_log ADD COLUMN image_data_url TEXT;`,
+  '0098': `ALTER TABLE ai_chat_shares ADD COLUMN image_data_url TEXT;`,
 };
 
 async function ensureGroupTable(db: D1Database): Promise<void> {
@@ -4112,8 +4113,8 @@ app.post('/api/aichat', authMiddleware, async (c) => {
       const conversationHash = await computeConversationHash(user.sub, message, response, usedModel, now);
       const questionHash = await computeQuestionHash(user.sub, message);
       await c.env.DB.prepare(
-        'INSERT INTO ai_chat_shares (id, user_id, user_hash, question, answer, model, created_at, conversation_hash, question_hash, input_tokens, output_tokens, total_tokens, source) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
-      ).bind(shareId, user.sub, userHash, message, response, usedModel, now, conversationHash, questionHash, usage.input_tokens, usage.output_tokens, usage.total_tokens, source).run();
+        'INSERT INTO ai_chat_shares (id, user_id, user_hash, question, answer, model, created_at, conversation_hash, question_hash, input_tokens, output_tokens, total_tokens, source, image_data_url) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+      ).bind(shareId, user.sub, userHash, message, response, usedModel, now, conversationHash, questionHash, usage.input_tokens, usage.output_tokens, usage.total_tokens, source, image || null).run();
       return { shareId, userHash, conversationHash, questionHash };
     } catch (saveErr) {
       logger.warn('AI chat auto-save failed', {
@@ -7438,12 +7439,13 @@ app.get('/api/aichat/shares/:id', authMiddleware, async (c) => {
   const id = c.req.param('id');
   const row = await c.env.DB.prepare(
     `SELECT id, user_hash, question, answer, model, created_at, access_count, question_hash,
-            input_tokens, output_tokens, total_tokens
+            input_tokens, output_tokens, total_tokens, image_data_url
      FROM ai_chat_shares WHERE id = ? AND user_id = ? AND deleted_at IS NULL`
   ).bind(id, user.sub).first<{
     id: string; user_hash: string; question: string; answer: string;
     model: string; created_at: string; access_count: number; question_hash: string | null;
     input_tokens: number | null; output_tokens: number | null; total_tokens: number | null;
+    image_data_url: string | null;
   }>();
   if (!row) return jsonUtf8({ error: 'Not found' }, 404);
   const vectorized = await isAnswerVectorized(c.env.DB, user.sub, id);
