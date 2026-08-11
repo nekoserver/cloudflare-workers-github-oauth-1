@@ -97,8 +97,9 @@ import { extractAiUsage } from './utils/aiUsage';
 import { validateImageDataUrl, attachImageToLastUserMessage, resolveAichatModelsForRequest } from './utils/aichatImage';
 import {
   MOONDREAM_MODEL,
+  MOONDREAM_DEFAULT_PROMPT,
   validateMoondreamImageDataUrl,
-  dataUrlToImageBytes,
+  estimateImageByteLength,
   buildMoondreamRunParams,
   parseMoondreamResponse,
 } from './utils/moondreamAnalyze';
@@ -8754,13 +8755,9 @@ app.post('/api/moondream-analyze', authMiddleware, async (c) => {
     return jsonUtf8({ error: 'リクエストが多すぎます。しばらく待ってから再試行してください。' }, 429);
   }
 
-  let imageBytes: Uint8Array;
-  try {
-    imageBytes = dataUrlToImageBytes(image);
-  } catch {
-    return jsonUtf8({ error: '画像データのデコードに失敗しました' }, 400);
-  }
-  const runParams = buildMoondreamRunParams(imageBytes, body.prompt);
+  const runParams = buildMoondreamRunParams(image, body.prompt);
+  const promptLength = (body.prompt && body.prompt.trim() ? body.prompt.trim() : MOONDREAM_DEFAULT_PROMPT).length;
+  const imageByteLength = estimateImageByteLength(image);
 
   try {
     const result = await c.env.AI.run(
@@ -8773,14 +8770,14 @@ app.post('/api/moondream-analyze', authMiddleware, async (c) => {
       logger.warn('[moondream-analyze] 空の応答', { resultKeys });
       c.executionCtx?.waitUntil(recordMoondreamAnalyzeLog(c.env.DB, {
         userId: user.sub, status: 'error', model: MOONDREAM_MODEL,
-        promptLength: runParams.prompt.length, imageBytes: imageBytes.length,
+        promptLength, imageBytes: imageByteLength,
         errorMessage: `空の応答(resultKeys=${resultKeys})`, imageDataUrl: image,
       }));
       return jsonUtf8({ error: '分析結果を取得できませんでした' }, 502);
     }
     c.executionCtx?.waitUntil(recordMoondreamAnalyzeLog(c.env.DB, {
       userId: user.sub, status: 'ok', model: MOONDREAM_MODEL,
-      promptLength: runParams.prompt.length, imageBytes: imageBytes.length,
+      promptLength, imageBytes: imageByteLength,
       imageDataUrl: image,
     }));
     return jsonUtf8({ analysis, usedModel: MOONDREAM_MODEL });
@@ -8789,7 +8786,7 @@ app.post('/api/moondream-analyze', authMiddleware, async (c) => {
     logger.error('[moondream-analyze] 呼び出し失敗', { error: errorMessage });
     c.executionCtx?.waitUntil(recordMoondreamAnalyzeLog(c.env.DB, {
       userId: user.sub, status: 'error', model: MOONDREAM_MODEL,
-      promptLength: runParams.prompt.length, imageBytes: imageBytes.length,
+      promptLength, imageBytes: imageByteLength,
       errorMessage, imageDataUrl: image,
     }));
     return jsonUtf8({ error: '画像分析に失敗しました' }, 502);
