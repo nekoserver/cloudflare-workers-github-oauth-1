@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
 import { getAiChatPage } from './views/aichat';
 
 // 対象: AIチャットページ(/aichat)の詳細プレビューモーダル(historyModal)。
@@ -49,6 +50,40 @@ describe('/aichat ページ: 詳細プレビューモーダルの添付画像表
       expect(() => new Function(m![1])).not.toThrow();
     }
     expect(count).toBeGreaterThan(0);
+  });
+});
+
+describe('/api/aichat/shares系一覧APIがimage_data_urlを欠かさず返す(詳細プレビューモーダルへ直接渡される行のため)', () => {
+  // 対象: search/by-date/by-keyword はクライアントの currentResults にそのまま入り、
+  // showHistoryPreview()経由でshowHistoryModal(r)へ再フェッチなしで直接渡される。
+  // /api/aichat/shares/:id のような単体フェッチ経路だけimage_data_urlを直しても、
+  // これら一覧系のSELECTが取り忘れるとプレビューモーダルの画像は表示されないまま
+  // (実際に発生した回帰)。SELECT文にimage_data_urlが含まれることを機械的に保証する。
+  const src = readFileSync(`${__dirname}/index.ts`, 'utf-8');
+
+  it('searchAiChatShares()のSELECTがimage_data_urlを含む', () => {
+    const idx = src.indexOf('export async function searchAiChatShares(');
+    const block = src.slice(idx, idx + 1200);
+    expect(block).toContain('access_count, question_hash, image_data_url');
+  });
+
+  it('/api/aichat/shares/by-dateのSELECTがimage_data_urlを含む', () => {
+    const idx = src.indexOf("app.get('/api/aichat/shares/by-date'");
+    const block = src.slice(idx, idx + 900);
+    expect(block).toContain('access_count, question_hash, image_data_url');
+  });
+
+  it('/api/aichat/shares/by-keywordのSELECTが両分岐(topicあり/なし)ともimage_data_urlを含む', () => {
+    const idx = src.indexOf("app.get('/api/aichat/shares/by-keyword'");
+    const block = src.slice(idx, idx + 1600);
+    expect(block).toContain('access_count, question_hash, image_data_url');
+    expect(block).toContain('access_count, s.question_hash, s.image_data_url');
+  });
+
+  it('/api/aichat/shares/:id (単体フェッチ)のSELECTもimage_data_urlを含む', () => {
+    const idx = src.indexOf("app.get('/api/aichat/shares/:id'");
+    const block = src.slice(idx, idx + 700);
+    expect(block).toContain('image_data_url');
   });
 });
 

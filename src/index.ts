@@ -4176,6 +4176,7 @@ export async function searchAiChatShares(
 ): Promise<{ results: Array<{
   id: string; user_hash: string; question: string; answer: string;
   model: string; created_at: string; access_count: number; question_hash: string | null;
+  image_data_url: string | null;
 }> }> {
   // LIKEは(ワイルドカードの有無に関わらず)D1では約50バイト超のパターンで
   // "LIKE or GLOB pattern too complex" になるため、任意長になり得る自由入力の
@@ -4183,7 +4184,7 @@ export async function searchAiChatShares(
   const normalized = q.replace(/[・･]/g, '・');
   const rows = await db
     .prepare(
-      `SELECT id, user_hash, question, answer, model, created_at, access_count, question_hash
+      `SELECT id, user_hash, question, answer, model, created_at, access_count, question_hash, image_data_url
        FROM ai_chat_shares
        WHERE user_id = ? AND deleted_at IS NULL AND (INSTR(REPLACE(question, '･', '・'), ?) > 0 OR INSTR(REPLACE(answer, '･', '・'), ?) > 0)
        ORDER BY created_at DESC LIMIT 30`
@@ -4192,6 +4193,7 @@ export async function searchAiChatShares(
     .all<{
       id: string; user_hash: string; question: string; answer: string;
       model: string; created_at: string; access_count: number; question_hash: string | null;
+      image_data_url: string | null;
     }>();
   return { results: rows.results ?? [] };
 }
@@ -5111,13 +5113,14 @@ app.get('/api/aichat/shares/by-date', authMiddleware, async (c) => {
   if (!date) return jsonUtf8({ results: [] });
 
   const rows = await c.env.DB.prepare(
-    `SELECT id, user_hash, question, answer, model, created_at, access_count, question_hash
+    `SELECT id, user_hash, question, answer, model, created_at, access_count, question_hash, image_data_url
      FROM ai_chat_shares
      WHERE user_id = ? AND deleted_at IS NULL AND created_at LIKE ?
      ORDER BY created_at DESC LIMIT 50`
   ).bind(user.sub, `${date}%`).all<{
     id: string; user_hash: string; question: string; answer: string;
     model: string; created_at: string; access_count: number; question_hash: string | null;
+    image_data_url: string | null;
   }>();
 
   return jsonUtf8({ date, results: rows.results ?? [] });
@@ -5132,7 +5135,7 @@ app.get('/api/aichat/shares/by-keyword', authMiddleware, async (c) => {
   let rows;
   if (topic) {
     rows = await c.env.DB.prepare(
-      `SELECT DISTINCT id, user_hash, question, answer, model, created_at, access_count, question_hash
+      `SELECT DISTINCT id, user_hash, question, answer, model, created_at, access_count, question_hash, image_data_url
        FROM ai_chat_shares
        WHERE user_id = ? AND deleted_at IS NULL
          AND question LIKE ? AND question LIKE ?
@@ -5140,10 +5143,11 @@ app.get('/api/aichat/shares/by-keyword', authMiddleware, async (c) => {
     ).bind(user.sub, `%「${keyword}」%`, `%「${topic}」%`).all<{
       id: string; user_hash: string; question: string; answer: string;
       model: string; created_at: string; access_count: number; question_hash: string | null;
+      image_data_url: string | null;
     }>();
   } else {
     rows = await c.env.DB.prepare(
-      `SELECT DISTINCT s.id, s.user_hash, s.question, s.answer, s.model, s.created_at, s.access_count, s.question_hash
+      `SELECT DISTINCT s.id, s.user_hash, s.question, s.answer, s.model, s.created_at, s.access_count, s.question_hash, s.image_data_url
        FROM aichat_search_log l
        JOIN ai_chat_shares s ON s.id = l.share_id AND s.user_id = l.user_id
        WHERE l.user_id = ? AND l.keyword = ? AND s.deleted_at IS NULL
@@ -5151,6 +5155,7 @@ app.get('/api/aichat/shares/by-keyword', authMiddleware, async (c) => {
     ).bind(user.sub, keyword).all<{
       id: string; user_hash: string; question: string; answer: string;
       model: string; created_at: string; access_count: number; question_hash: string | null;
+      image_data_url: string | null;
     }>();
   }
   return jsonUtf8({ keyword, results: rows.results ?? [] });

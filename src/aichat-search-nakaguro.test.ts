@@ -54,7 +54,8 @@ function setupDb(): DatabaseSync {
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       access_count INTEGER NOT NULL DEFAULT 0,
       question_hash TEXT,
-      deleted_at TEXT
+      deleted_at TEXT,
+      image_data_url TEXT
     );
   `);
   return db;
