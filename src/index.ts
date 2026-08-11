@@ -38,6 +38,7 @@ import { getWebGLLVSpherePage } from './views/webglLVSphere';
 import { getWebGLCubePage } from './views/webglCube';
 import { getWebGLSolarPage } from './views/webglSolar';
 import { getMoondreamVlmPage } from './views/moondreamVlm';
+import { getMoondreamAnalyzeLogPage, type MoondreamAnalyzeLogRow } from './views/moondreamAnalyzeLog';
 import { getEclipseTiltLessonPage } from './views/eclipseTiltLesson';
 import { getWebGLFaultsPage } from './views/webglFaults';
 import { getUuidGenPage } from './views/uuidGen';
@@ -223,6 +224,7 @@ export const STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
   { name: 'aichat_answer_category_scores', migration: '0089', description: '回答伝播グラフ(/answer-graph)のノード色分け用: 回答ごとの中分類カテゴリ類似度スコアのキャッシュ', syncPolicy: 'auto' },
   { name: 'aichat_answer_vectors', migration: '0094', description: '回答文(ai_chat_shares)のplamo-embedding-1bベクトルキャッシュ。answer-graphの回答モーダル「この回答文をベクタ化する」ボタンで生成', syncPolicy: 'auto' },
   { name: 'aichat_answer_keyword_vectors', migration: '0095', description: '回答文からgemma-4-26b-a4b-itで抽出した予備知識キーワードのplamo-embedding-1bベクトルキャッシュ(回答文IDごと)。answer-graphの回答モーダル「この回答文をベクタ化する」ボタンで生成', syncPolicy: 'auto' },
+  { name: 'moondream_analyze_log', migration: '0096', description: '/api/moondream-analyze呼び出しの成否ログ(モデル名・プロンプト長・画像バイト数・失敗時のエラー内容)', syncPolicy: 'auto' },
 ];
 
 const REQUIRED_STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
@@ -1429,6 +1431,19 @@ CREATE INDEX IF NOT EXISTS idx_aichat_answer_vectors_share ON aichat_answer_vect
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_aichat_answer_keyword_vectors_unique ON aichat_answer_keyword_vectors(user_id, share_id, keyword, model);
 CREATE INDEX IF NOT EXISTS idx_aichat_answer_keyword_vectors_share ON aichat_answer_keyword_vectors(share_id);`,
+  '0096': `CREATE TABLE IF NOT EXISTS moondream_analyze_log (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id TEXT NOT NULL,
+  status TEXT NOT NULL,
+  model TEXT NOT NULL,
+  prompt_length INTEGER NOT NULL,
+  image_bytes INTEGER NOT NULL,
+  error_message TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_moondream_analyze_log_user_created ON moondream_analyze_log(user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_moondream_analyze_log_status ON moondream_analyze_log(status);`,
+  '0097': `ALTER TABLE moondream_analyze_log ADD COLUMN image_data_url TEXT;`,
 };
 
 async function ensureGroupTable(db: D1Database): Promise<void> {
@@ -1650,6 +1665,7 @@ export const TABLE_COLUMN_KEYS: Record<string, ColumnKeyInfo> = {
   aichat_answer_category_scores: { id: 'pk', user_id: 'uk', share_id: 'uk', category_id: 'fk+idx' },
   aichat_answer_vectors: { id: 'pk', user_id: 'uk', share_id: 'uk', model: 'uk' },
   aichat_answer_keyword_vectors: { id: 'pk', user_id: 'uk', share_id: 'uk', keyword: 'uk', model: 'uk' },
+  moondream_analyze_log: { id: 'pk', user_id: 'fk+idx' },
 };
 
 export function getColumnKeyType(tableName: string, columnName: string): ColumnKeyType {
@@ -1745,6 +1761,7 @@ export const TABLE_GROUP_MAP: Record<string, string> = {
   aichat_answer_category_scores: 'ai',
   aichat_answer_vectors: 'ai',
   aichat_answer_keyword_vectors: 'ai',
+  moondream_analyze_log: 'ai',
   keyword_category_groups: 'search',
   keyword_multi_labels: 'search',
   ts_repository:          'ts-catalog',
@@ -1933,6 +1950,7 @@ export const COLUMN_FK_TARGETS: Record<string, Record<string, string>> = {
   aichat_answer_category_scores: { user_id: 'user_sessions', category_id: 'aichat_keyword_categories' },
   aichat_answer_vectors: { user_id: 'user_sessions' },
   aichat_answer_keyword_vectors: { user_id: 'user_sessions' },
+  moondream_analyze_log: { user_id: 'user_sessions' },
 
   // ========================================================================
   // 世界遺産ページ AI質問ログ・保存済みエリア系
@@ -2457,6 +2475,35 @@ async function recordApiAccess(db: D1Database | undefined, method: string, route
          count = count + 1,
          last_called_at = datetime('now')`
     ).bind(endpoint, statusCode).run();
+  } catch {}
+}
+
+async function recordMoondreamAnalyzeLog(
+  db: D1Database | undefined,
+  payload: {
+    userId: string;
+    status: 'ok' | 'error';
+    model: string;
+    promptLength: number;
+    imageBytes: number;
+    errorMessage?: string | null;
+    imageDataUrl?: string | null;
+  },
+): Promise<void> {
+  if (!db) return;
+  try {
+    await db.prepare(
+      `INSERT INTO moondream_analyze_log (user_id, status, model, prompt_length, image_bytes, error_message, image_data_url)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`
+    ).bind(
+      payload.userId,
+      payload.status,
+      payload.model,
+      payload.promptLength,
+      payload.imageBytes,
+      payload.errorMessage ?? null,
+      payload.imageDataUrl ?? null,
+    ).run();
   } catch {}
 }
 
@@ -8656,6 +8703,24 @@ app.get('/moondream-vlm', authMiddleware, async (c) => {
   return c.html(getMoondreamVlmPage(user.sub));
 });
 
+// /api/moondream-analyze の呼び出し履歴を確認するための内部用ログ閲覧ページ。
+// c.env.AI.run() が失敗した場合の原因調査に使う(rule 10: D1の診断データを最初に見る)。
+app.get('/moondream-analyze-log', authMiddleware, async (c) => {
+  const user = c.get('user');
+  let rows: MoondreamAnalyzeLogRow[] = [];
+  if (c.env.DB) {
+    const result = await c.env.DB.prepare(
+      `SELECT id, status, model, prompt_length, image_bytes, error_message, created_at, image_data_url
+       FROM moondream_analyze_log
+       WHERE user_id = ?
+       ORDER BY created_at DESC, id DESC
+       LIMIT 100`
+    ).bind(user.sub).all<MoondreamAnalyzeLogRow>();
+    rows = result.results ?? [];
+  }
+  return c.html(getMoondreamAnalyzeLogPage(user.sub, rows));
+});
+
 // /moondream-vlm ページとAIチャットの画像添付機能の両方から呼ばれる内部用API。
 // Workers AI の画像分析VLM(@cf/moondream/moondream3.1-9B-A2B)へ画像とプロンプトを渡し、
 // 分析結果のテキストを返す。
@@ -8697,12 +8762,29 @@ app.post('/api/moondream-analyze', authMiddleware, async (c) => {
     );
     const analysis = parseMoondreamResponse(result);
     if (!analysis) {
-      logger.warn('[moondream-analyze] 空の応答', { resultKeys: typeof result === 'object' && result !== null ? Object.keys(result as object).join(',') : 'non-object' });
+      const resultKeys = typeof result === 'object' && result !== null ? Object.keys(result as object).join(',') : 'non-object';
+      logger.warn('[moondream-analyze] 空の応答', { resultKeys });
+      c.executionCtx?.waitUntil(recordMoondreamAnalyzeLog(c.env.DB, {
+        userId: user.sub, status: 'error', model: MOONDREAM_MODEL,
+        promptLength: runParams.prompt.length, imageBytes: imageBytes.length,
+        errorMessage: `空の応答(resultKeys=${resultKeys})`, imageDataUrl: image,
+      }));
       return jsonUtf8({ error: '分析結果を取得できませんでした' }, 502);
     }
+    c.executionCtx?.waitUntil(recordMoondreamAnalyzeLog(c.env.DB, {
+      userId: user.sub, status: 'ok', model: MOONDREAM_MODEL,
+      promptLength: runParams.prompt.length, imageBytes: imageBytes.length,
+      imageDataUrl: image,
+    }));
     return jsonUtf8({ analysis, usedModel: MOONDREAM_MODEL });
   } catch (err) {
-    logger.error('[moondream-analyze] 呼び出し失敗', { error: err instanceof Error ? err.message : String(err) });
+    const errorMessage = err instanceof Error ? err.message : String(err);
+    logger.error('[moondream-analyze] 呼び出し失敗', { error: errorMessage });
+    c.executionCtx?.waitUntil(recordMoondreamAnalyzeLog(c.env.DB, {
+      userId: user.sub, status: 'error', model: MOONDREAM_MODEL,
+      promptLength: runParams.prompt.length, imageBytes: imageBytes.length,
+      errorMessage, imageDataUrl: image,
+    }));
     return jsonUtf8({ error: '画像分析に失敗しました' }, 502);
   }
 });
