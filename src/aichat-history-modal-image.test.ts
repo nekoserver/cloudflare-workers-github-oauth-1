@@ -87,6 +87,22 @@ describe('/api/aichat/shares系一覧APIがimage_data_urlを欠かさず返す(�
   });
 });
 
+describe('/aichat ページ: 下部パネル表示モード(showResultsPanel)でも添付画像を表示する', () => {
+  // 対象: aichat_history_preview_mode Cookieが'bottom-panel'のユーザー向けの
+  // 別プレビューUI(showResultsPanel)。historyModalとは完全に別のDOM・別関数
+  // のため、historyModal側だけ直しても下部パネル利用者には画像が出ない。
+  const html = buildPage();
+
+  it('showResultsPanel()がr.image_data_urlありならchat-bubble-imageを質問欄に追加する', () => {
+    const idx = html.indexOf('function showResultsPanel(r, keyword)');
+    expect(idx).toBeGreaterThan(-1);
+    const block = html.slice(idx, idx + 700);
+    expect(block).toContain("resultsPanelImg.className = 'chat-bubble-image';");
+    expect(block).toContain('resultsPanelImg.src = r.image_data_url;');
+    expect(block).toContain('resultsPanelQ.appendChild(resultsPanelImg);');
+  });
+});
+
 describe('appendHistoryModalBubble: DOM描画の実挙動', () => {
   function loadFn(html: string) {
     const idx = html.indexOf('function appendHistoryModalBubble(text, role, imageDataUrl)');

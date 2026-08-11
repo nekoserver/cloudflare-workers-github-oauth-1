@@ -2921,7 +2921,14 @@ export function getAiChatPage(user: {
 
     function showResultsPanel(r, keyword) {
       closeHistoryModal();
-      resultsPanelQ.textContent = r.question;
+      resultsPanelQ.innerHTML = '';
+      if (r.image_data_url) {
+        var resultsPanelImg = document.createElement('img');
+        resultsPanelImg.className = 'chat-bubble-image';
+        resultsPanelImg.src = r.image_data_url;
+        resultsPanelQ.appendChild(resultsPanelImg);
+      }
+      resultsPanelQ.appendChild(document.createTextNode(r.question));
       resultsPanelA.innerHTML = parseMd(truncateForHistoryPreview(r.answer));
       if (keyword) {
         applyKeywordHighlight(resultsPanelQ, keyword);

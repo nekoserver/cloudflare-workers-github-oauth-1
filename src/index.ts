@@ -8754,7 +8754,7 @@ app.post('/api/moondream-analyze', authMiddleware, async (c) => {
     return jsonUtf8({ error: 'リクエストが多すぎます。しばらく待ってから再試行してください。' }, 429);
   }
 
-  let imageBytes: number[];
+  let imageBytes: Uint8Array;
   try {
     imageBytes = dataUrlToImageBytes(image);
   } catch {
