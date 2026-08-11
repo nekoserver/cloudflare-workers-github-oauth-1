@@ -160,7 +160,7 @@ describe('/aichat ページ: 送信処理(chatForm submit)の写真添付対応'
   it('送信時にpendingImageDataUrlをpayload.imageとして含める', () => {
     const block = html.slice(submitIdx, submitIdx + 900);
     expect(block).toContain('var attachedImage = pendingImageDataUrl;');
-    expect(block).toContain('if (attachedImage) payload.image = attachedImage;');
+    expect(block).toContain('payload.image = attachedImage;');
   });
 
   it('送信直後にclearAttachedImage()で添付状態をリセットする(次の送信に混入しない)', () => {
@@ -171,6 +171,14 @@ describe('/aichat ページ: 送信処理(chatForm submit)の写真添付対応'
   it('ユーザーの発言バブルにappendBubbleでattachedImageを渡している', () => {
     const block = html.slice(submitIdx, submitIdx + 600);
     expect(block).toContain("appendBubble(msg, 'user', null, null, null, attachedImage);");
+  });
+
+  it('画像添付時のみpayload.preferMoondreamにaichatPreferMoondream設定値を含める(画像なしでは含めない)', () => {
+    const block = html.slice(submitIdx, submitIdx + 900);
+    const ifBlockMatch = block.match(/if \(attachedImage\) \{[\s\S]*?\n\s*\}/);
+    expect(ifBlockMatch, 'if (attachedImage) { ... } ブロックが見つからない').not.toBeNull();
+    expect(ifBlockMatch![0]).toContain('payload.image = attachedImage;');
+    expect(ifBlockMatch![0]).toContain('payload.preferMoondream = aichatPreferMoondream;');
   });
 });
 

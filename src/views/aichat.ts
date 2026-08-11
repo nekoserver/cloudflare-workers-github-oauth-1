@@ -23,6 +23,7 @@ export function getAiChatPage(user: {
   fallbackModel?: string;
   availableModels?: Array<{value: string; label: string}>;
   modelColors?: Record<string, string>;
+  aichatPreferMoondream?: boolean;
 }): string {
   const displayName = escapeHtml(user.name || user.username);
   const initials = escapeHtml((user.name || user.username).substring(0, 2).toUpperCase());
@@ -35,6 +36,7 @@ export function getAiChatPage(user: {
     .map(m => `<option value="${escapeHtml(m.value)}"${m.value === user.aiChatModel ? ' selected' : ''}>${escapeHtml(m.label)}</option>`)
     .join('');
   const modelColorsJson = JSON.stringify(user.modelColors ?? {});
+  const aichatPreferMoondreamInit = user.aichatPreferMoondream === false ? 'false' : 'true';
   const modelListJson = JSON.stringify(modelList.map(m => ({ value: m.value, label: m.label })));
 
   return `<!DOCTYPE html>
@@ -6431,6 +6433,12 @@ export function getAiChatPage(user: {
 
     var MODEL_COLORS = ${modelColorsJson};
     var MODEL_LIST = ${modelListJson};
+    // テキストプロンプトに添付画像がある場合、選択中のモデルより優先して
+    // moondream(/api/moondream-analyzeと同じ内部モデル)へ問い合わせるかどうか。
+    // /settingsページのトグルで変更され、Cookie(aichat_prefer_moondream)に
+    // 保存される。ページ読み込み時はサーバー側でCookieを読んで埋め込んだ
+    // この初期値をそのまま使う(クライアント側でのCookie再読み込みは不要)。
+    var aichatPreferMoondream = ${aichatPreferMoondreamInit};
     var modelColorDot = document.getElementById('modelColorDot');
 
     function applyModelColor(model) {
@@ -6539,7 +6547,10 @@ export function getAiChatPage(user: {
       var currentMsg = msg;
       var thinking = appendBubble('考え中...', 'thinking');
       var payload = { message: msg, model: lastModel, systemPromptMode: langModeSelect.value, source: 'textbox' };
-      if (attachedImage) payload.image = attachedImage;
+      if (attachedImage) {
+        payload.image = attachedImage;
+        payload.preferMoondream = aichatPreferMoondream;
+      }
 
       var assistantBubbleEl = null;
       var moondreamAnalysisText = null;

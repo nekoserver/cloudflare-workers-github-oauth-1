@@ -1401,7 +1401,7 @@ describe('ナビバー モデル選択ドロップダウン', () => {
     const src = readFileSync(resolve(__dirname, '..', 'index.ts'), 'utf-8');
     const idx = src.indexOf("app.post('/api/aichat'");
     expect(idx).toBeGreaterThan(-1);
-    const fn = src.slice(idx, idx + 3200);
+    const fn = src.slice(idx, idx + 3600);
     expect(fn).toContain('body.model');
   });
 
