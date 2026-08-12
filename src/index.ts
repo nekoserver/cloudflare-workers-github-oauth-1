@@ -8750,6 +8750,26 @@ app.get('/moondream-analyze-log', authMiddleware, async (c) => {
   return c.html(getMoondreamAnalyzeLogPage(user.sub, rows));
 });
 
+// AIチャットの左サイドパネル(スワイプ削除)と同様の操作でmoondream-analyze-logの
+// 行を削除するAPI。ai_chat_sharesと異なりdeleted_at列を持たないテーブルのため、
+// 論理削除ではなくDELETE FROMで該当行そのものをD1から取り除く。
+app.delete('/api/moondream-analyze-log/:id', authMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+
+  const id = Number(c.req.param('id'));
+  if (!id || isNaN(id)) return jsonUtf8({ error: '無効なIDです' }, 400);
+
+  const row = await c.env.DB.prepare(
+    'SELECT id FROM moondream_analyze_log WHERE id = ? AND user_id = ?'
+  ).bind(id, user.sub).first<{ id: number }>();
+  if (!row) return jsonUtf8({ error: '見つかりません' }, 404);
+
+  await c.env.DB.prepare('DELETE FROM moondream_analyze_log WHERE id = ?').bind(id).run();
+
+  return jsonUtf8({ ok: true });
+});
+
 // /moondream-vlm ページとAIチャットの画像添付機能の両方から呼ばれる内部用API。
 // Workers AI の画像分析VLM(@cf/moondream/moondream3.1-9B-A2B)へ画像とプロンプトを渡し、
 // 分析結果のテキストを返す。
