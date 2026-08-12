@@ -3,14 +3,18 @@ import { buildMoondreamAnalyzeLogRowsHtml, getMoondreamAnalyzeLogPage } from './
 
 // 対象: /moondream-analyze-log ページ。/api/moondream-analyze の呼び出し失敗を
 // D1(moondream_analyze_log)から調査するための内部用ログ閲覧ページ。
+// AIチャットの左サイドパネルと同様のスワイプ削除UIを持ち、削除操作は
+// /api/moondream-analyze-log/:id へのDELETEでD1の該当行そのものを消す
+// (ai_chat_sharesのような論理削除ではなく物理削除)。
 //
 // 故障シナリオ:
-//   (1) ログ0件のとき空のテーブル本体になり「読み込み中のまま止まっている」ように見える
+//   (1) ログ0件のとき空の一覧になり「読み込み中のまま止まっている」ように見える
 //   (2) error_messageにHTML特殊文字が含まれるとエスケープされずXSSになる
 //   (3) statusが'ok'でもエラー扱いのバッジ色になる(逆も同様)
+//   (4) 各行にdata-id・削除ボタンが無いとスワイプ削除の対象が特定できない
 
 describe('buildMoondreamAnalyzeLogRowsHtml', () => {
-  it('ログが0件のとき「ログがありません」の行を返す', () => {
+  it('ログが0件のとき「ログがありません」の空表示を返す', () => {
     const html = buildMoondreamAnalyzeLogRowsHtml([]);
     expect(html).toContain('ログがありません');
   });
@@ -36,7 +40,7 @@ describe('buildMoondreamAnalyzeLogRowsHtml', () => {
     const html = buildMoondreamAnalyzeLogRowsHtml([
       { id: 1, status: 'ok', model: 'm', prompt_length: 3, image_bytes: 100, error_message: null, created_at: '2026-08-10', image_data_url: null },
     ]);
-    expect(html).toContain('<td class="error-cell">-</td>');
+    expect(html).toContain('<div class="log-cell log-cell-error">-</div>');
   });
 
   it('image_data_urlがあれば画像を復元できるサムネイルリンク(ダウンロード付き)を表示する', () => {
@@ -54,10 +58,19 @@ describe('buildMoondreamAnalyzeLogRowsHtml', () => {
     ]);
     expect(html).not.toContain('class="thumb"');
   });
+
+  it('各行にスワイプ削除対象を特定するdata-idと削除ボタンを持つ', () => {
+    const html = buildMoondreamAnalyzeLogRowsHtml([
+      { id: 42, status: 'ok', model: 'm', prompt_length: 3, image_bytes: 100, error_message: null, created_at: '2026-08-10', image_data_url: null },
+    ]);
+    expect(html).toContain('data-id="42"');
+    expect(html).toContain('class="log-delete-btn"');
+    expect(html).toContain('class="log-swipe-inner"');
+  });
 });
 
 describe('getMoondreamAnalyzeLogPage', () => {
-  it('script タグに構文エラーがない(ページ自体に<script>がなくてもOK)', () => {
+  it('script タグに構文エラーがない', () => {
     const html = getMoondreamAnalyzeLogPage('testuser', []);
     const scriptRe = /<script>([\s\S]*?)<\/script>/g;
     let m: RegExpExecArray | null;
@@ -70,5 +83,14 @@ describe('getMoondreamAnalyzeLogPage', () => {
     const html = getMoondreamAnalyzeLogPage('<b>evil</b>', []);
     expect(html).not.toContain('<b>evil</b>');
     expect(html).toContain('&lt;b&gt;evil&lt;/b&gt;');
+  });
+
+  it('削除確認オーバーレイと削除APIエンドポイントを埋め込む', () => {
+    const html = getMoondreamAnalyzeLogPage('testuser', [
+      { id: 7, status: 'ok', model: 'm', prompt_length: 3, image_bytes: 100, error_message: null, created_at: '2026-08-10', image_data_url: null },
+    ]);
+    expect(html).toContain('id="deleteConfirmOverlay"');
+    expect(html).toContain('/api/moondream-analyze-log/');
+    expect(html).toContain("method: 'DELETE'");
   });
 });
