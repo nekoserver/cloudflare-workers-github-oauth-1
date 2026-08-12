@@ -2,6 +2,10 @@ function escH(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
+function escAttr(s: string): string {
+  return escH(s).replace(/"/g, '&quot;');
+}
+
 export type MoondreamAnalyzeLogRow = {
   id: number;
   status: string;
@@ -11,6 +15,8 @@ export type MoondreamAnalyzeLogRow = {
   error_message: string | null;
   created_at: string;
   image_data_url: string | null;
+  prompt_text: string | null;
+  analysis_text: string | null;
 };
 
 export function buildMoondreamAnalyzeLogRowsHtml(rows: MoondreamAnalyzeLogRow[]): string {
@@ -26,7 +32,15 @@ export function buildMoondreamAnalyzeLogRowsHtml(rows: MoondreamAnalyzeLogRow[])
       : '-';
     return `<div class="log-item" data-id="${row.id}">
       <button type="button" class="log-delete-btn">削除</button>
-      <div class="log-swipe-inner">
+      <div class="log-swipe-inner" tabindex="0" role="button"
+        data-preview="1"
+        data-status="${escAttr(row.status)}"
+        data-model="${escAttr(row.model)}"
+        data-created="${escAttr(row.created_at)}"
+        data-prompt="${escAttr(row.prompt_text || '')}"
+        data-analysis="${escAttr(row.analysis_text || '')}"
+        data-error="${escAttr(row.error_message || '')}"
+        data-image="${row.image_data_url ? escAttr(row.image_data_url) : ''}">
         <div class="log-cell log-cell-date">${escH(row.created_at)}</div>
         <div class="log-cell log-cell-status"><span class="badge ${statusClass}">${statusLabel}</span></div>
         <div class="log-cell log-cell-model">${escH(row.model)}</div>
@@ -71,8 +85,9 @@ h1 { font-size:15px; font-weight:700; flex:1; }
 .log-item.swipe-open .log-delete-btn { opacity:1; pointer-events:auto; }
 .log-swipe-inner {
   display:grid; grid-template-columns: 150px 70px 170px 90px 90px 90px 1fr;
-  background:#000010; position:relative; z-index:1;
+  background:#000010; position:relative; z-index:1; cursor:pointer;
 }
+.log-swipe-inner:hover { background:#0a1120; }
 .log-cell { padding:6px 8px; vertical-align:top; white-space:nowrap; }
 .log-cell-error { white-space:pre-wrap; color:#ff7b72; max-width:420px; }
 .empty { color:#8b949e; text-align:center; padding:20px; }
@@ -94,6 +109,34 @@ h1 { font-size:15px; font-weight:700; flex:1; }
 .confirm-box button { padding:6px 16px; border-radius:6px; border:1px solid #30363d; cursor:pointer; font-size:12px; }
 .confirm-ok { background:#b91c1c; color:#fff; border-color:#b91c1c; }
 .confirm-cancel { background:#161b22; color:#e6edf3; }
+.preview-overlay {
+  position:fixed; inset:0; background:rgba(0,0,0,0.65); display:none;
+  align-items:center; justify-content:center; z-index:1000; padding:16px;
+}
+.preview-overlay.open { display:flex; }
+.preview-box {
+  background:#0d1424; border:1px solid #1e2a40; border-radius:10px;
+  width:100%; max-width:640px; max-height:85vh; display:flex; flex-direction:column;
+}
+.preview-head {
+  display:flex; align-items:center; gap:10px; padding:10px 14px;
+  border-bottom:1px solid #1e2a40; flex-shrink:0;
+}
+.preview-title { font-size:13px; font-weight:700; flex:1; }
+.preview-meta { font-size:11px; color:#8b949e; }
+.preview-close {
+  background:none; border:none; color:#8b949e; font-size:16px; cursor:pointer; padding:2px 6px;
+}
+.preview-close:hover { color:#e6edf3; }
+.preview-chat { flex:1; overflow-y:auto; padding:16px; display:flex; flex-direction:column; gap:12px; }
+.preview-bubble {
+  max-width:90%; padding:10px 12px; border-radius:10px; font-size:13px;
+  line-height:1.5; white-space:pre-wrap; word-break:break-word;
+}
+.preview-bubble.user { align-self:flex-end; background:#1f4a8c; color:#fff; border-bottom-right-radius:2px; }
+.preview-bubble.assistant { align-self:flex-start; background:#161b22; color:#e6edf3; border:1px solid #30363d; border-bottom-left-radius:2px; }
+.preview-bubble.error { align-self:flex-start; background:#2a0f10; color:#ff7b72; border:1px solid #6e2426; border-bottom-left-radius:2px; }
+.preview-bubble-image { max-width:220px; max-height:220px; border-radius:6px; display:block; margin-bottom:6px; }
 </style>
 </head>
 <body>
@@ -126,6 +169,16 @@ ${rowsHtml}
       <button type="button" class="confirm-ok" id="deleteConfirmOk">削除</button>
       <button type="button" class="confirm-cancel" id="deleteConfirmCancel">キャンセル</button>
     </div>
+  </div>
+</div>
+<div class="preview-overlay" id="previewOverlay">
+  <div class="preview-box">
+    <div class="preview-head">
+      <div class="preview-title">🔍 分析ログの詳細</div>
+      <div class="preview-meta" id="previewMeta"></div>
+      <button type="button" class="preview-close" id="previewClose" aria-label="閉じる">✕</button>
+    </div>
+    <div class="preview-chat" id="previewChat"></div>
   </div>
 </div>
 <script>
@@ -246,6 +299,62 @@ ${rowsHtml}
     document.addEventListener('mouseup', function(e) { if (!mouseDown) return; mouseDown = false; onEnd(e.clientX); });
   }
 
+  // AIチャットの「詳細プレビュー」(historyModal)と同様に、行をタップすると
+  // その分析ログ1件をユーザー(プロンプト)/アシスタント(分析結果 or エラー)の
+  // チャットバブル形式で表示する。データは行のdata-*属性にサーバー側で埋め込み
+  // 済みのため、追加のfetchなしで即座に開ける。
+  var previewOverlay = document.getElementById('previewOverlay');
+  var previewChat = document.getElementById('previewChat');
+  var previewMeta = document.getElementById('previewMeta');
+  var previewClose = document.getElementById('previewClose');
+
+  function openPreview(inner) {
+    var status = inner.getAttribute('data-status');
+    var model = inner.getAttribute('data-model');
+    var created = inner.getAttribute('data-created');
+    var prompt = inner.getAttribute('data-prompt');
+    var analysis = inner.getAttribute('data-analysis');
+    var errorMessage = inner.getAttribute('data-error');
+    var image = inner.getAttribute('data-image');
+
+    previewMeta.textContent = model + '　' + created;
+    previewChat.innerHTML = '';
+
+    var userBubble = document.createElement('div');
+    userBubble.className = 'preview-bubble user';
+    if (image) {
+      var img = document.createElement('img');
+      img.className = 'preview-bubble-image';
+      img.src = image;
+      img.alt = '添付画像';
+      userBubble.appendChild(img);
+    }
+    var promptText = document.createElement('div');
+    promptText.textContent = prompt || '(プロンプトが記録されていません)';
+    userBubble.appendChild(promptText);
+    previewChat.appendChild(userBubble);
+
+    var assistantBubble = document.createElement('div');
+    if (status === 'ok') {
+      assistantBubble.className = 'preview-bubble assistant';
+      assistantBubble.textContent = analysis || '(分析結果が記録されていません)';
+    } else {
+      assistantBubble.className = 'preview-bubble error';
+      assistantBubble.textContent = errorMessage || 'エラーが発生しました';
+    }
+    previewChat.appendChild(assistantBubble);
+
+    previewOverlay.classList.add('open');
+  }
+
+  function closePreview() {
+    previewOverlay.classList.remove('open');
+  }
+
+  previewClose.addEventListener('click', function(e) { e.stopPropagation(); closePreview(); });
+  previewOverlay.addEventListener('click', function(e) { if (e.target === previewOverlay) closePreview(); });
+  document.addEventListener('keydown', function(e) { if (e.key === 'Escape' && previewOverlay.classList.contains('open')) closePreview(); });
+
   var items = logItems.querySelectorAll('.log-item');
   items.forEach(function(item) {
     var inner = item.querySelector('.log-swipe-inner');
@@ -254,7 +363,14 @@ ${rowsHtml}
     if (delBtn) {
       delBtn.addEventListener('click', function(e) { e.stopPropagation(); showDeleteConfirm(id, item); });
     }
-    if (inner) addSwipeBehavior(item, inner);
+    if (inner) {
+      addSwipeBehavior(item, inner);
+      inner.addEventListener('click', function(e) {
+        if (e.target && e.target.closest && e.target.closest('a')) return;
+        if (swipeOpenItem === item) return;
+        openPreview(inner);
+      });
+    }
   });
 })();
 </script>
