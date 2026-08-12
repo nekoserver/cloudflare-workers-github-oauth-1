@@ -3955,6 +3955,7 @@ app.get('/aichat', authMiddleware, async (c) => {
     aiChatModelConfigured: !!configuredModel,
     fallbackModel,
     modelColors,
+    aichatPreferMoondream: resolveAichatPreferMoondream(c.req.header('Cookie')),
   }));
 });
 
@@ -3972,7 +3973,7 @@ const AICHAT_ALLOWED_MODELS = new Set([
 
 app.post('/api/aichat', authMiddleware, async (c) => {
   const user = c.get('user');
-  let body: { message?: string; model?: string; systemPromptMode?: string; source?: string; image?: string };
+  let body: { message?: string; model?: string; systemPromptMode?: string; source?: string; image?: string; preferMoondream?: boolean };
   try {
     body = await c.req.json();
   } catch {
@@ -4044,7 +4045,13 @@ app.post('/api/aichat', authMiddleware, async (c) => {
   if (!message) {
     message = '添付した画像について説明してください。';
   }
-  const requestedModel = (body.model ?? '').trim();
+  // 画像添付時、「moondreamを優先する」設定がONならユーザーが選択中のモデルより
+  // 優先してMOONDREAM_MODEL(内部的にはAIチャット本体と同じ実績のあるvision
+  // モデル)を使う。resolveAichatModelsForRequestへ渡すrequestedModelを
+  // 差し替えるだけで、vision対応モデル同士のフォールバック関係(otherVisionModel)は
+  // そのまま流用できる。
+  const preferMoondream = !!body.preferMoondream && !!image;
+  const requestedModel = preferMoondream ? MOONDREAM_MODEL : (body.model ?? '').trim();
   const configuredModel = (c.env.AI_CHAT_MODEL ?? '').trim();
   const textFallbackModel = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
   const { primaryModel, fallbackModel } = resolveAichatModelsForRequest({
@@ -5950,6 +5957,20 @@ export function resolveAutoVectorizeSettings(cookieHeader: string | undefined | 
   const rawModel = vals[AUTO_VECTORIZE_MODEL_COOKIE];
   const model = rawModel && (KEYWORD_EMBEDDING_MODELS as string[]).includes(rawModel) ? rawModel : PLAMO_EMBEDDING_MODEL;
   return { enabled, model };
+}
+
+export const AICHAT_PREFER_MOONDREAM_COOKIE = 'aichat_prefer_moondream';
+
+/**
+ * AIチャットでテキストプロンプトに画像が添付されている場合、選択中の
+ * チャットモデルより優先してmoondream(実体はMOONDREAM_MODEL、
+ * Cloudflare側のMoondream本体スキーマが不安定なため内部的にはAIチャット
+ * 本体と同じ実績のあるvisionモデルを使う)へ問い合わせるかどうかを
+ * Cookieから解決する。デフォルトは有効(優先する)。
+ */
+export function resolveAichatPreferMoondream(cookieHeader: string | undefined | null): boolean {
+  const vals = getCookieValues(cookieHeader ?? undefined, [AICHAT_PREFER_MOONDREAM_COOKIE]);
+  return vals[AICHAT_PREFER_MOONDREAM_COOKIE] !== 'off';
 }
 
 export const ANSWER_GRAPH_HIDE_EMPTY_ROWS_COOKIE = 'answer_graph_hide_empty_rows';
@@ -9298,6 +9319,7 @@ app.get('/settings', authMiddleware, async (c) => {
   const autoVectorizeSettings = resolveAutoVectorizeSettings(cookieHeader);
   const answerGraphHideEmptyRows = resolveAnswerGraphHideEmptyRows(cookieHeader);
   const answerGraphTrailSessionStorage = resolveAnswerGraphTrailSessionStorage(cookieHeader);
+  const aichatPreferMoondream = resolveAichatPreferMoondream(cookieHeader);
 
   let issuedAt: string;
   let expiresAt: string;
@@ -9368,6 +9390,7 @@ app.get('/settings', authMiddleware, async (c) => {
     aichatAutoVectorizeModel: autoVectorizeSettings.model,
     answerGraphHideEmptyRows: answerGraphHideEmptyRows ? 'on' : 'off',
     answerGraphTrailSessionStorage: answerGraphTrailSessionStorage ? 'on' : 'off',
+    aichatPreferMoondream: aichatPreferMoondream ? 'on' : 'off',
     emailConfirmLoginEnabled,
     githubScopes: GITHUB_OAUTH_SCOPE,
     githubGrantedScopes: grantedScopes,
@@ -14280,6 +14303,19 @@ app.post('/api/settings/aichat-auto-vectorize-enabled', authMiddleware, async (c
     return c.json({ message: 'キーワードの自動ベクタ化設定を変更しました', mode }, 200);
   } catch {
     return c.json({ error: 'キーワードの自動ベクタ化設定の変更に失敗しました' }, 500);
+  }
+});
+
+app.post('/api/settings/aichat-prefer-moondream', authMiddleware, async (c) => {
+  try {
+    const { mode } = await c.req.json();
+    if (mode !== 'on' && mode !== 'off') {
+      return c.json({ error: '無効な設定値です' }, 400);
+    }
+    c.header('Set-Cookie', `${AICHAT_PREFER_MOONDREAM_COOKIE}=${mode}; Path=/; Secure; SameSite=Lax; Max-Age=31536000`);
+    return c.json({ message: '画像添付時にmoondreamを優先する設定を変更しました', mode }, 200);
+  } catch {
+    return c.json({ error: '画像添付時にmoondreamを優先する設定の変更に失敗しました' }, 500);
   }
 });
 

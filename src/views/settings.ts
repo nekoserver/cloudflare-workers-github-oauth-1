@@ -31,6 +31,7 @@ export function getSettingsPage(user: {
   aichatAutoVectorizeModel?: string;
   answerGraphHideEmptyRows?: string;
   answerGraphTrailSessionStorage?: string;
+  aichatPreferMoondream?: string;
   emailConfirmLoginEnabled?: boolean;
   githubScopes?: string;
   githubGrantedScopes?: string[] | null;
@@ -63,6 +64,7 @@ export function getSettingsPage(user: {
     : '@cf/pfnet/plamo-embedding-1b';
   const currentAnswerGraphHideEmptyRows = user.answerGraphHideEmptyRows === 'off' ? 'off' : 'on';
   const currentAnswerGraphTrailSessionStorage = user.answerGraphTrailSessionStorage === 'on' ? 'on' : 'off';
+  const currentAichatPreferMoondream = user.aichatPreferMoondream === 'off' ? 'off' : 'on';
   const currentEmailConfirmLoginEnabled = user.emailConfirmLoginEnabled === true;
   const requestedScopes = user.githubScopes ? user.githubScopes.split(/\s+/).filter(Boolean) : [];
   const grantedScopes = user.githubGrantedScopes ?? null;
@@ -645,6 +647,17 @@ export function getSettingsPage(user: {
                 <option value="manual-modal" ${currentSearchLabelMode === 'manual-modal' ? 'selected' : ''}>新規キーワード追加時にラベル選択モーダルを表示</option>
                 <option value="auto-classify" ${currentSearchLabelMode === 'auto-classify' ? 'selected' : ''}>AIが自動分類する（Workers AI）</option>
               </select>
+            </div>
+          </div>
+          <div class="info-item">
+            <span class="info-label">テキストプロンプトに添付画像がある場合優先的に言語モデルmoondreamで画像を分析する</span>
+            <div class="setting-control" style="justify-content: flex-end;">
+              <span class="theme-label" id="aichatPreferMoondreamLabel">${currentAichatPreferMoondream === 'on' ? 'ON' : 'OFF'}</span>
+              <label class="theme-toggle-switch">
+                <input type="checkbox" id="aichatPreferMoondreamCheckbox" onchange="onAichatPreferMoondreamChange()"
+                  ${currentAichatPreferMoondream === 'on' ? 'checked' : ''}>
+                <span class="theme-toggle-slider"></span>
+              </label>
             </div>
           </div>
           <div class="info-item">
@@ -1555,6 +1568,25 @@ export function getSettingsPage(user: {
         if (!res.ok) throw new Error('failed');
       } catch(e) {
         alert('キーワードの自動ベクタ化設定の変更に失敗しました');
+        cb.checked = !cb.checked;
+        label.textContent = cb.checked ? 'ON' : 'OFF';
+      }
+    }
+
+    async function onAichatPreferMoondreamChange() {
+      var cb = document.getElementById('aichatPreferMoondreamCheckbox');
+      var label = document.getElementById('aichatPreferMoondreamLabel');
+      var enabled = cb.checked;
+      var mode = enabled ? 'on' : 'off';
+      label.textContent = enabled ? 'ON' : 'OFF';
+      try {
+        var res = await fetch('/api/settings/aichat-prefer-moondream', {
+          method: 'POST', headers: {'Content-Type':'application/json'}, credentials: 'include',
+          body: JSON.stringify({ mode })
+        });
+        if (!res.ok) throw new Error('failed');
+      } catch(e) {
+        alert('画像添付時にmoondreamを優先する設定の変更に失敗しました');
         cb.checked = !cb.checked;
         label.textContent = cb.checked ? 'ON' : 'OFF';
       }
