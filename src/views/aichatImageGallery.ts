@@ -1,3 +1,5 @@
+import { getMarkdownParserScript, getMarkdownPreviewCSS } from '../utils/markdownRenderer';
+
 function escH(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
@@ -9,9 +11,12 @@ function escH(s: string): string {
  * /api/aichat/image-gallery-search から取得し、クライアント側でDOM生成する
  * (data-*属性へ本文を埋め込まないため、属性エスケープ漏れによるXSSの
  * 余地自体が生じない)。
+ * modelColorsはAIチャットページ(/aichat)と同じaichat_model_colorsテーブルの
+ * 値をそのまま渡し、プレビューモーダルのモデル名表示に同じ色を使う。
  */
-export function getAichatImageGalleryPage(username: string): string {
+export function getAichatImageGalleryPage(username: string, modelColors: Record<string, string> = {}): string {
   const safeUser = escH(username);
+  const modelColorsJson = JSON.stringify(modelColors);
   return `<!DOCTYPE html>
 <html lang="ja">
 <head>
@@ -20,6 +25,10 @@ export function getAichatImageGalleryPage(username: string): string {
 <meta name="theme-color" content="#000010">
 <title>🖼️ AIチャット画像検索</title>
 <style>
+:root {
+  --text-primary:#e6edf3; --text-muted:#8b949e; --border-color:#30363d;
+  --accent-color:#58a6ff; --bg-secondary:#161b22; --code-bg:#0d1117;
+}
 * { box-sizing:border-box; margin:0; padding:0; }
 body { background:#000010; color:#e6edf3; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; font-size:13px; min-height:100vh; min-height:100svh; display:flex; flex-direction:column; }
 .topbar { background:rgba(0,0,20,0.95); border-bottom:1px solid #1e2a40; padding:8px 18px; display:flex; align-items:center; gap:10px; flex-shrink:0; }
@@ -74,7 +83,9 @@ h1 { font-size:15px; font-weight:700; flex:1; }
 }
 .preview-bubble.user { align-self:flex-end; background:#1f4a8c; color:#fff; border-bottom-right-radius:2px; }
 .preview-bubble.assistant { align-self:flex-start; background:#161b22; color:#e6edf3; border:1px solid #30363d; border-bottom-left-radius:2px; }
+.preview-bubble.assistant.preview-area { white-space:normal; }
 .preview-bubble-image { max-width:220px; max-height:220px; border-radius:6px; display:block; margin-bottom:6px; }
+${getMarkdownPreviewCSS()}
 </style>
 </head>
 <body>
@@ -103,7 +114,9 @@ h1 { font-size:15px; font-weight:700; flex:1; }
   </div>
 </div>
 <script>
+${getMarkdownParserScript()}
 (function() {
+  var MODEL_COLORS = ${modelColorsJson};
   var searchInput = document.getElementById('gallerySearchInput');
   var searchBtn = document.getElementById('gallerySearchBtn');
   var statusLine = document.getElementById('galleryStatus');
@@ -116,7 +129,13 @@ h1 { font-size:15px; font-weight:700; flex:1; }
   var currentResults = [];
 
   function openPreview(item) {
-    previewMeta.textContent = item.model + '　' + item.created_at;
+    previewMeta.innerHTML = '';
+    var modelSpan = document.createElement('span');
+    var modelColor = MODEL_COLORS[item.model];
+    if (modelColor) modelSpan.style.color = modelColor;
+    modelSpan.textContent = item.model;
+    previewMeta.appendChild(modelSpan);
+    previewMeta.appendChild(document.createTextNode('　' + item.created_at));
     previewChat.innerHTML = '';
 
     var userBubble = document.createElement('div');
@@ -132,8 +151,8 @@ h1 { font-size:15px; font-weight:700; flex:1; }
     previewChat.appendChild(userBubble);
 
     var assistantBubble = document.createElement('div');
-    assistantBubble.className = 'preview-bubble assistant';
-    assistantBubble.textContent = item.answer;
+    assistantBubble.className = 'preview-bubble assistant preview-area';
+    assistantBubble.innerHTML = parseMd(item.answer);
     previewChat.appendChild(assistantBubble);
 
     previewOverlay.classList.add('open');
@@ -164,22 +183,45 @@ h1 { font-size:15px; font-weight:700; flex:1; }
     });
   }
 
+  // インクリメントサーチでは入力のたびにfetchが飛ぶため、後から送ったリクエスト
+  // より先に古いリクエストの応答が返ってくる(ネットワーク遅延の逆転)ことがある。
+  // 最新のリクエストのみ結果を反映するよう、リクエストごとに連番を振って
+  // 応答時に「自分が最新か」を確認する。
+  var searchRequestSeq = 0;
   function doSearch() {
     var q = searchInput.value.trim();
+    var seq = ++searchRequestSeq;
     if (!q) { statusLine.textContent = 'キーワードを入力してください'; galleryGrid.innerHTML = ''; return; }
     statusLine.textContent = '検索中...';
     fetch('/api/aichat/image-gallery-search?q=' + encodeURIComponent(q), { credentials: 'same-origin' })
       .then(function(res) { return res.json(); })
       .then(function(data) {
+        if (seq !== searchRequestSeq) return;
         var results = (data && data.results) || [];
         renderGallery(results);
         statusLine.textContent = results.length + ' 件ヒットしました';
       })
-      .catch(function() { statusLine.textContent = '検索に失敗しました'; });
+      .catch(function() {
+        if (seq !== searchRequestSeq) return;
+        statusLine.textContent = '検索に失敗しました';
+      });
   }
 
-  searchBtn.addEventListener('click', doSearch);
-  searchInput.addEventListener('keydown', function(e) { if (e.key === 'Enter') doSearch(); });
+  var INCREMENTAL_SEARCH_DEBOUNCE_MS = 300;
+  var incrementalSearchTimer = null;
+  searchInput.addEventListener('input', function() {
+    if (incrementalSearchTimer) clearTimeout(incrementalSearchTimer);
+    incrementalSearchTimer = setTimeout(doSearch, INCREMENTAL_SEARCH_DEBOUNCE_MS);
+  });
+  searchBtn.addEventListener('click', function() {
+    if (incrementalSearchTimer) { clearTimeout(incrementalSearchTimer); incrementalSearchTimer = null; }
+    doSearch();
+  });
+  searchInput.addEventListener('keydown', function(e) {
+    if (e.key !== 'Enter') return;
+    if (incrementalSearchTimer) { clearTimeout(incrementalSearchTimer); incrementalSearchTimer = null; }
+    doSearch();
+  });
 })();
 </script>
 </body>

@@ -8813,7 +8813,18 @@ app.delete('/api/moondream-analyze-log/:id', authMiddleware, async (c) => {
 // 新規テーブルは作らない。
 app.get('/aichat-image-gallery', authMiddleware, async (c) => {
   const user = c.get('user');
-  return c.html(getAichatImageGalleryPage(user.sub));
+  let modelColors: Record<string, string> = {};
+  if (c.env.DB) {
+    try {
+      const rows = await c.env.DB.prepare('SELECT model_id, color FROM aichat_model_colors').all<{ model_id: string; color: string }>();
+      for (const row of rows.results ?? []) {
+        modelColors[row.model_id] = row.color;
+      }
+    } catch {
+      logger.warn('aichat_model_colors query failed, using empty map');
+    }
+  }
+  return c.html(getAichatImageGalleryPage(user.sub, modelColors));
 });
 
 app.get('/api/aichat/image-gallery-search', authMiddleware, async (c) => {
