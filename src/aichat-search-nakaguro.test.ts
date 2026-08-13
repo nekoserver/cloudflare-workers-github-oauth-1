@@ -55,7 +55,16 @@ function setupDb(): DatabaseSync {
       access_count INTEGER NOT NULL DEFAULT 0,
       question_hash TEXT,
       deleted_at TEXT,
-      image_data_url TEXT
+      image_data_url TEXT,
+      image_id TEXT
+    );
+    CREATE TABLE aichat_images (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      content_hash TEXT NOT NULL,
+      image_data_url TEXT NOT NULL,
+      byte_length INTEGER NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
   `);
   return db;

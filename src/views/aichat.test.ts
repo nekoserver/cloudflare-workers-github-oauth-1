@@ -2065,7 +2065,7 @@ describe('AIチャット応答の自動保存（auto-save to ai_chat_shares）',
     const src = readFileSync(resolve(__dirname, '..', 'index.ts'), 'utf-8');
     const idx = src.indexOf("app.post('/api/aichat'");
     expect(idx).toBeGreaterThan(-1);
-    const fn = src.slice(idx, idx + 7300);
+    const fn = src.slice(idx, idx + 7500);
     expect(fn).toContain('INSERT INTO ai_chat_shares');
   });
 
