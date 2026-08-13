@@ -6554,9 +6554,22 @@ export function getAiChatPage(user: {
 
       var assistantBubbleEl = null;
       var moondreamAnalysisText = null;
+      var pendingShareIdForMoondream = null;
+      var moondreamAnalysisSaved = false;
       function tryAppendMoondream() {
         if (assistantBubbleEl && moondreamAnalysisText) {
           appendMoondreamAnalysis(assistantBubbleEl, moondreamAnalysisText);
+        }
+        // /api/aichat(回答本体・shareId)と/api/moondream-analyze(画像分析)は
+        // 並行に呼ばれ、どちらが先に終わるか分からない。両方が出揃った時点で
+        // 一度だけ保存APIを呼ぶ(moondreamAnalysisSavedで二重送信を防ぐ)。
+        if (!moondreamAnalysisSaved && moondreamAnalysisText && pendingShareIdForMoondream) {
+          moondreamAnalysisSaved = true;
+          fetch('/api/aichat/moondream-analysis', {
+            method: 'POST', credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ shareId: pendingShareIdForMoondream, analysisText: moondreamAnalysisText })
+          }).catch(function() {});
         }
       }
       if (attachedImage) {
@@ -6591,6 +6604,7 @@ export function getAiChatPage(user: {
             var isLocalCommand = usedModel === 'local/neko';
             var respUsage = extractRespUsage(data);
             assistantBubbleEl = appendBubble(responseText, 'assistant', isLocalCommand ? null : lastModel, data.fallbackUsed, respUsage, undefined, isLocalCommand, data.nekoResults);
+            if (attachedImage && data.shareId) pendingShareIdForMoondream = data.shareId;
             tryAppendMoondream();
             if (!isLocalCommand) {
               appendShareBtn(currentMsg, responseText, usedModel, data.shareId, data.userHash);

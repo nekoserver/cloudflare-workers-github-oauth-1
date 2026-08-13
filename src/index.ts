@@ -229,6 +229,7 @@ export const STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
   { name: 'aichat_answer_keyword_vectors', migration: '0095', description: '回答文からgemma-4-26b-a4b-itで抽出した予備知識キーワードのplamo-embedding-1bベクトルキャッシュ(回答文IDごと)。answer-graphの回答モーダル「この回答文をベクタ化する」ボタンで生成', syncPolicy: 'auto' },
   { name: 'moondream_analyze_log', migration: '0096', description: '/api/moondream-analyze呼び出しの成否ログ(モデル名・プロンプト長・画像バイト数・失敗時のエラー内容)', syncPolicy: 'auto' },
   { name: 'aichat_images', migration: '0100', description: 'AIチャットの画像添付を正規化して保存するテーブル。同一ユーザー内で同一内容(content_hash)の画像は再登録せず既存行のIDを再利用する(重複保存防止)', syncPolicy: 'auto' },
+  { name: 'aichat_moondream_analyses', migration: '0102', description: 'AIチャットの画像添付投稿でMoondream(moondream3.1-9B-A2B)に問い合わせた画像分析結果を、回答文(share_id)・画像(image_id)に紐づけて保存する', syncPolicy: 'auto' },
 ];
 
 const REQUIRED_STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
@@ -1461,6 +1462,17 @@ ALTER TABLE moondream_analyze_log ADD COLUMN analysis_text TEXT;`,
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_aichat_images_user_hash ON aichat_images(user_id, content_hash);`,
   '0101': `ALTER TABLE ai_chat_shares ADD COLUMN image_id TEXT;`,
+  '0102': `CREATE TABLE IF NOT EXISTS aichat_moondream_analyses (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  share_id TEXT NOT NULL,
+  image_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  model TEXT NOT NULL,
+  analysis_text TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_aichat_moondream_analyses_share ON aichat_moondream_analyses(share_id);
+CREATE INDEX IF NOT EXISTS idx_aichat_moondream_analyses_image ON aichat_moondream_analyses(image_id);`,
 };
 
 async function ensureGroupTable(db: D1Database): Promise<void> {
@@ -1684,6 +1696,7 @@ export const TABLE_COLUMN_KEYS: Record<string, ColumnKeyInfo> = {
   aichat_answer_keyword_vectors: { id: 'pk', user_id: 'uk', share_id: 'uk', keyword: 'uk', model: 'uk' },
   moondream_analyze_log: { id: 'pk', user_id: 'fk+idx' },
   aichat_images: { id: 'pk', user_id: 'uk', content_hash: 'uk' },
+  aichat_moondream_analyses: { id: 'pk', share_id: 'uk', image_id: 'fk+idx', user_id: 'fk+idx' },
 };
 
 export function getColumnKeyType(tableName: string, columnName: string): ColumnKeyType {
@@ -1781,6 +1794,7 @@ export const TABLE_GROUP_MAP: Record<string, string> = {
   aichat_answer_keyword_vectors: 'ai',
   moondream_analyze_log: 'ai',
   aichat_images: 'ai',
+  aichat_moondream_analyses: 'ai',
   keyword_category_groups: 'search',
   keyword_multi_labels: 'search',
   ts_repository:          'ts-catalog',
@@ -1971,6 +1985,7 @@ export const COLUMN_FK_TARGETS: Record<string, Record<string, string>> = {
   aichat_answer_keyword_vectors: { user_id: 'user_sessions' },
   moondream_analyze_log: { user_id: 'user_sessions' },
   aichat_images: { user_id: 'user_sessions' },
+  aichat_moondream_analyses: { user_id: 'user_sessions', share_id: 'ai_chat_shares', image_id: 'aichat_images' },
 
   // ========================================================================
   // 世界遺産ページ AI質問ログ・保存済みエリア系
@@ -2563,6 +2578,33 @@ export async function registerOrGetAichatImage(
     if (raceExisting) return { id: raceExisting.id, isNew: false };
     throw err;
   }
+}
+
+/**
+ * AIチャットの画像添付投稿でMoondreamに問い合わせた画像分析結果を、回答文
+ * (share_id)・画像(image_id)に紐づけて aichat_moondream_analyses へ保存する。
+ * /api/aichat(回答本体の保存)と/api/moondream-analyze(画像分析)はクライアント
+ * 側で並行に呼ばれるため、両方の結果が揃った時点でクライアントから改めて
+ * このAPIを呼んでもらう形にしている(呼び出し元: aichat.tsのtryAppendMoondream)。
+ * 1回答につき1件(UNIQUE(share_id))のため、二重送信はINSERT OR IGNOREで無視する。
+ */
+async function recordAichatMoondreamAnalysis(
+  db: D1Database,
+  userId: string,
+  shareId: string,
+  analysisText: string,
+  model: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const share = await db.prepare(
+    'SELECT image_id FROM ai_chat_shares WHERE id = ? AND user_id = ? AND deleted_at IS NULL'
+  ).bind(shareId, userId).first<{ image_id: string | null }>();
+  if (!share) return { ok: false, error: '指定された回答が見つかりません' };
+  if (!share.image_id) return { ok: false, error: '指定された回答には画像添付がありません' };
+
+  await db.prepare(
+    'INSERT OR IGNORE INTO aichat_moondream_analyses (share_id, image_id, user_id, model, analysis_text) VALUES (?, ?, ?, ?, ?)'
+  ).bind(shareId, share.image_id, userId, model, analysisText).run();
+  return { ok: true };
 }
 
 async function recordAichatCategoryAudit(
@@ -4218,6 +4260,32 @@ app.post('/api/aichat', authMiddleware, async (c) => {
       return jsonUtf8({ error: 'AI への問い合わせに失敗しました' }, 500);
     }
   }
+});
+
+/**
+ * AIチャットの画像添付投稿でMoondreamに問い合わせた画像分析結果を保存するAPI。
+ * /api/aichat(回答本体)と/api/moondream-analyze(画像分析)はクライアント側で
+ * 並行に呼ばれ、shareIdはaichat応答からしか得られないため、両方が出揃った
+ * 時点でクライアントから改めてこのAPIを呼んでもらう(aichat.tsのtryAppendMoondream)。
+ */
+app.post('/api/aichat/moondream-analysis', authMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+
+  let body: { shareId?: string; analysisText?: string; model?: string };
+  try {
+    body = await c.req.json();
+  } catch {
+    return jsonUtf8({ error: 'リクエスト形式が不正です' }, 400);
+  }
+  const shareId = (body.shareId ?? '').trim();
+  const analysisText = (body.analysisText ?? '').trim();
+  const model = (body.model ?? '').trim() || MOONDREAM_MODEL;
+  if (!shareId || !analysisText) return jsonUtf8({ error: 'shareId, analysisText は必須です' }, 400);
+
+  const result = await recordAichatMoondreamAnalysis(c.env.DB, user.sub, shareId, analysisText, model);
+  if (!result.ok) return jsonUtf8({ error: result.error }, 404);
+  return jsonUtf8({ ok: true });
 });
 
 // SQLite(D1) の LIKE は非ASCII文字を正規化せずコードポイント単位の完全一致で
