@@ -28,7 +28,7 @@ function buildPage(): string {
 describe('/aichat ページ: 画像添付時のMoondream分析結果表示', () => {
   const html = buildPage();
   const submitIdx = html.indexOf("chatForm.addEventListener('submit'");
-  const block = html.slice(submitIdx, submitIdx + 2600);
+  const block = html.slice(submitIdx, submitIdx + 3600);
 
   it('画像添付時のみ /api/moondream-analyze へPOSTする(if (attachedImage) でガードされている)', () => {
     expect(block).toMatch(/if \(attachedImage\) \{\s*fetch\('\/api\/moondream-analyze'/);
@@ -43,7 +43,8 @@ describe('/aichat ページ: 画像添付時のMoondream分析結果表示', () 
     expect(block).toContain('function tryAppendMoondream()');
     expect(block).toContain('if (assistantBubbleEl && moondreamAnalysisText)');
     // /api/aichat 成功時にassistantBubbleElを設定してから呼ぶ
-    expect(block).toMatch(/assistantBubbleEl = appendBubble\([^)]*\);\s*\n\s*tryAppendMoondream\(\);/);
+    // (shareIdをMoondream分析結果の保存用に控える行が間に挟まっていてもよい)
+    expect(block).toMatch(/assistantBubbleEl = appendBubble\([^)]*\);\s*\n(\s*.*\n)*?\s*tryAppendMoondream\(\);/);
     // /api/moondream-analyze 成功時にmoondreamAnalysisTextを設定してから呼ぶ
     expect(block).toMatch(/moondreamAnalysisText = data\.analysis;\s*\n\s*tryAppendMoondream\(\);/);
   });
