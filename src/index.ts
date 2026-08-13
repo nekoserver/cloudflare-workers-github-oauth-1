@@ -105,6 +105,7 @@ import {
   parseMoondreamResponse,
 } from './utils/moondreamAnalyze';
 import { extractFunctionSource } from './utils/extractFunctionSource';
+import { sha256Hex } from './utils/contentHash';
 import { listD1Databases, getD1Tables } from './utils/cloudflareApi';
 import { validateRevokeRequest } from './utils/revoke';
 import { HERITAGE_FLAG_MAP, HERITAGE_COUNTRY_MAP, HERITAGE_LIST } from './data/heritageList';
@@ -227,6 +228,7 @@ export const STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
   { name: 'aichat_answer_vectors', migration: '0094', description: '回答文(ai_chat_shares)のplamo-embedding-1bベクトルキャッシュ。answer-graphの回答モーダル「この回答文をベクタ化する」ボタンで生成', syncPolicy: 'auto' },
   { name: 'aichat_answer_keyword_vectors', migration: '0095', description: '回答文からgemma-4-26b-a4b-itで抽出した予備知識キーワードのplamo-embedding-1bベクトルキャッシュ(回答文IDごと)。answer-graphの回答モーダル「この回答文をベクタ化する」ボタンで生成', syncPolicy: 'auto' },
   { name: 'moondream_analyze_log', migration: '0096', description: '/api/moondream-analyze呼び出しの成否ログ(モデル名・プロンプト長・画像バイト数・失敗時のエラー内容)', syncPolicy: 'auto' },
+  { name: 'aichat_images', migration: '0100', description: 'AIチャットの画像添付を正規化して保存するテーブル。同一ユーザー内で同一内容(content_hash)の画像は再登録せず既存行のIDを再利用する(重複保存防止)', syncPolicy: 'auto' },
 ];
 
 const REQUIRED_STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
@@ -1449,6 +1451,16 @@ CREATE INDEX IF NOT EXISTS idx_moondream_analyze_log_status ON moondream_analyze
   '0098': `ALTER TABLE ai_chat_shares ADD COLUMN image_data_url TEXT;`,
   '0099': `ALTER TABLE moondream_analyze_log ADD COLUMN prompt_text TEXT;
 ALTER TABLE moondream_analyze_log ADD COLUMN analysis_text TEXT;`,
+  '0100': `CREATE TABLE IF NOT EXISTS aichat_images (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  content_hash TEXT NOT NULL,
+  image_data_url TEXT NOT NULL,
+  byte_length INTEGER NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_aichat_images_user_hash ON aichat_images(user_id, content_hash);`,
+  '0101': `ALTER TABLE ai_chat_shares ADD COLUMN image_id TEXT;`,
 };
 
 async function ensureGroupTable(db: D1Database): Promise<void> {
@@ -1618,7 +1630,7 @@ export const TABLE_COLUMN_KEYS: Record<string, ColumnKeyInfo> = {
   ai_summary_link_access_log: { id: 'pk', request_id: 'fk', route: 'idx', issue_code: 'idx', created_at: 'idx' },
   commit_stats_cache: { id: 'pk', owner: 'idx', repo: 'idx', period: 'idx' },
   repo_commit_index: { commit_hash: 'pk', seq_num: 'idx', github_pr_number: 'idx', repo_name: 'idx' },
-  ai_chat_shares: { id: 'pk', user_id: 'fk', user_hash: 'idx', conversation_hash: 'uk', question_hash: 'idx' },
+  ai_chat_shares: { id: 'pk', user_id: 'fk', user_hash: 'idx', conversation_hash: 'uk', question_hash: 'idx', image_id: 'fk' },
   aichat_search_log: { id: 'pk', user_id: 'fk', share_id: 'fk', keyword: 'idx' },
   aichat_search_history: { id: 'pk', user_id: 'fk', share_id: 'fk', keyword: 'idx', seq_num: 'idx' },
   aichat_search_impressions: { id: 'pk', user_id: 'fk', share_id: 'fk' },
@@ -1671,6 +1683,7 @@ export const TABLE_COLUMN_KEYS: Record<string, ColumnKeyInfo> = {
   aichat_answer_vectors: { id: 'pk', user_id: 'uk', share_id: 'uk', model: 'uk' },
   aichat_answer_keyword_vectors: { id: 'pk', user_id: 'uk', share_id: 'uk', keyword: 'uk', model: 'uk' },
   moondream_analyze_log: { id: 'pk', user_id: 'fk+idx' },
+  aichat_images: { id: 'pk', user_id: 'uk', content_hash: 'uk' },
 };
 
 export function getColumnKeyType(tableName: string, columnName: string): ColumnKeyType {
@@ -1767,6 +1780,7 @@ export const TABLE_GROUP_MAP: Record<string, string> = {
   aichat_answer_vectors: 'ai',
   aichat_answer_keyword_vectors: 'ai',
   moondream_analyze_log: 'ai',
+  aichat_images: 'ai',
   keyword_category_groups: 'search',
   keyword_multi_labels: 'search',
   ts_repository:          'ts-catalog',
@@ -1917,7 +1931,7 @@ export const COLUMN_FK_TARGETS: Record<string, Record<string, string>> = {
   // コミットインデックス系
   // ========================================================================
   repo_commit_index: { repo_name: 'installation_permissions' },
-  ai_chat_shares: { user_id: 'user_sessions' },
+  ai_chat_shares: { user_id: 'user_sessions', image_id: 'aichat_images' },
   aichat_search_log: { user_id: 'user_sessions', share_id: 'ai_chat_shares' },
   aichat_search_history: { user_id: 'user_sessions', share_id: 'ai_chat_shares' },
   aichat_search_impressions: { user_id: 'user_sessions', share_id: 'ai_chat_shares' },
@@ -1956,6 +1970,7 @@ export const COLUMN_FK_TARGETS: Record<string, Record<string, string>> = {
   aichat_answer_vectors: { user_id: 'user_sessions' },
   aichat_answer_keyword_vectors: { user_id: 'user_sessions' },
   moondream_analyze_log: { user_id: 'user_sessions' },
+  aichat_images: { user_id: 'user_sessions' },
 
   // ========================================================================
   // 世界遺産ページ AI質問ログ・保存済みエリア系
@@ -2514,6 +2529,40 @@ async function recordMoondreamAnalyzeLog(
       payload.analysisText ?? null,
     ).run();
   } catch {}
+}
+
+/**
+ * AIチャットの画像添付を正規化テーブル(aichat_images)へ登録する。
+ * 同一ユーザー内で同一内容(SHA-256の内容ハッシュ)の画像が既に登録済みなら
+ * 新規登録せず既存行のIDをそのまま返す(重複保存の防止)。
+ * 同時リクエストで同じ画像が競合登録された場合はUNIQUE制約違反になるため、
+ * 一度だけ既存行を再取得して復帰する(2回目以降の同一エラーはそのまま投げる)。
+ */
+export async function registerOrGetAichatImage(
+  db: D1Database,
+  userId: string,
+  imageDataUrl: string,
+): Promise<{ id: string; isNew: boolean }> {
+  const contentHash = await sha256Hex(imageDataUrl);
+  const existing = await db.prepare(
+    'SELECT id FROM aichat_images WHERE user_id = ? AND content_hash = ?'
+  ).bind(userId, contentHash).first<{ id: string }>();
+  if (existing) return { id: existing.id, isNew: false };
+
+  const id = crypto.randomUUID();
+  const byteLength = estimateImageByteLength(imageDataUrl);
+  try {
+    await db.prepare(
+      'INSERT INTO aichat_images (id, user_id, content_hash, image_data_url, byte_length) VALUES (?, ?, ?, ?, ?)'
+    ).bind(id, userId, contentHash, imageDataUrl, byteLength).run();
+    return { id, isNew: true };
+  } catch (err) {
+    const raceExisting = await db.prepare(
+      'SELECT id FROM aichat_images WHERE user_id = ? AND content_hash = ?'
+    ).bind(userId, contentHash).first<{ id: string }>();
+    if (raceExisting) return { id: raceExisting.id, isNew: false };
+    throw err;
+  }
 }
 
 async function recordAichatCategoryAudit(
@@ -4127,9 +4176,10 @@ app.post('/api/aichat', authMiddleware, async (c) => {
       const now = new Date().toISOString();
       const conversationHash = await computeConversationHash(user.sub, message, response, usedModel, now);
       const questionHash = await computeQuestionHash(user.sub, message);
+      const imageId = image ? (await registerOrGetAichatImage(c.env.DB, user.sub, image)).id : null;
       await c.env.DB.prepare(
-        'INSERT INTO ai_chat_shares (id, user_id, user_hash, question, answer, model, created_at, conversation_hash, question_hash, input_tokens, output_tokens, total_tokens, source, image_data_url) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
-      ).bind(shareId, user.sub, userHash, message, response, usedModel, now, conversationHash, questionHash, usage.input_tokens, usage.output_tokens, usage.total_tokens, source, image || null).run();
+        'INSERT INTO ai_chat_shares (id, user_id, user_hash, question, answer, model, created_at, conversation_hash, question_hash, input_tokens, output_tokens, total_tokens, source, image_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+      ).bind(shareId, user.sub, userHash, message, response, usedModel, now, conversationHash, questionHash, usage.input_tokens, usage.output_tokens, usage.total_tokens, source, imageId).run();
       return { shareId, userHash, conversationHash, questionHash };
     } catch (saveErr) {
       logger.warn('AI chat auto-save failed', {
@@ -4199,10 +4249,12 @@ export async function searchAiChatShares(
   const normalized = q.replace(/[・･]/g, '・');
   const rows = await db
     .prepare(
-      `SELECT id, user_hash, question, answer, model, created_at, access_count, question_hash, image_data_url
-       FROM ai_chat_shares
-       WHERE user_id = ? AND deleted_at IS NULL AND (INSTR(REPLACE(question, '･', '・'), ?) > 0 OR INSTR(REPLACE(answer, '･', '・'), ?) > 0)
-       ORDER BY created_at DESC LIMIT 30`
+      `SELECT s.id, s.user_hash, s.question, s.answer, s.model, s.created_at, s.access_count, s.question_hash,
+              COALESCE(img.image_data_url, s.image_data_url) AS image_data_url
+       FROM ai_chat_shares s
+       LEFT JOIN aichat_images img ON img.id = s.image_id
+       WHERE s.user_id = ? AND s.deleted_at IS NULL AND (INSTR(REPLACE(s.question, '･', '・'), ?) > 0 OR INSTR(REPLACE(s.answer, '･', '・'), ?) > 0)
+       ORDER BY s.created_at DESC LIMIT 30`
     )
     .bind(userId, normalized, normalized)
     .all<{
@@ -4214,10 +4266,11 @@ export async function searchAiChatShares(
 }
 
 /**
- * /aichat-image-gallery ページ用。ai_chat_shares のうち画像添付(image_data_url
- * が非NULL)のものだけを対象に、質問文・回答文をキーワード検索する。
- * searchAiChatShares と同じINSTR/REPLACEベースの検索(中黒の全角/半角表記ゆれ
- * 吸収込み)に、画像添付フィルタを加えただけの派生版。
+ * /aichat-image-gallery ページ用。ai_chat_shares のうち画像添付済み(正規化テーブル
+ * aichat_imagesにimage_idで紐づく、または移行前の旧image_data_url列が非NULL)の
+ * ものだけを対象に、質問文・回答文をキーワード検索する。searchAiChatShares と
+ * 同じINSTR/REPLACEベースの検索(中黒の全角/半角表記ゆれ吸収込み)に、
+ * 画像添付フィルタを加えただけの派生版。
  */
 export async function searchAiChatSharesWithImage(
   db: D1Like,
@@ -4230,11 +4283,13 @@ export async function searchAiChatSharesWithImage(
   const normalized = q.replace(/[・･]/g, '・');
   const rows = await db
     .prepare(
-      `SELECT id, user_hash, question, answer, model, created_at, image_data_url
-       FROM ai_chat_shares
-       WHERE user_id = ? AND deleted_at IS NULL AND image_data_url IS NOT NULL
-         AND (INSTR(REPLACE(question, '･', '・'), ?) > 0 OR INSTR(REPLACE(answer, '･', '・'), ?) > 0)
-       ORDER BY created_at DESC LIMIT 60`
+      `SELECT s.id, s.user_hash, s.question, s.answer, s.model, s.created_at,
+              COALESCE(img.image_data_url, s.image_data_url) AS image_data_url
+       FROM ai_chat_shares s
+       LEFT JOIN aichat_images img ON img.id = s.image_id
+       WHERE s.user_id = ? AND s.deleted_at IS NULL AND (s.image_id IS NOT NULL OR s.image_data_url IS NOT NULL)
+         AND (INSTR(REPLACE(s.question, '･', '・'), ?) > 0 OR INSTR(REPLACE(s.answer, '･', '・'), ?) > 0)
+       ORDER BY s.created_at DESC LIMIT 60`
     )
     .bind(userId, normalized, normalized)
     .all<{
@@ -5159,10 +5214,12 @@ app.get('/api/aichat/shares/by-date', authMiddleware, async (c) => {
   if (!date) return jsonUtf8({ results: [] });
 
   const rows = await c.env.DB.prepare(
-    `SELECT id, user_hash, question, answer, model, created_at, access_count, question_hash, image_data_url
-     FROM ai_chat_shares
-     WHERE user_id = ? AND deleted_at IS NULL AND created_at LIKE ?
-     ORDER BY created_at DESC LIMIT 50`
+    `SELECT s.id, s.user_hash, s.question, s.answer, s.model, s.created_at, s.access_count, s.question_hash,
+            COALESCE(img.image_data_url, s.image_data_url) AS image_data_url
+     FROM ai_chat_shares s
+     LEFT JOIN aichat_images img ON img.id = s.image_id
+     WHERE s.user_id = ? AND s.deleted_at IS NULL AND s.created_at LIKE ?
+     ORDER BY s.created_at DESC LIMIT 50`
   ).bind(user.sub, `${date}%`).all<{
     id: string; user_hash: string; question: string; answer: string;
     model: string; created_at: string; access_count: number; question_hash: string | null;
@@ -5181,11 +5238,13 @@ app.get('/api/aichat/shares/by-keyword', authMiddleware, async (c) => {
   let rows;
   if (topic) {
     rows = await c.env.DB.prepare(
-      `SELECT DISTINCT id, user_hash, question, answer, model, created_at, access_count, question_hash, image_data_url
-       FROM ai_chat_shares
-       WHERE user_id = ? AND deleted_at IS NULL
-         AND question LIKE ? AND question LIKE ?
-       ORDER BY created_at DESC LIMIT 50`
+      `SELECT DISTINCT s.id, s.user_hash, s.question, s.answer, s.model, s.created_at, s.access_count, s.question_hash,
+              COALESCE(img.image_data_url, s.image_data_url) AS image_data_url
+       FROM ai_chat_shares s
+       LEFT JOIN aichat_images img ON img.id = s.image_id
+       WHERE s.user_id = ? AND s.deleted_at IS NULL
+         AND s.question LIKE ? AND s.question LIKE ?
+       ORDER BY s.created_at DESC LIMIT 50`
     ).bind(user.sub, `%「${keyword}」%`, `%「${topic}」%`).all<{
       id: string; user_hash: string; question: string; answer: string;
       model: string; created_at: string; access_count: number; question_hash: string | null;
@@ -5193,9 +5252,11 @@ app.get('/api/aichat/shares/by-keyword', authMiddleware, async (c) => {
     }>();
   } else {
     rows = await c.env.DB.prepare(
-      `SELECT DISTINCT s.id, s.user_hash, s.question, s.answer, s.model, s.created_at, s.access_count, s.question_hash, s.image_data_url
+      `SELECT DISTINCT s.id, s.user_hash, s.question, s.answer, s.model, s.created_at, s.access_count, s.question_hash,
+              COALESCE(img.image_data_url, s.image_data_url) AS image_data_url
        FROM aichat_search_log l
        JOIN ai_chat_shares s ON s.id = l.share_id AND s.user_id = l.user_id
+       LEFT JOIN aichat_images img ON img.id = s.image_id
        WHERE l.user_id = ? AND l.keyword = ? AND s.deleted_at IS NULL
        ORDER BY s.created_at DESC LIMIT 50`
     ).bind(user.sub, keyword).all<{
@@ -7503,9 +7564,12 @@ app.get('/api/aichat/shares/:id', authMiddleware, async (c) => {
   if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
   const id = c.req.param('id');
   const row = await c.env.DB.prepare(
-    `SELECT id, user_hash, question, answer, model, created_at, access_count, question_hash,
-            input_tokens, output_tokens, total_tokens, image_data_url
-     FROM ai_chat_shares WHERE id = ? AND user_id = ? AND deleted_at IS NULL`
+    `SELECT s.id, s.user_hash, s.question, s.answer, s.model, s.created_at, s.access_count, s.question_hash,
+            s.input_tokens, s.output_tokens, s.total_tokens,
+            COALESCE(img.image_data_url, s.image_data_url) AS image_data_url
+     FROM ai_chat_shares s
+     LEFT JOIN aichat_images img ON img.id = s.image_id
+     WHERE s.id = ? AND s.user_id = ? AND s.deleted_at IS NULL`
   ).bind(id, user.sub).first<{
     id: string; user_hash: string; question: string; answer: string;
     model: string; created_at: string; access_count: number; question_hash: string | null;

@@ -61,23 +61,29 @@ describe('/api/aichat/shares系一覧APIがimage_data_urlを欠かさず返す(�
   // (実際に発生した回帰)。SELECT文にimage_data_urlが含まれることを機械的に保証する。
   const src = readFileSync(`${__dirname}/index.ts`, 'utf-8');
 
-  it('searchAiChatShares()のSELECTがimage_data_urlを含む', () => {
+  it('searchAiChatShares()のSELECTがimage_data_urlを含む(正規化テーブルaichat_imagesとのJOIN経由)', () => {
     const idx = src.indexOf('export async function searchAiChatShares(');
     const block = src.slice(idx, idx + 1200);
-    expect(block).toContain('access_count, question_hash, image_data_url');
+    expect(block).toContain('s.access_count, s.question_hash');
+    expect(block).toContain('COALESCE(img.image_data_url, s.image_data_url) AS image_data_url');
+    expect(block).toContain('LEFT JOIN aichat_images img ON img.id = s.image_id');
   });
 
-  it('/api/aichat/shares/by-dateのSELECTがimage_data_urlを含む', () => {
+  it('/api/aichat/shares/by-dateのSELECTがimage_data_urlを含む(正規化テーブルaichat_imagesとのJOIN経由)', () => {
     const idx = src.indexOf("app.get('/api/aichat/shares/by-date'");
     const block = src.slice(idx, idx + 900);
-    expect(block).toContain('access_count, question_hash, image_data_url');
+    expect(block).toContain('s.access_count, s.question_hash');
+    expect(block).toContain('COALESCE(img.image_data_url, s.image_data_url) AS image_data_url');
+    expect(block).toContain('LEFT JOIN aichat_images img ON img.id = s.image_id');
   });
 
-  it('/api/aichat/shares/by-keywordのSELECTが両分岐(topicあり/なし)ともimage_data_urlを含む', () => {
+  it('/api/aichat/shares/by-keywordのSELECTが両分岐(topicあり/なし)ともimage_data_urlを含む(正規化テーブルaichat_imagesとのJOIN経由)', () => {
     const idx = src.indexOf("app.get('/api/aichat/shares/by-keyword'");
-    const block = src.slice(idx, idx + 1600);
-    expect(block).toContain('access_count, question_hash, image_data_url');
-    expect(block).toContain('access_count, s.question_hash, s.image_data_url');
+    const block = src.slice(idx, idx + 1900);
+    const joinCount = (block.match(/LEFT JOIN aichat_images img ON img\.id = s\.image_id/g) || []).length;
+    expect(joinCount).toBe(2);
+    const coalesceCount = (block.match(/COALESCE\(img\.image_data_url, s\.image_data_url\) AS image_data_url/g) || []).length;
+    expect(coalesceCount).toBe(2);
   });
 
   it('/api/aichat/shares/:id (単体フェッチ)のSELECTもimage_data_urlを含む', () => {

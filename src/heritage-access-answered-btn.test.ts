@@ -7,14 +7,14 @@ const view = readFileSync(new URL('./views/heritageAccess.ts', import.meta.url).
 describe('/api/aichat/shares/by-keyword — topic指定時のai_chat_shares直接クエリ', () => {
   it('topic が指定された場合は ai_chat_shares を直接クエリする', () => {
     const idx = src.indexOf("app.get('/api/aichat/shares/by-keyword'");
-    const block = src.slice(idx, idx + 1200);
+    const block = src.slice(idx, idx + 2000);
     expect(block).toContain('ai_chat_shares');
     expect(block).toContain("question LIKE ?");
   });
 
   it('topic指定時は aichat_search_log JOIN を使わない（ai_chat_shares 直接）', () => {
     const idx = src.indexOf("app.get('/api/aichat/shares/by-keyword'");
-    const block = src.slice(idx, idx + 1200);
+    const block = src.slice(idx, idx + 2000);
     const topicBranch = block.slice(0, block.indexOf('} else {'));
     expect(topicBranch).not.toContain('aichat_search_log');
     expect(topicBranch).toContain('FROM ai_chat_shares');
@@ -22,7 +22,7 @@ describe('/api/aichat/shares/by-keyword — topic指定時のai_chat_shares直�
 
   it('topic なしの場合は従来の aichat_search_log JOIN を維持する', () => {
     const idx = src.indexOf("app.get('/api/aichat/shares/by-keyword'");
-    const block = src.slice(idx, idx + 1200);
+    const block = src.slice(idx, idx + 2000);
     const elseBranch = block.slice(block.indexOf('} else {'));
     expect(elseBranch).toContain('aichat_search_log');
   });

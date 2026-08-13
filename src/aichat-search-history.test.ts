@@ -122,7 +122,7 @@ describe('GET /api/aichat/shares/:id エンドポイント', () => {
   it('ハンドラが ai_chat_shares から当該ユーザーのレコードを取得する', () => {
     const idx = INDEX_SRC.indexOf("app.get('/api/aichat/shares/:id'");
     expect(idx).toBeGreaterThan(-1);
-    const handler = INDEX_SRC.slice(idx, idx + 600);
+    const handler = INDEX_SRC.slice(idx, idx + 800);
     expect(handler).toContain('ai_chat_shares');
     expect(handler).toContain('user_id');
     expect(handler).toContain('deleted_at IS NULL');
@@ -131,7 +131,7 @@ describe('GET /api/aichat/shares/:id エンドポイント', () => {
   it('ハンドラが question・answer・created_at を返す', () => {
     const idx = INDEX_SRC.indexOf("app.get('/api/aichat/shares/:id'");
     expect(idx).toBeGreaterThan(-1);
-    const handler = INDEX_SRC.slice(idx, idx + 600);
+    const handler = INDEX_SRC.slice(idx, idx + 800);
     expect(handler).toContain('question');
     expect(handler).toContain('answer');
     expect(handler).toContain('created_at');
@@ -147,7 +147,7 @@ describe('GET /api/aichat/search-history エンドポイント', () => {
   it('search-history ハンドラが aichat_search_history を SELECT する', () => {
     const idx = INDEX_SRC.indexOf("app.get('/api/aichat/search-history'");
     expect(idx).toBeGreaterThan(-1);
-    const handler = INDEX_SRC.slice(idx, idx + 600);
+    const handler = INDEX_SRC.slice(idx, idx + 800);
     expect(handler).toContain('aichat_search_history');
     expect(handler).toContain('SELECT');
   });
@@ -155,14 +155,14 @@ describe('GET /api/aichat/search-history エンドポイント', () => {
   it('search-history ハンドラが ai_chat_shares を LEFT JOIN する', () => {
     const idx = INDEX_SRC.indexOf("app.get('/api/aichat/search-history'");
     expect(idx).toBeGreaterThan(-1);
-    const handler = INDEX_SRC.slice(idx, idx + 600);
+    const handler = INDEX_SRC.slice(idx, idx + 800);
     expect(handler).toContain('ai_chat_shares');
   });
 
   it('search-history ハンドラが LIMIT 30 で取得する', () => {
     const idx = INDEX_SRC.indexOf("app.get('/api/aichat/search-history'");
     expect(idx).toBeGreaterThan(-1);
-    const handler = INDEX_SRC.slice(idx, idx + 600);
+    const handler = INDEX_SRC.slice(idx, idx + 800);
     expect(handler).toContain('LIMIT 30');
   });
 });
