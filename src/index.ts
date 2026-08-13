@@ -39,6 +39,7 @@ import { getWebGLCubePage } from './views/webglCube';
 import { getWebGLSolarPage } from './views/webglSolar';
 import { getMoondreamVlmPage } from './views/moondreamVlm';
 import { getMoondreamAnalyzeLogPage, type MoondreamAnalyzeLogRow } from './views/moondreamAnalyzeLog';
+import { getAichatImageGalleryPage } from './views/aichatImageGallery';
 import { getEclipseTiltLessonPage } from './views/eclipseTiltLesson';
 import { getWebGLFaultsPage } from './views/webglFaults';
 import { getUuidGenPage } from './views/uuidGen';
@@ -4208,6 +4209,37 @@ export async function searchAiChatShares(
       id: string; user_hash: string; question: string; answer: string;
       model: string; created_at: string; access_count: number; question_hash: string | null;
       image_data_url: string | null;
+    }>();
+  return { results: rows.results ?? [] };
+}
+
+/**
+ * /aichat-image-gallery ページ用。ai_chat_shares のうち画像添付(image_data_url
+ * が非NULL)のものだけを対象に、質問文・回答文をキーワード検索する。
+ * searchAiChatShares と同じINSTR/REPLACEベースの検索(中黒の全角/半角表記ゆれ
+ * 吸収込み)に、画像添付フィルタを加えただけの派生版。
+ */
+export async function searchAiChatSharesWithImage(
+  db: D1Like,
+  userId: string,
+  q: string,
+): Promise<{ results: Array<{
+  id: string; user_hash: string; question: string; answer: string;
+  model: string; created_at: string; image_data_url: string | null;
+}> }> {
+  const normalized = q.replace(/[・･]/g, '・');
+  const rows = await db
+    .prepare(
+      `SELECT id, user_hash, question, answer, model, created_at, image_data_url
+       FROM ai_chat_shares
+       WHERE user_id = ? AND deleted_at IS NULL AND image_data_url IS NOT NULL
+         AND (INSTR(REPLACE(question, '･', '・'), ?) > 0 OR INSTR(REPLACE(answer, '･', '・'), ?) > 0)
+       ORDER BY created_at DESC LIMIT 60`
+    )
+    .bind(userId, normalized, normalized)
+    .all<{
+      id: string; user_hash: string; question: string; answer: string;
+      model: string; created_at: string; image_data_url: string | null;
     }>();
   return { results: rows.results ?? [] };
 }
@@ -8774,6 +8806,25 @@ app.delete('/api/moondream-analyze-log/:id', authMiddleware, async (c) => {
   await c.env.DB.prepare('DELETE FROM moondream_analyze_log WHERE id = ?').bind(id).run();
 
   return jsonUtf8({ ok: true });
+});
+
+// 画像添付付きAIチャット会話を質問文・回答文のキーワードでギャラリー検索する
+// 閲覧専用ページ。ai_chat_shares(正式な会話記録)をそのまま参照するのみで、
+// 新規テーブルは作らない。
+app.get('/aichat-image-gallery', authMiddleware, async (c) => {
+  const user = c.get('user');
+  return c.html(getAichatImageGalleryPage(user.sub));
+});
+
+app.get('/api/aichat/image-gallery-search', authMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+
+  const q = (c.req.query('q') ?? '').trim();
+  if (!q) return jsonUtf8({ results: [] });
+
+  const { results } = await searchAiChatSharesWithImage(c.env.DB as unknown as D1Like, user.sub, q);
+  return jsonUtf8({ results });
 });
 
 // /moondream-vlm ページとAIチャットの画像添付機能の両方から呼ばれる内部用API。
