@@ -48,6 +48,11 @@ h1 { font-size:15px; font-weight:700; flex:1; }
   padding:8px 16px; font-size:13px; cursor:pointer;
 }
 .search-btn:hover { background:#2a5aa0; }
+.search-target-select {
+  background:#0d1424; border:1px solid #30363d; border-radius:6px;
+  color:#e6edf3; padding:8px 10px; font-size:13px; cursor:pointer;
+}
+.search-target-select:focus { outline:none; border-color:#58a6ff; }
 .status-line { color:#8b949e; font-size:12px; margin-bottom:10px; min-height:16px; }
 .gallery {
   display:grid; grid-template-columns:repeat(auto-fill, minmax(140px, 1fr)); gap:10px;
@@ -95,8 +100,12 @@ ${getMarkdownPreviewCSS()}
   <a href="/aichat">AIチャット</a>
 </div>
 <div class="wrap">
-  <div class="hint">${safeUser} さんのAIチャット履歴(ai_chat_shares)のうち、画像添付付きの会話を質問文・回答文のキーワードで検索します。画像をタップすると質問(バブル)と回答(バブル)を表示します。</div>
+  <div class="hint">${safeUser} さんのAIチャット履歴(ai_chat_shares)のうち、画像添付付きの会話を検索します。検索対象は「llama-4」(質問文・回答文)と「moondream3.1」(画像分析結果)から選べます。画像をタップすると質問(バブル)と回答(バブル)を表示します。</div>
   <div class="search-row">
+    <select class="search-target-select" id="gallerySearchTarget">
+      <option value="llama-4" selected>llama-4(質問・回答)</option>
+      <option value="moondream3.1">moondream3.1(画像分析)</option>
+    </select>
     <input class="search-input" id="gallerySearchInput" type="search" placeholder="キーワードを入力..." autocomplete="off">
     <button type="button" class="search-btn" id="gallerySearchBtn">🔍 検索</button>
   </div>
@@ -117,6 +126,7 @@ ${getMarkdownPreviewCSS()}
 ${getMarkdownParserScript()}
 (function() {
   var MODEL_COLORS = ${modelColorsJson};
+  var searchTarget = document.getElementById('gallerySearchTarget');
   var searchInput = document.getElementById('gallerySearchInput');
   var searchBtn = document.getElementById('gallerySearchBtn');
   var statusLine = document.getElementById('galleryStatus');
@@ -193,7 +203,8 @@ ${getMarkdownParserScript()}
     var seq = ++searchRequestSeq;
     if (!q) { statusLine.textContent = 'キーワードを入力してください'; galleryGrid.innerHTML = ''; return; }
     statusLine.textContent = '検索中...';
-    fetch('/api/aichat/image-gallery-search?q=' + encodeURIComponent(q), { credentials: 'same-origin' })
+    var target = searchTarget.value;
+    fetch('/api/aichat/image-gallery-search?q=' + encodeURIComponent(q) + '&target=' + encodeURIComponent(target), { credentials: 'same-origin' })
       .then(function(res) { return res.json(); })
       .then(function(data) {
         if (seq !== searchRequestSeq) return;
@@ -219,6 +230,11 @@ ${getMarkdownParserScript()}
   });
   searchInput.addEventListener('keydown', function(e) {
     if (e.key !== 'Enter') return;
+    if (incrementalSearchTimer) { clearTimeout(incrementalSearchTimer); incrementalSearchTimer = null; }
+    doSearch();
+  });
+  searchTarget.addEventListener('change', function() {
+    if (!searchInput.value.trim()) return;
     if (incrementalSearchTimer) { clearTimeout(incrementalSearchTimer); incrementalSearchTimer = null; }
     doSearch();
   });
