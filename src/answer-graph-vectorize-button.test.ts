@@ -569,12 +569,11 @@ describe('回答モーダル(DOM実動作): 「キーワード一覧」モーダ
       }
       if (u.includes('/api/aichat/search-log/open-modal')) {
         calls.push({ kind: 'open-modal', url: u, body });
-        return Promise.resolve({ json: () => Promise.resolve({
-          entries: [
-            { shareId: 'sA', model: 'm', question: 'q', isNew: true },
-            { shareId: 'sB', model: 'm', question: 'q', isNew: false },
-          ],
-        }) });
+        // sBだけ「既に登録済み(isNew:false)」、それ以外(sA・検索ヒットゼロ時に
+        // 補完される起点shareIdのs1等)は未登録(isNew:true)として扱う
+        const reqShareIds = (body as { shareIds?: string[] } | null)?.shareIds ?? [];
+        const entries = reqShareIds.map((id) => ({ shareId: id, model: 'm', question: 'q', isNew: id !== 'sB' }));
+        return Promise.resolve({ json: () => Promise.resolve({ entries }) });
       }
       if (u.includes('/api/aichat/search-log/approve')) {
         calls.push({ kind: 'approve', url: u, body });
@@ -654,11 +653,20 @@ describe('回答モーダル(DOM実動作): 「キーワード一覧」モーダ
     const shinkansenCalls = calls.filter((c) => c.body && (c.body as { keyword?: string }).keyword === '新幹線');
     expect(shinkansenCalls.map((c) => c.kind)).toEqual(['open-modal', 'approve']);
     const approveCall = shinkansenCalls.find((c) => c.kind === 'approve')!;
-    expect(approveCall.body).toEqual({ keyword: '新幹線', shareIds: ['sA'] });
+    // sA(検索ヒット・未登録)に加えて、起点shareId(s1)も検索結果に関わらず
+    // 常に登録対象へ補完されるため両方approveされる(sBは登録済み扱いなので含まれない)
+    expect(approveCall.body).toEqual({ keyword: '新幹線', shareIds: ['sA', 's1'] });
 
-    // ヒットする回答が無いキーワード(乗車券)はopen-modal/approveまで進まない
+    // 根本原因の修正確認: テキスト検索でヒットする回答が無いキーワード(乗車券)
+    // でも、抽出元の回答文(s1)は検索結果の有無に関わらず必ず登録対象へ
+    // 補完されるため、open-modal/approveまで進んで s1 が登録される
+    // (修正前はここで0件のまま何も登録されない不具合があった)。
     const norimonoCalls = calls.filter((c) => c.body && (c.body as { keyword?: string }).keyword === '乗車券');
-    expect(norimonoCalls).toEqual([]);
+    expect(norimonoCalls.map((c) => c.kind)).toEqual(['open-modal', 'approve']);
+    const norimonoOpenModal = norimonoCalls.find((c) => c.kind === 'open-modal')!;
+    expect(norimonoOpenModal.body).toEqual({ keyword: '乗車券', shareIds: ['s1'] });
+    const norimonoApprove = norimonoCalls.find((c) => c.kind === 'approve')!;
+    expect(norimonoApprove.body).toEqual({ keyword: '乗車券', shareIds: ['s1'] });
 
     expect(btn.disabled).toBe(true);
     expect(btn.textContent).toBe('登録完了');

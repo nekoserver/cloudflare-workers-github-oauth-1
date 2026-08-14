@@ -1,4 +1,5 @@
 import { getMarkdownParserScript } from '../utils/markdownRenderer';
+import { getVectorizeAndBulkRegisterScript } from '../utils/vectorizeAndBulkRegister';
 
 function escAG(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -692,6 +693,7 @@ input[type=search]:focus { border-color:var(--accent); }
   }
 
   ${getMarkdownParserScript()}
+  ${getVectorizeAndBulkRegisterScript()}
 
   function appendAnswerModalBubble(text) {
     var el = document.createElement('div');
@@ -886,45 +888,12 @@ input[type=search]:focus { border-color:var(--accent); }
     prereqModalBackdrop.setAttribute('aria-hidden', 'false');
   }
 
-  // 未登録キーワード1件について、サイドパネル検索窓へのキーワード入力→
-  // 📋ボタン→「検索ログ: 」モーダルでの「承認して登録」までの一連の手続きを
-  // (すべて承認するものとして)自動で行う。
-  //   1. GET /api/aichat/shares/search?q=keyword でそのキーワードにヒットする
-  //      回答一覧(shareIds)を取得(=検索窓にキーワードを入力した状態)
-  //   2. POST /api/aichat/search-log/open-modal でヒットしたshareIdごとの
-  //      未登録/登録済みを判定(=📋ボタンで「検索ログ: 」モーダルを開いた状態)
-  //   3. 未登録(isNew)のshareIdだけをPOST /api/aichat/search-log/approve へ
-  //      渡して登録する(=「承認して登録」を押した状態)
-  function registerKeywordViaSearchLogFlow(keyword) {
-    return fetch('/api/aichat/shares/search?q=' + encodeURIComponent(keyword), { credentials: 'same-origin' })
-      .then(function(r) { return r.json(); })
-      .then(function(d) {
-        var shareIds = (d && d.results ? d.results : []).map(function(r) { return String(r.id); });
-        if (!shareIds.length) return;
-        return fetch('/api/aichat/search-log/open-modal', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'same-origin',
-          body: JSON.stringify({ keyword: keyword, shareIds: shareIds }),
-        })
-          .then(function(r) { return r.json(); })
-          .then(function(d2) {
-            var newIds = (d2 && d2.entries ? d2.entries : [])
-              .filter(function(e) { return e.isNew; })
-              .map(function(e) { return e.shareId; });
-            if (!newIds.length) return;
-            return fetch('/api/aichat/search-log/approve', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              credentials: 'same-origin',
-              body: JSON.stringify({ keyword: keyword, shareIds: newIds }),
-            });
-          });
-      });
-  }
-
-  // 未登録キーワードをループしながら1件ずつ登録する。カウンタが進むたびに
-  // 現在処理中のバッジへ外枠(中抜き)の強調表示を移動させ、進行状況を可視化する。
+  // 未登録キーワードをループしながら1件ずつ登録する。ネットワーク呼び出しと
+  // 登録ロジック自体は vectorizeAndBulkRegister.ts から埋め込まれる
+  // bulkRegisterUnregisteredKeywords() が担う(answer-graph以外のページからも
+  // 再利用できるよう切り出し済み)。ここではカウンタが進むたびに現在処理中の
+  // バッジへ外枠(中抜き)の強調表示を移動させる進行演出と、キャッシュ更新を
+  // callbackとして渡すだけにする。
   function runBulkRegister() {
     // ボタン連打や多重呼び出しでループが二重に走らないようにする
     // (disabled中のボタンはブラウザがclickイベント自体を発火しないが、
@@ -934,28 +903,22 @@ input[type=search]:focus { border-color:var(--accent); }
     if (!items.length) return;
     prereqBulkRegisterBtn.disabled = true;
     prereqBulkRegisterBtn.textContent = '登録中...';
-    var i = 0;
-    function step() {
-      if (i > 0) items[i - 1].badge.classList.remove('kw-badge-registering');
-      if (i >= items.length) {
-        prereqBulkRegisterBtn.textContent = '登録完了';
-        return;
-      }
-      items[i].badge.classList.add('kw-badge-registering');
-      registerKeywordViaSearchLogFlow(items[i].keyword)
-        .then(function() {
-          // 登録済み扱いへキャッシュを更新する(同一セッション内で予備知識
-          // モーダルを開き直しても未登録のまま表示され続けることを防ぐ)。
-          keywordCountMap[items[i].keyword] = (keywordCountMap[items[i].keyword] || 0) + 1;
-          items[i].badge.classList.remove('chip-unregistered');
-        })
-        .catch(function() {})
-        .then(function() {
-          i++;
-          step();
-        });
-    }
-    step();
+    var keywords = items.map(function(it) { return it.keyword; });
+    bulkRegisterUnregisteredKeywords(currentAnswerModalShareId, keywords, {
+      onStart: function(i) {
+        if (i > 0) items[i - 1].badge.classList.remove('kw-badge-registering');
+        items[i].badge.classList.add('kw-badge-registering');
+      },
+      onItemDone: function(i) {
+        // 登録済み扱いへキャッシュを更新する(同一セッション内で予備知識
+        // モーダルを開き直しても未登録のまま表示され続けることを防ぐ)。
+        keywordCountMap[items[i].keyword] = (keywordCountMap[items[i].keyword] || 0) + 1;
+        items[i].badge.classList.remove('chip-unregistered');
+      },
+    }).then(function() {
+      if (items.length > 0) items[items.length - 1].badge.classList.remove('kw-badge-registering');
+      prereqBulkRegisterBtn.textContent = '登録完了';
+    });
   }
 
   prereqBulkRegisterBtn.addEventListener('click', runBulkRegister);
@@ -1048,13 +1011,7 @@ input[type=search]:focus { border-color:var(--accent); }
     if (!shareId) return;
     btn.disabled = true;
     btn.textContent = 'ベクタ化中...';
-    fetch('/api/aichat/vectorize-answer', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'same-origin',
-      body: JSON.stringify({ shareId: shareId }),
-    })
-      .then(function(r) { return r.json().then(function(d) { return { status: r.status, data: d }; }); })
+    vectorizeAnswerAndExtractKeywords(shareId)
       .then(function(res) {
         if (res.status !== 200 || !res.data || res.data.error) {
           btn.disabled = false;
