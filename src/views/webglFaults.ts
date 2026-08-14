@@ -100,7 +100,8 @@ canvas:active { cursor:grabbing; }
 #vol-tooltip { position:fixed; background:rgba(13,17,23,0.97); border:1px solid #ff9500; border-radius:8px; padding:0; font-size:12px; color:#e6edf3; min-width:200px; max-width:280px; pointer-events:none; opacity:0; transition:opacity .15s; z-index:65; transform:translate(-50%,-110%); line-height:1.7; }
 #vol-tooltip.pinned { pointer-events:auto; transform:none; transition:opacity .15s; cursor:grab; user-select:none; }
 #vol-tooltip.pinned:active { cursor:grabbing; }
-#fault-tooltip { position:fixed; background:rgba(13,17,23,0.97); border:1px solid #f78166; border-radius:8px; padding:0; font-size:12px; color:#e6edf3; min-width:200px; max-width:280px; pointer-events:none; opacity:0; transition:opacity .15s; z-index:65; transform:translate(-50%,-115%); line-height:1.7; }
+#fault-tooltip { position:fixed; background:rgba(13,17,23,0.97); border:1px solid #f78166; border-radius:8px; padding:0; font-size:12px; color:#e6edf3; min-width:200px; max-width:280px; pointer-events:none; opacity:0; transition:opacity .15s, top .2s, bottom .2s; z-index:65; left:16px; top:16px; bottom:auto; transform:none; line-height:1.7; }
+#fault-tooltip.drawer-open { top:auto; bottom:16px; }
 #fault-tooltip.pinned { pointer-events:auto; transform:none; }
 .fault-tt-hdr { display:flex; align-items:center; justify-content:space-between; cursor:move; padding:5px 10px 3px; border-bottom:1px solid #30363d; user-select:none; }
 .fault-tt-name { font-weight:700; font-size:13px; color:#58a6ff; flex:1; cursor:pointer; text-decoration:none; }
@@ -1356,8 +1357,7 @@ void main() {
       faultDotDivMap[f.id] = el;
       el.addEventListener('touchstart', function(e) { e.stopPropagation(); }, {passive:true});
       el.addEventListener('mouseenter', function(e) {
-        var r = el.getBoundingClientRect();
-        showFaultTooltip(f, r.left + r.width/2, r.top);
+        showFaultTooltip(f);
       });
       el.addEventListener('mouseleave', hideFaultTooltip);
       el.addEventListener('click', function(e) {
@@ -1444,7 +1444,7 @@ void main() {
   var faultTtDragging = false, faultTtDx = 0, faultTtDy = 0;
   var _faultTtMouseHandler = null, _faultTtTouchHandler = null;
 
-  function showFaultTooltip(f, x, y) {
+  function showFaultTooltip(f) {
     if (faultTtPinned) return;
     var c = faultColor(f.t);
     var dotClr = 'rgb(' + Math.round(c[0]*255) + ',' + Math.round(c[1]*255) + ',' + Math.round(c[2]*255) + ')';
@@ -1460,9 +1460,7 @@ void main() {
       '<div><span style="color:#8b949e">直近: </span>' + f.lastMajor + '</div>' +
       '<div><span style="color:#8b949e">国・地域: </span>' + f.country + '</div>' +
       '</div>';
-    faultTooltipEl.className = '';
-    faultTooltipEl.style.left = x + 'px';
-    faultTooltipEl.style.top = y + 'px';
+    faultTooltipEl.className = areaTourDrawer.classList.contains('open') ? 'drawer-open' : '';
     faultTooltipEl.style.opacity = '1';
   }
 
