@@ -17,14 +17,20 @@ import { getWebGLFaultsPage } from './views/webglFaults';
 // 背景(2): 地球儀のドラッグ回転感度が `*0.008` の固定係数だったため、カメラ距離(zoom)が
 // 小さい(最大ズームに近い)ほど、同じピクセル移動量でも画面上の見た目の回転量が大きくなり、
 // 最大ズーム時はカーソルをわずかに動かしただけで画面内の対象物が画面外まで吹き飛ぶように
-// 見えていた。感度係数を現在のzoom値に比例させる(zoom/3.2、3.2は既定のズーム値)ことで、
-// ズームレベルによらず見た目のドラッグ感度が一定になるようにした。
+// 見えていた。感度係数を現在のzoom値に比例させる(zoom/3.2、3.2は既定のズーム値)ことで
+// 一旦改善したが、それでも最大ズーム(1.2)付近では線形の比例だけでは不十分で、わずかな
+// カーソル移動でも大きく動いてしまうという報告を受け、computeDragSens()に切り出した上で
+// 既定ズーム(3.2)より手前側(zoom<3.2、ズームイン側)だけ比率を2乗にして急減させる方式に
+// 変更した。既定ズーム以上(ズームアウト側)は従来の線形のまま維持している。
 //
 // 故障シナリオ:
 //   (1) z-indexを上げすぎて、本来ボタンより手前に出るべきモーダル(getNextZ()で200以上を
 //       割り当てられるもの)の下に埋もれてしまう
 //   (2) マウスドラッグ側だけ感度を修正し、タッチドラッグ側の修正を忘れる
 //   (3) 感度係数が0や負になり、ズーム時に回転操作自体が効かなくなる
+//   (4) 最大ズーム(1.2)付近で感度が既定ズーム(3.2)時と同じかそれ以上のままで、
+//       わずかなカーソル移動でも大きく動いてしまう
+//   (5) ズームアウト側(zoom>=3.2)の感度まで変わってしまい、従来の操作感が変化する
 
 describe('活断層ページ: ツールバーボタン(.canvas-ctrl-btns)のz-index', () => {
   const html = getWebGLFaultsPage('tester');
@@ -65,7 +71,7 @@ describe('活断層ページ: 地球儀ドラッグ回転感度のズーム比�
     const idx = html.indexOf("window.addEventListener('mousemove', function(e) {\n    if (volTtDragging) return;");
     expect(idx).toBeGreaterThan(-1);
     const block = html.slice(idx, idx + 400);
-    expect(block).toContain('var dragSens=0.008*(zoom/3.2);');
+    expect(block).toContain('var dragSens=computeDragSens(zoom);');
     expect(block).toContain('(e.clientX-lx)*dragSens');
     expect(block).toContain('(e.clientY-ly)*dragSens');
   });
@@ -74,7 +80,7 @@ describe('活断層ページ: 地球儀ドラッグ回転感度のズーム比�
     const idx = html.indexOf('canvas.addEventListener(\'touchmove\'');
     expect(idx).toBeGreaterThan(-1);
     const block = html.slice(idx, idx + 500);
-    expect(block).toContain('var dragSens=0.008*(zoom/3.2);');
+    expect(block).toContain('var dragSens=computeDragSens(zoom);');
     expect(block).toContain('(e.touches[0].clientX-lx)*dragSens');
     expect(block).toContain('(e.touches[0].clientY-ly)*dragSens');
   });
@@ -88,5 +94,45 @@ describe('活断層ページ: 地球儀ドラッグ回転感度のズーム比�
     expect(html).toContain('var wheelSens=0.006*Math.min(1,zoomTarget/3.2);');
     expect(html).toContain('zoomTarget+e.deltaY*wheelSens');
     expect(html).toContain('zoomTarget-(d-pinch0)*0.008');
+  });
+});
+
+describe('活断層ページ: computeDragSens() の数値挙動', () => {
+  const html = getWebGLFaultsPage('tester');
+
+  it('computeDragSens 関数が定義されている', () => {
+    expect(html).toContain('function computeDragSens(z)');
+    expect(html).toContain('var DRAG_SENS_BASE_ZOOM = 3.2;');
+  });
+
+  function extractComputeDragSens(source: string): (z: number) => number {
+    const start = source.indexOf('function computeDragSens(z)');
+    expect(start).toBeGreaterThan(-1);
+    const braceStart = source.indexOf('{', start);
+    let depth = 0;
+    let i = braceStart;
+    for (; i < source.length; i++) {
+      if (source[i] === '{') depth++;
+      else if (source[i] === '}') {
+        depth--;
+        if (depth === 0) break;
+      }
+    }
+    const fnSrc = source.slice(start, i + 1);
+    return new Function('DRAG_SENS_BASE_ZOOM', fnSrc + '\nreturn computeDragSens;')(3.2) as any;
+  }
+
+  it('最大ズーム(1.2)付近では従来の線形係数(0.008*(1.2/3.2))より小さい感度になる', () => {
+    const computeDragSens = extractComputeDragSens(html);
+    const oldLinear = 0.008 * (1.2 / 3.2);
+    const newVal = computeDragSens(1.2);
+    expect(newVal).toBeLessThan(oldLinear);
+    expect(newVal).toBeGreaterThan(0);
+  });
+
+  it('既定ズーム(3.2)以上(ズームアウト側)では従来の線形係数と一致する', () => {
+    const computeDragSens = extractComputeDragSens(html);
+    expect(computeDragSens(3.2)).toBeCloseTo(0.008 * (3.2 / 3.2), 10);
+    expect(computeDragSens(10)).toBeCloseTo(0.008 * (10 / 3.2), 10);
   });
 });
