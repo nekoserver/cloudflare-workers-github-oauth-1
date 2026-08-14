@@ -3,6 +3,12 @@ export type Airline = { name: string; iata: string; hubCode: string; hubName: st
 export type CountryAirlines = { country: string; flag: string; airlines: Airline[] };
 
 // 便数(週)は主要路線のおおまかな目安であり、季節・年度により変動する概算値。
+// 2026-08-14時点でWeb検索により裏取りできた一部路線のみ更新済み(JAL 成田/羽田-
+// バンコク: 14→7、Emirates ドバイ-成田: 7→14、Qatar Airways ドーハ-成田: 7→14)。
+// この環境からは航空会社公式サイトへの直接アクセス(WebFetch)がネットワーク
+// ポリシーでブロックされており、検索スニペットだけでは他の路線の正確な
+// 週間便数(単一社分か全社合計かの判別を含む)を裏取りできなかったため、
+// 上記以外は未更新のまま残している。
 export const AIRLINE_NETWORK: CountryAirlines[] = [
   { country: '日本', flag: '🇯🇵', airlines: [
     { name: 'ANA(全日本空輸)', iata: 'NH', hubCode: 'HND', hubName: '羽田空港', destinations: [
@@ -16,7 +22,7 @@ export const AIRLINE_NETWORK: CountryAirlines[] = [
       { code: 'ICN', name: '仁川国際空港(ソウル)', flightsPerWeek: 28 },
       { code: 'JFK', name: 'ジョン・F・ケネディ国際空港', flightsPerWeek: 14 },
       { code: 'CDG', name: 'シャルル・ド・ゴール空港', flightsPerWeek: 7 },
-      { code: 'BKK', name: 'スワンナプーム国際空港', flightsPerWeek: 14 },
+      { code: 'BKK', name: 'スワンナプーム国際空港', flightsPerWeek: 7 },
       { code: 'SYD', name: 'シドニー国際空港', flightsPerWeek: 7 }
     ]}
   ]},
@@ -95,7 +101,7 @@ export const AIRLINE_NETWORK: CountryAirlines[] = [
   { country: 'アラブ首長国連邦', flag: '🇦🇪', airlines: [
     { name: 'Emirates', iata: 'EK', hubCode: 'DXB', hubName: 'ドバイ国際空港', destinations: [
       { code: 'LHR', name: 'ロンドン・ヒースロー空港', flightsPerWeek: 21 },
-      { code: 'NRT', name: '成田国際空港', flightsPerWeek: 7 },
+      { code: 'NRT', name: '成田国際空港', flightsPerWeek: 14 },
       { code: 'JFK', name: 'ジョン・F・ケネディ国際空港', flightsPerWeek: 14 },
       { code: 'SYD', name: 'シドニー国際空港', flightsPerWeek: 7 },
       { code: 'SIN', name: 'チャンギ空港(シンガポール)', flightsPerWeek: 14 }
@@ -104,7 +110,7 @@ export const AIRLINE_NETWORK: CountryAirlines[] = [
   { country: 'カタール', flag: '🇶🇦', airlines: [
     { name: 'Qatar Airways', iata: 'QR', hubCode: 'DOH', hubName: 'ハマド国際空港', destinations: [
       { code: 'LHR', name: 'ロンドン・ヒースロー空港', flightsPerWeek: 21 },
-      { code: 'NRT', name: '成田国際空港', flightsPerWeek: 7 },
+      { code: 'NRT', name: '成田国際空港', flightsPerWeek: 14 },
       { code: 'SYD', name: 'シドニー国際空港', flightsPerWeek: 7 }
     ]}
   ]},
