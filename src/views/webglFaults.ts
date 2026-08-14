@@ -1281,12 +1281,12 @@ void main() {
       volTooltipEl.style.left = (e.touches[0].clientX - volTtDx) + 'px';
       volTooltipEl.style.top = (e.touches[0].clientY - volTtDy) + 'px';
     }
-    if (faultTtDragging) {
+    if (faultTtDragging && e.touches.length <= 1) {
       faultTooltipEl.style.left = (e.touches[0].clientX - faultTtDx) + 'px';
       faultTooltipEl.style.top = (e.touches[0].clientY - faultTtDy) + 'px';
     }
   }, {passive:true});
-  window.addEventListener('touchend', function() { volTtDragging = false; });
+  window.addEventListener('touchend', function() { volTtDragging = false; faultTtDragging = false; });
 
   function flyToLatLon(lat, lon, dur, cb) {
     var latR = lat * Math.PI / 180;
@@ -1516,6 +1516,7 @@ void main() {
     };
     _faultTtTouchHandler = function(ev) {
       if (boxZoomMode) return;
+      if (ev.touches.length > 1) return;
       if (ev.target && (ev.target.id === 'faultTtClose' || ev.target.className === 'fault-tt-name')) return;
       var r = faultTooltipEl.getBoundingClientRect();
       faultTtDragging = true;
