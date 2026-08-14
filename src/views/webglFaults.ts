@@ -2090,6 +2090,16 @@ void main() {
   });
 
   var rotXv = 0.3, rotYv = 0.6, zoom = 3.2, zoomTarget = 3.2;
+  var DRAG_SENS_BASE_ZOOM = 3.2;
+  // ドラッグ回転の感度。既定ズーム(3.2)を基準に、zoomが小さい(=最大ズーム付近、
+  // カメラが地表に近い)ほど画面上の同じカーソル移動量が球面上のより大きな
+  // 移動に見えてしまうため、既定ズームより手前側(zoom<3.2)だけ2乗で急減させて
+  // 微調整しやすくする。既定ズーム以上(zoom>=3.2、ズームアウト側)は従来通り
+  // 線形のまま変更しない。
+  function computeDragSens(z) {
+    var t = z / DRAG_SENS_BASE_ZOOM;
+    return 0.008 * (t < 1 ? t * t : t);
+  }
   var drag = false, lx = 0, ly = 0, pinch0 = 0, touchMoved = false;
   var velY = 0, velX = 0, momentumY = 0, momentumX = 0;
   var MOMENTUM_DECAY = 0.94, SPIN_BOOST = 2.0;
@@ -2394,7 +2404,7 @@ void main() {
     if (volTtDragging) return;
     if (boxDragging) { bxCur=e.clientX; byCur=e.clientY; updateBoxOverlay(); return; }
     if(!drag)return;
-    var dragSens=0.008*(zoom/3.2);
+    var dragSens=computeDragSens(zoom);
     var dy=(e.clientX-lx)*dragSens, dx=(e.clientY-ly)*dragSens;
     rotYv+=dy; velY=velY*0.4+dy*0.6;
     if(!axisLocked){rotXv=clampElev(rotXv+dx); velX=velX*0.4+dx*0.6;}
@@ -2423,7 +2433,7 @@ void main() {
     e.preventDefault(); touchMoved=true;
     if(e.touches.length===1&&boxDragging){ bxCur=e.touches[0].clientX; byCur=e.touches[0].clientY; updateBoxOverlay(); return; }
     if(e.touches.length===1&&drag){
-      var dragSens=0.008*(zoom/3.2);
+      var dragSens=computeDragSens(zoom);
       var dy=(e.touches[0].clientX-lx)*dragSens, dx=(e.touches[0].clientY-ly)*dragSens;
       rotYv+=dy; velY=velY*0.4+dy*0.6;
       if(!axisLocked){rotXv=clampElev(rotXv+dx); velX=velX*0.4+dx*0.6;}
