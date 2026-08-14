@@ -158,20 +158,20 @@ npm install
 
 Cloudflare DNS 上のサブドメインを Workers Route でこの Worker に接続する場合は、GitHub 側に登録する公開 URL を **workers.dev ではなく、ユーザーが実際にアクセスする同一ホスト名** に統一してください。
 
-例: `https://1.cfw1.nekomaneki.work` で公開する場合
+例: `https://cloudflare-workers-github-oauth-1.nekoflare.workers.dev` で公開する場合
 
 | 設定先 | 推奨値 |
 |---|---|
-| Cloudflare Workers Route | `1.cfw1.nekomaneki.work/*` |
-| GitHub OAuth App / GitHub App callback URL | `https://1.cfw1.nekomaneki.work/auth/github/callback` |
-| GitHub App Homepage URL / Setup URL（使う場合） | `https://1.cfw1.nekomaneki.work/` |
-| GitHub App Webhook URL（この Worker で受ける場合） | `https://1.cfw1.nekomaneki.work/webhook/github` |
+| Cloudflare Workers Route | `cloudflare-workers-github-oauth-1.nekoflare.workers.dev/*` |
+| GitHub OAuth App / GitHub App callback URL | `https://cloudflare-workers-github-oauth-1.nekoflare.workers.dev/auth/github/callback` |
+| GitHub App Homepage URL / Setup URL（使う場合） | `https://cloudflare-workers-github-oauth-1.nekoflare.workers.dev/` |
+| GitHub App Webhook URL（この Worker で受ける場合） | `https://cloudflare-workers-github-oauth-1.nekoflare.workers.dev/webhook/github` |
 
-この Worker は OAuth 開始時とコールバック時の `redirect_uri` をリクエストの `protocol` と `host` から組み立てます。つまり `https://1.cfw1.nekomaneki.work/auth/github` からログインを始めれば、GitHub に送る `redirect_uri` も `https://1.cfw1.nekomaneki.work/auth/github/callback` になります。
+この Worker は OAuth 開始時とコールバック時の `redirect_uri` をリクエストの `protocol` と `host` から組み立てます。つまり `https://cloudflare-workers-github-oauth-1.nekoflare.workers.dev/auth/github` からログインを始めれば、GitHub に送る `redirect_uri` も `https://cloudflare-workers-github-oauth-1.nekoflare.workers.dev/auth/github/callback` になります。
 
 `workers.dev` とカスタムサブドメインを混在させると、GitHub の認可画面や App install 後のコールバックで「別ドメインへ戻る」ように見える警告・不一致が起きやすくなります。回避策は次の順で検討してください。
 
-1. **推奨**: GitHub 側の callback / setup / webhook / homepage をすべて `https://1.cfw1.nekomaneki.work` に統一する。
+1. **推奨**: GitHub 側の callback / setup / webhook / homepage をすべて `https://cloudflare-workers-github-oauth-1.nekoflare.workers.dev` に統一する。
 2. `https://cloudflare-workers-github-oauth-1.workers.dev` を直接ユーザーに案内しない。既存リンク・Slack 通知・README・GitHub App の各 URL をカスタムサブドメインへ置き換える。
 3. Cloudflare 側では DNS レコードを proxied にし、Workers Route の pattern を `1.cfw1.nekomaneki.work/*` にする。必要なら `wrangler.toml` の `routes` 例を有効化する。
 4. どうしても両方のホストを残す場合でも、OAuth 開始 URL と GitHub に登録する callback URL は同じホストに揃える。
