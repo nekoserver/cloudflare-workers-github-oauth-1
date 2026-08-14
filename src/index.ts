@@ -4368,6 +4368,42 @@ export async function searchAiChatSharesWithImage(
 }
 
 /**
+ * /aichat-image-gallery ページの検索対象ドロップダウンで「moondream3.1」を
+ * 選んだ場合用。ai_chat_shares の質問文・回答文ではなく、
+ * aichat_moondream_analyses.analysis_text(Moondreamの画像分析結果)を
+ * キーワード検索する。ヒットした行は対応する ai_chat_shares(質問・回答・画像)を
+ * 一緒に返すことで、プレビューモーダル側は searchAiChatSharesWithImage と
+ * 同じ形(質問/回答バブル)でそのまま表示できる。
+ */
+export async function searchAichatMoondreamAnalyses(
+  db: D1Like,
+  userId: string,
+  q: string,
+): Promise<{ results: Array<{
+  id: string; user_hash: string; question: string; answer: string;
+  model: string; created_at: string; image_data_url: string | null;
+}> }> {
+  const normalized = q.replace(/[・･]/g, '・');
+  const rows = await db
+    .prepare(
+      `SELECT s.id, s.user_hash, s.question, s.answer, s.model, s.created_at,
+              COALESCE(img.image_data_url, s.image_data_url) AS image_data_url
+       FROM aichat_moondream_analyses m
+       JOIN ai_chat_shares s ON s.id = m.share_id AND s.user_id = m.user_id
+       LEFT JOIN aichat_images img ON img.id = s.image_id
+       WHERE m.user_id = ? AND s.deleted_at IS NULL
+         AND INSTR(REPLACE(m.analysis_text, '･', '・'), ?) > 0
+       ORDER BY s.created_at DESC LIMIT 60`
+    )
+    .bind(userId, normalized)
+    .all<{
+      id: string; user_hash: string; question: string; answer: string;
+      model: string; created_at: string; image_data_url: string | null;
+    }>();
+  return { results: rows.results ?? [] };
+}
+
+/**
  * テキストに含まれる登録済みキーワードだけを返す（大文字小文字を無視）。
  * /answer-graph の回答伝播グラフ構築で使う。
  */
@@ -8966,7 +9002,14 @@ app.get('/api/aichat/image-gallery-search', authMiddleware, async (c) => {
   const q = (c.req.query('q') ?? '').trim();
   if (!q) return jsonUtf8({ results: [] });
 
-  const { results } = await searchAiChatSharesWithImage(c.env.DB as unknown as D1Like, user.sub, q);
+  // ドロップダウンで検索対象を切り替える。llama-4(デフォルト): AIチャットの
+  // 質問文・回答文そのものを検索。moondream3.1: Moondreamの画像分析結果
+  // (aichat_moondream_analyses.analysis_text)を検索する。
+  const target = (c.req.query('target') ?? '').trim();
+  const db = c.env.DB as unknown as D1Like;
+  const { results } = target === 'moondream3.1'
+    ? await searchAichatMoondreamAnalyses(db, user.sub, q)
+    : await searchAiChatSharesWithImage(db, user.sub, q);
   return jsonUtf8({ results });
 });
 

@@ -20,6 +20,9 @@ import { getAichatImageGalleryPage } from './aichatImageGallery';
 //       しまい、表示色が食い違う
 //   (6) 検索窓の入力(input)イベントにハンドラが無く、インクリメントサーチが
 //       効かない(ボタン/Enter押下でしか検索できない)
+//   (7) 検索対象ドロップダウン(llama-4/moondream3.1)が無い、またはリクエストに
+//       targetパラメータが含まれず、常に同じ検索対象(質問文・回答文)しか
+//       検索できない
 
 describe('getAichatImageGalleryPage', () => {
   it('script タグに構文エラーがない', () => {
@@ -81,5 +84,23 @@ describe('getAichatImageGalleryPage', () => {
   it('検索リクエストには連番を振り、古いリクエストの応答で新しい結果を上書きしない', () => {
     const html = getAichatImageGalleryPage('testuser');
     expect(html).toContain('if (seq !== searchRequestSeq) return;');
+  });
+
+  it('検索対象ドロップダウン(llama-4/moondream3.1)を持ち、llama-4がデフォルト選択されている', () => {
+    const html = getAichatImageGalleryPage('testuser');
+    expect(html).toContain('id="gallerySearchTarget"');
+    expect(html).toContain('<option value="llama-4" selected>');
+    expect(html).toContain('<option value="moondream3.1">');
+  });
+
+  it('検索リクエストのURLにドロップダウンで選択中のtargetを含める', () => {
+    const html = getAichatImageGalleryPage('testuser');
+    expect(html).toContain("var target = searchTarget.value;");
+    expect(html).toContain("'/api/aichat/image-gallery-search?q=' + encodeURIComponent(q) + '&target=' + encodeURIComponent(target)");
+  });
+
+  it('ドロップダウンのchangeイベントで(キーワード入力済みなら)再検索する', () => {
+    const html = getAichatImageGalleryPage('testuser');
+    expect(html).toContain("searchTarget.addEventListener('change'");
   });
 });
