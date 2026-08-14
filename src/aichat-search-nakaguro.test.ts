@@ -66,6 +66,15 @@ function setupDb(): DatabaseSync {
       byte_length INTEGER NOT NULL,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
+    CREATE TABLE aichat_moondream_analyses (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      share_id TEXT NOT NULL,
+      image_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      model TEXT NOT NULL,
+      analysis_text TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
   `);
   return db;
 }
@@ -74,6 +83,15 @@ function insertShare(db: DatabaseSync, id: string, question: string) {
   db.prepare(
     `INSERT INTO ai_chat_shares (id, user_id, question, answer) VALUES (?, ?, ?, ?)`
   ).run(id, 'user1', question, '回答本文');
+}
+
+function insertMoondreamAnalysis(
+  db: DatabaseSync,
+  opts: { shareId: string; imageId?: string; userId?: string; analysisText: string },
+) {
+  db.prepare(
+    `INSERT INTO aichat_moondream_analyses (share_id, image_id, user_id, model, analysis_text) VALUES (?, ?, ?, ?, ?)`
+  ).run(opts.shareId, opts.imageId ?? 'img1', opts.userId ?? 'user1', 'moondream3.1', opts.analysisText);
 }
 
 describe('buildFuzzySearchLikePattern: 中黒の表記ゆれをLIKEワイルドカードで吸収する', () => {
@@ -174,6 +192,56 @@ describe('searchAiChatShares — 実SQLiteでの中黒表記ゆれ吸収の検�
     const longQuery = 'サンタ・マリア・デッレ・グラツィエ教会（レオナルドの最後の晩餐）';
     insertShare(real, 's1', `「${longQuery}」の「見どころ」について説明してください`);
     const { results } = await searchAiChatShares(wrapD1(real), 'user1', longQuery);
+    expect(results).toHaveLength(1);
+  });
+});
+
+// ===========================================================================
+// 根本原因:
+//   添付画像付き投稿は、画像に何が写っているかを説明するテキストが
+//   ai_chat_shares.question/answerに存在しないことがある(画像だけを送って
+//   文章を打たなかった場合はquestionが空文字になる、回答文が画像の内容に
+//   触れない、等)。画像の内容を説明するテキストはMoondreamの分析結果
+//   (aichat_moondream_analyses.analysis_text)としてのみ保存されているため、
+//   サイドバー検索窓(searchAiChatShares)がquestion/answerしか見ていないと、
+//   「画像に写っている物」で検索してもヒットしようがなかった。
+// ===========================================================================
+describe('searchAiChatShares — 添付画像のMoondream分析結果(analysis_text)も検索対象にする', () => {
+  it('質問文・回答文にキーワードが無くても、紐づくanalysis_textにあればヒットする', async () => {
+    const real = setupDb();
+    // 画像だけを送って文章を打たなかった想定(questionが空文字)
+    real.prepare(
+      `INSERT INTO ai_chat_shares (id, user_id, question, answer, image_id) VALUES (?, ?, ?, ?, ?)`
+    ).run('s1', 'user1', '', 'かわいい猫ですね!', 'img1');
+    insertMoondreamAnalysis(real, { shareId: 's1', analysisText: '茶色い猫が窓際で寝ています' });
+    const { results } = await searchAiChatShares(wrapD1(real), 'user1', '猫');
+    expect(results.map((r) => r.id)).toEqual(['s1']);
+  });
+
+  it('analysis_textの中黒表記ゆれも吸収する', async () => {
+    const real = setupDb();
+    real.prepare(
+      `INSERT INTO ai_chat_shares (id, user_id, question, answer, image_id) VALUES (?, ?, ?, ?, ?)`
+    ).run('s1', 'user1', '', '説明します', 'img1');
+    insertMoondreamAnalysis(real, { shareId: 's1', analysisText: '「タージ・マハル」が写っています' });
+    const { results } = await searchAiChatShares(wrapD1(real), 'user1', 'タージ･マハル');
+    expect(results).toHaveLength(1);
+  });
+
+  it('他ユーザーのanalysis_textはヒットしない', async () => {
+    const real = setupDb();
+    real.prepare(
+      `INSERT INTO ai_chat_shares (id, user_id, question, answer, image_id) VALUES (?, ?, ?, ?, ?)`
+    ).run('s1', 'other-user', '', '説明します', 'img1');
+    insertMoondreamAnalysis(real, { shareId: 's1', userId: 'other-user', analysisText: '猫が写っています' });
+    const { results } = await searchAiChatShares(wrapD1(real), 'user1', '猫');
+    expect(results).toHaveLength(0);
+  });
+
+  it('質問文にヒットする通常の検索は従来通り動作する(analysis_text追加による回帰なし)', async () => {
+    const real = setupDb();
+    insertShare(real, 's1', '「タージ・マハル」の「見どころ」について説明してください');
+    const { results } = await searchAiChatShares(wrapD1(real), 'user1', 'タージ・マハル');
     expect(results).toHaveLength(1);
   });
 });
