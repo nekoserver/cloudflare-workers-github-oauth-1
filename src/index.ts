@@ -4302,6 +4302,14 @@ export function buildFuzzySearchLikePattern(q: string): string {
   return `%${fuzzy}%`;
 }
 
+// 根本原因: 添付画像付き投稿は、画像に何が写っているかを説明するテキストが
+// ai_chat_shares.question/answerには存在しない(ユーザーが画像だけを送って
+// 文章を打たなかった場合はquestionが空文字になるほか、回答文が画像の内容に
+// 触れない場合も多い)。画像の内容を説明するテキストはMoondreamの分析結果
+// (aichat_moondream_analyses.analysis_text)としてのみ保存されているため、
+// question/answerだけを見る検索では「画像に写っている物」で検索しても
+// 一致しようがなかった。EXISTSでanalysis_textもOR条件に加えることで、
+// 画像添付付き投稿もその画像の内容から検索できるようにする。
 export async function searchAiChatShares(
   db: D1Like,
   userId: string,
@@ -4321,10 +4329,19 @@ export async function searchAiChatShares(
               COALESCE(img.image_data_url, s.image_data_url) AS image_data_url
        FROM ai_chat_shares s
        LEFT JOIN aichat_images img ON img.id = s.image_id
-       WHERE s.user_id = ? AND s.deleted_at IS NULL AND (INSTR(REPLACE(s.question, '･', '・'), ?) > 0 OR INSTR(REPLACE(s.answer, '･', '・'), ?) > 0)
+       WHERE s.user_id = ? AND s.deleted_at IS NULL
+         AND (
+           INSTR(REPLACE(s.question, '･', '・'), ?) > 0
+           OR INSTR(REPLACE(s.answer, '･', '・'), ?) > 0
+           OR EXISTS (
+             SELECT 1 FROM aichat_moondream_analyses m
+             WHERE m.share_id = s.id AND m.user_id = s.user_id
+               AND INSTR(REPLACE(m.analysis_text, '･', '・'), ?) > 0
+           )
+         )
        ORDER BY s.created_at DESC LIMIT 30`
     )
-    .bind(userId, normalized, normalized)
+    .bind(userId, normalized, normalized, normalized)
     .all<{
       id: string; user_hash: string; question: string; answer: string;
       model: string; created_at: string; access_count: number; question_hash: string | null;
