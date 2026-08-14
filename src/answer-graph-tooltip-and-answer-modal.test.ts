@@ -303,6 +303,7 @@ describe('/answer-graph ページ: openAnswerModal/closeAnswerModal のDOM実動
         <button id="answerModalVectorizeBtn"></button>
         <span id="answerModalVectorizedBadge"></span>
         <button id="answerModalKeywordListBtn"></button>
+        <button id="answerModalKeywordRecheckBtn"></button>
         <button id="answerModalKeywordExtractBtn"></button>
       </div>
       <div id="answerModalBody"></div>
@@ -314,7 +315,7 @@ describe('/answer-graph ページ: openAnswerModal/closeAnswerModal のDOM実動
       'document', 'fetch', 'MODEL_COLORS',
       'answerModalBody', 'answerModalBackdrop', 'answerModalQuestion', 'answerModalDate', 'answerModalTime',
       'answerModalMeta', 'answerModalTokens', 'answerModalShareLink', 'answerModalHighlightToggleBtn',
-      'answerModalVectorizeBtn', 'answerModalVectorizedBadge', 'answerModalKeywordListBtn', 'answerModalKeywordExtractBtn',
+      'answerModalVectorizeBtn', 'answerModalVectorizedBadge', 'answerModalKeywordListBtn', 'answerModalKeywordRecheckBtn', 'answerModalKeywordExtractBtn',
       `${src}\nreturn { openAnswerModal: openAnswerModal, closeAnswerModal: closeAnswerModal };`
     );
     return fn(
@@ -333,6 +334,7 @@ describe('/answer-graph ページ: openAnswerModal/closeAnswerModal のDOM実動
       document.getElementById('answerModalVectorizeBtn'),
       document.getElementById('answerModalVectorizedBadge'),
       document.getElementById('answerModalKeywordListBtn'),
+      document.getElementById('answerModalKeywordRecheckBtn'),
       document.getElementById('answerModalKeywordExtractBtn'),
     ) as { openAnswerModal: (id: string) => void; closeAnswerModal: () => void };
   }

@@ -470,6 +470,7 @@ input[type=search]:focus { border-color:var(--accent); }
       <button type="button" class="answer-modal-vectorize-btn" id="answerModalVectorizeBtn" style="display:none;">この回答文をベクタ化する</button>
       <span class="answer-modal-vectorized-badge" id="answerModalVectorizedBadge" style="display:none;">ベクタ化済み</span>
       <button type="button" class="answer-modal-vectorize-btn" id="answerModalKeywordListBtn" style="display:none;">キーワード一覧</button>
+      <button type="button" class="answer-modal-vectorize-btn" id="answerModalKeywordRecheckBtn" style="display:none;" title="この回答文からベクタ化済みの全キーワードについて未登録のものが無いか再チェックし、あれば一括登録する">再チェック</button>
       <button type="button" class="answer-modal-vectorize-btn" id="answerModalKeywordExtractBtn" style="display:none;">キーワード抽出</button>
       <span id="answerModalMeta"></span>
       <span id="answerModalTokens"></span>
@@ -542,6 +543,7 @@ input[type=search]:focus { border-color:var(--accent); }
   var answerModalVectorizeBtn = document.getElementById('answerModalVectorizeBtn');
   var answerModalVectorizedBadge = document.getElementById('answerModalVectorizedBadge');
   var answerModalKeywordListBtn = document.getElementById('answerModalKeywordListBtn');
+  var answerModalKeywordRecheckBtn = document.getElementById('answerModalKeywordRecheckBtn');
   var answerModalKeywordExtractBtn = document.getElementById('answerModalKeywordExtractBtn');
   var prereqModalBackdrop = document.getElementById('prereqModalBackdrop');
   var prereqModalBody = document.getElementById('prereqModalBody');
@@ -722,6 +724,9 @@ input[type=search]:focus { border-color:var(--accent); }
     answerModalVectorizeBtn.textContent = 'この回答文をベクタ化する';
     answerModalVectorizedBadge.style.display = 'none';
     answerModalKeywordListBtn.style.display = 'none';
+    answerModalKeywordRecheckBtn.style.display = 'none';
+    answerModalKeywordRecheckBtn.disabled = false;
+    answerModalKeywordRecheckBtn.textContent = '再チェック';
     answerModalKeywordExtractBtn.style.display = 'none';
     answerModalKeywordExtractBtn.disabled = false;
     answerModalKeywordExtractBtn.textContent = 'キーワード抽出';
@@ -750,11 +755,13 @@ input[type=search]:focus { border-color:var(--accent); }
           answerModalVectorizeBtn.style.display = 'none';
           answerModalVectorizedBadge.style.display = '';
           answerModalKeywordListBtn.style.display = d.keywordsRegistered ? '' : 'none';
+          answerModalKeywordRecheckBtn.style.display = d.keywordsRegistered ? '' : 'none';
           answerModalKeywordExtractBtn.style.display = d.keywordsRegistered ? 'none' : '';
         } else {
           answerModalVectorizeBtn.style.display = '';
           answerModalVectorizedBadge.style.display = 'none';
           answerModalKeywordListBtn.style.display = 'none';
+          answerModalKeywordRecheckBtn.style.display = 'none';
           answerModalKeywordExtractBtn.style.display = 'none';
         }
       })
@@ -1079,6 +1086,33 @@ input[type=search]:focus { border-color:var(--accent); }
         openPrereqKeywordListModal(d.keywordOccurrences);
       })
       .catch(function() { alert('キーワード一覧の取得に失敗しました（通信エラー）'); });
+  });
+
+  // 「再チェック」ボタン: この回答文からベクタ化時に過去に抽出した
+  // キーワード群(aichat_answer_keyword_vectors、キャッシュではなく常に
+  // 最新をDBへ問い合わせる)全件についてループし、それぞれ現在も未登録の
+  // ままかどうかをチェックする(isKeywordRegisteredInBarCacheでの判定は
+  // openPrereqModal内で行われる)。1件でも未登録があれば、ベクタ化直後と
+  // 同じ「一括登録」処理(runBulkRegister)をそのまま自動実行する。
+  answerModalKeywordRecheckBtn.addEventListener('click', function() {
+    var shareId = currentAnswerModalShareId;
+    if (!shareId) return;
+    answerModalKeywordRecheckBtn.disabled = true;
+    answerModalKeywordRecheckBtn.textContent = 'チェック中...';
+    fetch('/api/aichat/answer-keywords?shareId=' + encodeURIComponent(shareId), { credentials: 'same-origin' })
+      .then(function(r) { return r.json(); })
+      .then(function(d) {
+        answerModalKeywordRecheckBtn.disabled = false;
+        answerModalKeywordRecheckBtn.textContent = '再チェック';
+        if (!d || d.error) { alert('再チェックに失敗しました: ' + ((d && d.error) || '不明なエラー')); return; }
+        openPrereqModal(d.keywords || [], null, null);
+        if (prereqUnregisteredItems.length > 0) runBulkRegister();
+      })
+      .catch(function() {
+        answerModalKeywordRecheckBtn.disabled = false;
+        answerModalKeywordRecheckBtn.textContent = '再チェック';
+        alert('再チェックに失敗しました（通信エラー）');
+      });
   });
 
   function hideNodeTooltip() {
