@@ -9,6 +9,7 @@ import { getCookieValue } from '../utils/cookie';
 import { postSlackMessage } from '../utils/slack';
 import { getSessionDurationSeconds } from '../utils/session';
 import { resolveIdleTimeoutSeconds, type Bindings, type Variables } from '../types';
+import { isApiKeyToken, checkApiKeyAuth, touchApiKeyLastUsed, type ApiKeyDb } from '../utils/apiKeys';
 
 // Contextに認証ユーザー情報を追加
 export interface AuthContext {
@@ -229,4 +230,33 @@ export async function optionalAuthMiddleware(c: Context<{ Bindings: Bindings; Va
   }
 
   await next();
+}
+
+/**
+ * /api/aichat 専用: APIキー(nkapi_...)またはセッションJWT(Cookie/Bearer)の
+ * どちらでも認証できるミドルウェア。他のエンドポイントの認証方式(authMiddleware)は
+ * 変更せず、/api/aichat にのみ個別にAPIキー対応を追加する。
+ * APIキーの場合は c.set('user', ...) にsub(発行者のuser_id)のみを持つ最小限の
+ * ペイロードを設定する(/api/aichatハンドラはuser.subしか参照しない)。
+ */
+export async function aichatAuthMiddleware(c: Context<{ Bindings: Bindings; Variables: Variables }>, next: Next) {
+  const bearerToken = extractBearerToken(c.req.header('Authorization'));
+  if (bearerToken && isApiKeyToken(bearerToken)) {
+    const db = c.env.DB;
+    if (!db) {
+      return c.json({ error: 'サーバー設定エラー' }, 500);
+    }
+    const result = await checkApiKeyAuth(db as unknown as ApiKeyDb, bearerToken, new Date());
+    if (!result.valid) {
+      return c.json({ error: 'APIキーが無効です', reason: result.reason }, 401);
+    }
+    const nowSeconds = Math.floor(Date.now() / 1000);
+    c.set('user', { sub: result.userId, iat: nowSeconds, exp: nowSeconds + 60 });
+    c.executionCtx.waitUntil(
+      touchApiKeyLastUsed(db as unknown as ApiKeyDb, bearerToken).catch(() => {})
+    );
+    await next();
+    return;
+  }
+  return authMiddleware(c, next);
 }

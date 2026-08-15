@@ -176,16 +176,23 @@ describe('index.ts: APIキー関連のサーバー側実装', () => {
     const block = src.slice(idx, idx + 2000);
     expect(block).toContain('extractBearerToken(');
     expect(block).toContain('isApiKeyToken(bearerToken)');
-    expect(block).toContain('evaluateApiKeyRow(');
+    expect(block).toContain('checkApiKeyAuth(');
     expect(block).toContain('loggedIn: true');
     expect(block).toContain("loggedIn: false, reason: result.reason");
   });
 
-  it('GET / のAPIキー判定は発行者アカウント(user_sessions)のrevoke状態も見る', () => {
-    const idx = src.indexOf("app.get('/', async (c) => {");
-    const block = src.slice(idx, idx + 2000);
+  it('GET / のAPIキー判定はcheckApiKeyAuth経由で発行者アカウント(user_sessions)のrevoke状態も見る(共通ロジックの再利用)', () => {
+    const apiKeysSrc = readFileSync(resolve(__dirname, 'utils', 'apiKeys.ts'), 'utf-8');
+    const idx = apiKeysSrc.indexOf('export async function checkApiKeyAuth(');
+    expect(idx).toBeGreaterThan(-1);
+    const block = apiKeysSrc.slice(idx, idx + 700);
     expect(block).toContain('FROM user_sessions WHERE user_id = ?');
     expect(block).toContain('accountRevoked');
+  });
+
+  it('/api/aichat はaichatAuthMiddlewareでAPIキーまたはセッションJWTのどちらでも認証できる(他エンドポイントはauthMiddlewareのまま)', () => {
+    expect(src).toContain("app.post('/api/aichat', aichatAuthMiddleware,");
+    expect(src).toContain("app.get('/api/protected', authMiddleware,");
   });
 
   it('migration 0103 で api_keys テーブルが作成される(生キーではなくkey_hashのみ保存)', () => {

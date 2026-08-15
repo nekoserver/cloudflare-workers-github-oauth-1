@@ -9,7 +9,7 @@ import { createJWT, JWTPayload, extractBearerToken } from './utils/jwt';
 // NOTE: レートリミットはCloudflare WAFのRate Limiting Rulesで設定することを推奨します
 // Cloudflare Workersはステートレスなため、アプリ内でのレートリミットには
 // Durable ObjectsやKVなどの外部ストアが必要です
-import { authMiddleware, optionalAuthMiddleware } from './middleware/auth';
+import { authMiddleware, optionalAuthMiddleware, aichatAuthMiddleware } from './middleware/auth';
 import { getSessionExpiredPage } from './views/session-expired';
 import { getLoginPage } from './views/login';
 import { getWelcomePage } from './views/welcome';
@@ -114,8 +114,9 @@ import {
   isApiKeyToken,
   resolveApiKeyExpiryDays,
   computeApiKeyExpiresAt,
-  evaluateApiKeyRow,
-  type ApiKeyRow,
+  checkApiKeyAuth,
+  touchApiKeyLastUsed,
+  type ApiKeyDb,
 } from './utils/apiKeys';
 import { listD1Databases, getD1Tables } from './utils/cloudflareApi';
 import { validateRevokeRequest } from './utils/revoke';
@@ -3463,24 +3464,10 @@ app.get('/', async (c) => {
       return c.json({ loggedIn: false, reason: 'db_unavailable' }, 500);
     }
     try {
-      const keyHash = await hashApiKey(bearerToken);
-      const row = await db.prepare(
-        'SELECT id, user_id, label, expires_at, revoked_at FROM api_keys WHERE key_hash = ?'
-      ).bind(keyHash).first<ApiKeyRow>();
-
-      let accountRevoked = false;
-      if (row) {
-        const sessionRow = await db.prepare(
-          'SELECT revoked_at FROM user_sessions WHERE user_id = ?'
-        ).bind(row.user_id).first<{ revoked_at: string | null }>();
-        accountRevoked = !!sessionRow?.revoked_at;
-      }
-
-      const result = evaluateApiKeyRow(row ?? null, new Date(), accountRevoked);
+      const result = await checkApiKeyAuth(db as unknown as ApiKeyDb, bearerToken, new Date());
       if (result.valid) {
         c.executionCtx.waitUntil(
-          db.prepare('UPDATE api_keys SET last_used_at = ? WHERE key_hash = ?')
-            .bind(new Date().toISOString(), keyHash).run().catch(() => {})
+          touchApiKeyLastUsed(db as unknown as ApiKeyDb, bearerToken).catch(() => {})
         );
         return c.json({ loggedIn: true });
       }
@@ -4136,7 +4123,7 @@ const AICHAT_ALLOWED_MODELS = new Set([
   '@cf/meta/llama-4-scout-17b-16e-instruct',
 ]);
 
-app.post('/api/aichat', authMiddleware, async (c) => {
+app.post('/api/aichat', aichatAuthMiddleware, async (c) => {
   const user = c.get('user');
   let body: { message?: string; model?: string; systemPromptMode?: string; source?: string; image?: string; preferMoondream?: boolean };
   try {

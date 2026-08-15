@@ -105,3 +105,46 @@ export function evaluateApiKeyRow(
   if (accountRevoked) return { valid: false, reason: 'account_revoked' };
   return { valid: true, userId: row.user_id };
 }
+
+/**
+ * D1Database(Cloudflare Workers)のうち、APIキー検証に必要な最小限の形だけを
+ * 表す構造的インターフェース。テストではこの形を満たすモックを渡せる。
+ */
+export interface ApiKeyDb {
+  prepare(sql: string): {
+    bind(...args: unknown[]): {
+      first<T = Record<string, unknown>>(): Promise<T | null>;
+      run(): Promise<unknown>;
+    };
+  };
+}
+
+/**
+ * Bearerトークン(APIキー)を実際にDBに照合し、有効性を判定する。
+ * GET / のログイン判定と /api/aichat のAPIキー認証の両方から呼び出され、
+ * 同じ判定ロジック(キー自体の失効/期限切れ + 発行者アカウントの無効化)を共有する
+ * (同じSQLをコピペで重複させない)。
+ */
+export async function checkApiKeyAuth(db: ApiKeyDb, bearerToken: string, now: Date): Promise<ApiKeyCheckResult> {
+  const keyHash = await hashApiKey(bearerToken);
+  const row = await db.prepare(
+    'SELECT id, user_id, label, expires_at, revoked_at FROM api_keys WHERE key_hash = ?'
+  ).bind(keyHash).first<ApiKeyRow>();
+
+  let accountRevoked = false;
+  if (row) {
+    const sessionRow = await db.prepare(
+      'SELECT revoked_at FROM user_sessions WHERE user_id = ?'
+    ).bind(row.user_id).first<{ revoked_at: string | null }>();
+    accountRevoked = !!sessionRow?.revoked_at;
+  }
+
+  return evaluateApiKeyRow(row ?? null, now, accountRevoked);
+}
+
+/** APIキーの最終使用時刻(last_used_at)を更新する(fire-and-forget想定)。 */
+export async function touchApiKeyLastUsed(db: ApiKeyDb, bearerToken: string): Promise<void> {
+  const keyHash = await hashApiKey(bearerToken);
+  await db.prepare('UPDATE api_keys SET last_used_at = ? WHERE key_hash = ?')
+    .bind(new Date().toISOString(), keyHash).run();
+}

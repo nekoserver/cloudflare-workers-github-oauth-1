@@ -9,7 +9,10 @@ import {
   resolveApiKeyExpiryDays,
   computeApiKeyExpiresAt,
   evaluateApiKeyRow,
+  checkApiKeyAuth,
+  touchApiKeyLastUsed,
   type ApiKeyRow,
+  type ApiKeyDb,
 } from './apiKeys';
 
 // 対象: 新設予定のAPIキー管理機能(トップページのAPIキーによるログイン判定、
@@ -185,5 +188,80 @@ describe('evaluateApiKeyRow', () => {
   it('無期限・未revoke・アカウントも無効化されていない場合は有効', () => {
     const result = evaluateApiKeyRow(baseRow, now, false);
     expect(result).toEqual({ valid: true, userId: 'user1' });
+  });
+});
+
+// checkApiKeyAuth/touchApiKeyLastUsed 用の最小モックDB。
+// api_keys / user_sessions への実際のクエリ文字列は見ず、呼び出し順に
+// 決め打ちの行を返すことでモック地獄を避け、戻り値の組み合わせだけを検証する
+// (CLAUDE.mdルール15)。
+function createMockDb(rows: (Record<string, unknown> | null)[]): { db: ApiKeyDb; calls: string[] } {
+  const calls: string[] = [];
+  let callIndex = 0;
+  const db: ApiKeyDb = {
+    prepare(sql: string) {
+      calls.push(sql);
+      return {
+        bind() {
+          return {
+            async first<T>() {
+              const row = rows[callIndex++];
+              return (row ?? null) as T | null;
+            },
+            async run() {
+              callIndex++;
+              return { success: true };
+            },
+          };
+        },
+      };
+    },
+  };
+  return { db, calls };
+}
+
+describe('checkApiKeyAuth', () => {
+  const now = new Date('2026-08-15T00:00:00.000Z');
+
+  it('該当するapi_keys行が無ければnot_foundで無効(user_sessionsへは問い合わせない)', async () => {
+    const { db, calls } = createMockDb([null]);
+    const result = await checkApiKeyAuth(db, 'nkapi_missing', now);
+    expect(result).toEqual({ valid: false, reason: 'not_found' });
+    expect(calls).toHaveLength(1);
+  });
+
+  it('api_keys行が有効でuser_sessionsも無効化されていなければvalid', async () => {
+    const { db } = createMockDb([
+      { id: 'k1', user_id: 'user1', label: 'test', expires_at: null, revoked_at: null },
+      { revoked_at: null },
+    ]);
+    const result = await checkApiKeyAuth(db, 'nkapi_valid', now);
+    expect(result).toEqual({ valid: true, userId: 'user1' });
+  });
+
+  it('api_keys行は有効でもuser_sessions.revoked_atが設定されていればaccount_revokedで無効', async () => {
+    const { db } = createMockDb([
+      { id: 'k1', user_id: 'user1', label: 'test', expires_at: null, revoked_at: null },
+      { revoked_at: '2026-08-01T00:00:00.000Z' },
+    ]);
+    const result = await checkApiKeyAuth(db, 'nkapi_valid-but-account-revoked', now);
+    expect(result).toEqual({ valid: false, reason: 'account_revoked' });
+  });
+
+  it('api_keys行自体がrevoked_at済みならuser_sessionsを見るまでもなくrevokedで無効', async () => {
+    const { db } = createMockDb([
+      { id: 'k1', user_id: 'user1', label: 'test', expires_at: null, revoked_at: '2026-08-01T00:00:00.000Z' },
+    ]);
+    const result = await checkApiKeyAuth(db, 'nkapi_revoked', now);
+    expect(result).toEqual({ valid: false, reason: 'revoked' });
+  });
+});
+
+describe('touchApiKeyLastUsed', () => {
+  it('UPDATE文を1回発行する', async () => {
+    const { db, calls } = createMockDb([]);
+    await touchApiKeyLastUsed(db, 'nkapi_test');
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toContain('UPDATE api_keys SET last_used_at');
   });
 });
