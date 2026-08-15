@@ -229,7 +229,7 @@ describe('searchAichatMoondreamAnalyses', () => {
     expect(results).toHaveLength(0);
   });
 
-  it('ヒットした行は元のai_chat_sharesの質問・回答・画像を返す(プレビューモーダル表示用)', async () => {
+  it('ヒットした行は質問文・画像は元のai_chat_sharesから、回答文はMoondreamのanalysis_textを返す(プレビューモーダルに実際の画像分析結果を表示するため)', async () => {
     const db = setupDb();
     const dataUrl = 'data:image/png;base64,CCCC';
     insertImage(db, { id: 'img1', imageDataUrl: dataUrl });
@@ -237,7 +237,8 @@ describe('searchAichatMoondreamAnalyses', () => {
     insertMoondreamAnalysis(db, { shareId: 's1', imageId: 'img1', analysisText: '猫が写っています' });
     const { results } = await searchAichatMoondreamAnalyses(wrapD1(db), 'user1', '猫');
     expect(results[0].question).toBe('これは何の画像?');
-    expect(results[0].answer).toBe('これは猫の画像です');
+    expect(results[0].answer).toBe('猫が写っています');
+    expect(results[0].answer).not.toBe('これは猫の画像です');
     expect(results[0].image_data_url).toBe(dataUrl);
   });
 
