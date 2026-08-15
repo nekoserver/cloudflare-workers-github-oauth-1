@@ -38,6 +38,7 @@ export const VOLCANOES: VolcanoSite[] = [
   {id:'kelud',n:'クルード山',c:'インドネシア（ジャワ）',elev:1731,lastErupt:'2014年',lat:-7.93,lon:112.31},
   {id:'soputan',n:'ソプタン山',c:'インドネシア（スラウェシ）',elev:1784,lastErupt:'2016年',lat:1.11,lon:124.73},
   {id:'ijen',n:'イジェン山',c:'インドネシア（ジャワ）',elev:2799,lastErupt:'1999年',lat:-8.058,lon:114.242},
+  {id:'ibu',n:'イブ山',c:'インドネシア（北マルク・ハルマヘラ島）',elev:1325,lastErupt:'2026年（2018年12月から溶岩ドーム噴火が継続中）',lat:1.488,lon:127.630},
   {id:'pinatubo',n:'ピナトゥボ山',c:'フィリピン',elev:1486,lastErupt:'1991年（20世紀最大級）',lat:15.14,lon:120.35},
   {id:'mayon',n:'マヨン山',c:'フィリピン',elev:2463,lastErupt:'2023年',lat:13.26,lon:123.69},
   {id:'taal',n:'タール火山',c:'フィリピン',elev:311,lastErupt:'2020年',lat:14.01,lon:120.99},
