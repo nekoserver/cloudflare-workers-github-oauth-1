@@ -95,7 +95,7 @@ canvas:active { cursor:grabbing; }
 .detail-desc { font-size:12px; color:#c9d1d9; line-height:1.6; margin-top:10px; padding-top:10px; border-top:1px solid #21262d; }
 .spd-row { padding:8px 10px 6px; border-bottom:1px solid #21262d; flex-shrink:0; }
 .spd-label { font-size:10px; font-weight:700; color:#f78166; text-transform:uppercase; letter-spacing:.5px; margin-bottom:4px; }
-.vol-mk { position:absolute; transform:translate(-50%,-50%); line-height:1; font-size:14px; pointer-events:auto; cursor:pointer; user-select:none; -webkit-user-select:none; filter:drop-shadow(0 1px 3px rgba(0,0,0,0.9)); }
+.vol-mk { position:absolute; transform:translate(-50%,-50%); line-height:1; font-size:14px; pointer-events:auto; cursor:pointer; user-select:none; -webkit-user-select:none; filter:drop-shadow(0 1px 3px rgba(0,0,0,0.9)); min-width:32px; min-height:32px; display:flex; align-items:center; justify-content:center; touch-action:manipulation; }
 .vol-mk.active { font-size:18px; }
 #vol-tooltip { position:fixed; background:rgba(13,17,23,0.97); border:1px solid #ff9500; border-radius:8px; padding:0; font-size:12px; color:#e6edf3; min-width:200px; max-width:280px; pointer-events:none; opacity:0; transition:opacity .15s; z-index:65; transform:translate(-50%,-110%); line-height:1.7; }
 #vol-tooltip.pinned { pointer-events:auto; transform:none; transition:opacity .15s; cursor:grab; user-select:none; }
