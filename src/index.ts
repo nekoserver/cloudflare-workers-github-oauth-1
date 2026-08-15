@@ -4067,6 +4067,7 @@ const AICHAT_ALLOWED_MODELS = new Set([
   '@cf/google/gemma-4-26b-a4b-it',
   '@cf/google/gemma-3-12b-it',
   '@cf/meta/llama-4-scout-17b-16e-instruct',
+  '@cf/zai-org/glm-5.2',
 ]);
 
 app.post('/api/aichat', authMiddleware, async (c) => {
