@@ -4442,9 +4442,10 @@ export async function searchAiChatSharesWithImage(
  * /aichat-image-gallery ページの検索対象ドロップダウンで「moondream3.1」を
  * 選んだ場合用。ai_chat_shares の質問文・回答文ではなく、
  * aichat_moondream_analyses.analysis_text(Moondreamの画像分析結果)を
- * キーワード検索する。ヒットした行は対応する ai_chat_shares(質問・回答・画像)を
- * 一緒に返すことで、プレビューモーダル側は searchAiChatSharesWithImage と
- * 同じ形(質問/回答バブル)でそのまま表示できる。
+ * キーワード検索する。プレビューモーダルにも実際にMoondreamが出力した
+ * analysis_textを表示できるよう、answerフィールドはs.answer(元の会話の回答文、
+ * 例えばllama-4の回答)ではなくm.analysis_textを返す(質問文questionと画像は
+ * 引き続きai_chat_shares/aichat_imagesから取得する)。
  */
 export async function searchAichatMoondreamAnalyses(
   db: D1Like,
@@ -4457,7 +4458,7 @@ export async function searchAichatMoondreamAnalyses(
   const normalized = q.replace(/[・･]/g, '・');
   const rows = await db
     .prepare(
-      `SELECT s.id, s.user_hash, s.question, s.answer, s.model, s.created_at,
+      `SELECT s.id, s.user_hash, s.question, m.analysis_text AS answer, m.model, s.created_at,
               COALESCE(img.image_data_url, s.image_data_url) AS image_data_url
        FROM aichat_moondream_analyses m
        JOIN ai_chat_shares s ON s.id = m.share_id AND s.user_id = m.user_id
