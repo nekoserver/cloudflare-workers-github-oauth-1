@@ -4,6 +4,7 @@ import {
   generateApiKeySecret,
   hashApiKey,
   maskApiKey,
+  truncateKeyDisplay,
   isApiKeyToken,
   resolveApiKeyExpiryDays,
   computeApiKeyExpiresAt,
@@ -74,6 +75,27 @@ describe('maskApiKey', () => {
     const masked = maskApiKey(raw);
     const secretTail = raw.slice(-16);
     expect(masked).not.toContain(secretTail);
+  });
+});
+
+describe('truncateKeyDisplay', () => {
+  it('偶数長の文字列は前半ちょうど半分を返す', () => {
+    expect(truncateKeyDisplay('abcdefgh')).toBe('abcd');
+  });
+
+  it('奇数長の文字列は切り上げで前半に含める(中央の1文字は残す)', () => {
+    expect(truncateKeyDisplay('abcde')).toBe('abc');
+  });
+
+  it('maskApiKeyの出力(nkapi_プレフィックス+マスク済み文字列)に対しても前半のみ返す', () => {
+    const masked = maskApiKey(API_KEY_PREFIX + 'ab12cd34ef56gh78ij90kl12mn34op56');
+    const truncated = truncateKeyDisplay(masked);
+    expect(truncated.length).toBe(Math.ceil(masked.length / 2));
+    expect(masked.startsWith(truncated)).toBe(true);
+  });
+
+  it('空文字列を渡しても例外を投げず空文字列を返す', () => {
+    expect(truncateKeyDisplay('')).toBe('');
   });
 });
 

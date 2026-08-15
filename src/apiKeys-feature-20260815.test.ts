@@ -79,12 +79,64 @@ describe('🔑キー管理ページ(/api-keys)のHTML', () => {
   it('一覧描画時にラベルやプレフィックスをエスケープしている(XSS対策)', () => {
     expect(html).toContain('function escapeHtmlClient(s)');
     expect(html).toContain('escapeHtmlClient(item.label)');
-    expect(html).toContain('escapeHtmlClient(item.key_prefix)');
+    expect(html).toContain('escapeHtmlClient(displayKey)');
   });
 
   it('失効ボタンのonclickは\\\'エスケープではなく&#39;エンティティを使う(CLAUDE.mdルール29)', () => {
-    expect(html).not.toMatch(/revokeApiKey\(\\'/);
-    expect(html).toContain('revokeApiKey(&#39;');
+    expect(html).not.toMatch(/requestRevoke\(\\'/);
+    expect(html).toContain('requestRevoke(&#39;');
+  });
+
+  it('一覧表示のキーはtruncateKeyDisplayと同じロジック(前半のみ)で切り詰められる', () => {
+    expect(html).toContain('function truncateKeyDisplayClient(keyPrefix)');
+    expect(html).toContain('var half = Math.ceil(keyPrefix.length / 2)');
+    expect(html).toContain('return keyPrefix.slice(0, half)');
+  });
+
+  it('キー表示はテキストエリアに埋め込まれ、右側にコピーボタン・失効ボタンが並ぶ', () => {
+    expect(html).toContain('class="key-textarea');
+    expect(html).toContain('readonly');
+    expect(html).toContain('onclick="copyKeyText(this)"');
+    expect(html).toContain('📋 コピー');
+    expect(html).toContain('🗑️ 失効');
+  });
+
+  it('コピーボタンはClipboard APIでテキストエリアの内容をコピーし、失敗時はフォールバックする', () => {
+    expect(html).toContain('function copyKeyText(btn)');
+    expect(html).toContain("querySelector('.key-textarea')");
+    expect(html).toContain('navigator.clipboard.writeText(text)');
+    expect(html).toContain('function fallbackCopy(textarea)');
+  });
+
+  it('失効は最上位レイヤーの確認モーダル(いいえ/はい)を経由し、confirm()は使わない', () => {
+    expect(html).toContain('id="revokeConfirmModal"');
+    expect(html).toContain('このキーの権限を削除しますか');
+    expect(html).toContain('>いいえ</button>');
+    expect(html).toContain('onclick="confirmRevoke()">はい</button>');
+    expect(html).not.toContain('confirm(\'このAPIキーを失効させますか');
+  });
+
+  it('確認モーダルはgetNextZ()で動的にz-indexを算出してから表示する(CLAUDE.mdルール26)', () => {
+    expect(html).toContain('function getNextZ()');
+    expect(html).toContain("staticZDefaults = { rawKeyModal: 2000, revokeConfirmModal: 2000 }");
+    const idx = html.indexOf('function requestRevoke(id)');
+    const block = html.slice(idx, idx + 300);
+    expect(block).toContain("modal.style.zIndex = String(getNextZ())");
+    expect(block).toContain("modal.classList.add('show')");
+  });
+
+  it('確認モーダルで「はい」を押したときのみ失効APIを呼び、対象IDは保留状態(pendingRevokeId)経由で受け渡す', () => {
+    expect(html).toContain('var pendingRevokeId = null');
+    expect(html).toContain('function confirmRevoke()');
+    const idx = html.indexOf('function confirmRevoke()');
+    const block = html.slice(idx, idx + 300);
+    expect(block).toContain('/revoke');
+  });
+
+  it('ページ読み込み時に失効済みキーはテキストエリアの背景色を薄ピンクにするクラスが付与される', () => {
+    expect(html).toContain('key-revoked-bg');
+    expect(html).toContain("(revoked ? ' key-revoked-bg' : '')");
+    expect(html).toContain('#ffd6e0');
   });
 });
 
