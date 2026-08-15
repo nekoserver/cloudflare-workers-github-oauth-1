@@ -37,6 +37,15 @@ export function maskApiKey(rawKey: string): string {
   return `${API_KEY_PREFIX}${visible}${'*'.repeat(Math.max(0, body.length - visible.length))}`;
 }
 
+/**
+ * 🔑キー管理ページの一覧表示で、マスク済みキー(key_prefix)がさらに長すぎるため、
+ * 前半だけを残して切り詰める(奇数長は切り上げで前半に含める)。
+ */
+export function truncateKeyDisplay(keyPrefix: string): string {
+  const half = Math.ceil(keyPrefix.length / 2);
+  return keyPrefix.slice(0, half);
+}
+
 /** Authorizationヘッダのトークンが(セッションJWTではなく)APIキー形式かどうか判定する。 */
 export function isApiKeyToken(token: string): boolean {
   return typeof token === 'string' && token.startsWith(API_KEY_PREFIX);

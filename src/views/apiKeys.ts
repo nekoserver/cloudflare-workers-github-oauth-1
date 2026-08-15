@@ -91,7 +91,19 @@ export function getApiKeysPage(user: { name?: string; username: string }): strin
     .status-revoked { background: var(--danger-color); color: white; }
     .status-expired { background: #a0a0a0; color: white; }
     .empty-row td { text-align: center; color: var(--text-muted); padding: 24px; }
-    .key-prefix { font-family: monospace; font-size: 12px; }
+    .key-cell { display: flex; align-items: center; gap: 6px; }
+    .key-textarea {
+      font-family: monospace; font-size: 12px; resize: none; overflow: hidden;
+      width: 160px; height: 32px; padding: 6px 8px; border: 1px solid var(--input-border);
+      border-radius: 6px; background: var(--input-bg); color: var(--text-secondary);
+    }
+    .key-textarea.key-revoked-bg { background: #ffd6e0; color: #7a1f34; }
+    [data-theme="dark"] .key-textarea.key-revoked-bg { background: #4a1c28; color: #ffb3c6; }
+    .icon-btn {
+      background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 6px;
+      padding: 6px 10px; font-size: 12px; cursor: pointer; color: var(--text-secondary); flex-shrink: 0;
+    }
+    .icon-btn:hover { background: var(--dropdown-hover); }
     .back-btn {
       background: var(--accent-color); color: white; border: none; border-radius: 8px;
       padding: 12px 24px; font-size: 14px; font-weight: 600; cursor: pointer;
@@ -100,7 +112,7 @@ export function getApiKeysPage(user: { name?: string; username: string }): strin
     .back-btn:hover { background: var(--accent-hover); }
     .modal-overlay {
       display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5);
-      align-items: center; justify-content: center; z-index: 2000;
+      align-items: center; justify-content: center;
     }
     .modal-overlay.show { display: flex; }
     .modal-box { background: var(--card-bg); border-radius: 12px; padding: 28px; max-width: 520px; width: 90%; }
@@ -172,11 +184,10 @@ export function getApiKeysPage(user: { name?: string; username: string }): strin
             <th>発行日</th>
             <th>有効期限</th>
             <th>最終使用</th>
-            <th></th>
           </tr>
         </thead>
         <tbody id="apiKeyTableBody">
-          <tr class="empty-row"><td colspan="7">読み込み中...</td></tr>
+          <tr class="empty-row"><td colspan="6">読み込み中...</td></tr>
         </tbody>
       </table>
 
@@ -191,6 +202,16 @@ export function getApiKeysPage(user: { name?: string; username: string }): strin
       <div class="raw-key-box" id="rawKeyText"></div>
       <div class="modal-actions">
         <button class="btn btn-primary" onclick="closeRawKeyModal()">閉じる</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="revokeConfirmModal">
+    <div class="modal-box">
+      <h3>🗑️ このキーの権限を削除しますか</h3>
+      <div class="modal-actions">
+        <button class="btn" onclick="closeRevokeConfirmModal()">いいえ</button>
+        <button class="btn btn-danger" style="background:var(--danger-color);color:white;border:none" onclick="confirmRevoke()">はい</button>
       </div>
     </div>
   </div>
@@ -213,6 +234,31 @@ export function getApiKeysPage(user: { name?: string; username: string }): strin
       });
     }
 
+    // 一覧表示のキーはただでさえマスク済み(nkapi_+先頭8文字+*)で長いため、
+    // さらに前半だけを残して表示する(src/utils/apiKeys.ts の
+    // truncateKeyDisplay と同じロジック)。
+    function truncateKeyDisplayClient(keyPrefix) {
+      var half = Math.ceil(keyPrefix.length / 2);
+      return keyPrefix.slice(0, half);
+    }
+
+    function getNextZ() {
+      var max = 100;
+      document.querySelectorAll('[style*="z-index"]').forEach(function(el) {
+        var z = parseInt(el.style.zIndex, 10);
+        if (!isNaN(z) && z < 9000 && z > max) max = z;
+      });
+      var staticZDefaults = { rawKeyModal: 2000, revokeConfirmModal: 2000 };
+      Object.keys(staticZDefaults).forEach(function(id) {
+        var el = document.getElementById(id);
+        if (el && el.classList.contains('show')) {
+          var z = parseInt(el.style.zIndex, 10) || staticZDefaults[id];
+          if (z > max) max = z;
+        }
+      });
+      return max + 100;
+    }
+
     function formatStatus(item) {
       if (item.revoked_at) return '<span class="status-badge status-revoked">失効済み</span>';
       if (item.expires_at && new Date(item.expires_at).getTime() <= Date.now()) {
@@ -224,21 +270,43 @@ export function getApiKeysPage(user: { name?: string; username: string }): strin
     function renderApiKeyTable(keys) {
       var body = document.getElementById('apiKeyTableBody');
       if (!keys || keys.length === 0) {
-        body.innerHTML = '<tr class="empty-row"><td colspan="7">まだAPIキーがありません</td></tr>';
+        body.innerHTML = '<tr class="empty-row"><td colspan="6">まだAPIキーがありません</td></tr>';
         return;
       }
       body.innerHTML = keys.map(function(item) {
         var revoked = !!item.revoked_at;
+        var displayKey = truncateKeyDisplayClient(item.key_prefix);
         return '<tr>' +
           '<td>' + escapeHtmlClient(item.label) + '</td>' +
-          '<td class="key-prefix">' + escapeHtmlClient(item.key_prefix) + '</td>' +
+          '<td><div class="key-cell">' +
+            '<textarea class="key-textarea' + (revoked ? ' key-revoked-bg' : '') + '" readonly>' + escapeHtmlClient(displayKey) + '</textarea>' +
+            '<button class="icon-btn" onclick="copyKeyText(this)">📋 コピー</button>' +
+            '<button class="icon-btn" ' + (revoked ? 'disabled' : '') + ' onclick="requestRevoke(&#39;' + item.id + '&#39;)">🗑️ 失効</button>' +
+          '</div></td>' +
           '<td>' + formatStatus(item) + '</td>' +
           '<td>' + escapeHtmlClient(item.created_at) + '</td>' +
           '<td>' + (item.expires_at ? escapeHtmlClient(item.expires_at) : '無期限') + '</td>' +
           '<td>' + (item.last_used_at ? escapeHtmlClient(item.last_used_at) : '未使用') + '</td>' +
-          '<td><button class="btn-danger" ' + (revoked ? 'disabled' : '') + ' onclick="revokeApiKey(&#39;' + item.id + '&#39;)">失効</button></td>' +
           '</tr>';
       }).join('');
+    }
+
+    function copyKeyText(btn) {
+      var textarea = btn.parentElement.querySelector('.key-textarea');
+      if (!textarea) return;
+      var text = textarea.value;
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).catch(function() { fallbackCopy(textarea); });
+      } else {
+        fallbackCopy(textarea);
+      }
+    }
+
+    function fallbackCopy(textarea) {
+      textarea.removeAttribute('readonly');
+      textarea.select();
+      try { document.execCommand('copy'); } catch (e) { /* コピー失敗は無視 */ }
+      textarea.setAttribute('readonly', 'readonly');
     }
 
     function loadApiKeys() {
@@ -247,7 +315,7 @@ export function getApiKeysPage(user: { name?: string; username: string }): strin
         .then(function(data) { renderApiKeyTable(data.keys || []); })
         .catch(function() {
           document.getElementById('apiKeyTableBody').innerHTML =
-            '<tr class="empty-row"><td colspan="7">読み込みに失敗しました</td></tr>';
+            '<tr class="empty-row"><td colspan="6">読み込みに失敗しました</td></tr>';
         });
     }
 
@@ -281,8 +349,24 @@ export function getApiKeysPage(user: { name?: string; username: string }): strin
         .catch(function() { alert('APIキーの発行に失敗しました'); });
     }
 
-    function revokeApiKey(id) {
-      if (!confirm('このAPIキーを失効させますか?この操作は取り消せません。')) return;
+    var pendingRevokeId = null;
+
+    function requestRevoke(id) {
+      pendingRevokeId = id;
+      var modal = document.getElementById('revokeConfirmModal');
+      modal.style.zIndex = String(getNextZ());
+      modal.classList.add('show');
+    }
+
+    function closeRevokeConfirmModal() {
+      pendingRevokeId = null;
+      document.getElementById('revokeConfirmModal').classList.remove('show');
+    }
+
+    function confirmRevoke() {
+      var id = pendingRevokeId;
+      closeRevokeConfirmModal();
+      if (!id) return;
       fetch('/api/api-keys/' + encodeURIComponent(id) + '/revoke', {
         method: 'POST',
         credentials: 'same-origin',
@@ -300,7 +384,9 @@ export function getApiKeysPage(user: { name?: string; username: string }): strin
 
     function showRawKeyModal(rawKey) {
       document.getElementById('rawKeyText').textContent = rawKey;
-      document.getElementById('rawKeyModal').classList.add('show');
+      var modal = document.getElementById('rawKeyModal');
+      modal.style.zIndex = String(getNextZ());
+      modal.classList.add('show');
     }
 
     function closeRawKeyModal() {
