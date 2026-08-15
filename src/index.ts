@@ -5,7 +5,7 @@
 
 import { Hono, type Context } from 'hono';
 import { cors } from 'hono/cors';
-import { createJWT, JWTPayload } from './utils/jwt';
+import { createJWT, JWTPayload, extractBearerToken } from './utils/jwt';
 // NOTE: レートリミットはCloudflare WAFのRate Limiting Rulesで設定することを推奨します
 // Cloudflare Workersはステートレスなため、アプリ内でのレートリミットには
 // Durable ObjectsやKVなどの外部ストアが必要です
@@ -16,6 +16,7 @@ import { getWelcomePage } from './views/welcome';
 import { getAiChatPage, DEFAULT_AICHAT_MODELS } from './views/aichat';
 import { getAiChatSharePage, getAiChatShareNotFoundPage } from './views/aichat-share';
 import { getSettingsPage } from './views/settings';
+import { getApiKeysPage } from './views/apiKeys';
 import { getRepositoriesPage } from './views/repositories';
 import { getUserInfoPage } from './views/userinfo';
 import { getMarkdownPreviewPage } from './views/markdown-preview';
@@ -106,6 +107,16 @@ import {
 } from './utils/moondreamAnalyze';
 import { extractFunctionSource } from './utils/extractFunctionSource';
 import { sha256Hex } from './utils/contentHash';
+import {
+  generateApiKeySecret,
+  hashApiKey,
+  maskApiKey,
+  isApiKeyToken,
+  resolveApiKeyExpiryDays,
+  computeApiKeyExpiresAt,
+  evaluateApiKeyRow,
+  type ApiKeyRow,
+} from './utils/apiKeys';
 import { listD1Databases, getD1Tables } from './utils/cloudflareApi';
 import { validateRevokeRequest } from './utils/revoke';
 import { HERITAGE_FLAG_MAP, HERITAGE_COUNTRY_MAP, HERITAGE_LIST } from './data/heritageList';
@@ -230,6 +241,7 @@ export const STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
   { name: 'moondream_analyze_log', migration: '0096', description: '/api/moondream-analyze呼び出しの成否ログ(モデル名・プロンプト長・画像バイト数・失敗時のエラー内容)', syncPolicy: 'auto' },
   { name: 'aichat_images', migration: '0100', description: 'AIチャットの画像添付を正規化して保存するテーブル。同一ユーザー内で同一内容(content_hash)の画像は再登録せず既存行のIDを再利用する(重複保存防止)', syncPolicy: 'auto' },
   { name: 'aichat_moondream_analyses', migration: '0102', description: 'AIチャットの画像添付投稿でMoondream(moondream3.1-9B-A2B)に問い合わせた画像分析結果を、回答文(share_id)・画像(image_id)に紐づけて保存する', syncPolicy: 'auto' },
+  { name: 'api_keys', migration: '0103', description: 'トップページのログイン判定に使うAPIキー(🔑キー管理ページで発行)。生キーは保存せずSHA-256ハッシュのみ保存し、失効(revoked_at)・有効期限(expires_at)を個別に管理する', syncPolicy: 'auto' },
 ];
 
 const REQUIRED_STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
@@ -1473,6 +1485,19 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_aichat_images_user_hash ON aichat_images(u
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_aichat_moondream_analyses_share ON aichat_moondream_analyses(share_id);
 CREATE INDEX IF NOT EXISTS idx_aichat_moondream_analyses_image ON aichat_moondream_analyses(image_id);`,
+  '0103': `CREATE TABLE IF NOT EXISTS api_keys (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  label TEXT NOT NULL,
+  key_hash TEXT NOT NULL,
+  key_prefix TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  expires_at TEXT,
+  revoked_at TEXT,
+  last_used_at TEXT
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_api_keys_key_hash ON api_keys(key_hash);
+CREATE INDEX IF NOT EXISTS idx_api_keys_user_id ON api_keys(user_id);`,
 };
 
 async function ensureGroupTable(db: D1Database): Promise<void> {
@@ -1611,6 +1636,7 @@ export interface ColumnKeyInfo {
 
 export const TABLE_COLUMN_KEYS: Record<string, ColumnKeyInfo> = {
   user_sessions: { id: 'pk', user_id: 'uk', current_workspace_id: 'fk', revoked_at: 'idx' },
+  api_keys: { id: 'pk', user_id: 'fk+idx', key_hash: 'uk' },
   teams: { id: 'pk' },
   workspaces: { id: 'pk', team_id: 'fk' },
   team_members: { team_id: 'pk+fk', user_id: 'pk+fk' },
@@ -1739,7 +1765,7 @@ export function getFilterableColumns(tableName: string): string[] {
  * table_catalog がDBに存在しない場合のフォールバック。
  */
 export const TABLE_GROUP_MAP: Record<string, string> = {
-  user_sessions: 'auth', teams: 'auth', workspaces: 'auth', team_members: 'auth',
+  user_sessions: 'auth', teams: 'auth', workspaces: 'auth', team_members: 'auth', api_keys: 'auth',
   commit_calendar_cache: 'commit', commit_list_cache: 'commit', cache_stats: 'commit',
   commit_search_history: 'commit', commit_search_repo_stats: 'commit', commit_search_hit_details: 'commit', commit_search_keyword_labels: 'commit', cloudflare_setup_pending: 'commit',
   commit_stats_cache: 'commit',
@@ -1898,6 +1924,7 @@ export const COLUMN_FK_TARGETS: Record<string, Record<string, string>> = {
   user_sessions: { current_workspace_id: 'workspaces' },
   workspaces: { team_id: 'teams' },
   team_members: { team_id: 'teams', user_id: 'user_sessions' },
+  api_keys: { user_id: 'user_sessions' },
 
   // ========================================================================
   // user_id の論理FK（user_sessions.user_id が参照先）
@@ -3425,7 +3452,47 @@ const GITHUB_OAUTH_SCOPE = 'read:user user:email repo';
 /**
  * トップページ - GitHub OAuth ログインページ
  */
-app.get('/', (c) => {
+app.get('/', async (c) => {
+  // APIキー(nkapi_...)がAuthorizationヘッダに付与されている場合は、
+  // ログインページを返さずキーの有効性(revoke/期限切れ/発行者アカウントの
+  // 無効化)を判定してJSONで返す(🔑キー管理ページで発行したキーの検証用)。
+  const bearerToken = extractBearerToken(c.req.header('Authorization'));
+  if (bearerToken && isApiKeyToken(bearerToken)) {
+    const db = c.env.DB;
+    if (!db) {
+      return c.json({ loggedIn: false, reason: 'db_unavailable' }, 500);
+    }
+    try {
+      const keyHash = await hashApiKey(bearerToken);
+      const row = await db.prepare(
+        'SELECT id, user_id, label, expires_at, revoked_at FROM api_keys WHERE key_hash = ?'
+      ).bind(keyHash).first<ApiKeyRow>();
+
+      let accountRevoked = false;
+      if (row) {
+        const sessionRow = await db.prepare(
+          'SELECT revoked_at FROM user_sessions WHERE user_id = ?'
+        ).bind(row.user_id).first<{ revoked_at: string | null }>();
+        accountRevoked = !!sessionRow?.revoked_at;
+      }
+
+      const result = evaluateApiKeyRow(row ?? null, new Date(), accountRevoked);
+      if (result.valid) {
+        c.executionCtx.waitUntil(
+          db.prepare('UPDATE api_keys SET last_used_at = ? WHERE key_hash = ?')
+            .bind(new Date().toISOString(), keyHash).run().catch(() => {})
+        );
+        return c.json({ loggedIn: true });
+      }
+      return c.json({ loggedIn: false, reason: result.reason }, 401);
+    } catch (error) {
+      logger.error('API key login check failed', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+      return c.json({ loggedIn: false, reason: 'internal_error' }, 500);
+    }
+  }
+
   const clientId = c.env.GITHUB_CLIENT_ID;
 
   if (!clientId) {
@@ -9682,6 +9749,15 @@ app.get('/settings', authMiddleware, async (c) => {
 app.get('/auth-flow', authMiddleware, (c) => c.html(getAuthFlowPage()));
 
 /**
+ * 🔑キー管理ページ（認証が必要）
+ * トップページ(GET /)のAPIキーによるログイン判定に使うAPIキーの発行・失効を行う。
+ */
+app.get('/api-keys', authMiddleware, (c) => {
+  const user = c.get('user');
+  return c.html(getApiKeysPage({ name: user.name, username: user.sub }));
+});
+
+/**
  * ユーザー情報ページ（認証が必要）
  */
 app.get('/userinfo', authMiddleware, async (c) => {
@@ -14138,6 +14214,108 @@ app.get('/api/profile', authMiddleware, (c) => {
       expiresAt: new Date(user.exp * 1000).toISOString(),
     },
   });
+});
+
+/**
+ * APIキー一覧取得(🔑キー管理ページ用)。生キー・ハッシュ値は返さず、
+ * マスク済みのkey_prefixのみ返す。
+ */
+app.get('/api/api-keys', authMiddleware, async (c) => {
+  const user = c.get('user');
+  const db = c.env.DB;
+  if (!db) {
+    return c.json({ keys: [] });
+  }
+  try {
+    const rows = await db.prepare(
+      'SELECT id, label, key_prefix, created_at, expires_at, revoked_at, last_used_at FROM api_keys WHERE user_id = ? ORDER BY created_at DESC'
+    ).bind(user.sub).all<{
+      id: string; label: string; key_prefix: string; created_at: string;
+      expires_at: string | null; revoked_at: string | null; last_used_at: string | null;
+    }>();
+    return c.json({ keys: rows.results ?? [] });
+  } catch (error) {
+    logger.error('Failed to fetch api keys', {
+      userId: user.sub,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    return c.json({ error: 'APIキー一覧の取得に失敗しました' }, 500);
+  }
+});
+
+/**
+ * APIキー発行。生キーはこのレスポンスでのみ返し、DBにはSHA-256ハッシュのみ保存する
+ * (以降は再表示不可)。
+ */
+app.post('/api/api-keys', authMiddleware, async (c) => {
+  const user = c.get('user');
+  const db = c.env.DB;
+  if (!db) {
+    return c.json({ error: 'D1 is not configured' }, 500);
+  }
+  try {
+    const body = await c.req.json<{ label?: string; expiresInDays?: number | string | null }>();
+    const label = (body.label ?? '').trim();
+    if (!label) {
+      return c.json({ error: 'ラベルは必須です' }, 400);
+    }
+
+    const expiryDays = resolveApiKeyExpiryDays(body.expiresInDays ?? null);
+    const now = new Date();
+    const expiresAt = computeApiKeyExpiresAt(expiryDays, now);
+
+    const rawKey = generateApiKeySecret();
+    const keyHash = await hashApiKey(rawKey);
+    const keyPrefix = maskApiKey(rawKey);
+    const id = crypto.randomUUID();
+
+    await db.prepare(
+      'INSERT INTO api_keys (id, user_id, label, key_hash, key_prefix, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
+    ).bind(id, user.sub, label, keyHash, keyPrefix, now.toISOString(), expiresAt).run();
+
+    logger.info('Created api key', { userId: user.sub, keyId: id, label, expiresAt });
+    return c.json({
+      key: { id, label, keyPrefix, createdAt: now.toISOString(), expiresAt },
+      rawKey,
+    }, 201);
+  } catch (error) {
+    logger.error('Failed to create api key', {
+      userId: user.sub,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    return c.json({ error: 'APIキーの発行に失敗しました' }, 500);
+  }
+});
+
+/**
+ * APIキー失効。自分が発行したキーのみ失効できる(user_idで絞り込み)。
+ */
+app.post('/api/api-keys/:id/revoke', authMiddleware, async (c) => {
+  const user = c.get('user');
+  const db = c.env.DB;
+  if (!db) {
+    return c.json({ error: 'D1 is not configured' }, 500);
+  }
+  const keyId = c.req.param('id');
+  try {
+    const result = await db.prepare(
+      'UPDATE api_keys SET revoked_at = ? WHERE id = ? AND user_id = ? AND revoked_at IS NULL'
+    ).bind(new Date().toISOString(), keyId, user.sub).run();
+
+    if (!result.meta || result.meta.changes === 0) {
+      return c.json({ error: '対象のAPIキーが見つからないか、既に失効しています' }, 404);
+    }
+
+    logger.info('Revoked api key', { userId: user.sub, keyId });
+    return c.json({ message: 'APIキーを失効しました' });
+  } catch (error) {
+    logger.error('Failed to revoke api key', {
+      userId: user.sub,
+      keyId,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    return c.json({ error: 'APIキーの失効に失敗しました' }, 500);
+  }
 });
 
 /**
