@@ -109,6 +109,7 @@ export function getTsubuyakiPage(username: string): string {
           <a href="/aichat" class="dropdown-item">🤖 AI チャット</a>
           <a href="/repositories" class="dropdown-item">📦 リポジトリ</a>
           <a href="/settings" class="dropdown-item">⚙️ 設定</a>
+          <a href="/api-keys" class="dropdown-item">🔑 キー管理</a>
           <a href="/auth/switch" class="dropdown-item switch-account">🔄 別アカウントでログイン</a>
           <a href="/auth/logout" class="dropdown-item logout">🚪 ログアウト</a>
         </div>
