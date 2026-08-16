@@ -3494,7 +3494,8 @@ app.get('/', async (c) => {
     }, 500);
   }
 
-  return c.html(getLoginPage());
+  const returnTo = validateReturnTo(c.req.query('return_to'));
+  return c.html(getLoginPage(returnTo));
 });
 
 /**
@@ -8985,7 +8986,7 @@ app.get('/heritage-area', authMiddleware, async (c) => {
   const user = c.get('user');
   const userSession = await getUserSession(c.env.DB, user.sub);
   if (!userSession) {
-    return c.html(getSessionExpiredPage(), 403);
+    return c.html(getSessionExpiredPage(c.req.path), 403);
   }
   return c.html(getHeritageAreaPage());
 });
@@ -9763,7 +9764,7 @@ app.get('/kw-drilldown', authMiddleware, async (c) => {
   const user = c.get('user');
   const userSession = await getUserSession(c.env.DB, user.sub);
   if (!userSession) {
-    return c.html(getSessionExpiredPage(), 403);
+    return c.html(getSessionExpiredPage(c.req.path), 403);
   }
   return c.html(getKwDrilldownPage());
 });
@@ -9772,7 +9773,7 @@ app.get('/kw-architecture', authMiddleware, async (c) => {
   const user = c.get('user');
   const userSession = await getUserSession(c.env.DB, user.sub);
   if (!userSession) {
-    return c.html(getSessionExpiredPage(), 403);
+    return c.html(getSessionExpiredPage(c.req.path), 403);
   }
   return c.html(getKwArchitecturePage());
 });
@@ -9817,7 +9818,7 @@ app.get('/cf-dashboard', authMiddleware, async (c) => {
   const user = c.get('user');
   const userSession = await getUserSession(c.env.DB, user.sub);
   if (!userSession) {
-    return c.html(getSessionExpiredPage(), 403);
+    return c.html(getSessionExpiredPage(c.req.path), 403);
   }
   return c.html(getCfDashboardPage());
 });
@@ -9829,7 +9830,7 @@ app.get('/apis', authMiddleware, async (c) => {
   const user = c.get('user');
   const userSession = await getUserSession(c.env.DB, user.sub);
   if (!userSession) {
-    return c.html(getSessionExpiredPage(), 403);
+    return c.html(getSessionExpiredPage(c.req.path), 403);
   }
   return c.html(getApisPage());
 });
