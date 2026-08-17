@@ -3623,9 +3623,20 @@ export function getAiChatPage(user: {
       subqueriesListBody.innerHTML = html;
 
       subqueriesListBody.querySelectorAll('.kw-cat-summary-badge').forEach(function(sqCatEl) {
-        sqCatEl.classList.toggle('kw-cat-badge-active', !!sqSelectedCats[sqCatEl.dataset.catId]);
+        var catId = sqCatEl.dataset.catId;
+        var catColor = sqCatEl.dataset.catColor || '#6366f1';
+        // 大分類グループを選択中は、その大分類に属さない中分類カテゴリの
+        // 色を一時的に暗い色へ差し替え、属する中分類カテゴリ(元の色のまま)
+        // と一目で区別できるようにする(キーワード分類モーダルと同様)。
+        var isDimmed = !!sqSelectedGroupId && !sqSelectedCats[catId];
+        var displayColor = isDimmed ? KW_CAT_DIM_COLOR : catColor;
+        sqCatEl.style.borderColor = displayColor;
+        sqCatEl.style.color = displayColor;
+        sqCatEl.style.setProperty('--kw-pal-cat', displayColor);
+        sqCatEl.style.setProperty('--kw-pal-cat-bg', displayColor + '22');
+        sqCatEl.classList.toggle('kw-cat-badge-dimmed', isDimmed);
+        sqCatEl.classList.toggle('kw-cat-badge-active', !!sqSelectedCats[catId]);
         sqCatEl.addEventListener('click', function() {
-          var catId = sqCatEl.dataset.catId;
           if (sqSelectedCats[catId]) { delete sqSelectedCats[catId]; } else { sqSelectedCats[catId] = true; }
           renderSubqueriesList();
         });
