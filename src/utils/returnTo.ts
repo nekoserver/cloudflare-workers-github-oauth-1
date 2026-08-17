@@ -6,15 +6,11 @@
  * - プロトコル付き URL は拒否
  * - // で始まるパスは拒否（protocol-relative URL）
  * - パストラバーサルは拒否
- * - 許可リスト内のパスのみ受け入れる
+ *
+ * 許可対象は同一オリジンの相対パス全般とする（個別ページの許可リストは持たない）。
+ * 上記3チェックだけで外部ホストへのオープンリダイレクトは防げるため、
+ * 許可リストによる追加の安全性向上はない。
  */
-
-/** return_to として許可するパスのプレフィックス */
-const ALLOWED_RETURN_PREFIXES = [
-  '/repositories',
-  '/welcome',
-  '/settings',
-];
 
 /**
  * return_to パラメータを検証し、安全な値のみ返す
@@ -31,10 +27,6 @@ export function validateReturnTo(value: string | undefined | null): string | nul
 
   // パストラバーサルを拒否
   if (value.includes('..')) return null;
-
-  // 許可リスト内のパスプレフィックスに一致するか
-  const matches = ALLOWED_RETURN_PREFIXES.some((prefix) => value === prefix || value.startsWith(prefix + '?') || value.startsWith(prefix + '/'));
-  if (!matches) return null;
 
   return value;
 }

@@ -74,7 +74,7 @@ export async function authMiddleware(c: Context<{ Bindings: Bindings; Variables:
 
   if (!tokenInfo) {
     if (isBrowserRequest) {
-      return c.html(getSessionExpiredPage(), 401);
+      return c.html(getSessionExpiredPage(c.req.path), 401);
     }
     return c.json({ error: '認証が必要です' }, 401);
   }
@@ -101,7 +101,7 @@ export async function authMiddleware(c: Context<{ Bindings: Bindings; Variables:
       }).catch(() => { /* 通知失敗は無視 */ });
     }
     if (isBrowserRequest) {
-      return c.html(getSessionExpiredPage(), 401);
+      return c.html(getSessionExpiredPage(c.req.path), 401);
     }
     return c.json({ error: '無効なトークンです' }, 401);
   }
@@ -137,7 +137,7 @@ export async function authMiddleware(c: Context<{ Bindings: Bindings; Variables:
         clearHeaders.append('Set-Cookie', 'login_timestamp=; Path=/; Secure; SameSite=Lax; Max-Age=0');
         if (isBrowserRequest) {
           clearHeaders.set('Content-Type', 'text/html; charset=utf-8');
-          return new Response(getSessionExpiredPage(), { status: 401, headers: clearHeaders });
+          return new Response(getSessionExpiredPage(c.req.path), { status: 401, headers: clearHeaders });
         }
         clearHeaders.set('Content-Type', 'application/json; charset=utf-8');
         return new Response(JSON.stringify({ error: 'セッションが無効化されました' }), { status: 401, headers: clearHeaders });
@@ -164,7 +164,7 @@ export async function authMiddleware(c: Context<{ Bindings: Bindings; Variables:
 
       if (isBrowserRequest) {
         clearHeaders.set('Content-Type', 'text/html; charset=utf-8');
-        return new Response(getSessionExpiredPage(), {
+        return new Response(getSessionExpiredPage(c.req.path), {
           status: 401,
           headers: clearHeaders,
         });

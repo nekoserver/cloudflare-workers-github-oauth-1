@@ -512,6 +512,7 @@ void main() {
       <button class="canvas-ctrl-btn" id="btnStats">📊 内訳</button>
       <button class="canvas-ctrl-btn" id="btnCityStats">🌇 都市統計</button>
       <button class="canvas-ctrl-btn" id="btnBoxZoom">🔲 エリアズーム</button>
+      <button class="canvas-ctrl-btn" id="btnLandTap" title="陸地をタップするとその国の世界遺産一覧・国土を表示します">🗺️ 陸地タップ判定</button>
       <button class="canvas-ctrl-btn" id="btnRail">🚉 鉄道</button>
       <button class="canvas-ctrl-btn" id="btnF1">🏎️ F1</button>
       <button class="canvas-ctrl-btn" id="btnAirport">🛫 空路</button>
@@ -853,6 +854,48 @@ void main() {
     return out;
   }
 
+  // 陸地タップ判定用の点in多角形判定(レイキャスティング法、evenodd)。
+  // ring は unwrapRingLons と同じ考え方で経度を連続値にアンラップしてから判定する。
+  // 穴(内側のリング)を持つ多角形でも、全リングをevenoddで重ねることで
+  // 正しく「外側リング内かつ内側リング外」を判定できる(canvas の fill('evenodd')
+  // と同じロジック)。
+  function pointInRing(lon, lat, ring) {
+    var inside = false;
+    var lons = unwrapRingLons(ring);
+    var n = ring.length;
+    for (var i = 0, j = n - 1; i < n; j = i++) {
+      var xi = lons[i], yi = ring[i][1];
+      var xj = lons[j], yj = ring[j][1];
+      if (((yi > lat) !== (yj > lat)) && (lon < (xj - xi) * (lat - yi) / (yj - yi) + xi)) {
+        inside = !inside;
+      }
+    }
+    return inside;
+  }
+  function pointInPolygons(lon, lat, polygons) {
+    var inside = false;
+    polygons.forEach(function(poly) {
+      poly.forEach(function(ring) {
+        if (pointInRing(lon, lat, ring)) inside = !inside;
+      });
+    });
+    return inside;
+  }
+  // 日付変更線をまたぐ国の多角形は元データの経度がそのまま(-180〜180)なので、
+  // タップ地点の経度をそのまま/-360/+360の3通りで試し、いずれかで一致すれば
+  // その国とみなす(drawCountryBorderMaskの[-1,0,1]繰り返し描画と同じ発想)。
+  function findCountryAtLatLon(lat, lon) {
+    for (var i = 0; i < COUNTRY_BORDERS.length; i++) {
+      var entry = COUNTRY_BORDERS[i];
+      if (pointInPolygons(lon, lat, entry.polygons) ||
+          pointInPolygons(lon - 360, lat, entry.polygons) ||
+          pointInPolygons(lon + 360, lat, entry.polygons)) {
+        return entry.cc;
+      }
+    }
+    return null;
+  }
+
   // 帯状・線状のシリアル資産(pts を持つ世界遺産)を、国境マスクと同じ
   // 等距円筒図法キャンバスに折れ線として描く。活断層ページが LINE_STRIP で
   // 断層線を引くのと同じ考え方だが、このページの地球儀はマスクテクスチャを
@@ -1000,6 +1043,20 @@ void main() {
     btnBoxZoom.classList.toggle('active', boxZoomMode);
     btnBoxZoom.textContent = boxZoomMode ? '🔲 選択中…' : '🔲 エリアズーム';
     canvas.style.cursor = boxZoomMode ? 'crosshair' : '';
+  });
+
+  // 陸地タップ判定モード: ONの間だけ、地球儀上の何もない場所(マーカー以外)を
+  // タップすると点in多角形判定でその陸地の所属国を特定し、既存の国別世界遺産
+  // パネル(ch-overlay)を国境ハイライト付きで開く。常時判定すると負荷になるため
+  // (COUNTRY_BORDERSは約135ヶ国分の多角形を持つ)、既存のエリアズームモードと
+  // 同様にボタンでON/OFFできるモードとして切り出した。
+  var landTapMode = false;
+  var btnLandTap = document.getElementById('btnLandTap');
+  btnLandTap.addEventListener('click', function() {
+    landTapMode = !landTapMode;
+    btnLandTap.classList.toggle('active', landTapMode);
+    btnLandTap.textContent = landTapMode ? '🗺️ 陸地タップ判定中…' : '🗺️ 陸地タップ判定';
+    canvas.style.cursor = landTapMode ? 'help' : '';
   });
 
   function updateBoxOverlay() {
@@ -1755,7 +1812,8 @@ void main() {
     }, FLY_DUR + 100);
   }
 
-  canvas.addEventListener('mousedown',  function(e){ if(boxZoomMode){ boxDragging=true; bx0=e.clientX; by0=e.clientY; bxCur=bx0; byCur=by0; return; } drag=true; lx=e.clientX; ly=e.clientY; momentumY=0; momentumX=0; velY=0; velX=0; });
+  var mouseDownX = 0, mouseDownY = 0;
+  canvas.addEventListener('mousedown',  function(e){ mouseDownX=e.clientX; mouseDownY=e.clientY; if(boxZoomMode){ boxDragging=true; bx0=e.clientX; by0=e.clientY; bxCur=bx0; byCur=by0; return; } drag=true; lx=e.clientX; ly=e.clientY; momentumY=0; momentumX=0; velY=0; velX=0; });
   window.addEventListener('mouseup',    function(e){ if(boxDragging){ boxDragging=false; applyBoxZoom(e.clientX, e.clientY); return; } if(!drag)return; drag=false; applyMomentum(velY, velX); velY=0; velX=0; });
   window.addEventListener('mousemove',  function(e){ if(boxDragging){ bxCur=e.clientX; byCur=e.clientY; updateBoxOverlay(); return; } if(!drag)return; var dy=(e.clientX-lx)*0.008; var dx=(e.clientY-ly)*0.008; rotYv+=dy; velY=velY*0.4+dy*0.6; if(!axisLocked){rotXv=clampElev(rotXv+dx); velX=velX*0.4+dx*0.6;} lx=e.clientX; ly=e.clientY; });
   canvas.addEventListener('wheel',      function(e){ e.preventDefault(); zoom=Math.max(1.2,Math.min(10,zoom+e.deltaY*0.01)); },{passive:false});
@@ -4675,7 +4733,20 @@ void main() {
     updateProximityList();
   });
 
-  canvas.addEventListener('click', function() { hideTooltip(); stopAmericaTour(); stopEuropeTour(); stopAfricaTour(); });
+  canvas.addEventListener('click', function(e) {
+    hideTooltip(); stopAmericaTour(); stopEuropeTour(); stopAfricaTour();
+    if (landTapMode && !boxZoomMode) {
+      var moved = Math.hypot(e.clientX - mouseDownX, e.clientY - mouseDownY);
+      if (moved < 6 && !touchMoved) {
+        var rect = canvas.getBoundingClientRect();
+        var ll = screenToLatLon(e.clientX, e.clientY, rect);
+        if (ll) {
+          var cc = findCountryAtLatLon(ll.lat, ll.lon);
+          if (cc) showCountryHeritagePanel(cc);
+        }
+      }
+    }
+  });
 
   gl.enable(gl.DEPTH_TEST);
 

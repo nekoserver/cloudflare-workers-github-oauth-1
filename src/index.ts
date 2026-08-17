@@ -59,6 +59,7 @@ import { getGalaxyPage } from './views/galaxy';
 import { findNearbyCities } from './utils/worldCities';
 import { getAuthFlowPage } from './views/authFlow';
 import { getTsubuyakiPage } from './views/tsubuyaki';
+import { getSha256WasmPage } from './views/sha256Wasm';
 import { validateFreeText, buildFreeTextSlackMessage, handleTsubuyakiSlashCommand } from './utils/freeTextSlackPost';
 import { handleF1ScheduleSlashCommand } from './utils/f1ScheduleSlackPost';
 import { resolveNotifyConfig, isNotifyConfigured, sendNotification as dispatchNotification } from './utils/notifyDispatch';
@@ -3494,7 +3495,8 @@ app.get('/', async (c) => {
     }, 500);
   }
 
-  return c.html(getLoginPage());
+  const returnTo = validateReturnTo(c.req.query('return_to'));
+  return c.html(getLoginPage(returnTo));
 });
 
 /**
@@ -8981,11 +8983,16 @@ app.get('/heritage-access', authMiddleware, async (c) => {
   return c.html(getHeritageAccessPage(user.sub));
 });
 
+app.get('/sha256-wasm', authMiddleware, async (c) => {
+  const user = c.get('user');
+  return c.html(getSha256WasmPage(user.sub));
+});
+
 app.get('/heritage-area', authMiddleware, async (c) => {
   const user = c.get('user');
   const userSession = await getUserSession(c.env.DB, user.sub);
   if (!userSession) {
-    return c.html(getSessionExpiredPage(), 403);
+    return c.html(getSessionExpiredPage(c.req.path), 403);
   }
   return c.html(getHeritageAreaPage());
 });
@@ -9763,7 +9770,7 @@ app.get('/kw-drilldown', authMiddleware, async (c) => {
   const user = c.get('user');
   const userSession = await getUserSession(c.env.DB, user.sub);
   if (!userSession) {
-    return c.html(getSessionExpiredPage(), 403);
+    return c.html(getSessionExpiredPage(c.req.path), 403);
   }
   return c.html(getKwDrilldownPage());
 });
@@ -9772,7 +9779,7 @@ app.get('/kw-architecture', authMiddleware, async (c) => {
   const user = c.get('user');
   const userSession = await getUserSession(c.env.DB, user.sub);
   if (!userSession) {
-    return c.html(getSessionExpiredPage(), 403);
+    return c.html(getSessionExpiredPage(c.req.path), 403);
   }
   return c.html(getKwArchitecturePage());
 });
@@ -9817,7 +9824,7 @@ app.get('/cf-dashboard', authMiddleware, async (c) => {
   const user = c.get('user');
   const userSession = await getUserSession(c.env.DB, user.sub);
   if (!userSession) {
-    return c.html(getSessionExpiredPage(), 403);
+    return c.html(getSessionExpiredPage(c.req.path), 403);
   }
   return c.html(getCfDashboardPage());
 });
@@ -9829,7 +9836,7 @@ app.get('/apis', authMiddleware, async (c) => {
   const user = c.get('user');
   const userSession = await getUserSession(c.env.DB, user.sub);
   if (!userSession) {
-    return c.html(getSessionExpiredPage(), 403);
+    return c.html(getSessionExpiredPage(c.req.path), 403);
   }
   return c.html(getApisPage());
 });

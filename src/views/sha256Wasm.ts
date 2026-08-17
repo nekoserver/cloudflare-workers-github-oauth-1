@@ -1,0 +1,207 @@
+import { escapeHtml } from '../utils/html';
+import { getThemeCSS, getThemeInitScript, getThemeToggleCSS, getThemeToggleHTML, getThemeToggleScript } from '../utils/theme';
+
+export function getSha256WasmPage(username: string): string {
+  const safeUsername = escapeHtml(username);
+
+  return `<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SHA-256 (WASM) - Cloudflare Workers GitHub OAuth</title>
+  ${getThemeInitScript()}
+  <style>
+    ${getThemeCSS()}
+    ${getThemeToggleCSS()}
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: linear-gradient(135deg, var(--bg-gradient-start) 0%, var(--bg-gradient-end) 100%);
+      min-height: 100vh;
+    }
+    .navbar {
+      background: var(--navbar-bg);
+      backdrop-filter: blur(10px);
+      box-shadow: 0 2px 10px var(--navbar-shadow);
+      padding: 16px 32px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .navbar-brand { font-size: 20px; font-weight: 700; color: var(--text-primary); display: flex; align-items: center; gap: 8px; }
+    .user-menu { display: flex; align-items: center; gap: 12px; }
+    .user-name { font-size: 14px; color: var(--text-secondary); font-weight: 500; }
+    .user-icon {
+      width: 40px; height: 40px; border-radius: 50%;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      display: flex; align-items: center; justify-content: center;
+      color: white; font-weight: 600; font-size: 16px; cursor: pointer;
+    }
+    .user-menu-container { position: relative; }
+    .dropdown-menu {
+      display: none;
+      position: absolute;
+      top: 48px;
+      right: 0;
+      background: var(--card-bg);
+      border-radius: 8px;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+      min-width: 200px;
+      overflow: hidden;
+      z-index: 100;
+    }
+    .dropdown-menu.open { display: block; }
+    .dropdown-item {
+      display: block;
+      padding: 12px 16px;
+      color: var(--text-secondary);
+      text-decoration: none;
+      font-size: 14px;
+    }
+    .dropdown-item:hover { background: var(--bg-secondary); }
+    .dropdown-item.logout { color: #e53e3e; }
+    .dropdown-item.switch-account { color: var(--accent-color, #667eea); }
+    .container { max-width: 720px; margin: 0 auto; padding: 32px 20px; }
+    .card {
+      background: var(--card-bg);
+      border-radius: 16px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+      padding: 32px;
+    }
+    .title { font-size: 22px; font-weight: 700; color: var(--text-primary); margin-bottom: 4px; }
+    .subtitle { font-size: 14px; color: var(--text-muted); margin-bottom: 24px; }
+    .wasm-status {
+      font-size: 12px;
+      padding: 6px 12px;
+      border-radius: 6px;
+      margin-bottom: 20px;
+      display: inline-block;
+    }
+    .wasm-status.loading { background: var(--bg-secondary); color: var(--text-muted); }
+    .wasm-status.ready { background: #dcfce7; color: #166534; }
+    .wasm-status.error { background: #fee2e2; color: #991b1b; }
+    textarea {
+      width: 100%;
+      min-height: 120px;
+      padding: 12px;
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      background: var(--bg-secondary);
+      color: var(--text-primary);
+      font-size: 14px;
+      font-family: 'Monaco', 'Courier New', monospace;
+      resize: vertical;
+      margin-bottom: 16px;
+    }
+    .hash-btn {
+      background: #667eea;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      padding: 12px 24px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .hash-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .hash-btn:hover:not(:disabled) { background: #5568d3; }
+    .result-block { margin-top: 20px; }
+    .result-label { font-size: 12px; color: var(--text-muted); margin-bottom: 6px; }
+    .result-value {
+      font-family: 'Monaco', 'Courier New', monospace;
+      font-size: 13px;
+      word-break: break-all;
+      background: var(--bg-secondary);
+      color: var(--text-secondary);
+      padding: 12px;
+      border-radius: 8px;
+      border: 1px solid var(--border-color);
+    }
+    .theme-toggle-inline { display: flex; align-items: center; }
+  </style>
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">
+      <span>🧮</span>
+      <span>SHA-256 (WASM)</span>
+    </div>
+    <div class="user-menu">
+      ${getThemeToggleHTML()}
+      <span class="user-name">${safeUsername}</span>
+      <div class="user-menu-container">
+        <div class="user-icon" title="${safeUsername}" onclick="toggleDropdown()">
+          ${escapeHtml(username.substring(0, 2).toUpperCase())}
+        </div>
+        <div class="dropdown-menu" id="dropdownMenu">
+          <a href="/welcome" class="dropdown-item">🏠 ホーム</a>
+          <a href="/aichat" class="dropdown-item">🤖 AI チャット</a>
+          <a href="/repositories" class="dropdown-item">📦 リポジトリ</a>
+          <a href="/settings" class="dropdown-item">⚙️ 設定</a>
+          <a href="/api-keys" class="dropdown-item">🔑 キー管理</a>
+          <a href="/auth/switch" class="dropdown-item switch-account">🔄 別アカウントでログイン</a>
+          <a href="/auth/logout" class="dropdown-item logout">🚪 ログアウト</a>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <div class="container">
+    <div class="card">
+      <div class="title">SHA-256 ハッシュ生成 (WASM)</div>
+      <div class="subtitle">Rustで実装したSHA-256実装をwasm-bindgenでビルドし、ブラウザ上のWebAssemblyで実行します。</div>
+      <div class="wasm-status loading" id="wasmStatus">WASMモジュールを読み込み中…</div>
+      <textarea id="inputText" placeholder="ハッシュ化したい文字列を入力してください"></textarea>
+      <button class="hash-btn" id="hashBtn" disabled>SHA-256を計算</button>
+      <div class="result-block" id="resultBlock" style="display:none;">
+        <div class="result-label">SHA-256 (hex)</div>
+        <div class="result-value" id="resultValue"></div>
+      </div>
+    </div>
+  </div>
+
+  <script type="module">
+    ${getThemeToggleScript()}
+
+    function toggleDropdown() {
+      document.getElementById('dropdownMenu').classList.toggle('open');
+    }
+    window.toggleDropdown = toggleDropdown;
+    document.addEventListener('click', function(e) {
+      var menu = document.getElementById('dropdownMenu');
+      var container = document.querySelector('.user-menu-container');
+      if (menu.classList.contains('open') && container && !container.contains(e.target)) {
+        menu.classList.remove('open');
+      }
+    });
+
+    var wasmStatus = document.getElementById('wasmStatus');
+    var hashBtn = document.getElementById('hashBtn');
+    var inputText = document.getElementById('inputText');
+    var resultBlock = document.getElementById('resultBlock');
+    var resultValue = document.getElementById('resultValue');
+    var sha256_hex = null;
+
+    import('/wasm/sha256.js').then(function(mod) {
+      return mod.default('/wasm/sha256_bg.wasm').then(function() {
+        sha256_hex = mod.sha256_hex;
+        wasmStatus.textContent = 'WASMモジュール読み込み完了';
+        wasmStatus.className = 'wasm-status ready';
+        hashBtn.disabled = false;
+      });
+    }).catch(function(err) {
+      wasmStatus.textContent = 'WASMモジュールの読み込みに失敗しました: ' + (err && err.message ? err.message : String(err));
+      wasmStatus.className = 'wasm-status error';
+    });
+
+    hashBtn.addEventListener('click', function() {
+      if (!sha256_hex) return;
+      var hex = sha256_hex(inputText.value);
+      resultValue.textContent = hex;
+      resultBlock.style.display = 'block';
+    });
+  </script>
+</body>
+</html>`;
+}

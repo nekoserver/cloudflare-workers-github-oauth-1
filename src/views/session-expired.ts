@@ -2,8 +2,11 @@
  * セッション期限切れページのHTML
  */
 import { getThemeCSS, getThemeInitScript } from '../utils/theme';
+import { validateReturnTo } from '../utils/returnTo';
 
-export function getSessionExpiredPage(): string {
+export function getSessionExpiredPage(returnTo?: string | null): string {
+  const validReturnTo = validateReturnTo(returnTo);
+  const loginHref = validReturnTo ? `/?return_to=${encodeURIComponent(validReturnTo)}` : '/';
   return `<!DOCTYPE html>
 <html lang="ja">
 <head>
@@ -63,7 +66,7 @@ export function getSessionExpiredPage(): string {
   </div>
   <script>
     function redirectToLogin() {
-      window.location.href = '/';
+      window.location.href = ${JSON.stringify(loginHref)};
     }
     setTimeout(redirectToLogin, 10000);
   </script>

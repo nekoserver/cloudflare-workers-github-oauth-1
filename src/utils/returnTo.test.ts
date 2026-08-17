@@ -23,6 +23,14 @@ describe('validateReturnTo - オープンリダイレクト防止', () => {
     expect(validateReturnTo('/settings')).toBe('/settings');
   });
 
+  it('許可リストに無い同一オリジンの相対パスも許可される(/webgl-heritage)', () => {
+    expect(validateReturnTo('/webgl-heritage')).toBe('/webgl-heritage');
+  });
+
+  it('許可リストに無い同一オリジンの相対パスも許可される(クエリ付き)', () => {
+    expect(validateReturnTo('/heritage-area?mode=tour')).toBe('/heritage-area?mode=tour');
+  });
+
   // =====================================================
   // 拒否されるケース: 攻撃パターン
   // =====================================================
@@ -39,8 +47,8 @@ describe('validateReturnTo - オープンリダイレクト防止', () => {
     expect(validateReturnTo('/repositories/../admin')).toBeNull();
   });
 
-  it('許可リスト外のパスは拒否される', () => {
-    expect(validateReturnTo('/admin')).toBeNull();
+  it('/ で始まらないパスは拒否される', () => {
+    expect(validateReturnTo('admin')).toBeNull();
   });
 
   it('空文字は null を返す', () => {
