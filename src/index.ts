@@ -4180,6 +4180,15 @@ app.post('/api/aichat', aichatAuthMiddleware, async (c) => {
       ).bind(user.sub).all<{ id: string; question: string }>();
       return { count: countRow?.cnt ?? 0, totalCount: totalRow?.cnt ?? 0, results: rows.results ?? [] };
     },
+    sha256ViaWasm: async (input) => {
+      // dynamic importにする理由: sha256WasmServer.tsは.wasmファイルを
+      // 静的importしており、Vite/vitest環境では.wasmインポートが
+      // WebAssembly.Moduleではなくアセットパス文字列になる。静的import
+      // にすると `import app from './index'` を使う全テストがテスト収集時に
+      // 壊れるため、実行時にのみ読み込む
+      const { sha256HexViaWasm } = await import('./utils/sha256WasmServer');
+      return sha256HexViaWasm(input);
+    },
   });
   if (slashCommand.handled) {
     return jsonUtf8({
