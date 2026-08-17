@@ -6,3 +6,4 @@ dist/
 .env.local
 .claude/*
 !.claude/settings.json
+wasm/*/target/

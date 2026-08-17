@@ -59,6 +59,7 @@ import { getGalaxyPage } from './views/galaxy';
 import { findNearbyCities } from './utils/worldCities';
 import { getAuthFlowPage } from './views/authFlow';
 import { getTsubuyakiPage } from './views/tsubuyaki';
+import { getSha256WasmPage } from './views/sha256Wasm';
 import { validateFreeText, buildFreeTextSlackMessage, handleTsubuyakiSlashCommand } from './utils/freeTextSlackPost';
 import { handleF1ScheduleSlashCommand } from './utils/f1ScheduleSlackPost';
 import { resolveNotifyConfig, isNotifyConfigured, sendNotification as dispatchNotification } from './utils/notifyDispatch';
@@ -8980,6 +8981,11 @@ app.get('/api/heritage-access/nearby-cities', authMiddleware, async (c) => {
 app.get('/heritage-access', authMiddleware, async (c) => {
   const user = c.get('user');
   return c.html(getHeritageAccessPage(user.sub));
+});
+
+app.get('/sha256-wasm', authMiddleware, async (c) => {
+  const user = c.get('user');
+  return c.html(getSha256WasmPage(user.sub));
 });
 
 app.get('/heritage-area', authMiddleware, async (c) => {
