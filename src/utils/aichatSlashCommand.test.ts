@@ -4,6 +4,7 @@ import {
   formatJstMonthCalendar,
   formatCommitAgentLogEntry,
   formatAichatSlashCommandHelp,
+  formatSha256WasmResult,
   interpretAichatSlashCommand,
   type CommitAgentLogRow,
 } from './aichatSlashCommand';
@@ -99,6 +100,7 @@ describe('formatAichatSlashCommandHelp', () => {
     expect(result).toContain('/neko cal');
     expect(result).toContain('/neko clog');
     expect(result).toContain('/neko limit');
+    expect(result).toContain('/neko 256');
     expect(result).toContain('/neko help');
   });
 
@@ -175,5 +177,37 @@ describe('interpretAichatSlashCommand', () => {
     const result = await interpretAichatSlashCommand('/neko', now, unusedDeps);
     expect(result.handled).toBe(true);
     expect((result as { response: string }).response).toContain('(なし)');
+  });
+
+  it('/neko 256 <文字列> は sha256ViaWasm の結果を表示する', async () => {
+    const sha256ViaWasm = vi.fn().mockResolvedValue('abc123');
+    const result = await interpretAichatSlashCommand('/neko 256 hello world', now, { ...unusedDeps, sha256ViaWasm });
+    expect(sha256ViaWasm).toHaveBeenCalledWith('hello world');
+    expect(result).toEqual({ handled: true, response: formatSha256WasmResult('hello world', 'abc123') });
+  });
+
+  it('/neko 256 で文字列未指定の場合はエラーメッセージを返す（握りつぶさない）', async () => {
+    const sha256ViaWasm = vi.fn().mockRejectedValue(new Error('should not be called'));
+    const result = await interpretAichatSlashCommand('/neko 256', now, { ...unusedDeps, sha256ViaWasm });
+    expect(sha256ViaWasm).not.toHaveBeenCalled();
+    expect(result).toEqual({ handled: true, response: '❌ ハッシュ化する文字列を指定してください: /neko 256 <文字列>' });
+  });
+
+  it('/neko 256 は sha256ViaWasm 未設定時にエラーメッセージを返す', async () => {
+    const result = await interpretAichatSlashCommand('/neko 256 hello', now, unusedDeps);
+    expect(result).toEqual({ handled: true, response: '❌ /neko 256 は現在利用できません(WASM未設定)' });
+  });
+
+  it('/neko 256 で sha256ViaWasm が例外を投げた場合はエラーメッセージを返す（握りつぶさない）', async () => {
+    const sha256ViaWasm = vi.fn().mockRejectedValue(new Error('wasm init failed'));
+    const result = await interpretAichatSlashCommand('/neko 256 hello', now, { ...unusedDeps, sha256ViaWasm });
+    expect(result).toEqual({ handled: true, response: '❌ /neko 256 の実行中にエラーが発生しました: wasm init failed' });
+  });
+});
+
+describe('formatSha256WasmResult', () => {
+  it('入力文字列とハッシュ値をMarkdownで表示する', () => {
+    const result = formatSha256WasmResult('hello', 'abc123');
+    expect(result).toBe('## SHA-256 (WASM)\n入力: hello\nハッシュ: abc123');
   });
 });

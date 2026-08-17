@@ -1401,7 +1401,7 @@ describe('ナビバー モデル選択ドロップダウン', () => {
     const src = readFileSync(resolve(__dirname, '..', 'index.ts'), 'utf-8');
     const idx = src.indexOf("app.post('/api/aichat'");
     expect(idx).toBeGreaterThan(-1);
-    const fn = src.slice(idx, idx + 3600);
+    const fn = src.slice(idx, idx + 4200);
     expect(fn).toContain('body.model');
   });
 
@@ -1411,7 +1411,7 @@ describe('ナビバー モデル選択ドロップダウン', () => {
     const src = readFileSync(resolve(__dirname, '..', 'index.ts'), 'utf-8');
     const idx = src.indexOf("app.post('/api/aichat'");
     expect(idx).toBeGreaterThan(-1);
-    const fn = src.slice(idx, idx + 3200);
+    const fn = src.slice(idx, idx + 3800);
     const slashCommandIdx = fn.indexOf('interpretAichatSlashCommand(');
     const aiBindingCheckIdx = fn.indexOf('AI バインディングが未設定です');
     expect(slashCommandIdx).toBeGreaterThan(-1);
@@ -1468,11 +1468,25 @@ describe('ナビバー モデル選択ドロップダウン', () => {
     const src = readFileSync(resolve(__dirname, '..', 'index.ts'), 'utf-8');
     const idx = src.indexOf("app.post('/api/aichat'");
     expect(idx).toBeGreaterThan(-1);
-    const fn = src.slice(idx, idx + 2500);
+    const fn = src.slice(idx, idx + 3100);
     expect(fn).toContain('vectorizedAnswers:');
     expect(fn).toContain('SELECT COUNT(DISTINCT share_id) AS cnt FROM aichat_answer_vectors WHERE user_id = ?');
     expect(fn).toContain('SELECT COUNT(*) AS cnt FROM ai_chat_shares WHERE user_id = ? AND deleted_at IS NULL');
     expect(fn).toContain('JOIN ai_chat_shares s ON s.id = v.share_id');
+  });
+
+  it('index.ts の /api/aichat が sha256ViaWasm を渡す（/neko 256用、sha256WasmServerをdynamic importで読み込む）', () => {
+    const { readFileSync } = require('node:fs');
+    const { resolve } = require('node:path');
+    const src = readFileSync(resolve(__dirname, '..', 'index.ts'), 'utf-8');
+    const idx = src.indexOf("app.post('/api/aichat'");
+    expect(idx).toBeGreaterThan(-1);
+    const fn = src.slice(idx, idx + 3200);
+    expect(fn).toContain('sha256ViaWasm:');
+    // 静的importにするとVite/vitestの.wasmインポートがWebAssembly.Moduleでは
+    // なくアセットパス文字列を返すため、index.tsを読み込む全テストが壊れる。
+    // dynamic importで実行時にのみ読み込むこと
+    expect(fn).toContain("await import('./utils/sha256WasmServer')");
   });
 
   it('renderAiResultInModal も /neko コマンドの応答時は共有リンク行(appendAiResponseRow)を表示しない', () => {
@@ -2065,7 +2079,7 @@ describe('AIチャット応答の自動保存（auto-save to ai_chat_shares）',
     const src = readFileSync(resolve(__dirname, '..', 'index.ts'), 'utf-8');
     const idx = src.indexOf("app.post('/api/aichat'");
     expect(idx).toBeGreaterThan(-1);
-    const fn = src.slice(idx, idx + 7500);
+    const fn = src.slice(idx, idx + 8100);
     expect(fn).toContain('INSERT INTO ai_chat_shares');
   });
 
@@ -2075,7 +2089,7 @@ describe('AIチャット応答の自動保存（auto-save to ai_chat_shares）',
     const src = readFileSync(resolve(__dirname, '..', 'index.ts'), 'utf-8');
     const idx = src.indexOf("app.post('/api/aichat'");
     expect(idx).toBeGreaterThan(-1);
-    const fn = src.slice(idx, idx + 7200);
+    const fn = src.slice(idx, idx + 7800);
     expect(fn).toContain('shareId');
   });
 
@@ -2085,7 +2099,7 @@ describe('AIチャット応答の自動保存（auto-save to ai_chat_shares）',
     const src = readFileSync(resolve(__dirname, '..', 'index.ts'), 'utf-8');
     const idx = src.indexOf("app.post('/api/aichat'");
     expect(idx).toBeGreaterThan(-1);
-    const fn = src.slice(idx, idx + 6800);
+    const fn = src.slice(idx, idx + 7400);
     expect(fn).toContain('userHash');
   });
 

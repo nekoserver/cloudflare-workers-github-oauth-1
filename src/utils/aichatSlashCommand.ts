@@ -83,6 +83,7 @@ export function formatAichatSlashCommandHelp(): string {
     '| /neko limit | Codex / Claude Code のリミット確認先を表示します |',
     '| /neko search <キーワード> | 質問文・回答文にキーワードを含む過去ログのヒット件数を表示します(結果一覧は最大30件までモーダルで確認できます) |',
     '| /neko vcount | ベクタ化済みの回答文の件数と全回答文に占める割合を表示します(結果一覧は最大30件までモーダルで確認できます) |',
+    '| /neko 256 <文字列> | 指定した文字列のSHA-256ハッシュをWASM(Rust実装)で計算します |',
     '| /neko help | このサブコマンド一覧を表示します |',
   ].join('\n');
 }
@@ -161,10 +162,21 @@ export function formatVectorizedAnswerCount(count: number, totalCount: number): 
   return `ベクタ化済みの回答文: ${count}件 / ${totalCount}件　(${percent}%)`;
 }
 
+/**
+ * `/neko 256 <文字列>` の計算結果を表示する。入力にバッククォート等が
+ * 含まれても崩れないよう、コードブロックではなく1行のプレーンテキストで
+ * 組み立てる(バッククォートで囲むと入力自体にバッククォートが含まれる場合に
+ * Markdownが崩れるため)。
+ */
+export function formatSha256WasmResult(input: string, hex: string): string {
+  return ['## SHA-256 (WASM)', `入力: ${input}`, `ハッシュ: ${hex}`].join('\n');
+}
+
 export type AichatSlashCommandDeps = {
   fetchLatestCommitAgentLog: () => Promise<CommitAgentLogRow | null>;
   searchShares?: (keyword: string) => Promise<AichatSearchOutcome>;
   vectorizedAnswers?: () => Promise<AichatVectorizedAnswersOutcome>;
+  sha256ViaWasm?: (input: string) => Promise<string>;
 };
 
 export const AICHAT_SEARCH_TIMEOUT_MS = 8000;
@@ -277,12 +289,31 @@ export async function interpretAichatSlashCommand(
     };
   }
 
+  if (subcommand === '256') {
+    const target = parts.slice(2).join(' ').trim();
+    if (!target) {
+      return { handled: true, response: '❌ ハッシュ化する文字列を指定してください: /neko 256 <文字列>' };
+    }
+    if (!deps.sha256ViaWasm) {
+      return { handled: true, response: '❌ /neko 256 は現在利用できません(WASM未設定)' };
+    }
+    try {
+      const hex = await deps.sha256ViaWasm(target);
+      return { handled: true, response: formatSha256WasmResult(target, hex) };
+    } catch (err) {
+      return {
+        handled: true,
+        response: `❌ /neko 256 の実行中にエラーが発生しました: ${err instanceof Error ? err.message : String(err)}`,
+      };
+    }
+  }
+
   if (subcommand === 'help') {
     return { handled: true, response: formatAichatSlashCommandHelp() };
   }
 
   return {
     handled: true,
-    response: `❌ 未対応のサブコマンドです: ${subcommand || '(なし)'}\n利用可能なコマンド: /neko hms, /neko cal, /neko clog, /neko limit, /neko search, /neko vcount, /neko help\n詳細は /neko help を実行してください`,
+    response: `❌ 未対応のサブコマンドです: ${subcommand || '(なし)'}\n利用可能なコマンド: /neko hms, /neko cal, /neko clog, /neko limit, /neko search, /neko vcount, /neko 256, /neko help\n詳細は /neko help を実行してください`,
   };
 }
