@@ -23,7 +23,7 @@ function loadFunctions() {
     `${src}\nreturn { vectorizeAnswerAndExtractKeywords, registerKeywordViaSearchLogFlow, bulkRegisterUnregisteredKeywords };`
   );
   return fn() as {
-    vectorizeAnswerAndExtractKeywords: (shareId: string) => Promise<{ status: number; data: unknown }>;
+    vectorizeAnswerAndExtractKeywords: (shareId: string, model?: string) => Promise<{ status: number; data: unknown }>;
     registerKeywordViaSearchLogFlow: (keyword: string, originShareId: string | null) => Promise<void>;
     bulkRegisterUnregisteredKeywords: (
       originShareId: string | null,
@@ -55,6 +55,58 @@ describe('getVectorizeAndBulkRegisterScript', () => {
     }));
     expect(res.status).toBe(200);
     expect((res.data as { keywords: string[] }).keywords).toEqual(['猫']);
+  });
+
+  it('modelを渡すとリクエストボディに含まれる', async () => {
+    const fetchMock = vi.fn(() => Promise.resolve({
+      status: 200,
+      json: () => Promise.resolve({ vectorized: true, keywords: [] }),
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+    const { vectorizeAnswerAndExtractKeywords } = loadFunctions();
+
+    await vectorizeAnswerAndExtractKeywords('s1', '@cf/baai/bge-m3');
+    expect(fetchMock).toHaveBeenCalledWith('/api/aichat/vectorize-answer', expect.objectContaining({
+      method: 'POST',
+      body: JSON.stringify({ shareId: 's1', model: '@cf/baai/bge-m3' }),
+    }));
+  });
+
+  it('サーバーが一定時間(30秒)応答しない場合はタイムアウトエラーを返す(通信エラーとして投げない)', async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi.fn((_url: string, init?: { signal?: AbortSignal }) => {
+      return new Promise((_resolve, reject) => {
+        init?.signal?.addEventListener('abort', () => {
+          const err = new Error('The operation was aborted');
+          err.name = 'AbortError';
+          reject(err);
+        });
+      });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const { vectorizeAnswerAndExtractKeywords } = loadFunctions();
+
+    const promise = vectorizeAnswerAndExtractKeywords('s1');
+    await vi.advanceTimersByTimeAsync(30000);
+    const res = await promise;
+
+    expect(res.status).toBe(0);
+    expect((res.data as { error: string }).error).toContain('タイムアウト');
+    vi.useRealTimers();
+  });
+
+  it('30秒以内に応答すればタイムアウト扱いにならない', async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi.fn(() => Promise.resolve({
+      status: 200,
+      json: () => Promise.resolve({ vectorized: true, keywords: ['猫'] }),
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+    const { vectorizeAnswerAndExtractKeywords } = loadFunctions();
+
+    const res = await vectorizeAnswerAndExtractKeywords('s1');
+    expect(res.status).toBe(200);
+    vi.useRealTimers();
   });
 
   it('根本原因の修正: テキスト検索が0件でも、抽出元(originShareId)は必ず登録対象へ含める', async () => {

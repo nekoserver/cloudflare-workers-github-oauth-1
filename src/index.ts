@@ -7345,6 +7345,28 @@ export async function vectorizeAnswerKeywords(
 }
 
 export const ANSWER_PREREQUISITE_TERMS_MODEL = '@cf/google/gemma-4-26b-a4b-it';
+export const PREREQUISITE_TERMS_TIMEOUT_MS = 20000;
+
+/**
+ * gemma-4-26b-a4b-itはsystem message混入時のthinking mode強制の影響で、
+ * まれにCloudflare側の内部タイムアウト(エラーコード3046 "Request timeout")が
+ * 出るまで非常に長く応答が返らないことがある。/api/aichat/vectorize-answer が
+ * その間ブラウザ側で「ベクタ化中...」のまま固まって見えないよう、Cloudflare側の
+ * 内部タイムアウトより先にこちらから見切りをつけ、素早くエラーとして返す。
+ */
+export async function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_, reject) => {
+        timer = setTimeout(() => reject(new Error(message)), ms);
+      }),
+    ]);
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+  }
+}
 
 /**
  * gemma-4-26b-a4b-itの応答テキストから「予備知識として抽出された用語」の
@@ -7839,17 +7861,18 @@ app.delete('/api/aichat/shares/:id', authMiddleware, async (c) => {
 
 /**
  * answer-graphの回答モーダル「この回答文をベクタ化する」ボタン用API。
- * 回答文をplamo-embedding-1bでベクタ化してaichat_answer_vectorsに保存し、
- * さらにgemma-4-26b-a4b-itに「この文章を理解するのに必要な予備知識」を
- * 単語単位で抽出させて返す。予備知識抽出の失敗はベクタ化そのものの失敗とは
- * 独立して扱い、_keywordsWarningに理由を入れて返す(ベクタ化自体は成功のまま)。
+ * 回答文を埋め込みモデル(既定plamo-embedding-1b、bodyのmodelで選択可能)で
+ * ベクタ化してaichat_answer_vectorsに保存し、さらにgemma-4-26b-a4b-itに
+ * 「この文章を理解するのに必要な予備知識」を単語単位で抽出させて返す。
+ * 予備知識抽出の失敗はベクタ化そのものの失敗とは独立して扱い、
+ * _keywordsWarningに理由を入れて返す(ベクタ化自体は成功のまま)。
  */
 app.post('/api/aichat/vectorize-answer', authMiddleware, async (c) => {
   const user = c.get('user');
   if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
   if (!c.env.AI) return jsonUtf8({ error: 'AIバインディングが未設定です' }, 503);
 
-  let body: { shareId?: string };
+  let body: { shareId?: string; model?: string };
   try {
     body = await c.req.json();
   } catch {
@@ -7858,6 +7881,12 @@ app.post('/api/aichat/vectorize-answer', authMiddleware, async (c) => {
   const shareId = (body.shareId ?? '').trim();
   if (!shareId) return jsonUtf8({ error: 'shareId は必須です' }, 400);
 
+  const requestedModel = (body.model ?? '').trim();
+  if (requestedModel && !KEYWORD_EMBEDDING_MODELS.includes(requestedModel)) {
+    return jsonUtf8({ error: '不明な埋め込みモデルです: ' + requestedModel }, 400);
+  }
+  const embeddingModel = requestedModel || PLAMO_EMBEDDING_MODEL;
+
   const share = await c.env.DB.prepare(
     `SELECT id, answer FROM ai_chat_shares WHERE id = ? AND user_id = ? AND deleted_at IS NULL`
   ).bind(shareId, user.sub).first<{ id: string; answer: string }>();
@@ -7865,10 +7894,10 @@ app.post('/api/aichat/vectorize-answer', authMiddleware, async (c) => {
 
   let vector: number[];
   try {
-    vector = await getOrComputeAnswerEmbedding(c.env.DB, c.env.AI, user.sub, shareId, share.answer);
+    vector = await getOrComputeAnswerEmbedding(c.env.DB, c.env.AI, user.sub, shareId, share.answer, embeddingModel);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    logger.error('vectorize-answer: embedding failed', { shareId, error: message });
+    logger.error('vectorize-answer: embedding failed', { shareId, model: embeddingModel, error: message });
     return jsonUtf8({ error: 'ベクタ化に失敗しました: ' + message }, 500);
   }
   if (vector.length === 0) {
@@ -7878,7 +7907,11 @@ app.post('/api/aichat/vectorize-answer', authMiddleware, async (c) => {
   let keywords: string[] = [];
   let keywordsWarning: string | null = null;
   try {
-    keywords = await extractPrerequisiteTerms(c.env.AI, share.answer);
+    keywords = await withTimeout(
+      extractPrerequisiteTerms(c.env.AI, share.answer),
+      PREREQUISITE_TERMS_TIMEOUT_MS,
+      `予備知識キーワードの抽出が${PREREQUISITE_TERMS_TIMEOUT_MS / 1000}秒以内に完了しませんでした(タイムアウト)`
+    );
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     logger.warn('vectorize-answer: prerequisite term extraction failed', { shareId, error: message });
@@ -7886,12 +7919,12 @@ app.post('/api/aichat/vectorize-answer', authMiddleware, async (c) => {
   }
 
   const keywordVectorization = keywords.length > 0
-    ? await vectorizeAnswerKeywords(c.env.DB, c.env.AI, user.sub, shareId, keywords)
+    ? await vectorizeAnswerKeywords(c.env.DB, c.env.AI, user.sub, shareId, keywords, embeddingModel)
     : [];
 
   return jsonUtf8({
     vectorized: true,
-    model: PLAMO_EMBEDDING_MODEL,
+    model: embeddingModel,
     dim: vector.length,
     keywords,
     keywordVectorization,

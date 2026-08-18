@@ -5,8 +5,12 @@
  * 他のページ(画像ギャラリー等)からも同じ処理を再利用できるよう抽象化した。
  *
  * <script>ブロック内に埋め込むと、以下の2関数が使えるようになる:
- *   - vectorizeAnswerAndExtractKeywords(shareId): /api/aichat/vectorize-answer
- *     を呼び、{ status, data } を返すPromiseを返す。
+ *   - vectorizeAnswerAndExtractKeywords(shareId, model): /api/aichat/vectorize-answer
+ *     を呼び、{ status, data } を返すPromiseを返す。modelは埋め込みモデル名
+ *     (省略時はサーバー側のデフォルト(plamo-embedding-1b)が使われる)。
+ *     サーバー無応答が長時間続く場合に画面が固まって見える不具合を防ぐため、
+ *     クライアント側でも一定時間(VECTORIZE_FETCH_TIMEOUT_MS)で打ち切り、
+ *     タイムアウトを明示するエラーとして返す。
  *   - bulkRegisterUnregisteredKeywords(originShareId, keywords, callbacks):
  *     未登録キーワード配列を1件ずつ順番に回答文へ紐付け登録する。
  *
@@ -15,13 +19,29 @@
  */
 export function getVectorizeAndBulkRegisterScript(): string {
   return `
-    function vectorizeAnswerAndExtractKeywords(shareId) {
+    var VECTORIZE_FETCH_TIMEOUT_MS = 30000;
+
+    function vectorizeAnswerAndExtractKeywords(shareId, model) {
+      var controller = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+      var timedOut = false;
+      var timer = controller ? setTimeout(function() { timedOut = true; controller.abort(); }, VECTORIZE_FETCH_TIMEOUT_MS) : null;
+      var body = { shareId: shareId };
+      if (model) body.model = model;
       return fetch('/api/aichat/vectorize-answer', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'same-origin',
-        body: JSON.stringify({ shareId: shareId }),
-      }).then(function(r) { return r.json().then(function(d) { return { status: r.status, data: d }; }); });
+        body: JSON.stringify(body),
+        signal: controller ? controller.signal : undefined,
+      })
+        .then(function(r) { return r.json().then(function(d) { return { status: r.status, data: d }; }); })
+        .catch(function(err) {
+          if (timedOut) {
+            return { status: 0, data: { error: 'ベクタ化処理が' + (VECTORIZE_FETCH_TIMEOUT_MS / 1000) + '秒以内に応答しませんでした(タイムアウト)。時間をおいて再度お試しください。' } };
+          }
+          throw err;
+        })
+        .finally(function() { if (timer) clearTimeout(timer); });
     }
 
     // 根本原因: gemmaが抽出する予備知識キーワードは、回答文中の文字列と
