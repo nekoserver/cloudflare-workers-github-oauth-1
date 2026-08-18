@@ -133,7 +133,7 @@ export function getCheeseSearchPage(username: string): string {
       color: var(--text-secondary);
       cursor: pointer;
     }
-    .pairing-candidates { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-start; clear: both; }
+    .pairing-candidates { display: flex; flex-wrap: wrap; gap: 1px; justify-content: flex-start; clear: both; }
     .pairing-candidate-btn {
       font-size: 12px;
       padding: 6px 12px;
@@ -478,14 +478,21 @@ export function getCheeseSearchPage(username: string): string {
       });
     }
 
+    function pairingTokens(pairingText) {
+      if (!pairingText) return [PAIRING_UNKNOWN_LABEL];
+      return pairingText.split('、').map(function(s) { return s.trim(); }).filter(function(s) { return s; });
+    }
+
     function renderPairingCandidates() {
       var container = document.getElementById('pairingCandidates');
       var base = baseForPairingCandidates();
-      var valuesSet = {};
-      allItems.forEach(function(item) { valuesSet[item.pairing || PAIRING_UNKNOWN_LABEL] = true; });
-      var candidates = Object.keys(valuesSet).map(function(value) {
-        var count = base.filter(function(item) { return matchesPairing(item, value); }).length;
-        return { value: value, count: count };
+      var tokenSet = {};
+      allItems.forEach(function(item) {
+        pairingTokens(item.pairing).forEach(function(tok) { tokenSet[tok] = true; });
+      });
+      var candidates = Object.keys(tokenSet).map(function(tok) {
+        var count = base.filter(function(item) { return pairingTokens(item.pairing).indexOf(tok) !== -1; }).length;
+        return { value: tok, count: count };
       });
       candidates.sort(function(a, b) { return b.count - a.count; });
       container.innerHTML = candidates.map(function(c) {
