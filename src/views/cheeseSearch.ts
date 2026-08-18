@@ -77,6 +77,7 @@ export function getCheeseSearchPage(username: string): string {
     }
     .facets { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
     .facet-group { display: flex; align-items: center; gap: 6px; background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 8px; padding: 8px 12px; }
+    .facet-options { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-start; }
     .facet-label { font-size: 12px; color: var(--text-muted); margin-right: 2px; }
     .facet-btn {
       font-size: 12px;
@@ -136,23 +137,19 @@ export function getCheeseSearchPage(username: string): string {
     <div class="facets">
       <div class="facet-group">
         <span class="facet-label">乳種:</span>
-        <button type="button" class="facet-btn" data-facet="milk" data-value="牛乳">牛乳</button>
-        <button type="button" class="facet-btn" data-facet="milk" data-value="山羊">山羊</button>
-        <button type="button" class="facet-btn" data-facet="milk" data-value="羊乳">羊乳</button>
+        <span class="facet-options" id="facetOptions-milk"></span>
       </div>
       <div class="facet-group">
         <span class="facet-label">固さ:</span>
-        <button type="button" class="facet-btn" data-facet="hardness" data-value="硬め">硬め</button>
-        <button type="button" class="facet-btn" data-facet="hardness" data-value="柔らかめ">柔らかめ</button>
+        <span class="facet-options" id="facetOptions-hardness"></span>
       </div>
       <div class="facet-group">
         <span class="facet-label">カビ:</span>
-        <button type="button" class="facet-btn" data-facet="mold" data-value="有">有</button>
-        <button type="button" class="facet-btn" data-facet="mold" data-value="無">無</button>
+        <span class="facet-options" id="facetOptions-mold"></span>
       </div>
       <div class="facet-group">
         <span class="facet-label">産地:</span>
-        <button type="button" class="facet-btn" data-facet="region" data-value="限定">産地限定のみ</button>
+        <span class="facet-options" id="facetOptions-region"></span>
       </div>
       <div class="facet-group">
         <span class="facet-label">合う食材:</span>
@@ -197,27 +194,34 @@ export function getCheeseSearchPage(username: string): string {
     var emptyMsg = document.getElementById('emptyMsg');
     var activeFacets = { milk: null, hardness: null, mold: null, region: null };
 
-    document.querySelectorAll('.facet-btn[data-facet]').forEach(function(btn) {
-      btn.addEventListener('click', function() {
-        var facet = btn.getAttribute('data-facet');
-        var value = btn.getAttribute('data-value');
-        if (activeFacets[facet] === value) {
-          activeFacets[facet] = null;
-          btn.classList.remove('active');
-        } else {
-          document.querySelectorAll('.facet-btn[data-facet="' + facet + '"]').forEach(function(b) {
-            b.classList.remove('active');
-          });
-          activeFacets[facet] = value;
-          btn.classList.add('active');
-        }
-        render();
-      });
-    });
+    var FACET_DEFS = {
+      milk: [
+        { value: '牛乳', label: '牛乳' },
+        { value: '山羊', label: '山羊' },
+        { value: '羊乳', label: '羊乳' },
+      ],
+      hardness: [
+        { value: '硬め', label: '硬め' },
+        { value: '柔らかめ', label: '柔らかめ' },
+      ],
+      mold: [
+        { value: '有', label: 'カビ有' },
+        { value: '無', label: 'カビ無' },
+      ],
+      region: [
+        { value: '限定', label: '産地限定' },
+      ],
+    };
+
+    var FACET_MATCHERS = {
+      milk: matchesMilk,
+      hardness: matchesHardness,
+      mold: matchesMold,
+      region: matchesRegion,
+    };
 
     document.getElementById('resetBtn').addEventListener('click', function() {
       activeFacets = { milk: null, hardness: null, mold: null, region: null };
-      document.querySelectorAll('.facet-btn[data-facet]').forEach(function(b) { b.classList.remove('active'); });
       freewordInput.value = '';
       pairingInput.value = '';
       render();
@@ -272,18 +276,64 @@ export function getCheeseSearchPage(username: string): string {
       return pairing.indexOf(q.toLowerCase()) !== -1;
     }
 
-    function currentFiltered() {
+    function matchesAllFacetsExcept(item, excludeFacet) {
+      var facetNames = ['milk', 'hardness', 'mold', 'region'];
+      for (var i = 0; i < facetNames.length; i++) {
+        var name = facetNames[i];
+        if (name === excludeFacet) continue;
+        if (!FACET_MATCHERS[name](item, activeFacets[name])) return false;
+      }
+      return true;
+    }
+
+    function baseFilteredExcluding(excludeFacet) {
       var q = freewordInput.value.trim();
       var pairingQ = pairingInput.value.trim();
       return allItems.filter(function(item) {
         return matchesFreeword(item, q)
-          && matchesMilk(item, activeFacets.milk)
-          && matchesHardness(item, activeFacets.hardness)
-          && matchesMold(item, activeFacets.mold)
-          && matchesRegion(item, activeFacets.region)
-          && matchesPairing(item, pairingQ);
+          && matchesPairing(item, pairingQ)
+          && matchesAllFacetsExcept(item, excludeFacet);
       });
     }
+
+    function currentFiltered() {
+      return baseFilteredExcluding(null);
+    }
+
+    function renderFacetGroup(facetName) {
+      var container = document.getElementById('facetOptions-' + facetName);
+      if (!container) return;
+      var base = baseFilteredExcluding(facetName);
+      var matcher = FACET_MATCHERS[facetName];
+      var options = FACET_DEFS[facetName].map(function(opt) {
+        var count = base.filter(function(item) { return matcher(item, opt.value); }).length;
+        return { value: opt.value, label: opt.label, count: count };
+      });
+      var noneCount = base.length;
+      options.sort(function(a, b) { return b.count - a.count; });
+
+      var html = '';
+      var isNoneActive = !activeFacets[facetName];
+      html += '<button type="button" class="facet-btn' + (isNoneActive ? ' active' : '') + '" data-facet="' + facetName + '" data-value="">条件なし(' + noneCount + ')</button>';
+      options.forEach(function(opt) {
+        var isActive = activeFacets[facetName] === opt.value;
+        html += '<button type="button" class="facet-btn' + (isActive ? ' active' : '') + '" data-facet="' + facetName + '" data-value="' + escHtml(opt.value) + '">' + escHtml(opt.label) + '(' + opt.count + ')</button>';
+      });
+      container.innerHTML = html;
+    }
+
+    function renderFacets() {
+      Object.keys(FACET_DEFS).forEach(renderFacetGroup);
+    }
+
+    document.querySelector('.facets').addEventListener('click', function(e) {
+      var btn = e.target.closest ? e.target.closest('.facet-btn[data-facet]') : null;
+      if (!btn) return;
+      var facet = btn.getAttribute('data-facet');
+      var value = btn.getAttribute('data-value');
+      activeFacets[facet] = value || null;
+      render();
+    });
 
     function fieldRow(label, value) {
       var safe = value ? escHtml(value) : '不明';
@@ -306,6 +356,7 @@ export function getCheeseSearchPage(username: string): string {
     }
 
     function render() {
+      renderFacets();
       var filtered = currentFiltered();
       resultCount.textContent = filtered.length + ' 件 / 全 ' + allItems.length + ' 件';
       if (filtered.length === 0) {
