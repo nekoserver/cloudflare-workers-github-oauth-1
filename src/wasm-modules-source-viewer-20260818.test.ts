@@ -136,9 +136,14 @@ describe('GET /api/wasm-modules/source', () => {
     expect(body.githubUrl).toContain('wasm/sha256-wasm/src/lib.rs');
   });
 
-  it('GitHub API取得失敗時は502を返す(空文字で握りつぶさない)', async () => {
+  it('GitHub API取得失敗時は502と実際のステータスコード・エラーメッセージを返す(空文字で握りつぶさない)', async () => {
     const authHeader = await makeAuthHeader();
-    const fetchMock = vi.fn().mockResolvedValue({ ok: false, status: 404 });
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 401,
+      statusText: 'Unauthorized',
+      json: () => Promise.resolve({ message: 'Bad credentials' }),
+    });
     vi.stubGlobal('fetch', fetchMock);
     const res = await app.request(
       '/api/wasm-modules/source?id=sha256',
@@ -146,5 +151,8 @@ describe('GET /api/wasm-modules/source', () => {
       { JWT_SECRET, DB: createMockDb('gh-token-abc') }
     );
     expect(res.status).toBe(502);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toContain('401');
+    expect(body.error).toContain('Bad credentials');
   });
 });
