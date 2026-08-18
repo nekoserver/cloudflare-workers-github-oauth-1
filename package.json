@@ -17,10 +17,12 @@
     "playwright": "^1.61.1"
   },
   "devDependencies": {
+    "@ast-grep/wasm": "^0.45.1",
     "@cloudflare/workers-types": "^4.20260214.0",
     "@types/jsdom": "^28.0.3",
     "animejs": "^3.2.1",
     "jsdom": "^29.1.1",
+    "tree-sitter-typescript": "^0.23.2",
     "typescript": "^5.3.3",
     "vitest": "^4.1.9",
     "wrangler": "^3.96.0"
