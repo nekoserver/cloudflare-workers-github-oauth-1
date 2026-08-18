@@ -60,6 +60,7 @@ import { findNearbyCities } from './utils/worldCities';
 import { getAuthFlowPage } from './views/authFlow';
 import { getTsubuyakiPage } from './views/tsubuyaki';
 import { getSha256WasmPage } from './views/sha256Wasm';
+import { getFactorWasmPage } from './views/factorWasm';
 import { getWasmModulesPage } from './views/wasmModules';
 import { getFileDepsPage } from './views/fileDeps';
 import { mergeWasmModuleConfig, isKnownWasmModuleId, isWasmModuleEnabled, type WasmModuleStartupRow } from './utils/wasmModuleConfig';
@@ -4221,6 +4222,21 @@ app.post('/api/aichat', aichatAuthMiddleware, async (c) => {
       // 壊れるため、実行時にのみ読み込む
       const { sha256HexViaWasm } = await import('./utils/sha256WasmServer');
       return sha256HexViaWasm(input);
+    },
+    factorViaWasm: async (n) => {
+      if (c.env.DB) {
+        const row = await c.env.DB.prepare(
+          'SELECT module_id, enabled, updated_at, updated_by FROM wasm_module_startup_config WHERE module_id = ?'
+        ).bind('factor').first<WasmModuleStartupRow>().catch(() => null);
+        if (!isWasmModuleEnabled(row)) {
+          throw new Error('factorモジュールは現在無効化されています(/wasm-modulesページで有効にしてください)');
+        }
+      }
+      // dynamic importにする理由はsha256ViaWasmと同じ(.wasmの静的importが
+      // Vite/vitest環境ではWebAssembly.Moduleを返さず、index.tsを読み込む
+      // 既存テストが壊れるため)
+      const { factorViaWasm } = await import('./utils/factorWasmServer');
+      return factorViaWasm(n);
     },
   });
   if (slashCommand.handled) {
@@ -9091,6 +9107,17 @@ app.get('/sha256-wasm', authMiddleware, async (c) => {
     "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'"
   );
   return c.html(getSha256WasmPage(user.sub));
+});
+
+app.get('/factor-wasm', authMiddleware, async (c) => {
+  const user = c.get('user');
+  // WebAssembly.instantiateの実行にはscript-srcへのwasm-unsafe-evalが必要
+  // (このページだけの例外。他ページのCSPはグローバルミドルウェアのまま)
+  c.header(
+    'Content-Security-Policy',
+    "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'"
+  );
+  return c.html(getFactorWasmPage(user.sub));
 });
 
 app.get('/wasm-modules', authMiddleware, async (c) => {

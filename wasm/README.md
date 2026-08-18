@@ -62,3 +62,15 @@ export function sha256HexViaWasm(input: string): string {
 を読み込む既存の全テストが静的importのせいで壊れるのを防ぐため)。
 また `.wasm` importをTypeScriptで解決できるよう `src/wasm-module.d.ts`
 のようなアンビエント宣言(`declare module '*.wasm'`)が必要。
+
+## 導入済みモジュール一覧
+
+- `sha256-wasm`: SHA-256計算(`sha2` crate)。`/sha256-wasm`ページ・`/neko 256`
+- `factor-wasm`: GNU coreutils `factor` を模した素因数分解(試し割り法、
+  0以上2^53以下の整数のみ対応)。`/factor-wasm`ページ・`/neko factor`。
+  C言語コード生成を伴わない純Rust実装のため、tree-sitter系クレートで
+  ぶつかったwasm32ビルド不可の制約は関係ない(NOTICE.cloudflare-workers-github-oauth-1.rust-WASM.md参照)
+
+新しいモジュールを追加したら、`src/data/wasmModuleRegistry.ts` の
+`WASM_MODULE_REGISTRY`(`/wasm-modules`ページの一覧・起動時ON/OFF設定用)
+にもエントリを追加すること。

@@ -23,6 +23,15 @@ export const WASM_MODULE_REGISTRY: WasmModuleInfo[] = [
     sourceDir: 'wasm/sha256-wasm',
     approxSize: '約25KB',
   },
+  {
+    id: 'factor',
+    name: 'factor (素因数分解, Rust)',
+    description:
+      'GNU coreutilsのfactorコマンドを模した素因数分解(0以上2^53以下の整数、試し割り法)。/factor-wasmページのブラウザ実行と、AIチャットの/neko factorサブコマンドのサーバー実行の両方で同じバイナリを使用する',
+    wasmPath: 'public/wasm/factor_bg.wasm',
+    sourceDir: 'wasm/factor-wasm',
+    approxSize: '約21KB',
+  },
 ];
 
 export function findWasmModule(id: string): WasmModuleInfo | undefined {

@@ -5,6 +5,7 @@ import {
   formatCommitAgentLogEntry,
   formatAichatSlashCommandHelp,
   formatSha256WasmResult,
+  formatFactorWasmResult,
   interpretAichatSlashCommand,
   type CommitAgentLogRow,
 } from './aichatSlashCommand';
@@ -101,6 +102,7 @@ describe('formatAichatSlashCommandHelp', () => {
     expect(result).toContain('/neko clog');
     expect(result).toContain('/neko limit');
     expect(result).toContain('/neko 256');
+    expect(result).toContain('/neko factor');
     expect(result).toContain('/neko help');
   });
 
@@ -202,6 +204,56 @@ describe('interpretAichatSlashCommand', () => {
     const sha256ViaWasm = vi.fn().mockRejectedValue(new Error('wasm init failed'));
     const result = await interpretAichatSlashCommand('/neko 256 hello', now, { ...unusedDeps, sha256ViaWasm });
     expect(result).toEqual({ handled: true, response: '❌ /neko 256 の実行中にエラーが発生しました: wasm init failed' });
+  });
+
+  it('/neko factor <数値> は factorViaWasm の結果を表示する', async () => {
+    const factorViaWasm = vi.fn().mockResolvedValue('12: 2 2 3');
+    const result = await interpretAichatSlashCommand('/neko factor 12', now, { ...unusedDeps, factorViaWasm });
+    expect(factorViaWasm).toHaveBeenCalledWith(12);
+    expect(result).toEqual({ handled: true, response: formatFactorWasmResult('12: 2 2 3') });
+  });
+
+  it('/neko factor で数値未指定の場合はエラーメッセージを返す（握りつぶさない）', async () => {
+    const factorViaWasm = vi.fn().mockRejectedValue(new Error('should not be called'));
+    const result = await interpretAichatSlashCommand('/neko factor', now, { ...unusedDeps, factorViaWasm });
+    expect(factorViaWasm).not.toHaveBeenCalled();
+    expect(result).toEqual({ handled: true, response: '❌ 素因数分解する整数を指定してください: /neko factor <数値>' });
+  });
+
+  it('/neko factor で非整数・負数・範囲外を指定した場合はエラーメッセージを返す（握りつぶさない）', async () => {
+    const factorViaWasm = vi.fn().mockRejectedValue(new Error('should not be called'));
+    for (const bad of ['abc', '3.14', '-1', '10000000000000000']) {
+      const result = await interpretAichatSlashCommand(`/neko factor ${bad}`, now, { ...unusedDeps, factorViaWasm });
+      expect(result.handled).toBe(true);
+      expect((result as { response: string }).response).toContain('2^53');
+    }
+    expect(factorViaWasm).not.toHaveBeenCalled();
+  });
+
+  it('/neko factor は0と2^53を境界値として許可する', async () => {
+    const factorViaWasm = vi.fn().mockResolvedValue('mock');
+    await interpretAichatSlashCommand('/neko factor 0', now, { ...unusedDeps, factorViaWasm });
+    await interpretAichatSlashCommand('/neko factor 9007199254740992', now, { ...unusedDeps, factorViaWasm });
+    expect(factorViaWasm).toHaveBeenCalledWith(0);
+    expect(factorViaWasm).toHaveBeenCalledWith(9007199254740992);
+  });
+
+  it('/neko factor は factorViaWasm 未設定時にエラーメッセージを返す', async () => {
+    const result = await interpretAichatSlashCommand('/neko factor 12', now, unusedDeps);
+    expect(result).toEqual({ handled: true, response: '❌ /neko factor は現在利用できません(WASM未設定)' });
+  });
+
+  it('/neko factor で factorViaWasm が例外を投げた場合はエラーメッセージを返す（握りつぶさない）', async () => {
+    const factorViaWasm = vi.fn().mockRejectedValue(new Error('wasm init failed'));
+    const result = await interpretAichatSlashCommand('/neko factor 12', now, { ...unusedDeps, factorViaWasm });
+    expect(result).toEqual({ handled: true, response: '❌ /neko factor の実行中にエラーが発生しました: wasm init failed' });
+  });
+});
+
+describe('formatFactorWasmResult', () => {
+  it('factorの結果をコードブロック付きMarkdownで表示する', () => {
+    const result = formatFactorWasmResult('12: 2 2 3');
+    expect(result).toBe('## factor (WASM)\n```\n12: 2 2 3\n```');
   });
 });
 
