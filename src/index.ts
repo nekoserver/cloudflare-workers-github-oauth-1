@@ -6370,6 +6370,18 @@ export function resolveAnswerGraphTrailSessionStorage(cookieHeader: string | und
   return vals[ANSWER_GRAPH_TRAIL_SESSION_STORAGE_COOKIE] === 'on';
 }
 
+export const WASM_MODULES_VIEW_MODE_COOKIE = 'wasm_modules_view_mode';
+
+/**
+ * /wasm-modulesページの表示モード(パネル表示/リスト表示)をCookieから
+ * 解決する。デフォルトはリスト表示('list')。Cookie値が'panel'の場合のみ
+ * パネル表示にする(それ以外の値・未設定は全てlist扱い)。
+ */
+export function resolveWasmModulesViewMode(cookieHeader: string | undefined | null): 'panel' | 'list' {
+  const vals = getCookieValues(cookieHeader ?? undefined, [WASM_MODULES_VIEW_MODE_COOKIE]);
+  return vals[WASM_MODULES_VIEW_MODE_COOKIE] === 'panel' ? 'panel' : 'list';
+}
+
 /**
  * bge-m3以外のモデル(plamo-embedding-1b, embeddinggemma-300m)は、それぞれ
  * 専用の追加カラム(<prefix>_vector/<prefix>_dim/<prefix>_model/<prefix>_updated_at)
@@ -9157,7 +9169,8 @@ app.get('/factor-wasm', authMiddleware, async (c) => {
 
 app.get('/wasm-modules', authMiddleware, async (c) => {
   const user = c.get('user');
-  return c.html(getWasmModulesPage(user.sub));
+  const viewMode = resolveWasmModulesViewMode(c.req.header('Cookie'));
+  return c.html(getWasmModulesPage(user.sub, viewMode));
 });
 
 app.get('/api/wasm-modules', authMiddleware, async (c) => {
@@ -10004,6 +10017,7 @@ app.get('/settings', authMiddleware, async (c) => {
   const answerGraphHideEmptyRows = resolveAnswerGraphHideEmptyRows(cookieHeader);
   const answerGraphTrailSessionStorage = resolveAnswerGraphTrailSessionStorage(cookieHeader);
   const aichatPreferMoondream = resolveAichatPreferMoondream(cookieHeader);
+  const wasmModulesViewMode = resolveWasmModulesViewMode(cookieHeader);
 
   let issuedAt: string;
   let expiresAt: string;
@@ -10073,6 +10087,7 @@ app.get('/settings', authMiddleware, async (c) => {
     aichatAutoVectorizeEnabled: autoVectorizeSettings.enabled ? 'on' : 'off',
     aichatAutoVectorizeModel: autoVectorizeSettings.model,
     answerGraphHideEmptyRows: answerGraphHideEmptyRows ? 'on' : 'off',
+    wasmModulesViewMode,
     answerGraphTrailSessionStorage: answerGraphTrailSessionStorage ? 'on' : 'off',
     aichatPreferMoondream: aichatPreferMoondream ? 'on' : 'off',
     emailConfirmLoginEnabled,
@@ -15137,6 +15152,19 @@ app.post('/api/settings/answer-graph-trail-session-storage', authMiddleware, asy
     return c.json({ message: 'answer-graphのパン屑リストのsessionStorage保存設定を変更しました', mode }, 200);
   } catch {
     return c.json({ error: 'answer-graphのパン屑リストのsessionStorage保存設定の変更に失敗しました' }, 500);
+  }
+});
+
+app.post('/api/settings/wasm-modules-view-mode', authMiddleware, async (c) => {
+  try {
+    const { mode } = await c.req.json();
+    if (mode !== 'panel' && mode !== 'list') {
+      return c.json({ error: '無効な設定値です' }, 400);
+    }
+    c.header('Set-Cookie', `${WASM_MODULES_VIEW_MODE_COOKIE}=${mode}; Path=/; Secure; SameSite=Lax; Max-Age=31536000`);
+    return c.json({ message: 'WASMモジュール一覧の表示モードを変更しました', mode }, 200);
+  } catch {
+    return c.json({ error: 'WASMモジュール一覧の表示モードの変更に失敗しました' }, 500);
   }
 });
 

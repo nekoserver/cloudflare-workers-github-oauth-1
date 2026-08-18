@@ -32,6 +32,7 @@ export function getSettingsPage(user: {
   answerGraphHideEmptyRows?: string;
   answerGraphTrailSessionStorage?: string;
   aichatPreferMoondream?: string;
+  wasmModulesViewMode?: string;
   emailConfirmLoginEnabled?: boolean;
   githubScopes?: string;
   githubGrantedScopes?: string[] | null;
@@ -65,6 +66,7 @@ export function getSettingsPage(user: {
   const currentAnswerGraphHideEmptyRows = user.answerGraphHideEmptyRows === 'off' ? 'off' : 'on';
   const currentAnswerGraphTrailSessionStorage = user.answerGraphTrailSessionStorage === 'on' ? 'on' : 'off';
   const currentAichatPreferMoondream = user.aichatPreferMoondream === 'off' ? 'off' : 'on';
+  const currentWasmModulesViewMode = user.wasmModulesViewMode === 'panel' ? 'panel' : 'list';
   const currentEmailConfirmLoginEnabled = user.emailConfirmLoginEnabled === true;
   const requestedScopes = user.githubScopes ? user.githubScopes.split(/\s+/).filter(Boolean) : [];
   const grantedScopes = user.githubGrantedScopes ?? null;
@@ -702,6 +704,15 @@ export function getSettingsPage(user: {
                   ${currentAnswerGraphTrailSessionStorage === 'on' ? 'checked' : ''}>
                 <span class="theme-toggle-slider"></span>
               </label>
+            </div>
+          </div>
+          <div class="info-item">
+            <span class="info-label">WASMモジュール一覧ページのデフォルト表示モード</span>
+            <div class="setting-control">
+              <select class="timezone-select" id="wasmModulesViewModeSelect" onchange="onWasmModulesViewModeChange()">
+                <option value="list" ${currentWasmModulesViewMode === 'list' ? 'selected' : ''}>リスト表示</option>
+                <option value="panel" ${currentWasmModulesViewMode === 'panel' ? 'selected' : ''}>パネル表示</option>
+              </select>
             </div>
           </div>
           <div class="info-item">
@@ -1628,6 +1639,24 @@ export function getSettingsPage(user: {
         alert('answer-graphのパン屑リストのsessionStorage保存設定の変更に失敗しました');
         cb.checked = !cb.checked;
         label.textContent = cb.checked ? 'ON' : 'OFF';
+      }
+    }
+
+    async function onWasmModulesViewModeChange() {
+      var sel = document.getElementById('wasmModulesViewModeSelect');
+      if (!sel) return;
+      var mode = sel.value;
+      var prev = sel.getAttribute('data-prev') || 'list';
+      try {
+        var res = await fetch('/api/settings/wasm-modules-view-mode', {
+          method: 'POST', headers: {'Content-Type':'application/json'}, credentials: 'include',
+          body: JSON.stringify({ mode })
+        });
+        if (!res.ok) throw new Error('failed');
+        sel.setAttribute('data-prev', mode);
+      } catch(e) {
+        alert('WASMモジュール一覧の表示モードの変更に失敗しました');
+        sel.value = prev;
       }
     }
 

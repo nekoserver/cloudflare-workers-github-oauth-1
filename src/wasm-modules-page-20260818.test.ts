@@ -52,6 +52,29 @@ describe('getWasmModulesPage', () => {
     expect(html).toContain('id="modeListBtn"');
   });
 
+  it('見出しは「リンクタップで各WASMファイルのソースコードを読むことができます」に変わり、旧説明文(起動時の読み込みON/OFF設定)は削除されている', () => {
+    expect(html).toContain('リンクタップで各WASMファイルのソースコードを読むことができます');
+    expect(html).not.toContain('リポジトリに組み込まれているWASMモジュールと、起動時の読み込みON/OFF設定');
+  });
+
+  function extractTag(source: string, id: string): string {
+    const idx = source.indexOf('id="' + id + '"');
+    const start = source.lastIndexOf('<button', idx);
+    const end = source.indexOf('>', idx);
+    return source.slice(start, end + 1);
+  }
+
+  it('引数を省略した場合はデフォルトでリストモードがactiveになる', () => {
+    expect(extractTag(html, 'modeListBtn')).toContain('active');
+    expect(extractTag(html, 'modePanelBtn')).not.toContain('active');
+  });
+
+  it('第2引数に"panel"を渡すとパネルモードがactiveになる', () => {
+    const panelHtml = getWasmModulesPage('tester', 'panel');
+    expect(extractTag(panelHtml, 'modePanelBtn')).toContain('active');
+    expect(extractTag(panelHtml, 'modeListBtn')).not.toContain('active');
+  });
+
   it('リストモードのth見出しはID/バイナリ/ソース/サイズ/⬜︎(起動時に読み込む)/最終更新日時/最新ビルド日時の7列に集約され、行末の「:」は付かない', () => {
     const idx = html.indexOf('<thead>');
     const endIdx = html.indexOf('</thead>');
@@ -142,8 +165,8 @@ describe('/wasm-modules ページ: パネル/リスト切替・詳細モーダ�
     },
   ];
 
-  async function setup() {
-    const html = getWasmModulesPage('tester');
+  async function setup(mode?: 'panel' | 'list') {
+    const html = mode ? getWasmModulesPage('tester', mode) : getWasmModulesPage('tester');
     const bodyIdx = html.indexOf('<body>') + 6;
     const scriptIdx = html.indexOf('<script>', bodyIdx);
     document.body.innerHTML = html.slice(bodyIdx, scriptIdx);
@@ -164,12 +187,30 @@ describe('/wasm-modules ページ: パネル/リスト切替・詳細モーダ�
     return { fetchMock };
   }
 
-  it('初期表示はパネルモードで、モジュールごとのカードに説明文が直接表示される', async () => {
+  it('初期表示(引数省略)はデフォルトでリストモードになる', async () => {
     await setup();
+    expect(document.getElementById('modeListBtn')!.classList.contains('active')).toBe(true);
+    expect(document.getElementById('modePanelBtn')!.classList.contains('active')).toBe(false);
+    expect((document.getElementById('moduleList') as HTMLElement).style.display).toBe('none');
+    expect((document.getElementById('wasmTableWrap') as HTMLElement).style.display).not.toBe('none');
+  });
+
+  it('サーバーから渡された初期モードが"panel"の場合、パネルモードでカードに説明文が直接表示される', async () => {
+    await setup('panel');
+    expect(document.getElementById('modePanelBtn')!.classList.contains('active')).toBe(true);
     const cards = document.querySelectorAll('.module-card');
     expect(cards.length).toBe(2);
     expect(document.getElementById('moduleList')!.textContent).toContain('SHA-256ハッシュを計算する');
     expect((document.getElementById('wasmTableWrap') as HTMLElement).style.display).toBe('none');
+  });
+
+  it('モードを切り替えるとCookie保存用APIにmodeが送信される', async () => {
+    const { fetchMock } = await setup('panel');
+    (document.getElementById('modeListBtn') as HTMLButtonElement).click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const saveCall = fetchMock.mock.calls.find((c: unknown[]) => String(c[0]).includes('/api/settings/wasm-modules-view-mode')) as unknown as [string, RequestInit] | undefined;
+    expect(saveCall).toBeDefined();
+    expect(saveCall![1].body).toBe(JSON.stringify({ mode: 'list' }));
   });
 
   it('リストモードに切り替えるとテーブル行にはID等の値のみが並び、説明文はどこにも表示されない', async () => {
