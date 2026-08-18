@@ -15,6 +15,9 @@
  *   (6) facetボタンをクリックしても他のfacetの件数が再計算されない(選択の組み合わせ次第で件数が変わらないまま)
  *   (7) 固さfacetが「硬め/柔らかめ」の2値グループのままで、実際のカラム値(ハード/セミハード/セミソフト/ソフト)ごとの絞り込みができない
  *   (8) リスト(表)表示に切り替えてもデータがカード表示のままで、テーブル行が描画されない
+ *   (9) 合う食材の🔑ボタンを押しても候補モーダルが開かない、またはヒット件数が0件のまま/降順にならない
+ *   (10) pairingがnull(不明)の行が候補一覧から漏れる、または「不明」候補を選んでも絞り込みに反映されない
+ *   (11) モーダルから候補を選択してもフリーワード検索窓(pairingInput)に反映されず絞り込みが行われない
  */
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import app from './index';
@@ -59,9 +62,12 @@ describe('getCheeseSearchPage', () => {
     expect(html).toContain("条件なし(");
   });
 
-  it('フリーワード検索欄と食材ペアリング検索欄を含む', () => {
+  it('フリーワード検索欄と食材ペアリング検索欄、🔑候補モーダルを含む', () => {
     expect(html).toContain('id="freeword"');
     expect(html).toContain('id="pairingInput"');
+    expect(html).toContain('id="pairingKeyBtn"');
+    expect(html).toContain('id="pairingModalOverlay"');
+    expect(html).toContain('id="pairingCandidates"');
   });
 
   it('/api/cheese-frを呼び出す', () => {
@@ -78,8 +84,8 @@ describe('フランスチーズ検索ページ: facetのヒット件数・並び
   afterEach(() => { vi.unstubAllGlobals(); });
 
   const ITEMS = [
-    { seq_no: 1, name_fr: 'A', reading: 'あ', ingredient: '牛乳', producer: null, method: '白カビ', hardness: 'ソフト', notes: null, pairing: null },
-    { seq_no: 2, name_fr: 'B', reading: 'い', ingredient: '牛乳', producer: 'X地方', method: 'セミハード', hardness: 'セミハード', notes: null, pairing: null },
+    { seq_no: 1, name_fr: 'A', reading: 'あ', ingredient: '牛乳', producer: null, method: '白カビ', hardness: 'ソフト', notes: null, pairing: 'はちみつ、赤ワイン' },
+    { seq_no: 2, name_fr: 'B', reading: 'い', ingredient: '牛乳', producer: 'X地方', method: 'セミハード', hardness: 'セミハード', notes: null, pairing: 'はちみつ、赤ワイン' },
     { seq_no: 3, name_fr: 'C', reading: 'う', ingredient: '山羊乳', producer: null, method: '青カビ', hardness: 'セミソフト', notes: null, pairing: null },
   ];
 
@@ -164,5 +170,42 @@ describe('フランスチーズ検索ページ: facetのヒット件数・並び
     expect((grid as HTMLElement).style.display).not.toBe('none');
     expect((tableWrap as HTMLElement).style.display).toBe('none');
     expect(grid.querySelectorAll('.cheese-card').length).toBe(ITEMS.length);
+  });
+
+  it('🔑ボタンを押すと合う食材の候補モーダルが開き、不明を含めヒット件数順(はちみつ・赤ワイン2件が不明1件より左)に並ぶ', async () => {
+    await setup();
+    const overlay = document.getElementById('pairingModalOverlay')!;
+    expect(overlay.classList.contains('open')).toBe(false);
+
+    (document.getElementById('pairingKeyBtn') as HTMLButtonElement).click();
+
+    expect(overlay.classList.contains('open')).toBe(true);
+    const candidates = Array.from(document.querySelectorAll('#pairingCandidates .pairing-candidate-btn'));
+    const pairedBtn = candidates.find((b) => b.getAttribute('data-value') === 'はちみつ、赤ワイン')!;
+    const unknownBtn = candidates.find((b) => b.getAttribute('data-value') === '不明')!;
+    expect(pairedBtn.textContent).toContain('はちみつ、赤ワイン(2)');
+    expect(unknownBtn.textContent).toContain('不明(1)');
+    expect(candidates.indexOf(pairedBtn)).toBeLessThan(candidates.indexOf(unknownBtn));
+  });
+
+  it('候補を選択するとpairingInputに反映され絞り込みが行われ、モーダルが閉じる', async () => {
+    await setup();
+    (document.getElementById('pairingKeyBtn') as HTMLButtonElement).click();
+    const unknownBtn = Array.from(document.querySelectorAll('#pairingCandidates .pairing-candidate-btn'))
+      .find((b) => b.getAttribute('data-value') === '不明') as HTMLButtonElement;
+    unknownBtn.click();
+
+    const pairingInput = document.getElementById('pairingInput') as HTMLInputElement;
+    expect(pairingInput.value).toBe('不明');
+    const overlay = document.getElementById('pairingModalOverlay')!;
+    expect(overlay.classList.contains('open')).toBe(false);
+    expect(document.getElementById('resultCount')!.textContent).toContain('1 件');
+  });
+
+  it('閉じるボタンでモーダルが閉じる', async () => {
+    await setup();
+    (document.getElementById('pairingKeyBtn') as HTMLButtonElement).click();
+    (document.getElementById('pairingModalCloseBtn') as HTMLButtonElement).click();
+    expect(document.getElementById('pairingModalOverlay')!.classList.contains('open')).toBe(false);
   });
 });
