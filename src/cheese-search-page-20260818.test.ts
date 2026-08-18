@@ -13,6 +13,8 @@
  *   (4) 「条件なし」がデフォルトで選択状態にならない
  *   (5) facet選択肢の表示順がヒット件数の降順にならない
  *   (6) facetボタンをクリックしても他のfacetの件数が再計算されない(選択の組み合わせ次第で件数が変わらないまま)
+ *   (7) 固さfacetが「硬め/柔らかめ」の2値グループのままで、実際のカラム値(ハード/セミハード/セミソフト/ソフト)ごとの絞り込みができない
+ *   (8) リスト(表)表示に切り替えてもデータがカード表示のままで、テーブル行が描画されない
  */
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import app from './index';
@@ -120,8 +122,47 @@ describe('フランスチーズ検索ページ: facetのヒット件数・並び
     milkBtn.click();
 
     const hardnessGroup = document.getElementById('facetOptions-hardness')!;
-    const softBtn = Array.from(hardnessGroup.querySelectorAll('.facet-btn')).find((b) => b.getAttribute('data-value') === '柔らかめ')!;
-    // 牛乳(A:ソフト, B:セミハード)に絞り込んだ後は「柔らかめ」は1件のみ一致する
-    expect(softBtn.textContent).toContain('柔らかめ(1)');
+    const softBtn = Array.from(hardnessGroup.querySelectorAll('.facet-btn')).find((b) => b.getAttribute('data-value') === 'ソフト')!;
+    // 牛乳(A:ソフト, B:セミハード)に絞り込んだ後は「ソフト」は1件のみ一致する
+    expect(softBtn.textContent).toContain('ソフト(1)');
+  });
+
+  it('固さfacetの選択肢は実際の値(ハード/セミハード/セミソフト/ソフト)ごとに分かれている', async () => {
+    await setup();
+    const hardnessGroup = document.getElementById('facetOptions-hardness')!;
+    const values = Array.from(hardnessGroup.querySelectorAll('.facet-btn')).map((b) => b.getAttribute('data-value'));
+    expect(values).toContain('ハード');
+    expect(values).toContain('セミハード');
+    expect(values).toContain('セミソフト');
+    expect(values).toContain('ソフト');
+    expect(values).not.toContain('硬め');
+    expect(values).not.toContain('柔らかめ');
+  });
+
+  it('リスト表示に切り替えるとカードが隠れテーブル行が描画される', async () => {
+    await setup();
+    const grid = document.getElementById('cheeseGrid')!;
+    const tableWrap = document.getElementById('cheeseTableWrap')!;
+    const tableBody = document.getElementById('cheeseTableBody')!;
+    expect((grid as HTMLElement).style.display).not.toBe('none');
+    expect((tableWrap as HTMLElement).style.display).toBe('none');
+
+    (document.getElementById('viewListBtn') as HTMLButtonElement).click();
+
+    expect((grid as HTMLElement).style.display).toBe('none');
+    expect((tableWrap as HTMLElement).style.display).not.toBe('none');
+    expect(tableBody.querySelectorAll('tr').length).toBe(ITEMS.length);
+    expect(tableBody.textContent).toContain('A');
+  });
+
+  it('カード表示に戻すとテーブルが隠れカードが再表示される', async () => {
+    await setup();
+    (document.getElementById('viewListBtn') as HTMLButtonElement).click();
+    (document.getElementById('viewCardBtn') as HTMLButtonElement).click();
+    const grid = document.getElementById('cheeseGrid')!;
+    const tableWrap = document.getElementById('cheeseTableWrap')!;
+    expect((grid as HTMLElement).style.display).not.toBe('none');
+    expect((tableWrap as HTMLElement).style.display).toBe('none');
+    expect(grid.querySelectorAll('.cheese-card').length).toBe(ITEMS.length);
   });
 });
