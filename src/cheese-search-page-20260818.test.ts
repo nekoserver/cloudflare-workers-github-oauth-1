@@ -85,7 +85,7 @@ describe('フランスチーズ検索ページ: facetのヒット件数・並び
 
   const ITEMS = [
     { seq_no: 1, name_fr: 'A', reading: 'あ', ingredient: '牛乳', producer: null, method: '白カビ', hardness: 'ソフト', notes: null, pairing: 'はちみつ、赤ワイン' },
-    { seq_no: 2, name_fr: 'B', reading: 'い', ingredient: '牛乳', producer: 'X地方', method: 'セミハード', hardness: 'セミハード', notes: null, pairing: 'はちみつ、赤ワイン' },
+    { seq_no: 2, name_fr: 'B', reading: 'い', ingredient: '牛乳', producer: 'X地方', method: 'セミハード', hardness: 'セミハード', notes: null, pairing: 'はちみつ、白ワイン' },
     { seq_no: 3, name_fr: 'C', reading: 'う', ingredient: '山羊乳', producer: null, method: '青カビ', hardness: 'セミソフト', notes: null, pairing: null },
   ];
 
@@ -172,7 +172,7 @@ describe('フランスチーズ検索ページ: facetのヒット件数・並び
     expect(grid.querySelectorAll('.cheese-card').length).toBe(ITEMS.length);
   });
 
-  it('🔑ボタンを押すと合う食材の候補モーダルが開き、不明を含めヒット件数順(はちみつ・赤ワイン2件が不明1件より左)に並ぶ', async () => {
+  it('🔑ボタンを押すと合う食材の候補モーダルが開き、各行の値を「、」区切りで個別集計した候補がヒット件数順(はちみつ2件が赤ワイン/白ワイン/不明の各1件より左)に並ぶ', async () => {
     await setup();
     const overlay = document.getElementById('pairingModalOverlay')!;
     expect(overlay.classList.contains('open')).toBe(false);
@@ -181,11 +181,22 @@ describe('フランスチーズ検索ページ: facetのヒット件数・並び
 
     expect(overlay.classList.contains('open')).toBe(true);
     const candidates = Array.from(document.querySelectorAll('#pairingCandidates .pairing-candidate-btn'));
-    const pairedBtn = candidates.find((b) => b.getAttribute('data-value') === 'はちみつ、赤ワイン')!;
+    const honeyBtn = candidates.find((b) => b.getAttribute('data-value') === 'はちみつ')!;
+    const redWineBtn = candidates.find((b) => b.getAttribute('data-value') === '赤ワイン')!;
+    const whiteWineBtn = candidates.find((b) => b.getAttribute('data-value') === '白ワイン')!;
     const unknownBtn = candidates.find((b) => b.getAttribute('data-value') === '不明')!;
-    expect(pairedBtn.textContent).toContain('はちみつ、赤ワイン(2)');
+    expect(honeyBtn.textContent).toContain('はちみつ(2)');
+    expect(redWineBtn.textContent).toContain('赤ワイン(1)');
+    expect(whiteWineBtn.textContent).toContain('白ワイン(1)');
     expect(unknownBtn.textContent).toContain('不明(1)');
-    expect(candidates.indexOf(pairedBtn)).toBeLessThan(candidates.indexOf(unknownBtn));
+    expect(candidates.indexOf(honeyBtn)).toBeLessThan(candidates.indexOf(redWineBtn));
+    expect(candidates.indexOf(honeyBtn)).toBeLessThan(candidates.indexOf(unknownBtn));
+  });
+
+  it('候補キーワードバッジ同士の間隔は縦横それぞれ1pxになっている', async () => {
+    await setup();
+    const html = getCheeseSearchPage('tester');
+    expect(html).toMatch(/\.pairing-candidates\s*\{[^}]*gap:\s*1px;/);
   });
 
   it('候補を選択するとpairingInputに反映され絞り込みが行われ、モーダルが閉じる', async () => {
