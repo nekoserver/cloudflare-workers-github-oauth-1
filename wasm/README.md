@@ -70,6 +70,13 @@ export function sha256HexViaWasm(input: string): string {
   0以上2^53以下の整数のみ対応)。`/factor-wasm`ページ・`/neko factor`。
   C言語コード生成を伴わない純Rust実装のため、tree-sitter系クレートで
   ぶつかったwasm32ビルド不可の制約は関係ない(NOTICE.cloudflare-workers-github-oauth-1.rust-WASM.md参照)
+- `dig-wasm`: dig(1)風のDNS問い合わせ。DNSワイヤーフォーマットの問い合わせ
+  パケット組み立て・応答パケット解析(A/AAAA/NS/CNAME/MX/TXT/SOA等)をRustで
+  実装。`/neko dig <ドメイン> [タイプ]`(`/neko dig --help`でヘルプ表示)。
+  ブラウザページは無くサーバー(Worker)実行のみ。Workersからは生のUDP:53
+  ソケットが使えないため、実際のDNS問い合わせ自体はCloudflare DNS over
+  HTTPS(`https://cloudflare-dns.com/dns-query`)へのfetchで行う
+  (`src/utils/digWasmServer.ts`)
 
 新しいモジュールを追加したら、`src/data/wasmModuleRegistry.ts` の
 `WASM_MODULE_REGISTRY`(`/wasm-modules`ページの一覧・起動時ON/OFF設定用)
