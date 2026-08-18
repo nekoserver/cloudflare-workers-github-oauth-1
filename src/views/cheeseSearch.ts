@@ -90,6 +90,62 @@ export function getCheeseSearchPage(username: string): string {
     }
     .facet-btn.active { background: #0969da; color: #fff; border-color: #0969da; }
     .pairing-input { font-size: 12px; padding: 5px 8px; border-radius: 6px; border: 1px solid var(--border-color); background: var(--bg-secondary); color: var(--text-primary); width: 140px; }
+    .pairing-search-wrap { display: flex; align-items: center; gap: 4px; }
+    .pairing-key-btn {
+      font-size: 14px;
+      line-height: 1;
+      padding: 5px 7px;
+      border-radius: 6px;
+      border: 1px solid var(--border-color);
+      background: var(--bg-secondary);
+      color: var(--text-secondary);
+      cursor: pointer;
+    }
+    .pairing-key-btn:hover { background: var(--card-bg); }
+    .pairing-modal-overlay {
+      display: none;
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0,0,0,0.45);
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+    }
+    .pairing-modal-overlay.open { display: flex; }
+    .pairing-modal {
+      background: var(--card-bg);
+      border-radius: 10px;
+      max-width: 720px;
+      width: 90%;
+      max-height: 80vh;
+      overflow-y: auto;
+      padding: 20px;
+      box-shadow: 0 12px 32px rgba(0,0,0,0.3);
+    }
+    .pairing-modal-title { font-size: 16px; font-weight: 700; color: var(--text-primary); margin-bottom: 12px; }
+    .pairing-modal-close {
+      float: right;
+      font-size: 13px;
+      padding: 4px 10px;
+      border-radius: 6px;
+      border: 1px solid var(--border-color);
+      background: var(--bg-secondary);
+      color: var(--text-secondary);
+      cursor: pointer;
+    }
+    .pairing-candidates { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-start; clear: both; }
+    .pairing-candidate-btn {
+      font-size: 12px;
+      padding: 6px 12px;
+      border-radius: 999px;
+      border: 1px solid var(--border-color);
+      background: var(--bg-secondary);
+      color: var(--text-secondary);
+      cursor: pointer;
+      max-width: 100%;
+      text-align: left;
+    }
+    .pairing-candidate-btn:hover { background: #0969da; color: #fff; border-color: #0969da; }
     .result-bar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; flex-wrap: wrap; gap: 8px; }
     .result-count { font-size: 13px; color: var(--text-muted); }
     .view-toggle { display: flex; gap: 6px; }
@@ -163,7 +219,10 @@ export function getCheeseSearchPage(username: string): string {
       </div>
       <div class="facet-group">
         <span class="facet-label">合う食材:</span>
-        <input type="text" id="pairingInput" class="pairing-input" placeholder="例: はちみつ、赤ワイン">
+        <div class="pairing-search-wrap">
+          <button type="button" class="pairing-key-btn" id="pairingKeyBtn" title="候補一覧をヒット件数付きで表示">🔑</button>
+          <input type="text" id="pairingInput" class="pairing-input" placeholder="例: はちみつ、赤ワイン">
+        </div>
       </div>
       <div class="facet-group">
         <button type="button" class="facet-btn" id="resetBtn">条件をリセット</button>
@@ -196,6 +255,14 @@ export function getCheeseSearchPage(username: string): string {
       </table>
     </div>
     <div class="empty-msg" id="emptyMsg" style="display:none;">条件に一致するチーズが見つかりませんでした。</div>
+  </div>
+
+  <div class="pairing-modal-overlay" id="pairingModalOverlay">
+    <div class="pairing-modal" id="pairingModal">
+      <button type="button" class="pairing-modal-close" id="pairingModalCloseBtn">✕ 閉じる</button>
+      <div class="pairing-modal-title">合う食材の候補(ヒット件数順)</div>
+      <div class="pairing-candidates" id="pairingCandidates"></div>
+    </div>
   </div>
 
   <script>
@@ -320,8 +387,11 @@ export function getCheeseSearchPage(username: string): string {
       return !!item.producer;
     }
 
+    var PAIRING_UNKNOWN_LABEL = '不明';
+
     function matchesPairing(item, q) {
       if (!q) return true;
+      if (q === PAIRING_UNKNOWN_LABEL) return !item.pairing;
       var pairing = (item.pairing || '').toLowerCase();
       return pairing.indexOf(q.toLowerCase()) !== -1;
     }
@@ -382,6 +452,69 @@ export function getCheeseSearchPage(username: string): string {
       var facet = btn.getAttribute('data-facet');
       var value = btn.getAttribute('data-value');
       activeFacets[facet] = value || null;
+      render();
+    });
+
+    function getNextZ() {
+      var maxZ = 0;
+      document.querySelectorAll('*').forEach(function(el) {
+        var cs = window.getComputedStyle(el);
+        if (cs.position === 'fixed') {
+          var z = parseInt(cs.zIndex, 10);
+          if (!isNaN(z) && z > maxZ) maxZ = z;
+        }
+      });
+      var staticZDefaults = { pairingModalOverlay: 1000 };
+      Object.keys(staticZDefaults).forEach(function(id) {
+        if (staticZDefaults[id] > maxZ) maxZ = staticZDefaults[id];
+      });
+      return maxZ + 100;
+    }
+
+    function baseForPairingCandidates() {
+      var q = freewordInput.value.trim();
+      return allItems.filter(function(item) {
+        return matchesFreeword(item, q) && matchesAllFacetsExcept(item, null);
+      });
+    }
+
+    function renderPairingCandidates() {
+      var container = document.getElementById('pairingCandidates');
+      var base = baseForPairingCandidates();
+      var valuesSet = {};
+      allItems.forEach(function(item) { valuesSet[item.pairing || PAIRING_UNKNOWN_LABEL] = true; });
+      var candidates = Object.keys(valuesSet).map(function(value) {
+        var count = base.filter(function(item) { return matchesPairing(item, value); }).length;
+        return { value: value, count: count };
+      });
+      candidates.sort(function(a, b) { return b.count - a.count; });
+      container.innerHTML = candidates.map(function(c) {
+        return '<button type="button" class="pairing-candidate-btn" data-value="' + escHtml(c.value) + '">' + escHtml(c.value) + '(' + c.count + ')</button>';
+      }).join('');
+    }
+
+    var pairingModalOverlay = document.getElementById('pairingModalOverlay');
+
+    function openPairingModal() {
+      renderPairingCandidates();
+      pairingModalOverlay.style.zIndex = String(getNextZ());
+      pairingModalOverlay.classList.add('open');
+    }
+
+    function closePairingModal() {
+      pairingModalOverlay.classList.remove('open');
+    }
+
+    document.getElementById('pairingKeyBtn').addEventListener('click', openPairingModal);
+    document.getElementById('pairingModalCloseBtn').addEventListener('click', closePairingModal);
+    pairingModalOverlay.addEventListener('click', function(e) {
+      if (e.target === pairingModalOverlay) closePairingModal();
+    });
+    document.getElementById('pairingCandidates').addEventListener('click', function(e) {
+      var btn = e.target.closest ? e.target.closest('.pairing-candidate-btn') : null;
+      if (!btn) return;
+      pairingInput.value = btn.getAttribute('data-value');
+      closePairingModal();
       render();
     });
 
