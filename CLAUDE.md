@@ -270,6 +270,8 @@ NOTICE.<リポジトリ名>.<YYYYMMDD>.md
 
 - D1への問い合わせ時のクエリ最適化(N+1問題・バインド上限チャンク分割):
   [`NOTICE.cloudflare-workers-github-oauth-1.20260806.md`](NOTICE.cloudflare-workers-github-oauth-1.20260806.md)
+- Rust/WASM実装(wasm32ビルド制約・ブラウザ/サーバー共用・vitestとの相性・CSP・ast-grep):
+  [`NOTICE.cloudflare-workers-github-oauth-1.rust-WASM.md`](NOTICE.cloudflare-workers-github-oauth-1.rust-WASM.md)
 
 ---
 
