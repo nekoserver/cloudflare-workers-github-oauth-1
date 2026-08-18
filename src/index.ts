@@ -9218,6 +9218,15 @@ app.get('/api/wasm-modules/source', authMiddleware, async (c) => {
       status: result.status,
       message: result.message,
     });
+    // HTTP 401(Bad credentials等)はDBに保存されたGitHubアクセストークン自体が
+    // GitHub側で無効化・失効している状態(ユーザーがGitHub側でアプリの認可を
+    // 取り消した、トークンが古い等)であり、このAPI固有のバグではない。
+    // 再ログインで新しいトークンを取得すれば解消するため、その旨を明示する。
+    if (result.status === 401) {
+      return jsonUtf8({
+        error: 'GitHubアクセストークンが無効です(HTTP 401: Bad credentials)。GitHubから一度ログアウトし、再度ログインし直してください。',
+      }, 401);
+    }
     return jsonUtf8({ error: `ソースファイルの取得に失敗しました(HTTP ${result.status}: ${result.message})` }, 502);
   }
   return jsonUtf8({

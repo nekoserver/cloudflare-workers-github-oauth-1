@@ -136,7 +136,7 @@ describe('GET /api/wasm-modules/source', () => {
     expect(body.githubUrl).toContain('wasm/sha256-wasm/src/lib.rs');
   });
 
-  it('GitHub API取得失敗時は502と実際のステータスコード・エラーメッセージを返す(空文字で握りつぶさない)', async () => {
+  it('GitHub APIが401(Bad credentials)を返す場合は401と再ログインを促すメッセージを返す(保存されたトークン自体が失効しているケース)', async () => {
     const authHeader = await makeAuthHeader();
     const fetchMock = vi.fn().mockResolvedValue({
       ok: false,
@@ -150,9 +150,30 @@ describe('GET /api/wasm-modules/source', () => {
       { headers: { Authorization: authHeader } },
       { JWT_SECRET, DB: createMockDb('gh-token-abc') }
     );
-    expect(res.status).toBe(502);
+    expect(res.status).toBe(401);
     const body = (await res.json()) as { error: string };
     expect(body.error).toContain('401');
     expect(body.error).toContain('Bad credentials');
+    expect(body.error).toContain('再度ログイン');
+  });
+
+  it('GitHub APIが401以外のエラー(404等)を返す場合は502と実際のステータスコード・エラーメッセージを返す(空文字で握りつぶさない)', async () => {
+    const authHeader = await makeAuthHeader();
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 404,
+      statusText: 'Not Found',
+      json: () => Promise.resolve({ message: 'Not Found' }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const res = await app.request(
+      '/api/wasm-modules/source?id=sha256',
+      { headers: { Authorization: authHeader } },
+      { JWT_SECRET, DB: createMockDb('gh-token-abc') }
+    );
+    expect(res.status).toBe(502);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toContain('404');
+    expect(body.error).toContain('Not Found');
   });
 });
