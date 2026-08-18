@@ -52,10 +52,10 @@ describe('GET /api/cheese-fr', () => {
     expect(res.status).toBe(503);
   });
 
-  it('qを指定しない場合は全件を返す', async () => {
+  it('qを指定しない場合は全件を返す(pairingを含む)', async () => {
     const authHeader = await makeAuthHeader();
     const rows = [
-      { seq_no: 1, name_fr: 'Abbaye de Belloc', reading: 'アッベイ・ド・ベルロック', ingredient: '羊乳', producer: 'バスク地方・修道院', method: 'セミハード', hardness: 'セミハード', notes: null },
+      { seq_no: 1, name_fr: 'Abbaye de Belloc', reading: 'アッベイ・ド・ベルロック', ingredient: '羊乳', producer: 'バスク地方・修道院', method: 'セミハード', hardness: 'セミハード', notes: null, pairing: 'ハム、くるみ、白ワインやフルーティな赤ワイン' },
     ];
     const res = await app.request(
       '/api/cheese-fr',
@@ -80,6 +80,20 @@ describe('GET /api/cheese-fr', () => {
     expect(cheeseQuery).toBeDefined();
     expect(cheeseQuery).toContain('name_fr LIKE ?');
     expect(cheeseQuery).toContain('reading LIKE ?');
+  });
+
+  it('SELECT句にpairingカラムが含まれる(食材ペアリング検索ページ用)', async () => {
+    const authHeader = await makeAuthHeader();
+    const db = createMockDb([]);
+    await app.request(
+      '/api/cheese-fr',
+      { headers: { Authorization: authHeader } },
+      { JWT_SECRET, DB: db }
+    );
+    const calledSqls = db.prepare.mock.calls.map((c) => c[0] as string);
+    const cheeseQuery = calledSqls.find((sql) => sql.includes('FROM cheese_fr'));
+    expect(cheeseQuery).toBeDefined();
+    expect(cheeseQuery).toContain('pairing');
   });
 
   it('DBエラー時は実際のエラーメッセージを含んだ500を返す(握りつぶさない)', async () => {

@@ -63,6 +63,7 @@ import { getSha256WasmPage } from './views/sha256Wasm';
 import { getFactorWasmPage } from './views/factorWasm';
 import { getWasmModulesPage } from './views/wasmModules';
 import { getFileDepsPage } from './views/fileDeps';
+import { getCheeseSearchPage } from './views/cheeseSearch';
 import { mergeWasmModuleConfig, isKnownWasmModuleId, isWasmModuleEnabled, type WasmModuleStartupRow } from './utils/wasmModuleConfig';
 import { validateFreeText, buildFreeTextSlackMessage, handleTsubuyakiSlashCommand } from './utils/freeTextSlackPost';
 import { handleF1ScheduleSlashCommand } from './utils/f1ScheduleSlackPost';
@@ -250,7 +251,7 @@ export const STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
   { name: 'api_keys', migration: '0103', description: 'トップページのログイン判定に使うAPIキー(🔑キー管理ページで発行)。生キーは保存せずSHA-256ハッシュのみ保存し、失効(revoked_at)・有効期限(expires_at)を個別に管理する', syncPolicy: 'auto' },
   { name: 'wasm_module_startup_config', migration: '0104', description: 'ブラウザ/サーバー両対応WASMモジュール(/wasm-modulesページ)を起動時に読み込むかどうかのON/OFF設定', syncPolicy: 'manual' },
   { name: 'ts_file_dependencies', migration: '0105', description: 'ast-grep(WASM)で抽出したTypeScriptファイル間のimport依存関係(/file-depsページの可視化用)', syncPolicy: 'manual' },
-  { name: 'cheese_fr', migration: '0107', description: 'フランスチーズの名称・読み仮名・原材料・生産者・製法・固さ・備考の一覧(参照専用マスタデータ)', syncPolicy: 'manual' },
+  { name: 'cheese_fr', migration: '0107', description: 'フランスチーズの名称・読み仮名・原材料・生産者・製法・固さ・備考・食材ペアリングの一覧(参照専用マスタデータ)', syncPolicy: 'manual' },
 ];
 
 const REQUIRED_STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
@@ -1536,6 +1537,7 @@ CREATE INDEX IF NOT EXISTS idx_ts_file_dependencies_target ON ts_file_dependenci
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_cheese_fr_seq_no ON cheese_fr(seq_no);
 CREATE INDEX IF NOT EXISTS idx_cheese_fr_name_fr ON cheese_fr(name_fr);`,
+  '0108': `ALTER TABLE cheese_fr ADD COLUMN pairing TEXT;`,
 };
 
 async function ensureGroupTable(db: D1Database): Promise<void> {
@@ -9197,6 +9199,11 @@ app.get('/file-deps', authMiddleware, async (c) => {
   return c.html(getFileDepsPage(user.sub));
 });
 
+app.get('/cheese-search', authMiddleware, async (c) => {
+  const user = c.get('user');
+  return c.html(getCheeseSearchPage(user.sub));
+});
+
 app.get('/api/file-deps', authMiddleware, async (c) => {
   if (!c.env.DB) {
     return jsonUtf8({ nodes: [], edges: [] });
@@ -9232,11 +9239,11 @@ app.get('/api/cheese-fr', authMiddleware, async (c) => {
   try {
     const rows = q
       ? await c.env.DB.prepare(
-          `SELECT seq_no, name_fr, reading, ingredient, producer, method, hardness, notes
+          `SELECT seq_no, name_fr, reading, ingredient, producer, method, hardness, notes, pairing
            FROM cheese_fr WHERE name_fr LIKE ? OR reading LIKE ? ORDER BY seq_no`
         ).bind(`%${q}%`, `%${q}%`).all()
       : await c.env.DB.prepare(
-          `SELECT seq_no, name_fr, reading, ingredient, producer, method, hardness, notes
+          `SELECT seq_no, name_fr, reading, ingredient, producer, method, hardness, notes, pairing
            FROM cheese_fr ORDER BY seq_no`
         ).all();
     return jsonUtf8({ items: rows.results ?? [] });
