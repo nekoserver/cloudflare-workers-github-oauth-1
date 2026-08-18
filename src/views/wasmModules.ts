@@ -196,6 +196,7 @@ export function getWasmModulesPage(username: string): string {
       font-size: 12px;
       line-height: 1.6;
       white-space: pre;
+      color: var(--text-primary);
     }
     .src-line { display: flex; }
     .src-lineno {
@@ -214,6 +215,11 @@ export function getWasmModulesPage(username: string): string {
     .tok-num { color: #953800; }
     .tok-com { color: #6e7781; font-style: italic; }
     .tok-macro { color: #8250df; }
+    [data-theme="dark"] .tok-kw { color: #ff7b72; }
+    [data-theme="dark"] .tok-str { color: #a5d6ff; }
+    [data-theme="dark"] .tok-num { color: #ffa657; }
+    [data-theme="dark"] .tok-com { color: #8b949e; }
+    [data-theme="dark"] .tok-macro { color: #d2a8ff; }
   </style>
 </head>
 <body>

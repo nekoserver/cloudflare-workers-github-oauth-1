@@ -108,6 +108,20 @@ describe('getWasmModulesPage', () => {
     expect(html).not.toContain("\\'");
     expect(html).not.toContain('&#39;&#39;');
   });
+
+  it('シンタックスハイライトの各tok-*クラスにダークモード用の色指定がある(ダークモードで読めなくなるのを防ぐ)', () => {
+    expect(html).toContain('[data-theme="dark"] .tok-kw');
+    expect(html).toContain('[data-theme="dark"] .tok-str');
+    expect(html).toContain('[data-theme="dark"] .tok-num');
+    expect(html).toContain('[data-theme="dark"] .tok-com');
+    expect(html).toContain('[data-theme="dark"] .tok-macro');
+  });
+
+  it('ソースコード本体の文字色はvar(--text-primary)を明示指定する(テーマ切替に追随させるため)', () => {
+    const idx = html.indexOf('.source-code {');
+    const block = html.slice(idx, idx + 200);
+    expect(block).toContain('color: var(--text-primary);');
+  });
 });
 
 describe('/wasm-modules ページ: パネル/リスト切替・詳細モーダル・ソース閲覧モーダル', () => {
