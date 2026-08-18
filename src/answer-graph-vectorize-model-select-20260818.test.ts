@@ -142,6 +142,35 @@ describe('POST /api/aichat/vectorize-answer: 予備知識キーワード抽出�
   });
 });
 
+describe('POST /api/aichat/vectorize-answer: 意味の薄い予備知識キーワードの事前排除', () => {
+  it('英数字だけの語・ひらがなカタカナ1文字の語はレスポンスにもベクタ化対象にも含まれない', async () => {
+    const auth = await makeAuthHeader();
+    const db = makeDb({ id: 's1', answer: 'テスト回答' });
+    const embedCalls: string[] = [];
+    const ai = {
+      run: vi.fn().mockImplementation((model: string, params: { messages?: { content: string }[] }) => {
+        if (model === PLAMO_EMBEDDING_MODEL && params.messages) {
+          // vectorizeAnswerKeywordsの個別キーワード埋め込み呼び出しを記録
+          embedCalls.push(params.messages[0].content);
+          return Promise.resolve({ data: [[0.1, 0.2]] });
+        }
+        if (model === PLAMO_EMBEDDING_MODEL) return Promise.resolve({ data: [[0.1, 0.2, 0.3]] });
+        return Promise.resolve({ response: '新幹線\nA\nGPT4\nあ\n改札' });
+      }),
+    };
+
+    const res = await app.request('/api/aichat/vectorize-answer', {
+      method: 'POST',
+      headers: { Authorization: auth, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ shareId: 's1' }),
+    }, makeEnv(db, ai));
+
+    expect(res.status).toBe(200);
+    const bodyJson = await res.json() as { keywords: string[] };
+    expect(bodyJson.keywords).toEqual(['新幹線', '改札']);
+  });
+});
+
 describe('withTimeout', () => {
   it('元のPromiseが規定時間内に解決すればその値をそのまま返す', async () => {
     const { withTimeout } = await import('./index');

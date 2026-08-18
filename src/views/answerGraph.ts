@@ -530,8 +530,8 @@ input[type=search]:focus { border-color:var(--accent); }
     <div class="vec-model-modal-title" id="vecModelModalTitle">🧭 埋め込みモデルを選択</div>
     <div class="vec-model-modal-hint">この回答文のベクタ化に使うモデルを選んでください</div>
     <div class="vec-model-modal-options">
-      <label class="vec-model-modal-option"><input type="radio" name="vecModelChoice" value="@cf/baai/bge-m3"> bge-m3</label>
       <label class="vec-model-modal-option"><input type="radio" name="vecModelChoice" value="@cf/pfnet/plamo-embedding-1b" checked> plamo-embedding-1b</label>
+      <label class="vec-model-modal-option"><input type="radio" name="vecModelChoice" value="@cf/baai/bge-m3"> bge-m3</label>
       <label class="vec-model-modal-option"><input type="radio" name="vecModelChoice" value="@cf/google/embeddinggemma-300m"> embeddinggemma-300m</label>
     </div>
     <div class="vec-model-modal-foot">

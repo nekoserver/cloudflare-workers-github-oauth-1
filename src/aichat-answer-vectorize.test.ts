@@ -15,6 +15,8 @@ import {
   getKeywordCategoryColors,
   mergeKeywordOccurrenceWithCategory,
   enrichSearchResultsWithVectorizedFlag,
+  isLowValuePrerequisiteTerm,
+  filterMeaningfulPrerequisiteTerms,
   PLAMO_EMBEDDING_MODEL,
   ANSWER_PREREQUISITE_TERMS_MODEL,
 } from './index';
@@ -668,5 +670,68 @@ describe('mergeKeywordOccurrenceWithCategory: 出現回数リストへの分類�
       {},
     );
     expect(merged.map((m) => m.keyword)).toEqual(['B', 'A']);
+  });
+});
+
+// 対象: 「この回答文をベクタ化する」ボタンで、未登録の予備知識キーワードを
+// ベクタ化・登録する前に、意味の薄い語(英数字だけの語・ひらがなカタカナ
+// 1文字だけの語)を弾くフィルタ。
+//
+// 故障シナリオ:
+//   (1) "AI"や"GPT4"のような英数字だけの語(複数文字)を除外し損なう
+//   (2) アルファベット1文字("A"等)を除外し損なう
+//   (3) ひらがな・カタカナ1文字("あ"・"ア"・"ー"等)を除外し損なう
+//   (4) 漢字1文字や、英数字+日本語が混在した語(例: "iOS版")まで
+//       誤って除外してしまう
+describe('isLowValuePrerequisiteTerm: 意味の薄い予備知識キーワードの判定', () => {
+  it('英数字だけの語(複数文字)はtrue', () => {
+    expect(isLowValuePrerequisiteTerm('GPT4')).toBe(true);
+    expect(isLowValuePrerequisiteTerm('2024')).toBe(true);
+    expect(isLowValuePrerequisiteTerm('AI')).toBe(true);
+  });
+
+  it('アルファベット1文字・数字1文字はtrue', () => {
+    expect(isLowValuePrerequisiteTerm('A')).toBe(true);
+    expect(isLowValuePrerequisiteTerm('a')).toBe(true);
+    expect(isLowValuePrerequisiteTerm('1')).toBe(true);
+  });
+
+  it('ひらがな1文字・カタカナ1文字はtrue', () => {
+    expect(isLowValuePrerequisiteTerm('あ')).toBe(true);
+    expect(isLowValuePrerequisiteTerm('ア')).toBe(true);
+    expect(isLowValuePrerequisiteTerm('ー')).toBe(true);
+  });
+
+  it('漢字1文字はfalse(除外しない)', () => {
+    expect(isLowValuePrerequisiteTerm('駅')).toBe(false);
+  });
+
+  it('ひらがな・カタカナ2文字以上の語はfalse(除外しない)', () => {
+    expect(isLowValuePrerequisiteTerm('あい')).toBe(false);
+    expect(isLowValuePrerequisiteTerm('アイ')).toBe(false);
+  });
+
+  it('英数字と日本語が混在した語はfalse(除外しない)', () => {
+    expect(isLowValuePrerequisiteTerm('iOS版')).toBe(false);
+    expect(isLowValuePrerequisiteTerm('新幹線')).toBe(false);
+  });
+
+  it('空文字はfalse', () => {
+    expect(isLowValuePrerequisiteTerm('')).toBe(false);
+  });
+});
+
+describe('filterMeaningfulPrerequisiteTerms: 意味の薄い語を取り除く', () => {
+  it('意味の薄い語だけを除外し、残りは順序を保ったまま返す', () => {
+    const result = filterMeaningfulPrerequisiteTerms(['新幹線', 'A', 'GPT4', '駅', 'あ', '改札']);
+    expect(result).toEqual(['新幹線', '駅', '改札']);
+  });
+
+  it('全て意味の薄い語なら空配列を返す', () => {
+    expect(filterMeaningfulPrerequisiteTerms(['A', 'あ', 'ア', '123'])).toEqual([]);
+  });
+
+  it('空配列を渡すと空配列を返す', () => {
+    expect(filterMeaningfulPrerequisiteTerms([])).toEqual([]);
   });
 });
