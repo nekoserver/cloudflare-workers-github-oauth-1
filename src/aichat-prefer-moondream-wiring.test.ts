@@ -38,7 +38,7 @@ describe('画像添付時にmoondreamを優先する設定: 配線の整合性',
   it('POST /api/aichat はpreferMoondreamがtrueかつ画像添付時のみrequestedModelをMOONDREAM_MODELへ差し替える', () => {
     const idx = src.indexOf("app.post('/api/aichat'");
     expect(idx).toBeGreaterThan(-1);
-    const block = src.slice(idx, idx + 4200);
+    const block = src.slice(idx, idx + 4800);
     expect(block).toContain('const preferMoondream = !!body.preferMoondream && !!image;');
     expect(block).toContain('preferMoondream ? MOONDREAM_MODEL : (body.model ?? \'\').trim()');
   });
