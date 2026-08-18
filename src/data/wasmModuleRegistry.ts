@@ -10,6 +10,7 @@ export type WasmModuleInfo = {
   description: string;
   wasmPath: string;
   sourceDir: string;
+  sourceFile: string;
   approxSize: string;
 };
 
@@ -21,6 +22,7 @@ export const WASM_MODULE_REGISTRY: WasmModuleInfo[] = [
       '文字列のSHA-256ハッシュを計算する。/sha256-wasmページのブラウザ実行と、AIチャットの/neko 256サブコマンドのサーバー実行の両方で同じバイナリを使用する',
     wasmPath: 'public/wasm/sha256_bg.wasm',
     sourceDir: 'wasm/sha256-wasm',
+    sourceFile: 'wasm/sha256-wasm/src/lib.rs',
     approxSize: '約25KB',
   },
   {
@@ -30,6 +32,7 @@ export const WASM_MODULE_REGISTRY: WasmModuleInfo[] = [
       'GNU coreutilsのfactorコマンドを模した素因数分解(0以上2^53以下の整数、試し割り法)。/factor-wasmページのブラウザ実行と、AIチャットの/neko factorサブコマンドのサーバー実行の両方で同じバイナリを使用する',
     wasmPath: 'public/wasm/factor_bg.wasm',
     sourceDir: 'wasm/factor-wasm',
+    sourceFile: 'wasm/factor-wasm/src/lib.rs',
     approxSize: '約21KB',
   },
   {
@@ -39,6 +42,7 @@ export const WASM_MODULE_REGISTRY: WasmModuleInfo[] = [
       'dig(1)風のDNS問い合わせ。DNSワイヤーフォーマットの問い合わせパケット組み立て・応答パケット解析をRust/WASMで行い、実際のDNS問い合わせ自体はCloudflare DNS over HTTPS(cloudflare-dns.com)へのfetchで行う。AIチャットの/neko digサブコマンドのサーバー実行で使用する',
     wasmPath: 'public/wasm/dig_bg.wasm',
     sourceDir: 'wasm/dig-wasm',
+    sourceFile: 'wasm/dig-wasm/src/lib.rs',
     approxSize: '約55KB',
   },
 ];

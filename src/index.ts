@@ -65,6 +65,8 @@ import { getWasmModulesPage } from './views/wasmModules';
 import { getFileDepsPage } from './views/fileDeps';
 import { getCheeseSearchPage } from './views/cheeseSearch';
 import { mergeWasmModuleConfig, isKnownWasmModuleId, isWasmModuleEnabled, type WasmModuleStartupRow } from './utils/wasmModuleConfig';
+import { findWasmModule } from './data/wasmModuleRegistry';
+import { WASM_MODULES_REPO_FULL_NAME, fetchLatestCommitDateForPath, fetchFileContent } from './utils/wasmModuleSource';
 import { validateFreeText, buildFreeTextSlackMessage, handleTsubuyakiSlashCommand } from './utils/freeTextSlackPost';
 import { handleF1ScheduleSlashCommand } from './utils/f1ScheduleSlackPost';
 import { resolveNotifyConfig, isNotifyConfigured, sendNotification as dispatchNotification } from './utils/notifyDispatch';
@@ -9159,20 +9161,64 @@ app.get('/wasm-modules', authMiddleware, async (c) => {
 });
 
 app.get('/api/wasm-modules', authMiddleware, async (c) => {
-  if (!c.env.DB) {
-    return jsonUtf8({ modules: mergeWasmModuleConfig([]) });
+  const db = c.env.DB;
+  let modules = mergeWasmModuleConfig([]);
+  if (db) {
+    try {
+      const rows = await db.prepare(
+        'SELECT module_id, enabled, updated_at, updated_by FROM wasm_module_startup_config'
+      ).all<WasmModuleStartupRow>();
+      modules = mergeWasmModuleConfig(rows.results ?? []);
+    } catch (error) {
+      logger.warn('Failed to load wasm_module_startup_config', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
   }
-  try {
-    const rows = await c.env.DB.prepare(
-      'SELECT module_id, enabled, updated_at, updated_by FROM wasm_module_startup_config'
-    ).all<WasmModuleStartupRow>();
-    return jsonUtf8({ modules: mergeWasmModuleConfig(rows.results ?? []) });
-  } catch (error) {
-    logger.warn('Failed to load wasm_module_startup_config', {
-      error: error instanceof Error ? error.message : String(error),
-    });
-    return jsonUtf8({ modules: mergeWasmModuleConfig([]) });
+
+  // 各モジュールのソースファイル・ビルド成果物(.wasm)の最終コミット日時を
+  // GitHub APIから取得する(失敗時はnullのまま返し、「不明」表示にフォールバック
+  // させる。ここで例外を投げてページ全体を壊さない)。
+  const user = c.get('user');
+  const userSession = await getUserSession(db, user.sub);
+  const accessToken = userSession?.githubAccessToken ?? user.github_access_token ?? undefined;
+  const modulesWithDates = accessToken
+    ? await Promise.all(
+        modules.map(async (m) => {
+          const [sourceUpdatedAt, wasmBuiltAt] = await Promise.all([
+            fetchLatestCommitDateForPath(accessToken, WASM_MODULES_REPO_FULL_NAME, m.sourceFile),
+            fetchLatestCommitDateForPath(accessToken, WASM_MODULES_REPO_FULL_NAME, m.wasmPath),
+          ]);
+          return { ...m, sourceUpdatedAt, wasmBuiltAt };
+        })
+      )
+    : modules.map((m) => ({ ...m, sourceUpdatedAt: null, wasmBuiltAt: null }));
+
+  return jsonUtf8({ modules: modulesWithDates });
+});
+
+app.get('/api/wasm-modules/source', authMiddleware, async (c) => {
+  const moduleId = (c.req.query('id') ?? '').trim();
+  const mod = findWasmModule(moduleId);
+  if (!mod) {
+    return jsonUtf8({ error: '不明なモジュールIDです' }, 400);
   }
+  const db = c.env.DB;
+  const user = c.get('user');
+  const userSession = await getUserSession(db, user.sub);
+  const accessToken = userSession?.githubAccessToken ?? user.github_access_token ?? undefined;
+  if (!accessToken) {
+    return jsonUtf8({ error: 'GitHubアクセストークンが未設定のためソースを取得できません' }, 503);
+  }
+  const content = await fetchFileContent(accessToken, WASM_MODULES_REPO_FULL_NAME, mod.sourceFile);
+  if (content === null) {
+    return jsonUtf8({ error: 'ソースファイルの取得に失敗しました' }, 502);
+  }
+  return jsonUtf8({
+    path: mod.sourceFile,
+    content,
+    githubUrl: `https://github.com/${WASM_MODULES_REPO_FULL_NAME}/blob/main/${mod.sourceFile}`,
+  });
 });
 
 app.post('/api/wasm-modules', authMiddleware, async (c) => {
