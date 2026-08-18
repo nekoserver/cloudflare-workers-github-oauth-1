@@ -60,6 +60,8 @@ import { findNearbyCities } from './utils/worldCities';
 import { getAuthFlowPage } from './views/authFlow';
 import { getTsubuyakiPage } from './views/tsubuyaki';
 import { getSha256WasmPage } from './views/sha256Wasm';
+import { getWasmModulesPage } from './views/wasmModules';
+import { mergeWasmModuleConfig, isKnownWasmModuleId, isWasmModuleEnabled, type WasmModuleStartupRow } from './utils/wasmModuleConfig';
 import { validateFreeText, buildFreeTextSlackMessage, handleTsubuyakiSlashCommand } from './utils/freeTextSlackPost';
 import { handleF1ScheduleSlashCommand } from './utils/f1ScheduleSlackPost';
 import { resolveNotifyConfig, isNotifyConfigured, sendNotification as dispatchNotification } from './utils/notifyDispatch';
@@ -244,6 +246,7 @@ export const STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
   { name: 'aichat_images', migration: '0100', description: 'AIチャットの画像添付を正規化して保存するテーブル。同一ユーザー内で同一内容(content_hash)の画像は再登録せず既存行のIDを再利用する(重複保存防止)', syncPolicy: 'auto' },
   { name: 'aichat_moondream_analyses', migration: '0102', description: 'AIチャットの画像添付投稿でMoondream(moondream3.1-9B-A2B)に問い合わせた画像分析結果を、回答文(share_id)・画像(image_id)に紐づけて保存する', syncPolicy: 'auto' },
   { name: 'api_keys', migration: '0103', description: 'トップページのログイン判定に使うAPIキー(🔑キー管理ページで発行)。生キーは保存せずSHA-256ハッシュのみ保存し、失効(revoked_at)・有効期限(expires_at)を個別に管理する', syncPolicy: 'auto' },
+  { name: 'wasm_module_startup_config', migration: '0104', description: 'ブラウザ/サーバー両対応WASMモジュール(/wasm-modulesページ)を起動時に読み込むかどうかのON/OFF設定', syncPolicy: 'manual' },
 ];
 
 const REQUIRED_STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
@@ -1500,6 +1503,12 @@ CREATE INDEX IF NOT EXISTS idx_aichat_moondream_analyses_image ON aichat_moondre
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_api_keys_key_hash ON api_keys(key_hash);
 CREATE INDEX IF NOT EXISTS idx_api_keys_user_id ON api_keys(user_id);`,
+  '0104': `CREATE TABLE IF NOT EXISTS wasm_module_startup_config (
+  module_id TEXT PRIMARY KEY,
+  enabled INTEGER NOT NULL DEFAULT 1,
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_by TEXT
+);`,
 };
 
 async function ensureGroupTable(db: D1Database): Promise<void> {
@@ -1725,6 +1734,7 @@ export const TABLE_COLUMN_KEYS: Record<string, ColumnKeyInfo> = {
   moondream_analyze_log: { id: 'pk', user_id: 'fk+idx' },
   aichat_images: { id: 'pk', user_id: 'uk', content_hash: 'uk' },
   aichat_moondream_analyses: { id: 'pk', share_id: 'uk', image_id: 'fk+idx', user_id: 'fk+idx' },
+  wasm_module_startup_config: { module_id: 'pk' },
 };
 
 export function getColumnKeyType(tableName: string, columnName: string): ColumnKeyType {
@@ -1832,6 +1842,7 @@ export const TABLE_GROUP_MAP: Record<string, string> = {
   ts_commit_function_map: 'ts-catalog',
   ts_function_impact:     'ts-catalog',
   ts_commit_quality:      'ts-catalog',
+  wasm_module_startup_config: 'system',
 };
 
 async function recordAiSummaryLinkAccess(
@@ -4181,6 +4192,14 @@ app.post('/api/aichat', aichatAuthMiddleware, async (c) => {
       return { count: countRow?.cnt ?? 0, totalCount: totalRow?.cnt ?? 0, results: rows.results ?? [] };
     },
     sha256ViaWasm: async (input) => {
+      if (c.env.DB) {
+        const row = await c.env.DB.prepare(
+          'SELECT module_id, enabled, updated_at, updated_by FROM wasm_module_startup_config WHERE module_id = ?'
+        ).bind('sha256').first<WasmModuleStartupRow>().catch(() => null);
+        if (!isWasmModuleEnabled(row)) {
+          throw new Error('sha256モジュールは現在無効化されています(/wasm-modulesページで有効にしてください)');
+        }
+      }
       // dynamic importにする理由: sha256WasmServer.tsは.wasmファイルを
       // 静的importしており、Vite/vitest環境では.wasmインポートが
       // WebAssembly.Moduleではなくアセットパス文字列になる。静的import
@@ -9001,6 +9020,62 @@ app.get('/sha256-wasm', authMiddleware, async (c) => {
     "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'"
   );
   return c.html(getSha256WasmPage(user.sub));
+});
+
+app.get('/wasm-modules', authMiddleware, async (c) => {
+  const user = c.get('user');
+  return c.html(getWasmModulesPage(user.sub));
+});
+
+app.get('/api/wasm-modules', authMiddleware, async (c) => {
+  if (!c.env.DB) {
+    return jsonUtf8({ modules: mergeWasmModuleConfig([]) });
+  }
+  try {
+    const rows = await c.env.DB.prepare(
+      'SELECT module_id, enabled, updated_at, updated_by FROM wasm_module_startup_config'
+    ).all<WasmModuleStartupRow>();
+    return jsonUtf8({ modules: mergeWasmModuleConfig(rows.results ?? []) });
+  } catch (error) {
+    logger.warn('Failed to load wasm_module_startup_config', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return jsonUtf8({ modules: mergeWasmModuleConfig([]) });
+  }
+});
+
+app.post('/api/wasm-modules', authMiddleware, async (c) => {
+  const user = c.get('user');
+  let body: { moduleId?: string; enabled?: boolean };
+  try {
+    body = await c.req.json();
+  } catch {
+    return jsonUtf8({ error: 'リクエスト形式が不正です' }, 400);
+  }
+  const moduleId = (body.moduleId ?? '').trim();
+  if (!moduleId || !isKnownWasmModuleId(moduleId)) {
+    return jsonUtf8({ error: '不明なモジュールIDです' }, 400);
+  }
+  if (typeof body.enabled !== 'boolean') {
+    return jsonUtf8({ error: 'enabledはboolean型で指定してください' }, 400);
+  }
+  if (!c.env.DB) {
+    return jsonUtf8({ error: 'DBバインディングが未設定です' }, 503);
+  }
+  try {
+    await c.env.DB.prepare(
+      `INSERT INTO wasm_module_startup_config (module_id, enabled, updated_at, updated_by)
+       VALUES (?, ?, datetime('now'), ?)
+       ON CONFLICT(module_id) DO UPDATE SET enabled = excluded.enabled, updated_at = excluded.updated_at, updated_by = excluded.updated_by`
+    ).bind(moduleId, body.enabled ? 1 : 0, user.sub).run();
+    return jsonUtf8({ ok: true });
+  } catch (error) {
+    logger.warn('Failed to update wasm_module_startup_config', {
+      moduleId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return jsonUtf8({ error: '設定の保存に失敗しました' }, 500);
+  }
 });
 
 app.get('/heritage-area', authMiddleware, async (c) => {
