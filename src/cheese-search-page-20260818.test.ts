@@ -1,14 +1,20 @@
+// @vitest-environment jsdom
 /**
- * GET /cheese-search ページの構造テスト
+ * GET /cheese-search ページの構造・挙動テスト
  *
  * 対象: フランスチーズ検索ページ(フリーワード検索+facetフィルタ)。
+ * 各facetは「条件なし」をデフォルトとし、選択肢ごとに現在の絞り込み状態での
+ * ヒット件数を「ラベル(件数)」の形式で表示、件数の多い順に左詰めで並ぶ想定。
  *
  * 故障シナリオ:
  *   (1) 認証なしでアクセスできてしまう
  *   (2) facetボタン(乳種/固さ/カビ/産地限定)や食材ペアリング検索欄が生成されない
  *   (3) client-side scriptにテンプレートリテラルのエスケープ起因の構文エラーが混入する
+ *   (4) 「条件なし」がデフォルトで選択状態にならない
+ *   (5) facet選択肢の表示順がヒット件数の降順にならない
+ *   (6) facetボタンをクリックしても他のfacetの件数が再計算されない(選択の組み合わせ次第で件数が変わらないまま)
  */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import app from './index';
 import { createJWT } from './utils/jwt';
 import { getCheeseSearchPage } from './views/cheeseSearch';
@@ -42,11 +48,13 @@ describe('GET /cheese-search', () => {
 describe('getCheeseSearchPage', () => {
   const html = getCheeseSearchPage('tester');
 
-  it('facetフィルタ(乳種・固さ・カビ・産地限定)を含む', () => {
-    expect(html).toContain('data-facet="milk"');
-    expect(html).toContain('data-facet="hardness"');
-    expect(html).toContain('data-facet="mold"');
-    expect(html).toContain('data-facet="region"');
+  it('facetフィルタ(乳種・固さ・カビ・産地限定)の描画先コンテナとヒット件数付き選択肢定義を含む', () => {
+    expect(html).toContain('id="facetOptions-milk"');
+    expect(html).toContain('id="facetOptions-hardness"');
+    expect(html).toContain('id="facetOptions-mold"');
+    expect(html).toContain('id="facetOptions-region"');
+    expect(html).toContain("milk: [");
+    expect(html).toContain("条件なし(");
   });
 
   it('フリーワード検索欄と食材ペアリング検索欄を含む', () => {
@@ -61,5 +69,59 @@ describe('getCheeseSearchPage', () => {
   it('テンプレートリテラル起因のエスケープ崩れがない(単引用符エスケープ・生regexリテラルなし)', () => {
     expect(html).not.toContain("\\'");
     expect(html).not.toContain('&#39;&#39;');
+  });
+});
+
+describe('フランスチーズ検索ページ: facetのヒット件数・並び順・デフォルト状態', () => {
+  afterEach(() => { vi.unstubAllGlobals(); });
+
+  const ITEMS = [
+    { seq_no: 1, name_fr: 'A', reading: 'あ', ingredient: '牛乳', producer: null, method: '白カビ', hardness: 'ソフト', notes: null, pairing: null },
+    { seq_no: 2, name_fr: 'B', reading: 'い', ingredient: '牛乳', producer: 'X地方', method: 'セミハード', hardness: 'セミハード', notes: null, pairing: null },
+    { seq_no: 3, name_fr: 'C', reading: 'う', ingredient: '山羊乳', producer: null, method: '青カビ', hardness: 'セミソフト', notes: null, pairing: null },
+  ];
+
+  async function setup() {
+    const html = getCheeseSearchPage('tester');
+    const bodyIdx = html.indexOf('<body>') + 6;
+    const scriptIdx = html.indexOf('<script>', bodyIdx);
+    document.body.innerHTML = html.slice(bodyIdx, scriptIdx);
+    const fetchMock = vi.fn(() => Promise.resolve({ json: () => Promise.resolve({ items: ITEMS }) }));
+    vi.stubGlobal('fetch', fetchMock);
+    const scriptSrc = html.slice(scriptIdx + 8, html.indexOf('</script>', scriptIdx));
+    // eslint-disable-next-line no-new-func
+    new Function(scriptSrc)();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+
+  it('初期表示では各facetグループの「条件なし」がactiveになる', async () => {
+    await setup();
+    const milkGroup = document.getElementById('facetOptions-milk')!;
+    const noneBtn = milkGroup.querySelector('.facet-btn[data-value=""]')!;
+    expect(noneBtn.classList.contains('active')).toBe(true);
+    expect(noneBtn.textContent).toContain('条件なし(3)');
+  });
+
+  it('facetの選択肢はヒット件数(牛乳2件・山羊乳1件)を含み降順(牛乳が山羊より左)に並ぶ', async () => {
+    await setup();
+    const milkGroup = document.getElementById('facetOptions-milk')!;
+    const buttons = Array.from(milkGroup.querySelectorAll('.facet-btn'));
+    const milkBtn = buttons.find((b) => b.getAttribute('data-value') === '牛乳')!;
+    const goatBtn = buttons.find((b) => b.getAttribute('data-value') === '山羊')!;
+    expect(milkBtn.textContent).toContain('牛乳(2)');
+    expect(goatBtn.textContent).toContain('山羊(1)');
+    expect(buttons.indexOf(milkBtn)).toBeLessThan(buttons.indexOf(goatBtn));
+  });
+
+  it('facetボタンをクリックすると他facetのヒット件数が絞り込み後の値に再計算される', async () => {
+    await setup();
+    const milkGroup = document.getElementById('facetOptions-milk')!;
+    const milkBtn = milkGroup.querySelector('.facet-btn[data-value="牛乳"]') as HTMLButtonElement;
+    milkBtn.click();
+
+    const hardnessGroup = document.getElementById('facetOptions-hardness')!;
+    const softBtn = Array.from(hardnessGroup.querySelectorAll('.facet-btn')).find((b) => b.getAttribute('data-value') === '柔らかめ')!;
+    // 牛乳(A:ソフト, B:セミハード)に絞り込んだ後は「柔らかめ」は1件のみ一致する
+    expect(softBtn.textContent).toContain('柔らかめ(1)');
   });
 });
