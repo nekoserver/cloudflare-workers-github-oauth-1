@@ -60,6 +60,7 @@ import { findNearbyCities } from './utils/worldCities';
 import { getAuthFlowPage } from './views/authFlow';
 import { getTsubuyakiPage } from './views/tsubuyaki';
 import { getSha256WasmPage } from './views/sha256Wasm';
+import { getFactorWasmPage } from './views/factorWasm';
 import { getWasmModulesPage } from './views/wasmModules';
 import { getFileDepsPage } from './views/fileDeps';
 import { mergeWasmModuleConfig, isKnownWasmModuleId, isWasmModuleEnabled, type WasmModuleStartupRow } from './utils/wasmModuleConfig';
@@ -249,6 +250,7 @@ export const STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
   { name: 'api_keys', migration: '0103', description: 'トップページのログイン判定に使うAPIキー(🔑キー管理ページで発行)。生キーは保存せずSHA-256ハッシュのみ保存し、失効(revoked_at)・有効期限(expires_at)を個別に管理する', syncPolicy: 'auto' },
   { name: 'wasm_module_startup_config', migration: '0104', description: 'ブラウザ/サーバー両対応WASMモジュール(/wasm-modulesページ)を起動時に読み込むかどうかのON/OFF設定', syncPolicy: 'manual' },
   { name: 'ts_file_dependencies', migration: '0105', description: 'ast-grep(WASM)で抽出したTypeScriptファイル間のimport依存関係(/file-depsページの可視化用)', syncPolicy: 'manual' },
+  { name: 'cheese_fr', migration: '0107', description: 'フランスチーズの名称・読み仮名・原材料・生産者・製法・固さ・備考の一覧(参照専用マスタデータ)', syncPolicy: 'manual' },
 ];
 
 const REQUIRED_STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
@@ -1521,6 +1523,19 @@ CREATE INDEX IF NOT EXISTS idx_api_keys_user_id ON api_keys(user_id);`,
 CREATE UNIQUE INDEX IF NOT EXISTS idx_ts_file_dependencies_edge ON ts_file_dependencies(repo_id, source_file, target_file);
 CREATE INDEX IF NOT EXISTS idx_ts_file_dependencies_source ON ts_file_dependencies(repo_id, source_file);
 CREATE INDEX IF NOT EXISTS idx_ts_file_dependencies_target ON ts_file_dependencies(repo_id, target_file);`,
+  '0107': `CREATE TABLE IF NOT EXISTS cheese_fr (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  seq_no INTEGER NOT NULL,
+  name_fr TEXT NOT NULL,
+  reading TEXT NOT NULL,
+  ingredient TEXT,
+  producer TEXT,
+  method TEXT,
+  hardness TEXT,
+  notes TEXT
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_cheese_fr_seq_no ON cheese_fr(seq_no);
+CREATE INDEX IF NOT EXISTS idx_cheese_fr_name_fr ON cheese_fr(name_fr);`,
 };
 
 async function ensureGroupTable(db: D1Database): Promise<void> {
@@ -1748,6 +1763,7 @@ export const TABLE_COLUMN_KEYS: Record<string, ColumnKeyInfo> = {
   aichat_moondream_analyses: { id: 'pk', share_id: 'uk', image_id: 'fk+idx', user_id: 'fk+idx' },
   wasm_module_startup_config: { module_id: 'pk' },
   ts_file_dependencies: { id: 'pk', source_file: 'idx', target_file: 'idx' },
+  cheese_fr: { id: 'pk', seq_no: 'uk', name_fr: 'idx' },
 };
 
 export function getColumnKeyType(tableName: string, columnName: string): ColumnKeyType {
@@ -1857,6 +1873,7 @@ export const TABLE_GROUP_MAP: Record<string, string> = {
   ts_commit_quality:      'ts-catalog',
   wasm_module_startup_config: 'system',
   ts_file_dependencies: 'ts-catalog',
+  cheese_fr: 'system',
 };
 
 async function recordAiSummaryLinkAccess(
@@ -4221,6 +4238,21 @@ app.post('/api/aichat', aichatAuthMiddleware, async (c) => {
       // 壊れるため、実行時にのみ読み込む
       const { sha256HexViaWasm } = await import('./utils/sha256WasmServer');
       return sha256HexViaWasm(input);
+    },
+    factorViaWasm: async (n) => {
+      if (c.env.DB) {
+        const row = await c.env.DB.prepare(
+          'SELECT module_id, enabled, updated_at, updated_by FROM wasm_module_startup_config WHERE module_id = ?'
+        ).bind('factor').first<WasmModuleStartupRow>().catch(() => null);
+        if (!isWasmModuleEnabled(row)) {
+          throw new Error('factorモジュールは現在無効化されています(/wasm-modulesページで有効にしてください)');
+        }
+      }
+      // dynamic importにする理由はsha256ViaWasmと同じ(.wasmの静的importが
+      // Vite/vitest環境ではWebAssembly.Moduleを返さず、index.tsを読み込む
+      // 既存テストが壊れるため)
+      const { factorViaWasm } = await import('./utils/factorWasmServer');
+      return factorViaWasm(n);
     },
   });
   if (slashCommand.handled) {
@@ -9093,6 +9125,17 @@ app.get('/sha256-wasm', authMiddleware, async (c) => {
   return c.html(getSha256WasmPage(user.sub));
 });
 
+app.get('/factor-wasm', authMiddleware, async (c) => {
+  const user = c.get('user');
+  // WebAssembly.instantiateの実行にはscript-srcへのwasm-unsafe-evalが必要
+  // (このページだけの例外。他ページのCSPはグローバルミドルウェアのまま)
+  c.header(
+    'Content-Security-Policy',
+    "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'"
+  );
+  return c.html(getFactorWasmPage(user.sub));
+});
+
 app.get('/wasm-modules', authMiddleware, async (c) => {
   const user = c.get('user');
   return c.html(getWasmModulesPage(user.sub));
@@ -9177,6 +9220,29 @@ app.get('/api/file-deps', authMiddleware, async (c) => {
       error: error instanceof Error ? error.message : String(error),
     });
     return jsonUtf8({ nodes: [], edges: [] });
+  }
+});
+
+/**
+ * フランスチーズ一覧(cheese_fr)を返す。qがあれば名称・読み仮名の部分一致で絞り込む。
+ */
+app.get('/api/cheese-fr', authMiddleware, async (c) => {
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  const q = (c.req.query('q') ?? '').trim();
+  try {
+    const rows = q
+      ? await c.env.DB.prepare(
+          `SELECT seq_no, name_fr, reading, ingredient, producer, method, hardness, notes
+           FROM cheese_fr WHERE name_fr LIKE ? OR reading LIKE ? ORDER BY seq_no`
+        ).bind(`%${q}%`, `%${q}%`).all()
+      : await c.env.DB.prepare(
+          `SELECT seq_no, name_fr, reading, ingredient, producer, method, hardness, notes
+           FROM cheese_fr ORDER BY seq_no`
+        ).all();
+    return jsonUtf8({ items: rows.results ?? [] });
+  } catch (error) {
+    logger.warn('Failed to load cheese_fr', { error: error instanceof Error ? error.message : String(error) });
+    return jsonUtf8({ error: 'cheese_frの取得に失敗しました: ' + (error instanceof Error ? error.message : String(error)) }, 500);
   }
 });
 

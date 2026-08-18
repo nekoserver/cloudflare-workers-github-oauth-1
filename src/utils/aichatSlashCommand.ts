@@ -84,6 +84,7 @@ export function formatAichatSlashCommandHelp(): string {
     '| /neko search <キーワード> | 質問文・回答文にキーワードを含む過去ログのヒット件数を表示します(結果一覧は最大30件までモーダルで確認できます) |',
     '| /neko vcount | ベクタ化済みの回答文の件数と全回答文に占める割合を表示します(結果一覧は最大30件までモーダルで確認できます) |',
     '| /neko 256 <文字列> | 指定した文字列のSHA-256ハッシュをWASM(Rust実装)で計算します |',
+    '| /neko factor <数値> | 指定した整数(0以上2^53以下)をWASM(Rust実装)で素因数分解します |',
     '| /neko help | このサブコマンド一覧を表示します |',
   ].join('\n');
 }
@@ -172,11 +173,20 @@ export function formatSha256WasmResult(input: string, hex: string): string {
   return ['## SHA-256 (WASM)', `入力: ${input}`, `ハッシュ: ${hex}`].join('\n');
 }
 
+/**
+ * `/neko factor <数値>` の計算結果を表示する。resultはGNU coreutilsの
+ * factorコマンドと同じ書式("n: p1 p2 p3 ...")で渡される。
+ */
+export function formatFactorWasmResult(result: string): string {
+  return ['## factor (WASM)', '```', result, '```'].join('\n');
+}
+
 export type AichatSlashCommandDeps = {
   fetchLatestCommitAgentLog: () => Promise<CommitAgentLogRow | null>;
   searchShares?: (keyword: string) => Promise<AichatSearchOutcome>;
   vectorizedAnswers?: () => Promise<AichatVectorizedAnswersOutcome>;
   sha256ViaWasm?: (input: string) => Promise<string>;
+  factorViaWasm?: (n: number) => Promise<string>;
 };
 
 export const AICHAT_SEARCH_TIMEOUT_MS = 8000;
@@ -308,12 +318,36 @@ export async function interpretAichatSlashCommand(
     }
   }
 
+  if (subcommand === 'factor') {
+    const raw = (parts[2] ?? '').trim();
+    const MAX_SAFE = 9007199254740992; // 2^53
+    if (!raw) {
+      return { handled: true, response: '❌ 素因数分解する整数を指定してください: /neko factor <数値>' };
+    }
+    const n = Number(raw);
+    if (!Number.isFinite(n) || !Number.isInteger(n) || n < 0 || n > MAX_SAFE) {
+      return { handled: true, response: `❌ nは0以上${MAX_SAFE}(2^53)以下の整数を指定してください: /neko factor <数値>` };
+    }
+    if (!deps.factorViaWasm) {
+      return { handled: true, response: '❌ /neko factor は現在利用できません(WASM未設定)' };
+    }
+    try {
+      const result = await deps.factorViaWasm(n);
+      return { handled: true, response: formatFactorWasmResult(result) };
+    } catch (err) {
+      return {
+        handled: true,
+        response: `❌ /neko factor の実行中にエラーが発生しました: ${err instanceof Error ? err.message : String(err)}`,
+      };
+    }
+  }
+
   if (subcommand === 'help') {
     return { handled: true, response: formatAichatSlashCommandHelp() };
   }
 
   return {
     handled: true,
-    response: `❌ 未対応のサブコマンドです: ${subcommand || '(なし)'}\n利用可能なコマンド: /neko hms, /neko cal, /neko clog, /neko limit, /neko search, /neko vcount, /neko 256, /neko help\n詳細は /neko help を実行してください`,
+    response: `❌ 未対応のサブコマンドです: ${subcommand || '(なし)'}\n利用可能なコマンド: /neko hms, /neko cal, /neko clog, /neko limit, /neko search, /neko vcount, /neko 256, /neko factor, /neko help\n詳細は /neko help を実行してください`,
   };
 }
