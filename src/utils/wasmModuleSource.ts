@@ -43,10 +43,21 @@ export async function fetchLatestCommitDateForPath(
   }
 }
 
+export type FetchFileContentResult =
+  | { ok: true; content: string }
+  | { ok: false; status: number; message: string };
+
 /**
- * 指定パスのファイル本文(UTF-8テキスト)を取得する。取得失敗時はnullを返す。
+ * 指定パスのファイル本文(UTF-8テキスト)を取得する。
+ *
+ * 以前は失敗時にnullだけを返して詳細を握りつぶしており、GitHub側の実際の
+ * エラー(トークンのスコープ不足によるBad credentials、レート制限等)が
+ * 呼び出し元にもユーザーにも一切伝わらず「ソースファイルの取得に失敗
+ * しました」としか表示できなかった(CLAUDE.mdルール8: catchで握りつぶす
+ * なら記録・通知・テストの3つを満たすこと、に反していた)。GitHub APIの
+ * ステータスコードとエラーメッセージ本文を呼び出し元に返すよう修正した。
  */
-export async function fetchFileContent(accessToken: string, repoFullName: string, path: string): Promise<string | null> {
+export async function fetchFileContent(accessToken: string, repoFullName: string, path: string): Promise<FetchFileContentResult> {
   try {
     const url = `https://api.github.com/repos/${repoFullName}/contents/${path}`;
     const res = await fetch(url, {
@@ -56,9 +67,18 @@ export async function fetchFileContent(accessToken: string, repoFullName: string
         Accept: 'application/vnd.github.v3.raw',
       },
     });
-    if (!res.ok) return null;
-    return await res.text();
-  } catch {
-    return null;
+    if (!res.ok) {
+      let detail = '';
+      try {
+        const body = (await res.json()) as { message?: string };
+        detail = body?.message ?? '';
+      } catch {
+        // レスポンスボディがJSONでない場合は無視し、ステータス文言のみ使う
+      }
+      return { ok: false, status: res.status, message: detail || res.statusText || '不明なエラー' };
+    }
+    return { ok: true, content: await res.text() };
+  } catch (error) {
+    return { ok: false, status: 0, message: error instanceof Error ? error.message : String(error) };
   }
 }

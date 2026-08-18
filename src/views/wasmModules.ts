@@ -77,15 +77,6 @@ export function getWasmModulesPage(username: string): string {
       cursor: pointer;
     }
     .mode-btn.active { background: #0969da; color: #fff; border-color: #0969da; }
-    .note {
-      font-size: 12px;
-      color: var(--text-muted);
-      background: var(--bg-secondary);
-      border-radius: 8px;
-      padding: 10px 14px;
-      margin-bottom: 20px;
-      line-height: 1.6;
-    }
     .module-card {
       background: var(--card-bg);
       border-radius: 12px;
@@ -105,7 +96,7 @@ export function getWasmModulesPage(username: string): string {
       border: none;
       padding: 0;
       cursor: pointer;
-      text-decoration: underline;
+      text-decoration: none;
       font-size: inherit;
     }
     .toggle-label { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-secondary); white-space: nowrap; }
@@ -131,12 +122,37 @@ export function getWasmModulesPage(username: string): string {
 
     .wasm-table-wrap { width: 100%; overflow-x: auto; border: 1px solid var(--border-color); border-radius: 10px; margin-bottom: 16px; }
     .wasm-table { width: 100%; border-collapse: collapse; font-size: 12px; background: var(--card-bg); }
-    .wasm-table th, .wasm-table td { padding: 8px 10px; text-align: left; border-bottom: 1px solid var(--border-color); white-space: nowrap; }
-    .wasm-table th { color: var(--text-muted); font-weight: 600; background: var(--bg-secondary); }
-    .wasm-table td { color: var(--text-secondary); }
+    .wasm-table th, .wasm-table td { padding: 8px 10px; border-bottom: 1px solid var(--border-color); white-space: nowrap; }
+    .wasm-table th { color: var(--text-muted); font-weight: 600; background: var(--bg-secondary); text-align: center; cursor: pointer; position: relative; user-select: none; }
+    .wasm-table th:hover { color: var(--text-primary); }
+    .wasm-table th.enabled-th { cursor: pointer; font-size: 14px; }
+    .wasm-table td { color: var(--text-secondary); text-align: left; }
     .wasm-table td code { font-family: 'Monaco', 'Courier New', monospace; }
     .wasm-row { cursor: pointer; }
     .wasm-row:hover td { background: var(--bg-secondary); }
+
+    .th-tooltip {
+      display: none;
+      position: absolute;
+      top: 100%;
+      left: 50%;
+      transform: translateX(-50%);
+      margin-top: 6px;
+      width: 260px;
+      max-width: 60vw;
+      background: var(--card-bg);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.2);
+      padding: 10px 12px;
+      font-size: 11px;
+      font-weight: 400;
+      color: var(--text-secondary);
+      text-align: left;
+      white-space: normal;
+      z-index: 10;
+    }
+    .th-tooltip.open { display: block; }
 
     .modal-overlay {
       display: none;
@@ -235,22 +251,23 @@ export function getWasmModulesPage(username: string): string {
       </div>
     </div>
     <div class="subtitle">リポジトリに組み込まれているWASMモジュールと、起動時の読み込みON/OFF設定</div>
-    <div class="note">
-      Cloudflare Workersにはファイルシステムの一覧取得APIが無いため、この一覧はコード側の手動カタログ(wasm/README.md参照)です。
-      設定を変更しても、既に起動中のWorker isolateには反映されません。次にisolateが新規に立ち上がったタイミング(次回のコールドスタート)から反映されます。
-    </div>
     <div id="moduleList"></div>
     <div class="wasm-table-wrap" id="wasmTableWrap" style="display:none;">
       <table class="wasm-table">
         <thead>
           <tr>
-            <th>ID:</th>
-            <th>バイナリ:</th>
-            <th>ソース:</th>
-            <th>サイズ:</th>
-            <th>起動時に読み込む:</th>
-            <th>最終更新日時:</th>
-            <th>最新ビルド日時:</th>
+            <th data-sort-key="id">ID</th>
+            <th data-sort-key="wasmPath">バイナリ</th>
+            <th data-sort-key="sourceFile">ソース</th>
+            <th data-sort-key="approxSize">サイズ</th>
+            <th class="enabled-th" id="enabledTh">
+              ⬜︎
+              <div class="th-tooltip" id="enabledThTooltip">
+                起動時にこのモジュールを読み込むかどうかの設定です。チェックを変更して「設定を保存」を押しても、既に起動中のWorker isolateには反映されません。次にisolateが新規に立ち上がったタイミング(次回のコールドスタート)から反映されます。
+              </div>
+            </th>
+            <th data-sort-key="sourceUpdatedAt">最終更新日時</th>
+            <th data-sort-key="wasmBuiltAt">最新ビルド日時</th>
           </tr>
         </thead>
         <tbody id="wasmTableBody"></tbody>
@@ -363,6 +380,14 @@ export function getWasmModulesPage(username: string): string {
       return '<button type="button" class="source-link" data-source-open="' + escHtml(m.id) + '">' + escHtml(m.sourceFile) + '</button>';
     }
 
+    var WASM_PREFIX = 'public/wasm/';
+    function displayWasmPath(path) {
+      if (typeof path === 'string' && path.indexOf(WASM_PREFIX) === 0) {
+        return path.slice(WASM_PREFIX.length);
+      }
+      return path;
+    }
+
     function renderPanel(modules) {
       if (modules.length === 0) {
         moduleListEl.innerHTML = '<div class="empty">登録されているWASMモジュールがありません</div>';
@@ -390,16 +415,39 @@ export function getWasmModulesPage(username: string): string {
       moduleListEl.innerHTML = html;
     }
 
+    var listSortKey = null;
+    var listSortDir = 1;
+
+    function sortValueFor(m, key) {
+      if (key === 'wasmPath') return displayWasmPath(m.wasmPath) || '';
+      var v = m[key];
+      return v === null || v === undefined ? '' : v;
+    }
+
+    function sortedModulesForList(modules) {
+      if (!listSortKey) return modules;
+      var copy = modules.slice();
+      copy.sort(function(a, b) {
+        var av = sortValueFor(a, listSortKey);
+        var bv = sortValueFor(b, listSortKey);
+        if (av < bv) return -1 * listSortDir;
+        if (av > bv) return 1 * listSortDir;
+        return 0;
+      });
+      return copy;
+    }
+
     function renderList(modules) {
-      if (modules.length === 0) {
+      var sorted = sortedModulesForList(modules);
+      if (sorted.length === 0) {
         wasmTableBody.innerHTML = '<tr><td colspan="7" class="empty">登録されているWASMモジュールがありません</td></tr>';
         return;
       }
       var html = '';
-      modules.forEach(function(m) {
+      sorted.forEach(function(m) {
         html += '<tr class="wasm-row" data-module-id="' + escHtml(m.id) + '">';
         html += '<td><code>' + escHtml(m.id) + '</code></td>';
-        html += '<td><code>' + escHtml(m.wasmPath) + '</code></td>';
+        html += '<td><code>' + escHtml(displayWasmPath(m.wasmPath)) + '</code></td>';
         html += '<td>' + sourceLinkHtml(m) + '</td>';
         html += '<td>' + escHtml(m.approxSize) + '</td>';
         html += '<td><label class="toggle-label"><input type="checkbox" class="module-toggle"' + (m.enabled ? ' checked' : '') + '></label></td>';
@@ -409,6 +457,31 @@ export function getWasmModulesPage(username: string): string {
       });
       wasmTableBody.innerHTML = html;
     }
+
+    document.querySelectorAll('.wasm-table th[data-sort-key]').forEach(function(th) {
+      th.addEventListener('click', function() {
+        var key = th.getAttribute('data-sort-key');
+        if (listSortKey === key) {
+          listSortDir = listSortDir * -1;
+        } else {
+          listSortKey = key;
+          listSortDir = 1;
+        }
+        renderList(loadedModules);
+      });
+    });
+
+    var enabledTh = document.getElementById('enabledTh');
+    var enabledThTooltip = document.getElementById('enabledThTooltip');
+    enabledTh.addEventListener('click', function(e) {
+      e.stopPropagation();
+      enabledThTooltip.classList.toggle('open');
+    });
+    document.addEventListener('click', function(e) {
+      if (enabledThTooltip.classList.contains('open') && !enabledTh.contains(e.target)) {
+        enabledThTooltip.classList.remove('open');
+      }
+    });
 
     function findModuleById(id) {
       return loadedModules.filter(function(m) { return m.id === id; })[0];

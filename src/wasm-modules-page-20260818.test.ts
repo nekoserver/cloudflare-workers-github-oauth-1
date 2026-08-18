@@ -52,18 +52,49 @@ describe('getWasmModulesPage', () => {
     expect(html).toContain('id="modeListBtn"');
   });
 
-  it('リストモードのth見出しはID/バイナリ/ソース/サイズ/起動時に読み込む/最終更新日時/最新ビルド日時の7列に集約されている', () => {
+  it('リストモードのth見出しはID/バイナリ/ソース/サイズ/⬜︎(起動時に読み込む)/最終更新日時/最新ビルド日時の7列に集約され、行末の「:」は付かない', () => {
     const idx = html.indexOf('<thead>');
     const endIdx = html.indexOf('</thead>');
     const thead = html.slice(idx, endIdx);
-    expect(thead).toContain('ID:');
-    expect(thead).toContain('バイナリ:');
-    expect(thead).toContain('ソース:');
-    expect(thead).toContain('サイズ:');
-    expect(thead).toContain('起動時に読み込む:');
-    expect(thead).toContain('最終更新日時:');
-    expect(thead).toContain('最新ビルド日時:');
-    expect((thead.match(/<th>/g) || []).length).toBe(7);
+    expect(thead).toContain('>ID<');
+    expect(thead).toContain('>バイナリ<');
+    expect(thead).toContain('>ソース<');
+    expect(thead).toContain('>サイズ<');
+    expect(thead).toContain('⬜︎');
+    expect(thead).toContain('>最終更新日時<');
+    expect(thead).toContain('>最新ビルド日時<');
+    expect(thead).not.toContain('ID:');
+    expect(thead).not.toContain('起動時に読み込む:');
+    expect((thead.match(/<th[ >]/g) || []).length).toBe(7);
+  });
+
+  it('リストモードのthは中央寄せで、データ列はソート可能なdata-sort-keyを持つ', () => {
+    const idx = html.indexOf('<thead>');
+    const endIdx = html.indexOf('</thead>');
+    const thead = html.slice(idx, endIdx);
+    expect(html).toContain(".wasm-table th { color: var(--text-muted); font-weight: 600; background: var(--bg-secondary); text-align: center;");
+    expect(thead).toContain('data-sort-key="id"');
+    expect(thead).toContain('data-sort-key="wasmPath"');
+    expect(thead).toContain('data-sort-key="sourceFile"');
+    expect(thead).toContain('data-sort-key="approxSize"');
+    expect(thead).toContain('data-sort-key="sourceUpdatedAt"');
+    expect(thead).toContain('data-sort-key="wasmBuiltAt"');
+  });
+
+  it('起動時に読み込むth(⬜︎)にはツールチップ要素があり、旧「note」文言(コールドスタート説明)を含む', () => {
+    expect(html).toContain('id="enabledThTooltip"');
+    expect(html).toContain('コールドスタート');
+    expect(html).not.toContain('class="note"');
+  });
+
+  it('ファイルシステム一覧取得APIに関する旧note文言は削除されている', () => {
+    expect(html).not.toContain('ファイルシステムの一覧取得APIが無いため');
+  });
+
+  it('ソースリンクにアンダーラインを付けない', () => {
+    expect(html).toContain("text-decoration: none;");
+    const sourceLinkCss = html.slice(html.indexOf('.source-link {'), html.indexOf('.source-link {') + 300);
+    expect(sourceLinkCss).not.toContain('text-decoration: underline;');
   });
 
   it('ソース閲覧モーダル・詳細モーダルの要素を含む', () => {
@@ -176,5 +207,43 @@ describe('/wasm-modules ページ: パネル/リスト切替・詳細モーダ�
     const sourceBtn = document.querySelector('#wasmTableBody [data-source-open="factor"]') as HTMLButtonElement;
     sourceBtn.click();
     expect(document.getElementById('sourceModalOverlay')!.classList.contains('open')).toBe(true);
+  });
+
+  it('リストモードのバイナリ列は「public/wasm/」プレフィックスを除いて表示する', async () => {
+    await setup();
+    (document.getElementById('modeListBtn') as HTMLButtonElement).click();
+    const cell = document.querySelector('#wasmTableBody .wasm-row[data-module-id="sha256"] td:nth-child(2)')!;
+    expect(cell.textContent).toBe('sha256_bg.wasm');
+    expect(cell.textContent).not.toContain('public/wasm/');
+  });
+
+  it('IDのthをクリックすると昇順に並び替わり、もう一度クリックすると降順になる', async () => {
+    await setup();
+    (document.getElementById('modeListBtn') as HTMLButtonElement).click();
+    var idTh = document.querySelector('.wasm-table th[data-sort-key="id"]') as HTMLElement;
+    idTh.click();
+    var rowsAsc = Array.from(document.querySelectorAll('#wasmTableBody .wasm-row')).map(function(r) { return r.getAttribute('data-module-id'); });
+    expect(rowsAsc).toEqual(['factor', 'sha256']);
+
+    idTh.click();
+    var rowsDesc = Array.from(document.querySelectorAll('#wasmTableBody .wasm-row')).map(function(r) { return r.getAttribute('data-module-id'); });
+    expect(rowsDesc).toEqual(['sha256', 'factor']);
+  });
+
+  it('⬜︎(起動時に読み込む)thをクリックしてもソートされず、ツールチップが開閉する', async () => {
+    await setup();
+    (document.getElementById('modeListBtn') as HTMLButtonElement).click();
+    var rowsBefore = Array.from(document.querySelectorAll('#wasmTableBody .wasm-row')).map(function(r) { return r.getAttribute('data-module-id'); });
+    var enabledTh = document.getElementById('enabledTh') as HTMLElement;
+    var tooltip = document.getElementById('enabledThTooltip')!;
+    expect(tooltip.classList.contains('open')).toBe(false);
+
+    enabledTh.click();
+    expect(tooltip.classList.contains('open')).toBe(true);
+    var rowsAfter = Array.from(document.querySelectorAll('#wasmTableBody .wasm-row')).map(function(r) { return r.getAttribute('data-module-id'); });
+    expect(rowsAfter).toEqual(rowsBefore);
+
+    enabledTh.click();
+    expect(tooltip.classList.contains('open')).toBe(false);
   });
 });

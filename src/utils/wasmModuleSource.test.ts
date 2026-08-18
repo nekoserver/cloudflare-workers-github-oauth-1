@@ -61,28 +61,45 @@ describe('fetchLatestCommitDateForPath', () => {
 describe('fetchFileContent', () => {
   afterEach(() => { vi.unstubAllGlobals(); });
 
-  it('取得に成功すればファイル本文(テキスト)を返す', async () => {
+  it('取得に成功すればok:trueとファイル本文(テキスト)を返す', async () => {
     const fetchMock = vi.fn().mockResolvedValue({ ok: true, text: () => Promise.resolve('fn main() {}') });
     vi.stubGlobal('fetch', fetchMock);
     const result = await fetchFileContent('token', 'owner/repo', 'wasm/dig-wasm/src/lib.rs');
-    expect(result).toBe('fn main() {}');
+    expect(result).toEqual({ ok: true, content: 'fn main() {}' });
     expect(fetchMock).toHaveBeenCalledWith(
       'https://api.github.com/repos/owner/repo/contents/wasm/dig-wasm/src/lib.rs',
       expect.objectContaining({ headers: expect.objectContaining({ Accept: 'application/vnd.github.v3.raw' }) })
     );
   });
 
-  it('HTTPエラー時はnullを返す(例外を投げない)', async () => {
-    const fetchMock = vi.fn().mockResolvedValue({ ok: false, status: 404 });
+  it('HTTPエラー時はok:false・実際のステータスコードとGitHubのエラーメッセージを返す(握りつぶさない)', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 401,
+      statusText: 'Unauthorized',
+      json: () => Promise.resolve({ message: 'Bad credentials' }),
+    });
     vi.stubGlobal('fetch', fetchMock);
     const result = await fetchFileContent('token', 'owner/repo', 'path');
-    expect(result).toBeNull();
+    expect(result).toEqual({ ok: false, status: 401, message: 'Bad credentials' });
   });
 
-  it('fetch自体が例外を投げてもnullを返す', async () => {
+  it('エラーレスポンスがJSONでない場合はstatusTextにフォールバックする', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 404,
+      statusText: 'Not Found',
+      json: () => Promise.reject(new Error('not json')),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const result = await fetchFileContent('token', 'owner/repo', 'path');
+    expect(result).toEqual({ ok: false, status: 404, message: 'Not Found' });
+  });
+
+  it('fetch自体が例外を投げてもok:falseとエラーメッセージを返す(例外を投げない)', async () => {
     const fetchMock = vi.fn().mockRejectedValue(new Error('network error'));
     vi.stubGlobal('fetch', fetchMock);
     const result = await fetchFileContent('token', 'owner/repo', 'path');
-    expect(result).toBeNull();
+    expect(result).toEqual({ ok: false, status: 0, message: 'network error' });
   });
 });

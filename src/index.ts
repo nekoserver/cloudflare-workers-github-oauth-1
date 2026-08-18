@@ -9210,13 +9210,19 @@ app.get('/api/wasm-modules/source', authMiddleware, async (c) => {
   if (!accessToken) {
     return jsonUtf8({ error: 'GitHubアクセストークンが未設定のためソースを取得できません' }, 503);
   }
-  const content = await fetchFileContent(accessToken, WASM_MODULES_REPO_FULL_NAME, mod.sourceFile);
-  if (content === null) {
-    return jsonUtf8({ error: 'ソースファイルの取得に失敗しました' }, 502);
+  const result = await fetchFileContent(accessToken, WASM_MODULES_REPO_FULL_NAME, mod.sourceFile);
+  if (!result.ok) {
+    logger.warn('Failed to fetch wasm module source from GitHub', {
+      moduleId,
+      sourceFile: mod.sourceFile,
+      status: result.status,
+      message: result.message,
+    });
+    return jsonUtf8({ error: `ソースファイルの取得に失敗しました(HTTP ${result.status}: ${result.message})` }, 502);
   }
   return jsonUtf8({
     path: mod.sourceFile,
-    content,
+    content: result.content,
     githubUrl: `https://github.com/${WASM_MODULES_REPO_FULL_NAME}/blob/main/${mod.sourceFile}`,
   });
 });
