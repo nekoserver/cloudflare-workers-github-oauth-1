@@ -90,7 +90,10 @@ export function getCheeseSearchPage(username: string): string {
     }
     .facet-btn.active { background: #0969da; color: #fff; border-color: #0969da; }
     .pairing-input { font-size: 12px; padding: 5px 8px; border-radius: 6px; border: 1px solid var(--border-color); background: var(--bg-secondary); color: var(--text-primary); width: 140px; }
-    .result-count { font-size: 13px; color: var(--text-muted); margin-bottom: 10px; }
+    .result-bar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; flex-wrap: wrap; gap: 8px; }
+    .result-count { font-size: 13px; color: var(--text-muted); }
+    .view-toggle { display: flex; gap: 6px; }
+    .view-toggle .facet-btn { padding: 5px 12px; }
     .cheese-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 14px; }
     .cheese-card { background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 10px; padding: 14px 16px; }
     .cheese-name { font-size: 15px; font-weight: 700; color: var(--text-primary); }
@@ -99,6 +102,13 @@ export function getCheeseSearchPage(username: string): string {
     .cheese-row .k { color: var(--text-muted); min-width: 64px; flex-shrink: 0; }
     .cheese-row .v { color: var(--text-secondary); }
     .cheese-row .v.empty { color: var(--text-muted); font-style: italic; }
+    .cheese-table-wrap { width: 100%; overflow-x: auto; border: 1px solid var(--border-color); border-radius: 10px; }
+    .cheese-table { width: 100%; border-collapse: collapse; font-size: 12px; background: var(--card-bg); }
+    .cheese-table th, .cheese-table td { padding: 8px 10px; text-align: left; border-bottom: 1px solid var(--border-color); white-space: nowrap; }
+    .cheese-table th { color: var(--text-muted); font-weight: 600; background: var(--bg-secondary); position: sticky; top: 0; }
+    .cheese-table td { color: var(--text-secondary); }
+    .cheese-table td.empty { color: var(--text-muted); font-style: italic; }
+    .cheese-table tr:hover td { background: var(--bg-secondary); }
     .empty-msg { color: var(--text-muted); font-size: 13px; padding: 24px 0; text-align: center; }
   </style>
 </head>
@@ -160,8 +170,31 @@ export function getCheeseSearchPage(username: string): string {
       </div>
     </div>
 
-    <div class="result-count" id="resultCount"></div>
+    <div class="result-bar">
+      <div class="result-count" id="resultCount"></div>
+      <div class="view-toggle">
+        <button type="button" class="facet-btn active" id="viewCardBtn" data-view="card">🗂 カード表示</button>
+        <button type="button" class="facet-btn" id="viewListBtn" data-view="list">📋 リスト表示</button>
+      </div>
+    </div>
     <div class="cheese-grid" id="cheeseGrid"></div>
+    <div class="cheese-table-wrap" id="cheeseTableWrap" style="display:none;">
+      <table class="cheese-table">
+        <thead>
+          <tr>
+            <th>名称</th>
+            <th>読み仮名</th>
+            <th>原材料</th>
+            <th>生産者</th>
+            <th>製法</th>
+            <th>固さ</th>
+            <th>合う食材</th>
+            <th>備考</th>
+          </tr>
+        </thead>
+        <tbody id="cheeseTableBody"></tbody>
+      </table>
+    </div>
     <div class="empty-msg" id="emptyMsg" style="display:none;">条件に一致するチーズが見つかりませんでした。</div>
   </div>
 
@@ -190,9 +223,27 @@ export function getCheeseSearchPage(username: string): string {
     var freewordInput = document.getElementById('freeword');
     var pairingInput = document.getElementById('pairingInput');
     var grid = document.getElementById('cheeseGrid');
+    var tableWrap = document.getElementById('cheeseTableWrap');
+    var tableBody = document.getElementById('cheeseTableBody');
+    var viewCardBtn = document.getElementById('viewCardBtn');
+    var viewListBtn = document.getElementById('viewListBtn');
     var resultCount = document.getElementById('resultCount');
     var emptyMsg = document.getElementById('emptyMsg');
     var activeFacets = { milk: null, hardness: null, mold: null, region: null };
+    var viewMode = 'card';
+
+    viewCardBtn.addEventListener('click', function() {
+      viewMode = 'card';
+      viewCardBtn.classList.add('active');
+      viewListBtn.classList.remove('active');
+      render();
+    });
+    viewListBtn.addEventListener('click', function() {
+      viewMode = 'list';
+      viewListBtn.classList.add('active');
+      viewCardBtn.classList.remove('active');
+      render();
+    });
 
     var FACET_DEFS = {
       milk: [
@@ -201,8 +252,10 @@ export function getCheeseSearchPage(username: string): string {
         { value: '羊乳', label: '羊乳' },
       ],
       hardness: [
-        { value: '硬め', label: '硬め' },
-        { value: '柔らかめ', label: '柔らかめ' },
+        { value: 'ハード', label: 'ハード' },
+        { value: 'セミハード', label: 'セミハード' },
+        { value: 'セミソフト', label: 'セミソフト' },
+        { value: 'ソフト', label: 'ソフト' },
       ],
       mold: [
         { value: '有', label: 'カビ有' },
@@ -250,10 +303,7 @@ export function getCheeseSearchPage(username: string): string {
 
     function matchesHardness(item, value) {
       if (!value) return true;
-      var hardness = item.hardness || '';
-      if (value === '硬め') return hardness === 'ハード' || hardness === 'セミハード';
-      if (value === '柔らかめ') return hardness === 'ソフト' || hardness === 'セミソフト';
-      return true;
+      return (item.hardness || '') === value;
     }
 
     function matchesMold(item, value) {
@@ -355,17 +405,44 @@ export function getCheeseSearchPage(username: string): string {
       return html;
     }
 
+    function tableCell(value) {
+      var safe = value ? escHtml(value) : '不明';
+      var cls = value ? '' : 'empty';
+      return '<td class="' + cls + '">' + safe + '</td>';
+    }
+
+    function renderTableRow(item) {
+      var html = '<tr>';
+      html += '<td>' + escHtml(item.name_fr) + '</td>';
+      html += '<td>' + escHtml(item.reading) + '</td>';
+      html += tableCell(item.ingredient);
+      html += tableCell(item.producer);
+      html += tableCell(item.method);
+      html += tableCell(item.hardness);
+      html += tableCell(item.pairing);
+      html += tableCell(item.notes);
+      html += '</tr>';
+      return html;
+    }
+
     function render() {
       renderFacets();
       var filtered = currentFiltered();
       resultCount.textContent = filtered.length + ' 件 / 全 ' + allItems.length + ' 件';
+      grid.style.display = viewMode === 'card' ? 'grid' : 'none';
+      tableWrap.style.display = viewMode === 'list' ? 'block' : 'none';
       if (filtered.length === 0) {
         grid.innerHTML = '';
+        tableBody.innerHTML = '';
         emptyMsg.style.display = 'block';
         return;
       }
       emptyMsg.style.display = 'none';
-      grid.innerHTML = filtered.map(renderCard).join('');
+      if (viewMode === 'card') {
+        grid.innerHTML = filtered.map(renderCard).join('');
+      } else {
+        tableBody.innerHTML = filtered.map(renderTableRow).join('');
+      }
     }
 
     function load() {
