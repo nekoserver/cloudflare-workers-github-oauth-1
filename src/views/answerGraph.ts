@@ -342,6 +342,32 @@ input[type=search]:focus { border-color:var(--accent); }
   background:var(--btn-bg); color:var(--fg); cursor:pointer;
 }
 .prereq-result-modal-ok-btn:hover { background:var(--btn-hover); border-color:var(--accent); }
+.vec-model-modal-backdrop {
+  position:fixed; inset:0; z-index:1400; display:none;
+  align-items:center; justify-content:center; padding:28px 16px;
+  background:rgba(15,23,42,.55); backdrop-filter:blur(4px);
+}
+.vec-model-modal-backdrop.open { display:flex; }
+.vec-model-modal {
+  width:min(360px,100%); background:var(--bg); border:1px solid var(--border);
+  border-radius:16px; box-shadow:0 24px 80px rgba(0,0,0,.32);
+  display:flex; flex-direction:column; overflow:hidden; padding:18px 20px;
+}
+.vec-model-modal-title { font-size:13px; font-weight:700; color:var(--fg); margin-bottom:4px; }
+.vec-model-modal-hint { font-size:11px; color:var(--label); margin-bottom:12px; }
+.vec-model-modal-options { display:flex; flex-direction:column; gap:8px; margin-bottom:16px; }
+.vec-model-modal-option {
+  display:flex; align-items:center; gap:8px; font-size:13px; color:var(--fg);
+  border:1px solid var(--btn-border); border-radius:8px; padding:8px 12px; cursor:pointer;
+}
+.vec-model-modal-option:hover { background:var(--btn-hover); }
+.vec-model-modal-option input { cursor:pointer; }
+.vec-model-modal-foot { display:flex; justify-content:flex-end; gap:8px; }
+.vec-model-modal-cancel-btn, .vec-model-modal-ok-btn {
+  font-size:12px; padding:6px 20px; border-radius:6px; border:1px solid var(--btn-border);
+  background:var(--btn-bg); color:var(--fg); cursor:pointer;
+}
+.vec-model-modal-cancel-btn:hover, .vec-model-modal-ok-btn:hover { background:var(--btn-hover); border-color:var(--accent); }
 .answer-modal-model-dot { display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:4px; vertical-align:middle; }
 .answer-modal-link { font-size:11px; color:var(--accent); text-decoration:none; white-space:nowrap; margin-left:auto; }
 .answer-modal-link:hover { text-decoration:underline; }
@@ -496,6 +522,21 @@ input[type=search]:focus { border-color:var(--accent); }
     <div class="prereq-result-modal-body" id="prereqResultModalBody"></div>
     <div class="prereq-result-modal-foot">
       <button type="button" class="prereq-result-modal-ok-btn" id="prereqResultModalOkBtn">了解</button>
+    </div>
+  </div>
+</div>
+<div class="vec-model-modal-backdrop" id="vecModelModalBackdrop" aria-hidden="true">
+  <div class="vec-model-modal" role="dialog" aria-modal="true" aria-labelledby="vecModelModalTitle">
+    <div class="vec-model-modal-title" id="vecModelModalTitle">🧭 埋め込みモデルを選択</div>
+    <div class="vec-model-modal-hint">この回答文のベクタ化に使うモデルを選んでください</div>
+    <div class="vec-model-modal-options">
+      <label class="vec-model-modal-option"><input type="radio" name="vecModelChoice" value="@cf/baai/bge-m3"> bge-m3</label>
+      <label class="vec-model-modal-option"><input type="radio" name="vecModelChoice" value="@cf/pfnet/plamo-embedding-1b" checked> plamo-embedding-1b</label>
+      <label class="vec-model-modal-option"><input type="radio" name="vecModelChoice" value="@cf/google/embeddinggemma-300m"> embeddinggemma-300m</label>
+    </div>
+    <div class="vec-model-modal-foot">
+      <button type="button" class="vec-model-modal-cancel-btn" id="vecModelModalCancelBtn">キャンセル</button>
+      <button type="button" class="vec-model-modal-ok-btn" id="vecModelModalOkBtn">ベクタ化する</button>
     </div>
   </div>
 </div>
@@ -1013,12 +1054,12 @@ input[type=search]:focus { border-color:var(--accent); }
   // まだ回答文に紐付けて登録されていない場合の「キーワード抽出」ボタンは、
   // どちらも/api/aichat/vectorize-answerを叩く同じ処理を行う(既にベクタ化
   // 済みの回答文はサーバー側でAI再呼び出しをスキップしキャッシュを使う)。
-  function runVectorizeAnswer(btn, idleText) {
+  function runVectorizeAnswer(btn, idleText, model) {
     var shareId = currentAnswerModalShareId;
     if (!shareId) return;
     btn.disabled = true;
     btn.textContent = 'ベクタ化中...';
-    vectorizeAnswerAndExtractKeywords(shareId)
+    vectorizeAnswerAndExtractKeywords(shareId, model)
       .then(function(res) {
         if (res.status !== 200 || !res.data || res.data.error) {
           btn.disabled = false;
@@ -1036,12 +1077,47 @@ input[type=search]:focus { border-color:var(--accent); }
       });
   }
 
+  // 「ベクタ化する」「キーワード抽出」ボタンは、実行前に最上位レイヤーの
+  // モーダルで埋め込みモデルを選ばせ、選択結果をrunVectorizeAnswerへ渡す。
+  var vecModelModalBackdrop = document.getElementById('vecModelModalBackdrop');
+  var vecModelModalCancelBtn = document.getElementById('vecModelModalCancelBtn');
+  var vecModelModalOkBtn = document.getElementById('vecModelModalOkBtn');
+  var pendingVectorizeBtn = null;
+  var pendingVectorizeIdleText = '';
+
+  function openVecModelModal(btn, idleText) {
+    pendingVectorizeBtn = btn;
+    pendingVectorizeIdleText = idleText;
+    vecModelModalBackdrop.classList.add('open');
+    vecModelModalBackdrop.setAttribute('aria-hidden', 'false');
+  }
+
+  function closeVecModelModal() {
+    vecModelModalBackdrop.classList.remove('open');
+    vecModelModalBackdrop.setAttribute('aria-hidden', 'true');
+    pendingVectorizeBtn = null;
+  }
+
+  vecModelModalCancelBtn.addEventListener('click', closeVecModelModal);
+  vecModelModalBackdrop.addEventListener('click', function(e) { if (e.target === vecModelModalBackdrop) closeVecModelModal(); });
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape' && vecModelModalBackdrop.classList.contains('open')) closeVecModelModal();
+  });
+  vecModelModalOkBtn.addEventListener('click', function() {
+    var btn = pendingVectorizeBtn;
+    var idleText = pendingVectorizeIdleText;
+    var checked = document.querySelector('input[name="vecModelChoice"]:checked');
+    var model = checked ? checked.value : '@cf/pfnet/plamo-embedding-1b';
+    closeVecModelModal();
+    if (btn) runVectorizeAnswer(btn, idleText, model);
+  });
+
   answerModalVectorizeBtn.addEventListener('click', function() {
-    runVectorizeAnswer(answerModalVectorizeBtn, 'この回答文をベクタ化する');
+    openVecModelModal(answerModalVectorizeBtn, 'この回答文をベクタ化する');
   });
 
   answerModalKeywordExtractBtn.addEventListener('click', function() {
-    runVectorizeAnswer(answerModalKeywordExtractBtn, 'キーワード抽出');
+    openVecModelModal(answerModalKeywordExtractBtn, 'キーワード抽出');
   });
 
   // 「キーワード一覧」ボタン用。グラフが既に読み込み済みで、この回答文が

@@ -86,6 +86,7 @@ async function setupChipVectorizingColorTest() {
 
   const btn = document.getElementById('answerModalVectorizeBtn') as HTMLButtonElement;
   btn.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+  document.getElementById('vecModelModalOkBtn')!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
   await vi.advanceTimersByTimeAsync(10);
 
   const chips = Array.from(document.querySelectorAll('.prereq-modal-chip')) as HTMLElement[];

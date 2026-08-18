@@ -119,6 +119,7 @@ async function setupPrereqUnregisteredCacheTest(vectorizeResponseOverrides: Reco
 
   const btn = document.getElementById('answerModalVectorizeBtn') as HTMLButtonElement;
   btn.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+  document.getElementById('vecModelModalOkBtn')!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
   await new Promise((resolve) => setTimeout(resolve, 10));
 
   return { fetchMock, extraFetchCalls };

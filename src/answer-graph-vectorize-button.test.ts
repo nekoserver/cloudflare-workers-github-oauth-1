@@ -107,10 +107,11 @@ describe('回答モーダル(DOM実動作): 「この回答文をベクタ化す
 
     const btn = document.getElementById('answerModalVectorizeBtn') as HTMLButtonElement;
     btn.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    document.getElementById('vecModelModalOkBtn')!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     await new Promise((resolve) => setTimeout(resolve, 10));
 
     expect(vectorizeCalls).toHaveLength(1);
-    expect(vectorizeCalls[0].body).toEqual({ shareId: 's1' });
+    expect(vectorizeCalls[0].body).toEqual({ shareId: 's1', model: '@cf/pfnet/plamo-embedding-1b' });
   });
 
   it('ベクタ化成功後、抽出されたキーワードが予備知識モーダルに表示され、モーダルが開く', async () => {
@@ -120,6 +121,7 @@ describe('回答モーダル(DOM実動作): 「この回答文をベクタ化す
 
     const btn = document.getElementById('answerModalVectorizeBtn') as HTMLButtonElement;
     btn.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    document.getElementById('vecModelModalOkBtn')!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     await new Promise((resolve) => setTimeout(resolve, 10));
 
     const prereqBackdrop = document.getElementById('prereqModalBackdrop')!;
@@ -135,6 +137,7 @@ describe('回答モーダル(DOM実動作): 「この回答文をベクタ化す
 
     const btn = document.getElementById('answerModalVectorizeBtn') as HTMLButtonElement;
     btn.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    document.getElementById('vecModelModalOkBtn')!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     await new Promise((resolve) => setTimeout(resolve, 10));
 
     expect(btn.style.display).toBe('none');
@@ -198,6 +201,7 @@ describe('回答モーダル(DOM実動作): 「この回答文をベクタ化す
 
     const btn = document.getElementById('answerModalVectorizeBtn') as HTMLButtonElement;
     btn.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    document.getElementById('vecModelModalOkBtn')!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     await vi.advanceTimersByTimeAsync(10);
 
     const chips = Array.from(document.querySelectorAll('.prereq-modal-chip'));
@@ -266,6 +270,7 @@ describe('回答モーダル(DOM実動作): 「この回答文をベクタ化す
     await vi.advanceTimersByTimeAsync(10);
     const btn = document.getElementById('answerModalVectorizeBtn') as HTMLButtonElement;
     btn.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    document.getElementById('vecModelModalOkBtn')!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     await vi.advanceTimersByTimeAsync(10);
     // チップのハイライトループ(4件 × 220ms)を最後まで進める
     await vi.advanceTimersByTimeAsync(220 * 4);
@@ -316,6 +321,56 @@ describe('回答モーダル(DOM実動作): 「この回答文をベクタ化す
     vi.useRealTimers();
   });
 
+  it('ボタンを押すとまず埋め込みモデル選択モーダルが開き、直後には/api/aichat/vectorize-answerを呼ばない', async () => {
+    const { vectorizeCalls } = await setupVectorizeButtonTest({ vectorized: false });
+    openAnswerModalViaClick('s1');
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    const btn = document.getElementById('answerModalVectorizeBtn') as HTMLButtonElement;
+    btn.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    expect(document.getElementById('vecModelModalBackdrop')!.classList.contains('open')).toBe(true);
+    expect(vectorizeCalls).toHaveLength(0);
+  });
+
+  it('モデル選択モーダルで「キャンセル」を押すと閉じて何も送信されない', async () => {
+    const { vectorizeCalls } = await setupVectorizeButtonTest({ vectorized: false });
+    openAnswerModalViaClick('s1');
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    const btn = document.getElementById('answerModalVectorizeBtn') as HTMLButtonElement;
+    btn.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    document.getElementById('vecModelModalCancelBtn')!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    expect(document.getElementById('vecModelModalBackdrop')!.classList.contains('open')).toBe(false);
+    expect(vectorizeCalls).toHaveLength(0);
+  });
+
+  it('モデル選択モーダルで選んだモデルがリクエストボディのmodelに反映される', async () => {
+    const { vectorizeCalls } = await setupVectorizeButtonTest({ vectorized: false });
+    openAnswerModalViaClick('s1');
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    const btn = document.getElementById('answerModalVectorizeBtn') as HTMLButtonElement;
+    btn.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    const bgeRadio = document.querySelector('input[name="vecModelChoice"][value="@cf/baai/bge-m3"]') as HTMLInputElement;
+    bgeRadio.checked = true;
+    document.getElementById('vecModelModalOkBtn')!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    expect(vectorizeCalls).toHaveLength(1);
+    expect(vectorizeCalls[0].body).toEqual({ shareId: 's1', model: '@cf/baai/bge-m3' });
+  });
+
+  it('モデル未選択でも既定でplamo-embedding-1bのradioがcheckedになっている', () => {
+    const html = buildPage();
+    const idx = html.indexOf('id="vecModelModalBackdrop"');
+    const block = html.slice(idx, idx + 900);
+    expect(block).toContain('value="@cf/pfnet/plamo-embedding-1b" checked');
+  });
+
   it('APIがエラーを返した場合、ボタンは再度押せる状態に戻る', async () => {
     const html = buildPage();
     document.body.innerHTML = html.slice(html.indexOf('<body>') + 6, html.indexOf('<script>'));
@@ -348,6 +403,7 @@ describe('回答モーダル(DOM実動作): 「この回答文をベクタ化す
 
     const btn = document.getElementById('answerModalVectorizeBtn') as HTMLButtonElement;
     btn.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    document.getElementById('vecModelModalOkBtn')!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     await new Promise((resolve) => setTimeout(resolve, 10));
 
     expect(btn.disabled).toBe(false);
@@ -467,10 +523,11 @@ describe('回答モーダル(DOM実動作): ベクタ化済みバッジとキー
 
     const btn = document.getElementById('answerModalKeywordExtractBtn') as HTMLButtonElement;
     btn.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    document.getElementById('vecModelModalOkBtn')!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     await new Promise((resolve) => setTimeout(resolve, 10));
 
     expect(vectorizeCalls).toHaveLength(1);
-    expect(vectorizeCalls[0].body).toEqual({ shareId: 's1' });
+    expect(vectorizeCalls[0].body).toEqual({ shareId: 's1', model: '@cf/pfnet/plamo-embedding-1b' });
     expect(document.getElementById('prereqModalBackdrop')!.classList.contains('open')).toBe(true);
     expect(btn.style.display).toBe('none');
   });
