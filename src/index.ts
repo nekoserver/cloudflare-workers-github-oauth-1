@@ -7388,6 +7388,27 @@ export function parsePrerequisiteTermsResponse(raw: string): string[] {
 }
 
 /**
+ * 予備知識キーワードとして意味が薄いものを判定する。
+ * 「この回答文をベクタ化する」ボタンで未登録キーワードをベクタ化・登録する前に、
+ * 以下を除外する(AI呼び出し・D1書き込みの無駄を減らすため、登録処理より前で
+ * 弾く):
+ *   - 英数字だけで構成された語(長さを問わない。1文字のアルファベットも含む)
+ *   - ひらがな・カタカナ1文字だけの語(助詞の断片・記号的なノイズが多いため)
+ */
+export function isLowValuePrerequisiteTerm(term: string): boolean {
+  if (/^[A-Za-z0-9]+$/.test(term)) return true;
+  if (term.length === 1 && /^[぀-ヿ]$/.test(term)) return true;
+  return false;
+}
+
+/**
+ * extractPrerequisiteTermsの結果から意味の薄い語を取り除く。
+ */
+export function filterMeaningfulPrerequisiteTerms(terms: string[]): string[] {
+  return terms.filter((t) => !isLowValuePrerequisiteTerm(t));
+}
+
+/**
  * 回答文を理解するのに必要な予備知識(用語・概念)をgemma-4-26b-a4b-itに
  * 単語単位で抽出させる。gemma-4-26b-a4b-itはsystem messageが含まれると
  * enable_thinking:falseを無視して思考過程を応答に混入させる既知の制限が
@@ -7912,6 +7933,9 @@ app.post('/api/aichat/vectorize-answer', authMiddleware, async (c) => {
       PREREQUISITE_TERMS_TIMEOUT_MS,
       `予備知識キーワードの抽出が${PREREQUISITE_TERMS_TIMEOUT_MS / 1000}秒以内に完了しませんでした(タイムアウト)`
     );
+    // 英数字だけの語・ひらがなカタカナ1文字だけの語は、ベクタ化・登録処理
+    // (AI呼び出し・D1書き込み)を行う前にここで弾く
+    keywords = filterMeaningfulPrerequisiteTerms(keywords);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     logger.warn('vectorize-answer: prerequisite term extraction failed', { shareId, error: message });

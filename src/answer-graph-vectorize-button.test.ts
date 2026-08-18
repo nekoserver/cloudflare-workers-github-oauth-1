@@ -371,6 +371,18 @@ describe('回答モーダル(DOM実動作): 「この回答文をベクタ化す
     expect(block).toContain('value="@cf/pfnet/plamo-embedding-1b" checked');
   });
 
+  it('埋め込みモデルの一覧は一番上にplamo-embedding-1bが来る', () => {
+    const html = buildPage();
+    const idx = html.indexOf('id="vecModelModalBackdrop"');
+    const block = html.slice(idx, idx + 900);
+    const plamoIdx = block.indexOf('@cf/pfnet/plamo-embedding-1b');
+    const bgeIdx = block.indexOf('@cf/baai/bge-m3');
+    const gemmaIdx = block.indexOf('@cf/google/embeddinggemma-300m');
+    expect(plamoIdx).toBeGreaterThan(-1);
+    expect(plamoIdx).toBeLessThan(bgeIdx);
+    expect(plamoIdx).toBeLessThan(gemmaIdx);
+  });
+
   it('APIがエラーを返した場合、ボタンは再度押せる状態に戻る', async () => {
     const html = buildPage();
     document.body.innerHTML = html.slice(html.indexOf('<body>') + 6, html.indexOf('<script>'));
