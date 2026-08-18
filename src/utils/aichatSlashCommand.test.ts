@@ -6,6 +6,8 @@ import {
   formatAichatSlashCommandHelp,
   formatSha256WasmResult,
   formatFactorWasmResult,
+  formatDigHelp,
+  formatDigResult,
   interpretAichatSlashCommand,
   type CommitAgentLogRow,
 } from './aichatSlashCommand';
@@ -103,11 +105,28 @@ describe('formatAichatSlashCommandHelp', () => {
     expect(result).toContain('/neko limit');
     expect(result).toContain('/neko 256');
     expect(result).toContain('/neko factor');
+    expect(result).toContain('/neko dig');
     expect(result).toContain('/neko help');
   });
 
   it('罫線・ツリー文字を使わずMarkdownテーブルで表現する（CLAUDE.mdルール16）', () => {
     const result = formatAichatSlashCommandHelp();
+    expect(result).not.toMatch(/[├└│─┼]/);
+  });
+});
+
+describe('formatDigHelp', () => {
+  it('対応レコードタイプ・書式一覧を含むMarkdownを返す', () => {
+    const result = formatDigHelp();
+    expect(result).toContain('/neko dig <ドメイン>');
+    expect(result).toContain('-t <タイプ>');
+    expect(result).toContain('--help');
+    expect(result).toContain('対応レコードタイプ');
+    expect(result).toContain('AAAA');
+  });
+
+  it('罫線・ツリー文字を使わずMarkdownテーブルで表現する（CLAUDE.mdルール16）', () => {
+    const result = formatDigHelp();
     expect(result).not.toMatch(/[├└│─┼]/);
   });
 });
@@ -261,5 +280,75 @@ describe('formatSha256WasmResult', () => {
   it('入力文字列とハッシュ値をMarkdownで表示する', () => {
     const result = formatSha256WasmResult('hello', 'abc123');
     expect(result).toBe('## SHA-256 (WASM)\n入力: hello\nハッシュ: abc123');
+  });
+});
+
+describe('/neko dig', () => {
+  const now = new Date('2026-08-18T10:00:00Z');
+  const unusedDeps = { fetchLatestCommitAgentLog: vi.fn().mockRejectedValue(new Error('should not be called')) };
+
+  it('/neko dig --help はdigLookupを呼ばずヘルプを返す', async () => {
+    const digLookup = vi.fn().mockRejectedValue(new Error('should not be called'));
+    const result = await interpretAichatSlashCommand('/neko dig --help', now, { ...unusedDeps, digLookup });
+    expect(digLookup).not.toHaveBeenCalled();
+    expect(result).toEqual({ handled: true, response: formatDigHelp() });
+  });
+
+  it('/neko dig -h もヘルプを返す', async () => {
+    const digLookup = vi.fn().mockRejectedValue(new Error('should not be called'));
+    const result = await interpretAichatSlashCommand('/neko dig -h', now, { ...unusedDeps, digLookup });
+    expect(digLookup).not.toHaveBeenCalled();
+    expect(result).toEqual({ handled: true, response: formatDigHelp() });
+  });
+
+  it('/neko dig (引数なし) もヘルプを返す', async () => {
+    const digLookup = vi.fn().mockRejectedValue(new Error('should not be called'));
+    const result = await interpretAichatSlashCommand('/neko dig', now, { ...unusedDeps, digLookup });
+    expect(digLookup).not.toHaveBeenCalled();
+    expect(result).toEqual({ handled: true, response: formatDigHelp() });
+  });
+
+  it('/neko dig <ドメイン> はデフォルトでAレコードをdigLookupに渡す', async () => {
+    const digLookup = vi.fn().mockResolvedValue('dummy result');
+    const result = await interpretAichatSlashCommand('/neko dig example.com', now, { ...unusedDeps, digLookup });
+    expect(digLookup).toHaveBeenCalledWith('example.com', 'A');
+    expect(result).toEqual({ handled: true, response: formatDigResult('dummy result') });
+  });
+
+  it('/neko dig <ドメイン> <タイプ> は指定したタイプをdigLookupに渡す(小文字も大文字化する)', async () => {
+    const digLookup = vi.fn().mockResolvedValue('dummy result');
+    await interpretAichatSlashCommand('/neko dig example.com mx', now, { ...unusedDeps, digLookup });
+    expect(digLookup).toHaveBeenCalledWith('example.com', 'MX');
+  });
+
+  it('/neko dig -t <タイプ> <ドメイン> はdig(1)の-t書式でも動作する', async () => {
+    const digLookup = vi.fn().mockResolvedValue('dummy result');
+    await interpretAichatSlashCommand('/neko dig -t AAAA example.com', now, { ...unusedDeps, digLookup });
+    expect(digLookup).toHaveBeenCalledWith('example.com', 'AAAA');
+  });
+
+  it('/neko dig -t だけでドメインが無い場合はエラーメッセージを返す（握りつぶさない）', async () => {
+    const digLookup = vi.fn().mockRejectedValue(new Error('should not be called'));
+    const result = await interpretAichatSlashCommand('/neko dig -t MX', now, { ...unusedDeps, digLookup });
+    expect(digLookup).not.toHaveBeenCalled();
+    expect(result).toEqual({ handled: true, response: '❌ 書式が正しくありません: /neko dig -t <タイプ> <ドメイン>' });
+  });
+
+  it('/neko dig は digLookup 未設定時にエラーメッセージを返す', async () => {
+    const result = await interpretAichatSlashCommand('/neko dig example.com', now, unusedDeps);
+    expect(result).toEqual({ handled: true, response: '❌ /neko dig は現在利用できません(WASM未設定)' });
+  });
+
+  it('/neko dig で digLookup が例外を投げた場合はエラーメッセージを返す（握りつぶさない）', async () => {
+    const digLookup = vi.fn().mockRejectedValue(new Error('NXDOMAIN'));
+    const result = await interpretAichatSlashCommand('/neko dig no-such-domain.invalid', now, { ...unusedDeps, digLookup });
+    expect(result).toEqual({ handled: true, response: '❌ /neko dig の実行中にエラーが発生しました: NXDOMAIN' });
+  });
+});
+
+describe('formatDigResult', () => {
+  it('digの結果をコードブロック付きMarkdownで表示する', () => {
+    const result = formatDigResult(';; ANSWER SECTION:\nexample.com. 300 IN A 93.184.216.34');
+    expect(result).toBe('## dig (WASM)\n```\n;; ANSWER SECTION:\nexample.com. 300 IN A 93.184.216.34\n```');
   });
 });

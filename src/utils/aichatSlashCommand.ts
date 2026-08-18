@@ -85,8 +85,38 @@ export function formatAichatSlashCommandHelp(): string {
     '| /neko vcount | ベクタ化済みの回答文の件数と全回答文に占める割合を表示します(結果一覧は最大30件までモーダルで確認できます) |',
     '| /neko 256 <文字列> | 指定した文字列のSHA-256ハッシュをWASM(Rust実装)で計算します |',
     '| /neko factor <数値> | 指定した整数(0以上2^53以下)をWASM(Rust実装)で素因数分解します |',
+    '| /neko dig <ドメイン> [タイプ] | 指定ドメインのDNS問い合わせをWASM(Rust実装)で行います。詳細は /neko dig --help |',
     '| /neko help | このサブコマンド一覧を表示します |',
   ].join('\n');
+}
+
+/**
+ * `/neko dig --help` 用のオプション一覧をMarkdownテーブルで返す。
+ * 罫線・ツリー文字は使わずMarkdownテーブルで表現する（CLAUDE.mdルール16）。
+ */
+export function formatDigHelp(): string {
+  return [
+    '## /neko dig ヘルプ',
+    '指定したドメインのDNS問い合わせを行います(DNS over HTTPS経由。DNSワイヤーフォーマットの',
+    '問い合わせパケット組み立て・応答パケット解析はRust/WASMで行います)。',
+    '',
+    '| 書式 | 説明 |',
+    '|---|---|',
+    '| /neko dig <ドメイン> | Aレコードを問い合わせます(タイプ省略時のデフォルト) |',
+    '| /neko dig <ドメイン> <タイプ> | 指定したレコードタイプを問い合わせます |',
+    '| /neko dig -t <タイプ> <ドメイン> | dig(1)の-tオプションと同じ書式で問い合わせます |',
+    '| /neko dig --help / -h | このヘルプを表示します |',
+    '',
+    '対応レコードタイプ: A, AAAA, NS, CNAME, MX, TXT, SOA, PTR, SRV, ANY',
+  ].join('\n');
+}
+
+/**
+ * `/neko dig` の実行結果(digWasmServer側で整形済みのdig(1)風テキスト)を
+ * コードブロックで表示する。
+ */
+export function formatDigResult(result: string): string {
+  return ['## dig (WASM)', '```', result, '```'].join('\n');
 }
 
 export type CommitAgentLogRow = {
@@ -187,6 +217,7 @@ export type AichatSlashCommandDeps = {
   vectorizedAnswers?: () => Promise<AichatVectorizedAnswersOutcome>;
   sha256ViaWasm?: (input: string) => Promise<string>;
   factorViaWasm?: (n: number) => Promise<string>;
+  digLookup?: (name: string, qtype: string) => Promise<string>;
 };
 
 export const AICHAT_SEARCH_TIMEOUT_MS = 8000;
@@ -342,12 +373,45 @@ export async function interpretAichatSlashCommand(
     }
   }
 
+  if (subcommand === 'dig') {
+    const args = parts.slice(2);
+    if (args.length === 0 || args[0] === '--help' || args[0] === '-h') {
+      return { handled: true, response: formatDigHelp() };
+    }
+
+    let name: string;
+    let qtype = 'A';
+    if (args[0] === '-t') {
+      qtype = (args[1] ?? '').toUpperCase();
+      name = args[2] ?? '';
+      if (!qtype || !name) {
+        return { handled: true, response: '❌ 書式が正しくありません: /neko dig -t <タイプ> <ドメイン>' };
+      }
+    } else {
+      name = args[0];
+      if (args[1]) qtype = args[1].toUpperCase();
+    }
+
+    if (!deps.digLookup) {
+      return { handled: true, response: '❌ /neko dig は現在利用できません(WASM未設定)' };
+    }
+    try {
+      const result = await deps.digLookup(name, qtype);
+      return { handled: true, response: formatDigResult(result) };
+    } catch (err) {
+      return {
+        handled: true,
+        response: `❌ /neko dig の実行中にエラーが発生しました: ${err instanceof Error ? err.message : String(err)}`,
+      };
+    }
+  }
+
   if (subcommand === 'help') {
     return { handled: true, response: formatAichatSlashCommandHelp() };
   }
 
   return {
     handled: true,
-    response: `❌ 未対応のサブコマンドです: ${subcommand || '(なし)'}\n利用可能なコマンド: /neko hms, /neko cal, /neko clog, /neko limit, /neko search, /neko vcount, /neko 256, /neko factor, /neko help\n詳細は /neko help を実行してください`,
+    response: `❌ 未対応のサブコマンドです: ${subcommand || '(なし)'}\n利用可能なコマンド: /neko hms, /neko cal, /neko clog, /neko limit, /neko search, /neko vcount, /neko 256, /neko factor, /neko dig, /neko help\n詳細は /neko help を実行してください`,
   };
 }

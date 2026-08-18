@@ -32,6 +32,15 @@ export const WASM_MODULE_REGISTRY: WasmModuleInfo[] = [
     sourceDir: 'wasm/factor-wasm',
     approxSize: '約21KB',
   },
+  {
+    id: 'dig',
+    name: 'dig (DNS lookup, Rust)',
+    description:
+      'dig(1)風のDNS問い合わせ。DNSワイヤーフォーマットの問い合わせパケット組み立て・応答パケット解析をRust/WASMで行い、実際のDNS問い合わせ自体はCloudflare DNS over HTTPS(cloudflare-dns.com)へのfetchで行う。AIチャットの/neko digサブコマンドのサーバー実行で使用する',
+    wasmPath: 'public/wasm/dig_bg.wasm',
+    sourceDir: 'wasm/dig-wasm',
+    approxSize: '約55KB',
+  },
 ];
 
 export function findWasmModule(id: string): WasmModuleInfo | undefined {
