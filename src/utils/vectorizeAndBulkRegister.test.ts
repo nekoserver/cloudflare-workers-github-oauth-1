@@ -16,6 +16,10 @@ import { getVectorizeAndBulkRegisterScript } from './vectorizeAndBulkRegister';
 //   (4) bulkRegisterUnregisteredKeywordsのonStart/onItemDoneコールバックが
 //       正しいインデックス・順序で呼ばれない
 //   (5) 1件の登録に失敗しても残りの処理が止まってしまう
+//   (6) サーバー側がHTTPエラーやエラーJSON({ok:false,error:...})を返しても
+//       検知されず、onItemDoneが常に「成功」扱いで呼ばれてしまう
+//       (実際に発生した不具合の根本原因: 見た目は「登録完了」なのに
+//       DBには書き込まれておらず、後で開き直すと未登録のまま表示される)
 
 function loadFunctions() {
   const src = getVectorizeAndBulkRegisterScript();
@@ -24,11 +28,11 @@ function loadFunctions() {
   );
   return fn() as {
     vectorizeAnswerAndExtractKeywords: (shareId: string, model?: string) => Promise<{ status: number; data: unknown }>;
-    registerKeywordViaSearchLogFlow: (keyword: string, originShareId: string | null) => Promise<void>;
+    registerKeywordViaSearchLogFlow: (keyword: string, originShareId: string | null) => Promise<boolean>;
     bulkRegisterUnregisteredKeywords: (
       originShareId: string | null,
       keywords: string[],
-      callbacks: { onStart?: (i: number, kw: string) => void; onItemDone?: (i: number, kw: string) => void },
+      callbacks: { onStart?: (i: number, kw: string) => void; onItemDone?: (i: number, kw: string, success: boolean) => void },
     ) => Promise<void>;
   };
 }
@@ -116,20 +120,20 @@ describe('getVectorizeAndBulkRegisterScript', () => {
       const body = init && init.body ? JSON.parse(init.body) : null;
       if (u.includes('/api/aichat/shares/search')) {
         calls.push({ kind: 'search', body });
-        return Promise.resolve({ json: () => Promise.resolve({ results: [] }) });
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ results: [] }) });
       }
       if (u.includes('/api/aichat/search-log/open-modal')) {
         calls.push({ kind: 'open-modal', body });
         const reqShareIds = (body as { shareIds: string[] }).shareIds;
-        return Promise.resolve({ json: () => Promise.resolve({
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({
           entries: reqShareIds.map((id: string) => ({ shareId: id, model: 'm', question: 'q', isNew: true })),
         }) });
       }
       if (u.includes('/api/aichat/search-log/approve')) {
         calls.push({ kind: 'approve', body });
-        return Promise.resolve({ json: () => Promise.resolve({ ok: true }) });
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ ok: true }) });
       }
-      return Promise.resolve({ json: () => Promise.resolve({}) });
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
     });
     vi.stubGlobal('fetch', fetchMock);
     const { registerKeywordViaSearchLogFlow } = loadFunctions();
@@ -151,20 +155,20 @@ describe('getVectorizeAndBulkRegisterScript', () => {
       const body = init && init.body ? JSON.parse(init.body) : null;
       if (u.includes('/api/aichat/shares/search')) {
         calls.push({ kind: 'search', body });
-        return Promise.resolve({ json: () => Promise.resolve({ results: [{ id: 's1' }, { id: 'sB' }] }) });
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ results: [{ id: 's1' }, { id: 'sB' }] }) });
       }
       if (u.includes('/api/aichat/search-log/open-modal')) {
         calls.push({ kind: 'open-modal', body });
         const reqShareIds = (body as { shareIds: string[] }).shareIds;
-        return Promise.resolve({ json: () => Promise.resolve({
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({
           entries: reqShareIds.map((id: string) => ({ shareId: id, model: 'm', question: 'q', isNew: true })),
         }) });
       }
       if (u.includes('/api/aichat/search-log/approve')) {
         calls.push({ kind: 'approve', body });
-        return Promise.resolve({ json: () => Promise.resolve({ ok: true }) });
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ ok: true }) });
       }
-      return Promise.resolve({ json: () => Promise.resolve({}) });
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
     });
     vi.stubGlobal('fetch', fetchMock);
     const { registerKeywordViaSearchLogFlow } = loadFunctions();
@@ -181,17 +185,17 @@ describe('getVectorizeAndBulkRegisterScript', () => {
       const u = String(url);
       const body = init && init.body ? JSON.parse(init.body) : null;
       if (u.includes('/api/aichat/shares/search')) {
-        return Promise.resolve({ json: () => Promise.resolve({ results: [{ id: 'sA' }] }) });
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ results: [{ id: 'sA' }] }) });
       }
       if (u.includes('/api/aichat/search-log/open-modal')) {
         calls.push({ kind: 'open-modal', body });
-        return Promise.resolve({ json: () => Promise.resolve({ entries: [{ shareId: 'sA', model: 'm', question: 'q', isNew: true }] }) });
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ entries: [{ shareId: 'sA', model: 'm', question: 'q', isNew: true }] }) });
       }
       if (u.includes('/api/aichat/search-log/approve')) {
         calls.push({ kind: 'approve', body });
-        return Promise.resolve({ json: () => Promise.resolve({ ok: true }) });
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ ok: true }) });
       }
-      return Promise.resolve({ json: () => Promise.resolve({}) });
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
     });
     vi.stubGlobal('fetch', fetchMock);
     const { registerKeywordViaSearchLogFlow } = loadFunctions();
@@ -200,15 +204,15 @@ describe('getVectorizeAndBulkRegisterScript', () => {
     expect((calls.find((c) => c.kind === 'open-modal')!.body as { shareIds: string[] }).shareIds).toEqual(['sA']);
   });
 
-  it('bulkRegisterUnregisteredKeywordsはonStart/onItemDoneを順番通りに呼び、完了までresolveする', async () => {
+  it('bulkRegisterUnregisteredKeywordsはonStart/onItemDoneを順番通りに呼び、成功時はsuccess=trueで完了までresolveする', async () => {
     const fetchMock = vi.fn((url: string) => {
       const u = String(url);
-      if (u.includes('/api/aichat/shares/search')) return Promise.resolve({ json: () => Promise.resolve({ results: [] }) });
+      if (u.includes('/api/aichat/shares/search')) return Promise.resolve({ ok: true, json: () => Promise.resolve({ results: [] }) });
       if (u.includes('/api/aichat/search-log/open-modal')) {
-        return Promise.resolve({ json: () => Promise.resolve({ entries: [{ shareId: 's1', model: 'm', question: 'q', isNew: true }] }) });
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ entries: [{ shareId: 's1', model: 'm', question: 'q', isNew: true }] }) });
       }
-      if (u.includes('/api/aichat/search-log/approve')) return Promise.resolve({ json: () => Promise.resolve({ ok: true }) });
-      return Promise.resolve({ json: () => Promise.resolve({}) });
+      if (u.includes('/api/aichat/search-log/approve')) return Promise.resolve({ ok: true, json: () => Promise.resolve({ ok: true }) });
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
     });
     vi.stubGlobal('fetch', fetchMock);
     const { bulkRegisterUnregisteredKeywords } = loadFunctions();
@@ -216,26 +220,26 @@ describe('getVectorizeAndBulkRegisterScript', () => {
     const events: string[] = [];
     await bulkRegisterUnregisteredKeywords('s1', ['猫', '犬'], {
       onStart: (i, kw) => events.push(`start:${i}:${kw}`),
-      onItemDone: (i, kw) => events.push(`done:${i}:${kw}`),
+      onItemDone: (i, kw, success) => events.push(`done:${i}:${kw}:${success}`),
     });
 
-    expect(events).toEqual(['start:0:猫', 'done:0:猫', 'start:1:犬', 'done:1:犬']);
+    expect(events).toEqual(['start:0:猫', 'done:0:猫:true', 'start:1:犬', 'done:1:犬:true']);
   });
 
-  it('1件の登録失敗(fetch例外)があっても、残りのキーワードの処理を続ける', async () => {
+  it('1件の登録失敗(fetch例外)があっても、残りのキーワードの処理を続け、失敗した件だけsuccess=falseで通知する', async () => {
     let callCount = 0;
     const fetchMock = vi.fn((url: string) => {
       const u = String(url);
       if (u.includes('/api/aichat/shares/search')) {
         callCount++;
         if (callCount === 1) return Promise.reject(new Error('network error'));
-        return Promise.resolve({ json: () => Promise.resolve({ results: [] }) });
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ results: [] }) });
       }
       if (u.includes('/api/aichat/search-log/open-modal')) {
-        return Promise.resolve({ json: () => Promise.resolve({ entries: [{ shareId: 's1', model: 'm', question: 'q', isNew: true }] }) });
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ entries: [{ shareId: 's1', model: 'm', question: 'q', isNew: true }] }) });
       }
-      if (u.includes('/api/aichat/search-log/approve')) return Promise.resolve({ json: () => Promise.resolve({ ok: true }) });
-      return Promise.resolve({ json: () => Promise.resolve({}) });
+      if (u.includes('/api/aichat/search-log/approve')) return Promise.resolve({ ok: true, json: () => Promise.resolve({ ok: true }) });
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
     });
     vi.stubGlobal('fetch', fetchMock);
     const { bulkRegisterUnregisteredKeywords } = loadFunctions();
@@ -243,9 +247,68 @@ describe('getVectorizeAndBulkRegisterScript', () => {
     const events: string[] = [];
     await bulkRegisterUnregisteredKeywords('s1', ['猫', '犬'], {
       onStart: (i, kw) => events.push(`start:${i}:${kw}`),
-      onItemDone: (i, kw) => events.push(`done:${i}:${kw}`),
+      onItemDone: (i, kw, success) => events.push(`done:${i}:${kw}:${success}`),
     });
 
-    expect(events).toEqual(['start:0:猫', 'done:0:猫', 'start:1:犬', 'done:1:犬']);
+    expect(events).toEqual(['start:0:猫', 'done:0:猫:false', 'start:1:犬', 'done:1:犬:true']);
+  });
+
+  it('根本原因の修正: 検索ログ承認(approve)がHTTPエラーを返した場合、registerKeywordViaSearchLogFlowは失敗として拒否する(以前は検知されず成功扱いになっていた)', async () => {
+    const fetchMock = vi.fn((url: string) => {
+      const u = String(url);
+      if (u.includes('/api/aichat/shares/search')) return Promise.resolve({ ok: true, json: () => Promise.resolve({ results: [] }) });
+      if (u.includes('/api/aichat/search-log/open-modal')) {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ entries: [{ shareId: 's1', model: 'm', question: 'q', isNew: true }] }) });
+      }
+      if (u.includes('/api/aichat/search-log/approve')) {
+        return Promise.resolve({ ok: false, status: 500, json: () => Promise.resolve({ ok: false, error: 'D1 write failed' }) });
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const { registerKeywordViaSearchLogFlow } = loadFunctions();
+
+    await expect(registerKeywordViaSearchLogFlow('猫', 's1')).rejects.toThrow();
+  });
+
+  it('根本原因の修正: 検索ログ承認(approve)がHTTP 200でもok:falseを返した場合は失敗として拒否する', async () => {
+    const fetchMock = vi.fn((url: string) => {
+      const u = String(url);
+      if (u.includes('/api/aichat/shares/search')) return Promise.resolve({ ok: true, json: () => Promise.resolve({ results: [] }) });
+      if (u.includes('/api/aichat/search-log/open-modal')) {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ entries: [{ shareId: 's1', model: 'm', question: 'q', isNew: true }] }) });
+      }
+      if (u.includes('/api/aichat/search-log/approve')) {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ ok: false, error: 'D1 write failed' }) });
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const { registerKeywordViaSearchLogFlow } = loadFunctions();
+
+    await expect(registerKeywordViaSearchLogFlow('猫', 's1')).rejects.toThrow('D1 write failed');
+  });
+
+  it('根本原因の修正: bulkRegisterUnregisteredKeywordsはapproveの失敗をonItemDoneのsuccess=falseとして伝える', async () => {
+    const fetchMock = vi.fn((url: string) => {
+      const u = String(url);
+      if (u.includes('/api/aichat/shares/search')) return Promise.resolve({ ok: true, json: () => Promise.resolve({ results: [] }) });
+      if (u.includes('/api/aichat/search-log/open-modal')) {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ entries: [{ shareId: 's1', model: 'm', question: 'q', isNew: true }] }) });
+      }
+      if (u.includes('/api/aichat/search-log/approve')) {
+        return Promise.resolve({ ok: false, status: 500, json: () => Promise.resolve({ ok: false, error: 'D1 write failed' }) });
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const { bulkRegisterUnregisteredKeywords } = loadFunctions();
+
+    const results: Array<{ kw: string; success: boolean }> = [];
+    await bulkRegisterUnregisteredKeywords('s1', ['猫'], {
+      onItemDone: (_i, kw, success) => results.push({ kw, success }),
+    });
+
+    expect(results).toEqual([{ kw: '猫', success: false }]);
   });
 });

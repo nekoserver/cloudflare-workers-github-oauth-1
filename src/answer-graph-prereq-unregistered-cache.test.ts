@@ -57,6 +57,7 @@ async function setupPrereqUnregisteredCacheTest(vectorizeResponseOverrides: Reco
     const u = String(url);
     if (u.includes('/api/aichat/vectorize-answer')) {
       return Promise.resolve({
+        ok: true,
         status: 200,
         json: () => Promise.resolve({
           vectorized: true, model: '@cf/pfnet/plamo-embedding-1b', dim: 3,
@@ -67,37 +68,37 @@ async function setupPrereqUnregisteredCacheTest(vectorizeResponseOverrides: Reco
       });
     }
     if (u.includes('/api/aichat/all-keywords')) {
-      return Promise.resolve({ json: () => Promise.resolve({ keywords: [
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({ keywords: [
         { keyword: '東京駅', cnt: 5, category_id: 1 },
         { keyword: '駅', cnt: 2 },
         { keyword: '乗車券', cnt: 0 },
       ] }) });
     }
     if (u.includes('/api/aichat/shares/search')) {
-      return Promise.resolve({ json: () => Promise.resolve({ results: [{ id: 's2' }] }) });
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({ results: [{ id: 's2' }] }) });
     }
     if (u.includes('/api/aichat/search-log/open-modal')) {
-      return Promise.resolve({ json: () => Promise.resolve({ entries: [{ shareId: 's2', isNew: true }] }) });
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({ entries: [{ shareId: 's2', isNew: true }] }) });
     }
     if (u.includes('/api/aichat/search-log/approve')) {
-      return Promise.resolve({ json: () => Promise.resolve({ ok: true }) });
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({ ok: true }) });
     }
     if (u.includes('/api/aichat/category-groups')) {
-      return Promise.resolve({ json: () => Promise.resolve({ groups: [] }) });
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({ groups: [] }) });
     }
     if (u.includes('/api/aichat/keyword-categories-summary')) {
-      return Promise.resolve({ json: () => Promise.resolve({ categories: [{ id: 1, name: '交通', color: '#3b82f6' }] }) });
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({ categories: [{ id: 1, name: '交通', color: '#3b82f6' }] }) });
     }
     if (u.includes('share-keywords')) {
-      return Promise.resolve({ json: () => Promise.resolve({ keywords: [] }) });
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({ keywords: [] }) });
     }
     if (u.includes('/api/aichat/shares/')) {
-      return Promise.resolve({ json: () => Promise.resolve({ id: 's1', question: 'Q', answer: 'A', vectorized: false }) });
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({ id: 's1', question: 'Q', answer: 'A', vectorized: false }) });
     }
     if (u.includes('/api/aichat/answer-keywords')) {
       extraFetchCalls.push(u);
     }
-    return Promise.resolve({ json: () => Promise.resolve({}) });
+    return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
   });
   vi.stubGlobal('fetch', fetchMock);
   vi.stubGlobal('alert', vi.fn());

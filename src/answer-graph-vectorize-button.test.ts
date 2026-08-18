@@ -622,7 +622,7 @@ describe('回答モーダル(DOM実動作): 「キーワード一覧」モーダ
       const body = init && init.body ? JSON.parse(init.body) : null;
       if (u.includes('/api/aichat/answer-keywords')) {
         calls.push({ kind: 'answer-keywords', url: u, body });
-        return Promise.resolve({ json: () => Promise.resolve({
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({
           shareId: 's1', keywords: ['新幹線', '乗車券'],
           keywordOccurrences: [
             { keyword: '新幹線', count: 0, classified: false, categoryColor: null },
@@ -633,8 +633,8 @@ describe('回答モーダル(DOM実動作): 「キーワード一覧」モーダ
       if (u.includes('/api/aichat/shares/search')) {
         calls.push({ kind: 'search', url: u, body });
         const q = decodeURIComponent(u.split('q=')[1] || '');
-        if (q === '乗車券') return Promise.resolve({ json: () => Promise.resolve({ results: [] }) });
-        return Promise.resolve({ json: () => Promise.resolve({ results: [{ id: 'sA' }, { id: 'sB' }] }) });
+        if (q === '乗車券') return Promise.resolve({ ok: true, json: () => Promise.resolve({ results: [] }) });
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ results: [{ id: 'sA' }, { id: 'sB' }] }) });
       }
       if (u.includes('/api/aichat/search-log/open-modal')) {
         calls.push({ kind: 'open-modal', url: u, body });
@@ -642,19 +642,19 @@ describe('回答モーダル(DOM実動作): 「キーワード一覧」モーダ
         // 補完される起点shareIdのs1等)は未登録(isNew:true)として扱う
         const reqShareIds = (body as { shareIds?: string[] } | null)?.shareIds ?? [];
         const entries = reqShareIds.map((id) => ({ shareId: id, model: 'm', question: 'q', isNew: id !== 'sB' }));
-        return Promise.resolve({ json: () => Promise.resolve({ entries }) });
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ entries }) });
       }
       if (u.includes('/api/aichat/search-log/approve')) {
         calls.push({ kind: 'approve', url: u, body });
-        return Promise.resolve({ json: () => Promise.resolve({ ok: true, count: 1 }) });
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ ok: true, count: 1 }) });
       }
       if (u.includes('share-keywords')) {
-        return Promise.resolve({ json: () => Promise.resolve({ keywords: [] }) });
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ keywords: [] }) });
       }
       if (u.includes('/api/aichat/shares/')) {
-        return Promise.resolve({ json: () => Promise.resolve(shareResponse) });
+        return Promise.resolve({ ok: true, json: () => Promise.resolve(shareResponse) });
       }
-      return Promise.resolve({ json: () => Promise.resolve({}) });
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
     });
     vi.stubGlobal('fetch', fetchMock);
     vi.stubGlobal('alert', vi.fn());
@@ -684,14 +684,14 @@ describe('回答モーダル(DOM実動作): 「キーワード一覧」モーダ
     const fetchMock = vi.fn((url: string) => {
       const u = String(url);
       if (u.includes('/api/aichat/answer-keywords')) {
-        return Promise.resolve({ json: () => Promise.resolve({
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({
           shareId: 's1', keywords: ['新幹線'],
           keywordOccurrences: [{ keyword: '新幹線', count: 3, classified: true, categoryColor: '#3b82f6' }],
         }) });
       }
-      if (u.includes('share-keywords')) return Promise.resolve({ json: () => Promise.resolve({ keywords: [] }) });
-      if (u.includes('/api/aichat/shares/')) return Promise.resolve({ json: () => Promise.resolve({ id: 's1', question: 'Q', answer: 'A', vectorized: true, keywordsRegistered: true }) });
-      return Promise.resolve({ json: () => Promise.resolve({}) });
+      if (u.includes('share-keywords')) return Promise.resolve({ ok: true, json: () => Promise.resolve({ keywords: [] }) });
+      if (u.includes('/api/aichat/shares/')) return Promise.resolve({ ok: true, json: () => Promise.resolve({ id: 's1', question: 'Q', answer: 'A', vectorized: true, keywordsRegistered: true }) });
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
     });
     vi.stubGlobal('fetch', fetchMock);
     vi.stubGlobal('alert', vi.fn());
@@ -759,7 +759,7 @@ describe('回答モーダル(DOM実動作): 「キーワード一覧」モーダ
     expect(shinkansenApproveCalls).toHaveLength(1);
   });
 
-  it('1件のキーワード登録に失敗しても残りのキーワードの処理を続ける', async () => {
+  it('1件のキーワード登録に失敗しても残りのキーワードの処理を続け、失敗した件だけ未登録のまま残り通知される', async () => {
     const html = buildPage();
     document.body.innerHTML = html.slice(html.indexOf('<body>') + 6, html.indexOf('<script>'));
     const proto = (window as unknown as { HTMLCanvasElement: { prototype: { getContext: unknown } } }).HTMLCanvasElement.prototype;
@@ -771,7 +771,7 @@ describe('回答モーダル(DOM実動作): 「キーワード一覧」モーダ
       const u = String(url);
       const body = init && init.body ? JSON.parse(init.body) : null;
       if (u.includes('/api/aichat/answer-keywords')) {
-        return Promise.resolve({ json: () => Promise.resolve({
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({
           shareId: 's1', keywords: ['新幹線', '乗車券'],
           keywordOccurrences: [
             { keyword: '新幹線', count: 0, classified: false, categoryColor: null },
@@ -781,21 +781,22 @@ describe('回答モーダル(DOM実動作): 「キーワード一覧」モーダ
       }
       if (u.includes('/api/aichat/shares/search')) {
         if (u.includes('q=%E6%96%B0%E5%B9%B9%E7%B7%9A')) return Promise.reject(new Error('network error'));
-        return Promise.resolve({ json: () => Promise.resolve({ results: [{ id: 'sA' }] }) });
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ results: [{ id: 'sA' }] }) });
       }
       if (u.includes('/api/aichat/search-log/open-modal')) {
-        return Promise.resolve({ json: () => Promise.resolve({ entries: [{ shareId: 'sA', model: 'm', question: 'q', isNew: true }] }) });
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ entries: [{ shareId: 'sA', model: 'm', question: 'q', isNew: true }] }) });
       }
       if (u.includes('/api/aichat/search-log/approve')) {
         approveCalls.push(body);
-        return Promise.resolve({ json: () => Promise.resolve({ ok: true, count: 1 }) });
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ ok: true, count: 1 }) });
       }
-      if (u.includes('share-keywords')) return Promise.resolve({ json: () => Promise.resolve({ keywords: [] }) });
-      if (u.includes('/api/aichat/shares/')) return Promise.resolve({ json: () => Promise.resolve({ id: 's1', question: 'Q', answer: 'A', vectorized: true, keywordsRegistered: true }) });
-      return Promise.resolve({ json: () => Promise.resolve({}) });
+      if (u.includes('share-keywords')) return Promise.resolve({ ok: true, json: () => Promise.resolve({ keywords: [] }) });
+      if (u.includes('/api/aichat/shares/')) return Promise.resolve({ ok: true, json: () => Promise.resolve({ id: 's1', question: 'Q', answer: 'A', vectorized: true, keywordsRegistered: true }) });
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
     });
     vi.stubGlobal('fetch', fetchMock);
-    vi.stubGlobal('alert', vi.fn());
+    const alertMock = vi.fn();
+    vi.stubGlobal('alert', alertMock);
     const scriptSrc = html.slice(html.indexOf('<script>') + 8, html.indexOf('</script>'));
     // eslint-disable-next-line no-new-func
     new Function(scriptSrc)();
@@ -807,7 +808,12 @@ describe('回答モーダル(DOM実動作): 「キーワード一覧」モーダ
 
     // 新幹線の検索(shares/search)が失敗しても、乗車券のapproveは実行される
     expect(approveCalls).toEqual([{ keyword: '乗車券', shareIds: ['sA'] }]);
-    expect(btn.textContent).toBe('登録完了');
+    // 根本原因の修正確認: 失敗した項目がある場合は「登録完了」と表示せず、
+    // ボタンを再度押せる状態に戻し、失敗したキーワードをユーザーへ通知する
+    // (以前は失敗を検知できず常に「登録完了」と表示していた)
+    expect(btn.textContent).toBe('一括登録');
+    expect(btn.disabled).toBe(false);
+    expect(alertMock).toHaveBeenCalledWith(expect.stringContaining('新幹線'));
   });
 
   it('ループが進むたびに現在処理中のバッジへkw-badge-registeringクラスが移動する(前のバッジからは外れる)', async () => {
@@ -825,7 +831,7 @@ describe('回答モーダル(DOM実動作): 「キーワード一覧」モーダ
     const fetchMock = vi.fn((url: string) => {
       const u = String(url);
       if (u.includes('/api/aichat/answer-keywords')) {
-        return Promise.resolve({ json: () => Promise.resolve({
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({
           shareId: 's1', keywords: ['新幹線', '乗車券'],
           keywordOccurrences: [
             { keyword: '新幹線', count: 0, classified: false, categoryColor: null },
@@ -836,14 +842,14 @@ describe('回答モーダル(DOM実動作): 「キーワード一覧」モーダ
       if (u.includes('/api/aichat/shares/search')) {
         if (u.includes('q=%E6%96%B0%E5%B9%B9%E7%B7%9A')) {
           return new Promise((resolve) => { resolveFirstSearch = resolve; })
-            .then(() => ({ json: () => Promise.resolve({ results: [] }) }));
+            .then(() => ({ ok: true, json: () => Promise.resolve({ results: [] }) }));
         }
         return new Promise((resolve) => { resolveSecondSearch = resolve; })
-          .then(() => ({ json: () => Promise.resolve({ results: [] }) }));
+          .then(() => ({ ok: true, json: () => Promise.resolve({ results: [] }) }));
       }
-      if (u.includes('share-keywords')) return Promise.resolve({ json: () => Promise.resolve({ keywords: [] }) });
-      if (u.includes('/api/aichat/shares/')) return Promise.resolve({ json: () => Promise.resolve({ id: 's1', question: 'Q', answer: 'A', vectorized: true, keywordsRegistered: true }) });
-      return Promise.resolve({ json: () => Promise.resolve({}) });
+      if (u.includes('share-keywords')) return Promise.resolve({ ok: true, json: () => Promise.resolve({ keywords: [] }) });
+      if (u.includes('/api/aichat/shares/')) return Promise.resolve({ ok: true, json: () => Promise.resolve({ id: 's1', question: 'Q', answer: 'A', vectorized: true, keywordsRegistered: true }) });
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
     });
     vi.stubGlobal('fetch', fetchMock);
     vi.stubGlobal('alert', vi.fn());
