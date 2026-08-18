@@ -1,8 +1,9 @@
 import { escapeHtml } from '../utils/html';
 import { getThemeCSS, getThemeInitScript, getThemeToggleCSS, getThemeToggleHTML, getThemeToggleScript } from '../utils/theme';
 
-export function getWasmModulesPage(username: string): string {
+export function getWasmModulesPage(username: string, initialViewMode: 'panel' | 'list' = 'list'): string {
   const safeUsername = escapeHtml(username);
+  const isInitialPanel = initialViewMode === 'panel';
 
   return `<!DOCTYPE html>
 <html lang="ja">
@@ -65,7 +66,6 @@ export function getWasmModulesPage(username: string): string {
     .container { max-width: 1000px; margin: 0 auto; padding: 32px 20px; }
     .title-bar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-bottom: 4px; }
     .title { font-size: 22px; font-weight: 700; color: var(--text-primary); }
-    .subtitle { font-size: 14px; color: var(--text-muted); margin-bottom: 24px; }
     .mode-toggle { display: flex; gap: 6px; }
     .mode-btn {
       font-size: 13px;
@@ -250,13 +250,12 @@ export function getWasmModulesPage(username: string): string {
 
   <div class="container">
     <div class="title-bar">
-      <div class="title">WASMモジュール一覧</div>
+      <div class="title">リンクタップで各WASMファイルのソースコードを読むことができます</div>
       <div class="mode-toggle">
-        <button type="button" class="mode-btn active" id="modePanelBtn" data-mode="panel">🗂 パネル表示</button>
-        <button type="button" class="mode-btn" id="modeListBtn" data-mode="list">📋 リスト表示</button>
+        <button type="button" class="mode-btn${isInitialPanel ? ' active' : ''}" id="modePanelBtn" data-mode="panel">🗂 パネル表示</button>
+        <button type="button" class="mode-btn${isInitialPanel ? '' : ' active'}" id="modeListBtn" data-mode="list">📋 リスト表示</button>
       </div>
     </div>
-    <div class="subtitle">リポジトリに組み込まれているWASMモジュールと、起動時の読み込みON/OFF設定</div>
     <div id="moduleList"></div>
     <div class="wasm-table-wrap" id="wasmTableWrap" style="display:none;">
       <table class="wasm-table">
@@ -357,19 +356,34 @@ export function getWasmModulesPage(username: string): string {
     var saveBtn = document.getElementById('saveBtn');
     var statusMsg = document.getElementById('statusMsg');
     var loadedModules = [];
-    var viewMode = 'panel';
+    var viewMode = '${initialViewMode}';
+
+    function saveViewModeCookie(mode) {
+      fetch('/api/settings/wasm-modules-view-mode', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mode: mode }),
+      }).catch(function() {
+        // Cookie保存に失敗しても表示切替自体はこのページ内で完結しているため、
+        // ここではUIをブロックしない(次回アクセス時のデフォルトが今回選択した
+        // モードに更新されないだけで、機能自体は使い続けられる)。
+      });
+    }
 
     modePanelBtn.addEventListener('click', function() {
       viewMode = 'panel';
       modePanelBtn.classList.add('active');
       modeListBtn.classList.remove('active');
       renderCurrentMode();
+      saveViewModeCookie('panel');
     });
     modeListBtn.addEventListener('click', function() {
       viewMode = 'list';
       modeListBtn.classList.add('active');
       modePanelBtn.classList.remove('active');
       renderCurrentMode();
+      saveViewModeCookie('list');
     });
 
     function renderCurrentMode() {
