@@ -61,6 +61,7 @@ import { getAuthFlowPage } from './views/authFlow';
 import { getTsubuyakiPage } from './views/tsubuyaki';
 import { getSha256WasmPage } from './views/sha256Wasm';
 import { getWasmModulesPage } from './views/wasmModules';
+import { getFileDepsPage } from './views/fileDeps';
 import { mergeWasmModuleConfig, isKnownWasmModuleId, isWasmModuleEnabled, type WasmModuleStartupRow } from './utils/wasmModuleConfig';
 import { validateFreeText, buildFreeTextSlackMessage, handleTsubuyakiSlashCommand } from './utils/freeTextSlackPost';
 import { handleF1ScheduleSlashCommand } from './utils/f1ScheduleSlackPost';
@@ -247,6 +248,7 @@ export const STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
   { name: 'aichat_moondream_analyses', migration: '0102', description: 'AIチャットの画像添付投稿でMoondream(moondream3.1-9B-A2B)に問い合わせた画像分析結果を、回答文(share_id)・画像(image_id)に紐づけて保存する', syncPolicy: 'auto' },
   { name: 'api_keys', migration: '0103', description: 'トップページのログイン判定に使うAPIキー(🔑キー管理ページで発行)。生キーは保存せずSHA-256ハッシュのみ保存し、失効(revoked_at)・有効期限(expires_at)を個別に管理する', syncPolicy: 'auto' },
   { name: 'wasm_module_startup_config', migration: '0104', description: 'ブラウザ/サーバー両対応WASMモジュール(/wasm-modulesページ)を起動時に読み込むかどうかのON/OFF設定', syncPolicy: 'manual' },
+  { name: 'ts_file_dependencies', migration: '0105', description: 'ast-grep(WASM)で抽出したTypeScriptファイル間のimport依存関係(/file-depsページの可視化用)', syncPolicy: 'manual' },
 ];
 
 const REQUIRED_STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
@@ -1509,6 +1511,16 @@ CREATE INDEX IF NOT EXISTS idx_api_keys_user_id ON api_keys(user_id);`,
   updated_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_by TEXT
 );`,
+  '0105': `CREATE TABLE IF NOT EXISTS ts_file_dependencies (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  repo_id INTEGER NOT NULL,
+  source_file TEXT NOT NULL,
+  target_file TEXT NOT NULL,
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_ts_file_dependencies_edge ON ts_file_dependencies(repo_id, source_file, target_file);
+CREATE INDEX IF NOT EXISTS idx_ts_file_dependencies_source ON ts_file_dependencies(repo_id, source_file);
+CREATE INDEX IF NOT EXISTS idx_ts_file_dependencies_target ON ts_file_dependencies(repo_id, target_file);`,
 };
 
 async function ensureGroupTable(db: D1Database): Promise<void> {
@@ -1735,6 +1747,7 @@ export const TABLE_COLUMN_KEYS: Record<string, ColumnKeyInfo> = {
   aichat_images: { id: 'pk', user_id: 'uk', content_hash: 'uk' },
   aichat_moondream_analyses: { id: 'pk', share_id: 'uk', image_id: 'fk+idx', user_id: 'fk+idx' },
   wasm_module_startup_config: { module_id: 'pk' },
+  ts_file_dependencies: { id: 'pk', source_file: 'idx', target_file: 'idx' },
 };
 
 export function getColumnKeyType(tableName: string, columnName: string): ColumnKeyType {
@@ -1843,6 +1856,7 @@ export const TABLE_GROUP_MAP: Record<string, string> = {
   ts_function_impact:     'ts-catalog',
   ts_commit_quality:      'ts-catalog',
   wasm_module_startup_config: 'system',
+  ts_file_dependencies: 'ts-catalog',
 };
 
 async function recordAiSummaryLinkAccess(
@@ -9075,6 +9089,37 @@ app.post('/api/wasm-modules', authMiddleware, async (c) => {
       error: error instanceof Error ? error.message : String(error),
     });
     return jsonUtf8({ error: '設定の保存に失敗しました' }, 500);
+  }
+});
+
+app.get('/file-deps', authMiddleware, async (c) => {
+  const user = c.get('user');
+  return c.html(getFileDepsPage(user.sub));
+});
+
+app.get('/api/file-deps', authMiddleware, async (c) => {
+  if (!c.env.DB) {
+    return jsonUtf8({ nodes: [], edges: [] });
+  }
+  try {
+    const rows = await c.env.DB.prepare(
+      'SELECT source_file, target_file FROM ts_file_dependencies WHERE repo_id = 1'
+    ).all<{ source_file: string; target_file: string }>();
+    const edges = rows.results ?? [];
+    const nodeSet = new Set<string>();
+    for (const e of edges) {
+      nodeSet.add(e.source_file);
+      nodeSet.add(e.target_file);
+    }
+    return jsonUtf8({
+      nodes: [...nodeSet],
+      edges: edges.map((e) => ({ source: e.source_file, target: e.target_file })),
+    });
+  } catch (error) {
+    logger.warn('Failed to load ts_file_dependencies', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return jsonUtf8({ nodes: [], edges: [] });
   }
 });
 
