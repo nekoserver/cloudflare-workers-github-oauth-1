@@ -5677,7 +5677,7 @@ export function getAiChatPage(user: {
             if (periods.indexOf(r.period) < 0) periods.push(r.period);
             modelSet[r.model] = true;
           });
-          periods.sort();
+          periods.sort().reverse();
           var models = Object.keys(modelSet).sort();
           var dataMap = {};
           rows.forEach(function(r) {
