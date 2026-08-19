@@ -63,9 +63,25 @@ export function getWfBrowserPage(
 
   const summaryHtml = `<div class="wfb-summary">全${totalCount}件中 <strong>${referencedCount}件</strong> がいずれかのワークフローから参照されています(未参照: ${totalCount - referencedCount}件)。</div>`;
 
-  const wfBadgesHtml = allWorkflows.length === 0
+  // バッジバーは各ワークフローが内部で使っているAPI数の多い順に左から並べる。
+  // 件数はrefsByKey(エンドポイント→参照元ワークフロー一覧)を逆引きして数える。
+  const apiCountByWfNo = new Map<string, number>();
+  for (const refs of refsByKey.values()) {
+    for (const r of refs) {
+      apiCountByWfNo.set(r.workflow_no, (apiCountByWfNo.get(r.workflow_no) ?? 0) + 1);
+    }
+  }
+  const sortedWorkflows = [...allWorkflows].sort((a, b) => {
+    const countDiff = (apiCountByWfNo.get(b.workflow_no) ?? 0) - (apiCountByWfNo.get(a.workflow_no) ?? 0);
+    return countDiff !== 0 ? countDiff : a.workflow_no.localeCompare(b.workflow_no);
+  });
+
+  const wfBadgesHtml = sortedWorkflows.length === 0
     ? `<span class="wfb-badgebar-empty">登録済みワークフローはありません</span>`
-    : allWorkflows.map((w) => `<button type="button" class="wfb-wf-badge" data-wf-no="${escapeHtml(w.workflow_no)}" title="${escapeHtml(w.title)}">${escapeHtml(w.workflow_no)}</button>`).join('');
+    : sortedWorkflows.map((w) => {
+        const count = apiCountByWfNo.get(w.workflow_no) ?? 0;
+        return `<button type="button" class="wfb-wf-badge" data-wf-no="${escapeHtml(w.workflow_no)}" title="${escapeHtml(w.title)}">${escapeHtml(w.title)} (${count})</button>`;
+      }).join('');
 
   // workflow_registryには登録されているがworkflow_stepsが1行も無い
   // (処理段階のINSERT文がまだ未実行の)ワークフローがあれば、ページ上部に
@@ -132,7 +148,7 @@ export function getWfBrowserPage(
     .wfb-badgebar {
       position: sticky; top: 0; z-index: 20;
       background: var(--card-bg); border-bottom: 1px solid var(--border-color);
-      padding: 10px 20px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center;
+      padding: 10px 20px; display: flex; flex-wrap: wrap; gap: 1px; align-items: center;
     }
     .wfb-badgebar-label { font-size: 11px; font-weight: 700; color: var(--text-muted); margin-right: 4px; }
     .wfb-badgebar-empty { font-size: 12px; color: var(--text-muted); }

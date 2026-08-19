@@ -75,6 +75,37 @@ describe('getWfBrowserPage — 上部のワークフローバッジバー', () =
     expect(barHtml).toContain('data-wf-no="0002"');
   });
 
+  it('バッジは「ワークフロー名 (API数)」の表記で、各ワークフローが使うAPI数の多い順に左から並ぶ', () => {
+    // 0001は2件のAPIを参照、0002は1件のみ参照 → 0001が先に並ぶ
+    const refs = new Map([
+      [sample.method + ' ' + sample.path, [{ workflow_no: '0001', title: 'WASMモジュール管理' }]],
+      [sample2.method + ' ' + sample2.path, [{ workflow_no: '0001', title: 'WASMモジュール管理' }]],
+      ['POST /api/uuid/save', [{ workflow_no: '0002', title: 'AIチャット送信' }]],
+    ]);
+    const html = getWfBrowserPage('testuser', refs, allWorkflows);
+    const barStart = html.indexOf('id="wfbBadgebar"');
+    const barEnd = html.indexOf('</div>', barStart);
+    const barHtml = html.slice(barStart, barEnd);
+    expect(barHtml).toContain('WASMモジュール管理 (2)');
+    expect(barHtml).toContain('AIチャット送信 (1)');
+    const idx1 = barHtml.indexOf('data-wf-no="0001"');
+    const idx2 = barHtml.indexOf('data-wf-no="0002"');
+    expect(idx1).toBeGreaterThan(-1);
+    expect(idx2).toBeGreaterThan(-1);
+    expect(idx1).toBeLessThan(idx2);
+  });
+
+  it('参照エンドポイントが0件のワークフローは(0)と表記される', () => {
+    const html = getWfBrowserPage('testuser', new Map(), allWorkflows);
+    expect(html).toContain('WASMモジュール管理 (0)');
+    expect(html).toContain('AIチャット送信 (0)');
+  });
+
+  it('バッジ間の余白(gap)は1pxに詰められている', () => {
+    const html = getWfBrowserPage('testuser', new Map(), allWorkflows);
+    expect(html).toContain('gap: 1px;');
+  });
+
   it('バッジバー(position: sticky)がページ上部に固定される', () => {
     const html = getWfBrowserPage('testuser', new Map(), allWorkflows);
     expect(html).toContain('.wfb-badgebar {');
