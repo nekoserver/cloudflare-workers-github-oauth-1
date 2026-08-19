@@ -99,6 +99,14 @@ export function getWfBrowserPage(
     <button type="button" class="wfb-toast-close" id="wfbToastClose" aria-label="閉じる">✕</button>
   </div>`;
 
+  // 反映漏れが1件も無く、登録済みワークフローが1件以上ある場合のみ、
+  // 「すべて反映済み」を知らせる薄緑色のトーストを画面上部から降ろす。
+  // 7秒表示した後、画面最上段へフェードアウトしながら消える。
+  const showSuccessToast = allWorkflows.length > 0 && missingStepsWorkflows.length === 0;
+  const successToastHtml = !showSuccessToast ? '' : `<div class="wfb-success-toast" id="wfbSuccessToast" role="status">
+    ✅ ${allWorkflows.length}件すべてのワークフローが反映されました
+  </div>`;
+
   return `<!DOCTYPE html>
 <html lang="ja">
 <head>
@@ -182,6 +190,23 @@ export function getWfBrowserPage(
       font-size: 13px; line-height: 1; padding: 2px 4px; opacity: 0.7;
     }
     .wfb-toast-close:hover { opacity: 1; }
+    .wfb-success-toast {
+      position: fixed; top: 0; left: 50%; transform: translate(-50%, -120%); opacity: 0;
+      background: #d4f5d4; color: #14532d; border: 1px solid #86efac; border-top: none;
+      border-radius: 0 0 10px 10px; box-shadow: 0 4px 14px rgba(0,0,0,.15);
+      padding: 10px 22px; font-size: 13px; font-weight: 600; z-index: 50;
+      animation: wfbSuccessToast 8s ease forwards;
+    }
+    :root[data-theme="dark"] .wfb-success-toast { background: #123a1e; color: #86efac; border-color: #1f6b3a; }
+    @media (prefers-color-scheme: dark) {
+      :root:not([data-theme="light"]) .wfb-success-toast { background: #123a1e; color: #86efac; border-color: #1f6b3a; }
+    }
+    @keyframes wfbSuccessToast {
+      0% { transform: translate(-50%, -120%); opacity: 0; }
+      6% { transform: translate(-50%, 0); opacity: 1; }
+      94% { transform: translate(-50%, 0); opacity: 1; }
+      100% { transform: translate(-50%, -120%); opacity: 0; }
+    }
   </style>
 </head>
 <body>
@@ -196,6 +221,7 @@ export function getWfBrowserPage(
     ${wfBadgesHtml}
   </div>
   ${toastHtml}
+  ${successToastHtml}
   <main class="wfb-main">
     <div class="wfb-title">APIエンドポイント参照状況</div>
     <div class="wfb-subtitle">/apis ページにある全エンドポイントのうち、<a href="/workflow">/workflow</a> の各ワークフローから参照されていないものをグレーアウトして表示します。上部のバッジを押すと、そのワークフローが使用するエンドポイントの行が緑色にハイライトされます。</div>
@@ -251,6 +277,13 @@ export function getWfBrowserPage(
       closeBtn.addEventListener('click', function() {
         var toast = document.getElementById('wfbToast');
         if (toast) toast.remove();
+      });
+    })();
+    (function() {
+      var successToast = document.getElementById('wfbSuccessToast');
+      if (!successToast) return;
+      successToast.addEventListener('animationend', function() {
+        successToast.remove();
       });
     })();
   </script>
