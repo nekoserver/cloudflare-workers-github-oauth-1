@@ -84,6 +84,8 @@ export function formatAichatSlashCommandHelp(): string {
     '| /neko cal | 当月カレンダーをMarkdownテーブルで表示します |',
     '| /neko clog | 直近のコミットエージェントログを表示します |',
     '| /neko limit | Codex / Claude Code のリミット確認先を表示します |',
+    '| /neko uuidgen4 | UUIDv4を1件生成し、UUID生成履歴に保存します |',
+    '| /neko uuidgen7 | UUIDv7を1件生成し、UUID生成履歴に保存します |',
     '| /neko search <キーワード> | 質問文・回答文にキーワードを含む過去ログのヒット件数を表示します(結果一覧は最大30件までモーダルで確認できます) |',
     '| /neko vcount | ベクタ化済みの回答文の件数と全回答文に占める割合を表示します(結果一覧は最大30件までモーダルで確認できます) |',
     '| /neko 256 <文字列> | 指定した文字列のSHA-256ハッシュをWASM(Rust実装)で計算します |',
@@ -221,6 +223,7 @@ export type AichatSlashCommandDeps = {
   sha256ViaWasm?: (input: string) => Promise<string>;
   factorViaWasm?: (n: number) => Promise<string>;
   digLookup?: (name: string, qtype: string) => Promise<string>;
+  generateUuid?: (version: 'v4' | 'v7') => Promise<string>;
 };
 
 export const AICHAT_SEARCH_TIMEOUT_MS = 8000;
@@ -288,6 +291,21 @@ export async function interpretAichatSlashCommand(
 
   if (subcommand === 'limit') {
     return { handled: true, response: formatAiToolLimitInfo(now) };
+  }
+
+  if (subcommand === 'uuidgen4' || subcommand === 'uuidgen7') {
+    const version = subcommand === 'uuidgen4' ? 'v4' : 'v7';
+    if (!deps.generateUuid) {
+      return { handled: true, response: `❌ /neko ${subcommand} は現在利用できません(UUID生成API未設定)` };
+    }
+    try {
+      return { handled: true, response: await deps.generateUuid(version) };
+    } catch (err) {
+      return {
+        handled: true,
+        response: `❌ /neko ${subcommand} の実行中にエラーが発生しました: ${err instanceof Error ? err.message : String(err)}`,
+      };
+    }
   }
 
   if (subcommand === 'search') {
@@ -415,6 +433,6 @@ export async function interpretAichatSlashCommand(
 
   return {
     handled: true,
-    response: `❌ 未対応のサブコマンドです: ${subcommand || '(なし)'}\n利用可能なコマンド: /neko hms, /neko cal, /neko clog, /neko limit, /neko search, /neko vcount, /neko 256, /neko factor, /neko dig, /neko help\n詳細は /neko help を実行してください`,
+    response: `❌ 未対応のサブコマンドです: ${subcommand || '(なし)'}\n利用可能なコマンド: /neko hms, /neko cal, /neko clog, /neko limit, /neko uuidgen4, /neko uuidgen7, /neko search, /neko vcount, /neko 256, /neko factor, /neko dig, /neko help\n詳細は /neko help を実行してください`,
   };
 }
