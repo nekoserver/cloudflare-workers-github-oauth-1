@@ -1,0 +1,128 @@
+import { escapeHtml } from '../utils/html';
+import { getThemeCSS, getThemeInitScript, getThemeToggleCSS, getThemeToggleHTML, getThemeToggleScript } from '../utils/theme';
+import { API_ENDPOINT_LIST } from '../data/apiEndpointList';
+
+export type WfBrowserRef = { workflow_no: string; title: string };
+
+const METHOD_COLORS: Record<string, string> = {
+  GET: '#1a7f37',
+  POST: '#0969da',
+  PUT: '#9a6700',
+  PATCH: '#6639ba',
+  DELETE: '#cf222e',
+  QUERY: '#656d76',
+};
+
+function groupByGroup(): Map<string, typeof API_ENDPOINT_LIST> {
+  const map = new Map<string, typeof API_ENDPOINT_LIST>();
+  for (const e of API_ENDPOINT_LIST) {
+    if (!map.has(e.group)) map.set(e.group, []);
+    map.get(e.group)!.push(e);
+  }
+  return map;
+}
+
+export function getWfBrowserPage(
+  username: string,
+  refsByKey: Map<string, WfBrowserRef[]>
+): string {
+  const groups = groupByGroup();
+
+  let referencedCount = 0;
+  const totalCount = API_ENDPOINT_LIST.length;
+
+  const groupsHtml = [...groups.entries()].map(([group, endpoints]) => {
+    const rows = endpoints.map((e) => {
+      const key = e.method + ' ' + e.path;
+      const refs = refsByKey.get(key) ?? [];
+      const referenced = refs.length > 0;
+      if (referenced) referencedCount++;
+      const color = METHOD_COLORS[e.method] ?? '#656d76';
+      const refsHtml = referenced
+        ? `<span class="wfb-refs">${refs.map((r) => `<a class="wfb-ref-badge" href="/workflow/${escapeHtml(r.workflow_no)}" title="${escapeHtml(r.title)}">${escapeHtml(r.workflow_no)}</a>`).join('')}</span>`
+        : `<span class="wfb-unreferenced">未参照</span>`;
+      return `<tr class="wfb-row${referenced ? '' : ' wfb-row-gray'}">
+        <td><span class="wfb-method" style="background:${color}22;color:${color}">${escapeHtml(e.method)}</span></td>
+        <td><code class="wfb-path">${escapeHtml(e.path)}</code></td>
+        <td class="wfb-desc">${escapeHtml(e.desc)}</td>
+        <td>${refsHtml}</td>
+      </tr>`;
+    }).join('');
+    return `<section class="wfb-group">
+      <h2 class="wfb-group-title">${escapeHtml(group)}</h2>
+      <table class="wfb-table">
+        <thead><tr><th>Method</th><th>Path</th><th>説明</th><th>参照元ワークフロー</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </section>`;
+  }).join('');
+
+  const summaryHtml = `<div class="wfb-summary">全${totalCount}件中 <strong>${referencedCount}件</strong> がいずれかのワークフローから参照されています(未参照: ${totalCount - referencedCount}件)。</div>`;
+
+  return `<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>APIエンドポイント参照状況 - Cloudflare Workers GitHub OAuth</title>
+  ${getThemeInitScript()}
+  <style>
+    ${getThemeCSS()}
+    ${getThemeToggleCSS()}
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: var(--bg-primary, #f6f8fa);
+    }
+    .navbar {
+      background: var(--navbar-bg);
+      backdrop-filter: blur(10px);
+      box-shadow: 0 2px 10px var(--navbar-shadow);
+      padding: 10px 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .navbar-brand { font-size: 16px; font-weight: 700; color: var(--text-primary); display: flex; align-items: center; gap: 8px; }
+    .wfb-main { max-width: 1100px; margin: 0 auto; padding: 24px 20px 60px; }
+    .wfb-title { font-size: 20px; font-weight: 700; color: var(--text-primary); margin-bottom: 4px; }
+    .wfb-subtitle { font-size: 13px; color: var(--text-muted); margin-bottom: 14px; line-height: 1.6; }
+    .wfb-summary { font-size: 13px; color: var(--text-secondary); background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 8px; padding: 10px 14px; margin-bottom: 20px; }
+    .wfb-group { margin-bottom: 26px; }
+    .wfb-group-title { font-size: 14px; font-weight: 700; color: var(--text-primary); margin-bottom: 8px; padding-bottom: 4px; border-bottom: 1px solid var(--border-color); }
+    .wfb-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    .wfb-table th { text-align: left; color: var(--text-muted); font-weight: 600; padding: 6px 8px; border-bottom: 1px solid var(--border-color); }
+    .wfb-row td { padding: 6px 8px; border-bottom: 1px solid var(--border-color); vertical-align: top; }
+    .wfb-row-gray { opacity: 0.4; }
+    .wfb-row-gray .wfb-path, .wfb-row-gray .wfb-desc { color: var(--text-muted); }
+    .wfb-method { padding: 2px 8px; border-radius: 4px; font-weight: 700; font-size: 11px; white-space: nowrap; }
+    .wfb-path { font-family: ui-monospace, SFMono-Regular, monospace; color: var(--text-secondary); }
+    .wfb-desc { color: var(--text-secondary); }
+    .wfb-refs { display: flex; flex-wrap: wrap; gap: 4px; }
+    .wfb-ref-badge {
+      font-family: ui-monospace, SFMono-Regular, monospace; font-size: 11px; text-decoration: none;
+      background: var(--accent-color, #667eea); color: #fff; border-radius: 4px; padding: 2px 6px;
+    }
+    .wfb-ref-badge:hover { opacity: 0.85; }
+    .wfb-unreferenced { color: var(--text-muted); font-size: 11px; }
+  </style>
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">🔎 APIエンドポイント参照状況</div>
+    <div class="user-menu">
+      ${getThemeToggleHTML()}
+    </div>
+  </nav>
+  <main class="wfb-main">
+    <div class="wfb-title">APIエンドポイント参照状況</div>
+    <div class="wfb-subtitle">/apis ページにある全エンドポイントのうち、<a href="/workflow">/workflow</a> の各ワークフローから参照されていないものをグレーアウトして表示します。</div>
+    ${summaryHtml}
+    ${groupsHtml}
+  </main>
+  <script>
+    ${getThemeToggleScript()}
+  </script>
+</body>
+</html>`;
+}
