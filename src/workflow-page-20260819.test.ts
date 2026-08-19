@@ -109,8 +109,8 @@ describe('getWorkflowPage — サイドバー・処理段階の表示', () => {
     expect(html).toContain('padding: 10px 20px;');
   });
 
-  it('PWA用のmeta/manifestタグ(mobile-web-app-capable等)を他のPWA対応ページと同様に配置する', () => {
-    // 故障シナリオ: これらのタグが無いページはiOS Safariが「アプリのスコープ外」と
+  it('PWA用のmeta(apple-mobile-web-app-capable等)を他のPWA対応ページと同様に配置する', () => {
+    // 故障シナリオ(1): これらのタグが無いページはiOS Safariが「アプリのスコープ外」と
     // 判定し、アドレスバーが表示された状態(通常のSafariタブ)で開いてしまう。
     // PWAとしてホーム画面から起動した状態からサイドパネルのリンクで遷移した際、
     // 遷移先ページにもこのタグ一式が無いとアドレスバーが出現する不具合になる。
@@ -119,7 +119,17 @@ describe('getWorkflowPage — サイドバー・処理段階の表示', () => {
     expect(html).toContain('<meta name="apple-mobile-web-app-capable" content="yes">');
     expect(html).toContain('<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">');
     expect(html).toContain('<meta name="apple-mobile-web-app-title" content="ワークフロー">');
-    expect(html).toContain('<link rel="manifest" href="/manifest.json">');
+  });
+
+  it('/manifest.json(start_url=/webgl-sphereの別アプリ用)へはlinkしない', () => {
+    // 故障シナリオ(2): このmanifest.jsonはWebGL地球儀アプリ専用
+    // (name/start_urlが地球儀向け)で、ワークフローページからも
+    // <link rel="manifest">してしまうと、ワークフローページをホーム画面に
+    // 追加した際にアイコン・起動URLが地球儀アプリのものになってしまう。
+    // 同一オリジン・相対パスのページ遷移である限りstandalone表示自体は
+    // apple-mobile-web-app-capableだけで維持されるため、manifestは不要。
+    const html = getWorkflowPage('testuser', workflows, null);
+    expect(html).not.toContain('rel="manifest"');
   });
 });
 
