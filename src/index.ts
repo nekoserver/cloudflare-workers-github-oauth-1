@@ -65,6 +65,7 @@ import { getWasmModulesPage } from './views/wasmModules';
 import { getFileDepsPage } from './views/fileDeps';
 import { getCheeseSearchPage } from './views/cheeseSearch';
 import { getWorkflowPage, type WorkflowSummary, type WorkflowStep } from './views/workflow';
+import { getWfBrowserPage, type WfBrowserRef } from './views/wfBrowser';
 import { mergeWasmModuleConfig, isKnownWasmModuleId, isWasmModuleEnabled, type WasmModuleStartupRow } from './utils/wasmModuleConfig';
 import { findWasmModule } from './data/wasmModuleRegistry';
 import { WASM_MODULES_REPO_FULL_NAME, fetchLatestCommitDateForPath, fetchFileContent } from './utils/wasmModuleSource';
@@ -9381,6 +9382,32 @@ app.get('/api/workflow/:no', authMiddleware, async (c) => {
   if (!workflow) return jsonUtf8({ error: '指定されたワークフローが見つかりません' }, 404);
   const steps = await loadWorkflowSteps(c.env.DB, workflowNo);
   return jsonUtf8({ workflow, steps });
+});
+
+// /apisページにある全エンドポイントのうち、/workflow配下のいずれかの
+// ワークフローから参照されていないもの(workflow_stepsにapi_path/api_methodの
+// 組が登録されていないもの)をグレーアウト表示するための参照状況ページ。
+async function loadWorkflowEndpointRefs(db: D1Database): Promise<Map<string, WfBrowserRef[]>> {
+  const rows = await db.prepare(
+    `SELECT s.api_method AS api_method, s.api_path AS api_path, s.workflow_no AS workflow_no, w.title AS title
+     FROM workflow_steps s
+     JOIN workflow_registry w ON w.workflow_no = s.workflow_no
+     WHERE s.api_method IS NOT NULL AND s.api_path IS NOT NULL
+     ORDER BY s.workflow_no ASC`
+  ).all<{ api_method: string; api_path: string; workflow_no: string; title: string }>();
+  const map = new Map<string, WfBrowserRef[]>();
+  for (const row of rows.results ?? []) {
+    const key = row.api_method + ' ' + row.api_path;
+    if (!map.has(key)) map.set(key, []);
+    map.get(key)!.push({ workflow_no: row.workflow_no, title: row.title });
+  }
+  return map;
+}
+
+app.get('/wf-browser', authMiddleware, async (c) => {
+  const user = c.get('user');
+  const refs = c.env.DB ? await loadWorkflowEndpointRefs(c.env.DB) : new Map<string, WfBrowserRef[]>();
+  return c.html(getWfBrowserPage(user.sub, refs));
 });
 
 app.get('/api/file-deps', authMiddleware, async (c) => {
