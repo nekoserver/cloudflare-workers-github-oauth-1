@@ -64,6 +64,7 @@ import { getFactorWasmPage } from './views/factorWasm';
 import { getWasmModulesPage } from './views/wasmModules';
 import { getFileDepsPage } from './views/fileDeps';
 import { getCheeseSearchPage } from './views/cheeseSearch';
+import { getWorkflowPage, type WorkflowSummary, type WorkflowStep } from './views/workflow';
 import { mergeWasmModuleConfig, isKnownWasmModuleId, isWasmModuleEnabled, type WasmModuleStartupRow } from './utils/wasmModuleConfig';
 import { findWasmModule } from './data/wasmModuleRegistry';
 import { WASM_MODULES_REPO_FULL_NAME, fetchLatestCommitDateForPath, fetchFileContent } from './utils/wasmModuleSource';
@@ -254,6 +255,8 @@ export const STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
   { name: 'wasm_module_startup_config', migration: '0104', description: 'ブラウザ/サーバー両対応WASMモジュール(/wasm-modulesページ)を起動時に読み込むかどうかのON/OFF設定', syncPolicy: 'manual' },
   { name: 'ts_file_dependencies', migration: '0105', description: 'ast-grep(WASM)で抽出したTypeScriptファイル間のimport依存関係(/file-depsページの可視化用)', syncPolicy: 'manual' },
   { name: 'cheese_fr', migration: '0107', description: 'フランスチーズの名称・読み仮名・原材料・生産者・製法・固さ・備考・食材ペアリングの一覧(参照専用マスタデータ)', syncPolicy: 'manual' },
+  { name: 'workflow_registry', migration: '0109', description: '/workflow/NNNNページで一覧表示するワークフロー(内部でAPI問い合わせを行うアプリ)の通し番号・タイトル・遷移先パス', syncPolicy: 'manual' },
+  { name: 'workflow_steps', migration: '0109', description: 'workflow_registryの各ワークフローについて、処理段階ごとにどのAPIへ問い合わせが行われるかを上から下の順序で記録', syncPolicy: 'manual' },
 ];
 
 const REQUIRED_STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
@@ -1540,6 +1543,23 @@ CREATE INDEX IF NOT EXISTS idx_ts_file_dependencies_target ON ts_file_dependenci
 CREATE UNIQUE INDEX IF NOT EXISTS idx_cheese_fr_seq_no ON cheese_fr(seq_no);
 CREATE INDEX IF NOT EXISTS idx_cheese_fr_name_fr ON cheese_fr(name_fr);`,
   '0108': `ALTER TABLE cheese_fr ADD COLUMN pairing TEXT;`,
+  '0109': `CREATE TABLE IF NOT EXISTS workflow_registry (
+  workflow_no TEXT PRIMARY KEY,
+  title TEXT NOT NULL,
+  page_path TEXT NOT NULL,
+  summary TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE TABLE IF NOT EXISTS workflow_steps (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  workflow_no TEXT NOT NULL,
+  step_order INTEGER NOT NULL,
+  stage_title TEXT NOT NULL,
+  api_method TEXT,
+  api_path TEXT,
+  note TEXT
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_workflow_steps_order ON workflow_steps(workflow_no, step_order);`,
 };
 
 async function ensureGroupTable(db: D1Database): Promise<void> {
@@ -1768,6 +1788,8 @@ export const TABLE_COLUMN_KEYS: Record<string, ColumnKeyInfo> = {
   wasm_module_startup_config: { module_id: 'pk' },
   ts_file_dependencies: { id: 'pk', source_file: 'idx', target_file: 'idx' },
   cheese_fr: { id: 'pk', seq_no: 'uk', name_fr: 'idx' },
+  workflow_registry: { workflow_no: 'pk' },
+  workflow_steps: { id: 'pk', workflow_no: 'fk+idx' },
 };
 
 export function getColumnKeyType(tableName: string, columnName: string): ColumnKeyType {
@@ -1878,6 +1900,8 @@ export const TABLE_GROUP_MAP: Record<string, string> = {
   wasm_module_startup_config: 'system',
   ts_file_dependencies: 'ts-catalog',
   cheese_fr: 'system',
+  workflow_registry: 'system',
+  workflow_steps: 'system',
 };
 
 async function recordAiSummaryLinkAccess(
@@ -2067,6 +2091,11 @@ export const COLUMN_FK_TARGETS: Record<string, Record<string, string>> = {
   // ========================================================================
   heritage_question_view_log: { question_master_id: 'heritage_ai_question_masters' },
   heritage_area_items: { area_seq: 'heritage_area_boxes' },
+
+  // ========================================================================
+  // /workflow/NNNN ページ
+  // ========================================================================
+  workflow_steps: { workflow_no: 'workflow_registry' },
 };
 
 /**
@@ -9291,6 +9320,67 @@ app.get('/file-deps', authMiddleware, async (c) => {
 app.get('/cheese-search', authMiddleware, async (c) => {
   const user = c.get('user');
   return c.html(getCheeseSearchPage(user.sub));
+});
+
+async function loadWorkflowSummaries(db: D1Database): Promise<WorkflowSummary[]> {
+  const rows = await db.prepare(
+    'SELECT workflow_no, title, page_path, summary FROM workflow_registry ORDER BY workflow_no ASC'
+  ).all<WorkflowSummary>();
+  return rows.results ?? [];
+}
+
+async function loadWorkflowSteps(db: D1Database, workflowNo: string): Promise<WorkflowStep[]> {
+  const rows = await db.prepare(
+    'SELECT step_order, stage_title, api_method, api_path, note FROM workflow_steps WHERE workflow_no = ? ORDER BY step_order ASC'
+  ).bind(workflowNo).all<WorkflowStep>();
+  return rows.results ?? [];
+}
+
+// /workflow/NNNN で参照される4桁ゼロ埋めの通し番号(0001〜9999)に正規化する。
+// 数値以外・範囲外は null を返し、呼び出し元で404扱いにする。
+export function normalizeWorkflowNo(raw: string): string | null {
+  const n = Number(raw);
+  if (!Number.isInteger(n) || n < 1 || n > 9999) return null;
+  return String(n).padStart(4, '0');
+}
+
+app.get('/workflow', authMiddleware, async (c) => {
+  const user = c.get('user');
+  const workflows = c.env.DB ? await loadWorkflowSummaries(c.env.DB) : [];
+  return c.html(getWorkflowPage(user.sub, workflows, null));
+});
+
+app.get('/workflow/:no', authMiddleware, async (c) => {
+  const user = c.get('user');
+  const workflowNo = normalizeWorkflowNo(c.req.param('no'));
+  const workflows = c.env.DB ? await loadWorkflowSummaries(c.env.DB) : [];
+  if (!workflowNo || !c.env.DB) {
+    return c.html(getWorkflowPage(user.sub, workflows, null));
+  }
+  const workflow = workflows.find((w) => w.workflow_no === workflowNo);
+  if (!workflow) {
+    return c.html(getWorkflowPage(user.sub, workflows, null));
+  }
+  const steps = await loadWorkflowSteps(c.env.DB, workflowNo);
+  return c.html(getWorkflowPage(user.sub, workflows, { workflow, steps }));
+});
+
+app.get('/api/workflow', authMiddleware, async (c) => {
+  if (!c.env.DB) return jsonUtf8({ workflows: [] });
+  const workflows = await loadWorkflowSummaries(c.env.DB);
+  return jsonUtf8({ workflows });
+});
+
+app.get('/api/workflow/:no', authMiddleware, async (c) => {
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  const workflowNo = normalizeWorkflowNo(c.req.param('no'));
+  if (!workflowNo) return jsonUtf8({ error: '無効なワークフロー番号です' }, 400);
+  const workflow = await c.env.DB.prepare(
+    'SELECT workflow_no, title, page_path, summary FROM workflow_registry WHERE workflow_no = ?'
+  ).bind(workflowNo).first<WorkflowSummary>();
+  if (!workflow) return jsonUtf8({ error: '指定されたワークフローが見つかりません' }, 404);
+  const steps = await loadWorkflowSteps(c.env.DB, workflowNo);
+  return jsonUtf8({ workflow, steps });
 });
 
 app.get('/api/file-deps', authMiddleware, async (c) => {
