@@ -285,3 +285,53 @@ describe('getWfBrowserPage — バッジ押下時の該当行へのジャンプ(
     scrollSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
   });
 });
+
+describe('getWfBrowserPage — 全ワークフロー反映確認の成功トースト', () => {
+  const allWorkflows = [
+    { workflow_no: '0001', title: 'WASMモジュール管理' },
+    { workflow_no: '0005', title: 'heritage-area Travelキーワード検索' },
+  ];
+
+  // 対象: ページ読み込み時、登録済みのすべてのワークフローに
+  // workflow_stepsが反映されている(反映漏れが無い)ことが確認できた場合、
+  // 画面上部から薄緑色のトースト(#wfbSuccessToast)が降りてきて
+  // 「◯件すべてのワークフローが反映されました」と表示し、
+  // アニメーション終了後にDOMから消える。
+  //
+  // 故障シナリオ:
+  //   (1) 反映漏れが無いのにトーストが出ない(安心材料が無い)
+  //   (2) 反映漏れがあるのにトーストが出てしまう(誤った安心感を与える)
+  //   (3) ワークフローが1件も登録されていないのにトーストが出てしまう
+  //   (4) アニメーション終了後もDOMに残り続ける
+
+  it('反映漏れが無く、ワークフローが1件以上ある場合は成功トースト(#wfbSuccessToast)を表示し件数を含める', () => {
+    const html = getWfBrowserPage('testuser', new Map(), allWorkflows, []);
+    expect(html).toContain('id="wfbSuccessToast"');
+    expect(html).toContain('2件すべてのワークフローが反映されました');
+  });
+
+  it('反映漏れがある場合は成功トーストを表示しない', () => {
+    const html = getWfBrowserPage('testuser', new Map(), allWorkflows, [
+      { workflow_no: '0005', title: 'heritage-area Travelキーワード検索' },
+    ]);
+    expect(html).not.toContain('id="wfbSuccessToast"');
+  });
+
+  it('ワークフローが1件も登録されていない場合は成功トーストを表示しない', () => {
+    const html = getWfBrowserPage('testuser', new Map(), [], []);
+    expect(html).not.toContain('id="wfbSuccessToast"');
+  });
+
+  it('(DOM実動作) animationend後に成功トーストがDOMから消える', () => {
+    const html = getWfBrowserPage('testuser', new Map(), allWorkflows, []);
+    document.body.innerHTML = html.slice(html.indexOf('<body>') + 6, html.lastIndexOf('<script>'));
+    const scriptSrc = html.slice(html.lastIndexOf('<script>') + 8, html.lastIndexOf('</script>'));
+    // eslint-disable-next-line no-new-func
+    new Function(scriptSrc)();
+
+    const toast = document.getElementById('wfbSuccessToast');
+    expect(toast).not.toBeNull();
+    toast!.dispatchEvent(new Event('animationend'));
+    expect(document.getElementById('wfbSuccessToast')).toBeNull();
+  });
+});
