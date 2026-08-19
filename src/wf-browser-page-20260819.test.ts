@@ -139,3 +139,55 @@ describe('getWfBrowserPage — 上部のワークフローバッジバー', () =
     expect(document.querySelectorAll('.wfb-highlight')).toHaveLength(2);
   });
 });
+
+describe('getWfBrowserPage — 反映漏れ(workflow_stepsが未登録)の警告トースト', () => {
+  const allWorkflows = [
+    { workflow_no: '0001', title: 'WASMモジュール管理' },
+    { workflow_no: '0005', title: 'heritage-area Travelキーワード検索' },
+  ];
+
+  // 対象: workflow_registryには登録されているがworkflow_stepsが1行も無い
+  // (処理段階のINSERT文が未実行の)ワークフローがある場合、/wf-browser
+  // ページ上部に薄ピンク色のトーストでやんわり警告し、反映までの導線
+  // (該当ワークフローページへのリンク)を示す。
+  //
+  // 故障シナリオ:
+  //   (1) 反映漏れがあるのにトーストが出ない(気づけない)
+  //   (2) 反映漏れが無いのにトーストが出てしまう(過剰警告)
+  //   (3) トースト内に該当ワークフローへの導線(リンク)が無い
+  //   (4) 閉じるボタンを押しても消えない
+
+  it('反映漏れワークフローがある場合、薄ピンク色のトースト(#wfbToast)を表示し、該当ワークフローへのリンクを含める', () => {
+    const html = getWfBrowserPage('testuser', new Map(), allWorkflows, [
+      { workflow_no: '0005', title: 'heritage-area Travelキーワード検索' },
+    ]);
+    expect(html).toContain('id="wfbToast"');
+    expect(html).toContain('background: #fde2e9');
+    expect(html).toContain('href="/workflow/0005"');
+    expect(html).toContain('heritage-area Travelキーワード検索');
+  });
+
+  it('反映漏れが無い場合はトーストを表示しない', () => {
+    const html = getWfBrowserPage('testuser', new Map(), allWorkflows, []);
+    expect(html).not.toContain('id="wfbToast"');
+  });
+
+  it('missingStepsWorkflows省略時もエラーにならず、トーストを表示しない', () => {
+    const html = getWfBrowserPage('testuser', new Map(), allWorkflows);
+    expect(html).not.toContain('id="wfbToast"');
+  });
+
+  it('(DOM実動作) 閉じるボタンを押すとトーストがDOMから消える', () => {
+    const html = getWfBrowserPage('testuser', new Map(), allWorkflows, [
+      { workflow_no: '0005', title: 'heritage-area Travelキーワード検索' },
+    ]);
+    document.body.innerHTML = html.slice(html.indexOf('<body>') + 6, html.lastIndexOf('<script>'));
+    const scriptSrc = html.slice(html.lastIndexOf('<script>') + 8, html.lastIndexOf('</script>'));
+    // eslint-disable-next-line no-new-func
+    new Function(scriptSrc)();
+
+    expect(document.getElementById('wfbToast')).not.toBeNull();
+    (document.getElementById('wfbToastClose') as HTMLButtonElement).click();
+    expect(document.getElementById('wfbToast')).toBeNull();
+  });
+});
