@@ -88,6 +88,7 @@ export function formatAichatSlashCommandHelp(): string {
     '| /neko uuidgen7 | UUIDv7を1件生成し、UUID生成履歴に保存します |',
     '| /neko search <キーワード> | 質問文・回答文にキーワードを含む過去ログのヒット件数を表示します(結果一覧は最大30件までモーダルで確認できます) |',
     '| /neko vcount | ベクタ化済みの回答文の件数と全回答文に占める割合を表示します(結果一覧は最大30件までモーダルで確認できます) |',
+    '| /neko tokens | 過去24時間のモデル別トークン使用量を1時間刻みでMarkdownテーブル表示します |',
     '| /neko 256 <文字列> | 指定した文字列のSHA-256ハッシュをWASM(Rust実装)で計算します |',
     '| /neko factor <数値> | 指定した整数(0以上2^53以下)をWASM(Rust実装)で素因数分解します |',
     '| /neko dig <ドメイン> [タイプ] | 指定ドメインのDNS問い合わせをWASM(Rust実装)で行います。詳細は /neko dig --help |',
@@ -216,10 +217,47 @@ export function formatFactorWasmResult(result: string): string {
   return ['## factor (WASM)', '```', result, '```'].join('\n');
 }
 
+export type HourlyTokenUsageRow = {
+  hour: string;
+  model: string;
+  input_tokens: number;
+  output_tokens: number;
+  request_count: number;
+};
+
+/**
+ * `/neko tokens` の結果を、時間帯(hour)ごとにMarkdownテーブルで表示する。
+ * 罫線・ツリー文字は使わずMarkdownテーブルで表現する(CLAUDE.mdルール16)。
+ * 同じ時間帯に複数モデルの利用があれば、その時間帯内で行を分けて表示する。
+ */
+export function formatHourlyTokenUsage(rows: HourlyTokenUsageRow[]): string {
+  if (rows.length === 0) {
+    return '## 過去24時間のトークン使用量\n直近24時間の記録はありません。';
+  }
+  const header = '| 時間帯(JST) | モデル | 入力 | 出力 | 件数 |';
+  const separator = '|---|---|---:|---:|---:|';
+  const lines = rows.map((r) => {
+    const model = r.model.split('/').pop() || r.model;
+    return `| ${r.hour} | ${model} | ${r.input_tokens.toLocaleString()} | ${r.output_tokens.toLocaleString()} | ${r.request_count} |`;
+  });
+  const totalIn = rows.reduce((sum, r) => sum + (r.input_tokens || 0), 0);
+  const totalOut = rows.reduce((sum, r) => sum + (r.output_tokens || 0), 0);
+  const totalReq = rows.reduce((sum, r) => sum + (r.request_count || 0), 0);
+  return [
+    '## 過去24時間のトークン使用量',
+    header,
+    separator,
+    ...lines,
+    '',
+    `計: 入力 ${totalIn.toLocaleString()} / 出力 ${totalOut.toLocaleString()} / ${totalReq}件`,
+  ].join('\n');
+}
+
 export type AichatSlashCommandDeps = {
   fetchLatestCommitAgentLog: () => Promise<CommitAgentLogRow | null>;
   searchShares?: (keyword: string) => Promise<AichatSearchOutcome>;
   vectorizedAnswers?: () => Promise<AichatVectorizedAnswersOutcome>;
+  hourlyTokenUsage?: () => Promise<HourlyTokenUsageRow[]>;
   sha256ViaWasm?: (input: string) => Promise<string>;
   factorViaWasm?: (n: number) => Promise<string>;
   digLookup?: (name: string, qtype: string) => Promise<string>;
@@ -427,12 +465,29 @@ export async function interpretAichatSlashCommand(
     }
   }
 
+  if (subcommand === 'tokens') {
+    if (!deps.hourlyTokenUsage) {
+      return { handled: true, response: formatHourlyTokenUsage([]) };
+    }
+    const outcome = await raceWithTimeout(deps.hourlyTokenUsage(), AICHAT_SEARCH_TIMEOUT_MS);
+    if (outcome.status === 'timeout') {
+      return {
+        handled: true,
+        response: `❌ /neko tokens がタイムアウトしました(${AICHAT_SEARCH_TIMEOUT_MS / 1000}秒以内に応答がありませんでした)。データ量が多い可能性があります。時間をおいて再度お試しください。`,
+      };
+    }
+    if (outcome.status === 'error') {
+      return { handled: true, response: `❌ /neko tokens でエラーが発生しました: ${outcome.message}` };
+    }
+    return { handled: true, response: formatHourlyTokenUsage(outcome.value) };
+  }
+
   if (subcommand === 'help') {
     return { handled: true, response: formatAichatSlashCommandHelp() };
   }
 
   return {
     handled: true,
-    response: `❌ 未対応のサブコマンドです: ${subcommand || '(なし)'}\n利用可能なコマンド: /neko hms, /neko cal, /neko clog, /neko limit, /neko uuidgen4, /neko uuidgen7, /neko search, /neko vcount, /neko 256, /neko factor, /neko dig, /neko help\n詳細は /neko help を実行してください`,
+    response: `❌ 未対応のサブコマンドです: ${subcommand || '(なし)'}\n利用可能なコマンド: /neko hms, /neko cal, /neko clog, /neko limit, /neko uuidgen4, /neko uuidgen7, /neko search, /neko vcount, /neko tokens, /neko 256, /neko factor, /neko dig, /neko help\n詳細は /neko help を実行してください`,
   };
 }

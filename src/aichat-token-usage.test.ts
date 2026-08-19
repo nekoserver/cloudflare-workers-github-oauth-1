@@ -95,10 +95,36 @@ describe('トークン使用量: index.ts バックエンド', () => {
     const src = fs.readFileSync(__dirname + '/index.ts', 'utf-8');
     const idx = src.indexOf('/api/aichat/token-usage');
     expect(idx).toBeGreaterThan(-1);
-    const snippet = src.slice(idx, idx + 1200);
+    const snippet = src.slice(idx, idx + 1600);
     expect(snippet).toContain('model');
     expect(snippet).toContain('SUM');
     expect(snippet).toContain('GROUP BY');
+  });
+
+  // 対象: `/api/aichat/token-usage`のgranularityクエリパラメータ(day/month)。
+  // モデル別トークン使用量モーダルで日毎/月毎の切替表示を可能にするため、
+  // strftimeのフォーマットとsinceの計算をgranularityで分岐させている。
+  //
+  // 故障シナリオ:
+  //   (1) granularity=dayを指定しても月単位のまま集計されてしまう
+  //   (2) granularity未指定時のデフォルト挙動(月単位)が変わってしまう
+  //   (3) 不正なgranularity値(想定外の文字列)でSQLエラーや例外になる
+  it('granularity=dayのとき日単位(%Y-%m-%d)でstrftimeする', () => {
+    const fs = require('fs');
+    const src = fs.readFileSync(__dirname + '/index.ts', 'utf-8');
+    const idx = src.indexOf('/api/aichat/token-usage');
+    const snippet = src.slice(idx, idx + 1600);
+    expect(snippet).toContain("'day'");
+    expect(snippet).toContain('%Y-%m-%d');
+    expect(snippet).toContain('%Y-%m');
+  });
+
+  it('granularity未指定時は従来どおり月(month)がデフォルトになる', () => {
+    const fs = require('fs');
+    const src = fs.readFileSync(__dirname + '/index.ts', 'utf-8');
+    const idx = src.indexOf('/api/aichat/token-usage');
+    const snippet = src.slice(idx, idx + 400);
+    expect(snippet).toContain("=== 'day' ? 'day' : 'month'");
   });
 });
 
@@ -120,6 +146,28 @@ describe('トークン使用量: フロントエンド', () => {
   it('/api/aichat/token-usage を fetch するコードがある', () => {
     const html = buildPage();
     expect(html).toContain('/api/aichat/token-usage');
+  });
+
+  // 対象: モデル別トークン使用量モーダルの日毎/月毎切替ボタン。
+  //
+  // 故障シナリオ:
+  //   (1) 切替ボタン自体がマークアップに存在しない
+  //   (2) 切替ボタンを押してもgranularityパラメータ付きでfetchし直されない
+  //   (3) 押した側のボタンにactiveクラスが付かない(どちらが選択中か分からない)
+  it('日毎/月毎の切替ボタン(#tokenUsageGranMonth・#tokenUsageGranDay)がある', () => {
+    const html = buildPage();
+    expect(html).toContain('id="tokenUsageGranMonth"');
+    expect(html).toContain('id="tokenUsageGranDay"');
+    expect(html).toContain("data-granularity=\"month\"");
+    expect(html).toContain("data-granularity=\"day\"");
+  });
+
+  it('renderTokenUsageGraphがgranularityに応じてクエリパラメータを切り替える', () => {
+    const html = buildPage();
+    const idx = html.indexOf('renderTokenUsageGraph');
+    const snippet = html.slice(idx, idx + 1200);
+    expect(snippet).toContain("granularity=day&days=30");
+    expect(snippet).toContain("granularity=month&months=6");
   });
 
   it('SVG またはグラフ描画コードが含まれる', () => {

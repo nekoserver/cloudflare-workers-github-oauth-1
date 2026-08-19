@@ -104,7 +104,7 @@ import { withAiTimeout, AI_CLASSIFY_TIMEOUT_MS } from './utils/aiTimeout';
 import { computeConversationHash, computeQuestionHash } from './utils/conversationHash';
 import { buildAiMessages, ALLOWED_MODES, type SystemPromptMode } from './utils/buildAiMessages';
 import { stripThinkTags } from './utils/stripThinkTags';
-import { interpretAichatSlashCommand, type CommitAgentLogRow } from './utils/aichatSlashCommand';
+import { interpretAichatSlashCommand, type CommitAgentLogRow, type HourlyTokenUsageRow } from './utils/aichatSlashCommand';
 import { AICHAT_MODEL_MAX_TOKENS, getModelRunParams, assignModelColors } from './utils/aichatModelConfig';
 import { extractAiUsage } from './utils/aiUsage';
 import { validateImageDataUrl, attachImageToLastUserMessage, resolveAichatModelsForRequest } from './utils/aichatImage';
@@ -4268,6 +4268,23 @@ app.post('/api/aichat', aichatAuthMiddleware, async (c) => {
       return { count: countRow?.cnt ?? 0, totalCount: totalRow?.cnt ?? 0, results: rows.results ?? [] };
     },
     generateUuid: async (version) => c.env.DB ? generateAndSaveUuid(c.env.DB, user.sub, version) : Promise.reject(new Error('DB未設定です')),
+    hourlyTokenUsage: async () => {
+      if (!c.env.DB) return [];
+      const rows = await c.env.DB.prepare(
+        `SELECT
+           strftime('%Y-%m-%d %H:00', created_at, '+9 hours') AS hour,
+           model,
+           SUM(COALESCE(input_tokens, 0)) AS input_tokens,
+           SUM(COALESCE(output_tokens, 0)) AS output_tokens,
+           COUNT(*) AS request_count
+         FROM ai_chat_shares
+         WHERE user_id = ? AND created_at >= datetime('now', '-24 hours')
+           AND (input_tokens IS NOT NULL OR output_tokens IS NOT NULL)
+         GROUP BY hour, model
+         ORDER BY hour ASC, model ASC`
+      ).bind(user.sub).all<HourlyTokenUsageRow>();
+      return rows.results ?? [];
+    },
     sha256ViaWasm: async (input) => {
       if (c.env.DB) {
         const row = await c.env.DB.prepare(
@@ -6089,12 +6106,20 @@ app.get('/api/aichat/keyword-categories', authMiddleware, async (c) => {
 app.get('/api/aichat/token-usage', authMiddleware, async (c) => {
   const user = c.get('user');
   if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
-  const months = Math.min(Math.max(parseInt(c.req.query('months') ?? '6', 10), 1), 24);
-  const since = new Date(Date.now() - months * 31 * 24 * 60 * 60 * 1000).toISOString().slice(0, 7) + '-01';
+  const granularity = c.req.query('granularity') === 'day' ? 'day' : 'month';
+  const periodFormat = granularity === 'day' ? '%Y-%m-%d' : '%Y-%m';
+  let since: string;
+  if (granularity === 'day') {
+    const days = Math.min(Math.max(parseInt(c.req.query('days') ?? '30', 10), 1), 90);
+    since = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  } else {
+    const months = Math.min(Math.max(parseInt(c.req.query('months') ?? '6', 10), 1), 24);
+    since = new Date(Date.now() - months * 31 * 24 * 60 * 60 * 1000).toISOString().slice(0, 7) + '-01';
+  }
   try {
     const rows = await c.env.DB.prepare(
       `SELECT
-         strftime('%Y-%m', created_at) AS month,
+         strftime('${periodFormat}', created_at) AS period,
          model,
          SUM(COALESCE(input_tokens, 0)) AS input_tokens,
          SUM(COALESCE(output_tokens, 0)) AS output_tokens,
@@ -6103,15 +6128,15 @@ app.get('/api/aichat/token-usage', authMiddleware, async (c) => {
        FROM ai_chat_shares
        WHERE user_id = ? AND created_at >= ?
          AND (input_tokens IS NOT NULL OR output_tokens IS NOT NULL)
-       GROUP BY month, model
-       ORDER BY month ASC, model ASC`
+       GROUP BY period, model
+       ORDER BY period ASC, model ASC`
     ).bind(user.sub, since).all<{
-      month: string; model: string;
+      period: string; model: string;
       input_tokens: number; output_tokens: number; total_tokens: number; request_count: number;
     }>();
-    return jsonUtf8({ rows: rows.results ?? [] });
+    return jsonUtf8({ rows: rows.results ?? [], granularity });
   } catch {
-    return jsonUtf8({ rows: [], _warning: 'schema not ready' });
+    return jsonUtf8({ rows: [], granularity, _warning: 'schema not ready' });
   }
 });
 
