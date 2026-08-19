@@ -52,15 +52,30 @@ export function getMarkdownParserScript(): string {
         }
 
         if (i + 1 < lines.length && /^\\|/.test(line) && /^[\\|\\s:-]+$/.test(lines[i+1])) {
+          var aligns = splitTableRow(lines[i+1]).map(function(s) {
+            var t = s.trim();
+            var left = t.charAt(0) === ':';
+            var right = t.charAt(t.length - 1) === ':';
+            if (left && right) return 'center';
+            if (right) return 'right';
+            if (left) return 'left';
+            return '';
+          });
           var tbl = '<table><thead><tr>';
           var heads = splitTableRow(line);
-          for (var h = 0; h < heads.length; h++) tbl += '<th>' + inline(heads[h].trim()) + '</th>';
+          for (var h = 0; h < heads.length; h++) {
+            var ah = aligns[h] ? ' style="text-align:' + aligns[h] + '"' : '';
+            tbl += '<th' + ah + '>' + inline(heads[h].trim()) + '</th>';
+          }
           tbl += '</tr></thead><tbody>';
           i += 2;
           while (i < lines.length && /^\\|/.test(lines[i])) {
             tbl += '<tr>';
             var cells = splitTableRow(lines[i]);
-            for (var c = 0; c < cells.length; c++) tbl += '<td>' + inline(cells[c].trim()) + '</td>';
+            for (var c = 0; c < cells.length; c++) {
+              var ac = aligns[c] ? ' style="text-align:' + aligns[c] + '"' : '';
+              tbl += '<td' + ac + '>' + inline(cells[c].trim()) + '</td>';
+            }
             tbl += '</tr>'; i++;
           }
           tbl += '</tbody></table>';

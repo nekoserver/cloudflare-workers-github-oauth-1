@@ -46,6 +46,24 @@ describe('getMarkdownParserScript', () => {
     expect(html).toContain('<td>1</td>');
   });
 
+  it('テーブルの区切り行に:---:/---:/:---があれば列ごとにtext-alignを付与する', () => {
+    const parseMd = loadParseMd();
+    const html = parseMd('| a | b | c |\n|:---:|---:|:---|\n| 1 | 2 | 3 |');
+    expect(html).toContain('<th style="text-align:center">a</th>');
+    expect(html).toContain('<th style="text-align:right">b</th>');
+    expect(html).toContain('<th style="text-align:left">c</th>');
+    expect(html).toContain('<td style="text-align:center">1</td>');
+    expect(html).toContain('<td style="text-align:right">2</td>');
+    expect(html).toContain('<td style="text-align:left">3</td>');
+  });
+
+  it('区切り行にアラインメント指定がない列にはstyleを付与しない', () => {
+    const parseMd = loadParseMd();
+    const html = parseMd('| a | b |\n|---|---|\n| 1 | 2 |');
+    expect(html).toContain('<th>a</th>');
+    expect(html).toContain('<td>1</td>');
+  });
+
   it('フェンスドコードブロックとインラインコードを変換する', () => {
     const parseMd = loadParseMd();
     expect(parseMd('```js\nconst x = 1;\n```')).toContain('<pre><code class="language-js">const x = 1;</code></pre>');

@@ -30,9 +30,10 @@ describe('formatJstMonthCalendar', () => {
   it('当月のカレンダーをMarkdownテーブルで組み立て、今日のマスを太字にする（2026年7月5日=日曜始まり）', () => {
     const result = formatJstMonthCalendar(new Date('2026-07-05T01:02:03Z'));
     const expected = [
-      '2026年7月',
+      '| 2026年7月 |',
+      '|:---:|',
       '| 日 | 月 | 火 | 水 | 木 | 金 | 土 |',
-      '|---|---|---|---|---|---|---|',
+      '|---:|---:|---:|---:|---:|---:|---:|',
       '|  |  |  | 1 | 2 | 3 | 4 |',
       '| **5** | 6 | 7 | 8 | 9 | 10 | 11 |',
       '| 12 | 13 | 14 | 15 | 16 | 17 | 18 |',
@@ -40,6 +41,16 @@ describe('formatJstMonthCalendar', () => {
       '| 26 | 27 | 28 | 29 | 30 | 31 |  |',
     ].join('\n');
     expect(result).toBe(expected);
+  });
+
+  it('タイトルは1列の中央寄せMarkdownテーブルとして表現される', () => {
+    const result = formatJstMonthCalendar(new Date('2026-07-05T01:02:03Z'));
+    expect(result.split('\n').slice(0, 2)).toEqual(['| 2026年7月 |', '|:---:|']);
+  });
+
+  it('日付グリッドの区切り行は右寄せ(---:)で表現される', () => {
+    const result = formatJstMonthCalendar(new Date('2026-07-05T01:02:03Z'));
+    expect(result.split('\n')[3]).toBe('|---:|---:|---:|---:|---:|---:|---:|');
   });
 
   it('罫線・ツリー文字を使わずMarkdownテーブルで表現する（CLAUDE.mdルール16）', () => {
