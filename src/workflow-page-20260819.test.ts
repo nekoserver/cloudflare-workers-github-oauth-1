@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { normalizeWorkflowNo } from './index';
 import { getWorkflowPage } from './views/workflow';
 
@@ -172,5 +172,76 @@ describe('getWorkflowPage — サイドパネル開閉ボタン(DOM実動作)', 
     new Function(scriptSrc)();
     const layout2 = document.getElementById('wfLayout') as HTMLElement;
     expect(layout2.classList.contains('wf-sidebar-collapsed')).toBe(true);
+  });
+});
+
+describe('getWorkflowPage — サイドパネルのリンクをfetch+history.pushStateで切り替える(DOM実動作)', () => {
+  // 対象: PWA(display-mode:standalone)でサイドパネルのリンクをクリックした際、
+  // 通常のフルページ遷移(<a href>のデフォルト動作)だとiOSでアドレスバーが
+  // 一瞬表示されてしまう不具合への対応。fetch(/api/workflow/:no) + 画面差し替え
+  // + history.pushStateで、フルリロードを起こさずにページを切り替える。
+  //
+  // 故障シナリオ:
+  //   (1) クリックしてもデフォルトのページ遷移(e.preventDefaultなし)が起きてしまう
+  //   (2) 画面(#wfMain)の内容が新しいワークフローの内容に差し替わらない
+  //   (3) URL(history)が更新されない、またはブラウザの戻るボタンで元に戻らない
+  //   (4) サイドバーの選択中(active)表示が切り替わらない
+  const workflows = [
+    { workflow_no: '0001', title: 'WASMモジュール管理', page_path: '/wasm-modules', summary: null },
+    { workflow_no: '0002', title: 'AIチャット送信', page_path: '/aichat', summary: 'テスト概要' },
+  ];
+
+  function setupNavTest() {
+    const html = getWorkflowPage('testuser', workflows, { workflow: workflows[0], steps: [] });
+    document.body.innerHTML = html.slice(html.indexOf('<body>') + 6, html.lastIndexOf('<script>'));
+    const scriptSrc = html.slice(html.lastIndexOf('<script>') + 8, html.lastIndexOf('</script>'));
+    const fetchMock = vi.fn(() => Promise.resolve({
+      ok: true,
+      json: () => Promise.resolve({
+        workflow: workflows[1],
+        steps: [{ step_order: 1, stage_title: 'ステップ1', api_method: 'GET', api_path: '/api/aichat', note: null }],
+      }),
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+    // eslint-disable-next-line no-new-func
+    new Function(scriptSrc)();
+    return { fetchMock };
+  }
+
+  afterEach(() => { vi.unstubAllGlobals(); });
+
+  it('サイドバーのリンククリックはデフォルトのページ遷移をpreventDefaultする', async () => {
+    setupNavTest();
+    const link = document.querySelector('[data-wf-no="0002"]') as HTMLAnchorElement;
+    const event = new MouseEvent('click', { bubbles: true, cancelable: true });
+    link.dispatchEvent(event);
+    expect(event.defaultPrevented).toBe(true);
+  });
+
+  it('クリックするとfetch(/api/workflow/:no)を呼び、#wfMainの内容を差し替える', async () => {
+    const { fetchMock } = setupNavTest();
+    const link = document.querySelector('[data-wf-no="0002"]') as HTMLAnchorElement;
+    link.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/workflow/0002', expect.objectContaining({ credentials: 'same-origin' }));
+    const main = document.getElementById('wfMain')!;
+    expect(main.innerHTML).toContain('AIチャット送信');
+    expect(main.innerHTML).toContain('/api/aichat');
+    expect(document.title).toContain('AIチャット送信');
+  });
+
+  it('クリックするとhistory.pushStateでURLを更新し、サイドバーのactive表示も切り替わる', async () => {
+    setupNavTest();
+    const pushStateSpy = vi.spyOn(history, 'pushState');
+    const link = document.querySelector('[data-wf-no="0002"]') as HTMLAnchorElement;
+    link.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    expect(pushStateSpy).toHaveBeenCalledWith(expect.anything(), '', '/workflow/0002');
+    expect(link.classList.contains('active')).toBe(true);
+    const otherLink = document.querySelector('[data-wf-no="0001"]') as HTMLAnchorElement;
+    expect(otherLink.classList.contains('active')).toBe(false);
+    pushStateSpy.mockRestore();
   });
 });

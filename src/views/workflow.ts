@@ -30,7 +30,7 @@ function renderSidebar(workflows: WorkflowSummary[], activeNo: string | null): s
   }
   return workflows.map((w) => {
     const active = w.workflow_no === activeNo ? ' active' : '';
-    return `<a class="wf-nav-item${active}" href="/workflow/${escapeHtml(w.workflow_no)}">
+    return `<a class="wf-nav-item${active}" href="/workflow/${escapeHtml(w.workflow_no)}" data-wf-no="${escapeHtml(w.workflow_no)}">
       <span class="wf-nav-no">${escapeHtml(w.workflow_no)}</span>
       <span class="wf-nav-title">${escapeHtml(w.title)}</span>
     </a>`;
@@ -187,7 +187,7 @@ export function getWorkflowPage(
       </div>
       ${renderSidebar(workflows, activeNo)}
     </aside>
-    <main class="wf-main">
+    <main class="wf-main" id="wfMain">
       ${mainContent}
     </main>
   </div>
@@ -205,6 +205,75 @@ export function getWorkflowPage(
         var collapsed = !layout.classList.contains('wf-sidebar-collapsed');
         applyState(collapsed);
         localStorage.setItem(STORAGE_KEY, collapsed ? '1' : '0');
+      });
+    })();
+
+    // PWA(display-mode:standalone)でサイドパネルのリンクをクリックすると
+    // 通常のページ遷移(フルリロード)になり、iOSではその瞬間だけアドレスバーが
+    // 表示されてしまう。同一オリジン・相対パスのfetch + history.pushStateで
+    // ページを差し替えることで、フルリロードを起こさずワークフローを
+    // 切り替えられるようにする(hrefは自体はJS無効時のフォールバックとして残す)。
+    (function() {
+      var METHOD_COLORS = { GET: '#1a7f37', POST: '#0969da', PUT: '#9a6700', PATCH: '#6639ba', DELETE: '#cf222e' };
+      function escHtml(s) {
+        return String(s == null ? '' : s).replace(/[&<>"']/g, function(c) {
+          return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+        });
+      }
+      function renderSteps(steps) {
+        if (!steps || steps.length === 0) {
+          return '<div class="wf-empty">この番号には処理段階が登録されていません</div>';
+        }
+        var items = steps.map(function(s) {
+          var color = s.api_method ? (METHOD_COLORS[s.api_method] || '#656d76') : null;
+          var apiLine = s.api_method && s.api_path
+            ? '<div class="wf-api-call"><span class="wf-method" style="background:' + color + '22;color:' + color + '">' + escHtml(s.api_method) + '</span><code class="wf-path">' + escHtml(s.api_path) + '</code></div>'
+            : '<div class="wf-api-call wf-no-api">API問い合わせなし</div>';
+          var note = s.note ? '<div class="wf-note">' + escHtml(s.note) + '</div>' : '';
+          return '<li class="wf-step"><div class="wf-step-marker">' + s.step_order + '</div><div class="wf-step-body"><div class="wf-step-title">' + escHtml(s.stage_title) + '</div>' + apiLine + note + '</div></li>';
+        }).join('');
+        return '<ol class="wf-timeline">' + items + '</ol>';
+      }
+      function renderDetail(workflow, steps) {
+        var summary = workflow.summary ? '<p class="wf-detail-summary">' + escHtml(workflow.summary) + '</p>' : '';
+        return '<div class="wf-detail-header"><div class="wf-detail-no">#' + escHtml(workflow.workflow_no) + '</div>' +
+          '<h1 class="wf-detail-title">' + escHtml(workflow.title) + '</h1>' +
+          '<div class="wf-detail-path">対象ページ: <a href="' + escHtml(workflow.page_path) + '">' + escHtml(workflow.page_path) + '</a></div>' +
+          summary + '</div>' + renderSteps(steps);
+      }
+      var wfMain = document.getElementById('wfMain');
+      var navItems = document.querySelectorAll('[data-wf-no]');
+      function setActiveNav(no) {
+        navItems.forEach(function(el) {
+          el.classList.toggle('active', el.getAttribute('data-wf-no') === no);
+        });
+      }
+      function loadWorkflow(no, push) {
+        fetch('/api/workflow/' + encodeURIComponent(no), { credentials: 'same-origin' })
+          .then(function(r) { return r.json().then(function(data) { return { ok: r.ok, data: data }; }); })
+          .then(function(res) {
+            if (!res.ok || !res.data || !res.data.workflow) return;
+            wfMain.innerHTML = renderDetail(res.data.workflow, res.data.steps || []);
+            document.title = res.data.workflow.title + ' - ワークフロー - Cloudflare Workers GitHub OAuth';
+            setActiveNav(no);
+            if (push) history.pushState({ wfNo: no }, '', '/workflow/' + no);
+          })
+          .catch(function() {});
+      }
+      document.querySelectorAll('.wf-sidebar').forEach(function(sidebar) {
+        sidebar.addEventListener('click', function(e) {
+          var link = e.target.closest('[data-wf-no]');
+          if (!link) return;
+          e.preventDefault();
+          loadWorkflow(link.getAttribute('data-wf-no'), true);
+        });
+      });
+      window.addEventListener('popstate', function() {
+        var path = location.pathname;
+        var prefix = '/workflow/';
+        if (path.indexOf(prefix) === 0) {
+          loadWorkflow(path.slice(prefix.length), false);
+        }
       });
     })();
   </script>
