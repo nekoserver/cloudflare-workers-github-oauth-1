@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { getWfBrowserPage } from './views/wfBrowser';
 import { API_ENDPOINT_LIST } from './data/apiEndpointList';
 
@@ -220,5 +220,68 @@ describe('getWfBrowserPage — 反映漏れ(workflow_stepsが未登録)の警告
     expect(document.getElementById('wfbToast')).not.toBeNull();
     (document.getElementById('wfbToastClose') as HTMLButtonElement).click();
     expect(document.getElementById('wfbToast')).toBeNull();
+  });
+});
+
+describe('getWfBrowserPage — バッジ押下時の該当行へのジャンプ(DOM実動作)', () => {
+  // 対象: ワークフローバッジを押した際、そのワークフローが使用する
+  // エンドポイントのうち最上位(DOM順で最初)の行にカーソル(フォーカス)を
+  // 飛ばし、スクロールして見える位置まで移動させる。
+  //
+  // 故障シナリオ:
+  //   (1) 最上位行ではなく無関係な行、または複数行すべてにフォーカスが飛ぶ
+  //   (2) scrollIntoViewが呼ばれない(画面内に見えるようにならない)
+  //   (3) バッジを解除(2回目クリック)した際にもジャンプが発生してしまう
+  const sample = API_ENDPOINT_LIST[0];
+  const sample2 = API_ENDPOINT_LIST[1];
+  const allWorkflows = [{ workflow_no: '0001', title: 'WASMモジュール管理' }];
+
+  function setup() {
+    const refs = new Map([
+      [sample.method + ' ' + sample.path, [{ workflow_no: '0001', title: 'WASMモジュール管理' }]],
+      [sample2.method + ' ' + sample2.path, [{ workflow_no: '0001', title: 'WASMモジュール管理' }]],
+    ]);
+    const html = getWfBrowserPage('testuser', refs, allWorkflows);
+    document.body.innerHTML = html.slice(html.indexOf('<body>') + 6, html.lastIndexOf('<script>'));
+    const scriptSrc = html.slice(html.lastIndexOf('<script>') + 8, html.lastIndexOf('</script>'));
+    // eslint-disable-next-line no-new-func
+    new Function(scriptSrc)();
+  }
+
+  it('バッジを押すと、そのワークフローが使う最上位(DOM順で最初)の行にフォーカスが移り、画面内へスクロールされる', () => {
+    setup();
+    const rows = document.querySelectorAll('.wfb-row');
+    const scrollSpies = [...rows].map((r) => {
+      (r as HTMLElement).scrollIntoView = vi.fn();
+      return (r as HTMLElement).scrollIntoView as ReturnType<typeof vi.fn>;
+    });
+
+    const badge = document.querySelector('[data-wf-no="0001"]') as HTMLButtonElement;
+    badge.click();
+
+    const firstMatchIdx = [...rows].findIndex((r) => (r.getAttribute('data-wf-nos') || '').split(' ').includes('0001'));
+    expect(firstMatchIdx).toBeGreaterThan(-1);
+    expect(scrollSpies[firstMatchIdx]).toHaveBeenCalledTimes(1);
+    expect(document.activeElement).toBe(rows[firstMatchIdx]);
+    // 他の行にはジャンプしていない
+    scrollSpies.forEach((spy, i) => {
+      if (i !== firstMatchIdx) expect(spy).not.toHaveBeenCalled();
+    });
+  });
+
+  it('バッジを解除(2回目クリック)した際はジャンプが発生しない', () => {
+    setup();
+    const rows = document.querySelectorAll('.wfb-row');
+    const scrollSpies = [...rows].map((r) => {
+      (r as HTMLElement).scrollIntoView = vi.fn();
+      return (r as HTMLElement).scrollIntoView as ReturnType<typeof vi.fn>;
+    });
+
+    const badge = document.querySelector('[data-wf-no="0001"]') as HTMLButtonElement;
+    badge.click();
+    scrollSpies.forEach((spy) => spy.mockClear());
+    badge.click();
+
+    scrollSpies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
   });
 });
