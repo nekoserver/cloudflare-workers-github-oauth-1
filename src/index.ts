@@ -44,6 +44,7 @@ import { getAichatImageGalleryPage } from './views/aichatImageGallery';
 import { getEclipseTiltLessonPage } from './views/eclipseTiltLesson';
 import { getWebGLFaultsPage } from './views/webglFaults';
 import { getUuidGenPage } from './views/uuidGen';
+import { generateAndSaveUuid } from './utils/uuid';
 import { getAnswerGraphPage } from './views/answerGraph';
 import { getBase64Page } from './views/base64';
 import { getHarnessLogPage, type HarnessHookLogRow, type HarnessLogResultCounts } from './views/harnessLog';
@@ -4256,6 +4257,7 @@ app.post('/api/aichat', aichatAuthMiddleware, async (c) => {
       ).bind(user.sub).all<{ id: string; question: string }>();
       return { count: countRow?.cnt ?? 0, totalCount: totalRow?.cnt ?? 0, results: rows.results ?? [] };
     },
+    generateUuid: async (version) => c.env.DB ? generateAndSaveUuid(c.env.DB, user.sub, version) : Promise.reject(new Error('DB未設定です')),
     sha256ViaWasm: async (input) => {
       if (c.env.DB) {
         const row = await c.env.DB.prepare(
