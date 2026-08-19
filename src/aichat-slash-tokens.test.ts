@@ -20,6 +20,8 @@ import {
 //   (5) DB問い合わせが例外を投げた場合に、エラーメッセージを返さず
 //       握りつぶしてしまう(CLAUDE.mdルール8: 記録・通知の義務)
 //   (6) 複数モデル・複数時間帯の集計で合計値の計算を誤る
+//   (7) 末尾のモデル別総和テーブルで、同じモデルが複数の時間帯にまたがる場合に
+//       合算し忘れて重複行や過小な合計値になる
 
 describe('formatHourlyTokenUsage', () => {
   it('時間帯・モデルごとにMarkdownテーブルの行を組み立て、末尾に合計を表示する', () => {
@@ -31,6 +33,32 @@ describe('formatHourlyTokenUsage', () => {
     expect(text).toContain('| 2026-07-15 09:00 | llama-3.3-70b-instruct-fp8-fast | 100 | 200 | 2 |');
     expect(text).toContain('| 2026-07-15 10:00 | gemma-3-12b-it | 50 | 80 | 1 |');
     expect(text).toContain('計: 入力 150 / 出力 280 / 3件');
+  });
+
+  it('末尾に、使用したモデルをループ元として使用量を合算したモデル別総和テーブルを付け加える', () => {
+    const rows: HourlyTokenUsageRow[] = [
+      { hour: '2026-07-15 09:00', model: '@cf/meta/llama-3.3-70b-instruct-fp8-fast', input_tokens: 100, output_tokens: 200, request_count: 2 },
+      { hour: '2026-07-15 10:00', model: '@cf/google/gemma-3-12b-it', input_tokens: 50, output_tokens: 80, request_count: 1 },
+      { hour: '2026-07-15 11:00', model: '@cf/meta/llama-3.3-70b-instruct-fp8-fast', input_tokens: 30, output_tokens: 40, request_count: 1 },
+    ];
+    const text = formatHourlyTokenUsage(rows);
+    const summaryIdx = text.indexOf('### モデル別総和');
+    expect(summaryIdx).toBeGreaterThan(-1);
+    const summary = text.slice(summaryIdx);
+    // llama-3.3は09:00分(100/200/2件)と11:00分(30/40/1件)を合算して130/240/3件になる
+    expect(summary).toContain('| llama-3.3-70b-instruct-fp8-fast | 130 | 240 | 3 |');
+    expect(summary).toContain('| gemma-3-12b-it | 50 | 80 | 1 |');
+  });
+
+  it('モデル別総和テーブルは、時間帯ごとの明細テーブルより後ろに出力される', () => {
+    const rows: HourlyTokenUsageRow[] = [
+      { hour: '2026-07-15 09:00', model: 'model-a', input_tokens: 10, output_tokens: 10, request_count: 1 },
+    ];
+    const text = formatHourlyTokenUsage(rows);
+    const detailIdx = text.indexOf('| 2026-07-15 09:00 |');
+    const summaryIdx = text.indexOf('### モデル別総和');
+    expect(detailIdx).toBeGreaterThan(-1);
+    expect(summaryIdx).toBeGreaterThan(detailIdx);
   });
 
   it('0件の場合は記録が無い旨を表示する(空文字やundefinedにしない)', () => {

@@ -88,7 +88,7 @@ export function formatAichatSlashCommandHelp(): string {
     '| /neko uuidgen7 | UUIDv7を1件生成し、UUID生成履歴に保存します |',
     '| /neko search <キーワード> | 質問文・回答文にキーワードを含む過去ログのヒット件数を表示します(結果一覧は最大30件までモーダルで確認できます) |',
     '| /neko vcount | ベクタ化済みの回答文の件数と全回答文に占める割合を表示します(結果一覧は最大30件までモーダルで確認できます) |',
-    '| /neko tokens | 過去24時間のモデル別トークン使用量を1時間刻みでMarkdownテーブル表示します |',
+    '| /neko tokens | 過去24時間のモデル別トークン使用量を1時間刻みでMarkdownテーブル表示し、末尾にモデル別総和も表示します |',
     '| /neko 256 <文字列> | 指定した文字列のSHA-256ハッシュをWASM(Rust実装)で計算します |',
     '| /neko factor <数値> | 指定した整数(0以上2^53以下)をWASM(Rust実装)で素因数分解します |',
     '| /neko dig <ドメイン> [タイプ] | 指定ドメインのDNS問い合わせをWASM(Rust実装)で行います。詳細は /neko dig --help |',
@@ -229,6 +229,8 @@ export type HourlyTokenUsageRow = {
  * `/neko tokens` の結果を、時間帯(hour)ごとにMarkdownテーブルで表示する。
  * 罫線・ツリー文字は使わずMarkdownテーブルで表現する(CLAUDE.mdルール16)。
  * 同じ時間帯に複数モデルの利用があれば、その時間帯内で行を分けて表示する。
+ * 末尾には、期間内に使われたモデルをループ元にして使用量を合算した
+ * モデル別総和テーブルを付け加える(登場順を維持する)。
  */
 export function formatHourlyTokenUsage(rows: HourlyTokenUsageRow[]): string {
   if (rows.length === 0) {
@@ -243,6 +245,27 @@ export function formatHourlyTokenUsage(rows: HourlyTokenUsageRow[]): string {
   const totalIn = rows.reduce((sum, r) => sum + (r.input_tokens || 0), 0);
   const totalOut = rows.reduce((sum, r) => sum + (r.output_tokens || 0), 0);
   const totalReq = rows.reduce((sum, r) => sum + (r.request_count || 0), 0);
+
+  const modelOrder: string[] = [];
+  const modelTotals = new Map<string, { input_tokens: number; output_tokens: number; request_count: number }>();
+  rows.forEach((r) => {
+    if (!modelTotals.has(r.model)) {
+      modelOrder.push(r.model);
+      modelTotals.set(r.model, { input_tokens: 0, output_tokens: 0, request_count: 0 });
+    }
+    const acc = modelTotals.get(r.model)!;
+    acc.input_tokens += r.input_tokens || 0;
+    acc.output_tokens += r.output_tokens || 0;
+    acc.request_count += r.request_count || 0;
+  });
+  const modelHeader = '| モデル | 入力 | 出力 | 件数 |';
+  const modelSeparator = '|---|---:|---:|---:|';
+  const modelLines = modelOrder.map((m) => {
+    const acc = modelTotals.get(m)!;
+    const shortModel = m.split('/').pop() || m;
+    return `| ${shortModel} | ${acc.input_tokens.toLocaleString()} | ${acc.output_tokens.toLocaleString()} | ${acc.request_count} |`;
+  });
+
   return [
     '## 過去24時間のトークン使用量',
     header,
@@ -250,6 +273,11 @@ export function formatHourlyTokenUsage(rows: HourlyTokenUsageRow[]): string {
     ...lines,
     '',
     `計: 入力 ${totalIn.toLocaleString()} / 出力 ${totalOut.toLocaleString()} / ${totalReq}件`,
+    '',
+    '### モデル別総和',
+    modelHeader,
+    modelSeparator,
+    ...modelLines,
   ].join('\n');
 }
 
