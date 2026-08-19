@@ -170,6 +170,19 @@ describe('トークン使用量: フロントエンド', () => {
     expect(snippet).toContain("granularity=month&months=6");
   });
 
+  // 対象: モーダル内で日毎/月毎の期間(period)を並べる順序。
+  //
+  // 故障シナリオ:
+  //   (1) 古い日付が上に来たままになり、直近の使用量を確認するのに
+  //       毎回スクロールが必要になる
+  it('periodsを昇順ソート後に反転し、新しい日付/月が上に来るようにする', () => {
+    const html = buildPage();
+    const idx = html.indexOf('var periods = [];');
+    expect(idx).toBeGreaterThan(-1);
+    const snippet = html.slice(idx, idx + 400);
+    expect(snippet).toContain('periods.sort().reverse();');
+  });
+
   it('SVG またはグラフ描画コードが含まれる', () => {
     const html = buildPage();
     const idx = html.indexOf('/api/aichat/token-usage');
