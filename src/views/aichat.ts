@@ -285,6 +285,12 @@ export function getAiChatPage(user: {
       transition: background 0.12s, color 0.12s;
     }
     .sidebar-mode-btn.active { background: var(--accent-color, #667eea); color: #fff; border-color: var(--accent-color, #667eea); }
+    .token-usage-gran-btn {
+      font-size: 10px; padding: 1px 7px; border: 1px solid var(--border-color);
+      border-radius: 4px; background: none; color: var(--text-muted); cursor: pointer;
+      transition: background 0.12s, color 0.12s;
+    }
+    .token-usage-gran-btn.active { background: var(--accent-color, #667eea); color: #fff; border-color: var(--accent-color, #667eea); }
     .sidebar-kw-modal {
       display: none; position: fixed; left: 260px; top: 44px; bottom: 0; z-index: 200;
       width: 240px; background: var(--card-bg); overflow-y: hidden;
@@ -823,6 +829,10 @@ export function getAiChatPage(user: {
       <div class="search-log-modal" style="max-width:620px;">
         <div class="search-log-head">
           <span class="search-log-title">📊 モデル別トークン使用量</span>
+          <div class="token-usage-granularity" style="display:flex;gap:4px;margin-left:auto;margin-right:8px;">
+            <button type="button" id="tokenUsageGranMonth" class="token-usage-gran-btn active" data-granularity="month">月毎</button>
+            <button type="button" id="tokenUsageGranDay" class="token-usage-gran-btn" data-granularity="day">日毎</button>
+          </div>
           <button id="tokenUsageClose">✕</button>
         </div>
         <div class="search-log-body" id="tokenUsageBody" style="padding:16px;overflow-y:auto;max-height:70vh;">
@@ -5646,10 +5656,14 @@ export function getAiChatPage(user: {
     var tokenUsageModal = document.getElementById('tokenUsageModal');
     var tokenUsageClose = document.getElementById('tokenUsageClose');
     var tokenUsageBody = document.getElementById('tokenUsageBody');
+    var tokenUsageGranMonth = document.getElementById('tokenUsageGranMonth');
+    var tokenUsageGranDay = document.getElementById('tokenUsageGranDay');
+    var tokenUsageGranularity = 'month';
 
     function renderTokenUsageGraph() {
       tokenUsageBody.innerHTML = '<div class="search-log-loading">読み込み中...</div>';
-      fetch('/api/aichat/token-usage?months=6', { credentials: 'same-origin' })
+      var qs = tokenUsageGranularity === 'day' ? 'granularity=day&days=30' : 'granularity=month&months=6';
+      fetch('/api/aichat/token-usage?' + qs, { credentials: 'same-origin' })
         .then(function(r) { return r.json(); })
         .then(function(d) {
           var rows = d.rows || [];
@@ -5657,18 +5671,18 @@ export function getAiChatPage(user: {
             tokenUsageBody.innerHTML = '<div class="search-log-empty">トークン使用量の記録がありません</div>';
             return;
           }
-          var months = [];
+          var periods = [];
           var modelSet = {};
           rows.forEach(function(r) {
-            if (months.indexOf(r.month) < 0) months.push(r.month);
+            if (periods.indexOf(r.period) < 0) periods.push(r.period);
             modelSet[r.model] = true;
           });
-          months.sort();
+          periods.sort();
           var models = Object.keys(modelSet).sort();
           var dataMap = {};
           rows.forEach(function(r) {
-            if (!dataMap[r.month]) dataMap[r.month] = {};
-            dataMap[r.month][r.model] = r;
+            if (!dataMap[r.period]) dataMap[r.period] = {};
+            dataMap[r.period][r.model] = r;
           });
           var MODEL_COLORS_LOCAL = (typeof MODEL_COLORS !== 'undefined' ? MODEL_COLORS : {});
           var defaultPalette = ['#6366f1','#22c55e','#f59e0b','#ef4444','#0ea5e9','#a855f7','#14b8a6','#f97316'];
@@ -5692,17 +5706,17 @@ export function getAiChatPage(user: {
             html += '</span>';
           });
           html += '</div>';
-          months.forEach(function(month) {
-            var monthData = dataMap[month] || {};
+          periods.forEach(function(period) {
+            var periodData = dataMap[period] || {};
             var totalIn = 0, totalOut = 0, totalReq = 0;
-            models.forEach(function(m) { if (monthData[m]) { totalIn += monthData[m].input_tokens || 0; totalOut += monthData[m].output_tokens || 0; totalReq += monthData[m].request_count || 0; } });
+            models.forEach(function(m) { if (periodData[m]) { totalIn += periodData[m].input_tokens || 0; totalOut += periodData[m].output_tokens || 0; totalReq += periodData[m].request_count || 0; } });
             var maxTok = totalIn + totalOut;
             html += '<div style="margin-bottom:16px;">';
-            html += '<div style="font-size:11px;font-weight:600;color:var(--text-secondary);margin-bottom:4px;">' + escHtml(month) + ' <span style="font-weight:400;color:var(--text-muted);">計 ' + maxTok.toLocaleString() + ' tokens / ' + totalReq + ' 件</span></div>';
+            html += '<div style="font-size:11px;font-weight:600;color:var(--text-secondary);margin-bottom:4px;">' + escHtml(period) + ' <span style="font-weight:400;color:var(--text-muted);">計 ' + maxTok.toLocaleString() + ' tokens / ' + totalReq + ' 件</span></div>';
             html += '<svg width="100%" height="' + (models.length * 20 + 4) + '" style="display:block;overflow:visible;">';
             var barW = 100 / (maxTok || 1);
             models.forEach(function(m, i) {
-              var row = monthData[m];
+              var row = periodData[m];
               var inTok = row ? (row.input_tokens || 0) : 0;
               var outTok = row ? (row.output_tokens || 0) : 0;
               var total = inTok + outTok;
@@ -5750,6 +5764,17 @@ export function getAiChatPage(user: {
       tokenUsageModal.classList.add('open');
       tokenUsageModal.setAttribute('aria-hidden', 'false');
       renderTokenUsageGraph();
+    });
+
+    [tokenUsageGranMonth, tokenUsageGranDay].forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        var granularity = btn.getAttribute('data-granularity');
+        if (granularity === tokenUsageGranularity) return;
+        tokenUsageGranularity = granularity;
+        tokenUsageGranMonth.classList.toggle('active', granularity === 'month');
+        tokenUsageGranDay.classList.toggle('active', granularity === 'day');
+        renderTokenUsageGraph();
+      });
     });
     tokenUsageClose.addEventListener('click', function() {
       tokenUsageModal.classList.remove('open');
