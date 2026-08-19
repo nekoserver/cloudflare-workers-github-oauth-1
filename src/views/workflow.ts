@@ -88,7 +88,6 @@ export function getWorkflowPage(
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="ワークフロー">
-  <link rel="manifest" href="/manifest.json">
   <title>${selected ? escapeHtml(selected.workflow.title) + ' - ' : ''}ワークフロー - Cloudflare Workers GitHub OAuth</title>
   ${getThemeInitScript()}
   <style>
