@@ -133,6 +133,7 @@ export function getWfBrowserPage(
     .wfb-table { width: 100%; border-collapse: collapse; font-size: 12px; }
     .wfb-table th { text-align: left; color: var(--text-muted); font-weight: 600; padding: 6px 8px; border-bottom: 1px solid var(--border-color); }
     .wfb-row td { padding: 6px 8px; border-bottom: 1px solid var(--border-color); vertical-align: top; }
+    .wfb-row:focus { outline: 2px solid var(--accent-color, #667eea); outline-offset: -2px; }
     .wfb-row-gray { opacity: 0.4; }
     .wfb-row-gray .wfb-path, .wfb-row-gray .wfb-desc { color: var(--text-muted); }
     .wfb-method { padding: 2px 8px; border-radius: 4px; font-weight: 700; font-size: 11px; white-space: nowrap; }
@@ -218,6 +219,17 @@ export function getWfBrowserPage(
           row.classList.toggle('wfb-highlight', hit);
         });
       }
+      function jumpToFirstRow(no) {
+        for (var i = 0; i < rows.length; i++) {
+          var nos = (rows[i].getAttribute('data-wf-nos') || '').split(' ').filter(Boolean);
+          if (nos.indexOf(no) !== -1) {
+            if (rows[i].scrollIntoView) rows[i].scrollIntoView({ behavior: 'smooth', block: 'center' });
+            rows[i].setAttribute('tabindex', '-1');
+            rows[i].focus({ preventScroll: true });
+            return;
+          }
+        }
+      }
       badges.forEach(function(btn) {
         btn.addEventListener('click', function() {
           var no = btn.getAttribute('data-wf-no');
@@ -227,6 +239,7 @@ export function getWfBrowserPage(
           } else {
             activeNos[no] = true;
             btn.classList.add('active');
+            jumpToFirstRow(no);
           }
           applyHighlight();
         });
