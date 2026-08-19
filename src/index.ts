@@ -65,7 +65,7 @@ import { getFactorWasmPage } from './views/factorWasm';
 import { getWasmModulesPage } from './views/wasmModules';
 import { getFileDepsPage } from './views/fileDeps';
 import { getCheeseSearchPage } from './views/cheeseSearch';
-import { getWorkflowPage, type WorkflowSummary, type WorkflowStep } from './views/workflow';
+import { getWorkflowPage, type WorkflowSummary, type WorkflowStep, type WorkflowHierarchyLink } from './views/workflow';
 import { getWfBrowserPage, type WfBrowserRef, type WfBrowserWorkflowSummary } from './views/wfBrowser';
 import { mergeWasmModuleConfig, isKnownWasmModuleId, isWasmModuleEnabled, type WasmModuleStartupRow } from './utils/wasmModuleConfig';
 import { findWasmModule } from './data/wasmModuleRegistry';
@@ -259,6 +259,7 @@ export const STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
   { name: 'cheese_fr', migration: '0107', description: 'フランスチーズの名称・読み仮名・原材料・生産者・製法・固さ・備考・食材ペアリングの一覧(参照専用マスタデータ)', syncPolicy: 'manual' },
   { name: 'workflow_registry', migration: '0109', description: '/workflow/NNNNページで一覧表示するワークフロー(内部でAPI問い合わせを行うアプリ)の通し番号・タイトル・遷移先パス', syncPolicy: 'manual' },
   { name: 'workflow_steps', migration: '0109', description: 'workflow_registryの各ワークフローについて、処理段階ごとにどのAPIへ問い合わせが行われるかを上から下の順序で記録', syncPolicy: 'manual' },
+  { name: 'workflow_hierarchy', migration: '0110', description: 'workflow_registryのフラットな通し番号を維持したまま、ワークフロー同士の分類上の親子関係のみを別テーブルで管理する(/workflowページの構造化表示切替用)', syncPolicy: 'manual' },
 ];
 
 const REQUIRED_STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
@@ -1562,6 +1563,12 @@ CREATE TABLE IF NOT EXISTS workflow_steps (
   note TEXT
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_workflow_steps_order ON workflow_steps(workflow_no, step_order);`,
+  '0110': `CREATE TABLE IF NOT EXISTS workflow_hierarchy (
+  child_workflow_no TEXT PRIMARY KEY,
+  parent_workflow_no TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_workflow_hierarchy_parent ON workflow_hierarchy(parent_workflow_no);`,
 };
 
 async function ensureGroupTable(db: D1Database): Promise<void> {
@@ -1792,6 +1799,7 @@ export const TABLE_COLUMN_KEYS: Record<string, ColumnKeyInfo> = {
   cheese_fr: { id: 'pk', seq_no: 'uk', name_fr: 'idx' },
   workflow_registry: { workflow_no: 'pk' },
   workflow_steps: { id: 'pk', workflow_no: 'fk+idx' },
+  workflow_hierarchy: { child_workflow_no: 'pk+fk', parent_workflow_no: 'fk+idx' },
 };
 
 export function getColumnKeyType(tableName: string, columnName: string): ColumnKeyType {
@@ -1904,6 +1912,7 @@ export const TABLE_GROUP_MAP: Record<string, string> = {
   cheese_fr: 'system',
   workflow_registry: 'system',
   workflow_steps: 'system',
+  workflow_hierarchy: 'system',
 };
 
 async function recordAiSummaryLinkAccess(
@@ -2098,6 +2107,7 @@ export const COLUMN_FK_TARGETS: Record<string, Record<string, string>> = {
   // /workflow/NNNN ページ
   // ========================================================================
   workflow_steps: { workflow_no: 'workflow_registry' },
+  workflow_hierarchy: { child_workflow_no: 'workflow_registry', parent_workflow_no: 'workflow_registry' },
 };
 
 /**
@@ -9339,6 +9349,15 @@ async function loadWorkflowSteps(db: D1Database, workflowNo: string): Promise<Wo
   return rows.results ?? [];
 }
 
+// workflow_registryのフラットな通し番号は維持したまま、分類上の親子関係のみを
+// workflow_hierarchyで管理する。/workflowページのサイドバー構造化表示切替用。
+async function loadWorkflowHierarchy(db: D1Database): Promise<WorkflowHierarchyLink[]> {
+  const rows = await db.prepare(
+    'SELECT parent_workflow_no, child_workflow_no FROM workflow_hierarchy ORDER BY parent_workflow_no ASC, child_workflow_no ASC'
+  ).all<WorkflowHierarchyLink>();
+  return rows.results ?? [];
+}
+
 // /workflow/NNNN で参照される4桁ゼロ埋めの通し番号(0001〜9999)に正規化する。
 // 数値以外・範囲外は null を返し、呼び出し元で404扱いにする。
 export function normalizeWorkflowNo(raw: string): string | null {
@@ -9350,22 +9369,24 @@ export function normalizeWorkflowNo(raw: string): string | null {
 app.get('/workflow', authMiddleware, async (c) => {
   const user = c.get('user');
   const workflows = c.env.DB ? await loadWorkflowSummaries(c.env.DB) : [];
-  return c.html(getWorkflowPage(user.sub, workflows, null));
+  const hierarchy = c.env.DB ? await loadWorkflowHierarchy(c.env.DB) : [];
+  return c.html(getWorkflowPage(user.sub, workflows, null, hierarchy));
 });
 
 app.get('/workflow/:no', authMiddleware, async (c) => {
   const user = c.get('user');
   const workflowNo = normalizeWorkflowNo(c.req.param('no'));
   const workflows = c.env.DB ? await loadWorkflowSummaries(c.env.DB) : [];
+  const hierarchy = c.env.DB ? await loadWorkflowHierarchy(c.env.DB) : [];
   if (!workflowNo || !c.env.DB) {
-    return c.html(getWorkflowPage(user.sub, workflows, null));
+    return c.html(getWorkflowPage(user.sub, workflows, null, hierarchy));
   }
   const workflow = workflows.find((w) => w.workflow_no === workflowNo);
   if (!workflow) {
-    return c.html(getWorkflowPage(user.sub, workflows, null));
+    return c.html(getWorkflowPage(user.sub, workflows, null, hierarchy));
   }
   const steps = await loadWorkflowSteps(c.env.DB, workflowNo);
-  return c.html(getWorkflowPage(user.sub, workflows, { workflow, steps }));
+  return c.html(getWorkflowPage(user.sub, workflows, { workflow, steps }, hierarchy));
 });
 
 app.get('/api/workflow', authMiddleware, async (c) => {

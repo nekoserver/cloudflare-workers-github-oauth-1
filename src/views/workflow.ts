@@ -16,6 +16,11 @@ export type WorkflowStep = {
   note: string | null;
 };
 
+export type WorkflowHierarchyLink = {
+  parent_workflow_no: string;
+  child_workflow_no: string;
+};
+
 const METHOD_COLORS: Record<string, string> = {
   GET: '#1a7f37',
   POST: '#0969da',
@@ -24,17 +29,57 @@ const METHOD_COLORS: Record<string, string> = {
   DELETE: '#cf222e',
 };
 
-function renderSidebar(workflows: WorkflowSummary[], activeNo: string | null): string {
-  if (workflows.length === 0) {
-    return `<div class="wf-empty-sidebar">登録済みワークフローはありません</div>`;
-  }
-  return workflows.map((w) => {
-    const active = w.workflow_no === activeNo ? ' active' : '';
-    return `<a class="wf-nav-item${active}" href="${escapeHtml(w.workflow_no)}" data-wf-no="${escapeHtml(w.workflow_no)}">
+function renderNavItem(w: WorkflowSummary, activeNo: string | null, depth = 0): string {
+  const active = w.workflow_no === activeNo ? ' active' : '';
+  const indentAttr = depth > 0 ? ` style="padding-left:${16 + depth * 18}px"` : '';
+  return `<a class="wf-nav-item${active}" href="${escapeHtml(w.workflow_no)}" data-wf-no="${escapeHtml(w.workflow_no)}"${indentAttr}>
       <span class="wf-nav-no">${escapeHtml(w.workflow_no)}</span>
       <span class="wf-nav-title">${escapeHtml(w.title)}</span>
     </a>`;
-  }).join('');
+}
+
+// フラット表示(通し番号順の単純な一覧)。
+function renderSidebarFlat(workflows: WorkflowSummary[], activeNo: string | null): string {
+  if (workflows.length === 0) {
+    return `<div class="wf-empty-sidebar">登録済みワークフローはありません</div>`;
+  }
+  return workflows.map((w) => renderNavItem(w, activeNo)).join('');
+}
+
+// 構造化表示(workflow_hierarchyの親子関係にもとづき、子ワークフローを
+// 親の直下にインデントして表示する)。workflow_registry側の通し番号(採番)は
+// 一切変更せず、あくまで表示上のグルーピングのみを行う。
+function renderSidebarStructured(
+  workflows: WorkflowSummary[],
+  activeNo: string | null,
+  hierarchy: WorkflowHierarchyLink[]
+): string {
+  if (workflows.length === 0) {
+    return `<div class="wf-empty-sidebar">登録済みワークフローはありません</div>`;
+  }
+  const byNo = new Map(workflows.map((w) => [w.workflow_no, w]));
+  const childrenByParent = new Map<string, string[]>();
+  const childNos = new Set<string>();
+  for (const link of hierarchy) {
+    if (!byNo.has(link.child_workflow_no) || !byNo.has(link.parent_workflow_no)) continue;
+    if (link.child_workflow_no === link.parent_workflow_no) continue;
+    childNos.add(link.child_workflow_no);
+    const list = childrenByParent.get(link.parent_workflow_no) ?? [];
+    list.push(link.child_workflow_no);
+    childrenByParent.set(link.parent_workflow_no, list);
+  }
+  function renderWithChildren(w: WorkflowSummary, depth: number): string {
+    const childrenHtml = (childrenByParent.get(w.workflow_no) ?? [])
+      .map((no) => byNo.get(no))
+      .filter((cw): cw is WorkflowSummary => Boolean(cw))
+      .map((cw) => renderWithChildren(cw, depth + 1))
+      .join('');
+    return renderNavItem(w, activeNo, depth) + childrenHtml;
+  }
+  return workflows
+    .filter((w) => !childNos.has(w.workflow_no))
+    .map((w) => renderWithChildren(w, 0))
+    .join('');
 }
 
 function renderSteps(steps: WorkflowStep[]): string {
@@ -61,7 +106,8 @@ function renderSteps(steps: WorkflowStep[]): string {
 export function getWorkflowPage(
   username: string,
   workflows: WorkflowSummary[],
-  selected?: { workflow: WorkflowSummary; steps: WorkflowStep[] } | null
+  selected?: { workflow: WorkflowSummary; steps: WorkflowStep[] } | null,
+  hierarchy: WorkflowHierarchyLink[] = []
 ): string {
   const activeNo = selected ? selected.workflow.workflow_no : null;
 
@@ -142,7 +188,17 @@ export function getWorkflowPage(
       color: var(--text-secondary); font-size: 13px; line-height: 1; padding: 4px 7px; flex-shrink: 0;
     }
     .wf-sidebar-toggle:hover { background: var(--bg-secondary); color: var(--text-primary); }
+    .wf-view-toggle {
+      background: none; border: 1px solid var(--border-color); border-radius: 6px; cursor: pointer;
+      color: var(--text-secondary); font-size: 11px; line-height: 1; padding: 4px 7px; margin-left: auto; flex-shrink: 0;
+      white-space: nowrap;
+    }
+    .wf-view-toggle:hover { background: var(--bg-secondary); color: var(--text-primary); }
+    .wf-view-toggle[aria-pressed="true"] { background: var(--bg-secondary); border-color: var(--accent-color, #667eea); color: var(--text-primary); }
+    .wf-hidden { display: none !important; }
     .wf-layout.wf-sidebar-collapsed .wf-sidebar-title,
+    .wf-layout.wf-sidebar-collapsed .wf-view-toggle,
+    .wf-layout.wf-sidebar-collapsed .wf-sidebar-list,
     .wf-layout.wf-sidebar-collapsed .wf-nav-item,
     .wf-layout.wf-sidebar-collapsed .wf-empty-sidebar { display: none; }
     .wf-main { flex: 1; padding: 28px 32px; max-width: 900px; }
@@ -184,8 +240,10 @@ export function getWorkflowPage(
       <div class="wf-sidebar-header">
         <button type="button" id="wfSidebarToggle" class="wf-sidebar-toggle" title="サイドパネルを開閉" aria-label="サイドパネルを開閉">☰</button>
         <div class="wf-sidebar-title">ワークフロー一覧</div>
+        <button type="button" id="wfViewModeToggle" class="wf-view-toggle" title="表示切替(フラット/構造化)" aria-pressed="false">📋 フラット</button>
       </div>
-      ${renderSidebar(workflows, activeNo)}
+      <div class="wf-sidebar-list" id="wfSidebarFlat">${renderSidebarFlat(workflows, activeNo)}</div>
+      <div class="wf-sidebar-list wf-hidden" id="wfSidebarStructured">${renderSidebarStructured(workflows, activeNo, hierarchy)}</div>
     </aside>
     <main class="wf-main" id="wfMain">
       ${mainContent}
@@ -205,6 +263,25 @@ export function getWorkflowPage(
         var collapsed = !layout.classList.contains('wf-sidebar-collapsed');
         applyState(collapsed);
         localStorage.setItem(STORAGE_KEY, collapsed ? '1' : '0');
+      });
+    })();
+
+    (function() {
+      var flatEl = document.getElementById('wfSidebarFlat');
+      var structuredEl = document.getElementById('wfSidebarStructured');
+      var viewToggleBtn = document.getElementById('wfViewModeToggle');
+      var STORAGE_KEY = 'wfSidebarViewMode';
+      function applyMode(structured) {
+        flatEl.classList.toggle('wf-hidden', structured);
+        structuredEl.classList.toggle('wf-hidden', !structured);
+        viewToggleBtn.textContent = structured ? '🗂️ 構造化' : '📋 フラット';
+        viewToggleBtn.setAttribute('aria-pressed', structured ? 'true' : 'false');
+      }
+      applyMode(localStorage.getItem(STORAGE_KEY) === 'structured');
+      viewToggleBtn.addEventListener('click', function() {
+        var switchToStructured = !flatEl.classList.contains('wf-hidden');
+        applyMode(switchToStructured);
+        localStorage.setItem(STORAGE_KEY, switchToStructured ? 'structured' : 'flat');
       });
     })();
 

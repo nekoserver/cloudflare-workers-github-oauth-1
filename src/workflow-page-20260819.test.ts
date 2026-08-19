@@ -151,6 +151,95 @@ describe('getWorkflowPage — サイドバー・処理段階の表示', () => {
   });
 });
 
+describe('getWorkflowPage — サイドバーのフラット/構造化表示切替', () => {
+  // 対象: /workflowページのサイドバー。workflow_registryの通し番号(採番)自体は
+  // フラットなまま維持しつつ、workflow_hierarchy(分類専用の親子関係テーブル)を
+  // もとに「構造化」表示(親ワークフローの直下に子ワークフローをインデント表示)を
+  // 選択できるようにするトグルボタン(#wfViewModeToggle)。
+  //
+  // 故障シナリオ:
+  //   (1) 親子関係があるのに構造化表示で子がインデント表示されない
+  //   (2) 子ワークフローが構造化表示のトップレベルにも重複して表示されてしまう
+  //   (3) フラット表示には最初から親子関係が影響してしまう(全件フラットに出ない)
+  //   (4) トグルボタンを押しても表示が切り替わらない、または状態が保存されない
+  //   (5) 親・子のどちらかが workflows に存在しない(不整合データ)場合に例外になる
+  const workflows = [
+    { workflow_no: '0002', title: 'AIチャット送信', page_path: '/aichat', summary: null },
+    { workflow_no: '0012', title: 'AIチャット検索プレビュー', page_path: '/aichat', summary: null },
+    { workflow_no: '0001', title: 'WASMモジュール管理', page_path: '/wasm-modules', summary: null },
+  ];
+  const hierarchy = [{ parent_workflow_no: '0002', child_workflow_no: '0012' }];
+
+  it('フラット表示(#wfSidebarFlat)には親子関係に関係なく全件がトップレベルとして並ぶ', () => {
+    const html = getWorkflowPage('testuser', workflows, null, hierarchy);
+    const flatBlock = html.slice(html.indexOf('id="wfSidebarFlat"'), html.indexOf('id="wfSidebarStructured"'));
+    expect(flatBlock).toContain('href="0002"');
+    expect(flatBlock).toContain('href="0012"');
+    expect(flatBlock).toContain('href="0001"');
+  });
+
+  it('構造化表示(#wfSidebarStructured)では子ワークフローが親の直下にインデントされ、トップレベルには重複しない', () => {
+    const html = getWorkflowPage('testuser', workflows, null, hierarchy);
+    const structuredBlock = html.slice(html.indexOf('id="wfSidebarStructured"'));
+    const parentIdx = structuredBlock.indexOf('href="0002"');
+    const childIdx = structuredBlock.indexOf('href="0012"');
+    expect(parentIdx).toBeGreaterThan(-1);
+    expect(childIdx).toBeGreaterThan(parentIdx);
+    // 子は親より深いインデント(padding-left)が付与される
+    const childItemStart = structuredBlock.lastIndexOf('<a class="wf-nav-item', childIdx);
+    const childItemTag = structuredBlock.slice(childItemStart, structuredBlock.indexOf('>', childItemStart));
+    expect(childItemTag).toContain('padding-left');
+  });
+
+  it('親子関係が無いワークフローは構造化表示でもインデント無しでトップレベルに表示される', () => {
+    const html = getWorkflowPage('testuser', workflows, null, hierarchy);
+    const structuredBlock = html.slice(html.indexOf('id="wfSidebarStructured"'));
+    const wasmItemStart = structuredBlock.lastIndexOf('<a class="wf-nav-item', structuredBlock.indexOf('href="0001"'));
+    const wasmItemTag = structuredBlock.slice(wasmItemStart, structuredBlock.indexOf('>', wasmItemStart));
+    expect(wasmItemTag).not.toContain('padding-left');
+  });
+
+  it('親または子がworkflowsに存在しない不整合な親子関係データがあっても例外にならない', () => {
+    const brokenHierarchy = [{ parent_workflow_no: '9999', child_workflow_no: '0001' }];
+    expect(() => getWorkflowPage('testuser', workflows, null, brokenHierarchy)).not.toThrow();
+    const html = getWorkflowPage('testuser', workflows, null, brokenHierarchy);
+    expect(html).toContain('href="0001"');
+  });
+
+  it('hierarchy省略時もエラーにならず、フラット表示と同じ内容が構造化表示にも出る', () => {
+    const html = getWorkflowPage('testuser', workflows, null);
+    const structuredBlock = html.slice(html.indexOf('id="wfSidebarStructured"'));
+    expect(structuredBlock).toContain('href="0002"');
+    expect(structuredBlock).toContain('href="0012"');
+    expect(structuredBlock).toContain('href="0001"');
+  });
+
+  it('(DOM実動作) トグルボタン(#wfViewModeToggle)を押すと表示が切り替わり、状態がlocalStorageに保存される', () => {
+    const html = getWorkflowPage('testuser', workflows, null, hierarchy);
+    document.body.innerHTML = html.slice(html.indexOf('<body>') + 6, html.lastIndexOf('<script>'));
+    const scriptSrc = html.slice(html.lastIndexOf('<script>') + 8, html.lastIndexOf('</script>'));
+    // eslint-disable-next-line no-new-func
+    new Function(scriptSrc)();
+
+    const flatEl = document.getElementById('wfSidebarFlat')!;
+    const structuredEl = document.getElementById('wfSidebarStructured')!;
+    const toggleBtn = document.getElementById('wfViewModeToggle') as HTMLButtonElement;
+
+    expect(flatEl.classList.contains('wf-hidden')).toBe(false);
+    expect(structuredEl.classList.contains('wf-hidden')).toBe(true);
+
+    toggleBtn.click();
+    expect(flatEl.classList.contains('wf-hidden')).toBe(true);
+    expect(structuredEl.classList.contains('wf-hidden')).toBe(false);
+    expect(localStorage.getItem('wfSidebarViewMode')).toBe('structured');
+
+    toggleBtn.click();
+    expect(flatEl.classList.contains('wf-hidden')).toBe(false);
+    expect(structuredEl.classList.contains('wf-hidden')).toBe(true);
+    expect(localStorage.getItem('wfSidebarViewMode')).toBe('flat');
+  });
+});
+
 describe('getWorkflowPage — サイドパネル開閉ボタン(DOM実動作)', () => {
   const workflows = [
     { workflow_no: '0001', title: 'WASMモジュール管理', page_path: '/wasm-modules', summary: null },
