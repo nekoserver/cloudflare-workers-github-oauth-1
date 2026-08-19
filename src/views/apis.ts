@@ -35,6 +35,17 @@ body{display:flex;flex-direction:column;height:100vh;height:100dvh;overflow:hidd
   scrollbar-width:none;
 }
 #topnav::-webkit-scrollbar{display:none;}
+.nav-home{
+  display:flex;align-items:center;gap:6px;flex-shrink:0;padding-right:8px;margin-right:5px;
+  border-right:1px solid var(--border);color:var(--text);font-size:12px;font-weight:700;
+}
+.nav-home-count{padding:1px 5px;border-radius:999px;background:var(--bg);color:var(--muted);font-size:10px;font-weight:600;}
+.workflow-browser-link{
+  display:inline-flex;align-items:center;gap:4px;white-space:nowrap;flex-shrink:0;
+  margin-left:auto;padding:3px 8px;border:1px solid var(--border);border-radius:4px;
+  color:var(--link);background:var(--surface);font-size:11px;font-weight:600;text-decoration:none;
+}
+.workflow-browser-link:hover{background:var(--bg);border-color:var(--link);}
 .nav-btn{
   white-space:nowrap;padding:3px 9px;border-radius:4px;border:none;
   font-size:11px;font-weight:600;cursor:pointer;background:none;color:var(--muted);
@@ -209,7 +220,7 @@ mark.hl-match{
 </head>
 <body>
 
-<div id="topnav"></div>
+<div id="topnav" aria-label="APIカテゴリーナビゲーション"></div>
 
 <div id="body-row">
   <div id="sidebar">
@@ -755,9 +766,13 @@ function collapseOtherGroups(openGi) {
 // ── top nav ──────────────────────────────────────────
 function renderTopNav() {
   const nav = document.getElementById('topnav');
-  nav.innerHTML = APIS.map((g, i) =>
+  const endpointCount = APIS.reduce((sum, g) => sum + g.endpoints.length, 0);
+  nav.innerHTML =
+    '<span class="nav-home" title="APIテスター"><span>API</span><span class="nav-home-count">' + endpointCount + ' endpoints</span></span>' +
+    APIS.map((g, i) =>
     \`<button class="nav-btn" id="navbtn-\${i}" onclick="jumpGroup(\${i})">\${esc(g.group)}</button>\`
-  ).join('');
+    ).join('') +
+    '<a class="workflow-browser-link" href="/wf-browser" title="ワークフローから参照されているAPIを確認">↗ 利用状況</a>';
 }
 
 function jumpGroup(gi) {
