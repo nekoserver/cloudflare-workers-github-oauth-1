@@ -9409,7 +9409,8 @@ async function loadWorkflowEndpointRefs(db: D1Database): Promise<Map<string, WfB
 app.get('/wf-browser', authMiddleware, async (c) => {
   const user = c.get('user');
   const refs = c.env.DB ? await loadWorkflowEndpointRefs(c.env.DB) : new Map<string, WfBrowserRef[]>();
-  return c.html(getWfBrowserPage(user.sub, refs));
+  const allWorkflows = c.env.DB ? await loadWorkflowSummaries(c.env.DB) : [];
+  return c.html(getWfBrowserPage(user.sub, refs, allWorkflows));
 });
 
 app.get('/api/file-deps', authMiddleware, async (c) => {

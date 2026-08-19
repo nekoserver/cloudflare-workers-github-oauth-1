@@ -3,6 +3,7 @@ import { getThemeCSS, getThemeInitScript, getThemeToggleCSS, getThemeToggleHTML,
 import { API_ENDPOINT_LIST } from '../data/apiEndpointList';
 
 export type WfBrowserRef = { workflow_no: string; title: string };
+export type WfBrowserWorkflowSummary = { workflow_no: string; title: string };
 
 const METHOD_COLORS: Record<string, string> = {
   GET: '#1a7f37',
@@ -24,7 +25,8 @@ function groupByGroup(): Map<string, typeof API_ENDPOINT_LIST> {
 
 export function getWfBrowserPage(
   username: string,
-  refsByKey: Map<string, WfBrowserRef[]>
+  refsByKey: Map<string, WfBrowserRef[]>,
+  allWorkflows: WfBrowserWorkflowSummary[] = []
 ): string {
   const groups = groupByGroup();
 
@@ -41,7 +43,8 @@ export function getWfBrowserPage(
       const refsHtml = referenced
         ? `<span class="wfb-refs">${refs.map((r) => `<a class="wfb-ref-badge" href="/workflow/${escapeHtml(r.workflow_no)}" title="${escapeHtml(r.title)}">${escapeHtml(r.workflow_no)}</a>`).join('')}</span>`
         : `<span class="wfb-unreferenced">未参照</span>`;
-      return `<tr class="wfb-row${referenced ? '' : ' wfb-row-gray'}">
+      const wfNos = refs.map((r) => r.workflow_no).join(' ');
+      return `<tr class="wfb-row${referenced ? '' : ' wfb-row-gray'}" data-wf-nos="${escapeHtml(wfNos)}">
         <td><span class="wfb-method" style="background:${color}22;color:${color}">${escapeHtml(e.method)}</span></td>
         <td><code class="wfb-path">${escapeHtml(e.path)}</code></td>
         <td class="wfb-desc">${escapeHtml(e.desc)}</td>
@@ -58,6 +61,10 @@ export function getWfBrowserPage(
   }).join('');
 
   const summaryHtml = `<div class="wfb-summary">全${totalCount}件中 <strong>${referencedCount}件</strong> がいずれかのワークフローから参照されています(未参照: ${totalCount - referencedCount}件)。</div>`;
+
+  const wfBadgesHtml = allWorkflows.length === 0
+    ? `<span class="wfb-badgebar-empty">登録済みワークフローはありません</span>`
+    : allWorkflows.map((w) => `<button type="button" class="wfb-wf-badge" data-wf-no="${escapeHtml(w.workflow_no)}" title="${escapeHtml(w.title)}">${escapeHtml(w.workflow_no)}</button>`).join('');
 
   return `<!DOCTYPE html>
 <html lang="ja">
@@ -105,6 +112,25 @@ export function getWfBrowserPage(
     }
     .wfb-ref-badge:hover { opacity: 0.85; }
     .wfb-unreferenced { color: var(--text-muted); font-size: 11px; }
+    .wfb-badgebar {
+      position: sticky; top: 0; z-index: 20;
+      background: var(--card-bg); border-bottom: 1px solid var(--border-color);
+      padding: 10px 20px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center;
+    }
+    .wfb-badgebar-label { font-size: 11px; font-weight: 700; color: var(--text-muted); margin-right: 4px; }
+    .wfb-badgebar-empty { font-size: 12px; color: var(--text-muted); }
+    .wfb-wf-badge {
+      font-family: ui-monospace, SFMono-Regular, monospace; font-size: 11px; cursor: pointer;
+      background: var(--bg-secondary); color: var(--text-secondary); border: 1px solid var(--border-color);
+      border-radius: 999px; padding: 4px 10px;
+    }
+    .wfb-wf-badge:hover { border-color: var(--accent-color, #667eea); }
+    .wfb-wf-badge.active { background: var(--accent-color, #667eea); color: #fff; border-color: var(--accent-color, #667eea); }
+    .wfb-row.wfb-highlight { background: #d4f5d4; }
+    @media (prefers-color-scheme: dark) {
+      :root:not([data-theme="light"]) .wfb-row.wfb-highlight { background: #1a3d1a; }
+    }
+    :root[data-theme="dark"] .wfb-row.wfb-highlight { background: #1a3d1a; }
   </style>
 </head>
 <body>
@@ -114,14 +140,47 @@ export function getWfBrowserPage(
       ${getThemeToggleHTML()}
     </div>
   </nav>
+  <div class="wfb-badgebar" id="wfbBadgebar">
+    <span class="wfb-badgebar-label">ワークフローで絞り込み:</span>
+    ${wfBadgesHtml}
+  </div>
   <main class="wfb-main">
     <div class="wfb-title">APIエンドポイント参照状況</div>
-    <div class="wfb-subtitle">/apis ページにある全エンドポイントのうち、<a href="/workflow">/workflow</a> の各ワークフローから参照されていないものをグレーアウトして表示します。</div>
+    <div class="wfb-subtitle">/apis ページにある全エンドポイントのうち、<a href="/workflow">/workflow</a> の各ワークフローから参照されていないものをグレーアウトして表示します。上部のバッジを押すと、そのワークフローが使用するエンドポイントの行が緑色にハイライトされます。</div>
     ${summaryHtml}
     ${groupsHtml}
   </main>
   <script>
     ${getThemeToggleScript()}
+    (function() {
+      var badgebar = document.getElementById('wfbBadgebar');
+      if (!badgebar) return;
+      var badges = badgebar.querySelectorAll('.wfb-wf-badge');
+      var rows = document.querySelectorAll('.wfb-row');
+      var activeNos = {};
+      function applyHighlight() {
+        var anyActive = Object.keys(activeNos).length > 0;
+        rows.forEach(function(row) {
+          if (!anyActive) { row.classList.remove('wfb-highlight'); return; }
+          var nos = (row.getAttribute('data-wf-nos') || '').split(' ').filter(Boolean);
+          var hit = nos.some(function(no) { return activeNos[no]; });
+          row.classList.toggle('wfb-highlight', hit);
+        });
+      }
+      badges.forEach(function(btn) {
+        btn.addEventListener('click', function() {
+          var no = btn.getAttribute('data-wf-no');
+          if (activeNos[no]) {
+            delete activeNos[no];
+            btn.classList.remove('active');
+          } else {
+            activeNos[no] = true;
+            btn.classList.add('active');
+          }
+          applyHighlight();
+        });
+      });
+    })();
   </script>
 </body>
 </html>`;
