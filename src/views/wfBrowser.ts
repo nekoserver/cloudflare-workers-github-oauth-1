@@ -26,7 +26,8 @@ function groupByGroup(): Map<string, typeof API_ENDPOINT_LIST> {
 export function getWfBrowserPage(
   username: string,
   refsByKey: Map<string, WfBrowserRef[]>,
-  allWorkflows: WfBrowserWorkflowSummary[] = []
+  allWorkflows: WfBrowserWorkflowSummary[] = [],
+  missingStepsWorkflows: WfBrowserWorkflowSummary[] = []
 ): string {
   const groups = groupByGroup();
 
@@ -65,6 +66,22 @@ export function getWfBrowserPage(
   const wfBadgesHtml = allWorkflows.length === 0
     ? `<span class="wfb-badgebar-empty">登録済みワークフローはありません</span>`
     : allWorkflows.map((w) => `<button type="button" class="wfb-wf-badge" data-wf-no="${escapeHtml(w.workflow_no)}" title="${escapeHtml(w.title)}">${escapeHtml(w.workflow_no)}</button>`).join('');
+
+  // workflow_registryには登録されているがworkflow_stepsが1行も無い
+  // (処理段階のINSERT文がまだ未実行の)ワークフローがあれば、ページ上部に
+  // 薄ピンク色のトーストでやんわり警告し、反映までの導線(該当ワークフロー
+  // ページへのリンク)を示す。件数が0件ならトースト自体を描画しない。
+  const missingListHtml = missingStepsWorkflows
+    .map((w) => `<a class="wfb-toast-link" href="/workflow/${escapeHtml(w.workflow_no)}">${escapeHtml(w.workflow_no)} ${escapeHtml(w.title)}</a>`)
+    .join('、');
+  const toastHtml = missingStepsWorkflows.length === 0 ? '' : `<div class="wfb-toast" id="wfbToast" role="status">
+    <span class="wfb-toast-icon">⚠️</span>
+    <span class="wfb-toast-body">
+      ワークフローは登録されていますが、処理段階(workflow_steps)がまだD1に反映されていないため、このページに表示されていません: ${missingListHtml}。
+      各ワークフローページで登録済みSQLが実行済みか確認してください。
+    </span>
+    <button type="button" class="wfb-toast-close" id="wfbToastClose" aria-label="閉じる">✕</button>
+  </div>`;
 
   return `<!DOCTYPE html>
 <html lang="ja">
@@ -131,6 +148,23 @@ export function getWfBrowserPage(
       :root:not([data-theme="light"]) .wfb-row.wfb-highlight { background: #1a3d1a; }
     }
     :root[data-theme="dark"] .wfb-row.wfb-highlight { background: #1a3d1a; }
+    .wfb-toast {
+      display: flex; align-items: flex-start; gap: 10px;
+      background: #fde2e9; color: #7a2e42; border: 1px solid #f5b8cb; border-radius: 8px;
+      padding: 12px 14px; margin: 14px 20px 0; font-size: 12px; line-height: 1.7;
+    }
+    :root[data-theme="dark"] .wfb-toast { background: #3a1f28; color: #f3b8cc; border-color: #6b3348; }
+    @media (prefers-color-scheme: dark) {
+      :root:not([data-theme="light"]) .wfb-toast { background: #3a1f28; color: #f3b8cc; border-color: #6b3348; }
+    }
+    .wfb-toast-icon { flex-shrink: 0; }
+    .wfb-toast-body { flex: 1; }
+    .wfb-toast-link { color: inherit; text-decoration: underline; font-weight: 600; }
+    .wfb-toast-close {
+      flex-shrink: 0; background: none; border: none; cursor: pointer; color: inherit;
+      font-size: 13px; line-height: 1; padding: 2px 4px; opacity: 0.7;
+    }
+    .wfb-toast-close:hover { opacity: 1; }
   </style>
 </head>
 <body>
@@ -144,6 +178,7 @@ export function getWfBrowserPage(
     <span class="wfb-badgebar-label">ワークフローで絞り込み:</span>
     ${wfBadgesHtml}
   </div>
+  ${toastHtml}
   <main class="wfb-main">
     <div class="wfb-title">APIエンドポイント参照状況</div>
     <div class="wfb-subtitle">/apis ページにある全エンドポイントのうち、<a href="/workflow">/workflow</a> の各ワークフローから参照されていないものをグレーアウトして表示します。上部のバッジを押すと、そのワークフローが使用するエンドポイントの行が緑色にハイライトされます。</div>
@@ -179,6 +214,14 @@ export function getWfBrowserPage(
           }
           applyHighlight();
         });
+      });
+    })();
+    (function() {
+      var closeBtn = document.getElementById('wfbToastClose');
+      if (!closeBtn) return;
+      closeBtn.addEventListener('click', function() {
+        var toast = document.getElementById('wfbToast');
+        if (toast) toast.remove();
       });
     })();
   </script>

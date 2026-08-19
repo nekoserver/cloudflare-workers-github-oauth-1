@@ -66,7 +66,7 @@ import { getWasmModulesPage } from './views/wasmModules';
 import { getFileDepsPage } from './views/fileDeps';
 import { getCheeseSearchPage } from './views/cheeseSearch';
 import { getWorkflowPage, type WorkflowSummary, type WorkflowStep } from './views/workflow';
-import { getWfBrowserPage, type WfBrowserRef } from './views/wfBrowser';
+import { getWfBrowserPage, type WfBrowserRef, type WfBrowserWorkflowSummary } from './views/wfBrowser';
 import { mergeWasmModuleConfig, isKnownWasmModuleId, isWasmModuleEnabled, type WasmModuleStartupRow } from './utils/wasmModuleConfig';
 import { findWasmModule } from './data/wasmModuleRegistry';
 import { WASM_MODULES_REPO_FULL_NAME, fetchLatestCommitDateForPath, fetchFileContent } from './utils/wasmModuleSource';
@@ -9406,11 +9406,27 @@ async function loadWorkflowEndpointRefs(db: D1Database): Promise<Map<string, WfB
   return map;
 }
 
+// workflow_registryには登録済みだが、workflow_stepsに1行も無いワークフロー
+// (SQLのINSERT文がworkflow_registry分しか実行されていない等)を検出する。
+// このページに「ワークフローを登録したのに反映されていない」異常として
+// 表示するための診断用クエリ。
+async function loadWorkflowsMissingSteps(db: D1Database): Promise<WfBrowserWorkflowSummary[]> {
+  const rows = await db.prepare(
+    `SELECT w.workflow_no AS workflow_no, w.title AS title
+     FROM workflow_registry w
+     LEFT JOIN workflow_steps s ON s.workflow_no = w.workflow_no
+     WHERE s.workflow_no IS NULL
+     ORDER BY w.workflow_no ASC`
+  ).all<{ workflow_no: string; title: string }>();
+  return rows.results ?? [];
+}
+
 app.get('/wf-browser', authMiddleware, async (c) => {
   const user = c.get('user');
   const refs = c.env.DB ? await loadWorkflowEndpointRefs(c.env.DB) : new Map<string, WfBrowserRef[]>();
   const allWorkflows = c.env.DB ? await loadWorkflowSummaries(c.env.DB) : [];
-  return c.html(getWfBrowserPage(user.sub, refs, allWorkflows));
+  const missingStepsWorkflows = c.env.DB ? await loadWorkflowsMissingSteps(c.env.DB) : [];
+  return c.html(getWfBrowserPage(user.sub, refs, allWorkflows, missingStepsWorkflows));
 });
 
 app.get('/api/file-deps', authMiddleware, async (c) => {
