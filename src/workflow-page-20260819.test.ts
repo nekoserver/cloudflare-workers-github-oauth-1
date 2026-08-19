@@ -91,6 +91,23 @@ describe('getWorkflowPage — サイドバー・処理段階の表示', () => {
     expect(html).toContain('id="wfSidebarToggle"');
     expect(html).toContain('class="wf-sidebar-header"');
   });
+
+  it('PWA(display-mode:standalone)では画面右上のユーザー名を非表示にする', () => {
+    const html = getWorkflowPage('testuser', workflows, null);
+    expect(html).toContain('@media (display-mode: standalone) { .pwa-hide { display: none !important; } }');
+    expect(html).toMatch(/class="user-name pwa-hide"/);
+  });
+
+  it('viewport meta に viewport-fit=cover を指定し、ヘッダーがセーフエリア(ノッチ)分の余白を確保する', () => {
+    const html = getWorkflowPage('testuser', workflows, null);
+    expect(html).toContain('viewport-fit=cover');
+    expect(html).toContain('env(safe-area-inset-top)');
+  });
+
+  it('ヘッダー(.navbar)の縦方向paddingは他のアプリ系ページと同程度(10px)に抑える', () => {
+    const html = getWorkflowPage('testuser', workflows, null);
+    expect(html).toContain('padding: 10px 20px;');
+  });
 });
 
 describe('getWorkflowPage — サイドパネル開閉ボタン(DOM実動作)', () => {

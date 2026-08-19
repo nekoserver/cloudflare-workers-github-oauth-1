@@ -83,7 +83,7 @@ export function getWorkflowPage(
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>${selected ? escapeHtml(selected.workflow.title) + ' - ' : ''}ワークフロー - Cloudflare Workers GitHub OAuth</title>
   ${getThemeInitScript()}
   <style>
@@ -93,21 +93,29 @@ export function getWorkflowPage(
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
       background: var(--bg-primary, #f6f8fa);
-      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      height: 100dvh;
+      overflow: hidden;
     }
+    @media (display-mode: standalone) { .pwa-hide { display: none !important; } }
     .navbar {
       background: var(--navbar-bg);
       backdrop-filter: blur(10px);
       box-shadow: 0 2px 10px var(--navbar-shadow);
-      padding: 16px 32px;
+      padding: 10px 20px;
+      padding-top: calc(10px + env(safe-area-inset-top));
       display: flex;
       justify-content: space-between;
       align-items: center;
+      flex-shrink: 0;
     }
-    .navbar-brand { font-size: 20px; font-weight: 700; color: var(--text-primary); display: flex; align-items: center; gap: 8px; }
+    .navbar-brand { font-size: 16px; font-weight: 700; color: var(--text-primary); display: flex; align-items: center; gap: 8px; }
     .user-menu { display: flex; align-items: center; gap: 12px; }
-    .user-name { font-size: 14px; color: var(--text-secondary); font-weight: 500; }
-    .wf-layout { display: flex; min-height: calc(100vh - 72px); }
+    .user-name { font-size: 12px; color: var(--text-secondary); font-weight: 500; }
+    .wf-layout { display: flex; flex: 1; min-height: 0; overflow: hidden; }
+    .wf-sidebar, .wf-main { overflow-y: auto; }
     .wf-sidebar {
       width: 260px; min-width: 260px; border-right: 1px solid var(--border-color);
       background: var(--card-bg); overflow-y: auto; padding: 12px 0;
@@ -164,7 +172,7 @@ export function getWorkflowPage(
     <div class="navbar-brand">🔀 ワークフロー</div>
     <div class="user-menu">
       ${getThemeToggleHTML()}
-      <span class="user-name">${safeUsername}</span>
+      <span class="user-name pwa-hide">${safeUsername}</span>
     </div>
   </nav>
   <div class="wf-layout" id="wfLayout">
