@@ -1,0 +1,19 @@
+{
+  "name": "ワークフロー",
+  "short_name": "ワークフロー",
+  "description": "内部でAPI問い合わせを行うアプリの処理段階を一覧・詳細表示するワークフローページ",
+  "start_url": "/workflow",
+  "scope": "/workflow",
+  "display": "standalone",
+  "background_color": "#0d1117",
+  "theme_color": "#0d1117",
+  "lang": "ja",
+  "icons": [
+    {
+      "src": "/workflow-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

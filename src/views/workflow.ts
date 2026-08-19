@@ -83,10 +83,12 @@ export function getWorkflowPage(
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#0d1117">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="ワークフロー">
+  <link rel="manifest" href="/manifest-workflow.json">
   <base href="/workflow/">
   <title>${selected ? escapeHtml(selected.workflow.title) + ' - ' : ''}ワークフロー - Cloudflare Workers GitHub OAuth</title>
   ${getThemeInitScript()}
@@ -274,6 +276,14 @@ export function getWorkflowPage(
         }
       });
     })();
+
+    // Android Chromeは有効なWeb App Manifest(name/icons/start_url/display)に加え
+    // Service Workerの登録が無いと、ホーム画面追加時に本来のstandalone表示ではなく
+    // アドレスバー付きの簡易ショートカット表示になることがある。/workflow専用の
+    // Service Worker(webgl系ページと共有しない)を登録して回避する。
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw-workflow.js', { scope: '/workflow' }).catch(function() {});
+    }
   </script>
 </body>
 </html>`;

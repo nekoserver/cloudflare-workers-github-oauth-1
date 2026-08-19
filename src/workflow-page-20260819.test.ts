@@ -128,15 +128,26 @@ describe('getWorkflowPage — サイドバー・処理段階の表示', () => {
     expect(html).toContain('<meta name="apple-mobile-web-app-title" content="ワークフロー">');
   });
 
-  it('/manifest.json(start_url=/webgl-sphereの別アプリ用)へはlinkしない', () => {
-    // 故障シナリオ(2): このmanifest.jsonはWebGL地球儀アプリ専用
+  it('共有の/manifest.json(start_url=/webgl-sphereの別アプリ用)へはlinkせず、専用のmanifest-workflow.jsonへlinkする', () => {
+    // 故障シナリオ(2): /manifest.jsonはWebGL地球儀アプリ専用
     // (name/start_urlが地球儀向け)で、ワークフローページからも
     // <link rel="manifest">してしまうと、ワークフローページをホーム画面に
     // 追加した際にアイコン・起動URLが地球儀アプリのものになってしまう。
-    // 同一オリジン・相対パスのページ遷移である限りstandalone表示自体は
-    // apple-mobile-web-app-capableだけで維持されるため、manifestは不要。
+    // 一方、Android ChromeはWeb App Manifest(name/icons/start_url/display)が
+    // 無いページをホーム画面に追加すると、standalone表示ではなく
+    // アドレスバー付きの簡易ショートカットとして開いてしまうため、
+    // manifestを完全に省くのではなく/workflow専用のmanifestを用意して参照する。
     const html = getWorkflowPage('testuser', workflows, null);
-    expect(html).not.toContain('rel="manifest"');
+    expect(html).toContain('<link rel="manifest" href="/manifest-workflow.json">');
+    expect(html).not.toContain('href="/manifest.json"');
+  });
+
+  it('/workflow専用のService Worker(sw-workflow.js)をscope指定で登録する', () => {
+    // 故障シナリオ(3): Android ChromeはWeb App Manifestに加えService Workerの
+    // 登録が無いと、ホーム画面追加時に真のstandalone表示にならないことがある。
+    // webgl系ページと共有しない専用のService Workerを/workflowスコープで登録する。
+    const html = getWorkflowPage('testuser', workflows, null);
+    expect(html).toContain("navigator.serviceWorker.register('/sw-workflow.js', { scope: '/workflow' })");
   });
 });
 
