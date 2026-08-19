@@ -111,8 +111,10 @@ export function getWorkflowPage(
     .wf-sidebar {
       width: 260px; min-width: 260px; border-right: 1px solid var(--border-color);
       background: var(--card-bg); overflow-y: auto; padding: 12px 0;
+      transition: width .15s ease, min-width .15s ease;
     }
-    .wf-sidebar-title { font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: .04em; padding: 6px 16px 10px; }
+    .wf-layout.wf-sidebar-collapsed .wf-sidebar { width: 44px; min-width: 44px; overflow: hidden; }
+    .wf-sidebar-title { font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: .04em; padding: 6px 0 6px 4px; }
     .wf-nav-item {
       display: flex; align-items: baseline; gap: 8px; padding: 8px 16px; text-decoration: none;
       color: var(--text-secondary); font-size: 13px; border-left: 3px solid transparent;
@@ -121,6 +123,15 @@ export function getWorkflowPage(
     .wf-nav-item.active { background: var(--bg-secondary); border-left-color: var(--accent-color, #667eea); color: var(--text-primary); font-weight: 600; }
     .wf-nav-no { font-family: ui-monospace, SFMono-Regular, monospace; font-size: 11px; color: var(--text-muted); flex-shrink: 0; }
     .wf-empty-sidebar { padding: 16px; font-size: 13px; color: var(--text-muted); }
+    .wf-sidebar-header { display: flex; align-items: center; gap: 6px; padding: 0 8px 10px; }
+    .wf-sidebar-toggle {
+      background: none; border: 1px solid var(--border-color); border-radius: 6px; cursor: pointer;
+      color: var(--text-secondary); font-size: 13px; line-height: 1; padding: 4px 7px; flex-shrink: 0;
+    }
+    .wf-sidebar-toggle:hover { background: var(--bg-secondary); color: var(--text-primary); }
+    .wf-layout.wf-sidebar-collapsed .wf-sidebar-title,
+    .wf-layout.wf-sidebar-collapsed .wf-nav-item,
+    .wf-layout.wf-sidebar-collapsed .wf-empty-sidebar { display: none; }
     .wf-main { flex: 1; padding: 28px 32px; max-width: 900px; }
     .wf-placeholder { color: var(--text-muted); font-size: 14px; line-height: 1.8; }
     .wf-placeholder-sub { margin-top: 6px; font-size: 12px; }
@@ -156,9 +167,12 @@ export function getWorkflowPage(
       <span class="user-name">${safeUsername}</span>
     </div>
   </nav>
-  <div class="wf-layout">
+  <div class="wf-layout" id="wfLayout">
     <aside class="wf-sidebar">
-      <div class="wf-sidebar-title">ワークフロー一覧</div>
+      <div class="wf-sidebar-header">
+        <button type="button" id="wfSidebarToggle" class="wf-sidebar-toggle" title="サイドパネルを開閉" aria-label="サイドパネルを開閉">☰</button>
+        <div class="wf-sidebar-title">ワークフロー一覧</div>
+      </div>
       ${renderSidebar(workflows, activeNo)}
     </aside>
     <main class="wf-main">
@@ -167,6 +181,20 @@ export function getWorkflowPage(
   </div>
   <script>
     ${getThemeToggleScript()}
+    (function() {
+      var layout = document.getElementById('wfLayout');
+      var toggleBtn = document.getElementById('wfSidebarToggle');
+      var STORAGE_KEY = 'wfSidebarCollapsed';
+      function applyState(collapsed) {
+        layout.classList.toggle('wf-sidebar-collapsed', collapsed);
+      }
+      applyState(localStorage.getItem(STORAGE_KEY) === '1');
+      toggleBtn.addEventListener('click', function() {
+        var collapsed = !layout.classList.contains('wf-sidebar-collapsed');
+        applyState(collapsed);
+        localStorage.setItem(STORAGE_KEY, collapsed ? '1' : '0');
+      });
+    })();
   </script>
 </body>
 </html>`;
