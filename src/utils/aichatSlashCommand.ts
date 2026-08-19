@@ -27,7 +27,7 @@ export function formatJstMonthCalendar(now: Date): string {
   const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate();
 
   const header = '| 日 | 月 | 火 | 水 | 木 | 金 | 土 |';
-  const separator = '|---|---|---|---|---|---|---|';
+  const separator = '|---:|---:|---:|---:|---:|---:|---:|';
   const rows: string[] = [];
   let cells: string[] = new Array(firstWeekday).fill('');
   for (let d = 1; d <= daysInMonth; d++) {
@@ -42,7 +42,10 @@ export function formatJstMonthCalendar(now: Date): string {
     rows.push('| ' + cells.join(' | ') + ' |');
   }
 
-  return [`${year}年${month}月`, header, separator, ...rows].join('\n');
+  const title = `| ${year}年${month}月 |`;
+  const titleSeparator = '|:---:|';
+
+  return [title, titleSeparator, header, separator, ...rows].join('\n');
 }
 
 

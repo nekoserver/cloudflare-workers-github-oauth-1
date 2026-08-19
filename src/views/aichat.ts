@@ -6282,10 +6282,28 @@ export function getAiChatPage(user: {
       };
     }
 
+    // 対象: /neko cal の出力バブルのみ。APIキー経由のプレーンテキスト応答には
+    // 影響しない、ブラウザUI限定の見た目調整(今日のマスの背景色)。
+    // タイトル行が「| YYYY年M月 |」+「|:---:|」の中央寄せ1列テーブルという
+    // /neko calの出力形状(formatJstMonthCalendar)でのみ発火させ、他の
+    // /nekoサブコマンドやAI生成テーブルには影響させない。
+    function highlightNekoCalToday(el, text) {
+      var lines = String(text).split('\\n');
+      if (lines.length < 2) return;
+      if (!/^\\|\\s*\\d{4}年\\d{1,2}月\\s*\\|$/.test(lines[0])) return;
+      if (lines[1].trim() !== '|:---:|') return;
+      var strongEls = el.querySelectorAll('table strong');
+      for (var i = 0; i < strongEls.length; i++) {
+        var td = strongEls[i].closest('td');
+        if (td) td.style.backgroundColor = '#d4f5d4';
+      }
+    }
+
     function buildAssistantBubble(text, model, isFallback, usage, isLocalCommand, nekoResults) {
       var el = document.createElement('div');
       el.className = 'chat-bubble assistant preview-area';
       el.innerHTML = parseMd(text);
+      if (isLocalCommand) highlightNekoCalToday(el, text);
       if (isLocalCommand && nekoResults && nekoResults.length > 0) {
         var resultsRow = document.createElement('div');
         resultsRow.className = 'neko-results-link-row';
