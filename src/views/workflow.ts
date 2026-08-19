@@ -30,7 +30,7 @@ function renderSidebar(workflows: WorkflowSummary[], activeNo: string | null): s
   }
   return workflows.map((w) => {
     const active = w.workflow_no === activeNo ? ' active' : '';
-    return `<a class="wf-nav-item${active}" href="/workflow/${escapeHtml(w.workflow_no)}" data-wf-no="${escapeHtml(w.workflow_no)}">
+    return `<a class="wf-nav-item${active}" href="${escapeHtml(w.workflow_no)}" data-wf-no="${escapeHtml(w.workflow_no)}">
       <span class="wf-nav-no">${escapeHtml(w.workflow_no)}</span>
       <span class="wf-nav-title">${escapeHtml(w.title)}</span>
     </a>`;
@@ -63,7 +63,6 @@ export function getWorkflowPage(
   workflows: WorkflowSummary[],
   selected?: { workflow: WorkflowSummary; steps: WorkflowStep[] } | null
 ): string {
-  const safeUsername = escapeHtml(username);
   const activeNo = selected ? selected.workflow.workflow_no : null;
 
   const mainContent = selected
@@ -88,6 +87,7 @@ export function getWorkflowPage(
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="ワークフロー">
+  <base href="/workflow/">
   <title>${selected ? escapeHtml(selected.workflow.title) + ' - ' : ''}ワークフロー - Cloudflare Workers GitHub OAuth</title>
   ${getThemeInitScript()}
   <style>
@@ -117,7 +117,6 @@ export function getWorkflowPage(
     }
     .navbar-brand { font-size: 16px; font-weight: 700; color: var(--text-primary); display: flex; align-items: center; gap: 8px; }
     .user-menu { display: flex; align-items: center; gap: 12px; }
-    .user-name { font-size: 12px; color: var(--text-secondary); font-weight: 500; }
     .wf-layout { display: flex; flex: 1; min-height: 0; overflow: hidden; }
     .wf-sidebar, .wf-main { overflow-y: auto; }
     .wf-sidebar {
@@ -176,7 +175,6 @@ export function getWorkflowPage(
     <div class="navbar-brand">🔀 ワークフロー</div>
     <div class="user-menu">
       ${getThemeToggleHTML()}
-      <span class="user-name pwa-hide">${safeUsername}</span>
     </div>
   </nav>
   <div class="wf-layout" id="wfLayout">

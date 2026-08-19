@@ -42,11 +42,15 @@ describe('getWorkflowPage — サイドバー・処理段階の表示', () => {
     { workflow_no: '0002', title: 'AIチャット送信', page_path: '/aichat', summary: null },
   ];
 
-  it('サイドバーに登録済み全ワークフローへのリンクを表示する', () => {
+  it('サイドバーに登録済み全ワークフローへのリンクを、<base>基準の相対パスで表示する', () => {
+    // 対象: PWAで絶対パス(/workflow/xxxx)のリンクを踏むと環境によっては
+    // アドレスバー付きの画面に切り替わることがあるため、<base href="/workflow/">
+    // を基準にした相対パス(番号のみ)でリンクする。
     const html = getWorkflowPage('testuser', workflows, null);
-    expect(html).toContain('/workflow/0001');
+    expect(html).toContain('<base href="/workflow/">');
+    expect(html).toContain('href="0001"');
     expect(html).toContain('WASMモジュール管理');
-    expect(html).toContain('/workflow/0002');
+    expect(html).toContain('href="0002"');
     expect(html).toContain('AIチャット送信');
   });
 
@@ -92,10 +96,13 @@ describe('getWorkflowPage — サイドバー・処理段階の表示', () => {
     expect(html).toContain('class="wf-sidebar-header"');
   });
 
-  it('PWA(display-mode:standalone)では画面右上のユーザー名を非表示にする', () => {
+  it('画面右上にログインユーザー名(user-name)を一切表示しない', () => {
+    // 対象: PWA時だけCSSで隠す方式は「standaloneと判定されない環境では
+    // 表示されたままになる」不具合を再発させたため、条件分岐なしで
+    // そもそもマークアップに含めない。
     const html = getWorkflowPage('testuser', workflows, null);
-    expect(html).toContain('@media (display-mode: standalone) { .pwa-hide { display: none !important; } }');
-    expect(html).toMatch(/class="user-name pwa-hide"/);
+    expect(html).not.toContain('user-name');
+    expect(html).not.toContain('testuser');
   });
 
   it('viewport meta に viewport-fit=cover を指定し、ヘッダーがセーフエリア(ノッチ)分の余白を確保する', () => {
