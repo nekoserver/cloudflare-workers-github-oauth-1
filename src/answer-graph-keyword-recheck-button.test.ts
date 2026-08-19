@@ -54,39 +54,39 @@ async function setupRecheckTest(opts: {
     const body = init && init.body ? JSON.parse(init.body) : null;
     if (u.includes('/api/aichat/all-keywords')) {
       calls.push({ kind: 'all-keywords', url: u, body });
-      return Promise.resolve({ json: () => Promise.resolve({
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({
         keywords: Object.keys(allKeywordCounts).map((kw) => ({ keyword: kw, cnt: allKeywordCounts[kw] })),
       }) });
     }
     if (u.includes('/api/aichat/answer-keywords')) {
       calls.push({ kind: 'answer-keywords', url: u, body });
-      return Promise.resolve({ json: () => Promise.resolve({
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({
         shareId: 's1', keywords: answerKeywords,
         keywordOccurrences: answerKeywords.map((kw) => ({ keyword: kw, count: allKeywordCounts[kw] || 0, classified: false, categoryColor: null })),
       }) });
     }
     if (u.includes('/api/aichat/shares/search')) {
       calls.push({ kind: 'search', url: u, body });
-      return Promise.resolve({ json: () => Promise.resolve({ results: [] }) });
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({ results: [] }) });
     }
     if (u.includes('/api/aichat/search-log/open-modal')) {
       calls.push({ kind: 'open-modal', url: u, body });
       const reqShareIds = (body as { shareIds?: string[] } | null)?.shareIds ?? [];
-      return Promise.resolve({ json: () => Promise.resolve({
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({
         entries: reqShareIds.map((id) => ({ shareId: id, model: 'm', question: 'q', isNew: true })),
       }) });
     }
     if (u.includes('/api/aichat/search-log/approve')) {
       calls.push({ kind: 'approve', url: u, body });
-      return Promise.resolve({ json: () => Promise.resolve({ ok: true, count: 1 }) });
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({ ok: true, count: 1 }) });
     }
     if (u.includes('share-keywords')) {
-      return Promise.resolve({ json: () => Promise.resolve({ keywords: [] }) });
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({ keywords: [] }) });
     }
     if (u.includes('/api/aichat/shares/')) {
-      return Promise.resolve({ json: () => Promise.resolve(shareResponse) });
+      return Promise.resolve({ ok: true, json: () => Promise.resolve(shareResponse) });
     }
-    return Promise.resolve({ json: () => Promise.resolve({}) });
+    return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
   });
   vi.stubGlobal('fetch', fetchMock);
   vi.stubGlobal('alert', vi.fn());
@@ -192,9 +192,9 @@ describe('回答モーダル(DOM実動作): 「キーワード一覧」右の「
     const fetchMock = vi.fn((url: string) => {
       const u = String(url);
       if (u.includes('/api/aichat/answer-keywords')) return Promise.reject(new Error('network error'));
-      if (u.includes('share-keywords')) return Promise.resolve({ json: () => Promise.resolve({ keywords: [] }) });
-      if (u.includes('/api/aichat/shares/')) return Promise.resolve({ json: () => Promise.resolve(shareResponse) });
-      return Promise.resolve({ json: () => Promise.resolve({}) });
+      if (u.includes('share-keywords')) return Promise.resolve({ ok: true, json: () => Promise.resolve({ keywords: [] }) });
+      if (u.includes('/api/aichat/shares/')) return Promise.resolve({ ok: true, json: () => Promise.resolve(shareResponse) });
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
     });
     vi.stubGlobal('fetch', fetchMock);
     vi.stubGlobal('alert', alertMock);

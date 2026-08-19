@@ -313,6 +313,10 @@ input[type=search]:focus { border-color:var(--accent); }
 .prereq-kw-badge.kw-badge-registering {
   border-width:2px; border-color:var(--accent); background:transparent;
 }
+.prereq-modal-chip.kw-badge-register-failed,
+.prereq-kw-badge.kw-badge-register-failed {
+  border-width:2px; border-color:var(--danger); color:var(--danger); background:transparent;
+}
 .prereq-modal-foot {
   flex-shrink:0; padding:9px 16px; border-top:1px solid var(--border);
   background:var(--card); display:flex; justify-content:center;
@@ -942,6 +946,17 @@ input[type=search]:focus { border-color:var(--accent); }
   // 再利用できるよう切り出し済み)。ここではカウンタが進むたびに現在処理中の
   // バッジへ外枠(中抜き)の強調表示を移動させる進行演出と、キャッシュ更新を
   // callbackとして渡すだけにする。
+  //
+  // 根本原因の修正: 以前はbulkRegisterUnregisteredKeywordsのonItemDoneが
+  // 成功/失敗を区別せず常に呼ばれていたため、ここでも無条件にkeywordCountMap
+  // を+1してバッジを「登録済み」表示にしていた。実際にはサーバー側の
+  // 登録処理(検索ログ承認)がHTTPエラーやエラーJSONを返しても検知できず、
+  // 見た目だけ「登録完了」になるのに実データは未登録のまま、という不具合の
+  // 原因になっていた(予備知識モーダルを開き直す・サーバーへ再問い合わせする
+  // 経路で未登録として再表示される)。onItemDoneの第3引数successを見て、
+  // 失敗した項目はキャッシュを更新せず「未登録」のままにし、バッジに
+  // 失敗スタイルを付け、完了後にどのキーワードが失敗したかをユーザーへ
+  // 明示する(CLAUDE.mdルール8: 記録・通知・テストの3つを満たす)。
   function runBulkRegister() {
     // ボタン連打や多重呼び出しでループが二重に走らないようにする
     // (disabled中のボタンはブラウザがclickイベント自体を発火しないが、
@@ -952,20 +967,34 @@ input[type=search]:focus { border-color:var(--accent); }
     prereqBulkRegisterBtn.disabled = true;
     prereqBulkRegisterBtn.textContent = '登録中...';
     var keywords = items.map(function(it) { return it.keyword; });
+    var failedKeywords = [];
     bulkRegisterUnregisteredKeywords(currentAnswerModalShareId, keywords, {
       onStart: function(i) {
         if (i > 0) items[i - 1].badge.classList.remove('kw-badge-registering');
         items[i].badge.classList.add('kw-badge-registering');
       },
-      onItemDone: function(i) {
-        // 登録済み扱いへキャッシュを更新する(同一セッション内で予備知識
-        // モーダルを開き直しても未登録のまま表示され続けることを防ぐ)。
-        keywordCountMap[items[i].keyword] = (keywordCountMap[items[i].keyword] || 0) + 1;
-        items[i].badge.classList.remove('chip-unregistered');
+      onItemDone: function(i, kw, success) {
+        if (success) {
+          // 登録済み扱いへキャッシュを更新する(同一セッション内で予備知識
+          // モーダルを開き直しても未登録のまま表示され続けることを防ぐ)。
+          keywordCountMap[items[i].keyword] = (keywordCountMap[items[i].keyword] || 0) + 1;
+          items[i].badge.classList.remove('chip-unregistered');
+          items[i].badge.classList.remove('kw-badge-register-failed');
+        } else {
+          failedKeywords.push(items[i].keyword);
+          items[i].badge.classList.add('kw-badge-register-failed');
+        }
       },
     }).then(function() {
       if (items.length > 0) items[items.length - 1].badge.classList.remove('kw-badge-registering');
-      prereqBulkRegisterBtn.textContent = '登録完了';
+      prereqBulkRegisterBtn.disabled = false;
+      if (failedKeywords.length > 0) {
+        prereqBulkRegisterBtn.textContent = '一括登録';
+        alert('一部のキーワードの登録に失敗しました(' + failedKeywords.length + '件): ' + failedKeywords.join('、') + String.fromCharCode(10) + '再度「一括登録」を押すとやり直せます。');
+      } else {
+        prereqBulkRegisterBtn.disabled = true;
+        prereqBulkRegisterBtn.textContent = '登録完了';
+      }
     });
   }
 

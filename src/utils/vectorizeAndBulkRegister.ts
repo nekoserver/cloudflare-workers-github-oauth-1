@@ -54,33 +54,58 @@ export function getVectorizeAndBulkRegisterScript(): string {
     // 現れないことが多く発生しやすい)。抽出元のshareId(originShareId)を
     // 検索結果に関わらず必ず対象へ含めることで、少なくとも「このキーワードを
     // 抽出したその回答文」には確実に紐付けられるようにする。
+    // 根本原因(その2): 従来はここのfetchチェーンがどのステップも
+    // response.ok/レスポンスボディのok・errorフィールドを一切確認して
+    // いなかったため、サーバー側がHTTPエラーやエラーJSON({ok:false,error:...})
+    // を返しても例外を投げず、呼び出し元(bulkRegisterUnregisteredKeywords)からは
+    // 常に「成功した」ようにしか見えなかった。これにより「一括登録」ボタンは
+    // 全件「登録完了」と表示するのに、実際にはDBへ書き込まれていないキーワードが
+    // 残り、後で「キーワード一覧」を開き直す(=クライアント側キャッシュではなく
+    // サーバーへ再問い合わせする)と未登録のまま表示される不具合になっていた。
+    // 各ステップでHTTPステータス・エラーフィールドを検査し、失敗時は例外を
+    // 投げて呼び出し元に伝播させる(CLAUDE.mdルール8: 握りつぶすなら記録・
+    // 通知・テストの3つを満たすこと)。
     function registerKeywordViaSearchLogFlow(keyword, originShareId) {
       return fetch('/api/aichat/shares/search?q=' + encodeURIComponent(keyword), { credentials: 'same-origin' })
-        .then(function(r) { return r.json(); })
+        .then(function(r) {
+          if (!r.ok) throw new Error('キーワード検索に失敗しました(HTTP ' + r.status + ')');
+          return r.json();
+        })
         .then(function(d) {
           var shareIds = (d && d.results ? d.results : []).map(function(r) { return String(r.id); });
           if (originShareId && shareIds.indexOf(String(originShareId)) === -1) {
             shareIds.push(String(originShareId));
           }
-          if (!shareIds.length) return;
+          if (!shareIds.length) return true;
           return fetch('/api/aichat/search-log/open-modal', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             credentials: 'same-origin',
             body: JSON.stringify({ keyword: keyword, shareIds: shareIds }),
           })
-            .then(function(r) { return r.json(); })
+            .then(function(r) {
+              if (!r.ok) throw new Error('登録候補の取得に失敗しました(HTTP ' + r.status + ')');
+              return r.json();
+            })
             .then(function(d2) {
               var newIds = (d2 && d2.entries ? d2.entries : [])
                 .filter(function(e) { return e.isNew; })
                 .map(function(e) { return e.shareId; });
-              if (!newIds.length) return;
+              if (!newIds.length) return true;
               return fetch('/api/aichat/search-log/approve', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 credentials: 'same-origin',
                 body: JSON.stringify({ keyword: keyword, shareIds: newIds }),
-              });
+              })
+                .then(function(r) {
+                  if (!r.ok) throw new Error('登録の保存に失敗しました(HTTP ' + r.status + ')');
+                  return r.json();
+                })
+                .then(function(d3) {
+                  if (d3 && d3.ok === false) throw new Error(d3.error || '登録の保存に失敗しました');
+                  return true;
+                });
             });
         });
     }
@@ -91,8 +116,13 @@ export function getVectorizeAndBulkRegisterScript(): string {
     //   keywords: 未登録キーワードの文字列配列
     //   callbacks.onStart(index, keyword): 各件の処理開始時に呼ばれる
     //     (呼び出し元ページでの進捗ハイライト用)
-    //   callbacks.onItemDone(index, keyword): 各件の処理完了時(成功/失敗どちらでも)
-    //     に呼ばれる(呼び出し元ページでのキャッシュ更新・バッジ更新用)
+    //   callbacks.onItemDone(index, keyword, success): 各件の処理完了時
+    //     (成功/失敗どちらでも)に呼ばれる。successはregisterKeywordViaSearchLogFlow
+    //     が実際にサーバーへの登録まで完了できたかどうかを表す真偽値。
+    //     呼び出し元は、successがfalseの場合にキャッシュを楽観的に更新
+    //     しない(=未登録のまま扱う)こと。1件の失敗で全体のループを
+    //     止めない(既存の要件どおり)が、失敗そのものは呼び出し元へ
+    //     必ず伝える(CLAUDE.mdルール8: 握りつぶさない)。
     // 戻り値はループ完了時にresolveするPromise。
     function bulkRegisterUnregisteredKeywords(originShareId, keywords, callbacks) {
       var onStart = (callbacks && callbacks.onStart) || function() {};
@@ -102,9 +132,10 @@ export function getVectorizeAndBulkRegisterScript(): string {
         if (i >= keywords.length) return Promise.resolve();
         onStart(i, keywords[i]);
         return registerKeywordViaSearchLogFlow(keywords[i], originShareId)
-          .catch(function() {})
-          .then(function() {
-            onItemDone(i, keywords[i]);
+          .then(function() { return true; })
+          .catch(function() { return false; })
+          .then(function(success) {
+            onItemDone(i, keywords[i], success);
             i++;
             return step();
           });
