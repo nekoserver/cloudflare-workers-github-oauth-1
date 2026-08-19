@@ -108,6 +108,19 @@ describe('getWorkflowPage — サイドバー・処理段階の表示', () => {
     const html = getWorkflowPage('testuser', workflows, null);
     expect(html).toContain('padding: 10px 20px;');
   });
+
+  it('PWA用のmeta/manifestタグ(mobile-web-app-capable等)を他のPWA対応ページと同様に配置する', () => {
+    // 故障シナリオ: これらのタグが無いページはiOS Safariが「アプリのスコープ外」と
+    // 判定し、アドレスバーが表示された状態(通常のSafariタブ)で開いてしまう。
+    // PWAとしてホーム画面から起動した状態からサイドパネルのリンクで遷移した際、
+    // 遷移先ページにもこのタグ一式が無いとアドレスバーが出現する不具合になる。
+    const html = getWorkflowPage('testuser', workflows, null);
+    expect(html).toContain('<meta name="mobile-web-app-capable" content="yes">');
+    expect(html).toContain('<meta name="apple-mobile-web-app-capable" content="yes">');
+    expect(html).toContain('<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">');
+    expect(html).toContain('<meta name="apple-mobile-web-app-title" content="ワークフロー">');
+    expect(html).toContain('<link rel="manifest" href="/manifest.json">');
+  });
 });
 
 describe('getWorkflowPage — サイドパネル開閉ボタン(DOM実動作)', () => {
