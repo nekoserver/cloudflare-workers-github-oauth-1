@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { describe, it, expect } from 'vitest';
 import { normalizeWorkflowNo } from './index';
 import { getWorkflowPage } from './views/workflow';
@@ -83,5 +84,53 @@ describe('getWorkflowPage — サイドバー・処理段階の表示', () => {
   it('登録済みワークフローが0件でもエラーなく表示できる', () => {
     const html = getWorkflowPage('testuser', [], null);
     expect(html).toContain('登録済みワークフローはありません');
+  });
+
+  it('サイドパネル左上に開閉ボタン(#wfSidebarToggle)を配置する', () => {
+    const html = getWorkflowPage('testuser', workflows, null);
+    expect(html).toContain('id="wfSidebarToggle"');
+    expect(html).toContain('class="wf-sidebar-header"');
+  });
+});
+
+describe('getWorkflowPage — サイドパネル開閉ボタン(DOM実動作)', () => {
+  const workflows = [
+    { workflow_no: '0001', title: 'WASMモジュール管理', page_path: '/wasm-modules', summary: null },
+  ];
+
+  it('開閉ボタンを押すたびに #wfLayout の wf-sidebar-collapsed クラスが切り替わる', async () => {
+    const html = getWorkflowPage('testuser', workflows, null);
+    document.body.innerHTML = html.slice(html.indexOf('<body>') + 6, html.lastIndexOf('<script>'));
+    const scriptSrc = html.slice(html.lastIndexOf('<script>') + 8, html.lastIndexOf('</script>'));
+    // eslint-disable-next-line no-new-func
+    new Function(scriptSrc)();
+
+    const layout = document.getElementById('wfLayout') as HTMLElement;
+    const btn = document.getElementById('wfSidebarToggle') as HTMLButtonElement;
+    expect(layout.classList.contains('wf-sidebar-collapsed')).toBe(false);
+
+    btn.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    expect(layout.classList.contains('wf-sidebar-collapsed')).toBe(true);
+
+    btn.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    expect(layout.classList.contains('wf-sidebar-collapsed')).toBe(false);
+  });
+
+  it('開閉状態はlocalStorageに保存され、再読み込み後も維持される', async () => {
+    const html = getWorkflowPage('testuser', workflows, null);
+    document.body.innerHTML = html.slice(html.indexOf('<body>') + 6, html.lastIndexOf('<script>'));
+    const scriptSrc = html.slice(html.lastIndexOf('<script>') + 8, html.lastIndexOf('</script>'));
+    // eslint-disable-next-line no-new-func
+    new Function(scriptSrc)();
+
+    const btn = document.getElementById('wfSidebarToggle') as HTMLButtonElement;
+    btn.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    expect(localStorage.getItem('wfSidebarCollapsed')).toBe('1');
+
+    document.body.innerHTML = html.slice(html.indexOf('<body>') + 6, html.lastIndexOf('<script>'));
+    // eslint-disable-next-line no-new-func
+    new Function(scriptSrc)();
+    const layout2 = document.getElementById('wfLayout') as HTMLElement;
+    expect(layout2.classList.contains('wf-sidebar-collapsed')).toBe(true);
   });
 });
