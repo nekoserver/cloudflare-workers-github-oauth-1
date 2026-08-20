@@ -5,17 +5,23 @@ import { getHeritageJourneyPage } from './views/heritageJourney';
 // 対象: /heritage-journeyページの「宿泊地の推奨プラン」セクション見出し右端の
 // 検索窓(#heritage-add-search)。インクリメンタルサーチで世界遺産名を検索し、
 // 結果を最上位モーダル(#heritage-add-modal-overlay)内の表(#heritage-add-results-body)に
-// 積み上げて表示、行末の「追加する」ボタンでルートへ手動追加できるようにする機能。
+// 積み上げて表示、行末の「追加する」/「解除する」ボタンでルートへの追加・除外を
+// トグルできるようにする機能。結果は巡回テストモーダルの中心座標から出発点までの
+// 距離の範囲内にある世界遺産だけに絞り込まれる。
 //
 // 故障シナリオ:
 //   (1) 検索窓にフォーカス/入力してもモーダルが開かない
 //   (2) 検索文字列で結果が絞り込まれない(常に全件 or 常に空)
 //   (3) 「追加する」を押しても manuallyAddedPoints / state.selected に反映されない
-//   (4) 追加してもボタンが「追加済み」に変わらず、連打で重複追加できてしまう
-//   (5) 追加してもルート順序(#route-line)や候補件数(#cand-count)などの
+//   (4) 追加しても世界遺産名の背景色が薄緑色にならず、ボタンも「解除する」に
+//       変わらない(既に巡回テストコース内にある場合も同様)
+//   (5) 「解除する」を押しても除外されず、背景色・ボタン文言も元に戻らない
+//   (6) 追加/解除してもルート順序(#route-line)や候補件数(#cand-count)などの
 //       関連セクションが再計算されない
-//   (6) 追加してもbuildCandidates()のdetour範囲外だと候補から漏れてしまう
-//   (7) モーダルの閉じるボタン/背景クリック/Escapeキーで閉じられない
+//   (7) 追加してもbuildCandidates()のdetour範囲外だと候補から漏れてしまう
+//   (8) 巡回テストモーダルの中心-出発点間の距離を超える世界遺産まで
+//       検索結果に列挙されてしまう
+//   (9) モーダルの閉じるボタン/背景クリック/Escapeキーで閉じられない
 
 function setupPage() {
   const html = getHeritageJourneyPage();
@@ -76,28 +82,50 @@ describe('heritage-journeyページ: 検索窓フォーカス・入力でモー�
   });
 });
 
-describe('heritage-journeyページ: 「追加する」ボタンでルートへ追加され関連セクションが再計算される', () => {
+describe('heritage-journeyページ: 「追加する」/「解除する」ボタンでルートへの追加・除外がトグルされる', () => {
   afterEach(() => { document.body.innerHTML = ''; });
 
-  it('追加するとボタンが「追加済み」になり、二重追加できない', () => {
+  it('追加すると世界遺産名の背景色が薄緑色になり、ボタンが「解除する」に変わる', () => {
+    setupPage();
+    const input = document.getElementById('heritage-add-search') as HTMLInputElement;
+    input.dispatchEvent(new Event('focus'));
+    const row = document.querySelector('#heritage-add-results-body tr') as HTMLTableRowElement;
+    const nameCell = row.querySelector('td') as HTMLElement;
+    const btn = row.querySelector('[data-add-name]') as HTMLButtonElement;
+    expect(nameCell.classList.contains('in-course')).toBe(false);
+    expect(btn.textContent).toBe('追加する');
+    const name = btn.getAttribute('data-add-name');
+
+    btn.click();
+
+    const rowAfter = Array.from(document.querySelectorAll('#heritage-add-results-body tr'))
+      .find((tr) => (tr.querySelector('[data-add-name]') as HTMLButtonElement).getAttribute('data-add-name') === name)!;
+    const nameCellAfter = rowAfter.querySelector('td') as HTMLElement;
+    const btnAfter = rowAfter.querySelector('[data-add-name]') as HTMLButtonElement;
+    expect(nameCellAfter.classList.contains('in-course')).toBe(true);
+    expect(btnAfter.textContent).toBe('解除する');
+  });
+
+  it('「解除する」を押すと世界遺産名の背景色・ボタン文言が元に戻る', () => {
     setupPage();
     const input = document.getElementById('heritage-add-search') as HTMLInputElement;
     input.dispatchEvent(new Event('focus'));
     const btn = document.querySelector('#heritage-add-results-body [data-add-name]') as HTMLButtonElement;
-    expect(btn.disabled).toBe(false);
     const name = btn.getAttribute('data-add-name');
+    btn.click(); // 追加する
 
-    btn.click();
-    expect(btn.disabled).toBe(true);
-    expect(btn.textContent).toBe('追加済み');
+    const findRow = () => Array.from(document.querySelectorAll('#heritage-add-results-body tr'))
+      .find((tr) => (tr.querySelector('[data-add-name]') as HTMLButtonElement).getAttribute('data-add-name') === name)!;
 
-    // 再描画されても既に追加済みの地点は「追加済み」のまま
-    input.dispatchEvent(new Event('input'));
-    const btnAfter = Array.from(document.querySelectorAll('#heritage-add-results-body [data-add-name]'))
-      .find((b) => b.getAttribute('data-add-name') === name) as HTMLButtonElement | undefined;
-    if (btnAfter) {
-      expect(btnAfter.disabled).toBe(true);
-    }
+    const releaseBtn = findRow().querySelector('[data-add-name]') as HTMLButtonElement;
+    expect(releaseBtn.textContent).toBe('解除する');
+    releaseBtn.click(); // 解除する
+
+    const rowAfter = findRow();
+    const nameCellAfter = rowAfter.querySelector('td') as HTMLElement;
+    const btnAfter = rowAfter.querySelector('[data-add-name]') as HTMLButtonElement;
+    expect(nameCellAfter.classList.contains('in-course')).toBe(false);
+    expect(btnAfter.textContent).toBe('追加する');
   });
 
   it('追加すると候補件数表示(#cand-count)が更新される(関連セクションの再計算)', () => {
@@ -117,6 +145,35 @@ describe('heritage-journeyページ: 「追加する」ボタンでルートへ�
 
     const candCountAfter = document.getElementById('cand-count')!.textContent;
     expect(candCountAfter).not.toBe(candCountBefore);
+  });
+});
+
+describe('heritage-journeyページ: 検索結果は巡回テストモーダルの中心-出発点間の距離の範囲内に絞り込まれる', () => {
+  afterEach(() => { document.body.innerHTML = ''; });
+
+  it('出発地・目的地が近い経路では、遠い経路より検索結果の件数が少ない(範囲が狭くなる)', () => {
+    setupPage();
+    const input = document.getElementById('heritage-add-search') as HTMLInputElement;
+
+    // 遠距離(パリ→ローマ、初期値)での検索結果件数
+    input.dispatchEvent(new Event('focus'));
+    const farCount = document.querySelectorAll('#heritage-add-results-body tr').length;
+
+    document.body.innerHTML = '';
+    setupPage();
+    // 近距離(ウィーン→ブラチスラヴァ、約55km)に変更
+    const startSel = document.getElementById('start-city') as unknown as HTMLSelectElement;
+    const endSel = document.getElementById('end-city') as unknown as HTMLSelectElement;
+    startSel.value = 'Vienna';
+    startSel.dispatchEvent(new Event('change'));
+    endSel.value = 'Bratislava';
+    endSel.dispatchEvent(new Event('change'));
+
+    const input2 = document.getElementById('heritage-add-search') as HTMLInputElement;
+    input2.dispatchEvent(new Event('focus'));
+    const nearCount = document.querySelectorAll('#heritage-add-results-body tr').length;
+
+    expect(nearCount).toBeLessThan(farCount);
   });
 });
 
