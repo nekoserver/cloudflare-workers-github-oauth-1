@@ -137,7 +137,7 @@ describe('heritage-journeyページ: 到着地テーブルの距離(km)列と並
 });
 
 describe('heritage-journeyページ: 行クリックで到着地を選択', () => {
-  it('行をクリックすると#end-cityの値がセットされchangeイベントが発火し(recomputeの副作用で再チェックfetchが呼ばれ)、モーダルが閉じる', async () => {
+  it('行をクリックすると#end-cityの値がセットされchangeイベントが発火し(recomputeの副作用で再チェックfetchが呼ばれ)、モーダルは開いたままになる', async () => {
     const { fetchMock } = setupPage();
     await new Promise((r) => setTimeout(r, 0));
     fetchMock.mockClear();
@@ -151,7 +151,8 @@ describe('heritage-journeyページ: 行クリックで到着地を選択', () =
 
     const endSel = document.getElementById('end-city') as unknown as HTMLSelectElement;
     expect(endSel.value).toBe('London');
-    expect(overlay.classList.contains('open')).toBe(false);
+    // 選択後もモーダルは自動で閉じない(ユーザーが手動で閉じるまで開いたまま)
+    expect(overlay.classList.contains('open')).toBe(true);
 
     // #register-route-btnの再チェックfetch(route-exists)が発火していること = change連動の証拠
     await new Promise((r) => setTimeout(r, 0));
@@ -160,6 +161,103 @@ describe('heritage-journeyページ: 行クリックで到着地を選択', () =
 
     // ボタンラベルも新しい到着地名に更新される
     expect(btn.textContent).toBe('ロンドン');
+
+    // 手動での閉じる操作は引き続き機能する
+    const closeBtn = document.getElementById('end-city-picker-modal-close') as HTMLButtonElement;
+    closeBtn.click();
+    expect(overlay.classList.contains('open')).toBe(false);
+  });
+});
+
+describe('heritage-journeyページ: 到着地選択モーダルの既定位置(#tour-mini-panelと重ならない)', () => {
+  it('モーダルを開くと#tour-mini-panelの既定領域(left:12px〜292px, top:12px〜60px)と重ならない位置に配置される', () => {
+    setupPage();
+    Object.defineProperty(window, 'innerWidth', { value: 1200, configurable: true });
+    const btn = document.getElementById('end-city-picker-btn') as HTMLButtonElement;
+    btn.click();
+
+    const box = document.getElementById('end-city-picker-modal-box') as HTMLElement;
+    const left = parseFloat(box.style.left);
+    const top = parseFloat(box.style.top);
+    expect(Number.isNaN(left)).toBe(false);
+    expect(Number.isNaN(top)).toBe(false);
+
+    // #tour-mini-panelの既定bounding box(left:12-292px, top:12-60px)と交差しないこと
+    const miniRight = 292;
+    const miniBottom = 60;
+    const overlapsHorizontally = left < miniRight;
+    const overlapsVertically = top < miniBottom;
+    expect(overlapsHorizontally && overlapsVertically).toBe(false);
+  });
+
+  it('狭いビューポートでも既定left位置は320px以上を確保する(#tour-mini-panelの右端292pxより右)', () => {
+    setupPage();
+    Object.defineProperty(window, 'innerWidth', { value: 400, configurable: true });
+    const btn = document.getElementById('end-city-picker-btn') as HTMLButtonElement;
+    btn.click();
+    const box = document.getElementById('end-city-picker-modal-box') as HTMLElement;
+    const left = parseFloat(box.style.left);
+    expect(left).toBeGreaterThanOrEqual(320);
+  });
+
+  it('モーダルを閉じて再度開くと既定位置にリセットされる(ドラッグ位置は保持しない)', () => {
+    setupPage();
+    Object.defineProperty(window, 'innerWidth', { value: 1200, configurable: true });
+    const btn = document.getElementById('end-city-picker-btn') as HTMLButtonElement;
+    const closeBtn = document.getElementById('end-city-picker-modal-close') as HTMLButtonElement;
+    const box = document.getElementById('end-city-picker-modal-box') as HTMLElement;
+
+    btn.click();
+    const defaultLeft = box.style.left;
+    const defaultTop = box.style.top;
+
+    box.style.left = '999px';
+    box.style.top = '888px';
+    closeBtn.click();
+
+    btn.click();
+    expect(box.style.left).toBe(defaultLeft);
+    expect(box.style.top).toBe(defaultTop);
+  });
+});
+
+describe('heritage-journeyページ: 到着地選択モーダルはヘッダドラッグで自由に移動できる', () => {
+  it('#end-city-picker-modal-headをドラッグすると#end-city-picker-modal-boxが移動する', () => {
+    setupPage();
+    const btn = document.getElementById('end-city-picker-btn') as HTMLButtonElement;
+    btn.click();
+
+    const box = document.getElementById('end-city-picker-modal-box') as HTMLElement;
+    const head = document.getElementById('end-city-picker-modal-head') as HTMLElement;
+    box.getBoundingClientRect = () => ({ left: 320, top: 80, right: 880, bottom: 400, width: 560, height: 320, x: 320, y: 80, toJSON: () => ({}) });
+    Object.defineProperty(box, 'offsetWidth', { value: 560, configurable: true });
+    Object.defineProperty(box, 'offsetHeight', { value: 320, configurable: true });
+
+    head.dispatchEvent(new MouseEvent('mousedown', { clientX: 50, clientY: 30, bubbles: true }));
+    document.dispatchEvent(new MouseEvent('mousemove', { clientX: 250, clientY: 230, bubbles: true }));
+    document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+
+    expect(box.style.left).toBe((320 + (250 - 50)) + 'px');
+    expect(box.style.top).toBe((80 + (230 - 30)) + 'px');
+  });
+
+  it('ドラッグ位置は画面外にはみ出さないようクランプされる', () => {
+    setupPage();
+    const btn = document.getElementById('end-city-picker-btn') as HTMLButtonElement;
+    btn.click();
+
+    const box = document.getElementById('end-city-picker-modal-box') as HTMLElement;
+    const head = document.getElementById('end-city-picker-modal-head') as HTMLElement;
+    box.getBoundingClientRect = () => ({ left: 320, top: 80, right: 880, bottom: 400, width: 560, height: 320, x: 320, y: 80, toJSON: () => ({}) });
+    Object.defineProperty(box, 'offsetWidth', { value: 560, configurable: true });
+    Object.defineProperty(box, 'offsetHeight', { value: 320, configurable: true });
+
+    head.dispatchEvent(new MouseEvent('mousedown', { clientX: 0, clientY: 0, bubbles: true }));
+    document.dispatchEvent(new MouseEvent('mousemove', { clientX: -9999, clientY: -9999, bubbles: true }));
+    document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+
+    expect(box.style.left).toBe('0px');
+    expect(box.style.top).toBe('0px');
   });
 });
 
