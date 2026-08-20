@@ -756,7 +756,7 @@ describe('AIチャット: doSearch が露出ログを POST する', () => {
     const html = getAiChatPage(minimalUser);
     const idx = html.indexOf('function doSearch(');
     expect(idx).toBeGreaterThan(-1);
-    const fnBody = html.slice(idx, idx + 1000);
+    const fnBody = html.slice(idx, idx + 1100);
     expect(fnBody).toContain('/api/aichat/search-impressions');
     expect(fnBody).toContain('POST');
   });
@@ -765,7 +765,7 @@ describe('AIチャット: doSearch が露出ログを POST する', () => {
     const html = getAiChatPage(minimalUser);
     const idx = html.indexOf('function doSearch(');
     expect(idx).toBeGreaterThan(-1);
-    const fnBody = html.slice(idx, idx + 1000);
+    const fnBody = html.slice(idx, idx + 1100);
     expect(fnBody).toContain('shareIds');
   });
 
@@ -773,7 +773,7 @@ describe('AIチャット: doSearch が露出ログを POST する', () => {
     const html = getAiChatPage(minimalUser);
     const idx = html.indexOf('function doSearch(');
     expect(idx).toBeGreaterThan(-1);
-    const fnBody = html.slice(idx, idx + 1000);
+    const fnBody = html.slice(idx, idx + 1100);
     expect(fnBody).toContain('resultCount');
   });
 });

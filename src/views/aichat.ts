@@ -344,6 +344,9 @@ export function getAiChatPage(user: {
     .sidebar-log-btn { background:none; border:none; cursor:pointer; font-size:14px; padding:0 4px; line-height:1; opacity:0.5; flex-shrink:0; }
     .sidebar-log-btn:hover { opacity:1; }
     .canvas-search-btn { background:none; border:none; cursor:pointer; font-size:14px; padding:0 4px; line-height:1; opacity:0.6; flex-shrink:0; }
+    .sidebar-search-target-btn { background:none; border:none; cursor:pointer; font-size:14px; padding:0 4px; line-height:1; opacity:0.3; flex-shrink:0; }
+    .sidebar-search-target-btn:hover { opacity:0.6; }
+    .sidebar-search-target-btn.active { opacity:1; }
     .canvas-search-btn:hover { opacity:1; }
     .canvas-search-input-wrap { position:relative; padding:10px 16px; border-bottom:1px solid var(--border-color); flex-shrink:0; }
     .canvas-search-input {
@@ -801,6 +804,7 @@ export function getAiChatPage(user: {
         <div class="sidebar-status" id="sidebarStatus" style="flex:1;font-size:10px;color:var(--text-muted);"></div>
         <button class="canvas-search-btn" id="canvasSearchBtn" title="質問・回答・キーワードをキャンバス表示" style="display:none;">⁂</button>
         <button class="sidebar-log-btn" id="searchLogRecordBtn" title="検索ログをモーダルに書き出す" style="display:none;">📋</button>
+        <button class="sidebar-search-target-btn" id="sidebarSearchTargetBtn" title="検索対象: llama-4(質問・回答)。クリックでmoondream3.1(画像分析)に切替">🖼️</button>
         <div class="sidebar-mode-toggle" id="sidebarModeToggle" style="display:none;">
           <button class="sidebar-mode-btn" id="sidebarModeNew">新着</button>
           <button class="sidebar-mode-btn" id="sidebarModeKw">キーワード</button>
@@ -1759,6 +1763,8 @@ export function getAiChatPage(user: {
     var sidebarSearch = document.getElementById('sidebarSearch');
     var sidebarClear = document.getElementById('sidebarClear');
     var searchLogRecordBtn = document.getElementById('searchLogRecordBtn');
+    var sidebarSearchTargetBtn = document.getElementById('sidebarSearchTargetBtn');
+    var sidebarSearchTarget = 'llama-4';
     var searchLogRecordModal = document.getElementById('searchLogRecordModal');
     var searchLogRecordModalBody = document.getElementById('searchLogRecordModalBody');
     var searchLogRecordTitle = document.getElementById('searchLogRecordTitle');
@@ -1971,6 +1977,17 @@ export function getAiChatPage(user: {
       sidebarSearch.focus();
     });
 
+    sidebarSearchTargetBtn.addEventListener('click', function() {
+      sidebarSearchTarget = sidebarSearchTarget === 'moondream3.1' ? 'llama-4' : 'moondream3.1';
+      var isMoondream = sidebarSearchTarget === 'moondream3.1';
+      sidebarSearchTargetBtn.classList.toggle('active', isMoondream);
+      sidebarSearchTargetBtn.title = isMoondream
+        ? '検索対象: moondream3.1(画像分析)。クリックでllama-4(質問・回答)に切替'
+        : '検索対象: llama-4(質問・回答)。クリックでmoondream3.1(画像分析)に切替';
+      var q = sidebarSearch.value.trim();
+      if (q && currentMode === 'search') doSearch(q);
+    });
+
     sidebarModeNew.addEventListener('click', function() {
       sidebarKwModal.classList.remove('open');
       if (currentMode === 'date') return;
@@ -2018,7 +2035,7 @@ export function getAiChatPage(user: {
 
     function doSearch(q) {
       fetchSidebarSubqueries();
-      fetch('/api/aichat/shares/search?q=' + encodeURIComponent(q), { credentials: 'same-origin' })
+      fetch('/api/aichat/shares/search?q=' + encodeURIComponent(q) + '&target=' + encodeURIComponent(sidebarSearchTarget), { credentials: 'same-origin' })
         .then(function(r) { return r.json(); })
         .then(function(data) {
           currentResults = data.results || [];
