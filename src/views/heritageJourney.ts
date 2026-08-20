@@ -2,6 +2,7 @@ import { HERITAGE_LIST } from '../data/heritageList';
 import { ROUTE_CITIES } from '../data/routeCities';
 import { getMarkdownParserScript } from '../utils/markdownRenderer';
 import { getMitokoroModalCss, getHeritageMitokoroModalScript } from '../utils/heritageMitokoroModal';
+import { heritageIndexToMasterId } from '../utils/heritage-master-seed';
 
 const EUROPE_LAT_MIN = 36, EUROPE_LAT_MAX = 61, EUROPE_LON_MIN = -12, EUROPE_LON_MAX = 35;
 
@@ -14,10 +15,14 @@ function inEurope(lat: number, lon: number): boolean {
  * 出発/到着都市によって迂回距離の絞り込みはクライアント側(JS)で行うため、ここでは
  * 座標付きの生データのみをヨーロッパ域内に絞って埋め込む。
  */
-export function buildEmbeddedHeritagePoints(): { n: string; e: string; f: string; c: string; lat: number; lon: number }[] {
+export function buildEmbeddedHeritagePoints(): { n: string; e: string; f: string; c: string; lat: number; lon: number; id: string }[] {
+  // idはHERITAGE_LIST(フィルタ前・全件配列)での並び順から算出する
+  // (heritage_masterのID採番と同じロジックをheritageIndexToMasterId経由で共有)。
+  // inEuropeフィルタ後のindexを使うとheritage_masterのIDとずれるため、
+  // 必ずフィルタ前にmapしてidを確定させてからフィルタすること。
   return HERITAGE_LIST
-    .filter((h) => inEurope(h.lat, h.lon))
-    .map((h) => ({ n: h.n, e: h.e, f: h.f, c: h.c, lat: h.lat, lon: h.lon }));
+    .map((h, index) => ({ n: h.n, e: h.e, f: h.f, c: h.c, lat: h.lat, lon: h.lon, id: heritageIndexToMasterId(index) }))
+    .filter((h) => inEurope(h.lat, h.lon));
 }
 
 export function getHeritageJourneyPage(): string {
@@ -69,6 +74,10 @@ h1{font-size:22px;margin:0 0 4px}
 #register-route-btn:disabled{opacity:.4;cursor:default}
 #register-route-btn:not(:disabled){background:#0369a1;border-color:#38bdf8;color:#fff}
 #register-route-btn:not(:disabled):hover{background:#0284c7}
+#save-waypoint-set-btn{background:#0369a1;border:1px solid #38bdf8;color:#fff;border-radius:8px;padding:6px 12px;font-size:12px;cursor:pointer;font-family:inherit;white-space:nowrap}
+#save-waypoint-set-btn:disabled{opacity:.4;cursor:default}
+#save-waypoint-set-btn:not(:disabled):hover{background:#0284c7}
+#waypoint-set-save-toast{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#dcfce7;color:#14532d;border:1px solid #86efac;border-radius:10px;padding:16px 24px;font-size:14px;box-shadow:0 8px 24px rgba(0,0,0,.35);display:none}
 #view-registered-routes-btn{background:#1e293b;border:1px solid #475569;color:#cbd5e1;border-radius:8px;padding:6px 12px;font-size:12px;cursor:pointer;font-family:inherit;white-space:nowrap}
 #view-registered-routes-btn:hover{border-color:#38bdf8;color:#fff}
 .registered-routes-freq-cols{display:flex;gap:16px;flex-wrap:wrap;margin-bottom:14px}
@@ -171,8 +180,10 @@ ${getMitokoroModalCss()}
       <select id="end-city"></select>
       <button id="register-route-btn" type="button" disabled>➕ ルート登録</button>
       <button id="view-registered-routes-btn" type="button">📋 登録済みルートを見る</button>
+      <button id="save-waypoint-set-btn" type="button" style="display:none">💾 この経由データを保存</button>
     </div>
     <div id="register-route-error" style="display:none"></div>
+    <div id="save-waypoint-set-error" style="display:none"></div>
     <div class="opt-grid">
       <label class="opt-item">迂回許容距離(km・候補の広さ)<input id="opt-detour" type="number" min="10" max="500" step="10" value="150"></label>
       <label class="opt-item">平均移動速度(km/h)<input id="opt-speed" type="number" min="20" max="160" step="5" value="70"></label>
@@ -259,6 +270,8 @@ ${getMitokoroModalCss()}
   </div>
 </div>
 
+<div id="waypoint-set-save-toast"></div>
+
 <div class="tour-modal-overlay" id="tour-modal-overlay">
   <div class="tour-modal-box">
     <div class="tour-modal-head">
@@ -320,7 +333,7 @@ function buildCandidates(start, end, pool, maxDetourKm) {
     if (haversineKm(h.lat, h.lon, start.lat, start.lon) < 3) return;
     if (haversineKm(h.lat, h.lon, end.lat, end.lon) < 3) return;
     var detour = computeDetourKm(start, end, h);
-    if (detour <= maxDetourKm || manuallyAddedPoints[h.n]) out.push({ name: h.n, icon: h.e, flag: h.f, country: h.c, lat: h.lat, lon: h.lon, detour: detour });
+    if (detour <= maxDetourKm || manuallyAddedPoints[h.n]) out.push({ name: h.n, icon: h.e, flag: h.f, country: h.c, lat: h.lat, lon: h.lon, detour: detour, id: h.id });
   });
   out.sort(function(a, b) { return a.detour - b.detour; });
   return out;
@@ -555,6 +568,20 @@ var state = { selected: {} };
 // 一時的に外す(テスト時に特定の地点だけスキップしたい場合の補助)。
 var routeLineExcluded = {};
 
+// 現在ON状態(routeLineExcludedで除外されていない)の世界遺産のみを、巡回順(tourPoints順)に
+// heritage_masterの4桁IDで並べた配列。出発地・到着地(idを持たない都市)は含まれない。
+// tourPointsが再計算される箇所(syncMiniGlobe内)から必ずupdateCurrentTourActiveHeritageIds()
+// を呼んで同期させること。この配列は「経由データを保存」ボタン(#save-waypoint-set-btn)の
+// waypoint_heritage_ids生成に使う。
+var currentTourActiveHeritageIds = [];
+
+function updateCurrentTourActiveHeritageIds() {
+  currentTourActiveHeritageIds = tourPoints
+    .filter(function(p) { return !!p.id; })
+    .map(function(p) { return p.id; });
+  updateSaveWaypointSetButton();
+}
+
 // 「宿泊地の推奨プラン」セクションの検索モーダルから手動で追加した世界遺産。
 // buildCandidates()のdetour範囲フィルタを無視して常に候補・選択済みに含める。
 var manuallyAddedPoints = {};
@@ -599,6 +626,118 @@ function updateRegisterRouteButton() {
       if (btn2) btn2.disabled = true;
     });
 }
+
+// 「経由地: 1 0123, 2 0456, ...」形式の文字列を、現在ON状態の
+// heritage_master ID配列(currentTourActiveHeritageIds、巡回順)から生成する。
+function buildWaypointHeritageIdsString() {
+  return currentTourActiveHeritageIds.map(function(id, i) { return (i + 1) + ' ' + id; }).join(', ');
+}
+
+// 現在のtourPoints(巡回テストスコープ、routeLineExcludedで除外中のものは含まない)を
+// start→...→end の順に連結した総延長距離(km)。computeStatsのレグ距離合計と同じ考え方。
+function computeCurrentTourTotalDistanceKm() {
+  if (tourPoints.length < 2) return 0;
+  var total = 0;
+  for (var i = 1; i < tourPoints.length; i++) {
+    total += haversineKm(tourPoints[i - 1].lat, tourPoints[i - 1].lon, tourPoints[i].lat, tourPoints[i].lon);
+  }
+  return total;
+}
+
+var waypointSetSaveToastTimer = null;
+function showWaypointSetSaveToast(recordId) {
+  var el = document.getElementById('waypoint-set-save-toast');
+  if (!el) return;
+  el.style.zIndex = String(getNextZ());
+  el.textContent = 'レコード' + recordId + 'にこの経由地が保存されました';
+  el.style.display = 'block';
+  if (waypointSetSaveToastTimer) clearTimeout(waypointSetSaveToastTimer);
+  waypointSetSaveToastTimer = setTimeout(function() {
+    el.textContent = '';
+    el.style.display = 'none';
+  }, 7000);
+}
+
+function showSaveWaypointSetError(message) {
+  var el = document.getElementById('save-waypoint-set-error');
+  if (!el) return;
+  el.textContent = message;
+  el.style.display = 'block';
+}
+
+function clearSaveWaypointSetError() {
+  var el = document.getElementById('save-waypoint-set-error');
+  if (!el) return;
+  el.textContent = '';
+  el.style.display = 'none';
+}
+
+// 出発地・到着地・現在ON状態の経由世界遺産ID配列(waypoint_heritage_ids)の組み合わせが
+// heritage_journey_waypoint_setsテーブルに未保存の場合のみ「この経由データを保存」ボタンを
+// 表示・有効化する。出発地・到着地の変更、ルート順序ON/OFFの切り替えのたびに再チェックする。
+function updateSaveWaypointSetButton() {
+  var btn = document.getElementById('save-waypoint-set-btn');
+  if (!btn) return;
+  if (tourPoints.length < 2 || currentTourActiveHeritageIds.length === 0) {
+    btn.style.display = 'none';
+    return;
+  }
+  var se = currentStartEnd();
+  var waypointHeritageIds = buildWaypointHeritageIdsString();
+  fetch('/api/heritage-journey/waypoint-set-exists?start=' + encodeURIComponent(se.start.name) +
+    '&end=' + encodeURIComponent(se.end.name) +
+    '&waypointHeritageIds=' + encodeURIComponent(waypointHeritageIds))
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      var btn2 = document.getElementById('save-waypoint-set-btn');
+      if (!btn2) return;
+      btn2.style.display = (data && data.exists) ? 'none' : '';
+      btn2.disabled = false;
+    })
+    .catch(function() {
+      var btn2 = document.getElementById('save-waypoint-set-btn');
+      if (btn2) btn2.style.display = 'none';
+    });
+}
+
+(function() {
+  var saveBtn = document.getElementById('save-waypoint-set-btn');
+  if (!saveBtn) return;
+  saveBtn.addEventListener('click', function() {
+    var btn = document.getElementById('save-waypoint-set-btn');
+    if (!btn) return;
+    clearSaveWaypointSetError();
+    var se = currentStartEnd();
+    var waypointHeritageIds = buildWaypointHeritageIdsString();
+    var totalDistanceKm = computeCurrentTourTotalDistanceKm();
+    btn.disabled = true;
+    fetch('/api/heritage-journey/save-waypoint-set', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        startCityName: se.start.name, startLat: se.start.lat, startLon: se.start.lon,
+        endCityName: se.end.name, endLat: se.end.lat, endLon: se.end.lon,
+        waypointCount: currentTourActiveHeritageIds.length,
+        waypointHeritageIds: waypointHeritageIds,
+        totalDistanceKm: totalDistanceKm,
+      }),
+    })
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        if (data && data.ok) {
+          btn.style.display = 'none';
+          showWaypointSetSaveToast(data.id);
+        } else {
+          btn.disabled = false;
+          showSaveWaypointSetError((data && data.error) ? data.error : '保存に失敗しました');
+        }
+      })
+      .catch(function() {
+        btn.disabled = false;
+        showSaveWaypointSetError('保存に失敗しました');
+      });
+  });
+})();
 
 function showRegisterRouteError(message) {
   var el = document.getElementById('register-route-error');
@@ -1394,11 +1533,14 @@ document.getElementById('replay-tour-btn').addEventListener('click', function() 
     var ordered = state.lastOrdered || [];
     if (ordered.length < 2) {
       miniPanel.style.display = 'none';
+      tourPoints = [];
+      updateCurrentTourActiveHeritageIds();
       return;
     }
     tourPoints = ordered
       .filter(function(p) { return !routeLineExcluded[p.name]; })
-      .map(function(p) { return { name: p.name, lat: p.lat, lon: p.lon, flag: p.flag }; });
+      .map(function(p) { return { name: p.name, lat: p.lat, lon: p.lon, flag: p.flag, id: p.id }; });
+    updateCurrentTourActiveHeritageIds();
     if (tourPoints.length < 2) {
       miniPanel.style.display = '';
       renderAll();
