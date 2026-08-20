@@ -255,7 +255,7 @@ describe('heritage-journeyページ: 「🌐 巡回テスト」ボタンとモ�
 describe('heritage-journeyページ: 「🌐 巡回テスト」モーダル(DOM実動作)', () => {
   afterEach(() => { document.body.innerHTML = ''; });
 
-  it('ボタンを押すとモーダルが開き、現在地ラベルに1件目の地点名を表示する', () => {
+  it('ボタンを押すとモーダルが開き、現在地ラベルに「国旗/宿泊推奨地」を表示する', () => {
     setupPage();
     selectRoute();
     const tourBtn = document.getElementById('tour-test-btn') as HTMLButtonElement;
@@ -264,7 +264,8 @@ describe('heritage-journeyページ: 「🌐 巡回テスト」モーダル(DOM�
     const overlay = document.getElementById('tour-modal-overlay')!;
     expect(overlay.classList.contains('open')).toBe(true);
     const label = document.getElementById('tour-current-label')!;
-    expect(label.textContent).toMatch(/^1 \/ \d+/);
+    expect(label.textContent).toMatch(/ \/ /);
+    expect(label.textContent).not.toBe('');
   });
 
   it('✕ボタンでモーダルを閉じられる', () => {
@@ -340,7 +341,7 @@ describe('heritage-journeyページ: 「🌐 巡回テスト」モーダル(DOM�
 
       tourBtn.click();
       const label = document.getElementById('tour-current-label')!;
-      expect(label.textContent).toMatch(/^1 \/ \d+/);
+      expect(label.textContent).toMatch(/ \/ /);
 
       const playBtn = document.getElementById('tour-play-btn') as HTMLButtonElement;
       expect(playBtn.textContent).toContain('再生');

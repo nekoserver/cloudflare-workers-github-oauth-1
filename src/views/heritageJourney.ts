@@ -12,10 +12,10 @@ function inEurope(lat: number, lon: number): boolean {
  * 出発/到着都市によって迂回距離の絞り込みはクライアント側(JS)で行うため、ここでは
  * 座標付きの生データのみをヨーロッパ域内に絞って埋め込む。
  */
-export function buildEmbeddedHeritagePoints(): { n: string; e: string; c: string; lat: number; lon: number }[] {
+export function buildEmbeddedHeritagePoints(): { n: string; e: string; f: string; c: string; lat: number; lon: number }[] {
   return HERITAGE_LIST
     .filter((h) => inEurope(h.lat, h.lon))
-    .map((h) => ({ n: h.n, e: h.e, c: h.c, lat: h.lat, lon: h.lon }));
+    .map((h) => ({ n: h.n, e: h.e, f: h.f, c: h.c, lat: h.lat, lon: h.lon }));
 }
 
 export function getHeritageJourneyPage(): string {
@@ -88,6 +88,7 @@ h1{font-size:22px;margin:0 0 4px}
 .tour-modal-head{position:relative;display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
 .tour-modal-title{font-size:14px;font-weight:700;color:#93c5fd}
 .tour-plan-summary{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);font-size:12px;color:#94a3b8;white-space:nowrap;pointer-events:none}
+.tour-day-label{text-align:center;font-size:12px;font-weight:700;color:#93c5fd;margin-bottom:8px}
 .tour-modal-close{background:none;border:none;color:#94a3b8;font-size:16px;cursor:pointer;padding:2px 6px}
 .tour-modal-close:hover{color:#e2e8f0}
 .tour-globe-wrap{position:relative}
@@ -212,6 +213,7 @@ h1{font-size:22px;margin:0 0 4px}
       <div class="tour-plan-summary" id="tour-plan-summary"></div>
       <button type="button" class="tour-modal-close" id="tour-modal-close" aria-label="閉じる">✕</button>
     </div>
+    <div class="tour-day-label" id="tour-day-label"></div>
     <div class="tour-globe-wrap">
       <canvas id="tour-globe-canvas" width="520" height="520"></canvas>
       <div class="tour-tap-label" id="tour-tap-label"></div>
@@ -256,7 +258,7 @@ function buildCandidates(start, end, pool, maxDetourKm) {
     if (haversineKm(h.lat, h.lon, start.lat, start.lon) < 3) return;
     if (haversineKm(h.lat, h.lon, end.lat, end.lon) < 3) return;
     var detour = computeDetourKm(start, end, h);
-    if (detour <= maxDetourKm || manuallyAddedPoints[h.n]) out.push({ name: h.n, icon: h.e, country: h.c, lat: h.lat, lon: h.lon, detour: detour });
+    if (detour <= maxDetourKm || manuallyAddedPoints[h.n]) out.push({ name: h.n, icon: h.e, flag: h.f, country: h.c, lat: h.lat, lon: h.lon, detour: detour });
   });
   out.sort(function(a, b) { return a.detour - b.detour; });
   return out;
@@ -739,7 +741,21 @@ function recompute() {
   var countEl = document.getElementById('cand-count');
   if (countEl) countEl.textContent = candidates.length + ' 件中 ' + selected.length + ' 件選択中';
   var tourPlanSummaryEl = document.getElementById('tour-plan-summary');
-  if (tourPlanSummaryEl) tourPlanSummaryEl.textContent = currentNights + '泊' + (currentNights + 1) + '日・世界遺産' + selected.length + '件選択中';
+  if (tourPlanSummaryEl) tourPlanSummaryEl.textContent = currentNights + '泊' + (currentNights + 1) + '日';
+
+  // 巡回テストモーダルで「現在地の日程(◯日目)」「宿泊推奨地」を表示するための対応表。
+  // dayVisitsに含まれない出発点・目的地自身は、それぞれ1日目の宿泊推奨地・
+  // 最終日の目的地そのものとして扱う。
+  dayNumberByName = {};
+  lodgingCityByName = {};
+  days.forEach(function(d, di) {
+    d.visits.forEach(function(name) { dayNumberByName[name] = di + 1; lodgingCityByName[name] = d.city; });
+  });
+  dayNumberByName[se.start.name] = 1;
+  lodgingCityByName[se.start.name] = days.length ? days[0].city : se.start.name;
+  dayNumberByName[se.end.name] = days.length;
+  lodgingCityByName[se.end.name] = se.end.name;
+
   syncMiniGlobe();
 }
 
@@ -785,6 +801,7 @@ document.getElementById('replay-tour-btn').addEventListener('click', function() 
   var playBtn = document.getElementById('tour-play-btn');
   var currentLabel = document.getElementById('tour-current-label');
   var nextLabel = document.getElementById('tour-next-label');
+  var dayLabel = document.getElementById('tour-day-label');
   var tapLabel = document.getElementById('tour-tap-label');
   var tourTestBtn = document.getElementById('tour-test-btn');
   var miniPanel = document.getElementById('tour-mini-panel');
@@ -802,6 +819,8 @@ document.getElementById('replay-tour-btn').addEventListener('click', function() 
   var pinchDist0 = 0;
   var tapLabelTimer = null; // タップされた宿泊予定地の丸の名称表示(7秒後に自動で消す)用タイマー
   var lastFocusedSideName = null; // 右側ルート順序リストで直前にフォーカスしていた地点名(変化時だけ点滅させるため)
+  var dayNumberByName = {}; // recompute()で構築される「地点名→日程(◯日目)」対応表
+  var lodgingCityByName = {}; // recompute()で構築される「地点名→宿泊推奨地」対応表
 
   // ===== 地表テクスチャ(webgl-heritageページと同じ/earth.jpgを流用) =====
   var earthImg = new Image();
@@ -1023,8 +1042,17 @@ document.getElementById('replay-tour-btn').addEventListener('click', function() 
   function updateLabel() {
     var idx = nearestPointIndex(animProgress);
     var p = tourPoints[idx];
-    if (!p) { currentLabel.textContent = ''; } else {
-      currentLabel.textContent = (idx + 1) + ' / ' + tourPoints.length + '　' + p.name;
+    if (!p) {
+      currentLabel.textContent = '';
+      if (dayLabel) dayLabel.textContent = '';
+    } else {
+      var flag = p.flag || '🏳️';
+      var lodging = lodgingCityByName[p.name] || p.name;
+      currentLabel.textContent = flag + ' / ' + lodging;
+      if (dayLabel) {
+        var dayNum = dayNumberByName[p.name];
+        dayLabel.textContent = dayNum ? (dayNum + '日目') : '';
+      }
     }
     updateNextLabel();
   }
@@ -1156,7 +1184,7 @@ document.getElementById('replay-tour-btn').addEventListener('click', function() 
     }
     tourPoints = ordered
       .filter(function(p) { return !routeLineExcluded[p.name]; })
-      .map(function(p) { return { name: p.name, lat: p.lat, lon: p.lon }; });
+      .map(function(p) { return { name: p.name, lat: p.lat, lon: p.lon, flag: p.flag }; });
     if (tourPoints.length < 2) {
       miniPanel.style.display = '';
       renderAll();
