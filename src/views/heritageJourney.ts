@@ -85,7 +85,8 @@ h1{font-size:22px;margin:0 0 4px}
 .tour-modal-box{background:#111827;border:1px solid #334155;border-radius:12px;padding:16px;max-width:560px;width:100%;max-height:90vh;overflow:auto}
 .tour-route-side-panel{background:#111827;border:1px solid #334155;border-radius:12px;padding:12px;width:200px;max-width:calc(100vw - 600px);max-height:90vh;overflow:auto;margin-left:16px;flex-shrink:0}
 .tour-route-side-title{font-size:12px;font-weight:700;color:#93c5fd;margin-bottom:8px}
-.tour-route-side-row{border:2px solid transparent;border-radius:6px;padding:5px 8px;font-size:12px;color:#e2e8f0;margin-bottom:4px}
+.tour-route-side-row{border:2px solid transparent;border-radius:6px;padding:5px 8px;font-size:12px;color:#e2e8f0;margin-bottom:4px;cursor:pointer}
+.tour-route-side-row:hover{background:#1e293b}
 .tour-route-side-row.off{opacity:.45;color:#64748b}
 .tour-route-side-row.focused{border-color:#facc15}
 .tour-route-side-row.blink{animation:tourRouteSideBlink .4s ease-in-out 3}
@@ -98,7 +99,7 @@ h1{font-size:22px;margin:0 0 4px}
 .tour-modal-close:hover{color:#e2e8f0}
 .tour-globe-wrap{position:relative}
 #tour-globe-canvas{width:100%;max-width:520px;aspect-ratio:1/1;display:block;margin:0 auto;background:#0b1220;border-radius:50%;border:1px solid #1e293b;cursor:pointer}
-.tour-tap-label{position:absolute;top:8px;left:50%;transform:translateX(-50%);background:#fbcfe8;color:#831843;font-size:12px;font-weight:700;padding:4px 10px;border-radius:999px;pointer-events:none;display:none;white-space:nowrap;max-width:90%;overflow:hidden;text-overflow:ellipsis}
+.tour-tap-label{position:absolute;top:8px;left:50%;transform:translate(-50%,calc(-100% - 10px));background:#fbcfe8;color:#831843;font-size:12px;font-weight:700;padding:4px 10px;border-radius:999px;pointer-events:none;display:none;white-space:nowrap;max-width:90%;overflow:hidden;text-overflow:ellipsis}
 .tour-modal-controls{display:flex;align-items:center;gap:10px;margin-top:12px}
 #tour-play-btn{background:#1e293b;border:1px solid #475569;color:#cbd5e1;border-radius:8px;padding:6px 14px;font-size:12px;cursor:pointer;font-family:inherit}
 #tour-play-btn:hover{border-color:#38bdf8;color:#fff}
@@ -638,7 +639,7 @@ function renderRouteSidePanel(ordered) {
   if (!el) return;
   el.innerHTML = ordered.map(function(p) {
     var off = !!routeLineExcluded[p.name];
-    return '<div class="tour-route-side-row' + (off ? ' off' : '') + '" data-side-name="' + esc(p.name) + '">'
+    return '<div class="tour-route-side-row' + (off ? ' off' : '') + '" data-side-name="' + esc(p.name) + '" data-side-lat="' + p.lat + '" data-side-lon="' + p.lon + '" title="タップで地球儀上に名称を表示">'
       + esc(p.icon || '📍') + ' ' + esc(p.name) + '</div>';
   }).join('');
 }
@@ -1130,10 +1131,18 @@ document.getElementById('replay-tour-btn').addEventListener('click', function() 
     }
   }
 
-  /** 宿泊予定地の丸がタップされた際、その世界遺産名を7秒間表示する。 */
-  function showTapLabel(name) {
-    if (!tapLabel) return;
-    tapLabel.textContent = name;
+  /**
+   * 指定した地点(lat/lon)の名称を、地球儀上のその座標の丸の真上に
+   * ツールチップとして7秒間表示する(#tour-globe-canvasの丸をタップした時、
+   * および右側ルート順序表示板の地点名をタップした時の両方から呼ぶ)。
+   */
+  function showTapLabel(point) {
+    if (!tapLabel || !point) return;
+    var geo = getGlobeGeometry(canvas);
+    var pp = project(point.lat, point.lon, tourCenterLat, tourCenterLon, geo.R, geo.cx, geo.cy);
+    tapLabel.textContent = point.name;
+    tapLabel.style.left = (pp.x / canvas.width * 100) + '%';
+    tapLabel.style.top = (pp.y / canvas.height * 100) + '%';
     tapLabel.style.display = '';
     if (tapLabelTimer) clearTimeout(tapLabelTimer);
     tapLabelTimer = setTimeout(function() {
@@ -1157,7 +1166,16 @@ document.getElementById('replay-tour-btn').addEventListener('click', function() 
       var d = Math.hypot(pp.x - clickX, pp.y - clickY);
       if (d <= 14 && d < hitDist) { hitDist = d; hitIdx = i; }
     });
-    if (hitIdx >= 0) showTapLabel(tourPoints[hitIdx].name);
+    if (hitIdx >= 0) showTapLabel(tourPoints[hitIdx]);
+  });
+
+  document.getElementById('tour-route-side-list').addEventListener('click', function(e) {
+    var row = e.target.closest('[data-side-name]');
+    if (!row) return;
+    var lat = Number(row.getAttribute('data-side-lat'));
+    var lon = Number(row.getAttribute('data-side-lon'));
+    if (isNaN(lat) || isNaN(lon)) return;
+    showTapLabel({ name: row.getAttribute('data-side-name'), lat: lat, lon: lon });
   });
 
   function stopAnim() {
