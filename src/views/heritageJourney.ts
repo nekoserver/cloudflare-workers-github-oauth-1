@@ -83,11 +83,14 @@ h1{font-size:22px;margin:0 0 4px}
 .tour-plan-summary{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);font-size:12px;color:#94a3b8;white-space:nowrap;pointer-events:none}
 .tour-modal-close{background:none;border:none;color:#94a3b8;font-size:16px;cursor:pointer;padding:2px 6px}
 .tour-modal-close:hover{color:#e2e8f0}
-#tour-globe-canvas{width:100%;max-width:520px;aspect-ratio:1/1;display:block;margin:0 auto;background:#0b1220;border-radius:50%;border:1px solid #1e293b}
+.tour-globe-wrap{position:relative}
+#tour-globe-canvas{width:100%;max-width:520px;aspect-ratio:1/1;display:block;margin:0 auto;background:#0b1220;border-radius:50%;border:1px solid #1e293b;cursor:pointer}
+.tour-tap-label{position:absolute;top:8px;left:50%;transform:translateX(-50%);background:#fbcfe8;color:#831843;font-size:12px;font-weight:700;padding:4px 10px;border-radius:999px;pointer-events:none;display:none;white-space:nowrap;max-width:90%;overflow:hidden;text-overflow:ellipsis}
 .tour-modal-controls{display:flex;align-items:center;gap:10px;margin-top:12px}
 #tour-play-btn{background:#1e293b;border:1px solid #475569;color:#cbd5e1;border-radius:8px;padding:6px 14px;font-size:12px;cursor:pointer;font-family:inherit}
 #tour-play-btn:hover{border-color:#38bdf8;color:#fff}
 .tour-modal-label{font-size:12px;color:#94a3b8}
+.tour-next-label{color:#f9a8d4}
 .tour-mini-panel{position:fixed;top:12px;left:12px;z-index:9998;background:#111827;border:1px solid #334155;border-radius:10px;box-shadow:0 6px 20px rgba(0,0,0,.4);overflow:hidden;width:280px}
 .tour-mini-head{background:#1e293b;color:#93c5fd;font-size:12px;font-weight:700;padding:6px 10px;cursor:grab;user-select:none;touch-action:none}
 .tour-mini-head:active{cursor:grabbing}
@@ -202,10 +205,14 @@ h1{font-size:22px;margin:0 0 4px}
       <div class="tour-plan-summary" id="tour-plan-summary"></div>
       <button type="button" class="tour-modal-close" id="tour-modal-close" aria-label="閉じる">✕</button>
     </div>
-    <canvas id="tour-globe-canvas" width="520" height="520"></canvas>
+    <div class="tour-globe-wrap">
+      <canvas id="tour-globe-canvas" width="520" height="520"></canvas>
+      <div class="tour-tap-label" id="tour-tap-label"></div>
+    </div>
     <div class="tour-modal-controls">
       <button type="button" id="tour-play-btn">▶ 再生</button>
       <span class="tour-modal-label" id="tour-current-label"></span>
+      <span class="tour-modal-label tour-next-label" id="tour-next-label"></span>
     </div>
   </div>
 </div>
@@ -746,6 +753,8 @@ document.getElementById('replay-tour-btn').addEventListener('click', function() 
   var canvas = document.getElementById('tour-globe-canvas');
   var playBtn = document.getElementById('tour-play-btn');
   var currentLabel = document.getElementById('tour-current-label');
+  var nextLabel = document.getElementById('tour-next-label');
+  var tapLabel = document.getElementById('tour-tap-label');
   var tourTestBtn = document.getElementById('tour-test-btn');
   var miniPanel = document.getElementById('tour-mini-panel');
   var miniHead = document.getElementById('tour-mini-head');
@@ -760,6 +769,7 @@ document.getElementById('replay-tour-btn').addEventListener('click', function() 
   var tourCenterLon = 0;
   var ZOOM_MIN = 0.5, ZOOM_MAX = 16;
   var pinchDist0 = 0;
+  var tapLabelTimer = null; // タップされた宿泊予定地の丸の名称表示(7秒後に自動で消す)用タイマー
 
   // ===== 地表テクスチャ(webgl-heritageページと同じ/earth.jpgを流用) =====
   var earthImg = new Image();
@@ -896,16 +906,24 @@ document.getElementById('replay-tour-btn').addEventListener('click', function() 
    * tourPoints/tourCenterLat/tourCenterLon/tourZoom/animProgressを共有して
    * 同じ見た目を保つ(モーダルでズームやピンチ操作をすると縮小プレビュー側も追従する)。
    */
+  /** 地球儀の中心座標・半径を算出する(描画とタップ判定の両方で同じ座標系を使うための共通処理)。 */
+  function getGlobeGeometry(targetCanvas) {
+    var W = targetCanvas.width, H = targetCanvas.height;
+    var cx = W / 2, cy = H / 2;
+    var margin = Math.min(W, H) <= 300 ? 12 : 24;
+    var baseR = Math.min(W, H) / 2 - margin;
+    var R = baseR * tourZoom;
+    return { cx: cx, cy: cy, R: R };
+  }
+
   function renderGlobeToCanvas(targetCanvas) {
     if (!targetCanvas || !targetCanvas.getContext) return;
     var ctx = targetCanvas.getContext('2d');
     var W = targetCanvas.width, H = targetCanvas.height;
     ctx.clearRect(0, 0, W, H);
     if (tourPoints.length === 0) return;
-    var cx = W / 2, cy = H / 2;
-    var margin = Math.min(W, H) <= 300 ? 12 : 24;
-    var baseR = Math.min(W, H) / 2 - margin;
-    var R = baseR * tourZoom;
+    var geo = getGlobeGeometry(targetCanvas);
+    var cx = geo.cx, cy = geo.cy, R = geo.R;
 
     if (earthImageData) {
       // 地表テクスチャを球面に貼り付ける
@@ -943,9 +961,9 @@ document.getElementById('replay-tour-btn').addEventListener('click', function() 
     projected.forEach(function(pp, i) { if (i === 0) ctx.moveTo(pp.x, pp.y); else ctx.lineTo(pp.x, pp.y); });
     ctx.stroke();
 
-    // 経由地点
+    // 経由地点(宿泊予定地) - 薄ピンク色で表示し、タップすると名称を一時表示する
     projected.forEach(function(pp, i) {
-      ctx.fillStyle = pp.visible ? '#f59e0b' : '#475569';
+      ctx.fillStyle = pp.visible ? '#f9a8d4' : '#475569';
       ctx.beginPath();
       ctx.arc(pp.x, pp.y, 5, 0, Math.PI * 2);
       ctx.fill();
@@ -973,9 +991,58 @@ document.getElementById('replay-tour-btn').addEventListener('click', function() 
   function updateLabel() {
     var idx = nearestPointIndex(animProgress);
     var p = tourPoints[idx];
-    if (!p) { currentLabel.textContent = ''; return; }
-    currentLabel.textContent = (idx + 1) + ' / ' + tourPoints.length + '　' + p.name;
+    if (!p) { currentLabel.textContent = ''; } else {
+      currentLabel.textContent = (idx + 1) + ' / ' + tourPoints.length + '　' + p.name;
+    }
+    updateNextLabel();
   }
+
+  /**
+   * 巡回中の「次の目的地」名を表示する。移動中の丸(現在位置マーカー)が
+   * 次の地点に到着する(animProgressが整数値に達する)までは表示し続け、
+   * 到着と同時に消す。
+   */
+  function updateNextLabel() {
+    if (!nextLabel) return;
+    var idxFloor = Math.min(Math.max(tourPoints.length - 1, 0), Math.max(0, Math.floor(animProgress)));
+    var frac = animProgress - idxFloor;
+    if (frac < 1e-6 || idxFloor >= tourPoints.length - 1) {
+      nextLabel.textContent = '';
+      return;
+    }
+    var next = tourPoints[idxFloor + 1];
+    nextLabel.textContent = next ? ('次の目的地: ' + next.name) : '';
+  }
+
+  /** 宿泊予定地の丸がタップされた際、その世界遺産名を7秒間表示する。 */
+  function showTapLabel(name) {
+    if (!tapLabel) return;
+    tapLabel.textContent = name;
+    tapLabel.style.display = '';
+    if (tapLabelTimer) clearTimeout(tapLabelTimer);
+    tapLabelTimer = setTimeout(function() {
+      tapLabel.textContent = '';
+      tapLabel.style.display = 'none';
+    }, 7000);
+  }
+
+  canvas.addEventListener('click', function(e) {
+    if (tourPoints.length === 0) return;
+    var rect = canvas.getBoundingClientRect();
+    if (!rect.width || !rect.height) return;
+    var scaleX = canvas.width / rect.width;
+    var scaleY = canvas.height / rect.height;
+    var clickX = (e.clientX - rect.left) * scaleX;
+    var clickY = (e.clientY - rect.top) * scaleY;
+    var geo = getGlobeGeometry(canvas);
+    var hitIdx = -1, hitDist = Infinity;
+    tourPoints.forEach(function(p, i) {
+      var pp = project(p.lat, p.lon, tourCenterLat, tourCenterLon, geo.R, geo.cx, geo.cy);
+      var d = Math.hypot(pp.x - clickX, pp.y - clickY);
+      if (d <= 14 && d < hitDist) { hitDist = d; hitIdx = i; }
+    });
+    if (hitIdx >= 0) showTapLabel(tourPoints[hitIdx].name);
+  });
 
   function stopAnim() {
     playing = false;
@@ -1066,6 +1133,8 @@ document.getElementById('replay-tour-btn').addEventListener('click', function() 
 
   function closeTourModal() {
     stopAnim();
+    if (tapLabelTimer) { clearTimeout(tapLabelTimer); tapLabelTimer = null; }
+    if (tapLabel) { tapLabel.textContent = ''; tapLabel.style.display = 'none'; }
     overlay.classList.remove('open');
   }
 
