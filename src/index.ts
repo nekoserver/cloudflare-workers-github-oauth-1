@@ -9024,8 +9024,26 @@ app.get('/api/heritage-journey/registered-routes', authMiddleware, async (c) => 
     const rows = await db.prepare(
       'SELECT id, start_city, end_city, straight_km FROM heritage_journey_registered_routes ORDER BY id ASC'
     ).all<{ id: number; start_city: string; end_city: string; straight_km: number }>();
+
+    let waypointSetKeys: Set<string> | null = null;
+    try {
+      const waypointRows = await db.prepare(
+        'SELECT DISTINCT start_city_name, end_city_name FROM heritage_journey_waypoint_sets WHERE deleted_flag = 0'
+      ).all<{ start_city_name: string; end_city_name: string }>();
+      waypointSetKeys = new Set(waypointRows.results.map(w => `${w.start_city_name}||${w.end_city_name}`));
+    } catch (waypointErr) {
+      console.error('[heritage-journey/registered-routes] waypoint-set query failed', waypointErr);
+      waypointSetKeys = null;
+    }
+
     return c.json({
-      routes: rows.results.map(r => ({ id: r.id, start: r.start_city, end: r.end_city, straightKm: r.straight_km })),
+      routes: rows.results.map(r => ({
+        id: r.id,
+        start: r.start_city,
+        end: r.end_city,
+        straightKm: r.straight_km,
+        hasWaypointSet: waypointSetKeys ? waypointSetKeys.has(`${r.start_city}||${r.end_city}`) : false,
+      })),
     });
   } catch (err) {
     console.error('[heritage-journey/registered-routes] DB query failed', err);

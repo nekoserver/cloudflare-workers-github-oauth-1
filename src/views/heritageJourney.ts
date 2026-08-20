@@ -106,6 +106,7 @@ h1{font-size:22px;margin:0 0 4px}
 .heritage-add-btn.active{background:#166534;border-color:#22c55e;color:#dcfce7}
 .heritage-add-btn.active:hover{border-color:#4ade80;color:#fff}
 .heritage-add-name.in-course{background:#bbf7d0;color:#064e3b;border-radius:4px;padding:2px 6px}
+.registered-routes-has-waypoint{background:#bbf7d0}
 .tour-modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:9999;align-items:center;justify-content:center;padding:16px}
 .tour-modal-overlay.open{display:flex}
 .tour-modal-box{background:#111827;border:1px solid #334155;border-radius:12px;padding:16px;max-width:560px;width:100%;max-height:90vh;overflow:auto}
@@ -1703,7 +1704,8 @@ function renderRegisteredRoutesTable(routes) {
   }
   body.innerHTML = routes.map(function(r) {
     var km = (typeof r.straightKm === 'number') ? r.straightKm.toFixed(1) + ' km' : '-';
-    return '<tr><td>' + esc(r.id) + '</td><td>' + esc(r.start) + '</td><td>' + esc(r.end) + '</td><td>' + km + '</td></tr>';
+    var rowClass = r.hasWaypointSet ? ' class="registered-routes-has-waypoint"' : '';
+    return '<tr' + rowClass + '><td>' + esc(r.id) + '</td><td>' + esc(r.start) + '</td><td>' + esc(r.end) + '</td><td>' + km + '</td></tr>';
   }).join('');
 }
 

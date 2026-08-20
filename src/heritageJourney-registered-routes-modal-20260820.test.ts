@@ -121,6 +121,59 @@ describe('heritage-journeyページ: ID/出発地/到着地/直線距離テー�
   });
 });
 
+describe('heritage-journeyページ: 経由地データありの行を薄緑色でハイライト', () => {
+  const ROUTES_WITH_WAYPOINT_FLAG = [
+    { id: 1, start: 'パリ', end: 'ローマ', straightKm: 1100.4, hasWaypointSet: true },
+    { id: 2, start: 'パリ', end: 'ロンドン', straightKm: 340.2, hasWaypointSet: false },
+    { id: 3, start: '東京', end: 'ローマ', straightKm: 9600.1, hasWaypointSet: true },
+  ];
+
+  it('hasWaypointSet:trueの行だけregistered-routes-has-waypointクラスが付き、falseの行には付かない', async () => {
+    setupPage(() => Promise.resolve({ json: () => Promise.resolve({ routes: ROUTES_WITH_WAYPOINT_FLAG }) }));
+    await new Promise((r) => setTimeout(r, 0));
+
+    const btn = document.getElementById('view-registered-routes-btn') as HTMLButtonElement;
+    btn.click();
+    await new Promise((r) => setTimeout(r, 0));
+    await new Promise((r) => setTimeout(r, 0));
+
+    const body = document.getElementById('registered-routes-table-body')!;
+    const rows = body.querySelectorAll('tr');
+    expect(rows.length).toBe(3);
+    expect(rows[0].classList.contains('registered-routes-has-waypoint')).toBe(true);
+    expect(rows[1].classList.contains('registered-routes-has-waypoint')).toBe(false);
+    expect(rows[2].classList.contains('registered-routes-has-waypoint')).toBe(true);
+  });
+
+  it('registered-routes-has-waypointクラスの背景色は.in-course(#bbf7d0)と同じ既存の薄緑トークンを再利用している', () => {
+    const html = getHeritageJourneyPage();
+    const inCourseMatch = html.match(/\.heritage-add-name\.in-course\{background:(#[0-9a-fA-F]{3,6});/);
+    const hasWaypointMatch = html.match(/\.registered-routes-has-waypoint\{background:(#[0-9a-fA-F]{3,6})\}/);
+    expect(inCourseMatch).not.toBeNull();
+    expect(hasWaypointMatch).not.toBeNull();
+    expect(hasWaypointMatch![1]).toBe(inCourseMatch![1]);
+    expect(hasWaypointMatch![1]).toBe('#bbf7d0');
+  });
+
+  it('hasWaypointSetが未定義(古いキャッシュ応答等)でも例外を投げず、ハイライトなしで表示する', async () => {
+    const ROUTES_WITHOUT_FLAG = [
+      { id: 1, start: 'パリ', end: 'ローマ', straightKm: 1100.4 },
+    ];
+    setupPage(() => Promise.resolve({ json: () => Promise.resolve({ routes: ROUTES_WITHOUT_FLAG }) }));
+    await new Promise((r) => setTimeout(r, 0));
+
+    const btn = document.getElementById('view-registered-routes-btn') as HTMLButtonElement;
+    expect(() => btn.click()).not.toThrow();
+    await new Promise((r) => setTimeout(r, 0));
+    await new Promise((r) => setTimeout(r, 0));
+
+    const body = document.getElementById('registered-routes-table-body')!;
+    const rows = body.querySelectorAll('tr');
+    expect(rows.length).toBe(1);
+    expect(rows[0].classList.contains('registered-routes-has-waypoint')).toBe(false);
+  });
+});
+
 describe('heritage-journeyページ: モーダルを閉じる操作', () => {
   it('閉じるボタン・背景クリック・Escapeキーでそれぞれモーダルが閉じる', async () => {
     setupPage(() => Promise.resolve({ json: () => Promise.resolve({ routes: SAMPLE_ROUTES }) }));
