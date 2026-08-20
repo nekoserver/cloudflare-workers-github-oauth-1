@@ -135,6 +135,12 @@ h1{font-size:22px;margin:0 0 4px}
 .tour-modal-head{position:relative;display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:8px}
 .end-city-picker-cand-toolbar{margin-left:auto;margin-bottom:0;font-size:11px}
 .end-city-picker-cand-label{color:#94a3b8;white-space:nowrap}
+.dist-country-filter-label{color:#94a3b8;white-space:nowrap}
+.dist-country-filter-list{list-style:none;margin:0;padding:0;max-height:60vh;overflow:auto}
+.dist-country-filter-row{display:flex;align-items:center;gap:8px;padding:8px 10px;border-bottom:1px solid #334155;cursor:pointer;color:#e2e8f0;font-size:13px}
+.dist-country-filter-row:hover{background:#1e293b}
+.dist-country-filter-row.active{background:#1e3a8a}
+.dist-country-filter-count{margin-left:auto;color:#94a3b8;font-size:11px}
 .tour-modal-title{font-size:14px;font-weight:700;color:#93c5fd}
 .tour-plan-summary{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);font-size:12px;color:#94a3b8;white-space:nowrap;pointer-events:none}
 .tour-day-label{text-align:center;font-size:12px;font-weight:700;color:#93c5fd;margin-bottom:8px}
@@ -212,7 +218,13 @@ ${getMitokoroModalCss()}
   </div>
 
   <div class="card">
-    <div class="section-title">出発地から見た目的地別プラン分布</div>
+    <div class="route-title-row">
+      <div class="section-title" style="margin:0">出発地から見た目的地別プラン分布</div>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <span class="dist-country-filter-label">到達国を限定する : </span>
+        <button id="dist-country-filter-btn" type="button">しない(デフォルト)</button>
+      </div>
+    </div>
     <div class="muted" style="margin-bottom:10px">現在の出発地から各都市への既定プラン(迂回20km以内の世界遺産を全て含む)が、それぞれ何泊必要かを集計しています。バーをクリックすると該当する目的地の一覧が開き、選ぶとその目的地の詳細プランに切り替わります。</div>
     <div id="nights-dist"></div>
   </div>
@@ -303,6 +315,16 @@ ${getMitokoroModalCss()}
       <thead><tr><th>都市名</th><th>出発地からの距離(km)</th></tr></thead>
       <tbody id="end-city-picker-table-body"></tbody>
     </table>
+  </div>
+</div>
+
+<div class="tour-modal-overlay" id="dist-country-filter-modal-overlay">
+  <div class="tour-modal-box">
+    <div class="tour-modal-head">
+      <div class="tour-modal-title">🌍 到達国を限定する</div>
+      <button type="button" class="tour-modal-close" id="dist-country-filter-modal-close" aria-label="閉じる">✕</button>
+    </div>
+    <ul class="dist-country-filter-list" id="dist-country-filter-list"></ul>
   </div>
 </div>
 
@@ -571,8 +593,111 @@ function computePlanNights(start, end, selectedPoints, hubRadiusKm, maxDailyKm) 
  * 迂回許容距離(opt-detour)には依存せず、常に20km以内の既定候補で計算する
  * (この分布は「候補の広さ」ではなく「既定プランでの負担」を横比較するためのもの)。
  */
-function computeDestinationNightsDistribution(start, hubRadiusKm, maxDailyKm) {
-  return CITIES.filter(function(c) { return c.label !== start.name; }).map(function(c) {
+// 「到達国を限定する」フィルタの現在値。'__ALL__'が「しない(デフォルト)」を表す
+// センチネル値で、Cookie(DEST_COUNTRY_FILTER_COOKIE)にもそのまま同じ文字列で
+// 保存する(空文字にするとCookie未設定と区別しづらいため明示的な文字列を使う)。
+var DEST_COUNTRY_FILTER_ALL = '__ALL__';
+var DEST_COUNTRY_FILTER_COOKIE = 'heritage_journey_dest_country_filter';
+var destCountryFilter = DEST_COUNTRY_FILTER_ALL;
+
+function isValidDestCountry(name) {
+  return CITIES.some(function(c) { return c.country === name; });
+}
+
+function getCookieValue(name) {
+  var m = document.cookie.match('(^|;)\\s*' + name + '=([^;]*)');
+  return m ? decodeURIComponent(m[2]) : null;
+}
+
+// ページ読み込み時にCookieを読み、ROUTE_CITIESに実在する国名の場合のみ採用する。
+// 未設定・不正値(過去に存在した国が削除された場合等)は「しない(デフォルト)」に
+// フォールバックし、クラッシュや空表示を避ける。
+function loadDestCountryFilterFromCookie() {
+  var v = getCookieValue(DEST_COUNTRY_FILTER_COOKIE);
+  if (v && v !== DEST_COUNTRY_FILTER_ALL && isValidDestCountry(v)) {
+    destCountryFilter = v;
+  } else {
+    destCountryFilter = DEST_COUNTRY_FILTER_ALL;
+  }
+}
+
+function saveDestCountryFilterToCookie(value) {
+  document.cookie = DEST_COUNTRY_FILTER_COOKIE + '=' + encodeURIComponent(value) + '; Path=/; Secure; SameSite=Lax; Max-Age=31536000';
+}
+
+function updateDistCountryFilterBtnLabel() {
+  var btn = document.getElementById('dist-country-filter-btn');
+  if (!btn) return;
+  if (destCountryFilter === DEST_COUNTRY_FILTER_ALL) {
+    btn.textContent = 'しない(デフォルト)';
+    return;
+  }
+  var city = CITIES.filter(function(c) { return c.country === destCountryFilter; })[0];
+  var flag = city ? (city.flag || '') : '';
+  btn.textContent = (flag ? flag + ' ' : '') + destCountryFilter;
+}
+
+// 到達国候補を国名でグルーピングし、その国に属する都市数の降順(同数は国名の
+// 辞書順)で並べる。「到着地の国旗の数が多い順」= 候補都市の多い国から表示する
+// 仕様のための集計。
+function computeDestCountryCounts() {
+  var counts = {};
+  var flags = {};
+  CITIES.forEach(function(c) {
+    if (!c.country) return;
+    counts[c.country] = (counts[c.country] || 0) + 1;
+    flags[c.country] = c.flag || '';
+  });
+  return Object.keys(counts).map(function(name) {
+    return { country: name, count: counts[name], flag: flags[name] };
+  }).sort(function(a, b) {
+    if (b.count !== a.count) return b.count - a.count;
+    return a.country.localeCompare(b.country, 'ja');
+  });
+}
+
+function renderDistCountryFilterList() {
+  var list = document.getElementById('dist-country-filter-list');
+  if (!list) return;
+  var entries = computeDestCountryCounts();
+  var rows = [{ country: DEST_COUNTRY_FILTER_ALL, count: null, flag: '' }].concat(entries);
+  list.innerHTML = rows.map(function(r) {
+    var isAll = r.country === DEST_COUNTRY_FILTER_ALL;
+    var isActive = r.country === destCountryFilter;
+    var label = isAll ? 'しない' : ((r.flag ? esc(r.flag) + ' ' : '') + esc(r.country));
+    var countBadge = isAll ? '' : '<span class="dist-country-filter-count">' + r.count + '件</span>';
+    return '<li class="dist-country-filter-row' + (isActive ? ' active' : '') + '" data-country="' + esc(r.country) + '"'
+      + (r.count === null ? '' : ' data-count="' + r.count + '"') + '>' + label + countBadge + '</li>';
+  }).join('');
+}
+
+function openDistCountryFilterModal() {
+  var overlay = document.getElementById('dist-country-filter-modal-overlay');
+  if (!overlay) return;
+  renderDistCountryFilterList();
+  overlay.style.zIndex = String(getNextZ());
+  overlay.classList.add('open');
+}
+
+function closeDistCountryFilterModal() {
+  var overlay = document.getElementById('dist-country-filter-modal-overlay');
+  if (overlay) overlay.classList.remove('open');
+}
+
+function selectDestCountryFilter(value) {
+  destCountryFilter = value;
+  saveDestCountryFilterToCookie(value);
+  updateDistCountryFilterBtnLabel();
+  closeDistCountryFilterModal();
+  renderNightsDistribution();
+}
+
+function computeDestinationNightsDistribution(start, hubRadiusKm, maxDailyKm, countryFilter) {
+  return CITIES.filter(function(c) {
+    if (c.label === start.name) return false;
+    if (countryFilter && c.country !== countryFilter) return false;
+    return true;
+  }).map(function(c) {
     var end = { name: c.label, lat: c.lat, lon: c.lon };
     var candidates = buildCandidates(start, end, HERITAGE_POINTS, 300).filter(function(x) { return x.detour <= 20; });
     var nights = computePlanNights(start, end, candidates, hubRadiusKm, maxDailyKm);
@@ -908,7 +1033,8 @@ function renderNightsDistribution() {
   var se = currentStartEnd();
   var hubRadiusKm = Number(document.getElementById('opt-hub').value) || 45;
   var maxDailyKm = Number(document.getElementById('opt-daily').value) || 350;
-  var distribution = computeDestinationNightsDistribution(se.start, hubRadiusKm, maxDailyKm);
+  var countryFilter = (destCountryFilter !== DEST_COUNTRY_FILTER_ALL) ? destCountryFilter : null;
+  var distribution = computeDestinationNightsDistribution(se.start, hubRadiusKm, maxDailyKm, countryFilter);
   var buckets = bucketByNights(distribution);
   var maxCount = 1;
   buckets.forEach(function(b) { if (b.cities.length > maxCount) maxCount = b.cities.length; });
@@ -1902,6 +2028,24 @@ function closeEndCityPickerModal() {
   });
 })();
 
+// ===== 「到達国を限定する」ボタン(#dist-country-filter-btn) → 最上位レイヤーの国一覧モーダル =====
+(function() {
+  var filterBtn = document.getElementById('dist-country-filter-btn');
+  var overlay = document.getElementById('dist-country-filter-modal-overlay');
+  var closeBtn = document.getElementById('dist-country-filter-modal-close');
+  var list = document.getElementById('dist-country-filter-list');
+  if (!filterBtn || !overlay || !closeBtn || !list) return;
+  filterBtn.addEventListener('click', openDistCountryFilterModal);
+  closeBtn.addEventListener('click', closeDistCountryFilterModal);
+  overlay.addEventListener('click', function(e) { if (e.target === overlay) closeDistCountryFilterModal(); });
+  document.addEventListener('keydown', function(e) { if (e.key === 'Escape' && overlay.classList.contains('open')) closeDistCountryFilterModal(); });
+  list.addEventListener('click', function(e) {
+    var row = e.target.closest('[data-country]');
+    if (!row) return;
+    selectDestCountryFilter(row.getAttribute('data-country'));
+  });
+})();
+
 // ===== 到着地選択モーダル(#end-city-picker-modal-overlay)をヘッダドラッグで画面内自由配置 =====
 // #tour-mini-panelのドラッグ実装(1671行目付近)と同じイベント方式・クランプ処理を踏襲する。
 (function() {
@@ -2018,6 +2162,8 @@ heritageAddResultsBody.addEventListener('click', function(e) {
 });
 
 populateCitySelects();
+loadDestCountryFilterFromCookie();
+updateDistCountryFilterBtnLabel();
 renderCandidates();
 recompute();
 renderNightsDistribution();
