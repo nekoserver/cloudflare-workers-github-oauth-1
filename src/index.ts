@@ -8920,6 +8920,22 @@ app.post('/api/heritage-journey/register-route', authMiddleware, async (c) => {
   }
 });
 
+app.get('/api/heritage-journey/registered-routes', authMiddleware, async (c) => {
+  const db = c.env.DB;
+  if (!db) return c.json({ routes: [], error: 'DB unavailable' });
+  try {
+    const rows = await db.prepare(
+      'SELECT id, start_city, end_city, straight_km FROM heritage_journey_registered_routes ORDER BY id ASC'
+    ).all<{ id: number; start_city: string; end_city: string; straight_km: number }>();
+    return c.json({
+      routes: rows.results.map(r => ({ id: r.id, start: r.start_city, end: r.end_city, straightKm: r.straight_km })),
+    });
+  } catch (err) {
+    console.error('[heritage-journey/registered-routes] DB query failed', err);
+    return c.json({ routes: [], error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
 app.get('/api/rail-station-cities', authMiddleware, async (c) => {
   const db = c.env.DB;
   if (!db) return c.json({ error: 'DB unavailable' }, 503);
