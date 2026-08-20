@@ -576,7 +576,7 @@ function computeDestinationNightsDistribution(start, hubRadiusKm, maxDailyKm) {
     var end = { name: c.label, lat: c.lat, lon: c.lon };
     var candidates = buildCandidates(start, end, HERITAGE_POINTS, 300).filter(function(x) { return x.detour <= 20; });
     var nights = computePlanNights(start, end, candidates, hubRadiusKm, maxDailyKm);
-    return { city: c.label, cityName: c.name, nights: nights };
+    return { city: c.label, cityName: c.name, nights: nights, flag: c.flag || '' };
   });
 }
 
@@ -901,7 +901,8 @@ function renderNightsDistribution() {
       var bucketCities = buckets[idx].cities.slice().sort(function(a, b2) { return a.nights - b2.nights; });
       citiesEl.innerHTML = bucketCities.length
         ? bucketCities.map(function(d) {
-            return '<button type="button" class="dist-city-chip" data-city="' + esc(d.cityName) + '">' + esc(d.city) + '(' + d.nights + '泊)</button>';
+            var flagPrefix = d.flag ? esc(d.flag) + ' ' : '';
+            return '<button type="button" class="dist-city-chip" data-city="' + esc(d.cityName) + '">' + flagPrefix + esc(d.city) + '(' + d.nights + '泊)</button>';
           }).join('')
         : '<span class="empty-note">該当する目的地はありません。</span>';
       citiesEl.querySelectorAll('[data-city]').forEach(function(chip) {
