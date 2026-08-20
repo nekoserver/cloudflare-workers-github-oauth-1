@@ -71,6 +71,10 @@ describe('heritage-journeyページ: ルート順序表示板の地点名タッ�
     firstRow.click();
 
     expect(tapLabel.textContent).toBe(name);
+    // CSSの.tour-tap-labelはdisplay:noneが既定のため、空文字('')ではスタイル
+    // シートの非表示が適用されたままになる。表示時は必ず非noneの値が
+    // インラインで明示されていることを検証する(実機で表示されないバグの再発防止)。
+    expect(tapLabel.style.display).not.toBe('');
     expect(tapLabel.style.display).not.toBe('none');
 
     const canvas = document.getElementById('tour-globe-canvas') as HTMLCanvasElement;

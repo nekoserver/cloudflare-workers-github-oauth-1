@@ -1143,7 +1143,10 @@ document.getElementById('replay-tour-btn').addEventListener('click', function() 
     tapLabel.textContent = point.name;
     tapLabel.style.left = (pp.x / canvas.width * 100) + '%';
     tapLabel.style.top = (pp.y / canvas.height * 100) + '%';
-    tapLabel.style.display = '';
+    // CSSの.tour-tap-labelはdisplay:noneが既定のため、空文字ではスタイル
+    // シートのdisplay:noneが適用されたままになり表示されない(実機バグの原因)。
+    // 必ず非noneの値を明示的にインラインで設定する。
+    tapLabel.style.display = 'block';
     if (tapLabelTimer) clearTimeout(tapLabelTimer);
     tapLabelTimer = setTimeout(function() {
       tapLabel.textContent = '';
