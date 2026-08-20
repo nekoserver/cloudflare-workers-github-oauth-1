@@ -58,16 +58,16 @@ describe('heritage-journeyページ: 巡回テストモーダルのルート順�
     setupPage();
     const routeBtn = document.querySelector('#route-line [data-wp-name]') as HTMLButtonElement;
     const name = routeBtn.getAttribute('data-wp-name')!;
-    const sideRow = Array.from(document.querySelectorAll('#tour-route-side-list [data-side-name]'))
+    const findSideRow = () => Array.from(document.querySelectorAll('#tour-route-side-list [data-side-name]'))
       .find((el) => el.getAttribute('data-side-name') === name)!;
-    expect(sideRow.classList.contains('off')).toBe(false);
+    expect(findSideRow().classList.contains('off')).toBe(false);
 
     routeBtn.click();
     expect(routeBtn.classList.contains('wp-badge-off')).toBe(true);
-    expect(sideRow.classList.contains('off')).toBe(true);
+    expect(findSideRow().classList.contains('off')).toBe(true);
 
     routeBtn.click();
-    expect(sideRow.classList.contains('off')).toBe(false);
+    expect(findSideRow().classList.contains('off')).toBe(false);
   });
 });
 
