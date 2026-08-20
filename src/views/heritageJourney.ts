@@ -1,5 +1,7 @@
 import { HERITAGE_LIST } from '../data/heritageList';
 import { ROUTE_CITIES } from '../data/routeCities';
+import { getMarkdownParserScript } from '../utils/markdownRenderer';
+import { getMitokoroModalCss, getHeritageMitokoroModalScript } from '../utils/heritageMitokoroModal';
 
 const EUROPE_LAT_MIN = 36, EUROPE_LAT_MAX = 61, EUROPE_LON_MIN = -12, EUROPE_LON_MAX = 35;
 
@@ -137,6 +139,8 @@ h1{font-size:22px;margin:0 0 4px}
 .visit-chip{display:inline-block;background:#1e293b;border:1px solid #475569;color:#cbd5e1;border-radius:999px;padding:2px 9px;font-size:11px;cursor:pointer;font-family:inherit;margin:2px 4px 2px 0}
 .visit-chip:hover{border-color:#38bdf8;color:#fff}
 .visit-chip.off{background:#374151;border-color:#374151;color:#9ca3af;text-decoration:line-through}
+#tour-tap-mitokoro-btn{cursor:pointer;margin-left:4px}
+${getMitokoroModalCss()}
 </style>
 </head>
 <body>
@@ -243,10 +247,19 @@ h1{font-size:22px;margin:0 0 4px}
   <canvas id="tour-mini-canvas" width="260" height="260"></canvas>
 </div>
 <script>
+${getMarkdownParserScript()}
+${getHeritageMitokoroModalScript()}
 var HERITAGE_POINTS = ${JSON.stringify(heritagePoints)};
 var CITIES = ${JSON.stringify(cities)};
 var CITY_POINTS = CITIES.map(function(c) { return { name: c.label, lat: c.lat, lon: c.lon }; });
 var EARTH_R = 6371;
+
+// 巡回テストのタップツールチップに「見どころ」アイコンを出せるよう、
+// 事前にname→{icon,shareId}のマップを取得しておく(見つかった分だけ随時反映)。
+var tourHeritageMitokoroShareId = {};
+fetchHeritageMitokoroShareIds(HERITAGE_POINTS.map(function(p) { return p.n; }), function(map) {
+  tourHeritageMitokoroShareId = map;
+});
 
 function haversineKm(lat1, lon1, lat2, lon2) {
   var dLat = (lat2 - lat1) * Math.PI / 180;
@@ -1147,13 +1160,28 @@ document.getElementById('replay-tour-btn').addEventListener('click', function() 
     if (!tapLabel || !point) return;
     var geo = getGlobeGeometry(canvas);
     var pp = project(point.lat, point.lon, tourCenterLat, tourCenterLon, geo.R, geo.cx, geo.cy);
-    tapLabel.textContent = point.name;
+    // 見どころ回答キャッシュがあれば、ツールチップ内に開閉可能なアイコンを添える。
+    // 無ければ従来通りプレーンな地点名のみ(textContentと等価)を表示する。
+    var mit = tourHeritageMitokoroShareId[point.name];
+    tapLabel.innerHTML = esc(point.name) + (mit ? ' <span id="tour-tap-mitokoro-btn" title="見どころを表示">' + mit.icon + '</span>' : '');
     tapLabel.style.left = (pp.x / canvas.width * 100) + '%';
     tapLabel.style.top = (pp.y / canvas.height * 100) + '%';
     // CSSの.tour-tap-labelはdisplay:noneが既定のため、空文字ではスタイル
     // シートのdisplay:noneが適用されたままになり表示されない(実機バグの原因)。
     // 必ず非noneの値を明示的にインラインで設定する。
     tapLabel.style.display = 'block';
+    if (mit) {
+      var mitBtn = document.getElementById('tour-tap-mitokoro-btn');
+      if (mitBtn) {
+        mitBtn.addEventListener('click', function(e) {
+          e.stopPropagation();
+          openHeritageMitokoroModal(mit.icon, point.name, mit.shareId);
+        });
+      }
+    }
+    // タップラベル自体の7秒自動非表示と、見どころモーダルの表示状態は独立している。
+    // モーダルは別レイヤー(data-overlay)のため、ここでラベルを消してもモーダルは
+    // 閉じない(ユーザーが読んでいる最中でも問題ない)。
     if (tapLabelTimer) clearTimeout(tapLabelTimer);
     tapLabelTimer = setTimeout(function() {
       tapLabel.textContent = '';
