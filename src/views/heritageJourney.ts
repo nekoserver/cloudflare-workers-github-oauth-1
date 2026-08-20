@@ -61,6 +61,18 @@ h1{font-size:22px;margin:0 0 4px}
 #replay-tour-btn,#tour-test-btn{background:#1e293b;border:1px solid #475569;color:#cbd5e1;border-radius:8px;padding:6px 12px;font-size:12px;cursor:pointer;font-family:inherit;white-space:nowrap}
 #replay-tour-btn:hover,#tour-test-btn:hover{border-color:#38bdf8;color:#fff}
 #replay-tour-btn:disabled,#tour-test-btn:disabled{opacity:.5;cursor:default}
+.heritage-add-search{background:#0b1220;border:1px solid #475569;border-radius:8px;color:#e2e8f0;font-size:13px;padding:7px 10px;width:220px;max-width:100%;flex-shrink:0;font-family:inherit}
+.heritage-add-search:focus{outline:none;border-color:#38bdf8}
+.heritage-add-modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:9999;align-items:center;justify-content:center;padding:16px}
+.heritage-add-modal-overlay.open{display:flex}
+.heritage-add-modal-box{background:#111827;border:1px solid #334155;border-radius:12px;padding:16px;max-width:520px;width:100%;max-height:80vh;display:flex;flex-direction:column}
+.heritage-add-results-wrap{overflow-y:auto;max-height:60vh}
+.heritage-add-results-table{width:100%;border-collapse:collapse;font-size:12px}
+.heritage-add-results-table th{text-align:left;padding:6px 8px;border-bottom:1px solid #1e293b;color:#94a3b8;font-weight:600;position:sticky;top:0;background:#111827}
+.heritage-add-results-table td{padding:6px 8px;border-bottom:1px solid #1e293b}
+.heritage-add-btn{background:#1e293b;border:1px solid #475569;color:#cbd5e1;border-radius:6px;padding:4px 10px;font-size:11px;cursor:pointer;font-family:inherit;white-space:nowrap}
+.heritage-add-btn:hover{border-color:#38bdf8;color:#fff}
+.heritage-add-btn:disabled{opacity:.5;cursor:default;border-color:#334155;color:#64748b}
 .tour-modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:9999;align-items:center;justify-content:center;padding:16px}
 .tour-modal-overlay.open{display:flex}
 .tour-modal-box{background:#111827;border:1px solid #334155;border-radius:12px;padding:16px;max-width:560px;width:100%;max-height:90vh;overflow:auto}
@@ -157,8 +169,26 @@ h1{font-size:22px;margin:0 0 4px}
   </div>
 
   <div class="card">
-    <div class="section-title">宿泊地の推奨プラン <span id="day-plan-duration" class="duration-label"></span></div>
+    <div class="route-title-row">
+      <div class="section-title" style="margin:0">宿泊地の推奨プラン <span id="day-plan-duration" class="duration-label"></span></div>
+      <input type="search" id="heritage-add-search" class="heritage-add-search" placeholder="🔍 追加したい世界遺産を検索..." autocomplete="off">
+    </div>
     <div id="day-plan"></div>
+  </div>
+</div>
+
+<div class="heritage-add-modal-overlay" id="heritage-add-modal-overlay">
+  <div class="heritage-add-modal-box">
+    <div class="tour-modal-head">
+      <div class="tour-modal-title">🔍 世界遺産を追加</div>
+      <button type="button" class="tour-modal-close" id="heritage-add-modal-close" aria-label="閉じる">✕</button>
+    </div>
+    <div class="heritage-add-results-wrap">
+      <table class="heritage-add-results-table">
+        <thead><tr><th>世界遺産</th><th>国</th><th></th></tr></thead>
+        <tbody id="heritage-add-results-body"></tbody>
+      </table>
+    </div>
   </div>
 </div>
 
@@ -204,7 +234,7 @@ function buildCandidates(start, end, pool, maxDetourKm) {
     if (haversineKm(h.lat, h.lon, start.lat, start.lon) < 3) return;
     if (haversineKm(h.lat, h.lon, end.lat, end.lon) < 3) return;
     var detour = computeDetourKm(start, end, h);
-    if (detour <= maxDetourKm) out.push({ name: h.n, icon: h.e, country: h.c, lat: h.lat, lon: h.lon, detour: detour });
+    if (detour <= maxDetourKm || manuallyAddedPoints[h.n]) out.push({ name: h.n, icon: h.e, country: h.c, lat: h.lat, lon: h.lon, detour: detour });
   });
   out.sort(function(a, b) { return a.detour - b.detour; });
   return out;
@@ -438,6 +468,10 @@ var state = { selected: {} };
 // 巡回テスト(#tour-mini-canvas/#tour-globe-canvas)の巡回対象からのみ
 // 一時的に外す(テスト時に特定の地点だけスキップしたい場合の補助)。
 var routeLineExcluded = {};
+
+// 「宿泊地の推奨プラン」セクションの検索モーダルから手動で追加した世界遺産。
+// buildCandidates()のdetour範囲フィルタを無視して常に候補・選択済みに含める。
+var manuallyAddedPoints = {};
 
 function populateCitySelects() {
   var startSel = document.getElementById('start-city');
@@ -1090,20 +1124,71 @@ document.getElementById('replay-tour-btn').addEventListener('click', function() 
 document.getElementById('swap-btn').addEventListener('click', function() {
   var s = document.getElementById('start-city'), e = document.getElementById('end-city');
   var tmp = s.value; s.value = e.value; e.value = tmp;
-  state.selected = {};
+  state.selected = {}; manuallyAddedPoints = {};
   renderCandidates(); recompute(); renderNightsDistribution();
 });
 document.getElementById('start-city').addEventListener('change', function() {
-  state.selected = {}; renderCandidates(); recompute(); renderNightsDistribution();
+  state.selected = {}; manuallyAddedPoints = {}; renderCandidates(); recompute(); renderNightsDistribution();
 });
 document.getElementById('end-city').addEventListener('change', function() {
-  state.selected = {}; renderCandidates(); recompute();
+  state.selected = {}; manuallyAddedPoints = {}; recompute();
 });
 ['opt-detour','opt-speed','opt-visit','opt-nights'].forEach(function(id) {
   document.getElementById(id).addEventListener('input', function() { renderCandidates(); recompute(); });
 });
 ['opt-daily','opt-hub'].forEach(function(id) {
   document.getElementById(id).addEventListener('input', function() { renderCandidates(); recompute(); renderNightsDistribution(); });
+});
+
+// ===== 「宿泊地の推奨プラン」検索モーダル: 世界遺産をインクリメンタルサーチで追加 =====
+var heritageAddSearchInput = document.getElementById('heritage-add-search');
+var heritageAddModalOverlay = document.getElementById('heritage-add-modal-overlay');
+var heritageAddModalClose = document.getElementById('heritage-add-modal-close');
+var heritageAddResultsBody = document.getElementById('heritage-add-results-body');
+
+function openHeritageAddModal() {
+  heritageAddModalOverlay.classList.add('open');
+  renderHeritageAddResults(heritageAddSearchInput.value);
+}
+
+function closeHeritageAddModal() {
+  heritageAddModalOverlay.classList.remove('open');
+}
+
+function renderHeritageAddResults(query) {
+  var q = String(query || '').trim().toLowerCase();
+  var matches = HERITAGE_POINTS.filter(function(h) {
+    return q === '' || h.n.toLowerCase().indexOf(q) !== -1;
+  }).slice(0, 30);
+  heritageAddResultsBody.innerHTML = matches.map(function(h) {
+    var added = !!manuallyAddedPoints[h.n];
+    return '<tr><td>' + esc(h.e || '📍') + ' ' + esc(h.n) + '</td><td>' + esc(h.c || '') + '</td>'
+      + '<td><button type="button" class="heritage-add-btn" data-add-name="' + esc(h.n) + '"' + (added ? ' disabled' : '') + '>'
+      + (added ? '追加済み' : '追加する') + '</button></td></tr>';
+  }).join('');
+}
+
+heritageAddSearchInput.addEventListener('focus', openHeritageAddModal);
+heritageAddSearchInput.addEventListener('input', function() {
+  if (!heritageAddModalOverlay.classList.contains('open')) openHeritageAddModal();
+  else renderHeritageAddResults(heritageAddSearchInput.value);
+});
+heritageAddModalClose.addEventListener('click', closeHeritageAddModal);
+heritageAddModalOverlay.addEventListener('click', function(e) { if (e.target === heritageAddModalOverlay) closeHeritageAddModal(); });
+document.addEventListener('keydown', function(e) { if (e.key === 'Escape' && heritageAddModalOverlay.classList.contains('open')) closeHeritageAddModal(); });
+
+heritageAddResultsBody.addEventListener('click', function(e) {
+  var btn = e.target.closest('[data-add-name]');
+  if (!btn || btn.disabled) return;
+  var name = btn.getAttribute('data-add-name');
+  var h = HERITAGE_POINTS.filter(function(x) { return x.n === name; })[0];
+  if (!h) return;
+  manuallyAddedPoints[name] = h;
+  state.selected[name] = true;
+  btn.disabled = true;
+  btn.textContent = '追加済み';
+  renderCandidates();
+  recompute();
 });
 
 populateCitySelects();

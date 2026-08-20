@@ -28,6 +28,7 @@ function loadFns(html: string) {
   const src = [
     'var CITIES = ' + citiesMatch[1] + ';',
     'var CITY_POINTS = CITIES.map(function(c) { return { name: c.label, lat: c.lat, lon: c.lon }; });',
+    'var manuallyAddedPoints = {};',
     earthR[0],
     extractFn(html, 'haversineKm', '[^)]*'),
     extractFn(html, 'computeDetourKm', '[^)]*'),
@@ -54,6 +55,7 @@ function extractDistributionFns(html: string) {
     'var CITIES = ' + citiesMatch[1] + ';',
     cityPointsLine,
     'var HERITAGE_POINTS = ' + heritageMatch[1] + ';',
+    'var manuallyAddedPoints = {};',
     html.match(/var EARTH_R = \d+;/)![0],
     extractFn(html, 'haversineKm', '[^)]*'),
     extractFn(html, 'computeDetourKm', '[^)]*'),
