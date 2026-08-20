@@ -684,24 +684,48 @@ document.getElementById('replay-tour-btn').addEventListener('click', function() 
   var animProgress = 0; // 0..(tourPoints.length-1) の連続値。整数部=区間番号、小数部=区間内の進み具合
   var animTimer = null;
   var playing = false;
+  var tourZoom = 1;
+  var tourCenterLat = 0;
+  var tourCenterLon = 0;
+  var ZOOM_MIN = 0.5, ZOOM_MAX = 6;
+  var pinchDist0 = 0;
 
-  function project(lat, lon, centerLon, R, cx, cy) {
+  /**
+   * 中心座標(centerLat, centerLon)を正面に見た正射影投影。中心を出発点と
+   * 目的地の中間座標に合わせることで、緯度方向もその中間点が画面中央に
+   * 来るように球を回転させる(経度回転だけの単純な投影だと、中間点の緯度が
+   * 高い/低い場合に中心からずれてしまうため)。
+   */
+  function project(lat, lon, centerLat, centerLon, R, cx, cy) {
     var latR = lat * Math.PI / 180;
     var lonR = (lon - centerLon) * Math.PI / 180;
+    var lat0 = centerLat * Math.PI / 180;
     var x = R * Math.cos(latR) * Math.sin(lonR);
-    var y = -R * Math.sin(latR);
-    var z = Math.cos(latR) * Math.cos(lonR);
+    var y = -R * (Math.cos(lat0) * Math.sin(latR) - Math.sin(lat0) * Math.cos(latR) * Math.cos(lonR));
+    var z = Math.sin(lat0) * Math.sin(latR) + Math.cos(lat0) * Math.cos(latR) * Math.cos(lonR);
     return { x: cx + x, y: cy + y, visible: z > -0.05 };
   }
 
-  function centerLongitude(points) {
-    var sumSin = 0, sumCos = 0;
-    points.forEach(function(p) {
-      var r = p.lon * Math.PI / 180;
-      sumSin += Math.sin(r);
-      sumCos += Math.cos(r);
-    });
-    return Math.atan2(sumSin, sumCos) * 180 / Math.PI;
+  function circularMeanLon(lonA, lonB) {
+    var a = lonA * Math.PI / 180, b = lonB * Math.PI / 180;
+    return Math.atan2((Math.sin(a) + Math.sin(b)) / 2, (Math.cos(a) + Math.cos(b)) / 2) * 180 / Math.PI;
+  }
+
+  /**
+   * 出発点と目的地の中間座標を地球儀の中心にし、その2点がなるべく
+   * モーダルの外側(円の縁)に近い位置に収まるズームレベルを自動算出する。
+   */
+  function computeInitialView(points, baseR) {
+    var start = points[0], end = points[points.length - 1];
+    var centerLat = (start.lat + end.lat) / 2;
+    var centerLon = circularMeanLon(start.lon, end.lon);
+    var pStart = project(start.lat, start.lon, centerLat, centerLon, baseR, 0, 0);
+    var pEnd = project(end.lat, end.lon, centerLat, centerLon, baseR, 0, 0);
+    var maxDist = Math.max(Math.hypot(pStart.x, pStart.y), Math.hypot(pEnd.x, pEnd.y));
+    var MARGIN = 0.9;
+    var zoom = maxDist > 0.01 ? (baseR * MARGIN) / maxDist : 1;
+    zoom = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, zoom));
+    return { centerLat: centerLat, centerLon: centerLon, zoom: zoom };
   }
 
   function pointAtProgress(points, progress) {
@@ -719,14 +743,16 @@ document.getElementById('replay-tour-btn').addEventListener('click', function() 
     var W = canvas.width, H = canvas.height;
     ctx.clearRect(0, 0, W, H);
     if (tourPoints.length === 0) return;
-    var cx = W / 2, cy = H / 2, R = Math.min(W, H) / 2 - 24;
-    var centerLon = centerLongitude(tourPoints);
+    var cx = W / 2, cy = H / 2;
+    var baseR = Math.min(W, H) / 2 - 24;
+    var R = baseR * tourZoom;
 
-    // 球体の輪郭と緯線(簡易グリッド)
+    // 球体の輪郭と緯線(簡易グリッド)。ズームにより実際のcanvas範囲を
+    // はみ出す場合は自然にクリップされ、出発点・目的地付近を拡大表示できる。
     ctx.strokeStyle = '#1e293b';
     ctx.lineWidth = 1;
     [-60, -30, 0, 30, 60].forEach(function(lat) {
-      var latR = lat * Math.PI / 180;
+      var latR = (lat - tourCenterLat) * Math.PI / 180;
       var ellipseY = cy - R * Math.sin(latR);
       var ellipseRx = R * Math.cos(latR);
       ctx.beginPath();
@@ -739,7 +765,7 @@ document.getElementById('replay-tour-btn').addEventListener('click', function() 
     ctx.arc(cx, cy, R, 0, Math.PI * 2);
     ctx.stroke();
 
-    var projected = tourPoints.map(function(p) { return project(p.lat, p.lon, centerLon, R, cx, cy); });
+    var projected = tourPoints.map(function(p) { return project(p.lat, p.lon, tourCenterLat, tourCenterLon, R, cx, cy); });
 
     // 経由地を結ぶルート線
     ctx.strokeStyle = '#38bdf8';
@@ -761,7 +787,7 @@ document.getElementById('replay-tour-btn').addEventListener('click', function() 
 
     // 巡回中の現在位置マーカー
     var curPt = pointAtProgress(tourPoints, animProgress);
-    var curProj = project(curPt.lat, curPt.lon, centerLon, R, cx, cy);
+    var curProj = project(curPt.lat, curPt.lon, tourCenterLat, tourCenterLon, R, cx, cy);
     ctx.fillStyle = '#22c55e';
     ctx.beginPath();
     ctx.arc(curProj.x, curProj.y, 7, 0, Math.PI * 2);
@@ -819,6 +845,11 @@ document.getElementById('replay-tour-btn').addEventListener('click', function() 
     tourPoints = ordered.map(function(p) { return { name: p.name, lat: p.lat, lon: p.lon }; });
     animProgress = 0;
     stopAnim();
+    var baseR = Math.min(canvas.width, canvas.height) / 2 - 24;
+    var initial = computeInitialView(tourPoints, baseR);
+    tourCenterLat = initial.centerLat;
+    tourCenterLon = initial.centerLon;
+    tourZoom = initial.zoom;
     drawGlobe();
     updateLabel();
     overlay.classList.add('open');
@@ -833,6 +864,30 @@ document.getElementById('replay-tour-btn').addEventListener('click', function() 
   closeBtn.addEventListener('click', closeTourModal);
   overlay.addEventListener('click', function(e) { if (e.target === overlay) closeTourModal(); });
   document.addEventListener('keydown', function(e) { if (e.key === 'Escape' && overlay.classList.contains('open')) closeTourModal(); });
+
+  // ===== ズーム・ピンチイン/ピンチアウト(webgl-heritageページから移植) =====
+  canvas.addEventListener('wheel', function(e) {
+    e.preventDefault();
+    tourZoom = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, tourZoom - e.deltaY * 0.002));
+    drawGlobe();
+  }, { passive: false });
+
+  canvas.addEventListener('touchstart', function(e) {
+    if (e.touches.length === 2) {
+      e.preventDefault();
+      pinchDist0 = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+    }
+  }, { passive: false });
+
+  canvas.addEventListener('touchmove', function(e) {
+    if (e.touches.length === 2) {
+      e.preventDefault();
+      var d = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+      tourZoom = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, tourZoom + (d - pinchDist0) * 0.008));
+      pinchDist0 = d;
+      drawGlobe();
+    }
+  }, { passive: false });
 })();
 document.getElementById('swap-btn').addEventListener('click', function() {
   var s = document.getElementById('start-city'), e = document.getElementById('end-city');

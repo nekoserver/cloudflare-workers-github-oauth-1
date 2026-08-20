@@ -23,14 +23,22 @@ function setupPage() {
   const html = getHeritageJourneyPage();
   document.body.innerHTML = html.slice(html.indexOf('<body>') + 6, html.lastIndexOf('<script>'));
   const scriptSrc = html.slice(html.lastIndexOf('<script>') + 8, html.lastIndexOf('</script>'));
-  const proto = (window as unknown as { HTMLCanvasElement: { prototype: { getContext: unknown } } }).HTMLCanvasElement.prototype;
-  proto.getContext = () => ({
-    clearRect: () => {}, beginPath: () => {}, arc: () => {}, ellipse: () => {},
+  const arcCalls: number[][] = [];
+  const ctx = {
+    clearRect: () => {}, beginPath: () => {}, ellipse: () => {},
+    arc: (...args: number[]) => { arcCalls.push(args); },
     fill: () => {}, stroke: () => {}, moveTo: () => {}, lineTo: () => {}, fillText: () => {},
-  });
+  };
+  const proto = (window as unknown as { HTMLCanvasElement: { prototype: { getContext: unknown } } }).HTMLCanvasElement.prototype;
+  proto.getContext = () => ctx;
   // eslint-disable-next-line no-new-func
   new Function(scriptSrc)();
-  return { html };
+  return { html, arcCalls };
+}
+
+/** 球体輪郭(arc呼び出し)のうち、半径が最大のものを地球儀の描画半径とみなす */
+function globeRadiusFromArcCalls(arcCalls: number[][]): number {
+  return arcCalls.reduce((max, args) => Math.max(max, args[2] ?? 0), 0);
 }
 
 function selectRoute() {
@@ -38,6 +46,80 @@ function selectRoute() {
   // populateCitySelects/renderCandidates/recomputeが自動実行されるため、
   // 追加操作なしでstate.lastOrderedが計算済みになる。
 }
+
+function loadProjectionFns(html: string) {
+  function extractFn(name: string, argsPattern: string): string {
+    const re = new RegExp('function ' + name + '\\(' + argsPattern + '\\) \\{[\\s\\S]*?\\n  \\}');
+    const m = html.match(re);
+    if (!m) throw new Error(name + ' が生成HTMLから見つからない');
+    return m[0];
+  }
+  const src = [
+    'var ZOOM_MIN = 0.5, ZOOM_MAX = 6;',
+    extractFn('project', 'lat, lon, centerLat, centerLon, R, cx, cy'),
+    extractFn('circularMeanLon', 'lonA, lonB'),
+    extractFn('computeInitialView', 'points, baseR'),
+  ].join('\n');
+  // eslint-disable-next-line no-new-func
+  const fn = new Function(`${src}\nreturn { project: project, circularMeanLon: circularMeanLon, computeInitialView: computeInitialView };`);
+  return fn() as {
+    project: (lat: number, lon: number, centerLat: number, centerLon: number, R: number, cx: number, cy: number) => { x: number; y: number; visible: boolean };
+    circularMeanLon: (a: number, b: number) => number;
+    computeInitialView: (points: { lat: number; lon: number }[], baseR: number) => { centerLat: number; centerLon: number; zoom: number };
+  };
+}
+
+describe('巡回テストモーダル: 初期表示の中心座標・ズーム自動算出(純粋関数)', () => {
+  it('project: 中心座標そのものは画面中心(cx,cy)に投影される', () => {
+    const { project } = loadProjectionFns(getHeritageJourneyPage());
+    const p = project(35, 100, 35, 100, 200, 0, 0);
+    expect(p.x).toBeCloseTo(0, 5);
+    expect(p.y).toBeCloseTo(0, 5);
+    expect(p.visible).toBe(true);
+  });
+
+  it('circularMeanLon: 2つの経度の中間値(経度またぎも考慮)を返す', () => {
+    const { circularMeanLon } = loadProjectionFns(getHeritageJourneyPage());
+    expect(circularMeanLon(10, 20)).toBeCloseTo(15, 5);
+    // 179度と-179度(またいで2度差)の中間は180(=-180)付近になる
+    expect(Math.abs(circularMeanLon(179, -179))).toBeCloseTo(180, 0);
+  });
+
+  it('computeInitialView: 中間の経由地は無視し、出発点(先頭)・目的地(末尾)だけの中間座標を中心にする', () => {
+    const { computeInitialView } = loadProjectionFns(getHeritageJourneyPage());
+    const points = [{ lat: 40, lon: 0 }, { lat: 20, lon: 100 }, { lat: 60, lon: 20 }];
+    const view = computeInitialView(points, 200);
+    expect(view.centerLat).toBeCloseTo((40 + 60) / 2, 5);
+    expect(view.centerLon).toBeCloseTo(10, 5);
+  });
+
+  it('computeInitialView: 出発点・目的地が近い(距離が小さい)ほどズームレベルを大きくする', () => {
+    const { computeInitialView } = loadProjectionFns(getHeritageJourneyPage());
+    const near = computeInitialView([{ lat: 48, lon: 2 }, { lat: 48.1, lon: 2.1 }], 200);
+    const far = computeInitialView([{ lat: 48, lon: 2 }, { lat: -33, lon: 151 }], 200);
+    expect(near.zoom).toBeGreaterThan(far.zoom);
+  });
+
+  it('computeInitialView: ズームはZOOM_MIN〜ZOOM_MAXの範囲にクランプされる', () => {
+    const { computeInitialView } = loadProjectionFns(getHeritageJourneyPage());
+    const sameSpot = computeInitialView([{ lat: 48, lon: 2 }, { lat: 48, lon: 2 }], 200);
+    expect(sameSpot.zoom).toBeLessThanOrEqual(6);
+    expect(sameSpot.zoom).toBeGreaterThanOrEqual(0.5);
+  });
+
+  it('computeInitialView: 出発点・目的地の投影後の距離が、算出したズームでbaseRの90%付近に収まる(ZOOM_MIN/MAXにクランプされない適度な離れ具合の場合)', () => {
+    const { project, computeInitialView } = loadProjectionFns(getHeritageJourneyPage());
+    // 中心から見て経度30度ずつ離れた2点(生ズーム1.8倍相当、ZOOM_MIN=0.5〜ZOOM_MAX=6の範囲内)
+    const points = [{ lat: 0, lon: -30 }, { lat: 0, lon: 30 }];
+    const baseR = 200;
+    const view = computeInitialView(points, baseR);
+    const R = baseR * view.zoom;
+    const pStart = project(points[0].lat, points[0].lon, view.centerLat, view.centerLon, R, 0, 0);
+    const pEnd = project(points[1].lat, points[1].lon, view.centerLat, view.centerLon, R, 0, 0);
+    const maxDist = Math.max(Math.hypot(pStart.x, pStart.y), Math.hypot(pEnd.x, pEnd.y));
+    expect(maxDist).toBeCloseTo(baseR * 0.9, 0);
+  });
+});
 
 describe('heritage-journeyページ: 「🌐 巡回テスト」ボタンとモーダル(マークアップ)', () => {
   it('ボタン(#tour-test-btn)とモーダル(#tour-modal-overlay)がマークアップに存在する', () => {
@@ -154,5 +236,77 @@ describe('heritage-journeyページ: 「🌐 巡回テスト」モーダル(DOM�
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+describe('巡回テストモーダル: ホイール・ピンチによるズーム(webgl-heritageページから移植、DOM実動作)', () => {
+  afterEach(() => { document.body.innerHTML = ''; });
+
+  it('マウスホイール(上スクロール=deltaY負)で地球儀の描画半径が拡大する', () => {
+    const { arcCalls } = setupPage();
+    (document.getElementById('tour-test-btn') as HTMLButtonElement).click();
+    const radiusBeforeCount = arcCalls.length;
+    const canvas = document.getElementById('tour-globe-canvas')!;
+    // 既定の出発地・到着地(Paris→Rome)は近接しておりZOOM_MAXに張り付いている
+    // ことがあるため、まず一度ズームアウトして拡大の余地を作ってから検証する
+    arcCalls.length = 0;
+    canvas.dispatchEvent(new WheelEvent('wheel', { deltaY: 500, cancelable: true }));
+    const radiusBefore = globeRadiusFromArcCalls(arcCalls);
+    arcCalls.length = 0;
+
+    canvas.dispatchEvent(new WheelEvent('wheel', { deltaY: -100, cancelable: true }));
+
+    const radiusAfter = globeRadiusFromArcCalls(arcCalls);
+    expect(radiusBeforeCount).toBeGreaterThan(0);
+    expect(radiusAfter).toBeGreaterThan(radiusBefore);
+  });
+
+  it('マウスホイール(下スクロール=deltaY正)で地球儀の描画半径が縮小する', () => {
+    const { arcCalls } = setupPage();
+    (document.getElementById('tour-test-btn') as HTMLButtonElement).click();
+    const radiusBefore = globeRadiusFromArcCalls(arcCalls);
+    arcCalls.length = 0;
+
+    const canvas = document.getElementById('tour-globe-canvas')!;
+    canvas.dispatchEvent(new WheelEvent('wheel', { deltaY: 100, cancelable: true }));
+
+    const radiusAfter = globeRadiusFromArcCalls(arcCalls);
+    expect(radiusAfter).toBeLessThan(radiusBefore);
+  });
+
+  it('2本指のピンチアウト(指の間隔が広がる)で地球儀の描画半径が拡大する', () => {
+    const { arcCalls } = setupPage();
+    (document.getElementById('tour-test-btn') as HTMLButtonElement).click();
+    const canvas = document.getElementById('tour-globe-canvas')!;
+    // 既定の出発地・到着地(Paris→Rome)は近接しておりZOOM_MAXに張り付いている
+    // ことがあるため、まず一度ズームアウトして拡大の余地を作ってから検証する
+    arcCalls.length = 0;
+    canvas.dispatchEvent(new WheelEvent('wheel', { deltaY: 500, cancelable: true }));
+    const radiusBefore = globeRadiusFromArcCalls(arcCalls);
+    arcCalls.length = 0;
+
+    const touchesStart = [{ clientX: 100, clientY: 100 }, { clientX: 120, clientY: 100 }] as unknown as TouchList;
+    canvas.dispatchEvent(Object.assign(new Event('touchstart', { cancelable: true }), { touches: touchesStart }));
+    const touchesMove = [{ clientX: 60, clientY: 100 }, { clientX: 160, clientY: 100 }] as unknown as TouchList;
+    canvas.dispatchEvent(Object.assign(new Event('touchmove', { cancelable: true }), { touches: touchesMove }));
+
+    const radiusAfter = globeRadiusFromArcCalls(arcCalls);
+    expect(radiusAfter).toBeGreaterThan(radiusBefore);
+  });
+
+  it('2本指のピンチイン(指の間隔が狭まる)で地球儀の描画半径が縮小する', () => {
+    const { arcCalls } = setupPage();
+    (document.getElementById('tour-test-btn') as HTMLButtonElement).click();
+    const radiusBefore = globeRadiusFromArcCalls(arcCalls);
+    arcCalls.length = 0;
+
+    const canvas = document.getElementById('tour-globe-canvas')!;
+    const touchesStart = [{ clientX: 60, clientY: 100 }, { clientX: 160, clientY: 100 }] as unknown as TouchList;
+    canvas.dispatchEvent(Object.assign(new Event('touchstart', { cancelable: true }), { touches: touchesStart }));
+    const touchesMove = [{ clientX: 100, clientY: 100 }, { clientX: 120, clientY: 100 }] as unknown as TouchList;
+    canvas.dispatchEvent(Object.assign(new Event('touchmove', { cancelable: true }), { touches: touchesMove }));
+
+    const radiusAfter = globeRadiusFromArcCalls(arcCalls);
+    expect(radiusAfter).toBeLessThan(radiusBefore);
   });
 });
