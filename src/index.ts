@@ -1744,7 +1744,7 @@ export const TABLE_COLUMN_KEYS: Record<string, ColumnKeyInfo> = {
   aichat_search_history: { id: 'pk', user_id: 'fk', share_id: 'fk', keyword: 'idx', seq_num: 'idx' },
   aichat_search_impressions: { id: 'pk', user_id: 'fk', share_id: 'fk' },
   aichat_subqueries: { id: 'pk' },
-  aichat_share_subquery_links: { id: 'pk', subquery_id: 'fk', question_hash: 'idx' },
+  aichat_share_subquery_links: { id: 'pk', user_id: 'idx', subquery_id: 'fk', question_hash: 'idx' },
   aichat_model_colors: { model_id: 'pk' },
   aichat_category_groups: { id: 'pk', user_id: 'idx' },
   keyword_category_groups: { id: 'pk', user_id: 'fk' },
@@ -2059,7 +2059,8 @@ export const COLUMN_FK_TARGETS: Record<string, Record<string, string>> = {
   aichat_search_log: { user_id: 'user_sessions', share_id: 'ai_chat_shares' },
   aichat_search_history: { user_id: 'user_sessions', share_id: 'ai_chat_shares' },
   aichat_search_impressions: { user_id: 'user_sessions', share_id: 'ai_chat_shares' },
-  aichat_share_subquery_links: { subquery_id: 'aichat_subqueries' },
+  aichat_share_subquery_links: { user_id: 'user_sessions', subquery_id: 'aichat_subqueries' },
+  aichat_category_groups: { user_id: 'user_sessions' },
   keyword_category_groups: { user_id: 'user_sessions' },
   keyword_multi_labels: { user_id: 'user_sessions' },
 
@@ -2081,6 +2082,7 @@ export const COLUMN_FK_TARGETS: Record<string, Record<string, string>> = {
   aichat_rate_limit: { user_id: 'user_sessions' },
   cf_auth_access_log: { username: 'user_sessions' },
   slack_installations: { installed_by_user: 'user_sessions' },
+  uuid_history: { user_id: 'user_sessions' },
 
   // ========================================================================
   // AIチャット キーワード分類・監査ログ系
@@ -2090,9 +2092,9 @@ export const COLUMN_FK_TARGETS: Record<string, Record<string, string>> = {
   aichat_category_audit_log: { user_id: 'user_sessions' },
   aichat_keyword_embeddings: { user_id: 'user_sessions' },
   aichat_keyword_category_suggestions: { user_id: 'user_sessions', suggested_category_id: 'aichat_keyword_categories' },
-  aichat_answer_category_scores: { user_id: 'user_sessions', category_id: 'aichat_keyword_categories' },
-  aichat_answer_vectors: { user_id: 'user_sessions' },
-  aichat_answer_keyword_vectors: { user_id: 'user_sessions' },
+  aichat_answer_category_scores: { user_id: 'user_sessions', share_id: 'ai_chat_shares', category_id: 'aichat_keyword_categories' },
+  aichat_answer_vectors: { user_id: 'user_sessions', share_id: 'ai_chat_shares' },
+  aichat_answer_keyword_vectors: { user_id: 'user_sessions', share_id: 'ai_chat_shares' },
   moondream_analyze_log: { user_id: 'user_sessions' },
   aichat_images: { user_id: 'user_sessions' },
   aichat_moondream_analyses: { user_id: 'user_sessions', share_id: 'ai_chat_shares', image_id: 'aichat_images' },
@@ -2100,7 +2102,8 @@ export const COLUMN_FK_TARGETS: Record<string, Record<string, string>> = {
   // ========================================================================
   // 世界遺産ページ AI質問ログ・保存済みエリア系
   // ========================================================================
-  heritage_question_view_log: { question_master_id: 'heritage_ai_question_masters' },
+  heritage_question_view_log: { user_id: 'user_sessions', question_master_id: 'heritage_ai_question_masters' },
+  heritage_area_boxes: { user_id: 'user_sessions' },
   heritage_area_items: { area_seq: 'heritage_area_boxes' },
 
   // ========================================================================
