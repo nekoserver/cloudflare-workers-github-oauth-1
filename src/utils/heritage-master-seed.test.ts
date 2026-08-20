@@ -49,11 +49,17 @@ describe('buildHeritageMasterRows', () => {
     expect(rows[2].registered_year).toBe(2000);
   });
 
-  it('分類用アイコンと自由アイコンはどちらもheritageList.tsのeフィールドを複製する(暫定値)', () => {
+  it('分類用アイコンはheritageList.tsのeフィールド(遺産種別ごとの個別アイコン)を使う', () => {
+    const rows = buildHeritageMasterRows(fixture);
+    expect(rows[0].classification_icon).toBe('🏛️');
+    expect(rows[1].classification_icon).toBe('🌿');
+    expect(rows[2].classification_icon).toBe('🏰');
+  });
+
+  it('自由アイコンはwebglHeritage.tsの世界遺産カテゴリ共通アイコン(🏛️)を使う', () => {
     const rows = buildHeritageMasterRows(fixture);
     for (const row of rows) {
-      expect(row.classification_icon).toBe(row.free_icon);
-      expect(row.classification_icon).not.toBe('');
+      expect(row.free_icon).toBe('🏛️');
     }
   });
 
