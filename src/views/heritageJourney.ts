@@ -72,7 +72,9 @@ h1{font-size:22px;margin:0 0 4px}
 .heritage-add-results-table td{padding:6px 8px;border-bottom:1px solid #1e293b}
 .heritage-add-btn{background:#1e293b;border:1px solid #475569;color:#cbd5e1;border-radius:6px;padding:4px 10px;font-size:11px;cursor:pointer;font-family:inherit;white-space:nowrap}
 .heritage-add-btn:hover{border-color:#38bdf8;color:#fff}
-.heritage-add-btn:disabled{opacity:.5;cursor:default;border-color:#334155;color:#64748b}
+.heritage-add-btn.active{background:#166534;border-color:#22c55e;color:#dcfce7}
+.heritage-add-btn.active:hover{border-color:#4ade80;color:#fff}
+.heritage-add-name.in-course{background:#bbf7d0;color:#064e3b;border-radius:4px;padding:2px 6px}
 .tour-modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:9999;align-items:center;justify-content:center;padding:16px}
 .tour-modal-overlay.open{display:flex}
 .tour-modal-box{background:#111827;border:1px solid #334155;border-radius:12px;padding:16px;max-width:560px;width:100%;max-height:90vh;overflow:auto}
@@ -1161,14 +1163,19 @@ function closeHeritageAddModal() {
 
 function renderHeritageAddResults(query) {
   var q = String(query || '').trim().toLowerCase();
-  var matches = HERITAGE_POINTS.filter(function(h) {
+  var pool = HERITAGE_POINTS;
+  if (tourPoints.length >= 1) {
+    var radius = haversineKm(tourCenterLat, tourCenterLon, tourPoints[0].lat, tourPoints[0].lon);
+    pool = pool.filter(function(h) { return haversineKm(tourCenterLat, tourCenterLon, h.lat, h.lon) <= radius; });
+  }
+  var matches = pool.filter(function(h) {
     return q === '' || h.n.toLowerCase().indexOf(q) !== -1;
   }).slice(0, 30);
   heritageAddResultsBody.innerHTML = matches.map(function(h) {
-    var added = !!manuallyAddedPoints[h.n];
-    return '<tr><td>' + esc(h.e || '📍') + ' ' + esc(h.n) + '</td><td>' + esc(h.c || '') + '</td>'
-      + '<td><button type="button" class="heritage-add-btn" data-add-name="' + esc(h.n) + '"' + (added ? ' disabled' : '') + '>'
-      + (added ? '追加済み' : '追加する') + '</button></td></tr>';
+    var inCourse = tourPoints.some(function(p) { return p.name === h.n; });
+    return '<tr><td class="heritage-add-name' + (inCourse ? ' in-course' : '') + '">' + esc(h.e || '📍') + ' ' + esc(h.n) + '</td><td>' + esc(h.c || '') + '</td>'
+      + '<td><button type="button" class="heritage-add-btn' + (inCourse ? ' active' : '') + '" data-add-name="' + esc(h.n) + '">'
+      + (inCourse ? '解除する' : '追加する') + '</button></td></tr>';
   }).join('');
 }
 
@@ -1183,16 +1190,21 @@ document.addEventListener('keydown', function(e) { if (e.key === 'Escape' && her
 
 heritageAddResultsBody.addEventListener('click', function(e) {
   var btn = e.target.closest('[data-add-name]');
-  if (!btn || btn.disabled) return;
+  if (!btn) return;
   var name = btn.getAttribute('data-add-name');
   var h = HERITAGE_POINTS.filter(function(x) { return x.n === name; })[0];
   if (!h) return;
-  manuallyAddedPoints[name] = h;
-  state.selected[name] = true;
-  btn.disabled = true;
-  btn.textContent = '追加済み';
+  var inCourse = tourPoints.some(function(p) { return p.name === name; });
+  if (inCourse) {
+    state.selected[name] = false;
+    delete manuallyAddedPoints[name];
+  } else {
+    manuallyAddedPoints[name] = h;
+    state.selected[name] = true;
+  }
   renderCandidates();
   recompute();
+  renderHeritageAddResults(heritageAddSearchInput.value);
 });
 
 populateCitySelects();
