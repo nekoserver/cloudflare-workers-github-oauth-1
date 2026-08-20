@@ -260,6 +260,7 @@ export const STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
   { name: 'workflow_registry', migration: '0109', description: '/workflow/NNNNページで一覧表示するワークフロー(内部でAPI問い合わせを行うアプリ)の通し番号・タイトル・遷移先パス', syncPolicy: 'manual' },
   { name: 'workflow_steps', migration: '0109', description: 'workflow_registryの各ワークフローについて、処理段階ごとにどのAPIへ問い合わせが行われるかを上から下の順序で記録', syncPolicy: 'manual' },
   { name: 'workflow_hierarchy', migration: '0110', description: 'workflow_registryのフラットな通し番号を維持したまま、ワークフロー同士の分類上の親子関係のみを別テーブルで管理する(/workflowページの構造化表示切替用)', syncPolicy: 'manual' },
+  { name: 'heritage_journey_registered_routes', migration: '0111', description: '/heritage-journeyページで出発地・到着地の組み合わせごとに手動登録したルートの直線距離(km)', syncPolicy: 'manual' },
 ];
 
 const REQUIRED_STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
@@ -1569,6 +1570,14 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_workflow_steps_order ON workflow_steps(wor
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_workflow_hierarchy_parent ON workflow_hierarchy(parent_workflow_no);`,
+  '0111': `CREATE TABLE IF NOT EXISTS heritage_journey_registered_routes (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  start_city TEXT NOT NULL,
+  end_city TEXT NOT NULL,
+  straight_km REAL NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_heritage_journey_registered_routes_pair ON heritage_journey_registered_routes(start_city, end_city);`,
 };
 
 async function ensureGroupTable(db: D1Database): Promise<void> {
@@ -1800,6 +1809,7 @@ export const TABLE_COLUMN_KEYS: Record<string, ColumnKeyInfo> = {
   workflow_registry: { workflow_no: 'pk' },
   workflow_steps: { id: 'pk', workflow_no: 'fk+idx' },
   workflow_hierarchy: { child_workflow_no: 'pk+fk', parent_workflow_no: 'fk+idx' },
+  heritage_journey_registered_routes: { id: 'pk', start_city: 'uk', end_city: 'uk' },
 };
 
 export function getColumnKeyType(tableName: string, columnName: string): ColumnKeyType {
@@ -1913,6 +1923,7 @@ export const TABLE_GROUP_MAP: Record<string, string> = {
   workflow_registry: 'system',
   workflow_steps: 'system',
   workflow_hierarchy: 'system',
+  heritage_journey_registered_routes: 'system',
 };
 
 async function recordAiSummaryLinkAccess(
@@ -8864,6 +8875,49 @@ app.get('/api/heritage-city-fetched-list', authMiddleware, async (c) => {
   if (!db) return c.json({ names: [] });
   const rows = await db.prepare('SELECT heritage_name FROM heritage_city_fetched WHERE city_count > 0').all<{ heritage_name: string }>();
   return c.json({ names: rows.results.map(r => r.heritage_name) });
+});
+
+app.get('/api/heritage-journey/route-exists', authMiddleware, async (c) => {
+  const start = c.req.query('start') || '';
+  const end = c.req.query('end') || '';
+  if (!start || !end) return c.json({ error: 'start, end required' }, 400);
+  const db = c.env.DB;
+  if (!db) return c.json({ exists: false, error: 'DB unavailable' });
+  try {
+    const row = await db.prepare(
+      'SELECT id FROM heritage_journey_registered_routes WHERE start_city = ? AND end_city = ?'
+    ).bind(start, end).first<{ id: number }>();
+    return c.json({ exists: !!row });
+  } catch (err) {
+    console.error('[heritage-journey/route-exists] DB query failed', err);
+    return c.json({ exists: false, error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+app.post('/api/heritage-journey/register-route', authMiddleware, async (c) => {
+  const body = await c.req.json<{ start: string; end: string; startLat: number; startLon: number; endLat: number; endLon: number }>().catch(() => null);
+  if (!body || !body.start || !body.end || body.startLat == null || body.startLon == null || body.endLat == null || body.endLon == null) {
+    return c.json({ ok: false, error: 'start, end, startLat, startLon, endLat, endLon required' }, 400);
+  }
+  const { start, end, startLat, startLon, endLat, endLon } = body;
+  const db = c.env.DB;
+  if (!db) return c.json({ ok: false, error: 'DB unavailable' }, 503);
+  const straightKm = haversineKm(startLat, startLon, endLat, endLon);
+  try {
+    const existing = await db.prepare(
+      'SELECT id FROM heritage_journey_registered_routes WHERE start_city = ? AND end_city = ?'
+    ).bind(start, end).first<{ id: number }>();
+    if (existing) {
+      return c.json({ ok: false, error: 'already registered', id: existing.id }, 409);
+    }
+    const result = await db.prepare(
+      'INSERT INTO heritage_journey_registered_routes (start_city, end_city, straight_km) VALUES (?, ?, ?)'
+    ).bind(start, end, straightKm).run();
+    return c.json({ ok: true, id: result.meta.last_row_id, straightKm });
+  } catch (err) {
+    console.error('[heritage-journey/register-route] DB write failed', err);
+    return c.json({ ok: false, error: err instanceof Error ? err.message : String(err) }, 500);
+  }
 });
 
 app.get('/api/rail-station-cities', authMiddleware, async (c) => {

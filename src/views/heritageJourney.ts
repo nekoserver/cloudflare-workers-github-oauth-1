@@ -65,6 +65,11 @@ h1{font-size:22px;margin:0 0 4px}
 #route-apply-btn:disabled{opacity:.4;cursor:default}
 #route-apply-btn:not(:disabled){background:#0369a1;border-color:#38bdf8;color:#fff}
 #route-apply-btn:not(:disabled):hover{background:#0284c7}
+#register-route-btn{background:#1e293b;border:1px solid #475569;color:#cbd5e1;border-radius:8px;padding:6px 12px;font-size:12px;cursor:pointer;font-family:inherit;white-space:nowrap}
+#register-route-btn:disabled{opacity:.4;cursor:default}
+#register-route-btn:not(:disabled){background:#0369a1;border-color:#38bdf8;color:#fff}
+#register-route-btn:not(:disabled):hover{background:#0284c7}
+#register-route-error{color:#f87171;font-size:12px;margin-top:6px}
 #replay-tour-btn,#tour-test-btn{background:#1e293b;border:1px solid #475569;color:#cbd5e1;border-radius:8px;padding:6px 12px;font-size:12px;cursor:pointer;font-family:inherit;white-space:nowrap}
 #replay-tour-btn:hover,#tour-test-btn:hover{border-color:#38bdf8;color:#fff}
 #replay-tour-btn:disabled,#tour-test-btn:disabled{opacity:.5;cursor:default}
@@ -154,7 +159,9 @@ ${getMitokoroModalCss()}
       <select id="start-city"></select>
       <button id="swap-btn" type="button">⇄ 入替</button>
       <select id="end-city"></select>
+      <button id="register-route-btn" type="button" disabled>➕ ルート登録</button>
     </div>
+    <div id="register-route-error" style="display:none"></div>
     <div class="opt-grid">
       <label class="opt-item">迂回許容距離(km・候補の広さ)<input id="opt-detour" type="number" min="10" max="500" step="10" value="150"></label>
       <label class="opt-item">平均移動速度(km/h)<input id="opt-speed" type="number" min="20" max="160" step="5" value="70"></label>
@@ -539,6 +546,74 @@ function currentStartEnd() {
   };
 }
 
+// 出発地・到着地の組み合わせが heritage_journey_registered_routes テーブルに
+// 未登録の場合のみ「ルート登録」ボタン(#register-route-btn)を有効化する。
+// 登録済みなら非アクティブ、書き込み成功後はボタン自体をDOMから削除する。
+function updateRegisterRouteButton() {
+  var btn = document.getElementById('register-route-btn');
+  if (!btn) return;
+  var se = currentStartEnd();
+  fetch('/api/heritage-journey/route-exists?start=' + encodeURIComponent(se.start.name) + '&end=' + encodeURIComponent(se.end.name))
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      var btn2 = document.getElementById('register-route-btn');
+      if (!btn2) return;
+      btn2.disabled = !!(data && data.exists);
+    })
+    .catch(function() {
+      var btn2 = document.getElementById('register-route-btn');
+      if (btn2) btn2.disabled = true;
+    });
+}
+
+function showRegisterRouteError(message) {
+  var el = document.getElementById('register-route-error');
+  if (!el) return;
+  el.textContent = message;
+  el.style.display = 'block';
+}
+
+function clearRegisterRouteError() {
+  var el = document.getElementById('register-route-error');
+  if (!el) return;
+  el.textContent = '';
+  el.style.display = 'none';
+}
+
+(function() {
+  var registerBtn = document.getElementById('register-route-btn');
+  if (!registerBtn) return;
+  registerBtn.addEventListener('click', function() {
+    var btn = document.getElementById('register-route-btn');
+    if (!btn) return;
+    clearRegisterRouteError();
+    var se = currentStartEnd();
+    btn.disabled = true;
+    fetch('/api/heritage-journey/register-route', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        start: se.start.name, end: se.end.name,
+        startLat: se.start.lat, startLon: se.start.lon,
+        endLat: se.end.lat, endLon: se.end.lon,
+      }),
+    })
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        if (data && data.ok) {
+          btn.remove();
+        } else {
+          btn.disabled = false;
+          showRegisterRouteError((data && data.error) ? data.error : '登録に失敗しました');
+        }
+      })
+      .catch(function() {
+        btn.disabled = false;
+        showRegisterRouteError('登録に失敗しました');
+      });
+  });
+})();
+
 function renderCandidates() {
   var se = currentStartEnd();
   var maxDetour = Number(document.getElementById('opt-detour').value) || 150;
@@ -614,6 +689,7 @@ function renderNightsDistribution() {
           state.selected = {};
           renderCandidates();
           recompute();
+          updateRegisterRouteButton();
           var summaryEl = document.getElementById('summary-grid');
           if (summaryEl && summaryEl.scrollIntoView) summaryEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
         });
@@ -1372,13 +1448,13 @@ document.getElementById('swap-btn').addEventListener('click', function() {
   var s = document.getElementById('start-city'), e = document.getElementById('end-city');
   var tmp = s.value; s.value = e.value; e.value = tmp;
   state.selected = {}; manuallyAddedPoints = {};
-  renderCandidates(); recompute(); renderNightsDistribution();
+  renderCandidates(); recompute(); renderNightsDistribution(); updateRegisterRouteButton();
 });
 document.getElementById('start-city').addEventListener('change', function() {
-  state.selected = {}; manuallyAddedPoints = {}; renderCandidates(); recompute(); renderNightsDistribution();
+  state.selected = {}; manuallyAddedPoints = {}; renderCandidates(); recompute(); renderNightsDistribution(); updateRegisterRouteButton();
 });
 document.getElementById('end-city').addEventListener('change', function() {
-  state.selected = {}; manuallyAddedPoints = {}; recompute();
+  state.selected = {}; manuallyAddedPoints = {}; recompute(); updateRegisterRouteButton();
 });
 ['opt-detour','opt-speed','opt-visit','opt-nights'].forEach(function(id) {
   document.getElementById(id).addEventListener('input', function() { renderCandidates(); recompute(); });
@@ -1452,6 +1528,7 @@ populateCitySelects();
 renderCandidates();
 recompute();
 renderNightsDistribution();
+updateRegisterRouteButton();
 </script>
 </body>
 </html>`;
