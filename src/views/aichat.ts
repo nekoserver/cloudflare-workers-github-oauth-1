@@ -4,6 +4,7 @@
 import { escapeHtml } from '../utils/html';
 import { getThemeCSS, getThemeInitScript, getThemeToggleCSS, getThemeToggleHTML, getThemeToggleScript } from '../utils/theme';
 import { getMarkdownParserScript } from '../utils/markdownRenderer';
+import { getKeywordHighlightScript } from '../utils/keywordHighlight';
 
 export const DEFAULT_AICHAT_MODELS: Array<{value: string; label: string}> = [
   { value: '@cf/meta/llama-3.3-70b-instruct-fp8-fast', label: 'llama-3.3-70b-instruct-fp8-fast' },
@@ -2782,43 +2783,8 @@ export function getAiChatPage(user: {
       historyModalChat.appendChild(el);
     }
 
-    function applyKeywordHighlight(el, keyword) {
-      if (!keyword) return;
-      var kwList = Array.isArray(keyword) ? keyword.filter(Boolean) : [keyword];
-      if (kwList.length === 0) return;
-      var escaped = kwList.map(function(k) { return k.replace(/[.*+?^$\{}()|[\]\\]/g, '\\$&'); });
-      var re = new RegExp(escaped.join('|'), 'gi');
-      var walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, null);
-      var nodes = [];
-      var n;
-      while ((n = walker.nextNode())) nodes.push(n);
-      nodes.forEach(function(tn) {
-        if (!re.test(tn.nodeValue)) { re.lastIndex = 0; return; }
-        re.lastIndex = 0;
-        var frag = document.createDocumentFragment();
-        var last = 0, m;
-        while ((m = re.exec(tn.nodeValue)) !== null) {
-          if (m.index > last) frag.appendChild(document.createTextNode(tn.nodeValue.slice(last, m.index)));
-          var mark = document.createElement('mark');
-          mark.className = 'kw-highlight';
-          mark.textContent = m[0];
-          frag.appendChild(mark);
-          last = re.lastIndex;
-        }
-        if (last < tn.nodeValue.length) frag.appendChild(document.createTextNode(tn.nodeValue.slice(last)));
-        tn.parentNode.replaceChild(frag, tn);
-      });
-    }
-
-    function clearKeywordHighlights(container) {
-      var marks = container.querySelectorAll('.kw-highlight');
-      marks.forEach(function(mark) {
-        if (mark.parentNode) {
-          mark.parentNode.replaceChild(document.createTextNode(mark.textContent), mark);
-        }
-      });
-      if (container.normalize) container.normalize();
-    }
+    // ===== キーワードハイライト(画像添付会話プレビュー等と共通) =====
+    ${getKeywordHighlightScript()}
 
     function buildAllKeywords() {
       var all = [];

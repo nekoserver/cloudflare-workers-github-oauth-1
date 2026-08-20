@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest';
+// @vitest-environment jsdom
+import { describe, expect, it, vi, afterEach } from 'vitest';
 import { getAichatImageGalleryPage } from './aichatImageGallery';
 
 // 対象: /aichat-image-gallery ページ(閲覧専用)。ai_chat_shares を検索対象に
@@ -102,5 +103,183 @@ describe('getAichatImageGalleryPage', () => {
   it('ドロップダウンのchangeイベントで(キーワード入力済みなら)再検索する', () => {
     const html = getAichatImageGalleryPage('testuser');
     expect(html).toContain("searchTarget.addEventListener('change'");
+  });
+
+  // 対象: 「画像添付会話のプレビュー」モーダルに移植したキーワードハイライト
+  // ON/OFFトグルボタン(🔑)。AIチャットの「詳細プレビュー」モーダル
+  // (history-modal)にある同機能と、applyKeywordHighlight/clearKeywordHighlights
+  // 本体(../utils/keywordHighlight.getKeywordHighlightScript)を共通化している。
+  //
+  // 故障シナリオ:
+  //   (1) トグルボタン自体がマークアップに存在しない
+  //   (2) applyKeywordHighlight/clearKeywordHighlightsが埋め込まれず
+  //       ReferenceErrorになる
+  //   (3) プレビューを開いた時点で検索キーワードがハイライトされない
+  //   (4) トグルボタンを押しても /api/aichat/share-keywords を呼ばない、
+  //       または呼んだ結果がハイライトに反映されない
+  //   (5) 別の会話をプレビューし直した際、前の会話のDB取得済みフラグや
+  //       ハイライト状態が引き継がれてしまう
+  it('プレビューモーダルにキーワードハイライトのトグルボタン(#previewHighlightToggle)を持つ', () => {
+    const html = getAichatImageGalleryPage('testuser');
+    expect(html).toContain('id="previewHighlightToggle"');
+  });
+
+  it('applyKeywordHighlight/clearKeywordHighlightsが埋め込まれている(AIチャットの詳細プレビューモーダルと共通)', () => {
+    const html = getAichatImageGalleryPage('testuser');
+    expect(html).toContain('function applyKeywordHighlight(el, keyword)');
+    expect(html).toContain('function clearKeywordHighlights(container)');
+  });
+
+  it('トグルボタン押下時、DB由来のキーワードが未取得ならshare-keywordsを取得してハイライトに反映する', () => {
+    const html = getAichatImageGalleryPage('testuser');
+    const idx = html.indexOf('previewHighlightToggle.addEventListener');
+    expect(idx).toBeGreaterThan(-1);
+    const snippet = html.slice(idx, idx + 1200);
+    expect(snippet).toContain('/api/aichat/share-keywords?shareId=');
+    expect(snippet).toContain('applyKeywordHighlight(previewChat, allKws)');
+  });
+
+  function setupWithSearchResult() {
+    const html = getAichatImageGalleryPage('testuser');
+    document.body.innerHTML = html.slice(html.indexOf('<body>') + 6, html.lastIndexOf('<script>'));
+    const scriptSrc = html.slice(html.lastIndexOf('<script>') + 8, html.lastIndexOf('</script>'));
+    const searchResult = {
+      id: 'share-1', user_hash: 'u1', question: 'ねこの写真です', answer: 'かわいいねこですね',
+      model: '@cf/meta/llama-3.3-70b-instruct-fp8-fast', created_at: '2026-08-20 10:00',
+      image_data_url: 'data:image/png;base64,AAAA',
+    };
+    const fetchMock = vi.fn((url: string) => {
+      if (String(url).indexOf('/api/aichat/image-gallery-search') === 0) {
+        return Promise.resolve({ json: () => Promise.resolve({ results: [searchResult] }) });
+      }
+      if (String(url).indexOf('/api/aichat/share-keywords') === 0) {
+        return Promise.resolve({ json: () => Promise.resolve({ keywords: [{ keyword: '写真', count: 3, is_classified: true }] }) });
+      }
+      return Promise.resolve({ json: () => Promise.resolve({}) });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    // eslint-disable-next-line no-new-func
+    new Function(scriptSrc)();
+    return { fetchMock };
+  }
+
+  afterEach(() => { vi.unstubAllGlobals(); });
+
+  it('(DOM実動作) プレビューを開くと検索キーワードが即座にハイライトされ、トグルボタンが有効化される', async () => {
+    setupWithSearchResult();
+    const searchInput = document.getElementById('gallerySearchInput') as HTMLInputElement;
+    const searchBtn = document.getElementById('gallerySearchBtn') as HTMLButtonElement;
+    searchInput.value = 'ねこ';
+    searchBtn.click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const item = document.querySelector('.gallery-item') as HTMLElement;
+    expect(item).not.toBeNull();
+    item.click();
+
+    const previewChat = document.getElementById('previewChat')!;
+    const marks = previewChat.querySelectorAll('.kw-highlight');
+    expect(marks.length).toBeGreaterThan(0);
+    expect(Array.from(marks).some((m) => m.textContent === 'ねこ')).toBe(true);
+
+    const toggleBtn = document.getElementById('previewHighlightToggle') as HTMLButtonElement;
+    expect(toggleBtn.style.opacity).toBe('1');
+  });
+
+  it('(DOM実動作) トグルボタンを押すとshare-keywordsを取得してDB由来のキーワードも合わせてハイライトする', async () => {
+    const { fetchMock } = setupWithSearchResult();
+    const searchInput = document.getElementById('gallerySearchInput') as HTMLInputElement;
+    const searchBtn = document.getElementById('gallerySearchBtn') as HTMLButtonElement;
+    searchInput.value = 'ねこ';
+    searchBtn.click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const item = document.querySelector('.gallery-item') as HTMLElement;
+    item.click();
+
+    const toggleBtn = document.getElementById('previewHighlightToggle') as HTMLButtonElement;
+    toggleBtn.click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/aichat/share-keywords?shareId=share-1',
+      expect.objectContaining({ credentials: 'same-origin' })
+    );
+    const previewChat = document.getElementById('previewChat')!;
+    const marks = Array.from(previewChat.querySelectorAll('.kw-highlight'));
+    expect(marks.some((m) => m.textContent === '写真')).toBe(true);
+  });
+
+  it('(DOM実動作) トグルボタンを2回目に押すとfetchせず、ハイライトの表示/非表示だけを切り替える', async () => {
+    const { fetchMock } = setupWithSearchResult();
+    const searchInput = document.getElementById('gallerySearchInput') as HTMLInputElement;
+    const searchBtn = document.getElementById('gallerySearchBtn') as HTMLButtonElement;
+    searchInput.value = 'ねこ';
+    searchBtn.click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    (document.querySelector('.gallery-item') as HTMLElement).click();
+
+    const toggleBtn = document.getElementById('previewHighlightToggle') as HTMLButtonElement;
+    toggleBtn.click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    fetchMock.mockClear();
+
+    const previewChat = document.getElementById('previewChat')!;
+    toggleBtn.click();
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(previewChat.classList.contains('highlights-hidden')).toBe(true);
+
+    toggleBtn.click();
+    expect(previewChat.classList.contains('highlights-hidden')).toBe(false);
+  });
+
+  it('(DOM実動作) 別の会話をプレビューし直すと、前の会話のDB取得済みフラグ・ハイライト状態を引き継がない', async () => {
+    const html = getAichatImageGalleryPage('testuser');
+    document.body.innerHTML = html.slice(html.indexOf('<body>') + 6, html.lastIndexOf('<script>'));
+    const scriptSrc = html.slice(html.lastIndexOf('<script>') + 8, html.lastIndexOf('</script>'));
+    const resultA = {
+      id: 'share-a', user_hash: 'u1', question: 'ねこの写真です', answer: 'かわいいねこですね',
+      model: 'm', created_at: 't', image_data_url: 'data:image/png;base64,AAAA',
+    };
+    const resultB = {
+      id: 'share-b', user_hash: 'u1', question: 'いぬの写真です', answer: 'かわいいいぬですね',
+      model: 'm', created_at: 't', image_data_url: 'data:image/png;base64,BBBB',
+    };
+    const fetchMock = vi.fn((url: string) => {
+      if (String(url).indexOf('/api/aichat/image-gallery-search') === 0) {
+        return Promise.resolve({ json: () => Promise.resolve({ results: [resultA, resultB] }) });
+      }
+      if (String(url).indexOf('/api/aichat/share-keywords') === 0) {
+        return Promise.resolve({ json: () => Promise.resolve({ keywords: [{ keyword: '写真', count: 1, is_classified: false }] }) });
+      }
+      return Promise.resolve({ json: () => Promise.resolve({}) });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    // eslint-disable-next-line no-new-func
+    new Function(scriptSrc)();
+
+    const searchInput = document.getElementById('gallerySearchInput') as HTMLInputElement;
+    const searchBtn = document.getElementById('gallerySearchBtn') as HTMLButtonElement;
+    searchInput.value = '写真';
+    searchBtn.click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const items = document.querySelectorAll('.gallery-item');
+    (items[0] as HTMLElement).click();
+    const toggleBtn = document.getElementById('previewHighlightToggle') as HTMLButtonElement;
+    toggleBtn.click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    fetchMock.mockClear();
+
+    (items[1] as HTMLElement).click();
+    // 2件目を開いた直後はまだDB由来キーワードを取得していないため、
+    // トグルを押すと再度share-keywordsを呼びに行くはず(前の会話のフラグを
+    // 引き継いで「取得済み」扱いになっていないこと)
+    toggleBtn.click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/aichat/share-keywords?shareId=share-b',
+      expect.objectContaining({ credentials: 'same-origin' })
+    );
   });
 });

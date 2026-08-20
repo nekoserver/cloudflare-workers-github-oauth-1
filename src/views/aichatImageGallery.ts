@@ -1,4 +1,5 @@
 import { getMarkdownParserScript, getMarkdownPreviewCSS } from '../utils/markdownRenderer';
+import { getKeywordHighlightScript } from '../utils/keywordHighlight';
 
 function escH(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -90,6 +91,10 @@ h1 { font-size:15px; font-weight:700; flex:1; }
 .preview-bubble.assistant { align-self:flex-start; background:#161b22; color:#e6edf3; border:1px solid #30363d; border-bottom-left-radius:2px; }
 .preview-bubble.assistant.preview-area { white-space:normal; }
 .preview-bubble-image { max-width:220px; max-height:220px; border-radius:6px; display:block; margin-bottom:6px; }
+.preview-highlight-toggle { background:none; border:none; color:#8b949e; font-size:14px; cursor:pointer; padding:2px 6px; opacity:0.2; }
+.preview-highlight-toggle:hover { color:#e6edf3; }
+.kw-highlight { background:#fef08a; color:#1a1a1a; border-radius:2px; padding:0 1px; }
+.preview-chat.highlights-hidden .kw-highlight { background:transparent; color:inherit; outline:none; }
 ${getMarkdownPreviewCSS()}
 </style>
 </head>
@@ -117,6 +122,7 @@ ${getMarkdownPreviewCSS()}
     <div class="preview-head">
       <div class="preview-title">🖼️ 画像添付会話のプレビュー</div>
       <div class="preview-meta" id="previewMeta"></div>
+      <button type="button" class="preview-highlight-toggle" id="previewHighlightToggle" title="キーワードハイライトON/OFF">🔑</button>
       <button type="button" class="preview-close" id="previewClose" aria-label="閉じる">✕</button>
     </div>
     <div class="preview-chat" id="previewChat"></div>
@@ -124,6 +130,7 @@ ${getMarkdownPreviewCSS()}
 </div>
 <script>
 ${getMarkdownParserScript()}
+${getKeywordHighlightScript()}
 (function() {
   var MODEL_COLORS = ${modelColorsJson};
   var searchTarget = document.getElementById('gallerySearchTarget');
@@ -135,8 +142,57 @@ ${getMarkdownParserScript()}
   var previewChat = document.getElementById('previewChat');
   var previewMeta = document.getElementById('previewMeta');
   var previewClose = document.getElementById('previewClose');
+  var previewHighlightToggle = document.getElementById('previewHighlightToggle');
 
   var currentResults = [];
+  var currentSearchKeyword = '';
+
+  // ===== キーワードハイライトON/OFF(AIチャットの詳細プレビューモーダルと共通のapplyKeywordHighlight/clearKeywordHighlightsを使用) =====
+  var previewCurrentId = null;
+  var previewHighlightActive = false;
+  var previewKeywordsFromDB = [];
+  var previewDBKeywordsApplied = false;
+
+  function updatePreviewHighlightBtn() {
+    var marks = previewChat.querySelectorAll('.kw-highlight');
+    if (!marks || marks.length === 0) {
+      previewHighlightToggle.style.opacity = '0.2';
+      previewHighlightToggle.title = 'クリックでキーワードをハイライト表示';
+      return;
+    }
+    if (previewHighlightActive) {
+      previewHighlightToggle.style.opacity = '1';
+      previewHighlightToggle.title = '🔑 ハイライト表示中(クリックで非表示)';
+    } else {
+      previewHighlightToggle.style.opacity = '0.35';
+      previewHighlightToggle.title = '🔑 ハイライト非表示(クリックで表示)';
+    }
+  }
+
+  previewHighlightToggle.addEventListener('click', function(e) {
+    e.stopPropagation();
+    if (!previewDBKeywordsApplied && previewCurrentId != null) {
+      fetch('/api/aichat/share-keywords?shareId=' + encodeURIComponent(String(previewCurrentId)), { credentials: 'same-origin' })
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+          previewKeywordsFromDB = (d.keywords || []).map(function(k) { return k.keyword; });
+          previewDBKeywordsApplied = true;
+          var allKws = currentSearchKeyword ? [currentSearchKeyword].concat(previewKeywordsFromDB) : previewKeywordsFromDB.slice();
+          previewHighlightActive = true;
+          previewChat.classList.remove('highlights-hidden');
+          clearKeywordHighlights(previewChat);
+          if (allKws.length > 0) applyKeywordHighlight(previewChat, allKws);
+          updatePreviewHighlightBtn();
+        })
+        .catch(function() { updatePreviewHighlightBtn(); });
+      return;
+    }
+    var marks = previewChat.querySelectorAll('.kw-highlight');
+    if (!marks || marks.length === 0) return;
+    previewHighlightActive = !previewHighlightActive;
+    previewChat.classList.toggle('highlights-hidden', !previewHighlightActive);
+    updatePreviewHighlightBtn();
+  });
 
   function openPreview(item) {
     previewMeta.innerHTML = '';
@@ -164,6 +220,18 @@ ${getMarkdownParserScript()}
     assistantBubble.className = 'preview-bubble assistant preview-area';
     assistantBubble.innerHTML = parseMd(item.answer);
     previewChat.appendChild(assistantBubble);
+
+    previewCurrentId = item.id;
+    previewKeywordsFromDB = [];
+    previewDBKeywordsApplied = false;
+    previewChat.classList.remove('highlights-hidden');
+    if (currentSearchKeyword) {
+      applyKeywordHighlight(previewChat, currentSearchKeyword);
+      previewHighlightActive = true;
+    } else {
+      previewHighlightActive = false;
+    }
+    updatePreviewHighlightBtn();
 
     previewOverlay.classList.add('open');
   }
@@ -202,6 +270,7 @@ ${getMarkdownParserScript()}
     var q = searchInput.value.trim();
     var seq = ++searchRequestSeq;
     if (!q) { statusLine.textContent = 'キーワードを入力してください'; galleryGrid.innerHTML = ''; return; }
+    currentSearchKeyword = q;
     statusLine.textContent = '検索中...';
     var target = searchTarget.value;
     fetch('/api/aichat/image-gallery-search?q=' + encodeURIComponent(q) + '&target=' + encodeURIComponent(target), { credentials: 'same-origin' })
