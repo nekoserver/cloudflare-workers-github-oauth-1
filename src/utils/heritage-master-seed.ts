@@ -28,9 +28,21 @@ export function zeroPad4(n: number): string {
   return String(n).padStart(4, '0');
 }
 
+/**
+ * HERITAGE_LIST(または同一構造の配列)における「並び順(0始まりindex)」から
+ * heritage_masterの4桁ゼロパディングIDを算出する共通ロジック。
+ * buildHeritageMasterRows(このファイル)とbuildEmbeddedHeritagePoints
+ * (src/views/heritageJourney.ts)の両方がこの関数を呼び出すことで、
+ * 2箇所のID採番ロジックが将来的にずれることを防ぐ。
+ * 必ずHERITAGE_LISTの「フィルタ前・全件配列」でのindexを渡すこと。
+ */
+export function heritageIndexToMasterId(index: number): string {
+  return zeroPad4(index + 1);
+}
+
 export function buildHeritageMasterRows(items: HeritageSeedSourceItem[]): HeritageMasterRow[] {
   return items.map((item, index) => ({
-    id: zeroPad4(index + 1),
+    id: heritageIndexToMasterId(index),
     flag: item.f,
     country_name: item.c,
     heritage_name: item.n,

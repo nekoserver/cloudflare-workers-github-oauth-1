@@ -262,6 +262,7 @@ export const STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
   { name: 'workflow_hierarchy', migration: '0110', description: 'workflow_registryのフラットな通し番号を維持したまま、ワークフロー同士の分類上の親子関係のみを別テーブルで管理する(/workflowページの構造化表示切替用)', syncPolicy: 'manual' },
   { name: 'heritage_journey_registered_routes', migration: '0111', description: '/heritage-journeyページで出発地・到着地の組み合わせごとに手動登録したルートの直線距離(km)', syncPolicy: 'manual' },
   { name: 'heritage_master', migration: '0112', description: 'src/data/heritageList.ts(HERITAGE_LIST)の全世界遺産に4桁ゼロパディングIDを付与するマスタ登録簿。分類用アイコン/自由アイコンは現時点でheritageList.tsのeフィールドを暫定値として複製しており、将来AIによる本分類パスで差し替える想定', syncPolicy: 'manual' },
+  { name: 'heritage_journey_waypoint_sets', migration: '0113', description: '/heritage-journeyページの「この経由データを保存」ボタンで保存する、出発地・到着地・現在ONの経由世界遺産ID一覧・総延長距離の組み合わせレコード', syncPolicy: 'manual' },
 ];
 
 const REQUIRED_STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
@@ -1601,6 +1602,22 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_heritage_journey_registered_routes_pair ON
 );
 CREATE INDEX IF NOT EXISTS idx_heritage_master_moved_to ON heritage_master(moved_to);
 CREATE INDEX IF NOT EXISTS idx_heritage_master_country ON heritage_master(country_name);`,
+  '0113': `CREATE TABLE IF NOT EXISTS heritage_journey_waypoint_sets (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  start_city_name TEXT NOT NULL,
+  start_lat REAL NOT NULL,
+  start_lon REAL NOT NULL,
+  end_city_name TEXT NOT NULL,
+  end_lat REAL NOT NULL,
+  end_lon REAL NOT NULL,
+  waypoint_count INTEGER NOT NULL,
+  waypoint_heritage_ids TEXT NOT NULL,
+  total_distance_km REAL NOT NULL,
+  template_flag INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  deleted_flag INTEGER NOT NULL DEFAULT 0
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_heritage_journey_waypoint_sets_dedup ON heritage_journey_waypoint_sets(start_city_name, end_city_name, waypoint_heritage_ids);`,
 };
 
 async function ensureGroupTable(db: D1Database): Promise<void> {
@@ -1834,6 +1851,7 @@ export const TABLE_COLUMN_KEYS: Record<string, ColumnKeyInfo> = {
   workflow_hierarchy: { child_workflow_no: 'pk+fk', parent_workflow_no: 'fk+idx' },
   heritage_journey_registered_routes: { id: 'pk', start_city: 'uk', end_city: 'uk' },
   heritage_master: { id: 'pk', moved_to: 'fk' },
+  heritage_journey_waypoint_sets: { id: 'pk', start_city_name: 'uk', end_city_name: 'uk', waypoint_heritage_ids: 'uk' },
 };
 
 export function getColumnKeyType(tableName: string, columnName: string): ColumnKeyType {
@@ -1949,6 +1967,7 @@ export const TABLE_GROUP_MAP: Record<string, string> = {
   workflow_hierarchy: 'system',
   heritage_journey_registered_routes: 'system',
   heritage_master: 'system',
+  heritage_journey_waypoint_sets: 'system',
 };
 
 async function recordAiSummaryLinkAccess(
@@ -8941,6 +8960,59 @@ app.post('/api/heritage-journey/register-route', authMiddleware, async (c) => {
     return c.json({ ok: true, id: result.meta.last_row_id, straightKm });
   } catch (err) {
     console.error('[heritage-journey/register-route] DB write failed', err);
+    return c.json({ ok: false, error: err instanceof Error ? err.message : String(err) }, 500);
+  }
+});
+
+app.get('/api/heritage-journey/waypoint-set-exists', authMiddleware, async (c) => {
+  const start = c.req.query('start') || '';
+  const end = c.req.query('end') || '';
+  const waypointHeritageIds = c.req.query('waypointHeritageIds') || '';
+  if (!start || !end) return c.json({ error: 'start, end required' }, 400);
+  const db = c.env.DB;
+  if (!db) return c.json({ exists: false, error: 'DB unavailable' });
+  try {
+    const row = await db.prepare(
+      'SELECT id FROM heritage_journey_waypoint_sets WHERE start_city_name = ? AND end_city_name = ? AND waypoint_heritage_ids = ? AND deleted_flag = 0'
+    ).bind(start, end, waypointHeritageIds).first<{ id: number }>();
+    return c.json({ exists: !!row });
+  } catch (err) {
+    console.error('[heritage-journey/waypoint-set-exists] DB query failed', err);
+    return c.json({ exists: false, error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+app.post('/api/heritage-journey/save-waypoint-set', authMiddleware, async (c) => {
+  const body = await c.req.json<{
+    startCityName: string; startLat: number; startLon: number;
+    endCityName: string; endLat: number; endLon: number;
+    waypointCount: number; waypointHeritageIds: string; totalDistanceKm: number;
+  }>().catch(() => null);
+  if (
+    !body || !body.startCityName || !body.endCityName ||
+    body.startLat == null || body.startLon == null ||
+    body.endLat == null || body.endLon == null ||
+    body.waypointCount == null || !body.waypointHeritageIds ||
+    body.totalDistanceKm == null
+  ) {
+    return c.json({ ok: false, error: 'startCityName, startLat, startLon, endCityName, endLat, endLon, waypointCount, waypointHeritageIds, totalDistanceKm required' }, 400);
+  }
+  const { startCityName, startLat, startLon, endCityName, endLat, endLon, waypointCount, waypointHeritageIds, totalDistanceKm } = body;
+  const db = c.env.DB;
+  if (!db) return c.json({ ok: false, error: 'DB unavailable' }, 503);
+  try {
+    const existing = await db.prepare(
+      'SELECT id FROM heritage_journey_waypoint_sets WHERE start_city_name = ? AND end_city_name = ? AND waypoint_heritage_ids = ? AND deleted_flag = 0'
+    ).bind(startCityName, endCityName, waypointHeritageIds).first<{ id: number }>();
+    if (existing) {
+      return c.json({ ok: false, error: 'already saved', id: existing.id }, 409);
+    }
+    const result = await db.prepare(
+      'INSERT INTO heritage_journey_waypoint_sets (start_city_name, start_lat, start_lon, end_city_name, end_lat, end_lon, waypoint_count, waypoint_heritage_ids, total_distance_km, template_flag) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0)'
+    ).bind(startCityName, startLat, startLon, endCityName, endLat, endLon, waypointCount, waypointHeritageIds, totalDistanceKm).run();
+    return c.json({ ok: true, id: result.meta.last_row_id });
+  } catch (err) {
+    console.error('[heritage-journey/save-waypoint-set] DB write failed', err);
     return c.json({ ok: false, error: err instanceof Error ? err.message : String(err) }, 500);
   }
 });
