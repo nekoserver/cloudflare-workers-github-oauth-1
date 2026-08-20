@@ -311,7 +311,7 @@ ${getMitokoroModalCss()}
 <div class="tour-modal-overlay" id="tour-modal-overlay">
   <div class="tour-modal-box">
     <div class="tour-modal-head">
-      <div class="tour-modal-title">🌐 巡回テスト</div>
+      <div class="tour-modal-title" id="tour-scope-title">🌐 巡回テスト</div>
       <div class="tour-plan-summary" id="tour-plan-summary"></div>
       <button type="button" class="tour-modal-close" id="tour-modal-close" aria-label="閉じる">✕</button>
     </div>
@@ -653,6 +653,37 @@ function currentStartEnd() {
     start: { name: s.label, lat: s.lat, lon: s.lon },
     end: { name: e.label, lat: e.lat, lon: e.lon },
   };
+}
+
+// 「巡回ルートスコープ」(#tour-mini-head / #tour-scope-title)に表示する
+// ラベル文字列を組み立てる純粋関数。出発地・到着地それぞれのCITIESレコード
+// (getCity()の戻り値、flag/labelを含む)を受け取り「(国旗)出発地名 - (国旗)到着地名」
+// を返す。いずれかの都市が解決できない(=CITIESに存在しない不正な値等)場合は、
+// 実際のルート情報を出さずに元の静的表記「🌐 巡回テスト」へフォールバックする
+// (中途半端な"undefined - パリ"のような表示を避けるため)。flagが個別に
+// 欠けている場合はその都市の国旗だけを省略し、都市名は表示する。
+function buildTourScopeLabel(startCity, endCity) {
+  if (!startCity || !endCity) return '🌐 巡回テスト';
+  var startFlag = startCity.flag || '';
+  var endFlag = endCity.flag || '';
+  return startFlag + startCity.label + ' - ' + endFlag + endCity.label;
+}
+
+// 巡回ルートスコープ(ミニ地球儀パネルの見出し#tour-mini-headと、
+// 巡回テストモーダルのタイトル#tour-scope-title)を、現在の出発地/到着地
+// セレクトの値に合わせて更新する。start-city/end-cityのどちらが変わっても
+// (分布チップクリック、到着地選択モーダル、出発地セレクト変更のいずれ経由でも)
+// 最終的にrecompute()を通るため、recompute()内から呼ぶことで全経路をカバーする。
+function updateTourScopeHeaderLabel() {
+  var startSel = document.getElementById('start-city');
+  var endSel = document.getElementById('end-city');
+  var startCity = startSel ? getCity(startSel.value) : null;
+  var endCity = endSel ? getCity(endSel.value) : null;
+  var label = buildTourScopeLabel(startCity, endCity);
+  var miniHeadEl = document.getElementById('tour-mini-head');
+  if (miniHeadEl) miniHeadEl.textContent = label;
+  var modalTitleEl = document.getElementById('tour-scope-title');
+  if (modalTitleEl) modalTitleEl.textContent = label;
 }
 
 // 出発地・到着地の組み合わせが heritage_journey_registered_routes テーブルに
@@ -1082,6 +1113,7 @@ function renderDayPlan(ordered, days, availableNights) {
 
 function recompute() {
   var se = currentStartEnd();
+  updateTourScopeHeaderLabel();
   var maxDetour = Number(document.getElementById('opt-detour').value) || 150;
   var speedKmh = Number(document.getElementById('opt-speed').value) || 70;
   var perSiteHours = Number(document.getElementById('opt-visit').value) || 0;
