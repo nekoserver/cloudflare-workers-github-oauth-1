@@ -132,7 +132,9 @@ h1{font-size:22px;margin:0 0 4px}
 .tour-route-side-row.focused{border-color:#facc15}
 .tour-route-side-row.blink{animation:tourRouteSideBlink .4s ease-in-out 3}
 @keyframes tourRouteSideBlink{0%,100%{border-color:#facc15}50%{border-color:#fef9c3}}
-.tour-modal-head{position:relative;display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.tour-modal-head{position:relative;display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:8px}
+.end-city-picker-cand-toolbar{margin-left:auto;margin-bottom:0;font-size:11px}
+.end-city-picker-cand-label{color:#94a3b8;white-space:nowrap}
 .tour-modal-title{font-size:14px;font-weight:700;color:#93c5fd}
 .tour-plan-summary{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);font-size:12px;color:#94a3b8;white-space:nowrap;pointer-events:none}
 .tour-day-label{text-align:center;font-size:12px;font-weight:700;color:#93c5fd;margin-bottom:8px}
@@ -289,6 +291,12 @@ ${getMitokoroModalCss()}
   <div class="tour-modal-box" id="end-city-picker-modal-box">
     <div class="tour-modal-head" id="end-city-picker-modal-head">
       <div class="tour-modal-title">🏙️ 到着地を選択</div>
+      <div class="cand-toolbar end-city-picker-cand-toolbar">
+        <span class="end-city-picker-cand-label">経由地 : </span>
+        <button id="select-all-btn-modal" type="button">すべて選択</button>
+        <button id="select-none-btn-modal" type="button">すべて解除</button>
+        <button id="select-near-btn-modal" type="button">近接のみ選択(20km以内)</button>
+      </div>
       <button type="button" class="tour-modal-close" id="end-city-picker-modal-close" aria-label="閉じる">✕</button>
     </div>
     <table class="end-city-picker-table">
@@ -1117,24 +1125,30 @@ function recompute() {
   syncMiniGlobe();
 }
 
-document.getElementById('select-all-btn').addEventListener('click', function() {
+function selectAllCandidates() {
   var se = currentStartEnd();
   var maxDetour = Number(document.getElementById('opt-detour').value) || 150;
   buildCandidates(se.start, se.end, HERITAGE_POINTS, maxDetour).forEach(function(c) { state.selected[c.name] = true; });
   renderCandidates(); recompute();
-});
-document.getElementById('select-none-btn').addEventListener('click', function() {
+}
+function selectNoneCandidates() {
   var se = currentStartEnd();
   var maxDetour = Number(document.getElementById('opt-detour').value) || 150;
   buildCandidates(se.start, se.end, HERITAGE_POINTS, maxDetour).forEach(function(c) { state.selected[c.name] = false; });
   renderCandidates(); recompute();
-});
-document.getElementById('select-near-btn').addEventListener('click', function() {
+}
+function selectNearCandidates() {
   var se = currentStartEnd();
   var maxDetour = Number(document.getElementById('opt-detour').value) || 150;
   buildCandidates(se.start, se.end, HERITAGE_POINTS, maxDetour).forEach(function(c) { state.selected[c.name] = c.detour <= 20; });
   renderCandidates(); recompute();
-});
+}
+document.getElementById('select-all-btn').addEventListener('click', selectAllCandidates);
+document.getElementById('select-none-btn').addEventListener('click', selectNoneCandidates);
+document.getElementById('select-near-btn').addEventListener('click', selectNearCandidates);
+document.getElementById('select-all-btn-modal').addEventListener('click', selectAllCandidates);
+document.getElementById('select-none-btn-modal').addEventListener('click', selectNoneCandidates);
+document.getElementById('select-near-btn-modal').addEventListener('click', selectNearCandidates);
 document.getElementById('replay-tour-btn').addEventListener('click', function() {
   var ordered = state.lastOrdered || [];
   if (ordered.length < 2) return;
