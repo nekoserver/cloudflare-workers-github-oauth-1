@@ -39,7 +39,7 @@ export function buildHeritageMasterRows(items: HeritageSeedSourceItem[]): Herita
     registered_year: item.y === '----' ? 0 : item.y,
     category: item.t,
     classification_icon: item.e,
-    free_icon: item.e,
+    free_icon: '🏛️',
   }));
 }
 
