@@ -83,9 +83,10 @@ h1{font-size:22px;margin:0 0 4px}
 .tour-modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:9999;align-items:center;justify-content:center;padding:16px}
 .tour-modal-overlay.open{display:flex}
 .tour-modal-box{background:#111827;border:1px solid #334155;border-radius:12px;padding:16px;max-width:560px;width:100%;max-height:90vh;overflow:auto}
-.tour-route-side-panel{background:#111827;border:1px solid #334155;border-radius:12px;padding:12px;width:200px;max-width:calc(100vw - 600px);max-height:90vh;overflow:auto;margin-left:16px;flex-shrink:0}
+.tour-route-side-panel{background:#111827;border:1px solid #334155;border-radius:12px;padding:12px;width:240px;max-width:calc(100vw - 600px);max-height:90vh;overflow:auto;margin-left:16px;flex-shrink:0}
 .tour-route-side-title{font-size:12px;font-weight:700;color:#93c5fd;margin-bottom:8px}
 .tour-route-side-row{border:2px solid transparent;border-radius:6px;padding:5px 8px;font-size:12px;color:#e2e8f0;margin-bottom:4px;cursor:pointer}
+.tour-route-side-num{display:inline-block;min-width:1.4em;color:#94a3b8;font-variant-numeric:tabular-nums}
 .tour-route-side-row:hover{background:#1e293b}
 .tour-route-side-row.off{opacity:.45;color:#64748b}
 .tour-route-side-row.focused{border-color:#facc15}
@@ -637,10 +638,16 @@ function renderRouteLine(ordered) {
 function renderRouteSidePanel(ordered) {
   var el = document.getElementById('tour-route-side-list');
   if (!el) return;
+  // 地球儀上の丸に振られる番号(巡回対象=routeLineExcludedでない地点だけを
+  // 順に数えたもの)と一致させるため、通し番号はグレーアウト中の地点を
+  // 数えずに算出する。グレーアウト中の地点は地球儀上に丸が描かれない
+  // (tourPointsから除外される)ため番号を振らない。
+  var num = 0;
   el.innerHTML = ordered.map(function(p) {
     var off = !!routeLineExcluded[p.name];
+    var label = off ? '-' : String(++num);
     return '<div class="tour-route-side-row' + (off ? ' off' : '') + '" data-side-name="' + esc(p.name) + '" data-side-lat="' + p.lat + '" data-side-lon="' + p.lon + '" title="タップで地球儀上に名称を表示">'
-      + esc(p.icon || '📍') + ' ' + esc(p.name) + '</div>';
+      + '<span class="tour-route-side-num">' + esc(label) + '</span> ' + esc(p.icon || '📍') + ' ' + esc(p.name) + '</div>';
   }).join('');
 }
 
@@ -661,9 +668,9 @@ document.getElementById('route-line').addEventListener('click', function(e) {
   var name = btn.getAttribute('data-wp-name');
   routeLineExcluded[name] = !routeLineExcluded[name];
   btn.classList.toggle('wp-badge-off', !!routeLineExcluded[name]);
-  Array.from(document.querySelectorAll('#tour-route-side-list [data-side-name]')).forEach(function(row) {
-    if (row.getAttribute('data-side-name') === name) row.classList.toggle('off', !!routeLineExcluded[name]);
-  });
+  // グレーアウトの切り替えは番号の振り直し(地球儀上の丸の番号との一致)にも
+  // 影響するため、サイドパネルは丸ごと再描画する。
+  renderRouteSidePanel(state.lastOrdered || []);
   routeApplyDirty = true;
   updateRouteApplyButton();
   syncMiniGlobe();
