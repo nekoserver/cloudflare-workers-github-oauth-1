@@ -43,6 +43,15 @@ h1{font-size:22px;margin:0 0 4px}
 .section-title{font-size:14px;font-weight:700;margin:0 0 10px;color:#93c5fd}
 .city-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 .city-row select{background:#0b1220;border:1px solid #475569;color:#e2e8f0;border-radius:8px;padding:8px 10px;font-size:13px;font-family:inherit}
+#end-city-picker-btn{background:#0b1220;border:1px solid #475569;color:#e2e8f0;border-radius:8px;padding:8px 10px;font-size:13px;font-family:inherit;cursor:pointer}
+#end-city-picker-btn:hover{border-color:#38bdf8;color:#fff}
+.end-city-picker-table{width:100%;border-collapse:collapse;font-size:12px}
+.end-city-picker-table th,.end-city-picker-table td{border:1px solid #334155;padding:4px 8px;text-align:left;color:#cbd5e1}
+.end-city-picker-table th{background:#1e293b;color:#93c5fd}
+.end-city-picker-row{cursor:pointer}
+.end-city-picker-row:hover{background:#1e293b}
+.end-city-picker-row.end-city-picker-current{background:#bbf7d0;color:#0f172a}
+.end-city-picker-row.end-city-picker-current td{color:#0f172a}
 #swap-btn{background:#1e293b;border:1px solid #475569;color:#cbd5e1;border-radius:8px;padding:7px 10px;cursor:pointer;font-size:13px}
 #swap-btn:hover{border-color:#38bdf8;color:#fff}
 .opt-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:10px;margin-top:12px}
@@ -179,7 +188,8 @@ ${getMitokoroModalCss()}
     <div class="city-row">
       <select id="start-city"></select>
       <button id="swap-btn" type="button">⇄ 入替</button>
-      <select id="end-city"></select>
+      <select id="end-city" style="display:none"></select>
+      <button id="end-city-picker-btn" type="button"></button>
       <button id="register-route-btn" type="button" disabled>➕ ルート登録</button>
       <button id="view-registered-routes-btn" type="button">📋 登録済みルートを見る</button>
       <button id="save-waypoint-set-btn" type="button" style="display:none">💾 この経由データを保存</button>
@@ -268,6 +278,19 @@ ${getMitokoroModalCss()}
     <table class="registered-routes-table">
       <thead><tr><th>ID</th><th>出発地</th><th>到着地</th><th>直線距離</th></tr></thead>
       <tbody id="registered-routes-table-body"></tbody>
+    </table>
+  </div>
+</div>
+
+<div class="tour-modal-overlay" id="end-city-picker-modal-overlay">
+  <div class="tour-modal-box">
+    <div class="tour-modal-head">
+      <div class="tour-modal-title">🏙️ 到着地を選択</div>
+      <button type="button" class="tour-modal-close" id="end-city-picker-modal-close" aria-label="閉じる">✕</button>
+    </div>
+    <table class="end-city-picker-table">
+      <thead><tr><th>都市名</th><th>出発地からの距離(km)</th></tr></thead>
+      <tbody id="end-city-picker-table-body"></tbody>
     </table>
   </div>
 </div>
@@ -596,6 +619,18 @@ function populateCitySelects() {
   endSel.innerHTML = opts;
   startSel.value = 'Paris';
   endSel.value = 'Rome';
+  updateEndCityPickerBtnLabel();
+}
+
+// #end-cityはネイティブ<select>のまま(display:none)でDOM上に残し、値/changeイベントの
+// 挙動は既存コードのために一切変更しない。見た目だけを「都市名を表示するボタン」に
+// 差し替え、押すと#end-city-picker-modal-overlayの一覧テーブル(最上位レイヤー)を開く。
+function updateEndCityPickerBtnLabel() {
+  var endSel = document.getElementById('end-city');
+  var btn = document.getElementById('end-city-picker-btn');
+  if (!endSel || !btn) return;
+  var c = getCity(endSel.value);
+  btn.textContent = c ? c.label : endSel.value;
 }
 
 function getCity(name) { return CITIES.filter(function(c){return c.name===name;})[0]; }
@@ -1745,16 +1780,80 @@ function closeRegisteredRoutesModal() {
   document.addEventListener('keydown', function(e) { if (e.key === 'Escape' && overlay.classList.contains('open')) closeRegisteredRoutesModal(); });
 })();
 
+// ===== 「到着地」ボタン(#end-city-picker-btn) → 最上位レイヤーの都市テーブル =====
+// #end-cityの<option>群(出発地を除外しない全都市)を出発地からの距離(km)降順で並べ、
+// クリックで#end-cityの値をセットしchangeイベントを発火する(既存のrecompute等が
+// 自然発火する)。出発地が未確定の場合は距離列を"-"にして例外を出さない。
+function renderEndCityPickerTable() {
+  var body = document.getElementById('end-city-picker-table-body');
+  if (!body) return;
+  var startSel = document.getElementById('start-city');
+  var endSel = document.getElementById('end-city');
+  var start = startSel ? getCity(startSel.value) : null;
+  var currentEnd = endSel ? endSel.value : null;
+  var rows = CITIES.map(function(c) {
+    var km = (start && typeof start.lat === 'number') ? haversineKm(start.lat, start.lon, c.lat, c.lon) : null;
+    return { name: c.name, label: c.label, km: km };
+  });
+  rows.sort(function(a, b) {
+    if (a.km === null && b.km === null) return 0;
+    if (a.km === null) return 1;
+    if (b.km === null) return -1;
+    return b.km - a.km;
+  });
+  body.innerHTML = rows.map(function(r) {
+    var isCurrent = r.name === currentEnd;
+    var kmText = (r.km === null) ? '-' : r.km.toFixed(1) + ' km';
+    return '<tr class="end-city-picker-row' + (isCurrent ? ' end-city-picker-current' : '') + '" data-city-name="' + esc(r.name) + '">'
+      + '<td>' + esc(r.label) + '</td><td>' + kmText + '</td></tr>';
+  }).join('');
+}
+
+function openEndCityPickerModal() {
+  var overlay = document.getElementById('end-city-picker-modal-overlay');
+  if (!overlay) return;
+  overlay.style.zIndex = String(getNextZ());
+  overlay.classList.add('open');
+  renderEndCityPickerTable();
+}
+
+function closeEndCityPickerModal() {
+  var overlay = document.getElementById('end-city-picker-modal-overlay');
+  if (overlay) overlay.classList.remove('open');
+}
+
+(function() {
+  var pickerBtn = document.getElementById('end-city-picker-btn');
+  var overlay = document.getElementById('end-city-picker-modal-overlay');
+  var closeBtn = document.getElementById('end-city-picker-modal-close');
+  var body = document.getElementById('end-city-picker-table-body');
+  if (!pickerBtn || !overlay || !closeBtn || !body) return;
+  pickerBtn.addEventListener('click', openEndCityPickerModal);
+  closeBtn.addEventListener('click', closeEndCityPickerModal);
+  overlay.addEventListener('click', function(e) { if (e.target === overlay) closeEndCityPickerModal(); });
+  document.addEventListener('keydown', function(e) { if (e.key === 'Escape' && overlay.classList.contains('open')) closeEndCityPickerModal(); });
+  body.addEventListener('click', function(e) {
+    var row = e.target.closest('[data-city-name]');
+    if (!row) return;
+    var endSel = document.getElementById('end-city');
+    endSel.value = row.getAttribute('data-city-name');
+    endSel.dispatchEvent(new Event('change'));
+    closeEndCityPickerModal();
+  });
+})();
+
 document.getElementById('swap-btn').addEventListener('click', function() {
   var s = document.getElementById('start-city'), e = document.getElementById('end-city');
   var tmp = s.value; s.value = e.value; e.value = tmp;
   state.selected = {}; manuallyAddedPoints = {};
+  updateEndCityPickerBtnLabel();
   renderCandidates(); recompute(); renderNightsDistribution(); updateRegisterRouteButton();
 });
 document.getElementById('start-city').addEventListener('change', function() {
   state.selected = {}; manuallyAddedPoints = {}; renderCandidates(); recompute(); renderNightsDistribution(); updateRegisterRouteButton();
 });
 document.getElementById('end-city').addEventListener('change', function() {
+  updateEndCityPickerBtnLabel();
   state.selected = {}; manuallyAddedPoints = {}; recompute(); updateRegisterRouteButton();
 });
 ['opt-detour','opt-speed','opt-visit','opt-nights'].forEach(function(id) {
