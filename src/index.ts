@@ -4904,9 +4904,18 @@ app.get('/api/aichat/shares/search', authMiddleware, async (c) => {
   const q = (c.req.query('q') ?? '').trim();
   if (!q) return jsonUtf8({ results: [] });
 
-  const { results } = await searchAiChatShares(c.env.DB as unknown as D1Like, user.sub, q);
-  const withKeywordCounts = await enrichSearchResultsWithKeywordCounts(c.env.DB as unknown as D1Like, user.sub, results);
-  const enriched = await enrichSearchResultsWithVectorizedFlag(c.env.DB as unknown as D1Like, user.sub, withKeywordCounts);
+  // target=moondream3.1 は /answer-graph ページの起点検索で、Moondreamの
+  // 画像分析結果(aichat_moondream_analyses.analysis_text)だけをキーワード検索し、
+  // マッチした分析結果テキストそのものをanswerとして返す(/aichat-image-gallery と
+  // 同じ検索関数を使い回す)。target省略時(デフォルト)は従来通り質問文・回答文
+  // (加えてEXISTS句でmoondream分析結果もヒット判定には含む)を検索する。
+  const target = (c.req.query('target') ?? '').trim();
+  const db = c.env.DB as unknown as D1Like;
+  const { results } = target === 'moondream3.1'
+    ? await searchAichatMoondreamAnalyses(db, user.sub, q)
+    : await searchAiChatShares(db, user.sub, q);
+  const withKeywordCounts = await enrichSearchResultsWithKeywordCounts(db, user.sub, results);
+  const enriched = await enrichSearchResultsWithVectorizedFlag(db, user.sub, withKeywordCounts);
   return jsonUtf8({ results: enriched });
 });
 
