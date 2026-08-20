@@ -36,4 +36,17 @@ export const FAMOUS_CHESS_GAMES: FamousChessGame[] = [
       '13. h5 Qg5 14. Qf3 Ng8 15. Bxf4 Qf6 16. Nc3 Bc5 17. Nd5 Qxb2 ' +
       '18. Bd6 Bxg1 19. e5 Qxa1+ 20. Ke2 Na6 21. Nxg7+ Kd8 22. Qf6+ Nxf6 23. Be7#',
   },
+  {
+    id: 'evergreen-1852',
+    title: 'エバーグリーンゲーム(Evergreen Game)',
+    players: 'Adolf Anderssen vs Jean Dufresne',
+    year: '1852',
+    event: 'Berlin(非公式の親善対局)',
+    note: '19手目Rad1!と21手目Qxd7!!のクイーン捨て駒が有名な一局。23.Bd7+の後、24...Kd8なら24.Bxc6#の詰みが確定するため黒投了(不朽の名局と並ぶアンデルセンの代表作)。',
+    moveText:
+      '1. e4 e5 2. Nf3 Nc6 3. Bc4 Bc5 4. b4 Bxb4 5. c3 Ba5 6. d4 exd4 ' +
+      '7. O-O d3 8. Qb3 Qf6 9. e5 Qg6 10. Re1 Nge7 11. Ba3 b5 12. Qxb5 Rb8 ' +
+      '13. Qa4 Bb6 14. Nbd2 Bb7 15. Ne4 Qf5 16. Bxd3 Qh5 17. Nf6+ gxf6 ' +
+      '18. exf6 Rg8 19. Rad1 Qxf3 20. Rxe7+ Nxe7 21. Qxd7+ Kxd7 22. Bf5+ Ke8 23. Bd7+',
+  },
 ];
