@@ -58,9 +58,21 @@ h1{font-size:22px;margin:0 0 4px}
 .cand-row .cdetour{color:#94a3b8;font-variant-numeric:tabular-nums}
 .route-line{padding:0;font-size:12px;line-height:2.1;margin-top:12px}
 .route-title-row{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
-#replay-tour-btn{background:#1e293b;border:1px solid #475569;color:#cbd5e1;border-radius:8px;padding:6px 12px;font-size:12px;cursor:pointer;font-family:inherit;white-space:nowrap}
-#replay-tour-btn:hover{border-color:#38bdf8;color:#fff}
-#replay-tour-btn:disabled{opacity:.5;cursor:default}
+#replay-tour-btn,#tour-test-btn{background:#1e293b;border:1px solid #475569;color:#cbd5e1;border-radius:8px;padding:6px 12px;font-size:12px;cursor:pointer;font-family:inherit;white-space:nowrap}
+#replay-tour-btn:hover,#tour-test-btn:hover{border-color:#38bdf8;color:#fff}
+#replay-tour-btn:disabled,#tour-test-btn:disabled{opacity:.5;cursor:default}
+.tour-modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:9999;align-items:center;justify-content:center;padding:16px}
+.tour-modal-overlay.open{display:flex}
+.tour-modal-box{background:#111827;border:1px solid #334155;border-radius:12px;padding:16px;max-width:560px;width:100%;max-height:90vh;overflow:auto}
+.tour-modal-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.tour-modal-title{font-size:14px;font-weight:700;color:#93c5fd}
+.tour-modal-close{background:none;border:none;color:#94a3b8;font-size:16px;cursor:pointer;padding:2px 6px}
+.tour-modal-close:hover{color:#e2e8f0}
+#tour-globe-canvas{width:100%;max-width:520px;aspect-ratio:1/1;display:block;margin:0 auto;background:#0b1220;border-radius:50%;border:1px solid #1e293b}
+.tour-modal-controls{display:flex;align-items:center;gap:10px;margin-top:12px}
+#tour-play-btn{background:#1e293b;border:1px solid #475569;color:#cbd5e1;border-radius:8px;padding:6px 14px;font-size:12px;cursor:pointer;font-family:inherit}
+#tour-play-btn:hover{border-color:#38bdf8;color:#fff}
+.tour-modal-label{font-size:12px;color:#94a3b8}
 .wp-badge{display:inline-block;background:#1e293b;border:1px solid #334155;border-radius:999px;padding:2px 9px;white-space:nowrap}
 .wp-arrow{color:#64748b;margin:0 4px}
 .day-table{width:100%;border-collapse:collapse;font-size:12px;margin-top:6px}
@@ -133,13 +145,27 @@ h1{font-size:22px;margin:0 0 4px}
   </div>
 
   <div class="card">
-    <div class="route-title-row"><div class="section-title" style="margin:0">ルート順序</div><button id="replay-tour-btn" type="button">🎬 巡回ルートを再現する</button></div>
+    <div class="route-title-row"><div class="section-title" style="margin:0">ルート順序</div><div style="display:flex;gap:8px;"><button id="tour-test-btn" type="button">🌐 巡回テスト</button><button id="replay-tour-btn" type="button">🎬 巡回ルートを再現する</button></div></div>
     <div class="route-line" id="route-line"></div>
   </div>
 
   <div class="card">
     <div class="section-title">宿泊地の推奨プラン <span id="day-plan-duration" class="duration-label"></span></div>
     <div id="day-plan"></div>
+  </div>
+</div>
+
+<div class="tour-modal-overlay" id="tour-modal-overlay">
+  <div class="tour-modal-box">
+    <div class="tour-modal-head">
+      <div class="tour-modal-title">🌐 巡回テスト</div>
+      <button type="button" class="tour-modal-close" id="tour-modal-close" aria-label="閉じる">✕</button>
+    </div>
+    <canvas id="tour-globe-canvas" width="520" height="520"></canvas>
+    <div class="tour-modal-controls">
+      <button type="button" id="tour-play-btn">▶ 再生</button>
+      <span class="tour-modal-label" id="tour-current-label"></span>
+    </div>
   </div>
 </div>
 <script>
@@ -639,6 +665,175 @@ document.getElementById('replay-tour-btn').addEventListener('click', function() 
   }
   window.location.href = '/webgl-heritage';
 });
+
+/**
+ * 「巡回テスト」モーダル: WebGLの本格的な地球儀(webgl-heritage)を使わず、
+ * 必要な行き先の座標だけをcanvas上の簡易な正射影(orthographic)地球儀に
+ * プロットし、モーダル内で出発点から目的地まで巡回できるようにする軽量版。
+ * 別ページへ遷移せず、モーダルの中だけで完結する。
+ */
+(function() {
+  var overlay = document.getElementById('tour-modal-overlay');
+  var closeBtn = document.getElementById('tour-modal-close');
+  var canvas = document.getElementById('tour-globe-canvas');
+  var playBtn = document.getElementById('tour-play-btn');
+  var currentLabel = document.getElementById('tour-current-label');
+  var tourTestBtn = document.getElementById('tour-test-btn');
+
+  var tourPoints = [];
+  var animProgress = 0; // 0..(tourPoints.length-1) の連続値。整数部=区間番号、小数部=区間内の進み具合
+  var animTimer = null;
+  var playing = false;
+
+  function project(lat, lon, centerLon, R, cx, cy) {
+    var latR = lat * Math.PI / 180;
+    var lonR = (lon - centerLon) * Math.PI / 180;
+    var x = R * Math.cos(latR) * Math.sin(lonR);
+    var y = -R * Math.sin(latR);
+    var z = Math.cos(latR) * Math.cos(lonR);
+    return { x: cx + x, y: cy + y, visible: z > -0.05 };
+  }
+
+  function centerLongitude(points) {
+    var sumSin = 0, sumCos = 0;
+    points.forEach(function(p) {
+      var r = p.lon * Math.PI / 180;
+      sumSin += Math.sin(r);
+      sumCos += Math.cos(r);
+    });
+    return Math.atan2(sumSin, sumCos) * 180 / Math.PI;
+  }
+
+  function pointAtProgress(points, progress) {
+    var clamped = Math.max(0, Math.min(points.length - 1, progress));
+    var idx = Math.floor(clamped);
+    var frac = clamped - idx;
+    if (idx >= points.length - 1) return points[points.length - 1];
+    var a = points[idx], b = points[idx + 1];
+    return { lat: a.lat + (b.lat - a.lat) * frac, lon: a.lon + (b.lon - a.lon) * frac };
+  }
+
+  function drawGlobe() {
+    if (!canvas.getContext) return;
+    var ctx = canvas.getContext('2d');
+    var W = canvas.width, H = canvas.height;
+    ctx.clearRect(0, 0, W, H);
+    if (tourPoints.length === 0) return;
+    var cx = W / 2, cy = H / 2, R = Math.min(W, H) / 2 - 24;
+    var centerLon = centerLongitude(tourPoints);
+
+    // 球体の輪郭と緯線(簡易グリッド)
+    ctx.strokeStyle = '#1e293b';
+    ctx.lineWidth = 1;
+    [-60, -30, 0, 30, 60].forEach(function(lat) {
+      var latR = lat * Math.PI / 180;
+      var ellipseY = cy - R * Math.sin(latR);
+      var ellipseRx = R * Math.cos(latR);
+      ctx.beginPath();
+      ctx.ellipse(cx, ellipseY, Math.max(ellipseRx, 0.01), Math.max(ellipseRx * 0.15, 0.01), 0, 0, Math.PI * 2);
+      ctx.stroke();
+    });
+    ctx.strokeStyle = '#334155';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(cx, cy, R, 0, Math.PI * 2);
+    ctx.stroke();
+
+    var projected = tourPoints.map(function(p) { return project(p.lat, p.lon, centerLon, R, cx, cy); });
+
+    // 経由地を結ぶルート線
+    ctx.strokeStyle = '#38bdf8';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    projected.forEach(function(pp, i) { if (i === 0) ctx.moveTo(pp.x, pp.y); else ctx.lineTo(pp.x, pp.y); });
+    ctx.stroke();
+
+    // 経由地点
+    projected.forEach(function(pp, i) {
+      ctx.fillStyle = pp.visible ? '#f59e0b' : '#475569';
+      ctx.beginPath();
+      ctx.arc(pp.x, pp.y, 5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = pp.visible ? '#e2e8f0' : '#64748b';
+      ctx.font = '10px sans-serif';
+      ctx.fillText(String(i + 1), pp.x + 7, pp.y - 7);
+    });
+
+    // 巡回中の現在位置マーカー
+    var curPt = pointAtProgress(tourPoints, animProgress);
+    var curProj = project(curPt.lat, curPt.lon, centerLon, R, cx, cy);
+    ctx.fillStyle = '#22c55e';
+    ctx.beginPath();
+    ctx.arc(curProj.x, curProj.y, 7, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#0f172a';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+  }
+
+  function nearestPointIndex(progress) {
+    return Math.round(Math.max(0, Math.min(tourPoints.length - 1, progress)));
+  }
+
+  function updateLabel() {
+    var idx = nearestPointIndex(animProgress);
+    var p = tourPoints[idx];
+    if (!p) { currentLabel.textContent = ''; return; }
+    currentLabel.textContent = (idx + 1) + ' / ' + tourPoints.length + '　' + p.name;
+  }
+
+  function stopAnim() {
+    playing = false;
+    if (animTimer) { clearInterval(animTimer); animTimer = null; }
+    playBtn.textContent = '▶ 再生';
+  }
+
+  function startAnim() {
+    if (tourPoints.length < 2) return;
+    if (animProgress >= tourPoints.length - 1) animProgress = 0;
+    playing = true;
+    playBtn.textContent = '⏸ 一時停止';
+    var STEP = 0.02;
+    animTimer = setInterval(function() {
+      animProgress += STEP;
+      if (animProgress >= tourPoints.length - 1) {
+        animProgress = tourPoints.length - 1;
+        drawGlobe();
+        updateLabel();
+        stopAnim();
+        return;
+      }
+      drawGlobe();
+      updateLabel();
+    }, 40);
+  }
+
+  playBtn.addEventListener('click', function() {
+    if (playing) { stopAnim(); return; }
+    startAnim();
+  });
+
+  function openTourModal() {
+    var ordered = state.lastOrdered || [];
+    if (ordered.length < 2) return;
+    tourPoints = ordered.map(function(p) { return { name: p.name, lat: p.lat, lon: p.lon }; });
+    animProgress = 0;
+    stopAnim();
+    drawGlobe();
+    updateLabel();
+    overlay.classList.add('open');
+  }
+
+  function closeTourModal() {
+    stopAnim();
+    overlay.classList.remove('open');
+  }
+
+  tourTestBtn.addEventListener('click', openTourModal);
+  closeBtn.addEventListener('click', closeTourModal);
+  overlay.addEventListener('click', function(e) { if (e.target === overlay) closeTourModal(); });
+  document.addEventListener('keydown', function(e) { if (e.key === 'Escape' && overlay.classList.contains('open')) closeTourModal(); });
+})();
 document.getElementById('swap-btn').addEventListener('click', function() {
   var s = document.getElementById('start-city'), e = document.getElementById('end-city');
   var tmp = s.value; s.value = e.value; e.value = tmp;
