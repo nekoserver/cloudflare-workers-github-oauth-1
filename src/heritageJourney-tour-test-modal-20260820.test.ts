@@ -78,7 +78,7 @@ function loadTextureFns(html: string) {
   }
   const projectSrc = extractFn('project', 'lat, lon, centerLat, centerLon, R, cx, cy');
   const unprojectSrc = extractFn('unproject', 'X, Y, centerLat, centerLon');
-  const renderSrc = extractFn('renderSphereTexture', 'ctx, cx, cy, R');
+  const renderSrc = extractFn('renderSphereTexture', 'ctx, cx, cy, R, W, H');
   const fn = new Function(
     'canvas', 'tourCenterLat', 'tourCenterLon', 'earthImageData', 'sphereCacheBox',
     `
@@ -91,7 +91,7 @@ function loadTextureFns(html: string) {
       project: project,
       unproject: unproject,
       renderSphereTexture: function(ctx, cx, cy, R) {
-        renderSphereTexture(ctx, cx, cy, R);
+        renderSphereTexture(ctx, cx, cy, R, canvas.width, canvas.height);
         sphereCacheBox.cache = sphereCache;
         sphereCacheBox.key = sphereCacheKey;
       },
@@ -420,5 +420,68 @@ describe('巡回テストモーダル: ホイール・ピンチによるズー�
 
     const radiusAfter = globeRadiusFromArcCalls(arcCalls);
     expect(radiusAfter).toBeLessThan(radiusBefore);
+  });
+});
+
+describe('heritage-journeyページ: 常時表示の縮小プレビュー(#tour-mini-panel)', () => {
+  afterEach(() => { document.body.innerHTML = ''; });
+
+  it('マークアップにヘッダ(#tour-mini-head)とcanvas(#tour-mini-canvas)を持ち、初期表示は画面左上に固定配置される', () => {
+    const html = getHeritageJourneyPage();
+    expect(html).toContain('id="tour-mini-panel"');
+    expect(html).toContain('id="tour-mini-head"');
+    expect(html).toContain('id="tour-mini-canvas"');
+    const cssBlock = html.slice(html.indexOf('.tour-mini-panel{'), html.indexOf('.tour-mini-panel{') + 200);
+    expect(cssBlock).toContain('position:fixed');
+    expect(cssBlock).toContain('top:12px');
+    expect(cssBlock).toContain('left:12px');
+  });
+
+  it('ルートが計算済み(state.lastOrdered.length>=2)になると表示され、地球儀を描画する', () => {
+    const { arcCalls } = setupPage();
+    const panel = document.getElementById('tour-mini-panel')!;
+    expect(panel.style.display).not.toBe('none');
+    // ミニ地球儀(半径の小さい方)の描画呼び出しが含まれる
+    expect(arcCalls.length).toBeGreaterThan(0);
+  });
+
+  it('ミニ地球儀のcanvas(#tour-mini-canvas)をタップすると、画面中央の巡回テストモーダルが開く', () => {
+    setupPage();
+    const miniCanvas = document.getElementById('tour-mini-canvas') as HTMLCanvasElement;
+    miniCanvas.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    const overlay = document.getElementById('tour-modal-overlay')!;
+    expect(overlay.classList.contains('open')).toBe(true);
+  });
+
+  it('ヘッダ(#tour-mini-head)をドラッグすると画面内の任意の位置へ移動する', () => {
+    setupPage();
+    const panel = document.getElementById('tour-mini-panel') as HTMLElement;
+    const head = document.getElementById('tour-mini-head') as HTMLElement;
+    panel.getBoundingClientRect = () => ({ left: 12, top: 12, right: 292, bottom: 60, width: 280, height: 48, x: 12, y: 12, toJSON: () => ({}) });
+    Object.defineProperty(panel, 'offsetWidth', { value: 280, configurable: true });
+    Object.defineProperty(panel, 'offsetHeight', { value: 300, configurable: true });
+
+    head.dispatchEvent(new MouseEvent('mousedown', { clientX: 50, clientY: 30, bubbles: true }));
+    document.dispatchEvent(new MouseEvent('mousemove', { clientX: 250, clientY: 230, bubbles: true }));
+    document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+
+    expect(panel.style.left).toBe((12 + (250 - 50)) + 'px');
+    expect(panel.style.top).toBe((12 + (230 - 30)) + 'px');
+  });
+
+  it('ドラッグ位置は画面外にはみ出さないようクランプされる', () => {
+    setupPage();
+    const panel = document.getElementById('tour-mini-panel') as HTMLElement;
+    const head = document.getElementById('tour-mini-head') as HTMLElement;
+    panel.getBoundingClientRect = () => ({ left: 12, top: 12, right: 292, bottom: 60, width: 280, height: 48, x: 12, y: 12, toJSON: () => ({}) });
+    Object.defineProperty(panel, 'offsetWidth', { value: 280, configurable: true });
+    Object.defineProperty(panel, 'offsetHeight', { value: 300, configurable: true });
+
+    head.dispatchEvent(new MouseEvent('mousedown', { clientX: 0, clientY: 0, bubbles: true }));
+    document.dispatchEvent(new MouseEvent('mousemove', { clientX: -9999, clientY: -9999, bubbles: true }));
+    document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+
+    expect(panel.style.left).toBe('0px');
+    expect(panel.style.top).toBe('0px');
   });
 });
