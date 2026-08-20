@@ -144,7 +144,7 @@ h1{font-size:22px;margin:0 0 4px}
 .visit-chip{display:inline-block;background:#1e293b;border:1px solid #475569;color:#cbd5e1;border-radius:999px;padding:2px 9px;font-size:11px;cursor:pointer;font-family:inherit;margin:2px 4px 2px 0}
 .visit-chip:hover{border-color:#38bdf8;color:#fff}
 .visit-chip.off{background:#374151;border-color:#374151;color:#9ca3af;text-decoration:line-through}
-#tour-tap-mitokoro-btn{cursor:pointer;margin-left:4px}
+#tour-tap-mitokoro-gemma-btn,#tour-tap-mitokoro-llama-btn{cursor:pointer;margin-left:4px}
 ${getMitokoroModalCss()}
 </style>
 </head>
@@ -1237,21 +1237,37 @@ document.getElementById('replay-tour-btn').addEventListener('click', function() 
     var geo = getGlobeGeometry(canvas);
     var pp = project(point.lat, point.lon, tourCenterLat, tourCenterLon, geo.R, geo.cx, geo.cy);
     // 見どころ回答キャッシュがあれば、ツールチップ内に開閉可能なアイコンを添える。
-    // 無ければ従来通りプレーンな地点名のみ(textContentと等価)を表示する。
+    // webglHeritage.ts(3D地球儀ページ)の本来の挙動と同じく、gemma回答(👀)と
+    // llama回答(👁️)は互いに排他ではなく、同じ世界遺産で両方存在すれば
+    // 両方のアイコンを独立してタップ可能な状態で並べる。無ければ従来通り
+    // プレーンな地点名のみ(textContentと等価)を表示する。
     var mit = tourHeritageMitokoroShareId[point.name];
-    tapLabel.innerHTML = esc(point.name) + (mit ? ' <span id="tour-tap-mitokoro-btn" title="見どころを表示">' + mit.icon + '</span>' : '');
+    var gemmaShareId = mit && mit.gemma;
+    var llamaShareId = mit && mit.llama;
+    var gemmaIcon = gemmaShareId ? ' <span id="tour-tap-mitokoro-gemma-btn" title="見どころ(gemma-4-26b-a4b-it)を表示">👀</span>' : '';
+    var llamaIcon = llamaShareId ? ' <span id="tour-tap-mitokoro-llama-btn" title="見どころ(llama-3.3-70b-instruct-fp8-fast)を表示">👁️</span>' : '';
+    tapLabel.innerHTML = esc(point.name) + gemmaIcon + llamaIcon;
     tapLabel.style.left = (pp.x / canvas.width * 100) + '%';
     tapLabel.style.top = (pp.y / canvas.height * 100) + '%';
     // CSSの.tour-tap-labelはdisplay:noneが既定のため、空文字ではスタイル
     // シートのdisplay:noneが適用されたままになり表示されない(実機バグの原因)。
     // 必ず非noneの値を明示的にインラインで設定する。
     tapLabel.style.display = 'block';
-    if (mit) {
-      var mitBtn = document.getElementById('tour-tap-mitokoro-btn');
-      if (mitBtn) {
-        mitBtn.addEventListener('click', function(e) {
+    if (gemmaShareId) {
+      var mitGemmaBtn = document.getElementById('tour-tap-mitokoro-gemma-btn');
+      if (mitGemmaBtn) {
+        mitGemmaBtn.addEventListener('click', function(e) {
           e.stopPropagation();
-          openHeritageMitokoroModal(mit.icon, point.name, mit.shareId);
+          openHeritageMitokoroModal('👀', point.name, gemmaShareId);
+        });
+      }
+    }
+    if (llamaShareId) {
+      var mitLlamaBtn = document.getElementById('tour-tap-mitokoro-llama-btn');
+      if (mitLlamaBtn) {
+        mitLlamaBtn.addEventListener('click', function(e) {
+          e.stopPropagation();
+          openHeritageMitokoroModal('👁️', point.name, llamaShareId);
         });
       }
     }

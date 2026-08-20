@@ -13,8 +13,12 @@
  *   - `${getMitokoroModalCss()}` を<style>ブロックに埋め込む(.mitokoro-md用)
  *   - `${getHeritageMitokoroModalScript()}` を同じ<script>ブロックに埋め込む
  *   - ページ側で `fetchHeritageMitokoroShareIds(names, onUpdate)` を呼び出し、
- *     取得できたname→{icon,shareId}のマップを使ってアイコン表示・タップ時に
- *     `openHeritageMitokoroModal(icon, name, shareId)` を呼ぶ
+ *     取得できたname→{gemma:shareId|undefined, llama:shareId|undefined}の
+ *     マップを使い、gemma/llamaそれぞれ独立に👀/👁️アイコンを表示する。
+ *     タップ時は `openHeritageMitokoroModal(icon, name, shareId)` を呼ぶ
+ *     (iconは呼び出し側で'👀'/'👁️'を指定する。webglHeritage.tsのツールチップ
+ *     と同じく、両方存在すれば両方のアイコンを同時に出す。片方優先で
+ *     もう片方を握りつぶしてはならない)
  */
 
 /** .mitokoro-md用のCSS(見どころモーダル本文のMarkdown描画スタイル)を返す。 */
@@ -61,16 +65,20 @@ export function getHeritageMitokoroModalScript(): string {
     }
 
     /**
-     * gemma/llamaの両バッチ確認APIを呼び、name→{icon,shareId}のマップを
-     * onUpdate(map)に渡す(gemma優先、無ければllama)。どちらかが失敗しても
-     * もう一方の結果は反映する。
+     * gemma/llamaの両バッチ確認APIを呼び、name→{gemma:shareId|undefined,
+     * llama:shareId|undefined}のマップをonUpdate(map)に渡す。
+     * webglHeritage.ts(3D地球儀ページ)本来の挙動と同じく、gemma回答と
+     * llama回答は互いに排他ではなく、同じ世界遺産で両方存在すれば
+     * 👀(gemma)・👁️(llama)の両アイコンを独立して出す(片方優先で片方を
+     * 握りつぶさない)。どちらかのAPIが失敗してももう一方の結果は反映する。
      */
     function fetchHeritageMitokoroShareIds(names, onUpdate) {
       var merged = {};
-      function apply(cached, icon) {
+      function apply(cached, key) {
         if (!cached) return;
         Object.keys(cached).forEach(function(name) {
-          if (!merged[name]) merged[name] = { icon: icon, shareId: cached[name] };
+          if (!merged[name]) merged[name] = {};
+          merged[name][key] = cached[name];
         });
         onUpdate(merged);
       }
@@ -79,7 +87,7 @@ export function getHeritageMitokoroModalScript(): string {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ heritages: names })
       }).then(function(r) { return r.json(); }).then(function(d) {
-        apply(d && d.cached, '👀');
+        apply(d && d.cached, 'gemma');
       }).catch(function(){});
 
       fetch('/api/aichat/check-heritage-mitokoro-llama-batch', {
@@ -87,7 +95,7 @@ export function getHeritageMitokoroModalScript(): string {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ heritages: names })
       }).then(function(r) { return r.json(); }).then(function(d) {
-        apply(d && d.cached, '👁️');
+        apply(d && d.cached, 'llama');
       }).catch(function(){});
     }
 
