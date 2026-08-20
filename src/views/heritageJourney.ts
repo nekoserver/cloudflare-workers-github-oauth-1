@@ -119,6 +119,9 @@ h1{font-size:22px;margin:0 0 4px}
 .tour-modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:9999;align-items:center;justify-content:center;padding:16px}
 .tour-modal-overlay.open{display:flex}
 .tour-modal-box{background:#111827;border:1px solid #334155;border-radius:12px;padding:16px;max-width:560px;width:100%;max-height:90vh;overflow:auto}
+#end-city-picker-modal-box{position:fixed;max-width:560px;width:calc(100% - 32px)}
+#end-city-picker-modal-head{cursor:grab;user-select:none;touch-action:none}
+#end-city-picker-modal-head:active{cursor:grabbing}
 .tour-route-side-panel{background:#111827;border:1px solid #334155;border-radius:12px;padding:12px;width:240px;max-width:calc(100vw - 600px);max-height:90vh;overflow:auto;margin-left:16px;flex-shrink:0}
 .tour-route-side-title{font-size:12px;font-weight:700;color:#93c5fd;margin-bottom:8px}
 .tour-route-side-row{border:2px solid transparent;border-radius:6px;padding:5px 8px;font-size:12px;color:#e2e8f0;margin-bottom:4px;cursor:pointer}
@@ -283,8 +286,8 @@ ${getMitokoroModalCss()}
 </div>
 
 <div class="tour-modal-overlay" id="end-city-picker-modal-overlay">
-  <div class="tour-modal-box">
-    <div class="tour-modal-head">
+  <div class="tour-modal-box" id="end-city-picker-modal-box">
+    <div class="tour-modal-head" id="end-city-picker-modal-head">
       <div class="tour-modal-title">🏙️ 到着地を選択</div>
       <button type="button" class="tour-modal-close" id="end-city-picker-modal-close" aria-label="閉じる">✕</button>
     </div>
@@ -1809,11 +1812,24 @@ function renderEndCityPickerTable() {
   }).join('');
 }
 
+// #tour-mini-panel(280px幅、既定でtop:12px;left:12px)と重ならないよう、
+// 既定位置は画面右側・やや下(left:innerWidth-600px以上を確保、下限320px)に固定する。
+// 再オープンのたびにこの既定位置へリセットする(ドラッグ位置は保持しない)。
+function resetEndCityPickerModalPosition() {
+  var box = document.getElementById('end-city-picker-modal-box');
+  if (!box) return;
+  var defaultLeft = Math.max(320, window.innerWidth - 600);
+  var defaultTop = 80;
+  box.style.left = defaultLeft + 'px';
+  box.style.top = defaultTop + 'px';
+}
+
 function openEndCityPickerModal() {
   var overlay = document.getElementById('end-city-picker-modal-overlay');
   if (!overlay) return;
   overlay.style.zIndex = String(getNextZ());
   overlay.classList.add('open');
+  resetEndCityPickerModalPosition();
   renderEndCityPickerTable();
 }
 
@@ -1838,8 +1854,40 @@ function closeEndCityPickerModal() {
     var endSel = document.getElementById('end-city');
     endSel.value = row.getAttribute('data-city-name');
     endSel.dispatchEvent(new Event('change'));
-    closeEndCityPickerModal();
   });
+})();
+
+// ===== 到着地選択モーダル(#end-city-picker-modal-overlay)をヘッダドラッグで画面内自由配置 =====
+// #tour-mini-panelのドラッグ実装(1671行目付近)と同じイベント方式・クランプ処理を踏襲する。
+(function() {
+  var modalBox = document.getElementById('end-city-picker-modal-box');
+  var modalHead = document.getElementById('end-city-picker-modal-head');
+  if (!modalBox || !modalHead) return;
+  var dragging = false, startX = 0, startY = 0, startLeft = 0, startTop = 0;
+  function onDown(clientX, clientY) {
+    dragging = true;
+    var rect = modalBox.getBoundingClientRect();
+    startX = clientX; startY = clientY; startLeft = rect.left; startTop = rect.top;
+    modalBox.style.left = startLeft + 'px';
+    modalBox.style.top = startTop + 'px';
+  }
+  function onMove(clientX, clientY) {
+    if (!dragging) return;
+    var dx = clientX - startX, dy = clientY - startY;
+    var maxLeft = Math.max(0, window.innerWidth - modalBox.offsetWidth);
+    var maxTop = Math.max(0, window.innerHeight - modalBox.offsetHeight);
+    var newLeft = Math.max(0, Math.min(maxLeft, startLeft + dx));
+    var newTop = Math.max(0, Math.min(maxTop, startTop + dy));
+    modalBox.style.left = newLeft + 'px';
+    modalBox.style.top = newTop + 'px';
+  }
+  function onUp() { dragging = false; }
+  modalHead.addEventListener('mousedown', function(e) { onDown(e.clientX, e.clientY); e.preventDefault(); });
+  document.addEventListener('mousemove', function(e) { onMove(e.clientX, e.clientY); });
+  document.addEventListener('mouseup', onUp);
+  modalHead.addEventListener('touchstart', function(e) { onDown(e.touches[0].clientX, e.touches[0].clientY); }, { passive: true });
+  modalHead.addEventListener('touchmove', function(e) { onMove(e.touches[0].clientX, e.touches[0].clientY); }, { passive: true });
+  modalHead.addEventListener('touchend', onUp);
 })();
 
 document.getElementById('swap-btn').addEventListener('click', function() {
