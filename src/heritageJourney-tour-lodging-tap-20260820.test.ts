@@ -104,6 +104,8 @@ describe('巡回テストモーダル: 「次の目的地」表示(純粋関数)
       'var nextLabel = { textContent: "" };',
       'var tourPoints = [];',
       'var animProgress = 0;',
+      'var lastFocusedSideName = null;',
+      'function updateRouteSideFocus() {}',
       extractFn('updateNextLabel', ''),
       'return { updateNextLabel: updateNextLabel, setState: function(pts, prog) { tourPoints = pts; animProgress = prog; }, getNextLabel: function() { return nextLabel; } };',
     ].join('\n');
