@@ -76,8 +76,9 @@ h1{font-size:22px;margin:0 0 4px}
 .tour-modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:9999;align-items:center;justify-content:center;padding:16px}
 .tour-modal-overlay.open{display:flex}
 .tour-modal-box{background:#111827;border:1px solid #334155;border-radius:12px;padding:16px;max-width:560px;width:100%;max-height:90vh;overflow:auto}
-.tour-modal-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.tour-modal-head{position:relative;display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
 .tour-modal-title{font-size:14px;font-weight:700;color:#93c5fd}
+.tour-plan-summary{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);font-size:12px;color:#94a3b8;white-space:nowrap;pointer-events:none}
 .tour-modal-close{background:none;border:none;color:#94a3b8;font-size:16px;cursor:pointer;padding:2px 6px}
 .tour-modal-close:hover{color:#e2e8f0}
 #tour-globe-canvas{width:100%;max-width:520px;aspect-ratio:1/1;display:block;margin:0 auto;background:#0b1220;border-radius:50%;border:1px solid #1e293b}
@@ -196,6 +197,7 @@ h1{font-size:22px;margin:0 0 4px}
   <div class="tour-modal-box">
     <div class="tour-modal-head">
       <div class="tour-modal-title">🌐 巡回テスト</div>
+      <div class="tour-plan-summary" id="tour-plan-summary"></div>
       <button type="button" class="tour-modal-close" id="tour-modal-close" aria-label="閉じる">✕</button>
     </div>
     <canvas id="tour-globe-canvas" width="520" height="520"></canvas>
@@ -696,6 +698,8 @@ function recompute() {
   renderSlackNote(se, currentNights, hubRadiusKm, maxDailyKm);
   var countEl = document.getElementById('cand-count');
   if (countEl) countEl.textContent = candidates.length + ' 件中 ' + selected.length + ' 件選択中';
+  var tourPlanSummaryEl = document.getElementById('tour-plan-summary');
+  if (tourPlanSummaryEl) tourPlanSummaryEl.textContent = currentNights + '泊' + (currentNights + 1) + '日・世界遺産' + selected.length + '件選択中';
   syncMiniGlobe();
 }
 
