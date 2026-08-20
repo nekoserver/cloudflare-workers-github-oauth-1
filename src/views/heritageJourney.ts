@@ -78,6 +78,13 @@ h1{font-size:22px;margin:0 0 4px}
 .tour-modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:9999;align-items:center;justify-content:center;padding:16px}
 .tour-modal-overlay.open{display:flex}
 .tour-modal-box{background:#111827;border:1px solid #334155;border-radius:12px;padding:16px;max-width:560px;width:100%;max-height:90vh;overflow:auto}
+.tour-route-side-panel{background:#111827;border:1px solid #334155;border-radius:12px;padding:12px;width:200px;max-width:calc(100vw - 600px);max-height:90vh;overflow:auto;margin-left:16px;flex-shrink:0}
+.tour-route-side-title{font-size:12px;font-weight:700;color:#93c5fd;margin-bottom:8px}
+.tour-route-side-row{border:2px solid transparent;border-radius:6px;padding:5px 8px;font-size:12px;color:#e2e8f0;margin-bottom:4px}
+.tour-route-side-row.off{opacity:.45;color:#64748b}
+.tour-route-side-row.focused{border-color:#facc15}
+.tour-route-side-row.blink{animation:tourRouteSideBlink .4s ease-in-out 3}
+@keyframes tourRouteSideBlink{0%,100%{border-color:#facc15}50%{border-color:#fef9c3}}
 .tour-modal-head{position:relative;display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
 .tour-modal-title{font-size:14px;font-weight:700;color:#93c5fd}
 .tour-plan-summary{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);font-size:12px;color:#94a3b8;white-space:nowrap;pointer-events:none}
@@ -214,6 +221,10 @@ h1{font-size:22px;margin:0 0 4px}
       <span class="tour-modal-label" id="tour-current-label"></span>
       <span class="tour-modal-label tour-next-label" id="tour-next-label"></span>
     </div>
+  </div>
+  <div class="tour-route-side-panel" id="tour-route-side-panel">
+    <div class="tour-route-side-title">ルート順序</div>
+    <div id="tour-route-side-list"></div>
   </div>
 </div>
 
@@ -608,12 +619,31 @@ function renderRouteLine(ordered) {
   }).join('<span class="wp-arrow">→</span>');
 }
 
+/**
+ * 巡回テストモーダルの右側に表示するルート順序リスト。#route-lineと同じ
+ * ordered(出発点から順)を縦に並べ、グレーアウト(routeLineExcluded)の
+ * 状態も#route-lineと同じ見た目で反映する。行はupdateNextLabel()から
+ * 「次の目的地」としてフォーカス表示(枠が薄黄色に点滅)される。
+ */
+function renderRouteSidePanel(ordered) {
+  var el = document.getElementById('tour-route-side-list');
+  if (!el) return;
+  el.innerHTML = ordered.map(function(p) {
+    var off = !!routeLineExcluded[p.name];
+    return '<div class="tour-route-side-row' + (off ? ' off' : '') + '" data-side-name="' + esc(p.name) + '">'
+      + esc(p.icon || '📍') + ' ' + esc(p.name) + '</div>';
+  }).join('');
+}
+
 document.getElementById('route-line').addEventListener('click', function(e) {
   var btn = e.target.closest('[data-wp-name]');
   if (!btn) return;
   var name = btn.getAttribute('data-wp-name');
   routeLineExcluded[name] = !routeLineExcluded[name];
   btn.classList.toggle('wp-badge-off', !!routeLineExcluded[name]);
+  Array.from(document.querySelectorAll('#tour-route-side-list [data-side-name]')).forEach(function(row) {
+    if (row.getAttribute('data-side-name') === name) row.classList.toggle('off', !!routeLineExcluded[name]);
+  });
   syncMiniGlobe();
 });
 
@@ -700,6 +730,7 @@ function recompute() {
   var stats = computeStats(se.start, se.end, ordered, speedKmh, perSiteHours);
   renderSummary(stats);
   renderRouteLine(ordered);
+  renderRouteSidePanel(ordered);
   var clusters = detectHubClusters(ordered, hubRadiusKm);
   var days = planOvernights(se.start, se.end, ordered, clusters, CITY_POINTS, maxDailyKm);
   renderDayPlan(ordered, days, availableNights);
@@ -770,6 +801,7 @@ document.getElementById('replay-tour-btn').addEventListener('click', function() 
   var ZOOM_MIN = 0.5, ZOOM_MAX = 16;
   var pinchDist0 = 0;
   var tapLabelTimer = null; // タップされた宿泊予定地の丸の名称表示(7秒後に自動で消す)用タイマー
+  var lastFocusedSideName = null; // 右側ルート順序リストで直前にフォーカスしていた地点名(変化時だけ点滅させるため)
 
   // ===== 地表テクスチャ(webgl-heritageページと同じ/earth.jpgを流用) =====
   var earthImg = new Image();
@@ -1008,10 +1040,34 @@ document.getElementById('replay-tour-btn').addEventListener('click', function() 
     var frac = animProgress - idxFloor;
     if (frac < 1e-6 || idxFloor >= tourPoints.length - 1) {
       nextLabel.textContent = '';
+      updateRouteSideFocus(null);
       return;
     }
     var next = tourPoints[idxFloor + 1];
     nextLabel.textContent = next ? ('次の目的地: ' + next.name) : '';
+    updateRouteSideFocus(next ? next.name : null);
+  }
+
+  /**
+   * 右側のルート順序リスト(#tour-route-side-list)で「次の目的地」の行に
+   * フォーカス(薄黄色の枠)を当てる。フォーカスが別の地点に移った瞬間だけ
+   * 枠を3回点滅させる(同じ地点へのフォーカスが続く間は点滅させない)。
+   */
+  function updateRouteSideFocus(name) {
+    var rows = document.querySelectorAll('#tour-route-side-list [data-side-name]');
+    rows.forEach(function(row) { row.classList.remove('focused'); });
+    if (!name) { lastFocusedSideName = null; return; }
+    var changed = name !== lastFocusedSideName;
+    lastFocusedSideName = name;
+    var target = null;
+    rows.forEach(function(row) { if (row.getAttribute('data-side-name') === name) target = row; });
+    if (!target) return;
+    target.classList.add('focused');
+    if (changed) {
+      target.classList.remove('blink');
+      void target.offsetWidth; // アニメーションを再始動させるための強制リフロー
+      target.classList.add('blink');
+    }
   }
 
   /** 宿泊予定地の丸がタップされた際、その世界遺産名を7秒間表示する。 */
