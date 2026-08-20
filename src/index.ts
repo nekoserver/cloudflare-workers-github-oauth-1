@@ -261,6 +261,7 @@ export const STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
   { name: 'workflow_steps', migration: '0109', description: 'workflow_registryの各ワークフローについて、処理段階ごとにどのAPIへ問い合わせが行われるかを上から下の順序で記録', syncPolicy: 'manual' },
   { name: 'workflow_hierarchy', migration: '0110', description: 'workflow_registryのフラットな通し番号を維持したまま、ワークフロー同士の分類上の親子関係のみを別テーブルで管理する(/workflowページの構造化表示切替用)', syncPolicy: 'manual' },
   { name: 'heritage_journey_registered_routes', migration: '0111', description: '/heritage-journeyページで出発地・到着地の組み合わせごとに手動登録したルートの直線距離(km)', syncPolicy: 'manual' },
+  { name: 'heritage_master', migration: '0112', description: 'src/data/heritageList.ts(HERITAGE_LIST)の全世界遺産に4桁ゼロパディングIDを付与するマスタ登録簿。分類用アイコン/自由アイコンは現時点でheritageList.tsのeフィールドを暫定値として複製しており、将来AIによる本分類パスで差し替える想定', syncPolicy: 'manual' },
 ];
 
 const REQUIRED_STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
@@ -1578,6 +1579,28 @@ CREATE INDEX IF NOT EXISTS idx_workflow_hierarchy_parent ON workflow_hierarchy(p
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_heritage_journey_registered_routes_pair ON heritage_journey_registered_routes(start_city, end_city);`,
+  '0112': `CREATE TABLE IF NOT EXISTS heritage_master (
+  id TEXT PRIMARY KEY,
+  flag TEXT NOT NULL,
+  country_name TEXT NOT NULL,
+  heritage_name TEXT NOT NULL,
+  lat REAL NOT NULL,
+  lon REAL NOT NULL,
+  registered_year INTEGER NOT NULL DEFAULT 0,
+  category TEXT NOT NULL,
+  classification_icon TEXT NOT NULL,
+  free_icon TEXT NOT NULL,
+  delete_mark TEXT,
+  moved_to TEXT,
+  source TEXT NOT NULL DEFAULT 'heritageList.ts',
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  deleted_at TEXT,
+  CHECK (delete_mark IS NULL OR length(delete_mark) = 1),
+  FOREIGN KEY (moved_to) REFERENCES heritage_master(id)
+);
+CREATE INDEX IF NOT EXISTS idx_heritage_master_moved_to ON heritage_master(moved_to);
+CREATE INDEX IF NOT EXISTS idx_heritage_master_country ON heritage_master(country_name);`,
 };
 
 async function ensureGroupTable(db: D1Database): Promise<void> {
@@ -1810,6 +1833,7 @@ export const TABLE_COLUMN_KEYS: Record<string, ColumnKeyInfo> = {
   workflow_steps: { id: 'pk', workflow_no: 'fk+idx' },
   workflow_hierarchy: { child_workflow_no: 'pk+fk', parent_workflow_no: 'fk+idx' },
   heritage_journey_registered_routes: { id: 'pk', start_city: 'uk', end_city: 'uk' },
+  heritage_master: { id: 'pk', moved_to: 'fk' },
 };
 
 export function getColumnKeyType(tableName: string, columnName: string): ColumnKeyType {
@@ -1924,6 +1948,7 @@ export const TABLE_GROUP_MAP: Record<string, string> = {
   workflow_steps: 'system',
   workflow_hierarchy: 'system',
   heritage_journey_registered_routes: 'system',
+  heritage_master: 'system',
 };
 
 async function recordAiSummaryLinkAccess(
