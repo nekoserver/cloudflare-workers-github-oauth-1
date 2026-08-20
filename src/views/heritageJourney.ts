@@ -58,6 +58,11 @@ h1{font-size:22px;margin:0 0 4px}
 .cand-row .cdetour{color:#94a3b8;font-variant-numeric:tabular-nums}
 .route-line{padding:0;font-size:12px;line-height:2.1;margin-top:12px}
 .route-title-row{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.route-apply-row{display:flex;justify-content:center;margin-top:12px}
+#route-apply-btn{background:#1e293b;border:1px solid #475569;color:#cbd5e1;border-radius:8px;padding:6px 16px;font-size:12px;cursor:pointer;font-family:inherit}
+#route-apply-btn:disabled{opacity:.4;cursor:default}
+#route-apply-btn:not(:disabled){background:#0369a1;border-color:#38bdf8;color:#fff}
+#route-apply-btn:not(:disabled):hover{background:#0284c7}
 #replay-tour-btn,#tour-test-btn{background:#1e293b;border:1px solid #475569;color:#cbd5e1;border-radius:8px;padding:6px 12px;font-size:12px;cursor:pointer;font-family:inherit;white-space:nowrap}
 #replay-tour-btn:hover,#tour-test-btn:hover{border-color:#38bdf8;color:#fff}
 #replay-tour-btn:disabled,#tour-test-btn:disabled{opacity:.5;cursor:default}
@@ -180,6 +185,7 @@ h1{font-size:22px;margin:0 0 4px}
   <div class="card">
     <div class="route-title-row"><div class="section-title" style="margin:0">ルート順序</div><div style="display:flex;gap:8px;"><button id="tour-test-btn" type="button">🌐 巡回テスト</button><button id="replay-tour-btn" type="button">🎬 巡回ルートを再現する</button></div></div>
     <div class="route-line" id="route-line"></div>
+    <div class="route-apply-row"><button id="route-apply-btn" type="button" disabled>適用する</button></div>
   </div>
 
   <div class="card">
@@ -637,6 +643,17 @@ function renderRouteSidePanel(ordered) {
   }).join('');
 }
 
+// ルート順序セクションのON/OFF切り替えが行われたら「適用する」ボタンを
+// アクティブ化する。適用するとグレーアウト(routeLineExcluded)中の地点を
+// state.selectedからも外し(距離・時間ロス・宿泊プランの計算対象から除外)、
+// 適用後は次のON/OFF変更があるまでボタンを再び非アクティブに戻す。
+var routeApplyDirty = false;
+
+function updateRouteApplyButton() {
+  var btn = document.getElementById('route-apply-btn');
+  if (btn) btn.disabled = !routeApplyDirty;
+}
+
 document.getElementById('route-line').addEventListener('click', function(e) {
   var btn = e.target.closest('[data-wp-name]');
   if (!btn) return;
@@ -646,7 +663,22 @@ document.getElementById('route-line').addEventListener('click', function(e) {
   Array.from(document.querySelectorAll('#tour-route-side-list [data-side-name]')).forEach(function(row) {
     if (row.getAttribute('data-side-name') === name) row.classList.toggle('off', !!routeLineExcluded[name]);
   });
+  routeApplyDirty = true;
+  updateRouteApplyButton();
   syncMiniGlobe();
+});
+
+document.getElementById('route-apply-btn').addEventListener('click', function() {
+  Object.keys(routeLineExcluded).forEach(function(name) {
+    if (routeLineExcluded[name]) {
+      state.selected[name] = false;
+      delete routeLineExcluded[name];
+    }
+  });
+  routeApplyDirty = false;
+  updateRouteApplyButton();
+  renderCandidates();
+  recompute();
 });
 
 function visitChipHtml(name) {
