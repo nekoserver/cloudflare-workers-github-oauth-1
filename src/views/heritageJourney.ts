@@ -77,7 +77,10 @@ h1{font-size:22px;margin:0 0 4px}
 .tour-mini-head{background:#1e293b;color:#93c5fd;font-size:12px;font-weight:700;padding:6px 10px;cursor:grab;user-select:none;touch-action:none}
 .tour-mini-head:active{cursor:grabbing}
 #tour-mini-canvas{display:block;width:260px;height:260px;margin:10px auto;background:#0b1220;border-radius:50%;border:1px solid #1e293b;cursor:pointer}
-.wp-badge{display:inline-block;background:#1e293b;border:1px solid #334155;border-radius:999px;padding:2px 9px;white-space:nowrap}
+.wp-badge{display:inline-block;background:#1e293b;border:1px solid #334155;border-radius:999px;padding:2px 9px;white-space:nowrap;color:#cbd5e1;font-family:inherit;font-size:12px;cursor:pointer}
+.wp-badge:hover{border-color:#38bdf8;color:#fff}
+.wp-badge-off{background:#0b1220;border-color:#1e293b;color:#4b5563;text-decoration:line-through;opacity:.6}
+.wp-badge-off:hover{border-color:#475569;color:#94a3b8}
 .wp-arrow{color:#64748b;margin:0 4px}
 .day-table{width:100%;border-collapse:collapse;font-size:12px;margin-top:6px}
 .day-table th,.day-table td{padding:6px 10px;border-bottom:1px solid #1e293b;text-align:left}
@@ -430,6 +433,11 @@ function bucketByNights(distribution) {
 var esc = function(s) { return String(s||'').replace(/[&<>"']/g, function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];}); };
 
 var state = { selected: {} };
+// ルート順序セクションの各ボタン(#route-line)をトグルした際の一時的な除外状態。
+// state.selectedとは別管理: 距離・時間ロスや宿泊プランの計算には影響させず、
+// 巡回テスト(#tour-mini-canvas/#tour-globe-canvas)の巡回対象からのみ
+// 一時的に外す(テスト時に特定の地点だけスキップしたい場合の補助)。
+var routeLineExcluded = {};
 
 function populateCitySelects() {
   var startSel = document.getElementById('start-city');
@@ -549,9 +557,20 @@ function renderSlackNote(se, currentNights, hubRadiusKm, maxDailyKm) {
 
 function renderRouteLine(ordered) {
   document.getElementById('route-line').innerHTML = ordered.map(function(p) {
-    return '<span class="wp-badge">' + esc(p.icon || '📍') + ' ' + esc(p.name) + '</span>';
+    var off = !!routeLineExcluded[p.name];
+    return '<button type="button" class="wp-badge' + (off ? ' wp-badge-off' : '') + '" data-wp-name="' + esc(p.name) + '" title="タップで巡回テストから一時的に除外/復帰">'
+      + esc(p.icon || '📍') + ' ' + esc(p.name) + '</button>';
   }).join('<span class="wp-arrow">→</span>');
 }
+
+document.getElementById('route-line').addEventListener('click', function(e) {
+  var btn = e.target.closest('[data-wp-name]');
+  if (!btn) return;
+  var name = btn.getAttribute('data-wp-name');
+  routeLineExcluded[name] = !routeLineExcluded[name];
+  btn.classList.toggle('wp-badge-off', !!routeLineExcluded[name]);
+  syncMiniGlobe();
+});
 
 function visitChipHtml(name) {
   var on = state.selected[name] !== false;
@@ -972,7 +991,15 @@ document.getElementById('replay-tour-btn').addEventListener('click', function() 
       miniPanel.style.display = 'none';
       return;
     }
-    tourPoints = ordered.map(function(p) { return { name: p.name, lat: p.lat, lon: p.lon }; });
+    tourPoints = ordered
+      .filter(function(p) { return !routeLineExcluded[p.name]; })
+      .map(function(p) { return { name: p.name, lat: p.lat, lon: p.lon }; });
+    if (tourPoints.length < 2) {
+      miniPanel.style.display = '';
+      renderAll();
+      updateLabel();
+      return;
+    }
     var start = tourPoints[0], end = tourPoints[tourPoints.length - 1];
     var viewKey = start.lat + ',' + start.lon + '|' + end.lat + ',' + end.lon;
     if (viewKey !== lastViewKey) {
