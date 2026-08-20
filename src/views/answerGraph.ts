@@ -102,6 +102,7 @@ main { flex:1; max-width:1100px; width:100%; margin:0 auto; padding:24px 16px; d
 .cat-quick-cats { display:flex; flex-wrap:wrap; gap:8px; }
 .cat-quick-cat-select { background:transparent; border:2px solid var(--btn-border); border-radius:6px; color:var(--fg); font-size:12px; padding:5px 8px; cursor:pointer; max-width:220px; }
 .search-row { display:flex; gap:8px; margin-bottom:10px; }
+#seedSearchTarget { background:var(--btn-bg); border:1px solid var(--btn-border); border-radius:6px; color:var(--fg); font-size:13px; padding:8px 10px; cursor:pointer; flex-shrink:0; }
 input[type=search] { flex:1; background:var(--btn-bg); border:1px solid var(--btn-border); border-radius:6px; color:var(--fg); font-size:13px; padding:8px 12px; outline:none; }
 input[type=search]:focus { border-color:var(--accent); }
 .search-results-wrap { max-height:260px; overflow-y:auto; border:1px solid var(--border); border-radius:6px; }
@@ -421,6 +422,10 @@ input[type=search]:focus { border-color:var(--accent); }
     </div>
     <div class="trail-bar" id="selectionTrailBar"></div>
     <div class="search-row">
+      <select id="seedSearchTarget">
+        <option value="llama-4" selected>llama-4(質問・回答)</option>
+        <option value="moondream3.1">moondream3.1(画像分析)</option>
+      </select>
       <input type="search" id="seedSearchInput" placeholder="質問・回答のキーワードで検索..." autocomplete="off">
     </div>
     <div class="search-status" id="seedSearchStatus"></div>
@@ -556,6 +561,7 @@ input[type=search]:focus { border-color:var(--accent); }
 <script>
 (function() {
   var seedSearchInput = document.getElementById('seedSearchInput');
+  var seedSearchTarget = document.getElementById('seedSearchTarget');
   var seedSearchStatus = document.getElementById('seedSearchStatus');
   var seedSearchResults = document.getElementById('seedSearchResults');
   var searchKeywordCountTh = document.getElementById('searchKeywordCountTh');
@@ -1518,7 +1524,8 @@ input[type=search]:focus { border-color:var(--accent); }
   // 各ステップの完了を待ってから次のステップへ進むために必要。
   function doSeedSearch(q) {
     seedSearchStatus.textContent = '検索中...';
-    return fetch('/api/aichat/shares/search?q=' + encodeURIComponent(q), { credentials: 'same-origin' })
+    var target = seedSearchTarget.value;
+    return fetch('/api/aichat/shares/search?q=' + encodeURIComponent(q) + '&target=' + encodeURIComponent(target), { credentials: 'same-origin' })
       .then(function(r) { return r.json(); })
       .then(function(d) {
         var results = (d && d.results) || [];
@@ -1706,6 +1713,13 @@ input[type=search]:focus { border-color:var(--accent); }
     resetSelectionTrail();
     if (!q) { seedSearchStatus.textContent = ''; searchResultsRaw = []; renderSearchResultsTable(); return; }
     searchTimer = setTimeout(function() { doSeedSearch(q); }, 350);
+  });
+
+  seedSearchTarget.addEventListener('change', function() {
+    var q = seedSearchInput.value.trim();
+    if (!q) return;
+    resetSelectionTrail();
+    doSeedSearch(q);
   });
 
   // ===== 大分類/中分類からのキーワードすばやい絞り込み =====
