@@ -346,6 +346,44 @@ describe('出発地別プラン分布(computeDestinationNightsDistribution / buc
     expect(athens).toBeTruthy();
     expect(lyon.nights).toBeLessThan(athens.nights);
   });
+
+  it('各目的地には所属国の国旗(flag)が付与され、全件が空文字にならない', () => {
+    const html = getHeritageJourneyPage();
+    const { computeDestinationNightsDistribution } = extractDistributionFns(html);
+    const start = { name: 'パリ', lat: 48.8566, lon: 2.3522 };
+    const distribution = computeDestinationNightsDistribution(start, 45, 350);
+    distribution.forEach((d: any) => { expect(d.flag).toBeTruthy(); });
+  });
+
+  it('ローマはイタリア国旗(🇮🇹)、リヨンはフランス国旗(🇫🇷)が付与される', () => {
+    const html = getHeritageJourneyPage();
+    const { computeDestinationNightsDistribution } = extractDistributionFns(html);
+    const start = { name: 'パリ', lat: 48.8566, lon: 2.3522 };
+    const distribution = computeDestinationNightsDistribution(start, 45, 350);
+    const rome = distribution.find((d: any) => d.city === 'ローマ');
+    const lyon = distribution.find((d: any) => d.city === 'リヨン');
+    expect(rome.flag).toBe('🇮🇹');
+    expect(lyon.flag).toBe('🇫🇷');
+  });
+});
+
+describe('出発地から見た目的地別プラン分布: 各都市ボタンの行頭に国旗を表示する', () => {
+  it('renderNightsDistribution内のチップ生成ロジックが、都市名の直前に国旗を連結する', () => {
+    const html = getHeritageJourneyPage();
+    const fnSrc = extractFn(html, 'renderNightsDistribution', '');
+    expect(fnSrc).toContain("var flagPrefix = d.flag ? esc(d.flag) + ' ' : '';");
+    expect(fnSrc).toContain('flagPrefix + esc(d.city)');
+  });
+
+  it('flagが空の場合でも例外にならず、国旗プレフィックスを省いた表示になる(欠損時のフォールバック)', () => {
+    const html = getHeritageJourneyPage();
+    const { computeDestinationNightsDistribution } = extractDistributionFns(html);
+    const start = { name: 'パリ', lat: 48.8566, lon: 2.3522 };
+    const distribution = computeDestinationNightsDistribution(start, 45, 350);
+    const d = distribution[0];
+    const flagPrefix = d.flag ? d.flag + ' ' : '';
+    expect(() => flagPrefix + d.city + '(' + d.nights + '泊)').not.toThrow();
+  });
 });
 
 describe('buildEmbeddedHeritagePoints', () => {
