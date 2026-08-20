@@ -113,6 +113,7 @@ h1{font-size:22px;margin:0 0 4px}
 .tour-route-side-title{font-size:12px;font-weight:700;color:#93c5fd;margin-bottom:8px}
 .tour-route-side-row{border:2px solid transparent;border-radius:6px;padding:5px 8px;font-size:12px;color:#e2e8f0;margin-bottom:4px;cursor:pointer}
 .tour-route-side-num{display:inline-block;min-width:1.4em;color:#94a3b8;font-variant-numeric:tabular-nums}
+.tour-route-side-check{margin:0 4px;vertical-align:middle;cursor:pointer}
 .tour-route-side-row:hover{background:#1e293b}
 .tour-route-side-row.off{opacity:.45;color:#64748b}
 .tour-route-side-row.focused{border-color:#facc15}
@@ -909,7 +910,9 @@ function renderRouteSidePanel(ordered) {
     var off = !!routeLineExcluded[p.name];
     var label = off ? '-' : String(++num);
     return '<div class="tour-route-side-row' + (off ? ' off' : '') + '" data-side-name="' + esc(p.name) + '" data-side-lat="' + p.lat + '" data-side-lon="' + p.lon + '" title="タップで地球儀上に名称を表示">'
-      + '<span class="tour-route-side-num">' + esc(label) + '</span> ' + esc(p.icon || '📍') + ' ' + esc(p.name) + '</div>';
+      + '<span class="tour-route-side-num">' + esc(label) + '</span>'
+      + '<input type="checkbox" class="tour-route-side-check" data-side-check-name="' + esc(p.name) + '"' + (off ? '' : ' checked') + ' title="OFFで巡回テストから一時的に除外">'
+      + ' ' + esc(p.icon || '📍') + ' ' + esc(p.name) + '</div>';
   }).join('');
 }
 
@@ -924,18 +927,32 @@ function updateRouteApplyButton() {
   if (btn) btn.disabled = !routeApplyDirty;
 }
 
-document.getElementById('route-line').addEventListener('click', function(e) {
-  var btn = e.target.closest('[data-wp-name]');
-  if (!btn) return;
-  var name = btn.getAttribute('data-wp-name');
+/**
+ * 指定した世界遺産名のグレーアウト(routeLineExcluded)状態をトグルする。
+ * #route-lineのバッジタップ・サイドパネルのチェックボックスの両方から
+ * 呼ばれる共通処理。OFFにすると地球儀上のその地点の丸が消え、
+ * 巡回線もその地点を経由せず前後の地点を直接結ぶようになる
+ * (syncMiniGlobe()がtourPointsから除外するため)。
+ */
+function toggleRouteLineExcluded(name) {
   routeLineExcluded[name] = !routeLineExcluded[name];
-  btn.classList.toggle('wp-badge-off', !!routeLineExcluded[name]);
+  var routeBtn = null;
+  Array.from(document.querySelectorAll('#route-line [data-wp-name]')).forEach(function(b) {
+    if (b.getAttribute('data-wp-name') === name) routeBtn = b;
+  });
+  if (routeBtn) routeBtn.classList.toggle('wp-badge-off', !!routeLineExcluded[name]);
   // グレーアウトの切り替えは番号の振り直し(地球儀上の丸の番号との一致)にも
   // 影響するため、サイドパネルは丸ごと再描画する。
   renderRouteSidePanel(state.lastOrdered || []);
   routeApplyDirty = true;
   updateRouteApplyButton();
   syncMiniGlobe();
+}
+
+document.getElementById('route-line').addEventListener('click', function(e) {
+  var btn = e.target.closest('[data-wp-name]');
+  if (!btn) return;
+  toggleRouteLineExcluded(btn.getAttribute('data-wp-name'));
 });
 
 document.getElementById('route-apply-btn').addEventListener('click', function() {
@@ -1473,12 +1490,19 @@ document.getElementById('replay-tour-btn').addEventListener('click', function() 
   });
 
   document.getElementById('tour-route-side-list').addEventListener('click', function(e) {
+    if (e.target.closest('[data-side-check-name]')) return; // チェックボックス操作はトグル専用のchangeリスナーに任せる
     var row = e.target.closest('[data-side-name]');
     if (!row) return;
     var lat = Number(row.getAttribute('data-side-lat'));
     var lon = Number(row.getAttribute('data-side-lon'));
     if (isNaN(lat) || isNaN(lon)) return;
     showTapLabel({ name: row.getAttribute('data-side-name'), lat: lat, lon: lon });
+  });
+
+  document.getElementById('tour-route-side-list').addEventListener('change', function(e) {
+    var check = e.target.closest('[data-side-check-name]');
+    if (!check) return;
+    toggleRouteLineExcluded(check.getAttribute('data-side-check-name'));
   });
 
   function stopAnim() {
