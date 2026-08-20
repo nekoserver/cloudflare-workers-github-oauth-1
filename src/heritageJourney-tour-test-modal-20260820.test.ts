@@ -55,7 +55,7 @@ function loadProjectionFns(html: string) {
     return m[0];
   }
   const src = [
-    'var ZOOM_MIN = 0.5, ZOOM_MAX = 6;',
+    'var ZOOM_MIN = 0.5, ZOOM_MAX = 16;',
     extractFn('project', 'lat, lon, centerLat, centerLon, R, cx, cy'),
     extractFn('circularMeanLon', 'lonA, lonB'),
     extractFn('computeInitialView', 'points, baseR'),
@@ -68,6 +68,118 @@ function loadProjectionFns(html: string) {
     computeInitialView: (points: { lat: number; lon: number }[], baseR: number) => { centerLat: number; centerLon: number; zoom: number };
   };
 }
+
+function loadTextureFns(html: string) {
+  function extractFn(name: string, argsPattern: string): string {
+    const re = new RegExp('function ' + name + '\\(' + argsPattern + '\\) \\{[\\s\\S]*?\\n  \\}');
+    const m = html.match(re);
+    if (!m) throw new Error(name + ' が生成HTMLから見つからない');
+    return m[0];
+  }
+  const projectSrc = extractFn('project', 'lat, lon, centerLat, centerLon, R, cx, cy');
+  const unprojectSrc = extractFn('unproject', 'X, Y, centerLat, centerLon');
+  const renderSrc = extractFn('renderSphereTexture', 'ctx, cx, cy, R');
+  const fn = new Function(
+    'canvas', 'tourCenterLat', 'tourCenterLon', 'earthImageData', 'sphereCacheBox',
+    `
+    ${projectSrc}
+    ${unprojectSrc}
+    var sphereCache = sphereCacheBox.cache;
+    var sphereCacheKey = sphereCacheBox.key;
+    ${renderSrc}
+    return {
+      project: project,
+      unproject: unproject,
+      renderSphereTexture: function(ctx, cx, cy, R) {
+        renderSphereTexture(ctx, cx, cy, R);
+        sphereCacheBox.cache = sphereCache;
+        sphereCacheBox.key = sphereCacheKey;
+      },
+    };
+    `
+  );
+  return fn as (
+    canvas: { width: number; height: number },
+    tourCenterLat: number,
+    tourCenterLon: number,
+    earthImageData: { data: Uint8ClampedArray; width: number; height: number } | null,
+    sphereCacheBox: { cache: unknown; key: string }
+  ) => {
+    project: (lat: number, lon: number, centerLat: number, centerLon: number, R: number, cx: number, cy: number) => { x: number; y: number; visible: boolean };
+    unproject: (X: number, Y: number, centerLat: number, centerLon: number) => { lat: number; lon: number } | null;
+    renderSphereTexture: (ctx: unknown, cx: number, cy: number, R: number) => void;
+  };
+}
+
+describe('巡回テストモーダル: 地表テクスチャの球面マッピング(純粋関数)', () => {
+  it('unproject: projectの逆変換になっている(往復して同じ緯度経度に戻る)', () => {
+    const html = getHeritageJourneyPage();
+    const load = loadTextureFns(html);
+    const api = load({ width: 520, height: 520 }, 10, 20, null, { cache: null, key: '' });
+    const lat = 35, lon = 80, centerLat = 10, centerLon = 20, R = 200;
+    const p = api.project(lat, lon, centerLat, centerLon, R, 0, 0);
+    const back = api.unproject(p.x / R, -p.y / R, centerLat, centerLon);
+    expect(back).not.toBeNull();
+    expect(back!.lat).toBeCloseTo(lat, 4);
+    expect(back!.lon).toBeCloseTo(lon, 4);
+  });
+
+  it('unproject: 中心からの距離が1を超える(球の外側)場合はnullを返す', () => {
+    const html = getHeritageJourneyPage();
+    const load = loadTextureFns(html);
+    const api = load({ width: 520, height: 520 }, 0, 0, null, { cache: null, key: '' });
+    expect(api.unproject(1.5, 0, 0, 0)).toBeNull();
+  });
+
+  it('renderSphereTexture: 画面中心のピクセルには中心座標(centerLat,centerLon)のテクスチャ色を書き込む', () => {
+    const html = getHeritageJourneyPage();
+    const load = loadTextureFns(html);
+    // 1x1のダミーテクスチャ(単色)。中心座標がどこであってもこの色が使われる
+    const earthImageData = { data: new Uint8ClampedArray([10, 20, 30, 255]), width: 1, height: 1 };
+    const W = 20, H = 20;
+    const writes: { x: number; y: number; r: number; g: number; b: number }[] = [];
+    const ctx = {
+      createImageData: (w: number, h: number) => ({ data: new Uint8ClampedArray(w * h * 4), width: w, height: h }),
+      putImageData: (img: { data: Uint8ClampedArray; width: number; height: number }) => {
+        for (let y = 0; y < img.height; y++) {
+          for (let x = 0; x < img.width; x++) {
+            const i = (y * img.width + x) * 4;
+            if (img.data[i + 3] > 0) writes.push({ x, y, r: img.data[i], g: img.data[i + 1], b: img.data[i + 2] });
+          }
+        }
+      },
+    };
+    const api = load({ width: W, height: H }, 0, 0, earthImageData, { cache: null, key: '' });
+    api.renderSphereTexture(ctx, W / 2, H / 2, 8);
+
+    const center = writes.find((w) => w.x === W / 2 && w.y === H / 2);
+    expect(center).toBeDefined();
+    expect(center!.r).toBe(10);
+    expect(center!.g).toBe(20);
+    expect(center!.b).toBe(30);
+    // 球の外側(円の範囲外)にはピクセルを書き込まない
+    expect(writes.find((w) => w.x === 0 && w.y === 0)).toBeUndefined();
+  });
+
+  it('renderSphereTexture: 中心・ズームが変わらなければキャッシュを再利用し、createImageDataを呼び直さない', () => {
+    const html = getHeritageJourneyPage();
+    const load = loadTextureFns(html);
+    const earthImageData = { data: new Uint8ClampedArray([1, 2, 3, 255]), width: 1, height: 1 };
+    let createCount = 0;
+    let putCount = 0;
+    const ctx = {
+      createImageData: (w: number, h: number) => { createCount++; return { data: new Uint8ClampedArray(w * h * 4), width: w, height: h }; },
+      putImageData: () => { putCount++; },
+    };
+    const cacheBox = { cache: null as unknown, key: '' };
+    const api = load({ width: 20, height: 20 }, 0, 0, earthImageData, cacheBox);
+    api.renderSphereTexture(ctx, 10, 10, 8);
+    api.renderSphereTexture(ctx, 10, 10, 8);
+
+    expect(createCount).toBe(1);
+    expect(putCount).toBe(2);
+  });
+});
 
 describe('巡回テストモーダル: 初期表示の中心座標・ズーム自動算出(純粋関数)', () => {
   it('project: 中心座標そのものは画面中心(cx,cy)に投影される', () => {
@@ -103,7 +215,7 @@ describe('巡回テストモーダル: 初期表示の中心座標・ズーム�
   it('computeInitialView: ズームはZOOM_MIN〜ZOOM_MAXの範囲にクランプされる', () => {
     const { computeInitialView } = loadProjectionFns(getHeritageJourneyPage());
     const sameSpot = computeInitialView([{ lat: 48, lon: 2 }, { lat: 48, lon: 2 }], 200);
-    expect(sameSpot.zoom).toBeLessThanOrEqual(6);
+    expect(sameSpot.zoom).toBeLessThanOrEqual(16);
     expect(sameSpot.zoom).toBeGreaterThanOrEqual(0.5);
   });
 
@@ -117,7 +229,7 @@ describe('巡回テストモーダル: 初期表示の中心座標・ズーム�
     const pStart = project(points[0].lat, points[0].lon, view.centerLat, view.centerLon, R, 0, 0);
     const pEnd = project(points[1].lat, points[1].lon, view.centerLat, view.centerLon, R, 0, 0);
     const maxDist = Math.max(Math.hypot(pStart.x, pStart.y), Math.hypot(pEnd.x, pEnd.y));
-    expect(maxDist).toBeCloseTo(baseR * 0.9, 0);
+    expect(maxDist).toBeCloseTo(baseR * 0.97, 0);
   });
 });
 

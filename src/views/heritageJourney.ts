@@ -687,8 +687,26 @@ document.getElementById('replay-tour-btn').addEventListener('click', function() 
   var tourZoom = 1;
   var tourCenterLat = 0;
   var tourCenterLon = 0;
-  var ZOOM_MIN = 0.5, ZOOM_MAX = 6;
+  var ZOOM_MIN = 0.5, ZOOM_MAX = 16;
   var pinchDist0 = 0;
+
+  // ===== 地表テクスチャ(webgl-heritageページと同じ/earth.jpgを流用) =====
+  var earthImg = new Image();
+  var earthImageData = null; // { data: Uint8ClampedArray, width, height } 相当
+  var sphereCache = null;    // 直前に描画したImageData(zoom/中心が変わらない限り再利用)
+  var sphereCacheKey = '';
+  earthImg.onload = function() {
+    var off = document.createElement('canvas');
+    off.width = earthImg.naturalWidth || earthImg.width;
+    off.height = earthImg.naturalHeight || earthImg.height;
+    var offCtx = off.getContext && off.getContext('2d');
+    if (!offCtx) return;
+    offCtx.drawImage(earthImg, 0, 0);
+    earthImageData = offCtx.getImageData(0, 0, off.width, off.height);
+    sphereCache = null;
+    if (overlay.classList.contains('open')) drawGlobe();
+  };
+  earthImg.src = '/earth.jpg';
 
   /**
    * 中心座標(centerLat, centerLon)を正面に見た正射影投影。中心を出発点と
@@ -722,10 +740,75 @@ document.getElementById('replay-tour-btn').addEventListener('click', function() 
     var pStart = project(start.lat, start.lon, centerLat, centerLon, baseR, 0, 0);
     var pEnd = project(end.lat, end.lon, centerLat, centerLon, baseR, 0, 0);
     var maxDist = Math.max(Math.hypot(pStart.x, pStart.y), Math.hypot(pEnd.x, pEnd.y));
-    var MARGIN = 0.9;
+    var MARGIN = 0.97;
     var zoom = maxDist > 0.01 ? (baseR * MARGIN) / maxDist : 1;
     zoom = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, zoom));
     return { centerLat: centerLat, centerLon: centerLon, zoom: zoom };
+  }
+
+  /**
+   * project()の逆変換(標準的な正射影投影の逆変換式、Snyderの地図投影公式)。
+   * 画面上の1点(中心からの相対座標X,Y、半径1に正規化済み)から緯度経度を
+   * 復元する。裏側(可視範囲外)ならnullを返す。
+   */
+  function unproject(X, Y, centerLat, centerLon) {
+    var rho = Math.sqrt(X * X + Y * Y);
+    if (rho > 1) return null;
+    var lat0 = centerLat * Math.PI / 180;
+    var lon0 = centerLon * Math.PI / 180;
+    var c = Math.asin(Math.min(1, rho));
+    var lat, lon;
+    if (rho < 1e-6) {
+      lat = lat0; lon = lon0;
+    } else {
+      var sinC = Math.sin(c), cosC = Math.cos(c);
+      lat = Math.asin(cosC * Math.sin(lat0) + (Y * sinC * Math.cos(lat0)) / rho);
+      lon = lon0 + Math.atan2(X * sinC, rho * cosC * Math.cos(lat0) - Y * sinC * Math.sin(lat0));
+    }
+    return { lat: lat * 180 / Math.PI, lon: lon * 180 / Math.PI };
+  }
+
+  /**
+   * 球体表面に地表テクスチャ(/earth.jpg、webgl-heritageページと共通)を
+   * ピクセル単位で貼り付ける(canvas 2Dにはメッシュ/UVマッピングが無いため、
+   * 画面側の各ピクセルから緯度経度を逆算しテクスチャをサンプリングする
+   * ソフトウェアレンダリング)。zoom/中心座標が変わらない限り結果を
+   * キャッシュし、巡回アニメーション中の再描画では使い回す。
+   */
+  function renderSphereTexture(ctx, cx, cy, R) {
+    var key = tourCenterLat + '|' + tourCenterLon + '|' + R;
+    if (sphereCache && sphereCacheKey === key) {
+      ctx.putImageData(sphereCache, 0, 0);
+      return;
+    }
+    var W = canvas.width, H = canvas.height;
+    var out = ctx.createImageData(W, H);
+    var src = earthImageData;
+    var sw = src.width, sh = src.height;
+    var x0 = Math.max(0, Math.floor(cx - R)), x1 = Math.min(W, Math.ceil(cx + R));
+    var y0 = Math.max(0, Math.floor(cy - R)), y1 = Math.min(H, Math.ceil(cy + R));
+    for (var py = y0; py < y1; py++) {
+      for (var px = x0; px < x1; px++) {
+        var X = (px - cx) / R;
+        var Y = -(py - cy) / R;
+        var ll = unproject(X, Y, tourCenterLat, tourCenterLon);
+        if (!ll) continue;
+        var u = 0.5 + ll.lon / 360;
+        u = u - Math.floor(u);
+        var v = Math.max(0, Math.min(1, 0.5 - ll.lat / 180));
+        var sx = Math.min(sw - 1, Math.floor(u * sw));
+        var sy = Math.min(sh - 1, Math.floor(v * sh));
+        var sIdx = (sy * sw + sx) * 4;
+        var dIdx = (py * W + px) * 4;
+        out.data[dIdx] = src.data[sIdx];
+        out.data[dIdx + 1] = src.data[sIdx + 1];
+        out.data[dIdx + 2] = src.data[sIdx + 2];
+        out.data[dIdx + 3] = 255;
+      }
+    }
+    sphereCache = out;
+    sphereCacheKey = key;
+    ctx.putImageData(out, 0, 0);
   }
 
   function pointAtProgress(points, progress) {
@@ -747,23 +830,32 @@ document.getElementById('replay-tour-btn').addEventListener('click', function() 
     var baseR = Math.min(W, H) / 2 - 24;
     var R = baseR * tourZoom;
 
-    // 球体の輪郭と緯線(簡易グリッド)。ズームにより実際のcanvas範囲を
-    // はみ出す場合は自然にクリップされ、出発点・目的地付近を拡大表示できる。
-    ctx.strokeStyle = '#1e293b';
-    ctx.lineWidth = 1;
-    [-60, -30, 0, 30, 60].forEach(function(lat) {
-      var latR = (lat - tourCenterLat) * Math.PI / 180;
-      var ellipseY = cy - R * Math.sin(latR);
-      var ellipseRx = R * Math.cos(latR);
+    if (earthImageData) {
+      // 地表テクスチャを球面に貼り付ける
+      renderSphereTexture(ctx, cx, cy, R);
+      ctx.strokeStyle = '#0b1220';
+      ctx.lineWidth = 1.5;
       ctx.beginPath();
-      ctx.ellipse(cx, ellipseY, Math.max(ellipseRx, 0.01), Math.max(ellipseRx * 0.15, 0.01), 0, 0, Math.PI * 2);
+      ctx.arc(cx, cy, R, 0, Math.PI * 2);
       ctx.stroke();
-    });
-    ctx.strokeStyle = '#334155';
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.arc(cx, cy, R, 0, Math.PI * 2);
-    ctx.stroke();
+    } else {
+      // テクスチャ読み込み中の暫定表示: 球体の輪郭と簡易緯線グリッド
+      ctx.strokeStyle = '#1e293b';
+      ctx.lineWidth = 1;
+      [-60, -30, 0, 30, 60].forEach(function(lat) {
+        var latR = (lat - tourCenterLat) * Math.PI / 180;
+        var ellipseY = cy - R * Math.sin(latR);
+        var ellipseRx = R * Math.cos(latR);
+        ctx.beginPath();
+        ctx.ellipse(cx, ellipseY, Math.max(ellipseRx, 0.01), Math.max(ellipseRx * 0.15, 0.01), 0, 0, Math.PI * 2);
+        ctx.stroke();
+      });
+      ctx.strokeStyle = '#334155';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.arc(cx, cy, R, 0, Math.PI * 2);
+      ctx.stroke();
+    }
 
     var projected = tourPoints.map(function(p) { return project(p.lat, p.lon, tourCenterLat, tourCenterLon, R, cx, cy); });
 
