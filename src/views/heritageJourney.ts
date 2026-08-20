@@ -912,8 +912,6 @@ function renderNightsDistribution() {
           renderCandidates();
           recompute();
           updateRegisterRouteButton();
-          var summaryEl = document.getElementById('summary-grid');
-          if (summaryEl && summaryEl.scrollIntoView) summaryEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
         });
       });
     });
