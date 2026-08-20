@@ -73,6 +73,10 @@ h1{font-size:22px;margin:0 0 4px}
 #tour-play-btn{background:#1e293b;border:1px solid #475569;color:#cbd5e1;border-radius:8px;padding:6px 14px;font-size:12px;cursor:pointer;font-family:inherit}
 #tour-play-btn:hover{border-color:#38bdf8;color:#fff}
 .tour-modal-label{font-size:12px;color:#94a3b8}
+.tour-mini-panel{position:fixed;top:12px;left:12px;z-index:9998;background:#111827;border:1px solid #334155;border-radius:10px;box-shadow:0 6px 20px rgba(0,0,0,.4);overflow:hidden;width:280px}
+.tour-mini-head{background:#1e293b;color:#93c5fd;font-size:12px;font-weight:700;padding:6px 10px;cursor:grab;user-select:none;touch-action:none}
+.tour-mini-head:active{cursor:grabbing}
+#tour-mini-canvas{display:block;width:260px;height:260px;margin:10px auto;background:#0b1220;border-radius:50%;border:1px solid #1e293b;cursor:pointer}
 .wp-badge{display:inline-block;background:#1e293b;border:1px solid #334155;border-radius:999px;padding:2px 9px;white-space:nowrap}
 .wp-arrow{color:#64748b;margin:0 4px}
 .day-table{width:100%;border-collapse:collapse;font-size:12px;margin-top:6px}
@@ -167,6 +171,11 @@ h1{font-size:22px;margin:0 0 4px}
       <span class="tour-modal-label" id="tour-current-label"></span>
     </div>
   </div>
+</div>
+
+<div class="tour-mini-panel" id="tour-mini-panel" style="display:none;">
+  <div class="tour-mini-head" id="tour-mini-head">🌐 巡回テスト</div>
+  <canvas id="tour-mini-canvas" width="260" height="260"></canvas>
 </div>
 <script>
 var HERITAGE_POINTS = ${JSON.stringify(heritagePoints)};
@@ -634,6 +643,7 @@ function recompute() {
   renderSlackNote(se, currentNights, hubRadiusKm, maxDailyKm);
   var countEl = document.getElementById('cand-count');
   if (countEl) countEl.textContent = candidates.length + ' 件中 ' + selected.length + ' 件選択中';
+  syncMiniGlobe();
 }
 
 document.getElementById('select-all-btn').addEventListener('click', function() {
@@ -672,13 +682,15 @@ document.getElementById('replay-tour-btn').addEventListener('click', function() 
  * プロットし、モーダル内で出発点から目的地まで巡回できるようにする軽量版。
  * 別ページへ遷移せず、モーダルの中だけで完結する。
  */
-(function() {
   var overlay = document.getElementById('tour-modal-overlay');
   var closeBtn = document.getElementById('tour-modal-close');
   var canvas = document.getElementById('tour-globe-canvas');
   var playBtn = document.getElementById('tour-play-btn');
   var currentLabel = document.getElementById('tour-current-label');
   var tourTestBtn = document.getElementById('tour-test-btn');
+  var miniPanel = document.getElementById('tour-mini-panel');
+  var miniHead = document.getElementById('tour-mini-head');
+  var miniCanvas = document.getElementById('tour-mini-canvas');
 
   var tourPoints = [];
   var animProgress = 0; // 0..(tourPoints.length-1) の連続値。整数部=区間番号、小数部=区間内の進み具合
@@ -704,7 +716,7 @@ document.getElementById('replay-tour-btn').addEventListener('click', function() 
     offCtx.drawImage(earthImg, 0, 0);
     earthImageData = offCtx.getImageData(0, 0, off.width, off.height);
     sphereCache = null;
-    if (overlay.classList.contains('open')) drawGlobe();
+    renderAll();
   };
   earthImg.src = '/earth.jpg';
 
@@ -775,13 +787,12 @@ document.getElementById('replay-tour-btn').addEventListener('click', function() 
    * ソフトウェアレンダリング)。zoom/中心座標が変わらない限り結果を
    * キャッシュし、巡回アニメーション中の再描画では使い回す。
    */
-  function renderSphereTexture(ctx, cx, cy, R) {
-    var key = tourCenterLat + '|' + tourCenterLon + '|' + R;
+  function renderSphereTexture(ctx, cx, cy, R, W, H) {
+    var key = W + '|' + tourCenterLat + '|' + tourCenterLon + '|' + R;
     if (sphereCache && sphereCacheKey === key) {
       ctx.putImageData(sphereCache, 0, 0);
       return;
     }
-    var W = canvas.width, H = canvas.height;
     var out = ctx.createImageData(W, H);
     var src = earthImageData;
     var sw = src.width, sh = src.height;
@@ -820,19 +831,26 @@ document.getElementById('replay-tour-btn').addEventListener('click', function() 
     return { lat: a.lat + (b.lat - a.lat) * frac, lon: a.lon + (b.lon - a.lon) * frac };
   }
 
-  function drawGlobe() {
-    if (!canvas.getContext) return;
-    var ctx = canvas.getContext('2d');
-    var W = canvas.width, H = canvas.height;
+  /**
+   * 指定したcanvasへ地球儀を描画する。巡回テストモーダル本体(#tour-globe-canvas)と
+   * 常時表示の縮小プレビュー(#tour-mini-canvas)の両方から呼び、同じ
+   * tourPoints/tourCenterLat/tourCenterLon/tourZoom/animProgressを共有して
+   * 同じ見た目を保つ(モーダルでズームやピンチ操作をすると縮小プレビュー側も追従する)。
+   */
+  function renderGlobeToCanvas(targetCanvas) {
+    if (!targetCanvas || !targetCanvas.getContext) return;
+    var ctx = targetCanvas.getContext('2d');
+    var W = targetCanvas.width, H = targetCanvas.height;
     ctx.clearRect(0, 0, W, H);
     if (tourPoints.length === 0) return;
     var cx = W / 2, cy = H / 2;
-    var baseR = Math.min(W, H) / 2 - 24;
+    var margin = Math.min(W, H) <= 300 ? 12 : 24;
+    var baseR = Math.min(W, H) / 2 - margin;
     var R = baseR * tourZoom;
 
     if (earthImageData) {
       // 地表テクスチャを球面に貼り付ける
-      renderSphereTexture(ctx, cx, cy, R);
+      renderSphereTexture(ctx, cx, cy, R, W, H);
       ctx.strokeStyle = '#0b1220';
       ctx.lineWidth = 1.5;
       ctx.beginPath();
@@ -916,12 +934,12 @@ document.getElementById('replay-tour-btn').addEventListener('click', function() 
       animProgress += STEP;
       if (animProgress >= tourPoints.length - 1) {
         animProgress = tourPoints.length - 1;
-        drawGlobe();
+        renderAll();
         updateLabel();
         stopAnim();
         return;
       }
-      drawGlobe();
+      renderAll();
       updateLabel();
     }, 40);
   }
@@ -931,18 +949,50 @@ document.getElementById('replay-tour-btn').addEventListener('click', function() 
     startAnim();
   });
 
-  function openTourModal() {
+  /** モーダル本体と縮小プレビューを同じ状態で両方描画する。 */
+  function renderAll() {
+    renderGlobeToCanvas(canvas);
+    if (miniPanel.style.display !== 'none') renderGlobeToCanvas(miniCanvas);
+  }
+
+  // 出発点・目的地(先頭・末尾)が変わった場合だけ中心・ズームを自動再計算する。
+  // ルート内の途中の経由地の選択/解除だけで再計算が走るrecompute()のたびに
+  // ユーザーが手動で操作したズーム/中心を巻き戻してしまわないための対策。
+  var lastViewKey = '';
+
+  /**
+   * 常時表示の縮小プレビュー(#tour-mini-panel)を、現在の計算済みルート
+   * (state.lastOrdered)に合わせて更新する。ルートが2地点未満(未計算)の
+   * 場合はプレビュー自体を隠す。recompute()から呼ぶことで、候補選択や
+   * 出発地・到着地の変更のたびに自動で追従する。
+   */
+  function syncMiniGlobe() {
     var ordered = state.lastOrdered || [];
-    if (ordered.length < 2) return;
+    if (ordered.length < 2) {
+      miniPanel.style.display = 'none';
+      return;
+    }
     tourPoints = ordered.map(function(p) { return { name: p.name, lat: p.lat, lon: p.lon }; });
-    animProgress = 0;
+    var start = tourPoints[0], end = tourPoints[tourPoints.length - 1];
+    var viewKey = start.lat + ',' + start.lon + '|' + end.lat + ',' + end.lon;
+    if (viewKey !== lastViewKey) {
+      lastViewKey = viewKey;
+      var baseR = Math.min(canvas.width, canvas.height) / 2 - 24;
+      var initial = computeInitialView(tourPoints, baseR);
+      tourCenterLat = initial.centerLat;
+      tourCenterLon = initial.centerLon;
+      tourZoom = initial.zoom;
+      animProgress = 0;
+    }
+    miniPanel.style.display = '';
+    renderAll();
+    updateLabel();
+  }
+
+  function openTourModal() {
+    if (tourPoints.length < 2) return;
     stopAnim();
-    var baseR = Math.min(canvas.width, canvas.height) / 2 - 24;
-    var initial = computeInitialView(tourPoints, baseR);
-    tourCenterLat = initial.centerLat;
-    tourCenterLon = initial.centerLon;
-    tourZoom = initial.zoom;
-    drawGlobe();
+    renderAll();
     updateLabel();
     overlay.classList.add('open');
   }
@@ -953,6 +1003,7 @@ document.getElementById('replay-tour-btn').addEventListener('click', function() 
   }
 
   tourTestBtn.addEventListener('click', openTourModal);
+  miniCanvas.addEventListener('click', openTourModal);
   closeBtn.addEventListener('click', closeTourModal);
   overlay.addEventListener('click', function(e) { if (e.target === overlay) closeTourModal(); });
   document.addEventListener('keydown', function(e) { if (e.key === 'Escape' && overlay.classList.contains('open')) closeTourModal(); });
@@ -961,7 +1012,7 @@ document.getElementById('replay-tour-btn').addEventListener('click', function() 
   canvas.addEventListener('wheel', function(e) {
     e.preventDefault();
     tourZoom = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, tourZoom - e.deltaY * 0.002));
-    drawGlobe();
+    renderAll();
   }, { passive: false });
 
   canvas.addEventListener('touchstart', function(e) {
@@ -977,10 +1028,38 @@ document.getElementById('replay-tour-btn').addEventListener('click', function() 
       var d = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
       tourZoom = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, tourZoom + (d - pinchDist0) * 0.008));
       pinchDist0 = d;
-      drawGlobe();
+      renderAll();
     }
   }, { passive: false });
-})();
+
+  // ===== 縮小プレビュー(#tour-mini-panel)をヘッダドラッグで画面内自由配置 =====
+  (function() {
+    var dragging = false, startX = 0, startY = 0, startLeft = 0, startTop = 0;
+    function onDown(clientX, clientY) {
+      dragging = true;
+      var rect = miniPanel.getBoundingClientRect();
+      startX = clientX; startY = clientY; startLeft = rect.left; startTop = rect.top;
+      miniPanel.style.left = startLeft + 'px';
+      miniPanel.style.top = startTop + 'px';
+    }
+    function onMove(clientX, clientY) {
+      if (!dragging) return;
+      var dx = clientX - startX, dy = clientY - startY;
+      var maxLeft = Math.max(0, window.innerWidth - miniPanel.offsetWidth);
+      var maxTop = Math.max(0, window.innerHeight - miniPanel.offsetHeight);
+      var newLeft = Math.max(0, Math.min(maxLeft, startLeft + dx));
+      var newTop = Math.max(0, Math.min(maxTop, startTop + dy));
+      miniPanel.style.left = newLeft + 'px';
+      miniPanel.style.top = newTop + 'px';
+    }
+    function onUp() { dragging = false; }
+    miniHead.addEventListener('mousedown', function(e) { onDown(e.clientX, e.clientY); e.preventDefault(); });
+    document.addEventListener('mousemove', function(e) { onMove(e.clientX, e.clientY); });
+    document.addEventListener('mouseup', onUp);
+    miniHead.addEventListener('touchstart', function(e) { onDown(e.touches[0].clientX, e.touches[0].clientY); }, { passive: true });
+    miniHead.addEventListener('touchmove', function(e) { onMove(e.touches[0].clientX, e.touches[0].clientY); }, { passive: true });
+    miniHead.addEventListener('touchend', onUp);
+  })();
 document.getElementById('swap-btn').addEventListener('click', function() {
   var s = document.getElementById('start-city'), e = document.getElementById('end-city');
   var tmp = s.value; s.value = e.value; e.value = tmp;
