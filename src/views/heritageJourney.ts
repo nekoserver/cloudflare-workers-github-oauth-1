@@ -69,6 +69,16 @@ h1{font-size:22px;margin:0 0 4px}
 #register-route-btn:disabled{opacity:.4;cursor:default}
 #register-route-btn:not(:disabled){background:#0369a1;border-color:#38bdf8;color:#fff}
 #register-route-btn:not(:disabled):hover{background:#0284c7}
+#view-registered-routes-btn{background:#1e293b;border:1px solid #475569;color:#cbd5e1;border-radius:8px;padding:6px 12px;font-size:12px;cursor:pointer;font-family:inherit;white-space:nowrap}
+#view-registered-routes-btn:hover{border-color:#38bdf8;color:#fff}
+.registered-routes-freq-cols{display:flex;gap:16px;flex-wrap:wrap;margin-bottom:14px}
+.registered-routes-freq-col{flex:1;min-width:160px}
+.registered-routes-freq-title{font-size:12px;font-weight:700;color:#93c5fd;margin-bottom:6px}
+.registered-routes-freq-item{display:flex;justify-content:flex-start;text-align:left;font-size:12px;color:#cbd5e1;padding:2px 0}
+.registered-routes-table{width:100%;border-collapse:collapse;font-size:12px}
+.registered-routes-table th,.registered-routes-table td{border:1px solid #334155;padding:4px 8px;text-align:left;color:#cbd5e1}
+.registered-routes-table th{background:#1e293b;color:#93c5fd}
+.registered-routes-empty{font-size:12px;color:#94a3b8}
 #register-route-error{color:#f87171;font-size:12px;margin-top:6px}
 #replay-tour-btn,#tour-test-btn{background:#1e293b;border:1px solid #475569;color:#cbd5e1;border-radius:8px;padding:6px 12px;font-size:12px;cursor:pointer;font-family:inherit;white-space:nowrap}
 #replay-tour-btn:hover,#tour-test-btn:hover{border-color:#38bdf8;color:#fff}
@@ -160,6 +170,7 @@ ${getMitokoroModalCss()}
       <button id="swap-btn" type="button">⇄ 入替</button>
       <select id="end-city"></select>
       <button id="register-route-btn" type="button" disabled>➕ ルート登録</button>
+      <button id="view-registered-routes-btn" type="button">📋 登録済みルートを見る</button>
     </div>
     <div id="register-route-error" style="display:none"></div>
     <div class="opt-grid">
@@ -222,6 +233,29 @@ ${getMitokoroModalCss()}
         <tbody id="heritage-add-results-body"></tbody>
       </table>
     </div>
+  </div>
+</div>
+
+<div class="tour-modal-overlay" id="registered-routes-modal-overlay">
+  <div class="tour-modal-box">
+    <div class="tour-modal-head">
+      <div class="tour-modal-title">📋 登録済みルート</div>
+      <button type="button" class="tour-modal-close" id="registered-routes-modal-close" aria-label="閉じる">✕</button>
+    </div>
+    <div class="registered-routes-freq-cols">
+      <div class="registered-routes-freq-col">
+        <div class="registered-routes-freq-title">出発地</div>
+        <div id="registered-routes-start-freq"></div>
+      </div>
+      <div class="registered-routes-freq-col">
+        <div class="registered-routes-freq-title">到着地</div>
+        <div id="registered-routes-end-freq"></div>
+      </div>
+    </div>
+    <table class="registered-routes-table">
+      <thead><tr><th>ID</th><th>出発地</th><th>到着地</th><th>直線距離</th></tr></thead>
+      <tbody id="registered-routes-table-body"></tbody>
+    </table>
   </div>
 </div>
 
@@ -1460,6 +1494,89 @@ document.getElementById('replay-tour-btn').addEventListener('click', function() 
     miniHead.addEventListener('touchmove', function(e) { onMove(e.touches[0].clientX, e.touches[0].clientY); }, { passive: true });
     miniHead.addEventListener('touchend', onUp);
   })();
+
+// ===== 「登録済みルートを見る」ボタン(#view-registered-routes-btn) =====
+// heritage_journey_registered_routes 全件を取得し、出発地・到着地それぞれの
+// 出現回数を集計して降順表示、あわせてID/出発地/到着地/直線距離のテーブルを表示する。
+function getNextZ() {
+  var els = document.querySelectorAll('[style*="z-index"]');
+  var max = 100;
+  for (var i = 0; i < els.length; i++) {
+    var z = parseInt(els[i].style.zIndex, 10);
+    if (!isNaN(z) && z > max) max = z;
+  }
+  return max + 100;
+}
+
+function renderCityFreq(elId, routes, key) {
+  var el = document.getElementById(elId);
+  if (!el) return;
+  var counts = {};
+  for (var i = 0; i < routes.length; i++) {
+    var name = routes[i][key];
+    if (!name) continue;
+    counts[name] = (counts[name] || 0) + 1;
+  }
+  var entries = Object.keys(counts).map(function(name) { return [name, counts[name]]; });
+  entries.sort(function(a, b) { return b[1] - a[1]; });
+  if (entries.length === 0) {
+    el.innerHTML = '<div class="registered-routes-empty">データがありません</div>';
+    return;
+  }
+  el.innerHTML = entries.map(function(e) {
+    return '<div class="registered-routes-freq-item">' + esc(e[0]) + ' (' + e[1] + ')</div>';
+  }).join('');
+}
+
+function renderRegisteredRoutesTable(routes) {
+  var body = document.getElementById('registered-routes-table-body');
+  if (!body) return;
+  if (routes.length === 0) {
+    body.innerHTML = '<tr><td colspan="4" class="registered-routes-empty">登録済みルートはありません</td></tr>';
+    return;
+  }
+  body.innerHTML = routes.map(function(r) {
+    var km = (typeof r.straightKm === 'number') ? r.straightKm.toFixed(1) + ' km' : '-';
+    return '<tr><td>' + esc(r.id) + '</td><td>' + esc(r.start) + '</td><td>' + esc(r.end) + '</td><td>' + km + '</td></tr>';
+  }).join('');
+}
+
+function openRegisteredRoutesModal() {
+  var overlay = document.getElementById('registered-routes-modal-overlay');
+  if (!overlay) return;
+  overlay.style.zIndex = String(getNextZ());
+  overlay.classList.add('open');
+  fetch('/api/heritage-journey/registered-routes')
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      var routes = (data && Array.isArray(data.routes)) ? data.routes : [];
+      renderCityFreq('registered-routes-start-freq', routes, 'start');
+      renderCityFreq('registered-routes-end-freq', routes, 'end');
+      renderRegisteredRoutesTable(routes);
+    })
+    .catch(function() {
+      renderCityFreq('registered-routes-start-freq', [], 'start');
+      renderCityFreq('registered-routes-end-freq', [], 'end');
+      renderRegisteredRoutesTable([]);
+    });
+}
+
+function closeRegisteredRoutesModal() {
+  var overlay = document.getElementById('registered-routes-modal-overlay');
+  if (overlay) overlay.classList.remove('open');
+}
+
+(function() {
+  var viewBtn = document.getElementById('view-registered-routes-btn');
+  var overlay = document.getElementById('registered-routes-modal-overlay');
+  var closeBtn = document.getElementById('registered-routes-modal-close');
+  if (!viewBtn || !overlay || !closeBtn) return;
+  viewBtn.addEventListener('click', openRegisteredRoutesModal);
+  closeBtn.addEventListener('click', closeRegisteredRoutesModal);
+  overlay.addEventListener('click', function(e) { if (e.target === overlay) closeRegisteredRoutesModal(); });
+  document.addEventListener('keydown', function(e) { if (e.key === 'Escape' && overlay.classList.contains('open')) closeRegisteredRoutesModal(); });
+})();
+
 document.getElementById('swap-btn').addEventListener('click', function() {
   var s = document.getElementById('start-city'), e = document.getElementById('end-city');
   var tmp = s.value; s.value = e.value; e.value = tmp;
