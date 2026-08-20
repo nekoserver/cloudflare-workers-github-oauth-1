@@ -120,6 +120,12 @@ describe('heritage-journeyページ: タップツールチップの見どころ�
     (globalThis as unknown as { fetch: unknown }).fetch = originalFetch;
   });
 
+  it('ラベル全体が地球儀の操作を妨げないまま、見どころアイコンだけはタップ操作を受け付ける', () => {
+    const html = getHeritageJourneyPage();
+    expect(html).toMatch(/\.tour-tap-label\{[^}]*pointer-events:none/);
+    expect(html).toMatch(/#tour-tap-mitokoro-gemma-btn,#tour-tap-mitokoro-llama-btn\{[^}]*pointer-events:auto[^}]*touch-action:manipulation/);
+  });
+
   it('gemma回答のみキャッシュされている場合、👀だけが表示され👁️は表示されない', async () => {
     const { fetchMock } = buildFetchMock({ gemmaShareId: 'share-gemma' });
     setupPage(fetchMock);

@@ -144,7 +144,7 @@ h1{font-size:22px;margin:0 0 4px}
 .visit-chip{display:inline-block;background:#1e293b;border:1px solid #475569;color:#cbd5e1;border-radius:999px;padding:2px 9px;font-size:11px;cursor:pointer;font-family:inherit;margin:2px 4px 2px 0}
 .visit-chip:hover{border-color:#38bdf8;color:#fff}
 .visit-chip.off{background:#374151;border-color:#374151;color:#9ca3af;text-decoration:line-through}
-#tour-tap-mitokoro-gemma-btn,#tour-tap-mitokoro-llama-btn{cursor:pointer;margin-left:4px}
+#tour-tap-mitokoro-gemma-btn,#tour-tap-mitokoro-llama-btn{cursor:pointer;margin-left:4px;pointer-events:auto;touch-action:manipulation}
 ${getMitokoroModalCss()}
 </style>
 </head>
