@@ -69,6 +69,10 @@ describe('heritage-journeyページ: 宿泊予定地の丸をタップすると�
     canvas.dispatchEvent(new MouseEvent('click', { clientX: firstWpDot.x, clientY: firstWpDot.y, bubbles: true }));
 
     expect(tapLabel.textContent).not.toBe('');
+    // CSSの.tour-tap-labelはdisplay:noneが既定のため、空文字('')ではスタイル
+    // シートの非表示が適用されたままになる。表示時は必ず非noneの値が
+    // インラインで明示されていることを検証する(実機で表示されないバグの再発防止)。
+    expect(tapLabel.style.display).not.toBe('');
     expect(tapLabel.style.display).not.toBe('none');
 
     vi.advanceTimersByTime(6999);
