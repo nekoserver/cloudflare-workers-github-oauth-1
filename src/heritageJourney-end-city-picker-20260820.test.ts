@@ -116,7 +116,7 @@ describe('heritage-journeyページ: 到着地テーブルの距離(km)列と並
 
     // 降順ソートの検証: 全行のkm値を抽出し、非増加列になっていること
     const kms = rows.map((r) => {
-      const text = r.querySelectorAll('td')[1].textContent || '';
+      const text = r.querySelectorAll('td')[2].textContent || '';
       return parseFloat(text);
     });
     for (let i = 1; i < kms.length; i++) {
@@ -280,7 +280,7 @@ describe('heritage-journeyページ: 出発地未確定など異常系での距�
     expect(rows.length).toBeGreaterThan(0);
     rows.forEach((r) => {
       const tds = Array.from(r.querySelectorAll('td'));
-      expect(tds[1].textContent).toBe('-');
+      expect(tds[2].textContent).toBe('-');
     });
   });
 });
