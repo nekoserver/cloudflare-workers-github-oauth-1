@@ -149,7 +149,10 @@ export function getAiChatPage(user: {
     .kw-cat-badge-active { border-color:var(--kw-pal-cat,#3b82f6) !important; background:var(--kw-pal-cat-bg,#dbeafe) !important; color:var(--kw-pal-cat,#1d4ed8) !important; }
     [data-theme="dark"] .kw-cat-badge-active { border-color:var(--kw-pal-cat,#60a5fa) !important; background:var(--kw-pal-cat-bg,rgba(59,130,246,0.25)) !important; color:var(--kw-pal-cat,#93c5fd) !important; }
     .kw-cat-badge-dimmed { opacity:.55; }
+    .kw-cat-badge-solo-disabled { opacity:.35; pointer-events:none; cursor:default; }
     .kw-group-badge-active { border-color:#3b82f6 !important; background:#3b82f6 !important; color:#fff !important; }
+    #kwMidSoloReleaseBtn { padding:6px 16px;border-radius:6px;border:1px solid var(--border-color);background:var(--bg-secondary);color:var(--text-secondary);font-size:12px;cursor:pointer; }
+    #kwMidSoloReleaseBtn:hover { background:var(--border-color); color:var(--text-primary); }
     .kw-color-swatch { display:inline-block;width:18px;height:18px;border-radius:3px;margin:1px;cursor:pointer;border:2px solid transparent;box-sizing:border-box;vertical-align:middle; }
     .kw-color-swatch:hover { opacity:0.8; }
     .kw-color-swatch-selected { border-color:var(--text-primary) !important; }
@@ -4382,6 +4385,50 @@ export function getAiChatPage(user: {
     var kwAddToCatName = '';
     var kwRemoveFromCatId = null;
     var kwRemoveFromCatName = '';
+    var kwMidSoloActive = false;
+    var kwMidSoloCatId = null;
+
+    // 大分類が選択されていない状態で単独の中分類カテゴリが選択された時、
+    // それ以外の中分類トグルを全てOFF+グレーアウト(実際に非活性)にし、
+    // キーワードバッジを一旦全て非表示にしてから選択中の中分類に属する
+    // キーワードだけを表示する「単独中分類分離モード」に入る。
+    function enterKwMidSoloMode(catId) {
+      kwMidSoloActive = true;
+      kwMidSoloCatId = catId;
+      kwClassifyListBody.querySelectorAll('.kw-cat-summary-badge').forEach(function(catEl) {
+        var cid = catEl.dataset.catId;
+        catEl.classList.toggle('kw-cat-badge-solo-disabled', cid !== catId);
+      });
+      kwClassifyListBody.querySelectorAll('.kw-classify-kw-badge').forEach(function(el) {
+        el.style.display = 'none';
+      });
+      kwClassifyListBody.querySelectorAll('.kw-classify-kw-badge').forEach(function(el) {
+        var catIds = [];
+        try { catIds = JSON.parse(el.dataset.catIds || '[]'); } catch(e) {}
+        if (catIds.length === 0 && el.dataset.catId) catIds = [el.dataset.catId];
+        if (catIds.indexOf(catId) !== -1) el.style.display = '';
+      });
+      var releaseWrap = document.getElementById('kwMidSoloReleaseWrap');
+      if (releaseWrap) releaseWrap.style.display = '';
+    }
+
+    // 「解除する」ボタン押下時、または選択中の中分類自身をタップして
+    // OFFにした時に、中分類カテゴリ群をページ読み込み時の状態(全て
+    // 有効・非グレーアウト)へ戻し、キーワードバッジを全て非表示に戻す。
+    function exitKwMidSoloMode() {
+      if (kwMidSoloCatId != null) delete selectedCats[kwMidSoloCatId];
+      kwMidSoloActive = false;
+      kwMidSoloCatId = null;
+      kwClassifyListBody.querySelectorAll('.kw-cat-summary-badge').forEach(function(catEl) {
+        catEl.classList.remove('kw-cat-badge-solo-disabled');
+      });
+      kwClassifyListBody.querySelectorAll('.kw-classify-kw-badge').forEach(function(el) {
+        el.style.display = '';
+      });
+      applyKwBadgeColors();
+      var releaseWrap = document.getElementById('kwMidSoloReleaseWrap');
+      if (releaseWrap) releaseWrap.style.display = 'none';
+    }
 
     function applyKwGroupBadgeState() {
       kwClassifyListBody.querySelectorAll('.kw-group-summary-badge').forEach(function(el) {
@@ -4472,6 +4519,7 @@ export function getAiChatPage(user: {
           cats.forEach(function(cat) {
             html += '<span class="kw-cat-summary-badge" data-cat-id="' + escHtml(String(cat.id)) + '" data-cat-color="' + escHtml(cat.color || '#6366f1') + '" style="display:inline-block;font-size:11px;padding:3px 11px;border-radius:2px;border:1px solid var(--border-color);background:var(--bg-secondary);color:var(--text-muted);cursor:pointer;white-space:nowrap;margin:1px;">' + escHtml(cat.name) + ' (' + cat.kw_count + ')</span>';
           });
+          html += '<div id="kwMidSoloReleaseWrap" style="display:none;text-align:center;margin-top:8px;"><button id="kwMidSoloReleaseBtn" type="button">解除する</button></div>';
           html += '</div>';
         }
         if (groups.length > 0) {
@@ -4513,9 +4561,14 @@ export function getAiChatPage(user: {
         applyKwBadgeColors();
         applyKwGroupBadgeState();
         applyKwClassifySearchFilter();
+        var kwMidSoloReleaseBtn = document.getElementById('kwMidSoloReleaseBtn');
+        if (kwMidSoloReleaseBtn) {
+          kwMidSoloReleaseBtn.addEventListener('click', function() { exitKwMidSoloMode(); });
+        }
         kwClassifyListBody.querySelectorAll('.kw-cat-summary-badge').forEach(function(catEl) {
           catEl.addEventListener('click', function() {
             var catId = catEl.dataset.catId;
+            if (kwMidSoloActive && catId !== kwMidSoloCatId) return;
             if (selectedGroupId && selectedCats[catId]) {
               var catMap = {};
               cats.forEach(function(cat) { catMap[String(cat.id)] = { name: cat.name, color: cat.color || '#6366f1' }; });
@@ -4547,6 +4600,13 @@ export function getAiChatPage(user: {
             }
             applyKwBadgeColors();
             var selCount = Object.keys(selectedCats).length;
+            if (!selectedGroupId && selCount === 1 && !kwMidSoloActive) {
+              enterKwMidSoloMode(catId);
+              return;
+            }
+            if (kwMidSoloActive && selCount !== 1) {
+              exitKwMidSoloMode();
+            }
             if (selCount >= 2) {
               var catMap = {};
               cats.forEach(function(cat) { catMap[String(cat.id)] = { name: cat.name, color: cat.color || '#6366f1' }; });
@@ -4576,6 +4636,7 @@ export function getAiChatPage(user: {
             }
             applyKwBadgeColors();
             applyKwGroupBadgeState();
+            if (kwMidSoloActive) exitKwMidSoloMode();
           });
         });
         if (dailyStatsModal && dailyStatsModal.classList.contains('open')) {
@@ -4609,6 +4670,8 @@ export function getAiChatPage(user: {
       selectedGroupId = null;
       kwAddToCatId = null;
       kwAddToCatName = '';
+      kwMidSoloActive = false;
+      kwMidSoloCatId = null;
       kwClassifySearchInput.value = '';
       kwClassifyListModal.style.zIndex = String(getNextZ());
       kwClassifyListModal.classList.add('open');
