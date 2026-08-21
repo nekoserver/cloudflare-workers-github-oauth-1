@@ -3,7 +3,7 @@ import { describe, expect, it, vi, afterEach } from 'vitest';
 import { getHeritageJourneyPage } from './views/heritageJourney';
 
 // 対象: /heritage-journeyページの「出発地から見た目的地別プラン分布」セクション
-// タイトル行右端に追加した「到達国を限定する : 」ラベル+ボタン(#dist-country-filter-btn)
+// タイトル行右端に追加した「到達国を制限する : 」ラベル+ボタン(#dist-country-filter-btn)
 // と、押下時に開く到達国選択モーダル(#dist-country-filter-modal-overlay)。
 // 選択した国はCookie(heritage_journey_dest_country_filter)に保存し、
 // ページ読み込み時にも復元・適用する。
@@ -48,7 +48,7 @@ describe('heritage-journeyページ: 出発地別プラン分布の到達国フ�
     const label = document.querySelector('.dist-country-filter-label') as HTMLElement;
     const btn = document.getElementById('dist-country-filter-btn') as HTMLButtonElement;
     expect(label).not.toBeNull();
-    expect(label.textContent).toBe('到達国を限定する : ');
+    expect(label.textContent).toBe('到達国を制限する : ');
     expect(btn).not.toBeNull();
     expect(btn.textContent).toBe('しない(デフォルト)');
   });
