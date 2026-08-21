@@ -102,7 +102,7 @@ describe('heritage-journeyページ: 出発地・到着地の出現回数集計'
 });
 
 describe('heritage-journeyページ: ID/出発地/到着地/直線距離テーブル', () => {
-  it('APIが返した各ルートを1行ずつ、正しい値で表示する', async () => {
+  it('APIが返した各ルートのうち、現在の#start-city(初期値パリ)と出発地が一致する行だけを表示する', async () => {
     setupPage(() => Promise.resolve({ json: () => Promise.resolve({ routes: SAMPLE_ROUTES }) }));
     await new Promise((r) => setTimeout(r, 0));
 
@@ -113,11 +113,13 @@ describe('heritage-journeyページ: ID/出発地/到着地/直線距離テー�
 
     const body = document.getElementById('registered-routes-table-body')!;
     const rows = body.querySelectorAll('tr');
-    expect(rows.length).toBe(3);
+    // SAMPLE_ROUTESのうちstart==='パリ'はid1,2の2件(id3は東京なので除外される)
+    expect(rows.length).toBe(2);
     expect(rows[0].textContent).toContain('1');
     expect(rows[0].textContent).toContain('パリ');
     expect(rows[0].textContent).toContain('ローマ');
     expect(rows[0].textContent).toContain('1100.4 km');
+    expect(body.textContent).not.toContain('東京');
   });
 });
 
@@ -139,10 +141,22 @@ describe('heritage-journeyページ: 経由地データありの行を薄緑色�
 
     const body = document.getElementById('registered-routes-table-body')!;
     const rows = body.querySelectorAll('tr');
-    expect(rows.length).toBe(3);
+    // start==='パリ'のid1,2のみ表示される(id3は東京なのでフィルタで除外)
+    expect(rows.length).toBe(2);
     expect(rows[0].classList.contains('registered-routes-has-waypoint')).toBe(true);
     expect(rows[1].classList.contains('registered-routes-has-waypoint')).toBe(false);
-    expect(rows[2].classList.contains('registered-routes-has-waypoint')).toBe(true);
+  });
+
+  it('ハイライト行(registered-routes-has-waypoint)のtd文字色は.in-course同様の濃色(#064e3b)で、非ハイライト行の文字色は変更されない', () => {
+    const html = getHeritageJourneyPage();
+    const highlightTextMatch = html.match(/\.registered-routes-has-waypoint td\{color:(#[0-9a-fA-F]{3,6})\}/);
+    const inCourseMatch = html.match(/\.heritage-add-name\.in-course\{background:#[0-9a-fA-F]{3,6};color:(#[0-9a-fA-F]{3,6})/);
+    expect(highlightTextMatch).not.toBeNull();
+    expect(inCourseMatch).not.toBeNull();
+    expect(highlightTextMatch![1]).toBe(inCourseMatch![1]);
+    expect(highlightTextMatch![1]).toBe('#064e3b');
+    // 通常行(th/td)の文字色トークン(#cbd5e1)は従来通り維持されている
+    expect(html).toContain('.registered-routes-table th,.registered-routes-table td{border:1px solid #334155;padding:4px 8px;text-align:left;color:#cbd5e1}');
   });
 
   it('registered-routes-has-waypointクラスの背景色は.in-course(#bbf7d0)と同じ既存の薄緑トークンを再利用している', () => {
@@ -171,6 +185,71 @@ describe('heritage-journeyページ: 経由地データありの行を薄緑色�
     const rows = body.querySelectorAll('tr');
     expect(rows.length).toBe(1);
     expect(rows[0].classList.contains('registered-routes-has-waypoint')).toBe(false);
+  });
+});
+
+describe('heritage-journeyページ: 登録済みルートテーブルの出発地フィルタ', () => {
+  const MULTI_CITY_ROUTES = [
+    { id: 1, start: 'パリ', end: 'ローマ', straightKm: 1100.4 },
+    { id: 2, start: 'パリ', end: 'ロンドン', straightKm: 340.2 },
+    { id: 3, start: '東京', end: 'ローマ', straightKm: 9600.1 },
+    { id: 4, start: 'ロンドン', end: 'パリ', straightKm: 340.2 },
+  ];
+
+  it('#start-cityの現在値(パリ)と一致する行だけを表示し、他の出発地の行は表示しない', async () => {
+    setupPage(() => Promise.resolve({ json: () => Promise.resolve({ routes: MULTI_CITY_ROUTES }) }));
+    await new Promise((r) => setTimeout(r, 0));
+
+    const btn = document.getElementById('view-registered-routes-btn') as HTMLButtonElement;
+    btn.click();
+    await new Promise((r) => setTimeout(r, 0));
+    await new Promise((r) => setTimeout(r, 0));
+
+    const body = document.getElementById('registered-routes-table-body')!;
+    const rows = body.querySelectorAll('tr');
+    expect(rows.length).toBe(2);
+    const ids = Array.from(rows).map((row) => row.querySelector('td')!.textContent);
+    expect(ids).toEqual(['1', '2']);
+    expect(body.textContent).not.toContain('東京');
+  });
+
+  it('#start-cityを変更してからモーダルを開くと、新しい出発地(ロンドン)で再フィルタされる(開いたまま裏を操作するライブ同期ではなく、開く/再取得のたびに現在値を読み直す実装)', async () => {
+    setupPage(() => Promise.resolve({ json: () => Promise.resolve({ routes: MULTI_CITY_ROUTES }) }));
+    await new Promise((r) => setTimeout(r, 0));
+
+    const startSel = document.getElementById('start-city') as unknown as HTMLSelectElement;
+    startSel.value = 'London';
+    startSel.dispatchEvent(new Event('change'));
+
+    const btn = document.getElementById('view-registered-routes-btn') as HTMLButtonElement;
+    btn.click();
+    await new Promise((r) => setTimeout(r, 0));
+    await new Promise((r) => setTimeout(r, 0));
+
+    const body = document.getElementById('registered-routes-table-body')!;
+    const rows = body.querySelectorAll('tr');
+    expect(rows.length).toBe(1);
+    expect(rows[0].textContent).toContain('ロンドン');
+    expect(rows[0].textContent).toContain('4');
+  });
+
+  it('現在の出発地に一致する登録済みルートが0件の場合、空テーブルではなく出発地名を含む案内メッセージを表示する', async () => {
+    const ROUTES_ONLY_TOKYO = [
+      { id: 9, start: '東京', end: 'ローマ', straightKm: 9600.1 },
+    ];
+    setupPage(() => Promise.resolve({ json: () => Promise.resolve({ routes: ROUTES_ONLY_TOKYO }) }));
+    await new Promise((r) => setTimeout(r, 0));
+
+    const btn = document.getElementById('view-registered-routes-btn') as HTMLButtonElement;
+    btn.click();
+    await new Promise((r) => setTimeout(r, 0));
+    await new Promise((r) => setTimeout(r, 0));
+
+    const body = document.getElementById('registered-routes-table-body')!;
+    // 初期値の#start-cityは'パリ'なので、東京のみのルートは全て除外される
+    expect(body.textContent).toContain('パリ');
+    expect(body.textContent).toContain('登録済みルートはありません');
+    expect(body.textContent).not.toContain('東京');
   });
 });
 

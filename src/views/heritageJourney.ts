@@ -116,6 +116,7 @@ h1{font-size:22px;margin:0 0 4px}
 .heritage-add-btn.active:hover{border-color:#4ade80;color:#fff}
 .heritage-add-name.in-course{background:#bbf7d0;color:#064e3b;border-radius:4px;padding:2px 6px}
 .registered-routes-has-waypoint{background:#bbf7d0}
+.registered-routes-has-waypoint td{color:#064e3b}
 .tour-modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:9999;align-items:center;justify-content:center;padding:16px}
 .tour-modal-overlay.open{display:flex}
 .tour-modal-box{background:#111827;border:1px solid #334155;border-radius:12px;padding:16px;max-width:560px;width:100%;max-height:90vh;overflow:auto}
@@ -1926,11 +1927,30 @@ function renderCityFreq(elId, routes, key) {
   }).join('');
 }
 
-function renderRegisteredRoutesTable(routes) {
+// 現在#start-cityで選択されている都市の表示ラベル(例: 'パリ')を返す。
+// CITIESに解決できない場合はnullを返す。
+function getCurrentStartCityLabel() {
+  var startSel = document.getElementById('start-city');
+  if (!startSel) return null;
+  var city = getCity(startSel.value);
+  return city ? city.label : null;
+}
+
+// routesのうち、r.startがstartLabelと一致するものだけを返す純粋関数。
+// startLabelがnull/undefinedの場合(#start-cityが未解決)はフィルタせず全件返す。
+function filterRoutesByStartLabel(routes, startLabel) {
+  if (!startLabel) return routes.slice();
+  return routes.filter(function(r) { return r.start === startLabel; });
+}
+
+function renderRegisteredRoutesTable(routes, startLabel) {
   var body = document.getElementById('registered-routes-table-body');
   if (!body) return;
   if (routes.length === 0) {
-    body.innerHTML = '<tr><td colspan="4" class="registered-routes-empty">登録済みルートはありません</td></tr>';
+    var msg = startLabel
+      ? '出発地「' + esc(startLabel) + '」の登録済みルートはありません'
+      : '登録済みルートはありません';
+    body.innerHTML = '<tr><td colspan="4" class="registered-routes-empty">' + msg + '</td></tr>';
     return;
   }
   body.innerHTML = routes.map(function(r) {
@@ -1940,6 +1960,12 @@ function renderRegisteredRoutesTable(routes) {
   }).join('');
 }
 
+// モーダルを開くたびに#start-cityの「現在の」値を読み直してテーブルを
+// フィルタする。このモーダルは.tour-modal-overlay(position:fixed;inset:0)で
+// 画面全体を覆う排他レイヤーのため、開いている間に裏の#start-cityを
+// 操作することはできない。よって「常に現在選択されている都市に切り替える」
+// 要件は、開く/再取得のたびに最新値を読み直すことで満たせる
+// (開いたまま裏のセレクトが変わり続けるライブ同期は実UI上発生しないため不要)。
 function openRegisteredRoutesModal() {
   var overlay = document.getElementById('registered-routes-modal-overlay');
   if (!overlay) return;
@@ -1951,12 +1977,13 @@ function openRegisteredRoutesModal() {
       var routes = (data && Array.isArray(data.routes)) ? data.routes : [];
       renderCityFreq('registered-routes-start-freq', routes, 'start');
       renderCityFreq('registered-routes-end-freq', routes, 'end');
-      renderRegisteredRoutesTable(routes);
+      var startLabel = getCurrentStartCityLabel();
+      renderRegisteredRoutesTable(filterRoutesByStartLabel(routes, startLabel), startLabel);
     })
     .catch(function() {
       renderCityFreq('registered-routes-start-freq', [], 'start');
       renderCityFreq('registered-routes-end-freq', [], 'end');
-      renderRegisteredRoutesTable([]);
+      renderRegisteredRoutesTable([], getCurrentStartCityLabel());
     });
 }
 
