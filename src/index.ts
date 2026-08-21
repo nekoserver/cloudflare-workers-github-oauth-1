@@ -4690,6 +4690,63 @@ export async function searchAichatMoondreamAnalyses(
   return { results: rows.results ?? [] };
 }
 
+export interface AichatShareDetail {
+  id: string; user_hash: string; question: string; answer: string;
+  model: string; created_at: string; access_count: number; question_hash: string | null;
+  input_tokens: number | null; output_tokens: number | null; total_tokens: number | null;
+  image_data_url: string | null;
+}
+
+/**
+ * GET /api/aichat/shares/:id (応答バブルモーダル)用。targetクエリパラメータに
+ * 応じて、質問文idが同じでも異なる画像分析モデルの出力結果を返す。
+ *
+ * 従来はtargetを考慮せず常にai_chat_shares.answer/model(=llama-4など元の会話の
+ * 回答)を返していたため、/answer-graphの起点検索でmoondream3.1を検索対象に
+ * 指定してヒットした質問文リンクをタップしても、モーダルにはllama-4の回答が
+ * 表示されてしまうバグがあった(searchAichatMoondreamAnalysesが返すidは
+ * ai_chat_shares.idと同じ値だが、答えの中身はaichat_moondream_analyses側に
+ * ある)。target='moondream3.1'の場合はaichat_moondream_analysesをJOINして
+ * analysis_text/modelを返すことで、検索対象として指定したモデルの出力結果が
+ * モーダルに表示されるようにする。target省略時・'llama-4'指定時は従来通り
+ * ai_chat_sharesの内容を返す(他の画像分析モデルを追加する場合もこの関数に
+ * 分岐を足す形で対応でき、呼び出し元のモーダル表示ロジックは変更不要)。
+ */
+export async function getAichatShareDetail(
+  db: D1Database,
+  userId: string,
+  id: string,
+  target: string,
+): Promise<AichatShareDetail | null> {
+  if (target === 'moondream3.1') {
+    const row = await db
+      .prepare(
+        `SELECT s.id, s.user_hash, s.question, m.analysis_text AS answer, m.model, s.created_at, s.access_count, s.question_hash,
+                s.input_tokens, s.output_tokens, s.total_tokens,
+                COALESCE(img.image_data_url, s.image_data_url) AS image_data_url
+         FROM aichat_moondream_analyses m
+         JOIN ai_chat_shares s ON s.id = m.share_id AND s.user_id = m.user_id
+         LEFT JOIN aichat_images img ON img.id = s.image_id
+         WHERE s.id = ? AND s.user_id = ? AND s.deleted_at IS NULL`
+      )
+      .bind(id, userId)
+      .first<AichatShareDetail>();
+    return row ?? null;
+  }
+  const row = await db
+    .prepare(
+      `SELECT s.id, s.user_hash, s.question, s.answer, s.model, s.created_at, s.access_count, s.question_hash,
+              s.input_tokens, s.output_tokens, s.total_tokens,
+              COALESCE(img.image_data_url, s.image_data_url) AS image_data_url
+       FROM ai_chat_shares s
+       LEFT JOIN aichat_images img ON img.id = s.image_id
+       WHERE s.id = ? AND s.user_id = ? AND s.deleted_at IS NULL`
+    )
+    .bind(id, userId)
+    .first<AichatShareDetail>();
+  return row ?? null;
+}
+
 /**
  * テキストに含まれる登録済みキーワードだけを返す（大文字小文字を無視）。
  * /answer-graph の回答伝播グラフ構築で使う。
@@ -8026,19 +8083,13 @@ app.get('/api/aichat/shares/:id', authMiddleware, async (c) => {
   const user = c.get('user');
   if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
   const id = c.req.param('id');
-  const row = await c.env.DB.prepare(
-    `SELECT s.id, s.user_hash, s.question, s.answer, s.model, s.created_at, s.access_count, s.question_hash,
-            s.input_tokens, s.output_tokens, s.total_tokens,
-            COALESCE(img.image_data_url, s.image_data_url) AS image_data_url
-     FROM ai_chat_shares s
-     LEFT JOIN aichat_images img ON img.id = s.image_id
-     WHERE s.id = ? AND s.user_id = ? AND s.deleted_at IS NULL`
-  ).bind(id, user.sub).first<{
-    id: string; user_hash: string; question: string; answer: string;
-    model: string; created_at: string; access_count: number; question_hash: string | null;
-    input_tokens: number | null; output_tokens: number | null; total_tokens: number | null;
-    image_data_url: string | null;
-  }>();
+  // target=moondream3.1 は /answer-graph の起点検索でmoondream3.1をヒットさせた
+  // 質問文リンクから開かれた場合。検索対象として指定した画像分析モデルの
+  // 出力結果が応答バブルモーダルに表示されるよう、getAichatShareDetailへ
+  // 振り分ける(target省略時・target=llama-4は従来通りai_chat_sharesの
+  // question/answer/created_at/image_data_urlをそのまま返す)。
+  const target = (c.req.query('target') ?? '').trim();
+  const row = await getAichatShareDetail(c.env.DB, user.sub, id, target);
   if (!row) return jsonUtf8({ error: 'Not found' }, 404);
   const vectorized = await isAnswerVectorized(c.env.DB, user.sub, id);
   const keywordsRegistered = vectorized ? await hasAnswerKeywordVectors(c.env.DB, user.sub, id) : false;
