@@ -50,6 +50,9 @@ h1{font-size:22px;margin:0 0 4px}
 .end-city-picker-table th{background:#1e293b;color:#93c5fd}
 .end-city-picker-row{cursor:pointer}
 .end-city-picker-row:hover{background:#1e293b}
+#end-city-picker-flag-th{cursor:pointer;text-align:center}
+#end-city-picker-flag-th:hover{color:#38bdf8}
+.end-city-picker-flag-td{text-align:center}
 .end-city-picker-row.end-city-picker-current{background:#bbf7d0;color:#0f172a}
 .end-city-picker-row.end-city-picker-current td{color:#0f172a}
 #swap-btn{background:#1e293b;border:1px solid #475569;color:#cbd5e1;border-radius:8px;padding:7px 10px;cursor:pointer;font-size:13px}
@@ -315,7 +318,7 @@ ${getMitokoroModalCss()}
       <button type="button" class="tour-modal-close" id="end-city-picker-modal-close" aria-label="閉じる">✕</button>
     </div>
     <table class="end-city-picker-table">
-      <thead><tr><th>都市名</th><th>出発地からの距離(km)</th></tr></thead>
+      <thead><tr><th id="end-city-picker-flag-th" title="国旗をタップすると到達国を制限できます">🏁</th><th>都市名</th><th>出発地からの距離(km)</th></tr></thead>
       <tbody id="end-city-picker-table-body"></tbody>
     </table>
   </div>
@@ -707,6 +710,12 @@ function selectDestCountryFilter(value) {
   updateDistCountryFilterBtnLabel();
   closeDistCountryFilterModal();
   renderNightsDistribution();
+  // 到着地選択モーダル(🏁列から開かれた場合を含む)が開いている場合は、
+  // その都市一覧テーブルにも同じフィルタを即座に反映する。
+  var endCityPickerOverlay = document.getElementById('end-city-picker-modal-overlay');
+  if (endCityPickerOverlay && endCityPickerOverlay.classList.contains('open')) {
+    renderEndCityPickerTable();
+  }
 }
 
 function computeDestinationNightsDistribution(start, hubRadiusKm, maxDailyKm, countryFilter) {
@@ -2014,9 +2023,15 @@ function renderEndCityPickerTable() {
   var endSel = document.getElementById('end-city');
   var start = startSel ? getCity(startSel.value) : null;
   var currentEnd = endSel ? endSel.value : null;
-  var rows = CITIES.map(function(c) {
+  // 「到達国を制限する」フィルタ(destCountryFilter)が有効な場合は、その国の都市のみに
+  // 絞り込む(「到達国を制限する」既存機能と同じフィルタ状態を共有する。しない(__ALL__)なら
+  // 全都市を表示)。
+  var pool = CITIES.filter(function(c) {
+    return destCountryFilter === DEST_COUNTRY_FILTER_ALL || c.country === destCountryFilter;
+  });
+  var rows = pool.map(function(c) {
     var km = (start && typeof start.lat === 'number') ? haversineKm(start.lat, start.lon, c.lat, c.lon) : null;
-    return { name: c.name, label: c.label, km: km };
+    return { name: c.name, label: c.label, km: km, flag: c.flag || '' };
   });
   rows.sort(function(a, b) {
     if (a.km === null && b.km === null) return 0;
@@ -2028,7 +2043,7 @@ function renderEndCityPickerTable() {
     var isCurrent = r.name === currentEnd;
     var kmText = (r.km === null) ? '-' : r.km.toFixed(1) + ' km';
     return '<tr class="end-city-picker-row' + (isCurrent ? ' end-city-picker-current' : '') + '" data-city-name="' + esc(r.name) + '">'
-      + '<td>' + esc(r.label) + '</td><td>' + kmText + '</td></tr>';
+      + '<td class="end-city-picker-flag-td">' + esc(r.flag) + '</td><td>' + esc(r.label) + '</td><td>' + kmText + '</td></tr>';
   }).join('');
 }
 
@@ -2063,6 +2078,7 @@ function closeEndCityPickerModal() {
   var overlay = document.getElementById('end-city-picker-modal-overlay');
   var closeBtn = document.getElementById('end-city-picker-modal-close');
   var body = document.getElementById('end-city-picker-table-body');
+  var flagTh = document.getElementById('end-city-picker-flag-th');
   if (!pickerBtn || !overlay || !closeBtn || !body) return;
   pickerBtn.addEventListener('click', openEndCityPickerModal);
   closeBtn.addEventListener('click', closeEndCityPickerModal);
@@ -2075,6 +2091,18 @@ function closeEndCityPickerModal() {
     endSel.value = row.getAttribute('data-city-name');
     endSel.dispatchEvent(new Event('change'));
   });
+  // 🏁列見出しをタップすると、既存の「到達国を制限する」国一覧モーダルをそのまま開く。
+  // 集計(国別都市数の降順)は候補都市の全体(CITIES全件)を対象にする既存の
+  // computeDestCountryCounts()をそのまま再利用する(この到着地選択モーダルで
+  // 現在絞り込まれている行だけを対象にはしない。フィルタ選択用ドロップダウンとしては
+  // 全候補の内訳が見えたほうが選びやすいため)。到着地選択モーダルの上に重ねて開くため
+  // openDistCountryFilterModal内のgetNextZ()が到着地選択モーダルより高いz-indexを
+  // 自動的に割り当てる。
+  if (flagTh) {
+    flagTh.addEventListener('click', function() {
+      openDistCountryFilterModal();
+    });
+  }
 })();
 
 // ===== 「到達国を制限する」ボタン(#dist-country-filter-btn) → 最上位レイヤーの国一覧モーダル =====
