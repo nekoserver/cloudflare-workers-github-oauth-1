@@ -7,16 +7,25 @@ import { getHeritageJourneyPage } from './views/heritageJourney';
 //   (1) 到達国フィルタモーダル(#dist-country-filter-modal-overlay)の既定位置が
 //       #tour-mini-panelと重ならないこと(#end-city-picker-modal-boxと同じ技法)
 //   (2) 「到達国を限定する」表記がすべて「到達国を制限する」に変更されていること
-//   (3) 出発地から見た目的地別プラン分布の各都市チップのうち、宿泊日数が0泊の
-//       ものはグレーアウトされ、クリックしても#end-cityが変化しないこと
+//
+// 【訂正】(3)は前セッションの誤読に基づく実装だった。正しい要求は
+// 「各バケット行(.dist-row)の右端カウント(.dist-count)が0件の場合、
+// 行全体をグレーアウトし選択不可にする」であり、個々の都市チップ
+// (.dist-city-chip)の宿泊日数(nights)は無関係。このファイルでは
+// 旧仕様の0泊チップ無効化テストを削除し、訂正後の仕様
+// (0件バケット行のグレーアウト・非活性化)を検証するテストに置き換える。
 //
 // 故障シナリオ:
 //   (1) モーダルの既定位置が#tour-mini-panelの領域(left:12-292px, top:12-60px)
 //       と交差する、または位置指定自体がされない(flexセンタリングのまま)
 //   (2) 旧表記「到達国を限定する」がボタン・モーダルタイトルのいずれかに残る
-//   (3) 0泊チップにdisabled属性が付かない、またはdisabled属性はあるが
-//       クリックハンドラ側でガードされておらず実質クリック可能
-//   (4) 0泊以外のチップまで巻き添えでdisabled化してしまう(リグレッション)
+//   (3) 該当件数0件のバケット行に.dist-row-emptyクラスが付かない、または
+//       クラスは付くがクリックリスナーがアタッチされたままで実質展開可能
+//   (4) 該当件数が1件以上あるバケット行まで巻き添えでグレーアウトしてしまう
+//       (リグレッション)
+//   (5) 0泊ラベルのバケットでも該当都市が1件以上あれば、その中の個々の
+//       チップ(nights===0のものも含む)は引き続きクリック可能でなければ
+//       ならない(チップレベルの無効化を復活させてしまうリグレッション)
 
 function setupPage(fetchImpl: (input: unknown, init?: unknown) => Promise<{ json: () => Promise<unknown> }> = () =>
   Promise.resolve({ json: () => Promise.resolve({ exists: false }) })) {
@@ -110,50 +119,68 @@ describe('heritage-journeyページ: 「到達国を制限する」表記への�
   });
 });
 
-describe('heritage-journeyページ: 出発地から見た目的地別プラン分布の0泊チップは選択不可', () => {
-  it('宿泊日数が0泊のチップはdisabled属性が付きグレーアウトされ、クリックしても#end-cityが変化しない', () => {
+describe('heritage-journeyページ: 出発地から見た目的地別プラン分布の0泊チップは選択可能(訂正後の仕様)', () => {
+  it('0泊ラベルのバケット(日帰り圏)に該当都市が1件以上ある場合、そのチップにdisabled属性は付かずクリックで#end-cityが更新される', () => {
     setupPage();
     const rows = Array.from(document.querySelectorAll('.dist-row')) as HTMLElement[];
-    // 「日帰り圏(0泊)」は先頭バケット(data-bucket="0")
     const zeroRow = rows.find((r) => r.getAttribute('data-bucket') === '0') as HTMLElement;
     expect(zeroRow).not.toBeUndefined();
+    // 該当件数0件なら行自体がグレーアウトされクリックが無効化されているはずなので、
+    // このテストは該当件数が1件以上あるケースのみを対象とする。
+    if (zeroRow.classList.contains('dist-row-empty')) {
+      return;
+    }
     zeroRow.dispatchEvent(new Event('click', { bubbles: true }));
     const citiesEl = document.getElementById('dist-cities-0') as HTMLElement;
     const chips = Array.from(citiesEl.querySelectorAll('.dist-city-chip')) as HTMLButtonElement[];
-
-    if (chips.length === 0) {
-      // このテストデータでは0泊該当都市がないケース。空表示になっていることだけ確認して終了。
-      expect(citiesEl.textContent).toContain('該当する目的地はありません');
-      return;
-    }
+    expect(chips.length).toBeGreaterThan(0);
 
     const endCitySel = document.getElementById('end-city') as unknown as HTMLSelectElement;
-    const before = endCitySel.value;
     chips.forEach((chip) => {
-      expect(chip.disabled).toBe(true);
-      chip.dispatchEvent(new Event('click', { bubbles: true }));
+      expect(chip.disabled).toBe(false);
     });
-    expect(endCitySel.value).toBe(before);
+    chips[0].dispatchEvent(new Event('click', { bubbles: true }));
+    expect(endCitySel.value).toBe(chips[0].getAttribute('data-city'));
   });
+});
 
-  it('0泊以外のチップは引き続きdisabled属性が付かず、クリックで#end-cityが更新される(リグレッション確認)', () => {
+describe('heritage-journeyページ: 出発地から見た目的地別プラン分布の該当0件バケット行はグレーアウトし選択不可(訂正後の仕様)', () => {
+  it('該当件数(.dist-count)が0件のバケット行には.dist-row-emptyが付与され、クリックしても都市一覧パネルが開かない', () => {
     setupPage();
     const rows = Array.from(document.querySelectorAll('.dist-row')) as HTMLElement[];
-    let clickedNonZero = false;
-    for (const row of rows) {
-      if (row.getAttribute('data-bucket') === '0') continue;
-      row.dispatchEvent(new Event('click', { bubbles: true }));
-      const idx = row.getAttribute('data-bucket');
-      const citiesEl = document.getElementById('dist-cities-' + idx) as HTMLElement;
-      const chip = citiesEl.querySelector('.dist-city-chip') as HTMLButtonElement | null;
-      if (!chip) continue;
-      expect(chip.disabled).toBe(false);
-      chip.dispatchEvent(new Event('click', { bubbles: true }));
-      const endCitySel = document.getElementById('end-city') as unknown as HTMLSelectElement;
-      expect(endCitySel.value).toBe(chip.getAttribute('data-city'));
-      clickedNonZero = true;
-      break;
+    const emptyRow = rows.find((r) => {
+      const countEl = r.querySelector('.dist-count');
+      return countEl?.textContent === '0件';
+    });
+    if (!emptyRow) {
+      // このテストデータでは0件バケットが発生しないケース。スキップして終了。
+      return;
     }
-    expect(clickedNonZero).toBe(true);
+    expect(emptyRow.classList.contains('dist-row-empty')).toBe(true);
+    const idx = emptyRow.getAttribute('data-bucket');
+    const citiesEl = document.getElementById('dist-cities-' + idx) as HTMLElement;
+    expect(citiesEl.style.display).toBe('none');
+    emptyRow.dispatchEvent(new Event('click', { bubbles: true }));
+    expect(citiesEl.style.display).toBe('none');
+  });
+
+  it('該当件数が1件以上あるバケット行は.dist-row-emptyが付与されず、引き続きクリックで都市一覧パネルが開閉する(リグレッション確認)', () => {
+    setupPage();
+    const rows = Array.from(document.querySelectorAll('.dist-row')) as HTMLElement[];
+    const nonEmptyRow = rows.find((r) => {
+      const countEl = r.querySelector('.dist-count');
+      return countEl?.textContent !== '0件';
+    });
+    expect(nonEmptyRow).not.toBeUndefined();
+    const row = nonEmptyRow as HTMLElement;
+    expect(row.classList.contains('dist-row-empty')).toBe(false);
+    const idx = row.getAttribute('data-bucket');
+    const citiesEl = document.getElementById('dist-cities-' + idx) as HTMLElement;
+
+    row.dispatchEvent(new Event('click', { bubbles: true }));
+    expect(citiesEl.style.display).toBe('flex');
+
+    row.dispatchEvent(new Event('click', { bubbles: true }));
+    expect(citiesEl.style.display).toBe('none');
   });
 });

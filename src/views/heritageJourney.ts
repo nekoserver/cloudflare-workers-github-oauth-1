@@ -182,8 +182,7 @@ h1{font-size:22px;margin:0 0 4px}
 .dist-cities{padding:4px 4px 10px 120px;display:flex;flex-wrap:wrap;gap:6px}
 .dist-city-chip{background:#1e293b;border:1px solid #475569;color:#cbd5e1;border-radius:999px;padding:4px 10px;font-size:11px;cursor:pointer}
 .dist-city-chip:hover{border-color:#38bdf8;color:#fff}
-.dist-city-chip:disabled{opacity:.4;cursor:default}
-.dist-city-chip:disabled:hover{border-color:#475569;color:#cbd5e1}
+.dist-row-empty{opacity:.4;cursor:default;pointer-events:none}
 .slack-note{background:#0c2d1a;border:1px solid #14532d;border-radius:8px;padding:8px 12px;font-size:12px;color:#86efac;margin-top:10px}
 .duration-label{font-size:12px;font-weight:400;color:#5eead4}
 .visit-chip{display:inline-block;background:#1e293b;border:1px solid #475569;color:#cbd5e1;border-radius:999px;padding:2px 9px;font-size:11px;cursor:pointer;font-family:inherit;margin:2px 4px 2px 0}
@@ -1059,13 +1058,19 @@ function renderNightsDistribution() {
   var el = document.getElementById('nights-dist');
   el.innerHTML = buckets.map(function(b, i) {
     var pct = (b.cities.length / maxCount * 100);
-    return '<div class="dist-row" data-bucket="' + i + '">' +
+    var isEmpty = b.cities.length === 0;
+    var rowClass = 'dist-row' + (isEmpty ? ' dist-row-empty' : '');
+    return '<div class="' + rowClass + '" data-bucket="' + i + '">' +
       '<span class="dist-label">' + esc(b.label) + '</span>' +
       '<div class="dist-bar-track"><div class="dist-bar" style="width:' + pct + '%"></div></div>' +
       '<span class="dist-count">' + b.cities.length + '件</span>' +
       '</div><div class="dist-cities" id="dist-cities-' + i + '" style="display:none"></div>';
   }).join('');
   el.querySelectorAll('.dist-row').forEach(function(row) {
+    // 該当件数が0件のバケット行はクリックしても展開する都市が存在しないため、
+    // 見た目のグレーアウト(.dist-row-empty)に加えクリックリスナー自体を
+    // アタッチしない(見た目だけに頼らず確実に無効化する)。
+    if (row.classList.contains('dist-row-empty')) return;
     row.addEventListener('click', function() {
       var idx = Number(row.getAttribute('data-bucket'));
       var citiesEl = document.getElementById('dist-cities-' + idx);
@@ -1077,16 +1082,11 @@ function renderNightsDistribution() {
       citiesEl.innerHTML = bucketCities.length
         ? bucketCities.map(function(d) {
             var flagPrefix = d.flag ? esc(d.flag) + ' ' : '';
-            // 宿泊日数が0泊の目的地は選択の余地がないため、ボタン自体をdisabled属性で
-            // 無効化しクリックが発火しないようにする(見た目のグレーアウトのみに頼らない)。
-            var isZeroNights = d.nights === 0;
-            var disabledAttr = isZeroNights ? ' disabled' : '';
-            return '<button type="button" class="dist-city-chip" data-city="' + esc(d.cityName) + '"' + disabledAttr + '>' + flagPrefix + esc(d.city) + '(' + d.nights + '泊)</button>';
+            return '<button type="button" class="dist-city-chip" data-city="' + esc(d.cityName) + '">' + flagPrefix + esc(d.city) + '(' + d.nights + '泊)</button>';
           }).join('')
         : '<span class="empty-note">該当する目的地はありません。</span>';
       citiesEl.querySelectorAll('[data-city]').forEach(function(chip) {
         chip.addEventListener('click', function() {
-          if (chip.disabled) return;
           document.getElementById('end-city').value = chip.getAttribute('data-city');
           state.selected = {};
           renderCandidates();
