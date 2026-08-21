@@ -467,6 +467,8 @@ ${getMitokoroModalCss()}
 ${getMarkdownParserScript()}
 ${getHeritageMitokoroModalScript()}
 var HERITAGE_POINTS = ${JSON.stringify(heritagePoints)};
+var CLIENT_AIRPORT_ICON = ${JSON.stringify(AIRPORT_ICON)};
+var CLIENT_STATION_ICON = ${JSON.stringify(STATION_ICON)};
 var CITIES = ${JSON.stringify(cities)};
 var CITY_POINTS = CITIES.map(function(c) { return { name: c.label, lat: c.lat, lon: c.lon }; });
 var EARTH_R = 6371;
@@ -1650,6 +1652,42 @@ document.getElementById('replay-tour-btn').addEventListener('click', function() 
     return { cx: cx, cy: cy, R: R };
   }
 
+  /**
+   * 巡回テスト地球儀上の経由地点1件分を描画する。世界遺産(icon未指定/上記2種以外)は
+   * 従来どおり薄ピンク色の丸(半径5)+通し番号ラベル。空港(CLIENT_AIRPORT_ICON)/駅
+   * (CLIENT_STATION_ICON)は丸を描かず、それぞれの絵文字グリフをctx.fillTextで
+   * 座標中心に直接描画する(textAlign/textBaseline経由でcenter/middleに設定してから描画)。
+   * 絵文字はfillStyleの影響を受けない(ブラウザ既定の色で描画される)ため、裏側
+   * (pp.visible===false)の減光はglobalAlphaの一時的な引き下げ(0.4)で行い、
+   * 描画後は必ず元の値に復元する(以降の描画呼び出しに影響を残さないため)。
+   */
+  function drawWaypointPoint(ctx, pp, icon, i) {
+    var isTransportGlyph = icon === CLIENT_AIRPORT_ICON || icon === CLIENT_STATION_ICON;
+    if (isTransportGlyph) {
+      var prevAlpha = ctx.globalAlpha;
+      ctx.globalAlpha = pp.visible ? 1 : 0.4;
+      ctx.font = '16px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillStyle = '#e2e8f0';
+      ctx.fillText(icon, pp.x, pp.y);
+      ctx.globalAlpha = prevAlpha;
+      ctx.textAlign = 'start';
+      ctx.textBaseline = 'alphabetic';
+      ctx.fillStyle = pp.visible ? '#e2e8f0' : '#64748b';
+      ctx.font = '10px sans-serif';
+      ctx.fillText(String(i + 1), pp.x + 9, pp.y - 9);
+    } else {
+      ctx.fillStyle = pp.visible ? '#f9a8d4' : '#475569';
+      ctx.beginPath();
+      ctx.arc(pp.x, pp.y, 5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = pp.visible ? '#e2e8f0' : '#64748b';
+      ctx.font = '10px sans-serif';
+      ctx.fillText(String(i + 1), pp.x + 7, pp.y - 7);
+    }
+  }
+
   function renderGlobeToCanvas(targetCanvas) {
     if (!targetCanvas || !targetCanvas.getContext) return;
     var ctx = targetCanvas.getContext('2d');
@@ -1695,15 +1733,13 @@ document.getElementById('replay-tour-btn').addEventListener('click', function() 
     projected.forEach(function(pp, i) { if (i === 0) ctx.moveTo(pp.x, pp.y); else ctx.lineTo(pp.x, pp.y); });
     ctx.stroke();
 
-    // 経由地点(宿泊予定地) - 薄ピンク色で表示し、タップすると名称を一時表示する
+    // 経由地点(宿泊予定地) - 薄ピンク色の丸で表示し、タップすると名称を一時表示する。
+    // ただし空港/駅は色丸ではなく、それぞれの絵文字グリフ(✈︎/🚉)を直接描画する
+    // (色丸だと世界遺産と見分けがつかないため)。描画本体はdrawWaypointPoint()に
+    // 切り出し、テストから直接呼び出して(裏側判定を含む)描画分岐を検証できるようにする。
     projected.forEach(function(pp, i) {
-      ctx.fillStyle = pp.visible ? '#f9a8d4' : '#475569';
-      ctx.beginPath();
-      ctx.arc(pp.x, pp.y, 5, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = pp.visible ? '#e2e8f0' : '#64748b';
-      ctx.font = '10px sans-serif';
-      ctx.fillText(String(i + 1), pp.x + 7, pp.y - 7);
+      var tp = tourPoints[i];
+      drawWaypointPoint(ctx, pp, tp && tp.icon, i);
     });
 
     // 巡回中の現在位置マーカー
@@ -1927,7 +1963,7 @@ document.getElementById('replay-tour-btn').addEventListener('click', function() 
     }
     tourPoints = ordered
       .filter(function(p) { return !routeLineExcluded[p.name]; })
-      .map(function(p) { return { name: p.name, lat: p.lat, lon: p.lon, flag: p.flag, id: p.id }; });
+      .map(function(p) { return { name: p.name, lat: p.lat, lon: p.lon, flag: p.flag, id: p.id, icon: p.icon }; });
     updateCurrentTourActiveHeritageIds();
     if (tourPoints.length < 2) {
       miniPanel.style.display = '';
