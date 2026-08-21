@@ -161,9 +161,10 @@ h1{font-size:22px;margin:0 0 4px}
 .stat .label{font-size:11px;color:#94a3b8}
 .stat .value{font-size:18px;font-weight:700;color:#5eead4;margin-top:2px}
 .stat.loss .value{color:#fca5a5}
-.cand-toolbar{display:flex;gap:8px;align-items:center;margin-bottom:8px;font-size:12px}
+.cand-toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px;font-size:12px}
 .cand-toolbar button{background:#1e293b;border:1px solid #475569;color:#cbd5e1;border-radius:6px;padding:5px 10px;cursor:pointer;font-size:11px}
 .cand-toolbar button:hover{border-color:#38bdf8;color:#fff}
+.cand-toolbar .transport-toggle[aria-pressed="true"]{font-weight:700;outline:2px solid currentColor;outline-offset:-2px}
 .cand-count{color:#94a3b8;margin-left:auto}
 .cand-list{max-height:360px;overflow:auto;border:1px solid #1e293b;border-radius:8px}
 .cand-row{display:flex;align-items:center;gap:8px;padding:7px 10px;border-bottom:1px solid #1e293b;font-size:12px}
@@ -343,6 +344,8 @@ ${getMitokoroModalCss()}
       <button id="select-all-btn" type="button">すべて選択</button>
       <button id="select-none-btn" type="button">すべて解除</button>
       <button id="select-near-btn" type="button">近接のみ選択(20km以内)</button>
+      <button id="toggle-stations-btn" class="transport-toggle" type="button" aria-pressed="false">駅ON/OFF</button>
+      <button id="toggle-airports-btn" class="transport-toggle" type="button" aria-pressed="false">空港ON/OFF</button>
       <span class="cand-count" id="cand-count"></span>
     </div>
     <div class="cand-list" id="cand-list"></div>
@@ -1391,6 +1394,7 @@ function recompute() {
   renderSlackNote(se, currentNights, hubRadiusKm, maxDailyKm);
   var countEl = document.getElementById('cand-count');
   if (countEl) countEl.textContent = candidates.length + ' 件中 ' + selected.length + ' 件選択中';
+  updateTransportToggleButtons(candidates);
   var tourPlanSummaryEl = document.getElementById('tour-plan-summary');
   if (tourPlanSummaryEl) tourPlanSummaryEl.textContent = currentNights + '泊' + (currentNights + 1) + '日';
 
@@ -1428,12 +1432,34 @@ function selectNearCandidates() {
   buildCandidates(se.start, se.end, HERITAGE_POINTS, maxDetour).forEach(function(c) { state.selected[c.name] = c.detour <= 20; });
   renderCandidates(); recompute();
 }
+function updateTransportToggleButtons(candidates) {
+  [
+    { id: 'toggle-stations-btn', suffix: '駅' },
+    { id: 'toggle-airports-btn', suffix: '空港' },
+  ].forEach(function(toggle) {
+    var matching = candidates.filter(function(c) { return c.name.endsWith(toggle.suffix); });
+    var isOn = matching.length > 0 && matching.every(function(c) { return !!state.selected[c.name]; });
+    document.getElementById(toggle.id).setAttribute('aria-pressed', isOn ? 'true' : 'false');
+  });
+}
+function toggleTransportCandidates(buttonId, suffix) {
+  var button = document.getElementById(buttonId);
+  var turnOn = button.getAttribute('aria-pressed') !== 'true';
+  var se = currentStartEnd();
+  var maxDetour = Number(document.getElementById('opt-detour').value) || 150;
+  buildCandidates(se.start, se.end, HERITAGE_POINTS, maxDetour).forEach(function(c) {
+    if (c.name.endsWith(suffix)) state.selected[c.name] = turnOn;
+  });
+  renderCandidates(); recompute();
+}
 document.getElementById('select-all-btn').addEventListener('click', selectAllCandidates);
 document.getElementById('select-none-btn').addEventListener('click', selectNoneCandidates);
 document.getElementById('select-near-btn').addEventListener('click', selectNearCandidates);
 document.getElementById('select-all-btn-modal').addEventListener('click', selectAllCandidates);
 document.getElementById('select-none-btn-modal').addEventListener('click', selectNoneCandidates);
 document.getElementById('select-near-btn-modal').addEventListener('click', selectNearCandidates);
+document.getElementById('toggle-stations-btn').addEventListener('click', function() { toggleTransportCandidates('toggle-stations-btn', '駅'); });
+document.getElementById('toggle-airports-btn').addEventListener('click', function() { toggleTransportCandidates('toggle-airports-btn', '空港'); });
 document.getElementById('replay-tour-btn').addEventListener('click', function() {
   var ordered = state.lastOrdered || [];
   if (ordered.length < 2) return;
