@@ -1,5 +1,7 @@
 import { HERITAGE_LIST } from '../data/heritageList';
 import { ROUTE_CITIES } from '../data/routeCities';
+import { AIRPORT_LIST } from '../data/airports';
+import { RAIL_LINES } from '../data/railLines';
 import { getMarkdownParserScript } from '../utils/markdownRenderer';
 import { getMitokoroModalCss, getHeritageMitokoroModalScript } from '../utils/heritageMitokoroModal';
 import { heritageIndexToMasterId } from '../utils/heritage-master-seed';
@@ -10,12 +12,35 @@ function inEurope(lat: number, lon: number): boolean {
   return lat >= EUROPE_LAT_MIN && lat <= EUROPE_LAT_MAX && lon >= EUROPE_LON_MIN && lon <= EUROPE_LON_MAX;
 }
 
+// 空港(webglHeritage.tsの'airport'種別と同じ✈︎)・鉄道駅(同じく'station'種別の🚉)を
+// 経由地候補として表示する際の識別アイコン。世界遺産の🏛️系アイコンと視覚的に区別するため、
+// webglHeritage.tsで既に使われているアイコンをそのまま再利用する(表記ゆれ防止)。
+const AIRPORT_ICON = '✈︎';
+const STATION_ICON = '🚉';
+
+export type JourneyPoint = { n: string; e: string; f: string; c: string; lat: number; lon: number; id: string | null };
+
+/**
+ * airports.tsのcityフィールド("🇯🇵 日本・千葉"のような 国旗+空白+国・地域 形式)から
+ * flag(国旗絵文字)とcountry(国名。"・"より前の部分)を分離する。
+ * 想定外の形式(空白が無い等)が来ても例外を投げず、可能な範囲でフォールバックする。
+ */
+export function parseAirportCity(city: string): { flag: string; country: string } {
+  const raw = String(city || '').trim();
+  if (!raw) return { flag: '', country: '' };
+  const spaceIdx = raw.indexOf(' ');
+  const flag = spaceIdx === -1 ? '' : raw.slice(0, spaceIdx);
+  const rest = spaceIdx === -1 ? raw : raw.slice(spaceIdx + 1).trim();
+  const country = rest.split('・')[0] || rest;
+  return { flag, country };
+}
+
 /**
  * heritage-journeyページの経由地候補として埋め込む、ヨーロッパ域内の世界遺産一覧。
  * 出発/到着都市によって迂回距離の絞り込みはクライアント側(JS)で行うため、ここでは
  * 座標付きの生データのみをヨーロッパ域内に絞って埋め込む。
  */
-export function buildEmbeddedHeritagePoints(): { n: string; e: string; f: string; c: string; lat: number; lon: number; id: string }[] {
+export function buildEmbeddedHeritagePoints(): JourneyPoint[] {
   // idはHERITAGE_LIST(フィルタ前・全件配列)での並び順から算出する
   // (heritage_masterのID採番と同じロジックをheritageIndexToMasterId経由で共有)。
   // inEuropeフィルタ後のindexを使うとheritage_masterのIDとずれるため、
@@ -25,8 +50,79 @@ export function buildEmbeddedHeritagePoints(): { n: string; e: string; f: string
     .filter((h) => inEurope(h.lat, h.lon));
 }
 
+/**
+ * heritage-journeyページの経由地候補として埋め込む、ヨーロッパ域内の空港一覧。
+ * airports.tsはグローバルなデータのため、世界遺産と同じくヨーロッパ域内にフィルタする。
+ * 空港は heritage_master のようなID採番の仕組みを持たないため id は null にする
+ * (経由データ保存機能側は !!p.id で null を自然に除外する設計になっている)。
+ * 同名重複(データ上の表記ゆれ、例: MADが2件)は先勝ちで1件に絞る。
+ * 個別データの形式が壊れていて解析に失敗しても、その1件だけ除外して処理を継続する
+ * (1空港の不正データでページ全体が壊れないようにするため)。
+ */
+export function buildEmbeddedAirportPoints(): JourneyPoint[] {
+  const seen = new Set<string>();
+  const out: JourneyPoint[] = [];
+  for (const a of AIRPORT_LIST) {
+    try {
+      if (typeof a.lat !== 'number' || typeof a.lon !== 'number' || !a.name) continue;
+      if (!inEurope(a.lat, a.lon)) continue;
+      if (seen.has(a.name)) continue;
+      seen.add(a.name);
+      const { flag, country } = parseAirportCity(a.city);
+      out.push({ n: a.name, e: AIRPORT_ICON, f: flag, c: country, lat: a.lat, lon: a.lon, id: null });
+    } catch {
+      // 個別データの解析失敗は握りつぶして次のデータへ進む(1件の不正データで
+      // ページ全体を壊さないため)。
+      continue;
+    }
+  }
+  return out;
+}
+
+/**
+ * heritage-journeyページの経由地候補として埋め込む、ヨーロッパ域内の鉄道駅一覧。
+ * railLines.tsはRAIL_LINES[].stationsのネスト構造かつグローバルなデータのため、
+ * 平坦化した上でヨーロッパ域内にフィルタする。flag/countryは駅自身のものを優先し、
+ * 無ければ所属する路線(line)のものにフォールバックする。空港と同じくidはnullとし、
+ * 同名重複(複数路線が同じ駅を経由する場合)は先勝ちで1件に絞る。
+ */
+export function buildEmbeddedRailStationPoints(): JourneyPoint[] {
+  const seen = new Set<string>();
+  const out: JourneyPoint[] = [];
+  for (const line of RAIL_LINES) {
+    for (const st of line.stations) {
+      try {
+        if (typeof st.lat !== 'number' || typeof st.lon !== 'number' || !st.name) continue;
+        if (!inEurope(st.lat, st.lon)) continue;
+        if (seen.has(st.name)) continue;
+        seen.add(st.name);
+        out.push({
+          n: st.name,
+          e: STATION_ICON,
+          f: st.flag || line.flag || '',
+          c: st.country || line.country || '',
+          lat: st.lat,
+          lon: st.lon,
+          id: null,
+        });
+      } catch {
+        continue;
+      }
+    }
+  }
+  return out;
+}
+
+/**
+ * heritage-journeyページの経由地候補プール全体。世界遺産・空港・鉄道駅をマージした
+ * ものを返す(変数名はHERITAGE_POINTSのまま、世界遺産以外も含む点に注意)。
+ */
+export function buildEmbeddedJourneyPoints(): JourneyPoint[] {
+  return [...buildEmbeddedHeritagePoints(), ...buildEmbeddedAirportPoints(), ...buildEmbeddedRailStationPoints()];
+}
+
 export function getHeritageJourneyPage(): string {
-  const heritagePoints = buildEmbeddedHeritagePoints();
+  const heritagePoints = buildEmbeddedJourneyPoints();
   const cities = ROUTE_CITIES;
   return `<!DOCTYPE html>
 <html lang="ja">
@@ -242,7 +338,7 @@ ${getMitokoroModalCss()}
   </div>
 
   <div class="card">
-    <div class="section-title">経由地候補(世界遺産)</div>
+    <div class="section-title">経由地候補(世界遺産・空港・駅)</div>
     <div class="cand-toolbar">
       <button id="select-all-btn" type="button">すべて選択</button>
       <button id="select-none-btn" type="button">すべて解除</button>
@@ -261,7 +357,7 @@ ${getMitokoroModalCss()}
   <div class="card">
     <div class="route-title-row">
       <div class="section-title" style="margin:0">宿泊地の推奨プラン <span id="day-plan-duration" class="duration-label"></span></div>
-      <input type="search" id="heritage-add-search" class="heritage-add-search" placeholder="🔍 追加したい世界遺産を検索..." autocomplete="off">
+      <input type="search" id="heritage-add-search" class="heritage-add-search" placeholder="🔍 追加したい経由地(世界遺産・空港・駅)を検索..." autocomplete="off">
     </div>
     <div id="day-plan"></div>
   </div>
@@ -270,12 +366,12 @@ ${getMitokoroModalCss()}
 <div class="heritage-add-modal-overlay" id="heritage-add-modal-overlay">
   <div class="heritage-add-modal-box">
     <div class="tour-modal-head">
-      <div class="tour-modal-title">🔍 世界遺産を追加</div>
+      <div class="tour-modal-title">🔍 経由地を追加</div>
       <button type="button" class="tour-modal-close" id="heritage-add-modal-close" aria-label="閉じる">✕</button>
     </div>
     <div class="heritage-add-results-wrap">
       <table class="heritage-add-results-table">
-        <thead><tr><th>世界遺産</th><th>国</th><th></th></tr></thead>
+        <thead><tr><th>経由地名</th><th>国</th><th></th></tr></thead>
         <tbody id="heritage-add-results-body"></tbody>
       </table>
     </div>

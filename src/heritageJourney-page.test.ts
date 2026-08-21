@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { getHeritageJourneyPage, buildEmbeddedHeritagePoints } from './views/heritageJourney';
+import {
+  getHeritageJourneyPage,
+  buildEmbeddedHeritagePoints,
+  buildEmbeddedAirportPoints,
+  buildEmbeddedRailStationPoints,
+  buildEmbeddedJourneyPoints,
+  parseAirportCity,
+} from './views/heritageJourney';
 
 // 対象: /heritage-journey ページ(旧/heritage-routesを作り替え)。
 // 都市2点(出発/到着)を選び、その間で「距離ロスがほぼ無く立ち寄れる」世界遺産候補を
@@ -395,6 +402,163 @@ describe('buildEmbeddedHeritagePoints', () => {
   it('ヨーロッパ域内の世界遺産(ローマ歴史地区など)は含まれる', () => {
     const points = buildEmbeddedHeritagePoints();
     expect(points.find((p) => p.n === 'ローマ歴史地区')).toBeTruthy();
+  });
+});
+
+describe('parseAirportCity', () => {
+  it('"国旗 国・地域" 形式から国旗と国名(・より前)を分離する', () => {
+    expect(parseAirportCity('🇫🇷 フランス・パリ')).toEqual({ flag: '🇫🇷', country: 'フランス' });
+  });
+
+  it('"・" を含まない場合は残り全体を国名として扱う', () => {
+    expect(parseAirportCity('🇸🇬 シンガポール')).toEqual({ flag: '🇸🇬', country: 'シンガポール' });
+  });
+
+  it('空文字や不正な形式でも例外を投げず、空文字にフォールバックする', () => {
+    expect(() => parseAirportCity('')).not.toThrow();
+    expect(parseAirportCity('')).toEqual({ flag: '', country: '' });
+    expect(() => parseAirportCity(undefined as unknown as string)).not.toThrow();
+  });
+});
+
+describe('buildEmbeddedAirportPoints', () => {
+  it('ヨーロッパ域内の空港(シャルル・ド・ゴール空港など)は含まれ、✈︎アイコンが付与される', () => {
+    const points = buildEmbeddedAirportPoints();
+    const cdg = points.find((p) => p.n === 'シャルル・ド・ゴール空港');
+    expect(cdg).toBeTruthy();
+    expect(cdg!.e).toBe('✈︎');
+    expect(cdg!.f).toBe('🇫🇷');
+    expect(cdg!.c).toBe('フランス');
+  });
+
+  it('ヨーロッパ域外の空港(成田国際空港など)は含まれない', () => {
+    const points = buildEmbeddedAirportPoints();
+    expect(points.find((p) => p.n === '成田国際空港')).toBeUndefined();
+  });
+
+  it('空港の候補はidを持たない(heritage_masterのID採番対象外のため)', () => {
+    const points = buildEmbeddedAirportPoints();
+    const cdg = points.find((p) => p.n === 'シャルル・ド・ゴール空港');
+    expect(cdg!.id).toBeNull();
+  });
+
+  it('同名の空港が重複データとして複数存在しても1件に絞られる(例: マドリード・バラハス空港系)', () => {
+    const points = buildEmbeddedAirportPoints();
+    const names = points.map((p) => p.n);
+    const uniqueNames = new Set(names);
+    expect(names.length).toBe(uniqueNames.size);
+  });
+});
+
+describe('buildEmbeddedRailStationPoints', () => {
+  it('ヨーロッパ域内の駅(パリ北駅など)は含まれ、🚉アイコンが付与される', () => {
+    const points = buildEmbeddedRailStationPoints();
+    const parisNord = points.find((p) => p.n === 'パリ北駅');
+    expect(parisNord).toBeTruthy();
+    expect(parisNord!.e).toBe('🚉');
+    expect(parisNord!.f).toBe('🇫🇷');
+    expect(parisNord!.id).toBeNull();
+  });
+
+  it('ヨーロッパ域外の駅(ソウル駅など)は含まれない', () => {
+    const points = buildEmbeddedRailStationPoints();
+    expect(points.find((p) => p.n === 'ソウル駅')).toBeUndefined();
+  });
+
+  it('駅自身にflag/countryが無い場合は所属路線(line)のflag/countryにフォールバックする', () => {
+    const points = buildEmbeddedRailStationPoints();
+    // ICE(ハンブルク～ハノーファー～フランクフルト)の各駅は駅レベルのflag/countryを
+    // 持たないため、路線側の値(🇩🇪 ドイツ)を引き継ぐ
+    const hamburg = points.find((p) => p.n === 'ハンブルク中央駅');
+    expect(hamburg).toBeTruthy();
+    expect(hamburg!.f).toBe('🇩🇪');
+    expect(hamburg!.c).toBe('ドイツ');
+  });
+
+  it('複数路線にまたがって同名で登場する駅(ウィーン中央駅など)は重複せず1件に絞られる', () => {
+    const points = buildEmbeddedRailStationPoints();
+    const names = points.map((p) => p.n);
+    const uniqueNames = new Set(names);
+    expect(names.length).toBe(uniqueNames.size);
+  });
+});
+
+describe('buildEmbeddedJourneyPoints', () => {
+  it('世界遺産・空港・駅の3種類がすべて候補プールに混在する', () => {
+    const points = buildEmbeddedJourneyPoints();
+    expect(points.find((p) => p.n === 'ローマ歴史地区')).toBeTruthy();
+    expect(points.find((p) => p.n === 'シャルル・ド・ゴール空港')).toBeTruthy();
+    expect(points.find((p) => p.n === 'パリ北駅')).toBeTruthy();
+  });
+
+  it('空港・駅のアイコンは世界遺産のアイコンと視覚的に区別できる(異なる絵文字)', () => {
+    const points = buildEmbeddedJourneyPoints();
+    const heritage = points.find((p) => p.n === 'ローマ歴史地区');
+    const airport = points.find((p) => p.n === 'シャルル・ド・ゴール空港');
+    const station = points.find((p) => p.n === 'パリ北駅');
+    expect(airport!.e).toBe('✈︎');
+    expect(station!.e).toBe('🚉');
+    expect(airport!.e).not.toBe(heritage!.e);
+    expect(station!.e).not.toBe(heritage!.e);
+    expect(airport!.e).not.toBe(station!.e);
+  });
+
+  it('件数は世界遺産+空港+駅の合計と一致する', () => {
+    const heritage = buildEmbeddedHeritagePoints();
+    const airports = buildEmbeddedAirportPoints();
+    const stations = buildEmbeddedRailStationPoints();
+    const merged = buildEmbeddedJourneyPoints();
+    expect(merged.length).toBe(heritage.length + airports.length + stations.length);
+  });
+});
+
+describe('buildCandidates: 空港・駅を含む統合候補プールでの動作', () => {
+  it('HERITAGE_POINTSに埋め込まれた空港・駅の実データがbuildCandidatesの迂回距離フィルタを通過する', () => {
+    const html = getHeritageJourneyPage();
+    const heritageMatch = html.match(/var HERITAGE_POINTS = (\[.*?\]);/);
+    expect(heritageMatch).toBeTruthy();
+    const embedded = JSON.parse(heritageMatch![1]);
+    // リール・ヨーロップ駅(ユーロスター)・シャルル・ド・ゴール空港が埋め込みデータに含まれていること自体を確認
+    expect(embedded.find((p: any) => p.n === 'リール・ヨーロップ駅')).toBeTruthy();
+    expect(embedded.find((p: any) => p.n === 'シャルル・ド・ゴール空港')).toBeTruthy();
+
+    const earthR = html.match(/var EARTH_R = \d+;/)![0];
+    const buildCandidatesSrc = extractFn(html, 'buildCandidates', '[^)]*');
+    const haversineKmSrc = extractFn(html, 'haversineKm', '[^)]*');
+    const computeDetourKmSrc = extractFn(html, 'computeDetourKm', '[^)]*');
+    const fn = new Function(
+      'manuallyAddedPoints',
+      `${earthR}\n${haversineKmSrc}\n${computeDetourKmSrc}\n${buildCandidatesSrc}\nreturn buildCandidates;`
+    )({});
+    // パリ(出発)からリヨン(到着)への移動中、シャルル・ド・ゴール空港とリール・ヨーロップ駅は
+    // 十分な迂回範囲(500km)なら候補に入るはず(ともに出発/到着から3km以上離れている)
+    const PARIS = { name: 'パリ', lat: 48.8566, lon: 2.3522 };
+    const LYON = { name: 'リヨン', lat: 45.7640, lon: 4.8357 };
+    const candidates = fn(PARIS, LYON, embedded, 500);
+    const names = candidates.map((c: any) => c.name);
+    expect(names).toContain('シャルル・ド・ゴール空港');
+    expect(names).toContain('リール・ヨーロップ駅');
+    // 空港・駅候補もid(null)を保持したまま返る
+    const cdg = candidates.find((c: any) => c.name === 'シャルル・ド・ゴール空港');
+    expect(cdg.id).toBeNull();
+  });
+});
+
+describe('経由データ保存機能(currentTourActiveHeritageIds)は空港・駅(id:null)混入時に壊れない', () => {
+  it('updateCurrentTourActiveHeritageIdsのロジック(!!p.idフィルタ)は、idを持たないtourPointを' +
+    '安全にスキップし、世界遺産のidだけを配列化する(クラッシュも空文字化もしない)', () => {
+    const tourPoints = [
+      { name: 'パリ', id: undefined },
+      { name: 'ローマ歴史地区', id: '0001' },
+      { name: 'シャルル・ド・ゴール空港', id: null },
+      { name: 'パリ北駅', id: null },
+      { name: 'ローマ', id: undefined },
+    ];
+    const updateCurrentTourActiveHeritageIds = (points: { name: string; id: string | null | undefined }[]) =>
+      points.filter((p) => !!p.id).map((p) => p.id);
+    const result = updateCurrentTourActiveHeritageIds(tourPoints);
+    expect(result).toEqual(['0001']);
+    expect(result.every((id) => typeof id === 'string' && id.length > 0)).toBe(true);
   });
 });
 
