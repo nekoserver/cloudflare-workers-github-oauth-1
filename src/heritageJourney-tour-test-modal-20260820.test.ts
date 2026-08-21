@@ -302,14 +302,18 @@ describe('heritage-journeyページ: 「🌐 巡回テスト」モーダル(DOM�
       vi.advanceTimersByTime(1000);
       expect(label.textContent).not.toBe(initialText);
 
-      // 十分な時間を進めれば最後の地点まで到達し、自動的に再生ボタンの表示が戻る
-      vi.advanceTimersByTime(90000);
+      // 最後の地点に到達するとstopAnim()がインターバルをclearIntervalするため、
+      // runAllTimers()で「完走してタイマーが消えるまで」を一気に進める。
+      // (heritage-journeyの経由地候補プールに空港・駅が加わり既定ルート上の地点数が
+      // 増えたため、advanceTimersByTimeの固定値では足りなくなった。runAllTimersなら
+      // 地点数に関わらず完走まで進められる)
+      vi.runAllTimers();
       expect(playBtn.textContent).toContain('再生');
       expect(playBtn.textContent).not.toContain('一時停止');
     } finally {
       vi.useRealTimers();
     }
-  });
+  }, 20000);
 
   it('(タイマー実動作) 再生中にモーダルを閉じるとタイマーが止まり、以降ラベルが更新されない', () => {
     vi.useFakeTimers();
