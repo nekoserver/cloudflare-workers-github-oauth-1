@@ -4235,12 +4235,14 @@ app.get('/aichat', authMiddleware, async (c) => {
     } catch {
       logger.warn('aichat_model_colors query failed, using empty map');
     }
-
-    const { merged, newAssignments } = assignModelColors(modelColors, DEFAULT_AICHAT_MODELS);
-    modelColors = merged;
+  }
+  const { merged, newAssignments } = assignModelColors(modelColors, DEFAULT_AICHAT_MODELS);
+  modelColors = merged;
+  if (c.env.DB) {
+    const db = c.env.DB;
     for (const a of newAssignments) {
       c.executionCtx.waitUntil(
-        c.env.DB.prepare('INSERT OR IGNORE INTO aichat_model_colors (model_id, color, label) VALUES (?, ?, ?)')
+        db.prepare('INSERT OR IGNORE INTO aichat_model_colors (model_id, color, label) VALUES (?, ?, ?)')
           .bind(a.model_id, a.color, a.label)
           .run()
           .catch(() => {})
@@ -4268,6 +4270,7 @@ const AICHAT_ALLOWED_MODELS = new Set([
   '@cf/google/gemma-4-26b-a4b-it',
   '@cf/google/gemma-3-12b-it',
   '@cf/meta/llama-4-scout-17b-16e-instruct',
+  '@cf/qwen/qwen3.8-27b',
 ]);
 
 app.post('/api/aichat', aichatAuthMiddleware, async (c) => {

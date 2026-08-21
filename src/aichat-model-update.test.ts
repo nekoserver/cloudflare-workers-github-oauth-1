@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { getAiChatPage } from './views/aichat';
+import { DEFAULT_AICHAT_MODELS, getAiChatPage } from './views/aichat';
+import { assignModelColors } from './utils/aichatModelConfig';
 
 function buildPage(model: string): string {
   return getAiChatPage({
@@ -36,6 +37,18 @@ describe('モデルリスト更新: DeepSeek 削除・新モデル追加', () =>
   it('granite-4.0-h-micro が選択肢に含まれる', () => {
     const html = buildPage(LLAMA_MODEL);
     expect(html).toContain('@cf/ibm-granite/granite-4.0-h-micro');
+  });
+
+  it('qwen3.8-27b が選択肢に含まれる', () => {
+    const html = buildPage(LLAMA_MODEL);
+    expect(html).toContain('value="@cf/qwen/qwen3.8-27b"');
+    expect(html).toContain('>qwen3.8-27b</option>');
+  });
+
+  it('qwen3.8-27b に表示用の固有色が割り当てられる', () => {
+    const { merged } = assignModelColors({}, DEFAULT_AICHAT_MODELS);
+    expect(merged['@cf/qwen/qwen3.8-27b']).toMatch(/^#[0-9a-f]{6}$/i);
+    expect(new Set(Object.values(merged)).size).toBe(DEFAULT_AICHAT_MODELS.length);
   });
 
   it('glm-4.7-flash が選択肢に含まれない', () => {
