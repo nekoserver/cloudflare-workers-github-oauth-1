@@ -122,6 +122,7 @@ h1{font-size:22px;margin:0 0 4px}
 #end-city-picker-modal-box{position:fixed;max-width:560px;width:calc(100% - 32px)}
 #end-city-picker-modal-head{cursor:grab;user-select:none;touch-action:none}
 #end-city-picker-modal-head:active{cursor:grabbing}
+#dist-country-filter-modal-box{position:fixed;max-width:560px;width:calc(100% - 32px)}
 .tour-route-side-panel{background:#111827;border:1px solid #334155;border-radius:12px;padding:12px;width:240px;max-width:calc(100vw - 600px);max-height:90vh;overflow:auto;margin-left:16px;flex-shrink:0}
 .tour-route-side-title{font-size:12px;font-weight:700;color:#93c5fd;margin-bottom:8px}
 .tour-route-side-row{border:2px solid transparent;border-radius:6px;padding:5px 8px;font-size:12px;color:#e2e8f0;margin-bottom:4px;cursor:pointer}
@@ -180,6 +181,8 @@ h1{font-size:22px;margin:0 0 4px}
 .dist-cities{padding:4px 4px 10px 120px;display:flex;flex-wrap:wrap;gap:6px}
 .dist-city-chip{background:#1e293b;border:1px solid #475569;color:#cbd5e1;border-radius:999px;padding:4px 10px;font-size:11px;cursor:pointer}
 .dist-city-chip:hover{border-color:#38bdf8;color:#fff}
+.dist-city-chip:disabled{opacity:.4;cursor:default}
+.dist-city-chip:disabled:hover{border-color:#475569;color:#cbd5e1}
 .slack-note{background:#0c2d1a;border:1px solid #14532d;border-radius:8px;padding:8px 12px;font-size:12px;color:#86efac;margin-top:10px}
 .duration-label{font-size:12px;font-weight:400;color:#5eead4}
 .visit-chip{display:inline-block;background:#1e293b;border:1px solid #475569;color:#cbd5e1;border-radius:999px;padding:2px 9px;font-size:11px;cursor:pointer;font-family:inherit;margin:2px 4px 2px 0}
@@ -221,7 +224,7 @@ ${getMitokoroModalCss()}
     <div class="route-title-row">
       <div class="section-title" style="margin:0">出発地から見た目的地別プラン分布</div>
       <div style="display:flex;align-items:center;gap:8px;">
-        <span class="dist-country-filter-label">到達国を限定する : </span>
+        <span class="dist-country-filter-label">到達国を制限する : </span>
         <button id="dist-country-filter-btn" type="button">しない(デフォルト)</button>
       </div>
     </div>
@@ -319,9 +322,9 @@ ${getMitokoroModalCss()}
 </div>
 
 <div class="tour-modal-overlay" id="dist-country-filter-modal-overlay">
-  <div class="tour-modal-box">
+  <div class="tour-modal-box" id="dist-country-filter-modal-box">
     <div class="tour-modal-head">
-      <div class="tour-modal-title">🌍 到達国を限定する</div>
+      <div class="tour-modal-title">🌍 到達国を制限する</div>
       <button type="button" class="tour-modal-close" id="dist-country-filter-modal-close" aria-label="閉じる">✕</button>
     </div>
     <ul class="dist-country-filter-list" id="dist-country-filter-list"></ul>
@@ -593,7 +596,7 @@ function computePlanNights(start, end, selectedPoints, hubRadiusKm, maxDailyKm) 
  * 迂回許容距離(opt-detour)には依存せず、常に20km以内の既定候補で計算する
  * (この分布は「候補の広さ」ではなく「既定プランでの負担」を横比較するためのもの)。
  */
-// 「到達国を限定する」フィルタの現在値。'__ALL__'が「しない(デフォルト)」を表す
+// 「到達国を制限する」フィルタの現在値。'__ALL__'が「しない(デフォルト)」を表す
 // センチネル値で、Cookie(DEST_COUNTRY_FILTER_COOKIE)にもそのまま同じ文字列で
 // 保存する(空文字にするとCookie未設定と区別しづらいため明示的な文字列を使う)。
 var DEST_COUNTRY_FILTER_ALL = '__ALL__';
@@ -671,12 +674,26 @@ function renderDistCountryFilterList() {
   }).join('');
 }
 
+// #tour-mini-panel(280px幅、既定でtop:12px;left:12px)と重ならないよう、
+// 既定位置は画面右側・やや下(left:innerWidth-600px以上を確保、下限320px)に固定する。
+// #end-city-picker-modal-boxの既定位置(resetEndCityPickerModalPosition)と同じ
+// 技法・数値パターンを踏襲する。再オープンのたびにこの既定位置へリセットする。
+function resetDistCountryFilterModalPosition() {
+  var box = document.getElementById('dist-country-filter-modal-box');
+  if (!box) return;
+  var defaultLeft = Math.max(320, window.innerWidth - 600);
+  var defaultTop = 80;
+  box.style.left = defaultLeft + 'px';
+  box.style.top = defaultTop + 'px';
+}
+
 function openDistCountryFilterModal() {
   var overlay = document.getElementById('dist-country-filter-modal-overlay');
   if (!overlay) return;
   renderDistCountryFilterList();
   overlay.style.zIndex = String(getNextZ());
   overlay.classList.add('open');
+  resetDistCountryFilterModalPosition();
 }
 
 function closeDistCountryFilterModal() {
@@ -1059,11 +1076,16 @@ function renderNightsDistribution() {
       citiesEl.innerHTML = bucketCities.length
         ? bucketCities.map(function(d) {
             var flagPrefix = d.flag ? esc(d.flag) + ' ' : '';
-            return '<button type="button" class="dist-city-chip" data-city="' + esc(d.cityName) + '">' + flagPrefix + esc(d.city) + '(' + d.nights + '泊)</button>';
+            // 宿泊日数が0泊の目的地は選択の余地がないため、ボタン自体をdisabled属性で
+            // 無効化しクリックが発火しないようにする(見た目のグレーアウトのみに頼らない)。
+            var isZeroNights = d.nights === 0;
+            var disabledAttr = isZeroNights ? ' disabled' : '';
+            return '<button type="button" class="dist-city-chip" data-city="' + esc(d.cityName) + '"' + disabledAttr + '>' + flagPrefix + esc(d.city) + '(' + d.nights + '泊)</button>';
           }).join('')
         : '<span class="empty-note">該当する目的地はありません。</span>';
       citiesEl.querySelectorAll('[data-city]').forEach(function(chip) {
         chip.addEventListener('click', function() {
+          if (chip.disabled) return;
           document.getElementById('end-city').value = chip.getAttribute('data-city');
           state.selected = {};
           renderCandidates();
@@ -2028,7 +2050,7 @@ function closeEndCityPickerModal() {
   });
 })();
 
-// ===== 「到達国を限定する」ボタン(#dist-country-filter-btn) → 最上位レイヤーの国一覧モーダル =====
+// ===== 「到達国を制限する」ボタン(#dist-country-filter-btn) → 最上位レイヤーの国一覧モーダル =====
 (function() {
   var filterBtn = document.getElementById('dist-country-filter-btn');
   var overlay = document.getElementById('dist-country-filter-modal-overlay');
