@@ -757,6 +757,20 @@ input[type=search]:focus { border-color:var(--accent); }
 
   var currentAnswerModalShareId = null;
 
+  // 起点検索(#seedSearchTarget)でmoondream3.1等llama-4以外を指定してヒットした
+  // 起点(shareId)を記憶しておき、その起点の応答バブルモーダルを開くときだけ
+  // /api/aichat/shares/:id にtargetを渡して、検索対象として指定した画像分析
+  // モデルの出力結果を表示する。起点から先へキーワードを辿って到達する他の
+  // 回答ノードは(グラフ自体がai_chat_shares上のキーワード共起で構築されるため)
+  // 常に実在の会話(llama-4等)であり、この記憶の対象外(shareId不一致)のままで
+  // 正しい。
+  var seedGraphTarget = { shareId: null, target: 'llama-4' };
+
+  function seedTargetFor(shareId) {
+    if (seedGraphTarget.shareId !== shareId || seedGraphTarget.target === 'llama-4') return '';
+    return '?target=' + encodeURIComponent(seedGraphTarget.target);
+  }
+
   function openAnswerModal(shareId) {
     currentAnswerModalShareId = shareId;
     answerModalQuestion.textContent = '';
@@ -782,7 +796,8 @@ input[type=search]:focus { border-color:var(--accent); }
     answerModalKeywordExtractBtn.disabled = false;
     answerModalKeywordExtractBtn.textContent = 'キーワード抽出';
     answerModalBackdrop.classList.add('open');
-    fetch('/api/aichat/shares/' + encodeURIComponent(shareId), { credentials: 'same-origin' })
+    var qsTarget = seedTargetFor(shareId);
+    fetch('/api/aichat/shares/' + encodeURIComponent(shareId) + qsTarget, { credentials: 'same-origin' })
       .then(function(r) { return r.json(); })
       .then(function(d) {
         if (!d || d.error) { answerModalBody.textContent = '回答の取得に失敗しました: ' + ((d && d.error) || '不明なエラー'); return; }
@@ -1378,7 +1393,8 @@ input[type=search]:focus { border-color:var(--accent); }
         selectedShareId = r.id;
         seedSearchResults.querySelectorAll('.search-result-row').forEach(function(el) { el.classList.remove('selected'); });
         row.classList.add('selected');
-        pushTrailSeed(r.id, r.question);
+        seedGraphTarget = { shareId: r.id, target: seedSearchTarget.value };
+        pushTrailSeed(r.id, r.question, seedSearchTarget.value);
         loadGraph(r.id);
       });
       seedSearchResults.appendChild(row);
@@ -1493,8 +1509,12 @@ input[type=search]:focus { border-color:var(--accent); }
     renderSelectionTrail();
   }
 
-  function pushTrailSeed(shareId, question) {
-    selectionTrail.push({ type: 'seed', label: question, id: shareId });
+  function pushTrailSeed(shareId, question, target) {
+    // targetは'llama-4'(デフォルト)のときは足跡オブジェクトに含めない。
+    // 既存のsessionStorage保存内容(足跡の完全な形)の互換性を壊さないため。
+    var entry = { type: 'seed', label: question, id: shareId };
+    if (target && target !== 'llama-4') entry.target = target;
+    selectionTrail.push(entry);
     renderSelectionTrail();
   }
 
@@ -1513,6 +1533,7 @@ input[type=search]:focus { border-color:var(--accent); }
     if (!entry) return;
     if (entry.type === 'seed') {
       selectedShareId = entry.id;
+      seedGraphTarget = { shareId: entry.id, target: entry.target || 'llama-4' };
       loadGraph(entry.id);
     } else {
       seedSearchInput.value = entry.label;

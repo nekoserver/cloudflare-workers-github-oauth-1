@@ -108,7 +108,7 @@ describe('/answer-graph ページ: 質問をヘッダーに固定表示し、回
     const html = buildPage();
     const idx = html.indexOf('function openAnswerModal');
     expect(idx).toBeGreaterThan(-1);
-    const block = html.slice(idx, idx + 2600);
+    const block = html.slice(idx, idx + 3200);
     expect(block).toContain('answerModalQuestion.textContent = d.question;');
     expect(block).toContain('appendAnswerModalBubble(d.answer);');
   });
@@ -255,8 +255,8 @@ describe('/answer-graph ページ: サイドパネル・ツールチップ共通
     const html = buildPage();
     const idx = html.indexOf('function openAnswerModal');
     expect(idx).toBeGreaterThan(-1);
-    const block = html.slice(idx, idx + 1500);
-    expect(block).toContain("fetch('/api/aichat/shares/' + encodeURIComponent(shareId)");
+    const block = html.slice(idx, idx + 1900);
+    expect(block).toContain("'/api/aichat/shares/' + encodeURIComponent(shareId)");
     expect(block).toContain('回答の取得に失敗しました');
   });
 });

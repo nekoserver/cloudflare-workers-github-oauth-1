@@ -86,10 +86,14 @@ describe('/api/aichat/shares系一覧APIがimage_data_urlを欠かさず返す(�
     expect(coalesceCount).toBe(2);
   });
 
-  it('/api/aichat/shares/:id (単体フェッチ)のSELECTもimage_data_urlを含む', () => {
+  it('/api/aichat/shares/:id (単体フェッチ)はgetAichatShareDetail経由でimage_data_urlを含むSELECTを実行する', () => {
     const idx = src.indexOf("app.get('/api/aichat/shares/:id'");
     const block = src.slice(idx, idx + 700);
-    expect(block).toContain('image_data_url');
+    expect(block).toContain('getAichatShareDetail');
+    const fnIdx = src.indexOf('export async function getAichatShareDetail');
+    expect(fnIdx).toBeGreaterThan(-1);
+    const fn = src.slice(fnIdx, fnIdx + 2000);
+    expect(fn).toContain('image_data_url');
   });
 });
 

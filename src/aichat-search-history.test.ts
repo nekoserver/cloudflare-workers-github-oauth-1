@@ -119,22 +119,26 @@ describe('GET /api/aichat/shares/:id エンドポイント', () => {
     expect(idx).toBeGreaterThan(-1);
   });
 
-  it('ハンドラが ai_chat_shares から当該ユーザーのレコードを取得する', () => {
+  it('ハンドラが getAichatShareDetail 経由で ai_chat_shares から当該ユーザーのレコードを取得する', () => {
     const idx = INDEX_SRC.indexOf("app.get('/api/aichat/shares/:id'");
     expect(idx).toBeGreaterThan(-1);
     const handler = INDEX_SRC.slice(idx, idx + 800);
-    expect(handler).toContain('ai_chat_shares');
-    expect(handler).toContain('user_id');
-    expect(handler).toContain('deleted_at IS NULL');
+    expect(handler).toContain('getAichatShareDetail');
+    const fnIdx = INDEX_SRC.indexOf('export async function getAichatShareDetail');
+    expect(fnIdx).toBeGreaterThan(-1);
+    const fn = INDEX_SRC.slice(fnIdx, fnIdx + 2000);
+    expect(fn).toContain('ai_chat_shares');
+    expect(fn).toContain('user_id');
+    expect(fn).toContain('deleted_at IS NULL');
   });
 
-  it('ハンドラが question・answer・created_at を返す', () => {
-    const idx = INDEX_SRC.indexOf("app.get('/api/aichat/shares/:id'");
-    expect(idx).toBeGreaterThan(-1);
-    const handler = INDEX_SRC.slice(idx, idx + 800);
-    expect(handler).toContain('question');
-    expect(handler).toContain('answer');
-    expect(handler).toContain('created_at');
+  it('getAichatShareDetail が question・answer・created_at を返す', () => {
+    const fnIdx = INDEX_SRC.indexOf('export async function getAichatShareDetail');
+    expect(fnIdx).toBeGreaterThan(-1);
+    const fn = INDEX_SRC.slice(fnIdx, fnIdx + 2000);
+    expect(fn).toContain('question');
+    expect(fn).toContain('answer');
+    expect(fn).toContain('created_at');
   });
 });
 
