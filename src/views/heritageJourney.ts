@@ -1399,14 +1399,22 @@ function renderRouteLine(ordered) {
     // 除外する対象になり得ないため、ON/OFFトグルバッジ(button.wp-badge)は
     // 描画せず、非interactiveな固定マーカー(.wp-badge-fixed)として名称・
     // アイコンのみ表示する。中間の経由地は従来通りトグル可能なbuttonにする。
-    var isEndpoint = idx === 0 || idx === ordered.length - 1;
+    // 出発地は📍、到着地は🏁のアイコンで区別する(中間地点はp.icon)。
+    var isFirst = idx === 0;
+    var isLast = idx === ordered.length - 1;
+    var isEndpoint = isFirst || isLast;
+    var icon = isEndpoint ? (isFirst ? '📍' : '🏁') : (p.icon || '📍');
+    var flagHtml = flag ? '<span class="wp-flag" title="' + esc(country) + '">' + esc(flag) + '</span>' : '';
+    // 表示順: 中間の経由地は「→ 国旗 アイコン(名称)」(国旗が矢印の直後)。
+    // 固定マーカー(出発地・到着地)はアイコン(📍/🏁)を先頭に保ったまま
+    // 「アイコン 国旗 名称」の順にする(国旗を都市名の直前に移動)。
     var badgeHtml = isEndpoint
-      ? '<span class="wp-badge wp-badge-fixed">' + esc(p.icon || '📍') + ' ' + esc(p.name) + '</span>'
+      ? '<span class="wp-badge wp-badge-fixed">' + esc(icon) + flagHtml + ' ' + esc(p.name) + '</span>'
       : '<button type="button" class="wp-badge' + (off ? ' wp-badge-off' : '') + '" data-wp-name="' + esc(p.name) + '" title="タップで巡回テストから一時的に除外/復帰">'
-        + esc(p.icon || '📍') + ' ' + esc(p.name) + '</button>';
+        + esc(icon) + ' ' + esc(p.name) + '</button>';
     return '<span class="route-line-item" data-wp-country="' + esc(country) + '" data-wp-item-name="' + esc(p.name) + '">'
+      + (isEndpoint ? '' : flagHtml)
       + badgeHtml
-      + (flag ? '<span class="wp-flag" title="' + esc(country) + '">' + esc(flag) + '</span>' : '')
       + '</span>';
   }).join('<span class="wp-arrow">→</span>');
   renderRouteCountryFilterDropdown(ordered);
@@ -1484,6 +1492,8 @@ function applyRouteCountryFilter() {
  * ordered(出発点から順)を縦に並べ、グレーアウト(routeLineExcluded)の
  * 状態も#route-lineと同じ見た目で反映する。行はupdateNextLabel()から
  * 「次の目的地」としてフォーカス表示(枠が薄黄色に点滅)される。
+ * #route-lineと同じ表示ルールで、国旗(.wp-flag)はnum/checkboxより後・
+ * アイコン(名称)より前に表示する。
  */
 function renderRouteSidePanel(ordered) {
   var el = document.getElementById('tour-route-side-list');
@@ -1496,10 +1506,13 @@ function renderRouteSidePanel(ordered) {
   el.innerHTML = ordered.map(function(p) {
     var off = !!routeLineExcluded[p.name];
     var label = off ? '-' : String(++num);
+    var country = p.country || '';
+    var flag = p.flag || '';
     return '<div class="tour-route-side-row' + (off ? ' off' : '') + '" data-side-name="' + esc(p.name) + '" data-side-lat="' + p.lat + '" data-side-lon="' + p.lon + '" title="タップで地球儀上に名称を表示">'
       + '<span class="tour-route-side-num">' + esc(label) + '</span>'
       + '<input type="checkbox" class="tour-route-side-check" data-side-check-name="' + esc(p.name) + '"' + (off ? '' : ' checked') + ' title="OFFで巡回テストから一時的に除外">'
-      + ' ' + esc(p.icon || '📍') + ' ' + esc(p.name) + '</div>';
+      + ' ' + (flag ? '<span class="wp-flag" title="' + esc(country) + '">' + esc(flag) + '</span>' : '')
+      + esc(p.icon || '📍') + ' ' + esc(p.name) + '</div>';
   }).join('');
 }
 
