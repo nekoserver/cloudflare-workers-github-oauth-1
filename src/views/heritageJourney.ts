@@ -121,9 +121,10 @@ export function buildEmbeddedJourneyPoints(): JourneyPoint[] {
   return [...buildEmbeddedHeritagePoints(), ...buildEmbeddedAirportPoints(), ...buildEmbeddedRailStationPoints()];
 }
 
-export function getHeritageJourneyPage(): string {
+export function getHeritageJourneyPage(heritageTourCountryFilterEnabled: boolean = true): string {
   const heritagePoints = buildEmbeddedJourneyPoints();
   const cities = ROUTE_CITIES;
+  const heritageTourCountryFilterEnabledJs = heritageTourCountryFilterEnabled ? 'true' : 'false';
   return `<!DOCTYPE html>
 <html lang="ja">
 <head>
@@ -205,6 +206,7 @@ h1{font-size:22px;margin:0 0 4px}
 #save-waypoint-set-btn:disabled{opacity:.4;cursor:default}
 #save-waypoint-set-btn:not(:disabled):hover{background:#0284c7}
 #waypoint-set-save-toast{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#dcfce7;color:#14532d;border:1px solid #86efac;border-radius:10px;padding:16px 24px;font-size:14px;box-shadow:0 8px 24px rgba(0,0,0,.35);display:none}
+#route-country-filter-locked-toast{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#fce7f3;color:#9d174d;border:1px solid #f9a8d4;border-radius:10px;padding:16px 24px;font-size:14px;box-shadow:0 8px 24px rgba(0,0,0,.35);display:none;max-width:360px;text-align:center}
 #view-registered-routes-btn{background:#1e293b;border:1px solid #475569;color:#cbd5e1;border-radius:8px;padding:6px 12px;font-size:12px;cursor:pointer;font-family:inherit;white-space:nowrap}
 #view-registered-routes-btn:hover{border-color:#38bdf8;color:#fff}
 .registered-routes-freq-cols{display:flex;gap:16px;flex-wrap:wrap;margin-bottom:14px}
@@ -379,7 +381,7 @@ ${getMitokoroModalCss()}
   </div>
 
   <div class="card">
-    <div class="route-title-row"><div style="display:flex;align-items:center;gap:10px;"><div class="section-title" style="margin:0">ルート順序</div><select id="route-country-filter" title="国で絞り込むとそれ以外の地点がグレーアウトされます"></select></div><div style="display:flex;gap:8px;"><button id="tour-test-btn" type="button">🌐 巡回テスト</button><button id="replay-tour-btn" type="button">🎬 巡回ルートを再現する</button></div></div>
+    <div class="route-title-row"><div class="section-title" style="margin:0">ルート順序</div><div style="display:flex;align-items:center;gap:8px;"><button id="tour-test-btn" type="button">🌐 巡回テスト</button><button id="replay-tour-btn" type="button">🎬 巡回ルートを再現する🌏</button><select id="route-country-filter" title="国で絞り込むとそれ以外の地点がグレーアウトされます"></select></div></div>
     <div class="route-line" id="route-line"></div>
     <div class="route-apply-row"><button id="route-apply-btn" type="button" disabled>適用する</button></div>
   </div>
@@ -480,6 +482,7 @@ ${getMitokoroModalCss()}
 </div>
 
 <div id="waypoint-set-save-toast"></div>
+<div id="route-country-filter-locked-toast"></div>
 
 <div class="tour-modal-overlay" id="tour-modal-overlay">
   <div class="tour-modal-box">
@@ -1390,6 +1393,13 @@ function renderSlackNote(se, currentNights, hubRadiusKm, maxDailyKm) {
 var ROUTE_COUNTRY_FILTER_ALL = '__ALL__';
 var routeCountryFilter = ROUTE_COUNTRY_FILTER_ALL;
 
+// 設定ページ「世界遺産の巡回ルート処理時に国別フィルタを適用する/しない」の値。
+// D1優先→Cookie→デフォルト(する)で解決済みの値がサーバー側から埋め込まれる。
+// これがfalseの場合、#route-country-filterで国を選んでいても
+// 「🎬巡回ルートを再現する🌏」実行時のデータからは除外しない(設定ページの
+// OFFのほうが強制力が上のため)。その際は薄ピンク色のトーストで設定変更を促す。
+var HERITAGE_TOUR_COUNTRY_FILTER_ENABLED = ${heritageTourCountryFilterEnabledJs};
+
 function renderRouteLine(ordered) {
   document.getElementById('route-line').innerHTML = ordered.map(function(p, idx) {
     var off = !!routeLineExcluded[p.name];
@@ -1738,10 +1748,40 @@ document.getElementById('select-none-btn-modal').addEventListener('click', selec
 document.getElementById('select-near-btn-modal').addEventListener('click', selectNearCandidates);
 document.getElementById('toggle-stations-btn').addEventListener('click', function() { toggleTransportCandidates('toggle-stations-btn', '駅'); });
 document.getElementById('toggle-airports-btn').addEventListener('click', function() { toggleTransportCandidates('toggle-airports-btn', '空港'); });
+/**
+ * 現在の#route-country-filter選択状態に基づき、渡すべき地点(orderedのサブセット)を返す純粋関数。
+ * routeCountryFilterがROUTE_COUNTRY_FILTER_ALLの場合、または設定ページの
+ * 「世界遺産の巡回ルート処理時に国別フィルタを適用する」がOFFの場合はフィルタを適用せず
+ * orderedをそのまま返す。設定がONかつ国が選択されている場合のみ、選択国以外の
+ * (グレーアウトされている)地点を除外する。
+ */
+function filterTourPointsByRouteCountry(ordered, filterCountry, settingEnabled) {
+  if (!settingEnabled) return ordered;
+  if (!filterCountry || filterCountry === ROUTE_COUNTRY_FILTER_ALL) return ordered;
+  return ordered.filter(function(p) { return (p.country || '') === filterCountry; });
+}
+
+function showRouteCountryFilterLockedToast() {
+  var el = document.getElementById('route-country-filter-locked-toast');
+  if (!el) return;
+  el.style.zIndex = String(getNextZ());
+  el.textContent = '設定ページで「世界遺産の巡回ルート処理時に国別フィルタを適用しない」になっているため、国別フィルタは巡回ルートの再現に反映されません。反映するには設定ページでこの設定をONにしてください。';
+  el.style.display = 'block';
+  setTimeout(function() {
+    el.textContent = '';
+    el.style.display = 'none';
+  }, 7000);
+}
+
 document.getElementById('replay-tour-btn').addEventListener('click', function() {
   var ordered = state.lastOrdered || [];
   if (ordered.length < 2) return;
-  var payload = { points: ordered.map(function(p) { return { name: p.name, lat: p.lat, lon: p.lon }; }) };
+  if (routeCountryFilter !== ROUTE_COUNTRY_FILTER_ALL && !HERITAGE_TOUR_COUNTRY_FILTER_ENABLED) {
+    showRouteCountryFilterLockedToast();
+  }
+  var filtered = filterTourPointsByRouteCountry(ordered, routeCountryFilter, HERITAGE_TOUR_COUNTRY_FILTER_ENABLED);
+  if (filtered.length < 2) filtered = ordered;
+  var payload = { points: filtered.map(function(p) { return { name: p.name, lat: p.lat, lon: p.lon }; }) };
   try {
     sessionStorage.setItem('heritageJourneyTour', JSON.stringify(payload));
   } catch (e) {
