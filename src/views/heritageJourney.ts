@@ -1480,21 +1480,27 @@ function renderRouteCountryFilterDropdown(ordered) {
  * 現在のrouteCountryFilterに基づき#route-lineの各行のグレーアウトを適用/解除する。
  * 視覚的な減光(route-line-item-dimmedクラス)だけでなく、対象行のON/OFFバッジに
  * disabled属性を付与し実際に操作できないようにする(見た目だけの減光にしない)。
+ * 巡回テストモーダル右側のルート順序サイドパネル(#tour-route-side-list)にも同じ
+ * グレーアウトを反映するため、renderRouteSidePanel()を再描画して同期させる
+ * (モーダル/サイドパネルが開いたままフィルタ選択を変更した場合もこのタイミングで
+ * 呼ばれるためライブに更新される)。
  */
 function applyRouteCountryFilter() {
   var el = document.getElementById('route-line');
-  if (!el) return;
-  var active = routeCountryFilter !== ROUTE_COUNTRY_FILTER_ALL;
-  Array.from(el.querySelectorAll('.route-line-item')).forEach(function(item) {
-    var country = item.getAttribute('data-wp-country') || '';
-    var dim = active && country !== routeCountryFilter;
-    item.classList.toggle('route-line-item-dimmed', dim);
-    var btn = item.querySelector('[data-wp-name]');
-    if (btn) {
-      btn.disabled = dim;
-      btn.setAttribute('aria-disabled', dim ? 'true' : 'false');
-    }
-  });
+  if (el) {
+    var active = routeCountryFilter !== ROUTE_COUNTRY_FILTER_ALL;
+    Array.from(el.querySelectorAll('.route-line-item')).forEach(function(item) {
+      var country = item.getAttribute('data-wp-country') || '';
+      var dim = active && country !== routeCountryFilter;
+      item.classList.toggle('route-line-item-dimmed', dim);
+      var btn = item.querySelector('[data-wp-name]');
+      if (btn) {
+        btn.disabled = dim;
+        btn.setAttribute('aria-disabled', dim ? 'true' : 'false');
+      }
+    });
+  }
+  renderRouteSidePanel(state.lastOrdered || []);
 }
 
 /**
@@ -1512,15 +1518,22 @@ function renderRouteSidePanel(ordered) {
   // 順に数えたもの)と一致させるため、通し番号はグレーアウト中の地点を
   // 数えずに算出する。グレーアウト中の地点は地球儀上に丸が描かれない
   // (tourPointsから除外される)ため番号を振らない。
+  // 国フィルタ(#route-country-filter)のグレーアウトは#route-lineと同じ
+  // route-line-item-dimmedクラスで表現し、毎回の描画時に現在の
+  // routeCountryFilterを読んで反映する(applyRouteCountryFilter()からも
+  // 再描画を呼ぶことでフィルタ変更のライブ反映を両立する)。この減光は
+  // 表示専用でtourPoints(実際の巡回アニメーション対象)には影響しない。
+  var filterActive = routeCountryFilter !== ROUTE_COUNTRY_FILTER_ALL;
   var num = 0;
   el.innerHTML = ordered.map(function(p) {
     var off = !!routeLineExcluded[p.name];
     var label = off ? '-' : String(++num);
     var country = p.country || '';
     var flag = p.flag || '';
-    return '<div class="tour-route-side-row' + (off ? ' off' : '') + '" data-side-name="' + esc(p.name) + '" data-side-lat="' + p.lat + '" data-side-lon="' + p.lon + '" title="タップで地球儀上に名称を表示">'
+    var dim = filterActive && country !== routeCountryFilter;
+    return '<div class="tour-route-side-row' + (off ? ' off' : '') + (dim ? ' route-line-item-dimmed' : '') + '" data-side-name="' + esc(p.name) + '" data-side-country="' + esc(country) + '" data-side-lat="' + p.lat + '" data-side-lon="' + p.lon + '" title="タップで地球儀上に名称を表示">'
       + '<span class="tour-route-side-num">' + esc(label) + '</span>'
-      + '<input type="checkbox" class="tour-route-side-check" data-side-check-name="' + esc(p.name) + '"' + (off ? '' : ' checked') + ' title="OFFで巡回テストから一時的に除外">'
+      + '<input type="checkbox" class="tour-route-side-check" data-side-check-name="' + esc(p.name) + '"' + (off ? '' : ' checked') + (dim ? ' disabled aria-disabled="true"' : '') + ' title="OFFで巡回テストから一時的に除外">'
       + ' ' + (flag ? '<span class="wp-flag" title="' + esc(country) + '">' + esc(flag) + '</span>' : '')
       + esc(p.icon || '📍') + ' ' + esc(p.name) + '</div>';
   }).join('');
