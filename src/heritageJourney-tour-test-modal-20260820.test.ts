@@ -299,7 +299,15 @@ describe('heritage-journeyページ: 「🌐 巡回テスト」モーダル(DOM�
 
       playBtn.click();
       expect(playBtn.textContent).toContain('一時停止');
-      vi.advanceTimersByTime(1000);
+      // 出発地/到着地にも実際の国旗(flag)を持たせるようになったため(ルート順序
+      // パネルの国旗表示・国別フィルタ機能の追加に伴う変更)、出発地から次の
+      // 経由地までが同一国・同一宿泊都市(例: フランス国内でパリ→パリ近郊)だと
+      // 1000ms程度の短い進みではラベル文字列(国旗+宿泊都市)が変化しないことがある。
+      // 固定の短い時間で1回だけ判定せず、宿泊都市が実際に変わるまで少しずつ
+      // 進めることで、ルートの具体的な地理データに依存しない安定した検証にする。
+      for (let i = 0; i < 100 && label.textContent === initialText; i++) {
+        vi.advanceTimersByTime(100);
+      }
       expect(label.textContent).not.toBe(initialText);
 
       // 最後の地点に到達するとstopAnim()がインターバルをclearIntervalするため、
