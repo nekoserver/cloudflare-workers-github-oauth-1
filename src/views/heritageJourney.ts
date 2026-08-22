@@ -1484,6 +1484,14 @@ function renderRouteCountryFilterDropdown(ordered) {
  * グレーアウトを反映するため、renderRouteSidePanel()を再描画して同期させる
  * (モーダル/サイドパネルが開いたままフィルタ選択を変更した場合もこのタイミングで
  * 呼ばれるためライブに更新される)。
+ * 巡回テストモーダル本体の地球儀(#tour-globe-canvas)およびスコープの縮小
+ * プレビュー(#tour-mini-canvas)上の各経由地点(drawWaypointPoint)にも同じ
+ * グレーアウト(減光)を反映するため、renderAll()(定義済みであれば)を呼んで
+ * 次フレームで再描画させる。アニメーション再生中(startAnimのintervalが
+ * renderAll()を毎tick呼ぶ)であってもここで即時に反映しておくことで、
+ * フィルタ変更直後の1フレーム分の表示遅延をなくす。renderAll()は#tour-globe-canvas
+ * 要素の取得より後に定義される関数だが、function宣言のホイスティングにより
+ * このスコープから呼び出し時点で参照可能。
  */
 function applyRouteCountryFilter() {
   var el = document.getElementById('route-line');
@@ -1501,6 +1509,7 @@ function applyRouteCountryFilter() {
     });
   }
   renderRouteSidePanel(state.lastOrdered || []);
+  if (typeof renderAll === 'function') renderAll();
 }
 
 /**
@@ -1989,24 +1998,37 @@ document.getElementById('replay-tour-btn').addEventListener('click', function() 
    * 絵文字はfillStyleの影響を受けない(ブラウザ既定の色で描画される)ため、裏側
    * (pp.visible===false)の減光はglobalAlphaの一時的な引き下げ(0.4)で行い、
    * 描画後は必ず元の値に復元する(以降の描画呼び出しに影響を残さないため)。
+   *
+   * ルート順序セクションの国別フィルタ(#route-country-filter/routeCountryFilter)が
+   * 「すべて」以外を選択している場合、選択国と異なるtp.countryの地点はglobalAlphaを
+   * さらに0.35倍して減光する(route-line-item-dimmedのopacity:.35と同じ濃さに揃える)。
+   * 裏側減光(0.4)と国別フィルタ減光(0.35)は乗算で合成するため、両方に該当する地点は
+   * どちらか一方のみの場合より必ず暗くなる(0.4*0.35=0.14)。tp省略時(country不明)は
+   * 減光しない。
    */
-  function drawWaypointPoint(ctx, pp, icon, i) {
+  function drawWaypointPoint(ctx, pp, icon, i, tp) {
+    var country = (tp && tp.country) || '';
+    var countryDimmed = routeCountryFilter !== ROUTE_COUNTRY_FILTER_ALL && country !== routeCountryFilter;
+    var countryAlphaFactor = countryDimmed ? 0.35 : 1;
     var isTransportGlyph = icon === CLIENT_AIRPORT_ICON || icon === CLIENT_STATION_ICON;
     if (isTransportGlyph) {
       var prevAlpha = ctx.globalAlpha;
-      ctx.globalAlpha = pp.visible ? 1 : 0.4;
+      ctx.globalAlpha = (pp.visible ? 1 : 0.4) * countryAlphaFactor;
       ctx.font = '16px sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.fillStyle = '#e2e8f0';
       ctx.fillText(icon, pp.x, pp.y);
-      ctx.globalAlpha = prevAlpha;
+      ctx.globalAlpha = countryAlphaFactor;
       ctx.textAlign = 'start';
       ctx.textBaseline = 'alphabetic';
       ctx.fillStyle = pp.visible ? '#e2e8f0' : '#64748b';
       ctx.font = '10px sans-serif';
       ctx.fillText(String(i + 1), pp.x + 9, pp.y - 9);
+      ctx.globalAlpha = prevAlpha;
     } else {
+      var prevAlphaCircle = ctx.globalAlpha;
+      ctx.globalAlpha = countryAlphaFactor;
       ctx.fillStyle = pp.visible ? '#f9a8d4' : '#475569';
       ctx.beginPath();
       ctx.arc(pp.x, pp.y, 5, 0, Math.PI * 2);
@@ -2014,6 +2036,7 @@ document.getElementById('replay-tour-btn').addEventListener('click', function() 
       ctx.fillStyle = pp.visible ? '#e2e8f0' : '#64748b';
       ctx.font = '10px sans-serif';
       ctx.fillText(String(i + 1), pp.x + 7, pp.y - 7);
+      ctx.globalAlpha = prevAlphaCircle;
     }
   }
 
@@ -2068,7 +2091,7 @@ document.getElementById('replay-tour-btn').addEventListener('click', function() 
     // 切り出し、テストから直接呼び出して(裏側判定を含む)描画分岐を検証できるようにする。
     projected.forEach(function(pp, i) {
       var tp = tourPoints[i];
-      drawWaypointPoint(ctx, pp, tp && tp.icon, i);
+      drawWaypointPoint(ctx, pp, tp && tp.icon, i, tp);
     });
 
     // 巡回中の現在位置マーカー
@@ -2292,7 +2315,7 @@ document.getElementById('replay-tour-btn').addEventListener('click', function() 
     }
     tourPoints = ordered
       .filter(function(p) { return !routeLineExcluded[p.name]; })
-      .map(function(p) { return { name: p.name, lat: p.lat, lon: p.lon, flag: p.flag, id: p.id, icon: p.icon }; });
+      .map(function(p) { return { name: p.name, lat: p.lat, lon: p.lon, flag: p.flag, id: p.id, icon: p.icon, country: p.country || '' }; });
     updateCurrentTourActiveHeritageIds();
     if (tourPoints.length < 2) {
       miniPanel.style.display = '';
