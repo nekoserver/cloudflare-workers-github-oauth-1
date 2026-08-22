@@ -51,14 +51,17 @@ describe('/aichat-image-gallery の分派を見るボタン', () => {
     expect(html).toContain('id="branchCanvas"');
   });
 
-  it('image_idが無い状態でボタンを押しても例外にならず、案内メッセージを表示する', () => {
+  // 分派の有無を表すボタンの活性状態機能を追加(20260822)。プレビューを一度も
+  // 開いていない(image_idが確定していない)状態ではボタンはdisabledのままであり、
+  // 分派0件の場合と同様に「機能的にクリック不可」でなければならない
+  // (CSSで暗くするだけでクリックが効く実装を禁止するハウスルールに従う)。
+  it('image_idが無い状態(プレビュー未オープン)ではボタンがdisabledで、押しても例外にならずオーバーレイは開かない', () => {
     setupPage();
     const toggle = document.getElementById('previewBranchToggle') as HTMLButtonElement;
+    expect(toggle.disabled).toBe(true);
     expect(() => toggle.dispatchEvent(new Event('click', { bubbles: true }))).not.toThrow();
     const overlay = document.getElementById('branchOverlay');
-    expect(overlay?.classList.contains('open')).toBe(true);
-    const panel = document.getElementById('branchPanel');
-    expect(panel?.textContent).toContain('画像ID');
+    expect(overlay?.classList.contains('open')).toBe(false);
   });
 
   it('画像添付会話をプレビューしてから分派を見るを押すと、API結果ぶんのノードをcanvasに描画する', async () => {
@@ -86,8 +89,11 @@ describe('/aichat-image-gallery の分派を見るボタン', () => {
     const cell = document.querySelector('.gallery-item') as HTMLDivElement;
     expect(cell).toBeTruthy();
     cell.dispatchEvent(new Event('click', { bubbles: true }));
+    // openPreview内で発火するimage-branches取得(ボタンの(N)表示確定)を待つ
+    await flushMicrotasks();
 
     const toggle = document.getElementById('previewBranchToggle') as HTMLButtonElement;
+    expect(toggle.disabled).toBe(false);
     toggle.dispatchEvent(new Event('click', { bubbles: true }));
     await flushMicrotasks();
 

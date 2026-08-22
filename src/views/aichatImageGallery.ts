@@ -95,6 +95,9 @@ h1 { font-size:15px; font-weight:700; flex:1; }
 .preview-highlight-toggle:hover { color:#e6edf3; }
 .preview-branch-toggle { background:#161b22; border:1px solid #30363d; color:#8b949e; font-size:11px; cursor:pointer; padding:4px 8px; border-radius:6px; white-space:nowrap; }
 .preview-branch-toggle:hover { color:#e6edf3; border-color:#58a6ff; }
+.preview-branch-toggle:disabled { opacity:0.35; cursor:not-allowed; pointer-events:none; }
+.preview-branch-toggle.has-branches { color:#e6edf3; animation:previewBranchBlink 1s ease-in-out infinite; }
+@keyframes previewBranchBlink { 0%,100%{border-color:#fef9c3;} 50%{border-color:#facc15;} }
 .kw-highlight { background:#fef08a; color:#1a1a1a; border-radius:2px; padding:0 1px; }
 .preview-chat.highlights-hidden .kw-highlight { background:transparent; color:inherit; outline:none; }
 .branch-overlay {
@@ -148,7 +151,7 @@ ${getMarkdownPreviewCSS()}
       <div class="preview-title">🖼️ 画像添付会話のプレビュー</div>
       <div class="preview-meta" id="previewMeta"></div>
       <button type="button" class="preview-highlight-toggle" id="previewHighlightToggle" title="キーワードハイライトON/OFF">🔑</button>
-      <button type="button" class="preview-branch-toggle" id="previewBranchToggle" title="この画像に対する全モデルの出力を分派図で見る">🌳 分派を見る</button>
+      <button type="button" class="preview-branch-toggle" id="previewBranchToggle" title="この画像に対する全モデルの出力を分派図で見る" disabled>🌳 分派を見る</button>
       <button type="button" class="preview-close" id="previewClose" aria-label="閉じる">✕</button>
     </div>
     <div class="preview-chat" id="previewChat"></div>
@@ -193,9 +196,30 @@ ${getKeywordHighlightScript()}
   // ===== キーワードハイライトON/OFF(AIチャットの詳細プレビューモーダルと共通のapplyKeywordHighlight/clearKeywordHighlightsを使用) =====
   var previewCurrentId = null;
   var previewCurrentImageId = null;
+  var previewCurrentModel = null;
   var previewHighlightActive = false;
   var previewKeywordsFromDB = [];
   var previewDBKeywordsApplied = false;
+  // ===== プレビューを開いた直後に取得する「分派の有無」状態。openPreview完了
+  // 時点でボタンのラベル/blink/活性状態を確定し、openBranchOverlay側では
+  // このキャッシュを使い回して再フェッチを避ける(previewBranchRequestSeqは
+  // 別プレビューへ切り替えた際に古い応答で状態を上書きしないためのガード) =====
+  var previewBranchCache = null;
+  var previewBranchRequestSeq = 0;
+
+  // 分派件数(自分以外の出力件数)確定後にボタンの表示/活性状態を反映する純粋関数。
+  function applyBranchToggleState(button, otherCount) {
+    if (!button) return;
+    if (otherCount > 0) {
+      button.textContent = '🌳 分派を見る (' + otherCount + ')';
+      button.disabled = false;
+      button.classList.add('has-branches');
+    } else {
+      button.textContent = '🌳 分派を見る';
+      button.disabled = true;
+      button.classList.remove('has-branches');
+    }
+  }
 
   function updatePreviewHighlightBtn() {
     var marks = previewChat.querySelectorAll('.kw-highlight');
@@ -267,6 +291,7 @@ ${getKeywordHighlightScript()}
 
     previewCurrentId = item.id;
     previewCurrentImageId = item.image_id || null;
+    previewCurrentModel = item.model || null;
     branchLastImageUrl = item.image_data_url || null;
     previewKeywordsFromDB = [];
     previewDBKeywordsApplied = false;
@@ -278,6 +303,33 @@ ${getKeywordHighlightScript()}
       previewHighlightActive = false;
     }
     updatePreviewHighlightBtn();
+
+    // 分派ボタンの状態はプレビューを開くたびに必ずリセットしてから確定させる
+    // (前の会話の(N)表示・blink・活性状態を引き継がないため)
+    var branchSeq = ++previewBranchRequestSeq;
+    previewBranchCache = null;
+    applyBranchToggleState(previewBranchToggle, 0);
+    if (previewCurrentImageId) {
+      fetch('/api/aichat/image-branches?imageId=' + encodeURIComponent(previewCurrentImageId), { credentials: 'same-origin' })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          if (branchSeq !== previewBranchRequestSeq) return;
+          var items = (data && data.items) || [];
+          // 「現在表示中の出力そのもの」はshareId+modelの組で同定する。同じ
+          // shareId(会話)にllama-4の回答とmoondream3.1の画像分析が両方
+          // 紐づくケースがあるため、shareIdだけでは自分自身以外の判定を
+          // 誤る(取り違えて分派0件と誤判定してしまう)
+          var others = items.filter(function(it) {
+            return !(it.shareId === previewCurrentId && it.model === previewCurrentModel);
+          });
+          previewBranchCache = items;
+          applyBranchToggleState(previewBranchToggle, others.length);
+        })
+        .catch(function() {
+          if (branchSeq !== previewBranchRequestSeq) return;
+          applyBranchToggleState(previewBranchToggle, 0);
+        });
+    }
 
     previewOverlay.classList.add('open');
   }
@@ -393,12 +445,21 @@ ${getKeywordHighlightScript()}
       branchOverlay.classList.add('open');
       return;
     }
-    branchPanel.textContent = '読み込み中...';
     branchOverlay.classList.add('open');
+    // openPreview時点で取得済みのレスポンスを使い回し、モーダルを開くたびの
+    // 再フェッチを避ける(ボタンの(N)表示に使ったのと同じデータソース)
+    if (previewBranchCache) {
+      branchItems = previewBranchCache;
+      branchPanel.textContent = branchItems.length + ' 件の出力が見つかりました。ノードをタップすると内容を表示します';
+      drawBranchDiagram(branchLastImageUrl, branchItems);
+      return;
+    }
+    branchPanel.textContent = '読み込み中...';
     fetch('/api/aichat/image-branches?imageId=' + encodeURIComponent(previewCurrentImageId), { credentials: 'same-origin' })
       .then(function(r) { return r.json(); })
       .then(function(data) {
         branchItems = (data && data.items) || [];
+        previewBranchCache = branchItems;
         branchPanel.textContent = branchItems.length + ' 件の出力が見つかりました。ノードをタップすると内容を表示します';
         drawBranchDiagram(branchLastImageUrl, branchItems);
       })
@@ -412,6 +473,9 @@ ${getKeywordHighlightScript()}
   if (previewBranchToggle) {
     previewBranchToggle.addEventListener('click', function(e) {
       e.stopPropagation();
+      // house rule: 「無効」はCSSの見た目だけでなく、必ずクリックを弾く
+      // ガードを併記する(disabled属性のみに頼らない)
+      if (previewBranchToggle.disabled) return;
       openBranchOverlay();
     });
   }

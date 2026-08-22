@@ -282,4 +282,135 @@ describe('getAichatImageGalleryPage', () => {
       expect.objectContaining({ credentials: 'same-origin' })
     );
   });
+
+  // 対象: プレビューモーダルの「🌳 分派を見る」ボタン(#previewBranchToggle)。
+  // /api/aichat/image-branches の応答(自分以外の出力件数)を反映し、
+  // (1) 件数>0: ラベルに"(N)"を付け、有効化し、薄黄色の点滅枠を付ける
+  // (2) 件数===0: ラベルは素のまま、disabled属性で機能的にクリック不可にする
+  //     (CSSで見た目を暗くするだけでクリックが効いてしまう実装を禁止する
+  //     ハウスルールに従い、クリックハンドラ側にも早期returnガードを持たせる)
+  // (3) 別のプレビューへ切り替えた際、前の会話のボタン状態を引き継がない
+  //
+  // 故障シナリオ:
+  //   (1) ボタンの初期状態(プレビューを開く前)がdisabledでなく、誤ってクリック可能
+  //   (2) 件数0の応答なのに何らかの理由でボタンが有効化されてしまう
+  //   (3) 件数>0の応答なのにhas-branches(blink)クラスが付かない
+  //   (4) 前の会話でN>0だった状態が、N=0の次の会話に引き継がれてしまう(表示のみ
+  //       ならず内部状態=previewBranchCache/previewBranchRequestSeqの競合含む)
+  //   (5) previewBranchToggleのfetchが完了する前に別プレビューに切り替えた場合、
+  //       古い応答が新しいプレビューの状態を上書きしてしまう(レースコンディション)
+  function setupWithBranches(branchesByImageId: Record<string, unknown[]>) {
+    const html = getAichatImageGalleryPage('testuser');
+    document.body.innerHTML = html.slice(html.indexOf('<body>') + 6, html.lastIndexOf('<script>'));
+    const scriptSrc = html.slice(html.lastIndexOf('<script>') + 8, html.lastIndexOf('</script>'));
+    const resultMany = {
+      id: 'share-many', user_hash: 'u1', question: 'ねこの写真です', answer: 'かわいいねこですね',
+      model: 'm', created_at: 't', image_data_url: 'data:image/png;base64,AAAA', image_id: 'img-many',
+    };
+    const resultNone = {
+      id: 'share-none', user_hash: 'u1', question: 'いぬの写真です', answer: 'かわいいいぬですね',
+      model: 'm', created_at: 't', image_data_url: 'data:image/png;base64,BBBB', image_id: 'img-none',
+    };
+    const fetchMock = vi.fn((url: string) => {
+      const u = String(url);
+      if (u.indexOf('/api/aichat/image-gallery-search') === 0) {
+        return Promise.resolve({ json: () => Promise.resolve({ results: [resultMany, resultNone] }) });
+      }
+      if (u.indexOf('/api/aichat/image-branches') === 0) {
+        const m = /imageId=([^&]+)/.exec(u);
+        const imageId = m ? decodeURIComponent(m[1]) : '';
+        return Promise.resolve({ json: () => Promise.resolve({ items: branchesByImageId[imageId] || [] }) });
+      }
+      return Promise.resolve({ json: () => Promise.resolve({}) });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    // eslint-disable-next-line no-new-func
+    new Function(scriptSrc)();
+    return { fetchMock };
+  }
+
+  it('分派ボタンはプレビューを開く前はdisabledで、クリック不可能な状態のマークアップになっている', () => {
+    const html = getAichatImageGalleryPage('testuser');
+    expect(html).toMatch(/id="previewBranchToggle"[^>]*disabled/);
+  });
+
+  it('(DOM実動作) 分派が他に存在する(N>0)場合、ラベルに(N)を付け有効化しblinkクラスを付ける', async () => {
+    setupWithBranches({
+      'img-many': [
+        { modelFamily: 'llama-4', shareId: 'share-many', question: 'q', answer: 'a', model: 'm', created_at: 't' },
+        { modelFamily: 'moondream3.1', shareId: 'share-other', question: null, answer: 'x', model: 'm2', created_at: 't' },
+      ],
+    });
+    const searchInput = document.getElementById('gallerySearchInput') as HTMLInputElement;
+    const searchBtn = document.getElementById('gallerySearchBtn') as HTMLButtonElement;
+    searchInput.value = 'ねこ';
+    searchBtn.click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const items = document.querySelectorAll('.gallery-item');
+    (items[0] as HTMLElement).click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const toggleBtn = document.getElementById('previewBranchToggle') as HTMLButtonElement;
+    expect(toggleBtn.textContent).toContain('分派を見る (1)');
+    expect(toggleBtn.disabled).toBe(false);
+    expect(toggleBtn.classList.contains('has-branches')).toBe(true);
+  });
+
+  it('(DOM実動作) 分派が他に存在しない(N=0)場合、ラベルは素のまま・disabled・クリックしても分派オーバーレイが開かない', async () => {
+    setupWithBranches({
+      'img-none': [
+        { modelFamily: 'llama-4', shareId: 'share-none', question: 'q', answer: 'a', model: 'm', created_at: 't' },
+      ],
+    });
+    const searchInput = document.getElementById('gallerySearchInput') as HTMLInputElement;
+    const searchBtn = document.getElementById('gallerySearchBtn') as HTMLButtonElement;
+    searchInput.value = 'いぬ';
+    searchBtn.click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const items = document.querySelectorAll('.gallery-item');
+    (items[1] as HTMLElement).click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const toggleBtn = document.getElementById('previewBranchToggle') as HTMLButtonElement;
+    expect(toggleBtn.textContent.trim()).toBe('🌳 分派を見る');
+    expect(toggleBtn.disabled).toBe(true);
+    expect(toggleBtn.classList.contains('has-branches')).toBe(false);
+
+    toggleBtn.click();
+    const branchOverlay = document.getElementById('branchOverlay')!;
+    expect(branchOverlay.classList.contains('open')).toBe(false);
+  });
+
+  it('(DOM実動作) 別の会話(分派件数が異なる)をプレビューし直すと、前の会話のボタン状態を引き継がない', async () => {
+    setupWithBranches({
+      'img-many': [
+        { modelFamily: 'llama-4', shareId: 'share-many', question: 'q', answer: 'a', model: 'm', created_at: 't' },
+        { modelFamily: 'moondream3.1', shareId: 'share-other', question: null, answer: 'x', model: 'm2', created_at: 't' },
+      ],
+      'img-none': [
+        { modelFamily: 'llama-4', shareId: 'share-none', question: 'q', answer: 'a', model: 'm', created_at: 't' },
+      ],
+    });
+    const searchInput = document.getElementById('gallerySearchInput') as HTMLInputElement;
+    const searchBtn = document.getElementById('gallerySearchBtn') as HTMLButtonElement;
+    searchInput.value = '写真';
+    searchBtn.click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const items = document.querySelectorAll('.gallery-item');
+    const toggleBtn = document.getElementById('previewBranchToggle') as HTMLButtonElement;
+
+    (items[0] as HTMLElement).click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(toggleBtn.textContent).toContain('(1)');
+    expect(toggleBtn.disabled).toBe(false);
+
+    (items[1] as HTMLElement).click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(toggleBtn.textContent.trim()).toBe('🌳 分派を見る');
+    expect(toggleBtn.disabled).toBe(true);
+    expect(toggleBtn.classList.contains('has-branches')).toBe(false);
+  });
 });
