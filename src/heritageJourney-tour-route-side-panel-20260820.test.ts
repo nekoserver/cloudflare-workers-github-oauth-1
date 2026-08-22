@@ -48,7 +48,9 @@ describe('heritage-journeyページ: 巡回テストモーダルのルート順�
 
   it('サイドパネルの並び順・地点数は#route-lineと一致する(出発点から順)', () => {
     setupPage();
-    const routeNames = Array.from(document.querySelectorAll('#route-line [data-wp-name]')).map((el) => el.getAttribute('data-wp-name'));
+    // 出発地・到着地はbutton.wp-badge(data-wp-name)を持たないため、行全体を
+    // 表す.route-line-item(data-wp-item-name)を基準に#route-line側の並びを取得する。
+    const routeNames = Array.from(document.querySelectorAll('#route-line .route-line-item[data-wp-item-name]')).map((el) => el.getAttribute('data-wp-item-name'));
     const sideNames = Array.from(document.querySelectorAll('#tour-route-side-list [data-side-name]')).map((el) => el.getAttribute('data-side-name'));
     expect(sideNames).toEqual(routeNames);
     expect(sideNames.length).toBeGreaterThan(0);

@@ -106,14 +106,16 @@ describe('heritage-journeyページ: ルート順序パネルの国旗表示・�
     expect(matching.length).toBeGreaterThan(0);
     matching.forEach((it) => {
       expect(it.classList.contains('route-line-item-dimmed')).toBe(false);
-      const btn = it.querySelector('[data-wp-name]') as HTMLButtonElement;
-      expect(btn.disabled).toBe(false);
+      // 出発地・到着地の行はbutton.wp-badge(data-wp-name)を持たないため、
+      // 存在する場合のみdisabled状態を検証する。
+      const btn = it.querySelector('[data-wp-name]') as HTMLButtonElement | null;
+      if (btn) expect(btn.disabled).toBe(false);
     });
     if (others.length > 0) {
       others.forEach((it) => {
         expect(it.classList.contains('route-line-item-dimmed')).toBe(true);
-        const btn = it.querySelector('[data-wp-name]') as HTMLButtonElement;
-        expect(btn.disabled).toBe(true);
+        const btn = it.querySelector('[data-wp-name]') as HTMLButtonElement | null;
+        if (btn) expect(btn.disabled).toBe(true);
       });
     }
   });
@@ -127,7 +129,9 @@ describe('heritage-journeyページ: ルート順序パネルの国旗表示・�
     sel.dispatchEvent(new Event('change'));
 
     const items = routeItems();
-    const others = items.filter((it) => it.getAttribute('data-wp-country') !== targetValue);
+    // 出発地・到着地の行はbutton.wp-badge(data-wp-name)自体を持たずクリック
+    // しても何も起きないため、バッジを持つ経由地の行だけを対象に検証する。
+    const others = items.filter((it) => it.getAttribute('data-wp-country') !== targetValue && it.querySelector('[data-wp-name]'));
     if (others.length === 0) return; // 単一国ルートの場合は対象なしなのでスキップ
     const btn = others[0].querySelector('[data-wp-name]') as HTMLButtonElement;
     const wasOff = btn.classList.contains('wp-badge-off');
@@ -149,8 +153,10 @@ describe('heritage-journeyページ: ルート順序パネルの国旗表示・�
     const items = routeItems();
     items.forEach((it) => {
       expect(it.classList.contains('route-line-item-dimmed')).toBe(false);
-      const btn = it.querySelector('[data-wp-name]') as HTMLButtonElement;
-      expect(btn.disabled).toBe(false);
+      // 出発地・到着地の行はbutton.wp-badge(data-wp-name)を持たないため、
+      // 存在する場合のみdisabled解除を検証する。
+      const btn = it.querySelector('[data-wp-name]') as HTMLButtonElement | null;
+      if (btn) expect(btn.disabled).toBe(false);
     });
   });
 

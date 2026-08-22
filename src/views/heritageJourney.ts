@@ -280,6 +280,8 @@ h1{font-size:22px;margin:0 0 4px}
 #tour-mini-canvas{display:block;width:260px;height:260px;margin:10px auto;background:#0b1220;border-radius:50%;border:1px solid #1e293b;cursor:pointer}
 .wp-badge{display:inline-block;background:#1e293b;border:1px solid #334155;border-radius:999px;padding:2px 9px;white-space:nowrap;color:#cbd5e1;font-family:inherit;font-size:12px;cursor:pointer}
 .wp-badge:hover{border-color:#38bdf8;color:#fff}
+.wp-badge-fixed{cursor:default}
+.wp-badge-fixed:hover{border-color:#334155;color:#cbd5e1}
 .wp-badge-off{background:#0b1220;border-color:#1e293b;color:#4b5563;text-decoration:line-through;opacity:.6}
 .wp-badge-off:hover{border-color:#475569;color:#94a3b8}
 .wp-arrow{color:#64748b;margin:0 4px}
@@ -1389,13 +1391,21 @@ var ROUTE_COUNTRY_FILTER_ALL = '__ALL__';
 var routeCountryFilter = ROUTE_COUNTRY_FILTER_ALL;
 
 function renderRouteLine(ordered) {
-  document.getElementById('route-line').innerHTML = ordered.map(function(p) {
+  document.getElementById('route-line').innerHTML = ordered.map(function(p, idx) {
     var off = !!routeLineExcluded[p.name];
     var country = p.country || '';
     var flag = p.flag || '';
-    return '<span class="route-line-item" data-wp-country="' + esc(country) + '">'
-      + '<button type="button" class="wp-badge' + (off ? ' wp-badge-off' : '') + '" data-wp-name="' + esc(p.name) + '" title="タップで巡回テストから一時的に除外/復帰">'
-      + esc(p.icon || '📍') + ' ' + esc(p.name) + '</button>'
+    // 出発地(先頭行)・到着地(最終行)はルートの起点・終点であり巡回テストから
+    // 除外する対象になり得ないため、ON/OFFトグルバッジ(button.wp-badge)は
+    // 描画せず、非interactiveな固定マーカー(.wp-badge-fixed)として名称・
+    // アイコンのみ表示する。中間の経由地は従来通りトグル可能なbuttonにする。
+    var isEndpoint = idx === 0 || idx === ordered.length - 1;
+    var badgeHtml = isEndpoint
+      ? '<span class="wp-badge wp-badge-fixed">' + esc(p.icon || '📍') + ' ' + esc(p.name) + '</span>'
+      : '<button type="button" class="wp-badge' + (off ? ' wp-badge-off' : '') + '" data-wp-name="' + esc(p.name) + '" title="タップで巡回テストから一時的に除外/復帰">'
+        + esc(p.icon || '📍') + ' ' + esc(p.name) + '</button>';
+    return '<span class="route-line-item" data-wp-country="' + esc(country) + '" data-wp-item-name="' + esc(p.name) + '">'
+      + badgeHtml
       + (flag ? '<span class="wp-flag" title="' + esc(country) + '">' + esc(flag) + '</span>' : '')
       + '</span>';
   }).join('<span class="wp-arrow">→</span>');

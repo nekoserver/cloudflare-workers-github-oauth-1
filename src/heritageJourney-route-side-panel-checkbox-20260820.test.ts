@@ -55,7 +55,12 @@ describe('heritage-journeyページ: チェックボックスOFFで地球儀の�
 
   it('チェックボックスをOFFにすると、その行はグレーアウトされ#route-line側のバッジも同期する', () => {
     setupPage();
-    const check = document.querySelector('#tour-route-side-list [data-side-check-name]') as HTMLInputElement;
+    // 出発地・到着地の行はbutton.wp-badge(data-wp-name)を持たず#route-line側に
+    // 同期対象が無いため、#route-lineにバッジが存在する中間の経由地の
+    // チェックボックスを対象に検証する。
+    const routeBadgeNames = Array.from(document.querySelectorAll('#route-line [data-wp-name]')).map((el) => el.getAttribute('data-wp-name'));
+    const check = Array.from(document.querySelectorAll('#tour-route-side-list [data-side-check-name]'))
+      .find((el) => routeBadgeNames.includes(el.getAttribute('data-side-check-name'))) as HTMLInputElement;
     const name = check.getAttribute('data-side-check-name')!;
 
     check.checked = false;
