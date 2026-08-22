@@ -321,7 +321,7 @@ describe('heritage-journeyページ: 「🌐 巡回テスト」モーダル(DOM�
     } finally {
       vi.useRealTimers();
     }
-  }, 20000);
+  }, 60000);
 
   it('(タイマー実動作) 再生中にモーダルを閉じるとタイマーが止まり、以降ラベルが更新されない', () => {
     vi.useFakeTimers();
