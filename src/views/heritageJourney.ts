@@ -1399,13 +1399,21 @@ function renderRouteLine(ordered) {
     // 除外する対象になり得ないため、ON/OFFトグルバッジ(button.wp-badge)は
     // 描画せず、非interactiveな固定マーカー(.wp-badge-fixed)として名称・
     // アイコンのみ表示する。中間の経由地は従来通りトグル可能なbuttonにする。
-    var isEndpoint = idx === 0 || idx === ordered.length - 1;
+    // 出発地は📍、到着地は🏁のアイコンで区別する(中間地点はp.icon)。
+    var isFirst = idx === 0;
+    var isLast = idx === ordered.length - 1;
+    var isEndpoint = isFirst || isLast;
+    var icon = isEndpoint ? (isFirst ? '📍' : '🏁') : (p.icon || '📍');
+    var flagHtml = flag ? '<span class="wp-flag" title="' + esc(country) + '">' + esc(flag) + '</span>' : '';
+    // 表示順: 中間の経由地は「→ 国旗 アイコン(名称)」(国旗が矢印の直後)。
+    // 固定マーカー(出発地・到着地)はアイコン(📍/🏁)を先頭に保ったまま
+    // 「アイコン 国旗 名称」の順にする(国旗を都市名の直前に移動)。
     var badgeHtml = isEndpoint
-      ? '<span class="wp-badge wp-badge-fixed">' + esc(p.icon || '📍') + ' ' + esc(p.name) + '</span>'
+      ? '<span class="wp-badge wp-badge-fixed">' + esc(icon) + flagHtml + ' ' + esc(p.name) + '</span>'
       : '<button type="button" class="wp-badge' + (off ? ' wp-badge-off' : '') + '" data-wp-name="' + esc(p.name) + '" title="タップで巡回テストから一時的に除外/復帰">'
-        + esc(p.icon || '📍') + ' ' + esc(p.name) + '</button>';
+        + esc(icon) + ' ' + esc(p.name) + '</button>';
     return '<span class="route-line-item" data-wp-country="' + esc(country) + '" data-wp-item-name="' + esc(p.name) + '">'
-      + (flag ? '<span class="wp-flag" title="' + esc(country) + '">' + esc(flag) + '</span>' : '')
+      + (isEndpoint ? '' : flagHtml)
       + badgeHtml
       + '</span>';
   }).join('<span class="wp-arrow">→</span>');
