@@ -4792,6 +4792,93 @@ export function buildAichatImageBranchItems(
 }
 
 /**
+ * /aichat-image-gallery の検索結果グリッド用。1枚のimage_idに紐づく他モデルの
+ * 出力一覧(shareId, modelの組)を、image_idをキーにまとめる純粋関数
+ * (DBアクセスなし、shapingのみ)。buildAichatImageBranchItemsと同じ「他」の
+ * 定義(image_idが同じで(shareId, model)の組が異なる行)を、グリッド全件へ
+ * 一括付与するために使う。
+ */
+export function groupAichatBranchRowsByImageId(
+  shareRows: Array<{ image_id: string; shareId: string; model: string }>,
+  moondreamRows: Array<{ image_id: string; shareId: string; model: string }>,
+): Map<string, Array<{ shareId: string; model: string }>> {
+  const byImage = new Map<string, Array<{ shareId: string; model: string }>>();
+  for (const row of [...shareRows, ...moondreamRows]) {
+    const list = byImage.get(row.image_id);
+    if (list) {
+      list.push({ shareId: row.shareId, model: row.model });
+    } else {
+      byImage.set(row.image_id, [{ shareId: row.shareId, model: row.model }]);
+    }
+  }
+  return byImage;
+}
+
+/**
+ * 上記でimage_id単位にまとめた一覧から、自分自身(ownShareId, ownModelが完全
+ * 一致する行)を除いた「他モデルの出力件数」を数える純粋関数。
+ */
+export function countOtherAichatBranches(
+  rowsForImage: Array<{ shareId: string; model: string }>,
+  ownShareId: string,
+  ownModel: string,
+): number {
+  return rowsForImage.filter((r) => !(r.shareId === ownShareId && r.model === ownModel)).length;
+}
+
+/**
+ * /aichat-image-gallery の検索結果グリッド(GET /api/aichat/image-gallery-search)用。
+ * プレビューモーダルを開く前の段階で「他モデルの分派出力が存在する画像」を
+ * カードの枠色で判別できるようにするため、検索結果の各行へ branch_count
+ * (自分以外の(shareId, model)行数)を付与する。
+ *
+ * PR #1447の「🌳 分派を見る」ボタンは1件のプレビューを開くたびに
+ * /api/aichat/image-branches を1回叩く遅延取得方式だが、グリッドは同時に
+ * 多数の結果を表示するためN+1になってしまう。ここでは results に含まれる
+ * image_id の集合をキーに、ai_chat_shares・aichat_moondream_analyses それぞれへ
+ * 1〜数回のグルーピング済みバッチ問い合わせを行い(D1のバインド上限に収まる
+ * よう chunkBindValues でチャンク分割)、N+1を避ける。
+ */
+export async function enrichAichatGalleryResultsWithBranchCounts<
+  T extends { id: string; image_id: string | null; model: string }
+>(db: D1Like, userId: string, results: T[]): Promise<(T & { branch_count: number })[]> {
+  if (results.length === 0) return [];
+
+  const imageIds = Array.from(new Set(
+    results.map((r) => r.image_id).filter((v): v is string => !!v)
+  ));
+  if (imageIds.length === 0) {
+    return results.map((r) => ({ ...r, branch_count: 0 }));
+  }
+
+  const shareRows: Array<{ image_id: string; shareId: string; model: string }> = [];
+  const moondreamRows: Array<{ image_id: string; shareId: string; model: string }> = [];
+
+  for (const chunk of chunkBindValues(imageIds, D1_MAX_BOUND_PARAMS - 1)) {
+    if (chunk.length === 0) continue;
+    const placeholders = chunk.map(() => '?').join(',');
+    const shareRes = await db.prepare(
+      `SELECT image_id, id AS shareId, model FROM ai_chat_shares
+       WHERE user_id = ? AND deleted_at IS NULL AND image_id IN (${placeholders})`
+    ).bind(userId, ...chunk).all<{ image_id: string; shareId: string; model: string }>();
+    shareRows.push(...(shareRes.results ?? []));
+
+    const moondreamRes = await db.prepare(
+      `SELECT image_id, share_id AS shareId, model FROM aichat_moondream_analyses
+       WHERE user_id = ? AND image_id IN (${placeholders})`
+    ).bind(userId, ...chunk).all<{ image_id: string; shareId: string; model: string }>();
+    moondreamRows.push(...(moondreamRes.results ?? []));
+  }
+
+  const byImage = groupAichatBranchRowsByImageId(shareRows, moondreamRows);
+
+  return results.map((r) => ({
+    ...r,
+    branch_count: r.image_id ? countOtherAichatBranches(byImage.get(r.image_id) ?? [], r.id, r.model) : 0,
+  }));
+}
+
+/**
  * テキストに含まれる登録済みキーワードだけを返す（大文字小文字を無視）。
  * /answer-graph の回答伝播グラフ構築で使う。
  */
@@ -9920,7 +10007,8 @@ app.get('/api/aichat/image-gallery-search', authMiddleware, async (c) => {
   const { results } = target === 'moondream3.1'
     ? await searchAichatMoondreamAnalyses(db, user.sub, q)
     : await searchAiChatSharesWithImage(db, user.sub, q);
-  return jsonUtf8({ results });
+  const enriched = await enrichAichatGalleryResultsWithBranchCounts(db, user.sub, results);
+  return jsonUtf8({ results: enriched });
 });
 
 // /aichat-image-gallery プレビューモーダルの「🌳 分派を見る」用。1枚の画像(image_id)に
