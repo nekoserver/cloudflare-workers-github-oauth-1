@@ -139,6 +139,8 @@ h1{font-size:22px;margin:0 0 4px}
 .section-title{font-size:14px;font-weight:700;margin:0 0 10px;color:#93c5fd}
 .city-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 .city-row select{background:#0b1220;border:1px solid #475569;color:#e2e8f0;border-radius:8px;padding:8px 10px;font-size:13px;font-family:inherit}
+#start-city option.start-city-option-registered{background:#bbf7d0;color:#064e3b}
+#start-city option.start-city-option-unregistered{background:transparent;border:2px solid #bbf7d0}
 #end-city-picker-btn{background:#0b1220;border:1px solid #475569;color:#e2e8f0;border-radius:8px;padding:8px 10px;font-size:13px;font-family:inherit;cursor:pointer}
 #end-city-picker-btn:hover{border-color:#38bdf8;color:#fff}
 .end-city-picker-table{width:100%;border-collapse:collapse;font-size:12px}
@@ -958,6 +960,62 @@ function updateRegisterRouteButton() {
     });
 }
 
+// APIレスポンス(/api/heritage-journey/registered-starts-for-destination)から
+// 登録済み出発地名(ラベル文字列)のセットを組み立てる純粋関数。
+// data.startsが配列でない場合(空レスポンス、null、フェッチ失敗時のフォールバック等)は
+// 全て未登録扱いとして空のセットを返し、誤って登録済み扱い(misclassify)にしない。
+function buildRegisteredStartsSet(data) {
+  var set = {};
+  if (!data || !Array.isArray(data.starts)) return set;
+  data.starts.forEach(function(s) {
+    if (typeof s === 'string' && s) set[s] = true;
+  });
+  return set;
+}
+
+// #start-city(出発地セレクト)の各<option>に、ロックされている到着地(#end-city)との
+// 組み合わせがheritage_journey_registered_routesに登録済みかどうかを視覚的に示す。
+// 登録済み: 薄緑色の塗りつぶし(#bbf7d0 / 文字色#064e3b、登録済みルートモーダルの
+// ハイライトと同じ配色)。未登録: 薄緑色の中抜き枠(border:2px solid #bbf7d0、背景は透過)。
+// これは「ルート登録ボタンが出てこない」判定バグ自体の修正ではなく、
+// 出発地ごとの登録状態を目視で確認できるようにする診断/UX目的の表示。
+function applyStartCityRegisteredIndicator(registeredStartsSet) {
+  var startSel = document.getElementById('start-city');
+  if (!startSel) return;
+  var opts = startSel.options;
+  for (var i = 0; i < opts.length; i++) {
+    var opt = opts[i];
+    var city = getCity(opt.value);
+    var label = city ? city.label : opt.value;
+    if (registeredStartsSet[label]) {
+      opt.className = 'start-city-option-registered';
+      opt.style.cssText = 'background:#bbf7d0;color:#064e3b;';
+    } else {
+      opt.className = 'start-city-option-unregistered';
+      opt.style.cssText = 'background:transparent;border:2px solid #bbf7d0;';
+    }
+  }
+}
+
+// ロックされている到着地(#end-cityの現在値)を対象に、登録済み出発地一覧をAPIから
+// 取得してapplyStartCityRegisteredIndicator()へ反映する。到着地の変更のたびに
+// 呼び直すことで、常に「現在ロックされている到着地」に対する判定を表示する。
+// fetch失敗時・レスポンス不正時は例外を投げず、全オプションを未登録扱いにフォールバックする。
+function updateStartCityRegisteredIndicator() {
+  var endSel = document.getElementById('end-city');
+  if (!endSel) return;
+  var endCity = getCity(endSel.value);
+  var endLabel = endCity ? endCity.label : endSel.value;
+  fetch('/api/heritage-journey/registered-starts-for-destination?end=' + encodeURIComponent(endLabel))
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      applyStartCityRegisteredIndicator(buildRegisteredStartsSet(data));
+    })
+    .catch(function() {
+      applyStartCityRegisteredIndicator({});
+    });
+}
+
 // 「経由地: 1 0123, 2 0456, ...」形式の文字列を、現在ON状態の
 // heritage_master ID配列(currentTourActiveHeritageIds、巡回順)から生成する。
 function buildWaypointHeritageIdsString() {
@@ -1106,6 +1164,7 @@ function clearRegisterRouteError() {
       .then(function(data) {
         if (data && data.ok) {
           btn.remove();
+          updateStartCityRegisteredIndicator();
         } else {
           btn.disabled = false;
           showRegisterRouteError((data && data.error) ? data.error : '登録に失敗しました');
@@ -1202,6 +1261,7 @@ function renderNightsDistribution() {
           renderCandidates();
           recompute();
           updateRegisterRouteButton();
+          updateStartCityRegisteredIndicator();
         });
       });
     });
@@ -2320,6 +2380,7 @@ document.getElementById('swap-btn').addEventListener('click', function() {
   state.selected = {}; manuallyAddedPoints = {};
   updateEndCityPickerBtnLabel();
   renderCandidates(); recompute(); renderNightsDistribution(); updateRegisterRouteButton();
+  updateStartCityRegisteredIndicator();
 });
 document.getElementById('start-city').addEventListener('change', function() {
   state.selected = {}; manuallyAddedPoints = {}; renderCandidates(); recompute(); renderNightsDistribution(); updateRegisterRouteButton();
@@ -2327,6 +2388,7 @@ document.getElementById('start-city').addEventListener('change', function() {
 document.getElementById('end-city').addEventListener('change', function() {
   updateEndCityPickerBtnLabel();
   state.selected = {}; manuallyAddedPoints = {}; recompute(); updateRegisterRouteButton();
+  updateStartCityRegisteredIndicator();
 });
 ['opt-detour','opt-speed','opt-visit','opt-nights'].forEach(function(id) {
   document.getElementById(id).addEventListener('input', function() { renderCandidates(); recompute(); });
@@ -2403,6 +2465,7 @@ renderCandidates();
 recompute();
 renderNightsDistribution();
 updateRegisterRouteButton();
+updateStartCityRegisteredIndicator();
 </script>
 </body>
 </html>`;

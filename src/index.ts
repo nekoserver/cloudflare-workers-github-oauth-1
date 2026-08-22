@@ -9123,6 +9123,22 @@ app.get('/api/heritage-journey/route-exists', authMiddleware, async (c) => {
   }
 });
 
+app.get('/api/heritage-journey/registered-starts-for-destination', authMiddleware, async (c) => {
+  const end = c.req.query('end') || '';
+  if (!end) return c.json({ error: 'end required' }, 400);
+  const db = c.env.DB;
+  if (!db) return c.json({ starts: [], error: 'DB unavailable' });
+  try {
+    const rows = await db.prepare(
+      'SELECT start_city FROM heritage_journey_registered_routes WHERE end_city = ?'
+    ).bind(end).all<{ start_city: string }>();
+    return c.json({ starts: rows.results.map(r => r.start_city) });
+  } catch (err) {
+    console.error('[heritage-journey/registered-starts-for-destination] DB query failed', err);
+    return c.json({ starts: [], error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
 app.post('/api/heritage-journey/register-route', authMiddleware, async (c) => {
   const body = await c.req.json<{ start: string; end: string; startLat: number; startLon: number; endLat: number; endLon: number }>().catch(() => null);
   if (!body || !body.start || !body.end || body.startLat == null || body.startLon == null || body.endLat == null || body.endLon == null) {
