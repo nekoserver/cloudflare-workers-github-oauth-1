@@ -32,6 +32,7 @@ export function getSettingsPage(user: {
   answerGraphHideEmptyRows?: string;
   answerGraphTrailSessionStorage?: string;
   aichatPreferMoondream?: string;
+  heritageTourCountryFilter?: string;
   wasmModulesViewMode?: string;
   emailConfirmLoginEnabled?: boolean;
   githubScopes?: string;
@@ -66,6 +67,7 @@ export function getSettingsPage(user: {
   const currentAnswerGraphHideEmptyRows = user.answerGraphHideEmptyRows === 'off' ? 'off' : 'on';
   const currentAnswerGraphTrailSessionStorage = user.answerGraphTrailSessionStorage === 'on' ? 'on' : 'off';
   const currentAichatPreferMoondream = user.aichatPreferMoondream === 'off' ? 'off' : 'on';
+  const currentHeritageTourCountryFilter = user.heritageTourCountryFilter === 'off' ? 'off' : 'on';
   const currentWasmModulesViewMode = user.wasmModulesViewMode === 'panel' ? 'panel' : 'list';
   const currentEmailConfirmLoginEnabled = user.emailConfirmLoginEnabled === true;
   const requestedScopes = user.githubScopes ? user.githubScopes.split(/\s+/).filter(Boolean) : [];
@@ -691,6 +693,17 @@ export function getSettingsPage(user: {
               <label class="theme-toggle-switch">
                 <input type="checkbox" id="answerGraphHideEmptyRowsCheckbox" onchange="onAnswerGraphHideEmptyRowsChange()"
                   ${currentAnswerGraphHideEmptyRows === 'on' ? 'checked' : ''}>
+                <span class="theme-toggle-slider"></span>
+              </label>
+            </div>
+          </div>
+          <div class="info-item">
+            <span class="info-label">世界遺産の巡回ルート処理時に国別フィルタを適用する(ルート順序の国旗ドロップダウンで絞り込んだ国以外を「🎬巡回ルートを再現する🌏」実行時のデータから除外します。OFFにすると常に全地点を渡します)</span>
+            <div class="setting-control" style="justify-content: flex-end;">
+              <span class="theme-label" id="heritageTourCountryFilterLabel">${currentHeritageTourCountryFilter === 'on' ? 'ON' : 'OFF'}</span>
+              <label class="theme-toggle-switch">
+                <input type="checkbox" id="heritageTourCountryFilterCheckbox" onchange="onHeritageTourCountryFilterChange()"
+                  ${currentHeritageTourCountryFilter === 'on' ? 'checked' : ''}>
                 <span class="theme-toggle-slider"></span>
               </label>
             </div>
@@ -1618,6 +1631,25 @@ export function getSettingsPage(user: {
         if (!res.ok) throw new Error('failed');
       } catch(e) {
         alert('answer-graphの空行非表示設定の変更に失敗しました');
+        cb.checked = !cb.checked;
+        label.textContent = cb.checked ? 'ON' : 'OFF';
+      }
+    }
+
+    async function onHeritageTourCountryFilterChange() {
+      var cb = document.getElementById('heritageTourCountryFilterCheckbox');
+      var label = document.getElementById('heritageTourCountryFilterLabel');
+      var enabled = cb.checked;
+      var mode = enabled ? 'on' : 'off';
+      label.textContent = enabled ? 'ON' : 'OFF';
+      try {
+        var res = await fetch('/api/settings/heritage-tour-country-filter', {
+          method: 'POST', headers: {'Content-Type':'application/json'}, credentials: 'include',
+          body: JSON.stringify({ mode })
+        });
+        if (!res.ok) throw new Error('failed');
+      } catch(e) {
+        alert('世界遺産の巡回ルート国別フィルタ設定の変更に失敗しました');
         cb.checked = !cb.checked;
         label.textContent = cb.checked ? 'ON' : 'OFF';
       }

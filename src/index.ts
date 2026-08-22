@@ -87,7 +87,7 @@ import { sendTestEmailResend } from './utils/emailVerify';
 import { buildAuthRedirectHeaders } from './utils/emailConfirm';
 import { runEmailConfirmGate, resolveEmailConfirmToken, renderLoginConfirmErrorPage, isEmailConfirmLoginEnabled } from './utils/emailConfirmGate';
 import { fetchPrDiff, runSummaryPipeline, buildSlackMessage, buildSummaryModal, buildSummaryFallbackBlocks, classifySummaryResult, resolveAiModel, extractDesignDiff, sanitizeBoxDrawing, detectCommitAgentFromText, detectCommitAgentFromPrText, describeModelSwitch, WORKER_BASE_URL, DESIGN_SPEC_CHECKLIST, DEFAULT_AI_MODEL, FALLBACK_AI_MODEL, type SummaryModalRow } from './utils/aiSummary';
-import { getSessionDurationSeconds, renewSession, resolveSessionDuration } from './utils/session';
+import { getSessionDurationSeconds, renewSession, resolveSessionDuration, resolveHeritageTourCountryFilterEnabled } from './utils/session';
 import { buildCommitAgentLogEntry, classifyCommitAgentFetchError } from './utils/commitAgentLog';
 import { verifySlackSignature } from './utils/slackSignature';
 import { handleSlackInteraction, type SlackAiReplyTask } from './utils/slackInteraction';
@@ -3301,6 +3301,7 @@ async function getUserSession(db: D1Database | undefined, userId: string): Promi
   recentCommitsCount: number | null;
   toastDuration: number | null;
   idleTimeoutSeconds: number | null;
+  heritageTourCountryFilter: string | null;
 } | null> {
   if (!db) {
     return null;
@@ -3308,7 +3309,7 @@ async function getUserSession(db: D1Database | undefined, userId: string): Promi
 
   try {
     const result = await db.prepare(
-      'SELECT timezone, session_duration, last_login_at, last_activity_at, github_access_token, github_granted_scopes, recent_commits_count, toast_duration, idle_timeout_seconds FROM user_sessions WHERE user_id = ?'
+      'SELECT timezone, session_duration, last_login_at, last_activity_at, github_access_token, github_granted_scopes, recent_commits_count, toast_duration, idle_timeout_seconds, heritage_tour_country_filter FROM user_sessions WHERE user_id = ?'
     ).bind(userId).first<{
       timezone: string;
       session_duration: string;
@@ -3319,6 +3320,7 @@ async function getUserSession(db: D1Database | undefined, userId: string): Promi
       recent_commits_count: number | null;
       toast_duration: number | null;
       idle_timeout_seconds: number | null;
+      heritage_tour_country_filter: string | null;
     }>();
 
     if (!result) {
@@ -3335,6 +3337,7 @@ async function getUserSession(db: D1Database | undefined, userId: string): Promi
       recentCommitsCount: result.recent_commits_count ?? null,
       toastDuration: result.toast_duration ?? null,
       idleTimeoutSeconds: result.idle_timeout_seconds ?? null,
+      heritageTourCountryFilter: result.heritage_tour_country_filter ?? null,
     };
   } catch (error) {
     const msg = error instanceof Error ? error.message : '';
@@ -3365,6 +3368,7 @@ async function getUserSession(db: D1Database | undefined, userId: string): Promi
           recentCommitsCount: fallback.recent_commits_count ?? null,
           toastDuration: fallback.toast_duration ?? null,
           idleTimeoutSeconds: null,
+          heritageTourCountryFilter: null,
         };
       } catch (fallbackError) {
         logger.error('getUserSession fallback also failed', { userId, error: fallbackError instanceof Error ? fallbackError.message : 'Unknown' });
@@ -3443,7 +3447,7 @@ async function finalizeGithubLogin(c: Context<{ Bindings: Bindings; Variables: V
 async function updateUserSettings(
   db: D1Database | undefined,
   userId: string,
-  field: 'timezone' | 'session_duration' | 'display_name' | 'recent_commits_count' | 'toast_duration',
+  field: 'timezone' | 'session_duration' | 'display_name' | 'recent_commits_count' | 'toast_duration' | 'heritage_tour_country_filter',
   value: string
 ): Promise<boolean> {
   if (!db) {
@@ -6668,6 +6672,8 @@ export function resolveAichatPreferMoondream(cookieHeader: string | undefined | 
   return vals[AICHAT_PREFER_MOONDREAM_COOKIE] !== 'off';
 }
 
+export const HERITAGE_TOUR_COUNTRY_FILTER_COOKIE = 'heritage_tour_country_filter';
+
 export const ANSWER_GRAPH_HIDE_EMPTY_ROWS_COOKIE = 'answer_graph_hide_empty_rows';
 
 /**
@@ -8425,7 +8431,30 @@ app.get('/webgl-heritage', authMiddleware, async (c) => {
 });
 
 app.get('/heritage-journey', authMiddleware, async (c) => {
-  return c.html(getHeritageJourneyPage());
+  const user = c.get('user');
+  const cookieHeader = c.req.header('Cookie');
+  const cookieVals = getCookieValues(cookieHeader, [HERITAGE_TOUR_COUNTRY_FILTER_COOKIE]);
+  const userSession = await getUserSession(c.env.DB, user.sub);
+  const heritageTourCountryFilterEnabled = resolveHeritageTourCountryFilterEnabled(
+    userSession?.heritageTourCountryFilter,
+    cookieVals[HERITAGE_TOUR_COUNTRY_FILTER_COOKIE]
+  );
+  return c.html(getHeritageJourneyPage(heritageTourCountryFilterEnabled));
+});
+
+app.post('/api/settings/heritage-tour-country-filter', authMiddleware, async (c) => {
+  try {
+    const user = c.get('user');
+    const { mode } = await c.req.json();
+    if (mode !== 'on' && mode !== 'off') {
+      return c.json({ error: '無効な設定値です' }, 400);
+    }
+    await updateUserSettings(c.env.DB, user.sub, 'heritage_tour_country_filter', mode);
+    c.header('Set-Cookie', `${HERITAGE_TOUR_COUNTRY_FILTER_COOKIE}=${mode}; Path=/; Secure; SameSite=Lax; Max-Age=31536000`);
+    return c.json({ message: '世界遺産の巡回ルート国別フィルタ設定を変更しました', mode }, 200);
+  } catch {
+    return c.json({ error: '世界遺産の巡回ルート国別フィルタ設定の変更に失敗しました' }, 500);
+  }
 });
 
 app.get('/tsubuyaki', authMiddleware, async (c) => {
@@ -10627,6 +10656,7 @@ app.get('/settings', authMiddleware, async (c) => {
   const answerGraphTrailSessionStorage = resolveAnswerGraphTrailSessionStorage(cookieHeader);
   const aichatPreferMoondream = resolveAichatPreferMoondream(cookieHeader);
   const wasmModulesViewMode = resolveWasmModulesViewMode(cookieHeader);
+  const heritageTourCountryFilterCookieVal = getCookieValues(cookieHeader, [HERITAGE_TOUR_COUNTRY_FILTER_COOKIE])[HERITAGE_TOUR_COUNTRY_FILTER_COOKIE];
 
   let issuedAt: string;
   let expiresAt: string;
@@ -10699,6 +10729,10 @@ app.get('/settings', authMiddleware, async (c) => {
     wasmModulesViewMode,
     answerGraphTrailSessionStorage: answerGraphTrailSessionStorage ? 'on' : 'off',
     aichatPreferMoondream: aichatPreferMoondream ? 'on' : 'off',
+    heritageTourCountryFilter: resolveHeritageTourCountryFilterEnabled(
+      userSession?.heritageTourCountryFilter,
+      heritageTourCountryFilterCookieVal
+    ) ? 'on' : 'off',
     emailConfirmLoginEnabled,
     githubScopes: GITHUB_OAUTH_SCOPE,
     githubGrantedScopes: grantedScopes,

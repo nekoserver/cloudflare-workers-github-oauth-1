@@ -24,6 +24,22 @@ export function resolveSessionDuration(
   return '1h';
 }
 
+/**
+ * heritage-journeyの「巡回ルートを再現する」実行時に国別フィルタ(ドロップダウンで
+ * グレーアウトされた国の地点)を実際のツアーデータから除外するかどうかを、
+ * D1優先→Cookie→ハードコードデフォルト(する=true)の順で解決する。
+ */
+export function resolveHeritageTourCountryFilterEnabled(
+  dbValue: string | null | undefined,
+  cookieValue: string | null | undefined
+): boolean {
+  if (dbValue === 'on') return true;
+  if (dbValue === 'off') return false;
+  if (cookieValue === 'on') return true;
+  if (cookieValue === 'off') return false;
+  return true;
+}
+
 export type RenewSessionParams = {
   currentUser: JWTPayload;
   newDuration: string;
