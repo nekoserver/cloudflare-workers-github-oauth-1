@@ -141,8 +141,24 @@ h1{font-size:22px;margin:0 0 4px}
 .city-row select{background:#0b1220;border:1px solid #475569;color:#e2e8f0;border-radius:8px;padding:8px 10px;font-size:13px;font-family:inherit}
 #start-city option.start-city-option-registered{background:#bbf7d0;color:#064e3b}
 #start-city option.start-city-option-unregistered{background:transparent;border:2px solid #bbf7d0}
-#end-city-picker-btn{background:#0b1220;border:1px solid #475569;color:#e2e8f0;border-radius:8px;padding:8px 10px;font-size:13px;font-family:inherit;cursor:pointer}
-#end-city-picker-btn:hover{border-color:#38bdf8;color:#fff}
+#start-city-picker-btn,#end-city-picker-btn{background:#0b1220;border:1px solid #475569;color:#e2e8f0;border-radius:8px;padding:8px 10px;font-size:13px;font-family:inherit;cursor:pointer}
+#start-city-picker-btn:hover,#end-city-picker-btn:hover{border-color:#38bdf8;color:#fff}
+.start-city-picker-table{width:100%;border-collapse:collapse;font-size:12px}
+.start-city-picker-table th,.start-city-picker-table td{border:1px solid #334155;padding:4px 8px;text-align:left;color:#cbd5e1}
+.start-city-picker-table th{background:#1e293b;color:#93c5fd}
+.start-city-picker-row{cursor:pointer}
+.start-city-picker-row:hover{background:#1e293b}
+.start-city-picker-row.start-city-picker-current{background:#bbf7d0;color:#0f172a}
+.start-city-picker-row.start-city-picker-current td{color:#0f172a}
+.start-city-picker-row td.start-city-picker-registered{background:#bbf7d0;color:#064e3b}
+.start-city-picker-row td.start-city-picker-unregistered{background:transparent;border:2px solid #bbf7d0}
+#start-city-picker-modal-box{position:fixed;max-width:560px;width:calc(100% - 32px)}
+#start-city-picker-modal-head{cursor:grab;user-select:none;touch-action:none}
+#start-city-picker-modal-head:active{cursor:grabbing}
+.start-city-picker-checkbox-row{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-left:auto;font-size:11px}
+.start-city-picker-checkbox-group{display:flex;align-items:center;gap:6px;color:#94a3b8;white-space:nowrap}
+.start-city-picker-checkbox-group input{cursor:pointer}
+.start-city-picker-checkbox-sep{width:1px;align-self:stretch;background:#334155}
 .end-city-picker-table{width:100%;border-collapse:collapse;font-size:12px}
 .end-city-picker-table th,.end-city-picker-table td{border:1px solid #334155;padding:4px 8px;text-align:left;color:#cbd5e1}
 .end-city-picker-table th{background:#1e293b;color:#93c5fd}
@@ -302,7 +318,8 @@ ${getMitokoroModalCss()}
   <div class="card">
     <div class="section-title">出発地・到着地</div>
     <div class="city-row">
-      <select id="start-city"></select>
+      <select id="start-city" style="display:none"></select>
+      <button id="start-city-picker-btn" type="button"></button>
       <button id="swap-btn" type="button">⇄ 入替</button>
       <select id="end-city" style="display:none"></select>
       <button id="end-city-picker-btn" type="button"></button>
@@ -421,6 +438,25 @@ ${getMitokoroModalCss()}
     <table class="end-city-picker-table">
       <thead><tr><th id="end-city-picker-flag-th" title="国旗をタップすると到達国を制限できます">🏁</th><th>都市名</th><th>出発地からの距離(km)</th></tr></thead>
       <tbody id="end-city-picker-table-body"></tbody>
+    </table>
+  </div>
+</div>
+
+<div class="tour-modal-overlay" id="start-city-picker-modal-overlay">
+  <div class="tour-modal-box" id="start-city-picker-modal-box">
+    <div class="tour-modal-head" id="start-city-picker-modal-head">
+      <div class="tour-modal-title">🏙️ 出発地を選択</div>
+      <div class="start-city-picker-checkbox-row">
+        <label class="start-city-picker-checkbox-group"><input type="checkbox" id="start-city-picker-cities-cb" checked>都市名のみ</label>
+        <span class="start-city-picker-checkbox-sep"></span>
+        <label class="start-city-picker-checkbox-group"><input type="checkbox" id="start-city-picker-stations-cb">駅</label>
+        <label class="start-city-picker-checkbox-group"><input type="checkbox" id="start-city-picker-airports-cb">空港</label>
+      </div>
+      <button type="button" class="tour-modal-close" id="start-city-picker-modal-close" aria-label="閉じる">✕</button>
+    </div>
+    <table class="start-city-picker-table">
+      <thead><tr><th>都市名</th><th>到着地からの距離(km)</th></tr></thead>
+      <tbody id="start-city-picker-table-body"></tbody>
     </table>
   </div>
 </div>
@@ -898,7 +934,27 @@ function updateEndCityPickerBtnLabel() {
   btn.textContent = c ? c.label : endSel.value;
 }
 
-function getCity(name) { return CITIES.filter(function(c){return c.name===name;})[0]; }
+// #start-cityはネイティブ<select>のまま(display:none)でDOM上に残し、値/changeイベントの
+// 挙動は既存コードのために一切変更しない。見た目だけを「都市名を表示するボタン」に
+// 差し替え、押すと#start-city-picker-modal-overlayの一覧テーブル(最上位レイヤー)を開く。
+// #end-city-picker-btn/updateEndCityPickerBtnLabel()と同じ構造。
+function updateStartCityPickerBtnLabel() {
+  var startSel = document.getElementById('start-city');
+  var btn = document.getElementById('start-city-picker-btn');
+  if (!startSel || !btn) return;
+  var c = getCity(startSel.value);
+  btn.textContent = c ? c.label : startSel.value;
+}
+
+// 「出発地を選択」モーダルで駅/空港(CITIESに存在しない仮想エントリ)を選んだ場合の
+// フォールバック用ルックアップ。extraPickerCitiesはこのファイル後方で定義される
+// (「出発地」ボタンのセクション)が、varのホイスティングにより参照時点では
+// 必ず初期化済み({})になっている。
+function getCity(name) {
+  var c = CITIES.filter(function(c){return c.name===name;})[0];
+  if (c) return c;
+  return (typeof extraPickerCities !== 'undefined') ? extraPickerCities[name] : undefined;
+}
 
 function currentStartEnd() {
   var s = getCity(document.getElementById('start-city').value);
@@ -943,18 +999,32 @@ function updateTourScopeHeaderLabel() {
 // 出発地・到着地の組み合わせが heritage_journey_registered_routes テーブルに
 // 未登録の場合のみ「ルート登録」ボタン(#register-route-btn)を有効化する。
 // 登録済みなら非アクティブ、書き込み成功後はボタン自体をDOMから削除する。
+//
+// 【非同期レースガード】出発地/到着地は短時間に何度も変わりうる
+// (入替ボタン・分布チップ・出発地/到着地選択モーダルの連続クリック等)。
+// fetchの応答順序はリクエスト順序と一致する保証がないため、
+// 古いリクエストの応答が新しいリクエストの応答より後に届くと、
+// 最新の組み合わせに対するボタン状態が古い結果で上書きされてしまう
+// (「ルート登録ボタンが出てこない」不具合の実際の原因の一つ)。
+// このリポジトリの確立された規約(searchRequestSeq等)に倣い、
+// リクエストごとに単調増加する連番を発行し、応答時点で最新でなければ
+// 何もしない(=古い応答は無視する)ことでレースを解消する。
+var registerRouteButtonReqSeq = 0;
 function updateRegisterRouteButton() {
   var btn = document.getElementById('register-route-btn');
   if (!btn) return;
   var se = currentStartEnd();
+  var mySeq = ++registerRouteButtonReqSeq;
   fetch('/api/heritage-journey/route-exists?start=' + encodeURIComponent(se.start.name) + '&end=' + encodeURIComponent(se.end.name))
     .then(function(r) { return r.json(); })
     .then(function(data) {
+      if (mySeq !== registerRouteButtonReqSeq) return;
       var btn2 = document.getElementById('register-route-btn');
       if (!btn2) return;
       btn2.disabled = !!(data && data.exists);
     })
     .catch(function() {
+      if (mySeq !== registerRouteButtonReqSeq) return;
       var btn2 = document.getElementById('register-route-btn');
       if (btn2) btn2.disabled = true;
     });
@@ -1001,19 +1071,46 @@ function applyStartCityRegisteredIndicator(registeredStartsSet) {
 // 取得してapplyStartCityRegisteredIndicator()へ反映する。到着地の変更のたびに
 // 呼び直すことで、常に「現在ロックされている到着地」に対する判定を表示する。
 // fetch失敗時・レスポンス不正時は例外を投げず、全オプションを未登録扱いにフォールバックする。
+// updateRegisterRouteButton()と同じ理由(非同期レース)で連番ガードを持つ。
+// 開いている「出発地を選択」モーダルの一覧(#start-city-picker-table-body)にも
+// 同じ登録状態を反映するため、応答が最新であればそちらの再描画も行う。
+var startCityIndicatorReqSeq = 0;
 function updateStartCityRegisteredIndicator() {
   var endSel = document.getElementById('end-city');
   if (!endSel) return;
   var endCity = getCity(endSel.value);
   var endLabel = endCity ? endCity.label : endSel.value;
+  var mySeq = ++startCityIndicatorReqSeq;
   fetch('/api/heritage-journey/registered-starts-for-destination?end=' + encodeURIComponent(endLabel))
     .then(function(r) { return r.json(); })
     .then(function(data) {
-      applyStartCityRegisteredIndicator(buildRegisteredStartsSet(data));
+      if (mySeq !== startCityIndicatorReqSeq) return;
+      lastRegisteredStartsSet = buildRegisteredStartsSet(data);
+      applyStartCityRegisteredIndicator(lastRegisteredStartsSet);
+      refreshStartCityPickerTableIfOpen();
     })
     .catch(function() {
-      applyStartCityRegisteredIndicator({});
+      if (mySeq !== startCityIndicatorReqSeq) return;
+      lastRegisteredStartsSet = {};
+      applyStartCityRegisteredIndicator(lastRegisteredStartsSet);
+      refreshStartCityPickerTableIfOpen();
     });
+}
+
+// 「出発地を選択」モーダル(#start-city-picker-table-body)で使う、直近に取得した
+// 登録済み出発地セット。updateStartCityRegisteredIndicator()の応答が届くたびに更新される。
+// モーダルを開いた時点でまだ応答が届いていない場合は空集合(=全て未登録扱い)として描画する。
+var lastRegisteredStartsSet = {};
+
+// 出発地/到着地のどちらかが変わった直後に必ずまとめて呼ぶための単一の入口。
+// updateRegisterRouteButton()とupdateStartCityRegisteredIndicator()を個別に
+// 呼び分けるとどちらかの呼び出し漏れ(=「ルート登録ボタンが出てこない」不具合の
+// もう一つの原因)を生みやすいため、両端点が変わりうる全ての操作
+// (出発地/到着地セレクトのchange、入替ボタン、分布チップ、出発地/到着地選択モーダルの
+// 行クリック)からはこの関数だけを呼ぶことで経路を一本化する。
+function refreshRouteRegistrationUi() {
+  updateRegisterRouteButton();
+  updateStartCityRegisteredIndicator();
 }
 
 // 「経由地: 1 0123, 2 0456, ...」形式の文字列を、現在ON状態の
@@ -1257,11 +1354,11 @@ function renderNightsDistribution() {
       citiesEl.querySelectorAll('[data-city]').forEach(function(chip) {
         chip.addEventListener('click', function() {
           document.getElementById('end-city').value = chip.getAttribute('data-city');
+          updateEndCityPickerBtnLabel();
           state.selected = {};
           renderCandidates();
           recompute();
-          updateRegisterRouteButton();
-          updateStartCityRegisteredIndicator();
+          refreshRouteRegistrationUi();
         });
       });
     });
@@ -2230,6 +2327,215 @@ function closeRegisteredRoutesModal() {
   document.addEventListener('keydown', function(e) { if (e.key === 'Escape' && overlay.classList.contains('open')) closeRegisteredRoutesModal(); });
 })();
 
+// ===== 「出発地」ボタン(#start-city-picker-btn) → 最上位レイヤーの都市テーブル =====
+// 構造・技法は「到着地」選択モーダル(#end-city-picker-modal-overlay、下のセクション)を
+// そのまま踏襲する: 最上位レイヤー(position:fixed)のドラッグ可能なモーダル、
+// #巡回テストスコープパネル(#tour-mini-panel、既定でtop:12px;left:12px幅280px)と
+// 重ならない既定位置(resetEndCityPickerModalPositionと同じ数値パターン)、行クリックで
+// ネイティブ<select>の値を書き換えchangeイベントを発火する(既存のrecompute等が自然発火)。
+//
+// 「出発元/到着先がそれぞれ入れ替わった場合にも同様のルールを適用」という要件のため、
+// 距離計算・登録インジケータ判定はどちらのモーダルも「もう一方の(ロックされている)
+// 都市との距離」「もう一方の都市との組み合わせでの登録状態」を対象にする共通ロジックとし、
+// このモーダル固有のsuffix('start'/'end')は使わず、常に「ロックされている側」を
+// 引数で受け取る形にして、入替ボタンで#start-city/#end-cityの役割が入れ替わっても
+// 同じ関数がそのまま正しく動く。
+
+// CITIESに存在しない「駅」「空港」候補(HERITAGE_POINTSの名称末尾一致)を、
+// #start-city選択モーダルの一覧に混在させるための一時的な仮想都市エントリ。
+// key: 仮想city名('TP::'+HERITAGE_POINTSのn)、value: {name,label,lat,lon,flag}。
+// ネイティブ<select>のvalueに存在しない値を代入してもブラウザ側で無視される
+// (jsdomも同様)ため、行クリック時にensureCityOptionInSelect()で対応する
+// <option>を動的に追加してからvalueを設定する。
+var extraPickerCities = {};
+
+function ensureCityOptionInSelect(selectEl, cityLikeObj) {
+  extraPickerCities[cityLikeObj.name] = cityLikeObj;
+  if (!selectEl) return;
+  var opts = selectEl.options;
+  for (var i = 0; i < opts.length; i++) {
+    if (opts[i].value === cityLikeObj.name) return;
+  }
+  var opt = document.createElement('option');
+  opt.value = cityLikeObj.name;
+  opt.textContent = cityLikeObj.label;
+  selectEl.appendChild(opt);
+}
+
+// HERITAGE_POINTSのうち名称が指定suffix('駅'/'空港')で終わるものを、
+// 都市選択モーダルの行として扱える形({name,label,lat,lon,flag})に変換する純粋関数。
+// 経由地候補側の既存トグル(toggleTransportCandidates)と同じ「名称末尾一致」基準を流用する。
+function buildTransportPickerPoints(suffix) {
+  return HERITAGE_POINTS.filter(function(h) {
+    return typeof h.n === 'string' && h.n.length > suffix.length && h.n.slice(h.n.length - suffix.length) === suffix;
+  }).map(function(h) {
+    return { name: 'TP::' + h.n, label: h.n, lat: h.lat, lon: h.lon, flag: h.e || '' };
+  });
+}
+
+// 都市選択モーダル(出発地/到着地共通)の候補プールを組み立てる純粋関数。
+// includeCities=falseの場合はCITIESを含めない(「都市名のみ」チェックを外した状態)。
+function buildCityPickerPool(includeCities, includeStations, includeAirports) {
+  var pool = [];
+  if (includeCities) {
+    pool = pool.concat(CITIES.map(function(c) { return { name: c.name, label: c.label, lat: c.lat, lon: c.lon, flag: c.flag || '' }; }));
+  }
+  if (includeStations) pool = pool.concat(buildTransportPickerPoints('駅'));
+  if (includeAirports) pool = pool.concat(buildTransportPickerPoints('空港'));
+  return pool;
+}
+
+// 候補プールの各行に「ロックされている側の都市」との距離(km)を付与し、近い順(昇順)に
+// 並び替える純粋関数。lockedがnull/未解決の場合は距離計算をせず(km:null)、順序も変えない。
+function sortPickerRowsByDistanceToLocked(pool, locked) {
+  var rows = pool.map(function(p) {
+    var km = (locked && typeof locked.lat === 'number') ? haversineKm(locked.lat, locked.lon, p.lat, p.lon) : null;
+    return { name: p.name, label: p.label, lat: p.lat, lon: p.lon, flag: p.flag || '', km: km };
+  });
+  if (!locked) return rows;
+  rows.sort(function(a, b) {
+    if (a.km === null && b.km === null) return 0;
+    if (a.km === null) return 1;
+    if (b.km === null) return -1;
+    return a.km - b.km;
+  });
+  return rows;
+}
+
+// 候補行(sortPickerRowsByDistanceToLockedの出力)に、PR#1450と同じ登録状態インジケータ用の
+// CSSクラス名を付与する純粋関数。registeredSetは{ラベル文字列: true}形式
+// (buildRegisteredStartsSetの出力と同じ形)。
+function classifyPickerRowsRegistered(rows, registeredSet) {
+  var set = registeredSet || {};
+  return rows.map(function(r) {
+    var cls = set[r.label] ? 'start-city-picker-registered' : 'start-city-picker-unregistered';
+    return { name: r.name, label: r.label, km: r.km, flag: r.flag, registeredClass: cls };
+  });
+}
+
+function renderStartCityPickerTable() {
+  var body = document.getElementById('start-city-picker-table-body');
+  if (!body) return;
+  var citiesCb = document.getElementById('start-city-picker-cities-cb');
+  var stationsCb = document.getElementById('start-city-picker-stations-cb');
+  var airportsCb = document.getElementById('start-city-picker-airports-cb');
+  var includeCities = citiesCb ? citiesCb.checked : true;
+  var includeStations = stationsCb ? stationsCb.checked : false;
+  var includeAirports = airportsCb ? airportsCb.checked : false;
+  var endSel = document.getElementById('end-city');
+  var startSel = document.getElementById('start-city');
+  var locked = endSel ? getCity(endSel.value) : null;
+  var currentStart = startSel ? startSel.value : null;
+  var pool = buildCityPickerPool(includeCities, includeStations, includeAirports);
+  var sorted = sortPickerRowsByDistanceToLocked(pool, locked);
+  var classified = classifyPickerRowsRegistered(sorted, lastRegisteredStartsSet);
+  if (classified.length === 0) {
+    body.innerHTML = '<tr><td colspan="2" class="registered-routes-empty">表示できる候補がありません(チェックボックスを確認してください)</td></tr>';
+    return;
+  }
+  body.innerHTML = classified.map(function(r) {
+    var isCurrent = r.name === currentStart;
+    var kmText = (r.km === null) ? '-' : r.km.toFixed(1) + ' km';
+    return '<tr class="start-city-picker-row' + (isCurrent ? ' start-city-picker-current' : '') + '" data-city-name="' + esc(r.name) + '">'
+      + '<td class="' + r.registeredClass + '">' + (r.flag ? esc(r.flag) + ' ' : '') + esc(r.label) + '</td><td>' + kmText + '</td></tr>';
+  }).join('');
+}
+
+function refreshStartCityPickerTableIfOpen() {
+  var overlay = document.getElementById('start-city-picker-modal-overlay');
+  if (overlay && overlay.classList.contains('open')) renderStartCityPickerTable();
+}
+
+// #tour-mini-panel(280px幅、既定top:12px;left:12px)と重ならないよう、
+// #end-city-picker-modal-boxのresetEndCityPickerModalPositionと同じ数値パターンを踏襲する。
+function resetStartCityPickerModalPosition() {
+  var box = document.getElementById('start-city-picker-modal-box');
+  if (!box) return;
+  var defaultLeft = Math.max(320, window.innerWidth - 600);
+  var defaultTop = 80;
+  box.style.left = defaultLeft + 'px';
+  box.style.top = defaultTop + 'px';
+}
+
+function openStartCityPickerModal() {
+  var overlay = document.getElementById('start-city-picker-modal-overlay');
+  if (!overlay) return;
+  overlay.style.zIndex = String(getNextZ());
+  overlay.classList.add('open');
+  resetStartCityPickerModalPosition();
+  renderStartCityPickerTable();
+}
+
+function closeStartCityPickerModal() {
+  var overlay = document.getElementById('start-city-picker-modal-overlay');
+  if (overlay) overlay.classList.remove('open');
+}
+
+(function() {
+  var pickerBtn = document.getElementById('start-city-picker-btn');
+  var overlay = document.getElementById('start-city-picker-modal-overlay');
+  var closeBtn = document.getElementById('start-city-picker-modal-close');
+  var body = document.getElementById('start-city-picker-table-body');
+  var citiesCb = document.getElementById('start-city-picker-cities-cb');
+  var stationsCb = document.getElementById('start-city-picker-stations-cb');
+  var airportsCb = document.getElementById('start-city-picker-airports-cb');
+  if (!pickerBtn || !overlay || !closeBtn || !body) return;
+  pickerBtn.addEventListener('click', openStartCityPickerModal);
+  closeBtn.addEventListener('click', closeStartCityPickerModal);
+  overlay.addEventListener('click', function(e) { if (e.target === overlay) closeStartCityPickerModal(); });
+  document.addEventListener('keydown', function(e) { if (e.key === 'Escape' && overlay.classList.contains('open')) closeStartCityPickerModal(); });
+  body.addEventListener('click', function(e) {
+    var row = e.target.closest('[data-city-name]');
+    if (!row) return;
+    var name = row.getAttribute('data-city-name');
+    var startSel = document.getElementById('start-city');
+    if (!getCity(name)) {
+      // CITIESに無い(=駅/空港の仮想エントリ)場合は<option>を動的に追加してから選択する。
+      var pool = buildCityPickerPool(true, true, true);
+      var match = pool.filter(function(p) { return p.name === name; })[0];
+      if (match) ensureCityOptionInSelect(startSel, match);
+    }
+    startSel.value = name;
+    startSel.dispatchEvent(new Event('change'));
+  });
+  [citiesCb, stationsCb, airportsCb].forEach(function(cb) {
+    if (cb) cb.addEventListener('change', renderStartCityPickerTable);
+  });
+})();
+
+// ===== 出発地選択モーダル(#start-city-picker-modal-overlay)をヘッダドラッグで画面内自由配置 =====
+// #end-city-picker-modal-headのドラッグ実装と同じイベント方式・クランプ処理を踏襲する。
+(function() {
+  var modalBox = document.getElementById('start-city-picker-modal-box');
+  var modalHead = document.getElementById('start-city-picker-modal-head');
+  if (!modalBox || !modalHead) return;
+  var dragging = false, startX = 0, startY = 0, startLeft = 0, startTop = 0;
+  function onDown(clientX, clientY) {
+    dragging = true;
+    var rect = modalBox.getBoundingClientRect();
+    startX = clientX; startY = clientY; startLeft = rect.left; startTop = rect.top;
+    modalBox.style.left = startLeft + 'px';
+    modalBox.style.top = startTop + 'px';
+  }
+  function onMove(clientX, clientY) {
+    if (!dragging) return;
+    var dx = clientX - startX, dy = clientY - startY;
+    var maxLeft = Math.max(0, window.innerWidth - modalBox.offsetWidth);
+    var maxTop = Math.max(0, window.innerHeight - modalBox.offsetHeight);
+    var newLeft = Math.max(0, Math.min(maxLeft, startLeft + dx));
+    var newTop = Math.max(0, Math.min(maxTop, startTop + dy));
+    modalBox.style.left = newLeft + 'px';
+    modalBox.style.top = newTop + 'px';
+  }
+  function onUp() { dragging = false; }
+  modalHead.addEventListener('mousedown', function(e) { onDown(e.clientX, e.clientY); e.preventDefault(); });
+  document.addEventListener('mousemove', function(e) { onMove(e.clientX, e.clientY); });
+  document.addEventListener('mouseup', onUp);
+  modalHead.addEventListener('touchstart', function(e) { onDown(e.touches[0].clientX, e.touches[0].clientY); }, { passive: true });
+  modalHead.addEventListener('touchmove', function(e) { onMove(e.touches[0].clientX, e.touches[0].clientY); }, { passive: true });
+  modalHead.addEventListener('touchend', onUp);
+})();
+
 // ===== 「到着地」ボタン(#end-city-picker-btn) → 最上位レイヤーの都市テーブル =====
 // #end-cityの<option>群(出発地を除外しない全都市)を出発地からの距離(km)降順で並べ、
 // クリックで#end-cityの値をセットしchangeイベントを発火する(既存のrecompute等が
@@ -2378,17 +2684,20 @@ document.getElementById('swap-btn').addEventListener('click', function() {
   var s = document.getElementById('start-city'), e = document.getElementById('end-city');
   var tmp = s.value; s.value = e.value; e.value = tmp;
   state.selected = {}; manuallyAddedPoints = {};
+  updateStartCityPickerBtnLabel();
   updateEndCityPickerBtnLabel();
-  renderCandidates(); recompute(); renderNightsDistribution(); updateRegisterRouteButton();
-  updateStartCityRegisteredIndicator();
+  renderCandidates(); recompute(); renderNightsDistribution();
+  refreshRouteRegistrationUi();
 });
 document.getElementById('start-city').addEventListener('change', function() {
-  state.selected = {}; manuallyAddedPoints = {}; renderCandidates(); recompute(); renderNightsDistribution(); updateRegisterRouteButton();
+  updateStartCityPickerBtnLabel();
+  state.selected = {}; manuallyAddedPoints = {}; renderCandidates(); recompute(); renderNightsDistribution();
+  refreshRouteRegistrationUi();
 });
 document.getElementById('end-city').addEventListener('change', function() {
   updateEndCityPickerBtnLabel();
-  state.selected = {}; manuallyAddedPoints = {}; recompute(); updateRegisterRouteButton();
-  updateStartCityRegisteredIndicator();
+  state.selected = {}; manuallyAddedPoints = {}; recompute();
+  refreshRouteRegistrationUi();
 });
 ['opt-detour','opt-speed','opt-visit','opt-nights'].forEach(function(id) {
   document.getElementById(id).addEventListener('input', function() { renderCandidates(); recompute(); });
@@ -2459,13 +2768,13 @@ heritageAddResultsBody.addEventListener('click', function(e) {
 });
 
 populateCitySelects();
+updateStartCityPickerBtnLabel();
 loadDestCountryFilterFromCookie();
 updateDistCountryFilterBtnLabel();
 renderCandidates();
 recompute();
 renderNightsDistribution();
-updateRegisterRouteButton();
-updateStartCityRegisteredIndicator();
+refreshRouteRegistrationUi();
 </script>
 </body>
 </html>`;
