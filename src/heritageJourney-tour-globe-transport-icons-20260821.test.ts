@@ -123,14 +123,17 @@ describe('drawWaypointPoint(単体): 経由地1件分の描画分岐(純粋関�
     const src = [
       "var CLIENT_AIRPORT_ICON = '✈︎';",
       "var CLIENT_STATION_ICON = '🚉';",
-      extractFn('drawWaypointPoint', 'ctx, pp, icon, i'),
-      'return { drawWaypointPoint: drawWaypointPoint, AIRPORT: CLIENT_AIRPORT_ICON, STATION: CLIENT_STATION_ICON };',
+      "var ROUTE_COUNTRY_FILTER_ALL = '__ALL__';",
+      "var routeCountryFilter = ROUTE_COUNTRY_FILTER_ALL;",
+      extractFn('drawWaypointPoint', 'ctx, pp, icon, i, tp'),
+      'return { drawWaypointPoint: drawWaypointPoint, AIRPORT: CLIENT_AIRPORT_ICON, STATION: CLIENT_STATION_ICON, setRouteCountryFilter: function(v) { routeCountryFilter = v; } };',
     ].join('\n');
     // eslint-disable-next-line no-new-func
     return new Function(src)() as {
-      drawWaypointPoint: (ctx: unknown, pp: { x: number; y: number; visible: boolean }, icon: unknown, i: number) => void;
+      drawWaypointPoint: (ctx: unknown, pp: { x: number; y: number; visible: boolean }, icon: unknown, i: number, tp?: { country?: string }) => void;
       AIRPORT: string;
       STATION: string;
+      setRouteCountryFilter: (v: string) => void;
     };
   }
 
