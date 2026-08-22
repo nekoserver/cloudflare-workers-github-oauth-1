@@ -413,4 +413,77 @@ describe('getAichatImageGalleryPage', () => {
     expect(toggleBtn.disabled).toBe(true);
     expect(toggleBtn.classList.contains('has-branches')).toBe(false);
   });
+
+  // 対象: 検索結果グリッド(renderGallery)のカード枠色。プレビューを開く前の
+  // 段階で「他モデルの分派出力が存在する画像(branch_count>0)」を一目で
+  // 判別できるよう、サーバー(GET /api/aichat/image-gallery-search)が付与した
+  // branch_count に応じて .gallery-item へ静的な(点滅しない)クラスを付ける。
+  // PR #1447のプレビューモーダル内ボタンの点滅枠(has-branches/blink)とは
+  // 別物であり、グリッドカード側は同じ点滅演出を流用しない。
+  //
+  // 故障シナリオ:
+  //   (1) branch_count>0でもクラスが付かず、他分派の存在に気づけない
+  //   (2) branch_count===0またはフィールド自体が無い行にもクラスが付いて
+  //       しまい、常に枠色が付いてしまう(意味を持たなくなる)
+  //   (3) プレビューモーダル用の点滅クラス(has-branches)を誤って使い回して
+  //       しまい、グリッド全体が点滅して見づらくなる
+  function setupWithGalleryBranchCounts(results: Array<Record<string, unknown>>) {
+    const html = getAichatImageGalleryPage('testuser');
+    document.body.innerHTML = html.slice(html.indexOf('<body>') + 6, html.lastIndexOf('<script>'));
+    const scriptSrc = html.slice(html.lastIndexOf('<script>') + 8, html.lastIndexOf('</script>'));
+    const fetchMock = vi.fn((url: string) => {
+      const u = String(url);
+      if (u.indexOf('/api/aichat/image-gallery-search') === 0) {
+        return Promise.resolve({ json: () => Promise.resolve({ results }) });
+      }
+      return Promise.resolve({ json: () => Promise.resolve({}) });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    // eslint-disable-next-line no-new-func
+    new Function(scriptSrc)();
+    return { fetchMock };
+  }
+
+  it('(DOM実動作) branch_count>0の結果カードには静的な分派枠クラス(has-other-branches)が付く', async () => {
+    setupWithGalleryBranchCounts([
+      { id: 's1', user_hash: 'u1', question: 'q1', answer: 'a1', model: 'm', created_at: 't', image_data_url: 'data:image/png;base64,AAAA', image_id: 'img-1', branch_count: 2 },
+    ]);
+    const searchInput = document.getElementById('gallerySearchInput') as HTMLInputElement;
+    const searchBtn = document.getElementById('gallerySearchBtn') as HTMLButtonElement;
+    searchInput.value = 'q';
+    searchBtn.click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const item = document.querySelector('.gallery-item') as HTMLElement;
+    expect(item.classList.contains('has-other-branches')).toBe(true);
+    expect(item.classList.contains('has-branches')).toBe(false);
+  });
+
+  it('(DOM実動作) branch_count===0の結果カードには分派枠クラスが付かない', async () => {
+    setupWithGalleryBranchCounts([
+      { id: 's1', user_hash: 'u1', question: 'q1', answer: 'a1', model: 'm', created_at: 't', image_data_url: 'data:image/png;base64,AAAA', image_id: 'img-1', branch_count: 0 },
+    ]);
+    const searchInput = document.getElementById('gallerySearchInput') as HTMLInputElement;
+    const searchBtn = document.getElementById('gallerySearchBtn') as HTMLButtonElement;
+    searchInput.value = 'q';
+    searchBtn.click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const item = document.querySelector('.gallery-item') as HTMLElement;
+    expect(item.classList.contains('has-other-branches')).toBe(false);
+  });
+
+  it('(DOM実動作) branch_countフィールド自体が無い結果カードにも分派枠クラスが付かない(欠落時のフォールバック)', async () => {
+    setupWithGalleryBranchCounts([
+      { id: 's1', user_hash: 'u1', question: 'q1', answer: 'a1', model: 'm', created_at: 't', image_data_url: 'data:image/png;base64,AAAA', image_id: 'img-1' },
+    ]);
+    const searchInput = document.getElementById('gallerySearchInput') as HTMLInputElement;
+    const searchBtn = document.getElementById('gallerySearchBtn') as HTMLButtonElement;
+    searchInput.value = 'q';
+    searchBtn.click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const item = document.querySelector('.gallery-item') as HTMLElement;
+    expect(item.classList.contains('has-other-branches')).toBe(false);
+  });
 });

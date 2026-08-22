@@ -29,6 +29,7 @@ export function getAichatImageGalleryPage(username: string, modelColors: Record<
 :root {
   --text-primary:#e6edf3; --text-muted:#8b949e; --border-color:#30363d;
   --accent-color:#58a6ff; --bg-secondary:#161b22; --code-bg:#0d1117;
+  --branch-border-color:#34d399;
 }
 * { box-sizing:border-box; margin:0; padding:0; }
 body { background:#000010; color:#e6edf3; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; font-size:13px; min-height:100vh; min-height:100svh; display:flex; flex-direction:column; }
@@ -63,6 +64,8 @@ h1 { font-size:15px; font-weight:700; flex:1; }
   cursor:pointer; display:flex; flex-direction:column;
 }
 .gallery-item:hover { border-color:#58a6ff; }
+.gallery-item.has-other-branches { border-color:var(--branch-border-color); }
+.gallery-item.has-other-branches:hover { border-color:var(--branch-border-color); }
 .gallery-thumb { width:100%; height:120px; object-fit:cover; display:block; background:#000; }
 .gallery-caption { padding:6px 8px; font-size:11px; color:#8b949e; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .preview-overlay {
@@ -493,6 +496,7 @@ ${getKeywordHighlightScript()}
     results.forEach(function(item) {
       var cell = document.createElement('div');
       cell.className = 'gallery-item';
+      if (item.branch_count > 0) cell.classList.add('has-other-branches');
       var thumb = document.createElement('img');
       thumb.className = 'gallery-thumb';
       thumb.src = item.image_data_url;
