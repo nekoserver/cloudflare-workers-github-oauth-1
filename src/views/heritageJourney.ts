@@ -1991,6 +1991,146 @@ document.getElementById('replay-tour-btn').addEventListener('click', function() 
   }
 
   /**
+   * 与えられた点集合(lat/lonの平面座標とみなす)の近似凸包をAndrewのmonotone chain法で
+   * 計算する。実データに国境(GeoJSON等)が存在しないため、選択国に属する候補点(都市・
+   * 世界遺産・空港・駅)から「その国のおおまかな領域」を近似する目的でのみ使う
+   * (球面上の測地線ではなく平面近似。1か国程度のスケールでは十分な近似)。
+   * 3点未満、または全点が同一直線上(共線)の場合は面積を持つ凸包にならず
+   * 2点以下に退化するため、呼び出し側(computeCountryOutlinePoints)で
+   * バウンディングボックスへのフォールバックを行う。
+   */
+  function convexHull(points) {
+    var uniq = [];
+    var sorted = points.slice().sort(function(a, b) { return a.lon - b.lon || a.lat - b.lat; });
+    sorted.forEach(function(p) {
+      var last = uniq[uniq.length - 1];
+      if (!last || last.lon !== p.lon || last.lat !== p.lat) uniq.push(p);
+    });
+    if (uniq.length < 3) return uniq;
+    function cross(o, a, b) {
+      return (a.lon - o.lon) * (b.lat - o.lat) - (a.lat - o.lat) * (b.lon - o.lon);
+    }
+    var lower = [];
+    for (var i = 0; i < uniq.length; i++) {
+      while (lower.length >= 2 && cross(lower[lower.length - 2], lower[lower.length - 1], uniq[i]) <= 0) lower.pop();
+      lower.push(uniq[i]);
+    }
+    var upper = [];
+    for (var j = uniq.length - 1; j >= 0; j--) {
+      while (upper.length >= 2 && cross(upper[upper.length - 2], upper[upper.length - 1], uniq[j]) <= 0) upper.pop();
+      upper.push(uniq[j]);
+    }
+    lower.pop();
+    upper.pop();
+    return lower.concat(upper);
+  }
+
+  /**
+   * 候補点集合のmin/max(緯度・経度)をmargin度だけ外側に広げた矩形の4頂点を返す。
+   * 凸包が退化する(候補点が2点以下、または共線)場合のフォールバックとして使う。
+   */
+  function boundingBoxPoints(points, margin) {
+    var lats = points.map(function(p) { return p.lat; });
+    var lons = points.map(function(p) { return p.lon; });
+    var minLat = Math.min.apply(null, lats) - margin;
+    var maxLat = Math.max.apply(null, lats) + margin;
+    var minLon = Math.min.apply(null, lons) - margin;
+    var maxLon = Math.max.apply(null, lons) + margin;
+    return [
+      { lat: minLat, lon: minLon },
+      { lat: minLat, lon: maxLon },
+      { lat: maxLat, lon: maxLon },
+      { lat: maxLat, lon: minLon },
+    ];
+  }
+
+  /**
+   * 指定した国名(routeCountryFilterの値)に属する候補点(CITIES/HERITAGE_POINTS双方の
+   * country/cフィールドが一致するもの)を集め、その凸包(近似の国境アウトライン)を返す。
+   * 該当点が1件も無ければnull(描画側は何も描かない)。候補点が2点以下、または凸包が
+   * 3点未満に退化した場合(共線)は、パディング付きバウンディングボックス(4頂点)に
+   * フォールバックする(何も描かれない/エラーになるより、大まかな矩形が出る方が良い)。
+   */
+  function computeCountryOutlinePoints(country) {
+    var pts = [];
+    (typeof CITIES !== 'undefined' ? CITIES : []).forEach(function(c) {
+      if (c.country === country) pts.push({ lat: c.lat, lon: c.lon });
+    });
+    (typeof HERITAGE_POINTS !== 'undefined' ? HERITAGE_POINTS : []).forEach(function(h) {
+      if (h.c === country) pts.push({ lat: h.lat, lon: h.lon });
+    });
+    if (pts.length === 0) return null;
+    if (pts.length <= 2) return boundingBoxPoints(pts, 0.5);
+    var hull = convexHull(pts);
+    if (hull.length < 3) return boundingBoxPoints(pts, 0.5);
+    return hull;
+  }
+
+  /**
+   * 投影済みの頂点列(project()の戻り値、visibleフラグ付き)を、地球儀裏側
+   * (visible===false)の頂点を除いた「連続する可視区間」ごとの部分パスに分割する。
+   * 裏側の頂点をそのまま含めて1本の閉じたポリゴンとして描画すると、画面上で
+   * 頂点が中心付近に押しつぶされ自己交差した破綻図形になるため、裏側の頂点は
+   * パスから除外し(暗く描くのではなく)、可視区間だけを開いた折れ線として描画する
+   * 方針を採る。全頂点が可視の場合のみ、1本のセグメント(closePathで閉じるポリゴン)
+   * として返す。全頂点が裏側の場合は空配列を返し、呼び出し側は何も描かない。
+   */
+  function buildOutlineSegments(projected) {
+    var n = projected.length;
+    if (n === 0) return [];
+    var allVisible = projected.every(function(pp) { return pp.visible; });
+    if (allVisible) return [projected.slice()];
+    var segments = [];
+    var current = [];
+    for (var i = 0; i < n; i++) {
+      var pp = projected[i];
+      if (pp.visible) {
+        current.push(pp);
+      } else if (current.length > 0) {
+        segments.push(current);
+        current = [];
+      }
+    }
+    if (current.length > 0) segments.push(current);
+    return segments;
+  }
+
+  /**
+   * ルート順序セクションの国別フィルタ(#route-country-filter/routeCountryFilter)で
+   * 「すべて」以外が選択されている場合、その国の近似アウトライン(中抜き・ストロークのみ)を
+   * 地球儀上に描画する。ルート線(#38bdf8)・世界遺産の丸(#f9a8d4)・空港/駅グリフとは
+   * 明確に区別できるよう、半透明の白(rgba(255,255,255,0.65))の破線で描く。
+   * 全頂点可視の場合のみ閉じたポリゴン(closePath)にし、一部が地球儀裏側の場合は
+   * buildOutlineSegments()で分割した開いた折れ線を描く(自己交差した破綻図形を防ぐため)。
+   * strokeStyle/lineWidth/線ダッシュは描画前の値を保持し、描画後に必ず元へ戻す
+   * (以降の描画呼び出し、特にdrawWaypointPointの丸描画に影響を残さないため)。
+   */
+  function drawCountryOutline(ctx, geo) {
+    if (routeCountryFilter === ROUTE_COUNTRY_FILTER_ALL) return;
+    var pts = computeCountryOutlinePoints(routeCountryFilter);
+    if (!pts || pts.length < 3) return;
+    var projected = pts.map(function(p) { return project(p.lat, p.lon, tourCenterLat, tourCenterLon, geo.R, geo.cx, geo.cy); });
+    var allVisible = projected.every(function(pp) { return pp.visible; });
+    var segments = buildOutlineSegments(projected);
+    if (segments.length === 0) return;
+    var prevStrokeStyle = ctx.strokeStyle;
+    var prevLineWidth = ctx.lineWidth;
+    ctx.strokeStyle = 'rgba(255,255,255,0.65)';
+    ctx.lineWidth = 1.5;
+    if (ctx.setLineDash) ctx.setLineDash([5, 4]);
+    segments.forEach(function(seg) {
+      if (seg.length < 2) return;
+      ctx.beginPath();
+      seg.forEach(function(pp, i) { if (i === 0) ctx.moveTo(pp.x, pp.y); else ctx.lineTo(pp.x, pp.y); });
+      if (allVisible && ctx.closePath) ctx.closePath();
+      ctx.stroke();
+    });
+    if (ctx.setLineDash) ctx.setLineDash([]);
+    ctx.strokeStyle = prevStrokeStyle;
+    ctx.lineWidth = prevLineWidth;
+  }
+
+  /**
    * 巡回テスト地球儀上の経由地点1件分を描画する。世界遺産(icon未指定/上記2種以外)は
    * 従来どおり薄ピンク色の丸(半径5)+通し番号ラベル。空港(CLIENT_AIRPORT_ICON)/駅
    * (CLIENT_STATION_ICON)は丸を描かず、それぞれの絵文字グリフをctx.fillTextで
@@ -2084,6 +2224,11 @@ document.getElementById('replay-tour-btn').addEventListener('click', function() 
     ctx.beginPath();
     projected.forEach(function(pp, i) { if (i === 0) ctx.moveTo(pp.x, pp.y); else ctx.lineTo(pp.x, pp.y); });
     ctx.stroke();
+
+    // ルート順序セクションの国別フィルタで国が選択されている場合、その国の
+    // 近似アウトライン(中抜き)を描画する(実データに国境データが無いため、
+    // 候補点の凸包/バウンディングボックスによる近似。drawCountryOutline()参照)。
+    drawCountryOutline(ctx, geo);
 
     // 経由地点(宿泊予定地) - 薄ピンク色の丸で表示し、タップすると名称を一時表示する。
     // ただし空港/駅は色丸ではなく、それぞれの絵文字グリフ(✈︎/🚉)を直接描画する
