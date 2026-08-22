@@ -3,12 +3,6 @@ export interface RouteCity {
   label: string;
   lat: number;
   lon: number;
-  // country: 都市が属する国名(日本語表記)。flag: その国の国旗絵文字。
-  // 「出発地から見た目的地別プラン分布」セクションの各都市ボタンの行頭に
-  // 表示する国旗の出所として使う(src/views/heritageJourney.ts の
-  // renderNightsDistribution/computeDestinationNightsDistribution参照)。
-  // src/data/heritageList.ts の HeritageItem.f(国旗)/c(国名)と同じ絵文字を
-  // 国ごとに再利用し、表記ゆれのない一意な絵文字を採用している。
   country: string;
   flag: string;
 }
@@ -16,7 +10,7 @@ export interface RouteCity {
 export const ROUTE_CITIES: RouteCity[] = [
   { name: "Paris", label: "パリ", lat: 48.8566, lon: 2.3522, country: "フランス", flag: "🇫🇷" },
   { name: "Prague", label: "プラハ", lat: 50.0755, lon: 14.4378, country: "チェコ", flag: "🇨🇿" },
-  { name: "London", label: "ロンドン", lat: 51.5074, lon: -0.1278, country: "イギリス", flag: "🇬🇧" },
+  { name: "London", label: "ロンドン", lat: 51.5074, lon: -0.1278, country: "英国", flag: "🇬🇧" },
   { name: "Amsterdam", label: "アムステルダム", lat: 52.3676, lon: 4.9041, country: "オランダ", flag: "🇳🇱" },
   { name: "Brussels", label: "ブリュッセル", lat: 50.8503, lon: 4.3517, country: "ベルギー", flag: "🇧🇪" },
   { name: "Berlin", label: "ベルリン", lat: 52.52, lon: 13.405, country: "ドイツ", flag: "🇩🇪" },
@@ -70,4 +64,186 @@ export const ROUTE_CITIES: RouteCity[] = [
   { name: "Bucharest", label: "ブカレスト", lat: 44.4268, lon: 26.1025, country: "ルーマニア", flag: "🇷🇴" },
   { name: "Sofia", label: "ソフィア", lat: 42.6977, lon: 23.3219, country: "ブルガリア", flag: "🇧🇬" },
   { name: "Belgrade", label: "ベオグラード", lat: 44.8176, lon: 20.4633, country: "セルビア", flag: "🇷🇸" },
+
+  { name: "Ostrava", label: "オストラヴァ", lat: 49.8347, lon: 18.2821, country: "チェコ", flag: "🇨🇿" },
+  { name: "Plzen", label: "プルゼニ", lat: 49.7384, lon: 13.3736, country: "チェコ", flag: "🇨🇿" },
+  { name: "Liberec", label: "リベレツ", lat: 50.7663, lon: 15.0543, country: "チェコ", flag: "🇨🇿" },
+
+  { name: "Birmingham", label: "バーミンガム", lat: 52.4862, lon: -1.8904, country: "英国", flag: "🇬🇧" },
+  { name: "Manchester", label: "マンチェスター", lat: 53.4808, lon: -2.2426, country: "英国", flag: "🇬🇧" },
+  { name: "Glasgow", label: "グラスゴー", lat: 55.8642, lon: -4.2518, country: "英国", flag: "🇬🇧" },
+  { name: "Leeds", label: "リーズ", lat: 53.8008, lon: -1.5491, country: "英国", flag: "🇬🇧" },
+
+  { name: "Rotterdam", label: "ロッテルダム", lat: 51.9244, lon: 4.4777, country: "オランダ", flag: "🇳🇱" },
+  { name: "TheHague", label: "ハーグ", lat: 52.0705, lon: 4.3007, country: "オランダ", flag: "🇳🇱" },
+  { name: "Utrecht", label: "ユトレヒト", lat: 52.0907, lon: 5.1214, country: "オランダ", flag: "🇳🇱" },
+  { name: "Eindhoven", label: "アイントホーフェン", lat: 51.4416, lon: 5.4697, country: "オランダ", flag: "🇳🇱" },
+
+  { name: "Antwerp", label: "アントウェルペン", lat: 51.2194, lon: 4.4025, country: "ベルギー", flag: "🇧🇪" },
+  { name: "Ghent", label: "ヘント", lat: 51.0543, lon: 3.7174, country: "ベルギー", flag: "🇧🇪" },
+  { name: "Charleroi", label: "シャルルロワ", lat: 50.4108, lon: 4.4446, country: "ベルギー", flag: "🇧🇪" },
+  { name: "Liege", label: "リエージュ", lat: 50.6326, lon: 5.5797, country: "ベルギー", flag: "🇧🇪" },
+
+  { name: "Graz", label: "グラーツ", lat: 47.0707, lon: 15.4395, country: "オーストリア", flag: "🇦🇹" },
+  { name: "Salzburg", label: "ザルツブルク", lat: 47.8095, lon: 13.055, country: "オーストリア", flag: "🇦🇹" },
+  { name: "Innsbruck", label: "インスブルック", lat: 47.2692, lon: 11.4041, country: "オーストリア", flag: "🇦🇹" },
+
+  { name: "Basel", label: "バーゼル", lat: 47.5596, lon: 7.5886, country: "スイス", flag: "🇨🇭" },
+  { name: "Lausanne", label: "ローザンヌ", lat: 46.5197, lon: 6.6323, country: "スイス", flag: "🇨🇭" },
+
+  { name: "Valencia", label: "バレンシア", lat: 39.4699, lon: -0.3763, country: "スペイン", flag: "🇪🇸" },
+  { name: "Seville", label: "セビリア", lat: 37.3891, lon: -5.9845, country: "スペイン", flag: "🇪🇸" },
+  { name: "Zaragoza", label: "サラゴサ", lat: 41.6488, lon: -0.8891, country: "スペイン", flag: "🇪🇸" },
+
+  { name: "Debrecen", label: "デブレツェン", lat: 47.5316, lon: 21.6273, country: "ハンガリー", flag: "🇭🇺" },
+  { name: "Szeged", label: "セゲド", lat: 46.253, lon: 20.1414, country: "ハンガリー", flag: "🇭🇺" },
+  { name: "Miskolc", label: "ミシュコルツ", lat: 48.1035, lon: 20.7784, country: "ハンガリー", flag: "🇭🇺" },
+  { name: "Pecs", label: "ペーチ", lat: 46.0727, lon: 18.2323, country: "ハンガリー", flag: "🇭🇺" },
+
+  { name: "Kosice", label: "コシツェ", lat: 48.7164, lon: 21.2611, country: "スロバキア", flag: "🇸🇰" },
+  { name: "Presov", label: "プレショフ", lat: 49.0018, lon: 21.2393, country: "スロバキア", flag: "🇸🇰" },
+  { name: "Zilina", label: "ジリナ", lat: 49.2231, lon: 18.7394, country: "スロバキア", flag: "🇸🇰" },
+  { name: "Nitra", label: "ニトラ", lat: 48.3081, lon: 18.0873, country: "スロバキア", flag: "🇸🇰" },
+
+  { name: "Split", label: "スプリト", lat: 43.5081, lon: 16.4402, country: "クロアチア", flag: "🇭🇷" },
+  { name: "Rijeka", label: "リエカ", lat: 45.3271, lon: 14.4422, country: "クロアチア", flag: "🇭🇷" },
+  { name: "Osijek", label: "オシイェク", lat: 45.555, lon: 18.6955, country: "クロアチア", flag: "🇭🇷" },
+  { name: "Zadar", label: "ザダル", lat: 44.1194, lon: 15.2314, country: "クロアチア", flag: "🇭🇷" },
+
+  { name: "Maribor", label: "マリボル", lat: 46.5547, lon: 15.6459, country: "スロベニア", flag: "🇸🇮" },
+  { name: "Celje", label: "ツェリェ", lat: 46.2311, lon: 15.2683, country: "スロベニア", flag: "🇸🇮" },
+  { name: "Kranj", label: "クラーニ", lat: 46.2437, lon: 14.3556, country: "スロベニア", flag: "🇸🇮" },
+  { name: "Koper", label: "コペル", lat: 45.5481, lon: 13.7302, country: "スロベニア", flag: "🇸🇮" },
+
+  { name: "Porto", label: "ポルト", lat: 41.1579, lon: -8.6291, country: "ポルトガル", flag: "🇵🇹" },
+  { name: "VilaNovaDeGaia", label: "ヴィラ・ノヴァ・デ・ガイア", lat: 41.1239, lon: -8.6118, country: "ポルトガル", flag: "🇵🇹" },
+  { name: "Amadora", label: "アマドーラ", lat: 38.7536, lon: -9.2302, country: "ポルトガル", flag: "🇵🇹" },
+  { name: "Braga", label: "ブラガ", lat: 41.5454, lon: -8.4265, country: "ポルトガル", flag: "🇵🇹" },
+
+  { name: "BanjaLuka", label: "バニャルカ", lat: 44.7722, lon: 17.191, country: "ボスニア・ヘルツェゴビナ", flag: "🇧🇦" },
+  { name: "Tuzla", label: "トゥズラ", lat: 44.5386, lon: 18.6753, country: "ボスニア・ヘルツェゴビナ", flag: "🇧🇦" },
+  { name: "Zenica", label: "ゼニツァ", lat: 44.2016, lon: 17.9074, country: "ボスニア・ヘルツェゴビナ", flag: "🇧🇦" },
+  { name: "Mostar", label: "モスタル", lat: 43.3438, lon: 17.8078, country: "ボスニア・ヘルツェゴビナ", flag: "🇧🇦" },
+
+  { name: "Aarhus", label: "オーフス", lat: 56.1629, lon: 10.2039, country: "デンマーク", flag: "🇩🇰" },
+  { name: "Odense", label: "オーデンセ", lat: 55.4038, lon: 10.4024, country: "デンマーク", flag: "🇩🇰" },
+  { name: "Aalborg", label: "オールボー", lat: 57.0488, lon: 9.9217, country: "デンマーク", flag: "🇩🇰" },
+  { name: "Esbjerg", label: "エスビャウ", lat: 55.4765, lon: 8.4594, country: "デンマーク", flag: "🇩🇰" },
+
+  { name: "Daugavpils", label: "ダウガフピルス", lat: 55.8747, lon: 26.5363, country: "ラトビア", flag: "🇱🇻" },
+  { name: "Liepaja", label: "リエパーヤ", lat: 56.5047, lon: 21.0108, country: "ラトビア", flag: "🇱🇻" },
+  { name: "Jelgava", label: "イェルガヴァ", lat: 56.6511, lon: 23.7214, country: "ラトビア", flag: "🇱🇻" },
+  { name: "Jurmala", label: "ユールマラ", lat: 56.9682, lon: 23.771, country: "ラトビア", flag: "🇱🇻" },
+
+  { name: "Kaunas", label: "カウナス", lat: 54.8985, lon: 23.9036, country: "リトアニア", flag: "🇱🇹" },
+  { name: "Klaipeda", label: "クライペダ", lat: 55.7033, lon: 21.1443, country: "リトアニア", flag: "🇱🇹" },
+  { name: "Siauliai", label: "シャウレイ", lat: 55.9349, lon: 23.3144, country: "リトアニア", flag: "🇱🇹" },
+  { name: "Panevezys", label: "パネヴェジース", lat: 55.7357, lon: 24.3591, country: "リトアニア", flag: "🇱🇹" },
+
+  { name: "Gomel", label: "ゴメリ", lat: 52.4345, lon: 30.9754, country: "ベラルーシ", flag: "🇧🇾" },
+  { name: "Mogilev", label: "モギリョフ", lat: 53.9006, lon: 30.3319, country: "ベラルーシ", flag: "🇧🇾" },
+  { name: "Vitebsk", label: "ヴィーツェプスク", lat: 55.1904, lon: 30.2049, country: "ベラルーシ", flag: "🇧🇾" },
+  { name: "Grodno", label: "フロドナ", lat: 53.6884, lon: 23.8258, country: "ベラルーシ", flag: "🇧🇾" },
+
+  { name: "Kharkiv", label: "ハルキウ", lat: 49.9935, lon: 36.2304, country: "ウクライナ", flag: "🇺🇦" },
+  { name: "Odesa", label: "オデーサ", lat: 46.4825, lon: 30.7233, country: "ウクライナ", flag: "🇺🇦" },
+  { name: "Dnipro", label: "ドニプロ", lat: 48.4647, lon: 35.0462, country: "ウクライナ", flag: "🇺🇦" },
+
+  { name: "Thessaloniki", label: "テッサロニキ", lat: 40.6401, lon: 22.9444, country: "ギリシャ", flag: "🇬🇷" },
+  { name: "Patras", label: "パトラ", lat: 38.2466, lon: 21.7346, country: "ギリシャ", flag: "🇬🇷" },
+  { name: "Heraklion", label: "ヘラクリオン", lat: 35.3387, lon: 25.1442, country: "ギリシャ", flag: "🇬🇷" },
+  { name: "Larissa", label: "ラリサ", lat: 39.639, lon: 22.4191, country: "ギリシャ", flag: "🇬🇷" },
+
+  { name: "ClujNapoca", label: "クルジュ=ナポカ", lat: 46.7712, lon: 23.6236, country: "ルーマニア", flag: "🇷🇴" },
+  { name: "Timisoara", label: "ティミショアラ", lat: 45.7489, lon: 21.2087, country: "ルーマニア", flag: "🇷🇴" },
+  { name: "Iasi", label: "ヤシ", lat: 47.1585, lon: 27.6014, country: "ルーマニア", flag: "🇷🇴" },
+  { name: "Constanta", label: "コンスタンツァ", lat: 44.1765, lon: 28.6348, country: "ルーマニア", flag: "🇷🇴" },
+
+  { name: "Plovdiv", label: "プロヴディフ", lat: 42.1354, lon: 24.7453, country: "ブルガリア", flag: "🇧🇬" },
+  { name: "Varna", label: "ヴァルナ", lat: 43.2141, lon: 27.9147, country: "ブルガリア", flag: "🇧🇬" },
+  { name: "Burgas", label: "ブルガス", lat: 42.5048, lon: 27.4626, country: "ブルガリア", flag: "🇧🇬" },
+  { name: "Ruse", label: "ルセ", lat: 43.8564, lon: 25.9704, country: "ブルガリア", flag: "🇧🇬" },
+
+  { name: "NoviSad", label: "ノヴィ・サド", lat: 45.2671, lon: 19.8335, country: "セルビア", flag: "🇷🇸" },
+  { name: "Nis", label: "ニシュ", lat: 43.3209, lon: 21.8958, country: "セルビア", flag: "🇷🇸" },
+  { name: "Kragujevac", label: "クラグイェヴァツ", lat: 44.0128, lon: 20.9114, country: "セルビア", flag: "🇷🇸" },
+  { name: "Subotica", label: "スボティツァ", lat: 46.1008, lon: 19.665, country: "セルビア", flag: "🇷🇸" },
+
+  { name: "Dublin", label: "ダブリン", lat: 53.3498, lon: -6.2603, country: "アイルランド", flag: "🇮🇪" },
+  { name: "Cork", label: "コーク", lat: 51.8985, lon: -8.4756, country: "アイルランド", flag: "🇮🇪" },
+  { name: "Limerick", label: "リムリック", lat: 52.6638, lon: -8.6267, country: "アイルランド", flag: "🇮🇪" },
+  { name: "Galway", label: "ゴールウェイ", lat: 53.2707, lon: -9.0568, country: "アイルランド", flag: "🇮🇪" },
+  { name: "Waterford", label: "ウォーターフォード", lat: 52.2593, lon: -7.1101, country: "アイルランド", flag: "🇮🇪" },
+
+  { name: "Oslo", label: "オスロ", lat: 59.9139, lon: 10.7522, country: "ノルウェー", flag: "🇳🇴" },
+  { name: "Bergen", label: "ベルゲン", lat: 60.3913, lon: 5.3221, country: "ノルウェー", flag: "🇳🇴" },
+  { name: "Trondheim", label: "トロンハイム", lat: 63.4305, lon: 10.3951, country: "ノルウェー", flag: "🇳🇴" },
+  { name: "Stavanger", label: "スタヴァンゲル", lat: 58.97, lon: 5.7331, country: "ノルウェー", flag: "🇳🇴" },
+  { name: "Drammen", label: "ドランメン", lat: 59.744, lon: 10.2045, country: "ノルウェー", flag: "🇳🇴" },
+
+  { name: "Stockholm", label: "ストックホルム", lat: 59.3293, lon: 18.0686, country: "スウェーデン", flag: "🇸🇪" },
+  { name: "Gothenburg", label: "イェーテボリ", lat: 57.7089, lon: 11.9746, country: "スウェーデン", flag: "🇸🇪" },
+  { name: "Malmo", label: "マルメ", lat: 55.605, lon: 13.0038, country: "スウェーデン", flag: "🇸🇪" },
+  { name: "Uppsala", label: "ウプサラ", lat: 59.8586, lon: 17.6389, country: "スウェーデン", flag: "🇸🇪" },
+  { name: "Vasteras", label: "ヴェステロース", lat: 59.6099, lon: 16.5448, country: "スウェーデン", flag: "🇸🇪" },
+
+  { name: "Helsinki", label: "ヘルシンキ", lat: 60.1699, lon: 24.9384, country: "フィンランド", flag: "🇫🇮" },
+  { name: "Espoo", label: "エスポー", lat: 60.2055, lon: 24.6559, country: "フィンランド", flag: "🇫🇮" },
+  { name: "Tampere", label: "タンペレ", lat: 61.4978, lon: 23.761, country: "フィンランド", flag: "🇫🇮" },
+  { name: "Vantaa", label: "ヴァンター", lat: 60.2934, lon: 25.0378, country: "フィンランド", flag: "🇫🇮" },
+  { name: "Oulu", label: "オウル", lat: 65.0121, lon: 25.4651, country: "フィンランド", flag: "🇫🇮" },
+
+  { name: "Reykjavik", label: "レイキャヴィク", lat: 64.1466, lon: -21.9426, country: "アイスランド", flag: "🇮🇸" },
+  { name: "Kopavogur", label: "コーパヴォグル", lat: 64.1085, lon: -21.9107, country: "アイスランド", flag: "🇮🇸" },
+  { name: "Hafnarfjordur", label: "ハフナルフィヨルズゥル", lat: 64.067, lon: -21.95, country: "アイスランド", flag: "🇮🇸" },
+  { name: "Akureyri", label: "アークレイリ", lat: 65.6835, lon: -18.0878, country: "アイスランド", flag: "🇮🇸" },
+  { name: "Reykjanesbaer", label: "レイキャネスバイル", lat: 63.9994, lon: -22.556, country: "アイスランド", flag: "🇮🇸" },
+
+  { name: "Tallinn", label: "タリン", lat: 59.437, lon: 24.7536, country: "エストニア", flag: "🇪🇪" },
+  { name: "Tartu", label: "タルトゥ", lat: 58.378, lon: 26.729, country: "エストニア", flag: "🇪🇪" },
+  { name: "Narva", label: "ナルヴァ", lat: 59.3772, lon: 28.1903, country: "エストニア", flag: "🇪🇪" },
+  { name: "Parnu", label: "ペルヌ", lat: 58.3859, lon: 24.4971, country: "エストニア", flag: "🇪🇪" },
+  { name: "KohtlaJarve", label: "コフトラ=ヤルヴェ", lat: 59.3992, lon: 27.2661, country: "エストニア", flag: "🇪🇪" },
+
+  { name: "Chisinau", label: "キシナウ", lat: 47.0105, lon: 28.8638, country: "モルドバ", flag: "🇲🇩" },
+  { name: "Tiraspol", label: "ティラスポリ", lat: 46.8403, lon: 29.6433, country: "モルドバ", flag: "🇲🇩" },
+  { name: "Balti", label: "バルツィ", lat: 47.7614, lon: 27.9294, country: "モルドバ", flag: "🇲🇩" },
+  { name: "Bender", label: "ベンデル", lat: 46.8225, lon: 29.4739, country: "モルドバ", flag: "🇲🇩" },
+  { name: "Ribnita", label: "リブニツァ", lat: 47.762, lon: 29.0043, country: "モルドバ", flag: "🇲🇩" },
+
+  { name: "Skopje", label: "スコピエ", lat: 42.0043, lon: 21.4267, country: "北マケドニア", flag: "🇲🇰" },
+  { name: "Bitola", label: "ビトラ", lat: 41.0297, lon: 21.3347, country: "北マケドニア", flag: "🇲🇰" },
+  { name: "Kumanovo", label: "クマノヴォ", lat: 42.1322, lon: 21.7144, country: "北マケドニア", flag: "🇲🇰" },
+  { name: "Prilep", label: "プリレプ", lat: 41.3453, lon: 21.5544, country: "北マケドニア", flag: "🇲🇰" },
+  { name: "Tetovo", label: "テトヴォ", lat: 42.0104, lon: 20.9715, country: "北マケドニア", flag: "🇲🇰" },
+
+  { name: "Tirana", label: "ティラナ", lat: 41.3275, lon: 19.8187, country: "アルバニア", flag: "🇦🇱" },
+  { name: "Durres", label: "ドゥラス", lat: 41.3231, lon: 19.4414, country: "アルバニア", flag: "🇦🇱" },
+  { name: "Vlore", label: "ヴロラ", lat: 40.4667, lon: 19.49, country: "アルバニア", flag: "🇦🇱" },
+  { name: "Elbasan", label: "エルバサン", lat: 41.1125, lon: 20.0822, country: "アルバニア", flag: "🇦🇱" },
+  { name: "Shkoder", label: "シュコドラ", lat: 42.0683, lon: 19.5126, country: "アルバニア", flag: "🇦🇱" },
+
+  { name: "Nicosia", label: "ニコシア", lat: 35.1856, lon: 33.3823, country: "キプロス", flag: "🇨🇾" },
+  { name: "Limassol", label: "リマソル", lat: 34.7071, lon: 33.0226, country: "キプロス", flag: "🇨🇾" },
+  { name: "Larnaca", label: "ラルナカ", lat: 34.9182, lon: 33.6386, country: "キプロス", flag: "🇨🇾" },
+  { name: "Famagusta", label: "ファマグスタ", lat: 35.1264, lon: 33.9391, country: "キプロス", flag: "🇨🇾" },
+  { name: "Paphos", label: "パフォス", lat: 34.772, lon: 32.4297, country: "キプロス", flag: "🇨🇾" },
+
+  { name: "LuxembourgCity", label: "ルクセンブルク市", lat: 49.6116, lon: 6.1319, country: "ルクセンブルク", flag: "🇱🇺" },
+  { name: "EschSurAlzette", label: "エッシュ=シュル=アルゼット", lat: 49.4958, lon: 5.9806, country: "ルクセンブルク", flag: "🇱🇺" },
+  { name: "Differdange", label: "ディフェルダンジュ", lat: 49.5236, lon: 5.8917, country: "ルクセンブルク", flag: "🇱🇺" },
+  { name: "Dudelange", label: "デュドランジュ", lat: 49.4797, lon: 6.0864, country: "ルクセンブルク", flag: "🇱🇺" },
+  { name: "Ettelbruck", label: "エッテルブリュック", lat: 49.8478, lon: 6.1044, country: "ルクセンブルク", flag: "🇱🇺" },
+
+  { name: "Birkirkara", label: "ビルキルカラ", lat: 35.8972, lon: 14.4611, country: "マルタ", flag: "🇲🇹" },
+  { name: "Mosta", label: "モスタ", lat: 35.9089, lon: 14.4258, country: "マルタ", flag: "🇲🇹" },
+  { name: "Qormi", label: "コルミ", lat: 35.8767, lon: 14.4711, country: "マルタ", flag: "🇲🇹" },
+  { name: "Sliema", label: "スリーマ", lat: 35.9122, lon: 14.5017, country: "マルタ", flag: "🇲🇹" },
+  { name: "StPaulsBay", label: "セント・ポールズ・ベイ", lat: 35.9497, lon: 14.3989, country: "マルタ", flag: "🇲🇹" },
+
+  { name: "Podgorica", label: "ポドゴリツァ", lat: 42.4304, lon: 19.2594, country: "モンテネグロ", flag: "🇲🇪" },
+  { name: "Niksic", label: "ニクシッチ", lat: 42.7731, lon: 18.9447, country: "モンテネグロ", flag: "🇲🇪" },
+  { name: "Pljevlja", label: "プリェヴリャ", lat: 43.3573, lon: 19.3586, country: "モンテネグロ", flag: "🇲🇪" },
+  { name: "BijeloPolje", label: "ビイェロ・ポリェ", lat: 43.0364, lon: 19.7469, country: "モンテネグロ", flag: "🇲🇪" },
+  { name: "HercegNovi", label: "ヘルツェグ・ノヴィ", lat: 42.4531, lon: 18.5375, country: "モンテネグロ", flag: "🇲🇪" },
 ];
