@@ -4586,7 +4586,7 @@ export async function searchAiChatShares(
 ): Promise<{ results: Array<{
   id: string; user_hash: string; question: string; answer: string;
   model: string; created_at: string; access_count: number; question_hash: string | null;
-  image_data_url: string | null;
+  image_data_url: string | null; image_id: string | null;
 }> }> {
   // LIKEは(ワイルドカードの有無に関わらず)D1では約50バイト超のパターンで
   // "LIKE or GLOB pattern too complex" になるため、任意長になり得る自由入力の
@@ -4594,7 +4594,7 @@ export async function searchAiChatShares(
   const normalized = q.replace(/[・･]/g, '・');
   const rows = await db
     .prepare(
-      `SELECT s.id, s.user_hash, s.question, s.answer, s.model, s.created_at, s.access_count, s.question_hash,
+      `SELECT s.id, s.user_hash, s.question, s.answer, s.model, s.created_at, s.access_count, s.question_hash, s.image_id,
               COALESCE(img.image_data_url, s.image_data_url) AS image_data_url
        FROM ai_chat_shares s
        LEFT JOIN aichat_images img ON img.id = s.image_id
@@ -4614,7 +4614,7 @@ export async function searchAiChatShares(
     .all<{
       id: string; user_hash: string; question: string; answer: string;
       model: string; created_at: string; access_count: number; question_hash: string | null;
-      image_data_url: string | null;
+      image_data_url: string | null; image_id: string | null;
     }>();
   return { results: rows.results ?? [] };
 }
@@ -4632,12 +4632,12 @@ export async function searchAiChatSharesWithImage(
   q: string,
 ): Promise<{ results: Array<{
   id: string; user_hash: string; question: string; answer: string;
-  model: string; created_at: string; image_data_url: string | null;
+  model: string; created_at: string; image_data_url: string | null; image_id: string | null;
 }> }> {
   const normalized = q.replace(/[・･]/g, '・');
   const rows = await db
     .prepare(
-      `SELECT s.id, s.user_hash, s.question, s.answer, s.model, s.created_at,
+      `SELECT s.id, s.user_hash, s.question, s.answer, s.model, s.created_at, s.image_id,
               COALESCE(img.image_data_url, s.image_data_url) AS image_data_url
        FROM ai_chat_shares s
        LEFT JOIN aichat_images img ON img.id = s.image_id
@@ -4648,7 +4648,7 @@ export async function searchAiChatSharesWithImage(
     .bind(userId, normalized, normalized)
     .all<{
       id: string; user_hash: string; question: string; answer: string;
-      model: string; created_at: string; image_data_url: string | null;
+      model: string; created_at: string; image_data_url: string | null; image_id: string | null;
     }>();
   return { results: rows.results ?? [] };
 }
@@ -4668,12 +4668,12 @@ export async function searchAichatMoondreamAnalyses(
   q: string,
 ): Promise<{ results: Array<{
   id: string; user_hash: string; question: string; answer: string;
-  model: string; created_at: string; image_data_url: string | null;
+  model: string; created_at: string; image_data_url: string | null; image_id: string | null;
 }> }> {
   const normalized = q.replace(/[・･]/g, '・');
   const rows = await db
     .prepare(
-      `SELECT s.id, s.user_hash, s.question, m.analysis_text AS answer, m.model, s.created_at,
+      `SELECT s.id, s.user_hash, s.question, m.analysis_text AS answer, m.model, s.created_at, s.image_id,
               COALESCE(img.image_data_url, s.image_data_url) AS image_data_url
        FROM aichat_moondream_analyses m
        JOIN ai_chat_shares s ON s.id = m.share_id AND s.user_id = m.user_id
@@ -4685,7 +4685,7 @@ export async function searchAichatMoondreamAnalyses(
     .bind(userId, normalized)
     .all<{
       id: string; user_hash: string; question: string; answer: string;
-      model: string; created_at: string; image_data_url: string | null;
+      model: string; created_at: string; image_data_url: string | null; image_id: string | null;
     }>();
   return { results: rows.results ?? [] };
 }
@@ -4745,6 +4745,50 @@ export async function getAichatShareDetail(
     .bind(id, userId)
     .first<AichatShareDetail>();
   return row ?? null;
+}
+
+/** /api/aichat/image-branches が返す1件分の型。llama-4はquestion/answer、moondream3.1はanalysis_textのみ埋める */
+export interface AichatImageBranchItem {
+  modelFamily: 'llama-4' | 'moondream3.1';
+  shareId: string;
+  question: string | null;
+  answer: string | null;
+  model: string;
+  created_at: string;
+}
+
+/**
+ * /aichat-image-gallery の「🌳 分派を見る」機能用。1枚のimage_idに紐づく
+ * llama-4側(ai_chat_shares)とmoondream3.1側(aichat_moondream_analyses)の
+ * 出力を1本の配列にまとめる純粋関数(DBアクセスなし、shapingのみ)。
+ * PR #1445で修正された「moondream3.1の分析結果はai_chat_shares.answerではなく
+ * aichat_moondream_analyses.analysis_textにある」という区別を、ここでも
+ * 同じ誤りを繰り返さないよう厳密に守る:
+ * - llama-4行はshareRowsのquestion/answerをそのまま使う
+ * - moondream3.1行はmoondreamRowsのanalysis_textをanswerとして使い、
+ *   ai_chat_shares.answerは一切参照しない
+ */
+export function buildAichatImageBranchItems(
+  shareRows: Array<{ id: string; question: string; answer: string; model: string; created_at: string }>,
+  moondreamRows: Array<{ share_id: string; analysis_text: string; model: string; created_at: string }>,
+): AichatImageBranchItem[] {
+  const llamaItems: AichatImageBranchItem[] = shareRows.map((s) => ({
+    modelFamily: 'llama-4',
+    shareId: s.id,
+    question: s.question,
+    answer: s.answer,
+    model: s.model,
+    created_at: s.created_at,
+  }));
+  const moondreamItems: AichatImageBranchItem[] = moondreamRows.map((m) => ({
+    modelFamily: 'moondream3.1',
+    shareId: m.share_id,
+    question: null,
+    answer: m.analysis_text,
+    model: m.model,
+    created_at: m.created_at,
+  }));
+  return [...llamaItems, ...moondreamItems];
 }
 
 /**
@@ -9877,6 +9921,34 @@ app.get('/api/aichat/image-gallery-search', authMiddleware, async (c) => {
     ? await searchAichatMoondreamAnalyses(db, user.sub, q)
     : await searchAiChatSharesWithImage(db, user.sub, q);
   return jsonUtf8({ results });
+});
+
+// /aichat-image-gallery プレビューモーダルの「🌳 分派を見る」用。1枚の画像(image_id)に
+// 対して、llama-4側(ai_chat_shares)とmoondream3.1側(aichat_moondream_analyses)の
+// 両方の出力を1本の配列で返す。閲覧専用(読み取りのみ)で、書き込み・関係修復は行わない。
+app.get('/api/aichat/image-branches', authMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+
+  const imageId = (c.req.query('imageId') ?? '').trim();
+  if (!imageId) return jsonUtf8({ error: 'imageId は必須です' }, 400);
+
+  const shareRows = await c.env.DB.prepare(
+    `SELECT id, question, answer, model, created_at
+     FROM ai_chat_shares
+     WHERE image_id = ? AND user_id = ? AND deleted_at IS NULL
+     ORDER BY created_at ASC`
+  ).bind(imageId, user.sub).all<{ id: string; question: string; answer: string; model: string; created_at: string }>();
+
+  const moondreamRows = await c.env.DB.prepare(
+    `SELECT share_id, analysis_text, model, created_at
+     FROM aichat_moondream_analyses
+     WHERE image_id = ? AND user_id = ?
+     ORDER BY created_at ASC`
+  ).bind(imageId, user.sub).all<{ share_id: string; analysis_text: string; model: string; created_at: string }>();
+
+  const items = buildAichatImageBranchItems(shareRows.results ?? [], moondreamRows.results ?? []);
+  return jsonUtf8({ items });
 });
 
 // /moondream-vlm ページとAIチャットの画像添付機能の両方から呼ばれる内部用API。

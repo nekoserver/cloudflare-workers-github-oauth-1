@@ -93,8 +93,33 @@ h1 { font-size:15px; font-weight:700; flex:1; }
 .preview-bubble-image { max-width:220px; max-height:220px; border-radius:6px; display:block; margin-bottom:6px; }
 .preview-highlight-toggle { background:none; border:none; color:#8b949e; font-size:14px; cursor:pointer; padding:2px 6px; opacity:0.2; }
 .preview-highlight-toggle:hover { color:#e6edf3; }
+.preview-branch-toggle { background:#161b22; border:1px solid #30363d; color:#8b949e; font-size:11px; cursor:pointer; padding:4px 8px; border-radius:6px; white-space:nowrap; }
+.preview-branch-toggle:hover { color:#e6edf3; border-color:#58a6ff; }
 .kw-highlight { background:#fef08a; color:#1a1a1a; border-radius:2px; padding:0 1px; }
 .preview-chat.highlights-hidden .kw-highlight { background:transparent; color:inherit; outline:none; }
+.branch-overlay {
+  position:fixed; inset:0; background:rgba(0,0,0,0.72); display:none;
+  align-items:center; justify-content:center; z-index:1100; padding:16px;
+}
+.branch-overlay.open { display:flex; }
+.branch-box {
+  background:#0d1424; border:1px solid #1e2a40; border-radius:10px;
+  width:100%; max-width:560px; max-height:90vh; display:flex; flex-direction:column;
+}
+.branch-head {
+  display:flex; align-items:center; gap:10px; padding:10px 14px;
+  border-bottom:1px solid #1e2a40; flex-shrink:0;
+}
+.branch-title { font-size:13px; font-weight:700; flex:1; }
+.branch-close { background:none; border:none; color:#8b949e; font-size:16px; cursor:pointer; padding:2px 6px; }
+.branch-close:hover { color:#e6edf3; }
+.branch-body { padding:12px; display:flex; flex-direction:column; gap:10px; align-items:center; overflow-y:auto; }
+.branch-body canvas { max-width:100%; touch-action:manipulation; cursor:pointer; }
+.branch-panel {
+  width:100%; min-height:60px; max-height:220px; overflow-y:auto; background:#161b22;
+  border:1px solid #30363d; border-radius:8px; padding:10px 12px; font-size:12px;
+  line-height:1.6; color:#8b949e; white-space:pre-wrap; word-break:break-word;
+}
 ${getMarkdownPreviewCSS()}
 </style>
 </head>
@@ -123,9 +148,22 @@ ${getMarkdownPreviewCSS()}
       <div class="preview-title">🖼️ 画像添付会話のプレビュー</div>
       <div class="preview-meta" id="previewMeta"></div>
       <button type="button" class="preview-highlight-toggle" id="previewHighlightToggle" title="キーワードハイライトON/OFF">🔑</button>
+      <button type="button" class="preview-branch-toggle" id="previewBranchToggle" title="この画像に対する全モデルの出力を分派図で見る">🌳 分派を見る</button>
       <button type="button" class="preview-close" id="previewClose" aria-label="閉じる">✕</button>
     </div>
     <div class="preview-chat" id="previewChat"></div>
+  </div>
+</div>
+<div class="branch-overlay" id="branchOverlay">
+  <div class="branch-box">
+    <div class="branch-head">
+      <div class="branch-title">🌳 分派図(このimageIdに紐づく全モデルの出力)</div>
+      <button type="button" class="branch-close" id="branchClose" aria-label="閉じる">✕</button>
+    </div>
+    <div class="branch-body">
+      <canvas id="branchCanvas" width="480" height="480"></canvas>
+      <div class="branch-panel" id="branchPanel">ノードをタップすると内容を表示します</div>
+    </div>
   </div>
 </div>
 <script>
@@ -143,12 +181,18 @@ ${getKeywordHighlightScript()}
   var previewMeta = document.getElementById('previewMeta');
   var previewClose = document.getElementById('previewClose');
   var previewHighlightToggle = document.getElementById('previewHighlightToggle');
+  var previewBranchToggle = document.getElementById('previewBranchToggle');
+  var branchOverlay = document.getElementById('branchOverlay');
+  var branchClose = document.getElementById('branchClose');
+  var branchCanvas = document.getElementById('branchCanvas');
+  var branchPanel = document.getElementById('branchPanel');
 
   var currentResults = [];
   var currentSearchKeyword = '';
 
   // ===== キーワードハイライトON/OFF(AIチャットの詳細プレビューモーダルと共通のapplyKeywordHighlight/clearKeywordHighlightsを使用) =====
   var previewCurrentId = null;
+  var previewCurrentImageId = null;
   var previewHighlightActive = false;
   var previewKeywordsFromDB = [];
   var previewDBKeywordsApplied = false;
@@ -222,6 +266,8 @@ ${getKeywordHighlightScript()}
     previewChat.appendChild(assistantBubble);
 
     previewCurrentId = item.id;
+    previewCurrentImageId = item.image_id || null;
+    branchLastImageUrl = item.image_data_url || null;
     previewKeywordsFromDB = [];
     previewDBKeywordsApplied = false;
     previewChat.classList.remove('highlights-hidden');
@@ -240,6 +286,142 @@ ${getKeywordHighlightScript()}
   previewClose.addEventListener('click', function(e) { e.stopPropagation(); closePreview(); });
   previewOverlay.addEventListener('click', function(e) { if (e.target === previewOverlay) closePreview(); });
   document.addEventListener('keydown', function(e) { if (e.key === 'Escape' && previewOverlay.classList.contains('open')) closePreview(); });
+
+  // ===== 分派図(閲覧専用): 1枚のimage_idに紐づくllama-4/moondream3.1の全出力を
+  // canvasの放射状ツリーで表示する。編集・関係修復UIは一切持たない。 =====
+
+  // 中心(画像サムネイル)を基準に、count個のノードを円周上へ均等配置する純粋関数。
+  // count<=0でも例外を投げず空配列を返す。
+  function computeRadialLayout(centerX, centerY, radius, count) {
+    var positions = [];
+    if (count <= 0) return positions;
+    for (var i = 0; i < count; i++) {
+      var angle = (Math.PI * 2 * i) / count - Math.PI / 2;
+      positions.push({
+        x: centerX + radius * Math.cos(angle),
+        y: centerY + radius * Math.sin(angle),
+      });
+    }
+    return positions;
+  }
+
+  // ノードタップ時にポップアップ(branchPanel)へ表示するテキストを選ぶ純粋関数。
+  // llama-4行は質問+回答、moondream3.1行はanalysis_text(=answerに詰めて渡す)のみ。
+  function selectBranchPopupContent(item) {
+    if (!item) return '';
+    if (item.modelFamily === 'moondream3.1') {
+      return '[' + item.model + '] ' + (item.answer || '');
+    }
+    var q = item.question || '(質問なし)';
+    var a = item.answer || '(回答なし)';
+    return '[' + item.model + '] Q: ' + q + '\\nA: ' + a;
+  }
+
+  var branchItems = [];
+  var branchNodePositions = [];
+  var branchLastImageUrl = null;
+
+  function drawBranchDiagram(imageUrl, items) {
+    if (!branchCanvas || !branchCanvas.getContext) return;
+    var ctx = branchCanvas.getContext('2d');
+    if (!ctx) return;
+    var w = branchCanvas.width, h = branchCanvas.height;
+    var cx = w / 2, cy = h / 2;
+    var radius = Math.min(w, h) / 2 - 60;
+    ctx.clearRect(0, 0, w, h);
+
+    branchNodePositions = computeRadialLayout(cx, cy, radius, items.length);
+
+    // 中心から各ノードへ、モデル別の色(MODEL_COLORS、未登録なら灰色)で線を引く
+    branchNodePositions.forEach(function(pos, i) {
+      var item = items[i];
+      var color = (MODEL_COLORS && MODEL_COLORS[item.model]) || '#586069';
+      ctx.beginPath();
+      ctx.moveTo(cx, cy);
+      ctx.lineTo(pos.x, pos.y);
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    });
+
+    // 中心ノード(画像サムネイル)は円で代用描画(読み込み待ちを避けるため画像自体は描かない)
+    ctx.beginPath();
+    ctx.arc(cx, cy, 22, 0, Math.PI * 2);
+    ctx.fillStyle = '#1f4a8c';
+    ctx.fill();
+
+    branchNodePositions.forEach(function(pos, i) {
+      var item = items[i];
+      var color = (MODEL_COLORS && MODEL_COLORS[item.model]) || '#586069';
+      ctx.beginPath();
+      ctx.arc(pos.x, pos.y, 14, 0, Math.PI * 2);
+      ctx.fillStyle = color;
+      ctx.fill();
+      ctx.fillStyle = '#e6edf3';
+      ctx.fillText(item.modelFamily === 'moondream3.1' ? '🌙' : '💬', pos.x - 6, pos.y + 4);
+    });
+  }
+
+  function findBranchNodeIndexAt(x, y) {
+    for (var i = 0; i < branchNodePositions.length; i++) {
+      var pos = branchNodePositions[i];
+      var dx = x - pos.x, dy = y - pos.y;
+      if (Math.sqrt(dx * dx + dy * dy) <= 16) return i;
+    }
+    return -1;
+  }
+
+  if (branchCanvas) {
+    branchCanvas.addEventListener('click', function(e) {
+      var rect = branchCanvas.getBoundingClientRect();
+      var scaleX = branchCanvas.width / rect.width;
+      var scaleY = branchCanvas.height / rect.height;
+      var x = (e.clientX - rect.left) * scaleX;
+      var y = (e.clientY - rect.top) * scaleY;
+      var idx = findBranchNodeIndexAt(x, y);
+      if (idx < 0) return;
+      var content = selectBranchPopupContent(branchItems[idx]);
+      branchPanel.textContent = content;
+      clearKeywordHighlights(branchPanel);
+      if (currentSearchKeyword) applyKeywordHighlight(branchPanel, currentSearchKeyword);
+    });
+  }
+
+  function openBranchOverlay() {
+    if (!previewCurrentImageId) {
+      branchPanel.textContent = 'この会話には画像IDが紐づいていないため分派図を表示できません';
+      branchOverlay.classList.add('open');
+      return;
+    }
+    branchPanel.textContent = '読み込み中...';
+    branchOverlay.classList.add('open');
+    fetch('/api/aichat/image-branches?imageId=' + encodeURIComponent(previewCurrentImageId), { credentials: 'same-origin' })
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        branchItems = (data && data.items) || [];
+        branchPanel.textContent = branchItems.length + ' 件の出力が見つかりました。ノードをタップすると内容を表示します';
+        drawBranchDiagram(branchLastImageUrl, branchItems);
+      })
+      .catch(function() {
+        branchPanel.textContent = '分派図の取得に失敗しました';
+      });
+  }
+
+  function closeBranchOverlay() { branchOverlay.classList.remove('open'); }
+
+  if (previewBranchToggle) {
+    previewBranchToggle.addEventListener('click', function(e) {
+      e.stopPropagation();
+      openBranchOverlay();
+    });
+  }
+  if (branchClose) {
+    branchClose.addEventListener('click', function(e) { e.stopPropagation(); closeBranchOverlay(); });
+  }
+  if (branchOverlay) {
+    branchOverlay.addEventListener('click', function(e) { if (e.target === branchOverlay) closeBranchOverlay(); });
+  }
+  document.addEventListener('keydown', function(e) { if (e.key === 'Escape' && branchOverlay && branchOverlay.classList.contains('open')) closeBranchOverlay(); });
 
   function renderGallery(results) {
     currentResults = results;
