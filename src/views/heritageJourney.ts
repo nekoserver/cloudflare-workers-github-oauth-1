@@ -292,6 +292,7 @@ h1{font-size:22px;margin:0 0 4px}
 .tour-modal-head{position:relative;display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:8px}
 .end-city-picker-cand-toolbar{margin-left:auto;margin-bottom:0;font-size:11px}
 .end-city-picker-cand-label{color:#94a3b8;white-space:nowrap}
+.end-city-picker-cand-toolbar-row2{flex-basis:100%;margin-left:0}
 .dist-country-filter-label{color:#94a3b8;white-space:nowrap}
 .dist-country-filter-list{list-style:none;margin:0;padding:0;max-height:60vh;overflow:auto}
 .dist-country-filter-row{display:flex;align-items:center;gap:8px;padding:8px 10px;border-bottom:1px solid #334155;cursor:pointer;color:#e2e8f0;font-size:13px}
@@ -486,13 +487,20 @@ ${getMitokoroModalCss()}
   <div class="tour-modal-box" id="end-city-picker-modal-box">
     <div class="tour-modal-head" id="end-city-picker-modal-head">
       <div class="tour-modal-title">🏙️ 到着地を選択</div>
-      <div class="cand-toolbar end-city-picker-cand-toolbar">
+      <div class="start-city-picker-checkbox-row">
+        <label class="start-city-picker-checkbox-group"><input type="checkbox" id="end-city-picker-cities-cb" checked>都市名のみ</label>
+        <span class="start-city-picker-checkbox-sep"></span>
+        <label class="start-city-picker-checkbox-group"><input type="checkbox" id="end-city-picker-stations-cb">駅</label>
+        <label class="start-city-picker-checkbox-group"><input type="checkbox" id="end-city-picker-airports-cb">空港</label>
+        <label class="start-city-picker-checkbox-group"><input type="checkbox" id="end-city-picker-castles-cb">城</label>
+      </div>
+      <button type="button" class="tour-modal-close" id="end-city-picker-modal-close" aria-label="閉じる">✕</button>
+      <div class="cand-toolbar end-city-picker-cand-toolbar end-city-picker-cand-toolbar-row2">
         <span class="end-city-picker-cand-label">経由地 : </span>
         <button id="select-all-btn-modal" type="button">すべて選択</button>
         <button id="select-none-btn-modal" type="button">すべて解除</button>
         <button id="select-near-btn-modal" type="button">近接のみ選択(20km以内)</button>
       </div>
-      <button type="button" class="tour-modal-close" id="end-city-picker-modal-close" aria-label="閉じる">✕</button>
     </div>
     <table class="end-city-picker-table">
       <thead><tr><th id="end-city-picker-flag-th" title="国旗をタップすると到達国を制限できます">🏁</th><th>都市名</th><th>出発地からの距離(km)</th></tr></thead>
@@ -510,6 +518,7 @@ ${getMitokoroModalCss()}
         <span class="start-city-picker-checkbox-sep"></span>
         <label class="start-city-picker-checkbox-group"><input type="checkbox" id="start-city-picker-stations-cb">駅</label>
         <label class="start-city-picker-checkbox-group"><input type="checkbox" id="start-city-picker-airports-cb">空港</label>
+        <label class="start-city-picker-checkbox-group"><input type="checkbox" id="start-city-picker-castles-cb">城</label>
       </div>
       <button type="button" class="tour-modal-close" id="start-city-picker-modal-close" aria-label="閉じる">✕</button>
     </div>
@@ -3144,15 +3153,26 @@ function buildTransportPickerPoints(suffix) {
   });
 }
 
+// HERITAGE_POINTSのうち絵文字が🏰(城)であるものを、都市選択モーダルの行として
+// 扱える形({name,label,lat,lon,flag})に変換する純粋関数。名称の末尾一致では
+// 「〜城」以外の表記(要塞群など)を取りこぼすため、「城ON/OFF」(#toggle-castles-btn)
+// の地球儀オーバーレイと同じくe==='🏰'で判定する。
+function buildCastlePickerPoints() {
+  return HERITAGE_POINTS.filter(function(h) { return h.e === '🏰'; }).map(function(h) {
+    return { name: 'TP::' + h.n, label: h.n, lat: h.lat, lon: h.lon, flag: h.e || '' };
+  });
+}
+
 // 都市選択モーダル(出発地/到着地共通)の候補プールを組み立てる純粋関数。
 // includeCities=falseの場合はCITIESを含めない(「都市名のみ」チェックを外した状態)。
-function buildCityPickerPool(includeCities, includeStations, includeAirports) {
+function buildCityPickerPool(includeCities, includeStations, includeAirports, includeCastles) {
   var pool = [];
   if (includeCities) {
     pool = pool.concat(CITIES.map(function(c) { return { name: c.name, label: c.label, lat: c.lat, lon: c.lon, flag: c.flag || '' }; }));
   }
   if (includeStations) pool = pool.concat(buildTransportPickerPoints('駅'));
   if (includeAirports) pool = pool.concat(buildTransportPickerPoints('空港'));
+  if (includeCastles) pool = pool.concat(buildCastlePickerPoints());
   return pool;
 }
 
@@ -3190,14 +3210,16 @@ function renderStartCityPickerTable() {
   var citiesCb = document.getElementById('start-city-picker-cities-cb');
   var stationsCb = document.getElementById('start-city-picker-stations-cb');
   var airportsCb = document.getElementById('start-city-picker-airports-cb');
+  var castlesCb = document.getElementById('start-city-picker-castles-cb');
   var includeCities = citiesCb ? citiesCb.checked : true;
   var includeStations = stationsCb ? stationsCb.checked : false;
   var includeAirports = airportsCb ? airportsCb.checked : false;
+  var includeCastles = castlesCb ? castlesCb.checked : false;
   var endSel = document.getElementById('end-city');
   var startSel = document.getElementById('start-city');
   var locked = endSel ? getCity(endSel.value) : null;
   var currentStart = startSel ? startSel.value : null;
-  var pool = buildCityPickerPool(includeCities, includeStations, includeAirports);
+  var pool = buildCityPickerPool(includeCities, includeStations, includeAirports, includeCastles);
   var sorted = sortPickerRowsByDistanceToLocked(pool, locked);
   var classified = classifyPickerRowsRegistered(sorted, lastRegisteredStartsSet);
   if (classified.length === 0) {
@@ -3250,6 +3272,7 @@ function closeStartCityPickerModal() {
   var citiesCb = document.getElementById('start-city-picker-cities-cb');
   var stationsCb = document.getElementById('start-city-picker-stations-cb');
   var airportsCb = document.getElementById('start-city-picker-airports-cb');
+  var castlesCb = document.getElementById('start-city-picker-castles-cb');
   if (!pickerBtn || !overlay || !closeBtn || !body) return;
   pickerBtn.addEventListener('click', openStartCityPickerModal);
   closeBtn.addEventListener('click', closeStartCityPickerModal);
@@ -3261,15 +3284,15 @@ function closeStartCityPickerModal() {
     var name = row.getAttribute('data-city-name');
     var startSel = document.getElementById('start-city');
     if (!getCity(name)) {
-      // CITIESに無い(=駅/空港の仮想エントリ)場合は<option>を動的に追加してから選択する。
-      var pool = buildCityPickerPool(true, true, true);
+      // CITIESに無い(=駅/空港/城の仮想エントリ)場合は<option>を動的に追加してから選択する。
+      var pool = buildCityPickerPool(true, true, true, true);
       var match = pool.filter(function(p) { return p.name === name; })[0];
       if (match) ensureCityOptionInSelect(startSel, match);
     }
     startSel.value = name;
     startSel.dispatchEvent(new Event('change'));
   });
-  [citiesCb, stationsCb, airportsCb].forEach(function(cb) {
+  [citiesCb, stationsCb, airportsCb, castlesCb].forEach(function(cb) {
     if (cb) cb.addEventListener('change', renderStartCityPickerTable);
   });
 })();
@@ -3318,15 +3341,27 @@ function renderEndCityPickerTable() {
   var endSel = document.getElementById('end-city');
   var start = startSel ? getCity(startSel.value) : null;
   var currentEnd = endSel ? endSel.value : null;
-  // 「到達国を制限する」フィルタ(destCountryFilter)が有効な場合は、その国の都市のみに
-  // 絞り込む(「到達国を制限する」既存機能と同じフィルタ状態を共有する。しない(__ALL__)なら
-  // 全都市を表示)。
-  var pool = CITIES.filter(function(c) {
+  // 出発地選択モーダル(#start-city-picker-modal-overlay)と同じ「都市名のみ/駅/空港/城」
+  // チェックボックスで候補プールを組み立てる(buildCityPickerPool()を共有)。
+  // 「到達国を制限する」フィルタ(destCountryFilter)は都市(CITIES)にのみ適用する
+  // (駅/空港/城の仮想エントリはbuildTransportPickerPoints/buildCastlePickerPointsが
+  // 国情報を持たないため、対象外のまま常に表示する)。
+  var citiesCb = document.getElementById('end-city-picker-cities-cb');
+  var stationsCb = document.getElementById('end-city-picker-stations-cb');
+  var airportsCb = document.getElementById('end-city-picker-airports-cb');
+  var castlesCb = document.getElementById('end-city-picker-castles-cb');
+  var includeCities = citiesCb ? citiesCb.checked : true;
+  var includeStations = stationsCb ? stationsCb.checked : false;
+  var includeAirports = airportsCb ? airportsCb.checked : false;
+  var includeCastles = castlesCb ? castlesCb.checked : false;
+  var cityPool = includeCities ? CITIES.filter(function(c) {
     return destCountryFilter === DEST_COUNTRY_FILTER_ALL || c.country === destCountryFilter;
-  });
-  var rows = pool.map(function(c) {
-    var km = (start && typeof start.lat === 'number') ? haversineKm(start.lat, start.lon, c.lat, c.lon) : null;
-    return { name: c.name, label: c.label, km: km, flag: c.flag || '' };
+  }).map(function(c) { return { name: c.name, label: c.label, lat: c.lat, lon: c.lon, flag: c.flag || '' }; }) : [];
+  var extraPool = buildCityPickerPool(false, includeStations, includeAirports, includeCastles);
+  var pool = cityPool.concat(extraPool);
+  var rows = pool.map(function(p) {
+    var km = (start && typeof start.lat === 'number') ? haversineKm(start.lat, start.lon, p.lat, p.lon) : null;
+    return { name: p.name, label: p.label, km: km, flag: p.flag || '' };
   });
   rows.sort(function(a, b) {
     if (a.km === null && b.km === null) return 0;
@@ -3374,6 +3409,10 @@ function closeEndCityPickerModal() {
   var closeBtn = document.getElementById('end-city-picker-modal-close');
   var body = document.getElementById('end-city-picker-table-body');
   var flagTh = document.getElementById('end-city-picker-flag-th');
+  var citiesCb = document.getElementById('end-city-picker-cities-cb');
+  var stationsCb = document.getElementById('end-city-picker-stations-cb');
+  var airportsCb = document.getElementById('end-city-picker-airports-cb');
+  var castlesCb = document.getElementById('end-city-picker-castles-cb');
   if (!pickerBtn || !overlay || !closeBtn || !body) return;
   pickerBtn.addEventListener('click', openEndCityPickerModal);
   closeBtn.addEventListener('click', closeEndCityPickerModal);
@@ -3382,9 +3421,19 @@ function closeEndCityPickerModal() {
   body.addEventListener('click', function(e) {
     var row = e.target.closest('[data-city-name]');
     if (!row) return;
+    var name = row.getAttribute('data-city-name');
     var endSel = document.getElementById('end-city');
-    endSel.value = row.getAttribute('data-city-name');
+    if (!getCity(name)) {
+      // CITIESに無い(=駅/空港/城の仮想エントリ)場合は<option>を動的に追加してから選択する。
+      var pool = buildCityPickerPool(true, true, true, true);
+      var match = pool.filter(function(p) { return p.name === name; })[0];
+      if (match) ensureCityOptionInSelect(endSel, match);
+    }
+    endSel.value = name;
     endSel.dispatchEvent(new Event('change'));
+  });
+  [citiesCb, stationsCb, airportsCb, castlesCb].forEach(function(cb) {
+    if (cb) cb.addEventListener('change', renderEndCityPickerTable);
   });
   // 🏁列見出しをタップすると、既存の「到達国を制限する」国一覧モーダルをそのまま開く。
   // 集計(国別都市数の降順)は候補都市の全体(CITIES全件)を対象にする既存の
