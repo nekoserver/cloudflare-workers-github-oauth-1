@@ -79,11 +79,10 @@ describe('heritage-journeyページ: 地球儀上の空港/駅は色丸ではな
     expect(heritageGlyphCalls.length).toBeGreaterThan(0);
     // 色丸(半径5)は、iconを持たない経由地(出発地/到着地そのもの)のみで使われる
     // 防御的フォールバックである。tourPointsには出発地(パリ)・到着地(ローマ)自身も
-    // 含まれ、これらはicon未設定のため丸で描画される(モーダル本体+スコープの
-    // 2キャンバス x 2地点 = 4回)。世界遺産の経由地(icon=カテゴリ絵文字)は
-    // 丸を描かない。
+    // 含まれ、これらはicon未設定のためモーダル本体では丸で描画される(2地点 = 2回)。
+    // スコープ側は半径3pxの統一マーカーなので半径5pxの集計には含まれない。
     const wpCircleCalls = arcCalls.filter((c) => c.r === 5);
-    expect(wpCircleCalls.length).toBe(4);
+    expect(wpCircleCalls.length).toBe(2);
   });
 
   it('空港/駅グリフはtextAlign/textBaselineをcenter/middleにして座標を中心に描画する', () => {

@@ -1721,6 +1721,18 @@ function recompute() {
   dayNumberByName[se.end.name] = days.length;
   lodgingCityByName[se.end.name] = se.end.name;
 
+  // 日程上の宿泊推奨地を都市マスタの座標へ解決する。同じ都市で連泊する日は
+  // 連続点を重ねず1点にまとめ、スコープの巡回線を「宿泊地間の移動」にする。
+  lodgingRoutePoints = [];
+  days.forEach(function(d) {
+    var city = CITY_POINTS.find(function(c) { return c.name === d.city; });
+    if (!city) return;
+    var previous = lodgingRoutePoints[lodgingRoutePoints.length - 1];
+    if (!previous || previous.name !== city.name) {
+      lodgingRoutePoints.push({ name: city.name, lat: city.lat, lon: city.lon });
+    }
+  });
+
   syncMiniGlobe();
 }
 
@@ -1832,6 +1844,9 @@ document.getElementById('replay-tour-btn').addEventListener('click', function() 
   var miniCanvas = document.getElementById('tour-mini-canvas');
 
   var tourPoints = [];
+  // 巡回ルートスコープでは、観光地点を結ぶのではなく日程表で算出した
+  // 宿泊推奨地どうしを結ぶ。各都市は実際の都市座標で保持する。
+  var lodgingRoutePoints = [];
   var animProgress = 0; // 0..(tourPoints.length-1) の連続値。整数部=区間番号、小数部=区間内の進み具合
   var animTimer = null;
   var playing = false;
@@ -2151,10 +2166,13 @@ document.getElementById('replay-tour-btn').addEventListener('click', function() 
    * 減光しない。この乗算合成ロジックはグリフ/丸どちらの分岐でも同一に適用される。
    */
   function drawWaypointPoint(ctx, pp, icon, i, tp) {
+    var isScope = arguments.length > 5 && arguments[5] === true;
     var country = (tp && tp.country) || '';
     var countryDimmed = routeCountryFilter !== ROUTE_COUNTRY_FILTER_ALL && country !== routeCountryFilter;
     var countryAlphaFactor = countryDimmed ? 0.35 : 1;
-    var hasGlyph = typeof icon === 'string' && icon.length > 0;
+    // 縮小スコープは空港(✈︎)だけをアイコンのまま残し、それ以外を小さな
+    // ピンク丸に統一する。モーダル本体は従来のカテゴリ表示を維持する。
+    var hasGlyph = typeof icon === 'string' && icon.length > 0 && (!isScope || icon === CLIENT_AIRPORT_ICON);
     if (hasGlyph) {
       var prevAlpha = ctx.globalAlpha;
       ctx.globalAlpha = (pp.visible ? 1 : 0.4) * countryAlphaFactor;
@@ -2175,11 +2193,13 @@ document.getElementById('replay-tour-btn').addEventListener('click', function() 
       ctx.globalAlpha = countryAlphaFactor;
       ctx.fillStyle = pp.visible ? '#f9a8d4' : '#475569';
       ctx.beginPath();
-      ctx.arc(pp.x, pp.y, 5, 0, Math.PI * 2);
+      ctx.arc(pp.x, pp.y, isScope ? 3 : 5, 0, Math.PI * 2);
       ctx.fill();
-      ctx.fillStyle = pp.visible ? '#e2e8f0' : '#64748b';
-      ctx.font = '10px sans-serif';
-      ctx.fillText(String(i + 1), pp.x + 7, pp.y - 7);
+      if (!isScope) {
+        ctx.fillStyle = pp.visible ? '#e2e8f0' : '#64748b';
+        ctx.font = '10px sans-serif';
+        ctx.fillText(String(i + 1), pp.x + 7, pp.y - 7);
+      }
       ctx.globalAlpha = prevAlphaCircle;
     }
   }
@@ -2220,13 +2240,16 @@ document.getElementById('replay-tour-btn').addEventListener('click', function() 
       ctx.stroke();
     }
 
+    var isScope = targetCanvas === miniCanvas;
     var projected = tourPoints.map(function(p) { return project(p.lat, p.lon, tourCenterLat, tourCenterLon, R, cx, cy); });
+    var routePoints = isScope && lodgingRoutePoints.length > 0 ? lodgingRoutePoints : tourPoints;
+    var projectedRoute = routePoints.map(function(p) { return project(p.lat, p.lon, tourCenterLat, tourCenterLon, R, cx, cy); });
 
     // 経由地を結ぶルート線
     ctx.strokeStyle = '#38bdf8';
     ctx.lineWidth = 2;
     ctx.beginPath();
-    projected.forEach(function(pp, i) { if (i === 0) ctx.moveTo(pp.x, pp.y); else ctx.lineTo(pp.x, pp.y); });
+    projectedRoute.forEach(function(pp, i) { if (i === 0) ctx.moveTo(pp.x, pp.y); else ctx.lineTo(pp.x, pp.y); });
     ctx.stroke();
 
     // ルート順序セクションの国別フィルタで国が選択されている場合、その国の
@@ -2241,8 +2264,20 @@ document.getElementById('replay-tour-btn').addEventListener('click', function() 
     // 含む)描画分岐を検証できるようにする。
     projected.forEach(function(pp, i) {
       var tp = tourPoints[i];
-      drawWaypointPoint(ctx, pp, tp && tp.icon, i, tp);
+      drawWaypointPoint(ctx, pp, tp && tp.icon, i, tp, isScope);
     });
+
+    // 宿泊推奨地は経由地点とは別レイヤーで、都市座標の中心に青い四角
+    // (中心から上下左右4px)を描く。これにより宿泊地間の巡回線の節点も明瞭になる。
+    if (isScope) {
+      ctx.fillStyle = '#3b82f6';
+      lodgingRoutePoints.forEach(function(p) {
+        var lp = project(p.lat, p.lon, tourCenterLat, tourCenterLon, R, cx, cy);
+        ctx.globalAlpha = lp.visible ? 1 : 0.4;
+        if (ctx.fillRect) ctx.fillRect(lp.x - 4, lp.y - 4, 8, 8);
+      });
+      ctx.globalAlpha = 1;
+    }
 
     // 巡回中の現在位置マーカー
     var curPt = pointAtProgress(tourPoints, animProgress);
