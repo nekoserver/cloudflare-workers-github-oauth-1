@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { getAirlineNetworkPage } from './airlineNetwork';
-import { AIRLINE_NETWORK } from '../data/airlineNetwork';
+import { AIRLINE_NETWORK, AIRLINE_NETWORK_CHECKED_AT } from '../data/airlineNetwork';
 import { AIRPORT_LIST } from '../data/airports';
 
 function uniqueDestCodes(): string[] {
@@ -69,6 +69,20 @@ describe('/airline-network ページ: 各国航空会社ネットワーク一覧
     expect(html).toContain(`<b>${countryCount}</b>`);
     expect(html).toContain(`<b>${airlineCount}</b>`);
     expect(html).toContain(`<b>${routeCount}</b>`);
+  });
+
+  it('運航情報の確認日と便数が目安である旨を表示する', () => {
+    expect(html).toContain(`<time datetime="${AIRLINE_NETWORK_CHECKED_AT}">${AIRLINE_NETWORK_CHECKED_AT}</time>`);
+    expect(html).toContain('便数は季節で変動する目安です');
+  });
+
+  it('羽田へ移管済みの主要5社を成田発着として表示しない', () => {
+    for (const iata of ['DL', 'BA', 'AF', 'LH', 'AZ']) {
+      const airline = AIRLINE_NETWORK.flatMap((country) => country.airlines).find((item) => item.iata === iata);
+      expect(airline).toBeDefined();
+      expect(airline!.destinations.find((destination) => destination.code === 'HND')).toBeDefined();
+      expect(airline!.destinations.find((destination) => destination.code === 'NRT')).toBeUndefined();
+    }
   });
 
   it('検索ボックスと国別フィルタが両方JSに実装されている', () => {

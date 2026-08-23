@@ -2,9 +2,11 @@ export type AirlineDestination = { code: string; name: string; flightsPerWeek: n
 export type Airline = { name: string; iata: string; hubCode: string; hubName: string; destinations: AirlineDestination[] };
 export type CountryAirlines = { country: string; flag: string; airlines: Airline[] };
 
+export const AIRLINE_NETWORK_CHECKED_AT = '2026-08-23';
+
 // 便数(週)は主要路線のおおまかな目安であり、季節・年度により変動する概算値。
-// 2026-08-14時点でWeb検索により裏取りできた一部路線のみ更新済み(JAL 成田/羽田-
-// バンコク: 14→7、Emirates ドバイ-成田: 7→14、Qatar Airways ドーハ-成田: 7→14)。
+// 2026-08-23時点で公開運航情報と突合。以前のデータに残っていた成田発着表記のうち、
+// Delta、British Airways、Air France、Lufthansa、ITA Airways は羽田発着へ修正した。
 // この環境からは航空会社公式サイトへの直接アクセス(WebFetch)がネットワーク
 // ポリシーでブロックされており、検索スニペットだけでは他の路線の正確な
 // 週間便数(単一社分か全社合計かの判別を含む)を裏取りできなかったため、
@@ -59,7 +61,7 @@ export const AIRLINE_NETWORK: CountryAirlines[] = [
     ]},
     { name: 'Delta Air Lines', iata: 'DL', hubCode: 'ATL', hubName: 'ハーツフィールド・ジャクソン・アトランタ国際空港', destinations: [
       { code: 'CDG', name: 'シャルル・ド・ゴール空港', flightsPerWeek: 7 },
-      { code: 'NRT', name: '成田国際空港', flightsPerWeek: 7 },
+      { code: 'HND', name: '羽田空港', flightsPerWeek: 7 },
       { code: 'ICN', name: '仁川国際空港(ソウル)', flightsPerWeek: 7 }
     ]},
     { name: 'United Airlines', iata: 'UA', hubCode: 'ORD', hubName: 'オヘア国際空港', destinations: [
@@ -71,7 +73,7 @@ export const AIRLINE_NETWORK: CountryAirlines[] = [
   { country: 'イギリス', flag: '🇬🇧', airlines: [
     { name: 'British Airways', iata: 'BA', hubCode: 'LHR', hubName: 'ロンドン・ヒースロー空港', destinations: [
       { code: 'JFK', name: 'ジョン・F・ケネディ国際空港', flightsPerWeek: 21 },
-      { code: 'NRT', name: '成田国際空港', flightsPerWeek: 7 },
+      { code: 'HND', name: '羽田空港', flightsPerWeek: 7 },
       { code: 'SIN', name: 'チャンギ空港(シンガポール)', flightsPerWeek: 7 },
       { code: 'DXB', name: 'ドバイ国際空港', flightsPerWeek: 14 }
     ]}
@@ -79,14 +81,14 @@ export const AIRLINE_NETWORK: CountryAirlines[] = [
   { country: 'フランス', flag: '🇫🇷', airlines: [
     { name: 'Air France', iata: 'AF', hubCode: 'CDG', hubName: 'シャルル・ド・ゴール空港', destinations: [
       { code: 'JFK', name: 'ジョン・F・ケネディ国際空港', flightsPerWeek: 14 },
-      { code: 'NRT', name: '成田国際空港', flightsPerWeek: 7 },
+      { code: 'HND', name: '羽田空港', flightsPerWeek: 7 },
       { code: 'ICN', name: '仁川国際空港(ソウル)', flightsPerWeek: 7 }
     ]}
   ]},
   { country: 'ドイツ', flag: '🇩🇪', airlines: [
     { name: 'Lufthansa', iata: 'LH', hubCode: 'FRA', hubName: 'フランクフルト空港', destinations: [
       { code: 'JFK', name: 'ジョン・F・ケネディ国際空港', flightsPerWeek: 14 },
-      { code: 'NRT', name: '成田国際空港', flightsPerWeek: 7 },
+      { code: 'HND', name: '羽田空港', flightsPerWeek: 7 },
       { code: 'PEK', name: '北京首都国際空港', flightsPerWeek: 7 },
       { code: 'SIN', name: 'チャンギ空港(シンガポール)', flightsPerWeek: 7 }
     ]}
@@ -149,7 +151,7 @@ export const AIRLINE_NETWORK: CountryAirlines[] = [
     { name: 'ITA Airways', iata: 'AZ', hubCode: 'FCO', hubName: 'フィウミチーノ空港', destinations: [
       { code: 'JFK', name: 'ジョン・F・ケネディ国際空港', flightsPerWeek: 14 },
       { code: 'LAX', name: 'ロサンゼルス国際空港', flightsPerWeek: 7 },
-      { code: 'NRT', name: '成田国際空港', flightsPerWeek: 3 }
+      { code: 'HND', name: '羽田空港', flightsPerWeek: 3 }
     ]}
   ]},
   { country: 'スペイン', flag: '🇪🇸', airlines: [

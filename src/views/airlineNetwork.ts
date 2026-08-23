@@ -1,4 +1,4 @@
-import { AIRLINE_NETWORK } from '../data/airlineNetwork';
+import { AIRLINE_NETWORK, AIRLINE_NETWORK_CHECKED_AT } from '../data/airlineNetwork';
 import { AIRPORT_LIST } from '../data/airports';
 
 type DestAirportEntry = { code: string; name: string; flag: string };
@@ -134,6 +134,8 @@ h1 { font-size: 1.15rem; margin-bottom: 3px; }
 .subtitle { color: var(--text-muted); font-size: 0.75rem; }
 .summary-bar { display: flex; gap: 14px; margin-top: 6px; font-size: 0.72rem; color: var(--text-muted); flex-wrap: wrap; }
 .summary-bar b { color: var(--accent); }
+.freshness-note { margin-top: 6px; color: var(--text-muted); font-size: 0.7rem; }
+.freshness-note time { color: var(--text); font-weight: 600; }
 
 .main-layout { display: flex; flex: 1; min-height: 0; overflow: hidden; }
 
@@ -239,6 +241,7 @@ tr:nth-child(even) td { background: var(--row-alt); }
     <span>航空会社: <b>${airlineCount}</b></span>
     <span>路線数: <b>${routeCount}</b></span>
   </div>
+  <p class="freshness-note">運航情報確認日: <time datetime="${AIRLINE_NETWORK_CHECKED_AT}">${AIRLINE_NETWORK_CHECKED_AT}</time>（便数は季節で変動する目安です。予約前に航空会社の最新時刻表をご確認ください）</p>
 </div>
 
 <div class="main-layout">
