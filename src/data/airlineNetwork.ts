@@ -159,5 +159,42 @@ export const AIRLINE_NETWORK: CountryAirlines[] = [
       { code: 'JFK', name: 'ジョン・F・ケネディ国際空港', flightsPerWeek: 14 },
       { code: 'LAX', name: 'ロサンゼルス国際空港', flightsPerWeek: 7 }
     ]}
+  ]},
+  // heritage-journey に候補として出る欧州主要空港のうち、従来は下記3拠点の
+  // 発着データが丸ごと欠けていた。便数はこのマスタの他路線と同じく、毎日運航を
+  // 7便/週として丸めた旅程検討用の目安（コードシェア便の重複は含めない）。
+  { country: 'スイス', flag: '🇨🇭', airlines: [
+    { name: 'SWISS', iata: 'LX', hubCode: 'ZRH', hubName: 'チューリッヒ空港', destinations: [
+      { code: 'LHR', name: 'ロンドン・ヒースロー空港', flightsPerWeek: 28 },
+      { code: 'CDG', name: 'シャルル・ド・ゴール空港', flightsPerWeek: 21 },
+      { code: 'FRA', name: 'フランクフルト空港', flightsPerWeek: 21 },
+      { code: 'AMS', name: 'スキポール空港', flightsPerWeek: 21 },
+      { code: 'MAD', name: 'マドリード・バラハス空港', flightsPerWeek: 14 },
+      { code: 'FCO', name: 'フィウミチーノ空港', flightsPerWeek: 14 },
+      { code: 'VIE', name: 'ウィーン国際空港', flightsPerWeek: 21 },
+      { code: 'CPH', name: 'コペンハーゲン空港', flightsPerWeek: 14 }
+    ]}
+  ]},
+  { country: 'オーストリア', flag: '🇦🇹', airlines: [
+    { name: 'Austrian Airlines', iata: 'OS', hubCode: 'VIE', hubName: 'ウィーン国際空港', destinations: [
+      { code: 'LHR', name: 'ロンドン・ヒースロー空港', flightsPerWeek: 21 },
+      { code: 'CDG', name: 'シャルル・ド・ゴール空港', flightsPerWeek: 21 },
+      { code: 'FRA', name: 'フランクフルト空港', flightsPerWeek: 28 },
+      { code: 'AMS', name: 'スキポール空港', flightsPerWeek: 21 },
+      { code: 'ZRH', name: 'チューリッヒ空港', flightsPerWeek: 21 },
+      { code: 'FCO', name: 'フィウミチーノ空港', flightsPerWeek: 14 },
+      { code: 'CPH', name: 'コペンハーゲン空港', flightsPerWeek: 14 }
+    ]}
+  ]},
+  { country: 'デンマーク', flag: '🇩🇰', airlines: [
+    { name: 'SAS Scandinavian Airlines', iata: 'SK', hubCode: 'CPH', hubName: 'コペンハーゲン空港', destinations: [
+      { code: 'LHR', name: 'ロンドン・ヒースロー空港', flightsPerWeek: 28 },
+      { code: 'CDG', name: 'シャルル・ド・ゴール空港', flightsPerWeek: 21 },
+      { code: 'FRA', name: 'フランクフルト空港', flightsPerWeek: 21 },
+      { code: 'AMS', name: 'スキポール空港', flightsPerWeek: 28 },
+      { code: 'ZRH', name: 'チューリッヒ空港', flightsPerWeek: 14 },
+      { code: 'VIE', name: 'ウィーン国際空港', flightsPerWeek: 14 },
+      { code: 'FCO', name: 'フィウミチーノ空港', flightsPerWeek: 14 }
+    ]}
   ]}
 ];
