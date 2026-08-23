@@ -149,11 +149,11 @@ describe('heritage-journeyページ: 登録済みルートから巡回スコー�
     expect(box.style.top).toBe('212px');
   });
 
-  it('現在の出発地に該当する行を直線距離の遠い順に並べる', async () => {
+  it('現在の出発地に該当する行を経由データ総数の降順（同数なら直線距離順）に並べ、行末に総数を表示する', async () => {
     const routes = [
-      { id: 20, start: 'パリ', end: 'ロンドン', straightKm: 340.2 },
-      { id: 10, start: 'パリ', end: 'ローマ', straightKm: 1100.4 },
-      { id: 30, start: 'パリ', end: 'ブリュッセル', straightKm: 263.8 },
+      { id: 20, start: 'パリ', end: 'ロンドン', straightKm: 340.2, waypointSetCount: 5 },
+      { id: 10, start: 'パリ', end: 'ローマ', straightKm: 1100.4, waypointSetCount: 2 },
+      { id: 30, start: 'パリ', end: 'ブリュッセル', straightKm: 263.8, waypointSetCount: 5 },
     ];
     setupPage(() => Promise.resolve({ json: () => Promise.resolve({ routes }) }));
     document.getElementById('view-registered-routes-btn')!.click();
@@ -161,11 +161,14 @@ describe('heritage-journeyページ: 登録済みルートから巡回スコー�
     await new Promise((r) => setTimeout(r, 0));
     const ids = Array.from(document.querySelectorAll('#registered-routes-table-body tr'))
       .map((row) => row.querySelector('td')!.textContent);
-    expect(ids).toEqual(['10', '20', '30']);
+    expect(ids).toEqual(['20', '30', '10']);
+    const counts = Array.from(document.querySelectorAll('#registered-routes-table-body tr'))
+      .map((row) => row.lastElementChild!.textContent);
+    expect(counts).toEqual(['5', '5', '2']);
   });
 
   it('各行をタップするたびに出発地・到着地と巡回ルートスコープ見出しが切り替わり、モーダルは開いたままになる', async () => {
-    setupPage(() => Promise.resolve({ json: () => Promise.resolve({ routes: SAMPLE_ROUTES }) }));
+    const { fetchMock } = setupPage(() => Promise.resolve({ json: () => Promise.resolve({ routes: SAMPLE_ROUTES }) }));
     document.getElementById('view-registered-routes-btn')!.click();
     await new Promise((r) => setTimeout(r, 0));
     await new Promise((r) => setTimeout(r, 0));
@@ -182,6 +185,11 @@ describe('heritage-journeyページ: 登録済みルートから巡回スコー�
     romeRow.click();
     expect((document.getElementById('end-city') as HTMLSelectElement).value).toBe('Rome');
     expect(document.getElementById('tour-mini-head')!.textContent).toContain('ローマ');
+
+    // 同じ登録済みルートを再選択しても、保存済み経由データの最新行を毎回取得する。
+    romeRow.click();
+    const latestCalls = fetchMock.mock.calls.filter((c) => String(c[0]).indexOf('/api/heritage-journey/latest-waypoint-set?') === 0);
+    expect(latestCalls).toHaveLength(3);
   });
 });
 
