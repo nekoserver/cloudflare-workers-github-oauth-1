@@ -216,6 +216,8 @@ h1{font-size:22px;margin:0 0 4px}
 .registered-routes-table{width:100%;border-collapse:collapse;font-size:12px}
 .registered-routes-table th,.registered-routes-table td{border:1px solid #334155;padding:4px 8px;text-align:left;color:#cbd5e1}
 .registered-routes-table th{background:#1e293b;color:#93c5fd}
+.registered-routes-row{cursor:pointer}
+.registered-routes-row:hover{background:#1e293b}
 .registered-routes-empty{font-size:12px;color:#94a3b8}
 #register-route-error{color:#f87171;font-size:12px;margin-top:6px}
 #replay-tour-btn,#tour-test-btn{background:#1e293b;border:1px solid #475569;color:#cbd5e1;border-radius:8px;padding:6px 12px;font-size:12px;cursor:pointer;font-family:inherit;white-space:nowrap}
@@ -241,6 +243,7 @@ h1{font-size:22px;margin:0 0 4px}
 .tour-modal-overlay.open{display:flex}
 .tour-modal-box{background:#111827;border:1px solid #334155;border-radius:12px;padding:16px;max-width:560px;width:100%;max-height:90vh;overflow:auto}
 #end-city-picker-modal-box{position:fixed;max-width:560px;width:calc(100% - 32px)}
+#registered-routes-modal-box{position:fixed;max-width:560px;width:calc(100% - 32px)}
 #end-city-picker-modal-head{cursor:grab;user-select:none;touch-action:none}
 #end-city-picker-modal-head:active{cursor:grabbing}
 #dist-country-filter-modal-box{position:fixed;max-width:560px;width:calc(100% - 32px)}
@@ -420,7 +423,7 @@ ${getMitokoroModalCss()}
 </div>
 
 <div class="tour-modal-overlay" id="registered-routes-modal-overlay">
-  <div class="tour-modal-box">
+  <div class="tour-modal-box" id="registered-routes-modal-box">
     <div class="tour-modal-head">
       <div class="tour-modal-title">📋 登録済みルート</div>
       <button type="button" class="tour-modal-close" id="registered-routes-modal-close" aria-label="閉じる">✕</button>
@@ -2728,11 +2731,46 @@ function renderRegisteredRoutesTable(routes, startLabel) {
     body.innerHTML = '<tr><td colspan="4" class="registered-routes-empty">' + msg + '</td></tr>';
     return;
   }
-  body.innerHTML = routes.map(function(r) {
+  var sortedRoutes = routes.slice().sort(function(a, b) {
+    var aKm = (typeof a.straightKm === 'number') ? a.straightKm : -Infinity;
+    var bKm = (typeof b.straightKm === 'number') ? b.straightKm : -Infinity;
+    if (bKm !== aKm) return bKm - aKm;
+    return Number(a.id) - Number(b.id);
+  });
+  body.innerHTML = sortedRoutes.map(function(r) {
     var km = (typeof r.straightKm === 'number') ? r.straightKm.toFixed(1) + ' km' : '-';
-    var rowClass = r.hasWaypointSet ? ' class="registered-routes-has-waypoint"' : '';
-    return '<tr' + rowClass + '><td>' + esc(r.id) + '</td><td>' + esc(r.start) + '</td><td>' + esc(r.end) + '</td><td>' + km + '</td></tr>';
+    var rowClass = 'registered-routes-row' + (r.hasWaypointSet ? ' registered-routes-has-waypoint' : '');
+    return '<tr class="' + rowClass + '" data-route-start="' + esc(r.start) + '" data-route-end="' + esc(r.end) + '"><td>' + esc(r.id) + '</td><td>' + esc(r.start) + '</td><td>' + esc(r.end) + '</td><td>' + km + '</td></tr>';
   }).join('');
+}
+
+// 左上の巡回ルートスコープ(既定top:12px/left:12px/幅280px)を隠さないよう、
+// 登録済みルートモーダルは他の都市選択モーダルと同じ右寄せ座標へ置く。
+function resetRegisteredRoutesModalPosition() {
+  var box = document.getElementById('registered-routes-modal-box');
+  if (!box) return;
+  box.style.left = Math.max(320, window.innerWidth - 600) + 'px';
+  box.style.top = '80px';
+}
+
+function findCityNameByLabel(label) {
+  var city = CITIES.filter(function(c) { return c.label === label; })[0];
+  return city ? city.name : null;
+}
+
+// 行の出発地・到着地をhidden selectへ同時に反映してからchangeを1回だけ発火する。
+// これによりrecompute()がミニ地球儀、見出し、日程を一貫した組み合わせで更新する。
+function switchTourScopeToRegisteredRoute(startLabel, endLabel) {
+  var startName = findCityNameByLabel(startLabel);
+  var endName = findCityNameByLabel(endLabel);
+  var startSel = document.getElementById('start-city');
+  var endSel = document.getElementById('end-city');
+  if (!startName || !endName || !startSel || !endSel) return false;
+  startSel.value = startName;
+  endSel.value = endName;
+  startSel.dispatchEvent(new Event('change'));
+  updateEndCityPickerBtnLabel();
+  return true;
 }
 
 // モーダルを開くたびに#start-cityの「現在の」値を読み直してテーブルを
@@ -2746,6 +2784,7 @@ function openRegisteredRoutesModal() {
   if (!overlay) return;
   overlay.style.zIndex = String(getNextZ());
   overlay.classList.add('open');
+  resetRegisteredRoutesModalPosition();
   fetch('/api/heritage-journey/registered-routes')
     .then(function(r) { return r.json(); })
     .then(function(data) {
@@ -2771,10 +2810,16 @@ function closeRegisteredRoutesModal() {
   var viewBtn = document.getElementById('view-registered-routes-btn');
   var overlay = document.getElementById('registered-routes-modal-overlay');
   var closeBtn = document.getElementById('registered-routes-modal-close');
-  if (!viewBtn || !overlay || !closeBtn) return;
+  var body = document.getElementById('registered-routes-table-body');
+  if (!viewBtn || !overlay || !closeBtn || !body) return;
   viewBtn.addEventListener('click', openRegisteredRoutesModal);
   closeBtn.addEventListener('click', closeRegisteredRoutesModal);
   overlay.addEventListener('click', function(e) { if (e.target === overlay) closeRegisteredRoutesModal(); });
+  body.addEventListener('click', function(e) {
+    var row = e.target.closest('.registered-routes-row');
+    if (!row) return;
+    switchTourScopeToRegisteredRoute(row.getAttribute('data-route-start'), row.getAttribute('data-route-end'));
+  });
   document.addEventListener('keydown', function(e) { if (e.key === 'Escape' && overlay.classList.contains('open')) closeRegisteredRoutesModal(); });
 })();
 
