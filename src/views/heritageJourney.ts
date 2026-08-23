@@ -237,6 +237,12 @@ h1{font-size:22px;margin:0 0 4px}
 .registered-routes-table{width:100%;border-collapse:collapse;font-size:12px}
 .registered-routes-table th,.registered-routes-table td{border:1px solid #334155;padding:4px 8px;text-align:left;color:#cbd5e1}
 .registered-routes-table th{background:#1e293b;color:#93c5fd}
+.registered-routes-end-th{position:relative}
+.registered-routes-end-th-btn{border:0;background:transparent;color:inherit;font:inherit;font-weight:inherit;padding:0;cursor:pointer;white-space:nowrap}
+.registered-routes-end-dropdown{position:absolute;top:100%;left:0;z-index:1;min-width:190px;max-height:280px;overflow:auto;padding:8px;background:var(--card-bg,#111827);border:1px solid var(--border-color,#334155);border-radius:0 0 8px 8px;box-shadow:0 8px 18px rgba(0,0,0,.35)}
+.registered-routes-country-filter-label{display:flex;align-items:center;gap:6px;margin-bottom:7px;color:var(--text-secondary,#94a3b8);white-space:nowrap}
+.registered-routes-country-filter{min-width:110px;background:var(--input-bg,#0b1220);color:var(--text-primary,#e2e8f0);border:1px solid var(--input-border,#475569);border-radius:6px;padding:3px 6px;font:inherit}
+.registered-routes-end-dropdown .registered-routes-freq-item{color:var(--text-primary,#e2e8f0)}
 .registered-routes-row{cursor:pointer}
 .registered-routes-row:hover{background:#1e293b}
 .registered-routes-empty{font-size:12px;color:#94a3b8}
@@ -467,13 +473,9 @@ ${getMitokoroModalCss()}
         <div class="registered-routes-freq-title">出発地</div>
         <div id="registered-routes-start-freq"></div>
       </div>
-      <div class="registered-routes-freq-col">
-        <div class="registered-routes-freq-title">到着地</div>
-        <div id="registered-routes-end-freq"></div>
-      </div>
     </div>
     <table class="registered-routes-table">
-      <thead><tr><th>ID</th><th>出発地</th><th>到着地</th><th>直線距離</th><th>総数</th></tr></thead>
+      <thead><tr><th>ID</th><th>出発地</th><th class="registered-routes-end-th"><button type="button" class="registered-routes-end-th-btn" id="registered-routes-end-th-btn" aria-expanded="false" aria-controls="registered-routes-end-dropdown">到着地 ▾</button><div class="registered-routes-end-dropdown" id="registered-routes-end-dropdown" hidden><label class="registered-routes-country-filter-label">国旗<select class="registered-routes-country-filter" id="registered-routes-country-filter" aria-label="到着地を国旗で絞り込む"><option value="">なし</option></select></label><div id="registered-routes-end-freq"></div></div></th><th>直線距離</th><th>総数</th></tr></thead>
       <tbody id="registered-routes-table-body"></tbody>
     </table>
   </div>
@@ -2822,6 +2824,47 @@ function filterRoutesByStartLabel(routes, startLabel) {
   return routes.filter(function(r) { return r.start === startLabel; });
 }
 
+// APIの都市名(label/nameのどちらでも可)からCITIESの国旗と国名を解決する。
+function getRegisteredRouteCityMeta(label) {
+  var city = CITIES.filter(function(c) { return c.label === label || c.name === label; })[0];
+  return city ? { country: city.country || '', flag: city.flag || '' } : { country: '', flag: '' };
+}
+
+function filterRegisteredRoutesByCountry(routes, country) {
+  if (!country) return routes.slice();
+  return routes.filter(function(r) { return getRegisteredRouteCityMeta(r.end).country === country; });
+}
+
+// 現在の出発地で表示対象になる行だけを集計し、国旗数の多い順に選択肢を作る。
+function renderRegisteredRoutesCountryFilter(routes) {
+  var select = document.getElementById('registered-routes-country-filter');
+  if (!select) return;
+  var countries = {};
+  routes.forEach(function(r) {
+    var meta = getRegisteredRouteCityMeta(r.end);
+    if (!meta.country || !meta.flag) return;
+    if (!countries[meta.country]) countries[meta.country] = { country: meta.country, flag: meta.flag, count: 0 };
+    countries[meta.country].count++;
+  });
+  var entries = Object.keys(countries).map(function(country) { return countries[country]; });
+  entries.sort(function(a, b) {
+    if (b.count !== a.count) return b.count - a.count;
+    return a.country.localeCompare(b.country, 'ja');
+  });
+  select.innerHTML = '<option value="">なし</option>' + entries.map(function(entry) {
+    return '<option value="' + esc(entry.country) + '">' + esc(entry.flag) + ' (' + entry.count + ')</option>';
+  }).join('');
+}
+
+var registeredRoutesForCurrentStart = [];
+var registeredRoutesStartLabel = null;
+
+function applyRegisteredRoutesCountryFilter() {
+  var select = document.getElementById('registered-routes-country-filter');
+  var country = select ? select.value : '';
+  renderRegisteredRoutesTable(filterRegisteredRoutesByCountry(registeredRoutesForCurrentStart, country), registeredRoutesStartLabel);
+}
+
 function renderRegisteredRoutesTable(routes, startLabel) {
   var body = document.getElementById('registered-routes-table-body');
   if (!body) return;
@@ -2845,7 +2888,9 @@ function renderRegisteredRoutesTable(routes, startLabel) {
     var km = (typeof r.straightKm === 'number') ? r.straightKm.toFixed(1) + ' km' : '-';
     var rowClass = 'registered-routes-row' + (r.hasWaypointSet ? ' registered-routes-has-waypoint' : '');
     var count = Number(r.waypointSetCount) || 0;
-    return '<tr class="' + rowClass + '" data-route-start="' + esc(r.start) + '" data-route-end="' + esc(r.end) + '"><td>' + esc(r.id) + '</td><td>' + esc(r.start) + '</td><td>' + esc(r.end) + '</td><td>' + km + '</td><td>' + count + '</td></tr>';
+    var endMeta = getRegisteredRouteCityMeta(r.end);
+    var endLabel = (endMeta.flag ? endMeta.flag + ' ' : '') + r.end;
+    return '<tr class="' + rowClass + '" data-route-start="' + esc(r.start) + '" data-route-end="' + esc(r.end) + '"><td>' + esc(r.id) + '</td><td>' + esc(r.start) + '</td><td>' + esc(endLabel) + '</td><td>' + km + '</td><td>' + count + '</td></tr>';
   }).join('');
 }
 
@@ -2913,6 +2958,10 @@ function openRegisteredRoutesModal() {
   overlay.style.zIndex = String(getNextZ());
   overlay.classList.add('open');
   resetRegisteredRoutesModalPosition();
+  var dropdown = document.getElementById('registered-routes-end-dropdown');
+  var thBtn = document.getElementById('registered-routes-end-th-btn');
+  if (dropdown) dropdown.hidden = true;
+  if (thBtn) thBtn.setAttribute('aria-expanded', 'false');
   fetch('/api/heritage-journey/registered-routes')
     .then(function(r) { return r.json(); })
     .then(function(data) {
@@ -2920,12 +2969,18 @@ function openRegisteredRoutesModal() {
       renderCityFreq('registered-routes-start-freq', routes, 'start');
       renderCityFreq('registered-routes-end-freq', routes, 'end');
       var startLabel = getCurrentStartCityLabel();
-      renderRegisteredRoutesTable(filterRoutesByStartLabel(routes, startLabel), startLabel);
+      registeredRoutesStartLabel = startLabel;
+      registeredRoutesForCurrentStart = filterRoutesByStartLabel(routes, startLabel);
+      renderRegisteredRoutesCountryFilter(registeredRoutesForCurrentStart);
+      applyRegisteredRoutesCountryFilter();
     })
     .catch(function() {
       renderCityFreq('registered-routes-start-freq', [], 'start');
       renderCityFreq('registered-routes-end-freq', [], 'end');
-      renderRegisteredRoutesTable([], getCurrentStartCityLabel());
+      registeredRoutesStartLabel = getCurrentStartCityLabel();
+      registeredRoutesForCurrentStart = [];
+      renderRegisteredRoutesCountryFilter([]);
+      applyRegisteredRoutesCountryFilter();
     });
 }
 
@@ -2939,10 +2994,18 @@ function closeRegisteredRoutesModal() {
   var overlay = document.getElementById('registered-routes-modal-overlay');
   var closeBtn = document.getElementById('registered-routes-modal-close');
   var body = document.getElementById('registered-routes-table-body');
-  if (!viewBtn || !overlay || !closeBtn || !body) return;
+  var endThBtn = document.getElementById('registered-routes-end-th-btn');
+  var endDropdown = document.getElementById('registered-routes-end-dropdown');
+  var countryFilter = document.getElementById('registered-routes-country-filter');
+  if (!viewBtn || !overlay || !closeBtn || !body || !endThBtn || !endDropdown || !countryFilter) return;
   viewBtn.addEventListener('click', openRegisteredRoutesModal);
   closeBtn.addEventListener('click', closeRegisteredRoutesModal);
   overlay.addEventListener('click', function(e) { if (e.target === overlay) closeRegisteredRoutesModal(); });
+  endThBtn.addEventListener('click', function() {
+    endDropdown.hidden = !endDropdown.hidden;
+    endThBtn.setAttribute('aria-expanded', endDropdown.hidden ? 'false' : 'true');
+  });
+  countryFilter.addEventListener('change', applyRegisteredRoutesCountryFilter);
   body.addEventListener('click', function(e) {
     var row = e.target.closest('.registered-routes-row');
     if (!row) return;

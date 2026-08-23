@@ -123,6 +123,67 @@ describe('heritage-journeyページ: ID/出発地/到着地/直線距離テー�
   });
 });
 
+describe('heritage-journeyページ: 到着地ドロップダウンと国旗フィルタ', () => {
+  const ROUTES_WITH_COUNTRIES = [
+    { id: 1, start: 'パリ', end: 'ローマ', straightKm: 1100.4 },
+    { id: 2, start: 'パリ', end: 'ミラノ', straightKm: 640.1 },
+    { id: 3, start: 'パリ', end: 'ロンドン', straightKm: 340.2 },
+  ];
+
+  async function openModal() {
+    setupPage(() => Promise.resolve({ json: () => Promise.resolve({ routes: ROUTES_WITH_COUNTRIES }) }));
+    document.getElementById('view-registered-routes-btn')!.click();
+    await new Promise((r) => setTimeout(r, 0));
+    await new Promise((r) => setTimeout(r, 0));
+  }
+
+  it('共通テーマ変数が未定義でもドロップダウンに不透明な背景色を適用する', () => {
+    const html = getHeritageJourneyPage();
+    expect(html).toContain('background:var(--card-bg,#111827)');
+    expect(html).toContain('background:var(--input-bg,#0b1220)');
+  });
+
+  it('到着地の全都市リストは初期非表示で、到着地thをタップして初めて表示される', async () => {
+    await openModal();
+    const menu = document.getElementById('registered-routes-end-dropdown')!;
+    expect(menu.hidden).toBe(true);
+    expect(menu.textContent).toContain('ローマ (1)');
+
+    document.getElementById('registered-routes-end-th-btn')!.click();
+    expect(menu.hidden).toBe(false);
+  });
+
+  it('表の到着地名の直前に所属国の国旗を表示する', async () => {
+    await openModal();
+    const romeCell = document.querySelector('[data-route-end="ローマ"] td:nth-child(3)')!;
+    const londonCell = document.querySelector('[data-route-end="ロンドン"] td:nth-child(3)')!;
+    expect(romeCell.textContent).toBe('🇮🇹 ローマ');
+    expect(londonCell.textContent).toBe('🇬🇧 ロンドン');
+  });
+
+  it('国旗選択肢は先頭が「なし」で、表内の国旗総数の降順に並ぶ', async () => {
+    await openModal();
+    document.getElementById('registered-routes-end-th-btn')!.click();
+    const select = document.querySelector<HTMLSelectElement>('#registered-routes-country-filter')!;
+    const options = Array.from(select.options).map((option) => option.textContent);
+    expect(options[0]).toBe('なし');
+    expect(options.slice(1)).toEqual(['🇮🇹 (2)', '🇬🇧 (1)']);
+  });
+
+  it('選択した国旗の到着地行だけを表示し、「なし」で全件に戻す', async () => {
+    await openModal();
+    const select = document.querySelector<HTMLSelectElement>('#registered-routes-country-filter')!;
+    select.value = 'イタリア';
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+    expect(document.querySelectorAll('#registered-routes-table-body .registered-routes-row')).toHaveLength(2);
+    expect(document.getElementById('registered-routes-table-body')!.textContent).not.toContain('ロンドン');
+
+    select.value = '';
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+    expect(document.querySelectorAll('#registered-routes-table-body .registered-routes-row')).toHaveLength(3);
+  });
+});
+
 describe('heritage-journeyページ: 登録済みルートから巡回スコープを選択', () => {
   it('巡回ルートスコープ(#tour-mini-panel、left:12px幅280px)の右端に接し、ページ最上段に揃う座標へモーダルを配置する', async () => {
     setupPage(() => Promise.resolve({ json: () => Promise.resolve({ routes: SAMPLE_ROUTES }) }));
