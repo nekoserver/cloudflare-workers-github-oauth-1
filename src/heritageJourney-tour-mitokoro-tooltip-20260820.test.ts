@@ -245,3 +245,118 @@ describe('heritage-journeyページ: タップツールチップの見どころ�
     expect(document.querySelectorAll('[data-overlay]').length).toBe(0);
   });
 });
+
+// 対象: #tour-globe-canvasのclickハンドラ。「城ON/OFF」(#toggle-castles-btn)で
+// 重ねて描画される城(ルートの経由地として選択されていない世界遺産)は、
+// 従来はtourPoints(ルートの経由地一覧)だけを対象にヒット判定していたため、
+// タップしてもツールチップ以降の処理(見どころアイコン→見どころモーダル)が
+// 一切発火しない不具合があった(#tour-tap-labelそのものが表示されない)。
+// このdescribeは、その修正がルート未選択の城のタップでも機能することを
+// project()/computeInitialView()と同じ計算式で実際のクリック座標を求め、
+// 実際にcanvasへclickイベントを飛ばして検証する。
+describe('heritage-journeyページ: 「城ON/OFF」で表示した、ルート未選択の城のタップ', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    document.body.innerHTML = '';
+    vi.useRealTimers();
+  });
+
+  // 既定の出発地(Paris)・到着地(Rome)から遠く離れた城(スオメンリンナの要塞群、
+  // フィンランド)を選ぶ。detourが既定のmaxDetour(150km)を大幅に超えるため、
+  // buildCandidates()の候補にすら入らず、tourPointsには絶対に含まれない
+  // (「たまたまルートの経由地としても選択されていた」ことによる偽陽性を排除するため)。
+  const FAR_CASTLE_NAME = 'スオメンリンナの要塞群';
+  const PARIS = { lat: 48.8566, lon: 2.3522 };
+  const ROME = { lat: 41.9028, lon: 12.4964 };
+
+  function circularMeanLon(lonA: number, lonB: number) {
+    const a = (lonA * Math.PI) / 180, b = (lonB * Math.PI) / 180;
+    return (Math.atan2((Math.sin(a) + Math.sin(b)) / 2, (Math.cos(a) + Math.cos(b)) / 2) * 180) / Math.PI;
+  }
+  function project(lat: number, lon: number, centerLat: number, centerLon: number, R: number, cx: number, cy: number) {
+    const latR = (lat * Math.PI) / 180;
+    const lonR = ((lon - centerLon) * Math.PI) / 180;
+    const lat0 = (centerLat * Math.PI) / 180;
+    const x = R * Math.cos(latR) * Math.sin(lonR);
+    const y = -R * (Math.cos(lat0) * Math.sin(latR) - Math.sin(lat0) * Math.cos(latR) * Math.cos(lonR));
+    return { x: cx + x, y: cy + y };
+  }
+  /** src/views/heritageJourney.tsのcomputeInitialView()と同じ計算式(定数含む)を再現する。 */
+  function computeInitialView(start: { lat: number; lon: number }, end: { lat: number; lon: number }, baseR: number) {
+    const centerLat = (start.lat + end.lat) / 2;
+    const centerLon = circularMeanLon(start.lon, end.lon);
+    const pStart = project(start.lat, start.lon, centerLat, centerLon, baseR, 0, 0);
+    const pEnd = project(end.lat, end.lon, centerLat, centerLon, baseR, 0, 0);
+    const maxDist = Math.max(Math.hypot(pStart.x, pStart.y), Math.hypot(pEnd.x, pEnd.y));
+    const MARGIN = 0.97;
+    let zoom = maxDist > 0.01 ? (baseR * MARGIN) / maxDist : 1;
+    zoom = Math.max(0.5, Math.min(16, zoom));
+    return { centerLat, centerLon, zoom };
+  }
+
+  /** その城を#tour-globe-canvas(520x520)上でタップするためのクリック座標を求める。 */
+  function computeCastleClickPoint(castleLat: number, castleLon: number) {
+    const baseR = Math.min(520, 520) / 2 - 24; // getGlobeGeometry()と同じ式(margin=24)
+    const { centerLat, centerLon, zoom } = computeInitialView(PARIS, ROME, baseR);
+    const R = baseR * zoom;
+    const cx = 260, cy = 260;
+    return project(castleLat, castleLon, centerLat, centerLon, R, cx, cy);
+  }
+
+  it('修正前は城をタップしてもツールチップ(#tour-tap-label)が一切表示されなかった(城はtourPointsに含まれないため)', async () => {
+    const { fetchMock } = buildFetchMock({});
+    setupPage(fetchMock);
+    await flushMicrotasks();
+
+    (document.getElementById('tour-test-btn') as HTMLButtonElement).click();
+    document.getElementById('toggle-castles-btn')!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+    const canvas = document.getElementById('tour-globe-canvas')!;
+    canvas.getBoundingClientRect = () => ({
+      left: 0, top: 0, right: 520, bottom: 520, width: 520, height: 520, x: 0, y: 0, toJSON: () => ({}),
+    });
+
+    const castle = HERITAGE_LIST.find((h) => h.n === FAR_CASTLE_NAME);
+    expect(castle).not.toBeUndefined();
+    const { x, y } = computeCastleClickPoint(castle!.lat, castle!.lon);
+
+    canvas.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: x, clientY: y }));
+
+    const tapLabel = document.getElementById('tour-tap-label')!;
+    // 修正済みの現在の実装では、城のタップでツールチップに城名が表示される
+    // (実装が退行し、この座標で再びタップが効かなくなっていないことを保証する)。
+    expect(tapLabel.style.display).toBe('block');
+    expect(tapLabel.textContent).toBe(FAR_CASTLE_NAME);
+  });
+
+  it('見どころキャッシュがあれば、城のタップでも👀/👁️アイコンが出てモーダルが開く', async () => {
+    const { fetchMock } = buildFetchMock({ gemmaShareId: 'share-gemma' });
+    setupPage(fetchMock);
+    await flushMicrotasks();
+
+    (document.getElementById('tour-test-btn') as HTMLButtonElement).click();
+    document.getElementById('toggle-castles-btn')!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+    const canvas = document.getElementById('tour-globe-canvas')!;
+    canvas.getBoundingClientRect = () => ({
+      left: 0, top: 0, right: 520, bottom: 520, width: 520, height: 520, x: 0, y: 0, toJSON: () => ({}),
+    });
+
+    const castle = HERITAGE_LIST.find((h) => h.n === FAR_CASTLE_NAME)!;
+    const { x, y } = computeCastleClickPoint(castle.lat, castle.lon);
+    canvas.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: x, clientY: y }));
+
+    const gemmaBtn = document.getElementById('tour-tap-mitokoro-gemma-btn');
+    expect(gemmaBtn).not.toBeNull();
+    gemmaBtn!.click();
+    await flushMicrotasks();
+
+    const overlay = document.querySelector('[data-overlay]');
+    expect(overlay).not.toBeNull();
+    const body = overlay!.querySelector('.mitokoro-md');
+    expect(body!.innerHTML).toContain('gemma回答本文です');
+  });
+});

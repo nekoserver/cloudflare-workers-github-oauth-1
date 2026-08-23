@@ -2553,7 +2553,7 @@ document.getElementById('replay-tour-btn').addEventListener('click', function() 
   }
 
   canvas.addEventListener('click', function(e) {
-    if (tourPoints.length === 0) return;
+    if (tourPoints.length === 0 && !castlesVisible) return;
     var rect = canvas.getBoundingClientRect();
     if (!rect.width || !rect.height) return;
     var scaleX = canvas.width / rect.width;
@@ -2567,7 +2567,23 @@ document.getElementById('replay-tour-btn').addEventListener('click', function() 
       var d = Math.hypot(pp.x - clickX, pp.y - clickY);
       if (d <= 14 && d < hitDist) { hitDist = d; hitIdx = i; }
     });
-    if (hitIdx >= 0) {
+    // 「城ON/OFF」で重ねて描画された城(tourPointsに含まれないルート未選択の
+    // 世界遺産)はtourPointsの一致判定だけでは検出できず、タップしても
+    // ツールチップが出ない不具合があったため、表示中はここでも同じ半径14pxの
+    // 判定を行い、tourPoints側より近ければそちらを優先してヒットさせる。
+    var castleHit = null;
+    if (castlesVisible) {
+      var castleHitDist = hitIdx >= 0 ? hitDist : Infinity;
+      HERITAGE_POINTS.filter(function(p) { return p.e === '🏰'; }).forEach(function(castle) {
+        var pp = project(castle.lat, castle.lon, tourCenterLat, tourCenterLon, geo.R, geo.cx, geo.cy);
+        var d = Math.hypot(pp.x - clickX, pp.y - clickY);
+        if (d <= 14 && d < castleHitDist) { castleHitDist = d; castleHit = castle; }
+      });
+      if (castleHit) hitIdx = -1; // tourPoints側より城が近ければそちらを優先する
+    }
+    if (castleHit) {
+      showTapLabel({ name: castleHit.n, lat: castleHit.lat, lon: castleHit.lon });
+    } else if (hitIdx >= 0) {
       showTapLabel(tourPoints[hitIdx]);
       scrollAirportSideRowIntoView(tourPoints[hitIdx]);
     }
