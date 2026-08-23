@@ -23,4 +23,20 @@ describe('heritage-journey: 空港ボタンのデータ表示', () => {
     expect(html).toContain("category === 'airport' ? !!c.airportCode");
     expect(html).toContain("{ id: 'toggle-airports-btn', matches: function(c) { return !!c.airportCode; } }");
   });
+
+  it('発着便データがある空港ボタンとルート小窓の行を薄緑色にする', () => {
+    const html = getHeritageJourneyPage();
+    expect(html).toContain('.airport-network-btn.has-data{background:#bbf7d0');
+    expect(html).toContain("(c.airportRoutes && c.airportRoutes.length) ? ' has-data' : ''");
+    expect(html).toContain('.tour-route-side-row.airport-has-data{background:#bbf7d0');
+    expect(html).toContain("(airportHasData ? ' airport-has-data' : '')");
+  });
+
+  it('地球儀またはルート小窓で空港をタップすると対応行へスクロールする', () => {
+    const html = getHeritageJourneyPage();
+    expect(html).toContain('function scrollAirportSideRowIntoView(point)');
+    expect(html).toContain("target.scrollIntoView({ behavior: 'smooth', block: 'nearest' });");
+    expect(html).toContain('scrollAirportSideRowIntoView(tourPoints[hitIdx]);');
+    expect(html).toContain('scrollAirportSideRowIntoView(point);');
+  });
 });

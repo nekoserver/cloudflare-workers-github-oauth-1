@@ -210,6 +210,7 @@ h1{font-size:22px;margin:0 0 4px}
 .cand-row .cname{flex:1}
 .cand-row .cdetour{color:#94a3b8;font-variant-numeric:tabular-nums}
 .airport-network-btn{background:#1e3a5f;border:1px solid #38bdf8;color:#bae6fd;border-radius:5px;padding:3px 7px;cursor:pointer;font-size:11px}
+.airport-network-btn.has-data{background:#bbf7d0;border-color:#86efac;color:#14532d;font-weight:700}
 .airport-network-table{width:100%;border-collapse:collapse;font-size:12px}.airport-network-table th,.airport-network-table td{border:1px solid #334155;padding:6px;text-align:left}.airport-network-table th{background:#1e293b;color:#93c5fd}.airport-network-code{display:block;color:#94a3b8;font-size:10px}.airport-network-freshness{color:#94a3b8;font-size:11px;margin:0 0 10px}
 .route-line{padding:0;font-size:12px;line-height:2.1;margin-top:12px}
 .route-title-row{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
@@ -277,6 +278,9 @@ h1{font-size:22px;margin:0 0 4px}
 .tour-route-side-row:hover{background:#1e293b}
 .tour-route-side-row.off{opacity:.45;color:#64748b}
 .tour-route-side-row.focused{border-color:#facc15}
+.tour-route-side-row.airport-has-data{background:#bbf7d0;color:#14532d}
+.tour-route-side-row.airport-has-data .tour-route-side-num,.tour-route-side-row.airport-has-data .airport-network-code{color:#166534}
+.tour-route-side-row.airport-has-data:hover{background:#86efac}
 .tour-route-side-row.blink{animation:tourRouteSideBlink .4s ease-in-out 3}
 @keyframes tourRouteSideBlink{0%,100%{border-color:#facc15}50%{border-color:#fef9c3}}
 .tour-modal-head{position:relative;display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:8px}
@@ -1359,7 +1363,7 @@ function renderCandidates() {
   listEl.innerHTML = candidates.map(function(c) {
     var checked = state.selected[c.name] !== undefined ? state.selected[c.name] : (c.detour <= 20);
     state.selected[c.name] = checked;
-    var networkButton = c.airportCode ? '<button type="button" class="airport-network-btn" data-airport-network="' + esc(c.airportCode) + '">発着便・航空会社</button>' : '';
+    var networkButton = c.airportCode ? '<button type="button" class="airport-network-btn' + ((c.airportRoutes && c.airportRoutes.length) ? ' has-data' : '') + '" data-airport-network="' + esc(c.airportCode) + '">発着便・航空会社</button>' : '';
     return '<div class="cand-row"><input type="checkbox" data-cand="' + esc(c.name) + '"' + (checked ? ' checked' : '') + '>' +
       '<span class="cname">' + esc(c.icon) + ' ' + esc(c.name) + '</span>' + networkButton + '<span class="cdetour">迂回 ' + c.detour.toFixed(1) + 'km</span></div>';
   }).join('');
@@ -1620,7 +1624,8 @@ function renderRouteSidePanel(ordered) {
     var country = p.country || '';
     var flag = p.flag || '';
     var dim = filterActive && country !== routeCountryFilter;
-    return '<div class="tour-route-side-row' + (off ? ' off' : '') + (dim ? ' route-line-item-dimmed' : '') + '" data-side-name="' + esc(p.name) + '" data-side-country="' + esc(country) + '" data-side-lat="' + p.lat + '" data-side-lon="' + p.lon + '" title="タップで地球儀上に名称を表示">'
+    var airportHasData = !!p.airportCode && !!(p.airportRoutes && p.airportRoutes.length);
+    return '<div class="tour-route-side-row' + (off ? ' off' : '') + (dim ? ' route-line-item-dimmed' : '') + (airportHasData ? ' airport-has-data' : '') + '" data-side-name="' + esc(p.name) + '" data-side-country="' + esc(country) + '" data-side-lat="' + p.lat + '" data-side-lon="' + p.lon + '"' + (p.airportCode ? ' data-side-airport-code="' + esc(p.airportCode) + '"' : '') + ' title="タップで地球儀上に名称を表示">'
       + '<span class="tour-route-side-num">' + esc(label) + '</span>'
       + '<input type="checkbox" class="tour-route-side-check" data-side-check-name="' + esc(p.name) + '"' + (off ? '' : ' checked') + (dim ? ' disabled aria-disabled="true"' : '') + ' title="OFFで巡回テストから一時的に除外">'
       + ' ' + (flag ? '<span class="wp-flag" title="' + esc(country) + '">' + esc(flag) + '</span>' : '')
@@ -2503,6 +2508,20 @@ document.getElementById('replay-tour-btn').addEventListener('click', function() 
     }, 7000);
   }
 
+  /** 地球儀またはルート行で選ばれた空港を、ルート順序小窓の同じ空港行まで移動する。 */
+  function scrollAirportSideRowIntoView(point) {
+    if (!point || !point.airportCode) return;
+    var target = null;
+    document.querySelectorAll('#tour-route-side-list [data-side-airport-code]').forEach(function(row) {
+      if (row.getAttribute('data-side-airport-code') === point.airportCode) target = row;
+    });
+    if (!target) return;
+    target.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    target.classList.remove('blink');
+    void target.offsetWidth;
+    target.classList.add('blink');
+  }
+
   canvas.addEventListener('click', function(e) {
     if (tourPoints.length === 0) return;
     var rect = canvas.getBoundingClientRect();
@@ -2518,7 +2537,10 @@ document.getElementById('replay-tour-btn').addEventListener('click', function() 
       var d = Math.hypot(pp.x - clickX, pp.y - clickY);
       if (d <= 14 && d < hitDist) { hitDist = d; hitIdx = i; }
     });
-    if (hitIdx >= 0) showTapLabel(tourPoints[hitIdx]);
+    if (hitIdx >= 0) {
+      showTapLabel(tourPoints[hitIdx]);
+      scrollAirportSideRowIntoView(tourPoints[hitIdx]);
+    }
   });
 
   document.getElementById('tour-route-side-list').addEventListener('click', function(e) {
@@ -2528,7 +2550,9 @@ document.getElementById('replay-tour-btn').addEventListener('click', function() 
     var lat = Number(row.getAttribute('data-side-lat'));
     var lon = Number(row.getAttribute('data-side-lon'));
     if (isNaN(lat) || isNaN(lon)) return;
-    showTapLabel({ name: row.getAttribute('data-side-name'), lat: lat, lon: lon });
+    var point = tourPoints.find(function(p) { return p.name === row.getAttribute('data-side-name'); });
+    showTapLabel(point || { name: row.getAttribute('data-side-name'), lat: lat, lon: lon });
+    scrollAirportSideRowIntoView(point);
   });
 
   document.getElementById('tour-route-side-list').addEventListener('change', function(e) {
