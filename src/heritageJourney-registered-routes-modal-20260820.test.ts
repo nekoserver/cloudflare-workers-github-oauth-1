@@ -9,7 +9,7 @@ import { getHeritageJourneyPage } from './views/heritageJourney';
 //   1. 出発地・到着地それぞれの出現回数を「都市名 (件数)」の形式で降順表示
 //   2. ID/出発地/到着地/直線距離のテーブル
 // を表示する。ソートは件数降順、同数の場合の順序は未規定(安定ソートに依存)。
-// テーブルはID昇順(サーバー側のORDER BY id ASCに依存)で表示する。
+// テーブルは直線距離の遠い順で表示し、行タップで巡回ルートスコープを切り替える。
 //
 // 故障シナリオ:
 //   (1) ボタンが正しい行(.city-row)に存在しない、モーダルが初期状態で開いている
@@ -120,6 +120,52 @@ describe('heritage-journeyページ: ID/出発地/到着地/直線距離テー�
     expect(rows[0].textContent).toContain('ローマ');
     expect(rows[0].textContent).toContain('1100.4 km');
     expect(body.textContent).not.toContain('東京');
+  });
+});
+
+describe('heritage-journeyページ: 登録済みルートから巡回スコープを選択', () => {
+  it('巡回ルートスコープと重ならない右寄せ座標へモーダルを配置する', async () => {
+    setupPage(() => Promise.resolve({ json: () => Promise.resolve({ routes: SAMPLE_ROUTES }) }));
+    const btn = document.getElementById('view-registered-routes-btn') as HTMLButtonElement;
+    btn.click();
+    const box = document.getElementById('registered-routes-modal-box') as HTMLElement;
+    expect(box.style.left).toBe(Math.max(320, window.innerWidth - 600) + 'px');
+    expect(box.style.top).toBe('80px');
+  });
+
+  it('現在の出発地に該当する行を直線距離の遠い順に並べる', async () => {
+    const routes = [
+      { id: 20, start: 'パリ', end: 'ロンドン', straightKm: 340.2 },
+      { id: 10, start: 'パリ', end: 'ローマ', straightKm: 1100.4 },
+      { id: 30, start: 'パリ', end: 'ブリュッセル', straightKm: 263.8 },
+    ];
+    setupPage(() => Promise.resolve({ json: () => Promise.resolve({ routes }) }));
+    document.getElementById('view-registered-routes-btn')!.click();
+    await new Promise((r) => setTimeout(r, 0));
+    await new Promise((r) => setTimeout(r, 0));
+    const ids = Array.from(document.querySelectorAll('#registered-routes-table-body tr'))
+      .map((row) => row.querySelector('td')!.textContent);
+    expect(ids).toEqual(['10', '20', '30']);
+  });
+
+  it('各行をタップするたびに出発地・到着地と巡回ルートスコープ見出しが切り替わり、モーダルは開いたままになる', async () => {
+    setupPage(() => Promise.resolve({ json: () => Promise.resolve({ routes: SAMPLE_ROUTES }) }));
+    document.getElementById('view-registered-routes-btn')!.click();
+    await new Promise((r) => setTimeout(r, 0));
+    await new Promise((r) => setTimeout(r, 0));
+
+    const londonRow = document.querySelector('[data-route-end="ロンドン"]') as HTMLElement;
+    londonRow.click();
+    expect((document.getElementById('start-city') as HTMLSelectElement).value).toBe('Paris');
+    expect((document.getElementById('end-city') as HTMLSelectElement).value).toBe('London');
+    expect(document.getElementById('tour-mini-head')!.textContent).toContain('パリ');
+    expect(document.getElementById('tour-mini-head')!.textContent).toContain('ロンドン');
+    expect(document.getElementById('registered-routes-modal-overlay')!.classList.contains('open')).toBe(true);
+
+    const romeRow = document.querySelector('[data-route-end="ローマ"]') as HTMLElement;
+    romeRow.click();
+    expect((document.getElementById('end-city') as HTMLSelectElement).value).toBe('Rome');
+    expect(document.getElementById('tour-mini-head')!.textContent).toContain('ローマ');
   });
 });
 
