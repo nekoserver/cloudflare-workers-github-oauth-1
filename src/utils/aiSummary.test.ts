@@ -138,6 +138,16 @@ describe('generateAiSummary', () => {
     expect(result).toBe('概要: ログイン機能を追加');
   });
 
+  it('英語で書かれたPRは日本語へ翻訳してから要約するよう指示する', async () => {
+    const ai = makeAi({ response: '概要: GitHub OAuth ログインを追加' });
+    await generateAiSummary({ ...baseParams, ai });
+
+    const call = (ai.run as ReturnType<typeof vi.fn>).mock.calls[0];
+    const systemContent = call[1].messages[0].content as string;
+    expect(systemContent).toContain('英語で書かれている場合は、まず日本語に翻訳してから要約');
+    expect(systemContent).toContain('最終的な出力は日本語のみ');
+  });
+
   it('diffありの場合、プロンプトに差分が含まれる', async () => {
     const ai = makeAi({ response: '要約テスト' });
     await generateAiSummary({
