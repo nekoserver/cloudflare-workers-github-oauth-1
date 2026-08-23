@@ -312,6 +312,14 @@ h1{font-size:22px;margin:0 0 4px}
 .lodging-recommend-status{font-size:11px;color:#bbf7d0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 #lodging-next-day-btn{flex-shrink:0;background:#14532d;border:1px solid #4ade80;color:#dcfce7;border-radius:7px;padding:5px 9px;font:11px inherit;cursor:pointer}
 #lodging-next-day-btn:disabled{opacity:.45;cursor:default}
+.tour-airport-summary{display:none;margin-top:10px;padding-top:9px;border-top:1px solid #334155}
+.tour-airport-summary-title{font-size:12px;font-weight:700;color:#bae6fd;margin-bottom:6px}
+.tour-airport-summary-wrap{max-height:132px;overflow:auto}
+.tour-airport-summary-table{width:100%;border-collapse:collapse;table-layout:fixed;font-size:10px;color:#cbd5e1}
+.tour-airport-summary-table th,.tour-airport-summary-table td{padding:4px;border-bottom:1px solid #1e293b;text-align:left;vertical-align:top}
+.tour-airport-summary-table th{position:sticky;top:0;background:#111827;color:#7dd3fc}
+.tour-airport-summary-table th:nth-child(1){width:34px}.tour-airport-summary-table th:nth-child(3),.tour-airport-summary-table th:nth-child(4){width:54px}
+.tour-airport-coordinate{white-space:nowrap;font-variant-numeric:tabular-nums}
 .wp-badge{display:inline-block;background:#1e293b;border:1px solid #334155;border-radius:999px;padding:2px 9px;white-space:nowrap;color:#cbd5e1;font-family:inherit;font-size:12px;cursor:pointer}
 .wp-badge:hover{border-color:#38bdf8;color:#fff}
 .wp-badge-fixed{cursor:default}
@@ -550,6 +558,10 @@ ${getMitokoroModalCss()}
   <div class="lodging-recommend-controls">
     <span class="lodging-recommend-status" id="lodging-recommend-status"></span>
     <button type="button" id="lodging-next-day-btn">次の1日へ →</button>
+  </div>
+  <div class="tour-airport-summary" id="tour-airport-summary">
+    <div class="tour-airport-summary-title">✈︎ 巡回ルートの空港</div>
+    <div class="tour-airport-summary-wrap"><table class="tour-airport-summary-table"><thead><tr><th>コード</th><th>空港名</th><th>緯度</th><th>経度</th></tr></thead><tbody id="tour-airport-summary-body"></tbody></table></div>
   </div>
 </section>
 <div class="tour-modal-overlay" id="airport-network-modal-overlay">
@@ -1483,10 +1495,11 @@ function renderRouteLine(ordered) {
     // 表示順: 中間の経由地は「→ 国旗 アイコン(名称)」(国旗が矢印の直後)。
     // 固定マーカー(出発地・到着地)はアイコン(📍/🏁)を先頭に保ったまま
     // 「アイコン 国旗 名称」の順にする(国旗を都市名の直前に移動)。
+    var airportCode = p.airportCode ? ' <span class="airport-network-code">' + esc(p.airportCode) + '</span>' : '';
     var badgeHtml = isEndpoint
-      ? '<span class="wp-badge wp-badge-fixed">' + esc(icon) + flagHtml + ' ' + esc(p.name) + '</span>'
+      ? '<span class="wp-badge wp-badge-fixed">' + esc(icon) + flagHtml + ' ' + esc(p.name) + airportCode + '</span>'
       : '<button type="button" class="wp-badge' + (off ? ' wp-badge-off' : '') + '" data-wp-name="' + esc(p.name) + '" title="タップで巡回テストから一時的に除外/復帰">'
-        + esc(icon) + ' ' + esc(p.name) + '</button>';
+        + esc(icon) + ' ' + esc(p.name) + airportCode + '</button>';
     return '<span class="route-line-item" data-wp-country="' + esc(country) + '" data-wp-item-name="' + esc(p.name) + '">'
       + (isEndpoint ? '' : flagHtml)
       + badgeHtml
@@ -1609,7 +1622,8 @@ function renderRouteSidePanel(ordered) {
       + '<span class="tour-route-side-num">' + esc(label) + '</span>'
       + '<input type="checkbox" class="tour-route-side-check" data-side-check-name="' + esc(p.name) + '"' + (off ? '' : ' checked') + (dim ? ' disabled aria-disabled="true"' : '') + ' title="OFFで巡回テストから一時的に除外">'
       + ' ' + (flag ? '<span class="wp-flag" title="' + esc(country) + '">' + esc(flag) + '</span>' : '')
-      + esc(p.icon || '📍') + ' ' + esc(p.name) + '</div>';
+      + esc(p.icon || '📍') + ' ' + esc(p.name)
+      + (p.airportCode ? ' <span class="airport-network-code">' + esc(p.airportCode) + '</span>' : '') + '</div>';
   }).join('');
 }
 
@@ -1915,6 +1929,8 @@ document.getElementById('replay-tour-btn').addEventListener('click', function() 
   var lodgingList = document.getElementById('lodging-recommend-list');
   var lodgingStatus = document.getElementById('lodging-recommend-status');
   var lodgingNextBtn = document.getElementById('lodging-next-day-btn');
+  var tourAirportSummary = document.getElementById('tour-airport-summary');
+  var tourAirportSummaryBody = document.getElementById('tour-airport-summary-body');
 
   var tourPoints = [];
   // 巡回ルートスコープでは、観光地点を結ぶのではなく日程表で算出した
@@ -2531,6 +2547,18 @@ document.getElementById('replay-tour-btn').addEventListener('click', function() 
     lodgingModal.style.top = Math.max(0, Math.min(window.innerHeight - lodgingModal.offsetHeight, rect.bottom + 8)) + 'px';
   }
 
+  /** 巡回対象に空港が含まれる場合だけ、宿泊推奨地の下へコードと座標を一覧表示する。 */
+  function renderTourAirportSummary() {
+    if (!tourAirportSummary || !tourAirportSummaryBody) return;
+    var airports = tourPoints.filter(function(p) { return !!p.airportCode; });
+    tourAirportSummary.style.display = airports.length ? 'block' : 'none';
+    tourAirportSummaryBody.innerHTML = airports.map(function(p) {
+      return '<tr><td><strong>' + esc(p.airportCode) + '</strong></td><td>' + esc(p.name) + '</td>'
+        + '<td class="tour-airport-coordinate">' + Number(p.lat).toFixed(4) + '</td>'
+        + '<td class="tour-airport-coordinate">' + Number(p.lon).toFixed(4) + '</td></tr>';
+    }).join('');
+  }
+
   /** 日程表から解決済みの宿泊推奨都市を最上位パネルへ列挙する。 */
   function renderLodgingRecommendModal() {
     if (!lodgingModal) return;
@@ -2545,6 +2573,7 @@ document.getElementById('replay-tour-btn').addEventListener('click', function() 
     var current = lodgingDayPoints[lodgingDayIndex];
     lodgingStatus.textContent = 'Day ' + (lodgingDayIndex + 1) + ' / ' + lodgingDayPoints.length + '　' + current.name;
     lodgingNextBtn.disabled = lodgingDayIndex >= lodgingDayPoints.length - 1;
+    renderTourAirportSummary();
     // モード変更時は既存の連続巡回処理を必ずOFFにする。
     stopAnim();
     playBtn.disabled = true;
@@ -2617,7 +2646,7 @@ document.getElementById('replay-tour-btn').addEventListener('click', function() 
     }
     tourPoints = ordered
       .filter(function(p) { return !routeLineExcluded[p.name]; })
-      .map(function(p) { return { name: p.name, lat: p.lat, lon: p.lon, flag: p.flag, id: p.id, icon: p.icon, country: p.country || '' }; });
+      .map(function(p) { return { name: p.name, lat: p.lat, lon: p.lon, flag: p.flag, id: p.id, icon: p.icon, country: p.country || '', airportCode: p.airportCode || '' }; });
     updateCurrentTourActiveHeritageIds();
     if (tourPoints.length < 2) {
       miniPanel.style.display = '';
