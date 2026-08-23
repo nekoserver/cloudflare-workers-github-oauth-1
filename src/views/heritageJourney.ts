@@ -280,6 +280,15 @@ h1{font-size:22px;margin:0 0 4px}
 .tour-mini-head{background:#1e293b;color:#93c5fd;font-size:12px;font-weight:700;padding:6px 10px;cursor:grab;user-select:none;touch-action:none}
 .tour-mini-head:active{cursor:grabbing}
 #tour-mini-canvas{display:block;width:260px;height:260px;margin:10px auto;background:#0b1220;border-radius:50%;border:1px solid #1e293b;cursor:pointer}
+.lodging-recommend-modal{position:fixed;top:306px;left:12px;z-index:10001;width:280px;box-sizing:border-box;background:#111827;border:1px solid #86efac;border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.55);padding:10px;display:none}
+.lodging-recommend-title{font-size:12px;font-weight:700;color:#bbf7d0;margin-bottom:7px}
+.lodging-recommend-list{display:flex;flex-wrap:wrap;gap:5px;max-height:92px;overflow:auto;margin-bottom:8px}
+.lodging-recommend-city{border:1px solid #475569;border-radius:999px;background:#1e293b;color:#cbd5e1;padding:3px 8px;font:11px inherit;cursor:pointer}
+.lodging-recommend-city.active{background:#14532d;border-color:#86efac;color:#dcfce7}
+.lodging-recommend-controls{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.lodging-recommend-status{font-size:11px;color:#bbf7d0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#lodging-next-day-btn{flex-shrink:0;background:#14532d;border:1px solid #4ade80;color:#dcfce7;border-radius:7px;padding:5px 9px;font:11px inherit;cursor:pointer}
+#lodging-next-day-btn:disabled{opacity:.45;cursor:default}
 .wp-badge{display:inline-block;background:#1e293b;border:1px solid #334155;border-radius:999px;padding:2px 9px;white-space:nowrap;color:#cbd5e1;font-family:inherit;font-size:12px;cursor:pointer}
 .wp-badge:hover{border-color:#38bdf8;color:#fff}
 .wp-badge-fixed{cursor:default}
@@ -512,6 +521,14 @@ ${getMitokoroModalCss()}
   <div class="tour-mini-head" id="tour-mini-head">🌐 巡回テスト</div>
   <canvas id="tour-mini-canvas" width="260" height="260"></canvas>
 </div>
+<section class="lodging-recommend-modal" id="lodging-recommend-modal" role="dialog" aria-modal="false" aria-labelledby="lodging-recommend-title">
+  <div class="lodging-recommend-title" id="lodging-recommend-title">🏨 宿泊推奨地</div>
+  <div class="lodging-recommend-list" id="lodging-recommend-list"></div>
+  <div class="lodging-recommend-controls">
+    <span class="lodging-recommend-status" id="lodging-recommend-status"></span>
+    <button type="button" id="lodging-next-day-btn">次の1日へ →</button>
+  </div>
+</section>
 <script>
 ${getMarkdownParserScript()}
 ${getHeritageMitokoroModalScript()}
@@ -1724,16 +1741,20 @@ function recompute() {
   // 日程上の宿泊推奨地を都市マスタの座標へ解決する。同じ都市で連泊する日は
   // 連続点を重ねず1点にまとめ、スコープの巡回線を「宿泊地間の移動」にする。
   lodgingRoutePoints = [];
+  lodgingDayPoints = [];
   days.forEach(function(d) {
     var city = CITY_POINTS.find(function(c) { return c.name === d.city; });
     if (!city) return;
+    lodgingDayPoints.push({ name: city.name, lat: city.lat, lon: city.lon });
     var previous = lodgingRoutePoints[lodgingRoutePoints.length - 1];
     if (!previous || previous.name !== city.name) {
       lodgingRoutePoints.push({ name: city.name, lat: city.lat, lon: city.lon });
     }
   });
+  lodgingDayIndex = Math.min(lodgingDayIndex, Math.max(0, lodgingDayPoints.length - 1));
 
   syncMiniGlobe();
+  renderLodgingRecommendModal();
 }
 
 function selectAllCandidates() {
@@ -1842,11 +1863,17 @@ document.getElementById('replay-tour-btn').addEventListener('click', function() 
   var miniPanel = document.getElementById('tour-mini-panel');
   var miniHead = document.getElementById('tour-mini-head');
   var miniCanvas = document.getElementById('tour-mini-canvas');
+  var lodgingModal = document.getElementById('lodging-recommend-modal');
+  var lodgingList = document.getElementById('lodging-recommend-list');
+  var lodgingStatus = document.getElementById('lodging-recommend-status');
+  var lodgingNextBtn = document.getElementById('lodging-next-day-btn');
 
   var tourPoints = [];
   // 巡回ルートスコープでは、観光地点を結ぶのではなく日程表で算出した
   // 宿泊推奨地どうしを結ぶ。各都市は実際の都市座標で保持する。
   var lodgingRoutePoints = [];
+  var lodgingDayPoints = [];
+  var lodgingDayIndex = 0;
   var animProgress = 0; // 0..(tourPoints.length-1) の連続値。整数部=区間番号、小数部=区間内の進み具合
   var animTimer = null;
   var playing = false;
@@ -2279,10 +2306,11 @@ document.getElementById('replay-tour-btn').addEventListener('click', function() 
       ctx.globalAlpha = 1;
     }
 
-    // 巡回中の現在位置マーカー
-    var curPt = pointAtProgress(tourPoints, animProgress);
+    // 宿泊推奨地モードの現在位置マーカー。従来の経由地点間アニメーションではなく、
+    // 「次の1日へ」操作ごとに、その日の宿泊推奨都市の実座標へ直接移動する。
+    var curPt = lodgingDayPoints[lodgingDayIndex] || pointAtProgress(tourPoints, animProgress);
     var curProj = project(curPt.lat, curPt.lon, tourCenterLat, tourCenterLon, R, cx, cy);
-    ctx.fillStyle = '#22c55e';
+    ctx.fillStyle = '#86efac';
     ctx.beginPath();
     ctx.arc(curProj.x, curProj.y, 7, 0, Math.PI * 2);
     ctx.fill();
@@ -2448,6 +2476,46 @@ document.getElementById('replay-tour-btn').addEventListener('click', function() 
     playBtn.textContent = '▶ 再生';
   }
 
+  function positionLodgingRecommendModal() {
+    if (!lodgingModal || miniPanel.style.display === 'none') return;
+    var rect = miniPanel.getBoundingClientRect();
+    lodgingModal.style.left = Math.max(0, Math.min(window.innerWidth - lodgingModal.offsetWidth, rect.left)) + 'px';
+    lodgingModal.style.top = Math.max(0, Math.min(window.innerHeight - lodgingModal.offsetHeight, rect.bottom + 8)) + 'px';
+  }
+
+  /** 日程表から解決済みの宿泊推奨都市を最上位パネルへ列挙する。 */
+  function renderLodgingRecommendModal() {
+    if (!lodgingModal) return;
+    if (!lodgingDayPoints.length || miniPanel.style.display === 'none') {
+      lodgingModal.style.display = 'none';
+      return;
+    }
+    lodgingModal.style.display = 'block';
+    lodgingList.innerHTML = lodgingDayPoints.map(function(p, i) {
+      return '<button type="button" class="lodging-recommend-city' + (i === lodgingDayIndex ? ' active' : '') + '" data-lodging-day="' + i + '">Day ' + (i + 1) + ' ' + esc(p.name) + '</button>';
+    }).join('');
+    var current = lodgingDayPoints[lodgingDayIndex];
+    lodgingStatus.textContent = 'Day ' + (lodgingDayIndex + 1) + ' / ' + lodgingDayPoints.length + '　' + current.name;
+    lodgingNextBtn.disabled = lodgingDayIndex >= lodgingDayPoints.length - 1;
+    // モード変更時は既存の連続巡回処理を必ずOFFにする。
+    stopAnim();
+    playBtn.disabled = true;
+    playBtn.textContent = '巡回OFF（宿泊地モード）';
+    positionLodgingRecommendModal();
+  }
+
+  function selectLodgingDay(index) {
+    lodgingDayIndex = Math.max(0, Math.min(lodgingDayPoints.length - 1, index));
+    renderLodgingRecommendModal();
+    renderAll();
+  }
+
+  lodgingNextBtn.addEventListener('click', function() { selectLodgingDay(lodgingDayIndex + 1); });
+  lodgingList.addEventListener('click', function(e) {
+    var btn = e.target.closest('[data-lodging-day]');
+    if (btn) selectLodgingDay(Number(btn.getAttribute('data-lodging-day')));
+  });
+
   function startAnim() {
     if (tourPoints.length < 2) return;
     if (animProgress >= tourPoints.length - 1) animProgress = 0;
@@ -2494,6 +2562,7 @@ document.getElementById('replay-tour-btn').addEventListener('click', function() 
     var ordered = state.lastOrdered || [];
     if (ordered.length < 2) {
       miniPanel.style.display = 'none';
+      lodgingModal.style.display = 'none';
       tourPoints = [];
       updateCurrentTourActiveHeritageIds();
       return;
@@ -2522,6 +2591,7 @@ document.getElementById('replay-tour-btn').addEventListener('click', function() 
     miniPanel.style.display = '';
     renderAll();
     updateLabel();
+    renderLodgingRecommendModal();
   }
 
   function openTourModal() {
@@ -2588,6 +2658,7 @@ document.getElementById('replay-tour-btn').addEventListener('click', function() 
       var newTop = Math.max(0, Math.min(maxTop, startTop + dy));
       miniPanel.style.left = newLeft + 'px';
       miniPanel.style.top = newTop + 'px';
+      positionLodgingRecommendModal();
     }
     function onUp() { dragging = false; }
     miniHead.addEventListener('mousedown', function(e) { onDown(e.clientX, e.clientY); e.preventDefault(); });
