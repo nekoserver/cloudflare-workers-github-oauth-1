@@ -1839,21 +1839,22 @@ function selectNearCandidates() {
 }
 function updateTransportToggleButtons(candidates) {
   [
-    { id: 'toggle-stations-btn', suffix: '駅' },
-    { id: 'toggle-airports-btn', suffix: '空港' },
+    { id: 'toggle-stations-btn', matches: function(c) { return !c.airportCode && c.icon === CLIENT_STATION_ICON; } },
+    { id: 'toggle-airports-btn', matches: function(c) { return !!c.airportCode; } },
   ].forEach(function(toggle) {
-    var matching = candidates.filter(function(c) { return c.name.endsWith(toggle.suffix); });
+    var matching = candidates.filter(toggle.matches);
     var isOn = matching.length > 0 && matching.every(function(c) { return !!state.selected[c.name]; });
     document.getElementById(toggle.id).setAttribute('aria-pressed', isOn ? 'true' : 'false');
   });
 }
-function toggleTransportCandidates(buttonId, suffix) {
+function toggleTransportCandidates(buttonId, category) {
   var button = document.getElementById(buttonId);
   var turnOn = button.getAttribute('aria-pressed') !== 'true';
   var se = currentStartEnd();
   var maxDetour = Number(document.getElementById('opt-detour').value) || 150;
   buildCandidates(se.start, se.end, HERITAGE_POINTS, maxDetour).forEach(function(c) {
-    if (c.name.endsWith(suffix)) state.selected[c.name] = turnOn;
+    var matches = category === 'airport' ? !!c.airportCode : (!c.airportCode && c.icon === CLIENT_STATION_ICON);
+    if (matches) state.selected[c.name] = turnOn;
   });
   renderCandidates(); recompute();
 }
@@ -1863,8 +1864,8 @@ document.getElementById('select-near-btn').addEventListener('click', selectNearC
 document.getElementById('select-all-btn-modal').addEventListener('click', selectAllCandidates);
 document.getElementById('select-none-btn-modal').addEventListener('click', selectNoneCandidates);
 document.getElementById('select-near-btn-modal').addEventListener('click', selectNearCandidates);
-document.getElementById('toggle-stations-btn').addEventListener('click', function() { toggleTransportCandidates('toggle-stations-btn', '駅'); });
-document.getElementById('toggle-airports-btn').addEventListener('click', function() { toggleTransportCandidates('toggle-airports-btn', '空港'); });
+document.getElementById('toggle-stations-btn').addEventListener('click', function() { toggleTransportCandidates('toggle-stations-btn', 'station'); });
+document.getElementById('toggle-airports-btn').addEventListener('click', function() { toggleTransportCandidates('toggle-airports-btn', 'airport'); });
 /**
  * 現在の#route-country-filter選択状態に基づき、渡すべき地点(orderedのサブセット)を返す純粋関数。
  * routeCountryFilterがROUTE_COUNTRY_FILTER_ALLの場合、または設定ページの
