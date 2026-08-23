@@ -2131,10 +2131,14 @@ document.getElementById('replay-tour-btn').addEventListener('click', function() 
   }
 
   /**
-   * 巡回テスト地球儀上の経由地点1件分を描画する。世界遺産(icon未指定/上記2種以外)は
-   * 従来どおり薄ピンク色の丸(半径5)+通し番号ラベル。空港(CLIENT_AIRPORT_ICON)/駅
-   * (CLIENT_STATION_ICON)は丸を描かず、それぞれの絵文字グリフをctx.fillTextで
-   * 座標中心に直接描画する(textAlign/textBaseline経由でcenter/middleに設定してから描画)。
+   * 巡回テスト地球儀上の経由地点1件分を描画する。icon(空港✈︎/駅🚉/世界遺産の
+   * カテゴリ絵文字🏰🏛️⛪🌿♨️🏭等、いずれもHeritageItem.e由来)がtruthyな文字列の
+   * 場合は、種別を問わずその絵文字グリフをctx.fillTextで座標中心に直接描画する
+   * (textAlign/textBaseline経由でcenter/middleに設定してから描画)。世界遺産の
+   * カテゴリ絵文字は/webgl-heritageページの地球儀(el.textContent = d.e)と同じ
+   * 絵文字を用いるため、両ページで一貫した見た目になる。iconが未指定/空文字の
+   * 場合のみ、従来の薄ピンク色の丸(半径5)+通し番号ラベルにフォールバックする
+   * (データ欠損時の防御的デフォルトであり、通常のデータフローでは発生しない)。
    * 絵文字はfillStyleの影響を受けない(ブラウザ既定の色で描画される)ため、裏側
    * (pp.visible===false)の減光はglobalAlphaの一時的な引き下げ(0.4)で行い、
    * 描画後は必ず元の値に復元する(以降の描画呼び出しに影響を残さないため)。
@@ -2144,14 +2148,14 @@ document.getElementById('replay-tour-btn').addEventListener('click', function() 
    * さらに0.35倍して減光する(route-line-item-dimmedのopacity:.35と同じ濃さに揃える)。
    * 裏側減光(0.4)と国別フィルタ減光(0.35)は乗算で合成するため、両方に該当する地点は
    * どちらか一方のみの場合より必ず暗くなる(0.4*0.35=0.14)。tp省略時(country不明)は
-   * 減光しない。
+   * 減光しない。この乗算合成ロジックはグリフ/丸どちらの分岐でも同一に適用される。
    */
   function drawWaypointPoint(ctx, pp, icon, i, tp) {
     var country = (tp && tp.country) || '';
     var countryDimmed = routeCountryFilter !== ROUTE_COUNTRY_FILTER_ALL && country !== routeCountryFilter;
     var countryAlphaFactor = countryDimmed ? 0.35 : 1;
-    var isTransportGlyph = icon === CLIENT_AIRPORT_ICON || icon === CLIENT_STATION_ICON;
-    if (isTransportGlyph) {
+    var hasGlyph = typeof icon === 'string' && icon.length > 0;
+    if (hasGlyph) {
       var prevAlpha = ctx.globalAlpha;
       ctx.globalAlpha = (pp.visible ? 1 : 0.4) * countryAlphaFactor;
       ctx.font = '16px sans-serif';
@@ -2230,10 +2234,11 @@ document.getElementById('replay-tour-btn').addEventListener('click', function() 
     // 候補点の凸包/バウンディングボックスによる近似。drawCountryOutline()参照)。
     drawCountryOutline(ctx, geo);
 
-    // 経由地点(宿泊予定地) - 薄ピンク色の丸で表示し、タップすると名称を一時表示する。
-    // ただし空港/駅は色丸ではなく、それぞれの絵文字グリフ(✈︎/🚉)を直接描画する
-    // (色丸だと世界遺産と見分けがつかないため)。描画本体はdrawWaypointPoint()に
-    // 切り出し、テストから直接呼び出して(裏側判定を含む)描画分岐を検証できるようにする。
+    // 経由地点(宿泊予定地) - 空港✈︎/駅🚉/世界遺産のカテゴリ絵文字(🏰🏛️⛪🌿♨️🏭等)を
+    // それぞれの座標に直接描画する(/webgl-heritageページの地球儀と同じ絵文字を用いる)。
+    // アイコン情報が無い場合のみ薄ピンク色の丸+通し番号ラベルにフォールバックする。
+    // 描画本体はdrawWaypointPoint()に切り出し、テストから直接呼び出して(裏側判定を
+    // 含む)描画分岐を検証できるようにする。
     projected.forEach(function(pp, i) {
       var tp = tourPoints[i];
       drawWaypointPoint(ctx, pp, tp && tp.icon, i, tp);
