@@ -427,6 +427,7 @@ ${getMitokoroModalCss()}
       <button id="select-near-btn" type="button">近接のみ選択(20km以内)</button>
       <button id="toggle-stations-btn" class="transport-toggle" type="button" aria-pressed="false">駅ON/OFF</button>
       <button id="toggle-airports-btn" class="transport-toggle" type="button" aria-pressed="false">空港ON/OFF</button>
+      <button id="toggle-castles-btn" class="transport-toggle" type="button" aria-pressed="false">城ON/OFF</button>
       <span class="cand-count" id="cand-count"></span>
     </div>
     <div class="cand-list" id="cand-list"></div>
@@ -1941,6 +1942,8 @@ document.getElementById('replay-tour-btn').addEventListener('click', function() 
   var lodgingNextBtn = document.getElementById('lodging-next-day-btn');
   var tourAirportSummary = document.getElementById('tour-airport-summary');
   var tourAirportSummaryBody = document.getElementById('tour-airport-summary-body');
+  var castleToggleBtn = document.getElementById('toggle-castles-btn');
+  var castlesVisible = false;
 
   var tourPoints = [];
   // 巡回ルートスコープでは、観光地点を結ぶのではなく日程表で算出した
@@ -2358,6 +2361,31 @@ document.getElementById('replay-tour-btn').addEventListener('click', function() 
     // 候補点の凸包/バウンディングボックスによる近似。drawCountryOutline()参照)。
     drawCountryOutline(ctx, geo);
 
+    // 「城ON/OFF」はルート候補の選択状態を変えず、巡回テストに属する2つの
+    // 地球儀だけへ全ての城座標を重ねる。モーダル本体では🏰、小さなスコープでは
+    // 混雑を避けるため薄水色の半径3pxマーカーとして描き分ける。
+    if (castlesVisible) {
+      HERITAGE_POINTS.filter(function(p) { return p.e === '🏰'; }).forEach(function(castle) {
+        var cp = project(castle.lat, castle.lon, tourCenterLat, tourCenterLon, R, cx, cy);
+        var castleAlpha = cp.visible ? 1 : 0.4;
+        ctx.globalAlpha = castleAlpha;
+        if (isScope) {
+          ctx.fillStyle = '#bae6fd';
+          ctx.beginPath();
+          ctx.arc(cp.x, cp.y, 3, 0, Math.PI * 2);
+          ctx.fill();
+        } else {
+          ctx.font = '16px sans-serif';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText('🏰', cp.x, cp.y);
+        }
+      });
+      ctx.globalAlpha = 1;
+      ctx.textAlign = 'start';
+      ctx.textBaseline = 'alphabetic';
+    }
+
     // 経由地点(宿泊予定地) - 空港✈︎/駅🚉/世界遺産のカテゴリ絵文字(🏰🏛️⛪🌿♨️🏭等)を
     // それぞれの座標に直接描画する(/webgl-heritageページの地球儀と同じ絵文字を用いる)。
     // アイコン情報が無い場合のみ薄ピンク色の丸+通し番号ラベルにフォールバックする。
@@ -2716,6 +2744,11 @@ document.getElementById('replay-tour-btn').addEventListener('click', function() 
   }
 
   tourTestBtn.addEventListener('click', openTourModal);
+  castleToggleBtn.addEventListener('click', function() {
+    castlesVisible = !castlesVisible;
+    castleToggleBtn.setAttribute('aria-pressed', castlesVisible ? 'true' : 'false');
+    renderAll();
+  });
   miniCanvas.addEventListener('click', openTourModal);
   closeBtn.addEventListener('click', closeTourModal);
   overlay.addEventListener('click', function(e) { if (e.target === overlay) closeTourModal(); });
