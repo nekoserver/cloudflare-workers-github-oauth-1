@@ -52,13 +52,35 @@ describe('heritage-journeyページ: 到着地選択モーダルのヘッダに�
     expect(children[3].textContent).toBe('近接のみ選択(20km以内)');
   });
 
-  it('ヘッダの閉じるボタンと重ならず、モーダルの close ボタンより前に存在する', () => {
+  // 「都市名/駅/空港/城」チェックボックス(出発地選択モーダルと共通のUI)をタイトル行に
+  // 配置するスペースを確保するため、この一括操作ボタン群はヘッダの2行目(flex-basis:100%で
+  // 強制改行する.end-city-picker-cand-toolbar-row2)へ移動された。ヘッダの閉じるボタンとは
+  // 重ならない(閉じるボタンは1行目に留まる)ことだけを検証する。
+  it('ヘッダの閉じるボタンと重ならず、2行目へ強制改行するクラスを持つ', () => {
     setupPage();
     const head = document.getElementById('end-city-picker-modal-head')!;
     const toolbar = head.querySelector('.end-city-picker-cand-toolbar')!;
     const closeBtn = document.getElementById('end-city-picker-modal-close')!;
+    expect(toolbar.classList.contains('end-city-picker-cand-toolbar-row2')).toBe(true);
+    expect(toolbar).not.toBe(closeBtn);
+    expect(closeBtn.closest('.end-city-picker-cand-toolbar')).toBeNull();
+  });
+
+  it('元々ボタンがあった場所(タイトル行)には、出発地選択モーダルと同じ「都市名のみ/駅/空港/城」チェックボックスが配置される', () => {
+    setupPage();
+    const head = document.getElementById('end-city-picker-modal-head')!;
+    const checkboxRow = head.querySelector('.start-city-picker-checkbox-row')!;
+    expect(checkboxRow).not.toBeNull();
+    const toolbar = head.querySelector('.end-city-picker-cand-toolbar')!;
     const headChildren = Array.from(head.children);
-    expect(headChildren.indexOf(toolbar)).toBeLessThan(headChildren.indexOf(closeBtn));
+    // チェックボックス行はタイトル行(closeBtnより前)、一括操作ボタン群(row2)はその後に来る。
+    const closeBtn = document.getElementById('end-city-picker-modal-close')!;
+    expect(headChildren.indexOf(checkboxRow)).toBeLessThan(headChildren.indexOf(closeBtn));
+    expect(headChildren.indexOf(toolbar)).toBeGreaterThan(headChildren.indexOf(closeBtn));
+    expect(document.getElementById('end-city-picker-cities-cb')).not.toBeNull();
+    expect(document.getElementById('end-city-picker-stations-cb')).not.toBeNull();
+    expect(document.getElementById('end-city-picker-airports-cb')).not.toBeNull();
+    expect(document.getElementById('end-city-picker-castles-cb')).not.toBeNull();
   });
 });
 
