@@ -1098,6 +1098,10 @@ function updateTourScopeHeaderLabel() {
 // リクエストごとに単調増加する連番を発行し、応答時点で最新でなければ
 // 何もしない(=古い応答は無視する)ことでレースを解消する。
 var registerRouteButtonReqSeq = 0;
+// ボタンが無効化されている理由を、tooltip(title属性)でユーザーに明示する。
+// 修正前は「既に登録済み」も「確認APIの通信・DBエラー」も同じ「押せない灰色ボタン」
+// にしか見えず、ユーザーからは「登録できない不具合」として区別できなかった
+// (Vienna→Paris等、実際には既に登録済みなだけの組み合わせがバグ報告される原因)。
 function updateRegisterRouteButton() {
   var btn = document.getElementById('register-route-btn');
   if (!btn) return;
@@ -1109,12 +1113,25 @@ function updateRegisterRouteButton() {
       if (mySeq !== registerRouteButtonReqSeq) return;
       var btn2 = document.getElementById('register-route-btn');
       if (!btn2) return;
-      btn2.disabled = !!(data && data.exists);
+      if (data && data.error) {
+        // route-existsがHTTPレベルでは成功(200)しつつDBエラー等をerrorフィールドで
+        // 返す実装(サーバー側)のため、existsだけでなくerrorの有無も見て区別する。
+        btn2.disabled = true;
+        btn2.title = '登録状況の確認に失敗しました(' + data.error + ')。再読み込みして再度お試しください';
+      } else if (data && data.exists) {
+        btn2.disabled = true;
+        btn2.title = 'この出発地・到着地の組み合わせは既に登録済みです';
+      } else {
+        btn2.disabled = false;
+        btn2.title = '';
+      }
     })
-    .catch(function() {
+    .catch(function(err) {
       if (mySeq !== registerRouteButtonReqSeq) return;
       var btn2 = document.getElementById('register-route-btn');
-      if (btn2) btn2.disabled = true;
+      if (!btn2) return;
+      btn2.disabled = true;
+      btn2.title = '登録状況の確認に失敗しました(' + (err && err.message ? err.message : '通信エラー') + ')。再読み込みして再度お試しください';
     });
 }
 

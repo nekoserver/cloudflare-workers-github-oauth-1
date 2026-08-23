@@ -141,3 +141,75 @@ describe('heritage-journeyページ: ボタン押下時の登録POSTと削除', 
     expect(errEl.style.display).not.toBe('none');
   });
 });
+
+// 対象: 「ウィーン→パリのルートが登録できない」という報告の根本原因調査で判明した、
+// #register-route-btnが無効化されている理由をユーザーが判別できない不具合。
+// 修正前は「既に登録済み(exists:true)」も「route-exists自体の通信・DBエラー」も
+// 同じ「押せない灰色ボタン」にしか見えず、実際には正常に動作している(既に登録済み
+// なだけの)組み合わせが「登録できないバグ」として報告される原因になっていた。
+// 修正後はtitle属性(tooltip)で理由を明示する。
+//
+// 故障シナリオ:
+//   (1) 既に登録済みの場合、無効化の理由がtitleに出ない
+//   (2) route-existsがHTTPレベルは200でもerrorフィールドを返す実装(DBエラー等)の場合に、
+//       existsだけを見てしまい「未登録」と誤判定して有効化してしまう、またはエラー理由が出ない
+//   (3) fetch自体が例外を投げた場合(通信断等)に理由が出ない
+//   (4) 有効な組み合わせに変わったのにtitleが古いまま残る
+describe('heritage-journeyページ: 「ルート登録」ボタンが無効な理由をtitle属性で明示する(ウィーン→パリ調査)', () => {
+  it('既に登録済み(exists:true)の場合、titleに「既に登録済み」である旨が入る', async () => {
+    setupPage(() => Promise.resolve({ json: () => Promise.resolve({ exists: true }) }));
+    await new Promise((r) => setTimeout(r, 0));
+    await new Promise((r) => setTimeout(r, 0));
+    const btn = document.getElementById('register-route-btn') as HTMLButtonElement;
+    expect(btn.disabled).toBe(true);
+    expect(btn.title).toContain('既に登録済み');
+  });
+
+  it('route-existsがHTTP 200でもerrorフィールドを返す場合、exists:falseでも登録済み扱いにせず、titleにエラー理由が入る', async () => {
+    setupPage(() => Promise.resolve({ json: () => Promise.resolve({ exists: false, error: 'DB unavailable' }) }));
+    await new Promise((r) => setTimeout(r, 0));
+    await new Promise((r) => setTimeout(r, 0));
+    const btn = document.getElementById('register-route-btn') as HTMLButtonElement;
+    expect(btn.disabled).toBe(true);
+    expect(btn.title).toContain('確認に失敗');
+    expect(btn.title).toContain('DB unavailable');
+  });
+
+  it('fetch自体が例外(通信断等)の場合も、titleに確認失敗である旨が入る', async () => {
+    setupPage(() => Promise.reject(new Error('network down')));
+    await new Promise((r) => setTimeout(r, 0));
+    await new Promise((r) => setTimeout(r, 0));
+    const btn = document.getElementById('register-route-btn') as HTMLButtonElement;
+    expect(btn.disabled).toBe(true);
+    expect(btn.title).toContain('確認に失敗');
+    expect(btn.title).toContain('network down');
+  });
+
+  it('未登録(exists:false, errorなし)の場合はtitleが空になり、ボタンが有効になる', async () => {
+    setupPage(() => Promise.resolve({ json: () => Promise.resolve({ exists: false }) }));
+    await new Promise((r) => setTimeout(r, 0));
+    await new Promise((r) => setTimeout(r, 0));
+    const btn = document.getElementById('register-route-btn') as HTMLButtonElement;
+    expect(btn.disabled).toBe(false);
+    expect(btn.title).toBe('');
+  });
+
+  it('登録済み→未登録に変わった(出発地/到着地を変更した)場合、古いtitleが残らずクリアされる', async () => {
+    let existsNow = true;
+    const { fetchMock } = setupPage(() => {
+      return Promise.resolve({ json: () => Promise.resolve({ exists: existsNow }) });
+    });
+    await new Promise((r) => setTimeout(r, 0));
+    await new Promise((r) => setTimeout(r, 0));
+    const btn = document.getElementById('register-route-btn') as HTMLButtonElement;
+    expect(btn.title).toContain('既に登録済み');
+
+    existsNow = false;
+    document.getElementById('end-city')!.dispatchEvent(new Event('change'));
+    await new Promise((r) => setTimeout(r, 0));
+    await new Promise((r) => setTimeout(r, 0));
+    expect(fetchMock.mock.calls.length).toBeGreaterThanOrEqual(2);
+    expect(btn.title).toBe('');
+    expect(btn.disabled).toBe(false);
+  });
+});
