@@ -2721,9 +2721,21 @@ export function getAiChatPage(user: {
       if (shouldTriggerHistoryModalSwipe(dx)) historyModalSwipeNavigate(dx < 0 ? 1 : -1);
     });
 
+    function shouldIgnoreHistorySwipeKey(e) {
+      if (e.isComposing) return true;
+      var target = e.target;
+      if (!target) return false;
+      if (target.isContentEditable) return true;
+      return typeof target.closest === 'function'
+        && !!target.closest('input, textarea, select, [contenteditable="true"], [contenteditable=""]');
+    }
+
     document.addEventListener('keydown', function(e) {
       if (!historyModalBackdrop.classList.contains('open')) return;
       if (historyModalSwipeItems.length <= 1) return;
+      // 履歴プレビューの上に分類モーダルを開いた場合もこのハンドラは有効なままになる。
+      // 入力欄でのカーソル移動や IME 変換を履歴切替として奪わないようにする。
+      if (shouldIgnoreHistorySwipeKey(e)) return;
       if (e.key === 'ArrowLeft') { e.preventDefault(); historyModalSwipeNavigate(-1); }
       if (e.key === 'ArrowRight') { e.preventDefault(); historyModalSwipeNavigate(1); }
     });
