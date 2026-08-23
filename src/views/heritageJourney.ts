@@ -2,6 +2,7 @@ import { HERITAGE_LIST } from '../data/heritageList';
 import { ROUTE_CITIES } from '../data/routeCities';
 import { AIRPORT_LIST } from '../data/airports';
 import { RAIL_LINES } from '../data/railLines';
+import { AIRLINE_NETWORK, AIRLINE_NETWORK_CHECKED_AT } from '../data/airlineNetwork';
 import { getMarkdownParserScript } from '../utils/markdownRenderer';
 import { getMitokoroModalCss, getHeritageMitokoroModalScript } from '../utils/heritageMitokoroModal';
 import { heritageIndexToMasterId } from '../utils/heritage-master-seed';
@@ -18,7 +19,24 @@ function inEurope(lat: number, lon: number): boolean {
 const AIRPORT_ICON = '✈︎';
 const STATION_ICON = '🚉';
 
-export type JourneyPoint = { n: string; e: string; f: string; c: string; lat: number; lon: number; id: string | null };
+export type AirportNetworkRoute = { country: string; flag: string; airline: string; iata: string; hubCode: string; hubName: string; destinationCode: string; destinationName: string; flightsPerWeek: number; direction: '出発' | '到着' };
+export type JourneyPoint = { n: string; e: string; f: string; c: string; lat: number; lon: number; id: string | null; airportCode?: string; airportRoutes?: AirportNetworkRoute[] };
+
+/** airline-networkページと同じマスタから、指定空港の出発便・到着便を同じ行形式で返す。 */
+export function buildAirportNetworkRoutes(airportCode: string): AirportNetworkRoute[] {
+  const routes: AirportNetworkRoute[] = [];
+  for (const country of AIRLINE_NETWORK) for (const airline of country.airlines) for (const destination of airline.destinations) {
+    if (airline.hubCode !== airportCode && destination.code !== airportCode) continue;
+    routes.push({
+      country: country.country, flag: country.flag, airline: airline.name, iata: airline.iata,
+      hubCode: airline.hubCode, hubName: airline.hubName,
+      destinationCode: destination.code, destinationName: destination.name,
+      flightsPerWeek: destination.flightsPerWeek,
+      direction: airline.hubCode === airportCode ? '出発' : '到着',
+    });
+  }
+  return routes;
+}
 
 /**
  * airports.tsのcityフィールド("🇯🇵 日本・千葉"のような 国旗+空白+国・地域 形式)から
@@ -69,7 +87,7 @@ export function buildEmbeddedAirportPoints(): JourneyPoint[] {
       if (seen.has(a.name)) continue;
       seen.add(a.name);
       const { flag, country } = parseAirportCity(a.city);
-      out.push({ n: a.name, e: AIRPORT_ICON, f: flag, c: country, lat: a.lat, lon: a.lon, id: null });
+      out.push({ n: a.name, e: AIRPORT_ICON, f: flag, c: country, lat: a.lat, lon: a.lon, id: null, airportCode: a.code, airportRoutes: buildAirportNetworkRoutes(a.code) });
     } catch {
       // 個別データの解析失敗は握りつぶして次のデータへ進む(1件の不正データで
       // ページ全体を壊さないため)。
@@ -191,6 +209,8 @@ h1{font-size:22px;margin:0 0 4px}
 .cand-row:hover{background:#0b1220}
 .cand-row .cname{flex:1}
 .cand-row .cdetour{color:#94a3b8;font-variant-numeric:tabular-nums}
+.airport-network-btn{background:#1e3a5f;border:1px solid #38bdf8;color:#bae6fd;border-radius:5px;padding:3px 7px;cursor:pointer;font-size:11px}
+.airport-network-table{width:100%;border-collapse:collapse;font-size:12px}.airport-network-table th,.airport-network-table td{border:1px solid #334155;padding:6px;text-align:left}.airport-network-table th{background:#1e293b;color:#93c5fd}.airport-network-code{display:block;color:#94a3b8;font-size:10px}.airport-network-freshness{color:#94a3b8;font-size:11px;margin:0 0 10px}
 .route-line{padding:0;font-size:12px;line-height:2.1;margin-top:12px}
 .route-title-row{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
 .route-apply-row{display:flex;justify-content:center;margin-top:12px}
@@ -532,6 +552,13 @@ ${getMitokoroModalCss()}
     <button type="button" id="lodging-next-day-btn">次の1日へ →</button>
   </div>
 </section>
+<div class="tour-modal-overlay" id="airport-network-modal-overlay">
+  <div class="tour-modal-box" id="airport-network-modal-box">
+    <div class="tour-modal-head"><div class="tour-modal-title" id="airport-network-modal-title">✈️ 空港の発着便</div><button type="button" class="tour-modal-close" id="airport-network-modal-close" aria-label="閉じる">✕</button></div>
+    <p class="airport-network-freshness">airline-networkと共通の運航情報（確認日: <time datetime="${AIRLINE_NETWORK_CHECKED_AT}">${AIRLINE_NETWORK_CHECKED_AT}</time>、便数は季節で変動する目安）</p>
+    <div class="registered-routes-table-wrap"><table class="airport-network-table"><thead><tr><th>方向</th><th>国</th><th>航空会社</th><th>拠点空港</th><th>乗り入れ空港</th><th>便数(週)</th></tr></thead><tbody id="airport-network-table-body"></tbody></table></div>
+  </div>
+</div>
 <script>
 ${getMarkdownParserScript()}
 ${getHeritageMitokoroModalScript()}
@@ -567,7 +594,7 @@ function buildCandidates(start, end, pool, maxDetourKm) {
     if (haversineKm(h.lat, h.lon, start.lat, start.lon) < 3) return;
     if (haversineKm(h.lat, h.lon, end.lat, end.lon) < 3) return;
     var detour = computeDetourKm(start, end, h);
-    if (detour <= maxDetourKm || manuallyAddedPoints[h.n]) out.push({ name: h.n, icon: h.e, flag: h.f, country: h.c, lat: h.lat, lon: h.lon, detour: detour, id: h.id });
+    if (detour <= maxDetourKm || manuallyAddedPoints[h.n]) out.push({ name: h.n, icon: h.e, flag: h.f, country: h.c, lat: h.lat, lon: h.lon, detour: detour, id: h.id, airportCode: h.airportCode, airportRoutes: h.airportRoutes });
   });
   out.sort(function(a, b) { return a.detour - b.detour; });
   return out;
@@ -1318,15 +1345,33 @@ function renderCandidates() {
   listEl.innerHTML = candidates.map(function(c) {
     var checked = state.selected[c.name] !== undefined ? state.selected[c.name] : (c.detour <= 20);
     state.selected[c.name] = checked;
-    return '<label class="cand-row"><input type="checkbox" data-cand="' + esc(c.name) + '"' + (checked ? ' checked' : '') + '>' +
-      '<span class="cname">' + esc(c.icon) + ' ' + esc(c.name) + '</span><span class="cdetour">迂回 ' + c.detour.toFixed(1) + 'km</span></label>';
+    var networkButton = c.airportCode ? '<button type="button" class="airport-network-btn" data-airport-network="' + esc(c.airportCode) + '">発着便・航空会社</button>' : '';
+    return '<div class="cand-row"><input type="checkbox" data-cand="' + esc(c.name) + '"' + (checked ? ' checked' : '') + '>' +
+      '<span class="cname">' + esc(c.icon) + ' ' + esc(c.name) + '</span>' + networkButton + '<span class="cdetour">迂回 ' + c.detour.toFixed(1) + 'km</span></div>';
   }).join('');
   document.getElementById('cand-count').textContent = candidates.length + ' 件中 ' + candidates.filter(function(c){return state.selected[c.name];}).length + ' 件選択中';
   listEl.querySelectorAll('[data-cand]').forEach(function(cb) {
     cb.addEventListener('change', function() { state.selected[cb.getAttribute('data-cand')] = cb.checked; recompute(); });
   });
+  listEl.querySelectorAll('[data-airport-network]').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      showAirportNetworkModal(HERITAGE_POINTS.find(function(p) { return p.airportCode === btn.getAttribute('data-airport-network'); }));
+    });
+  });
   return candidates;
 }
+
+function showAirportNetworkModal(point) {
+  if (!point) return;
+  document.getElementById('airport-network-modal-title').textContent = '✈️ ' + point.n + ' (' + point.airportCode + ') の発着便';
+  var routes = point.airportRoutes || [];
+  document.getElementById('airport-network-table-body').innerHTML = routes.length ? routes.map(function(r) {
+    return '<tr><td>' + esc(r.direction) + '</td><td>' + esc(r.flag + ' ' + r.country) + '</td><td>' + esc(r.airline) + '<span class="airport-network-code">' + esc(r.iata) + '</span></td><td>' + esc(r.hubName) + '<span class="airport-network-code">' + esc(r.hubCode) + '</span></td><td>' + esc(r.destinationName) + '<span class="airport-network-code">' + esc(r.destinationCode) + '</span></td><td>' + esc(r.flightsPerWeek) + '便/週</td></tr>';
+  }).join('') : '<tr><td colspan="6" class="empty-note">airline-networkに登録された発着便はありません。</td></tr>';
+  document.getElementById('airport-network-modal-overlay').style.display = 'flex';
+}
+document.getElementById('airport-network-modal-close').addEventListener('click', function() { document.getElementById('airport-network-modal-overlay').style.display = 'none'; });
+document.getElementById('airport-network-modal-overlay').addEventListener('click', function(e) { if (e.target === e.currentTarget) e.currentTarget.style.display = 'none'; });
 
 function renderSummary(stats) {
   var grid = document.getElementById('summary-grid');
