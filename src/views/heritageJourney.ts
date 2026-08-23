@@ -473,7 +473,7 @@ ${getMitokoroModalCss()}
       </div>
     </div>
     <table class="registered-routes-table">
-      <thead><tr><th>ID</th><th>出発地</th><th>到着地</th><th>直線距離</th></tr></thead>
+      <thead><tr><th>ID</th><th>出発地</th><th>到着地</th><th>直線距離</th><th>総数</th></tr></thead>
       <tbody id="registered-routes-table-body"></tbody>
     </table>
   </div>
@@ -2829,10 +2829,13 @@ function renderRegisteredRoutesTable(routes, startLabel) {
     var msg = startLabel
       ? '出発地「' + esc(startLabel) + '」の登録済みルートはありません'
       : '登録済みルートはありません';
-    body.innerHTML = '<tr><td colspan="4" class="registered-routes-empty">' + msg + '</td></tr>';
+    body.innerHTML = '<tr><td colspan="5" class="registered-routes-empty">' + msg + '</td></tr>';
     return;
   }
   var sortedRoutes = routes.slice().sort(function(a, b) {
+    var aCount = Number(a.waypointSetCount) || 0;
+    var bCount = Number(b.waypointSetCount) || 0;
+    if (bCount !== aCount) return bCount - aCount;
     var aKm = (typeof a.straightKm === 'number') ? a.straightKm : -Infinity;
     var bKm = (typeof b.straightKm === 'number') ? b.straightKm : -Infinity;
     if (bKm !== aKm) return bKm - aKm;
@@ -2841,7 +2844,8 @@ function renderRegisteredRoutesTable(routes, startLabel) {
   body.innerHTML = sortedRoutes.map(function(r) {
     var km = (typeof r.straightKm === 'number') ? r.straightKm.toFixed(1) + ' km' : '-';
     var rowClass = 'registered-routes-row' + (r.hasWaypointSet ? ' registered-routes-has-waypoint' : '');
-    return '<tr class="' + rowClass + '" data-route-start="' + esc(r.start) + '" data-route-end="' + esc(r.end) + '"><td>' + esc(r.id) + '</td><td>' + esc(r.start) + '</td><td>' + esc(r.end) + '</td><td>' + km + '</td></tr>';
+    var count = Number(r.waypointSetCount) || 0;
+    return '<tr class="' + rowClass + '" data-route-start="' + esc(r.start) + '" data-route-end="' + esc(r.end) + '"><td>' + esc(r.id) + '</td><td>' + esc(r.start) + '</td><td>' + esc(r.end) + '</td><td>' + km + '</td><td>' + count + '</td></tr>';
   }).join('');
 }
 
@@ -2856,7 +2860,8 @@ function resetRegisteredRoutesModalPosition() {
 }
 
 function findCityNameByLabel(label) {
-  var city = CITIES.filter(function(c) { return c.label === label; })[0];
+  // 登録済みデータは現在のnameを保持するが、旧データやテストデータのlabelも受け付ける。
+  var city = CITIES.filter(function(c) { return c.label === label || c.name === label; })[0];
   return city ? city.name : null;
 }
 
@@ -2872,6 +2877,27 @@ function switchTourScopeToRegisteredRoute(startLabel, endLabel) {
   endSel.value = endName;
   startSel.dispatchEvent(new Event('change'));
   updateEndCityPickerBtnLabel();
+  // 同じ行を続けて選んだ場合もキャッシュせずAPIを呼び、最後に保存された経由データを反映する。
+  fetch('/api/heritage-journey/latest-waypoint-set?start=' + encodeURIComponent(startName) + '&end=' + encodeURIComponent(endName))
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      if (!data || !data.waypointSet || typeof data.waypointSet.waypointHeritageIds !== 'string') return;
+      var ids = data.waypointSet.waypointHeritageIds.split(',').map(function(part) {
+        var match = part.trim().match(/(?:^|\s)(\d{4})$/);
+        return match ? match[1] : null;
+      }).filter(Boolean);
+      state.selected = {};
+      manuallyAddedPoints = {};
+      ids.forEach(function(id) {
+        var point = HERITAGE_POINTS.filter(function(p) { return p.id === id; })[0];
+        if (!point) return;
+        state.selected[point.name] = true;
+        manuallyAddedPoints[point.name] = point;
+      });
+      renderCandidates();
+      recompute();
+      renderNightsDistribution();
+    });
   return true;
 }
 

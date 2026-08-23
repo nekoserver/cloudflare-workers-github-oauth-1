@@ -9255,15 +9255,15 @@ app.get('/api/heritage-journey/registered-routes', authMiddleware, async (c) => 
       'SELECT id, start_city, end_city, straight_km FROM heritage_journey_registered_routes ORDER BY id ASC'
     ).all<{ id: number; start_city: string; end_city: string; straight_km: number }>();
 
-    let waypointSetKeys: Set<string> | null = null;
+    let waypointSetCounts: Map<string, number> | null = null;
     try {
       const waypointRows = await db.prepare(
-        'SELECT DISTINCT start_city_name, end_city_name FROM heritage_journey_waypoint_sets WHERE deleted_flag = 0'
-      ).all<{ start_city_name: string; end_city_name: string }>();
-      waypointSetKeys = new Set(waypointRows.results.map(w => `${w.start_city_name}||${w.end_city_name}`));
+        'SELECT start_city_name, end_city_name, COUNT(*) AS route_count FROM heritage_journey_waypoint_sets WHERE deleted_flag = 0 GROUP BY start_city_name, end_city_name'
+      ).all<{ start_city_name: string; end_city_name: string; route_count: number }>();
+      waypointSetCounts = new Map(waypointRows.results.map(w => [`${w.start_city_name}||${w.end_city_name}`, Number(w.route_count)]));
     } catch (waypointErr) {
       console.error('[heritage-journey/registered-routes] waypoint-set query failed', waypointErr);
-      waypointSetKeys = null;
+      waypointSetCounts = null;
     }
 
     return c.json({
@@ -9272,12 +9272,38 @@ app.get('/api/heritage-journey/registered-routes', authMiddleware, async (c) => 
         start: r.start_city,
         end: r.end_city,
         straightKm: r.straight_km,
-        hasWaypointSet: waypointSetKeys ? waypointSetKeys.has(`${r.start_city}||${r.end_city}`) : false,
+        waypointSetCount: waypointSetCounts ? (waypointSetCounts.get(`${r.start_city}||${r.end_city}`) || 0) : 0,
+        hasWaypointSet: waypointSetCounts ? waypointSetCounts.has(`${r.start_city}||${r.end_city}`) : false,
       })),
     });
   } catch (err) {
     console.error('[heritage-journey/registered-routes] DB query failed', err);
     return c.json({ routes: [], error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+// 登録済みルートを選ぶたびに、その組み合わせで最後に保存された経由データを返す。
+// created_at が同秒の場合も、AUTOINCREMENT の id で確実に最新行を決定する。
+app.get('/api/heritage-journey/latest-waypoint-set', authMiddleware, async (c) => {
+  const start = c.req.query('start') || '';
+  const end = c.req.query('end') || '';
+  if (!start || !end) return c.json({ waypointSet: null, error: 'start and end required' }, 400);
+  const db = c.env.DB;
+  if (!db) return c.json({ waypointSet: null, error: 'DB unavailable' }, 503);
+  try {
+    const row = await db.prepare(
+      'SELECT id, waypoint_heritage_ids, waypoint_count, total_distance_km, created_at FROM heritage_journey_waypoint_sets WHERE start_city_name = ? AND end_city_name = ? AND deleted_flag = 0 ORDER BY created_at DESC, id DESC LIMIT 1'
+    ).bind(start, end).first<{ id: number; waypoint_heritage_ids: string; waypoint_count: number; total_distance_km: number; created_at: string }>();
+    return c.json({ waypointSet: row ? {
+      id: row.id,
+      waypointHeritageIds: row.waypoint_heritage_ids,
+      waypointCount: row.waypoint_count,
+      totalDistanceKm: row.total_distance_km,
+      createdAt: row.created_at,
+    } : null });
+  } catch (err) {
+    console.error('[heritage-journey/latest-waypoint-set] DB query failed', err);
+    return c.json({ waypointSet: null, error: err instanceof Error ? err.message : String(err) }, 500);
   }
 });
 
