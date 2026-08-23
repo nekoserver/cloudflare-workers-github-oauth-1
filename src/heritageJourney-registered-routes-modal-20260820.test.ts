@@ -124,13 +124,29 @@ describe('heritage-journeyページ: ID/出発地/到着地/直線距離テー�
 });
 
 describe('heritage-journeyページ: 登録済みルートから巡回スコープを選択', () => {
-  it('巡回ルートスコープと重ならない右寄せ座標へモーダルを配置する', async () => {
+  it('巡回ルートスコープ(#tour-mini-panel、left:12px幅280px)の右端に接し、ページ最上段に揃う座標へモーダルを配置する', async () => {
     setupPage(() => Promise.resolve({ json: () => Promise.resolve({ routes: SAMPLE_ROUTES }) }));
     const btn = document.getElementById('view-registered-routes-btn') as HTMLButtonElement;
     btn.click();
     const box = document.getElementById('registered-routes-modal-box') as HTMLElement;
-    expect(box.style.left).toBe(Math.max(320, window.innerWidth - 600) + 'px');
-    expect(box.style.top).toBe('80px');
+    expect(box.style.left).toBe('292px');
+    expect(box.style.top).toBe('12px');
+  });
+
+  it('ヘッダをドラッグするとモーダルを自由な位置へ移動できる', async () => {
+    setupPage(() => Promise.resolve({ json: () => Promise.resolve({ routes: SAMPLE_ROUTES }) }));
+    const btn = document.getElementById('view-registered-routes-btn') as HTMLButtonElement;
+    btn.click();
+    const box = document.getElementById('registered-routes-modal-box') as HTMLElement;
+    const head = document.getElementById('registered-routes-modal-head') as HTMLElement;
+    box.getBoundingClientRect = () => ({ left: 292, top: 12, right: 592, bottom: 300, width: 300, height: 288, x: 292, y: 12, toJSON() {} }) as DOMRect;
+
+    head.dispatchEvent(new MouseEvent('mousedown', { clientX: 300, clientY: 20, bubbles: true }));
+    document.dispatchEvent(new MouseEvent('mousemove', { clientX: 500, clientY: 220, bubbles: true }));
+    document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+
+    expect(box.style.left).toBe('492px');
+    expect(box.style.top).toBe('212px');
   });
 
   it('現在の出発地に該当する行を直線距離の遠い順に並べる', async () => {

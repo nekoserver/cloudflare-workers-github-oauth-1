@@ -266,6 +266,8 @@ h1{font-size:22px;margin:0 0 4px}
 #registered-routes-modal-box{position:fixed;max-width:560px;width:calc(100% - 32px)}
 #end-city-picker-modal-head{cursor:grab;user-select:none;touch-action:none}
 #end-city-picker-modal-head:active{cursor:grabbing}
+#registered-routes-modal-head{cursor:grab;user-select:none;touch-action:none}
+#registered-routes-modal-head:active{cursor:grabbing}
 #dist-country-filter-modal-box{position:fixed;max-width:560px;width:calc(100% - 32px)}
 .tour-route-side-panel{background:#111827;border:1px solid #334155;border-radius:12px;padding:12px;width:240px;max-width:calc(100vw - 600px);max-height:90vh;overflow:auto;margin-left:16px;flex-shrink:0}
 .tour-route-side-title{font-size:12px;font-weight:700;color:#93c5fd;margin-bottom:8px}
@@ -452,7 +454,7 @@ ${getMitokoroModalCss()}
 
 <div class="tour-modal-overlay" id="registered-routes-modal-overlay">
   <div class="tour-modal-box" id="registered-routes-modal-box">
-    <div class="tour-modal-head">
+    <div class="tour-modal-head" id="registered-routes-modal-head">
       <div class="tour-modal-title">📋 登録済みルート</div>
       <button type="button" class="tour-modal-close" id="registered-routes-modal-close" aria-label="閉じる">✕</button>
     </div>
@@ -2819,13 +2821,14 @@ function renderRegisteredRoutesTable(routes, startLabel) {
   }).join('');
 }
 
-// 左上の巡回ルートスコープ(既定top:12px/left:12px/幅280px)を隠さないよう、
-// 登録済みルートモーダルは他の都市選択モーダルと同じ右寄せ座標へ置く。
+// 左上の巡回ルートスコープ(#tour-mini-panel、既定top:12px/left:12px/幅280px)の
+// 右端(12+280=292px)に登録済みルートモーダルの左端を接するよう配置し、
+// 上端はページ最上段(巡回ルートスコープと同じtop:12px)に揃える。
 function resetRegisteredRoutesModalPosition() {
   var box = document.getElementById('registered-routes-modal-box');
   if (!box) return;
-  box.style.left = Math.max(320, window.innerWidth - 600) + 'px';
-  box.style.top = '80px';
+  box.style.left = '292px';
+  box.style.top = '12px';
 }
 
 function findCityNameByLabel(label) {
@@ -2896,6 +2899,41 @@ function closeRegisteredRoutesModal() {
     switchTourScopeToRegisteredRoute(row.getAttribute('data-route-start'), row.getAttribute('data-route-end'));
   });
   document.addEventListener('keydown', function(e) { if (e.key === 'Escape' && overlay.classList.contains('open')) closeRegisteredRoutesModal(); });
+})();
+
+// ===== 登録済みルートモーダル(#registered-routes-modal-overlay)をヘッダドラッグで画面内自由配置 =====
+// #end-city-picker-modal-overlayのドラッグ実装(3146行目付近)と同じイベント方式・クランプ処理を踏襲する。
+// 既定位置は#tour-mini-panelの右端に接する座標(resetRegisteredRoutesModalPosition)だが、
+// 配置後はユーザーがヘッダをドラッグして自由に移動できる。
+(function() {
+  var modalBox = document.getElementById('registered-routes-modal-box');
+  var modalHead = document.getElementById('registered-routes-modal-head');
+  if (!modalBox || !modalHead) return;
+  var dragging = false, startX = 0, startY = 0, startLeft = 0, startTop = 0;
+  function onDown(clientX, clientY) {
+    dragging = true;
+    var rect = modalBox.getBoundingClientRect();
+    startX = clientX; startY = clientY; startLeft = rect.left; startTop = rect.top;
+    modalBox.style.left = startLeft + 'px';
+    modalBox.style.top = startTop + 'px';
+  }
+  function onMove(clientX, clientY) {
+    if (!dragging) return;
+    var dx = clientX - startX, dy = clientY - startY;
+    var maxLeft = Math.max(0, window.innerWidth - modalBox.offsetWidth);
+    var maxTop = Math.max(0, window.innerHeight - modalBox.offsetHeight);
+    var newLeft = Math.max(0, Math.min(maxLeft, startLeft + dx));
+    var newTop = Math.max(0, Math.min(maxTop, startTop + dy));
+    modalBox.style.left = newLeft + 'px';
+    modalBox.style.top = newTop + 'px';
+  }
+  function onUp() { dragging = false; }
+  modalHead.addEventListener('mousedown', function(e) { onDown(e.clientX, e.clientY); e.preventDefault(); });
+  document.addEventListener('mousemove', function(e) { onMove(e.clientX, e.clientY); });
+  document.addEventListener('mouseup', onUp);
+  modalHead.addEventListener('touchstart', function(e) { onDown(e.touches[0].clientX, e.touches[0].clientY); }, { passive: true });
+  modalHead.addEventListener('touchmove', function(e) { onMove(e.touches[0].clientX, e.touches[0].clientY); }, { passive: true });
+  modalHead.addEventListener('touchend', onUp);
 })();
 
 // ===== 「出発地」ボタン(#start-city-picker-btn) → 最上位レイヤーの都市テーブル =====
