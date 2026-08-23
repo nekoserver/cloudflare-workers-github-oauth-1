@@ -69,11 +69,21 @@ describe('heritage-journeyページ: 地球儀上の空港/駅は色丸ではな
     });
   });
 
-  it('世界遺産(色丸)は従来どおり薄ピンク色(#f9a8d4)の丸で描画され続ける(回帰確認)', () => {
-    const { arcCalls } = setupPage();
-    const wpCalls = arcCalls.filter((c) => c.r === 5);
-    expect(wpCalls.length).toBeGreaterThan(0);
-    expect(wpCalls.some((c) => c.fillStyle === '#f9a8d4')).toBe(true);
+  it('世界遺産は空港/駅と同様、カテゴリ絵文字(icon)をfillTextで直接描画する(色丸は使わない)', () => {
+    const { arcCalls, fillTextCalls } = setupPage();
+    const transportGlyphs = ['✈︎', '🚉'];
+    const heritageGlyphCalls = fillTextCalls.filter((c) => {
+      const s = String(c.icon);
+      return s.length > 0 && !/^\d+$/.test(s) && !transportGlyphs.includes(s);
+    });
+    expect(heritageGlyphCalls.length).toBeGreaterThan(0);
+    // 色丸(半径5)は、iconを持たない経由地(出発地/到着地そのもの)のみで使われる
+    // 防御的フォールバックである。tourPointsには出発地(パリ)・到着地(ローマ)自身も
+    // 含まれ、これらはicon未設定のため丸で描画される(モーダル本体+スコープの
+    // 2キャンバス x 2地点 = 4回)。世界遺産の経由地(icon=カテゴリ絵文字)は
+    // 丸を描かない。
+    const wpCircleCalls = arcCalls.filter((c) => c.r === 5);
+    expect(wpCircleCalls.length).toBe(4);
   });
 
   it('空港/駅グリフはtextAlign/textBaselineをcenter/middleにして座標を中心に描画する', () => {
