@@ -176,11 +176,12 @@ describe('heritage-journeyページ(統合): 既定ルート(Paris→Rome)の世
   it('既定ルートの色丸(r=5)は出発地/到着地自身(icon未設定)の分だけで、世界遺産の経由地では描かれない', () => {
     const { arcCalls } = setupPage();
     // tourPointsには出発地(パリ)・到着地(ローマ)自身も含まれ、iconが無いため
-    // 丸描画にフォールバックする(モーダル本体+スコープの2キャンバス x 2地点 = 4回)。
+    // モーダル本体では丸描画にフォールバックする(2地点 = 2回)。スコープ側は
+    // 新仕様の半径3pxマーカーとして描画されるため、この集計には含まれない。
     // これ以上の丸は、icon(カテゴリ絵文字)を持つはずの世界遺産経由地が誤って
     // 丸描画に落ちていることを意味するため許容しない。
     const heritageCircleCalls = arcCalls.filter((c) => c.r === 5 && c.fillStyle === '#f9a8d4');
-    expect(heritageCircleCalls.length).toBe(4);
+    expect(heritageCircleCalls.length).toBe(2);
   });
 
   it('既定ルートには空港/駅グリフ(✈︎/🚉)以外の絵文字グリフ(世界遺産のカテゴリ絵文字)が描画される', () => {
