@@ -288,7 +288,16 @@ describe('heritage-journeyページ: 「🌐 巡回テスト」モーダル(DOM�
     expect(overlay.classList.contains('open')).toBe(false);
   });
 
-  it('(タイマー実動作) 再生ボタンを押すとアニメーションが進み、現在地ラベルが最終地点まで更新される', () => {
+  // 対象: planOvernights()は2地点以上のルートであれば必ず最低1件の宿泊推奨日を
+  // 返すため、既定ルート(Paris→Rome)のように長距離のルートでは常に宿泊地モード
+  // (lodgingDayPoints.length>0)になり、#tour-play-btnはrenderLodgingRecommendModal()
+  // により無効化され「巡回OFF（宿泊地モード）」表示に固定される(宿泊地モードでは
+  // Day単位のナビゲーション(#lodging-next-day-btn等)が連続再生に代わる操作手段になる)。
+  // 以前はstopAnim()が無条件にテキストだけ「▶ 再生」へ戻してしまい、実際には
+  // disabled=trueのままという表示と実態の食い違い(クリックしても反応がない)が
+  // あったため、この整合性を検証する(押しても本当にアニメーションが始まらないこと
+  // も合わせて確認する)。
+  it('宿泊地モードでは#tour-play-btnが無効化され「巡回OFF（宿泊地モード）」と表示され、押してもアニメーションは始まらない', () => {
     vi.useFakeTimers();
     try {
       setupPage();
@@ -297,27 +306,13 @@ describe('heritage-journeyページ: 「🌐 巡回テスト」モーダル(DOM�
       const label = document.getElementById('tour-current-label')!;
       const initialText = label.textContent;
 
-      playBtn.click();
-      expect(playBtn.textContent).toContain('一時停止');
-      // 出発地/到着地にも実際の国旗(flag)を持たせるようになったため(ルート順序
-      // パネルの国旗表示・国別フィルタ機能の追加に伴う変更)、出発地から次の
-      // 経由地までが同一国・同一宿泊都市(例: フランス国内でパリ→パリ近郊)だと
-      // 1000ms程度の短い進みではラベル文字列(国旗+宿泊都市)が変化しないことがある。
-      // 固定の短い時間で1回だけ判定せず、宿泊都市が実際に変わるまで少しずつ
-      // 進めることで、ルートの具体的な地理データに依存しない安定した検証にする。
-      for (let i = 0; i < 100 && label.textContent === initialText; i++) {
-        vi.advanceTimersByTime(100);
-      }
-      expect(label.textContent).not.toBe(initialText);
+      expect(playBtn.disabled).toBe(true);
+      expect(playBtn.textContent).toBe('巡回OFF（宿泊地モード）');
 
-      // 最後の地点に到達するとstopAnim()がインターバルをclearIntervalするため、
-      // runAllTimers()で「完走してタイマーが消えるまで」を一気に進める。
-      // (heritage-journeyの経由地候補プールに空港・駅が加わり既定ルート上の地点数が
-      // 増えたため、advanceTimersByTimeの固定値では足りなくなった。runAllTimersなら
-      // 地点数に関わらず完走まで進められる)
-      vi.runAllTimers();
-      expect(playBtn.textContent).toContain('再生');
-      expect(playBtn.textContent).not.toContain('一時停止');
+      playBtn.click();
+      vi.advanceTimersByTime(5000);
+      expect(playBtn.textContent).toBe('巡回OFF（宿泊地モード）');
+      expect(label.textContent).toBe(initialText);
     } finally {
       vi.useRealTimers();
     }
@@ -341,13 +336,15 @@ describe('heritage-journeyページ: 「🌐 巡回テスト」モーダル(DOM�
     }
   });
 
-  it('(タイマー実動作) 再度開くと再生位置は最初からになり、前回のタイマーが二重に走らない', () => {
+  it('宿泊地モードのまま閉じて再度開いても、#tour-play-btnの無効化・表示状態が保たれる(前回のタイマーが二重に走らない)', () => {
     vi.useFakeTimers();
     try {
       setupPage();
       const tourBtn = document.getElementById('tour-test-btn') as HTMLButtonElement;
       tourBtn.click();
-      (document.getElementById('tour-play-btn') as HTMLButtonElement).click();
+      const playBtn = document.getElementById('tour-play-btn') as HTMLButtonElement;
+      expect(playBtn.disabled).toBe(true);
+      playBtn.click();
       vi.advanceTimersByTime(40);
       (document.getElementById('tour-modal-close') as HTMLButtonElement).click();
 
@@ -355,9 +352,8 @@ describe('heritage-journeyページ: 「🌐 巡回テスト」モーダル(DOM�
       const label = document.getElementById('tour-current-label')!;
       expect(label.textContent).toMatch(/ \/ /);
 
-      const playBtn = document.getElementById('tour-play-btn') as HTMLButtonElement;
-      expect(playBtn.textContent).toContain('再生');
-      expect(playBtn.textContent).not.toContain('一時停止');
+      expect(playBtn.disabled).toBe(true);
+      expect(playBtn.textContent).toBe('巡回OFF（宿泊地モード）');
     } finally {
       vi.useRealTimers();
     }

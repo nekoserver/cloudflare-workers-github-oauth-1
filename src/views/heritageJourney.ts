@@ -2697,10 +2697,21 @@ document.getElementById('replay-tour-btn').addEventListener('click', function() 
     toggleRouteLineExcluded(check.getAttribute('data-side-check-name'));
   });
 
+  // 宿泊地モード中(lodgingDayPoints.length>0)にstopAnim()を呼ぶと、
+  // モーダルを開く際のopenTourModal()等から無条件に「▶ 再生」表示へ
+  // 巻き戻ってしまい、実際にはplayBtn.disabled=trueのまま(renderLodgingRecommendModal
+  // 参照)で見た目だけ押せそうに見える不具合があった。宿泊地モード中は
+  // 表示・無効化状態の両方を保つ(実際のアニメーション停止処理自体は行う)。
   function stopAnim() {
     playing = false;
     if (animTimer) { clearInterval(animTimer); animTimer = null; }
-    playBtn.textContent = '▶ 再生';
+    if (lodgingDayPoints.length) {
+      playBtn.disabled = true;
+      playBtn.textContent = '巡回OFF（宿泊地モード）';
+    } else {
+      playBtn.disabled = false;
+      playBtn.textContent = '▶ 再生';
+    }
   }
 
   function positionLodgingRecommendModal() {
@@ -2727,6 +2738,12 @@ document.getElementById('replay-tour-btn').addEventListener('click', function() 
     if (!lodgingModal) return;
     if (!lodgingDayPoints.length || miniPanel.style.display === 'none') {
       lodgingModal.style.display = 'none';
+      // 宿泊地モードに入った際にplayBtn.disabled=trueへ切り替える処理はあるが、
+      // 宿泊地モードを抜ける(この分岐に来る)側では従来disabledを戻す処理が
+      // 一切無く、一度でも宿泊が必要なルートを経由すると以降ずっと再生ボタンが
+      // 無効化されたまま(見た目は「▶ 再生」のままなのでクリックしても反応が
+      // 無いだけに見える)不具合があった。ここで必ず再有効化する。
+      playBtn.disabled = false;
       return;
     }
     lodgingModal.style.display = 'block';
@@ -2737,10 +2754,9 @@ document.getElementById('replay-tour-btn').addEventListener('click', function() 
     lodgingStatus.textContent = 'Day ' + (lodgingDayIndex + 1) + ' / ' + lodgingDayPoints.length + '　' + current.name;
     lodgingNextBtn.disabled = lodgingDayIndex >= lodgingDayPoints.length - 1;
     renderTourAirportSummary();
-    // モード変更時は既存の連続巡回処理を必ずOFFにする。
+    // モード変更時は既存の連続巡回処理を必ずOFFにする。この時点でlodgingDayPointsは
+    // 既に埋まっているため、stopAnim()自身がplayBtnの無効化・表示切り替えを行う。
     stopAnim();
-    playBtn.disabled = true;
-    playBtn.textContent = '巡回OFF（宿泊地モード）';
     positionLodgingRecommendModal();
   }
 
