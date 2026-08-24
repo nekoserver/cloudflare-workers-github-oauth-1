@@ -1125,7 +1125,10 @@ function updateTourScopeHeaderLabel() {
 
 // 出発地・到着地の組み合わせが heritage_journey_registered_routes テーブルに
 // 未登録の場合のみ「ルート登録」ボタン(#register-route-btn)を有効化する。
-// 登録済みなら非アクティブ、書き込み成功後はボタン自体をDOMから削除する。
+// 登録済みなら非アクティブにする。書き込み成功後もボタンはDOMに残し、現在の
+// 組み合わせだけを登録済み状態にする。ボタンを削除すると、その後に別の都市を
+// 選んでもupdateRegisterRouteButton()が更新対象を見つけられず、同じページでは
+// 2件目以降のルートを登録できなくなるためである。
 //
 // 【非同期レースガード】出発地/到着地は短時間に何度も変わりうる
 // (入替ボタン・分布チップ・出発地/到着地選択モーダルの連続クリック等)。
@@ -1404,7 +1407,8 @@ function clearRegisterRouteError() {
       .then(function(r) { return r.json(); })
       .then(function(data) {
         if (data && data.ok) {
-          btn.remove();
+          btn.disabled = true;
+          btn.title = 'この出発地・到着地の組み合わせは既に登録済みです';
           updateStartCityRegisteredIndicator();
         } else {
           btn.disabled = false;
