@@ -1467,16 +1467,14 @@ function showAirportNetworkModal(point) {
   activateFloatingPanel(airportOverlay);
 }
 
-// 左上の巡回ルートスコープ(#tour-mini-panel、既定top:12px/left:12px/幅280px)を
-// 発着便モーダルが覆わないよう、他の選択モーダルと同じ画面右側の座標に配置する。
-// 再オープン時もこの位置へ戻し、前回の表示状態に左右されないようにする。
+// 登録済みルートモーダルと同じく、左上の巡回ルートスコープ
+// (#tour-mini-panel、既定top:12px/left:12px/幅280px)の右端に左端を接し、上端も揃える。
+// 再オープン時もこの基準位置へ戻す。
 function resetAirportNetworkModalPosition() {
   var box = document.getElementById('airport-network-modal-box');
   if (!box) return;
-  var defaultLeft = Math.max(320, window.innerWidth - 600);
-  var defaultTop = 80;
-  box.style.left = defaultLeft + 'px';
-  box.style.top = defaultTop + 'px';
+  box.style.left = '292px';
+  box.style.top = '12px';
 }
 document.getElementById('airport-network-modal-close').addEventListener('click', function() { document.getElementById('airport-network-modal-overlay').style.display = 'none'; });
 document.getElementById('airport-network-modal-overlay').addEventListener('click', function(e) { if (e.target === e.currentTarget) e.currentTarget.style.display = 'none'; });
