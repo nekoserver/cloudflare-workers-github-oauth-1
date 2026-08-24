@@ -2959,8 +2959,24 @@ document.getElementById('replay-tour-btn').addEventListener('click', function() 
 // heritage_journey_registered_routes 全件を取得し、出発地・到着地それぞれの
 // 出現回数を集計して降順表示、あわせてID/出発地/到着地/直線距離のテーブルを表示する。
 function getNextZ() {
+  // Inline style だけを調べると、stylesheet 側に z-index を持つ
+  // #tour-mini-panel / .lodging-recommend-modal / .tour-modal-overlay を
+  // 見落とす。その場合、後から開いたモーダルへ 200 程度しか割り当てられず、
+  // CSS の 9998〜10001 のレイヤーより背面に入ってしまう。
+  // 静的レイヤーは明示的に登録し、動的に前面化された要素は inline style から
+  // 拾う。全DOMの getComputedStyle() はモーダルを開くたびにレイアウト計算を
+  // 誘発するため行わない。
+  var staticZDefaults = {
+    heritageAddModal: 9999,
+    tourModalOverlay: 9999,
+    tourMiniPanel: 9998,
+    lodgingRecommendModal: 10001
+  };
   var els = document.querySelectorAll('[style*="z-index"]');
   var max = 100;
+  Object.keys(staticZDefaults).forEach(function(key) {
+    if (staticZDefaults[key] > max) max = staticZDefaults[key];
+  });
   for (var i = 0; i < els.length; i++) {
     var z = parseInt(els[i].style.zIndex, 10);
     if (!isNaN(z) && z > max) max = z;

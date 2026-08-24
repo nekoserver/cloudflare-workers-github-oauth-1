@@ -203,6 +203,17 @@ describe('heritage-journeyページ: 登録済みルートから巡回スコー�
     expect(Number(miniPanel.style.zIndex)).toBeGreaterThan(Number(overlay.style.zIndex));
   });
 
+  it('CSSでz-indexを持つ未表示モーダルも計算に含め、巡回ルートモーダルを確実に最上位へ出す', () => {
+    setupPage(() => Promise.resolve({ json: () => Promise.resolve({ routes: SAMPLE_ROUTES }) }));
+
+    document.getElementById('view-registered-routes-btn')!.click();
+    const overlay = document.getElementById('registered-routes-modal-overlay') as HTMLElement;
+
+    // stylesheet上で最も高い固定レイヤーは.lodging-recommend-modalの10001。
+    // テストDOMは<style>を含めないため、数値を境界として直接検証する。
+    expect(Number(overlay.style.zIndex)).toBeGreaterThan(10001);
+  }, 15000);
+
   it('巡回ルートスコープ(#tour-mini-panel、left:12px幅280px)の右端に接し、ページ最上段に揃う座標へモーダルを配置する', async () => {
     setupPage(() => Promise.resolve({ json: () => Promise.resolve({ routes: SAMPLE_ROUTES }) }));
     const btn = document.getElementById('view-registered-routes-btn') as HTMLButtonElement;
