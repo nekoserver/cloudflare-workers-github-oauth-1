@@ -203,6 +203,22 @@ describe('heritage-journeyページ: 登録済みルートから巡回スコー�
     expect(Number(miniPanel.style.zIndex)).toBeGreaterThan(Number(overlay.style.zIndex));
   });
 
+  it('モーダル本体の領域をタップするとレイヤーを再調整し、フォーカス不能な領域ではdialogへフォーカスを移す', () => {
+    setupPage(() => Promise.resolve({ json: () => Promise.resolve({ routes: SAMPLE_ROUTES }) }));
+    document.getElementById('view-registered-routes-btn')!.click();
+    const overlay = document.getElementById('registered-routes-modal-overlay') as HTMLElement;
+    const box = document.getElementById('registered-routes-modal-box') as HTMLElement;
+    const miniPanel = document.getElementById('tour-mini-panel') as HTMLElement;
+
+    overlay.style.zIndex = '1';
+    miniPanel.style.zIndex = '99999';
+    box.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+    expect(Number(overlay.style.zIndex)).toBeGreaterThan(Number(miniPanel.style.zIndex));
+    expect(document.activeElement).toBe(box);
+    expect(box.getAttribute('role')).toBe('dialog');
+  });
+
   it('巡回ルートスコープ(#tour-mini-panel、left:12px幅280px)の右端に接し、ページ最上段に揃う座標へモーダルを配置する', async () => {
     setupPage(() => Promise.resolve({ json: () => Promise.resolve({ routes: SAMPLE_ROUTES }) }));
     const btn = document.getElementById('view-registered-routes-btn') as HTMLButtonElement;

@@ -466,9 +466,9 @@ ${getMitokoroModalCss()}
 </div>
 
 <div class="tour-modal-overlay" id="registered-routes-modal-overlay">
-  <div class="tour-modal-box" id="registered-routes-modal-box">
+  <div class="tour-modal-box" id="registered-routes-modal-box" role="dialog" aria-modal="true" aria-labelledby="registered-routes-modal-title" tabindex="-1">
     <div class="tour-modal-head" id="registered-routes-modal-head">
-      <div class="tour-modal-title">📋 登録済みルート</div>
+      <div class="tour-modal-title" id="registered-routes-modal-title">📋 登録済みルート</div>
       <button type="button" class="tour-modal-close" id="registered-routes-modal-close" aria-label="閉じる">✕</button>
     </div>
     <div class="registered-routes-freq-cols">
@@ -3189,15 +3189,30 @@ function closeRegisteredRoutesModal() {
 (function() {
   var viewBtn = document.getElementById('view-registered-routes-btn');
   var overlay = document.getElementById('registered-routes-modal-overlay');
+  var modalBox = document.getElementById('registered-routes-modal-box');
   var closeBtn = document.getElementById('registered-routes-modal-close');
   var body = document.getElementById('registered-routes-table-body');
   var endThBtn = document.getElementById('registered-routes-end-th-btn');
   var endDropdown = document.getElementById('registered-routes-end-dropdown');
   var countryFilter = document.getElementById('registered-routes-country-filter');
-  if (!viewBtn || !overlay || !closeBtn || !body || !endThBtn || !endDropdown || !countryFilter) return;
+  if (!viewBtn || !overlay || !modalBox || !closeBtn || !body || !endThBtn || !endDropdown || !countryFilter) return;
   viewBtn.addEventListener('click', openRegisteredRoutesModal);
   closeBtn.addEventListener('click', closeRegisteredRoutesModal);
+  // overlayで一括して待つだけでは、ブラウザやタップ変換の経路によってモーダル
+  // 本体の操作がclickとしてしか届かない場合に再アクティブ化できない。本体自身を
+  // pointerdown/click/focusinの全経路で前面化し、空白・表の行などフォーカス不能な
+  // 領域がタップされたときはdialogへフォーカスも移す。
+  function reactivateRegisteredRoutesModal(e) {
+    activateRegisteredRoutesModalLayer(overlay);
+    var target = e.target;
+    if (!target || !target.closest('button, input, select, textarea, a[href], [tabindex]:not([tabindex="-1"])')) {
+      modalBox.focus({ preventScroll: true });
+    }
+  }
   overlay.addEventListener('pointerdown', function() { activateRegisteredRoutesModalLayer(overlay); });
+  modalBox.addEventListener('pointerdown', reactivateRegisteredRoutesModal);
+  modalBox.addEventListener('click', reactivateRegisteredRoutesModal);
+  modalBox.addEventListener('focusin', function() { activateRegisteredRoutesModalLayer(overlay); });
   overlay.addEventListener('click', function(e) { if (e.target === overlay) closeRegisteredRoutesModal(); });
   endThBtn.addEventListener('click', function() {
     endDropdown.hidden = !endDropdown.hidden;
