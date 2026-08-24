@@ -20,4 +20,12 @@ describe('heritage-journey 空港発着便', () => {
     expect(html).toContain('<th>航空会社</th><th>拠点空港</th><th>乗り入れ空港</th><th>便数(週)</th>');
     expect(html).toContain('発着便・航空会社');
   });
+
+  it('発着便モーダルを巡回ルートスコープと重ならない右側の座標に配置する', () => {
+    const html = getHeritageJourneyPage();
+    expect(html).toContain('#airport-network-modal-box{position:fixed;max-width:560px;width:calc(100% - 32px)}');
+    expect(html).toContain("var defaultLeft = Math.max(320, window.innerWidth - 600);");
+    expect(html).toContain("var defaultTop = 80;");
+    expect(html).toContain('resetAirportNetworkModalPosition();');
+  });
 });

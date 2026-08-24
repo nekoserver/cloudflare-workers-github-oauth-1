@@ -276,6 +276,7 @@ h1{font-size:22px;margin:0 0 4px}
 #registered-routes-modal-head{cursor:grab;user-select:none;touch-action:none}
 #registered-routes-modal-head:active{cursor:grabbing}
 #dist-country-filter-modal-box{position:fixed;max-width:560px;width:calc(100% - 32px)}
+#airport-network-modal-box{position:fixed;max-width:560px;width:calc(100% - 32px)}
 .tour-route-side-panel{background:#111827;border:1px solid #334155;border-radius:12px;padding:12px;width:240px;max-width:calc(100vw - 600px);max-height:90vh;overflow:auto;margin-left:16px;flex-shrink:0}
 .tour-route-side-title{font-size:12px;font-weight:700;color:#93c5fd;margin-bottom:8px}
 .tour-route-side-row{border:2px solid transparent;border-radius:6px;padding:5px 8px;font-size:12px;color:#e2e8f0;margin-bottom:4px;cursor:pointer}
@@ -1415,7 +1416,20 @@ function showAirportNetworkModal(point) {
   document.getElementById('airport-network-table-body').innerHTML = routes.length ? routes.map(function(r) {
     return '<tr><td>' + esc(r.direction) + '</td><td>' + esc(r.flag + ' ' + r.country) + '</td><td>' + esc(r.airline) + '<span class="airport-network-code">' + esc(r.iata) + '</span></td><td>' + esc(r.hubName) + '<span class="airport-network-code">' + esc(r.hubCode) + '</span></td><td>' + esc(r.destinationName) + '<span class="airport-network-code">' + esc(r.destinationCode) + '</span></td><td>' + esc(r.flightsPerWeek) + '便/週</td></tr>';
   }).join('') : '<tr><td colspan="6" class="empty-note">airline-networkに登録された発着便はありません。</td></tr>';
+  resetAirportNetworkModalPosition();
   document.getElementById('airport-network-modal-overlay').style.display = 'flex';
+}
+
+// 左上の巡回ルートスコープ(#tour-mini-panel、既定top:12px/left:12px/幅280px)を
+// 発着便モーダルが覆わないよう、他の選択モーダルと同じ画面右側の座標に配置する。
+// 再オープン時もこの位置へ戻し、前回の表示状態に左右されないようにする。
+function resetAirportNetworkModalPosition() {
+  var box = document.getElementById('airport-network-modal-box');
+  if (!box) return;
+  var defaultLeft = Math.max(320, window.innerWidth - 600);
+  var defaultTop = 80;
+  box.style.left = defaultLeft + 'px';
+  box.style.top = defaultTop + 'px';
 }
 document.getElementById('airport-network-modal-close').addEventListener('click', function() { document.getElementById('airport-network-modal-overlay').style.display = 'none'; });
 document.getElementById('airport-network-modal-overlay').addEventListener('click', function(e) { if (e.target === e.currentTarget) e.currentTarget.style.display = 'none'; });
