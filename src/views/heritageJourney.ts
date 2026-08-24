@@ -2032,6 +2032,22 @@ document.getElementById('replay-tour-btn').addEventListener('click', function() 
   var tourAirportSummary = document.getElementById('tour-airport-summary');
   var tourAirportSummaryBody = document.getElementById('tour-airport-summary-body');
   var castleToggleBtn = document.getElementById('toggle-castles-btn');
+  // 巡回ルートスコープと宿泊推奨地はドラッグ後などに重なることがある。
+  // DOM順や固定のz-indexだけに任せると、下側になったパネルのボタンやcanvasへ
+  // ポインターが届かなくなるため、最後に操作・フォーカスされた側を前面へ出す。
+  // pointerdownはボタンのclickより先に発火するので、前面化したその操作を
+  // キャンセルせず、そのまま各コントロールへ届けられる。
+  var floatingPanelZ = 10001;
+  function activateFloatingPanel(panel) {
+    if (!panel) return;
+    floatingPanelZ += 1;
+    panel.style.zIndex = String(floatingPanelZ);
+  }
+  [miniPanel, lodgingModal].forEach(function(panel) {
+    if (!panel) return;
+    panel.addEventListener('pointerdown', function() { activateFloatingPanel(panel); });
+    panel.addEventListener('focusin', function() { activateFloatingPanel(panel); });
+  });
   // 城の地球儀オーバーレイ表示は、経由地候補の「城ON/OFF」トグル(#toggle-castles-btn、
   // toggleTransportCandidates('toggle-castles-btn','castle')で駅/空港と同じ選択トグルとして
   // 動作する)と単一のボタン・単一の状態(aria-pressed)を共有する。以前はcastlesVisibleという
