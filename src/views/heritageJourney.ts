@@ -277,9 +277,14 @@ h1{font-size:22px;margin:0 0 4px}
 #registered-routes-modal-head:active{cursor:grabbing}
 #dist-country-filter-modal-box{position:fixed;max-width:560px;width:calc(100% - 32px)}
 #airport-network-modal-box{position:fixed;max-width:672px;width:calc(100% - 32px)}
-.tour-route-side-panel{background:#111827;border:1px solid #334155;border-radius:12px;padding:12px;width:240px;max-width:calc(100vw - 600px);max-height:90vh;overflow:auto;margin-left:16px;flex-shrink:0}
+.tour-route-side-panel{background:#111827;border:1px solid #334155;border-radius:12px;padding:12px;width:calc(100vw - 608px);max-width:none;max-height:90vh;overflow:auto;margin-left:16px;flex:1 1 auto;min-width:240px}
 .tour-route-side-title{font-size:12px;font-weight:700;color:#93c5fd;margin-bottom:8px}
-.tour-route-side-row{border:2px solid transparent;border-radius:6px;padding:5px 8px;font-size:12px;color:#e2e8f0;margin-bottom:4px;cursor:pointer}
+.tour-route-side-row{display:flex;align-items:center;border:2px solid transparent;border-radius:6px;padding:5px 8px;font-size:12px;color:#e2e8f0;margin-bottom:4px;cursor:pointer}
+.tour-route-side-name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tour-route-flight-controls{display:flex;align-items:center;gap:8px;margin-left:auto;padding-left:12px;white-space:nowrap;font-weight:700}
+.tour-route-flight-control{display:inline-flex;align-items:center;gap:3px;cursor:pointer}
+.tour-route-flight-control input{margin:0;cursor:pointer}
+.tour-route-flight-control.arrival{color:#b91c1c}.tour-route-flight-control.departure{color:#1d4ed8}
 .tour-route-side-num{display:inline-block;min-width:1.4em;color:#94a3b8;font-variant-numeric:tabular-nums}
 .tour-route-side-check{margin:0 4px;vertical-align:middle;cursor:pointer}
 .tour-route-side-row:hover{background:#1e293b}
@@ -998,6 +1003,9 @@ var state = { selected: {} };
 // 巡回テスト(#tour-mini-canvas/#tour-globe-canvas)の巡回対象からのみ
 // 一時的に外す(テスト時に特定の地点だけスキップしたい場合の補助)。
 var routeLineExcluded = {};
+// 空港行の「到着」「出発」は互いに独立して選択でき、再描画後も状態を保つ。
+// キーは同名表記ゆれの影響を受けないIATA空港コードを使う。
+var airportFlightLineSelection = {};
 
 // 現在ON状態(routeLineExcludedで除外されていない)の世界遺産のみを、巡回順(tourPoints順)に
 // heritage_masterの4桁IDで並べた配列。出発地・到着地(idを持たない都市)は含まれない。
@@ -1713,12 +1721,18 @@ function renderRouteSidePanel(ordered) {
     var flag = p.flag || '';
     var dim = filterActive && country !== routeCountryFilter;
     var airportHasData = !!p.airportCode && !!(p.airportRoutes && p.airportRoutes.length);
+    var flightSelection = p.airportCode && airportFlightLineSelection[p.airportCode] || {};
+    var flightControls = airportHasData
+      ? '<span class="tour-route-flight-controls">'
+        + '<label class="tour-route-flight-control arrival"><input type="checkbox" data-airport-flight-direction="arrival" data-airport-flight-code="' + esc(p.airportCode) + '"' + (flightSelection.arrival ? ' checked' : '') + '>到着</label>'
+        + '<label class="tour-route-flight-control departure"><input type="checkbox" data-airport-flight-direction="departure" data-airport-flight-code="' + esc(p.airportCode) + '"' + (flightSelection.departure ? ' checked' : '') + '>出発</label>'
+        + '</span>' : '';
     return '<div class="tour-route-side-row' + (off ? ' off' : '') + (dim ? ' route-line-item-dimmed' : '') + (airportHasData ? ' airport-has-data' : '') + '" data-side-name="' + esc(p.name) + '" data-side-country="' + esc(country) + '" data-side-lat="' + p.lat + '" data-side-lon="' + p.lon + '"' + (p.airportCode ? ' data-side-airport-code="' + esc(p.airportCode) + '"' : '') + ' title="タップで地球儀上に名称を表示">'
       + '<span class="tour-route-side-num">' + esc(label) + '</span>'
       + '<input type="checkbox" class="tour-route-side-check" data-side-check-name="' + esc(p.name) + '"' + (off ? '' : ' checked') + (dim ? ' disabled aria-disabled="true"' : '') + ' title="OFFで巡回テストから一時的に除外">'
-      + ' ' + (flag ? '<span class="wp-flag" title="' + esc(country) + '">' + esc(flag) + '</span>' : '')
+      + '<span class="tour-route-side-name"> ' + (flag ? '<span class="wp-flag" title="' + esc(country) + '">' + esc(flag) + '</span>' : '')
       + esc(p.icon || '📍') + ' ' + esc(p.name)
-      + (p.airportCode ? ' <span class="airport-network-code">' + esc(p.airportCode) + '</span>' : '') + '</div>';
+      + (p.airportCode ? ' <span class="airport-network-code">' + esc(p.airportCode) + '</span>' : '') + '</span>' + flightControls + '</div>';
   }).join('');
 }
 
@@ -2479,6 +2493,34 @@ document.getElementById('replay-tour-btn').addEventListener('click', function() 
     var routePoints = isScope && lodgingRoutePoints.length > 0 ? lodgingRoutePoints : tourPoints;
     var projectedRoute = routePoints.map(function(p) { return project(p.lat, p.lon, tourCenterLat, tourCenterLon, R, cx, cy); });
 
+    // ルート順序パネルの空港行で選択された発着便を重ねる。到着便は
+    // 他空港→選択空港を赤、出発便は選択空港→他空港を青で表す。
+    // airline-networkに座標は無いため、同じページへ埋め込んだ空港マスタを
+    // IATAコードで引いて両端の地球儀座標を解決する。
+    tourPoints.forEach(function(airport) {
+      if (!airport.airportCode) return;
+      var selection = airportFlightLineSelection[airport.airportCode] || {};
+      if (!selection.arrival && !selection.departure) return;
+      var airportSource = HERITAGE_POINTS.find(function(p) { return p.airportCode === airport.airportCode; });
+      ((airportSource && airportSource.airportRoutes) || []).forEach(function(route) {
+        var isArrival = route.direction === '到着';
+        if ((isArrival && !selection.arrival) || (!isArrival && !selection.departure)) return;
+        var otherCode = isArrival ? route.hubCode : route.destinationCode;
+        var other = HERITAGE_POINTS.find(function(p) { return p.airportCode === otherCode; });
+        if (!other) return;
+        var from = isArrival ? other : airport;
+        var to = isArrival ? airport : other;
+        var fp = project(from.lat, from.lon, tourCenterLat, tourCenterLon, R, cx, cy);
+        var tp = project(to.lat, to.lon, tourCenterLat, tourCenterLon, R, cx, cy);
+        ctx.strokeStyle = isArrival ? '#ef4444' : '#2563eb';
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        ctx.moveTo(fp.x, fp.y);
+        ctx.lineTo(tp.x, tp.y);
+        ctx.stroke();
+      });
+    });
+
     // 経由地を結ぶルート線
     ctx.strokeStyle = '#38bdf8';
     ctx.lineWidth = 2;
@@ -2726,7 +2768,7 @@ document.getElementById('replay-tour-btn').addEventListener('click', function() 
   });
 
   document.getElementById('tour-route-side-list').addEventListener('click', function(e) {
-    if (e.target.closest('[data-side-check-name]')) return; // チェックボックス操作はトグル専用のchangeリスナーに任せる
+    if (e.target.closest('[data-side-check-name], [data-airport-flight-direction]')) return; // チェックボックス操作はchangeリスナーに任せる
     var row = e.target.closest('[data-side-name]');
     if (!row) return;
     var lat = Number(row.getAttribute('data-side-lat'));
@@ -2738,6 +2780,15 @@ document.getElementById('replay-tour-btn').addEventListener('click', function() 
   });
 
   document.getElementById('tour-route-side-list').addEventListener('change', function(e) {
+    var flightCheck = e.target.closest('[data-airport-flight-direction]');
+    if (flightCheck) {
+      var code = flightCheck.getAttribute('data-airport-flight-code');
+      var direction = flightCheck.getAttribute('data-airport-flight-direction');
+      if (!airportFlightLineSelection[code]) airportFlightLineSelection[code] = {};
+      airportFlightLineSelection[code][direction] = flightCheck.checked;
+      renderAll();
+      return;
+    }
     var check = e.target.closest('[data-side-check-name]');
     if (!check) return;
     toggleRouteLineExcluded(check.getAttribute('data-side-check-name'));
