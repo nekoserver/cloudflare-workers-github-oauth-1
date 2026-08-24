@@ -19,7 +19,8 @@ describe('heritage-journeyページ: 宿泊推奨地モーダル', () => {
   });
 
   it('薄緑丸を宿泊推奨都市の座標へ移し、既存巡回をOFFにする', () => {
-    expect(html).toContain('lodgingDayPoints[lodgingDayIndex] || pointAtProgress');
+    expect(html).toContain('overlay.classList.contains(\'open\') ? null : lodgingDayPoints[lodgingDayIndex]');
+    expect(html).toContain('|| pointAtProgress(tourPoints, animProgress);');
     expect(html).toContain("ctx.fillStyle = '#86efac'");
     expect(html).toContain('playBtn.disabled = true');
     expect(html).toContain("playBtn.textContent = '巡回OFF（宿泊地モード）'");
