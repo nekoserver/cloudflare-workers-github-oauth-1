@@ -3127,7 +3127,7 @@ function switchTourScopeToRegisteredRoute(startLabel, endLabel) {
 function openRegisteredRoutesModal() {
   var overlay = document.getElementById('registered-routes-modal-overlay');
   if (!overlay) return;
-  overlay.style.zIndex = String(getNextZ());
+  activateRegisteredRoutesModalLayer(overlay);
   overlay.classList.add('open');
   resetRegisteredRoutesModalPosition();
   var dropdown = document.getElementById('registered-routes-end-dropdown');
@@ -3156,6 +3156,16 @@ function openRegisteredRoutesModal() {
     });
 }
 
+// 登録済みルートモーダルの領域を操作したときは、巡回ルートスコープと
+// 宿泊推奨地よりもこのモーダルを前面へ戻す。両フローティングパネルは
+// 操作時に動的にz-indexを上げるため、固定値ではなく同じカウンターも進める。
+function activateRegisteredRoutesModalLayer(overlay) {
+  if (!overlay) return;
+  var nextZ = Math.max(getNextZ(), floatingPanelZ + 1);
+  floatingPanelZ = nextZ;
+  overlay.style.zIndex = String(nextZ);
+}
+
 function closeRegisteredRoutesModal() {
   var overlay = document.getElementById('registered-routes-modal-overlay');
   if (overlay) overlay.classList.remove('open');
@@ -3172,6 +3182,7 @@ function closeRegisteredRoutesModal() {
   if (!viewBtn || !overlay || !closeBtn || !body || !endThBtn || !endDropdown || !countryFilter) return;
   viewBtn.addEventListener('click', openRegisteredRoutesModal);
   closeBtn.addEventListener('click', closeRegisteredRoutesModal);
+  overlay.addEventListener('pointerdown', function() { activateRegisteredRoutesModalLayer(overlay); });
   overlay.addEventListener('click', function(e) { if (e.target === overlay) closeRegisteredRoutesModal(); });
   endThBtn.addEventListener('click', function() {
     endDropdown.hidden = !endDropdown.hidden;

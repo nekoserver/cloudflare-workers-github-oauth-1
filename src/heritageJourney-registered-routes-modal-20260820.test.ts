@@ -179,6 +179,24 @@ describe('heritage-journeyページ: 到着地ドロップダウンと国旗フ�
 });
 
 describe('heritage-journeyページ: 登録済みルートから巡回スコープを選択', () => {
+  it('モーダル領域をタップすると巡回ルートスコープと宿泊推奨地を下のレイヤーへ戻す', () => {
+    setupPage(() => Promise.resolve({ json: () => Promise.resolve({ routes: SAMPLE_ROUTES }) }));
+    document.getElementById('view-registered-routes-btn')!.click();
+    const overlay = document.getElementById('registered-routes-modal-overlay') as HTMLElement;
+    const miniPanel = document.getElementById('tour-mini-panel') as HTMLElement;
+    const lodgingModal = document.getElementById('lodging-recommend-modal') as HTMLElement;
+
+    miniPanel.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    lodgingModal.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    expect(Number(lodgingModal.style.zIndex)).toBeGreaterThan(Number(overlay.style.zIndex));
+
+    document.getElementById('registered-routes-modal-box')!
+      .dispatchEvent(new Event('pointerdown', { bubbles: true }));
+
+    expect(Number(overlay.style.zIndex)).toBeGreaterThan(Number(miniPanel.style.zIndex));
+    expect(Number(overlay.style.zIndex)).toBeGreaterThan(Number(lodgingModal.style.zIndex));
+  });
+
   it('巡回ルートスコープ(#tour-mini-panel、left:12px幅280px)の右端に接し、ページ最上段に揃う座標へモーダルを配置する', async () => {
     setupPage(() => Promise.resolve({ json: () => Promise.resolve({ routes: SAMPLE_ROUTES }) }));
     const btn = document.getElementById('view-registered-routes-btn') as HTMLButtonElement;
