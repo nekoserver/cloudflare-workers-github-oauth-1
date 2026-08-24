@@ -290,14 +290,13 @@ describe('heritage-journeyページ: 「🌐 巡回テスト」モーダル(DOM�
 
   // 対象: planOvernights()は2地点以上のルートであれば必ず最低1件の宿泊推奨日を
   // 返すため、既定ルート(Paris→Rome)のように長距離のルートでは常に宿泊地モード
-  // (lodgingDayPoints.length>0)になり、#tour-play-btnはrenderLodgingRecommendModal()
-  // により無効化され「巡回OFF（宿泊地モード）」表示に固定される(宿泊地モードでは
-  // Day単位のナビゲーション(#lodging-next-day-btn等)が連続再生に代わる操作手段になる)。
-  // 以前はstopAnim()が無条件にテキストだけ「▶ 再生」へ戻してしまい、実際には
-  // disabled=trueのままという表示と実態の食い違い(クリックしても反応がない)が
-  // あったため、この整合性を検証する(押しても本当にアニメーションが始まらないこと
-  // も合わせて確認する)。
-  it('宿泊地モードでは#tour-play-btnが無効化され「巡回OFF（宿泊地モード）」と表示され、押してもアニメーションは始まらない', () => {
+  // (lodgingDayPoints.length>0)になる。ただし「巡回OFF（宿泊地モード）」表示は
+  // #tour-mini-panel(巡回ルートスコープ)側にフォーカスがある(=#tour-modal-overlay
+  // が閉じている)場合の状態であり、Day単位のナビゲーション(#lodging-next-day-btn等)
+  // がそこでの操作手段になる。#tour-modal-overlay自体を開いて巡回ルートモーダルに
+  // フォーカスが移ったあとは、宿泊地モードの有無にかかわらず#tour-play-btnは
+  // 通常の再生モード(有効・「▶ 再生」表示)へ戻り、実際に連続再生が始まる必要がある。
+  it('巡回ルートモーダルを開くと(宿泊地モードの有無によらず)#tour-play-btnは有効な「▶ 再生」表示になり、押すとアニメーションが始まる', () => {
     vi.useFakeTimers();
     try {
       setupPage();
@@ -306,17 +305,28 @@ describe('heritage-journeyページ: 「🌐 巡回テスト」モーダル(DOM�
       const label = document.getElementById('tour-current-label')!;
       const initialText = label.textContent;
 
-      expect(playBtn.disabled).toBe(true);
-      expect(playBtn.textContent).toBe('巡回OFF（宿泊地モード）');
+      expect(playBtn.disabled).toBe(false);
+      expect(playBtn.textContent).toBe('▶ 再生');
 
       playBtn.click();
+      expect(playBtn.textContent).toBe('⏸ 一時停止');
       vi.advanceTimersByTime(5000);
-      expect(playBtn.textContent).toBe('巡回OFF（宿泊地モード）');
-      expect(label.textContent).toBe(initialText);
+      expect(label.textContent).not.toBe(initialText);
     } finally {
       vi.useRealTimers();
     }
   }, 20000);
+
+  it('巡回ルートモーダルを閉じて巡回ルートスコープにフォーカスが戻ると、宿泊地モードでは#tour-play-btnが再び無効化され「巡回OFF（宿泊地モード）」と表示される', () => {
+    setupPage();
+    (document.getElementById('tour-test-btn') as HTMLButtonElement).click();
+    const playBtn = document.getElementById('tour-play-btn') as HTMLButtonElement;
+    expect(playBtn.disabled).toBe(false);
+
+    (document.getElementById('tour-modal-close') as HTMLButtonElement).click();
+    expect(playBtn.disabled).toBe(true);
+    expect(playBtn.textContent).toBe('巡回OFF（宿泊地モード）');
+  });
 
   it('(タイマー実動作) 再生中にモーダルを閉じるとタイマーが止まり、以降ラベルが更新されない', () => {
     vi.useFakeTimers();
@@ -336,14 +346,14 @@ describe('heritage-journeyページ: 「🌐 巡回テスト」モーダル(DOM�
     }
   });
 
-  it('宿泊地モードのまま閉じて再度開いても、#tour-play-btnの無効化・表示状態が保たれる(前回のタイマーが二重に走らない)', () => {
+  it('再生中に閉じて再度開いても、#tour-play-btnは有効な「▶ 再生」に戻り、前回のタイマーが二重に走らない', () => {
     vi.useFakeTimers();
     try {
       setupPage();
       const tourBtn = document.getElementById('tour-test-btn') as HTMLButtonElement;
       tourBtn.click();
       const playBtn = document.getElementById('tour-play-btn') as HTMLButtonElement;
-      expect(playBtn.disabled).toBe(true);
+      expect(playBtn.disabled).toBe(false);
       playBtn.click();
       vi.advanceTimersByTime(40);
       (document.getElementById('tour-modal-close') as HTMLButtonElement).click();
@@ -352,8 +362,8 @@ describe('heritage-journeyページ: 「🌐 巡回テスト」モーダル(DOM�
       const label = document.getElementById('tour-current-label')!;
       expect(label.textContent).toMatch(/ \/ /);
 
-      expect(playBtn.disabled).toBe(true);
-      expect(playBtn.textContent).toBe('巡回OFF（宿泊地モード）');
+      expect(playBtn.disabled).toBe(false);
+      expect(playBtn.textContent).toBe('▶ 再生');
     } finally {
       vi.useRealTimers();
     }

@@ -2742,12 +2742,18 @@ document.getElementById('replay-tour-btn').addEventListener('click', function() 
   // 宿泊地モード中(lodgingDayPoints.length>0)にstopAnim()を呼ぶと、
   // モーダルを開く際のopenTourModal()等から無条件に「▶ 再生」表示へ
   // 巻き戻ってしまい、実際にはplayBtn.disabled=trueのまま(renderLodgingRecommendModal
-  // 参照)で見た目だけ押せそうに見える不具合があった。宿泊地モード中は
-  // 表示・無効化状態の両方を保つ(実際のアニメーション停止処理自体は行う)。
+  // 参照)で見た目だけ押せそうに見える不具合があった。
+  // さらに「巡回OFF（宿泊地モード）」は#tour-mini-panel(巡回ルートスコープ)側に
+  // フォーカスがある(=#tour-modal-overlayが未オープン)場合の状態であり、
+  // #tour-modal-overlay自体にフォーカスが移った(開いた)後は宿泊地モードの有無に
+  // かかわらず通常の再生モードへ戻すべき。overlay.classList.contains('open')で
+  // どちらにフォーカスがあるかを判定し、両方の状態を切り替えられるようにする
+  // (呼び出し側のopenTourModal/closeTourModalは、stopAnim()より先にopenクラスの
+  // 付け外しを行うことでこの判定を成立させている)。
   function stopAnim() {
     playing = false;
     if (animTimer) { clearInterval(animTimer); animTimer = null; }
-    if (lodgingDayPoints.length) {
+    if (lodgingDayPoints.length && !overlay.classList.contains('open')) {
       playBtn.disabled = true;
       playBtn.textContent = '巡回OFF（宿泊地モード）';
     } else {
@@ -2908,18 +2914,18 @@ document.getElementById('replay-tour-btn').addEventListener('click', function() 
   // クリックも一切届かない(再びアクティブ化されるのはモーダルを閉じた時)。
   function openTourModal() {
     if (tourPoints.length < 2) return;
+    overlay.style.zIndex = String(Math.max(getNextZ(), 10002));
+    overlay.classList.add('open');
     stopAnim();
     renderAll();
     updateLabel();
-    overlay.style.zIndex = String(Math.max(getNextZ(), 10002));
-    overlay.classList.add('open');
   }
 
   function closeTourModal() {
+    overlay.classList.remove('open');
     stopAnim();
     if (tapLabelTimer) { clearTimeout(tapLabelTimer); tapLabelTimer = null; }
     if (tapLabel) { tapLabel.textContent = ''; tapLabel.style.display = 'none'; }
-    overlay.classList.remove('open');
   }
 
   tourTestBtn.addEventListener('click', openTourModal);
