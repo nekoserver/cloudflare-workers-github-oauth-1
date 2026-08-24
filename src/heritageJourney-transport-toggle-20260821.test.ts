@@ -30,21 +30,25 @@ describe('heritage-journeyページ: 駅・空港候補の一括ON/OFF', () => {
     expect(document.getElementById('toggle-airports-btn')?.textContent).toBe('空港ON/OFF');
   });
 
+  // 経由地候補の初期値変更(すべて解除+駅OFF+空港ON+城ON)により、空港トグルは
+  // 既定でONになった(駅は従来どおり既定OFF)。そのため「クリックでON」固定では
+  // なく、現在のaria-pressedを見て「クリックで反転する」ことだけを検証する。
   it.each([
     ['toggle-stations-btn', '駅'],
     ['toggle-airports-btn', '空港'],
-  ])('%sをONにすると末尾が「%s」の全候補がON、OFFに戻すと全候補がOFFになる', (buttonId, suffix) => {
+  ])('%sをクリックするたびに末尾が「%s」の全候補のON/OFFが反転する', (buttonId, suffix) => {
     setupPage();
     const button = document.getElementById(buttonId) as HTMLButtonElement;
     const inputs = candidateCheckboxesEndingWith(suffix);
     expect(inputs.length).toBeGreaterThan(0);
+    const initiallyOn = button.getAttribute('aria-pressed') === 'true';
 
     button.click();
-    expect(button.getAttribute('aria-pressed')).toBe('true');
-    expect(candidateCheckboxesEndingWith(suffix).every((input) => input.checked)).toBe(true);
+    expect(button.getAttribute('aria-pressed')).toBe(initiallyOn ? 'false' : 'true');
+    expect(candidateCheckboxesEndingWith(suffix).every((input) => input.checked === !initiallyOn)).toBe(true);
 
     button.click();
-    expect(button.getAttribute('aria-pressed')).toBe('false');
-    expect(candidateCheckboxesEndingWith(suffix).every((input) => !input.checked)).toBe(true);
+    expect(button.getAttribute('aria-pressed')).toBe(initiallyOn ? 'true' : 'false');
+    expect(candidateCheckboxesEndingWith(suffix).every((input) => input.checked === initiallyOn)).toBe(true);
   });
 });

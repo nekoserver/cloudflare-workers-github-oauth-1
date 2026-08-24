@@ -428,8 +428,8 @@ ${getMitokoroModalCss()}
       <button id="select-none-btn" type="button">すべて解除</button>
       <button id="select-near-btn" type="button">近接のみ選択(20km以内)</button>
       <button id="toggle-stations-btn" class="transport-toggle" type="button" aria-pressed="false">駅ON/OFF</button>
-      <button id="toggle-airports-btn" class="transport-toggle" type="button" aria-pressed="false">空港ON/OFF</button>
-      <button id="toggle-castles-btn" class="transport-toggle" type="button" aria-pressed="false">城ON/OFF</button>
+      <button id="toggle-airports-btn" class="transport-toggle" type="button" aria-pressed="true">空港ON/OFF</button>
+      <button id="toggle-castles-btn" class="transport-toggle" type="button" aria-pressed="true">城ON/OFF</button>
       <span class="cand-count" id="cand-count"></span>
     </div>
     <div class="cand-list" id="cand-list"></div>
@@ -838,9 +838,25 @@ function isValidDestCountry(name) {
   return CITIES.some(function(c) { return c.country === name; });
 }
 
+// このページ全体(scriptタグの中身)は他のTypeScriptファイルのtemplate literalの
+// 中に丸ごと埋め込まれているため、正規表現リテラルや文字列中のバックスラッシュ
+// エスケープシーケンス(空白文字クラス等)はtemplate literalのエスケープ処理を
+// 二重に経由し、バックスラッシュ自体が失われて壊れる(ルール29参照)。以前は
+// document.cookieを正規表現でパースしていたが、この二重エスケープにより実際に
+// 実行されるコードではバックスラッシュが消えてしまい、document.cookieの2件目
+// 以降のCookie(先頭以外、つまりセミコロンの後にスペースを挟むもの)を一切
+// 読み取れない不具合があった(1件目のCookieだけは先頭一致の分岐で偶然マッチ
+// していた)。正規表現・バックスラッシュを一切使わない文字列分割とtrim()に
+// 置き換えて回避する。
 function getCookieValue(name) {
-  var m = document.cookie.match('(^|;)\\s*' + name + '=([^;]*)');
-  return m ? decodeURIComponent(m[2]) : null;
+  var parts = document.cookie.split(';');
+  for (var i = 0; i < parts.length; i++) {
+    var eq = parts[i].indexOf('=');
+    if (eq === -1) continue;
+    var key = parts[i].slice(0, eq).trim();
+    if (key === name) return decodeURIComponent(parts[i].slice(eq + 1));
+  }
+  return null;
 }
 
 // ページ読み込み時にCookieを読み、ROUTE_CITIESに実在する国名の場合のみ採用する。
@@ -1001,14 +1017,36 @@ function updateCurrentTourActiveHeritageIds() {
 // buildCandidates()のdetour範囲フィルタを無視して常に候補・選択済みに含める。
 var manuallyAddedPoints = {};
 
+// 出発地・到着地(#start-city/#end-city)の選択をCookieに保存し、ページ再読み込み時に
+// 再現するための定数・純粋関数群。値はCITIES上の一意なname(英語識別子、<select>のvalue)
+// をそのまま保存する。CITIES上に存在しない値(過去に削除された都市名等)を復元してしまうと
+// getCity()がundefinedを返し以降の処理が例外になるため、復元前に必ずisValidCityName()で
+// 検証し、無効ならデフォルト(Paris/Rome)にフォールバックする。
+var START_CITY_COOKIE = 'heritage_journey_start_city';
+var END_CITY_COOKIE = 'heritage_journey_end_city';
+
+function isValidCityName(name) {
+  return CITIES.some(function(c) { return c.name === name; });
+}
+
+function saveStartEndCityToCookie() {
+  var startSel = document.getElementById('start-city');
+  var endSel = document.getElementById('end-city');
+  if (!startSel || !endSel) return;
+  document.cookie = START_CITY_COOKIE + '=' + encodeURIComponent(startSel.value) + '; Path=/; Secure; SameSite=Lax; Max-Age=31536000';
+  document.cookie = END_CITY_COOKIE + '=' + encodeURIComponent(endSel.value) + '; Path=/; Secure; SameSite=Lax; Max-Age=31536000';
+}
+
 function populateCitySelects() {
   var startSel = document.getElementById('start-city');
   var endSel = document.getElementById('end-city');
   var opts = CITIES.map(function(c) { return '<option value="' + esc(c.name) + '">' + esc(c.label) + '</option>'; }).join('');
   startSel.innerHTML = opts;
   endSel.innerHTML = opts;
-  startSel.value = 'Paris';
-  endSel.value = 'Rome';
+  var savedStart = getCookieValue(START_CITY_COOKIE);
+  var savedEnd = getCookieValue(END_CITY_COOKIE);
+  startSel.value = (savedStart && isValidCityName(savedStart)) ? savedStart : 'Paris';
+  endSel.value = (savedEnd && isValidCityName(savedEnd)) ? savedEnd : 'Rome';
   updateEndCityPickerBtnLabel();
 }
 
@@ -1391,7 +1429,10 @@ function renderCandidates() {
     return candidates;
   }
   listEl.innerHTML = candidates.map(function(c) {
-    var checked = state.selected[c.name] !== undefined ? state.selected[c.name] : (c.detour <= 20);
+    // 経由地候補の初期値: 「すべて解除」を基準に、空港と城のみ既定でON
+    // (駅・世界遺産(城以外)は既定OFF)。トグルボタン(#toggle-stations-btn等)の
+    // 初期状態「すべて解除/駅OFF/空港ON/城ON」と一致させる。
+    var checked = state.selected[c.name] !== undefined ? state.selected[c.name] : (!!c.airportCode || c.icon === '🏰');
     state.selected[c.name] = checked;
     var networkButton = c.airportCode ? '<button type="button" class="airport-network-btn' + ((c.airportRoutes && c.airportRoutes.length) ? ' has-data' : '') + '" data-airport-network="' + esc(c.airportCode) + '">発着便・航空会社</button>' : '';
     return '<div class="cand-row"><input type="checkbox" data-cand="' + esc(c.name) + '"' + (checked ? ' checked' : '') + '>' +
@@ -1891,6 +1932,7 @@ function updateTransportToggleButtons(candidates) {
   [
     { id: 'toggle-stations-btn', matches: function(c) { return !c.airportCode && c.icon === CLIENT_STATION_ICON; } },
     { id: 'toggle-airports-btn', matches: function(c) { return !!c.airportCode; } },
+    { id: 'toggle-castles-btn', matches: function(c) { return !c.airportCode && c.icon === '🏰'; } },
   ].forEach(function(toggle) {
     var matching = candidates.filter(toggle.matches);
     var isOn = matching.length > 0 && matching.every(function(c) { return !!state.selected[c.name]; });
@@ -1903,7 +1945,9 @@ function toggleTransportCandidates(buttonId, category) {
   var se = currentStartEnd();
   var maxDetour = Number(document.getElementById('opt-detour').value) || 150;
   buildCandidates(se.start, se.end, HERITAGE_POINTS, maxDetour).forEach(function(c) {
-    var matches = category === 'airport' ? !!c.airportCode : (!c.airportCode && c.icon === CLIENT_STATION_ICON);
+    var matches = category === 'airport' ? !!c.airportCode
+      : category === 'castle' ? (!c.airportCode && c.icon === '🏰')
+      : (!c.airportCode && c.icon === CLIENT_STATION_ICON);
     if (matches) state.selected[c.name] = turnOn;
   });
   renderCandidates(); recompute();
@@ -1916,6 +1960,7 @@ document.getElementById('select-none-btn-modal').addEventListener('click', selec
 document.getElementById('select-near-btn-modal').addEventListener('click', selectNearCandidates);
 document.getElementById('toggle-stations-btn').addEventListener('click', function() { toggleTransportCandidates('toggle-stations-btn', 'station'); });
 document.getElementById('toggle-airports-btn').addEventListener('click', function() { toggleTransportCandidates('toggle-airports-btn', 'airport'); });
+document.getElementById('toggle-castles-btn').addEventListener('click', function() { toggleTransportCandidates('toggle-castles-btn', 'castle'); });
 /**
  * 現在の#route-country-filter選択状態に基づき、渡すべき地点(orderedのサブセット)を返す純粋関数。
  * routeCountryFilterがROUTE_COUNTRY_FILTER_ALLの場合、または設定ページの
@@ -1983,7 +2028,16 @@ document.getElementById('replay-tour-btn').addEventListener('click', function() 
   var tourAirportSummary = document.getElementById('tour-airport-summary');
   var tourAirportSummaryBody = document.getElementById('tour-airport-summary-body');
   var castleToggleBtn = document.getElementById('toggle-castles-btn');
-  var castlesVisible = false;
+  // 城の地球儀オーバーレイ表示は、経由地候補の「城ON/OFF」トグル(#toggle-castles-btn、
+  // toggleTransportCandidates('toggle-castles-btn','castle')で駅/空港と同じ選択トグルとして
+  // 動作する)と単一のボタン・単一の状態(aria-pressed)を共有する。以前はcastlesVisibleという
+  // 別の真偽値で独立管理しており、選択状態のトグルとオーバーレイのトグルが同じボタンの
+  // aria-pressedを競って上書きし合い、状態が食い違う不具合があったため、真偽値を廃止して
+  // 常にDOM(aria-pressed、updateTransportToggleButtons()が実選択状態から都度算出する)を
+  // 単一の真実として参照する。
+  function isCastleOverlayOn() {
+    return !!castleToggleBtn && castleToggleBtn.getAttribute('aria-pressed') === 'true';
+  }
 
   var tourPoints = [];
   // 巡回ルートスコープでは、観光地点を結ぶのではなく日程表で算出した
@@ -2047,13 +2101,23 @@ document.getElementById('replay-tour-btn').addEventListener('click', function() 
    * 出発点と目的地の中間座標を地球儀の中心にし、その2点がなるべく
    * モーダルの外側(円の縁)に近い位置に収まるズームレベルを自動算出する。
    */
+  /**
+   * 出発地・到着地の中間地点(centerLat/centerLon)を中心に、pointsの中で
+   * その中心から最も離れている座標までの距離をスコープの半径とみなし、
+   * その半径がbaseR(モーダル/スコープの描画半径)にちょうど収まるズームを返す。
+   * pointsは出発地・到着地だけでなく、現在選択中の経由地候補(tourPoints)全体を渡す
+   * ことで、経由地候補のON/OFFが切り替わるたびに半径・ズームが再計算される。
+   */
   function computeInitialView(points, baseR) {
     var start = points[0], end = points[points.length - 1];
     var centerLat = (start.lat + end.lat) / 2;
     var centerLon = circularMeanLon(start.lon, end.lon);
-    var pStart = project(start.lat, start.lon, centerLat, centerLon, baseR, 0, 0);
-    var pEnd = project(end.lat, end.lon, centerLat, centerLon, baseR, 0, 0);
-    var maxDist = Math.max(Math.hypot(pStart.x, pStart.y), Math.hypot(pEnd.x, pEnd.y));
+    var maxDist = 0;
+    points.forEach(function(p) {
+      var pp = project(p.lat, p.lon, centerLat, centerLon, baseR, 0, 0);
+      var d = Math.hypot(pp.x, pp.y);
+      if (d > maxDist) maxDist = d;
+    });
     var MARGIN = 0.97;
     var zoom = maxDist > 0.01 ? (baseR * MARGIN) / maxDist : 1;
     zoom = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, zoom));
@@ -2401,10 +2465,10 @@ document.getElementById('replay-tour-btn').addEventListener('click', function() 
     // 候補点の凸包/バウンディングボックスによる近似。drawCountryOutline()参照)。
     drawCountryOutline(ctx, geo);
 
-    // 「城ON/OFF」はルート候補の選択状態を変えず、巡回テストに属する2つの
-    // 地球儀だけへ全ての城座標を重ねる。モーダル本体では🏰、小さなスコープでは
-    // 混雑を避けるため薄水色の半径3pxマーカーとして描き分ける。
-    if (castlesVisible) {
+    // 「城ON/OFF」(経由地候補の選択トグルと同じ#toggle-castles-btn)がONの間、
+    // 巡回テストに属する2つの地球儀だけへ全ての城座標を重ねる。モーダル本体では🏰、
+    // 小さなスコープでは混雑を避けるため薄水色の半径3pxマーカーとして描き分ける。
+    if (isCastleOverlayOn()) {
       HERITAGE_POINTS.filter(function(p) { return p.e === '🏰'; }).forEach(function(castle) {
         var cp = project(castle.lat, castle.lon, tourCenterLat, tourCenterLon, R, cx, cy);
         var castleAlpha = cp.visible ? 1 : 0.4;
@@ -2593,7 +2657,7 @@ document.getElementById('replay-tour-btn').addEventListener('click', function() 
   }
 
   canvas.addEventListener('click', function(e) {
-    if (tourPoints.length === 0 && !castlesVisible) return;
+    if (tourPoints.length === 0 && !isCastleOverlayOn()) return;
     var rect = canvas.getBoundingClientRect();
     if (!rect.width || !rect.height) return;
     var scaleX = canvas.width / rect.width;
@@ -2612,7 +2676,7 @@ document.getElementById('replay-tour-btn').addEventListener('click', function() 
     // ツールチップが出ない不具合があったため、表示中はここでも同じ半径14pxの
     // 判定を行い、tourPoints側より近ければそちらを優先してヒットさせる。
     var castleHit = null;
-    if (castlesVisible) {
+    if (isCastleOverlayOn()) {
       var castleHitDist = hitIdx >= 0 ? hitDist : Infinity;
       HERITAGE_POINTS.filter(function(p) { return p.e === '🏰'; }).forEach(function(castle) {
         var pp = project(castle.lat, castle.lon, tourCenterLat, tourCenterLon, geo.R, geo.cx, geo.cy);
@@ -2767,8 +2831,12 @@ document.getElementById('replay-tour-btn').addEventListener('click', function() 
       updateLabel();
       return;
     }
-    var start = tourPoints[0], end = tourPoints[tourPoints.length - 1];
-    var viewKey = start.lat + ',' + start.lon + '|' + end.lat + ',' + end.lon;
+    // 経由地候補のON/OFF切り替え(駅/空港/城トグル、個別チェックボックス等)で
+    // tourPointsの構成(=スコープの半径計算対象)が変わるたびにスコープを再描画するため、
+    // 出発地・到着地だけでなくtourPoints全体の座標をキーに含める
+    // (以前は出発地・到着地のみで判定しており、候補選択を変えても半径が
+    // 再計算されない不具合があった)。
+    var viewKey = tourPoints.map(function(p) { return p.lat + ',' + p.lon; }).join('|');
     if (viewKey !== lastViewKey) {
       lastViewKey = viewKey;
       var baseR = Math.min(canvas.width, canvas.height) / 2 - 24;
@@ -2800,11 +2868,6 @@ document.getElementById('replay-tour-btn').addEventListener('click', function() 
   }
 
   tourTestBtn.addEventListener('click', openTourModal);
-  castleToggleBtn.addEventListener('click', function() {
-    castlesVisible = !castlesVisible;
-    castleToggleBtn.setAttribute('aria-pressed', castlesVisible ? 'true' : 'false');
-    renderAll();
-  });
   miniCanvas.addEventListener('click', openTourModal);
   closeBtn.addEventListener('click', closeTourModal);
   overlay.addEventListener('click', function(e) { if (e.target === overlay) closeTourModal(); });
@@ -3537,6 +3600,7 @@ document.getElementById('swap-btn').addEventListener('click', function() {
   state.selected = {}; manuallyAddedPoints = {};
   updateStartCityPickerBtnLabel();
   updateEndCityPickerBtnLabel();
+  saveStartEndCityToCookie();
   renderCandidates(); recompute(); renderNightsDistribution();
   refreshRouteRegistrationUi();
 });
@@ -3544,11 +3608,13 @@ document.getElementById('start-city').addEventListener('change', function() {
   updateStartCityPickerBtnLabel();
   state.selected = {}; manuallyAddedPoints = {}; renderCandidates(); recompute(); renderNightsDistribution();
   refreshRouteRegistrationUi();
+  saveStartEndCityToCookie();
 });
 document.getElementById('end-city').addEventListener('change', function() {
   updateEndCityPickerBtnLabel();
   state.selected = {}; manuallyAddedPoints = {}; recompute();
   refreshRouteRegistrationUi();
+  saveStartEndCityToCookie();
 });
 ['opt-detour','opt-speed','opt-visit','opt-nights'].forEach(function(id) {
   document.getElementById(id).addEventListener('input', function() { renderCandidates(); recompute(); });

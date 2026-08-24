@@ -53,6 +53,10 @@ describe('heritage-journeyページ: 地球儀上の空港/駅は色丸ではな
 
   it('既定ルート(Paris→Rome)には空港・駅が含まれ、それぞれ✈︎/🚉のfillTextが呼ばれる', () => {
     const { fillTextCalls } = setupPage();
+    // 経由地候補の初期値変更(すべて解除+駅OFF+空港ON+城ON)により、駅は既定で
+    // 選択されなくなった(空港は従来どおり既定でON)。駅トグル(#toggle-stations-btn)を
+    // クリックしてONにしてから検証する。
+    document.getElementById('toggle-stations-btn')!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     const airportCalls = fillTextCalls.filter((c) => c.icon === '✈︎');
     const stationCalls = fillTextCalls.filter((c) => c.icon === '🚉');
     expect(airportCalls.length).toBeGreaterThan(0);
