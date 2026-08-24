@@ -1462,7 +1462,9 @@ function showAirportNetworkModal(point) {
     return '<tr><td>' + esc(r.direction) + '</td><td>' + esc(r.flag + ' ' + r.country) + '</td><td>' + esc(r.airline) + '<span class="airport-network-code">' + esc(r.iata) + '</span></td><td>' + esc(r.hubName) + '<span class="airport-network-code">' + esc(r.hubCode) + '</span></td><td>' + esc(r.destinationName) + '<span class="airport-network-code">' + esc(r.destinationCode) + '</span></td><td>' + esc(r.flightsPerWeek) + '便/週</td></tr>';
   }).join('') : '<tr><td colspan="6" class="empty-note">airline-networkに登録された発着便はありません。</td></tr>';
   resetAirportNetworkModalPosition();
-  document.getElementById('airport-network-modal-overlay').style.display = 'flex';
+  var airportOverlay = document.getElementById('airport-network-modal-overlay');
+  airportOverlay.style.display = 'flex';
+  activateFloatingPanel(airportOverlay);
 }
 
 // 左上の巡回ルートスコープ(#tour-mini-panel、既定top:12px/left:12px/幅280px)を
@@ -2026,6 +2028,7 @@ document.getElementById('replay-tour-btn').addEventListener('click', function() 
   var miniHead = document.getElementById('tour-mini-head');
   var miniCanvas = document.getElementById('tour-mini-canvas');
   var lodgingModal = document.getElementById('lodging-recommend-modal');
+  var airportNetworkModal = document.getElementById('airport-network-modal-overlay');
   var lodgingList = document.getElementById('lodging-recommend-list');
   var lodgingStatus = document.getElementById('lodging-recommend-status');
   var lodgingNextBtn = document.getElementById('lodging-next-day-btn');
@@ -2040,10 +2043,15 @@ document.getElementById('replay-tour-btn').addEventListener('click', function() 
   var floatingPanelZ = 10001;
   function activateFloatingPanel(panel) {
     if (!panel) return;
+    // 登録済み巡回ルートを選ぶ間は、呼び出し元のスコープとそこから開く
+    // 宿泊推奨地・空港の各パネルを背面に固定する。全画面overlayの外から
+    // focusinが発生した場合にも、巡回ルートモーダルを追い越させない。
+    var registeredRoutesOverlay = document.getElementById('registered-routes-modal-overlay');
+    if (registeredRoutesOverlay && registeredRoutesOverlay.classList.contains('open')) return;
     floatingPanelZ += 1;
     panel.style.zIndex = String(floatingPanelZ);
   }
-  [miniPanel, lodgingModal].forEach(function(panel) {
+  [miniPanel, lodgingModal, airportNetworkModal].forEach(function(panel) {
     if (!panel) return;
     panel.addEventListener('pointerdown', function() { activateFloatingPanel(panel); });
     panel.addEventListener('focusin', function() { activateFloatingPanel(panel); });
@@ -3164,6 +3172,13 @@ function activateRegisteredRoutesModalLayer(overlay) {
   var nextZ = Math.max(getNextZ(), floatingPanelZ + 1);
   floatingPanelZ = nextZ;
   overlay.style.zIndex = String(nextZ);
+  // 呼び出し元の巡回ルートスコープと、その配下から開かれる関連モーダルを
+  // 一つ下のレイヤーへまとめる。登録済みルートモーダルを閉じ、各パネルが
+  // 改めて操作・フォーカスされるまではこのレイヤーを維持する。
+  ['tour-mini-panel', 'lodging-recommend-modal', 'airport-network-modal-overlay'].forEach(function(id) {
+    var panel = document.getElementById(id);
+    if (panel) panel.style.zIndex = String(nextZ - 1);
+  });
 }
 
 function closeRegisteredRoutesModal() {
