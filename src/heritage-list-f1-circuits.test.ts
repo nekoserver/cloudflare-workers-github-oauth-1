@@ -36,6 +36,16 @@ describe('HERITAGE_LIST — F1開催サーキット', () => {
     }
   });
 
+  it('マドリング・サーキットをスペインの登録年なしの地点として表示する', () => {
+    expect(HERITAGE_LIST.find((item) => item.n === 'マドリング・サーキット')).toMatchObject({
+      f: '🇪🇸',
+      c: 'スペイン',
+      y: '----',
+      lat: 40.4650,
+      lon: -3.6089,
+    });
+  });
+
   it('重複追加されていない(サーキット名の重複が無い)', () => {
     const f1Names = new Set(F1_CIRCUITS.map((c) => c.circuit));
     const matches = HERITAGE_LIST.filter((item) => f1Names.has(item.n));
