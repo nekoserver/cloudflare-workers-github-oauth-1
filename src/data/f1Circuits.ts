@@ -22,7 +22,7 @@ export const F1_CIRCUITS: F1Circuit[] = [
   { gp: 'ハンガリーGP', circuit: 'ハンガロリンク', flag: '🇭🇺', country: 'ハンガリー', date: '2026-07-26', lat: 47.5789, lon: 19.2486 },
   { gp: 'オランダGP', circuit: 'ザントフォールト・サーキット', flag: '🇳🇱', country: 'オランダ', date: '2026-08-23', lat: 52.3888, lon: 4.5409 },
   { gp: 'イタリアGP', circuit: 'モンツァ・サーキット', flag: '🇮🇹', country: 'イタリア', date: '2026-09-06', lat: 45.6156, lon: 9.2811 },
-  { gp: 'スペイン(マドリード)GP', circuit: 'マドリング市街地サーキット', flag: '🇪🇸', country: 'スペイン', date: '2026-09-13', lat: 40.4650, lon: -3.6089 },
+  { gp: 'スペイン(マドリード)GP', circuit: 'マドリング・サーキット', flag: '🇪🇸', country: 'スペイン', date: '2026-09-13', lat: 40.4650, lon: -3.6089 },
   { gp: 'アゼルバイジャンGP', circuit: 'バクー市街地サーキット', flag: '🇦🇿', country: 'アゼルバイジャン', date: '2026-09-27', lat: 40.3725, lon: 49.8533 },
   { gp: 'シンガポールGP', circuit: 'マリーナベイ市街地サーキット', flag: '🇸🇬', country: 'シンガポール', date: '2026-10-11', lat: 1.2914, lon: 103.8640 },
   { gp: 'アメリカGP', circuit: 'サーキット・オブ・ジ・アメリカズ', flag: '🇺🇸', country: 'アメリカ', date: '2026-10-25', lat: 30.1328, lon: -97.6411 },
