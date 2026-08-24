@@ -498,3 +498,54 @@ describe('heritage-journeyページ: 常時表示の縮小プレビュー(#tour-
     expect(panel.style.top).toBe('0px');
   });
 });
+
+// 対象: 巡回ルートスコープ(#tour-mini-panel)から巡回ルートモーダル(#tour-modal-overlay)を
+// 呼び出す際のレイヤー順序。呼び出した側の#tour-mini-panel(静的CSSのz-index:9998)と
+// 宿泊推奨地モーダル#lodging-recommend-modal(静的CSSのz-index:10001。10001は
+// #tour-modal-overlayの静的CSSのz-index:9999より高いため、以前はモーダルを開いても
+// 宿泊推奨地モーダルの方が手前に残ってしまっていた)・その中の空港一覧
+// #tour-airport-summaryは、モーダルが開いている間その下位レイヤーに隠れ、
+// モーダルを閉じて「再びアクティブ化される」までは操作できないようにする。
+//
+// 故障シナリオ:
+//   (1) #tour-modal-overlayのz-indexが#lodging-recommend-modal(10001)を
+//       上回らず、宿泊推奨地モーダルがモーダルより手前に残ってしまう
+//   (2) #tour-mini-canvas(スコープ本体)のクリックで開いた場合にも同様の
+//       レイヤー逆転が起きる
+//   (3) モーダルを閉じてもz-indexが高いまま残り、次に他のモーダルを開いた際に
+//       意図せずそれより手前に居座ってしまう
+describe('heritage-journeyページ: 巡回ルートスコープから巡回ルートモーダルを開いた際のレイヤー順序', () => {
+  afterEach(() => { document.body.innerHTML = ''; });
+
+  it('「🌐 巡回テスト」ボタンで開くと、モーダルのz-indexが宿泊推奨地モーダル(静的10001)を上回る', () => {
+    setupPage();
+    (document.getElementById('tour-test-btn') as HTMLButtonElement).click();
+    const overlay = document.getElementById('tour-modal-overlay') as HTMLElement;
+    const overlayZ = Number(overlay.style.zIndex);
+    expect(overlay.classList.contains('open')).toBe(true);
+    expect(overlayZ).toBeGreaterThan(10001);
+  });
+
+  it('巡回ルートスコープ本体(#tour-mini-canvas)のクリックで開いた場合も、同様にz-indexが宿泊推奨地モーダルを上回る', () => {
+    setupPage();
+    (document.getElementById('tour-mini-canvas') as HTMLElement).dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    const overlay = document.getElementById('tour-modal-overlay') as HTMLElement;
+    const overlayZ = Number(overlay.style.zIndex);
+    expect(overlay.classList.contains('open')).toBe(true);
+    expect(overlayZ).toBeGreaterThan(10001);
+  });
+
+  it('開くたびに、その時点で最も高い他のz-indexよりもさらに高いz-indexへ引き上げる(getNextZ()との整合)', () => {
+    setupPage();
+    // 他のモーダル(到着地選択)を先に開き、getNextZ()の基準となる最大z-indexを引き上げておく。
+    (document.getElementById('end-city-picker-btn') as HTMLButtonElement).click();
+    const endPickerOverlay = document.getElementById('end-city-picker-modal-overlay') as HTMLElement;
+    const endPickerZ = Number(endPickerOverlay.style.zIndex);
+    expect(endPickerZ).toBeGreaterThan(0);
+
+    (document.getElementById('tour-test-btn') as HTMLButtonElement).click();
+    const overlay = document.getElementById('tour-modal-overlay') as HTMLElement;
+    const overlayZ = Number(overlay.style.zIndex);
+    expect(overlayZ).toBeGreaterThan(endPickerZ);
+  });
+});

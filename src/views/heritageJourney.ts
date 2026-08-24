@@ -2838,11 +2838,22 @@ document.getElementById('replay-tour-btn').addEventListener('click', function() 
     renderLodgingRecommendModal();
   }
 
+  // 巡回ルートモーダル(#tour-modal-overlay)を開いた側の巡回ルートスコープ
+  // (#tour-mini-panel、z-index:9998)・宿泊推奨地モーダル(#lodging-recommend-modal、
+  // z-index:10001)・その中の空港一覧(#tour-airport-summary)を、モーダルの下位レイヤーに
+  // 隠して閉じるまで操作できないようにする。#tour-modal-overlay自体は他のモーダルと
+  // 異なりCSSの固定z-index(9999)しか持たず、宿泊推奨地モーダルの10001より低いままだと
+  // 呼び出し元のパネルがモーダルより手前に残ってしまう不具合があったため、開くたびに
+  // getNextZ()で最上位へ引き上げる(宿泊推奨地モーダルの固定値10001はgetNextZ()の
+  // 走査対象外なので、その値を確実に上回るよう下限を設ける)。モーダルの半透明の
+  // 背景(inset:0)がその下のパネル全体を覆うため、閉じてクラスが外れるまで
+  // クリックも一切届かない(再びアクティブ化されるのはモーダルを閉じた時)。
   function openTourModal() {
     if (tourPoints.length < 2) return;
     stopAnim();
     renderAll();
     updateLabel();
+    overlay.style.zIndex = String(Math.max(getNextZ(), 10002));
     overlay.classList.add('open');
   }
 
