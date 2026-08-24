@@ -2498,9 +2498,15 @@ document.getElementById('replay-tour-btn').addEventListener('click', function() 
       ctx.globalAlpha = 1;
     }
 
-    // 宿泊推奨地モードの現在位置マーカー。従来の経由地点間アニメーションではなく、
-    // 「次の1日へ」操作ごとに、その日の宿泊推奨都市の実座標へ直接移動する。
-    var curPt = lodgingDayPoints[lodgingDayIndex] || pointAtProgress(tourPoints, animProgress);
+    // 現在位置マーカー(薄緑色の丸)。#tour-modal-overlayが開いて巡回ルートモーダル
+    // 自体にフォーカスがある間は、再生ボタンによる経由地点間の連続アニメーション
+    // (animProgress)に追従させる。モーダルを閉じて#tour-mini-panel(巡回ルート
+    // スコープ)側にフォーカスが戻っているときだけ、宿泊推奨地モードの「次の1日へ」
+    // 操作でその日の宿泊推奨都市の実座標へ直接移動する挙動にする(lodgingDayPointsは
+    // 2地点以上のルートなら常に埋まるため、モーダルが開いていてもこちらを優先すると
+    // 再生ボタンでanimProgressを進めてもマーカーが動かなく見える不具合になっていた)。
+    var curPt = (overlay.classList.contains('open') ? null : lodgingDayPoints[lodgingDayIndex])
+      || pointAtProgress(tourPoints, animProgress);
     var curProj = project(curPt.lat, curPt.lon, tourCenterLat, tourCenterLon, R, cx, cy);
     ctx.fillStyle = '#86efac';
     ctx.beginPath();

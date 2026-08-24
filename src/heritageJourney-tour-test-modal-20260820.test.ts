@@ -328,6 +328,32 @@ describe('heritage-journeyページ: 「🌐 巡回テスト」モーダル(DOM�
     expect(playBtn.textContent).toBe('巡回OFF（宿泊地モード）');
   });
 
+  // 対象: renderGlobeToCanvas()内の現在位置マーカー(薄緑色、半径7のarc)。
+  // lodgingDayPoints[lodgingDayIndex]は2地点以上のルートなら常に埋まっているため、
+  // これを無条件優先すると巡回ルートモーダルを開いて再生ボタンでanimProgressを
+  // 進めてもマーカーの座標(=arc呼び出しの引数)が全く変わらない不具合になっていた。
+  it('(タイマー実動作) 巡回ルートモーダルを開いて再生すると、現在位置マーカー(半径7の丸)の座標がanimProgressに追従して動く', () => {
+    vi.useFakeTimers();
+    try {
+      const { arcCalls } = setupPage();
+      (document.getElementById('tour-test-btn') as HTMLButtonElement).click();
+      arcCalls.length = 0;
+      (document.getElementById('tour-play-btn') as HTMLButtonElement).click();
+      vi.advanceTimersByTime(40);
+      const markerBefore = arcCalls.filter((args) => args[2] === 7).slice(-1)[0];
+      arcCalls.length = 0;
+
+      vi.advanceTimersByTime(400);
+      const markerAfter = arcCalls.filter((args) => args[2] === 7).slice(-1)[0];
+
+      expect(markerBefore).toBeTruthy();
+      expect(markerAfter).toBeTruthy();
+      expect(markerAfter).not.toEqual(markerBefore);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('(タイマー実動作) 再生中にモーダルを閉じるとタイマーが止まり、以降ラベルが更新されない', () => {
     vi.useFakeTimers();
     try {
