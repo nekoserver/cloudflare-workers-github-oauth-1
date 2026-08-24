@@ -311,8 +311,16 @@ describe('heritage-journeyページ: 「城ON/OFF」で表示した、ルート�
     setupPage(fetchMock);
     await flushMicrotasks();
 
+    // 「城ON/OFF」は経由地候補の初期値変更(すべて解除+空港ON+城ON)により既定でON
+    // (aria-pressed="true")になったため、クリックは不要(むしろクリックするとOFFに
+    // なってしまう)。また出発地・到着地の中間地点から最も遠い座標をスコープ半径とする
+    // 仕様変更で、既定選択の候補(近隣の空港・城)もタップ座標の算出に影響するため、
+    // #opt-detourを0にして候補をゼロにし、computeCastleClickPoint()が想定する
+    // 「出発地・到着地の2点のみ」のビューと実際の計算を一致させる。
+    (document.getElementById('opt-detour') as HTMLInputElement).value = '0';
+    document.getElementById('opt-detour')!.dispatchEvent(new Event('input'));
+
     (document.getElementById('tour-test-btn') as HTMLButtonElement).click();
-    document.getElementById('toggle-castles-btn')!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
 
     const canvas = document.getElementById('tour-globe-canvas')!;
     canvas.getBoundingClientRect = () => ({
@@ -337,8 +345,11 @@ describe('heritage-journeyページ: 「城ON/OFF」で表示した、ルート�
     setupPage(fetchMock);
     await flushMicrotasks();
 
+    // 「城ON/OFF」は既定でON、#opt-detourを0にする理由は直前のテストと同じ。
+    (document.getElementById('opt-detour') as HTMLInputElement).value = '0';
+    document.getElementById('opt-detour')!.dispatchEvent(new Event('input'));
+
     (document.getElementById('tour-test-btn') as HTMLButtonElement).click();
-    document.getElementById('toggle-castles-btn')!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
 
     const canvas = document.getElementById('tour-globe-canvas')!;
     canvas.getBoundingClientRect = () => ({
