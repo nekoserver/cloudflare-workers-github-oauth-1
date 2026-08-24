@@ -211,7 +211,7 @@ h1{font-size:22px;margin:0 0 4px}
 .cand-row .cdetour{color:#94a3b8;font-variant-numeric:tabular-nums}
 .airport-network-btn{background:#1e3a5f;border:1px solid #38bdf8;color:#bae6fd;border-radius:5px;padding:3px 7px;cursor:pointer;font-size:11px}
 .airport-network-btn.has-data{background:#bbf7d0;border-color:#86efac;color:#14532d;font-weight:700}
-.airport-network-table{width:100%;border-collapse:collapse;font-size:12px}.airport-network-table th,.airport-network-table td{border:1px solid #334155;padding:6px;text-align:left}.airport-network-table th{background:#1e293b;color:#93c5fd}.airport-network-code{display:block;color:#94a3b8;font-size:10px}.airport-network-freshness{color:#94a3b8;font-size:11px;margin:0 0 10px}
+.airport-network-table{width:100%;border-collapse:collapse;font-size:12px}.airport-network-table th,.airport-network-table td{border:1px solid #334155;padding:6px;text-align:left;white-space:nowrap}.airport-network-table th{background:#1e293b;color:#93c5fd}.airport-network-code{display:block;color:#94a3b8;font-size:10px}.airport-network-freshness{color:#94a3b8;font-size:11px;margin:0 0 10px}
 .route-line{padding:0;font-size:12px;line-height:2.1;margin-top:12px}
 .route-title-row{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
 .route-apply-row{display:flex;justify-content:center;margin-top:12px}
@@ -276,7 +276,7 @@ h1{font-size:22px;margin:0 0 4px}
 #registered-routes-modal-head{cursor:grab;user-select:none;touch-action:none}
 #registered-routes-modal-head:active{cursor:grabbing}
 #dist-country-filter-modal-box{position:fixed;max-width:560px;width:calc(100% - 32px)}
-#airport-network-modal-box{position:fixed;max-width:560px;width:calc(100% - 32px)}
+#airport-network-modal-box{position:fixed;max-width:672px;width:calc(100% - 32px)}
 .tour-route-side-panel{background:#111827;border:1px solid #334155;border-radius:12px;padding:12px;width:240px;max-width:calc(100vw - 600px);max-height:90vh;overflow:auto;margin-left:16px;flex-shrink:0}
 .tour-route-side-title{font-size:12px;font-weight:700;color:#93c5fd;margin-bottom:8px}
 .tour-route-side-row{border:2px solid transparent;border-radius:6px;padding:5px 8px;font-size:12px;color:#e2e8f0;margin-bottom:4px;cursor:pointer}
