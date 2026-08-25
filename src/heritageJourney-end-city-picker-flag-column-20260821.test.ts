@@ -65,7 +65,7 @@ describe('heritage-journeyページ: 到着地選択モーダルの🏁国旗カ
     btn.click();
 
     const headerCells = Array.from(document.querySelectorAll('.end-city-picker-table thead th'));
-    expect(headerCells.length).toBe(3);
+    expect(headerCells.length).toBe(4);
     expect(headerCells[0].id).toBe('end-city-picker-flag-th');
     expect(headerCells[0].textContent).toBe('🏁');
     expect(headerCells[1].textContent).toBe('都市名');
@@ -73,7 +73,7 @@ describe('heritage-journeyページ: 到着地選択モーダルの🏁国旗カ
     const body = document.getElementById('end-city-picker-table-body')!;
     const romeRow = body.querySelector('[data-city-name="Rome"]')!;
     const tds = Array.from(romeRow.querySelectorAll('td'));
-    expect(tds.length).toBe(3);
+    expect(tds.length).toBe(4);
     expect(tds[0].textContent).toBe('🇮🇹');
     expect(tds[1].textContent).toBe('ローマ');
 
