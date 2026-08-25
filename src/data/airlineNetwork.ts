@@ -160,6 +160,14 @@ export const AIRLINE_NETWORK: CountryAirlines[] = [
       { code: 'LAX', name: 'ロサンゼルス国際空港', flightsPerWeek: 7 }
     ]}
   ]},
+  { country: 'チェコ', flag: '🇨🇿', airlines: [
+    { name: 'Smartwings', iata: 'QS', hubCode: 'PRG', hubName: 'ヴァーツラフ・ハヴェル・プラハ国際空港', destinations: [
+      { code: 'LHR', name: 'ロンドン・ヒースロー空港', flightsPerWeek: 7 },
+      { code: 'CDG', name: 'シャルル・ド・ゴール空港', flightsPerWeek: 7 },
+      { code: 'AMS', name: 'スキポール空港', flightsPerWeek: 7 },
+      { code: 'FCO', name: 'フィウミチーノ空港', flightsPerWeek: 7 }
+    ]}
+  ]},
   // heritage-journey に候補として出る欧州主要空港のうち、従来は下記3拠点の
   // 発着データが丸ごと欠けていた。便数はこのマスタの他路線と同じく、毎日運航を
   // 7便/週として丸めた旅程検討用の目安（コードシェア便の重複は含めない）。
