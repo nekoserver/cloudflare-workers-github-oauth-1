@@ -173,6 +173,17 @@ describe('/airline-network ページ: 各国航空会社ネットワーク一覧
     expect(html).toContain('data-country="スペイン"');
   });
 
+  it('チェコのPRG拠点がネットワークに追加されている', () => {
+    const czechia = AIRLINE_NETWORK.find((c) => c.country === 'チェコ');
+    expect(czechia).toBeDefined();
+
+    const prgAirline = czechia!.airlines.find((airline) => airline.hubCode === 'PRG');
+    expect(prgAirline).toBeDefined();
+    expect(prgAirline!.hubName).toBe('ヴァーツラフ・ハヴェル・プラハ国際空港');
+    expect(html).toContain('data-country="チェコ"');
+    expect(html).toContain('ヴァーツラフ・ハヴェル・プラハ国際空港');
+  });
+
   it('「国」th内にフィルタボタンが配置されている', () => {
     const thMatch = html.match(/<th>国[\s\S]*?<\/th>/);
     expect(thMatch).toBeTruthy();
