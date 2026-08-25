@@ -89,10 +89,23 @@ export function formatAichatSlashCommandHelp(): string {
     '| /neko search <キーワード> | 質問文・回答文にキーワードを含む過去ログのヒット件数を表示します(結果一覧は最大30件までモーダルで確認できます) |',
     '| /neko vcount | ベクタ化済みの回答文の件数と全回答文に占める割合を表示します(結果一覧は最大30件までモーダルで確認できます) |',
     '| /neko tokens | 過去24時間のモデル別トークン使用量を1時間刻みでMarkdownテーブル表示し、末尾にモデル別総和も表示します |',
+    '| /neko tcheck <nkapi_トークン> | APIトークンが現在有効かどうかを確認します |',
     '| /neko 256 <文字列> | 指定した文字列のSHA-256ハッシュをWASM(Rust実装)で計算します |',
     '| /neko factor <数値> | 指定した整数(0以上2^53以下)をWASM(Rust実装)で素因数分解します |',
     '| /neko dig <ドメイン> [タイプ] | 指定ドメインのDNS問い合わせをWASM(Rust実装)で行います。詳細は /neko dig --help |',
     '| /neko help | このサブコマンド一覧を表示します |',
+  ].join('\n');
+}
+
+/** `/neko tcheck` の引数が無い、またはAPIトークン形式でない場合に表示する説明。 */
+export function formatTokenCheckHelp(): string {
+  return [
+    '```',
+    '/neko tcheck <nkapi_トークン>',
+    '',
+    '指定したAPIトークンが現在有効かどうかを確認します。',
+    'トークンには nkapi_ から始まる文字列を1つ指定してください。',
+    '```',
   ].join('\n');
 }
 
@@ -286,6 +299,7 @@ export type AichatSlashCommandDeps = {
   searchShares?: (keyword: string) => Promise<AichatSearchOutcome>;
   vectorizedAnswers?: () => Promise<AichatVectorizedAnswersOutcome>;
   hourlyTokenUsage?: () => Promise<HourlyTokenUsageRow[]>;
+  checkApiToken?: (token: string) => Promise<boolean>;
   sha256ViaWasm?: (input: string) => Promise<string>;
   factorViaWasm?: (n: number) => Promise<string>;
   digLookup?: (name: string, qtype: string) => Promise<string>;
@@ -510,12 +524,31 @@ export async function interpretAichatSlashCommand(
     return { handled: true, response: formatHourlyTokenUsage(outcome.value) };
   }
 
+  if (subcommand === 'tcheck') {
+    const token = parts[2] ?? '';
+    if (parts.length !== 3 || !token.startsWith('nkapi_')) {
+      return { handled: true, response: formatTokenCheckHelp() };
+    }
+    if (!deps.checkApiToken) {
+      return { handled: true, response: '❌ /neko tcheck は現在利用できません(APIトークン検証機能未設定)' };
+    }
+    try {
+      const valid = await deps.checkApiToken(token);
+      return { handled: true, response: valid ? '✅ APIトークンは有効です。' : '❌ APIトークンは無効です。' };
+    } catch (err) {
+      return {
+        handled: true,
+        response: `❌ /neko tcheck の実行中にエラーが発生しました: ${err instanceof Error ? err.message : String(err)}`,
+      };
+    }
+  }
+
   if (subcommand === 'help') {
     return { handled: true, response: formatAichatSlashCommandHelp() };
   }
 
   return {
     handled: true,
-    response: `❌ 未対応のサブコマンドです: ${subcommand || '(なし)'}\n利用可能なコマンド: /neko hms, /neko cal, /neko clog, /neko limit, /neko uuidgen4, /neko uuidgen7, /neko search, /neko vcount, /neko tokens, /neko 256, /neko factor, /neko dig, /neko help\n詳細は /neko help を実行してください`,
+    response: `❌ 未対応のサブコマンドです: ${subcommand || '(なし)'}\n利用可能なコマンド: /neko hms, /neko cal, /neko clog, /neko limit, /neko uuidgen4, /neko uuidgen7, /neko search, /neko vcount, /neko tokens, /neko tcheck, /neko 256, /neko factor, /neko dig, /neko help\n詳細は /neko help を実行してください`,
   };
 }
