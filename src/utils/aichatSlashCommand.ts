@@ -87,6 +87,7 @@ export function formatAichatSlashCommandHelp(): string {
     '| /neko uuidgen4 | UUIDv4を1件生成し、UUID生成履歴に保存します |',
     '| /neko uuidgen7 | UUIDv7を1件生成し、UUID生成履歴に保存します |',
     '| /neko search <キーワード> | 質問文・回答文にキーワードを含む過去ログのヒット件数を表示します(結果一覧は最大30件までモーダルで確認できます) |',
+    '| /neko s <検索語 ...> | 半角スペース区切りの検索語を順番に過去ログ検索します。空白を含む検索語は引用符で囲みます |',
     '| /neko vcount | ベクタ化済みの回答文の件数と全回答文に占める割合を表示します(結果一覧は最大30件までモーダルで確認できます) |',
     '| /neko tokens | 過去24時間のモデル別トークン使用量を1時間刻みでMarkdownテーブル表示し、末尾にモデル別総和も表示します |',
     '| /neko tcheck <nkapi_トークン> | APIトークンが現在有効かどうかを確認します |',
@@ -188,6 +189,44 @@ export function formatAichatSearchResults(keyword: string, outcome: AichatSearch
     return '❌ キーワードを指定してください: /neko search <キーワード>';
   }
   return `「${keyword}」を質問文・回答文に含む過去ログ: ${outcome.hitCount}件`;
+}
+
+/**
+ * `/neko s` の引数を、半角スペースまたはタブで区切る。ASCII/全角の二重引用符で
+ * 囲まれた範囲は、内側の半角スペースを含めて1引数として扱う。
+ */
+export function parseNekoSearchArguments(input: string): string[] {
+  const args: string[] = [];
+  let current = '';
+  let quote: '"' | '\u201c' | null = null;
+  for (let i = 0; i < input.length; i++) {
+    const char = input[i];
+    if (quote) {
+      const closesQuote = (quote === '"' && char === '"') || (quote === '\u201c' && char === '\u201d');
+      if (closesQuote) quote = null;
+      else current += char;
+      continue;
+    }
+    if (char === '"' || char === '\u201c') {
+      quote = char;
+    } else if (char === ' ' || char === '\t') {
+      if (current) {
+        args.push(current);
+        current = '';
+      }
+    } else {
+      current += char;
+    }
+  }
+  if (current) args.push(current);
+  return args;
+}
+
+export function formatAichatMultiSearchResults(outcomes: Array<{ keyword: string; hitCount: number }>): string {
+  if (outcomes.length === 0) {
+    return '❌ 検索語を指定してください: /neko s <検索語 ...>';
+  }
+  return ['過去ログを検索しました:', ...outcomes.map(({ keyword, hitCount }) => `- 「${keyword}」: ${hitCount}件`)].join('\n');
 }
 
 export type AichatVectorizedAnswersOutcome = {
@@ -410,6 +449,38 @@ export async function interpretAichatSlashCommand(
     };
   }
 
+  if (subcommand === 's') {
+    // partsでは引用符内の空白が失われるため、サブコマンドより後ろの原文を解析する。
+    const argumentText = trimmed.replace(/^\/neko\s+s(?:\s+|$)/i, '');
+    const keywords = parseNekoSearchArguments(argumentText);
+    if (keywords.length === 0) {
+      return { handled: true, response: formatAichatMultiSearchResults([]) };
+    }
+    if (!deps.searchShares) {
+      return { handled: true, response: '❌ /neko s は現在利用できません(過去ログ検索API未設定)' };
+    }
+
+    const summaries: Array<{ keyword: string; hitCount: number }> = [];
+    const modalResults = new Map<string, AichatResultItem>();
+    for (const keyword of keywords) {
+      const outcome = await raceWithTimeout(deps.searchShares(keyword), AICHAT_SEARCH_TIMEOUT_MS);
+      if (outcome.status === 'timeout') {
+        return { handled: true, response: `❌ /neko s の「${keyword}」検索がタイムアウトしました(${AICHAT_SEARCH_TIMEOUT_MS / 1000}秒以内に応答がありませんでした)` };
+      }
+      if (outcome.status === 'error') {
+        return { handled: true, response: `❌ /neko s の「${keyword}」検索でエラーが発生しました: ${outcome.message}` };
+      }
+      summaries.push({ keyword, hitCount: outcome.value.hitCount });
+      for (const result of outcome.value.results) modalResults.set(result.id, result);
+    }
+    const results = Array.from(modalResults.values()).slice(0, 30);
+    return {
+      handled: true,
+      response: formatAichatMultiSearchResults(summaries),
+      resultsForModal: results.length > 0 ? results : undefined,
+    };
+  }
+
   if (subcommand === 'vcount') {
     if (!deps.vectorizedAnswers) {
       return { handled: true, response: formatVectorizedAnswerCount(0, 0) };
@@ -549,6 +620,6 @@ export async function interpretAichatSlashCommand(
 
   return {
     handled: true,
-    response: `❌ 未対応のサブコマンドです: ${subcommand || '(なし)'}\n利用可能なコマンド: /neko hms, /neko cal, /neko clog, /neko limit, /neko uuidgen4, /neko uuidgen7, /neko search, /neko vcount, /neko tokens, /neko tcheck, /neko 256, /neko factor, /neko dig, /neko help\n詳細は /neko help を実行してください`,
+    response: `❌ 未対応のサブコマンドです: ${subcommand || '(なし)'}\n利用可能なコマンド: /neko hms, /neko cal, /neko clog, /neko limit, /neko uuidgen4, /neko uuidgen7, /neko search, /neko s, /neko vcount, /neko tokens, /neko tcheck, /neko 256, /neko factor, /neko dig, /neko help\n詳細は /neko help を実行してください`,
   };
 }
